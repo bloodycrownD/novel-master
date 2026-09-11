@@ -25,10 +25,17 @@ try {
   }));
   console.log("MM_BEFORE", JSON.stringify(mmBefore));
 
-  // 进批量模式（「全选/删除」是 ManageHeader batchMode 条件渲染，须先点「管理」）
-  const manageBtn = page.locator(".settings-view button:visible").filter({ hasText: "^管理$" }).first();
-  await manageBtn.click();
-  await sleep(600);
+  // 进批量模式（「全选/删除」是 ManageHeader batchMode 条件渲染，须先点「管理」）。
+  // 注意：hasText 字符串是子串匹配、JSX 按钮文本带换行空白——勿用 "^管理$" 锚点字符串
+  // （字面匹配永远失配，正是 coverage.md 备忘警告的锚点坑变体）
+  const manageBtn = page.getByRole("button", { name: "管理", exact: true }).first();
+  if (!(await manageBtn.count())) {
+    console.log("FAIL MANAGE_BTN_NOT_FOUND");
+    process.exitCode = 1;
+  } else {
+    await manageBtn.click();
+    await sleep(600);
+  }
 
   // 全选 → 删除（若批量 UI 存在）
   const selAll = page.locator(".settings-view button:visible").filter({ hasText: "全选" }).first();
@@ -126,6 +133,7 @@ try {
 
 } catch (e) {
   console.log("SCRIPT_ERROR", String(e).slice(0, 400));
+    process.exitCode = 1; // 静默假绿防护：断流必须非零退出
   try { await page.screenshot({ path: "/tmp/r62-err.png" }); } catch {}
 }
 await shutdown(app, vite);

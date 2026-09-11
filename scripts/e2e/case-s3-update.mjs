@@ -110,6 +110,7 @@ try {
 
 } catch (e) {
   console.log("SCRIPT_ERROR", String(e).slice(0, 400));
+    process.exitCode = 1; // 静默假绿防护：断流必须非零退出
   try { await page.screenshot({ path: "/tmp/r72-err.png" }); } catch {}
 }
 await shutdown(app, vite);
