@@ -871,6 +871,103 @@ describe('ChatTranscriptWebView', () => {
     }
   });
 
+  it('Step 6: forceSnapshot 直发全量快照——uiRunning+流式活跃时不 defer', async () => {
+    // 单元控制消息 force-snapshot 的屏幕消费面：流式活跃（streamActive）+
+    // uiRunning 时普通 snapshot 会 pending 到流式结束，forceSnapshot 必须
+    // 绕过 defer 立即直发（对齐 T-SUB-CARD 的 force 语义，经 handle 暴露）。
+    const messages = [sampleMessage('m1', 1), sampleMessage('m2', 2)];
+    let tree: TestRenderer.ReactTestRenderer;
+    const ref =
+      React.createRef<
+        import('@/components/chat/ChatTranscriptWebView').ChatTranscriptWebViewHandle
+      >();
+
+    await act(async () => {
+      tree = TestRenderer.create(
+        <ChatTranscriptWebView
+          ref={ref}
+          sessionKey="p1:s1"
+          messages={messages}
+          agentRunning
+          uiRunning
+        />,
+      );
+    });
+
+    simulateWebReady(tree!.root);
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    // 置 streamActive（imperative delta 经 RAF 直达）
+    await act(async () => {
+      ref.current?.pushStreamDelta('text', '部分流式');
+    });
+    await flushAnimationFrame();
+
+    const baseline = mockWebViewPostMessages.length;
+    await act(async () => {
+      ref.current?.forceSnapshot();
+    });
+
+    const types = messageTypesSince(baseline);
+    expect(types).toContain('sessionSnapshot');
+  });
+
+  it('Step 6: commitSyntheticAssistantRow 把中断 partial 合成为只读终态行（不依赖本地累积）', async () => {
+    // 重启水合的 interrupted 单元：webview 本地无任何流式累积（streamActive
+    // 恒 false），commitAbortOverlaySnapshot 必返回 false；轻量合成提交以
+    // 参数携带 partial，经 streamCommit 呈现只读 assistant 终态行。
+    const messages = [sampleMessage('m1', 1)];
+    let tree: TestRenderer.ReactTestRenderer;
+    const ref =
+      React.createRef<
+        import('@/components/chat/ChatTranscriptWebView').ChatTranscriptWebViewHandle
+      >();
+
+    await act(async () => {
+      tree = TestRenderer.create(
+        <ChatTranscriptWebView
+          ref={ref}
+          sessionKey="p1:s1"
+          messages={messages}
+        />,
+      );
+    });
+
+    simulateWebReady(tree!.root);
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    // 前置印证：无本地累积时 abort 路径不可用
+    expect(ref.current?.commitAbortOverlaySnapshot()).toBe(false);
+
+    const baseline = mockWebViewPostMessages.length;
+    let committed = false;
+    await act(async () => {
+      committed =
+        ref.current?.commitSyntheticAssistantRow('中断前的正文', '思考') ??
+        false;
+    });
+    expect(committed).toBe(true);
+
+    const commitMsg = mockWebViewPostMessages
+      .slice(baseline)
+      .map(raw => decodeHostToTranscript(raw))
+      .find(msg => msg.type === 'streamCommit');
+    expect(commitMsg?.type).toBe('streamCommit');
+    if (commitMsg?.type === 'streamCommit') {
+      const row = commitMsg.payload.rows.find(r => r.kind === 'message');
+      expect(row).toBeDefined();
+    }
+
+    // partial 全空时返回 false（无意义提交被拒）
+    await act(async () => {
+      expect(ref.current?.commitSyntheticAssistantRow('', '')).toBe(false);
+    });
+  });
+
   it('agent 运行中 assistant 含 tool_use 落库时走 sessionSnapshot 而非 appendTailRows', async () => {
     const initialMessages = [sampleMessage('u1', 1)];
     let tree: TestRenderer.ReactTestRenderer;

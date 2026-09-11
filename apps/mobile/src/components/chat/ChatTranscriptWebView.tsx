@@ -75,6 +75,20 @@ export type ChatTranscriptWebViewHandle = {
   ) => boolean;
   /** abort 极早 stop：将 overlay stream tail 固化为 assistant 行（不含 tools）。无 tail 则 skip。 */
   commitAbortOverlaySnapshot: () => boolean;
+  /**
+   * 强制直发全量快照（Step 6 单元接线的控制消息消费面）：绕过
+   * uiRunning+streamActive 的 defer 拦截——subagent 长任务期间消息可见、
+   * 重挂后空基线直发均走此路径（对齐组件内 pendingSubagentSessions
+   * 变化时的 force 直发语义）。
+   */
+  forceSnapshot: () => void;
+  /**
+   * 轻量合成提交（Step 6 中断现场渲染）：把单元持有的 interrupted
+   * partial（text/thinking 由调用方传入，不依赖组件本地累积）组装为
+   * 一条只读 assistant 终态行经 streamCommit 通道呈现。成功返回 true；
+   * webview 未就绪或 partial 全空返回 false。
+   */
+  commitSyntheticAssistantRow: (text: string, thinking: string) => boolean;
 };
 
 export type ChatTranscriptWebViewProps = {
@@ -731,6 +745,46 @@ export const ChatTranscriptWebView = memo(
         return true;
       }, [webReady, flags?.richText, commitStreamTail]);
 
+      /**
+       * 轻量合成提交（Step 6 中断现场渲染）：与 commitAbortOverlaySnapshot
+       * 的差异在数据源——后者读组件本地累积（streamTextAccumRef）且以
+       * streamActiveRef 为前置（重启水合出的 interrupted 单元两者皆空，
+       * 直接调用必 false）；本方法把单元投影携带的 partial 作为参数传入，
+       * 不依赖任何本地状态，专职「中断现场的只读终态行」呈现。
+       */
+      const commitSyntheticAssistantRow = useCallback(
+        (text: string, thinking: string): boolean => {
+          if (!webReady) {
+            return false;
+          }
+          if (text.length === 0 && thinking.length === 0) {
+            return false;
+          }
+          const richText = flags?.richText ?? false;
+          const rows = enrichTranscriptRows(
+            [
+              {
+                kind: 'message',
+                id: `interrupted-partial-${Date.now()}`,
+                role: 'assistant',
+                hidden: false,
+                text: decodeLiteralHtmlEntities(text),
+                thinking: decodeLiteralHtmlEntities(thinking),
+              },
+            ],
+            richText,
+          );
+          commitStreamTail(rows, 'preserve');
+          return true;
+        },
+        [webReady, flags?.richText, commitStreamTail],
+      );
+
+      /** handle 的 forceSnapshot 叶子：经 ref 取最新快照实现（force 直发）。 */
+      const forceSnapshotNow = useCallback(() => {
+        sendSessionSnapshotRef.current('preserve', undefined, true);
+      }, []);
+
       const resetStreamTail = useCallback(() => {
         clearLocalStreamBuffers();
         const wasActive = streamActiveRef.current;
@@ -756,6 +810,8 @@ export const ChatTranscriptWebView = memo(
           resetStream: resetStreamTail,
           tryCommitStreamTail,
           commitAbortOverlaySnapshot,
+          forceSnapshot: forceSnapshotNow,
+          commitSyntheticAssistantRow,
         }),
         [
           queueStreamDelta,
@@ -763,6 +819,8 @@ export const ChatTranscriptWebView = memo(
           resetStreamTail,
           tryCommitStreamTail,
           commitAbortOverlaySnapshot,
+          forceSnapshotNow,
+          commitSyntheticAssistantRow,
         ],
       );
 
