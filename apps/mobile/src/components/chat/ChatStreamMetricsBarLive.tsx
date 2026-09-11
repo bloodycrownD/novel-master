@@ -49,6 +49,8 @@ export function ChatStreamMetricsBarLive({agentRunning, sessionId}: Props) {
   }, [manager]);
 
   let metrics: AgentStreamMetricsView | null = null;
+  /** 中断现场的正面标识（Step 7）：仅水合出的 interrupted 单元冻结指标携带。 */
+  let interrupted = false;
   if (sessionId != null) {
     const view = manager.snapshot(sessionId);
     if (view != null && isSessionStreamUnitSettled(view.status)) {
@@ -61,6 +63,7 @@ export function ChatStreamMetricsBarLive({agentRunning, sessionId}: Props) {
         view.metrics.textChars > 0 ||
         view.metrics.thinkingChars > 0
       ) {
+        interrupted = view.status === 'interrupted';
         const elapsedMs =
           view.elapsedMs != null
             ? view.elapsedMs
@@ -100,5 +103,5 @@ export function ChatStreamMetricsBarLive({agentRunning, sessionId}: Props) {
     return null;
   }
 
-  return <ChatStreamMetricsBar metrics={metrics} />;
+  return <ChatStreamMetricsBar metrics={metrics} interrupted={interrupted} />;
 }

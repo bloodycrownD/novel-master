@@ -237,6 +237,15 @@ export function SubagentSessionScreen() {
 
   return (
     <View style={[styles.root, {backgroundColor: tokens.background}]}>
+      {unitView?.status === 'interrupted' ? (
+        // 中断现场的正面标识（Step 7，与主屏指标条同语义）：轻量文本行，
+        // 复用既有视觉 token，不动 webview 协议。
+        <View style={[styles.interruptedBanner, {borderColor: tokens.danger}]}>
+          <Text style={[styles.interruptedText, {color: tokens.danger}]}>
+            已中断
+          </Text>
+        </View>
+      ) : null}
       {displayMessages.length === 0 && !agentRunning ? (
         <View style={styles.center}>
           <Text style={{color: tokens.textSecondary}}>子会话暂无消息</Text>
@@ -278,6 +287,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: 24,
+  },
+  interruptedBanner: {
+    alignSelf: 'center',
+    marginTop: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  interruptedText: {
+    fontSize: 12,
+    fontWeight: '600',
   },
   stopBtn: {
     position: 'absolute',

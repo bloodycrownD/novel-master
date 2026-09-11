@@ -20,8 +20,6 @@ export const APP_UI_KEY_CHAT_TRANSCRIPT_ENGINE = 'chatTranscriptEngine';
 /** `rn` | `webview` — VFS markdown preview engine (default `webview`). */
 export const APP_UI_KEY_VFS_MARKDOWN_PREVIEW_ENGINE =
   'vfsMarkdownPreviewEngine';
-/** `true` | `false` — WebView stream bridge uses streamBatch (default on). */
-export const APP_UI_KEY_CHAT_STREAM_BATCH_ENABLED = 'chatStreamBatchEnabled';
 /** Last app version seen at bootstrap (package version). */
 export const APP_UI_KEY_LAST_RUN_VERSION = 'app.lastRunVersion';
 /** Integer string; bumped when app version changes to remount rich text. */

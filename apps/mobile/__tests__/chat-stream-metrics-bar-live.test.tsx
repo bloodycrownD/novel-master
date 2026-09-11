@@ -60,7 +60,7 @@ function buildHarness(): {
   return {manager, eventBus};
 }
 
-/** 挂载指标条并读取其文案行（metrics 为 null 时无 Text 节点，返回 null）。 */
+/** 挂载指标条并读取其全部文案（含 Step 7 中断徽标；无 Text 节点返回 null）。 */
 function renderMetricsLine(
   agentRunning: boolean,
   sessionId: string,
@@ -76,7 +76,9 @@ function renderMetricsLine(
   });
   const textNodes = tree!.root.findAllByType(Text);
   const line =
-    textNodes.length > 0 ? String(textNodes[0]!.props.children) : null;
+    textNodes.length > 0
+      ? textNodes.map(node => String(node.props.children)).join(' | ')
+      : null;
   act(() => {
     tree!.unmount();
   });
@@ -115,6 +117,8 @@ describe('ChatStreamMetricsBarLive 双源（快照优先 / settled 投影兜底�
     expect(mockManager.getSettledProjection('s1')).toBe(null);
 
     const line = renderMetricsLine(false, 's1');
+    // Step 7 中断正面标识：interrupted 冻结指标前带「已中断」徽标。
+    expect(line).toContain('已中断');
     expect(line).toContain('上次生成');
     expect(line).toContain('3.0s'); // 冻结历时 = 5000 - 2000
     expect(line).toContain('正文 123 字');

@@ -2,7 +2,6 @@ import {
   APP_UI_DEFAULTS,
   APP_UI_KKV_MODULE,
   APP_UI_KEY_CHAT_RICH_TEXT,
-  APP_UI_KEY_CHAT_STREAM_BATCH_ENABLED,
   APP_UI_KEY_CHAT_TRANSCRIPT_ENGINE,
   APP_UI_KEY_THEME,
   APP_UI_KEY_VFS_MARKDOWN_PREVIEW_ENGINE,
@@ -26,6 +25,5 @@ describe('app-ui-keys', () => {
     expect(APP_UI_KEY_VFS_MARKDOWN_PREVIEW_ENGINE).toBe(
       'vfsMarkdownPreviewEngine',
     );
-    expect(APP_UI_KEY_CHAT_STREAM_BATCH_ENABLED).toBe('chatStreamBatchEnabled');
   });
 });

@@ -168,10 +168,6 @@ jest.mock('../src/services/stream-apply-buffer', () => ({
   }),
 }));
 
-jest.mock('../src/storage/chat-stream-batch-pref', () => ({
-  readChatStreamBatchEnabled: jest.fn(async () => true),
-}));
-
 jest.mock('../src/storage/chat-transcript-engine', () => ({
   defaultChatTranscriptEngine: () => 'webview',
   readChatTranscriptEngine: jest.fn(async () => 'webview'),
