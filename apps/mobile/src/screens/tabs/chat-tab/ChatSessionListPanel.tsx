@@ -1,7 +1,7 @@
 /**
  * Chat tab sessions subview: session list, template workspace.
  */
-import React, {useCallback, useEffect, useMemo, useRef} from 'react';
+import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {FlatList, Pressable, StyleSheet, Text, View} from 'react-native';
 import {type ChatSession} from '@novel-master/core/chat';
 
@@ -17,6 +17,7 @@ import {
   VfsFileManager,
   type VfsFileManagerHandle,
 } from '@/components/vfs/VfsFileManager';
+import {useRuntime} from '@/hooks/useRuntime';
 import type {ThemeTokens} from '@/theme/tokens';
 import {formatRelativeTimeMs} from '@/utils/format-relative-time';
 import type {SessionListPanel} from './useChatTabScope';
@@ -89,6 +90,31 @@ function ChatSessionListPanelInner({
   // 避免与聊天工作区的注册相互覆盖。
   const projectVfsRef = useRef<VfsFileManagerHandle | null>(null);
   const setWorkspaceBackState = useChatTabWorkspaceBackState();
+
+  // ===== 后台停止入口（Step 6）：订阅 manager 判活 =====
+  // 活跃 run 会话集合（starting|running 单元）：长按菜单的「停止生成」仅对
+  // 集合内的会话出现；变更经 manager.subscribe 通知（受理/收尾/替换均触发，
+  // 低频，整表重渲染可接受）。
+  const runtime = useRuntime();
+  const manager = runtime.sessionStreamUnitManager;
+  const [activeRunIds, setActiveRunIds] = useState<ReadonlySet<string>>(
+    () => new Set(manager.activeSessionIds()),
+  );
+  useEffect(() => {
+    const sync = () =>
+      setActiveRunIds(new Set(manager.activeSessionIds()));
+    sync();
+    return manager.subscribe(sync);
+  }, [manager]);
+
+  const onStopGenerating = useCallback(
+    (sid: string) => {
+      // 走单元的 abort 语义（retain/freeze 时序由 core 负责）；后续
+      // FINISHED 照常经事件路径收尾（投影回落、集合更新、按钮消失）。
+      manager.stopRun(sid);
+    },
+    [manager],
+  );
 
   const emitWorkspaceBackState = useCallback(() => {
     if (setWorkspaceBackState == null) {
@@ -224,6 +250,16 @@ function ChatSessionListPanelInner({
                       {isCurrent ? ' · 活跃中' : ''}
                     </Text>
                   </View>
+                  {activeRunIds.has(item.id) ? (
+                    <View
+                      style={[
+                        styles.generatingBadge,
+                        {backgroundColor: tokens.primary},
+                      ]}
+                    >
+                      <Text style={styles.currentBadgeText}>生成中</Text>
+                    </View>
+                  ) : null}
                   {isCurrent && !sessionBatchActive ? (
                     <View
                       style={[
@@ -265,11 +301,20 @@ function ChatSessionListPanelInner({
           />
           <BottomSheetMenu
             visible={menuSessionId != null}
-            items={[
-              {label: '重命名', action: 'rename'},
-              {label: '复制', action: 'copy'},
-              {label: '删除', action: 'delete', danger: true},
-            ]}
+            items={
+              menuSessionId != null && activeRunIds.has(menuSessionId)
+                ? [
+                    {label: '停止生成', action: 'stop-generating'},
+                    {label: '重命名', action: 'rename'},
+                    {label: '复制', action: 'copy'},
+                    {label: '删除', action: 'delete', danger: true},
+                  ]
+                : [
+                    {label: '重命名', action: 'rename'},
+                    {label: '复制', action: 'copy'},
+                    {label: '删除', action: 'delete', danger: true},
+                  ]
+            }
             onClose={() => onMenuSessionIdChange(undefined)}
             onSelect={action => {
               const sid = menuSessionId;
@@ -277,7 +322,9 @@ function ChatSessionListPanelInner({
               if (sid == null) {
                 return;
               }
-              if (action === 'rename') {
+              if (action === 'stop-generating') {
+                onStopGenerating(sid);
+              } else if (action === 'rename') {
                 onOpenSessionRename(sid);
               } else if (action === 'copy') {
                 onCopySession(sid);
@@ -325,6 +372,11 @@ const styles = StyleSheet.create({
     marginRight: 4,
   },
   currentBadgeText: {color: '#FFFFFF', fontSize: 12, fontWeight: '600'},
+  generatingBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
   menuDots: {fontSize: 18, paddingHorizontal: 4},
   chevron: {fontSize: 22, fontWeight: '300'},
   empty: {textAlign: 'center', marginTop: 32},
