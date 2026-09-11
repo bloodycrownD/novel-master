@@ -35,7 +35,7 @@ novel-master 的 AI 聊天目前内置 10 个工具（task/read/write/edit/fs/gl
 
 ### 包含范围
 
-1. 新增内置工具 `search`（四引擎：bocha / tavily / brave / searxng）
+1. 新增内置工具 `search`（五引擎：bocha / tavily / brave / searxng / duckduckgo）
 2. 搜索引擎手动配置界面（桌面 + 移动）与凭证/元数据存储
 3. curl 工具输出预算 256KB → 50KB，超预算自动落盘机制
 4. search 工具输出超预算同机制落盘
@@ -56,7 +56,14 @@ novel-master 的 AI 聊天目前内置 10 个工具（task/read/write/edit/fs/gl
 ### R1 search 工具与引擎适配
 
 - 注册内置工具 `search`，入参至少含 `query` 与结果条数；输出 `{answer?, results: [{title, url, snippet}]}`，遵循统一内部接口
-- 四引擎适配器：bocha（Bearer + POST）、tavily（Bearer + POST）、brave（X-Subscription-Token + GET）、searxng（无 key + GET `{base}/search?q=...&format=json`，用户自填 baseUrl）
+- 五引擎适配器：bocha（Bearer + POST）、tavily（Bearer + POST）、brave（X-Subscription-Token + GET）、searxng（无 key + GET `{base}/search?q=...&format=json`，用户自填 baseUrl）、duckduckgo（无 key + GET `html.duckduckgo.com/html/?q=...` HTML 端点解析，内置兑底免密钥；忽略 recencyFilter；解析 0 结果报 invalid 供串行链感知改版）
+
+#### R1.2 内置 DuckDuckGo 兑底（第三轮新增）
+
+- duckduckgo 恒 configured（无 key 无 baseUrl），默认序固定队尾，参与排序可上移（免费用户可挪至首位即纯免费搜索）
+- 未配置任何 key/baseUrl 时链 = [duckduckgo]，搜索开箱即用；「未配置」提示仅作为链空的防御路径保留（常规不可达）
+- 帮助弹窗引擎优先级段补一句：未配置时由内置 DuckDuckGo 兑底（免费、无需密钥）
+- UI：列表行状态标签「内置」；详情页为只读说明（无表单无保存）
 - 未配置任何引擎时调用返回明确的「未配置」提示（含配置入口指引），不报错崩溃
 - 参考实现 `.reference/pi-web-access` 的 bocha.ts / tavily.ts / brave.ts / searxng.ts 可直接借鉴
 
