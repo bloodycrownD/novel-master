@@ -138,11 +138,14 @@ export function SearchEngineDetailScreen() {
         }
         await store.setSearxngBaseUrl(baseUrl);
       } else {
-        // key 引擎留空 = 不改（密钥不回显，无 diff 可比）。
+        // key 引擎空 draft：密钥不回显、无 diff 可比，直接拦截提示
+        // （与 desktop 同口径：不发虚假成功 toast、不回读）。
         const draft = apiKeyDraft.trim();
-        if (draft.length > 0) {
-          await store.saveEngineKey(engineId, draft);
+        if (draft.length === 0) {
+          showToast('请输入 API Key（留空不会修改已保存的密钥）');
+          return;
         }
+        await store.saveEngineKey(engineId, draft);
       }
       showToast('配置已保存');
       await load();

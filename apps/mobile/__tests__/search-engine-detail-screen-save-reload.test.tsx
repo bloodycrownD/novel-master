@@ -1,7 +1,8 @@
 /**
  * SearchEngineDetailScreen 保存语义（ui/B-3 迁移，修订轮两级）：
  * 单引擎表单保存失败时 toast 后立即回读（catch 内补 `await load()`），
- * 状态标签反映已生效 configured；key 引擎留空保存不改已存密钥。
+ * 状态标签反映已生效 configured；key 引擎留空保存拦截提示、不触碰
+ * 密钥库（与 desktop 同口径）。
  *
  * 照 search-engines-screen-save-reload.test.tsx（旧列表单屏版，已删）的
  * TestRenderer 直测风格：输入框 / 保存按钮 / 状态标签 mock 成带标记的
@@ -265,12 +266,17 @@ describe('SearchEngineDetailScreen 保存语义（ui/B-3 迁移）', () => {
     expect(json(renderer)).toContain('tag:set');
   });
 
-  it('留空保存：不触碰密钥库，直接 toast 成功', async () => {
+  it('留空保存：拦截并提示，不触碰密钥库、不回读', async () => {
     const {renderer} = await renderScreen();
+    const readsBefore = mockReadConfig.mock.calls.length;
     await tapSave(renderer.root);
 
     expect(mockSaveEngineKey).not.toHaveBeenCalled();
     expect(mockShowToast).toHaveBeenCalledTimes(1);
-    expect(mockShowToast).toHaveBeenCalledWith('配置已保存');
+    expect(mockShowToast).toHaveBeenCalledWith(
+      '请输入 API Key（留空不会修改已保存的密钥）',
+    );
+    // 拦截早退：无成功链路的回读（readConfig 调用数不变）。
+    expect(mockReadConfig.mock.calls.length).toBe(readsBefore);
   });
 });

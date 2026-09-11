@@ -238,7 +238,7 @@ describe('SearchEnginesScreen 列表屏（修订轮两级）', () => {
     expect(text.indexOf('Tavily')).toBeLessThan(text.indexOf('Bocha'));
     expect(text.indexOf('SearXNG')).toBeLessThan(text.indexOf('Brave'));
     expect(text.indexOf('Brave')).toBeLessThan(text.indexOf('DuckDuckGo'));
-    // 状态标签跟随 configured（四引擎 set/not set 二态）。
+    // 状态标签跟随 configured（可配置引擎 set/not set 二态）。
     expect(text).toContain('tag:set');
     expect(text).toContain('tag:not set');
     // duckduckgo 行不走 ApiKeyStatusTag，用「内置」徽标（无 tag: 前缀）。

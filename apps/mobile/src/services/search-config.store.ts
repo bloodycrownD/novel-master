@@ -42,7 +42,7 @@ export async function readSearchEngineConfig(
 
 /**
  * 保存引擎优先级顺序（便捷入口；语义同 store.setEngineOrder）。
- * order 须为四引擎的合法排列，非法由 core 校验抛错。
+ * order 须为全部引擎（ENGINE_IDS）的合法排列，非法由 core 校验抛错。
  */
 export async function setSearchEngineOrder(
   runtime: MobileNovelMasterRuntime,

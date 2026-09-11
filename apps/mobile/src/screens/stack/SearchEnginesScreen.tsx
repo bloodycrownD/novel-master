@@ -1,5 +1,5 @@
 /**
- * 搜索配置列表页（修订轮两级结构）：按 engineOrder 顺序列出四引擎 +
+ * 搜索配置列表页（修订轮两级结构）：按 engineOrder 顺序列出全部引擎（ENGINE_IDS） +
  * 配置状态标签；行菜单上移/下移调整串行链优先级（首位上移/末位下移
  * 禁用，照 ProvidersScreen 的 BottomSheetMenu 先例）；点击行进详情页。
  *
