@@ -31,17 +31,28 @@
  * 标志位（水合前投影 null——水合流程在 Step 5 填实，本节点 manager 构造
  * 后由装配方/测试显式调 markHydrated）。runtime 装配接线在 Step 6。
  *
+ * Step 3 新增：流式事件订阅（TEXT/THINKING_DELTA、STEP_COMMITTED）按
+ * sessionId 路由进单元管线（delta 累积/step 边界/缓冲/注入/指标归单元
+ * 字段），通知节拍对齐单元 apply（64ms）；child-created 与 pendingChildren
+ * 链接语义同批填实。runtime 装配接线在 Step 6。
+ *
  * @module services/session-stream-unit-manager
  */
 import {
   EVENT_AGENT_RUN_FAILED,
   EVENT_AGENT_RUN_FINISHED,
   EVENT_AGENT_RUN_STARTED,
+  EVENT_AGENT_STEP_COMMITTED,
+  EVENT_AGENT_STREAM_TEXT_DELTA,
+  EVENT_AGENT_STREAM_THINKING_DELTA,
 } from '@novel-master/core/events';
 import type {
   AgentRunFailedPayload,
   AgentRunFinishedPayload,
   AgentRunStartedPayload,
+  AgentStepCommittedPayload,
+  AgentStreamTextDeltaPayload,
+  AgentStreamThinkingDeltaPayload,
 } from '@novel-master/core/events';
 import type {SendAnnotateDraft} from '@novel-master/core/chat';
 import type {EventSubscription} from '@novel-master/core/events';
@@ -184,6 +195,32 @@ export class SessionStreamUnitManager {
       ),
     );
 
+    // 流式事件订阅（Step 3）：按 sessionId 路由进对应单元的管线方法——
+    // 无单元（子会话 run / 旧连接残留）自然落空。delta 高频不触发投影通知，
+    // 通知由单元的 apply 节拍（64ms）回调 onProjectionChanged 驱动。
+    this.subscriptions.push(
+      this.runtime.eventBus.subscribe(
+        EVENT_AGENT_STREAM_TEXT_DELTA,
+        (payload: AgentStreamTextDeltaPayload) => {
+          this.units
+            .get(payload.sessionId)
+            ?.ingestTextDelta(payload.runId, payload.text);
+        },
+      ),
+      this.runtime.eventBus.subscribe(
+        EVENT_AGENT_STREAM_THINKING_DELTA,
+        (payload: AgentStreamThinkingDeltaPayload) => {
+          this.units
+            .get(payload.sessionId)
+            ?.ingestThinkingDelta(payload.runId, payload.text);
+        },
+      ),
+      this.runtime.eventBus.subscribe(
+        EVENT_AGENT_STEP_COMMITTED,
+        (payload: AgentStepCommittedPayload) => this.onStepCommitted(payload),
+      ),
+    );
+
     // 通知点按：切 scope 到目标会话（已在目标会话则跳过切换）+ 导航 Chat tab。
     // onBackgroundEvent 为模块级一次注册（handler 引用替换），不随实例退订；
     // 这里只握 onForegroundEvent 的退订函数，dispose 时退订。
@@ -251,7 +288,8 @@ export class SessionStreamUnitManager {
   }
 
   /**
-   * 订阅投影变更（受理/状态迁移/收尾/宽限销毁/LRU 淘汰/替换/水合完成均触发）
+   * 订阅投影变更（受理/状态迁移/收尾/宽限销毁/LRU 淘汰/替换/水合完成/
+   * step 边界/child 链接变化，以及运行中单元的 apply 节拍≈64ms 均触发）
    * ——会话运行态视图的响应源。返回退订函数；dispose 后不再通知。
    */
   subscribe(listener: () => void): () => void {
@@ -307,6 +345,7 @@ export class SessionStreamUnitManager {
       onSettled: options?.onSettled,
       settledGraceMs: this.settledGraceMs,
       onGraceExpired: expired => this.handleGraceExpired(sessionId, expired),
+      onProjectionChanged: () => this.notifyChanged(),
     });
     unit.begin();
     this.units.set(sessionId, unit);
@@ -396,6 +435,7 @@ export class SessionStreamUnitManager {
       sessionId,
       projectId,
       settledGraceMs: this.settledGraceMs,
+      onProjectionChanged: () => this.notifyChanged(),
     });
     unit.settleAsInterrupted();
     const existing = this.units.get(sessionId);
@@ -413,6 +453,18 @@ export class SessionStreamUnitManager {
   private onRunStarted(payload: AgentRunStartedPayload): void {
     const unit = this.units.get(payload.sessionId);
     if (unit == null || !unit.markRunning(payload.runId)) {
+      return;
+    }
+    this.notifyChanged();
+  }
+
+  /**
+   * STEP_COMMITTED：step 边界冲刷 + partial 清零 + 注入标记复位。
+   * 单元内含 runId 所有权守卫，生效才触发投影通知。
+   */
+  private onStepCommitted(payload: AgentStepCommittedPayload): void {
+    const unit = this.units.get(payload.sessionId);
+    if (unit == null || !unit.handleStepCommitted(payload.runId)) {
       return;
     }
     this.notifyChanged();
