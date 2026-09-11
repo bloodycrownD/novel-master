@@ -59,6 +59,11 @@
  * - requestStreamReset(sessionId)：广播 reset-stream 控制消息（消息操作后
  *   清流式显示的屏幕驱动入口）。
  *
+ * Step 7 新增：收尾校准探针接线（services/run-finish-calibration-probe，
+ * 自旧 use-run-resume-probe 收尾方向迁入的最小版）——低频轮询 + 前台回焦
+ * 校准「running 单元 + registry 无注册」的悬挂现场（终态事件丢失兜底），
+ * 走 finishRun('failed') 等效收尾；starting 单元不参与（受理空窗防误杀）。
+ *
  * @module services/session-stream-unit-manager
  */
 import {
@@ -113,6 +118,11 @@ import type {
 } from '@/services/session-stream-unit';
 import {createRunStateWritethrough} from '@/services/run-state-writethrough';
 import type {RunStateWritethrough} from '@/services/run-state-writethrough';
+import {
+  createRunFinishCalibrationProbe,
+  type RunFinishCalibrationProbe,
+} from '@/services/run-finish-calibration-probe';
+import {AppState} from 'react-native';
 
 /** settled 单元并存的 LRU 上限（含宽限中的与水合常驻的；活跃单元不占槽）。 */
 export const SESSION_STREAM_MAX_SETTLED_UNITS = 8;
@@ -281,6 +291,10 @@ export class SessionStreamUnitManager {
   private readonly listeners = new Set<() => void>();
   /** onForegroundEvent 点按监听的退订函数（dispose 时退订，防 retry 重建累积）。 */
   private offNotificationTap: (() => void) | undefined;
+  /** 收尾校准探针（Step 7：事件丢失兜底；dispose 时销毁）。 */
+  private calibrationProbe: RunFinishCalibrationProbe | undefined;
+  /** 前台回焦触发校准的 AppState 订阅（dispose 时退订）。 */
+  private calibrationAppStateSub: {remove(): void} | undefined;
   private disposed = false;
   private permissionEnsured = false;
   private hydratedValue = false;
@@ -367,6 +381,21 @@ export class SessionStreamUnitManager {
         navigateToChatTabFromNotification();
       },
     );
+
+    // 收尾校准探针（Step 7 自旧 run 探针的收尾方向迁入）：低频轮询 +
+    // 前台回焦校准「running 单元 + registry 无注册」的悬挂现场，防 core
+    // 终态事件丢失导致「生成中」永久残留。starting 单元不参与（受理空窗
+    // 内 registry 尚未注册，校准必误杀；该场景由 finally 兜底）。
+    this.calibrationProbe = createRunFinishCalibrationProbe({
+      activeSessionIds: () => this.listCalibratableSessionIds(),
+      isRunRegistered: sessionId => this.runtime.abortRegistry.has(sessionId),
+      onRunLost: sessionId => this.finishLostRun(sessionId),
+    });
+    this.calibrationAppStateSub = AppState.addEventListener('change', state => {
+      if (state === 'active') {
+        this.calibrationProbe?.calibrate();
+      }
+    });
 
     // 注入了持久层服务即异步 kick 水合（完成前 snapshot 恒 null 的既有
     // 语义生效——水合是单表小扫描，窗口可忽略；失败时放行 markHydrated
@@ -1244,7 +1273,45 @@ export class SessionStreamUnitManager {
     return status === 'starting' || status === 'running';
   }
 
+  /**
+   * 校准探针的活跃会话列举：只含 runId 已回填的 running 单元。starting
+   * 单元（受理空窗内 registry 尚未注册）不参与校准——查 registry 必为
+   * false，会把正常受理中的 run 误判为丢失；该形态的死单由 startRun 的
+   * promise 链尾 finally 兜底收口。
+   */
+  private listCalibratableSessionIds(): readonly string[] {
+    const ids: string[] = [];
+    for (const [sessionId, unit] of this.units) {
+      if (this.isActiveUnit(unit) && unit.getRunId() != null) {
+        ids.push(sessionId);
+      }
+    }
+    return ids;
+  }
+
+  /**
+   * 校准收尾（终态事件丢失的兜底）：走与 FAILED 事件等效的收尾路径——
+   * runId 所有权匹配则 settle('failed')，refcount/持久层/通知/保活照常
+   * 收口。经 startRun 发起的 run 的 runAgentTurn promise 挂死场景同样
+   * 被覆盖（finally 永不到达时这里是唯一收尾点）。
+   */
+  private finishLostRun(sessionId: string): void {
+    const unit = this.units.get(sessionId);
+    if (unit == null || !this.isActiveUnit(unit)) {
+      return;
+    }
+    const runId = unit.getRunId();
+    if (runId == null) {
+      return;
+    }
+    this.finishRun(sessionId, runId, 'failed', '连接已断开，生成被中断');
+  }
+
   private notifyChanged(): void {
+    // 校准轮询随活跃单元启停（空闲零常驻定时器）——notifyChanged 是单元
+    // 状态变化的总线，这里同步一次即可覆盖受理/回填/收尾/销毁全部沿。
+    const calibratableCount = this.listCalibratableSessionIds().length;
+    this.calibrationProbe?.setPollingEnabled(calibratableCount > 0);
     for (const listener of [...this.listeners]) {
       listener();
     }
@@ -1264,6 +1331,10 @@ export class SessionStreamUnitManager {
     this.disposed = true;
     this.offNotificationTap?.();
     this.offNotificationTap = undefined;
+    this.calibrationProbe?.dispose();
+    this.calibrationProbe = undefined;
+    this.calibrationAppStateSub?.remove();
+    this.calibrationAppStateSub = undefined;
     for (const sub of this.subscriptions) {
       sub.unsubscribe();
     }

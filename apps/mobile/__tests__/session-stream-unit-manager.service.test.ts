@@ -40,6 +40,9 @@ async function flushAsync(): Promise<void> {
   await new Promise(resolve => setTimeout(resolve, 0));
 }
 
+/** 本用例内创建的 manager 登记——afterEach 统一 dispose（防校准轮询 interval 残留）。 */
+const liveManagers: SessionStreamUnitManager[] = [];
+
 function createHarness(options?: {readonly skipHydrate?: boolean}) {
   const eventBus = new SimpleEventBus();
   const abortRegistry = {
@@ -67,6 +70,7 @@ function createHarness(options?: {readonly skipHydrate?: boolean}) {
     runtime: {eventBus, abortRegistry, sessions, projects} as never,
     runAgentTurn: runAgentTurn as never,
   });
+  liveManagers.push(manager);
   if (options?.skipHydrate !== true) {
     manager.markHydrated();
   }
@@ -121,6 +125,11 @@ describe('SessionStreamUnitManager', () => {
   afterEach(() => {
     setMobileAgentActive(false);
     resetKeepAliveStateForTests();
+    // 未在用例内 dispose 的 manager 统一收口：清校准轮询 interval 与
+    // 复询定时器，防 jest 环境拆除后异步路径再触碰 RN 模块。
+    for (const manager of liveManagers.splice(0)) {
+      manager.dispose();
+    }
   });
 
   it('水合语义：markHydrated 前投影一律 null（会话呈现为无 run）；置位后可读并通知', () => {
