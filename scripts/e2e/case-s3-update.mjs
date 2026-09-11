@@ -90,7 +90,7 @@ try {
     // 拖拽前后各取一份列宽快照，按列差值判定拖拽是否生效；旧实现两份快照都取在
     // mouse.up 之后（b0c 与 b1 间无 DOM 变化，changed 恒 false），b0 总宽快照从未使用一并移除
     const colWidths = () => page.evaluate(() =>
-      [...document.querySelectorAll("#app > *")].map((e) => Math.round(e.getBoundingClientRect().width)));
+      [...document.querySelectorAll(".workspace > *")].map((e) => Math.round(e.getBoundingClientRect().width)));
     const before = await colWidths();
     const sb = await splitter.boundingBox();
     await page.mouse.move(sb.x + sb.width / 2, sb.y + 200);

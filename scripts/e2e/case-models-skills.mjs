@@ -20,9 +20,15 @@ try {
   await sleep(1000);
   await shot(page, "610", "model-manage-list");
   const mmBefore = await page.evaluate(() => ({
-    models: [...document.querySelectorAll(".settings-view [class*=model-item], .settings-view li")].filter((e) => e.offsetParent).map((e) => e.textContent?.slice(0, 40)).slice(0, 6),
+    // 模型行是 SettingsListItem 渲染的 div.settings-list-item（非 li、无 model-item 类）
+    models: [...document.querySelectorAll(".settings-view .settings-list-item")].filter((e) => e.offsetParent).map((e) => e.textContent?.slice(0, 40)).slice(0, 6),
   }));
   console.log("MM_BEFORE", JSON.stringify(mmBefore));
+
+  // 进批量模式（「全选/删除」是 ManageHeader batchMode 条件渲染，须先点「管理」）
+  const manageBtn = page.locator(".settings-view button:visible").filter({ hasText: "^管理$" }).first();
+  await manageBtn.click();
+  await sleep(600);
 
   // 全选 → 删除（若批量 UI 存在）
   const selAll = page.locator(".settings-view button:visible").filter({ hasText: "全选" }).first();
@@ -48,7 +54,7 @@ try {
     const addOk = page.locator(".text-prompt-modal button").filter({ hasText: /^添加$/ }).first();
     if (await addOk.count()) { await addOk.click(); await sleep(900); }
   }
-  const mmCount = await page.locator(".settings-view li").filter({ hasText: "glm-regression-test" }).count();
+  const mmCount = await page.locator(".settings-view .settings-list-item").filter({ hasText: "glm-regression-test" }).count();
   console.log("MODEL_READDED", mmCount >= 1);
   if (mmCount < 1) console.log("FAIL MODEL_READDED", mmCount);
 
