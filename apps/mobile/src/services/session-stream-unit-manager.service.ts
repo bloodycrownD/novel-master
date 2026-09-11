@@ -79,6 +79,7 @@ import {
 import type {
   SessionStreamRunSettledStatus,
   SessionStreamUnitView,
+  SessionStreamWebviewHandle,
 } from '@/services/session-stream-unit';
 
 /** settled 单元并存的 LRU 上限（含宽限中的与水合常驻的；活跃单元不占槽）。 */
@@ -316,6 +317,22 @@ export class SessionStreamUnitManager {
   /** 当前注册表中的单元总数（含活跃与 settled；诊断/测试用）。 */
   unitCount(): number {
     return this.units.size;
+  }
+
+  /**
+   * 把 webview 句柄挂到该会话的单元（Step 6 屏幕接线的消费面；无单元
+   * no-op）。单元内会在 attach 时尝试注入本 step 已累积的 partial。
+   */
+  attachWebview(
+    sessionId: string,
+    handle: SessionStreamWebviewHandle,
+  ): void {
+    this.units.get(sessionId)?.attachWebview(handle);
+  }
+
+  /** 摘除该会话单元上的 webview 句柄（无单元/未注册 no-op）。 */
+  detachWebview(sessionId: string, handleId: string): void {
+    this.units.get(sessionId)?.detachWebview(handleId);
   }
 
   /**

@@ -383,23 +383,48 @@ export class SessionStreamUnit {
    * child-created 登记（manager 按 parentSessionId 路由）。
    *
    * 去重语义对齐蓝本 Map<title, childSessionId>：同 title 再次创建覆盖
-   * （新 child 接管该 title 的任务卡）；同 childSessionId 已登记则不重复
-   * 入投影。水合流程（Step 5）恢复链接也走本入口逐条回填。返回投影是否
-   * 变化（变化才触发通知）。
+   * （新 child 接管该 title 的任务卡，旧 child 若无其他 title 归属则一并
+   * 摘除）；同 childSessionId 已登记则不重复入投影。水合流程（Step 5）
+   * 恢复链接也走本入口逐条回填。返回投影是否变化（变化才触发通知）。
    */
   registerPendingChild(childSessionId: string, title: string): boolean {
     if (this.destroyed || childSessionId.length === 0) {
       return false;
     }
+    const previousId = this.pendingChildIdsByTitle.get(title);
     this.pendingChildIdsByTitle.set(title, childSessionId);
-    if (this.pendingChildrenValue.includes(childSessionId)) {
+    if (previousId === childSessionId) {
       return false;
     }
-    this.pendingChildrenValue = [
-      ...this.pendingChildrenValue,
-      childSessionId,
-    ];
-    return true;
+    let changed = false;
+    if (
+      previousId != null &&
+      previousId !== childSessionId &&
+      !this.isChildIdReferenced(previousId)
+    ) {
+      this.pendingChildrenValue = this.pendingChildrenValue.filter(
+        id => id !== previousId,
+      );
+      changed = true;
+    }
+    if (!this.pendingChildrenValue.includes(childSessionId)) {
+      this.pendingChildrenValue = [
+        ...this.pendingChildrenValue,
+        childSessionId,
+      ];
+      changed = true;
+    }
+    return changed;
+  }
+
+  /** 该 childSessionId 是否仍被任一 title 指向（覆盖判重的辅助）。 */
+  private isChildIdReferenced(childSessionId: string): boolean {
+    for (const id of this.pendingChildIdsByTitle.values()) {
+      if (id === childSessionId) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /**
