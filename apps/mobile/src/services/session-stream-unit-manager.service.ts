@@ -41,6 +41,15 @@
  * （force 快照直发驱动）；runtime.messages 以窄口透传进单元（Step 4 起
  * Pick 扩展 messages 字段，构造处原样传入即可）。
  *
+ * Step 5 新增：run 态持久化（core session_run_state 表，服务经构造参数
+ * 可注入——不注入即纯内存模式）——受理写 starting 行、RUN_STARTED 写
+ * running 行、delta 进 250ms 写通 coalescer（step 边界立即刷、大载荷
+ * 降频 1s）、收尾 settle 落库 + manager 级 settled 投影（常驻 map，供
+ * 「上次生成」跨重启读取）；重启水合（hydrate，单飞幂等）扫 starting/
+ * running 行建 interrupted 单元、扫 settled 行回填投影；forgetSession
+ * 供会话删除链路清内存现场（持久层行由 core 删除事务联动清理）。真装配
+ * 接线在 Step 6。
+ *
  * @module services/session-stream-unit-manager
  */
 import {
@@ -64,6 +73,11 @@ import type {
 import type {SendAnnotateDraft} from '@novel-master/core/chat';
 import type {ChatMessage} from '@novel-master/core/chat';
 import type {EventSubscription} from '@novel-master/core/events';
+import type {
+  SessionRunState,
+  SessionRunStateSettleInput,
+  SessionRunStatus,
+} from '@novel-master/core/session-run-state';
 import {
   decrementAgentActive,
   incrementAgentActive,
@@ -84,9 +98,12 @@ import {
 } from '@/services/session-stream-unit';
 import type {
   SessionStreamRunSettledStatus,
+  SessionStreamUnitMetrics,
   SessionStreamUnitView,
   SessionStreamWebviewHandle,
 } from '@/services/session-stream-unit';
+import {createRunStateWritethrough} from '@/services/run-state-writethrough';
+import type {RunStateWritethrough} from '@/services/run-state-writethrough';
 
 /** settled 单元并存的 LRU 上限（含宽限中的与水合常驻的；活跃单元不占槽）。 */
 export const SESSION_STREAM_MAX_SETTLED_UNITS = 8;
@@ -144,6 +161,38 @@ export interface SessionStreamScopeBridge {
   setCurrentSession(sessionId: string): Promise<void>;
 }
 
+/**
+ * run 状态持久层窄口（manager 只消费这三个方法；真装配为 core 的
+ * `createSessionRunStateService(conn)`，测试注入 mock）。不注入时
+ * manager 无持久化行为（纯内存，Step 2-4 的既有语义）。
+ */
+export interface SessionStreamRunStateStore {
+  upsert(state: SessionRunState): Promise<void>;
+  settle(input: SessionRunStateSettleInput): Promise<void>;
+  listByStatuses(
+    statuses: readonly SessionRunStatus[],
+  ): Promise<SessionRunState[]>;
+}
+
+/**
+ * manager 级 settled 投影条目：run 收尾后的「上次生成」快照。
+ *
+ * 常驻 map（sessionId → 条目），独立于单元生命周期：不随单元宽限销毁或
+ * LRU 淘汰清除（否则单元淘汰后「上次生成」断源），仅被同会话新 run 收尾
+ * 覆盖、随 forgetSession（会话删除链路）清理，或重启后由 settled 行回填。
+ */
+export interface SessionStreamSettledProjection {
+  readonly sessionId: string;
+  /** 冻结的最终指标（「上次生成」的数据源）。 */
+  readonly metrics: SessionStreamUnitMetrics;
+  /** run 开始时刻（毫秒）；starting 阶段中断的 run 可能为 0。 */
+  readonly startedAtMs: number;
+  /** 收尾时刻（毫秒）；持久层回填时以 updated_at_ms 近似。 */
+  readonly settledAtMs: number;
+  /** 终态冻结的历时 =「上次生成」；回填时以 settledAtMs-startedAtMs 近似。 */
+  readonly elapsedMs: number;
+}
+
 export interface SessionStreamUnitManagerParams {
   readonly runtime: SessionStreamManagerRuntime;
   /** 测试注入用；默认走 services/agent-run.service 的包装。 */
@@ -152,6 +201,19 @@ export interface SessionStreamUnitManagerParams {
   readonly settledGraceMs?: number;
   /** settled 单元 LRU 上限；缺省 SESSION_STREAM_MAX_SETTLED_UNITS（测试可覆盖）。 */
   readonly maxSettledUnits?: number;
+  /**
+   * run 状态持久层服务（可注入；真装配 Step 6 由 runtime 侧传
+   * `createSessionRunStateService(conn)`）。注入后 manager 构造即异步
+   * kick 水合（starting/running 行 → interrupted 单元、settled 行 →
+   * settled 投影回填，完成后 markHydrated）。
+   */
+  readonly runStateService?: SessionStreamRunStateStore;
+  /** 写通节流参数透传（测试可覆盖；缺省用模块默认 250ms/1s/1MB）。 */
+  readonly writethrough?: {
+    readonly intervalMs?: number;
+    readonly slowIntervalMs?: number;
+    readonly largePayloadChars?: number;
+  };
 }
 
 /**
@@ -175,6 +237,28 @@ export class SessionStreamUnitManager {
   private readonly settledGraceMs: number | undefined;
   private readonly maxSettledUnits: number;
 
+  /** run 状态持久层（未注入 = 纯内存模式，不写通不水合）。 */
+  private readonly runStateStore:
+    | SessionStreamRunStateStore
+    | undefined;
+  /** 写通节流参数（透传 coalescer；测试覆盖用）。 */
+  private readonly writethroughOptions:
+    | {
+        readonly intervalMs?: number;
+        readonly slowIntervalMs?: number;
+        readonly largePayloadChars?: number;
+      }
+    | undefined;
+  /** per-session 写通 coalescer（RUN_STARTED 时建、收尾/出表时收口）。 */
+  private readonly writethroughs = new Map<string, RunStateWritethrough>();
+  /** settled 投影常驻 map（独立于单元生命周期，见接口注释）。 */
+  private readonly settledProjections = new Map<
+    string,
+    SessionStreamSettledProjection
+  >();
+  /** 水合流程的单飞 promise（构造 kick 一次；hydrate 幂等复用）。 */
+  private hydratePromise: Promise<void> | null = null;
+
   private uiBridge: SessionStreamUiBridge | undefined;
   private prefBridge: SessionStreamPrefBridge | undefined;
   private scopeBridge: SessionStreamScopeBridge | undefined;
@@ -194,6 +278,8 @@ export class SessionStreamUnitManager {
     this.settledGraceMs = params.settledGraceMs;
     this.maxSettledUnits =
       params.maxSettledUnits ?? SESSION_STREAM_MAX_SETTLED_UNITS;
+    this.runStateStore = params.runStateService;
+    this.writethroughOptions = params.writethrough;
 
     // 全量订阅 run 生命周期事件（不经 UI 面板过滤）。
     this.subscriptions.push(
@@ -214,21 +300,32 @@ export class SessionStreamUnitManager {
     // 流式事件订阅（Step 3）：按 sessionId 路由进对应单元的管线方法——
     // 无单元（子会话 run / 旧连接残留）自然落空。delta 高频不触发投影通知，
     // 通知由单元的 apply 节拍（64ms）回调 onProjectionChanged 驱动。
+    // Step 5：delta 生效（ingest 返回 true）即把最新快照 append 进该会话
+    // 的写通 coalescer（250ms 合并；settled/interrupted 单元的陈旧 delta
+    // 被 ingest 守卫拦截，不产生持久层写）。
     this.subscriptions.push(
       this.runtime.eventBus.subscribe(
         EVENT_AGENT_STREAM_TEXT_DELTA,
         (payload: AgentStreamTextDeltaPayload) => {
-          this.units
-            .get(payload.sessionId)
-            ?.ingestTextDelta(payload.runId, payload.text);
+          const unit = this.units.get(payload.sessionId);
+          if (
+            unit != null &&
+            unit.ingestTextDelta(payload.runId, payload.text)
+          ) {
+            this.appendWritethroughSnapshot(unit);
+          }
         },
       ),
       this.runtime.eventBus.subscribe(
         EVENT_AGENT_STREAM_THINKING_DELTA,
         (payload: AgentStreamThinkingDeltaPayload) => {
-          this.units
-            .get(payload.sessionId)
-            ?.ingestThinkingDelta(payload.runId, payload.text);
+          const unit = this.units.get(payload.sessionId);
+          if (
+            unit != null &&
+            unit.ingestThinkingDelta(payload.runId, payload.text)
+          ) {
+            this.appendWritethroughSnapshot(unit);
+          }
         },
       ),
       this.runtime.eventBus.subscribe(
@@ -255,6 +352,13 @@ export class SessionStreamUnitManager {
         navigateToChatTabFromNotification();
       },
     );
+
+    // 注入了持久层服务即异步 kick 水合（完成前 snapshot 恒 null 的既有
+    // 语义生效——水合是单表小扫描，窗口可忽略；失败时放行 markHydrated
+    // 而非卡死在无 run 态）。
+    if (this.runStateStore != null) {
+      void this.hydrate();
+    }
   }
 
   /** Provider ready 后注入 UI toast 桥。 */
@@ -286,6 +390,134 @@ export class SessionStreamUnitManager {
       return;
     }
     this.hydratedValue = true;
+    this.notifyChanged();
+  }
+
+  /**
+   * 重启水合（Step 5）：扫持久层行恢复内存现场，单飞幂等。
+   *
+   * - `status IN (starting,running)` → 逐会话建 interrupted 态单元
+   *   （partial/指标/startedAtMs/pendingChildren 从行恢复）；这些单元
+   *   不挂写通 coalescer（run 已死，只读）；水合窗口内已被新 startRun
+   *   受理的会话跳过（新 run 优先于陈旧行）；
+   * - `status = settled` → 回填 settled 投影（sessionId → metrics 快照，
+   *   settledAtMs 以 updated_at_ms 近似），供「上次生成」跨重启读取；
+   * - 完成后 markHydrated（此前 snapshot 恒 null 的既有语义生效）。
+   *
+   * 失败策略：任一步失败则记日志并直接 markHydrated 放行（会话呈现为
+   * 无 run，不阻塞 UI）。
+   */
+  hydrate(): Promise<void> {
+    if (this.hydratePromise != null) {
+      return this.hydratePromise;
+    }
+    const run = (async () => {
+      const store = this.runStateStore;
+      if (store == null) {
+        this.markHydrated();
+        return;
+      }
+      const activeRows = await store.listByStatuses([
+        'starting',
+        'running',
+      ]);
+      if (this.disposed) {
+        // dispose 已发生（慢扫描撞上 runtime 重建）：不再往死 manager 里
+        // 建单元，直接放行。
+        this.markHydrated();
+        return;
+      }
+      for (const row of activeRows) {
+        const existing = this.units.get(row.sessionId);
+        if (existing != null && this.isActiveUnit(existing)) {
+          // 水合窗口内新受理的 run 优先：不 adopt、不覆盖。
+          continue;
+        }
+        const unit = this.adoptInterruptedUnit(
+          row.sessionId,
+          row.projectId,
+        );
+        let pendingChildren: readonly string[] = [];
+        if (row.pendingChildrenJson != null) {
+          try {
+            const parsed: unknown = JSON.parse(row.pendingChildrenJson);
+            if (Array.isArray(parsed)) {
+              pendingChildren = parsed.filter(
+                (id): id is string => typeof id === 'string',
+              );
+            }
+          } catch {
+            // 损坏的 JSON 按空链接处理，不阻断水合
+          }
+        }
+        unit.hydrateFromRunState({
+          runId: row.runId,
+          startedAtMs: row.startedAtMs,
+          settledAtMs: row.updatedAtMs,
+          metrics: {
+            textChars: row.textChars,
+            thinkingChars: row.thinkingChars,
+          },
+          partialText: row.partialText ?? '',
+          partialThinking: row.partialThinking ?? '',
+          pendingChildren,
+        });
+      }
+      const settledRows = await store.listByStatuses(['settled']);
+      for (const row of settledRows) {
+        this.settledProjections.set(row.sessionId, {
+          sessionId: row.sessionId,
+          metrics: {
+            textChars: row.textChars,
+            thinkingChars: row.thinkingChars,
+          },
+          startedAtMs: row.startedAtMs,
+          settledAtMs: row.updatedAtMs,
+          elapsedMs: Math.max(0, row.updatedAtMs - row.startedAtMs),
+        });
+      }
+      this.markHydrated();
+    })();
+    this.hydratePromise = run.catch(err => {
+      console.error(
+        '[novel-master/session-stream-unit-manager] hydrate failed',
+        err,
+      );
+      this.markHydrated();
+    });
+    return this.hydratePromise;
+  }
+
+  /**
+   * settled 投影读取（Step 6 指标条消费面）：该会话「上次生成」的冻结
+   * 快照；无收尾记录为 null。运行中单元的实时指标走 snapshot(sessionId)
+   * 的 metrics/startedAtMs（消费方按需合并两源）。
+   */
+  getSettledProjection(
+    sessionId: string,
+  ): SessionStreamSettledProjection | null {
+    return this.settledProjections.get(sessionId) ?? null;
+  }
+
+  /**
+   * 遗忘会话（Step 6 会话删除链路调用）：销毁该会话单元（在途写通
+   * coalescer 一并 flush+dispose 收口）+ 清 settled 投影。
+   *
+   * 只清内存：持久层 session_run_state 行由 core 会话删除事务联动清理
+   * （deleteSessionTree / 项目删除级联），此处不重复写库。活跃单元被
+   * 遗忘时同步 decrement（对齐 dispose 的收口，防 refcount 泄漏）。
+   */
+  forgetSession(sessionId: string): void {
+    const unit = this.units.get(sessionId);
+    if (unit != null) {
+      if (!isSessionStreamUnitSettled(unit.getStatus())) {
+        decrementAgentActive();
+      }
+      this.removeUnit(sessionId, unit);
+    } else {
+      this.flushAndDisposeWritethrough(sessionId);
+    }
+    this.settledProjections.delete(sessionId);
     this.notifyChanged();
   }
 
@@ -415,6 +647,22 @@ export class SessionStreamUnitManager {
     });
     unit.begin();
     this.units.set(sessionId, unit);
+    // Step 5：受理即写 starting 行（一次性事件不走节流；runId 未回填用
+    // 空串占位，RUN_STARTED 到达后覆盖）。杀进程落在受理空窗内时，重启
+    // 水合会把该行识别为中断现场。
+    this.upsertRunStateQuietly({
+      sessionId,
+      projectId,
+      runId: '',
+      status: 'starting',
+      startedAtMs: 0,
+      textChars: 0,
+      thinkingChars: 0,
+      partialText: null,
+      partialThinking: null,
+      pendingChildrenJson: null,
+      updatedAtMs: Date.now(),
+    });
     this.notifyChanged();
     incrementAgentActive();
     this.startKeepAliveQuietly(sessionId, projectId);
@@ -520,18 +768,27 @@ export class SessionStreamUnitManager {
     if (unit == null || !unit.markRunning(payload.runId)) {
       return;
     }
+    // Step 5：挂写通 coalescer（供后续 delta append）+ 直接写 running 行
+    //（runId/startedAtMs 回填；一次性事件不走节流）。
+    this.ensureWritethrough(payload.sessionId);
+    const snap = unit.snapshot();
+    this.upsertRunStateQuietly(this.runStateRowFromSnapshot(unit, snap));
     this.notifyChanged();
   }
 
   /**
    * STEP_COMMITTED：step 边界冲刷 + partial 清零 + 注入标记复位。
-   * 单元内含 runId 所有权守卫，生效才触发投影通知。
+   * 单元内含 runId 所有权守卫，生效才触发投影通知。Step 5：生效后把
+   * partial 已清零的新快照 append 进 coalescer 并立即 flush（step 边界
+   * 立即刷——落盘行反映 step 边界状态，而非 append 时刻的旧 partial）。
    */
   private onStepCommitted(payload: AgentStepCommittedPayload): void {
     const unit = this.units.get(payload.sessionId);
     if (unit == null || !unit.handleStepCommitted(payload.runId)) {
       return;
     }
+    this.appendWritethroughSnapshot(unit);
+    this.writethroughs.get(payload.sessionId)?.flush();
     this.notifyChanged();
   }
 
@@ -552,6 +809,9 @@ export class SessionStreamUnitManager {
       payload.parentSessionId,
     );
     if (unit.registerPendingChild(payload.childSessionId, payload.title)) {
+      // 链接变化进写通节流窗（不立即刷——低频事件，等下个窗口即可；
+      // 重启恢复晚一个窗口可接受）。
+      this.appendWritethroughSnapshot(unit);
       this.notifyChanged();
     }
   }
@@ -563,10 +823,9 @@ export class SessionStreamUnitManager {
       return;
     }
     this.pendingChildParentByChild.delete(childSessionId);
-    if (
-      this.units.get(parentSessionId)?.removePendingChild(childSessionId) ===
-      true
-    ) {
+    const parentUnit = this.units.get(parentSessionId);
+    if (parentUnit?.removePendingChild(childSessionId) === true) {
+      this.appendWritethroughSnapshot(parentUnit);
       this.notifyChanged();
     }
   }
@@ -611,8 +870,24 @@ export class SessionStreamUnitManager {
     if (!unit.settle(status)) {
       return;
     }
+    // Step 5：先丢弃写通 coalescer 的在途 pending 再写 settled 行——
+    // 不 flush（pending 里的旧 partial 马上要被 settle 覆盖，flush 只是
+    // 多一次无效写；更重要的是杜绝在途定时器把 settled 行覆盖回 running）。
+    this.discardWritethrough(sessionId);
     // 父收尾：settle 内已清空单元的 pendingChildren，这里同步清反查条目。
     this.clearPendingChildIndex(sessionId);
+    // settled 行落库（partial 清空、metrics 保留——由 core settle 服务端
+    // 强制）+ manager 级 settled 投影更新（「上次生成」常驻，不随单元
+    // 宽限销毁/LRU 淘汰清除）。
+    const snap = unit.snapshot();
+    this.upsertSettledRunStateQuietly(sessionId, unit.projectId, snap);
+    this.settledProjections.set(sessionId, {
+      sessionId,
+      metrics: snap.metrics,
+      startedAtMs: snap.startedAtMs,
+      settledAtMs: snap.settledAtMs ?? Date.now(),
+      elapsedMs: snap.elapsedMs ?? 0,
+    });
     this.evictSettledOverflow();
     this.notifyChanged();
     decrementAgentActive();
@@ -755,11 +1030,131 @@ export class SessionStreamUnitManager {
     this.notifyChanged();
   }
 
-  /** 单元出表统一收口：摘注册表 + 清子会话反查条目 + 销毁单元。 */
+  /**
+   * 单元出表统一收口：摘注册表 + 清子会话反查条目 + 写通 coalescer
+   * 「尽力 flush + dispose」（T-U12 防旧写覆盖新 run 的行）+ 销毁单元。
+   *
+   * flush 而非直接丢弃的场景：finally 兜底（异常死亡、无终态事件）与
+   * manager.dispose（runtime 重建前）——行留在 running 态 + 最新 partial
+   * 落盘，重启水合恢复出的中断现场最完整。已收尾的单元（settle 时已
+   * discardWritethrough）与水合 interrupted 单元（本就无 coalescer）在
+   * 这里天然 no-op。
+   */
   private removeUnit(sessionId: string, unit: SessionStreamUnit): void {
     this.units.delete(sessionId);
     this.clearPendingChildIndex(sessionId);
+    this.flushAndDisposeWritethrough(sessionId);
     unit.destroy();
+  }
+
+  /** 挂写通 coalescer（RUN_STARTED 时调用；已存在则保持——markRunning 一次性保证不重建）。 */
+  private ensureWritethrough(sessionId: string): void {
+    if (this.runStateStore == null || this.writethroughs.has(sessionId)) {
+      return;
+    }
+    this.writethroughs.set(
+      sessionId,
+      createRunStateWritethrough(
+        state => this.runStateStore!.upsert(state),
+        this.writethroughOptions,
+      ),
+    );
+  }
+
+  /** 把单元当前快照 append 进该会话的写通 coalescer（无 coalescer no-op）。 */
+  private appendWritethroughSnapshot(unit: SessionStreamUnit): void {
+    const writethrough = this.writethroughs.get(unit.sessionId);
+    if (writethrough == null) {
+      return;
+    }
+    writethrough.append(
+      this.runStateRowFromSnapshot(unit, unit.snapshot()),
+    );
+  }
+
+  /** 单元快照 → run_state 行（partial 全量覆盖写；空值存 null）。 */
+  private runStateRowFromSnapshot(
+    unit: SessionStreamUnit,
+    snap: SessionStreamUnitView,
+  ): SessionRunState {
+    return {
+      sessionId: unit.sessionId,
+      projectId: unit.projectId,
+      runId: snap.runId ?? '',
+      status: 'running',
+      startedAtMs: snap.startedAtMs,
+      textChars: snap.metrics.textChars,
+      thinkingChars: snap.metrics.thinkingChars,
+      partialText: snap.partialText.length > 0 ? snap.partialText : null,
+      partialThinking:
+        snap.partialThinking.length > 0 ? snap.partialThinking : null,
+      pendingChildrenJson:
+        snap.pendingChildren.length > 0
+          ? JSON.stringify([...snap.pendingChildren])
+          : null,
+      updatedAtMs: Date.now(),
+    };
+  }
+
+  /** upsert 覆盖写（fire-and-forget，失败吞错留日志；无持久层 no-op）。 */
+  private upsertRunStateQuietly(state: SessionRunState): void {
+    if (this.runStateStore == null) {
+      return;
+    }
+    this.runStateStore.upsert(state).catch(err => {
+      console.error(
+        '[novel-master/session-stream-unit-manager] run_state upsert failed',
+        err,
+      );
+    });
+  }
+
+  /** settle 收尾写（fire-and-forget，失败吞错留日志；无持久层 no-op）。 */
+  private upsertSettledRunStateQuietly(
+    sessionId: string,
+    projectId: string,
+    snap: SessionStreamUnitView,
+  ): void {
+    if (this.runStateStore == null) {
+      return;
+    }
+    this.runStateStore
+      .settle({
+        sessionId,
+        projectId,
+        runId: snap.runId ?? '',
+        startedAtMs: snap.startedAtMs,
+        textChars: snap.metrics.textChars,
+        thinkingChars: snap.metrics.thinkingChars,
+        updatedAtMs: Date.now(),
+      })
+      .catch(err => {
+        console.error(
+          '[novel-master/session-stream-unit-manager] run_state settle failed',
+          err,
+        );
+      });
+  }
+
+  /** 写通 coalescer 收口（尽力 flush + dispose + 出表；flush 内部吞错）。 */
+  private flushAndDisposeWritethrough(sessionId: string): void {
+    const writethrough = this.writethroughs.get(sessionId);
+    if (writethrough == null) {
+      return;
+    }
+    this.writethroughs.delete(sessionId);
+    writethrough.flush();
+    writethrough.dispose();
+  }
+
+  /** 写通 coalescer 直接丢弃（finishRun 用：settle 行即将覆盖，无需 flush）。 */
+  private discardWritethrough(sessionId: string): void {
+    const writethrough = this.writethroughs.get(sessionId);
+    if (writethrough == null) {
+      return;
+    }
+    this.writethroughs.delete(sessionId);
+    writethrough.dispose();
   }
 
   private isActiveUnit(unit: SessionStreamUnit): boolean {
@@ -800,6 +1195,12 @@ export class SessionStreamUnitManager {
       this.removeUnit(unit.sessionId, unit);
     }
     this.pendingChildParentByChild.clear();
+    // 写通兜底：单元出表路径已逐一收口，理论上表空；防御性清一遍残留
+    //（同样尽力 flush——连接可能已关，失败由 coalescer 吞掉不阻塞）。
+    for (const sessionId of [...this.writethroughs.keys()]) {
+      this.flushAndDisposeWritethrough(sessionId);
+    }
+    this.settledProjections.clear();
     this.notifyChanged();
     this.listeners.clear();
     void stopAgentKeepAliveService().catch(() => undefined);

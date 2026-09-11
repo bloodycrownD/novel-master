@@ -343,6 +343,38 @@ export class SessionStreamUnit {
     return true;
   }
 
+  /**
+   * 水合回填（Step 5）：从持久层 run_state 行恢复中断现场。
+   *
+   * 仅 interrupted 态可回填（manager 的水合流程先 adoptInterruptedUnit
+   * 再调这里）。partial/指标/startedAtMs 从行恢复；pendingChildren 只
+   * 存了 id 序列（title→id 映射不可恢复，后续同 title 新 child 的覆盖
+   * 语义自然退化为按 id 追加）；settledAtMs 用行的 updated_at_ms 近似
+   * 中断时刻，保证多次重启不刷新 LRU 新旧序。本单元不挂写通 coalescer
+   * （run 已死，只读）。
+   */
+  hydrateFromRunState(state: {
+    readonly runId: string;
+    readonly startedAtMs: number;
+    readonly settledAtMs: number;
+    readonly metrics: SessionStreamUnitMetrics;
+    readonly partialText: string;
+    readonly partialThinking: string;
+    readonly pendingChildren: readonly string[];
+  }): boolean {
+    if (this.destroyed || this.status !== 'interrupted') {
+      return false;
+    }
+    this.runIdValue = state.runId;
+    this.startedAtMsValue = state.startedAtMs;
+    this.settledAtMsValue = state.settledAtMs;
+    this.metricsAcc = {...state.metrics};
+    this.partialTextValue = state.partialText;
+    this.partialThinkingValue = state.partialThinking;
+    this.pendingChildrenValue = [...state.pendingChildren];
+    return true;
+  }
+
   /** 触发 onSettled 回调（manager 事件收尾路径调用；回调异常吞掉不影响收尾）。 */
   invokeOnSettled(status: SessionStreamRunSettledStatus): void {
     try {
@@ -420,15 +452,17 @@ export class SessionStreamUnit {
    *
    * 指标在事件到达即归账（不经缓冲节拍，蓝本 noteTextDelta 对齐）；
    * 正文进 32ms ingress 合并缓冲。runId 与当前 run 不符（陈旧事件）
-   * 或非 running 态时整体忽略。
+   * 或非 running 态时整体忽略。返回是否生效（Step 5 起 manager 以此
+   * 决定是否把最新快照 append 进写通 coalescer——settled/interrupted
+   * 单元的陈旧 delta 不产生持久层写）。
    */
-  ingestTextDelta(runId: string, text: string): void {
-    this.ingestDelta(runId, 'text', text);
+  ingestTextDelta(runId: string, text: string): boolean {
+    return this.ingestDelta(runId, 'text', text);
   }
 
   /** 思考 delta 入口：语义同 {@link ingestTextDelta}。 */
-  ingestThinkingDelta(runId: string, text: string): void {
-    this.ingestDelta(runId, 'thinking', text);
+  ingestThinkingDelta(runId: string, text: string): boolean {
+    return this.ingestDelta(runId, 'thinking', text);
   }
 
   /**
@@ -764,17 +798,17 @@ export class SessionStreamUnit {
     this.onProjectionChanged?.();
   }
 
-  /** delta 统一入口：守卫 → 指标归账 → 入队 → 调度 32ms 合并。 */
+  /** delta 统一入口：守卫 → 指标归账 → 入队 → 调度 32ms 合并。返回是否生效。 */
   private ingestDelta(
     runId: string,
     kind: StreamWireKind,
     text: string,
-  ): void {
+  ): boolean {
     if (this.destroyed || text.length === 0) {
-      return;
+      return false;
     }
     if (this.status !== 'running' || this.runIdValue !== runId) {
-      return;
+      return false;
     }
     if (kind === 'text') {
       this.metricsAcc.textChars += text.length;
@@ -788,6 +822,7 @@ export class SessionStreamUnit {
         this.flushIngressToApplyBuffer();
       }, SESSION_STREAM_INGRESS_COALESCE_MS);
     }
+    return true;
   }
 
   /** ingress 队列合并后压进 apply 缓冲（空队列 no-op）。 */
