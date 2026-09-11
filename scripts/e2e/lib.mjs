@@ -133,7 +133,7 @@ export async function openWorkspaceContextMenu(page) {
 export async function shutdown(app, vite = null, mock = null) {
   try { await app.close(); } catch {}
   if (vite) { try { process.kill(-vite.pid, "SIGKILL"); } catch {} }
-  // 兕底 pkill 只带 ${ROOT} 路径前缀匹配本 worktree 的 vite——无根前缀的子串匹配会误杀并行会话
+  // 兜底 pkill 只带 ${ROOT} 路径前缀匹配本 worktree 的 vite——无根前缀的子串匹配会误杀并行会话
   // （其它 worktree）的 vite；且前一行进程组击杀已覆盖本脚本拉起的 vite 全组，第二条零收益纯风险已删
   try { execSync(`pkill -9 -f "${ROOT}/node_modules/.bin/vite"`, { stdio: "ignore" }); } catch {}
   if (mock) mock.close();
