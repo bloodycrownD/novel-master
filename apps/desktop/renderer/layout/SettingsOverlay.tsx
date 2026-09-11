@@ -22,6 +22,9 @@ import { TokenUsageStatsView } from "../features/settings/TokenUsageStatsView";
 import { WorkspaceSettingsView } from "../features/settings/WorkspaceSettingsView";
 import { SkillsManageView } from "../features/settings/SkillsManageView";
 import { SkillDetailView } from "../features/settings/SkillDetailView";
+import { SearchEnginesView } from "../features/settings/SearchEnginesView";
+import { SearchEngineDetailView } from "../features/settings/SearchEngineDetailView";
+import { engineLabel } from "../features/settings/search-engine-meta";
 import {
   OPEN_SETTINGS_VIEW_EVENT,
   type OpenSettingsViewDetail,
@@ -43,6 +46,10 @@ function getSettingsMainTitle(
   if (viewId === "providerDetail") return "模型管理";
   if (viewId === "providerCreate") return "新建服务商";
   if (viewId === "modelSampling") return "采样配置";
+  if (viewId === "searchEngineDetail") {
+    const label = engineLabel(navState.editingEngineId);
+    return label ? `搜索引擎 · ${label}` : "搜索引擎";
+  }
   if (viewId === "skillDetail") {
     return navState.viewingSkillRef != null
       ? `技能 · ${navState.viewingSkillRef.name}`
@@ -135,6 +142,10 @@ export function SettingsOverlay({ open, onClose }: SettingsOverlayProps) {
         return <AgentsSettingsView nav={nav} />;
       case "agentEditor":
         return <AgentEditorView nav={nav} />;
+      case "searchEngines":
+        return <SearchEnginesView nav={nav} />;
+      case "searchEngineDetail":
+        return <SearchEngineDetailView nav={nav} />;
 
       case "providers":
         return <ProvidersView nav={nav} />;

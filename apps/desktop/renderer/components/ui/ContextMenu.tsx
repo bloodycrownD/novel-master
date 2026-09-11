@@ -5,6 +5,8 @@ export type ContextMenuItem = {
   readonly label: string;
   readonly action: string;
   readonly danger?: boolean;
+  /** 置灰不可点（如列表首项的「上移」）；点击与 hover 高亮均禁用。 */
+  readonly disabled?: boolean;
 };
 
 type ContextMenuProps = {
@@ -64,7 +66,12 @@ export function ContextMenu({
           type="button"
           role="menuitem"
           className={item.danger ? "is-danger" : undefined}
+          disabled={item.disabled}
+          aria-disabled={item.disabled}
           onClick={() => {
+            if (item.disabled) {
+              return;
+            }
             onClose();
             onSelect(item.action);
           }}

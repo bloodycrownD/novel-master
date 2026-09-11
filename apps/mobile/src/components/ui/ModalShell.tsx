@@ -106,7 +106,7 @@ export function ModalShell({
     <Animated.View
       style={[
         styles.panel,
-        {backgroundColor: tokens.surface},
+        {backgroundColor: tokens.surfaceElevated},
         avoidStyle,
         panelStyle,
       ]}

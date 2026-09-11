@@ -24,6 +24,8 @@ import {ProviderDetailScreen} from '../screens/stack/ProviderDetailScreen';
 import {ModelSamplingScreen} from '../screens/stack/ModelSamplingScreen';
 
 import {CloudSyncConfigScreen} from '../screens/stack/CloudSyncConfigScreen';
+import {SearchEnginesScreen} from '../screens/stack/SearchEnginesScreen';
+import {SearchEngineDetailScreen} from '../screens/stack/SearchEngineDetailScreen';
 import {StorageConfigScreen} from '../screens/stack/StorageConfigScreen';
 import {CloudSyncProgressScreen} from '../screens/stack/CloudSyncProgressScreen';
 import {ChatConfigScreen} from '../screens/stack/ChatConfigScreen';
@@ -134,6 +136,14 @@ const CloudSyncConfigStackScreen = withStackLayout(
   'CloudSyncConfig',
   CloudSyncConfigScreen,
 );
+const SearchEnginesStackScreen = withStackLayout(
+  'SearchEngines',
+  SearchEnginesScreen,
+);
+const SearchEngineDetailStackScreen = withStackLayout(
+  'SearchEngineDetail',
+  SearchEngineDetailScreen,
+);
 const GlobalTemplateStackScreen = withStackLayout(
   'GlobalTemplate',
   GlobalTemplateScreen,
@@ -224,6 +234,14 @@ export function RootNavigator() {
             <Stack.Screen
               name="CloudSyncConfig"
               component={CloudSyncConfigStackScreen}
+            />
+            <Stack.Screen
+              name="SearchEngines"
+              component={SearchEnginesStackScreen}
+            />
+            <Stack.Screen
+              name="SearchEngineDetail"
+              component={SearchEngineDetailStackScreen}
             />
             <Stack.Screen
               name="GlobalTemplate"

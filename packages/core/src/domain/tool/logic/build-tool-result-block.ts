@@ -19,7 +19,7 @@ import {
 } from "./format-tool-output.js";
 import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { ParallelToolOutcome } from "./tool-runner.js";
-import { CURL_MAX_BODY_BYTES } from "../builtin/curl-tool.js";
+import { TOOL_OUTPUT_MAX_BYTES } from "../logic/tool-output-limits.js";
 
 export interface BuildToolResultBlockMeta {
   readonly toolName?: string;
@@ -179,10 +179,26 @@ function summarizeToolSuccess(
     }
   }
 
+  // search：引擎 · N 条结果；超预算落盘形态（Step 6 后出现）显示已落盘路径。
+  // 未配置提示是纯字符串输出（非 record），在上方 isRecord 门处已返回 undefined。
+  if (name === "search") {
+    if (typeof output.engine === "string" && Array.isArray(output.results)) {
+      return `${output.engine} · ${output.results.length} 条结果`;
+    }
+    if (typeof output.savedPath === "string") {
+      return `已落盘 ${output.savedPath}`;
+    }
+  }
+
   // curl：状态 · 原始体积（如 `200 · 12.3KB`）；截断时保留量/原始量
-  // （如 `truncated · 256KB/1.2MB`）。保留量即字节预算（截断的正文部分
-  // ≤ CURL_MAX_BODY_BYTES），非文本占位与预检占位很小，照 body 现算。
+  // （如 `truncated · 50KB/1.2MB`）。超预算落盘形态优先：显示已落盘路径
+  // （正文已存 /tmp/，体积档位无意义）；降级截断路径 body 含标注行会
+  // 略超预算，展示上按预算值口径（TOOL_OUTPUT_MAX_BYTES）。非文本占位
+  // 与预检占位很小，照 body 现算。
   if (name === "curl") {
+    if (typeof output.savedPath === "string") {
+      return `已落盘 ${output.savedPath}`;
+    }
     const status = output.status;
     const originalBytes = output.originalBytes;
     if (typeof status === "number" && typeof originalBytes === "number") {
@@ -193,9 +209,9 @@ function summarizeToolSuccess(
             : undefined;
         // 正常截断路径 body 含标注行会略超预算，展示上按预算值口径。
         const kept =
-          bodyBytes != null && bodyBytes < CURL_MAX_BODY_BYTES
+          bodyBytes != null && bodyBytes < TOOL_OUTPUT_MAX_BYTES
             ? bodyBytes
-            : CURL_MAX_BODY_BYTES;
+            : TOOL_OUTPUT_MAX_BYTES;
         return `truncated · ${formatByteSize(kept)}/${formatByteSize(
           originalBytes
         )}`;

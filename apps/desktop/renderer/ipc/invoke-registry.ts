@@ -104,6 +104,11 @@ import {
   type SkillsReadResponse,
   type SkillsToggleRequest,
   type SkillsWriteRequest,
+  type SearchConfigDto,
+  type SearchSaveEngineKeyRequest,
+  type SearchClearEngineKeyRequest,
+  type SearchSetSearxngBaseUrlRequest,
+  type SearchSetEngineOrderRequest,
 } from '@shared/ipc-types';
 
 export type InvokeFn = <T>(channel: string, arg?: unknown) => Promise<T>;
@@ -579,6 +584,26 @@ export function createInvokeClient(invoke: InvokeFn) {
     ipcCloudSyncPull: noArg(invoke, IPC_CHANNELS.CLOUD_SYNC_PULL),
     ipcCloudSyncPush: (req?: { forceOverwriteRemote?: boolean }) =>
       invoke(IPC_CHANNELS.CLOUD_SYNC_PUSH, req),
+    ipcSearchGetConfig: noArg<IpcResult<SearchConfigDto>>(
+      invoke,
+      IPC_CHANNELS.SEARCH_GET_CONFIG,
+    ),
+    ipcSearchSaveEngineKey: withReq<
+      SearchSaveEngineKeyRequest,
+      IpcResult<void>
+    >(invoke, IPC_CHANNELS.SEARCH_SAVE_ENGINE_KEY),
+    ipcSearchClearEngineKey: withReq<
+      SearchClearEngineKeyRequest,
+      IpcResult<void>
+    >(invoke, IPC_CHANNELS.SEARCH_CLEAR_ENGINE_KEY),
+    ipcSearchSetSearxngBaseUrl: withReq<
+      SearchSetSearxngBaseUrlRequest,
+      IpcResult<void>
+    >(invoke, IPC_CHANNELS.SEARCH_SET_SEARXNG_BASE_URL),
+    ipcSearchSetEngineOrder: withReq<
+      SearchSetEngineOrderRequest,
+      IpcResult<void>
+    >(invoke, IPC_CHANNELS.SEARCH_SET_ENGINE_ORDER),
     ipcShellMenuPopup: withReq<
       {
         menuId: 'file' | 'edit' | 'view' | 'window' | 'help';

@@ -879,6 +879,16 @@ html:not([data-theme="dark"]) .chat-composer__send:not(:disabled) {
   box-shadow: var(--shadow-card-subtle);
 }
 
+/* 禁用段：灰态不可点；与 is-active 叠加时保留选中底色，仍可辨识「当前值但已失效」（opacity 0.45 对齐 mobile FormChipGroup 口径） */
+.segmented-control__btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.segmented-control__btn:disabled:not(.is-active):hover {
+  background: transparent;
+}
+
 /* 服务商详情页 tab 容器：顶部 SegmentedControl 当 tab 头 */
 .provider-detail {
   display: flex;
@@ -2368,6 +2378,11 @@ html:not([data-theme="dark"]) .chat-composer__send:not(:disabled) {
 .settings-tag--muted {
   color: var(--text-secondary);
   background: color-mix(in srgb, var(--text-secondary) 12%, transparent);
+}
+
+.settings-tag--primary {
+  color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
 }
 
 .settings-tag--warn {
@@ -5235,6 +5250,15 @@ html[data-theme="dark"] .chat-batch-bar {
 
 .context-menu button.is-danger {
   color: var(--danger);
+}
+
+.context-menu button:disabled {
+  color: var(--text-secondary);
+  cursor: default;
+}
+
+.context-menu button:disabled:hover {
+  background: transparent;
 }
 
 .text-prompt-overlay {

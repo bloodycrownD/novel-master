@@ -27,6 +27,8 @@ export const PAGE_HEADER_CONFIG: Record<HeaderPageKey, PageHeaderConfig> = {
   CloudSyncProgress: {title: '云同步', showBack: true, showNav: false},
   ChatConfig: {title: '聊天配置', showBack: true, showNav: false},
   CloudSyncConfig: {title: '云存储配置', showBack: true, showNav: false},
+  SearchEngines: {title: '搜索配置', showBack: true, showNav: false},
+  SearchEngineDetail: {title: '搜索配置', showBack: true, showNav: false},
   GlobalTemplate: {title: '文件浏览器', showBack: true, showNav: false},
   FileEditor: {title: '编辑文件', showBack: true, showNav: false},
   SessionDetail: {title: '会话详情', showBack: true, showNav: false},

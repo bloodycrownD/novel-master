@@ -1,6 +1,8 @@
 type SegmentedControlOption<T extends string> = {
   value: T;
   label: string;
+  /** 禁用该项（如保底补挂的失效选项），不可点选 */
+  disabled?: boolean;
 };
 
 type SegmentedControlProps<T extends string> = {
@@ -22,8 +24,9 @@ export function SegmentedControl<T extends string>({
         <button
           key={option.value}
           type="button"
-          className={`segmented-control__btn${value === option.value ? " is-active" : ""}`}
+          className={`segmented-control__btn${value === option.value ? " is-active" : ""}${option.disabled ? " is-disabled" : ""}`}
           aria-pressed={value === option.value}
+          disabled={option.disabled}
           onClick={() => onChange(option.value)}
         >
           {option.label}
