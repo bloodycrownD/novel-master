@@ -87,23 +87,22 @@ try {
   await sleep(800);
   const splitter = page.locator('[data-splitter]').first();
   if (await splitter.count()) {
-    const b0 = await page.evaluate(() => document.getElementById("app")?.getBoundingClientRect().width ?? null);
+    // 拖拽前后各取一份列宽快照，按列差值判定拖拽是否生效；旧实现两份快照都取在
+    // mouse.up 之后（b0c 与 b1 间无 DOM 变化，changed 恒 false），b0 总宽快照从未使用一并移除
+    const colWidths = () => page.evaluate(() =>
+      [...document.querySelectorAll("#app > *")].map((e) => Math.round(e.getBoundingClientRect().width)));
+    const before = await colWidths();
     const sb = await splitter.boundingBox();
     await page.mouse.move(sb.x + sb.width / 2, sb.y + 200);
     await page.mouse.down();
     await page.mouse.move(sb.x - 120, sb.y + 200, { steps: 8 });
     await page.mouse.up();
     await sleep(700);
-    const b1 = await page.evaluate(() => {
-      const cols = [...document.querySelectorAll("#app > *")].map((e) => Math.round(e.getBoundingClientRect().width));
-      return cols.join(",");
-    });
-    const b0c = await page.evaluate(() => {
-      const cols = [...document.querySelectorAll("#app > *")].map((e) => Math.round(e.getBoundingClientRect().width));
-      return cols.join(",");
-    });
-    console.log("SPLITTER_BEFORE", b0c);
-    console.log("SPLITTER_AFTER", b1, "changed:", b0c !== b1);
+    const after = await colWidths();
+    const diff = after.map((w, i) => (before[i] != null ? w - before[i] : null));
+    const changed = before.length === after.length && diff.some((d) => d != null && Math.abs(d) >= 1);
+    console.log("SPLITTER_BEFORE", before.join(","));
+    console.log("SPLITTER_AFTER", after.join(","), "changed:", changed, "diff:", diff.join(","));
     await shot(page, "634", "splitter-dragged");
   }
 
