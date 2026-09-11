@@ -37,7 +37,8 @@ import {
   type MobileScopeSnapshot,
 } from './mobile-scope';
 import type {MobileNovelMasterRuntime} from './types';
-import {AgentRunManager} from '@/services/agent-run-manager.service';
+import {SessionStreamUnitManager} from '@/services/session-stream-unit-manager.service';
+import {createSessionRunStateService} from '@novel-master/core/session-run-state';
 import {showAppToast} from '@/services/app-toast';
 import {readAgentFinishedNotificationEnabled} from '@/storage/agent-finished-notification-pref';
 import {readAgentKeepAliveEnabled} from '@/storage/agent-keepalive-pref';
@@ -105,17 +106,22 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
     (async () => {
       if (bootToken > 0) {
         // 对齐 desktop main 的先 detach 模式：重建前先销毁旧 Manager
-        // （退订事件总线 + 按记录清零模块级 refcount + 停前台服务），
-        // 再销毁旧连接。模块级 agent-activity 不随 runtime 重建归零，
-        // 必须 dispose 显式清零。
-        runtimeRef.current?.agentRunManager.dispose();
+        // （退订事件总线 + 按记录清零模块级 refcount + 停前台服务 + 在途
+        // 写通尽力落盘），再销毁旧连接。模块级 agent-activity 不随 runtime
+        // 重建归零，必须 dispose 显式清零。
+        runtimeRef.current?.sessionStreamUnitManager.dispose();
         await closeMobileConnection();
       }
       const rt = await createMobileNovelMasterRuntime();
       // 装配契约：runtime 创建完成后实例化 Manager 并挂到 runtime 上
       // （Manager 生命周期跟随 runtime；桥在下方 ready 后的 effect 注入）。
+      // 构造注入 core 的 session_run_state 服务——持久化开跑（写通/水合/
+      // settled 投影），注入即自动 kick 重启水合。
       const runtime: MobileNovelMasterRuntime = Object.assign(rt, {
-        agentRunManager: new AgentRunManager({runtime: rt}),
+        sessionStreamUnitManager: new SessionStreamUnitManager({
+          runtime: rt,
+          runStateService: createSessionRunStateService(rt.conn),
+        }),
       });
       const loaded = await loadMobileScope(runtime);
       const ui = createAppUiPreferences(runtime.kkv);
@@ -147,9 +153,9 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
 
   // 桥注入（ready 后执行；retry 换新 runtime 时对新 Manager 重新注入）。
   // 桥未注入期间（bootstrap 早期与 retry 窗口）的降级：失败 toast 与完成通知
-  // 不发，refcount 与 RunEntry 维护不依赖桥，始终生效。
+  // 不发，refcount 与单元维护不依赖桥，始终生效。
   useEffect(() => {
-    const manager = runtime?.agentRunManager;
+    const manager = runtime?.sessionStreamUnitManager;
     if (!manager) {
       return;
     }
@@ -171,6 +177,7 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
       },
     });
     manager.setScopeBridge({
+      getCurrentSessionId: () => scopeRef.current.sessionId ?? null,
       setCurrentSession: async sessionId => {
         const rt = runtimeRef.current;
         const projectId = scopeRef.current.projectId;

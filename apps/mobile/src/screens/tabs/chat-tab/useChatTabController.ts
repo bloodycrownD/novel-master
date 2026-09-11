@@ -1,5 +1,10 @@
 /**
  * Chat tab 低频回调：消息菜单、工作区导航等。
+ *
+ * Step 6 接线微调（spec 点名表）：原 ctx.uiRunning（源自被删的运行态装配）
+ * 换为单元投影派生（status 为 starting|running）；resetStreamingDisplay
+ * （原 useSessionStream 的 state 清空）换为 manager 的 reset-stream 控制消息
+ * 广播（webview 侧 resetStream，单元 partial 由 core step 边界清零）。
  */
 import {useCallback} from 'react';
 import {Alert} from 'react-native';
@@ -11,13 +16,26 @@ import {useChatTabMessageActions} from './useChatTabMessageActions';
 export function useChatTabController() {
   const ctx = useChatTabContext();
 
+  // 当前会话 run 是否活跃（单元投影派生；水合未完成/无单元为静止态）。
+  const sessionRunActive =
+    ctx.unitView?.status === 'starting' || ctx.unitView?.status === 'running';
+
+  // 流式显示清理的单元等效：请求单元向全句柄广播 reset-stream（legacy
+  // MessageList 的 partial props 随投影清空由消费方自理——rollback/fork 后
+  // 消息面以落库行为准）。
+  const resetStreamingDisplay = useCallback(() => {
+    if (ctx.sessionId != null) {
+      ctx.runtime.sessionStreamUnitManager.requestStreamReset(ctx.sessionId);
+    }
+  }, [ctx.sessionId, ctx.runtime]);
+
   const messageActions = useChatTabMessageActions({
     runtime: ctx.runtime,
     projectId: ctx.projectId,
     sessionId: ctx.sessionId,
     messages: ctx.messages,
-    agentRunning: ctx.uiRunning,
-    resetStreamingDisplay: ctx.resetStreamingDisplay,
+    agentRunning: sessionRunActive,
+    resetStreamingDisplay,
     showToast: ctx.showToast,
     refreshChatTokenLabel: ctx.scope.refreshChatTokenLabel,
     bumpWorktreeUiToken: ctx.bumpWorktreeUiToken,
@@ -33,13 +51,13 @@ export function useChatTabController() {
       msg: import('@novel-master/core/chat').ChatMessage,
       anchor: import('@/components/chat/MessageActionMenu').MessageMenuAnchor,
     ) => {
-      if (ctx.uiRunning) {
+      if (sessionRunActive) {
         return;
       }
       ctx.setMessageMenuTarget(msg);
       ctx.setMessageMenuAnchor(anchor);
     },
-    [ctx],
+    [ctx, sessionRunActive],
   );
 
   const handleCapturePromptFileBlock = useCallback(() => {

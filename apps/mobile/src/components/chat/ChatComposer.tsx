@@ -69,19 +69,8 @@ type Props = {
 
   hasModel: boolean;
 
+  /** 当前会话 run 活跃（消费方从单元投影派生：status 为 starting|running）。 */
   running: boolean;
-
-  beginUiRun: () => void;
-
-  /**
-   * UI run 异常收尾（本地异常 / startRun 被拒时收回 UI 态；
-   * refcount 已归 AgentRunManager，此处只收 UI 侧状态）。
-   */
-  endUiRunOnError: () => void;
-
-  abortUiRun: () => void;
-
-  onStreamReset: () => void;
 
   onMessagesChanged: () => void | Promise<void>;
 
@@ -107,10 +96,6 @@ export function ChatComposer({
   scope,
   hasModel,
   running,
-  beginUiRun,
-  endUiRunOnError,
-  abortUiRun,
-  onStreamReset,
   onMessagesChanged,
   onNeedModel,
   canResumeWithoutInput,
@@ -150,11 +135,9 @@ export function ChatComposer({
 
   const streamHandlersRef = useRef({
     onMessagesChanged,
-    onStreamReset,
   });
   streamHandlersRef.current = {
     onMessagesChanged,
-    onStreamReset,
   };
 
   const runtimeRef = useRef(runtime);
@@ -327,8 +310,6 @@ export function ChatComposer({
   const executeRun = useCallback(
     async (content: string, allowResumeWithoutInput: boolean) => {
       setError(undefined);
-      onStreamReset();
-      beginUiRun();
 
       // 有正文 / 批注草稿 → 成功后清输入
       // annotate 仅在 onUserMessageAppended 清 store（与正文分轨可并存于回调）
@@ -347,9 +328,12 @@ export function ChatComposer({
       try {
         const stream = await runtime.preferences.getLlmStreamEnabled();
         const annotateDrafts = listChatAnnotateDrafts(sessionId);
-        // 迁移 AgentRunManager：门禁由 Manager per-session 拒绝（返回明确错误），
-        // run 本体 fire-and-forget；refcount 与收尾归 Manager。
-        const manager = runtime.agentRunManager;
+        // Step 6：发起改调 SessionStreamUnitManager——门禁由 manager 的
+        // per-session 单元拒绝（返回明确错误），run 本体 fire-and-forget；
+        // refcount 与收尾归 manager。受理同步触发投影通知（starting 即时
+        // 可见），composer 侧不再需要乐观置位与收回（endUiRunOnError 语义
+        // 随之退役——被拒/本地异常时投影从未变过）。
+        const manager = runtime.sessionStreamUnitManager;
         if (manager == null) {
           throw new Error('运行时尚未就绪，请稍后重试');
         }
@@ -381,21 +365,20 @@ export function ChatComposer({
               })
               .catch(() => undefined);
             // 再刷一次列表：切走 / 无面板场景的补刷；停留当前面板时与
-            // useSessionStream 的 FINISHED 路径双刷幂等（代价是多一次 DB 读，可接受）。
+            // 单元消息管线的收尾 reload 双刷幂等（代价是多一次 DB 读，可接受）。
             void Promise.resolve(
               streamHandlersRef.current.onMessagesChanged(),
             ).catch(() => undefined);
           },
         });
         if (!started.ok) {
-          // Manager 拒绝（同会话已有 run）：收回本次 UI 态并明确反馈
-          endUiRunOnError();
+          // Manager 拒绝（同会话已有 run）：明确反馈（投影未变，无需收回）
           setError(started.error);
           return;
         }
       } catch (err) {
-        // 本地异常（偏好读取失败 / runtime 未就绪等）：收敛收尾
-        endUiRunOnError();
+        // 本地异常（偏好读取失败 / runtime 未就绪等）：run 未受理，
+        // 单元投影不受影响，只反馈错误
         if (typeof __DEV__ !== 'undefined' && __DEV__) {
           const detail =
             err instanceof Error
@@ -415,9 +398,6 @@ export function ChatComposer({
       runtime,
       scope,
       sessionId,
-      beginUiRun,
-      endUiRunOnError,
-      onStreamReset,
       hasAnnotateDrafts,
     ],
   );
@@ -505,7 +485,9 @@ export function ChatComposer({
     }
 
     if (running) {
-      abortUiRun();
+      // 双保险保留：running 时发送 = 停止（经 manager 的 abort 语义，
+      // retain/freeze 时序由 core 负责；收尾照常走事件路径）。
+      runtime.sessionStreamUnitManager.stopRun(sessionId);
       return;
     }
 
@@ -522,13 +504,13 @@ export function ChatComposer({
 
     await executeRun(content, allowResumeWithoutInput);
   }, [
+    runtime,
+    sessionId,
     hasModel,
     running,
     text,
-    attachments,
     canResumeWithoutInput,
     lastMessageIsPlainUserText,
-    abortUiRun,
     onNeedModel,
     executeRun,
     sendIntent,
