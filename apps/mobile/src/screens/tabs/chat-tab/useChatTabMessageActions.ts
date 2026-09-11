@@ -40,13 +40,17 @@ import type {RollbackOptions} from '@novel-master/core/message-checkpoint';
 import {rollbackToMessage} from '@/services/message-rollback.service';
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
 import type {ChatSubview, ConversationPanel} from './useChatTabScope';
-import type {UseChatTabMessagesResult} from './useChatTabMessages';
 
 export type UseChatTabMessageActionsParams = {
   runtime: MobileNovelMasterRuntime;
   projectId: string | undefined;
   sessionId: string | undefined;
-  messages: UseChatTabMessagesResult;
+  /** 消息显示源（Step 7 收口：manager 消息快照经 ctx 传入）。 */
+  chatMessages: readonly ChatMessage[];
+  /** 操作后 force 回源刷新消息面（manager 路径）。 */
+  reloadMessages: (force?: boolean) => Promise<unknown>;
+  /** 编辑消息恢复草稿的 UI 令牌递增。 */
+  setDraftRestoreToken: (updater: (token: number) => number) => void;
   agentRunning: boolean;
   resetStreamingDisplay: () => void;
   showToast: (message: string) => void;
@@ -65,7 +69,9 @@ export function useChatTabMessageActions({
   runtime,
   projectId,
   sessionId,
-  messages,
+  chatMessages,
+  reloadMessages,
+  setDraftRestoreToken,
   agentRunning,
   resetStreamingDisplay,
   showToast,
@@ -77,7 +83,6 @@ export function useChatTabMessageActions({
   setConversationPanel,
   setMessageEditPrompt,
 }: UseChatTabMessageActionsParams) {
-  const {chatMessages, reloadMessages, setDraftRestoreToken} = messages;
 
   const handleCompactSession = useCallback(() => {
     if (agentRunning) {

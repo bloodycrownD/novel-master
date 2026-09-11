@@ -8,10 +8,10 @@
  *   SessionStreamUnitView 放进 ctx（运行态的唯一出口，消费方自行派生）；
  * - 会话/引擎/子页变化时把 webview 句柄 attach/detach 进 manager（流式
  *   推送与控制消息广播的接线面）；
- * - 消息面路由：当前会话有单元时从投影取（分页走单元管线），无单元
- *   （非运行态会话）继续走 useChatTabMessages 的数据管线兜底；
- * - 非运行态（发送态推导 / draftRestoreToken / DeviceEventEmitter 监听）
- *   继续由 useChatTabMessages 承担。
+ * - 消息面（Step 7 收口）：单一来源 manager——有单元走投影、无单元走
+ *   manager 的 idle 消息路径，Provider 不再持有消息 state；
+ * - 非运行态（draftRestoreToken / DeviceEventEmitter 监听）继续由
+ *   useChatTabMessages 承担（数据管线已退役）。
  */
 import React, {
   createContext,
@@ -198,11 +198,8 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
   });
 
   const messages = useChatTabMessages({
-    runtime,
-    projectId,
     sessionId,
-    chatSubview: scope.chatSubview,
-    onAfterExternalReload: scope.refreshChatTokenLabel,
+    onTranscriptChanged: scope.refreshChatTokenLabel,
   });
 
   const {refreshChatMeta} = scope;
@@ -243,54 +240,43 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
     useWebviewTranscript,
   });
 
-  // ===== 单元投影订阅（subscribe + useEffect + sync 模式） =====
+  // ===== 单元投影 + 消息面订阅（subscribe + useEffect + sync 模式） =====
   // 当前会话的运行态唯一事实源：水合未完成 / 无单元为 null。事件同步总线
   // 保证 manager 订阅先于 UI 建立——UI 侧同名事件回调执行时投影已更新。
+  // 消息面（Step 7 收口）单一来源 manager：readMessagesSnapshot 有单元走
+  // 投影、无单元走 idle 视图，Provider 不再持有第二套消息 state。
   const [unitView, setUnitView] = useState<SessionStreamUnitView | null>(
     () => (sessionId != null ? manager.snapshot(sessionId) : null),
   );
+  const [messagesView, setMessagesView] = useState<
+    ReturnType<typeof manager.readMessagesSnapshot>
+  >(() => (sessionId != null ? manager.readMessagesSnapshot(sessionId) : null));
   useEffect(() => {
-    const sync = () =>
+    const sync = () => {
       setUnitView(sessionId != null ? manager.snapshot(sessionId) : null);
+      setMessagesView(
+        sessionId != null ? manager.readMessagesSnapshot(sessionId) : null,
+      );
+    };
     sync();
     return manager.subscribe(sync);
   }, [manager, sessionId]);
 
   const hasUnit = unitView != null;
 
-  // 单元消息面水合：会话切换或单元出现时取 tail（非 force——缓存命中即
+  // 消息面 tail 水合：会话切换或单元出现时取 tail（非 force——缓存命中即
   // 采纳的会话切换语义；运行中单元的后续刷新由 step/settle 边界自驱）。
+  // 无单元（非运行态会话）同样走 manager 的 idle 路径（Step 7 收口后双源
+  // 合一，hook 数据管线已退役）。
+  const chatSubview = scope.chatSubview;
   useEffect(() => {
-    if (sessionId == null || !hasUnit) {
+    if (sessionId == null || chatSubview !== 'conversation') {
       return;
     }
     void manager
-      .loadSessionTailMessages(sessionId)
+      .loadSessionTailMessages(sessionId, {projectId})
       .catch(() => undefined);
-  }, [manager, sessionId, hasUnit]);
-
-  // ===== 单元消失迁移沿的消息面补偿 =====
-  // settled 单元宽限到期销毁（或 LRU 淘汰）时 unitView 变 null、双源回退到
-  // useChatTabMessages——但 run 期间该 hook 的刷新入口被 manager 分支接管，
-  // 其 state 停留在 run 前的旧快照，直接回退会把本轮最终消息从屏幕冲掉
-  // （用户停留同一会话超宽限即触发）。单元收尾的 force reload 已把最终 tail
-  // 无条件写进视图缓存，故只在 hasUnit true→false 且会话未变的迁移沿上让
-  // hook 路径非 force 重载一次（缓存命中即采纳、miss 回源 DB）恢复消息面；
-  // 会话切换沿由 hook 自身的 sessionId effect 兜底，不在此重复触发。
-  const reloadMessages = messages.reloadMessages;
-  const unitPresenceRef = useRef({hasUnit, sessionId});
-  useEffect(() => {
-    const prev = unitPresenceRef.current;
-    unitPresenceRef.current = {hasUnit, sessionId};
-    if (
-      prev.sessionId === sessionId &&
-      prev.hasUnit &&
-      !hasUnit &&
-      sessionId != null
-    ) {
-      void reloadMessages().catch(() => undefined);
-    }
-  }, [hasUnit, sessionId, reloadMessages]);
+  }, [manager, sessionId, projectId, chatSubview, hasUnit]);
 
   // ===== webview 句柄 attach/detach =====
   // webview ready 世代：每次 onReady 递增（重挂/切会话后 webview 是空基线，
@@ -334,59 +320,52 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
     hasUnit,
   ]);
 
-  // ===== 消息面路由（双源） =====
-  // 当前会话有单元（含宽限中的 settled / 水合的 interrupted）：投影是
-  // 唯一显示源；无单元（非运行态会话）：useChatTabMessages 的数据管线
-  // 兜底（Step 6 保留其 tail 初载，运行态刷新路径已由单元接管）。
-  // 单元消失的迁移沿由上方「消息面补偿」effect 重载 hook 路径，防旧
-  // 快照回退顶掉本轮最终消息。
+  // ===== 消息面（单一来源 manager，Step 7 收口） =====
+  // readMessagesSnapshot：有单元（含宽限中的 settled / 水合的 interrupted）
+  // 走投影，无单元（非运行态会话）走 idle 视图；单元销毁时 manager 已把
+  // 投影消息面交接进 idle，屏幕侧无迁移沿要补偿。
   const chatMessages = useMemo(
-    () => (unitView != null ? unitView.messages : messages.chatMessages),
-    [unitView, messages.chatMessages],
+    () => messagesView?.messages ?? EMPTY_CHAT_MESSAGES,
+    [messagesView],
   );
-  const hasMoreMessages =
-    unitView != null ? unitView.hasMoreMessages : messages.hasMoreMessages;
-  const loadingMoreMessages =
-    unitView != null
-      ? unitView.loadingMoreMessages
-      : messages.loadingMoreMessages;
+  const hasMoreMessages = messagesView?.hasMoreMessages ?? false;
+  const loadingMoreMessages = messagesView?.loadingMoreMessages ?? false;
 
-  // 发送态推导基于显示源（投影优先）：用户消息 append 后单元消息面刷新，
-  // 推导随投影即时更新；无单元时随 useChatTabMessages 的 state 更新。
+  // 发送态推导基于显示源：用户消息 append 后 force 回源刷新（有单元走
+  // 投影、无单元走 idle），推导随消息面即时更新。
   const composerSendState = useMemo(
     () => deriveComposerSendState(findLastVisibleMessage(chatMessages)),
     [chatMessages],
   );
 
   const onLoadOlderMessages = useCallback(() => {
-    if (sessionId != null && manager.snapshot(sessionId) != null) {
-      void manager.loadOlderSessionMessages(sessionId).catch(() => undefined);
-      return;
+    if (sessionId != null) {
+      void manager
+        .loadOlderSessionMessages(sessionId, projectId)
+        .catch(() => undefined);
     }
-    void messages.loadOlderMessages().catch(() => undefined);
-  }, [manager, sessionId, messages]);
+  }, [manager, sessionId, projectId]);
 
-  // composer 的 onUserMessageAppended / onSettled 回调驱动：有单元时 force
-  // 回源刷新投影（用户消息行进基线；低频调用不合并），无单元走原路径。
+  // composer 的 onUserMessageAppended / onSettled 回调驱动：force 回源刷新
+  // 消息面（用户消息行进基线；低频调用不合并）+ 刷新 token 讇签。
+  const refreshChatTokenLabel = scope.refreshChatTokenLabel;
   const handleMessagesChanged = useCallback(
     (options?: {immediate?: boolean}) => {
       void (async () => {
-        if (sessionId != null && manager.snapshot(sessionId) != null) {
+        if (sessionId != null) {
           try {
-            await manager.loadSessionTailMessages(sessionId, {force: true});
+            await manager.loadSessionTailMessages(sessionId, {
+              force: true,
+              projectId,
+            });
           } catch {
             // DB 失败不阻塞 token 标签刷新
           }
-          void scope.refreshChatTokenLabel().catch(() => undefined);
-          return;
         }
-        await messages.handleMessagesChanged(scope.refreshChatTokenLabel, {
-          immediate: options?.immediate,
-        });
+        void refreshChatTokenLabel().catch(() => undefined);
       })();
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- scope.refreshChatTokenLabel 为稳定 useCallback；整 scope 对象不稳定，列入会导致高频重建
-    [manager, sessionId, messages, scope.refreshChatTokenLabel],
+    [manager, sessionId, projectId, refreshChatTokenLabel],
   );
 
   const [agentActive, setAgentActive] = useState(() => isMobileAgentActive());
@@ -563,3 +542,5 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
 }
 
 const EMPTY_PENDING_SUBAGENT_SESSIONS: ReadonlyMap<string, string> = new Map();
+
+const EMPTY_CHAT_MESSAGES: readonly ChatMessage[] = [];

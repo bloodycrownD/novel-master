@@ -344,6 +344,15 @@ async function enterConversation(
 }
 
 describe('ChatTabScreen integration', () => {
+  /** 本用例内挂载的树登记——afterEach 统一卸载（防 mock props 跨用例污染）。 */
+  const mountedTrees: TestRenderer.ReactTestRenderer[] = [];
+
+  function mountScreen(): TestRenderer.ReactTestRenderer {
+    const tree = TestRenderer.create(<ChatTabScreen />);
+    mountedTrees.push(tree);
+    return tree;
+  }
+
   beforeEach(() => {
     jest.useFakeTimers();
     mockFocusInvoked = false;
@@ -369,7 +378,14 @@ describe('ChatTabScreen integration', () => {
     mockRuntime.streamRegistry.get.mockImplementation(() => undefined);
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    // 用例树统一卸载：mockLatest*Props 是模块级全局，旧树若在后续用例的
+    // 渲染批次里落下更新，会把捕获的 props 覆盖回旧值（跨用例污染）。
+    for (const tree of mountedTrees.splice(0)) {
+      await act(async () => {
+        tree.unmount();
+      });
+    }
     mockHarnessManager?.dispose();
     mockHarnessManager = undefined;
     jest.useRealTimers();
@@ -378,12 +394,16 @@ describe('ChatTabScreen integration', () => {
   it('loads initial tail and paginates older without listBySession dependency', async () => {
     let tree: TestRenderer.ReactTestRenderer;
     await act(async () => {
-      tree = TestRenderer.create(<ChatTabScreen />);
+      tree = mountScreen();
     });
     await enterConversation(tree!);
 
-    // 无单元（非运行态会话）：useChatTabMessages 数据管线兜底。
-    expect(mockLoadTail).toHaveBeenCalledWith(mockRuntime, 's1', 40);
+    // 无单元（非运行态会话，Step 7 收口）：manager 的 idle 消息路径兜底
+    // ——同样走 runtime.messages 窄口（listBySessionTail），不经
+    // session-messages-loader（该 loader 的 hook 消费方已退役）。
+    expect(mockRuntime.messages.listBySessionTail).toHaveBeenCalledWith('s1', {
+      limit: 40,
+    });
     expect(mockRuntime.messages.listBySession).not.toHaveBeenCalled();
 
     const loadMore = findPressableByText(tree!.root, '加载更早消息');
@@ -391,7 +411,7 @@ describe('ChatTabScreen integration', () => {
       loadMore.props.onPress();
     });
 
-    expect(mockLoadPage).toHaveBeenCalledWith(mockRuntime, 's1', {
+    expect(mockRuntime.messages.listBySessionPage).toHaveBeenCalledWith('s1', {
       limit: 40,
       beforeSeq: 2,
     });
@@ -408,7 +428,7 @@ describe('ChatTabScreen integration', () => {
 
     let tree: TestRenderer.ReactTestRenderer;
     await act(async () => {
-      tree = TestRenderer.create(<ChatTabScreen />);
+      tree = mountScreen();
     });
     await enterConversation(tree!);
 
@@ -433,7 +453,7 @@ describe('ChatTabScreen integration', () => {
   it('wires bursty stream deltas through unit buffers to projection partial', async () => {
     let tree: TestRenderer.ReactTestRenderer;
     await act(async () => {
-      tree = TestRenderer.create(<ChatTabScreen />);
+      tree = mountScreen();
     });
     await enterConversation(tree!);
 
@@ -486,7 +506,7 @@ describe('ChatTabScreen integration', () => {
 
     let tree: TestRenderer.ReactTestRenderer;
     await act(async () => {
-      tree = TestRenderer.create(<ChatTabScreen />);
+      tree = mountScreen();
     });
     const root = tree!.root;
 
@@ -548,7 +568,7 @@ describe('ChatTabScreen integration', () => {
   it('会话列表停止入口：run 活跃时菜单出现「停止生成」并调 manager.stopRun', async () => {
     let tree: TestRenderer.ReactTestRenderer;
     await act(async () => {
-      tree = TestRenderer.create(<ChatTabScreen />);
+      tree = mountScreen();
     });
 
     // 无活跃 run：长按菜单不含停止项。
@@ -597,7 +617,7 @@ describe('ChatTabScreen integration', () => {
 
     let tree: TestRenderer.ReactTestRenderer;
     await act(async () => {
-      tree = TestRenderer.create(<ChatTabScreen />);
+      tree = mountScreen();
     });
     await enterConversation(tree!);
 

@@ -64,6 +64,14 @@
  * 校准「running 单元 + registry 无注册」的悬挂现场（终态事件丢失兜底），
  * 走 finishRun('failed') 等效收尾；starting 单元不参与（受理空窗防误杀）。
  *
+ * Step 7 新增（消息面收口，方案 a）：无单元会话的消息面由本 manager 承担
+ * ——loadSessionTailMessages/loadOlderSessionMessages 的 idle 路径（view
+ * cache 命中即采纳 / miss 回源 messageStore 窄窗 + hasMore 探针）、
+ * readMessagesSnapshot 统一读取口（有单元走投影、空投影回落 idle）、
+ * hydrateSessionMessages 同步水合（会话切换防闪）、单元销毁时投影消息面
+ * 交接进 idle 视图（宽限销毁/LRU/替换沿不断档）。useChatTabMessages 的
+ * 数据管线随之退役，Provider 消息显示单一来源本 manager。
+ *
  * @module services/session-stream-unit-manager
  */
 import {
@@ -109,6 +117,7 @@ import type {MobileNovelMasterRuntime} from '@/runtime/types';
 import {
   SessionStreamUnit,
   isSessionStreamUnitSettled,
+  SESSION_STREAM_MESSAGES_PAGE_SIZE,
 } from '@/services/session-stream-unit';
 import type {
   SessionStreamRunSettledStatus,
@@ -122,10 +131,26 @@ import {
   createRunFinishCalibrationProbe,
   type RunFinishCalibrationProbe,
 } from '@/services/run-finish-calibration-probe';
+import {
+  getSessionViewCache,
+  sessionViewCacheKey,
+  setSessionViewCache,
+} from '@/services/chat-session-view-cache';
+import {prependOlderMessages} from '@/services/message-paging';
 import {AppState} from 'react-native';
 
 /** settled 单元并存的 LRU 上限（含宽限中的与水合常驻的；活跃单元不占槽）。 */
 export const SESSION_STREAM_MAX_SETTLED_UNITS = 8;
+
+/**
+ * 无单元会话的消息面视图（Step 7 消息面收口：非运行态会话的消息兜底，
+ * 原 useChatTabMessages 数据管线的等价语义迁入 manager）。
+ */
+interface IdleMessageView {
+  readonly messages: readonly ChatMessage[];
+  readonly hasMoreMessages: boolean;
+  readonly loadingMoreMessages: boolean;
+}
 
 /** Manager 实际依赖的 runtime 子集（测试可传 mock）。messages 为 Step 4 消息管线所需。 */
 export type SessionStreamManagerRuntime = Pick<
@@ -281,6 +306,8 @@ export class SessionStreamUnitManager {
     string,
     SessionStreamSettledProjection
   >();
+  /** 无单元会话的消息面（Step 7 收口：idle 会话 tail/分页的落点）。 */
+  private readonly idleMessageViews = new Map<string, IdleMessageView>();
   /** 水合流程的单飞 promise（构造 kick 一次；hydrate 幂等复用）。 */
   private hydratePromise: Promise<void> | null = null;
 
@@ -565,6 +592,7 @@ export class SessionStreamUnitManager {
       this.flushAndDisposeWritethrough(sessionId);
     }
     this.settledProjections.delete(sessionId);
+    this.idleMessageViews.delete(sessionId);
     this.notifyChanged();
   }
 
@@ -648,22 +676,207 @@ export class SessionStreamUnitManager {
   /**
    * tail 加载（Step 6 屏幕接线的消费面）：路由进该会话单元的消息管线。
    * 非 force = 会话切换水合语义（缓存命中不回源）；force = 无条件回源 DB。
-   * 无单元返回 null（非运行态会话走瘦身后的 useChatTabMessages 路径）。
+   * 无单元（Step 7 收口）：走 idle 路径——view cache 命中即采纳、miss 回源
+   * messageStore 窄窗，不建单元、不碰单元投影；projectId 供 view cache
+   * 键用（缺省只回源、不读写缓存）。
    */
   async loadSessionTailMessages(
     sessionId: string,
-    options?: {readonly force?: boolean},
+    options?: {readonly force?: boolean; readonly projectId?: string},
   ): Promise<readonly ChatMessage[] | null> {
     const unit = this.units.get(sessionId);
-    if (unit == null) {
-      return null;
+    if (unit != null) {
+      return unit.loadTailMessages(
+        options?.force != null ? {force: options.force} : undefined,
+      );
     }
-    return unit.loadTailMessages(options);
+    return this.loadIdleTailMessages(sessionId, options);
   }
 
-  /** 分页加载更早消息（无单元 no-op）。 */
-  loadOlderSessionMessages(sessionId: string): Promise<void> {
-    return this.units.get(sessionId)?.loadOlderMessages() ?? Promise.resolve();
+  /**
+   * 分页加载更早消息：有单元走单元管线；无单元走 idle 分页（以 idle 视图
+   * 首行 seq 为锚向上翻页，结果写 view cache 与 idle 视图）。
+   */
+  loadOlderSessionMessages(
+    sessionId: string,
+    projectId?: string,
+  ): Promise<void> {
+    const unit = this.units.get(sessionId);
+    if (unit != null) {
+      return unit.loadOlderMessages();
+    }
+    return this.loadIdleOlderMessages(sessionId, projectId);
+  }
+
+  /**
+   * 消息面统一读取口（Step 7 收口：Provider 消息显示的单一来源）：
+   * - 有单元：走投影字段（tail/分页/step reload 均为单元消息面）——
+   *   单元消息面为空且 idle 有值时回落 idle（新 run 替换沿 starting 单元
+   *   尚未加载，回落防历史消息闪空）；
+   * - 无单元：idle 视图（从未加载过为 null，消费方按空处理）。
+   */
+  readMessagesSnapshot(sessionId: string): IdleMessageView | null {
+    const unit = this.units.get(sessionId);
+    if (unit != null) {
+      const snap = unit.snapshot();
+      if (snap.messages.length > 0) {
+        return {
+          messages: snap.messages,
+          hasMoreMessages: snap.hasMoreMessages,
+          loadingMoreMessages: snap.loadingMoreMessages,
+        };
+      }
+      const idle = this.idleMessageViews.get(sessionId);
+      if (idle != null) {
+        return {...idle};
+      }
+      return {
+        messages: snap.messages,
+        hasMoreMessages: snap.hasMoreMessages,
+        loadingMoreMessages: snap.loadingMoreMessages,
+      };
+    }
+    const idle = this.idleMessageViews.get(sessionId);
+    return idle != null ? {...idle} : null;
+  }
+
+  /**
+   * 同步水合（会话切换防闪，原 useChatTabMessages.hydrateFromSessionCache
+   * 的等价语义）：view cache 命中即采纳进 idle 视图、miss 清空；有单元
+   * （投影接管消息面）no-op。写完通知一次。
+   */
+  hydrateSessionMessages(projectId: string, sessionId: string): void {
+    if (this.units.has(sessionId)) {
+      return;
+    }
+    const cached = getSessionViewCache(
+      sessionViewCacheKey(projectId, sessionId),
+    );
+    if (cached != null) {
+      this.idleMessageViews.set(sessionId, {
+        messages: [...cached.messages],
+        hasMoreMessages: cached.hasMoreMessages,
+        loadingMoreMessages: false,
+      });
+    } else {
+      this.idleMessageViews.set(sessionId, {
+        messages: [],
+        hasMoreMessages: false,
+        loadingMoreMessages: false,
+      });
+    }
+    this.notifyChanged();
+  }
+
+  /** idle 路径 tail 加载：缓存命中采纳 → 回源窄窗 + hasMore 探针 → 写缓存。 */
+  private async loadIdleTailMessages(
+    sessionId: string,
+    options?: {readonly force?: boolean; readonly projectId?: string},
+  ): Promise<readonly ChatMessage[] | null> {
+    const force = options?.force ?? false;
+    const projectId = options?.projectId;
+    if (projectId != null && !force) {
+      const cached = getSessionViewCache(
+        sessionViewCacheKey(projectId, sessionId),
+      );
+      if (cached != null) {
+        this.applyIdleMessages(sessionId, cached.messages, cached.hasMoreMessages);
+        return [...cached.messages];
+      }
+    }
+    const list = await this.runtime.messages.listBySessionTail(sessionId, {
+      limit: SESSION_STREAM_MESSAGES_PAGE_SIZE,
+    });
+    let hasMore = false;
+    const oldestSeq = list[0]?.seq;
+    if (oldestSeq != null) {
+      const older = await this.runtime.messages.listBySessionPage(sessionId, {
+        limit: 1,
+        beforeSeq: oldestSeq,
+      });
+      hasMore = older.length > 0;
+    }
+    if (projectId != null) {
+      setSessionViewCache(sessionViewCacheKey(projectId, sessionId), {
+        messages: list,
+        hasMoreMessages: hasMore,
+      });
+    }
+    this.applyIdleMessages(sessionId, list, hasMore);
+    return [...list];
+  }
+
+  /** idle 路径分页：以 idle 视图首行 seq 为锚向上翻页，prepend 后写缓存。 */
+  private async loadIdleOlderMessages(
+    sessionId: string,
+    projectId?: string,
+  ): Promise<void> {
+    const idle = this.idleMessageViews.get(sessionId);
+    if (idle == null || idle.loadingMoreMessages || idle.messages.length === 0) {
+      return;
+    }
+    const beforeSeq = idle.messages[0]?.seq;
+    if (beforeSeq == null) {
+      return;
+    }
+    this.idleMessageViews.set(sessionId, {...idle, loadingMoreMessages: true});
+    this.notifyChanged();
+    try {
+      const older = await this.runtime.messages.listBySessionPage(sessionId, {
+        limit: SESSION_STREAM_MESSAGES_PAGE_SIZE,
+        beforeSeq,
+      });
+      const current = this.idleMessageViews.get(sessionId);
+      if (current == null) {
+        return;
+      }
+      if (older.length === 0) {
+        this.idleMessageViews.set(sessionId, {
+          ...current,
+          hasMoreMessages: false,
+          loadingMoreMessages: false,
+        });
+        this.notifyChanged();
+        return;
+      }
+      const hasMore = older.length === SESSION_STREAM_MESSAGES_PAGE_SIZE;
+      const next = prependOlderMessages(current.messages, older);
+      if (projectId != null) {
+        setSessionViewCache(sessionViewCacheKey(projectId, sessionId), {
+          messages: next,
+          hasMoreMessages: hasMore,
+        });
+      }
+      this.idleMessageViews.set(sessionId, {
+        messages: next,
+        hasMoreMessages: hasMore,
+        loadingMoreMessages: false,
+      });
+      this.notifyChanged();
+    } finally {
+      const current = this.idleMessageViews.get(sessionId);
+      if (current?.loadingMoreMessages) {
+        this.idleMessageViews.set(sessionId, {
+          ...current,
+          loadingMoreMessages: false,
+        });
+        this.notifyChanged();
+      }
+    }
+  }
+
+  /** 采纳 idle 消息面并通知（通知驱动 Provider 的消息快照刷新）。 */
+  private applyIdleMessages(
+    sessionId: string,
+    messages: readonly ChatMessage[],
+    hasMore: boolean,
+  ): void {
+    this.idleMessageViews.set(sessionId, {
+      messages: [...messages],
+      hasMoreMessages: hasMore,
+      loadingMoreMessages: false,
+    });
+    this.notifyChanged();
   }
 
   /**
@@ -1151,6 +1364,17 @@ export class SessionStreamUnitManager {
    * 这里天然 no-op。
    */
   private removeUnit(sessionId: string, unit: SessionStreamUnit): void {
+    // 消息面交接（Step 7 收口）：销毁前把投影消息面挪进 idle 视图——宽限
+    // 销毁/LRU 淘汰/替换沿上，消息显示源从投影切 idle 无缝不断档。单元
+    // 消息面为空时保留既有 idle（防 run 前历史消息被闪掉）。
+    const handover = unit.snapshot();
+    if (handover.messages.length > 0) {
+      this.idleMessageViews.set(sessionId, {
+        messages: [...handover.messages],
+        hasMoreMessages: handover.hasMoreMessages,
+        loadingMoreMessages: false,
+      });
+    }
     this.units.delete(sessionId);
     this.consumptiveSessions.delete(sessionId);
     this.clearPendingChildIndex(sessionId);
@@ -1359,6 +1583,7 @@ export class SessionStreamUnitManager {
       this.flushAndDisposeWritethrough(sessionId);
     }
     this.settledProjections.clear();
+    this.idleMessageViews.clear();
     this.notifyChanged();
     this.listeners.clear();
     void stopAgentKeepAliveService().catch(() => undefined);

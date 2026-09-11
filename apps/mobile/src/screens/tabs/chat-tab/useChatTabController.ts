@@ -29,11 +29,26 @@ export function useChatTabController() {
     }
   }, [ctx.sessionId, ctx.runtime]);
 
+  // 消息操作后的 force 回源刷新（Step 7 收口：直连 manager，消息面单一
+  // 来源；force 语义与原 hook 的 reloadMessages(true) 等价）。
+  const reloadMessages = useCallback(
+    (force = true) =>
+      ctx.sessionId == null
+        ? Promise.resolve(null)
+        : ctx.runtime.sessionStreamUnitManager.loadSessionTailMessages(
+            ctx.sessionId,
+            {force, projectId: ctx.projectId},
+          ),
+    [ctx.sessionId, ctx.projectId, ctx.runtime],
+  );
+
   const messageActions = useChatTabMessageActions({
     runtime: ctx.runtime,
     projectId: ctx.projectId,
     sessionId: ctx.sessionId,
-    messages: ctx.messages,
+    chatMessages: ctx.chatMessages,
+    reloadMessages,
+    setDraftRestoreToken: ctx.messages.setDraftRestoreToken,
     agentRunning: sessionRunActive,
     resetStreamingDisplay,
     showToast: ctx.showToast,
