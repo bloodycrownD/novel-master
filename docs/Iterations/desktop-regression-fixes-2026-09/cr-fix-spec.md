@@ -124,6 +124,13 @@
 - DEV-2（accepted）：e2e 附带修复——bootstrap B4 收尾 drawer+picker 叠开残留改用 closeOverlays（既有缺陷，可执行性所需）。
 - 两条登记原文在主仓 docs/.iteration-state.yaml 与 apm 记忆（未随分支提交），此处摘要使分支自包含。
 
+### 执行期新增 deviations（终检建议补登，2026-09-12）
+
+- **DEV-3（accepted）**：ensure-test-native dash 反引号 bug 修复（f530303c）——e2e 切 Electron ABI 后首次暴露的既有 bug，阻塞 verify，可执行性所需。
+- **DEV-4（accepted，含教训）**：断言收紧后真跑暴露两处定位 bug 修复（模型行 .settings-list-item + 须先点「管理」进批量模式；拖拽快照 .workspace>*）——产品无辜。教训：修复中引入 "^管理\$" 字符串锚点 bug 致 models-skills 静默断流假绿，被 cr-func-final 终检揪出（产物时间戳 611-615 缺失为证），已修+全链路重验真通。
+- **DEV-5（accepted）**：C-3③ annotate2 未加 closeOverlays 静态 import——其唯一使用点随自足段整体迁入 lib，加进来必是死 import，以「迁移消解」闭合。
+- **DEV-6（注记）**：B-3③ 第三处退出码（SCRIPT_ERROR 路径）为执行内生强化；且已推广到全部 case 脚本（静默假绿防护），负向抽验实锤生效。
+
 ## Open questions / 待拍板（不阻塞 fix-spec 执行）
 
 1. **dismissUpdatePrompt 等待窗口**：实为有界轮询（弹窗出现即点击即返回，15s 仅上限）——清库首跑通常 2~4s 内返回，续库 snooze 已写时需等满窗口（每脚本约 2~15s）。是否引入读 novel.db 探测 snooze 状态以缩短续库场景？代价：e2e 增加 sqlite 读依赖与存储结构耦合。
