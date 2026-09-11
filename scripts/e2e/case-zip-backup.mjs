@@ -5,7 +5,6 @@ import { launchApp, shutdown, shot, goToProjects, openWorkspaceContextMenu } fro
 const errors = [];
 const { app, page, vite } = await launchApp({ errors });
 const sleep = (ms) => page.waitForTimeout(ms);
-const OUT = "/home/bloodycrown/Dev/novel-master/.worktree/desk-e2e-test/scripts/e2e/out";
 
 // patch 原生对话框：保存返回预置路径，打开返回预置文件
 const patchRes = await app.evaluate(({ savePath, openPath }) => {

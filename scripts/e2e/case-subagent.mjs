@@ -1,5 +1,4 @@
 // R7-3: 子会话（mock 回 task tool_calls → 子会话创建 → task 卡片 → 子会话面板）
-import { spawn } from "node:child_process";
 import http from "node:http";
 import { launchApp, shutdown, shot, goToProjects, sendMessage, closeOverlays } from "./lib.mjs";
 
