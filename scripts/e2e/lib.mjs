@@ -69,10 +69,19 @@ export async function launchApp({ errors = null } = {}) {
   delete env.ELECTRON_RUN_AS_NODE;
   env.DISPLAY = env.DISPLAY || ":0";
   env.NOVEL_MASTER_DB = path.join(DATA, "novel.db");
-  const app = await _electron.launch({
-    executablePath: ELECTRON_BIN,
-    args: ["."], cwd: DESKTOP, env,
-  });
+  // electron 启动失败（ELECTRON_BIN 路径错误等）时先回收 vite 进程组再抛——孤儿 vite 占住 5173，
+  // 会让下一次 launchApp 的 waitForPort 误判「端口已就绪」而连锁挂起；
+  // mock 进程由调用方管理（startMock 独立拉起），本函数失败不负责回收 mock
+  let app;
+  try {
+    app = await _electron.launch({
+      executablePath: ELECTRON_BIN,
+      args: ["."], cwd: DESKTOP, env,
+    });
+  } catch (e) {
+    try { process.kill(-vite.pid, "SIGKILL"); } catch {}
+    throw e;
+  }
   const page = await app.firstWindow();
   await page.on("dialog", (d) => { d.dismiss().catch(() => {}); });
   if (errors) {
@@ -124,7 +133,9 @@ export async function openWorkspaceContextMenu(page) {
 export async function shutdown(app, vite = null, mock = null) {
   try { await app.close(); } catch {}
   if (vite) { try { process.kill(-vite.pid, "SIGKILL"); } catch {} }
-  try { execSync(`pkill -9 -f "${ROOT}/node_modules/.bin/vite"; pkill -9 -f "npm exec vite"`, { stdio: "ignore" }); } catch {}
+  // 兕底 pkill 只带 ${ROOT} 路径前缀匹配本 worktree 的 vite——无根前缀的子串匹配会误杀并行会话
+  // （其它 worktree）的 vite；且前一行进程组击杀已覆盖本脚本拉起的 vite 全组，第二条零收益纯风险已删
+  try { execSync(`pkill -9 -f "${ROOT}/node_modules/.bin/vite"`, { stdio: "ignore" }); } catch {}
   if (mock) mock.close();
 }
 
@@ -195,14 +206,19 @@ export async function sendMessage(page, text) {
 export async function waitRunSettled(page) {
   const label = () =>
     page.locator('button[aria-label="发送"], button[aria-label="停止"]').first().getAttribute("aria-label").catch(() => null);
+  // 两段超时不再静默返回：warn 留痕（带最终 label 值）——发送失败/未收敛至少可见，不再吞成绿
   const tLeave = Date.now();
+  let left = false;
   while (Date.now() - tLeave < 5000) {
-    if ((await label()) !== "发送") break;
+    if ((await label()) !== "发送") { left = true; break; }
     await page.waitForTimeout(200);
   }
+  if (!left) console.warn(`waitRunSettled: 离开段超时（5s 未见 label 离开「发送」，最终 label=${await label()}）——疑似发送失败`);
   const tBack = Date.now();
+  let back = false;
   while (Date.now() - tBack < 15000) {
-    if ((await label()) === "发送") break;
+    if ((await label()) === "发送") { back = true; break; }
     await page.waitForTimeout(300);
   }
+  if (!back) console.warn(`waitRunSettled: 回归段超时（15s 未见 label 回归「发送」，最终 label=${await label()}）——run 未收敛`);
 }
