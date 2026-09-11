@@ -5,7 +5,7 @@
  *   「清除密钥」按钮；
  * - searxng：实例 baseUrl 表单，空串保存即清除；URL 形状校验
  *   （http/https、禁 userinfo）前置于提交，无连通性测试（PRD 口径）；
- * - duckduckgo：内置兑底引擎，只读说明卡（无表单无保存，文案与
+ * - duckduckgo：内置兜底引擎，只读说明卡（无表单无保存，文案与
  *   mobile 同构勿漂移）。
  * 保存与清除双向互斥（沿用旧单页的互斥口径：saving/clearing 布尔
  * 双态，在途期间按钮禁用 + 交错点击直接忽略）。
@@ -94,14 +94,14 @@ export function SearchEngineDetailView({ nav }: { nav: SettingsNavHandle }) {
     );
   }
 
-  // 内置兑底引擎：只读说明（无表单无保存；文案与 mobile 同构勿漂移）。
+  // 内置兜底引擎：只读说明（无表单无保存；文案与 mobile 同构勿漂移）。
   if (engineId === "duckduckgo") {
     const duckMeta = ENGINE_META[engineId];
     return (
       <SettingsPanel>
         <SettingsFormSection title={duckMeta.label} desc={duckMeta.desc}>
           <p className="settings-hint">
-            内置兑底引擎，无需 API Key，开箱即用；未配置其它引擎时搜索自动使用它，可上移调整优先级。
+            内置兜底引擎，无需 API Key，开箱即用；未配置其它引擎时搜索自动使用它，可上移调整优先级。
           </p>
         </SettingsFormSection>
       </SettingsPanel>

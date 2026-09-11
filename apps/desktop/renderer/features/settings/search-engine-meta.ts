@@ -31,7 +31,7 @@ export const ENGINE_META: Record<EngineId, { label: string; desc: string }> = {
   },
   duckduckgo: {
     label: "DuckDuckGo",
-    desc: "内置 · 免费兑底",
+    desc: "内置 · 免费兜底",
   },
 };
 

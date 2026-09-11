@@ -70,7 +70,7 @@ export function SearchEngineDetailScreen() {
   const engineId = route.params?.engineId;
   const knownEngine = isKnownEngineId(engineId);
   const isSearxng = knownEngine && engineId === 'searxng';
-  /** 内置兑底引擎：无凭据可配，详情页为只读说明（无表单无保存）。 */
+  /** 内置兜底引擎：无凭据可配，详情页为只读说明（无表单无保存）。 */
   const isDuckduckgo = knownEngine && engineId === 'duckduckgo';
 
   const [loading, setLoading] = useState(true);
@@ -177,7 +177,7 @@ export function SearchEngineDetailScreen() {
     );
   }
 
-  // 内置兑底引擎：只读说明卡，无输入框、无保存 footer、无清除。
+  // 内置兜底引擎：只读说明卡，无输入框、无保存 footer、无清除。
   if (isDuckduckgo) {
     return (
       <ScreenFormLayout tokens={tokens}>
@@ -187,7 +187,7 @@ export function SearchEngineDetailScreen() {
           hint={ENGINE_HINTS[engineId]}
           rightAction={<BuiltinTag tokens={tokens} />}>
           <Text style={[styles.builtinDesc, {color: tokens.textSecondary}]}>
-            内置兑底引擎，无需 API Key，开箱即用；未配置其它引擎时搜索自动使用它，可上移调整优先级。
+            内置兜底引擎，无需 API Key，开箱即用；未配置其它引擎时搜索自动使用它，可上移调整优先级。
           </Text>
         </FormSectionCard>
       </ScreenFormLayout>

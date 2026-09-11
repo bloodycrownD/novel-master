@@ -26,7 +26,7 @@ import {
 const HELP_SECTIONS: ReadonlyArray<{ title: string; body: string }> = [
   {
     title: "引擎优先级",
-    body: "列表顺序即搜索时尝试引擎的顺序，第一位为默认引擎；行菜单可上移/下移调整。未配置任何引擎时由内置 DuckDuckGo 免费兑底（无需密钥）。",
+    body: "列表顺序即搜索时尝试引擎的顺序，第一位为默认引擎；行菜单可上移/下移调整。未配置任何引擎时由内置 DuckDuckGo 免费兜底（无需密钥）。",
   },
   {
     title: "自动降级",
