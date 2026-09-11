@@ -107,15 +107,19 @@ export function SearchEnginesScreen() {
 
   // 标题栏菜单位换「?」帮助按钮（AppHeader 经 stackOverride 消费
   // menuIcon/onMenu，见 ProviderDetailScreen 标题 override 同一链路）。
-  useEffect(() => {
-    setStackOverride({
-      title: '搜索配置',
-      showMenu: true,
-      menuIcon: <HelpIcon color={tokens.text} />,
-      onMenu: () => setHelpVisible(true),
-    });
-    return () => setStackOverride(undefined);
-  }, [setStackOverride, tokens.text]);
+  // 用 useFocusEffect 而非 useEffect：进入详情页再返回时，详情页的 cleanup
+  // 会清空 header 覆盖，列表页须在重新聚焦时重设，否则「?」按钮丢失。
+  useFocusEffect(
+    useCallback(() => {
+      setStackOverride({
+        title: '搜索配置',
+        showMenu: true,
+        menuIcon: <HelpIcon color={tokens.text} />,
+        onMenu: () => setHelpVisible(true),
+      });
+      return () => setStackOverride(undefined);
+    }, [setStackOverride, tokens.text]),
+  );
 
   const {rows, loading, error, reload} = useFocusListReload({
     fetcher: useCallback(async () => {
