@@ -82,6 +82,10 @@
       "types": "./dist/public/session-kkv.d.ts",
       "import": "./dist/public/session-kkv.js"
     },
+    "./session-run-state": {
+      "types": "./dist/public/session-run-state.d.ts",
+      "import": "./dist/public/session-run-state.js"
+    },
     "./skills": {
       "types": "./dist/public/skills.d.ts",
       "import": "./dist/public/skills.js"
