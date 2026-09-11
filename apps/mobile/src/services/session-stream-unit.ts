@@ -182,6 +182,12 @@ export interface SessionStreamUnitView {
   /** 子会话链接：run 进行中创建、尚未终态的 child session id（插入序）。 */
   readonly pendingChildren: readonly string[];
   /**
+   * 子会话链接的 title → childSessionId 映射（Step 6 屏幕接线：任务卡
+   * 可点性的数据源——ChatTranscriptWebView 的 pendingSubagentSessions
+   * props 形状）。每次快照新 Map，消费方只读。
+   */
+  readonly pendingChildrenByTitle: ReadonlyMap<string, string>;
+  /**
    * 消息面（Step 4 消息管线）：本会话当前持有的消息行（tail 加载/分页/
    * step 级 reload 的结果）。无消息仓库且缓存未命中时为空数组。
    */
@@ -441,6 +447,7 @@ export class SessionStreamUnit {
       partialThinking: this.partialThinkingValue,
       injected: this.injectedValue,
       pendingChildren: [...this.pendingChildrenValue],
+      pendingChildrenByTitle: new Map(this.pendingChildIdsByTitle),
       messages: [...this.messagesValue],
       hasMoreMessages: this.hasMoreMessagesValue,
       loadingMoreMessages: this.loadingMoreMessagesValue,

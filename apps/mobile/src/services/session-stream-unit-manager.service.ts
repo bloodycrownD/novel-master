@@ -50,6 +50,15 @@
  * 供会话删除链路清内存现场（持久层行由 core 删除事务联动清理）。真装配
  * 接线在 Step 6。
  *
+ * Step 6 新增（屏幕订阅接线的消费面与缺口补全）：
+ * - 消费型单元：RUN_STARTED 到达时该会话无单元（subagent 子会话 run）即
+ *   lazy 建立接收型单元，供子会话屏订阅投影与单一注入实现落点；不占
+ *   refcount、不写持久层、收尾不发通知（这些语义只覆盖经 startRun 发起
+ *   的 run）；
+ * - activeSessionIds()：活跃 run 会话列举（会话列表「停止生成」判活）；
+ * - requestStreamReset(sessionId)：广播 reset-stream 控制消息（消息操作后
+ *   清流式显示的屏幕驱动入口）。
+ *
  * @module services/session-stream-unit-manager
  */
 import {
@@ -234,6 +243,12 @@ export class SessionStreamUnitManager {
    * 找回父单元摘除 pendingChild；父收尾/单元出表时批量清相关条目。
    */
   private readonly pendingChildParentByChild = new Map<string, string>();
+  /**
+   * 消费型单元登记（Step 6）：sessionId 集合——由 RUN_STARTED 的 lazy 路径
+   * 建立（subagent 子会话 run）。这类单元的收尾不 decrement refcount
+   * （increment 归属发起方 run 的 startRun）、不写持久层、不发完成通知。
+   */
+  private readonly consumptiveSessions = new Set<string>();
   private readonly settledGraceMs: number | undefined;
   private readonly maxSettledUnits: number;
 
@@ -510,7 +525,10 @@ export class SessionStreamUnitManager {
   forgetSession(sessionId: string): void {
     const unit = this.units.get(sessionId);
     if (unit != null) {
-      if (!isSessionStreamUnitSettled(unit.getStatus())) {
+      if (
+        !isSessionStreamUnitSettled(unit.getStatus()) &&
+        !this.consumptiveSessions.has(sessionId)
+      ) {
         decrementAgentActive();
       }
       this.removeUnit(sessionId, unit);
@@ -525,6 +543,31 @@ export class SessionStreamUnitManager {
   hasActiveRun(sessionId: string): boolean {
     const unit = this.units.get(sessionId);
     return unit != null && this.isActiveUnit(unit);
+  }
+
+  /**
+   * 当前有活跃 run（starting|running 单元，含消费型子会话 run）的
+   * sessionId 列表（Step 6 会话列表「停止生成」入口的判活数据源）。
+   */
+  activeSessionIds(): readonly string[] {
+    const ids: string[] = [];
+    for (const [sessionId, unit] of this.units) {
+      if (this.isActiveUnit(unit)) {
+        ids.push(sessionId);
+      }
+    }
+    return ids;
+  }
+
+  /**
+   * 请求该会话单元向全句柄广播 reset-stream 控制消息（Step 6 屏幕接线：
+   * 消息操作 rollback/fork 等场景清流式显示的单元等效，对应 webview 的
+   * resetStream；无单元 no-op）。
+   */
+  requestStreamReset(sessionId: string): void {
+    this.units
+      .get(sessionId)
+      ?.broadcastControlMessage({type: 'reset-stream'});
   }
 
   /**
@@ -764,16 +807,45 @@ export class SessionStreamUnitManager {
 
   /** RUN_STARTED 只做单元状态迁移与 runId 回填，不碰 refcount。 */
   private onRunStarted(payload: AgentRunStartedPayload): void {
-    const unit = this.units.get(payload.sessionId);
-    if (unit == null || !unit.markRunning(payload.runId)) {
+    let unit = this.units.get(payload.sessionId);
+    if (unit == null) {
+      // Step 6 消费型单元：非本 manager 发起的 run（subagent 子会话 run）。
+      // 子会话屏订阅 manager 取投影/注入，需要子会话 run 有单元落点；
+      // 该类单元不占 refcount（refcount 归属发起方 run 的 startRun）、
+      // 不写持久层（session_run_state 行只记录经 startRun 发起的 run）。
+      unit = this.adoptConsumptiveUnit(payload.sessionId, payload.projectId);
+    }
+    if (!unit.markRunning(payload.runId)) {
       return;
     }
-    // Step 5：挂写通 coalescer（供后续 delta append）+ 直接写 running 行
-    //（runId/startedAtMs 回填；一次性事件不走节流）。
-    this.ensureWritethrough(payload.sessionId);
-    const snap = unit.snapshot();
-    this.upsertRunStateQuietly(this.runStateRowFromSnapshot(unit, snap));
+    if (!this.consumptiveSessions.has(payload.sessionId)) {
+      // Step 5：挂写通 coalescer（供后续 delta append）+ 直接写 running 行
+      //（runId/startedAtMs 回填；一次性事件不走节流）。消费型单元跳过。
+      this.ensureWritethrough(payload.sessionId);
+      const snap = unit.snapshot();
+      this.upsertRunStateQuietly(this.runStateRowFromSnapshot(unit, snap));
+    }
     this.notifyChanged();
+  }
+
+  /**
+   * 建消费型单元（Step 6）：接收型落点，仅由 onRunStarted 在无单元时调用。
+   * 状态机直接 idle → starting（begin），随后由调用方 markRunning 回填 runId。
+   */
+  private adoptConsumptiveUnit(
+    sessionId: string,
+    projectId: string,
+  ): SessionStreamUnit {
+    const unit = new SessionStreamUnit({
+      sessionId,
+      projectId,
+      messageStore: this.runtime.messages,
+      onProjectionChanged: () => this.notifyChanged(),
+    });
+    unit.begin();
+    this.consumptiveSessions.add(sessionId);
+    this.units.set(sessionId, unit);
+    return unit;
   }
 
   /**
@@ -868,6 +940,15 @@ export class SessionStreamUnitManager {
     // settle 状态守卫（已销毁/已收尾的单元不再收尾——防同 runId 双事件或
     // 与 finally 兜底竞态的双减；正常运行时不会走到，纯防御）。
     if (!unit.settle(status)) {
+      return;
+    }
+    // 消费型单元（subagent 子会话 run，Step 6）：只收状态机（消息面 reload、
+    // pendingChildren 清理、宽限销毁）。refcount/持久层/完成通知/保活均不
+    // 参与——refcount 与持久层语义只覆盖经 startRun 发起的 run。
+    if (this.consumptiveSessions.has(sessionId)) {
+      this.clearPendingChildIndex(sessionId);
+      this.evictSettledOverflow();
+      this.notifyChanged();
       return;
     }
     // Step 5：先丢弃写通 coalescer 的在途 pending 再写 settled 行——
@@ -1042,6 +1123,7 @@ export class SessionStreamUnitManager {
    */
   private removeUnit(sessionId: string, unit: SessionStreamUnit): void {
     this.units.delete(sessionId);
+    this.consumptiveSessions.delete(sessionId);
     this.clearPendingChildIndex(sessionId);
     this.flushAndDisposeWritethrough(sessionId);
     unit.destroy();
@@ -1188,13 +1270,18 @@ export class SessionStreamUnitManager {
     this.subscriptions.length = 0;
     for (const unit of [...this.units.values()]) {
       // 模块级计数不随 runtime 重建归零，必须由 dispose 显式清零——
-      // 但只清活跃 run 的计数（settled 单元在 finishRun 时已 decrement）。
-      if (!isSessionStreamUnitSettled(unit.getStatus())) {
+      // 但只清活跃 run 的计数（settled 单元在 finishRun 时已 decrement；
+      // 消费型单元从未 increment）。
+      if (
+        !isSessionStreamUnitSettled(unit.getStatus()) &&
+        !this.consumptiveSessions.has(unit.sessionId)
+      ) {
         decrementAgentActive();
       }
       this.removeUnit(unit.sessionId, unit);
     }
     this.pendingChildParentByChild.clear();
+    this.consumptiveSessions.clear();
     // 写通兜底：单元出表路径已逐一收口，理论上表空；防御性清一遍残留
     //（同样尽力 flush——连接可能已关，失败由 coalescer 吞掉不阻塞）。
     for (const sessionId of [...this.writethroughs.keys()]) {
