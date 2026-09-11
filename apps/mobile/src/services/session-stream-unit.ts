@@ -20,7 +20,10 @@
  *   均复位标记（重进/新 step 需重新注入）；
  * - 指标字段化：textChars/thinkingChars 事件即归账（run 级累计，step 边界
  *   不清）、startedAtMs 于 RUN_STARTED 回填时置位（重进连续计时）、
- *   settle 时冻结 elapsedMs 为「上次生成」。
+ *   settle 时冻结 elapsedMs 为「上次生成」；
+ * - 子会话链接：pendingChildren 登记（同 title 覆盖、同 id 去重）、child
+ *   终态摘除（manager 反查路由）、父收尾清空（蓝本 subagentChildSessions
+ *   ByParent 语义，防陈旧条目串到下一 run）。
  *
  * @module services/session-stream-unit
  */
@@ -131,7 +134,7 @@ export interface SessionStreamUnitView {
   readonly partialThinking: string;
   /** 本 step 内是否已向句柄注入过 partial（step 边界/句柄摘除复位）。 */
   readonly injected: boolean;
-  /** 子会话链接占位（child-created 管线填实）。 */
+  /** 子会话链接：run 进行中创建、尚未终态的 child session id（插入序）。 */
   readonly pendingChildren: readonly string[];
 }
 
@@ -172,6 +175,8 @@ export class SessionStreamUnit {
   private partialTextValue = '';
   private partialThinkingValue = '';
   private injectedValue = false;
+  /** 子会话链接：title → childSessionId（同 title 覆盖；投影按 id 去重）。 */
+  private readonly pendingChildIdsByTitle = new Map<string, string>();
   private pendingChildrenValue: readonly string[] = [];
 
   /** ingress 合并队列（32ms 窗口内相邻同 kind 合并，禁止 kind 重排）。 */
@@ -249,6 +254,9 @@ export class SessionStreamUnit {
       this.startedAtMsValue > 0
         ? Math.max(0, this.settledAtMsValue - this.startedAtMsValue)
         : 0;
+    // 父 run 收尾即清空子会话链接：落库 result meta 接管任务卡可点性，
+    // 且避免同 title 陈旧条目串到下一 run（蓝本父 FINISHED 清理语义）。
+    this.clearPendingChildren();
     this.scheduleGraceDestroy();
     return true;
   }
@@ -369,6 +377,56 @@ export class SessionStreamUnit {
     this.partialThinkingValue = '';
     this.injectedValue = false;
     return true;
+  }
+
+  /**
+   * child-created 登记（manager 按 parentSessionId 路由）。
+   *
+   * 去重语义对齐蓝本 Map<title, childSessionId>：同 title 再次创建覆盖
+   * （新 child 接管该 title 的任务卡）；同 childSessionId 已登记则不重复
+   * 入投影。水合流程（Step 5）恢复链接也走本入口逐条回填。返回投影是否
+   * 变化（变化才触发通知）。
+   */
+  registerPendingChild(childSessionId: string, title: string): boolean {
+    if (this.destroyed || childSessionId.length === 0) {
+      return false;
+    }
+    this.pendingChildIdsByTitle.set(title, childSessionId);
+    if (this.pendingChildrenValue.includes(childSessionId)) {
+      return false;
+    }
+    this.pendingChildrenValue = [
+      ...this.pendingChildrenValue,
+      childSessionId,
+    ];
+    return true;
+  }
+
+  /**
+   * child 终态摘除（manager 由 FINISHED/FAILED 反查路由）：该子会话的
+   * pending 态消失，落库 result meta 接管。返回投影是否变化。
+   */
+  removePendingChild(childSessionId: string): boolean {
+    let removedTitle = false;
+    for (const [title, id] of this.pendingChildIdsByTitle) {
+      if (id === childSessionId) {
+        this.pendingChildIdsByTitle.delete(title);
+        removedTitle = true;
+      }
+    }
+    if (!removedTitle) {
+      return false;
+    }
+    this.pendingChildrenValue = this.pendingChildrenValue.filter(
+      id => id !== childSessionId,
+    );
+    return true;
+  }
+
+  /** 清空全部子会话链接（父 run 收尾时由 settle 内部调用）。 */
+  private clearPendingChildren(): void {
+    this.pendingChildIdsByTitle.clear();
+    this.pendingChildrenValue = [];
   }
 
   /** 注册 webview 句柄（重复 handleId 先移除旧条目再追加，保持「最后 attach」序）。 */

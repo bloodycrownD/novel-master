@@ -45,6 +45,7 @@ import {
   EVENT_AGENT_STEP_COMMITTED,
   EVENT_AGENT_STREAM_TEXT_DELTA,
   EVENT_AGENT_STREAM_THINKING_DELTA,
+  EVENT_SUBAGENT_CHILD_SESSION_CREATED,
 } from '@novel-master/core/events';
 import type {
   AgentRunFailedPayload,
@@ -53,6 +54,7 @@ import type {
   AgentStepCommittedPayload,
   AgentStreamTextDeltaPayload,
   AgentStreamThinkingDeltaPayload,
+  SubagentChildSessionCreatedPayload,
 } from '@novel-master/core/events';
 import type {SendAnnotateDraft} from '@novel-master/core/chat';
 import type {EventSubscription} from '@novel-master/core/events';
@@ -156,6 +158,13 @@ export class SessionStreamUnitManager {
   private readonly runAgentTurnFn: RunAgentTurnFn;
   private readonly units = new Map<string, SessionStreamUnit>();
   private readonly subscriptions: EventSubscription[] = [];
+  /**
+   * 子会话链接反查表：childSessionId → parentSessionId。
+   *
+   * 子会话 run 的终态事件（sessionId 为子会话 id，经 finishRun 路由）靠它
+   * 找回父单元摘除 pendingChild；父收尾/单元出表时批量清相关条目。
+   */
+  private readonly pendingChildParentByChild = new Map<string, string>();
   private readonly settledGraceMs: number | undefined;
   private readonly maxSettledUnits: number;
 
@@ -218,6 +227,11 @@ export class SessionStreamUnitManager {
       this.runtime.eventBus.subscribe(
         EVENT_AGENT_STEP_COMMITTED,
         (payload: AgentStepCommittedPayload) => this.onStepCommitted(payload),
+      ),
+      this.runtime.eventBus.subscribe(
+        EVENT_SUBAGENT_CHILD_SESSION_CREATED,
+        (payload: SubagentChildSessionCreatedPayload) =>
+          this.onChildSessionCreated(payload),
       ),
     );
 
@@ -336,8 +350,7 @@ export class SessionStreamUnitManager {
 
     // settled 旧单元（interrupted/finished/failed，含宽限中）替换吸收：删旧建新。
     if (existing != null) {
-      this.units.delete(sessionId);
-      existing.destroy();
+      this.removeUnit(sessionId, existing);
     }
     const unit = new SessionStreamUnit({
       sessionId,
@@ -399,8 +412,7 @@ export class SessionStreamUnitManager {
         // 无终态事件」的窗口（否则单元/refcount 永久泄漏）；finishRun 的
         // runId 所有权 + settle 状态守卫是另一道双保险。
         // 此路径不走 settle（非正常终态）：直接销毁单元出表。
-        this.units.delete(sessionId);
-        unit.destroy();
+        this.removeUnit(sessionId, unit);
         this.notifyChanged();
         decrementAgentActive();
         this.stopKeepAliveQuietly(sessionId);
@@ -440,8 +452,7 @@ export class SessionStreamUnitManager {
     unit.settleAsInterrupted();
     const existing = this.units.get(sessionId);
     if (existing != null) {
-      this.units.delete(sessionId);
-      existing.destroy();
+      this.removeUnit(sessionId, existing);
     }
     this.units.set(sessionId, unit);
     this.evictSettledOverflow();
@@ -470,6 +481,51 @@ export class SessionStreamUnitManager {
     this.notifyChanged();
   }
 
+  /**
+   * child-created：按 parentSessionId 路由进父单元登记（去重在单元内），
+   * 同时记反查表供子会话终态摘除。无父单元（父 run 已结束/不在本进程）
+   * 自然落空。
+   */
+  private onChildSessionCreated(
+    payload: SubagentChildSessionCreatedPayload,
+  ): void {
+    const unit = this.units.get(payload.parentSessionId);
+    if (unit == null) {
+      return;
+    }
+    this.pendingChildParentByChild.set(
+      payload.childSessionId,
+      payload.parentSessionId,
+    );
+    if (unit.registerPendingChild(payload.childSessionId, payload.title)) {
+      this.notifyChanged();
+    }
+  }
+
+  /** 子会话 run 终态：反查父单元并摘除 pending 链接（无条目 no-op）。 */
+  private removePendingChildIfAny(childSessionId: string): void {
+    const parentSessionId = this.pendingChildParentByChild.get(childSessionId);
+    if (parentSessionId == null) {
+      return;
+    }
+    this.pendingChildParentByChild.delete(childSessionId);
+    if (
+      this.units.get(parentSessionId)?.removePendingChild(childSessionId) ===
+      true
+    ) {
+      this.notifyChanged();
+    }
+  }
+
+  /** 清掉指向某父会话的全部反查条目（父收尾/单元出表时调用）。 */
+  private clearPendingChildIndex(parentSessionId: string): void {
+    for (const [childId, parent] of this.pendingChildParentByChild) {
+      if (parent === parentSessionId) {
+        this.pendingChildParentByChild.delete(childId);
+      }
+    }
+  }
+
   private onRunFinished(payload: AgentRunFinishedPayload): void {
     this.finishRun(payload.sessionId, payload.runId, 'finished');
   }
@@ -487,6 +543,11 @@ export class SessionStreamUnitManager {
     status: SessionStreamRunSettledStatus,
     errorMessage?: string,
   ): void {
+    // 子会话 run 终态（sessionId 为子会话 id、本表无单元）：反查父单元
+    // 摘除 pending 链接——任务卡 pending 态消失，落库 result meta 接管。
+    // 无反查条目时 no-op，不影响下方父单元收尾路径。
+    this.removePendingChildIfAny(sessionId);
+
     const unit = this.units.get(sessionId);
     if (unit == null || unit.getRunId() !== runId) {
       return;
@@ -496,6 +557,8 @@ export class SessionStreamUnitManager {
     if (!unit.settle(status)) {
       return;
     }
+    // 父收尾：settle 内已清空单元的 pendingChildren，这里同步清反查条目。
+    this.clearPendingChildIndex(sessionId);
     this.evictSettledOverflow();
     this.notifyChanged();
     decrementAgentActive();
@@ -614,8 +677,7 @@ export class SessionStreamUnitManager {
     if (this.units.get(sessionId) !== unit) {
       return;
     }
-    this.units.delete(sessionId);
-    unit.destroy();
+    this.removeUnit(sessionId, unit);
     this.notifyChanged();
   }
 
@@ -634,10 +696,16 @@ export class SessionStreamUnitManager {
       (a, b) => (a.getSettledAtMs() ?? 0) - (b.getSettledAtMs() ?? 0),
     );
     for (const unit of settled.slice(0, settled.length - this.maxSettledUnits)) {
-      this.units.delete(unit.sessionId);
-      unit.destroy();
+      this.removeUnit(unit.sessionId, unit);
     }
     this.notifyChanged();
+  }
+
+  /** 单元出表统一收口：摘注册表 + 清子会话反查条目 + 销毁单元。 */
+  private removeUnit(sessionId: string, unit: SessionStreamUnit): void {
+    this.units.delete(sessionId);
+    this.clearPendingChildIndex(sessionId);
+    unit.destroy();
   }
 
   private isActiveUnit(unit: SessionStreamUnit): boolean {
@@ -675,9 +743,9 @@ export class SessionStreamUnitManager {
       if (!isSessionStreamUnitSettled(unit.getStatus())) {
         decrementAgentActive();
       }
-      this.units.delete(unit.sessionId);
-      unit.destroy();
+      this.removeUnit(unit.sessionId, unit);
     }
+    this.pendingChildParentByChild.clear();
     this.notifyChanged();
     this.listeners.clear();
     void stopAgentKeepAliveService().catch(() => undefined);
