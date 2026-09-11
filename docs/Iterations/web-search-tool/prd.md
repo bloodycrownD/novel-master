@@ -113,7 +113,7 @@ novel-master 的 AI 聊天目前内置 10 个工具（task/read/write/edit/fs/gl
 
 - Given 用户已配置 bocha key，When 在对话中让 AI 检索，Then 模型调用 search 返回结果列表（title/url/snippet），回答引用来源
 - Given 用户配置 searxng baseUrl（自托管实例），When 调用 search，Then 经该实例返回结果，全程无 key
-- Given 用户未配置任何引擎，When 调用 search，Then 返回未配置提示与配置指引，无异常
+- Given 用户未配置任何引擎，When 调用 search，Then 由内置 DuckDuckGo 兜底返回结果（开箱即用；见 R1.2），无异常
 - Given 某引擎 key 无效，When 未显式指定引擎且存在后续已配置引擎，Then 串行降级至下一引擎（见串行请求链节）；Given 显式以该引擎调用，Then 返回可读的错误信息（不泄漏 key 明文）
 
 ### 配置界面（修订轮）
