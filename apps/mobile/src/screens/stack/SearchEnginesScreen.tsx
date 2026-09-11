@@ -57,7 +57,7 @@ export const ENGINE_HINTS: Record<EngineId, string> = {
   tavily: '按量计费 · 国际',
   brave: '按量计费 · 国际',
   searxng: '自托管 · 免费',
-  duckduckgo: '内置 · 免费兜底',
+  duckduckgo: '内置',
 };
 
 /** 内置引擎徽标：duckduckgo 无 set/not set 二态（恒可用），用主题色
