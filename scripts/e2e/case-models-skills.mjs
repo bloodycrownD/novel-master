@@ -48,7 +48,9 @@ try {
     const addOk = page.locator(".text-prompt-modal button").filter({ hasText: /^添加$/ }).first();
     if (await addOk.count()) { await addOk.click(); await sleep(900); }
   }
-  console.log("MODEL_READDED", (await page.locator(".settings-view li").filter({ hasText: "glm-regression-test" }).count()) >= 0);
+  const mmCount = await page.locator(".settings-view li").filter({ hasText: "glm-regression-test" }).count();
+  console.log("MODEL_READDED", mmCount >= 1);
+  if (mmCount < 1) console.log("FAIL MODEL_READDED", mmCount);
 
   // ===== B. 技能管理：行菜单删除「回归技能」 + 域切换 =====
   // 清场：关掉可能残留的弹窗（confirm-modal 与 text-prompt-modal 两类）
