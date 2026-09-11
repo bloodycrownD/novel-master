@@ -183,6 +183,38 @@ export function ManageListIcon({color, size = 22}: IconProps) {
   );
 }
 
+/** 帮助（问号圆圈）：标题栏帮助入口，区别于菜单汉堡。 */
+export function HelpIcon({color, size = 22}: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Circle
+        cx={12}
+        cy={12}
+        r={10}
+        fill="none"
+        stroke={color}
+        strokeWidth={2}
+      />
+      <Path
+        d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Line
+        x1={12}
+        y1={17}
+        x2={12.01}
+        y2={17}
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+      />
+    </Svg>
+  );
+}
+
 /** Header back icon. */
 export function BackIcon({color, size = 22}: IconProps) {
   return (

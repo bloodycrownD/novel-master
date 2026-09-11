@@ -4,10 +4,10 @@
  * 禁用，照 ProvidersScreen 的 BottomSheetMenu 先例）；点击行进详情页。
  *
  * 读写经 `runtime.searchConfig`（core `createSearchConfigStore` 装配）：
- * 对外状态只显 configured 标签，不回显 key 明文；列表顺序即 search
- * 工具的串行降级链优先级。
+ * 对外状态只显 configured 标签，不回显 key 明文。列表页不留长说明文案，
+ * 引擎优先级 / 自动降级 / 密钥安全三段使用说明收进标题栏「?」帮助弹窗。
  */
-import React, {useCallback, useState} from 'react';
+import React, {useCallback, useEffect, useState} from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -23,9 +23,12 @@ import type {EngineId} from '@novel-master/core';
 import {ApiKeyStatusTag} from '@/components/provider/ApiKeyStatusTag';
 import {BottomSheetMenu} from '@/components/sheet/BottomSheetMenu';
 import {ConfigListCard} from '@/components/ui/ConfigListCard';
+import {HelpIcon} from '@/components/icons/TabIcons';
+import {ModalShell} from '@/components/ui/ModalShell';
 import {useDismissOverlaysOnBlur} from '@/hooks/useDismissOverlaysOnBlur';
 import {useFocusListReload} from '@/hooks/useFocusListReload';
 import {useRuntime} from '@/hooks/useRuntime';
+import {useHeaderContext} from '@/navigation/HeaderContext';
 import type {RootStackParamList} from '@/navigation/types';
 import {listScreenStyles} from '../shared/list-screen-styles';
 import {useTheme} from '@/theme/ThemeProvider';
@@ -46,13 +49,33 @@ export const ENGINE_LABELS: Record<EngineId, string> = {
   searxng: 'SearXNG',
 };
 
-/** 行副标题（引擎口径说明；详情页表单卡片 hint 共用）。 */
+/** 行副标题短语（计费/部署口径）；详情页表单卡片 hint 用独立短文案。 */
 export const ENGINE_HINTS: Record<EngineId, string> = {
-  bocha: '博查搜索 API，按量计费',
-  tavily: 'Tavily Search API',
-  brave: 'Brave Search API',
-  searxng: '自托管元搜索引擎实例，无需 API key',
+  bocha: '按量计费 · 中文检索',
+  tavily: '按量计费 · 国际',
+  brave: '按量计费 · 国际',
+  searxng: '自托管 · 免费',
 };
+
+/** 帮助弹窗一段说明：小标题 + 一句话。 */
+function HelpSection({
+  title,
+  body,
+  tokens,
+}: {
+  title: string;
+  body: string;
+  tokens: {text: string; textSecondary: string};
+}) {
+  return (
+    <View style={styles.helpSection}>
+      <Text style={[styles.helpSectionTitle, {color: tokens.text}]}>{title}</Text>
+      <Text style={[styles.helpSectionBody, {color: tokens.textSecondary}]}>
+        {body}
+      </Text>
+    </View>
+  );
+}
 
 /** 列表行数据：engineOrder 序 + 单引擎配置状态。 */
 interface SearchEngineRow {
@@ -67,16 +90,32 @@ export function SearchEnginesScreen() {
   const {showToast} = useToast();
   const runtime = useRuntime();
   const navigation = useNavigation<Nav>();
+  const {setStackOverride} = useHeaderContext();
   /** 行菜单当前指向的引擎（undefined = 收起）。 */
   const [menuEngineId, setMenuEngineId] = useState<EngineId | undefined>();
   /** 排序写库进行中（互斥连点）。 */
   const [moving, setMoving] = useState(false);
+  /** 使用说明弹窗开关（标题栏「?」按钮）。 */
+  const [helpVisible, setHelpVisible] = useState(false);
 
   const dismissAllOverlays = useCallback(() => {
     setMenuEngineId(undefined);
+    setHelpVisible(false);
   }, []);
 
   useDismissOverlaysOnBlur(dismissAllOverlays);
+
+  // 标题栏菜单位换「?」帮助按钮（AppHeader 经 stackOverride 消费
+  // menuIcon/onMenu，见 ProviderDetailScreen 标题 override 同一链路）。
+  useEffect(() => {
+    setStackOverride({
+      title: '搜索配置',
+      showMenu: true,
+      menuIcon: <HelpIcon color={tokens.text} />,
+      onMenu: () => setHelpVisible(true),
+    });
+    return () => setStackOverride(undefined);
+  }, [setStackOverride, tokens.text]);
 
   const {rows, loading, error, reload} = useFocusListReload({
     fetcher: useCallback(async () => {
@@ -160,13 +199,6 @@ export function SearchEnginesScreen() {
               onMenuPress={() => setMenuEngineId(item.engineId)}
             />
           )}
-          ListFooterComponent={
-            <Text style={[styles.note, {color: tokens.textTertiary}]}>
-              列表顺序即 search
-              工具的引擎优先级：请求失败时按序降级到下一个已配置引擎。API key
-              只保存在本机密钥库，不进入会话记录，也不会随云同步上传。
-            </Text>
-          }
         />
       )}
       <BottomSheetMenu
@@ -194,6 +226,40 @@ export function SearchEnginesScreen() {
           }
         }}
       />
+      {/* 使用说明弹窗：三段短文案（优先级 / 降级 / 密钥安全），无输入不避键盘。 */}
+      <ModalShell
+        visible={helpVisible}
+        onClose={() => setHelpVisible(false)}
+        variant="center"
+        animationType="fade"
+        panelStyle={styles.helpPanel}
+      >
+        <Text style={[styles.helpTitle, {color: tokens.text}]}>使用说明</Text>
+        <HelpSection
+          tokens={tokens}
+          title="引擎优先级"
+          body="列表顺序即搜索时尝试引擎的顺序，第一位为默认引擎；行菜单可上移/下移调整。"
+        />
+        <HelpSection
+          tokens={tokens}
+          title="自动降级"
+          body="请求失败（如密钥失效、超时）时自动尝试下一个已配置引擎，直到成功。"
+        />
+        <HelpSection
+          tokens={tokens}
+          title="密钥安全"
+          body="API key 仅存本机安全密钥库，不进入会话记录，不随云同步上传。"
+        />
+        <Pressable
+          onPress={() => setHelpVisible(false)}
+          style={[
+            styles.helpCloseRow,
+            {borderTopColor: tokens.border},
+          ]}
+        >
+          <Text style={{color: tokens.primary, fontWeight: '600'}}>知道了</Text>
+        </Pressable>
+      </ModalShell>
     </View>
   );
 }
@@ -201,5 +267,21 @@ export function SearchEnginesScreen() {
 const styles = StyleSheet.create({
   center: {alignItems: 'center', gap: 12, padding: 24},
   error: {textAlign: 'center', lineHeight: 20},
-  note: {fontSize: 12, lineHeight: 18, marginTop: 4, marginBottom: 8},
+  helpPanel: {
+    borderRadius: 16,
+    width: '100%',
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 8,
+  },
+  helpTitle: {fontSize: 17, fontWeight: '600', marginBottom: 14},
+  helpSection: {marginBottom: 12},
+  helpSectionTitle: {fontSize: 14, fontWeight: '600', marginBottom: 2},
+  helpSectionBody: {fontSize: 13, lineHeight: 19},
+  helpCloseRow: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    marginTop: 2,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
 });

@@ -113,6 +113,29 @@ jest.mock('@/components/chrome/ToastHost', () => ({
 
 const mockShowToast = jest.fn();
 
+// 顶栏 override：记录调用参数，供标题栏「?」帮助按钮断言。
+jest.mock('@/navigation/HeaderContext', () => ({
+  useHeaderContext: () => ({setStackOverride: mockSetStackOverride}),
+}));
+
+const mockSetStackOverride = jest.fn();
+
+// 帮助弹窗骨架：visible 时输出标记节点，供断言开关状态。
+jest.mock('@/components/ui/ModalShell', () => {
+  const mockReact = require('react');
+  const {Text} = require('react-native');
+  return {
+    ModalShell: (props: {visible: boolean; onClose: () => void}) =>
+      props.visible
+        ? mockReact.createElement(
+            Text,
+            {testHelpModal: 'help', onClose: props.onClose},
+            '使用说明',
+          )
+        : null,
+  };
+});
+
 // searchConfig store mock：readConfig 返回固定 engineOrder + configured；
 // setEngineOrder 记录调用参数。
 const mockReadConfig = jest.fn();
@@ -181,6 +204,7 @@ describe('SearchEnginesScreen 列表屏（修订轮两级）', () => {
   beforeEach(() => {
     mockShowToast.mockReset();
     mockNavigate.mockReset();
+    mockSetStackOverride.mockReset();
     mockSetEngineOrder.mockReset().mockResolvedValue(undefined);
     mockReadConfig.mockReset().mockImplementation(async () => ({
       engineOrder: ['bocha', 'tavily', 'brave', 'searxng'],
@@ -282,6 +306,20 @@ describe('SearchEnginesScreen 列表屏（修订轮两级）', () => {
       'searxng',
       'brave',
     ]);
+  });
+
+  it('标题栏「?」帮助按钮：override 菜单位并打开使用说明弹窗', async () => {
+    const {renderer} = await renderScreen();
+    expect(mockSetStackOverride).toHaveBeenCalled();
+    const override = mockSetStackOverride.mock.calls[0][0];
+    expect(override.title).toBe('搜索配置');
+    expect(override.showMenu).toBe(true);
+    // 初始弹窗关闭；点「?」后树里出现使用说明文本。
+    expect(treeText(renderer.root)).not.toContain('使用说明');
+    await act(async () => {
+      override.onMenu();
+    });
+    expect(treeText(renderer.root)).toContain('使用说明');
   });
 
   it('排序写库失败：toast 报错，不静默吞掉', async () => {

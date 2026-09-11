@@ -9,7 +9,7 @@
  * desktop 93f534ea 口径对齐）。
  */
 import React, {useCallback, useEffect, useState} from 'react';
-import {ActivityIndicator, StyleSheet, Text, View} from 'react-native';
+import {ActivityIndicator, StyleSheet, View} from 'react-native';
 import {
   useFocusEffect,
   useNavigation,
@@ -200,7 +200,9 @@ export function SearchEngineDetailScreen() {
       <FormSectionCard
         tokens={tokens}
         title={ENGINE_LABELS[engineId]}
-        hint={ENGINE_HINTS[engineId]}
+        hint={
+          isSearxng ? ENGINE_HINTS[engineId] : '密钥仅存本机安全密钥库'
+        }
         rightAction={
           <ApiKeyStatusTag
             status={configured ? 'set' : 'not set'}
@@ -256,17 +258,10 @@ export function SearchEngineDetailScreen() {
           </>
         )}
       </FormSectionCard>
-
-      {isSearxng ? null : (
-        <Text style={[styles.note, {color: tokens.textTertiary}]}>
-          API key 只保存在本机密钥库，不进入会话记录，也不会随云同步上传。
-        </Text>
-      )}
     </ScreenFormLayout>
   );
 }
 
 const styles = StyleSheet.create({
   centered: {flex: 1, alignItems: 'center', justifyContent: 'center'},
-  note: {fontSize: 12, lineHeight: 18, marginTop: 4, marginBottom: 8},
 });
