@@ -61,10 +61,9 @@ function mountActions() {
       runtime: mockRuntime as any,
       projectId: 'p1',
       sessionId: 's1',
-      messages: {
-        chatMessages: [],
-        reloadMessages: mockReloadMessages,
-      } as any,
+      chatMessages: [],
+      reloadMessages: mockReloadMessages,
+      setDraftRestoreToken: jest.fn(),
       agentRunning: false,
       resetStreamingDisplay: jest.fn(),
       showToast: mockShowToast,
