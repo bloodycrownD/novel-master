@@ -195,10 +195,6 @@ export function SearchEngineDetailView({ nav }: { nav: SettingsNavHandle }) {
               />
             </SettingsField>
           )}
-          <p className="settings-hint settings-hint--compact">
-            API Key 经 SKSP 安全存储，仅保存时写入；至少配置一个引擎后
-            search 工具可用。
-          </p>
           {isKeyEngine && configured ? (
             <Button
               variant="secondary"

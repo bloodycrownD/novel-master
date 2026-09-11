@@ -12,21 +12,22 @@ import {
 } from "@shared/logic/search-engines";
 
 export const ENGINE_META: Record<EngineId, { label: string; desc: string }> = {
+  // desc 为行副标题（计费/部署形态一句话），与 mobile 同构口径，勿漂移
   bocha: {
     label: "Bocha",
-    desc: "博查 AI 搜索（api.bochaai.com），需 API Key。",
+    desc: "按量计费 · 中文检索",
   },
   tavily: {
     label: "Tavily",
-    desc: "Tavily 搜索（tavily.com），需 API Key。",
+    desc: "按量计费 · 国际",
   },
   brave: {
     label: "Brave",
-    desc: "Brave 搜索（search.brave.com），需 API Key。",
+    desc: "按量计费 · 国际",
   },
   searxng: {
     label: "SearXNG",
-    desc: "自托管元搜索实例，无需 API Key，填实例地址即可。",
+    desc: "自托管 · 免费",
   },
 };
 

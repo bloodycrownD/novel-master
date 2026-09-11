@@ -117,6 +117,7 @@ export function ApiKeyStatusTag({ status }: { status: string }) {
 
 export function SettingsListItem({
   title,
+  desc,
   meta,
   onClick,
   onMenu,
@@ -125,6 +126,8 @@ export function SettingsListItem({
   onToggleSelect,
 }: {
   title: string;
+  /** 可选：标题下方短副标题（如计费/部署形态），与 mobile 行副标题同口径。 */
+  desc?: string;
   meta?: React.ReactNode;
   onClick?: () => void;
   onMenu?: (event: React.MouseEvent<HTMLButtonElement>) => void;
@@ -152,7 +155,10 @@ export function SettingsListItem({
           onToggle={() => onToggleSelect?.()}
         />
       ) : null}
-      <span className="settings-list-item__label">{title}</span>
+      <span className="settings-list-item__label">
+        {title}
+        {desc ? <span className="settings-row__desc">{desc}</span> : null}
+      </span>
       {meta ? <span className="settings-list-item__meta">{meta}</span> : null}
       {!batchMode ? (
         <span className="settings-list-item__chevron" aria-hidden="true">
