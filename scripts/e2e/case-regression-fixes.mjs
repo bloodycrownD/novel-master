@@ -1,6 +1,7 @@
 // 本迭代专属回归断言（fix/desktop-regression-fixes Step 9）：
 // T-P1/P2/P3 PreviewPane 三修、T-S1/S2 设置两修、T-D1/D2 抽屉重置+返回、
-// T-G1~G4 导航守卫四分发点、T-A2 下划线投影复核（spec 遗留观察，不 FAIL）。
+// T-G1~G4 导航守卫四分发点、T-A1 附件双发守门（TA2 段收口进 results）、
+// T-A2 下划线投影复核（spec 遗留观察，不 FAIL）。
 // 依赖 bootstrap 产物（回归项目A + 会话 + 回归Provider/模型绑定）；技能在本脚本
 // 自建 nav-guard-A/B 两个——命名刻意避开「回归技能」子串，不干扰后续
 // case-models-skills 的「回归技能」行删除断言（hasText 子串匹配会误伤）。
@@ -138,7 +139,7 @@ try {
   await sleep(1400);
   await shot(page, "703", "tp1-tab-closed");
 
-  // ===== Phase 3：T-A2 下划线投影复核（观察记录，不 FAIL）=====
+  // ===== Phase 3：T-A1 附件双发守门 + T-A2 下划线投影复核（T-A2 仍为观察记录，不 FAIL）=====
   console.log("PHASE", "annotate-projection");
   await noteNode.click();
   await sleep(1500);
@@ -184,10 +185,10 @@ try {
       await sendMessage(page, "T-A2投影复核消息");
       await sleep(1500);
       await shot(page, "705", "ta2-sent");
-      // 附件落库断言（公共函数重试式探测，C-3② 收敛）：先等最近一条 user 消息
-      // 匹配本次发送内容，再验批注附件分组；T-A1 守门收口见下
+      // 附件落库断言（公共函数重试式探测，C-3② 收敛）：结果收口进 T-A1 守门断言（A-1）——
+      // 附件双发复发或探测不匹配时 FAIL，不再只 console.log 观察致 ALL_PASS 恒绿
       const attach = await assertLastUserAttach(page, "T-A2投影复核消息");
-      console.log("TA2_ATTACH", JSON.stringify(attach));
+      record("T-A1", attach.matched && attach.hasAttach, JSON.stringify(attach));
 
       // 重开文件：切到另一文件再切回（触发 loadFile + annotator 重建）
       await emptyNode.click();
@@ -498,10 +499,15 @@ try {
 
   await shot(page, "714", "done");
   console.log("SUMMARY", JSON.stringify(results));
-  console.log("ALL_PASS", results.every((r) => r.pass));
+  const allPass = results.every((r) => r.pass);
+  console.log("ALL_PASS", allPass);
+  // B-3③：FAIL 时非零退出，串联序列（&& 编排）自动断链，失败不再向后传导
+  if (!allPass) process.exitCode = 1;
 
 } catch (e) {
   console.log("SCRIPT_ERROR", String(e).slice(0, 500));
+  // 中途炸断同样以非零退出断链（此时 ALL_PASS 可能来不及打，不能以 0 退出绿携传递）
+  process.exitCode = 1;
   try { await page.screenshot({ path: "/tmp/regfx-err.png" }); } catch {}
 }
 await shutdown(app, vite, mock);
