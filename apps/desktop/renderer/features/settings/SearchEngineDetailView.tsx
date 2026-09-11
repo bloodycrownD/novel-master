@@ -4,7 +4,9 @@
  * - key 引擎（bocha/tavily/brave）：密码框 + 留空不修改 + 已配置时的
  *   「清除密钥」按钮；
  * - searxng：实例 baseUrl 表单，空串保存即清除；URL 形状校验
- *   （http/https、禁 userinfo）前置于提交，无连通性测试（PRD 口径）。
+ *   （http/https、禁 userinfo）前置于提交，无连通性测试（PRD 口径）；
+ * - duckduckgo：内置兑底引擎，只读说明卡（无表单无保存，文案与
+ *   mobile 同构勿漂移）。
  * 保存与清除双向互斥（沿用旧单页的互斥口径：saving/clearing 布尔
  * 双态，在途期间按钮禁用 + 交错点击直接忽略）。
  */
@@ -72,7 +74,8 @@ export function SearchEngineDetailView({ nav }: { nav: SettingsNavHandle }) {
   }, []);
 
   useEffect(() => {
-    if (isEngineId(engineId)) {
+    // duckduckgo 只读说明卡不依赖库内数据（configured 恒 true），免读 IPC。
+    if (isEngineId(engineId) && engineId !== "duckduckgo") {
       void reload(engineId);
     }
   }, [engineId, reload]);
@@ -86,6 +89,20 @@ export function SearchEngineDetailView({ nav }: { nav: SettingsNavHandle }) {
           <Button variant="secondary" onClick={() => nav.pop()}>
             返回列表
           </Button>
+        </SettingsFormSection>
+      </SettingsPanel>
+    );
+  }
+
+  // 内置兑底引擎：只读说明（无表单无保存；文案与 mobile 同构勿漂移）。
+  if (engineId === "duckduckgo") {
+    const duckMeta = ENGINE_META[engineId];
+    return (
+      <SettingsPanel>
+        <SettingsFormSection title={duckMeta.label} desc={duckMeta.desc}>
+          <p className="settings-hint">
+            内置兑底引擎，无需 API Key，开箱即用；未配置其它引擎时搜索自动使用它，可上移调整优先级。
+          </p>
         </SettingsFormSection>
       </SettingsPanel>
     );

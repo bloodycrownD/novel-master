@@ -115,6 +115,12 @@ export function ApiKeyStatusTag({ status }: { status: string }) {
   );
 }
 
+/** 内置引擎徽标：duckduckgo 无 set/not set 二态（恒可用），主题色胶囊
+ * 标「内置」，与 ApiKeyStatusTag 同形状（双端同构口径）。 */
+export function BuiltinEngineTag() {
+  return <span className="settings-tag settings-tag--primary">内置</span>;
+}
+
 export function SettingsListItem({
   title,
   desc,

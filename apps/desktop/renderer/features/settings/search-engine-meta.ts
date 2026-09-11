@@ -29,6 +29,10 @@ export const ENGINE_META: Record<EngineId, { label: string; desc: string }> = {
     label: "SearXNG",
     desc: "自托管 · 免费",
   },
+  duckduckgo: {
+    label: "DuckDuckGo",
+    desc: "内置 · 免费兑底",
+  },
 };
 
 /** navState 携带的 engineId 收窄守卫（非法值兜底回列表页视觉态）。 */

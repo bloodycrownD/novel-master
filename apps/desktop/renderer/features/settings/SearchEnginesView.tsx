@@ -16,6 +16,7 @@ import type { SettingsNavHandle } from "./settings-nav";
 import { ENGINE_META } from "./search-engine-meta";
 import {
   ApiKeyStatusTag,
+  BuiltinEngineTag,
   SettingsListItem,
   SettingsListSection,
   SettingsPanel,
@@ -25,7 +26,7 @@ import {
 const HELP_SECTIONS: ReadonlyArray<{ title: string; body: string }> = [
   {
     title: "引擎优先级",
-    body: "列表顺序即搜索时尝试引擎的顺序，第一位为默认引擎；行菜单可上移/下移调整。",
+    body: "列表顺序即搜索时尝试引擎的顺序，第一位为默认引擎；行菜单可上移/下移调整。未配置任何引擎时由内置 DuckDuckGo 免费兑底（无需密钥）。",
   },
   {
     title: "自动降级",
@@ -157,7 +158,15 @@ export function SearchEnginesView({ nav }: { nav: SettingsNavHandle }) {
               key={engineId}
               title={meta.label}
               desc={meta.desc}
-              meta={<ApiKeyStatusTag status={configured ? "set" : "not set"} />}
+              meta={
+                engineId === "duckduckgo" ? (
+                  <BuiltinEngineTag />
+                ) : (
+                  <ApiKeyStatusTag
+                    status={configured ? "set" : "not set"}
+                  />
+                )
+              }
               onClick={() => {
                 nav.navState.editingEngineId = engineId;
                 nav.push("searchEngineDetail");
