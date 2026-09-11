@@ -1,7 +1,9 @@
 /**
  * `search` 工具实现：经已配置的搜索引擎（bocha / tavily / brave /
- * searxng）检索网页，回流统一形状的结果列表（title / url / snippet），
- * 让 agent 具备联网检索能力（写作考据、事实核验、资料收集）。
+ * searxng / duckduckgo）检索网页，回流统一形状的结果列表（title /
+ * url / snippet），让 agent 具备联网检索能力（写作考据、事实核验、
+ * 资料收集）；未配置付费引擎时由内置 DuckDuckGo 免费搜索兑底（PRD
+ * R1.2，搜索开箱即用）。
  *
  * 设计口径（SPEC web-search-tool Step 4，修订轮串行链）：
  * - 引擎链经 `ctx.search` 闭包解析（engineOrder 优先级序；显式
@@ -130,16 +132,16 @@ export const searchTool: Tool<
 > = {
   name: SEARCH_TOOL_NAME,
   description: () =>
-    `联网搜索：经已配置的搜索引擎（bocha / tavily / brave / searxng）检索网页，返回结果列表（标题 / 链接 / 摘要），适用于写作资料查找、事实核验与背景考据。
+    `联网搜索：经已配置的搜索引擎（bocha / tavily / brave / searxng / duckduckgo）检索网页，返回结果列表（标题 / 链接 / 摘要），适用于写作资料查找、事实核验与背景考据；未配置付费引擎时自动使用内置 DuckDuckGo 免费搜索（无需密钥）。
 
 入参：
 - query：搜索关键词（必填）
 - maxResults：结果条数，默认 5，范围 1..20（超出范围自动收敛）
-- engine：可选，指定引擎 bocha/tavily/brave/searxng；缺省按配置顺序（engineOrder）串行尝试已配置引擎，前一个失败自动降级到下一个；显式指定时钉死该引擎，失败不降级直接报错
+- engine：可选，指定引擎 bocha/tavily/brave/searxng/duckduckgo；缺省按配置顺序（engineOrder）串行尝试已配置引擎，前一个失败自动降级到下一个；显式指定时钉死该引擎，失败不降级直接报错
 
 结果格式：可读文本，非 JSON——首行为「search 引擎 · N 条结果」，发生过降级时下一行展示尝试轨迹（如「bocha 失败(401) → tavily 成功」），tavily 的原生回答（如有）紧随其后，其后为「- 标题 — 链接 — 摘要」紧凑列表；结果超过 50KB 时全文自动保存到会话工作区 /tmp/（可用 read 读取）并显示落盘路径。
 
-注意：需先在设置中配置至少一个搜索引擎（bocha/tavily/brave 的 API key 或自托管 searxng 的 baseUrl），未配置时调用返回配置指引；串行链总预算 120s，全链失败返回逐引擎聚合错误。`,
+注意：未配置付费引擎（bocha/tavily/brave 的 API key、自托管 searxng 的 baseUrl）时使用内置 DuckDuckGo 免费搜索，无需任何配置即可用；可在设置中配置付费引擎获得更稳定的质量；串行链总预算 120s，全链失败返回逐引擎聚合错误。`,
   inputSchema: z.object({
     query: z.string().min(1).describe("搜索关键词"),
     maxResults: z
@@ -190,8 +192,9 @@ export const searchTool: Tool<
     }
 
     // 引擎链解析：engineOrder 优先级序（显式 input.engine 时从该引擎起
-    // 截取，未配置顺位回落截取链中下一个 configured）；全无 → 未配置
-    // 提示（成功输出，含双端配置入口指引，非错误）。
+    // 截取，未配置顺位回落截取链中下一个 configured）；链常规非空
+    //（duckduckgo 恒 configured 队尾兑底），空链仅防御路径可达 →
+    // 未配置提示（成功输出，含双端配置入口指引，非错误）。
     const chain = await search.resolveEngineChain(input.engine);
     if (chain.length === 0) {
       return SEARCH_NOT_CONFIGURED_MESSAGE;

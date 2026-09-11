@@ -1,6 +1,6 @@
 /**
- * `search` 工具统一内部接口：四引擎适配器（bocha / tavily / brave / searxng）
- * 与工具本体共用的类型和小型纯函数。
+ * `search` 工具统一内部接口：五引擎适配器（bocha / tavily / brave /
+ * searxng / duckduckgo）与工具本体共用的类型和小型纯函数。
  *
  * 设计口径（SPEC web-search-tool Step 1）：
  * - 搜索引擎 API 无通用协议，各引擎适配器把请求/响应映射到本模块的
@@ -18,19 +18,25 @@
  * @module domain/tool/builtin/search/types
  */
 
-/** 支持的搜索引擎标识（注册顺序即「第一个已配置引擎」回落的优先顺序）。 */
-export const ENGINE_IDS = ["bocha", "tavily", "brave", "searxng"] as const;
+/** 支持的搜索引擎标识（注册顺序即「第一个已配置引擎」回落的优先顺序；duckduckgo 内置免费兜底固定队尾）。 */
+export const ENGINE_IDS = [
+  "bocha",
+  "tavily",
+  "brave",
+  "searxng",
+  "duckduckgo",
+] as const;
 
 /** 搜索引擎标识。 */
 export type EngineId = (typeof ENGINE_IDS)[number];
 
-/** 需要填 API key 的引擎（searxng 走自托管 baseUrl，无 key）。 */
+/** 需要填 API key 的引擎（searxng 走自托管 baseUrl、duckduckgo 内置免费，均无 key）。 */
 export const KEY_ENGINE_IDS = ["bocha", "tavily", "brave"] as const;
 
 /** 需要 API key 的引擎标识。 */
 export type KeyEngineId = (typeof KEY_ENGINE_IDS)[number];
 
-/** 单条搜索结果（四引擎统一形状）。 */
+/** 单条搜索结果（五引擎统一形状）。 */
 export interface SearchResult {
   readonly title: string;
   readonly url: string;
@@ -101,7 +107,7 @@ export const MAX_RESULTS_LIMIT = 20;
 
 /**
  * 归一化结果条数：缺省 / 非有限数 / 小于 1 → 5；其余向下取整并 clamp 到
- * 1..20（0→5、99→20，T-A5 锁定该口径）。四引擎适配器共用。
+ * 1..20（0→5、99→20，T-A5 锁定该口径）。五引擎适配器共用。
  */
 export function normalizeMaxResults(value: number | undefined): number {
   if (value == null || !Number.isFinite(value) || value < 1) {
@@ -162,7 +168,7 @@ function hostMatchesDomain(hostname: string, domain: string): boolean {
 
 /**
  * 客户端域名过滤兜底：include 非空时要求命中其一，exclude 命中即排除；
- * URL 解析失败按不命中处理。brave / searxng / bocha 共用。
+ * URL 解析失败按不命中处理。brave / searxng / bocha / duckduckgo 共用。
  */
 export function matchesDomainFilters(
   url: string,

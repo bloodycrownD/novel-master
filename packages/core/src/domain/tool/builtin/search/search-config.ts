@@ -51,7 +51,7 @@ export interface SearchConfigPublic {
   readonly engineOrder: readonly EngineId[];
   /** searxng 实例 baseUrl（规范化后；未配置为空串）。 */
   readonly searxngBaseUrl: string;
-  /** 四引擎的配置状态（searxng 的 configured = baseUrl 非空，不查 secretStore）。 */
+  /** 五引擎的配置状态（searxng 的 configured = baseUrl 非空、duckduckgo 恒 true，均不查 secretStore）。 */
   readonly engines: Readonly<Record<EngineId, SearchEngineStatus>>;
 }
 
@@ -112,7 +112,7 @@ async function kkvDelete(kkv: KkvService, key: string): Promise<void> {
  * engineOrder 存量值容错归一：非 JSON / 非数组 / 含非法项 / 有重复时，
  * 合法前缀保留、缺项按 `ENGINE_IDS` 默认序补齐去重——归一结果恒为
  * ENGINE_IDS 的全排列（UI 排序菜单与串行链都拿得到稳定顺序，损坏值
- * 不致解析链断裂）。
+ * 不致解析链断裂；存量四引擎 order 归一后 duckduckgo 自然补尾）。
  */
 function normalizeEngineOrder(raw: string | undefined): EngineId[] {
   const order: EngineId[] = [];
@@ -142,7 +142,8 @@ function normalizeEngineOrder(raw: string | undefined): EngineId[] {
 
 /**
  * 读取对外配置：并行 `kkv.get` × 2 + `secretStore.has` × 3（仅 key 引擎）；
- * searxng 的 `configured` 只看 baseUrl 是否非空，不触碰 secretStore。
+ * searxng 的 `configured` 只看 baseUrl 是否非空，duckduckgo 恒 true，
+ * 均不触碰 secretStore。
  */
 export async function readSearchConfig(
   deps: SearchConfigDeps
@@ -163,17 +164,20 @@ export async function readSearchConfig(
       tavily: { configured: keySet[1] === true },
       brave: { configured: keySet[2] === true },
       searxng: { configured: searxngBaseUrl.trim().length > 0 },
+      // duckduckgo 内置免费兑底：无 key 无 baseUrl，恒 configured（无存储依赖）。
+      duckduckgo: { configured: true },
     },
   };
 }
 
 /**
  * 解析串行引擎链：按 `engineOrder` 顺序返回全部已配置引擎的候选数组
- * （优先级即降级链）；显式 `inputEngine` 时从该引擎起截取（位于其前
+ * （优先级即降级链；duckduckgo 恒 configured 队尾兑底，链常规非空）；
+ * 显式 `inputEngine` 时从该引擎起截取（位于其前
  * 的引擎不参与，未配置则顺位回落到截取链中下一个 configured）。候选
  * 凭据随项注入（key 引擎现读明文；`has` 之后被并发清除的竞态兜底：
  * get 不到明文视作未配置跳过；searxng 存库 baseUrl 损坏同样跳过），
- * 全无 → 空数组（工具回落未配置提示）。
+ * 全无 → 空数组（仅防御路径可达：DDG 恒在链，工具常规不会回落未配置提示）。
  */
 export async function resolveEngineChain(
   deps: SearchConfigDeps,
@@ -194,6 +198,12 @@ export async function resolveEngineChain(
       const baseUrl = normalizeSearxngBaseUrl(config.searxngBaseUrl);
       if (baseUrl == null) continue;
       chain.push({ engine: "searxng", baseUrl });
+      continue;
+    }
+    // duckduckgo 内置兑底：无凭据依赖，直接入链（PRD R1.2：未配置任何
+    // key/baseUrl 时链 = [duckduckgo]，搜索开箱即用）。
+    if (engineId === "duckduckgo") {
+      chain.push({ engine: "duckduckgo" });
       continue;
     }
     const apiKey = await deps.secretStore.get(searchApiKeyRef(engineId));
@@ -280,14 +290,14 @@ export function createSearchConfigStore(
           seen.has(item)
         ) {
           throw new Error(
-            `engineOrder 必须是四引擎的合法排列（不重复、不缺项），收到: ${JSON.stringify(order)}`
+            `engineOrder 必须是五引擎的合法排列（不重复、不缺项），收到: ${JSON.stringify(order)}`
           );
         }
         seen.add(item);
       }
       if (seen.size !== ENGINE_IDS.length) {
         throw new Error(
-          `engineOrder 必须是四引擎的合法排列（不重复、不缺项），收到: ${JSON.stringify(order)}`
+          `engineOrder 必须是五引擎的合法排列（不重复、不缺项），收到: ${JSON.stringify(order)}`
         );
       }
       await kkv.set(
