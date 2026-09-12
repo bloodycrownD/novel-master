@@ -9,12 +9,16 @@
  * 测试预览为正则匹配测试（fix ②：替代旧排序测试）：输入一段文本，
  * 点「测试」按钮手动触发（非实时联动），下方 monospace 区高亮渲染
  * 原文（匹配段 primary 变色，按 matches.index 切分，fix-desc-and-highlight）
+ * + 每处匹配的提取元组小字（D13：tuple 文案，null 显「无序号」）
  * + 底部匹配计数；输入变化即清空结果（结果只属于上次点击）。
  * 规则字段 example 已更名 description（fix ④：语义泛化为描述）。
+ * 捕获数字三档下拉（D13）：智能数字/固定最大/固定最小，PickerListModal
+ * 值行模式（照 DirectoryRuleSheet）；固定档命中即哨兵元组、忽略捕获组。
  */
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import {
   ActivityIndicator,
+  Pressable,
   StyleSheet,
   Text,
   View,
@@ -31,6 +35,7 @@ import {
   parsePatternInput,
   validateSmartSortRuleDraft,
   type MatchSmartSortPatternResult,
+  type SmartSortCaptureKind,
   type SmartSortRule,
 } from '@novel-master/core/smart-sort-rule';
 import {FormField} from '@/components/form/FormField';
@@ -40,6 +45,8 @@ import {FormTextInput} from '@/components/form/FormTextInput';
 import {ScreenFormLayout} from '@/components/form/ScreenFormLayout';
 import {StickyFormFooter} from '@/components/form/StickyFormFooter';
 import {SecondaryButton} from '@/components/ui/Buttons';
+import {PickerListModal} from '@/components/ui/PickerListModal';
+import type {PickerListLoadResult} from '@/components/ui/PickerListModal';
 import {useRuntime} from '@/hooks/useRuntime';
 import {useTheme} from '@/theme/ThemeProvider';
 import type {ThemeTokens} from '@/theme/tokens';
@@ -58,6 +65,8 @@ interface DraftFields {
   /** parsePatternInput(patternInput) 的解析结果（测试/保存消费）。 */
   pattern: string;
   flags: string;
+  /** 捕获数字档位（D13）：smart 捕获组提取 / fixed_min 哨兵最前 / fixed_max 沉底。 */
+  captureKind: SmartSortCaptureKind;
   description: string;
   enabled: boolean;
 }
@@ -67,9 +76,25 @@ const DEFAULT_DRAFT: DraftFields = {
   patternInput: '',
   pattern: '',
   flags: '',
+  captureKind: 'smart',
   description: '',
   enabled: true,
 };
+
+/** 捕获数字三档选项（D13）：值行下拉用，顺序与任务定稿一致。 */
+const CAPTURE_KIND_OPTIONS: ReadonlyArray<{
+  value: SmartSortCaptureKind;
+  label: string;
+}> = [
+  {value: 'smart', label: '智能数字'},
+  {value: 'fixed_max', label: '固定最大'},
+  {value: 'fixed_min', label: '固定最小'},
+];
+
+/** 档位显示名（回显/选项高亮共用）。 */
+function captureKindLabel(kind: SmartSortCaptureKind): string {
+  return CAPTURE_KIND_OPTIONS.find(o => o.value === kind)?.label ?? '智能数字';
+}
 
 /** 正则输入自适应高度：单行起步，约 7 行封顶（超出内部滚动）。 */
 const PATTERN_INPUT_MIN_HEIGHT = 46;
@@ -173,6 +198,8 @@ export function SmartSortRuleEditorScreen() {
   const [draft, setDraft] = useState<DraftFields>(DEFAULT_DRAFT);
   const [testText, setTestText] = useState('');
   const [testOutcome, setTestOutcome] = useState<TestOutcome>(IDLE_OUTCOME);
+  const [captureKindPickerVisible, setCaptureKindPickerVisible] =
+    useState(false);
   const [loading, setLoading] = useState(Boolean(ruleId));
   const [saving, setSaving] = useState(false);
   const [baseline, setBaseline] = useState('');
@@ -254,10 +281,19 @@ export function SmartSortRuleEditorScreen() {
       setTestOutcome({kind: 'error', message: '请先填写正则表达式'});
       return;
     }
-    // 与保存同口径：trim 后重新解析，避免尾随空白拆坏字面量。
+    // 与保存同口径：trim 后重新解析，避免尾随空白拆坏字面量；档位随当前
+    // 捕获数字选择传入（fixed 档 tuple 显哨兵文案，D13）。
     const parsed = parsePatternInput(draft.patternInput.trim());
-    setTestOutcome({kind: 'ok', result: matchSmartSortPattern(parsed.pattern, parsed.flags, testText)});
-  }, [draft.patternInput, testText]);
+    setTestOutcome({
+      kind: 'ok',
+      result: matchSmartSortPattern(
+        parsed.pattern,
+        parsed.flags,
+        testText,
+        draft.captureKind,
+      ),
+    });
+  }, [draft.patternInput, draft.captureKind, testText]);
 
   const handleSave = async () => {
     const fields = collectFields();
@@ -265,11 +301,13 @@ export function SmartSortRuleEditorScreen() {
       return;
     }
     try {
-      // 保存前走同一校验（非法正则/flags/捕获组），提示语与测试一致。
+      // 保存前走同一校验（非法正则/flags/捕获组——smart 档才强制捕获组），
+      // 提示语与测试一致。
       validateSmartSortRuleDraft({
         name: fields.name,
         pattern: fields.pattern,
         flags: fields.flags,
+        captureKind: fields.captureKind,
       });
     } catch (error) {
       showToast(toastMessage('无法保存', error));
@@ -281,6 +319,7 @@ export function SmartSortRuleEditorScreen() {
         name: fields.name,
         pattern: fields.pattern,
         flags: fields.flags,
+        captureKind: fields.captureKind,
         description: fields.description === '' ? null : fields.description,
         enabled: fields.enabled,
       };
@@ -299,6 +338,17 @@ export function SmartSortRuleEditorScreen() {
       setSaving(false);
     }
   };
+
+  // PickerListModal 骨架要求 load 异步；静态选项每次打开以当前档位高亮。
+  const loadCaptureKinds = useCallback(
+    async (): Promise<
+      PickerListLoadResult<{
+        value: SmartSortCaptureKind;
+        label: string;
+      }>
+    > => ({rows: [...CAPTURE_KIND_OPTIONS], selectedId: draft.captureKind}),
+    [draft.captureKind],
+  );
 
   if (loading) {
     return <ActivityIndicator style={styles.loader} />;
@@ -326,7 +376,7 @@ export function SmartSortRuleEditorScreen() {
       <FormSectionCard
         title="规则"
         tokens={tokens}
-        hint="按优先级逐条尝试，首个命中者以捕获组提取序号（须含至少一个捕获组）。"
+        hint="按优先级逐条尝试，首个命中者按捕获方式取序：智能数字从捕获组提取（须含至少一个捕获组），固定档命中即排最前/沉底。"
       >
         <FormField label="名称" tokens={tokens}>
           <FormTextInput
@@ -350,6 +400,32 @@ export function SmartSortRuleEditorScreen() {
             maxHeight={PATTERN_INPUT_MAX_HEIGHT}
           />
         </FormField>
+        <FormField
+          label="捕获数字"
+          tokens={tokens}
+          hint={
+            draft.captureKind === 'smart'
+              ? '从捕获组提取序号，中文数字自动转换'
+              : draft.captureKind === 'fixed_min'
+                ? '命中即排在所有序号之前（序章/楔子类）'
+                : '命中即沉底排在所有序号之后（终章/番外类）'
+          }>
+          <Pressable
+            testID="capture-kind-value-row"
+            accessibilityLabel="选择捕获数字方式"
+            onPress={() => setCaptureKindPickerVisible(true)}
+            style={[styles.pickerRow, {borderColor: tokens.border}]}>
+            <Text
+              testID="capture-kind-value"
+              style={{color: tokens.text}}
+              numberOfLines={1}>
+              {captureKindLabel(draft.captureKind)}
+            </Text>
+            <Text style={[styles.chevron, {color: tokens.textTertiary}]}>
+              ›
+            </Text>
+          </Pressable>
+        </FormField>
         <FormField label="描述" tokens={tokens}>
           <AutoGrowMultilineInput
             tokens={tokens}
@@ -371,7 +447,7 @@ export function SmartSortRuleEditorScreen() {
       <FormSectionCard
         title="测试"
         tokens={tokens}
-        hint="输入一段文本，点击「测试」后显示全部匹配与捕获组。"
+        hint="输入一段文本，点击「测试」后显示全部匹配与每处匹配的提取序号。"
       >
         <FormField label="测试文本" tokens={tokens}>
           <FormTextInput
@@ -425,6 +501,24 @@ export function SmartSortRuleEditorScreen() {
                     ),
                   )}
                 </Text>
+                {/* 每处匹配的提取元组小字（D13）：匹配文本 → tuple 展示，
+                    null 显「无序号」；固定档恒显哨兵文案。 */}
+                {testOutcome.result.matches.length > 0 ? (
+                  <View style={styles.tupleList}>
+                    {testOutcome.result.matches.map((m, i) => (
+                      <Text
+                        key={`${m.index}-${i}`}
+                        style={[
+                          styles.tupleRow,
+                          {color: tokens.textSecondary},
+                        ]}>
+                        {`${m.text || '(空匹配)'} → ${
+                          m.tuple ?? '无序号'
+                        }`}
+                      </Text>
+                    ))}
+                  </View>
+                ) : null}
                 <Text
                   style={[styles.resultCount, {color: tokens.textSecondary}]}>
                   {testOutcome.result.matches.length > 0
@@ -440,6 +534,32 @@ export function SmartSortRuleEditorScreen() {
           </View>
         </FormField>
       </FormSectionCard>
+
+      {/* 捕获数字单选：独立底部弹层（RN Modal 叠层），选中即关（D13）。 */}
+      <PickerListModal
+        visible={captureKindPickerVisible}
+        title="捕获数字"
+        load={loadCaptureKinds}
+        keyExtractor={item => item.value}
+        renderRow={(item, selected) => (
+          <>
+            <Text style={{color: tokens.text}}>{item.label}</Text>
+            {selected ? (
+              <Text style={{color: tokens.primary}}>当前</Text>
+            ) : null}
+          </>
+        )}
+        getRowProps={item => ({
+          testID: `capture-kind-option-${item.value}`,
+          accessibilityLabel: `捕获数字 ${item.label}`,
+        })}
+        onPick={item => {
+          patchDraft({captureKind: item.value});
+          setCaptureKindPickerVisible(false);
+        }}
+        emptyText="暂无可选捕获方式"
+        onClose={() => setCaptureKindPickerVisible(false)}
+      />
     </ScreenFormLayout>
   );
 }
@@ -452,6 +572,7 @@ function toDraft(rule: SmartSortRule): DraftFields {
     patternInput: formatPatternInput(rule.pattern, rule.flags),
     pattern: rule.pattern,
     flags: rule.flags,
+    captureKind: rule.captureKind,
     description: rule.description ?? '',
     enabled: rule.enabled,
   };
@@ -467,6 +588,28 @@ const styles = StyleSheet.create({
   },
   autoGrowInput: {
     textAlignVertical: 'top',
+  },
+  pickerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  chevron: {
+    fontSize: 18,
+    marginLeft: 8,
+  },
+  tupleList: {
+    marginTop: 8,
+    gap: 2,
+  },
+  tupleRow: {
+    fontFamily: 'monospace',
+    fontSize: 12,
+    lineHeight: 16,
   },
   resultBox: {
     borderWidth: StyleSheet.hairlineWidth,
