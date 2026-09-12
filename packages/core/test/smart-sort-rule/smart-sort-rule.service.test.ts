@@ -11,8 +11,11 @@ import {
 
 novelMasterTestFixture();
 
-/** bootstrap seed 后的内置规则 id 集（sort_order 1..4，spec 附录 A）。 */
+/** bootstrap seed 后的内置规则 id 集（sort_order 1..7，spec 附录 A + D13）。 */
 const BUILTIN_IDS = [
+  "builtin-zh-prologue",
+  "builtin-zh-finale",
+  "builtin-zh-extra",
   "builtin-zh-volume-chapter",
   "builtin-zh-chapter",
   "builtin-en-chapter",
@@ -51,7 +54,7 @@ describe("T-SR1: SmartSortRuleService CRUD/move/reorder", () => {
     assert.equal(created.enabled, true);
     const rules = await svc.listRules();
     assert.equal(rules.length, BUILTIN_IDS.length + 1);
-    assert.equal(rules[0]!.ruleId, "builtin-zh-volume-chapter");
+    assert.equal(rules[0]!.ruleId, "builtin-zh-prologue");
     assert.equal(rules.at(-1)!.ruleId, created.ruleId);
     assert.ok(
       sortOrdersAreConsecutiveFromOne(rules),
@@ -185,6 +188,60 @@ describe("T-SR1: SmartSortRuleService CRUD/move/reorder", () => {
       "Chapter 12.txt",
     ]);
   });
+
+  it("D13：previewSort 内置七条下序章哨兵最前、终章/番外沉底（同值文件名决胜）", async () => {
+    const ctx = getNovelMasterTestContext();
+    const svc = createSmartSortRuleService(ctx.conn);
+    const result = await svc.previewSort([
+      "终章.txt",
+      "第十章.txt",
+      "序章.txt",
+      "番外.txt",
+      "第一章.txt",
+    ]);
+    const byName = new Map(result.lines.map((l) => [l.name, l]));
+    assert.equal(byName.get("序章.txt")!.matchedRuleId, "builtin-zh-prologue");
+    assert.equal(byName.get("序章.txt")!.nums?.[0], -Infinity);
+    assert.equal(byName.get("终章.txt")!.matchedRuleId, "builtin-zh-finale");
+    assert.equal(byName.get("终章.txt")!.nums?.[0], Infinity);
+    assert.equal(byName.get("番外.txt")!.matchedRuleId, "builtin-zh-extra");
+    // 同为 +∞：「番」U+756A <「终」U+7EC8 → 番外在终章前（D13 同值 tiebreak
+    // 定稿接受现状，测试锁行为；如需终章在前须改用不同权重——已否决）。
+    assert.deepEqual(result.sortedNames, [
+      "序章.txt",
+      "第一章.txt",
+      "第十章.txt",
+      "番外.txt",
+      "终章.txt",
+    ]);
+  });
+
+  it("D13：create/update 携带 captureKind 且 round-trip 无损（缺省 smart）", async () => {
+    const ctx = getNovelMasterTestContext();
+    const svc = createSmartSortRuleService(ctx.conn);
+    const fixed = await svc.createRule({
+      name: "序章类",
+      pattern: "^(序章?|楔子)",
+      captureKind: "fixed_min",
+    });
+    assert.equal(fixed.captureKind, "fixed_min");
+    const smart = await svc.createRule({ name: "数字", pattern: "(\\d+)" });
+    assert.equal(smart.captureKind, "smart", "缺省 smart");
+    const patched = await svc.updateRule(smart.ruleId, {
+      captureKind: "fixed_max",
+    });
+    assert.equal(patched.captureKind, "fixed_max");
+    // 非法档位被 zod 拒。
+    await assert.rejects(
+      () =>
+        svc.createRule({
+          name: "bad",
+          pattern: "(\\d+)",
+          captureKind: "bogus" as unknown as "smart",
+        }),
+      Error
+    );
+  });
 });
 
 describe("T-SR2: resetDefaults 与 seed 幂等", () => {
@@ -215,7 +272,7 @@ describe("T-SR2: resetDefaults 与 seed 幂等", () => {
     const ctx = getNovelMasterTestContext();
     const svc = createSmartSortRuleService(ctx.conn);
     const mine = await svc.createRule({ name: "mine", pattern: "(\\d+)" });
-    // 用户规则置顶：sort_order=1，与重灌 builtin 的种子 sortOrder 1..4 撞号
+    // 用户规则置顶：sort_order=1，与重灌 builtin 的种子 sortOrder 1..7 撞号
     await svc.moveRule(mine.ruleId, "top");
 
     await svc.resetDefaults();
@@ -224,7 +281,7 @@ describe("T-SR2: resetDefaults 与 seed 幂等", () => {
     assert.deepEqual(
       rules.map((r) => r.ruleId),
       [...BUILTIN_IDS, mine.ruleId],
-      "builtin 恒在前 4 位（默认序），用户规则紧随其后"
+      "builtin 恒在前 7 位（默认序），用户规则紧随其后"
     );
     assert.ok(
       sortOrdersAreConsecutiveFromOne(rules),
@@ -255,10 +312,20 @@ describe("T-SR3: export→import round-trip 无损（替换式）", () => {
       description: "规则 a 的描述",
     });
     await svc.createRule({ name: "b", pattern: "(\\d+)", enabled: false });
+    // D13：fixed 档规则入 bundle round-trip。
+    await svc.createRule({
+      name: "c-fixed",
+      pattern: "^(番外|外传)",
+      captureKind: "fixed_max",
+    });
     await svc.setEnabled("builtin-zh-chapter", false);
     const before = await svc.listRules();
     const doc = await svc.exportRules();
     assert.equal(doc.schemaVersion, 2, "bundle 文档 schemaVersion 升到 2");
+    assert.ok(
+      doc.rules.some((r) => r.captureKind === "fixed_max"),
+      "导出应携带 fixed_max 档（D13）"
+    );
 
     // 导出后改库：删除一条用户规则 + 移动顺序
     await svc.deleteRule(a.ruleId);
@@ -279,6 +346,11 @@ describe("T-SR3: export→import round-trip 无损（替换式）", () => {
       imported.map((r) => r.description),
       before.map((r) => r.description),
       "导入后 description 与导出时一致"
+    );
+    assert.deepEqual(
+      imported.map((r) => r.captureKind),
+      before.map((r) => r.captureKind),
+      "导入后 captureKind 与导出时一致（D13）"
     );
     assert.ok(sortOrdersAreConsecutiveFromOne(imported));
   });
@@ -353,6 +425,30 @@ describe("T-SR4: 非法正则/零捕获组/非法 flags 被拒", () => {
     const svc = createSmartSortRuleService(ctx.conn);
     await assert.rejects(
       () => svc.createRule({ name: "bad", pattern: "第[0-9]+章" }),
+      (e: unknown) =>
+        e instanceof SmartSortRuleError && e.code === "INVALID_ARGUMENT"
+    );
+  });
+
+  it("D13：fixed 档不强制捕获组；切回 smart 时零捕获组才被拒", async () => {
+    const ctx = getNovelMasterTestContext();
+    const svc = createSmartSortRuleService(ctx.conn);
+    // fixed 档 + 无捕获组：合法（命中即哨兵，捕获组被忽略）。
+    const fixed = await svc.createRule({
+      name: "序章类",
+      pattern: "^序章",
+      captureKind: "fixed_min",
+    });
+    assert.equal(fixed.captureKind, "fixed_min");
+    // fixed 档 + 捕获组共存：同样合法（固定元组优先）。
+    await svc.createRule({
+      name: "终章类",
+      pattern: "^(终章|尾声)([0-9]*)",
+      captureKind: "fixed_max",
+    });
+    // 切回 smart：零捕获组开始被拒（按合并后档位校验）。
+    await assert.rejects(
+      () => svc.updateRule(fixed.ruleId, { captureKind: "smart" }),
       (e: unknown) =>
         e instanceof SmartSortRuleError && e.code === "INVALID_ARGUMENT"
     );

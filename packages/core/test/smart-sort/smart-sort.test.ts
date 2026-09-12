@@ -4,14 +4,29 @@ import { describe, it } from "node:test";
 import {
   compareSmartBasenames,
   extractSortKey,
+  extractSortKeyDetail,
+  formatSortTupleForDisplay,
   parseChineseNum,
   tokenizeNatural,
   type CompiledSmartSortRule,
   type SmartSortKeyCache,
 } from "../../src/domain/workplace/logic/smart-sort.js";
 
-function compile(ruleId: string, pattern: string, flags = ""): CompiledSmartSortRule {
-  return { ruleId, name: ruleId, regex: new RegExp(pattern, flags) };
+function compile(
+  ruleId: string,
+  pattern: string,
+  flags = "",
+): CompiledSmartSortRule {
+  return { ruleId, name: ruleId, regex: new RegExp(pattern, flags), captureKind: "smart" };
+}
+
+/** fixed 档编译 helper（D13）：无捕获组 pattern 合法，哨兵元组优先。 */
+function compileFixed(
+  ruleId: string,
+  pattern: string,
+  captureKind: "fixed_min" | "fixed_max",
+): CompiledSmartSortRule {
+  return { ruleId, name: ruleId, regex: new RegExp(pattern), captureKind };
 }
 
 /** Decorate-sort-undecorate: pre-extract one key per basename (D5). */
@@ -179,6 +194,26 @@ describe("extractSortKey (T-SS3)", () => {
     assert.deepEqual(extractSortKey("第十二章.txt", [zhChapter]), [12]);
     assert.deepEqual(extractSortKey("第两千零一章.txt", [zhChapter]), [2001]);
   });
+
+  it("D13 fixed 档：命中即哨兵元组，忽略捕获组管道", () => {
+    const prologue = compileFixed("t-prologue", "^(序章?|楔子|引子)", "fixed_min");
+    const finale = compileFixed("t-finale", "^(终章|尾声|后记)", "fixed_max");
+    // 无捕获组 pattern：fixed 档照常命中（捕获组被忽略，语义固定元组优先）。
+    const detailMin = extractSortKeyDetail("序章 起源.txt", [prologue]);
+    assert.equal(detailMin?.ruleId, "t-prologue");
+    assert.equal(detailMin?.nums[0], -Infinity);
+    const detailMax = extractSortKeyDetail("终章 大结局.txt", [finale]);
+    assert.equal(detailMax?.ruleId, "t-finale");
+    assert.equal(detailMax?.nums[0], Infinity);
+    // 捕获组与 fixed 档共存：捕获组存在但被忽略（仍哨兵元组）。
+    const withGroups = {
+      ...compileFixed("t-extra", "^(番外|外传)", "fixed_max"),
+      regex: new RegExp("^(番外|外传)([0-9]+)"),
+    };
+    assert.equal(extractSortKeyDetail("番外3.txt", [withGroups])?.nums[0], Infinity);
+    // smart 档行为零变化：未命中 fixed 规则的名字照旧走捕获组管道。
+    assert.deepEqual(extractSortKey("第一章.txt", [prologue, zhChapter]), [1]);
+  });
 });
 
 describe("compareSmartBasenames total order (T-SS4)", () => {
@@ -252,13 +287,64 @@ describe("compareSmartBasenames total order (T-SS4)", () => {
       ["第1卷-第3章", "第1卷-第5章", "第2卷-第1章"],
     );
   });
+
+  it("D13 fixed 档全序：fixed_min 排一切序号前、fixed_max 沉底、同值文件名决胜、desc 取反", () => {
+    const fixedRules: CompiledSmartSortRule[] = [
+      ...rules,
+      compileFixed("t-prologue", "^(序章?|楔子|引子)", "fixed_min"),
+      compileFixed("t-finale", "^(终章|尾声|后记)", "fixed_max"),
+      compileFixed("t-extra", "^(番外|外传)", "fixed_max"),
+    ];
+    // fixed_min 排 (0,) 前；fixed_max 排 (999999,) 后。
+    const zero = compile("t-zero", "^第([0-9]{1,6})章");
+    assert.deepEqual(
+      sortSmart(["第0章.txt", "序章.txt", "终章.txt"], [zero, fixedRules[3]!, fixedRules[4]!]),
+      ["序章.txt", "第0章.txt", "终章.txt"],
+    );
+    const big = compile("t-big", "^第([0-9]{1,6})章");
+    assert.deepEqual(
+      sortSmart(["终章.txt", "番外.txt", "第999999章.txt"], [big, fixedRules[4]!, fixedRules[5]!]),
+      ["第999999章.txt", "番外.txt", "终章.txt"],
+    );
+    // 双 fixed_max 同值：按原文件名自然序决胜。「番」U+756A <「终」U+7EC8，
+    // 故番外排在终章前（D13 定稿：同值 tiebreak 接受现状，测试锁行为）。
+    assert.deepEqual(
+      sortSmart(["终章.txt", "番外.txt"], [fixedRules[4]!, fixedRules[5]!]),
+      ["番外.txt", "终章.txt"],
+    );
+    // 冒烟序列（任务定稿样例）：序章 → 第一章 → 第十章 →（fixed_max 同值
+    // 文件名决胜：番外 < 终章）。
+    assert.deepEqual(
+      sortSmart(
+        ["终章.txt", "第十章.txt", "序章.txt", "番外.txt", "第一章.txt"],
+        fixedRules,
+      ),
+      ["序章.txt", "第一章.txt", "第十章.txt", "番外.txt", "终章.txt"],
+    );
+    // 降序取反：哨兵元组随之反转（fixed_min 沉底、fixed_max 置顶）。
+    const names = ["序章.txt", "第一章.txt", "第十章.txt", "番外.txt", "终章.txt"];
+    const asc = sortSmart(names, fixedRules, "asc");
+    const desc = sortSmart(names, fixedRules, "desc");
+    assert.deepEqual(desc, [...asc].reverse());
+  });
+
+  it("D13 formatSortTupleForDisplay：数字元组/哨兵文案", () => {
+    assert.equal(formatSortTupleForDisplay([12]), "(12,)");
+    assert.equal(formatSortTupleForDisplay([2, 13]), "(2,13,)");
+    assert.equal(formatSortTupleForDisplay([-Infinity]), "(固定最小,)");
+    assert.equal(formatSortTupleForDisplay([Infinity]), "(固定最大,)");
+  });
 });
 
 describe("builtin rule set, appendix A verbatim (T-SS5)", () => {
-  // 附录 A 原文内联（NUM 字符类 + 四条 pattern/flags 一字不改）；
-  // 不 import bootstrap 常量——并行节点负责 seed 落库，这里只验语义。
+  // 附录 A 原文内联（NUM 字符类 + 七条 pattern/flags 一字不改，D13 后
+  // 含三条 fixed 档）；不 import bootstrap 常量——并行节点负责 seed 落库，
+  // 这里只验语义。
   const NUM = "[0-9〇零一二两三四五六七八九十百千万壹贰叁肆伍陆柒捌玖拾佰仟]{1,12}";
   const builtinRules: CompiledSmartSortRule[] = [
+    compileFixed("builtin-zh-prologue", "^(序章?|楔子|引子|前言|开篇)", "fixed_min"),
+    compileFixed("builtin-zh-finale", "^(终章|尾声|后记|完结|finale)", "fixed_max"),
+    compileFixed("builtin-zh-extra", "^(番外|外传|if篇?)", "fixed_max"),
     compile(
       "builtin-zh-volume-chapter",
       `第[ \\t]{0,2}(${NUM})[ \\t]{0,2}卷[ \\t]*[-—·.、]?[ \\t]*第[ \\t]{0,2}(${NUM})[ \\t]{0,2}章`,
@@ -271,7 +357,21 @@ describe("builtin rule set, appendix A verbatim (T-SS5)", () => {
     ),
     compile("builtin-numeric", "^[ \\t]*([0-9]{1,6})[ \\t]*(?:[、.．\\-—_]|$)"),
   ];
-  const [volumeChapter, zhChapter, enChapter, numeric] = builtinRules;
+  const [, , , volumeChapter, zhChapter, enChapter, numeric] = builtinRules;
+
+  it("D13 fixed 三条：序章类哨兵排最前、终章/番外类沉底", () => {
+    const prologue = extractSortKeyDetail("楔子 起源", builtinRules);
+    assert.equal(prologue?.ruleId, "builtin-zh-prologue");
+    assert.equal(prologue?.nums[0], -Infinity);
+    const finale = extractSortKeyDetail("终章 大结局", builtinRules);
+    assert.equal(finale?.ruleId, "builtin-zh-finale");
+    assert.equal(finale?.nums[0], Infinity);
+    const extra = extractSortKeyDetail("番外一 日常", builtinRules);
+    assert.equal(extra?.ruleId, "builtin-zh-extra");
+    assert.equal(extra?.nums[0], Infinity);
+    // 序章类不在开头不命中（pattern 锚定 ^）：退回数字规则。
+    assert.deepEqual(extractSortKey("非番外 第一章", builtinRules), [1]);
+  });
 
   it("each builtin rule matches its own example with the right ordinal", () => {
     assert.deepEqual(extractSortKey("第2卷 第13章", [volumeChapter]), [2, 13]);

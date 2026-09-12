@@ -131,3 +131,72 @@ describe("matchSmartSortPattern (正则测试预览核心)", () => {
     assert.ok(result.matches.every((m) => m.text === ""));
   });
 });
+
+describe("matchSmartSortPattern tuple（D13 捕获档位展示字段）", () => {
+  it("smart 档（缺省）：捕获组→数字元组格式化为 (12,) 风格", () => {
+    const result = matchSmartSortPattern(
+      "第([0-9]+)卷第([0-9]+)章",
+      "",
+      "第2卷第13章 第十二卷第三章"
+    );
+    ok(result);
+    // 阿拉伯数字直取。
+    assert.equal(result.matches[0]!.tuple, "(2,13,)");
+  });
+
+  it("smart 档：中文数字捕获组经 parseChineseNum 转换", () => {
+    const result = matchSmartSortPattern(
+      "第([0-9〇零一二两三四五六七八九十百千]+)章",
+      "",
+      "第十二章"
+    );
+    ok(result);
+    assert.equal(result.matches[0]!.tuple, "(12,)");
+  });
+
+  it("smart 档：无捕获组 / 转换失败 → tuple null（GUI 显「无序号」）", () => {
+    // 无捕获组：tuple null。
+    const noGroup = matchSmartSortPattern("序章|楔子", "", "序章");
+    ok(noGroup);
+    assert.equal(noGroup.matches[0]!.tuple, null);
+    // 捕获组非数字且中文解析失败：tuple null。
+    const unparsable = matchSmartSortPattern("第(\\S+)章", "", "第风起章");
+    ok(unparsable);
+    assert.equal(unparsable.matches[0]!.tuple, null);
+    // 多组中任一组失败：整条 null（与提取管道「任一组失败跳过规则」一致）。
+    const mixed = matchSmartSortPattern("第([0-9]+)章(?:-(\\S+))?", "", "第3章-风起");
+    ok(mixed);
+    assert.equal(mixed.matches[0]!.tuple, null);
+  });
+
+  it("fixed 档：tuple 恒为哨兵文案，忽略捕获组（有无捕获组均可）", () => {
+    // 无捕获组 + fixed_min。
+    const minNoGroup = matchSmartSortPattern(
+      "^(序章?|楔子|引子)",
+      "",
+      "楔子 起源",
+      "fixed_min"
+    );
+    ok(minNoGroup);
+    assert.equal(minNoGroup.matches[0]!.tuple, "(固定最小,)");
+    // 捕获组可解析 + fixed_max：捕获组被忽略，仍显哨兵文案。
+    const maxWithGroup = matchSmartSortPattern(
+      "^(番外|外传)([0-9]*)",
+      "",
+      "番外3 日常",
+      "fixed_max"
+    );
+    ok(maxWithGroup);
+    assert.equal(maxWithGroup.matches[0]!.groups.length, 2);
+    assert.equal(maxWithGroup.matches[0]!.tuple, "(固定最大,)");
+    // 捕获组不可解析 + fixed：不影响 tuple（哨兵优先，不参与转换）。
+    const minUnparsable = matchSmartSortPattern(
+      "^(终章|尾声)(\\S*)",
+      "",
+      "终章 大结局",
+      "fixed_max"
+    );
+    ok(minUnparsable);
+    assert.equal(minUnparsable.matches[0]!.tuple, "(固定最大,)");
+  });
+});

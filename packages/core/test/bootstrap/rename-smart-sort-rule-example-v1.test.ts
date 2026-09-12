@@ -30,6 +30,7 @@ import {
   RENAME_SMART_SORT_RULE_EXAMPLE_V1_ID,
   renameSmartSortRuleExampleV1Up,
 } from "../../src/bootstrap/schema-migrations/rename-smart-sort-rule-example-v1.js";
+import { ADD_SMART_SORT_CAPTURE_KIND_V1_ID } from "../../src/bootstrap/schema-migrations/add-smart-sort-capture-kind-v1.js";
 import {
   SCHEMA_MIGRATIONS,
   runPendingSchemaMigrations,
@@ -73,7 +74,8 @@ async function seedLegacyShape(conn: TdbcConnection): Promise<void> {
   );
 }
 
-/** 把本迁移之前的既有 migration 登记为 applied（模拟真实 v13 库状态）。 */
+/** 把本迁移之前的既有 migration 登记为 applied（模拟真实 v13 库状态：
+ *  rename 与 capture-kind 均未发布过，都不算 prior）。 */
 async function markPriorMigrationsApplied(conn: TdbcConnection): Promise<void> {
   await conn.execute(
     `CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -82,7 +84,10 @@ async function markPriorMigrationsApplied(conn: TdbcConnection): Promise<void> {
      )`
   );
   for (const migration of SCHEMA_MIGRATIONS) {
-    if (migration.id === RENAME_SMART_SORT_RULE_EXAMPLE_V1_ID) {
+    if (
+      migration.id === RENAME_SMART_SORT_RULE_EXAMPLE_V1_ID ||
+      migration.id === ADD_SMART_SORT_CAPTURE_KIND_V1_ID
+    ) {
       continue;
     }
     await conn.execute(
@@ -93,10 +98,13 @@ async function markPriorMigrationsApplied(conn: TdbcConnection): Promise<void> {
 }
 
 describe("rename-smart-sort-rule-example-v1 migration", () => {
-  it("登记于 SCHEMA_MIGRATIONS 阵尾", () => {
-    assert.equal(
-      SCHEMA_MIGRATIONS.at(-1)?.id,
-      RENAME_SMART_SORT_RULE_EXAMPLE_V1_ID
+  it("登记于 SCHEMA_MIGRATIONS 阵列（后续迁移排其之后，阵尾断言归各自迁移测试）", () => {
+    const ids = SCHEMA_MIGRATIONS.map((m) => m.id);
+    const pos = ids.indexOf(RENAME_SMART_SORT_RULE_EXAMPLE_V1_ID);
+    assert.ok(pos >= 0, "rename 迁移应在 SCHEMA_MIGRATIONS 阵列中");
+    assert.ok(
+      ids.indexOf(ADD_SMART_SORT_CAPTURE_KIND_V1_ID) > pos,
+      "capture-kind 迁移（D13）应登记在 rename 之后"
     );
   });
 

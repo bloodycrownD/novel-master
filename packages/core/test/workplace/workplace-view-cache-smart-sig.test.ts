@@ -134,27 +134,28 @@ describe("L1 缓存签名三元组：smart_sort_rule 指纹（core/B-3）", () =
       fillPolicy: "hidden",
     });
 
-    // 首评：builtin-zh-chapter（seed 默认启用）命中「第5章」提取序号 5，
-    // 「序章」不命中；比较全序第 1 条：有序号者在前
+    // 首评（D13 后）：builtin-zh-prologue（fixed_min）命中「序章」提取哨兵
+    // 元组 (-Infinity)，builtin-zh-chapter 命中「第5章」提取序号 5；
+    // 元组比较 -Infinity < 5 → 序章恒在前
     const first = filePathsUnder(await wt.buildListRows(), "/r");
     assert.deepEqual(
       first,
-      ["/r/第5章.md", "/r/序章.md"],
-      "smart 排序：有序号的「第5章」排在无序号的「序章」前"
+      ["/r/序章.md", "/r/第5章.md"],
+      "smart 排序：序章（fixed_min 哨兵）排在第5章（序号 5）前"
     );
     assert.equal(calls.listFileMetaUnderPrefix, 1, "首次评估全量加载一次");
 
-    // 改智能规则：禁用 builtin-zh-chapter（整行 update，行数不变）
+    // 改智能规则：禁用 builtin-zh-prologue（整行 update，行数不变）
     const smartRepo = new SqliteSmartSortRuleRepository(ctx.conn);
-    const zhChapter = (await smartRepo.listOrdered()).find(
-      (r) => r.ruleId === "builtin-zh-chapter"
+    const prologue = (await smartRepo.listOrdered()).find(
+      (r) => r.ruleId === "builtin-zh-prologue"
     );
-    assert.ok(zhChapter != null, "seed 应含 builtin-zh-chapter");
-    assert.equal(zhChapter.enabled, true, "内置规则 seed 默认启用");
-    await smartRepo.update({ ...zhChapter, enabled: false });
+    assert.ok(prologue != null, "seed 应含 builtin-zh-prologue");
+    assert.equal(prologue.enabled, true, "内置规则 seed 默认启用");
+    await smartRepo.update({ ...prologue, enabled: false });
 
-    // 再评：签名 miss 重算——「第5章」不再命中规则，全体退化自然排序
-    // （「序」U+5E8F <「第」U+7B2C，与启用时的有序号优先序相反）
+    // 再评：签名 miss 重算——「序章」失去哨兵元组退化为无序号，而「第5章」
+    // 仍命中 zh-chapter 提取 [5]；比较全序第 1 条（有序号者在前）序反转
     const second = filePathsUnder(await wt.buildListRows(), "/r");
     assert.equal(
       calls.listFileMetaUnderPrefix,
@@ -163,8 +164,8 @@ describe("L1 缓存签名三元组：smart_sort_rule 指纹（core/B-3）", () =
     );
     assert.deepEqual(
       second,
-      ["/r/序章.md", "/r/第5章.md"],
-      "禁用后退化自然排序：序章 < 第5章"
+      ["/r/第5章.md", "/r/序章.md"],
+      "禁用后：有序号的第5章排在无序号的序章前（全序第 1 条）"
     );
     assert.notDeepEqual(second, first, "排序结果与旧缓存不一致");
   });
