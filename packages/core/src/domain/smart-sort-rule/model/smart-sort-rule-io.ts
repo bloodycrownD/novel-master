@@ -9,24 +9,36 @@
  * v2 (fix ④): rule field `example` renamed to `description`. Decoding keeps
  * accepting v1 documents carrying `example` — the loader maps the legacy
  * field onto `description` before validation, so old exports keep importing.
+ * captureKind (D13) joins v2 as an optional field defaulting to `smart` —
+ * pre-D13 v2 exports keep importing without bumping the schema version.
  *
  * @module domain/smart-sort-rule/model/smart-sort-rule-io
  */
 
 import { z } from "zod";
 import { decode } from "@/infra/serialization/decode.js";
-import type { SmartSortRule } from "./smart-sort-rule.js";
+import {
+  SMART_SORT_CAPTURE_KINDS,
+  type SmartSortCaptureKind,
+  type SmartSortRule,
+} from "./smart-sort-rule.js";
 
 /** Current bundle document schema version. */
 export const SMART_SORT_RULE_BUNDLE_SCHEMA_VERSION = 2;
 
-/** Bundle 内单条规则（description 缺省 null；sortOrder 即导出时的优先级顺序）。 */
+/** captureKind 三档枚举（D13）：值域单源 SMART_SORT_CAPTURE_KINDS。 */
+const captureKindSchema = z.enum(
+  SMART_SORT_CAPTURE_KINDS as [SmartSortCaptureKind, ...SmartSortCaptureKind[]]
+);
+
+/** Bundle 内单条规则（description 缺省 null；captureKind 缺省 smart，D13；sortOrder 即导出时的优先级顺序）。 */
 const bundleRuleSchema = z
   .object({
     ruleId: z.string().min(1),
     name: z.string().min(1),
     pattern: z.string().min(1),
     flags: z.string(),
+    captureKind: captureKindSchema.optional(),
     description: z.string().nullable().optional(),
     enabled: z.boolean(),
     sortOrder: z.number().int().nonnegative(),
@@ -58,6 +70,7 @@ export function encodeSmartSortRuleBundle(
       name: rule.name,
       pattern: rule.pattern,
       flags: rule.flags,
+      captureKind: rule.captureKind,
       ...(rule.description != null ? { description: rule.description } : {}),
       enabled: rule.enabled,
       sortOrder: rule.sortOrder,
@@ -110,7 +123,7 @@ export function decodeSmartSortRuleBundle(
   return decode(migrateBundleV1Raw(raw), smartSortRuleBundleDocumentSchema);
 }
 
-/** Bundle rules → domain entities（时间戳由导入方重新分配）。 */
+/** Bundle rules → domain entities（时间戳由导入方重新分配；captureKind 缺省 smart，D13）。 */
 export function bundleRulesToEntities(
   doc: SmartSortRuleBundleDocument,
   nowMs: number
@@ -120,6 +133,7 @@ export function bundleRulesToEntities(
     name: rule.name,
     pattern: rule.pattern,
     flags: rule.flags,
+    captureKind: rule.captureKind ?? "smart",
     description: rule.description ?? null,
     enabled: rule.enabled,
     sortOrder: index + 1,

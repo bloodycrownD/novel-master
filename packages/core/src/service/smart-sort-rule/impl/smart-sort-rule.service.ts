@@ -17,6 +17,7 @@ import {
 } from "@/domain/smart-sort-rule/model/smart-sort-rule-io.js";
 import {
   isBuiltinSmartSortRuleId,
+  type SmartSortCaptureKind,
   type SmartSortRule,
 } from "@/domain/smart-sort-rule/model/smart-sort-rule.js";
 import {
@@ -47,6 +48,7 @@ export interface SmartSortBuiltinSeedRow {
   readonly name: string;
   readonly pattern: string;
   readonly flags: string;
+  readonly captureKind: SmartSortCaptureKind;
   readonly description: string;
   readonly sortOrder: number;
 }
@@ -76,6 +78,7 @@ export class DefaultSmartSortRuleService implements SmartSortRuleService {
       name: fields.name,
       pattern: fields.pattern,
       flags: fields.flags,
+      captureKind: fields.captureKind,
       description: fields.description,
       enabled: fields.enabled,
       sortOrder,
@@ -96,6 +99,7 @@ export class DefaultSmartSortRuleService implements SmartSortRuleService {
       name: parsed.name ?? existing.name,
       pattern: parsed.pattern ?? existing.pattern,
       flags: parsed.flags ?? existing.flags,
+      captureKind: parsed.captureKind ?? existing.captureKind,
     };
     validateSmartSortRuleDraft(merged, { ruleId });
     const updated: SmartSortRule = {
@@ -103,6 +107,7 @@ export class DefaultSmartSortRuleService implements SmartSortRuleService {
       name: merged.name,
       pattern: merged.pattern,
       flags: merged.flags,
+      captureKind: merged.captureKind,
       description:
         parsed.description !== undefined ? parsed.description : existing.description,
       enabled: parsed.enabled ?? existing.enabled,
@@ -265,6 +270,7 @@ export class DefaultSmartSortRuleService implements SmartSortRuleService {
         name: row.name,
         pattern: row.pattern,
         flags: row.flags,
+        captureKind: row.captureKind,
         description: row.description,
         enabled: true,
         sortOrder: row.sortOrder,
@@ -293,6 +299,7 @@ export class DefaultSmartSortRuleService implements SmartSortRuleService {
           name: draft.name,
           pattern: draft.pattern,
           flags: draft.flags,
+          captureKind: draft.captureKind ?? "smart",
           description: null,
           enabled: true,
           sortOrder: 0,

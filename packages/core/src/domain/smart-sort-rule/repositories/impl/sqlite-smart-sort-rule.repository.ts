@@ -11,15 +11,24 @@ import {
   queryTemplate,
 } from "@/infra/tdbc/logic/template-helper.js";
 import type { Row } from "@/infra/tdbc/types.js";
-import type { SmartSortRule } from "../../model/smart-sort-rule.js";
+import type {
+  SmartSortCaptureKind,
+  SmartSortRule,
+} from "../../model/smart-sort-rule.js";
 import type { SmartSortRuleRepository } from "../smart-sort-rule.port.js";
 
 function rowToRule(row: Row): SmartSortRule {
+  const captureKind = String(row.capture_kind ?? "smart");
   return {
     ruleId: String(row.rule_id),
     name: String(row.name),
     pattern: String(row.pattern),
     flags: String(row.flags ?? ""),
+    captureKind: (
+      ["smart", "fixed_min", "fixed_max"] as const
+    ).includes(captureKind as "smart" | "fixed_min" | "fixed_max")
+      ? (captureKind as SmartSortCaptureKind)
+      : "smart",
     description: row.description != null ? String(row.description) : null,
     enabled: Number(row.enabled) !== 0,
     sortOrder: Number(row.sort_order),
@@ -28,7 +37,7 @@ function rowToRule(row: Row): SmartSortRule {
   };
 }
 
-const SELECT_COLUMNS = `rule_id, name, pattern, flags, description, enabled,
+const SELECT_COLUMNS = `rule_id, name, pattern, flags, capture_kind, description, enabled,
        sort_order, created_at_ms, updated_at_ms`;
 
 /** TDBC-backed smart sort rule repository. */
@@ -68,10 +77,10 @@ export class SqliteSmartSortRuleRepository implements SmartSortRuleRepository {
       this.conn,
       this.parser,
       `INSERT INTO smart_sort_rule (
-        rule_id, name, pattern, flags, description, enabled,
+        rule_id, name, pattern, flags, capture_kind, description, enabled,
         sort_order, created_at_ms, updated_at_ms
       ) VALUES (
-        #{ruleId}, #{name}, #{pattern}, #{flags}, #{description}, #{enabled},
+        #{ruleId}, #{name}, #{pattern}, #{flags}, #{captureKind}, #{description}, #{enabled},
         #{sortOrder}, #{createdAtMs}, #{updatedAtMs}
       )`,
       {
@@ -79,6 +88,7 @@ export class SqliteSmartSortRuleRepository implements SmartSortRuleRepository {
         name: rule.name,
         pattern: rule.pattern,
         flags: rule.flags,
+        captureKind: rule.captureKind,
         description: rule.description,
         enabled: rule.enabled ? 1 : 0,
         sortOrder: rule.sortOrder,
@@ -96,6 +106,7 @@ export class SqliteSmartSortRuleRepository implements SmartSortRuleRepository {
         name = #{name},
         pattern = #{pattern},
         flags = #{flags},
+        capture_kind = #{captureKind},
         description = #{description},
         enabled = #{enabled},
         sort_order = #{sortOrder},
@@ -106,6 +117,7 @@ export class SqliteSmartSortRuleRepository implements SmartSortRuleRepository {
         name: rule.name,
         pattern: rule.pattern,
         flags: rule.flags,
+        captureKind: rule.captureKind,
         description: rule.description,
         enabled: rule.enabled ? 1 : 0,
         sortOrder: rule.sortOrder,

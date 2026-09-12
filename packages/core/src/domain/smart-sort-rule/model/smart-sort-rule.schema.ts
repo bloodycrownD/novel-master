@@ -6,6 +6,18 @@
 
 import { z } from "zod";
 import { SmartSortRuleError } from "@/errors/smart-sort-rule-errors.js";
+import {
+  SMART_SORT_CAPTURE_KINDS,
+  type SmartSortCaptureKind,
+} from "./smart-sort-rule.js";
+
+/**
+ * captureKind 三档枚举（D13）：值域单源 SMART_SORT_CAPTURE_KINDS。
+ * fixed 档不禁止捕获组共存（语义：固定元组优先、捕获组被忽略）。
+ */
+const captureKindSchema = z.enum(
+  SMART_SORT_CAPTURE_KINDS as [SmartSortCaptureKind, ...SmartSortCaptureKind[]]
+);
 
 /**
  * flags 字段共享校验：仅 g/i/m/s/u/y 字符、不重复（与表 CHECK
@@ -45,6 +57,7 @@ export const createSmartSortRuleSchema = z
     name: z.string().min(1),
     pattern: z.string().min(1),
     flags: z.string().optional(),
+    captureKind: captureKindSchema.optional(),
     description: z.string().nullable().optional(),
     enabled: z.boolean().optional(),
   })
@@ -58,6 +71,7 @@ export const updateSmartSortRuleSchema = z
     name: z.string().min(1).optional(),
     pattern: z.string().min(1).optional(),
     flags: z.string().optional(),
+    captureKind: captureKindSchema.optional(),
     description: z.string().nullable().optional(),
     enabled: z.boolean().optional(),
   })
@@ -70,6 +84,7 @@ export interface CreateSmartSortRuleFields {
   readonly name: string;
   readonly pattern: string;
   readonly flags: string;
+  readonly captureKind: SmartSortCaptureKind;
   readonly description: string | null;
   readonly enabled: boolean;
 }
@@ -85,6 +100,7 @@ export function parseCreateSmartSortRuleInput(
     name: parsed.name,
     pattern: parsed.pattern,
     flags,
+    captureKind: parsed.captureKind ?? "smart",
     description: parsed.description ?? null,
     enabled: parsed.enabled ?? true,
   };

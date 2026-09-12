@@ -5,7 +5,10 @@
  */
 
 import type { CompiledSmartSortRule } from "@/domain/workplace/logic/smart-sort.js";
-import type { SmartSortRule } from "@/domain/smart-sort-rule/model/smart-sort-rule.js";
+import type {
+  SmartSortCaptureKind,
+  SmartSortRule,
+} from "@/domain/smart-sort-rule/model/smart-sort-rule.js";
 import type { SmartSortRuleBundleDocument } from "@/domain/smart-sort-rule/model/smart-sort-rule-io.js";
 import type {
   CreateSmartSortRuleInput,
@@ -26,6 +29,8 @@ export interface SmartSortRulePreviewDraft {
   readonly name: string;
   readonly pattern: string;
   readonly flags: string;
+  /** 捕获档位（D13）：缺省 smart。 */
+  readonly captureKind?: SmartSortCaptureKind;
 }
 
 /** 预览单行：输入顺序逐行给出命中规则与序号元组。 */
