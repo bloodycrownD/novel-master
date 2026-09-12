@@ -26,7 +26,7 @@ import {ScreenFormLayout} from '@/components/form/ScreenFormLayout';
 import {StickyFormFooter} from '@/components/form/StickyFormFooter';
 import {SecondaryButton} from '@/components/ui/Buttons';
 import {useRuntime} from '@/hooks/useRuntime';
-import {useHeaderContext} from '@/navigation/HeaderContext';
+import {useHeaderContext, useStackOverrideSetter} from '@/navigation/HeaderContext';
 import type {RootStackParamList} from '@/navigation/types';
 import {useTheme} from '@/theme/ThemeProvider';
 import {useToast} from '@/components/chrome/ToastHost';
@@ -65,7 +65,8 @@ export function SearchEngineDetailScreen() {
   const runtime = useRuntime();
   const navigation = useNavigation<Nav>();
   const route = useRoute<DetailRoute>();
-  const {setStackOverride} = useHeaderContext();
+    // 屏级 override：自动带 ownerRouteKey，转场期间不泄漏到相邻屏 header。
+  const setStackOverride = useStackOverrideSetter();
 
   const engineId = route.params?.engineId;
   const knownEngine = isKnownEngineId(engineId);

@@ -10,6 +10,7 @@ import React, {
   type ReactNode,
 } from 'react';
 import type {ChatHeaderContext} from './types';
+import {useRoute} from '@react-navigation/native';
 
 export interface HeaderOverride {
   title?: string;
@@ -19,6 +20,13 @@ export interface HeaderOverride {
   menuIcon?: ReactNode;
   onBack?: () => void;
   onMenu?: () => void;
+  /**
+   * 归属屏的 route key（useStackOverrideSetter 自动附加）：AppHeader 只在
+   * 自己屏的 key 匹配时应用 override。转场动画期间两个屏的 header 同时
+   * 可见，若不过滤会出现「问号/标题同时渲染在两个页面」的闪烁。
+   * 缺省（旧调用方）维持全局语义，不参与过滤。
+   */
+  ownerRouteKey?: string;
 }
 
 interface HeaderContextValue {
@@ -55,4 +63,21 @@ export function useHeaderContext(): HeaderContextValue {
     throw new Error('useHeaderContext requires HeaderProvider');
   }
   return ctx;
+}
+
+/**
+ * 屏级 stack override setter：自动附加当前屏的 route key 为 ownerRouteKey，
+ * AppHeader 仅在归属屏应用（转场期间不再泄漏到相邻屏）。屏组件内使用。
+ */
+export function useStackOverrideSetter() {
+  const {setStackOverride} = useHeaderContext();
+  const route = useRoute();
+  return useCallback(
+    (override: HeaderOverride | undefined) => {
+      setStackOverride(
+        override == null ? undefined : {...override, ownerRouteKey: route.key},
+      );
+    },
+    [setStackOverride, route.key],
+  );
 }

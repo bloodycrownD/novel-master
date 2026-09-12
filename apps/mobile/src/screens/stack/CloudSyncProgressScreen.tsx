@@ -13,7 +13,7 @@ import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {CloudSyncProgressPanel} from '@/components/chrome/CloudSyncProgressPanel';
 import {useToast} from '@/components/chrome/ToastHost';
 import {toastMessage} from '@/errors/toast-message';
-import {useHeaderContext} from '@/navigation/HeaderContext';
+import {useHeaderContext, useStackOverrideSetter} from '@/navigation/HeaderContext';
 import type {RootStackParamList} from '@/navigation/types';
 import {useRuntime} from '@/hooks/useRuntime';
 import {useNovelMaster} from '@/runtime/novel-master-context';
@@ -36,7 +36,8 @@ export function CloudSyncProgressScreen() {
   const {retry} = useNovelMaster();
   const navigation = useNavigation<Nav>();
   const route = useRoute<Route>();
-  const {setStackOverride} = useHeaderContext();
+    // 屏级 override：自动带 ownerRouteKey，转场期间不泄漏到相邻屏 header。
+  const setStackOverride = useStackOverrideSetter();
 
   const {op, forceOverwriteRemote = false} = route.params;
   const title = op === 'pull' ? '从云端拉取' : '推送到云端';

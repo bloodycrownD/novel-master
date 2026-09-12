@@ -116,6 +116,7 @@ const mockShowToast = jest.fn();
 // 顶栏 override：记录调用参数，供标题栏「?」帮助按钮断言。
 jest.mock('@/navigation/HeaderContext', () => ({
   useHeaderContext: () => ({setStackOverride: mockSetStackOverride}),
+  useStackOverrideSetter: () => mockSetStackOverride,
 }));
 
 const mockSetStackOverride = jest.fn();

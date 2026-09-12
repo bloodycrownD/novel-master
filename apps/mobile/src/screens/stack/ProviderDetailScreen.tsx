@@ -41,7 +41,7 @@ import {useBatchSelection} from '../../hooks/useBatchSelection';
 import {useDismissOverlaysOnBlur} from '../../hooks/useDismissOverlaysOnBlur';
 import {useFocusListReload} from '../../hooks/useFocusListReload';
 import {useRuntime} from '../../hooks/useRuntime';
-import {useHeaderContext} from '../../navigation/HeaderContext';
+import {useHeaderContext, useStackOverrideSetter} from '../../navigation/HeaderContext';
 import type {RootStackParamList} from '../../navigation/types';
 import {useTheme} from '../../theme/ThemeProvider';
 import {listScreenStyles} from '../shared/list-screen-styles';
@@ -71,7 +71,8 @@ export function ProviderDetailScreen() {
   const navigation = useNavigation<Nav>();
   const route = useRoute<DetailRoute>();
   const providerId = route.params?.providerId;
-  const {setStackOverride} = useHeaderContext();
+    // 屏级 override：自动带 ownerRouteKey，转场期间不泄漏到相邻屏 header。
+  const setStackOverride = useStackOverrideSetter();
 
   // 默认「模型管理」（高频），与「服务商配置」tab 并列；顶部 SegmentedControl 切换。
   const [activeTab, setActiveTab] = useState<'config' | 'models'>('config');

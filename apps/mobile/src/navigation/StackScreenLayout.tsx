@@ -3,7 +3,7 @@
  */
 import React, {type ReactNode} from 'react';
 import {StyleSheet, View} from 'react-native';
-import {useNavigation} from '@react-navigation/native';
+import {useNavigation, useRoute} from '@react-navigation/native';
 import {AppHeader} from '@/components/chrome/AppHeader';
 import type {HeaderPageKey} from './header-config';
 
@@ -14,10 +14,15 @@ type Props = {
 
 export function StackScreenLayout({pageKey, children}: Props) {
   const navigation = useNavigation();
+  const route = useRoute();
 
   return (
     <View style={styles.root}>
-      <AppHeader pageKey={pageKey} onBack={() => navigation.goBack()} />
+      <AppHeader
+        pageKey={pageKey}
+        ownerRouteKey={route.key}
+        onBack={() => navigation.goBack()}
+      />
       {children}
     </View>
   );
