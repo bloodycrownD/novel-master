@@ -27,6 +27,8 @@ interface MessageListProps {
   ) => void;
   /** 点击文件类工具卡片时在聊天工作区 Preview 打开路径。 */
   onOpenToolFile?: (path: string) => void;
+  /** markdown 链接点击（正文与流式尾巴）：识别与路由由调用方单源完成。 */
+  onLinkClick?: (href: string) => void;
   /** 点击 task 工具卡片时跳转只读子会话面板。 */
   onOpenSubagentSession?: (sessionId: string) => void;
   /** 搜索结果等场景：长文本消息默认折叠（line-clamp 4 行），点击切换展开；默认关闭。 */
@@ -37,15 +39,17 @@ function MessageBody({
   text,
   richText,
   alwaysRichText = false,
+  onLinkClick,
 }: {
   text: string;
   richText: boolean;
   alwaysRichText?: boolean;
+  onLinkClick?: (href: string) => void;
 }) {
   if (richText || alwaysRichText) {
     return (
       <div className="chat-message__markdown">
-        <MermaidMarkdown content={text} />
+        <MermaidMarkdown content={text} onLinkClick={onLinkClick} />
       </div>
     );
   }
@@ -70,20 +74,22 @@ function CollapsibleMessageBody({
   text,
   richText,
   alwaysRichText = false,
+  onLinkClick,
 }: {
   text: string;
   richText: boolean;
   alwaysRichText?: boolean;
+  onLinkClick?: (href: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   if (richText || alwaysRichText) {
     return (
-      <MessageBody text={text} richText={richText} alwaysRichText={alwaysRichText} />
+      <MessageBody text={text} richText={richText} alwaysRichText={alwaysRichText} onLinkClick={onLinkClick} />
     );
   }
   if (!isCollapsibleText(text)) {
     return (
-      <MessageBody text={text} richText={richText} alwaysRichText={alwaysRichText} />
+      <MessageBody text={text} richText={richText} alwaysRichText={alwaysRichText} onLinkClick={onLinkClick} />
     );
   }
   return (
@@ -109,6 +115,7 @@ export function MessageList({
   chatRichText = false,
   onOpenMessageMenu,
   onOpenToolFile,
+  onLinkClick,
   onOpenSubagentSession,
   collapsibleMessageBody = false,
 }: MessageListProps) {
@@ -182,12 +189,14 @@ export function MessageList({
                     text={text}
                     richText={chatRichText}
                     alwaysRichText={msg.role === 'assistant'}
+                    onLinkClick={onLinkClick}
                   />
                 ) : (
                   <MessageBody
                     text={text}
                     richText={chatRichText}
                     alwaysRichText={msg.role === 'assistant'}
+                    onLinkClick={onLinkClick}
                   />
                 )
               ) : null}
@@ -223,7 +232,7 @@ export function MessageList({
             ) : null}
             {streamingText ? (
               <div className="chat-message__markdown">
-                <MermaidMarkdown content={streamingText} />
+                <MermaidMarkdown content={streamingText} onLinkClick={onLinkClick} />
               </div>
             ) : null}
             {uiRunning ? (

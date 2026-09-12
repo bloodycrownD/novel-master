@@ -85,6 +85,7 @@ import {
 } from './handlers/providers.js';
 import {
   handleSkillsAssertCreateName,
+  handleSkillsUpdateInfo,
   handleSkillsDelete,
   handleSkillsEdit,
   handleSkillsEffective,
@@ -374,6 +375,7 @@ export function registerHandlersFromRegistry(): void {
   bindReq(IPC_CHANNELS.SKILLS_TOGGLE, handleSkillsToggle);
   bindReq(IPC_CHANNELS.SKILLS_DELETE, handleSkillsDelete);
   bindReq(IPC_CHANNELS.SKILLS_ASSERT_CREATE_NAME, handleSkillsAssertCreateName);
+  bindReq(IPC_CHANNELS.SKILLS_UPDATE_INFO, handleSkillsUpdateInfo);
 
   bindNoArg(
     IPC_CHANNELS.COMPACTION_CONDITIONS_GET,

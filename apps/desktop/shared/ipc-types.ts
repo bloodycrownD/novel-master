@@ -150,6 +150,7 @@ export const IPC_CHANNELS = {
   SKILLS_TOGGLE: 'nm:skills/toggle',
   SKILLS_DELETE: 'nm:skills/delete',
   SKILLS_ASSERT_CREATE_NAME: 'nm:skills/assert-create-name',
+  SKILLS_UPDATE_INFO: 'nm:skills/update-info',
 
   COMPACTION_CONDITIONS_GET: 'nm:compactionConditions/get',
   COMPACTION_CONDITIONS_SET: 'nm:compactionConditions/set',
@@ -447,6 +448,8 @@ export type VfsZipRequest = VfsScopeRequest & {
   readonly confirmed?: boolean;
   /** 子树目标目录；缺省 ≡ `/`（整域） */
   readonly directoryPath?: string;
+  /** 保存框默认名覆盖（如技能导出 `{技能名}.zip`）；仅导出方向消费，导入忽略。 */
+  readonly fileName?: string;
 };
 
 export type VfsZipExportResult = 'saved' | 'cancelled';
@@ -1329,6 +1332,17 @@ export type SkillsAssertCreateNameRequest = {
 };
 
 export type SkillsDeleteRequest = SkillRefDto;
+
+/**
+ * 编辑技能信息（重命名 + 描述同一提交）：单事务完成目录迁移 / front matter
+ * 同步 / 负清单迁移；至少提交 newName / description 一项。
+ */
+export type SkillsUpdateInfoRequest = SkillRefDto & {
+  /** 新技能名；缺省或与现名相同 = 不改名。 */
+  readonly newName?: string;
+  /** 新描述；缺省表示不改描述。 */
+  readonly description?: string;
+};
 
 export type CompactionConditionsDto = {
   readonly schemaVersion: number;

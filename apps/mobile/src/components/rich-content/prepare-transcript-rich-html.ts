@@ -8,6 +8,56 @@ import {sanitizeRichHtml} from './sanitize-rich-html';
 
 const markdown = new MarkdownIt({html: true, linkify: true});
 
+// 裸文件名（如 xxx.md）会被 linkify 的无协议裸域推断（match.schema 为空串、
+// 自动补 http://）链接化，点击后经聊天链接路由外跳浏览器，与 PRD「裸路径
+// 渲染为纯文本」口径相悖（.md 是摩尔多瓦 TLD，其余为同类撞车扩展）。注：
+// linkify-it 5 的 tlds() 增删 API 语义破碎（单调用禁不动目标 TLD 反伤 com，
+// 批量禁用需手工重植全表），故改在 match 层过滤：仅丢弃「无协议推断 +
+// 无路径 + 撞车 TLD」的匹配；显式 http(s) URL 与真裸域名（www/github 等）
+// 不受影响。清单事实：linkify-it 5 默认 TLD 表 = 16 项通用 + 两字符国别码
+// 全表 + xn--，清单只盯可达撞车项（md/sh/py/rs/pl/pm/so 与 tf/cc/ml/in/
+// cl/sc/st/as 等国别码）；zip/app/page/link/file/mov 在当前依赖下不可达、
+// 属前向防御。
+const FILE_EXTENSION_LOOKALIKE_TLDS = new Set([
+  'md',
+  'zip',
+  'sh',
+  'py',
+  'rs',
+  'pl',
+  'pm',
+  'ai',
+  'app',
+  'page',
+  'link',
+  'file',
+  'mov',
+  'so',
+  // 两字符国别码撞车扩展（round 3 CR 补，实测可达）
+  'tf',
+  'cc',
+  'ml',
+  'in',
+  'cl',
+  'sc',
+  'st',
+  'as',
+]);
+const originalLinkifyMatch = markdown.linkify.match.bind(markdown.linkify);
+markdown.linkify.match = (text: string) =>
+  (originalLinkifyMatch(text) ?? []).filter(match => {
+    if (match.schema !== '') {
+      return true; // 显式带协议的 URL 一律保留
+    }
+    if (!/^https?:\/\/[^/]+$/.test(match.url)) {
+      return true; // 非无路径形态不动
+    }
+    const host = match.url.replace(/^https?:\/\//, '').toLowerCase();
+    return !FILE_EXTENSION_LOOKALIKE_TLDS.has(
+      host.slice(host.lastIndexOf('.') + 1),
+    );
+  });
+
 // 代码块唯一高亮出口：覆盖 renderer.rules.fence（不挂 markdown-it highlight 选项，
 // fence 被覆盖后该选项不再被 fence 路径消费，双轨冗余）。
 // 清单内语言出 pre[data-lang] + hljs 类；无语言/不支持（含 mermaid）等价默认 fence

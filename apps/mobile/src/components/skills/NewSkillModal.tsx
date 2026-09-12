@@ -28,7 +28,10 @@ import {
 import {createVfsZipIoService, type VfsScope} from '@novel-master/core/vfs';
 import {ModalShell} from '@/components/ui/ModalShell';
 import {BottomSheetMenu} from '@/components/sheet/BottomSheetMenu';
-import {buildNewSkillDoc, yamlScalar} from './skill-ui';
+import {
+  buildNewSkillDoc,
+  withSkillFrontMatterValues,
+} from './skill-ui';
 import {pickZipFileBytes} from '@/services/vfs-zip.service';
 import {useRuntime} from '@/hooks/useRuntime';
 import {useTheme} from '@/theme/ThemeProvider';
@@ -55,37 +58,6 @@ type ImportedSkill = {
   readonly bytes: Uint8Array;
   readonly preview: SkillZipPreview;
 };
-
-/**
- * 以表单最终值为准重写 SKILL.md front matter（保留其余键与正文）。
- * 无 front matter 块时前置补一个；值用 YAML 双引号标量，含冒号/换行不出错。
- */
-function withFrontMatterValues(
-  source: string,
-  name: string,
-  description: string,
-): string {
-  const match = source.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/);
-  const fmLine = (key: string, value: string) => `${key}: ${yamlScalar(value)}`;
-  if (match == null) {
-    return `---\n${fmLine('name', name)}\n${fmLine(
-      'description',
-      description,
-    )}\n---\n\n${source}`;
-  }
-  let fm = match[1]!;
-  const values: ReadonlyArray<[string, string]> = [
-    ['name', name],
-    ['description', description],
-  ];
-  for (const [key, value] of values) {
-    const re = new RegExp(`^${key}:.*$`, 'm');
-    fm = re.test(fm)
-      ? fm.replace(re, fmLine(key, value))
-      : `${fm}\n${fmLine(key, value)}`;
-  }
-  return source.replace(match[0], `---\n${fm}\n---\n`);
-}
 
 export function NewSkillModal({
   visible,
@@ -244,11 +216,10 @@ export function NewSkillModal({
               domain,
               name,
               'SKILL.md',
-              withFrontMatterValues(
-                imported.preview.skillMd!,
+              withSkillFrontMatterValues(imported.preview.skillMd!, {
                 name,
                 description,
-              ),
+              }),
               domain === 'project' ? projectId : undefined,
             );
         }
@@ -319,7 +290,7 @@ export function NewSkillModal({
           style={[styles.label, {color: tokens.textSecondary}]}
           testID="new-skill-name-label"
         >
-          技能名（即目录名，创建后不可改）
+          技能名（即目录名，可在管理页重命名）
         </Text>
         <TextInput
           testID="new-skill-name-input"

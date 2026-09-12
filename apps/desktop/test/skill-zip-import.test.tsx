@@ -2,9 +2,11 @@
  * 技能 ZIP 导入并入新建弹窗（desktop 同步 mobile 9a04dee）：
  * - 主进程 zipImportBytes：字节直写 /meta/skills/{name}（SKILL.md + 附属文件），
  *   非 zip 字节拒绝；global/project 两域各自落盘。
- * - withFrontMatterValues：表单值重写 front matter（保留其余键与正文）。
+ * - withSkillFrontMatterValues：表单值重写 front matter（保留其余键与正文）；
+ *   已回收为 core 单源，本文件经 @shared/logic/skills 消费同一实现。
  * - NewSkillModal：默认渲染「从 ZIP 导入…」入口；imported 分支落盘前过
- *   保留名新建门（ipcSkillsAssertCreateName，CR D-1）。
+ *   保留名新建门（ipcSkillsAssertCreateName，CR D-1）；version 残留已清理
+ *   （T-S6：无 readRes / version 传参）。
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -23,8 +25,9 @@ import {
   setupDesktopDbTestEnv,
   teardownDesktopDbTestEnv,
 } from "./desktop-db-test-env.js";
-import { withFrontMatterValues } from "@/features/skills/skill-ui";
+import { withSkillFrontMatterValues } from "@shared/logic/skills";
 import { NewSkillModal } from "@/features/skills/NewSkillModal";
+import { SkillInfoEditModal } from "@/features/skills/SkillInfoEditModal";
 
 function skillZipBytes(
   name: string,
@@ -135,23 +138,32 @@ describe("VFS zipImportBytes handler（技能整包落盘）", () => {
   });
 });
 
-describe("withFrontMatterValues（表单值重写 front matter）", () => {
+describe("withSkillFrontMatterValues（表单值重写 front matter，core 单源）", () => {
   it("替换既有 name/description，保留其余键与正文", () => {
     const source =
       "---\nname: old-name\ndescription: 旧描述\nextra: 保留\n---\n\n正文。\n";
-    const out = withFrontMatterValues(source, "new-name", "含: 冒号的描述");
+    const out = withSkillFrontMatterValues(source, {
+      name: "new-name",
+      description: "含: 冒号的描述",
+    });
     assert.match(out, /^---\nname: "new-name"\ndescription: "含: 冒号的描述"\nextra: 保留\n---\n\n正文。\n$/);
   });
 
   it("缺失 name/description 键时补全", () => {
     const source = "---\nname: old\n---\n\n正文。\n";
-    const out = withFrontMatterValues(source, "old", "新描述");
+    const out = withSkillFrontMatterValues(source, {
+      name: "old",
+      description: "新描述",
+    });
     assert.match(out, /description: "新描述"/);
     assert.match(out, /name: "old"/);
   });
 
   it("无 front matter 块时前置补一个", () => {
-    const out = withFrontMatterValues("只有正文。\n", "n", "d");
+    const out = withSkillFrontMatterValues("只有正文。\n", {
+      name: "n",
+      description: "d",
+    });
     assert.match(out, /^---\nname: "n"\ndescription: "d"\n---\n\n只有正文。\n$/);
   });
 });
@@ -237,3 +249,113 @@ describe("ZIP 导入保留名新建门（CR D-1）", () => {
     assert.match(src, /if \(!assertRes\.ok\) \{[\s\S]*?setError\(assertRes\.error\.message\);[\s\S]*?return;/);
   });
 });
+
+describe("SkillInfoEditModal（T-S5：编辑信息弹窗）", () => {
+  const baseProps = {
+    onClose: () => undefined,
+    onSaved: () => undefined,
+  };
+
+  it("普通技能：渲染标题与两字段，名称框可编辑", () => {
+    const html = renderToStaticMarkup(
+      <SkillInfoEditModal
+        open
+        skillRef={{ domain: "global", name: "my-skill" }}
+        currentName="my-skill"
+        currentDescription="原描述"
+        {...baseProps}
+      />,
+    );
+    assert.match(html, /编辑信息/);
+    assert.match(html, /技能名/);
+    assert.match(html, /描述（进入技能索引）/);
+    assert.doesNotMatch(html, /readonly/);
+  });
+
+  it("global 域内置技能：名称框只读且提示不可改名", () => {
+    const html = renderToStaticMarkup(
+      <SkillInfoEditModal
+        open
+        skillRef={{ domain: "global", name: "agent-config" }}
+        currentName="agent-config"
+        currentDescription="内置描述"
+        {...baseProps}
+      />,
+    );
+    assert.match(html, /内置技能不可改名/);
+    // React DOM 会把 readOnly 序列化为 readOnly=""
+    assert.match(html, /readOnly/);
+  });
+
+  it("源码契约：管理页行菜单有「编辑信息」入口，invalid 时禁用（详情页入口按用户拍板移除）", () => {
+    const manageSrc = readFileSync(
+      fileURLToPath(
+        new URL("../renderer/features/settings/SkillsManageView.tsx", import.meta.url),
+      ),
+      "utf8",
+    );
+    assert.match(manageSrc, /"编辑信息"/);
+    assert.match(manageSrc, /disabled: !menu\.valid/);
+    assert.match(manageSrc, /SkillInfoEditModal/);
+  });
+
+  it("源码契约：校验消费 core validateSkillName，输入期出 reason 内联提示（MF-7）", () => {
+    const modalSrc = readFileSync(
+      fileURLToPath(
+        new URL("../renderer/features/skills/SkillInfoEditModal.tsx", import.meta.url),
+      ),
+      "utf8",
+    );
+    // 消费链：@shared/logic/skills 再导出 core 单源，与 mobile 同口径
+    assert.match(
+      modalSrc,
+      /import \{ BUILTIN_SKILL_NAMES, validateSkillName \} from "@shared\/logic\/skills"/,
+    );
+    // 输入期即出 reason（含保留名 SKILL.md / 空白全口径），点保存前拦截
+    assert.match(
+      modalSrc,
+      /nameChanged && name\.length > 0 \? validateSkillName\(trimmedName\) : null/,
+    );
+    assert.match(modalSrc, /\{nameIssue\}/);
+    // 本地布尔正则口径已退场：不再消费 isValidSkillNameInput
+    assert.doesNotMatch(modalSrc, /isValidSkillNameInput/);
+  });
+
+  it("源码契约：提交链路有 catch 兑底（MF-11，对齐 mobile）", () => {
+    const modalSrc = readFileSync(
+      fileURLToPath(
+        new URL("../renderer/features/skills/SkillInfoEditModal.tsx", import.meta.url),
+      ),
+      "utf8",
+    );
+    // IPC 极端失败（如 bridge 断连）时 setError 提示，不静默 unhandled rejection
+    assert.match(
+      modalSrc,
+      /\} catch \(err\) \{[\s\S]*?setError\(err instanceof Error \? err\.message : String\(err\)\);[\s\S]*?return;[\s\S]*?\} finally \{/,
+    );
+    // catch 块内不调 onClose（失败不停窗，用户可重试）
+    const catchBody = modalSrc.match(/\} catch \(err\) \{([\s\S]*?)\} finally \{/);
+    assert.ok(catchBody != null, "应有 catch → finally 结构");
+    assert.ok(!catchBody[1]!.includes("onClose"), "catch 内不应调 onClose");
+  });
+});
+
+describe("NewSkillModal version 残留清理（T-S6）", () => {
+  it("源码断言：无 readRes 调用、无 version: 传参与乐观锁注释", () => {
+    const src = readFileSync(
+      fileURLToPath(
+        new URL("../renderer/features/skills/NewSkillModal.tsx", import.meta.url),
+      ),
+      "utf8",
+    );
+    // SkillsWriteRequest 无 version 字段：死参数与取版本的 read 一并清理
+    expect_no_version(src);
+  });
+});
+
+function expect_no_version(src: string): void {
+  assert.ok(!src.includes("ipcSkillsRead"), "NewSkillModal 不应再调用 ipcSkillsRead");
+  assert.ok(!src.includes("readRes"), "不应有 readRes 残留");
+  assert.ok(!/\bversion\s*:/.test(src), "不应有 version: 传参残留");
+  assert.ok(!src.includes("乐观锁"), "不应有过时乐观锁注释");
+}

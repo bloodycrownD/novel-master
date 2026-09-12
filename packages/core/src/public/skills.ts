@@ -23,6 +23,8 @@ export type {
 } from "../domain/skills/logic/effective-skills.js";
 export { parseSkillFrontMatter } from "../domain/skills/logic/parse-skill-front-matter.js";
 export type { ParsedSkillFrontMatter } from "../domain/skills/logic/parse-skill-front-matter.js";
+export { withSkillFrontMatterValues } from "../domain/skills/logic/with-skill-front-matter-values.js";
+export type { SkillFrontMatterValues } from "../domain/skills/logic/with-skill-front-matter-values.js";
 export { previewSkillZip } from "../domain/skills/logic/preview-skill-zip.js";
 export type { SkillZipPreview } from "../domain/skills/logic/preview-skill-zip.js";
 export type {
@@ -32,6 +34,7 @@ export type {
   SkillSummary,
 } from "../domain/skills/model/skill.schema.js";
 export { skillFrontMatterSchema } from "../domain/skills/model/skill.schema.js";
+export { BUILTIN_SKILL_NAMES } from "../bootstrap/skills/seed-builtin-skills.js";
 export {
   SKILL_NAME_PATTERN,
   SKILL_NAME_PATTERN_SOURCE,
