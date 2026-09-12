@@ -12,7 +12,6 @@ import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { ProviderRepository } from "@/domain/provider/repositories/provider.port.js";
 import type { SavedModelRepository } from "@/domain/provider/repositories/saved-model.port.js";
 import type { ModelRequestService } from "../provider/model-request.port.js";
-import type { RegexConfigService } from "../regex/regex-config.port.js";
 import type { SimpleEventBus } from "@/infra/events/simple-event-bus.js";
 import type { SessionKkvService } from "../session-kkv/session-kkv.port.js";
 import type { WorkplaceService } from "../workplace/workplace.port.js";
@@ -55,7 +54,6 @@ export interface CreateAgentRunnerDeps {
   readonly messages?: MessageService;
   /** 压缩执行所需的 transcript effects；对话轨由 assembleAgentRunnerDeps 注入。 */
   readonly messageTranscriptEffects?: MessageTranscriptEffectsService;
-  readonly regexConfig?: RegexConfigService;
   readonly listAllSessionMessages?: () => Promise<readonly ChatMessage[]>;
   /** 按 sessionId 累积 in-flight 流式 partial，供子会话首次进入查询。 */
   readonly streamRegistry?: AgentStreamRegistry;

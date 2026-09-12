@@ -75,6 +75,7 @@ import {importCharacterCard} from '../../services/vfs-character-card.service';
 import {exportVfsZip, importVfsZip} from '../../services/vfs-zip.service';
 import {useTheme} from '../../theme/ThemeProvider';
 import {TemplatePullButton} from '../prompt/TemplatePullButton';
+import {TemplatePushButton} from '../prompt/TemplatePushButton';
 import {useToast} from '../chrome/ToastHost';
 import {
   VfsPromptModal,
@@ -89,6 +90,9 @@ import {isSelfOrAncestorPath, resolveMoveDestination} from './vfs-move-path';
 
 /** 仅支持 session 域 pull（project 域 pull 已拆除）。 */
 export type VfsFileManagerPullScope = {kind: 'session'; sessionId: string};
+
+/** 推送 scope 与 pull 同形：session 域工作区整树推回项目工作区（模板母本）。 */
+export type VfsFileManagerPushScope = {kind: 'session'; sessionId: string};
 
 /** 供父组件控制系统返回时逐级退出目录，并在切入工作区时刷新列表。 */
 export type VfsFileManagerHandle = {
@@ -114,6 +118,11 @@ export type VfsFileManagerProps = {
   pullFromParent?: {
     scope: VfsFileManagerPullScope;
     onPulled?: () => void;
+  };
+  /** 推送到项目工作区：与 pullFromParent 对称，工具栏并排渲染。 */
+  pushToParent?: {
+    scope: VfsFileManagerPushScope;
+    onPushed?: () => void;
   };
   /** 当前目录变化时通知父组件（用于同步系统返回状态）。 */
   onDirectoryChange?: () => void;
@@ -148,6 +157,7 @@ export const VfsFileManager = forwardRef<
     onOpenFile,
     rootPath,
     pullFromParent,
+    pushToParent,
     readOnly,
     onDirectoryChange,
     isProtectedPath,
@@ -1030,6 +1040,13 @@ export const VfsFileManager = forwardRef<
               iconOnly
               scope={pullFromParent.scope}
               onPulled={pullFromParent.onPulled}
+            />
+          ) : null}
+          {!readOnly && pushToParent ? (
+            <TemplatePushButton
+              iconOnly
+              scope={pushToParent.scope}
+              onPushed={pushToParent.onPushed}
             />
           ) : null}
           {!readOnly ? (

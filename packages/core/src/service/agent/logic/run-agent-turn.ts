@@ -32,10 +32,12 @@ import type {
 } from "@/domain/tool/builtin/builtin-tool-context.js";
 import type {
   BuiltinToolAgentsContext,
+  BuiltinToolSearchContext,
   BuiltinToolSkillsContext,
 } from "@/domain/tool/builtin/builtin-tool-context.js";
 import { SKILL_TOOL_NAME } from "@/domain/tool/builtin/skill-tool.js";
 import { AGENT_TOOL_NAME } from "@/domain/tool/builtin/agent-tool.js";
+import type { SearchConfigStore } from "@/domain/tool/builtin/search/search-config.js";
 import { ToolRegistry } from "@/domain/tool/logic/tool-registry.js";
 import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { SimpleEventBus } from "@/infra/events/simple-event-bus.js";
@@ -58,7 +60,6 @@ import type { ModelRequestService } from "@/service/provider/model-request.port.
 import type { LlmStreamEvent } from "@/infra/llm-protocol/ports/adapter.port.js";
 import type { ProviderRepository } from "@/domain/provider/repositories/provider.port.js";
 import type { SavedModelRepository } from "@/domain/provider/repositories/saved-model.port.js";
-import type { RegexConfigService } from "@/service/regex/regex-config.port.js";
 import type { VfsService } from "@/service/vfs/vfs.port.js";
 import type { WorkplaceService } from "@/service/workplace/workplace.port.js";
 import type { ProjectService } from "@/service/chat/project.port.js";
@@ -122,15 +123,12 @@ export interface AgentTurnRuntimePort extends AgentRunRuntimePort {
   readonly savedModelRepo: SavedModelRepository;
   readonly providerRepo?: Pick<ProviderRepository, "findById">;
   readonly eventBus: SimpleEventBus;
-  readonly regexConfig: RegexConfigService;
   readonly compactionConditionEvaluator: CompactionConditionEvaluator;
   /** 用户 VFS 写入端口：executeOp 由 VFS 写链路直接消费，本模块不再使用该成员。 */
   readonly userVfsTurn?: UserVfsTurnService;
   /** write 成功后 upsert `file_cache`；须由 runtime 注入。 */
   readonly sessionKkv: SessionKkvService;
-  readonly state: AgentRunRuntimePort["state"] & {
-    getCurrentRegexGroupId(): Promise<string | null | undefined>;
-  };
+  readonly state: AgentRunRuntimePort["state"];
   sessionVfs(projectId: string, sessionId: string): VfsService;
   workplace(scope: VfsScope): WorkplaceService;
   /**
@@ -148,6 +146,15 @@ export interface AgentTurnRuntimePort extends AgentRunRuntimePort {
     PersistentPreferences,
     "getThinkingContextEnabled"
   >;
+  /**
+   * 搜索配置存储（search 工具用）：desktop / mobile runtime 用 core 导出
+   * 的 `createSearchConfigStore(kkv + secretStore)` 工厂装配。
+   *
+   * 可选声明照 preferences Pick 先例——不强制旧测试 mock 补字段；未注入
+   * 时（CLI 无 kkv）search 工具 run 返回可读错误，恒不可用（known
+   * limitation，后续迭代 CLI 接入 kkv 后补一行装配即可启用）。
+   */
+  readonly searchConfig?: SearchConfigStore;
 }
 
 export class AgentTurnError extends Error {
@@ -178,6 +185,21 @@ export async function assembleSkillsToolContext(
   const effective = await service.effectiveSkills(projectId);
   // referencedNames：seen 共享（方向 A）的可变集合，runner 每步 prepare 后回填
   return { service, projectId, effective, referencedNames: new Set<string>() };
+}
+
+/**
+ * 装配 `search` 工具闭包（主 / 子两个装配点共用）：绑定 runtime 的
+ * SearchConfigStore；引擎解析与凭证明文读取全部延迟到工具 run 内，
+ * 装配期零 IO（与 skills 的装配期预算模式不同，search 的 description
+ * 是静态文案）。
+ */
+export function assembleSearchToolContext(
+  store: SearchConfigStore
+): BuiltinToolSearchContext {
+  return {
+    resolveEngineChain: (inputEngine) =>
+      store.resolveEngineChain(inputEngine),
+  };
 }
 
 /**
@@ -482,7 +504,6 @@ export async function runAgentTurn(
     registry
   );
   const session = new ChatAgentSession(runtime.messages, scope.sessionId);
-  const activeRegexGroupId = await runtime.state.getCurrentRegexGroupId();
   // 主 run 始终自建 internalController 作为注册目标——不管 caller 有没有传 signal。
   // caller signal（如果有）桥接到 internal：外部 abort 级联到 internal。
   // runner.run 拿 internal.signal；同时 internal.signal 作为 task 工具内子 agent run
@@ -519,6 +540,11 @@ export async function runAgentTurn(
     ...(skillsCtx != null ? { skills: skillsCtx } : {}),
     // agent 管理工具读取：装配期同步快照（description lambda / list 动作用）。
     ...(agentsCtx != null ? { agents: agentsCtx } : {}),
+    // search 工具读取：闭包绑定 runtime.searchConfig（CLI / 旧 mock 未注入时不装配，
+    // 工具 run 返回可读错误；引擎解析延迟到 run 内，装配期零 IO）。
+    ...(runtime.searchConfig != null
+      ? { search: assembleSearchToolContext(runtime.searchConfig) }
+      : {}),
     // task 工具读取：depth=0，捕获主 agent run 的 savedModelId/workspaceModelId/signal。
     subagent: {
       agentRegistry: runtime.agentRegistry,
@@ -603,7 +629,6 @@ export async function runAgentTurn(
       savedModelId,
       workspaceModelId,
       maxSteps,
-      activeRegexGroupId: activeRegexGroupId ?? undefined,
       stream,
       signal: internalController.signal,
       onStream: options?.onStream,
@@ -711,7 +736,7 @@ async function runChildAgent(args: {
 
   // 子 run controller 同样挂进 registry，让外部（子会话页停止按钮）
   // 能按 childSessionId 中断子 run。register 起就纳入 try/finally 包络，
-  // 覆盖中间 await（session.append / getCurrentRegexGroupId）抛错路径——
+  // 覆盖中间 await（session.append）抛错路径——
   // 否则一旦这些 await 抛错，finally 不会执行，registry 留下孤儿 controller。
   // finally 反注册带所有权比对，防误删新 run 的 controller / partial。形态对齐 runAgentTurn。
   // streamHandle 在 try 外声明（同 childController），保证 finally 能读到。
@@ -735,7 +760,6 @@ async function runChildAgent(args: {
     if (opts.prompt && opts.prompt.trim().length > 0) {
       await session.append("user", textBlocks(opts.prompt));
     }
-    const activeRegexGroupId = await runtime.state.getCurrentRegexGroupId();
     const toolCtx: BuiltinToolContext = {
       vfs,
       projectId: parentProjectId,
@@ -754,6 +778,10 @@ async function runChildAgent(args: {
       ...(skillsCtx != null ? { skills: skillsCtx } : {}),
       // agent 管理工具：mode==="all" 的子 agent 且 depth<2 时才可能注入（D6 摘除后不注入）。
       ...(childAgentsCtx != null ? { agents: childAgentsCtx } : {}),
+      // search：子代理同主代理注入（引擎配置全局共享，解析链与凭据读取在 run 内）。
+      ...(runtime.searchConfig != null
+        ? { search: assembleSearchToolContext(runtime.searchConfig) }
+        : {}),
       // 子 agent 也有 subagent 闭包：递归 depth=childDepth，孙 agent 装配的 registry 已 deny task。
       subagent: {
         agentRegistry: runtime.agentRegistry,
@@ -836,7 +864,6 @@ async function runChildAgent(args: {
       savedModelId: opts.savedModelId,
       workspaceModelId: opts.workspaceModelId,
       maxSteps,
-      activeRegexGroupId: activeRegexGroupId ?? undefined,
       // run 期：persistMessages=true 落库供 UI 浏览；publishRunLifecycle=true 发事件供子会话浏览页实时刷新（主会话按 sessionId 过滤不会串）；stream=true 走流式供子会话浏览页实时输出。
       persistMessages: true,
       publishRunLifecycle: true,

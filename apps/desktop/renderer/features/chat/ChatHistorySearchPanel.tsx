@@ -6,12 +6,12 @@
  * hidden 角标 + dimmed 区分，不再叠加 hiddenFilter）。
  *
  * 查询支持关键词（大小写不敏感，由 core 统一处理）、seq 编号区间
- * （fromSeq/toSeq 闭区间，可只填一端）与 beforeSeq 翻页。搜索基于原始文本，
- * 不套 regex-apply。
+ * （fromSeq/toSeq 闭区间，可只填一端）与 beforeSeq 翻页。搜索基于原始文本。
  */
 import { useCallback, useMemo, useRef, useState } from 'react';
 import type { ChatMessageDto } from '@shared/ipc-types';
 import { ipcMessagesSearch } from '@/ipc/client';
+import { useShellNav } from '@/providers/ShellNavProvider';
 import { MessageList } from './MessageList';
 
 interface ChatHistorySearchPanelProps {
@@ -37,6 +37,10 @@ export function ChatHistorySearchPanel({
   sessionId,
   onClose,
 }: ChatHistorySearchPanelProps) {
+  // 命中消息经 MessageList 渲染富文本，路径链接与正文同源路由（MF-12）：
+  // 复用 ShellNavProvider 的 openChatLink（搜索面板从会话详情抽屉进入，
+  // provider 的会话上下文与面板的 projectId/sessionId 同一活跃会话）。
+  const { openChatLink } = useShellNav();
   const [keyword, setKeyword] = useState('');
   const [fromSeqText, setFromSeqText] = useState('');
   const [toSeqText, setToSeqText] = useState('');
@@ -269,7 +273,12 @@ export function ChatHistorySearchPanel({
           <p className="chat-history-search__empty">未找到匹配的聊天记录</p>
         ) : (
           <>
-            <MessageList messages={results} chatRichText collapsibleMessageBody />
+            <MessageList
+              messages={results}
+              chatRichText
+              collapsibleMessageBody
+              onLinkClick={openChatLink}
+            />
             {hasMore && results.length > 0 ? (
               <div className="chat-history-search__more">
                 <button

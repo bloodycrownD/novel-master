@@ -1,5 +1,5 @@
 /**
- * Real prompt preview: agent prompts + llm-channel regex + structured segments.
+ * Real prompt preview: agent prompts + structured segments.
  */
 import {registerBuiltinTools, ToolRegistry} from '@novel-master/core';
 import {

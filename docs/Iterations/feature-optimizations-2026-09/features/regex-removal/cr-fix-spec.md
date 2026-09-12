@@ -1,0 +1,32 @@
+# CR Fix Spec: regex-removal
+
+## 元信息
+- repo: novel-master；base_sha: ecadd487；head_sha: b0037065（feat/regex-removal）
+- prd/spec: docs/Iterations/feature-optimizations-2026-09/features/regex-removal/{prd,spec}.md
+- review_round: 1 / dag_version: 1（diff 模式单轮）
+- 状态：已执行（2026-09-06，见提交）
+
+## Must-fix
+
+### RX/C-1 [P2] 删除 regex import 后的双空行残留
+- 维度：C
+- 文件：`apps/desktop/src/main/ipc/handlers/messages.ts:40-41`；`apps/mobile/src/services/session-prompt-input.service.ts:21-22`
+- 问题：删除 import 行后与既有空行叠加出多余空行，偏离文件惯例
+- 改法：各删一个空行
+- 验收/测试：两文件 import 区后恰一个空行；触碰包的测试保持绿（纯空行，无行为影响）
+- 来源：review-diff-regex-removal / round 1
+
+## Spec deviations
+- fixed（已闭合）：spec 测试清单已补记 `packages/core/test/domain/regex/regex-rule-update-depth.test.ts` 为必要连带删除
+
+## Open questions / 待拍板
+- 无
+
+## 已豁免（用户确认不修）
+- `visibleFloorByMessageId` 孤儿导出：用户拍板保留（后续正则相关功能可能复用）
+
+## 合并后 QA（manual_user）
+- T-RX8：真机从 v1.5.12 存量库升级后启动正常、聊天原文直出、双端设置无正则入口
+
+## K 节建议（下游执行时闭合）
+- [已闭合 2026-09-06] desktop 两测试 it 标题已去「regex-apply」字样（session-detail-drawer:136、messages-search-handler:162）

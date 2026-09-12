@@ -108,6 +108,12 @@ module.exports = {
       repoRoot,
       'packages/core/dist/public/kkv.js',
     ),
+    // 技能单源（front matter 重写等）：渲染链（skill-ui 再导出）真正加载
+    // 该子路径；直连 dist 真实文件（yaml 依赖已由上方 ^yaml$ 强制 CJS）。
+    '^@novel-master/core/skills$': path.join(
+      repoRoot,
+      'packages/core/dist/public/skills.js',
+    ),
     '^@novel-master/core/message-checkpoint$': path.join(
       repoRoot,
       'packages/core/dist/public/message-checkpoint.js',

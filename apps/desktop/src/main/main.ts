@@ -1,9 +1,10 @@
 /**
  * Electron main process: window lifecycle, Vite renderer load, IPC, runtime teardown.
  */
-import { app, BrowserWindow, nativeImage } from "electron";
+import { app, BrowserWindow, nativeImage, shell } from "electron";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { isHttpUrl } from "@novel-master/core/chat";
 import { closeDesktopConnection } from "./runtime/connection.js";
 import { resolveAppIconPath } from "./runtime/resolve-app-icon.js";
 import {
@@ -116,6 +117,29 @@ function createMainWindow(): BrowserWindow {
   setComposerAttachmentsSuggestForwardTarget(resolvePushWebContents);
   setUserMessageAppendedForwardTarget(resolvePushWebContents);
   setAgentActivityForwardTarget(resolvePushWebContents);
+
+  // 链接导航拦截（chat-link-file-nav）：renderer 内链接点击已在组件层拦截
+  // 路由（MermaidMarkdown onLinkClick），但 PreviewPane 等未接链路的 <a>
+  // 默认导航仍会整窗跳走——主进程统一兜底：页内导航一律拒绝，
+  // http(s) 转交系统浏览器，其余（file:// 等）直接否决；新开窗口同理 deny。
+  // 例外：dev 模式放行 vite dev server 同源导航——location.reload() 同样
+  // 触发 will-navigate，无条件拦截会把 vite full-reload（依赖变更、HMR 失败
+  // 回退）拦死，页面停留在旧构建；生产无 vite reload，reload 本就该拦。
+  window.webContents.on("will-navigate", (event, url) => {
+    if (isDev && url.startsWith(DEV_SERVER_URL)) {
+      return; // dev：vite full-reload 放行
+    }
+    event.preventDefault();
+    if (isHttpUrl(url)) {
+      void shell.openExternal(url).catch(() => undefined);
+    }
+  });
+  window.webContents.setWindowOpenHandler(({ url }) => {
+    if (isHttpUrl(url)) {
+      void shell.openExternal(url).catch(() => undefined);
+    }
+    return { action: "deny" };
+  });
 
   if (isDev) {
     void window.loadURL(DEV_SERVER_URL);

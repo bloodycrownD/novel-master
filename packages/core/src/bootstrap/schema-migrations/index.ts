@@ -11,24 +11,25 @@ import {
   listAppliedSchemaMigrationIds,
   markSchemaMigrationApplied,
 } from "./schema-migrations-table.js";
-import { usageCacheModelBackfillV1Migration } from "./usage-cache-model-backfill-v1.js";
 import { retirePrefSessionFsVersionCheckV1Migration } from "./retire-pref-session-fs-version-check-v1.js";
 import { workplaceDirRuleSmartFieldV1Migration } from "./workplace-dir-rule-smart-field-v1.js";
 
 /**
- * 本版本最低支持 v1.4.28。以下 11 条 migration 的逻辑已并入 canonical DDL、
+ * 本版本最低支持 v1.5.5。以下 12 条 migration 的逻辑已并入 canonical DDL、
  * align、运行期维护或不再需要，源文件已删除，也不再在 runner 阵列里登记：
  * saved-model-identity-v1、provider-identity-v1、drop-chat-session-user-vfs-pending-v1、
  * rename-worktree-tables-to-workplace-v1、vfs-content-blob-zlib-v1、vfs-revision-ref-count-v1、
  * vfs-entry-id-redesign-v1、session-agent-config-v2、project-agent-config-cleanup-v1、
  * orphan-revision-gc-v1（运行期 deleteGlobalOrphans 持续维护）、table-constraints-v1b
- * （约束形态已是 canonical DDL，legacy 探针见 assertMinimumBaseline）。
+ * （约束形态已是 canonical DDL，legacy 探针见 assertMinimumBaseline）、
+ * usage-cache-model-backfill-v1（第四轮退役：数据回填迁移，v1.5.4 首发引入，
+ * 所有 ≥v1.5.5 的库均已登记应用记录，进入 BASELINE_MIGRATION_IDS 判据；
+ * 数据迁移无 schema 形态可探，老库识别依赖既有 legacy 探针）。
  * 更早版本的库由 {@link assertMinimumBaseline}（novel-master-bootstrap）fail-fast 拦截。
  */
 
 /** 有序 migration 列表。 */
 export const SCHEMA_MIGRATIONS: readonly SchemaMigration[] = [
-  usageCacheModelBackfillV1Migration,
   retirePrefSessionFsVersionCheckV1Migration,
   workplaceDirRuleSmartFieldV1Migration,
 ];

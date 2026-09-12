@@ -44,6 +44,13 @@ import {
   handleCloudSyncTestConnection,
 } from './handlers/cloud-sync.js';
 import {
+  handleSearchClearEngineKey,
+  handleSearchGetConfig,
+  handleSearchSaveEngineKey,
+  handleSearchSetEngineOrder,
+  handleSearchSetSearxngBaseUrl,
+} from './handlers/search.js';
+import {
   handleAppCheckForUpdates,
   handleAppGetInfo,
   handleAppOpenExternal,
@@ -77,20 +84,6 @@ import {
   handleProvidersList,
 } from './handlers/providers.js';
 import {
-  handleRegexCreateGroup,
-  handleRegexCreateRule,
-  handleRegexDeleteGroup,
-  handleRegexDeleteRule,
-  handleRegexGetGroup,
-  handleRegexGetRule,
-  handleRegexListGroups,
-  handleRegexListPicker,
-  handleRegexListRules,
-  handleRegexSetCurrent,
-  handleRegexUpdateGroup,
-  handleRegexUpdateRule,
-} from './handlers/regex.js';
-import {
   handleSmartSortRuleCreate,
   handleSmartSortRuleDelete,
   handleSmartSortRuleDeleteBatch,
@@ -109,6 +102,7 @@ import {
 } from './handlers/smart-sort-rule.js';
 import {
   handleSkillsAssertCreateName,
+  handleSkillsUpdateInfo,
   handleSkillsDelete,
   handleSkillsEdit,
   handleSkillsEffective,
@@ -160,6 +154,7 @@ import {
   handleSessionsListByProject,
   handleSessionsProjectComposerStatus,
   handleSessionsPullTemplate,
+  handleSessionsPushTemplate,
   handleSessionsRename,
   handleSessionsSetAgentBinding,
   handleSessionsSetComposerDraft,
@@ -242,6 +237,7 @@ export function registerHandlersFromRegistry(): void {
   bindReq(IPC_CHANNELS.SESSIONS_RENAME, handleSessionsRename);
   bindReq(IPC_CHANNELS.SESSIONS_DELETE, handleSessionsDelete);
   bindReq(IPC_CHANNELS.SESSIONS_PULL_TEMPLATE, handleSessionsPullTemplate);
+  bindReq(IPC_CHANNELS.SESSIONS_PUSH_TEMPLATE, handleSessionsPushTemplate);
   bindReq(IPC_CHANNELS.SESSIONS_GET_COMPOSER_DRAFT, handleSessionsGetComposerDraft);
   bindReq(IPC_CHANNELS.SESSIONS_SET_COMPOSER_DRAFT, handleSessionsSetComposerDraft);
   bindReq(
@@ -389,19 +385,6 @@ export function registerHandlersFromRegistry(): void {
   bindReq(IPC_CHANNELS.AGENT_YAML_IMPORT, handleAgentYamlImport);
 
 
-  bindNoArg(IPC_CHANNELS.REGEX_LIST_GROUPS, handleRegexListGroups);
-  bindReq(IPC_CHANNELS.REGEX_GET_GROUP, handleRegexGetGroup);
-  bindReq(IPC_CHANNELS.REGEX_CREATE_GROUP, handleRegexCreateGroup);
-  bindReq(IPC_CHANNELS.REGEX_UPDATE_GROUP, handleRegexUpdateGroup);
-  bindReq(IPC_CHANNELS.REGEX_DELETE_GROUP, handleRegexDeleteGroup);
-  bindReq(IPC_CHANNELS.REGEX_LIST_RULES, handleRegexListRules);
-  bindReq(IPC_CHANNELS.REGEX_GET_RULE, handleRegexGetRule);
-  bindReq(IPC_CHANNELS.REGEX_CREATE_RULE, handleRegexCreateRule);
-  bindReq(IPC_CHANNELS.REGEX_UPDATE_RULE, handleRegexUpdateRule);
-  bindReq(IPC_CHANNELS.REGEX_DELETE_RULE, handleRegexDeleteRule);
-  bindNoArg(IPC_CHANNELS.REGEX_LIST_PICKER, handleRegexListPicker);
-  bindReq(IPC_CHANNELS.REGEX_SET_CURRENT, handleRegexSetCurrent);
-
   bindNoArg(IPC_CHANNELS.SMART_SORT_RULE_LIST, handleSmartSortRuleList);
   bindReq(IPC_CHANNELS.SMART_SORT_RULE_CREATE, handleSmartSortRuleCreate);
   bindReq(IPC_CHANNELS.SMART_SORT_RULE_UPDATE, handleSmartSortRuleUpdate);
@@ -432,6 +415,7 @@ export function registerHandlersFromRegistry(): void {
   bindReq(IPC_CHANNELS.SKILLS_TOGGLE, handleSkillsToggle);
   bindReq(IPC_CHANNELS.SKILLS_DELETE, handleSkillsDelete);
   bindReq(IPC_CHANNELS.SKILLS_ASSERT_CREATE_NAME, handleSkillsAssertCreateName);
+  bindReq(IPC_CHANNELS.SKILLS_UPDATE_INFO, handleSkillsUpdateInfo);
 
   bindNoArg(
     IPC_CHANNELS.COMPACTION_CONDITIONS_GET,
@@ -458,6 +442,18 @@ export function registerHandlersFromRegistry(): void {
   );
   bindNoArg(IPC_CHANNELS.CLOUD_SYNC_PULL, handleCloudSyncPull);
   bindReq(IPC_CHANNELS.CLOUD_SYNC_PUSH, handleCloudSyncPush);
+
+  bindNoArg(IPC_CHANNELS.SEARCH_GET_CONFIG, handleSearchGetConfig);
+  bindReq(IPC_CHANNELS.SEARCH_SAVE_ENGINE_KEY, handleSearchSaveEngineKey);
+  bindReq(IPC_CHANNELS.SEARCH_CLEAR_ENGINE_KEY, handleSearchClearEngineKey);
+  bindReq(
+    IPC_CHANNELS.SEARCH_SET_SEARXNG_BASE_URL,
+    handleSearchSetSearxngBaseUrl,
+  );
+  bindReq(
+    IPC_CHANNELS.SEARCH_SET_ENGINE_ORDER,
+    handleSearchSetEngineOrder,
+  );
 
   bindEventReq(IPC_CHANNELS.SHELL_MENU_POPUP, handleShellMenuPopup);
   bindEventReq(

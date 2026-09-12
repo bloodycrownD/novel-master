@@ -13,8 +13,6 @@ import {
   ipcPreferencesGetThinkingContext,
   ipcPreferencesSetLlmStream,
   ipcPreferencesSetThinkingContext,
-  ipcRegexListPicker,
-  ipcRegexSetCurrent,
 } from "@/ipc/client";
 
 import { toastSettingsError, toastSettingsSuccess } from "@/utils/settings-feedback";
@@ -37,7 +35,6 @@ export function WorkspaceSettingsView() {
   const { notifyAgentConfigChanged } = useShellNav();
   const [modelLabel, setModelLabel] = useState("—");
   const [agentLabel, setAgentLabel] = useState("—");
-  const [regexLabel, setRegexLabel] = useState("不启用");
   const [llmStream, setLlmStream] = useState(true);
   const [thinkingContext, setThinkingContext] = useState(true);
   const [chatRichText, setChatRichText] = useState(true);
@@ -45,20 +42,17 @@ export function WorkspaceSettingsView() {
   const [compactionTokenRatio, setCompactionTokenRatio] = useState("0.8");
   // hideStartDepth 默认值 6，对齐 core 的 DEFAULT_HIDE_START_DEPTH
   const [compactionHideStartDepth, setCompactionHideStartDepth] = useState("6");
-  const [picker, setPicker] = useState<"model" | "agent" | "regex" | null>(null);
+  const [picker, setPicker] = useState<"model" | "agent" | null>(null);
   const [modelRows, setModelRows] = useState<Array<{ id: string; label: string }>>([]);
   const [agentRows, setAgentRows] = useState<Array<{ id: string; label: string }>>([]);
-  const [regexRows, setRegexRows] = useState<Array<{ id: string; label: string }>>([]);
   const [currentModelId, setCurrentModelId] = useState<string | undefined>();
   const [currentAgentId, setCurrentAgentId] = useState<string | undefined>();
-  const [currentRegexId, setCurrentRegexId] = useState<string | undefined>();
 
   const refresh = useCallback(async () => {
-    const [agentRes, modelRes, regexRes, streamRes, richRes, compactionRes, thinkingRes] =
+    const [agentRes, modelRes, streamRes, richRes, compactionRes, thinkingRes] =
       await Promise.all([
         ipcAgentResolveCurrent(),
         ipcModelListPicker(),
-        ipcRegexListPicker(),
         ipcPreferencesGetLlmStream(),
         ipcAppUiGet(KEY_CHAT_RICH_TEXT),
         ipcCompactionConditionsGet(),
@@ -80,20 +74,6 @@ export function WorkspaceSettingsView() {
         (r) => r.savedModelId === modelRes.data.currentId,
       );
       setModelLabel(current?.label ?? modelRes.data.currentId ?? "—");
-    }
-    if (regexRes.ok) {
-      setRegexRows(
-        regexRes.data.rows.map((r) => ({ id: r.groupId, label: r.label })),
-      );
-      setCurrentRegexId(regexRes.data.currentId);
-      if (!regexRes.data.currentId) {
-        setRegexLabel("不启用");
-      } else {
-        const row = regexRes.data.rows.find(
-          (r) => r.groupId === regexRes.data.currentId,
-        );
-        setRegexLabel(row?.label ?? "不启用");
-      }
     }
     if (streamRes.ok) {
       setLlmStream(streamRes.data);
@@ -125,24 +105,18 @@ export function WorkspaceSettingsView() {
     refresh().catch(() => undefined);
   }, [refresh]);
 
-  const openPicker = async (kind: "model" | "agent" | "regex") => {
+  const openPicker = async (kind: "model" | "agent") => {
     if (kind === "model") {
       const res = await ipcModelListPicker();
       if (res.ok) {
         setModelRows(res.data.rows.map((r) => ({ id: r.savedModelId, label: r.label })));
         setCurrentModelId(res.data.currentId);
       }
-    } else if (kind === "agent") {
+    } else {
       const res = await ipcAgentListPicker();
       if (res.ok) {
         setAgentRows(res.data.rows.map((r) => ({ id: r.agentId, label: r.label })));
         setCurrentAgentId(res.data.currentId);
-      }
-    } else {
-      const res = await ipcRegexListPicker();
-      if (res.ok) {
-        setRegexRows(res.data.rows.map((r) => ({ id: r.groupId, label: r.label })));
-        setCurrentRegexId(res.data.currentId);
       }
     }
     setPicker(kind);
@@ -207,11 +181,6 @@ export function WorkspaceSettingsView() {
             label="当前智能体"
             value={agentLabel}
             onClick={() => void openPicker("agent")}
-          />
-          <SettingsRow
-            label="当前正则组"
-            value={regexLabel}
-            onClick={() => void openPicker("regex")}
           />
         </SettingsRows>
       </SettingsSection>
@@ -313,19 +282,6 @@ export function WorkspaceSettingsView() {
           await ipcAgentSetCurrent({ agentId: id });
           await refresh();
           notifyAgentConfigChanged();
-        }}
-      />
-      <PickerModal
-        open={picker === "regex"}
-        title="选择正则组"
-        rows={regexRows}
-        currentId={currentRegexId}
-        allowNone
-        onClose={() => setPicker(null)}
-        onSelect={async (id) => {
-          setPicker(null);
-          await ipcRegexSetCurrent({ groupId: id });
-          await refresh();
         }}
       />
     </SettingsPanel>

@@ -131,7 +131,6 @@ export {
   KEY_CURRENT_SESSION_ID,
   KEY_CURRENT_PROVIDER_ID,
   KEY_CURRENT_MODEL_ID,
-  KEY_CURRENT_REGEX_GROUP_ID,
   KEY_CURRENT_AGENT_ID,
 } from "./service/persistent-state/impl/workspace-state-keys.js";
 /**
@@ -181,6 +180,42 @@ export type {
   VfsToolContext,
   ToolResourceQuota,
 } from "./domain/tool/builtin/builtin-tool-context.js";
+/**
+ * `search` 工具与搜索引擎配置（SKSP ref + KKV `nm-search` 模块）。
+ *
+ * desktop / mobile runtime 用 `createSearchConfigStore` 工厂包
+ * `kkv + secretStore` 装配到 `AgentTurnRuntimePort.searchConfig`。
+ *
+ * `ENGINE_IDS` / `KEY_ENGINE_IDS` 是引擎清单单一真源（ui/C-1）：双端
+ * 配置页的清单/顺序一律从这两个常量派生，不再各自手工副本。
+ */
+export {
+  ENGINE_IDS,
+  KEY_ENGINE_IDS,
+} from "./domain/tool/builtin/search/types.js";
+export type {
+  EngineId,
+  KeyEngineId,
+  SearchResponse,
+  SearchResult,
+  SearchRecency,
+  SearchToolOptions,
+  SearchOversizeOutput,
+  ResolvedEngineConfig,
+} from "./domain/tool/builtin/search/types.js";
+export type {
+  SearchConfigPublic,
+  SearchConfigStore,
+  SearchConfigDeps,
+  SearchEngineStatus,
+} from "./domain/tool/builtin/search/search-config.js";
+export {
+  SEARCH_KKV_MODULE,
+  searchApiKeyRef,
+  createSearchConfigStore,
+  readSearchConfig,
+  resolveEngineChain,
+} from "./domain/tool/builtin/search/search-config.js";
 
 /**
  * 基础序列化能力：供跨端配置读写共用。

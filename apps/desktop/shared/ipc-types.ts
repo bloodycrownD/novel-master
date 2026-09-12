@@ -80,6 +80,7 @@ export const IPC_CHANNELS = {
   WORKPLACE_CAPTURE_SESSION_BLOCK: 'nm:workplace/captureSessionBlock',
 
   SESSIONS_PULL_TEMPLATE: 'nm:sessions/pullTemplate',
+  SESSIONS_PUSH_TEMPLATE: 'nm:sessions/pushTemplate',
 
   MESSAGES_LIST: 'nm:messages/list',
   MESSAGES_APPEND: 'nm:messages/append',
@@ -142,19 +143,6 @@ export const IPC_CHANNELS = {
   AGENT_YAML_IMPORT: 'nm:agentYaml/import',
 
 
-  REGEX_LIST_GROUPS: 'nm:regex/listGroups',
-  REGEX_GET_GROUP: 'nm:regex/getGroup',
-  REGEX_CREATE_GROUP: 'nm:regex/createGroup',
-  REGEX_UPDATE_GROUP: 'nm:regex/updateGroup',
-  REGEX_DELETE_GROUP: 'nm:regex/deleteGroup',
-  REGEX_LIST_RULES: 'nm:regex/listRules',
-  REGEX_GET_RULE: 'nm:regex/getRule',
-  REGEX_CREATE_RULE: 'nm:regex/createRule',
-  REGEX_UPDATE_RULE: 'nm:regex/updateRule',
-  REGEX_DELETE_RULE: 'nm:regex/deleteRule',
-  REGEX_LIST_PICKER: 'nm:regex/listPicker',
-  REGEX_SET_CURRENT: 'nm:regex/setCurrent',
-
   SMART_SORT_RULE_LIST: 'nm:sort-rule/list',
   SMART_SORT_RULE_CREATE: 'nm:sort-rule/create',
   SMART_SORT_RULE_UPDATE: 'nm:sort-rule/update',
@@ -180,6 +168,7 @@ export const IPC_CHANNELS = {
   SKILLS_TOGGLE: 'nm:skills/toggle',
   SKILLS_DELETE: 'nm:skills/delete',
   SKILLS_ASSERT_CREATE_NAME: 'nm:skills/assert-create-name',
+  SKILLS_UPDATE_INFO: 'nm:skills/update-info',
 
   COMPACTION_CONDITIONS_GET: 'nm:compactionConditions/get',
   COMPACTION_CONDITIONS_SET: 'nm:compactionConditions/set',
@@ -194,6 +183,12 @@ export const IPC_CHANNELS = {
   CLOUD_SYNC_GET_LOCAL_STATUS: 'nm:cloud-sync/getLocalStatus',
   CLOUD_SYNC_PULL: 'nm:cloud-sync/pull',
   CLOUD_SYNC_PUSH: 'nm:cloud-sync/push',
+
+  SEARCH_GET_CONFIG: 'nm:search/getConfig',
+  SEARCH_SAVE_ENGINE_KEY: 'nm:search/saveEngineKey',
+  SEARCH_CLEAR_ENGINE_KEY: 'nm:search/clearEngineKey',
+  SEARCH_SET_SEARXNG_BASE_URL: 'nm:search/setSearxngBaseUrl',
+  SEARCH_SET_ENGINE_ORDER: 'nm:search/setEngineOrder',
 
   SHELL_MENU_POPUP: 'nm:shell/menuPopup',
   SHELL_SET_TITLEBAR_THEME: 'nm:shell/setTitleBarTheme',
@@ -471,6 +466,8 @@ export type VfsZipRequest = VfsScopeRequest & {
   readonly confirmed?: boolean;
   /** 子树目标目录；缺省 ≡ `/`（整域） */
   readonly directoryPath?: string;
+  /** 保存框默认名覆盖（如技能导出 `{技能名}.zip`）；仅导出方向消费，导入忽略。 */
+  readonly fileName?: string;
 };
 
 export type VfsZipExportResult = 'saved' | 'cancelled';
@@ -637,6 +634,11 @@ export type SessionFsRollbackRequest = {
 };
 
 export type SessionPullTemplateRequest = {
+  readonly sessionId: string;
+};
+
+/** 推送：用当前聊天工作区整树覆盖项目工作区（模板母本）。 */
+export type SessionPushTemplateRequest = {
   readonly sessionId: string;
 };
 
@@ -1094,6 +1096,8 @@ export type ProviderDetailDto = {
   readonly baseUrl: string;
   readonly isBuiltin: boolean;
   readonly headers: Record<string, string>;
+  /** 自定义参数：原样合并进请求体顶层，值任意 JSON。 */
+  readonly bodyParams: Record<string, unknown>;
   readonly apiKeyStatus: 'set' | 'not set';
 };
 
@@ -1104,6 +1108,7 @@ export type ProviderCreateRequest = {
   readonly displayName: string;
   readonly apiKey: string;
   readonly headers?: Record<string, string>;
+  readonly bodyParams?: Record<string, unknown>;
 };
 
 export type ProviderEditRequest = {
@@ -1114,6 +1119,8 @@ export type ProviderEditRequest = {
   readonly displayName?: string;
   readonly apiKey?: string;
   readonly headers?: Record<string, string>;
+  /** 显式空对象 {} 可清空（不传=保留原值）。 */
+  readonly bodyParams?: Record<string, unknown>;
 };
 
 export type ProviderIdRequest = {
@@ -1232,66 +1239,6 @@ export type AgentYamlExportRequest = {
 
 export type AgentYamlImportRequest = {
   readonly agentId: string;
-};
-
-export type RegexGroupDto = {
-  readonly groupId: string;
-  readonly displayName: string | null;
-  readonly ruleCount: number;
-};
-
-export type RegexGroupIdRequest = {
-  readonly groupId: string;
-};
-
-export type RegexCreateGroupRequest = {
-  readonly groupId: string;
-  readonly displayName?: string;
-};
-
-export type RegexUpdateGroupRequest = {
-  readonly groupId: string;
-  readonly displayName?: string | null;
-};
-
-export type RegexRuleDto = {
-  readonly ruleId: string;
-  readonly name: string;
-  readonly pattern: string;
-  readonly flags: string;
-  readonly enabled: boolean;
-  readonly llmReplace: string | null;
-  readonly displayReplace: string | null;
-  readonly startDepth: number | null;
-  readonly endDepth: number | null;
-  readonly scopeUser: boolean;
-  readonly scopeAssistant: boolean;
-};
-
-export type RegexRuleIdRequest = RegexGroupIdRequest & {
-  readonly ruleId: string;
-};
-
-export type RegexCreateRuleRequest = RegexGroupIdRequest & {
-  readonly rule: Omit<RegexRuleDto, 'ruleId'> & { readonly ruleId?: string };
-};
-
-export type RegexUpdateRuleRequest = RegexRuleIdRequest & {
-  readonly patch: Partial<Omit<RegexRuleDto, 'ruleId'>>;
-};
-
-export type RegexPickerRowDto = {
-  readonly groupId: string;
-  readonly label: string;
-};
-
-export type RegexListPickerResponse = {
-  readonly rows: readonly RegexPickerRowDto[];
-  readonly currentId: string | undefined;
-};
-
-export type RegexSetCurrentRequest = {
-  readonly groupId: string | null;
 };
 
 /**
@@ -1513,6 +1460,17 @@ export type SkillsAssertCreateNameRequest = {
 
 export type SkillsDeleteRequest = SkillRefDto;
 
+/**
+ * 编辑技能信息（重命名 + 描述同一提交）：单事务完成目录迁移 / front matter
+ * 同步 / 负清单迁移；至少提交 newName / description 一项。
+ */
+export type SkillsUpdateInfoRequest = SkillRefDto & {
+  /** 新技能名；缺省或与现名相同 = 不改名。 */
+  readonly newName?: string;
+  /** 新描述；缺省表示不改描述。 */
+  readonly description?: string;
+};
+
 export type CompactionConditionsDto = {
   readonly schemaVersion: number;
   readonly enabled: boolean;
@@ -1582,6 +1540,36 @@ export type CloudSyncPushRequest = {
 
 export type CloudSyncPushResult = {
   readonly rev: number;
+};
+
+/** 单引擎配置状态（不含 key 明文，只有 configured 布尔）。 */
+export type SearchEngineStatusDto = {
+  readonly configured: boolean;
+};
+
+/** 搜索引擎配置（DTO 不含 key 明文；engines 键为 EngineId 字符串；engineOrder 即串行降级链优先级）。 */
+export type SearchConfigDto = {
+  readonly engineOrder: readonly string[];
+  readonly searxngBaseUrl: string;
+  readonly engines: Readonly<Record<string, SearchEngineStatusDto>>;
+};
+
+export type SearchSaveEngineKeyRequest = {
+  readonly engineId: string;
+  readonly apiKey: string;
+};
+
+export type SearchClearEngineKeyRequest = {
+  readonly engineId: string;
+};
+
+export type SearchSetSearxngBaseUrlRequest = {
+  readonly baseUrl: string;
+};
+
+/** 引擎优先级顺序（须为全部引擎（ENGINE_IDS）的合法排列；core 内校验非法抛错）。 */
+export type SearchSetEngineOrderRequest = {
+  readonly engineOrder: readonly string[];
 };
 
 export type ShellMenuId = 'file' | 'edit' | 'view' | 'window' | 'help';

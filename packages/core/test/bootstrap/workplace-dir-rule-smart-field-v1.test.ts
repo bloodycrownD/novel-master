@@ -24,6 +24,7 @@ import {
   workplaceDirRuleSmartFieldV1Up,
 } from "../../src/bootstrap/schema-migrations/workplace-dir-rule-smart-field-v1.js";
 import { SCHEMA_MIGRATIONS } from "../../src/bootstrap/schema-migrations/index.js";
+import { SCHEMA_BOOT_VERSION } from "../../src/bootstrap/novel-master-bootstrap.js";
 
 
 /** v10 存量用户的 workplace_dir_rule 形态（table-constraints-v1b 约束版，无 'smart'）。 */
@@ -157,9 +158,11 @@ describe("workplace-dir-rule-smart-field-v1 migration（T-MIG1/T-MIG2）", () =>
       const userVersion = await conn.query<{ user_version: number }>(
         `PRAGMA user_version`
       );
-      assert.equal(Number(userVersion[0]?.user_version ?? 0), 11);
+      // 合并 origin/main 后 BOOT_VERSION 顺延为 13（main 已发布 v11/v12），
+      // 断言引用常量而非硬编码，避免后续 bump 再漂移。
+      assert.equal(Number(userVersion[0]?.user_version ?? 0), SCHEMA_BOOT_VERSION);
 
-      // 二跑：user_version=11 走快路径，migration applied 跳过，不炸。
+      // 二跑：user_version 达到 BOOT_VERSION 走快路径，migration applied 跳过，不炸。
       await bootstrapNovelMaster(conn);
       assert.deepEqual(await readDirRules(conn), snapshotAfterFirst);
 
@@ -193,7 +196,7 @@ describe("workplace-dir-rule-smart-field-v1 migration（T-MIG1/T-MIG2）", () =>
   it("T-MIG2 快路径：applied 记录被抹掉后快路径仍执行 pending migration（早退安全）", async () => {
     const conn = await openMemoryConn();
     try {
-      // 完整 bootstrap 一次：v11 + migration applied。
+      // 完整 bootstrap 一次：升至 BOOT_VERSION + migration applied。
       await bootstrapNovelMaster(conn);
       await conn.execute(
         `INSERT INTO workplace_dir_rule (
@@ -202,7 +205,7 @@ describe("workplace-dir-rule-smart-field-v1 migration（T-MIG1/T-MIG2）", () =>
          ) VALUES ('project:book', '/chapters', 1, 'smart', 'asc', 0, 1000, 'header')`
       );
 
-      // 模拟异常态：抹掉 applied 记录（user_version 仍 11 → 快路径）。
+      // 模拟异常态：抹掉 applied 记录（user_version 仍达 BOOT_VERSION → 快路径）。
       await conn.execute(
         `DELETE FROM schema_migrations WHERE id = '${WORKPLACE_DIR_RULE_SMART_FIELD_V1_ID}'`
       );

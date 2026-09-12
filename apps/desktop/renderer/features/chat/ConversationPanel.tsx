@@ -116,6 +116,7 @@ export function ConversationPanel({
     openSession,
     projectName,
     openChatWorkspacePreview,
+    openChatLink,
     reloadFooter,
     viewPromptRequest,
   } = useShellNav();
@@ -912,6 +913,7 @@ export function ConversationPanel({
             chatRichText={chatRichText}
             onOpenMessageMenu={readOnly ? undefined : openMessageMenu}
             onOpenToolFile={openChatWorkspacePreview}
+            onLinkClick={openChatLink}
             onOpenSubagentSession={onOpenSubagentSession}
           />
         </div>

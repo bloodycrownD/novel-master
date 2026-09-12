@@ -210,6 +210,7 @@ export function ChatConversationPanel({
           onLoadOlder={onLoadOlderMessages}
           onReady={ctx.onTranscriptWebviewReady}
           onOpenToolFile={scope.openSessionFilePreview}
+          onLinkClick={scope.openChatLink}
           onOpenSubagentSession={scope.openSubagentSession}
           onOpenSkillDetail={scope.openSkillDetail}
           pendingSubagentSessions={pendingSubagentSessions}
@@ -322,6 +323,10 @@ export function ChatConversationPanel({
                 pullFromParent={{
                   scope: {kind: 'session', sessionId},
                   onPulled: bumpWorktreeUiToken,
+                }}
+                pushToParent={{
+                  scope: {kind: 'session', sessionId},
+                  onPushed: bumpWorktreeUiToken,
                 }}
                 onOpenFile={path => onOpenFileEditor(path, 'session')}
                 onDirectoryChange={emitWorkspaceBackState}

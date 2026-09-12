@@ -129,16 +129,16 @@ function renderPicker(props: {
 }
 
 describe('ToolPolicyPicker (mobile) — T-P1/T-P2/T-P3', () => {
-  it('T-P1: trigger 显示「已选工具（N/10）」；打开 sheet 勾选后确定 → onChange 收到新数组', () => {
+  it('T-P1: trigger 显示「已选工具（N/11）」；打开 sheet 勾选后确定 → onChange 收到新数组', () => {
     const onChange = jest.fn();
     const renderer = renderPicker({selected: ['read'], onChange});
 
     const json = JSON.stringify(renderer.toJSON());
-    expect(json).toContain('已选工具（1/10）');
+    expect(json).toContain('已选工具（1/11）');
     expect(json).toContain('▼');
 
     // trigger 是 trigger 样式（含 minHeight），靠文案定位
-    const trigger = findPressableByChildText(renderer.root, '已选工具（1/10）');
+    const trigger = findPressableByChildText(renderer.root, '已选工具（1/11）');
     expect(trigger).toBeTruthy();
     act(() => {
       trigger.props.onPress();
@@ -174,7 +174,7 @@ describe('ToolPolicyPicker (mobile) — T-P1/T-P2/T-P3', () => {
     const onChange = jest.fn();
     const renderer = renderPicker({selected: ['read'], onChange});
 
-    const trigger = findPressableByChildText(renderer.root, '已选工具（1/10）');
+    const trigger = findPressableByChildText(renderer.root, '已选工具（1/11）');
     act(() => {
       trigger.props.onPress();
     });
@@ -196,14 +196,14 @@ describe('ToolPolicyPicker (mobile) — T-P1/T-P2/T-P3', () => {
     expect(onChange).not.toHaveBeenCalled();
 
     // 关闭后 trigger 文案仍是原值（草稿被丢弃）
-    expect(JSON.stringify(renderer.toJSON())).toContain('已选工具（1/10）');
+    expect(JSON.stringify(renderer.toJSON())).toContain('已选工具（1/11）');
   });
 
   it('T-P3: 选中行有 ✓；渲染树不含 ☑ / ☐ 字符', () => {
     const onChange = jest.fn();
     const renderer = renderPicker({selected: ['read'], onChange});
 
-    const trigger = findPressableByChildText(renderer.root, '已选工具（1/10）');
+    const trigger = findPressableByChildText(renderer.root, '已选工具（1/11）');
     act(() => {
       trigger.props.onPress();
     });
@@ -229,7 +229,7 @@ describe('ToolPolicyPicker (mobile) — T-P1/T-P2/T-P3', () => {
         </FormOverlayProvider>,
       );
     });
-    expect(JSON.stringify(r1.toJSON())).toContain('未选择工具（0/10）');
+    expect(JSON.stringify(r1.toJSON())).toContain('未选择工具（0/11）');
 
     const all = [
       'task',
@@ -242,6 +242,7 @@ describe('ToolPolicyPicker (mobile) — T-P1/T-P2/T-P3', () => {
       'skill',
       'agent',
       'curl',
+      'search',
     ];
     let r2: any;
     act(() => {
@@ -255,7 +256,7 @@ describe('ToolPolicyPicker (mobile) — T-P1/T-P2/T-P3', () => {
         </FormOverlayProvider>,
       );
     });
-    expect(JSON.stringify(r2.toJSON())).toContain('全部工具（10/10）');
+    expect(JSON.stringify(r2.toJSON())).toContain('全部工具（11/11）');
   });
 });
 
@@ -266,7 +267,7 @@ describe('ToolPolicyPicker (mobile) — C-1 键盘避让接线（行为断言）
     // 打开 sheet：ModalShell 由 overlay.show 挂载，靠 keyboardAvoid prop 定位
     const trigger = findPressableByChildText(
       renderer.root,
-      '未选择工具（0/10）',
+      '未选择工具（0/11）',
     );
     expect(trigger).toBeTruthy();
     act(() => {

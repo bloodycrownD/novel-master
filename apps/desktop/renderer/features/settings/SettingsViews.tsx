@@ -46,15 +46,6 @@ import {
   ipcProvidersEdit,
   ipcProvidersGet,
   ipcProvidersList,
-  ipcRegexCreateGroup,
-  ipcRegexCreateRule,
-  ipcRegexDeleteGroup,
-  ipcRegexDeleteRule,
-  ipcRegexGetRule,
-  ipcRegexListGroups,
-  ipcRegexListRules,
-  ipcRegexUpdateGroup,
-  ipcRegexUpdateRule,
   ipcSmartSortRuleCreate,
   ipcSmartSortRuleDelete,
   ipcSmartSortRuleDeleteBatch,
@@ -81,18 +72,7 @@ import {
   SettingsListSection,
   ApiKeyStatusTag,
   SettingsPanel,
-  SettingsSection,
 } from "./settings-ui";
-import { deriveRegexGroupId } from "@shared/logic/format";
-import {
-  parseOptionalDepthInput,
-  previewRegexReplacementOnly,
-  regexRuleForIpc,
-  validateRegexRuleDraft,
-  type RegexChannel,
-  type RegexRuleDraftFields,
-} from "@/services/regex-test.service";
-import { REGEX_UI_LABELS } from "@shared/logic/config-forms-shared";
 import {
   AGENT_LIST_LABELS,
   storedConfigInvalidReason,
@@ -1038,6 +1018,7 @@ export function ProviderFormView({
   const [displayName, setDisplayName] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [headersJson, setHeadersJson] = useState("");
+  const [bodyParamsJson, setBodyParamsJson] = useState("");
   const [isBuiltin, setIsBuiltin] = useState(false);
   const [apiKeyStatus, setApiKeyStatus] = useState("not set");
 
@@ -1055,11 +1036,26 @@ export function ProviderFormView({
           ? JSON.stringify(res.data.headers, null, 2)
           : "",
       );
+      setBodyParamsJson(
+        Object.keys(res.data.bodyParams ?? {}).length
+          ? JSON.stringify(res.data.bodyParams, null, 2)
+          : "",
+      );
     });
   }, [mode, providerId]);
 
   const submit = async () => {
     try {
+      // 自定义参数：必须是 JSON 对象（值任意 JSON）；解析失败拖 toast 阻止保存
+      const parseBodyParams = (raw: string): Record<string, unknown> | undefined => {
+        const trimmed = raw.trim();
+        if (!trimmed) return undefined;
+        const parsed = JSON.parse(trimmed) as unknown;
+        if (parsed == null || typeof parsed !== "object" || Array.isArray(parsed)) {
+          throw new Error("自定义参数必须是 JSON 对象");
+        }
+        return parsed as Record<string, unknown>;
+      };
       if (mode === "create") {
         const name = displayName.trim();
         if (!name) {
@@ -1072,6 +1068,7 @@ export function ProviderFormView({
           displayName: name,
           apiKey: apiKey.trim(),
           headers: headersJson.trim() ? JSON.parse(headersJson) : undefined,
+          bodyParams: parseBodyParams(bodyParamsJson),
         });
         if (!res.ok) {
           toastSettingsError(res.error.message);
@@ -1090,6 +1087,8 @@ export function ProviderFormView({
         patch.displayName = name;
         if (apiKey.trim()) patch.apiKey = apiKey.trim();
         if (headersJson.trim()) patch.headers = JSON.parse(headersJson);
+        // 空文本保存 = 显式清空自定义参数（区别于 headers 的「空文本不修改」）
+        patch.bodyParams = parseBodyParams(bodyParamsJson) ?? {};
         if (!isBuiltin) patch.protocol = protocol;
         const res = await ipcProvidersEdit({ providerId, ...patch });
         if (res.ok) {
@@ -1135,10 +1134,19 @@ export function ProviderFormView({
           </select>
         </SettingsField>
         <SettingsField label="Base URL">
-          <input value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} />
+          {/* D-4：显式补 type="text"，供 e2e input[type="text"] 选择器稳定命中 */}
+          <input
+            type="text"
+            value={baseUrl}
+            onChange={(e) => setBaseUrl(e.target.value)}
+          />
         </SettingsField>
         <SettingsField label="服务商名称">
-          <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
+          <input
+            type="text"
+            value={displayName}
+            onChange={(e) => setDisplayName(e.target.value)}
+          />
         </SettingsField>
         <SettingsField label={mode === "edit" ? "新 API Key（留空则不修改）" : "API Key"}>
           <input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} />
@@ -1151,6 +1159,17 @@ export function ProviderFormView({
             onKeyDown={(e) => {
               handleMultilineSubmitKeyDown(e, () => void submit());
             }}
+          />
+        </SettingsField>
+        <SettingsField label="自定义参数（JSON 对象，原样合并进请求体顶层，可覆盖标准字段）">
+          <textarea
+            rows={4}
+            value={bodyParamsJson}
+            onChange={(e) => setBodyParamsJson(e.target.value)}
+            onKeyDown={(e) => {
+              handleMultilineSubmitKeyDown(e, () => void submit());
+            }}
+            placeholder='{"tool_stream": true}，清空并保存即移除全部自定义参数'
           />
         </SettingsField>
       </SettingsFormSection>
@@ -1440,471 +1459,6 @@ export function ProviderDetailView({ nav }: { nav: Nav }) {
   );
 }
 
-export function RegexGroupsView({ nav }: { nav: Nav }) {
-  const [rows, setRows] = useState<Array<{ groupId: string; displayName: string | null; ruleCount: number }>>([]);
-  const [createPromptOpen, setCreatePromptOpen] = useState(false);
-  const [groupMenu, setGroupMenu] = useState<{
-    groupId: string;
-    x: number;
-    y: number;
-  } | null>(null);
-  const [renamePrompt, setRenamePrompt] = useState<{
-    groupId: string;
-    initialName: string;
-  } | null>(null);
-  const [deleteConfirm, setDeleteConfirm] = useState<{
-    groupId: string;
-    label: string;
-  } | null>(null);
-
-  const reload = useCallback(async () => {
-    const res = await ipcRegexListGroups();
-    if (!res.ok) {
-      toastSettingsError(res.error.message);
-      return;
-    }
-    setRows([...res.data]);
-  }, []);
-
-  useEffect(() => {
-    void reload();
-  }, [reload]);
-
-  const createGroup = async (displayName: string) => {
-    const taken = new Set(rows.map((r) => r.groupId));
-    const groupId = deriveRegexGroupId(displayName, taken);
-    const res = await ipcRegexCreateGroup({ groupId, displayName });
-    if (!res.ok) {
-      toastSettingsError(res.error.message);
-      throw new Error(res.error.message);
-    }
-    toastSettingsSuccess("已添加正则组");
-    await reload();
-  };
-
-  const handleGroupMenuSelect = (action: string) => {
-    const menu = groupMenu;
-    setGroupMenu(null);
-    if (!menu) {
-      return;
-    }
-    const row = rows.find((r) => r.groupId === menu.groupId);
-    if (!row) {
-      return;
-    }
-    if (action === "rename") {
-      setRenamePrompt({
-        groupId: row.groupId,
-        initialName: row.displayName?.trim() || row.groupId,
-      });
-      return;
-    }
-    if (action === "delete") {
-      setDeleteConfirm({
-        groupId: row.groupId,
-        label: row.displayName?.trim() || row.groupId,
-      });
-    }
-  };
-
-  const handleGroupRename = async (name: string) => {
-    const prompt = renamePrompt;
-    setRenamePrompt(null);
-    if (!prompt) {
-      return;
-    }
-    const res = await ipcRegexUpdateGroup({
-      groupId: prompt.groupId,
-      displayName: name.trim() || null,
-    });
-    if (!res.ok) {
-      showToast(res.error.message);
-      return;
-    }
-    showToast("已重命名");
-    await reload();
-  };
-
-  return (
-    <SettingsPanel>
-      <SettingsListSection
-        header={
-          <button
-            type="button"
-            className="list-manage-header__btn list-manage-header__btn--primary"
-            onClick={() => setCreatePromptOpen(true)}
-          >
-            新建组
-          </button>
-        }
-      >
-        {rows.length === 0 ? (
-          <SettingsListEmpty>暂无正则组，点击上方按钮创建。</SettingsListEmpty>
-        ) : null}
-        {rows.map((g) => (
-          <SettingsListItem
-            key={g.groupId}
-            title={g.displayName?.trim() || g.groupId}
-            meta={`${g.ruleCount} 条规则 · ${g.groupId}`}
-            onClick={() => {
-              nav.navState.editingRegexGroupId = g.groupId;
-              nav.push("regexRules");
-            }}
-            onMenu={(e) => {
-              const rect = e.currentTarget.getBoundingClientRect();
-              setGroupMenu({
-                groupId: g.groupId,
-                x: Math.max(8, rect.left),
-                y: Math.max(8, rect.bottom + 4),
-              });
-            }}
-          />
-        ))}
-      </SettingsListSection>
-      <ContextMenu
-        open={groupMenu != null}
-        x={groupMenu?.x ?? 0}
-        y={groupMenu?.y ?? 0}
-        items={[
-          { label: "重命名", action: "rename" },
-          { label: "删除", action: "delete", danger: true },
-        ]}
-        onSelect={(action) => handleGroupMenuSelect(action)}
-        onClose={() => setGroupMenu(null)}
-      />
-      <TextPromptModal
-        open={renamePrompt != null}
-        title="重命名正则组"
-        label="组名称"
-        initialValue={renamePrompt?.initialName ?? ""}
-        onClose={() => setRenamePrompt(null)}
-        onConfirm={handleGroupRename}
-      />
-      <TextPromptModal
-        open={createPromptOpen}
-        title="新建正则组"
-        label="组名称"
-        placeholder="如 对话清洗"
-        confirmLabel="创建"
-        onClose={() => setCreatePromptOpen(false)}
-        onConfirm={createGroup}
-      />
-      <ConfirmModal
-        open={deleteConfirm != null}
-        title="删除正则组"
-        message={`删除正则组「${deleteConfirm?.label ?? ""}」？`}
-        danger
-        onConfirm={() => {
-          const target = deleteConfirm;
-          setDeleteConfirm(null);
-          if (!target) {
-            return;
-          }
-          void (async () => {
-            const res = await ipcRegexDeleteGroup({ groupId: target.groupId });
-            if (!res.ok) {
-              toastSettingsError(res.error.message);
-              return;
-            }
-            toastSettingsSuccess("已删除正则组");
-            await reload();
-          })();
-        }}
-        onCancel={() => setDeleteConfirm(null)}
-      />
-    </SettingsPanel>
-  );
-}
-
-export function RegexRulesView({ nav }: { nav: Nav }) {
-  const groupId = nav.navState.editingRegexGroupId;
-  const [rules, setRules] = useState<Array<{ ruleId: string; name: string }>>([]);
-
-  const reload = useCallback(async () => {
-    if (!groupId) return;
-    const res = await ipcRegexListRules({ groupId });
-    if (!res.ok) {
-      toastSettingsError(res.error.message);
-      return;
-    }
-    setRules(res.data.map((r) => ({ ruleId: r.ruleId, name: r.name })));
-  }, [groupId]);
-
-  useEffect(() => {
-    void reload();
-  }, [reload]);
-
-  if (!groupId) return <p className="settings-hint">缺少 groupId</p>;
-
-  return (
-    <SettingsPanel>
-      <SettingsListSection
-        header={
-          <button
-            type="button"
-            className="list-manage-header__btn list-manage-header__btn--primary"
-            onClick={() => {
-              nav.navState.editingRegexRuleId = undefined;
-              nav.push("regexRuleEditor");
-            }}
-          >
-            新建规则
-          </button>
-        }
-      >
-        {rules.length === 0 ? (
-          <SettingsListEmpty>暂无规则，点击上方按钮创建。</SettingsListEmpty>
-        ) : null}
-        {rules.map((r) => (
-          <SettingsListItem
-            key={r.ruleId}
-            title={r.name}
-            onClick={() => {
-              nav.navState.editingRegexRuleId = r.ruleId;
-              nav.push("regexRuleEditor");
-            }}
-            onMenu={() => {
-              void (async () => {
-                const res = await ipcRegexDeleteRule({ groupId, ruleId: r.ruleId });
-                if (!res.ok) {
-                  toastSettingsError(res.error.message);
-                  return;
-                }
-                toastSettingsSuccess("已删除规则");
-                await reload();
-              })();
-            }}
-          />
-        ))}
-      </SettingsListSection>
-    </SettingsPanel>
-  );
-}
-
-const DEFAULT_REGEX_DRAFT: RegexRuleDraftFields = {
-  name: "",
-  pattern: "",
-  flags: "gim",
-  enabled: true,
-  llmReplace: null,
-  displayReplace: null,
-  startDepth: 0,
-  endDepth: null,
-  scopeUser: true,
-  scopeAssistant: true,
-};
-
-export function RegexRuleEditorView({ nav }: { nav: Nav }) {
-  const groupId = nav.navState.editingRegexGroupId;
-  const ruleId = nav.navState.editingRegexRuleId;
-  const [draft, setDraft] = useState<RegexRuleDraftFields>(DEFAULT_REGEX_DRAFT);
-  const [llmOn, setLlmOn] = useState(false);
-  const [displayOn, setDisplayOn] = useState(false);
-  const [testText, setTestText] = useState("mysecret@email.com");
-  const [testChannel, setTestChannel] = useState<RegexChannel>("display");
-  const [preview, setPreview] = useState("");
-  const [previewError, setPreviewError] = useState(false);
-
-  useEffect(() => {
-    if (!groupId || !ruleId) return;
-    ipcRegexGetRule({ groupId, ruleId }).then((res) => {
-      if (!res.ok) return;
-      const r = res.data;
-      setDraft({
-        name: r.name,
-        pattern: r.pattern,
-        flags: r.flags,
-        enabled: r.enabled,
-        llmReplace: r.llmReplace,
-        displayReplace: r.displayReplace,
-        startDepth: r.startDepth,
-        endDepth: r.endDepth,
-        scopeUser: r.scopeUser,
-        scopeAssistant: r.scopeAssistant,
-      });
-      setLlmOn(r.llmReplace != null && r.llmReplace !== "");
-      setDisplayOn(r.displayReplace != null && r.displayReplace !== "");
-    });
-  }, [groupId, ruleId]);
-
-  if (!groupId) return <p className="settings-hint">缺少 groupId</p>;
-
-  const fieldsForSave = (): RegexRuleDraftFields => ({
-    ...draft,
-    llmReplace: llmOn ? draft.llmReplace ?? "" : null,
-    displayReplace: displayOn ? draft.displayReplace ?? "" : null,
-  });
-
-  const updatePreview = useCallback(() => {
-    const result = previewRegexReplacementOnly(testText, fieldsForSave(), testChannel);
-    if (result.ok) {
-      setPreview(result.text);
-      setPreviewError(false);
-    } else {
-      setPreview(result.message);
-      setPreviewError(true);
-    }
-  }, [testText, testChannel, draft, llmOn, displayOn]);
-
-  useEffect(() => {
-    updatePreview();
-  }, [updatePreview]);
-
-  const save = async () => {
-    const fields = regexRuleForIpc(fieldsForSave());
-    const valid = validateRegexRuleDraft(fieldsForSave());
-    if (!valid.ok) {
-      toastSettingsError(valid.message);
-      return;
-    }
-    if (ruleId) {
-      const res = await ipcRegexUpdateRule({ groupId, ruleId, patch: fields });
-      if (res.ok) {
-        toastSettingsSuccess("已保存");
-      } else {
-        toastSettingsError(res.error.message);
-      }
-    } else {
-      const res = await ipcRegexCreateRule({ groupId, rule: fields });
-      if (res.ok) {
-        toastSettingsSuccess("已创建");
-        nav.navState.editingRegexRuleId = res.data.ruleId;
-        nav.pop();
-      } else {
-        toastSettingsError(res.error.message);
-      }
-    }
-  };
-
-  const ruleDesc = draft.name.trim() || (ruleId ? "未命名规则" : "新规则");
-
-  return (
-    <SettingsPanel>
-      <SettingsFormSection
-        title="正则规则"
-        desc={ruleDesc}
-        footer={
-          <>
-            <Button variant="secondary" onClick={updatePreview}>
-              测试预览
-            </Button>
-            <Button variant="primary" onClick={() => void save()}>
-              保存
-            </Button>
-          </>
-        }
-      >
-        <SettingsSection title="基本信息">
-          <SettingsField label="名称">
-            <input
-              value={draft.name}
-              placeholder="如 隐藏邮箱"
-              onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-            />
-          </SettingsField>
-          <SettingsField label="正则表达式">
-            <input
-              value={draft.pattern}
-              placeholder="如 [a-z]+@[a-z]+\\.[a-z]+"
-              onChange={(e) => setDraft({ ...draft, pattern: e.target.value })}
-            />
-          </SettingsField>
-          <SettingsField label="标志">
-            <input
-              value={draft.flags}
-              placeholder="gim"
-              onChange={(e) => setDraft({ ...draft, flags: e.target.value })}
-            />
-          </SettingsField>
-          <p className="settings-hint">常用 gim：全局、忽略大小写、多行。</p>
-          <SettingsSwitchRow label="启用规则" checked={draft.enabled} onChange={(v) => setDraft({ ...draft, enabled: v })} />
-        </SettingsSection>
-
-        <SettingsSection title="深度范围">
-          <p className="settings-hint">自最新消息起计数；0 表示最新一条，留空表示该侧无界。</p>
-          <div className="settings-field-grid">
-            <SettingsField label={REGEX_UI_LABELS.startDepth}>
-              <input
-                value={draft.startDepth ?? ""}
-                placeholder="0"
-                inputMode="numeric"
-                onChange={(e) => setDraft({ ...draft, startDepth: parseOptionalDepthInput(e.target.value) })}
-              />
-            </SettingsField>
-            <SettingsField label={REGEX_UI_LABELS.endDepth}>
-              <input
-                value={draft.endDepth ?? ""}
-                placeholder="留空表示无界"
-                inputMode="numeric"
-                onChange={(e) => setDraft({ ...draft, endDepth: parseOptionalDepthInput(e.target.value) })}
-              />
-            </SettingsField>
-          </div>
-        </SettingsSection>
-
-        <SettingsSection title="作用范围">
-          <p className="settings-hint">按消息角色生效，至少选择一项。</p>
-          <SettingsSwitchRow label="用户消息" checked={draft.scopeUser} onChange={(v) => setDraft({ ...draft, scopeUser: v })} />
-          <SettingsSwitchRow label="助手消息" checked={draft.scopeAssistant} onChange={(v) => setDraft({ ...draft, scopeAssistant: v })} />
-        </SettingsSection>
-
-        <SettingsSection title="提示词替换">
-          <SettingsSwitchRow label="改写送入模型的文本" checked={llmOn} onChange={setLlmOn} />
-          {llmOn ? (
-            <SettingsField label="替换为">
-              <input
-                value={draft.llmReplace ?? ""}
-                placeholder="如 [redacted]"
-                onChange={(e) => setDraft({ ...draft, llmReplace: e.target.value })}
-              />
-            </SettingsField>
-          ) : (
-            <p className="settings-hint">关闭时不改写 LLM 通道文本。</p>
-          )}
-        </SettingsSection>
-
-        <SettingsSection title="显示替换">
-          <SettingsSwitchRow label="改写界面展示文本" checked={displayOn} onChange={setDisplayOn} />
-          {displayOn ? (
-            <SettingsField label="替换为">
-              <input
-                value={draft.displayReplace ?? ""}
-                placeholder="如 ***"
-                onChange={(e) => setDraft({ ...draft, displayReplace: e.target.value })}
-              />
-            </SettingsField>
-          ) : (
-            <p className="settings-hint">关闭时不改写界面展示文本。</p>
-          )}
-        </SettingsSection>
-
-        <SettingsSection title="测试预览">
-          <p className="settings-hint">对样例文本应用所选通道的替换规则；保存前可本地试跑。</p>
-          <SettingsField label="样例文本">
-            <input value={testText} onChange={(e) => setTestText(e.target.value)} />
-          </SettingsField>
-          <SettingsField label="预览通道">
-            <SegmentedControl
-              value={testChannel}
-              options={[
-                { value: "display", label: REGEX_UI_LABELS.displayChannel },
-                { value: "llm", label: REGEX_UI_LABELS.promptChannel },
-              ]}
-              onChange={setTestChannel}
-              aria-label="预览通道"
-            />
-          </SettingsField>
-          <pre
-            className={`settings-preview-box${previewError ? " settings-preview-box--error" : ""}`}
-          >
-            {preview}
-          </pre>
-        </SettingsSection>
-      </SettingsFormSection>
-    </SettingsPanel>
-  );
-}
-
 // ===== 智能排序规则（spec Step 11）=====
 
 /** 内置规则固定前缀（与 core `BUILTIN_SMART_SORT_RULE_ID_PREFIX` 对齐；renderer 不依赖 core）。 */
@@ -1940,7 +1494,7 @@ export function SmartSortRulesView({ nav }: { nav: Nav }) {
     try {
       const res = await ipcSmartSortRuleList();
       if (!res.ok) {
-        // 加载失败不可伪装成「暂无规则」（desktop/B-1），与 RegexRulesView 错误惯例对齐。
+        // 加载失败不可伪装成「暂无规则」（desktop/B-1），与其它设置列表页错误惯例对齐。
         toastSettingsError(res.error.message);
         setLoadFailed(true);
         return;

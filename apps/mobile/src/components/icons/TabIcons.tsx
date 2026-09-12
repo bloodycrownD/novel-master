@@ -183,6 +183,38 @@ export function ManageListIcon({color, size = 22}: IconProps) {
   );
 }
 
+/** 帮助（问号圆圈）：标题栏帮助入口，区别于菜单汉堡。 */
+export function HelpIcon({color, size = 22}: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Circle
+        cx={12}
+        cy={12}
+        r={10}
+        fill="none"
+        stroke={color}
+        strokeWidth={2}
+      />
+      <Path
+        d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Line
+        x1={12}
+        y1={17}
+        x2={12.01}
+        y2={17}
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+      />
+    </Svg>
+  );
+}
+
 /** Header back icon. */
 export function BackIcon({color, size = 22}: IconProps) {
   return (
@@ -219,6 +251,23 @@ export function SyncPullIcon({color, size = 22}: IconProps) {
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Path
         d="M12 3v12M8 11l4 4 4-4M5 21h14"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+/** Push current worktree up to parent scope（拉取图标的向上镜像）。
+ * 箭体足迹与 SyncPullIcon 完全同尺寸（y∈[3,15]，尾端距基线 6 格），
+ * 避免镜像后视觉长度不一（2026-09-08 真机反馈）。 */
+export function SyncPushIcon({color, size = 22}: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M12 15V3M8 7l4-4 4 4M5 21h14"
         stroke={color}
         strokeWidth={2}
         strokeLinecap="round"

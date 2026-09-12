@@ -73,6 +73,7 @@ import {
   type SessionListByProjectRequest,
   type SessionProjectComposerStatusRequest,
   type SessionPullTemplateRequest,
+  type SessionPushTemplateRequest,
   type SessionRenameRequest,
   type SessionAgentConfigDto,
   type SessionSetAgentBindingRequest,
@@ -117,7 +118,13 @@ import {
   type SkillsReadRequest,
   type SkillsReadResponse,
   type SkillsToggleRequest,
+  type SkillsUpdateInfoRequest,
   type SkillsWriteRequest,
+  type SearchConfigDto,
+  type SearchSaveEngineKeyRequest,
+  type SearchClearEngineKeyRequest,
+  type SearchSetSearxngBaseUrlRequest,
+  type SearchSetEngineOrderRequest,
 } from '@shared/ipc-types';
 
 export type InvokeFn = <T>(channel: string, arg?: unknown) => Promise<T>;
@@ -319,6 +326,10 @@ export function createInvokeClient(invoke: InvokeFn) {
       SessionPullTemplateRequest,
       IpcResult<void>
     >(invoke, IPC_CHANNELS.SESSIONS_PULL_TEMPLATE),
+    ipcSessionsPushTemplate: withReq<
+      SessionPushTemplateRequest,
+      IpcResult<void>
+    >(invoke, IPC_CHANNELS.SESSIONS_PUSH_TEMPLATE),
     ipcMessagesList: withReq<MessagesListRequest, IpcResult<ChatMessageDto[]>>(
       invoke,
       IPC_CHANNELS.MESSAGES_LIST,
@@ -518,44 +529,6 @@ export function createInvokeClient(invoke: InvokeFn) {
       IPC_CHANNELS.AGENT_YAML_IMPORT,
     ),
 
-    ipcRegexListGroups: noArg(invoke, IPC_CHANNELS.REGEX_LIST_GROUPS),
-    ipcRegexCreateGroup: withReq<unknown, unknown>(
-      invoke,
-      IPC_CHANNELS.REGEX_CREATE_GROUP,
-    ),
-    ipcRegexUpdateGroup: withReq<unknown, unknown>(
-      invoke,
-      IPC_CHANNELS.REGEX_UPDATE_GROUP,
-    ),
-    ipcRegexDeleteGroup: withReq<{ groupId: string }, unknown>(
-      invoke,
-      IPC_CHANNELS.REGEX_DELETE_GROUP,
-    ),
-    ipcRegexListRules: withReq<{ groupId: string }, unknown>(
-      invoke,
-      IPC_CHANNELS.REGEX_LIST_RULES,
-    ),
-    ipcRegexGetRule: withReq<{ groupId: string; ruleId: string }, unknown>(
-      invoke,
-      IPC_CHANNELS.REGEX_GET_RULE,
-    ),
-    ipcRegexCreateRule: withReq<unknown, unknown>(
-      invoke,
-      IPC_CHANNELS.REGEX_CREATE_RULE,
-    ),
-    ipcRegexUpdateRule: withReq<unknown, unknown>(
-      invoke,
-      IPC_CHANNELS.REGEX_UPDATE_RULE,
-    ),
-    ipcRegexDeleteRule: withReq<{ groupId: string; ruleId: string }, unknown>(
-      invoke,
-      IPC_CHANNELS.REGEX_DELETE_RULE,
-    ),
-    ipcRegexListPicker: noArg(invoke, IPC_CHANNELS.REGEX_LIST_PICKER),
-    ipcRegexSetCurrent: withReq<{ groupId: string | null }, unknown>(
-      invoke,
-      IPC_CHANNELS.REGEX_SET_CURRENT,
-    ),
     ipcSmartSortRuleList: noArg<IpcResult<SmartSortRuleDto[]>>(
       invoke,
       IPC_CHANNELS.SMART_SORT_RULE_LIST,
@@ -648,6 +621,10 @@ export function createInvokeClient(invoke: InvokeFn) {
       SkillsAssertCreateNameRequest,
       IpcResult<void>
     >(invoke, IPC_CHANNELS.SKILLS_ASSERT_CREATE_NAME),
+    ipcSkillsUpdateInfo: withReq<SkillsUpdateInfoRequest, IpcResult<void>>(
+      invoke,
+      IPC_CHANNELS.SKILLS_UPDATE_INFO,
+    ),
     ipcCompactionConditionsGet: noArg(
       invoke,
       IPC_CHANNELS.COMPACTION_CONDITIONS_GET,
@@ -687,6 +664,26 @@ export function createInvokeClient(invoke: InvokeFn) {
     ipcCloudSyncPull: noArg(invoke, IPC_CHANNELS.CLOUD_SYNC_PULL),
     ipcCloudSyncPush: (req?: { forceOverwriteRemote?: boolean }) =>
       invoke(IPC_CHANNELS.CLOUD_SYNC_PUSH, req),
+    ipcSearchGetConfig: noArg<IpcResult<SearchConfigDto>>(
+      invoke,
+      IPC_CHANNELS.SEARCH_GET_CONFIG,
+    ),
+    ipcSearchSaveEngineKey: withReq<
+      SearchSaveEngineKeyRequest,
+      IpcResult<void>
+    >(invoke, IPC_CHANNELS.SEARCH_SAVE_ENGINE_KEY),
+    ipcSearchClearEngineKey: withReq<
+      SearchClearEngineKeyRequest,
+      IpcResult<void>
+    >(invoke, IPC_CHANNELS.SEARCH_CLEAR_ENGINE_KEY),
+    ipcSearchSetSearxngBaseUrl: withReq<
+      SearchSetSearxngBaseUrlRequest,
+      IpcResult<void>
+    >(invoke, IPC_CHANNELS.SEARCH_SET_SEARXNG_BASE_URL),
+    ipcSearchSetEngineOrder: withReq<
+      SearchSetEngineOrderRequest,
+      IpcResult<void>
+    >(invoke, IPC_CHANNELS.SEARCH_SET_ENGINE_ORDER),
     ipcShellMenuPopup: withReq<
       {
         menuId: 'file' | 'edit' | 'view' | 'window' | 'help';

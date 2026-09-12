@@ -408,4 +408,60 @@ describe("schema 列对齐（T-B3）", () => {
       await conn.close();
     }
   });
+
+  it("A13：v11 存量库（llm_provider 无 body_params_json）bootstrap 后补列且 DEFAULT '{}'、版本升到 12", async () => {
+    // provider-body-params 迭代：v11 存量库靠 SCHEMA_BOOT_VERSION 12 触发慢路径，
+    // 由 ALIGN 给 llm_provider 补 body_params_json 列；新列带 DEFAULT '{}'，
+    // 存量行无需回填、读出来应是 {}（repository 解析层兑底）。
+    const conn = await openInMemoryConnection();
+    try {
+      await bootstrapNovelMaster(conn);
+      await conn.execute(
+        "ALTER TABLE llm_provider DROP COLUMN body_params_json"
+      );
+      await conn.execute("PRAGMA user_version = 11");
+
+      // 补列前插入一行存量 provider（无 body_params_json 列的形态）
+      const legacyId = randomUUID();
+      const now = 1_700_000_000_000;
+      await conn.execute(
+        `INSERT INTO llm_provider (
+           id, builtin_key, protocol, base_url, display_name, secret_ref,
+           headers_json, is_builtin, created_at_ms, updated_at_ms
+         ) VALUES (
+           '${legacyId}', NULL, 'openai', 'https://example.com/v1', 'v11-row',
+           NULL, '{}', 0, ${now}, ${now}
+         )`
+      );
+
+      await bootstrapNovelMaster(conn);
+
+      const columns = await tableColumnNames(conn, "llm_provider");
+      assert.ok(
+        columns.has("body_params_json"),
+        "body_params_json 应被 ALIGN 补列"
+      );
+
+      // 存量行走 DEFAULT '{}'，repository 读出 bodyParams = {}
+      const legacyRow = await conn.query<{ body_params_json: string }>(
+        `SELECT body_params_json FROM llm_provider WHERE id = '${legacyId}'`
+      );
+      assert.equal(legacyRow[0]?.body_params_json, "{}");
+
+      const { SqliteProviderRepository } = await import(
+        "../../src/domain/provider/repositories/impl/sqlite-provider.repository.js"
+      );
+      const repo = new SqliteProviderRepository(conn);
+      const legacyProvider = await repo.findById(legacyId);
+      assert.ok(legacyProvider);
+      assert.deepEqual(legacyProvider!.bodyParams, {});
+
+      const versionRows = await conn.query<{ user_version: number }>(
+        "PRAGMA user_version"
+      );
+      assert.equal(versionRows[0]?.user_version, SCHEMA_BOOT_VERSION);
+    } finally {
+      await conn.close();
+    }
+  });
 });

@@ -24,13 +24,12 @@ import {ProviderDetailScreen} from '../screens/stack/ProviderDetailScreen';
 import {ModelSamplingScreen} from '../screens/stack/ModelSamplingScreen';
 
 import {CloudSyncConfigScreen} from '../screens/stack/CloudSyncConfigScreen';
+import {SearchEnginesScreen} from '../screens/stack/SearchEnginesScreen';
+import {SearchEngineDetailScreen} from '../screens/stack/SearchEngineDetailScreen';
 import {StorageConfigScreen} from '../screens/stack/StorageConfigScreen';
 import {CloudSyncProgressScreen} from '../screens/stack/CloudSyncProgressScreen';
 import {ChatConfigScreen} from '../screens/stack/ChatConfigScreen';
 import {GlobalTemplateScreen} from '../screens/stack/GlobalTemplateScreen';
-import {RegexGroupsScreen} from '../screens/stack/RegexGroupsScreen';
-import {RegexRulesScreen} from '../screens/stack/RegexRulesScreen';
-import {RegexRuleEditorScreen} from '../screens/stack/RegexRuleEditorScreen';
 import {SmartSortRulesScreen} from '../screens/stack/SmartSortRulesScreen';
 import {SmartSortRuleEditorScreen} from '../screens/stack/SmartSortRuleEditorScreen';
 import {FileEditorScreen} from '../screens/stack/FileEditorScreen';
@@ -139,18 +138,17 @@ const CloudSyncConfigStackScreen = withStackLayout(
   'CloudSyncConfig',
   CloudSyncConfigScreen,
 );
+const SearchEnginesStackScreen = withStackLayout(
+  'SearchEngines',
+  SearchEnginesScreen,
+);
+const SearchEngineDetailStackScreen = withStackLayout(
+  'SearchEngineDetail',
+  SearchEngineDetailScreen,
+);
 const GlobalTemplateStackScreen = withStackLayout(
   'GlobalTemplate',
   GlobalTemplateScreen,
-);
-const RegexGroupsStackScreen = withStackLayout(
-  'RegexGroups',
-  RegexGroupsScreen,
-);
-const RegexRulesStackScreen = withStackLayout('RegexRules', RegexRulesScreen);
-const RegexRuleEditorStackScreen = withStackLayout(
-  'RegexRuleEditor',
-  RegexRuleEditorScreen,
 );
 const SmartSortRulesStackScreen = withStackLayout(
   'SmartSortRules',
@@ -248,17 +246,16 @@ export function RootNavigator() {
               component={CloudSyncConfigStackScreen}
             />
             <Stack.Screen
+              name="SearchEngines"
+              component={SearchEnginesStackScreen}
+            />
+            <Stack.Screen
+              name="SearchEngineDetail"
+              component={SearchEngineDetailStackScreen}
+            />
+            <Stack.Screen
               name="GlobalTemplate"
               component={GlobalTemplateStackScreen}
-            />
-            <Stack.Screen
-              name="RegexGroups"
-              component={RegexGroupsStackScreen}
-            />
-            <Stack.Screen name="RegexRules" component={RegexRulesStackScreen} />
-            <Stack.Screen
-              name="RegexRuleEditor"
-              component={RegexRuleEditorStackScreen}
             />
             <Stack.Screen
               name="SmartSortRules"

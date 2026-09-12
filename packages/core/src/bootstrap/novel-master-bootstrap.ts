@@ -7,7 +7,7 @@
  * 稳态冷启动：若 `PRAGMA user_version` ≥ {@link SCHEMA_BOOT_VERSION}，跳过 DDL 与
  * 列对齐，仅跑 pending migration 与 builtin seed，避免 RN 上数十次桥接往返。
  *
- * 最低支持版本：v1.4.28。低于此版本的极旧库需先升级到 v1.4.28，再升级到本版本——
+ * 最低支持版本：v1.5.5。低于此版本的极旧库需先升级到 v1.5.5，再升级到本版本——
  * {@link assertMinimumBaseline} 会在 migration runner 之前做 fail-fast 检查，
  * 防止跨大版本升级走样。
  *
@@ -28,7 +28,6 @@ import { SMART_SORT_RULE_SCHEMA_STATEMENTS } from "./smart-sort-rule/smart-sort-
 import { SKILLS_SCHEMA_STATEMENTS } from "./skills/skills-schema.js";
 import { SKSP_SCHEMA_STATEMENTS } from "./sksp/sksp-schema.js";
 import { PROVIDER_SCHEMA_STATEMENTS } from "./provider/provider-schema.js";
-import { REGEX_SCHEMA_STATEMENTS } from "./regex/regex-schema.js";
 import { AGENT_SCHEMA_STATEMENTS } from "./agent/agent-schema.js";
 import { seedBuiltinProviders } from "./provider/seed-builtin-providers.js";
 import { seedBuiltinSmartSortRules } from "./smart-sort-rule/builtin-smart-sort-rules.js";
@@ -65,13 +64,23 @@ import { IntegrityRepairRegistry } from "@/service/integrity-repair.js";
  * 快照 savedModel.providerId）。老库（v9）靠本轮 bump 走慢路径由 ALIGN
  * 补列；无存量回填（历史行 NULL 归「其他」桶）。曾再犯 v9 同款遗漏，
  * 真机实测 no such column: provider_id。
- * v11：workplace_dir_rule.sort_field CHECK 扩枚举 'smart'（文件名智能排序）
- * + 新表 smart_sort_rule（规则管理）与内置规则 seed。老库（v10）靠本轮
+ * v11：移除正则系统——statements 删去 regex_group/regex_rule 建表并加入
+ * DROP TABLE IF EXISTS 幂等清理两表。老库（v10）靠本轮 bump 走慢路径
+ * 执行 DROP；全新库建表语句已不存在；恢复旧备份（user_version 回退）
+ * 同样走慢路径再次清理。KKV currentRegexGroupId 残留键随方法删除后
+ * 无人读写，无害保留。
+ * v12：llm_provider 新增 body_params_json 列（服务商「自定义参数」，
+ * 原样合并进请求体顶层）。老库（v11）靠本轮 bump 走慢路径由 ALIGN
+ * 补列；DEFAULT '{}' 无存量回填。seed 内置行的 INSERT 显式列清单，
+ * 新列走 DEFAULT。
+ * v13：workplace_dir_rule.sort_field CHECK 扩枚举 'smart'（文件名智能排序）
+ * + 新表 smart_sort_rule（规则管理）与内置规则 seed。老库（v12）靠本轮
  * bump 走慢路径：新表由 DDL 建出；但 CHECK 变更对已存在的表不生效，
  * 由 workplace-dir-rule-smart-field-v1 migration rebuild 承担（存量行
- * 原样搬运）。
+ * 原样搬运）。本条在分支内原编号 v11；merge origin/main（已发布 v11/v12）
+ * 时顺延为 v13，保证走过 v1.5.16（user_version=12）的存量库走慢路径。
  */
-export const SCHEMA_BOOT_VERSION = 11;
+export const SCHEMA_BOOT_VERSION = 13;
 
 /** 各模块 DDL 语句，按依赖安全顺序排列。 */
 export const NOVEL_MASTER_SCHEMA_STATEMENTS: readonly string[] = [
@@ -88,8 +97,11 @@ export const NOVEL_MASTER_SCHEMA_STATEMENTS: readonly string[] = [
   ...SKILLS_SCHEMA_STATEMENTS,
   ...SKSP_SCHEMA_STATEMENTS,
   ...PROVIDER_SCHEMA_STATEMENTS,
-  ...REGEX_SCHEMA_STATEMENTS,
   ...AGENT_SCHEMA_STATEMENTS,
+  // v11：正则系统移除，幂等清理两表（idx_regex_rule_group_sort 随表消亡）；
+  // 先子表后父表，避免未来开启 FK 约束时 DROP 顺序问题。
+  "DROP TABLE IF EXISTS regex_rule;",
+  "DROP TABLE IF EXISTS regex_group;",
 ];
 
 async function readSchemaBootVersion(tx: TdbcConnection): Promise<number> {
@@ -115,8 +127,10 @@ async function writeSchemaBootVersion(
  *
  * 前三条（vfs-entry-id-redesign-v1、session-agent-config-v2、
  * project-agent-config-cleanup-v1）为第二轮退役：所有 ≥v1.4.27 的库都已应用过。
- * 第三轮退役（本次）：orphan-revision-gc-v1、table-constraints-v1b——所有
+ * 第三轮退役：orphan-revision-gc-v1、table-constraints-v1b——所有
  * ≥v1.4.28 的库都已应用过，最低支持版本随之升至 v1.4.28。
+ * 第四轮退役：usage-cache-model-backfill-v1（数据回填，v1.5.4 首发引入）——
+ * 所有 ≥v1.5.5 的库都已应用过，最低支持版本随之升至 v1.5.5。
  */
 export const BASELINE_MIGRATION_IDS: readonly string[] = [
   "saved-model-identity-v1",
@@ -130,11 +144,12 @@ export const BASELINE_MIGRATION_IDS: readonly string[] = [
   "project-agent-config-cleanup-v1",
   "orphan-revision-gc-v1",
   "table-constraints-v1b",
+  "usage-cache-model-backfill-v1",
 ];
 
-/** 老库升级失败提示，指引用户先升到 v1.4.28。 */
+/** 老库升级失败提示，指引用户先升到 v1.5.5。 */
 export const BASELINE_TOO_OLD_MESSAGE =
-  "检测到当前数据库低于本版本最低支持版本（v1.4.28）。请先升级到 v1.4.28，再升级到本版本。";
+  "检测到当前数据库低于本版本最低支持版本（v1.5.5）。请先升级到 v1.5.5，再升级到本版本。";
 
 /** `llm_saved_model` 无 `id` 列 → 常见老库尚未走 saved-model-identity-v1。 */
 async function hasLegacySavedModelShape(tx: TdbcConnection): Promise<boolean> {

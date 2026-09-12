@@ -2,6 +2,7 @@
  * React Navigation param lists (prototype pageId → route names).
  */
 import type {NavigatorScreenParams} from '@react-navigation/native';
+import type {EngineId} from '@novel-master/core';
 
 export type MainTabParamList = {
   Chat: undefined;
@@ -25,10 +26,11 @@ export type RootStackParamList = {
   };
   ChatConfig: undefined;
   CloudSyncConfig: undefined;
+  /** 搜索配置：引擎列表（排序即串行链优先级，无参数）。 */
+  SearchEngines: undefined;
+  /** 搜索引擎详情：单引擎表单（key / baseUrl），标题用引擎名。 */
+  SearchEngineDetail: {engineId: EngineId} | undefined;
   GlobalTemplate: undefined;
-  RegexGroups: undefined;
-  RegexRules: {groupId?: string} | undefined;
-  RegexRuleEditor: {groupId?: string; ruleId?: string} | undefined;
   /** 智能排序规则列表（spec smart-filename-sort Step 13）。 */
   SmartSortRules: undefined;
   SmartSortRuleEditor: {ruleId?: string} | undefined;

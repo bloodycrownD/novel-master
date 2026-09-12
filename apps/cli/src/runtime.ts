@@ -40,7 +40,6 @@ import {
   type SecretStore,
   type TokenCounterRegistry,
 } from "@novel-master/core/provider";
-import { createRegexConfigService, type RegexConfigService } from "@novel-master/core/regex";
 import {
   createSmartSortRuleService,
   type SmartSortRuleService,
@@ -157,7 +156,6 @@ export interface NovelMasterRuntime {
   readonly userVfsTurn: UserVfsTurnService;
   /** 会话级规则快照 / file_cache；Agent write upsert 与常驻工作区共用。 */
   readonly sessionKkv: SessionKkvService;
-  readonly regexConfig: RegexConfigService;
   /** 智能排序规则管理（sort-rule 命令组与 workplace smart 排序共用）。 */
   readonly smartSortRule: SmartSortRuleService;
   readonly agentRegistry: AgentRegistryService;
@@ -185,7 +183,6 @@ export async function createNovelMasterRuntime(
   await bootstrapNovelMaster(conn);
 
   const state = createPersistentState(conn);
-  const regexConfig = createRegexConfigService(conn, state);
   const smartSortRule = createSmartSortRuleService(conn);
   const preferences = createPersistentPreferences(conn);
   const userVfsUnifiedToolTurnEnabled = await preferences.getUserVfsUnifiedToolTurn();
@@ -267,7 +264,6 @@ export async function createNovelMasterRuntime(
     savedModelRepo: providerBundle.savedModelRepo,
     providerRepo: providerBundle.providerRepo,
     userVfsTurn,
-    regexConfig,
     smartSortRule,
   };
 }

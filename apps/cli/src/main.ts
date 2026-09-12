@@ -18,8 +18,6 @@ import { runProvider } from "./provider/commands.js";
 import { runModel } from "./model/commands.js";
 import { runAgent } from "./agent/commands.js";
 import { runCompactionConditions } from "./compaction-conditions/commands.js";
-import { runRegexGroup } from "./regex-group/commands.js";
-import { runRegex } from "./regex/commands.js";
 import { runSortRule } from "./sort-rule/commands.js";
 import { runSession } from "./session/commands.js";
 import { createNovelMasterRuntime } from "./runtime.js";
@@ -126,8 +124,6 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
     top === "model" ||
     top === "agent" ||
     top === "compaction-conditions" ||
-    top === "regex-group" ||
-    top === "regex" ||
     top === "sort-rule"
   ) {
     const rt = await createNovelMasterRuntime(argv);
@@ -176,12 +172,6 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
           break;
         case "compaction-conditions":
           await runCompactionConditions(rt, sub, rest);
-          break;
-        case "regex-group":
-          await runRegexGroup(rt, sub, rest);
-          break;
-        case "regex":
-          await runRegex(rt, sub, rest);
           break;
         case "sort-rule":
           await runSortRule(rt, sub, rest);

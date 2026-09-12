@@ -42,15 +42,23 @@ import { previewTabKey } from "../layout/preview-tab-utils";
 
 import {
 
+  ipcAppOpenExternal,
+
   ipcProjectsList,
 
   ipcSessionsListByProject,
+
+  ipcVfsRead,
 
   onAgentStream,
 
   onWorkspaceMutated,
 
 } from "../ipc/client";
+
+import { resolveChatLinkAction } from "../features/chat/chat-link-route";
+import { chatLinkNotFoundMessage } from "@novel-master/core/chat";
+import { showToast } from "@/components/ui/show-toast";
 
 import {
   markPreviewTabsDeletedUnderPathInList,
@@ -169,6 +177,12 @@ export interface ShellNavContextValue {
   registerEnsurePreviewVisible: (fn: () => void) => void;
   /** 在聊天工作区 Preview 打开文件；若 Preview 列隐藏则先显示。 */
   openChatWorkspacePreview: (path: string) => void;
+  /**
+   * 聊天 markdown 链接点击路由（chat-link-file-nav）：识别与探测在
+   * chat-link-route 纯函数完成，这里只执行意图——工作区文件进 Preview，
+   * http(s) 外跳系统浏览器，mailto/未命中 no-op。
+   */
+  openChatLink: (href: string) => void;
   /** 详情抽屉「查看提示词」请求：bump 后由 ConversationPanel 切到 realPrompt tab。 */
   viewPromptRequest: { token: number } | null;
   requestViewPrompt: () => void;
@@ -365,6 +379,46 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
       ensurePreviewVisibleRef.current?.();
     },
     [selectPreviewFile],
+  );
+
+  // 聊天链接路由：探测经 ipcVfsRead（chat 域=core session 域、session 域=core
+  // project 域，命名陷阱见 chat-link-route 头注）；执行 preview 时复用
+  // openChatWorkspacePreview 的「选 tab + 确保可见」链路；外跳消费现成
+  // ipcAppOpenExternal（nm:shell/openExternal），失败静默兜底。探测 miss
+  // 接 console.info 日志（MF-5：生产可观测，兑现 chat-link-route 头注承诺）。
+  const openChatLink = useCallback(
+    (href: string) => {
+      const sessionContext =
+        projectId != null && sessionId != null
+          ? { projectId, sessionId }
+          : null;
+      const projectContext = projectId != null ? { projectId } : null;
+      void resolveChatLinkAction(href, {
+        sessionContext,
+        projectContext,
+        vfsRead: ipcVfsRead,
+        log: (message, detail) => console.info(message, detail),
+      }).then((action) => {
+        if (action.kind === "external") {
+          void ipcAppOpenExternal(action.url).catch(() => undefined);
+          return;
+        }
+        if (action.kind === "preview") {
+          if (action.workspaceScope === "chat") {
+            openChatWorkspacePreview(action.path);
+          } else {
+            selectPreviewFile("session", action.path);
+            ensurePreviewVisibleRef.current?.();
+          }
+          return;
+        }
+        if (action.kind === "not-found") {
+          // 路径型链接双域探测未命中：用户拍板弹提示，不再静默无动作
+          showToast(chatLinkNotFoundMessage(action.path));
+        }
+      });
+    },
+    [projectId, sessionId, openChatWorkspacePreview, selectPreviewFile],
   );
 
   const closePreviewTab = useCallback(
@@ -835,6 +889,8 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
 
       openChatWorkspacePreview,
 
+      openChatLink,
+
       viewPromptRequest,
 
       requestViewPrompt,
@@ -918,6 +974,8 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
       registerEnsurePreviewVisible,
 
       openChatWorkspacePreview,
+
+      openChatLink,
 
       viewPromptRequest,
 
