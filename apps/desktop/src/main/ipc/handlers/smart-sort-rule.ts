@@ -57,6 +57,7 @@ export async function handleSmartSortRuleCreate(
       name: req.name,
       pattern: req.pattern,
       ...(req.flags != null ? { flags: req.flags } : {}),
+      ...(req.captureKind != null ? { captureKind: req.captureKind } : {}),
       ...(req.description != null ? { description: req.description } : {}),
       ...(req.enabled != null ? { enabled: req.enabled } : {}),
     });
@@ -194,7 +195,12 @@ export async function handleSmartSortRuleMatch(
   req: SmartSortRuleMatchRequest,
 ): Promise<IpcResult<SmartSortRuleMatchResultDto>> {
   try {
-    const result = matchSmartSortPattern(req.pattern, req.flags, req.text);
+    const result = matchSmartSortPattern(
+      req.pattern,
+      req.flags,
+      req.text,
+      req.captureKind ?? "smart"
+    );
     return { ok: true, data: result as SmartSortRuleMatchResultDto };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };

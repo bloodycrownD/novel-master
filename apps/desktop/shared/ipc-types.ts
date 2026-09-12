@@ -1244,11 +1244,15 @@ export type AgentYamlImportRequest = {
 /**
  * 智能排序规则（与 core `SmartSortRule` 同构的 IPC DTO；renderer 不直接依赖 core）。
  */
+/** 捕获数字三档（D13，与 core SmartSortCaptureKind 同构；renderer 经 shared 消费）。 */
+export type SmartSortCaptureKindDto = 'smart' | 'fixed_min' | 'fixed_max';
 export type SmartSortRuleDto = {
   readonly ruleId: string;
   readonly name: string;
   readonly pattern: string;
   readonly flags: string;
+  /** 捕获数字档位（D13，缺省 smart）。 */
+  readonly captureKind: SmartSortCaptureKindDto;
   readonly description: string | null;
   readonly enabled: boolean;
   readonly sortOrder: number;
@@ -1260,6 +1264,7 @@ export type SmartSortRuleCreateRequest = {
   readonly name: string;
   readonly pattern: string;
   readonly flags?: string;
+  readonly captureKind?: SmartSortCaptureKindDto;
   readonly description?: string | null;
   readonly enabled?: boolean;
 };
@@ -1270,6 +1275,7 @@ export type SmartSortRuleUpdateRequest = {
     readonly name?: string;
     readonly pattern?: string;
     readonly flags?: string;
+    readonly captureKind?: SmartSortCaptureKindDto;
     readonly description?: string | null;
     readonly enabled?: boolean;
   };
@@ -1308,6 +1314,7 @@ export type SmartSortRuleBundleRuleDto = {
   readonly name: string;
   readonly pattern: string;
   readonly flags: string;
+  readonly captureKind?: SmartSortCaptureKindDto;
   readonly description?: string | null;
   readonly enabled: boolean;
   readonly sortOrder: number;
@@ -1324,18 +1331,22 @@ export type SmartSortRuleImportRulesRequest = {
 };
 
 /** 编辑器正则匹配测试的单个匹配（index = 原文起始偏移，供高亮切分；
- *  groups 内 null = 捕获组未参与匹配，GUI 渲染 '-'）。 */
+ *  groups 内 null = 捕获组未参与匹配，GUI 渲染 '-'；tuple = 提取元组
+ *  展示文案，D13，null 显「无序号」）。 */
 export type SmartSortRuleMatchDto = {
   readonly text: string;
   readonly index: number;
   readonly groups: readonly (string | null)[];
+  readonly tuple: string | null;
 };
 
-/** 正则匹配测试请求（fix ②：替代旧排序预览的 names + draftRules 语义）。 */
+/** 正则匹配测试请求（fix ②：替代旧排序预览的 names + draftRules 语义；
+ *  captureKind 缺省 smart，D13）。 */
 export type SmartSortRuleMatchRequest = {
   readonly pattern: string;
   readonly flags: string;
   readonly text: string;
+  readonly captureKind?: SmartSortCaptureKindDto;
 };
 
 /** 正则匹配测试结果：非法正则是合法测试结局（ok 分支内联错误文案，非 IPC 错误）。 */

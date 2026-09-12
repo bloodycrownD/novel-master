@@ -83,6 +83,7 @@ import {
 } from "@shared/logic/config-forms-stored-config-validity";
 import type {
   AgentRegistryListItemDto,
+  SmartSortCaptureKindDto,
   SmartSortRuleDto,
   SmartSortRuleMatchResultDto,
   SmartSortRuleMoveRequest,
@@ -1965,6 +1966,8 @@ type SmartSortRuleDraft = {
   /** parsePatternInput(patternInput) 的解析结果（测试/保存消费）。 */
   pattern: string;
   flags: string;
+  /** 捕获数字档位（D13）：smart 捕获组提取 / fixed_min 哨兵最前 / fixed_max 沉底。 */
+  captureKind: SmartSortCaptureKindDto;
   description: string;
   enabled: boolean;
 };
@@ -1974,9 +1977,20 @@ const DEFAULT_SMART_SORT_DRAFT: SmartSortRuleDraft = {
   patternInput: "",
   pattern: "",
   flags: "",
+  captureKind: "smart",
   description: "",
   enabled: true,
 };
+
+/** 捕获数字三档选项（D13）：顺序与任务定稿一致（智能/固定最大/固定最小）。 */
+const SMART_SORT_CAPTURE_KIND_OPTIONS: ReadonlyArray<{
+  value: SmartSortCaptureKindDto;
+  label: string;
+}> = [
+  { value: "smart", label: "智能数字" },
+  { value: "fixed_max", label: "固定最大" },
+  { value: "fixed_min", label: "固定最小" },
+];
 
 /** 输入框文本同步解析为 pattern/flags（非法字面量自动当裸 pattern）。 */
 function applySmartSortPatternInput(
@@ -2060,6 +2074,7 @@ export function SmartSortRuleEditorView({ nav }: { nav: Nav }) {
             patternInput: formatPatternInput(rule.pattern, rule.flags),
             pattern: rule.pattern,
             flags: rule.flags,
+            captureKind: rule.captureKind,
             description: rule.description ?? "",
             enabled: rule.enabled,
           });
@@ -2091,12 +2106,14 @@ export function SmartSortRuleEditorView({ nav }: { nav: Nav }) {
       setTestError("请先填写正则表达式");
       return;
     }
-    // 与保存同口径：trim 后重新解析，避免尾随空白拆坏字面量。
+    // 与保存同口径：trim 后重新解析，避免尾随空白拆坏字面量；档位随当前
+    // 捕获数字选择传入（fixed 档 tuple 显哨兵文案，D13）。
     const parsed = parsePatternInput(draft.patternInput.trim());
     const res = await ipcSmartSortRuleMatch({
       pattern: parsed.pattern,
       flags: parsed.flags,
       text: testText,
+      captureKind: draft.captureKind,
     });
     if (res.ok) {
       setMatchResult(res.data);
@@ -2105,7 +2122,7 @@ export function SmartSortRuleEditorView({ nav }: { nav: Nav }) {
       setMatchResult(null);
       setTestError(res.error.message);
     }
-  }, [testText, draft.patternInput]);
+  }, [testText, draft.patternInput, draft.captureKind]);
 
   const save = async () => {
     const description = draft.description.trim() || null;
@@ -2115,6 +2132,7 @@ export function SmartSortRuleEditorView({ nav }: { nav: Nav }) {
       name: draft.name,
       pattern: parsed.pattern,
       flags: parsed.flags,
+      captureKind: draft.captureKind,
       description,
       enabled: draft.enabled,
     };
@@ -2189,8 +2207,34 @@ export function SmartSortRuleEditorView({ nav }: { nav: Nav }) {
             <SettingsStatus error={`正则无效：${regexError}`} inline />
           ) : null}
           <p className="settings-hint">
-            支持 /正则/flags 格式，如 /第(\d+)章/i；正则须含至少一个捕获组，命中时全部捕获组须可解析为数值（中文数字自动转换），否则尝试下一条规则。
+            支持 /正则/flags 格式，如 /第(\d+)章/i；智能数字档须含至少一个捕获组，命中时全部捕获组须可解析为数值（中文数字自动转换），否则尝试下一条规则；固定档命中即排最前/沉底，忽略捕获组。
           </p>
+          <SettingsField
+            label="捕获数字"
+            hint={
+              draft.captureKind === "smart"
+                ? "从捕获组提取序号，中文数字自动转换"
+                : draft.captureKind === "fixed_min"
+                  ? "命中即排在所有序号之前（序章/楔子类）"
+                  : "命中即沉底排在所有序号之后（终章/番外类）"
+            }
+          >
+            <select
+              value={draft.captureKind}
+              onChange={(e) =>
+                setDraft({
+                  ...draft,
+                  captureKind: e.target.value as SmartSortCaptureKindDto,
+                })
+              }
+            >
+              {SMART_SORT_CAPTURE_KIND_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </SettingsField>
           <SettingsField label="描述">
             <textarea
               rows={3}
@@ -2237,6 +2281,18 @@ export function SmartSortRuleEditorView({ nav }: { nav: Nav }) {
                       <span key={i}>{seg.text}</span>
                     ),
                   )}{"\n"}
+                  {/* 每处匹配的提取元组小字（D13）：匹配文本 → tuple 展示，
+                      null 显「无序号」；固定档恒显哨兵文案。 */}
+                  {matchResult?.ok
+                    ? matchResult.matches.map((m, i) => (
+                        <span
+                          key={`${m.index}-${i}`}
+                          style={{ color: "var(--text-secondary)" }}
+                        >
+                          {`${m.text || "(空匹配)"} → ${m.tuple ?? "无序号"}\n`}
+                        </span>
+                      ))
+                    : null}
                   <span style={{ color: "var(--text-secondary)" }}>
                     {matchCount > 0 ? `共 ${matchCount} 处匹配` : "无匹配"}
                   </span>
