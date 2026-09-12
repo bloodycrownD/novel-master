@@ -9,7 +9,7 @@
 - spec_path：docs/Iterations/smart-filename-sort/spec.md
 - review_round：4（第 4 轮新增量批次：capture_kind 三档 / 编辑屏重构终态 / IPC match 通道 / VFS 文件名校验 / ownerRouteKey 归属过滤；三 scope 并行评审）
 - dag_version：4
-- 状态：fix-spec-ready 待复核（round 4 新增 15 条 = 2 P1 + 13 P2；round 1-3 旧 11 条保持执行完成态不动）
+- 状态：fix-spec-ready（round 4 终审闭合，2026-09-13）（round 4 新增 15 条 = 2 P1 + 13 P2；round 1-3 旧 11 条保持执行完成态不动）
 - 历史轮次：round 1-3 覆盖 b442d397 → 4f84da40（含 merge-dev 适配 core/B-3 [P0]），旧 11 条已全部执行并经 cr-func-fix-review 复核 func-ready。
 
 ---
@@ -127,7 +127,7 @@
 - 维度：B + G（双端 parity）
 - 文件：apps/desktop/renderer/features/settings/SettingsViews.tsx:2262-2264（测试文本 onChange 只 setTestText）、2163-2166（highlightSegments 按旧 matchResult 偏移切分）；apps/mobile/src/screens/stack/SmartSortRuleEditorScreen.tsx:240-242（applyPatternInput）、580（captureKind patchDraft）
 - 问题：测试结果区的语义是「结果只属于上次点击『测试』时的输入快照」，但四个输入变化入口里只有部分清结果：desktop 测试文本 onChange 不清 matchResult/testError，编辑文本后旧 matches 的 index 偏移对已编辑文本切分高亮错位；mobile 正则输入 applyPatternInput 与捕获数字切换 captureKind patchDraft 两处不清 testOutcome，改正则或换档位后旧结果残留误导（mobile 的 changeTestText 已有清空范式，这两处漏对齐）。
-- 改法：双端对齐「结果只属于上次点击」——desktop 测试文本 onChange 追加 setMatchResult(null) + setTestError(null)；mobile applyPatternInput 与 captureKind patchDraft 两处 setTestOutcome(IDLE_OUTCOME)（照 changeTestText 既有清空范式）。
+- 改法：双端对齐「结果只属于上次点击」——desktop **三个入口**（终审修订：不只测试文本）均追加清结果：测试文本 onChange（:2263）、正则输入 onChange（:2201）、捕获数字 select onChange（:2227）各追加 setMatchResult(null) + setTestError(null)；mobile applyPatternInput 与 captureKind patchDraft 两处 setTestOutcome(IDLE_OUTCOME)（照 changeTestText 既有清空范式）。验收：任一输入变化后结果区回占位提示（双端断言挂 dtcli/G-1 与 mobile/G-2）。
 - 验收/测试：双端改输入后结果区回 idle 状态（desktop 回占位提示、mobile 回 idle 文案）；行为断言分别落入 dtcli/G-1 与 mobile/G-2 的测试。
 - 来源：review_round 4 · desktop + mobile scope 评审（mobile/B-2 并入本条，双端同治）
 
@@ -239,13 +239,21 @@
 
 ---
 
+#### 16. review-full/C-1 [P2]（终审新增）高亮切分双端逐行同构双实现——收敛 core 单源
+- 维度：C（DRY）+ C-orch
+- 文件：apps/desktop/renderer/features/settings/SettingsViews.tsx:2027（splitSmartSortHighlightSegments）；apps/mobile/src/screens/stack/SmartSortRuleEditorScreen.tsx:173（splitHighlightSegments）
+- 问题：双端高亮切分纯函数算法完全一致（cursor 单调推进、零宽跳过、尾段补齐，逐行同构），双份维护下任一侧修边界 bug 另一侧静默漂移。仓库惯例是共享逻辑 core 单源、desktop 经 shared/logic 薄再导出（49c580ee 先例）。
+- 改法：core 在 match-smart-sort-pattern.ts 旁新增切分纯函数（入参 {index, text}[] 最小结构）并经 public/smart-sort-rule.ts 导出（同步 allowlist 快照）；mobile 删本地直调 core；desktop 删本地经 shared/logic/smart-sort.ts 薄再导出。#11/#14 要求的切分测试随之单源化到 core（三边界：交替切分/零宽跳过不漂移/末尾匹配无尾段），双端只留渲染断言。
+- 验收/测试：core 单测三边界全绿；双端无本地复制（grep 零残留）。
+- 来源：review-full · round 4 终审
+
 ## Spec deviations
 
 | 项 | 状态 | 处置 |
 |----|------|------|
 | Step 6 懒加载条件加码（`ruleEnabled && sortField === "smart"` 超出 spec 口径） | fixed | core/B-1 已执行：条件去掉 ruleEnabled，与 spec 口径对齐（T-WE3c 独享库验证） |
 | CLI list 列序与 Step 9 不符 | fixed | mc/A-1 已执行：列序调回 spec 钉死顺序（e2e 锁列） |
-| VFS 文件名校验不在迭代 spec（43803e39 引入 packages/core/src/domain/vfs/logic/validate-entry-name.ts） | open（用户已知情拍板） | 用户已知情拍板（本会话新增需求）；K 类建议：spec 补一节收录设计拍板（拒控制字符/纯空白/首尾空格与 . 与 ..、五入口、导入链路豁免），随下游执行时闭合 |
+| VFS 文件名校验不在迭代 spec（43803e39 引入 packages/core/src/domain/vfs/logic/validate-entry-name.ts） | fixed（用户已知情拍板；spec 补章节随 K 类闭合，见终审流转注） | 用户已知情拍板（本会话新增需求）；K 类建议：spec 补一节收录设计拍板（拒控制字符/纯空白/首尾空格与 . 与 ..、五入口、导入链路豁免），随下游执行时闭合 |
 
 ---
 
@@ -300,4 +308,17 @@ round 1-3 遗留：
 round 4 新增：
 
 - desktop 测试入口 apps/desktop/scripts/run-tests.mjs 的默认 glob `test/**/*.test.ts` 在 bash 无 globstar 下只展开一层子目录（`test/*/*.test.ts`）——顶层 85 个测试文件不进测试入口，CI 同盲区（实测：顶层 85 个仅子目录 7 个被跑到）。建议本迭代一并修（一行 glob 修正，如显式 `test/*.test.ts test/**/*.test.ts` 或改 node --test 目录发现），或另立迭代处理；dtcli/G-1 的新测试需确认真的被入口跑到。
+- spec 勘误：Step 1 与变更点清单写 SCHEMA_BOOT_VERSION 10→11，实际落地 =13（merge v1.5.16 后顺延，行为正确、快路径不短路 pending migration 已终审核实）；随 K 类一并勘正。
 - spec 补 VFS 文件名校验章节：收录设计拍板（拒控制字符/纯空白/首尾空格/`.` 与 `..`、五个入口、导入链路豁免），与 Spec deviations 的 open 行对应，随下游执行时闭合。
+
+## Fix-Spec Closure（Round 4）
+
+| 项 | 状态 |
+| fix-spec-ready | yes（终审三项文档级缺口已 trivial 直接执行闭合：#2 改法扩三入口 / 新增 #16 切分单源 / VFS deviation 转 fixed） |
+| fix_spec_path | docs/Iterations/smart-filename-sort/cr-fix-spec.md |
+| dag_version / review_round | 4 / 4（scope×3 并行 → spec-fix → review-full → trivial 闭合） |
+| P0 / P1 / P2（已写入 fix-spec） | 0 / 2 / 14（#16 新增后） |
+| 未写入的开放 must-fix | 0 |
+| spec_deviations | none（VFS 校验已转 fixed，用户拍板在案） |
+| C-orch | ✅（#2 双端 parity、#4/#16 单源收敛、#9 死 import 清理） |
+| C 类合并后 QA | 真机验收继续（T-DT 系列）；K 类 5 项随下游执行闭合 |
