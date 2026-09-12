@@ -1,7 +1,7 @@
 /**
  * Directory inclusion rule form → {@link WorkplaceService.setDirRule}.
  */
-import React, {useEffect, useState} from 'react';
+import React, {useCallback, useEffect, useState} from 'react';
 import {
   Pressable,
   ScrollView,
@@ -19,6 +19,10 @@ import {
   type SortOrder,
 } from '@novel-master/core/workplace';
 import {ModalShell} from '../ui/ModalShell';
+import {
+  PickerListModal,
+  type PickerListLoadResult,
+} from '../ui/PickerListModal';
 import {normalizeFillPolicyForMobile} from '../../services/fill-policy-mobile';
 import {useTheme} from '../../theme/ThemeProvider';
 
@@ -32,11 +36,13 @@ type Props = {
   onSave: (input: SetDirRuleInput) => Promise<void>;
 };
 
+// 4 项横排 chip 会换行把面板顶出滚动区，排序方式改 PickerListModal 单选
+// （智能排序列表首项，照 ModelPickerModal 先例），表单内只留一行当前值。
 const SORT_FIELDS: {value: SortField; label: string}[] = [
+  {value: 'smart', label: '智能排序'},
   {value: 'name', label: '文件名称'},
   {value: 'created', label: '创建时间'},
   {value: 'updated', label: '更新时间'},
-  {value: 'smart', label: '智能排序'},
 ];
 
 const SORT_ORDERS: {value: SortOrder; label: string}[] = [
@@ -80,6 +86,7 @@ export function DirectoryRuleSheet({
   );
   const [ruleEnabled, setRuleEnabled] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [sortFieldPickerVisible, setSortFieldPickerVisible] = useState(false);
 
   useEffect(() => {
     if (!visible) {
@@ -119,6 +126,11 @@ export function DirectoryRuleSheet({
     }
   };
 
+  // PickerListModal 骨架要求 load 异步；静态选项每次打开以当前 sortField 高亮。
+  const loadSortFields = useCallback(async (): Promise<
+    PickerListLoadResult<{value: SortField; label: string}>
+  > => ({rows: SORT_FIELDS, selectedId: sortField}), [sortField]);
+
   const sheetContent = (
     <>
       <Text style={[styles.heading, {color: tokens.text}]}>目录规则</Text>
@@ -130,12 +142,21 @@ export function DirectoryRuleSheet({
         {/* 规则启用/关闭由文件管理的快捷开关负责，表单内不再提供开关，仅编辑规则内容；
               ruleEnabled 沿用打开时的既有状态原样保存。 */}
         <FieldLabel tokens={tokens} text="排序方式" />
-        <OptionRow
-          options={SORT_FIELDS}
-          value={sortField}
-          onChange={setSortField}
-          tokens={tokens}
-        />
+        <Pressable
+          testID="sort-field-value-row"
+          accessibilityLabel="选择排序方式"
+          onPress={() => setSortFieldPickerVisible(true)}
+          style={[styles.pickerRow, {borderColor: tokens.border}]}
+        >
+          <Text
+            testID="sort-field-value"
+            style={{color: tokens.text}}
+            numberOfLines={1}>
+            {(SORT_FIELDS.find(opt => opt.value === sortField) ?? SORT_FIELDS[0])
+              .label}
+          </Text>
+          <Text style={[styles.chevron, {color: tokens.textTertiary}]}>›</Text>
+        </Pressable>
         <FieldLabel tokens={tokens} text="排序方向" />
         <OptionRow
           options={SORT_ORDERS}
@@ -191,16 +212,43 @@ export function DirectoryRuleSheet({
   );
 
   return (
-    <ModalShell
-      visible={visible}
-      onClose={onClose}
-      variant="bottom"
-      animationType="slide"
-      keyboardAvoid={{kind: 'adaptive', maxHeightRatio: 0.85}}
-      panelStyle={[styles.sheet, {paddingBottom: Math.max(insets.bottom, 16)}]}
-    >
-      {sheetContent}
-    </ModalShell>
+    <>
+      <ModalShell
+        visible={visible}
+        onClose={onClose}
+        variant="bottom"
+        animationType="slide"
+        keyboardAvoid={{kind: 'adaptive', maxHeightRatio: 0.85}}
+        panelStyle={[styles.sheet, {paddingBottom: Math.max(insets.bottom, 16)}]}
+      >
+        {sheetContent}
+      </ModalShell>
+      {/* 排序方式单选：独立底部弹层（RN Modal 叠 Modal），选中即关。 */}
+      <PickerListModal
+        visible={sortFieldPickerVisible}
+        title="排序方式"
+        load={loadSortFields}
+        keyExtractor={item => item.value}
+        renderRow={(item, selected) => (
+          <>
+            <Text style={{color: tokens.text}}>{item.label}</Text>
+            {selected ? (
+              <Text style={{color: tokens.primary}}>当前</Text>
+            ) : null}
+          </>
+        )}
+        getRowProps={item => ({
+          testID: `sort-field-option-${item.value}`,
+          accessibilityLabel: `排序方式 ${item.label}`,
+        })}
+        onPick={item => {
+          setSortField(item.value);
+          setSortFieldPickerVisible(false);
+        }}
+        emptyText="暂无可选排序方式"
+        onClose={() => setSortFieldPickerVisible(false)}
+      />
+    </>
   );
 }
 
@@ -287,6 +335,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
   },
+  pickerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  chevron: {fontSize: 18, lineHeight: 22},
   actions: {
     flexDirection: 'row',
     justifyContent: 'space-around',

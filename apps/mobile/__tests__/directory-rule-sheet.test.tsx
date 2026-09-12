@@ -6,6 +6,9 @@
  * tests/G-3：改 TestRenderer 渲染后断布局（渲染树里存在 flexShrink:1 的
  * 收缩容器），等价重构（挪样式、改写法）不再碎。mock 范式照
  * keyboard-avoid-android.test.tsx（AppModal 换透传 View）。
+ *
+ * 另一用例：排序方式改 PickerListModal 单选（UI 紧凑化）——值行点开弹层、
+ * 选中回写、弹层关闭的交互闭环。
  */
 import React from 'react';
 import {describe, expect, it, jest} from '@jest/globals';
@@ -81,5 +84,49 @@ describe('DirectoryRuleSheet (mobile) — C-2 flexShrink 契约', () => {
       return flat.flexShrink === 1 && typeof flat.maxHeight === 'number';
     });
     expect(shrinkers.length).toBeGreaterThan(0);
+  });
+});
+
+describe('DirectoryRuleSheet (mobile) — 排序方式 PickerListModal 单选', () => {
+  it('值行显示当前值，点开弹层选中「智能排序」后值行更新且弹层关闭', async () => {
+    let renderer!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      renderer = TestRenderer.create(
+        <DirectoryRuleSheet
+          visible
+          logicalPath="novel://project-x/"
+          initial={{sortField: 'name'}}
+          onClose={jest.fn()}
+          onSave={jest.fn(async () => undefined)}
+        />,
+      );
+    });
+    expect(
+      renderer.root.findByProps({testID: 'sort-field-value'}).props.children,
+    ).toBe('文件名称');
+
+    await act(async () => {
+      renderer.root
+        .findByProps({testID: 'sort-field-value-row'})
+        .props.onPress();
+    });
+    // PickerListModal 的 load 是异步，flush 后选项行才渲染。
+    await act(async () => {});
+    const optionSmart = renderer.root.findByProps({
+      testID: 'sort-field-option-smart',
+    });
+    await act(async () => {
+      optionSmart.props.onPress();
+    });
+
+    expect(
+      renderer.root.findByProps({testID: 'sort-field-value'}).props.children,
+    ).toBe('智能排序');
+    // 选中即关：弹层卸载，选项行不再存在。
+    expect(
+      renderer.root.findAll(
+        node => node.props?.testID === 'sort-field-option-smart',
+      ).length,
+    ).toBe(0);
   });
 });
