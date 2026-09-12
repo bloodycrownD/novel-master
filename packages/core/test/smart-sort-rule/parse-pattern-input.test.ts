@@ -92,9 +92,9 @@ describe("parsePatternInput (spec smart-filename-sort: /pattern/flags literal)",
   });
 });
 
-describe("formatPatternInput (edit echo-back)", () => {
-  it("empty flags render bare pattern", () => {
-    assert.equal(formatPatternInput("第(\\d+)章", ""), "第(\\d+)章");
+describe("formatPatternInput (edit echo-back: 始终 /pattern/flags 字面量)", () => {
+  it("empty flags render /pattern/ (统一字面量回显，不裸拼)", () => {
+    assert.equal(formatPatternInput("第(\\d+)章", ""), "/第(\\d+)章/");
   });
 
   it("non-empty flags render /pattern/flags", () => {
@@ -108,7 +108,7 @@ describe("formatPatternInput (edit echo-back)", () => {
 
   it("already-escaped slashes are left untouched", () => {
     assert.equal(formatPatternInput("a\\/b", "i"), "/a\\/b/i");
-    assert.equal(formatPatternInput("a\\/b", ""), "a\\/b");
+    assert.equal(formatPatternInput("a\\/b", ""), "/a\\/b/");
   });
 
   it("round-trips: format → parse recovers pattern + flags (escape-normalized)", () => {

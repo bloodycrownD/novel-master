@@ -100,14 +100,12 @@ export function parsePatternInput(input: string): ParsedPatternInput {
 }
 
 /**
- * Formats a stored pattern + flags back into editor input text:
- * non-empty flags render as `/pattern/flags`, empty flags render bare.
- * Unescaped `/` inside the pattern is escaped as `\/` so the formatted
- * text always parses back to the same pattern + flags (round-trip).
+ * Formats a stored pattern + flags back into editor input text: always the
+ * `/pattern/flags` literal form (empty flags render as `/pattern/`, so the
+ * echo-back style stays uniform regardless of flags). Unescaped `/` inside
+ * the pattern is escaped as `\/` so the formatted text always parses back
+ * to the same pattern + flags (round-trip).
  */
 export function formatPatternInput(pattern: string, flags: string): string {
-  if (!flags) {
-    return pattern;
-  }
   return `/${escapeUnescapedSlash(pattern)}/${flags}`;
 }
