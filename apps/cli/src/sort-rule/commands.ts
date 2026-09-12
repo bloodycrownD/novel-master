@@ -68,14 +68,14 @@ export async function runSortRule(
       const pattern = flagString(flags, "pattern");
       if (!name || !pattern) {
         throw new Error(
-          "Usage: nm sort-rule create --name <n> --pattern <p> [--example <e>] [--flags <f>]",
+          "Usage: nm sort-rule create --name <n> --pattern <p> [--description <d>] [--flags <f>]",
         );
       }
       const rule = await svc.createRule({
         name,
         pattern,
-        ...(flags.has("example")
-          ? { example: flagString(flags, "example") ?? null }
+        ...(flags.has("description")
+          ? { description: flagString(flags, "description") ?? null }
           : {}),
         ...(flags.has("flags") ? { flags: flagString(flags, "flags") } : {}),
       });
@@ -86,14 +86,14 @@ export async function runSortRule(
       const ruleId = flagString(flags, "id");
       if (!ruleId) {
         throw new Error(
-          "Usage: nm sort-rule update --id <ruleId> [--name <n>] [--pattern <p>] [--example <e>] [--flags <f>]",
+          "Usage: nm sort-rule update --id <ruleId> [--name <n>] [--pattern <p>] [--description <d>] [--flags <f>]",
         );
       }
       const patch: UpdateSmartSortRuleInput = {};
       if (flags.has("name")) patch.name = flagString(flags, "name");
       if (flags.has("pattern")) patch.pattern = flagString(flags, "pattern");
-      if (flags.has("example")) {
-        patch.example = flagString(flags, "example") ?? null;
+      if (flags.has("description")) {
+        patch.description = flagString(flags, "description") ?? null;
       }
       if (flags.has("flags")) patch.flags = flagString(flags, "flags");
       const rule = await svc.updateRule(ruleId, patch);

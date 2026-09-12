@@ -167,6 +167,8 @@ describe("sort-rule CLI e2e", () => {
         "用户规则",
         "--pattern",
         "第([0-9]+)话",
+        "--description",
+        "匹配 第X话 序号",
         "--db",
         dbPath,
       ]);
@@ -176,6 +178,19 @@ describe("sort-rule CLI e2e", () => {
         .filter((line) => line && !line.startsWith("[nm-boot]"))
         .join("");
       assert.match(ruleId, /^rule-/);
+
+      // update --description 可改描述（fix ④：--example 改名 --description）。
+      const updated = runNm([
+        "sort-rule",
+        "update",
+        "--id",
+        ruleId,
+        "--description",
+        "新描述",
+        "--db",
+        dbPath,
+      ]);
+      assert.equal(updated.status, 0, updated.stderr);
 
       const removed = runNm([
         "sort-rule",
