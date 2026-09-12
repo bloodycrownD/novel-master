@@ -378,6 +378,12 @@ export function SmartSortRuleEditorScreen() {
         tokens={tokens}
         hint="按优先级逐条尝试，首个命中者按捕获方式取序：智能数字从捕获组提取（须含至少一个捕获组），固定档命中即排最前/沉底。"
       >
+        <FormSwitchRow
+          tokens={tokens}
+          label="启用规则"
+          value={draft.enabled}
+          onValueChange={v => patchDraft({enabled: v})}
+        />
         <FormField label="名称" tokens={tokens}>
           <FormTextInput
             tokens={tokens}
@@ -439,12 +445,6 @@ export function SmartSortRuleEditorScreen() {
             maxHeight={DESCRIPTION_INPUT_MAX_HEIGHT}
           />
         </FormField>
-        <FormSwitchRow
-          tokens={tokens}
-          label="启用规则"
-          value={draft.enabled}
-          onValueChange={v => patchDraft({enabled: v})}
-        />
       </FormSectionCard>
 
       <FormSectionCard
