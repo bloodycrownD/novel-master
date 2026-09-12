@@ -35,6 +35,15 @@ export {
 } from "../domain/smart-sort-rule/logic/compile-smart-sort-rule.js";
 export type { SmartSortRuleValidationFields } from "../domain/smart-sort-rule/logic/compile-smart-sort-rule.js";
 export {
+  matchSmartSortPattern,
+} from "../domain/smart-sort-rule/logic/match-smart-sort-pattern.js";
+export type {
+  MatchSmartSortPatternResult,
+  MatchSmartSortPatternOk,
+  MatchSmartSortPatternErr,
+  SmartSortPatternMatch,
+} from "../domain/smart-sort-rule/logic/match-smart-sort-pattern.js";
+export {
   formatPatternInput,
   parsePatternInput,
 } from "../domain/smart-sort-rule/logic/parse-pattern-input.js";

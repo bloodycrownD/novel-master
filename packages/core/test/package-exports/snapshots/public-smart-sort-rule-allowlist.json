@@ -9,6 +9,7 @@
   "encodeSmartSortRuleBundle",
   "formatPatternInput",
   "isBuiltinSmartSortRuleId",
+  "matchSmartSortPattern",
   "parsePatternInput",
   "smartSortRuleBundleDocumentSchema",
   "updateSmartSortRuleSchema",
