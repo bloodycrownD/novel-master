@@ -63,7 +63,7 @@ import {
 import {
   formatPatternInput,
   parsePatternInput,
-} from "@novel-master/core/smart-sort-rule";
+} from "@shared/logic/smart-sort";
 import type { SettingsNavHandle } from "./settings-nav";
 import {
   SettingsActionSection,
