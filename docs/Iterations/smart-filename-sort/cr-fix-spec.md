@@ -3,17 +3,20 @@
 ## 元信息
 
 - repo：novel-master（worktree `.worktree/smart-filename-sort`）
-- base_sha：b442d397
-- head_sha：4f84da40（执行完成态）
+- base_sha：76c03550（origin/main v1.5.16）
+- head_sha：fa485f10
 - prd_path：docs/Iterations/smart-filename-sort/prd.md
 - spec_path：docs/Iterations/smart-filename-sort/spec.md
-- review_round：2
-- dag_version：3
-- 状态：fix-spec-executed（11 条全部执行并经 cr-func-fix-review 复核 func-ready）
+- review_round：4（第 4 轮新增量批次：capture_kind 三档 / 编辑屏重构终态 / IPC match 通道 / VFS 文件名校验 / ownerRouteKey 归属过滤；三 scope 并行评审）
+- dag_version：4
+- 状态：fix-spec-ready 待复核（round 4 新增 15 条 = 2 P1 + 13 P2；round 1-3 旧 11 条保持执行完成态不动）
+- 历史轮次：round 1-3 覆盖 b442d397 → 4f84da40（含 merge-dev 适配 core/B-3 [P0]），旧 11 条已全部执行并经 cr-func-fix-review 复核 func-ready。
 
 ---
 
-## Must-fix（按 P1 → P2，本轮无 P0）
+## Round 1-3 must-fix（已执行完成态，共 11 条，保持不动）
+
+以下为 round 1-3 的执行完成态记录，仅作下游引用与回归基线，本条目区不再改动（mc/C-2 例外，追加一条状态注记）。
 
 ### core/B-1 [P1] 懒加载条件与排序消费端口径不一致，disabled+smart 目录出现第三种行为形态
 - 维度：B + C-orch
@@ -94,8 +97,7 @@
 - 改法：smart-sort-drag.ts 导出单一 `fallbackRowCenter(from, dy)`（与 computeBoundaries 共用步长来源与 96 常量），SmartSortRulesScreen 改调该函数，删除本地硬编码。
 - 验收/测试：smart-sort-drag.test.ts 补同源断言（fallbackRowCenter 与 computeBoundaries 的兜底值同源一致）。
 - 来源：review_round 1 · mc scope 评审
-
----
+- 状态注记（round 4 追加）：随 D8 拖拽移除自然失效，目标文件已不存在（smart-sort-drag.ts 已删除，无需任何后续动作）。
 
 ### core/B-3 [P0] L1 评估链缓存签名不含 smart_sort_rule 表——改智能规则后排序不刷新
 - 维度：B（正确性）+ C-orch
@@ -105,16 +107,151 @@
 - 验收/测试：新用例——选 smart 排序评估一次（缓存发布）→ 改智能规则（如禁用某条）→ 再次评估结果与旧缓存不一致（签名 miss 重算）；非 smart 库行为不变。
 - 来源：merge-dev 适配评估（2026-09-08，用户确认开工）
 
+---
+
+## Round 4 must-fix（增量批次，合并后 15 条 = 2 P1 + 13 P2）
+
+本轮为真机验收增量批次（base 76c03550 → head fa485f10），三个 scope 并行评审（core / mobile / dtcli=desktop+cli）。合并说明：mobile/B-2 并入 dtcli/B-1（双端「结果只属于上次点击」parity，同一条治）；dtcli/C-1 并入 core/C-3（哨兵元组显示文案单源化，core 侧治本 + CLI 侧消费收敛同一条）。编号 1-15 为合并后顺序。
+
+### P1（2 条）
+
+#### 1. core/mobile-G-1 [P1] ownerRouteKey 归属过滤零测试覆盖
+- 维度：G（测试覆盖）
+- 文件：apps/mobile/src/navigation/HeaderContext.tsx:69-78（useStackOverrideSetter 自动附加 route.key 为 ownerRouteKey）；AppHeader 消费侧三态判定；测试落 apps/mobile/__tests__/app-header.test.tsx
+- 问题：fa485f10 引入的 ownerRouteKey 归属过滤（转场动画期间「?」帮助按钮与标题不再同时渲染到相邻屏 header）没有任何行为断言——AppHeader 的三态判定（owner 匹配当前 route.key → 应用 override；不匹配 → 回退 base 标题；无 owner → 保持旧全局兼容语义）与 useStackOverrideSetter 自动附加 route.key 的行为均无测试锁住，后续重构或回归无从拦截。
+- 改法：app-header.test.tsx 补三态用例（owner 匹配应用 / 不匹配回退 base / 无 owner 全局兼容）+ useStackOverrideSetter 附加 route.key 断言。
+- 验收/测试：用例②（不匹配回退 base）在无过滤的旧代码下跑红——证明测试对原始 bug 有真实捕获力，不是恒绿摆设。
+- 来源：review_round 4 · mobile scope 评审
+
+#### 2. dtcli/B-1 [P1]（合并 mobile/B-2）测试结果不随输入失效——双端高亮错位与结果残留
+- 维度：B + G（双端 parity）
+- 文件：apps/desktop/renderer/features/settings/SettingsViews.tsx:2262-2264（测试文本 onChange 只 setTestText）、2163-2166（highlightSegments 按旧 matchResult 偏移切分）；apps/mobile/src/screens/stack/SmartSortRuleEditorScreen.tsx:240-242（applyPatternInput）、580（captureKind patchDraft）
+- 问题：测试结果区的语义是「结果只属于上次点击『测试』时的输入快照」，但四个输入变化入口里只有部分清结果：desktop 测试文本 onChange 不清 matchResult/testError，编辑文本后旧 matches 的 index 偏移对已编辑文本切分高亮错位；mobile 正则输入 applyPatternInput 与捕获数字切换 captureKind patchDraft 两处不清 testOutcome，改正则或换档位后旧结果残留误导（mobile 的 changeTestText 已有清空范式，这两处漏对齐）。
+- 改法：双端对齐「结果只属于上次点击」——desktop 测试文本 onChange 追加 setMatchResult(null) + setTestError(null)；mobile applyPatternInput 与 captureKind patchDraft 两处 setTestOutcome(IDLE_OUTCOME)（照 changeTestText 既有清空范式）。
+- 验收/测试：双端改输入后结果区回 idle 状态（desktop 回占位提示、mobile 回 idle 文案）；行为断言分别落入 dtcli/G-1 与 mobile/G-2 的测试。
+- 来源：review_round 4 · desktop + mobile scope 评审（mobile/B-2 并入本条，双端同治）
+
+### P2（13 条）
+
+#### 3. core/B-4 [P2] parseChineseNum 超长 ASCII 数字串溢出 ±Infinity，击穿 D13 哨兵前提
+- 维度：B（正确性）
+- 文件：packages/core/src/domain/workplace/logic/smart-sort.ts:147-163（parseChineseNum）
+- 问题：约 309 位以上的纯 ASCII 数字串经 `Number()` 转成 ±Infinity（ASCII_INT 分支 154-156 直接 `return Number(s)`），与 fixed_min/fixed_max 哨兵在数值上平权——formatSortTupleForDisplay 的文档前提「数字管道永不产出 ±Infinity（parseChineseNum 有限值）」被击穿，展示层会把普通捕获数字误报成「固定最小/最大」档，排序比较侧 Infinity 与哨兵混序。
+- 改法：ASCII 整数分支与最终返回加 `Number.isFinite` 守卫，非有限返回 null（沿用「转换失败继续下一条」语义）；中文逐位分支的 `Number(digits)` 同型溢出，一并对齐同一守卫。
+- 验收/测试：`parseChineseNum("9".repeat(400)) === null` 断言 + smart-sort.test 补对应用例。
+- 来源：review_round 4 · core scope 评审
+
+#### 4. core/C-3 + dtcli/C-1 合并 [P2] 哨兵元组显示文案多源，±∞ 显示单源化
+- 维度：C（DRY）
+- 文件：packages/core/src/domain/smart-sort-rule/logic/match-smart-sort-pattern.ts:112-124（tupleForCaptureKind 内联「(固定最小,)」「(固定最大,)」文案）；apps/cli/src/sort-rule/commands.ts:194-207（test 命令手写 -Infinity/Infinity 检测，输出不带括号）；packages/core/src/domain/workplace/logic/smart-sort.ts:250-262（formatSortTupleForDisplay，经 packages/core/src/public/smart-sort-rule.ts 公开导出但零生产消费）
+- 问题：哨兵元组的显示文案有三份平行来源——match 通道的 tupleForCaptureKind 内联字符串、CLI test 命令手写 ±∞ 检测、D13 唯一权威实现 formatSortTupleForDisplay（公开导出却没有任何生产消费方）。三处已现格式分叉（CLI 不带括号），文案漂移无一致性保障。
+- 改法（拍板方案 a）：三处消费全部收敛调 formatSortTupleForDisplay（smart 档数字元组与 fixed 档哨兵文案同源格式化）；CLI test 输出同步为带括号格式；与 core/B-4 一起治本（哨兵前提修复）治面（显示单源化）。
+- 验收/测试：CLI e2e 断言同步带括号格式（dtcli/G-2 补）；core 单测锁 formatSortTupleForDisplay 为唯一文案来源。
+- 来源：review_round 4 · core + dtcli scope 评审（dtcli/C-1 并入本条）
+
+#### 5. core/C-4 [P2] flags 合法性第三份平行实现
+- 维度：C（DRY）
+- 文件：packages/core/src/domain/smart-sort-rule/logic/parse-pattern-input.ts:24-30（本地 isValidFlags 字面复制）；对照 packages/core/src/domain/smart-sort-rule/model/smart-sort-rule.schema.ts（assertFlagsValid）
+- 问题：round 1 的 core/C-1 已收敛过 schema/compile 双实现，但 parse-pattern-input.ts 内还留着第三份 flags 合法性字面复制——同一规则三处维护，drift 风险复燃。
+- 改法：schema 层导出非 throw 的纯谓词 `isFlagsValid`，`assertFlagsValid` 内部复用该谓词后 throw；parse-pattern-input 引入 schema 版并删除本地复制。
+- 验收/测试：parse-pattern-input.test 全绿零行为变化。
+- 来源：review_round 4 · core scope 评审
+
+#### 6. core/F-1 [P2] SmartRulesProvider port 文档注释仍写「启用且」，与 core/B-1 修复后口径矛盾
+- 维度：F（注释/文档一致性）
+- 文件：packages/core/src/service/workplace/workplace.port.ts:17-21
+- 问题：port 注释写「仅当存在启用且 sortField='smart' 的目录规则时才被调用」，而 core/B-1 修复后懒加载触发只看 `sortField === 'smart'`、不看 ruleEnabled（启用过滤由 service 编译侧承担）——注释与实现口径矛盾，误导后续维护与评审。
+- 改法：删「启用且」，写明与排序消费端共用基线口径（是否启用由规则编译结果决定，不由加载侧预过滤）。
+- 验收/测试：注释-only，无行为面。
+- 来源：review_round 4 · core scope 评审
+
+#### 7. core/F-2 [P2] 注释错字与措辞失实两处
+- 维度：F
+- 文件：packages/core/src/service/smart-sort-rule/impl/smart-sort-rule.service.ts:257、282（「兑底」×2）；packages/core/src/service/workplace/create-workplace-service.ts:38（「复用同一 repo」）
+- 问题：①resetDefaults 注释两处「兑底」为错字，应为「兜底」；②「复用同一 repo」措辞失实——smartRuleRows 每次调用 `new SqliteSmartSortRuleRepository(conn)` 新建实例，并非复用同一实例。
+- 改法：错字改「兜底」；措辞改「同一 repo 类」（每次新建实例、共享同一 conn）。
+- 验收/测试：注释-only，无行为面。
+- 来源：review_round 4 · core scope 评审
+
+#### 8. mobile/B-1 [P2] 编辑屏加载失败后 dirty 恒真，误弹未保存确认
+- 维度：B
+- 文件：apps/mobile/src/screens/stack/SmartSortRuleEditorScreen.tsx:229（baseline 初始 ''）、232（dirty = snapshot !== baseline）、263-265（listRules 异常 catch 只 toast）
+- 问题：编辑已有规则时 listRules 抛异常，catch 分支只 toast「加载失败」，baseline 停在初始 ''，而 draft 是 DEFAULT_DRAFT（非空快照）——dirty 恒真，用户返回时误弹「未保存的更改」确认框。
+- 改法：catch 分支与加载中路径把 baseline 对齐当前 draft（或 baseline 引入 null 态 + dirty 判空），保证加载失败不产生伪 dirty。
+- 验收/测试：listRules reject 时无「未保存的更改」弹窗。
+- 来源：review_round 4 · mobile scope 评审
+
+#### 9. mobile/C-1 [P2] 七文件 useHeaderContext 死 import + 屏级注释缩进错位
+- 维度：C（死代码/格式）
+- 文件：apps/mobile/src/screens/stack/ 下 CloudSyncProgressScreen.tsx / PromptEditorScreen.tsx / ProviderDetailScreen.tsx / SearchEngineDetailScreen.tsx / SearchEnginesScreen.tsx / SmartSortRuleEditorScreen.tsx，及 apps/mobile/src/hooks/useVfsBackNavigation.ts（共七处）
+- 问题：ownerRouteKey 改造把七处 override 调用方统一切到 useStackOverrideSetter 后，旧的 useHeaderContext import 残留成死 import；部分屏级注释缩进错位（未按 2 格缩进）。
+- 改法：删死 import（只留 useStackOverrideSetter），注释缩进归位 2 格。
+- 验收/测试：typecheck/lint 干净，无行为面。
+- 来源：review_round 4 · mobile scope 评审
+
+#### 10. mobile/C-3 [P2] 列表屏头注释仍提拖拽，与 D8 移除终态矛盾
+- 维度：F（注释一致性）
+- 文件：apps/mobile/src/screens/stack/SmartSortRulesScreen.tsx:2
+- 问题：文件头注释仍描述长按拖拽调序，而拖拽已按设计定案 D8 移除（改按钮调序），注释与实现终态矛盾。
+- 改法：改写为按钮调序（注明拖拽已按 D8 移除）。
+- 验收/测试：注释-only，无行为面。
+- 来源：review_round 4 · mobile scope 评审
+
+#### 11. mobile/G-2 [P2] splitHighlightSegments 纯函数零测试
+- 维度：G（测试覆盖）
+- 文件：apps/mobile/src/screens/stack/SmartSortRuleEditorScreen.tsx:173（splitHighlightSegments）
+- 问题：高亮切分纯函数零测试——普通交替切分、零宽匹配跳过、末尾匹配无尾段等边界均无断言，dtcli/B-1 的清结果修复也无 mobile 侧行为断言可挂。
+- 改法：新增测试三用例：①普通交替切分（普通段/匹配段交错）；②零宽匹配不产生空段且后续段偏移不漂移；③末尾匹配无尾段。
+- 验收/测试：三用例全绿；可顺带挂 dtcli/B-1 的 mobile 侧断言（改正则/换档位后结果回 idle 文案）。
+- 来源：review_round 4 · mobile scope 评审
+
+#### 12. dtcli/B-2 [P2] desktop 编辑器保存 name 未 trim，无空名拦截
+- 维度：B（双端 parity）
+- 文件：apps/desktop/renderer/features/settings/SettingsViews.tsx:2127-2141（save，name 直取 draft.name）
+- 问题：save 不 trim name、空名/纯空格名照发 IPC，靠 core 层报错兜底；mobile 侧 collectFields 有本地 trim + 「请填写规则名称」toast 前置拦截，双端行为不对齐。
+- 改法：save 里 name trim + 空名本地 toast「请填写规则名称」（对齐 mobile collectFields 惯例）。
+- 验收/测试：空白名保存被本地拦截（不达 IPC）。
+- 来源：review_round 4 · desktop scope 评审
+
+#### 13. dtcli/B-3 [P2] 编辑器加载 effect 对 IPC 失败静默
+- 维度：B
+- 文件：apps/desktop/renderer/features/settings/SettingsViews.tsx:2062-2066（list effect 的 !res.ok 裸 return）
+- 问题：编辑器加载 effect 对 `!res.ok` 静默 return——round 1 desktop/B-1 修过的「失败伪装成空态」同型问题在编辑器复现。
+- 改法：`!res.ok` 时 toastSettingsError(res.error.message)。
+- 验收/测试：list ok:false 出错误 toast。
+- 来源：review_round 4 · desktop scope 评审
+
+#### 14. dtcli/G-1 [P2] 桌面端新批次零行为测试
+- 维度：G（测试覆盖）
+- 文件：apps/desktop/renderer/features/settings/SettingsViews.tsx:2027（splitSmartSortHighlightSegments）；nm:sort-rule/match IPC 通道（DTO：index/tuple 透传）
+- 问题：round 4 增量（高亮切分函数 + match 通道）在桌面端零行为断言，dtcli/B-1 的清结果修复也无测试可挂。
+- 改法：①高亮切分函数行为断言：多匹配偏移 / 零宽跳过不产生空段 / 尾部段 / 重复文本下偏移不错位；②match DTO 的 index/tuple 透传断言与非法正则返回 ok:false 结果（非 IPC 错误）断言；③挂 dtcli/B-1 desktop 侧断言（改测试文本后结果区回 idle）。
+- 验收/测试：上述断言全绿。
+- 来源：review_round 4 · desktop scope 评审
+
+#### 15. dtcli/G-2 [P2] CLI import/export/enable/disable 四子命令零 e2e
+- 维度：G（测试覆盖）
+- 文件：apps/cli/test/sort-rule-e2e.test.ts
+- 问题：CLI 九个 sort-rule 子命令现覆盖 5/9，import / export / enable / disable 四个子命令零 e2e。
+- 改法：补 round-trip 用例：export → disable → import 回灌 → list 断言恢复（含 enabled 翻转）。
+- 验收/测试：round-trip 用例全绿；core/C-3 的带括号哨兵格式断言可顺带在此锁定（test 命令输出走 formatSortTupleForDisplay 后）。
+- 来源：review_round 4 · cli scope 评审
+
+---
+
 ## Spec deviations
 
 | 项 | 状态 | 处置 |
 |----|------|------|
 | Step 6 懒加载条件加码（`ruleEnabled && sortField === "smart"` 超出 spec 口径） | fixed | core/B-1 已执行：条件去掉 ruleEnabled，与 spec 口径对齐（T-WE3c 独享库验证） |
 | CLI list 列序与 Step 9 不符 | fixed | mc/A-1 已执行：列序调回 spec 钉死顺序（e2e 锁列） |
+| VFS 文件名校验不在迭代 spec（43803e39 引入 packages/core/src/domain/vfs/logic/validate-entry-name.ts） | open（用户已知情拍板） | 用户已知情拍板（本会话新增需求）；K 类建议：spec 补一节收录设计拍板（拒控制字符/纯空白/首尾空格与 . 与 ..、五入口、导入链路豁免），随下游执行时闭合 |
 
 ---
 
 ## Open questions / 待拍板（不阻塞 fix-spec）
+
+round 1-3 遗留：
 
 - core-oq1：importRules 替换式清空含 builtin 后，不含 builtin 的 YAML 导入会在下次启动 seed 重灌时 sortOrder 撞号（与 core/B-2 同型问题、bootstrap 路径）——候选方案：importRules 收尾显式 renumber（builtin 在前），或接受 seed 重灌语义；**需用户拍板**。
 - core-oq2：YAML bundle 的 sortOrder 字段与数组序构成双真相源（当前数组序为唯一真相、字段静默忽略）——两可，维持或收窄均可。
@@ -126,6 +263,15 @@
 - mc-oq2：编辑器预览只跑草稿规则、不含全列表上下文（符合 spec D11，hint 已声明）——两可。
 - mc-oq3：`test` 命令尾行 `# asc` 为 spec 外附加输出——默认保留。
 
+round 4 新增：
+
+- core-oq5：importRules 中 builtin 前缀行获 D3 保护删不掉——builtin 前缀的导入行不可删除是否符合预期，待用户确认语义。
+- core-oq6：previewSort 的 nums 含 ±Infinity 时的 JSON 序列化留意（Infinity 非合法 JSON 值，序列化后变 null）——core/B-4 修复后数字管道不再产出 ±Infinity，此问题面自然收窄，但导出/序列化路径留意。
+- mc-oq4：SmartSortRuleEditorScreen 内两处 pickerRow 数值不一致（捕获数字与排序方式两处选择器行样式）——是否抽公共组件，两可。
+- mc-oq5：VfsFileManager 每次 reload 重新编译智能排序规则——量小，重编译成本可忽略，两可维持。
+- dtcli-oq1：desktop 保存前置校验是否整体拉齐 mobile collectFields（dtcli/B-2 只补 name 一项，正则空值等其余字段是否同拦）——待拍板。
+- dtcli-oq2：非法正则时结果区错误样式观感（红框/红字层级）——UI 细节，待用户真机过目后定。
+
 ---
 
 ## 已豁免（用户确认不修）
@@ -134,7 +280,7 @@
 
 ---
 
-## 合并后 QA（manual_user，不阻塞）
+## 合并后 QA（manual_user，不阻塞；round 1-3 批次）
 
 - 桌面端设置页智能排序规则视图手动 smoke：列表加载失败出错误提示（desktop/B-1）；编辑已删除规则出「规则不存在」提示且 save 走新建语义（desktop/B-2）；规则拖拽调序行为与改前一致（desktop/C-1）。
 - 移动端智能排序规则列表手动 smoke：长按拖拽调序动画与兜底行为正常（mc/C-2 改动后）。
@@ -144,7 +290,14 @@
 
 ## K 节建议（下游执行时闭合）
 
+round 1-3 遗留：
+
 - 触达文件统一 lint/format：SettingsViews.tsx、smart-sort-rule.service.ts、workplace.service.ts、create-workplace-service.ts、sort-rule/commands.ts、SmartSortRulesScreen.tsx、smart-sort-drag.ts 及对应测试文件。
 - core/B-1 改动涉及的注释与 core/C-2 的 provider 注入说明需同步更新，避免下一轮评审再报口径漂移。
 - mc/A-1、mc/C-1 的 e2e 断言补齐后，确认 CI 的 CLI 用例为绿（本地 CLI 测试环境受限时以 CI 为准）。
 - 桌面端 TS2540 同款问题不逐个修（见 desktop-oq2），本轮新增代码避免再引入新的实例。
+
+round 4 新增：
+
+- desktop 测试入口 apps/desktop/scripts/run-tests.mjs 的默认 glob `test/**/*.test.ts` 在 bash 无 globstar 下只展开一层子目录（`test/*/*.test.ts`）——顶层 85 个测试文件不进测试入口，CI 同盲区（实测：顶层 85 个仅子目录 7 个被跑到）。建议本迭代一并修（一行 glob 修正，如显式 `test/*.test.ts test/**/*.test.ts` 或改 node --test 目录发现），或另立迭代处理；dtcli/G-1 的新测试需确认真的被入口跑到。
+- spec 补 VFS 文件名校验章节：收录设计拍板（拒控制字符/纯空白/首尾空格/`.` 与 `..`、五个入口、导入链路豁免），与 Spec deviations 的 open 行对应，随下游执行时闭合。
