@@ -73,14 +73,18 @@ function probePort(port, host) {
 let ownVite = null;
 
 // 进程退出兜底：只杀自己 spawn 的 vite（ownVite），复用的不动。exit 回调里只能
-// 同步操作，process.kill(-pid, SIGKILL) 是同步的，可用。防脚本异常路径泄漏孤儿 vite
+// 同步操作，process.kill(-pid, SIGKILL) 是同步的，可用。防脚本异常路径泄漏孤儿 vite。
+// 序列模式（run-all 注入 E2E_REUSE_VITE=1）下不杀——首个脚本退出时要把自己起的
+// vite 留给后续脚本复用，统一由 run-all 末尾的 shutdownVite() 回收；单跑则自起自关
 process.on("exit", () => {
-  if (ownVite) { try { process.kill(-ownVite.pid, "SIGKILL"); } catch {} }
+  if (ownVite && process.env.E2E_REUSE_VITE !== "1") {
+    try { process.kill(-ownVite.pid, "SIGKILL"); } catch {}
+  }
 });
 
 // 彻底清场：杀本 worktree 路径前缀匹配的 vite（带 ROOT 前缀防误杀并行 worktree）。
-// 供序列 runner（run-all）末尾调用——各 case 的 shutdown 已不管 vite，末尾脚本
-// 正常退出时只杀自己的 ownVite，首个脚本起的 vite 要靠这个 pkill 兜底回收
+// 供序列 runner（run-all）末尾调用——各 case 的 shutdown 已不管 vite、序列模式下
+// exit 兜底也不杀复用源，首个脚本起的 vite 由这个 pkill 兜底回收
 export function shutdownVite() {
   try { execSync(`pkill -9 -f "${ROOT}/node_modules/.bin/vite"`, { stdio: "ignore" }); } catch {}
 }
@@ -176,6 +180,23 @@ export async function openWorkspaceContextMenu(page) {
 export async function shutdown(app, vite = null, mock = null) {
   try { await app.close(); } catch {}
   if (mock) mock.close();
+}
+
+// app 就绪条件等待（替代各 case 开头 domcontentloaded 后的固定 sleep(3500)）：
+// ① domcontentloaded；② #chat-rail 出现——React shell（App→MainShell→ChatRail）挂载标志，
+//    覆盖空库/恢复会话两种启动路径；③ rail 列表的「加载中…」占位消失——projects/sessions
+//    初始数据就绪，后续才能安全点项目/会话行。③超时只 warn 不抛：非预期慢环境继续跑，
+//    由后续断言自然暴露（不把「慢」静默升级成「挂」）
+export async function waitForAppReady(page) {
+  await page.waitForLoadState("domcontentloaded");
+  await page.waitForSelector("#chat-rail", { timeout: 15000 });
+  await page
+    .waitForFunction(
+      () => ![...document.querySelectorAll(".chat-list__label")].some((el) => (el.textContent ?? "").includes("加载中")),
+      null,
+      { timeout: 15000, polling: 250 },
+    )
+    .catch(() => console.warn("waitForAppReady: rail 加载占位 15s 未消失，继续执行"));
 }
 
 export async function shot(page, id, name, ms = 900) {

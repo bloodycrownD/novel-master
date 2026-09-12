@@ -1,13 +1,13 @@
 // R6-2: 模型重命名/删除/全选 + 技能行菜单删除/域切换 + YAML 导入导出补验
-import { launchApp, shutdown, shot } from "./lib.mjs";
+import { waitForAppReady, launchApp, shutdown, shot } from "./lib.mjs";
 
 const errors = [];
 const { app, page, vite } = await launchApp({ errors });
 const sleep = (ms) => page.waitForTimeout(ms);
 
 try {
-  await page.waitForLoadState("domcontentloaded");
-  await sleep(3500);
+  // app 就绪条件等待（原固定 sleep(3500)，见 lib.mjs waitForAppReady 说明）
+  await waitForAppReady(page);
 
   // ===== A. 模型管理：拉取(已有3模型场景跳过) → 全选/删除 =====
   await page.click('button[aria-label="打开设置"]');

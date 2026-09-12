@@ -1,5 +1,5 @@
 // bootstrap：重建测试库（项目/Agent/Provider/模型/会话/消息/工作区文件）
-import { launchApp, shutdown, startMock, shot, sendMessage, goToProjects, openWorkspaceContextMenu, closeOverlays } from "./lib.mjs";
+import { waitForAppReady, launchApp, shutdown, startMock, shot, sendMessage, goToProjects, openWorkspaceContextMenu, closeOverlays } from "./lib.mjs";
 
 const errors = [];
 const mock = await startMock();
@@ -10,8 +10,8 @@ const sleep = (ms) => page.waitForTimeout(ms);
 let state = null;
 
 try {
-  await page.waitForLoadState("domcontentloaded");
-  await sleep(3500);
+  // app 就绪条件等待（原固定 sleep(3500)，见 lib.mjs waitForAppReady 说明）
+  await waitForAppReady(page);
   await shot(page, "B0", "bootstrap-start");
 
   // 1. 项目

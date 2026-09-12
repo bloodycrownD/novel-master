@@ -1,13 +1,13 @@
 // R6-1: 会话/项目 删除 + 批量管理模式
-import { launchApp, shutdown, shot, goToProjects } from "./lib.mjs";
+import { waitForAppReady, launchApp, shutdown, shot, goToProjects } from "./lib.mjs";
 
 const errors = [];
 const { app, page, vite } = await launchApp({ errors });
 const sleep = (ms) => page.waitForTimeout(ms);
 
 try {
-  await page.waitForLoadState("domcontentloaded");
-  await sleep(3500);
+  // app 就绪条件等待（原固定 sleep(3500)，见 lib.mjs waitForAppReady 说明）
+  await waitForAppReady(page);
   await goToProjects(page);
   const st0 = await page.evaluate(() => ({
     vis: [...document.querySelectorAll(".chat-nav-view")].filter((v) => !v.hidden).map((v) => v.getAttribute("data-nav-view")),

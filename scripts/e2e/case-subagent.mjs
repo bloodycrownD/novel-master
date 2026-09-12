@@ -1,6 +1,6 @@
 // R7-3: 子会话（mock 回 task tool_calls → 子会话创建 → task 卡片 → 子会话面板）
 import http from "node:http";
-import { launchApp, shutdown, shot, goToProjects, sendMessage, closeOverlays } from "./lib.mjs";
+import { waitForAppReady, launchApp, shutdown, shot, goToProjects, sendMessage, closeOverlays } from "./lib.mjs";
 
 const errors = [];
 // mock：第一轮回 tool_calls（task 工具），tool 结果轮回 stop
@@ -41,8 +41,8 @@ const { app, page, vite } = await launchApp({ errors });
 const sleep = (ms) => page.waitForTimeout(ms);
 
 try {
-  await page.waitForLoadState("domcontentloaded");
-  await sleep(3500);
+  // app 就绪条件等待（原固定 sleep(3500)，见 lib.mjs waitForAppReady 说明）
+  await waitForAppReady(page);
   const composer = page.locator('textarea[aria-label="消息输入"]');
   if (!(await composer.count())) {
     await goToProjects(page);
