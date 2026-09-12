@@ -80,14 +80,21 @@ export function resolveChatLinkTarget(href: string): string | null {
   }
 }
 
+/** 省略显示长度门槛（字符数）：路径超过该长度且层数 >2 才做中间省略。 */
+const ELIDE_PATH_MIN_LENGTH = 20;
+
 /**
  * 超长路径省略显示：保留首段目录 + `...` + 文件名（对齐工作区路径中省
- * 略的视觉口径），如 `/测试/1/1/x/不存在的文件.md` → `/测试.../不存在的文件.md`。
- * 层数不足（根 + 文件两段内）原样返回，不做省略。
+ * 略的视觉口径），如 `/测试/1/1/.../不存在的文件.md` → `/测试.../不存在的文件.md`。
+ * 入参应为归一化绝对逻辑路径（/ 开头、无空段无尾斜杠，即
+ * resolveChatLinkTarget/resolveLogicalPath 的产出形态）；短路径（两段内或
+ * 未超过 ELIDE_PATH_MIN_LENGTH）原样返回；文件名/首段本身超长不截断。
  */
 export function elideChatLinkPath(path: string): string {
   const parts = path.split("/").filter(p => p.length > 0);
-  if (parts.length <= 2) {
+  // 拍板口径是「超长才省」：段数>2 且超过显示长度门槛才省略，短而深的路径
+  // （如 /notes/2026/x.md）完整显示；文件名/首段本身超长不截断（显示层自适应）。
+  if (parts.length <= 2 || path.length <= ELIDE_PATH_MIN_LENGTH) {
     return path;
   }
   return `/${parts[0]!}.../${parts[parts.length - 1]!}`;

@@ -102,16 +102,29 @@ describe("isHttpUrl（MF-4 三端单源）", () => {
 });
 
 describe('chatLinkNotFoundMessage / elideChatLinkPath', () => {
-  it('浅路径（根+文件两段内）不省略，文案为「{路径} 不存在」', () => {
+  it('浅路径（两段内）与未超长度门槛的短路径不省略', () => {
     assert.equal(chatLinkNotFoundMessage('/测试/不存在的文件.md'), '/测试/不存在的文件.md 不存在');
     assert.equal(chatLinkNotFoundMessage('/x.md'), '/x.md 不存在');
+    // 短而深（3 段但整体 ≤20 字符）：完整显示，不丢中间段
+    assert.equal(elideChatLinkPath('/a/b/c/x.md'), '/a/b/c/x.md');
   });
 
-  it('深层路径保留首段 + ... + 文件名', () => {
+  it('超长深层路径保留首段 + ... + 文件名', () => {
     assert.equal(
       elideChatLinkPath('/测试/1/1/1/1/1/1/1/1/1/s/sds/c/ds/x/不存在的文件.md'),
       '/测试.../不存在的文件.md',
     );
-    assert.equal(chatLinkNotFoundMessage('/a/b/c/x.md'), '/a.../x.md 不存在');
+    // 长而浅（3 段但总长 >20）：省略中间段
+    assert.equal(
+      chatLinkNotFoundMessage('/notes/2026/report-final-draft.md'),
+      '/notes.../report-final-draft.md 不存在',
+    );
+  });
+
+  it('边界：纯 / 与尾斜杠原样、超长文件名单段不截断', () => {
+    assert.equal(elideChatLinkPath('/'), '/');
+    assert.equal(elideChatLinkPath('/a/b/'), '/a/b/');
+    const longName = `/${'x'.repeat(60)}.md`;
+    assert.equal(elideChatLinkPath(longName), longName);
   });
 });

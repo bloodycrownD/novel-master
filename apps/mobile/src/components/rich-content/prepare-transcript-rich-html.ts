@@ -14,7 +14,10 @@ const markdown = new MarkdownIt({html: true, linkify: true});
 // linkify-it 5 的 tlds() 增删 API 语义破碎（单调用禁不动目标 TLD 反伤 com，
 // 批量禁用需手工重植全表），故改在 match 层过滤：仅丢弃「无协议推断 +
 // 无路径 + 撞车 TLD」的匹配；显式 http(s) URL 与真裸域名（www/github 等）
-// 不受影响。
+// 不受影响。清单事实：linkify-it 5 默认 TLD 表 = 16 项通用 + 两字符国别码
+// 全表 + xn--，清单只盯可达撞车项（md/sh/py/rs/pl/pm/so 与 tf/cc/ml/in/
+// cl/sc/st/as 等国别码）；zip/app/page/link/file/mov 在当前依赖下不可达、
+// 属前向防御。
 const FILE_EXTENSION_LOOKALIKE_TLDS = new Set([
   'md',
   'zip',
@@ -30,6 +33,15 @@ const FILE_EXTENSION_LOOKALIKE_TLDS = new Set([
   'file',
   'mov',
   'so',
+  // 两字符国别码撞车扩展（round 3 CR 补，实测可达）
+  'tf',
+  'cc',
+  'ml',
+  'in',
+  'cl',
+  'sc',
+  'st',
+  'as',
 ]);
 const originalLinkifyMatch = markdown.linkify.match.bind(markdown.linkify);
 markdown.linkify.match = (text: string) =>
