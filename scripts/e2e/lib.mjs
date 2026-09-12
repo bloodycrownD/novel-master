@@ -131,15 +131,14 @@ export async function launchApp({ errors = null } = {}) {
     page.on("pageerror", (err) => errors.push(String(err).slice(0, 200)));
     page.on("console", (m) => { if (m.type() === "error" && !m.text().includes("Electron Security Warning") && !m.text().includes("Insecure Content")) errors.push(("c:" + m.text()).slice(0, 200)); });
   }
-  // 版本弹窗兜底：autoCheck 在 bootstrap ready 2s 后弹「版本检查」结果遮罩
-  // （snooze 写库 24h，清库即失效——每轮 bootstrap 后首跑必弹），不点掉会挡全屏操作 30s 超时；
-  // 窗口 3s：env 短路（NOVEL_MASTER_DISABLE_UPDATE_CHECK=1）后主进程 fetch 立即失败，
-  // 「版本检查」遮罩理论上不会再弹，这里纯防漏网兑底；弹出则优先「今日不再提醒」
-  await dismissUpdatePrompt(page, 3000);
+  // 版本弹窗处理不在这里做：autoCheck 遮罩最早在 renderer 挂载 + 2s 才出现，此刻
+  // （firstWindow 后）轮询只会空转漏网（历史 15s 长窗口是为覆盖真 fetch 超时 10s 的
+  // 最坏路径；env 短路后弹窗提前，3s 窗口同样擦边漏——smoke 实测漏网弹窗挡后续点击）。
+  // 挪到 waitForAppReady 末尾——renderer 就绪后 2s 内必弹，短窗口即可精确覆盖
   return { app, page, vite };
 }
 
-// 版本弹窗兜底：有界轮询等待「版本检查」结果遮罩出现（env 短路后 launchApp 传 3s 纯防漏网，
+// 版本弹窗处理：有界轮询等待「版本检查」结果遮罩出现（waitForAppReady 内置调用；其它
 // 定点调用方自选窗口；限定标题「版本检查」避免误伤同结构的其它 overlay 弹窗）；
 // 出现则优先点「今日不再提醒」（写库 snooze 24h，同库后续脚本不再弹），无则退回「关闭」。
 // 检测到并处理返回 true，窗口耗尽返回 false
@@ -197,6 +196,12 @@ export async function waitForAppReady(page) {
       { timeout: 15000, polling: 250 },
     )
     .catch(() => console.warn("waitForAppReady: rail 加载占位 15s 未消失，继续执行"));
+
+  // autoCheck 弹窗处理：renderer 挂载 ~2s 后 autoCheck 触发，env 短路下检查立即失败、
+  // 未 snooze 时弹「版本检查」错误遮罩（不点掉会挡全屏操作 30s 超时）。此刻起算 4s 窗口
+  // 精确覆盖「2s 触发 + 渲染」；出现即点「今日不再提醒」（写库 snooze 24h，同库后续
+  // 脚本不再弹、各自只吃满本窗口）；窗口耗尽说明已 snooze，正常放行
+  await dismissUpdatePrompt(page, 4000);
 }
 
 export async function shot(page, id, name, ms = 900) {
