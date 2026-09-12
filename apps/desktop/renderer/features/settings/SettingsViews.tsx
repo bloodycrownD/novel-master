@@ -1952,6 +1952,7 @@ export function SmartSortRulesView({ nav }: { nav: Nav }) {
   );
 }
 
+/** Flags 四选预设（用户拍板简化：无自由输入框；全量 flags 经 CLI --flags / YAML 导入仍可用）。 */
 const SMART_SORT_FLAG_PRESETS: Array<{ label: string; value: string }> = [
   { label: "无", value: "" },
   { label: "i", value: "i" },
@@ -2212,28 +2213,23 @@ export function SmartSortRuleEditorView({ nav }: { nav: Nav }) {
             <SettingsStatus error={`正则无效：${regexError}`} inline />
           ) : null}
           <SettingsField label="标志（flags）">
-            <input
-              value={draft.flags}
-              placeholder="留空；常用 i（忽略大小写）"
-              onChange={(e) => setDraft({ ...draft, flags: e.target.value })}
-            />
+            <div className="config-dep-chips">
+              {SMART_SORT_FLAG_PRESETS.map((preset) => (
+                <button
+                  key={preset.label}
+                  type="button"
+                  className={`config-dep-chip${
+                    draft.flags === preset.value ? " is-active" : ""
+                  }`}
+                  onClick={() => setDraft({ ...draft, flags: preset.value })}
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
           </SettingsField>
-          <div className="config-dep-chips">
-            {SMART_SORT_FLAG_PRESETS.map((preset) => (
-              <button
-                key={preset.label}
-                type="button"
-                className={`config-dep-chip${
-                  draft.flags === preset.value ? " is-active" : ""
-                }`}
-                onClick={() => setDraft({ ...draft, flags: preset.value })}
-              >
-                {preset.label}
-              </button>
-            ))}
-          </div>
           <p className="settings-hint">
-            flags 须为 gimsuy 子集且不重复；正则须含至少一个捕获组，命中时全部捕获组须可解析为数值（中文数字自动转换），否则尝试下一条规则。
+            正则匹配修饰符四选一（无/i/g/gi）；正则须含至少一个捕获组，命中时全部捕获组须可解析为数值（中文数字自动转换），否则尝试下一条规则。
           </p>
           <SettingsField label="示例">
             <input

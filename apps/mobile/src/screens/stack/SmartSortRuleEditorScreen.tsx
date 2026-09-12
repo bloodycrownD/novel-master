@@ -43,7 +43,7 @@ const DEFAULT_DRAFT: DraftFields = {
 
 const DEFAULT_TEST_INPUT = '第一章.txt\n第二章.txt\n第十章.txt';
 
-/** Flags 快捷预设（spec：默认空 + g/i 快捷）。 */
+/** Flags 四选预设（用户拍板简化：无自由输入框；全量 flags 经 CLI --flags / YAML 导入仍可用）。 */
 const FLAG_PRESETS: {value: string; label: string}[] = [
   {value: '', label: '无'},
   {value: 'i', label: 'i'},
@@ -264,15 +264,8 @@ export function SmartSortRuleEditorScreen() {
         <FormField
           label="Flags"
           tokens={tokens}
-          hint="可填 g/i/m/s/u/y（不重复）；忽略大小写用 i。"
+          hint="正则匹配修饰符"
         >
-          <FormTextInput
-            tokens={tokens}
-            value={draft.flags}
-            onChangeText={v => patchDraft({flags: v})}
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
           <View style={styles.flagPresets}>
             {FLAG_PRESETS.map(preset => {
               const active = draft.flags === preset.value;
