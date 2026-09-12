@@ -106,3 +106,9 @@ user:
 
 assistant:
 fix-spec 执行完成：用户拍板（12 条全修含新增 MF-12 搜索面板接线、invalid 静默 no-op 维持现状豁免、query 参考 Typora 不处理豁免；invalid 技能=SKILL.md front matter 解析失败的数据状态，用户技能都正常创建故从未见过，UI 已禁其编辑入口）。fix 两节点并行 8 笔提交（fix-link-core：MF-1/2/3/4/5/6/12；fix-skills-ui：MF-7/8/9/10/11）后 verify+cr-func 并行双绿：core 97+mobile 63+desktop 44 全绿、双端 typecheck 过、12/12 MF 闭合矩阵真断言、零越界（T-CF7 stub 配套合理）。存量清单外 4 处同语义 http 正则（app-info:106/ChatTranscriptWebView:1241/RichDocumentWebView:349/CodeEditorWebView:159，基线已有非本 diff）留待后续拍板是否收敛 isHttpUrl；s3 driver 的 replace 剥前缀是另一语义不列。dev-ready 二次达成（分支 34 笔提交），待真机 manual_user（T-E7/L7/S7）与合并决策。cr-func 两处观察记录：DEV_SERVER_URL 前缀匹配理论可被同前缀长域名绕（仅 dev 可忽略）；搜索面板链接路由依赖「抽屉只在活跃会话打开」隐含约束（未来支持非活跃会话查看时需显式传 sessionContext）。
+
+user:
+拉取主分支，主分支有更新，同步主分支。
+
+assistant:
+同步完成：更新实为 dev 已并入 main（v1.5.15：web-search-tool + desktop-regression-fixes + e2e 资产库，93 笔）。merge main 进迭代分支（3378a5fb），两处冲突手工解：CHANGELOG（我方 Unreleased 与 main 的 1.5.15 段双保留）、ContextMenu.tsx（双方各自加了 item.disabled——取 main 侧，带 aria-disabled 更完整，我方 SkillsManageView 的 disabled: !menu.valid 用法兼容）。11 包 dist + webview 重建后回归全绿：core 97/0、mobile 42/42、desktop 36/0、双端 typecheck 过；语义共存抽查通过（SkillDetailView 的编辑信息入口与 desktop-regression 的未保存守卫共存 :287/:413、ConversationPanel openChatLink 注入在、disabled 用法匹配）。分支现 35 笔，dev-ready 状态保持，待真机验收与合并。
