@@ -5,9 +5,11 @@
  * 输入框绑定原始文本 patternInput，解析结果同步进 draft.pattern/flags，
  * 测试/保存均消费解析值；正则不进全屏编辑（fix ②：正则没那么长），
  * 改为自适应高度的多行输入（textarea 式，内容增高、封顶后内部滚动）。
+ * 描述字段同为自适应多行（fix-desc-and-highlight：单行看不全）。
  * 测试预览为正则匹配测试（fix ②：替代旧排序测试）：输入一段文本，
- * 点「测试」按钮手动触发（非实时联动），下方 monospace 区逐匹配显示
- * 文本与捕获组；输入变化即清空结果（结果只属于上次点击）。
+ * 点「测试」按钮手动触发（非实时联动），下方 monospace 区高亮渲染
+ * 原文（匹配段 primary 变色，按 matches.index 切分，fix-desc-and-highlight）
+ * + 底部匹配计数；输入变化即清空结果（结果只属于上次点击）。
  * 规则字段 example 已更名 description（fix ④：语义泛化为描述）。
  */
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
@@ -18,6 +20,7 @@ import {
   View,
   type NativeSyntheticEvent,
   type TextInputContentSizeChangeEventData,
+  type TextInputProps,
 } from 'react-native';
 import {useNavigation, useRoute} from '@react-navigation/native';
 import type {RouteProp} from '@react-navigation/native';
@@ -39,6 +42,7 @@ import {StickyFormFooter} from '@/components/form/StickyFormFooter';
 import {SecondaryButton} from '@/components/ui/Buttons';
 import {useRuntime} from '@/hooks/useRuntime';
 import {useTheme} from '@/theme/ThemeProvider';
+import type {ThemeTokens} from '@/theme/tokens';
 import {useToast} from '@/components/chrome/ToastHost';
 import {toastMessage} from '@/errors/toast-message';
 import {useUnsavedGuard} from '@/hooks/useUnsavedGuard';
@@ -71,6 +75,10 @@ const DEFAULT_DRAFT: DraftFields = {
 const PATTERN_INPUT_MIN_HEIGHT = 46;
 const PATTERN_INPUT_MAX_HEIGHT = 170;
 
+/** 描述字段自适应高度：与正则同款起步，封顶略低（fix-desc-and-highlight）。 */
+const DESCRIPTION_INPUT_MIN_HEIGHT = 46;
+const DESCRIPTION_INPUT_MAX_HEIGHT = 120;
+
 /** 测试结果形态：idle（未测/输入已变化）→ 手动点击后才进入 ok/error。 */
 type TestOutcome =
   | {kind: 'idle'}
@@ -79,13 +87,79 @@ type TestOutcome =
 
 const IDLE_OUTCOME: TestOutcome = {kind: 'idle'};
 
-/** 匹配行渲染：匹配文本带引号，捕获组逐组列出（未参与匹配为 '-'）。 */
-function formatMatchLine(match: {
+/** 自适应多行输入（正则/描述共用，fix-desc-and-highlight 抽出）：
+ *  单行起步，内容增高即撑高，封顶后固定高度内部滚动。 */
+function AutoGrowMultilineInput({
+  tokens,
+  value,
+  onChangeText,
+  placeholder,
+  minHeight,
+  maxHeight,
+  ...rest
+}: TextInputProps & {
+  tokens: ThemeTokens;
+  minHeight: number;
+  maxHeight: number;
+}) {
+  const [height, setHeight] = useState<number | null>(null);
+  const handleContentSizeChange = useCallback(
+    (e: NativeSyntheticEvent<TextInputContentSizeChangeEventData>) => {
+      const contentHeight = e.nativeEvent.contentSize.height;
+      setHeight(
+        Math.min(Math.max(contentHeight + 24, minHeight), maxHeight),
+      );
+    },
+    [minHeight, maxHeight],
+  );
+  return (
+    <FormTextInput
+      tokens={tokens}
+      multiline
+      value={value}
+      onChangeText={onChangeText}
+      onContentSizeChange={handleContentSizeChange}
+      placeholder={placeholder}
+      autoCapitalize="none"
+      autoCorrect={false}
+      style={[
+        styles.autoGrowInput,
+        {minHeight},
+        height != null ? {height} : null,
+      ]}
+      {...rest}
+    />
+  );
+}
+
+/** 高亮切分段：测试原文按匹配偏移切成普通段/匹配段交替。 */
+interface HighlightSegment {
   text: string;
-  groups: readonly (string | null)[];
-}): string {
-  const groups = match.groups.map(g => (g == null ? '-' : JSON.stringify(g)));
-  return `${JSON.stringify(match.text)}  [${groups.join(', ')}]`;
+  matched: boolean;
+}
+
+/** 按 matches（含 index）把测试文本切成普通段/匹配段交替序列：
+ *  偏移来自 matchAll 原生 index，重复文本不会错位（indexOf 回查会漂）；
+ *  零宽匹配跳过（不产生空匹配段，cursor 不后移）。 */
+function splitHighlightSegments(
+  text: string,
+  matches: readonly {index: number; text: string}[],
+): HighlightSegment[] {
+  const segments: HighlightSegment[] = [];
+  let cursor = 0;
+  for (const m of matches) {
+    if (m.index > cursor) {
+      segments.push({text: text.slice(cursor, m.index), matched: false});
+    }
+    if (m.text.length > 0) {
+      segments.push({text: m.text, matched: true});
+    }
+    cursor = Math.max(cursor, m.index + m.text.length);
+  }
+  if (cursor < text.length) {
+    segments.push({text: text.slice(cursor), matched: false});
+  }
+  return segments;
 }
 
 export function SmartSortRuleEditorScreen() {
@@ -99,9 +173,6 @@ export function SmartSortRuleEditorScreen() {
   const [draft, setDraft] = useState<DraftFields>(DEFAULT_DRAFT);
   const [testText, setTestText] = useState('');
   const [testOutcome, setTestOutcome] = useState<TestOutcome>(IDLE_OUTCOME);
-  const [patternInputHeight, setPatternInputHeight] = useState<number | null>(
-    null,
-  );
   const [loading, setLoading] = useState(Boolean(ruleId));
   const [saving, setSaving] = useState(false);
   const [baseline, setBaseline] = useState('');
@@ -118,20 +189,6 @@ export function SmartSortRuleEditorScreen() {
   const applyPatternInput = useCallback((text: string) => {
     setDraft(prev => ({...prev, patternInput: text, ...parsePatternInput(text)}));
   }, []);
-
-  // 自适应高度：内容增高即撑高输入框，封顶后固定高度内部滚动。
-  const handlePatternContentSizeChange = useCallback(
-    (e: NativeSyntheticEvent<TextInputContentSizeChangeEventData>) => {
-      const contentHeight = e.nativeEvent.contentSize.height;
-      setPatternInputHeight(
-        Math.min(
-          Math.max(contentHeight + 24, PATTERN_INPUT_MIN_HEIGHT),
-          PATTERN_INPUT_MAX_HEIGHT,
-        ),
-      );
-    },
-    [],
-  );
 
   const load = useCallback(async () => {
     if (!ruleId) {
@@ -284,29 +341,23 @@ export function SmartSortRuleEditorScreen() {
           tokens={tokens}
           hint="支持 /正则/flags 格式，如 /第(\d+)章/i"
         >
-          <FormTextInput
+          <AutoGrowMultilineInput
             tokens={tokens}
-            multiline
             value={draft.patternInput}
             onChangeText={applyPatternInput}
-            onContentSizeChange={handlePatternContentSizeChange}
             placeholder="如 /第([0-9〇零一二两三四五六七八九十百千]+)章/i"
-            autoCapitalize="none"
-            autoCorrect={false}
-            style={[
-              styles.patternInput,
-              patternInputHeight != null
-                ? {height: patternInputHeight}
-                : null,
-            ]}
+            minHeight={PATTERN_INPUT_MIN_HEIGHT}
+            maxHeight={PATTERN_INPUT_MAX_HEIGHT}
           />
         </FormField>
         <FormField label="描述" tokens={tokens}>
-          <FormTextInput
+          <AutoGrowMultilineInput
             tokens={tokens}
             value={draft.description}
             onChangeText={v => patchDraft({description: v})}
             placeholder="描述这条规则匹配什么，如 匹配 第X章 形式的标题"
+            minHeight={DESCRIPTION_INPUT_MIN_HEIGHT}
+            maxHeight={DESCRIPTION_INPUT_MAX_HEIGHT}
           />
         </FormField>
         <FormSwitchRow
@@ -356,15 +407,31 @@ export function SmartSortRuleEditorScreen() {
                 {testOutcome.message}
               </Text>
             ) : testOutcome.result.ok ? (
-              testOutcome.result.matches.length === 0 ? (
-                <Text style={[styles.resultText, {color: tokens.textSecondary}]}>
-                  无匹配
-                </Text>
-              ) : (
+              <>
+                {/* 高亮渲染（fix-desc-and-highlight）：按匹配偏移把原文切
+                    成普通段/匹配段，嵌套 Text 继承 monospace 样式；多行
+                    文本在 Text 内自然换行。 */}
                 <Text style={[styles.resultText, {color: tokens.text}]}>
-                  {testOutcome.result.matches.map(formatMatchLine).join('\n')}
+                  {splitHighlightSegments(
+                    testText,
+                    testOutcome.result.matches,
+                  ).map((seg, i) =>
+                    seg.matched ? (
+                      <Text key={i} style={{color: tokens.primary}}>
+                        {seg.text}
+                      </Text>
+                    ) : (
+                      <Text key={i}>{seg.text}</Text>
+                    ),
+                  )}
                 </Text>
-              )
+                <Text
+                  style={[styles.resultCount, {color: tokens.textSecondary}]}>
+                  {testOutcome.result.matches.length > 0
+                    ? `共 ${testOutcome.result.matches.length} 处匹配`
+                    : '无匹配'}
+                </Text>
+              </>
             ) : (
               <Text style={[styles.resultText, {color: tokens.danger}]}>
                 {`正则无效：${testOutcome.result.error}`}
@@ -398,8 +465,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     paddingHorizontal: 16,
   },
-  patternInput: {
-    minHeight: PATTERN_INPUT_MIN_HEIGHT,
+  autoGrowInput: {
     textAlignVertical: 'top',
   },
   resultBox: {
@@ -412,5 +478,10 @@ const styles = StyleSheet.create({
     fontFamily: 'monospace',
     fontSize: 14,
     lineHeight: 20,
+  },
+  resultCount: {
+    fontSize: 12,
+    lineHeight: 16,
+    marginTop: 8,
   },
 });

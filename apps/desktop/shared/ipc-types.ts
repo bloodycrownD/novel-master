@@ -1323,9 +1323,11 @@ export type SmartSortRuleImportRulesRequest = {
   readonly bundle: SmartSortRuleBundleDto;
 };
 
-/** 编辑器正则匹配测试的单个匹配（groups 内 null = 捕获组未参与匹配，GUI 渲染 '-'）。 */
+/** 编辑器正则匹配测试的单个匹配（index = 原文起始偏移，供高亮切分；
+ *  groups 内 null = 捕获组未参与匹配，GUI 渲染 '-'）。 */
 export type SmartSortRuleMatchDto = {
   readonly text: string;
+  readonly index: number;
   readonly groups: readonly (string | null)[];
 };
 

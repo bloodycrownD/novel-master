@@ -2001,6 +2001,36 @@ function localSmartSortRegexError(
   }
 }
 
+/** 高亮切分段：测试原文按匹配偏移切成普通段/匹配段交替（与 mobile 同源）。 */
+type SmartSortHighlightSegment = {
+  text: string;
+  matched: boolean;
+};
+
+/** 按 matches（含 matchAll 原生 index）把测试文本切成普通段/匹配段交替：
+ *  偏移切分不因重复文本错位（indexOf 回查会漂）；零宽匹配跳过
+ *  （不产生空匹配段，cursor 不后移）。 */
+function splitSmartSortHighlightSegments(
+  text: string,
+  matches: readonly { index: number; text: string }[],
+): SmartSortHighlightSegment[] {
+  const segments: SmartSortHighlightSegment[] = [];
+  let cursor = 0;
+  for (const m of matches) {
+    if (m.index > cursor) {
+      segments.push({ text: text.slice(cursor, m.index), matched: false });
+    }
+    if (m.text.length > 0) {
+      segments.push({ text: m.text, matched: true });
+    }
+    cursor = Math.max(cursor, m.index + m.text.length);
+  }
+  if (cursor < text.length) {
+    segments.push({ text: text.slice(cursor), matched: false });
+  }
+  return segments;
+}
+
 export function SmartSortRuleEditorView({ nav }: { nav: Nav }) {
   // ruleId 经本地 state 镜像 navState：规则缺失回退新建时 setRuleId(undefined)
   // 才能让本组件感知（直接改 navState 不触发渲染，desktop/B-2）。
@@ -2110,20 +2140,13 @@ export function SmartSortRuleEditorView({ nav }: { nav: Nav }) {
     }
   };
 
-  /** 结果区渲染：逐匹配显示文本与捕获组（未参与匹配的组为 '-'）。 */
-  const matchText =
-    matchResult == null
-      ? ""
-      : matchResult.ok
-        ? matchResult.matches.length === 0
-          ? "无匹配"
-          : matchResult.matches
-              .map(
-                (m) =>
-                  `${JSON.stringify(m.text)}  [${m.groups.map((g) => g ?? "-").join(", ")}]`,
-              )
-              .join("\n")
-        : `正则无效：${matchResult.error}`;
+  /** 结果区渲染（fix-desc-and-highlight）：按匹配偏移高亮切分原文
+   *  （匹配段 --primary 变色）+ 底部匹配计数；错误/非法正则照旧文案。 */
+  const matchCount = matchResult?.ok ? matchResult.matches.length : 0;
+  const highlightSegments =
+    matchResult?.ok
+      ? splitSmartSortHighlightSegments(testText, matchResult.matches)
+      : null;
 
   const ruleDesc = draft.name.trim() || (ruleId ? "未命名规则" : "新规则");
 
@@ -2169,7 +2192,8 @@ export function SmartSortRuleEditorView({ nav }: { nav: Nav }) {
             支持 /正则/flags 格式，如 /第(\d+)章/i；正则须含至少一个捕获组，命中时全部捕获组须可解析为数值（中文数字自动转换），否则尝试下一条规则。
           </p>
           <SettingsField label="描述">
-            <input
+            <textarea
+              rows={3}
               value={draft.description}
               placeholder="描述这条规则匹配什么，如 匹配 第X章 形式的标题"
               onChange={(e) =>
@@ -2186,7 +2210,7 @@ export function SmartSortRuleEditorView({ nav }: { nav: Nav }) {
 
         <SettingsSection title="测试">
           <p className="settings-hint">
-            输入一段文本，点击「测试」后显示全部匹配与捕获组（未参与匹配的捕获组显示 -）。
+            输入一段文本，点击「测试」后原文内高亮显示全部匹配段，并给出匹配计数。
           </p>
           <SettingsField label="测试文本">
             <textarea
@@ -2202,7 +2226,26 @@ export function SmartSortRuleEditorView({ nav }: { nav: Nav }) {
             }`}
           >
             {testError ??
-              (matchText || "输入测试文本后点击「测试」查看匹配结果。")}
+              (highlightSegments != null ? (
+                <>
+                  {highlightSegments.map((seg, i) =>
+                    seg.matched ? (
+                      <span key={i} style={{ color: "var(--primary)" }}>
+                        {seg.text}
+                      </span>
+                    ) : (
+                      <span key={i}>{seg.text}</span>
+                    ),
+                  )}{"\n"}
+                  <span style={{ color: "var(--text-secondary)" }}>
+                    {matchCount > 0 ? `共 ${matchCount} 处匹配` : "无匹配"}
+                  </span>
+                </>
+              ) : matchResult != null && !matchResult.ok ? (
+                `正则无效：${matchResult.error}`
+              ) : (
+                "输入测试文本后点击「测试」查看匹配结果。"
+              ))}
           </pre>
         </SettingsSection>
       </SettingsFormSection>
