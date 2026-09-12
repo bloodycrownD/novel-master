@@ -123,3 +123,9 @@ assistant:
 ③认账：详情页入口是超出用户拍板范围的加料，双端移除（mobile 还原基线；desktop 手术式摘除保 main 的未保存守卫），入口收敛为管理页行菜单单点，测试与 CHANGELOG 同步。提交 90568909（linkify）+ 3e25868b（详情页移除）。
 ④$$ 是 CR 揪出的存量 bug（String.replace 字符串替换 $ 序列展开损坏 front matter），已修复并有单测，无需人工再验。
 真机验收态：①②③④全部闭环；desktop 侧（搜索面板链接等）待用户桌面端走查。探针日志已撤。
+
+user:
+简单测试没什么问题，合并到主分支吧。
+
+assistant:
+合并完成：export-link-skill-mgmt（tip 6359ae19）经 --no-ff 并入 main（a635a28f，中文合并信息概括三 feature 与 CR 三轮 17 条 MF）；dev 快进到同点。合并障碍两处均为本会话遗留的未跟踪旧快照（apm 记忆文件 + 7 份 PRD/spec 早期版本，内容为分支版子集，核对 diff 后删除放行）；期间 main 被并行会话合入 e2e 提速批次（c8734116），无冲突。合并后 core 冒烟 28/0。本地 main 领先 origin 55 笔（含并行会话的 e2e 批次），未推送——推送与发版由用户决定。迭代闭环：brainstorm→PRD×4→spec×3→spec-check 两轮 execute-ready→dev-loop（3 impl/3 verify/3 cr-func）→CR 两轮 12 MF→真机验收（linkify 根因修复/详情页收敛/未命中提示三轮迭代）→CR round3 5 MF 收尾→合并。
