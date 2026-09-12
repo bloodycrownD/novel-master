@@ -143,23 +143,31 @@ function chineseNumToIntPowerForm(s: string): number | null {
  * zeros); otherwise the string is parsed as a Chinese numeral (positional
  * "一零二五" → 1025, power "一千零二十五" → 1025, uppercase forms included).
  * Returns `null` when neither path applies (empty / mixed / unknown chars).
+ *
+ * Overflow guard (core/B-4): a ~309+ digit run makes `Number()` return
+ * ±Infinity, which would be numerically indistinguishable from the
+ * fixed_min/fixed_max sentinel tuples. Non-finite results are treated as a
+ * conversion failure (`null`) so the numeric pipeline never yields ±Infinity
+ * and `formatSortTupleForDisplay`'s sentinel-only-±Infinity premise holds.
  */
 export function parseChineseNum(input: string): number | null {
   const s = fullWidthToHalf(input).replace(/\s+/g, "");
   if (s === "") {
     return null;
   }
+  let parsed: number | null;
   if (ASCII_INT.test(s)) {
-    return Number(s);
-  }
-  if (s.length > 1 && CHN_POSITIONAL_CHARS.test(s)) {
+    parsed = Number(s);
+  } else if (s.length > 1 && CHN_POSITIONAL_CHARS.test(s)) {
     let digits = "";
     for (const ch of s) {
       digits += String(CHN_NUM_VALUE[ch]);
     }
-    return Number(digits);
+    parsed = Number(digits);
+  } else {
+    parsed = chineseNumToIntPowerForm(s);
   }
-  return chineseNumToIntPowerForm(s);
+  return parsed !== null && Number.isFinite(parsed) ? parsed : null;
 }
 
 /**

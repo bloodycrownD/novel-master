@@ -97,6 +97,19 @@ describe("parseChineseNum (T-SS1)", () => {
     assert.equal(parseChineseNum("００１"), 1); // full-width digits fold to half-width
   });
 
+  it("returns null for digit runs that overflow Number() to ±Infinity (core/B-4)", () => {
+    // ~309 位以上的纯数字串经 Number() 溢出为 ±Infinity，与 fixed_min/max
+    // 哨兵元组数值平权；必须按「转换失败」返回 null，数字管道永不产出 ±Infinity。
+    assert.equal(parseChineseNum("9".repeat(400)), null);
+    assert.equal(parseChineseNum(`-${"9".repeat(400)}`), null);
+    // 中文逐位分支同型溢出："一"*400 → digits 400 位 → Infinity → null。
+    assert.equal(parseChineseNum("一".repeat(400)), null);
+    // 仍在有限范围内的长数字串正常返回（10^299 < Number.MAX_VALUE）。
+    const finite = parseChineseNum(`1${"0".repeat(299)}`);
+    assert.ok(finite !== null && Number.isFinite(finite));
+    assert.equal(finite, 1e299);
+  });
+
   it("returns null for empty / mixed / unknown inputs", () => {
     assert.equal(parseChineseNum(""), null);
     assert.equal(parseChineseNum("  "), null); // whitespace-only collapses to empty
@@ -176,6 +189,18 @@ describe("extractSortKey (T-SS3)", () => {
     const alt = compile("t-alt", "^(?:a(\\d+)|b(\\d+))$");
     const anyDigit = compile("t-digit", "(\\d+)");
     assert.deepEqual(extractSortKey("b5", [alt, anyDigit]), [5]);
+  });
+
+  it("treats an overflowing capture group as a conversion failure and skips the rule (core/B-4)", () => {
+    // 400 位数字串经 Number() 溢出为 Infinity：按「任一组转换失败」跳过该
+    // 规则（与 unparsable 组同语义），绝不产出 ±Infinity 数字元组与哨兵混序。
+    const huge = compile("t-huge", "第(\\d+)章");
+    const firstDigit = compile("t-first", "第(\\d)");
+    assert.equal(extractSortKey(`第${"9".repeat(400)}章`, [huge]), null);
+    assert.deepEqual(
+      extractSortKey(`第${"9".repeat(400)}章`, [huge, firstDigit]),
+      [9]
+    );
   });
 
   it("defends against zero-capture-group rules by skipping them", () => {
