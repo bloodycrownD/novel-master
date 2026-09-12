@@ -31,6 +31,15 @@ const flagsSchema = z
   });
 
 /**
+ * flags 合法性纯谓词（C-4 单源）：仅 g/i/m/s/u/y 字符、不重复，非 throw。
+ * schema 校验（{@link assertFlagsValid}）与 logic 层（parse-pattern-input
+ * 等）共用本谓词，勿另写平行实现。
+ */
+export function isFlagsValid(flags: string): boolean {
+  return flagsSchema.safeParse(flags).success;
+}
+
+/**
  * flags 合法性单源校验（C-1：schema 层与 logic 层共用，勿另写平行实现）。
  *
  * @param flags - 待检 flags 字符串
@@ -41,14 +50,18 @@ export function assertFlagsValid(
   flags: string,
   detail?: { ruleId?: string }
 ): void {
-  const checked = flagsSchema.safeParse(flags);
-  if (!checked.success) {
-    throw new SmartSortRuleError(
-      "INVALID_ARGUMENT",
-      `Invalid flags '${flags}': ${checked.error.issues[0]?.message ?? "invalid"}`,
-      detail
-    );
+  if (isFlagsValid(flags)) {
+    return;
   }
+  // 冷路径（仅非法 flags 触发）：判定已由 isFlagsValid 单源给出，此处
+  // 重跑一次 safeParse 仅为取 zod issue 文案（保持既有错误消息不变）。
+  const checked = flagsSchema.safeParse(flags);
+  const issue = checked.success ? undefined : checked.error.issues[0]?.message;
+  throw new SmartSortRuleError(
+    "INVALID_ARGUMENT",
+    `Invalid flags '${flags}': ${issue ?? "invalid"}`,
+    detail
+  );
 }
 
 /** Create payload: name/pattern 必填，flags 缺省 ''，description 可选。 */

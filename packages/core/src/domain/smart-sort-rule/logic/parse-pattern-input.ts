@@ -7,24 +7,20 @@
  * - Input starting with `/` is treated as a literal only when it closes
  *   cleanly: the delimiter is the rightmost UNESCAPED `/` (a `\/` pair stays
  *   inside the body), the tail after it must be valid flags (gimsuy subset,
- *   no repeats — same rule as the schema-level assertFlagsValid), and the body
- *   must be non-empty and contain no unescaped `/`. Otherwise the whole input
- *   degrades to a bare pattern with empty flags (e.g. `/x/q`, `//`, `/a/b/i`).
+ *   no repeats — via the schema-level isFlagsValid single source), and the
+ *   body must be non-empty and contain no unescaped `/`. Otherwise the whole
+ *   input degrades to a bare pattern with empty flags (e.g. `/x/q`, `//`,
+ *   `/a/b/i`).
  *
  * @module domain/smart-sort-rule/logic/parse-pattern-input
  */
+
+import { isFlagsValid } from "../model/smart-sort-rule.schema.js";
 
 /** Parse result of {@link parsePatternInput}: pattern + flags ('' when bare). */
 export interface ParsedPatternInput {
   readonly pattern: string;
   readonly flags: string;
-}
-
-/** Flags validity (gimsuy subset, no repeats) — mirrors schema assertFlagsValid. */
-function isValidFlags(flags: string): boolean {
-  return (
-    /^[gimsuy]*$/.test(flags) && new Set(flags).size === flags.length
-  );
 }
 
 /** Whether `text` contains a `/` not preceded by an odd number of backslashes. */
@@ -91,7 +87,7 @@ export function parsePatternInput(input: string): ParsedPatternInput {
     // Empty body (JS has no empty-regex literal), invalid flags, or an
     // unescaped `/` inside the body all mean "not a literal" — degrade to
     // treating the whole input as a bare pattern.
-    if (body === "" || !isValidFlags(flags) || containsUnescapedSlash(body)) {
+    if (body === "" || !isFlagsValid(flags) || containsUnescapedSlash(body)) {
       break;
     }
     return { pattern: body, flags };
