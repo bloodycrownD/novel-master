@@ -60,11 +60,45 @@ function waitForPort(port, host, timeoutMs) {
   });
 }
 
+// 单次探测端口是否已有响应（连接成功即通，不重试）
+function probePort(port, host) {
+  return new Promise((resolve) => {
+    const s = net.connect({ port, host }, () => { s.destroy(); resolve(true); });
+    s.on("error", () => { s.destroy(); resolve(false); });
+  });
+}
+
+// 跨进程 vite 复用：本进程 spawn 的 vite 才记在 ownVite，其余情形（端口已通、复用
+// 前一个脚本起的 vite）为 null——清理责任见 shutdown/shutdownVite 的注释
+let ownVite = null;
+
+// 进程退出兜底：只杀自己 spawn 的 vite（ownVite），复用的不动。exit 回调里只能
+// 同步操作，process.kill(-pid, SIGKILL) 是同步的，可用。防脚本异常路径泄漏孤儿 vite
+process.on("exit", () => {
+  if (ownVite) { try { process.kill(-ownVite.pid, "SIGKILL"); } catch {} }
+});
+
+// 彻底清场：杀本 worktree 路径前缀匹配的 vite（带 ROOT 前缀防误杀并行 worktree）。
+// 供序列 runner（run-all）末尾调用——各 case 的 shutdown 已不管 vite，末尾脚本
+// 正常退出时只杀自己的 ownVite，首个脚本起的 vite 要靠这个 pkill 兜底回收
+export function shutdownVite() {
+  try { execSync(`pkill -9 -f "${ROOT}/node_modules/.bin/vite"`, { stdio: "ignore" }); } catch {}
+}
+
 export async function launchApp({ errors = null } = {}) {
   fs.mkdirSync(OUT, { recursive: true });
   fs.mkdirSync(DATA, { recursive: true });
-  const vite = spawn("npx", ["vite"], { cwd: DESKTOP, stdio: ["ignore", "pipe", "pipe"], detached: true });
-  await waitForPort(5173, "127.0.0.1", 60000);
+  // vite 跨进程复用：5173 已有响应（序列里前一个脚本起的还活着）则直接复用，不 spawn、
+  // 不纳入本进程清理责任（ownVite 保持 null，exit 兜底不会杀它）；只有单跑（端口空）才自起
+  // 自关。序列里首个脚本起 vite，后续 7 个复用，每轮省一次 vite 启动等待+退出回收
+  let vite = null;
+  if (await probePort(5173, "127.0.0.1")) {
+    console.log("VITE_REUSE", "5173 已有响应，复用现有 vite");
+  } else {
+    vite = spawn("npx", ["vite"], { cwd: DESKTOP, stdio: ["ignore", "pipe", "pipe"], detached: true });
+    ownVite = vite;
+    await waitForPort(5173, "127.0.0.1", 60000);
+  }
   const env = { ...process.env };
   delete env.ELECTRON_RUN_AS_NODE;
   env.DISPLAY = env.DISPLAY || ":0";
@@ -73,7 +107,7 @@ export async function launchApp({ errors = null } = {}) {
   // 立即失败，免去每次启动 10s 超时等待 + autoCheck 弹窗判定窗口
   env.NOVEL_MASTER_DISABLE_UPDATE_CHECK = "1";
   // electron 启动失败（ELECTRON_BIN 路径错误等）时先回收 vite 进程组再抛——孤儿 vite 占住 5173，
-  // 会让下一次 launchApp 的 waitForPort 误判「端口已就绪」而连锁挂起；
+  // 会让下一次 launchApp 的复用探测误判「端口已就绪」而连锁挂起；
   // mock 进程由调用方管理（startMock 独立拉起），本函数失败不负责回收 mock
   let app;
   try {
@@ -82,7 +116,9 @@ export async function launchApp({ errors = null } = {}) {
       args: ["."], cwd: DESKTOP, env,
     });
   } catch (e) {
-    try { process.kill(-vite.pid, "SIGKILL"); } catch {}
+    // 只回收自己 spawn 的 vite（复用场景 vite=null 无清理责任），防孤儿 vite 占住 5173
+    if (vite) { try { process.kill(-vite.pid, "SIGKILL"); } catch {} }
+    ownVite = null;
     throw e;
   }
   const page = await app.firstWindow();
@@ -134,12 +170,11 @@ export async function openWorkspaceContextMenu(page) {
   return menu;
 }
 
+// case 正常收尾：只关 electron + mock，不管 vite——序列里首个脚本起的 vite 要留给后续
+// 脚本复用；自己 spawn 的 vite 由模块级 exit 兜底在脚本退出时回收（单跑场景自起自关）。
+// vite 参数保留只为兼容既有调用点，已不参与清理；需要彻底清场用 shutdownVite()
 export async function shutdown(app, vite = null, mock = null) {
   try { await app.close(); } catch {}
-  if (vite) { try { process.kill(-vite.pid, "SIGKILL"); } catch {} }
-  // 兜底 pkill 只带 ${ROOT} 路径前缀匹配本 worktree 的 vite——无根前缀的子串匹配会误杀并行会话
-  // （其它 worktree）的 vite；且前一行进程组击杀已覆盖本脚本拉起的 vite 全组，第二条零收益纯风险已删
-  try { execSync(`pkill -9 -f "${ROOT}/node_modules/.bin/vite"`, { stdio: "ignore" }); } catch {}
   if (mock) mock.close();
 }
 
