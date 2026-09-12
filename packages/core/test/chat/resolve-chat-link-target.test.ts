@@ -4,7 +4,12 @@
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { isHttpUrl, resolveChatLinkTarget } from "../../src/domain/chat/logic/resolve-chat-link-target.js";
+import {
+  chatLinkNotFoundMessage,
+  elideChatLinkPath,
+  isHttpUrl,
+  resolveChatLinkTarget,
+} from "../../src/domain/chat/logic/resolve-chat-link-target.js";
 
 describe("resolveChatLinkTarget (T-L1)", () => {
   it("真机形态①：相对路径 → 补前导 / 归一化", () => {
@@ -93,5 +98,20 @@ describe("isHttpUrl（MF-4 三端单源）", () => {
     assert.equal(isHttpUrl("C:/x"), false);
     assert.equal(isHttpUrl("//host/p"), false);
     assert.equal(isHttpUrl(""), false);
+  });
+});
+
+describe('chatLinkNotFoundMessage / elideChatLinkPath', () => {
+  it('浅路径（根+文件两段内）不省略，文案为「{路径} 不存在」', () => {
+    assert.equal(chatLinkNotFoundMessage('/测试/不存在的文件.md'), '/测试/不存在的文件.md 不存在');
+    assert.equal(chatLinkNotFoundMessage('/x.md'), '/x.md 不存在');
+  });
+
+  it('深层路径保留首段 + ... + 文件名', () => {
+    assert.equal(
+      elideChatLinkPath('/测试/1/1/1/1/1/1/1/1/1/s/sds/c/ds/x/不存在的文件.md'),
+      '/测试.../不存在的文件.md',
+    );
+    assert.equal(chatLinkNotFoundMessage('/a/b/c/x.md'), '/a.../x.md 不存在');
   });
 });

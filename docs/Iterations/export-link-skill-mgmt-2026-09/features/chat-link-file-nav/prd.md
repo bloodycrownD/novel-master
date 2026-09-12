@@ -27,7 +27,7 @@ agent 常在正文里以 markdown 链接引用工作区文件，用户点击的�
 ### 包含范围
 
 1. 聊天正文 markdown 链接点击路由（Typora 式标准行为，用户已拍板）：链接目标为无 scheme 的路径形态——**相对路径、绝对路径、带锚点三种写法均可点**——且文件存在（先查聊天工作区，再查项目工作区）时，打开该文件预览（mobile FileEditor / desktop 预览面板），跳转口径与现有工具文件卡片一致。
-2. 路径形态链接但文件不存在时点击弹 toast 提示「文件路径不存在：{路径}」（2026-09-12 用户拍板，替代原「无动作」口径；不再出现 webview 错误页）；http(s)/mailto 等非路径链接维持现状：http(s) 外跳系统浏览器，不报错、不崩溃。
+2. 路径形态链接但文件不存在时点击弹 toast 提示「{路径} 不存在」（2026-09-12 用户拍板措辞；超长路径中间省略为 /首段.../文件名，如 /测试.../不存在的文件.md 不存在；不再出现 webview 错误页）；http(s)/mailto 等非路径链接维持现状：http(s) 外跳系统浏览器，不报错、不崩溃。
 3. desktop 外链安全兜底：http(s) 链接改为系统外部打开，主窗口不再整窗导航离开。
 4. 双端一致。
 
@@ -41,7 +41,7 @@ agent 常在正文里以 markdown 链接引用工作区文件，用户点击的�
 ## 核心需求（3-7 条）
 
 1. mobile webview 链接点击拦截上抛（preventDefault + bridge 传 href），识别与路由在 RN 宿主侧完成。
-2. RN 侧路由：路径归一化 → session 工作区探测 → project 工作区探测 → 命中打开 FileEditor（scope 按命中层传递）→ 未命中弹「文件路径不存在」提示。
+2. RN 侧路由：路径归一化 → session 工作区探测 → project 工作区探测 → 命中打开 FileEditor（scope 按命中层传递）→ 未命中弹「{省略路径} 不存在」提示（超长路径中间省略）。
 3. desktop 共享 markdown 组件支持链接点击回调注入（聊天侧接工作区预览，文件预览侧不改变现状）。
 4. desktop 主进程补外链拦截（`will-navigate`/`setWindowOpenHandler` + 外部打开）。
 5. 识别规则（Typora 式标准行为）：markdown 语法链接的路径目标——相对、绝对、锚点三形态，href 先 decodeURIComponent 再归一化；锚点取 path 部分定位文件，`#` 后内容 v1 不解析。
@@ -50,7 +50,7 @@ agent 常在正文里以 markdown 链接引用工作区文件，用户点击的�
 
 - Given 聊天正文存在指向聊天工作区已有文件的路径链接（相对/绝对/锚点任一写法） When 点击 Then 打开该文件预览（与点击工具文件卡片同一目标页）。
 - Given 路径链接指向的文件仅存在于项目工作区 When 点击 Then 以 project scope 打开预览。
-- Given 路径链接指向的文件两处都不存在 When 点击 Then 弹「文件路径不存在：{路径}」toast（不出错误页）、不报错。
+- Given 路径链接指向的文件两处都不存在 When 点击 Then 弹「{路径} 不存在」toast，超长路径中间省略（不出错误页）、不报错。
 - Given http(s) 链接 When mobile 点击 Then 系统浏览器打开（现状不变）。
 - Given http(s) 链接 When desktop 点击 Then 系统外部打开且主窗口停留在应用内。
 - Given wiki 风格 `[[...]]` 与反引号裸路径 When 渲染 Then 维持纯文本（与现状一致）。

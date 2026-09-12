@@ -156,7 +156,7 @@ describe('openChatLink 接线源码契约 (T-L5)', () => {
     expect(src).toMatch(/Linking\.openURL\(intent\.url\)/);
     expect(src).toMatch(/openFileEditor\(intent\.path, intent\.scope\)/);
     // 路径型链接双域未命中：弹提示（用户拍板，不再静默无动作）
-    expect(src).toMatch(/showAppToast\(`文件路径不存在：\$\{intent\.path\}`\)/);
+    expect(src).toMatch(/showAppToast\(chatLinkNotFoundMessage\(intent\.path\)\)/);
     // 外跳失败静默兜底（与原导航守卫语义一致）
     expect(src).toMatch(/Linking\.openURL\(intent\.url\)\.catch\(\(\) => undefined\)/);
     expect(src).toContain('openChatLink');
@@ -176,7 +176,7 @@ describe('openChatLink 接线源码契约 (T-L5)', () => {
       /runtime\.sessionVfs\(projectId, parentSessionId\)/,
     );
     // 未命中提示与主会话同源（showAppToast）
-    expect(src).toMatch(/showAppToast\(`文件路径不存在：\$\{intent\.path\}`\)/);
+    expect(src).toMatch(/showAppToast\(chatLinkNotFoundMessage\(intent\.path\)\)/);
     // 打开口径：session 域 FileEditor 也用 parentSessionId
     expect(src).toMatch(
       /scopeKind: 'session',\s*projectId,\s*sessionId: parentSessionId,/s,

@@ -79,3 +79,24 @@ export function resolveChatLinkTarget(href: string): string | null {
     return null;
   }
 }
+
+/**
+ * 超长路径省略显示：保留首段目录 + `...` + 文件名（对齐工作区路径中省
+ * 略的视觉口径），如 `/测试/1/1/x/不存在的文件.md` → `/测试.../不存在的文件.md`。
+ * 层数不足（根 + 文件两段内）原样返回，不做省略。
+ */
+export function elideChatLinkPath(path: string): string {
+  const parts = path.split("/").filter(p => p.length > 0);
+  if (parts.length <= 2) {
+    return path;
+  }
+  return `/${parts[0]!}.../${parts[parts.length - 1]!}`;
+}
+
+/**
+ * 聊天路径链接未命中的提示文案：`{省略路径} 不存在`（2026-09-12 用户拍板
+ * 措辞；超长路径经 elideChatLinkPath 中间省略，双端同口径）。
+ */
+export function chatLinkNotFoundMessage(path: string): string {
+  return `${elideChatLinkPath(path)} 不存在`;
+}
