@@ -9,6 +9,8 @@ import { extname } from "node:path";
 import { parseText, stringifyText } from "@novel-master/core";
 import {
   isBuiltinSmartSortRuleId,
+  SMART_SORT_CAPTURE_KINDS,
+  type SmartSortCaptureKind,
   type SmartSortRuleMoveTarget,
   type UpdateSmartSortRuleInput,
 } from "@novel-master/core/smart-sort-rule";
@@ -21,6 +23,16 @@ function flagString(
 ): string | undefined {
   const v = flags.get(key);
   return typeof v === "string" ? v : undefined;
+}
+
+/** --capture-kind 取值校验（D13 三档，非法值报错而非静默缺省 smart）。 */
+function parseCaptureKind(value: string): SmartSortCaptureKind {
+  if ((SMART_SORT_CAPTURE_KINDS as readonly string[]).includes(value)) {
+    return value as SmartSortCaptureKind;
+  }
+  throw new Error(
+    `invalid --capture-kind: ${value} (expected ${SMART_SORT_CAPTURE_KINDS.join("|")})`,
+  );
 }
 
 function formatFromPath(path: string): "yaml" | "json" {
@@ -56,9 +68,11 @@ export async function runSortRule(
       const rules = await svc.listRules();
       for (const r of rules) {
         const en = r.enabled ? 1 : 0;
-        // 列序按 spec Step 9 钉死：order⇥id⇥enabled⇥flags⇥name⇥pattern。
+        // 列序钉死：order⇥id⇥enabled⇥capture⇥flags⇥name⇥pattern（D13 后
+        // capture 列插在 enabled 后）。序号元组显示：固定档哨兵文案友好化，
+        // smart 档保持数字（-Infinity/Infinity 不适合 TSV 直出）。
         console.log(
-          `${r.sortOrder}\t${r.ruleId}\t${en}\t${r.flags}\t${r.name}\t${r.pattern}`,
+          `${r.sortOrder}\t${r.ruleId}\t${en}\t${r.captureKind}\t${r.flags}\t${r.name}\t${r.pattern}`,
         );
       }
       return;
@@ -68,7 +82,7 @@ export async function runSortRule(
       const pattern = flagString(flags, "pattern");
       if (!name || !pattern) {
         throw new Error(
-          "Usage: nm sort-rule create --name <n> --pattern <p> [--description <d>] [--flags <f>]",
+          "Usage: nm sort-rule create --name <n> --pattern <p> [--description <d>] [--flags <f>] [--capture-kind <smart|fixed_min|fixed_max>]",
         );
       }
       const rule = await svc.createRule({
@@ -78,6 +92,13 @@ export async function runSortRule(
           ? { description: flagString(flags, "description") ?? null }
           : {}),
         ...(flags.has("flags") ? { flags: flagString(flags, "flags") } : {}),
+        ...(flags.has("capture-kind")
+          ? {
+              captureKind: parseCaptureKind(
+                flagString(flags, "capture-kind") ?? "smart",
+              ),
+            }
+          : {}),
       });
       console.log(rule.ruleId);
       return;
@@ -86,7 +107,7 @@ export async function runSortRule(
       const ruleId = flagString(flags, "id");
       if (!ruleId) {
         throw new Error(
-          "Usage: nm sort-rule update --id <ruleId> [--name <n>] [--pattern <p>] [--description <d>] [--flags <f>]",
+          "Usage: nm sort-rule update --id <ruleId> [--name <n>] [--pattern <p>] [--description <d>] [--flags <f>] [--capture-kind <smart|fixed_min|fixed_max>]",
         );
       }
       const patch: UpdateSmartSortRuleInput = {};
@@ -96,6 +117,11 @@ export async function runSortRule(
         patch.description = flagString(flags, "description") ?? null;
       }
       if (flags.has("flags")) patch.flags = flagString(flags, "flags");
+      if (flags.has("capture-kind")) {
+        patch.captureKind = parseCaptureKind(
+          flagString(flags, "capture-kind") ?? "smart",
+        );
+      }
       const rule = await svc.updateRule(ruleId, patch);
       console.log(rule.ruleId);
       return;
@@ -164,7 +190,15 @@ export async function runSortRule(
       }
       const result = await svc.previewSort(positional);
       for (const line of result.lines) {
-        const nums = line.nums == null ? "-" : line.nums.join(",");
+        // 序号元组显示：null → '-'；固定档哨兵 → 文案（D13）；smart → 逗号连接。
+        const nums =
+          line.nums == null
+            ? "-"
+            : line.nums[0] === -Infinity
+              ? "固定最小"
+              : line.nums[0] === Infinity
+                ? "固定最大"
+                : line.nums.join(",");
         console.log(`${line.name}\t${line.matchedRuleId ?? "-"}\t${nums}`);
       }
       console.log("");
