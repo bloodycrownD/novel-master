@@ -28,6 +28,21 @@ describe("matchSmartSortPattern (正则测试预览核心)", () => {
     );
   });
 
+  it("matches 携带原文起始偏移 index（重复文本/多行不错位，供 GUI 高亮切分）", () => {
+    // 重复出现同一文本：indexOf 式回查会漂移，index 必须来自 matchAll 原生偏移。
+    const result = matchSmartSortPattern("第[0-9]+章", "", "第1章 第1章\n第12章");
+    ok(result);
+    assert.deepEqual(
+      result.matches.map((m) => ({ text: m.text, index: m.index })),
+      [
+        { text: "第1章", index: 0 },
+        { text: "第1章", index: 4 },
+        // 换行计入偏移：第(4)1(5)章(6)\n(7)第(8)1(9)2(10)章(11)。
+        { text: "第12章", index: 8 },
+      ]
+    );
+  });
+
   it("global flags 语义不重复（flags 已含 g 时正常迭代）", () => {
     const result = matchSmartSortPattern("第[0-9]+章", "g", "第1章 第22章");
     ok(result);
@@ -43,6 +58,7 @@ describe("matchSmartSortPattern (正则测试预览核心)", () => {
     ok(result);
     assert.equal(result.matches.length, 1);
     assert.equal(result.matches[0]!.text, "第2卷第13章");
+    assert.equal(result.matches[0]!.index, 0);
     assert.deepEqual(result.matches[0]!.groups, ["2", "13"]);
   });
 
@@ -107,5 +123,11 @@ describe("matchSmartSortPattern (正则测试预览核心)", () => {
     ok(result);
     // matchAll 对零宽匹配按引擎语义逐位推进，返回有限个结果。
     assert.ok(result.matches.length >= 1 && result.matches.length <= 4);
+    // 零宽匹配 text 为空但 index 严格递增（GUI 切分跳过空段，不重复渲染）。
+    const indexes = result.matches.map((m) => m.index);
+    for (let i = 1; i < indexes.length; i++) {
+      assert.ok(indexes[i]! > indexes[i - 1]!, "零宽匹配 index 严格递增");
+    }
+    assert.ok(result.matches.every((m) => m.text === ""));
   });
 });

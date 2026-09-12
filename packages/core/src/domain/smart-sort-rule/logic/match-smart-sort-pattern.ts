@@ -12,16 +12,26 @@
  *   with `g` appended and iterates via `matchAll`. Cloning also keeps the
  *   original's `lastIndex` untouched (no hidden state leaking between
  *   repeated test runs when flags already contain `g`).
- * - Each match carries the full match text plus one entry per capture
- *   group; a group that did not participate in the match (optional group)
- *   maps to `null` and renders as '-' in the GUI.
+ * - Each match carries the full match text, its start offset in the tested
+ *   text (`index`, from matchAll) and one entry per capture group; a group
+ *   that did not participate in the match (optional group) maps to `null`
+ *   and renders as '-' in the GUI. The offset lets both GUIs split the
+ *   text into plain/highlighted segments without re-searching (duplicate
+ *   match texts would make indexOf-style lookups drift).
+ * - Zero-width matches report their index with an empty `text`; callers
+ *   skip empty segments when rendering.
  *
  * @module domain/smart-sort-rule/logic/match-smart-sort-pattern
  */
 
-/** Single match: full match text + capture groups (null = group not hit). */
+/**
+ * Single match: full match text + start offset in the tested text
+ * (code-unit offset; zero-width matches carry an empty text) + capture
+ * groups (null = group not hit).
+ */
 export interface SmartSortPatternMatch {
   readonly text: string;
+  readonly index: number;
   readonly groups: readonly (string | null)[];
 }
 
@@ -66,6 +76,8 @@ export function matchSmartSortPattern(
   for (const m of text.matchAll(matcher)) {
     matches.push({
       text: m[0],
+      // matchAll 的 m.index 恒为数字；?? 0 仅为类型收窄（never hit）。
+      index: m.index ?? 0,
       // m.slice(1) keeps holes as undefined; normalize to null for JSON-safe
       // IPC transport (desktop DTO) and a stable '-' rendering on both GUIs.
       groups: m.slice(1).map((g) => g ?? null),
