@@ -2,7 +2,7 @@
  * Standard elevated row for config stack list screens.
  */
 import React, {type ReactNode} from 'react';
-import {Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle} from 'react-native';
+import {Pressable, StyleSheet, Text, View} from 'react-native';
 import {ElevatedCard} from './ElevatedCard';
 import type {ThemeTokens} from '@/theme/tokens';
 
@@ -18,8 +18,6 @@ type Props = {
   badge?: string;
   onMenuPress?: () => void;
   showChevron?: boolean;
-  /** 附加到卡片表面的样式（如拖拽浮起时的阴影加深）。 */
-  style?: StyleProp<ViewStyle>;
 };
 
 export function ConfigListCard({
@@ -33,10 +31,9 @@ export function ConfigListCard({
   badge,
   onMenuPress,
   showChevron = true,
-  style,
 }: Props) {
   return (
-    <ElevatedCard tokens={tokens} selected={selected} onPress={onPress} style={style}>
+    <ElevatedCard tokens={tokens} selected={selected} onPress={onPress}>
       {leading}
       <View style={styles.info}>
         <Text style={[styles.title, {color: tokens.text}]} numberOfLines={1}>

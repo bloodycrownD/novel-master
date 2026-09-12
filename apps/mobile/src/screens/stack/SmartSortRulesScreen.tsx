@@ -1,33 +1,18 @@
 /**
  * Smart sort rule management: list + toggle + reorder + batch + YAML I/O
- * (spec smart-filename-sort Step 13) + long-press drag reorder (Step 15).
- *
- * 拖拽为自研手势（D8：不引第三方拖拽库、不新增 GestureHandlerRootView）——
- * RNGH 2.31 的 GestureDetector 无 RootView 祖先时 DEV 直接抛错，
- * 故用 RN 内置响应系统：手柄 View onTouchStart 记按压时刻，
- * PanResponder.onMoveShouldSetPanResponder 在按住 ≥ DRAG_LONG_PRESS_MS 且位移
- * 未超 slop 时接管手势，reanimated shared value 驱动行位移跟随。
+ * (spec smart-filename-sort Step 13; drag reorder is a separate node).
  */
-import React, {useCallback, useMemo, useRef, useState, type ReactNode} from 'react';
+import React, {useCallback, useState} from 'react';
 import {
   ActivityIndicator,
   Alert,
   FlatList,
-  PanResponder,
   RefreshControl,
   StyleSheet,
   Switch,
   Text,
   View,
-  type LayoutChangeEvent,
-  type StyleProp,
-  type ViewStyle,
 } from 'react-native';
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  type SharedValue,
-} from 'react-native-reanimated';
 import {useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {
@@ -52,15 +37,6 @@ import {
   exportSmartSortRuleYaml,
   importSmartSortRuleYaml,
 } from '@/services/smart-sort-rule-yaml.service';
-import {
-  DRAG_ACTIVATE_SLOP,
-  DRAG_LONG_PRESS_MS,
-  DRAG_ROW_GAP,
-  computeInsertIndex,
-  fallbackRowCenter,
-  reorderRows,
-  type DragRowLayout,
-} from './smart-sort-drag';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -153,79 +129,6 @@ export function SmartSortRulesScreen() {
       }
     },
     [menuRule, navigation, moveRule, deleteRuleWithConfirm],
-  );
-
-  // ---- 长按拖拽调序（Step 15） ----
-
-  /** 每行实测布局（含 gap 的总高），拖拽插入位换算用。 */
-  const rowLayoutsRef = useRef(new Map<string, DragRowLayout>());
-  const transY = useSharedValue(0);
-  const [draggingId, setDraggingId] = useState<string | null>(null);
-  /** 当前插入位（-1 = 无拖拽）；语义见 computeInsertIndex。 */
-  const [dragInsert, setDragInsert] = useState(-1);
-  /** dragInsert 的 ref 镜：release 与最后一次 move 同帧时 state 闭包可能滞后。 */
-  const dragInsertRef = useRef(-1);
-  const dragFrom =
-    draggingId != null
-      ? rows.findIndex(r => r.ruleId === draggingId)
-      : -1;
-
-  const resetDrag = useCallback(() => {
-    setDraggingId(null);
-    setDragInsert(-1);
-    dragInsertRef.current = -1;
-    transY.value = 0;
-  }, [transY]);
-
-  const handleDragActivate = useCallback((ruleId: string) => {
-    setDraggingId(ruleId);
-    setDragInsert(-1);
-    dragInsertRef.current = -1;
-  }, []);
-
-  const handleDragMove = useCallback(
-    (ruleId: string, dy: number) => {
-      transY.value = dy;
-      const from = rows.findIndex(r => r.ruleId === ruleId);
-      if (from < 0) {
-        return;
-      }
-      const layouts = rows.map(r => rowLayoutsRef.current.get(r.ruleId));
-      const layout = rowLayoutsRef.current.get(ruleId);
-      // 实测布局缺失（虚拟化极端场景）时，兑底中心与 computeInsertIndex 内部的
-      // 兑底边界共用同一 avgRowStep 步长（smart-sort-drag 单源，不再硬编码 96）。
-      const center = layout
-        ? layout.y + (layout.height - DRAG_ROW_GAP) / 2 + dy
-        : fallbackRowCenter(from, dy, layouts);
-      const t = computeInsertIndex(center, layouts, rows.length);
-      setDragInsert(prev => (prev === t ? prev : t));
-      dragInsertRef.current = t;
-    },
-    [rows, transY],
-  );
-
-  const handleDragRelease = useCallback(
-    (ruleId: string) => {
-      const from = rows.findIndex(r => r.ruleId === ruleId);
-      const insert = dragInsertRef.current;
-      if (from >= 0 && insert >= 0) {
-        const next = reorderRows(rows, from, insert);
-        if (next !== rows) {
-          const prevRows = rows;
-          setRows(next);
-          runtime.smartSortRule
-            .reorderRules(next.map(r => r.ruleId))
-            .then(() => reload({silent: true}))
-            .catch(error => {
-              // 提交失败回滚到拖拽前顺序。
-              setRows(prevRows);
-              showToast(toastMessage('调整失败', error));
-            });
-        }
-      }
-      resetDrag();
-    },
-    [rows, runtime, reload, setRows, showToast, resetDrag],
   );
 
   // ---- 行内启停（乐观更新，失败回滚） ----
@@ -418,10 +321,6 @@ export function SmartSortRulesScreen() {
           data={rows}
           keyExtractor={item => item.ruleId}
           contentContainerStyle={listScreenStyles.listContent}
-          // 拖拽中禁滚动：拖拽行坐标系基于内容布局，避免拖拽中列表滚动导致漂移。
-          scrollEnabled={draggingId == null}
-          // 首屏全量布局，保证插入位换算的行坐标表完整（规则列表规模小）。
-          initialNumToRender={24}
           refreshControl={
             <RefreshControl
               refreshing={loading}
@@ -435,86 +334,43 @@ export function SmartSortRulesScreen() {
               暂无规则，点击「新建」创建。
             </Text>
           }
-          ListFooterComponent={
-            draggingId != null &&
-            dragInsert === rows.length &&
-            dragInsert !== dragFrom &&
-            dragInsert !== dragFrom + 1 ? (
-              <InsertLine color={tokens.primary} />
-            ) : null
-          }
-          renderItem={({item, index}) => {
-            const isDragging = item.ruleId === draggingId;
-            const showInsertLine =
-              draggingId != null &&
-              item.ruleId !== draggingId &&
-              dragInsert === index &&
-              dragInsert !== dragFrom &&
-              dragInsert !== dragFrom + 1;
-            return (
-              <DragTranslate
-                active={isDragging}
-                transY={transY}
-                style={isDragging ? styles.draggingWrapper : undefined}
-                onLayout={e => {
-                  rowLayoutsRef.current.set(item.ruleId, {
-                    y: e.nativeEvent.layout.y,
-                    height: e.nativeEvent.layout.height,
+          renderItem={({item}) => (
+            <ConfigListCard
+              tokens={tokens}
+              selected={batch.isSelected(item.ruleId)}
+              onPress={() => {
+                if (batch.active) {
+                  batch.toggle(item.ruleId);
+                } else {
+                  navigation.navigate('SmartSortRuleEditor', {
+                    ruleId: item.ruleId,
                   });
-                }}
-              >
-                {showInsertLine ? <InsertLine color={tokens.primary} /> : null}
-                <ConfigListCard
-                  tokens={tokens}
-                  selected={batch.isSelected(item.ruleId)}
-                  onPress={() => {
-                    if (batch.active) {
-                      batch.toggle(item.ruleId);
-                    } else {
-                      navigation.navigate('SmartSortRuleEditor', {
-                        ruleId: item.ruleId,
-                      });
-                    }
-                  }}
-                  leading={
-                    batch.active ? (
-                      <BatchCheckbox
-                        checked={batch.isSelected(item.ruleId)}
-                        onToggle={() => batch.toggle(item.ruleId)}
-                      />
-                    ) : (
-                      <View style={styles.leadingRow}>
-                        <DragHandle
-                          enabled={rows.length > 1 && draggingId == null}
-                          active={isDragging}
-                          color={tokens.textTertiary}
-                          activeColor={tokens.primary}
-                          onActivate={() => handleDragActivate(item.ruleId)}
-                          onMove={dy => handleDragMove(item.ruleId, dy)}
-                          onRelease={() => handleDragRelease(item.ruleId)}
-                          onCancel={resetDrag}
-                        />
-                        <Switch
-                          value={item.enabled}
-                          onValueChange={next => toggleEnabled(item, next)}
-                          trackColor={{false: tokens.border, true: tokens.primary}}
-                        />
-                      </View>
-                    )
-                  }
-                  title={item.name}
-                  subtitle={`${isBuiltinSmartSortRuleId(item.ruleId) ? '内置 · ' : ''}${
-                    item.example ?? '—'
-                  }`}
-                  onMenuPress={
-                    batch.active ? undefined : () => setMenuRule(item)
-                  }
-                  showChevron={!batch.active}
-                  style={isDragging ? styles.dragLift : undefined}
-                />
-              </DragTranslate>
-            );
-          }}
+                }
+              }}
+              leading={
+                batch.active ? (
+                  <BatchCheckbox
+                    checked={batch.isSelected(item.ruleId)}
+                    onToggle={() => batch.toggle(item.ruleId)}
+                  />
+                ) : (
+                  <Switch
+                    value={item.enabled}
+                    onValueChange={next => toggleEnabled(item, next)}
+                    trackColor={{false: tokens.border, true: tokens.primary}}
+                  />
+                )
+              }
+              title={item.name}
+              subtitle={`${isBuiltinSmartSortRuleId(item.ruleId) ? '内置 · ' : ''}${
+                item.example ?? '—'
+              }`}
+              onMenuPress={
+                batch.active ? undefined : () => setMenuRule(item)
+              }
+              showChevron={!batch.active}
+            />
+          )}
         />
       )}
       <BottomSheetMenu
@@ -541,161 +397,6 @@ export function SmartSortRulesScreen() {
 
 const EMPTY_RULES: SmartSortRule[] = [];
 
-/** 拖拽手柄：长按 ≥ DRAG_LONG_PRESS_MS 后接管手势进入拖拽。 */
-function DragHandle({
-  enabled,
-  active,
-  color,
-  activeColor,
-  onActivate,
-  onMove,
-  onRelease,
-  onCancel,
-}: {
-  enabled: boolean;
-  active: boolean;
-  color: string;
-  activeColor: string;
-  onActivate: () => void;
-  onMove: (dy: number) => void;
-  onRelease: () => void;
-  onCancel: () => void;
-}) {
-  // PanResponder 建一次；回调与开关经 ref 转发，避免拖拽中重建丢手势。
-  const cbsRef = useRef({onActivate, onMove, onRelease, onCancel});
-  cbsRef.current = {onActivate, onMove, onRelease, onCancel};
-  const enabledRef = useRef(enabled);
-  enabledRef.current = enabled;
-  /** 手柄按下时刻（onTouchStart 记录，非 responder 状态也能收到）。 */
-  const pressStartRef = useRef(0);
-  /** 接管手势时的累计 dy，后续位移相对此值归零。 */
-  const startDyRef = useRef(0);
-
-  const panResponder = useMemo(
-    () =>
-      PanResponder.create({
-        onStartShouldSetPanResponder: () => false,
-        onStartShouldSetPanResponderCapture: () => false,
-        onMoveShouldSetPanResponderCapture: () => false,
-        onMoveShouldSetPanResponder: (_e, gs) => {
-          if (!enabledRef.current || pressStartRef.current <= 0) {
-            return false;
-          }
-          const heldMs = Date.now() - pressStartRef.current;
-          return (
-            heldMs >= DRAG_LONG_PRESS_MS && Math.abs(gs.dy) < DRAG_ACTIVATE_SLOP
-          );
-        },
-        onPanResponderGrant: (_e, gs) => {
-          startDyRef.current = gs.dy;
-          cbsRef.current.onActivate();
-        },
-        onPanResponderMove: (_e, gs) => {
-          cbsRef.current.onMove(gs.dy - startDyRef.current);
-        },
-        onPanResponderRelease: () => {
-          cbsRef.current.onRelease();
-        },
-        // 被系统/父容器抢走（如来电）时不提交，复位拖拽态。
-        onPanResponderTerminate: () => {
-          cbsRef.current.onCancel();
-        },
-        onPanResponderTerminationRequest: () => true,
-      }),
-    [],
-  );
-
-  const barColor = active ? activeColor : color;
-  return (
-    <View
-      {...panResponder.panHandlers}
-      onTouchStart={() => {
-        pressStartRef.current = Date.now();
-      }}
-      onTouchEnd={() => {
-        pressStartRef.current = 0;
-      }}
-      onTouchCancel={() => {
-        pressStartRef.current = 0;
-      }}
-      style={styles.dragHandleHit}
-      accessibilityLabel="拖拽排序手柄"
-      accessibilityRole="button"
-    >
-      <View
-        style={[
-          styles.dragHandleBars,
-          !enabled && styles.dragHandleDisabled,
-        ]}
-      >
-        {[0, 1, 2].map(i => (
-          <View
-            key={i}
-            style={[styles.dragHandleBar, {backgroundColor: barColor}]}
-          />
-        ))}
-      </View>
-    </View>
-  );
-}
-
-/** 行包装：拖拽行 translateY 跟随（UI 线程），并上报实测布局。 */
-function DragTranslate({
-  active,
-  transY,
-  onLayout,
-  style,
-  children,
-}: {
-  active: boolean;
-  transY: SharedValue<number>;
-  onLayout: (e: LayoutChangeEvent) => void;
-  style?: StyleProp<ViewStyle>;
-  children: ReactNode;
-}) {
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: active ? [{translateY: transY.value}] : [],
-  }));
-  return (
-    <Animated.View onLayout={onLayout} style={[style, animatedStyle]}>
-      {children}
-    </Animated.View>
-  );
-}
-
-/** 插入位指示线：悬浮在目标行上方的 gap 区，不占布局高度。 */
-function InsertLine({color}: {color: string}) {
-  return (
-    <View style={[styles.insertLine, {backgroundColor: color}]} />
-  );
-}
-
 const styles = StyleSheet.create({
   headerActions: {flexDirection: 'row', alignItems: 'center', gap: 8},
-  leadingRow: {flexDirection: 'row', alignItems: 'center', gap: 4},
-  draggingWrapper: {zIndex: 10, elevation: 8},
-  dragLift: {
-    elevation: 8,
-    shadowColor: '#000',
-    shadowOffset: {width: 0, height: 4},
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-  },
-  insertLine: {
-    position: 'absolute',
-    top: -7.5,
-    left: 10,
-    right: 10,
-    height: 3,
-    borderRadius: 2,
-  },
-  dragHandleHit: {
-    width: 28,
-    height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  dragHandleBars: {gap: 3, alignItems: 'center'},
-  dragHandleBar: {width: 14, height: 3, borderRadius: 1.5},
-  dragHandleDisabled: {opacity: 0.3},
 });
