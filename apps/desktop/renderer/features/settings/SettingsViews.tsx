@@ -63,6 +63,7 @@ import {
 import {
   formatPatternInput,
   parsePatternInput,
+  splitSmartSortHighlightSegments,
 } from "@shared/logic/smart-sort";
 import type { SettingsNavHandle } from "./settings-nav";
 import {
@@ -2013,36 +2014,6 @@ function localSmartSortRegexError(
   } catch (e) {
     return e instanceof Error ? e.message : String(e);
   }
-}
-
-/** 高亮切分段：测试原文按匹配偏移切成普通段/匹配段交替（与 mobile 同源）。 */
-type SmartSortHighlightSegment = {
-  text: string;
-  matched: boolean;
-};
-
-/** 按 matches（含 matchAll 原生 index）把测试文本切成普通段/匹配段交替：
- *  偏移切分不因重复文本错位（indexOf 回查会漂）；零宽匹配跳过
- *  （不产生空匹配段，cursor 不后移）。 */
-function splitSmartSortHighlightSegments(
-  text: string,
-  matches: readonly { index: number; text: string }[],
-): SmartSortHighlightSegment[] {
-  const segments: SmartSortHighlightSegment[] = [];
-  let cursor = 0;
-  for (const m of matches) {
-    if (m.index > cursor) {
-      segments.push({ text: text.slice(cursor, m.index), matched: false });
-    }
-    if (m.text.length > 0) {
-      segments.push({ text: m.text, matched: true });
-    }
-    cursor = Math.max(cursor, m.index + m.text.length);
-  }
-  if (cursor < text.length) {
-    segments.push({ text: text.slice(cursor), matched: false });
-  }
-  return segments;
 }
 
 export function SmartSortRuleEditorView({ nav }: { nav: Nav }) {

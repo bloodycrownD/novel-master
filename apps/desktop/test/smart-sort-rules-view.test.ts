@@ -13,6 +13,13 @@ const settingsViewsPath = path.join(
   "settings",
   "SettingsViews.tsx",
 );
+const sharedLogicSmartSortPath = path.join(
+  __dirname,
+  "..",
+  "shared",
+  "logic",
+  "smart-sort.ts",
+);
 
 describe("SmartSortRulesView 评审修复（desktop/B-1、B-2、C-1）", () => {
   const source = readFileSync(settingsViewsPath, "utf8");
@@ -46,5 +53,25 @@ describe("SmartSortRulesView 评审修复（desktop/B-1、B-2、C-1）", () => {
       /const sourceId = e\.dataTransfer\.getData\("text\/plain"\) \|\| dragRuleId;/,
     );
     assert.match(source, /void handleDrop\(e, rule\.ruleId\);/);
+  });
+});
+
+describe("SmartSortRuleEditorView 高亮切分单源（dtcli/G-1）", () => {
+  const source = readFileSync(settingsViewsPath, "utf8");
+
+  it("G-1：高亮切分消费 shared/logic 再导出的 core 单源，本地实现已删", () => {
+    // 本地实现删除（formerly line-by-line isomorphic copy）
+    assert.doesNotMatch(source, /function splitSmartSortHighlightSegments\(/);
+    // renderer 经 @shared/logic/smart-sort 薄再导出消费（X1 gate：不直连 core）
+    assert.match(
+      source,
+      /import \{\s*formatPatternInput,\s*parsePatternInput,\s*splitSmartSortHighlightSegments,\s*\} from "@shared\/logic\/smart-sort";/,
+    );
+    // shared 薄层确实再导出 core 单源
+    const shared = readFileSync(sharedLogicSmartSortPath, "utf8");
+    assert.match(
+      shared,
+      /splitSmartSortHighlightSegments,\s*\} from "@novel-master\/core\/smart-sort-rule";/,
+    );
   });
 });
