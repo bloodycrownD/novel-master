@@ -42,6 +42,7 @@ const CONFIG_MENU: Array<{
 }> = [
   {icon: '🤖', label: '智能体配置', route: 'AgentsSettings'},
   {icon: '🔌', label: '服务商配置', route: 'Providers'},
+  {icon: '🔍', label: '搜索配置', route: 'SearchEngines'},
   {icon: '🧩', label: '技能管理', route: 'SkillsSettings'},
   {icon: '💬', label: '聊天配置', route: 'ChatConfig'},
   {icon: '💾', label: '存储配置', route: 'StorageConfig'},

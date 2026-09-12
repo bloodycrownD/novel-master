@@ -4,10 +4,8 @@ import { afterEach, describe, it, mock } from "node:test";
 import { ToolRegistry } from "../../src/domain/tool/logic/tool-registry.js";
 import { ToolRunner } from "../../src/domain/tool/logic/tool-runner.js";
 import { registerBuiltinTools } from "../../src/domain/tool/builtin/register-builtin-tools.js";
-import {
-  CURL_MAX_BODY_BYTES,
-  curlTool,
-} from "../../src/domain/tool/builtin/curl-tool.js";
+import { curlTool } from "../../src/domain/tool/builtin/curl-tool.js";
+import { TOOL_OUTPUT_MAX_BYTES } from "../../src/domain/tool/logic/tool-output-limits.js";
 import type { BuiltinToolContext } from "../../src/domain/tool/builtin/builtin-tool-context.js";
 import { ToolError } from "../../src/errors/tool-errors.js";
 import {
@@ -65,13 +63,45 @@ function fakeResponse(
   });
 }
 
+/**
+ * 内存 mock VFS：记录 write 调用与文件内容（overflow-sink 落盘用例，
+ * T-O2/T-O3 断言「/tmp/ 下有全文、read 可读回」）。无 sessionKkv /
+ * workplace 注入——落盘后的配套动作各自安全跳过。
+ */
+function makeRecordingVfs(): {
+  readonly files: Map<string, string>;
+  readonly writes: string[];
+  readonly vfs: BuiltinToolContext["vfs"];
+} {
+  const files = new Map<string, string>();
+  const writes: string[] = [];
+  const vfs = {
+    write: async (path: string, content: string) => {
+      writes.push(path);
+      files.set(path, content);
+      return { version: 1 };
+    },
+    read: async (path: string) => {
+      const content = files.get(path);
+      if (content == null) {
+        throw new Error(`NOT_FOUND: ${path}`);
+      }
+      return { path, content, version: 1, mtimeMs: 0 };
+    },
+  } as never;
+  return { files, writes, vfs };
+}
+
 /** 构造注入 mock fetchFn 的 BuiltinToolContext（其余字段照 skill-tool 先例占位）。 */
 function makeCtx(
   fetchFn: typeof fetch,
-  extra?: { readonly allowedPaths?: readonly string[] },
+  extra?: {
+    readonly allowedPaths?: readonly string[];
+    readonly vfs?: BuiltinToolContext["vfs"];
+  },
 ): BuiltinToolContext {
   return {
-    vfs: {} as never,
+    vfs: extra?.vfs ?? ({} as never),
     projectId: "proj-1",
     sessionId: "sess-1",
     listSessionMessages: async () => [],
@@ -166,55 +196,145 @@ describe("curl 工具", () => {
     assert.equal(rec.originalBytes, 11);
   });
 
-  it("T-CT3: 超预算正文按字节截断并附标注行（ASCII 与多字节两路）", async () => {
+  it("T-O1: 30KB 响应照常返回正文（不落盘，savedPath 无）", async () => {
     const { runner } = makeRunner();
-    // 300KB ASCII 正文 > 256KB 预算（curl 升级后预算从 50KB 提到 256KB）。
+    const body = "a".repeat(30 * 1024);
+    const { writes, vfs } = makeRecordingVfs();
+    const out = await runner.call(
+      "curl",
+      { url: "https://example.com/mid" },
+      makeCtx(
+        mock.fn(async () =>
+          fakeResponse({
+            headers: { "content-type": "text/html" },
+            body,
+          }),
+        ) as unknown as typeof fetch,
+        { vfs },
+      ),
+    );
+    const rec = out as {
+      body: string;
+      truncated: boolean;
+      savedPath?: string;
+    };
+    // 30KB < 50KB 预算：正文照常回流，不触发落盘。
+    assert.equal(rec.body, body);
+    assert.equal(rec.truncated, false);
+    assert.equal(rec.savedPath, undefined);
+    assert.equal(writes.length, 0);
+  });
+
+  it("T-CT3/T-O2: 超 50KB 正文全文落盘 /tmp/，body 空串占位，meta 保留，read 可读回", async () => {
+    const { runner } = makeRunner();
+    // 300KB ASCII 正文 > 50KB 预算（curl 预算从 256KB 收回到四工具统一的 50KB）。
     const ascii = "a".repeat(300_000);
+    const { files, writes, vfs } = makeRecordingVfs();
     const out = await runner.call(
       "curl",
       { url: "https://example.com/big" },
       makeCtx(
-        mock.fn(async () => fakeResponse({ body: ascii })) as unknown as typeof fetch,
+        mock.fn(async () =>
+          fakeResponse({
+            status: 200,
+            headers: { "content-type": "text/html; charset=utf-8" },
+            body: ascii,
+          }),
+        ) as unknown as typeof fetch,
+        { vfs },
+      ),
+    );
+    const rec = out as {
+      url: string;
+      finalUrl: string;
+      method: string;
+      status: number;
+      contentType: string;
+      body: string;
+      truncated: boolean;
+      originalBytes: number;
+      savedPath?: string;
+      message?: string;
+    };
+    assert.equal(rec.truncated, true);
+    assert.equal(rec.originalBytes, 300_000);
+    // body 置空串占位（zod schema 必填不变），url/method/status 等 meta 保留。
+    assert.equal(rec.body, "");
+    assert.equal(rec.status, 200);
+    assert.equal(rec.method, "GET");
+    assert.equal(rec.url, "https://example.com/big");
+    assert.equal(rec.contentType, "text/html; charset=utf-8");
+    // savedPath 形状：/tmp/curl-{yyyyMMdd}-{rand4}.html（ext 按 content-type 映射）。
+    assert.ok(
+      rec.savedPath != null &&
+        /^\/tmp\/curl-\d{8}-[0-9a-f]{4}\.html$/.test(rec.savedPath),
+      `savedPath 形状不对: ${rec.savedPath}`,
+    );
+    assert.ok(rec.message != null && rec.message.length > 0);
+    // /tmp/ 下存在截断前的全文；后续 read 该文件可读出内容。子代理的
+    // toolCtx.vfs 指向父会话 VFS（装配由 subsession-workspace-isolation
+    // 的 T-SS-3 锁定），故子代理内 curl 落盘同样落父会话工作区。
+    assert.equal(writes.length, 1);
+    assert.equal(files.get(rec.savedPath!), ascii);
+    const readBack = (await vfs.read(rec.savedPath!)) as {
+      content: string;
+    };
+    assert.equal(readBack.content, ascii);
+
+    // 多字节：中文字符 3 字节/字符，落盘的是序列化全文（无截断），
+    // 不存在切半个字符问题（截断只发生在降级路径）；text/plain → txt。
+    const cjk = "你".repeat(90_000);
+    const { files: cjkFiles, vfs: cjkVfs } = makeRecordingVfs();
+    const out2 = await runner.call(
+      "curl",
+      { url: "https://example.com/cjk" },
+      makeCtx(
+        mock.fn(async () =>
+          fakeResponse({
+            headers: { "content-type": "text/plain; charset=utf-8" },
+            body: cjk,
+          }),
+        ) as unknown as typeof fetch,
+        { vfs: cjkVfs },
+      ),
+    );
+    const rec2 = out2 as typeof rec;
+    assert.equal(rec2.truncated, true);
+    assert.equal(rec2.originalBytes, 270_000);
+    assert.ok(
+      rec2.savedPath != null &&
+        /^\/tmp\/curl-\d{8}-[0-9a-f]{4}\.txt$/.test(rec2.savedPath),
+    );
+    assert.equal(cjkFiles.get(rec2.savedPath!), cjk);
+  });
+
+  it("T-CT3 降级: 落盘失败（vfs 不可用）回退字节截断，不切半个字符、不丢正文", async () => {
+    const { runner } = makeRunner();
+    // makeCtx 缺省 vfs 是空对象 → sink 的 vfs.write 抛错 → 降级回字节截断。
+    const cjk = "你".repeat(90_000);
+    const out = await runner.call(
+      "curl",
+      { url: "https://example.com/cjk-fallback" },
+      makeCtx(
+        mock.fn(async () => fakeResponse({ body: cjk })) as unknown as typeof fetch,
       ),
     );
     const rec = out as { body: string; truncated: boolean; originalBytes: number };
     assert.equal(rec.truncated, true);
-    assert.equal(rec.originalBytes, 300_000);
+    assert.equal(rec.originalBytes, 270_000);
     assert.ok(
-      rec.body.endsWith("Output truncated (original 300000 bytes)."),
+      rec.body.endsWith("Output truncated (original 270000 bytes)."),
       `body 应以截断标注结尾: ${rec.body.slice(-60)}`,
     );
     const kept = rec.body.slice(
       0,
       rec.body.indexOf("\n\nOutput truncated"),
     );
-    // 标注行不计入预算：截断后的正文部分 ≤ CURL_MAX_BODY_BYTES。
-    assert.ok(
-      new TextEncoder().encode(kept).byteLength <= CURL_MAX_BODY_BYTES,
-    );
-    assert.equal(kept, "a".repeat(kept.length));
-
-    // 多字节：中文字符 3 字节/字符，按字符数切会失守字节预算，且不得切半个字符。
-    // 90_000 字中文 = 270_000 字节 > 262_144 预算。
-    const cjk = "你".repeat(90_000);
-    const out2 = await runner.call(
-      "curl",
-      { url: "https://example.com/cjk" },
-      makeCtx(
-        mock.fn(async () => fakeResponse({ body: cjk })) as unknown as typeof fetch,
-      ),
-    );
-    const rec2 = out2 as typeof rec;
-    assert.equal(rec2.truncated, true);
-    assert.equal(rec2.originalBytes, 270_000);
-    const kept2 = rec2.body.slice(
-      0,
-      rec2.body.indexOf("\n\nOutput truncated"),
-    );
-    const kept2Bytes = new TextEncoder().encode(kept2).byteLength;
-    assert.ok(kept2Bytes <= CURL_MAX_BODY_BYTES);
-    assert.ok(kept2Bytes % 3 === 0, "截断不应切在多字节字符中间");
-    assert.ok(kept2.length > 0);
+    // 标注行不计入预算：截断后的正文部分 ≤ TOOL_OUTPUT_MAX_BYTES（50KB）。
+    const keptBytes = new TextEncoder().encode(kept).byteLength;
+    assert.ok(keptBytes <= TOOL_OUTPUT_MAX_BYTES);
+    assert.ok(keptBytes % 3 === 0, "截断不应切在多字节字符中间");
+    assert.ok(kept.length > 0);
   });
 
   it("T-CT4: 超时（默认 30s）→ ToolError FAILED，文案含 timed out 与 URL", async () => {
@@ -424,8 +544,9 @@ describe("curl 工具", () => {
     );
   });
 
-  it("T-CT10: formatter 产出可读文本（非 JSON 串），截断场景含标注行", async () => {
+  it("T-CT10: formatter 产出可读文本（非 JSON 串），超预算场景显示已落盘路径", async () => {
     const { runner } = makeRunner();
+    const { vfs } = makeRecordingVfs();
     const out = await runner.call(
       "curl",
       { url: "https://example.com/big" },
@@ -433,13 +554,16 @@ describe("curl 工具", () => {
         mock.fn(async () =>
           fakeResponse({ body: "b".repeat(300_000) }),
         ) as unknown as typeof fetch,
+        { vfs },
       ),
     );
     const formatted = formatToolOutputForLlm(out);
     assert.ok(!formatted.trimStart().startsWith("{"), "不应回落 JSON.stringify");
     assert.ok(formatted.startsWith("curl GET https://example.com/big"));
     assert.ok(formatted.includes("Status: 200"));
-    assert.ok(formatted.includes("Output truncated (original 300000 bytes)."));
+    // 落盘形态：请求行/状态行后显示「已落盘 /tmp/…」+ message（body 为空串占位）。
+    assert.ok(formatted.includes("已落盘 /tmp/curl-"));
+    assert.ok(formatted.includes("可用 read 分页读取"));
   });
 
   it("T-CT10 回归: curl 输出形状不误撞 read/grep/glob/fs 形状", () => {
@@ -469,7 +593,7 @@ describe("curl 工具", () => {
     assert.equal(isCurlOutput(readOut), false);
   });
 
-  it("T-CT11: buildToolResultBlock 摘要——正常 `200 · 12.3KB`、截断 `truncated · 256KB/1.2MB`", () => {
+  it("T-CT11: buildToolResultBlock 摘要——正常 `200 · 12.3KB`、降级截断 `truncated · 50KB/1.2MB`、落盘 `已落盘 …`", () => {
     const normal = buildToolResultBlock(
       "tu-normal",
       {
@@ -507,8 +631,31 @@ describe("curl 工具", () => {
       },
       { toolName: "curl" },
     );
-    // body 300_000 字节 > 256KB 预算 → 保留量按预算值口径展示 256KB。
-    assert.equal(truncated.summary, "truncated · 256KB/1.2MB");
+    // body 300_000 字节 > 50KB 预算 → 保留量按预算值口径展示 50KB
+    // （降级截断路径；正常超预算路径走落盘形态，见下方 saved 断言）。
+    assert.equal(truncated.summary, "truncated · 50KB/1.2MB");
+
+    // 落盘形态（savedPath）：summary 显示已落盘路径，优先于体积档位。
+    const saved = buildToolResultBlock(
+      "tu-saved",
+      {
+        ok: true,
+        output: {
+          url: "https://example.com",
+          finalUrl: "https://example.com",
+          method: "GET",
+          status: 200,
+          contentType: "text/html",
+          body: "",
+          truncated: true,
+          originalBytes: 1_258_291,
+          savedPath: "/tmp/curl-20260906-1f2e.html",
+          message: "输出超过 50KB 预算，全文已自动保存，可用 read 分页读取。",
+        },
+      },
+      { toolName: "curl" },
+    );
+    assert.equal(saved.summary, "已落盘 /tmp/curl-20260906-1f2e.html");
 
     // 字节格式化规则抽查：1024 进位、保留 1 位小数。
     assert.equal(

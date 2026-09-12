@@ -27,7 +27,8 @@ export function ApiKeyStatusTag({status, tokens}: Props) {
       <Text
         style={[
           styles.tagText,
-          {color: connected ? tokens.success : tokens.textSecondary},
+          // 未连接态文字用主文字色：灰底胶囊已提供弱化感，文字保持高对比可读
+          {color: connected ? tokens.success : tokens.text},
         ]}
       >
         {connected ? API_KEY_STATUS_LABELS.set : API_KEY_STATUS_LABELS.notSet}

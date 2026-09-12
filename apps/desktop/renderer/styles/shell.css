@@ -879,6 +879,16 @@ html:not([data-theme="dark"]) .chat-composer__send:not(:disabled) {
   box-shadow: var(--shadow-card-subtle);
 }
 
+/* 禁用段：灰态不可点；与 is-active 叠加时保留选中底色，仍可辨识「当前值但已失效」（opacity 0.45 对齐 mobile FormChipGroup 口径） */
+.segmented-control__btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.segmented-control__btn:disabled:not(.is-active):hover {
+  background: transparent;
+}
+
 /* 服务商详情页 tab 容器：顶部 SegmentedControl 当 tab 头 */
 .provider-detail {
   display: flex;
@@ -2368,6 +2378,11 @@ html:not([data-theme="dark"]) .chat-composer__send:not(:disabled) {
 .settings-tag--muted {
   color: var(--text-secondary);
   background: color-mix(in srgb, var(--text-secondary) 12%, transparent);
+}
+
+.settings-tag--primary {
+  color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
 }
 
 .settings-tag--warn {
@@ -5237,6 +5252,15 @@ html[data-theme="dark"] .chat-batch-bar {
   color: var(--danger);
 }
 
+.context-menu button:disabled {
+  color: var(--text-secondary);
+  cursor: default;
+}
+
+.context-menu button:disabled:hover {
+  background: transparent;
+}
+
 .text-prompt-overlay {
   position: fixed;
   inset: 0;
@@ -5523,6 +5547,14 @@ html[data-theme="dark"] .chat-batch-bar {
   background: var(--background);
   color: var(--text);
   box-sizing: border-box;
+}
+
+/* D-11：补全局蓝色聚焦范式，四个共用弹窗（TextPrompt/NewSkill/AddModel/DirectoryRule）统一受益 */
+.text-prompt-modal__input:focus,
+.text-prompt-modal__textarea:focus {
+  outline: none;
+  border-color: var(--primary-ring);
+  box-shadow: 0 0 0 3px var(--primary-glow);
 }
 
 .text-prompt-modal__textarea {
@@ -7259,6 +7291,33 @@ pre:hover > .code-copy-btn,
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+}
+
+/* 头部左侧组：返回钮 + 整理动作，避免 space-between 把返回钮单独撒到一边 */
+.session-skill-panel__head-side {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* 返回钮：形态对齐 .chat-history-search__back（28px 方形透明图标钮，hover 浮起） */
+.session-skill-panel__back {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: background var(--transition-speed) ease, color var(--transition-speed) ease;
+}
+
+.session-skill-panel__back:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
 }
 
 .session-skill-panel__summary {

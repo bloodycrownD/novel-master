@@ -1113,10 +1113,19 @@ export function ProviderFormView({
           </select>
         </SettingsField>
         <SettingsField label="Base URL">
-          <input value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} />
+          {/* D-4：显式补 type="text"，供 e2e input[type="text"] 选择器稳定命中 */}
+          <input
+            type="text"
+            value={baseUrl}
+            onChange={(e) => setBaseUrl(e.target.value)}
+          />
         </SettingsField>
         <SettingsField label="服务商名称">
-          <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
+          <input
+            type="text"
+            value={displayName}
+            onChange={(e) => setDisplayName(e.target.value)}
+          />
         </SettingsField>
         <SettingsField label={mode === "edit" ? "新 API Key（留空则不修改）" : "API Key"}>
           <input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} />

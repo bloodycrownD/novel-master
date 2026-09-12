@@ -46,6 +46,7 @@ import type {WorkplaceService} from '@novel-master/core/workplace';
 import type {KkvService} from '@novel-master/core/kkv';
 import type {SessionKkvService} from '@novel-master/core/session-kkv';
 import type {SkillService} from '@novel-master/core/skills';
+import type {SearchConfigStore} from '@novel-master/core';
 
 /** Open connection with domain services (no CLI scope resolver or mock LLM). */
 export interface MobileNovelMasterRuntime {
@@ -90,6 +91,8 @@ export interface MobileNovelMasterRuntime {
   readonly abortRegistry: AgentAbortRegistry;
   /** 按 sessionId 索引 in-flight run 的流句柄，供 IPC 订阅 / 取消订阅。 */
   readonly streamRegistry: AgentStreamRegistry;
+  /** 搜索引擎配置存储（search 工具 run 内现读引擎与 key；搜索配置页（列表+详情）消费）。 */
+  readonly searchConfig: SearchConfigStore;
   readonly tokenCounters: TokenCounterRegistry;
   readonly userVfsTurn: UserVfsTurnService;
 }

@@ -15,6 +15,10 @@ import type { AgentRunResult } from "@/domain/agent/model/agent-run-result.js";
 import type { SkillService } from "@/service/skills/skills.port.js";
 import type { EffectiveSkill } from "@/domain/skills/logic/effective-skills.js";
 import type { WorkplaceService } from "@/service/workplace/workplace.port.js";
+import type {
+  EngineId,
+  ResolvedEngineConfig,
+} from "@/domain/tool/builtin/search/types.js";
 
 /** `runChildAgent` 透传给子 agent run 的解析后模型信息。 */
 export interface ResolveChildModelIdResult {
@@ -128,6 +132,27 @@ export interface BuiltinToolAgentsContext {
 }
 
 /**
+ * `search` 工具读取的搜索闭包；装配点（runAgentTurn / runChildAgent）
+ * 从 `runtime.searchConfig`（SearchConfigStore 工厂装配）注入。
+ *
+ * 引擎链解析与凭证明文读取全部发生在工具 run 内（resolveEngineChain），
+ * 装配期零 IO——与 skills（装配期预算）/ task（装配期名单快照）不同，
+ * search 的 description 是静态文案，无需装配期取数。未注入时（CLI 无
+ * kkv、旧测试 mock）search 的 run 抛 ToolError（FAILED），工具对 LLM
+ * 仍可见。
+ */
+export interface BuiltinToolSearchContext {
+  /**
+   * 解析本次调用的串行引擎链（engineOrder 优先级序；显式 inputEngine
+   * 时从该引擎起截取；只含 configured 引擎；全无返回空数组，工具回落
+   * 未配置提示）。
+   */
+  readonly resolveEngineChain: (
+    inputEngine?: EngineId
+  ) => Promise<ResolvedEngineConfig[]>;
+}
+
+/**
  * 资源配额占位（A-14）。
  *
  * @remarks
@@ -205,6 +230,14 @@ export type BuiltinToolContext = {
     WorkplaceService,
     "setDirRule" | "getDirRule" | "listDirRules"
   >;
+  /**
+   * 可选：仅 `search` 工具读取。未注入时（CLI 无 kkv、旧测试 mock）
+   * search 的 run 抛 ToolError（FAILED），工具对 LLM 仍可见。
+   *
+   * 是否对 LLM 可用由 `resolveAgentToolRegistry` 的 tools.allow/deny 控制
+   * （search 不在任何摘除分支内，主/子/孙 agent 全深度可用，照 curl）。
+   */
+  readonly search?: BuiltinToolSearchContext;
   /**
    * 可选：仅 `curl` 工具读取。缺省回落 `globalThis.fetch`（双端一致）。
    *
