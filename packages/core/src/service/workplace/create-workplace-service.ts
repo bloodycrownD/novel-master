@@ -35,7 +35,8 @@ export function createWorkplaceService(
     // 目录规则时才被调用（查表 + 编译，启用过滤由 service 承担）；三端
     // runtime 均经本工厂构造，零逐端接线。
     smartRules: () => smartSortRuleService.listCompiledRules(),
-    // 原始行 provider（L1 签名采样，core/B-3）：仅查表不编译，复用同一 repo。
+    // 原始行 provider（L1 签名采样，core/B-3）：仅查表不编译，同一 repo 类
+    // （每次新建实例、共享同一 conn）。
     smartRuleRows: () => new SqliteSmartSortRuleRepository(conn).listOrdered(),
   });
 }

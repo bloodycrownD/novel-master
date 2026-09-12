@@ -16,9 +16,10 @@ import type { CompiledSmartSortRule } from "@/domain/workplace/logic/smart-sort.
 import type { SmartSortRule } from "@/domain/smart-sort-rule/model/smart-sort-rule.js";
 
 /**
- * 懒加载智能排序规则 provider（spec Step 6）：仅当存在启用且 sortField='smart'
- * 的目录规则时才被调用（查表 + 编译）；三端 runtime 经
- * {@link createWorkplaceService} 工厂默认组装，零逐端接线。
+ * 懒加载智能排序规则 provider（spec Step 6）：仅当存在 sortField='smart'
+ * 的目录规则时才被调用（查表 + 编译），与排序消费端共用基线口径——是否
+ * 启用由规则编译结果决定（core/B-1 后加载侧不做启用预过滤）；三端
+ * runtime 经 {@link createWorkplaceService} 工厂默认组装，零逐端接线。
  */
 export type SmartRulesProvider = () => Promise<readonly CompiledSmartSortRule[]>;
 
