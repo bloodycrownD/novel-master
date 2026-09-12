@@ -122,10 +122,10 @@ test("T-L6: chat 域 IS_DIRECTORY 按未命中续探 session 域，命中后返�
     projectContext: PROJECT_CTX,
     vfsRead,
   });
-  assert.deepEqual(none, { kind: "none" });
+  assert.deepEqual(none, { kind: "not-found", path: "/missing.md" });
 });
 
-test("T-L6: 两域均 IS_DIRECTORY → none（对称：session 域目录同样按未命中）", async () => {
+test("T-L6: 两域均 IS_DIRECTORY → not-found（对称：session 域目录同样按未命中）", async () => {
   const vfsRead = makeVfsRead({
     "chat:/notes": "IS_DIRECTORY",
     "session:/notes": "IS_DIRECTORY",
@@ -135,7 +135,7 @@ test("T-L6: 两域均 IS_DIRECTORY → none（对称：session 域目录同样�
     projectContext: PROJECT_CTX,
     vfsRead,
   });
-  assert.deepEqual(action, { kind: "none" });
+  assert.deepEqual(action, { kind: "not-found", path: "/notes" });
   assert.equal(vfsRead.calls.length, 2);
 });
 
@@ -234,6 +234,10 @@ test("T-L6 源码契约: MessageList 正文与流式尾巴均透传 onLinkClick�
   // MF-5：生产接线 console.info 日志，兑现 chat-link-route 头注的「探测 miss 留日志」
   assert.ok(
     shell.includes("log: (message, detail) => console.info(message, detail)"),
+  );
+  // not-found：双域未命中弹「文件路径不存在」提示（用户拍板，不再静默无动作）
+  assert.ok(
+    shell.includes("showToast(`文件路径不存在：${action.path}`)"),
   );
 });
 

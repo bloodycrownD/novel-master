@@ -3,6 +3,7 @@
  */
 import {useCallback, useEffect, useMemo, useState} from 'react';
 import {Alert, DeviceEventEmitter, Linking} from 'react-native';
+import {showAppToast} from '@/services/app-toast';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {
   type ChatProject,
@@ -447,6 +448,11 @@ export function useChatTabScope({
         }
         if (intent.kind === 'file') {
           openFileEditor(intent.path, intent.scope);
+          return;
+        }
+        if (intent.kind === 'not-found') {
+          // 路径型链接双域探测未命中：用户拍板弹提示，不再静默无动作
+          showAppToast(`文件路径不存在：${intent.path}`);
         }
       });
     },

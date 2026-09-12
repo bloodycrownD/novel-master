@@ -63,12 +63,12 @@ describe('resolveChatLinkIntent (T-L5 行为)', () => {
     expect(intent).toEqual({kind: 'file', scope: 'project', path: '/notes/a.md'});
   });
 
-  it('双未命中 → none（无动作）', async () => {
+  it('双未命中 → not-found（调用方弹「路径不存在」提示）', async () => {
     const intent = await resolveChatLinkIntent('missing.md', {
       sessionVfs: makeVfs([]),
       projectVfs: makeVfs([]),
     });
-    expect(intent).toEqual({kind: 'none'});
+    expect(intent).toEqual({kind: 'not-found', path: '/missing.md'});
   });
 
   it('http(s) → external，不触发任何 vfs 探测', async () => {
@@ -104,12 +104,12 @@ describe('resolveChatLinkIntent (T-L5 行为)', () => {
     expect(intent).toEqual({kind: 'none'});
   });
 
-  it('目标存在但是目录 → 不命中 → none', async () => {
+  it('目标存在但是目录 → 不命中 → not-found', async () => {
     const intent = await resolveChatLinkIntent('notes', {
       sessionVfs: makeVfs([{path: '/notes', kind: 'directory'}]),
       projectVfs: makeVfs([{path: '/notes', kind: 'directory'}]),
     });
-    expect(intent).toEqual({kind: 'none'});
+    expect(intent).toEqual({kind: 'not-found', path: '/notes'});
   });
 
   it('父目录 NOT_FOUND（list 抛错）按未命中，继续探 project', async () => {
@@ -150,11 +150,13 @@ describe('resolveChatLinkIntent (T-L5 行为)', () => {
 });
 
 describe('openChatLink 接线源码契约 (T-L5)', () => {
-  it('useChatTabScope：external 走 Linking 外跳、file 走 openFileEditor', () => {
+  it('useChatTabScope：external 外跳、file 打开、not-found 弹「路径不存在」提示', () => {
     const src = rnSrc('screens/tabs/chat-tab/useChatTabScope.ts');
     expect(src).toContain('resolveChatLinkIntent');
     expect(src).toMatch(/Linking\.openURL\(intent\.url\)/);
     expect(src).toMatch(/openFileEditor\(intent\.path, intent\.scope\)/);
+    // 路径型链接双域未命中：弹提示（用户拍板，不再静默无动作）
+    expect(src).toMatch(/showAppToast\(`文件路径不存在：\$\{intent\.path\}`\)/);
     // 外跳失败静默兜底（与原导航守卫语义一致）
     expect(src).toMatch(/Linking\.openURL\(intent\.url\)\.catch\(\(\) => undefined\)/);
     expect(src).toContain('openChatLink');
@@ -173,6 +175,8 @@ describe('openChatLink 接线源码契约 (T-L5)', () => {
     expect(src).toMatch(
       /runtime\.sessionVfs\(projectId, parentSessionId\)/,
     );
+    // 未命中提示与主会话同源（showAppToast）
+    expect(src).toMatch(/showAppToast\(`文件路径不存在：\$\{intent\.path\}`\)/);
     // 打开口径：session 域 FileEditor 也用 parentSessionId
     expect(src).toMatch(
       /scopeKind: 'session',\s*projectId,\s*sessionId: parentSessionId,/s,

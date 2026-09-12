@@ -57,6 +57,7 @@ import {
 } from "../ipc/client";
 
 import { resolveChatLinkAction } from "../features/chat/chat-link-route";
+import { showToast } from "@/components/ui/show-toast";
 
 import {
   markPreviewTabsDeletedUnderPathInList,
@@ -408,6 +409,11 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
             selectPreviewFile("session", action.path);
             ensurePreviewVisibleRef.current?.();
           }
+          return;
+        }
+        if (action.kind === "not-found") {
+          // 路径型链接双域探测未命中：用户拍板弹提示，不再静默无动作
+          showToast(`文件路径不存在：${action.path}`);
         }
       });
     },

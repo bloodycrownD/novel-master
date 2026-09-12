@@ -10,7 +10,8 @@
  * project 域（项目工作区）。探测顺序：先 chat 域后 session 域。
  *
  * 探测原语：ipcVfsRead 通道现成——ok 即文件存在；一切非 ok（NOT_FOUND /
- * IS_DIRECTORY / 缺会话上下文等）按未命中并留日志，继续下一域或返回 none。
+ * IS_DIRECTORY / 缺会话上下文等）按未命中并留日志，继续下一域或返回
+ * not-found（调用方弹「路径不存在」提示）。
  *
  * @module renderer/features/chat/chat-link-route
  */
@@ -27,10 +28,11 @@ export type ChatLinkProbeRead = (
   req: VfsReadRequest,
 ) => Promise<IpcResult<VfsReadResultDto>>;
 
-/** 链接点击的执行意图：应用内 Preview 打开 / 外部浏览器打开 / 无动作。 */
+/** 链接点击的执行意图：应用内 Preview 打开 / 外部浏览器打开 / 路径未命中 / 无动作。 */
 export type ChatLinkAction =
   | { kind: "preview"; workspaceScope: "chat" | "session"; path: string }
   | { kind: "external"; url: string }
+  | { kind: "not-found"; path: string }
   | { kind: "none" };
 
 /** 会话上下文：chat 域（core session 域）探测必需 projectId+sessionId。 */
@@ -47,7 +49,7 @@ export type ChatLinkLogger = (message: string, detail?: unknown) => void;
  *
  * 顺序：http(s) → external；core 识别（mailto/非法形态/纯锚点 → none）；
  * chat 域探测（需会话上下文齐全）→ session 域探测 → 命中即 preview；
- * 双未命中 none。
+ * 双未命中 not-found（调用方弹「路径不存在」提示——用户拍板）。
  */
 export async function resolveChatLinkAction(
   href: string,
@@ -98,5 +100,5 @@ export async function resolveChatLinkAction(
       code: result.error.code,
     });
   }
-  return { kind: "none" };
+  return { kind: "not-found", path: target };
 }

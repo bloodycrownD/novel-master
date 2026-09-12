@@ -31,6 +31,7 @@ import type {
   AgentStepCommittedPayload,
 } from '@novel-master/core/events';
 import {ChatTranscriptWebView} from '../../components/chat/ChatTranscriptWebView';
+import {showAppToast} from '@/services/app-toast';
 import type {ChatTranscriptWebViewHandle} from '../../components/chat/ChatTranscriptWebView';
 import {useToast} from '../../components/chrome/ToastHost';
 import {toastMessage} from '../../errors/toast-message';
@@ -293,6 +294,11 @@ export function SubagentSessionScreen() {
         intent => {
           if (intent.kind === 'external') {
             void Linking.openURL(intent.url).catch(() => undefined);
+            return;
+          }
+          if (intent.kind === 'not-found') {
+            // 路径型链接双域探测未命中：用户拍板弹提示，不再静默无动作
+            showAppToast(`文件路径不存在：${intent.path}`);
             return;
           }
           if (intent.kind === 'file') {

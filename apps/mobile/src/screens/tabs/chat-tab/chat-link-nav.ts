@@ -20,10 +20,11 @@ export type ChatLinkProbeVfs = {
   list(dir: string): Promise<readonly VfsListEntry[]>;
 };
 
-/** 链接点击的执行意图：应用内打开文件 / 外跳系统浏览器 / 无动作。 */
+/** 链接点击的执行意图：应用内打开文件 / 外跳系统浏览器 / 路径未命中 / 无动作。 */
 export type ChatLinkOpenIntent =
   | {kind: 'file'; scope: 'session' | 'project'; path: string}
   | {kind: 'external'; url: string}
+  | {kind: 'not-found'; path: string}
   | {kind: 'none'};
 
 /**
@@ -31,7 +32,8 @@ export type ChatLinkOpenIntent =
  *
  * 顺序：http(s) 直接外跳；其余交 core 单源识别（mailto 及非法形态 → none）；
  * 识别出的逻辑路径先探 session 工作区、再探 project 工作区（spec 定序），
- * 命中文件返回打开意图，双未命中返回 none（调用方 no-op）。
+ * 命中文件返回打开意图；双未命中返回 not-found（调用方弹「路径不存在」
+ * 提示——用户拍板，不再静默无动作）。
  */
 export async function resolveChatLinkIntent(
   href: string,
@@ -52,7 +54,7 @@ export async function resolveChatLinkIntent(
   if (await probeFileIn(deps.projectVfs, target)) {
     return {kind: 'file', scope: 'project', path: target};
   }
-  return {kind: 'none'};
+  return {kind: 'not-found', path: target};
 }
 
 /** 在单个工作区探测归一化路径是否为已存在的文件（目录不算命中）。 */
