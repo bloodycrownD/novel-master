@@ -112,3 +112,14 @@ user:
 
 assistant:
 同步完成：更新实为 dev 已并入 main（v1.5.15：web-search-tool + desktop-regression-fixes + e2e 资产库，93 笔）。merge main 进迭代分支（3378a5fb），两处冲突手工解：CHANGELOG（我方 Unreleased 与 main 的 1.5.15 段双保留）、ContextMenu.tsx（双方各自加了 item.disabled——取 main 侧，带 aria-disabled 更完整，我方 SkillsManageView 的 disabled: !menu.valid 用法兼容）。11 包 dist + webview 重建后回归全绿：core 97/0、mobile 42/42、desktop 36/0、双端 typecheck 过；语义共存抽查通过（SkillDetailView 的编辑信息入口与 desktop-regression 的未保存守卫共存 :287/:413、ConversationPanel openChatLink 注入在、disabled 用法匹配）。分支现 35 笔，dev-ready 状态保持，待真机验收与合并。
+
+user:
+真机验收反馈：1 不存在的文件链接跳浏览器；2 导出没问题；3 详情页顶部多了描述和编辑按钮（没让加，要求移除）；问 $$ 是什么。
+
+assistant:
+逐项闭环：
+①根因实锤（探针 + adb 亲自操纵真机复现）：裸文件名（xxx.md）被 markdown-it linkify 的无协议裸域推断自动补 http:// 链接化（.md 是摩尔多瓦 TLD），点击经聊天链接路由判外链跳浏览器——不是幽灵文件链接逻辑的锅（markdown 语法链接探测 no-op 本来就对）。修复：prepare-transcript-rich-html 在 linkify match 层过滤「schema 空 + 无路径 + 撞车 TLD（md/zip/sh/py/rs/pl/pm/ai/app/page/link/file/mov/so）」，显式 URL 与真裸域名不动；linkify-it 5 的 tlds() 增删 API 语义破碎（单调用禁不动目标反伤 com）不可用。真机复装验证：三个裸文件名回归纯文本、点击无动作不跳浏览器（vision 审图 + 前台 Activity 双确认）。
+②通过。
+③认账：详情页入口是超出用户拍板范围的加料，双端移除（mobile 还原基线；desktop 手术式摘除保 main 的未保存守卫），入口收敛为管理页行菜单单点，测试与 CHANGELOG 同步。提交 90568909（linkify）+ 3e25868b（详情页移除）。
+④$$ 是 CR 揪出的存量 bug（String.replace 字符串替换 $ 序列展开损坏 front matter），已修复并有单测，无需人工再验。
+真机验收态：①②③④全部闭环；desktop 侧（搜索面板链接等）待用户桌面端走查。探针日志已撤。
