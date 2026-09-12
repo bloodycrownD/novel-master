@@ -199,9 +199,13 @@ export async function waitForAppReady(page) {
 
   // autoCheck 弹窗处理：renderer 挂载 ~2s 后 autoCheck 触发，env 短路下检查立即失败、
   // 未 snooze 时弹「版本检查」错误遮罩（不点掉会挡全屏操作 30s 超时）。此刻起算 4s 窗口
-  // 精确覆盖「2s 触发 + 渲染」；出现即点「今日不再提醒」（写库 snooze 24h，同库后续
-  // 脚本不再弹、各自只吃满本窗口）；窗口耗尽说明已 snooze，正常放行
-  await dismissUpdatePrompt(page, 4000);
+  // 覆盖「2s 触发 + 渲染」；出现即点「今日不再提醒」（写库 snooze 24h，同库后续脚本
+  // 不再弹、各自只吃满本窗口）。注：实测 vite dev 下 StrictMode 双 mount 会清掉
+  // autoCheck 的首次 timer（useAutoUpdateCheck ranRef+cleanup 交互），弹窗实际不弹、
+  // 本窗口在 dev e2e 里多为纯空转——保留 4s 是防实现细节变化（如改跑 build 产物）
+  // 后弹窗回归挡屏的保险，成本 8 脚本共 ~32s
+  const dismissed = await dismissUpdatePrompt(page, 4000);
+  if (dismissed) console.log("UPDATE_PROMPT_DISMISSED", "autoCheck 遮罩已点掉（今日不再提醒）");
 }
 
 export async function shot(page, id, name, ms = 900) {
