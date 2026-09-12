@@ -60,6 +60,10 @@ import {
   ipcSmartSortRuleYamlExport,
   ipcSmartSortRuleYamlImport,
 } from "@/ipc/client";
+import {
+  formatPatternInput,
+  parsePatternInput,
+} from "@novel-master/core/smart-sort-rule";
 import type { SettingsNavHandle } from "./settings-nav";
 import {
   SettingsActionSection,
@@ -1952,19 +1956,17 @@ export function SmartSortRulesView({ nav }: { nav: Nav }) {
   );
 }
 
-/** Flags 四选预设（用户拍板简化：无自由输入框；全量 flags 经 CLI --flags / YAML 导入仍可用）。 */
-const SMART_SORT_FLAG_PRESETS: Array<{ label: string; value: string }> = [
-  { label: "无", value: "" },
-  { label: "i", value: "i" },
-  { label: "g", value: "g" },
-  { label: "gi", value: "gi" },
-];
-
+/** 正则输入支持 /pattern/flags 字面量风格（core parsePatternInput 单源，
+ * 与 mobile 同源）：输入框绑定原始文本 patternInput，解析结果同步进
+ * draft.pattern/flags，预览/保存均消费解析值；无独立 flags UI。 */
 const SMART_SORT_PREVIEW_SAMPLE =
   "第一章 开端\n第2章\n第十一章\n001、序章\nChapter 3";
 
 type SmartSortRuleDraft = {
   name: string;
+  /** 正则输入框原始文本（可能是 /pattern/flags 字面量风格）。 */
+  patternInput: string;
+  /** parsePatternInput(patternInput) 的解析结果（预览/保存消费）。 */
   pattern: string;
   flags: string;
   example: string;
@@ -1973,13 +1975,22 @@ type SmartSortRuleDraft = {
 
 const DEFAULT_SMART_SORT_DRAFT: SmartSortRuleDraft = {
   name: "",
+  patternInput: "",
   pattern: "",
   flags: "",
   example: "",
   enabled: true,
 };
 
-/** 本地即时正则校验（renderer 不依赖 core；捕获组等严格校验仍走 service）。 */
+/** 输入框文本同步解析为 pattern/flags（非法字面量自动当裸 pattern）。 */
+function applySmartSortPatternInput(
+  draft: SmartSortRuleDraft,
+  text: string,
+): SmartSortRuleDraft {
+  return { ...draft, patternInput: text, ...parsePatternInput(text) };
+}
+
+/** 本地即时正则校验（用解析后的 pattern/flags；捕获组等严格校验仍走 service）。 */
 function localSmartSortRegexError(
   draft: SmartSortRuleDraft,
 ): string | null {
@@ -2055,6 +2066,9 @@ export function SmartSortRuleEditorView({ nav }: { nav: Nav }) {
         if (rule) {
           setDraft({
             name: rule.name,
+            // 回显：pattern+flags 拼回 /pattern/flags 字面量风格（flags 空则裸
+            // pattern），再解析回同一 pattern/flags（core 单测保障 round-trip）。
+            patternInput: formatPatternInput(rule.pattern, rule.flags),
             pattern: rule.pattern,
             flags: rule.flags,
             example: rule.example ?? "",
@@ -2117,16 +2131,19 @@ export function SmartSortRuleEditorView({ nav }: { nav: Nav }) {
 
   const save = async () => {
     const example = draft.example.trim() || null;
+    // 保存前以 trim 后的输入重新解析（避免尾随空白把字面量拆成裸 pattern）。
+    const parsed = parsePatternInput(draft.patternInput.trim());
+    const payload = {
+      name: draft.name,
+      pattern: parsed.pattern,
+      flags: parsed.flags,
+      example,
+      enabled: draft.enabled,
+    };
     if (ruleId) {
       const res = await ipcSmartSortRuleUpdate({
         ruleId,
-        patch: {
-          name: draft.name,
-          pattern: draft.pattern,
-          flags: draft.flags,
-          example,
-          enabled: draft.enabled,
-        },
+        patch: payload,
       });
       if (res.ok) {
         toastSettingsSuccess("已保存");
@@ -2136,13 +2153,7 @@ export function SmartSortRuleEditorView({ nav }: { nav: Nav }) {
       }
       return;
     }
-    const res = await ipcSmartSortRuleCreate({
-      name: draft.name,
-      pattern: draft.pattern,
-      flags: draft.flags,
-      example,
-      enabled: draft.enabled,
-    });
+    const res = await ipcSmartSortRuleCreate(payload);
     if (res.ok) {
       toastSettingsSuccess("已创建");
       nav.pop();
@@ -2203,33 +2214,21 @@ export function SmartSortRuleEditorView({ nav }: { nav: Nav }) {
             />
           </SettingsField>
           <SettingsField label="正则表达式">
-            <input
-              value={draft.pattern}
-              placeholder="如 第([0-9一二三四五六七八九十百千]+)章"
-              onChange={(e) => setDraft({ ...draft, pattern: e.target.value })}
+            <textarea
+              rows={2}
+              value={draft.patternInput}
+              placeholder="如 /第([0-9〇零一二两三四五六七八九十百千]+)章/i"
+              spellCheck={false}
+              onChange={(e) =>
+                setDraft(applySmartSortPatternInput(draft, e.target.value))
+              }
             />
           </SettingsField>
           {regexError != null ? (
             <SettingsStatus error={`正则无效：${regexError}`} inline />
           ) : null}
-          <SettingsField label="标志（flags）">
-            <div className="config-dep-chips">
-              {SMART_SORT_FLAG_PRESETS.map((preset) => (
-                <button
-                  key={preset.label}
-                  type="button"
-                  className={`config-dep-chip${
-                    draft.flags === preset.value ? " is-active" : ""
-                  }`}
-                  onClick={() => setDraft({ ...draft, flags: preset.value })}
-                >
-                  {preset.label}
-                </button>
-              ))}
-            </div>
-          </SettingsField>
           <p className="settings-hint">
-            正则匹配修饰符四选一（无/i/g/gi）；正则须含至少一个捕获组，命中时全部捕获组须可解析为数值（中文数字自动转换），否则尝试下一条规则。
+            支持 /正则/flags 格式，如 /第(\d+)章/i；正则须含至少一个捕获组，命中时全部捕获组须可解析为数值（中文数字自动转换），否则尝试下一条规则。
           </p>
           <SettingsField label="示例">
             <input
