@@ -1,6 +1,6 @@
 // 补验：批注划词→添加→发送落库→重开文件看下划线投影
 import {
-  launchApp, shutdown, startMock, shot, sendMessage, openWorkspaceContextMenu,
+  waitForAppReady, launchApp, shutdown, startMock, shot, sendMessage, openWorkspaceContextMenu,
   pickUsableSession, assertLastUserAttach,
 } from "./lib.mjs";
 
@@ -10,8 +10,8 @@ const { app, page, vite } = await launchApp({ errors });
 const sleep = (ms) => page.waitForTimeout(ms);
 
 try {
-  await page.waitForLoadState("domcontentloaded");
-  await sleep(3500);
+  // app 就绪条件等待（原固定 sleep(3500)，见 lib.mjs waitForAppReady 说明）
+  await waitForAppReady(page);
   // app 启动会自动恢复上次会话（可能是前序脚本留下的未绑模型会话，发送失败不落库）：
   // 逐个尝试会话直至可用（未绑模型时自足绑定），停妥后无返回；全不可用由公共函数抛出（C-3② 收敛）
   await pickUsableSession(page);

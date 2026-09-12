@@ -60,17 +60,63 @@ function waitForPort(port, host, timeoutMs) {
   });
 }
 
+// 单次探测端口是否已有响应（连接成功即通，不重试）
+function probePort(port, host) {
+  return new Promise((resolve) => {
+    const s = net.connect({ port, host }, () => { s.destroy(); resolve(true); });
+    s.on("error", () => { s.destroy(); resolve(false); });
+  });
+}
+
+// 跨进程 vite 复用：本进程 spawn 的 vite 才记在 ownVite，其余情形（端口已通、复用
+// 前一个脚本起的 vite）为 null——清理责任见 shutdown/shutdownVite 的注释
+let ownVite = null;
+
+// 进程退出兜底：只杀自己 spawn 的 vite（ownVite），复用的不动。exit 回调里只能
+// 同步操作，process.kill(-pid, SIGKILL) 是同步的，可用。防脚本异常路径泄漏孤儿 vite。
+// 序列模式（run-all 注入 E2E_REUSE_VITE=1）下不杀——首个脚本退出时要把自己起的
+// vite 留给后续脚本复用，统一由 run-all 末尾的 shutdownVite() 回收；单跑则自起自关
+process.on("exit", () => {
+  if (ownVite && process.env.E2E_REUSE_VITE !== "1") {
+    try { process.kill(-ownVite.pid, "SIGKILL"); } catch {}
+  }
+});
+
+// 彻底清场：杀本 worktree 路径前缀匹配的 vite（带 ROOT 前缀防误杀并行 worktree）。
+// 供序列 runner（run-all）末尾调用——各 case 的 shutdown 已不管 vite、序列模式下
+// exit 兜底也不杀复用源，首个脚本起的 vite 由这个 pkill 兜底回收
+export function shutdownVite() {
+  try { execSync(`pkill -9 -f "${ROOT}/node_modules/.bin/vite"`, { stdio: "ignore" }); } catch {}
+}
+
 export async function launchApp({ errors = null } = {}) {
   fs.mkdirSync(OUT, { recursive: true });
   fs.mkdirSync(DATA, { recursive: true });
-  const vite = spawn("npx", ["vite"], { cwd: DESKTOP, stdio: ["ignore", "pipe", "pipe"], detached: true });
-  await waitForPort(5173, "127.0.0.1", 60000);
+  // vite 跨进程复用：5173 已有响应（序列里前一个脚本起的还活着）则直接复用，不 spawn、
+  // 不纳入本进程清理责任（ownVite 保持 null，exit 兜底不会杀它）；只有单跑（端口空）才自起
+  // 自关。序列里首个脚本起 vite，后续 7 个复用，每轮省一次 vite 启动等待+退出回收
+  let vite = null;
+  if (await probePort(5173, "127.0.0.1")) {
+    console.log("VITE_REUSE", "5173 已有响应，复用现有 vite");
+  } else {
+    vite = spawn("npx", ["vite"], { cwd: DESKTOP, stdio: ["ignore", "pipe", "pipe"], detached: true });
+    // 复用语义下 vite 活得比脚本久：unref 其 stdio/进程句柄，否则 pipe 拽住事件循环、
+    // 脚本末尾 await 完也不退（序列 runner 会卡在等子进程退出）——日志仍可读，只是不再阻止退出
+    vite.stdout?.unref();
+    vite.stderr?.unref();
+    vite.unref();
+    ownVite = vite;
+    await waitForPort(5173, "127.0.0.1", 60000);
+  }
   const env = { ...process.env };
   delete env.ELECTRON_RUN_AS_NODE;
   env.DISPLAY = env.DISPLAY || ":0";
   env.NOVEL_MASTER_DB = path.join(DATA, "novel.db");
+  // 更新检查 env 短路（apps/desktop checkForUpdates 入口消费）：e2e 环境的 GitHub fetch
+  // 立即失败，免去每次启动 10s 超时等待 + autoCheck 弹窗判定窗口
+  env.NOVEL_MASTER_DISABLE_UPDATE_CHECK = "1";
   // electron 启动失败（ELECTRON_BIN 路径错误等）时先回收 vite 进程组再抛——孤儿 vite 占住 5173，
-  // 会让下一次 launchApp 的 waitForPort 误判「端口已就绪」而连锁挂起；
+  // 会让下一次 launchApp 的复用探测误判「端口已就绪」而连锁挂起；
   // mock 进程由调用方管理（startMock 独立拉起），本函数失败不负责回收 mock
   let app;
   try {
@@ -79,7 +125,9 @@ export async function launchApp({ errors = null } = {}) {
       args: ["."], cwd: DESKTOP, env,
     });
   } catch (e) {
-    try { process.kill(-vite.pid, "SIGKILL"); } catch {}
+    // 只回收自己 spawn 的 vite（复用场景 vite=null 无清理责任），防孤儿 vite 占住 5173
+    if (vite) { try { process.kill(-vite.pid, "SIGKILL"); } catch {} }
+    ownVite = null;
     throw e;
   }
   const page = await app.firstWindow();
@@ -88,15 +136,15 @@ export async function launchApp({ errors = null } = {}) {
     page.on("pageerror", (err) => errors.push(String(err).slice(0, 200)));
     page.on("console", (m) => { if (m.type() === "error" && !m.text().includes("Electron Security Warning") && !m.text().includes("Insecure Content")) errors.push(("c:" + m.text()).slice(0, 200)); });
   }
-  // 版本弹窗兜底：autoCheck 在 bootstrap ready 2s 后弹「版本检查」结果遮罩
-  // （snooze 写库 24h，清库即失效——每轮 bootstrap 后首跑必弹），不点掉会挡全屏操作 30s 超时；
-  // 窗口 15s ≥ 最坏路径（ready 2s + GitHub fetch 超时 10s）——实测 fetch 慢时弹窗在短窗口后才弹出漏网挡点击
-  await dismissUpdatePrompt(page, 15000);
+  // 版本弹窗处理不在这里做：autoCheck 遮罩最早在 renderer 挂载 + 2s 才出现，此刻
+  // （firstWindow 后）轮询只会空转漏网（历史 15s 长窗口是为覆盖真 fetch 超时 10s 的
+  // 最坏路径；env 短路后弹窗提前，3s 窗口同样擦边漏——smoke 实测漏网弹窗挡后续点击）。
+  // 挪到 waitForAppReady 末尾——renderer 就绪后 2s 内必弹，短窗口即可精确覆盖
   return { app, page, vite };
 }
 
-// 版本弹窗兜底：有界轮询等待「版本检查」结果遮罩出现（最坏路径 bootstrap ready 2s + GitHub
-// fetch 超时 10s，launchApp 传 15s 覆盖；限定标题「版本检查」避免误伤同结构的其它 overlay 弹窗）；
+// 版本弹窗处理：有界轮询等待「版本检查」结果遮罩出现（waitForAppReady 内置调用；其它
+// 定点调用方自选窗口；限定标题「版本检查」避免误伤同结构的其它 overlay 弹窗）；
 // 出现则优先点「今日不再提醒」（写库 snooze 24h，同库后续脚本不再弹），无则退回「关闭」。
 // 检测到并处理返回 true，窗口耗尽返回 false
 export async function dismissUpdatePrompt(page, timeoutMs = 8000) {
@@ -130,13 +178,39 @@ export async function openWorkspaceContextMenu(page) {
   return menu;
 }
 
+// case 正常收尾：只关 electron + mock，不管 vite——序列里首个脚本起的 vite 要留给后续
+// 脚本复用；自己 spawn 的 vite 由模块级 exit 兜底在脚本退出时回收（单跑场景自起自关）。
+// vite 参数保留只为兼容既有调用点，已不参与清理；需要彻底清场用 shutdownVite()
 export async function shutdown(app, vite = null, mock = null) {
   try { await app.close(); } catch {}
-  if (vite) { try { process.kill(-vite.pid, "SIGKILL"); } catch {} }
-  // 兜底 pkill 只带 ${ROOT} 路径前缀匹配本 worktree 的 vite——无根前缀的子串匹配会误杀并行会话
-  // （其它 worktree）的 vite；且前一行进程组击杀已覆盖本脚本拉起的 vite 全组，第二条零收益纯风险已删
-  try { execSync(`pkill -9 -f "${ROOT}/node_modules/.bin/vite"`, { stdio: "ignore" }); } catch {}
   if (mock) mock.close();
+}
+
+// app 就绪条件等待（替代各 case 开头 domcontentloaded 后的固定 sleep(3500)）：
+// ① domcontentloaded；② #chat-rail 出现——React shell（App→MainShell→ChatRail）挂载标志，
+//    覆盖空库/恢复会话两种启动路径；③ rail 列表的「加载中…」占位消失——projects/sessions
+//    初始数据就绪，后续才能安全点项目/会话行。③超时只 warn 不抛：非预期慢环境继续跑，
+//    由后续断言自然暴露（不把「慢」静默升级成「挂」）
+export async function waitForAppReady(page) {
+  await page.waitForLoadState("domcontentloaded");
+  await page.waitForSelector("#chat-rail", { timeout: 15000 });
+  await page
+    .waitForFunction(
+      () => ![...document.querySelectorAll(".chat-list__label")].some((el) => (el.textContent ?? "").includes("加载中")),
+      null,
+      { timeout: 15000, polling: 250 },
+    )
+    .catch(() => console.warn("waitForAppReady: rail 加载占位 15s 未消失，继续执行"));
+
+  // autoCheck 弹窗处理：renderer 挂载 ~2s 后 autoCheck 触发，env 短路下检查立即失败、
+  // 未 snooze 时弹「版本检查」错误遮罩（不点掉会挡全屏操作 30s 超时）。此刻起算 4s 窗口
+  // 覆盖「2s 触发 + 渲染」；出现即点「今日不再提醒」（写库 snooze 24h，同库后续脚本
+  // 不再弹、各自只吃满本窗口）。注：实测 vite dev 下 StrictMode 双 mount 会清掉
+  // autoCheck 的首次 timer（useAutoUpdateCheck ranRef+cleanup 交互），弹窗实际不弹、
+  // 本窗口在 dev e2e 里多为纯空转——保留 4s 是防实现细节变化（如改跑 build 产物）
+  // 后弹窗回归挡屏的保险，成本 8 脚本共 ~32s
+  const dismissed = await dismissUpdatePrompt(page, 4000);
+  if (dismissed) console.log("UPDATE_PROMPT_DISMISSED", "autoCheck 遮罩已点掉（今日不再提醒）");
 }
 
 export async function shot(page, id, name, ms = 900) {

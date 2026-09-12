@@ -6,7 +6,7 @@
 // 自建 nav-guard-A/B 两个——命名刻意避开「回归技能」子串，不干扰后续
 // case-models-skills 的「回归技能」行删除断言（hasText 子串匹配会误伤）。
 import {
-  launchApp, shutdown, startMock, shot, sendMessage,
+  waitForAppReady, launchApp, shutdown, startMock, shot, sendMessage,
   openWorkspaceContextMenu, closeOverlays, pickUsableSession, assertLastUserAttach,
 } from "./lib.mjs";
 
@@ -73,8 +73,8 @@ const drawerState = () => page.evaluate(() => ({
 }));
 
 try {
-  await page.waitForLoadState("domcontentloaded");
-  await sleep(3500);
+  // app 就绪条件等待（原固定 sleep(3500)，见 lib.mjs waitForAppReady 说明）
+  await waitForAppReady(page);
   await pickUsableSession(page);
 
   // ===== Phase 1：工作区弹窗聚焦描边（T-S2）+ 空文件占位（T-P2）+ 空态文案（T-P3）=====

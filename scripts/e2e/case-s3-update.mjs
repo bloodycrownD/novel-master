@@ -1,13 +1,13 @@
 // R7-2: 云同步 S3 表单/测试连接错误态 + 检查更新 + 菜单栏 + 三栏拖拽
-import { launchApp, shutdown, shot, dismissUpdatePrompt } from "./lib.mjs";
+import { waitForAppReady, launchApp, shutdown, shot, dismissUpdatePrompt } from "./lib.mjs";
 
 const errors = [];
 const { app, page, vite } = await launchApp({ errors });
 const sleep = (ms) => page.waitForTimeout(ms);
 
 try {
-  await page.waitForLoadState("domcontentloaded");
-  await sleep(3500);
+  // app 就绪条件等待（原固定 sleep(3500)，见 lib.mjs waitForAppReady 说明）
+  await waitForAppReady(page);
 
   // ===== 1. S3 表单 + 测试连接（假 endpoint → 错误态）=====
   await page.click('button[aria-label="打开设置"]');

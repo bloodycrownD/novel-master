@@ -1,6 +1,6 @@
 // R7-1: ZIP 导出/导入 + 备份导出/导入（patch 原生对话框）
 import fs from "node:fs";
-import { launchApp, shutdown, shot, goToProjects, openWorkspaceContextMenu } from "./lib.mjs";
+import { waitForAppReady, launchApp, shutdown, shot, goToProjects, openWorkspaceContextMenu } from "./lib.mjs";
 
 const errors = [];
 const { app, page, vite } = await launchApp({ errors });
@@ -20,8 +20,8 @@ console.log("DIALOG_PATCHED", JSON.stringify(patchRes));
 console.log("DIALOG_PATCHED");
 
 try {
-  await page.waitForLoadState("domcontentloaded");
-  await sleep(3500);
+  // app 就绪条件等待（原固定 sleep(3500)，见 lib.mjs waitForAppReady 说明）
+  await waitForAppReady(page);
   await goToProjects(page);
   await page.locator("li:visible").filter({ hasText: "回归项目A" }).first().click();
   await sleep(800);
