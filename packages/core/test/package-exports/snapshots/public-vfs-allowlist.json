@@ -45,5 +45,6 @@
   "resolveLogicalPath",
   "scopePhysicalPrefix",
   "toLogicalPath",
-  "toPhysicalPath"
+  "toPhysicalPath",
+  "validateVfsEntryName"
 ]

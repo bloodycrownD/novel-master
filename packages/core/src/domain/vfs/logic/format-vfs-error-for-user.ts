@@ -45,6 +45,9 @@ function formatVfsErrorCodeMessage(
       return "文件内容已变更，无法应用本次修改。请刷新文件后重新编辑。";
     case "NOT_FOUND":
       return "文件不存在或已被删除。";
+    case "INVALID_NAME":
+      // message 就是 validateVfsEntryName 的中文 reason，直接透出
+      return vfsError.message;
     default: {
       const pathHint = resolveDisplayPath(vfsError, scope);
       const reason = stripKnownPhysicalPrefixes(vfsError.message);
