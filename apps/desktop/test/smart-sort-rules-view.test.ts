@@ -75,3 +75,56 @@ describe("SmartSortRuleEditorView 高亮切分单源（dtcli/G-1）", () => {
     );
   });
 });
+
+describe("SmartSortRuleEditorView 评审修复 round 4（dtcli/B-1/B-2/B-3）", () => {
+  const source = readFileSync(settingsViewsPath, "utf8");
+
+  it("B-1：三个输入入口（测试文本/正则/捕获档）变化即清 matchResult/testError", () => {
+    // 清空 helper：结果与错误一起清（结果只属于上次点击「测试」时的输入快照）
+    assert.match(
+      source,
+      /const invalidateMatchResult = useCallback\(\(\) => \{\s*setMatchResult\(null\);\s*setTestError\(null\);\s*\}, \[\]\);/,
+    );
+    // 测试文本 onChange
+    assert.match(
+      source,
+      /onChange=\{\(e\) => \{\s*setTestText\(e\.target\.value\);\s*invalidateMatchResult\(\);\s*\}\}/,
+    );
+    // 正则输入 onChange
+    assert.match(
+      source,
+      /setDraft\(applySmartSortPatternInput\(draft, e\.target\.value\)\);\s*invalidateMatchResult\(\);/,
+    );
+    // 捕获档 select onChange
+    assert.match(
+      source,
+      /captureKind: e\.target\.value as SmartSortCaptureKindDto,\s*\}\);\s*invalidateMatchResult\(\);/,
+    );
+  });
+
+  it("B-1：清空后结果区回 idle 占位文案（源码级断言，偏弱：锁占位分支存在）", () => {
+    assert.match(
+      source,
+      /: \(\s*"输入测试文本后点击「测试」查看匹配结果。"\s*\)\)/,
+    );
+  });
+
+  it("B-2：save 前置 trim + 空名本地拦截（不达 IPC）", () => {
+    assert.match(
+      source,
+      /const name = draft\.name\.trim\(\);\s*if \(!name\) \{\s*toastSettingsError\("请填写规则名称"\);\s*return;\s*\}/,
+    );
+    // payload 用 trim 后的 name；空名短路 return 在构造 IPC 请求之前
+    assert.match(
+      source,
+      /const payload = \{\s*name,\s*pattern: parsed\.pattern,/,
+    );
+  });
+
+  it("B-3：编辑器规则列表加载失败出 toast，不静默伪装空态", () => {
+    assert.match(
+      source,
+      /if \(!res\.ok\) \{\s*\/\/ 加载失败不可静默[\s\S]*?toastSettingsError\(res\.error\.message\);\s*return;/,
+    );
+  });
+});

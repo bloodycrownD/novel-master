@@ -2033,6 +2033,9 @@ export function SmartSortRuleEditorView({ nav }: { nav: Nav }) {
   useEffect(() => {
     ipcSmartSortRuleList().then((res) => {
       if (!res.ok) {
+        // 加载失败不可静默伪装成「空列表 + 默认草稿」（dtcli/B-3，
+        // 与列表视图 round 1 desktop/B-1 同型），出 toast 后维持新建语义。
+        toastSettingsError(res.error.message);
         return;
       }
       if (ruleId) {
@@ -2065,6 +2068,14 @@ export function SmartSortRuleEditorView({ nav }: { nav: Nav }) {
 
   const regexError = localSmartSortRegexError(draft);
 
+  /** 结果只属于点击「测试」时的输入快照：任一输入（测试文本/正则/捕获档）
+   *  变化即清空旧结果与错误，避免旧 matches 偏移对已编辑文本高亮错位、
+   *  计数失真（dtcli/B-1，终审口径：三入口全清）。 */
+  const invalidateMatchResult = useCallback(() => {
+    setMatchResult(null);
+    setTestError(null);
+  }, []);
+
   /** 正则匹配测试（fix ②：按钮手动触发，替代旧实时排序预览）。 */
   const runMatchTest = useCallback(async () => {
     if (!testText.trim()) {
@@ -2096,11 +2107,18 @@ export function SmartSortRuleEditorView({ nav }: { nav: Nav }) {
   }, [testText, draft.patternInput, draft.captureKind]);
 
   const save = async () => {
+    // 与 mobile collectFields 对齐：name 本地 trim + 空名前置拦截，
+    // 不把空名/纯空格发到 IPC 靠 core 兜底（dtcli/B-2）。
+    const name = draft.name.trim();
+    if (!name) {
+      toastSettingsError("请填写规则名称");
+      return;
+    }
     const description = draft.description.trim() || null;
     // 保存前以 trim 后的输入重新解析（避免尾随空白把字面量拆成裸 pattern）。
     const parsed = parsePatternInput(draft.patternInput.trim());
     const payload = {
-      name: draft.name,
+      name,
       pattern: parsed.pattern,
       flags: parsed.flags,
       captureKind: draft.captureKind,
@@ -2169,9 +2187,10 @@ export function SmartSortRuleEditorView({ nav }: { nav: Nav }) {
               value={draft.patternInput}
               placeholder="如 /第([0-9〇零一二两三四五六七八九十百千]+)章/i"
               spellCheck={false}
-              onChange={(e) =>
-                setDraft(applySmartSortPatternInput(draft, e.target.value))
-              }
+              onChange={(e) => {
+                setDraft(applySmartSortPatternInput(draft, e.target.value));
+                invalidateMatchResult();
+              }}
             />
           </SettingsField>
           {regexError != null ? (
@@ -2192,12 +2211,13 @@ export function SmartSortRuleEditorView({ nav }: { nav: Nav }) {
           >
             <select
               value={draft.captureKind}
-              onChange={(e) =>
+              onChange={(e) => {
                 setDraft({
                   ...draft,
                   captureKind: e.target.value as SmartSortCaptureKindDto,
-                })
-              }
+                });
+                invalidateMatchResult();
+              }}
             >
               {SMART_SORT_CAPTURE_KIND_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>
@@ -2232,7 +2252,10 @@ export function SmartSortRuleEditorView({ nav }: { nav: Nav }) {
               rows={3}
               value={testText}
               placeholder="输入测试文本"
-              onChange={(e) => setTestText(e.target.value)}
+              onChange={(e) => {
+                setTestText(e.target.value);
+                invalidateMatchResult();
+              }}
             />
           </SettingsField>
           <pre
