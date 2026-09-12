@@ -8,9 +8,11 @@
  * 描述字段同为自适应多行（fix-desc-and-highlight：单行看不全）。
  * 测试预览为正则匹配测试（fix ②：替代旧排序测试）：输入一段文本，
  * 点「测试」按钮手动触发（非实时联动），下方 monospace 区高亮渲染
- * 原文（匹配段 primary 变色，按 matches.index 切分，fix-desc-and-highlight）
+ * 原文（匹配段 primary 变色，按 matches.index 切分——core 单源
+ * splitSmartSortHighlightSegments，fix-desc-and-highlight）
  * + 每处匹配的提取元组小字（D13：tuple 文案，null 显「无序号」）
- * + 底部匹配计数；输入变化即清空结果（结果只属于上次点击）。
+ * + 底部匹配计数；测试文本/正则/捕获档位任一变化即清空结果
+ * （结果只属于上次点击「测试」时的输入快照，dtcli/B-1）。
  * 规则字段 example 已更名 description（fix ④：语义泛化为描述）。
  * 捕获数字三档下拉（D13）：智能数字/固定最大/固定最小，PickerListModal
  * 值行模式（照 DirectoryRuleSheet）；固定档命中即哨兵元组、忽略捕获组。
@@ -34,6 +36,7 @@ import {
   formatPatternInput,
   matchSmartSortPattern,
   parsePatternInput,
+  splitSmartSortHighlightSegments,
   validateSmartSortRuleDraft,
   type MatchSmartSortPatternResult,
   type SmartSortCaptureKind,
@@ -161,36 +164,6 @@ function AutoGrowMultilineInput({
   );
 }
 
-/** 高亮切分段：测试原文按匹配偏移切成普通段/匹配段交替。 */
-interface HighlightSegment {
-  text: string;
-  matched: boolean;
-}
-
-/** 按 matches（含 index）把测试文本切成普通段/匹配段交替序列：
- *  偏移来自 matchAll 原生 index，重复文本不会错位（indexOf 回查会漂）；
- *  零宽匹配跳过（不产生空匹配段，cursor 不后移）。 */
-function splitHighlightSegments(
-  text: string,
-  matches: readonly {index: number; text: string}[],
-): HighlightSegment[] {
-  const segments: HighlightSegment[] = [];
-  let cursor = 0;
-  for (const m of matches) {
-    if (m.index > cursor) {
-      segments.push({text: text.slice(cursor, m.index), matched: false});
-    }
-    if (m.text.length > 0) {
-      segments.push({text: m.text, matched: true});
-    }
-    cursor = Math.max(cursor, m.index + m.text.length);
-  }
-  if (cursor < text.length) {
-    segments.push({text: text.slice(cursor), matched: false});
-  }
-  return segments;
-}
-
 export function SmartSortRuleEditorScreen() {
   const {tokens} = useTheme();
   const {showToast} = useToast();
@@ -236,9 +209,12 @@ export function SmartSortRuleEditorScreen() {
     setDraft(prev => ({...prev, ...patch}));
   };
 
-  // 输入框文本同步解析为 pattern/flags（非法字面量自动当裸 pattern）。
+  // 输入框文本同步解析为 pattern/flags（非法字面量自动当裸 pattern）；
+  // 正则变了旧结果就不再属于当前输入，照 changeTestText 范式一并清空
+  // （dtcli/B-1：结果只属于上次点击「测试」时的输入快照）。
   const applyPatternInput = useCallback((text: string) => {
     setDraft(prev => ({...prev, patternInput: text, ...parsePatternInput(text)}));
+    setTestOutcome(IDLE_OUTCOME);
   }, []);
 
   const load = useCallback(async () => {
@@ -507,11 +483,12 @@ export function SmartSortRuleEditorScreen() {
               </Text>
             ) : testOutcome.result.ok ? (
               <>
-                {/* 高亮渲染（fix-desc-and-highlight）：按匹配偏移把原文切
+                {/* 高亮渲染（fix-desc-and-highlight）：core 单源切分
+                    （splitSmartSortHighlightSegments）按匹配偏移把原文切
                     成普通段/匹配段，嵌套 Text 继承 monospace 样式；多行
                     文本在 Text 内自然换行。 */}
                 <Text style={[styles.resultText, {color: tokens.text}]}>
-                  {splitHighlightSegments(
+                  {splitSmartSortHighlightSegments(
                     testText,
                     testOutcome.result.matches,
                   ).map((seg, i) =>
@@ -577,7 +554,9 @@ export function SmartSortRuleEditorScreen() {
           accessibilityLabel: `捕获数字 ${item.label}`,
         })}
         onPick={item => {
+          // 档位影响 tuple 提取，旧结果同样失效（dtcli/B-1，照 changeTestText 范式）。
           patchDraft({captureKind: item.value});
+          setTestOutcome(IDLE_OUTCOME);
           setCaptureKindPickerVisible(false);
         }}
         emptyText="暂无可选捕获方式"

@@ -67,6 +67,12 @@ module.exports = {
       repoRoot,
       'packages/core/dist/public/regex.js',
     ),
+    // smart-sort-rule 公共入口（match/高亮切分/parse 单源）：同其它 core 子路径
+    // 直连 dist 真实文件，避开 workspace symlink 的 exports 解析歧义。
+    '^@novel-master/core/smart-sort-rule$': path.join(
+      repoRoot,
+      'packages/core/dist/public/smart-sort-rule.js',
+    ),
     '^@novel-master/core/agent$': path.join(
       repoRoot,
       'packages/core/dist/public/agent.js',
