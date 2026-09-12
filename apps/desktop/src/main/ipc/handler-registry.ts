@@ -91,7 +91,7 @@ import {
   handleSmartSortRuleImportRules,
   handleSmartSortRuleList,
   handleSmartSortRuleMove,
-  handleSmartSortRulePreview,
+  handleSmartSortRuleMatch,
   handleSmartSortRuleReorder,
   handleSmartSortRuleResetDefaults,
   handleSmartSortRuleSetEnabled,
@@ -403,7 +403,7 @@ export function registerHandlersFromRegistry(): void {
     IPC_CHANNELS.SMART_SORT_RULE_RESET_DEFAULTS,
     handleSmartSortRuleResetDefaults,
   );
-  bindReq(IPC_CHANNELS.SMART_SORT_RULE_PREVIEW, handleSmartSortRulePreview);
+  bindReq(IPC_CHANNELS.SMART_SORT_RULE_MATCH, handleSmartSortRuleMatch);
   bindNoArg(IPC_CHANNELS.SMART_SORT_RULE_YAML_EXPORT, handleSmartSortRuleYamlExport);
   bindNoArg(IPC_CHANNELS.SMART_SORT_RULE_YAML_IMPORT, handleSmartSortRuleYamlImport);
 

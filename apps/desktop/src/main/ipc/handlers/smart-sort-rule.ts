@@ -13,9 +13,9 @@ import type {
   SmartSortRuleDto,
   SmartSortRuleIdRequest,
   SmartSortRuleImportRulesRequest,
+  SmartSortRuleMatchRequest,
+  SmartSortRuleMatchResultDto,
   SmartSortRuleMoveRequest,
-  SmartSortRulePreviewRequest,
-  SmartSortRulePreviewResultDto,
   SmartSortRuleReorderRequest,
   SmartSortRuleSetEnabledBatchRequest,
   SmartSortRuleSetEnabledRequest,
@@ -24,6 +24,7 @@ import type {
   SmartSortRuleYamlImportResult,
 } from "../../../../shared/ipc-types.js";
 import { BrowserWindow } from "electron";
+import { matchSmartSortPattern } from "@novel-master/core/smart-sort-rule";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
 import {
   exportSmartSortRuleYamlWithDialog,
@@ -56,7 +57,7 @@ export async function handleSmartSortRuleCreate(
       name: req.name,
       pattern: req.pattern,
       ...(req.flags != null ? { flags: req.flags } : {}),
-      ...(req.example != null ? { example: req.example } : {}),
+      ...(req.description != null ? { description: req.description } : {}),
       ...(req.enabled != null ? { enabled: req.enabled } : {}),
     });
     return { ok: true, data: rule as SmartSortRuleDto };
@@ -185,16 +186,16 @@ export async function handleSmartSortRuleResetDefaults(): Promise<
   }
 }
 
-export async function handleSmartSortRulePreview(
-  req: SmartSortRulePreviewRequest,
-): Promise<IpcResult<SmartSortRulePreviewResultDto>> {
+/**
+ * 正则匹配测试（fix ②：替代旧排序预览）：直调 core 纯函数，不走 runtime。
+ * 非法正则是合法测试结局（ok:false 内联错误文案，不作 IPC 失败）。
+ */
+export async function handleSmartSortRuleMatch(
+  req: SmartSortRuleMatchRequest,
+): Promise<IpcResult<SmartSortRuleMatchResultDto>> {
   try {
-    const rt = await getDesktopRuntime();
-    const result = await rt.smartSortRule.previewSort(
-      req.names,
-      req.draftRules,
-    );
-    return { ok: true, data: result as SmartSortRulePreviewResultDto };
+    const result = matchSmartSortPattern(req.pattern, req.flags, req.text);
+    return { ok: true, data: result as SmartSortRuleMatchResultDto };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }

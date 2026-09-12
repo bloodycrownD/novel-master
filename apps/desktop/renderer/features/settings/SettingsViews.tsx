@@ -51,7 +51,7 @@ import {
   ipcSmartSortRuleDeleteBatch,
   ipcSmartSortRuleList,
   ipcSmartSortRuleMove,
-  ipcSmartSortRulePreview,
+  ipcSmartSortRuleMatch,
   ipcSmartSortRuleReorder,
   ipcSmartSortRuleResetDefaults,
   ipcSmartSortRuleSetEnabled,
@@ -84,9 +84,8 @@ import {
 import type {
   AgentRegistryListItemDto,
   SmartSortRuleDto,
+  SmartSortRuleMatchResultDto,
   SmartSortRuleMoveRequest,
-  SmartSortRulePreviewDraftDto,
-  SmartSortRulePreviewResultDto,
 } from "@shared/ipc-types";
 
 type Nav = SettingsNavHandle;
@@ -1865,8 +1864,8 @@ export function SmartSortRulesView({ nav }: { nav: Nav }) {
                     </span>
                   ) : null}
                 </span>
-                {rule.example ? (
-                  <span className="settings-row__desc">{rule.example}</span>
+                {rule.description ? (
+                  <span className="settings-row__desc">{rule.description}</span>
                 ) : null}
               </span>
             </button>
@@ -1958,18 +1957,15 @@ export function SmartSortRulesView({ nav }: { nav: Nav }) {
 
 /** 正则输入支持 /pattern/flags 字面量风格（core parsePatternInput 单源，
  * 与 mobile 同源）：输入框绑定原始文本 patternInput，解析结果同步进
- * draft.pattern/flags，预览/保存均消费解析值；无独立 flags UI。 */
-const SMART_SORT_PREVIEW_SAMPLE =
-  "第一章 开端\n第2章\n第十一章\n001、序章\nChapter 3";
-
+ * draft.pattern/flags，测试/保存均消费解析值；无独立 flags UI。 */
 type SmartSortRuleDraft = {
   name: string;
   /** 正则输入框原始文本（可能是 /pattern/flags 字面量风格）。 */
   patternInput: string;
-  /** parsePatternInput(patternInput) 的解析结果（预览/保存消费）。 */
+  /** parsePatternInput(patternInput) 的解析结果（测试/保存消费）。 */
   pattern: string;
   flags: string;
-  example: string;
+  description: string;
   enabled: boolean;
 };
 
@@ -1978,7 +1974,7 @@ const DEFAULT_SMART_SORT_DRAFT: SmartSortRuleDraft = {
   patternInput: "",
   pattern: "",
   flags: "",
-  example: "",
+  description: "",
   enabled: true,
 };
 
@@ -2005,40 +2001,6 @@ function localSmartSortRegexError(
   }
 }
 
-/**
- * 预览规则集：库内启用规则 + 本草稿（编辑就位替换、新建置顶参与）。
- * draftRules 传入时 service 只用该集合（不叠库内规则），故须整表组装。
- */
-function composePreviewDraftRules(
-  allRules: readonly SmartSortRuleDto[],
-  ruleId: string | undefined,
-  draft: SmartSortRuleDraft,
-): SmartSortRulePreviewDraftDto[] {
-  const draftRule: SmartSortRulePreviewDraftDto = {
-    ruleId: ruleId ?? "draft",
-    name: draft.name.trim() || "（未命名草稿）",
-    pattern: draft.pattern,
-    flags: draft.flags,
-  };
-  const base: SmartSortRulePreviewDraftDto[] = [];
-  for (const rule of allRules) {
-    if (ruleId != null && rule.ruleId === ruleId) {
-      base.push(draftRule);
-    } else if (rule.enabled) {
-      base.push({
-        ruleId: rule.ruleId,
-        name: rule.name,
-        pattern: rule.pattern,
-        flags: rule.flags,
-      });
-    }
-  }
-  if (ruleId == null) {
-    return [draftRule, ...base];
-  }
-  return base;
-}
-
 export function SmartSortRuleEditorView({ nav }: { nav: Nav }) {
   // ruleId 经本地 state 镜像 navState：规则缺失回退新建时 setRuleId(undefined)
   // 才能让本组件感知（直接改 navState 不触发渲染，desktop/B-2）。
@@ -2048,30 +2010,27 @@ export function SmartSortRuleEditorView({ nav }: { nav: Nav }) {
   const [draft, setDraft] = useState<SmartSortRuleDraft>(
     DEFAULT_SMART_SORT_DRAFT,
   );
-  const [allRules, setAllRules] = useState<SmartSortRuleDto[]>([]);
-  const [testNames, setTestNames] = useState(SMART_SORT_PREVIEW_SAMPLE);
-  const [preview, setPreview] = useState<SmartSortRulePreviewResultDto | null>(
-    null,
-  );
-  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [testText, setTestText] = useState("");
+  const [matchResult, setMatchResult] =
+    useState<SmartSortRuleMatchResultDto | null>(null);
+  const [testError, setTestError] = useState<string | null>(null);
 
   useEffect(() => {
     ipcSmartSortRuleList().then((res) => {
       if (!res.ok) {
         return;
       }
-      setAllRules([...res.data]);
       if (ruleId) {
         const rule = res.data.find((r) => r.ruleId === ruleId);
         if (rule) {
           setDraft({
             name: rule.name,
-            // 回显：pattern+flags 拼回 /pattern/flags 字面量风格（flags 空则裸
-            // pattern），再解析回同一 pattern/flags（core 单测保障 round-trip）。
+            // 回显：pattern+flags 拼回 /pattern/flags 字面量风格（flags 空则
+            // /pattern/），再解析回同一 pattern/flags（core 单测保障 round-trip）。
             patternInput: formatPatternInput(rule.pattern, rule.flags),
             pattern: rule.pattern,
             flags: rule.flags,
-            example: rule.example ?? "",
+            description: rule.description ?? "",
             enabled: rule.enabled,
           });
         } else {
@@ -2090,54 +2049,43 @@ export function SmartSortRuleEditorView({ nav }: { nav: Nav }) {
 
   const regexError = localSmartSortRegexError(draft);
 
-  const runPreview = useCallback(async () => {
-    const names = testNames
-      .split("\n")
-      .map((line) => line.trim())
-      .filter((line) => line.length > 0);
-    if (names.length === 0) {
-      setPreview(null);
-      setPreviewError("请输入至少一行文件名");
+  /** 正则匹配测试（fix ②：按钮手动触发，替代旧实时排序预览）。 */
+  const runMatchTest = useCallback(async () => {
+    if (!testText.trim()) {
+      setMatchResult(null);
+      setTestError("请输入测试文本");
       return;
     }
-    const localError = localSmartSortRegexError(draft);
-    if (localError != null) {
-      setPreview(null);
-      setPreviewError(`正则无效：${localError}`);
+    if (!draft.patternInput.trim()) {
+      setMatchResult(null);
+      setTestError("请先填写正则表达式");
       return;
     }
-    const res = await ipcSmartSortRulePreview({
-      names,
-      draftRules: composePreviewDraftRules(allRules, ruleId, draft),
+    // 与保存同口径：trim 后重新解析，避免尾随空白拆坏字面量。
+    const parsed = parsePatternInput(draft.patternInput.trim());
+    const res = await ipcSmartSortRuleMatch({
+      pattern: parsed.pattern,
+      flags: parsed.flags,
+      text: testText,
     });
     if (res.ok) {
-      setPreview(res.data);
-      setPreviewError(null);
+      setMatchResult(res.data);
+      setTestError(null);
     } else {
-      setPreview(null);
-      setPreviewError(res.error.message);
+      setMatchResult(null);
+      setTestError(res.error.message);
     }
-  }, [testNames, draft, allRules, ruleId]);
-
-  /** 规则列表加载完成后自动试跑一次，与正则编辑器即时预览体验对齐。 */
-  const autoRanRef = useRef(false);
-  useEffect(() => {
-    if (autoRanRef.current || allRules.length === 0) {
-      return;
-    }
-    autoRanRef.current = true;
-    void runPreview();
-  }, [allRules, runPreview]);
+  }, [testText, draft.patternInput]);
 
   const save = async () => {
-    const example = draft.example.trim() || null;
+    const description = draft.description.trim() || null;
     // 保存前以 trim 后的输入重新解析（避免尾随空白把字面量拆成裸 pattern）。
     const parsed = parsePatternInput(draft.patternInput.trim());
     const payload = {
       name: draft.name,
       pattern: parsed.pattern,
       flags: parsed.flags,
-      example,
+      description,
       enabled: draft.enabled,
     };
     if (ruleId) {
@@ -2162,30 +2110,20 @@ export function SmartSortRuleEditorView({ nav }: { nav: Nav }) {
     }
   };
 
-  const previewNameById = new Map(
-    composePreviewDraftRules(allRules, ruleId, draft).map((r) => [
-      r.ruleId,
-      r.name,
-    ]),
-  );
-  const previewText =
-    preview == null
+  /** 结果区渲染：逐匹配显示文本与捕获组（未参与匹配的组为 '-'）。 */
+  const matchText =
+    matchResult == null
       ? ""
-      : [
-          ...preview.lines.map((line) => {
-            const ruleName =
-              line.matchedRuleId != null
-                ? previewNameById.get(line.matchedRuleId) ??
-                  line.matchedRuleId
-                : null;
-            const nums =
-              line.nums == null ? "—" : `[${line.nums.join(", ")}]`;
-            return `${line.name}\t${ruleName ?? "—"}\t${nums}`;
-          }),
-          "",
-          "排序后（升序）：",
-          ...preview.sortedNames.map((name, i) => `${i + 1}. ${name}`),
-        ].join("\n");
+      : matchResult.ok
+        ? matchResult.matches.length === 0
+          ? "无匹配"
+          : matchResult.matches
+              .map(
+                (m) =>
+                  `${JSON.stringify(m.text)}  [${m.groups.map((g) => g ?? "-").join(", ")}]`,
+              )
+              .join("\n")
+        : `正则无效：${matchResult.error}`;
 
   const ruleDesc = draft.name.trim() || (ruleId ? "未命名规则" : "新规则");
 
@@ -2196,8 +2134,8 @@ export function SmartSortRuleEditorView({ nav }: { nav: Nav }) {
         desc={ruleDesc}
         footer={
           <>
-            <Button variant="secondary" onClick={() => void runPreview()}>
-              测试预览
+            <Button variant="secondary" onClick={() => void runMatchTest()}>
+              测试
             </Button>
             <Button variant="primary" onClick={() => void save()}>
               保存
@@ -2230,11 +2168,13 @@ export function SmartSortRuleEditorView({ nav }: { nav: Nav }) {
           <p className="settings-hint">
             支持 /正则/flags 格式，如 /第(\d+)章/i；正则须含至少一个捕获组，命中时全部捕获组须可解析为数值（中文数字自动转换），否则尝试下一条规则。
           </p>
-          <SettingsField label="示例">
+          <SettingsField label="描述">
             <input
-              value={draft.example}
-              placeholder="如 第十二章 风起"
-              onChange={(e) => setDraft({ ...draft, example: e.target.value })}
+              value={draft.description}
+              placeholder="描述这条规则匹配什么，如 匹配 第X章 形式的标题"
+              onChange={(e) =>
+                setDraft({ ...draft, description: e.target.value })
+              }
             />
           </SettingsField>
           <SettingsSwitchRow
@@ -2244,24 +2184,25 @@ export function SmartSortRuleEditorView({ nav }: { nav: Nav }) {
           />
         </SettingsSection>
 
-        <SettingsSection title="测试预览">
+        <SettingsSection title="测试">
           <p className="settings-hint">
-            每行一个文件名；按当前优先级列表试跑（本草稿规则参与匹配），输出逐行命中规则与序号、以及排序后顺序。
+            输入一段文本，点击「测试」后显示全部匹配与捕获组（未参与匹配的捕获组显示 -）。
           </p>
-          <SettingsField label="示例文件名">
+          <SettingsField label="测试文本">
             <textarea
-              rows={5}
-              value={testNames}
-              onChange={(e) => setTestNames(e.target.value)}
+              rows={3}
+              value={testText}
+              placeholder="输入测试文本"
+              onChange={(e) => setTestText(e.target.value)}
             />
           </SettingsField>
           <pre
             className={`settings-preview-box${
-              previewError != null ? " settings-preview-box--error" : ""
+              testError != null ? " settings-preview-box--error" : ""
             }`}
           >
-            {previewError ??
-              (previewText || "输入文件名后点击「测试预览」。")}
+            {testError ??
+              (matchText || "输入测试文本后点击「测试」查看匹配结果。")}
           </pre>
         </SettingsSection>
       </SettingsFormSection>

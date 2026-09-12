@@ -146,7 +146,7 @@ export const {
   ipcSmartSortRuleExportRules,
   ipcSmartSortRuleImportRules,
   ipcSmartSortRuleResetDefaults,
-  ipcSmartSortRulePreview,
+  ipcSmartSortRuleMatch,
   ipcSmartSortRuleYamlExport,
   ipcSmartSortRuleYamlImport,
   ipcSkillsList,

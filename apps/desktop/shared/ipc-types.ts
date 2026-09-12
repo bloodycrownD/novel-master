@@ -155,7 +155,7 @@ export const IPC_CHANNELS = {
   SMART_SORT_RULE_IMPORT_RULES: 'nm:sort-rule/importRules',
   SMART_SORT_RULE_EXPORT_RULES: 'nm:sort-rule/exportRules',
   SMART_SORT_RULE_RESET_DEFAULTS: 'nm:sort-rule/resetDefaults',
-  SMART_SORT_RULE_PREVIEW: 'nm:sort-rule/preview',
+  SMART_SORT_RULE_MATCH: 'nm:sort-rule/match',
   /** YAML 导入导出走 main 进程系统对话框（替换式导入，D10）。 */
   SMART_SORT_RULE_YAML_EXPORT: 'nm:sort-rule/yamlExport',
   SMART_SORT_RULE_YAML_IMPORT: 'nm:sort-rule/yamlImport',
@@ -1249,7 +1249,7 @@ export type SmartSortRuleDto = {
   readonly name: string;
   readonly pattern: string;
   readonly flags: string;
-  readonly example: string | null;
+  readonly description: string | null;
   readonly enabled: boolean;
   readonly sortOrder: number;
   readonly createdAtMs: number;
@@ -1260,7 +1260,7 @@ export type SmartSortRuleCreateRequest = {
   readonly name: string;
   readonly pattern: string;
   readonly flags?: string;
-  readonly example?: string | null;
+  readonly description?: string | null;
   readonly enabled?: boolean;
 };
 
@@ -1270,7 +1270,7 @@ export type SmartSortRuleUpdateRequest = {
     readonly name?: string;
     readonly pattern?: string;
     readonly flags?: string;
-    readonly example?: string | null;
+    readonly description?: string | null;
     readonly enabled?: boolean;
   };
 };
@@ -1308,7 +1308,7 @@ export type SmartSortRuleBundleRuleDto = {
   readonly name: string;
   readonly pattern: string;
   readonly flags: string;
-  readonly example?: string | null;
+  readonly description?: string | null;
   readonly enabled: boolean;
   readonly sortOrder: number;
 };
@@ -1323,29 +1323,23 @@ export type SmartSortRuleImportRulesRequest = {
   readonly bundle: SmartSortRuleBundleDto;
 };
 
-/** 编辑器测试预览的草稿规则（未保存形态，参与优先级列表）。 */
-export type SmartSortRulePreviewDraftDto = {
-  readonly ruleId: string;
-  readonly name: string;
+/** 编辑器正则匹配测试的单个匹配（groups 内 null = 捕获组未参与匹配，GUI 渲染 '-'）。 */
+export type SmartSortRuleMatchDto = {
+  readonly text: string;
+  readonly groups: readonly (string | null)[];
+};
+
+/** 正则匹配测试请求（fix ②：替代旧排序预览的 names + draftRules 语义）。 */
+export type SmartSortRuleMatchRequest = {
   readonly pattern: string;
   readonly flags: string;
+  readonly text: string;
 };
 
-export type SmartSortRulePreviewRequest = {
-  readonly names: readonly string[];
-  readonly draftRules?: readonly SmartSortRulePreviewDraftDto[];
-};
-
-export type SmartSortRulePreviewLineDto = {
-  readonly name: string;
-  readonly matchedRuleId: string | null;
-  readonly nums: readonly number[] | null;
-};
-
-export type SmartSortRulePreviewResultDto = {
-  readonly lines: readonly SmartSortRulePreviewLineDto[];
-  readonly sortedNames: readonly string[];
-};
+/** 正则匹配测试结果：非法正则是合法测试结局（ok 分支内联错误文案，非 IPC 错误）。 */
+export type SmartSortRuleMatchResultDto =
+  | { readonly ok: true; readonly matches: readonly SmartSortRuleMatchDto[] }
+  | { readonly ok: false; readonly error: string };
 
 export type SmartSortRuleYamlExportResult = 'saved' | 'cancelled';
 export type SmartSortRuleYamlImportResult = 'imported' | 'cancelled';

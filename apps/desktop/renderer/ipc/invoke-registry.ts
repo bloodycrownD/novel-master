@@ -55,9 +55,9 @@ import {
   type SmartSortRuleDto,
   type SmartSortRuleIdRequest,
   type SmartSortRuleImportRulesRequest,
+  type SmartSortRuleMatchRequest,
+  type SmartSortRuleMatchResultDto,
   type SmartSortRuleMoveRequest,
-  type SmartSortRulePreviewRequest,
-  type SmartSortRulePreviewResultDto,
   type SmartSortRuleReorderRequest,
   type SmartSortRuleSetEnabledBatchRequest,
   type SmartSortRuleSetEnabledRequest,
@@ -577,10 +577,10 @@ export function createInvokeClient(invoke: InvokeFn) {
       invoke,
       IPC_CHANNELS.SMART_SORT_RULE_RESET_DEFAULTS,
     ),
-    ipcSmartSortRulePreview: withReq<
-      SmartSortRulePreviewRequest,
-      IpcResult<SmartSortRulePreviewResultDto>
-    >(invoke, IPC_CHANNELS.SMART_SORT_RULE_PREVIEW),
+    ipcSmartSortRuleMatch: withReq<
+      SmartSortRuleMatchRequest,
+      IpcResult<SmartSortRuleMatchResultDto>
+    >(invoke, IPC_CHANNELS.SMART_SORT_RULE_MATCH),
     ipcSmartSortRuleYamlExport: noArg<IpcResult<SmartSortRuleYamlExportResult>>(
       invoke,
       IPC_CHANNELS.SMART_SORT_RULE_YAML_EXPORT,
