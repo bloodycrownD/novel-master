@@ -12,7 +12,7 @@
  * （与工作区 FileEditorScreen 共用）。
  */
 import React, {useCallback, useEffect, useRef, useState} from 'react';
-import {Keyboard} from 'react-native';
+import {Keyboard, Platform, View} from 'react-native';
 import {useRoute, type RouteProp} from '@react-navigation/native';
 import type {RootStackParamList} from '../../navigation/types';
 import {useHeaderContext} from '../../navigation/HeaderContext';
@@ -27,6 +27,8 @@ import {
   type PreviewRenderKind,
 } from '../../components/vfs/FileMarkdownPreview';
 import {EditorScreenShell} from '../../components/chrome/EditorScreenShell';
+import {KeyboardAvoidingView} from 'react-native-keyboard-controller';
+import {AndroidKeyboardClipBody} from '../../components/chrome/AndroidKeyboardClipBody';
 import {
   takePromptEditorOnSaved,
   type PromptEditorOnSaved,
@@ -95,8 +97,11 @@ export function PromptEditorScreen() {
     showToast('已保存');
   }, [previewMode, isDirty, draft, showToast]);
 
-  // 预览态无软键盘，直接铺开；编辑态键盘抬升/裁切分支由 EditorScreenShell 统一处理。
-  return (
+  // 预览态无软键盘，直接铺开；编辑态补外层键盘避让（fix ①，照仓库范式 A：
+  // iOS keyboard-controller KeyboardAvoidingView padding / Android
+  // AndroidKeyboardClipBody 裁切收缩——RN 0.85 + targetSdk 36 默认 edge-to-edge
+  // 下 Manifest adjustResize 不可靠，与正则全屏编辑同一真机验收过的写法）。
+  const shell = (
     <EditorScreenShell
       tokens={tokens}
       toolbarBorderColor={tokens.borderLight}
@@ -142,5 +147,17 @@ export function PromptEditorScreen() {
         />
       }
     />
+  );
+  if (previewMode) {
+    return shell;
+  }
+  return Platform.OS === 'ios' ? (
+    <KeyboardAvoidingView style={{flex: 1}} behavior="padding">
+      {shell}
+    </KeyboardAvoidingView>
+  ) : (
+    <AndroidKeyboardClipBody>
+      <View style={{flex: 1}}>{shell}</View>
+    </AndroidKeyboardClipBody>
   );
 }
