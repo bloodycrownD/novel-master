@@ -1,8 +1,8 @@
 ---
-date: 2026-09-12 21:55
+date: 2026-09-12 22:21
 title: 智能排序验收反馈重构：正则测试预览 + description + 撤全屏编辑 + PromptEditor 键盘避让（fix-preview-redesign）
-keywords: smart-sort, matchSmartSortPattern, description, rename migration, bundle v2, 自适应输入, 键盘避让, PromptEditorScreen
-abstract: 用户真机验收提五项反馈：agent PromptEditor 补键盘避让、排序测试预览改按钮触发的正则匹配测试、formatPatternInput 始终 /pattern/flags、example 字段改 description、mobile 撤正则全屏编辑改自适应高度输入。全部完成，8 commit。
+keywords: smart-sort, matchSmartSortPattern, description, rename migration, bundle v2, 自适应输入, 键盘避让, PromptEditorScreen, 高亮渲染
+abstract: 用户真机验收两轮反馈：首轮五项（PromptEditor 补键盘避让、测试预览改按钮触发的正则匹配测试、formatPatternInput 始终 /pattern/flags、example 改 description、mobile 撤正则全屏编辑）；二轮两项（描述字段改自适应多行、测试结果改高亮渲染+匹配计数，core matches 加 index 偏移）。全部完成，11 commit。
 ---
 
 user: 五项验收反馈：① agent 的 PromptEditorScreen 也补键盘避让；② 测试预览重新设计——排序测试作用不大，改成正则匹配测试（输入一段文本，点「测试」按钮后显示匹配内容），当前实时渲染性能糟糕，必须按钮手动触发；③ 正则回显统一始终显示 /pattern/flags（flags 空也 /pattern/；裸输入解析兼容不变）；④ 规则 example 字段改 description，内置规则值从示例文件名改为描述文字；⑤ mobile 正则撤全屏编辑，改自适应高度多行输入（正则没那么长）；desktop 已是 textarea 不动。
@@ -22,3 +22,15 @@ assistant: 已完成（8 commit：71392749 core format / 1aeaef21 core match / d
 6. **验证**：core npm test 2047 全绿 + build（dist 重建后 mobile 才能过 typecheck/jest——fixture 经 dist 建库，src/dist 列名不一致会炸 no such column）；mobile typecheck + NODE_ENV=test jest 188 套件/1147 用例全绿；desktop typecheck + NODE_ENV=development test 125 全绿；CLI build + e2e 4/4 + 临时存量库冒烟（v13 example 形态 → migration run 日志 → list 正常 → 用户行值保留、builtin 描述刷新、export schemaVersion:2）。冒烟坑：模拟 v13 库跑完整 bootstrap 会因缺全套表在前序迁移/seed 上炸（kkv_entry/llm_provider），最小化模拟要么预登记前序迁移 applied（快路径场景）、要么 user_version=0 走慢路径让 DDL 建全套表；shell 通配 --db /tmp/dir* 会匹配到旧冒烟库误导判断。
 
 spec 已补 5 处【重构注 2026-09-12】（Step 10/11/13、附录 A、内置规则表）：正则测试替代排序测试、description 替代 example、全屏编辑撤改自适应、formatPatternInput 始终字面量、CLI previewSort（`sort-rule test`）保留不变。
+
+user: 二次真机验收两项反馈：① 规则编辑屏「描述」字段单行看不全，改自适应多行；② 测试预览结果显示改高亮渲染——测试文本里的匹配部分变色（不再是『"文本" [组1,组2]』字符串+数组清单），下方给「共 N 处匹配」计数；非法正则显示错误。
+
+assistant: 已完成（fix-desc-and-highlight，3 commit：82d49964 core index / d68160d4 mobile+desktop / 213a5cd5 spec）：
+
+1. **core**：`matchSmartSortPattern` 的 `SmartSortPatternMatch` 每项新增 `index: number`（matchAll 原生 m.index，原文起始偏移）——双端高亮切分需要偏移，重复匹配文本下 indexOf 回查会错位；零宽匹配 index 仍在、text 空串（GUI 切分跳过空段、cursor 不后移）。无新导出（SmartSortPatternMatch 本就在 public allowlist），单测补重复文本/多行偏移断言 + 零宽 index 严格递增断言。
+
+2. **mobile**：描述字段抽屏幕内小组件 `AutoGrowMultilineInput`（TextInputProps & {tokens, minHeight, maxHeight}）与正则字段共用 auto-grow（onContentSizeChange + min/max 高度），描述封顶 120（正则 170）；结果区改高亮：`splitHighlightSegments(text, matches)` 按偏移切普通段/匹配段，嵌套 Text 继承 monospace、匹配段 tokens.primary 变色，底部 resultCount 行「共 N 处匹配」（0 处显「无匹配」），删 formatMatchLine 清单渲染。
+
+3. **desktop**：描述 input 改 textarea rows=3；ipc-types `SmartSortRuleMatchDto` 同步加 index（IPC handler 直调 core 自动透传，handler 无改动）；结果区 pre 内按偏移切分 JSX，匹配段 inline `color: var(--primary)`，计数行 var(--text-secondary)，settings-preview-box 容器沿用。
+
+4. 验证：core 2048 全绿 + build；mobile typecheck + NODE_ENV=test jest 188 套件/1147 用例全绿；desktop typecheck + NODE_ENV=development test 125 全绿；CLI sort-rule-e2e 4/4。spec Step 11/13 追加【重构注 2026-09-12 二次】。
