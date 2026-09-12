@@ -15,7 +15,8 @@
  * 捕获数字三档下拉（D13）：智能数字/固定最大/固定最小，PickerListModal
  * 值行模式（照 DirectoryRuleSheet）；固定档命中即哨兵元组、忽略捕获组。
  */
-import React, {useCallback, useEffect, useMemo, useState} from 'react';
+import {useCallback, useEffect, useMemo, useState} from 'react';
+import {useFocusEffect} from '@react-navigation/native';
 import {
   ActivityIndicator,
   Pressable,
@@ -48,6 +49,9 @@ import {SecondaryButton} from '@/components/ui/Buttons';
 import {PickerListModal} from '@/components/ui/PickerListModal';
 import type {PickerListLoadResult} from '@/components/ui/PickerListModal';
 import {useRuntime} from '@/hooks/useRuntime';
+import {useHeaderContext} from '@/navigation/HeaderContext';
+import {HelpIcon} from '@/components/icons/TabIcons';
+import {ModalShell} from '@/components/ui/ModalShell';
 import {useTheme} from '@/theme/ThemeProvider';
 import type {ThemeTokens} from '@/theme/tokens';
 import {useToast} from '@/components/chrome/ToastHost';
@@ -191,9 +195,28 @@ export function SmartSortRuleEditorScreen() {
   const {tokens} = useTheme();
   const {showToast} = useToast();
   const runtime = useRuntime();
+  const {setStackOverride} = useHeaderContext();
   const navigation = useNavigation<StackNav>();
   const route = useRoute<EditorRoute>();
   const ruleId = route.params?.ruleId;
+  /** 使用说明弹窗（标题栏「?」按钮，照搜索配置同款）。 */
+  const [helpVisible, setHelpVisible] = useState(false);
+
+  // 标题栏菜单位换「?」帮助按钮（照 SearchEnginesScreen 先例；useFocusEffect
+  // 保证其它屏覆盖/返回后重新聚焦时按钮不丢，卸载时一并关闭帮助弹窗）。
+  useFocusEffect(
+    useCallback(() => {
+      setStackOverride({
+        showMenu: true,
+        menuIcon: <HelpIcon color={tokens.text} />,
+        onMenu: () => setHelpVisible(true),
+      });
+      return () => {
+        setStackOverride(undefined);
+        setHelpVisible(false);
+      };
+    }, [setStackOverride, tokens.text]),
+  );
 
   const [draft, setDraft] = useState<DraftFields>(DEFAULT_DRAFT);
   const [testText, setTestText] = useState('');
@@ -373,11 +396,7 @@ export function SmartSortRuleEditorScreen() {
         </View>
       }
     >
-      <FormSectionCard
-        title="规则"
-        tokens={tokens}
-        hint="按优先级逐条尝试，首个命中者按捕获方式取序：智能数字从捕获组提取（须含至少一个捕获组），固定档命中即排最前/沉底。"
-      >
+      <FormSectionCard tokens={tokens}>
         <FormSwitchRow
           tokens={tokens}
           label="启用规则"
@@ -563,6 +582,40 @@ export function SmartSortRuleEditorScreen() {
         emptyText="暂无可选捕获方式"
         onClose={() => setCaptureKindPickerVisible(false)}
       />
+      {/* 使用说明弹窗：规则优先级 / 智能数字 / 固定档 / 正则格式四段，照搜索配置同款。 */}
+      <ModalShell
+        visible={helpVisible}
+        onClose={() => setHelpVisible(false)}
+        variant="center"
+        animationType="fade"
+        panelStyle={styles.helpPanel}>
+        <Text style={[styles.helpTitle, {color: tokens.text}]}>使用说明</Text>
+        <HelpSection
+          tokens={tokens}
+          title="规则与优先级"
+          body="排序时按列表顺序逐条尝试，首个命中的规则生效；行菜单可上移/下移/置顶/置底调整优先级。"
+        />
+        <HelpSection
+          tokens={tokens}
+          title="智能数字"
+          body="从正则捕获组提取序号，中文与阿拉伯数字均可（第十二章→12、第12章→12）；多个捕获组组成复合序号（第X卷第Y章→[X,Y]）。须含至少一个捕获组。"
+        />
+        <HelpSection
+          tokens={tokens}
+          title="固定最大/最小"
+          body="命中即取固定序号：固定最小排在所有序号之前（序章/楔子类），固定最大沉底排在所有序号之后（终章/番外类），无需捕获组。"
+        />
+        <HelpSection
+          tokens={tokens}
+          title="正则格式"
+          body="支持 /正则/flags 字面量（如 /第(\\d+)章/i），也可直接输入裸正则（默认无 flags）。"
+        />
+        <Pressable
+          onPress={() => setHelpVisible(false)}
+          style={[styles.helpCloseRow, {borderTopColor: tokens.border}]}>
+          <Text style={{color: tokens.primary, fontSize: 15}}>关闭</Text>
+        </Pressable>
+      </ModalShell>
     </ScreenFormLayout>
   );
 }
@@ -581,7 +634,44 @@ function toDraft(rule: SmartSortRule): DraftFields {
   };
 }
 
+/** 帮助弹窗一段说明：小标题 + 正文（照搜索配置同款）。 */
+function HelpSection({
+  title,
+  body,
+  tokens,
+}: {
+  title: string;
+  body: string;
+  tokens: ThemeTokens;
+}) {
+  return (
+    <View style={styles.helpSection}>
+      <Text style={[styles.helpSectionTitle, {color: tokens.text}]}>{title}</Text>
+      <Text style={[styles.helpSectionBody, {color: tokens.textSecondary}]}>
+        {body}
+      </Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  helpPanel: {
+    borderRadius: 16,
+    width: '100%',
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 8,
+  },
+  helpTitle: {fontSize: 17, fontWeight: '600', marginBottom: 14},
+  helpSection: {marginBottom: 12},
+  helpSectionTitle: {fontSize: 14, fontWeight: '600', marginBottom: 2},
+  helpSectionBody: {fontSize: 13, lineHeight: 19},
+  helpCloseRow: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    marginTop: 2,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
   loader: {marginTop: 32},
   unsaved: {
     fontSize: 13,
