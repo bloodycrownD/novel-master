@@ -7,7 +7,9 @@
   "createSmartSortRuleService",
   "decodeSmartSortRuleBundle",
   "encodeSmartSortRuleBundle",
+  "formatPatternInput",
   "isBuiltinSmartSortRuleId",
+  "parsePatternInput",
   "smartSortRuleBundleDocumentSchema",
   "updateSmartSortRuleSchema",
   "validateSmartSortRuleDraft"
