@@ -363,7 +363,7 @@ export function SmartSortRulesScreen() {
               }
               title={item.name}
               subtitle={`${isBuiltinSmartSortRuleId(item.ruleId) ? '内置 · ' : ''}${
-                item.example ?? '—'
+                item.description ?? '—'
               }`}
               onMenuPress={
                 batch.active ? undefined : () => setMenuRule(item)

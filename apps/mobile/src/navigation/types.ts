@@ -34,12 +34,6 @@ export type RootStackParamList = {
   /** 智能排序规则列表（spec smart-filename-sort Step 13）。 */
   SmartSortRules: undefined;
   SmartSortRuleEditor: {ruleId?: string} | undefined;
-  /** 正则字段全屏编辑页：草稿副本编辑，保存才回填，取消/返回键不动原值。
-   *  回调不走路由参数（不可序列化），由 pattern-editor-callback 模块级存取。 */
-  PatternEditor: {
-    title?: string;
-    initialText: string;
-  };
   FileEditor: {
     path: string;
     /** physical = 全局文件浏览器的只读物理路径（保存禁用，仅预览）。 */

@@ -1,26 +1,33 @@
 /**
- * Create/edit smart sort rule with live test preview
- * (spec smart-filename-sort Step 13).
+ * Create/edit smart sort rule (spec smart-filename-sort Step 13,
+ * fix-preview-redesign 重构)。
  * 正则输入支持 /pattern/flags 字面量风格（core parsePatternInput 单源）：
  * 输入框绑定原始文本 patternInput，解析结果同步进 draft.pattern/flags，
- * 预览/保存均消费解析值；复杂正则可进全屏编辑（照 agent 配置
- * PromptEditorScreen 先例，保存回填 + 未保存拦截）。
+ * 测试/保存均消费解析值；正则不进全屏编辑（fix ②：正则没那么长），
+ * 改为自适应高度的多行输入（textarea 式，内容增高、封顶后内部滚动）。
+ * 测试预览为正则匹配测试（fix ②：替代旧排序测试）：输入一段文本，
+ * 点「测试」按钮手动触发（非实时联动），下方 monospace 区逐匹配显示
+ * 文本与捕获组；输入变化即清空结果（结果只属于上次点击）。
+ * 规则字段 example 已更名 description（fix ④：语义泛化为描述）。
  */
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import {
   ActivityIndicator,
-  Pressable,
   StyleSheet,
   Text,
   View,
+  type NativeSyntheticEvent,
+  type TextInputContentSizeChangeEventData,
 } from 'react-native';
 import {useNavigation, useRoute} from '@react-navigation/native';
 import type {RouteProp} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {
   formatPatternInput,
+  matchSmartSortPattern,
   parsePatternInput,
   validateSmartSortRuleDraft,
+  type MatchSmartSortPatternResult,
   type SmartSortRule,
 } from '@novel-master/core/smart-sort-rule';
 import {FormField} from '@/components/form/FormField';
@@ -29,7 +36,7 @@ import {FormSwitchRow} from '@/components/form/FormSwitchRow';
 import {FormTextInput} from '@/components/form/FormTextInput';
 import {ScreenFormLayout} from '@/components/form/ScreenFormLayout';
 import {StickyFormFooter} from '@/components/form/StickyFormFooter';
-import {setPatternEditorOnSaved} from '@/components/smart-sort/pattern-editor-callback';
+import {SecondaryButton} from '@/components/ui/Buttons';
 import {useRuntime} from '@/hooks/useRuntime';
 import {useTheme} from '@/theme/ThemeProvider';
 import {useToast} from '@/components/chrome/ToastHost';
@@ -44,10 +51,10 @@ interface DraftFields {
   name: string;
   /** 正则输入框原始文本（可能是 /pattern/flags 字面量风格）。 */
   patternInput: string;
-  /** parsePatternInput(patternInput) 的解析结果（预览/保存消费）。 */
+  /** parsePatternInput(patternInput) 的解析结果（测试/保存消费）。 */
   pattern: string;
   flags: string;
-  example: string;
+  description: string;
   enabled: boolean;
 }
 
@@ -56,11 +63,30 @@ const DEFAULT_DRAFT: DraftFields = {
   patternInput: '',
   pattern: '',
   flags: '',
-  example: '',
+  description: '',
   enabled: true,
 };
 
-const DEFAULT_TEST_INPUT = '第一章.txt\n第二章.txt\n第十章.txt';
+/** 正则输入自适应高度：单行起步，约 7 行封顶（超出内部滚动）。 */
+const PATTERN_INPUT_MIN_HEIGHT = 46;
+const PATTERN_INPUT_MAX_HEIGHT = 170;
+
+/** 测试结果形态：idle（未测/输入已变化）→ 手动点击后才进入 ok/error。 */
+type TestOutcome =
+  | {kind: 'idle'}
+  | {kind: 'ok'; result: MatchSmartSortPatternResult}
+  | {kind: 'error'; message: string};
+
+const IDLE_OUTCOME: TestOutcome = {kind: 'idle'};
+
+/** 匹配行渲染：匹配文本带引号，捕获组逐组列出（未参与匹配为 '-'）。 */
+function formatMatchLine(match: {
+  text: string;
+  groups: readonly (string | null)[];
+}): string {
+  const groups = match.groups.map(g => (g == null ? '-' : JSON.stringify(g)));
+  return `${JSON.stringify(match.text)}  [${groups.join(', ')}]`;
+}
 
 export function SmartSortRuleEditorScreen() {
   const {tokens} = useTheme();
@@ -71,9 +97,11 @@ export function SmartSortRuleEditorScreen() {
   const ruleId = route.params?.ruleId;
 
   const [draft, setDraft] = useState<DraftFields>(DEFAULT_DRAFT);
-  const [testText, setTestText] = useState(DEFAULT_TEST_INPUT);
-  const [previewOutput, setPreviewOutput] = useState('');
-  const [previewError, setPreviewError] = useState(false);
+  const [testText, setTestText] = useState('');
+  const [testOutcome, setTestOutcome] = useState<TestOutcome>(IDLE_OUTCOME);
+  const [patternInputHeight, setPatternInputHeight] = useState<number | null>(
+    null,
+  );
   const [loading, setLoading] = useState(Boolean(ruleId));
   const [saving, setSaving] = useState(false);
   const [baseline, setBaseline] = useState('');
@@ -86,21 +114,24 @@ export function SmartSortRuleEditorScreen() {
     setDraft(prev => ({...prev, ...patch}));
   };
 
-  // 输入框文本同步解析为 pattern/flags（非法字面量自动当裸 pattern）；
-  // 函数式更新不捕获旧 draft，全屏回填与就地输入共用。
+  // 输入框文本同步解析为 pattern/flags（非法字面量自动当裸 pattern）。
   const applyPatternInput = useCallback((text: string) => {
     setDraft(prev => ({...prev, patternInput: text, ...parsePatternInput(text)}));
   }, []);
 
-  // 全屏编辑入口（照 AgentEditorForm.openPromptEditor 先例）：回调先写进
-  // 模块级存取再 push，保存才回填 patternInput 并重新解析。
-  const openPatternEditor = useCallback(() => {
-    setPatternEditorOnSaved(applyPatternInput);
-    navigation.push('PatternEditor', {
-      title: '正则表达式',
-      initialText: draft.patternInput,
-    });
-  }, [navigation, draft.patternInput, applyPatternInput]);
+  // 自适应高度：内容增高即撑高输入框，封顶后固定高度内部滚动。
+  const handlePatternContentSizeChange = useCallback(
+    (e: NativeSyntheticEvent<TextInputContentSizeChangeEventData>) => {
+      const contentHeight = e.nativeEvent.contentSize.height;
+      setPatternInputHeight(
+        Math.min(
+          Math.max(contentHeight + 24, PATTERN_INPUT_MIN_HEIGHT),
+          PATTERN_INPUT_MAX_HEIGHT,
+        ),
+      );
+    },
+    [],
+  );
 
   const load = useCallback(async () => {
     if (!ruleId) {
@@ -149,60 +180,27 @@ export function SmartSortRuleEditorScreen() {
       patternInput: draft.patternInput.trim(),
       pattern: parsed.pattern,
       flags: parsed.flags,
-      example: draft.example.trim(),
+      description: draft.description.trim(),
     };
   };
 
-  // ---- 测试预览：草稿规则逐行试跑 + 排序结果（非法正则只提示不阻断输入） ----
+  // ---- 正则匹配测试（fix ②：按钮手动触发，替代旧实时排序预览） ----
 
-  const updatePreview = useCallback(() => {
-    if (!draft.name.trim() || !draft.patternInput.trim()) {
-      setPreviewOutput('请填写名称与正则表达式后再预览');
-      setPreviewError(true);
+  // 输入变化清空结果区：结果只属于上次点击「测试」时的输入快照。
+  const changeTestText = useCallback((v: string) => {
+    setTestText(v);
+    setTestOutcome(IDLE_OUTCOME);
+  }, []);
+
+  const runMatchTest = useCallback(() => {
+    if (!draft.patternInput.trim()) {
+      setTestOutcome({kind: 'error', message: '请先填写正则表达式'});
       return;
     }
-    const names = testText
-      .split('\n')
-      .map(line => line.trim())
-      .filter(line => line.length > 0);
-    if (names.length === 0) {
-      setPreviewOutput('请在上方输入待测试的文件名（每行一个）');
-      setPreviewError(true);
-      return;
-    }
-    // previewSort 内部会编译草稿正则：非法正则/零捕获组在这里抛错并只作提示。
-    runtime.smartSortRule
-      .previewSort(names, [
-        {
-          ruleId: ruleId ?? 'draft',
-          name: draft.name,
-          pattern: draft.pattern,
-          flags: draft.flags,
-        },
-      ])
-      .then(result => {
-        const detailLines = result.lines.map(line =>
-          line.matchedRuleId != null
-            ? `${line.name} → ${line.matchedRuleId} [${line.nums?.join(', ')}]`
-            : `${line.name} → 未命中`,
-        );
-        const sortedLines = result.sortedNames.map(
-          (name, index) => `${index + 1}. ${name}`,
-        );
-        setPreviewOutput(
-          [...detailLines, '', '排序后：', ...sortedLines].join('\n'),
-        );
-        setPreviewError(false);
-      })
-      .catch(error => {
-        setPreviewOutput(toastMessage('预览失败', error));
-        setPreviewError(true);
-      });
-  }, [runtime, ruleId, draft.name, draft.patternInput, draft.pattern, draft.flags, testText]);
-
-  useEffect(() => {
-    updatePreview();
-  }, [updatePreview]);
+    // 与保存同口径：trim 后重新解析，避免尾随空白拆坏字面量。
+    const parsed = parsePatternInput(draft.patternInput.trim());
+    setTestOutcome({kind: 'ok', result: matchSmartSortPattern(parsed.pattern, parsed.flags, testText)});
+  }, [draft.patternInput, testText]);
 
   const handleSave = async () => {
     const fields = collectFields();
@@ -210,7 +208,7 @@ export function SmartSortRuleEditorScreen() {
       return;
     }
     try {
-      // 保存前走同一校验（非法正则/flags/捕获组），提示语与预览一致。
+      // 保存前走同一校验（非法正则/flags/捕获组），提示语与测试一致。
       validateSmartSortRuleDraft({
         name: fields.name,
         pattern: fields.pattern,
@@ -226,7 +224,7 @@ export function SmartSortRuleEditorScreen() {
         name: fields.name,
         pattern: fields.pattern,
         flags: fields.flags,
-        example: fields.example === '' ? null : fields.example,
+        description: fields.description === '' ? null : fields.description,
         enabled: fields.enabled,
       };
       if (ruleId) {
@@ -288,30 +286,27 @@ export function SmartSortRuleEditorScreen() {
         >
           <FormTextInput
             tokens={tokens}
+            multiline
             value={draft.patternInput}
             onChangeText={applyPatternInput}
+            onContentSizeChange={handlePatternContentSizeChange}
             placeholder="如 /第([0-9〇零一二两三四五六七八九十百千]+)章/i"
             autoCapitalize="none"
             autoCorrect={false}
+            style={[
+              styles.patternInput,
+              patternInputHeight != null
+                ? {height: patternInputHeight}
+                : null,
+            ]}
           />
-          <Pressable
-            testID="pattern-fullscreen-entry"
-            accessibilityRole="button"
-            accessibilityLabel="全屏编辑"
-            onPress={openPatternEditor}
-            style={styles.expandBtn}
-          >
-            <Text style={[styles.expandBtnText, {color: tokens.primary}]}>
-              全屏编辑
-            </Text>
-          </Pressable>
         </FormField>
-        <FormField label="示例" tokens={tokens}>
+        <FormField label="描述" tokens={tokens}>
           <FormTextInput
             tokens={tokens}
-            value={draft.example}
-            onChangeText={v => patchDraft({example: v})}
-            placeholder="如 第十二章 风起"
+            value={draft.description}
+            onChangeText={v => patchDraft({description: v})}
+            placeholder="描述这条规则匹配什么，如 匹配 第X章 形式的标题"
           />
         </FormField>
         <FormSwitchRow
@@ -323,36 +318,58 @@ export function SmartSortRuleEditorScreen() {
       </FormSectionCard>
 
       <FormSectionCard
-        title="测试预览"
+        title="测试"
         tokens={tokens}
-        hint="用当前编辑中的规则测试；每行一个文件名。"
+        hint="输入一段文本，点击「测试」后显示全部匹配与捕获组。"
       >
-        <FormField label="文件名列表" tokens={tokens}>
+        <FormField label="测试文本" tokens={tokens}>
           <FormTextInput
             tokens={tokens}
             multiline
             value={testText}
-            onChangeText={setTestText}
+            onChangeText={changeTestText}
+            placeholder="输入测试文本"
           />
         </FormField>
-        <FormField label="预览结果" tokens={tokens}>
+        <SecondaryButton
+          label="测试"
+          tokens={tokens}
+          onPress={runMatchTest}
+          fullWidth
+        />
+        <FormField label="结果" tokens={tokens}>
           <View
             style={[
-              styles.previewBox,
+              styles.resultBox,
               {
                 backgroundColor: tokens.bgSecondary,
                 borderColor: tokens.borderLight,
               },
             ]}
           >
-            <Text
-              style={[
-                styles.previewText,
-                {color: previewError ? tokens.danger : tokens.text},
-              ]}
-            >
-              {previewOutput}
-            </Text>
+            {testOutcome.kind === 'idle' ? (
+              <Text style={[styles.resultText, {color: tokens.textSecondary}]}>
+                点击「测试」查看匹配结果
+              </Text>
+            ) : testOutcome.kind === 'error' ? (
+              <Text style={[styles.resultText, {color: tokens.danger}]}>
+                {testOutcome.message}
+              </Text>
+            ) : testOutcome.result.ok ? (
+              testOutcome.result.matches.length === 0 ? (
+                <Text style={[styles.resultText, {color: tokens.textSecondary}]}>
+                  无匹配
+                </Text>
+              ) : (
+                <Text style={[styles.resultText, {color: tokens.text}]}>
+                  {testOutcome.result.matches.map(formatMatchLine).join('\n')}
+                </Text>
+              )
+            ) : (
+              <Text style={[styles.resultText, {color: tokens.danger}]}>
+                {`正则无效：${testOutcome.result.error}`}
+              </Text>
+            )}
           </View>
         </FormField>
       </FormSectionCard>
@@ -363,12 +380,12 @@ export function SmartSortRuleEditorScreen() {
 function toDraft(rule: SmartSortRule): DraftFields {
   return {
     name: rule.name,
-    // 回显：pattern+flags 拼回 /pattern/flags 字面量风格（flags 空则裸 pattern），
+    // 回显：pattern+flags 拼回 /pattern/flags 字面量风格（flags 空则 /pattern/），
     // 再解析回同一 pattern/flags（core 单测保障 round-trip）。
     patternInput: formatPatternInput(rule.pattern, rule.flags),
     pattern: rule.pattern,
     flags: rule.flags,
-    example: rule.example ?? '',
+    description: rule.description ?? '',
     enabled: rule.enabled,
   };
 }
@@ -381,15 +398,17 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     paddingHorizontal: 16,
   },
-  expandBtn: {alignSelf: 'flex-end', paddingVertical: 6},
-  expandBtnText: {fontSize: 13, fontWeight: '500'},
-  previewBox: {
+  patternInput: {
+    minHeight: PATTERN_INPUT_MIN_HEIGHT,
+    textAlignVertical: 'top',
+  },
+  resultBox: {
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: 12,
     padding: 14,
     minHeight: 56,
   },
-  previewText: {
+  resultText: {
     fontFamily: 'monospace',
     fontSize: 14,
     lineHeight: 20,
