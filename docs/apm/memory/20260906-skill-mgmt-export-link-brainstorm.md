@@ -129,3 +129,9 @@ user:
 
 assistant:
 合并完成：export-link-skill-mgmt（tip 6359ae19）经 --no-ff 并入 main（a635a28f，中文合并信息概括三 feature 与 CR 三轮 17 条 MF）；dev 快进到同点。合并障碍两处均为本会话遗留的未跟踪旧快照（apm 记忆文件 + 7 份 PRD/spec 早期版本，内容为分支版子集，核对 diff 后删除放行）；期间 main 被并行会话合入 e2e 提速批次（c8734116），无冲突。合并后 core 冒烟 28/0。本地 main 领先 origin 55 笔（含并行会话的 e2e 批次），未推送——推送与发版由用户决定。迭代闭环：brainstorm→PRD×4→spec×3→spec-check 两轮 execute-ready→dev-loop（3 impl/3 verify/3 cr-func）→CR 两轮 12 MF→真机验收（linkify 根因修复/详情页收敛/未命中提示三轮迭代）→CR round3 5 MF 收尾→合并。
+
+user:
+发布 1.5.16 吧。
+
+assistant:
+发版完成（publish skill checklist 走全）：版本四处对齐（desktop/mobile package.json、build.gradle 默认 versionName、CHANGELOG [1.5.16] - 2026-09-12 段挪自 Unreleased）；desktop 125/0 + mobile 1144/0 + 双端 typecheck 过（core 2395/0 前置已绿）；提交 76c03550（只含版本 bump 四文件，避开并行会话 dirty 文件）；tag v1.5.16 已推（Release workflow in_progress：三平台 Android APK + Windows NSIS + macOS DMG 并行构建，run 34690822070）；main 已推（19539d2d..76c03550，含 export-link-skill-mgmt 迭代 + e2e 提速批次 + migration 第四轮清理）。gh CLI 本机不可用，workflow 状态经匿名 GitHub API 查询可用（公开仓库）。
