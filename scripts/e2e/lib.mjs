@@ -100,6 +100,11 @@ export async function launchApp({ errors = null } = {}) {
     console.log("VITE_REUSE", "5173 已有响应，复用现有 vite");
   } else {
     vite = spawn("npx", ["vite"], { cwd: DESKTOP, stdio: ["ignore", "pipe", "pipe"], detached: true });
+    // 复用语义下 vite 活得比脚本久：unref 其 stdio/进程句柄，否则 pipe 拽住事件循环、
+    // 脚本末尾 await 完也不退（序列 runner 会卡在等子进程退出）——日志仍可读，只是不再阻止退出
+    vite.stdout?.unref();
+    vite.stderr?.unref();
+    vite.unref();
     ownVite = vite;
     await waitForPort(5173, "127.0.0.1", 60000);
   }
