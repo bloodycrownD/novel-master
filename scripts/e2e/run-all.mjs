@@ -62,6 +62,11 @@ for (const script of SCRIPTS) {
   results.push({ script, code, secs });
   if (code !== 0) failed = true;
   console.log(`===== EXIT ${script} code=${code} ${secs}s =====`);
+  // bootstrap 是数据基座：它挂了后续全在脏环境陪跑，直接中止
+  if (code !== 0 && script === "bootstrap.mjs") {
+    console.log("\n===== ABORT: bootstrap 失败，后续脚本无数据基座，中止序列 =====");
+    break;
+  }
 }
 
 // 汇总表：脚本名/退出码/耗时
