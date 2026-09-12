@@ -86,7 +86,8 @@ describe("sort-rule CLI e2e", () => {
         assert.equal(cols[1], "builtin-zh-chapter");
       }
       const nums = detail.map((c) => c[2]);
-      assert.deepEqual(nums, ["1", "10", "2"]);
+      // smart 档数字元组同走 formatSortTupleForDisplay（C-3）："(1,)" 风格。
+      assert.deepEqual(nums, ["(1,)", "(10,)", "(2,)"]);
       // 空行 + 排序后顺序 + 末行标记
       assert.equal(lines[3], "");
       assert.deepEqual(lines.slice(4, 7), [
@@ -100,7 +101,7 @@ describe("sort-rule CLI e2e", () => {
     }
   });
 
-  it("test 输出固定档哨兵文案与排序后顺序（D13：序章最前、番外/终章沉底决胜）", async () => {
+  it("test 输出固定档哨兵文案与排序后顺序（D13：序章最前、番外/终章沉底决胜；C-3 带括号单源格式）", async () => {
     const dir = await mkdtemp(join(tmpdir(), "nm-sort-rule-fixed-"));
     const dbPath = join(dir, "novel.db");
     try {
@@ -123,10 +124,11 @@ describe("sort-rule CLI e2e", () => {
       const detail = lines.slice(0, 5).map((line) => line.split("\t"));
       const detailByName = new Map(detail.map((c) => [c[0], c]));
       assert.equal(detailByName.get("序章.txt")![1], "builtin-zh-prologue");
-      assert.equal(detailByName.get("序章.txt")![2], "固定最小");
-      assert.equal(detailByName.get("终章.txt")![2], "固定最大");
-      assert.equal(detailByName.get("番外.txt")![2], "固定最大");
-      assert.equal(detailByName.get("第一章.txt")![2], "1");
+      // 哨兵文案走 core 单源 formatSortTupleForDisplay（C-3）：带括号格式。
+      assert.equal(detailByName.get("序章.txt")![2], "(固定最小,)");
+      assert.equal(detailByName.get("终章.txt")![2], "(固定最大,)");
+      assert.equal(detailByName.get("番外.txt")![2], "(固定最大,)");
+      assert.equal(detailByName.get("第一章.txt")![2], "(1,)");
       // 排序：序章(-∞) → 第一章(1) → 第十章(10) → 番外/终章(+∞ 同值，
       // 文件名决胜：「番」U+756A <「终」U+7EC8 → 番外在前，D13 定稿锁行为）。
       assert.equal(lines[5], "");
@@ -339,6 +341,94 @@ describe("sort-rule CLI e2e", () => {
         dbPath,
       ]);
       assert.equal(removed.status, 0, removed.stderr);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("export → disable/enable 翻转 → import 回灌恢复（round-trip，G-2）", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "nm-sort-rule-io-"));
+    const dbPath = join(dir, "novel.db");
+    const exportFile = join(dir, "rules.yaml");
+    /** list 的 TSV 行解析（剥 [nm-boot] 噪声行）。 */
+    const listRows = (): string[][] =>
+      runNm(["sort-rule", "list", "--db", dbPath]).stdout
+        .split("\n")
+        .filter((line) => line && !line.startsWith("[nm-boot]"))
+        .map((line) => line.split("\t"));
+    /** 取指定规则的 enabled 列（第 3 列，"1"/"0"）。 */
+    const enabledOf = (rows: string[][], ruleId: string): string => {
+      const row = rows.find((c) => c[1] === ruleId);
+      assert.ok(row != null, `rule not found in list: ${ruleId}`);
+      return row[2]!;
+    };
+    const stdoutLines = (out: string): string[] =>
+      out.split("\n").filter((line) => line && !line.startsWith("[nm-boot]"));
+    try {
+      // 快照时刻 builtin-zh-prologue 为 enabled=1；export 输出规则数。
+      const exported = runNm([
+        "sort-rule",
+        "export",
+        "--file",
+        exportFile,
+        "--db",
+        dbPath,
+      ]);
+      assert.equal(exported.status, 0, exported.stderr);
+      assert.deepEqual(stdoutLines(exported.stdout), ["7"]);
+      const initialIds = listRows().map((c) => c[1]);
+      assert.equal(enabledOf(listRows(), "builtin-zh-prologue"), "1");
+
+      // disable：enabled 翻转为 0。
+      const disabled = runNm([
+        "sort-rule",
+        "disable",
+        "--id",
+        "builtin-zh-prologue",
+        "--db",
+        dbPath,
+      ]);
+      assert.equal(disabled.status, 0, disabled.stderr);
+      assert.equal(enabledOf(listRows(), "builtin-zh-prologue"), "0");
+
+      // enable：翻回 1。
+      const enabled = runNm([
+        "sort-rule",
+        "enable",
+        "--id",
+        "builtin-zh-prologue",
+        "--db",
+        dbPath,
+      ]);
+      assert.equal(enabled.status, 0, enabled.stderr);
+      assert.equal(enabledOf(listRows(), "builtin-zh-prologue"), "1");
+
+      // 再次 disable 让库偏离 export 快照，import 回灌（全量替换语义）
+      // 应恢复快照时刻的 enabled 与全表 id 顺序。
+      runNm([
+        "sort-rule",
+        "disable",
+        "--id",
+        "builtin-zh-prologue",
+        "--db",
+        dbPath,
+      ]);
+      const imported = runNm([
+        "sort-rule",
+        "import",
+        "--file",
+        exportFile,
+        "--db",
+        dbPath,
+      ]);
+      assert.equal(imported.status, 0, imported.stderr);
+      assert.deepEqual(stdoutLines(imported.stdout), ["7"]);
+      const restoredRows = listRows();
+      assert.equal(enabledOf(restoredRows, "builtin-zh-prologue"), "1");
+      assert.deepEqual(
+        restoredRows.map((c) => c[1]),
+        initialIds,
+      );
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

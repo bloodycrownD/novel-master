@@ -8,6 +8,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { extname } from "node:path";
 import { parseText, stringifyText } from "@novel-master/core";
 import {
+  formatSortTupleForDisplay,
   isBuiltinSmartSortRuleId,
   SMART_SORT_CAPTURE_KINDS,
   type SmartSortCaptureKind,
@@ -190,15 +191,11 @@ export async function runSortRule(
       }
       const result = await svc.previewSort(positional);
       for (const line of result.lines) {
-        // 序号元组显示：null → '-'；固定档哨兵 → 文案（D13）；smart → 逗号连接。
+        // 序号元组显示：null → '-'；其余经 core 单源 formatSortTupleForDisplay
+        // 格式化（C-3）：固定档哨兵 "(固定最小,)"/"(固定最大,)"，smart "(1,)"
+        // 风格（Python 元组 repr 尾逗号）。
         const nums =
-          line.nums == null
-            ? "-"
-            : line.nums[0] === -Infinity
-              ? "固定最小"
-              : line.nums[0] === Infinity
-                ? "固定最大"
-                : line.nums.join(",");
+          line.nums == null ? "-" : formatSortTupleForDisplay(line.nums);
         console.log(`${line.name}\t${line.matchedRuleId ?? "-"}\t${nums}`);
       }
       console.log("");
