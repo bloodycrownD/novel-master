@@ -9,11 +9,14 @@
  * 让编辑器按纯文本处理。
  */
 import React, {useCallback, useEffect, useRef, useState} from 'react';
+import {Platform, View} from 'react-native';
 import {useRoute, type RouteProp} from '@react-navigation/native';
 import type {RootStackParamList} from '@/navigation/types';
 import {useHeaderContext} from '@/navigation/HeaderContext';
 import {useUnsavedGuard} from '@/hooks/useUnsavedGuard';
 import {useToast} from '@/components/chrome/ToastHost';
+import {KeyboardAvoidingView} from 'react-native-keyboard-controller';
+import {AndroidKeyboardClipBody} from '@/components/chrome/AndroidKeyboardClipBody';
 import {
   CodeEditorWebView,
 } from '@/components/vfs/CodeEditorWebView';
@@ -68,7 +71,12 @@ export function PatternFullscreenEditorScreen() {
     showToast('已保存');
   }, [isDirty, draft, showToast]);
 
-  return (
+  // 键盘避让：仓库范式 A（ChatHistorySearchScreen 同款）——iOS 走 keyboard-controller
+  // 的 KeyboardAvoidingView padding；Android 上 behavior={undefined} 等于啥也不干，
+  // 改用 AndroidKeyboardClipBody 裁切窗口 marginBottom 收缩（编辑区 flex:1 跟着缩，
+  // 内容可滚动、光标行贴在键盘上方）。RN 0.85 + targetSdk 36 默认 edge-to-edge 下
+  // Manifest 的 adjustResize 不可依赖，须显式避让。
+  const shell = (
     <EditorScreenShell
       tokens={tokens}
       toolbarBorderColor={tokens.borderLight}
@@ -94,5 +102,14 @@ export function PatternFullscreenEditorScreen() {
         />
       }
     />
+  );
+  return Platform.OS === 'ios' ? (
+    <KeyboardAvoidingView style={{flex: 1}} behavior="padding">
+      {shell}
+    </KeyboardAvoidingView>
+  ) : (
+    <AndroidKeyboardClipBody>
+      <View style={{flex: 1}}>{shell}</View>
+    </AndroidKeyboardClipBody>
   );
 }
