@@ -54,12 +54,16 @@ jest.mock('@/hooks/useRuntime', () => ({
   useRuntime: () => mockRuntime,
 }));
 
+// navigation 身份须稳定（生产中为同一 navigation prop）：load 以它为依赖，
+// 若每次渲染新建对象会让加载 effect 无限重跑。
+const mockNavigation = {
+  goBack: mockGoBack,
+  addListener: jest.fn(() => () => undefined),
+  removeListener: jest.fn(),
+};
+
 jest.mock('@react-navigation/native', () => ({
-  useNavigation: () => ({
-    goBack: mockGoBack,
-    addListener: jest.fn(() => () => undefined),
-    removeListener: jest.fn(),
-  }),
+  useNavigation: () => mockNavigation,
   useRoute: () => ({params: mockRouteParams}),
   // 头部 override 的聚焦副作用与表单行为无关，测试内不触发。
   useFocusEffect: () => undefined,
@@ -260,5 +264,32 @@ describe('SmartSortRuleEditorScreen 测试结果区（dtcli/B-1 mobile 侧）', 
       expect(seg).toBeDefined();
     }
     expect(hasText(tree.root, '起点')).toBe(true);
+  });
+});
+
+describe('SmartSortRuleEditorScreen 加载失败 dirty 链路（mobile/B-1）', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    pickerProps.length = 0;
+    mockRouteParams.ruleId = 'rule-1';
+    mockListRules.mockRejectedValue(new Error('boom'));
+  });
+
+  it('listRules reject 时只 toast，无「未保存的更改」伪标记；再编辑才计 dirty', async () => {
+    const tree = await renderEditor();
+
+    expect(mockListRules).toHaveBeenCalledTimes(1);
+    // toastMessage mock 为 String(err)：「加载失败」标题拼错误串。
+    expect(mockShowToast).toHaveBeenCalledWith('Error: boom');
+    // 加载失败停 DEFAULT_DRAFT，baseline 已对齐：不产生伪 dirty。
+    expect(hasText(tree.root, '未保存的更改')).toBe(false);
+
+    // 失败后用户真改了字段，dirty 正常出现（基线对齐不能吞掉真实编辑）。
+    await act(async () => {
+      inputByPlaceholder(tree.root, '如 中文序号章节').props.onChangeText(
+        '新规则',
+      );
+    });
+    expect(hasText(tree.root, '未保存的更改')).toBe(true);
   });
 });

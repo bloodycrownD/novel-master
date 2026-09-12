@@ -199,7 +199,10 @@ export function SmartSortRuleEditorScreen() {
     useState(false);
   const [loading, setLoading] = useState(Boolean(ruleId));
   const [saving, setSaving] = useState(false);
-  const [baseline, setBaseline] = useState('');
+  // baseline 初始即对齐 DEFAULT_DRAFT 快照：加载中与加载失败（catch 只 toast，
+  // draft 停在 DEFAULT_DRAFT）都不产生伪 dirty——返回时不误弹「未保存的更改」；
+  // 失败后用户再编辑仍正常计 dirty（mobile/B-1）。
+  const [baseline, setBaseline] = useState(() => JSON.stringify(DEFAULT_DRAFT));
 
   const snapshot = useMemo(() => JSON.stringify(draft), [draft]);
   const dirty = snapshot !== baseline;
@@ -219,7 +222,7 @@ export function SmartSortRuleEditorScreen() {
 
   const load = useCallback(async () => {
     if (!ruleId) {
-      setBaseline(JSON.stringify(DEFAULT_DRAFT));
+      // 新建规则：baseline 已在 useState 初始化对齐 DEFAULT_DRAFT。
       setLoading(false);
       return;
     }
