@@ -9,8 +9,12 @@ export type { SmartSortRuleErrorCode } from "../errors/smart-sort-rule-errors.js
 export {
   BUILTIN_SMART_SORT_RULE_ID_PREFIX,
   isBuiltinSmartSortRuleId,
+  SMART_SORT_CAPTURE_KINDS,
 } from "../domain/smart-sort-rule/model/smart-sort-rule.js";
-export type { SmartSortRule } from "../domain/smart-sort-rule/model/smart-sort-rule.js";
+export type {
+  SmartSortRule,
+  SmartSortCaptureKind,
+} from "../domain/smart-sort-rule/model/smart-sort-rule.js";
 export {
   createSmartSortRuleSchema,
   updateSmartSortRuleSchema,
@@ -49,6 +53,9 @@ export {
 } from "../domain/smart-sort-rule/logic/parse-pattern-input.js";
 export type { ParsedPatternInput } from "../domain/smart-sort-rule/logic/parse-pattern-input.js";
 export type { CompiledSmartSortRule } from "../domain/workplace/logic/smart-sort.js";
+export {
+  formatSortTupleForDisplay,
+} from "../domain/workplace/logic/smart-sort.js";
 export { createSmartSortRuleService } from "../service/smart-sort-rule/create-smart-sort-rule.service.js";
 export type { SmartSortRuleService } from "../service/smart-sort-rule/smart-sort-rule.port.js";
 export type {

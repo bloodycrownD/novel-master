@@ -19,6 +19,7 @@
  */
 
 import type { SortOrder } from "../model/workplace-types.js";
+import type { SmartSortCaptureKind } from "../../smart-sort-rule/model/smart-sort-rule.js";
 
 /** Chinese numeral char → numeric value (mirrors legado `ChnMap`). */
 const CHN_NUM_VALUE: Readonly<Record<string, number>> = {
@@ -231,6 +232,29 @@ export interface CompiledSmartSortRule {
   readonly name: string;
   /** Pre-compiled pattern; each capture group is one ordinal component (D6). */
   readonly regex: RegExp;
+  /** 捕获数字档位（D13）：smart = 捕获组→数字管道；fixed = 哨兵元组。 */
+  readonly captureKind: SmartSortCaptureKind;
+}
+
+/** fixed_min 哨兵元组：排一切数字序号之前（D13；仅内存比较，不序列化）。 */
+export const FIXED_MIN_SORT_TUPLE: readonly number[] = [-Infinity];
+/** fixed_max 哨兵元组：沉底（D13；仅内存比较，不序列化）。 */
+export const FIXED_MAX_SORT_TUPLE: readonly number[] = [Infinity];
+
+/**
+ * 元组显示格式化（D13）：数字元组 → "(12,)" / "(2,13,)" 风格（Python 元组
+ * repr 尾逗号）；哨兵元组 → "(固定最小,)" / "(固定最大,)"（GUI 测试预览
+ * 小字消费，不参与比较）。空数组/非哨兵不在此出现。仅识别 ±Infinity
+ * 首元素判定哨兵：数字管道永不产出 ±Infinity（parseChineseNum 有限值）。
+ */
+export function formatSortTupleForDisplay(nums: readonly number[]): string {
+  if (nums[0] === -Infinity) {
+    return "(固定最小,)";
+  }
+  if (nums[0] === Infinity) {
+    return "(固定最大,)";
+  }
+  return `(${nums.join(",")},)`;
 }
 
 /**
@@ -260,6 +284,13 @@ export function extractSortKeyDetail(
     const match = rule.regex.exec(basename);
     if (match === null) {
       continue;
+    }
+    // fixed 档（D13）：命中即哨兵元组，忽略捕获组（pattern 有无捕获组均可）。
+    if (rule.captureKind === "fixed_min") {
+      return { ruleId: rule.ruleId, nums: FIXED_MIN_SORT_TUPLE };
+    }
+    if (rule.captureKind === "fixed_max") {
+      return { ruleId: rule.ruleId, nums: FIXED_MAX_SORT_TUPLE };
     }
     const groups = match.slice(1);
     // Zero-capture-group patterns are rejected at compile/validate time

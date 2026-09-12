@@ -20,19 +20,33 @@
  *   match texts would make indexOf-style lookups drift).
  * - Zero-width matches report their index with an empty `text`; callers
  *   skip empty segments when rendering.
+ * - Each match also carries `tuple` (D13): the display-friendly ordinal
+ *   tuple for the given captureKind (fixed kinds render sentinel wording,
+ *   smart renders "(12,)"; null = no ordinal, GUI renders 「无序号」).
  *
  * @module domain/smart-sort-rule/logic/match-smart-sort-pattern
  */
 
+import type { SmartSortCaptureKind } from "../model/smart-sort-rule.js";
+import { parseChineseNum } from "@/domain/workplace/logic/smart-sort.js";
+
 /**
  * Single match: full match text + start offset in the tested text
  * (code-unit offset; zero-width matches carry an empty text) + capture
- * groups (null = group not hit).
+ * groups (null = group not hit) + the display-friendly ordinal tuple
+ * (D13; see `tuple`).
  */
 export interface SmartSortPatternMatch {
   readonly text: string;
   readonly index: number;
   readonly groups: readonly (string | null)[];
+  /**
+   * 提取元组的显示字符串（D13）：fixed 档恒为 "(固定最小,)"/"(固定最大,)"
+ * （忽略捕获组）；smart 档为捕获组→数字转换后的 "(12,)" 风格，无捕获组
+   * 或任一组转换失败时为 null（GUI 渲染「无序号」）。仅显示用途，排序比较
+   * 走 extractSortKey 的数值元组。
+   */
+  readonly tuple: string | null;
 }
 
 /** Success shape: all matches in first-occurrence order. */
@@ -56,11 +70,17 @@ export type MatchSmartSortPatternResult =
  * Pure and side-effect free: the returned result is fully derived from the
  * arguments, safe to call on every keystroke (the editor still triggers it
  * manually via the test button, fix ②).
+ *
+ * captureKind（D13，缺省 'smart'）只影响每个 match 的 `tuple` 展示字段：
+ * fixed 档恒显哨兵文案（捕获组被忽略）；smart 档走捕获组→数字转换，
+ * 任一组失败则该 match 的 tuple 为 null。匹配本身（text/index/groups）
+ * 与档位无关。
  */
 export function matchSmartSortPattern(
   pattern: string,
   flags: string,
-  text: string
+  text: string,
+  captureKind: SmartSortCaptureKind = "smart"
 ): MatchSmartSortPatternResult {
   let base: RegExp;
   try {
@@ -74,14 +94,42 @@ export function matchSmartSortPattern(
   const matcher = new RegExp(base.source, globalFlags);
   const matches: SmartSortPatternMatch[] = [];
   for (const m of text.matchAll(matcher)) {
+    // m.slice(1) keeps holes as undefined; normalize to null for JSON-safe
+    // IPC transport (desktop DTO) and a stable '-' rendering on both GUIs.
+    const groups = m.slice(1).map((g) => g ?? null);
     matches.push({
       text: m[0],
       // matchAll 的 m.index 恒为数字；?? 0 仅为类型收窄（never hit）。
       index: m.index ?? 0,
-      // m.slice(1) keeps holes as undefined; normalize to null for JSON-safe
-      // IPC transport (desktop DTO) and a stable '-' rendering on both GUIs.
-      groups: m.slice(1).map((g) => g ?? null),
+      groups,
+      tuple: tupleForCaptureKind(captureKind, groups),
     });
   }
   return { ok: true, matches };
+}
+
+/** 单 match 的 tuple 计算（D13）：fixed 档哨兵文案；smart 档数字转换。 */
+function tupleForCaptureKind(
+  captureKind: SmartSortCaptureKind,
+  groups: readonly (string | null)[]
+): string | null {
+  if (captureKind === "fixed_min") {
+    return "(固定最小,)";
+  }
+  if (captureKind === "fixed_max") {
+    return "(固定最大,)";
+  }
+  if (groups.length === 0) {
+    return null;
+  }
+  const nums: number[] = [];
+  for (const group of groups) {
+    const value =
+      typeof group === "string" ? parseChineseNum(group) : null;
+    if (value === null) {
+      return null;
+    }
+    nums.push(value);
+  }
+  return `(${nums.join(",")},)`;
 }
