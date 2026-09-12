@@ -14,6 +14,7 @@
   "matchSmartSortPattern",
   "parsePatternInput",
   "smartSortRuleBundleDocumentSchema",
+  "splitSmartSortHighlightSegments",
   "updateSmartSortRuleSchema",
   "validateSmartSortRuleDraft"
 ]

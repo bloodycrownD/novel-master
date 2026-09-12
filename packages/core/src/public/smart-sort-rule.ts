@@ -48,6 +48,13 @@ export type {
   SmartSortPatternMatch,
 } from "../domain/smart-sort-rule/logic/match-smart-sort-pattern.js";
 export {
+  splitSmartSortHighlightSegments,
+} from "../domain/smart-sort-rule/logic/split-smart-sort-highlight-segments.js";
+export type {
+  SmartSortHighlightSegment,
+  SmartSortHighlightMatchInput,
+} from "../domain/smart-sort-rule/logic/split-smart-sort-highlight-segments.js";
+export {
   formatPatternInput,
   parsePatternInput,
 } from "../domain/smart-sort-rule/logic/parse-pattern-input.js";
