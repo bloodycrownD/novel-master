@@ -7,7 +7,7 @@
  * 稳态冷启动：若 `PRAGMA user_version` ≥ {@link SCHEMA_BOOT_VERSION}，跳过 DDL 与
  * 列对齐，仅跑 pending migration 与 builtin seed，避免 RN 上数十次桥接往返。
  *
- * 最低支持版本：v1.4.28。低于此版本的极旧库需先升级到 v1.4.28，再升级到本版本——
+ * 最低支持版本：v1.5.5。低于此版本的极旧库需先升级到 v1.5.5，再升级到本版本——
  * {@link assertMinimumBaseline} 会在 migration runner 之前做 fail-fast 检查，
  * 防止跨大版本升级走样。
  *
@@ -118,8 +118,10 @@ async function writeSchemaBootVersion(
  *
  * 前三条（vfs-entry-id-redesign-v1、session-agent-config-v2、
  * project-agent-config-cleanup-v1）为第二轮退役：所有 ≥v1.4.27 的库都已应用过。
- * 第三轮退役（本次）：orphan-revision-gc-v1、table-constraints-v1b——所有
+ * 第三轮退役：orphan-revision-gc-v1、table-constraints-v1b——所有
  * ≥v1.4.28 的库都已应用过，最低支持版本随之升至 v1.4.28。
+ * 第四轮退役：usage-cache-model-backfill-v1（数据回填，v1.5.4 首发引入）——
+ * 所有 ≥v1.5.5 的库都已应用过，最低支持版本随之升至 v1.5.5。
  */
 export const BASELINE_MIGRATION_IDS: readonly string[] = [
   "saved-model-identity-v1",
@@ -133,11 +135,12 @@ export const BASELINE_MIGRATION_IDS: readonly string[] = [
   "project-agent-config-cleanup-v1",
   "orphan-revision-gc-v1",
   "table-constraints-v1b",
+  "usage-cache-model-backfill-v1",
 ];
 
-/** 老库升级失败提示，指引用户先升到 v1.4.28。 */
+/** 老库升级失败提示，指引用户先升到 v1.5.5。 */
 export const BASELINE_TOO_OLD_MESSAGE =
-  "检测到当前数据库低于本版本最低支持版本（v1.4.28）。请先升级到 v1.4.28，再升级到本版本。";
+  "检测到当前数据库低于本版本最低支持版本（v1.5.5）。请先升级到 v1.5.5，再升级到本版本。";
 
 /** `llm_saved_model` 无 `id` 列 → 常见老库尚未走 saved-model-identity-v1。 */
 async function hasLegacySavedModelShape(tx: TdbcConnection): Promise<boolean> {
