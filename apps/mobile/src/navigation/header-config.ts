@@ -32,6 +32,7 @@ export const PAGE_HEADER_CONFIG: Record<HeaderPageKey, PageHeaderConfig> = {
   GlobalTemplate: {title: '文件浏览器', showBack: true, showNav: false},
   SmartSortRules: {title: '智能排序规则', showBack: true, showNav: false},
   SmartSortRuleEditor: {title: '规则详情', showBack: true, showNav: false},
+  PatternEditor: {title: '正则编辑', showBack: true, showNav: false},
   FileEditor: {title: '编辑文件', showBack: true, showNav: false},
   SessionDetail: {title: '会话详情', showBack: true, showNav: false},
   SkillPanel: {title: '技能', showBack: true, showNav: false},

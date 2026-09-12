@@ -32,6 +32,7 @@ import {ChatConfigScreen} from '../screens/stack/ChatConfigScreen';
 import {GlobalTemplateScreen} from '../screens/stack/GlobalTemplateScreen';
 import {SmartSortRulesScreen} from '../screens/stack/SmartSortRulesScreen';
 import {SmartSortRuleEditorScreen} from '../screens/stack/SmartSortRuleEditorScreen';
+import {PatternFullscreenEditorScreen} from '../screens/stack/PatternFullscreenEditorScreen';
 import {FileEditorScreen} from '../screens/stack/FileEditorScreen';
 import {SessionDetailScreen} from '../screens/stack/SessionDetailScreen';
 import {SubagentSessionScreen} from '../screens/stack/SubagentSessionScreen';
@@ -158,6 +159,10 @@ const SmartSortRuleEditorStackScreen = withStackLayout(
   'SmartSortRuleEditor',
   SmartSortRuleEditorScreen,
 );
+const PatternEditorStackScreen = withStackLayout(
+  'PatternEditor',
+  PatternFullscreenEditorScreen,
+);
 const FileEditorStackScreen = withStackLayout('FileEditor', FileEditorScreen);
 const SessionDetailStackScreen = withStackLayout(
   'SessionDetail',
@@ -264,6 +269,10 @@ export function RootNavigator() {
             <Stack.Screen
               name="SmartSortRuleEditor"
               component={SmartSortRuleEditorStackScreen}
+            />
+            <Stack.Screen
+              name="PatternEditor"
+              component={PatternEditorStackScreen}
             />
             <Stack.Screen name="FileEditor" component={FileEditorStackScreen} />
             <Stack.Screen
