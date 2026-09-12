@@ -28,7 +28,12 @@
  */
 
 import type { SmartSortCaptureKind } from "../model/smart-sort-rule.js";
-import { parseChineseNum } from "@/domain/workplace/logic/smart-sort.js";
+import {
+  FIXED_MAX_SORT_TUPLE,
+  FIXED_MIN_SORT_TUPLE,
+  formatSortTupleForDisplay,
+  parseChineseNum,
+} from "@/domain/workplace/logic/smart-sort.js";
 
 /**
  * Single match: full match text + start offset in the tested text
@@ -42,9 +47,10 @@ export interface SmartSortPatternMatch {
   readonly groups: readonly (string | null)[];
   /**
    * 提取元组的显示字符串（D13）：fixed 档恒为 "(固定最小,)"/"(固定最大,)"
- * （忽略捕获组）；smart 档为捕获组→数字转换后的 "(12,)" 风格，无捕获组
-   * 或任一组转换失败时为 null（GUI 渲染「无序号」）。仅显示用途，排序比较
-   * 走 extractSortKey 的数值元组。
+   * （忽略捕获组）；smart 档为捕获组→数字转换后的 "(12,)" 风格，无捕获组
+   * 或任一组转换失败时为 null（GUI 渲染「无序号」）。文案单源
+   * formatSortTupleForDisplay（C-3）。仅显示用途，排序比较走
+   * extractSortKey 的数值元组。
    */
   readonly tuple: string | null;
 }
@@ -108,16 +114,21 @@ export function matchSmartSortPattern(
   return { ok: true, matches };
 }
 
-/** 单 match 的 tuple 计算（D13）：fixed 档哨兵文案；smart 档数字转换。 */
+/**
+ * 单 match 的 tuple 计算（D13）：fixed 档哨兵元组与 smart 档数字元组统一经
+ * {@link formatSortTupleForDisplay} 格式化（C-3 单源：哨兵/数字元组文案不再
+ * 内联平行实现；smart 档数字管道经 core/B-4 守卫后永不产出 ±Infinity，不会
+ * 误触 formatSortTupleForDisplay 的哨兵分支）。
+ */
 function tupleForCaptureKind(
   captureKind: SmartSortCaptureKind,
   groups: readonly (string | null)[]
 ): string | null {
   if (captureKind === "fixed_min") {
-    return "(固定最小,)";
+    return formatSortTupleForDisplay(FIXED_MIN_SORT_TUPLE);
   }
   if (captureKind === "fixed_max") {
-    return "(固定最大,)";
+    return formatSortTupleForDisplay(FIXED_MAX_SORT_TUPLE);
   }
   if (groups.length === 0) {
     return null;
@@ -131,5 +142,5 @@ function tupleForCaptureKind(
     }
     nums.push(value);
   }
-  return `(${nums.join(",")},)`;
+  return formatSortTupleForDisplay(nums);
 }

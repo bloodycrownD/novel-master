@@ -11,6 +11,11 @@ import {
   matchSmartSortPattern,
   type SmartSortPatternMatch,
 } from "../../src/domain/smart-sort-rule/logic/match-smart-sort-pattern.js";
+import {
+  FIXED_MAX_SORT_TUPLE,
+  FIXED_MIN_SORT_TUPLE,
+  formatSortTupleForDisplay,
+} from "../../src/domain/workplace/logic/smart-sort.js";
 
 function ok(
   result: ReturnType<typeof matchSmartSortPattern>
@@ -198,5 +203,28 @@ describe("matchSmartSortPattern tuple（D13 捕获档位展示字段）", () => 
     );
     ok(minUnparsable);
     assert.equal(minUnparsable.matches[0]!.tuple, "(固定最大,)");
+  });
+
+  it("tuple 文案与 formatSortTupleForDisplay 同源（C-3 单源锁定）", () => {
+    // match 通道不再内联哨兵文案：三档 tuple 必须与权威实现输出逐字一致。
+    const min = matchSmartSortPattern("^(序章?|楔子)", "", "序章", "fixed_min");
+    ok(min);
+    assert.equal(
+      min.matches[0]!.tuple,
+      formatSortTupleForDisplay(FIXED_MIN_SORT_TUPLE)
+    );
+    const max = matchSmartSortPattern("^(番外)", "", "番外", "fixed_max");
+    ok(max);
+    assert.equal(
+      max.matches[0]!.tuple,
+      formatSortTupleForDisplay(FIXED_MAX_SORT_TUPLE)
+    );
+    const smart = matchSmartSortPattern(
+      "第([0-9]+)卷第([0-9]+)章",
+      "",
+      "第2卷第13章"
+    );
+    ok(smart);
+    assert.equal(smart.matches[0]!.tuple, formatSortTupleForDisplay([2, 13]));
   });
 });
