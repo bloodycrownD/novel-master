@@ -230,7 +230,7 @@
 # Round 3（diff 模式：真机验收轮增量 CR）
 
 - 范围：e4daaec3..adb2c793（90568909 linkify / da4bc8f1 详情页移除 / 2bf999c0 未命中提示 / adb2c793 措辞与省略）
-- review_round：3（diff 单轮）· dag_version：4 · 状态：draft 待用户确认执行
+- review_round：3（diff 单轮）· dag_version：4 · 状态：executed（用户确认修复，2026-09-12 全部闭合）
 
 ## Must-fix（round 3，全部 P2）
 
@@ -249,7 +249,7 @@
 - 文件：packages/core/src/domain/chat/logic/resolve-chat-link-target.ts:88-96（+ 测试）
 - 问题：段数>2 恒省略，/notes/2026/x.md（显示得下）也被压丢中间段；拍板措辞是「超长路径」；文件名/首段本身超长不截断，toast 仍可能撑爆。
 - 改法：加显示长度门槛（建议 >20 字符才省略，段数仅作兜底）；JSDoc 补入参契约；测试补边界（纯 /、尾斜杠、超长文件名不截断）。
-- 备注：若用户确认「3 段即省略」为拍板口径则转已豁免。
+- 备注：用户确认按「超长才省」长度制执行（门槛 20 字符 + 层数兜底），已按此实施。
 - 验收：core 测试全绿 + dist 重建；短路径 toast 完整显示。
 
 ### MF-R3-4 mobile SkillDetailScreen 头注漂移

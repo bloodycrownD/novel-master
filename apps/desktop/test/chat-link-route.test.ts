@@ -235,7 +235,7 @@ test("T-L6 源码契约: MessageList 正文与流式尾巴均透传 onLinkClick�
   assert.ok(
     shell.includes("log: (message, detail) => console.info(message, detail)"),
   );
-  // not-found：双域未命中弹「文件路径不存在」提示（用户拍板，不再静默无动作）
+  // not-found：双域未命中弹「{省略路径} 不存在」提示（用户拍板，不再静默无动作）
   assert.ok(
     shell.includes("showToast(chatLinkNotFoundMessage(action.path))"),
   );

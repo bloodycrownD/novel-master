@@ -28,7 +28,7 @@ date: 2026-09-06
 
 **改描述门**：invalid 技能（front matter 解析失败）禁用「编辑信息」入口（UI 提示先修复 SKILL.md）——覆盖「改名跳过重写」分支的 UI 面，避免 invalid 技能经描述编辑意外补块变 valid 的歧义。
 
-**UI 形态（双端一致）**：行菜单/详情头「编辑信息」→ 弹窗两个字段（名称 + 描述）；内置技能名称框只读（提示内置不可改名）；mobile 从详情页发起时 `navigation.setParams({name: newName})`，desktop 更新 `viewingSkillRef`，列表刷新。NewSkillModal 文案「创建后不可改」更新为「可在管理页重命名」。
+**UI 形态（双端一致）**：行菜单「编辑信息」→ 弹窗两个字段（名称 + 描述）；内置技能名称框只读（提示内置不可改名）；desktop 管理页保存后更新 `viewingSkillRef`（详情栈顶同技能防踢回）与列表刷新。（2026-09-12 用户拍板：详情页头部入口已移除，收敛为管理页行菜单单点；下文 Step 4/5 中的详情页入口与 mobile `setParams` 描述为历史计划，未随拍板实施——mobile 详情页还原基线形态。）NewSkillModal 文案「创建后不可改」更新为「可在管理页重命名」。
 
 **desktop version 残留清理**：`NewSkillModal.tsx` ZIP 导入重写分支删除 `ipcSkillsRead`（readRes）调用、`version` 传参与过时乐观锁注释——`SkillsWriteRequest` 无 version 字段，spread 逃过 excess check 的死参数，content 实际来自 zip 预检原文。
 
