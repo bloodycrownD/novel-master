@@ -287,7 +287,7 @@ describe("SkillInfoEditModal（T-S5：编辑信息弹窗）", () => {
     assert.match(html, /readOnly/);
   });
 
-  it("源码契约：管理页与详情页均有「编辑信息」入口，invalid 时禁用", () => {
+  it("源码契约：管理页行菜单有「编辑信息」入口，invalid 时禁用（详情页入口按用户拍板移除）", () => {
     const manageSrc = readFileSync(
       fileURLToPath(
         new URL("../renderer/features/settings/SkillsManageView.tsx", import.meta.url),
@@ -297,16 +297,6 @@ describe("SkillInfoEditModal（T-S5：编辑信息弹窗）", () => {
     assert.match(manageSrc, /"编辑信息"/);
     assert.match(manageSrc, /disabled: !menu\.valid/);
     assert.match(manageSrc, /SkillInfoEditModal/);
-
-    const detailSrc = readFileSync(
-      fileURLToPath(
-        new URL("../renderer/features/settings/SkillDetailView.tsx", import.meta.url),
-      ),
-      "utf8",
-    );
-    assert.match(detailSrc, /编辑信息/);
-    assert.match(detailSrc, /SkillInfoEditModal/);
-    assert.match(detailSrc, /viewingSkillRef = newRef/);
   });
 
   it("源码契约：校验消费 core validateSkillName，输入期出 reason 内联提示（MF-7）", () => {

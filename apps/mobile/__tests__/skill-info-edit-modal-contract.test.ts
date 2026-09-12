@@ -2,8 +2,7 @@
  * SkillInfoEditModal（mobile）源码契约——技能重命名与描述编辑：
  * - 提交走 runtime skills updateSkillInfo，只提交真正变更的字段。
  * - global 域内置技能名称框只读（editable={!builtin}）。
- * - 调用方（管理页/详情页）invalid 技能入口禁用；详情页改名后
- *   setParams 同步栈内定位。
+ * - 调用方（管理页行菜单）invalid 技能入口禁用（详情页入口按用户拍板移除）。
  * - NewSkillModal 的 front matter 重写已回收为 core 单源消费。
  *
  * 整屏组件依赖太重（runtime/keyboard/modal），按本仓惯例钉源码契约
@@ -18,7 +17,6 @@ const readSrc = (...parts: string[]) =>
 
 const modalSrc = readSrc('components', 'skills', 'SkillInfoEditModal.tsx');
 const manageSrc = readSrc('screens', 'stack', 'SkillsSettingsScreen.tsx');
-const detailSrc = readSrc('screens', 'stack', 'SkillDetailScreen.tsx');
 const newSkillSrc = readSrc('components', 'skills', 'NewSkillModal.tsx');
 
 describe('SkillInfoEditModal 源码契约（T-S5）', () => {
@@ -66,12 +64,6 @@ describe('入口接线源码契约（T-S5）', () => {
     expect(manageSrc).toMatch(/<SkillInfoEditModal/);
   });
 
-  it('详情页头部入口：invalid 禁用 + 改名后 setParams 同步', () => {
-    expect(detailSrc).toMatch(/skill-detail-edit-info/);
-    expect(detailSrc).toMatch(/disabled=\{!item\.valid\}/);
-    expect(detailSrc).toMatch(/navigation\.setParams\(\{name: newName\}\)/);
-    expect(detailSrc).toMatch(/<SkillInfoEditModal/);
-  });
 });
 
 describe('NewSkillModal 消费 core 单源（front matter 重写回收）', () => {
