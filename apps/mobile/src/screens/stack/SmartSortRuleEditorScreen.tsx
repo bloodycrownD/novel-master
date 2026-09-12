@@ -414,7 +414,10 @@ export function SmartSortRuleEditorScreen() {
             testID="capture-kind-value-row"
             accessibilityLabel="选择捕获数字方式"
             onPress={() => setCaptureKindPickerVisible(true)}
-            style={[styles.pickerRow, {borderColor: tokens.border}]}>
+            style={[
+              styles.pickerRow,
+              {borderColor: tokens.border, backgroundColor: tokens.bgSecondary},
+            ]}>
             <Text
               testID="capture-kind-value"
               style={{color: tokens.text}}

@@ -146,7 +146,10 @@ export function DirectoryRuleSheet({
           testID="sort-field-value-row"
           accessibilityLabel="选择排序方式"
           onPress={() => setSortFieldPickerVisible(true)}
-          style={[styles.pickerRow, {borderColor: tokens.border}]}
+          style={[
+            styles.pickerRow,
+            {borderColor: tokens.border, backgroundColor: tokens.bgSecondary},
+          ]}
         >
           <Text
             testID="sort-field-value"
