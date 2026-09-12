@@ -15,7 +15,7 @@ import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {Keyboard} from 'react-native';
 import {useRoute, type RouteProp} from '@react-navigation/native';
 import type {RootStackParamList} from '../../navigation/types';
-import {useHeaderContext, useStackOverrideSetter} from '../../navigation/HeaderContext';
+import {useStackOverrideSetter} from '../../navigation/HeaderContext';
 import {useUnsavedGuard} from '../../hooks/useUnsavedGuard';
 import {useToast} from '../../components/chrome/ToastHost';
 import {
@@ -43,7 +43,7 @@ export function PromptEditorScreen() {
   const {showToast} = useToast();
   const route = useRoute<PromptEditorRoute>();
   const {title, initialText} = route.params;
-    // 屏级 override：自动带 ownerRouteKey，转场期间不泄漏到相邻屏 header。
+  // 屏级 override：自动带 ownerRouteKey，转场期间不泄漏到相邻屏 header。
   const setStackOverride = useStackOverrideSetter();
   // 回调走模块级存取（路由参数必须可序列化）：挂载时读走并清空，
   // 未保存即离开时不消费，随 ref 一起丢弃，不残留旧回调。

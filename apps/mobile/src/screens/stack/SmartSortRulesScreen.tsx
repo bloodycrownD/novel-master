@@ -1,6 +1,7 @@
 /**
  * Smart sort rule management: list + toggle + reorder + batch + YAML I/O
- * (spec smart-filename-sort Step 13; drag reorder is a separate node).
+ * (spec smart-filename-sort Step 13; 调序走行菜单按钮——上移/下移/置顶/
+ * 置底，拖拽方案已按设计定案 D8 移除).
  */
 import React, {useCallback, useState} from 'react';
 import {

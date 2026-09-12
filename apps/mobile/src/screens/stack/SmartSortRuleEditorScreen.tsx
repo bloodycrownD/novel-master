@@ -52,7 +52,7 @@ import {SecondaryButton} from '@/components/ui/Buttons';
 import {PickerListModal} from '@/components/ui/PickerListModal';
 import type {PickerListLoadResult} from '@/components/ui/PickerListModal';
 import {useRuntime} from '@/hooks/useRuntime';
-import {useHeaderContext, useStackOverrideSetter} from '@/navigation/HeaderContext';
+import {useStackOverrideSetter} from '@/navigation/HeaderContext';
 import {HelpIcon} from '@/components/icons/TabIcons';
 import {ModalShell} from '@/components/ui/ModalShell';
 import {useTheme} from '@/theme/ThemeProvider';
@@ -168,7 +168,7 @@ export function SmartSortRuleEditorScreen() {
   const {tokens} = useTheme();
   const {showToast} = useToast();
   const runtime = useRuntime();
-    // 屏级 override：自动带 ownerRouteKey，转场期间不泄漏到相邻屏 header。
+  // 屏级 override：自动带 ownerRouteKey，转场期间不泄漏到相邻屏 header。
   const setStackOverride = useStackOverrideSetter();
   const navigation = useNavigation<StackNav>();
   const route = useRoute<EditorRoute>();
