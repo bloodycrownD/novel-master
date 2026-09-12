@@ -224,3 +224,46 @@
 ## K 节建议（下游执行时闭合）
 
 - 无收尾项：round 2 全维核查——CHANGELOG Unreleased 三 feature 条目完整（新增 3 + 变更 1 + 修复 1）且口径符合「用户实际见过的行为」；diff 内新增代码零调试残留（console.log/TODO/FIXME/debugger 全扫无命中）；worktree 工作区干净、无残留处置项。
+
+---
+
+# Round 3（diff 模式：真机验收轮增量 CR）
+
+- 范围：e4daaec3..adb2c793（90568909 linkify / da4bc8f1 详情页移除 / 2bf999c0 未命中提示 / adb2c793 措辞与省略）
+- review_round：3（diff 单轮）· dag_version：4 · 状态：draft 待用户确认执行
+
+## Must-fix（round 3，全部 P2）
+
+### MF-R3-1 linkify 黑名单漏可达的两字符国别码撞车扩展
+- 文件：apps/mobile/src/components/rich-content/prepare-transcript-rich-html.ts（+ 测试）
+- 问题：实测 main.tf/main.cc/main.ml/Makefile.in/x.cl/y.sc/z.st/w.as 仍被链接化（两字符国别码撞车）；zip/app/page/link/file/mov 在 linkify-it 5 默认表下不可达（防御冗余，无害但注释与事实不符）。
+- 改法：Set 补 'tf','cc','ml','in','cl','sc','st','as'；注释补「默认 TLD 表=16 项+两字符国别码全表+xn--，清单只盯可达撞车项，其余前向防御」；测试补 main.tf/Makefile.in 可达断言。
+- 验收：mobile jest 全绿；真机 main.tf 纯文本（webview 变更须 npm run android 全量重装）。
+
+### MF-R3-2 skill-rename-description PRD/spec 未同步「详情页入口移除」拍板
+- 文件：docs/Iterations/export-link-skill-mgmt-2026-09/features/skill-rename-description/{prd.md,spec.md}
+- 改法：照 chat-link 先例补「2026-09-12 用户拍板移除详情页入口，收敛为管理页行菜单单点（desktop 管理页侧 viewingSkillRef 同步保留）」标注；Step 4/5 加勘误注记不重写。
+- 验收：文档与 CHANGELOG「技能管理页行菜单」口径一致。
+
+### MF-R3-3 elideChatLinkPath 段数阈值与「超长」拍板口径不符
+- 文件：packages/core/src/domain/chat/logic/resolve-chat-link-target.ts:88-96（+ 测试）
+- 问题：段数>2 恒省略，/notes/2026/x.md（显示得下）也被压丢中间段；拍板措辞是「超长路径」；文件名/首段本身超长不截断，toast 仍可能撑爆。
+- 改法：加显示长度门槛（建议 >20 字符才省略，段数仅作兜底）；JSDoc 补入参契约；测试补边界（纯 /、尾斜杠、超长文件名不截断）。
+- 备注：若用户确认「3 段即省略」为拍板口径则转已豁免。
+- 验收：core 测试全绿 + dist 重建；短路径 toast 完整显示。
+
+### MF-R3-4 mobile SkillDetailScreen 头注漂移
+- 文件：apps/mobile/src/screens/stack/SkillDetailScreen.tsx:1-2
+- 改法：头注改「技能文件浏览器」口径，保留踢回/守卫说明。
+
+### MF-R3-5 desktop 契约测试注释残留旧文案
+- 文件：apps/desktop/test/chat-link-route.test.ts:239
+- 改法：注释改「弹『{省略路径} 不存在』提示」。
+
+## Open questions
+- MF-R3-3 省略门槛形态（长度制 vs 段数制）待用户拍板。
+- 过程记忆中详情页移除提交哈希 3e25868b 实为 da4bc8f1（rebase 变哈希），提请知晓不改。
+
+## K 节（round 3）
+1. MF-R3-1 属 webview 变更：真机回归须全量重装 APK。
+2. 若采纳 MF-R3-3：重建 core dist。
