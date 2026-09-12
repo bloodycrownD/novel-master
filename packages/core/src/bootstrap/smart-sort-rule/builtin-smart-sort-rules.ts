@@ -17,13 +17,13 @@
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { SMART_SORT_RULE_TABLE } from "./smart-sort-rule-schema.js";
 
-/** 内置规则 seed 行（pattern 按 spec 附录 A 原样定案）. */
+/** 内置规则 seed 行（pattern 按 spec 附录 A 原样定案；description 为描述文字）. */
 export interface BuiltinSmartSortRuleSeedRow {
   readonly ruleId: string;
   readonly name: string;
   readonly pattern: string;
   readonly flags: string;
-  readonly example: string;
+  readonly description: string;
   readonly sortOrder: number;
 }
 
@@ -41,7 +41,7 @@ export const BUILTIN_SMART_SORT_RULE_ROWS: readonly BuiltinSmartSortRuleSeedRow[
       name: "中文卷章复合",
       pattern: `第[ \\t]{0,2}(${NUM_CLASS})[ \\t]{0,2}卷[ \\t]*[-—·.、]?[ \\t]*第[ \\t]{0,2}(${NUM_CLASS})[ \\t]{0,2}章`,
       flags: "",
-      example: "第2卷 第13章",
+      description: "匹配 第X卷…第Y章 复合结构，序号取 [卷,章]",
       sortOrder: 1,
     },
     {
@@ -49,7 +49,8 @@ export const BUILTIN_SMART_SORT_RULE_ROWS: readonly BuiltinSmartSortRuleSeedRow[
       name: "中文序号章节",
       pattern: `第[ \\t]{0,2}(${NUM_CLASS})[ \\t]{0,2}(?:章|节|集|部|篇|回|卷)`,
       flags: "",
-      example: "第十二章 风起",
+      description:
+        "匹配 第X章/节/集/部/篇/回/卷 形式的标题（X 支持中文与阿拉伯数字）",
       sortOrder: 2,
     },
     {
@@ -57,7 +58,7 @@ export const BUILTIN_SMART_SORT_RULE_ROWS: readonly BuiltinSmartSortRuleSeedRow[
       name: "英文章节",
       pattern: `(?:chapter|section|part|episode)[ \\t]*[.．]?[ \\t]*([0-9]{1,6})`,
       flags: "i",
-      example: "Chapter 12",
+      description: "匹配 Chapter/Section/Part/Episode N 英文标题（忽略大小写）",
       sortOrder: 3,
     },
     {
@@ -65,7 +66,7 @@ export const BUILTIN_SMART_SORT_RULE_ROWS: readonly BuiltinSmartSortRuleSeedRow[
       name: "数字序号开头",
       pattern: `^[ \\t]*([0-9]{1,6})[ \\t]*(?:[、.．\\-—_]|$)`,
       flags: "",
-      example: "001、开端",
+      description: "匹配数字序号开头的文件名，如 001、开端",
       sortOrder: 4,
     },
   ];
@@ -80,7 +81,7 @@ export async function seedBuiltinSmartSortRules(
   for (const row of BUILTIN_SMART_SORT_RULE_ROWS) {
     await conn.execute(
       `INSERT OR IGNORE INTO ${SMART_SORT_RULE_TABLE} (
-        rule_id, name, pattern, flags, example, enabled,
+        rule_id, name, pattern, flags, description, enabled,
         sort_order, created_at_ms, updated_at_ms
       ) VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?)`,
       [
@@ -88,7 +89,7 @@ export async function seedBuiltinSmartSortRules(
         row.name,
         row.pattern,
         row.flags,
-        row.example,
+        row.description,
         row.sortOrder,
         now,
         now,

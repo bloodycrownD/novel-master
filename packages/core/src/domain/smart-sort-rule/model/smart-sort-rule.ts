@@ -13,7 +13,7 @@ export interface SmartSortRule {
   readonly name: string;
   readonly pattern: string;
   readonly flags: string;
-  readonly example: string | null;
+  readonly description: string | null;
   readonly enabled: boolean;
   readonly sortOrder: number;
   readonly createdAtMs: number;

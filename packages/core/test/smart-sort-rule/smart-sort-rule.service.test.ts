@@ -44,7 +44,7 @@ describe("T-SR1: SmartSortRuleService CRUD/move/reorder", () => {
     const created = await svc.createRule({
       name: "我的规则",
       pattern: "第([0-9]+)话",
-      example: "第12话",
+      description: "匹配 第X话 序号",
     });
     assert.ok(created.ruleId.startsWith("rule-"));
     assert.equal(created.flags, "");
@@ -246,14 +246,19 @@ describe("T-SR2: resetDefaults 与 seed 幂等", () => {
 });
 
 describe("T-SR3: export→import round-trip 无损（替换式）", () => {
-  it("round-trip 保留 ruleId/enabled 与顺序（sort_order 重编号后顺序一致）", async () => {
+  it("round-trip 保留 ruleId/enabled/description 与顺序（sort_order 重编号后顺序一致）", async () => {
     const ctx = getNovelMasterTestContext();
     const svc = createSmartSortRuleService(ctx.conn);
-    const a = await svc.createRule({ name: "a", pattern: "(\\d+)" });
+    const a = await svc.createRule({
+      name: "a",
+      pattern: "(\\d+)",
+      description: "规则 a 的描述",
+    });
     await svc.createRule({ name: "b", pattern: "(\\d+)", enabled: false });
     await svc.setEnabled("builtin-zh-chapter", false);
     const before = await svc.listRules();
     const doc = await svc.exportRules();
+    assert.equal(doc.schemaVersion, 2, "bundle 文档 schemaVersion 升到 2");
 
     // 导出后改库：删除一条用户规则 + 移动顺序
     await svc.deleteRule(a.ruleId);
@@ -270,7 +275,33 @@ describe("T-SR3: export→import round-trip 无损（替换式）", () => {
       before.map((r) => r.enabled),
       "导入后 enabled 状态与导出时一致"
     );
+    assert.deepEqual(
+      imported.map((r) => r.description),
+      before.map((r) => r.description),
+      "导入后 description 与导出时一致"
+    );
     assert.ok(sortOrdersAreConsecutiveFromOne(imported));
+  });
+
+  it("importRules 兼容 v1 旧文档（example 字段自动映射为 description）", async () => {
+    const ctx = getNovelMasterTestContext();
+    const svc = createSmartSortRuleService(ctx.conn);
+    const imported = await svc.importRules({
+      schemaVersion: 1,
+      rules: [
+        {
+          ruleId: "rule-v1-legacy",
+          name: "旧文档规则",
+          pattern: "第([0-9]+)话",
+          flags: "",
+          example: "第12话",
+          enabled: true,
+          sortOrder: 1,
+        },
+      ],
+    });
+    assert.equal(imported.length, 1);
+    assert.equal(imported[0]!.description, "第12话", "旧 example 值应落到 description");
   });
 
   it("importRules 拒绝重复 ruleId 与非法规则（先校验后替换，不半删）", async () => {

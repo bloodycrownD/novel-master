@@ -6,6 +6,10 @@
  * text (de)serialization stays with the callers via
  * `@/infra/serialization` `parseText`/`stringifyText`.
  *
+ * v2 (fix ④): rule field `example` renamed to `description`. Decoding keeps
+ * accepting v1 documents carrying `example` — the loader maps the legacy
+ * field onto `description` before validation, so old exports keep importing.
+ *
  * @module domain/smart-sort-rule/model/smart-sort-rule-io
  */
 
@@ -14,16 +18,16 @@ import { decode } from "@/infra/serialization/decode.js";
 import type { SmartSortRule } from "./smart-sort-rule.js";
 
 /** Current bundle document schema version. */
-export const SMART_SORT_RULE_BUNDLE_SCHEMA_VERSION = 1;
+export const SMART_SORT_RULE_BUNDLE_SCHEMA_VERSION = 2;
 
-/** Bundle 内单条规则（example 缺省 null；sortOrder 即导出时的优先级顺序）。 */
+/** Bundle 内单条规则（description 缺省 null；sortOrder 即导出时的优先级顺序）。 */
 const bundleRuleSchema = z
   .object({
     ruleId: z.string().min(1),
     name: z.string().min(1),
     pattern: z.string().min(1),
     flags: z.string(),
-    example: z.string().nullable().optional(),
+    description: z.string().nullable().optional(),
     enabled: z.boolean(),
     sortOrder: z.number().int().nonnegative(),
   })
@@ -43,7 +47,7 @@ export type SmartSortRuleBundleDocument = z.infer<
   typeof smartSortRuleBundleDocumentSchema
 >;
 
-/** Domain rules → bundle document（全量、按 sortOrder；example null 省略）。 */
+/** Domain rules → bundle document（全量、按 sortOrder；description null 省略）。 */
 export function encodeSmartSortRuleBundle(
   rules: readonly SmartSortRule[]
 ): SmartSortRuleBundleDocument {
@@ -54,10 +58,48 @@ export function encodeSmartSortRuleBundle(
       name: rule.name,
       pattern: rule.pattern,
       flags: rule.flags,
-      ...(rule.example != null ? { example: rule.example } : {}),
+      ...(rule.description != null ? { description: rule.description } : {}),
       enabled: rule.enabled,
       sortOrder: rule.sortOrder,
     })),
+  };
+}
+
+/**
+ * v1 兼容映射：旧文档的 `example` 字段挪到 `description`，schemaVersion
+ * 改写为 2。仅识别 schemaVersion===1 且逐条规则只做字段搬运（无 example
+ * 的规则原样通过，description 与 example 同时存在时以 description 为准）。
+ */
+function migrateBundleV1Raw(raw: unknown): unknown {
+  if (
+    typeof raw !== "object" ||
+    raw === null ||
+    Array.isArray(raw)
+  ) {
+    return raw;
+  }
+  const doc = raw as {
+    schemaVersion?: unknown;
+    rules?: unknown;
+    [key: string]: unknown;
+  };
+  if (doc.schemaVersion !== 1 || !Array.isArray(doc.rules)) {
+    return raw;
+  }
+  return {
+    ...doc,
+    schemaVersion: SMART_SORT_RULE_BUNDLE_SCHEMA_VERSION,
+    rules: doc.rules.map((rule) => {
+      if (typeof rule !== "object" || rule === null || Array.isArray(rule)) {
+        return rule;
+      }
+      const r = rule as Record<string, unknown>;
+      if (r.description !== undefined || r.example === undefined) {
+        return r;
+      }
+      const { example, ...rest } = r;
+      return { ...rest, description: example };
+    }),
   };
 }
 
@@ -65,7 +107,7 @@ export function encodeSmartSortRuleBundle(
 export function decodeSmartSortRuleBundle(
   raw: unknown
 ): SmartSortRuleBundleDocument {
-  return decode(raw, smartSortRuleBundleDocumentSchema);
+  return decode(migrateBundleV1Raw(raw), smartSortRuleBundleDocumentSchema);
 }
 
 /** Bundle rules → domain entities（时间戳由导入方重新分配）。 */
@@ -78,7 +120,7 @@ export function bundleRulesToEntities(
     name: rule.name,
     pattern: rule.pattern,
     flags: rule.flags,
-    example: rule.example ?? null,
+    description: rule.description ?? null,
     enabled: rule.enabled,
     sortOrder: index + 1,
     createdAtMs: nowMs,

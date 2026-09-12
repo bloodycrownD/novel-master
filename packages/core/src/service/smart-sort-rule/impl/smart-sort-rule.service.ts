@@ -47,7 +47,7 @@ export interface SmartSortBuiltinSeedRow {
   readonly name: string;
   readonly pattern: string;
   readonly flags: string;
-  readonly example: string;
+  readonly description: string;
   readonly sortOrder: number;
 }
 
@@ -76,7 +76,7 @@ export class DefaultSmartSortRuleService implements SmartSortRuleService {
       name: fields.name,
       pattern: fields.pattern,
       flags: fields.flags,
-      example: fields.example,
+      description: fields.description,
       enabled: fields.enabled,
       sortOrder,
       createdAtMs: now,
@@ -103,7 +103,8 @@ export class DefaultSmartSortRuleService implements SmartSortRuleService {
       name: merged.name,
       pattern: merged.pattern,
       flags: merged.flags,
-      example: parsed.example !== undefined ? parsed.example : existing.example,
+      description:
+        parsed.description !== undefined ? parsed.description : existing.description,
       enabled: parsed.enabled ?? existing.enabled,
       updatedAtMs: Date.now(),
     };
@@ -264,7 +265,7 @@ export class DefaultSmartSortRuleService implements SmartSortRuleService {
         name: row.name,
         pattern: row.pattern,
         flags: row.flags,
-        example: row.example,
+        description: row.description,
         enabled: true,
         sortOrder: row.sortOrder,
         createdAtMs: now,
@@ -292,7 +293,7 @@ export class DefaultSmartSortRuleService implements SmartSortRuleService {
           name: draft.name,
           pattern: draft.pattern,
           flags: draft.flags,
-          example: null,
+          description: null,
           enabled: true,
           sortOrder: 0,
           createdAtMs: 0,

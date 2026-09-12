@@ -94,9 +94,12 @@ async function readDirRules(
 }
 
 describe("workplace-dir-rule-smart-field-v1 migration（T-MIG1/T-MIG2）", () => {
-  it("登记：migration 已注册于 SCHEMA_MIGRATIONS（数组尾部）", () => {
-    const last = SCHEMA_MIGRATIONS[SCHEMA_MIGRATIONS.length - 1];
-    assert.equal(last?.id, WORKPLACE_DIR_RULE_SMART_FIELD_V1_ID);
+  it("登记：migration 已注册于 SCHEMA_MIGRATIONS", () => {
+    // 后续新迁移会接在阵尾，不再断言本迁移居尾，只断言已登记且不重复。
+    const registered = SCHEMA_MIGRATIONS.filter(
+      (m) => m.id === WORKPLACE_DIR_RULE_SMART_FIELD_V1_ID
+    );
+    assert.equal(registered.length, 1);
   });
 
   it("T-MIG1：旧 CHECK 形态库 bootstrap 后可写 'smart'、存量行无损、CHECK 仍拦截非法值", async () => {

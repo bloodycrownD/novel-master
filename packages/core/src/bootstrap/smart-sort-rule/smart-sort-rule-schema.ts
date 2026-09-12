@@ -16,7 +16,7 @@ export const SMART_SORT_RULE_SCHEMA_STATEMENTS: readonly string[] = [
     name TEXT NOT NULL,
     pattern TEXT NOT NULL,
     flags TEXT NOT NULL DEFAULT '' CHECK (flags NOT GLOB '*[^gimsuy]*'),
-    example TEXT,
+    description TEXT,
     enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
     sort_order INTEGER NOT NULL,
     created_at_ms INTEGER NOT NULL,

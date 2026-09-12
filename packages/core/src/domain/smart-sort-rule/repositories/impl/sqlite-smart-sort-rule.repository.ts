@@ -20,7 +20,7 @@ function rowToRule(row: Row): SmartSortRule {
     name: String(row.name),
     pattern: String(row.pattern),
     flags: String(row.flags ?? ""),
-    example: row.example != null ? String(row.example) : null,
+    description: row.description != null ? String(row.description) : null,
     enabled: Number(row.enabled) !== 0,
     sortOrder: Number(row.sort_order),
     createdAtMs: Number(row.created_at_ms),
@@ -28,7 +28,7 @@ function rowToRule(row: Row): SmartSortRule {
   };
 }
 
-const SELECT_COLUMNS = `rule_id, name, pattern, flags, example, enabled,
+const SELECT_COLUMNS = `rule_id, name, pattern, flags, description, enabled,
        sort_order, created_at_ms, updated_at_ms`;
 
 /** TDBC-backed smart sort rule repository. */
@@ -68,10 +68,10 @@ export class SqliteSmartSortRuleRepository implements SmartSortRuleRepository {
       this.conn,
       this.parser,
       `INSERT INTO smart_sort_rule (
-        rule_id, name, pattern, flags, example, enabled,
+        rule_id, name, pattern, flags, description, enabled,
         sort_order, created_at_ms, updated_at_ms
       ) VALUES (
-        #{ruleId}, #{name}, #{pattern}, #{flags}, #{example}, #{enabled},
+        #{ruleId}, #{name}, #{pattern}, #{flags}, #{description}, #{enabled},
         #{sortOrder}, #{createdAtMs}, #{updatedAtMs}
       )`,
       {
@@ -79,7 +79,7 @@ export class SqliteSmartSortRuleRepository implements SmartSortRuleRepository {
         name: rule.name,
         pattern: rule.pattern,
         flags: rule.flags,
-        example: rule.example,
+        description: rule.description,
         enabled: rule.enabled ? 1 : 0,
         sortOrder: rule.sortOrder,
         createdAtMs: rule.createdAtMs,
@@ -96,7 +96,7 @@ export class SqliteSmartSortRuleRepository implements SmartSortRuleRepository {
         name = #{name},
         pattern = #{pattern},
         flags = #{flags},
-        example = #{example},
+        description = #{description},
         enabled = #{enabled},
         sort_order = #{sortOrder},
         updated_at_ms = #{updatedAtMs}
@@ -106,7 +106,7 @@ export class SqliteSmartSortRuleRepository implements SmartSortRuleRepository {
         name: rule.name,
         pattern: rule.pattern,
         flags: rule.flags,
-        example: rule.example,
+        description: rule.description,
         enabled: rule.enabled ? 1 : 0,
         sortOrder: rule.sortOrder,
         updatedAtMs: rule.updatedAtMs,

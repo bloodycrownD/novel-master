@@ -2,12 +2,13 @@
  * 内置智能排序规则 seed 行为测试（T-SR2 的 seed 部分 + 附录 A 常量锁）。
  *
  * 覆盖：
- *  1. bootstrap 后四条内置规则种入（rule_id / sort_order / flags / example）；
+ *  1. bootstrap 后四条内置规则种入（rule_id / sort_order / flags / description）；
  *  2. seed 幂等：INSERT OR IGNORE 不覆盖存量行（禁用+改名后重跑保持原样，
  *     D3「禁用某内置规则后重启保持禁用」）；
  *  3. 用户规则与 seed 隔离（不被覆盖也不被清掉）；
- *  4. 附录 A 常量锁：四条 pattern 均可编译、命中 example 且捕获组提取正确
- *    （防 spec 手抄转义漂移）。
+ *  4. 附录 A 常量锁：四条 pattern 均可编译、命中出厂样例文件名且捕获组
+ *    提取正确（description 已是描述文字、不再是可命中的样例，常量锁改用
+ *    内联样例文本，防 spec 手抄转义漂移）。
  *
  * @module test/bootstrap/smart-sort-rule-seed.test
  */
@@ -39,7 +40,7 @@ type RuleRow = {
   name: string;
   pattern: string;
   flags: string;
-  example: string | null;
+  description: string | null;
   enabled: number;
   sort_order: number;
 };
@@ -49,7 +50,7 @@ describe("内置智能排序规则 seed", () => {
     const conn = await openBootstrappedConn();
     try {
       const rows = await conn.query<RuleRow>(
-        `SELECT rule_id, name, pattern, flags, example, enabled, sort_order
+        `SELECT rule_id, name, pattern, flags, description, enabled, sort_order
          FROM smart_sort_rule WHERE rule_id LIKE 'builtin-%' ORDER BY sort_order`
       );
       assert.equal(rows.length, 4);
@@ -78,7 +79,7 @@ describe("内置智能排序规则 seed", () => {
         assert.equal(row.name, src.name);
         assert.equal(row.pattern, src.pattern);
         assert.equal(row.flags, src.flags);
-        assert.equal(row.example, src.example);
+        assert.equal(row.description, src.description);
       }
     } finally {
       await conn.close();
@@ -116,9 +117,9 @@ describe("内置智能排序规则 seed", () => {
     try {
       await conn.execute(
         `INSERT INTO smart_sort_rule (
-           rule_id, name, pattern, flags, example, enabled,
+           rule_id, name, pattern, flags, description, enabled,
            sort_order, created_at_ms, updated_at_ms
-         ) VALUES ('user-mine', '我的规则', '^番外([0-9]+)', '', '番外3', 1, 9, 1, 1)`
+         ) VALUES ('user-mine', '我的规则', '^番外([0-9]+)', '', '番外说明', 1, 9, 1, 1)`
       );
 
       await seedBuiltinSmartSortRules(conn);
@@ -134,13 +135,24 @@ describe("内置智能排序规则 seed", () => {
     }
   });
 
-  it("附录 A 常量锁：四条 pattern 可编译、命中 example、捕获组提取正确", () => {
+  it("附录 A 常量锁：四条 pattern 可编译、命中出厂样例、捕获组提取正确", () => {
+    // description 已是描述文字（fix ④），常量锁改用内联样例文件名。
+    const SAMPLE_BY_RULE: Record<string, string> = {
+      "builtin-zh-volume-chapter": "第2卷 第13章",
+      "builtin-zh-chapter": "第十二章 风起",
+      "builtin-en-chapter": "Chapter 12",
+      "builtin-numeric": "001、开端",
+    };
     for (const row of BUILTIN_SMART_SORT_RULE_ROWS) {
       const re = new RegExp(row.pattern, row.flags);
+      const sample = SAMPLE_BY_RULE[row.ruleId];
+      assert.ok(sample != null, `${row.ruleId} 缺内联样例`);
       assert.ok(
-        re.test(row.example),
-        `${row.ruleId} 应命中 example「${row.example}」`
+        re.test(sample),
+        `${row.ruleId} 应命中样例「${sample}」`
       );
+      // description 为描述文字（非空、不含旧示例值）。
+      assert.ok(row.description.length > 0);
     }
 
     // 卷章复合：两捕获组分别提取卷号与章号（阿拉伯数字直取）。

@@ -39,13 +39,13 @@ export function assertFlagsValid(
   }
 }
 
-/** Create payload: name/pattern 必填，flags 缺省 ''，example 可选。 */
+/** Create payload: name/pattern 必填，flags 缺省 ''，description 可选。 */
 export const createSmartSortRuleSchema = z
   .object({
     name: z.string().min(1),
     pattern: z.string().min(1),
     flags: z.string().optional(),
-    example: z.string().nullable().optional(),
+    description: z.string().nullable().optional(),
     enabled: z.boolean().optional(),
   })
   .strict();
@@ -58,19 +58,19 @@ export const updateSmartSortRuleSchema = z
     name: z.string().min(1).optional(),
     pattern: z.string().min(1).optional(),
     flags: z.string().optional(),
-    example: z.string().nullable().optional(),
+    description: z.string().nullable().optional(),
     enabled: z.boolean().optional(),
   })
   .strict();
 
 export type UpdateSmartSortRuleInput = z.infer<typeof updateSmartSortRuleSchema>;
 
-/** create 解析结果（flags 已缺省 ''，example 已归一 string | null）。 */
+/** create 解析结果（flags 已缺省 ''，description 已归一 string | null）。 */
 export interface CreateSmartSortRuleFields {
   readonly name: string;
   readonly pattern: string;
   readonly flags: string;
-  readonly example: string | null;
+  readonly description: string | null;
   readonly enabled: boolean;
 }
 
@@ -85,7 +85,7 @@ export function parseCreateSmartSortRuleInput(
     name: parsed.name,
     pattern: parsed.pattern,
     flags,
-    example: parsed.example ?? null,
+    description: parsed.description ?? null,
     enabled: parsed.enabled ?? true,
   };
 }
