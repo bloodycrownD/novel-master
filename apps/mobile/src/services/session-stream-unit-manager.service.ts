@@ -814,7 +814,16 @@ export class SessionStreamUnitManager {
     this.notifyChanged();
   }
 
-  /** idle 路径 tail 加载：缓存命中采纳 → 回源窄窗 + hasMore 探针 → 写缓存。 */
+  /**
+   * idle 路径 tail 加载：缓存命中采纳 → 回源单查询（多取一条判定
+   * hasMore）→ 写缓存。
+   *
+   * Step 2 单查询化：tail 一次取 `页大小 + 1`，返回超过页大小即
+   * hasMore=true 并裁去多取的最旧一行；hasMore 探针的第二次往返消除
+   * （原探针 beforeSeq 取自 tail 首行、依赖前一次查询结果，只能串行，
+   * 多取一条等价且省一次往返）。listBySessionTail 返回 seq 升序、最旧
+   * 在前，多取的一行在数组头部（list[0]）。
+   */
   private async loadIdleTailMessages(
     sessionId: string,
     options?: {readonly force?: boolean; readonly projectId?: string},
@@ -830,18 +839,11 @@ export class SessionStreamUnitManager {
         return [...cached.messages];
       }
     }
-    const list = await this.runtime.messages.listBySessionTail(sessionId, {
-      limit: SESSION_STREAM_MESSAGES_PAGE_SIZE,
+    const fetched = await this.runtime.messages.listBySessionTail(sessionId, {
+      limit: SESSION_STREAM_MESSAGES_PAGE_SIZE + 1,
     });
-    let hasMore = false;
-    const oldestSeq = list[0]?.seq;
-    if (oldestSeq != null) {
-      const older = await this.runtime.messages.listBySessionPage(sessionId, {
-        limit: 1,
-        beforeSeq: oldestSeq,
-      });
-      hasMore = older.length > 0;
-    }
+    const hasMore = fetched.length > SESSION_STREAM_MESSAGES_PAGE_SIZE;
+    const list = hasMore ? fetched.slice(1) : fetched;
     if (projectId != null) {
       setSessionViewCache(sessionViewCacheKey(projectId, sessionId), {
         messages: list,

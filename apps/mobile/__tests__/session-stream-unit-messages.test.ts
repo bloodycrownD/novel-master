@@ -20,7 +20,10 @@
  *   快照控制消息可被驱动（child-created 登记/父收尾清空自动广播 + 屏幕
  *   侧方法直调），消息面与流式 partial 照常可取；
  * - 回归：消息面引用稳定——无关会话事件不打穿消费方（webview memo）的
- *   引用比较，消息面真实变化时必须换新引用。
+ *   引用比较，消息面真实变化时必须换新引用；
+ * - T-H4（init-busy-yield Step 2）：idle tail 单查询多取——tail 一次取
+ *   `页大小 + 1` 判定 hasMore（超页裁去最旧一行即升序首行）、不足一页
+ *   原样、引用稳定保持。
  */
 import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
 import {
@@ -142,6 +145,8 @@ function createHarness(options?: {readonly settledGraceMs?: number}) {
     runtime: {eventBus, abortRegistry, sessions, projects, messages} as never,
     runAgentTurn: runAgentTurn as never,
     settledGraceMs: options?.settledGraceMs,
+    // Step 2 水合分片的让步点注入同步 mock（fake timers 下无需真实定时器）
+    yieldQuantum: async () => undefined,
   });
   manager.markHydrated();
   return {eventBus, abortRegistry, manager, db, messages, runAgentTurn};
@@ -288,12 +293,12 @@ describe('T-U5: 单元消息隔离（T-X 等价断言）', () => {
     expect(cacheA?.messages.every(m => m.sessionId === 'sess-a')).toBe(true);
     expect(cacheB?.messages.every(m => m.sessionId === 'sess-b')).toBe(true);
 
-    // 回源调用按会话路由（limit = 分页大小）
+    // 回源调用按会话路由（Step 2 单查询化：tail 多取一条 = 分页大小 + 1）
     expect(h.messages.listBySessionTail).toHaveBeenCalledWith('sess-a', {
-      limit: SESSION_STREAM_MESSAGES_PAGE_SIZE,
+      limit: SESSION_STREAM_MESSAGES_PAGE_SIZE + 1,
     });
     expect(h.messages.listBySessionTail).toHaveBeenCalledWith('sess-b', {
-      limit: SESSION_STREAM_MESSAGES_PAGE_SIZE,
+      limit: SESSION_STREAM_MESSAGES_PAGE_SIZE + 1,
     });
   });
 
@@ -314,18 +319,19 @@ describe('T-U5: 单元消息隔离（T-X 等价断言）', () => {
     expect(rowsA?.[0].seq).toBe(9);
     expect(h.messages.listBySessionTail).not.toHaveBeenCalled();
 
-    // miss：回源 DB + hasMore 探针 + 写缓存
+    // miss：回源 DB + 单查询 hasMore 判定 + 写缓存
     const rowsB = await h.manager.loadSessionTailMessages('sess-b');
     expect(rowsB).toHaveLength(2);
     expect(h.messages.listBySessionTail).toHaveBeenCalledWith('sess-b', {
-      limit: SESSION_STREAM_MESSAGES_PAGE_SIZE,
+      limit: SESSION_STREAM_MESSAGES_PAGE_SIZE + 1,
     });
+    expect(h.messages.listBySessionPage).not.toHaveBeenCalled();
     const cacheB = getSessionViewCache(sessionViewCacheKey('p1', 'sess-b'));
     expect(cacheB?.messages).toHaveLength(2);
-    expect(cacheB?.hasMoreMessages).toBe(false); // 探针发现无更早行
+    expect(cacheB?.hasMoreMessages).toBe(false); // 单查询：不足一页即无更多
   });
 
-  it('分页：tail 40 + hasMore 探针，向上翻页补齐后缓存同步', async () => {
+  it('分页：tail 40 + 单查询 hasMore 判定，向上翻页补齐后缓存同步', async () => {
     const h = createHarness();
     h.db.set(
       'sess-a',
@@ -337,7 +343,7 @@ describe('T-U5: 单元消息隔离（T-X 等价断言）', () => {
     let snap = h.manager.snapshot('sess-a');
     expect(snap?.messages).toHaveLength(SESSION_STREAM_MESSAGES_PAGE_SIZE);
     expect(snap?.messages[0].seq).toBe(11);
-    expect(snap?.hasMoreMessages).toBe(true); // 探针：还有 seq<11 的行
+    expect(snap?.hasMoreMessages).toBe(true); // 多取的一条证明还有 seq<11 的行
 
     await h.manager.loadOlderSessionMessages('sess-a');
     snap = h.manager.snapshot('sess-a');
@@ -523,5 +529,96 @@ describe('回归: 消息面引用稳定（无关会话事件不打穿 webview me
     expect(h.manager.readMessagesSnapshot('sess-a')?.messages).toBe(
       refAfterGrowth,
     );
+  });
+});
+
+describe('T-H4: idle tail 单查询多取（init-busy-yield Step 2）', () => {
+  it('无单元走 idle 路径：tail 一次取页大小+1，hasMore=true 时裁去最旧一行（首行）', async () => {
+    const h = createHarness();
+    h.db.set(
+      'sess-a',
+      Array.from({length: 50}, (_, i) => makeMessage('sess-a', i + 1)),
+    );
+    // 不 startRun（无单元）→ loadSessionTailMessages 走 manager 的 idle 路径
+    const rows = await h.manager.loadSessionTailMessages('sess-a', {
+      force: true,
+      projectId: 'p1',
+    });
+
+    // 一次往返：tail 查询 limit = 页大小 + 1，无第二次探针查询
+    expect(h.messages.listBySessionTail).toHaveBeenCalledTimes(1);
+    expect(h.messages.listBySessionTail).toHaveBeenCalledWith('sess-a', {
+      limit: SESSION_STREAM_MESSAGES_PAGE_SIZE + 1,
+    });
+    expect(h.messages.listBySessionPage).not.toHaveBeenCalled();
+
+    // 裁去的是多取的最旧一行（升序数组首行 seq=10，不是末行）：首行 seq=11
+    expect(rows).toHaveLength(SESSION_STREAM_MESSAGES_PAGE_SIZE);
+    expect(rows?.[0].seq).toBe(11);
+    expect(rows?.[SESSION_STREAM_MESSAGES_PAGE_SIZE - 1].seq).toBe(50);
+
+    // idle 视图与缓存同步（hasMore 判定与裁剪后行集）
+    const view = h.manager.readMessagesSnapshot('sess-a');
+    expect(view?.hasMoreMessages).toBe(true);
+    expect(view?.messages).toHaveLength(SESSION_STREAM_MESSAGES_PAGE_SIZE);
+    const cache = getSessionViewCache(sessionViewCacheKey('p1', 'sess-a'));
+    expect(cache?.messages).toHaveLength(SESSION_STREAM_MESSAGES_PAGE_SIZE);
+    expect(cache?.messages[0].seq).toBe(11);
+    expect(cache?.hasMoreMessages).toBe(true);
+  });
+
+  it('不足一页时 hasMore=false 原样采纳（无裁剪），缓存口径不变', async () => {
+    const h = createHarness();
+    h.db.set('sess-a', [makeMessage('sess-a', 1), makeMessage('sess-a', 2)]);
+    const rows = await h.manager.loadSessionTailMessages('sess-a', {
+      force: true,
+      projectId: 'p1',
+    });
+    expect(rows).toHaveLength(2);
+    expect(rows?.[0].seq).toBe(1);
+    expect(h.messages.listBySessionPage).not.toHaveBeenCalled();
+    expect(h.manager.readMessagesSnapshot('sess-a')?.hasMoreMessages).toBe(
+      false,
+    );
+    expect(
+      getSessionViewCache(sessionViewCacheKey('p1', 'sess-a'))?.hasMoreMessages,
+    ).toBe(false);
+  });
+
+  it('idle 分页照常走 listBySessionPage：prepend 更早行后视图与缓存补齐', async () => {
+    const h = createHarness();
+    h.db.set(
+      'sess-a',
+      Array.from({length: 50}, (_, i) => makeMessage('sess-a', i + 1)),
+    );
+    await h.manager.loadSessionTailMessages('sess-a', {
+      force: true,
+      projectId: 'p1',
+    });
+    await h.manager.loadOlderSessionMessages('sess-a', 'p1');
+
+    const view = h.manager.readMessagesSnapshot('sess-a');
+    expect(view?.messages).toHaveLength(50);
+    expect(view?.messages[0].seq).toBe(1);
+    expect(view?.hasMoreMessages).toBe(false); // 不足一整页 → 无更多
+    expect(
+      getSessionViewCache(sessionViewCacheKey('p1', 'sess-a'))?.messages,
+    ).toHaveLength(50);
+  });
+
+  it('idle 路径引用稳定：无关会话的受理/通知不打穿已加载 idle 视图的引用', async () => {
+    const h = createHarness();
+    h.db.set('sess-a', [makeMessage('sess-a', 1, 'user')]);
+    h.db.set('sess-b', [makeMessage('sess-b', 1, 'user')]);
+    await h.manager.loadSessionTailMessages('sess-a', {
+      force: true,
+      projectId: 'p1',
+    });
+    const refBefore = h.manager.readMessagesSnapshot('sess-a')?.messages;
+    expect(refBefore).toHaveLength(1);
+
+    // 无关会话受理触发全局通知：sess-a 的 idle 视图未被重写，引用保持
+    startRunningRun(h, 'sess-b', 'rb', 'p2');
+    expect(h.manager.readMessagesSnapshot('sess-a')?.messages).toBe(refBefore);
   });
 });

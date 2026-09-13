@@ -757,8 +757,12 @@ export class SessionStreamUnit {
   }
 
   /**
-   * tail reload 本体：缓存命中采纳（非 force）→ DB tail + hasMore 探针 →
-   * 无条件写缓存 → 采纳进消息面。
+   * tail reload 本体：缓存命中采纳（非 force）→ 回源单查询（多取一条
+   * 判定 hasMore，init-busy-yield Step 2）→ 无条件写缓存 → 采纳进消息面。
+   *
+   * 单查询化：tail 一次取 `页大小 + 1`，返回超过页大小即 hasMore=true 并
+   * 裁去多取的最旧一行（listBySessionTail 返回 seq 升序、最旧在前，多取
+   * 的一行在数组头部 list[0]）；hasMore 探针的第二次往返消除。
    *
    * 缓存写在状态采纳之前：单元若在中途被销毁/替换（宽限到期、LRU 淘汰、
    * 新 run 替换吸收），缓存仍刷新到位——重进会话水合的就是最终行。同会话
@@ -779,18 +783,11 @@ export class SessionStreamUnit {
       // 未装配消息仓库（防御降级，正常装配不会走到）：保持现状返回。
       return [...this.messagesValue];
     }
-    const list = await this.messageStore.listBySessionTail(this.sessionId, {
-      limit: SESSION_STREAM_MESSAGES_PAGE_SIZE,
+    const fetched = await this.messageStore.listBySessionTail(this.sessionId, {
+      limit: SESSION_STREAM_MESSAGES_PAGE_SIZE + 1,
     });
-    let hasMore = false;
-    const oldestSeq = list[0]?.seq;
-    if (oldestSeq != null) {
-      const older = await this.messageStore.listBySessionPage(this.sessionId, {
-        limit: 1,
-        beforeSeq: oldestSeq,
-      });
-      hasMore = older.length > 0;
-    }
+    const hasMore = fetched.length > SESSION_STREAM_MESSAGES_PAGE_SIZE;
+    const list = hasMore ? fetched.slice(1) : fetched;
     // 无条件刷新视图缓存（含无 attach 的后台收尾场景——消息丢失回归的
     // 守卫点）；键是本会话自己的，天然不串会话。
     setSessionViewCache(cacheKey, {messages: list, hasMoreMessages: hasMore});
