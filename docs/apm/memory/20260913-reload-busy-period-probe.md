@@ -40,3 +40,9 @@ user:
 
 assistant:
 三提交完成（86404b69 协议与原语 / 7cc2a70a RN 分片发送 / bdf2f3a3 web 拼装）。关键落点：①分片以「消息」为单位实现（消息→行 1:0/1 派生，与按行分片同界），常量 SNAPSHOT_CHUNK_SIZE=50；起点固定闭包快照（transcriptListOptions 每渲染重建，跨帧不能换口径）；预扫 buildToolPairingContext 从 message-blocks 导出 + 新增 buildTranscriptRowsWithContext（分片拼接与全量严格全等）。②代次作废统一收敛：六条 force/直发路径都过 sendSessionSnapshotNow，模块级计数器 ++ 即顶替，循环在每个让步点检查代次+webReadyRef；repaintEpoch 重挂经 postToWeb ready 守卫复位（webReadyRef 在 ready/visibility 分支同步直写，避免 effect 一帧窗口）。③T-S3 时序（分片先于 delta）：流式 RAF flush 在 in-flight 代次非空时推迟（segments 留队 + deferred 标记），末片 post 后 syncStreamToolInvoking 再补发；中止于重挂则连 deferred 一起作废（等价旧协议下 post 丢失，恢复注入链重推）。④web 侧 handleSnapshotPayload：单片/缺字段直发等价旧协议；多片同代次按 chunkIndex 累计、末片到齐才整体 applySnapshot（零中间渲染、零滚动副作用）；乱序/迟到旧代次丢弃，凑不齐等 force 新代次兜底——测试过程抓到一个真 bug：单片路径最初没判旧（gen5 应用后 gen4 单片迟到仍会应用），已修为 generation>0 时统一判旧。⑤测试基线事实（后续 Step 会再用到）：webReady 翻真本就双发快照（subagent effect preserve + needsOpenSnapshot stick，旧协议即如此），分片化后首代次只剩片 0 被顶替——T-S1/T-S2 断言按「按到达序分代次、末代次完整」书写；jest 全量的 torn down/worker 警告经基线 worktree 对照确认是既有现象（prompt-macro/legacy-scroll 两套件，与分片无关）。验证：typecheck 两套绿、jest 198 套件 1291 测试全绿、build:webview 9 产物。未动 webReady 双发语义（行为等价优先，去重不在 Step 6 范围）。
+
+user:
+（code-dev-loop 终态）dev DAG 全部跑完的结果如何？
+
+assistant:
+dev-ready 达成：Step 1-9 全部落地共 14 个实现提交（cb73992e 让步原语 / d28e38c6+c43a904b backfill 两段式判定与游标清空面 / 324d0677+0544f8f1 水合分片与探针单查询 / 67e72627 查询并行化 / 7af52a27 O(n²) 消除 / 86404b69+7cc2a70a+bdf2f3a3 快照分片协议与代次作废 / bb343863+dd9d813a RowList 窗口化 / 700117bc 通知两段式 / a529eacb 三态文案），三道 cr-func（w0/w3/final）均 func-ready。终验：mobile jest 200 套件 1317 全绿 + typecheck + build:webview + core 2107/2107 + core dist 重建。四项 deviation 全 closed 附理由（去重落点 inflight/selectTail 顺带预扫化/渐进渲染不做/扩窗行坐标重映射）。Step 10 真机验收（GWT-1~5 + release 冷启动基线）归用户 manual_user。过程事件：共享 worktree 多节点并行曾发生 stash 互相踩踏（pstream stash 完好）、impl-s6 子代理违规写入本记忆（追加式零破坏已核验保留）——教训：并行 impl prompt 须明令禁 stash、禁写 apm memory。
