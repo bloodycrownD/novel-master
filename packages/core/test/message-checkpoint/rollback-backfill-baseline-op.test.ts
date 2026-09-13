@@ -14,6 +14,11 @@ import { createBaselineCheckpointBackfillOperation } from "@/domain/message-chec
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
 import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
+import { SqliteSessionKkvRepository } from "@/domain/session-kkv/repositories/impl/sqlite-session-kkv.repository.js";
+import {
+  BACKFILL_CURSOR_LAST_SCANNED_COUNT_KEY,
+  SESSION_KKV_DOMAIN_BACKFILL_CURSOR,
+} from "@/domain/session-kkv/model/session-kkv-domains.js";
 import {
   getNovelMasterTestContext,
   novelMasterTestFixture,
@@ -32,6 +37,7 @@ describe("rollback-backfill-baseline-op: createBaselineCheckpointBackfillOperati
       entryRepo: new SqliteVfsEntryRepository(ctx.conn),
       messageRepo: new SqliteMessageRepository(ctx.conn),
       checkpointRepo: new SqliteMessageCheckpointRepository(ctx.conn),
+      sessionKkv: new SqliteSessionKkvRepository(ctx.conn),
       projectId: project.id,
       sessionId: session.id,
     });
@@ -58,6 +64,7 @@ describe("rollback-backfill-baseline-op: createBaselineCheckpointBackfillOperati
       entryRepo: new SqliteVfsEntryRepository(ctx.conn),
       messageRepo: new SqliteMessageRepository(ctx.conn),
       checkpointRepo: new SqliteMessageCheckpointRepository(ctx.conn),
+      sessionKkv: new SqliteSessionKkvRepository(ctx.conn),
       projectId: project.id,
       sessionId: session.id,
     });
@@ -69,5 +76,43 @@ describe("rollback-backfill-baseline-op: createBaselineCheckpointBackfillOperati
 
     const after = await op.detect();
     assert.equal(after.needsRepair, false, "补齐 baseline 后应不再需要修复");
+  });
+
+  it("游标短路：backfillMissingBaselines 确认无空窗后 detect 不再全量找空窗", async () => {
+    const ctx = getNovelMasterTestContext();
+    const suffix = testIsolationSuffix();
+    const project = await ctx.projects.create(`P-op-cursor-${suffix}`);
+    const session = await ctx.sessions.create(project.id);
+    const svfs = ctx.sessionVfs(project.id, session.id);
+
+    await svfs.write("/a.md", "v1", { versionCheck: false });
+    await ctx.messages.append(session.id, "user", textBlocks("1"));
+    await ctx.messages.append(session.id, "assistant", {
+      blocks: [{ type: "text", text: "2" }],
+    });
+
+    // 经 service 入口跑一次全量并落游标（detect 只读不写，游标由 backfill 路径写）。
+    await ctx.messageCheckpoint.backfillMissingBaselines(session.id, project.id);
+    const kkv = new SqliteSessionKkvRepository(ctx.conn);
+    assert.deepEqual(
+      await kkv.get(
+        session.id,
+        SESSION_KKV_DOMAIN_BACKFILL_CURSOR,
+        BACKFILL_CURSOR_LAST_SCANNED_COUNT_KEY
+      ),
+      { sessionId: session.id, domain: SESSION_KKV_DOMAIN_BACKFILL_CURSOR, key: BACKFILL_CURSOR_LAST_SCANNED_COUNT_KEY, value: "2" },
+      "前置：游标已落库"
+    );
+
+    const op = createBaselineCheckpointBackfillOperation({
+      entryRepo: new SqliteVfsEntryRepository(ctx.conn),
+      messageRepo: new SqliteMessageRepository(ctx.conn),
+      checkpointRepo: new SqliteMessageCheckpointRepository(ctx.conn),
+      sessionKkv: kkv,
+      projectId: project.id,
+      sessionId: session.id,
+    });
+    const detection = await op.detect();
+    assert.equal(detection.needsRepair, false, "两段式短路时 detect 无需修复");
   });
 });

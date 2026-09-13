@@ -108,6 +108,31 @@ export class SqliteMessageCheckpointRepository
     return rows.length > 0;
   }
 
+  async countCheckpointsForMessages(
+    sessionId: string,
+    messageIds: ReadonlyArray<string>
+  ): Promise<number> {
+    if (messageIds.length === 0) {
+      return 0;
+    }
+    const bindings = Object.fromEntries(
+      messageIds.map((id, i) => [`id${i}`, id])
+    );
+    // 每条消息至多一行（PK + insertCheckpoint 替换语义），COUNT(*) 即有 checkpoint 的消息数。
+    const rows = await queryTemplate<{ n: number }>(
+      this.conn,
+      this.parser,
+      `SELECT COUNT(*) AS n FROM message_checkpoint
+       WHERE session_id = #{sessionId}
+         AND message_id IN (${messageIds
+           .map((_, i) => `#{id${i}}`)
+           .join(", ")})`,
+      { sessionId, ...bindings }
+    );
+    // COUNT(*) 恒返回一行；SQLite 下 COUNT 结果是 INTEGER，Number() 安全。
+    return Number(rows[0]!.n);
+  }
+
   async insertCheckpoint(input: MessageCheckpointInsertInput): Promise<void> {
     const revisionRepo = new SqliteVfsRevisionRepository(this.conn);
 

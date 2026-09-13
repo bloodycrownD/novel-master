@@ -14,6 +14,14 @@ export const SESSION_KKV_DOMAIN_FILE_CACHE = "file_cache" as const;
 export const SESSION_KKV_DOMAIN_USER_VFS_PENDING = "user_vfs_pending" as const;
 
 /**
+ * backfill 扫描游标域：记录上次扫描确认无空窗时的消息总数。
+ *
+ * 仅由 core 的 backfill 判定读写；任何删除消息的事务都必须清掉本域
+ * （「发生删除即清游标」，seq 复用防线），残留只会导致一次保守回退全量。
+ */
+export const SESSION_KKV_DOMAIN_BACKFILL_CURSOR = "backfill_cursor" as const;
+
+/**
  * Composer 无叉状态条相关、回滚可按域清空的 kkv 域。
  * - `file_cache` → workplace chip（相对已加载差集）
  * - `user_vfs_pending` → user_ops chip
@@ -31,10 +39,14 @@ export const RULE_SNAPSHOT_CANON_KEY = "canon" as const;
 /** user_vfs_pending 域单键：FIFO 队列 JSON。 */
 export const USER_VFS_PENDING_QUEUE_KEY = "queue" as const;
 
+/** backfill_cursor 域单键：上次确认无空窗时的消息总数（十进制字符串）。 */
+export const BACKFILL_CURSOR_LAST_SCANNED_COUNT_KEY = "lastScannedCount" as const;
+
 export type SessionKkvDomain =
   | typeof SESSION_KKV_DOMAIN_RULE_SNAPSHOT
   | typeof SESSION_KKV_DOMAIN_FILE_CACHE
   | typeof SESSION_KKV_DOMAIN_USER_VFS_PENDING
+  | typeof SESSION_KKV_DOMAIN_BACKFILL_CURSOR
   | (string & {});
 
 /** 可写入 file_cache 的展示档位（不含 hidden）。 */

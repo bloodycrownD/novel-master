@@ -161,6 +161,24 @@ export class SqliteMessageRepository implements MessageRepository {
     return Number(rows[0]!.n);
   }
 
+  async listBySessionOffset(
+    sessionId: string,
+    offset: number
+  ): Promise<ChatMessage[]> {
+    const clampedOffset = Math.max(0, Math.floor(offset));
+    const rows = await queryTemplate(
+      this.conn,
+      this.parser,
+      `SELECT ${MESSAGE_SELECT_COLUMNS}
+       FROM chat_message
+       WHERE session_id = #{sessionId}
+       ORDER BY seq ASC
+       LIMIT -1 OFFSET #{offset}`,
+      { sessionId, offset: clampedOffset }
+    );
+    return rows.map(rowToMessage);
+  }
+
   async listBySessionTail(
     sessionId: string,
     limit: number

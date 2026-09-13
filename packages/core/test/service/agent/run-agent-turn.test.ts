@@ -601,4 +601,33 @@ describe("runAgentTurn", () => {
     assert.deepEqual(backfilled[0], { sessionId: "s", projectId: "p" });
     resetUserVfsUnifiedToolTurnSnapshotForTests();
   });
+
+  // T-B4（init-busy-yield Step 4）：连续多轮 run 时每轮仍恰好调用一次
+  // backfillMissingBaselines——判定加游标短路后调用契约不变（T-DS5 的多轮形态）。
+  it("T-B4：连续两轮 run 每轮恰调用一次 backfillMissingBaselines", async () => {
+    resetUserVfsUnifiedToolTurnSnapshotForTests();
+    refreshUserVfsUnifiedToolTurnSnapshot(false);
+    const backfilled: Array<{ sessionId: string; projectId: string }> = [];
+    const runtime = makeRuntime({
+      append: async () => ({ id: `u-b4-${backfilled.length}` }),
+      backfillMissingBaselines: async (sessionId, projectId) => {
+        backfilled.push({ sessionId, projectId });
+      },
+    });
+    for (let round = 0; round < 2; round++) {
+      try {
+        await runAgentTurn(
+          runtime,
+          { projectId: "p", sessionId: "s" },
+          `第 ${round + 1} 轮消息`,
+        );
+      } catch {
+        // runner deps stubbed；走到调用记录即说明 backfill 已调
+      }
+    }
+    assert.equal(backfilled.length, 2, "两轮 run 每轮恰调用一次 backfill");
+    assert.deepEqual(backfilled[0], { sessionId: "s", projectId: "p" });
+    assert.deepEqual(backfilled[1], { sessionId: "s", projectId: "p" });
+    resetUserVfsUnifiedToolTurnSnapshotForTests();
+  });
 });

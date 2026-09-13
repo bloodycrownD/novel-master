@@ -18,6 +18,16 @@ export interface MessageRepository {
    * 1000 条消息从拉 1000 行退化成拉 1 行。
    */
   countBySession(sessionId: string): Promise<number>;
+
+  /**
+   * 按 seq 升序跳过前 `offset` 行，取余下全部消息（backfill 圈「新增段」用）。
+   *
+   * `offset` 是行偏移而非 seq 值（seq 可能因删除有洞）；SQLite 方言
+   * `LIMIT -1 OFFSET ?` 表示不限条数。消息集只增不减时前 `offset` 行即
+   * 上次扫描确认过的消息，返回的就是之后的新增段。
+   */
+  listBySessionOffset(sessionId: string, offset: number): Promise<ChatMessage[]>;
+
   listBySessionTail(sessionId: string, limit: number): Promise<ChatMessage[]>;
   listBySessionPage(
     sessionId: string,
