@@ -18,7 +18,9 @@
  *   消息面与缓存；
  * - T-U6：subagent 长任务期间消息可见——child 活跃期间父单元的 force
  *   快照控制消息可被驱动（child-created 登记/父收尾清空自动广播 + 屏幕
- *   侧方法直调），消息面与流式 partial 照常可取。
+ *   侧方法直调），消息面与流式 partial 照常可取；
+ * - 回归：消息面引用稳定——无关会话事件不打穿消费方（webview memo）的
+ *   引用比较，消息面真实变化时必须换新引用。
  */
 import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
 import {
@@ -474,5 +476,52 @@ describe('T-U6: subagent 长任务期间消息可见（force 快照驱动）', (
     publishChildCreated(h.eventBus, 'sess-a', 'child-1', '任务');
     expect(controls).toEqual([{type: 'force-snapshot'}]);
     expect(payloads).toEqual([]); // 快照驱动不是流式推送
+  });
+});
+
+describe('回归: 消息面引用稳定（无关会话事件不打穿 webview memo）', () => {
+  it('B 的无关事件后 readMessagesSnapshot(A).messages 引用不变；A 消息面真实变化后换新引用', async () => {
+    const h = createHarness();
+    h.db.set('sess-a', [makeMessage('sess-a', 1, 'user')]);
+    h.db.set('sess-b', [makeMessage('sess-b', 1, 'user')]);
+    startRunningRun(h, 'sess-a', 'ra', 'p1');
+    startRunningRun(h, 'sess-b', 'rb', 'p2');
+    await h.manager.loadSessionTailMessages('sess-a', {force: true});
+    await h.manager.loadSessionTailMessages('sess-b', {force: true});
+
+    const refBefore = h.manager.readMessagesSnapshot('sess-a')?.messages;
+    expect(refBefore).toHaveLength(1);
+
+    // 会话 B 的无关事件（delta + 64ms apply 节拍通知）：A 的消息面引用必须
+    // 不变——ChatTabProvider 在任意会话的 notify 后都会 readMessagesSnapshot
+    // 重建视图，messages 引用一变 webview memo 即被打穿、隐藏 webview 被
+    // 全量快照记脏（返回白帧）
+    publishTextDelta(h.eventBus, 'sess-b', 'rb', 'B 会话自己生成');
+    advanceStreamTimers();
+    expect(h.manager.readMessagesSnapshot('sess-a')?.messages).toBe(refBefore);
+
+    // A 自己的 delta：partial 是流式面而非落库消息面——messages 引用不变，
+    // partial 照常更新（引用稳定不等于假稳定）
+    publishTextDelta(h.eventBus, 'sess-a', 'ra', 'A 会话正文');
+    advanceStreamTimers();
+    expect(h.manager.readMessagesSnapshot('sess-a')?.messages).toBe(refBefore);
+    expect(h.manager.snapshot('sess-a')?.partialText).toBe('A 会话正文');
+
+    // A 的消息面真实变化（step 落库新行 + force reload）：内容变了必须换新
+    // 引用——否则 webview 漏渲染新行
+    h.db.get('sess-a')!.push(makeMessage('sess-a', 2, 'assistant'));
+    publishStepCommitted(h.eventBus, 'sess-a', 'ra');
+    await flushAsync();
+    const refAfterGrowth = h.manager.readMessagesSnapshot('sess-a')?.messages;
+    expect(refAfterGrowth).not.toBe(refBefore);
+    expect(refAfterGrowth).toHaveLength(2);
+    expect(refAfterGrowth?.[1].role).toBe('assistant');
+
+    // 内容未变的 force reload（step 边界但无新落库行，行对象未变）：引用保持
+    publishStepCommitted(h.eventBus, 'sess-a', 'ra');
+    await flushAsync();
+    expect(h.manager.readMessagesSnapshot('sess-a')?.messages).toBe(
+      refAfterGrowth,
+    );
   });
 });

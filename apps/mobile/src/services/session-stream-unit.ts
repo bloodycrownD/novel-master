@@ -186,12 +186,17 @@ export interface SessionStreamUnitView {
   /**
    * 子会话链接的 title → childSessionId 映射（Step 6 屏幕接线：任务卡
    * 可点性的数据源——ChatTranscriptWebView 的 pendingSubagentSessions
-   * props 形状）。每次快照新 Map，消费方只读。
+   * props 形状）。返回内部引用且仅在内容变化时换新引用（copy-on-write）：
+   * 消费方（webview memo / effect 依赖）按引用比较判断变化，无谓新引用
+   * 会打穿 memo 使隐藏 webview 被记脏。调用方只读、不得 mutate。
    */
   readonly pendingChildrenByTitle: ReadonlyMap<string, string>;
   /**
    * 消息面（Step 4 消息管线）：本会话当前持有的消息行（tail 加载/分页/
    * step 级 reload 的结果）。无消息仓库且缓存未命中时为空数组。
+   * 返回内部引用（写入点均为内容变化时整体换新数组，见 applyMessages
+   * 的引用稳定守卫）——引用稳定是消费方 webview memo 比较成立的必要
+   * 条件。调用方只读、不得 mutate。
    */
   readonly messages: readonly ChatMessage[];
   /** 是否还有更早的消息可翻页（tail 探针/分页结果推导）。 */
@@ -239,8 +244,12 @@ export class SessionStreamUnit {
   private partialTextValue = '';
   private partialThinkingValue = '';
   private injectedValue = false;
-  /** 子会话链接：title → childSessionId（同 title 覆盖；投影按 id 去重）。 */
-  private readonly pendingChildIdsByTitle = new Map<string, string>();
+  /**
+   * 子会话链接：title → childSessionId（同 title 覆盖；投影按 id 去重）。
+   * copy-on-write：内容变化时整体换新 Map（snapshot 返回内部引用），引用
+   * 稳定是消费方（webview memo / effect 依赖）判断变化的前提。
+   */
+  private pendingChildIdsByTitle = new Map<string, string>();
   private pendingChildrenValue: readonly string[] = [];
 
   /** ingress 合并队列（32ms 窗口内相邻同 kind 合并，禁止 kind 重排）。 */
@@ -434,7 +443,7 @@ export class SessionStreamUnit {
     return this.destroyed;
   }
 
-  /** 只读投影快照（每次调用新对象；屏幕订阅消费的唯一形状）。 */
+  /** 只读投影快照（每次调用新对象；messages/pendingChildrenByTitle 字段返回内部引用——见字段注释的引用稳定契约）。 */
   snapshot(): SessionStreamUnitView {
     return {
       sessionId: this.sessionId,
@@ -449,8 +458,14 @@ export class SessionStreamUnit {
       partialThinking: this.partialThinkingValue,
       injected: this.injectedValue,
       pendingChildren: [...this.pendingChildrenValue],
-      pendingChildrenByTitle: new Map(this.pendingChildIdsByTitle),
-      messages: [...this.messagesValue],
+      // 引用稳定（修隐藏 webview 被记脏）：messages 数组与 title 映射在内容
+      // 未变时必须保持同一引用——ChatTranscriptWebView 的 memo 与
+      // pendingSubagentSessions effect 都按引用比较，每次快照造新引用会让
+      // 任意会话的 64ms 节拍通知打穿 memo、向隐藏 webview 发全量快照。
+      // 两字段的写入点均为「内容变化才换新引用」（copy-on-write），见
+      // applyMessages / registerPendingChild / clearPendingChildren。
+      pendingChildrenByTitle: this.pendingChildIdsByTitle,
+      messages: this.messagesValue,
       hasMoreMessages: this.hasMoreMessagesValue,
       loadingMoreMessages: this.loadingMoreMessagesValue,
     };
@@ -514,10 +529,16 @@ export class SessionStreamUnit {
       return false;
     }
     const previousId = this.pendingChildIdsByTitle.get(title);
-    this.pendingChildIdsByTitle.set(title, childSessionId);
     if (previousId === childSessionId) {
+      // 重复登记（同 id 同 title）：内容未变，保持映射引用不变。
       return false;
     }
+    // copy-on-write：映射内容变化才整体换新 Map——snapshot 返回内部引用，
+    // 引用稳定是消费方（webview memo / pendingSubagentSessions effect 依赖）
+    // 判断变化的前提，无谓新引用会打穿 memo。
+    const nextByTitle = new Map(this.pendingChildIdsByTitle);
+    nextByTitle.set(title, childSessionId);
+    this.pendingChildIdsByTitle = nextByTitle;
     let changed = false;
     if (
       previousId != null &&
@@ -560,7 +581,9 @@ export class SessionStreamUnit {
     if (this.pendingChildrenValue.length > 0) {
       this.requestForceSnapshot();
     }
-    this.pendingChildIdsByTitle.clear();
+    // 换新 Map 而非原位 clear：snapshot 返回内部引用，内容清空也必须换新
+    // 引用（消费方按引用比较感知变化——任务卡 pending 态随父收尾消失）。
+    this.pendingChildIdsByTitle = new Map();
     this.pendingChildrenValue = [];
   }
 
@@ -770,7 +793,14 @@ export class SessionStreamUnit {
     return [...list];
   }
 
-  /** 采纳消息面并触发投影通知（销毁后跳过状态更新——缓存已照常写）。 */
+  /**
+   * 采纳消息面并触发投影通知（销毁后跳过状态更新——缓存已照常写）。
+   *
+   * 引用稳定守卫：内容未变（长度一致且元素逐一同一引用）时保持原数组
+   * 引用——messages 引用稳定是消费方 webview memo 比较成立的必要条件，
+   * 事件到达但内容未变的重建（如缓存命中的重复采纳）会打穿 memo 使隐藏
+   * webview 被记脏。hasMore 标志仍照常收口；两者均未变时不再触发通知。
+   */
   private applyMessages(
     messages: readonly ChatMessage[],
     hasMore: boolean,
@@ -778,7 +808,15 @@ export class SessionStreamUnit {
     if (this.destroyed) {
       return;
     }
-    this.messagesValue = [...messages];
+    const unchanged =
+      this.messagesValue.length === messages.length &&
+      this.messagesValue.every((message, index) => message === messages[index]);
+    if (!unchanged) {
+      this.messagesValue = [...messages];
+    }
+    if (unchanged && this.hasMoreMessagesValue === hasMore) {
+      return;
+    }
     this.hasMoreMessagesValue = hasMore;
     this.onProjectionChanged?.();
   }
