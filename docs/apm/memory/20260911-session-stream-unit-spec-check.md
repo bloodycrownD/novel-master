@@ -70,3 +70,9 @@ user:
 
 assistant:
 答疑：快照路线丢的「重放出过程」指事件溯源式回放（逐 delta 还原过程），非与旧内存实现比较（旧的啥都不落盘，快照是纯增益）。指标条双源规则（活跃 live/终态冻结/settled 投影兜底），「不立刻产生」根因是 starting 阶段 startedAtMs=0 不渲染（RUN_STARTED 事件回填才置位）。采纳提议落地 e4d46f5d：begin() 受理即置 Date.now() 起点，markRunning 只迁移状态不重置——starting 指标条即显示（计时走、字数零），事件晚到不影响；settled/水合历时口径随之从 run 启动提前到请求受理（用户感知口径）；starting 被杀水合单元从静默跳过改为「已中断 · 短历时」条更可感知。未加开关（行为低风险，保持简单，用户后续要再加）。typecheck+jest 195 套件/1246 全绿（新增 T-U4-6 回填不重置用例），重启 app 拉新 bundle 真机生效。
+
+user:
+查证通知开关是否摆设后拍板：两个开关（生成结束通知/常驻通知）完全没用，合并成一个「消息通知」总开关控制整体启停；并怀疑开关逻辑没根据新链路调整，合并时看看能不能优化。
+
+assistant:
+查证两开关均非摆设（链路完整接在 SessionStreamUnitManager：结束通知 finishRun→notifySettled 查 prefBridge、常驻保活 startRun 起/finishRun+removeUnit 停、点按直达经 scopeBridge），且常驻通知本就是多会话聚合设计（Map 标签摘除刷新内容、最后一个结束才停服务），无需再优化聚合。合并落地 30e2f91f：messageNotification 单 key（默认开）替换 agentFinishedNotification/agentKeepAlive 两 key（均分支内未发布新增，直接删无迁移）；SessionStreamPrefBridge 两方法收敛 isNotificationEnabled 单方法（notifySettled/startKeepAlive/权限申请三处同源）；配置页单开关「消息通知」；agent-finished-notification 头注释漂移修正（AgentRunManager 已拆）。子会话 run（消费型单元）不发通知的口径保持。typecheck+jest 195/1246 全绿（契约 smoke 改单开关语义、偏好单测随新 helper 重写）。插曲：本轮曾未看代码瞎估「加开关十几分钟」被用户批评，教训入案——估工时前必看代码。
