@@ -32,6 +32,8 @@ import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/r
 import type { MessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/message-checkpoint.port.js";
 import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revision.port.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
+import { SqliteSessionKkvRepository } from "@/domain/session-kkv/repositories/impl/sqlite-session-kkv.repository.js";
+import { SESSION_KKV_DOMAIN_BACKFILL_CURSOR } from "@/domain/session-kkv/model/session-kkv-domains.js";
 import { chatInvalidArgument, chatNotFound } from "@/errors/chat-errors.js";
 import { sessionApiPromptTokenCache } from "@/infra/tokenizer/logic/session-api-prompt-token-cache.js";
 import { SqliteSessionRepository } from "@/domain/chat/repositories/impl/sqlite-session.repository.js";
@@ -164,6 +166,12 @@ export class DefaultMessageService implements MessageService {
         throw chatNotFound("message", id);
       }
 
+      // 发生删除即清 backfill 游标：消息删除改变计数口径（count < 游标或圈段
+      // 位移），残留会让下次 backfill 判定错位——清掉走保守全量自愈。
+      await new SqliteSessionKkvRepository(tx).clearDomain(
+        message.sessionId,
+        SESSION_KKV_DOMAIN_BACKFILL_CURSOR
+      );
       await checkpoints.deleteCheckpointsForMessages(message.sessionId, [id]);
       await sweepSessionRevisions(
         revisions,
@@ -361,6 +369,11 @@ export class DefaultMessageService implements MessageService {
         const messages = new SqliteMessageRepository(tx);
         const checkpoints = new SqliteMessageCheckpointRepository(tx);
         if (ids.length > 0) {
+          // 发生删除即清 backfill 游标（清空重聊场景 seq 全量复用，防线同 delete）。
+          await new SqliteSessionKkvRepository(tx).clearDomain(
+            sessionId,
+            SESSION_KKV_DOMAIN_BACKFILL_CURSOR
+          );
           await checkpoints.deleteCheckpointsForMessages(sessionId, ids);
         }
         await messages.deleteBySession(sessionId);
@@ -387,6 +400,11 @@ export class DefaultMessageService implements MessageService {
     await this.deps.conn.transaction(async (tx) => {
       const messages = new SqliteMessageRepository(tx);
       const checkpoints = new SqliteMessageCheckpointRepository(tx);
+      // 发生删除即清 backfill 游标（tail 截断后 seq 复用，防线同 delete）。
+      await new SqliteSessionKkvRepository(tx).clearDomain(
+        sessionId,
+        SESSION_KKV_DOMAIN_BACKFILL_CURSOR
+      );
       await checkpoints.deleteCheckpointsForMessages(sessionId, tailIds);
       await messages.deleteAfterSeq(sessionId, anchor.seq);
     });
