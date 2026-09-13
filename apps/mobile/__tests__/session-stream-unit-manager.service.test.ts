@@ -539,7 +539,7 @@ describe('SessionStreamUnitManager', () => {
       (Platform as {OS: string}).OS = originalOS;
     });
 
-    it('消息通知开时受理即起常驻通知；FINISHED 后停止（完成通知前台不发）', async () => {
+    it('消息通知开时受理即起常驻通知（默认文案先行、标签查回同 id 刷新）；FINISHED 后停止', async () => {
       const h = createHarness();
       h.runAgentTurn.mockImplementation(() => new Promise(() => undefined));
       h.manager.setPrefBridge({
@@ -548,10 +548,21 @@ describe('SessionStreamUnitManager', () => {
 
       h.manager.startRun('a', 'p', 'hi');
       await flushAsync();
-      expect(notifee.displayNotification).toHaveBeenCalledWith(
+      // 两段式（Step 8）：受理后默认文案立即上屏，标签查回后同 id 原位刷新
+      expect(notifee.displayNotification).toHaveBeenCalledTimes(2);
+      expect(notifee.displayNotification.mock.calls[0][0]).toEqual(
         expect.objectContaining({
           android: expect.objectContaining({asForegroundService: true}),
         }),
+      );
+      expect(notifee.displayNotification.mock.calls[0][0].title).toBe(
+        '正在生成',
+      );
+      expect(notifee.displayNotification.mock.calls[1][0].title).toBe(
+        '正在生成 · 会话-a',
+      );
+      expect(notifee.displayNotification.mock.calls[0][0].id).toBe(
+        notifee.displayNotification.mock.calls[1][0].id,
       );
 
       notifee.displayNotification.mockClear();
@@ -562,6 +573,55 @@ describe('SessionStreamUnitManager', () => {
       // 完成通知未发（前台口径独立于开关），但保活服务正常停止
       expect(notifee.displayNotification).not.toHaveBeenCalled();
       expect(notifee.stopForegroundService).toHaveBeenCalled();
+    });
+
+    it('T-N1: 两段式——默认文案首调先于标签查询完成；标签查回后同 id 原位刷新', async () => {
+      const h = createHarness();
+      h.runAgentTurn.mockImplementation(() => new Promise(() => undefined));
+      h.manager.setPrefBridge({
+        isNotificationEnabled: async () => true,
+      });
+
+      // 标签两查询挂起（手动 resolve）：制造「查询长时间未完成」窗口
+      let resolveTitle!: (value: {id: string; title: string}) => void;
+      let resolveProject!: (value: {id: string; name: string}) => void;
+      h.sessions.get.mockImplementation(
+        () =>
+          new Promise(resolve => {
+            resolveTitle = resolve;
+          }),
+      );
+      h.projects.get.mockImplementation(
+        () =>
+          new Promise(resolve => {
+            resolveProject = resolve;
+          }),
+      );
+
+      h.manager.startRun('a', 'p', 'hi');
+      await flushAsync();
+
+      // 第一段已用默认文案上屏；两个标签查询虽已发出但都未完成——
+      // 通知出现先于标签查询完成（忙期优先的核心断言）
+      expect(notifee.displayNotification).toHaveBeenCalledTimes(1);
+      expect(notifee.displayNotification.mock.calls[0][0].title).toBe(
+        '正在生成',
+      );
+      expect(h.sessions.get).toHaveBeenCalledWith('a');
+      expect(h.projects.get).toHaveBeenCalledWith('p');
+
+      // 查回标签：第二段带标签调用经 labelsVersion 同 id 原位刷新
+      resolveTitle({id: 'a', title: '会话-a'});
+      resolveProject({id: 'p', name: '项目-p'});
+      await flushAsync();
+
+      expect(notifee.displayNotification).toHaveBeenCalledTimes(2);
+      const first = notifee.displayNotification.mock.calls[0][0];
+      const refreshed = notifee.displayNotification.mock.calls[1][0];
+      expect(first.id).toBe('nm-agent-keepalive');
+      expect(refreshed.id).toBe(first.id);
+      expect(refreshed.title).toBe('正在生成 · 会话-a');
+      expect(refreshed.body).toContain('项目-p · 会话-a');
     });
 
     it('消息通知关：受理不起常驻通知', async () => {

@@ -1312,8 +1312,17 @@ export class SessionStreamUnitManager {
   }
 
   /**
-   * 受理后按需启动保活：消息通知总开关开启才起常驻通知，并带上
-   * 项目 · 会话名标签（取不到名字时仍启动，仅内容缺省）。
+   * 受理后按需启动保活：消息通知总开关开启才起常驻通知。两段式时序
+   * （Step 8 忙期优先）——
+   *
+   * 第一段：受理后立即无标签调 startAgentKeepAliveService(sessionId)，
+   * 默认文案「正在生成」先上屏（不等会话名/项目名查询，通知模块的
+   * labelsVersion 机制保证后续原位刷新）；若其它会话的保活已在跑，
+   * 该调用天然 no-op（进程级服务共享）。
+   *
+   * 第二段：会话名/项目名两查询 Promise.all 并行，查回后带标签再调
+   * 同一函数，经既有 labelsVersion → reconcileKeepAlive「同 id 原位
+   * 刷新」更新文案（项目 · 会话名）；取不到名字不阻塞、仅内容缺省。
    */
   private async startKeepAliveFor(
     sessionId: string,
@@ -1326,24 +1335,34 @@ export class SessionStreamUnitManager {
       timingLog('keepalive: disabled by pref, skip');
       return;
     }
-    let sessionTitle: string | undefined;
-    let projectName: string | undefined;
-    try {
-      sessionTitle =
-        (await this.runtime.sessions.get(sessionId))?.title ?? undefined;
-      timingLog('keepalive: session title fetched');
-    } catch {
-      // 名字取不到不阻塞保活
-    }
-    try {
-      projectName =
-        (await this.runtime.projects.get(projectId))?.name ?? undefined;
-      timingLog('keepalive: project name fetched');
-    } catch {
-      // 同上
-    }
+    await startAgentKeepAliveService(sessionId);
+    timingLog('keepalive: initial start (default content) returned');
+    const [sessionTitle, projectName] = await Promise.all([
+      (async () => {
+        try {
+          const title =
+            (await this.runtime.sessions.get(sessionId))?.title ?? undefined;
+          timingLog('keepalive: session title fetched');
+          return title;
+        } catch {
+          // 名字取不到不阻塞保活
+          return undefined;
+        }
+      })(),
+      (async () => {
+        try {
+          const name =
+            (await this.runtime.projects.get(projectId))?.name ?? undefined;
+          timingLog('keepalive: project name fetched');
+          return name;
+        } catch {
+          // 同上
+          return undefined;
+        }
+      })(),
+    ]);
     await startAgentKeepAliveService(sessionId, {projectName, sessionTitle});
-    timingLog('keepalive: startAgentKeepAliveService returned');
+    timingLog('keepalive: label refresh returned');
   }
 
   /** 单会话收尾：摘标签；仍有多会话在跑时由通知模块维持运行并刷新内容。 */
