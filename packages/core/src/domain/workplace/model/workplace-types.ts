@@ -19,7 +19,7 @@ export type InclusionMode = "auto" | "show" | "hide";
 export type DisplayState = "hidden" | "full" | "header" | "filename";
 
 /** Directory sort field. */
-export type SortField = "name" | "created" | "updated";
+export type SortField = "name" | "created" | "updated" | "smart";
 
 /** Directory sort direction. */
 export type SortOrder = "asc" | "desc";

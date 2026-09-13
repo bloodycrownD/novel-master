@@ -102,15 +102,17 @@ function buildDirSortPlans(ctx: WorkplaceRuleContext): Map<string, DirSortPlan> 
         autoMetas.push(metaOf(p));
       }
     }
-    const sortedAuto = sortFilesForDir(autoMetas, dirRule);
+    const sortedAuto = sortFilesForDir(autoMetas, dirRule, {
+      smartRules: ctx.smartRules,
+    });
     autoCount = sortedAuto.length;
     for (let i = 0; i < sortedAuto.length; i++) {
       autoIndexByFile.set(sortedAuto[i]!.logicalPath, i);
     }
     // 全量名单排序：列表行顺序（旧 walkDir 的 sortedFiles 语义）
-    const sortedFiles = sortFilesForDir(files.map(metaOf), dirRule).map(
-      (m) => m.logicalPath
-    );
+    const sortedFiles = sortFilesForDir(files.map(metaOf), dirRule, {
+      smartRules: ctx.smartRules,
+    }).map((m) => m.logicalPath);
     plans.set(dir, { autoIndexByFile, autoCount, sortedFiles });
   }
   return plans;
@@ -197,7 +199,11 @@ function walkDir(
 
   const dirRule = ctx.dirRuleMap.get(dirPath) ?? null;
 
-  const subdirs = sortDirPaths(directChildDirs(dirPath, ctx.allDirs), dirRule);
+  const subdirs = sortDirPaths(
+    directChildDirs(dirPath, ctx.allDirs),
+    dirRule,
+    { smartRules: ctx.smartRules, dirMtimeByPath: ctx.dirMtimeByPath }
+  );
   for (const sub of subdirs) {
     walkDir(scope, ctx, sub, rows, displayByPath, planByDir);
   }

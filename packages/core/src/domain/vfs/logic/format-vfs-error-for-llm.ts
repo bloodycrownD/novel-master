@@ -88,6 +88,9 @@ function formatByCode(
       return `[INVALID_PATH] Invalid path ${logicalPath}: ${extractInvalidPathReason(
         vfsError.message
       )}`;
+    case "INVALID_NAME":
+      // message 是中文 reason，LLM 面补上 code 前缀与名字定位
+      return `[INVALID_NAME] Invalid entry name ${vfsError.path ?? logicalPath}: ${vfsError.message}`;
     case "NOT_A_DIRECTORY":
       return `[NOT_A_DIRECTORY] Not a directory: ${logicalPath}`;
     case "PARENT_NOT_FOUND":

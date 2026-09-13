@@ -6,7 +6,6 @@ import {fileURLToPath} from 'node:url';
 const androidDir = join(
   dirname(fileURLToPath(import.meta.url)),
   '..',
-  '..',
   'android',
 );
 const cmd = process.platform === 'win32' ? 'gradlew.bat' : './gradlew';

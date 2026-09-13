@@ -30,6 +30,8 @@ import {StorageConfigScreen} from '../screens/stack/StorageConfigScreen';
 import {CloudSyncProgressScreen} from '../screens/stack/CloudSyncProgressScreen';
 import {ChatConfigScreen} from '../screens/stack/ChatConfigScreen';
 import {GlobalTemplateScreen} from '../screens/stack/GlobalTemplateScreen';
+import {SmartSortRulesScreen} from '../screens/stack/SmartSortRulesScreen';
+import {SmartSortRuleEditorScreen} from '../screens/stack/SmartSortRuleEditorScreen';
 import {FileEditorScreen} from '../screens/stack/FileEditorScreen';
 import {SessionDetailScreen} from '../screens/stack/SessionDetailScreen';
 import {SubagentSessionScreen} from '../screens/stack/SubagentSessionScreen';
@@ -148,6 +150,14 @@ const GlobalTemplateStackScreen = withStackLayout(
   'GlobalTemplate',
   GlobalTemplateScreen,
 );
+const SmartSortRulesStackScreen = withStackLayout(
+  'SmartSortRules',
+  SmartSortRulesScreen,
+);
+const SmartSortRuleEditorStackScreen = withStackLayout(
+  'SmartSortRuleEditor',
+  SmartSortRuleEditorScreen,
+);
 const FileEditorStackScreen = withStackLayout('FileEditor', FileEditorScreen);
 const SessionDetailStackScreen = withStackLayout(
   'SessionDetail',
@@ -246,6 +256,14 @@ export function RootNavigator() {
             <Stack.Screen
               name="GlobalTemplate"
               component={GlobalTemplateStackScreen}
+            />
+            <Stack.Screen
+              name="SmartSortRules"
+              component={SmartSortRulesStackScreen}
+            />
+            <Stack.Screen
+              name="SmartSortRuleEditor"
+              component={SmartSortRuleEditorStackScreen}
             />
             <Stack.Screen name="FileEditor" component={FileEditorStackScreen} />
             <Stack.Screen

@@ -183,6 +183,7 @@ jest.mock('@/components/ui/SegmentedControl', () => ({
 
 jest.mock('@/navigation/HeaderContext', () => ({
   useHeaderContext: () => ({setStackOverride: jest.fn()}),
+  useStackOverrideSetter: () => jest.fn(),
 }));
 
 import {AgentEditorScreen} from '@/screens/stack/AgentEditorScreen';

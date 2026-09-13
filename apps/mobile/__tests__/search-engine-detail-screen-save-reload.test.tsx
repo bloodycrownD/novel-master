@@ -47,6 +47,7 @@ jest.mock('@react-navigation/native', () => {
 // 顶栏 override：详情页标题用引擎名。
 jest.mock('@/navigation/HeaderContext', () => ({
   useHeaderContext: () => ({setStackOverride: mockSetStackOverride}),
+  useStackOverrideSetter: () => mockSetStackOverride,
 }));
 
 jest.mock('@/components/chrome/ToastHost', () => ({

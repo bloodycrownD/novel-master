@@ -20,6 +20,7 @@ const SORT_FIELDS: Array<{ value: SortField; label: string }> = [
   { value: "name", label: "文件名称" },
   { value: "created", label: "创建时间" },
   { value: "updated", label: "更新时间" },
+  { value: "smart", label: "智能排序" },
 ];
 
 const SORT_ORDERS: Array<{ value: SortOrder; label: string }> = [
@@ -164,7 +165,7 @@ export function DirectoryRuleModal({
           <div className="dir-rule-modal__form">
             {/* 规则启用/关闭由工作区右键菜单的快捷开关负责，表单内不再提供开关，
                 仅编辑规则内容；ruleEnabled 沿用加载到的既有状态原样保存。 */}
-            <FieldLabel text="排序字段" />
+            <FieldLabel text="排序方式" />
             <OptionChips
               options={SORT_FIELDS}
               value={sortField}

@@ -24,11 +24,13 @@ import { SESSION_KKV_SCHEMA_STATEMENTS } from "./session-kkv/session-kkv-schema.
 import { CHAT_SCHEMA_STATEMENTS } from "./chat/chat-schema.js";
 import { SESSION_FS_SCHEMA_STATEMENTS } from "./session-fs/session-fs-schema.js";
 import { WORKPLACE_SCHEMA_STATEMENTS } from "./workplace/workplace-schema.js";
+import { SMART_SORT_RULE_SCHEMA_STATEMENTS } from "./smart-sort-rule/smart-sort-rule-schema.js";
 import { SKILLS_SCHEMA_STATEMENTS } from "./skills/skills-schema.js";
 import { SKSP_SCHEMA_STATEMENTS } from "./sksp/sksp-schema.js";
 import { PROVIDER_SCHEMA_STATEMENTS } from "./provider/provider-schema.js";
 import { AGENT_SCHEMA_STATEMENTS } from "./agent/agent-schema.js";
 import { seedBuiltinProviders } from "./provider/seed-builtin-providers.js";
+import { seedBuiltinSmartSortRules } from "./smart-sort-rule/builtin-smart-sort-rules.js";
 import { seedBuiltinSkills } from "./skills/seed-builtin-skills.js";
 import { alignSchemaColumns } from "./schema-align/align-schema-columns.js";
 import {
@@ -71,8 +73,14 @@ import { IntegrityRepairRegistry } from "@/service/integrity-repair.js";
  * 原样合并进请求体顶层）。老库（v11）靠本轮 bump 走慢路径由 ALIGN
  * 补列；DEFAULT '{}' 无存量回填。seed 内置行的 INSERT 显式列清单，
  * 新列走 DEFAULT。
+ * v13：workplace_dir_rule.sort_field CHECK 扩枚举 'smart'（文件名智能排序）
+ * + 新表 smart_sort_rule（规则管理）与内置规则 seed。老库（v12）靠本轮
+ * bump 走慢路径：新表由 DDL 建出；但 CHECK 变更对已存在的表不生效，
+ * 由 workplace-dir-rule-smart-field-v1 migration rebuild 承担（存量行
+ * 原样搬运）。本条在分支内原编号 v11；merge origin/main（已发布 v11/v12）
+ * 时顺延为 v13，保证走过 v1.5.16（user_version=12）的存量库走慢路径。
  */
-export const SCHEMA_BOOT_VERSION = 12;
+export const SCHEMA_BOOT_VERSION = 13;
 
 /** 各模块 DDL 语句，按依赖安全顺序排列。 */
 export const NOVEL_MASTER_SCHEMA_STATEMENTS: readonly string[] = [
@@ -85,6 +93,7 @@ export const NOVEL_MASTER_SCHEMA_STATEMENTS: readonly string[] = [
   ...CHAT_SCHEMA_STATEMENTS,
   ...SESSION_FS_SCHEMA_STATEMENTS,
   ...WORKPLACE_SCHEMA_STATEMENTS,
+  ...SMART_SORT_RULE_SCHEMA_STATEMENTS,
   ...SKILLS_SCHEMA_STATEMENTS,
   ...SKSP_SCHEMA_STATEMENTS,
   ...PROVIDER_SCHEMA_STATEMENTS,
@@ -295,6 +304,7 @@ export async function bootstrapNovelMaster(
       await assertMinimumBaseline(tx);
       await runPendingSchemaMigrations(tx);
       await seedBuiltinProviders(tx);
+      await seedBuiltinSmartSortRules(tx);
       return;
     }
 
@@ -310,6 +320,7 @@ export async function bootstrapNovelMaster(
       "CREATE INDEX IF NOT EXISTS idx_chat_session_parent ON chat_session(parent_session_id)"
     );
     await seedBuiltinProviders(tx);
+    await seedBuiltinSmartSortRules(tx);
     await writeSchemaBootVersion(tx, SCHEMA_BOOT_VERSION);
   });
 

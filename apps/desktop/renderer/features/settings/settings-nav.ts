@@ -13,6 +13,8 @@ export type SettingsViewId =
   | "providerDetail"
   | "providerCreate"
   | "modelSampling"
+  | "smartSortRules"
+  | "smartSortRuleEditor"
   | "skillsManage"
   | "skillDetail";
 
@@ -31,7 +33,10 @@ export const SETTINGS_NAV = [
   },
   {
     label: "高级",
-    items: [{ id: "skillsManage" as const, label: "技能管理", icon: "⚡" }],
+    items: [
+      { id: "smartSortRules" as const, label: "智能排序", icon: "🔢" },
+      { id: "skillsManage" as const, label: "技能管理", icon: "⚡" },
+    ],
   },
   {
     label: "数据",
@@ -54,6 +59,7 @@ export const SETTINGS_TOP_LEVEL: Partial<Record<SettingsViewId, string>> = {
   agentsSettings: "智能体配置",
   searchEngines: "搜索配置",
   providers: "服务商配置",
+  smartSortRules: "智能排序",
   skillsManage: "技能管理",
 };
 
@@ -67,6 +73,7 @@ export function getSettingsNavHighlightId(viewId: SettingsViewId): SettingsViewI
   ) {
     return "providers";
   }
+  if (viewId === "smartSortRuleEditor") return "smartSortRules";
   if (viewId === "skillDetail") return "skillsManage";
   return viewId;
 }
@@ -102,6 +109,8 @@ export interface SettingsNavState {
   /** 搜索引擎详情页定位的引擎（EngineId 字符串）。 */
   editingEngineId?: string;
   readonly editingSavedModelId?: string;
+  /** smartSortRuleEditor 页定位的规则（undefined = 新建）。 */
+  readonly editingSmartSortRuleId?: string;
   /** skillDetail 页定位的技能（域 + 项目 + 名称）。 */
   viewingSkillRef?: import("@shared/ipc-types").SkillRefDto;
 }

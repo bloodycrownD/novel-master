@@ -13,6 +13,7 @@
       "@novel-master/core/feature-flags": ["./src/public/feature-flags.ts"],
       "@novel-master/core/prompt": ["./src/public/prompt.ts"],
       "@novel-master/core/provider": ["./src/public/provider.ts"],
+      "@novel-master/core/smart-sort-rule": ["./src/public/smart-sort-rule.ts"],
       "@novel-master/core/session-fs": ["./src/public/session-fs.ts"],
       "@novel-master/core/message-checkpoint": ["./src/public/message-checkpoint.ts"],
       "@novel-master/core/vfs": ["./src/public/vfs.ts"],

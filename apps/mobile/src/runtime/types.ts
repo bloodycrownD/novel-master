@@ -35,6 +35,7 @@ import type {
   ProviderServiceBundle,
   TokenCounterRegistry,
 } from '@novel-master/core/provider';
+import type {SmartSortRuleService} from '@novel-master/core/smart-sort-rule';
 import type {MessageCheckpointService} from '@novel-master/core/message-checkpoint';
 import type {SessionFsService} from '@novel-master/core/session-fs';
 import type {
@@ -86,6 +87,8 @@ export interface MobileNovelMasterRuntime {
   readonly savedModelRepo: ProviderServiceBundle['savedModelRepo'];
   readonly providerRepo: ProviderServiceBundle['providerRepo'];
   readonly modelRequests: ModelRequestService;
+  /** 智能排序规则：CRUD/调序/批量/导入导出/预览（spec smart-filename-sort）。 */
+  readonly smartSortRule: SmartSortRuleService;
   readonly agentRegistry: AgentRegistryService;
   /** 按 sessionId 索引 in-flight run 的 controller，供停止按钮 / IPC 中断。 */
   readonly abortRegistry: AgentAbortRegistry;

@@ -28,7 +28,7 @@ import {ModalShell} from '@/components/ui/ModalShell';
 import {useDismissOverlaysOnBlur} from '@/hooks/useDismissOverlaysOnBlur';
 import {useFocusListReload} from '@/hooks/useFocusListReload';
 import {useRuntime} from '@/hooks/useRuntime';
-import {useHeaderContext} from '@/navigation/HeaderContext';
+import {useStackOverrideSetter} from '@/navigation/HeaderContext';
 import type {RootStackParamList} from '@/navigation/types';
 import {listScreenStyles} from '../shared/list-screen-styles';
 import {useTheme} from '@/theme/ThemeProvider';
@@ -103,7 +103,8 @@ export function SearchEnginesScreen() {
   const {showToast} = useToast();
   const runtime = useRuntime();
   const navigation = useNavigation<Nav>();
-  const {setStackOverride} = useHeaderContext();
+  // 屏级 override：自动带 ownerRouteKey，转场期间不泄漏到相邻屏 header。
+  const setStackOverride = useStackOverrideSetter();
   /** 行菜单当前指向的引擎（undefined = 收起）。 */
   const [menuEngineId, setMenuEngineId] = useState<EngineId | undefined>();
   /** 排序写库进行中（互斥连点）。 */

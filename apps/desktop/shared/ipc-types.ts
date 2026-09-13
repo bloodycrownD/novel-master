@@ -142,6 +142,24 @@ export const IPC_CHANNELS = {
   AGENT_YAML_EXPORT: 'nm:agentYaml/export',
   AGENT_YAML_IMPORT: 'nm:agentYaml/import',
 
+
+  SMART_SORT_RULE_LIST: 'nm:sort-rule/list',
+  SMART_SORT_RULE_CREATE: 'nm:sort-rule/create',
+  SMART_SORT_RULE_UPDATE: 'nm:sort-rule/update',
+  SMART_SORT_RULE_DELETE: 'nm:sort-rule/delete',
+  SMART_SORT_RULE_DELETE_BATCH: 'nm:sort-rule/deleteBatch',
+  SMART_SORT_RULE_SET_ENABLED: 'nm:sort-rule/setEnabled',
+  SMART_SORT_RULE_SET_ENABLED_BATCH: 'nm:sort-rule/setEnabledBatch',
+  SMART_SORT_RULE_MOVE: 'nm:sort-rule/move',
+  SMART_SORT_RULE_REORDER: 'nm:sort-rule/reorder',
+  SMART_SORT_RULE_IMPORT_RULES: 'nm:sort-rule/importRules',
+  SMART_SORT_RULE_EXPORT_RULES: 'nm:sort-rule/exportRules',
+  SMART_SORT_RULE_RESET_DEFAULTS: 'nm:sort-rule/resetDefaults',
+  SMART_SORT_RULE_MATCH: 'nm:sort-rule/match',
+  /** YAML 导入导出走 main 进程系统对话框（替换式导入，D10）。 */
+  SMART_SORT_RULE_YAML_EXPORT: 'nm:sort-rule/yamlExport',
+  SMART_SORT_RULE_YAML_IMPORT: 'nm:sort-rule/yamlImport',
+
   SKILLS_LIST: 'nm:skills/list',
   SKILLS_EFFECTIVE: 'nm:skills/effective',
   SKILLS_READ: 'nm:skills/read',
@@ -583,7 +601,7 @@ export type PhysicalReadRequest = {
 export type WorkplaceSetDirRuleRequest = VfsScopeRequest & {
   readonly logicalPath: string;
   readonly ruleEnabled?: boolean;
-  readonly sortField?: 'name' | 'created' | 'updated';
+  readonly sortField?: 'name' | 'created' | 'updated' | 'smart';
   readonly sortOrder?: 'asc' | 'desc';
   readonly headCount?: number;
   readonly tailCount?: number;
@@ -1222,6 +1240,122 @@ export type AgentYamlExportRequest = {
 export type AgentYamlImportRequest = {
   readonly agentId: string;
 };
+
+/**
+ * 智能排序规则（与 core `SmartSortRule` 同构的 IPC DTO；renderer 不直接依赖 core）。
+ */
+/** 捕获数字三档（D13，与 core SmartSortCaptureKind 同构；renderer 经 shared 消费）。 */
+export type SmartSortCaptureKindDto = 'smart' | 'fixed_min' | 'fixed_max';
+export type SmartSortRuleDto = {
+  readonly ruleId: string;
+  readonly name: string;
+  readonly pattern: string;
+  readonly flags: string;
+  /** 捕获数字档位（D13，缺省 smart）。 */
+  readonly captureKind: SmartSortCaptureKindDto;
+  readonly description: string | null;
+  readonly enabled: boolean;
+  readonly sortOrder: number;
+  readonly createdAtMs: number;
+  readonly updatedAtMs: number;
+};
+
+export type SmartSortRuleCreateRequest = {
+  readonly name: string;
+  readonly pattern: string;
+  readonly flags?: string;
+  readonly captureKind?: SmartSortCaptureKindDto;
+  readonly description?: string | null;
+  readonly enabled?: boolean;
+};
+
+export type SmartSortRuleUpdateRequest = {
+  readonly ruleId: string;
+  readonly patch: {
+    readonly name?: string;
+    readonly pattern?: string;
+    readonly flags?: string;
+    readonly captureKind?: SmartSortCaptureKindDto;
+    readonly description?: string | null;
+    readonly enabled?: boolean;
+  };
+};
+
+export type SmartSortRuleIdRequest = {
+  readonly ruleId: string;
+};
+
+export type SmartSortRuleSetEnabledRequest = {
+  readonly ruleId: string;
+  readonly enabled: boolean;
+};
+
+export type SmartSortRuleSetEnabledBatchRequest = {
+  readonly ruleIds: readonly string[];
+  readonly enabled: boolean;
+};
+
+export type SmartSortRuleDeleteBatchRequest = {
+  readonly ruleIds: readonly string[];
+};
+
+export type SmartSortRuleMoveRequest = {
+  readonly ruleId: string;
+  readonly to: 'top' | 'bottom' | 'up' | 'down' | { readonly index: number };
+};
+
+export type SmartSortRuleReorderRequest = {
+  readonly orderedIds: readonly string[];
+};
+
+/** bundle 文档单条规则（与 core `SmartSortRuleBundleRule` 同构，D10）。 */
+export type SmartSortRuleBundleRuleDto = {
+  readonly ruleId: string;
+  readonly name: string;
+  readonly pattern: string;
+  readonly flags: string;
+  readonly captureKind?: SmartSortCaptureKindDto;
+  readonly description?: string | null;
+  readonly enabled: boolean;
+  readonly sortOrder: number;
+};
+
+/** bundle 文档（替换式导入导出，D10）。 */
+export type SmartSortRuleBundleDto = {
+  readonly schemaVersion: number;
+  readonly rules: readonly SmartSortRuleBundleRuleDto[];
+};
+
+export type SmartSortRuleImportRulesRequest = {
+  readonly bundle: SmartSortRuleBundleDto;
+};
+
+/** 编辑器正则匹配测试的单个匹配（index = 原文起始偏移，供高亮切分；
+ *  groups 内 null = 捕获组未参与匹配，GUI 渲染 '-'；tuple = 提取元组
+ *  展示文案，D13，null 显「无序号」）。 */
+export type SmartSortRuleMatchDto = {
+  readonly text: string;
+  readonly index: number;
+  readonly groups: readonly (string | null)[];
+  readonly tuple: string | null;
+};
+
+/** 正则匹配测试请求（fix ②：替代旧排序预览的 names + draftRules 语义；
+ *  captureKind 缺省 smart，D13）。 */
+export type SmartSortRuleMatchRequest = {
+  readonly pattern: string;
+  readonly flags: string;
+  readonly text: string;
+  readonly captureKind?: SmartSortCaptureKindDto;
+};
+
+/** 正则匹配测试结果：非法正则是合法测试结局（ok 分支内联错误文案，非 IPC 错误）。 */
+export type SmartSortRuleMatchResultDto =
+  | { readonly ok: true; readonly matches: readonly SmartSortRuleMatchDto[] }
+  | { readonly ok: false; readonly error: string };
+
+export type SmartSortRuleYamlExportResult = 'saved' | 'cancelled';
+export type SmartSortRuleYamlImportResult = 'imported' | 'cancelled';
 
 /** 技能归属域（与 core `SkillDomain` 对齐；renderer 不直接依赖 core）。 */
 export type SkillDomainDto = 'global' | 'project';

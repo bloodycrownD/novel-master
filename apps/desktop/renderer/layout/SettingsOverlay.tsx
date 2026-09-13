@@ -19,6 +19,8 @@ import {
   ProviderDetailView,
   ProviderFormView,
   ProvidersView,
+  SmartSortRuleEditorView,
+  SmartSortRulesView,
 } from "../features/settings/SettingsViews";
 import { AboutView } from "../features/settings/AboutView";
 import { TokenUsageStatsView } from "../features/settings/TokenUsageStatsView";
@@ -49,6 +51,9 @@ function getSettingsMainTitle(
   if (viewId === "providerDetail") return "模型管理";
   if (viewId === "providerCreate") return "新建服务商";
   if (viewId === "modelSampling") return "采样配置";
+  if (viewId === "smartSortRuleEditor") {
+    return navState.editingSmartSortRuleId ? "编辑规则" : "新规则";
+  }
   if (viewId === "searchEngineDetail") {
     const label = engineLabel(navState.editingEngineId);
     return label ? `搜索引擎 · ${label}` : "搜索引擎";
@@ -215,6 +220,10 @@ export function SettingsOverlay({ open, onClose }: SettingsOverlayProps) {
         return <ProviderDetailView nav={nav} />;
       case "modelSampling":
         return <ModelSamplingView nav={nav} />;
+      case "smartSortRules":
+        return <SmartSortRulesView nav={nav} />;
+      case "smartSortRuleEditor":
+        return <SmartSortRuleEditorView nav={nav} />;
       case "skillsManage":
         return <SkillsManageView nav={nav} />;
       case "skillDetail":

@@ -23,6 +23,7 @@ import { ProviderError } from "@novel-master/core/provider";
 
 
 import { SessionFsError } from "@novel-master/core/session-fs";
+import { SmartSortRuleError } from "@novel-master/core/smart-sort-rule";
 
 
 import { VfsError, VfsZipError, CharacterCardError } from "@novel-master/core/vfs";
@@ -47,6 +48,7 @@ export function formatCliError(error: unknown): string {
     error instanceof TdbcError ||
     error instanceof ProviderError ||
     error instanceof SessionFsError ||
+    error instanceof SmartSortRuleError ||
     error instanceof SkspError
   ) {
     return error.message;
@@ -73,6 +75,7 @@ export function exitCodeForError(error: unknown): number {
     error instanceof TdbcError ||
     error instanceof ProviderError ||
     error instanceof SessionFsError ||
+    error instanceof SmartSortRuleError ||
     error instanceof SkspError
   ) {
     return EXIT_RUNTIME;

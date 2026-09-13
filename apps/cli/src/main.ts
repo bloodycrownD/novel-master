@@ -18,6 +18,7 @@ import { runProvider } from "./provider/commands.js";
 import { runModel } from "./model/commands.js";
 import { runAgent } from "./agent/commands.js";
 import { runCompactionConditions } from "./compaction-conditions/commands.js";
+import { runSortRule } from "./sort-rule/commands.js";
 import { runSession } from "./session/commands.js";
 import { createNovelMasterRuntime } from "./runtime.js";
 import {
@@ -122,7 +123,8 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
     top === "provider" ||
     top === "model" ||
     top === "agent" ||
-    top === "compaction-conditions"
+    top === "compaction-conditions" ||
+    top === "sort-rule"
   ) {
     const rt = await createNovelMasterRuntime(argv);
     try {
@@ -170,6 +172,9 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
           break;
         case "compaction-conditions":
           await runCompactionConditions(rt, sub, rest);
+          break;
+        case "sort-rule":
+          await runSortRule(rt, sub, rest);
           break;
       }
       return 0;

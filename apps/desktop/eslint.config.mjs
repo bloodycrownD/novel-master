@@ -1,4 +1,5 @@
 import eslint from "@eslint/js";
+import globals from "globals";
 import tseslint from "typescript-eslint";
 import { sharedTsRules } from "../../eslint.config.base.mjs";
 
@@ -33,6 +34,17 @@ export default tseslint.config(
             create: () => ({}),
           },
         },
+      },
+    },
+  },
+  // scripts/*.mjs 是独立 Node 脚本（不在任何 TS project 内）：声明 node 全局，
+  // 避免 process/console 触发 no-undef 误报（scripts 目录虽不在 lint 门
+  // `eslint src test renderer shared` 内，触达后 npx eslint 也应 0 error）。
+  {
+    files: ["scripts/*.mjs"],
+    languageOptions: {
+      globals: {
+        ...globals.node,
       },
     },
   },

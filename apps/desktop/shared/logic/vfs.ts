@@ -7,5 +7,7 @@
  */
 
 export type { VfsScope } from "@novel-master/core/vfs";
+export type { VfsEntryNameValidation } from "@novel-master/core/vfs";
 
 export { formatVfsErrorForUser } from "@novel-master/core/vfs";
+export { validateVfsEntryName } from "@novel-master/core/vfs";

@@ -31,6 +31,9 @@ export type RootStackParamList = {
   /** 搜索引擎详情：单引擎表单（key / baseUrl），标题用引擎名。 */
   SearchEngineDetail: {engineId: EngineId} | undefined;
   GlobalTemplate: undefined;
+  /** 智能排序规则列表（spec smart-filename-sort Step 13）。 */
+  SmartSortRules: undefined;
+  SmartSortRuleEditor: {ruleId?: string} | undefined;
   FileEditor: {
     path: string;
     /** physical = 全局文件浏览器的只读物理路径（保存禁用，仅预览）。 */
