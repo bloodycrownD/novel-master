@@ -24,12 +24,122 @@ export type SnapshotPayload = {
   hasMore?: boolean;
   restoreScroll?: RestoreScroll;
   generating?: boolean;
+  /** 分片协议（init-busy-yield Step 6）：单片/旧载荷缺省视为 chunkTotal=1。 */
+  generation?: number;
+  chunkIndex?: number;
+  chunkTotal?: number;
 };
 
 export type RowsPayload = {
   rows?: TranscriptRow[];
   scrollIntent?: string;
 };
+
+/**
+ * 分片拼装状态（init-busy-yield Step 6，Step 7 前的最小适配）：
+ * 同代次按 chunkIndex 顺序累计 rows，末片到齐才整体 applySnapshot——
+ * 分片期间不产生中间渲染，也不触发任何滚动副作用（T-S4 前半）。
+ */
+type SnapshotChunkAccumulator = {
+  generation: number;
+  /** 期望的下一个 chunkIndex（同时是已收片数）。 */
+  received: number;
+  rows: TranscriptRow[];
+  sessionKey?: string;
+  hasMore?: boolean;
+  generating?: boolean;
+};
+
+/** 已完整应用的最新代次（RN 侧模块级计数器从 1 起单调递增）。 */
+let appliedSnapshotGeneration = 0;
+let pendingChunkAcc: SnapshotChunkAccumulator | null = null;
+
+function numberOf(value: unknown): number {
+  return typeof value === 'number' && value >= 0 ? value : -1;
+}
+
+/**
+ * sessionSnapshot 统一入口：单片（chunkTotal 缺省或 =1）直发 applySnapshot
+ * 等价旧协议；多片则按代次拼装——未知/迟到代次与乱序分片一律丢弃
+ * （凑不齐的代次由 RN 侧 force 新代次重传兜底）。
+ */
+export function handleSnapshotPayload(payload: SnapshotPayload): void {
+  const rawChunkTotal = numberOf(payload.chunkTotal);
+  const chunkTotal = rawChunkTotal >= 1 ? rawChunkTotal : 1;
+  const generation = numberOf(payload.generation);
+  if (chunkTotal <= 1) {
+    if (generation > 0) {
+      // 已应用代次的迟到单片（乱序/重复投递）与分片同口径判旧丢弃；
+      // generation 缺省=旧协议载荷，不判代次直发。
+      if (generation <= appliedSnapshotGeneration) {
+        return;
+      }
+      appliedSnapshotGeneration = generation;
+    }
+    applySnapshot(payload);
+    return;
+  }
+  if (generation <= 0) {
+    // 分片载荷缺代次：非法，丢弃。
+    return;
+  }
+  const chunkIndex = numberOf(payload.chunkIndex);
+  if (chunkIndex < 0 || chunkIndex >= chunkTotal) {
+    return;
+  }
+  let acc = pendingChunkAcc;
+  // 迟到的旧代次分片：丢弃（被更新代次顶替后的余片）。
+  if (acc != null && generation < acc.generation) {
+    return;
+  }
+  // 无收集时不新于已应用代次=未知代次迟到片：丢弃（中间片无法启动收集）。
+  if (acc == null && generation <= appliedSnapshotGeneration) {
+    return;
+  }
+  // 新代次首片：重置收集（顶替在途旧代次，旧余片随后被上面的判旧丢弃）。
+  if (acc == null || generation > acc.generation) {
+    if (chunkIndex !== 0) {
+      return;
+    }
+    acc = {
+      generation: generation,
+      received: 0,
+      rows: [],
+      sessionKey: payload.sessionKey,
+      hasMore: payload.hasMore,
+      generating: payload.generating,
+    };
+    pendingChunkAcc = acc;
+  }
+  // 乱序/重复分片：丢弃（缺口无法自愈，由 force 新代次整体重发兜底）。
+  if (chunkIndex !== acc.received) {
+    return;
+  }
+  const rows = payload.rows || [];
+  for (let i = 0; i < rows.length; i++) {
+    acc.rows.push(rows[i]);
+  }
+  // 快照级标量每片重复携带，取最新到达为准。
+  acc.sessionKey = payload.sessionKey;
+  acc.hasMore = payload.hasMore;
+  acc.generating = payload.generating;
+  acc.received = chunkIndex + 1;
+  if (chunkIndex === chunkTotal - 1) {
+    // 末片到齐：滚动字段仅在末片携带，拼齐后整体应用（一次 renderRows、
+    // 一次滚动副作用）。
+    const assembled: SnapshotPayload = {
+      sessionKey: acc.sessionKey,
+      rows: acc.rows,
+      hasMore: !!acc.hasMore,
+      generating: acc.generating,
+      scrollIntent: payload.scrollIntent || 'stick',
+      restoreScroll: payload.restoreScroll,
+    };
+    appliedSnapshotGeneration = generation;
+    pendingChunkAcc = null;
+    applySnapshot(assembled);
+  }
+}
 
 /**
  * 会话快照、prepend/append 与 streamCommit 编排。

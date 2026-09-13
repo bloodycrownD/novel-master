@@ -1,6 +1,6 @@
 import {state, BRIDGE_V, type TranscriptFlags} from './state/state';
 import {
-  applySnapshot,
+  handleSnapshotPayload,
   applyPrependPage,
   applyAppendTailRows,
   applyStreamCommit,
@@ -51,7 +51,9 @@ export function handleHostMessage(raw: unknown): void {
       }
       break;
     case 'sessionSnapshot':
-      applySnapshot(p);
+      // 分片协议统一入口（init-busy-yield Step 6）：单片等价旧 applySnapshot
+      // 直发；多片按代次拼装，末片到齐才整体应用。
+      handleSnapshotPayload(p);
       break;
     case 'prependPage':
       applyPrependPage(p);
