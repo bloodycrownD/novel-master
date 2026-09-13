@@ -9,7 +9,10 @@
  *   「上次生成」；
  * - T-U12（完整版）：interrupted 单元上 startRun → 门禁不阻塞、替换吸收、
  *   无双单元、指标按新 run 重置、无旧写覆盖新行；
- * - dispose：在途 coalescer 尽力 flush（成功落盘 / 失败吞错均不阻塞）。
+ * - dispose：在途 coalescer 尽力 flush（成功落盘 / 失败吞错均不阻塞）；
+ * - T-H1/H2/H3（init-busy-yield Step 2 水合分片）：全有或全无（分片期间
+ *   snapshot 恒 null）、让步可插队（插入的同步任务在让步点执行）、
+ *   disposed 中止（让步点后 dispose，后续行不再 adopt）。
  *
  * 写通 coalescer 另附模块级单测（三态语义 / 降频档 / 僵尸写防御）。
  *
@@ -151,6 +154,11 @@ function createFakeRunStateStore() {
 
 function createHarness(options?: {
   readonly runStateStore?: SessionStreamRunStateStore;
+  /**
+   * 水合让步点注入（Step 2 分片测试面）：缺省同步 mock（fake timers 下
+   * await hydrate() 不挂死）；T-H1/H2/H3 传计数/插队/dispose 变体。
+   */
+  readonly yieldQuantum?: () => Promise<void>;
 }) {
   const eventBus = new SimpleEventBus();
   const abortRegistry = {
@@ -179,6 +187,7 @@ function createHarness(options?: {
     runAgentTurn: runAgentTurn as never,
     settledGraceMs: TEST_SETTLED_GRACE_MS,
     runStateService: options?.runStateStore,
+    yieldQuantum: options?.yieldQuantum ?? (async () => undefined),
   });
   return {eventBus, abortRegistry, sessions, projects, runAgentTurn, manager};
 }
@@ -827,5 +836,140 @@ describe('SessionStreamUnitManager 持久化接线（T-U7 / T-U12 / dispose）',
     ).toEqual(expect.objectContaining({status: 'interrupted'}));
     // settled 投影独立于单元生命周期，不受 LRU 影响
     expect(h.manager.getSettledProjection('done')?.metrics.textChars).toBe(7);
+  });
+
+  it('T-H1: 水合全有或全无——分片让步期间 snapshot 恒 null，markHydrated 后全量可读', async () => {
+    const fake = createFakeRunStateStore();
+    for (let i = 1; i <= 3; i += 1) {
+      fake.seed(makeRow(`s${i}`, 'p', {partialText: `现场-${i}`}));
+    }
+    fake.seed(makeRow('done', 'p', {status: 'settled', textChars: 9}));
+
+    let yieldCount = 0;
+    const snapshotsAtYield: unknown[] = [];
+    let h!: ReturnType<typeof createHarness>;
+    h = createHarness({
+      runStateStore: fake.store,
+      yieldQuantum: async () => {
+        yieldCount += 1;
+        // 让步点观察：分片进行中（含 active 行已 adopt、settled 回填进行时），
+        // 水合未完成——单元投影必须恒 null，不提前 expose
+        snapshotsAtYield.push(
+          h.manager.snapshot('s1'),
+          h.manager.snapshot('s2'),
+          h.manager.snapshot('s3'),
+          h.manager.snapshot('done'),
+        );
+      },
+    });
+    await h.manager.hydrate();
+
+    // 3 行 active + 1 行 settled，逐行各一个让步点（分片确实发生）
+    expect(yieldCount).toBe(4);
+    expect(snapshotsAtYield.every(snapshot => snapshot === null)).toBe(true);
+    // markHydrated 后全量可读（时机与行为不变：分片只拉长耗时）
+    expect(h.manager.isHydrated()).toBe(true);
+    for (let i = 1; i <= 3; i += 1) {
+      expect(h.manager.snapshot(`s${i}`)).toEqual(
+        expect.objectContaining({status: 'interrupted', partialText: `现场-${i}`}),
+      );
+    }
+    expect(h.manager.getSettledProjection('done')?.metrics.textChars).toBe(9);
+  });
+
+  it('T-H2: 分片让步可插队——水合期间插入的同步任务在让步点执行，早于后续行落地', async () => {
+    const fake = createFakeRunStateStore();
+    for (let i = 1; i <= 3; i += 1) {
+      fake.seed(makeRow(`s${i}`, 'p'));
+    }
+    const taskObservations: Array<{
+      readonly unitCount: number;
+      readonly hydrated: boolean;
+    }> = [];
+    const pendingTasks: Array<() => void> = [];
+    let h!: ReturnType<typeof createHarness>;
+    h = createHarness({
+      runStateStore: fake.store,
+      yieldQuantum: async () => {
+        // 让步点：忙期排队的同步任务（模拟用户交互响应）此刻执行，
+        // 不被长循环饿死
+        const tasks = pendingTasks.splice(0);
+        for (const task of tasks) {
+          task();
+        }
+      },
+    });
+    // 水合发起后（构造已 kick、完成前）插入同步任务
+    pendingTasks.push(() => {
+      taskObservations.push({
+        unitCount: h.manager.unitCount(),
+        hydrated: h.manager.isHydrated(),
+      });
+    });
+    await h.manager.hydrate();
+
+    // 任务在首个让步点被执行（早于任何行 adopt），未被水合饿死
+    expect(taskObservations).toHaveLength(1);
+    expect(taskObservations[0].hydrated).toBe(false);
+    expect(taskObservations[0].unitCount).toBe(0);
+    // 插队不影响水合收尾：全部行照常恢复
+    expect(h.manager.unitCount()).toBe(3);
+    expect(h.manager.snapshot('s3')).toEqual(
+      expect.objectContaining({status: 'interrupted'}),
+    );
+  });
+
+  it('T-H3: disposed 中止——首个让步点后 dispose，全部行不再 adopt、settled 查询不再发起', async () => {
+    const fake = createFakeRunStateStore();
+    for (let i = 1; i <= 3; i += 1) {
+      fake.seed(makeRow(`s${i}`, 'p'));
+    }
+    fake.seed(makeRow('done', 'p', {status: 'settled'}));
+    let yieldCount = 0;
+    let h!: ReturnType<typeof createHarness>;
+    h = createHarness({
+      runStateStore: fake.store,
+      yieldQuantum: async () => {
+        yieldCount += 1;
+        if (yieldCount === 1) {
+          h.manager.dispose(); // 首个让步点（任何行 adopt 前）dispose
+        }
+      },
+    });
+    await h.manager.hydrate();
+
+    // 让步点后复查 disposed：循环中止——0 行 adopt（后续不发起新单元）、
+    // settled 查询未发起（list 调用只剩首查）、直接放行不卡死
+    expect(h.manager.isHydrated()).toBe(true);
+    expect(h.manager.unitCount()).toBe(0);
+    expect(fake.calls.filter(call => call.op === 'list')).toHaveLength(1);
+    expect(h.manager.getSettledProjection('done')).toBe(null);
+  });
+
+  it('T-H3 变体: 中途让步点后 dispose——已 adopt 行的单元随 dispose 销毁，剩余行不再 adopt', async () => {
+    const fake = createFakeRunStateStore();
+    for (let i = 1; i <= 3; i += 1) {
+      fake.seed(makeRow(`s${i}`, 'p'));
+    }
+    let yieldCount = 0;
+    let h!: ReturnType<typeof createHarness>;
+    h = createHarness({
+      runStateStore: fake.store,
+      yieldQuantum: async () => {
+        yieldCount += 1;
+        if (yieldCount === 2) {
+          // 第二个让步点：s1 已 adopt、s2/s3 未——此刻 dispose（模拟慢扫描
+          // 撞上 runtime 重建）
+          h.manager.dispose();
+        }
+      },
+    });
+    await h.manager.hydrate();
+
+    // dispose 销毁 s1 的单元后，s2/s3 不再进注册表（进表则 unitCount > 0）
+    expect(h.manager.unitCount()).toBe(0);
+    expect(h.manager.isHydrated()).toBe(true); // 中止后仍放行
+    // settled 查询未发起：active 循环中止即 return，不再触碰持久层
+    expect(fake.calls.filter(call => call.op === 'list')).toHaveLength(1);
   });
 });

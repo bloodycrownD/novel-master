@@ -69,6 +69,8 @@ function createHarness(options?: {readonly skipHydrate?: boolean}) {
   const manager = new SessionStreamUnitManager({
     runtime: {eventBus, abortRegistry, sessions, projects} as never,
     runAgentTurn: runAgentTurn as never,
+    // Step 2 水合分片的让步点注入同步 mock（fake timers 下无需真实定时器）
+    yieldQuantum: async () => undefined,
   });
   liveManagers.push(manager);
   if (options?.skipHydrate !== true) {

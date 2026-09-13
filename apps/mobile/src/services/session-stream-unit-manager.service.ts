@@ -138,6 +138,7 @@ import {
   setSessionViewCache,
 } from '@/services/chat-session-view-cache';
 import {prependOlderMessages} from '@/services/message-paging';
+import {createQuantumYield} from '@/services/yield-quantum';
 import {AppState} from 'react-native';
 
 /** settled 单元并存的 LRU 上限（含宽限中的与水合常驻的；活跃单元不占槽）。 */
@@ -258,6 +259,12 @@ export interface SessionStreamUnitManagerParams {
     readonly slowIntervalMs?: number;
     readonly largePayloadChars?: number;
   };
+  /**
+   * 量子化让步函数（init-busy-yield Step 2）：水合逐行循环的让步点用。
+   * 缺省 createQuantumYield()（16ms 时间量子 + setTimeout(0)）；测试经此
+   * 注入同步 resolve 的 mock（fake timers 下无需真实定时器）。
+   */
+  readonly yieldQuantum?: () => Promise<void>;
 }
 
 /**
@@ -307,6 +314,8 @@ export class SessionStreamUnitManager {
     | undefined;
   /** per-session 写通 coalescer（RUN_STARTED 时建、收尾/出表时收口）。 */
   private readonly writethroughs = new Map<string, RunStateWritethrough>();
+  /** 水合逐行循环的量子化让步（Step 2 分片；缺省 16ms 量子）。 */
+  private readonly yieldQuantum: () => Promise<void>;
   /** settled 投影常驻 map（独立于单元生命周期，见接口注释）。 */
   private readonly settledProjections = new Map<
     string,
@@ -342,6 +351,7 @@ export class SessionStreamUnitManager {
       params.maxSettledUnits ?? SESSION_STREAM_MAX_SETTLED_UNITS;
     this.runStateStore = params.runStateService;
     this.writethroughOptions = params.writethrough;
+    this.yieldQuantum = params.yieldQuantum ?? createQuantumYield();
 
     // 全量订阅 run 生命周期事件（不经 UI 面板过滤）。
     this.subscriptions.push(
@@ -431,8 +441,8 @@ export class SessionStreamUnitManager {
     });
 
     // 注入了持久层服务即异步 kick 水合（完成前 snapshot 恒 null 的既有
-    // 语义生效——水合是单表小扫描，窗口可忽略；失败时放行 markHydrated
-    // 而非卡死在无 run 态）。
+    // 语义生效——Step 2 起逐行量子让步分片，忙期不霸占事件循环；失败时
+    // 放行 markHydrated 而非卡死在无 run 态）。
     if (this.runStateStore != null) {
       void this.hydrate();
     }
@@ -481,6 +491,11 @@ export class SessionStreamUnitManager {
    *   settledAtMs 以 updated_at_ms 近似），供「上次生成」跨重启读取；
    * - 完成后 markHydrated（此前 snapshot 恒 null 的既有语义生效）。
    *
+   * Step 2 起两个逐行循环按量子让步分片（yieldQuantum，缺省 16ms 量子 +
+   * setTimeout(0)）：分片只拉长耗时，markHydrated 时机不变——全有或全无
+   * 语义保持，期间不提前 expose 单元。每个让步点后复查 disposed（分片拉长
+   * 窗口后 dispose 可能落在任意两行之间），命中即中止并直接放行。
+   *
    * 失败策略：任一步失败则记日志并直接 markHydrated 放行（会话呈现为
    * 无 run，不阻塞 UI）。
    */
@@ -505,6 +520,16 @@ export class SessionStreamUnitManager {
         return;
       }
       for (const row of activeRows) {
+        // Step 2 水合分片：逐行量子让步（忙期让出事件循环，交互可插队）。
+        // 让步点后必须复查 disposed——分片拉长了水合窗口，dispose 可能落在
+        // 任意两行之间；后续行不再 adopt，直接放行（不卡死在无 run 态）。
+        // 全有或全无语义保持：markHydrated 只在循环收尾调用一次，分片期间
+        // snapshot 恒 null、不提前 expose 单元。
+        await this.yieldQuantum();
+        if (this.disposed) {
+          this.markHydrated();
+          return;
+        }
         const existing = this.units.get(row.sessionId);
         if (existing != null && this.isActiveUnit(existing)) {
           // 水合窗口内新受理的 run 优先：不 adopt、不覆盖。
@@ -542,6 +567,13 @@ export class SessionStreamUnitManager {
       }
       const settledRows = await store.listByStatuses(['settled']);
       for (const row of settledRows) {
+        // settled 回填同款分片让步 + disposed 复查：dispose 已清空的
+        // settledProjections 不再被后续行回填（防死 manager 泄漏条目）。
+        await this.yieldQuantum();
+        if (this.disposed) {
+          this.markHydrated();
+          return;
+        }
         this.settledProjections.set(row.sessionId, {
           sessionId: row.sessionId,
           metrics: {

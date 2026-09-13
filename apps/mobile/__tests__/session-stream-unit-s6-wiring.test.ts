@@ -52,6 +52,8 @@ function buildHarness(options?: {
       },
     } as never,
     runAgentTurn: mockRunAgentTurn as never,
+    // Step 2 水合分片的让步点注入同步 mock（fake timers 下无需真实定时器）
+    yieldQuantum: async () => undefined,
   });
   manager.markHydrated();
   return {manager, eventBus, abortRegistry};
