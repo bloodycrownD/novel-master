@@ -28,3 +28,9 @@ PRD 确认后调用 spec-generate 出技术方案。
 
 assistant:
 spec-generate 派三个 readonly 探索子代理（backfill/checkpoint 回滚语义、bridge 协议与 webview 分块可行性、水合分片与测试基线）同步等待后落 spec（docs/Iterations/init-busy-yield-2026-09/spec.md）。spec 级关键定案：①让步原语复刻 TDBC 16ms 量子且必须构造注入（五套件全 fake timers，宏任务让步会挂死 13+ 处 await hydrate）；②水合保持「markHydrated 前投影恒 null」全有或全无语义（manager 测试 135-153 钉死）；③快照分片协议带 generation 代次（appendTailRows 无去重，force 打断旧片会叠加；T-ST1「快照只发一次」断言重定义）；④web 侧分批手动 insert 会被下次全量 renderRows 洗掉，窗口化必须做在 RowList 层；⑤backfill 用闲置原语 hasAnyCheckpointForSession 等组 O(1) 判定、游标挂 session_kkv、truncate 必须清游标（seq 复用坑）、判定不确定保守回退全量（回滚保证宁误报勿漏报）；⑥keepalive 通知改两段式先出后补标签。10 Step + 18 测试用例。待用户确认 spec。
+
+user:
+spec 确认前先跑 spec-check-loop 审查。
+
+assistant:
+spec-check-loop 五轮收敛至 Go（execute-ready）：R1 无 P0（3P1+4P2：探针 Promise.all 不可行/已中断缺数据源/占位高度缺失）；R2 新引 2 P1（裁剪方向写反—listBySessionTail 升序应裁首行、三态判定吞当前会话×中断）+5 P2；R3 抓到真 P0——游标 count≤判定在连续对话必然失效（backfill 先于 user 落库，count 恒>游标），升级两段式（==短路/>时新增段 OFFSET 圈段覆盖比对/<回退），核实空窗语义含 assistant、纯文本轮尾部 assistant/tool-result user 无源头建点全靠 backfill 补；R4 再抓 P0——count<游标（删除可疑态）被当安全短路且漏 message.service delete(id)/truncateAfter 两条删除事务，改 == 短路+四条删除路径全清游标+T-B5 反向/T-B6 新增；R5 终审四路径推演无洞 Go。四个 doc-fix 提交：8e31c8ea/85bdc41d/24407128/a5559176。待用户确认 execute-ready。
