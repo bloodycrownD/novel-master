@@ -53,6 +53,16 @@ jest.mock('@/services/chat-transcript-telemetry', () => ({
   emitChatTranscriptTelemetry: jest.fn(),
 }));
 
+// 快照分片循环的片间让步 mock（init-busy-yield Step 6）：强制每次让步都
+// 真实排队 setTimeout(0)，让测试可控观察到「分片在途」窗口——首片已 post、
+// 余片仍挂起。单片快照（chunkTotal=1）无让步调用，既有用例零影响。
+jest.mock('@/services/yield-quantum', () => ({
+  createQuantumYield: () => () =>
+    new Promise<void>(resolve => {
+      setTimeout(resolve, 0);
+    }),
+}));
+
 jest.mock('react-native-blob-util', () => ({
   __esModule: true,
   default: {
@@ -155,6 +165,7 @@ function streamToolInvokingActiveSince(clearAfterIndex: number): boolean[] {
 function snapshotScrollIntentsSince(
   clearAfterIndex: number,
 ): Array<'stick' | 'restore' | 'preserve'> {
+  // 分片协议下非末片不携带 scrollIntent，此处天然只统计末片/单片快照。
   return mockWebViewPostMessages
     .slice(clearAfterIndex)
     .map(raw => decodeHostToTranscript(raw))
@@ -168,6 +179,42 @@ function snapshotScrollIntentsSince(
     .filter(
       (intent): intent is 'stick' | 'restore' | 'preserve' => intent != null,
     );
+}
+
+/** 解码 baseline 之后的全部 host→web 消息。 */
+function decodedMessagesSince(clearAfterIndex: number) {
+  return mockWebViewPostMessages
+    .slice(clearAfterIndex)
+    .map(raw => decodeHostToTranscript(raw));
+}
+
+type SnapshotChunkMeta = {
+  generation: number;
+  chunkIndex: number;
+  chunkTotal: number;
+  scrollIntent?: 'stick' | 'restore' | 'preserve';
+  hasMore?: boolean;
+  rowIds: string[];
+};
+
+/** 提取消息序列中的 sessionSnapshot 分片元数据（含每片行 id）。 */
+function snapshotChunksSince(clearAfterIndex: number): SnapshotChunkMeta[] {
+  return decodedMessagesSince(clearAfterIndex).flatMap(msg =>
+    msg.type === 'sessionSnapshot'
+      ? [
+          {
+            generation: msg.payload.generation,
+            chunkIndex: msg.payload.chunkIndex,
+            chunkTotal: msg.payload.chunkTotal,
+            scrollIntent: msg.payload.scrollIntent,
+            hasMore: msg.payload.hasMore,
+            rowIds: msg.payload.rows
+              .filter(r => r.kind === 'message')
+              .map(r => (r.kind === 'message' ? r.id : '')),
+          },
+        ]
+      : [],
+  );
 }
 
 function simulateWebMessage(
@@ -211,6 +258,25 @@ async function flushDeferredSnapshot(): Promise<void> {
       setTimeout(resolve, 0);
     });
   });
+}
+
+/**
+ * 冲净分片序列：片间让步（mock 为 setTimeout(0)）逐轮推进，直到消息序列
+ * 稳定——大快照分多片时每轮最多发一片，嵌套的 RAF 补发也一并覆盖。
+ */
+async function flushSnapshotChunks(rounds = 16): Promise<void> {
+  for (let i = 0; i < rounds; i++) {
+    const before = mockWebViewPostMessages.length;
+    await act(async () => {
+      await new Promise<void>(resolve => {
+        setTimeout(resolve, 0);
+      });
+    });
+    await flushAnimationFrame();
+    if (mockWebViewPostMessages.length === before) {
+      break;
+    }
+  }
 }
 
 describe('ChatTranscriptWebView', () => {
@@ -1003,8 +1069,14 @@ describe('ChatTranscriptWebView', () => {
     expect(typesAfterCommit).not.toContain('appendTailRows');
   });
 
-  it('T-ST1: needsFullSnapshot 快照不被重启的 streamActive 拦截，snapshot 先于后续 delta', async () => {
-    const initialMessages = [sampleMessage('u1', 1)];
+  it('T-ST1: needsFullSnapshot 分片序列不被重启的 streamActive 拦截，完整先于后续 delta', async () => {
+    // 大快照（120 条 > 分片大小 50）分 3 片：needsFullSnapshot force 在流式
+    // 活跃时必须立即开始发送（首片同步 post），且完整分片序列（同一
+    // generation、chunkIndex 连续）全部先于后续 streamDelta——分片期间到达
+    // 的流式 flush 被推迟到末片 post 之后补发（init-busy-yield Step 6）。
+    const initialMessages = Array.from({length: 120}, (_, i) =>
+      sampleMessage(`u-${i + 1}`, i + 1),
+    );
     let tree: TestRenderer.ReactTestRenderer;
     const ref =
       React.createRef<
@@ -1023,8 +1095,8 @@ describe('ChatTranscriptWebView', () => {
       );
     });
     simulateWebReady(tree!.root);
-    await flushDeferredSnapshot();
-    await flushAnimationFrame();
+    // 首开快照（gen1，3 片）完整发完
+    await flushSnapshotChunks();
 
     // 流式进行中：先推一段 delta 激活 streamActive
     await act(async () => {
@@ -1040,41 +1112,43 @@ describe('ChatTranscriptWebView', () => {
         <ChatTranscriptWebView
           ref={ref}
           sessionKey="p1:s1"
-          messages={[...initialMessages, assistantWithToolUse('a1', 2)]}
+          messages={[...initialMessages, assistantWithToolUse('a1', 121)]}
           agentRunning
           uiRunning
         />,
       );
     });
 
-    // 不等 defer timer：force 快照必须同步发出，不被 streamActive 拦截成 pending
-    const typesImmediate = messageTypesSince(baseline);
-    expect(typesImmediate).toContain('sessionSnapshot');
+    // 不等 defer timer：force 快照必须同步开始发送（首片已 post），
+    // 不被 streamActive 拦截成 pending
+    expect(messageTypesSince(baseline)).toContain('sessionSnapshot');
 
-    // 后续 delta（下一 step 流式）继续追加
+    // 分片在途时后续 delta 到达：入队 + RAF 排队，但推迟到末片后补发
     await act(async () => {
       ref.current?.pushStreamDelta('text', 'partial-b');
     });
-    await flushAnimationFrame();
+    await flushSnapshotChunks();
 
-    const msgs = mockWebViewPostMessages
-      .slice(baseline)
-      .map(raw => decodeHostToTranscript(raw));
-    const snapshotIdx = msgs.findIndex(m => m.type === 'sessionSnapshot');
+    const msgs = decodedMessagesSince(baseline);
+    const snapshotIdxs: number[] = [];
+    msgs.forEach((m, i) => {
+      if (m.type === 'sessionSnapshot') {
+        snapshotIdxs.push(i);
+      }
+    });
     const laterDeltaIdx = msgs.findIndex(
       m => m.type === 'streamDelta' && m.payload.delta === 'partial-b',
     );
-    expect(snapshotIdx).toBeGreaterThanOrEqual(0);
-    expect(laterDeltaIdx).toBeGreaterThan(snapshotIdx);
-    // 无内容回跳：快照只发一次，且基线已包含新落库的 tool_use 行
-    expect(msgs.filter(m => m.type === 'sessionSnapshot')).toHaveLength(1);
-    const snapshotMsg = msgs[snapshotIdx]!;
-    if (snapshotMsg.type === 'sessionSnapshot') {
-      const rowIds = snapshotMsg.payload.rows
-        .filter(r => r.kind === 'message')
-        .map(r => r.id);
-      expect(rowIds).toContain('a1');
-    }
+    // 「只发一次」重定义为一个 generation 序列：3 片同代次、chunkIndex 连续
+    const chunks = snapshotChunksSince(baseline);
+    expect(chunks).toHaveLength(3);
+    expect(new Set(chunks.map(c => c.generation)).size).toBe(1);
+    expect(chunks.map(c => c.chunkIndex)).toEqual([0, 1, 2]);
+    expect(chunks.every(c => c.chunkTotal === 3)).toBe(true);
+    // 完整分片序列先于后续 delta
+    expect(laterDeltaIdx).toBeGreaterThan(Math.max(...snapshotIdxs));
+    // 基线已包含新落库的 tool_use 行（分片拼接后整体可见）
+    expect(chunks.flatMap(c => c.rowIds)).toContain('a1');
   });
 
   it('T-W1: tool_results-only user 落库走 sessionSnapshot', async () => {
@@ -1356,5 +1430,164 @@ describe('ChatTranscriptWebView', () => {
     const intentsAfterSameLength = snapshotScrollIntentsSince(baseline);
     expect(intentsAfterSameLength).toContain('preserve');
     expect(intentsAfterSameLength).not.toContain('stick');
+  });
+
+  it('Step 6 协议: 小会话快照单片直发——chunkTotal=1 等价旧单包行为', async () => {
+    // 分片协议回滚安全性：rows ≤ 分片大小时的快照必须仍是单包（chunkTotal=1），
+    // 携带全量 rows 与滚动字段，行为与旧协议完全一致。webReady 翻真本就有
+    // 两条路径各发一次（subagent effect 的 preserve + needsOpenSnapshot 的
+    // stick）——与旧协议的双发行为一致，此处顺带钉住该现状。
+    const messages = [sampleMessage('m1', 1), sampleMessage('m2', 2)];
+    let tree: TestRenderer.ReactTestRenderer;
+
+    await act(async () => {
+      tree = TestRenderer.create(
+        <ChatTranscriptWebView sessionKey="p1:s1" messages={messages} hasMore />,
+      );
+    });
+
+    simulateWebReady(tree!.root);
+    await flushDeferredSnapshot();
+
+    const chunks = snapshotChunksSince(0);
+    expect(chunks).toHaveLength(2);
+    chunks.forEach(c => {
+      expect(c.chunkTotal).toBe(1);
+      expect(c.chunkIndex).toBe(0);
+      expect(c.rowIds).toEqual(['m1', 'm2']);
+      expect(c.hasMore).toBe(true);
+    });
+    // 代次递增；needsOpenSnapshot（后发）携带 stick 滚动意图
+    expect(chunks[0]!.generation).toBeLessThan(chunks[1]!.generation);
+    expect(chunks[1]!.scrollIntent).toBe('stick');
+  });
+
+  it('T-S1: 大快照分片发送——同代次 chunkIndex 有序、片行数有界、标量每片携带、scrollIntent 仅末片', async () => {
+    const messages = Array.from({length: 120}, (_, i) =>
+      sampleMessage(`m-${i + 1}`, i + 1),
+    );
+    let tree: TestRenderer.ReactTestRenderer;
+
+    await act(async () => {
+      tree = TestRenderer.create(
+        <ChatTranscriptWebView sessionKey="p1:s1" messages={messages} hasMore />,
+      );
+    });
+
+    simulateWebReady(tree!.root);
+    await flushSnapshotChunks();
+
+    const chunks = snapshotChunksSince(0);
+    // webReady 双路径：首代次（subagent effect）在 needsOpenSnapshot 代次
+    // 启动后于让步点作废，只发出片 0；完整序列来自末代次。
+    const generations = [...new Set(chunks.map(c => c.generation))];
+    expect(generations).toHaveLength(2);
+    const stale = chunks.filter(c => c.generation === generations[0]);
+    const finalChunks = chunks.filter(c => c.generation === generations[1]);
+    expect(stale.map(c => c.chunkIndex)).toEqual([0]);
+
+    expect(finalChunks.map(c => c.chunkIndex)).toEqual([0, 1, 2]);
+    expect(finalChunks.every(c => c.chunkTotal === 3)).toBe(true);
+    // 每片行数有界（分片大小常量），行序拼接与全量一致（与单包等价）
+    finalChunks.forEach(c => {
+      expect(c.rowIds.length).toBeLessThanOrEqual(50);
+      expect(c.hasMore).toBe(true);
+    });
+    expect(finalChunks.flatMap(c => c.rowIds)).toEqual(messages.map(m => m.id));
+    // 滚动字段仅末片携带（T-S4 聚合口径）
+    expect(finalChunks[0]!.scrollIntent).toBeUndefined();
+    expect(finalChunks[1]!.scrollIntent).toBeUndefined();
+    expect(finalChunks[2]!.scrollIntent).toBe('stick');
+  });
+
+  it('T-S2: 分片在途时 force 新代次——旧代次余片在让步点作废、新代次完整发送', async () => {
+    const messages = Array.from({length: 120}, (_, i) =>
+      sampleMessage(`m-${i + 1}`, i + 1),
+    );
+    let tree: TestRenderer.ReactTestRenderer;
+    const ref =
+      React.createRef<
+        import('@/components/chat/ChatTranscriptWebView').ChatTranscriptWebViewHandle
+      >();
+
+    await act(async () => {
+      tree = TestRenderer.create(
+        <ChatTranscriptWebView ref={ref} sessionKey="p1:s1" messages={messages} />,
+      );
+    });
+    // ready 后双路径启动分片：首开代次在途（片 0 已发，余片挂起）
+    simulateWebReady(tree!.root);
+    // 再推进一轮让步：在途代次发出更多片（进度 ≥ 片 0）
+    await flushDeferredSnapshot();
+
+    // 分片在途时 force：经 handle.forceSnapshot 开新代次（adapter force 路径）
+    await act(async () => {
+      ref.current?.forceSnapshot();
+    });
+    await flushSnapshotChunks();
+
+    // 按到达序分代次：generation 必须严格递增（每条 force/直发路径开新代次）
+    const chunks = snapshotChunksSince(0);
+    const generations: number[] = [];
+    chunks.forEach(c => {
+      if (generations[generations.length - 1] !== c.generation) {
+        generations.push(c.generation);
+      }
+    });
+    expect(generations.length).toBeGreaterThanOrEqual(2);
+    for (let i = 1; i < generations.length; i++) {
+      expect(generations[i]).toBeGreaterThan(generations[i - 1]!);
+    }
+    // force 时在途的旧代次未发完（末片被作废）
+    const stale = chunks.filter(c => c.generation !== generations[generations.length - 1]!);
+    const lastGeneration = generations[generations.length - 1]!;
+    expect(
+      stale.filter(c => c.generation === stale[stale.length - 1]!.generation)
+        .length,
+    ).toBeLessThan(3);
+    // force 后的新代次完整 3 片且拼接覆盖全量（旧代次余片不混入）
+    const fresh = chunks.filter(c => c.generation === lastGeneration);
+    expect(fresh.map(c => c.chunkIndex)).toEqual([0, 1, 2]);
+    expect(fresh.flatMap(c => c.rowIds)).toEqual(messages.map(m => m.id));
+  });
+
+  it('T-REPAINT 分片: 分片在途时重挂（webReady=false）——在途序列作废，ready 后 force 快照重发', async () => {
+    const messages = Array.from({length: 120}, (_, i) =>
+      sampleMessage(`m-${i + 1}`, i + 1),
+    );
+    let tree: TestRenderer.ReactTestRenderer;
+
+    await act(async () => {
+      tree = TestRenderer.create(
+        <ChatTranscriptWebView
+          sessionKey="p1:s1"
+          messages={messages}
+          agentRunning
+          uiRunning
+        />,
+      );
+    });
+    // ready 后分片启动：片 0 已 post（sessionSnapshot 属改画推送，dirty 计数
+    // 已置），余片挂在让步定时器上——此刻正是在途窗口
+    simulateWebReady(tree!.root);
+    const baseline = mockWebViewPostMessages.length;
+    const inFlight = snapshotChunksSince(0);
+    expect(inFlight.length).toBeGreaterThanOrEqual(1);
+
+    // 恢复可见 + dirty → 强制重挂：webReadyRef 同步置 false，在途分片循环
+    // 在下一个让步点因 ready 守卫中止——若无守卫，余片会在重挂期间继续
+    // post 到已废弃的 WebView 实例
+    simulateWebMessage(tree!.root, 'visibility', {hidden: false});
+    await flushSnapshotChunks();
+    expect(snapshotChunksSince(baseline)).toHaveLength(0);
+
+    // 新 WebView ready：force 快照（forceSnapshotOnReadyRef 路径）整序列重发
+    simulateWebReady(tree!.root);
+    await flushSnapshotChunks();
+
+    const fresh = snapshotChunksSince(baseline);
+    expect(new Set(fresh.map(c => c.generation)).size).toBe(1);
+    expect(fresh.map(c => c.chunkIndex)).toEqual([0, 1, 2]);
+    expect(fresh.flatMap(c => c.rowIds)).toEqual(messages.map(m => m.id));
   });
 });

@@ -32,6 +32,7 @@ import {
   type TranscriptTheme,
 } from './ChatTranscriptBridge';
 import {enrichTranscriptRows} from './enrich-transcript-rows';
+import {createQuantumYield} from '@/services/yield-quantum';
 
 /** 会改变 WebView 画面的宿主消息类型；用于「隐藏期间脏推送」计数。 */
 const STATE_PAINTING_HOST_MESSAGES: ReadonlySet<string> = new Set([
@@ -47,6 +48,8 @@ const STATE_PAINTING_HOST_MESSAGES: ReadonlySet<string> = new Set([
 ]);
 import {
   buildTranscriptRows,
+  buildToolPairingContext,
+  buildTranscriptRowsWithContext,
   messageHasToolUse,
   messageIsToolResultsOnly,
   selectTailTranscriptRows,
@@ -146,6 +149,20 @@ function transcriptFlagsEqual(
     (a?.menuDisabled ?? false) === (b?.menuDisabled ?? false)
   );
 }
+
+/**
+ * 快照分片大小（init-busy-yield Step 6）：每片最多承载的消息数。行由消息
+ * 一对一派生（一条消息至多产出一行，tool_results-only 与空消息被跳过），
+ * 故「按消息分片」与「按行分片」同界——单片行数 ≤ 本常量。
+ */
+const SNAPSHOT_CHUNK_SIZE = 50;
+
+/**
+ * 快照分片代次（模块级单调递增计数器）：每次 sendSessionSnapshotNow 开新
+ * 代次，在途旧代次分片循环在每个让步点检查代次、失效即中止丢弃；web 侧
+ * 以代次大小判定「未知/迟到分片」并丢弃（等重传语义=RN 侧 force 新代次）。
+ */
+let snapshotGenerationCounter = 0;
 
 function chatTranscriptWebViewPropsEqual(
   prev: ChatTranscriptWebViewProps,
@@ -296,6 +313,10 @@ export const ChatTranscriptWebView = memo(
       const {tokens} = useTheme();
       const webRef = useRef<WebView>(null);
       const [webReady, setWebReady] = useState(false);
+      // webReady 的 ref 镜像：ready/visibility 分支同步写入（不经 effect，避免
+      // 一帧窗口期），postToWeb 的 ready 守卫与分片循环的让步点检查都读它——
+      // repaintEpoch 重挂（webReady=false）期间在途分片序列随之作废复位。
+      const webReadyRef = useRef(false);
       // Android WebView 恢复显示后可能仍渲染摘除前的旧帧（子会话压栈期间主会话
       // 跑完、退出后【生成中】残留的根因：屏幕上的是旧帧而非当前 DOM）。
       // 恢复可见时若隐藏期间发生过改画推送，强制重挂 WebView；ready 后
@@ -335,6 +356,14 @@ export const ChatTranscriptWebView = memo(
       const streamActiveRef = useRef(false);
       /** streamCommit 已写入的行 id，用于 messages effect 去重 snapshot。 */
       const lastStreamCommitIdsRef = useRef<readonly string[]>([]);
+      /**
+       * 当前在途快照分片的代次（null=无分片在途）。新快照开新代次时覆盖，
+       * 旧循环在让步点检测到代次被顶替即中止；流式 RAF flush 读它决定是否
+       * 推迟（T-S3：分片序列必须完整先于后续 streamDelta）。
+       */
+      const inFlightSnapshotGenerationRef = useRef<number | null>(null);
+      /** 快照分片在途期间被推迟的流式 flush 标记：末片 post 后统一补发。 */
+      const deferredStreamFlushRef = useRef(false);
 
       const clearLocalStreamBuffers = useCallback(() => {
         if (streamRafRef.current != null) {
@@ -362,6 +391,11 @@ export const ChatTranscriptWebView = memo(
       }, [defaultScrollToBottom]);
 
       const postToWeb = useCallback((message: HostToTranscriptMessage) => {
+        // ready 守卫：repaintEpoch 重挂期间（webReady=false）不再向未就绪的
+        // WebView 投递——分片序列随之复位，ready 后由 force 快照重建基线。
+        if (!webReadyRef.current) {
+          return;
+        }
         if (STATE_PAINTING_HOST_MESSAGES.has(message.type)) {
           statePushSinceResumeRef.current += 1;
         }
@@ -385,6 +419,12 @@ export const ChatTranscriptWebView = memo(
         }
         streamRafRef.current = requestAnimationFrame(() => {
           streamRafRef.current = null;
+          // 快照分片在途：推迟流式 post（segments 留队），末片 post 后由快照
+          // 流程统一补发——保证分片序列完整先于后续 streamDelta（T-S3）。
+          if (inFlightSnapshotGenerationRef.current != null) {
+            deferredStreamFlushRef.current = true;
+            return;
+          }
           const segments = pendingStreamDeltaSegmentsRef.current;
           if (segments.length === 0) {
             return;
@@ -423,6 +463,11 @@ export const ChatTranscriptWebView = memo(
         }
         streamRafRef.current = requestAnimationFrame(() => {
           streamRafRef.current = null;
+          // 同 flushPendingStreamDeltas：分片在途时推迟 batch post。
+          if (inFlightSnapshotGenerationRef.current != null) {
+            deferredStreamFlushRef.current = true;
+            return;
+          }
           const segments = pendingStreamSegmentsRef.current;
           if (segments.length === 0) {
             return;
@@ -509,31 +554,103 @@ export const ChatTranscriptWebView = memo(
       }, [flags?.richText, postToWeb, tokens, uiRunning]);
 
       // C1: sessionSnapshot must not depend on streamingText/streamingThinking — stream tail only via streamDelta.
+      // 分片化（init-busy-yield Step 6）：大快照按片构建+enrich+编码 post，
+      // 片间量子让步防长任务；每次调用开新代次，在途旧代次在让步点作废。
       const sendSessionSnapshotNow = useCallback(
-        (
+        async (
           scrollIntent: TranscriptScrollIntent,
           restoreScroll?: TranscriptRestoreScroll,
         ) => {
+          // 起点固定：分片跨帧，循环全程只读本闭包捕获的这份快照——
+          // transcriptListOptions 每次渲染都重建，让步后的重渲染绝不能
+          // 改变本次快照的构建口径。
+          const snapshotMessages = messages;
+          const listOptions = transcriptListOptions;
           const richText = flags?.richText ?? false;
-          const rows = enrichTranscriptRows(
-            buildTranscriptRows(messages, undefined, transcriptListOptions),
-            richText,
+          const snapshotSessionKey = sessionKey;
+          const snapshotHasMore = hasMore;
+          const generating = uiRunning;
+          const generation = ++snapshotGenerationCounter;
+          inFlightSnapshotGenerationRef.current = generation;
+          // 预扫全局配对上下文（Step 5 同款 O(n) 一次扫描）：逐片行转换共享，
+          // 分片拼接结果与单次全量 buildTranscriptRows 严格全等。
+          const pairingContext = buildToolPairingContext(snapshotMessages);
+          const chunkTotal = Math.max(
+            1,
+            Math.ceil(snapshotMessages.length / SNAPSHOT_CHUNK_SIZE),
           );
-          postToWeb({
-            v: 1,
-            type: 'sessionSnapshot',
-            payload: {
-              sessionKey,
-              rows,
-              hasMore,
-              scrollIntent,
-              ...(uiRunning ? {generating: true} : {}),
-              ...(scrollIntent === 'restore' && restoreScroll != null
-                ? {restoreScroll}
-                : {}),
-            },
-          });
-          syncStreamToolInvoking();
+          const yieldFn = createQuantumYield();
+          try {
+            for (
+              let chunkIndex = 0;
+              chunkIndex < chunkTotal;
+              chunkIndex += 1
+            ) {
+              // 让步点校验：代次被新快照顶替（六条 force/直发路径均收敛到
+              // 这里开新代次）或 WebView 重挂（webReady=false）即中止丢弃。
+              if (
+                inFlightSnapshotGenerationRef.current !== generation ||
+                !webReadyRef.current
+              ) {
+                return;
+              }
+              const chunkMessages = snapshotMessages.slice(
+                chunkIndex * SNAPSHOT_CHUNK_SIZE,
+                (chunkIndex + 1) * SNAPSHOT_CHUNK_SIZE,
+              );
+              const rows = enrichTranscriptRows(
+                buildTranscriptRowsWithContext(
+                  chunkMessages,
+                  pairingContext,
+                  listOptions,
+                ),
+                richText,
+              );
+              const isLastChunk = chunkIndex === chunkTotal - 1;
+              postToWeb({
+                v: 1,
+                type: 'sessionSnapshot',
+                payload: {
+                  sessionKey: snapshotSessionKey,
+                  rows,
+                  hasMore: snapshotHasMore,
+                  // 快照级标量每片重复携带；滚动字段仅末片（T-S4 聚合口径）。
+                  ...(isLastChunk ? {scrollIntent} : {}),
+                  ...(generating ? {generating: true} : {}),
+                  ...(isLastChunk &&
+                  scrollIntent === 'restore' &&
+                  restoreScroll != null
+                    ? {restoreScroll}
+                    : {}),
+                  generation,
+                  chunkIndex,
+                  chunkTotal,
+                },
+              });
+              if (!isLastChunk) {
+                // 片间量子让步：防止分片构建本身又变成长任务。
+                await yieldFn();
+              }
+            }
+            // 分片全部发完后统一同步（末片 post 之后）：保持「工具调用条与
+            // 快照末态一致」的既有时序语义；单片快照等价旧单包行为。
+            syncStreamToolInvoking();
+            // 补发分片期间被推迟的流式 flush（T-S3：delta 晚于完整分片序列）。
+            if (deferredStreamFlushRef.current) {
+              deferredStreamFlushRef.current = false;
+              flushPendingStreamDeltas();
+              flushPendingStreamBatch();
+            }
+          } finally {
+            if (inFlightSnapshotGenerationRef.current === generation) {
+              inFlightSnapshotGenerationRef.current = null;
+              if (!webReadyRef.current) {
+                // 重挂作废：推迟的流式补发一并丢弃，恢复注入链负责重推
+                //（与旧协议下 post 到未就绪 WebView 即丢失等价）。
+                deferredStreamFlushRef.current = false;
+              }
+            }
+          }
         },
         [
           messages,
@@ -541,10 +658,11 @@ export const ChatTranscriptWebView = memo(
           postToWeb,
           sessionKey,
           flags?.richText,
-          agentRunning,
           uiRunning,
           syncStreamToolInvoking,
           transcriptListOptions,
+          flushPendingStreamDeltas,
+          flushPendingStreamBatch,
         ],
       );
 
@@ -556,7 +674,7 @@ export const ChatTranscriptWebView = memo(
         const pending = pendingSnapshotRef.current;
         pendingSnapshotRef.current = null;
         if (pending != null) {
-          sendSessionSnapshotNow(pending.intent, pending.restoreScroll);
+          void sendSessionSnapshotNow(pending.intent, pending.restoreScroll);
         }
       }, [sendSessionSnapshotNow]);
 
@@ -577,14 +695,14 @@ export const ChatTranscriptWebView = memo(
             }
             const pending = pendingSnapshotRef.current;
             pendingSnapshotRef.current = null;
-            sendSessionSnapshotNow(
+            void sendSessionSnapshotNow(
               pending?.intent ?? intent,
               pending?.restoreScroll ?? restoreScroll,
             );
             return;
           }
           if (!uiRunning) {
-            sendSessionSnapshotNow(intent, restoreScroll);
+            void sendSessionSnapshotNow(intent, restoreScroll);
             return;
           }
           pendingSnapshotRef.current = {intent, restoreScroll};
@@ -602,7 +720,10 @@ export const ChatTranscriptWebView = memo(
             const pending = pendingSnapshotRef.current;
             pendingSnapshotRef.current = null;
             if (pending != null) {
-              sendSessionSnapshotNow(pending.intent, pending.restoreScroll);
+              void sendSessionSnapshotNow(
+                pending.intent,
+                pending.restoreScroll,
+              );
             }
           }, 0);
         },
@@ -881,6 +1002,7 @@ export const ChatTranscriptWebView = memo(
             return;
           }
           if (message.type === 'ready') {
+            webReadyRef.current = true;
             setWebReady(true);
             timingLog('webview ready (bridge handshake done)');
             onReady?.();
@@ -970,6 +1092,9 @@ export const ChatTranscriptWebView = memo(
                 prevStreamTextRef.current = '';
                 prevStreamThinkingRef.current = '';
                 forceSnapshotOnReadyRef.current = true;
+                // 同步置 ref：此后在途快照分片的下一个让步点即因 webReady
+                // 守卫中止（分片序列复位），重挂后由 force 快照重建基线。
+                webReadyRef.current = false;
                 setWebReady(false);
                 setRepaintEpoch(epoch => epoch + 1);
               }
@@ -1135,7 +1260,7 @@ export const ChatTranscriptWebView = memo(
           // needsOpenSnapshot 建立 WebView rows 基线，必须立即送达——
           // 不能走 sendSessionSnapshot 的 deferred 路径（uiRunning+streamActive
           // 时会 pending 到流式结束，导致子会话进入时 user 消息不可见）。
-          sendSessionSnapshotNow(intent, restoreScroll);
+          void sendSessionSnapshotNow(intent, restoreScroll);
           emitScrollRestoreTelemetry(intent, restoreScroll);
           emitChatTranscriptTelemetry({
             name: 'transcript_ready',
