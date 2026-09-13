@@ -56,3 +56,11 @@ assistant:
 修复：merge main 进分支（f4ecc2a2，四处冲突：bootstrap 注释+版本行、runtime/types.ts 双 import 并存、iteration-state.yaml 保留 HEAD 侧本迭代状态、build.gradle 兜底 versionName 取 main 的 1.5.17——文件 GBK 注释须字节级替换且行尾是 LF 不是 CRLF）；BOOT_VERSION 照先例顺延 14（注释记明撞号来龙去脉）。验证：core 2091/2091（main 带来 237 新测试）、mobile typecheck 绿、jest 195 套件/1243、core dist 重建确认产物内 =14。装机 1204 后拉真库实锤：PRAGMA user_version=14、session_run_state 表已建、行数 0（尚未跑过 run）。
 
 新建表而非复用 session 表的理由（spec「持久化」节 + 架构）：①PRD 定性 run 态是「会话数据而非可丢缓存」，要跨重启水合（interrupted 单元、指标条「上次生成」）；②session_kkv 有雷区（fork/copy 不复制、truncate-tail 回滚清域、TEXT 单 value 无法部分更新）；③chat_session 是低频会话元数据主表，run 态是 32-64ms 节流的高频写且随 run 生命周期流转（settled 瘦身/宽限销毁），混表写放大且列表查询背着 partial 大 TEXT；④独立小表按 status 扫描水合面小，project_id 冗余列让删除级联一条 DELETE；⑤回滚无害——旧代码不读新表（spec 回滚节原文）。教训入 RULE 候选：merge 长命分支前先 diff main 的 SCHEMA_BOOT_VERSION，同号即语义冲突，须顺延编号再并。
+
+user:
+（真机 Step 8 验收中）两个并发，其中一个派遣多个子 agent，只有最后一张 agent 卡片能点进去，其他灰色。另外进子会话再退出后整个页面刷新一次有白色闪帧，不确定是性能、bug 还是合理实现。先分析讨论，之后说「修复吧」。
+
+assistant:
+两个探索子代理并行定位、主代理抽查实锤后修复。灰卡=重构引入的真回归：finishRun 在子会话 run 终态立即 removePendingChildIfAny 摘父单元 title→child 映射（设计假设「落库 result meta 接管」），但 core runParallel 整批 fork-join 完成后才 append tool_results——首个子完成到最慢子完成窗口期卡片两头落空。白帧=09-01 3556be42 刻意机制（WebView 隐藏期有改画推送→恢复可见 bump repaintEpoch 整体重挂，修恢复旧帧残留），属合理代价非重构引入；但重构的全局广播+snapshot 每次新数组引用放大了触发面——主会话有单元时其它会话事件（64ms 节拍）也打穿 ChatTranscriptWebView memo 发全量 preserve 快照，隐藏页被无谓记脏。
+
+修复两笔：4a2ff45a 子会话终态不再摘除（回到重构前 da864517 语义，settle 的 clearPendingChildren 已在），反查表 pendingChildParentByChild 走 finishRun 父分支既有 clearPendingChildIndex + removeUnit + forgetSession 三口清理；11ed3439 snapshot 的 messages 直返内部引用（只读约定）、applyMessages 加「长度一致且元素同一引用则保持原引用」守卫、pendingChildrenByTitle 改 copy-on-write（memo 比较器有引用比较消费方）。新增回归用例盖住窗口期映射保留、无关事件引用不变、真实变化必换引用。typecheck + jest 195 套件/1245 主代理独立复跑全绿，重启 app 拉 metro 新 bundle 真机复验。遗留登记未修：同 title 覆盖（多 task 同 description 时卡片全指向最后一个 child，重构前就有）；水合丢 title 映射（pending_children_json 只存 id 数组，重启后运行中会话 pending 卡全灰）。
