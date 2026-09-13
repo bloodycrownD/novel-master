@@ -9,6 +9,14 @@ import {
 import {closeContextMenu} from '../menu/menu';
 import {scrollTopForOffsetFromBottom} from '../../../../../webview-host/chat-transcript/scroll';
 import {renderRows} from './row-logic';
+import {
+  handleRowWindowScroll,
+  notePrependHeightDelta,
+  resetRowWindowForSnapshot,
+  retargetRowWindowForPrepend,
+  retargetRowWindowFromBottom,
+  type RowWindowPositioning,
+} from './row-windowing';
 import {setStreamToolInvokingDom} from '../stream/stream';
 import {scheduleMermaidScan} from '../mermaid';
 
@@ -156,6 +164,30 @@ export function applySnapshot(payload: SnapshotPayload): void {
   state.rows = (payload.rows || []).slice();
   state.hasMore = !!payload.hasMore;
   state.loadOlderArmed = true;
+  // 窗口预定位（Step 7）：stick / restore / preserve 统一按距底偏移从底
+  // 反推（stick 即 offset=0 的贴底口径，与读位设定后的重估口径一致，
+  // 避免 stick 后无谓的二次扩窗渲染）。
+  let positioning: RowWindowPositioning = {kind: 'tail'};
+  if (intent === 'restore' && payload.restoreScroll) {
+    positioning = {
+      kind: 'fromBottom',
+      offsetFromBottom: payload.restoreScroll.offsetY,
+      clientHeight: scroller ? scroller.clientHeight : 0,
+    };
+  } else if (intent === 'preserve') {
+    positioning = {
+      kind: 'fromBottom',
+      offsetFromBottom: prevOffsetFromBottom,
+      clientHeight: scroller ? scroller.clientHeight : 0,
+    };
+  } else if (scroller) {
+    positioning = {
+      kind: 'fromBottom',
+      offsetFromBottom: 0,
+      clientHeight: scroller.clientHeight,
+    };
+  }
+  resetRowWindowForSnapshot(state.rows.length, positioning);
   if (intent !== 'preserve' || sessionChanged) {
     state.stream = {
       text: '',
@@ -195,13 +227,14 @@ export function applySnapshot(payload: SnapshotPayload): void {
         );
       }
     }
+    // 读位精确设定后再做一次窗口校正（幂等）：restore / preserve 的预定位
+    // 基于平均槽高估算，读位若落在窗口外由此收敛（上端移动自带差值补偿，
+    // 不破坏刚设置的读位）。
+    handleRowWindowScroll();
     state.nearBottom = isNearBottom(scroller);
     emitScrollSnapshot();
   };
   requestAnimationFrame(function () {
-    if (intent === 'stick' && scroller) {
-      scroller.scrollTop = 0;
-    }
     renderRows();
     // 历史行渲染后触发 mermaid 扫描（防抖；流式尾不扫）
     scheduleMermaidScan();
@@ -209,6 +242,11 @@ export function applySnapshot(payload: SnapshotPayload): void {
       setStreamToolInvokingDom(true);
     }
     if (intent === 'stick') {
+      // 窗口化后不再先回顶（top 占位巨大时会闪一帧空白）：渲染后立即贴底，
+      // 二层 RAF 的 scrollAfterRender 保持原时序幂等收尾（stick + emit）。
+      if (scroller) {
+        stickToBottom(scroller);
+      }
       requestAnimationFrame(function () {
         scrollAfterRender();
       });
@@ -230,6 +268,11 @@ export function applyAppendTailRows(payload: RowsPayload): void {
   const wasNearBottom = state.nearBottom;
   const prevOffsetFromBottom = scroller ? offsetFromBottom(scroller) : 0;
   state.rows = state.rows.concat(newRows);
+  // 窗口跟随尾部追加（渲染前）：按追加前距底偏移重定位，新行进窗口。
+  retargetRowWindowFromBottom(
+    prevOffsetFromBottom,
+    scroller ? scroller.clientHeight : 0,
+  );
   renderRows();
   scheduleMermaidScan();
   if (scroller) {
@@ -292,6 +335,12 @@ export function applyStreamCommit(payload: RowsPayload): void {
   const wasNearBottom = state.nearBottom;
   const prevOffsetFromBottom = scroller ? offsetFromBottom(scroller) : 0;
   state.rows = state.rows.concat(toAppend);
+  // 窗口跟随尾部定稿行（渲染前）：nearBottom 场景新行进窗口，
+  // 流式尾 promote 为正式行后不出现「尾清了而行没渲染」的空档。
+  retargetRowWindowFromBottom(
+    prevOffsetFromBottom,
+    scroller ? scroller.clientHeight : 0,
+  );
   const promoted =
     toAppend.length === 1 &&
     toAppend[0].kind === 'message' &&
@@ -328,12 +377,24 @@ export function applyPrependPage(payload: RowsPayload): void {
   const prependedScrollTop = scroller ? scroller.scrollTop : 0;
   state.rows = newRows.concat(state.rows);
   state.loadOlderArmed = true;
+  // 窗口按视口读位重定位（渲染前、旧 DOM 旧坐标系）：视口在顶部附近时
+  // 新 prepend 行按缓冲带进窗口，其余按估算进上占位。
+  retargetRowWindowForPrepend(newRows.length);
   renderRows();
   scheduleMermaidScan();
   if (scroller) {
     const nextScrollHeight = scroller.scrollHeight;
     scroller.scrollTop =
       prependedScrollTop + (nextScrollHeight - prependedScrollHeight);
+    // 占位估算校正（Step 7）：差值恰为新行真实平均高度（新行全进窗口、
+    // 占位零变化），并入 EWMA 后续 prepend / 扩窗估算更准。
+    notePrependHeightDelta(
+      nextScrollHeight - prependedScrollHeight,
+      newRows.length,
+    );
+    // 窗口超稳态的部分收敛（新行全进窗口后窗口变长；下端收缩不动
+    // scrollTop，不破坏刚补偿的读位）。
+    handleRowWindowScroll();
     state.nearBottom = isNearBottom(scroller);
   }
   emitScrollSnapshot();

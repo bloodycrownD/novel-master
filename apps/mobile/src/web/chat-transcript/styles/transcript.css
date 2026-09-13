@@ -385,6 +385,10 @@ body {
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
+/* 窗口化占位（init-busy-yield Step 7）：撑高未渲染区，不参与交互 */
+.row-window-spacer {
+  pointer-events: none;
+}
 /* __RICH_CSS__ */
 /* __MERMAID_FULLSCREEN_CSS__ */
 .bubble-body.rich {

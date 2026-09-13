@@ -1,6 +1,7 @@
 import {NEAR_BOTTOM_THRESHOLD_PX} from '@web/shared/constants';
 import {state, SCHEMA_V} from '../state/state';
 import {post} from '../bridge';
+import {handleRowWindowScroll} from '../render/row-windowing';
 /**
  * 滚动锚点、贴底与加载更早消息。
  */
@@ -62,6 +63,9 @@ export function onScroll(): void {
   const scroller = document.getElementById('scroller');
   if (!scroller) return;
   state.nearBottom = isNearBottom(scroller);
+  // 窗口化（Step 7）：滚动近界扩窗 / 远界收缩（幂等；上端移动自带
+  // scrollHeight 差值补偿，不产生读位跳动）。
+  handleRowWindowScroll();
   if (scroller.scrollTop <= SCROLL_TOP_LOAD_OLDER) {
     requestLoadOlder();
   }
