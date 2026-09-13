@@ -322,4 +322,4 @@ round 4 新增：
 | spec_deviations | none（VFS 校验已转 fixed，用户拍板在案） |
 | C-orch | ✅（#2 双端 parity、#4/#16 单源收敛、#9 死 import 清理） |
 | C 类合并后 QA | 真机验收继续（T-DT 系列）；K 类 5 项随下游执行闭合 |
-| **执行记录（2026-09-13）** | 16/16 全闭合（含跑红验证：G-1 用例②与 B-1 mobile 两用例、B-1 desktop 中间态）。K 节：run-tests.mjs glob 修复（入口 20→92 文件，desktop 测试 125→484 用例）✅；spec 勘误（BOOT_VERSION 10→11 实为 13，三处）✅；spec 附录 B VFS 校验补章 ✅；触达文件 eslint 0 error ✅；CLI 断言本地全绿（CI 确认留发版期）◻。遗留观察：desktop 4 套件 keyring 环境性失败（Secret Service 会话态，与 test/desk-e2e-regression 分支「keyring 解锁后补跑」同坑）；CLI 全量 26 失败为环境性存量（基线对照集合一致） |
+| **执行记录（2026-09-13）** | 16/16 全闭合（含跑红验证：G-1 用例②与 B-1 mobile 两用例、B-1 desktop 中间态）。K 节：run-tests.mjs glob 修复（入口 20→92 文件，desktop 测试 125→484 用例）✅；spec 勘误（BOOT_VERSION 10→11 实为 13，三处）✅；spec 附录 B VFS 校验补章 ✅；触达文件 eslint 0 error ✅；CLI 断言本地全绿（CI 确认留发版期）◻。遗留观察闭环：desktop 4 套件 keyring 环境性失败（Secret Service 会话态）——用户注销重登（PAM 自动解锁）后四套件复跑 8/8 全绿；CLI 全量 26 失败为环境性存量（基线对照集合一致） |
