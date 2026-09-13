@@ -1,8 +1,8 @@
 ---
-date: 2026-09-06 10:30
-title: magic-context 插件调研、安装与更新（pi 可用）
-keywords: magic-context, cortexkit, pi extension, 上下文管理, historian, compaction, sqlite, embedding, execute_threshold, 压缩阈值
-abstract: 调研确认 Magic Context 官方原生支持 pi（@cortexkit/pi-magic-context）并安装（historian 用 zai/glm-5.3-flash）；后更新到 0.41.3；源码调研确认压缩阈值设计：默认 execute_threshold 65%、主动触发 63%、强制墙 95%，400k 窗口实际用 ~252k 属预期，可通过 execute_threshold_percentage/tokens 调高。
+date: 2026-09-11 00:35
+title: magic-context 插件调研、安装与更新（pi + opencode 双端可用）
+keywords: magic-context, cortexkit, pi extension, opencode plugin, 上下文管理, historian, compaction, sqlite, embedding, execute_threshold, 压缩阈值
+abstract: 调研确认 Magic Context 官方原生支持 pi 与 opencode 并先后安装：pi 版 @cortexkit/pi-magic-context（historian 用 zai/glm-5.3-flash，后更新 0.41.3）；opencode 版手动安装（plugin 数组 + 关 compaction，historian.opencode 用 zhipuai-coding-plan/glm-5.3-flash，doctor 12 PASS/0 FAIL），两端共享同一 SQLite（100 memories/126 compartments）。源码调研确认压缩阈值设计：默认 execute_threshold 65%、主动触发 63%、强制墙 95%，400k 窗口实际用 ~252k 属预期，可通过 execute_threshold_percentage/tokens 调高。
 ---
 
 user:
@@ -24,3 +24,9 @@ assistant:
 更新：`pi update --extension npm:@cortexkit/pi-magic-context`，0.41.1 → 0.41.3（npm latest）。0.41.2 修复 embedding 回灌卡死整个进程（0.41.1 回归）+ Anthropic signed-thinking 会话缓存稳定性；0.41.3 修复同项目第二个 OpenCode 实例启动卡死、cache/启动修复、Pi/OMP parity。重启 pi 后新版本才生效。当日代理 127.0.0.1:7890 挂了，git 克隆用 `git -c http.proxy=` 绕过，curl 用 `--noproxy '*'`。
 
 阈值调研（源码结论）：`execute_threshold_percentage` 默认 65（packages/plugin/src/config/schema/magic-context.ts），可配 20–90，硬上限 90；主动触发 = 阈值 − 2 = 63%（compartment-trigger.ts 的 PROACTIVE_TRIGGER_OFFSET_PERCENTAGE=2），historian 在这里开始压缩；升级带：强制物化 ≥ max(85, 阈值+2)，绝对墙 95%（escalation-bands.ts）；丢完后目标落到阈值×0.75（POST_DROP_TARGET_RATIO）。百分比分母是“可用窗口”：pi 端对独立输出窗口的模型不做输出预留，glm-5.3 的 400k（models.json 手动 override）基本就是分母；token 数是本地字节估算而非 API 实报，所以实际触发点会漂几个点。用户观察 240k/400k=60% ≈ 63% 标称值减去估算误差，符合设计。压头留白是为了：中途单个大 tool output 突增、输出预留、缓存稳定（90% 上限的官方理由）。想用更多窗口：magic-context.jsonc 里配 `execute_threshold_percentage`（支持 per-model map）或 `execute_threshold_tokens`（绝对 token，按模型映射）。
+
+user:
+把 opencode 版也装上（https://github.com/cortexkit/magic-context）。
+
+assistant:
+手动安装（交互式向导无 TTY 不好使）：①`~/.config/opencode/opencode.jsonc` 加 `"plugin": ["@cortexkit/opencode-magic-context@latest"]` 并关内置 compaction（`"compaction": {"auto": false, "prune": false}`，README 硬性要求，否则插件自我禁用）；②`~/.config/cortexkit/magic-context.jsonc` 加 `historian.opencode.model: "zhipuai-coding-plan/glm-5.3-flash"`（opencode 端内置 provider `zhipuai-coding-plan`，`opencode models` 确认有 glm-5.3-flash，与 pi 版 historian 选型对齐）。doctor `--harness opencode`（非交互必带）结果 12 PASS / 2 WARN / 0 FAIL：无冲突（compaction/DCP/OMO）、共享 DB schema v83 匹配、完整性 ok——Pi 版攒的 100 memories/126 compartments 直接共享；doctor 顺手建了 `~/.config/opencode/tui.jsonc`（TUI 侧栏插件）。两个 WARN 无害：插件包要等 opencode 重启才下载（embedding runtime 因此 unverified）；compaction 检查是文件级，已用 `opencode debug config` 复核生效。激活条件：重启 opencode。

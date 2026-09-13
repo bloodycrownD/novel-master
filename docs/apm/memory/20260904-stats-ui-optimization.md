@@ -1,8 +1,8 @@
 ---
-date: 2026-09-07 12:40
+date: 2026-09-06 17:52
 title: 数据统计 UI 优化：从头脑风暴到 spec 定稿与 core 时间模型落地
 keywords: 数据统计, UI 优化, 时间筛选, 流水, 今天 tab, 明细改图表, 按小时, 饼图, provider×model, fromDay toDay, 自然日闭区间, 稠密补零, 需求①勘误, 流水跟随时间
-abstract: 五项统计 UI 优化经头脑风暴收敛为 spec（时间模型统一 {fromDay,toDay} 闭区间、range 可选、今日卡删除、饼图不折叠）。Step 1 core 重构落地（512cae4）；Step 4 移动端镜像落地（7670b56）；后续需求①方向勘误（用户拍板）：流水与时间解绑是记反的，正确方向是时间筛选继续约束流水——双端三处反转落地（mobile 60cb63f：loadRequests 用含 range 完整 filter、置脏 effect 依赖 comboFilter→filter、撤掉流水分支前置绕过空态，1092 用例全绿；desktop 36d2c1c：requestsFilter 别名完整 filter、全 filter 依赖 effect 置脏、empty 恢复整屏拦截，106 用例+typecheck 全绿）。
+abstract: 五项统计 UI 优化经头脑风暴收敛为 spec（时间模型统一 {fromDay,toDay} 闭区间、range 可选、今日卡删除、饼图不折叠）。Step 1 core 重构落地（512cae4）；Step 4 移动端镜像落地（7670b56）；后续需求①方向勘误（用户拍板）：流水与时间解绑是记反的，正确方向是时间筛选继续约束流水——双端三处反转落地（mobile 60cb63f：loadRequests 用含 range 完整 filter、置脏 effect 依赖 comboFilter→filter、撤掉流水分支前置绕过空态，1092 用例全绿；desktop 36d2c1c：requestsFilter 别名完整 filter、全 filter 依赖 effect 置脏、empty 恢复整屏拦截，106 用例+typecheck 全绿）。后续多轮：未记录服务商单块归并、饼图卡片化、CR loop 17 条 P2 修复、v1.5.11 发版；再追加饼图百分比/条形图纵坐标缺失答疑——饼图属设计决策（点选出详情行）、条形图刻度属实现省略且双端不对称，补法已给出待拍板。
 ---
 
 user:
@@ -142,3 +142,18 @@ user:
 
 assistant:
 v1.5.11 发版流程本地全毕：desktop/mobile 双端测试绿（109/1093）→ main 快进合并迭代分支 → CHANGELOG Unreleased 转正 [1.5.11] - 2026-09-06 → 双 package.json + android build.gradle 默认 versionName 同步 1.5.11 → 提交 6a6990b → tag v1.5.11。push 阻塞：本机无 GitHub 凭据（无 gh/credential helper/SSH 授权，HTTPS remote 非交互读不到用户名；代理 39859 链路本身通），tag 与 main 停在本地待用户侧推送。
+
+user:
+（另轮追问）数据统计的图表里，饼图的百分比比例为什么图中没有？条形图的纵坐标怎么也没有？
+
+assistant:
+（brain-storm 定性，非 bug）饼图无常驻百分比是 ui-refresh spec 明文设计决策：点选扇区/图例在图下固定详情行显示「label · 用量 · 次数 · 占比」（spec 点选交互条款，源自用户最初「点击每饼显示用量和次数」的表述）；desktop 扇区 aria-label 也含占比，读屏可听。条形图纵坐标是实现省略（初版 spec 只定「纯柱状语言不引依赖」，刻度从未拍过板），且双端不对称：desktop 有 max+max/2 两档右缘刻度+hover tooltip（TokenStatsChart 网格层），mobile 仅右上角一个 max 标签+1/3、2/3 两条网格线（StackedBars gridLayer）。勘误：饼图在「汇总」页签，「图表」页签只有条形图。补法均为纯展示层、占比数据现成（desktop PieSlice.share / mobile selectedShare 同口径，分母=窗口 totalTokens）：推荐图例行文字追加百分比（PieChart.tsx 图例段 / TokenUsageStatsView.tsx 图例 button，无小扇区文字溢出问题）；mobile 补 mid/0 刻度对齐 desktop。双端须同步改+各补一条测试断言（既有断言按新增节点不破）。
+
+user:
+安卓端，重做吧，这难道不是标准能力吗？
+
+assistant:
+拍板：统计图表在 mobile 重做，补齐「标准能力」——条形图纵坐标（刻度/参考系）与饼图百分比标注；desktop 本轮不动（其已有 max+mid 两档刻度但无常驻百分比，双端图表实现本就各自独立，不对称留待后续）。重做范围与是否引入图表库（现为自绘无依赖）留到 PRD/spec 阶段定。
+
+assistant:
+（补记）mobile 图表重做已立项为 feature PRD：docs/Iterations/feature-optimizations-2026-09/features/mobile-charts-redo/prd.md（y 轴刻度 + 饼图百分比常驻，desktop 不动，形态细节留 spec）。
