@@ -191,11 +191,10 @@ export interface SessionStreamUiBridge {
   onError(message: string): void;
 }
 
-/** 通知偏好读取桥（appUi 通道）：isEnabled = 生成结束通知（默认开）。 */
+/** 通知偏好读取桥（appUi 通道）：isNotificationEnabled = 消息通知总开关
+ * （默认开）——同时管生成结束通知与生成期间常驻保活，一个开关整体启停。 */
 export interface SessionStreamPrefBridge {
-  isEnabled(): Promise<boolean>;
-  /** 后台保活开关（默认关——历史行为完全兼容，开启后才起常驻通知/前台服务）。 */
-  isKeepAliveEnabled(): Promise<boolean>;
+  isNotificationEnabled(): Promise<boolean>;
 }
 
 /** scope 同步桥：通知点按后切换会话（React 外）；读取当前会话用于去重切换。 */
@@ -1241,7 +1240,7 @@ export class SessionStreamUnitManager {
     if (this.prefBridge == null) {
       return;
     }
-    const enabled = await this.prefBridge.isEnabled();
+    const enabled = await this.prefBridge.isNotificationEnabled();
     if (!enabled) {
       return;
     }
@@ -1263,7 +1262,7 @@ export class SessionStreamUnitManager {
     if (this.permissionEnsured) {
       return;
     }
-    const enabled = await this.prefBridge?.isEnabled();
+    const enabled = await this.prefBridge?.isNotificationEnabled();
     if (enabled !== true) {
       return;
     }
@@ -1272,14 +1271,15 @@ export class SessionStreamUnitManager {
   }
 
   /**
-   * 受理后按需启动保活：开关（默认关）开启才起常驻通知，并带上
+   * 受理后按需启动保活：消息通知总开关开启才起常驻通知，并带上
    * 项目 · 会话名标签（取不到名字时仍启动，仅内容缺省）。
    */
   private async startKeepAliveFor(
     sessionId: string,
     projectId: string,
   ): Promise<void> {
-    const enabled = (await this.prefBridge?.isKeepAliveEnabled()) ?? false;
+    const enabled =
+      (await this.prefBridge?.isNotificationEnabled()) ?? false;
     if (!enabled) {
       return;
     }

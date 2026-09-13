@@ -537,12 +537,11 @@ describe('SessionStreamUnitManager', () => {
       (Platform as {OS: string}).OS = originalOS;
     });
 
-    it('保活开启时受理即起常驻通知；FINISHED 后停止（完成通知前台不发）', async () => {
+    it('消息通知开时受理即起常驻通知；FINISHED 后停止（完成通知前台不发）', async () => {
       const h = createHarness();
       h.runAgentTurn.mockImplementation(() => new Promise(() => undefined));
       h.manager.setPrefBridge({
-        isEnabled: async () => false,
-        isKeepAliveEnabled: async () => true,
+        isNotificationEnabled: async () => true,
       });
 
       h.manager.startRun('a', 'p', 'hi');
@@ -558,17 +557,16 @@ describe('SessionStreamUnitManager', () => {
       publishFinished(h.eventBus, 'a', 'r1');
       await flushAsync();
 
-      // 完成通知未发（前台 + 偏好关），但保活服务正常停止
+      // 完成通知未发（前台口径独立于开关），但保活服务正常停止
       expect(notifee.displayNotification).not.toHaveBeenCalled();
       expect(notifee.stopForegroundService).toHaveBeenCalled();
     });
 
-    it('保活默认关（无 isKeepAliveEnabled 返回 false 时）：受理不起常驻通知', async () => {
+    it('消息通知关：受理不起常驻通知', async () => {
       const h = createHarness();
       h.runAgentTurn.mockImplementation(() => new Promise(() => undefined));
       h.manager.setPrefBridge({
-        isEnabled: async () => true,
-        isKeepAliveEnabled: async () => false,
+        isNotificationEnabled: async () => false,
       });
 
       h.manager.startRun('a', 'p', 'hi');

@@ -17,13 +17,9 @@ import {StickyFormFooter} from '../../components/form/StickyFormFooter';
 import {useRuntime} from '../../hooks/useRuntime';
 import {useNovelMaster} from '../../runtime/novel-master-context';
 import {
-  readAgentFinishedNotificationEnabled,
-  writeAgentFinishedNotificationEnabled,
-} from '../../storage/agent-finished-notification-pref';
-import {
-  readAgentKeepAliveEnabled,
-  writeAgentKeepAliveEnabled,
-} from '../../storage/agent-keepalive-pref';
+  readMessageNotificationEnabled,
+  writeMessageNotificationEnabled,
+} from '../../storage/message-notification-pref';
 import {
   readChatRichTextEnabled,
   writeChatRichTextEnabled,
@@ -47,11 +43,8 @@ export function ChatConfigScreen() {
   const [llmStreamEnabled, setLlmStreamEnabled] = useState(true);
   const [thinkingContextEnabled, setThinkingContextEnabled] = useState(true);
   const [chatRichTextEnabled, setChatRichTextEnabled] = useState(false);
-  const [
-    agentFinishedNotificationEnabled,
-    setAgentFinishedNotificationEnabled,
-  ] = useState(true);
-  const [agentKeepAliveEnabled, setAgentKeepAliveEnabled] = useState(false);
+  const [messageNotificationEnabled, setMessageNotificationEnabled] =
+    useState(true);
 
   const [compactionEnabled, setCompactionEnabled] = useState(false);
   const [compactionTokenRatio, setCompactionTokenRatio] = useState('0.8');
@@ -77,14 +70,13 @@ export function ChatConfigScreen() {
     setChatRichTextEnabled(await readChatRichTextEnabled(appUi));
   }, [appUi]);
 
-  const refreshAgentFinishedNotificationPref = useCallback(async () => {
+  const refreshMessageNotificationPref = useCallback(async () => {
     if (appUi == null) {
       return;
     }
-    setAgentFinishedNotificationEnabled(
-      await readAgentFinishedNotificationEnabled(appUi),
+    setMessageNotificationEnabled(
+      await readMessageNotificationEnabled(appUi),
     );
-    setAgentKeepAliveEnabled(await readAgentKeepAliveEnabled(appUi));
   }, [appUi]);
 
   const refreshCompaction = useCallback(async () => {
@@ -104,13 +96,13 @@ export function ChatConfigScreen() {
       refreshStreamPref().catch(() => undefined);
       refreshThinkingContextPref().catch(() => undefined);
       refreshChatRichTextPref().catch(() => undefined);
-      refreshAgentFinishedNotificationPref().catch(() => undefined);
+      refreshMessageNotificationPref().catch(() => undefined);
       refreshCompaction().catch(() => undefined);
     }, [
       refreshStreamPref,
       refreshThinkingContextPref,
       refreshChatRichTextPref,
-      refreshAgentFinishedNotificationPref,
+      refreshMessageNotificationPref,
       refreshCompaction,
     ]),
   );
@@ -230,41 +222,20 @@ export function ChatConfigScreen() {
 
       <ProfileSwitchItem
         icon="🔔"
-        label="生成结束通知"
+        label="消息通知"
         subtitle={
-          agentFinishedNotificationEnabled
-            ? '仅应用在后台时通知生成结束，点按直达会话'
-            : '生成结束后不再通知（生成与后台保持不受影响）'
+          messageNotificationEnabled
+            ? '生成期间常驻保活（多会话一条聚合通知），结束后台提醒、点按直达会话'
+            : '不保活、不提醒（生成行为不受影响）'
         }
-        value={agentFinishedNotificationEnabled}
+        value={messageNotificationEnabled}
         tokens={tokens}
         onValueChange={enabled => {
-          setAgentFinishedNotificationEnabled(enabled);
+          setMessageNotificationEnabled(enabled);
           if (appUi) {
             void persistSwitchWithRollback(
-              () => writeAgentFinishedNotificationEnabled(appUi, enabled),
-              () => setAgentFinishedNotificationEnabled(!enabled),
-            );
-          }
-        }}
-      />
-
-      <ProfileSwitchItem
-        icon="🛡️"
-        label="常驻通知"
-        subtitle={
-          agentKeepAliveEnabled
-            ? '生成期间每个会话一条常驻通知，点按直达对应会话'
-            : '关闭时生成中不显示常驻通知（升级前行为）'
-        }
-        value={agentKeepAliveEnabled}
-        tokens={tokens}
-        onValueChange={enabled => {
-          setAgentKeepAliveEnabled(enabled);
-          if (appUi) {
-            void persistSwitchWithRollback(
-              () => writeAgentKeepAliveEnabled(appUi, enabled),
-              () => setAgentKeepAliveEnabled(!enabled),
+              () => writeMessageNotificationEnabled(appUi, enabled),
+              () => setMessageNotificationEnabled(!enabled),
             );
           }
         }}

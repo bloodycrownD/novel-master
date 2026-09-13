@@ -2,7 +2,8 @@
  * 生成结束通知 + 前台保活服务（@notifee/react-native 封装）。
  *
  * 职责边界：本模块只管「怎么发通知 / 怎么起停前台服务」——是否发通知的
- * 业务决策（偏好开关、run 终态）在 AgentRunManager 侧完成。
+ * 业务决策（「消息通知」总开关、run 终态）在 SessionStreamUnitManager 侧
+ * 完成（经 prefBridge 单一开关查询）。
  *
  * 前台/后台口径：app 在前台（AppState active，任意页面）一律不发完成通知，
  * 前台界面自有完成反馈；仅后台时发。

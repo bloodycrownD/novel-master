@@ -40,8 +40,7 @@ import type {MobileNovelMasterRuntime} from './types';
 import {SessionStreamUnitManager} from '@/services/session-stream-unit-manager.service';
 import {createSessionRunStateService} from '@novel-master/core/session-run-state';
 import {showAppToast} from '@/services/app-toast';
-import {readAgentFinishedNotificationEnabled} from '@/storage/agent-finished-notification-pref';
-import {readAgentKeepAliveEnabled} from '@/storage/agent-keepalive-pref';
+import {readMessageNotificationEnabled} from '@/storage/message-notification-pref';
 import {tokensForMode} from '../theme/tokens';
 
 export type RuntimeStatus = 'loading' | 'ready' | 'error';
@@ -161,19 +160,14 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
     }
     manager.setUiBridge({onError: message => showAppToast(message)});
     manager.setPrefBridge({
-      isEnabled: () => {
+      // 消息通知总开关：完成通知与常驻保活一体启停；appUi 未就绪的降级
+      // 口径取「开」（完成通知默认开的延续），保活随后续读取自行纠正。
+      isNotificationEnabled: () => {
         const appUiNow = appUiRef.current;
         if (appUiNow == null) {
           return Promise.resolve(true);
         }
-        return readAgentFinishedNotificationEnabled(appUiNow);
-      },
-      isKeepAliveEnabled: () => {
-        const appUiNow = appUiRef.current;
-        if (appUiNow == null) {
-          return Promise.resolve(false);
-        }
-        return readAgentKeepAliveEnabled(appUiNow);
+        return readMessageNotificationEnabled(appUiNow);
       },
     });
     manager.setScopeBridge({
