@@ -16,3 +16,9 @@ assistant:
 遗留 bug 登记：①run 无超时挂死——probe 消息发送后「0字 · 计时增长」挂十几分钟不结束不报错，需手动停止；LLM 无响应无兜底。②中断会话在列表显示「活跃中 · 1 分钟前」，文案与实际状态（已中断）不符。
 
 排查工具资产：apps/mobile/src/debug/run-timing.ts（__DEV__ 门控打点，t0+站点）+ manager/keepalive/notifee/webview/composer 五处打点，未提交入库待定。
+
+user:
+（拍板）backfill 纳入本迭代范围；RN 侧 + webview 侧都治（含 bridge 协议）；当前分支继续开发；「活跃中」文案顺手修（run 挂死未定归属）。随后调用 prd-generate 立项。
+
+assistant:
+按 prd-generate 流程派三个 readonly 探索子代理（忙期链路/webview 冷加载与让步机制盘点/历史迭代检索）同步等待后汇总：忙期四大长任务源（webview 首快照 O(n²) 配对+富文本预渲染+整包序列化+webview 全量 vnode、水合全表扫+同步循环、backfill 全量探测、组件重挂载）全部零分片让步；现有节流全面向流式 delta 与 DB 写；InteractionManager/requestIdleCallback 全仓零使用；无重复立项风险（TDBC 16ms 量子是唯一让步先例、仅事务内）。AskUserQuestion 四项拍板后 PRD 落盘 docs/Iterations/init-busy-yield-2026-09/prd.md（dependency 指向 session-stream-unit prd），含 7 条 GWT 验收与四个风险待确认项（run 挂死归属、release 基线缺失、分片与 force 直发时序、水合/快照术语钉死）。待用户最终确认 PRD。
