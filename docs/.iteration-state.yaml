@@ -1,41 +1,8 @@
-# code-dev-loop 编排状态——session-stream-unit-2026-09（dev-ready Bundle-full）
-spec_path: docs/Iterations/session-stream-unit-2026-09/spec.md
-prd_path: docs/Iterations/session-stream-unit-2026-09/prd.md
+# spec-check-loop 编排状态——init-busy-yield-2026-09
+prd_path: docs/Iterations/init-busy-yield-2026-09/prd.md
+spec_path: docs/Iterations/init-busy-yield-2026-09/spec.md
 branch: feat/agent-run-parallel-and-notify
-base_sha: 4d5c7960
-head_sha: 5d7d850a
-dev_ready: yes
-dev_dag_matrix:
-  impl-s1-core-runstate: { status: done, executor: subagent, commits: "0aaeacde,4ec00094,91caeef8,50bd1272" }
-  impl-s2-unit-core: { status: done, executor: subagent, commits: "08db9cdc,ce5b92fb,80e05916" }
-  verify-s1-core: { status: done, executor: main, result: "core 1854/0 + 定点 9/9 + typecheck" }
-  verify-s2-unit: { status: done, executor: main, result: "27/27 + 回归 57/57 + typecheck" }
-  crfunc-s1-s2: { status: done, func_ready: yes, executor: subagent }
-  impl-s3-unit-pipeline: { status: done, executor: subagent, commits: "3bb54ea8,10e00f1e,9ff68475,9bec8f6b" }
-  impl-s4-unit-messages: { status: done, executor: subagent, commits: "e754f4ed,73737ce2" }
-  impl-s5-persist-hydrate: { status: done, executor: subagent, commits: "d9224232,0dfa7186,423488d1,a4b957db" }
-  verify-s345: { status: done, executor: main, result: "mobile 80/80 + core 10/10 + tsc" }
-  crfunc-s3-s5: { status: done, func_ready: yes, executor: subagent }
-  impl-s6-screen-subscribe: { status: done, executor: subagent, commits: "3815b68c,3909cb4c,2726503a,f172cc20,be7eeefe,336725f7" }
-  verify-s6: { status: done, executor: main, result: "193 套件/1254 全绿 + typecheck" }
-  crfunc-s6: { status: done, func_ready: no, executor: subagent }
-  fix-s6-mf1: { status: done, executor: subagent, commits: "559fb4fd,4272cf59", note: "MF-1 宽限销毁消息回退迁移沿补偿；MF-2 指标条快照优先" }
-  verify-s6b: { status: done, executor: main, result: "194 套件/1260 全绿 + tsc" }
-  crfunc-s6b: { status: done, func_ready: yes, executor: subagent }
-  impl-s7-teardown: { status: done, executor: subagent, commits: "0a04e81f,60aa2077,ebe821e7,73e35383,5d7d850a" }
-  verify-s7-full: { status: done, executor: main, result: "mobile 189 套件/1185 全绿 + tsc；desktop 116/116（补齐 desktop 构建产物与 sksp 三平台 dist 后）；core 见前" }
-  crfunc-final: { status: done, func_ready: yes, executor: subagent }
-spec_deviations: []
-open_must_fix: []
-manual_pending: "Step 8 phase-device-validation（T-U11 真机 GWT 全清单）归用户 manual_user 验收，不阻塞 dev-ready"
-accepted_impl_notes:
-  - starting 行 runId 空串占位——消费方禁用 runId===null 判 starting，用 status 字段
-  - 水合 fail-open（失败记日志后 markHydrated 放行，防卡死）
-  - registerPendingChild 无状态守卫（事件总线同步分发，实际触发面≈0）
-  - 指标条终态快照优先/投影兜底（spec 读路径已同步措辞，interrupted 历时以 settledAtMs-startedAtMs 近似）
-  - useChatTabMessageActions 参数形状微调（messages 解构改三个显式参数，typecheck 强制、「不动」本意——不订阅运行态——仍成立）
-  - 消费型子会话单元（lazy、不占 refcount、不写持久层、不发通知——子会话 run 无发起方场景）
-  - pstream 调试插桩两次复活事件：已 stash@{0} 保存（含未跟踪 debug/ 目录），来源未查明——后续若再复活优先怀疑 stash 恢复环节
-env_notes:
-  - desktop 测试前置：需先 npm run build -w @novel-master/desktop（icons+renderer+main+preload）与 sksp 三平台 dist（本 worktree 曾缺失，已补建）
-  - mobile jest 必须 NODE_ENV=test；desktop 测试 NODE_ENV=development；mobile typecheck 用官方脚本
+dag_version: 1
+review_round: 1
+doc_fix_plan: []
+status: 待首轮审查
