@@ -354,6 +354,66 @@ describe('sessionSnapshot 分片拼装（init-busy-yield Step 6）', () => {
     expect(scrollSnapshotPostCount()).toBe(1);
   });
 
+  it('T-S4 后半: 分片期间零 scrollSnapshot 且零 stick 写入，末片 stick/emit 行为与旧单包一致', () => {
+    const {snapshot} = loadFreshModules();
+    // fakeScroller.scrollTop 初始 0：stick 判定一旦执行会写 1400，
+    // 分片期间保持 0 即锁死「拼装期不做 stick 判定」。
+    const chunkPayloads = [
+      {generation: 1, chunkIndex: 0, chunkTotal: 3, rows: makeRows('a', 2)},
+      {generation: 1, chunkIndex: 1, chunkTotal: 3, rows: makeRows('b', 2)},
+    ];
+    for (const chunk of chunkPayloads) {
+      snapshot.handleSnapshotPayload({
+        ...chunk,
+        sessionKey: 'p1:s1',
+        hasMore: false,
+      });
+      expect(scrollSnapshotPostCount()).toBe(0);
+      expect(fakeScroller.scrollTop).toBe(0);
+    }
+    snapshot.handleSnapshotPayload({
+      generation: 1,
+      chunkIndex: 2,
+      chunkTotal: 3,
+      sessionKey: 'p1:s1',
+      hasMore: false,
+      rows: makeRows('c', 1),
+      scrollIntent: 'stick',
+    });
+    flushRaf();
+    // 末片应用后：一次 stick 到底 + 恰一次 scrollSnapshot
+    expect(fakeScroller.scrollTop).toBe(1400);
+    expect(scrollSnapshotPostCount()).toBe(1);
+    const chunkedPost = (post as jest.Mock).mock.calls.find(
+      (call: unknown[]) => call[0] === 'scrollSnapshot',
+    )![1];
+
+    // 对照：同数据旧单包（gen2 单片）行为全等
+    snapshot.handleSnapshotPayload({
+      generation: 2,
+      chunkIndex: 0,
+      chunkTotal: 1,
+      sessionKey: 'p1:s1',
+      hasMore: false,
+      rows: [...makeRows('a', 2), ...makeRows('b', 2), ...makeRows('c', 1)],
+      scrollIntent: 'stick',
+    });
+    flushRaf();
+    expect(fakeScroller.scrollTop).toBe(1400);
+    expect(scrollSnapshotPostCount()).toBe(2);
+    const singlePost = (post as jest.Mock).mock.calls
+      .filter((call: unknown[]) => call[0] === 'scrollSnapshot')
+      .map((call: unknown[]) => call[1])[1];
+    expect(singlePost).toEqual(chunkedPost);
+    expect(singlePost).toEqual({
+      schemaVersion: 2,
+      offsetY: 0,
+      nearBottom: true,
+      scrollHeight: 2000,
+      clientHeight: 600,
+    });
+  });
+
   it('旧协议载荷（无分片字段）直发 applySnapshot——等价单片行为', () => {
     const {snapshot, state} = loadFreshModules();
 
