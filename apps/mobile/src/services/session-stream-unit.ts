@@ -21,9 +21,11 @@
  * - 指标字段化：textChars/thinkingChars 事件即归账（run 级累计，step 边界
  *   不清）、startedAtMs 于 RUN_STARTED 回填时置位（重进连续计时）、
  *   settle 时冻结 elapsedMs 为「上次生成」；
- * - 子会话链接：pendingChildren 登记（同 title 覆盖、同 id 去重）、child
- *   终态摘除（manager 反查路由）、父收尾清空（蓝本 subagentChildSessions
- *   ByParent 语义，防陈旧条目串到下一 run）。
+ * - 子会话链接：pendingChildren 登记（同 title 覆盖、同 id 去重）、父收尾
+ *   清空（蓝本 subagentChildSessionsByParent 语义，防陈旧条目串到下一
+ *   run）。子会话终态不摘除——并行 task 批整批 fork-join，落库 result
+ *   meta 要等最慢子 agent 完成才接管任务卡，窗口期里 pending 映射是任务
+ *   卡唯一可点数据源；
  *
  * Step 4 填实的消息管线（蓝本 = useChatTabMessages 的纯数据部分）：
  * - tail 加载：非 force 先读视图缓存（命中即采纳，不回源）、miss/force 走
@@ -551,30 +553,6 @@ export class SessionStreamUnit {
       }
     }
     return false;
-  }
-
-  /**
-   * child 终态摘除（manager 由 FINISHED/FAILED 反查路由）：该子会话的
-   * pending 态消失，落库 result meta 接管。返回投影是否变化。
-   */
-  removePendingChild(childSessionId: string): boolean {
-    let removedTitle = false;
-    for (const [title, id] of this.pendingChildIdsByTitle) {
-      if (id === childSessionId) {
-        this.pendingChildIdsByTitle.delete(title);
-        removedTitle = true;
-      }
-    }
-    if (!removedTitle) {
-      return false;
-    }
-    this.pendingChildrenValue = this.pendingChildrenValue.filter(
-      id => id !== childSessionId,
-    );
-    // 摘除也是 pending 集合变化：落库 result meta 接管任务卡，同样广播
-    // force 快照刷新基线。
-    this.requestForceSnapshot();
-    return true;
   }
 
   /** 清空全部子会话链接（父 run 收尾时由 settle 内部调用）。 */

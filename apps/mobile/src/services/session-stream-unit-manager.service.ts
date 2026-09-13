@@ -274,8 +274,14 @@ export class SessionStreamUnitManager {
   /**
    * 子会话链接反查表：childSessionId → parentSessionId。
    *
-   * 子会话 run 的终态事件（sessionId 为子会话 id，经 finishRun 路由）靠它
-   * 找回父单元摘除 pendingChild；父收尾/单元出表时批量清相关条目。
+   * 登记于 child-created。子会话 run 终态【不】据此摘除父单元的
+   * pendingChild——并行 task 批是整批 fork-join（core 侧 runParallel 全部
+   * 完成后才 append tool_results，meta.subagentSessionId 才落库），「第一个
+   * 子 agent 完成 → 最慢子 agent 完成」的窗口期里先完成的任务卡两头落空
+   * （pending 映射已删、result meta 未落库）会灰掉不可点；pending 映射须
+   * 活到父 run 收尾，由单元 settle 内的 clearPendingChildren 统一清空。
+   * 本表只用于父收尾/单元出表/forgetSession/dispose 时批量清理相关条目，
+   * 防僵尸条目残留。
    */
   private readonly pendingChildParentByChild = new Map<string, string>();
   /**
@@ -579,6 +585,14 @@ export class SessionStreamUnitManager {
    * 遗忘时同步 decrement（对齐 dispose 的收口，防 refcount 泄漏）。
    */
   forgetSession(sessionId: string): void {
+    // 反查表双向清理：该会话作为父（value 侧）的条目由 removeUnit 内的
+    // clearPendingChildIndex 摘；作为子（key 侧）的条目在这里摘——会话删除
+    // 后 id 不应残留映射（removeUnit 的 value 侧清理覆盖不到 key 侧）。
+    for (const [childId, parent] of this.pendingChildParentByChild) {
+      if (childId === sessionId || parent === sessionId) {
+        this.pendingChildParentByChild.delete(childId);
+      }
+    }
     const unit = this.units.get(sessionId);
     if (unit != null) {
       if (
@@ -1130,20 +1144,6 @@ export class SessionStreamUnitManager {
     }
   }
 
-  /** 子会话 run 终态：反查父单元并摘除 pending 链接（无条目 no-op）。 */
-  private removePendingChildIfAny(childSessionId: string): void {
-    const parentSessionId = this.pendingChildParentByChild.get(childSessionId);
-    if (parentSessionId == null) {
-      return;
-    }
-    this.pendingChildParentByChild.delete(childSessionId);
-    const parentUnit = this.units.get(parentSessionId);
-    if (parentUnit?.removePendingChild(childSessionId) === true) {
-      this.appendWritethroughSnapshot(parentUnit);
-      this.notifyChanged();
-    }
-  }
-
   /** 清掉指向某父会话的全部反查条目（父收尾/单元出表时调用）。 */
   private clearPendingChildIndex(parentSessionId: string): void {
     for (const [childId, parent] of this.pendingChildParentByChild) {
@@ -1170,11 +1170,11 @@ export class SessionStreamUnitManager {
     status: SessionStreamRunSettledStatus,
     errorMessage?: string,
   ): void {
-    // 子会话 run 终态（sessionId 为子会话 id、本表无单元）：反查父单元
-    // 摘除 pending 链接——任务卡 pending 态消失，落库 result meta 接管。
-    // 无反查条目时 no-op，不影响下方父单元收尾路径。
-    this.removePendingChildIfAny(sessionId);
-
+    // 子会话 run 终态（sessionId 为子会话 id）不摘除父单元的 pending 链接：
+    // 并行 task 批的 tool_results 要等最慢子 agent 完成才整批落库
+    // （meta.subagentSessionId 才接管任务卡可点性），窗口期里 pending 映射
+    // 是任务卡唯一可点数据源。链接由父 run 收尾（settle 内
+    // clearPendingChildren + 下方父分支 clearPendingChildIndex）统一清空。
     const unit = this.units.get(sessionId);
     if (unit == null || unit.getRunId() !== runId) {
       return;

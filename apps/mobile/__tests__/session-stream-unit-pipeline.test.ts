@@ -12,7 +12,8 @@
  *   一次）、step 边界后 attach 重新注入、detach 再 attach（重进）重注入；
  * - T-U4 / T-M 平移：指标语义五条（新 run 重置 / backfill+child 不重置 /
  *   结束冻结 / 切会话换源 / 连续历时）+ runId 所有权守卫；
- * - T-SUB：pendingChildren 登记/去重/同 title 覆盖/子终态摘除/父收尾清空；
+ * - T-SUB：pendingChildren 登记/去重/同 title 覆盖/子终态不摘除（并行批
+ *   窗口期任务卡须可点）/父收尾清空；
  * - T-U13：跨项目并行等价——两个不同 project 的 session 并行，事件路由/
  *   投影/收尾互不串扰。
  */
@@ -651,20 +652,55 @@ describe('子会话链接 pendingChildren（T-SUB）', () => {
     expect(h.manager.snapshot('a')?.pendingChildren).toEqual(['c2']);
   });
 
-  it('T-SUB: 子会话 run 终态（FINISHED/FAILED）从父单元摘除该链接', () => {
+  it('T-SUB: 子会话 run 终态（FINISHED/FAILED）不摘除父单元链接（父收尾才清空）', () => {
     const h = createHarness();
     startRunningRun(h, 'a', 'r1');
     publishChildCreated(h.eventBus, 'a', 'c1', '任务一');
     publishChildCreated(h.eventBus, 'a', 'c2', '任务二');
     expect(h.manager.snapshot('a')?.pendingChildren).toEqual(['c1', 'c2']);
 
-    // 子会话自己的 run 结束：sessionId 是子会话 id，父单元在跑也照常摘除
+    // 子会话自己的 run 结束：sessionId 是子会话 id——并行 task 批整批
+    // fork-join，tool_results（含 meta.subagentSessionId）要等最慢子 agent
+    // 完成才落库；窗口期里 pending 映射是任务卡唯一可点数据源，不摘除
     publishFinished(h.eventBus, 'c1', 'child-run-1');
-    expect(h.manager.snapshot('a')?.pendingChildren).toEqual(['c2']);
+    expect(h.manager.snapshot('a')?.pendingChildren).toEqual(['c1', 'c2']);
     expect(h.manager.snapshot('a')?.status).toBe('running'); // 父不受影响
 
     publishFailed(h.eventBus, 'c2', 'child-run-2');
+    expect(h.manager.snapshot('a')?.pendingChildren).toEqual(['c1', 'c2']);
+    expect(h.manager.snapshot('a')?.status).toBe('running');
+
+    // 父 run 收尾统一清空：落库 result meta 接管任务卡可点性
+    publishFinished(h.eventBus, 'a', 'r1');
     expect(h.manager.snapshot('a')?.pendingChildren).toEqual([]);
+    expect(h.manager.snapshot('a')?.pendingChildrenByTitle.size).toBe(0);
+  });
+
+  it('T-SUB 回归: 并行两个子会话 run，先完成者的映射活到父 run 收尾', () => {
+    const h = createHarness();
+    startRunningRun(h, 'a', 'r1');
+    publishChildCreated(h.eventBus, 'a', 'c1', '任务一');
+    publishChildCreated(h.eventBus, 'a', 'c2', '任务二');
+    // 子会话各自 RUN_STARTED：manager lazy 建消费型单元（贴近真实并行 task）
+    publishStarted(h.eventBus, 'c1', 'child-run-1');
+    publishStarted(h.eventBus, 'c2', 'child-run-2');
+
+    // 第一个子 agent 完成、批未整体结束：title→child 映射两者俱在——
+    // 卡片可点性由 pending 映射承担，直到 tool_results 整批落库
+    publishFinished(h.eventBus, 'c1', 'child-run-1');
+    const mid = h.manager.snapshot('a');
+    expect(mid?.pendingChildren).toEqual(['c1', 'c2']);
+    expect(mid?.pendingChildrenByTitle.get('任务一')).toBe('c1');
+    expect(mid?.pendingChildrenByTitle.get('任务二')).toBe('c2');
+    expect(mid?.status).toBe('running');
+
+    // 父 run 收尾（fork-join 结束、tool_results 落库后）：映射清空，
+    // 任务卡交给 result meta.subagentSessionId
+    publishFinished(h.eventBus, 'a', 'r1');
+    const settled = h.manager.snapshot('a');
+    expect(settled?.pendingChildren).toEqual([]);
+    expect(settled?.pendingChildrenByTitle.size).toBe(0);
+    expect(settled?.status).toBe('finished');
   });
 
   it('T-SUB: 父收尾清空全部链接（防同 title 陈旧条目串到下一 run）', () => {
@@ -683,7 +719,7 @@ describe('子会话链接 pendingChildren（T-SUB）', () => {
     expect(h.manager.snapshot('ghost')).toBe(null);
   });
 
-  it('T-SUB: 单元销毁（宽限到期）后反查条目一并清理，子终态不再复活', () => {
+  it('T-SUB: 单元销毁（宽限到期）后反查条目一并清理，子终态不复活', () => {
     const h = createHarness({settledGraceMs: 1000});
     startRunningRun(h, 'a', 'r1');
     publishChildCreated(h.eventBus, 'a', 'c1', '任务一');
@@ -694,7 +730,7 @@ describe('子会话链接 pendingChildren（T-SUB）', () => {
     jest.advanceTimersByTime(1000);
     expect(h.manager.snapshot('a')).toBe(null);
 
-    // 迟到的子终态事件：反查条目已随单元出表清理，不抛错、不复活
+    // 迟到的子终态事件：反查条目已随父收尾/单元出表清理，不抛错、不复活
     publishFinished(h.eventBus, 'c1', 'child-run-1');
     expect(h.manager.snapshot('a')).toBe(null);
   });
