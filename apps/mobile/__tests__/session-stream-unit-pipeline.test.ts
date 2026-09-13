@@ -522,18 +522,34 @@ describe('指标语义（T-U4 五条 + T-M 平移）', () => {
     publishFinished(h.eventBus, 'a', 'r1');
     expect(h.manager.snapshot('a')?.metrics.textChars).toBe(6);
 
-    // settled 单元被 startRun 替换吸收：新单元天然零值（starting 态先验证）
+    // settled 单元被 startRun 替换吸收：新单元除计时起点外天然零值
+    // （起点随受理置位——starting 阶段指标条即显示）
     h.runAgentTurn.mockImplementation(() => new Promise(() => undefined));
     expect(h.manager.startRun('a', 'p', 'again').ok).toBe(true);
     const starting = h.manager.snapshot('a');
     expect(starting?.status).toBe('starting');
     expect(starting?.metrics).toEqual({textChars: 0, thinkingChars: 0});
-    expect(starting?.startedAtMs).toBe(0);
+    expect(starting?.startedAtMs).toBeGreaterThan(0);
     expect(starting?.elapsedMs).toBe(null);
     expect(starting?.partialText).toBe('');
     expect(starting?.partialThinking).toBe('');
     expect(starting?.injected).toBe(false);
     expect(starting?.pendingChildren).toEqual([]);
+  });
+
+  it('T-U4-6: 受理即置计时起点，RUN_STARTED 回填不重置', () => {
+    const h = createHarness();
+    h.runAgentTurn.mockImplementation(() => new Promise(() => undefined));
+    expect(h.manager.startRun('a', 'p', 'r1').ok).toBe(true);
+    const beginAt = h.manager.snapshot('a')?.startedAtMs;
+    // starting 阶段（事件未回填）指标条即有起点——用户请求时刻起算
+    expect(beginAt).toBeGreaterThan(0);
+
+    jest.advanceTimersByTime(1_000);
+    publishStarted(h.eventBus, 'a', 'r1');
+    // 回填只迁移状态不重置起点：起点保持受理时刻（用户感知口径），
+    // 连续计时不从零的语义不受影响
+    expect(h.manager.snapshot('a')?.startedAtMs).toBe(beginAt);
   });
 
   it('T-U4-2: 重复 STARTED（同 runId 回填）与 child 事件不重置指标', () => {

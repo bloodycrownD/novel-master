@@ -56,8 +56,9 @@ export function ChatStreamMetricsBarLive({agentRunning, sessionId}: Props) {
     if (view != null && isSessionStreamUnitSettled(view.status)) {
       // 终态快照即冻结指标。事件收尾的单元 elapsedMs 已冻结；水合
       // interrupted 单元 elapsedMs 为 null，以 settledAtMs-startedAtMs
-      // 近似冻结历时；starting 阶段被杀的 run（计时与字数皆零）无内容
-      // 可展示，跳过以免空指标条常驻。
+      // 近似冻结历时；全零守卫兜底极老形态（起点与字数皆无的空行）。
+      // 受理即置起点后，starting 阶段被杀的水合单元带短历时（字数为零）
+      // ——「已中断 · 数百 ms」比静默消失更可感知，属预期口径。
       if (
         view.startedAtMs > 0 ||
         view.metrics.textChars > 0 ||
@@ -74,12 +75,14 @@ export function ChatStreamMetricsBarLive({agentRunning, sessionId}: Props) {
                 )
               : 0;
         metrics = toAgentStreamMetricsView(false, {
-          elapsedMs,
+          elapsedMs: elapsedMs,
           textChars: view.metrics.textChars,
           thinkingChars: view.metrics.thinkingChars,
         });
       }
     } else if (agentRunning && view != null && view.startedAtMs > 0) {
+      // starting 阶段起点已随 begin() 置位（用户请求时刻），指标条自受理
+      // 即显示（计时在走、字数为零的「准备中」形态），不等 RUN_STARTED。
       const elapsedMs = Math.max(0, Date.now() - view.startedAtMs);
       metrics = toAgentStreamMetricsView(true, {
         elapsedMs,

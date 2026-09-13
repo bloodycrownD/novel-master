@@ -293,21 +293,27 @@ export class SessionStreamUnit {
     );
   }
 
-  /** run 受理：idle → starting。非 idle（含销毁后）拒绝，返回是否迁移成功。 */
+  /**
+   * run 受理：idle → starting。非 idle（含销毁后）拒绝，返回是否迁移成功。
+   *
+   * 受理即置指标计时起点（用户请求时刻）——starting 阶段指标条就显示，
+   * 不等 RUN_STARTED 事件回填（事件晚到/丢失不影响状态条出现）。
+   */
   begin(): boolean {
     if (this.destroyed || this.status !== 'idle') {
       return false;
     }
     this.status = 'starting';
+    this.startedAtMsValue = Date.now();
     return true;
   }
 
   /**
    * RUN_STARTED 回填：starting → running。
    *
-   * 同时置位指标计时起点（蓝本 noteRunStarted 语义：startedAtMs = run
-   * 开始时刻，重进连续计时不从零）；同一 runId 的重复 STARTED（回填双发）
-   * 被状态守卫拒绝，天然不重置。
+   * 计时起点已随 begin() 置位于请求受理时刻（用户感知口径：从点发送
+   * 起算），此处不重置；重进连续计时不从零的语义不变。同一 runId 的
+   * 重复 STARTED（回填双发）被状态守卫拒绝，天然不重复迁移。
    */
   markRunning(runId: string): boolean {
     if (this.destroyed || this.status !== 'starting') {
@@ -315,7 +321,6 @@ export class SessionStreamUnit {
     }
     this.status = 'running';
     this.runIdValue = runId;
-    this.startedAtMsValue = Date.now();
     return true;
   }
 
