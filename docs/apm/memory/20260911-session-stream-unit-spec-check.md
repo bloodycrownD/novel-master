@@ -64,3 +64,9 @@ assistant:
 两个探索子代理并行定位、主代理抽查实锤后修复。灰卡=重构引入的真回归：finishRun 在子会话 run 终态立即 removePendingChildIfAny 摘父单元 title→child 映射（设计假设「落库 result meta 接管」），但 core runParallel 整批 fork-join 完成后才 append tool_results——首个子完成到最慢子完成窗口期卡片两头落空。白帧=09-01 3556be42 刻意机制（WebView 隐藏期有改画推送→恢复可见 bump repaintEpoch 整体重挂，修恢复旧帧残留），属合理代价非重构引入；但重构的全局广播+snapshot 每次新数组引用放大了触发面——主会话有单元时其它会话事件（64ms 节拍）也打穿 ChatTranscriptWebView memo 发全量 preserve 快照，隐藏页被无谓记脏。
 
 修复两笔：4a2ff45a 子会话终态不再摘除（回到重构前 da864517 语义，settle 的 clearPendingChildren 已在），反查表 pendingChildParentByChild 走 finishRun 父分支既有 clearPendingChildIndex + removeUnit + forgetSession 三口清理；11ed3439 snapshot 的 messages 直返内部引用（只读约定）、applyMessages 加「长度一致且元素同一引用则保持原引用」守卫、pendingChildrenByTitle 改 copy-on-write（memo 比较器有引用比较消费方）。新增回归用例盖住窗口期映射保留、无关事件引用不变、真实变化必换引用。typecheck + jest 195 套件/1245 主代理独立复跑全绿，重启 app 拉 metro 新 bundle 真机复验。遗留登记未修：同 title 覆盖（多 task 同 description 时卡片全指向最后一个 child，重构前就有）；水合丢 title 映射（pending_children_json 只存 id 数组，重启后运行中会话 pending 卡全灰）。
+
+user:
+真机测试没什么特别问题，持久化思路（除事件外内容落库）是对的。状态栏生成规则是什么？好像不是切换窗口后立刻产生。之后提议：不如让状态栏在用户请求时就生成，不等事件回填，更简单更稳定。
+
+assistant:
+答疑：快照路线丢的「重放出过程」指事件溯源式回放（逐 delta 还原过程），非与旧内存实现比较（旧的啥都不落盘，快照是纯增益）。指标条双源规则（活跃 live/终态冻结/settled 投影兜底），「不立刻产生」根因是 starting 阶段 startedAtMs=0 不渲染（RUN_STARTED 事件回填才置位）。采纳提议落地 e4d46f5d：begin() 受理即置 Date.now() 起点，markRunning 只迁移状态不重置——starting 指标条即显示（计时走、字数零），事件晚到不影响；settled/水合历时口径随之从 run 启动提前到请求受理（用户感知口径）；starting 被杀水合单元从静默跳过改为「已中断 · 短历时」条更可感知。未加开关（行为低风险，保持简单，用户后续要再加）。typecheck+jest 195 套件/1246 全绿（新增 T-U4-6 回填不重置用例），重启 app 拉新 bundle 真机生效。
