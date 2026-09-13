@@ -18,6 +18,7 @@ import {
 } from '@/hooks/useAgentStreamMetrics';
 import {useRuntime} from '@/hooks/useRuntime';
 import {isSessionStreamUnitSettled} from '@/services/session-stream-unit';
+import {timingLog} from '@/debug/run-timing';
 import {ChatStreamMetricsBar} from './ChatStreamMetricsBar';
 
 type Props = {
@@ -47,6 +48,13 @@ export function ChatStreamMetricsBarLive({agentRunning, sessionId}: Props) {
     const sync = () => setTick(t => t + 1);
     return manager.subscribe(sync);
   }, [manager]);
+
+  // 首帧延迟打点：agentRunning 翻真后的首次渲染时刻（React 实际画出来的时机）
+  useEffect(() => {
+    if (agentRunning) {
+      timingLog('metrics bar rendered');
+    }
+  }, [agentRunning]);
 
   let metrics: AgentStreamMetricsView | null = null;
   /** 中断现场的正面标识（Step 7）：仅水合出的 interrupted 单元冻结指标携带。 */

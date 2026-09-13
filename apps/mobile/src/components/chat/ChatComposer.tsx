@@ -63,6 +63,7 @@ import {SkillPicker} from '@/components/skills/SkillPicker';
 import {SkillTypeahead, filterSkillTypeaheadCandidates} from './SkillTypeahead';
 import type {EffectiveSkill} from '@novel-master/core/skills';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import {resetRunTiming, timingLog} from '@/debug/run-timing';
 
 type Props = {
   scope: AgentRunScope;
@@ -309,6 +310,7 @@ export function ChatComposer({
 
   const executeRun = useCallback(
     async (content: string, allowResumeWithoutInput: boolean) => {
+      timingLog('executeRun enter (tap→run dispatch gap)');
       setError(undefined);
 
       // 有正文 / 批注草稿 → 成功后清输入
@@ -327,6 +329,7 @@ export function ChatComposer({
 
       try {
         const stream = await runtime.preferences.getLlmStreamEnabled();
+        timingLog('pref-read done');
         const annotateDrafts = listChatAnnotateDrafts(sessionId);
         // Step 6：发起改调 SessionStreamUnitManager——门禁由 manager 的
         // per-session 单元拒绝（返回明确错误），run 本体 fire-and-forget；
@@ -479,6 +482,8 @@ export function ChatComposer({
   );
 
   const send = useCallback(async () => {
+    // t0 钉在 onPress 第一行：executeRun 入口前的一切排队/前置都在表内
+    resetRunTiming();
     if (!hasModel) {
       onNeedModel();
       return;

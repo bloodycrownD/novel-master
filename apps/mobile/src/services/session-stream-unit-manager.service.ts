@@ -105,6 +105,7 @@ import {
   incrementAgentActive,
 } from '@/runtime/agent-activity';
 import {runAgentTurn as defaultRunAgentTurn} from '@/services/agent-run.service';
+import {timingLog} from '@/debug/run-timing';
 import {
   ensureAgentNotificationPermission,
   notifyAgentRunFinished,
@@ -919,6 +920,7 @@ export class SessionStreamUnitManager {
     content: string,
     options?: SessionStreamStartOptions,
   ): SessionStreamStartResult {
+    timingLog('startRun enter');
     if (this.disposed) {
       return {ok: false, error: '运行时正在重建，请稍后重试'};
     }
@@ -962,10 +964,12 @@ export class SessionStreamUnitManager {
       updatedAtMs: Date.now(),
     });
     this.notifyChanged();
+    timingLog('notifyChanged done (metrics bar scheduled)');
     incrementAgentActive();
     this.startKeepAliveQuietly(sessionId, projectId);
     void this.maybeEnsureNotificationPermission();
 
+    timingLog('runAgentTurn invoke');
     void this.runAgentTurnFn(this.runtime, {projectId, sessionId}, content, {
         stream: options?.stream,
         annotateDrafts: options?.annotateDrafts,
@@ -1062,6 +1066,7 @@ export class SessionStreamUnitManager {
 
   /** RUN_STARTED 只做单元状态迁移与 runId 回填，不碰 refcount。 */
   private onRunStarted(payload: AgentRunStartedPayload): void {
+    timingLog(`RUN_STARTED arrived (s=${payload.sessionId.slice(0, 4)})`);
     let unit = this.units.get(payload.sessionId);
     if (unit == null) {
       // Step 6 消费型单元：非本 manager 发起的 run（subagent 子会话 run）。
@@ -1267,7 +1272,9 @@ export class SessionStreamUnitManager {
       return;
     }
     this.permissionEnsured = true;
+    timingLog('notif-permission: request begin');
     await ensureAgentNotificationPermission().catch(() => false);
+    timingLog('notif-permission: request done');
   }
 
   /**
@@ -1278,9 +1285,11 @@ export class SessionStreamUnitManager {
     sessionId: string,
     projectId: string,
   ): Promise<void> {
+    timingLog('keepalive: begin');
     const enabled =
       (await this.prefBridge?.isNotificationEnabled()) ?? false;
     if (!enabled) {
+      timingLog('keepalive: disabled by pref, skip');
       return;
     }
     let sessionTitle: string | undefined;
@@ -1288,16 +1297,19 @@ export class SessionStreamUnitManager {
     try {
       sessionTitle =
         (await this.runtime.sessions.get(sessionId))?.title ?? undefined;
+      timingLog('keepalive: session title fetched');
     } catch {
       // 名字取不到不阻塞保活
     }
     try {
       projectName =
         (await this.runtime.projects.get(projectId))?.name ?? undefined;
+      timingLog('keepalive: project name fetched');
     } catch {
       // 同上
     }
     await startAgentKeepAliveService(sessionId, {projectName, sessionTitle});
+    timingLog('keepalive: startAgentKeepAliveService returned');
   }
 
   /** 单会话收尾：摘标签；仍有多会话在跑时由通知模块维持运行并刷新内容。 */

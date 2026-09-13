@@ -293,6 +293,10 @@ async function mapResolveError<T>(fn: () => Promise<T>): Promise<T> {
 /**
  * Appends a user message (optional) and runs the agent loop (streaming via event bus).
  */
+// RN 调试全局（首帧延迟打点用）：node/desktop/cli 环境不存在该名字，
+// typeof 守卫短路为零开销；类型层局部声明避免引入 RN 类型依赖。
+declare const __DEV__: boolean | undefined;
+
 export async function runAgentTurn(
   runtime: AgentTurnRuntimePort,
   scope: AgentTurnScope,
@@ -317,10 +321,19 @@ export async function runAgentTurn(
   // 在源头就有 baseline 了，但旧会话里可能还留着没有 checkpoint 的历史消息——
   // 这里幂等地补齐，确保 undo_send 始终能找到可回滚点。已有 checkpoint 的消息不动。
   stage = "backfill-baseline-checkpoints";
+  const timingDevBackfillStart = Date.now();
+  if (typeof __DEV__ !== "undefined" && __DEV__) {
+    console.log("[nm-timing] backfill start");
+  }
   await runtime.messageCheckpoint.backfillMissingBaselines(
     scope.sessionId,
     scope.projectId
   );
+  if (typeof __DEV__ !== "undefined" && __DEV__) {
+    console.log(
+      `[nm-timing] backfill done (took ${Date.now() - timingDevBackfillStart}ms)`
+    );
+  }
 
   stage = "resolve-agent";
   const definition = (
@@ -467,6 +480,9 @@ export async function runAgentTurn(
 
   await coordinatedWrite.run();
 
+  if (typeof __DEV__ !== "undefined" && __DEV__) {
+    console.log("[nm-timing] pre-runner ready (model/user msg/validate done)");
+  }
   stage = "validate-agent-definition";
   const toolProbe = new ToolRegistry<BuiltinToolContext>();
   registerBuiltinTools(toolProbe);
@@ -621,6 +637,9 @@ export async function runAgentTurn(
   const streamHandle = runtime.streamRegistry?.register(scope.sessionId);
   try {
     stage = "runner.run";
+    if (typeof __DEV__ !== "undefined" && __DEV__) {
+      console.log("[nm-timing] runner.run enter (workplace happens inside)");
+    }
     const maxSteps = definition.runtime?.maxSteps ?? DEFAULT_AGENT_MAX_STEPS;
     const result = await runner.run({
       definition,

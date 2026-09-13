@@ -17,6 +17,7 @@ import notifee, {
 } from '@notifee/react-native';
 import {AppState, Platform} from 'react-native';
 import {navigationContainerRef} from '@/navigation/navigation-container-ref';
+import {timingLog} from '@/debug/run-timing';
 
 /** 完成通知 channel（IMPORTANCE_DEFAULT：有横幅、不响铃）。 */
 const CHANNEL_AGENT_FINISHED = 'agent-finished';
@@ -124,6 +125,7 @@ async function reconcileKeepAlive(): Promise<void> {
   if (keepAliveDesired) {
     const {title, body} = buildKeepAliveContent();
     await ensureChannels();
+    timingLog('keepalive: notifee displayNotification begin (channels ready)');
     await notifee.displayNotification({
       id: KEEPALIVE_NOTIFICATION_ID,
       title,
@@ -142,6 +144,7 @@ async function reconcileKeepAlive(): Promise<void> {
         },
       },
     });
+    timingLog('keepalive: notifee displayNotification returned (visible now)');
     keepAliveRunning = true;
     keepAliveDisplayedVersion = keepAliveLabelsVersion;
     return;

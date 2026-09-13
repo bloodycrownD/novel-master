@@ -16,6 +16,7 @@ import WebView, {type WebViewMessageEvent} from 'react-native-webview';
 // import type 会被擦除，不影响运行时打包。
 import type {WebViewOpenWindowEvent} from 'react-native-webview/lib/WebViewTypes';
 import {type ChatMessage} from '@novel-master/core/chat';
+import {timingLog} from '@/debug/run-timing';
 import Clipboard from '@react-native-clipboard/clipboard';
 import {
   encodeHostToTranscript,
@@ -281,6 +282,12 @@ export const ChatTranscriptWebView = memo(
     ) {
       const uiRunning = uiRunningProp ?? agentRunning;
       const streamGenerating = uiRunning || toolInvoking;
+      // 首帧延迟打点：流式标志翻真（消息面生成态的起点，webview 注入将随之而来）
+      useEffect(() => {
+        if (streamGenerating) {
+          timingLog('webview streamGenerating=true (transcript live)');
+        }
+      }, [streamGenerating]);
       const transcriptListOptions = {
         agentRunning,
         runUiStopped: !uiRunning,
@@ -875,6 +882,7 @@ export const ChatTranscriptWebView = memo(
           }
           if (message.type === 'ready') {
             setWebReady(true);
+            timingLog('webview ready (bridge handshake done)');
             onReady?.();
             // WebView 被系统回收重建后，webview 侧全屏层已不存在；对称复位
             // 上浮给外层的全屏开合状态，避免外层返回键拦截态关真。
