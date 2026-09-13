@@ -1,8 +1,8 @@
 ---
-date: 2026-09-14 09:20
-title: session-stream-unit-2026-09 spec 三轮审查收敛 + dev DAG 全程跑通达 dev-ready
-keywords: spec-check-loop, session-stream-unit, 真并发, session_run_state, execute-ready, code-dev-loop, dev-ready
-abstract: session-stream-unit-2026-09（会话流式单元真并发重构）spec 三轮审查至 execute-ready 后 code-dev-loop 跑通 Step1-7（27 实现 commit，s6 轮 No-Go 抓到宽限销毁消息回退真回归后修复），mobile 189 套件/1185、desktop 116/116、core 1854 全绿，dev-ready；两天后复核状态稳定，Step 8 真机验收与并入 dev 待用户。
+date: 2026-09-13 18:30
+title: session-stream-unit-2026-09 spec 三轮审查收敛 + dev DAG 达 dev-ready + 真机撞号事故修复
+keywords: spec-check-loop, session-stream-unit, 真并发, session_run_state, execute-ready, code-dev-loop, dev-ready, BOOT_VERSION 撞号, merge main
+abstract: session-stream-unit-2026-09（会话流式单元真并发重构）spec 三轮审查至 execute-ready 后 code-dev-loop 跑通 Step1-7 达 dev-ready；真机 Step 8 首验即爆 no such table session_run_state——根因 BOOT_VERSION 撞号（main v1.5.16 线与 worktree 各自 bump 12→13，语义互斥但字面相同险些静默合并），并 main（四处冲突）后顺延 v14 修复，真库实锤 user_version=14 表已建；Step 8 复验与并 dev 待用户。
 ---
 
 user:
@@ -46,3 +46,13 @@ user:
 
 assistant:
 状态复核：距 dev-ready 两天（+1d16h），HEAD 仍 497ae568 未动、工作区干净、pstream 插桩 stash@{0} 完好、无新提交——Step 8 真机验收（T-U11：并行压测七条 + 杀进程水合 + 中断标识两处视觉 + 消息面收口后切换防闪）与并入 dev 分支两件事均仍待用户，迭代无悬空工作流状态。环境事实补录：desktop 全量测试在本 worktree 需先 npm run build -w @novel-master/desktop（icons+renderer+main+preload）并备齐 sksp 三平台 dist，否则 4 个 smoke/packaging 用例报产物缺失（非回归）；mobile jest 须 NODE_ENV=test、desktop 测试 NODE_ENV=development。
+
+user:
+（真机装机 1203 后）报错 no such table session_run_state。应该是 schema version 的问题，另外应该先合并下 main 分支，main 更新了很多。还有 session_run_state 为什么要新建表？session 表不够用吗？
+
+assistant:
+根因实锤：BOOT_VERSION 撞号。worktree 0aaeacde 把 SCHEMA_BOOT_VERSION 12→13（session_run_state 建表），但 main 的 v1.5.16 线（smart-sort，6b224584 后、76c03550 前）也把 12→13（sort_field CHECK 扩枚举 + smart_sort_rule 表）——真机库从 1.5.16-smart 升级时 user_version 已是 13，新代码 13≥13 走快路径跳过全部 DDL，session_run_state 永远不建。最险的是两边改成同一字面量，git 会静默合并不报冲突（本次靠注释块措辞不同才产生冲突暴露）；main 侧注释自己就记着同款前例（smart-sort 分支原编号 v11、merge origin/main 时顺延 v13）。
+
+修复：merge main 进分支（f4ecc2a2，四处冲突：bootstrap 注释+版本行、runtime/types.ts 双 import 并存、iteration-state.yaml 保留 HEAD 侧本迭代状态、build.gradle 兜底 versionName 取 main 的 1.5.17——文件 GBK 注释须字节级替换且行尾是 LF 不是 CRLF）；BOOT_VERSION 照先例顺延 14（注释记明撞号来龙去脉）。验证：core 2091/2091（main 带来 237 新测试）、mobile typecheck 绿、jest 195 套件/1243、core dist 重建确认产物内 =14。装机 1204 后拉真库实锤：PRAGMA user_version=14、session_run_state 表已建、行数 0（尚未跑过 run）。
+
+新建表而非复用 session 表的理由（spec「持久化」节 + 架构）：①PRD 定性 run 态是「会话数据而非可丢缓存」，要跨重启水合（interrupted 单元、指标条「上次生成」）；②session_kkv 有雷区（fork/copy 不复制、truncate-tail 回滚清域、TEXT 单 value 无法部分更新）；③chat_session 是低频会话元数据主表，run 态是 32-64ms 节流的高频写且随 run 生命周期流转（settled 瘦身/宽限销毁），混表写放大且列表查询背着 partial 大 TEXT；④独立小表按 status 扫描水合面小，project_id 冗余列让删除级联一条 DELETE；⑤回滚无害——旧代码不读新表（spec 回滚节原文）。教训入 RULE 候选：merge 长命分支前先 diff main 的 SCHEMA_BOOT_VERSION，同号即语义冲突，须顺延编号再并。
