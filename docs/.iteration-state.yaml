@@ -1,8 +1,21 @@
-# spec-check-loop 编排状态——init-busy-yield-2026-09
-prd_path: docs/Iterations/init-busy-yield-2026-09/prd.md
+# code-dev-loop 编排状态——init-busy-yield-2026-09
 spec_path: docs/Iterations/init-busy-yield-2026-09/spec.md
+prd_path: docs/Iterations/init-busy-yield-2026-09/prd.md
 branch: feat/agent-run-parallel-and-notify
+base_sha: e8533053
 dag_version: 1
-review_round: 5
-doc_fix_plan: []
-status: execute-ready 待用户确认
+wave_plan:
+  - wave-0: [impl-s1-yield, impl-s4-backfill]
+  - wave-1: [verify-s1, verify-s4]
+  - wave-2: [crfunc-w0]
+  - wave-3: [impl-s2-hydrate, impl-s3-chattab, impl-s5-rows]
+  - wave-4: [verify-s2, verify-s3, verify-s5]
+  - wave-5: [crfunc-w3]
+  - wave-6: [impl-s6-snapshot-rn]
+  - wave-7: [verify-s6, impl-s7-web, impl-s8-s9-notify-copy]
+  - wave-8: [verify-s7, verify-s8-s9]
+  - wave-9: [crfunc-final]
+node_status: {}
+open_must_fix: []
+spec_deviations: []
+manual_pending: "Step 10 真机验收归用户 manual_user"
