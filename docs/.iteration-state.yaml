@@ -1,21 +1,31 @@
-# code-dev-loop 编排状态——init-busy-yield-2026-09
+# code-dev-loop 编排状态——init-busy-yield-2026-09（dev-ready）
 spec_path: docs/Iterations/init-busy-yield-2026-09/spec.md
 prd_path: docs/Iterations/init-busy-yield-2026-09/prd.md
 branch: feat/agent-run-parallel-and-notify
 base_sha: e8533053
-dag_version: 1
-wave_plan:
-  - wave-0: [impl-s1-yield, impl-s4-backfill]
-  - wave-1: [verify-s1, verify-s4]
-  - wave-2: [crfunc-w0]
-  - wave-3: [impl-s2-hydrate, impl-s3-chattab, impl-s5-rows]
-  - wave-4: [verify-s2, verify-s3, verify-s5]
-  - wave-5: [crfunc-w3]
-  - wave-6: [impl-s6-snapshot-rn]
-  - wave-7: [verify-s6, impl-s7-web, impl-s8-s9-notify-copy]
-  - wave-8: [verify-s7, verify-s8-s9]
-  - wave-9: [crfunc-final]
-node_status: {}
+head_sha: dd9d813a
+dev_ready: yes
+dev_dag_matrix:
+  impl-s1-yield: { status: done, head: cb73992e, executor: subagent }
+  impl-s4-backfill: { status: done, head: "d28e38c6,c43a904b", executor: subagent }
+  verify-s1: { status: done, executor: main, result: "4/4" }
+  verify-s4: { status: done, executor: main, result: "core 2107/2107" }
+  crfunc-w0: { status: done, func_ready: yes, executor: subagent }
+  impl-s2-hydrate: { status: done, head: "324d0677,0544f8f1", executor: subagent }
+  impl-s3-chattab: { status: done, head: 67e72627, executor: subagent }
+  impl-s5-rows: { status: done, head: 7af52a27, executor: subagent }
+  verify-w3: { status: done, executor: main, result: "typecheck+jest 197/1281" }
+  crfunc-w3: { status: done, func_ready: yes, executor: subagent }
+  impl-s6-snapshot-rn: { status: done, head: "86404b69,7cc2a70a,bdf2f3a3", executor: subagent }
+  verify-s6: { status: done, executor: main, result: "jest 198/1291 + build:webview" }
+  impl-s7-web: { status: done, head: "bb343863,dd9d813a", executor: subagent }
+  impl-s8-s9: { status: done, head: "700117bc,a529eacb", executor: subagent }
+  verify-final: { status: done, executor: main, result: "typecheck+jest 200/1317+build:webview+core 2107/2107" }
+  crfunc-final: { status: done, func_ready: yes, executor: subagent }
+spec_deviations:
+  - closed: Step 3 去重落点在 refreshChatMeta 内部 inflight（覆盖面更广，语义等价有专测）
+  - closed: Step 5 selectTailTranscriptRows 顺带改预扫构建（等价论证+对拍测试）
+  - closed: Step 7 渐进渲染不做（与 T-S4 语义冲突，窗口化已降本）
+  - closed: Step 7 扩窗读位用行坐标线性重映射（scrollHeight 差值被扩窗污染，容差断言在）
 open_must_fix: []
-spec_deviations: []
-manual_pending: "Step 10 真机验收归用户 manual_user"
+manual_pending: "Step 10 真机验收（GWT-1~5 + release 冷启动基线）归用户 manual_user"
