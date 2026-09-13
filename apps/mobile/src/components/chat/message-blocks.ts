@@ -169,14 +169,16 @@ function turnToolResultsCompleteWith(
  * 一次 O(n) 扫描产出全量 messages 的 toolUseId→result map
  * 与「最后一条结果不齐备的 assistant」，供逐消息循环内 O(1) 判定复用，
  * 取代旧实现里每条消息现场重建 map / 全量重扫的写法（语义严格等价）。
+ * Step 6 起导出：快照分片构建（sendSessionSnapshotNow）复用同一份预扫，
+ * 逐片行转换共享全量配对上下文。
  */
-interface ToolPairingContext {
+export interface ToolPairingContext {
   readonly results: ReadonlyMap<string, ToolResultBlock>;
   readonly lastIncompleteAssistant: ChatMessage | undefined;
 }
 
 /** 一次 O(n) 扫描构建工具配对上下文（等价旧 lastIncompleteToolAssistant 的全量扫描）。 */
-function buildToolPairingContext(
+export function buildToolPairingContext(
   messages: readonly ChatMessage[],
 ): ToolPairingContext {
   const results = buildToolResultByUseId(messages);
@@ -534,4 +536,20 @@ export function buildTranscriptRows(
   }
 
   return rows;
+}
+
+/**
+ * 基于既有配对上下文构建消息片段的 transcript rows（init-busy-yield Step 6
+ * 快照分片）：行转换逐消息独立、不依赖跨消息状态，故「按片调用本函数后
+ * 顺序拼接」与单次全量 buildTranscriptRows（stream 省略时）输出全等——
+ * 快照路径从不携带 stream 行，这里不设 stream 参数。
+ */
+export function buildTranscriptRowsWithContext(
+  messages: readonly ChatMessage[],
+  context: ToolPairingContext,
+  options: BuildChatListItemsOptions = {},
+): TranscriptRow[] {
+  return buildChatListItemsWithContext(messages, context, options).map(
+    transcriptRowFromItem,
+  );
 }
