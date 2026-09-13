@@ -51,18 +51,25 @@ export async function loadChatAgentMeta(
   sessionId: string,
 ): Promise<ChatAgentMeta> {
   try {
+    // resolveAgentForProject 与 getSessionAgentConfig 互不依赖（后者只需
+    // sessionId，且为无副作用的读取），并行发起；resolveModelDisplayLabel
+    // 依赖两者结果合成的 savedModelId，必须等两边都回来，保持串行。
+    const sessionConfigPromise = runtime.sessions.getSessionAgentConfig(
+      sessionId,
+    );
+    // 兜底挂接：resolveAgentForProject 先失败提前退出（归一 none meta /
+    // rethrow）时，本路在途的拒绝不会变成 unhandled rejection；
+    // 真正的错误仍在下方 await 按原语义抛出。
+    sessionConfigPromise.catch(() => undefined);
     const resolved = await resolveAgentForProject(
       runtime,
       projectId,
       sessionId,
     );
+    const sessionConfig = await sessionConfigPromise;
     const {definition} = resolved;
     const hasDedicatedModel =
       definition.model != null && definition.model !== '';
-    // 会话级 agentId 解析后读 sessionConfig 拿 modelId，用于 savedModelId 兜底。
-    const sessionConfig = await runtime.sessions.getSessionAgentConfig(
-      sessionId,
-    );
     const savedModelId = resolveSavedModelId({
       agentModelId: definition.model,
       sessionModelId: sessionConfig.modelId,

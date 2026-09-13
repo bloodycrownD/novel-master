@@ -95,4 +95,42 @@ describe('loadChatAgentMeta', () => {
     expect(meta.hasDedicatedModel).toBe(true);
     expect(meta.modelSource).toBe('agent-pin');
   });
+
+  it('T-C1：resolveAgentForProject 与 getSessionAgentConfig 并行发起，输出与串行版等价', async () => {
+    // 受控 getSessionAgentConfig：挂起时不 resolve。resolveAgentForProject
+    // 内部第一步就是它——挂起即 resolveAgentForProject 不可能完成；
+    // 此时若外层那次 getSessionAgentConfig 也已发起（共 2 次调用），
+    // 即证明两路并行（串行版会等 resolveAgentForProject 完成后才发起
+    // 外层调用，此刻只会是 1 次）。
+    let resolveConfig!: (value: {agentId: string; modelId?: string}) => void;
+    const configPromise = new Promise<{agentId: string; modelId?: string}>(
+      resolve => {
+        resolveConfig = resolve;
+      },
+    );
+    const runtime: any = mockRuntime({
+      sessionAgentConfig: {agentId: 'default', modelId: 'openai:gpt-4'},
+    });
+    runtime.sessions.getSessionAgentConfig = jest.fn(() => configPromise);
+
+    const metaPromise = loadChatAgentMeta(runtime, 'proj-1', 'sess-1');
+    // flush microtask：让两路查询都推进到挂起的 await。
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(runtime.sessions.getSessionAgentConfig).toHaveBeenCalledTimes(2);
+
+    // 放行后输出与串行版一致：session 来源、agent 名称、savedModelId
+    // （session.modelId 兜底）→ 模型标签、modelSource 跟随会话。
+    resolveConfig({agentId: 'default', modelId: 'openai:gpt-4'});
+    const meta = await metaPromise;
+    expect(meta).toEqual({
+      source: 'session',
+      agentId: 'default',
+      agentName: '全局助手',
+      modelLabel: 'GPT-4',
+      tokenLabel: '',
+      hasDedicatedModel: false,
+      modelSource: 'session',
+    });
+  });
 });
