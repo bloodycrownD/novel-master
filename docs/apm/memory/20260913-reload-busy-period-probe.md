@@ -34,3 +34,9 @@ spec 确认前先跑 spec-check-loop 审查。
 
 assistant:
 spec-check-loop 五轮收敛至 Go（execute-ready）：R1 无 P0（3P1+4P2：探针 Promise.all 不可行/已中断缺数据源/占位高度缺失）；R2 新引 2 P1（裁剪方向写反—listBySessionTail 升序应裁首行、三态判定吞当前会话×中断）+5 P2；R3 抓到真 P0——游标 count≤判定在连续对话必然失效（backfill 先于 user 落库，count 恒>游标），升级两段式（==短路/>时新增段 OFFSET 圈段覆盖比对/<回退），核实空窗语义含 assistant、纯文本轮尾部 assistant/tool-result user 无源头建点全靠 backfill 补；R4 再抓 P0——count<游标（删除可疑态）被当安全短路且漏 message.service delete(id)/truncateAfter 两条删除事务，改 == 短路+四条删除路径全清游标+T-B5 反向/T-B6 新增；R5 终审四路径推演无洞 Go。四个 doc-fix 提交：8e31c8ea/85bdc41d/24407128/a5559176。待用户确认 execute-ready。
+
+user:
+（code-dev-loop 派遣 impl-s6-snapshot-rn）实施 Step 6 phase-snapshot-chunk-rn：sendSessionSnapshotNow 分片化 + 协议扩展 + web 侧拼装最小适配 + 测试。
+
+assistant:
+三提交完成（86404b69 协议与原语 / 7cc2a70a RN 分片发送 / bdf2f3a3 web 拼装）。关键落点：①分片以「消息」为单位实现（消息→行 1:0/1 派生，与按行分片同界），常量 SNAPSHOT_CHUNK_SIZE=50；起点固定闭包快照（transcriptListOptions 每渲染重建，跨帧不能换口径）；预扫 buildToolPairingContext 从 message-blocks 导出 + 新增 buildTranscriptRowsWithContext（分片拼接与全量严格全等）。②代次作废统一收敛：六条 force/直发路径都过 sendSessionSnapshotNow，模块级计数器 ++ 即顶替，循环在每个让步点检查代次+webReadyRef；repaintEpoch 重挂经 postToWeb ready 守卫复位（webReadyRef 在 ready/visibility 分支同步直写，避免 effect 一帧窗口）。③T-S3 时序（分片先于 delta）：流式 RAF flush 在 in-flight 代次非空时推迟（segments 留队 + deferred 标记），末片 post 后 syncStreamToolInvoking 再补发；中止于重挂则连 deferred 一起作废（等价旧协议下 post 丢失，恢复注入链重推）。④web 侧 handleSnapshotPayload：单片/缺字段直发等价旧协议；多片同代次按 chunkIndex 累计、末片到齐才整体 applySnapshot（零中间渲染、零滚动副作用）；乱序/迟到旧代次丢弃，凑不齐等 force 新代次兜底——测试过程抓到一个真 bug：单片路径最初没判旧（gen5 应用后 gen4 单片迟到仍会应用），已修为 generation>0 时统一判旧。⑤测试基线事实（后续 Step 会再用到）：webReady 翻真本就双发快照（subagent effect preserve + needsOpenSnapshot stick，旧协议即如此），分片化后首代次只剩片 0 被顶替——T-S1/T-S2 断言按「按到达序分代次、末代次完整」书写；jest 全量的 torn down/worker 警告经基线 worktree 对照确认是既有现象（prompt-macro/legacy-scroll 两套件，与分片无关）。验证：typecheck 两套绿、jest 198 套件 1291 测试全绿、build:webview 9 产物。未动 webReady 双发语义（行为等价优先，去重不在 Step 6 范围）。
