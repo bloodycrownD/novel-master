@@ -9,7 +9,7 @@
 - spec_path：docs/Iterations/smart-filename-sort/spec.md
 - review_round：4（第 4 轮新增量批次：capture_kind 三档 / 编辑屏重构终态 / IPC match 通道 / VFS 文件名校验 / ownerRouteKey 归属过滤；三 scope 并行评审）
 - dag_version：4
-- 状态：fix-spec-ready（round 4 终审闭合，2026-09-13）（round 4 新增 15 条 = 2 P1 + 13 P2；round 1-3 旧 11 条保持执行完成态不动）
+- 状态：**已执行完成**（2026-09-13 round 4 增量 16 条全闭合：wave1 impl-core 5 commits（8b69603b/20318efd/41d11000/7d3b12b0/e2ed49dc）+ wave2 impl-mobile 4 commits（310c5f1a/b49674a9/56d1c57e/ff8c83fd）+ impl-desktop 3 commits（3ce5d315/38a38a81/d3e3b5b1）+ impl-cli 1 commit（53c7d8d4）= 13 commits；终验 core 2078/2078、mobile 1156/1156、CLI sort-rule e2e 7/7、desktop typecheck 过 + 480/484（4 个失败套件均为 Secret Service keyring 环境性签名、测试文件属 v1.4.21 既有、与本批改动无关，节点执行期同命令两轮全绿）；K 节 glob 修复/spec 勘误/VFS 补章同批闭合）（round 4 新增 15 条 = 2 P1 + 13 P2 + 终审 #16；round 1-3 旧 11 条保持执行完成态不动）
 - 历史轮次：round 1-3 覆盖 b442d397 → 4f84da40（含 merge-dev 适配 core/B-3 [P0]），旧 11 条已全部执行并经 cr-func-fix-review 复核 func-ready。
 
 ---
@@ -322,3 +322,4 @@ round 4 新增：
 | spec_deviations | none（VFS 校验已转 fixed，用户拍板在案） |
 | C-orch | ✅（#2 双端 parity、#4/#16 单源收敛、#9 死 import 清理） |
 | C 类合并后 QA | 真机验收继续（T-DT 系列）；K 类 5 项随下游执行闭合 |
+| **执行记录（2026-09-13）** | 16/16 全闭合（含跑红验证：G-1 用例②与 B-1 mobile 两用例、B-1 desktop 中间态）。K 节：run-tests.mjs glob 修复（入口 20→92 文件，desktop 测试 125→484 用例）✅；spec 勘误（BOOT_VERSION 10→11 实为 13，三处）✅；spec 附录 B VFS 校验补章 ✅；触达文件 eslint 0 error ✅；CLI 断言本地全绿（CI 确认留发版期）◻。遗留观察：desktop 4 套件 keyring 环境性失败（Secret Service 会话态，与 test/desk-e2e-regression 分支「keyring 解锁后补跑」同坑）；CLI 全量 26 失败为环境性存量（基线对照集合一致） |

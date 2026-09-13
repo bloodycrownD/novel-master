@@ -46,7 +46,7 @@ date: 2026-09-06
 
 | # | 决策点 | 定案 | 依据 |
 |---|--------|------|------|
-| D1 | `sort_field` CHECK 扩枚举 | canonical DDL 改 CHECK + BOOT_VERSION 10→11 + rebuild migration **三件套同一步骤原子完成**。rebuild 照抄 `git 5d271868^` 的 `rebuildTable`（含 rowid 分块搬运，quick-sqlite 整表 INSERT SELECT 会挂起） | 探索1 §3.1/风险1；记忆 #10 两次事故 |
+| D1 | `sort_field` CHECK 扩枚举 | canonical DDL 改 CHECK + BOOT_VERSION 10→11 + rebuild migration **三件套同一步骤原子完成**。rebuild 照抄 `git 5d271868^` 的 `rebuildTable`（含 rowid 分块搬运，quick-sqlite 整表 INSERT SELECT 会挂起）。【勘误 2026-09-13：BOOT_VERSION 计划 10→11，实际落地 **13**——v11/v12 编号被两次 merge main 顺延占用（正则系统移除 v11、body_params v12），行为正确：快路径不短路 pending migration 已 round 4 终审核实】 | 探索1 §3.1/风险1；记忆 #10 两次事故 |
 | D2 | 规则表结构与调序 | 单表无分组（比 regex 少一层）：`rule_id TEXT PK`、`sort_order INTEGER` **不加 UNIQUE**；调序统一「整表重编号」（legado PersistOrder 模式：内存排序后批量 UPDATE 1..N），规避唯一约束两阶段交换 | 探索2 §3.3（regex 无 move 先例+UNIQUE 撞调序） |
 | D3 | 内置规则标识与生命周期 | 固定 `rule_id` 前缀 `builtin-`；seed 每次幂等 `INSERT OR IGNORE`（不覆盖存量行，用户禁用内置规则后重启保持禁用）；**内置规则仅可禁用不可删除**：service 层 `deleteRule`/`deleteBatch` 对 `builtin-` 前缀一律拒绝（错误 code 可辨），UI 对 `builtin-` 行隐藏删除入口，CLI `remove` 对 `builtin-` 报错；唯一删除路径是恢复默认 = `DELETE WHERE rule_id LIKE 'builtin-%'` 后重灌，用户规则隔离 | legado 负 id 模式（探索1 报告）+ PRD「禁用某内置规则后不再参与匹配」 |
 | D4 | 比较器数据流 | `sortFilesForDir(files, dirRule, opts?)`/`sortDirPaths(paths, dirRule, opts?)` 加**可选**第三参 `{ smartRules?: readonly CompiledSmartSortRule[]; dirMtimeByPath?: ReadonlyMap<string, number> }`；缺省时 smart 退化为自然排序（纯函数无 IO、签名向后兼容，三条调用链 + core-shim 不破坏）；规则由 service 层组装传入（workplace.service 构造注入 provider，mobile orderedDirectChildPaths 自行经 runtime 取） | 探索1 §3.4（public API 被三端消费） |
@@ -146,7 +146,7 @@ apps/cli/src/
 
 ## 变更点清单
 
-**core**：① `SortField` 加 `"smart"`（`workplace-types.ts:22`）；② CHECK 扩枚举（`workplace-schema.ts:22`）+ BOOT_VERSION 11（`novel-master-bootstrap.ts:67`，续写注释链）；③ rebuild migration 入 `SCHEMA_MIGRATIONS`（`schema-migrations/index.ts:29-32` 数组尾追加 + import 区）；④ 新表 `smart_sort_rule` DDL 入 `NOVEL_MASTER_SCHEMA_STATEMENTS`；⑤ 比较器纯函数；⑥ `workplace-eval.ts` `sortFilesForDir`（:65）加 case、`sortDirPaths`（:139）补 sortField；⑦ rule-engine/file-tree/context 传参链；⑧ `vfs-entry.port.ts` 新方法声明 + `sqlite-vfs-entry.repository.ts` 目录 mtime 查询（:464 旁新增方法）；⑨ 规则域（含 `smart-sort-rule-io.ts` YAML 单源）+ service + public 导出；⑩ 快照 `public-workplace-allowlist.json` 手动同步（无自动更新，探索1 §2.5）。
+**core**：① `SortField` 加 `"smart"`（`workplace-types.ts:22`）；② CHECK 扩枚举（`workplace-schema.ts:22`）+ BOOT_VERSION 11（`novel-master-bootstrap.ts:67`，续写注释链）【勘误 2026-09-13：实际落地 BOOT_VERSION 13，编号顺延见 D1 勘误】；③ rebuild migration 入 `SCHEMA_MIGRATIONS`（`schema-migrations/index.ts:29-32` 数组尾追加 + import 区）；④ 新表 `smart_sort_rule` DDL 入 `NOVEL_MASTER_SCHEMA_STATEMENTS`；⑤ 比较器纯函数；⑥ `workplace-eval.ts` `sortFilesForDir`（:65）加 case、`sortDirPaths`（:139）补 sortField；⑦ rule-engine/file-tree/context 传参链；⑧ `vfs-entry.port.ts` 新方法声明 + `sqlite-vfs-entry.repository.ts` 目录 mtime 查询（:464 旁新增方法）；⑨ 规则域（含 `smart-sort-rule-io.ts` YAML 单源）+ service + public 导出；⑩ 快照 `public-workplace-allowlist.json` 手动同步（无自动更新，探索1 §2.5）。
 
 **desktop**：IPC 五行（channel/DTO/handler/bind/invoke）+ runtime 两步 + 设置视图 + DirectoryRuleModal + ManageHeader 扩展 + `ipc-types.ts:590` union 加 `'smart'`。
 
@@ -158,7 +158,7 @@ apps/cli/src/
 
 > 全部在 worktree 分支开发（记忆 #23），完成后并入 dev（记忆 #37）。
 
-- Step 1 — phase-core-schema — blocking: yes — qa: auto：`smart-sort-rule-schema.ts` 新表 DDL（字段见 D2：`rule_id TEXT PRIMARY KEY / name TEXT NOT NULL / pattern TEXT NOT NULL / flags TEXT NOT NULL DEFAULT '' CHECK (flags NOT GLOB '*[^gimsuy]*') / example TEXT / enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0,1)) / sort_order INTEGER NOT NULL / created_at_ms / updated_at_ms`，索引 `idx_smart_sort_rule_order(sort_order)`）注册进 `NOVEL_MASTER_SCHEMA_STATEMENTS`；`workplace-schema.ts` CHECK 改 `IN ('name','created','updated','smart')`；`SCHEMA_BOOT_VERSION` 10→11 并续写注释链。【D13 注 2026-09-13】canonical DDL 增列 `capture_kind TEXT NOT NULL DEFAULT 'smart' CHECK (capture_kind IN ('smart','fixed_min','fixed_max'))`；新 pending migration `add-smart-sort-capture-kind-v1`（照 rename 迁移模式：PRAGMA table_info 探测无列才 ALTER ADD COLUMN，存量行自动默认 smart；SCHEMA_BOOT_VERSION 不 bump——pending migration 不受快路径短路）；内置 seed 4→7 条（附录 A D13 注）。
+- Step 1 — phase-core-schema — blocking: yes — qa: auto：`smart-sort-rule-schema.ts` 新表 DDL（字段见 D2：`rule_id TEXT PRIMARY KEY / name TEXT NOT NULL / pattern TEXT NOT NULL / flags TEXT NOT NULL DEFAULT '' CHECK (flags NOT GLOB '*[^gimsuy]*') / example TEXT / enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0,1)) / sort_order INTEGER NOT NULL / created_at_ms / updated_at_ms`，索引 `idx_smart_sort_rule_order(sort_order)`）注册进 `NOVEL_MASTER_SCHEMA_STATEMENTS`；`workplace-schema.ts` CHECK 改 `IN ('name','created','updated','smart')`；`SCHEMA_BOOT_VERSION` 10→11 并续写注释链。【勘误 2026-09-13：实际落地 13（v11/v12 被 merge main 顺延占用），行为正确，详见 D1 勘误】【D13 注 2026-09-13】canonical DDL 增列 `capture_kind TEXT NOT NULL DEFAULT 'smart' CHECK (capture_kind IN ('smart','fixed_min','fixed_max'))`；新 pending migration `add-smart-sort-capture-kind-v1`（照 rename 迁移模式：PRAGMA table_info 探测无列才 ALTER ADD COLUMN，存量行自动默认 smart；SCHEMA_BOOT_VERSION 不 bump——pending migration 不受快路径短路）；内置 seed 4→7 条（附录 A D13 注）。
 - Step 2 — phase-core-schema — blocking: yes — qa: auto：新迁移 `workplace-dir-rule-smart-field-v1.ts`：照抄 v1b `rebuildTable`（`git show 5d271868^` 模板，保留 rowid 分块搬运与列交集搬运），对 `workplace_dir_rule` 以新 CHECK 形态重建 + 重建 `idx_workplace_dir_scope`；`up()` 开头形态探测早退（**查 sqlite_master 的建表 SQL 是否含 'smart'**，v1b 同款判据——`SELECT sql FROM sqlite_master WHERE type='table' AND name='workplace_dir_rule'`，不用 pragma_table_info）；注册进 `SCHEMA_MIGRATIONS`。迁移单测：构造旧 CHECK 形态库 → bootstrap → 写入 `'smart'` 成功、存量行无损。
 - Step 3 — phase-core-seed — blocking: yes — qa: auto：内置规则常量（附录 A）+ 幂等 seed（`INSERT OR IGNORE` 按固定 rule_id，挂 bootstrap seed 阶段，参照 `seedBuiltinProviders` 事务内模式）。
 - Step 4 — phase-core-comparator — blocking: yes — qa: auto：`smart-sort.ts` 纯函数：`parseChineseNum`（零〇两/一二三…十百千万亿 + 大写，逐位式与进位式，参照 legado `StringUtils.chineseNumToInt` 语义）、`tokenizeNatural`（AlphanumComparator 语义，见全序规则 3）、`extractSortKey(basename, compiledRules)`（优先级逐条、D6 捕获组约定；compiled 规则含 flags，编译为 `RegExp(pattern, flags)`，见 D6）、`compareSmartBasenames(a,b,order,cache)`（全序五条 + decorate-sort-undecorate cache Map）。
@@ -260,6 +260,15 @@ example: 001、开端 → [1]
 2. **目录名场景**：zh-chapter 后缀类含「卷」的另一面：「第一卷」「第十卷」这类目录名命中 zh-chapter 提取 [1]/[10]（已验证），子目录智能排序依赖此行为（PRD 验收「子目录 [第一卷， 第三卷， 第十卷] 按卷序排列」）。
 
 （`parseChineseNum` 输入含阿拉伯数字混排时按 legado `stringToInt` 语义：整组可 `Number()` 直接转，否则中文解析，失败该组 null → 该规则跳过继续下一条。）
+
+## 附录 B：VFS 文件名校验（迭代中途并入需求，2026-09-13 补章）
+
+真机验收期间用户发现新建/重命名弹窗无文件名校验，作为独立需求并入本迭代（commit `43803e39` core + `b06dae8d` 双端弹窗前置）。设计拍板：
+
+- **校验规则**（拒绝即报 INVALID_NAME 错误码，双格式化提示）：控制字符/NUL、纯空白名、首尾空格、`.` 与 `..`；其余放行。不照搬严格 POSIX（只禁 `/` 与 NUL）与便携集（仅 `A-Za-z0-9._-`）——中文文件名是核心场景，两者均过严。
+- **core 五入口统一拦**：mkdir、write 的创建分支、writeWithRevision、renamePath、renamePrefix；agent 工具走同链路天然生效。
+- **导入链路豁免**：角色卡/ZIP 导入不过此校验（历史数据兼容）。
+- **双端弹窗前置校验**：新建/重命名弹窗先行友好提示；desktop 经 `shared/logic` 薄再导出（X1 gate：renderer 不直接依赖 core）。
 
 ## Context Bundle
 
