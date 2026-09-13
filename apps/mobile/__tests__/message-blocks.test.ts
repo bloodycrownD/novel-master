@@ -6,6 +6,7 @@ import {
 import {
   buildChatListItems,
   buildToolResultByUseId,
+  isDisplayableAttachment,
   isTurnToolExecuting,
   messageHasToolUse,
   resolveToolResultsMessageId,
@@ -14,6 +15,8 @@ import {
   toolUseIdsFromMessage,
   turnToolResultsComplete,
   vfsToolFilePath,
+  type BuildChatListItemsOptions,
+  type ChatListItem,
 } from '@/components/chat/message-blocks';
 
 function msg(
@@ -920,5 +923,341 @@ describe('message-blocks', () => {
     const items = buildChatListItems(messages);
     expect(items.every(i => i.kind === 'message')).toBe(true);
     expect(items.length).toBeGreaterThan(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// T-R1（init-busy-yield Step 5）：长列表（500+ 消息、密集 tool）预扫等价对拍。
+// legacy* 系列复刻预扫改造前「每条消息现场全量重算」的旧算法，仅作对拍 oracle：
+// 断言新实现（开头一次构建 toolUseId→result map + lastIncompleteToolAssistant，
+// 循环内只读）输出与旧实现完全一致。
+// ---------------------------------------------------------------------------
+
+type Block = ChatMessage['content']['blocks'][number];
+type ToolUseBlockOnly = Extract<Block, {type: 'tool_use'}>;
+
+function legacyTurnToolResultsComplete(
+  assistant: ChatMessage,
+  messages: readonly ChatMessage[],
+): boolean {
+  const required = toolUseIdsFromMessage(assistant);
+  if (required.length === 0) {
+    return true;
+  }
+  // 旧实现：每次现场重建全量 map（O(n)）。
+  const results = buildToolResultByUseId(messages);
+  return required.every(id => results.has(id));
+}
+
+function legacyLastIncompleteToolAssistant(
+  messages: readonly ChatMessage[],
+): ChatMessage | undefined {
+  let last: ChatMessage | undefined;
+  for (const message of messages) {
+    if (
+      message.role === 'assistant' &&
+      messageHasToolUse(message) &&
+      !legacyTurnToolResultsComplete(message, messages)
+    ) {
+      last = message;
+    }
+  }
+  return last;
+}
+
+function legacyIsTurnToolExecuting(
+  assistant: ChatMessage,
+  messages: readonly ChatMessage[],
+  agentRunning: boolean,
+): boolean {
+  if (!agentRunning || !messageHasToolUse(assistant)) {
+    return false;
+  }
+  if (legacyTurnToolResultsComplete(assistant, messages)) {
+    return false;
+  }
+  return legacyLastIncompleteToolAssistant(messages)?.id === assistant.id;
+}
+
+/** 复刻旧 buildChatListItems 的完整循环体（unpaired 判定走 legacy 现场重算）。 */
+function legacyBuildChatListItems(
+  messages: readonly ChatMessage[],
+  options: BuildChatListItemsOptions = {},
+): ChatListItem[] {
+  const agentRunning = options.agentRunning ?? false;
+  const runUiStopped = options.runUiStopped ?? false;
+  const results = buildToolResultByUseId(messages);
+  const items: ChatListItem[] = [];
+  for (const message of messages) {
+    const blocks = message.content.blocks ?? [];
+    const textParts: string[] = [];
+    const thinkingParts: string[] = [];
+    const toolUses: ToolUseBlockOnly[] = [];
+    let hasToolResult = false;
+    for (const block of blocks) {
+      switch (block.type) {
+        case 'text':
+          if (block.text.trim()) {
+            textParts.push(block.text);
+          }
+          break;
+        case 'thinking':
+          if (block.text.trim()) {
+            thinkingParts.push(block.text);
+          }
+          break;
+        case 'redacted_thinking':
+          thinkingParts.push('思考（已脱敏）');
+          break;
+        case 'tool_use':
+          toolUses.push(block);
+          break;
+        case 'tool_result':
+          hasToolResult = true;
+          break;
+        default:
+          break;
+      }
+    }
+    if (hasToolResult && textParts.length === 0 && thinkingParts.length === 0) {
+      continue;
+    }
+    const hasToolUse = toolUses.length > 0;
+    const displayAttachments = (message.attachments ?? []).filter(
+      isDisplayableAttachment,
+    );
+    const hasAttachments = displayAttachments.length > 0;
+    const unpairedStatus = hasToolUse
+      ? runUiStopped
+        ? 'error'
+        : legacyIsTurnToolExecuting(message, messages, agentRunning)
+          ? 'pending'
+          : 'error'
+      : undefined;
+    const tools = toolUses.map(use => {
+      const view = toolCallViewFromUse(use, results, options);
+      if (view.status === 'pending' && unpairedStatus != null) {
+        return {...view, status: unpairedStatus};
+      }
+      return view;
+    });
+    if (
+      textParts.length > 0 ||
+      thinkingParts.length > 0 ||
+      hasToolUse ||
+      hasAttachments
+    ) {
+      items.push({
+        kind: 'message',
+        message,
+        textParts,
+        thinkingParts,
+        tools,
+      });
+    }
+  }
+  return items;
+}
+
+interface DenseToolPlan {
+  readonly rounds: number;
+  /** 指定轮次只回 list 工具结果、read 悬空（部分配对 assistant）。 */
+  readonly partialRounds?: ReadonlySet<number>;
+  /** 最后一轮不回任何工具结果（整轮 pending）。 */
+  readonly dropLastResults?: boolean;
+}
+
+/** 密集 tool 长会话生成器：每轮「user 提问 + assistant(thinking/text/read/list) + hidden user 工具结果」。 */
+function buildDenseToolMessages(plan: DenseToolPlan): ChatMessage[] {
+  const messages: ChatMessage[] = [];
+  let seq = 1;
+  let toolSeq = 0;
+  for (let round = 0; round < plan.rounds; round += 1) {
+    messages.push(
+      msg(`q-${round}`, 'user', [{type: 'text', text: `第 ${round} 轮提问`}], seq++),
+    );
+    const readId = `read-${toolSeq++}`;
+    const listId = `list-${toolSeq++}`;
+    messages.push(
+      msg(
+        `a-${round}`,
+        'assistant',
+        [
+          {type: 'thinking', text: `想一下第 ${round} 轮`},
+          {type: 'text', text: `第 ${round} 轮回答`},
+          {
+            type: 'tool_use',
+            id: readId,
+            name: 'read',
+            input: {path: `/f${round}.md`},
+          },
+          {type: 'tool_use', id: listId, name: 'list', input: {dir: '/'}},
+        ],
+        seq++,
+      ),
+    );
+    const isLast = round === plan.rounds - 1;
+    if (isLast && plan.dropLastResults) {
+      continue;
+    }
+    // read 恒 success；list 按轮次交替 success / error；partial 轮 list 悬空。
+    const resultBlocks: Block[] = [
+      {
+        type: 'tool_result',
+        toolUseId: readId,
+        content: `ok ${round}`,
+        ok: true,
+      },
+    ];
+    if (!plan.partialRounds?.has(round)) {
+      resultBlocks.push(
+        round % 2 === 0
+          ? {
+              type: 'tool_result',
+              toolUseId: listId,
+              content: `目录 ${round}`,
+              ok: true,
+            }
+          : {
+              type: 'tool_result',
+              toolUseId: listId,
+              content: `Error: 失败 ${round}`,
+              ok: false,
+            },
+      );
+    }
+    messages.push(msg(`r-${round}`, 'user', resultBlocks, seq++, true));
+  }
+  return messages;
+}
+
+describe('T-R1 长列表预扫等价（init-busy-yield Step 5）', () => {
+  const optionVariants: readonly BuildChatListItemsOptions[] = [
+    {},
+    {agentRunning: false},
+    {agentRunning: true},
+    {agentRunning: true, runUiStopped: true},
+    {runUiStopped: true},
+  ];
+
+  it.each(optionVariants)(
+    '尾轮结果缺失场景：预扫实现与旧算法输出全等（options=%j）',
+    options => {
+      // 180 轮 × 3 条 − 尾轮结果行 = 539 条消息（>500）；
+      // 每 9 轮一轮部分配对，尾轮整轮悬空。
+      const messages = buildDenseToolMessages({
+        rounds: 180,
+        partialRounds: new Set(
+          Array.from({length: 20}, (_, i) => 4 + i * 9),
+        ),
+        dropLastResults: true,
+      });
+      expect(messages).toHaveLength(539);
+      expect(buildChatListItems(messages, options)).toEqual(
+        legacyBuildChatListItems(messages, options),
+      );
+    },
+    20000,
+  );
+
+  it.each(optionVariants)(
+    '尾部轮齐备、中间轮部分配对场景：预扫实现与旧算法输出全等（options=%j）',
+    options => {
+      // lastIncompleteToolAssistant 边界：最后一条不齐备 assistant 在中间轮，
+      // 不是尾部消息——旧算法取「最后一条 incomplete」，新预扫须同口径。
+      const messages = buildDenseToolMessages({
+        rounds: 180,
+        partialRounds: new Set(
+          Array.from({length: 20}, (_, i) => 4 + i * 9),
+        ),
+      });
+      expect(messages).toHaveLength(540);
+      expect(buildChatListItems(messages, options)).toEqual(
+        legacyBuildChatListItems(messages, options),
+      );
+    },
+    20000,
+  );
+
+  it('关键状态直接断言（防 legacy 与新实现一起偏移）：pending/success/error 落点正确', () => {
+    const partialRounds = new Set(
+      Array.from({length: 20}, (_, i) => 4 + i * 9),
+    );
+    // 变体一：尾轮整轮悬空（lastIncomplete = 尾轮）。
+    const withDroppedLast = buildDenseToolMessages({
+      rounds: 180,
+      partialRounds,
+      dropLastResults: true,
+    });
+    const running = buildChatListItems(withDroppedLast, {agentRunning: true});
+    const lastAssistant = running.find(
+      item => item.message.id === 'a-179',
+    );
+    expect(lastAssistant?.tools.map(t => t.status)).toEqual([
+      'pending',
+      'pending',
+    ]);
+    // agentRunning=false 时同一轮直接 error。
+    const stopped = buildChatListItems(withDroppedLast, {agentRunning: false});
+    expect(
+      stopped.find(item => item.message.id === 'a-179')?.tools.map(
+        t => t.status,
+      ),
+    ).toEqual(['error', 'error']);
+    // 普通配对轮：read success、list 按轮次 success / error。
+    expect(
+      running.find(item => item.message.id === 'a-2')?.tools.map(t => t.status),
+    ).toEqual(['success', 'success']);
+    expect(
+      running.find(item => item.message.id === 'a-3')?.tools.map(t => t.status),
+    ).toEqual(['success', 'error']);
+
+    // 变体二：尾轮齐备、中间轮部分配对（lastIncomplete = 最后一个 partial 轮 a-175）。
+    const midIncomplete = buildDenseToolMessages({
+      rounds: 180,
+      partialRounds,
+    });
+    const midRunning = buildChatListItems(midIncomplete, {agentRunning: true});
+    const lastPartial = midRunning.find(item => item.message.id === 'a-175');
+    // 4 + i*9 的最后一个 ≤ 179 是 4 + 19*9 = 175。partial 轮 read 已配对
+    //（success）、list 悬空且该轮正是 lastIncomplete + agentRunning → pending。
+    expect(lastPartial?.tools.map(t => t.status)).toEqual([
+      'success',
+      'pending',
+    ]);
+    // 更早的 partial 轮（a-166）不是 lastIncomplete → 悬空的 list 显示 error。
+    const earlierPartial = midRunning.find(
+      item => item.message.id === 'a-166',
+    );
+    expect(earlierPartial?.tools.map(t => t.status)).toEqual([
+      'success',
+      'error',
+    ]);
+    // 尾轮（a-179）齐备：状态与执行态无关——read success；179 为奇数轮 list 结果 error。
+    expect(
+      midRunning.find(item => item.message.id === 'a-179')?.tools.map(
+        t => t.status,
+      ),
+    ).toEqual(['success', 'error']);
+  });
+
+  it('isTurnToolExecuting 导出签名在长列表上行为不变', () => {
+    const partialRounds = new Set(
+      Array.from({length: 20}, (_, i) => 4 + i * 9),
+    );
+    const messages = buildDenseToolMessages({
+      rounds: 180,
+      partialRounds,
+      dropLastResults: true,
+    });
+    const lastIncomplete = messages.find(m => m.id === 'a-179')!;
+    const earlierPartial = messages.find(m => m.id === 'a-175')!;
+    const completeRound = messages.find(m => m.id === 'a-2')!;
+    expect(isTurnToolExecuting(lastIncomplete, messages, true)).toBe(true);
+    expect(isTurnToolExecuting(earlierPartial, messages, true)).toBe(false);
+    expect(isTurnToolExecuting(completeRound, messages, true)).toBe(false);
+    expect(isTurnToolExecuting(lastIncomplete, messages, false)).toBe(false);
+    expect(turnToolResultsComplete(lastIncomplete, messages)).toBe(false);
+    expect(turnToolResultsComplete(completeRound, messages)).toBe(true);
   });
 });

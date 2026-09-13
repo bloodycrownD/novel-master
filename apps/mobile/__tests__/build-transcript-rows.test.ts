@@ -7,6 +7,7 @@ import {
   buildChatListItems,
   buildTranscriptRows,
   selectTailTranscriptRows,
+  type BuildChatListItemsOptions,
 } from '@/components/chat/message-blocks';
 
 function msg(
@@ -406,4 +407,114 @@ describe('buildTranscriptRows', () => {
       tools: [expect.objectContaining({toolUseId: 'tu1', status: 'success'})],
     });
   });
+
+  it('T-R1: 空 tail 返回空数组', () => {
+    const messages = [
+      msg('u1', 'user', [{type: 'text', text: 'hi'}], 1),
+    ];
+    expect(selectTailTranscriptRows(messages, [])).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// T-R1（init-busy-yield Step 5）：selectTailTranscriptRows 改为「预扫全量配对
+// 上下文 + 仅遍历 tail 构建」后，与旧形态「全量 buildTranscriptRows 再按
+// tail id 过滤」在长列表（500+ 消息、密集 tool）上输出全等。
+// ---------------------------------------------------------------------------
+
+type Block = ChatMessage['content']['blocks'][number];
+
+function buildDenseToolMessages(rounds: number): ChatMessage[] {
+  const messages: ChatMessage[] = [];
+  let seq = 1;
+  let toolSeq = 0;
+  for (let round = 0; round < rounds; round += 1) {
+    messages.push(
+      msg(`q-${round}`, 'user', [{type: 'text', text: `第 ${round} 轮提问`}], seq++),
+    );
+    const readId = `read-${toolSeq++}`;
+    const listId = `list-${toolSeq++}`;
+    messages.push(
+      msg(
+        `a-${round}`,
+        'assistant',
+        [
+          {type: 'thinking', text: `想一下第 ${round} 轮`},
+          {type: 'text', text: `第 ${round} 轮回答`},
+          {
+            type: 'tool_use',
+            id: readId,
+            name: 'read',
+            input: {path: `/f${round}.md`},
+          },
+          {type: 'tool_use', id: listId, name: 'list', input: {dir: '/'}},
+        ],
+        seq++,
+      ),
+    );
+    const isLast = round === rounds - 1;
+    if (isLast) {
+      // 最后一轮不回结果：tail 切片里带上未配对 assistant，
+      // 验证预扫上下文对 pending 判定的全局依赖。
+      continue;
+    }
+    const resultBlocks: Block[] = [
+      {
+        type: 'tool_result',
+        toolUseId: readId,
+        content: `ok ${round}`,
+        ok: true,
+      },
+    ];
+    if (round % 9 !== 4) {
+      resultBlocks.push(
+        round % 2 === 0
+          ? {
+              type: 'tool_result',
+              toolUseId: listId,
+              content: `目录 ${round}`,
+              ok: true,
+            }
+          : {
+              type: 'tool_result',
+              toolUseId: listId,
+              content: `Error: 失败 ${round}`,
+              ok: false,
+            },
+      );
+    }
+    messages.push(msg(`r-${round}`, 'user', resultBlocks, seq++, true));
+  }
+  return messages;
+}
+
+describe('T-R1 selectTailTranscriptRows 预扫构建等价（init-busy-yield Step 5）', () => {
+  const optionVariants: readonly BuildChatListItemsOptions[] = [
+    {},
+    {agentRunning: false},
+    {agentRunning: true},
+    {agentRunning: true, runUiStopped: true},
+  ];
+
+  it.each(optionVariants)(
+    '长列表：与「全量构建再 filter」输出全等（options=%j）',
+    options => {
+      const allMessages = buildDenseToolMessages(180);
+      // 尾轮不回结果行：180×3 − 1 = 539 条（>500）。
+      expect(allMessages).toHaveLength(539);
+      for (const tailSize of [3, 30, 539]) {
+        const tailMessages = allMessages.slice(-tailSize);
+        const tailIds = new Set(tailMessages.map(message => message.id));
+        const expected = buildTranscriptRows(
+          allMessages,
+          undefined,
+          options,
+        ).filter(row => row.kind === 'message' && tailIds.has(row.id));
+        expect(
+          selectTailTranscriptRows(allMessages, tailMessages, options),
+        ).toEqual(expected);
+      }
+    },
+    20000,
+  );
 });
