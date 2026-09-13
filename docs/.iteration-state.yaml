@@ -3,6 +3,6 @@ prd_path: docs/Iterations/init-busy-yield-2026-09/prd.md
 spec_path: docs/Iterations/init-busy-yield-2026-09/spec.md
 branch: feat/agent-run-parallel-and-notify
 dag_version: 1
-review_round: 4
+review_round: 5
 doc_fix_plan: []
 status: 待下轮审查
