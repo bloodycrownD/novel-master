@@ -523,6 +523,43 @@ describe('SessionStreamUnitManager', () => {
     expect(h.abortRegistry.abort).toHaveBeenCalledWith('a');
   });
 
+  it('T-X1: interruptedSessionIds 数据源——interrupted 单元入集；替换/删除出集；迁移经 subscribe 通知', () => {
+    const h = createHarness();
+    let notified = 0;
+    h.manager.subscribe(() => {
+      notified += 1;
+    });
+
+    // 水合回填：interrupted 单元入集并通知（notifyChanged 驱动 UI 刷新）
+    h.manager.adoptInterruptedUnit('a', 'p');
+    h.manager.adoptInterruptedUnit('b', 'p');
+    expect(new Set(h.manager.interruptedSessionIds())).toEqual(
+      new Set(['a', 'b']),
+    );
+    const notifiedAfterAdopt = notified;
+    expect(notifiedAfterAdopt).toBeGreaterThan(0);
+
+    // 活跃 run 单元不入集
+    h.runAgentTurn.mockImplementation(() => new Promise(() => undefined));
+    h.manager.startRun('c', 'p', 'hi');
+    publishStarted(h.eventBus, 'c', 'r1');
+    expect(h.manager.interruptedSessionIds().has('c')).toBe(false);
+    expect(new Set(h.manager.interruptedSessionIds())).toEqual(
+      new Set(['a', 'b']),
+    );
+
+    // interrupted 单元重跑（替换吸收）：出集并通知
+    h.manager.startRun('a', 'p', 'again');
+    publishStarted(h.eventBus, 'a', 'r2');
+    expect(h.manager.interruptedSessionIds().has('a')).toBe(false);
+    expect(new Set(h.manager.interruptedSessionIds())).toEqual(new Set(['b']));
+
+    // 会话删除（forgetSession）：出集并通知
+    h.manager.forgetSession('b');
+    expect(h.manager.interruptedSessionIds().size).toBe(0);
+    expect(notified).toBeGreaterThan(notifiedAfterAdopt);
+  });
+
   describe('保活前台服务（吸收契约 smoke）', () => {
     const originalOS = Platform.OS;
 

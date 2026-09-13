@@ -107,6 +107,20 @@ function ChatSessionListPanelInner({
     return manager.subscribe(sync);
   }, [manager]);
 
+  // ===== 中断徽标数据源（Step 9）：同 activeRunIds 的订阅模式 =====
+  // 中断态会话集合（水合回填的 interrupted 单元）：徽标三态判定
+  // running > interrupted > isCurrent 的中间一环；变更同样经
+  // manager.subscribe 通知驱动刷新。
+  const [interruptedRunIds, setInterruptedRunIds] = useState<
+    ReadonlySet<string>
+  >(() => new Set(manager.interruptedSessionIds()));
+  useEffect(() => {
+    const sync = () =>
+      setInterruptedRunIds(new Set(manager.interruptedSessionIds()));
+    sync();
+    return manager.subscribe(sync);
+  }, [manager]);
+
   const onStopGenerating = useCallback(
     (sid: string) => {
       // 走单元的 abort 语义（retain/freeze 时序由 core 负责）；后续
@@ -202,6 +216,15 @@ function ChatSessionListPanelInner({
             }
             renderItem={({item}) => {
               const isCurrent = item.id === sessionId;
+              // 徽标三态判定（Step 9），优先级 running > interrupted > isCurrent：
+              // running（活跃 run）→「生成中」；interrupted（无论是否当前会话）→
+              // 「已中断」——会话中断后重启 app 且当前停留在该会话时，必须落
+              // 「已中断」而非被「活跃中」吞掉（GWT-6 原样复现场景）；仅当前
+              // 会话且非上述两态才保留「活跃中」。
+              const isRunning = activeRunIds.has(item.id);
+              const isInterrupted =
+                !isRunning && interruptedRunIds.has(item.id);
+              const showsActiveMeta = isCurrent && !isRunning && !isInterrupted;
               return (
                 <Pressable
                   style={[
@@ -247,10 +270,10 @@ function ChatSessionListPanelInner({
                       ]}
                     >
                       {formatRelativeTimeMs(item.updatedAtMs)}
-                      {isCurrent ? ' · 活跃中' : ''}
+                      {showsActiveMeta ? ' · 活跃中' : ''}
                     </Text>
                   </View>
-                  {activeRunIds.has(item.id) ? (
+                  {isRunning ? (
                     <View
                       style={[
                         styles.generatingBadge,
@@ -258,6 +281,16 @@ function ChatSessionListPanelInner({
                       ]}
                     >
                       <Text style={styles.currentBadgeText}>生成中</Text>
+                    </View>
+                  ) : null}
+                  {isInterrupted ? (
+                    <View
+                      style={[
+                        styles.interruptedBadge,
+                        {backgroundColor: tokens.textSecondary},
+                      ]}
+                    >
+                      <Text style={styles.currentBadgeText}>已中断</Text>
                     </View>
                   ) : null}
                   {isCurrent && !sessionBatchActive ? (
@@ -376,6 +409,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
+  },
+  /** 中断徽标（Step 9）：中性色区分于进行中的主色。 */
+  interruptedBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginRight: 4,
   },
   menuDots: {fontSize: 18, paddingHorizontal: 4},
   chevron: {fontSize: 22, fontWeight: '300'},

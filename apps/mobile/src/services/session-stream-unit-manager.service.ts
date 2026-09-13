@@ -663,6 +663,22 @@ export class SessionStreamUnitManager {
   }
 
   /**
+   * 当前处于中断态（水合回填的 status='interrupted' 单元，常驻至替换或
+   * LRU 淘汰）的 sessionId 集合（Step 9 会话列表「已中断」徽标的数据源）。
+   * 变更沿与 activeSessionIds 同款：单元状态迁移均经 notifyChanged/subscribe
+   * 通知，UI 侧订阅驱动刷新。
+   */
+  interruptedSessionIds(): ReadonlySet<string> {
+    const ids = new Set<string>();
+    for (const [sessionId, unit] of this.units) {
+      if (unit.getStatus() === 'interrupted') {
+        ids.add(sessionId);
+      }
+    }
+    return ids;
+  }
+
+  /**
    * 请求该会话单元向全句柄广播 reset-stream 控制消息（Step 6 屏幕接线：
    * 消息操作 rollback/fork 等场景清流式显示的单元等效，对应 webview 的
    * resetStream；无单元 no-op）。
