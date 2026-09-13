@@ -1,8 +1,8 @@
 ---
-date: 2026-09-12 16:30
+date: 2026-09-14 09:20
 title: session-stream-unit-2026-09 spec 三轮审查收敛 + dev DAG 全程跑通达 dev-ready
 keywords: spec-check-loop, session-stream-unit, 真并发, session_run_state, execute-ready, code-dev-loop, dev-ready
-abstract: session-stream-unit-2026-09（会话流式单元真并发重构）spec 三轮审查至 execute-ready 后进入 code-dev-loop：Step1-7 全部落地（27 个实现 commit），五段 cr-func 全 func-ready（s6 一轮 No-Go 抓到宽限销毁消息回退真回归后修复），mobile 189 套件/1185、desktop 116/116、core 1854 全绿，dev-ready；Step 8 真机验收归用户。
+abstract: session-stream-unit-2026-09（会话流式单元真并发重构）spec 三轮审查至 execute-ready 后 code-dev-loop 跑通 Step1-7（27 实现 commit，s6 轮 No-Go 抓到宽限销毁消息回退真回归后修复），mobile 189 套件/1185、desktop 116/116、core 1854 全绿，dev-ready；两天后复核状态稳定，Step 8 真机验收与并入 dev 待用户。
 ---
 
 user:
@@ -40,3 +40,9 @@ user:
 
 assistant:
 dev-ready 达成：Step1-7 全部落地共 27 个实现 commit（core session_run_state 全链 + BOOT_VERSION 13 / Manager+Unit 状态机吸收 AgentRunManager / 事件管线 32-64ms 缓冲单一注入指标 / 消息管线 / 写通 coalescer+水合+settled 投影 / 屏幕订阅化装配替换 / 拆除九文件+探针落位+消息面收口+静态守卫）。五段 cr-func：s1-s2、s3-s5 均 yes；s6 一轮 No-Go 抓到真回归 MF-1（settled 单元 30s 宽限销毁后消息面回落旧 state，停留同会话超 30s 用户可见消息消失）+ MF-2（中断会话重启后指标条不显示，PRD「指标恢复」欠达），fix 后复审 yes；终检 yes。最终验证：mobile 189 套件/1185 全绿 + typecheck、desktop 116/116（需先构建 desktop 产物与 sksp 三平台 dist——本 worktree 曾缺失）、core 1854/0。实现注记与编排全程见 docs/.iteration-state.yaml 的 dev-ready Bundle-full。pstream 调试插桩在开发期间两次不明复活（stash 被恢复），已再次 stash 保存（stash@{0}），来源未查明。剩余：Step 8 真机验收（T-U11 PRD GWT 全清单）归用户 manual_user；并入 dev 分支待用户指示。
+
+user:
+（两天后）更新下记忆。
+
+assistant:
+状态复核：距 dev-ready 两天（+1d16h），HEAD 仍 497ae568 未动、工作区干净、pstream 插桩 stash@{0} 完好、无新提交——Step 8 真机验收（T-U11：并行压测七条 + 杀进程水合 + 中断标识两处视觉 + 消息面收口后切换防闪）与并入 dev 分支两件事均仍待用户，迭代无悬空工作流状态。环境事实补录：desktop 全量测试在本 worktree 需先 npm run build -w @novel-master/desktop（icons+renderer+main+preload）并备齐 sksp 三平台 dist，否则 4 个 smoke/packaging 用例报产物缺失（非回归）；mobile jest 须 NODE_ENV=test、desktop 测试 NODE_ENV=development。
