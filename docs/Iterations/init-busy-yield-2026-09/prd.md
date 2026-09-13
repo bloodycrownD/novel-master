@@ -44,7 +44,7 @@ dependency: iterations/session-stream-unit-2026-09/prd.md
 - **backfill 治理**：每次 run 开头的全量扫描探测改为低成本判定，发送链路不再有可感知占用；undo_send 的回滚保证不得削弱。
 - **忙期优先级**：交互事件（发送受理、通知链）优先于初始化任务。
 - **测量工具转正**：`apps/mobile/src/debug/run-timing.ts` 打点（`__DEV__` 门控）作为验收测量手段正式入库。
-- **附带修复**：中断会话在会话列表显示「活跃中」的文案错误（应为「已中断」语义）。
+- **附带修复**：中断会话在会话列表显示「活跃中」的文案错误（应为「已中断」语义）；列表徽标按三态判定——生成中/已中断/活跃中（当前会话），口径见 spec Step 9。
 
 ### 不包含范围
 
@@ -64,8 +64,8 @@ dependency: iterations/session-stream-unit-2026-09/prd.md
 ## 验收标准
 
 - **GWT-1（忙期通知）**：Given dev reload 完成后立即点发送，When 观察通知栏，Then 保活通知在 2 秒内出现（打点 + 截图时序双证）。
-- **GWT-2（忙期消息面）**：Given dev reload 后立即进入 1000+ 消息的会话，When 等待 WebView ready，Then ready + 首快照可见合计 ≤3 秒（dev 基线 15~19s）。
-- **GWT-3（交互可插队）**：Given 忙期任意阶段（水合/快照构建进行中），When 用户点击发送/停止/切换会话，Then 交互响应延迟 ≤100ms。
+- **GWT-2（忙期消息面）**：Given dev reload 后立即进入 1000+ 消息的会话（数据集用脚本灌入测试会话或备份真机大会话），When 等待 WebView ready，Then ready + 首快照可见合计 ≤3 秒（dev 基线 15~19s）。
+- **GWT-3（交互可插队）**：Given 忙期任意阶段（水合/快照构建进行中），When 用户点击发送/停止/切换会话，Then 交互响应延迟 ≤100ms（测量口径：打点 tap→handler 执行间隔；打点未扩展时以「忙期发送→通知 ≤2s」间接佐证并注明口径，见 spec Step 10）。
 - **GWT-4（正常场景）**：Given 非忙期点发送，When 打点测量，Then 点发送 → 保活通知 ≤1s，且 backfill 探测不再出现在该链路的关键路径。
 - **GWT-5（功能不回归）**：session-stream-unit PRD 的全部 GWT（切换防闪、水合恢复、指标恢复、并行无串会话）与性能红线套件全绿；分片快照与 force 直发交织场景（运行中 tool_use 落库、子会话链接更新）渲染正确。
 - **GWT-6（附带修复）**：Given 会话 A 中断后重启 app，When 查看会话列表，Then 该会话显示「已中断」语义文案而非「活跃中」。
