@@ -22,3 +22,9 @@ user:
 
 assistant:
 按 prd-generate 流程派三个 readonly 探索子代理（忙期链路/webview 冷加载与让步机制盘点/历史迭代检索）同步等待后汇总：忙期四大长任务源（webview 首快照 O(n²) 配对+富文本预渲染+整包序列化+webview 全量 vnode、水合全表扫+同步循环、backfill 全量探测、组件重挂载）全部零分片让步；现有节流全面向流式 delta 与 DB 写；InteractionManager/requestIdleCallback 全仓零使用；无重复立项风险（TDBC 16ms 量子是唯一让步先例、仅事务内）。AskUserQuestion 四项拍板后 PRD 落盘 docs/Iterations/init-busy-yield-2026-09/prd.md（dependency 指向 session-stream-unit prd），含 7 条 GWT 验收与四个风险待确认项（run 挂死归属、release 基线缺失、分片与 force 直发时序、水合/快照术语钉死）。待用户最终确认 PRD。
+
+user:
+PRD 确认后调用 spec-generate 出技术方案。
+
+assistant:
+spec-generate 派三个 readonly 探索子代理（backfill/checkpoint 回滚语义、bridge 协议与 webview 分块可行性、水合分片与测试基线）同步等待后落 spec（docs/Iterations/init-busy-yield-2026-09/spec.md）。spec 级关键定案：①让步原语复刻 TDBC 16ms 量子且必须构造注入（五套件全 fake timers，宏任务让步会挂死 13+ 处 await hydrate）；②水合保持「markHydrated 前投影恒 null」全有或全无语义（manager 测试 135-153 钉死）；③快照分片协议带 generation 代次（appendTailRows 无去重，force 打断旧片会叠加；T-ST1「快照只发一次」断言重定义）；④web 侧分批手动 insert 会被下次全量 renderRows 洗掉，窗口化必须做在 RowList 层；⑤backfill 用闲置原语 hasAnyCheckpointForSession 等组 O(1) 判定、游标挂 session_kkv、truncate 必须清游标（seq 复用坑）、判定不确定保守回退全量（回滚保证宁误报勿漏报）；⑥keepalive 通知改两段式先出后补标签。10 Step + 18 测试用例。待用户确认 spec。
