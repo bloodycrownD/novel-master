@@ -364,3 +364,20 @@ test("T-MD3: 成功覆盖失败 / LRU 淘汰时错误缓存连带清除（防泄
     resetMermaidCacheForTests();
   }
 });
+
+test("T-L6: 传 onLinkClick 时 <a> 覆盖生效（data-chat-link 标记），未传时渲染行为不变", () => {
+  const md = "[文件](notes/a.md) 与 [外链](https://example.com)";
+  // 传回调：components a 覆盖生效——onClick 不序列化进 markup，以
+  // data-chat-link 标记断言接线（链接 href 原样保留供回调上抛）。
+  const withLink = renderToStaticMarkup(
+    <MermaidMarkdown content={md} onLinkClick={() => undefined} />,
+  );
+  assert.ok(withLink.includes('data-chat-link=""'));
+  assert.ok(withLink.includes('href="notes/a.md"'));
+  assert.ok(withLink.includes('href="https://example.com"'));
+
+  // 未传回调：无 a 覆盖、无 data-chat-link（PreviewPane 等消费点渲染不变）
+  const withoutLink = renderToStaticMarkup(<MermaidMarkdown content={md} />);
+  assert.ok(!withoutLink.includes("data-chat-link"));
+  assert.ok(withoutLink.includes('href="notes/a.md"'));
+});

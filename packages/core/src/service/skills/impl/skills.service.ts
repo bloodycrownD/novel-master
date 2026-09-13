@@ -17,9 +17,13 @@ import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 
 import { isVfsError } from "@/errors/vfs-errors.js";
+import { TdbcError } from "@/infra/tdbc/index.js";
 import {
+  SkillError,
+  skillAlreadyExists,
   skillBuiltin,
   skillBuiltinNameReserved,
+  skillBuiltinRename,
   skillInvalidName,
   skillInvalidPath,
   skillMissingDomain,
@@ -28,15 +32,18 @@ import {
 } from "@/errors/skill-errors.js";
 import { BUILTIN_SKILL_NAMES } from "@/bootstrap/skills/seed-builtin-skills.js";
 import { parseSkillFrontMatter } from "@/domain/skills/logic/parse-skill-front-matter.js";
+import { withSkillFrontMatterValues } from "@/domain/skills/logic/with-skill-front-matter-values.js";
 import { computeEffectiveSkills } from "@/domain/skills/logic/effective-skills.js";
 import type { EffectiveSkill } from "@/domain/skills/logic/effective-skills.js";
 import type { SkillDomain } from "@/domain/skills/model/skill.schema.js";
 import { validateSkillName } from "@/domain/skills/model/skill-name.js";
 import { SqliteSkillDisabledRuleRepository } from "@/domain/skills/repositories/impl/sqlite-skill-disabled-rule.repository.js";
 import type { SkillDisabledRuleRepository } from "@/domain/skills/repositories/skill-disabled-rule.port.js";
+import { createScopedVfsService } from "@/service/vfs/create-scoped-vfs-service.js";
 import type {
   SkillEditMatch,
   SkillFileContent,
+  SkillInfoChanges,
   SkillListItem,
   SkillListScope,
   SkillLocation,
@@ -387,6 +394,145 @@ export class SkillsService implements SkillService {
         await ruleRepo.removeAllScopesByName(location.name);
       }
     });
+  }
+
+  /**
+   * 编辑技能信息（重命名 + 描述同一提交）：单事务（方案 A，deleteSkill
+   * 同层先例）完成校验门 → 目录迁移 → front matter 同步 → 负清单迁移。
+   *
+   * 事务内的 VFS 操作用 tx 连接新建 scoped vfs（message-rollback 的嵌套
+   * 先例）：vfs 内部 runInTransactionOrConn 对 TransactionalConnection 的
+   * transaction 立即抛 NESTED_TRANSACTION 后复用 tx 直通，不经 mutex 排队
+   * （若用捕获原 conn 的 deps 工厂，会与外层事务的 mutex 互等死锁）。
+   *
+   * 事务内抛的业务错误会被 driver 包装成 TdbcError(SQLITE_ERROR)，外层
+   * 解包 cause 还原 SkillError 错误码（IPC 透传依赖）。
+   */
+  async updateSkillInfo(
+    location: SkillLocation,
+    changes: SkillInfoChanges
+  ): Promise<void> {
+    const { newName, description } = changes;
+    if (newName == null && description == null) {
+      return; // 无变更提交，防御性 no-op
+    }
+    // 改名提交 = 提交了与现名不同的 newName；同值提交语义上是仅改描述
+    const renaming = newName != null && newName !== location.name;
+
+    // 校验链 1：技能名校验（仅提交 newName 时；同值提交校验无害）
+    if (newName != null) {
+      assertValidSkillName(newName);
+    }
+    // 校验链 2：内置源门（仅改名提交时）：global 域内置技能不可改名；
+    // 仅改描述（含 newName 同值提交）放行，T-S2⑨ 防回归
+    if (
+      renaming &&
+      location.domain === "global" &&
+      BUILTIN_SKILL_NAMES.has(location.name)
+    ) {
+      throw skillBuiltinRename(location.name);
+    }
+    // 校验链 3：目标保留名门（仅改名提交时）：目标名撞内置名且目标目录
+    // 不存在（= 新建语义）拒；目录已存在（历史同名副本）由查重门接管
+    if (renaming) {
+      await this.assertSkillNameNotReservedForCreate(
+        location.domain,
+        newName!,
+        location.projectId
+      );
+    }
+
+    // VFS 清理用 meta 域 key；project 域 projectId 校验同源
+    const vfsScopeKey = vfsScopeKeyOfLocation(location);
+    const oldPrefix = `${SKILLS_ROOT}/${location.name}`;
+    const newPrefix = renaming ? `${SKILLS_ROOT}/${newName}` : oldPrefix;
+
+    // 存在性检查放事务外（deleteSkill 先例：避免错误被事务包装器包裹）
+    await this.assertSkillDirExists(
+      new SqliteVfsEntryRepository(this.deps.conn),
+      vfsScopeKey,
+      oldPrefix
+    );
+
+    try {
+      await this.deps.conn.transaction(async (tx) => {
+        const ruleRepo = new SqliteSkillDisabledRuleRepository(tx);
+        // 校验链 4：域内查重（事务内重查，收口 TOCTOU；目标目录=自身时
+        // 是同值提交，不算撞名）
+        if (renaming) {
+          const conflict = await this.skillDirExists(
+            new SqliteVfsEntryRepository(tx),
+            vfsScopeKey,
+            newPrefix
+          );
+          if (conflict) {
+            throw skillAlreadyExists(newName!);
+          }
+        }
+
+        // 事务内用 tx 建 scoped vfs（嵌套先例见方法注释）
+        const scope =
+          location.domain === "global"
+            ? { kind: "global-meta" as const }
+            : {
+                kind: "project-meta" as const,
+                projectId: location.projectId!,
+              };
+        const vfs = createScopedVfsService(tx, scope);
+
+        // 校验链 5：目录迁移（entry_id / revision 历史自动跟随；
+        // renamePrefix 无目标存在检查，由上一步事务内查重保证）
+        if (renaming) {
+          await vfs.renamePrefix(oldPrefix, newPrefix);
+        }
+
+        // 校验链 6：front matter 同步——解析成功才重写（bump version +
+        // 写 revision）；invalid（含缺 SKILL.md）跳过，避免改名顺手
+        // 「治好」无效技能的行为歧义
+        const entryPath = `${newPrefix}/${SKILL_ENTRY_FILE}`;
+        let source: string | null = null;
+        try {
+          source = (await vfs.read(entryPath)).content;
+        } catch (error) {
+          if (!isVfsError(error, "NOT_FOUND")) {
+            throw error;
+          }
+        }
+        if (source != null && parseSkillFrontMatter(source).valid) {
+          await vfs.write(
+            entryPath,
+            withSkillFrontMatterValues(source, {
+              ...(newName != null ? { name: newName } : {}),
+              ...(description != null ? { description } : {}),
+            })
+          );
+        }
+
+        // 校验链 7：负清单迁移（仅改名时）——project 域迁本项目单行；
+        // global 域迁所有 scope 同名行（镜像 deleteSkill 连带口径）。
+        // 已知边界（文档化不处理）：global X 与 project P 的 X 并存且
+        // (P,X) 被禁用时改 global X 名，(P,X) 一并迁移但 P 实际生效的
+        // 是本地副本 X，行成孤儿；低频组合接受。
+        if (renaming) {
+          if (location.domain === "project") {
+            await ruleRepo.renameByName(
+              disabledScopeKeyOfProject(location.projectId!),
+              location.name,
+              newName!
+            );
+          } else {
+            await ruleRepo.renameByName(null, location.name, newName!);
+          }
+        }
+      });
+    } catch (error) {
+      // 两 driver 的事务实现都会把非 TdbcError（含 SkillError）包装成
+      // SQLITE_ERROR（cause 保留原错）：解包还原业务错误码
+      if (error instanceof TdbcError && error.cause instanceof SkillError) {
+        throw error.cause;
+      }
+      throw error;
+    }
   }
 
   /**

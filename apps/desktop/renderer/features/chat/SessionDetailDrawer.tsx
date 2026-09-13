@@ -112,6 +112,18 @@ export function SessionDetailDrawer({
   // 防止 blur 与 keydown Enter 重复提交
   const submittingRef = useRef(false);
 
+  // 子面板状态重置：组件 if (!open) return null 只是隐藏、并不卸载，
+  // searchPanelOpen / skillsPanelOpen 会跨「关闭再打开」、跨会话切换残留
+  // （上个会话停在技能/查找面板，重开抽屉仍停在原面板）。
+  // 打开抽屉或切换会话时统一拉回默认视图。
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    setSearchPanelOpen(false);
+    setSkillsPanelOpen(false);
+  }, [open, sessionId]);
+
   const reload = useCallback(async () => {
     const [metaRes, tokens] = await Promise.all([
       ipcPromptAgentMeta({ projectId, sessionId }),

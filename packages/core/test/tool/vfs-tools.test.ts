@@ -9,10 +9,16 @@ import {
 import { registerBuiltinTools } from "../../src/domain/tool/builtin/register-builtin-tools.js";
 import type { BuiltinToolContext } from "../../src/domain/tool/builtin/builtin-tool-context.js";
 import { createWorkplaceService } from "../../src/service/workplace/create-workplace-service.js";
+import { createSessionKkvService } from "../../src/service/session-kkv/create-session-kkv-service.js";
 import { vfsNotFound } from "../../src/errors/vfs-errors.js";
 import { ToolError } from "../../src/errors/tool-errors.js";
 import { isVfsError } from "@novel-master/core/vfs";
-import { TOOL_OUTPUT_MAX_LINES, TOOL_OUTPUT_MAX_MATCHES } from "../../src/domain/tool/logic/tool-output-limits.js";
+import {
+  TOOL_OUTPUT_MAX_BYTES,
+  TOOL_OUTPUT_MAX_LINES,
+  TOOL_OUTPUT_MAX_MATCHES,
+} from "../../src/domain/tool/logic/tool-output-limits.js";
+import { formatToolOutputForLlm } from "../../src/domain/tool/logic/format-tool-output.js";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 
 function toolCtx(
@@ -39,10 +45,10 @@ describe("Builtin file tools V2 (unit)", () => {
     );
   });
 
-  it("registers exactly 10 builtin tools via registerBuiltinTools", () => {
+  it("registers exactly 11 builtin tools via registerBuiltinTools", () => {
     const registry = new ToolRegistry<BuiltinToolContext>();
     registerBuiltinTools(registry);
-    assert.equal(registry.list().length, 10);
+    assert.equal(registry.list().length, 11);
     assert.ok(registry.list().includes("task"));
     assert.ok(registry.list().includes("skill"));
     assert.ok(registry.list().includes("agent"));
@@ -546,7 +552,7 @@ describe("Builtin file tools V2 (integration)", () => {
     );
   });
 
-  it("T5: read truncates long lines", async () => {
+  it("T5: read 中等单行（3000 字符 < 50KB）完整返回，不再按 2000 字符截行", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`p-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
@@ -558,12 +564,170 @@ describe("Builtin file tools V2 (integration)", () => {
     const runner = new ToolRunner(registry);
     const baseCtx = toolCtx(vfs, project.id, session.id);
 
-    const read = await runner.call<{ content: string }>(
+    const read = await runner.call<{ content: string; truncated: boolean }>(
       "read",
       { path: "/long.txt" },
       baseCtx,
     );
-    assert.ok(read.content.includes("line truncated"));
+    // 旧行为（truncateLine 2000 字符 + 后缀）已废：3000 字符单行在 50KB
+    // 预算内完整返回，无截断标记。
+    assert.equal(read.content, "a".repeat(3000));
+    assert.equal(read.truncated, false);
+    assert.ok(!read.content.includes("line truncated"));
+  });
+
+  it("T-R1: read 单行 300KB 文件返回 50KB 预算内前缀（不再是 2000 字符），末行截断不可续读", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`p-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    // 单行 300KB：旧行为（truncateLine 2000 字符）只回 2000 字符，
+    // 新行为按 50KB 单一预算尽量填满、末行截到预算点。
+    await vfs.write("/long-oneline.txt", "a".repeat(300 * 1024));
+
+    const registry = new ToolRegistry<BuiltinToolContext>();
+    registerBuiltinTools(registry);
+    const runner = new ToolRunner(registry);
+    const baseCtx = toolCtx(vfs, project.id, session.id);
+
+    const read = await runner.call<{
+      content: string;
+      truncated: boolean;
+      lastLineTruncated?: boolean;
+      nextOffset?: number;
+      returnedLines: number;
+      totalLines: number;
+    }>("read", { path: "/long-oneline.txt" }, baseCtx);
+
+    assert.equal(read.totalLines, 1);
+    assert.equal(read.returnedLines, 1);
+    // 预算内前缀：远超旧行为的 2000 字符（'a' 1 字节/字符，51200 字符
+    // 即 50KB 预算填满），且 ≤ 50KB（UTF-8 字节口径）。
+    assert.ok(read.content.length > 50_000, `前缀应尽量填满预算: ${read.content.length}`);
+    assert.ok(
+      new TextEncoder().encode(read.content).byteLength <= TOOL_OUTPUT_MAX_BYTES
+    );
+    assert.ok(read.content.startsWith("aaaa"));
+    assert.equal(read.truncated, true);
+    assert.equal(read.lastLineTruncated, true);
+    // 被截行是文件末行：跳过后无剩余内容，不给 nextOffset（避免续读超界）。
+    assert.equal(read.nextOffset, undefined);
+    // formatter 提示注明末行截断、尾部不可续读。
+    const formatted = formatToolOutputForLlm(read);
+    assert.match(formatted, /tail is not resumable/);
+  });
+
+  it("T-R1: 多行超预算文件跨行填满预算，nextOffset 跳过被截的末行", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`p-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    // 9 行 × 10KB('b') + 1 行 100KB('c') + 1 行 'd'。每行 10240B：
+    // 行 1-4 累计 40963B，行 5（40963+1+10240=51204）超 51200 预算 →
+    // 截断为 10236B 前缀（仍以 'b' 开头）。
+    const lines: string[] = [];
+    for (let i = 0; i < 9; i++) lines.push("b".repeat(10 * 1024));
+    lines.push("c".repeat(100 * 1024));
+    lines.push("d-line");
+    await vfs.write("/multi-big.txt", lines.join("\n"));
+
+    const registry = new ToolRegistry<BuiltinToolContext>();
+    registerBuiltinTools(registry);
+    const runner = new ToolRunner(registry);
+    const baseCtx = toolCtx(vfs, project.id, session.id);
+
+    const read = await runner.call<{
+      content: string;
+      truncated: boolean;
+      lastLineTruncated?: boolean;
+      nextOffset?: number;
+      returnedLines: number;
+      totalLines: number;
+    }>("read", { path: "/multi-big.txt" }, baseCtx);
+
+    assert.equal(read.totalLines, 11);
+    assert.equal(read.truncated, true);
+    assert.equal(read.lastLineTruncated, true);
+    // 4 行完整 10KB + 第 5 行截断前缀（仍以 'b' 开头，末尾无换行）。
+    assert.equal(read.returnedLines, 5);
+    assert.ok(read.content.endsWith("b"));
+    assert.ok(
+      new TextEncoder().encode(read.content).byteLength <= TOOL_OUTPUT_MAX_BYTES
+    );
+    // nextOffset 跳过被截的末行（offset + returnedLines = 6，从第 6 行续读，
+    // 不是同一行——重读被截行会因预算不变再次截断，死循环）。
+    assert.equal(read.nextOffset, 6);
+    // 续读一：第 6-9 行完整 + 第 10 行('c' 100KB 单行)截断前缀。
+    const next = await runner.call<{ content: string; nextOffset?: number }>(
+      "read",
+      { path: "/multi-big.txt", offset: 6 },
+      baseCtx,
+    );
+    assert.ok(next.content.startsWith("bbbb"));
+    assert.ok(next.content.endsWith("c"));
+    // 续读二：跳过被截的 'c' 行，从第 11 行 'd' 起（预算重置可整行读出）。
+    const final = await runner.call<{ content: string }>(
+      "read",
+      { path: "/multi-big.txt", offset: 11 },
+      baseCtx,
+    );
+    assert.equal(final.content, "d-line");
+  });
+
+  it("T-R1: 多行正常文件（<50KB，行 ≤2000 字符）输出与旧行为一致（快照对照）", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`p-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    const content = Array.from({ length: 100 }, (_, i) => `第${i + 1}行内容`.padEnd(20, "字")).join("\n");
+    await vfs.write("/normal.txt", content);
+
+    const registry = new ToolRegistry<BuiltinToolContext>();
+    registerBuiltinTools(registry);
+    const runner = new ToolRunner(registry);
+    const baseCtx = toolCtx(vfs, project.id, session.id);
+
+    const read = await runner.call<{
+      content: string;
+      truncated: boolean;
+      returnedLines: number;
+      totalLines: number;
+      lastLineTruncated?: boolean;
+    }>("read", { path: "/normal.txt" }, baseCtx);
+
+    // 全量返回：content 与原文一致、无任何截断标记（与旧行为快照一致）。
+    assert.equal(read.content, content);
+    assert.equal(read.truncated, false);
+    assert.equal(read.lastLineTruncated, undefined);
+    assert.equal(read.returnedLines, 100);
+    assert.equal(read.totalLines, 100);
+  });
+
+  it("T-R2: 普通文件不变——5000 行大文件仍按行数帽分页（旧行为快照）", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`p-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    const content = Array.from({ length: 5000 }, (_, i) => `line-${i + 1}`).join("\n");
+    await vfs.write("/big-t-r2.txt", content);
+
+    const registry = new ToolRegistry<BuiltinToolContext>();
+    registerBuiltinTools(registry);
+    const runner = new ToolRunner(registry);
+    const baseCtx = toolCtx(vfs, project.id, session.id);
+
+    const read = await runner.call<{
+      truncated: boolean;
+      returnedLines: number;
+      nextOffset?: number;
+      lastLineTruncated?: boolean;
+    }>("read", { path: "/big-t-r2.txt" }, baseCtx);
+
+    assert.equal(read.returnedLines, TOOL_OUTPUT_MAX_LINES);
+    assert.equal(read.truncated, true);
+    assert.equal(read.nextOffset, TOOL_OUTPUT_MAX_LINES + 1);
+    // 行数帽路径不产生末行截断标记。
+    assert.equal(read.lastLineTruncated, undefined);
   });
 
   it("T6: grep and glob truncate beyond 100 matches", async () => {
@@ -597,6 +761,95 @@ describe("Builtin file tools V2 (integration)", () => {
     assert.equal(glob.total, 120);
     assert.equal(glob.truncated, true);
     assert.equal(glob.paths.length, TOOL_OUTPUT_MAX_MATCHES);
+  });
+
+  it("T-G3: 超 50KB 响应经 curl 落盘真实 VFS：/tmp 首建目录 + file_cache + 目录规则 + read 分页读回全文", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`p-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    const workplace = createWorkplaceService(ctx.conn, {
+      kind: "session",
+      projectId: project.id,
+      sessionId: session.id,
+    });
+    const sessionKkv = createSessionKkvService(ctx.conn);
+
+    // 行长 1023B：页 1 的 50 行 + 分隔符恰好耗尽 50KB 预算
+    //（50×1023+50=51200，末行 remaining=0 整行丢弃而非部分截断），
+    // 续读 nextOffset 指回被丢弃行、预算重置整行读出——分页拼回全文
+    // 无丢失，不碰「被截行尾部不可续读」路径。
+    const line = "x".repeat(1023);
+    const body = Array.from({ length: 62 }, () => line).join("\n");
+    // 62×1023+61 = 63487B > 50KB，触发 curl 落盘保险丝。
+    const fetchFn = (async () =>
+      new Response(body, {
+        status: 200,
+        headers: { "content-type": "text/html" },
+      })) as typeof globalThis.fetch;
+
+    const registry = new ToolRegistry<BuiltinToolContext>();
+    registerBuiltinTools(registry);
+    const runner = new ToolRunner(registry);
+    const baseCtx: BuiltinToolContext = {
+      ...toolCtx(vfs, project.id, session.id),
+      workplace,
+      sessionKkv,
+      fetchFn,
+    };
+
+    const out = await runner.call(
+      "curl",
+      { url: "https://example.com/big" },
+      baseCtx,
+    );
+    const rec = out as {
+      body: string;
+      truncated: boolean;
+      originalBytes: number;
+      savedPath?: string;
+    };
+    // 落盘形态：body 置空占位、savedPath 指向 /tmp 下真实 VFS 文件。
+    assert.equal(rec.truncated, true);
+    assert.equal(rec.body, "");
+    assert.equal(rec.originalBytes, 63487);
+    assert.ok(
+      rec.savedPath != null &&
+        /^\/tmp\/curl-\d{8}-[0-9a-f]{4}\.html$/.test(rec.savedPath),
+      `savedPath 形状不对: ${rec.savedPath}`
+    );
+
+    // /tmp 首次建目录：文件在真实 VFS 存在且全文一致。
+    const saved = await vfs.read(rec.savedPath!);
+    assert.equal(saved.content, body);
+
+    // 配套动作一：file_cache upsert（同会话后续 read 免重读盘）。
+    assert.ok(
+      (await sessionKkv.listKeys(session.id, "file_cache")).includes(
+        `full:${rec.savedPath}`
+      )
+    );
+    // 配套动作二：/tmp 目录链补默认规则（rule_on）。
+    assert.equal((await workplace.getDirRule("/tmp"))?.ruleEnabled, true);
+
+    // read 工具分页读回：页 1（行 1-50）+ 页 2（行 51-62）拼回全文。
+    const page1 = await runner.call<{
+      content: string;
+      truncated: boolean;
+      lastLineTruncated?: boolean;
+      nextOffset?: number;
+    }>("read", { path: rec.savedPath! }, baseCtx);
+    assert.equal(page1.truncated, true);
+    // 预算恰耗尽 → 末行整行丢弃，不是部分截断。
+    assert.equal(page1.lastLineTruncated, undefined);
+    assert.equal(page1.nextOffset, 51);
+    const page2 = await runner.call<{ content: string; truncated: boolean }>(
+      "read",
+      { path: rec.savedPath!, offset: 51 },
+      baseCtx,
+    );
+    assert.equal(page2.truncated, false);
+    assert.equal(`${page1.content}\n${page2.content}`, body);
   });
 
   it("wraps VfsError as FAILED and preserves cause", async () => {

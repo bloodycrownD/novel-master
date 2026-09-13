@@ -69,15 +69,16 @@ function renderDefaultMode(): string {
 }
 
 describe('AgentEditorForm builtin tools hint (T-AG5)', () => {
-  it('默认模式展示提示文案计 10 个且名单含 agent 与 curl', () => {
+  it('默认模式展示提示文案计 11 个且名单含 agent 与 curl', () => {
     const json = renderDefaultMode();
-    expect(json).toContain('未配置时使用全部内置工具（10 个）');
+    expect(json).toContain('未配置时使用全部内置工具（11 个）');
     expect(json).toContain(
-      'task、read、write、edit、fs、glob、grep、skill、agent、curl。',
+      'task、read、write、edit、fs、glob、grep、skill、agent、curl、search。',
     );
   });
 
-  it('不再残留 8 个的旧计数', () => {
+  it('不再残留 8 / 10 个的旧计数', () => {
     expect(renderDefaultMode()).not.toContain('全部内置工具（8');
+    expect(renderDefaultMode()).not.toContain('全部内置工具（10');
   });
 });

@@ -13,11 +13,31 @@ import type {
   WorkplaceDirRule,
 } from "../model/workplace-types.js";
 import { DEFAULT_WORKPLACE_DIR_RULE } from "./default-dir-rule.js";
+import {
+  compareSmartBasenames,
+  extractSortKey,
+  type CompiledSmartSortRule,
+  type SmartSortKeyCache,
+} from "./smart-sort.js";
 
 /** File metadata used for sorting within a directory. */
 export interface WorkplaceFileSortMeta {
   readonly logicalPath: string;
   readonly mtimeMs: number;
+}
+
+/** Optional inputs for {@link sortFilesForDir} (smart sort rules, spec D4). */
+export interface SortFilesForDirOptions {
+  /** Pre-compiled smart rules; when omitted `smart` degrades to natural sort. */
+  readonly smartRules?: readonly CompiledSmartSortRule[];
+}
+
+/** Optional inputs for {@link sortDirPaths} (smart rules + dir mtimes, spec D4/D7). */
+export interface SortDirPathsOptions {
+  /** Pre-compiled smart rules; when omitted `smart` degrades to natural sort. */
+  readonly smartRules?: readonly CompiledSmartSortRule[];
+  /** Directory path → mtime; when omitted `created`/`updated` degrade to name order (D7). */
+  readonly dirMtimeByPath?: ReadonlyMap<string, number>;
 }
 
 /**
@@ -59,17 +79,39 @@ function compareNumbers(a: number, b: number, order: SortOrder): number {
   return order === "asc" ? cmp : -cmp;
 }
 
+/** Decorate-sort-undecorate: pre-extract ordinals once per basename (D5). */
+function decorateSmartCache(
+  basenames: readonly string[],
+  rules: readonly CompiledSmartSortRule[]
+): SmartSortKeyCache {
+  const cache: SmartSortKeyCache = new Map();
+  for (const base of basenames) {
+    if (!cache.has(base)) {
+      cache.set(base, extractSortKey(base, rules));
+    }
+  }
+  return cache;
+}
+
 /**
  * Sorts direct child files using directory rule (or name asc default).
  */
 export function sortFilesForDir(
   files: readonly WorkplaceFileSortMeta[],
-  dirRule: WorkplaceDirRule | null
+  dirRule: WorkplaceDirRule | null,
+  opts?: SortFilesForDirOptions
 ): WorkplaceFileSortMeta[] {
   const sortField: SortField =
     dirRule?.sortField ?? DEFAULT_WORKPLACE_DIR_RULE.sortField;
   const sortOrder: SortOrder =
     dirRule?.sortOrder ?? DEFAULT_WORKPLACE_DIR_RULE.sortOrder;
+  let smartCache: SmartSortKeyCache | undefined;
+  if (sortField === "smart") {
+    smartCache = decorateSmartCache(
+      files.map((f) => basename(f.logicalPath)),
+      opts?.smartRules ?? []
+    );
+  }
   const sorted = [...files];
   sorted.sort((a, b) => {
     switch (sortField) {
@@ -82,6 +124,13 @@ export function sortFilesForDir(
       case "created":
       case "updated":
         return compareNumbers(a.mtimeMs, b.mtimeMs, sortOrder);
+      case "smart":
+        return compareSmartBasenames(
+          basename(a.logicalPath),
+          basename(b.logicalPath),
+          sortOrder,
+          smartCache
+        );
     }
   });
   return sorted;
@@ -134,18 +183,53 @@ export function evaluateFileDisplay(params: {
 }
 
 /**
- * Sorts sibling directory paths using the parent directory's rule (name + order).
+ * Sorts sibling directory paths using the parent directory's rule.
+ *
+ * `name` keeps the legacy basename lexicographic order (zero regression);
+ * `created`/`updated` compare directory mtimes from `opts.dirMtimeByPath`
+ * (missing map / orphan path degrades to name order — the legacy behavior,
+ * spec D7); `smart` orders by extracted ordinals (missing rules degrade to
+ * natural order). Direction (`sortOrder`) applies uniformly.
  */
 export function sortDirPaths(
   paths: readonly string[],
-  parentDirRule: WorkplaceDirRule | null
+  parentDirRule: WorkplaceDirRule | null,
+  opts?: SortDirPathsOptions
 ): string[] {
   const sortOrder: SortOrder = parentDirRule?.sortOrder ?? "asc";
+  const sortField: SortField =
+    parentDirRule?.sortField ?? DEFAULT_WORKPLACE_DIR_RULE.sortField;
+  let smartCache: SmartSortKeyCache | undefined;
+  if (sortField === "smart") {
+    smartCache = decorateSmartCache(
+      paths.map((p) => basename(p)),
+      opts?.smartRules ?? []
+    );
+  }
   const sorted = [...paths];
   sorted.sort((a, b) => {
-    const nameCmp = compareStrings(basename(a), basename(b), sortOrder);
-    if (nameCmp !== 0) {
-      return nameCmp;
+    let cmp: number;
+    switch (sortField) {
+      case "created":
+      case "updated": {
+        const mtimeA = opts?.dirMtimeByPath?.get(a);
+        const mtimeB = opts?.dirMtimeByPath?.get(b);
+        if (mtimeA != null && mtimeB != null && mtimeA !== mtimeB) {
+          cmp = compareNumbers(mtimeA, mtimeB, sortOrder);
+        } else {
+          // 缺 mtime（缺省 map / 孤儿路径）或 mtime 相等 → basename 字典序（D7 退化分支）
+          cmp = compareStrings(basename(a), basename(b), sortOrder);
+        }
+        break;
+      }
+      case "smart":
+        cmp = compareSmartBasenames(basename(a), basename(b), sortOrder, smartCache);
+        break;
+      default:
+        cmp = compareStrings(basename(a), basename(b), sortOrder);
+    }
+    if (cmp !== 0) {
+      return cmp;
     }
     return compareStrings(a, b, sortOrder);
   });

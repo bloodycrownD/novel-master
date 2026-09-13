@@ -35,6 +35,7 @@ import type {
   ProviderServiceBundle,
   TokenCounterRegistry,
 } from '@novel-master/core/provider';
+import type {SmartSortRuleService} from '@novel-master/core/smart-sort-rule';
 import type {MessageCheckpointService} from '@novel-master/core/message-checkpoint';
 import type {SessionFsService} from '@novel-master/core/session-fs';
 import type {
@@ -46,6 +47,7 @@ import type {WorkplaceService} from '@novel-master/core/workplace';
 import type {KkvService} from '@novel-master/core/kkv';
 import type {SessionKkvService} from '@novel-master/core/session-kkv';
 import type {SkillService} from '@novel-master/core/skills';
+import type {SearchConfigStore} from '@novel-master/core';
 import type {SessionStreamUnitManager} from '@/services/session-stream-unit-manager.service';
 
 /** Open connection with domain services (no CLI scope resolver or mock LLM). */
@@ -86,11 +88,15 @@ export interface MobileNovelMasterRuntime {
   readonly savedModelRepo: ProviderServiceBundle['savedModelRepo'];
   readonly providerRepo: ProviderServiceBundle['providerRepo'];
   readonly modelRequests: ModelRequestService;
+  /** 智能排序规则：CRUD/调序/批量/导入导出/预览（spec smart-filename-sort）。 */
+  readonly smartSortRule: SmartSortRuleService;
   readonly agentRegistry: AgentRegistryService;
   /** 按 sessionId 索引 in-flight run 的 controller，供停止按钮 / IPC 中断。 */
   readonly abortRegistry: AgentAbortRegistry;
   /** 按 sessionId 索引 in-flight run 的流句柄，供 IPC 订阅 / 取消订阅。 */
   readonly streamRegistry: AgentStreamRegistry;
+  /** 搜索引擎配置存储（search 工具 run 内现读引擎与 key；搜索配置页（列表+详情）消费）。 */
+  readonly searchConfig: SearchConfigStore;
   readonly tokenCounters: TokenCounterRegistry;
   readonly userVfsTurn: UserVfsTurnService;
   /**

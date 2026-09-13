@@ -149,7 +149,7 @@ function parseSortField(value: string | true | undefined): SortField | undefined
   if (typeof value !== "string") {
     return undefined;
   }
-  if (value === "name" || value === "created" || value === "updated") {
+  if (value === "name" || value === "created" || value === "updated" || value === "smart") {
     return value;
   }
   throw new Error(`invalid --sort: ${value}`);

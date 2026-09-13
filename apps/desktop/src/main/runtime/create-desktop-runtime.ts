@@ -29,8 +29,10 @@ import {
 import {
   createPersistentPreferences,
   createPersistentState,
+  createSearchConfigStore,
 } from "@novel-master/core";
 import { refreshUserVfsUnifiedToolTurnSnapshot } from "@novel-master/core/feature-flags";
+import { createSmartSortRuleService } from "@novel-master/core/smart-sort-rule";
 import {
   createMessageCheckpointService,
 } from "@novel-master/core/message-checkpoint";
@@ -72,6 +74,7 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
   const preferences = createPersistentPreferences(conn);
   const userVfsUnifiedToolTurnEnabled = await preferences.getUserVfsUnifiedToolTurn();
   refreshUserVfsUnifiedToolTurnSnapshot(userVfsUnifiedToolTurnEnabled);
+  const smartSortRule = createSmartSortRuleService(conn);
 
   const skspName = getPlatformSkspName();
   const dbStore = resolveSkspDriver(skspName).createStore(conn);
@@ -83,6 +86,8 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
     db: dbStore,
     env: envStore,
   });
+  // search 工具配置：KKV `nm-search` 模块 + SKSP key ref（与 mobile 同构，core 工厂统一逻辑）
+  const searchConfig = createSearchConfigStore({ kkv, secretStore });
 
   const providerBundle = createProviderServices(conn, secretStore);
   const tokenCounters = createDefaultTokenCounterRegistry({
@@ -149,6 +154,8 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
     savedModelRepo: providerBundle.savedModelRepo,
     providerRepo: providerBundle.providerRepo,
     modelRequests: providerBundle.modelRequests,
+    smartSortRule,
     userVfsTurn,
+    searchConfig,
   };
 }

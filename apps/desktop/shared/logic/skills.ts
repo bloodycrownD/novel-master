@@ -5,3 +5,7 @@
 
 export { previewSkillZip, SKILL_NAME_PATTERN } from "@novel-master/core/skills";
 export type { SkillZipPreview } from "@novel-master/core/skills";
+export { withSkillFrontMatterValues } from "@novel-master/core/skills";
+export type { SkillFrontMatterValues } from "@novel-master/core/skills";
+export { BUILTIN_SKILL_NAMES } from "@novel-master/core/skills";
+export { validateSkillName } from "@novel-master/core/skills";

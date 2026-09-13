@@ -6,7 +6,7 @@ import {useCallback, useEffect, type RefObject} from 'react';
 import {BackHandler} from 'react-native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {VfsFileManagerHandle} from '@/components/vfs/VfsFileManager';
-import {useHeaderContext} from '@/navigation/HeaderContext';
+import {useStackOverrideSetter} from '@/navigation/HeaderContext';
 import type {RootStackParamList} from '@/navigation/types';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -16,7 +16,8 @@ export function useVfsBackNavigation(
   navigation: Nav,
   options?: {title?: string},
 ) {
-  const {setStackOverride} = useHeaderContext();
+  // 屏级 override：自动带 ownerRouteKey，转场期间不泄漏到相邻屏 header。
+  const setStackOverride = useStackOverrideSetter();
 
   // 系统返回（header/侧滑/硬件返回）在子目录时逐级上翻而非退出页面；
   // 根目录时才真正退出。

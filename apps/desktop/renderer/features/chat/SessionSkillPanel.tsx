@@ -3,7 +3,7 @@
  *
  * 当前项目的合并视图（global ∪ project、同名项目副本覆盖）：
  * 域徽标 / 覆盖 / 无效标签 + 启用开关（写当前项目负清单，仅对本项目生效）。
- * 头部动作：「整理」跳设置·技能管理页、「新建」默认项目域；
+ * 头部动作：「‹返回」回抽屉默认视图、「整理」跳设置·技能管理页、「新建」默认项目域；
  * 点行（开关区域外）跳设置·技能详情页。
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -99,17 +99,28 @@ export function SessionSkillPanel({ projectId, onClose }: SessionSkillPanelProps
   return (
     <div className="session-skill-panel" id="session-skill-panel">
       <div className="session-skill-panel__head">
-        <button
-          type="button"
-          className="session-skill-panel__action"
-          data-session-skill-action="manage"
-          onClick={() => {
-            onClose();
-            dispatchOpenSettingsView({ view: "skillsManage" });
-          }}
-        >
-          整理
-        </button>
+        <div className="session-skill-panel__head-side">
+          <button
+            type="button"
+            className="session-skill-panel__back"
+            data-session-detail-action="skill-panel-back"
+            aria-label="返回会话详情"
+            onClick={onClose}
+          >
+            ‹
+          </button>
+          <button
+            type="button"
+            className="session-skill-panel__action"
+            data-session-skill-action="manage"
+            onClick={() => {
+              onClose();
+              dispatchOpenSettingsView({ view: "skillsManage" });
+            }}
+          >
+            整理
+          </button>
+        </div>
         <span className="session-skill-panel__summary">
           {summary.enabledCount}/{summary.validCount} 启用
         </span>

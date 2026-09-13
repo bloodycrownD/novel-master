@@ -13,10 +13,10 @@ import {
   type SkillZipPreview,
 } from "@shared/logic/skills";
 import type { ProjectDto, SkillDomainDto, SkillRefDto } from "@shared/ipc-types";
+import { withSkillFrontMatterValues } from "@shared/logic/skills";
 import {
   ipcSkillsAssertCreateName,
   ipcSkillsList,
-  ipcSkillsRead,
   ipcSkillsWrite,
   ipcVfsZipImportBytes,
   ipcVfsZipPick,
@@ -26,7 +26,6 @@ import {
   buildNewSkillDoc,
   isValidSkillNameInput,
   toSkillRef,
-  withFrontMatterValues,
 } from "./skill-ui";
 
 /** 导入态：zip 字节（创建时落盘）+ 预检结果（预填与 front matter 重写判定）。 */
@@ -176,27 +175,16 @@ export function NewSkillModal({
           imported.preview.name !== trimmedName ||
           imported.preview.description !== trimmedDesc
         ) {
-          // 重写目标是刚导入落盘的 SKILL.md（已存在文件），不带版本会被
-          // VFS 乐观锁拒绝（CONFLICT）：先 read 拿版本再回传写入。
-          const readRes = await ipcSkillsRead({
-            domain,
-            ...(domain === "project" ? { projectId } : {}),
-            name: trimmedName,
-          });
-          if (!readRes.ok) {
-            setError(readRes.error.message);
-            return;
-          }
+          // 重写目标是刚导入落盘的 SKILL.md（已存在文件）：写入统一
+          // last-write-wins，直接覆盖即可（旧版本校验链路已随 last-write-wins 一并清理）。
           const rewriteRes = await ipcSkillsWrite({
             domain,
             ...(domain === "project" ? { projectId } : {}),
             name: trimmedName,
-            content: withFrontMatterValues(
-              imported.preview.skillMd!,
-              trimmedName,
-              trimmedDesc,
-            ),
-            version: readRes.data.version,
+            content: withSkillFrontMatterValues(imported.preview.skillMd!, {
+              name: trimmedName,
+              description: trimmedDesc,
+            }),
           });
           if (!rewriteRes.ok) {
             setError(rewriteRes.error.message);
@@ -255,7 +243,7 @@ export function NewSkillModal({
             {importing ? "读取中…" : "从 ZIP 导入…"}
           </button>
         )}
-        <p className="text-prompt-modal__label">技能名（创建后不可改）</p>
+        <p className="text-prompt-modal__label">技能名（可在管理页重命名）</p>
         <input
           className="text-prompt-modal__input"
           type="text"

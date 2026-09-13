@@ -132,16 +132,16 @@ describe('db-backup.service', () => {
 
     expect(mockCheckpoint).toHaveBeenCalledWith(liveConn);
     expect(mockGetPath).toHaveBeenCalled();
-    const tmpPath = expect.stringMatching(
-      /\/cache\/novel-master-backup-\d+\.nmbackup/,
-    );
+    const tmpPath = '/cache/nmbackup.db';
     expect(mockCp).toHaveBeenCalledWith('/db/novel_master_vfs', tmpPath);
     expect(mockScrubInDatabase).toHaveBeenCalledWith(
       liveConn,
-      expect.stringMatching(/\/cache\/novel-master-backup-\d+\.nmbackup/),
+      '/cache/nmbackup.db',
       'export_db',
     );
-    expect(mockSaveDocuments).toHaveBeenCalled();
+    expect(mockSaveDocuments).toHaveBeenCalledWith(
+      expect.objectContaining({fileName: 'nmbackup.db'}),
+    );
   });
 
   it('rejects export when agent is running', async () => {

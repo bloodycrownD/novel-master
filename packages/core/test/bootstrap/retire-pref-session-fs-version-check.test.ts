@@ -78,10 +78,11 @@ async function countMigrationRegistration(
 }
 
 describe("retire-pref-session-fs-version-check-v1 migration", () => {
-  it("登记表：migration 注册于 SCHEMA_MIGRATIONS 队尾", () => {
-    assert.equal(
-      SCHEMA_MIGRATIONS[SCHEMA_MIGRATIONS.length - 1]?.id,
-      RETIRE_PREF_SESSION_FS_VERSION_CHECK_V1_ID
+  it("登记表：migration 注册于 SCHEMA_MIGRATIONS（队尾由 workplace-dir-rule-smart-field-v1 接任）", () => {
+    assert.ok(
+      SCHEMA_MIGRATIONS.some(
+        (migration) => migration.id === RETIRE_PREF_SESSION_FS_VERSION_CHECK_V1_ID
+      )
     );
   });
 

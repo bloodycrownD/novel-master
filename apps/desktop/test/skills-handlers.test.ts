@@ -11,6 +11,7 @@ import {
   handleSkillsList,
   handleSkillsRead,
   handleSkillsToggle,
+  handleSkillsUpdateInfo,
   handleSkillsWrite,
 } from "../src/main/ipc/handlers/skills.js";
 import {
@@ -75,9 +76,10 @@ describe("skills IPC handlers", () => {
     if (!globalList.ok) {
       return;
     }
+    // 测试库 bootstrap 种入内置技能 agent-config，清单含它属预期
     assert.deepEqual(
       globalList.data.map((s) => s.name).sort(),
-      ["bar", "foo"],
+      ["agent-config", "bar", "foo"],
     );
     const foo = globalList.data.find((s) => s.name === "foo");
     assert.ok(foo);
@@ -103,9 +105,10 @@ describe("skills IPC handlers", () => {
     if (!res.ok) {
       return;
     }
+    // 含 bootstrap 种入的内置技能 agent-config（global 有效）
     assert.deepEqual(
       res.data.map((s) => s.name),
-      ["bar", "foo"],
+      ["agent-config", "bar", "foo"],
     );
     const foo = res.data.find((s) => s.name === "foo")!;
     assert.equal(foo.domain, "project");
@@ -255,6 +258,68 @@ describe("skills IPC handlers", () => {
     if (list.ok) {
       const foo = list.data.find((s) => s.name === "foo")!;
       assert.ok(foo.files.includes("references/x.md"));
+    }
+  });
+
+  it("updateInfo（T-S4）：改名成功迁移目录并同步 front matter，仅改描述不动目录", async () => {
+    // 改名：新名可读且 front matter name 同步；旧名 NOT_FOUND
+    const renamed = await handleSkillsUpdateInfo({
+      domain: "global",
+      name: "bar",
+      newName: "bar-renamed",
+    });
+    assert.equal(renamed.ok, true);
+
+    const readNew = await handleSkillsRead({ domain: "global", name: "bar-renamed" });
+    assert.equal(readNew.ok, true);
+    if (readNew.ok) {
+      assert.match(readNew.data.content, /name: "bar-renamed"/);
+    }
+    const readOld = await handleSkillsRead({ domain: "global", name: "bar" });
+    assert.equal(readOld.ok, false);
+    if (!readOld.ok) {
+      assert.equal(readOld.error.code, "NOT_FOUND");
+    }
+
+    // 仅改描述：目录不迁（同名可读）、description 更新
+    const descRes = await handleSkillsUpdateInfo({
+      domain: "global",
+      name: "bar-renamed",
+      description: "改过的描述",
+    });
+    assert.equal(descRes.ok, true);
+    const list = await handleSkillsList({ domain: "global" });
+    assert.equal(list.ok, true);
+    if (list.ok) {
+      const item = list.data.find((s) => s.name === "bar-renamed")!;
+      assert.equal(item.description, "改过的描述");
+    }
+  });
+
+  it("updateInfo（T-S4）：撞名与内置改名拒绝时错误码透传", async () => {
+    // 域内撞名：SKILL_ALREADY_EXISTS（core 事务内错误解包后仍透传）
+    const dup = await handleSkillsUpdateInfo({
+      domain: "global",
+      name: "bar-renamed",
+      newName: "foo",
+    });
+    assert.equal(dup.ok, false);
+    if (!dup.ok) {
+      assert.equal(dup.error.code, "SKILL_ALREADY_EXISTS");
+      assert.match(dup.error.message, /已存在同名技能/);
+    }
+
+    // global 域内置技能改名拒：BUILTIN_SKILL_RENAME（内置源门先于
+    // 存在性检查，不依赖目录状态）
+    const builtinRes = await handleSkillsUpdateInfo({
+      domain: "global",
+      name: "agent-config",
+      newName: "agent-config-renamed",
+    });
+    assert.equal(builtinRes.ok, false);
+    if (!builtinRes.ok) {
+      assert.equal(builtinRes.error.code, "BUILTIN_SKILL_RENAME");
+      assert.match(builtinRes.error.message, /内置技能不支持重命名：agent-config/);
     }
   });
 });

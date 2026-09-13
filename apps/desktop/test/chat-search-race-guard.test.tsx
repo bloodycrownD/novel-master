@@ -36,7 +36,9 @@ function readPanel(): string {
 }
 
 // 见文件头注释：先注册钩子，再动态导入 act 与面板（整棵依赖树统一根 react 副本）。
+// MF-12：面板消费 useShellNav().openChatLink，重定向到 no-op stub（不挂完整 provider）。
 register(new URL("./react-alias-hook.mjs", import.meta.url));
+register(new URL("./chat-search-shell-nav-hook.mjs", import.meta.url));
 const { act } = await import("react");
 const { ChatHistorySearchPanel } = await import(
   "@/features/chat/ChatHistorySearchPanel"

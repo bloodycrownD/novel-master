@@ -6,6 +6,10 @@
 
 import type {SkillDomain} from '@novel-master/core/skills';
 
+// front matter 重写（重命名/描述编辑与 ZIP 导入回写共用）已回收为
+// core 单源，经此处再导出供 mobile 各组件消费。
+export {withSkillFrontMatterValues} from '@novel-master/core/skills';
+
 /** 域徽标三态：全局 / 项目 / 项目 · 覆盖全局。 */
 export function skillDomainBadgeLabel(
   domain: SkillDomain,
@@ -39,8 +43,9 @@ export function skillDomainHintLabel(
 /**
  * YAML 双引号标量：JSON 字符串本身即合法 YAML double-quoted scalar，
  * description 含冒号 / 引号 / 换行时不会破坏 front matter 解析。
+ * 仅本文件 buildNewSkillDoc 消费，模块内私有。
  */
-export function yamlScalar(value: string): string {
+function yamlScalar(value: string): string {
   return JSON.stringify(value);
 }
 

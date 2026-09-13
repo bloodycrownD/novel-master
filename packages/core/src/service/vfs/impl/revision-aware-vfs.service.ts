@@ -10,6 +10,7 @@
  */
 
 import { ensureParentDirectories } from "@/domain/vfs/logic/ensure-parent-dirs.js";
+import { assertValidVfsEntryName } from "@/domain/vfs/logic/validate-entry-name.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
@@ -261,6 +262,7 @@ export class RevisionAwareVfsService implements InternalVfsService {
   ): Promise<void> {
     const normalizedFrom = normalizePath(fromLogical);
     const normalizedTo = normalizePath(toLogical);
+    assertValidVfsEntryName(normalizedTo);
     return runInTransactionOrConn(this.conn, async (tx) => {
       const entryRepo = new SqliteVfsEntryRepository(tx);
       await renameVfsEntry(
@@ -280,6 +282,7 @@ export class RevisionAwareVfsService implements InternalVfsService {
   ): Promise<void> {
     const normalizedOld = normalizePath(oldDirLogical);
     const normalizedNew = normalizePath(newDirLogical);
+    assertValidVfsEntryName(normalizedNew);
     return runInTransactionOrConn(this.conn, async (tx) => {
       const entryRepo = new SqliteVfsEntryRepository(tx);
       await renameVfsDirectory(
@@ -328,6 +331,8 @@ async function writeWithRevision(
   let version: number;
 
   if (existing == null) {
+    // 只拦「创建」：存量条目（含 zip 导入的历史名）内容更新不重新审判名字
+    assertValidVfsEntryName(normalized);
     await ensureParentDirectories(entryRepo, scopeKey, normalized);
     const maxRevision = await resolveMaxRevision(
       entryRepo,

@@ -110,6 +110,7 @@ describe("rollback reach hash batch", () => {
       delete: async () => undefined,
       listAllPaths: async () => [],
       listDirectoryPathsUnderPrefix: async () => [],
+      listDirectoryMetaUnderPrefix: async () => [],
       listEntriesUnderPrefix: async () => [],
       listFileMetaUnderPrefix: async () => [],
       listFileHeadsUnderPrefix: async () => [],

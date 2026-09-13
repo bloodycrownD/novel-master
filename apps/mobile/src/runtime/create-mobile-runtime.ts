@@ -22,12 +22,14 @@ import {
 import {
   createPersistentPreferences,
   createPersistentState,
+  createSearchConfigStore,
 } from '@novel-master/core';
 import {refreshUserVfsUnifiedToolTurnSnapshot} from '@novel-master/core/feature-flags';
 import {
   createProviderServices,
   createDefaultTokenCounterRegistry,
 } from '@novel-master/core/provider';
+import {createSmartSortRuleService} from '@novel-master/core/smart-sort-rule';
 import {createMessageCheckpointService} from '@novel-master/core/message-checkpoint';
 import {createSessionFsService} from '@novel-master/core/session-fs';
 import {
@@ -66,6 +68,7 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileRuntimeCor
     await preferences.getUserVfsUnifiedToolTurn();
   refreshUserVfsUnifiedToolTurnSnapshot(userVfsUnifiedToolTurnEnabled);
 
+  const smartSortRule = createSmartSortRuleService(conn);
   const agentRegistry = createAgentRegistryService(conn, state);
   const abortRegistry = createAgentAbortRegistry();
   const streamRegistry = createAgentStreamRegistry();
@@ -75,6 +78,8 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileRuntimeCor
   });
   const providerBundle = createProviderServices(conn, secretStore);
   const tokenCounters = createDefaultTokenCounterRegistry({});
+  // search 配置依赖 kkv + secretStore，在两者之后装配。
+  const searchConfig = createSearchConfigStore({kkv, secretStore});
 
   const eventBus = new SimpleEventBus();
   const compactionConditions = createCompactionConditionsStore(conn);
@@ -130,6 +135,7 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileRuntimeCor
     agentRegistry,
     abortRegistry,
     streamRegistry,
+    searchConfig,
     tokenCounters,
     projects,
     sessions,
@@ -156,6 +162,7 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileRuntimeCor
     savedModelRepo: providerBundle.savedModelRepo,
     providerRepo: providerBundle.providerRepo,
     modelRequests: providerBundle.modelRequests,
+    smartSortRule,
     userVfsTurn,
   };
 }

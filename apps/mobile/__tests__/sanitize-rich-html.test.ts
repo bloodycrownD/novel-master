@@ -148,6 +148,24 @@ describe('sanitizeRichHtml（真实库行为）', () => {
     );
     expect(out).toBe('<div>x</div>');
   });
+
+  it('T-L4: 中文相对/绝对路径 href 保留（拦截链路有料可拦）', () => {
+    // 无 scheme 的相对/绝对路径不被 allowedSchemes 过滤；中文原样保留
+    const rel = sanitizeWithRealConfig('<a href="笔记/大纲.md">x</a>');
+    expect(rel).toContain('href="笔记/大纲.md"');
+    const abs = sanitizeWithRealConfig('<a href="/续写/chapter.md">x</a>');
+    expect(abs).toContain('href="/续写/chapter.md"');
+    // 真机形态：URL 编码 href 同样保留
+    const encoded = sanitizeWithRealConfig(
+      '<a href="%E7%AC%94%E8%AE%B0/%E5%A4%A7%E7%BA%B2.md">x</a>',
+    );
+    expect(encoded).toContain(
+      'href="%E7%AC%94%E8%AE%B0/%E5%A4%A7%E7%BA%B2.md"',
+    );
+    // 锚点链接保留（webview 侧放行滚动的前提）
+    const anchor = sanitizeWithRealConfig('<a href="#foo">x</a>');
+    expect(anchor).toContain('href="#foo"');
+  });
 });
 
 describe('filterInlineStyle（CSS 属性白名单）', () => {

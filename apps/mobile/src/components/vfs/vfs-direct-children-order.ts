@@ -5,6 +5,7 @@ import type {
   WorkplaceDirRule,
   WorkplaceListRow,
 } from '@novel-master/core/workplace';
+import type {CompiledSmartSortRule} from '@novel-master/core/smart-sort-rule';
 import {sortDirPaths, sortFilesForDir} from '@novel-master/core/workplace';
 import {isDirectChild} from './vfs-row-mapper';
 
@@ -15,6 +16,8 @@ export type OrderedDirectChildPathsParams = {
   readonly extraPaths: readonly string[];
   readonly dirRule: WorkplaceDirRule | null;
   readonly mtimeByPath?: ReadonlyMap<string, number>;
+  /** 预编译智能排序规则（runtime.smartSortRule.listCompiledRules()）；缺省时 smart 退化自然排序。 */
+  readonly smartRules?: readonly CompiledSmartSortRule[];
   /** VFS-only paths not present in {@link rows}; dirs vs files for orphan sort. */
   readonly kindByPath?: ReadonlyMap<string, 'dir' | 'file'>;
 };
@@ -35,7 +38,7 @@ function rowKindAtPath(
 export function orderedDirectChildPaths(
   params: OrderedDirectChildPathsParams,
 ): string[] {
-  const {parentPath, rows, extraPaths, dirRule, mtimeByPath, kindByPath} =
+  const {parentPath, rows, extraPaths, dirRule, mtimeByPath, smartRules, kindByPath} =
     params;
 
   const ordered: string[] = [];
@@ -66,13 +69,14 @@ export function orderedDirectChildPaths(
     }
   }
 
-  const sortedDirs = sortDirPaths(orphanDirs, dirRule);
+  const sortedDirs = sortDirPaths(orphanDirs, dirRule, {smartRules});
   const sortedFiles = sortFilesForDir(
     orphanFiles.map(logicalPath => ({
       logicalPath,
       mtimeMs: mtimeByPath?.get(logicalPath) ?? 0,
     })),
     dirRule,
+    {smartRules},
   ).map(f => f.logicalPath);
 
   return [...ordered, ...sortedDirs, ...sortedFiles];

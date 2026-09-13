@@ -36,6 +36,7 @@ import type {
 } from "@novel-master/core/provider";
 import type { MessageCheckpointService } from "@novel-master/core/message-checkpoint";
 import type { SessionFsService } from "@novel-master/core/session-fs";
+import type { SmartSortRuleService } from "@novel-master/core/smart-sort-rule";
 import type {
   PhysicalVfsService,
   VfsScope,
@@ -47,6 +48,7 @@ import type {
 import type { KkvService } from "@novel-master/core/kkv";
 import type { SessionKkvService } from "@novel-master/core/session-kkv";
 import type { SkillService } from "@novel-master/core/skills";
+import type { SearchConfigStore } from "@novel-master/core";
 
 /** Open connection with domain services (main-process singleton host). */
 export interface DesktopNovelMasterRuntime {
@@ -87,6 +89,8 @@ export interface DesktopNovelMasterRuntime {
   readonly savedModelRepo: ProviderServiceBundle["savedModelRepo"];
   readonly providerRepo: ProviderServiceBundle["providerRepo"];
   readonly modelRequests: ModelRequestService;
+  /** 智能排序规则管理（列表/增删改/启停/调序/导入导出/预览，设置页数据源）。 */
+  readonly smartSortRule: SmartSortRuleService;
   readonly agentRegistry: AgentRegistryService;
   /** 按 sessionId 索引 in-flight run 的 controller，供停止按钮 / IPC 中断。 */
   readonly abortRegistry: AgentAbortRegistry;
@@ -94,4 +98,9 @@ export interface DesktopNovelMasterRuntime {
   readonly streamRegistry: AgentStreamRegistry;
   readonly tokenCounters: TokenCounterRegistry;
   readonly userVfsTurn: UserVfsTurnService;
+  /**
+   * 搜索引擎配置（search 工具用）：core 工厂包 kkv + secretStore，
+   * run-agent-turn 经结构化兼容读取本字段装配 search 闭包。
+   */
+  readonly searchConfig: SearchConfigStore;
 }

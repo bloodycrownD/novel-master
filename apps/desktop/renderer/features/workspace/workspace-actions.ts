@@ -1,4 +1,5 @@
 import { DEFAULT_WORKPLACE_DIR_RULE } from "@shared/logic/workplace";
+import { validateVfsEntryName } from "@shared/logic/vfs";
 import type {
   VfsScopeRequest,
   WorkplaceSetDirRuleRequest,
@@ -50,6 +51,12 @@ export async function createWorkspaceEntry(
   projectId: string | undefined,
   sessionId: string | undefined,
 ): Promise<{ ok: true } | { ok: false; message: string }> {
+  // 与 core 服务层同规则的前置校验（控制字符/纯空白/首尾空格/./..），
+  // 不合法时直接返回中文 reason，不发 IPC；main 进程侧仍会兕底拦。
+  const nameCheck = validateVfsEntryName(name);
+  if (!nameCheck.ok) {
+    return { ok: false, message: nameCheck.reason };
+  }
   const req = scopeRequestFromTarget(target, projectId, sessionId);
   const path = joinVfsPath(parentPathForTarget(target), name);
   if (kind === "file") {
@@ -74,6 +81,10 @@ export async function renameWorkspaceEntry(
 ): Promise<{ ok: true } | { ok: false; message: string }> {
   if (target.kind !== "row") {
     return { ok: false, message: "无效操作" };
+  }
+  const nameCheck = validateVfsEntryName(newName);
+  if (!nameCheck.ok) {
+    return { ok: false, message: nameCheck.reason };
   }
   const req = scopeRequestFromTarget(target, projectId, sessionId);
   const row = target.row;

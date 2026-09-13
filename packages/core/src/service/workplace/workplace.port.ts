@@ -12,6 +12,23 @@ import type {
   WorkplaceScope,
 } from "@/domain/workplace/model/workplace-types.js";
 import type { WorkplaceRuleView } from "@/domain/workplace/model/workplace-rule-view.js";
+import type { CompiledSmartSortRule } from "@/domain/workplace/logic/smart-sort.js";
+import type { SmartSortRule } from "@/domain/smart-sort-rule/model/smart-sort-rule.js";
+
+/**
+ * 懒加载智能排序规则 provider（spec Step 6）：仅当存在 sortField='smart'
+ * 的目录规则时才被调用（查表 + 编译），与排序消费端共用基线口径——是否
+ * 启用由规则编译结果决定（core/B-1 后加载侧不做启用预过滤）；三端
+ * runtime 经 {@link createWorkplaceService} 工厂默认组装，零逐端接线。
+ */
+export type SmartRulesProvider = () => Promise<readonly CompiledSmartSortRule[]>;
+
+/**
+ * 智能排序规则原始行 provider（L1 缓存签名采样用，core/B-3）：每次评估
+ * 无条件全量读取（仅查表，不编译）；smart_sort_rule 表小、管理页改动低频，
+ * 过度失效可接受。经 {@link createWorkplaceService} 工厂默认组装。
+ */
+export type SmartRuleRowsProvider = () => Promise<readonly SmartSortRule[]>;
 
 /** 消费方 ①：工作区列表 + `{{$filetree}}` 宏，单次元数据遍历产出。 */
 export interface WorkplaceLiveView {

@@ -1,5 +1,9 @@
 import {Platform} from 'react-native';
-import {exportVfsZip, importVfsZip} from '@/services/vfs-zip.service';
+import {
+  exportVfsZip,
+  importVfsZip,
+  zipBaseNameFromPath,
+} from '@/services/vfs-zip.service';
 import {VfsZipError} from '@novel-master/core/vfs';
 
 const mockExport = jest.fn();
@@ -14,6 +18,7 @@ const mockExists = jest.fn();
 const mockStat = jest.fn();
 const mockUnlink = jest.fn();
 const mockParseVfsZip = jest.fn();
+const mockProjectsGet = jest.fn();
 
 jest.mock('@novel-master/core/vfs', () => ({
   ...jest.requireActual('@novel-master/core/vfs'),
@@ -68,7 +73,10 @@ const VALID_ZIP_BASE64 =
 const TRUNCATED_ZIP_BASE64 = 'UEsDBBQAAAAIAAAAAAAAAAAAAAAAAAAAAAA=';
 
 describe('vfs-zip.service', () => {
-  const runtime = {conn: {}} as never;
+  const runtime = {
+    conn: {},
+    projects: {get: mockProjectsGet},
+  } as never;
   const scope = {kind: 'session', projectId: 'p', sessionId: 's'} as const;
 
   beforeEach(() => {
@@ -85,6 +93,7 @@ describe('vfs-zip.service', () => {
     mockStat.mockReset();
     mockUnlink.mockReset();
     mockParseVfsZip.mockReset();
+    mockProjectsGet.mockReset().mockResolvedValue({id: 'p', name: '我的项目'});
     mockCreateVfsZipIoService.mockReturnValue({
       export: mockExport,
       import: mockImport,
@@ -127,19 +136,19 @@ describe('vfs-zip.service', () => {
     const result = await exportVfsZip(runtime, scope);
     expect(result).toBe('saved');
     expect(mockWriteFile).toHaveBeenCalledWith(
-      '/cache/vfs-session-s.zip',
+      '/cache/我的项目.zip',
       expect.any(String),
       'base64',
     );
     expect(mockSaveDocuments).toHaveBeenCalledWith(
       expect.objectContaining({
-        sourceUris: ['file:///cache/vfs-session-s.zip'],
+        sourceUris: ['file:///cache/我的项目.zip'],
         mimeType: 'application/zip',
-        fileName: 'vfs-session-s.zip',
+        fileName: '我的项目.zip',
         copy: true,
       }),
     );
-    expect(mockUnlink).toHaveBeenCalledWith('/cache/vfs-session-s.zip');
+    expect(mockUnlink).toHaveBeenCalledWith('/cache/我的项目.zip');
   });
 
   it('surfaces VfsZipError from gather without retry', async () => {
@@ -212,19 +221,63 @@ describe('vfs-zip.service', () => {
     });
   });
 
-  it('export fileName includes directoryPath suffix aligned with Desktop', async () => {
+  it('export 默认名取子目录末段（与 Desktop 同规则）', async () => {
     await exportVfsZip(runtime, scope, {directoryPath: '/a/b'});
     expect(mockWriteFile).toHaveBeenCalledWith(
-      '/cache/vfs-session-s-a-b.zip',
+      '/cache/b.zip',
       expect.any(String),
       'base64',
     );
     expect(mockSaveDocuments).toHaveBeenCalledWith(
       expect.objectContaining({
-        sourceUris: ['file:///cache/vfs-session-s-a-b.zip'],
-        fileName: 'vfs-session-s-a-b.zip',
+        sourceUris: ['file:///cache/b.zip'],
+        fileName: 'b.zip',
       }),
     );
+    // 子目录命名不依赖项目解析
+    expect(mockProjectsGet).not.toHaveBeenCalled();
+  });
+
+  it('fileName 覆盖优先于路径与项目名推导', async () => {
+    await exportVfsZip(runtime, scope, {
+      directoryPath: '/a/b',
+      fileName: '技能包.zip',
+    });
+    expect(mockSaveDocuments).toHaveBeenCalledWith(
+      expect.objectContaining({fileName: '技能包.zip'}),
+    );
+    expect(mockWriteFile).toHaveBeenCalledWith(
+      '/cache/技能包.zip',
+      expect.any(String),
+      'base64',
+    );
+  });
+
+  it('根目录导出项目解析失败回退 workspace.zip', async () => {
+    mockProjectsGet.mockRejectedValue(new Error('project not found'));
+    await exportVfsZip(runtime, scope);
+    expect(mockSaveDocuments).toHaveBeenCalledWith(
+      expect.objectContaining({fileName: 'workspace.zip'}),
+    );
+  });
+
+  it('无 projectId 域的根目录导出回退 workspace.zip', async () => {
+    await exportVfsZip(runtime, {kind: 'global-meta'} as const);
+    expect(mockProjectsGet).not.toHaveBeenCalled();
+    expect(mockSaveDocuments).toHaveBeenCalledWith(
+      expect.objectContaining({fileName: 'workspace.zip'}),
+    );
+  });
+
+  it('zipBaseNameFromPath：根→null，子目录→末段，文件→文件名', () => {
+    expect(zipBaseNameFromPath('/')).toBeNull();
+    expect(zipBaseNameFromPath('')).toBeNull();
+    expect(zipBaseNameFromPath('/设定集')).toBe('设定集');
+    expect(zipBaseNameFromPath('/设定集/大纲')).toBe('大纲');
+    // 文件目标口径：末段即文件名，追加 .zip
+    expect(zipBaseNameFromPath('/notes/资料.md')).toBe('资料.md');
+    // 尾斜杠归一化到目录名
+    expect(zipBaseNameFromPath('/设定集/')).toBe('设定集');
   });
 
   it('skips import when picker cancelled', async () => {

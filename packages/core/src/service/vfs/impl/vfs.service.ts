@@ -13,6 +13,7 @@ import {
   isStorageRootParent,
   parentDir,
 } from "@/domain/vfs/logic/parent-dir.js";
+import { assertValidVfsEntryName } from "@/domain/vfs/logic/validate-entry-name.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import type { VfsContentSize } from "@/domain/vfs/model/vfs-content-size.js";
 import { computeReplaceResult } from "@/domain/vfs/logic/compute-replace-result.js";
@@ -63,6 +64,7 @@ export class DefaultVfsService implements InternalVfsService {
     if (normalized === "/") {
       throw vfsInvalidPath(path, "cannot mkdir root");
     }
+    assertValidVfsEntryName(normalized);
 
     const existing = await this.repo.findByPath(scopeKey, normalized);
     if (existing != null) {
@@ -117,6 +119,8 @@ export class DefaultVfsService implements InternalVfsService {
       throw vfsIsDirectory(normalized);
     }
     if (existing == null) {
+      // 只拦「创建」：存量条目（含 zip 导入的历史名）内容更新不重新审判名字
+      assertValidVfsEntryName(normalized);
       await ensureParentDirectories(this.repo, scopeKey, normalized);
       return this.repo.insert(scopeKey, normalized, content);
     }

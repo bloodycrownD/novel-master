@@ -1,5 +1,6 @@
 /**
- * 技能详情页：技能元信息 + 内嵌文件浏览器（SkillFileManager）。
+ * 技能详情页：内嵌技能文件浏览器（SkillFileManager；元信息展示与
+ * 「编辑信息」入口已按 2026-09-12 用户拍板收敛至管理页行菜单单点）。
  *
  * - 列表数据来自 listSkills（按域），找不到技能（被并行删除等）时安全踢回管理页。
  * - 打开文件跳 FileEditor 的 skill scope（skillRef 带域定位，路径锚定

@@ -34,7 +34,7 @@ const EXPORT_ATTACH_ALIAS = 'export_db';
 const WRITE_CHUNK_BYTES = 256 * 1024;
 
 function backupFileName(): string {
-  return `novel-master-backup-${Date.now()}${BACKUP_EXT}`;
+  return 'nmbackup.db';
 }
 
 function assertSqliteFile(bytes: Uint8Array): void {

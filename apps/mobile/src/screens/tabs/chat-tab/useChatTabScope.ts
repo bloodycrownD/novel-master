@@ -2,7 +2,8 @@
  * Chat tab local UI scope: projects/sessions lists, subviews, drawers, VFS handles.
  */
 import {useCallback, useEffect, useMemo, useState} from 'react';
-import {Alert, DeviceEventEmitter} from 'react-native';
+import {Alert, DeviceEventEmitter, Linking} from 'react-native';
+import {showAppToast} from '@/services/app-toast';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {
   type ChatProject,
@@ -25,6 +26,10 @@ import {
 import {clearScrollSnapshotsByProject} from '@/services/chat-list-scroll-cache';
 import {clearTranscriptScrollSnapshotsByProject} from '@/services/chat-transcript-scroll-cache';
 import {nextDefaultSessionTitle} from '@/utils/session-default-title';
+import {
+  resolveChatLinkIntent,
+} from './chat-link-nav';
+import {chatLinkNotFoundMessage} from '@novel-master/core/chat';
 
 export type SessionListPanel = 'sessions' | 'projects';
 export type ChatSubview = 'sessions' | 'conversation';
@@ -427,6 +432,33 @@ export function useChatTabScope({
     () => (projectId != null ? runtime.projectVfs(projectId) : null),
     [runtime, projectId],
   );
+
+  // 聊天 markdown 链接点击（webview 上抛 linkClick）：只做意图执行。
+  // 识别与探测在 chat-link-nav 纯函数内完成（session 先、project 后，仅文件命中）；
+  // http(s) 外跳系统浏览器，外跳失败静默兜底（与原导航守卫语义一致）；
+  // session 打开需 projectId+sessionId 齐全，缺参由 openFileEditor 内部降级 no-op。
+  const openChatLink = useCallback(
+    (href: string) => {
+      void resolveChatLinkIntent(href, {
+        sessionVfs,
+        projectVfs,
+      }).then(intent => {
+        if (intent.kind === 'external') {
+          void Linking.openURL(intent.url).catch(() => undefined);
+          return;
+        }
+        if (intent.kind === 'file') {
+          openFileEditor(intent.path, intent.scope);
+          return;
+        }
+        if (intent.kind === 'not-found') {
+          // 路径型链接双域探测未命中：用户拍板弹提示，不再静默无动作
+          showAppToast(chatLinkNotFoundMessage(intent.path));
+        }
+      });
+    },
+    [sessionVfs, projectVfs, openFileEditor],
+  );
   const projectWorktree = useMemo(
     () =>
       projectId != null
@@ -474,6 +506,7 @@ export function useChatTabScope({
     handleDeleteProjects,
     openFileEditor,
     openSessionFilePreview,
+    openChatLink,
     openSubagentSession,
     openSkillDetail,
     sessionVfs,

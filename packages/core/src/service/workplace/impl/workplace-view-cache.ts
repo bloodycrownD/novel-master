@@ -21,10 +21,12 @@ import type {
 } from "@/domain/workplace/model/workplace-rule-view.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 
-/** 读时校验用的校验值二元组（vfs 聚合签名 + 规则表序列化签名）。 */
+/** 读时校验用的校验值三元组（vfs 聚合签名 + 规则表/智能规则表序列化签名）。 */
 export interface WorkplaceViewSigs {
   readonly vfs: string;
   readonly rules: string;
+  /** smart_sort_rule 全量按 sort_order 排序后的确定性序列化（core/B-3）。 */
+  readonly smartRules: string;
 }
 
 /** 缓存的完整评估结果（三个评估入口共享同一次计算）。 */
@@ -112,7 +114,11 @@ export function getCachedWorkplaceView(
   ) {
     return undefined;
   }
-  if (entry.sigs.vfs !== sigs.vfs || entry.sigs.rules !== sigs.rules) {
+  if (
+    entry.sigs.vfs !== sigs.vfs ||
+    entry.sigs.rules !== sigs.rules ||
+    entry.sigs.smartRules !== sigs.smartRules
+  ) {
     return undefined;
   }
   return {

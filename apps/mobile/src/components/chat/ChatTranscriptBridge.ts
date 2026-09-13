@@ -185,6 +185,10 @@ export type TranscriptToHostMessage =
       {messageId: string; pageX: number; pageY: number}
     >
   | BridgeEnvelope<'openToolFile', {path: string}>
+  | BridgeEnvelope<
+      'linkClick',
+      {href: string}
+    >
   | BridgeEnvelope<'openSubagentSession', {sessionId: string}>
   | BridgeEnvelope<
       'openSkillDetail',

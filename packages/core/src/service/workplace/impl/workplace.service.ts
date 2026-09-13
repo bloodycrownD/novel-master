@@ -38,6 +38,10 @@ import type {
   WorkplacePersistBlock,
   WorkplaceService,
 } from "../workplace.port.js";
+import type {
+  SmartRuleRowsProvider,
+  SmartRulesProvider,
+} from "../workplace.port.js";
 import {
   ensureWorkplaceViewEntry,
   getCachedWorkplaceView,
@@ -53,6 +57,10 @@ export interface WorkplaceServiceDeps {
   readonly conn: TdbcConnection;
   readonly vfs: VfsEntryRepository;
   readonly workplace: WorkplaceRepository;
+  /** 懒加载智能规则 provider；缺省时 smart 排序退化为自然排序（D4）。 */
+  readonly smartRules?: SmartRulesProvider;
+  /** 智能规则原始行 provider（L1 签名采样，core/B-3）；缺省时该来源不参与失效。 */
+  readonly smartRuleRows?: SmartRuleRowsProvider;
 }
 
 /**
@@ -250,6 +258,8 @@ export class DefaultWorkplaceService implements WorkplaceService {
       fileSet: ctx.fileSet,
       dirRuleMap: ctx.dirRuleMap,
       mtimeByPath: ctx.mtimeByPath,
+      smartRules: ctx.smartRules,
+      dirMtimeByPath: ctx.dirMtimeByPath,
       displayByPath: view.displayByPath,
     });
     return { ctx, view, filetreeDisplay };
@@ -257,7 +267,9 @@ export class DefaultWorkplaceService implements WorkplaceService {
 
   /**
    * 采样读时校验值：vfs 聚合签名（1 条 SQL）+ 规则表全量重读按 logicalPath
-   * 排序后的确定性 JSON 序列化（规则表无版本列且存在同数改写，不做聚合指纹）。
+   * 排序后的确定性 JSON 序列化（规则表无版本列且存在同数改写，不做聚合指纹）
+   * + smart_sort_rule 全量按 sort_order 排序后的确定性序列化（原始行不编译，
+   * core/B-3：增删改/启停/调序智能规则都会反映到签名，改规则后排序即时刷新）。
    */
   private async sampleSignatures(): Promise<WorkplaceViewSigs> {
     const scopeKey = workplaceScopeKey(this.scope);
@@ -271,7 +283,17 @@ export class DefaultWorkplaceService implements WorkplaceService {
     ) => (a.logicalPath < b.logicalPath ? -1 : a.logicalPath > b.logicalPath ? 1 : 0);
     dirRules.sort(byLogicalPath);
     fileRules.sort(byLogicalPath);
-    return { vfs, rules: JSON.stringify([dirRules, fileRules]) };
+    // 无条件采样（表小成本可忽略，管理页改规则低频，过度失效可接受）；
+    // listOrdered 已按 sort_order 排序，行对象由 repo 字面量构造，序列化确定。
+    const smartRuleRows =
+      this.deps.smartRuleRows != null
+        ? await this.deps.smartRuleRows()
+        : [];
+    return {
+      vfs,
+      rules: JSON.stringify([dirRules, fileRules]),
+      smartRules: JSON.stringify(smartRuleRows),
+    };
   }
 
   /** Loads path/mtime/rules context without scanning file content. */
@@ -305,12 +327,31 @@ export class DefaultWorkplaceService implements WorkplaceService {
     for (const logical of dirPaths) {
       allDirs.add(logical);
     }
+    const dirMtimeByPath = new Map<string, number>();
+    for (const row of await this.deps.vfs.listDirectoryMetaUnderPrefix(
+      vfsKey,
+      "/"
+    )) {
+      dirMtimeByPath.set(row.path, row.mtimeMs);
+    }
+    // 懒加载（Step 6）：仅当存在 sortField='smart' 的目录规则时才查表编译。
+    // 与排序消费端（sortFilesForDir / sortDirPaths）共用同一基线口径——只看
+    // sortField、不看 ruleEnabled：disabled 目录规则的排序配置仍生效（与
+    // created/updated 的 disabled-仍生效基线对齐），单条规则是否启用由编译
+    // 结果决定（disabled 规则不参与编译），不在加载侧预过滤。
+    const smartRules =
+      this.deps.smartRules != null &&
+      [...dirRuleMap.values()].some((r) => r.sortField === "smart")
+        ? await this.deps.smartRules()
+        : undefined;
     return {
       dirRuleMap,
       fileRuleMap,
       fileSet,
       mtimeByPath,
       allDirs,
+      smartRules,
+      dirMtimeByPath,
     };
   }
 }

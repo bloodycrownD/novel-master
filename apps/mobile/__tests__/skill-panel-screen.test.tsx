@@ -63,6 +63,7 @@ jest.mock('@/navigation/HeaderContext', () => ({
   useHeaderContext: () => ({
     setStackOverride: jest.fn(),
   }),
+  useStackOverrideSetter: () => jest.fn(),
 }));
 
 jest.mock('@/components/icons/TabIcons', () => ({

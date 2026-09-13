@@ -31,6 +31,7 @@ function createSpyVfs(
     delete: async () => ({ deleted: true }),
     listAllPaths: async () => [],
     listDirectoryPathsUnderPrefix: async () => [],
+    listDirectoryMetaUnderPrefix: async () => [],
     listEntriesUnderPrefix: async () => [],
     listFileMetaUnderPrefix: async () => [],
     listFileHeadsUnderPrefix: async () => [],

@@ -15,8 +15,11 @@
  *   与 LLM provider 层的 `assertOk` 语义刻意不同。
  * - content-length 预检：响应头声明超过 {@link CURL_MAX_RESPONSE_BYTES}
  *   时不读 body，直接返回占位输出，防巨响应内存峰值。
- * - 截断按字节预算（{@link CURL_MAX_BODY_BYTES}）而非行数：网页 HTML
- *   常是单行几十万字符，按行截断（`capUtf8Bytes`）会一行都留不下。
+ * - 超预算落盘（overflow-sink）：正文超过 `TOOL_OUTPUT_MAX_BYTES`
+ *   （50KB，与 read/grep 等四工具同预算）时，截断前的全文落盘会话
+ *   工作区 `/tmp/`（子代理经装配链落父会话工作区），`body` 置空串
+ *   占位、输出附 `savedPath`/`message`；落盘失败（如 vfs 不可用）
+ *   降级回字节截断，不因落盘故障丢正文。
  * - 请求体 content-type：headers 显式给就用显式的；有 body 且未显式
  *   给 content-type 时默认 application/json（API 提交的常见口径）。
  * - 不做确认门 / 域名白名单 / SSRF 私网拦截（用户拍板：简单搞、参考
@@ -28,8 +31,13 @@
 import { z } from "zod";
 
 import { toolFailed } from "@/errors/tool-errors.js";
+import { TOOL_OUTPUT_MAX_BYTES } from "../logic/tool-output-limits.js";
 import type { Tool } from "../model/tool.js";
 import type { BuiltinToolContext } from "./builtin-tool-context.js";
+import {
+  sinkOversizedOutput,
+  type OversizedSinkResult,
+} from "./overflow-sink.js";
 
 /** 支持的 HTTP 方法（对齐 curl 常用子集，method 入参枚举来源）。 */
 const HTTP_METHODS = [
@@ -47,9 +55,6 @@ export const CURL_DEFAULT_TIMEOUT_SECONDS = 30;
 
 /** 超时上限（秒）：入参 timeout 的 schema 层硬顶。 */
 export const CURL_MAX_TIMEOUT_SECONDS = 120;
-
-/** 回流正文的字节预算：截断点按 UTF-8 字节计，末尾标注行不计入。 */
-export const CURL_MAX_BODY_BYTES = 256 * 1024;
 
 /** content-length 预检上限：响应头声明超过此值时不读 body。 */
 export const CURL_MAX_RESPONSE_BYTES = 10 * 1024 * 1024;
@@ -107,6 +112,10 @@ export interface CurlToolOutput {
    * - 非文本路径：不下载正文，回填 content-length 头数值（缺失时为 0）。
    */
   readonly originalBytes: number;
+  /** 超预算落盘路径（overflow-sink）：仅正文超 50KB 落盘成功时存在。 */
+  readonly savedPath?: string;
+  /** 超预算落盘说明（与 savedPath 成对出现）。 */
+  readonly message?: string;
 }
 
 /**
@@ -234,9 +243,9 @@ export const curlTool: Tool<CurlToolInput, CurlToolOutput, BuiltinToolContext> =
 - body：可选请求体，上限 1MB；GET/HEAD 不携带请求体；有 body 且未显式给 content-type 时默认 application/json
 - timeout：超时秒数，默认 30，上限 120
 
-结果格式：可读文本，非 JSON——第一行为「curl METHOD url」请求行（发生重定向时附「→ 最终 URL」），第二行为 Status 状态行（含 content-type），空行后是正文文本；正文超过 256KB 时按字节截断，末尾附截断标注；非文本类型（如图片）返回占位说明，不回流内容。
+结果格式：可读文本，非 JSON——第一行为「curl METHOD url」请求行（发生重定向时附「→ 最终 URL」），第二行为 Status 状态行（含 content-type），空行后是正文文本；正文超过 50KB 时自动保存到会话工作区 /tmp/（可用 read 读取），空行后显示落盘路径。
 - status：HTTP 状态码（非 2xx 也照常返回，不会当作工具错误）。
-- body：响应正文，超过 256KB 时按字节截断并置 truncated=true；非文本类型返回占位说明。
+- body：响应正文；超过 50KB 时全文自动保存到会话工作区 /tmp/ 并置 truncated=true、附 savedPath 与 message（body 为空串占位，可用 read 读取全文）；非文本类型返回占位说明。
 - finalUrl：重定向后的最终 URL。
 
 注意：无鉴权管理（需要时经 headers 自行携带 token）；网络错误或超时会返回可读错误。`,
@@ -359,6 +368,16 @@ export const curlTool: Tool<CurlToolInput, CurlToolOutput, BuiltinToolContext> =
         .describe(
           "原始正文字节数（文本路径为解码后 UTF-8 口径，预检与非文本路径回填 content-length）"
         ),
+      savedPath: z
+        .string()
+        .optional()
+        .describe(
+          "超预算落盘路径：正文超 50KB 时全文保存到会话工作区 /tmp/ 后回填"
+        ),
+      message: z
+        .string()
+        .optional()
+        .describe("超预算落盘说明（与 savedPath 成对出现）"),
     }),
     async run(input, ctx) {
       const doFetch = ctx.fetchFn ?? globalThis.fetch;
@@ -467,9 +486,36 @@ export const curlTool: Tool<CurlToolInput, CurlToolOutput, BuiltinToolContext> =
 
         const originalBytes = utf8ByteLength(text);
 
-        // 字节预算截断：截断点按 UTF-8 字节计，末尾标注行不计入预算。
-        if (originalBytes > CURL_MAX_BODY_BYTES) {
-          const kept = truncateToByteBudget(text, CURL_MAX_BODY_BYTES);
+        // 超 50KB 预算（与 read/grep 等四工具同口径）：截断前的全文落盘
+        // 会话工作区 /tmp/，body 置空串占位（schema 必填不变，meta 全保留），
+        // 模型经 savedPath 用 read 分页读取。落盘失败（如 vfs 不可用）
+        // 降级回字节截断——正文已到手，不因落盘故障丢弃。
+        if (originalBytes > TOOL_OUTPUT_MAX_BYTES) {
+          let sink: OversizedSinkResult | undefined;
+          try {
+            sink = await sinkOversizedOutput(ctx, {
+              tool: "curl",
+              content: text,
+              contentType,
+            });
+          } catch (error) {
+            console.debug("[curl] 超预算落盘失败，降级字节截断:", error);
+          }
+          if (sink != null) {
+            return {
+              url: normalizedUrl,
+              finalUrl,
+              method,
+              status: response.status,
+              contentType,
+              body: "",
+              truncated: true,
+              originalBytes,
+              savedPath: sink.savedPath,
+              message: sink.message,
+            };
+          }
+          const kept = truncateToByteBudget(text, TOOL_OUTPUT_MAX_BYTES);
           return {
             url: normalizedUrl,
             finalUrl,

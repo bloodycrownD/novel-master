@@ -26,6 +26,7 @@ export type VfsErrorCode =
   | "REPLACE_NOT_FOUND"
   | "DIRECTORY_NOT_EMPTY"
   | "INVALID_PATH"
+  | "INVALID_NAME"
   | "IS_DIRECTORY"
   | "ALREADY_EXISTS"
   | "NOT_A_DIRECTORY"
@@ -112,6 +113,16 @@ export function vfsInvalidPath(path: string, reason: string): VfsError {
   return new VfsError("INVALID_PATH", `Invalid path ${path}: ${reason}`, {
     path,
   });
+}
+
+/**
+ * Entry name rejected by {@link validateVfsEntryName}（创建/重命名入口拦截）。
+ *
+ * message 直接用中文 reason（面向用户的文案即最终展示文案）；LLM 面由
+ * format-vfs-error-for-llm 包装 `[INVALID_NAME]` 前缀与路径。
+ */
+export function vfsInvalidName(name: string, reason: string): VfsError {
+  return new VfsError("INVALID_NAME", reason, { path: name });
 }
 
 /** Path is a directory row; read/write/replace are not allowed. */

@@ -539,6 +539,28 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     return rows.map((row) => String(row.path));
   }
 
+  async listDirectoryMetaUnderPrefix(
+    scopeKey: string,
+    pathPrefix: string
+  ): Promise<ReadonlyArray<{ path: string; mtimeMs: number }>> {
+    const base = normalizePrefix(pathPrefix);
+    const pattern = childLikePattern(base);
+    const rows = await queryTemplate<{ path: string; mtime_ms: number }>(
+      this.conn,
+      this.parser,
+      `SELECT path, mtime_ms FROM vfs_entry
+       WHERE scope_key = #{scopeKey}
+         AND entry_kind = 'directory'
+         AND (path = #{path} OR path LIKE #{pattern} ESCAPE '\\')
+       ORDER BY path`,
+      { scopeKey, path: base, pattern }
+    );
+    return rows.map((row) => ({
+      path: String(row.path),
+      mtimeMs: Number(row.mtime_ms),
+    }));
+  }
+
   async listEntriesUnderPrefix(
     scopeKey: string,
     pathPrefix: string

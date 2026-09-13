@@ -25,10 +25,14 @@ import {ProviderDetailScreen} from '../screens/stack/ProviderDetailScreen';
 import {ModelSamplingScreen} from '../screens/stack/ModelSamplingScreen';
 
 import {CloudSyncConfigScreen} from '../screens/stack/CloudSyncConfigScreen';
+import {SearchEnginesScreen} from '../screens/stack/SearchEnginesScreen';
+import {SearchEngineDetailScreen} from '../screens/stack/SearchEngineDetailScreen';
 import {StorageConfigScreen} from '../screens/stack/StorageConfigScreen';
 import {CloudSyncProgressScreen} from '../screens/stack/CloudSyncProgressScreen';
 import {ChatConfigScreen} from '../screens/stack/ChatConfigScreen';
 import {GlobalTemplateScreen} from '../screens/stack/GlobalTemplateScreen';
+import {SmartSortRulesScreen} from '../screens/stack/SmartSortRulesScreen';
+import {SmartSortRuleEditorScreen} from '../screens/stack/SmartSortRuleEditorScreen';
 import {FileEditorScreen} from '../screens/stack/FileEditorScreen';
 import {SessionDetailScreen} from '../screens/stack/SessionDetailScreen';
 import {SubagentSessionScreen} from '../screens/stack/SubagentSessionScreen';
@@ -135,9 +139,25 @@ const CloudSyncConfigStackScreen = withStackLayout(
   'CloudSyncConfig',
   CloudSyncConfigScreen,
 );
+const SearchEnginesStackScreen = withStackLayout(
+  'SearchEngines',
+  SearchEnginesScreen,
+);
+const SearchEngineDetailStackScreen = withStackLayout(
+  'SearchEngineDetail',
+  SearchEngineDetailScreen,
+);
 const GlobalTemplateStackScreen = withStackLayout(
   'GlobalTemplate',
   GlobalTemplateScreen,
+);
+const SmartSortRulesStackScreen = withStackLayout(
+  'SmartSortRules',
+  SmartSortRulesScreen,
+);
+const SmartSortRuleEditorStackScreen = withStackLayout(
+  'SmartSortRuleEditor',
+  SmartSortRuleEditorScreen,
 );
 const FileEditorStackScreen = withStackLayout('FileEditor', FileEditorScreen);
 const SessionDetailStackScreen = withStackLayout(
@@ -228,8 +248,24 @@ export function RootNavigator() {
               component={CloudSyncConfigStackScreen}
             />
             <Stack.Screen
+              name="SearchEngines"
+              component={SearchEnginesStackScreen}
+            />
+            <Stack.Screen
+              name="SearchEngineDetail"
+              component={SearchEngineDetailStackScreen}
+            />
+            <Stack.Screen
               name="GlobalTemplate"
               component={GlobalTemplateStackScreen}
+            />
+            <Stack.Screen
+              name="SmartSortRules"
+              component={SmartSortRulesStackScreen}
+            />
+            <Stack.Screen
+              name="SmartSortRuleEditor"
+              component={SmartSortRuleEditorStackScreen}
             />
             <Stack.Screen name="FileEditor" component={FileEditorStackScreen} />
             <Stack.Screen

@@ -10,6 +10,7 @@ import type {
   WorkplaceFileRule,
   WorkplaceRuleRow,
 } from "./workplace-types.js";
+import type { CompiledSmartSortRule } from "../logic/smart-sort.js";
 
 /** RuleEngine 输入：与 {@link DefaultWorkplaceService.loadContextMetadata} 等价。 */
 export interface WorkplaceRuleContext {
@@ -18,6 +19,10 @@ export interface WorkplaceRuleContext {
   readonly fileSet: ReadonlySet<string>;
   readonly mtimeByPath: ReadonlyMap<string, number>;
   readonly allDirs: ReadonlySet<string>;
+  /** 预编译智能排序规则（spec D4）；缺省时 smart 退化为自然排序。 */
+  readonly smartRules?: readonly CompiledSmartSortRule[];
+  /** 目录 path → mtime（spec D7）；缺省时目录 created/updated 退化为 name 字典序。 */
+  readonly dirMtimeByPath?: ReadonlyMap<string, number>;
 }
 
 /** evaluateWorkplaceRuleView 输出：纯规则视图，不含文件正文。 */

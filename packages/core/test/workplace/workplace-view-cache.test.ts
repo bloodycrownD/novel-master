@@ -57,6 +57,8 @@ function createSpyingWorkplaceService(
       calls.listFileMetaUnderPrefix += 1;
       return baseRepo.listFileMetaUnderPrefix(...args);
     },
+    listDirectoryMetaUnderPrefix: (...args) =>
+      baseRepo.listDirectoryMetaUnderPrefix(...args),
     listFileHeadsUnderPrefix: (...args) =>
       baseRepo.listFileHeadsUnderPrefix(...args),
     scanContents: (...args) => baseRepo.scanContents(...args),

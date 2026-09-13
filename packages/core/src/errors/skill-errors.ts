@@ -12,7 +12,9 @@ export type SkillErrorCode =
   | "INVALID_PATH"
   | "NOT_FOUND"
   | "BUILTIN_SKILL"
-  | "BUILTIN_SKILL_NAME_RESERVED";
+  | "BUILTIN_SKILL_NAME_RESERVED"
+  | "BUILTIN_SKILL_RENAME"
+  | "SKILL_ALREADY_EXISTS";
 
 /**
  * Unified error for skill service operations.
@@ -120,6 +122,22 @@ export function skillBuiltinNameReserved(name: string): SkillError {
   return new SkillError(
     "BUILTIN_SKILL_NAME_RESERVED",
     `「${name}」为内置技能保留名，不能用于新建；内置技能本身可在管理页编辑`,
+    { skillName: name }
+  );
+}
+
+/** 重命名 global 域内置技能（仅改名拒；仅改描述放行）。 */
+export function skillBuiltinRename(name: string): SkillError {
+  return new SkillError("BUILTIN_SKILL_RENAME", `内置技能不支持重命名：${name}`, {
+    skillName: name,
+  });
+}
+
+/** 域内查重撞名：目标技能目录已存在（updateSkillInfo 重命名）。 */
+export function skillAlreadyExists(name: string): SkillError {
+  return new SkillError(
+    "SKILL_ALREADY_EXISTS",
+    `已存在同名技能：${name}`,
     { skillName: name }
   );
 }

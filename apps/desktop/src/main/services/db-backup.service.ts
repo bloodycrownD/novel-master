@@ -31,11 +31,10 @@ async function closeLiveDbForBackupImport(): Promise<void> {
 }
 
 const SQLITE_MAGIC = "SQLite format 3";
-const BACKUP_EXT = ".nmbackup";
 const EXPORT_ATTACH_ALIAS = "export_db";
 
 function backupFileName(): string {
-  return `novel-master-backup-${Date.now()}${BACKUP_EXT}`;
+  return "nmbackup.db";
 }
 
 function assertSqliteFile(bytes: Uint8Array): void {
@@ -158,11 +157,15 @@ export async function exportDatabaseBackup(
   const result = win
     ? await dialog.showSaveDialog(win, {
         defaultPath: fileName,
-        filters: [{ name: "Novel Master Backup", extensions: ["nmbackup"] }],
+        filters: [
+          { name: "Novel Master Backup", extensions: ["db", "nmbackup"] },
+        ],
       })
     : await dialog.showSaveDialog({
         defaultPath: fileName,
-        filters: [{ name: "Novel Master Backup", extensions: ["nmbackup"] }],
+        filters: [
+          { name: "Novel Master Backup", extensions: ["db", "nmbackup"] },
+        ],
       });
   if (result.canceled || result.filePath == null) {
     return "cancelled";

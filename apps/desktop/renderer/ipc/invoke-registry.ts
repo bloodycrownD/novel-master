@@ -49,6 +49,21 @@ import {
   type ScopeSetProjectRequest,
   type ScopeSetSessionRequest,
   type ScopeSnapshotDto,
+  type SmartSortRuleBundleDto,
+  type SmartSortRuleCreateRequest,
+  type SmartSortRuleDeleteBatchRequest,
+  type SmartSortRuleDto,
+  type SmartSortRuleIdRequest,
+  type SmartSortRuleImportRulesRequest,
+  type SmartSortRuleMatchRequest,
+  type SmartSortRuleMatchResultDto,
+  type SmartSortRuleMoveRequest,
+  type SmartSortRuleReorderRequest,
+  type SmartSortRuleSetEnabledBatchRequest,
+  type SmartSortRuleSetEnabledRequest,
+  type SmartSortRuleUpdateRequest,
+  type SmartSortRuleYamlExportResult,
+  type SmartSortRuleYamlImportResult,
   type SessionCreateRequest,
   type SessionDeleteRequest,
   type SessionDto,
@@ -103,7 +118,13 @@ import {
   type SkillsReadRequest,
   type SkillsReadResponse,
   type SkillsToggleRequest,
+  type SkillsUpdateInfoRequest,
   type SkillsWriteRequest,
+  type SearchConfigDto,
+  type SearchSaveEngineKeyRequest,
+  type SearchClearEngineKeyRequest,
+  type SearchSetSearxngBaseUrlRequest,
+  type SearchSetEngineOrderRequest,
 } from '@shared/ipc-types';
 
 export type InvokeFn = <T>(channel: string, arg?: unknown) => Promise<T>;
@@ -508,6 +529,66 @@ export function createInvokeClient(invoke: InvokeFn) {
       IPC_CHANNELS.AGENT_YAML_IMPORT,
     ),
 
+    ipcSmartSortRuleList: noArg<IpcResult<SmartSortRuleDto[]>>(
+      invoke,
+      IPC_CHANNELS.SMART_SORT_RULE_LIST,
+    ),
+    ipcSmartSortRuleCreate: withReq<
+      SmartSortRuleCreateRequest,
+      IpcResult<SmartSortRuleDto>
+    >(invoke, IPC_CHANNELS.SMART_SORT_RULE_CREATE),
+    ipcSmartSortRuleUpdate: withReq<
+      SmartSortRuleUpdateRequest,
+      IpcResult<SmartSortRuleDto>
+    >(invoke, IPC_CHANNELS.SMART_SORT_RULE_UPDATE),
+    ipcSmartSortRuleDelete: withReq<SmartSortRuleIdRequest, IpcResult<void>>(
+      invoke,
+      IPC_CHANNELS.SMART_SORT_RULE_DELETE,
+    ),
+    ipcSmartSortRuleDeleteBatch: withReq<
+      SmartSortRuleDeleteBatchRequest,
+      IpcResult<void>
+    >(invoke, IPC_CHANNELS.SMART_SORT_RULE_DELETE_BATCH),
+    ipcSmartSortRuleSetEnabled: withReq<
+      SmartSortRuleSetEnabledRequest,
+      IpcResult<SmartSortRuleDto>
+    >(invoke, IPC_CHANNELS.SMART_SORT_RULE_SET_ENABLED),
+    ipcSmartSortRuleSetEnabledBatch: withReq<
+      SmartSortRuleSetEnabledBatchRequest,
+      IpcResult<void>
+    >(invoke, IPC_CHANNELS.SMART_SORT_RULE_SET_ENABLED_BATCH),
+    ipcSmartSortRuleMove: withReq<
+      SmartSortRuleMoveRequest,
+      IpcResult<SmartSortRuleDto[]>
+    >(invoke, IPC_CHANNELS.SMART_SORT_RULE_MOVE),
+    ipcSmartSortRuleReorder: withReq<
+      SmartSortRuleReorderRequest,
+      IpcResult<SmartSortRuleDto[]>
+    >(invoke, IPC_CHANNELS.SMART_SORT_RULE_REORDER),
+    ipcSmartSortRuleExportRules: noArg<IpcResult<SmartSortRuleBundleDto>>(
+      invoke,
+      IPC_CHANNELS.SMART_SORT_RULE_EXPORT_RULES,
+    ),
+    ipcSmartSortRuleImportRules: withReq<
+      SmartSortRuleImportRulesRequest,
+      IpcResult<SmartSortRuleDto[]>
+    >(invoke, IPC_CHANNELS.SMART_SORT_RULE_IMPORT_RULES),
+    ipcSmartSortRuleResetDefaults: noArg<IpcResult<void>>(
+      invoke,
+      IPC_CHANNELS.SMART_SORT_RULE_RESET_DEFAULTS,
+    ),
+    ipcSmartSortRuleMatch: withReq<
+      SmartSortRuleMatchRequest,
+      IpcResult<SmartSortRuleMatchResultDto>
+    >(invoke, IPC_CHANNELS.SMART_SORT_RULE_MATCH),
+    ipcSmartSortRuleYamlExport: noArg<IpcResult<SmartSortRuleYamlExportResult>>(
+      invoke,
+      IPC_CHANNELS.SMART_SORT_RULE_YAML_EXPORT,
+    ),
+    ipcSmartSortRuleYamlImport: noArg<IpcResult<SmartSortRuleYamlImportResult>>(
+      invoke,
+      IPC_CHANNELS.SMART_SORT_RULE_YAML_IMPORT,
+    ),
     ipcSkillsList: withReq<
       SkillsListRequest,
       IpcResult<SkillListItemDto[]>
@@ -540,6 +621,10 @@ export function createInvokeClient(invoke: InvokeFn) {
       SkillsAssertCreateNameRequest,
       IpcResult<void>
     >(invoke, IPC_CHANNELS.SKILLS_ASSERT_CREATE_NAME),
+    ipcSkillsUpdateInfo: withReq<SkillsUpdateInfoRequest, IpcResult<void>>(
+      invoke,
+      IPC_CHANNELS.SKILLS_UPDATE_INFO,
+    ),
     ipcCompactionConditionsGet: noArg(
       invoke,
       IPC_CHANNELS.COMPACTION_CONDITIONS_GET,
@@ -579,6 +664,26 @@ export function createInvokeClient(invoke: InvokeFn) {
     ipcCloudSyncPull: noArg(invoke, IPC_CHANNELS.CLOUD_SYNC_PULL),
     ipcCloudSyncPush: (req?: { forceOverwriteRemote?: boolean }) =>
       invoke(IPC_CHANNELS.CLOUD_SYNC_PUSH, req),
+    ipcSearchGetConfig: noArg<IpcResult<SearchConfigDto>>(
+      invoke,
+      IPC_CHANNELS.SEARCH_GET_CONFIG,
+    ),
+    ipcSearchSaveEngineKey: withReq<
+      SearchSaveEngineKeyRequest,
+      IpcResult<void>
+    >(invoke, IPC_CHANNELS.SEARCH_SAVE_ENGINE_KEY),
+    ipcSearchClearEngineKey: withReq<
+      SearchClearEngineKeyRequest,
+      IpcResult<void>
+    >(invoke, IPC_CHANNELS.SEARCH_CLEAR_ENGINE_KEY),
+    ipcSearchSetSearxngBaseUrl: withReq<
+      SearchSetSearxngBaseUrlRequest,
+      IpcResult<void>
+    >(invoke, IPC_CHANNELS.SEARCH_SET_SEARXNG_BASE_URL),
+    ipcSearchSetEngineOrder: withReq<
+      SearchSetEngineOrderRequest,
+      IpcResult<void>
+    >(invoke, IPC_CHANNELS.SEARCH_SET_ENGINE_ORDER),
     ipcShellMenuPopup: withReq<
       {
         menuId: 'file' | 'edit' | 'view' | 'window' | 'help';

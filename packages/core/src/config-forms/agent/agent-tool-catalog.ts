@@ -43,7 +43,13 @@ export const BUILTIN_TOOL_CATALOG: ReadonlyArray<{
     name: "curl",
     label: "curl",
     description:
-      "发起 http/https 请求获取或提交网页/API 内容，支持自定义方法、请求头与请求体",
+      "发起 http/https 请求获取或提交网页/API 内容，支持自定义方法、请求头与请求体；响应超过 50KB 时自动保存到会话工作区 /tmp/（可用 read 读取）",
+  },
+  {
+    name: "search",
+    label: "search",
+    description:
+      "联网搜索（bocha/tavily/brave/searxng/duckduckgo 五引擎；未配置时使用内置 DuckDuckGo 免费搜索，无需配置），返回标题/链接/摘要结果列表",
   },
 ] as const;
 

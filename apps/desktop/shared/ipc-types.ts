@@ -142,6 +142,24 @@ export const IPC_CHANNELS = {
   AGENT_YAML_EXPORT: 'nm:agentYaml/export',
   AGENT_YAML_IMPORT: 'nm:agentYaml/import',
 
+
+  SMART_SORT_RULE_LIST: 'nm:sort-rule/list',
+  SMART_SORT_RULE_CREATE: 'nm:sort-rule/create',
+  SMART_SORT_RULE_UPDATE: 'nm:sort-rule/update',
+  SMART_SORT_RULE_DELETE: 'nm:sort-rule/delete',
+  SMART_SORT_RULE_DELETE_BATCH: 'nm:sort-rule/deleteBatch',
+  SMART_SORT_RULE_SET_ENABLED: 'nm:sort-rule/setEnabled',
+  SMART_SORT_RULE_SET_ENABLED_BATCH: 'nm:sort-rule/setEnabledBatch',
+  SMART_SORT_RULE_MOVE: 'nm:sort-rule/move',
+  SMART_SORT_RULE_REORDER: 'nm:sort-rule/reorder',
+  SMART_SORT_RULE_IMPORT_RULES: 'nm:sort-rule/importRules',
+  SMART_SORT_RULE_EXPORT_RULES: 'nm:sort-rule/exportRules',
+  SMART_SORT_RULE_RESET_DEFAULTS: 'nm:sort-rule/resetDefaults',
+  SMART_SORT_RULE_MATCH: 'nm:sort-rule/match',
+  /** YAML 导入导出走 main 进程系统对话框（替换式导入，D10）。 */
+  SMART_SORT_RULE_YAML_EXPORT: 'nm:sort-rule/yamlExport',
+  SMART_SORT_RULE_YAML_IMPORT: 'nm:sort-rule/yamlImport',
+
   SKILLS_LIST: 'nm:skills/list',
   SKILLS_EFFECTIVE: 'nm:skills/effective',
   SKILLS_READ: 'nm:skills/read',
@@ -150,6 +168,7 @@ export const IPC_CHANNELS = {
   SKILLS_TOGGLE: 'nm:skills/toggle',
   SKILLS_DELETE: 'nm:skills/delete',
   SKILLS_ASSERT_CREATE_NAME: 'nm:skills/assert-create-name',
+  SKILLS_UPDATE_INFO: 'nm:skills/update-info',
 
   COMPACTION_CONDITIONS_GET: 'nm:compactionConditions/get',
   COMPACTION_CONDITIONS_SET: 'nm:compactionConditions/set',
@@ -164,6 +183,12 @@ export const IPC_CHANNELS = {
   CLOUD_SYNC_GET_LOCAL_STATUS: 'nm:cloud-sync/getLocalStatus',
   CLOUD_SYNC_PULL: 'nm:cloud-sync/pull',
   CLOUD_SYNC_PUSH: 'nm:cloud-sync/push',
+
+  SEARCH_GET_CONFIG: 'nm:search/getConfig',
+  SEARCH_SAVE_ENGINE_KEY: 'nm:search/saveEngineKey',
+  SEARCH_CLEAR_ENGINE_KEY: 'nm:search/clearEngineKey',
+  SEARCH_SET_SEARXNG_BASE_URL: 'nm:search/setSearxngBaseUrl',
+  SEARCH_SET_ENGINE_ORDER: 'nm:search/setEngineOrder',
 
   SHELL_MENU_POPUP: 'nm:shell/menuPopup',
   SHELL_SET_TITLEBAR_THEME: 'nm:shell/setTitleBarTheme',
@@ -441,6 +466,8 @@ export type VfsZipRequest = VfsScopeRequest & {
   readonly confirmed?: boolean;
   /** 子树目标目录；缺省 ≡ `/`（整域） */
   readonly directoryPath?: string;
+  /** 保存框默认名覆盖（如技能导出 `{技能名}.zip`）；仅导出方向消费，导入忽略。 */
+  readonly fileName?: string;
 };
 
 export type VfsZipExportResult = 'saved' | 'cancelled';
@@ -574,7 +601,7 @@ export type PhysicalReadRequest = {
 export type WorkplaceSetDirRuleRequest = VfsScopeRequest & {
   readonly logicalPath: string;
   readonly ruleEnabled?: boolean;
-  readonly sortField?: 'name' | 'created' | 'updated';
+  readonly sortField?: 'name' | 'created' | 'updated' | 'smart';
   readonly sortOrder?: 'asc' | 'desc';
   readonly headCount?: number;
   readonly tailCount?: number;
@@ -1214,6 +1241,122 @@ export type AgentYamlImportRequest = {
   readonly agentId: string;
 };
 
+/**
+ * 智能排序规则（与 core `SmartSortRule` 同构的 IPC DTO；renderer 不直接依赖 core）。
+ */
+/** 捕获数字三档（D13，与 core SmartSortCaptureKind 同构；renderer 经 shared 消费）。 */
+export type SmartSortCaptureKindDto = 'smart' | 'fixed_min' | 'fixed_max';
+export type SmartSortRuleDto = {
+  readonly ruleId: string;
+  readonly name: string;
+  readonly pattern: string;
+  readonly flags: string;
+  /** 捕获数字档位（D13，缺省 smart）。 */
+  readonly captureKind: SmartSortCaptureKindDto;
+  readonly description: string | null;
+  readonly enabled: boolean;
+  readonly sortOrder: number;
+  readonly createdAtMs: number;
+  readonly updatedAtMs: number;
+};
+
+export type SmartSortRuleCreateRequest = {
+  readonly name: string;
+  readonly pattern: string;
+  readonly flags?: string;
+  readonly captureKind?: SmartSortCaptureKindDto;
+  readonly description?: string | null;
+  readonly enabled?: boolean;
+};
+
+export type SmartSortRuleUpdateRequest = {
+  readonly ruleId: string;
+  readonly patch: {
+    readonly name?: string;
+    readonly pattern?: string;
+    readonly flags?: string;
+    readonly captureKind?: SmartSortCaptureKindDto;
+    readonly description?: string | null;
+    readonly enabled?: boolean;
+  };
+};
+
+export type SmartSortRuleIdRequest = {
+  readonly ruleId: string;
+};
+
+export type SmartSortRuleSetEnabledRequest = {
+  readonly ruleId: string;
+  readonly enabled: boolean;
+};
+
+export type SmartSortRuleSetEnabledBatchRequest = {
+  readonly ruleIds: readonly string[];
+  readonly enabled: boolean;
+};
+
+export type SmartSortRuleDeleteBatchRequest = {
+  readonly ruleIds: readonly string[];
+};
+
+export type SmartSortRuleMoveRequest = {
+  readonly ruleId: string;
+  readonly to: 'top' | 'bottom' | 'up' | 'down' | { readonly index: number };
+};
+
+export type SmartSortRuleReorderRequest = {
+  readonly orderedIds: readonly string[];
+};
+
+/** bundle 文档单条规则（与 core `SmartSortRuleBundleRule` 同构，D10）。 */
+export type SmartSortRuleBundleRuleDto = {
+  readonly ruleId: string;
+  readonly name: string;
+  readonly pattern: string;
+  readonly flags: string;
+  readonly captureKind?: SmartSortCaptureKindDto;
+  readonly description?: string | null;
+  readonly enabled: boolean;
+  readonly sortOrder: number;
+};
+
+/** bundle 文档（替换式导入导出，D10）。 */
+export type SmartSortRuleBundleDto = {
+  readonly schemaVersion: number;
+  readonly rules: readonly SmartSortRuleBundleRuleDto[];
+};
+
+export type SmartSortRuleImportRulesRequest = {
+  readonly bundle: SmartSortRuleBundleDto;
+};
+
+/** 编辑器正则匹配测试的单个匹配（index = 原文起始偏移，供高亮切分；
+ *  groups 内 null = 捕获组未参与匹配，GUI 渲染 '-'；tuple = 提取元组
+ *  展示文案，D13，null 显「无序号」）。 */
+export type SmartSortRuleMatchDto = {
+  readonly text: string;
+  readonly index: number;
+  readonly groups: readonly (string | null)[];
+  readonly tuple: string | null;
+};
+
+/** 正则匹配测试请求（fix ②：替代旧排序预览的 names + draftRules 语义；
+ *  captureKind 缺省 smart，D13）。 */
+export type SmartSortRuleMatchRequest = {
+  readonly pattern: string;
+  readonly flags: string;
+  readonly text: string;
+  readonly captureKind?: SmartSortCaptureKindDto;
+};
+
+/** 正则匹配测试结果：非法正则是合法测试结局（ok 分支内联错误文案，非 IPC 错误）。 */
+export type SmartSortRuleMatchResultDto =
+  | { readonly ok: true; readonly matches: readonly SmartSortRuleMatchDto[] }
+  | { readonly ok: false; readonly error: string };
+
+export type SmartSortRuleYamlExportResult = 'saved' | 'cancelled';
+export type SmartSortRuleYamlImportResult = 'imported' | 'cancelled';
+
 /** 技能归属域（与 core `SkillDomain` 对齐；renderer 不直接依赖 core）。 */
 export type SkillDomainDto = 'global' | 'project';
 
@@ -1324,6 +1467,17 @@ export type SkillsAssertCreateNameRequest = {
 
 export type SkillsDeleteRequest = SkillRefDto;
 
+/**
+ * 编辑技能信息（重命名 + 描述同一提交）：单事务完成目录迁移 / front matter
+ * 同步 / 负清单迁移；至少提交 newName / description 一项。
+ */
+export type SkillsUpdateInfoRequest = SkillRefDto & {
+  /** 新技能名；缺省或与现名相同 = 不改名。 */
+  readonly newName?: string;
+  /** 新描述；缺省表示不改描述。 */
+  readonly description?: string;
+};
+
 export type CompactionConditionsDto = {
   readonly schemaVersion: number;
   readonly enabled: boolean;
@@ -1393,6 +1547,36 @@ export type CloudSyncPushRequest = {
 
 export type CloudSyncPushResult = {
   readonly rev: number;
+};
+
+/** 单引擎配置状态（不含 key 明文，只有 configured 布尔）。 */
+export type SearchEngineStatusDto = {
+  readonly configured: boolean;
+};
+
+/** 搜索引擎配置（DTO 不含 key 明文；engines 键为 EngineId 字符串；engineOrder 即串行降级链优先级）。 */
+export type SearchConfigDto = {
+  readonly engineOrder: readonly string[];
+  readonly searxngBaseUrl: string;
+  readonly engines: Readonly<Record<string, SearchEngineStatusDto>>;
+};
+
+export type SearchSaveEngineKeyRequest = {
+  readonly engineId: string;
+  readonly apiKey: string;
+};
+
+export type SearchClearEngineKeyRequest = {
+  readonly engineId: string;
+};
+
+export type SearchSetSearxngBaseUrlRequest = {
+  readonly baseUrl: string;
+};
+
+/** 引擎优先级顺序（须为全部引擎（ENGINE_IDS）的合法排列；core 内校验非法抛错）。 */
+export type SearchSetEngineOrderRequest = {
+  readonly engineOrder: readonly string[];
 };
 
 export type ShellMenuId = 'file' | 'edit' | 'view' | 'window' | 'help';

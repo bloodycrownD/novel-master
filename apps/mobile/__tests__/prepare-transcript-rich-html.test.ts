@@ -62,4 +62,26 @@ describe('prepareTranscriptRichHtml', () => {
     expect(html).not.toMatch(/\son\w+\s*=/i);
     expect(hasExecutableOpenTag(html, 'b')).toBe(false);
   });
+
+  it('裸文件名（.md 等文件扩展撞车 TLD）不被 linkify 自动链接化', () => {
+    // .md 是摩尔多瓦 TLD：linkify 会把裸 test-quote.md 当无协议域名补 http://
+    // 链接化，点击经聊天链接路由外跳浏览器——须维持纯文本（PRD 口径）。
+    for (const bare of ['test-quote.md', '报告.zip', 'deploy.sh', 'main.py', 'main.rs', 'lib.so', 'main.tf', 'Makefile.in', 'x.cl']) {
+      const html = prepareTranscriptRichHtml(`参见 ${bare} 文件`);
+      expect(html).not.toMatch(/<a\b/i);
+      expect(html).toContain(bare);
+    }
+  });
+
+  it('真裸域名与显式 URL 链接化不回归', () => {
+    const html = prepareTranscriptRichHtml(
+      '见 www.example.com 与 github.com 与 https://a.md/x 与 http://vercel.app',
+    );
+    // 无协议真裸域名照常自动链接化（schema 为空但 TLD 不在撞车清单）
+    expect(html).toMatch(/<a[^>]*href="http:\/\/www\.example\.com"/);
+    expect(html).toMatch(/<a[^>]*href="http:\/\/github\.com"/);
+    // 显式带协议的 URL 一律保留（即使 TLD 撞车、无路径）：只拦自动补协议的推断
+    expect(html).toMatch(/<a[^>]*href="https:\/\/a\.md\/x"/);
+    expect(html).toMatch(/<a[^>]*href="http:\/\/vercel\.app"/);
+  });
 });

@@ -16,8 +16,10 @@ const copyDir = path.join(testNativeRoot, "better-sqlite3");
 
 function sqliteCopyWorks() {
   try {
+    // 注意：execSync(shell:true) 在 Linux 默认 /bin/sh(dash)，双引号内的反引号会被当命令替换
+    // 执行拆烂模板字符串——必须用普通单引号拼接，勿用 String.raw`…`
     const sqlitePath = copyDir.split(path.sep).join("/");
-    execSync(`node -e "require(String.raw\`${sqlitePath}\`)(':memory:')"`, {
+    execSync(`node -e "require('${sqlitePath}')(':memory:')"`, {
       cwd: repoRoot,
       stdio: "pipe",
       shell: true,

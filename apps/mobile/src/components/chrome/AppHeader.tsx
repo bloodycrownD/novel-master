@@ -17,9 +17,11 @@ type Props = {
   pageKey: keyof typeof PAGE_HEADER_CONFIG;
   onBack?: () => void;
   onMenu?: () => void;
+  /** 归属屏 route key（StackScreenLayout 传入）：override 仅在归属屏应用。 */
+  ownerRouteKey?: string;
 };
 
-export function AppHeader({pageKey, onBack, onMenu}: Props) {
+export function AppHeader({pageKey, ownerRouteKey, onBack, onMenu}: Props) {
   const insets = useSafeAreaInsets();
   const {tokens, mode, toggleMode} = useTheme();
   const {stackOverride} = useHeaderContext();
@@ -27,7 +29,13 @@ export function AppHeader({pageKey, onBack, onMenu}: Props) {
 
   const resolved = useMemo(() => {
     const base = PAGE_HEADER_CONFIG[pageKey];
-    if (stackOverride && pageKey !== 'chat') {
+    // ownerRouteKey 过滤：转场动画期间两个屏的 header 同时可见，
+    // override 只在归属屏应用，避免「?」/标题闪烁到相邻屏。
+    const owned =
+      stackOverride != null &&
+      (stackOverride.ownerRouteKey == null ||
+        stackOverride.ownerRouteKey === ownerRouteKey);
+    if (owned && pageKey !== 'chat') {
       return {
         title: stackOverride.title ?? base.title,
         showBack: stackOverride.showBack ?? base.showBack,
@@ -68,7 +76,7 @@ export function AppHeader({pageKey, onBack, onMenu}: Props) {
       onBack,
       onMenu,
     };
-  }, [pageKey, chatNav, stackOverride, onBack, onMenu]);
+  }, [pageKey, chatNav, stackOverride, onBack, onMenu, ownerRouteKey]);
 
   const menuLabel =
     pageKey === 'chat' &&

@@ -44,6 +44,13 @@ import {
   handleCloudSyncTestConnection,
 } from './handlers/cloud-sync.js';
 import {
+  handleSearchClearEngineKey,
+  handleSearchGetConfig,
+  handleSearchSaveEngineKey,
+  handleSearchSetEngineOrder,
+  handleSearchSetSearxngBaseUrl,
+} from './handlers/search.js';
+import {
   handleAppCheckForUpdates,
   handleAppGetInfo,
   handleAppOpenExternal,
@@ -77,7 +84,25 @@ import {
   handleProvidersList,
 } from './handlers/providers.js';
 import {
+  handleSmartSortRuleCreate,
+  handleSmartSortRuleDelete,
+  handleSmartSortRuleDeleteBatch,
+  handleSmartSortRuleExportRules,
+  handleSmartSortRuleImportRules,
+  handleSmartSortRuleList,
+  handleSmartSortRuleMove,
+  handleSmartSortRuleMatch,
+  handleSmartSortRuleReorder,
+  handleSmartSortRuleResetDefaults,
+  handleSmartSortRuleSetEnabled,
+  handleSmartSortRuleSetEnabledBatch,
+  handleSmartSortRuleUpdate,
+  handleSmartSortRuleYamlExport,
+  handleSmartSortRuleYamlImport,
+} from './handlers/smart-sort-rule.js';
+import {
   handleSkillsAssertCreateName,
+  handleSkillsUpdateInfo,
   handleSkillsDelete,
   handleSkillsEdit,
   handleSkillsEffective,
@@ -359,6 +384,29 @@ export function registerHandlersFromRegistry(): void {
   bindReq(IPC_CHANNELS.AGENT_YAML_EXPORT, handleAgentYamlExport);
   bindReq(IPC_CHANNELS.AGENT_YAML_IMPORT, handleAgentYamlImport);
 
+
+  bindNoArg(IPC_CHANNELS.SMART_SORT_RULE_LIST, handleSmartSortRuleList);
+  bindReq(IPC_CHANNELS.SMART_SORT_RULE_CREATE, handleSmartSortRuleCreate);
+  bindReq(IPC_CHANNELS.SMART_SORT_RULE_UPDATE, handleSmartSortRuleUpdate);
+  bindReq(IPC_CHANNELS.SMART_SORT_RULE_DELETE, handleSmartSortRuleDelete);
+  bindReq(IPC_CHANNELS.SMART_SORT_RULE_DELETE_BATCH, handleSmartSortRuleDeleteBatch);
+  bindReq(IPC_CHANNELS.SMART_SORT_RULE_SET_ENABLED, handleSmartSortRuleSetEnabled);
+  bindReq(
+    IPC_CHANNELS.SMART_SORT_RULE_SET_ENABLED_BATCH,
+    handleSmartSortRuleSetEnabledBatch,
+  );
+  bindReq(IPC_CHANNELS.SMART_SORT_RULE_MOVE, handleSmartSortRuleMove);
+  bindReq(IPC_CHANNELS.SMART_SORT_RULE_REORDER, handleSmartSortRuleReorder);
+  bindNoArg(IPC_CHANNELS.SMART_SORT_RULE_EXPORT_RULES, handleSmartSortRuleExportRules);
+  bindReq(IPC_CHANNELS.SMART_SORT_RULE_IMPORT_RULES, handleSmartSortRuleImportRules);
+  bindNoArg(
+    IPC_CHANNELS.SMART_SORT_RULE_RESET_DEFAULTS,
+    handleSmartSortRuleResetDefaults,
+  );
+  bindReq(IPC_CHANNELS.SMART_SORT_RULE_MATCH, handleSmartSortRuleMatch);
+  bindNoArg(IPC_CHANNELS.SMART_SORT_RULE_YAML_EXPORT, handleSmartSortRuleYamlExport);
+  bindNoArg(IPC_CHANNELS.SMART_SORT_RULE_YAML_IMPORT, handleSmartSortRuleYamlImport);
+
   bindReq(IPC_CHANNELS.SKILLS_LIST, handleSkillsList);
   bindReq(IPC_CHANNELS.SKILLS_EFFECTIVE, handleSkillsEffective);
   bindReq(IPC_CHANNELS.SKILLS_READ, handleSkillsRead);
@@ -367,6 +415,7 @@ export function registerHandlersFromRegistry(): void {
   bindReq(IPC_CHANNELS.SKILLS_TOGGLE, handleSkillsToggle);
   bindReq(IPC_CHANNELS.SKILLS_DELETE, handleSkillsDelete);
   bindReq(IPC_CHANNELS.SKILLS_ASSERT_CREATE_NAME, handleSkillsAssertCreateName);
+  bindReq(IPC_CHANNELS.SKILLS_UPDATE_INFO, handleSkillsUpdateInfo);
 
   bindNoArg(
     IPC_CHANNELS.COMPACTION_CONDITIONS_GET,
@@ -393,6 +442,18 @@ export function registerHandlersFromRegistry(): void {
   );
   bindNoArg(IPC_CHANNELS.CLOUD_SYNC_PULL, handleCloudSyncPull);
   bindReq(IPC_CHANNELS.CLOUD_SYNC_PUSH, handleCloudSyncPush);
+
+  bindNoArg(IPC_CHANNELS.SEARCH_GET_CONFIG, handleSearchGetConfig);
+  bindReq(IPC_CHANNELS.SEARCH_SAVE_ENGINE_KEY, handleSearchSaveEngineKey);
+  bindReq(IPC_CHANNELS.SEARCH_CLEAR_ENGINE_KEY, handleSearchClearEngineKey);
+  bindReq(
+    IPC_CHANNELS.SEARCH_SET_SEARXNG_BASE_URL,
+    handleSearchSetSearxngBaseUrl,
+  );
+  bindReq(
+    IPC_CHANNELS.SEARCH_SET_ENGINE_ORDER,
+    handleSearchSetEngineOrder,
+  );
 
   bindEventReq(IPC_CHANNELS.SHELL_MENU_POPUP, handleShellMenuPopup);
   bindEventReq(

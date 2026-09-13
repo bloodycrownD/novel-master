@@ -1,10 +1,14 @@
 /**
  * VfsFileManager 内联单输入弹窗（重命名/新建文件/新建目录）。
  * 骨架复用 ModalShell（居中卡片 + translate 0.5 键盘避让）。
+ * 提交前本地校验条目名（validateVfsEntryName，与 core 服务层同规则）：
+ * 不合法时 toast 中文 reason 且不提交、不关窗。
  */
 import React, {useEffect, useState} from 'react';
 import {Pressable, StyleSheet, Text, TextInput, View} from 'react-native';
+import {validateVfsEntryName} from '@novel-master/core/vfs';
 import {ModalShell} from '@/components/ui/ModalShell';
+import {useToast} from '@/components/chrome/ToastHost';
 import {useTheme} from '@/theme/ThemeProvider';
 
 export type VfsPromptState = {
@@ -22,11 +26,21 @@ type Props = {
 
 export function VfsPromptModal({state, onCancel, onSubmit}: Props) {
   const {tokens} = useTheme();
+  const {showToast} = useToast();
   const [value, setValue] = useState(state.defaultValue);
   // 每次打开（父组件换新 state）都重置回 defaultValue。
   useEffect(() => {
     setValue(state.defaultValue);
   }, [state]);
+
+  const handleSubmit = () => {
+    const check = validateVfsEntryName(value);
+    if (!check.ok) {
+      showToast(check.reason);
+      return;
+    }
+    onSubmit(value);
+  };
 
   return (
     <ModalShell
@@ -57,7 +71,7 @@ export function VfsPromptModal({state, onCancel, onSubmit}: Props) {
         <Pressable onPress={onCancel}>
           <Text style={{color: tokens.textSecondary}}>取消</Text>
         </Pressable>
-        <Pressable testID="vfs-prompt-submit" onPress={() => onSubmit(value)}>
+        <Pressable testID="vfs-prompt-submit" onPress={handleSubmit}>
           <Text style={{color: tokens.primary}}>确定</Text>
         </Pressable>
       </View>

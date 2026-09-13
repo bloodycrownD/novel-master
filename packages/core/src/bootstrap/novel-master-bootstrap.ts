@@ -7,7 +7,7 @@
  * 稳态冷启动：若 `PRAGMA user_version` ≥ {@link SCHEMA_BOOT_VERSION}，跳过 DDL 与
  * 列对齐，仅跑 pending migration 与 builtin seed，避免 RN 上数十次桥接往返。
  *
- * 最低支持版本：v1.4.28。低于此版本的极旧库需先升级到 v1.4.28，再升级到本版本——
+ * 最低支持版本：v1.5.5。低于此版本的极旧库需先升级到 v1.5.5，再升级到本版本——
  * {@link assertMinimumBaseline} 会在 migration runner 之前做 fail-fast 检查，
  * 防止跨大版本升级走样。
  *
@@ -25,11 +25,13 @@ import { SESSION_RUN_STATE_SCHEMA_STATEMENTS } from "./session-run-state/session
 import { CHAT_SCHEMA_STATEMENTS } from "./chat/chat-schema.js";
 import { SESSION_FS_SCHEMA_STATEMENTS } from "./session-fs/session-fs-schema.js";
 import { WORKPLACE_SCHEMA_STATEMENTS } from "./workplace/workplace-schema.js";
+import { SMART_SORT_RULE_SCHEMA_STATEMENTS } from "./smart-sort-rule/smart-sort-rule-schema.js";
 import { SKILLS_SCHEMA_STATEMENTS } from "./skills/skills-schema.js";
 import { SKSP_SCHEMA_STATEMENTS } from "./sksp/sksp-schema.js";
 import { PROVIDER_SCHEMA_STATEMENTS } from "./provider/provider-schema.js";
 import { AGENT_SCHEMA_STATEMENTS } from "./agent/agent-schema.js";
 import { seedBuiltinProviders } from "./provider/seed-builtin-providers.js";
+import { seedBuiltinSmartSortRules } from "./smart-sort-rule/builtin-smart-sort-rules.js";
 import { seedBuiltinSkills } from "./skills/seed-builtin-skills.js";
 import { alignSchemaColumns } from "./schema-align/align-schema-columns.js";
 import {
@@ -72,11 +74,19 @@ import { IntegrityRepairRegistry } from "@/service/integrity-repair.js";
  * 原样合并进请求体顶层）。老库（v11）靠本轮 bump 走慢路径由 ALIGN
  * 补列；DEFAULT '{}' 无存量回填。seed 内置行的 INSERT 显式列清单，
  * 新列走 DEFAULT。
- * v13：新增 session_run_state 表（会话流式单元的 run 状态持久层：
- * status/partial 快照/metrics，session_id 主键单行）。老库（v12）靠
- * 本轮 bump 走慢路径由 DDL 建表；全新库直接建表；无存量回填。
+ * v13：workplace_dir_rule.sort_field CHECK 扩枚举 'smart'（文件名智能排序）
+ * + 新表 smart_sort_rule（规则管理）与内置规则 seed。老库（v12）靠本轮
+ * bump 走慢路径：新表由 DDL 建出；但 CHECK 变更对已存在的表不生效，
+ * 由 workplace-dir-rule-smart-field-v1 migration rebuild 承担（存量行
+ * 原样搬运）。本条在分支内原编号 v11；merge origin/main（已发布 v11/v12）
+ * 时顺延为 v13，保证走过 v1.5.16（user_version=12）的存量库走慢路径。
+ * v14：新增 session_run_state 表（会话流式单元的 run 状态持久层：
+ * status/partial 快照/metrics，session_id 主键单行）。本条在分支内原
+ * 编号 v13，与 main 的 v13（smart-sort）撞号；merge main 后顺延为 v14，
+ * 保证走过 main v13（user_version=13，v1.5.16+）的存量库走慢路径由
+ * DDL 建表；全新库直接建表；无存量回填。
  */
-export const SCHEMA_BOOT_VERSION = 13;
+export const SCHEMA_BOOT_VERSION = 14;
 
 /** 各模块 DDL 语句，按依赖安全顺序排列。 */
 export const NOVEL_MASTER_SCHEMA_STATEMENTS: readonly string[] = [
@@ -90,6 +100,7 @@ export const NOVEL_MASTER_SCHEMA_STATEMENTS: readonly string[] = [
   ...CHAT_SCHEMA_STATEMENTS,
   ...SESSION_FS_SCHEMA_STATEMENTS,
   ...WORKPLACE_SCHEMA_STATEMENTS,
+  ...SMART_SORT_RULE_SCHEMA_STATEMENTS,
   ...SKILLS_SCHEMA_STATEMENTS,
   ...SKSP_SCHEMA_STATEMENTS,
   ...PROVIDER_SCHEMA_STATEMENTS,
@@ -123,8 +134,10 @@ async function writeSchemaBootVersion(
  *
  * 前三条（vfs-entry-id-redesign-v1、session-agent-config-v2、
  * project-agent-config-cleanup-v1）为第二轮退役：所有 ≥v1.4.27 的库都已应用过。
- * 第三轮退役（本次）：orphan-revision-gc-v1、table-constraints-v1b——所有
+ * 第三轮退役：orphan-revision-gc-v1、table-constraints-v1b——所有
  * ≥v1.4.28 的库都已应用过，最低支持版本随之升至 v1.4.28。
+ * 第四轮退役：usage-cache-model-backfill-v1（数据回填，v1.5.4 首发引入）——
+ * 所有 ≥v1.5.5 的库都已应用过，最低支持版本随之升至 v1.5.5。
  */
 export const BASELINE_MIGRATION_IDS: readonly string[] = [
   "saved-model-identity-v1",
@@ -138,11 +151,12 @@ export const BASELINE_MIGRATION_IDS: readonly string[] = [
   "project-agent-config-cleanup-v1",
   "orphan-revision-gc-v1",
   "table-constraints-v1b",
+  "usage-cache-model-backfill-v1",
 ];
 
-/** 老库升级失败提示，指引用户先升到 v1.4.28。 */
+/** 老库升级失败提示，指引用户先升到 v1.5.5。 */
 export const BASELINE_TOO_OLD_MESSAGE =
-  "检测到当前数据库低于本版本最低支持版本（v1.4.28）。请先升级到 v1.4.28，再升级到本版本。";
+  "检测到当前数据库低于本版本最低支持版本（v1.5.5）。请先升级到 v1.5.5，再升级到本版本。";
 
 /** `llm_saved_model` 无 `id` 列 → 常见老库尚未走 saved-model-identity-v1。 */
 async function hasLegacySavedModelShape(tx: TdbcConnection): Promise<boolean> {
@@ -297,6 +311,7 @@ export async function bootstrapNovelMaster(
       await assertMinimumBaseline(tx);
       await runPendingSchemaMigrations(tx);
       await seedBuiltinProviders(tx);
+      await seedBuiltinSmartSortRules(tx);
       return;
     }
 
@@ -312,6 +327,7 @@ export async function bootstrapNovelMaster(
       "CREATE INDEX IF NOT EXISTS idx_chat_session_parent ON chat_session(parent_session_id)"
     );
     await seedBuiltinProviders(tx);
+    await seedBuiltinSmartSortRules(tx);
     await writeSchemaBootVersion(tx, SCHEMA_BOOT_VERSION);
   });
 

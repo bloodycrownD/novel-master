@@ -54,6 +54,14 @@ export interface SkillWriteOptions {
   readonly builtinSeed?: boolean;
 }
 
+/** updateSkillInfo 的变更字段：至少一项，未提交字段不动。 */
+export interface SkillInfoChanges {
+  /** 新技能名（= 目录迁移）；缺省表示不改名。 */
+  readonly newName?: string;
+  /** 新描述（重写 SKILL.md front matter）；缺省表示不改描述。 */
+  readonly description?: string;
+}
+
 /**
  * 技能应用服务。
  *
@@ -137,4 +145,21 @@ export interface SkillService {
    * 整目录删除技能，连带清理负清单行（global 域清所有项目行）。
    */
   deleteSkill(location: SkillLocation): Promise<void>;
+
+  /**
+   * 编辑技能信息（重命名 + 描述同一提交）：单事务完成校验门 → 目录
+   * 迁移（renamePrefix，entry_id / revision 历史跟随）→ front matter
+   * 同步（parseSkillFrontMatter 成功才重写；invalid 技能跳过重写）→
+   * 负清单行迁移。
+   *
+   * 校验门（撞错抛 SkillError）：newName 须过技能名校验；global 域内置
+   * 技能不可改名（`BUILTIN_SKILL_RENAME`，仅改描述放行）；目标名撞内置
+   * 保留名且目标目录不存在拒（`BUILTIN_SKILL_NAME_RESERVED`）；域内
+   * 已存在目标目录拒（`SKILL_ALREADY_EXISTS`）。仅改描述时不迁目录、
+   * 不迁负清单。
+   */
+  updateSkillInfo(
+    location: SkillLocation,
+    changes: SkillInfoChanges
+  ): Promise<void>;
 }

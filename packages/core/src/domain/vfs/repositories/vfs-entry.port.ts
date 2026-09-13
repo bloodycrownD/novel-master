@@ -171,6 +171,12 @@ export interface VfsEntryRepository {
     pathPrefix: string
   ): Promise<string[]>;
 
+  /** Lists directory paths with mtimes under a prefix (dir time sort, spec D7). */
+  listDirectoryMetaUnderPrefix(
+    scopeKey: string,
+    pathPrefix: string
+  ): Promise<ReadonlyArray<{ path: string; mtimeMs: number }>>;
+
   listEntriesUnderPrefix(
     scopeKey: string,
     pathPrefix: string
