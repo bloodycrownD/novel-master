@@ -31,6 +31,9 @@ jest.mock('@react-navigation/native', () => {
     useFocusEffect: (cb: () => void | (() => void)) => {
       mockReact.useEffect(cb, []);
     },
+    // ChatConfigScreen 经通知模块间接引入 navigation-container-ref 的
+    // 模块级调用，mock 需提供该工厂防 suite 装载失败。
+    createNavigationContainerRef: () => ({}),
   };
 });
 
