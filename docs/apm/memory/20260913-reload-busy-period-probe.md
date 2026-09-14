@@ -94,3 +94,9 @@ user:
 
 assistant:
 spec-generate 三探索子代理（测试基线/notifee 版本能力/设置页与装配链）关键发现：①notifee 9.1.8 的 AuthorizationStatus 只有 -1/0/1/2，Android 无法区分软拒/永久拒（requestPermission 恒返回 DENIED/AUTHORIZED）——手动按钮采行为推断口径：申请回 DENIED 即 openNotificationSettings 跳设置；②仓库 notifee-mock 的 DENIED=4 与真实枚举 0 不一致（碰巧行为等价未爆雷，顺手修正）；③断言反转精确清单：agent-finished-notification.test L409（最后收尾停服）、manager 测试 L612（FINISHED 停服）反转，两段式计数基线重排，MF-4 三条按新导出面重写；④mock 需扩 getNotificationSettings/openNotificationSettings；⑤桥 effect 依赖 [runtime] 不含 appUi——开关切换必须设置页显式调用；⑥prefBridge appUi 未就绪降级返回 true 与「默认关」冲突必须同改；⑦resetKeepAliveStateForTests 扩 resident 复位签名不变（五个调用文件零改）；⑧screens 直连 services 是通行分层（15+ 先例）。spec 落盘 docs/Iterations/resident-keepalive-notification-2026-09/spec.md：期望态模型重构（keepAliveResident 开关态、服务运行⇔resident、start/stop 标签化、reconcile 加 resident 短路防关开关后被标签操作复活）、常驻挂点=桥 effect 末尾 storage 直读开关、manager 只退役权限申请（启停调用零改动语义由模块吸收）、5 Step（4 auto blocking + 1 manual_user 真机）+ T-K1~K10 用例矩阵。待用户确认 spec。
+
+user:
+（确认 spec）[$spec-check-loop] 循环至 execute-ready。
+
+assistant:
+spec-check-loop 三轮收敛至 Go（execute-ready）：R1 No-Go 抓两个真 P0——①默认关链条断裂（未写值用户真实回退在 APP_UI_DEFAULTS 的功能性 'true'（app-ui-keys.ts L41），只改 readBoolPref 第三参不生效，T-K10 还须补 KKV 未写值路径断言）；②reconcile 短路歧义（stop 的 size>0 分支传 true 未定义改法，多会话关开关竞态下「立即停」失效）——修法定为不变量「标签操作永不直接置 true」（start/stop 全传 keepAliveResident）+T-K11「生成中关开关立即停+标签保留」；另 2P1（断言反转清单漏三条 start 直调用例 L366-376/L378-393/L419-423；PRD 三态权限文案回写两态）+4P2。R2 上轮 8 条全闭合但新抓 P0-A——doc-fix 重写引入的受理第一段双口径矛盾（start 只操作标签表的字面推演=受理 no-op 维持空闲文案 vs L27「维持正在生成」），主代理裁定方向 A（承认 no-op，标签查回前显示空闲文案、查回后刷新「正在生成 · 会话名」，测试计数改〔前置空闲1+带标签1〕、T-N1 改锚「标签查回后立即刷新且受理链路不被查询阻塞」）+P2-B/C（PRD「永久拒绝」措辞统一、GWT-2 补忙期口径、Step 5 补 GWT-7 复核、Step 1 完成点全量会红须自管文件或 Step1+2 合并验收的节奏备注）。R3 Go：全部闭合且行号级核实（T-P4 归属 agent-run-parallel-and-notify 迭代已验真），剩 3 条措辞级 P2（T-P4 归属括注/T-K4 构造说明/T-K10 null 路径措辞）按 trivial 豁免主代理直改闭合。最终状态：5 Step + T-K1~K11 + T-K11 前置文件 keepalive-resident-boot.test.ts，PRD/SPEC 两侧口径一致，待用户确认 execute-ready 后可进 code-dev-loop。
