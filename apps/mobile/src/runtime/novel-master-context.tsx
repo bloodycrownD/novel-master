@@ -37,9 +37,13 @@ import {
   type MobileScopeSnapshot,
 } from './mobile-scope';
 import type {MobileNovelMasterRuntime} from './types';
-import {SessionStreamUnitManager} from '@/services/session-stream-unit-manager.service';
+import {
+  SessionStreamUnitManager,
+  type SessionStreamPrefBridge,
+} from '@/services/session-stream-unit-manager.service';
 import {createSessionRunStateService} from '@novel-master/core/session-run-state';
 import {showAppToast} from '@/services/app-toast';
+import {setKeepAliveResidentEnabled} from '@/services/agent-finished-notification';
 import {readMessageNotificationEnabled} from '@/storage/message-notification-pref';
 import {tokensForMode} from '../theme/tokens';
 
@@ -68,6 +72,53 @@ function formatBootstrapError(err: unknown): string {
     return err.message;
   }
   return String(err);
+}
+
+/**
+ * 常驻保活启动挂点：按消息通知开关拉起常驻前台服务通知。
+ *
+ * 直读 storage 层 readMessageNotificationEnabled（不走 prefBridge，避免
+ * appUi 未就绪降级口径干扰），开则 setKeepAliveResidentEnabled(true)。
+ * 签名显式接受 undefined：appUiRef.current 的声明类型就是
+ * `AppUiPreferences | undefined`，而 readMessageNotificationEnabled 参数
+ * 非空——守卫收在函数体内（typecheck 强制；时序上 effect 触发时 appUi
+ * 必已就绪，守卫非时序需要）。拉起失败只 console.error，不向上抛
+ * （fire-and-forget，与桥装配风格一致）。
+ */
+export async function ensureKeepAliveResidentBoot(
+  appUi: AppUiPreferences | undefined,
+): Promise<void> {
+  if (appUi == null) {
+    return;
+  }
+  if (!(await readMessageNotificationEnabled(appUi))) {
+    return;
+  }
+  try {
+    await setKeepAliveResidentEnabled(true);
+  } catch (err) {
+    console.error('keepalive: resident boot failed', err);
+  }
+}
+
+/**
+ * 消息通知偏好桥工厂：返回 manager 侧 isNotificationEnabled 的装配。
+ *
+ * appUi 未就绪（getAppUi() 返回 null）的降级口径取「关」——与开关默认关
+ * 对齐，防装配早期误判开；appUi 就绪后按存储真值。
+ */
+export function createNotificationPrefBridge(
+  getAppUi: () => AppUiPreferences | undefined,
+): SessionStreamPrefBridge {
+  return {
+    isNotificationEnabled: () => {
+      const appUiNow = getAppUi();
+      if (appUiNow == null) {
+        return Promise.resolve(false);
+      }
+      return readMessageNotificationEnabled(appUiNow);
+    },
+  };
 }
 
 export function NovelMasterProvider({children}: {children: ReactNode}) {
@@ -159,17 +210,9 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
       return;
     }
     manager.setUiBridge({onError: message => showAppToast(message)});
-    manager.setPrefBridge({
-      // 消息通知总开关：完成通知与常驻保活一体启停；appUi 未就绪的降级
-      // 口径取「开」（完成通知默认开的延续），保活随后续读取自行纠正。
-      isNotificationEnabled: () => {
-        const appUiNow = appUiRef.current;
-        if (appUiNow == null) {
-          return Promise.resolve(true);
-        }
-        return readMessageNotificationEnabled(appUiNow);
-      },
-    });
+    // 消息通知总开关：完成通知与常驻保活一体启停；appUi 未就绪的降级
+    // 口径取「关」（与开关默认关对齐），appUi 就绪后按存储真值。
+    manager.setPrefBridge(createNotificationPrefBridge(() => appUiRef.current));
     manager.setScopeBridge({
       getCurrentSessionId: () => scopeRef.current.sessionId ?? null,
       setCurrentSession: async sessionId => {
@@ -184,6 +227,10 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
         setScope(next);
       },
     });
+    // 常驻保活启动挂点：桥装配完成后按开关拉起常驻前台服务通知
+    // （fire-and-forget；retry 重建 runtime 后本 effect 重跑，dispose 全停
+    // → 重新拉起的秒级闪断 PRD 已接受）。
+    void ensureKeepAliveResidentBoot(appUiRef.current);
   }, [runtime]);
 
   const refreshScope = useCallback(async () => {
