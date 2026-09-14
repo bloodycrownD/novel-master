@@ -1,8 +1,8 @@
 ---
-date: 2026-09-14 22:35
-title: reload/冷启动忙期排查——通知 gap 复现、系统级日志定案 + run 秒败 composer 禁用新 bug
-keywords: 通知延迟, reload, 冷启动, JS 单线程, 忙期排队, keepalive 通知, webview 冷加载, 水合, 快照构建, 分片让步, logcat 取证, NotificationService, composer disabled, run 秒败
-abstract: 用户报「发送后通知卡片很慢出现」——vision 幻觉翻车后改系统级日志复测：三次稳态发送 tap→NotificationService 入队 632/666/670ms 全达标，通知链路本身健康；「10 几秒」感知构成=dev 冷启动拉 bundle ~4s+会话页挂载 ~4s+忙期输入框 ~1.2s tap 无响应+输入交互，大头不在通知 API。另发现新 bug：run 秒败（settled 无 assistant 消息）后 lastMessageIsPlainUserText 恒真致 composer 永久禁用无恢复出口。上轮 webview ready 75s 谜团=基准含列表停留时间，实际冷创建仅 1.2s。
+date: 2026-09-14 23:05
+title: 通知「10几秒才出现」定案——EMUI 对前台服务通知延迟展示；通知链路代码本身健康
+keywords: 通知延迟, EMUI, 前台服务通知, delay foreground service ntf, keepalive 通知, notifee, ForegroundService, onNotificationPosted, 冷启动, 忙期排队, logcat 取证, composer disabled, run 秒败
+abstract: 用户报「发送后切后台，拉状态栏 10 几秒才见『新会话·生成中』」——系统级日志定案：真凶是 EMUI 对前台服务通知的延迟展示机制（delay foreground service ntf：已入队不展示，~10 秒后系统放行才 onNotificationPosted；普通通知 agent-finished 同时刻立即展示作对照）。app 侧链路健康：tap→入队 632-670ms。GWT-1「通知≤2s」在华为/荣耀机不可达，除非绕过前台服务（修复候选：普通通知先显+FGS 静默保活）。另发现 run 秒败后 composer 永久禁用 bug。
 ---
 
 user:
@@ -58,3 +58,9 @@ user:
 
 assistant:
 （9/14 晚系统级复测轮，全程日志零截图）**方法论沉淀**：①console.log→logcat 通道在冷启动场景验证可用（ReactNativeJS tag，reload 死通道不影响冷启动）；②host 侧 `adb shell log -t nm-probe '标记'` 与 app 日志落在同一 logcat 时间轴（-v time），零时钟偏差对齐 tap 物理时刻；③键盘弹出用 dumpsys input_method 的 mInputShown 判定；④run-timing.ts 补 bootTimingLog（JS bundle 求值基准）+ 水合 4 站/快照分片 3 类/webview ready 双轴打点（worktree 未提交现场，+32 行）。**核心结论：通知链路本身健康**——三次稳态发送（SEQ1/2/5，跨「新会话1」「新会话4」）tap→NotificationService 系统入队 632/666/670ms（GWT-1 ≤2s 达标，双证=nm-timing 打点+系统 enqueue 行）。**用户「10 几秒」感知的构成分解**（dev 模式）：冷启动→bundle 求值 ~4s（dev 从 metro 拉包，release 应显著更快）+ 会话页挂载 webview ready ~4s（冷启动恢复场景）/1.2s（列表点进）+ **忙期输入框 ~1.2s 内 tap 无响应**（SEQ5 第 4 次才弹键盘；SEQ6 两轮 0.3s 步进完全一致：0.3/0.6/0.9s 全无响应、1.2s 处响应，边界与 webview ready 重合）+ 用户输入交互——通知 API 只占尾部 0.6-0.7s，大头在「点不动/等就绪」段。**新 bug 发现：run 秒败后 composer 永久禁用**——「新会话1」SEQ1 发送后 run 3 秒 settled 但无任何 assistant 消息落库（秒败无声），尾部停在 user 消息 → ChatComposer 的 `inputDisabled = !hasModel || running || lastMessageIsPlainUserText` 恒真 → 输入框 enabled=false（uiautomator 属性实锤）、无恢复出口，SEQ3b/SEQ4「怎么点都没反应」的真因（推翻了中途的「忙期输入框不响应」单因素假说——忙期窗口确实存在但仅 ~1.2s，disabled 是另一回事）。**旧谜团顺手破案**：上轮 webview ready +75526ms 的 75 秒=基准含会话列表停留时间，webview 实际冷创建仅 1.2s。取证坑：华为机 logcat 无 InputDispatcher 行；adb shell log 标记文本勿带括号（设备 sh 语法报错）；uiautomator 偶尔抓不到 EditText 但 enabled 属性可用。
+
+user:
+（纠偏）你说的通知栏是系统通知「新会话 - 生成中」。测试方式：reload 应用完全进入→进会话→输入→发送→开始计时→**切换到其他应用或回桌面**→拉状态栏→没有「生成中」→10 几秒后才出现。指责复测场景与真实场景完全不一样。
+
+assistant:
+（SEQ7b/SEQ8 补测后定案）用户场景 = 「发送后切后台再看通知」——之前所有轮次都漏了「后台」观察方式，实际连「前台是否延迟」都被漏了。**真凶定案：EMUI（荣耀/华为）系统通知服务对「前台服务通知」的延迟展示机制**，铁证链：①keepalive 走 notifee ForegroundService（agent-keepalive channel），每次 display 后系统打 `delay foreground service ntf, pkg=com.novelmaster`——通知**已入队但不展示**（无 onNotificationPosted）；②**~10 秒后**系统侧自动第三条 enqueue → 立即 onNotificationPosted → 通知这才可见（SEQ5 +10.0s、SEQ7b +10.7s，第三条 enqueue 时 app 侧无任何动作=系统放行实锤）；③**对照组**：同一时刻同 app 的普通通知（agent-finished channel，非前台服务）enqueue 后 33ms 立即 posted 展示（SEQ8 实锤）——延迟专冲前台服务通知；④SEQ1 的通知被 delay 后恰逢 run 3 秒结束 stopKeepAlive，**从未 posted**（delay 中的通知随服务停止直接消失）；⑤AppBgModeMgr 行显示 FGS 每次 start/stop 成对（run 结束即 stop），「service 已在跑走 update 路径」假说不成立。例外待查：SEQ2（22:18）一次未命中 delay 且立即 posted，决策链多走完整（shouldBlock→isNeedInterceptStart→posted），有 `setForegroundNotification enqueue time low` 行，与其他轮唯一结构性差异未定位（「app 冷启动后 60 秒内」假说已被 SEQ8 的 25 秒内发送仍 delay 推翻）。**对本项目的含义**：通知链路代码本身健康（tap→入队 632-670ms），但 keepalive 通知在 EMUI 上必然延迟 ~10 秒才对用户可见——GWT-1 的「通知 ≤2s 出现」在华为/荣耀机上**不可达**（除非绕过前台服务）。候选修复方向（待用户拍板立项）：a) keepalive 先发普通通知（立即显示「生成中」）+ FGS 用独立静默 channel 在后台保活，注意 10 秒后 FGS 通知放行可能出现双条，需同 id 接管实验；b) 普通通知先展示后 startForeground 同 id 接管，验证已展示通知是否会被 re-enqueue 的 delay 藏回去；c) 调研 EMUI 豁免条件（channel importance/targetSdk/FGS serviceType:2049）。验证方法论沉淀：onNotificationPosted（NotificationListener/SystemUI pid）是「入队→真正展示」的判据；delay foreground service ntf 行是 EMUI 延迟命中的直接证据；nm-probe host 标记与系统行同 logcat 时间轴对齐。
