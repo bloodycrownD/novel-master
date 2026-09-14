@@ -33,7 +33,10 @@ import {
 } from '@/services/session-stream-unit-manager.service';
 import {Platform} from 'react-native';
 import notifee, {onForegroundEventUnsubscribe} from '@notifee/react-native';
-import {resetKeepAliveStateForTests} from '@/services/agent-finished-notification';
+import {
+  resetKeepAliveStateForTests,
+  setKeepAliveResidentEnabled,
+} from '@/services/agent-finished-notification';
 
 /** 等待 fire-and-forget promise 链（catch+finally）收敛。 */
 async function flushAsync(): Promise<void> {
@@ -576,43 +579,52 @@ describe('SessionStreamUnitManager', () => {
       (Platform as {OS: string}).OS = originalOS;
     });
 
-    it('消息通知开时受理即起常驻通知（默认文案先行、标签查回同 id 刷新）；FINISHED 后停止', async () => {
+    it('T-K5: 常驻开——受理第一段 no-op（零新增刷新），标签查回同 id 切「正在生成」；FINISHED 不停服、回空闲文案', async () => {
       const h = createHarness();
       h.runAgentTurn.mockImplementation(() => new Promise(() => undefined));
       h.manager.setPrefBridge({
         isNotificationEnabled: async () => true,
       });
 
+      // 常驻前置（模拟开关开/启动拉起）：空闲文案先上屏 1 次
+      await setKeepAliveResidentEnabled(true);
+      expect(notifee.displayNotification).toHaveBeenCalledTimes(1);
+      const idle = notifee.displayNotification.mock.calls[0][0];
+      expect(idle.title).toBe('novel master · 空闲');
+      expect(idle.body).toBeUndefined();
+      expect(idle.android).toEqual(
+        expect.objectContaining({asForegroundService: true}),
+      );
+
+      const idleNotificationId = idle.id;
+      notifee.displayNotification.mockClear();
+
       h.manager.startRun('a', 'p', 'hi');
       await flushAsync();
-      // 两段式（Step 8）：受理后默认文案立即上屏，标签查回后同 id 原位刷新
-      expect(notifee.displayNotification).toHaveBeenCalledTimes(2);
-      expect(notifee.displayNotification.mock.calls[0][0]).toEqual(
-        expect.objectContaining({
-          android: expect.objectContaining({asForegroundService: true}),
-        }),
-      );
-      expect(notifee.displayNotification.mock.calls[0][0].title).toBe(
-        '正在生成',
-      );
-      expect(notifee.displayNotification.mock.calls[1][0].title).toBe(
-        '正在生成 · 会话-a',
-      );
-      expect(notifee.displayNotification.mock.calls[0][0].id).toBe(
-        notifee.displayNotification.mock.calls[1][0].id,
-      );
+      // 两段式调用序列保留（计数重排）：受理第一段（无标签 start）常驻下
+      // no-op——受理零新增刷新；标签查回后带标签刷新恰好 1 次，同 id 原位
+      // 切「正在生成 · 会话-a」
+      expect(notifee.displayNotification).toHaveBeenCalledTimes(1);
+      const labeled = notifee.displayNotification.mock.calls[0][0];
+      expect(labeled.id).toBe(idleNotificationId);
+      expect(labeled.title).toBe('正在生成 · 会话-a');
+      expect(labeled.body).toContain('项目-p · 会话-a');
 
       notifee.displayNotification.mockClear();
       publishStarted(h.eventBus, 'a', 'r1');
       publishFinished(h.eventBus, 'a', 'r1');
       await flushAsync();
 
-      // 完成通知未发（前台口径独立于开关），但保活服务正常停止
-      expect(notifee.displayNotification).not.toHaveBeenCalled();
-      expect(notifee.stopForegroundService).toHaveBeenCalled();
+      // 完成通知未发（前台口径独立于开关）；常驻语义反转（原断言停服）：
+      // 摘标签后服务不停，通知内容刷回空闲文案
+      expect(notifee.displayNotification).toHaveBeenCalledTimes(1);
+      expect(
+        notifee.displayNotification.mock.calls[0][0].title,
+      ).toBe('novel master · 空闲');
+      expect(notifee.stopForegroundService).not.toHaveBeenCalled();
     });
 
-    it('T-N1: 两段式——默认文案首调先于标签查询完成；标签查回后同 id 原位刷新', async () => {
+    it('T-N1(改锚): 两段式——受理链路不被标签查询阻塞；标签查回后立即同 id 刷新', async () => {
       const h = createHarness();
       h.runAgentTurn.mockImplementation(() => new Promise(() => undefined));
       h.manager.setPrefBridge({
@@ -635,33 +647,40 @@ describe('SessionStreamUnitManager', () => {
           }),
       );
 
+      // 常驻前置：空闲文案 1 次后清零，聚焦受理窗口内的增量
+      await setKeepAliveResidentEnabled(true);
+      notifee.displayNotification.mockClear();
+
       h.manager.startRun('a', 'p', 'hi');
       await flushAsync();
 
-      // 第一段已用默认文案上屏；两个标签查询虽已发出但都未完成——
-      // 通知出现先于标签查询完成（忙期优先的核心断言）
-      expect(notifee.displayNotification).toHaveBeenCalledTimes(1);
-      expect(notifee.displayNotification.mock.calls[0][0].title).toBe(
-        '正在生成',
+      // 受理链路不被标签查询阻塞：run 已受理（agent 计数活跃、单元
+      // starting、runAgentTurn 已调）、两个标签查询已发出但均未完成；
+      // 受理第一段（无标签 start）常驻下 no-op——窗口内零新增刷新
+      // （原「通知出现先于标签查询完成」锚随常驻化失效，改锚为不阻塞
+      // + 查回后立即刷新）
+      expect(isMobileAgentActive()).toBe(true);
+      expect(h.manager.snapshot('a')).toEqual(
+        expect.objectContaining({status: 'starting', runId: null}),
       );
+      expect(h.runAgentTurn).toHaveBeenCalledTimes(1);
       expect(h.sessions.get).toHaveBeenCalledWith('a');
       expect(h.projects.get).toHaveBeenCalledWith('p');
+      expect(notifee.displayNotification).not.toHaveBeenCalled();
 
       // 查回标签：第二段带标签调用经 labelsVersion 同 id 原位刷新
       resolveTitle({id: 'a', title: '会话-a'});
       resolveProject({id: 'p', name: '项目-p'});
       await flushAsync();
 
-      expect(notifee.displayNotification).toHaveBeenCalledTimes(2);
-      const first = notifee.displayNotification.mock.calls[0][0];
-      const refreshed = notifee.displayNotification.mock.calls[1][0];
-      expect(first.id).toBe('nm-agent-keepalive');
-      expect(refreshed.id).toBe(first.id);
+      expect(notifee.displayNotification).toHaveBeenCalledTimes(1);
+      const refreshed = notifee.displayNotification.mock.calls[0][0];
+      expect(refreshed.id).toBe('nm-agent-keepalive');
       expect(refreshed.title).toBe('正在生成 · 会话-a');
       expect(refreshed.body).toContain('项目-p · 会话-a');
     });
 
-    it('消息通知关：受理不起常驻通知', async () => {
+    it('消息通知关：受理两段均 no-op 零 display；FINISHED 收尾同样零 display 零 stop', async () => {
       const h = createHarness();
       h.runAgentTurn.mockImplementation(() => new Promise(() => undefined));
       h.manager.setPrefBridge({
@@ -670,6 +689,61 @@ describe('SessionStreamUnitManager', () => {
 
       h.manager.startRun('a', 'p', 'hi');
       await flushAsync();
+      // 开关关：受理（第一段登记 + 第二段带标签）全程零通知刷新
+      // （PRD 需求 2：开关关闭时受理不产生任何通知刷新）
+      expect(notifee.displayNotification).not.toHaveBeenCalled();
+
+      publishStarted(h.eventBus, 'a', 'r1');
+      publishFinished(h.eventBus, 'a', 'r1');
+      await flushAsync();
+      // 收尾摘标签同样零刷新、零停服调用（常驻关时收尾入队走「从未
+      // 运行」分支，不触碰 notifee）
+      expect(notifee.displayNotification).not.toHaveBeenCalled();
+      expect(notifee.stopForegroundService).not.toHaveBeenCalled();
+    });
+
+    it('T-K6: dispose 无参全停保持（常驻开也停服）；afterEach reset→dispose 顺序不破坏', async () => {
+      // 场景一：常驻开 + 生成中（标签已登记），dispose 直接全停——
+      // 无论 resident，无参 stop 清空标签并无条件停服（retry 闪断与
+      // 测试防泄漏依赖该语义）
+      const h1 = createHarness();
+      h1.runAgentTurn.mockImplementation(() => new Promise(() => undefined));
+      h1.manager.setPrefBridge({
+        isNotificationEnabled: async () => true,
+      });
+      await setKeepAliveResidentEnabled(true);
+      h1.manager.startRun('a', 'p', 'hi');
+      await flushAsync();
+      // 常驻前置空闲 1 次 + 带标签刷新 1 次，最后一条为「正在生成」
+      expect(notifee.displayNotification).toHaveBeenCalledTimes(2);
+      expect(
+        notifee.displayNotification.mock.calls[1][0].title,
+      ).toBe('正在生成 · 会话-a');
+
+      notifee.stopForegroundService.mockClear();
+      h1.manager.dispose();
+      await flushAsync();
+      expect(notifee.stopForegroundService).toHaveBeenCalledTimes(1);
+
+      // 场景二：afterEach 的收口顺序（resetKeepAliveStateForTests 先、
+      // dispose 后）不破坏——reset 已把模块级 running/desired/resident
+      // 复位，dispose 尾部的无参全停在链上按「从未运行」收敛：不抛错、
+      // 不再触发 stop；manager 侧（校准轮询等）仍由 dispose 本身收口
+      const h2 = createHarness();
+      h2.runAgentTurn.mockImplementation(() => new Promise(() => undefined));
+      h2.manager.setPrefBridge({
+        isNotificationEnabled: async () => true,
+      });
+      await setKeepAliveResidentEnabled(true);
+      h2.manager.startRun('b', 'p', 'hi');
+      await flushAsync();
+
+      notifee.stopForegroundService.mockClear();
+      notifee.displayNotification.mockClear();
+      resetKeepAliveStateForTests();
+      expect(() => h2.manager.dispose()).not.toThrow();
+      await flushAsync();
+      expect(notifee.stopForegroundService).not.toHaveBeenCalled();
       expect(notifee.displayNotification).not.toHaveBeenCalled();
     });
   });
