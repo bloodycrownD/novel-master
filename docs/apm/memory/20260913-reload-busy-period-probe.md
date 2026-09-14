@@ -112,3 +112,9 @@ user:
 
 assistant:
 装机坑（跨会话级）：app/build.gradle L91 的 versionCode 从 -PversionCode / VERSION_CODE 环境变量取，**本地裸 assembleDebug 默认 versionCode=1**——手机已装 1205（init-busy-yield 迭代装机时显式带号），降级安装触发华为安装器「旧版本」警告被用户拒绝。修正：`./gradlew assembleDebug -PversionCode=1206 -PversionName=1.5.17-dev` 重打后 adb install -r 成功；metro（pid 6366）与 adb reverse 已就绪，常驻通知全量改动随机上机。教训：本地 gradle 构建装机必须显式带 -PversionCode（顺延已装最大值），或先 dumpsys package 查已装版本。
+
+user:
+（Step 5 真机验收后）感觉没什么问题。
+
+assistant:
+Step 5 真机验收由用户操作并通过（用户确认「感觉没什么问题」）——常驻通知迭代（resident-keepalive-notification-2026-09）全交付：dev-ready + 真机验收 ✓。覆盖安装下 GWT-5「全新默认关」纯新装路径未单独验（偏好已存在），行为由 T-K10 双路径单测锁定，风险极低。两个迭代的 dev 产物现在都在机上验证过（init-busy-yield 忙期优化 + 常驻通知），并入 main 待用户指令。
