@@ -1,8 +1,8 @@
 ---
-date: 2026-09-13 22:30
-title: reload 忙期交互排队排查——通知 gap 复现与 JS 单线程机制定案
-keywords: 通知延迟, reload, Fast Refresh, JS 单线程, 忙期排队, keepalive 通知, webview 冷加载, 水合, 快照构建, 分片让步
-abstract: 用户报「发送后通知卡片很慢出现」——排查从误解「状态栏」（实为系统通知非应用内指标条）绕行两轮，最终用截图时序复现实锤：reload 后立刻发送通知 10~20s 才出现（等待初始化完成后 ≤2s），机制是 reload 忙期的长同步任务（水合 SQL 批/webview 全量快照构建/组件重挂载）占满 JS 单线程，tap 回调与每个 await 恢复被推迟；异步 API 不免排队（慢在「发起前」）。立项点：初始化长任务分片让步。另发现 run 无超时挂死、中断会话列表显示「活跃中」两个遗留 bug。
+date: 2026-09-14 22:35
+title: reload/冷启动忙期排查——通知 gap 复现、系统级日志定案 + run 秒败 composer 禁用新 bug
+keywords: 通知延迟, reload, 冷启动, JS 单线程, 忙期排队, keepalive 通知, webview 冷加载, 水合, 快照构建, 分片让步, logcat 取证, NotificationService, composer disabled, run 秒败
+abstract: 用户报「发送后通知卡片很慢出现」——vision 幻觉翻车后改系统级日志复测：三次稳态发送 tap→NotificationService 入队 632/666/670ms 全达标，通知链路本身健康；「10 几秒」感知构成=dev 冷启动拉 bundle ~4s+会话页挂载 ~4s+忙期输入框 ~1.2s tap 无响应+输入交互，大头不在通知 API。另发现新 bug：run 秒败（settled 无 assistant 消息）后 lastMessageIsPlainUserText 恒真致 composer 永久禁用无恢复出口。上轮 webview ready 75s 谜团=基准含列表停留时间，实际冷创建仅 1.2s。
 ---
 
 user:
@@ -52,3 +52,9 @@ user:
 
 assistant:
 重大教训：analyze_image 描述式 prompt 会幻觉——本轮曾据此宣称「正常场景/Fast Refresh/冷启动通知均 ≤2s 达标」，用户核对原图识破；改用「逐字转写（verbatim）」式 prompt 复验 cold-2s.png，实际面板只有 USB/VPN 系统通知、无任何应用通知——**三场景达标结论全部作废，用户报的 10 几秒为真，GWT-1 未达标待查**。视觉证据自此必须逐字转写+系统级日志双证（教训拟入 RULE.md）。其余现场：logcat 真实文本行有 webview ready +75526ms（75 秒，比优化前 15-19s 更差，异常信号待查——但该轮伴随系统弹窗干扰与 uiautomator 抓不到 EditText 的轮询实验，场景未净）；华为机 logcat 流静默/dumpsys 查不到 novelmaster record 的取证困境依旧。当前进行中的复测被记忆更新打断：logcat 全量抓取已起（pid 7063，/tmp/sys-notif.log）、app 已冷启动（22:00:30）、复测计划=冷启动后固定坐标发送→用 NotificationService 系统入队日志时间戳对 tap 时刻（不经过 vision）。代码层 dev-ready 结论不受影响（jest/typecheck/core 全绿是真实文本证据）。
+
+user:
+继续复现测试，多记录日志——日志比截图方便。
+
+assistant:
+（9/14 晚系统级复测轮，全程日志零截图）**方法论沉淀**：①console.log→logcat 通道在冷启动场景验证可用（ReactNativeJS tag，reload 死通道不影响冷启动）；②host 侧 `adb shell log -t nm-probe '标记'` 与 app 日志落在同一 logcat 时间轴（-v time），零时钟偏差对齐 tap 物理时刻；③键盘弹出用 dumpsys input_method 的 mInputShown 判定；④run-timing.ts 补 bootTimingLog（JS bundle 求值基准）+ 水合 4 站/快照分片 3 类/webview ready 双轴打点（worktree 未提交现场，+32 行）。**核心结论：通知链路本身健康**——三次稳态发送（SEQ1/2/5，跨「新会话1」「新会话4」）tap→NotificationService 系统入队 632/666/670ms（GWT-1 ≤2s 达标，双证=nm-timing 打点+系统 enqueue 行）。**用户「10 几秒」感知的构成分解**（dev 模式）：冷启动→bundle 求值 ~4s（dev 从 metro 拉包，release 应显著更快）+ 会话页挂载 webview ready ~4s（冷启动恢复场景）/1.2s（列表点进）+ **忙期输入框 ~1.2s 内 tap 无响应**（SEQ5 第 4 次才弹键盘；SEQ6 两轮 0.3s 步进完全一致：0.3/0.6/0.9s 全无响应、1.2s 处响应，边界与 webview ready 重合）+ 用户输入交互——通知 API 只占尾部 0.6-0.7s，大头在「点不动/等就绪」段。**新 bug 发现：run 秒败后 composer 永久禁用**——「新会话1」SEQ1 发送后 run 3 秒 settled 但无任何 assistant 消息落库（秒败无声），尾部停在 user 消息 → ChatComposer 的 `inputDisabled = !hasModel || running || lastMessageIsPlainUserText` 恒真 → 输入框 enabled=false（uiautomator 属性实锤）、无恢复出口，SEQ3b/SEQ4「怎么点都没反应」的真因（推翻了中途的「忙期输入框不响应」单因素假说——忙期窗口确实存在但仅 ~1.2s，disabled 是另一回事）。**旧谜团顺手破案**：上轮 webview ready +75526ms 的 75 秒=基准含会话列表停留时间，webview 实际冷创建仅 1.2s。取证坑：华为机 logcat 无 InputDispatcher 行；adb shell log 标记文本勿带括号（设备 sh 语法报错）；uiautomator 偶尔抓不到 EditText 但 enabled 属性可用。
