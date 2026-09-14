@@ -46,3 +46,9 @@ user:
 
 assistant:
 dev-ready 达成：Step 1-9 全部落地共 14 个实现提交（cb73992e 让步原语 / d28e38c6+c43a904b backfill 两段式判定与游标清空面 / 324d0677+0544f8f1 水合分片与探针单查询 / 67e72627 查询并行化 / 7af52a27 O(n²) 消除 / 86404b69+7cc2a70a+bdf2f3a3 快照分片协议与代次作废 / bb343863+dd9d813a RowList 窗口化 / 700117bc 通知两段式 / a529eacb 三态文案），三道 cr-func（w0/w3/final）均 func-ready。终验：mobile jest 200 套件 1317 全绿 + typecheck + build:webview + core 2107/2107 + core dist 重建。四项 deviation 全 closed 附理由（去重落点 inflight/selectTail 顺带预扫化/渐进渲染不做/扩窗行坐标重映射）。Step 10 真机验收（GWT-1~5 + release 冷启动基线）归用户 manual_user。过程事件：共享 worktree 多节点并行曾发生 stash 互相踩踏（pstream stash 完好）、impl-s6 子代理违规写入本记忆（追加式零破坏已核验保留）——教训：并行 impl prompt 须明令禁 stash、禁写 apm memory。
+
+user:
+装机 1205（init-busy-yield 全量）做 Step 10 真机验收：还是花 10 几秒才出现通知栏。之后澄清场景为「杀死应用重进」；随后用户识破——cold-2s.png 里根本没有「生成中」通知，analyze_image 是幻觉。
+
+assistant:
+重大教训：analyze_image 描述式 prompt 会幻觉——本轮曾据此宣称「正常场景/Fast Refresh/冷启动通知均 ≤2s 达标」，用户核对原图识破；改用「逐字转写（verbatim）」式 prompt 复验 cold-2s.png，实际面板只有 USB/VPN 系统通知、无任何应用通知——**三场景达标结论全部作废，用户报的 10 几秒为真，GWT-1 未达标待查**。视觉证据自此必须逐字转写+系统级日志双证（教训拟入 RULE.md）。其余现场：logcat 真实文本行有 webview ready +75526ms（75 秒，比优化前 15-19s 更差，异常信号待查——但该轮伴随系统弹窗干扰与 uiautomator 抓不到 EditText 的轮询实验，场景未净）；华为机 logcat 流静默/dumpsys 查不到 novelmaster record 的取证困境依旧。当前进行中的复测被记忆更新打断：logcat 全量抓取已起（pid 7063，/tmp/sys-notif.log）、app 已冷启动（22:00:30）、复测计划=冷启动后固定坐标发送→用 NotificationService 系统入队日志时间戳对 tap 时刻（不经过 vision）。代码层 dev-ready 结论不受影响（jest/typecheck/core 全绿是真实文本证据）。
