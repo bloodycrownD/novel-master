@@ -7,8 +7,9 @@ import {
   type CompactionConditions,
 } from '@novel-master/core/compaction';
 import {useFocusEffect} from '@react-navigation/native';
-import {StyleSheet, Switch} from 'react-native';
+import {Platform, StyleSheet, Switch} from 'react-native';
 import {ProfileSwitchItem} from '../../components/profile/ProfileSwitchItem';
+import {ProfileMenuItem} from '../../components/profile/ProfileMenuItem';
 import {FormField} from '../../components/form/FormField';
 import {FormSectionCard} from '../../components/form/FormSectionCard';
 import {FormTextInput} from '../../components/form/FormTextInput';
@@ -20,6 +21,12 @@ import {
   readMessageNotificationEnabled,
   writeMessageNotificationEnabled,
 } from '../../storage/message-notification-pref';
+import {
+  ensureAgentNotificationPermission,
+  getAgentNotificationPermissionStatus,
+  requestAgentNotificationPermissionManually,
+  setKeepAliveResidentEnabled,
+} from '../../services/agent-finished-notification';
 import {
   readChatRichTextEnabled,
   writeChatRichTextEnabled,
@@ -44,7 +51,11 @@ export function ChatConfigScreen() {
   const [thinkingContextEnabled, setThinkingContextEnabled] = useState(true);
   const [chatRichTextEnabled, setChatRichTextEnabled] = useState(false);
   const [messageNotificationEnabled, setMessageNotificationEnabled] =
-    useState(true);
+    useState(false);
+  // 「通知权限」行三态：checking 兼作首帧占位与手动申请中的防重入标记。
+  const [notificationPermission, setNotificationPermission] = useState<
+    'authorized' | 'denied' | 'checking'
+  >('checking');
 
   const [compactionEnabled, setCompactionEnabled] = useState(false);
   const [compactionTokenRatio, setCompactionTokenRatio] = useState('0.8');
@@ -79,6 +90,19 @@ export function ChatConfigScreen() {
     );
   }, [appUi]);
 
+  const refreshNotificationPermission = useCallback(async () => {
+    // 权限行仅 Android 渲染，非 Android 不查询。
+    if (Platform.OS !== 'android') {
+      return;
+    }
+    try {
+      setNotificationPermission(await getAgentNotificationPermissionStatus());
+    } catch {
+      // 查询失败按未授权展示：权限行的点击出口始终可用（手动申请路径）。
+      setNotificationPermission('denied');
+    }
+  }, []);
+
   const refreshCompaction = useCallback(async () => {
     const stored = await runtime.compactionConditions.getConditions();
     const c = stored ?? DEFAULT_CONDITIONS;
@@ -97,15 +121,29 @@ export function ChatConfigScreen() {
       refreshThinkingContextPref().catch(() => undefined);
       refreshChatRichTextPref().catch(() => undefined);
       refreshMessageNotificationPref().catch(() => undefined);
+      refreshNotificationPermission().catch(() => undefined);
       refreshCompaction().catch(() => undefined);
     }, [
       refreshStreamPref,
       refreshThinkingContextPref,
       refreshChatRichTextPref,
       refreshMessageNotificationPref,
+      refreshNotificationPermission,
       refreshCompaction,
     ]),
   );
+
+  const handleNotificationPermissionPress = useCallback(() => {
+    // 防重入：申请中（checking）不重复发起；已授权（authorized）无需操作。
+    if (notificationPermission !== 'denied') {
+      return;
+    }
+    setNotificationPermission('checking');
+    // 权限弹窗关闭不触发 navigation focus，回执是状态更新的可靠源。
+    requestAgentNotificationPermissionManually()
+      .then(setNotificationPermission)
+      .catch(() => setNotificationPermission('denied'));
+  }, [notificationPermission]);
 
   // 四个偏好开关采用「乐观更新 + 失败回滚」：先立即翻转开关保证跟手，
   // 持久化 reject 时回滚到原值并 toast（未选「成功才翻转」——那会让开关
@@ -225,8 +263,8 @@ export function ChatConfigScreen() {
         label="消息通知"
         subtitle={
           messageNotificationEnabled
-            ? '生成期间常驻保活（多会话一条聚合通知），结束后台提醒、点按直达会话'
-            : '不保活、不提醒（生成行为不受影响）'
+            ? '进入应用即常驻状态栏保活，生成中显示状态，结束后台提醒'
+            : '无常驻通知、无提醒（生成行为不受影响）'
         }
         value={messageNotificationEnabled}
         tokens={tokens}
@@ -234,12 +272,41 @@ export function ChatConfigScreen() {
           setMessageNotificationEnabled(enabled);
           if (appUi) {
             void persistSwitchWithRollback(
-              () => writeMessageNotificationEnabled(appUi, enabled),
+              async () => {
+                await writeMessageNotificationEnabled(appUi, enabled);
+                // 存储已持久化，通知模块的进程级副作用失败只 toast 不回滚
+                //（不易回滚，下次启动按存储态收敛）。
+                setKeepAliveResidentEnabled(enabled).catch(cause => {
+                  showToast(toastMessage('常驻保活切换失败', cause));
+                });
+                if (enabled) {
+                  // 关→开：权限申请前移到开关切换（拒绝过一次后不再自动弹）。
+                  ensureAgentNotificationPermission().catch(cause => {
+                    showToast(toastMessage('通知权限申请失败', cause));
+                  });
+                }
+              },
               () => setMessageNotificationEnabled(!enabled),
             );
           }
         }}
       />
+
+      {Platform.OS === 'android' ? (
+        <ProfileMenuItem
+          icon="🔔"
+          label="通知权限"
+          value={
+            notificationPermission === 'authorized'
+              ? '已授权'
+              : notificationPermission === 'denied'
+                ? '未授权'
+                : '申请中…'
+          }
+          onPress={handleNotificationPermissionPress}
+          tokens={tokens}
+        />
+      ) : null}
 
       <FormSectionCard
         title="压缩配置"
