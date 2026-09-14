@@ -106,3 +106,9 @@ user:
 
 assistant:
 code-dev-loop 达 dev-ready（base 33c4e4e9 → head 6ea8389c，9 实现提交）：打点改动先收口为独立诊断 commit 96ba0c10（__DEV__ 门控可整体 revert）；wave-0 impl-s1（6f49ba02/e89cb561，通知模块 resident 期望态+权限两导出+mock 扩面与 DENIED 修正，自管 31/31）；wave-1 三并行 impl-s2（6c7f327f/0349b1fb，manager 退役权限申请+断言反转+T-K5/K6，30/30）/impl-s3（11fcd1bf/a4309c56，ensureKeepAliveResidentBoot+createNotificationPrefBridge 降级 false+T-K8/K9 新文件 5/5）/impl-s4（83547e99/a4e00d39，默认关两处联动+设置页三改+权限行+pref 断言反转 6/6）；fix-w1（6ea8389c，trivial 主代理直执——s4 给 ChatConfigScreen 新增 import 后 navigation-container-ref 模块级调用拉进 chat-config 既有测试环境致 suite 挂，navigation mock 补 createNavigationContainerRef；s2 曾误判「预存失败」，还原实验时序错位，全量复跑实锤引入源）；verify-final 全量 jest 201 套件 1333/1333 + typecheck 全绿；cr-func-final func-ready yes（三处关键行为代码级推演通过：标签操作永不置 true 的五处 enqueue 全查、reconcile 短路与停服互斥、挂点时序）。六条 deviations 全 closed：jest Platform.Version getter-only 用 defineProperty 覆写、fix-w1 spec 外必要修复、T-K8 改端到端断言（强于 spy）、T-K10 screen 侧两点按 Step 4 收窄口径走查+Step 5 真机兜底、权限行 onPress 按 state 判断（等效+防重入更稳）、权限查询失败回退 denied（防御补充）。过程坑：impl-s2 中途 git restore 误冲掉自己在途测试改写（重做无损）；impl 并行时共享 worktree 的「工作区残留他人未提交改动」互相可见属正常，约束不触碰即可。Step 5 真机验收（GWT-1/2/4/5/6/7/8）归用户 manual_user；装机验证时注意 EMUI logcat 双证方法论（delay 行+onNotificationposted）。
+
+user:
+（装机指令后）手机安装弹窗三次拒绝——「版本不对」。
+
+assistant:
+装机坑（跨会话级）：app/build.gradle L91 的 versionCode 从 -PversionCode / VERSION_CODE 环境变量取，**本地裸 assembleDebug 默认 versionCode=1**——手机已装 1205（init-busy-yield 迭代装机时显式带号），降级安装触发华为安装器「旧版本」警告被用户拒绝。修正：`./gradlew assembleDebug -PversionCode=1206 -PversionName=1.5.17-dev` 重打后 adb install -r 成功；metro（pid 6366）与 adb reverse 已就绪，常驻通知全量改动随机上机。教训：本地 gradle 构建装机必须显式带 -PversionCode（顺延已装最大值），或先 dumpsys package 查已装版本。
