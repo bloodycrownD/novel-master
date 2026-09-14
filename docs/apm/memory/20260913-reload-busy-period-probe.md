@@ -1,8 +1,8 @@
 ---
-date: 2026-09-14 23:05
+date: 2026-09-14 23:15
 title: 通知「10几秒才出现」定案——EMUI 对前台服务通知延迟展示；通知链路代码本身健康
 keywords: 通知延迟, EMUI, 前台服务通知, delay foreground service ntf, keepalive 通知, notifee, ForegroundService, onNotificationPosted, 冷启动, 忙期排队, logcat 取证, composer disabled, run 秒败
-abstract: 用户报「发送后切后台，拉状态栏 10 几秒才见『新会话·生成中』」——系统级日志定案：真凶是 EMUI 对前台服务通知的延迟展示机制（delay foreground service ntf：已入队不展示，~10 秒后系统放行才 onNotificationPosted；普通通知 agent-finished 同时刻立即展示作对照）。app 侧链路健康：tap→入队 632-670ms。GWT-1「通知≤2s」在华为/荣耀机不可达，除非绕过前台服务（修复候选：普通通知先显+FGS 静默保活）。另发现 run 秒败后 composer 永久禁用 bug。
+abstract: 用户报「发送后切后台，拉状态栏 10 几秒才见『新会话·生成中』」——系统级日志定案：真凶是 EMUI 对前台服务通知的延迟展示机制（delay foreground service ntf：已入队不展示，~10 秒后系统放行才 onNotificationPosted；普通通知 agent-finished 同时刻立即展示作对照；冷却窗口补完：距上次前台服务停止 ~3 分钟内不延迟、首次必延迟整 10 秒——解释「第二次发送立刻出现」）。app 侧链路健康：tap→入队 632-670ms。GWT-1「通知≤2s」在华为/荣耀机不可达，除非绕过前台服务（修复候选：普通通知先显+FGS 静默保活）。另发现 run 秒败后 composer 永久禁用 bug。
 ---
 
 user:
@@ -64,3 +64,9 @@ user:
 
 assistant:
 （SEQ7b/SEQ8 补测后定案）用户场景 = 「发送后切后台再看通知」——之前所有轮次都漏了「后台」观察方式，实际连「前台是否延迟」都被漏了。**真凶定案：EMUI（荣耀/华为）系统通知服务对「前台服务通知」的延迟展示机制**，铁证链：①keepalive 走 notifee ForegroundService（agent-keepalive channel），每次 display 后系统打 `delay foreground service ntf, pkg=com.novelmaster`——通知**已入队但不展示**（无 onNotificationPosted）；②**~10 秒后**系统侧自动第三条 enqueue → 立即 onNotificationPosted → 通知这才可见（SEQ5 +10.0s、SEQ7b +10.7s，第三条 enqueue 时 app 侧无任何动作=系统放行实锤）；③**对照组**：同一时刻同 app 的普通通知（agent-finished channel，非前台服务）enqueue 后 33ms 立即 posted 展示（SEQ8 实锤）——延迟专冲前台服务通知；④SEQ1 的通知被 delay 后恰逢 run 3 秒结束 stopKeepAlive，**从未 posted**（delay 中的通知随服务停止直接消失）；⑤AppBgModeMgr 行显示 FGS 每次 start/stop 成对（run 结束即 stop），「service 已在跑走 update 路径」假说不成立。例外待查：SEQ2（22:18）一次未命中 delay 且立即 posted，决策链多走完整（shouldBlock→isNeedInterceptStart→posted），有 `setForegroundNotification enqueue time low` 行，与其他轮唯一结构性差异未定位（「app 冷启动后 60 秒内」假说已被 SEQ8 的 25 秒内发送仍 delay 推翻）。**对本项目的含义**：通知链路代码本身健康（tap→入队 632-670ms），但 keepalive 通知在 EMUI 上必然延迟 ~10 秒才对用户可见——GWT-1 的「通知 ≤2s 出现」在华为/荣耀机上**不可达**（除非绕过前台服务）。候选修复方向（待用户拍板立项）：a) keepalive 先发普通通知（立即显示「生成中」）+ FGS 用独立静默 channel 在后台保活，注意 10 秒后 FGS 通知放行可能出现双条，需同 id 接管实验；b) 普通通知先展示后 startForeground 同 id 接管，验证已展示通知是否会被 re-enqueue 的 delay 藏回去；c) 调研 EMUI 豁免条件（channel importance/targetSdk/FGS serviceType:2049）。验证方法论沉淀：onNotificationPosted（NotificationListener/SystemUI pid）是「入队→真正展示」的判据；delay foreground service ntf 行是 EMUI 延迟命中的直接证据；nm-probe host 标记与系统行同 logcat 时间轴对齐。
+
+user:
+质疑：如果前台服务通知在华为/荣耀上「永远做不到 ≤2 秒」，为什么通知生成过一次后，第二次再发送消息几乎立刻就出现？
+
+assistant:
+（SEQ9 连发实验）用户反例完全正确，机制补完——**EMUI 的延迟有冷却窗口：距上次前台服务停止约 3 分钟内再启动前台服务 → 不延迟立即展示；隔久了（首次/超窗）→ 延迟整 10 秒**。实锤数据：SEQ9a 发送#1（距上次 FGS stop 11 分钟）delay 命中，enqueue 23:09:20.560 → 第三条 enqueue 23:09:30.560（**精确 +10.000 秒**）→ posted；SEQ9b 发送#2（#1 的 FGS 已于 23:09:35 stop，#2 于 23:09:56 **全新 start**，距 stop 仅 20 秒）→ enqueue 后 **9 毫秒即 posted，无 delay 行**。全新 start 排除「服务复用走 update 路径」解释。全量数据表：不延迟的间隔（start 锚）=35 秒/2 分 09 秒；延迟的间隔 =3 分 53 秒/5 分 06 秒/11 分 31 秒/18 分 43 秒——阈值区间收敛到 ~3 分钟（stop 锚 2 分 07 秒不延迟 vs 3 分 10 秒延迟，与 180 秒吻合）。**用户场景对齐**：连续使用时第二条在窗口内→立刻（用户观察）；reload 后第一条距上次服务停止必超 3 分钟→延迟 10 秒。之前「永远做不到」的说法修正为「**每次冷启动/隔 3 分钟以上的首次发送必然延迟 10 秒**，窗口内的后续发送正常」。修复方向 a/b（普通通知立即显「生成中」+ FGS 静默保活）不受影响且更有必要——真实使用中「开 app 第一条消息」是最常见路径。本轮顺带坑：BACK 返回会话列表后有滚动恢复动画，列表底部「新会话4」滚进「新建会话」dock 覆盖区（[30,1982][1050,2202] 空容器拦截 hit-test），点不进时先滚列表或换其他会话项。
