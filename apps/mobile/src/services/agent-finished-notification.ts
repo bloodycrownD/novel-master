@@ -1,9 +1,11 @@
 /**
  * 生成结束通知 + 前台保活服务（@notifee/react-native 封装）。
  *
- * 职责边界：本模块只管「怎么发通知 / 怎么起停前台服务」——是否发通知的
- * 业务决策（「消息通知」总开关、run 终态）在 SessionStreamUnitManager 侧
- * 完成（经 prefBridge 单一开关查询）。
+ * 职责边界：本模块只管「怎么发通知 / 怎么起停前台服务」。保活服务的启停
+ * 决策权在模块内的常驻开关态 keepAliveResident（唯一驱动入口
+ * setKeepAliveResidentEnabled，映射「消息通知」总开关）——服务运行 ⇔ 开关
+ * 开；run 生命周期只经 start/stop 登记或摘除内容标签，run 收尾不再启停
+ * 服务（常驻开时仅把通知内容刷回空闲文案）。
  *
  * 前台/后台口径：app 在前台（AppState active，任意页面）一律不发完成通知，
  * 前台界面自有完成反馈；仅后台时发。
@@ -60,6 +62,15 @@ let keepAliveRunning = false;
 /** 期望运行态：链上每次 reconcile 都按最新期望值对齐实际状态。 */
 let keepAliveDesired = false;
 
+/**
+ * 常驻开关态（消息通知开关的模块内映像）：服务运行 ⇔ keepAliveResident。
+ *
+ * 核心不变量：标签操作（start/stop 带 sessionId）永不直接置 true——
+ * `desired` 的 true 只能来自 setKeepAliveResidentEnabled(true)，服务启停
+ * 决策权完全收归开关态；标签操作只登记/摘除标签并触发内容刷新。
+ */
+let keepAliveResident = false;
+
 /** per-session 保活标签（Step 5 需求：状态栏展示项目/会话名）。 */
 const keepAliveLabels = new Map<string, AgentKeepAliveLabel>();
 
@@ -76,10 +87,11 @@ export interface AgentKeepAliveLabel {
   readonly sessionTitle?: string;
 }
 
-/** 仅测试用：复位保活模块级状态。 */
+/** 仅测试用：复位保活模块级状态（签名不变，调用方零改动）。 */
 export function resetKeepAliveStateForTests(): void {
   keepAliveRunning = false;
   keepAliveDesired = false;
+  keepAliveResident = false;
   keepAliveLabels.clear();
   keepAliveLabelsVersion = 0;
   keepAliveDisplayedVersion = -1;
@@ -105,12 +117,32 @@ function enqueueKeepAliveSync(desired: boolean): Promise<void> {
 }
 
 /**
+ * 常驻开关的唯一驱动入口：写 keepAliveResident 并按开关值入队起/停。
+ *
+ * 开 → 拉起前台服务（空闲文案或既有标签内容）；关 → 立即停服（生成中的
+ * run 继续跑，仅失去保活）。start/stop 的标签分支一律透传 keepAliveResident，
+ * true 永远只经本函数写入——这是「关开关后标签操作不复活服务」的不变量来源。
+ */
+export function setKeepAliveResidentEnabled(enabled: boolean): Promise<void> {
+  keepAliveResident = enabled;
+  return enqueueKeepAliveSync(enabled);
+}
+
+/**
  * 按最新期望态对齐实际运行态（只在链尾执行，天然串行）。
  *
  * 运行中且标签未变时 no-op（保持既有起停语义）；标签变化（会话加入/收尾）
  * 时同 id 重发通知 = 原位刷新内容（项目 · 会话名随最新 run 更新）。
  */
 async function reconcileKeepAlive(): Promise<void> {
+  // 纯防御兜底：标签路径的入参已全部透传 keepAliveResident，desired=true 而
+  // resident=false 的组合正常不可达；若未来回归把 true 直接写进标签路径，
+  // 这里按 no-op 处理（对齐版本后返回），不给「关开关后标签操作复活服务」留门。
+  // 正确性由入参本身保证，不依赖本分支。
+  if (keepAliveDesired && !keepAliveResident) {
+    keepAliveDisplayedVersion = keepAliveLabelsVersion;
+    return;
+  }
   if (
     keepAliveDesired === keepAliveRunning &&
     keepAliveDisplayedVersion === keepAliveLabelsVersion
@@ -204,6 +236,56 @@ export function resetAgentNotificationPermissionStateForTests(): void {
   permissionDenied = false;
 }
 
+/** 授权态归一：AUTHORIZED / PROVISIONAL 视为 authorized，DENIED 视为 denied。 */
+function isAuthorizationGranted(status: number): boolean {
+  return (
+    status === AuthorizationStatus.AUTHORIZED ||
+    status === AuthorizationStatus.PROVISIONAL
+  );
+}
+
+/**
+ * 查询通知权限状态（设置页「通知权限」行展示用）。
+ *
+ * Android<33 无运行时权限门禁、非 Android 维持「已授权」口径（iOS 不在
+ * 范围），均恒 authorized；Android 13+ 经 notifee.getNotificationSettings()
+ * 读取 authorizationStatus 判定。
+ */
+export async function getAgentNotificationPermissionStatus(): Promise<
+  'authorized' | 'denied'
+> {
+  if (Platform.OS !== 'android' || Platform.Version < 33) {
+    return 'authorized';
+  }
+  const settings = await notifee.getNotificationSettings();
+  return isAuthorizationGranted(settings.authorizationStatus)
+    ? 'authorized'
+    : 'denied';
+}
+
+/**
+ * 手动申请通知权限（设置页「通知权限」行点击路径）。
+ *
+ * 与开关自动申请（ensureAgentNotificationPermission）不同：用户主动点击
+ * 即明确意图，绕过 permissionDenied 降级直接 requestPermission。返回
+ * denied 时跳系统应用通知设置总页（openNotificationSettings 不带
+ * channelId），由用户手动开启——notifee 9.1.8 无法区分软拒绝/永久拒绝，
+ * 采用「手动申请被拒即跳设置页」的行为推断，无需三态区分。
+ */
+export async function requestAgentNotificationPermissionManually(): Promise<
+  'authorized' | 'denied'
+> {
+  if (Platform.OS !== 'android' || Platform.Version < 33) {
+    return 'authorized';
+  }
+  const settings = await notifee.requestPermission();
+  if (isAuthorizationGranted(settings.authorizationStatus)) {
+    return 'authorized';
+  }
+  await notifee.openNotificationSettings();
+  return 'denied';
+}
+
 /** app 是否在前台（active）。 */
 export function isAppInForeground(): boolean {
   return AppState.currentState === 'active';
@@ -268,10 +350,13 @@ export async function notifyAgentRunFinished(input: {
 }
 
 /**
- * 启动前台保活服务（dataSync 类型，常驻「正在生成」通知）。
+ * 登记保活内容标签（run 受理/标签查回后调用）。
  *
- * 携带 sessionId 时同时登记/刷新该会话的内容标签（状态栏展示项目 · 会话名，
- * 并行多 run 时显示最近一个 + 总数）。仅 Android；无标签调用保持旧语义。
+ * 常驻模式下只操作标签表并触发内容刷新（标签有变化时 labelsVersion++），
+ * 不再直接决定服务启停——入队透传 keepAliveResident：常驻开则刷新内容
+ * （「正在生成 · 会话名」），常驻关则 no-op（零 display、零 stop）。
+ * 无标签 start（受理段）在常驻模式下同样 no-op：受理时该会话无标签，
+ * delete 不改版本，reconcile 不刷新。
  */
 export function startAgentKeepAliveService(
   sessionId?: string,
@@ -291,15 +376,17 @@ export function startAgentKeepAliveService(
       keepAliveLabelsVersion += 1;
     }
   }
-  return enqueueKeepAliveSync(true);
+  return enqueueKeepAliveSync(keepAliveResident);
 }
 
 /**
- * 停止前台保活服务。
+ * 摘除保活内容标签（单会话 run 收尾调用）。
  *
- * 带 sessionId（单会话 run 收尾）：仅摘除该会话标签——仍有其它会话在跑时
- * 服务继续、通知内容刷新为剩余会话；最后一个标签摘除时服务停止。
- * 不带 sessionId（全部 run 结束 / Manager dispose）：清空全部标签并停止。
+ * 带 sessionId：只摘标签——入队透传 keepAliveResident：常驻开则刷新内容
+ * （仍有其它会话时刷剩余会话、清零时刷回空闲文案，服务不停），常驻关则
+ * 停服务（异常残留兜底）。启停决策权在开关态，不由标签数量决定。
+ * 不带 sessionId（Manager dispose 专用）：清空全部标签并无条件停服务
+ * （无论 resident）。
  */
 export function stopAgentKeepAliveService(sessionId?: string): Promise<void> {
   if (Platform.OS !== 'android') {
@@ -309,11 +396,7 @@ export function stopAgentKeepAliveService(sessionId?: string): Promise<void> {
     if (keepAliveLabels.delete(sessionId)) {
       keepAliveLabelsVersion += 1;
     }
-    if (keepAliveLabels.size > 0) {
-      // 其它会话仍在跑：刷新内容、维持运行
-      return enqueueKeepAliveSync(true);
-    }
-    return enqueueKeepAliveSync(false);
+    return enqueueKeepAliveSync(keepAliveResident);
   }
   if (keepAliveLabels.size > 0) {
     keepAliveLabels.clear();
@@ -335,12 +418,16 @@ function labelEquals(
   return a.projectName === b.projectName && a.sessionTitle === b.sessionTitle;
 }
 
-/** 组装保活通知内容：最近登记的会话标签 +（多会话时）总数。 */
+/** 组装保活通知内容：空闲态仅 title；有标签时为最近登记的会话 +（多会话时）总数。 */
 function buildKeepAliveContent(): {
   title: string;
-  body: string;
+  body?: string;
 } {
   const labels = [...keepAliveLabels.values()];
+  if (labels.length === 0) {
+    // 空闲：仅 title、不设 body（常驻开关拉起后的默认态）。
+    return {title: 'novel master · 空闲'};
+  }
   const latest = labels[labels.length - 1];
   const scopeText =
     latest == null

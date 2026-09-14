@@ -6,9 +6,9 @@
  * 直接 import 本文件的 mock fn 后 clear/assert。
  */
 export const AuthorizationStatus = {
+  DENIED: 0,
   AUTHORIZED: 1,
   PROVISIONAL: 2,
-  DENIED: 4,
 } as const;
 
 export const AndroidImportance = {
@@ -32,6 +32,10 @@ export const createChannel = jest.fn(async () => 'channel-id');
 export const requestPermission = jest.fn(async () => ({
   authorizationStatus: AuthorizationStatus.AUTHORIZED,
 }));
+export const getNotificationSettings = jest.fn(async () => ({
+  authorizationStatus: AuthorizationStatus.AUTHORIZED,
+}));
+export const openNotificationSettings = jest.fn(async () => undefined);
 export const stopForegroundService = jest.fn(async () => undefined);
 export const registerForegroundService = jest.fn();
 /** onForegroundEvent 返回的退订函数（单独暴露以便断言注册/退订净值）。 */
@@ -44,6 +48,8 @@ const notifeeMock = {
   displayNotification,
   createChannel,
   requestPermission,
+  getNotificationSettings,
+  openNotificationSettings,
   stopForegroundService,
   registerForegroundService,
   onForegroundEvent,
