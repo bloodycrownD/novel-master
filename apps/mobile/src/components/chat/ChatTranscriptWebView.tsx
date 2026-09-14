@@ -16,7 +16,7 @@ import WebView, {type WebViewMessageEvent} from 'react-native-webview';
 // import type 会被擦除，不影响运行时打包。
 import type {WebViewOpenWindowEvent} from 'react-native-webview/lib/WebViewTypes';
 import {type ChatMessage} from '@novel-master/core/chat';
-import {timingLog} from '@/debug/run-timing';
+import {bootTimingLog, timingLog} from '@/debug/run-timing';
 import Clipboard from '@react-native-clipboard/clipboard';
 import {
   encodeHostToTranscript,
@@ -580,6 +580,9 @@ export const ChatTranscriptWebView = memo(
             Math.ceil(snapshotMessages.length / SNAPSHOT_CHUNK_SIZE),
           );
           const yieldFn = createQuantumYield();
+          bootTimingLog(
+            `snapshot begin (msgs=${snapshotMessages.length}, chunks=${chunkTotal}, gen=${generation})`,
+          );
           try {
             for (
               let chunkIndex = 0;
@@ -592,6 +595,9 @@ export const ChatTranscriptWebView = memo(
                 inFlightSnapshotGenerationRef.current !== generation ||
                 !webReadyRef.current
               ) {
+                bootTimingLog(
+                  `snapshot gen=${generation} aborted at chunk ${chunkIndex}/${chunkTotal} (superseded or remount)`,
+                );
                 return;
               }
               const chunkMessages = snapshotMessages.slice(
@@ -627,6 +633,9 @@ export const ChatTranscriptWebView = memo(
                   chunkTotal,
                 },
               });
+              bootTimingLog(
+                `snapshot chunk ${chunkIndex + 1}/${chunkTotal} posted (rows=${rows.length})`,
+              );
               if (!isLastChunk) {
                 // 片间量子让步：防止分片构建本身又变成长任务。
                 await yieldFn();
@@ -635,6 +644,7 @@ export const ChatTranscriptWebView = memo(
             // 分片全部发完后统一同步（末片 post 之后）：保持「工具调用条与
             // 快照末态一致」的既有时序语义；单片快照等价旧单包行为。
             syncStreamToolInvoking();
+            bootTimingLog(`snapshot all chunks done (gen=${generation})`);
             // 补发分片期间被推迟的流式 flush（T-S3：delta 晚于完整分片序列）。
             if (deferredStreamFlushRef.current) {
               deferredStreamFlushRef.current = false;
@@ -1005,6 +1015,7 @@ export const ChatTranscriptWebView = memo(
             webReadyRef.current = true;
             setWebReady(true);
             timingLog('webview ready (bridge handshake done)');
+            bootTimingLog('webview ready (bridge handshake done)');
             onReady?.();
             // WebView 被系统回收重建后，webview 侧全屏层已不存在；对称复位
             // 上浮给外层的全屏开合状态，避免外层返回键拦截态关真。

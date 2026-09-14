@@ -105,7 +105,7 @@ import {
   incrementAgentActive,
 } from '@/runtime/agent-activity';
 import {runAgentTurn as defaultRunAgentTurn} from '@/services/agent-run.service';
-import {timingLog} from '@/debug/run-timing';
+import {bootTimingLog, timingLog} from '@/debug/run-timing';
 import {
   ensureAgentNotificationPermission,
   notifyAgentRunFinished,
@@ -504,6 +504,7 @@ export class SessionStreamUnitManager {
       return this.hydratePromise;
     }
     const run = (async () => {
+      bootTimingLog('hydrate begin');
       const store = this.runStateStore;
       if (store == null) {
         this.markHydrated();
@@ -513,6 +514,7 @@ export class SessionStreamUnitManager {
         'starting',
         'running',
       ]);
+      bootTimingLog(`hydrate active rows listed (n=${activeRows.length})`);
       if (this.disposed) {
         // dispose 已发生（慢扫描撞上 runtime 重建）：不再往死 manager 里
         // 建单元，直接放行。
@@ -566,6 +568,7 @@ export class SessionStreamUnitManager {
         });
       }
       const settledRows = await store.listByStatuses(['settled']);
+      bootTimingLog(`hydrate settled rows listed (n=${settledRows.length})`);
       for (const row of settledRows) {
         // settled 回填同款分片让步 + disposed 复查：dispose 已清空的
         // settledProjections 不再被后续行回填（防死 manager 泄漏条目）。
@@ -585,6 +588,9 @@ export class SessionStreamUnitManager {
           elapsedMs: Math.max(0, row.updatedAtMs - row.startedAtMs),
         });
       }
+      bootTimingLog(
+        `hydrate complete (active=${activeRows.length}, settled=${settledRows.length})`,
+      );
       this.markHydrated();
     })();
     this.hydratePromise = run.catch(err => {

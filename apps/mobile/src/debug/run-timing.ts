@@ -28,5 +28,18 @@ export function timingLog(label: string): void {
   }
   console.log(`[nm-timing] ${label} +${Date.now() - t0}ms`);
 }
+
+// 启动基准：模块求值时刻（dev bundle 加载即计时）。冷启动初始化链
+// （水合/快照分片/webview ready）没有发送 t0，统一挂这条轴，logcat 过滤
+// `[nm-boot]` 即得冷启动全链时间轴。
+const bootT0 = Date.now();
+
+/** 打一站相对 JS bundle 求值时刻的耗时（冷启动链专用）。 */
+export function bootTimingLog(label: string): void {
+  if (typeof __DEV__ === 'undefined' || !__DEV__) {
+    return;
+  }
+  console.log(`[nm-boot] ${label} +${Date.now() - bootT0}ms`);
+}
 // refresh-trigger 1789305097
 // refresh-trigger-2 1789305385
