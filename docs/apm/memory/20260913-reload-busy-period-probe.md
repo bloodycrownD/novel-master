@@ -88,3 +88,9 @@ user:
 
 assistant:
 prd-generate 三探索子代理（启动装配链/keepalive 模块全貌/设置页先例与 desktop 对照）关键发现：①常驻启动最佳挂点=novel-master-context 桥注入 effect（runtime+appUi+Manager 就绪且 retry 自动重跑）；②Android 14+ dataSync FGS 约 6 小时系统限额（Manifest 注释，超时按外力关闭）；③权限申请被模块级 permissionDenied+实例级 permissionEnsured 双重防重锁死，Android 永久拒绝后 requestPermission 不再弹窗，手动按钮需 getNotificationSettings/openNotificationSettings 新通路（仓库零先例），AboutScreen「检查更新」行为状态+动作完整先例；④dispose 无参全停与常驻冲突，retry 重建靠桥 effect 重拉（秒级闪断，接受）；⑤受影响测试断言两处反转（T-P5 最后收尾停服务、manager FINISHED 后 stop）；⑥desktop 零通知功能无漂移。PRD 落盘 docs/Iterations/resident-keepalive-notification-2026-09/prd.md（dependency 指向 init-busy-yield），8 条 GWT 验收，风险节含 GWT-1 口径接替声明/6h 限额/闪断/首启压制边界/权限新通路。待用户确认 PRD。
+
+user:
+（确认 PRD）[$spec-generate]。
+
+assistant:
+spec-generate 三探索子代理（测试基线/notifee 版本能力/设置页与装配链）关键发现：①notifee 9.1.8 的 AuthorizationStatus 只有 -1/0/1/2，Android 无法区分软拒/永久拒（requestPermission 恒返回 DENIED/AUTHORIZED）——手动按钮采行为推断口径：申请回 DENIED 即 openNotificationSettings 跳设置；②仓库 notifee-mock 的 DENIED=4 与真实枚举 0 不一致（碰巧行为等价未爆雷，顺手修正）；③断言反转精确清单：agent-finished-notification.test L409（最后收尾停服）、manager 测试 L612（FINISHED 停服）反转，两段式计数基线重排，MF-4 三条按新导出面重写；④mock 需扩 getNotificationSettings/openNotificationSettings；⑤桥 effect 依赖 [runtime] 不含 appUi——开关切换必须设置页显式调用；⑥prefBridge appUi 未就绪降级返回 true 与「默认关」冲突必须同改；⑦resetKeepAliveStateForTests 扩 resident 复位签名不变（五个调用文件零改）；⑧screens 直连 services 是通行分层（15+ 先例）。spec 落盘 docs/Iterations/resident-keepalive-notification-2026-09/spec.md：期望态模型重构（keepAliveResident 开关态、服务运行⇔resident、start/stop 标签化、reconcile 加 resident 短路防关开关后被标签操作复活）、常驻挂点=桥 effect 末尾 storage 直读开关、manager 只退役权限申请（启停调用零改动语义由模块吸收）、5 Step（4 auto blocking + 1 manual_user 真机）+ T-K1~K10 用例矩阵。待用户确认 spec。
