@@ -107,7 +107,6 @@ import {
 import {runAgentTurn as defaultRunAgentTurn} from '@/services/agent-run.service';
 import {bootTimingLog, timingLog} from '@/debug/run-timing';
 import {
-  ensureAgentNotificationPermission,
   notifyAgentRunFinished,
   navigateToChatTabFromNotification,
   registerAgentNotificationTapHandling,
@@ -338,7 +337,6 @@ export class SessionStreamUnitManager {
   /** 前台回焦触发校准的 AppState 订阅（dispose 时退订）。 */
   private calibrationAppStateSub: {remove(): void} | undefined;
   private disposed = false;
-  private permissionEnsured = false;
   private hydratedValue = false;
 
   constructor(params: SessionStreamUnitManagerParams) {
@@ -1023,7 +1021,6 @@ export class SessionStreamUnitManager {
     timingLog('notifyChanged done (metrics bar scheduled)');
     incrementAgentActive();
     this.startKeepAliveQuietly(sessionId, projectId);
-    void this.maybeEnsureNotificationPermission();
 
     timingLog('runAgentTurn invoke');
     void this.runAgentTurnFn(this.runtime, {projectId, sessionId}, content, {
@@ -1315,36 +1312,18 @@ export class SessionStreamUnitManager {
   }
 
   /**
-   * 通知权限申请：时机钉死为「首次发起 run 且开关为开」。
-   *
-   * 仅在开关开启时申请；已申请过 / 已拒绝后不再重复（内部降级标记）。
-   */
-  private async maybeEnsureNotificationPermission(): Promise<void> {
-    if (this.permissionEnsured) {
-      return;
-    }
-    const enabled = await this.prefBridge?.isNotificationEnabled();
-    if (enabled !== true) {
-      return;
-    }
-    this.permissionEnsured = true;
-    timingLog('notif-permission: request begin');
-    await ensureAgentNotificationPermission().catch(() => false);
-    timingLog('notif-permission: request done');
-  }
-
-  /**
-   * 受理后按需启动保活：消息通知总开关开启才起常驻通知。两段式时序
-   * （Step 8 忙期优先）——
+   * 受理后按需刷新保活通知：消息通知总开关开启才操作（开关关时受理不
+   * 产生任何通知刷新）。两段式时序（Step 8 忙期优先）——
    *
    * 第一段：受理后立即无标签调 startAgentKeepAliveService(sessionId)，
-   * 默认文案「正在生成」先上屏（不等会话名/项目名查询，通知模块的
-   * labelsVersion 机制保证后续原位刷新）；若其它会话的保活已在跑，
-   * 该调用天然 no-op（进程级服务共享）。
+   * 登记受理意图——常驻模式下该调用是 no-op（受理时该会话无标签，
+   * labels.delete 不改版本，reconcile 不刷新，通知维持空闲文案）；通知
+   * 启停决策权已收归模块内的常驻开关态。
    *
    * 第二段：会话名/项目名两查询 Promise.all 并行，查回后带标签再调
    * 同一函数，经既有 labelsVersion → reconcileKeepAlive「同 id 原位
-   * 刷新」更新文案（项目 · 会话名）；取不到名字不阻塞、仅内容缺省。
+   * 刷新」把内容切到「正在生成 · 会话名」（项目 · 会话名）；取不到
+   * 名字不阻塞、仅内容缺省。
    */
   private async startKeepAliveFor(
     sessionId: string,
