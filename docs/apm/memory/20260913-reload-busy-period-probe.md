@@ -76,3 +76,15 @@ user:
 
 assistant:
 方案评估：成立且优于此前候选 a/b——启动时刻挪到用户正看 app 时（进 app 即启），之后发送只是**更新已展示通知**（系统放行后的 re-enqueue 均毫秒 posted 有间接证据），完全绕开 EMUI 冷启动 FGS 的 10 秒压制；一条通知零重复；「前台时启动 FGS」恰好是 Android 12+ 最合规时机。诚实边界：app 启动 10 秒内快速发送退后台的极端场景仍要等那 10 秒（与现状持平，不更差）。开关现状调查（apps/mobile）：①存储 `storage/message-notification-pref.ts`，appUi 通道 key `messageNotification`（app-ui-keys.ts:16），readBoolPref 第三参=**默认 true**（改默认关=改这里+注释）；合并自两个未发布旧开关、无迁移负担。②UI ChatConfigScreen「消息通知」ProfileSwitchItem，**切换只持久化无即时启停副作用**（下次 run 才读），副标题两态文案描述现状语义（常驻化后需改写）。③消费方全走 manager 的 prefBridge.isNotificationEnabled()（桥装配 novel-master-context.tsx:170）：maybeEnsureNotificationPermission（权限申请=首次 run 且开关开）、startKeepAliveFor（run 受理时开关开才启）、notifySettled（run 结束时开关开才发完成通知）。④keepalive 模块 services/agent-finished-notification.ts：reconcileKeepAlive 期望态（keepAliveDesired）+标签表+版本号驱动、keepAliveChain 串行队列；display 固定 id、asForegroundService:true、ongoing、channel agent-keepalive、pressAction 拉起 app；buildKeepAliveContent 单会话「正在生成 · 会话名」+「项目 · 会话名」+（多会话「共 N 个会话生成中」）+「完成后自动结束；期间请勿强行关闭应用」；启停随 run（stop 摘标签、最后一个摘除停服务）；FGS 类型 dataSync；iOS 分支直接 return；notifyAgentRunFinished 普通通知（channel agent-finished、仅后台发、失败有合并窗口）。**与常驻方案的 gap 清单**：a) 默认值 true→false；b) 需新增「app 启动/开关切换」驱动 reconcile（现在只有标签变化驱动）——context 装配处读开关→空闲态启动 FGS；c) run 收尾从「最后一个标签摘除停服务」改「摘标签但服务由开关维持」，内容回「novel master · 空闲」；d) 权限申请时机提前（否则无权限时常驻通知静默失败）；e) 设置页副标题文案改写；f) 空闲态 body 文案（现「完成后自动结束…」不适用）。待用户指令立项（prd-generate）。
+
+user:
+（gap d 拍板）权限申请挪到「开关开启的地方」，甚至可以加一个权限申请按钮。其他感觉问题不大。
+
+assistant:
+最后一个开放点拍板完毕，常驻通知方案全部决策齐备：空闲文案「novel master · 空闲」、开关默认关、权限申请挪至开关开启时机+聊天配置页加手动申请按钮兜底、run 收尾摘标签不停服务、副标题与空闲 body 文案改写。随即走 prd-generate 立项。
+
+user:
+（prd-generate 澄清答复）6 小时 dataSync 上限：接受现状；run 进行中关开关：立即停（run 继续仅失去保活）；权限按钮：状态+动作（仿 AboutScreen「检查更新」行先例，永久拒绝跳系统设置）。
+
+assistant:
+prd-generate 三探索子代理（启动装配链/keepalive 模块全貌/设置页先例与 desktop 对照）关键发现：①常驻启动最佳挂点=novel-master-context 桥注入 effect（runtime+appUi+Manager 就绪且 retry 自动重跑）；②Android 14+ dataSync FGS 约 6 小时系统限额（Manifest 注释，超时按外力关闭）；③权限申请被模块级 permissionDenied+实例级 permissionEnsured 双重防重锁死，Android 永久拒绝后 requestPermission 不再弹窗，手动按钮需 getNotificationSettings/openNotificationSettings 新通路（仓库零先例），AboutScreen「检查更新」行为状态+动作完整先例；④dispose 无参全停与常驻冲突，retry 重建靠桥 effect 重拉（秒级闪断，接受）；⑤受影响测试断言两处反转（T-P5 最后收尾停服务、manager FINISHED 后 stop）；⑥desktop 零通知功能无漂移。PRD 落盘 docs/Iterations/resident-keepalive-notification-2026-09/prd.md（dependency 指向 init-busy-yield），8 条 GWT 验收，风险节含 GWT-1 口径接替声明/6h 限额/闪断/首启压制边界/权限新通路。待用户确认 PRD。
