@@ -118,3 +118,11 @@ user:
 
 assistant:
 Step 5 真机验收由用户操作并通过（用户确认「感觉没什么问题」）——常驻通知迭代（resident-keepalive-notification-2026-09）全交付：dev-ready + 真机验收 ✓。覆盖安装下 GWT-5「全新默认关」纯新装路径未单独验（偏好已存在），行为由 T-K10 双路径单测锁定，风险极低。两个迭代的 dev 产物现在都在机上验证过（init-busy-yield 忙期优化 + 常驻通知），并入 main 待用户指令。
+
+user:
+（答疑）init-busy-yield 对通知 10s 没作用，有保留价值吗？有副作用吗？（拍板）不合并之后还得 CR；先修 run 秒败 composer 锁死 bug。
+
+assistant:
+init-busy-yield 价值答疑：它治的是 app 自身忙期卡顿（10s 是 EMUI 系统压制，两者是不同的病）——本轮数据即其成绩单：四次发送 tap→onPress 90/91/90/96ms（优化前排 10-20s 队）、水合 53-62ms、快照 387ms 分片发完；大会话长期收益（RowList 窗口化/配对预扫消 O(n²)/backfill 游标）在 40 条测试会话显不出来但机制确定。副作用=复杂度成本（generation 代次/EWMA 占位/断言复杂化），五轮审查+全绿测试兜住；「通知两段式」被常驻化演进取代（第一段 no-op）非回归。检讨：先立项优化后系统归因，顺序反了——教训是先 logcat 双证归因再立项。
+
+run-fail-composer-lock bug 修复（agile-dev，session-stream-unit-2026-09/bugs/ 下留痕）：两探索子代理锤实根因链——core agent-runner 主 catch 失败只发事件不落消息（三端皆无错误消息机制）→尾部停 user→双端共享「连续 user 守卫」（D-bug-fixes 设计）锁死输入框；错误仅 2.5s toast 易失、DB 无 error 字段无从回查；desktop 同病；附带发现「用户停止在首条回复前」也锁死（低频记已知限制）。修复（a57daa0a，子代理 inline）：主 catch 非 abort 分支在 FAILED 事件前落 assistant 错误消息（现有 text 块零 schema，文案「[生成失败] …」不带 usage；assistantAppendedInRun 幂等豁免；persistMessages=false 豁免；abort 保持 partial 语义）+4 用例（含落库先于事件的时序锁定）。验证：core 2111/2111、mobile 201/1333 基线一致、双端 typecheck 绿、desktop keyring 4 失败为无头环境既有。主代理复核定向测试 fail 0。prd/spec 落盘 bugs/run-fail-composer-lock/，已知限制三条（settle error 字段/cancelled 锁死/setError 增强）留后续。插曲：服务器重启致 metro 挂+adb daemon 重启（reverse 重配）；「本地 metro 需长驻，重启后须重拉+重配 reverse」。
