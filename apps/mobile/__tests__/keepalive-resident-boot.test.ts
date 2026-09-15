@@ -7,6 +7,7 @@
  */
 import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
 import notifee from '@notifee/react-native';
+import {Platform} from 'react-native';
 import {
   ensureKeepAliveResidentBoot,
   createNotificationPrefBridge,
@@ -36,6 +37,18 @@ describe('keepalive-resident-boot', () => {
   });
 
   describe('T-K8 ensureKeepAliveResidentBoot', () => {
+    const originalOS = Platform.OS;
+
+    beforeEach(() => {
+      // jest 环境默认 iOS，而常驻链路带 Android 平台门禁（svc/B-1）——
+      // 本组用例验证的是开关语义，须显式切到 Android。
+      (Platform as {OS: string}).OS = 'android';
+    });
+
+    afterEach(() => {
+      (Platform as {OS: string}).OS = originalOS;
+    });
+
     it('开关开：拉起常驻空闲通知（asForegroundService + ongoing）', async () => {
       const appUi = appUiWith({messageNotification: 'true'});
       await ensureKeepAliveResidentBoot(appUi);

@@ -119,11 +119,20 @@ function enqueueKeepAliveSync(desired: boolean): Promise<void> {
 /**
  * 常驻开关的唯一驱动入口：写 keepAliveResident 并按开关值入队起/停。
  *
+ * 平台门禁在入口最前（svc/B-1，模块单点收口）：非 Android 直接早退——
+ * notifee 前台服务是 Android-only，iOS 走到 displayNotification 会真实展示
+ * 「novel master · 空闲」常驻通知，违背 resident-keepalive「iOS 零影响」
+ * 声明。早退时 resident 保持 false、不入队任何起停决策（零 display、
+ * 零 stop），与完成通知、标签链路的既有门禁对齐。
+ *
  * 开 → 拉起前台服务（空闲文案或既有标签内容）；关 → 立即停服（生成中的
  * run 继续跑，仅失去保活）。start/stop 的标签分支一律透传 keepAliveResident，
  * true 永远只经本函数写入——这是「关开关后标签操作不复活服务」的不变量来源。
  */
 export function setKeepAliveResidentEnabled(enabled: boolean): Promise<void> {
+  if (Platform.OS !== 'android') {
+    return Promise.resolve();
+  }
   keepAliveResident = enabled;
   return enqueueKeepAliveSync(enabled);
 }

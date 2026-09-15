@@ -291,14 +291,14 @@ describe('agent-finished-notification', () => {
     });
   });
 
-  describe('MF-8: notifyAgentRunFinished 平台门禁', () => {
+  describe('MF-8: 平台门禁（完成通知 + 常驻链路）', () => {
     const originalOS = Platform.OS;
 
     afterEach(() => {
       (Platform as {OS: string}).OS = originalOS;
     });
 
-    it('iOS 上不走到 Android-only API（createChannel / displayNotification 均不调用）', async () => {
+    it('iOS 上 notifyAgentRunFinished 不走到 Android-only API（createChannel / displayNotification 均不调用）', async () => {
       (Platform as {OS: string}).OS = 'ios';
       setAppState('background');
       await notifyAgentRunFinished({
@@ -325,6 +325,22 @@ describe('agent-finished-notification', () => {
         status: 'failed',
       });
       expect(displayNotification).toHaveBeenCalledTimes(1);
+    });
+
+    it('svc/B-1: iOS 上 setKeepAliveResidentEnabled(true) 零 display、零 stop（常驻链路门禁）', async () => {
+      (Platform as {OS: string}).OS = 'ios';
+      await setKeepAliveResidentEnabled(true);
+      expect(displayNotification).not.toHaveBeenCalled();
+      expect(notifee.stopForegroundService).not.toHaveBeenCalled();
+
+      // resident 未被 iOS 调用污染为 true：切回 android 重新打开，
+      // 空闲常驻通知正常拉起（而非因 desired/running 错位被 no-op 吞掉）
+      (Platform as {OS: string}).OS = 'android';
+      await setKeepAliveResidentEnabled(true);
+      expect(displayNotification).toHaveBeenCalledTimes(1);
+      expect(displayNotification.mock.calls[0][0].title).toBe(
+        'novel master · 空闲',
+      );
     });
   });
 
