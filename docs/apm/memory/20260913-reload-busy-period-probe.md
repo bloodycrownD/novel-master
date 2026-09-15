@@ -144,3 +144,9 @@ user:
 
 assistant:
 CHANGELOG Unreleased 段完成（8fd27ef5，新建于 1.5.17 之上）：新增四条（多会话并行生成+状态徽标/生成中断现场恢复/消息通知与常驻状态栏含华为延迟修复表述/通知权限管理）、变更一条（启动与切换更流畅+大会话按可视区域渲染）、修复一条（生成失败或无内容后输入框不再锁死——BASE 即有的真 bug 合规进修复段；CR 过程 bug 按原则未写入）、维护一条（诊断打点工具入库）。校对时自查修正一处分类重复（失败提示原本同时出现在新增与修复，合并进修复）。至此分支交付链全闭合：四轮迭代+CR 修复+CHANGELOG，并入 main 仅待用户指令。
+
+user:
+（CHANGELOG 完成后）[$novel-master-publish] 发布吧。
+
+assistant:
+v1.6.0 发版完成（2026-09-15）：主仓 main（分叉点 1b8f0c01，无新提交）no-ff 合并 feat/agent-run-parallel-and-notify（6b6f1b62，约 150 commit 含四轮迭代+CR 修复）；版本收口 f2beb33f——CHANGELOG Unreleased 转正 [1.6.0] - 2026-09-15、双端 package.json 1.5.17→1.6.0、build.gradle versionName 默认值同步（build.gradle 是 GBK 编码须字节级替换，UTF-8 读取即炸——RULE 既有坑再验证）。测试：core 2117/2117 + mobile 1347/1347（CR 终验结论直接引用，其后代码零变化）+ desktop 484/484（本次实跑全绿，此前无头环境的 4 个 keyring 失败消失）。tag v1.6.0 推送触发 Release CI（run 34982650258，Android APK/Windows NSIS/macOS DMG 三产物），main 同步推送 ec63fec7..f2beb33f。worktree（agent-run-parallel-and-notify）与 feature 分支保留未删（metro 仍在 worktree 服务真机调试，用户习惯只保留最新分支、删除待指令）。合并后 QA 三项待真机观察：徽标间距/prepend 上拉体验/EWMA 首测偏差。分支交付全链闭环：真机排查（EMUI 通知压制定案）→ 常驻方案 → PRD/spec/spec-check/dev-loop/CR/changelog/publish 全流程。
