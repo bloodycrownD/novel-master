@@ -1,5 +1,8 @@
 import { DEFAULT_WORKPLACE_DIR_RULE } from "@shared/logic/workplace";
-import { validateVfsEntryName } from "@shared/logic/vfs";
+import {
+  formatVfsErrorForUser,
+  validateVfsEntryName,
+} from "@shared/logic/vfs";
 import type {
   VfsScopeRequest,
   WorkplaceSetDirRuleRequest,
@@ -18,6 +21,21 @@ import { joinVfsPath } from "@/utils/vfs-path";
 import { entryName } from "./vfs-tree-utils";
 import type { WorkspaceContextTarget } from "./workspace-context";
 import { parentPathForTarget } from "./workspace-context";
+
+/**
+ * VFS 动作失败时把 IPC payload（{code,message}）转成终端用户可见的中文文案；
+ * main 侧只透传 VfsError 原文（英文），直接弹给用户看不懂。
+ * ALREADY_EXISTS 单独映射（对齐 mobile「名称不能重复」口径）。
+ */
+function vfsActionErrorMessage(error: {
+  readonly code: string;
+  readonly message: string;
+}): string {
+  if (error.code === "ALREADY_EXISTS") {
+    return "名称不能重复";
+  }
+  return formatVfsErrorForUser(error);
+}
 
 export function scopeRequestFromTarget(
   target: WorkspaceContextTarget,
@@ -61,12 +79,15 @@ export async function createWorkspaceEntry(
   const path = joinVfsPath(parentPathForTarget(target), name);
   if (kind === "file") {
     const result = await ipcVfsWrite({ ...req, path, content: "" });
-    return result.ok ? { ok: true } : { ok: false, message: result.error.message };
+    return result.ok
+      ? { ok: true }
+      : { ok: false, message: vfsActionErrorMessage(result.error) };
   }
   const mkdirResult = await ipcVfsMkdir({ ...req, path });
   if (!mkdirResult.ok) {
-    return { ok: false, message: mkdirResult.error.message };
+    return { ok: false, message: vfsActionErrorMessage(mkdirResult.error) };
   }
+  // 规则写入是 workplace 动作而非 VFS 动作，失败文案保持原文透出
   const ruleResult = await ipcWorkplaceSetDirRule(defaultDirRuleRequest(path, req));
   return ruleResult.ok
     ? { ok: true }
@@ -94,7 +115,9 @@ export async function renameWorkspaceEntry(
       : row.path.slice(0, row.path.lastIndexOf("/")) || "";
   const newPath = `${parent}/${newName.trim()}`.replace(/\/+/g, "/");
   const result = await ipcVfsRename({ ...req, oldPath: row.path, newPath });
-  return result.ok ? { ok: true } : { ok: false, message: result.error.message };
+  return result.ok
+    ? { ok: true }
+    : { ok: false, message: vfsActionErrorMessage(result.error) };
 }
 
 export async function deleteWorkspaceEntry(
@@ -111,7 +134,9 @@ export async function deleteWorkspaceEntry(
     path: target.row.path,
     recursive: true,
   });
-  return result.ok ? { ok: true } : { ok: false, message: result.error.message };
+  return result.ok
+    ? { ok: true }
+    : { ok: false, message: vfsActionErrorMessage(result.error) };
 }
 
 /** 新建目录时持久化的默认规则（规则启用）。 */
