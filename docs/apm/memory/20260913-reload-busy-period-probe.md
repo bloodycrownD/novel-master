@@ -138,3 +138,9 @@ user:
 
 assistant:
 ③ startedAtMs 答疑（session_run_state.started_at_ms=run 起算时刻，指标条计时/上次生成耗时/中断重进连续计时三个消费点；spec 写 RUN_STARTED 置位 vs 实现 begin() 受理即置——差 pre-runner 段 0.5-1s，按实现收窄更符合直觉）。用户拍板后 fix-spec 全确认（a0405e6f + core/B-2 新增为第 13 条：成功空回复落「（本次生成无内容输出）」assistant 占位）。code-dev-loop 执行 fix-spec（base a0405e6f）：wave-0 四路并行 impl（web/core/svc/ui 文件分组无冲突）+full/K-1 主代理 trivial 直执（1fe80174）——共 11 commit：web/C-orch-1 三处细化全落地（postOrDeferSnapshotPaint 单一 DeferredSnapshotAction 队列、重挂清队、第四入口天然覆盖）+web 侧挂起重放兜底（b0bf5fe0/7e2995b4 含 B-1 作废收集器/C-1 占位漂移扣除）；core/B-2 占位消息+8 用例+T-SR5 旧断言更新、core/K-1 打点归零（879745f8/294a5c2d）；svc/B-1 iOS 门禁+jest 默认 iOS 环境的连带测试修正（0c8a9d1f）、svc/B-2 cancelled 清理（b6031f76）、svc/C-1 守卫（81bf9416）；ui/B-1+C-1 抽 useInterruptedPartialCommit+ready 世代驱动+epoch 进 ctx（b9644480）、ui/G-1 五用例（9b7ce5ab）、ui/J-1+full/F-1（0aaa44a2）。过程事件：并行 git add 竞态一次（ui 节点误并 web 暂存文件，双方 reset 重提交拆开，历史抽查干净——「并行 impl 共享 worktree 须显式路径 add+提交前核对 stat」）。verify-final：core 2117/2117 + mobile 1347/1347（+14 新用例）+ typecheck 0。cr-func 终检 func-ready yes：14 条逐条 closed、deviations ①③ confirmed ② fixed、特别核对 C-orch-1×epoch 兼容闭环（相互成立：无 C-orch-1 则 ui/B-1 修复链反而丢合成行）、integration 真实覆盖「tail 先于 ready」场景。**CR 循环全链路完成**（评审→fix-spec→执行→终检）。剩余：CHANGELOG 补条目（fix-spec K 节）、并入 main 待用户指令、合并后 QA 三项（徽标间距/prepend 上拉/EWMA 首测真机观察）。
+
+user:
+（1208 装机测试后）没什么问题，生成 changelog 吧 [$novel-master-changelog]。
+
+assistant:
+CHANGELOG Unreleased 段完成（8fd27ef5，新建于 1.5.17 之上）：新增四条（多会话并行生成+状态徽标/生成中断现场恢复/消息通知与常驻状态栏含华为延迟修复表述/通知权限管理）、变更一条（启动与切换更流畅+大会话按可视区域渲染）、修复一条（生成失败或无内容后输入框不再锁死——BASE 即有的真 bug 合规进修复段；CR 过程 bug 按原则未写入）、维护一条（诊断打点工具入库）。校对时自查修正一处分类重复（失败提示原本同时出现在新增与修复，合并进修复）。至此分支交付链全闭合：四轮迭代+CR 修复+CHANGELOG，并入 main 仅待用户指令。
