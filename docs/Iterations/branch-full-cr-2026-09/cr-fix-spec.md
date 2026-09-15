@@ -86,6 +86,17 @@
 - 验收：上述用例全绿；与 T-K 系列服务层用例互补，覆盖 T-K10 的屏幕侧要求。
 - 来源：review-scope-mobile-ui/r1
 
+### 【P1】core/B-2 run 成功但回复为空时尾部锁死（与 run-fail-composer-lock 同构）
+
+- id：core/B-2
+- 严重度：P1
+- 维度：core + A（run-fail-composer-lock PRD「已知限制」未覆盖的场景，用户拍板修复）
+- 文件：packages/core/src/service/agent/impl/agent-runner.ts（成功路径 `hasMeaningfulAssistantBlocks` 条件分支，约 L578；参照 a57daa0a 引入的失败落消息机制与 assistantAppendedInRun 标志）
+- 问题：model 请求成功返回但 result.blocks 为空或不含 meaningful 内容时，run 以 FINISHED 正常结束且不落 assistant 消息——尾部停在 user，`lastMessageIsPlainUserText` 恒真，双端 composer 输入框锁死，与已修复的 run 失败场景同构但 run 未失败（BASE 即有，非本 diff 引入；review-scope-core open_questions ① 提请，用户拍板顺手修）。
+- 改法：成功路径 `hasMeaningfulAssistantBlocks` 为 false 的分支落一条 assistant 占位消息（现有 text 块，文案如「（本次生成无内容输出）」，不带 usage/raw），随后照常走 FINISHED；复用/对齐 assistantAppendedInRun 幂等口径；persistMessages=false 豁免同款。
+- 验收：core 测试补例——成功但空 blocks → 断言 assistant 占位消息落库 + FINISHED 照发 + 尾部解锁推导（lastMessageIsPlainUserText false）；abort/正常成功路径不回归。
+- 来源：review-scope-core open_questions ① / 用户拍板 2026-09-15
+
 ### 【P1】web/B-1 单片应用新代次时未作废在途旧代次收集器
 
 - id：web/B-1
@@ -189,7 +200,7 @@
 
 ## Spec deviations
 
-1. **BOOT_VERSION 撞号**：session-stream-unit spec 写 12→13，实现为 13→14。spec 撰写时 main 尚为 v12，之后 main 发了 v13，撞号后顺延。建议用户确认按现状（13→14）收窄 spec。
+1. **BOOT_VERSION 撞号**：session-stream-unit spec 写 12→13，实现为 13→14。spec 撰写时 main 尚为 v12，之后 main 发了 v13，撞号后顺延。**用户已确认按实现收窄（13→14，2026-09-15）**。
 2. **svc/B-1 兼容声明违背（open）**：iOS 平台门禁缺失，违背 resident-keepalive spec「iOS 零影响」声明。随 must-fix svc/B-1 修复后转 fixed。
 3. **startedAtMs 置位时机**：spec 写 RUN_STARTED 回填，实现为 begin() 受理即置。代码注释已声明理由。建议用户确认按实现收窄 spec（确认后由 must-fix full/F-1 同步头注释）。
 
@@ -226,9 +237,9 @@
 | fix-spec-ready | yes（待用户确认；Spec deviations ①③ 需拍板收窄） |
 | fix_spec_path | docs/Iterations/branch-full-cr-2026-09/cr-fix-spec.md |
 | dag_version / review_round | 3 / 2 |
-| P0 / P1 / P2（已写入 fix-spec） | 1 / 4 / 7 |
+| P0 / P1 / P2（已写入 fix-spec） | 1 / 5 / 7 |
 | 未写入的开放 must-fix | 0 |
-| spec_deviations | open：①BOOT_VERSION 顺延、③startedAtMs 收窄（均待用户确认）；②随 svc/B-1 修复转 fixed |
+| spec_deviations | open：③startedAtMs 收窄（待用户确认）；①BOOT_VERSION 已确认收窄；②随 svc/B-1 修复转 fixed |
 | C-orch | ✅（web/C-orch-1 为 P0 主项；svc/C-1、ui/C-1 相关） |
 | C 类合并后 QA | 徽标间距走查、prepend/EWMA 真机观察（见「合并后 QA」节） |
 | 评审轮次明细 | round 1：四路 scope 并行（core / mobile-services / mobile-ui / webview）+ spec-fix 落盘；round 2：review-full 全维终检 + trivial 增补（full/K-1、full/F-1、web/C-orch-1 细化，主代理直执） |
