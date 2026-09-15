@@ -1590,4 +1590,174 @@ describe('ChatTranscriptWebView', () => {
     expect(fresh.map(c => c.chunkIndex)).toEqual([0, 1, 2]);
     expect(fresh.flatMap(c => c.rowIds)).toEqual(messages.map(m => m.id));
   });
+
+  it('C-orch-1: 分片在途时非 tool 消息落库——appendTailRows 推迟到末片后 post，增量行不丢', async () => {
+    // 可达场景（fix-spec）：needsFullSnapshot force 在流式中开启分片 + 跨帧
+    // 窗口内下一条非 tool 消息落库。修复前 appendTailRows 直发插进分片序列
+    // 中间，末片用旧闭包整体替换抹掉增量行；修复后入 deferred 队列，
+    // 末片 post 之后按原序补发。
+    const initialMessages = Array.from({length: 120}, (_, i) =>
+      sampleMessage(`u-${i + 1}`, i + 1),
+    );
+    let tree: TestRenderer.ReactTestRenderer;
+    const ref =
+      React.createRef<
+        import('@/components/chat/ChatTranscriptWebView').ChatTranscriptWebViewHandle
+      >();
+
+    await act(async () => {
+      tree = TestRenderer.create(
+        <ChatTranscriptWebView
+          ref={ref}
+          sessionKey="p1:s1"
+          messages={initialMessages}
+          agentRunning
+          uiRunning
+        />,
+      );
+    });
+    simulateWebReady(tree!.root);
+    await flushSnapshotChunks();
+    // 流式进行中：激活 streamActive
+    await act(async () => {
+      ref.current?.pushStreamDelta('text', 'partial-a');
+    });
+    await flushAnimationFrame();
+
+    const baseline = mockWebViewPostMessages.length;
+
+    // force 分片启动：tool_use 落库（uiRunning && grew → needsFullSnapshot）
+    await act(async () => {
+      tree!.update(
+        <ChatTranscriptWebView
+          ref={ref}
+          sessionKey="p1:s1"
+          messages={[...initialMessages, assistantWithToolUse('a1', 121)]}
+          agentRunning
+          uiRunning
+        />,
+      );
+    });
+    expect(messageTypesSince(baseline)).toContain('sessionSnapshot');
+
+    // 跨帧窗口内（分片在途）：非 tool assistant 落库 → appendTailRows 入队，
+    // 此刻不得 post（不得插进分片序列中间）
+    await act(async () => {
+      tree!.update(
+        <ChatTranscriptWebView
+          ref={ref}
+          sessionKey="p1:s1"
+          messages={[
+            ...initialMessages,
+            assistantWithToolUse('a1', 121),
+            assistantTextMessage('a2', 122, 'hi'),
+          ]}
+          agentRunning
+          uiRunning
+        />,
+      );
+    });
+    expect(messageTypesSince(baseline)).not.toContain('appendTailRows');
+
+    await flushSnapshotChunks();
+
+    const msgs = decodedMessagesSince(baseline);
+    const snapshotIdxs: number[] = [];
+    msgs.forEach((m, i) => {
+      if (m.type === 'sessionSnapshot') {
+        snapshotIdxs.push(i);
+      }
+    });
+    const appendIdx = msgs.findIndex(m => m.type === 'appendTailRows');
+    // appendTailRows 的 post 晚于末片（完整分片序列先于增量行）
+    expect(appendIdx).toBeGreaterThan(-1);
+    expect(appendIdx).toBeGreaterThan(Math.max(...snapshotIdxs));
+    // 末片基线（force 闭包）含 tool_use 行；增量行由补发的 appendTailRows
+    // 补入——合并语义上基线完整
+    const chunks = snapshotChunksSince(baseline);
+    expect(chunks.flatMap(c => c.rowIds)).toContain('a1');
+    const appendMsg = msgs[appendIdx];
+    if (appendMsg.type === 'appendTailRows') {
+      expect(appendMsg.payload.rows.map(r => r.id)).toEqual(['a2']);
+    }
+  });
+
+  it('C-orch-1 重挂边界: 分片在途推迟的 appendTailRows 在重挂时一并丢弃，不补发', async () => {
+    // 改法细化①：deferred 队列对齐 deferredStreamFlushRef 的同款处理——
+    // webReady=false（重挂）时队列丢弃，由恢复注入链（ready 后 force 快照，
+    // 闭包含最新消息）负责重推。
+    const initialMessages = Array.from({length: 120}, (_, i) =>
+      sampleMessage(`u-${i + 1}`, i + 1),
+    );
+    let tree: TestRenderer.ReactTestRenderer;
+    const ref =
+      React.createRef<
+        import('@/components/chat/ChatTranscriptWebView').ChatTranscriptWebViewHandle
+      >();
+
+    await act(async () => {
+      tree = TestRenderer.create(
+        <ChatTranscriptWebView
+          ref={ref}
+          sessionKey="p1:s1"
+          messages={initialMessages}
+          agentRunning
+          uiRunning
+        />,
+      );
+    });
+    simulateWebReady(tree!.root);
+    await flushSnapshotChunks();
+    await act(async () => {
+      ref.current?.pushStreamDelta('text', 'partial-a');
+    });
+    await flushAnimationFrame();
+
+    const baseline = mockWebViewPostMessages.length;
+
+    // force 分片启动 + 跨帧窗口内非 tool 落库（appendTailRows 入队）
+    await act(async () => {
+      tree!.update(
+        <ChatTranscriptWebView
+          ref={ref}
+          sessionKey="p1:s1"
+          messages={[...initialMessages, assistantWithToolUse('a1', 121)]}
+          agentRunning
+          uiRunning
+        />,
+      );
+    });
+    await act(async () => {
+      tree!.update(
+        <ChatTranscriptWebView
+          ref={ref}
+          sessionKey="p1:s1"
+          messages={[
+            ...initialMessages,
+            assistantWithToolUse('a1', 121),
+            assistantTextMessage('a2', 122, 'hi'),
+          ]}
+          agentRunning
+          uiRunning
+        />,
+      );
+    });
+    expect(messageTypesSince(baseline)).not.toContain('appendTailRows');
+
+    // 恢复可见 + dirty（分片首片已计数）→ 强制重挂：在途分片中止、
+    // deferred 队列（含已入队的 appendTailRows）一并丢弃
+    simulateWebMessage(tree!.root, 'visibility', {hidden: false});
+    await flushSnapshotChunks();
+    expect(messageTypesSince(baseline)).not.toContain('appendTailRows');
+
+    // 新 WebView ready：force 快照重建基线——闭包为最新 messages，
+    // a1/a2 均经快照重推（增量行不丢、无重复 appendTailRows）
+    simulateWebReady(tree!.root);
+    await flushSnapshotChunks();
+
+    expect(messageTypesSince(baseline)).not.toContain('appendTailRows');
+    const fresh = snapshotChunksSince(baseline);
+    expect(fresh.flatMap(c => c.rowIds)).toContain('a1');
+    expect(fresh.flatMap(c => c.rowIds)).toContain('a2');
+  });
 });

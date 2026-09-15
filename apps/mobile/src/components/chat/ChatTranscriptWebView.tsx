@@ -164,6 +164,15 @@ const SNAPSHOT_CHUNK_SIZE = 50;
  */
 let snapshotGenerationCounter = 0;
 
+/**
+ * 分片在途期间推迟的动作（单一队列保序，C-orch-1）：
+ * - streamFlush：流式 flush 的占位（无载荷，补发时触发两个 flush 尝试）；
+ * - post：appendTailRows / prependPage / streamCommit 三通道的完整消息。
+ */
+type DeferredSnapshotAction =
+  | {kind: 'streamFlush'}
+  | {kind: 'post'; message: HostToTranscriptMessage};
+
 function chatTranscriptWebViewPropsEqual(
   prev: ChatTranscriptWebViewProps,
   next: ChatTranscriptWebViewProps,
@@ -358,12 +367,19 @@ export const ChatTranscriptWebView = memo(
       const lastStreamCommitIdsRef = useRef<readonly string[]>([]);
       /**
        * 当前在途快照分片的代次（null=无分片在途）。新快照开新代次时覆盖，
-       * 旧循环在让步点检测到代次被顶替即中止；流式 RAF flush 读它决定是否
-       * 推迟（T-S3：分片序列必须完整先于后续 streamDelta）。
+       * 旧循环在让步点检测到代次被顶替即中止；流式 RAF flush 与三通道
+       * （appendTailRows / prependPage / streamCommit）的发送入口读它决定
+       * 是否推迟（T-S3 + C-orch-1：分片序列必须完整先于后续改画消息）。
        */
       const inFlightSnapshotGenerationRef = useRef<number | null>(null);
-      /** 快照分片在途期间被推迟的流式 flush 标记：末片 post 后统一补发。 */
-      const deferredStreamFlushRef = useRef(false);
+      /**
+       * 快照分片在途期间被推迟的动作队列（单一容器保序，C-orch-1）：
+       * - streamFlush 占位：流式 RAF flush 尝试时分片在途（T-S3，原布尔标记）；
+       * - post：三通道已构建好的消息（末片旧闭包快照会整体替换基线，直发
+       *   会被抹掉——推迟到末片 post 之后按入队原序补发）。
+       * 重挂（webReady=false）时队列一并丢弃，恢复注入链负责重推。
+       */
+      const deferredSnapshotActionsRef = useRef<DeferredSnapshotAction[]>([]);
 
       const clearLocalStreamBuffers = useCallback(() => {
         if (streamRafRef.current != null) {
@@ -402,6 +418,37 @@ export const ChatTranscriptWebView = memo(
         webRef.current?.postMessage(encodeHostToTranscript(message));
       }, []);
 
+      /**
+       * 改画基线消息的推迟发送（C-orch-1）：分片在途时 appendTailRows /
+       * prependPage / streamCommit 直发会插进分片序列中间——web 侧先按
+       * concat 渲染增量行，末片 applySnapshot 再用旧闭包快照整体替换，
+       * 增量行被抹掉且 RN 侧去重标志已推进、缺口留存。此处入 deferred
+       * 队列（与流式 flush 占位同容器保序），末片 post 后统一按原序补发。
+       */
+      const postOrDeferSnapshotPaint = useCallback(
+        (message: HostToTranscriptMessage) => {
+          if (inFlightSnapshotGenerationRef.current != null) {
+            deferredSnapshotActionsRef.current.push({kind: 'post', message});
+            return;
+          }
+          postToWeb(message);
+        },
+        [postToWeb],
+      );
+
+      /**
+       * 流式 flush 占位入队（T-S3，原布尔标记并入单队列）：队列已有占位则
+       * 不重复——flush 幂等（segments 空转），占位只承担「末片后补发一次」。
+       */
+      const enqueueDeferredStreamFlush = useCallback(() => {
+        for (const action of deferredSnapshotActionsRef.current) {
+          if (action.kind === 'streamFlush') {
+            return;
+          }
+        }
+        deferredSnapshotActionsRef.current.push({kind: 'streamFlush'});
+      }, []);
+
       const syncStreamToolInvoking = useCallback(() => {
         if (!webReady) {
           return;
@@ -422,7 +469,7 @@ export const ChatTranscriptWebView = memo(
           // 快照分片在途：推迟流式 post（segments 留队），末片 post 后由快照
           // 流程统一补发——保证分片序列完整先于后续 streamDelta（T-S3）。
           if (inFlightSnapshotGenerationRef.current != null) {
-            deferredStreamFlushRef.current = true;
+            enqueueDeferredStreamFlush();
             return;
           }
           const segments = pendingStreamDeltaSegmentsRef.current;
@@ -455,7 +502,7 @@ export const ChatTranscriptWebView = memo(
             });
           }
         });
-      }, [postToWeb]);
+      }, [postToWeb, enqueueDeferredStreamFlush]);
 
       const flushPendingStreamBatch = useCallback(() => {
         if (streamRafRef.current != null) {
@@ -465,7 +512,7 @@ export const ChatTranscriptWebView = memo(
           streamRafRef.current = null;
           // 同 flushPendingStreamDeltas：分片在途时推迟 batch post。
           if (inFlightSnapshotGenerationRef.current != null) {
-            deferredStreamFlushRef.current = true;
+            enqueueDeferredStreamFlush();
             return;
           }
           const segments = pendingStreamSegmentsRef.current;
@@ -502,7 +549,7 @@ export const ChatTranscriptWebView = memo(
             },
           });
         });
-      }, [postToWeb]);
+      }, [postToWeb, enqueueDeferredStreamFlush]);
 
       const queueStreamDelta = useCallback(
         (kind: 'text' | 'thinking', delta: string) => {
@@ -645,19 +692,28 @@ export const ChatTranscriptWebView = memo(
             // 快照末态一致」的既有时序语义；单片快照等价旧单包行为。
             syncStreamToolInvoking();
             bootTimingLog(`snapshot all chunks done (gen=${generation})`);
-            // 补发分片期间被推迟的流式 flush（T-S3：delta 晚于完整分片序列）。
-            if (deferredStreamFlushRef.current) {
-              deferredStreamFlushRef.current = false;
-              flushPendingStreamDeltas();
-              flushPendingStreamBatch();
+            // 补发分片期间被推迟的动作（单一队列按入队原序，末片 post 先于
+            // 全部补发消息）：T-S3 流式 flush + C-orch-1 三通道 post。
+            const deferredActions = deferredSnapshotActionsRef.current;
+            if (deferredActions.length > 0) {
+              deferredSnapshotActionsRef.current = [];
+              for (const action of deferredActions) {
+                if (action.kind === 'streamFlush') {
+                  flushPendingStreamDeltas();
+                  flushPendingStreamBatch();
+                } else {
+                  postToWeb(action.message);
+                }
+              }
             }
           } finally {
             if (inFlightSnapshotGenerationRef.current === generation) {
               inFlightSnapshotGenerationRef.current = null;
               if (!webReadyRef.current) {
-                // 重挂作废：推迟的流式补发一并丢弃，恢复注入链负责重推
-                //（与旧协议下 post 到未就绪 WebView 即丢失等价）。
-                deferredStreamFlushRef.current = false;
+                // 重挂作废：推迟队列（流式 flush 占位 + 三通道 post）一并
+                // 丢弃，恢复注入链负责重推（与旧协议下 post 到未就绪
+                // WebView 即丢失等价）。
+                deferredSnapshotActionsRef.current = [];
               }
             }
           }
@@ -673,6 +729,7 @@ export const ChatTranscriptWebView = memo(
           transcriptListOptions,
           flushPendingStreamDeltas,
           flushPendingStreamBatch,
+          enqueueDeferredStreamFlush,
         ],
       );
 
@@ -766,14 +823,16 @@ export const ChatTranscriptWebView = memo(
           if (rows.length === 0) {
             return;
           }
-          postToWeb({
+          // C-orch-1：分片在途时入 deferred 队列，末片 post 后补发——直发会
+          // 被 web 侧末片的旧闭包整体替换抹掉。
+          postOrDeferSnapshotPaint({
             v: 1,
             type: 'appendTailRows',
             payload: {rows},
           });
         },
         [
-          postToWeb,
+          postOrDeferSnapshotPaint,
           flags?.richText,
           agentRunning,
           messages,
@@ -799,14 +858,23 @@ export const ChatTranscriptWebView = memo(
           lastStreamCommitIdsRef.current = rows
             .filter(row => row.kind === 'message')
             .map(row => row.id);
-          postToWeb({
+          // C-orch-1：分片在途时 streamCommit 推迟到末片后补发。本地状态
+          // （buffer 清理 / streamActive / 去重 ids）照常同步推进——只推迟
+          // post 本身。tryCommitStreamTail / commitAbortOverlaySnapshot /
+          // commitSyntheticAssistantRow 均经此入口，第四入口天然覆盖。
+          postOrDeferSnapshotPaint({
             v: 1,
             type: 'streamCommit',
             payload: {rows, scrollIntent},
           });
           syncStreamToolInvoking();
         },
-        [webReady, postToWeb, clearLocalStreamBuffers, syncStreamToolInvoking],
+        [
+          webReady,
+          postOrDeferSnapshotPaint,
+          clearLocalStreamBuffers,
+          syncStreamToolInvoking,
+        ],
       );
 
       const tryCommitStreamTail = useCallback(
@@ -969,7 +1037,8 @@ export const ChatTranscriptWebView = memo(
         (prependedCount: number) => {
           const richText = flags?.richText ?? false;
           const olderMessages = messages.slice(0, prependedCount);
-          postToWeb({
+          // C-orch-1：与 appendTailRows 同款推迟——分片在途时入队，末片后补发。
+          postOrDeferSnapshotPaint({
             v: 1,
             type: 'prependPage',
             payload: {
@@ -987,7 +1056,7 @@ export const ChatTranscriptWebView = memo(
         },
         [
           messages,
-          postToWeb,
+          postOrDeferSnapshotPaint,
           flags?.richText,
           agentRunning,
           transcriptListOptions,

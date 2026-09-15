@@ -64,6 +64,19 @@ type SnapshotChunkAccumulator = {
 let appliedSnapshotGeneration = 0;
 let pendingChunkAcc: SnapshotChunkAccumulator | null = null;
 
+/**
+ * 分片收集在途时挂起的三通道动作（C-orch-1 web 侧防御）：appendTailRows /
+ * prependPage / streamCommit 若在末片之前到达（协议异常时序——RN 侧已用
+ * deferred 队列保序，此处兜底），先按到达序挂起，末片 applySnapshot 后
+ * 原序重放——末片整体替换基线会抹掉已 concat 的增量行，重放恢复之。
+ * 收集器被顶替/作废时挂起队列一并丢弃（新代次基线为准）。
+ */
+type PendingChunkAction =
+  | {kind: 'appendTail'; rows: TranscriptRow[]}
+  | {kind: 'prependPage'; rows: TranscriptRow[]}
+  | {kind: 'streamCommit'; rows: TranscriptRow[]; scrollIntent?: string};
+let pendingChunkActions: PendingChunkAction[] = [];
+
 function numberOf(value: unknown): number {
   return typeof value === 'number' && value >= 0 ? value : -1;
 }
@@ -87,12 +100,13 @@ export function handleSnapshotPayload(payload: SnapshotPayload): void {
       appliedSnapshotGeneration = generation;
       // web/B-1：单片应用新代次时同步作废在途旧代次收集器——否则其末片
       // 随后到达仍会拼装并 applySnapshot，造成已应用代次回退（当前 RN 实现
-      // 不可达，协议鲁棒性缺口）。
+      // 不可达，协议鲁棒性缺口）。挂起的三通道动作一并作废（新基线为准）。
       if (
         pendingChunkAcc != null &&
         generation >= pendingChunkAcc.generation
       ) {
         pendingChunkAcc = null;
+        pendingChunkActions = [];
       }
     }
     applySnapshot(payload);
@@ -115,7 +129,8 @@ export function handleSnapshotPayload(payload: SnapshotPayload): void {
   if (acc == null && generation <= appliedSnapshotGeneration) {
     return;
   }
-  // 新代次首片：重置收集（顶替在途旧代次，旧余片随后被上面的判旧丢弃）。
+  // 新代次首片：重置收集（顶替在途旧代次，旧余片随后被上面的判旧丢弃）；
+  // 旧收集器挂起的三通道动作随之作废（新代次基线为准）。
   if (acc == null || generation > acc.generation) {
     if (chunkIndex !== 0) {
       return;
@@ -129,6 +144,7 @@ export function handleSnapshotPayload(payload: SnapshotPayload): void {
       generating: payload.generating,
     };
     pendingChunkAcc = acc;
+    pendingChunkActions = [];
   }
   // 乱序/重复分片：丢弃（缺口无法自愈，由 force 新代次整体重发兜底）。
   if (chunkIndex !== acc.received) {
@@ -157,6 +173,28 @@ export function handleSnapshotPayload(payload: SnapshotPayload): void {
     appliedSnapshotGeneration = generation;
     pendingChunkAcc = null;
     applySnapshot(assembled);
+    // 末片应用后按原序重放分片期间挂起的三通道动作（C-orch-1 web 侧）：
+    // applySnapshot 用分片启动时的旧闭包整体替换 rows，挂起的增量行由此恢复。
+    replayPendingChunkActions();
+  }
+}
+
+/** 遍历挂起队列按到达序重放（各通道 Now 实现不再受挂起拦截）。 */
+function replayPendingChunkActions(): void {
+  if (pendingChunkActions.length === 0) {
+    return;
+  }
+  const actions = pendingChunkActions;
+  pendingChunkActions = [];
+  for (let i = 0; i < actions.length; i++) {
+    const action = actions[i];
+    if (action.kind === 'appendTail') {
+      applyAppendTailRowsNow(action.rows);
+    } else if (action.kind === 'prependPage') {
+      applyPrependPageNow(action.rows);
+    } else {
+      applyStreamCommitNow(action.rows, action.scrollIntent);
+    }
   }
 }
 
@@ -269,12 +307,21 @@ export function applySnapshot(payload: SnapshotPayload): void {
 
 /**
  * appendTailRows: 追加落库行；全量路径走 Preact renderRows（保留滚动锚点）。
+ * 分片收集在途时挂起（C-orch-1），末片应用后重放。
  */
 export function applyAppendTailRows(payload: RowsPayload): void {
   const newRows = (payload.rows || []).slice();
   if (newRows.length === 0) {
     return;
   }
+  if (pendingChunkAcc != null) {
+    pendingChunkActions.push({kind: 'appendTail', rows: newRows});
+    return;
+  }
+  applyAppendTailRowsNow(newRows);
+}
+
+function applyAppendTailRowsNow(newRows: TranscriptRow[]): void {
   const scroller = document.getElementById('scroller');
   const wasNearBottom = state.nearBottom;
   const prevOffsetFromBottom = scroller ? offsetFromBottom(scroller) : 0;
@@ -317,8 +364,27 @@ export function promoteStreamTailToRow(row: TranscriptRow): boolean {
   return true;
 }
 
+/**
+ * streamCommit: 流式结束单次提交 — 清 stream 状态、追加落库行；优先 promote #stream-tail。
+ * 分片收集在途时挂起（C-orch-1），末片应用后重放。
+ */
 export function applyStreamCommit(payload: RowsPayload): void {
   const newRows = (payload.rows || []).slice();
+  if (pendingChunkAcc != null) {
+    pendingChunkActions.push({
+      kind: 'streamCommit',
+      rows: newRows,
+      scrollIntent: payload.scrollIntent,
+    });
+    return;
+  }
+  applyStreamCommitNow(newRows, payload.scrollIntent);
+}
+
+function applyStreamCommitNow(
+  newRows: TranscriptRow[],
+  scrollIntent?: string,
+): void {
   const toAppend: TranscriptRow[] = [];
   for (let i = 0; i < newRows.length; i++) {
     const row = newRows[i];
@@ -361,11 +427,11 @@ export function applyStreamCommit(payload: RowsPayload): void {
   }
   // 定稿行落库后触发 mermaid 扫描（流式期保留的源码占位在此转图表）
   scheduleMermaidScan();
-  const scrollIntent = payload.scrollIntent || 'preserve';
+  const resolvedScrollIntent = scrollIntent || 'preserve';
   if (scroller) {
-    if (scrollIntent === 'preserve' && wasNearBottom) {
+    if (resolvedScrollIntent === 'preserve' && wasNearBottom) {
       stickToBottom(scroller);
-    } else if (scrollIntent === 'preserve') {
+    } else if (resolvedScrollIntent === 'preserve') {
       scroller.scrollTop = scrollTopForOffsetFromBottom(
         scroller.scrollHeight,
         scroller.clientHeight,
@@ -380,9 +446,18 @@ export function applyStreamCommit(payload: RowsPayload): void {
 /**
  * prependPage: only new older rows — NOT a full sessionSnapshot reload.
  * Anchor reading position: scrollTop += scrollHeight - prependedScrollHeight.
+ * 分片收集在途时挂起（C-orch-1），末片应用后重放。
  */
 export function applyPrependPage(payload: RowsPayload): void {
   const newRows = (payload.rows || []).slice();
+  if (pendingChunkAcc != null) {
+    pendingChunkActions.push({kind: 'prependPage', rows: newRows});
+    return;
+  }
+  applyPrependPageNow(newRows);
+}
+
+function applyPrependPageNow(newRows: TranscriptRow[]): void {
   const scroller = document.getElementById('scroller');
   const prependedScrollHeight = scroller ? scroller.scrollHeight : 0;
   const prependedScrollTop = scroller ? scroller.scrollTop : 0;

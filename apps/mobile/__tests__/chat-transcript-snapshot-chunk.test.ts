@@ -464,6 +464,80 @@ describe('sessionSnapshot 分片拼装（init-busy-yield Step 6）', () => {
     expect(scrollSnapshotPostCount()).toBe(1);
   });
 
+  it('C-orch-1 web 防御: 分片收集在途 appendTailRows 挂起，末片应用后重放——增量行不丢', () => {
+    const {snapshot, state} = loadFreshModules();
+
+    snapshot.handleSnapshotPayload({
+      generation: 1,
+      chunkIndex: 0,
+      chunkTotal: 2,
+      sessionKey: 'p1:s1',
+      hasMore: false,
+      rows: makeRows('a', 2),
+    });
+    // 分片在途：appendTailRows 到达（协议异常时序——RN 修复后不可达，
+    // 此处钉住 web 侧兜底行为）→ 挂起，不 concat、不渲染。
+    snapshot.applyAppendTailRows({rows: makeRows('inc', 1)});
+    expect(state.rows).toHaveLength(0);
+    expect(renderRows).not.toHaveBeenCalled();
+
+    snapshot.handleSnapshotPayload({
+      generation: 1,
+      chunkIndex: 1,
+      chunkTotal: 2,
+      sessionKey: 'p1:s1',
+      hasMore: false,
+      rows: makeRows('b', 1),
+      scrollIntent: 'stick',
+    });
+    flushRaf();
+
+    // 末片整体替换后挂起动作按原序重放：增量行恢复，不丢
+    expect(state.rows.map(row => row.id)).toEqual([
+      'a-0',
+      'a-1',
+      'b-0',
+      'inc-0',
+    ]);
+    expect(renderRows).toHaveBeenCalled();
+  });
+
+  it('C-orch-1 web 防御: 挂起队列随收集器被新代次顶替而作废——不跨代次重放', () => {
+    const {snapshot, state} = loadFreshModules();
+
+    snapshot.handleSnapshotPayload({
+      generation: 1,
+      chunkIndex: 0,
+      chunkTotal: 2,
+      sessionKey: 'p1:s1',
+      hasMore: false,
+      rows: makeRows('a', 1),
+    });
+    snapshot.applyAppendTailRows({rows: makeRows('inc', 1)});
+    // gen2 新代次首片到达：gen1 收集器连同挂起队列作废（新基线为准）
+    snapshot.handleSnapshotPayload({
+      generation: 2,
+      chunkIndex: 0,
+      chunkTotal: 2,
+      sessionKey: 'p1:s1',
+      hasMore: false,
+      rows: makeRows('n', 1),
+    });
+    snapshot.handleSnapshotPayload({
+      generation: 2,
+      chunkIndex: 1,
+      chunkTotal: 2,
+      sessionKey: 'p1:s1',
+      hasMore: false,
+      rows: makeRows('n-tail', 1),
+      scrollIntent: 'stick',
+    });
+    flushRaf();
+
+    // 旧代次的挂起增量行不重放（其语义锚定的旧基线已被顶替）
+    expect(state.rows.map(row => row.id)).toEqual(['n-0', 'n-tail-0']);
+  });
+
   it('旧协议载荷（无分片字段）直发 applySnapshot——等价单片行为', () => {
     const {snapshot, state} = loadFreshModules();
 
