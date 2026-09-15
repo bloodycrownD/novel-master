@@ -180,6 +180,12 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
         mobilePackage.version,
       );
       if (cancelled) {
+        // svc/B-2：此刻 Manager 已构造（事件订阅、AppState 订阅、通知点按
+        // 注册均已生效），直接 return 会泄漏——对齐 bootToken>0 分支的
+        // 先 detach 模式：先 dispose（退订 + 清 refcount + 停前台服务 +
+        // 写通尽力落盘），再销毁数据库连接。
+        runtime.sessionStreamUnitManager.dispose();
+        await closeMobileConnection();
         return;
       }
       setRuntime(runtime);
