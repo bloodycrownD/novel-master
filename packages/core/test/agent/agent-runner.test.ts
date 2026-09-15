@@ -244,8 +244,9 @@ describe("AgentRunner", () => {
     assert.equal(result.stepsExecuted, 0);
   });
 
-  // T-SR5��runner �� append ���� text �� assistant��hasMeaningfulAssistantBlocks��
-  it("T-SR5: �� append ���� text �� assistant", async () => {
+  // T-SR5：空文本 blocks 不落原始 assistant（hasMeaningfulAssistantBlocks 判空），
+  // 改落占位 assistant——core/B-2：尾部停在 user 会锁死双端 composer。
+  it("T-SR5: 空文本 blocks 不落原始 assistant，改落占位消息", async () => {
     const session = new InMemoryAgentSession();
     await session.append("user", textBlocks("go"));
 
@@ -280,8 +281,14 @@ describe("AgentRunner", () => {
     assert.equal(result.stopReason, "completed");
     assert.equal(model.callCount(), 1);
     const msgs = await session.list();
-    assert.equal(msgs.length, 1, "�������������� assistant");
+    // 空文本不落原始 assistant，改落占位（core/B-2）
+    assert.equal(msgs.length, 2);
     assert.equal(msgs[0]!.role, "user");
+    assert.equal(msgs[1]!.role, "assistant");
+    const tailTexts = msgs[1]!.content.blocks
+      .filter((b) => b.type === "text")
+      .map((b) => (b as { text: string }).text);
+    assert.deepEqual(tailTexts, ["（本次生成无内容输出）"]);
   });
 
   it("T-ARP-C1: abort + text/thinking blocks ��� partial assistant���� tool_results", async () => {

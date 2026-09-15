@@ -618,6 +618,36 @@ export class DefaultAgentRunner implements AgentRunner {
           break;
         }
 
+        // B-2（成功空回复解锁 composer）：model 请求成功但无 meaningful
+        // assistant 内容（blocks 为空或全空白文本）时，run 虽以 FINISHED
+        // 收尾，但会话尾部停在 user——双端 composer 的连续 user 守卫
+        // （lastMessageIsPlainUserText）恒真、输入框锁死。落一条 assistant
+        // 占位消息让尾部变 assistant，守卫自然解锁。豁免与失败落消息同款：
+        // ① persistMessages=false（EphemeralOverlay run 落了不可见）；
+        // ② 本轮已有 assistant 落库（assistantAppendedInRun——多步 run 中途
+        //    空回合时尾部是 tool_results user，本就不锁，再落会双条）。
+        // 占位不带 usage/raw——模型没有产出可统计的内容，避免脏统计行。
+        // 能走到这里且未置位，本 step 必无 tool_use，后继必然 finished。
+        if (persistMessages && !assistantAppendedInRun) {
+          try {
+            await session.append("assistant", {
+              blocks: [{ type: "text", text: "（本次生成无内容输出）" }],
+            });
+            assistantAppendedInRun = true;
+          } catch (appendError) {
+            // 占位落库失败不把成功 run 翻成 FAILED：记日志后照常收尾。
+            console.error(
+              "[agent-runner] empty_reply_placeholder_append_failed",
+              {
+                stage: "empty_reply_placeholder_append",
+                sessionId,
+                projectId,
+                error: appendError,
+              }
+            );
+          }
+        }
+
         const toolUses = result.blocks.filter(
           (b): b is ToolUseBlock => b.type === "tool_use"
         );
