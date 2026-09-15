@@ -18,7 +18,7 @@ import notifee, {
   EventType,
 } from '@notifee/react-native';
 import {AppState, Platform} from 'react-native';
-import {navigationContainerRef} from '@/navigation/navigation-container-ref';
+import type {navigationContainerRef as NavigationContainerRef} from '@/navigation/navigation-container-ref';
 import {timingLog} from '@/debug/run-timing';
 
 /** 完成通知 channel（IMPORTANCE_DEFAULT：有横幅、不响铃）。 */
@@ -481,6 +481,13 @@ export function registerAgentNotificationTapHandling(
 
 /** 通知点按后的编程式导航：回根 stack 并落到 Chat tab。 */
 export function navigateToChatTabFromNotification(): void {
+  // 惰性 require：本模块对 navigation-container-ref 的顶层 import 在特定
+  // 依赖解析顺序下会构成 metro 运行时 require-cycle 报错（点按导航链），
+  // 调用时导航模块早已初始化完毕，按需引入即可打破初始化期环。
+  const {navigationContainerRef} =
+    require('@/navigation/navigation-container-ref') as {
+      navigationContainerRef: typeof NavigationContainerRef;
+    };
   const ref = navigationContainerRef;
   if (!ref.isReady()) {
     return;

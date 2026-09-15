@@ -16,6 +16,8 @@
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "baseUrl": ".",
+    // TS 6.0 起 baseUrl 弃用告警为 error；路径别名仍依赖它，7.0 前显式压掉。
+    "ignoreDeprecations": "6.0",
     "paths": {
       "@/*": ["src/*"],
       // 给误用 RN tsconfig 打开 web 文件的工具一条退路；正式类型检查以 src/web/tsconfig 为准
