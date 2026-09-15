@@ -29,9 +29,26 @@ jest.mock('../src/components/chat/ChatMetaBar', () => ({
 jest.mock('../src/components/chat/ChatStreamMetricsBarLive', () => ({
   ChatStreamMetricsBarLive: () => null,
 }));
-jest.mock('../src/components/chat/ChatTranscriptWebView', () => ({
-  ChatTranscriptWebView: () => null,
-}));
+
+// webview mock：经 ref 暴露可记录的 commitSyntheticAssistantRow（ui/B-1
+// 中断现场用例的断言面）；组件本体渲染 null，其余 props 不消费。
+const mockCommitSyntheticAssistantRow = jest.fn(() => true);
+jest.mock('../src/components/chat/ChatTranscriptWebView', () => {
+  const mockReact = require('react');
+  return {
+    ChatTranscriptWebView: mockReact.forwardRef(
+      (
+        _props: unknown,
+        ref: React.Ref<{commitSyntheticAssistantRow: unknown}>,
+      ) => {
+        mockReact.useImperativeHandle(ref, () => ({
+          commitSyntheticAssistantRow: mockCommitSyntheticAssistantRow,
+        }));
+        return null;
+      },
+    ),
+  };
+});
 jest.mock('../src/components/chat/MessageList', () => ({
   MessageList: () => null,
 }));
@@ -60,6 +77,7 @@ jest.mock('../src/components/chrome/ToastHost', () => ({
 
 import {ChatConversationPanel} from '../src/screens/tabs/chat-tab/ChatConversationPanel';
 import type {VfsFileManagerHandle} from '../src/components/vfs/VfsFileManager';
+import type {SessionStreamUnitView} from '../src/services/session-stream-unit';
 
 const tokens = {
   background: '#000',
@@ -254,5 +272,125 @@ describe('ChatConversationPanel workspace reload', () => {
     });
 
     expect(mockReload).toHaveBeenCalled();
+  });
+});
+
+// ── 中断现场合成行提交（cr-fix-spec ui/B-1 / ui/C-1）─────────────────────
+//
+// 时序背景：重进 interrupted 会话的常态是 tail（单元投影水合）先于 webview
+// ready 到达——webReady=false 时 commitSyntheticAssistantRow 被组件守卫拒绝
+// 且不置去重键，若 effect 只依赖投影变化，此后永不重跑、partial 永不提交。
+// 修复把 ready 世代（ctx.transcriptReadyEpoch）纳入依赖，ready 后补交。
+
+/** interrupted 投影工厂：默认携带非空 partial（runId/settledAtMs 固定）。 */
+function interruptedUnitView(
+  overrides?: Partial<SessionStreamUnitView>,
+): SessionStreamUnitView {
+  return {
+    sessionId: 's1',
+    projectId: 'p1',
+    status: 'interrupted',
+    runId: 'run-1',
+    settledAtMs: 1234,
+    metrics: {textChars: 5, thinkingChars: 2},
+    startedAtMs: 100,
+    elapsedMs: 1134,
+    partialText: '中断前的正文',
+    partialThinking: '中断前的思考',
+    injected: false,
+    pendingChildren: [],
+    pendingChildrenByTitle: new Map(),
+    messages: [],
+    hasMoreMessages: false,
+    loadingMoreMessages: false,
+    ...overrides,
+  };
+}
+
+describe('ChatConversationPanel 中断现场合成行提交（ui/B-1）', () => {
+  // 时序驱动变量：模拟 Provider 侧的投影水合与 ready 世代推进。
+  let mockUnitView: SessionStreamUnitView | null;
+  let mockReadyEpoch: number;
+
+  function InterruptedTestHost() {
+    const workspaceVfsRef = useRef<VfsFileManagerHandle>(null);
+    const ctx = makeMockContext(workspaceVfsRef) as ReturnType<
+      typeof useChatTabContext
+    > & {
+      unitView: SessionStreamUnitView | null;
+      transcriptReadyEpoch: number;
+    };
+    ctx.unitView = mockUnitView;
+    ctx.transcriptReadyEpoch = mockReadyEpoch;
+    ctx.useWebviewTranscript = true;
+    mockUseChatTabContext.mockReturnValue(ctx);
+    return <ChatConversationPanel tokens={tokens} visible />;
+  }
+
+  let tree: TestRenderer.ReactTestRenderer | undefined;
+
+  beforeEach(() => {
+    mockCommitSyntheticAssistantRow.mockClear().mockReturnValue(true);
+    mockUnitView = interruptedUnitView();
+    mockReadyEpoch = 0;
+  });
+
+  afterEach(() => {
+    if (tree != null) {
+      act(() => {
+        tree!.unmount();
+      });
+    }
+    tree = undefined;
+  });
+
+  it('ui/B-1: 进入 interrupted 会话、tail 先于 webview ready，ready 后合成行仍提交', async () => {
+    await act(async () => {
+      tree = TestRenderer.create(<InterruptedTestHost />);
+      await flushPromises();
+    });
+
+    // tail（投影水合）已到、webview 未 ready：不提交（守卫拒绝且不置键）
+    expect(mockCommitSyntheticAssistantRow).not.toHaveBeenCalled();
+
+    // webview ready：ready 世代递增（Provider 的 onReady bump），effect 重跑补交
+    mockReadyEpoch = 1;
+    await act(async () => {
+      tree!.update(<InterruptedTestHost />);
+      await flushPromises();
+    });
+
+    expect(mockCommitSyntheticAssistantRow).toHaveBeenCalledTimes(1);
+    expect(mockCommitSyntheticAssistantRow).toHaveBeenCalledWith(
+      '中断前的正文',
+      '中断前的思考',
+    );
+  });
+
+  it('ui/B-1: 同一中断现场不重复提交（runId+settledAtMs 去重），webview 重挂后重新提交', async () => {
+    mockReadyEpoch = 1;
+    await act(async () => {
+      tree = TestRenderer.create(<InterruptedTestHost />);
+      await flushPromises();
+    });
+    expect(mockCommitSyntheticAssistantRow).toHaveBeenCalledTimes(1);
+
+    // 同一 run 的投影再次换新引用（字段微变，runId+settledAtMs 不变）：
+    // 不重复提交
+    mockUnitView = interruptedUnitView({metrics: {textChars: 99, thinkingChars: 2}});
+    await act(async () => {
+      tree!.update(<InterruptedTestHost />);
+      await flushPromises();
+    });
+    expect(mockCommitSyntheticAssistantRow).toHaveBeenCalledTimes(1);
+
+    // webview 重挂：ready 世代递增 = 新空基线（落库行经快照链重推，合成行
+    // 不在落库消息里），同键须在新世代重新提交
+    mockReadyEpoch = 2;
+    await act(async () => {
+      tree!.update(<InterruptedTestHost />);
+      await flushPromises();
+    });
+    expect(mockCommitSyntheticAssistantRow).toHaveBeenCalledTimes(2);
   });
 });

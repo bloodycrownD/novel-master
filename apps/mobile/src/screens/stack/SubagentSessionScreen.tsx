@@ -35,6 +35,7 @@ import {useRuntime} from '../../hooks/useRuntime';
 import {useNovelMaster} from '../../runtime/novel-master-context';
 import {readChatRichTextEnabled} from '../../storage/chat-rich-text-pref';
 import {resolveChatLinkIntent} from '@/screens/tabs/chat-tab/chat-link-nav';
+import {useInterruptedPartialCommit} from '@/screens/tabs/chat-tab/useInterruptedPartialCommit';
 import {useTheme} from '../../theme/ThemeProvider';
 import type {RootStackParamList} from '../../navigation/types';
 import type {SessionStreamUnitView} from '@/services/session-stream-unit';
@@ -149,36 +150,15 @@ export function SubagentSessionScreen() {
     };
   }, [manager, sessionId, webviewReadyEpoch, hasUnit]);
 
-  // 中断现场渲染（Step 6，与主屏同一语义）：水合出的 interrupted 单元
-  // 携带 partial 时合成只读终态行呈现；runId+settledAtMs 去重。
-  const interruptedCommitKeyRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (unitView?.status !== 'interrupted') {
-      return;
-    }
-    if (
-      unitView.partialText.length === 0 &&
-      unitView.partialThinking.length === 0
-    ) {
-      return;
-    }
-    const web = transcriptWebRef.current;
-    if (web == null) {
-      return;
-    }
-    const key = `${unitView.runId ?? ''}:${unitView.settledAtMs ?? 0}`;
-    if (interruptedCommitKeyRef.current === key) {
-      return;
-    }
-    if (
-      web.commitSyntheticAssistantRow(
-        unitView.partialText,
-        unitView.partialThinking,
-      )
-    ) {
-      interruptedCommitKeyRef.current = key;
-    }
-  }, [unitView, transcriptWebRef]);
+  // 中断现场渲染（Step 6，语义说明见 hook 模块头）：与主屏
+  // ChatConversationPanel 共用同一份 effect（ui/C-1 抽取）；本屏的
+  // webviewReadyEpoch 直接入参，ready 世代驱动修 ui/B-1 的
+  // 「tail 先于 webview ready 到达」时序。
+  useInterruptedPartialCommit({
+    unitView,
+    webRef: transcriptWebRef,
+    readyEpoch: webviewReadyEpoch,
+  });
 
   // 嵌套子会话（孙会话）也共享同一个根父工作区，因此透传同一个 parentSessionId，
   // 而不是当前子会话的 id。

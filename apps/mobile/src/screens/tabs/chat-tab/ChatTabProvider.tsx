@@ -143,6 +143,12 @@ export type ChatTabContextValue = {
   readonly mermaidViewerCloseSignal: number;
   /** WebView onReady 接线：bump ready 世代，驱动句柄 attach 进 manager。 */
   readonly onTranscriptWebviewReady: () => void;
+  /**
+   * WebView ready 世代（每次 onReady 递增，0 = 尚未 ready）：除句柄 attach
+   * 外，也是「ready 前到达的投影动作」的补交驱动（如中断现场合成行提交
+   * useInterruptedPartialCommit——ui/B-1 的 tail 先于 ready 时序）。
+   */
+  readonly transcriptReadyEpoch: number;
   readonly onLoadOlderMessages: () => void;
   readonly onOpenFileEditor: (
     path: string,
@@ -487,6 +493,7 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
       setMermaidViewerOpen,
       mermaidViewerCloseSignal,
       onTranscriptWebviewReady,
+      transcriptReadyEpoch,
       onLoadOlderMessages,
       onOpenFileEditor: scope.openFileEditor,
       onNeedModel: () => setModelPickerOpen(true),
@@ -528,6 +535,7 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
       mermaidViewerOpen,
       mermaidViewerCloseSignal,
       onTranscriptWebviewReady,
+      transcriptReadyEpoch,
       onLoadOlderMessages,
       navigation,
       showToast,
