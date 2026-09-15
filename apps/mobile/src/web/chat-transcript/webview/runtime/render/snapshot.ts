@@ -10,6 +10,8 @@ import {closeContextMenu} from '../menu/menu';
 import {scrollTopForOffsetFromBottom} from '../../../../../webview-host/chat-transcript/scroll';
 import {renderRows} from './row-logic';
 import {
+  getRowWindowRange,
+  getRowWindowSpacerPxTotal,
   handleRowWindowScroll,
   notePrependHeightDelta,
   resetRowWindowForSnapshot,
@@ -83,6 +85,15 @@ export function handleSnapshotPayload(payload: SnapshotPayload): void {
         return;
       }
       appliedSnapshotGeneration = generation;
+      // web/B-1：单片应用新代次时同步作废在途旧代次收集器——否则其末片
+      // 随后到达仍会拼装并 applySnapshot，造成已应用代次回退（当前 RN 实现
+      // 不可达，协议鲁棒性缺口）。
+      if (
+        pendingChunkAcc != null &&
+        generation >= pendingChunkAcc.generation
+      ) {
+        pendingChunkAcc = null;
+      }
     }
     applySnapshot(payload);
     return;
@@ -375,6 +386,12 @@ export function applyPrependPage(payload: RowsPayload): void {
   const scroller = document.getElementById('scroller');
   const prependedScrollHeight = scroller ? scroller.scrollHeight : 0;
   const prependedScrollTop = scroller ? scroller.scrollTop : 0;
+  // web/C-1：retarget 前捕获窗口 start 与占位 DOM 真值（retarget 会清零
+  // 上占位并把这些行换进窗口），采样时据此扣除占位漂移、并入分母。
+  const prependSpacerBefore = {
+    rows: getRowWindowRange(state.rows.length).start,
+    spacerPx: getRowWindowSpacerPxTotal(),
+  };
   state.rows = newRows.concat(state.rows);
   state.loadOlderArmed = true;
   // 窗口按视口读位重定位（渲染前、旧 DOM 旧坐标系）：视口在顶部附近时
@@ -386,11 +403,13 @@ export function applyPrependPage(payload: RowsPayload): void {
     const nextScrollHeight = scroller.scrollHeight;
     scroller.scrollTop =
       prependedScrollTop + (nextScrollHeight - prependedScrollHeight);
-    // 占位估算校正（Step 7）：差值恰为新行真实平均高度（新行全进窗口、
-    // 占位零变化），并入 EWMA 后续 prepend / 扩窗估算更准。
+    // 占位估算校正（Step 7）：新行全进窗口后差值折算为窗口新增行的真实
+    // 平均高度（web/C-1：扣除占位置换/漂移），并入 EWMA 后续 prepend /
+    // 扩窗估算更准。
     notePrependHeightDelta(
       nextScrollHeight - prependedScrollHeight,
       newRows.length,
+      prependSpacerBefore,
     );
     // 窗口超稳态的部分收敛（新行全进窗口后窗口变长；下端收缩不动
     // scrollTop，不破坏刚补偿的读位）。

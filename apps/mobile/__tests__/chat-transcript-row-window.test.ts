@@ -465,6 +465,23 @@ describe('RowList 窗口化（init-busy-yield Step 7, T-W1）', () => {
         6,
       );
     });
+
+    it('web/C-1: prepend 前窗口 start>0——上占位置换差被扣除，avgSlotPx 不被拉偏', () => {
+      mods.state.rows = makeRows('r', 500) as never;
+      // 视口在中部：窗口 (180, 280)，prepend 前上占位 180 行
+      mods.windowing.retargetRowWindow(500, 200);
+      mods.renderRows();
+      mods.windowing.measureRowWindow(); // avg: 120 → 110（窗口行真实 80）
+      expect(mods.windowing.getRowWindowAvgSlotPx()).toBe(110);
+
+      mods.snapshot.applyPrependPage({rows: makeRows('p', 40) as never});
+
+      // 差值 = 新进窗口行真实高 − 上占位估算高 = 220×80 − 180×110 = −2200；
+      // 修复后采样 = (−2200 + 180×110) / (40+180) = 80（真实槽高），
+      // EWMA 110 → 102.5。未修复时负差值直接跳过（avg 停留 110）或
+      // 不扣分母的错实现会得 440（avg → 192.5），均被此断言拦下。
+      expect(mods.windowing.getRowWindowAvgSlotPx()).toBeCloseTo(102.5, 6);
+    });
   });
 
   describe('applyPrependPage 锚定（T-W1 核心：±1 平均行高容差）', () => {

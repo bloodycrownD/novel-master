@@ -313,16 +313,46 @@ function firstOrLastRowEl(last: boolean): LayoutBox | null {
 }
 
 /**
+ * 当前上下占位的像素总高（无占位元素按 0 计）：prepend 差值采样时
+ * 扣除占位漂移用（DOM 真值，不受 avg 实测更新与渲染先后差影响）。
+ */
+export function getRowWindowSpacerPxTotal(): number {
+  let total = 0;
+  const topSpacer = document.getElementById(ROW_WINDOW_TOP_SPACER_ID);
+  if (topSpacer) total += topSpacer.offsetHeight;
+  const bottomSpacer = document.getElementById(ROW_WINDOW_BOTTOM_SPACER_ID);
+  if (bottomSpacer) total += bottomSpacer.offsetHeight;
+  return total;
+}
+
+/**
  * prepend 后的占位估算校正（任务点：按 scrollHeight 差值校正一次）：
  * 差值折算到新行的平均高度，并入 EWMA 样本——新行未全进窗口时
  * （差值里混有占位估算），measure 覆盖不到的部分由此兜底收敛。
+ *
+ * 前提修正（web/C-1）：retargetRowWindowForPrepend 会把上占位清零并让
+ * 原上占位区行换进窗口（估算高→真实高），「差值恰为新行真实总高」仅在
+ * prepend 前窗口 start=0（上占位本就为零）时成立。start>0 时差值混入
+ * 占位置换差；上下占位高度还可能因 avg 实测更新在前后两次渲染间漂移。
+ * topSpacerBefore 由调用方在 retarget 前捕获（窗口 start + 占位 DOM 真值）：
+ * 采样时扣除占位漂移、分母并入被置换行数，样本恢复为「窗口新增行的
+ * 真实平均高」。缺省时保持旧行为（不扣除、分母仅新行数）。
  */
 export function notePrependHeightDelta(
   heightDeltaPx: number,
   prependedRows: number,
+  topSpacerBefore?: {rows: number; spacerPx: number},
 ): void {
-  if (!(heightDeltaPx > 0) || prependedRows <= 0) return;
-  const per = heightDeltaPx / prependedRows;
+  const displacedRows = topSpacerBefore?.rows ?? 0;
+  const spacerPxBefore =
+    topSpacerBefore?.spacerPx ?? getRowWindowSpacerPxTotal();
+  const sampledRows = prependedRows + displacedRows;
+  if (prependedRows <= 0 || sampledRows <= 0) {
+    return;
+  }
+  const per =
+    (heightDeltaPx - (getRowWindowSpacerPxTotal() - spacerPxBefore)) /
+    sampledRows;
   if (!(per > 0)) return;
   avgSlotPx =
     avgSlotPx * (1 - ROW_WINDOW_AVG_ALPHA) + per * ROW_WINDOW_AVG_ALPHA;

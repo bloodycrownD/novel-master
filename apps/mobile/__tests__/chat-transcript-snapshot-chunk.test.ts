@@ -414,6 +414,56 @@ describe('sessionSnapshot 分片拼装（init-busy-yield Step 6）', () => {
     });
   });
 
+  it('web/B-1: 单片应用新代次时作废在途旧代次收集器——迟到旧末片不回退代次', () => {
+    const {snapshot, state} = loadFreshModules();
+
+    // gen5 收集到 2/3：在途
+    snapshot.handleSnapshotPayload({
+      generation: 5,
+      chunkIndex: 0,
+      chunkTotal: 3,
+      sessionKey: 'p1:s1',
+      hasMore: false,
+      rows: makeRows('old', 1),
+    });
+    snapshot.handleSnapshotPayload({
+      generation: 5,
+      chunkIndex: 1,
+      chunkTotal: 3,
+      sessionKey: 'p1:s1',
+      hasMore: false,
+      rows: makeRows('old', 1),
+    });
+    // gen6 以单片形态直接应用：在途 gen5 收集器须同步作废
+    snapshot.handleSnapshotPayload({
+      generation: 6,
+      chunkIndex: 0,
+      chunkTotal: 1,
+      sessionKey: 'p1:s1',
+      hasMore: false,
+      rows: makeRows('n', 2),
+      scrollIntent: 'stick',
+    });
+    flushRaf();
+    expect(state.rows.map(row => row.id)).toEqual(['n-0', 'n-1']);
+    expect(renderRows).toHaveBeenCalledTimes(1);
+
+    // gen5 末片迟到：收集器已作废，不拼装、不产生第二次 applySnapshot
+    snapshot.handleSnapshotPayload({
+      generation: 5,
+      chunkIndex: 2,
+      chunkTotal: 3,
+      sessionKey: 'p1:s1',
+      hasMore: false,
+      rows: makeRows('old', 1),
+      scrollIntent: 'stick',
+    });
+    flushRaf();
+    expect(state.rows.map(row => row.id)).toEqual(['n-0', 'n-1']);
+    expect(renderRows).toHaveBeenCalledTimes(1);
+    expect(scrollSnapshotPostCount()).toBe(1);
+  });
+
   it('旧协议载荷（无分片字段）直发 applySnapshot——等价单片行为', () => {
     const {snapshot, state} = loadFreshModules();
 
