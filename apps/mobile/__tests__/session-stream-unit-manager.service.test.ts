@@ -148,12 +148,21 @@ describe('SessionStreamUnitManager', () => {
     publishStarted(h.eventBus, 'a', 'r1');
     expect(h.manager.snapshot('a')).toBe(null);
 
+    // svc/C-1：run 收尾已把 settled 投影写入 manager 级常驻 map，水合
+    // 完成前读取口同样恒 null（读侧不提前 expose，与 snapshot 语义对齐）
+    publishFinished(h.eventBus, 'a', 'r1');
+    expect(h.manager.getSettledProjection('a')).toBe(null);
+
     h.manager.markHydrated();
     expect(h.manager.isHydrated()).toBe(true);
-    // 受理 + RUN_STARTED + markHydrated 各通知一次（水合前通知照发、投影读 null）
-    expect(notified).toEqual(['notify', 'notify', 'notify']);
+    // 受理 + RUN_STARTED + 收尾 + markHydrated 各通知一次（水合前通知照发、投影读 null）
+    expect(notified).toEqual(['notify', 'notify', 'notify', 'notify']);
     expect(h.manager.snapshot('a')).toEqual(
-      expect.objectContaining({status: 'running', runId: 'r1'}),
+      expect.objectContaining({status: 'finished', runId: 'r1'}),
+    );
+    // 水合完成后 settled 投影可读
+    expect(h.manager.getSettledProjection('a')).toEqual(
+      expect.objectContaining({sessionId: 'a'}),
     );
   });
 
@@ -527,14 +536,22 @@ describe('SessionStreamUnitManager', () => {
   });
 
   it('T-X1: interruptedSessionIds 数据源——interrupted 单元入集；替换/删除出集；迁移经 subscribe 通知', () => {
-    const h = createHarness();
+    const h = createHarness({skipHydrate: true});
     let notified = 0;
     h.manager.subscribe(() => {
       notified += 1;
     });
 
-    // 水合回填：interrupted 单元入集并通知（notifyChanged 驱动 UI 刷新）
+    // svc/C-1：markHydrated 前读取口守卫——水合分片已 adopt 的 interrupted
+    // 单元虽在注册表中，读取口仍返回空集（与 snapshot 恒 null 语义对齐，
+    // 徽标不分批跳变）
     h.manager.adoptInterruptedUnit('a', 'p');
+    expect(h.manager.isHydrated()).toBe(false);
+    expect(h.manager.interruptedSessionIds().size).toBe(0);
+
+    // 水合完成：interrupted 单元入集并通知（notifyChanged 驱动 UI 刷新）
+    h.manager.markHydrated();
+    expect(new Set(h.manager.interruptedSessionIds())).toEqual(new Set(['a']));
     h.manager.adoptInterruptedUnit('b', 'p');
     expect(new Set(h.manager.interruptedSessionIds())).toEqual(
       new Set(['a', 'b']),

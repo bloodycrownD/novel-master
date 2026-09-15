@@ -605,10 +605,16 @@ export class SessionStreamUnitManager {
    * settled 投影读取（Step 6 指标条消费面）：该会话「上次生成」的冻结
    * 快照；无收尾记录为 null。运行中单元的实时指标走 snapshot(sessionId)
    * 的 metrics/startedAtMs（消费方按需合并两源）。
+   *
+   * 水合完成前恒 null（svc/C-1，与 snapshot 恒 null 语义对齐）——否则
+   * 水合分片回填 settled 行期间会读到渐进增长的投影，指标条分批跳变。
    */
   getSettledProjection(
     sessionId: string,
   ): SessionStreamSettledProjection | null {
+    if (!this.hydratedValue) {
+      return null;
+    }
     return this.settledProjections.get(sessionId) ?? null;
   }
 
@@ -671,8 +677,15 @@ export class SessionStreamUnitManager {
    * LRU 淘汰）的 sessionId 集合（Step 9 会话列表「已中断」徽标的数据源）。
    * 变更沿与 activeSessionIds 同款：单元状态迁移均经 notifyChanged/subscribe
    * 通知，UI 侧订阅驱动刷新。
+   *
+   * 水合完成前恒空集（svc/C-1，与 snapshot 恒 null 语义对齐）——否则
+   * 水合分片逐行 adopt interrupted 单元期间会读到渐进增长的集合，徽标
+   * 分批跳变。
    */
   interruptedSessionIds(): ReadonlySet<string> {
+    if (!this.hydratedValue) {
+      return new Set<string>();
+    }
     const ids = new Set<string>();
     for (const [sessionId, unit] of this.units) {
       if (unit.getStatus() === 'interrupted') {
