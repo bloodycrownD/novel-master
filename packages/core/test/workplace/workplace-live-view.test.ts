@@ -150,11 +150,21 @@ describe("worktree materializeLiveView", () => {
       inclusionMode: "show",
     });
 
+    // loadContextMetadata 兜底过滤后，VFS 条目已删的残留规则不再把
+    // /55 渲染成幽灵目录（原断言「幽灵可见」随兜底过滤行为变更而调整）
     let rows = await wt.buildListRows();
-    assert.ok(rows.some((r) => r.kind === "dir" && r.path === "/55"));
+    assert.ok(!rows.some((r) => r.path === "/55" || r.path.startsWith("/55/")));
+
+    const repo = new SqliteWorkplaceRepository(ctx.conn);
+    const scopeKey = `session:${session.id}`;
+    assert.ok(
+      (await repo.findFileRule(scopeKey, "/55/诗歌.txt")) != null,
+      "清理前残留规则行应存在",
+    );
 
     await wt.deleteRulesUnderLogicalPrefix("/55");
 
+    assert.equal(await repo.findFileRule(scopeKey, "/55/诗歌.txt"), null);
     rows = await wt.buildListRows();
     assert.ok(!rows.some((r) => r.path === "/55" || r.path.startsWith("/55/")));
   });
@@ -302,5 +312,106 @@ describe("worktree materializeLiveView", () => {
     assert.ok((await repo.findDirRule(fileScopeKey, "/原")) != null);
     assert.ok((await repo.findDirRule(fileScopeKey, "/原/子")) != null);
     assert.equal(await repo.findDirRule(fileScopeKey, "/新名"), null);
+  });
+});
+
+describe("幽灵规则路径过滤（loadContextMetadata 兜底）", () => {
+  /** 组装单 session 域的 workplace service（手工组装模式）。 */
+  function makeSessionWorkplace(
+    ctx: ReturnType<typeof getNovelMasterTestContext>,
+    projectId: string,
+    sessionId: string,
+  ) {
+    return new DefaultWorkplaceService({
+      conn: ctx.conn,
+      scope: { kind: "session", projectId, sessionId },
+      vfs: new SqliteVfsEntryRepository(ctx.conn),
+      workplace: new SqliteWorkplaceRepository(ctx.conn),
+    });
+  }
+
+  it("VFS 条目已删除的残留规则不再渲染幽灵目录（列表 + 文件树）", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const svfs = ctx.sessionVfs(project.id, session.id);
+    await svfs.write("/残留/内/a.md", "a", { versionCheck: false });
+
+    const wt = makeSessionWorkplace(ctx, project.id, session.id);
+    await wt.setDirRule({
+      ...DEFAULT_WORKPLACE_DIR_RULE,
+      logicalPath: "/残留",
+      ruleEnabled: true,
+    });
+    await wt.setFileRule({
+      logicalPath: "/残留/内/a.md",
+      inclusionMode: "show",
+    });
+
+    // 绕过 IPC 层的规则清理直接删 VFS 条目，模拟历史 rename/删除残留
+    await svfs.delete("/残留", { recursive: true });
+
+    const rows = await wt.buildListRows();
+    assert.ok(
+      !rows.some((r) => r.path === "/残留" || r.path.startsWith("/残留/")),
+      "幽灵目录不应出现在列表行",
+    );
+    const tree = await wt.renderFileTree();
+    assert.ok(!tree.includes("/残留"), "幽灵目录不应出现在 $filetree 宏");
+  });
+
+  it("目录行在的空目录仍正常渲染（不误杀）", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const svfs = ctx.sessionVfs(project.id, session.id);
+    await svfs.mkdir("/空目录");
+
+    const wt = makeSessionWorkplace(ctx, project.id, session.id);
+    await wt.setDirRule({
+      ...DEFAULT_WORKPLACE_DIR_RULE,
+      logicalPath: "/空目录",
+      ruleEnabled: true,
+    });
+
+    const rows = await wt.buildListRows();
+    assert.ok(
+      rows.some((r) => r.kind === "dir" && r.path === "/空目录"),
+      "目录行存在的空目录不应被幽灵过滤误杀",
+    );
+    // 宏树按条目名渲染目录（末段 + `/`），不是完整路径
+    const tree = await wt.renderFileTree();
+    assert.ok(tree.includes("空目录/"));
+  });
+
+  it("目录行缺失但前缀下有 live 文件的目录规则仍保留（文件隐含目录）", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const svfs = ctx.sessionVfs(project.id, session.id);
+    await svfs.write("/隐含/a.md", "a", { versionCheck: false });
+
+    // repo.delete 对非空目录抛 DIRECTORY_NOT_EMPTY，改用 SQL 直删目录行
+    // （不动文件），模拟目录行缺失但文件仍在的状态
+    await ctx.conn.execute(
+      "DELETE FROM vfs_entry WHERE scope_key = ? AND path = ?",
+      [`session:${project.id}:${session.id}`, "/隐含"]
+    );
+
+    const wt = makeSessionWorkplace(ctx, project.id, session.id);
+    await wt.setDirRule({
+      ...DEFAULT_WORKPLACE_DIR_RULE,
+      logicalPath: "/隐含",
+      ruleEnabled: true,
+    });
+
+    const rows = await wt.buildListRows();
+    assert.ok(
+      rows.some((r) => r.kind === "dir" && r.path === "/隐含"),
+      "前缀下有 live 文件的目录规则不应被过滤",
+    );
+    assert.ok(
+      rows.some((r) => r.kind === "file" && r.path === "/隐含/a.md"),
+    );
   });
 });
