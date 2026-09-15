@@ -88,8 +88,16 @@ async function markPriorMigrationsApplied(conn: TdbcConnection): Promise<void> {
 }
 
 describe("add-smart-sort-capture-kind-v1 migration", () => {
-  it("登记于 SCHEMA_MIGRATIONS 阵尾", () => {
-    assert.equal(SCHEMA_MIGRATIONS.at(-1)?.id, ADD_SMART_SORT_CAPTURE_KIND_V1_ID);
+  it("登记于 SCHEMA_MIGRATIONS（add-mcp-file-path-snapshot-v1 入列后不再居尾）", () => {
+    // 该迁移入列时是阵尾；后续迁移（如 add-mcp-file-path-snapshot-v1）
+    // 登记到其后再自然让位——这里只断言仍在注册表中且顺序先于新迁移。
+    const ids = SCHEMA_MIGRATIONS.map((m) => m.id);
+    assert.ok(ids.includes(ADD_SMART_SORT_CAPTURE_KIND_V1_ID));
+    assert.ok(
+      ids.indexOf(ADD_SMART_SORT_CAPTURE_KIND_V1_ID) <
+        ids.indexOf("add-mcp-file-path-snapshot-v1"),
+      "add-smart-sort-capture-kind-v1 应先于 add-mcp-file-path-snapshot-v1 执行"
+    );
   });
 
   it("迁移语义（up 直调）：加列 + 存量行默认 smart + CHECK 拒非法值 + 幂等", async () => {

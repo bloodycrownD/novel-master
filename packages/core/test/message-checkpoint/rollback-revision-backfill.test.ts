@@ -179,7 +179,73 @@ describe("MessageRollbackService (revision head backfill)", () => {
     assert.equal(backfilled, false);
   });
 
-  it("RB4b: entry 不存在时 partial rollback 不创建文件", async () => {
+  it("RB4b(纯删除): entry 已删但 revision 在 — 回滚后文件复现 anchor 内容", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const svfs = ctx.sessionVfs(project.id, session.id);
+
+    const user1 = await ctx.messages.append(session.id, "user", textBlocks("go"));
+    const assistant1 = await ctx.messages.append(session.id, "assistant", {
+      blocks: [{ type: "text", text: "write" }],
+    });
+    await svfs.write("/gone.md", "anchor-gone", { versionCheck: false });
+    await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id);
+
+    await ctx.messages.append(session.id, "user", textBlocks("more"));
+    await ctx.messages.append(session.id, "assistant", {
+      blocks: [{ type: "text", text: "later" },
+      ],
+    });
+    // 常规删除：deleteWithRevision 写墓碑 revision 后物理删除 entry 行。
+    await svfs.delete("/gone.md");
+
+    // 不手工删 revision 行——checkpoint 的 path 快照 + 旧 entryId 应让回滚复活文件。
+    await ctx.sessionFs.rollbackToMessage(
+      session.id,
+      project.id,
+      assistant1.id,
+      { revisionHeadBackfill: true },
+    );
+
+    assert.equal((await svfs.read("/gone.md")).content, "anchor-gone");
+    const messages = await ctx.messages.listBySession(session.id);
+    assert.equal(messages.length, 2);
+    assert.equal(messages[0]!.id, user1.id);
+    assert.equal(messages[1]!.id, assistant1.id);
+  });
+
+  it("RB4b(纯删除·无 backfill 选项): 不抛 BACKFILL_REQUIRED，直接复现", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const svfs = ctx.sessionVfs(project.id, session.id);
+
+    await ctx.messages.append(session.id, "user", textBlocks("go"));
+    const assistant1 = await ctx.messages.append(session.id, "assistant", {
+      blocks: [{ type: "text", text: "write" }],
+    });
+    await svfs.write("/gone2.md", "anchor-content", { versionCheck: false });
+    await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id);
+
+    await ctx.messages.append(session.id, "user", textBlocks("more"));
+    await ctx.messages.append(session.id, "assistant", {
+      blocks: [{ type: "text", text: "later" }],
+    });
+    await svfs.delete("/gone2.md");
+
+    // entry 已删但 checkpoint 旧 entryId 的 revision 行在 → 不算 missing，
+    // 无需 revisionHeadBackfill 确认也不应抛 BACKFILL_REQUIRED。
+    await ctx.sessionFs.rollbackToMessage(
+      session.id,
+      project.id,
+      assistant1.id,
+    );
+
+    assert.equal((await svfs.read("/gone2.md")).content, "anchor-content");
+  });
+
+  it("RB4b(手工删 revision 行): entry 与 revision 都缺 — 维持降级不复现", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
@@ -206,7 +272,8 @@ describe("MessageRollbackService (revision head backfill)", () => {
     });
     await svfs.delete("/gone.md");
 
-    // 手动删除 anchor revision 行（entry_id 在 entry 被删后仍可用作 revision 外键筛选）
+    // 手动删除 anchor revision 行（revision 真缺，非 entry 缺）——
+    // backfill 按旧 entryId 回补 deleted 墓碑，回滚走删除降级，不复现。
     const revisions = await ctx.conn.query<{ version: number }>(
       "SELECT version FROM vfs_revision WHERE entry_id = ? ORDER BY version ASC",
       [entryId],
