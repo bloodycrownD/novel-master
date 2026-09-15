@@ -8,10 +8,15 @@ description: Publishes novel-master releases—version bumps, git tags, and GitH
 **Git tag、产物版本、关于页/更新检查显示的版本必须一致。**  
 tag 形如 `v1.0.4` → 应用内版本为 `1.0.4`（去掉前缀 `v`）。
 
+## 版本号规则（硬性）
+
+**新版本号一律为上一发布版本的 patch 位 +1（即只允许 `+0.0.1` 递增），与功能体量无关，agent 不得按 minor/major 语义自行升级。** 上一版本看 `git tag` 最新 `v*`（或 CHANGELOG 最新 `## [x.y.z]`）；例：上一版 `v1.5.17` → 本次必为 `v1.5.18`，即使本批全是新功能。版本号策略若需变更，由用户明确拍板后更新本条。
+
 ## Checklist（在 `main` 上完成后再打 tag）
 
 ```
 - [ ] 在 CHANGELOG.md 补充本版本 `## [x.y.z]` 更新说明（CI 会写入 Release「更新说明」）
+- [ ] 确认新版本号 = 上一 tag 的 patch +1（+0.0.1 规则，见上节）
 - [ ] bump apps/desktop/package.json version
 - [ ] bump apps/mobile/package.json version
 - [ ] 确认 apps/mobile/android/app/build.gradle 默认 versionName 与 tag 一致
