@@ -3,7 +3,8 @@
  *
  * entry_id 化后 `message_checkpoint_file` 用 `entry_id` 替代 `logical_path` 指向
  * vfs_entry，主键改为 `(session_id, message_id, entry_id)`。checkpoint 不再与具体
- * path 死绑，rename 文件后历史 checkpoint 仍能命中同一 entry。
+ * path 死绑，rename 文件后历史 checkpoint 仍能命中同一 entry；`path` 尾列另存
+ * capture 时点的路径快照，供「entry 行已被删除」场景反解回滚 targetTree。
  *
  * @module bootstrap/message-checkpoint/message-checkpoint-schema
  */
@@ -17,13 +18,21 @@ CREATE TABLE IF NOT EXISTS message_checkpoint (
   PRIMARY KEY (session_id, message_id)
 ) WITHOUT ROWID`.trim();
 
-/** File entry → revision version pointer at capture time (entry_id 形态，WITHOUT ROWID). */
+/**
+ * File entry → revision version pointer at capture time (entry_id 形态，WITHOUT ROWID).
+ *
+ * `path` 是 capture 时点的路径快照：删除文件会物理删掉 vfs_entry 行，只靠
+ * entry_id JOIN 反解路径会让被删文件进不了回滚 targetTree（rollback-restore-
+ * deleted-entry 修复）。快照列可空——迁移前的存量行与 entry 已删的回填残留
+ * 为 NULL，读取侧回退 JOIN 现路径。WITHOUT ROWID 表追加可空尾列不改变 PK。
+ */
 export const MESSAGE_CHECKPOINT_FILE_TABLE_DDL = `
 CREATE TABLE IF NOT EXISTS message_checkpoint_file (
   session_id TEXT NOT NULL,
   message_id TEXT NOT NULL,
   entry_id INTEGER NOT NULL,
   revision_version INTEGER NOT NULL CHECK (revision_version >= 1),
+  path TEXT NULL,
   PRIMARY KEY (session_id, message_id, entry_id)
 ) WITHOUT ROWID`.trim();
 
