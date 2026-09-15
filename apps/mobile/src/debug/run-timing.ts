@@ -41,5 +41,3 @@ export function bootTimingLog(label: string): void {
   }
   console.log(`[nm-boot] ${label} +${Date.now() - bootT0}ms`);
 }
-// refresh-trigger 1789305097
-// refresh-trigger-2 1789305385
