@@ -4,7 +4,38 @@
  * @module domain/message-checkpoint/logic/resolve-target-tree
  */
 
-import type { MessageCheckpointRepository } from "../repositories/message-checkpoint.port.js";
+import type {
+  CheckpointFilePointer,
+  MessageCheckpointRepository,
+} from "../repositories/message-checkpoint.port.js";
+
+/**
+ * 回滚 target 树解析结果。
+ *
+ * `tree` 是 `Map<logicalPath, version>`（reconcile / UI 友好形态）；
+ * `entryIdByPath` 是 checkpoint 记录的旧 entryId——entry 行已被物理删除的
+ * 路径（deleteWithRevision）靠它寻址 revision 并复活 entry
+ * （rollback-restore-deleted-entry）。
+ */
+export type RollbackTargetTreeResolution = {
+  readonly tree: Map<string, number>;
+  readonly entryIdByPath: Map<string, number>;
+};
+
+/** checkpoint 指针树 → (version 树 + 旧 entryId 索引)。 */
+function resolutionFromPointers(
+  pointers: Map<string, CheckpointFilePointer> | null
+): RollbackTargetTreeResolution {
+  const tree = new Map<string, number>();
+  const entryIdByPath = new Map<string, number>();
+  if (pointers != null) {
+    for (const [path, pointer] of pointers) {
+      tree.set(path, pointer.revisionVersion);
+      entryIdByPath.set(path, pointer.entryId);
+    }
+  }
+  return { tree, entryIdByPath };
+}
 
 /**
  * Loads the target file tree for rollback.
@@ -17,10 +48,13 @@ export async function resolveRollbackTargetTree(
   sessionId: string,
   anchorMessageId: string,
   anchorSeq: number
-): Promise<Map<string, number>> {
-  const direct = await checkpoints.loadFileTree(sessionId, anchorMessageId);
+): Promise<RollbackTargetTreeResolution> {
+  const direct = await checkpoints.loadFilePointerTree(
+    sessionId,
+    anchorMessageId
+  );
   if (direct != null) {
-    return direct;
+    return resolutionFromPointers(direct);
   }
 
   const priorMessageId = await checkpoints.findCheckpointMessageIdAtOrBefore(
@@ -28,11 +62,11 @@ export async function resolveRollbackTargetTree(
     anchorSeq
   );
   if (priorMessageId == null) {
-    return new Map();
+    return resolutionFromPointers(null);
   }
 
-  const prior = await checkpoints.loadFileTree(sessionId, priorMessageId);
-  return prior ?? new Map();
+  const prior = await checkpoints.loadFilePointerTree(sessionId, priorMessageId);
+  return resolutionFromPointers(prior);
 }
 
 /**
@@ -44,15 +78,15 @@ export async function resolvePriorRollbackTargetTree(
   checkpoints: MessageCheckpointRepository,
   sessionId: string,
   maxSeq: number
-): Promise<Map<string, number>> {
+): Promise<RollbackTargetTreeResolution> {
   const priorMessageId = await checkpoints.findCheckpointMessageIdAtOrBefore(
     sessionId,
     maxSeq
   );
   if (priorMessageId == null) {
-    return new Map();
+    return resolutionFromPointers(null);
   }
 
-  const prior = await checkpoints.loadFileTree(sessionId, priorMessageId);
-  return prior ?? new Map();
+  const prior = await checkpoints.loadFilePointerTree(sessionId, priorMessageId);
+  return resolutionFromPointers(prior);
 }

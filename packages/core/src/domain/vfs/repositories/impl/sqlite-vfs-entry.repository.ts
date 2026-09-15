@@ -322,6 +322,31 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     );
   }
 
+  async reviveEntryAtVersion(input: {
+    entryId: number;
+    scopeKey: string;
+    path: string;
+    contentHash: string;
+    headVersion: number;
+    mtimeMs: number;
+  }): Promise<void> {
+    const normalized = normalizePath(input.path);
+    await executeTemplate(
+      this.conn,
+      this.parser,
+      `INSERT INTO vfs_entry (entry_id, scope_key, path, content, content_hash, head_version, mtime_ms, entry_kind)
+       VALUES (#{entryId}, #{scopeKey}, #{path}, NULL, #{contentHash}, #{headVersion}, #{mtimeMs}, 'file')`,
+      {
+        entryId: input.entryId,
+        scopeKey: input.scopeKey,
+        path: normalized,
+        contentHash: input.contentHash,
+        headVersion: input.headVersion,
+        mtimeMs: input.mtimeMs,
+      }
+    );
+  }
+
   async update(
     scopeKey: string,
     path: string,

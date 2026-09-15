@@ -16,13 +16,17 @@ import { revisionPairKey } from "@/domain/vfs/logic/revision-pair-key.js";
  * 扫描待 reconcile 路径，找出目标树中 revision 行不存在的逻辑路径。
  *
  * @remarks 仅检查 `targetTree` 中有版本指针的路径；待删除路径（不在 targetTree）不参与检测。
+ * @param checkpointEntryIdByPath checkpoint 记录的旧 entryId（path → entryId）：
+ *        entry 行已被物理删除但 checkpoint 有指针的路径按旧 entryId 查 revision，
+ *        行在即视为可恢复（复活），不算 missing。
  */
 export async function findMissingRevisionPointers(
   revisionRepo: VfsRevisionRepository,
   entryRepo: VfsEntryRepository,
   scope: VfsScope,
   targetTree: ReadonlyMap<string, number>,
-  pathsToReconcile: Iterable<string>
+  pathsToReconcile: Iterable<string>,
+  checkpointEntryIdByPath?: ReadonlyMap<string, number>
 ): Promise<string[]> {
   const scopeKeyStr = scopeKey(scope);
   const pairs: Array<{
@@ -38,8 +42,11 @@ export async function findMissingRevisionPointers(
     }
     const entry = await entryRepo.findByPath(scopeKeyStr, logicalPath);
     if (entry == null) {
-      // entry 不在 → revision 必然缺失，直接记为 missing。
-      pairs.push({ logicalPath, entryId: -1, version: targetVersion });
+      // entry 行已物理删除：有 checkpoint 旧 entryId 时按它寻址 revision
+      //（entryId >= 0 进下方 meta 批查，查到即非 missing）；无指针上下文
+      // 才维持 entryId=-1 直接算 missing。
+      const cpEntryId = checkpointEntryIdByPath?.get(logicalPath) ?? -1;
+      pairs.push({ logicalPath, entryId: cpEntryId, version: targetVersion });
       continue;
     }
     pairs.push({ logicalPath, entryId: entry.entryId, version: targetVersion });

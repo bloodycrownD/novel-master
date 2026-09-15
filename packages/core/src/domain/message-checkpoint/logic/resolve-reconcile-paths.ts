@@ -24,13 +24,18 @@ export type ReconcilePathSets = {
  * 从 target 树与 live 状态筛出真正需写盘/删除的逻辑路径。
  *
  * 同 version 或同 content_hash 不进 pathsNeedWrite（对齐 restore 短路语义）。
+ *
+ * @param checkpointEntryIdByPath checkpoint 记录的旧 entryId（path → entryId）：
+ *        entry 行已被物理删除的路径靠它寻址 revision（rollback-restore-deleted-entry），
+ *        不再一律标 -1 判「必写盘+必 missing」。
  */
 export async function resolveReconcilePathSets(
   entryRepo: VfsEntryRepository,
   revisionRepo: VfsRevisionRepository,
   scope: Extract<VfsScope, { kind: "session" }>,
   targetTree: ReadonlyMap<string, number>,
-  hasDirectTargetTree: boolean
+  hasDirectTargetTree: boolean,
+  checkpointEntryIdByPath?: ReadonlyMap<string, number>
 ): Promise<ReconcilePathSets> {
   const { projectId, sessionId } = scope;
   const scopeKeyStr = scopeKey(scope);
@@ -56,8 +61,10 @@ export async function resolveReconcilePathSets(
       entryId = entry?.entryId;
     }
     if (entryId == null) {
-      // entry 完全不在：revision 必缺失，标记成 -1 让后续 meta 查询把它判为需写盘。
-      entryId = -1;
+      // entry 行已被物理删除：优先用 checkpoint 旧 entryId 寻址 revision（被删
+      // 文件仍要参与 meta 比对判「是否需写盘」）；无快照上下文的老指针维持
+      // entryId=-1（meta 必查不到 → 标记需写盘，restore 阶段降级）。
+      entryId = checkpointEntryIdByPath?.get(logicalPath) ?? -1;
     }
     reconcilePairs.push({ logicalPath, entryId, version });
   }
