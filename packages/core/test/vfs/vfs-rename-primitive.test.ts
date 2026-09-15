@@ -125,4 +125,34 @@ describe("vfs rename primitive", () => {
     const oldEntry = await entryRepo.findByPath(scopeKey, oldPath);
     assert.equal(oldEntry, null, "rename 后旧路径对应 entry 应不存在");
   });
+
+  it("T-V4: 空目录 renamePrefix 成功且目录行路径更新", async () => {
+    const ctx = getNovelMasterTestContext();
+    const suffix = testIsolationSuffix();
+    const project = await ctx.projects.create(`P-V4-${suffix}`);
+    const session = await ctx.sessions.create(project.id);
+    const svfs = ctx.sessionVfs(project.id, session.id);
+    const entryRepo = new SqliteVfsEntryRepository(ctx.conn);
+
+    const scopeKey = `session:${project.id}:${session.id}`;
+    const oldDir = "/空目录";
+    const newDir = "/改名后";
+
+    await svfs.mkdir(oldDir);
+    await svfs.renamePrefix(oldDir, newDir);
+
+    // directory 行整体改到新路径，旧路径无残留
+    const moved = await entryRepo.findByPath(scopeKey, newDir);
+    assert.notEqual(moved, null, "rename 后新目录行应存在");
+    assert.equal(moved!.entryKind, "directory", "rename 后应为 directory 行");
+    assert.equal(
+      await entryRepo.findByPath(scopeKey, oldDir),
+      null,
+      "rename 后旧目录行不应存在",
+    );
+
+    // rename 后的空目录仍可正常写入子项
+    await svfs.write(`${newDir}/a.md`, "a");
+    assert.equal((await svfs.read(`${newDir}/a.md`)).content, "a");
+  });
 });
