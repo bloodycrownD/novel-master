@@ -107,11 +107,13 @@ export async function restorePathToRevision(
   checkpointEntryId?: number | null,
   contentStore?: VfsContentStore
 ): Promise<RestorePathOutcome> {
-  // live head 已与 checkpoint 目标 version 对齐时，正文无需再 restore。
-  if (liveHeadByPath?.get(logicalPath) === version) {
-    return "skipped_same_version";
-  }
-
+  // checkpoint 旧 entryId 上下文提前解析：live entry 与指针不同源（删除后
+  // 同路径重建）时版本空间各自独立，所有 version/hash 短路都不可信。
+  const cpEntryId = resolveCheckpointEntryId(
+    logicalPath,
+    prefetch,
+    checkpointEntryId
+  );
   const scopeKeyStr = scopeKey(scope);
 
   // entry_id 解析：prefetch 优先，退化为 entryRepo 探测。
@@ -123,6 +125,27 @@ export async function restorePathToRevision(
       logicalPath,
       prefetch
     );
+  }
+
+  if (cpEntryId != null && entryId != null && cpEntryId !== entryId) {
+    // 同路径异 entry：live 上是 tail 期新建的 entry，checkpoint 指向被删的
+    // 旧 entry。按「回滚后工作区正文 = 目标检查点完成态」拍板——墓碑新
+    // entry、复活旧 entry（revive 内含占用清除）。
+    if (entryRepo == null) {
+      throw sessionFsRestoreRevisionMissing(logicalPath, version);
+    }
+    return reviveDeletedEntryForRestore(
+      { vfs, entryRepo, revisionRepo, contentStore },
+      scope,
+      logicalPath,
+      cpEntryId,
+      version
+    );
+  }
+
+  // live head 已与 checkpoint 目标 version 对齐时，正文无需再 restore。
+  if (liveHeadByPath?.get(logicalPath) === version) {
+    return "skipped_same_version";
   }
 
   // 轻量 meta：先判 deleted / 再比 content_hash，避免无谓解压。
@@ -163,11 +186,6 @@ export async function restorePathToRevision(
     // entry 已被物理删除（deleteWithRevision）。携带 checkpoint 旧 entryId 时
     // 原位复活 entry（rollback-restore-deleted-entry）；无上下文（老 checkpoint
     // 无 path 快照、或调用方未传）维持降级：抛 restore-missing。
-    const cpEntryId = resolveCheckpointEntryId(
-      logicalPath,
-      prefetch,
-      checkpointEntryId
-    );
     if (entryRepo != null && cpEntryId != null) {
       return reviveDeletedEntryForRestore(
         { vfs, entryRepo, revisionRepo, contentStore },
@@ -222,7 +240,19 @@ export async function restorePathToRevisionWithBackfill(
   prefetch?: RestorePathPrefetch,
   checkpointEntryId?: number | null
 ): Promise<{ backfilled: boolean; outcome: RestorePathOutcome }> {
-  if (liveHeadByPath?.get(logicalPath) === version) {
+  // 同路径异 entry（删除后同路径重建）时 live head 与目标 version 分属两个
+  // 版本空间，same_version 短路失效——交给 restorePathToRevision 走墓碑+复活。
+  const cpEntryIdEarly = resolveCheckpointEntryId(
+    logicalPath,
+    prefetch,
+    checkpointEntryId
+  );
+  const liveEntryIdEarly = prefetch?.entryIdByPath?.get(logicalPath) ?? null;
+  const divergedEarly =
+    cpEntryIdEarly != null &&
+    liveEntryIdEarly != null &&
+    cpEntryIdEarly !== liveEntryIdEarly;
+  if (!divergedEarly && liveHeadByPath?.get(logicalPath) === version) {
     return { backfilled: false, outcome: "skipped_same_version" };
   }
 

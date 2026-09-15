@@ -453,6 +453,15 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
     let restored = 0;
     let deleted = 0;
 
+    // 先清 targetTree 外的 live 路径，再做写盘恢复：rename 后回滚（快照语义）
+    // 时同一 entry 会同时出现在两处——旧路径在 pathsNeedWrite（复活 entry）、
+    // 现路径在 pathsNeedDelete（墓碑 entry）——先删现路径才能按旧路径复活，
+    // 反序会撞 entry 主键。普通场景两个集合不相交，顺序无影响。
+    for (const logicalPath of pathsNeedDelete) {
+      await this.deletePathIfExists(vfs, logicalPath);
+      deleted++;
+    }
+
     for (const logicalPath of pathsNeedWrite) {
       const version = targetTree.get(logicalPath);
       if (version != null) {
@@ -492,11 +501,6 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
           restored++;
         }
       }
-    }
-
-    for (const logicalPath of pathsNeedDelete) {
-      await this.deletePathIfExists(vfs, logicalPath);
-      deleted++;
     }
 
     return {

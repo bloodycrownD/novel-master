@@ -237,7 +237,7 @@ export class SqliteMessageCheckpointRepository
     }
     await insertMultiValues(
       this.conn,
-      `INSERT INTO message_checkpoint_file (session_id, message_id, entry_id, revision_version)`,
+      `INSERT INTO message_checkpoint_file (session_id, message_id, entry_id, revision_version, path)`,
       fileRows
     );
 

@@ -53,18 +53,27 @@ export async function resolveReconcilePathSets(
     entryId: number;
     version: number;
   }> = [];
+  const pathsNeedWrite = new Set<string>();
   for (const [logicalPath, version] of targetTree) {
-    let entryId = entryIdByPath.get(logicalPath);
+    let entryId = entryIdByPath.get(logicalPath) ?? null;
     if (entryId == null) {
       // 非-live 路径（可能已删）：退化为 entryRepo 探测拿 entryId。
       const entry = await entryRepo.findByPath(scopeKeyStr, logicalPath);
-      entryId = entry?.entryId;
+      entryId = entry?.entryId ?? null;
+    }
+    const cpEntryId = checkpointEntryIdByPath?.get(logicalPath) ?? null;
+    if (entryId != null && cpEntryId != null && entryId !== cpEntryId) {
+      // live entry 与 checkpoint 指针不同源（删除后同路径重建）：两边版本空间
+      // 各自独立，version/content_hash 短路全部失效，一律写盘——restore 阶段
+      // 墓碑新 entry 并复活 checkpoint 旧 entry（目标检查点完成态语义）。
+      pathsNeedWrite.add(logicalPath);
+      continue;
     }
     if (entryId == null) {
       // entry 行已被物理删除：优先用 checkpoint 旧 entryId 寻址 revision（被删
       // 文件仍要参与 meta 比对判「是否需写盘」）；无快照上下文的老指针维持
       // entryId=-1（meta 必查不到 → 标记需写盘，restore 阶段降级）。
-      entryId = checkpointEntryIdByPath?.get(logicalPath) ?? -1;
+      entryId = cpEntryId ?? -1;
     }
     reconcilePairs.push({ logicalPath, entryId, version });
   }
@@ -77,7 +86,6 @@ export async function resolveReconcilePathSets(
     ...new Set(reconcilePairs.map((pair) => pair.logicalPath)),
   ]);
 
-  const pathsNeedWrite = new Set<string>();
   for (const pair of reconcilePairs) {
     const liveHead = liveHeadByPath.get(pair.logicalPath);
     if (liveHead === pair.version) {
