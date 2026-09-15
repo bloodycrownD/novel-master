@@ -170,6 +170,7 @@ export async function backfillBaselineCheckpoints(
   const filePointers = files.map((f) => ({
     entryId: f.entryId,
     revisionVersion: f.headVersion,
+    path: f.logicalPath,
   }));
 
   for (let i = firstGapIndex; i < messages.length; i++) {

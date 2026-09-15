@@ -127,6 +127,7 @@ export async function seedForkCopyParity(
   const files = heads.map((h) => ({
     entryId: h.entryId,
     revisionVersion: h.headVersion,
+    path: h.logicalPath,
   }));
   const createdAtMs = Date.now();
   // 批量播种：一次性写入所有消息的 checkpoint 锚点 + 文件指针 + ref_count，
