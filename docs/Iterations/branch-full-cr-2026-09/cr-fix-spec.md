@@ -10,7 +10,7 @@
 - head_sha：cb7dd03d
 - review_round：2（round 1 四路 scope；round 2 review-full 增补）
 - dag_version：3
-- 状态：fix-spec-ready（待用户拍板 Spec deviations ①③ 后确认开工）
+- 状态：fix-spec-ready（已确认，2026-09-15 用户拍板开工）
 - 业务文档（只读参考）：
   - docs/Iterations/session-stream-unit-2026-09/prd.md
   - docs/Iterations/session-stream-unit-2026-09/spec.md
@@ -202,7 +202,7 @@
 
 1. **BOOT_VERSION 撞号**：session-stream-unit spec 写 12→13，实现为 13→14。spec 撰写时 main 尚为 v12，之后 main 发了 v13，撞号后顺延。**用户已确认按实现收窄（13→14，2026-09-15）**。
 2. **svc/B-1 兼容声明违背（open）**：iOS 平台门禁缺失，违背 resident-keepalive spec「iOS 零影响」声明。随 must-fix svc/B-1 修复后转 fixed。
-3. **startedAtMs 置位时机**：spec 写 RUN_STARTED 回填，实现为 begin() 受理即置。代码注释已声明理由。建议用户确认按实现收窄 spec（确认后由 must-fix full/F-1 同步头注释）。
+3. **startedAtMs 置位时机**：spec 写 RUN_STARTED 回填，实现为 begin() 受理即置。**用户已确认按实现收窄（2026-09-15）**；头注释同步修正由 must-fix full/F-1 承担。
 
 ## Open questions / 待拍板
 
@@ -239,7 +239,7 @@
 | dag_version / review_round | 3 / 2 |
 | P0 / P1 / P2（已写入 fix-spec） | 1 / 5 / 7 |
 | 未写入的开放 must-fix | 0 |
-| spec_deviations | open：③startedAtMs 收窄（待用户确认）；①BOOT_VERSION 已确认收窄；②随 svc/B-1 修复转 fixed |
+| spec_deviations | open：无（①③用户已确认收窄 2026-09-15；②随 svc/B-1 修复转 fixed） |
 | C-orch | ✅（web/C-orch-1 为 P0 主项；svc/C-1、ui/C-1 相关） |
 | C 类合并后 QA | 徽标间距走查、prepend/EWMA 真机观察（见「合并后 QA」节） |
 | 评审轮次明细 | round 1：四路 scope 并行（core / mobile-services / mobile-ui / webview）+ spec-fix 落盘；round 2：review-full 全维终检 + trivial 增补（full/K-1、full/F-1、web/C-orch-1 细化，主代理直执） |
