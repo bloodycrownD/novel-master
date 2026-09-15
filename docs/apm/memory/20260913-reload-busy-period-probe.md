@@ -1,5 +1,5 @@
 ---
-date: 2026-09-14 23:15
+date: 2026-09-16 01:30
 title: 通知「10几秒才出现」定案——EMUI 对前台服务通知延迟展示；通知链路代码本身健康
 keywords: 通知延迟, EMUI, 前台服务通知, delay foreground service ntf, keepalive 通知, notifee, ForegroundService, onNotificationPosted, 冷启动, 忙期排队, logcat 取证, composer disabled, run 秒败
 abstract: 用户报「发送后切后台，拉状态栏 10 几秒才见『新会话·生成中』」——系统级日志定案：真凶是 EMUI 对前台服务通知的延迟展示机制（delay foreground service ntf：已入队不展示，~10 秒后系统放行才 onNotificationPosted；普通通知 agent-finished 同时刻立即展示作对照；冷却窗口补完：距上次前台服务停止 ~3 分钟内不延迟、首次必延迟整 10 秒——解释「第二次发送立刻出现」）。app 侧链路健康：tap→入队 632-670ms。GWT-1「通知≤2s」在华为/荣耀机不可达，除非绕过前台服务（修复候选：普通通知先显+FGS 静默保活）。另发现 run 秒败后 composer 永久禁用 bug。
@@ -156,3 +156,9 @@ user:
 
 assistant:
 v1.5.18 重发完成（2026-09-15）：事故=agent 按功能体量自定 minor bump 1.6.0 越权（版本号策略决策权在用户）。止损：v1.6.0 的 CI run 被取消（Android job 日志实锤 canceled 非构建失败，代码无恙）、Release 未产生（最新仍 v1.5.17）、远程+本地 tag 删除；修正 f0a791d5——CHANGELOG 标题/双端 package.json/build.gradle 全部 1.6.0→1.5.18，tag v1.5.18 推送触发新 CI（run 34983184336）。publish skill 已更新（.agents/skills/novel-master-publish/SKILL.md）：新增硬性「版本号规则」节——新版本号一律为上一 tag patch+1（+0.0.1），与功能体量无关、agent 不得自行 minor/major，变更须用户拍板；checklist 首部同步加确认项。教训入档：版本号是用户决策不是工程判断。
+
+user:
+把合并完的代码重启 metro 安装到手机——release 版本出现用户消息、工具消息渲染不及时的情况，要测试。
+
+assistant:
+（主仓装机全链排查，2026-09-16 凌晨）worktree 已被用户删除，metro 与构建首次切到主仓 main，连踩五坑全排掉：①主仓 node_modules 停在 v1.5.17 时代缺 notifee——npm install 补齐，且 **install 必须先于 gradle**（autolink 按 node_modules 扫描，install 前构建的 APK 缺 notifee 原生模块，运行时报 Notifee native module not found）；②主仓缺 local.properties（sdk.dir 不进 git）——写入解决；③gradle autolink 的依赖识别被 apps/mobile/node_modules 的过期内容干扰（识别出 16 个旧集合、无 notifee）——清理其过期内容后 autolinking.json 恢复 17 个含 notifee；**但注意该目录是 workspace 正常子级安装**（markdown-it 等未 hoist 到根的包住这里），不能整删（误删导致 metro 解析 markdown-it 失败，重跑 npm install 恢复）；④APK 内验证 notifee 不能用 unzip -l 按文件名搜（代码编进 classes.dex，文件名不含）——PackageList.java 计数/装机运行才是有效验证；⑤真 bug：**require-cycle 运行时报错**（agent-finished-notification→navigation-container-ref，环一直存在但 worktree 的模块解析顺序未触发，主仓 fresh 环境炸出）——修法=navigateToChatTabFromNotification 改惰性 require（import type 保类型），顺带修 TS6.0.3 的 baseUrl 弃用错误（mobile tsconfig.json 与 src/web/tsconfig.json 补 ignoreDeprecations "6.0"）与 lockfile 里发版漏更的 workspace 版本号（79f70eed，typecheck 双端绿+通知测试 32/32 绿）。最终 1210 dev 包（主仓代码+notifee 原生模块）装机正常启动。release 侧评估：用户装的 v1.5.18 release 可正常启动（模块顺序未触发 cycle 崩溃），无需重发；修复已进 main 兜底。用户待测试项：release 版「用户消息/工具消息渲染不及时」在 dev 版的对照观察。
