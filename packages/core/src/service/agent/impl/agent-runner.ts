@@ -236,6 +236,15 @@ export class DefaultAgentRunner implements AgentRunner {
     let finished = false;
     let stopReason: AgentRunResult["stopReason"] = "max_steps";
     let runError: string | undefined;
+    /**
+     * 本轮 run 是否已有 assistant 消息落库（含 abort partial）。
+     *
+     * 失败收尾落错误消息的幂等防御：多步 run 中途失败（如 step N 的
+     * doom_loop / 工具链抛错）时，前序 step 的 assistant 已 append——此时
+     * 会话尾部为 assistant 或 tool_results user，isPlainUserText 已为
+     * false、composer 本就解锁，再追加错误消息只会造成双条提示。
+     */
+    let assistantAppendedInRun = false;
     const signal = options.signal;
     const toolUseWindow: ToolUseBlock[] = [];
     let vfsMutatedInRun = false;
@@ -588,6 +597,7 @@ export class DefaultAgentRunner implements AgentRunner {
               usage: { ...result.usage, firstTokenMs, durationMs },
             }
           );
+          assistantAppendedInRun = true;
           if (publishRunLifecycle) {
             bus.publish(EVENT_AGENT_STEP_COMMITTED, {
               sessionId,
@@ -606,6 +616,36 @@ export class DefaultAgentRunner implements AgentRunner {
         // abort 时已写入 partial assistant，不再执行 tool，直接退出
         if (aborted) {
           break;
+        }
+
+        // B-2（成功空回复解锁 composer）：model 请求成功但无 meaningful
+        // assistant 内容（blocks 为空或全空白文本）时，run 虽以 FINISHED
+        // 收尾，但会话尾部停在 user——双端 composer 的连续 user 守卫
+        // （lastMessageIsPlainUserText）恒真、输入框锁死。落一条 assistant
+        // 占位消息让尾部变 assistant，守卫自然解锁。豁免与失败落消息同款：
+        // ① persistMessages=false（EphemeralOverlay run 落了不可见）；
+        // ② 本轮已有 assistant 落库（assistantAppendedInRun——多步 run 中途
+        //    空回合时尾部是 tool_results user，本就不锁，再落会双条）。
+        // 占位不带 usage/raw——模型没有产出可统计的内容，避免脏统计行。
+        // 能走到这里且未置位，本 step 必无 tool_use，后继必然 finished。
+        if (persistMessages && !assistantAppendedInRun) {
+          try {
+            await session.append("assistant", {
+              blocks: [{ type: "text", text: "（本次生成无内容输出）" }],
+            });
+            assistantAppendedInRun = true;
+          } catch (appendError) {
+            // 占位落库失败不把成功 run 翻成 FAILED：记日志后照常收尾。
+            console.error(
+              "[agent-runner] empty_reply_placeholder_append_failed",
+              {
+                stage: "empty_reply_placeholder_append",
+                sessionId,
+                projectId,
+                error: appendError,
+              }
+            );
+          }
         }
 
         const toolUses = result.blocks.filter(
@@ -758,6 +798,31 @@ export class DefaultAgentRunner implements AgentRunner {
         await handleAbort("catch_abort");
       } else {
         runError = e instanceof Error ? e.message : String(e);
+        // 失败收尾落一条 assistant 错误消息：会话尾部变 assistant 后，双端
+        // composer 的连续 user 守卫（lastMessageIsPlainUserText）自然解锁，
+        // 失败原因也从一次性 toast 变为持久可回查。豁免两条：
+        // ① persistMessages=false（EphemeralOverlay run，append 只进内存，
+        //    run 结束即丢，落了也不可见）；② 本轮已有 assistant 落库
+        //    （assistantAppendedInRun——秒败路径必然无 assistant：assistant
+        //    仅在 model request 成功返回后 append，request 抛错时标志必为
+        //    false；多步中途失败时尾部已是 assistant / tool_results user，
+        //    isPlainUserText 已为 false，无需再落，避免双条）。
+        // 落库须先于 FAILED 事件发出，保证下游 tail reload 时能读到这条消息。
+        if (persistMessages && !assistantAppendedInRun) {
+          try {
+            await session.append("assistant", {
+              blocks: [{ type: "text", text: `[生成失败] ${runError}` }],
+            });
+          } catch (appendError) {
+            // 错误消息落库失败不掩盖原始错误：记日志后继续发 FAILED 并抛原错。
+            console.error("[agent-runner] failure_message_append_failed", {
+              stage: "failure_message_append",
+              sessionId,
+              projectId,
+              error: appendError,
+            });
+          }
+        }
         // FAILED / 非 Abort throw 不到达 FINISHED：必清 API 缓存，避免残留旧值
         sessionApiPromptTokenCache.clear(sessionId);
         if (publishRunLifecycle) {

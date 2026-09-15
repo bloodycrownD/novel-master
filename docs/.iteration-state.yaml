@@ -1,65 +1,31 @@
-# code-dev-loop 编排状态（desktop-regression-fixes-2026-09）
-spec_path: docs/Iterations/desktop-regression-fixes-2026-09/spec.md
-prd_path: docs/Iterations/desktop-regression-fixes-2026-09/prd.md
-worktree: .worktree/desktop-regression-fixes
-branch: fix/desktop-regression-fixes
-base_sha: 4b9fac01
-dag_version: 3
-wave_plan:
-  - wave-0: [impl-step1-e2e-tooling, impl-step5-preview-panes, impl-step6-settings-form, impl-step7-drawer-reset, impl-step8-nav-guard]
-  - wave-1: [verify-diag-step2, verify-step5678]
-  - wave-2: [cr-func-wave0]
-  - wave-2: [impl-e2e-hardening, cr-func-mid(并行,readonly)]
-  - wave-3: [verify-step9-regression 全量复验(含e2e加固后的六case+bootstrap)]
-  - wave-4: [cr-func-final]
-node_status:
-  impl-step1-e2e-tooling: { status: done, head: 718cdcc5, executor: subagent }
-  impl-step5-preview-panes: { status: done, head: 47475316, executor: subagent }
-  impl-step6-settings-form: { status: done, head: 0c0bdc0f, executor: subagent }
-  impl-step7-drawer-reset: { status: done, head: c7ca66b7, executor: subagent }
-  impl-step8-nav-guard: { status: done, head: ea19266c, executor: subagent }
-  verify-diag-step2: { status: done, 结论: 假设A成立/D-15已排除, executor: subagent }
-  verify-build-test: { status: done, 结论: 零回归(109/109+tsc基线360→358), executor: subagent }
-  impl-step8b-unit-test: { status: done, head: 872cfaeb, executor: subagent }
-  impl-step3-annotate-fix: { status: cancelled, 原因: Step2结论假设A }
-  impl-e2e-hardening: { status: done, head: b0d1f11d, 含: Step4防御日志66fded4d, executor: subagent }
-  cr-func-mid: { status: done, func_ready: yes, executor: subagent }
-  verify-step9-regression: { status: done, 结论: 14断言全PASS+七脚本序列绿+annotate2序列尾终验绿, executor: subagent+main }
-open_must_fix: []
+# code-dev-loop 编排状态——init-busy-yield-2026-09（dev-ready）
+spec_path: docs/Iterations/init-busy-yield-2026-09/spec.md
+prd_path: docs/Iterations/init-busy-yield-2026-09/prd.md
+branch: feat/agent-run-parallel-and-notify
+base_sha: e8533053
+head_sha: dd9d813a
+dev_ready: yes
+dev_dag_matrix:
+  impl-s1-yield: { status: done, head: cb73992e, executor: subagent }
+  impl-s4-backfill: { status: done, head: "d28e38c6,c43a904b", executor: subagent }
+  verify-s1: { status: done, executor: main, result: "4/4" }
+  verify-s4: { status: done, executor: main, result: "core 2107/2107" }
+  crfunc-w0: { status: done, func_ready: yes, executor: subagent }
+  impl-s2-hydrate: { status: done, head: "324d0677,0544f8f1", executor: subagent }
+  impl-s3-chattab: { status: done, head: 67e72627, executor: subagent }
+  impl-s5-rows: { status: done, head: 7af52a27, executor: subagent }
+  verify-w3: { status: done, executor: main, result: "typecheck+jest 197/1281" }
+  crfunc-w3: { status: done, func_ready: yes, executor: subagent }
+  impl-s6-snapshot-rn: { status: done, head: "86404b69,7cc2a70a,bdf2f3a3", executor: subagent }
+  verify-s6: { status: done, executor: main, result: "jest 198/1291 + build:webview" }
+  impl-s7-web: { status: done, head: "bb343863,dd9d813a", executor: subagent }
+  impl-s8-s9: { status: done, head: "700117bc,a529eacb", executor: subagent }
+  verify-final: { status: done, executor: main, result: "typecheck+jest 200/1317+build:webview+core 2107/2107" }
+  crfunc-final: { status: done, func_ready: yes, executor: subagent }
 spec_deviations:
-  - id: DEV-1
-    desc: Step8 附带修复——SkillDetailView 文件加载 effect deps 补技能三元组（spec 未点名、守卫确认路径完整性必需：不补则确认切技能后旧 selected 不触发重载、脏内容挂新技能名下）
-    status: accepted（cr-func-mid 论证正确性，登记留痕）
-  - id: DEV-2
-    desc: e2e 附带修复——B4 收尾 drawer+picker 叠开残留改用 closeOverlays（既有缺陷，bootstrap 可执行性所需）
-    status: accepted
-status: dev-ready（cr-func-final func-ready:yes）；Step 10 待定性/Step 11 并 dev 移交用户
-
-# code-review-loop 编排状态（2026-09-10）
-cr:
-  repo: .worktree/desktop-regression-fixes
-  base_sha: 4b9fac01
-  head_sha: 79cadb7a
-  mode: scope
-  dag_version: 1
-  review_round: 1
-  fix_spec_path: docs/Iterations/desktop-regression-fixes-2026-09/cr-fix-spec.md
-  wave_plan: [[review-scope-renderer, review-scope-e2e], [spec-fix(若有must-fix)], [review-full]]
-  review_round: 2
-  node_status: { review-scope-renderer: done, review-scope-e2e: done, spec-fix-1: done, review-full: done(建议yes), spec-fix-2: done(trivial豁免主代理直改——D-1补写+2措辞修正) }
-  must_fix: [renderer/G-1 P2, e2e/C-1 P1, e2e/G-1 P1, e2e/A-1 P1, e2e/B-1..B-4 P2, e2e/C-2 P2, e2e/C-3 P2, e2e/K-1 P2]
-  open_questions: [dismissUpdatePrompt 15s固定等待, ^锚点$ 备忘冲突, subagent mock 对齐, novel.db 去留(需拍板)]
-  status: fix-spec-ready 已确认待用户——请确认是否按 cr-fix-spec 开工
-
-# code-dev-loop（CR fix-spec 执行）2026-09-12
-cr_fix_dev:
-  spec_path: docs/Iterations/desktop-regression-fixes-2026-09/cr-fix-spec.md
-  worktree: .worktree/desktop-regression-fixes
-  branch: fix/desktop-regression-fixes
-  dag_version: 1
-  wave_plan:
-    - wave-0: [impl-a-e2e-lib(C-1/B-1/B-2/B-3①③/C-2/C-3①/K-1), impl-b-e2e-cases(G-1e/B-4/A-1/B-3②/C-3②), impl-c-renderer-test(G-1r, executor:main trivial)]
-    - wave-1: [verify-all(npm test + 全量序列 + check-ignore 验收)]
-    - wave-2: [cr-func-final]
-  node_status: { impl-a: done, impl-b: done, impl-c: done(main), verify-all: done(109/109+八脚本), vision: done(9过+634拖拽证据+654基线陷阱证伪), cr-func-final: round1 no(锚点Blocker)→修复+补验→round2等效yes, deviation: DEV-3~6补登 }
-  status: dev-ready（CR fix-spec 12/12 闭合+负向抽验过）
+  - closed: Step 3 去重落点在 refreshChatMeta 内部 inflight（覆盖面更广，语义等价有专测）
+  - closed: Step 5 selectTailTranscriptRows 顺带改预扫构建（等价论证+对拍测试）
+  - closed: Step 7 渐进渲染不做（与 T-S4 语义冲突，窗口化已降本）
+  - closed: Step 7 扩窗读位用行坐标线性重映射（scrollHeight 差值被扩窗污染，容差断言在）
+open_must_fix: []
+manual_pending: "Step 10 真机验收（GWT-1~5 + release 冷启动基线）归用户 manual_user"

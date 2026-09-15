@@ -18,11 +18,9 @@ import {useTheme} from '@/theme/ThemeProvider';
 
 import {formatError} from '@/errors/format-error';
 
-import {runAgentTurn, type AgentRunScope} from '@/services/agent-run.service';
+import type {AgentRunScope} from '@/services/agent-run.service';
 
 import {useRuntime} from '@/hooks/useRuntime';
-
-import {isMobileAgentActive} from '@/runtime/agent-activity';
 
 import {
   applyComposerStatusAttachmentsReplace,
@@ -65,22 +63,15 @@ import {SkillPicker} from '@/components/skills/SkillPicker';
 import {SkillTypeahead, filterSkillTypeaheadCandidates} from './SkillTypeahead';
 import type {EffectiveSkill} from '@novel-master/core/skills';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import {resetRunTiming, timingLog} from '@/debug/run-timing';
 
 type Props = {
   scope: AgentRunScope;
 
   hasModel: boolean;
 
+  /** 当前会话 run 活跃（消费方从单元投影派生：status 为 starting|running）。 */
   running: boolean;
-
-  beginUiRun: () => void;
-
-  /** UI run 异常收尾（替代旧 finally 兜底递减，refcount 单一归属 lifecycle）。 */
-  endUiRunOnError: () => void;
-
-  abortUiRun: () => void;
-
-  onStreamReset: () => void;
 
   onMessagesChanged: () => void | Promise<void>;
 
@@ -106,10 +97,6 @@ export function ChatComposer({
   scope,
   hasModel,
   running,
-  beginUiRun,
-  endUiRunOnError,
-  abortUiRun,
-  onStreamReset,
   onMessagesChanged,
   onNeedModel,
   canResumeWithoutInput,
@@ -149,11 +136,9 @@ export function ChatComposer({
 
   const streamHandlersRef = useRef({
     onMessagesChanged,
-    onStreamReset,
   });
   streamHandlersRef.current = {
     onMessagesChanged,
-    onStreamReset,
   };
 
   const runtimeRef = useRef(runtime);
@@ -325,13 +310,8 @@ export function ChatComposer({
 
   const executeRun = useCallback(
     async (content: string, allowResumeWithoutInput: boolean) => {
-      if (isMobileAgentActive()) {
-        return;
-      }
-
+      timingLog('executeRun enter (tap→run dispatch gap)');
       setError(undefined);
-      onStreamReset();
-      beginUiRun();
 
       // 有正文 / 批注草稿 → 成功后清输入
       // annotate 仅在 onUserMessageAppended 清 store（与正文分轨可并存于回调）
@@ -349,10 +329,18 @@ export function ChatComposer({
 
       try {
         const stream = await runtime.preferences.getLlmStreamEnabled();
+        timingLog('pref-read done');
         const annotateDrafts = listChatAnnotateDrafts(sessionId);
-        // 文件引用由 Core 扫描正文 `@`；规则变更不走差集 materialize
-        // caller 不传 signal——core runAgentTurn 自建 internalController 注册到 registry。
-        await runAgentTurn(runtime, scope, content, {
+        // Step 6：发起改调 SessionStreamUnitManager——门禁由 manager 的
+        // per-session 单元拒绝（返回明确错误），run 本体 fire-and-forget；
+        // refcount 与收尾归 manager。受理同步触发投影通知（starting 即时
+        // 可见），composer 侧不再需要乐观置位与收回（endUiRunOnError 语义
+        // 随之退役——被拒/本地异常时投影从未变过）。
+        const manager = runtime.sessionStreamUnitManager;
+        if (manager == null) {
+          throw new Error('运行时尚未就绪，请稍后重试');
+        }
+        const started = manager.startRun(sessionId, scope.projectId, content, {
           stream,
           allowResumeWithoutInput,
           annotateDrafts:
@@ -365,36 +353,35 @@ export function ChatComposer({
               streamHandlersRef.current.onMessagesChanged(),
             ).catch(() => undefined);
           },
+          onSettled: () => {
+            // 空续跑等路径可能不走 append 回调——结束后兑底清草稿
+            if (shouldClearComposer) {
+              clearComposerNow();
+            }
+            // 以投影为准刷新 chip（仅 annotate）
+            void projectComposerStatusForSession(runtime, sessionId)
+              .then(status => {
+                applyComposerStatusAttachmentsReplace({
+                  sessionId,
+                  attachments: status,
+                });
+              })
+              .catch(() => undefined);
+            // 再刷一次列表：切走 / 无面板场景的补刷；停留当前面板时与
+            // 单元消息管线的收尾 reload 双刷幂等（代价是多一次 DB 读，可接受）。
+            void Promise.resolve(
+              streamHandlersRef.current.onMessagesChanged(),
+            ).catch(() => undefined);
+          },
         });
-        // 空续跑等路径可能不走 append 回调
-        if (shouldClearComposer) {
-          clearComposerNow();
-        }
-        // 以投影为准刷新 chip（仅 annotate）
-        try {
-          const status = await projectComposerStatusForSession(
-            runtime,
-            sessionId,
-          );
-          applyComposerStatusAttachmentsReplace({
-            sessionId,
-            attachments: status,
-          });
-        } catch {
-          // 投影失败不影响发送结果
-        }
-        // 再刷一次列表，覆盖 re-append / 流式末态漏刷新
-        await Promise.resolve(
-          streamHandlersRef.current.onMessagesChanged(),
-        ).catch(() => undefined);
-      } catch (err) {
-        if (err instanceof Error && err.name === 'AbortError') {
-          // abort 走正常 RUN_FINISHED/FAILED 路径，lifecycle 自己递减 refcount，
-          // 这里不再调用 endUiRunOnError。
+        if (!started.ok) {
+          // Manager 拒绝（同会话已有 run）：明确反馈（投影未变，无需收回）
+          setError(started.error);
           return;
         }
-        // 非 abort 异常：收敛到 lifecycle 单一归属收尾。
-        endUiRunOnError();
+      } catch (err) {
+        // 本地异常（偏好读取失败 / runtime 未就绪等）：run 未受理，
+        // 单元投影不受影响，只反馈错误
         if (typeof __DEV__ !== 'undefined' && __DEV__) {
           const detail =
             err instanceof Error
@@ -414,9 +401,6 @@ export function ChatComposer({
       runtime,
       scope,
       sessionId,
-      beginUiRun,
-      endUiRunOnError,
-      onStreamReset,
       hasAnnotateDrafts,
     ],
   );
@@ -498,13 +482,17 @@ export function ChatComposer({
   );
 
   const send = useCallback(async () => {
+    // t0 钉在 onPress 第一行：executeRun 入口前的一切排队/前置都在表内
+    resetRunTiming();
     if (!hasModel) {
       onNeedModel();
       return;
     }
 
     if (running) {
-      abortUiRun();
+      // 双保险保留：running 时发送 = 停止（经 manager 的 abort 语义，
+      // retain/freeze 时序由 core 负责；收尾照常走事件路径）。
+      runtime.sessionStreamUnitManager.stopRun(sessionId);
       return;
     }
 
@@ -521,13 +509,13 @@ export function ChatComposer({
 
     await executeRun(content, allowResumeWithoutInput);
   }, [
+    runtime,
+    sessionId,
     hasModel,
     running,
     text,
-    attachments,
     canResumeWithoutInput,
     lastMessageIsPlainUserText,
-    abortUiRun,
     onNeedModel,
     executeRun,
     sendIntent,

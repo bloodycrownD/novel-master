@@ -1,7 +1,7 @@
 /**
  * Chat tab sessions subview: session list, template workspace.
  */
-import React, {useCallback, useEffect, useMemo, useRef} from 'react';
+import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {FlatList, Pressable, StyleSheet, Text, View} from 'react-native';
 import {type ChatSession} from '@novel-master/core/chat';
 
@@ -17,6 +17,7 @@ import {
   VfsFileManager,
   type VfsFileManagerHandle,
 } from '@/components/vfs/VfsFileManager';
+import {useRuntime} from '@/hooks/useRuntime';
 import type {ThemeTokens} from '@/theme/tokens';
 import {formatRelativeTimeMs} from '@/utils/format-relative-time';
 import type {SessionListPanel} from './useChatTabScope';
@@ -89,6 +90,45 @@ function ChatSessionListPanelInner({
   // 避免与聊天工作区的注册相互覆盖。
   const projectVfsRef = useRef<VfsFileManagerHandle | null>(null);
   const setWorkspaceBackState = useChatTabWorkspaceBackState();
+
+  // ===== 后台停止入口（Step 6）：订阅 manager 判活 =====
+  // 活跃 run 会话集合（starting|running 单元）：长按菜单的「停止生成」仅对
+  // 集合内的会话出现；变更经 manager.subscribe 通知（受理/收尾/替换均触发，
+  // 低频，整表重渲染可接受）。
+  const runtime = useRuntime();
+  const manager = runtime.sessionStreamUnitManager;
+  const [activeRunIds, setActiveRunIds] = useState<ReadonlySet<string>>(
+    () => new Set(manager.activeSessionIds()),
+  );
+  useEffect(() => {
+    const sync = () =>
+      setActiveRunIds(new Set(manager.activeSessionIds()));
+    sync();
+    return manager.subscribe(sync);
+  }, [manager]);
+
+  // ===== 中断徽标数据源（Step 9）：同 activeRunIds 的订阅模式 =====
+  // 中断态会话集合（水合回填的 interrupted 单元）：徽标三态判定
+  // running > interrupted > isCurrent 的中间一环；变更同样经
+  // manager.subscribe 通知驱动刷新。
+  const [interruptedRunIds, setInterruptedRunIds] = useState<
+    ReadonlySet<string>
+  >(() => new Set(manager.interruptedSessionIds()));
+  useEffect(() => {
+    const sync = () =>
+      setInterruptedRunIds(new Set(manager.interruptedSessionIds()));
+    sync();
+    return manager.subscribe(sync);
+  }, [manager]);
+
+  const onStopGenerating = useCallback(
+    (sid: string) => {
+      // 走单元的 abort 语义（retain/freeze 时序由 core 负责）；后续
+      // FINISHED 照常经事件路径收尾（投影回落、集合更新、按钮消失）。
+      manager.stopRun(sid);
+    },
+    [manager],
+  );
 
   const emitWorkspaceBackState = useCallback(() => {
     if (setWorkspaceBackState == null) {
@@ -176,6 +216,15 @@ function ChatSessionListPanelInner({
             }
             renderItem={({item}) => {
               const isCurrent = item.id === sessionId;
+              // 徽标三态判定（Step 9），优先级 running > interrupted > isCurrent：
+              // running（活跃 run）→「生成中」；interrupted（无论是否当前会话）→
+              // 「已中断」——会话中断后重启 app 且当前停留在该会话时，必须落
+              // 「已中断」而非被「活跃中」吞掉（GWT-6 原样复现场景）；仅当前
+              // 会话且非上述两态才保留「活跃中」。
+              const isRunning = activeRunIds.has(item.id);
+              const isInterrupted =
+                !isRunning && interruptedRunIds.has(item.id);
+              const showsActiveMeta = isCurrent && !isRunning && !isInterrupted;
               return (
                 <Pressable
                   style={[
@@ -221,9 +270,29 @@ function ChatSessionListPanelInner({
                       ]}
                     >
                       {formatRelativeTimeMs(item.updatedAtMs)}
-                      {isCurrent ? ' · 活跃中' : ''}
+                      {showsActiveMeta ? ' · 活跃中' : ''}
                     </Text>
                   </View>
+                  {isRunning ? (
+                    <View
+                      style={[
+                        styles.generatingBadge,
+                        {backgroundColor: tokens.primary},
+                      ]}
+                    >
+                      <Text style={styles.currentBadgeText}>生成中</Text>
+                    </View>
+                  ) : null}
+                  {isInterrupted ? (
+                    <View
+                      style={[
+                        styles.interruptedBadge,
+                        {backgroundColor: tokens.textSecondary},
+                      ]}
+                    >
+                      <Text style={styles.currentBadgeText}>已中断</Text>
+                    </View>
+                  ) : null}
                   {isCurrent && !sessionBatchActive ? (
                     <View
                       style={[
@@ -265,11 +334,20 @@ function ChatSessionListPanelInner({
           />
           <BottomSheetMenu
             visible={menuSessionId != null}
-            items={[
-              {label: '重命名', action: 'rename'},
-              {label: '复制', action: 'copy'},
-              {label: '删除', action: 'delete', danger: true},
-            ]}
+            items={
+              menuSessionId != null && activeRunIds.has(menuSessionId)
+                ? [
+                    {label: '停止生成', action: 'stop-generating'},
+                    {label: '重命名', action: 'rename'},
+                    {label: '复制', action: 'copy'},
+                    {label: '删除', action: 'delete', danger: true},
+                  ]
+                : [
+                    {label: '重命名', action: 'rename'},
+                    {label: '复制', action: 'copy'},
+                    {label: '删除', action: 'delete', danger: true},
+                  ]
+            }
             onClose={() => onMenuSessionIdChange(undefined)}
             onSelect={action => {
               const sid = menuSessionId;
@@ -277,7 +355,9 @@ function ChatSessionListPanelInner({
               if (sid == null) {
                 return;
               }
-              if (action === 'rename') {
+              if (action === 'stop-generating') {
+                onStopGenerating(sid);
+              } else if (action === 'rename') {
                 onOpenSessionRename(sid);
               } else if (action === 'copy') {
                 onCopySession(sid);
@@ -325,6 +405,20 @@ const styles = StyleSheet.create({
     marginRight: 4,
   },
   currentBadgeText: {color: '#FFFFFF', fontSize: 12, fontWeight: '600'},
+  generatingBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    // 与 interruptedBadge/currentBadge 一致的右侧间距：多徽标同排不贴死（ui/J-1）。
+    marginRight: 4,
+  },
+  /** 中断徽标（Step 9）：中性色区分于进行中的主色。 */
+  interruptedBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginRight: 4,
+  },
   menuDots: {fontSize: 18, paddingHorizontal: 4},
   chevron: {fontSize: 22, fontWeight: '300'},
   empty: {textAlign: 'center', marginTop: 32},

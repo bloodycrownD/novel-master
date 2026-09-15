@@ -34,6 +34,18 @@ export interface MessageCheckpointRepository {
   hasAnyCheckpointForSession(sessionId: string): Promise<boolean>;
 
   /**
+   * 统计给定消息里有 checkpoint 的条数（一条 `message_id IN (...)` 计数查询）。
+   *
+   * 等价性依赖 `message_checkpoint` 每 (session_id, message_id) 至多一行
+   * （PK + {@link MessageCheckpointRepository.insertCheckpoint} 的替换语义），
+   * 所以 `COUNT(*)` 恰等于「有 checkpoint 的消息数」——backfill 圈段比对用。
+   */
+  countCheckpointsForMessages(
+    sessionId: string,
+    messageIds: ReadonlyArray<string>
+  ): Promise<number>;
+
+  /**
    * Inserts checkpoint anchor + file pointers (replaces existing rows for the message).
    */
   insertCheckpoint(input: MessageCheckpointInsertInput): Promise<void>;

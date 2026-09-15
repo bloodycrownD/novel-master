@@ -6,7 +6,10 @@
 
 import type { MessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/message-checkpoint.port.js";
 import type { MessageRepository } from "@/domain/chat/repositories/message.port.js";
-import { SESSION_KKV_COMPOSER_STATUS_DOMAINS } from "@/domain/session-kkv/model/session-kkv-domains.js";
+import {
+  SESSION_KKV_COMPOSER_STATUS_DOMAINS,
+  SESSION_KKV_DOMAIN_BACKFILL_CURSOR,
+} from "@/domain/session-kkv/model/session-kkv-domains.js";
 import type { SessionKkvRepository } from "@/domain/session-kkv/repositories/session-kkv.port.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revision.port.js";
@@ -39,7 +42,7 @@ export type TruncateTailDeps = {
  * 1. 子查询列出 seq > afterSeq 的 tail → deleteCheckpointsForMessages（内含 −ref）
  * 2. messages.deleteAfterSeq(sessionId, afterSeq)
  * 3. 若 sweepRevisions → sweepSessionRevisions（仅 revision，无 sync blob）
- * 4. 若 tail 非空 → 清空 Composer 无叉 chip 对应 kkv 域
+ * 4. 若 tail 非空 → 清 backfill 游标（seq 复用防线）+ 清空 Composer 无叉 chip 对应 kkv 域
  */
 export async function truncateTailInTransaction(
   deps: TruncateTailDeps,
@@ -66,6 +69,12 @@ export async function truncateTailInTransaction(
   }
 
   if (tailIds.length > 0) {
+    // 发生删除即清 backfill 游标（seq 复用防线）：tail 删除后新消息会复用被删
+    // 的 seq，残留游标按行数圈段会错位——清掉让下次判定回退全量自愈。
+    await deps.sessionKkv.clearDomain(
+      sessionId,
+      SESSION_KKV_DOMAIN_BACKFILL_CURSOR
+    );
     for (const domain of SESSION_KKV_COMPOSER_STATUS_DOMAINS) {
       await deps.sessionKkv.clearDomain(sessionId, domain);
     }

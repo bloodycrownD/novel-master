@@ -1,7 +1,7 @@
 /**
  * Chat tab local UI scope: projects/sessions lists, subviews, drawers, VFS handles.
  */
-import {useCallback, useEffect, useMemo, useState} from 'react';
+import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {Alert, DeviceEventEmitter, Linking} from 'react-native';
 import {showAppToast} from '@/services/app-toast';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
@@ -105,25 +105,60 @@ export function useChatTabScope({
     }
   }, [runtime, projectId, sessionId]);
 
-  const refreshChatMeta = useCallback(async () => {
-    const modelId = await runtime.state.getCurrentModelId();
-    setHasWorkspaceModel(modelId != null && modelId !== '');
-    if (projectId == null || sessionId == null) {
-      // 无项目或无活动会话时无法解析 session 绑定，回退到无 meta 状态。
-      setAgentMeta(EMPTY_AGENT_META);
-      return;
+  // refreshChatMeta 的在途复用槽：首屏三处触发（本 hook 的 dep effect、
+  // Provider 的 conversation effect、useFocusEffect）在同一挂载周期内
+  // 重入，同参调用共享在途 promise，只跑一轮查询。
+  const refreshChatMetaInflightRef = useRef<{
+    key: string;
+    promise: Promise<void>;
+  } | null>(null);
+
+  const refreshChatMeta = useCallback(() => {
+    const key = `${projectId ?? ''}#${sessionId ?? ''}`;
+    const inflight = refreshChatMetaInflightRef.current;
+    if (inflight != null && inflight.key === key) {
+      return inflight.promise;
     }
-    try {
-      const meta = await loadChatAgentMeta(runtime, projectId, sessionId);
-      setAgentMeta(prev => ({
-        ...prev,
-        ...meta,
-        tokenLabel: prev?.tokenLabel ?? '…',
-      }));
-      void refreshChatTokenLabel();
-    } catch {
-      setAgentMeta(EMPTY_AGENT_META);
-    }
+    const promise = (async () => {
+      // getCurrentModelId 与 loadChatAgentMeta 互不依赖（后者只需
+      // projectId/sessionId），并行发起；两路赋值顺序保持
+      // （先 hasWorkspaceModel 后 agentMeta），失败语义不变。
+      const metaPromise =
+        projectId != null && sessionId != null
+          ? loadChatAgentMeta(runtime, projectId, sessionId)
+          : undefined;
+      // 兜底挂接：getCurrentModelId 先失败提前退出时，在途 meta 查询的
+      // 拒绝不会变成 unhandled rejection（其结果本就不会再被消费）。
+      metaPromise?.catch(() => undefined);
+      const modelId = await runtime.state.getCurrentModelId();
+      setHasWorkspaceModel(modelId != null && modelId !== '');
+      if (metaPromise == null) {
+        // 无项目或无活动会话时无法解析 session 绑定，回退到无 meta 状态。
+        setAgentMeta(EMPTY_AGENT_META);
+        return;
+      }
+      try {
+        const meta = await metaPromise;
+        setAgentMeta(prev => ({
+          ...prev,
+          ...meta,
+          tokenLabel: prev?.tokenLabel ?? '…',
+        }));
+        void refreshChatTokenLabel();
+      } catch {
+        setAgentMeta(EMPTY_AGENT_META);
+      }
+    })();
+    refreshChatMetaInflightRef.current = {key, promise};
+    // 落定后清引用：只清自己这一轮，避免覆盖后继（不同参数）的刷新；
+    // 完成后无 inflight，下次调用（如重新聚焦）正常发起新一轮。
+    const settleInflight = () => {
+      if (refreshChatMetaInflightRef.current?.promise === promise) {
+        refreshChatMetaInflightRef.current = null;
+      }
+    };
+    promise.then(settleInflight, settleInflight);
+    return promise;
   }, [runtime, projectId, sessionId, refreshChatTokenLabel]);
 
   const reloadLists = useCallback(async () => {
@@ -131,13 +166,20 @@ export function useChatTabScope({
     setProjects(plist);
     const pid = projectId ?? plist[0]?.id;
     if (pid) {
+      // projects.get 与 sessions.listByProject 都只依赖 pid、互不依赖，
+      // 并行发起（projects.list 必须先行：pid 取自 plist[0] 兜底）。
+      const nextSessionsPromise = runtime.sessions.listByProject(pid);
+      // 先挂兜底 handler：get 慢于本查询失败时，等待窗口内不会出现
+      // unhandled rejection；真正的失败语义由下方 await 原样承接。
+      nextSessionsPromise.catch(() => undefined);
+      let projectMeta: ChatProject | undefined;
       try {
-        setCurrentProjectMeta(await runtime.projects.get(pid));
+        projectMeta = await runtime.projects.get(pid);
       } catch {
-        setCurrentProjectMeta(undefined);
+        projectMeta = undefined;
       }
-      const nextSessions = await runtime.sessions.listByProject(pid);
-      setSessions(nextSessions);
+      setCurrentProjectMeta(projectMeta);
+      setSessions(await nextSessionsPromise);
     } else {
       setCurrentProjectMeta(undefined);
       setSessions([]);

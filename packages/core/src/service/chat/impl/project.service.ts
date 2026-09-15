@@ -37,6 +37,7 @@ import {
   runDeferredBlobGc,
 } from "@/service/session-fs/create-session-fs-service.js";
 import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
+import { createSessionRunStateService } from "@/service/session-run-state/create-session-run-state-service.js";
 import { SqliteSkillDisabledRuleRepository } from "@/domain/skills/repositories/impl/sqlite-skill-disabled-rule.repository.js";
 import type { ProjectService } from "../project.port.js";
 
@@ -170,6 +171,10 @@ export class DefaultProjectService implements ProjectService {
         // entry_id 化后会话独立 scope：session:{pid}:{sid}，前缀为"/"
         await deleteVfsPrefix(r.vfs, `session:${id}:${session.id}`, "/");
       }
+      // run_state 表带 project_id 列，一条 DELETE 等价于逐会话清理
+      // （BFS 展开的 allSessions 集合 = 该 project 全部会话）；
+      // 留着孤儿 starting/running 行会在重启水合时生成幽灵 interrupted 单元。
+      await createSessionRunStateService(tx).deleteByProject(id);
       await r.sessions.deleteByProject(id);
       // 项目 scope 只剩 template（会话都有自己的 scope）；技能负清单行一并清理，
       // 避免留下指向已删项目的孤儿禁用行。

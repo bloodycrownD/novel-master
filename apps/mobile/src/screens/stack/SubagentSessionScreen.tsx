@@ -5,16 +5,17 @@
  * 复用主会话的 {@link ChatTranscriptWebView}（WebView 引擎），与主会话共享
  * 富文本渲染、工具卡片展示、消息宽度、流式输出等所有视觉行为。
  *
- * Phase 2 重构后：消费 {@link useSessionStream} + {@link useSessionAbort} +
- * {@link useSessionBatch}（不接 composer），删除原本手搓的事件订阅/state 平行实现，
- * 与主会话共用同一套 stream/abort/batch 单元。
+ * Step 6 起删除第二套装配（原 useSessionStream + useSessionAbort +
+ * useSessionBatch + useRunResumeProbe + 内联注入），改为订阅同一
+ * SessionStreamUnitManager：子会话 run 的事件由 manager 的消费型单元落点
+ * 承接（RUN_STARTED 到达时 lazy 建立），本页只做——
+ * - 订阅子会话的单元投影（运行态视图：流式/停止按钮/中断现场）；
+ * - 把自己的 webview 句柄 attach 进 manager（单元的单一注入实现自动补齐
+ *   重进 partial——与本页旧的内联注入版语义一致，实现只剩单元一份）；
+ * - 消息面：有单元走投影，无单元（run 已结束且单元出表）本地回源。
  *
- * 错过 RUN_STARTED 的 stale 守卫（P1-1）：子会话页可能晚于 run 启动打开，
- * 此时 mount 主动查 `abortRegistry.has(sessionId)`，若该 sessionId 已有
- * in-flight run 则合成一次 markRunStarted 初始化 uiRunning，避免后续 stream
- * delta 因 uiRunning=false 被全部丢弃。
- *
- * 只读：无 composer；但 agent 运行中时显示停止按钮（调 abortRegistry.abort）。
+ * 只读：无 composer；agent 运行中时显示停止按钮（经 manager.stopRun 走
+ * abortRegistry 的 abort 语义）。
  */
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {Linking, Pressable, StyleSheet, Text, View} from 'react-native';
@@ -24,12 +25,6 @@ import {
   type RouteProp,
 } from '@react-navigation/native';
 import type {ChatMessage} from '@novel-master/core/chat';
-import type {
-  AgentRunFailedPayload,
-  AgentRunFinishedPayload,
-  AgentRunStartedPayload,
-  AgentStepCommittedPayload,
-} from '@novel-master/core/events';
 import {ChatTranscriptWebView} from '../../components/chat/ChatTranscriptWebView';
 import {showAppToast} from '@/services/app-toast';
 import {chatLinkNotFoundMessage} from '@novel-master/core/chat';
@@ -40,15 +35,16 @@ import {useRuntime} from '../../hooks/useRuntime';
 import {useNovelMaster} from '../../runtime/novel-master-context';
 import {readChatRichTextEnabled} from '../../storage/chat-rich-text-pref';
 import {resolveChatLinkIntent} from '@/screens/tabs/chat-tab/chat-link-nav';
+import {useInterruptedPartialCommit} from '@/screens/tabs/chat-tab/useInterruptedPartialCommit';
 import {useTheme} from '../../theme/ThemeProvider';
 import type {RootStackParamList} from '../../navigation/types';
-import {useSessionAbort} from '@/screens/tabs/chat-tab/useSessionAbort';
-import {useSessionBatch} from '@/screens/tabs/chat-tab/useSessionBatch';
-import {useSessionStream} from '@/screens/tabs/chat-tab/useSessionStream';
-import type {StreamWireChunk} from '@/services/stream-wire-queue';
-import {useRunResumeProbe} from '@/hooks/use-run-resume-probe';
+import type {SessionStreamUnitView} from '@/services/session-stream-unit';
+import {createTranscriptStreamHandle} from '@/services/session-stream-webview-adapter';
 
 type ScreenRoute = RouteProp<RootStackParamList, 'SubagentSessionView'>;
+
+/** 子会话 webview 句柄在单元注册表里的稳定标识（attach/detach 对账用）。 */
+const SUBAGENT_TRANSCRIPT_HANDLE_ID = 'subagent-transcript';
 
 export function SubagentSessionScreen() {
   const {tokens} = useTheme();
@@ -58,37 +54,64 @@ export function SubagentSessionScreen() {
   const navigation = useNavigation();
   const route = useRoute<ScreenRoute>();
   const {sessionId, projectId, parentSessionId} = route.params;
-
-  // 子会话流式 partial：从 core 的 streamRegistry 直接查询，不依赖 eventBus 订阅时机。
-  // registry 在 run-agent-turn 里按 sessionId register/append/unregister，
-  // 不管用户何时进入子会话，get() 都能拿到从 run 开始的全部累积文本。
+  const manager = runtime.sessionStreamUnitManager;
 
   const [messages, setMessages] = useState<readonly ChatMessage[]>([]);
   const [initialLoading, setInitialLoading] = useState(true);
   const [richTextEnabled, setRichTextEnabled] = useState(false);
   const transcriptWebRef = useRef<ChatTranscriptWebViewHandle>(null);
-  const messagesCountRef = useRef(0);
-  // WebView 路径下 streamingText state 不会增长（delta 直接推给 webview 内部），
-  // 重进时需要靠 streamCache + 本 ref 把 partial 注回新的 webview。
-  const [webviewReady, setWebviewReady] = useState(false);
-  const streamInjectedRef = useRef(false);
 
-  const reload = useCallback(async (): Promise<readonly ChatMessage[]> => {
-    try {
-      const list = await runtime.messages.listBySession(sessionId);
-      setMessages(list);
-      messagesCountRef.current = list.length;
-      return list;
-    } catch (error) {
-      showToast(toastMessage('加载子会话失败', error));
-      return [];
-    }
-  }, [runtime, sessionId, showToast]);
-
-  // 初次加载：复用 reload（含错误 toast），仅制表 initialLoading 的收尾
+  // ===== 单元投影订阅（与 ChatTabProvider 同构：subscribe + sync） =====
+  const [unitView, setUnitView] = useState<SessionStreamUnitView | null>(() =>
+    sessionId != null ? manager.snapshot(sessionId) : null,
+  );
   useEffect(() => {
-    reload().finally(() => setInitialLoading(false));
-  }, [reload]);
+    const sync = () =>
+      setUnitView(sessionId != null ? manager.snapshot(sessionId) : null);
+    sync();
+    return manager.subscribe(sync);
+  }, [manager, sessionId]);
+
+  // 消息面：有单元（消费型/interrupted/宽限中的 settled）走单元管线水合，
+  // 无单元本地回源（run 早已结束且单元出表的兜底）。
+  const hasUnit = unitView != null;
+  useEffect(() => {
+    let cancelled = false;
+    const load = async (): Promise<readonly ChatMessage[]> => {
+      if (sessionId == null) {
+        return [];
+      }
+      if (manager.snapshot(sessionId) != null) {
+        try {
+          return (await manager.loadSessionTailMessages(sessionId)) ?? [];
+        } catch (error) {
+          showToast(toastMessage('加载子会话失败', error));
+          return [];
+        }
+      }
+      try {
+        return await runtime.messages.listBySession(sessionId);
+      } catch (error) {
+        showToast(toastMessage('加载子会话失败', error));
+        return [];
+      }
+    };
+    void load()
+      .then(list => {
+        if (!cancelled) {
+          setMessages(list);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setInitialLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount/会话变化时水合一次；后续刷新由投影自驱
+  }, [sessionId, hasUnit]);
 
   // 继承主会话的富文本偏好
   useEffect(() => {
@@ -100,161 +123,42 @@ export function SubagentSessionScreen() {
       .catch(() => undefined);
   }, [appUi]);
 
-  // 装配 stream/abort/batch（与主会话同构，但不接 composer）。
-  const onStreamResetRef = useRef<() => void>(() => undefined);
-  const applySegmentsRef = useRef<
-    (segments: readonly StreamWireChunk[]) => void
-  >(() => undefined);
+  // ===== webview 句柄 attach（ready 后挂进单元——注入/流式推送的落点） =====
+  const [webviewReadyEpoch, setWebviewReadyEpoch] = useState(0);
+  const onWebviewReady = useCallback(() => {
+    setWebviewReadyEpoch(epoch => epoch + 1);
+  }, []);
 
-  const abort = useSessionAbort({
-    sessionId,
-    abortRegistry: runtime.abortRegistry,
-    onStreamResetRef,
-  });
-
-  const batch = useSessionBatch({
-    applySegments: segments => applySegmentsRef.current(segments),
-  });
-
-  // 子会话只有一个 in-flight run，acceptRunEvent 放宽：任何非空 runId 都接受。
-  const acceptRunEvent = useCallback(
-    (runId: string | undefined) => runId != null && runId !== '',
-    [],
-  );
-
-  // 子会话 run 回调：同步 uiRunning + 触发 reload（落库消息接管渲染）。
-  // streamRegistry 的 register/append/unregister 全部在 core 的 run-agent-turn 里管理，
-  // Screen 侧不需要手动操作 registry——只需在 step commit / run 结束时重置注入标记。
-  const handleRunStarted = useCallback(
-    (_payload: AgentRunStartedPayload) => {
-      abort.markRunStarted();
-      void reload().catch(() => undefined);
-    },
-    [abort, reload],
-  );
-  const handleRunFinished = useCallback(
-    (_payload: AgentRunFinishedPayload) => {
-      abort.markRunEnded();
-      void reload().catch(() => undefined);
-    },
-    [abort, reload],
-  );
-  const handleRunFailed = useCallback(
-    (_payload: AgentRunFailedPayload) => {
-      abort.markRunEnded();
-      void reload().catch(() => undefined);
-    },
-    [abort, reload],
-  );
-  const handleStepCommitted = useCallback(
-    (_payload: AgentStepCommittedPayload) => {
-      // step 提交后 partial 已落库，core 侧 streamRegistry 会重置（下一 step 从空开始）。
-      // Screen 侧重置注入标记，允许下一 step 的新 partial 被注入。
-      streamInjectedRef.current = false;
-      void reload().catch(() => undefined);
-    },
-    [reload],
-  );
-
-  const stream = useSessionStream({
-    sessionId,
-    useWebviewTranscript: true,
-    batchEnabled: true,
-    transcriptWebRef,
-    uiRunning: abort.uiRunning,
-    acceptRunEvent,
-    onRunStarted: handleRunStarted,
-    onRunFinished: handleRunFinished,
-    onRunFailed: handleRunFailed,
-    getUiRunning: abort.getUiRunning,
-    getTranscriptFreezeCount: abort.getTranscriptFreezeCount,
-    getAbortRetainPending: abort.getAbortRetainPending,
-    clearAbortRetainPending: abort.clearAbortRetainPending,
-    batchIngest: batch.ingestWireChunk,
-    batchClear: batch.clearBuffers,
-    batchFlush: batch.flushBuffers,
-    onMessagesChanged: reload,
-    getMessageCount: () => messagesCountRef.current,
-    onStepCommitted: handleStepCommitted,
-  });
-  // 拆环：stream mount 后把 apply 叶子 / reset 写入两个占位 ref。
-  applySegmentsRef.current = stream.applySegments;
-  onStreamResetRef.current = stream.handleStreamReset;
-
-  // stale 守卫日志已移除（诊断阶段结束）。
-  // ===== 生成中状态兜底（避免事件丢失导致 uiRunning 永久残留） =====
-  //
-  // 双方向探针（从本 Screen 抽出的 useRunResumeProbe）：
-  // 恢复方向——sessionId 生效时查 abortRegistry.has → 合成 markRunStarted + reload；
-  // 收尾方向——uiRunning=true 但 has=false 时校准收尾 + reload（前台触发 + 低频轮询，
-  // 内部含复询防抖；mobile 查的是本进程内存里的 core registry 注册状态，
-  // unregister 事件还没派发到 renderer 时 has 可能短暂仍返回 true）。
-  // 该探针/轮询节点也是 registry.has 的唯一复评点，不新增订阅机制。
-  useRunResumeProbe({
-    sessionId,
-    isRunRegistered: () =>
-      sessionId != null && runtime.abortRegistry.has(sessionId),
-    onRunActive: () => {
-      abort.markRunStarted();
-      void reload().catch(() => undefined);
-    },
-    onRunEnded: () => {
-      abort.markRunEnded();
-      void reload().catch(() => undefined);
-    },
-    uiRunning: abort.uiRunning,
-    isRunActive: abort.getUiRunning,
-  });
-
-  // 从 core streamRegistry 查询 in-flight 流式 partial 并注入 WebView。
-  // registry 在 run-agent-turn register/append/unregister，不管用户何时进入，
-  // get() 都能拿到从 run 开始的全部累积文本。run 结束后 registry 会 unregister，
-  // get() 返回 undefined——此时落库的消息从 messages list 正常加载。
   useEffect(() => {
-    if (streamInjectedRef.current) {
-      return;
-    }
-    if (!webviewReady) {
-      return;
-    }
-    if (!abort.uiRunning) {
-      return;
-    }
-    if (sessionId == null) {
-      return;
-    }
-    // 必须等 messages 加载完再注入——ChatTranscriptWebView 的 messages effect
-    //（child effect，先于本 parent effect 执行）需要先发 sessionSnapshot 把
-    // user 行渲染到 WebView。如果 inject 先于 snapshot 到达，WebView 上 rows
-    // 还是空的，只渲染 stream tail，user 消息不可见。
-    if (messages.length === 0) {
-      return;
-    }
-    const partial = runtime.streamRegistry?.get(sessionId);
-    if (partial == null) {
-      return;
-    }
-    if (partial.text.length === 0 && partial.thinking.length === 0) {
+    if (sessionId == null || webviewReadyEpoch === 0) {
       return;
     }
     const web = transcriptWebRef.current;
     if (web == null) {
       return;
     }
-    streamInjectedRef.current = true;
-    if (partial.text.length > 0) {
-      web.pushStreamDelta('text', partial.text);
-    }
-    if (partial.thinking.length > 0) {
-      web.pushStreamDelta('thinking', partial.thinking);
-    }
-  }, [
-    webviewReady,
-    abort.uiRunning,
-    sessionId,
-    runtime.streamRegistry,
-    messages.length,
-  ]);
+    const sid = sessionId;
+    // 单元载荷/控制消息 → webview handle 适配（与主屏同一份哑引擎契约，
+    // 映射细节见 services/session-stream-webview-adapter）。
+    const handle = createTranscriptStreamHandle(
+      SUBAGENT_TRANSCRIPT_HANDLE_ID,
+      web,
+    );
+    manager.attachWebview(sid, handle);
+    return () => {
+      manager.detachWebview(sid, handle.handleId);
+    };
+  }, [manager, sessionId, webviewReadyEpoch, hasUnit]);
+
+  // 中断现场渲染（Step 6，语义说明见 hook 模块头）：与主屏
+  // ChatConversationPanel 共用同一份 effect（ui/C-1 抽取）；本屏的
+  // webviewReadyEpoch 直接入参，ready 世代驱动修 ui/B-1 的
+  // 「tail 先于 webview ready 到达」时序。
+  useInterruptedPartialCommit({
+    unitView,
+    webRef: transcriptWebRef,
+    readyEpoch: webviewReadyEpoch,
+  });
 
   // 嵌套子会话（孙会话）也共享同一个根父工作区，因此透传同一个 parentSessionId，
   // 而不是当前子会话的 id。
@@ -335,10 +239,10 @@ export function SubagentSessionScreen() {
     if (sessionId == null) {
       return;
     }
-    // 与主会话停止按钮一致：经 abortRegistry.abort 触发 Core 层中断。
-    // 不传 freezeAt——子会话只读，无需 freeze 列表（无 composer 续跑场景）。
-    abort.abortUiRun();
-  }, [abort, sessionId]);
+    // 与主会话停止入口一致：经 manager.stopRun → abortRegistry.abort 触发
+    // core 层中断；后续 FINISHED 照常走事件路径收尾（投影回落、按钮消失）。
+    manager.stopRun(sessionId);
+  }, [manager, sessionId]);
 
   if (initialLoading) {
     return (
@@ -350,11 +254,22 @@ export function SubagentSessionScreen() {
     );
   }
 
-  const agentRunning = abort.uiRunning;
+  const agentRunning =
+    unitView?.status === 'starting' || unitView?.status === 'running';
+  const displayMessages = unitView?.messages ?? messages;
 
   return (
     <View style={[styles.root, {backgroundColor: tokens.background}]}>
-      {messages.length === 0 && !agentRunning ? (
+      {unitView?.status === 'interrupted' ? (
+        // 中断现场的正面标识（Step 7，与主屏指标条同语义）：轻量文本行，
+        // 复用既有视觉 token，不动 webview 协议。
+        <View style={[styles.interruptedBanner, {borderColor: tokens.danger}]}>
+          <Text style={[styles.interruptedText, {color: tokens.danger}]}>
+            已中断
+          </Text>
+        </View>
+      ) : null}
+      {displayMessages.length === 0 && !agentRunning ? (
         <View style={styles.center}>
           <Text style={{color: tokens.textSecondary}}>子会话暂无消息</Text>
         </View>
@@ -362,13 +277,12 @@ export function SubagentSessionScreen() {
         <ChatTranscriptWebView
           ref={transcriptWebRef}
           sessionKey={sessionKey}
-          messages={messages}
-          streamingText={stream.streamingText}
-          streamingThinking={stream.streamingThinking}
+          messages={displayMessages}
           flags={flags}
           agentRunning={agentRunning}
+          uiRunning={agentRunning}
           defaultScrollToBottom={false}
-          onReady={() => setWebviewReady(true)}
+          onReady={onWebviewReady}
           onOpenToolFile={onOpenToolFile}
           onLinkClick={onLinkClick}
           onOpenSubagentSession={onOpenSubagentSession}
@@ -397,6 +311,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: 24,
+  },
+  interruptedBanner: {
+    alignSelf: 'center',
+    marginTop: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  interruptedText: {
+    fontSize: 12,
+    fontWeight: '600',
   },
   stopBtn: {
     position: 'absolute',

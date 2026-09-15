@@ -28,6 +28,7 @@ import type {ThemeTokens} from '@/theme/tokens';
 import {useChatTabContext} from './ChatTabProvider';
 import {useChatTabWorkspaceBackState} from './ChatTabNavigationProvider';
 import {useChatTabController} from './useChatTabController';
+import {useInterruptedPartialCommit} from './useInterruptedPartialCommit';
 
 export type ChatConversationPanelProps = {
   tokens: ThemeTokens;
@@ -55,10 +56,8 @@ export function ChatConversationPanel({
     projectId,
     sessionId,
     agentMeta,
-    streamMetricsAccRef,
-    streamMetricsLastRun,
-    uiRunning,
-    agentActive,
+    unitView,
+    transcriptReadyEpoch,
     useWebviewTranscript,
     transcriptWebRef,
     chatScrollKey,
@@ -72,8 +71,6 @@ export function ChatConversationPanel({
     restoredTranscriptScroll,
     defaultChatScrollToBottom,
     cachedChatScroll,
-    streamingText,
-    streamingThinking,
     loadingMoreMessages,
     hasWorkspaceModel,
     canResumeWithoutInput,
@@ -92,10 +89,6 @@ export function ChatConversationPanel({
     messageMenuAnchor,
     messageEditPrompt,
     setMessageEditPrompt,
-    beginUiRun,
-    endUiRunOnError,
-    abortUiRun,
-    onStreamReset,
     onMessagesChanged,
     onNeedModel,
     bumpWorktreeUiToken,
@@ -106,6 +99,20 @@ export function ChatConversationPanel({
     workspaceVfsRef,
     scope,
   } = ctx;
+
+  // 当前会话 run 是否活跃（单元投影派生：starting|running；含受理未回填的
+  // 保护窗——starting 投影即时可见，乐观置位已随单元化退役）。
+  const unitActive =
+    unitView?.status === 'starting' || unitView?.status === 'running';
+
+  // 中断现场渲染（Step 6，语义说明见 hook 模块头）：与 SubagentSessionScreen
+  // 共用同一份 effect（ui/C-1 抽取）；ready 世代入依赖修 ui/B-1 的
+  // 「tail 先于 webview ready 到达」时序。
+  useInterruptedPartialCommit({
+    unitView,
+    webRef: transcriptWebRef,
+    readyEpoch: transcriptReadyEpoch,
+  });
 
   const transcriptFlags = useMemo(
     () => ({
@@ -183,9 +190,8 @@ export function ChatConversationPanel({
           onPressModel={openModelPicker}
         />
         <ChatStreamMetricsBarLive
-          agentRunning={uiRunning}
-          accRef={streamMetricsAccRef}
-          lastRun={streamMetricsLastRun}
+          agentRunning={unitActive}
+          sessionId={sessionId}
         />
       </>
     ) : null;
@@ -198,9 +204,9 @@ export function ChatConversationPanel({
           sessionKey={chatScrollKey ?? 'no-session'}
           messages={chatMessages}
           hasMore={hasMoreMessages}
-          agentRunning={agentActive}
-          uiRunning={uiRunning}
-          toolInvoking={uiRunning}
+          agentRunning={unitActive}
+          uiRunning={unitActive}
+          toolInvoking={unitActive}
           flags={transcriptFlags}
           menuCloseSignal={webMenuCloseSignal}
           mermaidViewerCloseSignal={mermaidViewerCloseSignal}
@@ -222,10 +228,10 @@ export function ChatConversationPanel({
         <MessageList
           key={chatScrollKey ?? 'no-session-scroll'}
           messages={chatMessages}
-          streamingText={streamingText}
-          streamingThinking={streamingThinking}
-          toolInvoking={uiRunning}
-          agentRunning={agentActive}
+          streamingText={unitView?.partialText ?? ''}
+          streamingThinking={unitView?.partialThinking ?? ''}
+          toolInvoking={unitActive}
+          agentRunning={unitActive}
           chatRichTextEnabled={chatRichTextEnabled}
           richRenderEpoch={richRenderEpoch}
           initialScroll={cachedChatScroll ?? null}
@@ -256,11 +262,7 @@ export function ChatConversationPanel({
       <ChatComposer
         scope={{projectId, sessionId}}
         hasModel={hasWorkspaceModel || agentMeta.hasDedicatedModel}
-        running={uiRunning}
-        beginUiRun={beginUiRun}
-        endUiRunOnError={endUiRunOnError}
-        abortUiRun={abortUiRun}
-        onStreamReset={onStreamReset}
+        running={unitActive}
         onMessagesChanged={onMessagesChanged}
         onNeedModel={onNeedModel}
         canResumeWithoutInput={canResumeWithoutInput}

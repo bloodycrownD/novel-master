@@ -72,6 +72,27 @@
 ### 验证
 
 `npx jest` 186 suites / 1083 tests 全绿；`npm run build` + `npm run typecheck` 通过；eslint error 数与基线持平（22=22，存量）。
+## cr-func 代码审查修复（2026-08-30，fix-parallel 节点，worktree .woktree/parallel-notify）
+
+### 请求
+
+在 worktree `parallel-notify`（分支 feat/agent-run-parallel-and-notify）闭合 cr-func 两条 must-fix：T-P7 守卫用例缺失、RUN_STARTED 后失败双 toast。只改最小范围，不动 useSessionStream/ChatTabProvider 与 docs/Iterations/。
+
+### 修复要点
+
+- **must-fix 1（T-P7）**：`apps/mobile/__tests__/agent-activity.test.ts` 新增「T-P7 守卫：refcount 单一归属」describe——受理即活跃、STARTED 不碰计数、FINISHED/FAILED 事件收尾归零、finally 早退归零、跨会话并行归零在最后一个 run 收尾；另有静态断言锁定 lifecycle 路径（useAgentRunLifecycle.ts / useSessionStream.ts）不含计数 API 的调用或导入（正则带括号/匹配 import 语句，注释提及 API 名不算）。`db-backup.service.test.ts` 补 import 侧守卫用例（活跃期间选择器启动前即拒）。
+- **must-fix 2（双 toast）**：根因是 core `agent-runner.ts:774` 失败时既 publish EVENT_AGENT_RUN_FAILED 又 throw，Manager 的 onRunFailed 与 .catch 都调 uiBridge.onError。修复：`.catch` 仅当 `entries.get(sessionId) === entry && entry.runId == null`（resolve/register 阶段错误，事件永不来）时才 onError；事件已收尾或 RUN_STARTED 已达由事件路径负责。补两条测试：RUN_STARTED 后失败只弹一次、早退 throw 兜底弹一次。
+
+### 提交与验证
+
+- 35ed6fd fix(manager): 失败双 toast——throw 路径仅在事件路径未收尾时兜底 onError
+- 54bb4b0 test(t-p7): 补 refcount 单一归属守卫用例
+- `cd apps/mobile && npx jest` 全量 186 套件 / 1091 用例全过；`npm run typecheck` 干净。
+
+### 经验
+
+- 静态源码断言（readFileSync + 正则）要区分「调用/导入」与「注释提及」，否则误伤既有注释。
+- Manager 双路径收尾的去重判断统一用「entry 是否仍是本次 + runId 是否已回填」两个信号，覆盖受理空窗、事件先到、throw 先到三种时序。
 
 ## 续作启动（2026-09-05，主会话）
 
@@ -86,3 +107,78 @@
 - useAgentRunLifecycle.ts 冲突为架构对决：main 的 refCountedRef 所有权守卫（1.5.9 修复）vs 分支的 refcount 整体上收 AgentRunManager（T-P7 静态断言锁死 lifecycle 不碰计数）。裁决取分支侧（Manager 方案是同一泄漏的更根本修复），并清除自动合并漏进来的孤儿（refCountedRef 声明、beginUiRun 置位）。main 的流式恢复机制（保护窗/恢复窗口/反填）完整保留——notify PRD 依赖它。
 - use-agent-run-lifecycle 的「refcount 平衡」断言按新语义对齐（计数断言移除，归 T-P7 Manager 套件覆盖）。
 - 验证：8 套件 105 测试全绿（含 T-P7、composer 两轮回归、webview 重挂回归）；merge commit 8991cd7，分支领先 main 14 提交、落后 0。
+
+## Step 3 落地（2026-09-05，worktree）
+
+### 请求
+
+主 worktree 停用（用户占用），在 .worktree/agent-run-parallel-and-notify 继续 notify 迭代；main 领先 152 提交（1.5.11→1.5.14、正则移除、body-params、workspace-push、图表重做），重新合入后实现 spec Step 3。
+
+### 实现
+
+- 重合 main：旧 worktree 已被并行会话清理，重建后合并，仅记忆文档一处冲突（照旧双保留），代码零冲突；npm install + core dist 重建 + 9 套件 102 绿后开工。
+- Manager 投影面：getEntry（starting runId=null）/subscribeEntries（5 变更点通知）。
+- lifecycle：getManagerEntry 注入；reset 采纳 running 投影 runId（重进即严格匹配）；starting 不采纳走恢复窗口；RUN_STARTED 直通路径保持 payload.runId 回填（事件序保证 Manager 先填、UI 后读，同值）。
+- Provider：开窗资格与探针 isRunRegistered 扩 registry.has ∥ manager.hasRun（封受理空窗回页误收尾）；sessionAgentRunning 新视图（transcript agentRunning/reload 语义随之会话化——别的会话 run 不再冻结本会话）。
+- 测试：T-P3a/b/c/d + mock 桩；9 套件 116 全绿、tsc 0 错、prettier/eslint 过（no-void 警告为分支存量）。提交 942a6a98。
+- 记忆改记 worktree 侧（随分支走，避免下次合并再撞同一文档冲突）。
+
+## Step 5 反馈落地（2026-09-09，worktree）
+
+user:
+真机测试反馈：1) 状态栏常驻通知希望能显示当前项目、当前会话名；2) 聊天配置里给通知栏（保活）加开关，默认关，对历史完全兼容。
+
+assistant:
+两条都落地（提交 602cb909，spec 附需求变更追记）：
+- 内容化：通知模块按 sessionId 维护标签集，标题「正在生成 · 会话名」/正文「项目 · 会话名」，多会话附「共 N 个」；单会话收尾摘标签原位刷新，最后收尾才停服务。标签版本号驱动内容刷新，无标签变更时保持旧起停竞态语义（旧用例零改动通过）。
+- 独立开关：偏好 agentKeepAlive 默认关（历史零感知：不开启则无前台服务无常驻通知），与完成通知开关（默认开）解耦；prefBridge 扩 isKeepAliveEnabled，未注入视为关；收尾摘标签与开关无关。
+- 测试 T-P5×5 / T-P8/T-P8b，T-P6 语义更新；5 套件 94 全绿。JS-only 改动，设备 force-restart 已重拉 bundle（0 error）。
+- 踩坑：测试 describe 挂在外层 describe 之外导致 beforeEach 复位没罩到（双 display 假失败）——新增 describe 要么进外层要么自带 clearAllMocks+reset。
+
+user:
+第二轮反馈：能一个会话一个通知吗？这样点按才能跳到对应会话；生成中的通知现在点不了跳转；开关 title 太长改「常驻通知」、描述简化。
+
+assistant:
+per-session 化落地（80343a13）：通知 id nm-agent-keepalive-<sessionId>、各带 data.sessionId 复用既有 PRESS→setCurrentSession 导航链（此前常驻通知无 data 是点不动的原因）；单会话收尾只 cancel 自己的通知条、最后一个收尾才 stopForegroundService；desired/version 状态机退场，显示/取消即状态；串行链保留；同标签重复登记经 displayed 映射抑制。开关文案改「常驻通知」。测试随模型重写，踩坑两个：①mockImplementationOnce 未消费不被 clearAllMocks 清除、跨用例泄漏卡死后续 stopFg——改用「调用即信号」Promise 精确等待；②notifee mock 缺 cancelNotification 补齐。6 套件 97 全绿，设备已重拉 bundle（旧 ERROR 为改到一半的陈旧日志，二次拉包零错）。
+
+user:
+第三轮反馈：并行请求只有一个状态栏通知，不对。
+
+assistant:
+根因（2b21d44a）：Android startForeground 是替换语义——N 条通知同挂 asForegroundService 时后发顶掉前发，只剩最后一条。改为 FGS 载体模型：同一时刻仅载体会话的通知挂 FGS 标记（首个受理者），其余普通 ongoing（视觉/点按一致）；载体收尾先向剩余会话转交（重发挂 FGS 顺带撤旧条）再收尾，无剩余才停服务；stop→立即 start 同会话竞态用「调用时摘意图标记+任务时重登记探测」原样保留。教训：测试场景要先想清楚收尾顺序——载体最后收尾时集合已空本就该停服务，转交用例必须让载体先走。
+
+user:
+第四轮反馈：点击通知后消息会消失？感觉不如回滚到初版共用一个状态栏？
+
+assistant:
+先查后动（50f03e82）：发现常驻通知缺 pressAction——notifee 无它不派发 PRESS 事件（完成通知有所以能跳），此前点按走的是系统默认打开应用、行为不可控，这才是跳转从未真正生效的原因（上轮只归因到缺 data，只对一半）。已补齐 pressAction:{id:'default'} 与完成通知同型，23 测试全绿推真机。同时向用户澄清：跳转链路完成通知也在用，若切换路径有 bug 回滚常驻通知只是藏症状；「消息消失」待用户复现细节（哪条通知/前后台/是否流式中/消失的是会话消息还是通知本体）再定位，若用户仍偏好简单稳妥，可回滚到单条聚合通知（内容+开关保留，仅失去分条跳转）。
+
+user:
+第五轮反馈：状态栏（通知）点击后还是会消失；拍板回滚到一个聚合状态栏。另外并行双会话重进流式丢失待复现（已埋探针）。
+
+assistant:
+按拍板回滚（5a3f5657）：通知模块/测试/mock 恢复至 602cb909 聚合版——单条常驻通知、内容随最近会话+总数、开关默认关、文案保留「常驻通知」；点按直达仅完成通知保留。44 测试全绿推真机。spec 追记 #7 记录决策：华为 EMUI 对 FGS 通知点按处置与 AOSP 预期不符（加 pressAction 后仍消失），per-session 放弃。流式丢失探针（4 文件+[pstream] 前缀，未提交）保留在工作区待用户复现。
+
+user:
+第六轮反馈：确认重复消息没了；但出现消息丢失（并行两会话，一个消息丢失，重启后渲染回来）；状态栏生成中点击无反应，可不跳会话但必须跳应用。
+
+assistant:
+消息丢失根因（37eddafe）：3cf66a8e 的串会话守卫把后台会话收尾的 force reload 整体丢弃，连视图缓存刷新一起丢——该会话缓存停在完成前旧列表，重进水合旧缓存=消息丢失；缓存纯内存故重启恢复。修复=守卫只挡 setChatMessages，缓存按发起时 scopeKey 照常写回属主。状态栏点按：聚合版常驻通知无 pressAction，notifee 不设 contentIntent，Android 点按完全无反应；补 default pressAction=点按拉起应用，PRESS 无 sessionId 走既有 no-op（不跳会话，用户拍板）。测试：T-X 扩属主缓存断言、通知 pressAction 用例，6 套件 86 绿。排查经验沉淀：RN 侧探针（[pstream] 前缀 6 文件）全量验证绑定/webview/快照层正确后才锁死消息层；受控 promise mock 要单次武装式（按序号会被切换重渲染的新初次加载顶掉句柄）。
+
+user:
+第七轮反馈：这轮生成结束后渲染正常；推测之前的"假渲染"是生成接近尾声未结束时进入，堆积内容按渲染节奏补完——是否如此？
+
+assistant:
+核实结论：非 bug。代码里无打字机限速（RN rAF 批帧 + webview 每帧整段替换，均无人为限速），用户看到的"已完成还在流式"实为 run 未真正结束、尾部 token 按真实速度续渲；等待真结束后进入渲染正常，日志增量流匀速吻合。后台挂机→回前台的排队/脏重挂机器正常无异常。本轮排查探针（[pstream] 前缀，5 文件 + debug 模块）已全部拆除，工作区零残留，7 套件 99 测试全绿，设备已重拉干净 bundle。迭代收尾：Step 3 投影 + 通知聚合模型 + 串会话/消息丢失双守卫 + pressAction，累计提交 942a6a98..e8dbffcd。
+
+user:
+第八轮起：映射修复生效（任务卡可点）但消息渲染丢失复现；用户拍板停止打补丁，重设计真并发。三项决策：跨项目跨会话（会话最细粒度，项目只是属性）；持久化一步到位；不留灰度直接替换。随后补充设计共识：SSE 线是唯一瞬态边界，事件间派生态落库与内存语义等价，持久化钉死归属即得并发模型。
+
+assistant:
+按 prd-generate 流程：四路 readonly scout 并行探索（provider 链缝隙 S1-S12 清单/会话键控基建盘点含三份平行记录与收尾多头/core 事件全集与表结构含 SCHEMA_BOOT_VERSION=12/视图消费端含子会话双装配与注入三拷贝），PRD 落盘 docs/Iterations/session-stream-unit-2026-09/prd.md（待用户审，含七条核心需求、GWT 验收清单——本迭代全部并发 bug 转为验收用例、五条待确认项带默认值）。映射修复已提交 da864517（pendingSubagentSessions 按父会话持久）。
+
+user:
+确认走 spec-generate 流程产出会话流式单元技术方案。
+
+assistant:
+三路 readonly scout（React 集成面：Manager 装配/dispose/三桥/订阅模式先例/composer 契约/装配点去向；持久化机制：tdbc 事务铁律/session-kkv 语义雷区/bootstrap 快慢路径/写通节流先例/水合时机；测试基建：四层矩阵/T-P7 静态守卫硬编码脆点/改写-新增-不动清单/旧 Step5-7 验收接管）。spec 落盘 docs/Iterations/session-stream-unit-2026-09/spec.md 待用户审：单元管理器模板沿用 Manager 契约、core 新表走 BOOT_VERSION 13、250ms 写通+step 边界刷+>1MB 降频、interrupted 水合终态、宽限 5min+LRU8、8 Step（T-U1~U11）。

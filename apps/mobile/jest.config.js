@@ -39,6 +39,7 @@ module.exports = {
     // 原生包在 Jest 环境顶层即抛错（blob-util 的 NativeEventEmitter / op-sqlite 的
     // turbo module），挂全局 stub 保证未被局部 mock 的套件也能加载；
     // 测试文件内的 jest.mock 仍会覆盖这里的映射。
+    '^@notifee/react-native$': '<rootDir>/test-utils/notifee-mock.ts',
     '^react-native-blob-util$':
       '<rootDir>/test-utils/react-native-blob-util-mock.ts',
     '^@op-engineering/op-sqlite$': '<rootDir>/test-utils/op-sqlite-mock.ts',
@@ -127,6 +128,10 @@ module.exports = {
     '^@novel-master/core/session-kkv$': path.join(
       repoRoot,
       'packages/core/dist/public/session-kkv.js',
+    ),
+    '^@novel-master/core/session-run-state$': path.join(
+      repoRoot,
+      'packages/core/dist/public/session-run-state.js',
     ),
     '^@novel-master/core/tdbc$': path.join(
       repoRoot,

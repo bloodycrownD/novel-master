@@ -146,28 +146,52 @@ export function turnToolResultsComplete(
   assistant: ChatMessage,
   messages: readonly ChatMessage[],
 ): boolean {
+  return turnToolResultsCompleteWith(
+    assistant,
+    buildToolResultByUseId(messages),
+  );
+}
+
+/** O(1) 判定版本：tool_use id 全部命中预扫 map 即视为本轮工具结果齐备。 */
+function turnToolResultsCompleteWith(
+  assistant: ChatMessage,
+  results: ReadonlyMap<string, ToolResultBlock>,
+): boolean {
   const required = toolUseIdsFromMessage(assistant);
   if (required.length === 0) {
     return true;
   }
-  const results = buildToolResultByUseId(messages);
   return required.every(id => results.has(id));
 }
 
-function lastIncompleteToolAssistant(
+/**
+ * 工具配对预扫上下文（init-busy-yield Step 5 消 O(n²)）：
+ * 一次 O(n) 扫描产出全量 messages 的 toolUseId→result map
+ * 与「最后一条结果不齐备的 assistant」，供逐消息循环内 O(1) 判定复用，
+ * 取代旧实现里每条消息现场重建 map / 全量重扫的写法（语义严格等价）。
+ * Step 6 起导出：快照分片构建（sendSessionSnapshotNow）复用同一份预扫，
+ * 逐片行转换共享全量配对上下文。
+ */
+export interface ToolPairingContext {
+  readonly results: ReadonlyMap<string, ToolResultBlock>;
+  readonly lastIncompleteAssistant: ChatMessage | undefined;
+}
+
+/** 一次 O(n) 扫描构建工具配对上下文（等价旧 lastIncompleteToolAssistant 的全量扫描）。 */
+export function buildToolPairingContext(
   messages: readonly ChatMessage[],
-): ChatMessage | undefined {
-  let last: ChatMessage | undefined;
+): ToolPairingContext {
+  const results = buildToolResultByUseId(messages);
+  let lastIncompleteAssistant: ChatMessage | undefined;
   for (const message of messages) {
     if (
       message.role === 'assistant' &&
-      messageHasToolUse(message) &&
-      !turnToolResultsComplete(message, messages)
+      !turnToolResultsCompleteWith(message, results)
     ) {
-      last = message;
+      lastIncompleteAssistant = message;
     }
   }
-  return last;
+  return {results, lastIncompleteAssistant};
 }
 
 /** Current turn tool execution: agent running + last assistant with incomplete results. */
@@ -176,13 +200,26 @@ export function isTurnToolExecuting(
   messages: readonly ChatMessage[],
   agentRunning: boolean,
 ): boolean {
+  return isTurnToolExecutingWith(
+    assistant,
+    buildToolPairingContext(messages),
+    agentRunning,
+  );
+}
+
+/** O(1) 判定版本：agent 运行中且该消息正是预扫出的最后一条结果不齐备 assistant。 */
+function isTurnToolExecutingWith(
+  assistant: ChatMessage,
+  context: ToolPairingContext,
+  agentRunning: boolean,
+): boolean {
   if (!agentRunning || !messageHasToolUse(assistant)) {
     return false;
   }
-  if (turnToolResultsComplete(assistant, messages)) {
+  if (turnToolResultsCompleteWith(assistant, context.results)) {
     return false;
   }
-  return lastIncompleteToolAssistant(messages)?.id === assistant.id;
+  return context.lastIncompleteAssistant?.id === assistant.id;
 }
 
 function toolStatusFromResult(result: ToolResultBlock): ToolCallStatus {
@@ -191,7 +228,7 @@ function toolStatusFromResult(result: ToolResultBlock): ToolCallStatus {
 
 export function toolCallViewFromUse(
   use: ToolUseBlock,
-  results: Map<string, ToolResultBlock>,
+  results: ReadonlyMap<string, ToolResultBlock>,
   options?: BuildChatListItemsOptions,
 ): ToolCallView {
   const result = results.get(use.id);
@@ -290,28 +327,46 @@ export function toolCallSummary(tool: ToolCallView): string {
   return '';
 }
 
-/** Flattens session messages into chat bubbles (tool_use embedded on assistant rows). */
+/** 未配对 tool_use 的展示状态：runUiStopped 直接 error；agent 运行中且为本轮执行消息则 pending。 */
 function resolveUnpairedToolStatus(
   assistant: ChatMessage,
-  messages: readonly ChatMessage[],
+  context: ToolPairingContext,
   agentRunning: boolean,
   runUiStopped: boolean,
 ): ToolCallStatus {
   if (runUiStopped) {
     return 'error';
   }
-  return isTurnToolExecuting(assistant, messages, agentRunning)
+  return isTurnToolExecutingWith(assistant, context, agentRunning)
     ? 'pending'
     : 'error';
 }
 
+/** Flattens session messages into chat bubbles (tool_use embedded on assistant rows). */
 export function buildChatListItems(
   messages: readonly ChatMessage[],
   options: BuildChatListItemsOptions = {},
 ): ChatListItem[] {
+  return buildChatListItemsWithContext(
+    messages,
+    buildToolPairingContext(messages),
+    options,
+  );
+}
+
+/**
+ * 基于既有配对上下文构建聊天气泡（预扫一次、循环内只读，消 O(n²)）。
+ * selectTailTranscriptRows 以「全量 messages 的上下文 + tail 消息」调用，
+ * 保持与全量构建后按 tail id 过滤完全等价。
+ */
+function buildChatListItemsWithContext(
+  messages: readonly ChatMessage[],
+  context: ToolPairingContext,
+  options: BuildChatListItemsOptions,
+): ChatListItem[] {
   const agentRunning = options.agentRunning ?? false;
   const runUiStopped = options.runUiStopped ?? false;
-  const results = buildToolResultByUseId(messages);
+  const results = context.results;
   const items: ChatListItem[] = [];
 
   for (let index = 0; index < messages.length; index += 1) {
@@ -361,7 +416,7 @@ export function buildChatListItems(
     );
     const hasAttachments = displayAttachments.length > 0;
     const unpairedStatus = hasToolUse
-      ? resolveUnpairedToolStatus(message, messages, agentRunning, runUiStopped)
+      ? resolveUnpairedToolStatus(message, context, agentRunning, runUiStopped)
       : undefined;
     const tools = toolUses.map(use => {
       const view = toolCallViewFromUse(use, results, options);
@@ -396,9 +451,55 @@ export function buildChatListItems(
 // 维持既有导入路径兼容。
 export type {TranscriptStreamState};
 
+/** 单个聊天气泡 → Web transcript 行（逐 item 独立转换，不依赖跨消息状态）。 */
+function transcriptRowFromItem(item: ChatListItem): TranscriptRow {
+  // 与 buildChatListItems 同口径：丢弃 user_ops 遗留操作日志（非 annotate），
+  // 仅保留批注与其它来源附件。
+  const userAttachments =
+    item.message.role === 'user' &&
+    (item.message.attachments?.length ?? 0) > 0
+      ? item.message.attachments!.filter(isDisplayableAttachment)!.map(a => ({
+          source: a.source,
+          type: a.type,
+          name: a.name,
+          path: a.path ?? a.name,
+          ...(a.action != null ? {action: a.action} : {}),
+          ...(a.content !== undefined ? {content: a.content} : {}),
+        }))
+      : undefined;
+  return {
+    kind: 'message',
+    id: item.message.id,
+    role: item.message.role === 'user' ? 'user' : 'assistant',
+    hidden: item.message.hidden,
+    text: decodeLiteralHtmlEntities(item.textParts.join('\n')),
+    thinking: decodeLiteralHtmlEntities(item.thinkingParts.join('\n')),
+    ...(userAttachments != null ? {attachments: userAttachments} : {}),
+    ...(item.tools.length > 0
+      ? {
+          tools: item.tools.map(t => ({
+            toolUseId: t.toolUseId,
+            name: t.name,
+            input: t.input,
+            status: t.status,
+            resultContent: t.resultContent,
+            ...(t.summary != null ? {summary: t.summary} : {}),
+            ...(t.subagentSessionId != null
+              ? {subagentSessionId: t.subagentSessionId}
+              : {}),
+            ...(t.skillRef != null ? {skillRef: t.skillRef} : {}),
+          })),
+        }
+      : {}),
+  };
+}
+
 /**
- * 基于完整会话构建 transcript 行，再按 tail 消息 id 筛选待 append 行。
- * appendTail 必须带全量上下文，否则 tool pending/complete 在多轮或已配对 hidden tool_result 时会判错。
+ * tail 行选择：appendTail 必须带全量上下文，否则 tool pending/complete 在多轮
+ * 或已配对 hidden tool_result 时会判错——预扫（toolUseId→result map 与
+ * lastIncompleteToolAssistant）基于全量 messages 构建，行转换只遍历 tail 消息。
+ * 逐消息转换不依赖跨消息状态，故与「全量构建后按 tail id 过滤」语义严格等价，
+ * 且省掉了 tail 之前所有消息的整段构建（原实现为全量 build 再 filter）。
  */
 export function selectTailTranscriptRows(
   allMessages: readonly ChatMessage[],
@@ -408,9 +509,9 @@ export function selectTailTranscriptRows(
   if (tailMessages.length === 0) {
     return [];
   }
-  const tailIds = new Set(tailMessages.map(message => message.id));
-  return buildTranscriptRows(allMessages, undefined, options).filter(
-    row => row.kind === 'message' && tailIds.has(row.id),
+  const context = buildToolPairingContext(allMessages);
+  return buildChatListItemsWithContext(tailMessages, context, options).map(
+    transcriptRowFromItem,
   );
 }
 
@@ -421,49 +522,7 @@ export function buildTranscriptRows(
   options: BuildChatListItemsOptions = {},
 ): TranscriptRow[] {
   const items = buildChatListItems(messages, options);
-  const rows: TranscriptRow[] = [];
-
-  for (const item of items) {
-    // 与 buildChatListItems 同口径：丢弃 user_ops 遗留操作日志（非 annotate），
-    // 仅保留批注与其它来源附件。
-    const userAttachments =
-      item.message.role === 'user' &&
-      (item.message.attachments?.length ?? 0) > 0
-        ? item.message.attachments!.filter(isDisplayableAttachment)!.map(a => ({
-            source: a.source,
-            type: a.type,
-            name: a.name,
-            path: a.path ?? a.name,
-            ...(a.action != null ? {action: a.action} : {}),
-            ...(a.content !== undefined ? {content: a.content} : {}),
-          }))
-        : undefined;
-    rows.push({
-      kind: 'message',
-      id: item.message.id,
-      role: item.message.role === 'user' ? 'user' : 'assistant',
-      hidden: item.message.hidden,
-      text: decodeLiteralHtmlEntities(item.textParts.join('\n')),
-      thinking: decodeLiteralHtmlEntities(item.thinkingParts.join('\n')),
-      ...(userAttachments != null ? {attachments: userAttachments} : {}),
-      ...(item.tools.length > 0
-        ? {
-            tools: item.tools.map(t => ({
-              toolUseId: t.toolUseId,
-              name: t.name,
-              input: t.input,
-              status: t.status,
-              resultContent: t.resultContent,
-              ...(t.summary != null ? {summary: t.summary} : {}),
-              ...(t.subagentSessionId != null
-                ? {subagentSessionId: t.subagentSessionId}
-                : {}),
-              ...(t.skillRef != null ? {skillRef: t.skillRef} : {}),
-            })),
-          }
-        : {}),
-    });
-  }
+  const rows: TranscriptRow[] = items.map(transcriptRowFromItem);
 
   if (
     stream != null &&
@@ -477,4 +536,20 @@ export function buildTranscriptRows(
   }
 
   return rows;
+}
+
+/**
+ * 基于既有配对上下文构建消息片段的 transcript rows（init-busy-yield Step 6
+ * 快照分片）：行转换逐消息独立、不依赖跨消息状态，故「按片调用本函数后
+ * 顺序拼接」与单次全量 buildTranscriptRows（stream 省略时）输出全等——
+ * 快照路径从不携带 stream 行，这里不设 stream 参数。
+ */
+export function buildTranscriptRowsWithContext(
+  messages: readonly ChatMessage[],
+  context: ToolPairingContext,
+  options: BuildChatListItemsOptions = {},
+): TranscriptRow[] {
+  return buildChatListItemsWithContext(messages, context, options).map(
+    transcriptRowFromItem,
+  );
 }

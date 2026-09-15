@@ -150,6 +150,15 @@ describe('db-backup.service', () => {
     expect(mockCheckpoint).not.toHaveBeenCalled();
   });
 
+  it('rejects import when agent is running (guard fires before picker)', async () => {
+    mockAgentActive.mockReturnValue(true);
+    await expect(importDatabaseBackup(onRebootstrap)).rejects.toThrow(/Agent/);
+    // 守卫在触发前拦截：文件选择器与后续导入链路均未启动
+    expect(mockPick).not.toHaveBeenCalled();
+    expect(mockDumpSnapshot).not.toHaveBeenCalled();
+    expect(onRebootstrap).not.toHaveBeenCalled();
+  });
+
   it('import uses path-level cp (no whole-file read / writeFile)', async () => {
     mockPick.mockResolvedValue([{uri: 'content://backup'}]);
     mockKeepLocalCopy.mockResolvedValue([

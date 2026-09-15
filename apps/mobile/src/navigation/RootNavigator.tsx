@@ -7,6 +7,7 @@ import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
 import {createNativeStackNavigator} from '@react-navigation/native-stack';
 import {StyleSheet} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import {navigationContainerRef} from './navigation-container-ref';
 import {ChatTabIcon, ProfileTabIcon} from '../components/icons/TabIcons';
 import {HeaderProvider} from './HeaderContext';
 import {buildMainTabBarStyle} from './main-tab-bar-style';
@@ -195,7 +196,8 @@ export function RootNavigator() {
 
   return (
     <>
-      <NavigationContainer>
+      {/* 通知点按等 React 外路径经 navigationContainerRef 编程式导航 */}
+      <NavigationContainer ref={navigationContainerRef}>
         <HeaderProvider>
           <Stack.Navigator
             screenOptions={{

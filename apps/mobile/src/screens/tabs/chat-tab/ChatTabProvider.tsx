@@ -1,5 +1,17 @@
 /**
- * Chat tab 组合层 Context：收敛对话子树状态与高频回调。
+ * Chat tab 组合层 Context：收敛对话子树状态与低频回调。
+ *
+ * Step 6 起屏幕退化为单元投影的订阅者：本 Provider 不再装配任何运行态
+ * （流式缓冲/中止状态机/生命周期/重进注入/探针均由 SessionStreamUnitManager
+ * 的 per-session 单元承担），只负责——
+ * - 订阅 manager 投影（subscribe + sync 模式）并把当前会话的
+ *   SessionStreamUnitView 放进 ctx（运行态的唯一出口，消费方自行派生）；
+ * - 会话/引擎/子页变化时把 webview 句柄 attach/detach 进 manager（流式
+ *   推送与控制消息广播的接线面）；
+ * - 消息面（Step 7 收口）：单一来源 manager——有单元走投影、无单元走
+ *   manager 的 idle 消息路径，Provider 不再持有消息 state；
+ * - 非运行态（draftRestoreToken / DeviceEventEmitter 监听）继续由
+ *   useChatTabMessages 承担（数据管线已退役）。
  */
 import React, {
   createContext,
@@ -16,26 +28,19 @@ import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {type ChatMessage} from '@novel-master/core/chat';
 import type {VfsService} from '@novel-master/core/vfs';
 import type {WorkplaceService} from '@novel-master/core/workplace';
-import {
-  EVENT_SUBAGENT_CHILD_SESSION_CREATED,
-  type SubagentChildSessionCreatedPayload,
-} from '@novel-master/core/events';
 import type {ChatTranscriptWebViewHandle} from '@/components/chat/ChatTranscriptWebView';
-import type {StreamWireChunk} from '@/services/stream-wire-queue';
 import type {MessageMenuAnchor} from '@/components/chat/MessageActionMenu';
 import type {VfsFileManagerHandle} from '@/components/vfs/VfsFileManager';
 import type {ChatListScrollSnapshot} from '@/services/chat-list-scroll-cache';
 import type {ChatTranscriptScrollSnapshot} from '@/components/chat/ChatTranscriptBridge';
 import type {ChatAgentMeta} from '@/services/chat-agent-meta';
-import type {
-  AgentStreamMetricsSnapshot,
-  StreamMetricsAccRef,
-} from '@/hooks/useAgentStreamMetrics';
+import type {SessionStreamUnitView} from '@/services/session-stream-unit';
+import {createTranscriptStreamHandle} from '@/services/session-stream-webview-adapter';
+import {findLastVisibleMessage} from '@/components/chat/composer-send-state';
+import {deriveComposerSendState} from '@/components/chat/composer-send-state';
 import {useToast} from '@/components/chrome/ToastHost';
 import {useRuntime} from '@/hooks/useRuntime';
 import {useMobileScope} from '@/hooks/useMobileScope';
-import {useAgentRunLifecycle, RUN_LAUNCH_PROTECT_WINDOW_MS} from '@/hooks/useAgentRunLifecycle';
-import {useRunResumeProbe} from '@/hooks/use-run-resume-probe';
 import {useDismissOverlaysOnBlur} from '@/hooks/useDismissOverlaysOnBlur';
 import {useNovelMaster} from '@/runtime/novel-master-context';
 import {
@@ -49,7 +54,6 @@ import {
   type ChatTranscriptEngine,
 } from '@/storage/chat-transcript-engine';
 import {readChatRichTextEnabled} from '@/storage/chat-rich-text-pref';
-import {readChatStreamBatchEnabled} from '@/storage/chat-stream-batch-pref';
 import {useChatTabMessages} from './useChatTabMessages';
 import {
   useChatTabScope,
@@ -57,12 +61,11 @@ import {
   type ConversationPanel,
 } from './useChatTabScope';
 import {useChatTabScrollCache} from './useChatTabStream';
-import {useSessionAbort} from './useSessionAbort';
-import {useSessionBatch} from './useSessionBatch';
-import {useSessionStream} from './useSessionStream';
-import {useChatStreamResumeInject} from './useChatStreamResumeInject';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
+
+/** 主会话 webview 句柄在单元注册表里的稳定标识（attach/detach 对账用）。 */
+const CHAT_TAB_TRANSCRIPT_HANDLE_ID = 'chat-tab-transcript';
 
 export type ChatTabContextValue = {
   readonly tokens?: never;
@@ -73,19 +76,18 @@ export type ChatTabContextValue = {
   readonly chatSubview: ChatSubview;
   readonly setChatSubview: (subview: ChatSubview) => void;
   readonly agentMeta: ChatAgentMeta;
-  readonly uiRunning: boolean;
+  /**
+   * 当前会话的单元投影（运行态唯一事实源）：水合未完成或无单元为 null。
+   * 消费方自行派生（运行中 = status 为 starting|running；流式 partial =
+   * partialText/partialThinking；任务卡 pending 映射 = pendingChildrenByTitle）。
+   */
+  readonly unitView: SessionStreamUnitView | null;
+  /** 全局任意会话运行中（refcount 视图）。 */
   readonly agentActive: boolean;
-  readonly activeRunId: string | null;
-  readonly streamTailGenerating: boolean;
-  readonly streamingText: string;
-  readonly streamingThinking: string;
-  readonly streamMetricsLastRun: AgentStreamMetricsSnapshot | null;
-  readonly streamMetricsAccRef: StreamMetricsAccRef;
-  readonly onStreamReset: () => void;
-  readonly chatMessages: ChatMessage[];
+  readonly chatMessages: readonly ChatMessage[];
   readonly hasMoreMessages: boolean;
   readonly loadingMoreMessages: boolean;
-  readonly onMessagesChanged: () => void;
+  readonly onMessagesChanged: (options?: {immediate?: boolean}) => void;
   readonly canResumeWithoutInput: boolean;
   readonly lastMessageIsPlainUserText: boolean;
   readonly draftRestoreToken: number;
@@ -126,7 +128,8 @@ export type ChatTabContextValue = {
   readonly chatRichTextEnabled: boolean;
   /**
    * pending task 工具的子会话映射（title → childSessionId）。
-   * 由 EVENT_SUBAGENT_CHILD_SESSION_CREATED 维护，让执行中的 task 卡片可点击进入子会话。
+   * Step 6 起从当前会话的单元投影读取（pendingChildrenByTitle）——
+   * 执行中的 task 卡片可点击进入子会话。
    */
   readonly pendingSubagentSessions: ReadonlyMap<string, string>;
   readonly richRenderEpoch: number;
@@ -138,12 +141,14 @@ export type ChatTabContextValue = {
   readonly setMermaidViewerOpen: (open: boolean) => void;
   /** 递增时由 ChatTranscriptWebView 下发 closeMermaidViewer（照 webMenuCloseSignal 先例）。 */
   readonly mermaidViewerCloseSignal: number;
-  readonly beginUiRun: () => void;
-  /** UI run 异常收尾（composer catch 路径用）。 */
-  readonly endUiRunOnError: () => void;
-  /** WebView onReady 接线：提升 webviewReady 给注入 hook（重进 partial 恢复）。 */
+  /** WebView onReady 接线：bump ready 世代，驱动句柄 attach 进 manager。 */
   readonly onTranscriptWebviewReady: () => void;
-  readonly abortUiRun: () => void;
+  /**
+   * WebView ready 世代（每次 onReady 递增，0 = 尚未 ready）：除句柄 attach
+   * 外，也是「ready 前到达的投影动作」的补交驱动（如中断现场合成行提交
+   * useInterruptedPartialCommit——ui/B-1 的 tail 先于 ready 时序）。
+   */
+  readonly transcriptReadyEpoch: number;
   readonly onLoadOlderMessages: () => void;
   readonly onOpenFileEditor: (
     path: string,
@@ -155,7 +160,6 @@ export type ChatTabContextValue = {
   readonly workspaceVfsRef: React.RefObject<VfsFileManagerHandle | null>;
   readonly scope: ReturnType<typeof useChatTabScope>;
   readonly messages: ReturnType<typeof useChatTabMessages>;
-  readonly resetStreamingDisplay: () => void;
   readonly navigation: Nav;
   readonly showToast: (message: string) => void;
   readonly runtime: ReturnType<typeof useRuntime>;
@@ -200,11 +204,8 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
   });
 
   const messages = useChatTabMessages({
-    runtime,
-    projectId,
     sessionId,
-    chatSubview: scope.chatSubview,
-    onAfterExternalReload: scope.refreshChatTokenLabel,
+    onTranscriptChanged: scope.refreshChatTokenLabel,
   });
 
   const {refreshChatMeta} = scope;
@@ -214,41 +215,13 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
     }
   }, [scope.chatSubview, sessionId, refreshChatMeta]);
 
-  // 订阅子会话创建事件：task 工具执行中（createChildSession）即发出，
-  // 用 title → childSessionId 维护映射，让 pending 卡片也能点击进入子会话浏览。
-  // 切换会话时清空，避免上一个会话的映射串到新会话。
-  useEffect(() => {
-    if (sessionId == null) {
-      setPendingSubagentSessions(new Map());
-      return undefined;
-    }
-    const sid = sessionId;
-    setPendingSubagentSessions(new Map());
-    const sub = runtime.eventBus.subscribe(
-      EVENT_SUBAGENT_CHILD_SESSION_CREATED,
-      (payload: SubagentChildSessionCreatedPayload) => {
-        if (payload.parentSessionId !== sid) {
-          return;
-        }
-        setPendingSubagentSessions(prev => {
-          const next = new Map(prev);
-          next.set(payload.title, payload.childSessionId);
-          return next;
-        });
-      },
-    );
-    return () => sub.unsubscribe();
-  }, [runtime.eventBus, sessionId]);
+  const manager = runtime.sessionStreamUnitManager;
 
   const [modelPickerOpen, setModelPickerOpen] = useState(false);
   const [agentPickerOpen, setAgentPickerOpen] = useState(false);
   const transcriptWebRef = useRef<ChatTranscriptWebViewHandle>(null);
   const workspaceVfsRef = useRef<VfsFileManagerHandle>(null);
   const [chatRichTextEnabled, setChatRichTextEnabled] = useState(false);
-  const [pendingSubagentSessions, setPendingSubagentSessions] = useState<
-    Map<string, string>
-  >(() => new Map());
-  const [chatStreamBatchEnabled, setChatStreamBatchEnabled] = useState(true);
   const [messageMenuTarget, setMessageMenuTarget] = useState<
     ChatMessage | undefined
   >();
@@ -273,157 +246,143 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
     useWebviewTranscript,
   });
 
-  const onStreamResetRef = useRef<() => void>(() => undefined);
-  const applySegmentsRef = useRef<
-    (segments: readonly StreamWireChunk[]) => void
-  >(() => undefined);
-  const agentRunningRef = useRef(false);
-  const chatMessageCountRef = useRef(0);
+  // ===== 单元投影 + 消息面订阅（subscribe + useEffect + sync 模式） =====
+  // 当前会话的运行态唯一事实源：水合未完成 / 无单元为 null。事件同步总线
+  // 保证 manager 订阅先于 UI 建立——UI 侧同名事件回调执行时投影已更新。
+  // 消息面（Step 7 收口）单一来源 manager：readMessagesSnapshot 有单元走
+  // 投影、无单元走 idle 视图，Provider 不再持有第二套消息 state。
+  const [unitView, setUnitView] = useState<SessionStreamUnitView | null>(
+    () => (sessionId != null ? manager.snapshot(sessionId) : null),
+  );
+  const [messagesView, setMessagesView] = useState<
+    ReturnType<typeof manager.readMessagesSnapshot>
+  >(() => (sessionId != null ? manager.readMessagesSnapshot(sessionId) : null));
+  useEffect(() => {
+    const sync = () => {
+      setUnitView(sessionId != null ? manager.snapshot(sessionId) : null);
+      setMessagesView(
+        sessionId != null ? manager.readMessagesSnapshot(sessionId) : null,
+      );
+    };
+    sync();
+    return manager.subscribe(sync);
+  }, [manager, sessionId]);
+
+  const hasUnit = unitView != null;
+
+  // 消息面 tail 水合：会话切换或单元出现时取 tail（非 force——缓存命中即
+  // 采纳的会话切换语义；运行中单元的后续刷新由 step/settle 边界自驱）。
+  // 无单元（非运行态会话）同样走 manager 的 idle 路径（Step 7 收口后双源
+  // 合一，hook 数据管线已退役）。
+  const chatSubview = scope.chatSubview;
+  useEffect(() => {
+    if (sessionId == null || chatSubview !== 'conversation') {
+      return;
+    }
+    void manager
+      .loadSessionTailMessages(sessionId, {projectId})
+      .catch(() => undefined);
+  }, [manager, sessionId, projectId, chatSubview, hasUnit]);
+
+  // ===== webview 句柄 attach/detach =====
+  // webview ready 世代：每次 onReady 递增（重挂/切会话后 webview 是空基线，
+  // 句柄必须在 ready 之后挂进单元——注入与流式推送才有落点）。epoch 为 0
+  // 表示当前挂载的 webview 尚未 ready，不 attach。
+  const [transcriptReadyEpoch, setTranscriptReadyEpoch] = useState(0);
+  const onTranscriptWebviewReady = useCallback(() => {
+    setTranscriptReadyEpoch(epoch => epoch + 1);
+  }, []);
 
   useEffect(() => {
-    chatMessageCountRef.current = messages.chatMessages.length;
-  }, [messages.chatMessages.length]);
-
-  // 装配顺序（P1-2）：先实例化 abort 单元（传 onStreamResetRef 占位 no-op），
-  // 再实例化 batch / lifecycle / stream，最后把 stream 输出的 handleStreamReset
-  // 写入同一个 ref——这样 abort 状态机调 onStreamResetRef.current() 即可，
-  // abort 与 stream 两个单元不直接 import。apply 叶子同理：batch 接收一个
-  // ref 包装，stream mount 后把自己的 applySegments 写进去。
-  const abort = useSessionAbort({
+    if (
+      sessionId == null ||
+      !useWebviewTranscript ||
+      scope.chatSubview !== 'conversation' ||
+      transcriptReadyEpoch === 0
+    ) {
+      return;
+    }
+    const web = transcriptWebRef.current;
+    if (web == null) {
+      return;
+    }
+    const sid = sessionId;
+    // 单元流式载荷/控制消息 → webview handle 的适配层（哑引擎契约不动，
+    // 映射细节见 services/session-stream-webview-adapter）。
+    const handle = createTranscriptStreamHandle(
+      CHAT_TAB_TRANSCRIPT_HANDLE_ID,
+      web,
+    );
+    manager.attachWebview(sid, handle);
+    return () => {
+      manager.detachWebview(sid, handle.handleId);
+    };
+  }, [
+    manager,
     sessionId,
-    abortRegistry: runtime.abortRegistry,
-    onStreamResetRef,
-  });
+    useWebviewTranscript,
+    scope.chatSubview,
+    transcriptReadyEpoch,
+    hasUnit,
+  ]);
+
+  // ===== 消息面（单一来源 manager，Step 7 收口） =====
+  // readMessagesSnapshot：有单元（含宽限中的 settled / 水合的 interrupted）
+  // 走投影，无单元（非运行态会话）走 idle 视图；单元销毁时 manager 已把
+  // 投影消息面交接进 idle，屏幕侧无迁移沿要补偿。
+  const chatMessages = useMemo(
+    () => messagesView?.messages ?? EMPTY_CHAT_MESSAGES,
+    [messagesView],
+  );
+  const hasMoreMessages = messagesView?.hasMoreMessages ?? false;
+  const loadingMoreMessages = messagesView?.loadingMoreMessages ?? false;
+
+  // 发送态推导基于显示源：用户消息 append 后 force 回源刷新（有单元走
+  // 投影、无单元走 idle），推导随消息面即时更新。
+  const composerSendState = useMemo(
+    () => deriveComposerSendState(findLastVisibleMessage(chatMessages)),
+    [chatMessages],
+  );
+
+  const onLoadOlderMessages = useCallback(() => {
+    if (sessionId != null) {
+      void manager
+        .loadOlderSessionMessages(sessionId, projectId)
+        .catch(() => undefined);
+    }
+  }, [manager, sessionId, projectId]);
+
+  // composer 的 onUserMessageAppended / onSettled 回调驱动：force 回源刷新
+  // 消息面（用户消息行进基线；低频调用不合并）+ 刷新 token 讇签。
+  const refreshChatTokenLabel = scope.refreshChatTokenLabel;
+  const handleMessagesChanged = useCallback(
+    (options?: {immediate?: boolean}) => {
+      void (async () => {
+        if (sessionId != null) {
+          try {
+            await manager.loadSessionTailMessages(sessionId, {
+              force: true,
+              projectId,
+            });
+          } catch {
+            // DB 失败不阻塞 token 标签刷新
+          }
+        }
+        void refreshChatTokenLabel().catch(() => undefined);
+      })();
+    },
+    [manager, sessionId, projectId, refreshChatTokenLabel],
+  );
 
   const [agentActive, setAgentActive] = useState(() => isMobileAgentActive());
   useEffect(() => subscribeMobileAgentActivity(setAgentActive), []);
 
-  const lifecycle = useAgentRunLifecycle({
-    onRunUiActivate: abort.markRunStarted,
-    onRunUiDeactivate: abort.markRunEnded,
-    getUiRunning: abort.getUiRunning,
-    // 恢复窗口资格：session 切换时 core abortRegistry 仍注册 in-flight run
-    // 则开窗，activeRunId==null 期间放宽事件接纳（详见 hook 注释）。
-    getResumeWindowEligible: () =>
-      sessionId != null && runtime.abortRegistry.has(sessionId),
-  });
-
-  // 主会话流式 partial 重进恢复：webviewReady / 注入标记提升到常驻 Provider，
-  // 与 WebView mount 绑定复位（chatSubview 离开 conversation / sessionKey 变化）。
-  const sessionKey =
-    projectId != null && sessionId != null
-      ? `${projectId}:${sessionId}`
-      : '';
-  const inject = useChatStreamResumeInject({
-    chatSubview: scope.chatSubview,
-    sessionKey,
-    sessionId,
-    uiRunning: abort.uiRunning,
-    transcriptWebRef,
-    messagesLength: messages.chatMessages.length,
-    streamRegistry: runtime.streamRegistry,
-  });
-
-  useEffect(() => {
-    abort.resetForSessionChange();
-    lifecycle.resetUiForSessionChange();
-    // 声明顺序约束：本 reset effect 不得移到下方 useRunResumeProbe 接线
-    // 之后——session 切换的同一 commit 里必须 reset 先求值（清 uiRunning /
-    // activeRunId），探针的恢复方向再按 registry.has 合成 markRunStarted；
-    // 若探针在前，其合成的 uiRunning=true 会被随后的 reset 清掉，路径 B
-    // 切回状态重建失效（行为守护：T-R1，顺序颠倒时应红）。
-    //
-    // 状态重建（路径 B）在 useRunResumeProbe 的恢复方向承担（声明于本 effect
-    // 之后，同 commit 内 reset 先清、再按 registry.has 合成 markRunStarted）；
-    // lifecycle 的恢复窗口已在上面 reset 内按需开启，迟到的真 RUN_STARTED
-    // 不会被 stale 守卫拒收（uiRunning 已被合成置 true），会反填真实 runId。
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅 session 切换时重置 UI
-  }, [sessionId]);
-
-  const handleMessagesChanged = useCallback(
-    (options?: {immediate?: boolean}) =>
-      messages
-        .handleMessagesChanged(scope.refreshChatTokenLabel, {
-          agentRunning: agentRunningRef.current,
-          immediate: options?.immediate,
-        })
-        .then(list => {
-          chatMessageCountRef.current = list.length;
-          return list;
-        }),
-    [messages, scope.refreshChatTokenLabel],
-  );
-
-  // 双方向探针：恢复方向（sessionId 生效 + registry.has → 合成 markRunStarted，
-  // 路径 B 状态重建，早于注入与 snapshot）；收尾方向（uiRunning=true 但 registry
-  // 已无 → markRunEnded + reload，防「生成中」永久残留）。探针/轮询节点也是
-  // registry.has 的唯一复评点；主会话不接 agent-activity refcount（refcount 归属
-  // 发起方，合成恢复不加）。
-  useRunResumeProbe({
-    sessionId,
-    isRunRegistered: () =>
-      sessionId != null && runtime.abortRegistry.has(sessionId),
-    onRunActive: () => {
-      abort.markRunStarted();
-    },
-    onRunEnded: () => {
-      // 发起保护窗（MF-4）：beginUiRun 先把 uiRunning 置 true，core 侧
-      // abortRegistry.register 要到 agent-runner 跑起来才发生；若恰逢回
-      // 前台/轮询触发探针且复询时仍未 register，把 has=false 误判为
-      // 「run 已结束」收尾，uiRunning 翻 false 后迟到的真 RUN_STARTED 会被
-      // stale 守卫拒收，本轮流式 UI 全丢。窗口内不收尾；过期后仍 !has
-      // 才兑底。守卫落本闭包一处，同时覆盖前台探针与 30s 轮询两条触发路径。
-      if (Date.now() - lifecycle.getBeginUiRunAt() < RUN_LAUNCH_PROTECT_WINDOW_MS) {
-        return;
-      }
-      abort.markRunEnded();
-      void handleMessagesChanged().catch(() => undefined);
-    },
-    uiRunning: abort.uiRunning,
-    isRunActive: abort.getUiRunning,
-  });
-
-  // step 提交后 partial 已落库（core 侧 streamRegistry.reset 保证 get() 只含
-  // 下一 step 的新累积），重置注入标记允许再注入；落库 reload 由 useSessionStream
-  // 的 STEP_COMMITTED 订阅（flushAgentStepUi）承担，这里不重复触发。
-  const handleStepCommitted = useCallback(() => {
-    inject.resetInjection();
-  }, [inject]);
-
-  const batch = useSessionBatch({
-    applySegments: segments => applySegmentsRef.current(segments),
-  });
-
-  const stream = useSessionStream({
-    sessionId,
-    useWebviewTranscript,
-    batchEnabled: chatStreamBatchEnabled,
-    transcriptWebRef,
-    uiRunning: abort.uiRunning,
-    acceptRunEvent: lifecycle.acceptRunEvent,
-    onRunStarted: lifecycle.onRunStarted,
-    onRunFinished: lifecycle.onRunFinished,
-    onRunFailed: lifecycle.onRunFailed,
-    getUiRunning: abort.getUiRunning,
-    getTranscriptFreezeCount: abort.getTranscriptFreezeCount,
-    getAbortRetainPending: abort.getAbortRetainPending,
-    clearAbortRetainPending: abort.clearAbortRetainPending,
-    batchIngest: batch.ingestWireChunk,
-    batchClear: batch.clearBuffers,
-    batchFlush: batch.flushBuffers,
-    onMessagesChanged: handleMessagesChanged,
-    getMessageCount: () => chatMessageCountRef.current,
-    onStepCommitted: handleStepCommitted,
-  });
-  // 拆环：stream mount 后把 apply 叶子 / stream reset 写入两个占位 ref。
-  applySegmentsRef.current = stream.applySegments;
-  onStreamResetRef.current = stream.handleStreamReset;
-
-  const abortUiRunWithFreeze = useCallback(() => {
-    abort.abortUiRun(chatMessageCountRef.current);
-  }, [abort]);
-
-  agentRunningRef.current = agentActive;
+  const {
+    setProjectDrawerOpen,
+    setSessionDrawerOpen,
+    setSessionRenamePrompt,
+    setMenuSessionId,
+  } = scope;
 
   const closeMessageMenu = useCallback(() => {
     setMessageMenuTarget(undefined);
@@ -436,13 +395,6 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
     setMermaidViewerOpen(false);
     setMermaidViewerCloseSignal(signal => signal + 1);
   }, []);
-
-  const {
-    setProjectDrawerOpen,
-    setSessionDrawerOpen,
-    setSessionRenamePrompt,
-    setMenuSessionId,
-  } = scope;
 
   const dismissAllOverlays = useCallback(() => {
     setProjectDrawerOpen(false);
@@ -476,20 +428,14 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
     setChatTranscriptEngine(await readChatTranscriptEngine(appUi));
   }, [appUi]);
 
-  const refreshChatStreamBatchPref = useCallback(async () => {
-    setChatStreamBatchEnabled(await readChatStreamBatchEnabled(appUi));
-  }, [appUi]);
-
   useFocusEffect(
     useCallback(() => {
       refreshChatRichTextPref().catch(() => undefined);
       refreshChatTranscriptEngine().catch(() => undefined);
-      refreshChatStreamBatchPref().catch(() => undefined);
       refreshChatMeta().catch(() => undefined);
     }, [
       refreshChatRichTextPref,
       refreshChatTranscriptEngine,
-      refreshChatStreamBatchPref,
       refreshChatMeta,
     ]),
   );
@@ -503,21 +449,15 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
       chatSubview: scope.chatSubview,
       setChatSubview: scope.setChatSubview,
       agentMeta: scope.agentMeta,
-      uiRunning: abort.uiRunning,
+      unitView,
       agentActive,
-      activeRunId: lifecycle.activeRunId,
-      streamTailGenerating: abort.uiRunning,
-      streamingText: stream.streamingText,
-      streamingThinking: stream.streamingThinking,
-      streamMetricsLastRun: stream.streamMetricsLastRun,
-      streamMetricsAccRef: stream.streamMetricsAccRef,
-      onStreamReset: stream.handleStreamReset,
-      chatMessages: messages.chatMessages,
-      hasMoreMessages: messages.hasMoreMessages,
-      loadingMoreMessages: messages.loadingMoreMessages,
-      onMessagesChanged: () => handleMessagesChanged().catch(() => undefined),
-      canResumeWithoutInput: messages.canResumeWithoutInput,
-      lastMessageIsPlainUserText: messages.lastMessageIsPlainUserText,
+      chatMessages,
+      hasMoreMessages,
+      loadingMoreMessages,
+      onMessagesChanged: handleMessagesChanged,
+      canResumeWithoutInput: composerSendState.canResumeWithoutInput,
+      lastMessageIsPlainUserText:
+        composerSendState.lastMessageIsPlainUserText,
       draftRestoreToken: messages.draftRestoreToken,
       sessionVfs: scope.sessionVfs,
       sessionWorktree: scope.sessionWorktree,
@@ -543,7 +483,8 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
       setMessageEditPrompt,
       useWebviewTranscript,
       chatRichTextEnabled,
-      pendingSubagentSessions,
+      pendingSubagentSessions:
+        unitView?.pendingChildrenByTitle ?? EMPTY_PENDING_SUBAGENT_SESSIONS,
       richRenderEpoch,
       webMenuCloseSignal,
       webMenuOpen,
@@ -551,12 +492,9 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
       mermaidViewerOpen,
       setMermaidViewerOpen,
       mermaidViewerCloseSignal,
-      beginUiRun: lifecycle.beginUiRun,
-      endUiRunOnError: lifecycle.endUiRunOnError,
-      onTranscriptWebviewReady: inject.markWebviewReady,
-      abortUiRun: abortUiRunWithFreeze,
-      onLoadOlderMessages: () =>
-        messages.loadOlderMessages().catch(() => undefined),
+      onTranscriptWebviewReady,
+      transcriptReadyEpoch,
+      onLoadOlderMessages,
       onOpenFileEditor: scope.openFileEditor,
       onNeedModel: () => setModelPickerOpen(true),
       onRefreshChatMeta: () => scope.refreshChatMeta().catch(() => undefined),
@@ -564,7 +502,6 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
       workspaceVfsRef,
       scope,
       messages,
-      resetStreamingDisplay: stream.resetStreamingDisplay,
       navigation,
       showToast,
       runtime,
@@ -576,14 +513,15 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
       projectId,
       sessionId,
       scope,
-      lifecycle,
-      abort,
+      unitView,
       agentActive,
-      stream,
-      messages,
+      chatMessages,
+      hasMoreMessages,
+      loadingMoreMessages,
       handleMessagesChanged,
+      composerSendState,
+      messages,
       scroll,
-      inject,
       modelPickerOpen,
       agentPickerOpen,
       messageMenuTarget,
@@ -591,21 +529,26 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
       messageEditPrompt,
       useWebviewTranscript,
       chatRichTextEnabled,
-      pendingSubagentSessions,
       richRenderEpoch,
       webMenuCloseSignal,
       webMenuOpen,
       mermaidViewerOpen,
       mermaidViewerCloseSignal,
+      onTranscriptWebviewReady,
+      transcriptReadyEpoch,
+      onLoadOlderMessages,
       navigation,
       showToast,
       runtime,
       setCurrentSession,
       closeMessageMenu,
       closeMermaidViewer,
-      abortUiRunWithFreeze,
     ],
   );
 
   return <ChatTabCtx.Provider value={value}>{children}</ChatTabCtx.Provider>;
 }
+
+const EMPTY_PENDING_SUBAGENT_SESSIONS: ReadonlyMap<string, string> = new Map();
+
+const EMPTY_CHAT_MESSAGES: readonly ChatMessage[] = [];

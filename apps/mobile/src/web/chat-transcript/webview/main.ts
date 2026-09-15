@@ -7,6 +7,7 @@
 import {h, render} from 'preact';
 import {registerRenderContextMenu} from './runtime/menu/menu';
 import {registerRenderRows} from './runtime/render/row-logic';
+import {measureRowWindow} from './runtime/render/row-windowing';
 import {startTranscriptBoot} from './runtime/boot/boot-transcript';
 import {post} from './runtime/bridge';
 import {
@@ -33,6 +34,9 @@ registerRenderRows(() => {
   const list = document.getElementById('rows');
   if (!list) return;
   render(h(RowList, null), list);
+  // 窗口化（Step 7）：渲染后实测窗口行占高 → 收敛平均槽高估算
+  // （窗口未变时内部跳过，流式期高频 renderRows 不产生额外 reflow）。
+  measureRowWindow();
 });
 
 // Mermaid 全屏查看器：模块刈处一行挂接（不进 renderRows 链路）

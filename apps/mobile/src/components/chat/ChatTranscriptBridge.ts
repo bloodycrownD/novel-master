@@ -112,10 +112,21 @@ export type HostToTranscriptMessage =
         hasMore: boolean;
         /** @deprecated Stream tail is owned by streamDelta/streamReset only. */
         stream?: TranscriptStreamState;
-        scrollIntent: TranscriptScrollIntent;
+        /** 分片协议下仅末片携带（chunkIndex === chunkTotal - 1）。 */
+        scrollIntent?: TranscriptScrollIntent;
         restoreScroll?: TranscriptRestoreScroll;
         /** RN 侧 uiRunning 时携带，applySnapshot 后重同步 generating DOM。 */
         generating?: boolean;
+        /**
+         * 分片协议（init-busy-yield Step 6）：generation 单调递增——新快照
+         * 开新代次，在途旧代次分片在让步点作废；chunkTotal=1 等价旧单包。
+         * 字段分布约定：sessionKey/hasMore/generating 每片重复携带（任意片
+         * 到达即可读快照级标量）；rows 只含本片行；scrollIntent/restoreScroll
+         * 仅末片（chunkIndex === chunkTotal - 1）携带（滚动副作用聚合到末片）。
+         */
+        generation: number;
+        chunkIndex: number;
+        chunkTotal: number;
       }
     >
   | BridgeEnvelope<

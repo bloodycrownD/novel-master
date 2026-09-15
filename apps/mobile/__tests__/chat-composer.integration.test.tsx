@@ -73,23 +73,10 @@ const mockGetComposerDraftJson = jest.fn(
   async (): Promise<string | null> => null,
 );
 const mockProjectComposerStatus = jest.fn(async () => [] as unknown[]);
+// 可变 runtime 容器：Harness 每次挂载时重填（含 agentRunManager）。
+const mockRuntime: Record<string, unknown> = {};
 jest.mock('../src/hooks/useRuntime', () => ({
-  useRuntime: () => ({
-    eventBus: {
-      subscribe: () => ({unsubscribe: () => undefined}),
-    },
-    preferences: {
-      getLlmStreamEnabled: mockGetLlmStreamEnabled,
-    },
-    userVfsTurn: {},
-    sessions: {
-      getComposerDraftJson: (...args: unknown[]) =>
-        mockGetComposerDraftJson(...args),
-      setComposerDraftJson: async () => true,
-      get: async () => ({projectId: 'p'}),
-    },
-    workplace: () => ({}),
-  }),
+  useRuntime: () => mockRuntime,
 }));
 
 jest.mock('../src/services/project-composer-status.service', () => ({
@@ -118,6 +105,7 @@ jest.mock('../src/services/agent-run.service', () => ({
   runAgentTurn: (...args: any[]) => mockRunAgentTurn(...args),
 }));
 
+import {SimpleEventBus} from '@novel-master/core/events';
 import {serializeComposerDraftJson} from '@novel-master/core/chat';
 import {ChatComposer} from '../src/components/chat/ChatComposer';
 import {ComposerAtPathInput} from '../src/components/chat/ComposerAtPathInput';
@@ -125,10 +113,8 @@ import {
   formatAtPathMentionMarkup,
   mentionValueToPlain,
 } from '../src/components/chat/composer-at-path-mention';
-import {useAgentRunLifecycle} from '../src/hooks/useAgentRunLifecycle';
-import {useSessionAbort} from '../src/screens/tabs/chat-tab/useSessionAbort';
+import {SessionStreamUnitManager} from '../src/services/session-stream-unit-manager.service';
 import {
-  decrementAgentActive,
   isMobileAgentActive,
   setMobileAgentActive,
 } from '../src/runtime/agent-activity';
@@ -140,43 +126,83 @@ import {
 } from '../src/storage/chat-composer-draft';
 import {
   addChatAnnotateDraft,
+  listChatAnnotateDrafts,
   resetChatAnnotateDraftStoreForTests,
 } from '@novel-master/core/chat';
+
+/** 当前 Harness 的 eventBus（测试里 publish run 生命周期事件用）。 */
+let harnessEventBus: SimpleEventBus | undefined;
+/** 当前 Harness 的 Manager。 */
+let harnessManager: SessionStreamUnitManager | undefined;
 
 function Harness(props: {
   canResumeWithoutInput: boolean;
   lastMessageIsPlainUserText?: boolean;
   draftRestoreToken?: number;
+  onMessagesChanged?: () => void | Promise<void>;
 }) {
-  // 与 ChatTabProvider 等价的 abort + lifecycle 装配（composer 是 dumb component）。
-  const onStreamResetRef = React.useRef<() => void>(() => undefined);
+  // Step 6 平移：真 SessionStreamUnitManager 装配（与 Provider bootstrap 同
+  // 形状）+ mock runtime（eventBus / abortRegistry / sessions），
+  // runAgentTurn 注入 mock。composer 是 dumb component——running 从 manager
+  // 投影派生（与 ChatConversationPanel 同语义：status 为 starting|running）。
   const abortRegistry = React.useRef({
     register: () => undefined,
     abort: () => undefined,
     unregister: () => undefined,
     has: () => false,
   });
-  const abort = useSessionAbort({
-    sessionId: 's',
-    abortRegistry: abortRegistry.current as never,
-    onStreamResetRef,
-  });
-  const lifecycle = useAgentRunLifecycle({
-    onRunUiActivate: abort.markRunStarted,
-    onRunUiDeactivate: abort.markRunEnded,
-    getUiRunning: abort.getUiRunning,
+  const eventBus = React.useRef(new SimpleEventBus()).current;
+  const managerRef = React.useRef<SessionStreamUnitManager>();
+  if (managerRef.current == null) {
+    managerRef.current = new SessionStreamUnitManager({
+      runtime: {
+        eventBus,
+        abortRegistry: abortRegistry.current,
+        sessions: {get: async () => ({id: 's', title: '会话 s'})},
+      } as never,
+      runAgentTurn: mockRunAgentTurn as never,
+    });
+    // harness 无持久层：显式放行水合（snapshot 可读）。
+    managerRef.current.markHydrated();
+  }
+  const manager = managerRef.current;
+  const [running, setRunning] = React.useState(
+    () =>
+      manager.snapshot('s')?.status === 'starting' ||
+      manager.snapshot('s')?.status === 'running',
+  );
+  React.useEffect(() => {
+    const sync = () => {
+      const status = manager.snapshot('s')?.status;
+      setRunning(status === 'starting' || status === 'running');
+    };
+    sync();
+    return manager.subscribe(sync);
+  }, [manager]);
+  harnessEventBus = eventBus;
+  harnessManager = manager;
+  Object.assign(mockRuntime, {
+    eventBus,
+    preferences: {
+      getLlmStreamEnabled: mockGetLlmStreamEnabled,
+    },
+    userVfsTurn: {},
+    sessions: {
+      getComposerDraftJson: (...args: unknown[]) =>
+        mockGetComposerDraftJson(...args),
+      setComposerDraftJson: async () => true,
+      get: async () => ({projectId: 'p'}),
+    },
+    workplace: () => ({}),
+    sessionStreamUnitManager: manager,
   });
   return (
     <ThemeProvider>
       <ChatComposer
         scope={{projectId: 'p', sessionId: 's'}}
         hasModel={true}
-        running={abort.uiRunning}
-        beginUiRun={lifecycle.beginUiRun}
-        endUiRunOnError={lifecycle.endUiRunOnError}
-        abortUiRun={abort.abortUiRun}
-        onStreamReset={() => undefined}
-        onMessagesChanged={() => undefined}
+        running={running}
+        onMessagesChanged={props.onMessagesChanged ?? (() => undefined)}
         onNeedModel={() => undefined}
         canResumeWithoutInput={props.canResumeWithoutInput}
         lastMessageIsPlainUserText={props.lastMessageIsPlainUserText ?? false}
@@ -224,6 +250,9 @@ describe('ChatComposer integration', () => {
     mockProjectComposerStatus.mockResolvedValue([]);
     clearChatComposerDraft('s');
     resetChatAnnotateDraftStoreForTests();
+    harnessEventBus = undefined;
+    harnessManager?.dispose();
+    harnessManager = undefined;
   });
   it('running-state “终止” action aborts current run', async () => {
     let tree: TestRenderer.ReactTestRenderer;
@@ -282,11 +311,20 @@ describe('ChatComposer integration', () => {
     });
   });
 
-  it('T22: agentActive 时第二次发送被拒绝', async () => {
+  it('T22: 同会话已有 in-flight run 时第二次发送被 Manager 拒绝', async () => {
+    // 迁移 AgentRunManager 后：门禁从全局 isMobileAgentActive 改为 Manager
+    // 的 per-session 拒绝——全局 agentActive 不再拦截发送。
     setMobileAgentActive(true);
+    mockRunAgentTurn.mockImplementationOnce(() => new Promise(() => undefined));
     let tree: TestRenderer.ReactTestRenderer;
     await act(async () => {
       tree = TestRenderer.create(<Harness canResumeWithoutInput={true} />);
+    });
+    const input = (tree as TestRenderer.ReactTestRenderer).root.find(
+      node => node.props?.testID === 'chat-composer-input',
+    );
+    await act(async () => {
+      input.props.onChangeText('first');
     });
     const sendBtn = (tree as TestRenderer.ReactTestRenderer).root.find(
       node => node.props?.accessibilityLabel === '发送',
@@ -294,13 +332,22 @@ describe('ChatComposer integration', () => {
     await act(async () => {
       sendBtn.props.onPress();
     });
-    expect(mockRunAgentTurn).not.toHaveBeenCalled();
+    expect(mockRunAgentTurn).toHaveBeenCalledTimes(1);
+
+    // 第一个 run 仍 in-flight（entry 处 starting）：第二次发送被拒、不再调 run
+    await act(async () => {
+      input.props.onChangeText('second');
+    });
+    await act(async () => {
+      sendBtn.props.onPress();
+    });
+    expect(mockRunAgentTurn).toHaveBeenCalledTimes(1);
     await act(async () => {
       (tree as TestRenderer.ReactTestRenderer).unmount();
     });
   });
 
-  it('T23: run 早退时 agentActive 回落', async () => {
+  it('T23: run 早退时 agentActive 回落（Manager finally 兑底）', async () => {
     mockRunAgentTurn.mockRejectedValueOnce(new Error('early fail'));
     let tree: TestRenderer.ReactTestRenderer;
     await act(async () => {
@@ -311,6 +358,9 @@ describe('ChatComposer integration', () => {
     );
     await act(async () => {
       sendBtn.props.onPress();
+    });
+    await act(async () => {
+      new Promise(resolve => setTimeout(resolve, 0));
     });
     expect(isMobileAgentActive()).toBe(false);
     await act(async () => {
@@ -383,11 +433,8 @@ describe('ChatComposer integration', () => {
     });
   });
 
-  it('T23: RUN_FINISHED 已递减时 finally 不再双减', async () => {
-    mockRunAgentTurn.mockImplementationOnce(async () => {
-      // 模拟 useChatStreamRuntime 在 runAgentTurn 结束前已处理 FINISHED
-      decrementAgentActive();
-    });
+  it('T23: RUN_FINISHED 已收尾时 finally 不再双减', async () => {
+    mockRunAgentTurn.mockImplementationOnce(async () => undefined);
     let tree: TestRenderer.ReactTestRenderer;
     await act(async () => {
       tree = TestRenderer.create(<Harness canResumeWithoutInput={true} />);
@@ -398,7 +445,158 @@ describe('ChatComposer integration', () => {
     await act(async () => {
       sendBtn.props.onPress();
     });
+    // run 同步完成前先补发 STARTED + FINISHED（事件路径收尾），
+    // 再等 finally 链收敛——不应把计数减成负/永久 busy。
+    harnessEventBus!.publish(
+      'agent.run.started' as never,
+      {
+        sessionId: 's',
+        projectId: 'p',
+        runId: 'r1',
+      } as never,
+    );
+    harnessEventBus!.publish(
+      'agent.run.finished' as never,
+      {
+        sessionId: 's',
+        projectId: 'p',
+        runId: 'r1',
+        stopReason: 'end_turn',
+      } as never,
+    );
+    await act(async () => {
+      new Promise(resolve => setTimeout(resolve, 0));
+    });
     expect(isMobileAgentActive()).toBe(false);
+    await act(async () => {
+      (tree as TestRenderer.ReactTestRenderer).unmount();
+    });
+  });
+
+  it('T-P10: append 成功后清批注与输入草稿（失败不清）', async () => {
+    let tree: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(<Harness canResumeWithoutInput={false} />);
+    });
+    const input = (tree as TestRenderer.ReactTestRenderer).root.find(
+      node => node.props?.testID === 'chat-composer-input',
+    );
+    await act(async () => {
+      input.props.onChangeText('hello');
+    });
+    addChatAnnotateDraft('s', {
+      name: '/a.md',
+      start: 0,
+      end: 3,
+      text: 'abc',
+    } as never);
+
+    // run 内 append 成功后触发 onUserMessageAppended，run 本体继续挂起
+    mockRunAgentTurn.mockImplementationOnce(
+      async (_rt: unknown, _scope: unknown, _content: string, options: any) => {
+        options?.onUserMessageAppended?.();
+        return new Promise(() => undefined);
+      },
+    );
+    const sendBtn = (tree as TestRenderer.ReactTestRenderer).root.find(
+      node => node.props?.accessibilityLabel === '发送',
+    );
+    await act(async () => {
+      sendBtn.props.onPress();
+    });
+    expect(input.props.value).toBe('');
+    expect(listChatAnnotateDrafts('s')).toHaveLength(0);
+    await act(async () => {
+      (tree as TestRenderer.ReactTestRenderer).unmount();
+    });
+  });
+
+  it('T-P10: run 失败（append 未达）时草稿保留不清', async () => {
+    let tree: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(<Harness canResumeWithoutInput={false} />);
+    });
+    const input = (tree as TestRenderer.ReactTestRenderer).root.find(
+      node => node.props?.testID === 'chat-composer-input',
+    );
+    await act(async () => {
+      input.props.onChangeText('keep me');
+    });
+    mockRunAgentTurn.mockImplementationOnce(() => new Promise(() => undefined));
+    const sendBtn = (tree as TestRenderer.ReactTestRenderer).root.find(
+      node => node.props?.accessibilityLabel === '发送',
+    );
+    await act(async () => {
+      sendBtn.props.onPress();
+    });
+    expect(input.props.value).toBe('keep me');
+    await act(async () => {
+      (tree as TestRenderer.ReactTestRenderer).unmount();
+    });
+  });
+
+  it('T-P10: onSettled 后 chip 刷新与列表刷新', async () => {
+    const onMessagesChanged = jest.fn(async () => undefined);
+    let tree: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(
+        <Harness
+          canResumeWithoutInput={false}
+          onMessagesChanged={onMessagesChanged}
+        />,
+      );
+    });
+    const input = (tree as TestRenderer.ReactTestRenderer).root.find(
+      node => node.props?.testID === 'chat-composer-input',
+    );
+    await act(async () => {
+      input.props.onChangeText('hi');
+    });
+    mockRunAgentTurn.mockImplementationOnce(
+      async (_rt: unknown, _scope: unknown, _content: string, options: any) => {
+        options?.onUserMessageAppended?.();
+        return new Promise(() => undefined);
+      },
+    );
+    const sendBtn = (tree as TestRenderer.ReactTestRenderer).root.find(
+      node => node.props?.accessibilityLabel === '发送',
+    );
+    await act(async () => {
+      sendBtn.props.onPress();
+    });
+    // 挂载水化已有一文投影调用，记基线；发送后（append 回调）不应额外新增
+    const baselineCalls = mockProjectComposerStatus.mock.calls.filter(
+      call => call[1] === 's',
+    ).length;
+
+    // 驱动 run 终态（STARTED 补 runId 后 FINISHED）
+    harnessEventBus!.publish(
+      'agent.run.started' as never,
+      {
+        sessionId: 's',
+        projectId: 'p',
+        runId: 'r1',
+      } as never,
+    );
+    harnessEventBus!.publish(
+      'agent.run.finished' as never,
+      {
+        sessionId: 's',
+        projectId: 'p',
+        runId: 'r1',
+        stopReason: 'end_turn',
+      } as never,
+    );
+    await act(async () => {
+      new Promise(resolve => setTimeout(resolve, 0));
+    });
+
+    // onSettled 驱动：chip 投影刷新（projectComposerStatusForSession）+ 列表刷新
+    const afterCalls = mockProjectComposerStatus.mock.calls.filter(
+      call => call[1] === 's',
+    ).length;
+    expect(afterCalls).toBeGreaterThan(baselineCalls);
+    expect(onMessagesChanged.mock.calls.length).toBeGreaterThan(1);
     await act(async () => {
       (tree as TestRenderer.ReactTestRenderer).unmount();
     });

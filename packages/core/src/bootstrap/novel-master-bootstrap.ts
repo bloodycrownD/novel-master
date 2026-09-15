@@ -21,6 +21,7 @@ import { VFS_CONTENT_BLOB_SCHEMA_STATEMENTS } from "./vfs/vfs-content-blob-schem
 import { MESSAGE_CHECKPOINT_SCHEMA_STATEMENTS } from "./message-checkpoint/message-checkpoint-schema.js";
 import { KKV_SCHEMA_STATEMENTS } from "./kkv/kkv-schema.js";
 import { SESSION_KKV_SCHEMA_STATEMENTS } from "./session-kkv/session-kkv-schema.js";
+import { SESSION_RUN_STATE_SCHEMA_STATEMENTS } from "./session-run-state/session-run-state-schema.js";
 import { CHAT_SCHEMA_STATEMENTS } from "./chat/chat-schema.js";
 import { SESSION_FS_SCHEMA_STATEMENTS } from "./session-fs/session-fs-schema.js";
 import { WORKPLACE_SCHEMA_STATEMENTS } from "./workplace/workplace-schema.js";
@@ -79,8 +80,13 @@ import { IntegrityRepairRegistry } from "@/service/integrity-repair.js";
  * 由 workplace-dir-rule-smart-field-v1 migration rebuild 承担（存量行
  * 原样搬运）。本条在分支内原编号 v11；merge origin/main（已发布 v11/v12）
  * 时顺延为 v13，保证走过 v1.5.16（user_version=12）的存量库走慢路径。
+ * v14：新增 session_run_state 表（会话流式单元的 run 状态持久层：
+ * status/partial 快照/metrics，session_id 主键单行）。本条在分支内原
+ * 编号 v13，与 main 的 v13（smart-sort）撞号；merge main 后顺延为 v14，
+ * 保证走过 main v13（user_version=13，v1.5.16+）的存量库走慢路径由
+ * DDL 建表；全新库直接建表；无存量回填。
  */
-export const SCHEMA_BOOT_VERSION = 13;
+export const SCHEMA_BOOT_VERSION = 14;
 
 /** 各模块 DDL 语句，按依赖安全顺序排列。 */
 export const NOVEL_MASTER_SCHEMA_STATEMENTS: readonly string[] = [
@@ -90,6 +96,7 @@ export const NOVEL_MASTER_SCHEMA_STATEMENTS: readonly string[] = [
   ...MESSAGE_CHECKPOINT_SCHEMA_STATEMENTS,
   ...KKV_SCHEMA_STATEMENTS,
   ...SESSION_KKV_SCHEMA_STATEMENTS,
+  ...SESSION_RUN_STATE_SCHEMA_STATEMENTS,
   ...CHAT_SCHEMA_STATEMENTS,
   ...SESSION_FS_SCHEMA_STATEMENTS,
   ...WORKPLACE_SCHEMA_STATEMENTS,
