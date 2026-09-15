@@ -409,6 +409,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
+    // 与 interruptedBadge/currentBadge 一致的右侧间距：多徽标同排不贴死（ui/J-1）。
+    marginRight: 4,
   },
   /** 中断徽标（Step 9）：中性色区分于进行中的主色。 */
   interruptedBadge: {

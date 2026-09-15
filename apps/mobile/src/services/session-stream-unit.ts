@@ -19,7 +19,7 @@
  *   pushStreamDelta 等价载荷注入该句柄，恰好一次；step 边界与句柄摘除
  *   均复位标记（重进/新 step 需重新注入）；
  * - 指标字段化：textChars/thinkingChars 事件即归账（run 级累计，step 边界
- *   不清）、startedAtMs 于 RUN_STARTED 回填时置位（重进连续计时）、
+ *   不清）、startedAtMs 于 begin() 受理时置位（重进连续计时）、
  *   settle 时冻结 elapsedMs 为「上次生成」；
  * - 子会话链接：pendingChildren 登记（同 title 覆盖、同 id 去重）、父收尾
  *   清空（蓝本 subagentChildSessionsByParent 语义，防陈旧条目串到下一
@@ -172,7 +172,7 @@ export interface SessionStreamUnitView {
   readonly settledAtMs: number | null;
   /** 指标：run 级累计字数（事件即归账，不经缓冲节拍）。 */
   readonly metrics: SessionStreamUnitMetrics;
-  /** run 开始时刻（毫秒，RUN_STARTED 回填时置位）；未开始为 0。运行中重进连续计时。 */
+  /** run 开始时刻（毫秒，begin() 受理时置位）；未开始为 0。运行中重进连续计时。 */
   readonly startedAtMs: number;
   /** 终态冻结的历时（毫秒）=「上次生成」；活跃态为 null（消费方按 startedAtMs 实时算）。 */
   readonly elapsedMs: number | null;
