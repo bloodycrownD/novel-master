@@ -212,3 +212,9 @@ user:
 
 assistant:
 有变动且机制定案（a0822d41，mobile 1351/1351）：RN 布局层 17=18 完全一致（composer/transcriptHost flex 布局与键盘避让组件 diff 为零，ChatComposer 的 diff 只是发送链 manager 化）——差异全在 web 侧窗口化。**抖动机制**：打字换行 composer 长高 → transcriptHost（flex:1）变矮 → webview 变矮 → 贴底 scrollTop 被浏览器钳制 → handleRowWindowScroll 把视口行估算的抬升误判为用户上滚（超 20 行滞回）→ 上端收缩把顶部真实行换成 EWMA 估算占位 → scrollHeight 突变一整个估算误差 → 视口内容跳一格；键盘弹收同理。1.5.17 无窗口化（scroll 事件只更新 nearBottom 不碰 DOM）故永不抖。**修复**：handleRowWindowScroll 贴底守卫（win.end>=total 且 startDelta>0 时跳过——贴底时上端收缩对可视区零收益）。+1 防回归用例。取证教训：EMUI 无 screenrecord、0.6s 采样截图抓不到 ~100ms 瞬时抖动——症状明确的时序类 bug 走代码机制推演+行为级单测比真机采样更高效。1219 干净验证包装机（三修复齐：reset-stream/句柄迁移/贴底守卫；插桩全撤、内嵌 bundle 不依赖 metro）待用户验证。
+
+user:
+（抖动修复后）你的 todo 中还有 bug 没修完？
+
+assistant:
+清账轮（51d3a447，mobile 1352/1352）：登记三项处理完毕——①「首字前被杀 run 水合后 composer 锁死」修复：ChatTabProvider 的 composerSendState 推导加中断分支（unitView.status==='interrupted' 时 lastMessageIsPlainUserText 强制 false——partial 空的中断无可提交合成行，锁死无出口；再发消息替换吸收中断单元是合法操作）+静态守卫用例；②「run-fail 活跃中不回落」**撤销——系误读**：「活跃中」徽标语义=isCurrent（当前打开的会话标记，ChatSessionListPanel L227 的三态判定 running>interrupted>isCurrent），与 run 状态无关；③「CI s3 包构建顺序」修复：cloud-sync-driver-s3 补 prebuild（先 build core，对齐 mobile 先例）。验证坑：本地模拟 CI fresh 环境须同时移除 core 的 dist 与 tsconfig.tsbuildinfo——tsc --build 增量信息残留会假装「已构建」不重新输出 dist，误判修复无效。至此本轮全部登记 bug 清零：三个渲染修复（f68b9d22/a0822d41）+ 中断解锁 + CI 顺序，main 领先远端 7 提交待推。
