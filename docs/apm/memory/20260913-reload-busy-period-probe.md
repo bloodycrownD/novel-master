@@ -1,5 +1,5 @@
 ---
-date: 2026-09-17 00:10
+date: 2026-09-17 00:50
 title: 通知「10几秒才出现」定案（EMUI FGS 压制）→ 常驻通知迭代交付 → v1.5.18 渲染回归回滚重发（1.5.17 基线）
 keywords: 通知延迟, EMUI, 前台服务通知, delay foreground service ntf, keepalive 通知, notifee, ForegroundService, onNotificationPosted, 冷启动, 忙期排队, logcat 取证, composer disabled, run 秒败
 abstract: 用户报「发送后切后台，拉状态栏 10 几秒才见『新会话·生成中』」——系统级日志定案：真凶是 EMUI 对前台服务通知的延迟展示机制（delay foreground service ntf：已入队不展示，~10 秒后系统放行才 onNotificationPosted；普通通知 agent-finished 同时刻立即展示作对照；冷却窗口补完：距上次前台服务停止 ~3 分钟内不延迟、首次必延迟整 10 秒——解释「第二次发送立刻出现」）。app 侧链路健康：tap→入队 632-670ms。GWT-1「通知≤2s」在华为/荣耀机不可达，除非绕过前台服务（修复候选：普通通知先显+FGS 静默保活）。另发现 run 秒败后 composer 永久禁用 bug。
@@ -206,3 +206,9 @@ user:
 
 assistant:
 重发 Release run 35002454266 completed/success（2026-09-16 晚）——v1.5.18（1.5.17 基线 ffe04f00）三产物构建完成，GitHub Release 已挂载，可下载覆盖安装（versionCode=run number 高于初版，正常升级覆盖）。
+
+user:
+（架构三问后）你都修好了？另发现 18 版输入框/消息列表会突然抖动，尤其输入文字从两行到三行、输入框宽度变化、可见窗口变小的时候；问这部分 17/18 有变动吗。
+
+assistant:
+有变动且机制定案（a0822d41，mobile 1351/1351）：RN 布局层 17=18 完全一致（composer/transcriptHost flex 布局与键盘避让组件 diff 为零，ChatComposer 的 diff 只是发送链 manager 化）——差异全在 web 侧窗口化。**抖动机制**：打字换行 composer 长高 → transcriptHost（flex:1）变矮 → webview 变矮 → 贴底 scrollTop 被浏览器钳制 → handleRowWindowScroll 把视口行估算的抬升误判为用户上滚（超 20 行滞回）→ 上端收缩把顶部真实行换成 EWMA 估算占位 → scrollHeight 突变一整个估算误差 → 视口内容跳一格；键盘弹收同理。1.5.17 无窗口化（scroll 事件只更新 nearBottom 不碰 DOM）故永不抖。**修复**：handleRowWindowScroll 贴底守卫（win.end>=total 且 startDelta>0 时跳过——贴底时上端收缩对可视区零收益）。+1 防回归用例。取证教训：EMUI 无 screenrecord、0.6s 采样截图抓不到 ~100ms 瞬时抖动——症状明确的时序类 bug 走代码机制推演+行为级单测比真机采样更高效。1219 干净验证包装机（三修复齐：reset-stream/句柄迁移/贴底守卫；插桩全撤、内嵌 bundle 不依赖 metro）待用户验证。
