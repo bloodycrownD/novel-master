@@ -420,6 +420,25 @@ describe('RowList 窗口化（init-busy-yield Step 7, T-W1）', () => {
       expect(mods.renderRows).toHaveBeenCalledTimes(1);
     });
 
+    it('贴底守卫：视口高度变化的 scrollTop 钳制（打字换行/键盘弹收）不触发上端收缩', () => {
+      mods.state.rows = makeRows('r', 500) as never;
+      mods.windowing.resetRowWindowForSnapshot(500, {kind: 'tail'}); // 窗口 (400,500)=贴底
+      mods.renderRows();
+      mods.renderRows.mock.calls.length = 0;
+      // webview 变矮 → scrollTop 被钳到底 → 估算行被推高到 445（超出
+      // start+20 滞回带，正常会计划上缩）——贴底时必须跳过，否则顶部
+      // 真实行换估算占位、scrollHeight 突变，视口内容跳一格（打字抖动）。
+      layout.scrollTop = 400 * FALLBACK_AVG + 45 * FALLBACK_AVG;
+
+      const moved = mods.windowing.handleRowWindowScroll();
+      expect(moved).toBe(false);
+      expect(mods.windowing.getRowWindowRange(500)).toEqual({
+        start: 400,
+        end: 500,
+      });
+      expect(mods.renderRows).toHaveBeenCalledTimes(0);
+    });
+
     it('上端收缩（远离超滞回带）：重映射保读位不跳', () => {
       mods.state.rows = makeRows('r', 500) as never;
       mods.windowing.retargetRowWindow(500, 300); // 窗口 (280, 380)
