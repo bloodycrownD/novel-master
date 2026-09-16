@@ -839,3 +839,114 @@ describe('T-U13: 跨项目并行等价', () => {
     expect(h.manager.startRun('sc', 'p3', 'fresh').ok).toBe(true);
   });
 });
+
+describe('step 边界 reset-stream 广播（1.5.18 渲染错段回归修复）', () => {
+  it('STEP_COMMITTED 冲刷后向句柄广播 reset-stream，webview 尾巴随之整体重置', () => {
+    const h = createHarness();
+    startRunningRun(h, 's1', 'r1');
+    const controls: unknown[] = [];
+    h.manager.attachWebview(
+      's1',
+      (() => {
+        const handle: SessionStreamWebviewHandle = {
+          handleId: 'web-reset',
+          isVisible: () => true,
+          onStreamPayload: () => undefined,
+          onControlMessage: (m: unknown) => {
+            controls.push(m);
+          },
+        };
+        return handle;
+      })(),
+    );
+
+    publishTextDelta(h.eventBus, 's1', 'r1', 'step1 text');
+    advanceStreamTimers();
+    publishStepCommitted(h.eventBus, 's1', 'r1');
+
+    // 尾巴重置广播必须与 partial 清零同边界发出，否则下一 step 的
+    // thinking/text 追加进上一 step 残留尾巴（正文/思考交替错段）。
+    expect(controls).toContainEqual({type: 'reset-stream'});
+  });
+
+  it('runId 不匹配或非 running 态的陈旧 STEP_COMMITTED 不广播', () => {
+    const h = createHarness();
+    startRunningRun(h, 's1', 'r1');
+    const controls: unknown[] = [];
+    h.manager.attachWebview(
+      's1',
+      (() => {
+        const handle: SessionStreamWebviewHandle = {
+          handleId: 'web-stale',
+          isVisible: () => true,
+          onStreamPayload: () => undefined,
+          onControlMessage: (m: unknown) => {
+            controls.push(m);
+          },
+        };
+        return handle;
+      })(),
+    );
+
+    publishStepCommitted(h.eventBus, 's1', 'other-run');
+    expect(controls).toEqual([]);
+  });
+});
+
+describe('settled 旧单元替换吸收：句柄迁移（HANDLE-NULL 回归）', () => {
+  it('宽限中的旧单元被替换吸收时，已挂句柄转挂给新单元，流式推送不断流', () => {
+    const h = createHarness();
+    // 第一轮 run：起流 → 收尾进宽限（settled 单元仍在注册表）
+    startRunningRun(h, 's1', 'r1');
+    const payloads: unknown[] = [];
+    h.manager.attachWebview(
+      's1',
+      (() => {
+        const handle: SessionStreamWebviewHandle = {
+          handleId: 'web-migrate',
+          isVisible: () => true,
+          onStreamPayload: (p: unknown) => {
+            payloads.push(p);
+          },
+        };
+        return handle;
+      })(),
+    );
+    publishTextDelta(h.eventBus, 's1', 'r1', 'step text');
+    advanceStreamTimers();
+    eventBusSettle(h, 's1', 'r1');
+
+    // 第二轮 run：替换吸收 settled 旧单元——句柄必须迁移，
+    // 否则新单元全程无句柄（会话内不渲染，重进注入才可见）。
+    expect(h.manager.startRun('s1', 'p', 'again').ok).toBe(true);
+    publishStarted(h.eventBus, 's1', 'r2');
+    publishTextDelta(h.eventBus, 's1', 'r2', 'second run text');
+    // settle 前的同步冲刷绕过定时器节拍（T-U2 收尾冲刷手法），直达
+    // applyStreamSegments → pushStreamPayload——句柄迁移是否生效一步定案。
+    eventBusSettle(h, 's1', 'r2');
+
+    const pushed = payloads.filter(
+      p => (p as {type?: string}).type === 'stream-batch',
+    );
+    expect(pushed.length).toBeGreaterThan(0);
+    expect(
+      pushed.some(p =>
+        JSON.stringify(p).includes('second run text'),
+      ),
+    ).toBe(true);
+  });
+});
+
+/** 收尾第一轮 run（FINISHED 事件驱动 settle，进宽限保留注册表）。 */
+function eventBusSettle(
+  h: ReturnType<typeof createHarness>,
+  sessionId: string,
+  runId: string,
+): void {
+  h.eventBus.publish(EVENT_AGENT_RUN_FINISHED, {
+    sessionId,
+    projectId: 'p',
+    runId,
+    success: true,
+  });
+}

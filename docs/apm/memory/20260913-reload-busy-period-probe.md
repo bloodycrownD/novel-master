@@ -1,6 +1,6 @@
 ---
-date: 2026-09-16 01:30
-title: 通知「10几秒才出现」定案——EMUI 对前台服务通知延迟展示；通知链路代码本身健康
+date: 2026-09-16 01:45
+title: 通知「10几秒才出现」定案（EMUI FGS 压制）→ 常驻通知迭代交付 → v1.5.18 渲染回归回滚重发（1.5.17 基线）
 keywords: 通知延迟, EMUI, 前台服务通知, delay foreground service ntf, keepalive 通知, notifee, ForegroundService, onNotificationPosted, 冷启动, 忙期排队, logcat 取证, composer disabled, run 秒败
 abstract: 用户报「发送后切后台，拉状态栏 10 几秒才见『新会话·生成中』」——系统级日志定案：真凶是 EMUI 对前台服务通知的延迟展示机制（delay foreground service ntf：已入队不展示，~10 秒后系统放行才 onNotificationPosted；普通通知 agent-finished 同时刻立即展示作对照；冷却窗口补完：距上次前台服务停止 ~3 分钟内不延迟、首次必延迟整 10 秒——解释「第二次发送立刻出现」）。app 侧链路健康：tap→入队 632-670ms。GWT-1「通知≤2s」在华为/荣耀机不可达，除非绕过前台服务（修复候选：普通通知先显+FGS 静默保活）。另发现 run 秒败后 composer 永久禁用 bug。
 ---
@@ -158,7 +158,43 @@ assistant:
 v1.5.18 重发完成（2026-09-15）：事故=agent 按功能体量自定 minor bump 1.6.0 越权（版本号策略决策权在用户）。止损：v1.6.0 的 CI run 被取消（Android job 日志实锤 canceled 非构建失败，代码无恙）、Release 未产生（最新仍 v1.5.17）、远程+本地 tag 删除；修正 f0a791d5——CHANGELOG 标题/双端 package.json/build.gradle 全部 1.6.0→1.5.18，tag v1.5.18 推送触发新 CI（run 34983184336）。publish skill 已更新（.agents/skills/novel-master-publish/SKILL.md）：新增硬性「版本号规则」节——新版本号一律为上一 tag patch+1（+0.0.1），与功能体量无关、agent 不得自行 minor/major，变更须用户拍板；checklist 首部同步加确认项。教训入档：版本号是用户决策不是工程判断。
 
 user:
-把合并完的代码重启 metro 安装到手机——release 版本出现用户消息、工具消息渲染不及时的情况，要测试。
+（前一轮）把合并完的代码重启 metro 安装到手机——release 版本出现用户消息、工具消息渲染不及时的情况，要测试。
 
 assistant:
 （主仓装机全链排查，2026-09-16 凌晨）worktree 已被用户删除，metro 与构建首次切到主仓 main，连踩五坑全排掉：①主仓 node_modules 停在 v1.5.17 时代缺 notifee——npm install 补齐，且 **install 必须先于 gradle**（autolink 按 node_modules 扫描，install 前构建的 APK 缺 notifee 原生模块，运行时报 Notifee native module not found）；②主仓缺 local.properties（sdk.dir 不进 git）——写入解决；③gradle autolink 的依赖识别被 apps/mobile/node_modules 的过期内容干扰（识别出 16 个旧集合、无 notifee）——清理其过期内容后 autolinking.json 恢复 17 个含 notifee；**但注意该目录是 workspace 正常子级安装**（markdown-it 等未 hoist 到根的包住这里），不能整删（误删导致 metro 解析 markdown-it 失败，重跑 npm install 恢复）；④APK 内验证 notifee 不能用 unzip -l 按文件名搜（代码编进 classes.dex，文件名不含）——PackageList.java 计数/装机运行才是有效验证；⑤真 bug：**require-cycle 运行时报错**（agent-finished-notification→navigation-container-ref，环一直存在但 worktree 的模块解析顺序未触发，主仓 fresh 环境炸出）——修法=navigateToChatTabFromNotification 改惰性 require（import type 保类型），顺带修 TS6.0.3 的 baseUrl 弃用错误（mobile tsconfig.json 与 src/web/tsconfig.json 补 ignoreDeprecations "6.0"）与 lockfile 里发版漏更的 workspace 版本号（79f70eed，typecheck 双端绿+通知测试 32/32 绿）。最终 1210 dev 包（主仓代码+notifee 原生模块）装机正常启动。release 侧评估：用户装的 v1.5.18 release 可正常启动（模块顺序未触发 cycle 崩溃），无需重发；修复已进 main 兜底。用户待测试项：release 版「用户消息/工具消息渲染不及时」在 dev 版的对照观察。
+
+user:
+（真机验证回报）当前手机没有出现鸿蒙6 那种 user 消息延迟渲染，但 Assistant 消息延迟渲染确实存在：发送后 6~7s 才渲染出内容；3s 时退出会话再进入则立刻渲染出来。1.5.17 无此问题，确认 1.5.18 引入。
+
+assistant:
+回归排查（进行中被打断，线索已固定）：现象「退出重进立刻渲染」=数据已在（unit partial 照常累积+重进靠注入补齐），是会话内流式推送/渲染链路被卡。静态走查：RN 侧 deferred 队列（postOrDeferSnapshotPaint/T-S3 streamFlush 推迟）闭环看似完整，但「分片在途持续数秒」或持续 supersede 可致流式尾巴长期不可见；web 侧窗口化（row-windowing）若把 stream-tail 行虚拟化出窗口，appendStreamDelta 的 renderRows 兜底救不回（重建后仍是 spacer）——两嫌疑待真机 logcat（1210 dev 带打点）定案。
+
+user:
+（打断排查，新指令）需要回滚：GitHub 再推送一次 1.5.18，但代码用 1.5.17 没问题的代码。另确认：同版本号软件可以重复安装？
+
+assistant:
+回滚发版本地全部就绪（2026-09-16 01:35）：从 v1.5.17（ec63fec7）切 release/1.5.18-clean 分支，bump 双端 package.json+build.gradle（字节级，CRLF/GBK 未动）+lockfile workspace 条目（该基线竟停在 1.5.7，一并治好）+CHANGELOG 补 [1.5.18] 重发说明段，提交 ffe04f00；本地 tag v1.5.18 已重打至 ffe04f00（原指 f0a791d5）。远程操作被 gh token 失效阻塞（连续两轮），待用户 gh auth login 后执行：删 GitHub Release v1.5.18（若存在）→ 删远程 tag → 推新 tag（触发 CI）→ 推 release 分支与 main。同版本号安装答复：Android 判定看 versionCode（CI 用 GITHUB_RUN_NUMBER 递增，重发构建必比初版高）+签名，覆盖安装无障碍；限制是应用内更新检查比对版本号，已装初版用户收不到更新提示需手动重下。main 未动：渲染回归修复继续在 main 进行，修好后发 v1.5.19（+0.0.1），届时 main 的 CHANGELOG [1.5.18] 段改名 [1.5.19]。
+
+user:
+用户自己网页删除了 GitHub Release；随后问「gh 能用 ssh 吗」，想知道推送怎么绕开失效 token。
+
+assistant:
+可以：gh 的 git_protocol 支持 ssh，但 gh 自身 API（查 CI/删 Release）仍需 token，SSH 只解决 git 推拉。实测用户已于前晚备好 SSH key（~/.ssh/id_ed25519，2026-09-15 21:49 生成），`ssh -T git@github.com` 认证通过（Hi bloodycrownD）。执行：`git remote set-url origin git@github.com:...` 切 SSH → 删远程旧 tag → 推新 tag v1.5.18（ffe04f00）→ 推 release/1.5.18-clean 分支，全部成功并 ls-remote 核验。Release CI 立即触发（run 35002454266，匿名 REST API 可查——仓库公开，gh token 坏着也能用 curl api.github.com 监控）。注意：main 仍领先远端 3 提交（79f70eed/ee22929a/bf3be4a7），用户指令范围只含 tag，main 推送待确认。
+
+user:
+（贴 CI 失败日志）分支推送触发的 CI 挂了（cloud-sync-driver-s3 找不到 @novel-master/core）；问重发提交会不会影响构建。
+
+assistant:
+定案（2026-09-16）：失败的是 ci.yml（非 main 分支 push 触发的检查流水线，run 35002468370），**不是 Release**（三产物 run 35002454266 独立在跑，走 release.yml 自己的显式逐包构建清单，v1.5.17 与 v1.5.18 初版两度验证绿）。与重发提交无关（只动版本串+CHANGELOG，install 步骤已过）。根因=ci.yml 首跑暴露的固有坑：`npm run build --workspaces --if-present` 按 workspaces 声明序（['packages/*','apps/*']+包名字母序）执行，cloud-sync-driver-s3（c-l）排在 core（c-o）前，fresh checkout 上 core 的 dist（gitignore）尚不存在，s3 的 import '@novel-master/core' 经 NodeNext+exports 解析到 ./dist/index.d.ts 缺失 → TS2307+TS7006；本地移开 core/dist 复现同错误逐字节一致。ci.yml 在 v1.5.17 基线就存在但**从未跑过**（workflows runs 总数=1，feature 分支开发从不推远端，推 release 分支是首次触发）——CI 历史 run 数可作「workflow 是否首跑」的判据。处置：不阻塞发版、不在 release 分支修；将来在 main 修（s3 包补 prebuild 先构建 core，或 ci.yml build 步骤前插 core 单独构建）。
+
+user:
+（发版后）你先修渲染 bug 吧；另外为什么 bug 在鸿蒙上放大、安卓上不明显？提示：复杂 UI 时间序 bug 截图不好测，测不出来就先比对代码找。
+
+assistant:
+（真机复现取证轮，2026-09-16 02:00-02:30）**症状在 1210 dev 复现成功并定性**：进「新会话4」（智普/glm-5.3-flash，模型可用）adb 驱动发送（`adb shell input text` 空格必须 %s 转义；键盘弹出时发送键随 composer 上移，tap 坐标必须按弹键盘后的 dump 重新定位——两轮无效复现都是这两坑）+ 0.5s×18 截图序列+logcat 时间轴：**tap+0.75s 用户气泡已渲染；指标条/生成中条/流式内容全部缺失；tap+8.4s「生成中」条才出现**（与用户报 6~7s 吻合）。**排除图**：①快照在途卡住——排除（R1 run-fail 轮 gen=3/4/5 三次快照 8/13/7ms 全毫秒级，均单分片）；②受理链——排除（R1：t0 send→startRun 29ms→RUN_STARTED 676ms→metrics bar +238ms→streamGenerating +240ms 全健康）；③delta 消费链——排除（ingest=队列 push、appendWritethroughSnapshot=unit.snapshot()浅构造+writethrough 250ms 合并暂存、core streamRegistry=纯内存拼接，全轻量）；④64ms 节拍打穿 memo 引发全量快照风暴——排除（messages 引用 copy-on-write 稳定，readMessagesSnapshot 返回外层新对象但 messages 数组同引用，ChatTranscriptWebView memo 挡住）。**定性**：R1（run 在 core 早期失败、不走 LLM 请求）全链健康 vs R3（真 LLM 流式）冻结 8 秒——元凶在「真 run 才走的段落」（core 准备段/LLM 请求/UI 驱动链某处），指标条（纯 RN 组件）也不出现 → 不是 webview 单方问题。**取证中断原因**：R3 期间 console→logcat 通道死（华为机老坑），重启 app 后 bundle 拉不回（22.8MB 传输挂起：adb kill-server/reverse 重配/WiFi tcpip/切回 USB/metro --reset-cache 全试无效；host 侧 curl 0.1s 出全量、metro 日志可见设备请求到达——卡在 adb 传输层物理劣化，需重插 USB 线或重启手机）。环境恢复后下一步：复现一次拿冻结窗口内的打点时间轴（t0/startRun/RUN_STARTED/gen 序列的 gap 直接定位卡段）。**鸿蒙放大机理的待验证假说**：若冻结源是设备性能敏感的同步长任务（JS 线程被占），鸿蒙更慢 → 冻结更长 → 连 user 消息的 append（排队中的 postMessage）都被压住——与「鸿蒙上 user 消息也延迟、荣耀机只有 assistant 延迟」吻合；定案冻结源后此问自解。**副线新发现**：run-fail（Model not saved 秒败）后会话列表「新会话2」持续显示「活跃中」不回落——run 失败路径 unit 状态清理可能不完整（与已修的 run-fail-composer-lock 同族，另行排查）。
+
+user:
+（期间确认）用户自行重启 app 恢复；重发 Release CI 结果如何。
+
+assistant:
+重发 Release run 35002454266 completed/success（2026-09-16 02:2x）——v1.5.18（1.5.17 基线 ffe04f00）三产物构建完成，GitHub Release 已挂载，用户可下载覆盖安装（versionCode=run number 高于初版，正常升级覆盖）。
