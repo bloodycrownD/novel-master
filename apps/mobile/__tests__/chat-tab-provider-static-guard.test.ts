@@ -44,3 +44,16 @@ describe('T-U10: ChatTabProvider 无运行态静态守卫', () => {
     expect(source).toContain('ChatTabProvider');
   });
 });
+
+
+// 中断现场解锁（首字前被杀 run 水合后 composer 不再锁死）：行为语义由
+// deriveComposerSendState/集成测试覆盖，此处静态保证推导含 interrupted 分支
+// （分支被误删时立即红灯，而非静默回到锁死）。
+describe('中断现场解锁输入（静态守卫）', () => {
+  const source = readFileSync(PROVIDER_PATH, 'utf8');
+
+  it('composerSendState 推导含 interrupted 解锁分支', () => {
+    expect(source).toContain("unitView?.status === 'interrupted'");
+    expect(source).toContain('lastMessageIsPlainUserText: false');
+  });
+});
