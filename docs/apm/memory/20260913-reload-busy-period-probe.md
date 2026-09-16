@@ -1,5 +1,5 @@
 ---
-date: 2026-09-16 01:45
+date: 2026-09-17 00:10
 title: 通知「10几秒才出现」定案（EMUI FGS 压制）→ 常驻通知迭代交付 → v1.5.18 渲染回归回滚重发（1.5.17 基线）
 keywords: 通知延迟, EMUI, 前台服务通知, delay foreground service ntf, keepalive 通知, notifee, ForegroundService, onNotificationPosted, 冷启动, 忙期排队, logcat 取证, composer disabled, run 秒败
 abstract: 用户报「发送后切后台，拉状态栏 10 几秒才见『新会话·生成中』」——系统级日志定案：真凶是 EMUI 对前台服务通知的延迟展示机制（delay foreground service ntf：已入队不展示，~10 秒后系统放行才 onNotificationPosted；普通通知 agent-finished 同时刻立即展示作对照；冷却窗口补完：距上次前台服务停止 ~3 分钟内不延迟、首次必延迟整 10 秒——解释「第二次发送立刻出现」）。app 侧链路健康：tap→入队 632-670ms。GWT-1「通知≤2s」在华为/荣耀机不可达，除非绕过前台服务（修复候选：普通通知先显+FGS 静默保活）。另发现 run 秒败后 composer 永久禁用 bug。
@@ -188,13 +188,21 @@ assistant:
 定案（2026-09-16）：失败的是 ci.yml（非 main 分支 push 触发的检查流水线，run 35002468370），**不是 Release**（三产物 run 35002454266 独立在跑，走 release.yml 自己的显式逐包构建清单，v1.5.17 与 v1.5.18 初版两度验证绿）。与重发提交无关（只动版本串+CHANGELOG，install 步骤已过）。根因=ci.yml 首跑暴露的固有坑：`npm run build --workspaces --if-present` 按 workspaces 声明序（['packages/*','apps/*']+包名字母序）执行，cloud-sync-driver-s3（c-l）排在 core（c-o）前，fresh checkout 上 core 的 dist（gitignore）尚不存在，s3 的 import '@novel-master/core' 经 NodeNext+exports 解析到 ./dist/index.d.ts 缺失 → TS2307+TS7006；本地移开 core/dist 复现同错误逐字节一致。ci.yml 在 v1.5.17 基线就存在但**从未跑过**（workflows runs 总数=1，feature 分支开发从不推远端，推 release 分支是首次触发）——CI 历史 run 数可作「workflow 是否首跑」的判据。处置：不阻塞发版、不在 release 分支修；将来在 main 修（s3 包补 prebuild 先构建 core，或 ci.yml build 步骤前插 core 单独构建）。
 
 user:
-（发版后）你先修渲染 bug 吧；另外为什么 bug 在鸿蒙上放大、安卓上不明显？提示：复杂 UI 时间序 bug 截图不好测，测不出来就先比对代码找。
+（发版后）你先修渲染 bug 吧；另外为什么 bug 在鸿蒙上放大、安卓上不明显？提示：复杂 UI 时间序 bug 截图不好测，测不出来就先比对代码找。随后补充新观察：正文流式渲染一半→thinking 继续渲染→thinking 完→再渲染正文，三段式错乱；确认非请求乱序，是 1.5.18 代码变动。最后问：为什么 18 版 bug 这么多、改了哪部分、能否回滚、有无保留必要？
 
 assistant:
-（真机复现取证轮，2026-09-16 02:00-02:30）**症状在 1210 dev 复现成功并定性**：进「新会话4」（智普/glm-5.3-flash，模型可用）adb 驱动发送（`adb shell input text` 空格必须 %s 转义；键盘弹出时发送键随 composer 上移，tap 坐标必须按弹键盘后的 dump 重新定位——两轮无效复现都是这两坑）+ 0.5s×18 截图序列+logcat 时间轴：**tap+0.75s 用户气泡已渲染；指标条/生成中条/流式内容全部缺失；tap+8.4s「生成中」条才出现**（与用户报 6~7s 吻合）。**排除图**：①快照在途卡住——排除（R1 run-fail 轮 gen=3/4/5 三次快照 8/13/7ms 全毫秒级，均单分片）；②受理链——排除（R1：t0 send→startRun 29ms→RUN_STARTED 676ms→metrics bar +238ms→streamGenerating +240ms 全健康）；③delta 消费链——排除（ingest=队列 push、appendWritethroughSnapshot=unit.snapshot()浅构造+writethrough 250ms 合并暂存、core streamRegistry=纯内存拼接，全轻量）；④64ms 节拍打穿 memo 引发全量快照风暴——排除（messages 引用 copy-on-write 稳定，readMessagesSnapshot 返回外层新对象但 messages 数组同引用，ChatTranscriptWebView memo 挡住）。**定性**：R1（run 在 core 早期失败、不走 LLM 请求）全链健康 vs R3（真 LLM 流式）冻结 8 秒——元凶在「真 run 才走的段落」（core 准备段/LLM 请求/UI 驱动链某处），指标条（纯 RN 组件）也不出现 → 不是 webview 单方问题。**取证中断原因**：R3 期间 console→logcat 通道死（华为机老坑），重启 app 后 bundle 拉不回（22.8MB 传输挂起：adb kill-server/reverse 重配/WiFi tcpip/切回 USB/metro --reset-cache 全试无效；host 侧 curl 0.1s 出全量、metro 日志可见设备请求到达——卡在 adb 传输层物理劣化，需重插 USB 线或重启手机）。环境恢复后下一步：复现一次拿冻结窗口内的打点时间轴（t0/startRun/RUN_STARTED/gen 序列的 gap 直接定位卡段）。**鸿蒙放大机理的待验证假说**：若冻结源是设备性能敏感的同步长任务（JS 线程被占），鸿蒙更慢 → 冻结更长 → 连 user 消息的 append（排队中的 postMessage）都被压住——与「鸿蒙上 user 消息也延迟、荣耀机只有 assistant 延迟」吻合；定案冻结源后此问自解。**副线新发现**：run-fail（Model not saved 秒败）后会话列表「新会话2」持续显示「活跃中」不回落——run 失败路径 unit 状态清理可能不完整（与已修的 run-fail-composer-lock 同族，另行排查）。
+（完整定案轮，2026-09-16 深夜～09-17 凌晨）**取证基建三连跳**：①console→logcat 通道在 WebView 挂载后必死（老 SEQ 时代「reload 后 console 死」同源）→②fetch 局域网 collector 同死（webview ready 后 RN 的 Networking/console 桥双双静默，但 JS/DB/UI 活着）→③**DB 直写打点**（run-timing 的 probeOut 走 op-sqlite 独立 probe.db，同步 native 调用，冻结期唯一可靠出口）+ chromium tag（web 侧 console 独立通道）。内嵌 bundle 装机（MainApplication useDevSupport=false + react-native bundle --dev true 进 assets，__DEV__ 打点全保）绕开 metro/隧道。**取证环境坑**：adb reverse 隧道物理层劣化（USB push 73MB/s 正常但 socket 转发流挂起，WiFi/kill-server/重插皆不救，内嵌 bundle 才是根治）；adb input text 空格必须 %s 转义；键盘弹起时 composer 上移、发送键坐标必须按弹起后 dump；EMUI pm install 弹「安装来源」确认框会被应用市场带偏前台。
+
+**四站打点定案（A=manager 路由/B=unit 推送/C=handle 入队/D=postToWeb）**：受理链全健康（t0→startRun 30ms→RUN_STARTED 1.5s→指标条 224ms→streamGenerating 227ms）；**LLM 首 thinking delta 在 RUN_STARTED 后 8.3~9.6s 才到**（glm-5.3-flash+38 消息上下文，四轮一致）——「发送后 6~7s 无内容」的主体是**首 token 延迟**非渲染回归；但暴露两个真回归：**①B-push HANDLE-NULL**（间歇，循环复现 3 轮中 2 轮）：水合的 interrupted 旧单元被 startRun「删旧建新」替换吸收时**句柄随旧单元销毁而丢失**，hasUnit 新旧连续不触发屏幕 attach effect 重挂→新 run 全程无句柄→**会话内不渲染、退出重进注入才可见**（=用户原始症状的根因；触发条件=进会话时有上次被杀 run 的现场，真实使用常见）；**②三段式错段**：STEP_COMMITTED 后 force 快照发 'preserve'，而 web 侧 applySnapshot 只在 intent!=='preserve' 清 stream state→上一 step 尾巴残留→下一 step thinking/text 追加错段。
+
+**双修复（f68b9d22，mobile 1350/1350 全绿×2）**：①unit.handleStepCommitted 冲刷后广播 reset-stream（adapter→resetStreamTail：清本地累积+web 尾巴+cancel 残余 RAF）；②startRun 替换吸收时 existing.takeWebviewHandles() 迁移给新单元。+3 防回归用例。messages effect 兜底版被撤（resetStreamTail 进 deps 改变 effect 重跑时序致 C-orch-1 重挂测试挂，单跑过/全量挂的 flaky=probeOut fetch 在测试环境泄漏，NODE_ENV=test 早退修复）。
+
+**新 bug 登记**：首字前被杀的 run 水合后 composer 永久锁死（partial 空→合成行不提交→lastMessageIsPlainUserText 锁——已知限制「用户停止在首条回复前」的水合变体）；run-fail 后会话列表「活跃中」不回落。
+
+**架构级回答（用户三问）**：bug 全部集中在 session-stream-unit 架构（消息流从 React props 数据流改为命令式 unit→handle→webview 直推——命令式链路每条接线都要人工维护，边界时序（替换吸收/step 边界/失败收尾）漏接即静默失败，四轮 CR 的单测只覆盖正常主线）；不建议整体回滚（数据面健康：A 站四轮全通、DB 写通、受理毫秒级；并行/恢复功能依赖它；其他三块迭代——忙期优化/常驻通知/run-fail 落消息——独立且健康）。
 
 user:
-（期间确认）用户自行重启 app 恢复；重发 Release CI 结果如何。
+（期间）用户重插 USB 后链路未愈（USB push 73MB/s 正常但 reverse 流挂）；重发 Release CI 结果确认。
 
 assistant:
-重发 Release run 35002454266 completed/success（2026-09-16 02:2x）——v1.5.18（1.5.17 基线 ffe04f00）三产物构建完成，GitHub Release 已挂载，用户可下载覆盖安装（versionCode=run number 高于初版，正常升级覆盖）。
+重发 Release run 35002454266 completed/success（2026-09-16 晚）——v1.5.18（1.5.17 基线 ffe04f00）三产物构建完成，GitHub Release 已挂载，可下载覆盖安装（versionCode=run number 高于初版，正常升级覆盖）。
