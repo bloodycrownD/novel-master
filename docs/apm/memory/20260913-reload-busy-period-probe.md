@@ -1,5 +1,5 @@
 ---
-date: 2026-09-17 00:50
+date: 2026-09-17 23:50
 title: 通知「10几秒才出现」定案（EMUI FGS 压制）→ 常驻通知迭代交付 → v1.5.18 渲染回归回滚重发（1.5.17 基线）
 keywords: 通知延迟, EMUI, 前台服务通知, delay foreground service ntf, keepalive 通知, notifee, ForegroundService, onNotificationPosted, 冷启动, 忙期排队, logcat 取证, composer disabled, run 秒败
 abstract: 用户报「发送后切后台，拉状态栏 10 几秒才见『新会话·生成中』」——系统级日志定案：真凶是 EMUI 对前台服务通知的延迟展示机制（delay foreground service ntf：已入队不展示，~10 秒后系统放行才 onNotificationPosted；普通通知 agent-finished 同时刻立即展示作对照；冷却窗口补完：距上次前台服务停止 ~3 分钟内不延迟、首次必延迟整 10 秒——解释「第二次发送立刻出现」）。app 侧链路健康：tap→入队 632-670ms。GWT-1「通知≤2s」在华为/荣耀机不可达，除非绕过前台服务（修复候选：普通通知先显+FGS 静默保活）。另发现 run 秒败后 composer 永久禁用 bug。
@@ -218,3 +218,9 @@ user:
 
 assistant:
 清账轮（51d3a447，mobile 1352/1352）：登记三项处理完毕——①「首字前被杀 run 水合后 composer 锁死」修复：ChatTabProvider 的 composerSendState 推导加中断分支（unitView.status==='interrupted' 时 lastMessageIsPlainUserText 强制 false——partial 空的中断无可提交合成行，锁死无出口；再发消息替换吸收中断单元是合法操作）+静态守卫用例；②「run-fail 活跃中不回落」**撤销——系误读**：「活跃中」徽标语义=isCurrent（当前打开的会话标记，ChatSessionListPanel L227 的三态判定 running>interrupted>isCurrent），与 run 状态无关；③「CI s3 包构建顺序」修复：cloud-sync-driver-s3 补 prebuild（先 build core，对齐 mobile 先例）。验证坑：本地模拟 CI fresh 环境须同时移除 core 的 dist 与 tsconfig.tsbuildinfo——tsc --build 增量信息残留会假装「已构建」不重新输出 dist，误判修复无效。至此本轮全部登记 bug 清零：三个渲染修复（f68b9d22/a0822d41）+ 中断解锁 + CI 顺序，main 领先远端 7 提交待推。
+
+user:
+（bug 清零后）打包 release 比较慢，有什么快一些的版本？想真机测试后再推送。随后改口：请打 1.5.18 版本方便安装，且 versionCode 必须与原始版本相同，保证可用相同安装包覆盖。之后要求把 APK 传输到另一台主机。
+
+assistant:
+（2026-09-17 晚）快速真机验证方案：本地 assembleRelease 只打 Android 单平台（6m18s）远快于 CI 三产物，release 性能（Hermes+minify）比 debug 包真实——抖动/流式时序类必须 release 性能下测。**versionCode 对齐口径**：CI 的 versionCode=GITHUB_RUN_NUMBER（重发 v1.5.18 的 run 35002454266 → run_number=102），本地构建 `-PversionCode=102 -PversionName=1.5.18` 与用户已装正式版同号——测试包可覆盖、之后 GitHub 正式 1.5.19（run_number 递增）仍可正常升级；本地 release 用 debug keystore 兜底签名（无 secrets 时 build.gradle 已配）。产物：apps/mobile/android/app/build/outputs/apk/release/（arm64-v8a 89MB / universal 156MB）。**装机被 EMUI 双重阻拦**：①降级覆盖（当前 1220 dev → 102）需 `pm install -r -d`，EMUI 弹确认框须用户点允许；②手机通知栏面板卡半展开态（NotificationShade 焦点，BACK/上滑/cmd statusbar collapse 均收不起）把确认弹窗挡死——连续 User rejected permissions。**未完成**：102 release 包待装机——设备上已备两份（/sdcard/novel-master-1.5.18-fix.apk 供文件管理器手动装、/data/local/tmp/nm-rel-102.apk 供 pm install）；需用户手动收通知栏后 adb 装（弹窗点允许）或直接文件管理器点开装（EMUI 手动装降级包有「继续安装」选项）。APK 已按用户要求经临时 HTTP（python3 -m http.server 8000 + /tmp/apk-share，地址 http://192.168.1.144:8000/）传输到另一台主机，服务与临时目录已清理。**现场快照（2026-09-17 深夜）**：main 领先远端 8 提交（三渲染修复+中断解锁+CI 顺序+记忆）待推；手机装着 1220 dev（四修复、debug 变体、内嵌 bundle）；102 release 包待装待测；验证通过后发 v1.5.19（+0.0.1）。
