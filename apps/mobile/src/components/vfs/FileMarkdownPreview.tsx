@@ -25,7 +25,10 @@ import {
 import {refreshComposerAnnotateChips} from '../../storage/chat-composer-draft';
 import {RichContentBody} from '../rich-content/RichContentBody';
 import {prepareTranscriptRichHtml} from '../rich-content/prepare-transcript-rich-html';
-import {isRichContentOverLimit} from '../rich-content/rich-content-limits';
+import {
+  isRichContentOverLimit,
+  isWebViewDocumentOverLimit,
+} from '../rich-content/rich-content-limits';
 import {MessageEditModal} from '../chat/MessageEditModal';
 import {buildFrontMatterDocumentHtml} from './build-front-matter-document-html';
 import {parseFrontMatterFields} from './front-matter-fields';
@@ -286,16 +289,13 @@ export function FileMarkdownPreview({
     return isMdPath ? (split?.body ?? '').trim() : '';
   }, [isMdPath, split?.body]);
 
-  // Non-md + Markdown Tab: full file as body (no front-matter split).
-  const nonMdBody = useMemo(() => {
-    if (!isMdPath) {
-      return content.trim();
-    }
-    return '';
-  }, [isMdPath, content]);
-
-  const mdOverLimit = isRichContentOverLimit(mdBody);
-  const nonMdOverLimit = isRichContentOverLimit(nonMdBody);
+  // WebView 引擎走浏览器整页渲染，用放宽阈值（20 万字）；rn 兜底引擎维持
+  // RenderHTML 的 12k FlatList 护栏（RichContentBody 内部同款判定）。
+  const overLimitFor =
+    previewEngine === 'webview'
+      ? isWebViewDocumentOverLimit
+      : isRichContentOverLimit;
+  const mdOverLimit = overLimitFor(mdBody);
 
   const mdBodyHtml = useMemo(() => {
     if (!mdBody || mdOverLimit || previewEngine !== 'webview') {
@@ -308,24 +308,10 @@ export function FileMarkdownPreview({
     }
   }, [mdBody, mdOverLimit, previewEngine]);
 
-  const nonMdBodyHtml = useMemo(() => {
-    if (!nonMdBody || nonMdOverLimit || previewEngine !== 'webview') {
-      return undefined;
-    }
-    try {
-      return prepareTranscriptRichHtml(nonMdBody);
-    } catch {
-      return undefined;
-    }
-  }, [nonMdBody, nonMdOverLimit, previewEngine]);
-
   const mdUseWebViewPreview =
     previewEngine === 'webview' &&
     isMdPath &&
     (mdBody.length > 0 || showFrontMatter);
-
-  const nonMdUseWebViewPreview =
-    previewEngine === 'webview' && !isMdPath && nonMdBody.length > 0;
 
   const frontMatterHtml = useMemo(() => {
     if (!mdUseWebViewPreview || !showFrontMatter) {
@@ -431,8 +417,10 @@ export function FileMarkdownPreview({
     );
   }
 
-  // plain/文本 Tab：禁用批注（无 WebView annotate / 无 Recogito / 无菜单）
-  if (renderKind === 'txt') {
+  // plain 渲染：文本 Tab，以及非 md 文件的 Markdown Tab（2026-09-19 拍板：非 md
+  // 不再 markdown 化全文——# 注释变标题、缩进折叠、内嵌 html 执行等错乱不复存在，
+  // 与文本 Tab 同款纯文本）。plain 不挂批注（无 WebView annotate / 无 Recogito）。
+  if (renderKind === 'txt' || !isMdPath) {
     const plain = (
       <Text selectable style={[styles.plain, {color: tokens.text}]}>
         {content}
@@ -440,35 +428,6 @@ export function FileMarkdownPreview({
     );
     return (
       <PreviewScrollWrap previewFill={previewFill}>{plain}</PreviewScrollWrap>
-    );
-  }
-
-  // Non-md Markdown Tab: render full content as markdown body (no FM split).
-  if (!isMdPath) {
-    return (
-      <View
-        style={[
-          styles.root,
-          previewFill && nonMdUseWebViewPreview && styles.fillRoot,
-          previewFill && mdAnnotateActive && styles.fillRoot,
-        ]}
-      >
-        {nonMdUseWebViewPreview || mdAnnotateActive ? (
-          <RichDocumentWebView
-            key={path}
-            html={nonMdBodyHtml}
-            plain={content.trim()}
-            overLimit={nonMdOverLimit}
-            style={previewFill ? styles.webBody : undefined}
-            {...annotateWebProps}
-          />
-        ) : content.trim() ? (
-          <PreviewScrollWrap previewFill={previewFill}>
-            <RichContentBody content={content.trim()} tokens={tokens} />
-          </PreviewScrollWrap>
-        ) : null}
-        {mdAnnotateActive ? annotateModals : null}
-      </View>
     );
   }
 

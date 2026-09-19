@@ -1,16 +1,19 @@
 /**
  * rich-document 整页视图：主题 CSS 变量由 runtime applyTheme 写入；
- * 本组件负责文档结构；富片段与 frontMatterHtml 一律走 TrustedHtml。
+ * 本组件负责文档结构；frontMatterHtml 一律走 TrustedHtml。
  * plain 认锚：带锚 HTML 经 TrustedHtml（禁止文本节点露出裸 `<span>`）。
  *
- * html / plain 两个分支都通过 concatDocBodyHtml 把 FM HTML 拼进 .doc-body 内部
- * （置于正文之前），over-limit 回退时 FM 卡片不会凭空消失。
+ * 分支选择收敛在 buildDocumentBody（纯函数，合约测试直测）：
+ * - html 分支：FM + 富文本正文拼成同一条 HTML 整体 TrustedHtml（Recogito 挂载点
+ *   与偏移量基准覆盖 FM）；over-limit 回退时 FM 卡片不会凭空消失。
+ * - plain 分支：FM 单独 TrustedHtml，正文是文本节点按原文显示——FM 不得拼进
+ *   文本节点，否则 `<div class="fm-card">` 会按字面透出（2026-09-19 修复的回归）。
  */
 import type {ComponentChildren} from 'preact';
 import {TrustedHtml} from '@web/shared/ui/TrustedHtml';
 import {
   OVER_LIMIT_HINT,
-  concatDocBodyHtml,
+  buildDocumentBody,
   type DocumentPayload,
 } from '../runtime/document-model';
 
@@ -24,23 +27,23 @@ function docBodyClass(layout: 'plain' | 'rich' | undefined): string {
 }
 
 export function DocumentApp({payload}: DocumentAppProps) {
-  const fm = payload.frontMatterHtml || '';
-  const mode = payload.mode;
+  const bodyDesc = buildDocumentBody(payload);
   const overLimit = !!payload.overLimit;
 
   let body: ComponentChildren = null;
-  if (mode === 'html' && payload.html) {
-    // FM HTML 并入 .doc-body 内部（置于正文之前），让 Recogito 挂载点与偏移量基准覆盖 FM
+  if (bodyDesc?.kind === 'html') {
     body = (
       <TrustedHtml
-        html={concatDocBodyHtml(fm, payload.html)}
-        className={docBodyClass(payload.layout)}
+        html={bodyDesc.html}
+        className={docBodyClass(bodyDesc.layout)}
       />
     );
-  } else if (payload.plain) {
-    // 无锚纯文本回退（over-limit / 非 annotate 预览）；FM 同样并入 .doc-body 内、置于纯文本之前
+  } else if (bodyDesc) {
     body = (
-      <div className="doc-body">{concatDocBodyHtml(fm, payload.plain)}</div>
+      <div className="doc-body">
+        {bodyDesc.fmHtml ? <TrustedHtml html={bodyDesc.fmHtml} /> : null}
+        {bodyDesc.text}
+      </div>
     );
   }
 

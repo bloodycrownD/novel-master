@@ -34,7 +34,7 @@ jest.mock('@/components/vfs/RichDocumentWebView', () => ({
 
 import {FileMarkdownPreview} from '@/components/vfs/FileMarkdownPreview';
 import {RichDocumentWebView} from '@/components/vfs/RichDocumentWebView';
-import {RICH_CONTENT_MAX_CHARS} from '@/components/rich-content/rich-content-limits';
+import {RICH_CONTENT_MAX_CHARS, RICH_DOCUMENT_WEBVIEW_MAX_CHARS} from '@/components/rich-content/rich-content-limits';
 
 const mockRichDocumentWebView = RichDocumentWebView as jest.MockedFunction<
   typeof RichDocumentWebView
@@ -119,8 +119,8 @@ Hello body
     expect(tree!.root.findByProps({testID: 'rich-content-body'})).toBeTruthy();
   });
 
-  it('passes plain + overLimit to RichDocumentWebView when body exceeds char cap (T7)', async () => {
-    const longBody = 'x'.repeat(RICH_CONTENT_MAX_CHARS + 1);
+  it('passes plain + overLimit to RichDocumentWebView when body exceeds webview char cap (T7)', async () => {
+    const longBody = 'x'.repeat(RICH_DOCUMENT_WEBVIEW_MAX_CHARS + 1);
     const content = `---
 title: Long
 ---
@@ -145,6 +145,34 @@ ${longBody}`;
       html: undefined,
     });
     expect(lastCall?.frontMatterHtml).toContain('fm-card');
+  });
+
+  it('body over legacy 12k cap but within webview cap renders markdown (2026-09-19 放宽回归锚点)', async () => {
+    // 两三万字正文（旧 12k 阈值即回退纯文本）：WebView 引擎下应正常渲染，
+    // 不再误判超长——fm-card HTML 透出的触发面随之消失。
+    const novelBody = '章'.repeat(RICH_CONTENT_MAX_CHARS + 18_000);
+    const content = `---
+title: Novel
+---
+${novelBody}`;
+    await act(async () => {
+      TestRenderer.create(
+        <FileMarkdownPreview
+          path="/notes/novel.md"
+          content={content}
+          tokens={tokens}
+        />,
+      );
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    const lastCall = mockRichDocumentWebView.mock.calls.at(-1)?.[0];
+    expect(lastCall).toMatchObject({
+      overLimit: false,
+    });
+    expect(typeof lastCall?.html).toBe('string');
+    expect(lastCall?.html.length).toBeGreaterThan(0);
   });
 
   it('renderKind txt shows plain source and does not mount RichDocumentWebView', async () => {
@@ -311,7 +339,8 @@ title: x
     ).toBeGreaterThan(0);
   });
 
-  it('non-md markdown tab mounts RichDocumentWebView when webview engine (T2)', async () => {
+  it('non-md markdown tab renders plain source, no markdown parse (T2, 2026-09-19 拍板)', async () => {
+    // 非 md 文件的 Markdown Tab 与文本 Tab 同款纯文本——不再 markdown 化全文
     const content = '# Heading\n\n- item';
     let tree: TestRenderer.ReactTestRenderer;
     await act(async () => {
@@ -327,19 +356,28 @@ title: x
     await act(async () => {
       await Promise.resolve();
     });
-    expect(
+    expect(() =>
       tree!.root.findByProps({testID: 'rich-document-webview'}),
-    ).toBeTruthy();
+    ).toThrow();
+    expect(() =>
+      tree!.root.findByProps({testID: 'rich-content-body'}),
+    ).toThrow();
+    const textNodes = tree!.root.findAllByType(
+      require('react-native').Text as React.ComponentType,
+    );
+    const combined = textNodes.map(n => n.props.children).join('');
+    // 原文按字面显示：# 不再变标题、- 不再变列表
+    expect(combined).toContain('# Heading');
+    expect(combined).toContain('- item');
   });
 
-  it('non-md markdown tab mounts RichContentBody when rn engine (T2)', async () => {
-    mockReadEngine.mockResolvedValue('rn');
-    const content = '# Heading\n\n- item';
+  it('non-md yaml markdown tab shows raw yaml as plain text (2026-09-19 拍板回归锚点)', async () => {
+    const content = '# yaml 注释\nkey: value\nnested:\n  - a\n  - b\n';
     let tree: TestRenderer.ReactTestRenderer;
     await act(async () => {
       tree = TestRenderer.create(
         <FileMarkdownPreview
-          path="/notes/readme.txt"
+          path="/notes/config.yaml"
           content={content}
           tokens={tokens}
           renderKind="markdown"
@@ -349,7 +387,15 @@ title: x
     await act(async () => {
       await Promise.resolve();
     });
-    expect(tree!.root.findByProps({testID: 'rich-content-body'})).toBeTruthy();
+    expect(() =>
+      tree!.root.findByProps({testID: 'rich-document-webview'}),
+    ).toThrow();
+    const textNodes = tree!.root.findAllByType(
+      require('react-native').Text as React.ComponentType,
+    );
+    const combined = textNodes.map(n => n.props.children).join('');
+    expect(combined).toContain('# yaml 注释');
+    expect(combined).toContain('  - a');
   });
 
   it('non-md txt tab does not mount RichDocumentWebView (T3)', async () => {
