@@ -17,3 +17,9 @@ assistant:
 【migration 第五轮核查结论（重要）】本轮无可退役项：退役线 = 最新 v1.5.19 往下数 10 个 = v1.5.9；四条在册 migration 首发 tag 为 retire-pref v1.5.12、smart-field/rename-example/capture-kind 均 v1.5.17，全部新于退役线；add-mcp-file-path-snapshot-v1 未发布必留。用户「可以清理了」的预期与算术不符——下窗：v1.5.22 时 retire-pref 到窗（BASELINE 12→13、最低支持 v1.5.5→v1.5.13）；v1.5.27 时 smart-sort 三条同窗（→v1.5.18，前置 OQ：rebuild 探针、builtin 描述兜底）。现状核对无问题（注册表 5 条、登记阵尾、SCHEMA_BOOT_VERSION=14 不动）。
 
 待用户拍板后开工执行：条目 9 方向 b；OQ-1（PRD 验收 3 措辞按现状收窄）；其余 OQ 可延后。fix-spec 已提交在集成分支。
+
+user:
+修复吧。
+
+assistant:
+用户确认开工（条目 9 方向 b、OQ-1 收窄一并生效）。code-dev-loop 三波：wave-0 三个 impl 并行（core 回滚 diverged / vfs 文案收敛+测试 / agent 解锁加载态），7 个提交（316beab2/f7bbb2e9/b848eb18/c1e2b5d2/2cd41242/58e7da12/6f89f4e8）；wave-1 verify（子代理超时改主代理亲跑——孤儿 jest-worker 进程致卡，pkill 后正常）：core 全量 2139/2139、desktop 全量 494/498（3 失败为 Secret Service 环境存量与基线一致）、mobile 定向 45/45、根 typecheck 过、core dist 重建；wave-2 cr-func（readonly）矩阵逐条对照 func-ready: yes，实现期亮点：mobile agentMeta 改 ChatAgentMeta|undefined 并删 EMPTY_AGENT_META（useToast mock 每渲染新函数的无限重渲染坑用 ref 方案规避——把 showToast 放进 effect 依赖会炸，注释已载）、impl-core 节点做了撤修复验红的锚定抽查。dev-ready。cr-func 登记三项可接受偏差（mobile 失败 toast 附 error 详情与 desktop 形态不完全对称、desktop 条目 10 用源码断言替代组件 mock——既有测试形态、CHANGELOG 评估未留痕）与发版前待办：v1.5.20 发版时 Unreleased 需补约 5 条用户可感知修复（回滚复现/空目录改名/幽灵目录/VFS 中文文案/智能体删除后重选）。K4（loadFilePointerTree 单查询）按 spec 豁免未执行。真机已重启加载新 dist 继续测试。
