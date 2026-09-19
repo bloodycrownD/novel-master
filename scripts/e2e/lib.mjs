@@ -22,6 +22,9 @@ export const MOCK_PORT = 18099;
 // 返回 string 覆盖默认「收到，短回复。」；返回 null/undefined 走默认。
 // 供需要 mock 回复里带 markdown 链接等定制内容的用例（case-chat-file-link）；
 // 不传时行为与历史版本完全一致
+// B4 增量：返回对象 `{ httpError: 4xx/5xx }` → 不回 SSE、直接回该状态码的
+// JSON 错误体（触发 agent run 失败路径）；`{ empty: true }` → SSE 正常收尾
+// 但不带任何 content delta（触发模型成功空回复路径）。
 export async function startMock({ slow = false, replyFor = null } = {}) {
   const sse = (obj) => `data: ${JSON.stringify(obj)}\n\n`;
   const mock = http.createServer((req, res) => {
@@ -36,6 +39,7 @@ export async function startMock({ slow = false, replyFor = null } = {}) {
       // B3：请求体解析出最后一条 user 消息文本（字符串或多部件取字符串拼接），
       // 交给 replyFor 决定回复文本；解析失败静默回退默认，不影响既有用例
       let text = "收到，短回复。";
+      let emptyReply = false;
       if (replyFor) {
         try {
           const body = JSON.parse(Buffer.concat(chunks).toString("utf8"));
@@ -46,6 +50,14 @@ export async function startMock({ slow = false, replyFor = null } = {}) {
               const userText = typeof c === "string" ? c : Array.isArray(c) ? c.filter((p) => typeof p === "string").join("\n") : "";
               const custom = replyFor(userText);
               if (typeof custom === "string") text = custom;
+              else if (custom && typeof custom === "object") {
+                if (Number.isInteger(custom.httpError)) {
+                  res.writeHead(custom.httpError, { "Content-Type": "application/json" });
+                  res.end(JSON.stringify({ error: { message: "mock upstream failure", code: "mock_error", type: "server_error" } }));
+                  return;
+                }
+                if (custom.empty) emptyReply = true;
+              }
               break;
             }
           }
@@ -62,8 +74,8 @@ export async function startMock({ slow = false, replyFor = null } = {}) {
           res.write(sse(cb({ content: parts[i] }))); i++;
         }, 300);
       } else {
-        res.write(sse(cb({ content: text })));
-        res.write(sse({ ...cb({}), choices: [{ index: 0, delta: {}, finish_reason: "stop" }], usage: { prompt_tokens: 100, completion_tokens: 8, total_tokens: 108 } }));
+        if (!emptyReply) res.write(sse(cb({ content: text })));
+        res.write(sse({ ...cb({}), choices: [{ index: 0, delta: {}, finish_reason: "stop" }], usage: { prompt_tokens: 100, completion_tokens: emptyReply ? 0 : 8, total_tokens: emptyReply ? 100 : 108 } }));
         res.write("data: [DONE]\n\n");
         res.end();
       }

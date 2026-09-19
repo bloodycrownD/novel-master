@@ -38,6 +38,8 @@ const SCRIPTS = [
   // B3 批次（v1.5.16 桌面端功能回归）
   "case-chat-file-link.mjs",
   "case-skill-rename.mjs",
+  // B4 批次（v1.5.19 桌面端功能回归）
+  "case-run-fail-unlock.mjs",
 ];
 
 // --only 过滤（支持省略 .mjs 后缀）；含未知名直接报错退出，防静默跑空
