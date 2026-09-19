@@ -8,6 +8,11 @@ type TextPromptModalProps = {
   placeholder?: string;
   initialValue?: string;
   confirmLabel?: string;
+  /**
+   * 提交前对原始输入（未 trim）的校验：返回错误文案则行内展示并禁用提交。
+   * 不传则维持历史行为（trim 后非空即可提交）。
+   */
+  validate?: (rawValue: string) => string | null;
   onClose: () => void;
   onConfirm: (value: string) => void | Promise<void>;
 };
@@ -19,6 +24,7 @@ export function TextPromptModal({
   placeholder,
   initialValue = "",
   confirmLabel = "确定",
+  validate,
   onClose,
   onConfirm,
 }: TextPromptModalProps) {
@@ -36,7 +42,8 @@ export function TextPromptModal({
   }
 
   const trimmed = value.trim();
-  const canSubmit = trimmed.length > 0 && !saving;
+  const validationError = validate ? validate(value) : null;
+  const canSubmit = trimmed.length > 0 && validationError == null && !saving;
 
   const handleConfirm = async () => {
     if (!canSubmit) {
@@ -79,6 +86,11 @@ export function TextPromptModal({
             });
           }}
         />
+        {validationError ? (
+          <p className="text-prompt-modal__error" role="alert">
+            {validationError}
+          </p>
+        ) : null}
         <div className="text-prompt-modal__actions">
           <button type="button" className="text-prompt-modal__btn" onClick={onClose}>
             取消
