@@ -155,4 +155,47 @@ describe("vfs rename primitive", () => {
     await svfs.write(`${newDir}/a.md`, "a");
     assert.equal((await svfs.read(`${newDir}/a.md`)).content, "a");
   });
+
+  it("T-V5: 目录名含 %/_ 时 renamePrefix 根行与子项均迁移、旧路径无残留", async () => {
+    const ctx = getNovelMasterTestContext();
+    const suffix = testIsolationSuffix();
+    const project = await ctx.projects.create(`P-V5-${suffix}`);
+    const session = await ctx.sessions.create(project.id);
+    const svfs = ctx.sessionVfs(project.id, session.id);
+    const entryRepo = new SqliteVfsEntryRepository(ctx.conn);
+
+    const scopeKey = `session:${project.id}:${session.id}`;
+    // %/_ 是 LIKE 通配字符：renamePrefix 依赖 escapeLike + ESCAPE '\'
+    // 做子项前缀匹配，路径含它们时不能把 `a_b` 误当 `a%b` 之类的模式，
+    // 也不能因转义遗漏漏迁子项。这里用固定后缀隔离，避免子项 LIKE
+    // 误匹配到其它用例的路径。
+    const oldDir = `/a_b%c-${suffix}`;
+    const newDir = `/新_名%d-${suffix}`;
+
+    await svfs.mkdir(oldDir);
+    await svfs.write(`${oldDir}/x.md`, "x", { versionCheck: false });
+
+    await svfs.renamePrefix(oldDir, newDir);
+
+    // 根行迁移到新路径，旧路径无残留
+    const movedRoot = await entryRepo.findByPath(scopeKey, newDir);
+    assert.notEqual(movedRoot, null, "rename 后新目录行应存在");
+    assert.equal(movedRoot!.entryKind, "directory");
+    assert.equal(
+      await entryRepo.findByPath(scopeKey, oldDir),
+      null,
+      "rename 后旧目录行不应存在",
+    );
+
+    // 子项行随前缀迁移，旧子项路径无残留
+    const movedChild = await entryRepo.findByPath(scopeKey, `${newDir}/x.md`);
+    assert.notEqual(movedChild, null, "rename 后新子项行应存在");
+    assert.equal(movedChild!.entryKind, "file");
+    assert.equal(
+      await entryRepo.findByPath(scopeKey, `${oldDir}/x.md`),
+      null,
+      "rename 后旧子项行不应存在",
+    );
+    assert.equal((await svfs.read(`${newDir}/x.md`)).content, "x");
+  });
 });

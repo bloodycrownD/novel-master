@@ -69,6 +69,36 @@ describe("moveVfsPath", () => {
     assert.equal((await vfs.read("/renamed-dir/note.md")).content, "hi");
   });
 
+  it("moves a directory whose name contains % and _ (LIKE wildcard chars)", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`p-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    const suffix = testIsolationSuffix();
+
+    // %/_ 是 LIKE 通配字符，move 的子项迁移依赖 escapeLike + ESCAPE '\'
+    // 转义后匹配，目录名含它们时根行与子项都要完整迁移、旧路径无残留。
+    const oldDir = `/源_目%录-${suffix}`;
+    const newDir = `/目_标%d-${suffix}`;
+
+    await vfs.mkdir(oldDir);
+    await vfs.write(`${oldDir}/child.md`, "child");
+
+    await moveVfsPath(vfs, oldDir, newDir);
+
+    assert.equal((await vfs.read(`${newDir}/child.md`)).content, "child");
+    const children = await vfs.list(newDir);
+    assert.equal(children.some((e) => e.path === `${newDir}/child.md`), true);
+    await assert.rejects(
+      () => vfs.read(`${oldDir}/child.md`),
+      (e: unknown) => isVfsError(e, "NOT_FOUND"),
+    );
+    await assert.rejects(
+      () => vfs.list(oldDir),
+      (e: unknown) => isVfsError(e, "NOT_FOUND"),
+    );
+  });
+
   it("fails when target file already exists and keeps source", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`p-${testIsolationSuffix()}`);
