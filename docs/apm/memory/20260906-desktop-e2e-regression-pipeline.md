@@ -1,6 +1,6 @@
 ---
-date: 2026-09-08 23:30
-title: 桌面端 Electron 自动化回归流水线搭建与首轮全量回归（Playwright _electron + vision 截图审查 + bug 记录表 PRD）
+date: 2026-09-19 21:50
+title: 桌面端 Electron 自动化回归流水线搭建与历轮回归（Playwright _electron + 截图审查 + bug 记录表 PRD）
 keywords: desktop, electron, e2e, playwright, _electron, 回归测试, 视觉审查, vision agent, NOVEL_MASTER_DB, react-dom 版本, better-sqlite3 ABI, setVersion bug
 abstract: 应用户要求搭建桌面端自动化回归：Playwright _electron 驱动（NOVEL_MASTER_DB 隔离库 + vite dev 5173），逐视图截图后派 vision 子代理（glm-5.3-flash）审查，本地 mock OpenAI server 支撑聊天链路。首轮回归覆盖冷启动/设置八视图/主题/项目-Agent-Provider-模型-会话全创建链/消息发送/流式渲染/滚动（wheel+编程+自动贴底）/暗色。结论：历史 bug「消息列表无法下滑」确认已修复未复发；新发现 PreviewPane setVersion ReferenceError（VFS 版本锁拆除漏删一行）；发送失败反馈弱（仅 composer 上方红字 fetch failed）。环境侧：主工作区 node_modules 与 lockfile 漂移（react-dom 19.2.8/better-sqlite3 Node ABI/apps/desktop 嵌套 react 副本丢失），npm install 连续 ENOTEMPTY，靠 worktree 拷贝 react 副本+tarball 手术+rebuild-native 修复。
 ---
@@ -120,3 +120,21 @@ user:
 
 assistant:
 新 worktree .worktree/desktop-regression-fixes（分支 fix/desktop-regression-fixes）= dev v1.5.13 起点 + cherry-pick test/desk-e2e-regression 的 2 个 e2e 资产提交（dev 已超前 14 提交故不能直接从测试分支切）。发现 lib.mjs E2E_DIR/DESKTOP 硬编码旧 worktree 绝对路径，spec Step 1 补动态化（import.meta.url 解析）。code-dev-loop DAG：wave-0 五 impl 并行（step1 e2e 工具/step5 PreviewPane 三修/step6 设置两修/step7 抽屉/step8 导航守卫，文件不相交）→ wave-1 verify（含 step2 诊断定性）→ wave-2 cr-func → 诊断结论动态插 step3/4 → step9 全量复验 → cr-func-final。Step 11 并 dev 按协作红线最终问用户。
+
+user:
+1.5.15之后就没给桌面端做e2e测试了，你看看能不能做个e2e测试？反正你有mcp可以读取截图，正好能测试15版本之后桌面端的所有功能。
+
+assistant:
+第五轮增量回归（v1.5.16→v1.5.20，worktree .worktree/desk-e2e-test，分支 test/desk-e2e-regression）。按 CHANGELOG 版本分四批共 11 例，全部登记 run-all（现 17 脚本），提交 65f27bac/ec952495/7a8dae4a/20357bf6 + coverage eac18be9。B1（v1.5.20 修复）4 例全过：回滚复现被删文件（正文一字不差）、空目录重命名、目录改名无幽灵、VFS 中文报错、删智能体「⚠ 点击重选」徽标+重选后无多余 toast。B2（v1.5.17 智能排序）4 例：智能全序（序章顶/中文·阿拉伯·混排数值序/番外沉/无序号沉底/同名决胜）、子目录遵循目录规则三态实测、规则页内置七条+启停经真实排序验证+恢复默认只重灌内置+内置不可删全过；发现 D-16（规则编辑页打开即整页白屏：SettingsViews.tsx 用 SettingsSection 但 import 漏引，v1.5.17 起线上崩溃，esbuild 不查类型所以编译期不报；修法=补一行 import）与 D-17（首尾空格静默 trim：TextPromptModal 先 trim 再提交，与移动端 validateVfsEntryName 拒绝口径相反）；YAML 导入导出原生对话框 🔧 跳过。B3（v1.5.16）2 例全过：消息文件链接五场景（chat 域中文路径打开/项目域 fallback/不存在 toast 长路径省略号/http 链接窗口不导航）、技能编辑信息（改名+描述一次提交、$$100 && $&x 逐字保留、内置名只读、撞名/非法名拒绝）；导出 ZIP 实际落盘 🔧。B4（v1.5.19）主代理亲自写跑 6/6：lib startMock 的 replyFor 协议扩展 {httpError}/{empty} 失败注入，[生成失败] 提示落库重进仍在+composer 解禁+改写重发恢复，空回复（本次生成无内容输出）同款闭环。
+
+user:
+不用vision子代理，你有mcp。什么结果？你启动子代理了吗？为什么不是同步的？
+
+assistant:
+两条修正都照办：视觉审查改走 MCP、写用例子代理同步派遣。视觉审查新链路（本轮跑通）：Read 本地 PNG → 工具自动上传 CDN 返回公网 URL → mcp analyze_image 审图。关键背景是云侧 MCP 拿不到本机 URL（http://127.0.0.1 与局域网 IP 都报 error 1210 图片解析错误，PNG/JPEG 均然），只有 Read 返回的 CDN 直链能过；偶发 1210 重试即可，868/867 两张最终跳过（DOM 断言+源码抽查已定论）。关键 19 张审查全过，857 白屏=D-16 视觉证据。子代理调度教训：B3 子代理单条 bash 跑全量序列（1194s）无输出，触发 600s inactive 被杀——活儿其实基本干完（case 文件+截图都在）只剩提交报告，主代理抽查源码确认两个缺陷属实后补 commit（7a8dae4a）收尾；B4 干脆主代理亲自写跑。replyFor 关键词坑：失败注入按 user 文本匹配，重发探针文案若含触发词（如「RF-EMPTY 后重发…」）会被再次注入失败分支，测试文案要避开触发词。遗留：case-empty-dir-rename 全量序列负载下 ER-GHOST 时序 flake（单跑过，等待窗口偏紧待加轮询重试）；CLI sort-rule 命令组属 CLI 端不在桌面 e2e 范围；D-16 修复后 case-sort-rule-manager 的 SR-EDIT-TEST/SR-CREATE/SR-EDIT-FIXED 三场景应翻成真 UI 断言（当前自定义规则是 DB 预写绕过 UI 的临时手段）。
+
+user:
+修复。
+
+assistant:
+D-16/D-17 修复落地（分支 fix/desktop-e2e-d16-d17，主仓 3256c576 + docs 收口提交；worktree test/desk-e2e-regression 同步 cherry-pick 21d1810e + 用例翻新 f4de7480）。D-16=SettingsViews.tsx import 列表补 SettingsSection（先全扫了 SmartSortRuleEditorView 引用的全部组件，确认无第二个漏引）。D-17=TextPromptModal 加可选 validate prop（原始输入→行内中文提示+禁提交，shell.css 补 __error 样式沿 new-skill-modal 口径），App.tsx 工作区弹窗接 core 的 validateVfsEntryName（renderer 可直接 import @novel-master/core/vfs 子路径，dist 已有导出）；其它 TextPromptModal 调用点（Agent/服务商/项目重命名、技能辅助文件）不传 validate 行为不变。行为变化：`.`/`..` 与纯空白从服务层 toast 改为弹窗行内提示（移动端同款模型，服务层校验保留为兜底）。验证：桌面全量 494 pass + 4 个 keyring 环境失败（带 DBUS env 复跑 runtime.test.ts 3/3 过，归因环境非代码）；root typecheck 绿；e2e 双用例翻新后全绿——case-filename-validation 5/5（行内文案逐字命中+禁提交+树零残留+旧名保留），case-sort-rule-manager 8/8（SR-EDIT-TEST 回显+正则测试高亮/元组/计数、SR-EDIT-FIXED 哨兵元组 (固定最大,)、SR-CREATE UI 新建落列表，857 翻身照经 MCP 审查编辑页完整渲染）。脚本侧教训：FV-RENAME 首跑 30s 超时排查了半天 Playwright filter 语义，真相是 openRenamePrompt 参数设计错——把新名字当成要右击的树节点名（右击「.」这种不存在的节点必超时）；定位器探针（同链 count=1）+ LABEL_PROBE（querySelectorAll 能找到）对照才破案。CHANGELOG Unreleased 两条已写，PRD D-16/D-17 状态改已修。

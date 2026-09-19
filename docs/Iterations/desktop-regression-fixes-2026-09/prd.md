@@ -106,6 +106,22 @@ dependency: []
 
 - 第四轮尝试导出 YAML 时脚本选择器撞名（filter /导出|YAML/ 匹配到「导入 YAML」按钮，它也含 "YAML"）实际点开的是导入确认框——产品无责，但导出真实行为（下载路径/剪贴板/saveDialog）未验证，待补。
 
+### D-16（已修·fix/desktop-e2e-d16-d17，2026-09-19 e2e 复验通过）
+
+- **现象（第五轮回归 857 截图 + pageerror 实锤）**：设置 → 智能排序 → 点任意规则行（或「新建规则」）→ 整个渲染树崩溃白屏（整窗纯色无任何 UI），React 树炸掉后应用无响应需重启。pageerror：`ReferenceError: SettingsSection is not defined`。
+- **根因**：`apps/desktop/renderer/features/settings/SettingsViews.tsx` 的 `SmartSortRuleEditorView` 在 L2176/L2246 使用 `<SettingsSection>`，但 `./settings-ui` 的 import 列表（L70-80）漏引入该组件（settings-ui.tsx L10 有正常导出）；esbuild 不做类型检查，编译期不报。
+- **影响**：v1.5.17 主打功能「智能排序规则管理」的编辑/新建/正则测试全部不可用（列表/启停/恢复默认/删除不受影响）。影响版本 v1.5.17 起（main 分支同码，commit f2a02361 引入，v1.5.17~v1.5.20 全中）。
+- **修法**：import 列表补 `SettingsSection` 一行即可；修复后把 e2e case-sort-rule-manager 中被崩溃堵住的 SR-EDIT-TEST / SR-CREATE / SR-EDIT-FIXED 三个场景翻成真功能断言（当前用例里自定义规则是 DB 预写绕过 UI 的临时手段）。
+- **修复记录**：3256c576 补 import；e2e case-sort-rule-manager 8/8 全绿（SR-EDIT-TEST 回显+正则测试高亮/元组/计数、SR-EDIT-FIXED 哨兵元组 (固定最大,)、SR-CREATE UI 新建落列表，857 截图为修复后编辑页）。
+
+### D-17（已修·fix/desktop-e2e-d16-d17，2026-09-19 e2e 复验通过）首尾空格文件名静默 trim 后创建，与 v1.5.17 CHANGELOG 声明不符且双端不一致
+
+- **现象（第五轮回归 867 截图）**：工作区新建文件填 ` 空格名.md `（首尾空格）→ 确定后无任何提示，树里出现 trim 后的 `空格名.md`。CHANGELOG v1.5.17 声明「新建/重命名会拒绝……首尾空格……并即时提示」（双端），桌面弹窗路径不成立。
+- **根因**：桌面 `apps/desktop/renderer/components/ui/TextPromptModal.tsx:38-47` 提交前 `value.trim()` 再调 `onConfirm(trimmed)`，core `validate-entry-name.ts:46` 的「文件名不能以空格开头或结尾」在该路径永不可达（core 服务层/AI 工具路径按声明生效）。移动端 `VfsPromptModal.tsx:37` 直接 `validateVfsEntryName(value)` 不预 trim，真实拒绝——双端口径相反。
+- **修法方向**：对齐移动端——弹窗提交前先 `validateVfsEntryName(原始输入)`，命中首尾空格等非法名弹中文提示拒绝，不静默 trim。
+- **附带观察（FV-BLANK，随本条一并定）**：纯空白名的拒绝形态是「确定按钮禁用」静默拦截、无文案；`.`/`..` 则有 toast「文件名不能为 . 或 ..」——提示形态不统一。
+- **修复记录**：3256c576 给 TextPromptModal 增加可选 `validate` prop（原始输入校验 → 行内中文提示 + 禁提交），App.tsx 工作区弹窗接 `validateVfsEntryName`（与移动端同源）。附带效应：`.`/`..` 与纯空白也统一为弹窗行内提示（服务层 toast 保留为兜底）。e2e case-filename-validation 5/5 全绿（FV-DOT/BLANK/SPACE/RENAME 全部行内文案逐字命中 + 禁提交 + 树零残留）。
+
 ### S-1（系统性）renderer 无类型门禁
 
 - desktop 的 typecheck（`tsc --noEmit -p tsconfig.json`）include 仅 `src/main` 与 `shared`，**renderer 目录零类型检查覆盖**；`tsconfig.renderer.json` 存在但 scripts/CI 零调用（孤儿配置）。手动运行可精确报出 D-1，同时暴露约 240 行预存类型错误（Tooltip 泛型、annotator 类型漂移等）。
