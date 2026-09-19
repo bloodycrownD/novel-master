@@ -1,13 +1,14 @@
 // v1.5.17 批次 B2：case-filename-validation——新建/重命名文件名校验（中文提示 + 树不出现非法条目）
+// D-17 修复后口径（对齐移动端）：TextPromptModal 接入 validateVfsEntryName，非法名在弹窗层
+// 行内中文提示（.text-prompt-modal__error）+「确定」禁用，不再静默 trim、不再等服务层 toast。
 // 断言：
 //   FV-CONTROL——正向对照：正常名文件可创建（拒绝断言非空洞）
-//   FV-DOT——新建文件夹 "." / ".." → toast「文件名不能为 . 或 ..」，树不出现该条目（文件/目录两口径）
-//   FV-BLANK——纯空白名（"   "）新建文件与文件夹：树不出现条目；提示形态=弹窗「确定」禁用
-//              （TextPromptModal 对空提交直接拦，验证层文案不触达——记观察，不算失败）
-//   FV-SPACE——首尾空格名「 xx 」：预期被拒绝并中文提示；实测桌面弹窗提交前静默 trim，
-//              以去掉空格后的名字直接创建（CHANGELOG 声明与桌面实际不符）→ 记 FAIL 产品问题
-//   FV-RENAME——重命名为 "." → toast 拒绝、旧名保留；重命名纯空白 → 弹窗禁用提交、旧名保留
-// 预期依据：CHANGELOG v1.5.17「新建/重命名文件名校验」+ validate-entry-name.ts 中文文案
+//   FV-DOT——新建文件夹 "." / ".." → 行内「文件名不能为 . 或 ..」+ 确定禁用，树不出现条目
+//   FV-BLANK——纯空白名 → 行内「文件名不能为空或纯空白」+ 确定禁用，树不出现条目
+//   FV-SPACE——首尾空格名「 xx 」→ 行内「文件名不能以空格开头或结尾」+ 确定禁用，
+//              树中既无原样名也无 trim 后名字（修复前：静默 trim 创建）
+//   FV-RENAME——重命名为 "." → 行内提示、旧名保留；重命名纯空白/首尾空格 → 同款拦截、旧名保留
+// 预期依据：validate-entry-name.ts 中文文案 + 移动端 VfsPromptModal 同源行为
 import { waitForAppReady, launchApp, shutdown, shot, goToProjects } from "./lib.mjs";
 
 const errors = [];
@@ -54,51 +55,40 @@ const menuAction = (action) =>
 const confirmBtn = () => page.locator(".text-prompt-modal button").filter({ hasText: /^确定$|^创建$/ }).first();
 const cancelBtn = () => page.locator(".text-prompt-modal button").filter({ hasText: "取消" }).first();
 
-// 打开「新建 xx」弹窗（在根目录行上）并填入 name；返回确认按钮状态
+// 弹窗层拒绝状态：行内错误文案 + 确定按钮禁用（D-17 修复后的统一拒绝形态）
+const promptRejection = () => page.evaluate(() => ({
+  error: document.querySelector(".text-prompt-modal__error")?.textContent?.trim() ?? null,
+  confirmDisabled: (() => {
+    const btns = [...document.querySelectorAll(".text-prompt-modal button")];
+    const c = btns.find((b) => /^(确定|创建)$/.test(b.textContent.trim()));
+    return c ? c.disabled : null;
+  })(),
+}));
+
+// 打开「新建 xx」弹窗（在根目录行上）并填入 name；返回拒绝状态
 async function openCreatePrompt(kind, name) {
   await rightClickNode("/");
   await sleep(450);
   await menuAction(kind === "file" ? "create-file" : "create-folder");
   await sleep(700);
   await page.locator(".text-prompt-modal input").first().fill(name);
-  await sleep(200);
-  return confirmBtn().isDisabled();
+  await sleep(300);
+  return promptRejection();
+}
+// 打开「重命名」弹窗：右击树节点 nodeName，弹窗内填入 newName；返回拒绝状态
+async function openRenamePrompt(nodeName, newName) {
+  await rightClickNode(nodeName);
+  await sleep(450);
+  await menuAction("rename");
+  await sleep(700);
+  await page.locator(".text-prompt-modal input").first().fill(newName);
+  await sleep(300);
+  return promptRejection();
 }
 async function closePrompt() {
   if (!(await page.evaluate(() => !!document.querySelector(".text-prompt-modal")))) return;
   await cancelBtn().click();
   await sleep(500);
-}
-
-const toastText = () => page.evaluate(() =>
-  document.querySelector(".shell-toast.is-visible .shell-toast__message")?.textContent
-  ?? document.querySelector(".shell-toast.is-visible")?.textContent ?? null);
-async function waitToast(ms = 2500) {
-  const t0 = Date.now();
-  let t = null;
-  while (Date.now() - t0 < ms) {
-    t = await toastText();
-    if (t) return t;
-    await sleep(150);
-  }
-  return t;
-}
-// toast 可见窗口极短（实测 ~0.5s 即从 DOM 移除）：以「元素存在」为最早触发信号，
-// 同一轮先读文本再零延时截图（顺序反了文本必丢；截图晚了视觉必丢——两者都尽力，文本为准）
-async function waitToastShoot(id, name, ms = 2500) {
-  const t0 = Date.now();
-  while (Date.now() - t0 < ms) {
-    const t = await page.evaluate(() => {
-      const el = document.querySelector(".shell-toast");
-      return el?.textContent ?? null;
-    });
-    if (t) {
-      await shot(page, id, name, 0);
-      return t.trim() || t;
-    }
-    await sleep(50);
-  }
-  return null;
 }
 
 try {
@@ -121,91 +111,92 @@ try {
     record("FV-CONTROL", ok, `正常名 ${NORMAL} 创建=${ok}`);
   });
 
-  // ===== FV-DOT：新建文件夹 "." 与 ".." 被拒 + 中文 toast =====
+  // ===== FV-DOT：新建文件夹 "." / ".." → 行内提示 + 禁提交 + 树无条目 =====
   await step("FV-DOT", async () => {
     const before = await panelNodeCount();
-    const toasts = [];
+    const states = [];
     for (const dot of [".", ".."]) {
-      await openCreatePrompt("folder", dot);
-      await confirmBtn().click();
-      const t = await waitToastShoot("868", "dot-name-toast", 2200); // 出现瞬间截（B1 教训：晚了自动消失）
-      toasts.push(t);
+      const r = await openCreatePrompt("folder", dot);
+      if (!r.confirmDisabled) await confirmBtn().click().catch(() => {}); // 禁用态点了也不应提交
+      await sleep(500);
+      await closePrompt();
       await sleep(400);
-      await closePrompt(); // 校验失败时弹窗不自动关
-      await sleep(400);
+      states.push(r);
     }
     const after = await panelNodeCount();
     const noEntry = (await nodeCountOf(".")) === 0 && (await nodeCountOf("..")) === 0 && after === before;
-    const toastOk = toasts.every((t) => t === "文件名不能为 . 或 ..");
-    record("FV-DOT", noEntry && toastOk,
-      `toasts=${JSON.stringify(toasts)} 树条目数 ${before}→${after} 无 . / .. 条目=${noEntry}`);
+    const allRejected = states.every((s) => s.error === "文件名不能为 . 或 .." && s.confirmDisabled);
+    await shot(page, "868", "dot-name-inline-error", 300);
+    record("FV-DOT", noEntry && allRejected,
+      `拒绝=${JSON.stringify(states)} 树条目数 ${before}→${after}`);
   });
 
-  // ===== FV-BLANK：纯空白名（弹窗层禁用提交）=====
+  // ===== FV-BLANK：纯空白名 → 行内提示 + 禁提交 + 树无条目 =====
   await step("FV-BLANK", async () => {
     const before = await panelNodeCount();
     const states = [];
     for (const kind of ["file", "folder"]) {
-      const disabled = await openCreatePrompt(kind, "   ");
-      states.push({ kind, disabled });
-      // 确认禁用 → 点了也不提交；补一刀点按验证无副作用
-      if (!disabled) await confirmBtn().click().catch(() => {});
+      const r = await openCreatePrompt(kind, "   ");
+      if (!r.confirmDisabled) await confirmBtn().click().catch(() => {});
       await sleep(500);
       await closePrompt();
       await sleep(300);
+      states.push(r);
     }
     const after = await panelNodeCount();
     const noEntry = after === before;
-    await shot(page, "866", "blank-name-submit-blocked", 300);
-    const blocked = states.every((s) => s.disabled);
-    record("FV-BLANK", noEntry && blocked,
-      `文件/文件夹弹窗确定禁用=${JSON.stringify(states)} 树条目数 ${before}→${after}（拒绝成立；提示形态=禁用提交按钮，验证层中文文案不触达，记观察）`);
+    const allRejected = states.every((s) => s.error === "文件名不能为空或纯空白" && s.confirmDisabled);
+    await shot(page, "866", "blank-name-inline-error", 300);
+    record("FV-BLANK", noEntry && allRejected,
+      `拒绝=${JSON.stringify(states)} 树条目数 ${before}→${after}`);
   });
 
-  // ===== FV-SPACE：首尾空格名（预期拒绝；实测桌面静默 trim 创建）=====
+  // ===== FV-SPACE：首尾空格名 → 行内提示 + 禁提交 + 原样/trim 名均未创建 =====
   await step("FV-SPACE", async () => {
-    await openCreatePrompt("file", SPACED);
-    await confirmBtn().click();
-    const t = await waitToast(2200);
-    await sleep(900);
-    await closePrompt().catch(async () => {});
-    await sleep(300);
+    const before = await panelNodeCount();
+    const r = await openCreatePrompt("file", SPACED);
+    if (!r.confirmDisabled) await confirmBtn().click().catch(() => {});
+    await sleep(600);
+    await shot(page, "867", "spaced-name-inline-error", 300);
+    await closePrompt();
+    await sleep(400);
     const trimmedCreated = (await nodeCountOf(SPACED_TRIMMED)) === 1;
     const rawCreated = (await nodeCountOf(SPACED)) === 1;
-    await shot(page, "867", "spaced-name-result");
-    record("FV-SPACE", false,
-      `预期=拒绝+中文提示；实际=弹窗提交前静默 trim，以「${SPACED_TRIMMED}」创建（trimmed创建=${trimmedCreated} 原样创建=${rawCreated} toast=${JSON.stringify(t)}）——产品问题：桌面端首尾空格名校验被弹窗 trim 短路`);
+    const after = await panelNodeCount();
+    const rejected = r.error === "文件名不能以空格开头或结尾" && r.confirmDisabled;
+    record("FV-SPACE", rejected && !trimmedCreated && !rawCreated && after === before,
+      `拒绝=${JSON.stringify(r)} trimmed创建=${trimmedCreated} 原样创建=${rawCreated} 树条目数 ${before}→${after}`);
   });
 
-  // ===== FV-RENAME：重命名 "." 被拒（toast+旧名保留）；纯空白被弹窗拦截 =====
+  // ===== FV-RENAME：重命名 "." / 纯空白 / 首尾空格 → 行内拦截、旧名保留 =====
   await step("FV-RENAME", async () => {
-    // 重命名为 "." → 中文 toast，旧名保留
-    await rightClickNode(NORMAL);
-    await sleep(450);
-    await menuAction("rename");
-    await sleep(700);
-    await page.locator(".text-prompt-modal input").first().fill(".");
-    await confirmBtn().click();
-    const t = await waitToastShoot("869", "rename-dot-toast", 2200);
+    const cases = [];
+    // 重命名为 "." → 行内提示，旧名保留
+    let r = await openRenamePrompt(NORMAL, ".");
     await sleep(400);
+    await shot(page, "869", "rename-dot-inline-error", 300);
     await closePrompt();
     await sleep(300);
-    const dotToastOk = t === "文件名不能为 . 或 ..";
-    const oldKeptAfterDot = (await nodeCountOf(NORMAL)) === 1;
+    cases.push({ name: ".", r, kept: (await nodeCountOf(NORMAL)) === 1 });
+    // 重命名纯空白 → 行内提示 + 禁提交，旧名保留
+    r = await openRenamePrompt(NORMAL, "   ");
+    await sleep(300);
+    await closePrompt();
+    await sleep(300);
+    cases.push({ name: "空白", r, kept: (await nodeCountOf(NORMAL)) === 1 });
+    // 重命名首尾空格 → 行内提示 + 禁提交，旧名保留（修复前会静默 trim 改名）
+    r = await openRenamePrompt(NORMAL, ` ${NORMAL} `);
+    await sleep(300);
+    await closePrompt();
+    await sleep(300);
+    const spacedOldKept = (await nodeCountOf(NORMAL)) === 1;
+    cases.push({ name: "首尾空格", r, kept: spacedOldKept });
 
-    // 重命名为纯空白 → 弹窗禁用提交，旧名保留
-    await rightClickNode(NORMAL);
-    await sleep(450);
-    await menuAction("rename");
-    await sleep(700);
-    await page.locator(".text-prompt-modal input").first().fill("   ");
-    await sleep(200);
-    const disabled = await confirmBtn().isDisabled();
-    await closePrompt();
-    await sleep(300);
-    const oldKeptAfterBlank = (await nodeCountOf(NORMAL)) === 1;
-    record("FV-RENAME", dotToastOk && oldKeptAfterDot && disabled && oldKeptAfterBlank,
-      `点号 toast=${JSON.stringify(t)} 旧名保留=${oldKeptAfterDot} 空白提交禁用=${disabled} 空白后旧名保留=${oldKeptAfterBlank}`);
+    const dotOk = cases[0].r.error === "文件名不能为 . 或 .." && cases[0].r.confirmDisabled && cases[0].kept;
+    const blankOk = cases[1].r.error === "文件名不能为空或纯空白" && cases[1].r.confirmDisabled && cases[1].kept;
+    const spacedOk = cases[2].r.error === "文件名不能以空格开头或结尾" && cases[2].r.confirmDisabled && cases[2].kept;
+    record("FV-RENAME", dotOk && blankOk && spacedOk,
+      `dot=${JSON.stringify(cases[0].r)} 空白=${JSON.stringify(cases[1].r)} 首尾空格=${JSON.stringify(cases[2].r)} 旧名保留=${cases.map((c) => c.kept)}`);
   });
 
   // ===== 汇总 =====

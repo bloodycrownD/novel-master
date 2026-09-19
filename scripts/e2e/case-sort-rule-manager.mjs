@@ -7,15 +7,14 @@
 //   SR-BUILTIN-NODELETE——内置规则行菜单无「删除」项（仅可禁用不可删除）
 //   SR-RESET——「恢复默认」重灌内置规则（被禁用的恢复启用）、不影响自定义规则（DB 预置的自定义行保留）
 //   SR-DELETE——自定义规则可删除，删除后列表不再出现
-//   SR-EDIT-TEST / SR-EDIT-FIXED / SR-CREATE——编辑页正则测试（高亮+元组+计数）、固定档哨兵元组、新建规则
+//   SR-EDIT-TEST——编辑页打开（D-16 修复后）+ 正则测试：回显内置规则、测试文本
+//                命中高亮/元组/计数（smart 档 "(2,)" 形式 + 共 N 处匹配）
+//   SR-EDIT-FIXED——捕获数字切固定最大 → 测试元组显哨兵 "(固定最大,)"，不保存退出
+//   SR-CREATE——「新建规则」经 UI 填名称/正则/描述 → 保存 toast 已创建 → 列表出现
 //   🔧 SR-YAML——导入/导出 YAML 走系统文件对话框，自动化不可控，跳过（按钮存在性并入 SR-LIST）
 //
-// ⚠ 产品缺陷（v1.5.17 即存在，worktree 与 tag v1.5.17 同码）：SettingsViews.tsx 的
-//   SmartSortRuleEditorView 使用 <SettingsSection>（L2176/L2246）但 import 列表未引入——
-//   打开「编辑规则」或「新建规则」即抛 ReferenceError: SettingsSection is not defined，
-//   React 树整棵崩溃、界面白屏。因此本 case 把编辑页场景放在最后（crash 探针），
-//   前面的场景不受影响；SR-EDIT-TEST/SR-EDIT-FIXED/SR-CREATE 记 FAIL（产品缺陷）。
-//   自定义规则改由 DB 预置（python3 sqlite3 写 smart_sort_rule 表，测试数据准备，不改产品码）。
+// D-16 修复（fix/desktop-e2e-d16-d17，补 SettingsSection import）后编辑页可正常进入；
+// 此前的崩溃探针断言已翻成真功能断言。
 import { waitForAppReady, launchApp, shutdown, shot, goToProjects } from "./lib.mjs";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
@@ -342,25 +341,86 @@ try {
   // ===== 汇总（非编辑页部分）=====
   console.log("SUMMARY_NON_EDITOR", JSON.stringify(results));
 
-  // ===== 编辑页场景（放最后：当前版本打开编辑页即触发产品缺陷崩溃）=====
+  // ===== 编辑页场景（D-16 修复后为真功能断言）=====
+  // 编辑页字段定位：SettingsField 渲染为 label.settings-field > span.settings-field__label + 控件
+  const editorField = (labelText) =>
+    page.locator("#settings-page .settings-field").filter({
+      has: page.locator(".settings-field__label", { hasText: new RegExp(`^${labelText}$`) }),
+    }).first();
+  const previewText = () =>
+    page.evaluate(() => document.querySelector("#settings-page .settings-preview-box")?.textContent ?? "");
+  const editorSave = () =>
+    page.locator("#settings-page button").filter({ hasText: /^保存$/ }).first();
+  const editorTest = () =>
+    page.locator("#settings-page button").filter({ hasText: /^测试$/ }).first();
+
   await step("SR-EDIT-TEST", async () => {
+    await openSettingsToRules();
     await ruleRow("中文序号章节").locator(".settings-list-item").first().click();
-    await sleep(2500); // 留渲染/崩溃时间
+    await sleep(1500);
     const state = await page.evaluate(() => ({
       editorFields: !!document.querySelector("#settings-page .settings-field"),
       settingsAlive: !!document.querySelector("#settings-page"),
       appAlive: !!document.querySelector("#app #chat-rail, #app"),
     }));
     const crashErr = errors.find((e) => e.includes("SettingsSection")) ?? null;
-    console.log("EDITOR_STATE", JSON.stringify(state), "crashErr=", JSON.stringify(crashErr));
-    await shot(page, "857", "editor-crash");
-    const editorOk = state.editorFields;
-    record("SR-EDIT-TEST", editorOk,
-      editorOk ? "编辑页渲染正常" : `产品缺陷：打开编辑页抛 ReferenceError: SettingsSection is not defined，React 树崩溃白屏（${JSON.stringify(crashErr)}）`);
+    // 回显：名称 input 与正则 textarea 带出内置规则值
+    const nameVal = await editorField("名称").locator("input").inputValue();
+    const patternVal = await editorField("正则表达式").locator("textarea").inputValue();
+    // 正则测试：smart 档元组 + 计数
+    await editorField("测试文本").locator("textarea").fill("第2章 开端\n第10章 高潮\n尾声");
+    await editorTest().click();
+    await sleep(1200);
+    const preview = await previewText();
+    await shot(page, "857", "editor-open");
+    const echoOk = nameVal === "中文序号章节" && patternVal.includes("第");
+    const matchOk = preview.includes("共 2 处匹配") && preview.includes("第2章 → (2,)") && preview.includes("第10章 → (10,)");
+    record("SR-EDIT-TEST", state.editorFields && !crashErr && echoOk && matchOk,
+      `编辑器渲染=${state.editorFields} 回显名=${JSON.stringify(nameVal)} 正则=${JSON.stringify(patternVal)} 匹配=${matchOk} 预览=${JSON.stringify(preview.slice(0, 120))}`);
   });
-  // SR-CREATE / SR-EDIT-FIXED：同一缺陷阻断（新建规则同样进入 SmartSortRuleEditorView；崩溃后应用树已死，重试无意义）
-  record("SR-CREATE", false, "产品缺陷阻断：新建规则入口与编辑页同一组件（SmartSortRuleEditorView），打开即崩溃，无法经 UI 创建规则");
-  record("SR-EDIT-FIXED", false, "产品缺陷阻断：固定档元组测试依赖编辑页，同上");
+
+  await step("SR-EDIT-FIXED", async () => {
+    // 同一编辑会话内切「固定最大」→ 元组显哨兵文案；随后退出不保存（内置规则不受影响）
+    await editorField("捕获数字").locator("select").selectOption("fixed_max");
+    await sleep(400);
+    await editorTest().click();
+    await sleep(1200);
+    const preview = await previewText();
+    await shot(page, "858", "fixed-sentinel-tuple");
+    const sentinelOk = preview.includes("(固定最大,)") && !preview.includes("(2,)");
+    // 不保存退出：关设置重开回列表
+    await closeSettings();
+    await openSettingsToRules();
+    const names = await ruleNames();
+    const builtinIntact = names.includes("中文序号章节");
+    const savedGhost = names.some((n) => n === "新规则");
+    record("SR-EDIT-FIXED", sentinelOk && builtinIntact && !savedGhost,
+      `哨兵=${JSON.stringify(preview.slice(0, 120))} 退出后列表完好=${builtinIntact} 无未保存残留=${!savedGhost}`);
+  });
+
+  await step("SR-CREATE", async () => {
+    const NEW_RULE = `UI新建${RUN}`;
+    await page.locator("#settings-page button").filter({ hasText: "新建规则" }).first().click();
+    await sleep(1200);
+    const fieldsOk = !!(await page.evaluate(() => document.querySelector("#settings-page .settings-field")));
+    await editorField("名称").locator("input").fill(NEW_RULE);
+    await editorField("正则表达式").locator("textarea").fill("/插章(\\d+)/");
+    await editorField("描述").locator("textarea").fill("e2e UI 新建规则");
+    await editorSave().click();
+    const toast = await waitToast(2500);
+    await sleep(1200);
+    const names = await ruleNames();
+    const created = names.includes(NEW_RULE);
+    await shot(page, "859", "ui-created-rule");
+    // 清理：删除 UI 新建的规则（留库干净，后续轮次归一化少一步）
+    if (created) {
+      await rowMenu(NEW_RULE, "删除");
+      await confirmModal();
+      await sleep(800);
+    }
+    record("SR-CREATE", fieldsOk && toast === "已创建" && created,
+      `编辑器=${fieldsOk} toast=${JSON.stringify(toast)} 列表出现=${created}`);
+  });
 
   // 🔧 SR-YAML：导入/导出走系统文件对话框，e2e 不可控——跳过（按钮存在性已并入 SR-LIST）
   console.log("SKIP SR-YAML 导入/导出 YAML 走原生文件对话框，自动化不可控，标 🔧 跳过");
