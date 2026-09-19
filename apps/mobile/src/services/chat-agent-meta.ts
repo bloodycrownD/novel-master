@@ -12,7 +12,6 @@ import {
   resolveAgentForProject,
   resolveSavedModelId,
 } from '@novel-master/core/agent';
-import {ChatError} from '@novel-master/core/chat';
 import type {MobileNovelMasterRuntime} from '../runtime/types';
 import {resolveModelDisplayLabel} from './model-display-label';
 
@@ -96,10 +95,11 @@ export async function loadChatAgentMeta(
       modelSource,
     };
   } catch (error) {
-    // AgentRunResolveError（agentId 指向已删 agent）与 ChatError（如配置缺失/
-    // 迁移未跑）都归一为 source='none' 的安全默认 meta：调用方（详情页、
-    // chat tab）拿到非 undefined meta 渲染未绑定引导，不再卡「加载中…」。
-    if (error instanceof AgentRunResolveError || error instanceof ChatError) {
+    // 归一口径与 desktop prompt handler 对齐（au/C-orch-2，方向 b）：仅
+    // AgentRunResolveError（agentId 指向已删 agent）归一为 source='none'
+    // 的待重选 meta；ChatError（配置缺失/迁移未跑）等其它异常原样向上抛，
+    // 由调用方走「锁定 + 错误文案」的报错态——错误成因绝不冒充「已被删除」。
+    if (error instanceof AgentRunResolveError) {
       return {
         source: 'none',
         agentId: undefined,

@@ -37,16 +37,6 @@ export type ConversationPanel = 'chat' | 'workspace';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
-const EMPTY_AGENT_META: ChatAgentMeta = {
-  source: 'none',
-  agentId: undefined,
-  agentName: '—',
-  modelLabel: '—',
-  tokenLabel: '',
-  hasDedicatedModel: false,
-  modelSource: 'session',
-};
-
 export type UseChatTabScopeParams = {
   runtime: MobileNovelMasterRuntime;
   projectId: string | undefined;
@@ -85,23 +75,30 @@ export function useChatTabScope({
   const [sessionRenamePrompt, setSessionRenamePrompt] = useState<
     {sessionId: string; initialTitle: string} | undefined
   >();
-  const [agentMeta, setAgentMeta] = useState<ChatAgentMeta>(EMPTY_AGENT_META);
+  // agentMeta 未加载窗口用 undefined 表达（au/B-1）：undefined = 锁定/占位，
+  // 绝不用 source:'none' 占位冒充「已删待重选」——none 仅在 loadChatAgentMeta
+  // 归一（AgentRunResolveError）成功落位后才出现。
+  const [agentMeta, setAgentMeta] = useState<ChatAgentMeta | undefined>(
+    undefined,
+  );
   const [hasWorkspaceModel, setHasWorkspaceModel] = useState(false);
 
   const refreshChatTokenLabel = useCallback(async () => {
+    // meta 未加载（undefined）时保持未加载态：partial 更新不能凭空造出
+    // 残缺的 meta 对象（缺字段的假 meta 会被当成已加载渲染）。
     if (projectId == null || sessionId == null) {
-      setAgentMeta(prev => ({...prev, tokenLabel: ''}));
+      setAgentMeta(prev => (prev == null ? prev : {...prev, tokenLabel: ''}));
       return;
     }
-    setAgentMeta(prev => ({...prev, tokenLabel: '…'}));
+    setAgentMeta(prev => (prev == null ? prev : {...prev, tokenLabel: '…'}));
     try {
       const tokenLabel = await loadChatPromptTokenLabelResilient(runtime, {
         projectId,
         sessionId,
       });
-      setAgentMeta(prev => ({...prev, tokenLabel}));
+      setAgentMeta(prev => (prev == null ? prev : {...prev, tokenLabel}));
     } catch {
-      setAgentMeta(prev => ({...prev, tokenLabel: ''}));
+      setAgentMeta(prev => (prev == null ? prev : {...prev, tokenLabel: ''}));
     }
   }, [runtime, projectId, sessionId]);
 
@@ -112,6 +109,14 @@ export function useChatTabScope({
     key: string;
     promise: Promise<void>;
   } | null>(null);
+
+  // showToast 经 ref 取用：它随渲染可能换引用（消费方 context mock 每次
+  // 渲染给新函数），若进 refreshChatMeta 依赖会连锁重建 → dep effect 无限
+  // 重跑。ref 保住依赖稳定，调用时取最新引用。
+  const showToastRef = useRef(showToast);
+  useEffect(() => {
+    showToastRef.current = showToast;
+  }, [showToast]);
 
   const refreshChatMeta = useCallback(() => {
     const key = `${projectId ?? ''}#${sessionId ?? ''}`;
@@ -133,8 +138,9 @@ export function useChatTabScope({
       const modelId = await runtime.state.getCurrentModelId();
       setHasWorkspaceModel(modelId != null && modelId !== '');
       if (metaPromise == null) {
-        // 无项目或无活动会话时无法解析 session 绑定，回退到无 meta 状态。
-        setAgentMeta(EMPTY_AGENT_META);
+        // 无项目或无活动会话时无法解析 session 绑定：保持未加载（锁定）态，
+        // 不用 source:'none' 占位——那会被消费方当成「已删待重选」。
+        setAgentMeta(undefined);
         return;
       }
       try {
@@ -145,8 +151,12 @@ export function useChatTabScope({
           tokenLabel: prev?.tokenLabel ?? '…',
         }));
         void refreshChatTokenLabel();
-      } catch {
-        setAgentMeta(EMPTY_AGENT_META);
+      } catch (error) {
+        // loadChatAgentMeta 仅归一 AgentRunResolveError（→none meta）；走到
+        // 这里的是 ChatError 等其它异常——保持未加载（锁定）态并提示错误，
+        // 绝不冒充「已删待重选」（au/B-1 / au/C-orch-2）。
+        setAgentMeta(undefined);
+        showToastRef.current(toastMessage('智能体信息加载失败', error));
       }
     })();
     refreshChatMetaInflightRef.current = {key, promise};

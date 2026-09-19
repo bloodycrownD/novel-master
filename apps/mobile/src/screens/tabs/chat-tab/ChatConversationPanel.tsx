@@ -268,7 +268,7 @@ export function ChatConversationPanel({
     projectId != null && sessionId != null ? (
       <ChatComposer
         scope={{projectId, sessionId}}
-        hasModel={hasWorkspaceModel || agentMeta.hasDedicatedModel}
+        hasModel={hasWorkspaceModel || (agentMeta?.hasDedicatedModel ?? false)}
         running={unitActive}
         onMessagesChanged={onMessagesChanged}
         onNeedModel={onNeedModel}

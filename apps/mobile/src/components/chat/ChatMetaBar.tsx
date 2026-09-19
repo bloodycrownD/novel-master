@@ -16,14 +16,19 @@ import {
 import {useTheme} from '@/theme/ThemeProvider';
 
 type Props = {
-  meta: ChatAgentMeta;
+  /** 未加载（undefined）按锁定/占位渲染，不出「已删待重选」语义。 */
+  meta: ChatAgentMeta | undefined;
   onPressAgent?: () => void;
   onPressModel?: () => void;
 };
 
 export function ChatMetaBar({meta, onPressAgent, onPressModel}: Props) {
   const {tokens} = useTheme();
-  const showTokens = meta.tokenLabel.length > 0;
+  // 未加载窗口的字段占位：'—' / 空标签；锁定判据仍走 helper（undefined → 锁）。
+  const agentName = meta?.agentName ?? '—';
+  const modelLabel = meta?.modelLabel ?? '—';
+  const tokenLabel = meta?.tokenLabel ?? '';
+  const showTokens = tokenLabel.length > 0;
   // 锁定判据统一收口到 chat-agent-meta 的 helper：agent 卡仅 meta 未加载时锁
   // （none 态放开待重选）；model 卡在 none / agent-pin 态锁定。
   const agentLocked = isAgentLocked(meta);
@@ -34,7 +39,7 @@ export function ChatMetaBar({meta, onPressAgent, onPressModel}: Props) {
         disabled={!onPressAgent}
         onPress={onPressAgent}
         accessibilityRole="button"
-        accessibilityLabel={`切换智能体，当前 ${meta.agentName}`}
+        accessibilityLabel={`切换智能体，当前 ${agentName}`}
         accessibilityState={{disabled: agentLocked}}
         style={({pressed}) => [styles.agentCol, pressed && styles.pressed]}
       >
@@ -49,14 +54,14 @@ export function ChatMetaBar({meta, onPressAgent, onPressModel}: Props) {
           ]}
           numberOfLines={1}
         >
-          {meta.agentName}
+          {agentName}
         </Text>
       </Pressable>
       <Pressable
         disabled={!onPressModel}
         onPress={onPressModel}
         accessibilityRole="button"
-        accessibilityLabel={`切换模型，当前 ${meta.modelLabel}`}
+        accessibilityLabel={`切换模型，当前 ${modelLabel}`}
         accessibilityState={{disabled: modelLocked}}
         style={({pressed}) => [styles.metaRight, pressed && styles.pressed]}
       >
@@ -68,14 +73,14 @@ export function ChatMetaBar({meta, onPressAgent, onPressModel}: Props) {
           ]}
           numberOfLines={1}
         >
-          {meta.modelLabel}
+          {modelLabel}
         </Text>
         {showTokens ? (
           <Text
             style={[styles.tokens, {color: tokens.textTertiary}]}
             numberOfLines={1}
           >
-            {meta.tokenLabel}
+            {tokenLabel}
           </Text>
         ) : null}
       </Pressable>

@@ -117,15 +117,18 @@ jest.mock('@/services/chat-agent-meta', () => ({
 jest.mock('@/components/agent/AgentPickerModal', () => {
   const React = require('react');
   return {
+    // onSelected 透传到节点 props（au/G-4 切换成功重拉用例的断言面）。
     AgentPickerModal: (props: {
       visible: boolean;
       sessionId?: string;
       onClose: () => void;
+      onSelected?: () => void;
     }) =>
       React.createElement('View', {
         testID: 'agent-picker-modal',
         visible: String(props.visible),
         sessionId: props.sessionId,
+        onSelected: props.onSelected,
       }),
   };
 });
@@ -363,6 +366,33 @@ describe('T-M2 SessionDetailScreen', () => {
     expect(mockShowToast).not.toHaveBeenCalled();
     const picker = tree.root.findByProps({testID: 'agent-picker-modal'});
     expect(picker.props.visible).toBe('true');
+  });
+
+  // au/G-4（cr-fix-spec 条目 11c）：切换成功回调 onSelected 后详情页 load()
+  // 重拉——会话与 meta 都要重新查询，顶栏/卡片随新绑定刷新。
+  it('切换智能体成功（onSelected）后 load() 重拉会话与 meta', async () => {
+    let tree!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(<SessionDetailScreen />);
+      await flushPromises();
+    });
+    expect(mockSessionsGet).toHaveBeenCalledTimes(1);
+    expect(mockLoadChatAgentMeta).toHaveBeenCalledTimes(1);
+
+    // 打开 picker 并触发「切换成功」回调
+    await act(async () => {
+      tree.root.findByProps({testID: 'agent-row'}).props.onPress();
+    });
+    const picker = tree.root.findByProps({testID: 'agent-picker-modal'});
+    expect(picker.props.visible).toBe('true');
+    await act(async () => {
+      picker.props.onSelected();
+      await flushPromises();
+    });
+
+    // 重拉断言：sessions.get 与 loadChatAgentMeta 均再次发起。
+    expect(mockSessionsGet).toHaveBeenCalledTimes(2);
+    expect(mockLoadChatAgentMeta).toHaveBeenCalledTimes(2);
   });
 
   it('点击聊天名进入 inline 编辑，提交后调用 sessions.rename', async () => {

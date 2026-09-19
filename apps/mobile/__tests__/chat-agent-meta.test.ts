@@ -1,5 +1,6 @@
 import {describe, expect, it, jest} from '@jest/globals';
 import {buildDefaultAgentDefinitionPreservingName} from '@novel-master/core/config-forms/stored-config-validity';
+import {ChatError} from '@novel-master/core/chat';
 import {
   isAgentDeleted,
   isAgentLocked,
@@ -138,6 +139,40 @@ describe('loadChatAgentMeta', () => {
       hasDedicatedModel: false,
       modelSource: 'session',
     });
+  });
+});
+
+// ── au/C-orch-2（cr-fix-spec 条目 9，方向 b）：错误归一口径 ─────────────────
+// 「已删待重选」（source='none'）仅覆盖 AgentRunResolveError 成因；ChatError
+// 等其它异常原样上抛，由调用方走「锁定 + 错误文案」报错态——错误成因绝不
+// 冒充「已被删除」（与 desktop prompt handler 的内层 catch 口径一致）。
+describe('loadChatAgentMeta 错误归一口径（au/C-orch-2）', () => {
+  it('AgentRunResolveError（agentId 指向已删 agent）归一 source=none 待重选 meta（既有口径不回归）', async () => {
+    const runtime: any = mockRuntime({});
+    // registry.get 抛错会被 resolveAgentForProject 归一为 AgentRunResolveError。
+    runtime.agentRegistry.get = jest.fn(async () => {
+      throw new Error('AGENT_NOT_FOUND');
+    });
+    const meta = await loadChatAgentMeta(runtime, 'proj-1', 'sess-1');
+    expect(meta.source).toBe('none');
+    expect(meta.agentId).toBeUndefined();
+    expect(meta.agentName).toBe('未配置 Agent');
+    // 待重选判据：已加载且 none → 可弹 picker 重选
+    expect(isAgentDeleted(meta)).toBe(true);
+    expect(isAgentLocked(meta)).toBe(false);
+  });
+
+  it('ChatError（如配置缺失/迁移未跑）原样上抛——调用方 meta 停 undefined，锁定且不可弹重选', async () => {
+    const runtime: any = mockRuntime({});
+    runtime.sessions.getSessionAgentConfig = jest.fn(async () => {
+      throw new ChatError('INVALID_ARGUMENT', 'session 配置缺失');
+    });
+    await expect(
+      loadChatAgentMeta(runtime, 'proj-1', 'sess-1'),
+    ).rejects.toBeInstanceOf(ChatError);
+    // 调用方 catch 后 meta 保持 undefined：未加载锁定态，绝无「已删待重选」语义。
+    expect(isAgentDeleted(undefined)).toBe(false);
+    expect(isAgentLocked(undefined)).toBe(true);
   });
 });
 
