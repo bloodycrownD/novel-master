@@ -339,7 +339,8 @@ title: x
     ).toBeGreaterThan(0);
   });
 
-  it('non-md markdown tab mounts RichDocumentWebView when webview engine (T2)', async () => {
+  it('non-md markdown tab renders plain source, no markdown parse (T2, 2026-09-19 拍板)', async () => {
+    // 非 md 文件的 Markdown Tab 与文本 Tab 同款纯文本——不再 markdown 化全文
     const content = '# Heading\n\n- item';
     let tree: TestRenderer.ReactTestRenderer;
     await act(async () => {
@@ -355,19 +356,28 @@ title: x
     await act(async () => {
       await Promise.resolve();
     });
-    expect(
+    expect(() =>
       tree!.root.findByProps({testID: 'rich-document-webview'}),
-    ).toBeTruthy();
+    ).toThrow();
+    expect(() =>
+      tree!.root.findByProps({testID: 'rich-content-body'}),
+    ).toThrow();
+    const textNodes = tree!.root.findAllByType(
+      require('react-native').Text as React.ComponentType,
+    );
+    const combined = textNodes.map(n => n.props.children).join('');
+    // 原文按字面显示：# 不再变标题、- 不再变列表
+    expect(combined).toContain('# Heading');
+    expect(combined).toContain('- item');
   });
 
-  it('non-md markdown tab mounts RichContentBody when rn engine (T2)', async () => {
-    mockReadEngine.mockResolvedValue('rn');
-    const content = '# Heading\n\n- item';
+  it('non-md yaml markdown tab shows raw yaml as plain text (2026-09-19 拍板回归锚点)', async () => {
+    const content = '# yaml 注释\nkey: value\nnested:\n  - a\n  - b\n';
     let tree: TestRenderer.ReactTestRenderer;
     await act(async () => {
       tree = TestRenderer.create(
         <FileMarkdownPreview
-          path="/notes/readme.txt"
+          path="/notes/config.yaml"
           content={content}
           tokens={tokens}
           renderKind="markdown"
@@ -377,7 +387,15 @@ title: x
     await act(async () => {
       await Promise.resolve();
     });
-    expect(tree!.root.findByProps({testID: 'rich-content-body'})).toBeTruthy();
+    expect(() =>
+      tree!.root.findByProps({testID: 'rich-document-webview'}),
+    ).toThrow();
+    const textNodes = tree!.root.findAllByType(
+      require('react-native').Text as React.ComponentType,
+    );
+    const combined = textNodes.map(n => n.props.children).join('');
+    expect(combined).toContain('# yaml 注释');
+    expect(combined).toContain('  - a');
   });
 
   it('non-md txt tab does not mount RichDocumentWebView (T3)', async () => {

@@ -26,3 +26,13 @@ user:
 assistant:
 
 > 两条建议落地（yaml 非 md 文件的 Markdown Tab 渲染方式涉产品意图，未动待拍板）。①透出修复沿既有合约测试的纯函数模式：document-model.ts 新增 buildDocumentBody descriptor（html 分支=concat 后整体 TrustedHtml；plain 分支=fmHtml 与 text 分离，FM 单独 TrustedHtml、正文保持文本节点），DocumentApp 改为消费 descriptor，头注释同步——原 plain 分支 concat(fm, plain) 当文本子节点输出的写法即透出根因。②阈值分轨：rich-content-limits.ts 新增 RICH_DOCUMENT_WEBVIEW_MAX_CHARS=200_000 与 isWebViewDocumentOverLimit；FileMarkdownPreview 按 previewEngine 选判定（webview→20 万字，rn 兜底→12k 保留 FlatList 护栏）。测试：合约测试 rich-document-doc-body-concat 翻新（plain 分支 fmHtml/text 分离的回归守卫 + dist 接线断言改 buildDocumentBody）、rich-content-limits 边界测试补 20 万字临界与「三万字对 webview 不超限」锚点、FileMarkdownPreview T7 改用 20 万字阈值并新增「12k+18k 正文正常渲染」锚点用例。mobile 全量 201 套件 1366 用例全绿（chat-transcript-webview 曾在全量首跑挂一次、单跑 30/30 过，判并行干扰），root typecheck 0 错。CHANGELOG Unreleased 补两条。
+
+## 2026-09-19 23:55 · 非 md 文件 Markdown 标签页改 plain（用户拍板）
+
+user:
+
+> 非 md 文件在 Markdown 标签页按照plain渲染，就和文本标签页一样
+
+assistant:
+
+> 拍板落地：FileMarkdownPreview 把「文本 Tab」与「非 md 文件的 Markdown Tab」合并为同一条 plain 渲染路径（RN Text selectable + PreviewScrollWrap），非 md 不再走 prepareTranscriptRichHtml markdown 化全文——# 变标题/缩进折叠/内嵌 html 执行的错乱消失。连带删除死代码：nonMdBody/nonMdOverLimit/nonMdBodyHtml/nonMdUseWebViewPreview 四个 memo。批注口径：plain 永不 annotate（既有设计），非 md 会话文件原先在 Markdown Tab 可锚的批注随 plain 化不再可用（与文本 Tab 一致，用户口径「就和文本标签页一样」已覆盖此取舍）；FileEditorScreen 的 segmented 双 Tab 对非 md 保留（两 Tab 输出相同）。测试：T2 双引擎用例翻新为「不挂 WebView/RichContentBody + 原文字面显示」，新增 yaml 原文锚点用例（# 注释与缩进列表按原文）；mobile 全量 201 套件 1366 用例绿，root typecheck 0 错。CHANGELOG Unreleased 补「非 md 文件不再被强制 markdown 渲染」。
