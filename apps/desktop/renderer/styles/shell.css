@@ -5590,6 +5590,13 @@ html[data-theme="dark"] .chat-batch-bar {
   resize: vertical;
 }
 
+/* D-17：validate prop 的行内错误（口径同 new-skill-modal__error） */
+.text-prompt-modal__error {
+  margin: 8px 0 0;
+  color: var(--danger, #c0392b);
+  font-size: 12px;
+}
+
 .text-prompt-modal__actions {
   display: flex;
   justify-content: flex-end;
