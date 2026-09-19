@@ -40,7 +40,7 @@ dependency: iterations/vfs-rename-rollback-fixes-2026-09/prd.md
 
 1. 删除 → 回滚：被删文件复现，内容为锚点检查点时点内容；
 2. 删除 → 同路径重建 → 回滚（到重建前）：旧内容回来，重建产生的 entry 被墓碑回退；
-3. 检查点 revision 行真缺失（非 entry 缺失）时维持降级行为（不抛 BACKFILL_REQUIRED 阻断回滚）；
+3. 检查点 revision 行真缺失（非 entry 缺失）时维持既有确认流降级：默认抛 REVISION_BACKFILL_REQUIRED 阻断回滚，由双端 UI 确认后带 `revisionHeadBackfill: true` 重试，按 live head 回补占位/墓碑完成降级回滚（no-option 行为断言见 `rollback-restore-deleted-entry.test.ts`）；
 4. 存量库升级后历史 checkpoint 行为不劣化（无 path 快照的行回退旧 JOIN 语义）；
 5. 回滚复现后再次新建文件，entry_id 发号不回退、不撞唯一键。
 
