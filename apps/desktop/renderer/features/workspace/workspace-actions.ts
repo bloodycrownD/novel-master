@@ -25,15 +25,13 @@ import { parentPathForTarget } from "./workspace-context";
 /**
  * VFS 动作失败时把 IPC payload（{code,message}）转成终端用户可见的中文文案；
  * main 侧只透传 VfsError 原文（英文），直接弹给用户看不懂。
- * ALREADY_EXISTS 单独映射（对齐 mobile「名称不能重复」口径）。
+ * 文案映射（含 ALREADY_EXISTS「名称不能重复」）统一由 core
+ * formatVfsErrorForUser 的 code 文案表提供。
  */
 function vfsActionErrorMessage(error: {
   readonly code: string;
   readonly message: string;
 }): string {
-  if (error.code === "ALREADY_EXISTS") {
-    return "名称不能重复";
-  }
   return formatVfsErrorForUser(error);
 }
 

@@ -3,6 +3,7 @@ import test from "node:test";
 import { DEFAULT_WORKPLACE_DIR_RULE } from "@shared/logic/workplace";
 import { IPC_CHANNELS } from "@shared/ipc-types";
 import {
+  createWorkspaceEntry,
   emptyDirRuleForm,
   defaultDirRuleRequest,
   deleteWorkspaceEntry,
@@ -98,6 +99,55 @@ test("renameWorkspaceEntry ALREADY_EXISTS 失败 → 名称不能重复（对齐
     assert.equal(outcome.ok, false);
     if (!outcome.ok) {
       assert.equal(outcome.message, "名称不能重复");
+    }
+  } finally {
+    restore();
+  }
+});
+
+test("createWorkspaceEntry（新建文件夹）NOT_FOUND 失败 → 中文文案", async () => {
+  const restore = installInvokeStub((channel) => {
+    assert.equal(channel, IPC_CHANNELS.VFS_MKDIR);
+    return {
+      ok: false,
+      error: { code: "NOT_FOUND", message: "Path not found: /新文件夹" },
+    };
+  });
+  try {
+    const outcome = await createWorkspaceEntry(
+      { kind: "blank", panelScope: "chat", x: 0, y: 0 },
+      "folder",
+      "新文件夹",
+      "p1",
+      "s1",
+    );
+    assert.equal(outcome.ok, false);
+    if (!outcome.ok) {
+      assert.equal(outcome.message, "文件不存在或已被删除。");
+    }
+  } finally {
+    restore();
+  }
+});
+
+test("renameWorkspaceEntry 未知错误码 → default 分支「操作失败：原因」", async () => {
+  const restore = installInvokeStub((channel) => {
+    assert.equal(channel, IPC_CHANNELS.VFS_RENAME);
+    return {
+      ok: false,
+      error: { code: "SOMETHING", message: "x" },
+    };
+  });
+  try {
+    const outcome = await renameWorkspaceEntry(
+      dirRowTarget(),
+      "新名字",
+      "p1",
+      "s1",
+    );
+    assert.equal(outcome.ok, false);
+    if (!outcome.ok) {
+      assert.equal(outcome.message, "操作失败：x");
     }
   } finally {
     restore();

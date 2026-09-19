@@ -149,8 +149,9 @@ describe("handleVfsRename 目录迁移 workplace 规则", () => {
       path: "/旧会话目录",
     });
     assert.equal(mkdirResult.ok, true);
-    // 目录内放一个文件：core moveVfsPath 的目录判定依赖子项列表，
-    // 纯空目录 rename 属 core 既有 NOT_FOUND 行为，不在本修复范围
+    // 目录内放一个文件，覆盖「带子项的目录」rename 场景；
+    // 纯空目录 rename core 已支持（read 以 IS_DIRECTORY 判目录，
+    // 不再依赖子项列表），专项断言见下方空目录用例
     const writeResult = await handleVfsWrite({
       ...scope,
       path: "/旧会话目录/内容.md",
@@ -184,6 +185,84 @@ describe("handleVfsRename 目录迁移 workplace 规则", () => {
     const entries = await rt.sessionVfs(projectId, sessionId).list("/");
     assert.ok(entries.some((e) => e.path === "/新会话目录"));
     assert.ok(!entries.some((e) => e.path === "/旧会话目录"));
+  });
+
+  it("chat 面板 scope（session 分支）：纯空目录 rename 同样成功且规则迁移", async () => {
+    const scope = {
+      workspaceScope: "chat" as const,
+      projectId,
+      sessionId,
+    };
+    // core 已支持空目录 rename：read 以 IS_DIRECTORY 判目录，不再因
+    // 「无子项」误报 NOT_FOUND；session 分支（executeSessionUserVfsOp →
+    // fs mv → moveVfsPath）与 project 分支共用该能力
+    const mkdirResult = await handleVfsMkdir({
+      ...scope,
+      path: "/空会话目录",
+    });
+    assert.equal(mkdirResult.ok, true);
+    await setDirRuleWithDistinctConfig(scope, "/空会话目录");
+
+    const result = await handleVfsRename({
+      ...scope,
+      oldPath: "/空会话目录",
+      newPath: "/改名空会话目录",
+    });
+    assert.equal(result.ok, true, "空目录 rename 应成功而非 NOT_FOUND");
+
+    const oldRule = await handleWorkplaceGetDirRule({
+      ...scope,
+      logicalPath: "/空会话目录",
+    });
+    assert.equal(oldRule.ok && oldRule.data == null, true);
+
+    const newRule = await handleWorkplaceGetDirRule({
+      ...scope,
+      logicalPath: "/改名空会话目录",
+    });
+    assert.ok(newRule.ok && newRule.data != null);
+    assert.equal(newRule.data.sortField, DISTINCT_RULE.sortField);
+    assert.equal(newRule.data.sortOrder, DISTINCT_RULE.sortOrder);
+
+    const rt = await getDesktopRuntime();
+    const entries = await rt.sessionVfs(projectId, sessionId).list("/");
+    assert.ok(entries.some((e) => e.path === "/改名空会话目录"));
+    assert.ok(!entries.some((e) => e.path === "/空会话目录"));
+  });
+
+  it("project 面板 scope（对照）：纯空目录 rename 同样成功且规则迁移", async () => {
+    const scope = { workspaceScope: "session" as const, projectId };
+    const mkdirResult = await handleVfsMkdir({
+      ...scope,
+      path: "/空项目目录",
+    });
+    assert.equal(mkdirResult.ok, true);
+    await setDirRuleWithDistinctConfig(scope, "/空项目目录");
+
+    const result = await handleVfsRename({
+      ...scope,
+      oldPath: "/空项目目录",
+      newPath: "/改名空项目目录",
+    });
+    assert.equal(result.ok, true, "空目录 rename 应成功而非 NOT_FOUND");
+
+    const oldRule = await handleWorkplaceGetDirRule({
+      ...scope,
+      logicalPath: "/空项目目录",
+    });
+    assert.equal(oldRule.ok && oldRule.data == null, true);
+
+    const newRule = await handleWorkplaceGetDirRule({
+      ...scope,
+      logicalPath: "/改名空项目目录",
+    });
+    assert.ok(newRule.ok && newRule.data != null);
+    assert.equal(newRule.data.sortField, DISTINCT_RULE.sortField);
+
+    const rt = await getDesktopRuntime();
+    const entries = await rt.projectVfs(projectId).list("/");
+    assert.ok(entries.some((e) => e.path === "/改名空项目目录"));
+    assert.ok(!entries.some((e) => e.path === "/空项目目录"));
   });
 
   it("文件 rename 不迁移规则（对照）：fileRule 留在旧路径", async () => {
