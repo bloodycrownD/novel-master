@@ -34,4 +34,10 @@ assistant:
 ① rollback-restore-deleted-entry（30de0b82→28d59c9b）：schema 加 path 快照列 + 迁移 add-mcp-file-path-snapshot-v1（含存量回填）；loadFilePointerTree 快照优先；revive-deleted-entry.ts 按旧 entryId 显式插 entry 复活（reviveEntryAtVersion，sqlite_sequence 自动推高 + entry-sequence-repair 兜底）；实现期额外发现并修复两处——同路径异 entry 的 v1==v1 短路误判（加同源判定，diverged 直接墓碑+复活）、reconcileVfsPaths 清场须先于写盘（否则 rename 后回滚同一 entry 挂两路径撞主键）。行为变更：rename 后历史 checkpoint 路径冻结为 capture 时点（有意修正，无既有用例固化旧预期）；断言翻转 3 处（RB4b、R-BC2、add-smart-sort 阵尾）。
 ② desktop-rename-ghost-dir（fdaeaade/4b601803/5a1b2e4a）：rename 后迁移规则（session 分支 kind 判定提前到 execute 前）；loadContextMetadata 幽灵规则路径兜底过滤（零新增 SQL，文件树与 $filetree 同源去幽灵）；renderer VFS 失败中文化（formatVfsErrorForUser + ALREADY_EXISTS「名称不能重复」）。
 ③ 追加（59851835）：空目录 rename 误报 NOT_FOUND——两层根因：moveVfsPath 的 hasDirRow 恒 false（list 的 LIKE 不含目录自身行）+ renamePrefixInScope 改名后按旧路径 SELECT 死检查（改用根 UPDATE changes 判定）。这层最贴合用户「提交后英文报错、后来又好了」的现象。
-验证：core 全量 442 套件 2592 用例全绿 + typecheck 过；desktop 定向 10/10、core 抽样复核 495/495（主代理亲跑）。留痕：docs/Iterations/vfs-rename-rollback-fixes-2026-09/（父 PRD + 两个 bug 的 prd/spec）。遗留待办：vfs-copy.ts 的 copyVfsPath 空目录同款误报未修；mobile typecheck 既有环境问题（dist 未构建 + @notifee 类型缺失，stash 取证与本次无关）；packages/core 的 test:msg script 在 sh 下因 extglob 跑不了（历史遗留，用 bash -O extglob 等价替代）。待用户确认文档与代码一致后收尾。
+验证：core 全量 442 套件 2592 用例全绿 + typecheck 过；desktop 定向 10/10、core 抽样复核 495/495（主代理亲跑）。留痕：docs/Iterations/vfs-rename-rollback-fixes-2026-09/（父 PRD + 两个 bug 的 prd/spec）。遗留待办：vfs-copy.ts 的 copyVfsPath 空目录同款误报未修；packages/core 的 test:msg script 在 sh 下因 extglob 跑不了（历史遗留，用 bash -O extglob 等价替代）。
+
+user:
+（合并指令）切换到开发分支，我在主分支发布了些代码，可能需要合并处理下。
+
+assistant:
+用户在 main 上发了 v1.5.19（含 mobile TS 工具链对齐 6.0.3——正好治好了此前 mobile typecheck 跑不起来的环境问题）、mobile 系列修复与文档共 15 个提交。fix/vfs-rename-rollback-2026-09 合并 main（c529702d）零冲突——main 改动面（mobile/docs/发版）与修复分支（core/desktop）无重叠。合并后全量验证：core 全量测试 0 失败、desktop 定向测试 0 失败、根 typecheck 全绿（mobile 段首次完整跑通）。分支就绪待用户测试/合并。
