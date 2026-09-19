@@ -25,7 +25,10 @@ import {
 import {refreshComposerAnnotateChips} from '../../storage/chat-composer-draft';
 import {RichContentBody} from '../rich-content/RichContentBody';
 import {prepareTranscriptRichHtml} from '../rich-content/prepare-transcript-rich-html';
-import {isRichContentOverLimit} from '../rich-content/rich-content-limits';
+import {
+  isRichContentOverLimit,
+  isWebViewDocumentOverLimit,
+} from '../rich-content/rich-content-limits';
 import {MessageEditModal} from '../chat/MessageEditModal';
 import {buildFrontMatterDocumentHtml} from './build-front-matter-document-html';
 import {parseFrontMatterFields} from './front-matter-fields';
@@ -294,8 +297,14 @@ export function FileMarkdownPreview({
     return '';
   }, [isMdPath, content]);
 
-  const mdOverLimit = isRichContentOverLimit(mdBody);
-  const nonMdOverLimit = isRichContentOverLimit(nonMdBody);
+  // WebView 引擎走浏览器整页渲染，用放宽阈值（20 万字）；rn 兜底引擎维持
+  // RenderHTML 的 12k FlatList 护栏（RichContentBody 内部同款判定）。
+  const overLimitFor =
+    previewEngine === 'webview'
+      ? isWebViewDocumentOverLimit
+      : isRichContentOverLimit;
+  const mdOverLimit = overLimitFor(mdBody);
+  const nonMdOverLimit = overLimitFor(nonMdBody);
 
   const mdBodyHtml = useMemo(() => {
     if (!mdBody || mdOverLimit || previewEngine !== 'webview') {

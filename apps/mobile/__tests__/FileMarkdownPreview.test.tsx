@@ -34,7 +34,7 @@ jest.mock('@/components/vfs/RichDocumentWebView', () => ({
 
 import {FileMarkdownPreview} from '@/components/vfs/FileMarkdownPreview';
 import {RichDocumentWebView} from '@/components/vfs/RichDocumentWebView';
-import {RICH_CONTENT_MAX_CHARS} from '@/components/rich-content/rich-content-limits';
+import {RICH_CONTENT_MAX_CHARS, RICH_DOCUMENT_WEBVIEW_MAX_CHARS} from '@/components/rich-content/rich-content-limits';
 
 const mockRichDocumentWebView = RichDocumentWebView as jest.MockedFunction<
   typeof RichDocumentWebView
@@ -119,8 +119,8 @@ Hello body
     expect(tree!.root.findByProps({testID: 'rich-content-body'})).toBeTruthy();
   });
 
-  it('passes plain + overLimit to RichDocumentWebView when body exceeds char cap (T7)', async () => {
-    const longBody = 'x'.repeat(RICH_CONTENT_MAX_CHARS + 1);
+  it('passes plain + overLimit to RichDocumentWebView when body exceeds webview char cap (T7)', async () => {
+    const longBody = 'x'.repeat(RICH_DOCUMENT_WEBVIEW_MAX_CHARS + 1);
     const content = `---
 title: Long
 ---
@@ -145,6 +145,34 @@ ${longBody}`;
       html: undefined,
     });
     expect(lastCall?.frontMatterHtml).toContain('fm-card');
+  });
+
+  it('body over legacy 12k cap but within webview cap renders markdown (2026-09-19 放宽回归锚点)', async () => {
+    // 两三万字正文（旧 12k 阈值即回退纯文本）：WebView 引擎下应正常渲染，
+    // 不再误判超长——fm-card HTML 透出的触发面随之消失。
+    const novelBody = '章'.repeat(RICH_CONTENT_MAX_CHARS + 18_000);
+    const content = `---
+title: Novel
+---
+${novelBody}`;
+    await act(async () => {
+      TestRenderer.create(
+        <FileMarkdownPreview
+          path="/notes/novel.md"
+          content={content}
+          tokens={tokens}
+        />,
+      );
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    const lastCall = mockRichDocumentWebView.mock.calls.at(-1)?.[0];
+    expect(lastCall).toMatchObject({
+      overLimit: false,
+    });
+    expect(typeof lastCall?.html).toBe('string');
+    expect(lastCall?.html.length).toBeGreaterThan(0);
   });
 
   it('renderKind txt shows plain source and does not mount RichDocumentWebView', async () => {
