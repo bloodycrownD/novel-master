@@ -1,6 +1,12 @@
 import {describe, expect, it, jest} from '@jest/globals';
 import {buildDefaultAgentDefinitionPreservingName} from '@novel-master/core/config-forms/stored-config-validity';
-import {loadChatAgentMeta} from '@/services/chat-agent-meta';
+import {
+  isAgentDeleted,
+  isAgentLocked,
+  isModelLocked,
+  loadChatAgentMeta,
+  type ChatAgentMeta,
+} from '@/services/chat-agent-meta';
 
 const globalDefinition = buildDefaultAgentDefinitionPreservingName('全局助手');
 const sessionAgentDefinition =
@@ -132,5 +138,58 @@ describe('loadChatAgentMeta', () => {
       hasDedicatedModel: false,
       modelSource: 'session',
     });
+  });
+});
+
+// ── session-agent-locked-after-delete：isAgentLocked / isModelLocked 拆分 ──
+// none 态（绑定的智能体已被删除）下智能体卡放开为「待重选」，模型卡维持锁定，
+// 避免删除智能体后引用它的会话被锁死无法切换。
+describe('isAgentLocked / isModelLocked 拆分（none 态智能体卡放开待重选）', () => {
+  const sessionMeta: ChatAgentMeta = {
+    source: 'session',
+    agentId: 'agent-a',
+    agentName: 'Alpha',
+    modelLabel: 'Model-1',
+    tokenLabel: '',
+    hasDedicatedModel: false,
+    modelSource: 'session',
+  };
+  // loadChatAgentMeta 在 AgentRunResolveError 时归一回填的 none meta
+  const noneMeta: ChatAgentMeta = {
+    source: 'none',
+    agentId: undefined,
+    agentName: '未配置 Agent',
+    modelLabel: '—',
+    tokenLabel: '',
+    hasDedicatedModel: false,
+    modelSource: 'session',
+  };
+  const pinnedMeta: ChatAgentMeta = {
+    ...sessionMeta,
+    hasDedicatedModel: true,
+    modelSource: 'agent-pin',
+  };
+
+  it('isAgentLocked：仅 meta 未加载时锁定，none 态放开为待重选', () => {
+    // meta 还没加载出来 → 锁定，避免加载中误触
+    expect(isAgentLocked(undefined)).toBe(true);
+    // 智能体已被删除（none）→ 不再锁死，可点击弹 picker 重选
+    expect(isAgentLocked(noneMeta)).toBe(false);
+    expect(isAgentLocked(sessionMeta)).toBe(false);
+  });
+
+  it('isModelLocked：维持原口径——meta 空或 none 态锁定，session 态看 agent-pin', () => {
+    expect(isModelLocked(undefined)).toBe(true);
+    // 智能体没了，pin 的模型无从解析 → 模型卡仍锁，重选智能体后自然解锁
+    expect(isModelLocked(noneMeta)).toBe(true);
+    expect(isModelLocked(pinnedMeta)).toBe(true);
+    expect(isModelLocked(sessionMeta)).toBe(false);
+  });
+
+  it('isAgentDeleted：仅已加载且 source=none 时为 true（待重选判据）', () => {
+    // meta 未加载时不能断言「已删」，返回 false
+    expect(isAgentDeleted(undefined)).toBe(false);
+    expect(isAgentDeleted(noneMeta)).toBe(true);
+    expect(isAgentDeleted(sessionMeta)).toBe(false);
   });
 });

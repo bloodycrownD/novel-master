@@ -88,12 +88,13 @@ jest.mock('@/errors/toast-message', () => ({
 }));
 
 const mockLoadChatAgentMeta = jest.fn();
-// isAgentLocked / isModelLocked 的 mock 跟真实逻辑保持一致，
-// 这样锁定场景的测试（source !== 'session'）能拿到 true。
+// isAgentLocked / isModelLocked / isAgentDeleted 的 mock 跟真实逻辑保持一致：
+// agent 卡仅 meta 未加载时锁（none 态放开为待重选）；model 卡 none 态仍锁。
 jest.mock('@/services/chat-agent-meta', () => ({
   loadChatAgentMeta: (...args: unknown[]) => mockLoadChatAgentMeta(...args),
-  isAgentLocked: (meta: {source?: string} | undefined) =>
-    !meta || meta.source !== 'session',
+  isAgentLocked: (meta: {source?: string} | undefined) => meta == null,
+  isAgentDeleted: (meta: {source?: string} | undefined) =>
+    meta != null && meta.source === 'none',
   isModelLocked: (
     meta:
       | {
@@ -107,6 +108,10 @@ jest.mock('@/services/chat-agent-meta', () => ({
     meta.source !== 'session' ||
     meta.modelSource === 'agent-pin' ||
     Boolean(meta.hasDedicatedModel),
+  AGENT_LOCK_TOAST_STATEMENT: '智能体信息加载中，请稍候再试',
+  AGENT_RESELECT_TOAST: '智能体已被删除，请重新选择',
+  AGENT_RESELECT_HINT: '智能体已删除 · 点击重选',
+  MODEL_LOCK_TOAST: '当前智能体已锁定模型，会话内无法覆盖',
 }));
 
 jest.mock('@/components/agent/AgentPickerModal', () => {
@@ -295,8 +300,9 @@ describe('T-M2 SessionDetailScreen', () => {
     expect(mockShowToast).toHaveBeenCalled();
   });
 
-  // review-mobile/B-1 + G-2：source='none'（agent 解析失败）时 agent/model 卡片都应锁定。
-  it("source='none' 时 agent/model 卡片都锁定，点击只弹锁定提示不进 picker", async () => {
+  // session-agent-locked-after-delete：source='none'（绑定的智能体已被删除）时
+  // 智能体卡放开为「待重选」——可点击弹 picker 重选；模型卡保持锁定。
+  it("source='none' 时智能体卡待重选可弹 picker，模型卡锁定只弹提示", async () => {
     // chat-agent-meta.ts 在 AgentRunResolveError 时会回填这条 meta
     mockLoadChatAgentMeta.mockResolvedValue(meta({source: 'none'}));
     let tree!: TestRenderer.ReactTestRenderer;
@@ -305,23 +311,26 @@ describe('T-M2 SessionDetailScreen', () => {
       await flushPromises();
     });
     const json = JSON.stringify(tree.toJSON());
-    // 两张锁定卡片都应是 🔒（chat-history-row 是新增的常驻入口，始终带 ›，
-    // 所以不再用「整页不含 ›」反向断言，改成检查 🔒 数量）
+    // 智能体卡：待重选 badge 可见，chevron 仍为 › 暗示可点
+    expect(json).toContain('智能体已删除 · 点击重选');
+    expect(json).toContain('›');
+    // 模型卡：维持锁定（🔒）
     expect(json).toContain('🔒');
-    expect((json.match(/🔒/g) ?? []).length).toBeGreaterThanOrEqual(2);
+    // 点击智能体卡 → 正常弹 picker（不再锁死），并提示重选
     await act(async () => {
       tree.root.findByProps({testID: 'agent-row'}).props.onPress();
     });
     expect(
       tree.root.findByProps({testID: 'agent-picker-modal'}).props.visible,
-    ).toBe('false');
+    ).toBe('true');
+    // 点击模型卡 → 维持锁定：不进 picker，只弹锁定提示
     await act(async () => {
       tree.root.findByProps({testID: 'model-row'}).props.onPress();
     });
     expect(
       tree.root.findByProps({testID: 'model-picker-modal'}).props.visible,
     ).toBe('false');
-    // 两张卡片都应触发锁定提示
+    // 两次点击各弹一次提示：智能体卡（重选提示）+ 模型卡（锁定提示）
     expect(mockShowToast).toHaveBeenCalledTimes(2);
   });
 

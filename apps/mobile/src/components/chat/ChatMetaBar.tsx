@@ -2,9 +2,9 @@
  * Agent name + model label under conversation header (prototype chat-meta).
  *
  * agent / model 两段都可点：传入 onPressAgent / onPressModel 即启用 Pressable
- * 反馈（press 时降透明度）。锁定判据与 SessionDetailScreen 对齐——只有
- * source='session' 才放开，其余（none）一律视为锁定，
- * 仅作纯展示，不响应点击。
+ * 反馈（press 时降透明度）。锁定判据与 SessionDetailScreen 对齐——agent 卡
+ * 仅在 meta 未加载时锁定，none 态（智能体已删）放开为待重选可点击；
+ * model 卡在 none 态仍锁定（智能体没了，pin 的模型无从解析）。
  */
 import React from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
@@ -24,8 +24,8 @@ type Props = {
 export function ChatMetaBar({meta, onPressAgent, onPressModel}: Props) {
   const {tokens} = useTheme();
   const showTokens = meta.tokenLabel.length > 0;
-  // 锁定判据统一收口到 chat-agent-meta 的 helper：source !== 'session' 即锁定。
-  // hasDedicatedModel 已是 boolean，不再需要 ?? false 兜底。
+  // 锁定判据统一收口到 chat-agent-meta 的 helper：agent 卡仅 meta 未加载时锁
+  // （none 态放开待重选）；model 卡在 none / agent-pin 态锁定。
   const agentLocked = isAgentLocked(meta);
   const modelLocked = isModelLocked(meta);
   return (

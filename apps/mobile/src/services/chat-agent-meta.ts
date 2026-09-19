@@ -115,37 +115,50 @@ export async function loadChatAgentMeta(
 }
 
 /**
- * 锁定提示文案统一收口（screens/C-11）。
+ * 锁定 / 待重选提示文案统一收口（screens/C-11）。
  *
- * AGENT_LOCK_TOAST 两处文案是有意分化，不是漂移：
- * - 会话面板（chat tab）用引导语，把用户引去会话详情配置；
- * - 会话详情页用陈述语，说明当前页内不可切换。
+ * isAgentLocked 拆分后（none 态放开为待重选），agent 锁定 toast 仅在
+ * meta 还没加载出来时触发，两处文案统一为加载中语义；none 态点击
+ * 智能体卡则提示重选语义并正常弹 picker，不再锁死。
  */
-/** 会话面板锁定提示：引导去会话详情确认配置。 */
-export const AGENT_LOCK_TOAST_GUIDE =
-  '当前会话未绑定有效智能体，请到会话详情确认智能体配置';
-/** 会话详情页锁定提示：陈述本页不可切换。 */
-export const AGENT_LOCK_TOAST_STATEMENT =
-  '当前会话未绑定有效智能体，无法在会话内切换。';
+/** 会话面板锁定提示：meta 未加载，稍候再试。 */
+export const AGENT_LOCK_TOAST_GUIDE = '智能体信息加载中，请稍候再试';
+/** 会话详情页锁定提示：meta 未加载，稍候再试。 */
+export const AGENT_LOCK_TOAST_STATEMENT = '智能体信息加载中，请稍候再试';
+/** none 态（智能体已被删除）点击智能体卡的待重选提示。 */
+export const AGENT_RESELECT_TOAST = '智能体已被删除，请重新选择';
+/** none 态智能体卡上的待重选 badge 文案。 */
+export const AGENT_RESELECT_HINT = '智能体已删除 · 点击重选';
 /** 模型锁定提示：会话面板与会话详情页共用同一文案。 */
 export const MODEL_LOCK_TOAST = '当前智能体已锁定模型，会话内无法覆盖';
 
 /**
  * Agent 是否被锁定（不可在会话内切换）。
  *
- * 只有 source='session' 才放开，none（解析失败）一律视为锁定。meta 还没加载出来（undefined）时也按锁定处理，避免异常态误触。
+ * 仅在 meta 还没加载出来（undefined）时按锁定处理，避免加载中误触；
+ * source='none'（绑定的智能体已被删除）时不再锁定——智能体卡放开为
+ * 「待重选」，可点击弹 picker 重选，写入新 agentId 后悬空即解除。
  */
 export function isAgentLocked(meta: ChatAgentMeta | undefined): boolean {
-  if (!meta) {
-    return true;
-  }
-  return meta.source !== 'session';
+  return meta == null;
+}
+
+/**
+ * 智能体是否处于「已删待重选」态（meta 已加载且解析失败）。
+ *
+ * 该态下智能体卡不锁定：可点击弹 picker，选中存在的智能体后悬空解除。
+ */
+export function isAgentDeleted(meta: ChatAgentMeta | undefined): boolean {
+  return meta != null && meta.source === 'none';
 }
 
 /**
  * Model 是否被锁定（不可在会话内覆盖）。
  *
- * Agent 锁定时 model 必然也锁；Agent 放开时再额外看 agent-pin 压制 / hasDedicatedModel。
+ * 维持原口径：meta 为空或 source!=='session'（含 none——智能体没了，
+ * pin 的模型无从解析，重选智能体后自然解锁）即锁定；source='session'
+ * 时再额外看 agent-pin 压制 / hasDedicatedModel。
+ * 注意 isAgentLocked 拆分后不能再借它判定，这里直接写 source 条件。
  * hasDedicatedModel 已是 boolean（非 optional），不需要再兜 ?? false。
  */
 export function isModelLocked(meta: ChatAgentMeta | undefined): boolean {
@@ -153,7 +166,7 @@ export function isModelLocked(meta: ChatAgentMeta | undefined): boolean {
     return true;
   }
   return (
-    isAgentLocked(meta) ||
+    meta.source !== 'session' ||
     meta.modelSource === 'agent-pin' ||
     meta.hasDedicatedModel
   );

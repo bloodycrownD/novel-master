@@ -20,6 +20,8 @@ import {AndroidKeyboardClipBody} from '@/components/chrome/AndroidKeyboardClipBo
 import {useToast} from '@/components/chrome/ToastHost';
 import {
   AGENT_LOCK_TOAST_GUIDE,
+  AGENT_RESELECT_TOAST,
+  isAgentDeleted,
   isAgentLocked,
   isModelLocked,
   MODEL_LOCK_TOAST,
@@ -159,10 +161,15 @@ export function ChatConversationPanel({
 
   // 顶部 meta 条点 agent / model 名 → 判锁定后开对应 picker，判据统一走 helper，
   // 不再各处手写 source/modelSource/hasDedicatedModel 的组合。
+  // agent 卡：meta 未加载时锁（防误触）；none 态（智能体已删）放开为待重选，
+  // 点击提示重选并正常弹 picker。model 卡：none / agent-pin 态维持锁定。
   const openAgentPicker = useCallback(() => {
     if (isAgentLocked(agentMeta)) {
       showToast(AGENT_LOCK_TOAST_GUIDE);
       return;
+    }
+    if (isAgentDeleted(agentMeta)) {
+      showToast(AGENT_RESELECT_TOAST);
     }
     setAgentPickerOpen(true);
   }, [agentMeta, showToast, setAgentPickerOpen]);
