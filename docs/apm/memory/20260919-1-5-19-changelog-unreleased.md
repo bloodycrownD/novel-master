@@ -38,4 +38,4 @@ assistant:
 
 三笔提交（版本行用 sed 临时拨回 1.5.18 隔离 fix 与 release 的混文件改动）：8c2b2d30 fix（TS 工具链+readonly）、21f32c1b docs（两条记忆）、d3011975 chore(release)（CHANGELOG 转正+双端 bump+gradle versionName+lockfile）。tag v1.5.19 推送触发 Release CI（run 35428889437），main 同步推送。CI：Windows 4m24s ✓、macOS 4m31s ✓、Android 构建中——用户说自己盯尾，按成功收尾。
 
-遗留与注意：①fix/vfs-rename-rollback-2026-09 分支 11 提交未合并（VFS rename/回滚修复批，含 schema 迁移），下版发版前盘点；②仓库 gc 警告（unreachable loose objects 多，疑似 tag 清理重发遗留），闲时可 git prune；③npm 对 lockfile 已解析条目的粘滞行为记入教训：改 workspace 依赖范围后 install 报 up to date 不动，须删条目/删目录强制重解。
+遗留与注意：①fix/vfs-rename-rollback-2026-09 分支 11 提交未合并（VFS rename/回滚修复批，含 schema 迁移），下版发版前盘点；②仓库 gc 警告（unreachable loose objects 多，疑似 tag 清理重发遗留），闲时可 git prune——**已闭环（同日执行）**：dangling 全是历史 stash 残影（pop/drop 后不可达），无活 stash、无值钱对象，prune 后松散对象 26857→34、gc.log 已清，main/工作区无损；③npm 对 lockfile 已解析条目的粘滞行为记入教训：改 workspace 依赖范围后 install 报 up to date 不动，须删条目/删目录强制重解。
