@@ -6586,6 +6586,12 @@ pre:hover > .code-copy-btn,
   line-height: 1;
 }
 
+/* 智能体已删（待重选）badge：警示色区分于锁定态，暗示可点击重选 */
+.session-detail-pick__lock--reselect {
+  color: var(--warning);
+  background: color-mix(in srgb, var(--warning) 12%, transparent);
+}
+
 .session-detail-pick__chevron {
   flex-shrink: 0;
   margin-left: 4px;
