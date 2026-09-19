@@ -1,7 +1,7 @@
-# novel-master 桌面端回归覆盖矩阵（2026-09-08 三轮连跑后全量）
+# novel-master 桌面端回归覆盖矩阵（2026-09-08 三轮连跑后全量；2026-09-19 增量 v1.5.16→v1.5.20 见 I 节）
 
 依据：CHANGELOG 全量 desktop 条目 + renderer 盘点。状态：✅ 通过 | ❌ 发现问题 | ◻️ 未测 | 🔧 待手动/待补（含原因）
-完整缺陷清单：docs/iterations/desktop-regression-fixes-2026-09/prd.md（D-1~D-13 + S-1~S-3）
+完整缺陷清单：docs/iterations/desktop-regression-fixes-2026-09/prd.md（D-1~D-17 + S-1~S-3）
 
 ## A. 文件树 / 工作区
 - 三域面板（physical/session/chat）：✅ 面板存在与切换（physical 树内容浏览待补）
@@ -62,6 +62,15 @@
 - 应用菜单：🔧 原生 globalMenu（Linux 无 DOM 渲染），待手动
 - 自动更新检查：◻️（同 G 待确认项）
 - 空状态引导：✅
+
+## I. 2026-09-19 增量回归（v1.5.16 → v1.5.20，四批 11 例）
+
+- **B1 v1.5.20 修复**（case-rollback-restore / case-empty-dir-rename / case-vfs-error-copy / case-agent-reselect）：✅ 4/4——回滚复现被删文件（含正文一字不差）、空目录重命名、目录改名无幽灵残留、VFS 失败中文报错（「名称不能重复」）、删智能体「⚠ 点击重选」徽标可点且重选后无多余 toast
+- **B2 v1.5.17**（case-smart-sort-basic / case-sort-rule-manager / case-subdir-sort / case-filename-validation）：✅ 智能排序全序（序章置顶/中文·阿拉伯·混排数值序/番外沉底/无序号自然序沉底/同序号原名决胜/弹窗持久化）、子目录遵循目录规则（名称/创建时间/智能三态实测序各异）、「排序方式」文案更名、规则页内置七条+启停经真实排序验证+恢复默认只重灌内置+内置不可删、`./..` toast 拒绝+纯空白按钮禁用；❌ **D-16** 规则编辑页打开即白屏（P1，SR-EDIT-TEST/SR-CREATE/SR-EDIT-FIXED 三场景被堵，自定义规则暂经 DB 预写绕过）；❌ **D-17** 首尾空格静默 trim（与移动端「拒绝+提示」口径相反）；🔧 YAML 导入导出（原生对话框，按钮存在性已断言）
+- **B3 v1.5.16**（case-chat-file-link / case-skill-rename）：✅ 消息文件链接五场景（chat 域中文路径打开/项目域 fallback/不存在 toast 长路径省略号「/一个.../报告.md 不存在」/http 链接窗口不导航+界面完整）、技能重命名编辑信息（改名+描述一次提交、`$$100 && $&x` 逐字保留、内置技能名只读描述可改并还原、撞名拒绝、空白/`.` 开头行内提示+提交禁用）；🔧 技能导出 ZIP 实际落盘（行菜单项已断言）、备份默认名 nmbackup.db / 工作区 ZIP 命名（原生对话框）
+- **B4 v1.5.19**（case-run-fail-unlock）：✅ 6/6——上游 500 → 「[生成失败] …」提示落会话、返回重进仍在（落库）、composer 解禁、改写重发得正常回复；空回复 → 「（本次生成无内容输出）」占位 + 同款解锁闭环；mock 已支持 `{httpError}`/`{empty}` 失败注入（lib startMock replyFor 协议扩展）
+- 截图证据 out/ 800-916；关键 19 张经 MCP 视觉审查与 DOM 断言一致（857 白屏= D-16 证据、886 省略号 toast、911/915 提示消息、893 $$保留）
+- 遗留：case-empty-dir-rename 全量序列负载下 ER-GHOST 时序 flake（单跑过，等待窗口偏紧待加轮询重试）；CLI `sort-rule` 命令组属 CLI 端不在桌面 e2e 范围；run-all 现 17 脚本（B2 轮全量 1194s 验证过 16 脚本序列，B4 为增量单跑验证）
 
 ## 序列编排约定
 - 全量序列：`rm -rf data/*` 清本地产物库 → 先跑 bootstrap.mjs（重建库+建项目/会话+绑模型）→ 依次跑全部 case
