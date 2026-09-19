@@ -12,9 +12,13 @@
  *   （`ipcSessionsSetAgentBinding` / `ipcSessionsSetModelOverride`），
  *   不再写 workspace 全局。
  *
- * 锁定规则（与 mobile/B-1 方案一一致）：
- * - 只有 `source === 'session'`（session.agentId 指向真实 agent）才允许切 agent/model。
- * - `source === 'none'`（agentId 指向已删 agent）一律锁卡，避免已删 agent 场景下还能点出 picker。
+ * 锁定 / 待重选规则：
+ * - `source === 'session'`（session.agentId 指向真实 agent）→ agent / model 都允许切。
+ * - `source === 'none'`（agentId 指向已删 agent）→ 智能体卡放开为「待重选」：
+ *   可点击弹 picker 重选，写入新 agentId 后悬空即解除（避免会话被已删
+ *   agent 死锁）；模型卡保持锁定——智能体没了，pin 的模型无从解析，
+ *   重选智能体后自然解锁。
+ * - meta 尚未加载完时智能体卡保持锁定，避免加载中被误点。
  *   项目智能体已下线，不再有 project-custom 分支。
  *
  * core 移除 workspace 回退后：会话始终持有 agentId（必填）+ modelId（可选），
@@ -222,18 +226,27 @@ export function SessionDetailDrawer({
   }
 
   const source = meta?.source ?? "none";
-  // 锁定口径：只有 source === 'session'（session.agentId 指向真实 agent）才允许切；
-  // source === 'none'（session.agentId 指向已删 agent，handler 内层 catch 命中）一律锁，
-  // 与 mobile/B-1 方案一保持一致。项目智能体已下线，不再有 project-custom 分支。
-  const agentLocked = source !== "session";
-  // model 同口径收口：source !== 'session' 即锁定，避免 source='none' 时 model 卡仍可点
-  // （原 agent pin / 专属模型判定已废弃，统一走 source 判定）
+  // 智能体卡锁定口径：仅在 meta 尚未加载完时锁定（防加载中被误点）；
+  // source='none'（session.agentId 指向已删 agent，handler 内层 catch 命中）时
+  // 放开为「待重选」——可点击弹 picker 重选，写入新 agentId 后悬空即解除，
+  // 避免会话被已删 agent 死锁。项目智能体已下线，不再有 project-custom 分支。
+  const agentLocked = meta == null;
+  // 已加载且解析失败 → 智能体已被删除，智能体卡处于待重选态（可点、带重选提示）。
+  const agentDeleted = meta != null && source === "none";
+  // model 卡维持 source 判定：source !== 'session' 即锁定（智能体没了，pin 的
+  // 模型无从解析，重选智能体后自然解锁；原 agent pin / 专属模型判定已废弃，
+  // 统一走 source 判定）
   const modelLocked = source !== "session";
 
   const openAgentPicker = async () => {
     if (agentLocked) {
-      showToast("当前会话未绑定有效智能体，无法在会话内切换。");
+      // meta 尚未加载完，还不知道智能体状态，先锁住防误点。
+      showToast("智能体信息加载中，请稍候再试。");
       return;
+    }
+    if (agentDeleted) {
+      // 原绑定智能体已被删除：不早退，正常弹 picker 让用户重选。
+      showToast("智能体已被删除，请重新选择。");
     }
     const result = await ipcAgentListPicker();
     if (!result.ok || result.data.rows.length === 0) {
@@ -412,7 +425,13 @@ export function SessionDetailDrawer({
                 agentLocked ? " session-detail-pick--locked" : ""
               }`}
               data-session-detail-action="switch-agent"
-              aria-label={agentLocked ? "切换智能体（已锁定）" : "切换智能体"}
+              aria-label={
+                agentLocked
+                  ? "切换智能体（加载中）"
+                  : agentDeleted
+                    ? "切换智能体（待重选）"
+                    : "切换智能体"
+              }
               aria-disabled={agentLocked}
               onClick={() => void openAgentPicker()}
             >
@@ -427,7 +446,17 @@ export function SessionDetailDrawer({
                 <span className="session-detail-pick__value">
                   {meta?.agentName ?? "—"}
                 </span>
-                {agentLocked ? (
+                {agentDeleted ? (
+                  <span className="session-detail-pick__lock session-detail-pick__lock--reselect">
+                    <span
+                      className="session-detail-pick__lock-icon"
+                      aria-hidden="true"
+                    >
+                      ↻
+                    </span>
+                    智能体已删除 · 点击重选
+                  </span>
+                ) : agentLocked ? (
                   <span className="session-detail-pick__lock">
                     <span
                       className="session-detail-pick__lock-icon"
