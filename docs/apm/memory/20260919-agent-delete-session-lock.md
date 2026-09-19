@@ -26,7 +26,13 @@ assistant:
 实现收口（子代理单轮）：desktop 85feda7d（SessionDetailDrawer 拆 agentLocked/agentDeleted，none 态弹 picker+重选 badge，加载中仍锁）+ mobile 98b70d83（chat-agent-meta 拆 isAgentLocked/isModelLocked/isAgentDeleted，三消费方同步）。验证：desktop 定向 12/12、mobile 24/24+关联 72/72、根 typecheck 全绿；desktop 全量 480/484 的 3 个失败是 Secret Service 环境既有问题（stash 基线取证）。主代理复核：亲跑双端定向测试通过、diffstat 9 文件与报告一致。留痕 docs/Iterations/agent-session-fixes-2026-09/（父 PRD 含「明确不做」记录）。
 
 user:
-建集成分分支一起测试。
+建集成分支一起测试。
 
 assistant:
 按用户要求从 main 建集成分支 fix/2026-09-fixes-integration，先合 fix/vfs-rename-rollback-2026-09（含其先前并入的 v1.5.19 main），再合 fix/session-agent-locked-after-delete，两次合并零冲突。集成后验证（主代理亲跑，抓汇总行确认）：core 全量 2131/0 失败、desktop 五个定向文件 26/0、mobile 定向 24/24、根 typecheck 无错。两个源修复分支保留未删，集成分支供双端实测。
+
+user:
+（真机反馈）删除 agent 后进会话重新选择会弹「智能体已被删除，请重新选择」toast——非常多余，用户眼睛不瞎（卡片已有徽章）。
+
+assistant:
+体验精简：删掉点击已删卡时的 toast（desktop SessionDetailDrawer openAgentPicker 的 agentDeleted 分支、mobile SessionDetailScreen 与 ChatConversationPanel 的 isAgentDeleted 分支、chat-agent-meta.ts 的 AGENT_RESELECT_TOAST 常量），徽章与 picker 行为不变；加载中 toast 保留（彼时无 picker 反馈）。提交 1d15f377（7 文件），desktop 14/14、mobile 33/33，主代理复核通过。CR 波次修复（dev-ready，见 20260919-cr-loop-fixes-integration 记忆）之后追加在集成分支。
