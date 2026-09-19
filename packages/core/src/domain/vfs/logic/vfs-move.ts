@@ -160,8 +160,10 @@ async function moveVfsDirectory(
  * Move or rename a file or directory tree.
  *
  * @remarks
- * File vs directory: successful `read(from)` → file move; otherwise recursive
- * `list` with entries or a directory row at `from` → directory move; else NOT_FOUND.
+ * File vs directory: successful `read(from)` → file move; `read` IS_DIRECTORY →
+ * directory move (directory row exists, empty dirs included); `read` NOT_FOUND →
+ * recursive `list` with entries (directory row absent but children exist) →
+ * directory move; else NOT_FOUND.
  */
 export async function moveVfsPath(
   vfs: VfsService,
@@ -178,6 +180,7 @@ export async function moveVfsPath(
   }
 
   let isFile = false;
+  let sawDirectoryRow = false;
   try {
     await vfs.read(from);
     isFile = true;
@@ -185,8 +188,11 @@ export async function moveVfsPath(
     if (!(error instanceof VfsError)) {
       throw error;
     }
-    // IS_DIRECTORY or NOT_FOUND: fall through to directory detection via list.
-    if (error.code !== "NOT_FOUND" && error.code !== "IS_DIRECTORY") {
+    // IS_DIRECTORY：from 有 directory 行（空目录也是真实目录），直接判为目录移动，
+    // 不依赖子项列表——list 只返回子项、不含目录自身行，空目录下列表恒空。
+    if (error.code === "IS_DIRECTORY") {
+      sawDirectoryRow = true;
+    } else if (error.code !== "NOT_FOUND") {
       throw error;
     }
   }
@@ -196,12 +202,18 @@ export async function moveVfsPath(
     return;
   }
 
+  if (sawDirectoryRow) {
+    // 空目录（有 directory 行、零子项）同样允许 rename：renamePrefixInScope 的
+    // SQL 本就允许「仅前缀根自身存在」（见其「允许空目录」注释）。
+    await moveVfsDirectory(vfs, from, to);
+    return;
+  }
+
+  // read 报 NOT_FOUND：只剩「无 directory 行但有子项」一种目录形态，靠 list 兜底。
+  // 幽灵路径（无行、无子项）时 list 自身抛 NOT_FOUND 或返回空列表，维持 NOT_FOUND。
   const oldDir = normalizeDirPath(from);
   const entries = await vfs.list(oldDir, { recursive: true });
-  const hasDirRow = entries.some(
-    (e) => e.kind === "directory" && e.path === oldDir
-  );
-  if (entries.length === 0 && !hasDirRow) {
+  if (entries.length === 0) {
     throw vfsNotFound(from);
   }
 

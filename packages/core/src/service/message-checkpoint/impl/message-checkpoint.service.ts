@@ -60,6 +60,7 @@ export class DefaultMessageCheckpointService
         files: files.map((f) => ({
           entryId: f.entryId,
           revisionVersion: f.headVersion,
+          path: f.logicalPath,
         })),
       });
     });

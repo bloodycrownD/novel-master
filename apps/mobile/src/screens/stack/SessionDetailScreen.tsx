@@ -6,10 +6,12 @@
  * - 当前智能体 / 当前大模型各是一张卡片：左侧头像 icon、中间是 label + 取值、
  *   右侧是 › chevron 暗示可点；锁定时 chevron 换成 🔒，并整体降透明度。
  *
- * 锁定规则（与 desktop SessionDetailDrawer 对齐）：
+ * 锁定 / 待重选规则（与 desktop SessionDetailDrawer 对齐）：
  * - `source === 'session'` → agent / model 都允许在会话内切（model 仍受 agent-pin 压制）。
- * - `source === 'none'`（agent 解析失败，例如会话 agentId 指向已删 agent）→ 两张卡片都锁定，
- *   避免在异常态误操作。只有 session 才放开，所以锁定判据统一收口为 `source !== 'session'`。
+ * - `source === 'none'`（agent 解析失败，例如会话 agentId 指向已删 agent）→
+ *   智能体卡放开为「待重选」：可点击弹 picker 重选，写入新 agentId 后悬空
+ *   即解除；模型卡保持锁定（智能体没了，pin 的模型无从解析，重选后自然解锁）。
+ * - meta 还没加载出来时不渲染卡片（停在加载态），天然不会被误点。
  */
 import React, {useCallback, useEffect, useState} from 'react';
 import {
@@ -35,6 +37,8 @@ import {ModelPickerModal} from '../../components/provider/ModelPickerModal';
 import {useRuntime} from '../../hooks/useRuntime';
 import {
   AGENT_LOCK_TOAST_STATEMENT,
+  AGENT_RESELECT_HINT,
+  isAgentDeleted,
   isAgentLocked,
   isModelLocked,
   loadChatAgentMeta,
@@ -89,9 +93,9 @@ export function SessionDetailScreen() {
     load().catch(() => undefined);
   }, [load]);
 
-  // 锁定判据统一收口到 chat-agent-meta 的 helper：agent 卡看 isAgentLocked，
-  // model 卡在 agent 锁的基础上再看 agent-pin / hasDedicatedModel。meta 还没加载
-  // 出来时 helper 返回 true（锁定），避免异常态误点。
+  // 锁定判据统一收口到 chat-agent-meta 的 helper：agent 卡看 isAgentLocked
+  // （仅 meta 未加载时锁，none 态放开为待重选），model 卡看 isModelLocked
+  // （none 态仍锁，重选智能体后自然解锁）。
   const agentLocked = isAgentLocked(meta);
   const modelLocked = isModelLocked(meta);
 
@@ -123,11 +127,14 @@ export function SessionDetailScreen() {
 
   const openAgentPicker = useCallback(() => {
     if (agentLocked) {
+      // meta 尚未加载完，还不知道智能体状态，先锁住防误点。
       showToast(AGENT_LOCK_TOAST_STATEMENT);
       return;
     }
+    // 原绑定智能体已被删除：不早退，直接弹 picker 让用户重选
+    // （卡片 badge 已提示「已删除 · 点击重选」，不再额外弹 toast）。
     setAgentPickerOpen(true);
-  }, [agentLocked, showToast]);
+  }, [agentLocked, meta, showToast]);
 
   const openModelPicker = useCallback(() => {
     if (modelLocked) {
@@ -262,7 +269,7 @@ export function SessionDetailScreen() {
         )}
       </View>
 
-      {/* 当前智能体：点击直接弹 AgentPickerModal，locked 时仅提示。 */}
+      {/* 当前智能体：点击直接弹 AgentPickerModal；none 态（已删）放开为待重选。 */}
       <Pressable
         testID="agent-row"
         onPress={openAgentPicker}
@@ -292,9 +299,9 @@ export function SessionDetailScreen() {
           >
             {meta.agentName}
           </Text>
-          {agentLocked ? (
+          {isAgentDeleted(meta) ? (
             <Text style={[styles.lockHint, {color: tokens.textTertiary}]}>
-              {AGENT_LOCK_TOAST_STATEMENT}
+              {AGENT_RESELECT_HINT}
             </Text>
           ) : null}
         </View>

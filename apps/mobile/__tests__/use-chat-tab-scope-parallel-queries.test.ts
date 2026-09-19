@@ -85,6 +85,9 @@ function buildRuntime() {
   return {runtime, pendingProjectGet, pendingSessionsList, pendingModelId};
 }
 
+// harness 注入的 toast 记录（au/B-1 验收 c 的错误文案断言面）。
+const harnessShowToast = jest.fn();
+
 async function flushMicrotasks(rounds = 10) {
   for (let i = 0; i < rounds; i++) {
     await Promise.resolve();
@@ -111,7 +114,7 @@ async function mountScopeHarness(
       setCurrentProject: jest.fn(async () => undefined),
       setCurrentSession: jest.fn(async () => undefined),
       refreshScope: jest.fn(async () => undefined),
-      showToast: jest.fn(),
+      showToast: harnessShowToast,
       navigation: {navigate: jest.fn()} as any,
     });
     return null;
@@ -258,11 +261,11 @@ describe('useChatTabScope 查询并行化（T-C1）', () => {
 
       const api = scope.api();
       expect(api.hasWorkspaceModel).toBe(true);
-      expect(api.agentMeta.source).toBe('session');
-      expect(api.agentMeta.agentName).toBe('Agent');
-      expect(api.agentMeta.modelLabel).toBe('Model');
+      expect(api.agentMeta?.source).toBe('session');
+      expect(api.agentMeta?.agentName).toBe('Agent');
+      expect(api.agentMeta?.modelLabel).toBe('Model');
       // 成功链尾随的 token 标签刷新（mock 立即返回 ''）。
-      expect(api.agentMeta.tokenLabel).toBe('');
+      expect(api.agentMeta?.tokenLabel).toBe('');
     });
 
     it('在途重入合并为一轮（首屏三触发去重）；落定后新调用新起一轮', async () => {
@@ -291,7 +294,7 @@ describe('useChatTabScope 查询并行化（T-C1）', () => {
         await flushMicrotasks();
       });
       expect(scope.api().hasWorkspaceModel).toBe(false);
-      expect(scope.api().agentMeta.agentName).toBe('Agent');
+      expect(scope.api().agentMeta?.agentName).toBe('Agent');
 
       // 落定后无 inflight：再次调用（如重新聚焦）正常新起一轮。
       await act(async () => {
@@ -329,7 +332,39 @@ describe('useChatTabScope 查询并行化（T-C1）', () => {
         pendingMeta[1].resolve({...MOCK_META, agentName: 'Agent-2'});
         await flushMicrotasks();
       });
-      expect(scope.api().agentMeta.agentName).toBe('Agent-2');
+      expect(scope.api().agentMeta?.agentName).toBe('Agent-2');
+    });
+
+    // au/B-1 验收 c（cr-fix-spec 条目 4）：meta 加载失败后回到未加载
+    // （undefined → 锁定/占位）态并提示错误，绝不回退 source:'none' 占位
+    // 冒充「已删待重选」；au/C-orch-2 的 ChatError 场景即落在这条路径。
+    it('失败后 agentMeta 置 undefined（锁定/占位）并弹错误文案，不冒充已删待重选', async () => {
+      const {runtime, pendingModelId} = buildRuntime();
+      const scope = await mountScopeHarness(runtime, {
+        projectId: 'p1',
+        sessionId: 's1',
+      });
+      // 第一轮成功落位：证明后续 undefined 是失败回退、不是初始态巧合。
+      await act(async () => {
+        pendingModelId[0].resolve('openai/gpt-4o-mini');
+        pendingMeta[0].resolve(MOCK_META);
+        await flushMicrotasks();
+      });
+      expect(scope.api().agentMeta?.agentName).toBe('Agent');
+
+      // 第二轮（重新聚焦触发）meta 查询失败：回落未加载锁定态。
+      harnessShowToast.mockClear();
+      await act(async () => {
+        void scope.api().refreshChatMeta().catch(() => undefined);
+        await flushMicrotasks(3);
+        pendingModelId[1].resolve('openai/gpt-4o-mini');
+        pendingMeta[1].reject(new Error('chat config broken'));
+        await flushMicrotasks();
+      });
+      expect(scope.api().agentMeta).toBeUndefined();
+      expect(harnessShowToast).toHaveBeenCalledWith(
+        '智能体信息加载失败：chat config broken',
+      );
     });
   });
 });

@@ -75,7 +75,8 @@ export type ChatTabContextValue = {
   readonly setConversationPanel: (panel: ConversationPanel) => void;
   readonly chatSubview: ChatSubview;
   readonly setChatSubview: (subview: ChatSubview) => void;
-  readonly agentMeta: ChatAgentMeta;
+  /** 未加载窗口为 undefined（锁定/占位渲染）；source:'none' 仅在归一落位后出现。 */
+  readonly agentMeta: ChatAgentMeta | undefined;
   /**
    * 当前会话的单元投影（运行态唯一事实源）：水合未完成或无单元为 null。
    * 消费方自行派生（运行中 = status 为 starting|running；流式 partial =

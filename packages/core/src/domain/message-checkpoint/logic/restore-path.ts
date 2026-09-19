@@ -4,13 +4,13 @@
  * entry_id 化后 revision 按 `entryId` 寻址；`vfs` / entryRepo 都吃纯逻辑路径。
  * 走 resetHead 语义（不 append 新 revision），revision 表行数不回滚不增长。
  *
+ * entry 缺失（物理删除）分支已放宽：调用方传入 checkpoint 记录的旧 entryId
+ * 时走 revive-deleted-entry 原位复活（rollback-restore-deleted-entry）。
+ *
  * @module domain/message-checkpoint/logic/restore-path
  */
 
-import { mkdirIgnoreExistingDirectory } from "@/domain/vfs/logic/vfs-move.js";
-import { parentDir } from "@/domain/vfs/logic/parent-dir.js";
 import { scopeKey, type VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
-import { normalizePath } from "@/domain/vfs/repositories/impl/normalize-path.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revision.port.js";
@@ -20,21 +20,20 @@ import type { VfsRestorePort } from "@/domain/vfs/ports/vfs-restore.port.js";
 import type { VfsRevisionPointerMeta } from "@/domain/vfs/repositories/vfs-revision.port.js";
 import { revisionPairKey } from "@/domain/vfs/logic/revision-pair-key.js";
 import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
+import type { VfsContentStore } from "@/domain/vfs/content-store/vfs-content-store.port.js";
 import { backfillMissingRevisionIfNeeded } from "./backfill-missing-revision.js";
+import { reviveDeletedEntryForRestore } from "./revive-deleted-entry.js";
+import { ensureDirectoryChain } from "./ensure-directory-chain.js";
+import type {
+  RestorePathOutcome,
+  RestorePathPrefetch,
+} from "./restore-path-model.js";
 
-/** restore 单路径结果（供 reconcile 统计短路次数）。 */
-export type RestorePathOutcome =
-  | "skipped_same_version"
-  | "skipped_same_content_hash"
-  | "restored"
-  | "deleted";
-
-/** reconcile 批量预取的 entryId / revision meta / live hash（内存比对，减 N 次 SQL）。 */
-export type RestorePathPrefetch = {
-  readonly entryIdByPath?: ReadonlyMap<string, number>;
-  readonly revisionMetaByKey?: ReadonlyMap<string, VfsRevisionPointerMeta>;
-  readonly liveHashByPath?: ReadonlyMap<string, string | null>;
-};
+export { ensureDirectoryChain } from "./ensure-directory-chain.js";
+export type {
+  RestorePathOutcome,
+  RestorePathPrefetch,
+} from "./restore-path-model.js";
 
 async function resolveEntryId(
   entryRepo: VfsEntryRepository,
@@ -47,6 +46,18 @@ async function resolveEntryId(
   }
   const entry = await entryRepo.findByPath(scopeKeyStr, logicalPath);
   return entry?.entryId ?? null;
+}
+
+/** 解析 checkpoint 记录的旧 entryId：prefetch 优先，其次显式参数。 */
+function resolveCheckpointEntryId(
+  logicalPath: string,
+  prefetch: RestorePathPrefetch | undefined,
+  checkpointEntryId: number | null | undefined
+): number | null {
+  if (prefetch?.checkpointEntryIdByPath != null) {
+    return prefetch.checkpointEntryIdByPath.get(logicalPath) ?? null;
+  }
+  return checkpointEntryId ?? null;
 }
 
 async function resolveRevisionMeta(
@@ -75,31 +86,14 @@ async function resolveLiveHash(
 }
 
 /**
- * Creates parent directories from root down (idempotent mkdir).
- */
-export async function ensureDirectoryChain(
-  vfs: VfsRestorePort,
-  logicalPath: string
-): Promise<void> {
-  const normalized = normalizePath(logicalPath);
-  const dirs: string[] = [];
-  let current = parentDir(normalized);
-  while (current !== "/") {
-    dirs.unshift(current);
-    current = parentDir(current);
-  }
-  for (const dir of dirs) {
-    await mkdirIgnoreExistingDirectory(vfs, dir);
-  }
-}
-
-/**
  * Restores one logical path to the content/status of a stored revision.
  *
  * @remarks
  * - live head version 已等于目标 version → 直接跳过
  * - version 不等但 live `content_hash` 与目标 revision 相同 → 跳过解压与 write（T-RB1 允许 live version 高于锚点）
  * - 传入 `entryRepo` 时才启用 hash 短路；未传则退化为全量 find + write
+ * - entry 行已被物理删除但调用方给了 checkpoint 旧 entryId（显式参数或
+ *   `prefetch.checkpointEntryIdByPath`）时，走 revive-deleted-entry 复活
  */
 export async function restorePathToRevision(
   vfs: VfsRestorePort,
@@ -109,13 +103,17 @@ export async function restorePathToRevision(
   version: number,
   liveHeadByPath?: ReadonlyMap<string, number>,
   entryRepo?: VfsEntryRepository,
-  prefetch?: RestorePathPrefetch
+  prefetch?: RestorePathPrefetch,
+  checkpointEntryId?: number | null,
+  contentStore?: VfsContentStore
 ): Promise<RestorePathOutcome> {
-  // live head 已与 checkpoint 目标 version 对齐时，正文无需再 restore。
-  if (liveHeadByPath?.get(logicalPath) === version) {
-    return "skipped_same_version";
-  }
-
+  // checkpoint 旧 entryId 上下文提前解析：live entry 与指针不同源（删除后
+  // 同路径重建）时版本空间各自独立，所有 version/hash 短路都不可信。
+  const cpEntryId = resolveCheckpointEntryId(
+    logicalPath,
+    prefetch,
+    checkpointEntryId
+  );
   const scopeKeyStr = scopeKey(scope);
 
   // entry_id 解析：prefetch 优先，退化为 entryRepo 探测。
@@ -127,6 +125,27 @@ export async function restorePathToRevision(
       logicalPath,
       prefetch
     );
+  }
+
+  if (cpEntryId != null && entryId != null && cpEntryId !== entryId) {
+    // 同路径异 entry：live 上是 tail 期新建的 entry，checkpoint 指向被删的
+    // 旧 entry。按「回滚后工作区正文 = 目标检查点完成态」拍板——墓碑新
+    // entry、复活旧 entry（revive 内含占用清除）。
+    if (entryRepo == null) {
+      throw sessionFsRestoreRevisionMissing(logicalPath, version);
+    }
+    return reviveDeletedEntryForRestore(
+      { vfs, entryRepo, revisionRepo, contentStore },
+      scope,
+      logicalPath,
+      cpEntryId,
+      version
+    );
+  }
+
+  // live head 已与 checkpoint 目标 version 对齐时，正文无需再 restore。
+  if (liveHeadByPath?.get(logicalPath) === version) {
+    return "skipped_same_version";
   }
 
   // 轻量 meta：先判 deleted / 再比 content_hash，避免无谓解压。
@@ -164,7 +183,18 @@ export async function restorePathToRevision(
   }
 
   if (entryId == null) {
-    // entry 已 hardDelete（物理删除），revision 无 entry 可挂载，无法恢复，直接抛 restore-missing。
+    // entry 已被物理删除（deleteWithRevision）。携带 checkpoint 旧 entryId 时
+    // 原位复活 entry（rollback-restore-deleted-entry）；无上下文（老 checkpoint
+    // 无 path 快照、或调用方未传）维持降级：抛 restore-missing。
+    if (entryRepo != null && cpEntryId != null) {
+      return reviveDeletedEntryForRestore(
+        { vfs, entryRepo, revisionRepo, contentStore },
+        scope,
+        logicalPath,
+        cpEntryId,
+        version
+      );
+    }
     throw sessionFsRestoreRevisionMissing(logicalPath, version);
   }
 
@@ -207,9 +237,22 @@ export async function restorePathToRevisionWithBackfill(
   logicalPath: string,
   version: number,
   liveHeadByPath?: ReadonlyMap<string, number>,
-  prefetch?: RestorePathPrefetch
+  prefetch?: RestorePathPrefetch,
+  checkpointEntryId?: number | null
 ): Promise<{ backfilled: boolean; outcome: RestorePathOutcome }> {
-  if (liveHeadByPath?.get(logicalPath) === version) {
+  // 同路径异 entry（删除后同路径重建）时 live head 与目标 version 分属两个
+  // 版本空间，same_version 短路失效——交给 restorePathToRevision 走墓碑+复活。
+  const cpEntryIdEarly = resolveCheckpointEntryId(
+    logicalPath,
+    prefetch,
+    checkpointEntryId
+  );
+  const liveEntryIdEarly = prefetch?.entryIdByPath?.get(logicalPath) ?? null;
+  const divergedEarly =
+    cpEntryIdEarly != null &&
+    liveEntryIdEarly != null &&
+    cpEntryIdEarly !== liveEntryIdEarly;
+  if (!divergedEarly && liveHeadByPath?.get(logicalPath) === version) {
     return { backfilled: false, outcome: "skipped_same_version" };
   }
 
@@ -220,11 +263,25 @@ export async function restorePathToRevisionWithBackfill(
     logicalPath,
     prefetch
   );
+  const cpEntryId = resolveCheckpointEntryId(
+    logicalPath,
+    prefetch,
+    checkpointEntryId
+  );
+  const contentStore = new SqliteVfsContentStore(tx);
+  // backfill 寻址：live entry 优先，entry 已删时用 checkpoint 旧 entryId——
+  // 旧 entryId 的 revision 行在（纯删除场景）则回补 no-op，restore 走复活；
+  // 行真缺（如手工删行）时按旧 entryId 回补墓碑，restore 走 deleted 降级。
+  // 同路径异 entry（diverged）时 checkpoint 指针与 live head 分属两个版本
+  // 空间，回补必须打在旧 entryId 上：行真缺时按旧 entryId 回补占位让
+  // restore 走复活降级，不给 live 新 entry 伪造占位行。
+  const diverged = cpEntryId != null && entryId != null && cpEntryId !== entryId;
+  const backfillEntryId = diverged ? cpEntryId : entryId ?? cpEntryId;
   const backfilled = await backfillMissingRevisionIfNeeded(
-    { revisionRepo, entryRepo, contentStore: new SqliteVfsContentStore(tx) },
+    { revisionRepo, entryRepo, contentStore },
     scopeKeyStr,
     logicalPath,
-    entryId,
+    backfillEntryId,
     version
   );
   const outcome = await restorePathToRevision(
@@ -235,7 +292,9 @@ export async function restorePathToRevisionWithBackfill(
     version,
     liveHeadByPath,
     entryRepo,
-    prefetch
+    prefetch,
+    checkpointEntryId,
+    contentStore
   );
   return { backfilled, outcome };
 }

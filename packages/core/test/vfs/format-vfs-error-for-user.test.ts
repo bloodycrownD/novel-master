@@ -34,6 +34,26 @@ describe("formatVfsErrorForUser", () => {
     );
   });
 
+  it("ALREADY_EXISTS 返回名称不能重复（双端共用映射，不再本地补）", () => {
+    const err = new VfsError("ALREADY_EXISTS", "Path already exists: /note.md", {
+      path: "/projects/proj-1/sessions/sess-1/note.md",
+    });
+    assert.equal(
+      formatVfsErrorForUser(err, sessionScope),
+      "名称不能重复",
+    );
+  });
+
+  it("IPC 形态 { code: ALREADY_EXISTS } 同样返回名称不能重复", () => {
+    assert.equal(
+      formatVfsErrorForUser({
+        code: "ALREADY_EXISTS",
+        message: "Path already exists: /note.md",
+      }),
+      "名称不能重复",
+    );
+  });
+
   it("unwraps VfsError cause from ToolError", () => {
     const cause = new VfsError("REPLACE_NOT_FOUND", "Replace string not found in /note.md", {
       path: "/note.md",

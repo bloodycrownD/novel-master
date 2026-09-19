@@ -45,7 +45,7 @@ import {
 import {orderedDirectChildPaths} from './vfs-direct-children-order';
 import {isUserVfsUnifiedToolTurnEnabled} from '@novel-master/core/feature-flags';
 
-import {isVfsError} from '@novel-master/core/vfs';
+import {formatVfsErrorForUser, isVfsError} from '@novel-master/core/vfs';
 import {refreshComposerStatusAfterUserVfsOps} from '../../services/user-vfs-turn-execute.service';
 import {
   createVfsDirectory,
@@ -788,12 +788,10 @@ export const VfsFileManager = forwardRef<
               }
               await reloadVfsListOnly();
             } catch (err) {
-              // WHY: Core rejects duplicate names; surface friendly copy on mobile.
-              if (isVfsError(err, 'ALREADY_EXISTS')) {
-                showToast('名称不能重复');
-              } else {
-                showToast(toastMessage('重命名失败', err));
-              }
+              // WHY: 重命名失败的文案统一走 core formatVfsErrorForUser
+              // 的 code 文案表（ALREADY_EXISTS → 名称不能重复），与
+              // desktop 收敛到同一份映射，不再本地分支。
+              showToast(formatVfsErrorForUser(err));
             }
           },
         });

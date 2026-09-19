@@ -1,6 +1,13 @@
 import {describe, expect, it, jest} from '@jest/globals';
 import {buildDefaultAgentDefinitionPreservingName} from '@novel-master/core/config-forms/stored-config-validity';
-import {loadChatAgentMeta} from '@/services/chat-agent-meta';
+import {ChatError} from '@novel-master/core/chat';
+import {
+  isAgentDeleted,
+  isAgentLocked,
+  isModelLocked,
+  loadChatAgentMeta,
+  type ChatAgentMeta,
+} from '@/services/chat-agent-meta';
 
 const globalDefinition = buildDefaultAgentDefinitionPreservingName('全局助手');
 const sessionAgentDefinition =
@@ -132,5 +139,92 @@ describe('loadChatAgentMeta', () => {
       hasDedicatedModel: false,
       modelSource: 'session',
     });
+  });
+});
+
+// ── au/C-orch-2（cr-fix-spec 条目 9，方向 b）：错误归一口径 ─────────────────
+// 「已删待重选」（source='none'）仅覆盖 AgentRunResolveError 成因；ChatError
+// 等其它异常原样上抛，由调用方走「锁定 + 错误文案」报错态——错误成因绝不
+// 冒充「已被删除」（与 desktop prompt handler 的内层 catch 口径一致）。
+describe('loadChatAgentMeta 错误归一口径（au/C-orch-2）', () => {
+  it('AgentRunResolveError（agentId 指向已删 agent）归一 source=none 待重选 meta（既有口径不回归）', async () => {
+    const runtime: any = mockRuntime({});
+    // registry.get 抛错会被 resolveAgentForProject 归一为 AgentRunResolveError。
+    runtime.agentRegistry.get = jest.fn(async () => {
+      throw new Error('AGENT_NOT_FOUND');
+    });
+    const meta = await loadChatAgentMeta(runtime, 'proj-1', 'sess-1');
+    expect(meta.source).toBe('none');
+    expect(meta.agentId).toBeUndefined();
+    expect(meta.agentName).toBe('未配置 Agent');
+    // 待重选判据：已加载且 none → 可弹 picker 重选
+    expect(isAgentDeleted(meta)).toBe(true);
+    expect(isAgentLocked(meta)).toBe(false);
+  });
+
+  it('ChatError（如配置缺失/迁移未跑）原样上抛——调用方 meta 停 undefined，锁定且不可弹重选', async () => {
+    const runtime: any = mockRuntime({});
+    runtime.sessions.getSessionAgentConfig = jest.fn(async () => {
+      throw new ChatError('INVALID_ARGUMENT', 'session 配置缺失');
+    });
+    await expect(
+      loadChatAgentMeta(runtime, 'proj-1', 'sess-1'),
+    ).rejects.toBeInstanceOf(ChatError);
+    // 调用方 catch 后 meta 保持 undefined：未加载锁定态，绝无「已删待重选」语义。
+    expect(isAgentDeleted(undefined)).toBe(false);
+    expect(isAgentLocked(undefined)).toBe(true);
+  });
+});
+
+// ── session-agent-locked-after-delete：isAgentLocked / isModelLocked 拆分 ──
+// none 态（绑定的智能体已被删除）下智能体卡放开为「待重选」，模型卡维持锁定，
+// 避免删除智能体后引用它的会话被锁死无法切换。
+describe('isAgentLocked / isModelLocked 拆分（none 态智能体卡放开待重选）', () => {
+  const sessionMeta: ChatAgentMeta = {
+    source: 'session',
+    agentId: 'agent-a',
+    agentName: 'Alpha',
+    modelLabel: 'Model-1',
+    tokenLabel: '',
+    hasDedicatedModel: false,
+    modelSource: 'session',
+  };
+  // loadChatAgentMeta 在 AgentRunResolveError 时归一回填的 none meta
+  const noneMeta: ChatAgentMeta = {
+    source: 'none',
+    agentId: undefined,
+    agentName: '未配置 Agent',
+    modelLabel: '—',
+    tokenLabel: '',
+    hasDedicatedModel: false,
+    modelSource: 'session',
+  };
+  const pinnedMeta: ChatAgentMeta = {
+    ...sessionMeta,
+    hasDedicatedModel: true,
+    modelSource: 'agent-pin',
+  };
+
+  it('isAgentLocked：仅 meta 未加载时锁定，none 态放开为待重选', () => {
+    // meta 还没加载出来 → 锁定，避免加载中误触
+    expect(isAgentLocked(undefined)).toBe(true);
+    // 智能体已被删除（none）→ 不再锁死，可点击弹 picker 重选
+    expect(isAgentLocked(noneMeta)).toBe(false);
+    expect(isAgentLocked(sessionMeta)).toBe(false);
+  });
+
+  it('isModelLocked：维持原口径——meta 空或 none 态锁定，session 态看 agent-pin', () => {
+    expect(isModelLocked(undefined)).toBe(true);
+    // 智能体没了，pin 的模型无从解析 → 模型卡仍锁，重选智能体后自然解锁
+    expect(isModelLocked(noneMeta)).toBe(true);
+    expect(isModelLocked(pinnedMeta)).toBe(true);
+    expect(isModelLocked(sessionMeta)).toBe(false);
+  });
+
+  it('isAgentDeleted：仅已加载且 source=none 时为 true（待重选判据）', () => {
+    // meta 未加载时不能断言「已删」，返回 false
+    expect(isAgentDeleted(undefined)).toBe(false);
+    expect(isAgentDeleted(noneMeta)).toBe(true);
+    expect(isAgentDeleted(sessionMeta)).toBe(false);
   });
 });

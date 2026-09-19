@@ -88,12 +88,13 @@ jest.mock('@/errors/toast-message', () => ({
 }));
 
 const mockLoadChatAgentMeta = jest.fn();
-// isAgentLocked / isModelLocked 的 mock 跟真实逻辑保持一致，
-// 这样锁定场景的测试（source !== 'session'）能拿到 true。
+// isAgentLocked / isModelLocked / isAgentDeleted 的 mock 跟真实逻辑保持一致：
+// agent 卡仅 meta 未加载时锁（none 态放开为待重选）；model 卡 none 态仍锁。
 jest.mock('@/services/chat-agent-meta', () => ({
   loadChatAgentMeta: (...args: unknown[]) => mockLoadChatAgentMeta(...args),
-  isAgentLocked: (meta: {source?: string} | undefined) =>
-    !meta || meta.source !== 'session',
+  isAgentLocked: (meta: {source?: string} | undefined) => meta == null,
+  isAgentDeleted: (meta: {source?: string} | undefined) =>
+    meta != null && meta.source === 'none',
   isModelLocked: (
     meta:
       | {
@@ -107,20 +108,26 @@ jest.mock('@/services/chat-agent-meta', () => ({
     meta.source !== 'session' ||
     meta.modelSource === 'agent-pin' ||
     Boolean(meta.hasDedicatedModel),
+  AGENT_LOCK_TOAST_STATEMENT: '智能体信息加载中，请稍候再试',
+  AGENT_RESELECT_HINT: '智能体已删除 · 点击重选',
+  MODEL_LOCK_TOAST: '当前智能体已锁定模型，会话内无法覆盖',
 }));
 
 jest.mock('@/components/agent/AgentPickerModal', () => {
   const React = require('react');
   return {
+    // onSelected 透传到节点 props（au/G-4 切换成功重拉用例的断言面）。
     AgentPickerModal: (props: {
       visible: boolean;
       sessionId?: string;
       onClose: () => void;
+      onSelected?: () => void;
     }) =>
       React.createElement('View', {
         testID: 'agent-picker-modal',
         visible: String(props.visible),
         sessionId: props.sessionId,
+        onSelected: props.onSelected,
       }),
   };
 });
@@ -295,8 +302,9 @@ describe('T-M2 SessionDetailScreen', () => {
     expect(mockShowToast).toHaveBeenCalled();
   });
 
-  // review-mobile/B-1 + G-2：source='none'（agent 解析失败）时 agent/model 卡片都应锁定。
-  it("source='none' 时 agent/model 卡片都锁定，点击只弹锁定提示不进 picker", async () => {
+  // session-agent-locked-after-delete：source='none'（绑定的智能体已被删除）时
+  // 智能体卡放开为「待重选」——可点击弹 picker 重选；模型卡保持锁定。
+  it("source='none' 时智能体卡待重选可弹 picker，模型卡锁定只弹提示", async () => {
     // chat-agent-meta.ts 在 AgentRunResolveError 时会回填这条 meta
     mockLoadChatAgentMeta.mockResolvedValue(meta({source: 'none'}));
     let tree!: TestRenderer.ReactTestRenderer;
@@ -305,24 +313,28 @@ describe('T-M2 SessionDetailScreen', () => {
       await flushPromises();
     });
     const json = JSON.stringify(tree.toJSON());
-    // 两张锁定卡片都应是 🔒（chat-history-row 是新增的常驻入口，始终带 ›，
-    // 所以不再用「整页不含 ›」反向断言，改成检查 🔒 数量）
+    // 智能体卡：待重选 badge 可见，chevron 仍为 › 暗示可点
+    expect(json).toContain('智能体已删除 · 点击重选');
+    expect(json).toContain('›');
+    // 模型卡：维持锁定（🔒）
     expect(json).toContain('🔒');
-    expect((json.match(/🔒/g) ?? []).length).toBeGreaterThanOrEqual(2);
+    // 点击智能体卡 → 正常弹 picker（不再锁死，也不再弹重选 toast）
     await act(async () => {
       tree.root.findByProps({testID: 'agent-row'}).props.onPress();
     });
     expect(
       tree.root.findByProps({testID: 'agent-picker-modal'}).props.visible,
-    ).toBe('false');
+    ).toBe('true');
+    // 点击模型卡 → 维持锁定：不进 picker，只弹锁定提示
     await act(async () => {
       tree.root.findByProps({testID: 'model-row'}).props.onPress();
     });
     expect(
       tree.root.findByProps({testID: 'model-picker-modal'}).props.visible,
     ).toBe('false');
-    // 两张卡片都应触发锁定提示
-    expect(mockShowToast).toHaveBeenCalledTimes(2);
+    // 仅模型卡弹一次锁定提示：智能体卡点击不再弹「请重新选择」toast
+    expect(mockShowToast).toHaveBeenCalledTimes(1);
+    expect(mockShowToast).not.toHaveBeenCalledWith('智能体已被删除，请重新选择');
   });
 
   // review-mobile/G-2：loadChatAgentMeta 抛非 AgentRunResolveError 时走异常路径，
@@ -354,6 +366,33 @@ describe('T-M2 SessionDetailScreen', () => {
     expect(mockShowToast).not.toHaveBeenCalled();
     const picker = tree.root.findByProps({testID: 'agent-picker-modal'});
     expect(picker.props.visible).toBe('true');
+  });
+
+  // au/G-4（cr-fix-spec 条目 11c）：切换成功回调 onSelected 后详情页 load()
+  // 重拉——会话与 meta 都要重新查询，顶栏/卡片随新绑定刷新。
+  it('切换智能体成功（onSelected）后 load() 重拉会话与 meta', async () => {
+    let tree!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(<SessionDetailScreen />);
+      await flushPromises();
+    });
+    expect(mockSessionsGet).toHaveBeenCalledTimes(1);
+    expect(mockLoadChatAgentMeta).toHaveBeenCalledTimes(1);
+
+    // 打开 picker 并触发「切换成功」回调
+    await act(async () => {
+      tree.root.findByProps({testID: 'agent-row'}).props.onPress();
+    });
+    const picker = tree.root.findByProps({testID: 'agent-picker-modal'});
+    expect(picker.props.visible).toBe('true');
+    await act(async () => {
+      picker.props.onSelected();
+      await flushPromises();
+    });
+
+    // 重拉断言：sessions.get 与 loadChatAgentMeta 均再次发起。
+    expect(mockSessionsGet).toHaveBeenCalledTimes(2);
+    expect(mockLoadChatAgentMeta).toHaveBeenCalledTimes(2);
   });
 
   it('点击聊天名进入 inline 编辑，提交后调用 sessions.rename', async () => {

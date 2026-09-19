@@ -64,6 +64,45 @@ export interface WorkplaceServiceDeps {
 }
 
 /**
+ * 过滤幽灵规则路径：rename/删除残留的 workplace 规则路径（VFS 侧目录行与
+ * 文件均已不存在）若继续喂给 buildWorkplaceDirSet，会把早已消失的目录整链
+ * 渲染进工作区文件树与 `{{$filetree}}` 宏，对幽灵目录再操作则报 NOT_FOUND。
+ *
+ * 保留口径（满足任一即保留，原 dir_rule/file_rule 行不动，仅影响树构建输入）：
+ * - 根路径 `/` 永远保留；
+ * - 目录规则路径 P：VFS 目录行仍在（dirPathSet），或前缀 `P/` 下仍有 live
+ *   文件（文件隐含父目录存在）；
+ * - 文件规则路径 P：文件本身仍在（fileSet）。
+ */
+function filterGhostConfiguredPaths(input: {
+  readonly dirRulePaths: ReadonlySet<string>;
+  readonly fileRulePaths: ReadonlySet<string>;
+  readonly fileSet: ReadonlySet<string>;
+  readonly dirPathSet: ReadonlySet<string>;
+  readonly configuredPaths: readonly string[];
+}): string[] {
+  const kept: string[] = [];
+  const files = [...input.fileSet];
+  for (const raw of input.configuredPaths) {
+    const n = normalizePath(raw);
+    if (n === "/") {
+      kept.push(raw);
+      continue;
+    }
+    const prefix = `${n}/`;
+    const asDirKeep =
+      input.dirRulePaths.has(n) &&
+      (input.dirPathSet.has(n) ||
+        files.some((f) => f.startsWith(prefix)));
+    const asFileKeep = input.fileRulePaths.has(n) && input.fileSet.has(n);
+    if (asDirKeep || asFileKeep) {
+      kept.push(raw);
+    }
+  }
+  return kept;
+}
+
+/**
  * Workplace service backed by vfs_entry and workplace tables.
  */
 export class DefaultWorkplaceService implements WorkplaceService {
@@ -302,15 +341,29 @@ export class DefaultWorkplaceService implements WorkplaceService {
     const vfsKey = vfsScopeKey(this.scope);
     // entry_id 化后 path 列直接存逻辑路径，整个 scope 列在 "/" 前缀下
     const fileMeta = await this.deps.vfs.listFileMetaUnderPrefix(vfsKey, "/");
+    // 目录行查询提前到 buildWorkplaceDirSet 之前：既要喂给 allDirs，也要
+    // 作为「目录真实存在」的判据过滤幽灵规则路径（复用同一条 SQL，零新增查询）。
+    const dirPaths = await this.deps.vfs.listDirectoryPathsUnderPrefix(
+      vfsKey,
+      "/"
+    );
     const dirRules = await this.deps.workplace.listDirRules(scopeKey);
     const fileRules = await this.deps.workplace.listFileRules(scopeKey);
     const dirRuleMap = new Map(dirRules.map((r) => [r.logicalPath, r]));
     const fileRuleMap = new Map(fileRules.map((r) => [r.logicalPath, r]));
-    const configuredPaths = [
-      ...dirRules.map((r) => r.logicalPath),
-      ...fileRules.map((r) => r.logicalPath),
-    ];
     const fileSet = new Set(fileMeta.map((row) => normalizePath(row.path)));
+    // VFS 中真实存在的目录行（normalize 后作判据；喂 allDirs 用同一份数据）
+    const dirPathSet = new Set(dirPaths.map((logical) => normalizePath(logical)));
+    const configuredPaths = filterGhostConfiguredPaths({
+      dirRulePaths: new Set(dirRuleMap.keys()),
+      fileRulePaths: new Set(fileRuleMap.keys()),
+      fileSet,
+      dirPathSet,
+      configuredPaths: [
+        ...dirRules.map((r) => r.logicalPath),
+        ...fileRules.map((r) => r.logicalPath),
+      ],
+    });
     const mtimeByPath = new Map<string, number>();
     for (const row of fileMeta) {
       mtimeByPath.set(row.path, row.mtimeMs);
@@ -320,11 +373,7 @@ export class DefaultWorkplaceService implements WorkplaceService {
       filePaths: [...fileSet],
       configuredPaths,
     });
-    const dirPaths = await this.deps.vfs.listDirectoryPathsUnderPrefix(
-      vfsKey,
-      "/"
-    );
-    for (const logical of dirPaths) {
+    for (const logical of dirPathSet) {
       allDirs.add(logical);
     }
     const dirMtimeByPath = new Map<string, number>();

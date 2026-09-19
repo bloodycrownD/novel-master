@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { after, before, describe, it } from "node:test";
 import {
   createDefaultAgentEditorPrompts,
@@ -233,6 +236,72 @@ describe("sessions agent-binding IPC handlers + prompt meta", () => {
       assert.equal(metaPinned.data.hasDedicatedModel, true);
       assert.equal(metaPinned.data.modelSource, "agent-pin");
     }
+  });
+
+  // au/C-orch-2（cr-fix-spec 条目 9，方向 b）：归一口径与 mobile 对齐——
+  // AgentRunResolveError（agentId 指向已删 agent）→ ok:true + source='none'
+  // （待重选）；ChatError 等其它异常 → 外层 catch 包 ok:false（报错态，
+  // 由 SessionDetailDrawer 的失败 toast 兜底，绝不冒充「已被删除」）。
+  it("T-C2：已删 agent → AgentRunResolveError 归一 source='none' 待重选；其它异常落外层 ok:false", async () => {
+    const project = await handleProjectsCreate({ name: "归一口径" });
+    assert.equal(project.ok, true);
+    if (!project.ok) {
+      return;
+    }
+    const { getDesktopRuntime } = await import(
+      "../src/main/runtime/desktop-runtime-singleton.js"
+    );
+    const rt = await getDesktopRuntime();
+    const basePrompts = layoutFromFormInput(createDefaultAgentEditorPrompts());
+    await rt.agentRegistry.upsert("agent-gone", {
+      name: "将被删除",
+      runtime: { maxSteps: 20 },
+      prompts: basePrompts,
+    });
+    await rt.state.setCurrentAgentId("agent-gone");
+
+    const session = await handleSessionsCreate({
+      projectId: project.data.id,
+      title: "gone-s",
+    });
+    assert.equal(session.ok, true);
+    if (!session.ok) {
+      return;
+    }
+    const sessionId = session.data.id;
+    await verifyBindingCommitted(sessionId, "agent-gone");
+
+    // 删除绑定的 agent：registry 取不到 → resolveAgentForProject 抛
+    // AgentRunResolveError → handler 内层 catch 归一为 source='none'。
+    await rt.agentRegistry.delete("agent-gone");
+    const meta = await handlePromptAgentMeta({
+      projectId: project.data.id,
+      sessionId,
+    });
+    assert.equal(meta.ok, true);
+    if (meta.ok) {
+      assert.equal(meta.data.source, "none");
+      assert.equal(meta.data.agentName, "未配置 Agent");
+      assert.equal(meta.data.hasDedicatedModel, false);
+    }
+
+    // 源码口径断言：内层 catch 只归一 AgentRunResolveError，其余 rethrow
+    // （ChatError 落外层 catch → ok:false，与 mobile loadChatAgentMeta 对称）。
+    const promptSrc = readFileSync(
+      join(
+        dirname(fileURLToPath(import.meta.url)),
+        "..",
+        "src",
+        "main",
+        "ipc",
+        "handlers",
+        "prompt.ts",
+      ),
+      "utf8",
+    );
+    assert.match(promptSrc, /if \(error instanceof AgentRunResolveError\)/);
+    assert.match(promptSrc, /throw error;/);
+    assert.doesNotMatch(promptSrc, /ChatError/);
   });
 });
 

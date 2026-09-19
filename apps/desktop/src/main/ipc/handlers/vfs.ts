@@ -83,6 +83,25 @@ function pushWorkspaceMutated(req: VfsScopeRequest): void {
   notifyWorkspaceMutatedToRenderer(workspaceMutatedPayloadFromRequest(req));
 }
 
+/** rename 前探 kind 用：逻辑路径的父目录（顶层条目归一返回 `/`）。 */
+function parentOfLogicalPath(logicalPath: string): string {
+  const idx = logicalPath.lastIndexOf("/");
+  return idx > 0 ? logicalPath.slice(0, idx) : "/";
+}
+
+/**
+ * rename 前探测旧路径条目类型：目录重命名后要同步迁移 workplace 规则，
+ * 而规则迁移与否取决于旧路径是目录还是文件，必须在 rename 真正执行前判定
+ * （执行后旧路径条目已消失，parent list 里查不到）。
+ */
+async function findEntryKindBeforeRename(
+  vfs: Awaited<ReturnType<typeof getVfsForScope>>,
+  oldPath: string,
+): Promise<"directory" | "file" | undefined> {
+  const siblings = await vfs.list(parentOfLogicalPath(oldPath));
+  return siblings.find((e) => e.path === oldPath)?.kind;
+}
+
 async function readBaselineContent(
   vfs: Awaited<ReturnType<typeof getVfsForScope>>,
   path: string,
@@ -234,24 +253,39 @@ export async function handleVfsRename(
     const scope = resolveVfsScopeFromRequest(req);
 
     if (isSessionVfsScope(scope) && isUserVfsUnifiedToolTurnEnabled()) {
+      // kind 必须在 execute 之前判定：execute 后旧路径已消失，parent list 查不到。
+      const kindBeforeExecute = await findEntryKindBeforeRename(
+        getVfsForScope(rt, scope),
+        req.oldPath,
+      );
       await executeSessionUserVfsOp(
         rt,
         scope.sessionId,
         buildUserVfsRenameOp(req.oldPath, req.newPath),
       );
+      // 目录 rename 后迁移 workplace 规则（对齐 mobile 的 migrateWorkplaceDirRename
+      // 口径）；文件不迁移规则，与 mobile 一致。
+      if (kindBeforeExecute === "directory") {
+        await getWorkplaceForScope(rt, scope).renameRulesUnderLogicalPrefix(
+          req.oldPath,
+          req.newPath,
+        );
+      }
       pushWorkspaceMutated(req);
       return { ok: true, data: undefined };
     }
 
     const vfs = getVfsForScope(rt, scope);
-    const parentPath =
-      req.oldPath.lastIndexOf("/") > 0
-        ? req.oldPath.slice(0, req.oldPath.lastIndexOf("/"))
-        : "/";
-    const siblings = await vfs.list(parentPath);
-    const entry = siblings.find((e) => e.path === req.oldPath);
-    if (entry?.kind === "directory") {
+    const kind = await findEntryKindBeforeRename(vfs, req.oldPath);
+    if (kind === "directory") {
       await renameVfsDirectory(vfs, req.oldPath, req.newPath);
+      // 目录 rename 后迁移 workplace 规则（排布对齐 handleVfsDelete 的规则
+      // 清理）：不迁移的话残留规则会把旧路径整链渲染成幽灵目录，对它再操作
+      // 报 NOT_FOUND。
+      await getWorkplaceForScope(rt, scope).renameRulesUnderLogicalPrefix(
+        req.oldPath,
+        req.newPath,
+      );
     } else {
       await renameVfsFile(vfs, req.oldPath, req.newPath);
     }

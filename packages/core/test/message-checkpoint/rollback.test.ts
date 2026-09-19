@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
 import { createCharacterCardImportService } from "@novel-master/core/vfs";
+import { isVfsError } from "@novel-master/core/vfs";
 import { isSessionFsError } from "@novel-master/core/session-fs";
+import { SqliteMessageCheckpointRepository } from "../../src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 
 
@@ -257,11 +259,24 @@ describe("MessageRollbackService (revision model)", () => {
 
     // 验证：消息 1 没有 baseline checkpoint（backfill 没碰它），
     // 所以回滚到消息 1 时仍然走空基线（无 prior、无 anchor checkpoint）。
-    // 回滚到消息 4 时，anchor 有 backfill 的 checkpoint → 文件保留。
+    // backfill 边界的直接断言：消息 1、2 不因导入被补 baseline。
+    const checkpointRepo = new SqliteMessageCheckpointRepository(ctx.conn);
+    assert.equal(
+      await checkpointRepo.hasCheckpoint(session.id, user1.id),
+      false,
+      "backfill 不得给最后一个有 checkpoint 的消息之前的消息补 baseline",
+    );
 
-    // 先回滚到消息 4：新文件.md 应保留（anchor checkpoint 保护）。
+    // 回滚到消息 4（plain user → undo_send，prior = 消息 3 的 capture checkpoint）。
+    // path 快照修复后 prior tree 完整含 /old.md（导入删除其 entry 也不丢），
+    // 回滚按「目标检查点完成态」执行：/old.md 复活复现、tail 期导入的
+    // /新文件.md（不在 prior tree）被删除。
     await ctx.sessionFs.rollbackToMessage(session.id, project.id, user4.id);
-    assert.equal((await svfs.read("/新文件.md")).content, "imported");
+    assert.equal((await svfs.read("/old.md")).content, "v1");
+    await assert.rejects(
+      () => svfs.read("/新文件.md"),
+      (error: unknown) => isVfsError(error, "NOT_FOUND"),
+    );
     const msgsAfter4 = await ctx.messages.listBySession(session.id);
     assert.equal(msgsAfter4.length, 3); // user1, asst2, asst3
   });

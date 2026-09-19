@@ -30,6 +30,7 @@ import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.por
 import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revision.port.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
 import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
 import {
   sessionFsRollbackMessageNotFound,
@@ -68,6 +69,11 @@ type RollbackPlan = {
   pathsNeedWrite: ReadonlySet<string>;
   pathsNeedDelete: ReadonlySet<string>;
   targetTree: Map<string, number>;
+  /**
+   * checkpoint 记录的旧 entryId（path → entryId）：entry 行已被物理删除的
+   * 路径靠它寻址 revision 并复活 entry（rollback-restore-deleted-entry）。
+   */
+  checkpointEntryIdByPath: Map<string, number>;
   projectId: string;
   sessionId: string;
   scope: VfsScope;
@@ -161,7 +167,8 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
           this.deps.entries,
           plan.scope,
           plan.targetTree,
-          plan.pathsNeedWrite
+          plan.pathsNeedWrite,
+          plan.checkpointEntryIdByPath
         );
         if (missing.length > 0 && !options?.revisionHeadBackfill) {
           throw sessionFsRollbackRevisionBackfillRequired(missing, {
@@ -255,25 +262,33 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
     const tailMessageIds = tail.map((m) => m.id);
 
     let targetTree: Map<string, number>;
+    let checkpointEntryIdByPath: Map<string, number>;
     let hasDirectTargetTree: boolean;
 
     if (mode === "undo_send") {
-      targetTree = await resolvePriorRollbackTargetTree(
+      const priorResolution = await resolvePriorRollbackTargetTree(
         this.deps.checkpoints,
         sessionId,
         anchor.seq - 1
       );
+      targetTree = priorResolution.tree;
+      checkpointEntryIdByPath = priorResolution.entryIdByPath;
       // prior 为空时回退到 anchor 自身的 checkpoint。
       // 角色卡 / ZIP 导入会在事务末尾给空 checkpoint 的 message 补 baseline 快照，
       // 这样「导入后聊一轮再回滚首条 user」时，虽然 prior（seq<anchor.seq）为空，
       // 但 anchor 自身有 baseline checkpoint 可用，回滚到导入后的状态而非空树。
       if (targetTree.size === 0) {
-        const anchorTree = await this.deps.checkpoints.loadFileTree(
+        const anchorPointers = await this.deps.checkpoints.loadFilePointerTree(
           sessionId,
           anchor.id
         );
-        if (anchorTree != null) {
-          targetTree = anchorTree;
+        if (anchorPointers != null) {
+          targetTree = new Map(
+            [...anchorPointers].map(([path, p]) => [path, p.revisionVersion])
+          );
+          checkpointEntryIdByPath = new Map(
+            [...anchorPointers].map(([path, p]) => [path, p.entryId])
+          );
         }
       }
       // undo_send 始终按 prior 基线 diff 当前工作区。空 targetTree 历史上意味着
@@ -281,17 +296,17 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
       // reconcile 调用，避免误删；这里保持 hasDirectTargetTree 语义不变。
       hasDirectTargetTree = true;
     } else {
-      const directTargetTree = await this.deps.checkpoints.loadFileTree(
-        sessionId,
-        anchor.id
-      );
-      targetTree = await resolveRollbackTargetTree(
+      const directTargetPointers =
+        await this.deps.checkpoints.loadFilePointerTree(sessionId, anchor.id);
+      const resolution = await resolveRollbackTargetTree(
         this.deps.checkpoints,
         sessionId,
         anchor.id,
         anchor.seq
       );
-      hasDirectTargetTree = directTargetTree != null;
+      targetTree = resolution.tree;
+      checkpointEntryIdByPath = resolution.entryIdByPath;
+      hasDirectTargetTree = directTargetPointers != null;
     }
 
     const scope: VfsScope = { kind: "session", projectId, sessionId };
@@ -301,7 +316,8 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
       this.deps.revisions,
       scope,
       targetTree,
-      hasDirectTargetTree
+      hasDirectTargetTree,
+      checkpointEntryIdByPath
     );
 
     const pathsNeedDelete = new Set(reconcileSets.pathsNeedDelete);
@@ -339,6 +355,7 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
       pathsNeedWrite: reconcileSets.pathsNeedWrite,
       pathsNeedDelete,
       targetTree,
+      checkpointEntryIdByPath,
       projectId,
       sessionId,
       scope,
@@ -363,6 +380,7 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
       pathsNeedWrite,
       pathsNeedDelete,
       targetTree,
+      checkpointEntryIdByPath,
       projectId,
       sessionId,
     } = plan;
@@ -410,7 +428,12 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
     const liveHashByPath = await entries.findContentHashesByPaths(scopeKeyStr, [
       ...new Set(reconcilePairs.map((pair) => pair.logicalPath)),
     ]);
-    const prefetch = { entryIdByPath, revisionMetaByKey, liveHashByPath };
+    const prefetch = {
+      entryIdByPath,
+      revisionMetaByKey,
+      liveHashByPath,
+      checkpointEntryIdByPath,
+    };
     // backfill 会 append 新 revision 使 meta 变化，沿用 prefetch 的 revisionMetaByKey
     // 会有 stale prefetch——此处有意不放 revisionMetaByKey，由 restorePathToRevision
     // 逐条 findMetaByEntryAndVersion 查最新 meta，不并入 prefetch。
@@ -418,13 +441,26 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
       ? {
           liveHashByPath: prefetch.liveHashByPath,
           entryIdByPath: prefetch.entryIdByPath,
+          checkpointEntryIdByPath: prefetch.checkpointEntryIdByPath,
         }
       : prefetch;
+    // 复活已删 entry 分支需要 contentStore：put 幂等确保目标 blob 在位并回取
+    // 权威 content_hash（对齐 resetHeadToVersion 的做法）。
+    const contentStore = new SqliteVfsContentStore(tx);
 
     let skippedSameVersion = 0;
     let skippedSameContentHash = 0;
     let restored = 0;
     let deleted = 0;
+
+    // 先清 targetTree 外的 live 路径，再做写盘恢复：rename 后回滚（快照语义）
+    // 时同一 entry 会同时出现在两处——旧路径在 pathsNeedWrite（复活 entry）、
+    // 现路径在 pathsNeedDelete（墓碑 entry）——先删现路径才能按旧路径复活，
+    // 反序会撞 entry 主键。普通场景两个集合不相交，顺序无影响。
+    for (const logicalPath of pathsNeedDelete) {
+      await this.deletePathIfExists(vfs, logicalPath);
+      deleted++;
+    }
 
     for (const logicalPath of pathsNeedWrite) {
       const version = targetTree.get(logicalPath);
@@ -451,7 +487,9 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
               version,
               liveHeadByPath,
               entries,
-              prefetchForRestore
+              prefetchForRestore,
+              checkpointEntryIdByPath.get(logicalPath) ?? null,
+              contentStore
             );
         if (outcome === "skipped_same_version") {
           skippedSameVersion++;
@@ -463,11 +501,6 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
           restored++;
         }
       }
-    }
-
-    for (const logicalPath of pathsNeedDelete) {
-      await this.deletePathIfExists(vfs, logicalPath);
-      deleted++;
     }
 
     return {

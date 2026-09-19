@@ -79,6 +79,25 @@ export interface VfsEntryRepository {
   ): Promise<{ version: number }>;
 
   /**
+   * 以显式 entry_id 重建文件 entry 行（回滚复活已删 entry 专用）。
+   *
+   * @remarks 删除文件的 entry 行会被物理 DELETE；回滚到「entry 尚在」的
+   *   checkpoint 时需按 checkpoint 记录的旧 entry_id 原位重建，revision
+   *   历史 (entry_id, version) 才能重新挂回 live head。content 置 NULL、
+   *   共享既有 blob；head_version / mtime_ms 取目标 revision。
+   *   SQLite AUTOINCREMENT 表显式插 INTEGER PRIMARY KEY 会自动推高
+   *   sqlite_sequence（不低于旧值），后续新 entry 不会撞旧 id。
+   */
+  reviveEntryAtVersion(input: {
+    entryId: number;
+    scopeKey: string;
+    path: string;
+    contentHash: string;
+    headVersion: number;
+    mtimeMs: number;
+  }): Promise<void>;
+
+  /**
    * Inserts a new file entry at an explicit head version.
    *
    * @remarks Used when re-creating a path whose vfs_entry was removed but revision history remains.

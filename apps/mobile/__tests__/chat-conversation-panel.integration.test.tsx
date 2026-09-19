@@ -23,9 +23,18 @@ jest.mock('../src/components/vfs/VfsFileManager', () => {
 jest.mock('../src/components/chat/ChatComposer', () => ({
   ChatComposer: () => null,
 }));
-jest.mock('../src/components/chat/ChatMetaBar', () => ({
-  ChatMetaBar: () => null,
-}));
+// ChatMetaBar 的可交互骨架（au/B-1 / au/G-4 用例的断言面）：把 onPressAgent
+// 暴露为可按压节点，测试经 testID 触发；meta 仅供透传，不消费。
+jest.mock('../src/components/chat/ChatMetaBar', () => {
+  const mockReact = require('react');
+  return {
+    ChatMetaBar: (props: {onPressAgent?: () => void}) =>
+      mockReact.createElement('View', {
+        testID: 'chat-meta-agent-card',
+        onPress: props.onPressAgent,
+      }),
+  };
+});
 jest.mock('../src/components/chat/ChatStreamMetricsBarLive', () => ({
   ChatStreamMetricsBarLive: () => null,
 }));
@@ -71,8 +80,11 @@ jest.mock('../src/components/sheet/BottomSheetMenu', () => ({
 jest.mock('../src/theme/ThemeProvider', () => ({
   useTheme: () => ({tokens: {surface: '#111'}}),
 }));
+// toast 记录用模块级 mock：组件每次渲染取到的 showToast 是同一实例，
+// 断言（重选/锁定提示文案）才能拿到调用记录。
+const mockShowToast = jest.fn();
 jest.mock('../src/components/chrome/ToastHost', () => ({
-  useToast: () => ({showToast: jest.fn()}),
+  useToast: () => ({showToast: mockShowToast}),
 }));
 
 import {ChatConversationPanel} from '../src/screens/tabs/chat-tab/ChatConversationPanel';
@@ -104,6 +116,30 @@ let mockConversationPanel: 'chat' | 'workspace' = 'chat';
 const mockSetConversationPanel = jest.fn((panel: 'chat' | 'workspace') => {
   mockConversationPanel = panel;
 });
+// 按用例可变的 agentMeta（au/B-1 断言面）：默认正常 session meta，
+// 未加载窗口用例置 undefined、已删待重选用例置 source='none'。
+let mockAgentMeta:
+  | {
+      source: 'session' | 'none';
+      agentId: string | undefined;
+      agentName: string;
+      hasDedicatedModel: boolean;
+      modelLabel: string;
+      tokenLabel: string;
+      modelSource: 'agent-pin' | 'session';
+    }
+  | undefined = {
+  source: 'session',
+  agentId: 'a1',
+  agentName: 'A',
+  hasDedicatedModel: false,
+  modelLabel: 'Model',
+  tokenLabel: '',
+  modelSource: 'session',
+};
+
+// agent picker 开关记录（au/B-1 断言面）：模块级 mock，跨渲染可断言。
+const mockSetAgentPickerOpen = jest.fn();
 
 function makeMockContext(
   workspaceVfsRef: React.RefObject<VfsFileManagerHandle | null>,
@@ -115,15 +151,7 @@ function makeMockContext(
     setConversationPanel: mockSetConversationPanel,
     chatSubview: 'conversation' as const,
     setChatSubview: jest.fn(),
-    agentMeta: {
-      source: 'session',
-      agentId: 'a1',
-      agentName: 'A',
-      hasDedicatedModel: false,
-      modelLabel: 'Model',
-      tokenLabel: '',
-      modelSource: 'session',
-    },
+    agentMeta: mockAgentMeta,
     uiRunning: false,
     agentActive: false,
     activeRunId: null,
@@ -154,7 +182,7 @@ function makeMockContext(
     modelPickerOpen: false,
     setModelPickerOpen: jest.fn(),
     agentPickerOpen: false,
-    setAgentPickerOpen: jest.fn(),
+    setAgentPickerOpen: mockSetAgentPickerOpen,
     messageMenuTarget: undefined,
     messageMenuAnchor: undefined,
     setMessageMenuTarget: jest.fn(),
@@ -392,5 +420,83 @@ describe('ChatConversationPanel 中断现场合成行提交（ui/B-1）', () => 
       await flushPromises();
     });
     expect(mockCommitSyntheticAssistantRow).toHaveBeenCalledTimes(2);
+  });
+});
+
+// ── 顶栏 agent 卡三态分流（cr-fix-spec 条目 4 / 11，au/B-1）───────────────
+//
+// agentMeta 拆分后的三态口径：undefined（未加载）→ 锁定，弹「加载中」提示、
+// 不开 picker；source='none'（已删待重选）→ 弹重选 toast 并正常开 picker；
+// source='session' → 直接开 picker（既有行为，见下方默认态用例组不重复覆盖）。
+describe('ChatConversationPanel 顶栏 agent 卡分流（au/B-1 / au/G-4）', () => {
+  let tree: TestRenderer.ReactTestRenderer | undefined;
+
+  beforeEach(() => {
+    mockShowToast.mockClear();
+    mockSetAgentPickerOpen.mockClear();
+    mockConversationPanel = 'chat';
+    mockAgentMeta = {
+      source: 'session',
+      agentId: 'a1',
+      agentName: 'A',
+      hasDedicatedModel: false,
+      modelLabel: 'Model',
+      tokenLabel: '',
+      modelSource: 'session',
+    };
+  });
+
+  afterEach(() => {
+    if (tree != null) {
+      act(() => {
+        tree!.unmount();
+      });
+    }
+    tree = undefined;
+  });
+
+  it('验收a（条目4/11）：none 态点 agent 卡直接打开 picker，不弹重选 toast', async () => {
+    // loadChatAgentMeta 在 AgentRunResolveError 时归一落位的 none meta
+    mockAgentMeta = {
+      source: 'none',
+      agentId: undefined,
+      agentName: '未配置 Agent',
+      hasDedicatedModel: false,
+      modelLabel: '—',
+      tokenLabel: '',
+      modelSource: 'session',
+    };
+    await act(async () => {
+      tree = TestRenderer.create(<TestHost />);
+      await flushPromises();
+    });
+    await act(async () => {
+      tree!.root
+        .findByProps({testID: 'chat-meta-agent-card'})
+        .props.onPress();
+    });
+    // badge 已提示已删，点击只开 picker、不弹「请重新选择」toast
+    expect(mockShowToast).not.toHaveBeenCalled();
+    expect(mockSetAgentPickerOpen).toHaveBeenCalledWith(true);
+  });
+
+  it('验收b（条目4/11）：meta 未加载（undefined）点 agent 卡不开 picker，弹加载中提示', async () => {
+    // EMPTY→loaded 在途窗口：agentMeta 为 undefined（不再有 source:'none' 占位）
+    mockAgentMeta = undefined;
+    await act(async () => {
+      tree = TestRenderer.create(<TestHost />);
+      await flushPromises();
+    });
+    await act(async () => {
+      tree!.root
+        .findByProps({testID: 'chat-meta-agent-card'})
+        .props.onPress();
+    });
+    // 未加载锁：只提示加载中，绝不开 picker、绝不出「已删」语义
+    expect(mockShowToast).toHaveBeenCalledWith('智能体信息加载中，请稍候再试');
+    expect(mockShowToast).not.toHaveBeenCalledWith(
+      '智能体已被删除，请重新选择',
+    );
+    expect(mockSetAgentPickerOpen).not.toHaveBeenCalled();
   });
 });

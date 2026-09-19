@@ -22,6 +22,7 @@ import {
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import type { MessageCheckpointFile } from "../../model/message-checkpoint.js";
 import type {
+  CheckpointFilePointer,
   MessageCheckpointDistinctPointer,
   MessageCheckpointInsertInput,
   MessageCheckpointRepository,
@@ -180,12 +181,13 @@ export class SqliteMessageCheckpointRepository
     // 会变成 N 次 SQL 往返，seed-fork 500 消息 × 200 文件就是 10 万次，相当卡。
     // 这里切到 conn.batch（位置占位符 ?），一次调用处理整批。
     if (input.files.length > 0) {
-      const sql = `INSERT INTO message_checkpoint_file (session_id, message_id, entry_id, revision_version) VALUES (?, ?, ?, ?)`;
+      const sql = `INSERT INTO message_checkpoint_file (session_id, message_id, entry_id, revision_version, path) VALUES (?, ?, ?, ?, ?)`;
       const paramsList = input.files.map((f) => [
         input.sessionId,
         input.messageId,
         f.entryId,
         f.revisionVersion,
+        f.path,
       ]);
       await this.conn.batch(sql, paramsList);
     }
@@ -207,6 +209,7 @@ export class SqliteMessageCheckpointRepository
     files: ReadonlyArray<{
       readonly entryId: number;
       readonly revisionVersion: number;
+      readonly path: string;
     }>,
     createdAtMs: number
   ): Promise<void> {
@@ -229,12 +232,12 @@ export class SqliteMessageCheckpointRepository
     const fileRows: unknown[][] = [];
     for (const msg of messages) {
       for (const file of files) {
-        fileRows.push([sessionId, msg.id, file.entryId, file.revisionVersion]);
+        fileRows.push([sessionId, msg.id, file.entryId, file.revisionVersion, file.path]);
       }
     }
     await insertMultiValues(
       this.conn,
-      `INSERT INTO message_checkpoint_file (session_id, message_id, entry_id, revision_version)`,
+      `INSERT INTO message_checkpoint_file (session_id, message_id, entry_id, revision_version, path)`,
       fileRows
     );
 
@@ -254,25 +257,55 @@ export class SqliteMessageCheckpointRepository
     sessionId: string,
     messageId: string
   ): Promise<Map<string, number> | null> {
+    const pointers = await this.loadFilePointerTree(sessionId, messageId);
+    if (pointers == null) {
+      return null;
+    }
+    const tree = new Map<string, number>();
+    for (const [path, pointer] of pointers) {
+      tree.set(path, pointer.revisionVersion);
+    }
+    return tree;
+  }
+
+  async loadFilePointerTree(
+    sessionId: string,
+    messageId: string
+  ): Promise<Map<string, CheckpointFilePointer> | null> {
     const has = await this.hasCheckpoint(sessionId, messageId);
     if (!has) {
       return null;
     }
+    // LEFT JOIN 取现路径兜底：path 快照非 NULL 时优先（entry 已删仍保留进
+    // targetTree，这是 rollback-restore-deleted-entry 的修复核心）；快照 NULL
+    // 的存量行回退现路径（rename 后跟随新路径，等同旧 JOIN 形态行为）；
+    // 两者皆 NULL（entry 已删且无快照）跳过——无路径可寻址，无法恢复。
     const rows = await queryTemplate<{
-      path: string;
+      snapshot_path: string | null;
+      live_path: string | null;
+      entry_id: number;
       revision_version: number;
     }>(
       this.conn,
       this.parser,
-      `SELECT e.path AS path, mcf.revision_version AS revision_version
+      `SELECT mcf.path AS snapshot_path, e.path AS live_path,
+              mcf.entry_id AS entry_id, mcf.revision_version AS revision_version
        FROM message_checkpoint_file mcf
-       JOIN vfs_entry e ON e.entry_id = mcf.entry_id
+       LEFT JOIN vfs_entry e ON e.entry_id = mcf.entry_id
        WHERE mcf.session_id = #{sessionId} AND mcf.message_id = #{messageId}`,
       { sessionId, messageId }
     );
-    const tree = new Map<string, number>();
+    const tree = new Map<string, CheckpointFilePointer>();
     for (const row of rows) {
-      tree.set(String(row.path), Number(row.revision_version));
+      const path = row.snapshot_path ?? row.live_path;
+      if (path == null) {
+        continue;
+      }
+      tree.set(String(path), {
+        path: String(path),
+        entryId: Number(row.entry_id),
+        revisionVersion: Number(row.revision_version),
+      });
     }
     return tree;
   }

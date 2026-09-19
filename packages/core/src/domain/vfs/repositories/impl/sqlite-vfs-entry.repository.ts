@@ -322,6 +322,31 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     );
   }
 
+  async reviveEntryAtVersion(input: {
+    entryId: number;
+    scopeKey: string;
+    path: string;
+    contentHash: string;
+    headVersion: number;
+    mtimeMs: number;
+  }): Promise<void> {
+    const normalized = normalizePath(input.path);
+    await executeTemplate(
+      this.conn,
+      this.parser,
+      `INSERT INTO vfs_entry (entry_id, scope_key, path, content, content_hash, head_version, mtime_ms, entry_kind)
+       VALUES (#{entryId}, #{scopeKey}, #{path}, NULL, #{contentHash}, #{headVersion}, #{mtimeMs}, 'file')`,
+      {
+        entryId: input.entryId,
+        scopeKey: input.scopeKey,
+        path: normalized,
+        contentHash: input.contentHash,
+        headVersion: input.headVersion,
+        mtimeMs: input.mtimeMs,
+      }
+    );
+  }
+
   async update(
     scopeKey: string,
     path: string,
@@ -919,25 +944,19 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
       }
     );
     // 处理前缀根自身（oldBase → newBase）。
-    await executeTemplate(
+    const rootResult = await executeTemplate(
       tx,
       parser,
       `UPDATE vfs_entry SET path = #{newBase}
        WHERE scope_key = #{scopeKey} AND path = #{oldBase}`,
       { scopeKey, oldBase, newBase }
     );
-    if (result.changes === 0) {
-      // 允许空目录（无子项），仅根自身存在时也算成功；根都不在时抛错。
-      const rows = await queryTemplate<{ entry_id: number }>(
-        tx,
-        parser,
-        `SELECT entry_id FROM vfs_entry
-         WHERE scope_key = #{scopeKey} AND path = #{oldBase} LIMIT 1`,
-        { scopeKey, oldBase }
-      );
-      if (rows.length === 0) {
-        throw vfsNotFound(oldBase);
-      }
+    if (result.changes === 0 && rootResult.changes === 0) {
+      // 子项与目录根都不存在（幽灵路径）时维持 NOT_FOUND。
+      // 允许空目录（无子项）：根自身已被上面这条 UPDATE 改到新路径
+      // （rootResult.changes === 1）即算成功，不能再按旧路径 SELECT 复核——
+      // 根已改名，旧路径必然查不到。
+      throw vfsNotFound(oldBase);
     }
   }
 

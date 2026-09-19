@@ -1,6 +1,7 @@
 /**
  * T-D3：SessionDetailDrawer 渲染聊天名 / agent / model / 操作入口；
- *      agent 解析失败（none）时 agent 切换禁用；agent 带 pin 时 model 切换禁用。
+ *      none 态（agent 已删）智能体卡放开为待重选、模型卡锁定；
+ *      agent 带 pin 时 model 切换禁用。
  * T-D4：App.tsx 入口替换——原 #session-actions-menu 不再渲染；
  *      openSessionActions 触发 SessionDetailDrawer。
  *
@@ -46,9 +47,12 @@ describe("SessionDetailDrawer (T-D3)", () => {
     assert.doesNotMatch(src, /AGENT_SOURCE_LABEL/);
     assert.doesNotMatch(src, /MODEL_SOURCE_LABEL/);
     assert.doesNotMatch(src, /session-detail-pick__source/);
-    // 锁定指示仍保留
+    // 锁定指示仍保留；meta==null 的 badge 按 au/B-3 分「加载中…/加载失败」
+    // 两态（旧「智能体未绑定」文案已退役——失败态不得冒充未绑定/已删）。
     assert.match(src, /session-detail-pick__lock/);
-    assert.match(src, /智能体未绑定/);
+    assert.match(src, /加载中…/);
+    assert.match(src, /智能体信息加载失败/);
+    assert.doesNotMatch(src, /智能体未绑定/);
     assert.match(src, /智能体锁定/);
     // 操作入口 data hook
     assert.match(src, /data-session-detail-action="switch-agent"/);
@@ -69,21 +73,28 @@ describe("SessionDetailDrawer (T-D3)", () => {
     assert.match(src, /if \(!open\)/);
   });
 
-  it("源码：source !== 'session' 时锁定 agent/model 卡片（与 mobile/B-1 方案一一致）", () => {
+  it("源码：none 态智能体卡放开为待重选，模型卡仍锁定（防已删 agent 死锁）", () => {
     const src = readDrawer();
     // source 默认 'none'（meta 未加载或 session.agentId 指向已删 agent）
     assert.match(src, /meta\?\.source \?\? "none"/);
-    // agent 锁：只有 session 才允许切；none 一律锁（项目智能体已下线）
-    assert.match(src, /agentLocked = source !== "session"/);
-    // model 同口径收口（原 agent-pin / hasDedicatedModel 判定已废弃）
+    // agent 锁：仅在 meta 未加载完时锁定，防加载中被误点
+    assert.match(src, /agentLocked = meta == null/);
+    // none 态（已加载）识别为「已删待重选」：不早退、直接弹 picker
+    // （badge 已提示已删，不再额外弹「请重新选择」toast）
+    assert.match(src, /agentDeleted = meta != null && source === "none"/);
+    assert.doesNotMatch(src, /智能体已被删除，请重新选择/);
+    assert.match(src, /智能体已删除 · 点击重选/);
+    // 待重选 badge 样式与可点 chevron 保留（agentLocked 为 false 时渲染 ›）
+    assert.match(src, /session-detail-pick__lock--reselect/);
+    // model 卡维持 source !== 'session' 锁定（重选智能体后自然解锁）
     assert.match(src, /modelLocked = source !== "session"/);
-    // 锁定 toast 引导文案保留（none 口径：未绑定有效智能体）
-    assert.match(src, /未绑定有效智能体/);
     assert.match(src, /已锁定模型/);
     assert.match(src, /会话内无法覆盖/);
     // 旧的 agent-pin / hasDedicatedModel 判定不应再出现
     assert.doesNotMatch(src, /"agent-pin"/);
     assert.doesNotMatch(src, /hasDedicatedModel/);
+    // 旧「无法在会话内切换」的锁死文案已退役
+    assert.doesNotMatch(src, /未绑定有效智能体，无法在会话内切换/);
   });
 
   it("源码：重命名走行内编辑（ipcSessionsRename）；agent/model 切换走 session 级 IPC", () => {
@@ -115,6 +126,33 @@ describe("SessionDetailDrawer (T-D3)", () => {
     assert.match(src, /清除会话覆盖（使用智能体锁定模型）/);
     // 旧的“回退工作区”措辞已全部移除
     assert.doesNotMatch(src, /回退工作区/);
+  });
+});
+
+describe("SessionDetailDrawer meta 加载失败态（cr-fix-spec 条目 10，au/B-3）", () => {
+  it("源码：metaRes.ok=false 时 showToast 固定中文兜底「智能体信息加载失败」，不透出 metaRes.error.message", () => {
+    const src = readDrawer();
+    // 失败可见：metaLoadFailed 置位 + 固定中文 toast（main 侧 formatIpcError
+    // 可能直出英文，不直接透出 error.message）
+    assert.match(src, /metaLoadFailed/);
+    assert.match(src, /setMetaLoadFailed\(true\)/);
+    assert.match(src, /showToast\("智能体信息加载失败"\)/);
+    assert.doesNotMatch(src, /showToast\(metaRes\.error\.message\)/);
+    // 成功路径清失败标记；抽屉重开/会话切换重置（重开即重试的入口语义）
+    assert.match(src, /setMetaLoadFailed\(false\)/);
+  });
+
+  it("源码：badge 三态可辨——加载中…/智能体信息加载失败/已删待重选文案互不相同", () => {
+    const src = readDrawer();
+    // 三态文案各自出现
+    assert.match(src, /加载中…/);
+    assert.match(src, /智能体信息加载失败/);
+    assert.match(src, /智能体已删除 · 点击重选/);
+    // 失败后点击智能体卡提示错误文案（不再「加载中请稍候」永不发生）
+    assert.match(
+      src,
+      /metaLoadFailed\s*\?\s*"智能体信息加载失败"\s*:\s*"智能体信息加载中，请稍候再试。"/,
+    );
   });
 });
 

@@ -20,8 +20,22 @@ export interface MessageCheckpointInsertInput {
   readonly files: ReadonlyArray<{
     readonly entryId: number;
     readonly revisionVersion: number;
+    /** capture 时点的逻辑路径快照（entry 行被删后仍可反解回滚 targetTree）。 */
+    readonly path: string;
   }>;
 }
+
+/**
+ * checkpoint 文件指针（path 快照 + entryId + version），回滚 targetTree 反解用。
+ *
+ * @remarks path 取 capture 时点快照；存量行快照为 NULL 时回退 JOIN 现路径，
+ *          entry 行已删且无快照的指针会被跳过（等同旧 JOIN 形态行为）。
+ */
+export type CheckpointFilePointer = {
+  readonly path: string;
+  readonly entryId: number;
+  readonly revisionVersion: number;
+};
 
 /**
  * Persistence for `message_checkpoint` and `message_checkpoint_file` rows.
@@ -69,6 +83,8 @@ export interface MessageCheckpointRepository {
     files: ReadonlyArray<{
       readonly entryId: number;
       readonly revisionVersion: number;
+      /** capture 时点的逻辑路径快照（与 {@link MessageCheckpointInsertInput.files} 同语义）。 */
+      readonly path: string;
     }>,
     createdAtMs: number
   ): Promise<void>;
@@ -82,6 +98,20 @@ export interface MessageCheckpointRepository {
     sessionId: string,
     messageId: string
   ): Promise<Map<string, number> | null>;
+
+  /**
+   * 加载 checkpoint 文件指针树（path 快照优先，兼容无快照存量行）。
+   *
+   * 与 {@link MessageCheckpointRepository.loadFileTree} 的区别：额外带出
+   * checkpoint 记录的旧 entryId，供回滚在 entry 行已删（物理 DELETE）场景
+   * 仍能按 entryId 寻址 revision 并复活 entry。
+   *
+   * @returns `null` when no checkpoint exists for the message.
+   */
+  loadFilePointerTree(
+    sessionId: string,
+    messageId: string
+  ): Promise<Map<string, CheckpointFilePointer> | null>;
 
   /**
    * Finds the message id of the nearest checkpoint at or before `maxSeq`.
