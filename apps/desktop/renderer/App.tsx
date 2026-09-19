@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { validateVfsEntryName } from '@novel-master/core/vfs';
 import { useColumnSplitters } from './hooks/useColumnSplitters';
 import { SessionDetailDrawer } from './features/chat/SessionDetailDrawer';
 import { ConfirmModal } from './components/ui/ConfirmModal';
@@ -424,6 +425,10 @@ function DesktopOverlays() {
         initialValue={
           workspacePrompt?.kind === 'rename' ? workspacePrompt.initialName : ''
         }
+        validate={(raw) => {
+          const check = validateVfsEntryName(raw);
+          return check.ok ? null : check.reason;
+        }}
         onClose={() => setWorkspacePrompt(null)}
         onConfirm={handleWorkspacePromptConfirm}
       />

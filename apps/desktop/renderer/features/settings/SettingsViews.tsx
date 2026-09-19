@@ -70,6 +70,7 @@ import {
   SettingsActionSection,
   SettingsField,
   SettingsFormSection,
+  SettingsSection,
   SettingsStatus,
   SettingsSwitchRow,
   SettingsListEmpty,
