@@ -18,15 +18,50 @@ export const DATA = path.join(E2E_DIR, "data");
 const ELECTRON_BIN = path.join(ROOT, "node_modules", "electron", "dist", "electron");
 export const MOCK_PORT = 18099;
 
-export async function startMock({ slow = false } = {}) {
+// replyFor（B3 增量）：按请求里最后一条 user 消息文本计算回复内容的回调，
+// 返回 string 覆盖默认「收到，短回复。」；返回 null/undefined 走默认。
+// 供需要 mock 回复里带 markdown 链接等定制内容的用例（case-chat-file-link）；
+// 不传时行为与历史版本完全一致
+// B4 增量：返回对象 `{ httpError: 4xx/5xx }` → 不回 SSE、直接回该状态码的
+// JSON 错误体（触发 agent run 失败路径）；`{ empty: true }` → SSE 正常收尾
+// 但不带任何 content delta（触发模型成功空回复路径）。
+export async function startMock({ slow = false, replyFor = null } = {}) {
   const sse = (obj) => `data: ${JSON.stringify(obj)}\n\n`;
   const mock = http.createServer((req, res) => {
-    req.resume();
+    const chunks = [];
+    req.on("data", (c) => chunks.push(c));
     req.on("end", () => {
       if (req.url?.includes("/models")) {
         res.writeHead(200, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ object: "list", data: [{ id: "glm-4.7-flash" }, { id: "glm-4.7-air" }, { id: "glm-5.3" }] }));
         return;
+      }
+      // B3：请求体解析出最后一条 user 消息文本（字符串或多部件取字符串拼接），
+      // 交给 replyFor 决定回复文本；解析失败静默回退默认，不影响既有用例
+      let text = "收到，短回复。";
+      let emptyReply = false;
+      if (replyFor) {
+        try {
+          const body = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+          const msgs = Array.isArray(body?.messages) ? body.messages : [];
+          for (let i = msgs.length - 1; i >= 0; i--) {
+            if (msgs[i]?.role === "user") {
+              const c = msgs[i].content;
+              const userText = typeof c === "string" ? c : Array.isArray(c) ? c.filter((p) => typeof p === "string").join("\n") : "";
+              const custom = replyFor(userText);
+              if (typeof custom === "string") text = custom;
+              else if (custom && typeof custom === "object") {
+                if (Number.isInteger(custom.httpError)) {
+                  res.writeHead(custom.httpError, { "Content-Type": "application/json" });
+                  res.end(JSON.stringify({ error: { message: "mock upstream failure", code: "mock_error", type: "server_error" } }));
+                  return;
+                }
+                if (custom.empty) emptyReply = true;
+              }
+              break;
+            }
+          }
+        } catch {}
       }
       const cb = (delta) => ({ id: "m", object: "chat.completion.chunk", created: 0, model: "glm-regression-test", choices: [{ index: 0, delta, finish_reason: null }] });
       res.writeHead(200, { "Content-Type": "text/event-stream" });
@@ -39,8 +74,8 @@ export async function startMock({ slow = false } = {}) {
           res.write(sse(cb({ content: parts[i] }))); i++;
         }, 300);
       } else {
-        res.write(sse(cb({ content: "收到，短回复。" })));
-        res.write(sse({ ...cb({}), choices: [{ index: 0, delta: {}, finish_reason: "stop" }], usage: { prompt_tokens: 100, completion_tokens: 8, total_tokens: 108 } }));
+        if (!emptyReply) res.write(sse(cb({ content: text })));
+        res.write(sse({ ...cb({}), choices: [{ index: 0, delta: {}, finish_reason: "stop" }], usage: { prompt_tokens: 100, completion_tokens: emptyReply ? 0 : 8, total_tokens: emptyReply ? 100 : 108 } }));
         res.write("data: [DONE]\n\n");
         res.end();
       }
@@ -337,6 +372,19 @@ export async function pickUsableSession(page) {
   const c = page.locator('textarea[aria-label="消息输入"]');
   if (!(await c.count()) || (await c.isDisabled().catch(() => true))) throw new Error("bind model failed");
   console.log("SELF_BOUND_OK");
+}
+
+// toast 断言（B3）：有界轮询等 .shell-toast.is-visible 出现且文本含 needle，
+// 命中立刻返回完整文本（调用方应立刻截图——toast 生命期 ~3.2s）；
+// 超时返回 null 由调用方收口断言。同窗口内出现的是别的 toast 也会被捕获原文
+export async function waitForToast(page, needle, timeoutMs = 6000) {
+  const t0 = Date.now();
+  while (Date.now() - t0 < timeoutMs) {
+    const text = await page.evaluate(() => document.querySelector(".shell-toast.is-visible .shell-toast__message")?.textContent ?? null);
+    if (text != null && text.includes(needle)) return text;
+    await page.waitForTimeout(150);
+  }
+  return null;
 }
 
 // 附件断言：带超时的重试式探测（≤30 次×500ms）——先等「最近一条 user 消息」文本匹配 needle

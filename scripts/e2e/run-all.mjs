@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// 桌面端 e2e 全量序列 runner：清库 → 依序跑 8 个脚本（stdio 继承直出日志）→ 汇总表 → 任一非零 exit 1。
+// 桌面端 e2e 全量序列 runner：清库 → 依序跑全部脚本（stdio 继承直出日志）→ 汇总表 → 任一非零 exit 1。
 //
 // vite 生命周期（lib.mjs 端口探测式复用）：子进程注入 E2E_REUSE_VITE=1，首个脚本自起
 // vite，后续脚本探测 5173 直接复用；各 case 的 shutdown 只关 electron 不关 vite，且
@@ -25,6 +25,21 @@ const SCRIPTS = [
   "case-subagent.mjs",
   "case-zip-backup.mjs",
   "case-annotate2.mjs",
+  // B1 批次（v1.5.20 修复回归）
+  "case-rollback-restore.mjs",
+  "case-empty-dir-rename.mjs",
+  "case-vfs-error-copy.mjs",
+  "case-agent-reselect.mjs",
+  // B2 批次（v1.5.17 智能排序功能回归）
+  "case-smart-sort-basic.mjs",
+  "case-sort-rule-manager.mjs",
+  "case-subdir-sort.mjs",
+  "case-filename-validation.mjs",
+  // B3 批次（v1.5.16 桌面端功能回归）
+  "case-chat-file-link.mjs",
+  "case-skill-rename.mjs",
+  // B4 批次（v1.5.19 桌面端功能回归）
+  "case-run-fail-unlock.mjs",
 ];
 
 // --only 过滤（支持省略 .mjs 后缀）；含未知名直接报错退出，防静默跑空
