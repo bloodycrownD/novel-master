@@ -119,14 +119,13 @@ export async function loadChatAgentMeta(
  *
  * isAgentLocked 拆分后（none 态放开为待重选），agent 锁定 toast 仅在
  * meta 还没加载出来时触发，两处文案统一为加载中语义；none 态点击
- * 智能体卡则提示重选语义并正常弹 picker，不再锁死。
+ * 智能体卡则直接弹 picker 重选（badge 已提示已删，不再额外弹 toast），
+ * 不再锁死。
  */
 /** 会话面板锁定提示：meta 未加载，稍候再试。 */
 export const AGENT_LOCK_TOAST_GUIDE = '智能体信息加载中，请稍候再试';
 /** 会话详情页锁定提示：meta 未加载，稍候再试。 */
 export const AGENT_LOCK_TOAST_STATEMENT = '智能体信息加载中，请稍候再试';
-/** none 态（智能体已被删除）点击智能体卡的待重选提示。 */
-export const AGENT_RESELECT_TOAST = '智能体已被删除，请重新选择';
 /** none 态智能体卡上的待重选 badge 文案。 */
 export const AGENT_RESELECT_HINT = '智能体已删除 · 点击重选';
 /** 模型锁定提示：会话面板与会话详情页共用同一文案。 */

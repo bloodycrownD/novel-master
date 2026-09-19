@@ -38,7 +38,6 @@ import {useRuntime} from '../../hooks/useRuntime';
 import {
   AGENT_LOCK_TOAST_STATEMENT,
   AGENT_RESELECT_HINT,
-  AGENT_RESELECT_TOAST,
   isAgentDeleted,
   isAgentLocked,
   isModelLocked,
@@ -132,10 +131,8 @@ export function SessionDetailScreen() {
       showToast(AGENT_LOCK_TOAST_STATEMENT);
       return;
     }
-    if (isAgentDeleted(meta)) {
-      // 原绑定智能体已被删除：不早退，正常弹 picker 让用户重选。
-      showToast(AGENT_RESELECT_TOAST);
-    }
+    // 原绑定智能体已被删除：不早退，直接弹 picker 让用户重选
+    // （卡片 badge 已提示「已删除 · 点击重选」，不再额外弹 toast）。
     setAgentPickerOpen(true);
   }, [agentLocked, meta, showToast]);
 

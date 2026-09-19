@@ -262,10 +262,8 @@ export function SessionDetailDrawer({
       );
       return;
     }
-    if (agentDeleted) {
-      // 原绑定智能体已被删除：不早退，正常弹 picker 让用户重选。
-      showToast("智能体已被删除，请重新选择。");
-    }
+    // 原绑定智能体已被删除（agentDeleted）：卡片 badge 已提示「已删除 · 点击重选」，
+    // 点击直接弹 picker 重选，不再额外弹 toast。
     const result = await ipcAgentListPicker();
     if (!result.ok || result.data.rows.length === 0) {
       showToast("暂无 Agent，请先在设置中配置。");

@@ -79,9 +79,10 @@ describe("SessionDetailDrawer (T-D3)", () => {
     assert.match(src, /meta\?\.source \?\? "none"/);
     // agent 锁：仅在 meta 未加载完时锁定，防加载中被误点
     assert.match(src, /agentLocked = meta == null/);
-    // none 态（已加载）识别为「已删待重选」：不早退、弹 picker、提示重选
+    // none 态（已加载）识别为「已删待重选」：不早退、直接弹 picker
+    // （badge 已提示已删，不再额外弹「请重新选择」toast）
     assert.match(src, /agentDeleted = meta != null && source === "none"/);
-    assert.match(src, /智能体已被删除，请重新选择/);
+    assert.doesNotMatch(src, /智能体已被删除，请重新选择/);
     assert.match(src, /智能体已删除 · 点击重选/);
     // 待重选 badge 样式与可点 chevron 保留（agentLocked 为 false 时渲染 ›）
     assert.match(src, /session-detail-pick__lock--reselect/);

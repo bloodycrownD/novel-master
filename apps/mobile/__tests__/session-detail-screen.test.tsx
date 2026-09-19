@@ -109,7 +109,6 @@ jest.mock('@/services/chat-agent-meta', () => ({
     meta.modelSource === 'agent-pin' ||
     Boolean(meta.hasDedicatedModel),
   AGENT_LOCK_TOAST_STATEMENT: '智能体信息加载中，请稍候再试',
-  AGENT_RESELECT_TOAST: '智能体已被删除，请重新选择',
   AGENT_RESELECT_HINT: '智能体已删除 · 点击重选',
   MODEL_LOCK_TOAST: '当前智能体已锁定模型，会话内无法覆盖',
 }));
@@ -319,7 +318,7 @@ describe('T-M2 SessionDetailScreen', () => {
     expect(json).toContain('›');
     // 模型卡：维持锁定（🔒）
     expect(json).toContain('🔒');
-    // 点击智能体卡 → 正常弹 picker（不再锁死），并提示重选
+    // 点击智能体卡 → 正常弹 picker（不再锁死，也不再弹重选 toast）
     await act(async () => {
       tree.root.findByProps({testID: 'agent-row'}).props.onPress();
     });
@@ -333,8 +332,9 @@ describe('T-M2 SessionDetailScreen', () => {
     expect(
       tree.root.findByProps({testID: 'model-picker-modal'}).props.visible,
     ).toBe('false');
-    // 两次点击各弹一次提示：智能体卡（重选提示）+ 模型卡（锁定提示）
-    expect(mockShowToast).toHaveBeenCalledTimes(2);
+    // 仅模型卡弹一次锁定提示：智能体卡点击不再弹「请重新选择」toast
+    expect(mockShowToast).toHaveBeenCalledTimes(1);
+    expect(mockShowToast).not.toHaveBeenCalledWith('智能体已被删除，请重新选择');
   });
 
   // review-mobile/G-2：loadChatAgentMeta 抛非 AgentRunResolveError 时走异常路径，

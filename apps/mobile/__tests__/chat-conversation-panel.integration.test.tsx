@@ -455,7 +455,7 @@ describe('ChatConversationPanel 顶栏 agent 卡分流（au/B-1 / au/G-4）', ()
     tree = undefined;
   });
 
-  it('验收a（条目4/11）：none 态点 agent 卡弹重选 toast 并打开 picker', async () => {
+  it('验收a（条目4/11）：none 态点 agent 卡直接打开 picker，不弹重选 toast', async () => {
     // loadChatAgentMeta 在 AgentRunResolveError 时归一落位的 none meta
     mockAgentMeta = {
       source: 'none',
@@ -475,7 +475,8 @@ describe('ChatConversationPanel 顶栏 agent 卡分流（au/B-1 / au/G-4）', ()
         .findByProps({testID: 'chat-meta-agent-card'})
         .props.onPress();
     });
-    expect(mockShowToast).toHaveBeenCalledWith('智能体已被删除，请重新选择');
+    // badge 已提示已删，点击只开 picker、不弹「请重新选择」toast
+    expect(mockShowToast).not.toHaveBeenCalled();
     expect(mockSetAgentPickerOpen).toHaveBeenCalledWith(true);
   });
 
