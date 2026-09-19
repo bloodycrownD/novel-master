@@ -613,8 +613,8 @@ export class SessionStreamUnit {
    * 不复位 injectedValue——句柄只是搬家，本单元随后即被销毁。
    */
   takeWebviewHandles(): SessionStreamWebviewHandle[] {
-    const handles = this.webviewHandles;
-    this.webviewHandles = [];
+    const handles = [...this.webviewHandles];
+    this.webviewHandles.length = 0;
     return handles;
   }
 
