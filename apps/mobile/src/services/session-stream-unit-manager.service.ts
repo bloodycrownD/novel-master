@@ -1000,7 +1000,13 @@ export class SessionStreamUnitManager {
     }
 
     // settled 旧单元（interrupted/finished/failed，含宽限中）替换吸收：删旧建新。
+    // settled 旧单元（interrupted/finished/failed，含宽限中）替换吸收：删旧建新。
+    // 句柄迁移：旧单元销毁会清空句柄注册表，而 hasUnit 在旧→新之间连续
+    // （不触发屏幕侧 attach effect 重挂）——不迁移的话新 run 的流式推送
+    // 全程无句柄（HANDLE-NULL：会话内不渲染、退出重进注入才可见）。
+    let inheritedHandles: SessionStreamWebviewHandle[] = [];
     if (existing != null) {
+      inheritedHandles = existing.takeWebviewHandles();
       this.removeUnit(sessionId, existing);
     }
     const unit = new SessionStreamUnit({
@@ -1013,6 +1019,9 @@ export class SessionStreamUnitManager {
       onProjectionChanged: () => this.notifyChanged(),
     });
     unit.begin();
+    for (const handle of inheritedHandles) {
+      unit.attachWebview(handle);
+    }
     this.units.set(sessionId, unit);
     // Step 5：受理即写 starting 行（一次性事件不走节流；runId 未回填用
     // 空串占位，RUN_STARTED 到达后覆盖）。杀进程落在受理空窗内时，重启

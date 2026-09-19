@@ -339,10 +339,19 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
 
   // 发送态推导基于显示源：用户消息 append 后 force 回源刷新（有单元走
   // 投影、无单元走 idle），推导随消息面即时更新。
-  const composerSendState = useMemo(
-    () => deriveComposerSendState(findLastVisibleMessage(chatMessages)),
-    [chatMessages],
-  );
+  const composerSendState = useMemo(() => {
+    const derived = deriveComposerSendState(
+      findLastVisibleMessage(chatMessages),
+    );
+    // 中断现场解锁输入：被杀 run 的尾部 user 消息是「没回完」的历史现场，
+    // 不是「等待回复中」。partial 非空的中断有合成行提交解锁（ui/B-1），
+    // partial 为空的（首字前被杀）没有任何可提交内容，锁死将无出口；
+    // 再发消息会替换吸收中断单元，是合法操作。
+    if (unitView?.status === 'interrupted') {
+      return {...derived, lastMessageIsPlainUserText: false};
+    }
+    return derived;
+  }, [chatMessages, unitView?.status]);
 
   const onLoadOlderMessages = useCallback(() => {
     if (sessionId != null) {

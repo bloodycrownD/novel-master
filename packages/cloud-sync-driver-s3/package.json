@@ -12,6 +12,7 @@
     }
   },
   "scripts": {
+    "prebuild": "npm run build -w @novel-master/core",
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "dev": "tsc -p tsconfig.json --watch",

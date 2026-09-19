@@ -514,6 +514,13 @@ export class SessionStreamUnit {
     this.partialTextValue = '';
     this.partialThinkingValue = '';
     this.injectedValue = false;
+    // step 边界重置流式尾巴（reset-stream 广播）：partial 清零后下一 step
+    // 从空开始，但 webview 侧的 stream tail 与 RN 组件的本地累积不清的话，
+    // 下一 step 的 thinking/text delta 会追加进上一 step 的残留尾巴（正文/
+    // 思考交替错段）。落库行由随后的 force 快照进基线，尾巴此时必须整体
+    // 重置——resetStreamTail 的 cancel RAF 还能拦截本步残余 delta 的迟到
+    // post（内容已由落库行接管，丢弃无碍）。
+    this.broadcastControlMessage({type: 'reset-stream'});
     // step 落库行进消息面：partial 清零后 force 回源 reload（蓝本
     // flushAgentStepUi 的 reload 方向；webview 侧的 streamCommit 是 Step 6
     // 接线，这里只管数据面）。异步吞错。
@@ -598,6 +605,17 @@ export class SessionStreamUnit {
     this.webviewHandles.push(handle);
     // 新句柄挂上即尝试注入本 step 已累积的 partial（run 活跃且未注入过才生效）
     this.tryInjectPartialInto(handle);
+  }
+
+  /**
+   * 取出全部句柄并清空注册表（单元替换吸收时的迁移通道）：取出的句柄
+   * 由 manager 转挂给替换者单元，保证流式推送目标在旧→新单元间不丢失。
+   * 不复位 injectedValue——句柄只是搬家，本单元随后即被销毁。
+   */
+  takeWebviewHandles(): SessionStreamWebviewHandle[] {
+    const handles = [...this.webviewHandles];
+    this.webviewHandles.length = 0;
+    return handles;
   }
 
   /**

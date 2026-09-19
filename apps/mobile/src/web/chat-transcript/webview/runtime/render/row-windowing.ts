@@ -260,6 +260,14 @@ export function handleRowWindowScroll(): boolean {
   if (v == null) return false;
   const move = planRowWindowMove(total, win.start, win.end, v);
   if (!move) return false;
+  // 贴底守卫：窗口已含全部尾部行时，视口高度变化（输入框换行长高 /
+  // 键盘弹收把 webview 挤矮）引发的 scrollTop 钳制会把视口行估算推高、
+  // 误判为用户上滚并触发上端收缩——收缩把顶部真实行换成估算占位，
+  // scrollHeight 突变一整个估算误差，视口内容跳一格（打字时的突然抖动）。
+  // 贴底时上端收缩对可视区零收益（顶部缓冲行不影响底部视口），跳过。
+  if (move.startDelta > 0 && win.end >= total) {
+    return false;
+  }
   applyRowWindowMove(move, total);
   return true;
 }
