@@ -272,7 +272,11 @@ export async function restorePathToRevisionWithBackfill(
   // backfill 寻址：live entry 优先，entry 已删时用 checkpoint 旧 entryId——
   // 旧 entryId 的 revision 行在（纯删除场景）则回补 no-op，restore 走复活；
   // 行真缺（如手工删行）时按旧 entryId 回补墓碑，restore 走 deleted 降级。
-  const backfillEntryId = entryId ?? cpEntryId;
+  // 同路径异 entry（diverged）时 checkpoint 指针与 live head 分属两个版本
+  // 空间，回补必须打在旧 entryId 上：行真缺时按旧 entryId 回补占位让
+  // restore 走复活降级，不给 live 新 entry 伪造占位行。
+  const diverged = cpEntryId != null && entryId != null && cpEntryId !== entryId;
+  const backfillEntryId = diverged ? cpEntryId : entryId ?? cpEntryId;
   const backfilled = await backfillMissingRevisionIfNeeded(
     { revisionRepo, entryRepo, contentStore },
     scopeKeyStr,

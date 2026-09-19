@@ -41,12 +41,24 @@ export async function findMissingRevisionPointers(
       continue;
     }
     const entry = await entryRepo.findByPath(scopeKeyStr, logicalPath);
+    const cpEntryId = checkpointEntryIdByPath?.get(logicalPath) ?? null;
+    if (entry != null && cpEntryId != null && entry.entryId !== cpEntryId) {
+      // live entry 与 checkpoint 指针不同源（删除后同路径重建）：两边版本
+      // 空间各自独立，按 checkpoint 旧 entryId 组对寻址 revision（对齐
+      // resolve-reconcile-paths / restore 的 diverged 语义），避免按 live
+      // 新 entry 误报 missing 或漏检旧 entry 的真缺失。
+      pairs.push({ logicalPath, entryId: cpEntryId, version: targetVersion });
+      continue;
+    }
     if (entry == null) {
       // entry 行已物理删除：有 checkpoint 旧 entryId 时按它寻址 revision
       //（entryId >= 0 进下方 meta 批查，查到即非 missing）；无指针上下文
       // 才维持 entryId=-1 直接算 missing。
-      const cpEntryId = checkpointEntryIdByPath?.get(logicalPath) ?? -1;
-      pairs.push({ logicalPath, entryId: cpEntryId, version: targetVersion });
+      pairs.push({
+        logicalPath,
+        entryId: cpEntryId ?? -1,
+        version: targetVersion,
+      });
       continue;
     }
     pairs.push({ logicalPath, entryId: entry.entryId, version: targetVersion });

@@ -11,6 +11,10 @@ import type { VfsRestorePort } from "@/domain/vfs/ports/vfs-restore.port.js";
 
 /**
  * Creates parent directories from root down (idempotent mkdir).
+ *
+ * 从根往下逐级重建 `logicalPath` 的父目录链（幂等 mkdir，已存在的目录静默
+ * 跳过），供回滚 restore 写盘前确保父目录在位——被删文件复活时其父目录
+ * 可能已被一并删除。
  */
 export async function ensureDirectoryChain(
   vfs: VfsRestorePort,
