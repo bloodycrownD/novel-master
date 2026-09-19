@@ -18,7 +18,9 @@
  *   可点击弹 picker 重选，写入新 agentId 后悬空即解除（避免会话被已删
  *   agent 死锁）；模型卡保持锁定——智能体没了，pin 的模型无从解析，
  *   重选智能体后自然解锁。
- * - meta 尚未加载完时智能体卡保持锁定，避免加载中被误点。
+ * - meta 尚未加载完（null）时智能体卡保持锁定，避免加载中被误点；
+ *   null 下 badge 按加载结果分「加载中…/智能体信息加载失败」两态（au/B-3），
+ *   失败 toast 用固定中文兜底文案，不透出 main 侧可能英文的 error message。
  *   项目智能体已下线，不再有 project-custom 分支。
  *
  * core 移除 workspace 回退后：会话始终持有 agentId（必填）+ modelId（可选），
@@ -95,6 +97,9 @@ export function SessionDetailDrawer({
 }: SessionDetailDrawerProps) {
   const { notifyAgentConfigChanged, requestViewPrompt } = useShellNav();
   const [meta, setMeta] = useState<PromptAgentMetaResponse | null>(null);
+  // meta 加载失败标记（au/B-3）：区分「加载中」（未落定）与「加载失败」
+  // （ok:false 已落定）——两态下 meta 同为 null，badge 与点击提示靠它分流。
+  const [metaLoadFailed, setMetaLoadFailed] = useState(false);
   const [tokenStats, setTokenStats] =
     useState<PromptChatTokenStatsResponse | null>(null);
   const [agentPickerOpen, setAgentPickerOpen] = useState(false);
@@ -126,6 +131,8 @@ export function SessionDetailDrawer({
     }
     setSearchPanelOpen(false);
     setSkillsPanelOpen(false);
+    // 新一轮加载：失败标记随抽屉重开/会话切换重置，badge 回到「加载中…」语义。
+    setMetaLoadFailed(false);
   }, [open, sessionId]);
 
   const reload = useCallback(async () => {
@@ -135,6 +142,12 @@ export function SessionDetailDrawer({
     ]);
     if (metaRes.ok) {
       setMeta(metaRes.data);
+      setMetaLoadFailed(false);
+    } else {
+      // 失败不再静默（au/B-3）：固定中文兜底文案，不透出 metaRes.error.message
+      // ——main 侧 formatIpcError 可能直出英文。meta 保持 null（锁定态）。
+      setMetaLoadFailed(true);
+      showToast("智能体信息加载失败");
     }
     if (tokens.ok) {
       setTokenStats(tokens.data);
@@ -240,8 +253,13 @@ export function SessionDetailDrawer({
 
   const openAgentPicker = async () => {
     if (agentLocked) {
-      // meta 尚未加载完，还不知道智能体状态，先锁住防误点。
-      showToast("智能体信息加载中，请稍候再试。");
+      // meta 尚未加载完，先锁住防误点；已失败时给错误文案，不再误导
+      // 「加载中请稍候」永不发生（au/B-3）。
+      showToast(
+        metaLoadFailed
+          ? "智能体信息加载失败"
+          : "智能体信息加载中，请稍候再试。",
+      );
       return;
     }
     if (agentDeleted) {
@@ -427,7 +445,9 @@ export function SessionDetailDrawer({
               data-session-detail-action="switch-agent"
               aria-label={
                 agentLocked
-                  ? "切换智能体（加载中）"
+                  ? metaLoadFailed
+                    ? "切换智能体（加载失败）"
+                    : "切换智能体（加载中）"
                   : agentDeleted
                     ? "切换智能体（待重选）"
                     : "切换智能体"
@@ -457,14 +477,16 @@ export function SessionDetailDrawer({
                     智能体已删除 · 点击重选
                   </span>
                 ) : agentLocked ? (
+                  // meta==null 的两态分流（au/B-3 三态可辨）：未落定 = 加载中，
+                  // ok:false 已落定 = 加载失败；两者都不是「已删待重选」。
                   <span className="session-detail-pick__lock">
                     <span
                       className="session-detail-pick__lock-icon"
                       aria-hidden="true"
                     >
-                      🔒
+                      {metaLoadFailed ? "⚠" : "…"}
                     </span>
-                    智能体未绑定
+                    {metaLoadFailed ? "智能体信息加载失败" : "加载中…"}
                   </span>
                 ) : null}
               </span>

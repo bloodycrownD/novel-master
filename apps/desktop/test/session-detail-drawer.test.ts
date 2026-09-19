@@ -47,9 +47,12 @@ describe("SessionDetailDrawer (T-D3)", () => {
     assert.doesNotMatch(src, /AGENT_SOURCE_LABEL/);
     assert.doesNotMatch(src, /MODEL_SOURCE_LABEL/);
     assert.doesNotMatch(src, /session-detail-pick__source/);
-    // 锁定指示仍保留
+    // 锁定指示仍保留；meta==null 的 badge 按 au/B-3 分「加载中…/加载失败」
+    // 两态（旧「智能体未绑定」文案已退役——失败态不得冒充未绑定/已删）。
     assert.match(src, /session-detail-pick__lock/);
-    assert.match(src, /智能体未绑定/);
+    assert.match(src, /加载中…/);
+    assert.match(src, /智能体信息加载失败/);
+    assert.doesNotMatch(src, /智能体未绑定/);
     assert.match(src, /智能体锁定/);
     // 操作入口 data hook
     assert.match(src, /data-session-detail-action="switch-agent"/);
@@ -122,6 +125,33 @@ describe("SessionDetailDrawer (T-D3)", () => {
     assert.match(src, /清除会话覆盖（使用智能体锁定模型）/);
     // 旧的“回退工作区”措辞已全部移除
     assert.doesNotMatch(src, /回退工作区/);
+  });
+});
+
+describe("SessionDetailDrawer meta 加载失败态（cr-fix-spec 条目 10，au/B-3）", () => {
+  it("源码：metaRes.ok=false 时 showToast 固定中文兜底「智能体信息加载失败」，不透出 metaRes.error.message", () => {
+    const src = readDrawer();
+    // 失败可见：metaLoadFailed 置位 + 固定中文 toast（main 侧 formatIpcError
+    // 可能直出英文，不直接透出 error.message）
+    assert.match(src, /metaLoadFailed/);
+    assert.match(src, /setMetaLoadFailed\(true\)/);
+    assert.match(src, /showToast\("智能体信息加载失败"\)/);
+    assert.doesNotMatch(src, /showToast\(metaRes\.error\.message\)/);
+    // 成功路径清失败标记；抽屉重开/会话切换重置（重开即重试的入口语义）
+    assert.match(src, /setMetaLoadFailed\(false\)/);
+  });
+
+  it("源码：badge 三态可辨——加载中…/智能体信息加载失败/已删待重选文案互不相同", () => {
+    const src = readDrawer();
+    // 三态文案各自出现
+    assert.match(src, /加载中…/);
+    assert.match(src, /智能体信息加载失败/);
+    assert.match(src, /智能体已删除 · 点击重选/);
+    // 失败后点击智能体卡提示错误文案（不再「加载中请稍候」永不发生）
+    assert.match(
+      src,
+      /metaLoadFailed\s*\?\s*"智能体信息加载失败"\s*:\s*"智能体信息加载中，请稍候再试。"/,
+    );
   });
 });
 
