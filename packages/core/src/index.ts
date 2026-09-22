@@ -83,6 +83,17 @@ export type {
 } from "./infra/db-backup/index.js";
 
 /**
+ * 数据库维护（数据清理）：存储统计 + 缓存 GC/checkpoint/VACUUM 维护链路
+ * （VACUUM 须事务外调用，事务中调用由 SQLite 原生报错兜底）。
+ */
+export { createDbMaintenanceService } from "./infra/db-maintenance/index.js";
+export type {
+  DatabaseMaintenanceResult,
+  DbMaintenanceService,
+  StorageStats,
+} from "./infra/db-maintenance/index.js";
+
+/**
  * 跨端云同步：协调器、租约锁与 status schema。
  */
 export {
