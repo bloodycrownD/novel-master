@@ -176,6 +176,9 @@ export const IPC_CHANNELS = {
   BACKUP_EXPORT: 'nm:backup/export',
   BACKUP_IMPORT: 'nm:backup/import',
 
+  DB_STATS: 'nm:db/stats',
+  DB_MAINTENANCE: 'nm:db/maintenance',
+
   CLOUD_SYNC_GET_CONFIG: 'nm:cloud-sync/getConfig',
   CLOUD_SYNC_SET_CONFIG: 'nm:cloud-sync/setConfig',
   CLOUD_SYNC_SET_ENABLED: 'nm:cloud-sync/setEnabled',
@@ -1494,6 +1497,18 @@ export type CompactionConditionsSetRequest = {
 export type BackupExportResult = 'saved' | 'cancelled';
 export type BackupImportResult = 'imported' | 'cancelled';
 
+/** 数据库存储统计（文件体积由 main 侧 stat 提供，可回收量为 freelist 口径）。 */
+export type DbStatsResult = {
+  readonly fileBytes: number;
+  readonly reclaimableBytes: number;
+};
+
+/** 数据清理（GC + checkpoint + VACUUM）前后库文件体积。 */
+export type DbMaintenanceResult = {
+  readonly beforeBytes: number;
+  readonly afterBytes: number;
+};
+
 export type CloudSyncConfigDto = {
   readonly endpoint: string;
   readonly bucket: string;
@@ -1535,6 +1550,8 @@ export type CloudSyncLocalStatusDto = {
   readonly suggestsPull: boolean;
   readonly syncBusy: boolean;
   readonly agentActive: boolean;
+  /** 数据清理（VACUUM）进行中：期间禁用同步/导入导出等数据库操作。 */
+  readonly maintenanceBusy: boolean;
 };
 
 export type CloudSyncPullResult = {

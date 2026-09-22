@@ -35,6 +35,10 @@ import {
 } from './handlers/agent-registry.js';
 import { handleBackupExport, handleBackupImport } from './handlers/backup.js';
 import {
+  handleDbMaintenance,
+  handleDbStats,
+} from './handlers/db-maintenance.js';
+import {
   handleCloudSyncGetConfig,
   handleCloudSyncGetLocalStatus,
   handleCloudSyncPull,
@@ -428,6 +432,9 @@ export function registerHandlersFromRegistry(): void {
 
   bindNoArg(IPC_CHANNELS.BACKUP_EXPORT, handleBackupExport);
   bindNoArg(IPC_CHANNELS.BACKUP_IMPORT, handleBackupImport);
+
+  bindNoArg(IPC_CHANNELS.DB_STATS, handleDbStats);
+  bindNoArg(IPC_CHANNELS.DB_MAINTENANCE, handleDbMaintenance);
 
   bindNoArg(IPC_CHANNELS.CLOUD_SYNC_GET_CONFIG, handleCloudSyncGetConfig);
   bindReq(IPC_CHANNELS.CLOUD_SYNC_SET_CONFIG, handleCloudSyncSetConfig);

@@ -162,6 +162,8 @@ export const {
   ipcCompactionConditionsSet,
   ipcBackupExport,
   ipcBackupImport,
+  ipcDbStats,
+  ipcDbMaintenance,
   ipcCloudSyncGetConfig,
   ipcCloudSyncSetConfig,
   ipcCloudSyncSetEnabled,

@@ -26,6 +26,7 @@ import {
 } from "@aws-sdk/client-s3";
 import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
 import { isDesktopAgentActive } from "../runtime/agent-activity.js";
+import { isDesktopDbMaintenanceBusy } from "./db-maintenance-busy.js";
 import {
   createCloudSyncConfigStore,
   type CloudSyncConfigDto,
@@ -46,9 +47,16 @@ export type CloudSyncLocalStatusDto = {
   suggestsPull: boolean;
   syncBusy: boolean;
   agentActive: boolean;
+  /** 数据清理（VACUUM）进行中：期间禁用同步操作。 */
+  maintenanceBusy: boolean;
 };
 
 let syncBusy = false;
+
+/** 云同步（pull/push）是否进行中：供数据清理等数据库操作的入口守卫使用。 */
+export function isDesktopCloudSyncBusy(): boolean {
+  return syncBusy;
+}
 
 function computeSha256Hex(bytes: Uint8Array): string {
   return createHash("sha256").update(bytes).digest("hex");
@@ -212,6 +220,7 @@ export class DesktopCloudSyncService {
       suggestsPull,
       syncBusy,
       agentActive,
+      maintenanceBusy: isDesktopDbMaintenanceBusy(),
     };
   }
 
@@ -414,4 +423,9 @@ export async function getDesktopCloudSyncService(): Promise<DesktopCloudSyncServ
 export function resetDesktopCloudSyncServiceForTest(): void {
   service = undefined;
   syncBusy = false;
+}
+
+/** 测试用：直接置位云同步忙碌状态（模拟 pull/push 执行窗口）。 */
+export function setDesktopCloudSyncBusyForTest(busy: boolean): void {
+  syncBusy = busy;
 }
