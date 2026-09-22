@@ -49,9 +49,7 @@ after(async () => {
 });
 
 /** 直查某会话 entry 引用行的 content_hash 全集。 */
-async function entryHashes(
-  sessionId: string,
-): Promise<string[]> {
+async function entryHashes(sessionId: string): Promise<string[]> {
   const rows = await conn.query<{ content_hash: string }>(
     "SELECT content_hash FROM session_file_cache_entry WHERE session_id = ?",
     [sessionId]
@@ -68,7 +66,7 @@ async function blobTotalRows(): Promise<number> {
 }
 
 describe("数据库维护（infra/db-maintenance）", () => {
-  it("T-DM1 文件库：写入→删除产生 freelist→maintenance 回收（freelist 归零、体积不增大、缓存 GC 生效）", async () => {
+  it("T-DM1 文件库：写入→删除产生 freelist→maintenance 回收（freelist 归零、体积下降、缓存 GC 生效）", async () => {
     const sk = createSessionKkvService(conn);
     const bulkSession = "dm1-bulk";
     const keepSession = "dm1-keep";
@@ -131,7 +129,8 @@ describe("数据库维护（infra/db-maintenance）", () => {
 
     const result = await maintenance.runDatabaseMaintenance();
 
-    // VACUUM 后 freelist 归零（PRAGMA 直读复核），库文件体积不增大。
+    // VACUUM 后 freelist 归零（PRAGMA 直读复核），库文件体积严格下降
+    //（已前置断言 freelist > 0，VACUUM 归还空闲页后必然缩小，`<` 是安全断言）。
     assert.equal(result.after.freelistPages, 0);
     const flAfter = await conn.query<{ freelist_count: number }>(
       "PRAGMA freelist_count"
@@ -139,8 +138,8 @@ describe("数据库维护（infra/db-maintenance）", () => {
     assert.equal(Number(flAfter[0]?.freelist_count ?? -1), 0);
     const fileSizeAfter = statSync(dbPath).size;
     assert.ok(
-      fileSizeAfter <= fileSizeBefore,
-      `VACUUM 后文件体积不得增大：before=${fileSizeBefore} after=${fileSizeAfter}`
+      fileSizeAfter < fileSizeBefore,
+      `VACUUM 后文件体积应严格下降：before=${fileSizeBefore} after=${fileSizeAfter}`
     );
     assert.ok(result.reclaimedBytes > 0);
 
@@ -161,9 +160,9 @@ describe("数据库维护（infra/db-maintenance）", () => {
 
   it("T-DM2 事务中调用 runDatabaseMaintenance 得到错误而非静默", async () => {
     // TdbcConnection 无事务状态探测 API（端口仅 execute/query/batch/
-    // transaction/close），服务层不做主动探测；防护依赖 SQLite 原生拒绝
-    // 事务内 VACUUM（wal_checkpoint 同样在事务内被拒），此处断言事务中
-    // 调用得到 reject 而非静默成功。
+    // transaction/close），服务层不做主动探测；实测 DELETE journal 下事务内
+    // wal_checkpoint 不报错，防护完全落在 VACUUM 的原生报错上（SQLite
+    // 拒绝事务内 VACUUM），此处断言事务中调用得到 reject 而非静默成功。
     //
     // 注意用 transaction 回调传入的 tx 连接构造服务——真实误用场景就是
     // 调用方把事务连接喂给维护链路；若误用外层 conn，execute 会撞上
