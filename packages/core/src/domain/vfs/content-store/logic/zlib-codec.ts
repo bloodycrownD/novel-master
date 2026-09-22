@@ -1,5 +1,5 @@
 /**
- * ContentStore 专用 zlib 编解码（与 ZIP 的 deflate/inflate 模块边界分离）。
+ * zlib 编解码（ContentStore 与 session-kkv file_cache blob 共用；与 ZIP 的 deflate/inflate 模块边界分离）。
  *
  * @module domain/vfs/content-store/logic/zlib-codec
  */
@@ -16,7 +16,7 @@ export const VFS_CONTENT_ENCODING_ZLIB = "zlib" as const;
 /**
  * zlib 压缩明文 UTF-8 字节。
  *
- * @remarks 仅供 ContentStore 使用；禁止 ZIP 路径调用本封装。
+ * @remarks ContentStore 与 file_cache blob 共用；禁止 ZIP 路径调用本封装。
  */
 export function compressZlib(plainUtf8: Uint8Array): Uint8Array {
   return zlibSync(plainUtf8);
@@ -25,7 +25,7 @@ export function compressZlib(plainUtf8: Uint8Array): Uint8Array {
 /**
  * zlib 解压为 UTF-8 字节。
  *
- * @remarks 仅供 ContentStore 使用；禁止 ZIP 路径调用本封装。
+ * @remarks ContentStore 与 file_cache blob 共用；禁止 ZIP 路径调用本封装。
  */
 export function decompressZlib(compressed: Uint8Array): Uint8Array {
   return unzlibSync(compressed);
