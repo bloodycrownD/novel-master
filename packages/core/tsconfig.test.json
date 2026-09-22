@@ -6,6 +6,7 @@
     "paths": {
       "@/*": ["./src/*"],
       "@novel-master/core": ["./src/index.ts"],
+      "@novel-master/core/common": ["./src/common/index.ts"],
       "@novel-master/core/agent": ["./src/public/agent.ts"],
       "@novel-master/core/chat": ["./src/public/chat.ts"],
       "@novel-master/core/compaction": ["./src/public/compaction.ts"],
@@ -23,11 +24,14 @@
       "@novel-master/core/sksp": ["./src/infra/sksp/index.ts"],
       "@novel-master/core/nmtp": ["./src/infra/nmtp/index.ts"],
       "@novel-master/core/kkv": ["./src/service/kkv/index.ts"],
+      "@novel-master/core/session-kkv": ["./src/public/session-kkv.ts"],
+      "@novel-master/core/session-run-state": ["./src/public/session-run-state.ts"],
       "@novel-master/core/skills": ["./src/public/skills.ts"],
       "@novel-master/core/config-forms": ["./src/config-forms/index.ts"],
       "@novel-master/core/config-forms/agent": ["./src/config-forms/agent/index.ts"],
       "@novel-master/core/config-forms/events": ["./src/config-forms/events/index.ts"],
-      "@novel-master/core/config-forms/shared": ["./src/config-forms/shared/index.ts"]
+      "@novel-master/core/config-forms/shared": ["./src/config-forms/shared/index.ts"],
+      "@novel-master/core/config-forms/stored-config-validity": ["./src/config-forms/stored-config-validity/index.ts"]
     }
   },
   "include": ["src/**/*", "test/**/*"]
