@@ -249,5 +249,19 @@ describe("session file_cache 分流存储（两新表）", () => {
     assert.equal(legacyRows.length, 1);
     assert.equal(legacyRows[0]!.value, value);
     assert.equal(await currentEntryHash(ctx.conn, sid, key), null);
+
+    // 退化行的 key 必须并入 listKeys（T-CC4/T-IC3 以裸字符串预置缓存的
+    // 既有口径：任意字符串 set 后 listKeys 都要能列出，含新旧表混存合并）。
+    const blobKey = `full:/blob-${testIsolationSuffix()}.md`;
+    await sk.set(
+      sid,
+      SESSION_KKV_DOMAIN_FILE_CACHE,
+      blobKey,
+      JSON.stringify({ body: "blob-body", mtimeMs: 1 })
+    );
+    assert.deepEqual(
+      await sk.listKeys(sid, SESSION_KKV_DOMAIN_FILE_CACHE).then((keys) => keys.sort()),
+      [blobKey, key].sort()
+    );
   });
 });

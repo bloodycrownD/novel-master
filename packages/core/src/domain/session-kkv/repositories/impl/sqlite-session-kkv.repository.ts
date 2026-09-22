@@ -186,15 +186,19 @@ export class SqliteSessionKkvRepository implements SessionKkvRepository {
 
   async listKeys(sessionId: string, domain: string): Promise<string[]> {
     if (domain === SESSION_KKV_DOMAIN_FILE_CACHE) {
-      // 键集合口径不变：键名即 `{status}:{path}`。退化路径写入旧表的键
-      // 理论不出现（codec null 分支仅防御 get 逐字节还原合同），不并入。
+      // 键集合口径不变：键名即 `{status}:{path}`。退化路径（codec null）
+      // 写入旧表的键必须并入——既有调用方对任意字符串 set 后 listKeys
+      // 都要能列出（T-CC4/T-IC3 以裸字符串预置缓存），UNION 自带去重。
       const rows = await queryTemplate<{ key: string }>(
         this.conn,
         this.parser,
         `SELECT key FROM session_file_cache_entry
          WHERE session_id = #{sessionId}
+         UNION
+         SELECT key FROM session_kkv_entry
+         WHERE session_id = #{sessionId} AND domain = #{domain}
          ORDER BY key`,
-        { sessionId }
+        { sessionId, domain }
       );
       return rows.map((row) => String(row.key));
     }
