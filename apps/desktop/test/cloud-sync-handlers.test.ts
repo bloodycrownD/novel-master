@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
-import { resetDesktopCloudSyncServiceForTest } from "../src/main/services/cloud-sync.service.js";
+import {
+  getDesktopCloudSyncService,
+  isDesktopCloudSyncBusy,
+  resetDesktopCloudSyncServiceForTest,
+} from "../src/main/services/cloud-sync.service.js";
+import type { CloudSyncConfigStore } from "../src/main/services/cloud-sync-config.store.js";
 import {
   handleCloudSyncGetConfig,
   handleCloudSyncGetLocalStatus,
@@ -81,5 +86,26 @@ describe("cloud-sync ipc handlers", () => {
       assert.equal(configAfter.data.enabled, false);
       assert.equal(configAfter.data.bucket, "test-bucket");
     }
+  });
+
+  it("pull 前置 getLocalMeta 抛错后 syncBusy 复位 false", async () => {
+    // MF-4（desktop/B-3）回归：getLocalMeta 移入 try 后，任何抛错路径都
+    // 必须经 finally 复位 syncBusy——否则数据清理守卫会被永久锁死。
+    const service = await getDesktopCloudSyncService();
+    const configStore = (
+      service as unknown as {
+        configStore: CloudSyncConfigStore;
+      }
+    ).configStore;
+    const originalGetLocalMeta = configStore.getLocalMeta.bind(configStore);
+    configStore.getLocalMeta = async () => {
+      throw new Error("meta 读失败（注入）");
+    };
+    try {
+      await assert.rejects(service.pull(), /meta 读失败（注入）/);
+    } finally {
+      configStore.getLocalMeta = originalGetLocalMeta;
+    }
+    assert.equal(isDesktopCloudSyncBusy(), false);
   });
 });
