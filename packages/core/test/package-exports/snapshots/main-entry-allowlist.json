@@ -79,6 +79,7 @@
   "resolveEngineChain",
   "resolveToolResultOk",
   "restoreProviderTableSnapshot",
+  "runDeferredFileCacheGc",
   "scrubProviderTables",
   "scrubProviderTablesInDatabase",
   "searchApiKeyRef",

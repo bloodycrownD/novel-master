@@ -59,6 +59,12 @@ export {
 } from "./bootstrap/novel-master-bootstrap.js";
 
 /**
+ * 延期 file_cache 缓存 GC：回收无 entry 引用行的 `session_file_cache_blob`
+ * （引用集 = session_file_cache_entry 全表；须在删除引用行的事务提交后调度）。
+ */
+export { runDeferredFileCacheGc } from "./domain/session-kkv/logic/deferred-file-cache-gc.js";
+
+/**
  * 数据备份：导出时清除、导入时保留 provider 三表。
  */
 export {

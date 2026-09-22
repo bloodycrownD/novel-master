@@ -37,6 +37,7 @@ import {
   runDeferredBlobGc,
 } from "@/service/session-fs/create-session-fs-service.js";
 import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
+import { runDeferredFileCacheGc } from "@/domain/session-kkv/logic/deferred-file-cache-gc.js";
 import { createSessionRunStateService } from "@/service/session-run-state/create-session-run-state-service.js";
 import { SqliteSkillDisabledRuleRepository } from "@/domain/skills/repositories/impl/sqlite-skill-disabled-rule.repository.js";
 import type { ProjectService } from "../project.port.js";
@@ -191,6 +192,8 @@ export class DefaultProjectService implements ProjectService {
       }
     });
     await runDeferredBlobGc(this.deps.conn);
+    // file_cache 引用行随上面的事务删除，缓存 blob 的回收同样在提交后调度
+    await runDeferredFileCacheGc(this.deps.conn);
   }
 
   /**
