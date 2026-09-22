@@ -9,11 +9,9 @@ import { getDesktopRuntime } from "../runtime/desktop-runtime-singleton.js";
 import { resolveDbPath } from "../runtime/resolve-db-path.js";
 import { isDesktopAgentActive } from "../runtime/agent-activity.js";
 import { isDesktopCloudSyncBusy } from "./cloud-sync.service.js";
-import { setDesktopDbMaintenanceBusy } from "./db-maintenance-busy.js";
-
-export {
+import {
   isDesktopDbMaintenanceBusy,
-  resetDesktopDbMaintenanceBusyForTest,
+  setDesktopDbMaintenanceBusy,
 } from "./db-maintenance-busy.js";
 
 /** 采样存储统计：库文件体积（main 侧 stat）+ freelist 可回收量（core PRAGMA）。 */
@@ -26,7 +24,7 @@ export async function getDbMaintenanceStats(): Promise<{
   const runtime = await getDesktopRuntime();
   const fileInfo = await stat(resolveDbPath());
   const storage = await createDbMaintenanceService(
-    runtime.conn,
+    runtime.conn
   ).getStorageStats();
   return {
     fileBytes: fileInfo.size,
@@ -52,11 +50,16 @@ export async function runDbMaintenance(): Promise<{
   if (isDesktopCloudSyncBusy()) {
     throw new Error("云同步进行中，请稍后再操作");
   }
+  if (isDesktopDbMaintenanceBusy()) {
+    throw new Error("数据清理进行中，请稍后再操作");
+  }
   setDesktopDbMaintenanceBusy(true);
   try {
+    // 与 getDbMaintenanceStats 同口径：先确保 runtime/库文件就绪再 stat，
+    // 冷启动（库尚未 bootstrap 落盘）时避免 ENOENT。
+    const runtime = await getDesktopRuntime();
     const dbPath = resolveDbPath();
     const beforeInfo = await stat(dbPath);
-    const runtime = await getDesktopRuntime();
     await createDbMaintenanceService(runtime.conn).runDatabaseMaintenance();
     const afterInfo = await stat(dbPath);
     return {

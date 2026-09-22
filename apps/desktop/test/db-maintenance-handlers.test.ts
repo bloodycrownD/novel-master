@@ -4,11 +4,12 @@ import {
   resetDesktopCloudSyncServiceForTest,
   setDesktopCloudSyncBusyForTest,
 } from "../src/main/services/cloud-sync.service.js";
+import { runDbMaintenance } from "../src/main/services/db-maintenance.service.js";
 import {
   isDesktopDbMaintenanceBusy,
   resetDesktopDbMaintenanceBusyForTest,
-  runDbMaintenance,
-} from "../src/main/services/db-maintenance.service.js";
+  setDesktopDbMaintenanceBusy,
+} from "../src/main/services/db-maintenance-busy.js";
 import {
   handleDbMaintenance,
   handleDbStats,
@@ -59,6 +60,18 @@ describe("db-maintenance ipc handlers", () => {
       }
     } finally {
       setDesktopCloudSyncBusyForTest(false);
+    }
+
+    // 第三分支：自身数据清理 busy 时拒绝并发（spec 风险表承诺的口径）
+    setDesktopDbMaintenanceBusy(true);
+    try {
+      const res = await handleDbMaintenance();
+      assert.equal(res.ok, false);
+      if (!res.ok) {
+        assert.equal(res.error.message, "数据清理进行中，请稍后再操作");
+      }
+    } finally {
+      setDesktopDbMaintenanceBusy(false);
     }
 
     assert.equal(isDesktopDbMaintenanceBusy(), false);
