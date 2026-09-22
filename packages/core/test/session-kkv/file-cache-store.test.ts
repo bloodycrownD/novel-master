@@ -7,6 +7,11 @@ import {
   RULE_SNAPSHOT_CANON_KEY,
 } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
 import { serializeFileCachePayload } from "../../src/domain/workplace/logic/rule-snapshot-codec.js";
+import { encodeFileCacheValue } from "../../src/domain/session-kkv/logic/file-cache-blob-codec.js";
+import {
+  bytesToBase64,
+  VFS_CONTENT_ENCODING_ZLIB_B64,
+} from "../../src/domain/vfs/content-store/logic/blob-bytes-codec.js";
 import type { TdbcConnection } from "@novel-master/core";
 import {
   getNovelMasterTestContext,
@@ -47,11 +52,16 @@ describe("session file_cache 分流存储（两新表）", () => {
     const sk = createSessionKkvService(ctx.conn);
     const sid = `r1-${testIsolationSuffix()}`;
     const value = serializeFileCachePayload({
-      body: "【第一章】夜色渐深，少年推开客栈的木门……\n\t第二行带转义 \"引号\" 与 \\ 反斜杠",
+      body: '【第一章】夜色渐深，少年推开客栈的木门……\n\t第二行带转义 "引号" 与 \\ 反斜杠',
       mtimeMs: 1758576000123,
     });
 
-    await sk.set(sid, SESSION_KKV_DOMAIN_FILE_CACHE, "full:/小说/第一章.md", value);
+    await sk.set(
+      sid,
+      SESSION_KKV_DOMAIN_FILE_CACHE,
+      "full:/小说/第一章.md",
+      value
+    );
     assert.equal(
       await sk.get(sid, SESSION_KKV_DOMAIN_FILE_CACHE, "full:/小说/第一章.md"),
       value
@@ -185,10 +195,10 @@ describe("session file_cache 分流存储（两新表）", () => {
       "[]"
     );
 
-    assert.deepEqual(
-      await sk.listKeys(sid, SESSION_KKV_DOMAIN_FILE_CACHE),
-      ["full:/a.md", "header:/b.md"]
-    );
+    assert.deepEqual(await sk.listKeys(sid, SESSION_KKV_DOMAIN_FILE_CACHE), [
+      "full:/a.md",
+      "header:/b.md",
+    ]);
 
     await sk.clearSession(sid);
 
@@ -198,7 +208,11 @@ describe("session file_cache 分流存储（两新表）", () => {
       null
     );
     assert.equal(
-      await sk.get(sid, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY),
+      await sk.get(
+        sid,
+        SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
+        RULE_SNAPSHOT_CANON_KEY
+      ),
       null
     );
   });
@@ -213,7 +227,10 @@ describe("session file_cache 分流存储（两新表）", () => {
       sid,
       SESSION_KKV_DOMAIN_FILE_CACHE,
       key,
-      serializeFileCachePayload({ body: `heal-${testIsolationSuffix()}`, mtimeMs: 1 })
+      serializeFileCachePayload({
+        body: `heal-${testIsolationSuffix()}`,
+        mtimeMs: 1,
+      })
     );
     const hash = await currentEntryHash(ctx.conn, sid, key);
     assert.notEqual(hash, null);
@@ -236,10 +253,7 @@ describe("session file_cache 分流存储（两新表）", () => {
     const value = "not-a-json-payload::raw";
 
     await sk.set(sid, SESSION_KKV_DOMAIN_FILE_CACHE, key, value);
-    assert.equal(
-      await sk.get(sid, SESSION_KKV_DOMAIN_FILE_CACHE, key),
-      value
-    );
+    assert.equal(await sk.get(sid, SESSION_KKV_DOMAIN_FILE_CACHE, key), value);
 
     // 存储位置断言：旧表有行，新表 entry 无引用行
     const legacyRows = await ctx.conn.query<{ value: string }>(
@@ -260,8 +274,78 @@ describe("session file_cache 分流存储（两新表）", () => {
       JSON.stringify({ body: "blob-body", mtimeMs: 1 })
     );
     assert.deepEqual(
-      await sk.listKeys(sid, SESSION_KKV_DOMAIN_FILE_CACHE).then((keys) => keys.sort()),
+      await sk
+        .listKeys(sid, SESSION_KKV_DOMAIN_FILE_CACHE)
+        .then((keys) => keys.sort()),
       [blobKey, key].sort()
     );
+  });
+
+  it("T-R7 手工 INSERT zlib-b64 形态 blob+entry 行：get 还原原文（RN 落库形态）", async () => {
+    const ctx = getNovelMasterTestContext();
+    const sk = createSessionKkvService(ctx.conn);
+    const sid = `r7-${testIsolationSuffix()}`;
+    const key = "full:/rn-b64.md";
+    const value = serializeFileCachePayload({
+      body: `rn-b64-body-${testIsolationSuffix()}-中文`,
+      mtimeMs: 1758576000456,
+    });
+
+    // forceZlibB64=true 注入 RN 形态（Node 测试环境默认落 zlib 二进制，
+    // 无法自然走到 zlib-b64 分支），断言产物确为 zlib-b64 / TEXT。
+    const encoded = encodeFileCacheValue(value, true);
+    assert.notEqual(encoded, null);
+    assert.equal(encoded!.encoding, VFS_CONTENT_ENCODING_ZLIB_B64);
+    assert.equal(typeof encoded!.bytes, "string");
+
+    // 手工 INSERT 模拟 RN 存量库：blob 行（TEXT bytes）+ entry 引用行。
+    await ctx.conn.execute(
+      "INSERT INTO session_file_cache_blob (content_hash, encoding, bytes, byte_len) VALUES (?, ?, ?, ?)",
+      [
+        encoded!.contentHash,
+        encoded!.encoding,
+        encoded!.bytes,
+        encoded!.byteLen,
+      ]
+    );
+    await ctx.conn.execute(
+      "INSERT INTO session_file_cache_entry (session_id, key, content_hash, mtime_ms) VALUES (?, ?, ?, ?)",
+      [sid, key, encoded!.contentHash, encoded!.mtimeMs]
+    );
+
+    assert.equal(await sk.get(sid, SESSION_KKV_DOMAIN_FILE_CACHE, key), value);
+  });
+
+  it("T-R8 手工 INSERT 坏字节 blob 行（zlib-b64）：get 返回 null 不抛（解压失败自愈）", async () => {
+    const ctx = getNovelMasterTestContext();
+    const sk = createSessionKkvService(ctx.conn);
+    const sid = `r8-${testIsolationSuffix()}`;
+    const key = "full:/corrupt.md";
+
+    // 坏字节：合法 base64 文本，但解出的字节不是 zlib 流（解压必失败）——
+    // 覆盖 RN 形态 get 的解压失败分支（T-R6 只覆盖 blob 行整行缺失）。
+    const badBytes = bytesToBase64(Uint8Array.of(0x00, 0x01, 0x02, 0x03));
+    const encoded = encodeFileCacheValue(
+      serializeFileCachePayload({ body: "unused", mtimeMs: 1 }),
+      false
+    );
+    assert.notEqual(encoded, null);
+
+    await ctx.conn.execute(
+      "INSERT INTO session_file_cache_blob (content_hash, encoding, bytes, byte_len) VALUES (?, ?, ?, ?)",
+      [
+        encoded!.contentHash,
+        VFS_CONTENT_ENCODING_ZLIB_B64,
+        badBytes,
+        badBytes.length,
+      ]
+    );
+    await ctx.conn.execute(
+      "INSERT INTO session_file_cache_entry (session_id, key, content_hash, mtime_ms) VALUES (?, ?, ?, ?)",
+      [sid, key, encoded!.contentHash, encoded!.mtimeMs]
+    );
+
+    // repository 捕获解码/解压失败按 miss 自愈返回 null，不向调用方抛异常。
+    assert.equal(await sk.get(sid, SESSION_KKV_DOMAIN_FILE_CACHE, key), null);
   });
 });
