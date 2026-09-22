@@ -148,6 +148,15 @@ iterations:
       （库体积展示 + 缓存冗余清理 + VACUUM）。用户实测库 523MB 中
       415MB 为按会话复制的缓存（299 唯一内容 × ~71 会话副本）。
 
+  # ---- 消息正文压缩存储（2026-09-22 立项，PRD 骨架待细化）----
+  - id: message-content-compression
+    status: active
+    notes: >
+      chat_message.content_json 明文 73.1MB（实测占表 94%）改 zlib 压缩
+      存储，目标全库 105MB → 50MB 量级。关键难点：存量为用户数据本体
+      必须真搬运（跨 boot 可重入分批迁移框架），三端读写路径透明过
+      codec。缘起：storage-cache-dedup-and-cleanup 清理后剩余构成分析。
+
 # ---- S-2 漂移对齐跟踪表（9 处）----
 # #1 sksp/spec.md L248            —— fixed（Step 16, 6dadb65e）
 # #2 agent-prompt-abstract-block  —— fixed（superseded-by event-bus-compaction-conditions）

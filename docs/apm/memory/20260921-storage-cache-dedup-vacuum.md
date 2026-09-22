@@ -57,3 +57,6 @@ code-dev-loop 启动（2026-09-22）：分支 feat/storage-cache-dedup-and-clean
 
 assistant:
 Feature A 波次（wave-0~3）完成，cr-func-fc 判 func-ready：提交链 f688aeaa（两表 DDL+BOOT_VERSION 15）/7c9ddc62（清空迁移）/006e2483（repository 分流+codec）/21c33fb4（GC+挂载+导出）/5d01ad01（listKeys UNION 补退化行）/5509fb59（tsconfig.test.json 补 4 条包子路径映射）。verify：core 全量 2615/2618（3 失败=Windows 时区 T-C2/T-C6+perf /tmp 环境项，基线复证）+desktop 定向 6/6+mobile 2/2+typecheck 绿。三条 closed 偏离（add-mcp 阵尾断言让位/get 旧表回退+UNION/tsconfig paths 修复）经 cr-func 审定成立。中途教训两条：① verify 抓到 T-CC4/T-IC3 回归后主代理越权深潜排查多轮（用户纠正后改派 fix 子代理——skill 纪律：fix 默认子代理，trivial 豁免仅限小改动）；② 根因是 test helper 走包名导入时 tsconfig.test.json 缺子路径映射→tsx 静默加载 dist 旧产物，同进程 src/dist 双份代码并存（「裸 sid 通 UUID 挂」是 dist 编译时点造成的假象）——给 core 加 exports 子路径必须同步 tsconfig.test.json 的 paths，候选 RULE 条目（Step 10 落）。进入 wave-4（impl-maint-core Step 6）。
+
+assistant:
+dev-ready 达成（2026-09-22，code-dev-loop 八波全部收敛）：提交链 f688aeaa/7c9ddc62/006e2483/21c33fb4/5d01ad01/5509fb59/4475a774/292cdb6b/897839e0/edd4a3e7（含 docs），head edd4a3e7，工作区干净。终验：core 全量 2617/2620（3 失败=已知环境项）、全仓 typecheck 零错、desktop 新测试 8/8、mobile 12/12；cr-func-fc 与 cr-func-final 双 func-ready，AC-A/B 全映射，双端目录零交叉，spec_deviations 三条 closed（断言让位/退化路径回退+UNION/tsconfig paths）。Step 9 真机验收（T-MAN1 录屏）归用户 manual_user 未做；未 merge/push（协作红线，待用户指令）。Bundle：branch feat/storage-cache-dedup-and-cleanup，base 3e2488b2。
