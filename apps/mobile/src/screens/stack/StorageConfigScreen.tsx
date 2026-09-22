@@ -16,6 +16,10 @@ import {
   exportDatabaseBackup,
   importDatabaseBackup,
 } from '../../services/db-backup.service';
+import {
+  getDatabaseMaintenanceStats,
+  runDatabaseMaintenance,
+} from '../../services/db-maintenance.service';
 import {getCloudSyncStatusView} from '../../services/cloud-sync.service';
 import {
   isMobileAgentActive,
@@ -49,6 +53,10 @@ export function StorageConfigScreen() {
   >();
   const [agentActive, setAgentActive] = useState(false);
   const [statusLoading, setStatusLoading] = useState(true);
+  const [dbFileBytes, setDbFileBytes] = useState<number | null>(null);
+  const [dbReclaimableBytes, setDbReclaimableBytes] = useState<number | null>(
+    null,
+  );
 
   const refreshCloudSyncStatus = useCallback(async () => {
     setStatusLoading(true);
@@ -75,6 +83,32 @@ export function StorageConfigScreen() {
       setStatusLoading(false);
     }
   }, [runtime]);
+
+  const refreshMaintenanceStats = useCallback(async () => {
+    try {
+      const stats = await getDatabaseMaintenanceStats(runtime);
+      setDbFileBytes(stats.fileBytes);
+      setDbReclaimableBytes(stats.reclaimableBytes);
+    } catch {
+      // 统计仅用于展示（Agent 运行中会被守卫拒绝），失败静默占位
+      setDbFileBytes(null);
+      setDbReclaimableBytes(null);
+    }
+  }, [runtime]);
+
+  const formatStorageBytes = (bytes: number | null): string => {
+    if (bytes == null) {
+      return '—';
+    }
+    const mb = bytes / (1024 * 1024);
+    if (mb >= 1024) {
+      return `${(mb / 1024).toFixed(2)} GB`;
+    }
+    if (mb >= 1) {
+      return `${mb.toFixed(1)} MB`;
+    }
+    return `${Math.max(0, Math.round(bytes / 1024))} KB`;
+  };
 
   const formatSyncTime = (iso?: string): string => {
     if (!iso) {
@@ -112,6 +146,16 @@ export function StorageConfigScreen() {
       return resultLabel != null ? `${resultLabel} · ${time}` : `上次 ${time}`;
     }
     return '手动同步';
+  };
+
+  const maintenanceControlValue = (): string => {
+    if (dbBusy) {
+      return '处理中…';
+    }
+    if (agentActive) {
+      return 'Agent 运行中';
+    }
+    return '清理数据库空间';
   };
 
   const syncStatusContent = (): {
@@ -196,7 +240,8 @@ export function StorageConfigScreen() {
   useFocusEffect(
     useCallback(() => {
       refreshCloudSyncStatus().catch(() => undefined);
-    }, [refreshCloudSyncStatus]),
+      refreshMaintenanceStats().catch(() => undefined);
+    }, [refreshCloudSyncStatus, refreshMaintenanceStats]),
   );
 
   const syncStatus = syncStatusContent();
@@ -280,6 +325,51 @@ export function StorageConfigScreen() {
                   importDatabaseBackup(retry)
                     .then(() => showToast('正在重新加载，请稍候…'))
                     .catch(err => showToast(toastMessage('导入失败', err)))
+                    .finally(() => setDbBusy(false));
+                },
+              },
+            ],
+          );
+        }}
+      />
+      <ListSectionTitle title="数据清理" tokens={tokens} />
+      <ProfileStatusCard
+        title="存储空间"
+        hint="数据库文件体积与清理可回收的空间"
+        metrics={[
+          {label: '库体积', value: formatStorageBytes(dbFileBytes)},
+          {label: '可回收', value: formatStorageBytes(dbReclaimableBytes)},
+        ]}
+        tokens={tokens}
+      />
+      <ProfileMenuItem
+        icon="🧹"
+        label="数据清理"
+        value={maintenanceControlValue()}
+        tokens={tokens}
+        onPress={() => {
+          if (dbBusy) {
+            return;
+          }
+          Alert.alert(
+            '数据清理',
+            '将回收缓存冗余并压缩数据库文件，耗时随库体积增长（可能数十秒），期间请勿关闭应用，清理过程可能临时占用额外磁盘空间。是否继续？',
+            [
+              {text: '取消', style: 'cancel'},
+              {
+                text: '开始清理',
+                onPress: () => {
+                  setDbBusy(true);
+                  runDatabaseMaintenance(runtime)
+                    .then(({beforeBytes, afterBytes}) => {
+                      showToast(
+                        `清理完成：${formatStorageBytes(
+                          beforeBytes,
+                        )} → ${formatStorageBytes(afterBytes)}`,
+                      );
+                      refreshMaintenanceStats().catch(() => undefined);
+                    })
+                    .catch(err => showToast(toastMessage('清理失败', err)))
                     .finally(() => setDbBusy(false));
                 },
               },
