@@ -48,3 +48,12 @@ spec-check-loop 启动（2026-09-22）：iteration-state 用对话内 YAML 维�
 
 assistant:
 spec-check-loop 共 3 轮收敛（子代理审查/doc-fix 全流程）：R1 No-Go（1 P0：PRD 迁移口径未回写清空重填；2 P1：AC-B4 无测试、mobile 禁用/云同步互斥口径未口径化；3 P2）→ Wave1 双 doc-fix 并行（PRD 四条回写 + SPEC 四条补齐）→ R2 No-Go（2 P1 残留：AC-B3 半句、典型场景一旧口径；3 P2）→ Wave2 单 doc-fix（5 条全闭合）→ R3 Go（P0/P1 双零，剩 3 P2）。3 条 P2 由主代理 trivial 豁免直改（措辞级、≤3 次编辑，注明于本记忆）：① AsyncMutex 论据精确化——R3 审查员 grep 范围漏了 packages/tdbc-driver-* 误判「不存在」，实际 mutex.ts 在两个驱动包内真实存在（execute 全经 mutex.run 串行）；② GC 设计决策补「残留旧键维持现状」拍板句（回应 PRD 风险节待确认项）；③ 变更点清单补 Step 10 文档产物两行（CHANGELOG/RULE.md）。现状态：execute-ready 待用户确认，未开始编码。
+
+user:
+$code-dev-loop spec.md（确认 execute-ready，进入实现）
+
+assistant:
+code-dev-loop 启动（2026-09-22）：分支 feat/storage-cache-dedup-and-cleanup（自 main），base 3e2488b2（含 lockfile 同步与迭代文档两笔提交；顺手删了主代理此前误产的 $null 空文件）。初始 DAG 八波：impl-fc-foundation(S1+2)→impl-fc-store(S3+4)→verify-fc(S5)→cr-func-fc→impl-maint-core(S6)→impl-desktop∥impl-mobile(S7+8)→verify-final+docs(S10 main)→cr-func-final。进入 wave-0。
+
+assistant:
+Feature A 波次（wave-0~3）完成，cr-func-fc 判 func-ready：提交链 f688aeaa（两表 DDL+BOOT_VERSION 15）/7c9ddc62（清空迁移）/006e2483（repository 分流+codec）/21c33fb4（GC+挂载+导出）/5d01ad01（listKeys UNION 补退化行）/5509fb59（tsconfig.test.json 补 4 条包子路径映射）。verify：core 全量 2615/2618（3 失败=Windows 时区 T-C2/T-C6+perf /tmp 环境项，基线复证）+desktop 定向 6/6+mobile 2/2+typecheck 绿。三条 closed 偏离（add-mcp 阵尾断言让位/get 旧表回退+UNION/tsconfig paths 修复）经 cr-func 审定成立。中途教训两条：① verify 抓到 T-CC4/T-IC3 回归后主代理越权深潜排查多轮（用户纠正后改派 fix 子代理——skill 纪律：fix 默认子代理，trivial 豁免仅限小改动）；② 根因是 test helper 走包名导入时 tsconfig.test.json 缺子路径映射→tsx 静默加载 dist 旧产物，同进程 src/dist 双份代码并存（「裸 sid 通 UUID 挂」是 dist 编译时点造成的假象）——给 core 加 exports 子路径必须同步 tsconfig.test.json 的 paths，候选 RULE 条目（Step 10 落）。进入 wave-4（impl-maint-core Step 6）。
