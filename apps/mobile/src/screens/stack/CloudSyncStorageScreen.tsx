@@ -6,7 +6,6 @@ import React, {useCallback, useEffect, useState} from 'react';
 import {Alert, ScrollView, StyleSheet} from 'react-native';
 import {useFocusEffect, useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
-import {ListSectionTitle} from '../../components/ui/ListSectionTitle';
 import {ProfileMenuItem} from '../../components/profile/ProfileMenuItem';
 import {ProfileStatusCard} from '../../components/profile/ProfileStatusCard';
 import {useRuntime} from '../../hooks/useRuntime';
@@ -198,7 +197,6 @@ export function CloudSyncStorageScreen() {
       contentContainerStyle={styles.scrollContent}
       keyboardShouldPersistTaps="handled"
     >
-      <ListSectionTitle title="云同步" tokens={tokens} />
       <ProfileStatusCard
         title="同步状态"
         hint="显示本机与云端的 rev 对齐情况"

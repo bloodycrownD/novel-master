@@ -6,7 +6,6 @@ import React, {useCallback, useEffect, useState} from 'react';
 import {Alert, ScrollView, StyleSheet} from 'react-native';
 import {useFocusEffect, useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
-import {ListSectionTitle} from '../../components/ui/ListSectionTitle';
 import {ProfileMenuItem} from '../../components/profile/ProfileMenuItem';
 import {ProfileStatusCard} from '../../components/profile/ProfileStatusCard';
 import {useToast} from '../../components/chrome/ToastHost';
@@ -108,7 +107,6 @@ export function StorageConfigScreen() {
       contentContainerStyle={styles.scrollContent}
       keyboardShouldPersistTaps="handled"
     >
-      <ListSectionTitle title="存储空间" tokens={tokens} />
       <ProfileStatusCard
         title="存储空间"
         hint="数据库文件体积与清理可回收的空间"
@@ -118,7 +116,6 @@ export function StorageConfigScreen() {
         ]}
         tokens={tokens}
       />
-      <ListSectionTitle title="云端配置" tokens={tokens} />
       <ProfileMenuItem
         icon="☁️"
         label="云端配置"
@@ -126,7 +123,6 @@ export function StorageConfigScreen() {
         tokens={tokens}
         onPress={() => navigation.navigate('CloudSyncStorage')}
       />
-      <ListSectionTitle title="数据清理" tokens={tokens} />
       <ProfileMenuItem
         icon="🧹"
         label="数据清理"
@@ -162,7 +158,6 @@ export function StorageConfigScreen() {
           );
         }}
       />
-      <ListSectionTitle title="导入导出" tokens={tokens} />
       <ProfileMenuItem
         icon="💾"
         label="导出数据库"

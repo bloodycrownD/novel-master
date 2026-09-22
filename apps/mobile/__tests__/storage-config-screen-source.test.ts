@@ -19,15 +19,20 @@ const source = readFileSync(
 );
 
 describe('StorageConfigScreen 分区结构 — T-UIM1', () => {
-  it('四区顺序：存储空间 → 云端配置 → 数据清理 → 导入导出', () => {
+  it('条目顺序：存储空间卡 → 云端配置 → 数据清理 → 导出数据库 → 导入数据库', () => {
+    // 灰色分区小标题已按用户要求移除（卡片/菜单项自带标题，分区标题冗余）；
+    // 顺序锚点：存储空间卡 title → 三个菜单项 label
     const storageIdx = source.indexOf('title="存储空间"');
-    const cloudIdx = source.indexOf('title="云端配置"');
-    const cleanupIdx = source.indexOf('title="数据清理"');
-    const exportIdx = source.indexOf('title="导入导出"');
+    const cloudIdx = source.indexOf('label="云端配置"');
+    const cleanupIdx = source.indexOf('label="数据清理"');
+    const exportIdx = source.indexOf('label="导出数据库"');
+    const importIdx = source.indexOf('label="导入数据库"');
     expect(storageIdx).toBeGreaterThanOrEqual(0);
     expect(cloudIdx).toBeGreaterThan(storageIdx);
     expect(cleanupIdx).toBeGreaterThan(cloudIdx);
     expect(exportIdx).toBeGreaterThan(cleanupIdx);
+    expect(importIdx).toBeGreaterThan(exportIdx);
+    expect(source).not.toMatch(/ListSectionTitle/);
   });
 
   it('ProfileStatusCard 展示库体积与可回收量（进入页面拉取统计）', () => {
