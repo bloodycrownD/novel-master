@@ -1,11 +1,13 @@
 /**
- * StorageConfigScreen「数据清理」分区源码契约：T-UIM1。
+ * StorageConfigScreen 重排后源码契约：T-UIM1。
  *
- * 断言：分区标题（导入导出之后）、体积展示 metrics、dbBusy 守卫、
- * Alert 二次确认、失败 toast（toastMessage('清理失败')）、finally 复位
- * dbBusy。与 provider-detail-tabs.test.ts 同款源码断言手法：整屏依赖
- * runtime/navigation/Toast 上下文，TestRenderer 行为化需逐层 mock，
- * 代价远超收益；交互行为由服务层 T-DMM 系列承担，此处钉住接线。
+ * 断言：四区顺序（存储空间 → 云端配置 → 数据清理 → 导入导出）、
+ * 存储空间卡体积展示、云端配置入口（进 CloudSyncStorage）、数据清理的
+ * dbBusy 守卫、Alert 二次确认、失败 toast（toastMessage('清理失败')）、
+ * finally 复位 dbBusy，以及云同步区已迁出本页（不再直接出现同步状态卡
+ * 与拉取/推送菜单项）。与 provider-detail-tabs.test.ts 同款源码断言手法：
+ * 整屏依赖 runtime/navigation/Toast 上下文，TestRenderer 行为化需逐层
+ * mock，代价远超收益；交互行为由服务层 T-DMM 系列承担，此处钉住接线。
  */
 import {describe, expect, it} from '@jest/globals';
 import {readFileSync} from 'fs';
@@ -16,12 +18,16 @@ const source = readFileSync(
   'utf8',
 );
 
-describe('StorageConfigScreen 数据清理分区 — T-UIM1', () => {
-  it('「数据清理」分区标题存在，且位于「导入导出」分区之后', () => {
-    const exportIdx = source.indexOf('title="导入导出"');
+describe('StorageConfigScreen 分区结构 — T-UIM1', () => {
+  it('四区顺序：存储空间 → 云端配置 → 数据清理 → 导入导出', () => {
+    const storageIdx = source.indexOf('title="存储空间"');
+    const cloudIdx = source.indexOf('title="云端配置"');
     const cleanupIdx = source.indexOf('title="数据清理"');
-    expect(exportIdx).toBeGreaterThanOrEqual(0);
-    expect(cleanupIdx).toBeGreaterThan(exportIdx);
+    const exportIdx = source.indexOf('title="导入导出"');
+    expect(storageIdx).toBeGreaterThanOrEqual(0);
+    expect(cloudIdx).toBeGreaterThan(storageIdx);
+    expect(cleanupIdx).toBeGreaterThan(cloudIdx);
+    expect(exportIdx).toBeGreaterThan(cleanupIdx);
   });
 
   it('ProfileStatusCard 展示库体积与可回收量（进入页面拉取统计）', () => {
@@ -30,6 +36,21 @@ describe('StorageConfigScreen 数据清理分区 — T-UIM1', () => {
     expect(source).toMatch(/label: '可回收'/);
   });
 
+  it('云端配置入口存在：value 显示配置状态，点击进入 CloudSyncStorage', () => {
+    expect(source).toMatch(/label="云端配置"/);
+    expect(source).toMatch(/cloudConfigured \? '已配置' : '未配置'/);
+    expect(source).toMatch(/navigation\.navigate\('CloudSyncStorage'\)/);
+  });
+
+  it('云同步区已迁出本页：无同步状态卡、无拉取/推送菜单项', () => {
+    expect(source).not.toMatch(/title="云同步"/);
+    expect(source).not.toMatch(/title="同步状态"/);
+    expect(source).not.toMatch(/从云端拉取/);
+    expect(source).not.toMatch(/推送到云端/);
+  });
+});
+
+describe('StorageConfigScreen 数据清理行为 — T-UIM1', () => {
   it('dbBusy 守卫：数据清理 onPress 内 dbBusy 时直接返回', () => {
     expect(source).toMatch(/if \(dbBusy\) \{\s*return;\s*\}/);
   });
