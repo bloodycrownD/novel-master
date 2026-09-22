@@ -20,7 +20,7 @@ import {
   getDatabaseMaintenanceStats,
   runDatabaseMaintenance,
 } from '../../services/db-maintenance.service';
-import {getCloudSyncStatusView} from '../../services/cloud-sync.service';
+import {getCloudSyncLocalStatus} from '../../services/cloud-sync-config.store';
 import {
   isMobileAgentActive,
   subscribeMobileAgentActivity,
@@ -46,7 +46,9 @@ export function StorageConfigScreen() {
 
   const refreshCloudConfigured = useCallback(async () => {
     try {
-      const status = await getCloudSyncStatusView(runtime);
+      // 仅取本地 configured 布尔值，走 kkv 本地读取，不触发 S3 网络往返；
+      // 远端同步状态（rev/建议拉取等）由 CloudSyncStorageScreen 负责。
+      const status = await getCloudSyncLocalStatus(runtime);
       setCloudConfigured(status.configured);
     } catch {
       setCloudConfigured(false);

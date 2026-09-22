@@ -125,6 +125,9 @@ describe('db-maintenance.service', () => {
   });
 
   it('T-DMM2: core runDatabaseMaintenance 抛错时 reject 上抛（可被调用方捕获），不吞错', async () => {
+    // 矩阵归属：spec T-DMM2 的「库仍可正常读写」由 SQLite VACUUM 原子性 +
+    // core T-DM 系列（packages/core/test/infra/db-maintenance.test.ts）承接；
+    // mobile 侧照 db-backup.service.test.ts 的全模块 mock 版式，不重复断言。
     mockRunMaintenance.mockRejectedValue(
       new Error('VACUUM failed: database is locked'),
     );

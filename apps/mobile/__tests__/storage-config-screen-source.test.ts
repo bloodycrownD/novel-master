@@ -44,6 +44,8 @@ describe('StorageConfigScreen 分区结构 — T-UIM1', () => {
   it('云端配置入口存在：value 显示配置状态，点击进入 CloudSyncStorage', () => {
     expect(source).toMatch(/label="云端配置"/);
     expect(source).toMatch(/cloudConfigured \? '已配置' : '未配置'/);
+    // 配置状态经 getCloudSyncLocalStatus 本地读取（kkv），不发 S3 网络请求
+    expect(source).toMatch(/getCloudSyncLocalStatus/);
     expect(source).toMatch(/navigation\.navigate\('CloudSyncStorage'\)/);
   });
 
@@ -52,6 +54,8 @@ describe('StorageConfigScreen 分区结构 — T-UIM1', () => {
     expect(source).not.toMatch(/title="同步状态"/);
     expect(source).not.toMatch(/从云端拉取/);
     expect(source).not.toMatch(/推送到云端/);
+    // 全量同步状态（含 S3 网络往返）已整体迁出，本页不得再引用
+    expect(source).not.toMatch(/getCloudSyncStatusView/);
   });
 });
 
