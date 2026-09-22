@@ -26,6 +26,8 @@ export type RootStackParamList = {
   };
   ChatConfig: undefined;
   CloudSyncConfig: undefined;
+  /** 云端存储设置：同步状态卡、云存储配置入口与拉取/推送操作。 */
+  CloudSyncStorage: undefined;
   /** 搜索配置：引擎列表（排序即串行链优先级，无参数）。 */
   SearchEngines: undefined;
   /** 搜索引擎详情：单引擎表单（key / baseUrl），标题用引擎名。 */
