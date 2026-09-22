@@ -12,7 +12,7 @@
 | fix-spec | `docs/Iterations/storage-cache-dedup-and-cleanup/cr-fix-spec.md`（本文件） |
 | review_round | 1（四路 review-scope：desktop / core-store / core-maint / mobile 汇总） |
 | dag_version | 2 |
-| 状态 | draft |
+| 状态 | executed（fix-spec-ready 已确认；10/10 条落地，cr-func-fix 核验 func-ready，2026-09-22） |
 
 > 本文件只约束**文档与实现代码的修复动作**；prd.md / spec.md 为只读参考，本 wave 不改动。
 > 改法均已在评审轮认定，本文件忠实落盘；下游执行时可润色措辞，但不得弱化改法与验收标准。
@@ -153,9 +153,9 @@
 
 ## 2. Spec deviations（spec 偏差账）
 
-### open（待修复验证）
+### fixed（随执行波次闭合）
 
-- **desktop「handler 拒绝并发」承诺未兑现**：spec 风险表承诺数据清理 handler 拒绝并发调用，实现未查自身 busy 标志。与 MF-1（desktop/B-1）同源；MF-1 修复后，下轮 review 验证转 fixed。
+- **desktop「handler 拒绝并发」承诺未兑现 → 已修复**：随 MF-1（desktop/B-1）落地（d8ec9f6d，T-DMD1 第三分支验收），cr-func-fix 核验闭合。
 
 ### fixed（用户拍板的 spec 外追加，记录即可，无需动作）
 

@@ -69,3 +69,7 @@ user:
 
 assistant:
 CR 循环（2026-09-22，base 13549791 → f5ccbc11）：R1 四路 review-scope 并行（core-store/core-maint/desktop/mobile），core-maint 直接 scope-ready，共 2 P1 + 8 P2：desktop/B-1（runDbMaintenance 缺自身 busy 自查，spec「handler 拒绝并发」承诺未兑现，并发窗口实存）与 core-store/C-1（解码四 helper 与 vfs 逐行复制 DRY）为 P1；P2 含 desktop stat/runtime 顺序、pull 的 syncBusy 永久卡死既有缺陷被新守卫放大、busy 双导入路径、RN zlib-b64 零测试+无注入点、T-DM2 误导注释、T-DM1 断言收紧、mobile 全量状态接口只为取布尔发 S3 请求、T-DMM2 归属注释。spec-fix 落盘 cr-fix-spec.md（10 条，子代理逐条源码抽查吻合）。R2 review-full 建议 fix-spec-ready: yes（无新增，docs/F/K/C-orch 干净）。mobile 真机 UX 追加（存储页重排四区+云端存储设置新页+灰标题移除，9696e19a/f3794d61/d812bdb0）记 fixed deviation。待用户确认 fix-spec 后按其执行（MF-1 修复时同步闭合 open deviation）。
+
+
+assistant:
+cr-fix-spec 执行（code-dev-loop，2026-09-22）：三路 impl 并行（core 55822cc2/45e21393/8dcbbfac、desktop d8ec9f6d/aae173f6、mobile 56b4d254）+主代理 verify（重建 dist 后 core 317/317+desktop 11/11+mobile 20/20+全仓 typecheck 绿）+cr-func-fix func-ready：MF-1~10 全落地，open deviation 随 MF-1 转 fixed，fix-spec 状态 executed。三条 open questions（Alert 粒度差/Agent 停后统计恢复/renderer 无 catch 惯例）留附录不阻塞。分支 dev-ready；未 merge/push（待用户指令）。
