@@ -15,7 +15,10 @@ const ROOT = path.resolve(E2E_DIR, "..", "..");
 export const DESKTOP = path.join(ROOT, "apps/desktop");
 export const OUT = path.join(E2E_DIR, "out");
 export const DATA = path.join(E2E_DIR, "data");
-const ELECTRON_BIN = path.join(ROOT, "node_modules", "electron", "dist", "electron");
+// Windows 适配：electron 可执行文件带 .exe 后缀；npx 是 .cmd 需经 shell 启动；
+// 进程清理走 taskkill（无 POSIX 进程组 / pkill）
+const IS_WIN = process.platform === "win32";
+const ELECTRON_BIN = path.join(ROOT, "node_modules", "electron", "dist", IS_WIN ? "electron.exe" : "electron");
 export const MOCK_PORT = 18099;
 
 // replyFor（B3 增量）：按请求里最后一条 user 消息文本计算回复内容的回调，
@@ -85,22 +88,30 @@ export async function startMock({ slow = false, replyFor = null } = {}) {
   return mock;
 }
 
-function waitForPort(port, host, timeoutMs) {
+function waitForPort(port, timeoutMs) {
   const t0 = Date.now();
   return new Promise((resolve, reject) => {
     (function tryOnce() {
-      const s = net.connect({ port, host }, () => { s.destroy(); resolve(); });
-      s.on("error", () => { s.destroy(); if (Date.now() - t0 > timeoutMs) return reject(new Error("port timeout")); setTimeout(tryOnce, 300); });
+      probePort(port).then((up) => {
+        if (up) return resolve();
+        if (Date.now() - t0 > timeoutMs) return reject(new Error("port timeout"));
+        setTimeout(tryOnce, 300);
+      });
     })();
   });
 }
 
-// 单次探测端口是否已有响应（连接成功即通，不重试）
-function probePort(port, host) {
-  return new Promise((resolve) => {
-    const s = net.connect({ port, host }, () => { s.destroy(); resolve(true); });
-    s.on("error", () => { s.destroy(); resolve(false); });
-  });
+// 单次探测端口是否已有响应（连接成功即通，不重试）。
+// Windows 上 vite 监听 IPv6 [::1] 而 POSIX 惯例是 127.0.0.1——双栈都试，任一通即通
+async function probePort(port) {
+  for (const host of ["127.0.0.1", "::1"]) {
+    const up = await new Promise((resolve) => {
+      const s = net.connect({ port, host }, () => { s.destroy(); resolve(true); });
+      s.on("error", () => { s.destroy(); resolve(false); });
+    });
+    if (up) return true;
+  }
+  return false;
 }
 
 // 跨进程 vite 复用：本进程 spawn 的 vite 才记在 ownVite，其余情形（端口已通、复用
@@ -113,14 +124,38 @@ let ownVite = null;
 // vite 留给后续脚本复用，统一由 run-all 末尾的 shutdownVite() 回收；单跑则自起自关
 process.on("exit", () => {
   if (ownVite && process.env.E2E_REUSE_VITE !== "1") {
-    try { process.kill(-ownVite.pid, "SIGKILL"); } catch {}
+    killTree(ownVite.pid);
   }
 });
 
+// 进程树清理：Windows 用 taskkill /T 杀整树（shell:true 下 pid 是 cmd 包装进程）；
+// POSIX 沿用负 pid 进程组 SIGKILL
+function killTree(pid) {
+  try {
+    if (IS_WIN) execSync(`taskkill /F /T /PID ${pid}`, { stdio: "ignore" });
+    else process.kill(-pid, "SIGKILL");
+  } catch {}
+}
+
 // 彻底清场：杀本 worktree 路径前缀匹配的 vite（带 ROOT 前缀防误杀并行 worktree）。
 // 供序列 runner（run-all）末尾调用——各 case 的 shutdown 已不管 vite、序列模式下
-// exit 兜底也不杀复用源，首个脚本起的 vite 由这个 pkill 兜底回收
+// exit 兜底也不杀复用源，首个脚本起的 vite 由这个兜底回收
 export function shutdownVite() {
+  if (IS_WIN) {
+    try {
+      const list = execSync(
+        `wmic process where "name='node.exe'" get commandline,processid /format:csv`,
+        { encoding: "utf8" },
+      );
+      for (const line of list.split(/\r?\n/)) {
+        if (line.includes(path.join(ROOT, "node_modules", ".bin", "vite")) || line.includes(path.join(DESKTOP, "node_modules", ".bin", "vite"))) {
+          const pid = Number(line.trim().split(",").pop());
+          if (Number.isInteger(pid) && pid > 0) killTree(pid);
+        }
+      }
+    } catch {}
+    return;
+  }
   try { execSync(`pkill -9 -f "${ROOT}/node_modules/.bin/vite"`, { stdio: "ignore" }); } catch {}
 }
 
@@ -131,17 +166,17 @@ export async function launchApp({ errors = null } = {}) {
   // 不纳入本进程清理责任（ownVite 保持 null，exit 兜底不会杀它）；只有单跑（端口空）才自起
   // 自关。序列里首个脚本起 vite，后续 7 个复用，每轮省一次 vite 启动等待+退出回收
   let vite = null;
-  if (await probePort(5173, "127.0.0.1")) {
+  if (await probePort(5173)) {
     console.log("VITE_REUSE", "5173 已有响应，复用现有 vite");
   } else {
-    vite = spawn("npx", ["vite"], { cwd: DESKTOP, stdio: ["ignore", "pipe", "pipe"], detached: true });
+    vite = spawn(IS_WIN ? "npx.cmd" : "npx", ["vite"], { cwd: DESKTOP, stdio: ["ignore", "pipe", "pipe"], detached: true, shell: IS_WIN });
     // 复用语义下 vite 活得比脚本久：unref 其 stdio/进程句柄，否则 pipe 拽住事件循环、
     // 脚本末尾 await 完也不退（序列 runner 会卡在等子进程退出）——日志仍可读，只是不再阻止退出
     vite.stdout?.unref();
     vite.stderr?.unref();
     vite.unref();
     ownVite = vite;
-    await waitForPort(5173, "127.0.0.1", 60000);
+    await waitForPort(5173, 60000);
   }
   const env = { ...process.env };
   delete env.ELECTRON_RUN_AS_NODE;
@@ -161,7 +196,7 @@ export async function launchApp({ errors = null } = {}) {
     });
   } catch (e) {
     // 只回收自己 spawn 的 vite（复用场景 vite=null 无清理责任），防孤儿 vite 占住 5173
-    if (vite) { try { process.kill(-vite.pid, "SIGKILL"); } catch {} }
+    if (vite) killTree(vite.pid);
     ownVite = null;
     throw e;
   }

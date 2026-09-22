@@ -54,6 +54,7 @@
 - 正则过滤：🔧 系统将移除（用户拍板），不测
 - 技能管理：✅ 新建全流程+DetailView+脏状态行；❌ D-12 未保存侧导航切走零拦截（P1）；🔧 行菜单删除/域切换待手动（612 截图丢失）
 - 备份与恢复：✅ 确认文案（完全替换警告+保留本机服务商说明）+云同步 S3 表单展开/填写/测试连接错误态（inline「云端 rev：—」）；🔧 文件级导出导入待手动（对话框）；检查更新：◻️ 待确认（点击后无可见反馈，D-14 候选低置信度）
+- 数据清理：✅ 全链（体积/可回收展示、确认弹窗、清理执行、toast 前后对比 6.2 MB → 236 KB、库文件实际缩小 6545408→241664 bytes、python 塞孤儿 blob 全回收+引用探针幸存、零 console 错误；vision 四张截图全正常。2026-09-22 storage-cache-dedup-and-cleanup，case-db-maintenance.mjs + seed/probe-maintenance.py）
 - 数据统计：✅ 三页签×时间×模型+流水+图表钻取（64 条造数）
 
 ## H. 桌面集成
@@ -77,6 +78,7 @@
 - 单跑：依赖本机已 bootstrap 过的 data/ 库；data/ 已 ignore，novel.db 产物不再提交入库（含 wal/shm 伴生文件）
 
 ## 环境备忘（2026-09-08 更新）
+- Windows 适配（2026-09-22，lib.mjs）：electron 可执行文件 .exe 后缀；vite spawn 走 npx.cmd + shell；端口探测双栈（vite 在 Windows 监听 IPv6 [::1]，只探 127.0.0.1 会 60s 假超时）；进程清理 taskkill /T（无 POSIX 进程组/pkill，shutdownVite 的 Windows 分支用 wmic 按命令行匹配）
 - keyring 已解锁（用户 pkill -f gnome-keyring-daemon + --daemonize --login --components=secrets 常驻方案）：SKSP/发消息链路恢复
 - 解锁后补跑完成：bootstrap 带 key 版（消息链路活）、case-subagent（task 工具成功）、case-annotate2（发现 D-15）
 
