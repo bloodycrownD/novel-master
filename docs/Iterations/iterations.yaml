@@ -139,6 +139,15 @@ iterations:
       markdown 代码块渲染：块级形态 + 语言标签 + 语法高亮（双端），
       保留 mobile 折行与批注/mermaid 兼容。依赖 markdown-preview-mermaid。
 
+  # ---- 存储缓存去重与数据清理（2026-09-21 立项）----
+  - id: storage-cache-dedup-and-cleanup
+    status: active
+    notes: >
+      file_cache 缓存存储层去重（内容全局单份 + 会话引用，语义不变，
+      复用 vfs_content_blob 的共享 + GC 模式）与双端「数据清理」按钮
+      （库体积展示 + 缓存冗余清理 + VACUUM）。用户实测库 523MB 中
+      415MB 为按会话复制的缓存（299 唯一内容 × ~71 会话副本）。
+
 # ---- S-2 漂移对齐跟踪表（9 处）----
 # #1 sksp/spec.md L248            —— fixed（Step 16, 6dadb65e）
 # #2 agent-prompt-abstract-block  —— fixed（superseded-by event-bus-compaction-conditions）
