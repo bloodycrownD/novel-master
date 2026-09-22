@@ -18,6 +18,8 @@ import {
   type BootstrapStatusResponse,
   type ChatMessageDto,
   type CompactionManualRequest,
+  type DbMaintenanceResult,
+  type DbStatsResult,
   type IpcResult,
   type MessageAttachmentDto,
   type MessagesAppendRequest,
@@ -635,6 +637,14 @@ export function createInvokeClient(invoke: InvokeFn) {
     ),
     ipcBackupExport: noArg(invoke, IPC_CHANNELS.BACKUP_EXPORT),
     ipcBackupImport: noArg(invoke, IPC_CHANNELS.BACKUP_IMPORT),
+    ipcDbStats: noArg<IpcResult<DbStatsResult>>(
+      invoke,
+      IPC_CHANNELS.DB_STATS,
+    ),
+    ipcDbMaintenance: noArg<IpcResult<DbMaintenanceResult>>(
+      invoke,
+      IPC_CHANNELS.DB_MAINTENANCE,
+    ),
     ipcCloudSyncGetConfig: noArg(invoke, IPC_CHANNELS.CLOUD_SYNC_GET_CONFIG),
     ipcCloudSyncSetConfig: withReq<
       {

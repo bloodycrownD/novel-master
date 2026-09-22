@@ -26,10 +26,12 @@ import {
 } from "@aws-sdk/client-s3";
 import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
 import { isDesktopAgentActive } from "../runtime/agent-activity.js";
+import { isDesktopDbMaintenanceBusy } from "./db-maintenance-busy.js";
 import {
   createCloudSyncConfigStore,
   type CloudSyncConfigDto,
   type CloudSyncConfigStore,
+  type CloudSyncLocalMeta,
   type CloudSyncSetConfigInput,
 } from "./cloud-sync-config.store.js";
 
@@ -46,9 +48,16 @@ export type CloudSyncLocalStatusDto = {
   suggestsPull: boolean;
   syncBusy: boolean;
   agentActive: boolean;
+  /** 数据清理（VACUUM）进行中：期间禁用同步操作。 */
+  maintenanceBusy: boolean;
 };
 
 let syncBusy = false;
+
+/** 云同步（pull/push）是否进行中：供数据清理等数据库操作的入口守卫使用。 */
+export function isDesktopCloudSyncBusy(): boolean {
+  return syncBusy;
+}
 
 function computeSha256Hex(bytes: Uint8Array): string {
   return createHash("sha256").update(bytes).digest("hex");
@@ -65,7 +74,10 @@ async function hashSnapshotFile(path: string): Promise<string> {
   });
 }
 
-function isConfigured(config: CloudSyncConfigDto, secret: string | null): boolean {
+function isConfigured(
+  config: CloudSyncConfigDto,
+  secret: string | null
+): boolean {
   return (
     config.enabled &&
     config.endpoint.trim().length > 0 &&
@@ -77,7 +89,8 @@ function isConfigured(config: CloudSyncConfigDto, secret: string | null): boolea
   );
 }
 
-function mapStorageError(error: unknown): CloudSyncError {  if (isCloudSyncError(error)) {
+function mapStorageError(error: unknown): CloudSyncError {
+  if (isCloudSyncError(error)) {
     return error;
   }
   const message = error instanceof Error ? error.message : String(error);
@@ -88,7 +101,9 @@ function mapStorageError(error: unknown): CloudSyncError {  if (isCloudSyncError
     lower.includes("signaturedoesnotmatch") ||
     lower.includes("403")
   ) {
-    return new CloudSyncError("AUTH", "云存储凭据无效或权限不足", { cause: error });
+    return new CloudSyncError("AUTH", "云存储凭据无效或权限不足", {
+      cause: error,
+    });
   }
   if (
     lower.includes("network") ||
@@ -96,9 +111,13 @@ function mapStorageError(error: unknown): CloudSyncError {  if (isCloudSyncError
     lower.includes("econnrefused") ||
     lower.includes("enotfound")
   ) {
-    return new CloudSyncError("NETWORK", "无法连接云存储，请检查网络与 Endpoint", {
-      cause: error,
-    });
+    return new CloudSyncError(
+      "NETWORK",
+      "无法连接云存储，请检查网络与 Endpoint",
+      {
+        cause: error,
+      }
+    );
   }
   return new CloudSyncError("NETWORK", message, { cause: error });
 }
@@ -117,7 +136,7 @@ function buildS3Client(config: S3StorageConfig): S3Client {
 }
 
 async function buildS3StorageConfigFromStore(
-  configStore: CloudSyncConfigStore,
+  configStore: CloudSyncConfigStore
 ): Promise<S3StorageConfig> {
   const publicConfig = await configStore.getPublicConfig();
   const secret = await configStore.getSecretAccessKey();
@@ -141,7 +160,7 @@ export class DesktopCloudSyncService {
     this.runtime = runtime;
     this.configStore = createCloudSyncConfigStore(
       runtime.kkv,
-      runtime.secretStore,
+      runtime.secretStore
     );
   }
 
@@ -172,7 +191,7 @@ export class DesktopCloudSyncService {
             Bucket: s3Config.bucket,
             Prefix: pathPrefix,
             MaxKeys: 1,
-          }),
+          })
         );
       } catch (listError) {
         throw mapStorageError(listError ?? headError);
@@ -196,8 +215,7 @@ export class DesktopCloudSyncService {
     }
 
     const lastSyncedRev = meta.lastSyncedRev;
-    const suggestsPull =
-      remoteRev != null && remoteRev > lastSyncedRev;
+    const suggestsPull = remoteRev != null && remoteRev > lastSyncedRev;
 
     return {
       configured,
@@ -212,6 +230,7 @@ export class DesktopCloudSyncService {
       suggestsPull,
       syncBusy,
       agentActive,
+      maintenanceBusy: isDesktopDbMaintenanceBusy(),
     };
   }
 
@@ -220,10 +239,13 @@ export class DesktopCloudSyncService {
       throw new Error("云同步进行中，请稍后再试");
     }
     syncBusy = true;
-    const meta = await this.configStore.getLocalMeta();
+    let meta: CloudSyncLocalMeta | undefined;
     let exportTempPath: string | undefined;
     let importTempPath: string | undefined;
     try {
+      // getLocalMeta 的读取必须在 try 内（对齐 push() 写法）：若留在
+      // try 外，抛错时 syncBusy 永不复位，数据清理守卫会被连带锁死。
+      meta = await this.configStore.getLocalMeta();
       const built = await this.buildCoordinator();
       exportTempPath = built.exportTempPath;
       importTempPath = built.importTempPath;
@@ -235,11 +257,11 @@ export class DesktopCloudSyncService {
       return result;
     } catch (error) {
       if (isCloudSyncError(error) && error.code === "ALREADY_UP_TO_DATE") {
+        // 该错误只可能由 coordinator.pull 抛出，此时 meta 必已赋值。
         await this.configStore.recordPull(true, "已是最新");
-        return { rev: meta.lastSyncedRev };
+        return { rev: meta?.lastSyncedRev ?? 0 };
       }
-      const detail =
-        error instanceof Error ? error.message : String(error);
+      const detail = error instanceof Error ? error.message : String(error);
       await this.configStore.recordPull(false, detail).catch(() => undefined);
       throw error;
     } finally {
@@ -253,7 +275,9 @@ export class DesktopCloudSyncService {
     }
   }
 
-  async push(options?: { forceOverwriteRemote?: boolean }): Promise<{ rev: number }> {
+  async push(options?: {
+    forceOverwriteRemote?: boolean;
+  }): Promise<{ rev: number }> {
     if (syncBusy) {
       throw new Error("云同步进行中，请稍后再试");
     }
@@ -273,8 +297,7 @@ export class DesktopCloudSyncService {
       await this.configStore.recordPush(true, `已推送至 rev ${result.rev}`);
       return result;
     } catch (error) {
-      const detail =
-        error instanceof Error ? error.message : String(error);
+      const detail = error instanceof Error ? error.message : String(error);
       await this.configStore.recordPush(false, detail).catch(() => undefined);
       throw error;
     } finally {
@@ -320,7 +343,8 @@ export class DesktopCloudSyncService {
     coordinator: CloudSyncCoordinator;
     exportTempPath: string;
     importTempPath: string;
-  }> {    const publicConfig = await this.configStore.getPublicConfig();
+  }> {
+    const publicConfig = await this.configStore.getPublicConfig();
     const secret = await this.configStore.getSecretAccessKey();
     if (
       publicConfig.endpoint.trim().length === 0 ||
@@ -348,13 +372,19 @@ export class DesktopCloudSyncService {
         secretAccessKey: secret,
         forcePathStyle: publicConfig.forcePathStyle,
       },
-      { fileSystem: nodeFileSystem },
+      { fileSystem: nodeFileSystem }
     );
 
     const runtime = this.runtime;
     const stamp = Date.now();
-    const exportTempPath = join(tmpdir(), `nm-cloud-sync-export-${stamp}.nmbackup`);
-    const importTempPath = join(tmpdir(), `nm-cloud-sync-import-${stamp}.nmbackup`);
+    const exportTempPath = join(
+      tmpdir(),
+      `nm-cloud-sync-export-${stamp}.nmbackup`
+    );
+    const importTempPath = join(
+      tmpdir(),
+      `nm-cloud-sync-import-${stamp}.nmbackup`
+    );
 
     const dbSync = {
       isAgentActive: () => isDesktopAgentActive(),
@@ -402,7 +432,9 @@ export class DesktopCloudSyncService {
 let service: DesktopCloudSyncService | undefined;
 
 export async function getDesktopCloudSyncService(): Promise<DesktopCloudSyncService> {
-  const { getDesktopRuntime } = await import("../runtime/desktop-runtime-singleton.js");
+  const { getDesktopRuntime } = await import(
+    "../runtime/desktop-runtime-singleton.js"
+  );
   const runtime = await getDesktopRuntime();
   if (!service) {
     service = new DesktopCloudSyncService(runtime);
@@ -414,4 +446,9 @@ export async function getDesktopCloudSyncService(): Promise<DesktopCloudSyncServ
 export function resetDesktopCloudSyncServiceForTest(): void {
   service = undefined;
   syncBusy = false;
+}
+
+/** 测试用：直接置位云同步忙碌状态（模拟 pull/push 执行窗口）。 */
+export function setDesktopCloudSyncBusyForTest(busy: boolean): void {
+  syncBusy = busy;
 }

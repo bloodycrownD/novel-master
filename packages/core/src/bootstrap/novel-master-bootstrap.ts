@@ -21,6 +21,7 @@ import { VFS_CONTENT_BLOB_SCHEMA_STATEMENTS } from "./vfs/vfs-content-blob-schem
 import { MESSAGE_CHECKPOINT_SCHEMA_STATEMENTS } from "./message-checkpoint/message-checkpoint-schema.js";
 import { KKV_SCHEMA_STATEMENTS } from "./kkv/kkv-schema.js";
 import { SESSION_KKV_SCHEMA_STATEMENTS } from "./session-kkv/session-kkv-schema.js";
+import { FILE_CACHE_SCHEMA_STATEMENTS } from "./session-kkv/file-cache-schema.js";
 import { SESSION_RUN_STATE_SCHEMA_STATEMENTS } from "./session-run-state/session-run-state-schema.js";
 import { CHAT_SCHEMA_STATEMENTS } from "./chat/chat-schema.js";
 import { SESSION_FS_SCHEMA_STATEMENTS } from "./session-fs/session-fs-schema.js";
@@ -85,8 +86,16 @@ import { IntegrityRepairRegistry } from "@/service/integrity-repair.js";
  * 编号 v13，与 main 的 v13（smart-sort）撞号；merge main 后顺延为 v14，
  * 保证走过 main v13（user_version=13，v1.5.16+）的存量库走慢路径由
  * DDL 建表；全新库直接建表；无存量回填。
+ * v15：新增 session_file_cache_blob / session_file_cache_entry 两表与
+ * idx_session_file_cache_hash 索引（storage-cache-dedup-and-cleanup：
+ * 提示词文件缓存按内容哈希全库单份存储，会话侧只存轻量引用）。老库
+ * （v14）靠本轮 bump 走慢路径由 DDL 建出两表与索引；全新库直接建表。
+ * 存量 file_cache 缓存行不搬运——由 dedup-file-cache-storage-v1
+ * migration 在同一 bootstrap 事务内清空（清空重填口径：file_cache 可
+ * 再生，各会话下次组装提示词时按新结构重填，重填即天然去重）；旧表
+ * session_kkv_entry 不加列不改列。
  */
-export const SCHEMA_BOOT_VERSION = 14;
+export const SCHEMA_BOOT_VERSION = 15;
 
 /** 各模块 DDL 语句，按依赖安全顺序排列。 */
 export const NOVEL_MASTER_SCHEMA_STATEMENTS: readonly string[] = [
@@ -96,6 +105,7 @@ export const NOVEL_MASTER_SCHEMA_STATEMENTS: readonly string[] = [
   ...MESSAGE_CHECKPOINT_SCHEMA_STATEMENTS,
   ...KKV_SCHEMA_STATEMENTS,
   ...SESSION_KKV_SCHEMA_STATEMENTS,
+  ...FILE_CACHE_SCHEMA_STATEMENTS,
   ...SESSION_RUN_STATE_SCHEMA_STATEMENTS,
   ...CHAT_SCHEMA_STATEMENTS,
   ...SESSION_FS_SCHEMA_STATEMENTS,

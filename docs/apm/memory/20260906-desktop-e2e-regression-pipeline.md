@@ -138,3 +138,10 @@ user:
 
 assistant:
 D-16/D-17 修复落地（分支 fix/desktop-e2e-d16-d17，主仓 3256c576 + docs 收口提交；worktree test/desk-e2e-regression 同步 cherry-pick 21d1810e + 用例翻新 f4de7480）。D-16=SettingsViews.tsx import 列表补 SettingsSection（先全扫了 SmartSortRuleEditorView 引用的全部组件，确认无第二个漏引）。D-17=TextPromptModal 加可选 validate prop（原始输入→行内中文提示+禁提交，shell.css 补 __error 样式沿 new-skill-modal 口径），App.tsx 工作区弹窗接 core 的 validateVfsEntryName（renderer 可直接 import @novel-master/core/vfs 子路径，dist 已有导出）；其它 TextPromptModal 调用点（Agent/服务商/项目重命名、技能辅助文件）不传 validate 行为不变。行为变化：`.`/`..` 与纯空白从服务层 toast 改为弹窗行内提示（移动端同款模型，服务层校验保留为兜底）。验证：桌面全量 494 pass + 4 个 keyring 环境失败（带 DBUS env 复跑 runtime.test.ts 3/3 过，归因环境非代码）；root typecheck 绿；e2e 双用例翻新后全绿——case-filename-validation 5/5（行内文案逐字命中+禁提交+树零残留+旧名保留），case-sort-rule-manager 8/8（SR-EDIT-TEST 回显+正则测试高亮/元组/计数、SR-EDIT-FIXED 哨兵元组 (固定最大,)、SR-CREATE UI 新建落列表，857 翻身照经 MCP 审查编辑页完整渲染）。脚本侧教训：FV-RENAME 首跑 30s 超时排查了半天 Playwright filter 语义，真相是 openRenamePrompt 参数设计错——把新名字当成要右击的树节点名（右击「.」这种不存在的节点必超时）；定位器探针（同链 count=1）+ LABEL_PROBE（querySelectorAll 能找到）对照才破案。CHANGELOG Unreleased 两条已写，PRD D-16/D-17 状态改已修。
+
+
+user:
+数据清理功能开发完了，你看看能不能 e2e 测试（有图片读取能力）。
+
+assistant:
+2026-09-22 增量轮（storage-cache-dedup-and-cleanup 数据清理）：worktree .worktree/desk-e2e-test（分支 test/desk-e2e-maintenance，自 feat 分支建）。新用例 case-db-maintenance.mjs + seed/probe-maintenance.py（python 造孤儿 blob/引用探针）：首轮启动建库→python 塞 6MB 孤儿 blob→二轮走设置→数据管理→数据清理全链。CASE_PASS：体积/可回收展示、确认弹窗、清理执行、toast「清理完成：库体积 6.2 MB → 236 KB」、库文件实际 6545408→241664 bytes、孤儿 blob 全回收+引用探针幸存、零 console 错误；vision 四张截图全正常（浅色主题为 e2e 默认，非缺陷），无新登记。Windows 首跑三坑均修在 lib.mjs（8f0c755b）：① spawn npx ENOENT→npx.cmd+shell；② vite 在 Windows 监听 IPv6 [::1]，端口探测只试 127.0.0.1 会 60s 假超时→双栈探测；③ 进程清理无 POSIX 组/pkill→taskkill /T + wmic 匹配 shutdownVite；另 electron.exe 后缀。coverage.md G 节已登记。

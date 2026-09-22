@@ -3,7 +3,7 @@
  * （rollback-restore-deleted-entry：message_checkpoint_file 加 path 快照列）。
  *
  * 覆盖（照 add-smart-sort-capture-kind-v1 四段式）：
- *  1. 登记：migration 注册于 SCHEMA_MIGRATIONS 阵尾；
+ *  1. 登记：migration 注册于 SCHEMA_MIGRATIONS（后续迁移入列后不再居尾）；
  *  2. 迁移语义（up 直调）：旧形态表（无 path 列）ALTER ADD COLUMN 可空尾列 +
  *     存量行按 entry_id 回填现路径 + entry 已删的行留 NULL + 已是新形态时二跑早退；
  *  3. 快路径场景（旧形态存量库 + 前序 migration 已 applied）：runner 仍执行
@@ -101,10 +101,15 @@ async function markPriorMigrationsApplied(conn: TdbcConnection): Promise<void> {
 }
 
 describe("add-mcp-file-path-snapshot-v1 migration", () => {
-  it("登记于 SCHEMA_MIGRATIONS 阵尾", () => {
-    assert.equal(
-      SCHEMA_MIGRATIONS.at(-1)?.id,
-      ADD_MCP_FILE_PATH_SNAPSHOT_V1_ID
+  it("登记于 SCHEMA_MIGRATIONS（dedup-file-cache-storage-v1 入列后不再居尾）", () => {
+    // 该迁移入列时是阵尾；后续迁移（如 dedup-file-cache-storage-v1）
+    // 登记到其后再自然让位——这里只断言仍在注册表中且顺序先于新迁移。
+    const ids = SCHEMA_MIGRATIONS.map((m) => m.id);
+    assert.ok(ids.includes(ADD_MCP_FILE_PATH_SNAPSHOT_V1_ID));
+    assert.ok(
+      ids.indexOf(ADD_MCP_FILE_PATH_SNAPSHOT_V1_ID) <
+        ids.indexOf("dedup-file-cache-storage-v1"),
+      "add-mcp-file-path-snapshot-v1 应先于 dedup-file-cache-storage-v1 执行"
     );
   });
 

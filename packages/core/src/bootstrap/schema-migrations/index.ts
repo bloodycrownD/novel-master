@@ -16,6 +16,7 @@ import { workplaceDirRuleSmartFieldV1Migration } from "./workplace-dir-rule-smar
 import { renameSmartSortRuleExampleV1Migration } from "./rename-smart-sort-rule-example-v1.js";
 import { addSmartSortCaptureKindV1Migration } from "./add-smart-sort-capture-kind-v1.js";
 import { addMcpFilePathSnapshotV1Migration } from "./add-mcp-file-path-snapshot-v1.js";
+import { dedupFileCacheStorageV1Migration } from "./dedup-file-cache-storage-v1.js";
 
 /**
  * 本版本最低支持 v1.5.5。以下 12 条 migration 的逻辑已并入 canonical DDL、
@@ -38,6 +39,7 @@ export const SCHEMA_MIGRATIONS: readonly SchemaMigration[] = [
   renameSmartSortRuleExampleV1Migration,
   addSmartSortCaptureKindV1Migration,
   addMcpFilePathSnapshotV1Migration,
+  dedupFileCacheStorageV1Migration,
 ];
 
 /**

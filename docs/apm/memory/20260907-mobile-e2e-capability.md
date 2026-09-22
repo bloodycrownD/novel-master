@@ -33,3 +33,8 @@ assistant: 搭好模拟器环境并验证首启：①系统 Java 11 跑不了 sd
 user: 创建一个 skill 吧，主要就是如何 e2e 测试，如何用 vision agent，就是你上面干的事情。
 
 assistant: 新建项目级 skill .agents/skills/mobile-adb-vision/SKILL.md：移动端 adb 截图巡检 + vision 审查闭环。内容：与 wdio e2e 套件的分工（轻量巡检 vs 正式回归）；硬路径事实（adb/emulator/AVD nm-e2e/JAVA_HOME 17/APK 路径/真机序列号、多设备 -s 指定）；模拟器首选路径（headless 启动、boot 等待、dismiss-keyguard、stayon、装 APK、首启时序与版本弹窗）；真机备选路径（锁屏限制四条、先问用户）；操作循环（uiautomator dump 坐标提取 python 脚本、tap/swipe/keyevent、逐步截图、滚动疑点复测法）；vision 派遣模板与实战要点（主会话模型看不了图必须派 vision、背景要给足但别把假设当事实、多帧对比一次派、vision 观察由主代理判定、抽查它自己写的记忆）；首轮遗留线索四条（状态栏裁半/安全区 padding/滚底竞态/状态栏配色）；收尾（apm 记忆、缺陷登记、汇报口径）。
+
+
+---
+
+2026-09-22 增量轮（storage-cache-dedup-and-cleanup 数据清理，Windows 环境首次）：本机 Android SDK 在 LOCALAPPDATA（adb/emulator 在 PATH），AVD 用 Medium_Phone_API_36.1（nm-e2e 不存在——skill 环境块是旧 Linux 机器的）。全链结论：数据清理功能 e2e 通过——造数 6.5MB 孤儿 blob（python 经 adb 通道：exec-out run-as cat 拉库→seed→/data/local/tmp 中转推回，sdcard 通道被 SELinux 拒）→ UI 库体积 6.2 MB→清理→236 KB，设备文件 6545408→241664 bytes；vision 五张全正常。Windows 新坑三条：① e2e:build-apk 的 APK 缺 RN JS bundle（debug 变体默认连 metro），需先 npx react-native bundle --dev false 打进 assets 再 assembleDebug；② 模拟器残留 7-27 史前库（files/default/ 旧路径）升级触发器炸 no such column: ref_count——低于 v1.5.5 基线的库不在支持范围但报错形态不友好（线索留档）；pm clear 后新库在 databases/novel_master_vfs；③ adb shell run-as cat 拉 SQLite 二进制会被 pty CRLF 污染（malformed），必须走 exec-out 通道。遗留线索更新：底部导航「我的」贴边在模拟器 API 36 也观察到（此前真机中置信度线索），持续留查。

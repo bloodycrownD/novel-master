@@ -30,6 +30,8 @@ import {
   ipcAgentYamlImport,
   ipcBackupExport,
   ipcBackupImport,
+  ipcDbMaintenance,
+  ipcDbStats,
   ipcCloudSyncGetConfig,
   ipcCloudSyncGetLocalStatus,
   ipcCloudSyncPull,
@@ -109,7 +111,27 @@ type CloudSyncStatusState = {
   suggestsPull: boolean;
   syncBusy: boolean;
   agentActive: boolean;
+  maintenanceBusy: boolean;
 };
+
+/** 库体积/可回收量展示用的人类可读格式；无效值回退占位 '—'。 */
+function formatStorageBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes < 0) {
+    return "—";
+  }
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
+  const units = ["KB", "MB", "GB", "TB"];
+  let value = bytes;
+  let unit = -1;
+  do {
+    value /= 1024;
+    unit += 1;
+  } while (value >= 1024 && unit < units.length - 1);
+  const rounded = value >= 100 ? Math.round(value) : Math.round(value * 10) / 10;
+  return `${rounded} ${units[unit]}`;
+}
 
 export function DataManagementView() {
   const { retry } = useNovelMaster();
@@ -130,11 +152,28 @@ export function DataManagementView() {
   const [status, setStatus] = useState<CloudSyncStatusState | null>(null);
   const [confirmPull, setConfirmPull] = useState(false);
   const [confirmPushOverwrite, setConfirmPushOverwrite] = useState(false);
+  const [dbStats, setDbStats] = useState<{
+    fileBytes: number;
+    reclaimableBytes: number;
+  } | null>(null);
+  const [confirmMaintenance, setConfirmMaintenance] = useState(false);
 
   const reloadStatus = useCallback(async () => {
     const res = await ipcCloudSyncGetLocalStatus();
     if (res.ok) {
       setStatus(res.data);
+    }
+  }, []);
+
+  /** 拉取库体积与可回收量；失败保持占位 '—'（静默，不打扰用户）。 */
+  const reloadDbStats = useCallback(async () => {
+    try {
+      const res = await ipcDbStats();
+      if (res.ok) {
+        setDbStats(res.data);
+      }
+    } catch {
+      // 统计失败时保留上次值或占位展示
     }
   }, []);
 
@@ -162,20 +201,25 @@ export function DataManagementView() {
   useEffect(() => {
     void reloadConfig();
     void reloadStatus();
-  }, [reloadConfig, reloadStatus]);
+    void reloadDbStats();
+  }, [reloadConfig, reloadStatus, reloadDbStats]);
 
-  /** 轮询同步状态，使 Agent 运行中等标志与 main 进程一致 */
+  /** 轮询同步状态与库体积，使 Agent 运行中等标志与 main 进程一致 */
   useEffect(() => {
     const timer = window.setInterval(() => {
       void reloadStatus();
+      void reloadDbStats();
     }, 2000);
     return () => {
       window.clearInterval(timer);
     };
-  }, [reloadStatus]);
+  }, [reloadStatus, reloadDbStats]);
 
   const controlsDisabled =
-    busy || status?.syncBusy === true || status?.agentActive === true;
+    busy ||
+    status?.syncBusy === true ||
+    status?.agentActive === true ||
+    status?.maintenanceBusy === true;
 
   const saveConfig = async () => {
     setBusy(true);
@@ -319,6 +363,26 @@ export function DataManagementView() {
         } else {
           toastSettingsSuccess("已取消");
         }
+      } else {
+        toastSettingsError(res.error.message);
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const runMaintenance = async () => {
+    setConfirmMaintenance(false);
+    // better-sqlite3 同步 VACUUM 会冻住 main 事件循环，期间轮询与事件
+    // 推送全部挂起——busy 必须在 invoke 发起前置位，不能依赖 main 推送。
+    setBusy(true);
+    try {
+      const res = await ipcDbMaintenance();
+      if (res.ok) {
+        toastSettingsSuccess(
+          `清理完成：库体积 ${formatStorageBytes(res.data.beforeBytes)} → ${formatStorageBytes(res.data.afterBytes)}`,
+        );
+        await reloadDbStats();
       } else {
         toastSettingsError(res.error.message);
       }
@@ -508,6 +572,15 @@ export function DataManagementView() {
           </Button>
         }
       />
+      <SettingsActionSection
+        title="数据清理"
+        desc={`回收缓存冗余与空闲页并压缩数据库文件。当前库体积 ${dbStats ? formatStorageBytes(dbStats.fileBytes) : "—"} · 可回收约 ${dbStats ? formatStorageBytes(dbStats.reclaimableBytes) : "—"}。`}
+        action={
+          <Button variant="primary" disabled={controlsDisabled} onClick={() => setConfirmMaintenance(true)}>
+            清理
+          </Button>
+        }
+      />
 
       <ConfirmModal
         open={confirmPull}
@@ -543,6 +616,14 @@ export function DataManagementView() {
         busy={busy}
         onConfirm={() => void runImport()}
         onCancel={() => !busy && setConfirmImport(false)}
+      />
+      <ConfirmModal
+        open={confirmMaintenance}
+        title="确认清理"
+        message="清理将回收缓存冗余并压缩数据库文件，耗时随库体积增长（大库可能数十秒），期间应用可能短暂无响应；完成后磁盘占用通常会下降。确定继续？"
+        busy={busy}
+        onConfirm={() => void runMaintenance()}
+        onCancel={() => !busy && setConfirmMaintenance(false)}
       />
     </SettingsPanel>
   );

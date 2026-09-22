@@ -1,11 +1,11 @@
 /**
- * 存储配置：云同步状态/操作与数据库导入导出。
+ * 存储配置：存储空间概览、云端配置入口、数据清理与数据库导入导出。
+ * 云同步状态与拉取/推送操作已迁移至 CloudSyncStorageScreen。
  */
 import React, {useCallback, useEffect, useState} from 'react';
 import {Alert, ScrollView, StyleSheet} from 'react-native';
 import {useFocusEffect, useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
-import {ListSectionTitle} from '../../components/ui/ListSectionTitle';
 import {ProfileMenuItem} from '../../components/profile/ProfileMenuItem';
 import {ProfileStatusCard} from '../../components/profile/ProfileStatusCard';
 import {useToast} from '../../components/chrome/ToastHost';
@@ -16,7 +16,11 @@ import {
   exportDatabaseBackup,
   importDatabaseBackup,
 } from '../../services/db-backup.service';
-import {getCloudSyncStatusView} from '../../services/cloud-sync.service';
+import {
+  getDatabaseMaintenanceStats,
+  runDatabaseMaintenance,
+} from '../../services/db-maintenance.service';
+import {getCloudSyncLocalStatus} from '../../services/cloud-sync-config.store';
 import {
   isMobileAgentActive,
   subscribeMobileAgentActivity,
@@ -33,160 +37,59 @@ export function StorageConfigScreen() {
   const {retry} = useNovelMaster();
   const navigation = useNavigation<Nav>();
   const [dbBusy, setDbBusy] = useState(false);
-  const [cloudRemoteRev, setCloudRemoteRev] = useState<number | null>(null);
-  const [cloudLastSyncedRev, setCloudLastSyncedRev] = useState<number | null>(
+  const [cloudConfigured, setCloudConfigured] = useState(false);
+  const [agentActive, setAgentActive] = useState(false);
+  const [dbFileBytes, setDbFileBytes] = useState<number | null>(null);
+  const [dbReclaimableBytes, setDbReclaimableBytes] = useState<number | null>(
     null,
   );
-  const [cloudSuggestPull, setCloudSuggestPull] = useState(false);
-  const [cloudConfigured, setCloudConfigured] = useState(false);
-  const [cloudLastPullAt, setCloudLastPullAt] = useState<string | undefined>();
-  const [cloudLastPushAt, setCloudLastPushAt] = useState<string | undefined>();
-  const [cloudLastPullResult, setCloudLastPullResult] = useState<
-    string | undefined
-  >();
-  const [cloudLastPushResult, setCloudLastPushResult] = useState<
-    string | undefined
-  >();
-  const [agentActive, setAgentActive] = useState(false);
-  const [statusLoading, setStatusLoading] = useState(true);
 
-  const refreshCloudSyncStatus = useCallback(async () => {
-    setStatusLoading(true);
+  const refreshCloudConfigured = useCallback(async () => {
     try {
-      const status = await getCloudSyncStatusView(runtime);
+      // 仅取本地 configured 布尔值，走 kkv 本地读取，不触发 S3 网络往返；
+      // 远端同步状态（rev/建议拉取等）由 CloudSyncStorageScreen 负责。
+      const status = await getCloudSyncLocalStatus(runtime);
       setCloudConfigured(status.configured);
-      setCloudRemoteRev(status.remoteRev);
-      setCloudLastSyncedRev(status.lastSyncedRev);
-      setCloudSuggestPull(status.suggestPull);
-      setCloudLastPullAt(status.lastPullAt);
-      setCloudLastPushAt(status.lastPushAt);
-      setCloudLastPullResult(status.lastPullResult);
-      setCloudLastPushResult(status.lastPushResult);
     } catch {
       setCloudConfigured(false);
-      setCloudRemoteRev(null);
-      setCloudLastSyncedRev(null);
-      setCloudSuggestPull(false);
-      setCloudLastPullAt(undefined);
-      setCloudLastPushAt(undefined);
-      setCloudLastPullResult(undefined);
-      setCloudLastPushResult(undefined);
-    } finally {
-      setStatusLoading(false);
     }
   }, [runtime]);
 
-  const formatSyncTime = (iso?: string): string => {
-    if (!iso) {
+  const refreshMaintenanceStats = useCallback(async () => {
+    try {
+      const stats = await getDatabaseMaintenanceStats(runtime);
+      setDbFileBytes(stats.fileBytes);
+      setDbReclaimableBytes(stats.reclaimableBytes);
+    } catch {
+      // 统计仅用于展示（Agent 运行中会被守卫拒绝），失败静默占位
+      setDbFileBytes(null);
+      setDbReclaimableBytes(null);
+    }
+  }, [runtime]);
+
+  const formatStorageBytes = (bytes: number | null): string => {
+    if (bytes == null) {
       return '—';
     }
-    const date = new Date(iso);
-    if (Number.isNaN(date.getTime())) {
-      return '—';
+    const mb = bytes / (1024 * 1024);
+    if (mb >= 1024) {
+      return `${(mb / 1024).toFixed(2)} GB`;
     }
-    return date.toLocaleString();
+    if (mb >= 1) {
+      return `${mb.toFixed(1)} MB`;
+    }
+    return `${Math.max(0, Math.round(bytes / 1024))} KB`;
   };
 
-  const syncControlsDisabled = dbBusy || agentActive;
-
-  const formatSyncResultLabel = (result?: string): string | undefined => {
-    if (result === 'success') {
-      return '成功';
+  const maintenanceControlValue = (): string => {
+    if (dbBusy) {
+      return '处理中…';
     }
-    if (result === 'already_up_to_date') {
-      return '已是最新';
-    }
-    if (result === 'error') {
-      return '失败';
-    }
-    return result?.trim() ? result : undefined;
-  };
-
-  const syncControlValue = (lastAt?: string, lastResult?: string): string => {
     if (agentActive) {
       return 'Agent 运行中';
     }
-    if (lastAt) {
-      const resultLabel = formatSyncResultLabel(lastResult);
-      const time = formatSyncTime(lastAt);
-      return resultLabel != null ? `${resultLabel} · ${time}` : `上次 ${time}`;
-    }
-    return '手动同步';
+    return '清理数据库空间';
   };
-
-  const syncStatusContent = (): {
-    message?: string;
-    metrics?: Array<{
-      label: string;
-      value: string;
-      tone?: 'default' | 'warning' | 'success';
-    }>;
-  } => {
-    if (statusLoading) {
-      return {message: '加载中…'};
-    }
-    if (!cloudConfigured) {
-      return {message: '请先完成云存储配置'};
-    }
-    if (cloudRemoteRev == null || cloudLastSyncedRev == null) {
-      return {message: '无法读取同步状态'};
-    }
-    const aligned = cloudRemoteRev === cloudLastSyncedRev;
-    return {
-      metrics: [
-        {label: '云端 rev', value: String(cloudRemoteRev)},
-        {
-          label: '本机 rev',
-          value: String(cloudLastSyncedRev),
-          tone: aligned ? 'success' : 'warning',
-        },
-      ],
-    };
-  };
-
-  const syncStatusNotice = (): string | undefined => {
-    if (statusLoading || !cloudConfigured) {
-      return undefined;
-    }
-    if (agentActive) {
-      return 'Agent 运行中，同步操作已禁用。';
-    }
-    if (cloudSuggestPull) {
-      return '云端有更新，建议先拉取后再推送。';
-    }
-    if (
-      cloudRemoteRev != null &&
-      cloudLastSyncedRev != null &&
-      cloudRemoteRev === cloudLastSyncedRev
-    ) {
-      return '本机与云端 rev 已对齐。';
-    }
-    return undefined;
-  };
-
-  const runPull = useCallback(() => {
-    if (syncControlsDisabled) {
-      return;
-    }
-    Alert.alert(
-      '从云端拉取',
-      '将用云端最新快照替换本机数据（项目、会话、消息等）。本机服务商与 API Key 将保留。是否继续？',
-      [
-        {text: '取消', style: 'cancel'},
-        {
-          text: '拉取',
-          onPress: () => navigation.navigate('CloudSyncProgress', {op: 'pull'}),
-        },
-      ],
-    );
-  }, [syncControlsDisabled, navigation]);
-
-  const runPush = useCallback(() => {
-    if (syncControlsDisabled) {
-      return;
-    }
-    navigation.navigate('CloudSyncProgress', {op: 'push'});
-  }, [syncControlsDisabled, navigation]);
 
   useEffect(() => {
     setAgentActive(isMobileAgentActive());
@@ -195,11 +98,10 @@ export function StorageConfigScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      refreshCloudSyncStatus().catch(() => undefined);
-    }, [refreshCloudSyncStatus]),
+      refreshCloudConfigured().catch(() => undefined);
+      refreshMaintenanceStats().catch(() => undefined);
+    }, [refreshCloudConfigured, refreshMaintenanceStats]),
   );
-
-  const syncStatus = syncStatusContent();
 
   return (
     <ScrollView
@@ -207,38 +109,57 @@ export function StorageConfigScreen() {
       contentContainerStyle={styles.scrollContent}
       keyboardShouldPersistTaps="handled"
     >
-      <ListSectionTitle title="云同步" tokens={tokens} />
       <ProfileStatusCard
-        title="同步状态"
-        hint="显示本机与云端的 rev 对齐情况"
-        message={syncStatus.message}
-        metrics={syncStatus.metrics}
-        notice={syncStatusNotice()}
-        noticeTone={agentActive || cloudSuggestPull ? 'warning' : 'muted'}
+        title="存储空间"
+        hint="数据库文件体积与清理可回收的空间"
+        metrics={[
+          {label: '库体积', value: formatStorageBytes(dbFileBytes)},
+          {label: '可回收', value: formatStorageBytes(dbReclaimableBytes)},
+        ]}
         tokens={tokens}
       />
       <ProfileMenuItem
         icon="☁️"
-        label="云存储配置"
+        label="云端配置"
         value={cloudConfigured ? '已配置' : '未配置'}
         tokens={tokens}
-        onPress={() => navigation.navigate('CloudSyncConfig')}
+        onPress={() => navigation.navigate('CloudSyncStorage')}
       />
       <ProfileMenuItem
-        icon="⬇️"
-        label="从云端拉取"
-        value={syncControlValue(cloudLastPullAt, cloudLastPullResult)}
+        icon="🧹"
+        label="数据清理"
+        value={maintenanceControlValue()}
         tokens={tokens}
-        onPress={runPull}
+        onPress={() => {
+          if (dbBusy) {
+            return;
+          }
+          Alert.alert(
+            '数据清理',
+            '将回收缓存冗余并压缩数据库文件，耗时随库体积增长（可能数十秒），期间请勿关闭应用，清理过程可能临时占用额外磁盘空间。是否继续？',
+            [
+              {text: '取消', style: 'cancel'},
+              {
+                text: '开始清理',
+                onPress: () => {
+                  setDbBusy(true);
+                  runDatabaseMaintenance(runtime)
+                    .then(({beforeBytes, afterBytes}) => {
+                      showToast(
+                        `清理完成：${formatStorageBytes(
+                          beforeBytes,
+                        )} → ${formatStorageBytes(afterBytes)}`,
+                      );
+                      refreshMaintenanceStats().catch(() => undefined);
+                    })
+                    .catch(err => showToast(toastMessage('清理失败', err)))
+                    .finally(() => setDbBusy(false));
+                },
+              },
+            ],
+          );
+        }}
       />
-      <ProfileMenuItem
-        icon="⬆️"
-        label="推送到云端"
-        value={syncControlValue(cloudLastPushAt, cloudLastPushResult)}
-        tokens={tokens}
-        onPress={runPush}
-      />
-      <ListSectionTitle title="导入导出" tokens={tokens} />
       <ProfileMenuItem
         icon="💾"
         label="导出数据库"

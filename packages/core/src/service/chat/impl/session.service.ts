@@ -34,6 +34,7 @@ import {
   runDeferredBlobGc,
 } from "@/service/session-fs/create-session-fs-service.js";
 import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
+import { runDeferredFileCacheGc } from "@/domain/session-kkv/logic/deferred-file-cache-gc.js";
 import { createSessionRunStateService } from "@/service/session-run-state/create-session-run-state-service.js";
 import { initializeSessionWorkspace } from "@/service/template/logic/initialize-session-workspace.js";
 import { resolveWorkspaceAgentForNewSession } from "@/service/agent/logic/agent-run-shared.js";
@@ -191,6 +192,8 @@ export class DefaultSessionService implements SessionService {
       await this.deleteSessionTree(tx, session);
     });
     await runDeferredBlobGc(this.deps.conn);
+    // file_cache 引用行随上面的事务删除，缓存 blob 的回收同样在提交后调度
+    await runDeferredFileCacheGc(this.deps.conn);
   }
 
   /**
