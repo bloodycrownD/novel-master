@@ -60,3 +60,12 @@ Feature A 波次（wave-0~3）完成，cr-func-fc 判 func-ready：提交链 f68
 
 assistant:
 dev-ready 达成（2026-09-22，code-dev-loop 八波全部收敛）：提交链 f688aeaa/7c9ddc62/006e2483/21c33fb4/5d01ad01/5509fb59/4475a774/292cdb6b/897839e0/edd4a3e7（含 docs），head edd4a3e7，工作区干净。终验：core 全量 2617/2620（3 失败=已知环境项）、全仓 typecheck 零错、desktop 新测试 8/8、mobile 12/12；cr-func-fc 与 cr-func-final 双 func-ready，AC-A/B 全映射，双端目录零交叉，spec_deviations 三条 closed（断言让位/退化路径回退+UNION/tsconfig paths）。Step 9 真机验收（T-MAN1 录屏）归用户 manual_user 未做；未 merge/push（协作红线，待用户指令）。Bundle：branch feat/storage-cache-dedup-and-cleanup，base 3e2488b2。
+
+
+---
+
+user:
+感觉没什么问题（真机验收通过）。追问：清理后 500→100MB 合理吗？能更小吗？→ 主代理实算账本（content_json 明文 73.1MB 占 94%、checkpoint 引用 13.1MB、vfs blob 已压缩 8.8MB）；随后：记个迭代（message-content-compression 立项）+ 进入 code-review-loop。
+
+assistant:
+CR 循环（2026-09-22，base 13549791 → f5ccbc11）：R1 四路 review-scope 并行（core-store/core-maint/desktop/mobile），core-maint 直接 scope-ready，共 2 P1 + 8 P2：desktop/B-1（runDbMaintenance 缺自身 busy 自查，spec「handler 拒绝并发」承诺未兑现，并发窗口实存）与 core-store/C-1（解码四 helper 与 vfs 逐行复制 DRY）为 P1；P2 含 desktop stat/runtime 顺序、pull 的 syncBusy 永久卡死既有缺陷被新守卫放大、busy 双导入路径、RN zlib-b64 零测试+无注入点、T-DM2 误导注释、T-DM1 断言收紧、mobile 全量状态接口只为取布尔发 S3 请求、T-DMM2 归属注释。spec-fix 落盘 cr-fix-spec.md（10 条，子代理逐条源码抽查吻合）。R2 review-full 建议 fix-spec-ready: yes（无新增，docs/F/K/C-orch 干净）。mobile 真机 UX 追加（存储页重排四区+云端存储设置新页+灰标题移除，9696e19a/f3794d61/d812bdb0）记 fixed deviation。待用户确认 fix-spec 后按其执行（MF-1 修复时同步闭合 open deviation）。
