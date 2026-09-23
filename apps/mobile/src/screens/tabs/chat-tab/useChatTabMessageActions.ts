@@ -38,6 +38,10 @@ import {
 } from '@/services/project-composer-status.service';
 import type {RollbackOptions} from '@novel-master/core/message-checkpoint';
 import {rollbackToMessage} from '@/services/message-rollback.service';
+import {
+  resetRollbackTiming,
+  rollbackTimingLog,
+} from '@/debug/run-timing';
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
 import type {ChatSubview, ConversationPanel} from './useChatTabScope';
 
@@ -237,12 +241,18 @@ export function useChatTabMessageActions({
         options?: RollbackOptions,
       ) => {
         try {
+          // 回滚链分段打点（rollback-large-jank Step 1）：t0 定在确认回滚、
+          // core 调用发起前；各段耗时经 [nm-rollback] 轴输出（__DEV__ 门控，
+          // 生产 no-op）。core 事务内部子步由 runtime 注入的 probe 同轴输出。
+          resetRollbackTiming();
+          rollbackTimingLog('core rollback begin');
           await rollbackToMessage(
             runtime,
             {projectId, sessionId},
             targetMessageId,
             options,
           );
+          rollbackTimingLog('core rollback done');
           // assistant 锚点（rewind）：tail 里无 user 消息，没有 attach 可反投影，
           // 批注草稿应清空——与 user 锚点（undo_send）的反投影语义对称。
           // user 锚点（undo_send）的反投影在下方 applyComposerRestore 里处理：
@@ -255,13 +265,23 @@ export function useChatTabMessageActions({
             projectId,
             sessionId,
           });
+          rollbackTimingLog('composer status refreshed');
           resetStreamingDisplay();
-          await reloadMessages(true);
+          rollbackTimingLog('streaming display reset');
+          const reloaded = await reloadMessages(true);
+          rollbackTimingLog(
+            Array.isArray(reloaded)
+              ? `tail reload done (rows=${reloaded.length})`
+              : 'tail reload done',
+          );
           await applyComposerRestore();
+          rollbackTimingLog('composer restore done');
           void refreshChatTokenLabel();
+          rollbackTimingLog('token refresh scheduled');
           showToast(
             options?.skipVfsReconcile ? '对话已截断，工作区未恢复' : '回滚成功',
           );
+          rollbackTimingLog('toast shown');
         } catch (error) {
           if (
             !options?.skipVfsReconcile &&

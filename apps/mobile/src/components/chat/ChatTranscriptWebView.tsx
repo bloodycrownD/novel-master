@@ -16,7 +16,11 @@ import WebView, {type WebViewMessageEvent} from 'react-native-webview';
 // import type 会被擦除，不影响运行时打包。
 import type {WebViewOpenWindowEvent} from 'react-native-webview/lib/WebViewTypes';
 import {type ChatMessage} from '@novel-master/core/chat';
-import {bootTimingLog, timingLog} from '@/debug/run-timing';
+import {
+  bootTimingLog,
+  rollbackTimingLog,
+  timingLog,
+} from '@/debug/run-timing';
 import Clipboard from '@react-native-clipboard/clipboard';
 import {
   encodeHostToTranscript,
@@ -683,6 +687,11 @@ export const ChatTranscriptWebView = memo(
               bootTimingLog(
                 `snapshot chunk ${chunkIndex + 1}/${chunkTotal} posted (rows=${rows.length})`,
               );
+              // 回滚窗口内的快照分片也上回滚轴（窗口外 no-op）——build+post
+              // 是回滚链收尾的第三段长任务来源，修复前后对比依赖此站数据。
+              rollbackTimingLog(
+                `snapshot chunk ${chunkIndex + 1}/${chunkTotal} posted (rows=${rows.length})`,
+              );
               if (!isLastChunk) {
                 // 片间量子让步：防止分片构建本身又变成长任务。
                 await yieldFn();
@@ -692,6 +701,9 @@ export const ChatTranscriptWebView = memo(
             // 快照末态一致」的既有时序语义；单片快照等价旧单包行为。
             syncStreamToolInvoking();
             bootTimingLog(`snapshot all chunks done (gen=${generation})`);
+            rollbackTimingLog(
+              `snapshot all chunks done (gen=${generation}, chunks=${chunkTotal})`,
+            );
             // 补发分片期间被推迟的动作（单一队列按入队原序，末片 post 先于
             // 全部补发消息）：T-S3 流式 flush + C-orch-1 三通道 post。
             const deferredActions = deferredSnapshotActionsRef.current;
@@ -1094,6 +1106,10 @@ export const ChatTranscriptWebView = memo(
           if (message.type === 'scrollSnapshot') {
             const snap = parseScrollSnapshotFromHost(message);
             if (snap) {
+              // 回滚窗口内的首个 scrollSnapshot 即「web 侧渲染回执」——
+              // web 应用快照后才会 emit 滚动位置（T-S4 末片恰一次语义）。
+              // 回滚窗口外 no-op，不影响日常滚动路径。
+              rollbackTimingLog('web render receipt (scrollSnapshot)');
               lastScrollRef.current = {
                 nearBottom: snap.nearBottom,
                 offsetY: snap.offsetY,
