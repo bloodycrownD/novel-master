@@ -162,6 +162,44 @@ function transcriptFlagsEqual(
 const SNAPSHOT_CHUNK_SIZE = 50;
 
 /**
+ * 快照分片字节预算（rollback-large-jank Step 3）：单桶累计源 content JSON
+ * 尺寸上限。大消息场景即使条数未到 {@link SNAPSHOT_CHUNK_SIZE} 也切多片，
+ * 避免「40 条大消息挤单片 → 单次 rows 编码大包 → web 全量重建长任务」。
+ * 度量口径 = 源消息 content 的 JSON 序列化尺寸（rows 编码前），与
+ * rollback.plan.messages 打点的 contentBytes 同源。
+ */
+const SNAPSHOT_CHUNK_BYTES = 256 * 1024;
+
+/**
+ * 按源尺寸贪心分桶（rollback-large-jank Step 3）：一遍量测一遍定桶边界
+ * ——逐条累计源 content JSON 尺寸，条数到上限或累计字节超预算即封桶；
+ * 单条自身超预算时独占一桶（无法再细分）。返回每桶 [start, end) 边界；
+ * 空列表返回单空桶（chunkTotal=1，与旧单包空快照逐字节等价）。
+ */
+export function planSnapshotChunkBounds(
+  messages: readonly ChatMessage[],
+): Array<readonly [number, number]> {
+  const bounds: Array<readonly [number, number]> = [];
+  let start = 0;
+  let bytes = 0;
+  for (let i = 0; i < messages.length; i += 1) {
+    const messageBytes = JSON.stringify(messages[i]!.content).length;
+    const countInBucket = i - start + 1;
+    if (
+      countInBucket > SNAPSHOT_CHUNK_SIZE ||
+      (bytes + messageBytes > SNAPSHOT_CHUNK_BYTES && countInBucket > 1)
+    ) {
+      bounds.push([start, i]);
+      start = i;
+      bytes = 0;
+    }
+    bytes += messageBytes;
+  }
+  bounds.push([start, messages.length]);
+  return bounds;
+}
+
+/**
  * 快照分片代次（模块级单调递增计数器）：每次 sendSessionSnapshotNow 开新
  * 代次，在途旧代次分片循环在每个让步点检查代次、失效即中止丢弃；web 侧
  * 以代次大小判定「未知/迟到分片」并丢弃（等重传语义=RN 侧 force 新代次）。
@@ -626,10 +664,10 @@ export const ChatTranscriptWebView = memo(
           // 预扫全局配对上下文（Step 5 同款 O(n) 一次扫描）：逐片行转换共享，
           // 分片拼接结果与单次全量 buildTranscriptRows 严格全等。
           const pairingContext = buildToolPairingContext(snapshotMessages);
-          const chunkTotal = Math.max(
-            1,
-            Math.ceil(snapshotMessages.length / SNAPSHOT_CHUNK_SIZE),
-          );
+          // 先量测后分桶（Step 3 字节预算）：chunkTotal 预计算 = 桶数，
+          // chunk 0 的 payload 即携带最终值（与旧「条数除法」同构）。
+          const chunkBounds = planSnapshotChunkBounds(snapshotMessages);
+          const chunkTotal = chunkBounds.length;
           const yieldFn = createQuantumYield();
           bootTimingLog(
             `snapshot begin (msgs=${snapshotMessages.length}, chunks=${chunkTotal}, gen=${generation})`,
@@ -651,9 +689,10 @@ export const ChatTranscriptWebView = memo(
                 );
                 return;
               }
+              const [chunkStart, chunkEnd] = chunkBounds[chunkIndex]!;
               const chunkMessages = snapshotMessages.slice(
-                chunkIndex * SNAPSHOT_CHUNK_SIZE,
-                (chunkIndex + 1) * SNAPSHOT_CHUNK_SIZE,
+                chunkStart,
+                chunkEnd,
               );
               const rows = enrichTranscriptRows(
                 buildTranscriptRowsWithContext(
