@@ -125,6 +125,12 @@ export {
   createLoggingFetch,
   isLlmFetchDebugEnabled,
 } from "../infra/llm-protocol/logic/debug-fetch.js";
+export { LlmStreamTimeoutError } from "../infra/llm-protocol/logic/llm-stream-timeout-error.js";
+export {
+  FIRST_CHUNK_TIMEOUT_MS,
+  STREAM_IDLE_TIMEOUT_MS,
+  type StreamWatchdogPhase,
+} from "../infra/llm-protocol/logic/stream-watchdog.js";
 export {
   createDefaultTokenCounterRegistry,
   HeuristicTokenCounter,
