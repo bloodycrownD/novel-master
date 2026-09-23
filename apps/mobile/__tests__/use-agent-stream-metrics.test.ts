@@ -16,31 +16,39 @@ describe('useAgentStreamMetrics formatters', () => {
   });
 });
 
-describe('buildChatStreamMetricsLine', () => {
-  it('运行中显示生成中、正文、思考与速率', () => {
+describe('buildChatStreamMetricsLine（T-M8 文案快照）', () => {
+  it('生成中 · 秒 · 输出 token · 速率全段拼接（与 desktop 一致）', () => {
     const line = buildChatStreamMetricsLine({
       running: true,
-      elapsedMs: 10_000,
-      textChars: 5,
-      thinkingChars: 100,
-      totalChars: 105,
-      charsPerSecond: 10.5,
+      elapsedMs: 12_300,
+      completionTokens: 1_234,
+      tokenSource: 'usage',
+      tokensPerSecond: 45,
     });
-    expect(line).toContain('生成中');
-    expect(line).toContain('正文');
-    expect(line).toContain('思考');
-    expect(line).not.toContain('工具');
+    expect(line).toBe('生成中 · 12.3s · 输出 1,234 t · 45 t/s');
   });
 
-  it('结束后显示上次生成', () => {
+  it('无速率样本时省略速率段（上次生成冻结态）', () => {
     const line = buildChatStreamMetricsLine({
       running: false,
-      elapsedMs: 5000,
-      textChars: 0,
-      thinkingChars: 42,
-      totalChars: 42,
-      charsPerSecond: 8.4,
+      elapsedMs: 5_000,
+      completionTokens: 28,
+      tokenSource: 'heuristic',
+      tokensPerSecond: null,
     });
-    expect(line).toContain('上次生成');
+    expect(line).toBe('上次生成 · 5.0s · 输出 28 t');
+  });
+
+  it('正文/思考不再分列（token 化改版后的形态锁定）', () => {
+    const line = buildChatStreamMetricsLine({
+      running: true,
+      elapsedMs: 3_000,
+      completionTokens: 90,
+      tokenSource: 'heuristic',
+      tokensPerSecond: 30,
+    });
+    expect(line).not.toContain('正文');
+    expect(line).not.toContain('思考');
+    expect(line).toContain('输出 90 t');
   });
 });

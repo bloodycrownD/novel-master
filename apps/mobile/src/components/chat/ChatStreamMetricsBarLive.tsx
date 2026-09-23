@@ -10,8 +10,18 @@
  *   （「上次生成」冻结快照，跨重启由持久层 settled 行回填）。
  * manager.subscribe 驱动收尾/切会话/水合回填的即时刷新；活跃期间另有
  * 250ms tick 刷新 live 计时。
+ *
+ * stream-metrics-tokens：活跃 run 的实时速率由本组件采样喂
+ * slidingTokenRate——tick/通知驱动的每次重渲染把「当前累计 token」采成
+ * (t, tokens) 样本；heuristic→usage 校正点（tokenSource 翻转、累计值跳变）
+ * 样本序列清空重 seed，防一次巨大差分污染速率。冻结态不喂速率（无实时
+ * 语义，文案省略速率段）。
  */
-import React, {useEffect, useState} from 'react';
+import React, {useEffect, useRef, useState} from 'react';
+import {
+  createTokenRateSampler,
+  type TokenRateSampler,
+} from '@novel-master/core/format';
 import {
   type AgentStreamMetricsView,
   toAgentStreamMetricsView,
@@ -31,6 +41,8 @@ export function ChatStreamMetricsBarLive({agentRunning, sessionId}: Props) {
   const runtime = useRuntime();
   const manager = runtime.sessionStreamUnitManager;
   const [, setTick] = useState(0);
+  const samplerRef = useRef<TokenRateSampler>(createTokenRateSampler());
+  const samplerRunKeyRef = useRef('');
 
   // 活跃期间 250ms tick 刷新 live 计时；空闲时靠 manager 订阅触发
   // （收尾写 settled 投影、切会话换源、水合回填均经 notifyChanged）。
@@ -56,6 +68,20 @@ export function ChatStreamMetricsBarLive({agentRunning, sessionId}: Props) {
     }
   }, [agentRunning]);
 
+  /** 采样并算速率（渲染期调用，幂等——tokens 未变不产生新样本）。 */
+  const sampleRate = (
+    runKey: string,
+    tokens: number,
+    source: string,
+  ): number | null => {
+    // 新 run（或数据源切换）：整体重 seed，防跨 run 差分。
+    if (samplerRunKeyRef.current !== runKey) {
+      samplerRunKeyRef.current = runKey;
+      samplerRef.current.reset();
+    }
+    return samplerRef.current.sample(tokens, source, Date.now());
+  };
+
   let metrics: AgentStreamMetricsView | null = null;
   /** 中断现场的正面标识（Step 7）：仅水合出的 interrupted 单元冻结指标携带。 */
   let interrupted = false;
@@ -70,7 +96,8 @@ export function ChatStreamMetricsBarLive({agentRunning, sessionId}: Props) {
       if (
         view.startedAtMs > 0 ||
         view.metrics.textChars > 0 ||
-        view.metrics.thinkingChars > 0
+        view.metrics.thinkingChars > 0 ||
+        view.metrics.completionTokens > 0
       ) {
         interrupted = view.status === 'interrupted';
         const elapsedMs =
@@ -82,21 +109,30 @@ export function ChatStreamMetricsBarLive({agentRunning, sessionId}: Props) {
                   (view.settledAtMs ?? Date.now()) - view.startedAtMs,
                 )
               : 0;
+        // 冻结态：token 计数照显，速率段省略（无实时语义）。
         metrics = toAgentStreamMetricsView(false, {
-          elapsedMs: elapsedMs,
-          textChars: view.metrics.textChars,
-          thinkingChars: view.metrics.thinkingChars,
+          elapsedMs,
+          completionTokens: view.metrics.completionTokens,
+          tokenSource: view.metrics.tokenSource,
         });
       }
     } else if (agentRunning && view != null && view.startedAtMs > 0) {
       // starting 阶段起点已随 begin() 置位（用户请求时刻），指标条自受理
-      // 即显示（计时在走、字数为零的「准备中」形态），不等 RUN_STARTED。
+      // 即显示（计时在走、token 为零的「准备中」形态），不等 RUN_STARTED。
       const elapsedMs = Math.max(0, Date.now() - view.startedAtMs);
-      metrics = toAgentStreamMetricsView(true, {
-        elapsedMs,
-        textChars: view.metrics.textChars,
-        thinkingChars: view.metrics.thinkingChars,
-      });
+      metrics = toAgentStreamMetricsView(
+        true,
+        {
+          elapsedMs,
+          completionTokens: view.metrics.completionTokens,
+          tokenSource: view.metrics.tokenSource,
+        },
+        sampleRate(
+          `${sessionId}:${view.runId ?? ''}`,
+          view.metrics.completionTokens,
+          view.metrics.tokenSource,
+        ),
+      );
     }
   }
   if (metrics == null && sessionId != null) {
@@ -104,8 +140,8 @@ export function ChatStreamMetricsBarLive({agentRunning, sessionId}: Props) {
     if (lastRun != null) {
       metrics = toAgentStreamMetricsView(false, {
         elapsedMs: lastRun.elapsedMs,
-        textChars: lastRun.metrics.textChars,
-        thinkingChars: lastRun.metrics.thinkingChars,
+        completionTokens: lastRun.metrics.completionTokens,
+        tokenSource: lastRun.metrics.tokenSource,
       });
     }
   }

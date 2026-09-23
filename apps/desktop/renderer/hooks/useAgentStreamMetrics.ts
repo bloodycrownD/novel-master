@@ -32,8 +32,6 @@ export type AgentStreamMetricsSnapshot = {
 
 export type AgentStreamMetricsView = AgentStreamMetricsSnapshot & {
   readonly running: boolean;
-  readonly totalChars: number;
-  readonly charsPerSecond: number;
 };
 
 type MetricsAcc = {
@@ -61,10 +59,7 @@ function toView(
   running: boolean,
   snap: AgentStreamMetricsSnapshot,
 ): AgentStreamMetricsView {
-  const totalChars = snap.textChars + snap.thinkingChars;
-  const secs = snap.elapsedMs / 1000;
-  const charsPerSecond = secs > 0 ? totalChars / secs : 0;
-  return { ...snap, running, totalChars, charsPerSecond };
+  return { ...snap, running };
 }
 
 function emptyAcc(): MetricsAcc {
@@ -90,11 +85,20 @@ export function formatStreamElapsed(seconds: number): string {
   return `${Math.round(seconds)}s`;
 }
 
-/** 构建 metrics 条文案（供 AgentStreamMetricsBar 与单测共用）。 */
+/**
+ * 构建 metrics 条文案（供 AgentStreamMetricsBar 与单测共用）。
+ *
+ * `tokensPerSecond` 可选——组件侧采样喂入；缺省（含冻结态）省略速率段。
+ */
 export function buildAgentStreamMetricsLabel(
-  metrics: AgentStreamMetricsView,
+  metrics: AgentStreamMetricsView & { readonly tokensPerSecond?: number | null },
 ): string {
-  return buildStreamMetricsLine(metrics);
+  return buildStreamMetricsLine({
+    running: metrics.running,
+    elapsedMs: metrics.elapsedMs,
+    completionTokens: metrics.completionTokens,
+    tokensPerSecond: metrics.tokensPerSecond ?? null,
+  });
 }
 
 /** 运行中 live 统计；结束后保留「上次生成」直至下一轮。 */
