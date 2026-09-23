@@ -13,6 +13,11 @@
  * 增量处理，跨路径一致。详见
  * `.apm/kb/docs/Iterations/mobile-sse-stream-resilience/spec.md`。
  *
+ * 两条路径均装配 {@link createStreamWatchdog} 双 deadline（首字/流空闲，spec
+ * llm-stream-timeout）：任何失联在有限时间内以 {@link LlmStreamTimeoutError}
+ * 收敛，连接随之中断清理；超时分级语义（首字前可重试/流中断不重试）由
+ * model-request.service 的 isRetryableError 承接。
+ *
  * @module infra/llm-protocol/logic/llm-sse-transport
  */
 
@@ -24,6 +29,13 @@ import {
   dispatchSseChunk,
 } from "./dispatch-sse-chunk.js";
 import { assertOk } from "./http-util.js";
+import {
+  createStreamWatchdog,
+  FIRST_CHUNK_TIMEOUT_MS,
+  STREAM_IDLE_TIMEOUT_MS,
+  type StreamWatchdog,
+} from "./stream-watchdog.js";
+import { LlmStreamTimeoutError } from "./llm-stream-timeout-error.js";
 
 export type SseByteHandler = (chunk: string) => void;
 
@@ -168,6 +180,7 @@ function postSseViaXhr(
     let processedLength = 0;
     const dispatchState = createSseDispatchState();
     let settled = false;
+    let lastActivityAt = Date.now();
 
     const resolveOnce = (value: {
       status: number;
@@ -177,13 +190,42 @@ function postSseViaXhr(
       settled = true;
       resolve(value);
     };
-    const rejectOnce = (error: ProviderError) => {
+    // 放宽为 Error：watchdog 超时要以此 settle LlmStreamTimeoutError（非 ProviderError）。
+    const rejectOnce = (error: Error) => {
       if (settled) return;
       settled = true;
       reject(error);
     };
 
     const emitter = createSseChunkEmitter(onChunk);
+
+    // 双 deadline 看门狗（spec llm-stream-timeout 第 2 节）：
+    // onTimeout 时序关键——先 rejectOnce(超时错误) 抢占 settle，再 xhr.abort()
+    // + emitter.dispose() 仅作断流清理。abort 触发的 onabort 里二次 rejectOnce
+    // 被 settled 守卫挡掉，ProviderError("Request aborted") 根本不会产生，超时
+    // 错误原样上抛；若反过来寄望 onabort 链传播，会被 isRequestAborted 识别为
+    // 用户取消、被 adapter 吞成 partial，分级语义全失效。
+    const watchdog: StreamWatchdog = createStreamWatchdog({
+      onTimeout: (phase) => {
+        logSse(logTag, "stream timeout", {
+          phase,
+          lastActivityAt,
+          processedLength,
+          bufferedBytes: emitter.bufferedLength(),
+        });
+        rejectOnce(
+          new LlmStreamTimeoutError(
+            phase,
+            phase === "first-chunk"
+              ? FIRST_CHUNK_TIMEOUT_MS
+              : STREAM_IDLE_TIMEOUT_MS
+          )
+        );
+        watchdog.dispose();
+        emitter.dispose();
+        xhr.abort();
+      },
+    });
 
     const deliverNewText = (): void => {
       const text = xhr.responseText;
@@ -206,6 +248,7 @@ function postSseViaXhr(
     if (signal != null) {
       if (signal.aborted) {
         emitter.dispose();
+        watchdog.dispose();
         rejectOnce(
           new ProviderError("HTTP_ERROR", "Request aborted", { providerId })
         );
@@ -221,10 +264,14 @@ function postSseViaXhr(
     }
 
     xhr.onprogress = () => {
+      // 任何响应数据到达（含每次增量）：撤销首字阶段并重置空闲 deadline。
+      lastActivityAt = Date.now();
+      watchdog.noteActivity();
       deliverNewText();
     };
 
     xhr.onload = () => {
+      watchdog.dispose();
       deliverNewText();
       // Synchronous flush on complete: no async drain chain; guarantees tail delivery.
       const tail = emitter.flush();
@@ -251,6 +298,7 @@ function postSseViaXhr(
     };
 
     xhr.onerror = () => {
+      watchdog.dispose();
       emitter.dispose();
       rejectOnce(
         new ProviderError("HTTP_ERROR", "XHR network error", { providerId })
@@ -258,6 +306,7 @@ function postSseViaXhr(
     };
 
     xhr.onabort = () => {
+      watchdog.dispose();
       emitter.dispose();
       rejectOnce(
         new ProviderError("HTTP_ERROR", "Request aborted", { providerId })
@@ -280,44 +329,133 @@ async function postSseViaFetch(
   const fetchFn = options?.fetchFn ?? globalThis.fetch;
   const signal = options?.signal ?? init.signal;
 
-  const response = await fetchFn(url, { ...init, signal });
-  await assertOk(response, providerId);
-
-  if (response.body == null) {
-    const contentType = response.headers.get("content-type") ?? "none";
-    throw new ProviderError(
-      "HTTP_ERROR",
-      `Empty streaming response body (HTTP ${response.status}, content-type: ${contentType}). This environment does not support fetch stream bodies.`,
-      { providerId }
-    );
-  }
-
-  logSse(logTag, "fetch stream start", {
-    status: response.status,
-    contentType: response.headers.get("content-type"),
-  });
-
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  const dispatchState = createSseDispatchState();
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) {
-      break;
+  // 组合自有 controller：用户 AbortSignal（停止生成）转发进来；watchdog 超时也
+  // 经它主动断流。用户取消语义不变——signal abort → controller.abort →
+  // fetch/reader 抛 AbortError → 上抛（与直接传 signal 等价）。
+  const controller = new AbortController();
+  if (signal != null) {
+    if (signal.aborted) {
+      controller.abort();
+    } else {
+      signal.addEventListener(
+        "abort",
+        () => {
+          controller.abort();
+        },
+        { once: true }
+      );
     }
-    // fetch 在此完成 UTF-8 解码，再经公共 dispatchSseChunk 直投 onChunk（即时转发，
-    // 无节流）；首包日志与 XHR 路径共用同一套分发语义。
-    const chunk = decoder.decode(value, { stream: true });
-    dispatchSseChunk(chunk, dispatchState, onChunk, (bytes) =>
-      logSse(logTag, "fetch first chunk", { bytes })
-    );
   }
 
-  return {
-    status: response.status,
-    contentType: response.headers.get("content-type"),
-  };
+  let processedLength = 0;
+  let lastActivityAt = Date.now();
+
+  // 读循环包入带 settled 守卫的 Promise（spec llm-stream-timeout 第 3 节），
+  // onTimeout 时序与 XHR 同构：先 rejectOnce(超时错误) 抢占 settle，再
+  // controller.abort() 仅作断流清理；随后 reader.read() 抛出的 AbortError 落入
+  // 已 settle 分支被丢弃，最终传播的只会是超时错误（isAbortLikeError 无机会介入）。
+  return new Promise((resolve, reject) => {
+    let settled = false;
+
+    const resolveOnce = (value: {
+      status: number;
+      contentType: string | null;
+    }) => {
+      if (settled) return;
+      settled = true;
+      resolve(value);
+    };
+    const rejectOnce = (error: Error) => {
+      if (settled) return;
+      settled = true;
+      reject(error);
+    };
+
+    const watchdog: StreamWatchdog = createStreamWatchdog({
+      onTimeout: (phase) => {
+        // fetch 路径即时转发、无节流缓冲，bufferedBytes 不适用（记 0）。
+        logSse(logTag, "stream timeout", {
+          phase,
+          lastActivityAt,
+          processedLength,
+          bufferedBytes: 0,
+        });
+        rejectOnce(
+          new LlmStreamTimeoutError(
+            phase,
+            phase === "first-chunk"
+              ? FIRST_CHUNK_TIMEOUT_MS
+              : STREAM_IDLE_TIMEOUT_MS
+          )
+        );
+        watchdog.dispose();
+        controller.abort();
+      },
+    });
+
+    void (async () => {
+      try {
+        const response = await fetchFn(url, {
+          ...init,
+          signal: controller.signal,
+        });
+        await assertOk(response, providerId);
+
+        if (response.body == null) {
+          const contentType = response.headers.get("content-type") ?? "none";
+          throw new ProviderError(
+            "HTTP_ERROR",
+            `Empty streaming response body (HTTP ${response.status}, content-type: ${contentType}). This environment does not support fetch stream bodies.`,
+            { providerId }
+          );
+        }
+
+        logSse(logTag, "fetch stream start", {
+          status: response.status,
+          contentType: response.headers.get("content-type"),
+        });
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        const dispatchState = createSseDispatchState();
+
+        while (true) {
+          const { done, value } = await reader.read();
+          // reader.read() 每次返回（含空 chunk / done）即活动：撤销首字阶段、
+          // 重置空闲 deadline。
+          lastActivityAt = Date.now();
+          watchdog.noteActivity();
+          if (done) {
+            break;
+          }
+          // fetch 在此完成 UTF-8 解码，再经公共 dispatchSseChunk 直投 onChunk（即时转发，
+          // 无节流）；首包日志与 XHR 路径共用同一套分发语义。processedLength 为
+          // 解码后累计字符数（观测打点用，spec 第 5 节口径）。
+          const chunk = decoder.decode(value, { stream: true });
+          processedLength += chunk.length;
+          dispatchSseChunk(chunk, dispatchState, onChunk, (bytes) =>
+            logSse(logTag, "fetch first chunk", { bytes })
+          );
+        }
+
+        watchdog.dispose();
+        resolveOnce({
+          status: response.status,
+          contentType: response.headers.get("content-type"),
+        });
+      } catch (error) {
+        watchdog.dispose();
+        if (settled) {
+          // watchdog 已以超时错误 settle：controller.abort() 导致的 AbortError
+          // 在此丢弃，不让它顶替/竞态超时错误。
+          return;
+        }
+        rejectOnce(
+          error instanceof Error ? error : new Error(String(error))
+        );
+      }
+    })();
+  });
 }
 
 /**

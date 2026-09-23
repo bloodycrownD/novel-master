@@ -24,6 +24,8 @@ export interface SseChunkEmitter {
   flush(): string;
   /** Stop tick and discard un-emitted buffer (error/abort paths). */
   dispose(): void;
+  /** 当前待发缓冲长度（流超时观测打点用，只读，不改缓冲行为）。 */
+  bufferedLength(): number;
 }
 
 export function createSseChunkEmitter(
@@ -63,6 +65,10 @@ export function createSseChunkEmitter(
     dispose(): void {
       stopTimer();
       buffer = "";
+    },
+
+    bufferedLength(): number {
+      return buffer.length;
     },
   };
 }
