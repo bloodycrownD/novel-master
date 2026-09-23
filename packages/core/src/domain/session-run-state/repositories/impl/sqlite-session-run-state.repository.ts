@@ -14,11 +14,17 @@ import type { Row } from "@/infra/tdbc/types.js";
 import type {
   SessionRunState,
   SessionRunStatus,
+  SessionRunStateTokenSource,
 } from "../../model/session-run-state.js";
 import type { SessionRunStateRepository } from "../session-run-state.port.js";
 
 function nullableText(value: unknown): string | null {
   return value == null ? null : String(value);
+}
+
+/** token_source 列收窄：仅认 usage/heuristic，脏值/缺省回退 heuristic。 */
+function tokenSource(value: unknown): SessionRunStateTokenSource {
+  return value === "usage" ? "usage" : "heuristic";
 }
 
 function rowToState(row: Row): SessionRunState {
@@ -30,6 +36,8 @@ function rowToState(row: Row): SessionRunState {
     startedAtMs: Number(row.started_at_ms),
     textChars: Number(row.text_chars),
     thinkingChars: Number(row.thinking_chars),
+    completionTokens: Number(row.completion_tokens ?? 0),
+    tokenSource: tokenSource(row.token_source),
     partialText: nullableText(row.partial_text),
     partialThinking: nullableText(row.partial_thinking),
     pendingChildrenJson: nullableText(row.pending_children_json),
@@ -55,7 +63,8 @@ export class SqliteSessionRunStateRepository
       this.conn,
       this.parser,
       `SELECT session_id, project_id, run_id, status, started_at_ms,
-              text_chars, thinking_chars, partial_text, partial_thinking,
+              text_chars, thinking_chars, completion_tokens, token_source,
+              partial_text, partial_thinking,
               pending_children_json, updated_at_ms
        FROM session_run_state WHERE session_id = #{sessionId}`,
       { sessionId }
@@ -72,11 +81,13 @@ export class SqliteSessionRunStateRepository
       this.parser,
       `INSERT INTO session_run_state (
          session_id, project_id, run_id, status, started_at_ms,
-         text_chars, thinking_chars, partial_text, partial_thinking,
+         text_chars, thinking_chars, completion_tokens, token_source,
+         partial_text, partial_thinking,
          pending_children_json, updated_at_ms
        ) VALUES (
          #{sessionId}, #{projectId}, #{runId}, #{status}, #{startedAtMs},
-         #{textChars}, #{thinkingChars}, #{partialText}, #{partialThinking},
+         #{textChars}, #{thinkingChars}, #{completionTokens}, #{tokenSource},
+         #{partialText}, #{partialThinking},
          #{pendingChildrenJson}, #{updatedAtMs}
        )
        ON CONFLICT(session_id) DO UPDATE SET
@@ -86,6 +97,8 @@ export class SqliteSessionRunStateRepository
          started_at_ms = excluded.started_at_ms,
          text_chars = excluded.text_chars,
          thinking_chars = excluded.thinking_chars,
+         completion_tokens = excluded.completion_tokens,
+         token_source = excluded.token_source,
          partial_text = excluded.partial_text,
          partial_thinking = excluded.partial_thinking,
          pending_children_json = excluded.pending_children_json,
@@ -112,7 +125,8 @@ export class SqliteSessionRunStateRepository
       this.conn,
       this.parser,
       `SELECT session_id, project_id, run_id, status, started_at_ms,
-              text_chars, thinking_chars, partial_text, partial_thinking,
+              text_chars, thinking_chars, completion_tokens, token_source,
+              partial_text, partial_thinking,
               pending_children_json, updated_at_ms
        FROM session_run_state WHERE status IN (${inClause})
        ORDER BY session_id`,
