@@ -158,6 +158,22 @@ iterations:
       存储，目标全库 105MB → 50MB 量级。关键难点：存量为用户数据本体
       必须真搬运（跨 boot 可重入分批迁移框架），三端读写路径透明过
       codec。缘起：storage-cache-dedup-and-cleanup 清理后剩余构成分析。
+      spec 已落盘（2026-09-23）：后台谓词驱动压缩任务 + 行内双列双形态 +
+      三段式确定性下线生命周期（V0 搬运 / V1 删后台与明文读 / V1' 删收尾门）。
+
+  # ---- mobile 性能问题批次（2026-09-23 立项，四 feature）----
+  - id: mobile-perf-2026-09
+    status: active
+    notes: >
+      mobile 端实测性能问题批次（content_json 压缩另立 message-content-compression）。
+      四 feature：rollback-large-jank（大文本回滚卡顿：三遍全量 parse 收敛 +
+      快照字节预算分片 + 孤儿清扫 deferred）/ background-run-continuity
+      （后台任务卡住：RN timers 由 Choreographer 驱动后台停摆——SSE 投递
+      事件驱动化 + TDBC 量子让步后台感知）/ stream-metrics-tokens（指标条
+      「输出 N t · M t/s」token 化 + 实时滑窗速率，usage 优先 heuristic 兜底）/
+      llm-stream-timeout（流式双超时兜底：首字/空闲，分级重试语义，治
+      「run 无超时挂死」遗留 bug）。探索完成，PRD+spec 已落盘待确认。
+
 
 # ---- S-2 漂移对齐跟踪表（9 处）----
 # #1 sksp/spec.md L248            —— fixed（Step 16, 6dadb65e）

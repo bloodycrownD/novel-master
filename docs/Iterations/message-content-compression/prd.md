@@ -11,7 +11,7 @@ storage-cache-dedup-and-cleanup 迭代后，用户实测库（523MB）清理收�
 
 ## 目标（含成功指标）
 
-`chat_message.content_json` 改为 zlib 压缩存储（对齐 `vfs_content_blob` 的编码模式），消息读写语义零变化。同规模库全库体积从约 105MB 收敛到 **50MB 量级**（中文 JSON 压缩比预估 3~4:1）。
+`chat_message.content_json` 改为 zlib 压缩存储（对齐 `vfs_content_blob` 的编码模式），消息读写语义零变化。同规模库全库体积从约 105MB 收敛到 **50MB 量级**（中文 JSON 压缩比预估：desktop/CLI 3~4:1；mobile 因 zlib-b64 的 base64 膨胀为 2.5~3:1）。
 
 ## 用户与场景
 
@@ -31,13 +31,13 @@ storage-cache-dedup-and-cleanup 迭代后，用户实测库（523MB）清理收�
 ## 核心需求（3-7 条）
 
 1. content_json 压缩落库，get/insert/update 语义与现状逐字节等价；
-2. 存量迁移不可丢数据：跨启动可重入、分批不阻塞启动（vfs-content-blob-zlib 先例；**本次为必须搬运型迁移，"空占位登记"禁令与分批纪律强制适用**）；
+2. 存量迁移不可丢数据：跨启动可重入、分批、不无限期阻塞启动（升级首启有界同步预算 ≤60s，超预算转后台；vfs-content-blob-zlib 先例——沿用其「启动同步搬一段」模式，60s 预算界限为本迭代新增；该 migration 已退役，分批骨架见 git 历史 63a35139；**本次为必须搬运型迁移，"空占位登记"禁令与分批纪律强制适用**）；
 3. 性能护栏：单条消息读写经 codec 的延迟不劣化到可感知（SPEC 定阈值）；
 4. 迁移期间新旧形态可混存自愈（对齐 file_cache 迁移经验）。
 
 ## 验收标准（骨架）
 
-- AC-1：同规模真实库迁移后 content_json 存储压缩至 1/3 以下，消息内容逐条还原一致；
+- AC-1：同规模真实库迁移后 content_json 存储压缩到位，消息内容逐条还原一致；压缩比按端验收：desktop/CLI ≥3:1（1/3 以下），mobile ≥2.5:1（zlib-b64 含 base64 +33% 膨胀口径）；
 - AC-2：迁移中断可重入，重启后收敛，零消息丢失；
 - AC-3：既有全部消息读写相关测试零断言修改通过；
 - AC-4：三端（desktop/mobile/cli）回归通过。
