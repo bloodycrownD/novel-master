@@ -42,6 +42,7 @@ import {
   resetRollbackTiming,
   rollbackTimingLog,
 } from '@/debug/run-timing';
+import type {SnapshotCompleteSignal} from '@/services/snapshot-complete-signal';
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
 import type {ChatSubview, ConversationPanel} from './useChatTabScope';
 
@@ -59,6 +60,12 @@ export type UseChatTabMessageActionsParams = {
   resetStreamingDisplay: () => void;
   showToast: (message: string) => void;
   refreshChatTokenLabel: () => Promise<void>;
+  /**
+   * 快照完成信号（rollback-large-jank Step 5）：回滚链的 token 全量重算
+   * 错峰到「reloadMessages 触发的快照末片 post + deferred 排空」之后；
+   * 缺省不传（测试/无 webview 场景）→ 保持现状时机立即刷新。
+   */
+  snapshotCompleteSignal?: SnapshotCompleteSignal;
   bumpWorktreeUiToken: () => void;
   reloadLists: () => Promise<void>;
   setCurrentSession: (sessionId: string) => Promise<void>;
@@ -80,6 +87,7 @@ export function useChatTabMessageActions({
   resetStreamingDisplay,
   showToast,
   refreshChatTokenLabel,
+  snapshotCompleteSignal,
   bumpWorktreeUiToken,
   reloadLists,
   setCurrentSession,
@@ -276,12 +284,21 @@ export function useChatTabMessageActions({
           );
           await applyComposerRestore();
           rollbackTimingLog('composer restore done');
-          void refreshChatTokenLabel();
-          rollbackTimingLog('token refresh scheduled');
           showToast(
             options?.skipVfsReconcile ? '对话已截断，工作区未恢复' : '回滚成功',
           );
           rollbackTimingLog('toast shown');
+          // token 刷新错峰（rollback-large-jank Step 5）：等「reloadMessages
+          // 触发的快照末片 post + deferred actions 排空」信号之后再发起
+          // token 全量重算——快照构建/post 与 token 重算不再同窗口排队；
+          // 信号迟到/超时兜底照旧刷新（回到现状时机，不悬挂）。toast 先于
+          // 等待发出，回滚结果反馈不被错峰推迟。
+          const tokenTrigger = snapshotCompleteSignal
+            ? await snapshotCompleteSignal.consumeNext(1500)
+            : 'no-signal';
+          rollbackTimingLog(`token refresh trigger=${tokenTrigger}`);
+          void refreshChatTokenLabel();
+          rollbackTimingLog('token refresh scheduled');
         } catch (error) {
           if (
             !options?.skipVfsReconcile &&
@@ -371,6 +388,7 @@ export function useChatTabMessageActions({
       resetStreamingDisplay,
       showToast,
       setDraftRestoreToken,
+      snapshotCompleteSignal,
     ],
   );
 

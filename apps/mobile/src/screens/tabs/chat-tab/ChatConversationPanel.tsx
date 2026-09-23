@@ -226,6 +226,7 @@ export function ChatConversationPanel({
           onWebMenuOpenChange={controller.onWebMenuOpenChange}
           onWebMermaidViewerOpenChange={ctx.setMermaidViewerOpen}
           onMessageMenuAction={controller.onWebMessageMenuAction}
+          onSnapshotComplete={controller.notifySnapshotComplete}
         />
       ) : (
         <MessageList

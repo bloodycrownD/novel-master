@@ -6,15 +6,25 @@
  * （原 useSessionStream 的 state 清空）换为 manager 的 reset-stream 控制消息
  * 广播（webview 侧 resetStream，单元 partial 由 core step 边界清零）。
  */
-import {useCallback} from 'react';
+import {useCallback, useRef} from 'react';
 import {Alert} from 'react-native';
 import {buildMessageActionItems} from '@/components/chat/message-edit';
 import {clearSessionWorkplaceKkv} from '@/services/workplace-block.service';
+import {createSnapshotCompleteSignal} from '@/services/snapshot-complete-signal';
 import {useChatTabContext} from './ChatTabProvider';
 import {useChatTabMessageActions} from './useChatTabMessageActions';
 
 export function useChatTabController() {
   const ctx = useChatTabContext();
+
+  // 快照完成信号盒（rollback-large-jank Step 5）：webview 组件侧 notify
+  // （末片 post + deferred 排空后），回滚链 consumeNext 错峰 token 重算。
+  // useRef 持有——跨回滚轮次复用，每次 consumeNext 重置等待态。
+  const snapshotSignalRef = useRef(createSnapshotCompleteSignal());
+  const notifySnapshotComplete = useCallback(() => {
+    snapshotSignalRef.current.notify();
+  }, []);
+  const snapshotCompleteSignal = snapshotSignalRef.current;
 
   // 当前会话 run 是否活跃（单元投影派生；水合未完成/无单元为静止态）。
   const sessionRunActive =
@@ -53,6 +63,7 @@ export function useChatTabController() {
     resetStreamingDisplay,
     showToast: ctx.showToast,
     refreshChatTokenLabel: ctx.scope.refreshChatTokenLabel,
+    snapshotCompleteSignal,
     bumpWorktreeUiToken: ctx.bumpWorktreeUiToken,
     reloadLists: ctx.scope.reloadLists,
     setCurrentSession: ctx.setCurrentSession,
@@ -159,6 +170,7 @@ export function useChatTabController() {
     messageMenuItems,
     confirmBatchDeleteSessions,
     closeMessageMenu: ctx.closeMessageMenu,
+    notifySnapshotComplete,
   };
 }
 

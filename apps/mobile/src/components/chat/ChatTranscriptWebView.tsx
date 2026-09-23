@@ -142,6 +142,13 @@ export type ChatTranscriptWebViewProps = {
   readonly onWebMermaidViewerOpenChange?: (open: boolean) => void;
   /** pending task 工具的子会话映射（title → childSessionId），让执行中的 task 卡片可点击。 */
   readonly pendingSubagentSessions?: ReadonlyMap<string, string>;
+  /**
+   * 快照完成信号（rollback-large-jank Step 5）：sendSessionSnapshotNow 的
+   * 末片 post 且 deferred actions 排空之后调用；被新代次顶替 / 重挂的
+   * aborted 路径不发（该次快照未生效，等下一轮代次）。回滚链据此把
+   * token 全量重算错峰到快照 post 完成之后。
+   */
+  readonly onSnapshotComplete?: () => void;
 };
 
 function transcriptFlagsEqual(
@@ -345,6 +352,7 @@ export const ChatTranscriptWebView = memo(
         onWebMenuOpenChange,
         onWebMermaidViewerOpenChange,
         pendingSubagentSessions,
+        onSnapshotComplete,
       },
       ref,
     ) {
@@ -757,6 +765,11 @@ export const ChatTranscriptWebView = memo(
                 }
               }
             }
+            // 快照完成信号（rollback-large-jank Step 5）：末片 post 且
+            // deferred actions 排空之后发出——aborted 路径（代次被顶替/
+            // 重挂）在循环内 return，不会走到这里。消费端（runRollback）
+            // 据此错峰 token 全量重算。
+            onSnapshotComplete?.();
           } finally {
             if (inFlightSnapshotGenerationRef.current === generation) {
               inFlightSnapshotGenerationRef.current = null;
@@ -776,6 +789,7 @@ export const ChatTranscriptWebView = memo(
           sessionKey,
           flags?.richText,
           uiRunning,
+          onSnapshotComplete,
           syncStreamToolInvoking,
           transcriptListOptions,
           flushPendingStreamDeltas,
