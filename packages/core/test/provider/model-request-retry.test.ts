@@ -9,6 +9,7 @@ import type { SavedModelRepository } from "../../src/domain/provider/repositorie
 import type { SecretStore } from "../../src/infra/sksp/ports/secret-store.port.js";
 import type { ModelRetryPolicyService } from "../../src/service/provider/model-retry-policy.port.js";
 import { defaultSavedModelSettings } from "../../src/domain/provider/model/default-saved-model-settings.js";
+import { LlmStreamTimeoutError } from "../../src/infra/llm-protocol/logic/llm-stream-timeout-error.js";
 
 const providerRepo: ProviderRepository = {
   list: async () => [],
@@ -214,6 +215,60 @@ describe("DefaultModelRequestService retry", () => {
       svc.request(SAVED_MODEL_ID, "hello", { signal: controller.signal }),
     );
     assert.equal(calls, 1);
+  });
+
+  it("T-T4: 首字前流式超时（first-chunk）按既有上限重试后成功", async () => {
+    let calls = 0;
+    const adapter: LlmProtocolAdapter = {
+      kind: "openai",
+      listModels: async () => ({ models: [] }),
+      chat: async () => {
+        calls += 1;
+        if (calls < 3) {
+          // 传输层首字超时：无任何输出、无副作用，应与 429/5xx 同列可重试
+          throw new LlmStreamTimeoutError("first-chunk", 120_000);
+        }
+        return { assistantText: "ok", blocks: [{ type: "text", text: "ok" }], raw: {} };
+      },
+    };
+    const svc = new DefaultModelRequestService({
+      providers: providerRepo,
+      savedModels,
+      secretStore,
+      retryPolicies: noRetryPolicies,
+      retryPolicy: { maxRetries: 3, baseDelayMs: 0, maxDelayMs: 0, jitterRatio: 0 },
+      resolveAdapter: () => adapter,
+    });
+    const out = await svc.request(SAVED_MODEL_ID, "hello");
+    assert.equal(out.assistantText, "ok");
+    assert.equal(calls, 3, "first-chunk 超时应按既有重试上限重试");
+  });
+
+  it("T-T4: 流中断超时（idle，已有部分输出）不可重试，直接上抛", async () => {
+    let calls = 0;
+    const adapter: LlmProtocolAdapter = {
+      kind: "openai",
+      listModels: async () => ({ models: [] }),
+      chat: async () => {
+        calls += 1;
+        // 流中断：已有部分输出，不重试（避免重复输出/重复计费）
+        throw new LlmStreamTimeoutError("idle", 90_000);
+      },
+    };
+    const svc = new DefaultModelRequestService({
+      providers: providerRepo,
+      savedModels,
+      secretStore,
+      retryPolicies: noRetryPolicies,
+      retryPolicy: { maxRetries: 3, baseDelayMs: 0, maxDelayMs: 0, jitterRatio: 0 },
+      resolveAdapter: () => adapter,
+    });
+    await assert.rejects(
+      () => svc.request(SAVED_MODEL_ID, "hello"),
+      (error: unknown) =>
+        error instanceof LlmStreamTimeoutError && error.phase === "idle",
+    );
+    assert.equal(calls, 1, "idle 超时不应重试");
   });
 
   it("surfaces HTTP 400 without DOMException global (React Native Hermes)", async () => {

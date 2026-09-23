@@ -32,6 +32,7 @@ import {
   createAbortError,
   isAbortLikeError,
 } from "@/infra/llm-protocol/logic/request-abort.js";
+import { LlmStreamTimeoutError } from "@/infra/llm-protocol/logic/llm-stream-timeout-error.js";
 
 export interface DefaultModelRequestServiceDeps {
   readonly providers: ProviderRepository;
@@ -68,6 +69,13 @@ function parseHttpStatusFromProviderError(
 function isRetryableError(error: unknown): boolean {
   if (isAbortLikeError(error)) {
     return false;
+  }
+  // 流式超时分级（spec llm-stream-timeout 第 4 节）：首字前超时无任何输出、
+  // 无副作用，与 429/5xx 同列可重试；流中断（idle，已有部分输出）不重试，
+  // 避免重复输出/重复计费。本分支必须置于下方「非 ProviderError 默认 true」
+  // 之前——否则 idle 超时会被当未知瞬时错误误判为可重试。
+  if (error instanceof LlmStreamTimeoutError) {
+    return error.phase === "first-chunk";
   }
   if (!(error instanceof ProviderError)) {
     // Unknown transport/runtime failures are treated as transient once.

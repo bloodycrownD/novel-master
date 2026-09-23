@@ -25,6 +25,7 @@ import type {
 } from "@/service/provider/model-request.port.js";
 import { createAgentAbortRegistry } from "@/service/agent/create-agent-abort-registry.js";
 import type { AgentAbortRegistry } from "@/service/agent/agent-abort-registry.port.js";
+import { LlmStreamTimeoutError } from "@/infra/llm-protocol/logic/llm-stream-timeout-error.js";
 import type { UserVfsTurnService } from "@/service/chat/user-vfs-turn.port.js";
 import {
   getNovelMasterTestContext,
@@ -421,5 +422,75 @@ describe("runChildAgent abort registry 注册 / 父级联（T-R2 / T-A4）", () 
         "子 agent 末条 assistant 应为 mock 返回的半成品文本",
       );
     }
+  });
+});
+
+describe("流式超时收敛后的 registry 自愈（T-T6 / llm-stream-timeout）", () => {
+  it("T-T6: idle 超时上抛后 abortRegistry 反注册，同会话可立即再发", async () => {
+    const ctx = getNovelMasterTestContext();
+    await ensureDefaultAgentModel(ctx);
+
+    const abortRegistry = createAgentAbortRegistry();
+
+    // 第一次 run：model 调用窗口内 registry 已注册（门禁视角「进行中」），
+    // 随后以流中断超时收敛上抛（模拟传输层 watchdog 兜底后的状态）。
+    let firstRunSawRegistered = false;
+    let calls = 0;
+    const modelRequests: ModelRequestService = {
+      request: async () => {
+        calls += 1;
+        if (calls === 1) {
+          firstRunSawRegistered = true;
+        }
+        if (calls <= 1) {
+          throw new LlmStreamTimeoutError("idle", 90_000);
+        }
+        return textDoneResponse("重试成功");
+      },
+    };
+
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id, "S-T6");
+
+    const runtime = makeRuntime(ctx, { modelRequests, abortRegistry });
+    runtime.eventBus = realEventBus();
+
+    await ctx.state.setCurrentAgentId("test-default-agent");
+    await ctx.state.setCurrentModelId(TEST_SAVED_MODEL_ID);
+
+    await assert.rejects(
+      () =>
+        runAgentTurn(
+          runtime,
+          { projectId: project.id, sessionId: session.id },
+          "第一次会超时",
+          { stream: false, onStream: () => {} },
+        ),
+      (e: unknown) => e instanceof LlmStreamTimeoutError && e.phase === "idle",
+    );
+    assert.ok(firstRunSawRegistered, "第一次 run 应已执行到 model 调用");
+
+    // 超时收敛后 finally 反注册兑现：不泄漏（现状挂死时 finally 永不执行，
+    // registry 恒真导致同会话门禁锁死——本修复后随超时错误上抛自然消除）
+    assert.equal(
+      abortRegistry.has(session.id),
+      false,
+      "超时收敛后 sessionId 应从 registry 反注册",
+    );
+
+    // 同会话立即再发：正常完成（startRun 门禁放行）
+    const result = await runAgentTurn(
+      runtime,
+      { projectId: project.id, sessionId: session.id },
+      "同会话再发",
+      { stream: false, onStream: () => {} },
+    );
+    assert.equal(result.stopReason, "completed");
+    assert.equal(calls, 2);
+    assert.equal(
+      abortRegistry.has(session.id),
+      false,
+      "第二次 run 结束后 sessionId 应再次反注册",
+    );
   });
 });
