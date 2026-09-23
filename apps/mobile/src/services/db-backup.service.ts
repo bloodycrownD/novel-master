@@ -24,6 +24,7 @@ import {resolveMobileDatabaseFilePath} from '../db/db-file-path';
 import {isMobileAgentActive} from '../runtime/agent-activity';
 import type {MobileNovelMasterRuntime} from '../runtime/types';
 import {MOBILE_TDBC_URL} from '../vfs/constants';
+import {setMobileDbMaintenanceBusy} from './db-maintenance-busy';
 import {exportBytesViaDocumentPicker, pickToLocalPath} from './document-io';
 import {blobFs, bytesToAsciiString} from './rn-file-io';
 
@@ -176,12 +177,18 @@ export async function exportDatabaseBackup(
     throw new Error('Agent 运行中，请稍后再导出数据库');
   }
 
-  return exportBytesViaDocumentPicker({
-    fileName: backupFileName(),
-    mimeType: 'application/octet-stream',
-    copy: Platform.OS === 'ios',
-    write: destPath => exportDatabaseBackupToPath(runtime, destPath),
-  });
+  // 备份期间置模块级 busy：消息压缩后台循环据此让路（与备份互斥）。
+  setMobileDbMaintenanceBusy(true);
+  try {
+    return await exportBytesViaDocumentPicker({
+      fileName: backupFileName(),
+      mimeType: 'application/octet-stream',
+      copy: Platform.OS === 'ios',
+      write: destPath => exportDatabaseBackupToPath(runtime, destPath),
+    });
+  } finally {
+    setMobileDbMaintenanceBusy(false);
+  }
 }
 
 /**
@@ -196,14 +203,20 @@ export async function importDatabaseBackup(
     throw new Error('Agent 运行中，请稍后再导入数据库');
   }
 
-  const picked = await pickToLocalPath({
-    mimeTypes: [types.allFiles],
-    localFileName: 'import.nmbackup',
-  });
-  if (picked == null) {
-    return;
-  }
+  // 导入替换数据库期间置模块级 busy：消息压缩后台循环据此让路。
+  setMobileDbMaintenanceBusy(true);
+  try {
+    const picked = await pickToLocalPath({
+      mimeTypes: [types.allFiles],
+      localFileName: 'import.nmbackup',
+    });
+    if (picked == null) {
+      return;
+    }
 
-  await importDatabaseBackupFromPath(picked.fsPath);
-  onRebootstrap();
+    await importDatabaseBackupFromPath(picked.fsPath);
+    onRebootstrap();
+  } finally {
+    setMobileDbMaintenanceBusy(false);
+  }
 }

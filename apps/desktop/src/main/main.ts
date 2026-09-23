@@ -23,6 +23,7 @@ import { setComposerAttachmentsSuggestForwardTarget } from "./ipc/forward-compos
 import { setUserMessageAppendedForwardTarget } from "./ipc/forward-user-message-appended.js";
 import { registerIpcHandlers } from "./ipc/register-handlers.js";
 import { getDesktopRuntime } from "./runtime/desktop-runtime-singleton.js";
+import { scheduleDesktopMessageContentCompaction } from "./services/message-content-compaction.service.js";
 import {
   configureWindowChrome,
   installApplicationMenu,
@@ -168,6 +169,9 @@ async function bootstrapMainServices(): Promise<void> {
     runtime.eventBus,
   );
   detachAgentActivityForwarder = attachAgentActivityForwarder();
+  // 消息正文压缩搬运：main 就绪后后台预算制调度（fire-and-forget，
+  // 幂等——已完成时零成本，Agent/云同步/清理 busy 自动让路）。
+  scheduleDesktopMessageContentCompaction();
 }
 
 app.whenReady().then(async () => {

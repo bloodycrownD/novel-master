@@ -1497,10 +1497,19 @@ export type CompactionConditionsSetRequest = {
 export type BackupExportResult = 'saved' | 'cancelled';
 export type BackupImportResult = 'imported' | 'cancelled';
 
+/** 消息正文压缩搬运状态（两态口径：进行中剩余 N 条 / 已完成）。 */
+export type MessageCompactionStatusDto = {
+  /** true = 已完成（KKV 标记已置或谓词空）。 */
+  readonly done: boolean;
+  /** 未压缩行计数（进行中态的「剩余 N 条」）。 */
+  readonly pendingCount: number;
+};
+
 /** 数据库存储统计（文件体积由 main 侧 stat 提供，可回收量为 freelist 口径）。 */
 export type DbStatsResult = {
   readonly fileBytes: number;
   readonly reclaimableBytes: number;
+  readonly messageCompaction: MessageCompactionStatusDto;
 };
 
 /** 数据清理（GC + checkpoint + VACUUM）前后库文件体积。 */

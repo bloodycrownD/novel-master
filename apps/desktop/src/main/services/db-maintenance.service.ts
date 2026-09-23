@@ -4,7 +4,10 @@
  * @module services/db-maintenance
  */
 import { stat } from "node:fs/promises";
-import { createDbMaintenanceService } from "@novel-master/core";
+import {
+  createDbMaintenanceService,
+  getMessageCompactionStatus,
+} from "@novel-master/core";
 import { getDesktopRuntime } from "../runtime/desktop-runtime-singleton.js";
 import { resolveDbPath } from "../runtime/resolve-db-path.js";
 import { isDesktopAgentActive } from "../runtime/agent-activity.js";
@@ -18,17 +21,22 @@ import {
 export async function getDbMaintenanceStats(): Promise<{
   fileBytes: number;
   reclaimableBytes: number;
+  messageCompaction: { done: boolean; pendingCount: number };
 }> {
   // 先确保 runtime/库文件就绪再 stat：并行赛跑会在冷启动（库尚未
   // bootstrap 落盘）时拿到 ENOENT。
   const runtime = await getDesktopRuntime();
   const fileInfo = await stat(resolveDbPath());
-  const storage = await createDbMaintenanceService(
-    runtime.conn
-  ).getStorageStats();
+  const maintenance = createDbMaintenanceService(runtime.conn);
+  const [storage, messageCompaction] = await Promise.all([
+    maintenance.getStorageStats(),
+    // 消息压缩状态行数据源（稳态已完成时只读 KKV 标记，零 COUNT 成本）。
+    getMessageCompactionStatus(runtime.conn),
+  ]);
   return {
     fileBytes: fileInfo.size,
     reclaimableBytes: storage.reclaimableBytes,
+    messageCompaction,
   };
 }
 

@@ -2,8 +2,9 @@
  * db-maintenance.service（mobile）单测：T-DMM1 / T-DMM2。
  *
  * - T-DMM1：Agent 运行中两入口均 reject 中文错误且不触 stat/core；
- *   正常路径 getDatabaseMaintenanceStats 返回文件体积 + 可回收量、
- *   runDatabaseMaintenance 按序 stat → core 维护 → stat 返回前后体积。
+ *   正常路径 getDatabaseMaintenanceStats 返回文件体积 + 可回收量 +
+ *   消息压缩状态、runDatabaseMaintenance 按序 stat → core 维护 → stat
+ *   返回前后体积。
  * - T-DMM2：core runDatabaseMaintenance 抛错时以 reject 语义上抛
  *   （可被调用方捕获），不吞错、错误后不再采后置体积。
  *
@@ -20,12 +21,15 @@ const mockAgentActive = jest.fn();
 const mockGetStorageStats = jest.fn();
 const mockRunMaintenance = jest.fn();
 const mockCreateService = jest.fn();
+const mockGetCompactionStatus = jest.fn();
 
 const liveConn = {tag: 'live'};
 
 jest.mock('@novel-master/core', () => ({
   createDbMaintenanceService: (...args: unknown[]) =>
     mockCreateService(...args),
+  getMessageCompactionStatus: (...args: unknown[]) =>
+    mockGetCompactionStatus(...args),
 }));
 
 jest.mock('@/db/db-file-path', () => ({
@@ -73,6 +77,9 @@ describe('db-maintenance.service', () => {
     mockAgentActive.mockReset().mockReturnValue(false);
     mockGetStorageStats.mockReset().mockResolvedValue(STORAGE_STATS);
     mockRunMaintenance.mockReset().mockResolvedValue(MAINTENANCE_RESULT);
+    mockGetCompactionStatus
+      .mockReset()
+      .mockResolvedValue({done: true, pendingCount: 0});
     mockCreateService.mockReset().mockReturnValue({
       getStorageStats: (...args: unknown[]) => mockGetStorageStats(...args),
       runDatabaseMaintenance: (...args: unknown[]) =>
@@ -102,13 +109,19 @@ describe('db-maintenance.service', () => {
 
   it('T-DMM1: getDatabaseMaintenanceStats 正常路径返回文件体积与可回收量', async () => {
     mockStat.mockResolvedValue({size: 1048576});
+    mockGetCompactionStatus.mockResolvedValue({done: false, pendingCount: 7});
 
     const stats = await getDatabaseMaintenanceStats(runtime);
 
     expect(mockStat).toHaveBeenCalledWith('/db/novel_master_vfs');
     expect(mockCreateService).toHaveBeenCalledWith(liveConn);
     expect(mockGetStorageStats).toHaveBeenCalledTimes(1);
-    expect(stats).toEqual({fileBytes: 1048576, reclaimableBytes: 40960});
+    expect(mockGetCompactionStatus).toHaveBeenCalledWith(liveConn);
+    expect(stats).toEqual({
+      fileBytes: 1048576,
+      reclaimableBytes: 40960,
+      messageCompaction: {done: false, pendingCount: 7},
+    });
   });
 
   it('T-DMM1: runDatabaseMaintenance 正常路径 stat 前后各一次并返回前后体积', async () => {

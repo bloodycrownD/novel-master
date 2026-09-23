@@ -44,6 +44,7 @@ import {
 import {createSessionRunStateService} from '@novel-master/core/session-run-state';
 import {showAppToast} from '@/services/app-toast';
 import {setKeepAliveResidentEnabled} from '@/services/agent-finished-notification';
+import {scheduleMobileMessageContentCompaction} from '@/services/message-content-compaction.service';
 import {readMessageNotificationEnabled} from '@/storage/message-notification-pref';
 import {tokensForMode} from '../theme/tokens';
 
@@ -214,6 +215,13 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
     const manager = runtime?.sessionStreamUnitManager;
     if (!manager) {
       return;
+    }
+    // 消息正文压缩搬运：runtime 就绪后低优先后台调度（fire-and-forget，
+    // 幂等——已完成时零成本；Agent 活跃/数据清理 busy 自动让路；
+    // retry 换新 runtime 时对新连接重新挂一次，旧循环随旧连接失效
+    // 自然终止——任务谓词幂等，重复调度无副作用）。
+    if (runtime != null) {
+      scheduleMobileMessageContentCompaction(runtime);
     }
     manager.setUiBridge({onError: message => showAppToast(message)});
     // 消息通知总开关：完成通知与常驻保活一体启停；appUi 未就绪的降级

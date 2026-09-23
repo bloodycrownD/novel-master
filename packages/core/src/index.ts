@@ -84,12 +84,24 @@ export type {
 
 /**
  * 数据库维护（数据清理）：存储统计 + 缓存 GC/checkpoint/VACUUM 维护链路
- * （VACUUM 须事务外调用，事务中调用由 SQLite 原生报错兜底）。
+ * （VACUUM 须事务外调用，事务中调用由 SQLite 原生报错兜底）+ 消息正文
+ * 压缩搬运任务（谓词驱动、幂等可重入，完成后挂一次维护链路；不新增
+ * exports 子路径——`./compaction` 已被上下文裁剪域占用）。
  */
 export { createDbMaintenanceService } from "./infra/db-maintenance/index.js";
+export {
+  DEFAULT_COMPACTION_SYNC_BUDGET_MS,
+  MESSAGE_COMPACTION_KKV_KEY,
+  MESSAGE_COMPACTION_KKV_MODULE,
+  getMessageCompactionStatus,
+  runMessageContentCompaction,
+} from "./infra/db-maintenance/index.js";
 export type {
   DatabaseMaintenanceResult,
   DbMaintenanceService,
+  MessageCompactionRunResult,
+  MessageCompactionStatus,
+  RunMessageContentCompactionOptions,
   StorageStats,
 } from "./infra/db-maintenance/index.js";
 

@@ -7,7 +7,7 @@
 import { mkdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { registerTokenizerNodeDriver } from "@novel-master/tokenizer-driver-node";
-import { bootstrapNovelMaster, createPersistentPreferences, createPersistentState, open, type PersistentPreferences, type PersistentState, type TdbcConnection } from "@novel-master/core";
+import { bootstrapNovelMaster, createPersistentPreferences, createPersistentState, open, runMessageContentCompaction, type PersistentPreferences, type PersistentState, type TdbcConnection } from "@novel-master/core";
 import { refreshUserVfsUnifiedToolTurnSnapshot } from "@novel-master/core/feature-flags";
 
 import { createAgentRegistryService, createAgentStreamRegistry } from "@novel-master/core/agent";
@@ -181,6 +181,10 @@ export async function createNovelMasterRuntime(
     driver: "better-sqlite3",
   });
   await bootstrapNovelMaster(conn);
+  // 消息正文压缩搬运：CLI 命令进程内同步跑（预算制 60s、幂等，跑完即快）。
+  // 已完成（KKV 标记已置）时零成本短路；未完成最多同步搬运 60s，残余
+  // 留待下次命令续跑（命令进程短命，无后台循环）。
+  await runMessageContentCompaction(conn);
 
   const state = createPersistentState(conn);
   const smartSortRule = createSmartSortRuleService(conn);

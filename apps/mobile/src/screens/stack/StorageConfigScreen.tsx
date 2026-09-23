@@ -43,6 +43,10 @@ export function StorageConfigScreen() {
   const [dbReclaimableBytes, setDbReclaimableBytes] = useState<number | null>(
     null,
   );
+  const [messageCompaction, setMessageCompaction] = useState<{
+    done: boolean;
+    pendingCount: number;
+  } | null>(null);
 
   const refreshCloudConfigured = useCallback(async () => {
     try {
@@ -60,10 +64,12 @@ export function StorageConfigScreen() {
       const stats = await getDatabaseMaintenanceStats(runtime);
       setDbFileBytes(stats.fileBytes);
       setDbReclaimableBytes(stats.reclaimableBytes);
+      setMessageCompaction(stats.messageCompaction);
     } catch {
       // 统计仅用于展示（Agent 运行中会被守卫拒绝），失败静默占位
       setDbFileBytes(null);
       setDbReclaimableBytes(null);
+      setMessageCompaction(null);
     }
   }, [runtime]);
 
@@ -158,6 +164,28 @@ export function StorageConfigScreen() {
               },
             ],
           );
+        }}
+      />
+      <ProfileMenuItem
+        icon="🗜️"
+        label="消息压缩"
+        value={
+          messageCompaction == null
+            ? '—'
+            : messageCompaction.done
+              ? '已完成'
+              : `进行中（剩余 ${messageCompaction.pendingCount} 条）`
+        }
+        tokens={tokens}
+        onPress={() => {
+          // 两态状态行：只读展示（点击刷新状态），副文案在详情提示里给足。
+          Alert.alert(
+            '消息压缩',
+            messageCompaction?.done
+              ? '消息正文以 zlib 压缩存储，存储已优化完成。'
+              : '消息正文正在后台压缩为 zlib 存储（迁移期间随时可正常使用）；完成前升级新版本，会在首次启动时等待优化收尾（一次性）。',
+          );
+          refreshMaintenanceStats().catch(() => undefined);
         }}
       />
       <ProfileMenuItem
