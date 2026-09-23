@@ -39,6 +39,17 @@ export type LlmStreamEvent =
       readonly name: string;
       readonly input: Record<string, unknown>;
     }
+  | {
+      /**
+       * 流中 token usage（本 step 请求口径的输出侧累计值）：anthropic 在
+       * message_delta、gemini 在每个候选块到达且 `completionTokens` 累计值
+       * 发生变化时 emit；openai 协议流中不 emit（仅 done 终值，由 runner
+       * 在 step done 后补发事件）。消费侧取 `usage.completionTokens` 作
+       * step 内累计，协议层不节流（上层合批/节流吸收）。
+       */
+      readonly type: "usage";
+      readonly usage: LlmTokenUsage;
+    }
   | { readonly type: "done"; readonly result: LlmChatResult };
 
 export interface LlmChatRequest {

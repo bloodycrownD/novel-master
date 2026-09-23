@@ -203,4 +203,71 @@ describe("gemini-sse-parser", () => {
     assert.deepEqual(toolUse.input, {});
   });
 
+  it("T-M2: 每块 usageMetadata 累计值变化时 emit usage 事件；值不变不发", () => {
+    const state = createGeminiSseParserState();
+    const usageEvents: Array<{ completionTokens?: number }> = [];
+    const onStream = (ev: { type: string; usage?: { completionTokens?: number } }) => {
+      if (ev.type === "usage") {
+        usageEvents.push(ev.usage ?? {});
+      }
+    };
+
+    feedGeminiSseChunk(
+      state,
+      [
+        'data: {"candidates":[{"content":{"parts":[{"text":"Hel"}],"role":"model"}}],"usageMetadata":{"promptTokenCount":10,"candidatesTokenCount":3,"totalTokenCount":13}}',
+        "",
+        'data: {"candidates":[{"content":{"parts":[{"text":"lo"}],"role":"model"}}],"usageMetadata":{"promptTokenCount":10,"candidatesTokenCount":7,"totalTokenCount":17}}',
+        "",
+        // candidatesTokenCount 不变：不重发（仅 prompt 侧字段变化也不发）
+        'data: {"candidates":[{"content":{"parts":[{"text":"!"}],"role":"model"}}],"usageMetadata":{"promptTokenCount":10,"candidatesTokenCount":7,"totalTokenCount":17}}',
+        "",
+      ].join("\n"),
+      onStream,
+    );
+
+    assert.deepEqual(
+      usageEvents.map((u) => u.completionTokens),
+      [3, 7],
+    );
+  });
+
+  it("T-M2: 无候选内容的 usage-only 收尾块也 emit（streamRaw 存储点先于 candidates 早退）", () => {
+    const state = createGeminiSseParserState();
+    const usageEvents: Array<{ completionTokens?: number }> = [];
+    feedGeminiSseChunk(
+      state,
+      [
+        'data: {"candidates":[{"content":{"parts":[{"text":"Hi"}],"role":"model"}}],"usageMetadata":{"candidatesTokenCount":2,"totalTokenCount":12}}',
+        "",
+        'data: {"usageMetadata":{"candidatesTokenCount":9,"totalTokenCount":19}}',
+        "",
+      ].join("\n"),
+      (ev) => {
+        if (ev.type === "usage") {
+          usageEvents.push(ev.usage ?? {});
+        }
+      },
+    );
+    assert.deepEqual(
+      usageEvents.map((u) => u.completionTokens),
+      [2, 9],
+    );
+  });
+
+  it("T-M2: 块缺 usageMetadata 时不 emit 不报错", () => {
+    const state = createGeminiSseParserState();
+    let usageCount = 0;
+    feedGeminiSseChunk(
+      state,
+      'data: {"candidates":[{"content":{"parts":[{"text":"x"}],"role":"model"}}]}\n',
+      (ev) => {
+        if (ev.type === "usage") {
+          usageCount += 1;
+        }
+      },
+    );
+    assert.equal(usageCount, 0);
+  });
+
 });
