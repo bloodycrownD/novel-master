@@ -286,21 +286,33 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
       throw sessionFsRollbackMessageSessionMismatch(anchorMessageId, sessionId);
     }
 
-    const allMessages = await this.deps.messages.listBySession(sessionId);
+    // plan 拉取收窄（rollback-large-jank Step 2）：锚点解析只做 tool_result
+    // 前向配对（seq 更大方向）、tail 过滤只取锚点之后，锚点之前的消息对 plan
+    // 无用——拉取下界 = 触发消息（clicked）的 seq（含），大会话不再把锚点
+    // 之前的几百行 content_json 拉回来白 parse 一遍。
+    const [messagesFromClicked, messageCountSnapshot] = await Promise.all([
+      this.deps.messages.listBySessionFromSeq(sessionId, clicked.seq),
+      // A-22 计数快照：全量口径（会话消息总行数）。收窄后消息列表不再覆盖
+      // 全量，改用 countBySession（COUNT(*) 单行）取同一口径，事务内对比
+      // 逻辑零变化。
+      this.deps.messages.countBySession(sessionId),
+    ]);
     if (this.deps.probe != null) {
       // 字节量（源消息 content JSON 尺寸）只在探针注入时统计——量测本身
       // 是 O(总字节) 的 stringify，生产路径不付这笔账。
       let contentBytes = 0;
-      for (const message of allMessages) {
+      for (const message of messagesFromClicked) {
         contentBytes += JSON.stringify(message.content).length;
       }
       this.probeIfEnabled("rollback.plan.messages", {
-        rows: allMessages.length,
+        rows: messagesFromClicked.length,
         contentBytes,
+        fromSeq: clicked.seq,
       });
     }
     const anchor =
-      resolveRollbackAnchorMessage(allMessages, anchorMessageId) ?? clicked;
+      resolveRollbackAnchorMessage(messagesFromClicked, anchorMessageId) ??
+      clicked;
 
     const mode: RollbackMode = isPlainUserUndoSendEligible(anchor)
       ? "undo_send"
@@ -309,8 +321,8 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
 
     const tail =
       mode === "undo_send"
-        ? allMessages.filter((m) => m.seq >= anchor.seq)
-        : allMessages.filter((m) => m.seq > anchor.seq);
+        ? messagesFromClicked.filter((m) => m.seq >= anchor.seq)
+        : messagesFromClicked.filter((m) => m.seq > anchor.seq);
     const tailMessageIds = tail.map((m) => m.id);
 
     let targetTree: Map<string, number>;
@@ -411,9 +423,9 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
       projectId,
       sessionId,
       scope,
-      // A-22 快照：plan 阶段本来就要 listBySession 拿消息内容，顺手取 length 作为计数快照；
-      // 事务内用 countBySession 重读同一口径（会话消息总行数）对比，不一致即判冲突。
-      messageCountSnapshot: allMessages.length,
+      // A-22 快照：全量口径计数（COUNT(*)），事务内用 countBySession 重读
+      // 同一口径（会话消息总行数）对比，不一致即判冲突。
+      messageCountSnapshot,
     };
   }
 

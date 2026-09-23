@@ -36,6 +36,11 @@ export interface MessageRollbackServiceOptions {
    * 下注入；desktop/cli 不注入（恒 no-op）。
    */
   readonly probe?: RollbackProbe;
+  /**
+   * plan 拉取列表行解析的片间让步（rollback-large-jank Step 2）：mobile
+   * 传 createQuantumYield(16)；缺省不传 → 直通同步 map（现状行为）。
+   */
+  readonly yieldFn?: () => Promise<void>;
 }
 
 /** Creates a {@link MessageRollbackService} for the given connection. */
@@ -45,7 +50,7 @@ export function createMessageRollbackService(
 ): MessageRollbackService {
   return new DefaultMessageRollbackService({
     conn,
-    messages: new SqliteMessageRepository(conn),
+    messages: new SqliteMessageRepository(conn, options?.yieldFn),
     entries: new SqliteVfsEntryRepository(conn),
     revisions: new SqliteVfsRevisionRepository(conn),
     checkpoints: new SqliteMessageCheckpointRepository(conn),

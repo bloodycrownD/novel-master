@@ -81,9 +81,12 @@ describe("rollback chain probe (T-R0)", () => {
       );
     }
 
-    // plan 拉取打点携带行数与源 content 字节量（spec Step 1 度量口径）。
+    // plan 拉取打点携带行数与源 content 字节量（spec Step 1 度量口径）；
+    // Step 2 收窄后 rows 只计触发消息（clicked = assistant1，seq 含）起的
+    // 消息——本用例即 assistant1 + tail 两条，fromSeq 同时记录下界。
     const planDetail = collector.details()[labels.indexOf("rollback.plan.messages")];
-    assert.equal(planDetail?.rows, 3);
+    assert.equal(planDetail?.rows, 2);
+    assert.equal(planDetail?.fromSeq, assistant1.seq);
     assert.equal(
       typeof planDetail?.contentBytes,
       "number",

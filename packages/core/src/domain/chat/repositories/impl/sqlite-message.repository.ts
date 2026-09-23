@@ -136,8 +136,51 @@ function parseUsage(row: Row): MessageUsage | undefined {
 /** TDBC-backed `chat_message` repository. */
 export class SqliteMessageRepository implements MessageRepository {
   private readonly parser = new SqlTemplateParser();
+  private readonly conn: TdbcConnection;
+  private readonly yieldFn: (() => Promise<void>) | undefined;
 
-  constructor(private readonly conn: TdbcConnection) {}
+  /**
+   * 行解析分片大小：每片至多解析 50 行（两条 chat 消息 ≈ 一次屏幕页），
+   * 片间让步一次——让步次数 O(行数/50)，解析粒度又足够细不至于一次让
+   * 步间累积过长。
+   */
+  private static readonly ROW_PARSE_CHUNK = 50;
+
+  /**
+   * @param conn - 数据库连接。
+   * @param yieldFn - 列表行解析（rowToMessage 含 content_json JSON.parse）的
+   *   片间让步函数（rollback-large-jank Step 2）：缺省不传 → 直通同步 map，
+   *   与现状逐字节等价（desktop/cli/测试零影响）；传入 → 行解析按片（每片
+   *   ≤{@link ROW_PARSE_CHUNK} 行）执行、片间 await 让步，防大结果集把
+   *   JS 线程变成单个长任务。core 只声明函数类型，由装配方注入具体实现
+   *   （mobile 传 createQuantumYield(16)），不反向依赖 RN 模块。
+   */
+  constructor(conn: TdbcConnection, yieldFn?: () => Promise<void>) {
+    this.conn = conn;
+    this.yieldFn = yieldFn;
+  }
+
+  /** rows → ChatMessage 列表转换：无 yieldFn 直通同步 map，有则分片让步。 */
+  private async mapRows(rows: Row[]): Promise<ChatMessage[]> {
+    if (this.yieldFn == null) {
+      return rows.map(rowToMessage);
+    }
+    const messages: ChatMessage[] = [];
+    // 注意：分片步长是类静态常量，须以类名引用（this 上取不到 static
+    // 成员——实例方法里 this.ROW_PARSE_CHUNK 运行时是 undefined，会让
+    // start += undefined 变 NaN 而静默返回空数组）。
+    const chunkSize = SqliteMessageRepository.ROW_PARSE_CHUNK;
+    for (let start = 0; start < rows.length; start += chunkSize) {
+      const end = Math.min(start + chunkSize, rows.length);
+      for (let i = start; i < end; i++) {
+        messages.push(rowToMessage(rows[i]!));
+      }
+      if (end < rows.length) {
+        await this.yieldFn();
+      }
+    }
+    return messages;
+  }
 
   async listBySession(sessionId: string): Promise<ChatMessage[]> {
     const rows = await queryTemplate(
@@ -147,7 +190,23 @@ export class SqliteMessageRepository implements MessageRepository {
        FROM chat_message WHERE session_id = #{sessionId} ORDER BY seq ASC`,
       { sessionId }
     );
-    return rows.map(rowToMessage);
+    return this.mapRows(rows);
+  }
+
+  async listBySessionFromSeq(
+    sessionId: string,
+    fromSeq: number
+  ): Promise<ChatMessage[]> {
+    const rows = await queryTemplate(
+      this.conn,
+      this.parser,
+      `SELECT ${MESSAGE_SELECT_COLUMNS}
+       FROM chat_message
+       WHERE session_id = #{sessionId} AND seq >= #{fromSeq}
+       ORDER BY seq ASC`,
+      { sessionId, fromSeq }
+    );
+    return this.mapRows(rows);
   }
 
   async countBySession(sessionId: string): Promise<number> {
@@ -176,7 +235,7 @@ export class SqliteMessageRepository implements MessageRepository {
        LIMIT -1 OFFSET #{offset}`,
       { sessionId, offset: clampedOffset }
     );
-    return rows.map(rowToMessage);
+    return this.mapRows(rows);
   }
 
   async listBySessionTail(
@@ -198,7 +257,7 @@ export class SqliteMessageRepository implements MessageRepository {
        ORDER BY seq ASC`,
       { sessionId, limit: clampedLimit }
     );
-    return rows.map(rowToMessage);
+    return this.mapRows(rows);
   }
 
   async listBySessionPage(
@@ -222,7 +281,7 @@ export class SqliteMessageRepository implements MessageRepository {
        ORDER BY seq ASC`,
       { sessionId, beforeSeq: beforeSeq ?? null, limit: clampedLimit }
     );
-    return rows.map(rowToMessage);
+    return this.mapRows(rows);
   }
 
   async findById(id: string): Promise<ChatMessage | null> {
@@ -386,6 +445,6 @@ export class SqliteMessageRepository implements MessageRepository {
         limit: clampedLimit,
       }
     );
-    return rows.map(rowToMessage);
+    return this.mapRows(rows);
   }
 }
