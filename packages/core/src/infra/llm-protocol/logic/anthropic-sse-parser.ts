@@ -79,6 +79,7 @@ function emitAnthropicUsage(
   const usage = parseAnthropicUsage(state.messageDeltaRaw);
   const completionTokens = usage?.completionTokens;
   if (
+    usage == null ||
     completionTokens == null ||
     completionTokens === state.lastEmittedCompletionTokens
   ) {

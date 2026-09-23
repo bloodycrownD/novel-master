@@ -78,6 +78,7 @@ function emitGeminiUsage(
   const usage = parseGeminiUsage(payload);
   const completionTokens = usage?.completionTokens;
   if (
+    usage == null ||
     completionTokens == null ||
     completionTokens === state.lastEmittedCompletionTokens
   ) {

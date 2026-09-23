@@ -72,6 +72,7 @@ import {
   EVENT_AGENT_STREAM_TEXT_DELTA,
   EVENT_AGENT_STREAM_THINKING_DELTA,
   EVENT_AGENT_STREAM_TOOL_USE,
+  EVENT_AGENT_STREAM_USAGE,
 } from "@/domain/events/model/event-types.js";
 import type { LlmStreamEvent } from "@/infra/llm-protocol/ports/adapter.port.js";
 import { generateAgentRunId } from "@/domain/agent/logic/generate-agent-run-id.js";
@@ -277,6 +278,13 @@ export class DefaultAgentRunner implements AgentRunner {
     // 回合内的变更只来自 agent 自己的工具调用（模型已从工具轮次得知），
     // 固定快照不丢信息，且让回合内每步请求成为前一步的纯追加，提升 provider 前缀缓存命中。
     const turnNow = new Date();
+
+    // run 级 usage 累计基线（跨 step 存活）：前序 step 请求 done 后并入的
+    // 输出侧终值之和。每 step 流中 usage 事件是 step 口径累计，透传前以
+    // 该基线换算为 run 级（多 step 累加），payload 直接带 run 级值、消费端
+    // 零算术。经 wrapStreamForBus 的 deps 传入（每 step 重建的包装闭包共享
+    // 同一可变基线）。
+    const runUsageBase = { completionTokens: 0 };
 
     // assistant 落库的 model_name 来源（vendorModelId）；每 run 查一次即可。
     // saved model 可能已被删除（悬空引用）：查不到时降级不传该字段。
@@ -509,7 +517,10 @@ export class DefaultAgentRunner implements AgentRunner {
                 bus,
                 sessionId,
                 runId,
-                { streamRegistry: this.deps.streamRegistry },
+                {
+                  streamRegistry: this.deps.streamRegistry,
+                  usageBase: runUsageBase,
+                },
                 options.onStream
               )
             : options.stream
@@ -562,6 +573,25 @@ export class DefaultAgentRunner implements AgentRunner {
         // 非流式请求（无 onStream 或未收到内容事件）TTFT = 总时长（完成时刻口径）。
         const firstTokenMs =
           (firstContentAtMs ?? endedAtMs) - requestStartedAtMs;
+
+        // step done 补发（无论协议）：把该步 LlmChatResult.usage 的输出侧并入
+        // run 级累计基线，补发一条 run 级累计 usage 事件。openai 流中无事件段由
+        // heuristic 撑显示，到达时终值校正跳正；anthropic/gemini 的 done 终值与
+        // 流中累计一致，覆盖无害。usage 缺失（三方网关不给）不并入不补发——
+        // 无真值，heuristic 全程撑住。不走 FINISHED 链（usage 属流式旁路，与
+        // 生命周期事件解耦）。
+        const stepCompletionTokens = result.usage?.completionTokens;
+        if (stepCompletionTokens != null) {
+          runUsageBase.completionTokens += stepCompletionTokens;
+          if (options.stream && publishRunLifecycle) {
+            bus.publish(EVENT_AGENT_STREAM_USAGE, {
+              sessionId,
+              runId,
+              completionTokens: runUsageBase.completionTokens,
+              source: "usage",
+            });
+          }
+        }
 
         const meaningful = hasMeaningfulAssistantBlocks(result.blocks);
 
@@ -882,7 +912,14 @@ export function wrapStreamForBus(
   bus: SimpleEventBus,
   sessionId: string,
   runId: string,
-  deps: { readonly streamRegistry?: AgentStreamRegistry } = {},
+  deps: {
+    readonly streamRegistry?: AgentStreamRegistry;
+    /**
+     * run 级 usage 累计基线（跨 step 存活；step 循环外创建、随 run 生命周期
+     * 存取）。流中 usage 事件是 step 口径累计，换算 run 级 = 基线 + step 累计。
+     */
+    readonly usageBase?: { completionTokens: number };
+  } = {},
   userOnStream?: (event: LlmStreamEvent) => void
 ): ((event: LlmStreamEvent) => void) | undefined {
   // 待发布的 bus event 列表；同一同步批次内累积，由唯一一个 microtask 一次性 flush。
@@ -938,6 +975,21 @@ export function wrapStreamForBus(
           input: ev.input,
         })
       );
+    } else if (ev.type === "usage") {
+      // step 口径累计 → run 级换算：基线（前序 step 终值之和）+ 本 step 累计。
+      // 基线随每 step done 后的补发并基线推进（见 run() 内 done 补发）。
+      const stepCompletion = ev.usage.completionTokens;
+      if (stepCompletion != null) {
+        const runCompletion = (deps.usageBase?.completionTokens ?? 0) + stepCompletion;
+        enqueuePublish(() =>
+          bus.publish(EVENT_AGENT_STREAM_USAGE, {
+            sessionId,
+            runId,
+            completionTokens: runCompletion,
+            source: "usage",
+          })
+        );
+      }
     }
   };
 

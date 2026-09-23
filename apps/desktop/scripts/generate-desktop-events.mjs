@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
  * 已不需要——renderer 现在直接 import `@novel-master/core/events` 的类型（type-only，编译期擦除）。
- * 本脚本保留作为可选的 renderer 子集 lint 约束：手动跑一遍可以校验 core 仍然导出了这 7 个
- * agent 事件常量 + 8 个载荷类型（见下方 agentEventNames / agentTypes 列表），core 一旦
+ * 本脚本保留作为可选的 renderer 子集 lint 约束：手动跑一遍可以校验 core 仍然导出了这 8 个
+ * agent 事件常量 + 9 个载荷类型（见下方 agentEventNames / agentTypes 列表），core 一旦
  * 漏导就会抛错。不再绑定到 npm script，也不再生成 `shared/agent-event-types.ts`。
  *
  * 源：packages/core/src/domain/events/model/event-types.ts
@@ -28,6 +28,7 @@ const agentEventNames = [
   "EVENT_AGENT_STREAM_TEXT_DELTA",
   "EVENT_AGENT_STREAM_THINKING_DELTA",
   "EVENT_AGENT_STREAM_TOOL_USE",
+  "EVENT_AGENT_STREAM_USAGE",
   "EVENT_AGENT_STEP_COMMITTED",
 ];
 
@@ -38,6 +39,7 @@ const agentTypes = [
   "AgentStreamTextDeltaPayload",
   "AgentStreamThinkingDeltaPayload",
   "AgentStreamToolUsePayload",
+  "AgentStreamUsagePayload",
   "AgentStepCommittedPhase",
   "AgentStepCommittedPayload",
 ];
