@@ -1,6 +1,7 @@
 /**
  * Single SQLite connection for mobile (VFS + SKSP share one DB).
  */
+import {AppState} from 'react-native';
 import {
   bootstrapNovelMaster,
   open,
@@ -45,7 +46,14 @@ export async function getMobileConnection(): Promise<TdbcConnection> {
   }
   if (!initPromise) {
     initPromise = (async () => {
-      registerOpSqliteDriver();
+      // 注入后台探测：RN 后台 JS 定时器停摆，事务内 setTimeout(0) 量子
+      // 让步会让事务挂死到回前台；AppState.currentState 由原生生命周期
+      // 驱动（不经 Choreographer），后台时驱动层跳过让步连续执行、回前台
+      // 自动恢复。探测函数在 app 层注入，驱动包保持零依赖。
+      registerOpSqliteDriver(
+        undefined,
+        () => AppState.currentState === 'background',
+      );
       registerSkspAndroidDriver();
       registerTokenizerRnDriver();
       let c: TdbcConnection;

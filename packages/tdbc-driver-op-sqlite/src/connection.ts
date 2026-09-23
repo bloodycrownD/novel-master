@@ -25,7 +25,14 @@ export class OpSqliteConnection implements TdbcConnection {
   private lastYieldAt = 0;
   private readonly mutex = new AsyncMutex();
 
-  constructor(private readonly adapter: OpSqliteAdapter) {}
+  constructor(
+    private readonly adapter: OpSqliteAdapter,
+    /**
+     * 可选后台探测函数（app 层经注册工厂注入）：返回 true 时事务内
+     * 跳过休眠量子让步；未注入恒按前台口径让步，行为与现状一致。
+     */
+    private readonly isBackground?: () => boolean,
+  ) {}
 
   execute(
     sql: string,
@@ -258,8 +265,15 @@ export class OpSqliteConnection implements TdbcConnection {
       // 降到 O(总时长/16ms)，ANR 防护等价、开销摊薄到可忽略。
       const now = Date.now();
       if (now - this.lastYieldAt >= 16) {
-        await new Promise<void>((resolve) => setTimeout(resolve, 0));
-        this.lastYieldAt = Date.now();
+        // 后台跳过休眠让步：RN 后台 JS 定时器停摆，await setTimeout(0)
+        // 会让事务挂死到回前台；后台无 UI 交互可阻塞、其他 DB 使用者
+        // 同样停摆，连续执行无碍。跳过时不更新 lastYieldAt——回前台后
+        // 下一条过窗语句立即恢复让步节奏。未注入（desktop/CLI/测试默认）
+        // 或前台时行为与现状严格一致。
+        if (!this.isBackground?.()) {
+          await new Promise<void>((resolve) => setTimeout(resolve, 0));
+          this.lastYieldAt = Date.now();
+        }
       }
       return result;
     }
