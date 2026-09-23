@@ -422,7 +422,9 @@ export class DefaultMessageService implements MessageService {
       // keyword 为空时不做关键词过滤，仓储层已返回所有符合时间/limit 约束的消息。
       return candidates;
     }
-    // 仓储层 LIKE 是 content_json 超集召回，内存层只匹配 user/assistant 的 TextBlock 做最终判定。
+    // 仓储层（SqliteMessageRepository）已在内存层按 TextBlock 精筛——这里是
+    // 防御性重筛：port 合同允许其它实现退回超集召回（如曾经的 SQL LIKE 粗筛），
+    // messageMatchesKeyword 是最终判定口径（幂等，对已精筛结果零开销）。
     return candidates.filter((msg) => messageMatchesKeyword(msg, keyword));
   }
 }

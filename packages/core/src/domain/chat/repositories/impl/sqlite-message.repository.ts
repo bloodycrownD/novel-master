@@ -12,10 +12,8 @@ import {
 } from "@/infra/tdbc/logic/template-helper.js";
 import type { Row } from "@/infra/tdbc/types.js";
 import { parseMessageContent } from "../../content/parse-message-content.js";
-import {
-  escapeLikePattern,
-  type MessageSearchQuery,
-} from "../../content/message-content-match.js";
+import type { MessageSearchQuery } from "../../content/message-content-match.js";
+import { messageMatchesKeyword } from "../../content/message-content-match.js";
 import {
   parseAttachmentsJson,
   serializeAttachmentsJson,
@@ -381,39 +379,43 @@ export class SqliteMessageRepository implements MessageRepository {
     sessionId: string,
     query: MessageSearchQuery
   ): Promise<ChatMessage[]> {
+    // 正文压缩存储后 content_json 恒为空串，SQL LIKE 粗筛失效——改为
+    // 全量拉取 + 内存精筛（messageMatchesKeyword 与 service 层同一匹配）。
+    // 旧 LIKE 只是超集预筛（且会漏 thinking/tool_result 块含关键词的场景
+    // 反被 role 粗筛误杀），新实现按 TextBlock 精确匹配，召回语义严格
+    // 不小于现状；大会话搜索多付解压成本，与 listBySession 全量路径同量级。
     const keyword = query.keyword?.trim() ?? "";
     const hasKeyword = keyword.length > 0;
-    // keyword 非空时加 role 粗筛 + LIKE 粗筛（LIKE 扫整个 content_json 是超集，内存层再精筛 TextBlock）；
-    // keyword 为空时不加 role / LIKE 过滤，返回所有类型消息。
-    const roleFilter = hasKeyword ? "AND role IN ('user', 'assistant')" : "";
-    // JS 源码双反斜杠 → 落到 SQL 是单反斜杠 ESCAPE '\'。
-    const likeFilter = hasKeyword
-      ? "AND content_json LIKE #{likePattern} ESCAPE '\\'"
-      : "";
-    const likePattern = hasKeyword ? `%${escapeLikePattern(keyword)}%` : null;
     const clampedLimit = Math.max(1, Math.floor(query.limit));
+    // keyword 非空：SQL 不 LIMIT——先精筛后截断（旧实现 SQL 先 LIMIT 再由
+    // service 精筛，命中数可能不足 limit；新语义一次给满）。
+    // keyword 为空：不做关键词/role 过滤，SQL 直接 LIMIT（与旧口径一致）。
+    const limitClause = hasKeyword ? "" : "LIMIT #{limit}";
     const rows = await queryTemplate(
       this.conn,
       this.parser,
       `SELECT ${MESSAGE_SELECT_COLUMNS}
        FROM chat_message
        WHERE session_id = #{sessionId}
-         ${roleFilter}
-         ${likeFilter}
          AND (#{beforeSeq} IS NULL OR seq < #{beforeSeq})
          AND (#{fromSeq} IS NULL OR seq >= #{fromSeq})
          AND (#{toSeq} IS NULL OR seq <= #{toSeq})
        ORDER BY seq DESC
-       LIMIT #{limit}`,
+       ${limitClause}`,
       {
         sessionId,
-        likePattern,
         beforeSeq: query.beforeSeq ?? null,
         fromSeq: query.fromSeq ?? null,
         toSeq: query.toSeq ?? null,
         limit: clampedLimit,
       }
     );
-    return rows.map(rowToMessage);
+    if (!hasKeyword) {
+      return rows.map(rowToMessage);
+    }
+    const messages = rows.map(rowToMessage);
+    return messages
+      .filter((msg) => messageMatchesKeyword(msg, keyword))
+      .slice(0, clampedLimit);
   }
 }

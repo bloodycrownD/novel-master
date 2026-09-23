@@ -79,8 +79,10 @@ export interface MessageRepository {
   ): Promise<number>;
 
   /**
-   * 搜索会话内消息：keyword 非空时加 LIKE 粗筛 + role 粗筛，keyword 为空时全量拉；
-   * seq DESC LIMIT + 可选 beforeSeq；不在 SQL 层过滤 hidden（始终含隐藏消息）。
+   * 搜索会话内消息：keyword 非空时全量拉取后按 TextBlock 内存精筛再截断
+   * limit（正文压缩后无 SQL LIKE 粗筛），keyword 为空时全量返回（不过滤
+   * role）；seq DESC + 可选 beforeSeq/fromSeq/toSeq；不在 SQL 层过滤
+   * hidden（始终含隐藏消息）。
    */
   searchMessages(
     sessionId: string,
