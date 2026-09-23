@@ -94,8 +94,15 @@ import { IntegrityRepairRegistry } from "@/service/integrity-repair.js";
  * migration 在同一 bootstrap 事务内清空（清空重填口径：file_cache 可
  * 再生，各会话下次组装提示词时按新结构重填，重填即天然去重）；旧表
  * session_kkv_entry 不加列不改列。
+ * v16：chat_message 新增 content_encoding / content_blob 两列（消息正文
+ * zlib 压缩存储，message-content-compression）。老库（v15）靠本轮 bump
+ * 走慢路径由 ALIGN 补列；两列全 NULL = legacy 明文行合法形态。存量明文
+ * 不在 bootstrap 里搬运（空占位 migration 禁令），由后台谓词驱动的
+ * runMessageContentCompaction 任务跨启动续跑（见 infra/db-maintenance）。
+ * 注：bump 纪律是「DDL/ALIGN 变更必须 +1」本身而非具体号——与并行迭代
+ * 撞号时以主干现值为准递增顺延（v9/v10 真机事故的同款纪律）。
  */
-export const SCHEMA_BOOT_VERSION = 15;
+export const SCHEMA_BOOT_VERSION = 16;
 
 /** 各模块 DDL 语句，按依赖安全顺序排列。 */
 export const NOVEL_MASTER_SCHEMA_STATEMENTS: readonly string[] = [
