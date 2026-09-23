@@ -19,6 +19,7 @@ import {
   restorePathToRevision,
   restorePathToRevisionWithBackfill,
 } from "@/domain/message-checkpoint/logic/restore-path.js";
+import { scheduleDeferredRevisionOrphanGc } from "@/domain/message-checkpoint/logic/deferred-revision-orphan-gc.js";
 import {
   createTruncateTailDepsFromTx,
   truncateTailInTransaction,
@@ -254,6 +255,11 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
       }
     }
 
+    // 全局孤儿 revision 清扫（rollback-large-jank Step 4）：事务提交后
+    // fire-and-forget 调度——全表 DELETE 与本会话无关，不 await、不阻塞
+    // rollbackToMessage resolve；清扫中不重入（in-flight 去重），并发安全
+    // 由驱动层 AsyncMutex 串行化保证。
+    scheduleDeferredRevisionOrphanGc(this.deps.conn);
     sessionApiPromptTokenCache.invalidate(sessionId);
     this.probeIfEnabled("rollback.done", {sessionId});
   }

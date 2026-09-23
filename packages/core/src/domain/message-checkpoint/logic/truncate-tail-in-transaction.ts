@@ -58,13 +58,17 @@ export async function truncateTailInTransaction(
   await deps.messages.deleteAfterSeq(sessionId, afterSeq);
 
   if (sweepRevisions) {
+    // rollback-large-jank Step 4：事务内只做 scoped 打扫（回滚正确性依赖
+    // 本会话 scope 的 ref 修正与 revision 回收）；全局孤儿兜底（全表
+    // DELETE，与本会话无关）由回滚服务在事务提交后 fire-and-forget 调度。
     await sweepSessionRevisions(
       deps.revisions,
       deps.entries,
       deps.checkpoints,
       projectId,
       sessionId,
-      deps.conn
+      deps.conn,
+      {includeGlobalOrphans: false}
     );
   }
 
