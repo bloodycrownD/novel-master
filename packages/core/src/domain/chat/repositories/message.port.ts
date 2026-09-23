@@ -5,6 +5,7 @@
  */
 
 import type { ChatMessage } from "../model/message.js";
+import type { MessageContent } from "../model/content-block.js";
 import type { MessageSearchQuery } from "../content/message-content-match.js";
 
 /** Persistence for `chat_message` rows. */
@@ -48,8 +49,13 @@ export interface MessageRepository {
    */
   batchInsert(messages: readonly ChatMessage[]): Promise<void>;
 
-  /** Replaces stored content JSON. Returns false when the row is missing. */
-  updateContent(id: string, contentJson: string): Promise<boolean>;
+  /**
+   * 替换存储的消息正文。行缺失时返回 false。
+   *
+   * 入参为 MessageContent 对象——JSON 序列化与压缩编码都收口在
+   * repository（service 层不再 stringify）。
+   */
+  updateContent(id: string, content: MessageContent): Promise<boolean>;
 
   delete(id: string): Promise<boolean>;
 

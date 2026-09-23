@@ -191,10 +191,8 @@ export class DefaultMessageService implements MessageService {
     content: MessageContent
   ): Promise<ChatMessage> {
     assertMessageContent(content);
-    const updated = await this.deps.messages.updateContent(
-      messageId,
-      JSON.stringify(content)
-    );
+    // 序列化与压缩编码都下沉到 repository（port 签名为 MessageContent 对象）。
+    const updated = await this.deps.messages.updateContent(messageId, content);
     if (!updated) {
       throw chatNotFound("message", messageId);
     }

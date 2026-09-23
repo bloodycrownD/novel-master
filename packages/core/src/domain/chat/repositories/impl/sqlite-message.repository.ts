@@ -21,10 +21,15 @@ import {
   serializeAttachmentsJson,
 } from "../../model/message-attachment.schema.js";
 import type { ChatMessage } from "../../model/message.js";
+import type { MessageContent } from "../../model/content-block.js";
 import type { MessageUsage } from "../../model/message-usage.js";
+import {
+  decodeMessageContent,
+  encodeMessageContent,
+} from "../../logic/message-content-codec.js";
 import type { MessageRepository } from "../message.port.js";
 
-const MESSAGE_SELECT_COLUMNS = `id, session_id, seq, role, content_json, provider, provider_id, raw_json, created_at_ms, hidden, attachments_json, prompt_tokens, completion_tokens, total_tokens, cache_read_tokens, cache_creation_tokens, model_name, first_token_ms, duration_ms`;
+const MESSAGE_SELECT_COLUMNS = `id, session_id, seq, role, content_json, content_encoding, content_blob, provider, provider_id, raw_json, created_at_ms, hidden, attachments_json, prompt_tokens, completion_tokens, total_tokens, cache_read_tokens, cache_creation_tokens, model_name, first_token_ms, duration_ms`;
 
 /**
  * chat_message 的 INSERT 语句（`?` 占位），insert 与 batchInsert 共用。
@@ -33,22 +38,29 @@ const MESSAGE_SELECT_COLUMNS = `id, session_id, seq, role, content_json, provide
  */
 const MESSAGE_INSERT_SQL =
   `INSERT INTO chat_message ` +
-  `(id, session_id, seq, role, content_json, provider, provider_id, raw_json, created_at_ms, hidden, attachments_json, prompt_tokens, completion_tokens, total_tokens, cache_read_tokens, cache_creation_tokens, model_name, first_token_ms, duration_ms) ` +
-  `VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+  `(id, session_id, seq, role, content_json, content_encoding, content_blob, provider, provider_id, raw_json, created_at_ms, hidden, attachments_json, prompt_tokens, completion_tokens, total_tokens, cache_read_tokens, cache_creation_tokens, model_name, first_token_ms, duration_ms) ` +
+  `VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 
 /**
  * 把 ChatMessage 摊平成与 {@link MESSAGE_INSERT_SQL} 列顺序对齐的参数数组。
  *
  * insert 走 executeTemplate 时由 SqlTemplateParser 按 `#{xxx}` 出现顺序收集参数，
  * 这里手写数组必须保持同一顺序——两边的列/`?`/参数三者完全对齐。
+ *
+ * 消息正文压缩：content_json 置空串 ''（NOT NULL 约束自然满足，blocks JSON
+ * 恒非空串，'' 无歧义），正文走 content_encoding/content_blob 压缩两列
+ * （编码收口在 {@link encodeMessageContent}，三端零感知）。
  */
 function toMessageParams(message: ChatMessage): unknown[] {
+  const encoded = encodeMessageContent(JSON.stringify(message.content));
   return [
     message.id,
     message.sessionId,
     message.seq,
     message.role,
-    JSON.stringify(message.content),
+    "",
+    encoded.encoding,
+    encoded.blob,
     message.provider,
     message.providerId ?? null,
     message.raw == null ? null : JSON.stringify(message.raw),
@@ -67,8 +79,19 @@ function toMessageParams(message: ChatMessage): unknown[] {
   ];
 }
 
-function parseContent(json: string) {
-  return parseMessageContent(json);
+/** 双形态读：content_blob 非空走解压，否则 parse content_json 明文。 */
+function readRowContent(row: Row): MessageContent {
+  if (row.content_blob != null) {
+    return parseMessageContent(
+      decodeMessageContent(
+        row.content_encoding,
+        row.content_blob,
+        String(row.id)
+      )
+    );
+  }
+  // legacy 明文行（e2e fixture 直插 / 压缩任务未搬运 / 整体回滚写路径）。
+  return parseMessageContent(String(row.content_json));
 }
 
 function rowToMessage(row: Row): ChatMessage {
@@ -81,7 +104,7 @@ function rowToMessage(row: Row): ChatMessage {
     sessionId: String(row.session_id),
     seq: Number(row.seq),
     role: String(row.role),
-    content: parseContent(String(row.content_json)),
+    content: readRowContent(row),
     provider: row.provider == null ? null : String(row.provider),
     providerId: row.provider_id == null ? null : String(row.provider_id),
     modelName: row.model_name == null ? null : String(row.model_name),
@@ -250,12 +273,17 @@ export class SqliteMessageRepository implements MessageRepository {
     return maxSeq == null ? 1 : Number(maxSeq) + 1;
   }
 
-  async updateContent(id: string, contentJson: string): Promise<boolean> {
+  async updateContent(id: string, content: MessageContent): Promise<boolean> {
+    // JSON.stringify 下沉到 repository（消除 service 层序列化的不一致编码点；
+    // 压缩编码与 insert 同一收口）。
+    const encoded = encodeMessageContent(JSON.stringify(content));
     const result = await executeTemplate(
       this.conn,
       this.parser,
-      `UPDATE chat_message SET content_json = #{contentJson} WHERE id = #{id}`,
-      { id, contentJson }
+      `UPDATE chat_message
+       SET content_json = '', content_encoding = #{encoding}, content_blob = #{blob}
+       WHERE id = #{id}`,
+      { id, encoding: encoded.encoding, blob: encoded.blob }
     );
     return result.changes > 0;
   }
