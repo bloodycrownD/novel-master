@@ -26,6 +26,8 @@ describe("buildAgentStreamMetricsLabel", () => {
       elapsedMs: 10_000,
       textChars: 5,
       thinkingChars: 100,
+      completionTokens: 32,
+      tokenSource: "usage",
       totalChars: 105,
       charsPerSecond: 10.5,
     });
@@ -41,6 +43,8 @@ describe("buildAgentStreamMetricsLabel", () => {
       elapsedMs: 5000,
       textChars: 0,
       thinkingChars: 42,
+      completionTokens: 13,
+      tokenSource: "heuristic",
       totalChars: 42,
       charsPerSecond: 8.4,
     });

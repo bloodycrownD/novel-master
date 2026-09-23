@@ -31,6 +31,7 @@ import {
   EVENT_AGENT_STREAM_TEXT_DELTA,
   EVENT_AGENT_STREAM_THINKING_DELTA,
   EVENT_AGENT_STREAM_TOOL_USE,
+  EVENT_AGENT_STREAM_USAGE,
   type AgentRunFailedPayload,
   type AgentRunFinishedPayload,
   type AgentRunStartedPayload,
@@ -38,6 +39,7 @@ import {
   type AgentStreamTextDeltaPayload,
   type AgentStreamThinkingDeltaPayload,
   type AgentStreamToolUsePayload,
+  type AgentStreamUsagePayload,
 } from "@novel-master/core/events";
 import { onAgentStream } from "../ipc/client";
 import { useConversationBatch } from "@/features/chat/conversation-batch";
@@ -50,11 +52,19 @@ export interface UseAgentStreamCallbacks {
   /** 可选 metrics 旁路（无论是否走 batch 都会触发）。 */
   noteTextDelta?(delta: string): void;
   noteThinkingDelta?(delta: string): void;
+  /**
+   * usage 旁路（stream-metrics-tokens）：completionTokens 为 run 级累计，
+   * 经 ~250ms 尾随节流下发（事件风暴防线，与 metrics 渲染 tick 同量级）。
+   */
+  noteUsage?(completionTokens: number): void;
   onRunStarted?(payload: AgentRunStartedPayload): void;
   onStepCommitted?(payload: AgentStepCommittedPayload): void;
   onRunFinished?(payload: AgentRunFinishedPayload): void;
   onRunFailed?(payload: AgentRunFailedPayload): void;
 }
+
+/** usage 旁路的尾随节流间隔（与指标条 250ms 渲染 tick 对齐）。 */
+const USAGE_NOTE_THROTTLE_MS = 250;
 
 export interface UseAgentStreamOptions {
   readonly sessionId: string | undefined;
@@ -121,7 +131,21 @@ export function useAgentStream(
     if (sessionId == null) {
       return;
     }
-    return onAgentStream((envelope) => {
+    // usage 旁路的尾随节流：completionTokens 是 run 级累计值，风暴期
+    // （gemini 每块一发）只需取「最新值 + 定时到期下发」，250ms 与指标条
+    // 渲染 tick 同量级。effect 清理时若仍有 pending 则立即冲刷，防收尾
+    // 校正（step done 补发）丢失。
+    let usagePending: number | null = null;
+    let usageTimer: ReturnType<typeof setTimeout> | null = null;
+    const flushUsageNote = () => {
+      usageTimer = null;
+      if (usagePending != null) {
+        const value = usagePending;
+        usagePending = null;
+        callbacksRef.current.noteUsage?.(value);
+      }
+    };
+    const off = onAgentStream((envelope) => {
       const { type, payload } = envelope;
       const cb = callbacksRef.current;
       const useBatch = batchEnabledRef.current === true;
@@ -164,6 +188,21 @@ export function useAgentStream(
         }
         return;
       }
+      if (type === EVENT_AGENT_STREAM_USAGE) {
+        const p = payload as AgentStreamUsagePayload;
+        if (p.sessionId !== sessionId || !cb.acceptRunEvent(p.runId)) {
+          return;
+        }
+        if (!cb.getUiRunning()) {
+          return;
+        }
+        // 累计值覆盖式暂存；定时器到期下发最新值。
+        usagePending = p.completionTokens;
+        if (usageTimer == null) {
+          usageTimer = setTimeout(flushUsageNote, USAGE_NOTE_THROTTLE_MS);
+        }
+        return;
+      }
       if (type === EVENT_AGENT_STREAM_TOOL_USE) {
         const p = payload as AgentStreamToolUsePayload;
         if (p.sessionId !== sessionId || !cb.acceptRunEvent(p.runId)) {
@@ -199,6 +238,15 @@ export function useAgentStream(
         cb.onRunFailed?.(p);
       }
     });
+    // 卸载/切会话：冲刷在途的 usage 节流 pending（step done 补发的终值
+    // 校正不因卸载丢失），再退订。
+    return () => {
+      if (usageTimer != null) {
+        clearTimeout(usageTimer);
+      }
+      flushUsageNote();
+      off();
+    };
   }, [sessionId, callbacksRef, applyTextDelta, applyThinkingDelta]);
 
   return {
