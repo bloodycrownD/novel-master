@@ -2,11 +2,11 @@
  * T-R4（rollback-large-jank Step 4）：全局孤儿 revision 清扫 deferred 化。
  *
  * - 回滚事务内不再发全局孤儿 DELETE（scoped 打扫保留在事务内）；
- * - `rollbackToMessage` resolve 先于清扫 SQL 执行（清扫体经微任务脱离
- *   调用方同步栈，fire-and-forget 不阻塞回滚结果与 UI 链）；
+ * - `rollbackToMessage` resolve 先于清扫 SQL 执行（清扫体经 setImmediate
+ *   宏任务脱离调用方同步栈，fire-and-forget 不阻塞回滚结果与 UI 链）；
  * - 清扫进行中重复调度不重入（模块级 in-flight 去重——受控挂起连接下
  *   断言第二条调度被丢弃）；
- * - 孤儿行最终被清（排空微任务后孤儿归零）；
+ * - 孤儿行最终被清（排空一轮宏任务后孤儿归零）；
  * - 回滚后至清扫前的窗口内孤儿残留不影响回滚正确性。
  *
  * @module test/message-checkpoint/deferred-revision-orphan-gc
