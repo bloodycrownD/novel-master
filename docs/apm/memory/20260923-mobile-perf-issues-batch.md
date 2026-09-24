@@ -1,8 +1,8 @@
 ---
-date: 2026-09-24 23:15
-title: mobile 性能批次全记录：5 spec→dev-ready（未 merge）+ ⑤根因闭环→回炉重构→e2e 三幕全过（5826d19e）
-keywords: 性能优化, content_json 压缩, 回滚卡顿, 后台停摆, SSE 定时器, Choreographer, 指标条, t/s, LLM 流卡死, XHR onprogress, 增量投递停摆, 真机实验, mock-openai-server, 内嵌 bundle, worktree 并行, dev-ready, 视觉幻觉, 坐标漂移, Connection close, callTimeout, 死连接复用, 黑洞
-abstract: 五个 mobile 性能命题全部 dev-ready 未 merge（①635c714c ②19e4e841 ③61a14db9 ④6c0a0479 ⑤5826d19e 已回炉）。⑤完整闭环：真机裁决（渐进→中途停摆→尾部倾泻）→ 三路源码研究（RN 0.85.3 四超时全 0/死连接复用防不住/xhr.timeout 映射 callTimeout 可用/轮询 responseText 定论不可行）→ 模拟器黑洞复现（含 stop 误触自动重试僵尸）→ spec/prd 回炉重写（Connection:close 防复用 + 10min 整调用兜底分级 + 仅 idle 30s 看门狗 + abort 绝不重试）→ 实现提交 5826d19e（定向 27/27 绿，core 全量仅时区基线 2 红）→ 模拟器 e2e 三幕全过（连接用完即关不进池/黑洞停止后服务端实测连接被掐断零僵尸重试/重发走新连接完整成功）。
+date: 2026-09-25 00:45
+title: mobile 性能批次全记录：5 spec→dev-ready（未 merge）+ ⑤回炉闭环（e2e 三幕）+ Phase 2 llm-stream-native 立项并 execute-ready（待确认）+ 压缩前状态快照
+keywords: 性能优化, content_json 压缩, 回滚卡顿, 后台停摆, SSE 定时器, Choreographer, 指标条, t/s, LLM 流卡死, XHR onprogress, 增量投递停摆, 真机实验, mock-openai-server, 内嵌 bundle, worktree 并行, dev-ready, 视觉幻觉, 坐标漂移, Connection close, callTimeout, 死连接复用, 黑洞, llm-stream-native, 原生 SSE 管子, 块级渲染, execute-ready
+abstract: 五命题全 dev-ready 未 merge（①635c714c ②19e4e841 ③61a14db9 ④64c0a0479 ⑤5826d19e 已回炉 e2e 三幕验证为合并候选）。Phase 2 迭代 llm-stream-native 已立项（原生 SSE 管子+累积数组化+转录块级渲染+非流式收编）经 spec-check-loop 两轮收敛至 execute-ready，**待用户确认后从 Step 1 评估门开工**。文档分支 iteration-docs-20260924 最新 ccc3cffb。合并红线与实验资产全记录在案，环境已收尾（真机还原、模拟器带修复版 APK 在线）。
 ---
 
 user:
@@ -225,3 +225,15 @@ user:
 
 assistant:
 （spec-check-loop 两轮收敛，2026-09-25，提交 2e280242 @ iteration-docs-20260924）**R1 No-Go：3 P1 + 5 P2**——P1-1 native postJson 缺 method 装不下 GET（listModels 三家全 GET，照抄实施会把 GET 错发 POST）；P1-2 撤 Connection: close 缺运行时回落判定（native 未注册回落 XHR 时黑洞以 10 分钟形态回归——idle watchdog 首活动前不武装，唯一兜底 xhr.timeout=600s）；P1-3 T-N1「native 合批」测试不可落地（合批在 Kotlin 读循环，fake timer 是 JS 概念）；P2 含超限交互（RICH_CONTENT_MAX_CHARS=12k 全量判定下 AC-2 十万字场景全程纯文本，块级改造卖点落空——升级必修）、tokenizer 测试先例失实、port 形状/watchdog 上移边界、fetch shim 流式边界、装配点 dev logging 组合。doc-fix 单节点全闭合（含校准：tokenizer android 模块实有 Kotlin junit 测试只是未挂 CI——R1 审查也有小失实；设计定为「流中按块超限判定、终态/历史维持全量降级」「close 条件化撤除（XHR 且未注册时保留）」「T-N1 改 wrapper 级、合批精度归 manual」「request(method,...) 带 GET」「shim body 置 null 命中既有防御」「__DEV__ 下 createLoggingFetch(shim) 最外层」）。R2 复审：8 项全闭合、零 P0/P1、锚点逐条属实 → **Go（execute-ready）**。剩两条 P2（行号基准未标注合入漂移、streamCommit payload 漏 scrollIntent 字段）由主代理 trivial 豁免直改（已记档）。**待用户确认 execute-ready 后方可开工**（Step 1=评估门）。
+
+user:
+更新记忆，准备压缩上下文了。 [$apm-usage]
+
+assistant:
+（压缩前状态快照，2026-09-25 00:45）
+【恢复锚点（三选一开工）】① 用户确认 llm-stream-native execute-ready → 从 Step 1 评估门开工（mattermost PoC：模拟器+mock 核验 SSE POST/chunk 事件/abort + 全局 OkHttp5 强制冲突，决策记录落 docs/Iterations/llm-stream-native/decision.md，不过即自建）；② 用户给 ①②③④⑤ 合并指令；③ ⑤ 的真机 manual 验收（黑洞停止/重发场景真机复走）。
+【分支与提交全景】文档分支 iteration-docs-20260924：23818754（迭代文档基线）→ 7ef4967a（mock 服务器）→ b67085d4（llm-stream-native 立项 prd+spec）→ 2e280242（spec-check-loop 两轮修订）→ ccc3cffb（记忆补记）。五功能分支（基线 23818754）：feat/message-content-compression@635c714c / feat/rollback-large-jank@19e4e841 / feat/background-run-continuity@61a14db9 / feat/stream-metrics-tokens@64c0a0479 / feat/llm-stream-timeout@5826d19e（回炉版：Connection:close+SSE_WHOLE_CALL_TIMEOUT_MS(600s)+仅idle看门狗30s+abort不重试；定向测试 27/27 绿、e2e 三幕过、core 全量仅时区基线 T-C2/T-C6 两红）。全部未 merge（协作红线等指令）。
+【合并红线备忘】①④ 同 bump SCHEMA_BOOT_VERSION 15→16 须顺延（先合 +1 后合再 +1，断言引用常量）；①② 同碰 sqlite-message.repository 小冲突；③ 硬门禁=chrome inspect 后台 timer 停摆实证未做；各 feature manual_user 真机验收未做；④ desktop 指标条采样器跨 run 未 reset 为非阻塞 polish。
+【Phase 2 已定契约（spec 内有全文）】request(method,...) 带 GET；close 条件化撤除（XHR 且运行时判定 native 未注册时保留）；超限按块判定（流中块级/终态与历史全量降级双口径）；T-N1 wrapper 级测试；fetch shim=Response body 置 null 命中既有防御、__DEV__ 下 createLoggingFetch(shim) 最外层；不用 okhttp-sse（port 只搬字节）；Kotlin-only（iOS 工程存在但发布面仅 Android）；desktop/CLI 零变化。
+【环境终态】真机 DSLDU20407006179：DB 已还原 pristine（备份 %TEMP%\rt_db\pristine.db）、IME 已还原百度、诊断 APK 1.5.23-diag(1301) 仍装着（同签名顶替了 1.5.21，退回需旧 APK）；表单页 footer 裁剪 bug（ScreenFormLayout+StickyFormFooter，创建按钮零边界）已登记待专项。模拟器 Medium_Phone_API_36.1 在线：装着 ⑤ 回炉版诊断 APK（worktree 构建），repro/新会话1/新会话2 测试数据在库，adb reverse 已设。mock 服务器已停；D:\nm5 junction 已删；⑤ worktree 有未跟踪构建产物（assets bundle + res 目录，提交时勿纳入）；worktree 深路径构建须 junction 短路径（CMake 250 字符限制）。运维配方：composer 草稿 DB 注入（chat_session.composer_draft_json={"text","attachments"}）+ 无键盘态发送键 (990,2245)；lastMessageIsPlainUserText 会禁用 composer（t0 后静默 return 属设计）；真机 logcat 无 ReactNativeJS 输出（模拟器有）；视觉转写禁带格式示例（会诱导幻觉）。
+【会话工具沉淀】诊断构建配方（useDevSupport=false + bundle --dev true 进 assets + gradle；RN0.85 参数名注意）；mock-openai-server 用法全参数；uiautomator dump 解析脚本 %TEMP%\dump-parse.ps1（GBK 乱码可解码）。
