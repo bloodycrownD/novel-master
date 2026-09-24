@@ -39,7 +39,7 @@ describe("forward-event-bus", () => {
         assert.equal(channel, IPC_CHANNELS.AGENT_STREAM);
         forwarded.push(payload as { type: string; payload: unknown });
       },
-    }));
+    } as never));
 
     attachEventBusForwarder(bus);
 
