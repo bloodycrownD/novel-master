@@ -217,7 +217,35 @@ describe("DefaultModelRequestService retry", () => {
     assert.equal(calls, 1);
   });
 
-  it("T-T4: 首字前流式超时（first-chunk）按既有上限重试后成功", async () => {
+  it("T-D7: abort 形态 ProviderError（'Request aborted' 逃离 adapter 吞错窗口）绝不重试", async () => {
+    let calls = 0;
+    const adapter: LlmProtocolAdapter = {
+      kind: "openai",
+      listModels: async () => ({ models: [] }),
+      chat: async () => {
+        calls += 1;
+        // 黑洞复现实验 r3 实锤形态：用户停止后 onabort 链 reject 的错误
+        // 若逃离 adapter 吞错，不得落入「无状态码 → 默认可重试」触发僵尸重发
+        throw new ProviderError("HTTP_ERROR", "Request aborted");
+      },
+    };
+    const svc = new DefaultModelRequestService({
+      providers: providerRepo,
+      savedModels,
+      secretStore,
+      retryPolicies: noRetryPolicies,
+      retryPolicy: { maxRetries: 3, baseDelayMs: 0, maxDelayMs: 0, jitterRatio: 0 },
+      resolveAdapter: () => adapter,
+    });
+    await assert.rejects(
+      () => svc.request(SAVED_MODEL_ID, "hello"),
+      (error: unknown) =>
+        error instanceof ProviderError && error.code === "HTTP_ERROR",
+    );
+    assert.equal(calls, 1, "abort 形态错误不应重试");
+  });
+
+  it("T-T4: 首字前流式超时（first-chunk，黑洞耗尽整调用预算）按既有上限重试后成功", async () => {
     let calls = 0;
     const adapter: LlmProtocolAdapter = {
       kind: "openai",

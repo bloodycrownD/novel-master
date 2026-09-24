@@ -1,10 +1,12 @@
 /**
- * LLM 流式超时兜底——传输集成测试（spec llm-stream-timeout）：
+ * LLM 流式黑洞根治——传输集成测试（spec llm-stream-timeout 回炉版）：
  *
- * - T-T1/T-T2/T-T3（XHR 集成级）：首字超时 / 空闲超时 / 慢节奏零误杀；
- * - T-T7（fetch）：读循环同款双超时，reject LlmStreamTimeoutError 而非 AbortError；
- * - T-T5 前半（adapter 层）：idle 超时错误经 adapter rethrow，不吞成 partial；
- * - T-T9（观测）：onTimeout 打点字段按 spec 第 5 节口径可捕获并断言。
+ * - T-D3/T-D4/T-D5（XHR）：Connection: close 头、xhr.timeout 整调用预算、
+ *   ontimeout 分级（0 数据 → first-chunk 可重试；有数据 → idle 不重试）；
+ * - idle 看门狗（XHR 集成级）：静默到阈值 reject 'idle'；慢节奏零误杀；
+ * - T-D6（fetch）：whole-call 定时器同款分级；
+ * - adapter 层：idle 超时错误经 adapter rethrow，不吞成 partial；
+ * - 观测：onTimeout 打点字段按 spec 第 5 节口径可捕获并断言。
  *
  * @module test/infra/llm-protocol/llm-stream-timeout
  */
@@ -16,17 +18,15 @@ import {
   postSse,
   resetShouldUseXhrForSseCacheForTests,
   setShouldUseXhrForSseOverrideForTests,
+  SSE_WHOLE_CALL_TIMEOUT_MS,
 } from "../../../src/infra/llm-protocol/logic/llm-sse-transport.js";
-import {
-  FIRST_CHUNK_TIMEOUT_MS,
-  STREAM_IDLE_TIMEOUT_MS,
-} from "../../../src/infra/llm-protocol/logic/stream-watchdog.js";
+import { STREAM_IDLE_TIMEOUT_MS } from "../../../src/infra/llm-protocol/logic/stream-watchdog.js";
 import { LlmStreamTimeoutError } from "../../../src/infra/llm-protocol/logic/llm-stream-timeout-error.js";
 import { AnthropicProtocolAdapter } from "../../../src/infra/llm-protocol/impl/anthropic.adapter.js";
 
 const SSE_URL = "https://api.example.com/v1/chat/completions";
 
-/** Mock XHR：send 后挂起等待外部驱动（onprogress/onload/abort）。 */
+/** Mock XHR：send 后挂起等待外部驱动（onprogress/onload/abort/ontimeout）。 */
 class HangingXhr {
   open = mock.fn();
   setRequestHeader = mock.fn();
@@ -35,14 +35,16 @@ class HangingXhr {
     this.onabort?.();
   });
   send = mock.fn(function (this: HangingXhr) {
-    // 挂起：无任何响应，直到测试手动驱动或 watchdog 触发 abort
+    // 挂起：无任何响应，直到测试手动驱动或超时
   });
   onprogress: (() => void) | null = null;
   onload: (() => void) | null = null;
   onerror: (() => void) | null = null;
   onabort: (() => void) | null = null;
+  ontimeout: (() => void) | null = null;
   responseText = "";
   status = 0;
+  timeout = 0;
   getResponseHeader = mock.fn(() => "text/event-stream");
 }
 
@@ -89,8 +91,52 @@ async function settleAsync(): Promise<void> {
   });
 }
 
-describe("llm-stream-timeout XHR 集成", () => {
-  it("T-T1: 首字超时——无 onprogress 到阈值 → reject LlmStreamTimeoutError('first-chunk')，非 Request aborted，abort 仅作清理", async () => {
+describe("llm-stream-timeout XHR 集成（回炉版）", () => {
+  it("T-D3: 请求带 Connection: close，且在用户头之后设置（覆盖 provider.headers 同名头）", async () => {
+    mock.timers.enable();
+    setShouldUseXhrForSseOverrideForTests(true);
+    const instances = installXhr();
+
+    const promise = postSse(
+      SSE_URL,
+      {
+        method: "POST",
+        body: "{}",
+        headers: {
+          Authorization: "Bearer k",
+          Connection: "keep-alive",
+        },
+      },
+      () => {},
+    );
+    await settleAsync();
+
+    const xhr = instances[0]!;
+    const calls = xhr.setRequestHeader.mock.calls as Array<{
+      arguments: [string, string];
+    }>;
+    const connCalls = calls.filter(
+      (c) => c.arguments[0].toLowerCase() === "connection",
+    );
+    assert.equal(
+      connCalls.length,
+      2,
+      "用户头 + 传输层强制头各一次",
+    );
+    assert.deepEqual(connCalls[0]!.arguments, ["Connection", "keep-alive"]);
+    assert.deepEqual(
+      connCalls[1]!.arguments,
+      ["Connection", "close"],
+      "传输层 Connection: close 必须在用户头之后（强制生效）",
+    );
+
+    // 清理：驱动 onload 正常收尾
+    xhr.status = 200;
+    xhr.onload?.();
+    await promise;
+  });
+
+  it("T-D4: xhr.timeout 被设为 SSE_WHOLE_CALL_TIMEOUT_MS（OkHttp callTimeout 兜底）", async () => {
     mock.timers.enable();
     setShouldUseXhrForSseOverrideForTests(true);
     const instances = installXhr();
@@ -98,29 +144,69 @@ describe("llm-stream-timeout XHR 集成", () => {
     const promise = postSse(SSE_URL, { method: "POST", body: "{}" }, () => {});
     await settleAsync();
 
-    // 到点触发：先 rejectOnce(超时错误) 抢占 settle，再 xhr.abort() 断流清理
-    mock.timers.tick(FIRST_CHUNK_TIMEOUT_MS);
-
-    await assert.rejects(
-      promise,
-      (err: unknown) => {
-        assert.ok(err instanceof LlmStreamTimeoutError);
-        assert.equal(err.name, "LlmStreamTimeoutError");
-        assert.equal(err.phase, "first-chunk");
-        // 不得冒充用户取消（ProviderError "Request aborted"）
-        assert.ok(!(err instanceof ProviderError));
-        return true;
-      },
-    );
-
-    // abort 随后仅作断流清理：同步触发 onabort，其 rejectOnce 被 settled 守卫
-    // 挡掉，最终上抛的仍是超时错误（上面已断言类型）
     const xhr = instances[0]!;
-    assert.equal(xhr.abort.mock.calls.length, 1);
-    assert.equal(xhr.onabort != null, true);
+    assert.equal(xhr.timeout, SSE_WHOLE_CALL_TIMEOUT_MS);
+    assert.equal(xhr.ontimeout != null, true, "ontimeout 回调应已装配");
+
+    xhr.status = 200;
+    xhr.onload?.();
+    await promise;
   });
 
-  it("T-T2: 空闲超时——有 chunk 后静默到阈值 → reject LlmStreamTimeoutError('idle')；chunk 持续到达不触发", async () => {
+  it("T-D5: ontimeout 分级——0 数据（黑洞）→ reject LlmStreamTimeoutError('first-chunk')，非用户取消", async () => {
+    mock.timers.enable();
+    setShouldUseXhrForSseOverrideForTests(true);
+    const instances = installXhr();
+
+    const promise = postSse(SSE_URL, { method: "POST", body: "{}" }, () => {});
+    let rejected = false;
+    promise.catch(() => {
+      rejected = true;
+    });
+    await settleAsync();
+
+    // 无任何响应数据（黑洞形态），callTimeout 到点 RN dispatch timeout 事件
+    instances[0]!.ontimeout?.();
+    await settleAsync();
+
+    await assert.rejects(promise, (err: unknown) => {
+      assert.ok(err instanceof LlmStreamTimeoutError);
+      assert.equal(err.name, "LlmStreamTimeoutError");
+      assert.equal(err.phase, "first-chunk");
+      // 不得冒充用户取消（ProviderError "Request aborted"）
+      assert.ok(!(err instanceof ProviderError));
+      return true;
+    });
+
+    // 超时 settle 后，迟到的 load/abort 回调不得顶替超时错误
+    const xhr = instances[0]!;
+    xhr.status = 200;
+    xhr.onload?.();
+    assert.equal(rejected, true);
+  });
+
+  it("T-D5: ontimeout 分级——已有输出（健康长流超总预算）→ reject 'idle'（不自动重试语义）", async () => {
+    mock.timers.enable();
+    setShouldUseXhrForSseOverrideForTests(true);
+    const instances = installXhr();
+
+    const promise = postSse(SSE_URL, { method: "POST", body: "{}" }, () => {});
+    await settleAsync();
+
+    const xhr = instances[0]!;
+    xhr.responseText = 'data: {"x":1}\n\n';
+    xhr.onprogress?.();
+    await settleAsync();
+
+    xhr.ontimeout?.();
+    await assert.rejects(
+      promise,
+      (err: unknown) =>
+        err instanceof LlmStreamTimeoutError && err.phase === "idle",
+    );
+  });
+
+  it("idle 看门狗——有 chunk 后静默到阈值 → reject LlmStreamTimeoutError('idle')；chunk 持续到达不触发", async () => {
     mock.timers.enable();
     setShouldUseXhrForSseOverrideForTests(true);
     const instances = installXhr();
@@ -138,21 +224,20 @@ describe("llm-stream-timeout XHR 集成", () => {
     await settleAsync();
 
     const xhr = instances[0]!;
-    // 首个 chunk 到达（首字阶段撤销）
+    // 首个 chunk 到达（武装空闲 deadline）
     xhr.responseText = 'data: {"x":1}\n\n';
     xhr.onprogress?.();
 
     // 静默到 idle 阈值前一刻不触发
     mock.timers.tick(STREAM_IDLE_TIMEOUT_MS - 1);
-    // chunk 持续到达重置空闲计时：慢节奏（间隔 < idle 阈值）推进 5 分钟不触发
-    for (let i = 0; i < 3; i++) {
+    // chunk 持续到达重置空闲计时：间隔 < 30s 的节奏推进 5 分钟不触发
+    for (let i = 0; i < 10; i++) {
       xhr.responseText += `data: {"x":${i + 2}}\n\n`;
       xhr.onprogress?.();
-      mock.timers.tick(60_000);
+      mock.timers.tick(29_000);
     }
-    // flush 微任务后确认慢节奏推进期间未被 reject
     await settleAsync();
-    assert.equal(rejected, false, "慢节奏推进期间不应提前 reject");
+    assert.equal(rejected, false, "活跃节奏推进期间不应提前 reject");
 
     // 静默到 idle 到点触发
     mock.timers.tick(STREAM_IDLE_TIMEOUT_MS);
@@ -163,7 +248,7 @@ describe("llm-stream-timeout XHR 集成", () => {
     );
   });
 
-  it("T-T3: 零误杀——慢节奏长流正常 onload 收尾；dispose 后定时器清空", async () => {
+  it("零误杀——慢节奏长流正常 onload 收尾；dispose 后定时器清空", async () => {
     mock.timers.enable();
     setShouldUseXhrForSseOverrideForTests(true);
     const instances = installXhr();
@@ -177,43 +262,42 @@ describe("llm-stream-timeout XHR 集成", () => {
     await settleAsync();
 
     const xhr = instances[0]!;
-    // 慢节奏 chunk（间隔 60s < 90s），持续 8 分钟的长流
+    // 慢节奏 chunk（间隔 20s < 30s），持续 8 分钟的长流
     xhr.responseText = 'data: {"x":0}\n\n';
     xhr.onprogress?.();
-    for (let i = 1; i <= 8; i++) {
-      mock.timers.tick(60_000);
+    for (let i = 1; i <= 24; i++) {
+      mock.timers.tick(20_000);
       xhr.responseText += `data: {"x":${i}}\n\n`;
       xhr.onprogress?.();
     }
     // 正常收尾
-    mock.timers.tick(60_000);
+    mock.timers.tick(20_000);
     xhr.status = 200;
     xhr.onload?.();
 
     const result = await promise;
     assert.equal(result.status, 200);
     assert.ok(
-      chunks.join("").includes('"x":8'),
+      chunks.join("").includes('"x":24'),
       "正常收尾应完整交付（onload flush 兜底）",
     );
 
-    // dispose 后定时器清空：再推进远超两阈值的时长，无任何后续 reject/回调
-    await promise; // 已 fulfilled，确认不再变
-    mock.timers.tick(FIRST_CHUNK_TIMEOUT_MS + STREAM_IDLE_TIMEOUT_MS);
+    // dispose 后定时器清空：再推进远超阈值的时长，promise 状态不再变化
+    mock.timers.tick(STREAM_IDLE_TIMEOUT_MS * 4 + SSE_WHOLE_CALL_TIMEOUT_MS);
     await promise;
   });
 });
 
-describe("llm-stream-timeout fetch 集成", () => {
-  it("T-T7: 首字超时——body 无数据挂起 → reject LlmStreamTimeoutError('first-chunk') 而非 AbortError", async () => {
+describe("llm-stream-timeout fetch 集成（回炉版）", () => {
+  it("T-D6: whole-call 兜底——body 无数据挂起 → reject LlmStreamTimeoutError('first-chunk') 而非 AbortError", async () => {
     mock.timers.enable();
     setShouldUseXhrForSseOverrideForTests(false);
 
-    // start 不 enqueue 不 close：reader.read() 永久挂起（真实挂死形态）
+    // start 不 enqueue 不 close：reader.read() 永久挂起（黑洞形态）
     const fetchFn = mock.fn(async () => {
       const body = new ReadableStream<Uint8Array>({
         start() {
-          // 模拟网关排队/上游建连静默
+          // 模拟黑洞：无任何响应数据
         },
       });
       return new Response(body, {
@@ -231,7 +315,7 @@ describe("llm-stream-timeout fetch 集成", () => {
     );
     await settleAsync();
 
-    mock.timers.tick(FIRST_CHUNK_TIMEOUT_MS);
+    mock.timers.tick(SSE_WHOLE_CALL_TIMEOUT_MS);
 
     await assert.rejects(
       promise,
@@ -244,7 +328,7 @@ describe("llm-stream-timeout fetch 集成", () => {
     );
   });
 
-  it("T-T7: 空闲超时——首帧后挂起 → reject LlmStreamTimeoutError('idle') 而非 AbortError", async () => {
+  it("idle 看门狗——首帧后挂起 → reject LlmStreamTimeoutError('idle') 而非 AbortError", async () => {
     mock.timers.enable();
     setShouldUseXhrForSseOverrideForTests(false);
 
@@ -270,7 +354,7 @@ describe("llm-stream-timeout fetch 集成", () => {
       undefined,
       { fetchFn: fetchFn as typeof fetch },
     );
-    // 让首帧 read() 返回（noteActivity 撤销首字阶段）
+    // 让首帧 read() 返回（武装空闲 deadline）
     await settleAsync();
 
     mock.timers.tick(STREAM_IDLE_TIMEOUT_MS);
@@ -286,7 +370,7 @@ describe("llm-stream-timeout fetch 集成", () => {
     );
   });
 
-  it("T-T5 前半（adapter 层）: idle 超时经 anthropic adapter rethrow，不吞成 partial 正常完成", async () => {
+  it("adapter 层: idle 超时经 anthropic adapter rethrow，不吞成 partial 正常完成", async () => {
     mock.timers.enable();
     setShouldUseXhrForSseOverrideForTests(false);
 
@@ -335,7 +419,7 @@ describe("llm-stream-timeout fetch 集成", () => {
   });
 });
 
-describe("llm-stream-timeout 观测打点 T-T9", () => {
+describe("llm-stream-timeout 观测打点", () => {
   it("XHR: onTimeout 打点字段 phase/lastActivityAt/processedLength/bufferedBytes（bufferedBytes 取 emitter 待发缓冲）", async () => {
     // 只 mock setTimeout：emitter 的 setInterval 保持真实——测试毫秒级完成，
     // 待发缓冲不会被 32ms tick 冲走，bufferedBytes 才能按观测口径断言堆积

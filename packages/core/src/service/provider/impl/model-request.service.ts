@@ -70,16 +70,28 @@ function isRetryableError(error: unknown): boolean {
   if (isAbortLikeError(error)) {
     return false;
   }
-  // 流式超时分级（spec llm-stream-timeout 第 4 节）：首字前超时无任何输出、
-  // 无副作用，与 429/5xx 同列可重试；流中断（idle，已有部分输出）不重试，
-  // 避免重复输出/重复计费。本分支必须置于下方「非 ProviderError 默认 true」
-  // 之前——否则 idle 超时会被当未知瞬时错误误判为可重试。
+  // 流式超时分级（spec llm-stream-timeout 回炉版）：0 字节耗尽整调用预算
+  // （黑洞形态）无任何输出、无副作用，与 429/5xx 同列可重试；流中断（idle，
+  // 已有部分输出）不重试，避免重复输出/重复计费。本分支必须置于下方
+  // 「非 ProviderError 默认 true」之前——否则 idle 超时会被当未知瞬时错误
+  // 误判为可重试。
   if (error instanceof LlmStreamTimeoutError) {
     return error.phase === "first-chunk";
   }
   if (!(error instanceof ProviderError)) {
     // Unknown transport/runtime failures are treated as transient once.
     return true;
+  }
+  // abort 形态的 ProviderError（XHR onabort 链 reject 的 "Request aborted"）
+  // 绝不可重试：一旦因时序窗口逃离 adapter 的 isRequestAborted 吞错
+  // （signal 晚于错误判定等竞态），若落入下方「无状态码 → 默认可重试」
+  // 分支，用户停止会触发自动重发形成僵尸循环（黑洞复现实验 r3 实锤）。
+  // 口径与 request-abort.ts 的 isRequestAborted 第三判据对齐。
+  if (
+    error.code === "HTTP_ERROR" &&
+    error.message.toLowerCase().includes("abort")
+  ) {
+    return false;
   }
   if (error.code !== "HTTP_ERROR") {
     return false;

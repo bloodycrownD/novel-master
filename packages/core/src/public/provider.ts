@@ -127,10 +127,11 @@ export {
 } from "../infra/llm-protocol/logic/debug-fetch.js";
 export { LlmStreamTimeoutError } from "../infra/llm-protocol/logic/llm-stream-timeout-error.js";
 export {
-  FIRST_CHUNK_TIMEOUT_MS,
-  STREAM_IDLE_TIMEOUT_MS,
-  type StreamWatchdogPhase,
-} from "../infra/llm-protocol/logic/stream-watchdog.js";
+  type LlmStreamTimeoutPhase,
+  LLM_STREAM_TIMEOUT_ERROR_NAME,
+} from "../infra/llm-protocol/logic/llm-stream-timeout-error.js";
+export { STREAM_IDLE_TIMEOUT_MS } from "../infra/llm-protocol/logic/stream-watchdog.js";
+export { SSE_WHOLE_CALL_TIMEOUT_MS } from "../infra/llm-protocol/logic/llm-sse-transport.js";
 export {
   createDefaultTokenCounterRegistry,
   HeuristicTokenCounter,
