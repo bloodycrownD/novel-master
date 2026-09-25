@@ -166,13 +166,26 @@ iterations:
     status: active
     notes: >
       mobile 端实测性能问题批次（content_json 压缩另立 message-content-compression）。
-      四 feature：rollback-large-jank（大文本回滚卡顿：三遍全量 parse 收敛 +
-      快照字节预算分片 + 孤儿清扫 deferred）/ background-run-continuity
+      四 feature：rollback-large-jank（大文本回滚卡顿）/ background-run-continuity
       （后台任务卡住：RN timers 由 Choreographer 驱动后台停摆——SSE 投递
       事件驱动化 + TDBC 量子让步后台感知）/ stream-metrics-tokens（指标条
-      「输出 N t · M t/s」token 化 + 实时滑窗速率，usage 优先 heuristic 兜底）/
-      llm-stream-timeout（流式双超时兜底：首字/空闲，分级重试语义，治
-      「run 无超时挂死」遗留 bug）。探索完成，PRD+spec 已落盘待确认。
+      「输出 N t · M t/s」token 化 + 实时滑窗速率）/ llm-stream-timeout
+      （已回炉 5826d19e：Connection:close 防死连接复用 + 整调用 callTimeout
+      兜底 + 仅 idle 30s 看门狗 + abort 绝不重试；e2e 三幕验证）。四分支
+      dev-ready 未 merge。
+
+  # ---- LLM 流式原生传输与渲染丝滑化（2026-09-25 立项，Phase 2）----
+  - id: llm-stream-native
+    status: active
+    dependency: [mobile-perf-2026-09]
+    notes: >
+      P1 增量停摆/高速输出卡顿的根治 + ⑤ 过渡态回收：原生 SSE 管子（Kotlin，
+      自有 OkHttp + native 合批 + 读超时，port 只搬字节）+ 非流式 postJson
+      收编（用户拍板）+ 累积数组化（registry/unit；parser 三家已数组化）+
+      转录 richText 块级 append 渲染（病灶=RN 每帧全量 markdown-it + webview
+      整段 innerHTML）+ 撤 Connection: close（条件=读超时就位）。Step 1 为
+      mattermost 客户端买 vs 建评估门（倾向自建：全局 OkHttp 5 强制冲突风险）。
+      PRD+spec 已落盘待确认。
 
 
 # ---- S-2 漂移对齐跟踪表（9 处）----
