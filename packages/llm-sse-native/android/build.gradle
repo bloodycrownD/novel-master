@@ -1,0 +1,32 @@
+buildscript {
+  ext.kotlinVersion = "2.0.21"
+}
+
+apply plugin: 'com.android.library'
+apply plugin: 'org.jetbrains.kotlin.android'
+
+android {
+  namespace "com.novelmaster.llmsse"
+  compileSdkVersion rootProject.ext.compileSdkVersion
+
+  defaultConfig {
+    minSdkVersion rootProject.ext.minSdkVersion
+    targetSdkVersion rootProject.ext.targetSdkVersion
+  }
+
+  compileOptions {
+    sourceCompatibility JavaVersion.VERSION_17
+    targetCompatibility JavaVersion.VERSION_17
+  }
+
+  kotlinOptions {
+    jvmTarget = "17"
+  }
+}
+
+dependencies {
+  implementation "com.facebook.react:react-android"
+  implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlinVersion"
+  // OkHttp 用 RN/项目现有版本（零新增依赖；SSE 帧解析在 JS 侧，不用 okhttp-sse）
+  implementation "com.squareup.okhttp3:okhttp"
+}
