@@ -121,6 +121,8 @@ class LlmSseModule(reactContext: ReactApplicationContext) :
       return
     }
     val client = clientWithTimeouts(readTimeoutMs, callTimeoutMs)
+    val effectiveReadTimeoutMs =
+      if (readTimeoutMs > 0) readTimeoutMs.toLong() else DEFAULT_READ_TIMEOUT_MS
     val call = client.newCall(request)
     if (calls.putIfAbsent(requestId, call) != null) {
       emitError(requestId, "network", "duplicate requestId: $requestId")
@@ -141,7 +143,7 @@ class LlmSseModule(reactContext: ReactApplicationContext) :
           finishStream(requestId, state)
         }
       } catch (t: Throwable) {
-        handleStreamFailure(requestId, call, t)
+        handleStreamFailure(requestId, call, t, effectiveReadTimeoutMs)
       } finally {
         calls.remove(requestId)
       }
@@ -197,7 +199,8 @@ class LlmSseModule(reactContext: ReactApplicationContext) :
           promise.resolve(result)
         }
       } catch (t: Throwable) {
-        val (kind, message) = classifyError(t)
+        // 非流式走 baseClient：读超时即默认值（无 per-request 覆盖）。
+        val (kind, message) = classifyError(t, DEFAULT_READ_TIMEOUT_MS)
         promise.reject(kind, message, t)
       }
     }
@@ -366,27 +369,34 @@ class LlmSseModule(reactContext: ReactApplicationContext) :
     emitDone(requestId)
   }
 
-  private fun handleStreamFailure(requestId: String, call: Call, t: Throwable) {
+  private fun handleStreamFailure(
+    requestId: String,
+    call: Call,
+    t: Throwable,
+    effectiveReadTimeoutMs: Long,
+  ) {
     streams.remove(requestId)
     if (call.isCanceled()) {
       return // 主动 abort：JS 侧已自行收尾，静默
     }
-    val (kind, message) = classifyError(t)
+    val (kind, message) = classifyError(t, effectiveReadTimeoutMs)
     emitError(requestId, kind, message)
   }
 
-  /** 错误分类：读超时（SocketTimeout）与 callTimeout（InterruptedIOException "timeout"）归 timeout。 */
-  private fun classifyError(t: Throwable): Pair<String, String> = when (t) {
-    is SocketTimeoutException -> "timeout" to (t.message ?: "read timeout")
-    is InterruptedIOException ->
-      if (t.message?.contains("timeout", ignoreCase = true) == true) {
-        "timeout" to (t.message ?: "timeout")
-      } else {
-        "network" to (t.message ?: "interrupted")
-      }
-    is IOException -> "network" to (t.message ?: t.javaClass.simpleName)
-    else -> "network" to (t.message ?: t.javaClass.simpleName)
-  }
+  /** 错误分类：读超时（SocketTimeout）与 callTimeout（InterruptedIOException "timeout"）归 timeout。读超时 message 携带生效数值，供 JS 侧文案透传真实触发来源。 */
+  private fun classifyError(t: Throwable, effectiveReadTimeoutMs: Long): Pair<String, String> =
+    when (t) {
+      is SocketTimeoutException ->
+        "timeout" to "read timeout after ${effectiveReadTimeoutMs}ms"
+      is InterruptedIOException ->
+        if (t.message?.contains("timeout", ignoreCase = true) == true) {
+          "timeout" to (t.message ?: "timeout")
+        } else {
+          "network" to (t.message ?: "interrupted")
+        }
+      is IOException -> "network" to (t.message ?: t.javaClass.simpleName)
+      else -> "network" to (t.message ?: t.javaClass.simpleName)
+    }
 
   // ------------------------------------------------------------------
   // 事件发射

@@ -365,7 +365,7 @@ describe("T-N2: transport 超时错误映射 LlmStreamTimeoutError 分级", () =
           new RegExp(String(SSE_WHOLE_CALL_TIMEOUT_MS)),
           "timeoutMs 取整调用预算",
         );
-        assert.match(err.message, /native callTimeout/, "detail 标记来源");
+        assert.match(err.message, /native timeout:/, "detail 标记来源并透传真实信息");
         // 不冒充用户取消（isRequestAborted 三判据全不命中）
         assert.ok(!(err instanceof Error && err.name === "AbortError"));
         return true;

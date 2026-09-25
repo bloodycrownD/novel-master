@@ -449,8 +449,14 @@ export function postSse(
               return;
             }
             if (isTransportTimeoutError(error)) {
-              // native callTimeout 到点：映射同一分级语义（spec §3，T-N2）。
-              handleWholeCallTimeout("native callTimeout");
+              // native 读超时/callTimeout 到点：映射同一分级语义（spec §3，T-N2）。
+              // detail 透传 wrapper 错误的真实信息（如 "read timeout after 30000ms"），
+              // 固定文案会把 30s 读超时误标成 callTimeout 来源。
+              handleWholeCallTimeout(
+                `native timeout: ${
+                  error instanceof Error ? error.message : String(error)
+                }`,
+              );
               return;
             }
             watchdog.dispose();
