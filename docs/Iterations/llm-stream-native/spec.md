@@ -125,7 +125,7 @@ apps/mobile/src/services/session-stream-unit.ts                   # partialText 
 apps/mobile/src/components/chat/ChatTranscriptWebView.tsx         # 块感知渲染
 apps/mobile/src/components/chat/ChatTranscriptBridge.ts           # streamBlockCommit 协议
 apps/mobile/src/web/chat-transcript/webview/runtime/stream/stream.ts  # 块提交 append
-apps/mobile/src/web/chat-transcript/webview/runtime/stream/block-split.ts  # 新：块边界纯函数
+apps/mobile/src/web/chat-transcript/stream/block-split.ts  # 新：块边界纯函数（实施位置自 webview/runtime/stream/ 上移一级——tsconfig.build.json composite 工程排除 src/web/**/webview/**，RN 侧引用该目录必 TS6307；webview esbuild 侧不引用它）
 apps/mobile/src/services/                                  # native 装配 + fetch shim
 ```
 
