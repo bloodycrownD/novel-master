@@ -937,6 +937,202 @@ describe('ChatTranscriptWebView', () => {
     }
   });
 
+  it('T-N6 RN: 空行分段触发 streamBlockCommit——块 html 完成段、delta html 只含尾块', async () => {
+    const messages = [sampleMessage('m1', 1)];
+    let tree: TestRenderer.ReactTestRenderer;
+    const ref =
+      React.createRef<
+        import('@/components/chat/ChatTranscriptWebView').ChatTranscriptWebViewHandle
+      >();
+
+    await act(async () => {
+      tree = TestRenderer.create(
+        <ChatTranscriptWebView
+          ref={ref}
+          sessionKey="p1:s1"
+          messages={messages}
+          flags={{richText: true}}
+        />,
+      );
+    });
+
+    simulateWebReady(tree!.root);
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const baseline = mockWebViewPostMessages.length;
+
+    await act(async () => {
+      ref.current?.pushStreamDelta('text', 'para one\n\npara two');
+    });
+    await flushAnimationFrame();
+
+    const sent = mockWebViewPostMessages
+      .slice(baseline)
+      .map(raw => decodeHostToTranscript(raw));
+    const deltaMsg = sent.find(
+      msg => msg.type === 'streamDelta' && msg.payload.kind === 'text',
+    );
+    const commitMsg = sent.find(msg => msg.type === 'streamBlockCommit');
+
+    // 完成块：'para one' 渲染一次后下发
+    expect(commitMsg?.type).toBe('streamBlockCommit');
+    if (commitMsg?.type === 'streamBlockCommit') {
+      expect(commitMsg.payload.kind).toBe('text');
+      expect(commitMsg.payload.text).toContain('para one');
+      expect(commitMsg.payload.html).toContain('para one');
+      expect(commitMsg.payload.tailText).toContain('para two');
+      expect(commitMsg.payload.tailHtml).toContain('para two');
+    }
+    // delta 的 html 只覆盖活跃尾块（spec §6：不再全量）
+    expect(deltaMsg?.type).toBe('streamDelta');
+    if (deltaMsg?.type === 'streamDelta') {
+      expect(deltaMsg.payload.html ?? '').toContain('para two');
+      expect(deltaMsg.payload.html ?? '').not.toContain('para one');
+    }
+    // 顺序约束：delta 先行、块提交随后（webview 尾块重置洗掉块字符重复）
+    const deltaIdx = sent.findIndex(msg => msg.type === 'streamDelta');
+    const commitIdx = sent.findIndex(msg => msg.type === 'streamBlockCommit');
+    expect(deltaIdx).toBeGreaterThanOrEqual(0);
+    expect(commitIdx).toBeGreaterThan(deltaIdx);
+  });
+
+  it('T-N6 RN: 未闭合代码块不提交（无 streamBlockCommit）', async () => {
+    const messages = [sampleMessage('m1', 1)];
+    let tree: TestRenderer.ReactTestRenderer;
+    const ref =
+      React.createRef<
+        import('@/components/chat/ChatTranscriptWebView').ChatTranscriptWebViewHandle
+      >();
+
+    await act(async () => {
+      tree = TestRenderer.create(
+        <ChatTranscriptWebView
+          ref={ref}
+          sessionKey="p1:s1"
+          messages={messages}
+          flags={{richText: true}}
+        />,
+      );
+    });
+
+    simulateWebReady(tree!.root);
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const baseline = mockWebViewPostMessages.length;
+
+    await act(async () => {
+      ref.current?.pushStreamDelta('text', '```js\nconst x = 1;');
+    });
+    await flushAnimationFrame();
+
+    const types = messageTypesSince(baseline);
+    expect(types).toContain('streamDelta');
+    expect(types).not.toContain('streamBlockCommit');
+  });
+
+  it('T-N6 RN: batch 路径同样块切分（streamBatch 后补发 streamBlockCommit）', async () => {
+    const messages = [sampleMessage('m1', 1)];
+    let tree: TestRenderer.ReactTestRenderer;
+    const ref =
+      React.createRef<
+        import('@/components/chat/ChatTranscriptWebView').ChatTranscriptWebViewHandle
+      >();
+
+    await act(async () => {
+      tree = TestRenderer.create(
+        <ChatTranscriptWebView
+          ref={ref}
+          sessionKey="p1:s1"
+          messages={messages}
+          flags={{richText: true}}
+        />,
+      );
+    });
+
+    simulateWebReady(tree!.root);
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const baseline = mockWebViewPostMessages.length;
+
+    await act(async () => {
+      ref.current?.pushStreamBatch({
+        segments: [
+          {kind: 'text', delta: 'block a\n\n'},
+          {kind: 'text', delta: 'tail b'},
+        ],
+      });
+    });
+    await flushAnimationFrame();
+
+    const sent = mockWebViewPostMessages
+      .slice(baseline)
+      .map(raw => decodeHostToTranscript(raw));
+    const batchIdx = sent.findIndex(msg => msg.type === 'streamBatch');
+    const commitIdx = sent.findIndex(msg => msg.type === 'streamBlockCommit');
+    expect(batchIdx).toBeGreaterThanOrEqual(0);
+    expect(commitIdx).toBeGreaterThan(batchIdx);
+    const commitMsg = sent[commitIdx];
+    if (commitMsg?.type === 'streamBlockCommit') {
+      expect(commitMsg.payload.text).toContain('block a');
+      expect(commitMsg.payload.tailText).toContain('tail b');
+    }
+  });
+
+  it('T-N6 RN: abort overlay 全量物化含已提交块（committed parts + 活跃尾块）', async () => {
+    const messages = [sampleMessage('m1', 1)];
+    let tree: TestRenderer.ReactTestRenderer;
+    const ref =
+      React.createRef<
+        import('@/components/chat/ChatTranscriptWebView').ChatTranscriptWebViewHandle
+      >();
+
+    await act(async () => {
+      tree = TestRenderer.create(
+        <ChatTranscriptWebView
+          ref={ref}
+          sessionKey="p1:s1"
+          messages={messages}
+          flags={{richText: true}}
+        />,
+      );
+    });
+
+    simulateWebReady(tree!.root);
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      ref.current?.pushStreamDelta('text', 'committed part\n\ntail part');
+    });
+    await flushAnimationFrame();
+
+    const baseline = mockWebViewPostMessages.length;
+    const committed = ref.current?.commitAbortOverlaySnapshot();
+    expect(committed).toBe(true);
+
+    const commitRowMsg = mockWebViewPostMessages
+      .slice(baseline)
+      .map(raw => decodeHostToTranscript(raw))
+      .find(msg => msg.type === 'streamCommit');
+    expect(commitRowMsg?.type).toBe('streamCommit');
+    if (commitRowMsg?.type === 'streamCommit') {
+      const row = commitRowMsg.payload.rows.find(r => r.kind === 'message');
+      expect(row && row.kind === 'message' ? row.text : '').toContain(
+        'committed part',
+      );
+      expect(row && row.kind === 'message' ? row.text : '').toContain(
+        'tail part',
+      );
+    }
+  });
+
   it('Step 6: forceSnapshot 直发全量快照——uiRunning+流式活跃时不 defer', async () => {
     // 单元控制消息 force-snapshot 的屏幕消费面：流式活跃（streamActive）+
     // uiRunning 时普通 snapshot 会 pending 到流式结束，forceSnapshot 必须
@@ -1442,7 +1638,11 @@ describe('ChatTranscriptWebView', () => {
 
     await act(async () => {
       tree = TestRenderer.create(
-        <ChatTranscriptWebView sessionKey="p1:s1" messages={messages} hasMore />,
+        <ChatTranscriptWebView
+          sessionKey="p1:s1"
+          messages={messages}
+          hasMore
+        />,
       );
     });
 
@@ -1470,7 +1670,11 @@ describe('ChatTranscriptWebView', () => {
 
     await act(async () => {
       tree = TestRenderer.create(
-        <ChatTranscriptWebView sessionKey="p1:s1" messages={messages} hasMore />,
+        <ChatTranscriptWebView
+          sessionKey="p1:s1"
+          messages={messages}
+          hasMore
+        />,
       );
     });
 
@@ -1512,7 +1716,11 @@ describe('ChatTranscriptWebView', () => {
 
     await act(async () => {
       tree = TestRenderer.create(
-        <ChatTranscriptWebView ref={ref} sessionKey="p1:s1" messages={messages} />,
+        <ChatTranscriptWebView
+          ref={ref}
+          sessionKey="p1:s1"
+          messages={messages}
+        />,
       );
     });
     // ready 后双路径启动分片：首开代次在途（片 0 已发，余片挂起）
@@ -1539,7 +1747,9 @@ describe('ChatTranscriptWebView', () => {
       expect(generations[i]).toBeGreaterThan(generations[i - 1]!);
     }
     // force 时在途的旧代次未发完（末片被作废）
-    const stale = chunks.filter(c => c.generation !== generations[generations.length - 1]!);
+    const stale = chunks.filter(
+      c => c.generation !== generations[generations.length - 1]!,
+    );
     const lastGeneration = generations[generations.length - 1]!;
     expect(
       stale.filter(c => c.generation === stale[stale.length - 1]!.generation)
