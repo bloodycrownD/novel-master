@@ -49,6 +49,7 @@
   "parseTokenCounterModePref",
   "pickLastPromptUsage",
   "providerApiKeyRef",
+  "registerSseTransport",
   "resolveContextWindowTokens",
   "resolveCurrentPromptTokens",
   "resolveEffectiveMaxTokens",

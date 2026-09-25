@@ -76,7 +76,7 @@ jobs:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
-          key: ${{ runner.os }}-gradle-${{ hashFiles('apps/mobile/android/**/*.gradle*', 'apps/mobile/android/gradle/wrapper/gradle-wrapper.properties', 'packages/sksp-android/android/**/*.gradle*') }}
+          key: ${{ runner.os }}-gradle-${{ hashFiles('apps/mobile/android/**/*.gradle*', 'apps/mobile/android/gradle/wrapper/gradle-wrapper.properties', 'packages/sksp-android/android/**/*.gradle*', 'packages/llm-sse-native/android/**/*.gradle*') }}
           restore-keys: |
             ${{ runner.os }}-gradle-
 
