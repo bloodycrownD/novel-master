@@ -141,6 +141,16 @@ module.exports = {
       repoRoot,
       'packages/sksp-android/dist/index.js',
     ),
+    // llm-sse-native：dist gitignore，Jest 须经真实构建产物解析（./native 子路径
+    // 同步映射，漏写会让消费方测试套件解析失败——同 tdbc-driver 系列坑）。
+    '^@novel-master/llm-sse-native/native$': path.join(
+      repoRoot,
+      'packages/llm-sse-native/dist/native.js',
+    ),
+    '^@novel-master/llm-sse-native$': path.join(
+      repoRoot,
+      'packages/llm-sse-native/dist/index.js',
+    ),
     '^@novel-master/tdbc-driver-rn/native$': path.join(
       repoRoot,
       'packages/tdbc-driver-rn/dist/native.js',
