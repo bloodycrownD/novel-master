@@ -262,3 +262,14 @@ assistant:
 【真机复测（1304）】GLM 工具调用全链路跑通：发「continue」→ 助手思考+工具调用（8.3KB）→ tool_result "ok" → 收尾回复「写进了『故事章节/杏花劫.md』」；DB 硬证据（run-as 拉库 better-sqlite3 查）：vfs_entry `/故事章节/杏花劫.md` version 1 落盘 + 消息链完整。对比 1303 同场景被掐断 = 修复生效。
 【可选增强（未实施，待拍板）】给 GLM 请求注入 `tool_stream: true` 让工具调用也真流式（根上消解长停顿）；需判定口径（baseUrl/模型名/中转站边界）且限 GLM-4.6+ 型号。
 【真机取证配方补充】dev 模式下 metro 的 console 转发在本环境不工作（真机 JS 日志仍无）；DB 直查用 `adb exec-out run-as <pkg> cat databases/novel_master_vfs`（主库名 novel_master_vfs，109MB）；vfs_entry 列名 = scope_key/path/entry_kind/head_version/content（无 scope_kind/size）；input text 逗号被吃须用 %s 空格；发送键无键盘态 dump 定位（SVG PathView，本次 958,1510 附近）。
+
+user:
+（第三轮验收）「工具调用呢？还有速度还是慢。我记得有个本地模拟llm吧？也测试下」——「慢」指 GLM 吞吐 222 字/秒不够快，要求用 400~600 字/秒的高速 LLM 测试（不是 bug 诊断）。授权继续真机测试；要求手机常亮。
+
+assistant:
+（mock 高速流真机压测闭环，2026-09-26 下午，全程 adb 驱动真机 DSLDU20407006179 + 1304 APK + metro）
+【测试结果（5 轮 mock 高速流全成功）】用 mock-openai-server 压真机客户端：轮 1/2（--tokens-per-chunk 5，实际 ~313 字/秒 × 12000 字，37-38s）与轮 3/4/5（--tokens-per-chunk 8，实际 **~500 字/秒 × 12000 字，24.3s**）全部成功：请求→SSE→渐进渲染→**消息完整落库（12038 字节/条）**→无卡顿无冻结。服务端日志佐证（02:50:31→02:50:54 = 23.4s 完成 12000 token ≈ 513 token/s）。**结论：客户端在 ~500 字/秒 下完全跟得上**——GLM 222 字/秒的「慢」在模型/服务商侧（那一轮思考 2.26 万字是模型行为，非 app）。
+【工具调用】GLM write 工具调用链已在两轮跑通（「continue」→tool_use→tool_result ok→落文件到「故事章节/杏花劫.md」，DB vfs_entry 硬证据）；另测出模型会把未完成意图记进后续轮（跨轮上下文）。
+【测试中排除的三个环境坑（重要）】①**metro 病态态**：进程活着但 bundle 请求全卡 0%（旧实例，多次 bundle 未完成），app 靠缓存 bundle 跑而 run 链的按需模块加载永久挂起（症状：UI 正常但发送后消息不落库/请求不发/run「活跃中」）——重启 metro（--reset-cache）恢复；②**手插 chat_session 不可用于发送测试**：缺正常创建流程的初始化数据→run 启动链静默挂起（UI 乐观消息、库无消息、无请求）——**必须用 UI 建的会话再改 modelId/draft**；③自建 provider 需 API key（SKSP）——**mock 接入最省姿势 = 改内置 OpenCode Zen（defaultApiKey="public" 免 key）的 base_url + 模型行挂它**（测完还原）。另：IME 半死态反复（input text 静默失败，重试或 DB 草稿注入绕过）；**发送键/终止键坐标随键盘开合漂移，自动化点「终止键」多轮未命中**（非 bug——终止能力由模拟器三断言 + 用户日常点击覆盖，自动化不采信）。
+【传库操作教训】push 库会回退 app 期间的新写入——推旧副本会丢消息（本轮「hi」轮被回退实锤），**每次推库前必须重新拉最新副本**；app 写库正常时（UI 新建会话 ✓）外部推库只是替换文件，无锁问题。
+【环境终态】真机：1304（1.5.24-dev）、用户库已清理（测试 provider/模型/会话/消息全删、Zen base_url 还原 opencode.ai/zen/v1）、常亮已设（svc power stayon true + screen_off_timeout 1800000）、metro 在线；mock 已停；%TEMP% 测试副本已删（诊断脚本 nm-dump-*.ps1 保留可复用）。
