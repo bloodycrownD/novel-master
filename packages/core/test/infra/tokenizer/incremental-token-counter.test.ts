@@ -288,7 +288,7 @@ describe("createIncrementalTokenCounter（尾窗增量计数）", () => {
     assert.equal(counter.tokens, total);
   });
 
-  it("性能护栏：10 万字符流的分桶均摊耗时线性（末桶 ≤ 首桶 × 3）", () => {
+  it("性能护栏：10 万字符流的分桶均摊耗时线性（末桶 ≤ 首桶 × 8）", () => {
     const counter = makeCounter();
     const chunk = "字".repeat(20);
     const pushes = 5_000; // 10 万字符
@@ -306,8 +306,14 @@ describe("createIncrementalTokenCounter（尾窗增量计数）", () => {
     const amortized = bucketMs.map(ms => ms / (perBucket * 20));
     const first = amortized[0]!;
     const last = amortized[buckets - 1]!;
+    // 阈值取 8×（原为 3×，2026-09-27 起放宽）：这是**数量级回归线**，不是精度基准
+    // ——全量套件并行负载下同一次运行实测出现过 3.02×（首桶 77ns/char、末桶 232ns/char），
+    // 而退化的形态「每次 push 全量重算」是 ~100× 量级（12,000 字符 88s vs 0.5s），
+    // 中间隔着两个数量级。卡在 3× 等于拿机器噪声当回归（与 RULE「性能护栏取数量级
+    // 回归线」同款口径）；精确不变量由上面「单次 encode 入参 ≤64 字符」「累计 encode
+    // 字符量线性」两条计数式断言守着，与负载无关。
     assert.ok(
-      last <= first * 3 + 1e-6,
+      last <= first * 8 + 1e-6,
       `耗时曲线疑似超线性：首桶 ${first * 1e6}ns/char，末桶 ${last * 1e6}ns/char`,
     );
   });

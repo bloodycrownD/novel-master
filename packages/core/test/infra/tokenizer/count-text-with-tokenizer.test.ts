@@ -156,6 +156,39 @@ describe("countTextWithIncrementalTokenizer（整段文本真分词器计数）"
     }
   });
 
+  it("P1 回归护栏：尾部整段不可编码时读数夹在真值 ~1.05 倍之间（不丢计数、不虚高）", () => {
+    const warnings = captureWarnings();
+    try {
+      // 毒串构造口径写死：`<|endoftext|>` 的 13 个字符里含 `<` `|` `>`，会被
+      // `isBoundaryCharCode` 当切点劈开，所以末尾必须紧跟 11 个**无边界** CJK，
+      // 让整段毒串在默认 24 字符尾窗下仍整体落在窗口里（稳定复现的必要条件）。
+      const poison = "<|endoftext|>甲乙丙丁戊己庚辛壬癸子";
+      // 正文必须是 200 段**成句**中文（每段 ≥10 字），不是「200 个单字」：
+      // 毒串按 1:1 计入是 24 token，正文太小（约 200~400 token）时占比会顶到
+      // 6%~12%，把 1.05 的上界顶红——那是用例写坏了，不是实现退化。
+      const passage = `${ZH_SENTENCE}\n`.repeat(200);
+      const text = `${passage}${poison}`;
+      const count = countTextWithIncrementalTokenizer(cl100kEncode, text);
+      // 基准是「去掉毒串的正文」的全量 encode（禁止硬编码任何数字：ranks 表随
+      // js-tiktoken 版本会变，写死必然在升级后变成假红）。
+      const truth = cl100kEncode(passage);
+      // ⚠️ 必须**双边夹逼**，只写下界等于没断言：被本用例守的 bug 兜底值是
+      // `text.length`，中文下它 ≈ truth × 1.64，比真值**更大**，所以单边
+      // `count >= truth` 会被带 bug 的实现假绿通过；加上界后它必被抓住
+      // （1.64× > 1.05×），而修好后 count ≈ truth + 24（占比千分之一量级）。
+      assert.ok(
+        count >= truth,
+        `不可编码尾段不得吞掉已固化计数：${count} < 真值 ${truth}`,
+      );
+      assert.ok(
+        count <= truth * 1.05,
+        `读数不得虚高成字符数（≈${(text.length / truth).toFixed(2)}× 真值）：${count} > ${truth} × 1.05`,
+      );
+    } finally {
+      warnings.restore();
+    }
+  });
+
   it("整段一次计数 ≈ 同文本分块 push 的末值（同一套切分口径）", async () => {
     const { createIncrementalTokenCounter } = await import(
       "../../../src/infra/tokenizer/logic/incremental-token-counter.js"

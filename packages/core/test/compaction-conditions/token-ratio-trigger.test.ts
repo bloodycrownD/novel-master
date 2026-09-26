@@ -68,7 +68,6 @@ function seedKkvEntry(
     serializeSessionApiPromptTokenEntry({
       promptTokens,
       atMs: Date.now(),
-      runId: "run-previous",
       savedModelId: "openai/gpt-4o",
     })
   );

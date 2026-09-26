@@ -236,7 +236,6 @@ async function writeEntryFor(
     serializeSessionApiPromptTokenEntry({
       promptTokens,
       atMs: Date.now(),
-      runId: "run-before-restart",
       savedModelId,
     })
   );

@@ -79,7 +79,6 @@ async function seedPromptTokenRow(sessionId: string): Promise<void> {
     serializeSessionApiPromptTokenEntry({
       promptTokens: 1234,
       atMs: Date.now(),
-      runId: "run-previous",
     }),
   );
 }

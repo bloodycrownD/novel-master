@@ -6,11 +6,15 @@
  * 1. `serializeToolsForTokenCount` 的序列化形状（空 → 空串；只取三字段、键序稳定）；
  * 2. heuristic-only 路径（core）与注册驱动路径（node driver）都把 tools 段拼进
  *    同一个序列化串（用「跑一遍真实序列化 + 手算期望值」对齐，而非只断言变大）；
+ *    ⚠️ 两把「尺子」不同：heuristic-only 是 core 的字符折算，**node 驱动的
+ *    `heuristic` 档自 stream-metrics-native ④ 起改用真分词器（cl100k）计数**
+ *    （`counterKind` 仍诚实标 `heuristic`），故期望值要用同一把真尺子算。
  * 3. 空数组与 undefined 结果一致（不引入无意义差异）。
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { registerNodeTokenizerDriverForTests } from "../../helpers/register-node-tokenizer-driver-for-tests.js";
+import { countTextWithDefaultEncoding } from "../../../../tokenizer-driver-node/src/impl/encoding-cache.js";
 import type { LlmToolDefinition } from "../../../src/infra/llm-protocol/ports/adapter.port.js";
 import {
   countPromptLlmInput,
@@ -118,8 +122,15 @@ describe("本地计数含 tools 段", () => {
       BASE_PARAMS.layout,
       BASE_PARAMS.ctx
     );
-    const expected = registry.heuristic.countText(
+    // 期望值必须与实现同一把尺子：node 驱动的 heuristic 档自 ④ 起用真分词器（cl100k）
+    // 计数（`counterKind` 仍标 heuristic），所以这里不能再拿 `registry.heuristic.countText`
+    // 的字符折算值去比——那是改版前的契约（旧期望 81，真计数 90）。
+    const expected = countTextWithDefaultEncoding(
       serialized + serializeToolsForTokenCount(TOOLS)
+    );
+    assert.ok(
+      expected != null,
+      "真分词器计数不可用（编码表建不起来），本用例无法表达「tools 按同一序列化拼接」的契约"
     );
     assert.equal(withTools.tokenCount, expected);
     assert.ok(withTools.tokenCount > without.tokenCount);

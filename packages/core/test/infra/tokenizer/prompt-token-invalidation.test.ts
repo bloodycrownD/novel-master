@@ -47,7 +47,6 @@ async function seedRow(
     serializeSessionApiPromptTokenEntry({
       promptTokens: 4321,
       atMs: Date.now(),
-      runId: "run-previous",
     })
   );
   sessionApiPromptTokenCache.set(sessionId, {
