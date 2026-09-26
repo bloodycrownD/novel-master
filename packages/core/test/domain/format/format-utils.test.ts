@@ -1,11 +1,29 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { formatCharCount } from "../../../src/domain/format/format-char-count.js";
-import { buildStreamMetricsLine } from "../../../src/domain/format/format-stream-metrics-line.js";
+import {
+  buildStreamMetricsLine,
+  formatStreamElapsed,
+} from "../../../src/domain/format/format-stream-metrics-line.js";
 
 describe("formatCharCount", () => {
   it("uses zh-CN grouping", () => {
     assert.match(formatCharCount(1234), /1/);
+  });
+});
+
+describe("formatStreamElapsed（core-metrics/C-2：core 单点实现，双端复用）", () => {
+  it("60s 内一位小数（含 0 与四舍五入）", () => {
+    assert.equal(formatStreamElapsed(0), "0.0s");
+    assert.equal(formatStreamElapsed(1.25), "1.3s");
+    assert.equal(formatStreamElapsed(12.34), "12.3s");
+    assert.equal(formatStreamElapsed(59.94), "59.9s");
+  });
+
+  it("60s 起取整（边界 60 即离开小数段）", () => {
+    assert.equal(formatStreamElapsed(60), "60s");
+    assert.equal(formatStreamElapsed(61.4), "61s");
+    assert.equal(formatStreamElapsed(3_599.6), "3600s");
   });
 });
 

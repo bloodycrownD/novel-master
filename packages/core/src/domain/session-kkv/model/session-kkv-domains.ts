@@ -61,6 +61,7 @@ export type SessionKkvDomain =
   | typeof SESSION_KKV_DOMAIN_FILE_CACHE
   | typeof SESSION_KKV_DOMAIN_USER_VFS_PENDING
   | typeof SESSION_KKV_DOMAIN_BACKFILL_CURSOR
+  | typeof SESSION_KKV_DOMAIN_STREAM_METRICS
   | (string & {});
 
 /** 可写入 file_cache 的展示档位（不含 hidden）。 */

@@ -12,8 +12,20 @@
  */
 export type SessionRunStatus = "starting" | "running" | "settled";
 
-/** token 计数来源：usage=协议/补发事件真值；heuristic=字符折算兜底。 */
-export type SessionRunStateTokenSource = "usage" | "heuristic";
+/**
+ * 输出 token 计数来源（中立命名，展示层与持久层 alias 同一份声明）：
+ * - `usage`：协议事件 / step done 补发事件的真值（run 级累计）；
+ * - `heuristic`：字符折算兜底；usage 到达后不再回写。
+ */
+export type StreamTokenSource = "usage" | "heuristic";
+
+/**
+ * 行模型字段名（历史命名，与 {@link StreamTokenSource} 是同一份声明）。
+ *
+ * 展示层（双端 hook 的 `AgentStreamTokenSource`、mobile 单元的
+ * `SessionStreamUnitTokenSource`）一律 alias 到本类型，新增来源只改一处。
+ */
+export type SessionRunStateTokenSource = StreamTokenSource;
 
 /**
  * `session_run_state` 行模型（每 sessionId 至多一行）。

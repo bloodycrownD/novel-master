@@ -90,6 +90,27 @@ describe("slidingTokenRate（T-M9 滑窗速率）", () => {
       null
     );
   });
+
+  it("未来样本（时钟回拨）不计入窗口，恢复后正常（core-metrics/B-4）", () => {
+    const samples = [
+      {tMs: 100_000, tokens: 0},
+      {tMs: 100_250, tokens: 50},
+      {tMs: 100_500, tokens: 100},
+      {tMs: 100_750, tokens: 150},
+    ];
+    // 时钟回拨到 t=100_250：后两条是未来样本，须排除——只按 0→50 算 200 t/s。
+    assert.equal(slidingTokenRate(samples, 100_250), 200);
+    // 回拨到两样本之间：分母随 nowMs 走（50 t / 300ms），不被未来样本污染。
+    const between = slidingTokenRate(samples, 100_300);
+    assert.ok(
+      between != null && Math.abs(between - 50_000 / 300) < 1e-9,
+      `回拨到样本之间应只算已发生的增量：${between}`
+    );
+    // 回拨到首样本之前：无可用样本 → null（「全未来样本 → null」的推广）。
+    assert.equal(slidingTokenRate(samples, 99_000), null);
+    // 恢复：窗口按此刻重算，正常产出速率。
+    assert.equal(slidingTokenRate(samples, 100_750), 200);
+  });
 });
 
 describe("createTokenRateSampler（T-M10 校正重置）", () => {
@@ -119,6 +140,40 @@ describe("createTokenRateSampler（T-M10 校正重置）", () => {
     );
   });
 
+  it("usage 下调（900→600）与上调同构：翻转瞬间 null、从真值起算、freeze 回落（core-metrics/G-1）", () => {
+    const sampler = createTokenRateSampler();
+    const startMs = 100_000;
+    // heuristic 阶段：每 250ms 折算 +3 t（约 12 t/s），累计 24。
+    for (let i = 1; i <= 8; i += 1) {
+      sampler.sample(i * 3, "heuristic", startMs + i * 250);
+    }
+    const heuristicTail = sampler.freeze();
+    assert.ok(heuristicTail != null && heuristicTail > 0);
+
+    // 真值低于累计估值（向下校正）：重 seed 后窗口只有 1 个样本 → null，
+    // 不产负值、不产尖刺（与上调方向同构）。
+    const atCorrection = sampler.sample(600, "usage", startMs + 2_050);
+    assert.equal(atCorrection, null, "下调翻转瞬间不应产出速率");
+
+    // 单样本：freeze 回落到翻转前末值（真值尺度尚未成窗口）。
+    assert.equal(sampler.freeze(), heuristicTail);
+
+    // 同源增长期：速率非负且从真值起算（600→615 in 250ms = 60 t/s）。
+    const risen = sampler.sample(615, "usage", startMs + 2_300);
+    assert.ok(
+      risen != null && Number.isFinite(risen) && risen >= 0 && Math.abs(risen - 60) <= 1,
+      `下调后速率应从真值起算（≈60）：${risen}`
+    );
+    assert.ok(
+      Math.abs(sampler.freeze()! - 60) <= 1,
+      "freeze 末值同样从真值起算"
+    );
+
+    // 同源下调（补发回退/抖动）不得产出负速率：分子取 max(0, Δ)。
+    const dropped = sampler.sample(590, "usage", startMs + 2_550);
+    assert.equal(dropped, 0, "同源负增量应归零而非负值");
+  });
+
   it("reset 后跨 run 差分不残留", () => {
     const sampler = createTokenRateSampler();
     sampler.sample(5_000, "usage", 100_000);
@@ -136,6 +191,41 @@ describe("createTokenRateSampler（T-M10 校正重置）", () => {
     const r1 = sampler.sample(200, "usage", 100_500);
     const r2 = sampler.sample(200, "usage", 101_000);
     assert.ok(r1 != null && r2 != null && r2 < r1);
+  });
+
+  it("同毫秒多条 delta 只留最终累计值（core-metrics/B-1）", () => {
+    const sampler = createTokenRateSampler();
+    const startMs = 100_000;
+    // 同一渲染节拍内的 3 条 delta（累计 100 → 200 → 300）：同刻去重后只剩
+    // 一条样本，窗口样本不足 → null，而不是「300 t ÷ 0~几毫秒」的爆表值。
+    sampler.sample(100, "usage", startMs);
+    sampler.sample(200, "usage", startMs);
+    const sameTick = sampler.sample(300, "usage", startMs);
+    assert.equal(sameTick, null, "同刻只剩 1 条样本应按样本不足省略速率段");
+    // 5ms 后只读：仍是 null——旧实现此时会给出 300 t ÷ 5ms = 60000 t/s。
+    assert.equal(sampler.rateAt(startMs + 5), null);
+    // 第二时刻样本到达后恢复：分子只算真实增量（300 → 350 in 5ms）。
+    const next = sampler.sample(350, "usage", startMs + 5);
+    assert.equal(next, 10_000);
+  });
+
+  it("时钟回拨期采样入口丢弃、序列不倒序，恢复后照常记样本（core-metrics/B-4）", () => {
+    const sampler = createTokenRateSampler();
+    const startMs = 100_000;
+    sampler.sample(0, "usage", startMs);
+    sampler.sample(50, "usage", startMs + 250);
+    sampler.sample(100, "usage", startMs + 500);
+    // 回拨 250ms：末样本（+500）成为未来样本 → 只按 0→50 算 200 t/s。
+    assert.equal(sampler.rateAt(startMs + 250), 200);
+    // 回拨期间继续采样：不新增样本（避免序列倒序污染后续窗口）。
+    sampler.sample(150, "usage", startMs + 300);
+    assert.equal(sampler.rateAt(startMs + 250), 200);
+    // 时钟追上（同刻）→ 就地替换末样本；增量按真实累计值补齐。
+    sampler.sample(200, "usage", startMs + 500);
+    assert.equal(sampler.rateAt(startMs + 500), 400);
+    // 再前进 → 正常记样本。
+    const resumed = sampler.sample(250, "usage", startMs + 750);
+    assert.equal(resumed, 250_000 / 750);
   });
 
   it("rateAt 只读不记样本：同 nowMs 幂等、暂停期随 nowMs 衰减、样本不足 null", () => {

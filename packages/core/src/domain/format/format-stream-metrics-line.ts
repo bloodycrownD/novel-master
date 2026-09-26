@@ -9,6 +9,8 @@
  * @module domain/format/format-stream-metrics-line
  */
 
+import {formatCharCount} from "./format-char-count.js";
+
 /** 流式 metrics 展示切片。 */
 export type StreamMetricsLineInput = {
   readonly running: boolean;
@@ -19,7 +21,13 @@ export type StreamMetricsLineInput = {
   readonly tokensPerSecond: number | null;
 };
 
-function formatStreamElapsed(seconds: number): string {
+/**
+ * 历经秒数 → 展示文案：60s 内一位小数（`12.3s`）、60s 起取整（`61s`）。
+ *
+ * core 单点实现，双端 hook（mobile / desktop）直接引用，不再各自维护副本
+ * ——口径漂移会让两端文案不一致。
+ */
+export function formatStreamElapsed(seconds: number): string {
   if (seconds < 60) {
     return `${seconds.toFixed(1)}s`;
   }
@@ -46,7 +54,7 @@ export function buildStreamMetricsLine(
   const prefix = metrics.running ? "生成中" : "上次生成";
   const parts: string[] = [
     `${prefix} · ${elapsedLabel}`,
-    `输出 ${metrics.completionTokens.toLocaleString("zh-CN")} t`,
+    `输出 ${formatCharCount(metrics.completionTokens)} t`,
   ];
   if (metrics.tokensPerSecond != null) {
     parts.push(`${formatTokensPerSecondValue(metrics.tokensPerSecond)} t/s`);
