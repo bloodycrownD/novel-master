@@ -36,8 +36,18 @@
  *   生效；无空白超长串更快被切走，单次读值不会退化成几十毫秒的长耗时。代价是
  *   该场景下切点只能按固定步长落在词中间，边界误差略升（用误差换延迟）。
  *
- * 失败语义：`encode` 抛错（特殊 token 文本等）被吞掉，`tokens` 保持上一次成功
- * 读值，计数器不崩、不倒退。
+ * 失败语义：`encode` 抛错（特殊 token 文本等）分**两条路径**处理，互不掩盖——
+ * - **读值路径**（尾窗 encode 失败）：尾窗不被消费、字符不丢，`tokens` 保持
+ *   上一次成功读值；首次失败 `console.warn` 一次「尾窗不可编码，保持上一次
+ *   读值」，**不计入** {@link IncrementalTokenCounter.unencodableChars}
+ *   （本次没丢字，只是暂时读不出）；
+ * - **固化路径**（固化段 encode 失败）：按「1 字符 ≈ 1 token」的最坏上界
+ *   **兜底计入** `committedTokens`（宁可高估也不丢段，保证 `tokens` 单调不减），
+ *   首次失败 `console.warn` 一次并把本次字符数累加到
+ *   {@link IncrementalTokenCounter.unencodableChars}；尾窗照常推进（固化路径
+ *   存在的意义就是给内存封顶，不能因为失败就无限攒尾窗）。
+ *
+ * 计数器任何时候都不崩、不倒退。
  *
  * @module infra/tokenizer/logic/incremental-token-counter
  */
@@ -60,6 +70,18 @@ export interface IncrementalTokenCounter {
   push(delta: string): void;
   /** 当前估算 token 数（已固化前缀 + 尾窗重算；失败时保持上一次成功值）。 */
   readonly tokens: number;
+  /**
+   * 诊断量：**已按 1:1 兜底计入 `tokens` 的不可编码字符数**（只统计固化路径）。
+   *
+   * 语义收窄的原因：读值路径失败时尾窗没被消费、没丢字，把它计进来会让这一个
+   * 字段同时表达「丢了字」与「暂时读不出」两件事，排查时无法区分。读值路径的
+   * 失败只走一次性 `console.warn`。
+   *
+   * 跨 run 累计（`reset()` **不清零**）——它表达的是「这个计数器一生里吞掉过多少
+   * 不可编码字符」，清零会让「切模型后又开始丢字」在日志里消失；随对象消亡即可。
+   * 不进入任何投影 / 持久层。
+   */
+  readonly unencodableChars: number;
   /** 归零（新 run / 换会话）。 */
   reset(): void;
 }
@@ -185,6 +207,19 @@ export function createIncrementalTokenCounter(
   let tailDirty = false;
   /** 最近一次成功读值（编码失败时对外保持它）。 */
   let lastGoodTokens = 0;
+  /**
+   * 已按 1:1 兜底计入的不可编码字符数（诊断量，只统计固化路径；`reset()` 不清）。
+   */
+  let unencodableCharsValue = 0;
+  /**
+   * 两条失败路径各一个「已告警」标志——**必须分开**。
+   *
+   * 固化与读值是两种语义完全不同的失败（兜底计入 vs 保持上次读值），共用一个
+   * 标志会让「先发生过一次读值失败」把后续的固化失败静默掉，而固化失败才是
+   * 「静默丢字符」这条要治的问题。
+   */
+  let warnedCommitFailure = false;
+  let warnedReadFailure = false;
 
   /** 单次 encode 的失败安全包装：抛错 → null。 */
   const encodeChunk = (text: string): number | null => {
@@ -224,6 +259,15 @@ export function createIncrementalTokenCounter(
     if (tailDirty) {
       tailTokens = encodePiece(tail);
       tailDirty = false;
+      if (tailTokens === null && !warnedReadFailure) {
+        warnedReadFailure = true;
+        // 读值路径此前完全静默，「尾窗读不出来、指标条卡在某个数上」在真机上零
+        // 信号；本条告警是该现象唯一的可观测落点。首次打一次，后续静默防刷屏。
+        // 注意：本次没丢字（尾窗未消费），故不进 unencodableChars。
+        console.warn(
+          '[novel-master/incremental-token-counter] 尾窗不可编码，保持上一次读值',
+        );
+      }
     }
     return tailTokens;
   };
@@ -236,7 +280,21 @@ export function createIncrementalTokenCounter(
     const pieceTokens = encodePiece(piece);
     if (pieceTokens !== null) {
       committedTokens += pieceTokens;
+    } else {
+      // 兜底计入：按「1 字符 ≈ 1 token」的最坏上界计，宁可高估也不丢段——
+      // 旧实现只跳过 committedTokens 却照常推进 tail，这一段字符会永久蒸发，
+      // 且因为「固化部分没加、尾窗又短了」导致 tokens 读值倒退。
+      committedTokens += piece.length;
+      unencodableCharsValue += piece.length;
+      if (!warnedCommitFailure) {
+        warnedCommitFailure = true;
+        console.warn(
+          `[novel-master/incremental-token-counter] 不可编码 ${piece.length} 字符，按 1:1 兜底计入`,
+        );
+      }
     }
+    // 尾窗照常推进（切点在失败时同样有效）：固化路径的意义就是给内存封顶，
+    // 不能因为 encode 失败就无限攒尾窗。
     tail = tail.slice(cut);
   };
 
@@ -272,12 +330,16 @@ export function createIncrementalTokenCounter(
       lastGoodTokens = committedTokens + current;
       return lastGoodTokens;
     },
+    get unencodableChars(): number {
+      return unencodableCharsValue;
+    },
     reset(): void {
       committedTokens = 0;
       tail = "";
       tailTokens = 0;
       tailDirty = false;
       lastGoodTokens = 0;
+      // unencodableChars 刻意不清零：它是跨 run 的累计诊断量（见接口注释）。
     },
   };
 }

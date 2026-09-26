@@ -65,6 +65,16 @@ type MetricsAcc = {
   startedAtMs: number;
 };
 
+/**
+ * 估算器工厂失败的一次性告警标志（模块级，跨 run 累积）。
+ *
+ * 构造失败是「每次 run 都会再犯」的同一件事（编码表加载失败、运行环境缺
+ * 依赖等），不设去重的话每个 run 都会刷一条同样的 warn。去重后只在首次留下
+ * 信号——「桌面端指标条一直是启发式数字」这件事此前完全静默（mobile 侧同名
+ * 分支有 `console.warn`，双端不对称），真机上零线索。
+ */
+let warnedEstimatorFactoryFailure = false;
+
 function snapshotFromAcc(
   acc: MetricsAcc,
   elapsedMs: number,
@@ -208,8 +218,17 @@ export function useAgentStreamMetrics(
             text = created;
             thinking = createdSecond;
           }
-        } catch {
-          // 估算器构造失败：回退启发式（不阻断指标条）。
+        } catch (err) {
+          // 估算器构造失败：回退启发式（不阻断指标条）。首次打一条中文告警
+          // （与 mobile 侧 `getOrCreateEncoding` 失败分支对齐），后续同类失败
+          // 静默——回退行为本身不变。
+          if (!warnedEstimatorFactoryFailure) {
+            warnedEstimatorFactoryFailure = true;
+            console.warn(
+              "[novel-master/use-agent-stream-metrics] 估算器构造失败，回退启发式（不阻断指标条）",
+              err,
+            );
+          }
           text = null;
           thinking = null;
         }

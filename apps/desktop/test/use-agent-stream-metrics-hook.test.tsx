@@ -26,6 +26,7 @@ import {
 import { CHARACTERS_PER_TOKEN_RATIO } from "@novel-master/core/provider";
 import type { AgentStreamMetricsView } from "@/hooks/useAgentStreamMetrics";
 import type { UseAgentStreamCallbacks } from "@/hooks/useAgentStream";
+import { createIncrementalTokenCounter } from "@shared/logic/format";
 import type { IncrementalTokenCounter } from "@shared/logic/format";
 import type { ReactTestRenderer } from "react-test-renderer";
 
@@ -272,6 +273,10 @@ describe("useAgentStreamMetrics 状态机（desktop-metrics/test-1）", () => {
         get tokens() {
           return text.length;
         },
+        // 接口的必填诊断字段（core B-1 改法 #6）：假计数器不真的计数。
+        get unencodableChars() {
+          return 0;
+        },
         reset() {
           text = "";
         },
@@ -296,6 +301,137 @@ describe("useAgentStreamMetrics 状态机（desktop-metrics/test-1）", () => {
       await h.refresh(true, "s1:r1", 3);
       assert.equal(h.api().metrics?.completionTokens, 104);
       assert.equal(h.api().metrics?.tokenSource, "usage");
+    } finally {
+      await h.unmount();
+    }
+  });
+
+  // ↓ 以下三条的**声明顺序有依赖**：工厂抛错的告警去重标志是模块级的
+  // （`useAgentStreamMetrics.ts` 的 `warnedEstimatorFactoryFailure`，跨 run
+  // 累积）。「工厂失败留告警」那条必须排在任何别的「抛错工厂」用例之前，
+  // 否则它看到的是已被前序用例消耗掉的标志位、断言必然红。调换顺序请一并
+  // 调整这里的顺序。
+  it("工厂抛错：首次 console.warn 一次并带 err，后续同类失败不再打（去重）", async () => {
+    const warnings: unknown[][] = [];
+    const originalWarn = console.warn;
+    console.warn = (...args: unknown[]): void => {
+      warnings.push(args);
+    };
+    try {
+      // 每次调用都抛错（模拟编码表构造失败）。
+      const h = createMetricsHarness(() => {
+        throw new Error("js-tiktoken init failed");
+      });
+      try {
+        await h.render(true, "s1:r1");
+        // 回退行为不变：仍然出指标条，只是走启发式口径。
+        h.api().noteTextDelta("字".repeat(335));
+        await h.refresh(true, "s1:r1", 1);
+        assert.equal(h.api().metrics?.completionTokens, 100);
+
+        // 首次失败留痕：中文文案 + err 附参（此前该分支是空 catch，真机上
+        // 「指标条一直是启发式数字」零信号，与 mobile 侧不对称）。
+        assert.equal(warnings.length, 1);
+        assert.match(String(warnings[0]?.[0]), /回退启发式/);
+        assert.ok(warnings[0]?.[1] instanceof Error);
+
+        // 第二个 run 再失败：去重，不再刷屏。
+        await h.refresh(false, "s1:r1", 2);
+        await h.refresh(true, "s1:r2", 3);
+        h.api().noteTextDelta("字".repeat(335));
+        await h.refresh(true, "s1:r2", 4);
+        assert.equal(h.api().metrics?.completionTokens, 100);
+        assert.equal(
+          warnings.length,
+          1,
+          "同类失败只告警一次（去重标志跨 run 生效）",
+        );
+      } finally {
+        await h.unmount();
+      }
+    } finally {
+      console.warn = originalWarn;
+    }
+  });
+
+  it("工厂返回 null 与工厂抛错：两条降级路径都整条回退启发式（②未注入口径）", async () => {
+    // 前半：工厂返回 null（= 不可用，不抛错）。
+    const nullFactory = createMetricsHarness(() => null);
+    try {
+      await nullFactory.render(true, "s1:r1");
+      nullFactory.api().noteTextDelta("字".repeat(335));
+      await nullFactory.refresh(true, "s1:r1", 1);
+      assert.equal(
+        nullFactory.api().metrics?.completionTokens,
+        Math.ceil(335 / CHARACTERS_PER_TOKEN_RATIO),
+        "工厂返回 null：回退启发式折算",
+      );
+      assert.equal(nullFactory.api().metrics?.tokenSource, "heuristic");
+    } finally {
+      await nullFactory.unmount();
+    }
+
+    // 后半：工厂抛错（已由上一条用例消耗掉一次性告警，这里只关心读值口径）。
+    const throwingFactory = createMetricsHarness(() => {
+      throw new Error("js-tiktoken init failed");
+    });
+    try {
+      await throwingFactory.render(true, "s1:r1");
+      throwingFactory.api().noteTextDelta("字".repeat(335));
+      await throwingFactory.refresh(true, "s1:r1", 1);
+      assert.equal(
+        throwingFactory.api().metrics?.completionTokens,
+        Math.ceil(335 / CHARACTERS_PER_TOKEN_RATIO),
+        "工厂抛错：回退启发式折算（同样不阻断指标条）",
+      );
+      assert.equal(throwingFactory.api().metrics?.tokenSource, "heuristic");
+    } finally {
+      await throwingFactory.unmount();
+    }
+  });
+
+  it("注入真计数器且 encode 对特殊段抛错：completionTokens 单调不减（B-1 端到端）", async () => {
+    // 注入 core 真计数器（不是手写假实现），encode 对含 "!" 的段抛错——
+    // 对应真机上 js-tiktoken 遇特殊 token 文本（disallowedSpecial="all"）。
+    // 计数器跨过固化阈值时该段进入固化路径。
+    const h = createMetricsHarness(() =>
+      createIncrementalTokenCounter({
+        encode: text => {
+          if (text.includes("!")) {
+            throw new Error("special token text");
+          }
+          return text.length;
+        },
+      }),
+    );
+    try {
+      await h.render(true, "s1:r1");
+      const api = h.api();
+      const observed: number[] = [];
+      // 默认 tailChars 24 + commitStepChars 64 = 88 触发固化；这里推入
+      // 足够长的段落，确保跨越固化阈值。
+      const segments = [
+        "!".repeat(30),
+        "a".repeat(60),
+        "!".repeat(60),
+        "b".repeat(60),
+        "c".repeat(40),
+      ];
+      for (let i = 0; i < segments.length; i += 1) {
+        api.noteTextDelta(segments[i]!);
+        await h.refresh(true, "s1:r1", i + 1);
+        observed.push(h.api().metrics?.completionTokens ?? -1);
+      }
+      // 逐段单调不减：固化段 encode 失败时按 1:1 兜底计入，读值不得倒退。
+      for (let i = 1; i < observed.length; i += 1) {
+        assert.ok(
+          observed[i]! >= observed[i - 1]!,
+          `completionTokens 不得回退：第 ${i} 段 ${observed[i]} < ${observed[i - 1]}`,
+        );
+      }
+      // 末值等于累计字符数（1 字符 = 1 token，失败段 1:1 兜底 → 不丢段）。
+      const totalChars = segments.reduce((sum, s) => sum + s.length, 0);
+      assert.equal(observed[observed.length - 1], totalChars);
     } finally {
       await h.unmount();
     }

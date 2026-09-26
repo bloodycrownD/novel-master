@@ -162,6 +162,9 @@ describe('SessionStreamUnit partial 数组化性能护栏（T-N5）', () => {
       projectId: PROJECT_ID,
     });
     expect(hydrated.settleAsInterrupted()).toBe(true);
+    // completionTokens 走 usage 真值口径（>0）：水合的防御性重锚要把基线
+    // 锚成「读值 − 当前增量估算」，回填值必须原样读回、不被估算口径改写。
+    const hydratedTokens = 4_321;
     expect(
       hydrated.hydrateFromRunState({
         runId: RUN_ID,
@@ -170,8 +173,8 @@ describe('SessionStreamUnit partial 数组化性能护栏（T-N5）', () => {
         metrics: {
           textChars: TOTAL_CHARS,
           thinkingChars: 0,
-          completionTokens: 0,
-          tokenSource: 'heuristic',
+          completionTokens: hydratedTokens,
+          tokenSource: 'usage',
         },
         partialText: expectedText,
         partialThinking: '',
@@ -179,6 +182,8 @@ describe('SessionStreamUnit partial 数组化性能护栏（T-N5）', () => {
       }),
     ).toBe(true);
     expect(hydrated.snapshot().partialText).toBe(expectedText);
+    expect(hydrated.snapshot().metrics.completionTokens).toBe(hydratedTokens);
+    expect(hydrated.snapshot().metrics.tokenSource).toBe('usage');
     hydrated.destroy();
   });
 

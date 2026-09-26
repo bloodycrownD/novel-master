@@ -40,6 +40,7 @@ import {
   SESSION_STREAM_INGRESS_COALESCE_MS,
 } from '@/services/session-stream-unit';
 import type {SessionStreamWebviewHandle} from '@/services/session-stream-unit';
+import {createIncrementalTokenCounter} from '@novel-master/core/format';
 import type {IncrementalTokenCounter} from '@novel-master/core/format';
 import {resetKeepAliveStateForTests} from '@/services/agent-finished-notification';
 
@@ -1168,6 +1169,10 @@ describe('token 化指标（T-M5/T-M7）', () => {
         get tokens() {
           return text.length;
         },
+        // 接口的必填诊断字段（core B-1 改法 #6）：假计数器不真的计数。
+        get unencodableChars() {
+          return 0;
+        },
         reset() {
           text = '';
         },
@@ -1241,5 +1246,147 @@ describe('token 化指标（T-M5/T-M7）', () => {
     expect(h.manager.snapshot('a')?.metrics).toEqual(
       expect.objectContaining({completionTokens: 1, tokenSource: 'heuristic'}),
     );
+  });
+
+  it('注入降级：工厂返回 null 与「只建其一成功」都整条回退启发式（G-2）', () => {
+    // 场景一：工厂恒返回 null（编码不可用，不抛错）→ 整条回退启发式。
+    const nullFactory = createHarness({tokenEstimatorFactory: () => null});
+    startRunningRun(nullFactory, 'a', 'r1');
+    // ceil(13/3.35) = 4
+    publishTextDelta(nullFactory.eventBus, 'a', 'r1', 'step one body');
+    expect(nullFactory.manager.snapshot('a')?.metrics).toEqual(
+      expect.objectContaining({completionTokens: 4, tokenSource: 'heuristic'}),
+    );
+    publishThinkingDelta(nullFactory.eventBus, 'a', 'r1', '一二三四五');
+    // 累计 18 字符 → ceil(18/3.35) = 6
+    expect(nullFactory.manager.snapshot('a')?.metrics).toEqual(
+      expect.objectContaining({completionTokens: 6, tokenSource: 'heuristic'}),
+    );
+    nullFactory.manager.dispose();
+
+    // 场景二：只建其一成功（第一条计数器建成、第二条返回 null）——代码刻意
+    // 「两条都建成才启用」，半套状态会让正文/思考的增量口径不一致，整体回退。
+    let calls = 0;
+    const halfBuilt = createHarness({
+      tokenEstimatorFactory: () => {
+        calls += 1;
+        if (calls === 1) {
+          let text = '';
+          return {
+            push(delta: string) {
+              text += delta;
+            },
+            get tokens() {
+              return text.length;
+            },
+            get unencodableChars() {
+              return 0;
+            },
+            reset() {
+              text = '';
+            },
+          };
+        }
+        return null;
+      },
+    });
+    startRunningRun(halfBuilt, 'a', 'r1');
+    expect(calls).toBe(2);
+    publishTextDelta(halfBuilt.eventBus, 'a', 'r1', 'step one body');
+    // 半套未生效：读值是启发式 4（若误启用会是 1 字符 = 1 token 的 13）。
+    expect(halfBuilt.manager.snapshot('a')?.metrics).toEqual(
+      expect.objectContaining({completionTokens: 4, tokenSource: 'heuristic'}),
+    );
+    halfBuilt.manager.dispose();
+  });
+
+  it('注入跨 run：同会话二次 start 首读为 0，不带上一 run 的估算（G-2）', () => {
+    const created: number[] = [];
+    const h = createHarness({
+      tokenEstimatorFactory: () => {
+        created.push(created.length);
+        let text = '';
+        return {
+          push(delta: string) {
+            text += delta;
+          },
+          get tokens() {
+            return text.length;
+          },
+          get unencodableChars() {
+            return 0;
+          },
+          reset() {
+            text = '';
+          },
+        };
+      },
+    });
+    startRunningRun(h, 'a', 'r1');
+    // 首个 run 累计 8 t（1 字符 = 1 token 的假估算器，启发式只会给 3）。
+    publishTextDelta(h.eventBus, 'a', 'r1', 'abcdefgh');
+    expect(h.manager.snapshot('a')?.metrics.completionTokens).toBe(8);
+    expect(created).toHaveLength(2);
+
+    // 收尾后同会话再发起：读数从零起算，不串入上一 run 的 8 t。
+    publishFinished(h.eventBus, 'a', 'r1');
+    advanceStreamTimers();
+    h.runAgentTurn.mockImplementation(() => new Promise(() => undefined));
+    expect(h.manager.startRun('a', 'p', 'again').ok).toBe(true);
+    publishStarted(h.eventBus, 'a', 'r2');
+    // 两条估算器随新单元重新构造（工厂再被调用两次）。
+    expect(created).toHaveLength(4);
+    expect(h.manager.snapshot('a')?.metrics).toEqual({
+      textChars: 0,
+      thinkingChars: 0,
+      completionTokens: 0,
+      tokenSource: 'heuristic',
+    });
+    // 新 run 的首个 delta 从 0 起算（不带上一 run 的 8）。
+    publishTextDelta(h.eventBus, 'a', 'r2', 'ab');
+    expect(h.manager.snapshot('a')?.metrics.completionTokens).toBe(2);
+
+    h.manager.dispose();
+  });
+
+  it('注入真计数器且 encode 对特殊段抛错：投影 completionTokens 单调不减（B-1 端到端）', () => {
+    // 注入 core 真计数器（非手写假实现），encode 对含 "§" 的段抛错——对应
+    // 真机上 js-tiktoken 遇特殊 token 文本（disallowedSpecial="all"）。推入
+    // 足够长的段落让该段跨过固化阈值进入固化路径。
+    const h = createHarness({
+      tokenEstimatorFactory: () =>
+        createIncrementalTokenCounter({
+          encode: text => {
+            if (text.includes('§')) {
+              throw new Error('special token text');
+            }
+            return text.length;
+          },
+        }),
+    });
+    startRunningRun(h, 'a', 'r1');
+
+    const segments = ['a'.repeat(100), `§${'b'.repeat(120)}`, 'c'.repeat(50)];
+    let previous = 0;
+    for (const segment of segments) {
+      publishTextDelta(h.eventBus, 'a', 'r1', segment);
+      const current = h.manager.snapshot('a')!.metrics.completionTokens;
+      // 固化段 encode 失败按 1:1 兜底计入：读值不得因「固化部分没加、尾窗又
+      // 短了」而倒退（旧实现会在这里掉下去）。
+      expect(current).toBeGreaterThanOrEqual(previous);
+      previous = current;
+    }
+    // 末值 = 累计字符数（1 字符 = 1 token，失败段 1:1 兜底 → 一段不缺）。
+    expect(previous).toBe(
+      segments.reduce((sum, segment) => sum + segment.length, 0),
+    );
+
+    // usage 真值到达后增量继续叠加（不冻结、不倒退）。
+    publishUsage(h.eventBus, 'a', 'r1', 5000);
+    expect(h.manager.snapshot('a')!.metrics.completionTokens).toBe(5000);
+    publishTextDelta(h.eventBus, 'a', 'r1', 'd');
+    expect(h.manager.snapshot('a')!.metrics.completionTokens).toBe(5001);
+
+    h.manager.dispose();
   });
 });
