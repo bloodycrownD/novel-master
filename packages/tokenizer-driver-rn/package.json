@@ -17,6 +17,10 @@
     "./android-native-bridge": {
       "types": "./dist/android-native-bridge.d.ts",
       "import": "./dist/android-native-bridge.js"
+    },
+    "./encoding": {
+      "types": "./dist/encoding.d.ts",
+      "import": "./dist/encoding.js"
     }
   },
   "scripts": {

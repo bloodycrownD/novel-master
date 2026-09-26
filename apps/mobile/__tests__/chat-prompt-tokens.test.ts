@@ -11,6 +11,16 @@ const mockResolveTokenCounterModeForModel = jest.fn();
 const mockBuildSessionPromptInput = jest.fn();
 const mockResolveSavedModelId = jest.fn();
 const mockSerializePromptLlmInput = jest.fn(() => 'serialized');
+// 兜底路径（无模型早退 / build 失败）改走 RN 驱动的 cl100k 真分词器，不再走
+// `tokenCounters.heuristic.countText`。本套件整体 mock 掉了 `@novel-master/core/provider`，
+// 驱动的 encoding 子模块要从那里取 core 的计数 helper，因此这里连驱动一起 mock
+// 成可控值：既能钉住「确实没再走折算」，又不至于把整个 js-tiktoken 拉进单测。
+const mockCountTextWithDefaultEncoding = jest.fn((text: string) => 2345);
+
+jest.mock('@novel-master/tokenizer-driver-rn/encoding', () => ({
+  countTextWithDefaultEncoding: (text: string) =>
+    mockCountTextWithDefaultEncoding(text),
+}));
 
 jest.mock('@novel-master/core/provider', () => ({
   resolvePromptTokensWithBackfill: (...args: unknown[]) =>
@@ -80,6 +90,7 @@ describe('chat-prompt-tokens.service', () => {
     mockBuildSessionPromptInput.mockReset();
     mockResolveSavedModelId.mockReset();
     mockSerializePromptLlmInput.mockClear();
+    mockCountTextWithDefaultEncoding.mockClear();
   });
 
   it('formatPromptTokenUsageLabel shows percentage with context window', () => {
@@ -187,7 +198,7 @@ describe('chat-prompt-tokens.service', () => {
     });
   });
 
-  it('loadChatPromptTokenLabel without model uses heuristic suffix', async () => {
+  it('无模型早退：改走 cl100k 真计数，不再走 heuristic.countText', async () => {
     mockBuildSessionPromptInput.mockResolvedValue({
       definition: {},
       layout: {persist: [], dynamic: []},
@@ -195,15 +206,19 @@ describe('chat-prompt-tokens.service', () => {
     });
     mockResolveSavedModelId.mockReturnValue(undefined);
 
-    const label = await loadChatPromptTokenLabel(stubRuntime(), {
+    const runtime = stubRuntime();
+    const label = await loadChatPromptTokenLabel(runtime, {
       sessionId: 's1',
       projectId: 'p1',
     });
 
-    expect(label).toBe('~1K tokens (est.) · 预估');
+    // 折算 port（stub 里恒返回 1000）一次都不该被碰——碰了就说明改造没生效。
+    expect(runtime.tokenCounters.heuristic.countText).not.toHaveBeenCalled();
+    expect(mockCountTextWithDefaultEncoding).toHaveBeenCalledWith('serialized');
+    expect(label).toBe('~2.3K tokens (est.) · 预估');
   });
 
-  it('T7: loadChatPromptTokenLabelResilient falls back to heuristic suffix on build error', async () => {
+  it('T7: loadChatPromptTokenLabelResilient 构建失败时兜底也改走真分词器', async () => {
     mockBuildSessionPromptInput.mockRejectedValue(
       new Error('prompt build failed'),
     );
@@ -222,6 +237,31 @@ describe('chat-prompt-tokens.service', () => {
       projectId: 'p1',
     });
 
+    expect(runtime.tokenCounters.heuristic.countText).not.toHaveBeenCalled();
+    expect(mockCountTextWithDefaultEncoding).toHaveBeenCalledWith(
+      'user: hello',
+    );
+    expect(label).toBe('~2.3K tokens (est.) · 预估');
+  });
+
+  it('兜底：真分词器不可用（编码表建不起来）时才退回 heuristic.countText', async () => {
+    mockCountTextWithDefaultEncoding.mockReturnValueOnce(null as never);
+    mockBuildSessionPromptInput.mockResolvedValue({
+      definition: {},
+      layout: {persist: [], dynamic: []},
+      ctx: {workplaceDisplay: '', messages: []},
+    });
+    mockResolveSavedModelId.mockReturnValue(undefined);
+
+    const runtime = stubRuntime();
+    const label = await loadChatPromptTokenLabel(runtime, {
+      sessionId: 's1',
+      projectId: 'p1',
+    });
+
+    expect(runtime.tokenCounters.heuristic.countText).toHaveBeenCalledWith(
+      'serialized',
+    );
     expect(label).toBe('~1K tokens (est.) · 预估');
   });
 

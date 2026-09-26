@@ -175,6 +175,12 @@ module.exports = {
       repoRoot,
       'packages/tokenizer-driver-rn/dist/android-native-bridge.js',
     ),
+    // 编码表单例子（js-tiktoken，无 RN 运行时依赖）：app 侧纯逻辑服务直接复用它，
+    // 免得为了拿编码表把主入口的 react-native / 原生 bridge 一起拖进来。
+    '^@novel-master/tokenizer-driver-rn/encoding$': path.join(
+      repoRoot,
+      'packages/tokenizer-driver-rn/dist/encoding.js',
+    ),
     '^@novel-master/tokenizer-driver-rn$': path.join(
       repoRoot,
       'packages/tokenizer-driver-rn/dist/index.js',

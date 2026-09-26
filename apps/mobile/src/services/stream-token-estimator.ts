@@ -5,12 +5,13 @@
  * 真 BPE 尾窗增量计数（core 的 `createIncrementalTokenCounter`）：
  * - 用 `js-tiktoken/lite` 的真编码表（mobile 既有依赖，Metro 已重定向
  *   `tiktoken` shim，离线可用、零新增包体）；
- * - **编码表惰性单例 + 按编码名缓存**：构造要解析全量 ranks（实测
- *   cl100k_base 约 180–250ms、o200k_base 约 420ms），不能每次 run 重建；
- *   也**不在模块顶层构造**（RN 依赖 `fast-text-encoding` polyfill 先执行）。
- *   构造时机＝**会话切换时空闲预热**（`primeStreamTokenModelHint` 的
- *   `.then` 回调里 `setTimeout(..., 0)`），未就绪时在 `begin()`（run 起手）
- *   同步兜底；
+ * - **编码表惰性单例 + 按编码名缓存**（stream-metrics-native ④ 起下沉到
+ *   `@novel-master/tokenizer-driver-rn/encoding`，与驱动侧的兜底计数共用同一份
+ *   表，避免同进程建两份）：构造要解析全量 ranks（实测 cl100k_base 约
+ *   180–250ms、o200k_base 约 420ms），不能每次 run 重建；也**不在模块顶层
+ *   构造**（RN 依赖 `fast-text-encoding` polyfill 先执行）。构造时机＝**会话
+ *   切换时空闲预热**（`primeStreamTokenModelHint` 的 `.then` 回调里
+ *   `setTimeout(..., 0)`），未就绪时在 `begin()`（run 起手）同步兜底；
  * - 构造 / encode 失败一律返回 null → 调用方回退启发式；估算器内部对 encode
  *   抛错也已吞掉（保持上一次读值），这里只是把「整张编码表都建不起来」的
  *   情况挡在调用方之前。
@@ -39,19 +40,21 @@ import {
   mapVendorModelIdToTiktokenModel,
   resolveTokenizerFamily,
 } from '@novel-master/core/provider';
-import {Tiktoken, getEncodingNameForModel} from 'js-tiktoken/lite';
-// ranks 模块 ESM 侧是 default 导出、CJS 侧是命名导出：统一经
-// `(mod.default ?? mod)` 取值，防 ESM/CJS 解析差异（Metro/jest/Vite 三种环境）。
-import * as cl100kRanksModule from 'js-tiktoken/ranks/cl100k_base';
-import * as o200kRanksModule from 'js-tiktoken/ranks/o200k_base';
+import {getEncodingNameForModel} from 'js-tiktoken/lite';
+// 编码表的**单例缓存下沉到驱动**（stream-metrics-native ④）：本文件原来自己维护
+// 一份 `encodingByCacheKey`，而驱动侧的兜底计数（`count-prompt-llm-input`）也
+// 要用 cl100k——同进程两份表就是白付两次 185–248ms 的构造。驱动的
+// `getRnEncoding` 是惰性构造 + 按名缓存 + 构造失败缓存 null，与本文件原有策略
+// 逐条一致，故这里直接复用，语义不变、重复内存消失。
+// 走 `./encoding` 子路径而非主入口：主入口会连带拉进 `react-native` 与原生
+// bridge，而本服务只是纯逻辑。
+import {
+  getRnEncoding,
+  type RnEncodingName,
+} from '@novel-master/tokenizer-driver-rn/encoding';
 
 /** 支持的编码名（本模块只区分这两张表）。 */
-export type StreamTokenEncodingName = 'cl100k_base' | 'o200k_base';
-
-/** 编码器窄口（只要 encode 的 token 数）。 */
-interface TiktokenEncoding {
-  encode(text: string): ArrayLike<unknown>;
-}
+export type StreamTokenEncodingName = RnEncodingName;
 
 /** 会话级 vendor model id 提示缓存（异步解析结果；上限防无界增长）。 */
 const VENDOR_MODEL_HINT_CACHE_MAX = 32;
@@ -68,8 +71,8 @@ const vendorModelHintBySession = new Map<
 /** 在途解析（同会话去重，避免每次 startRun 都打一轮仓储）。 */
 const vendorModelHintInFlight = new Set<string>();
 
-/** 编码表按编码名缓存；null = 构造失败（不再重试）。 */
-const encodingByCacheKey = new Map<string, TiktokenEncoding | null>();
+/** 编码表按编码名缓存（惰性单例 + 构造失败缓存 null）已下沉到 RN 驱动
+ * （`getRnEncoding`），本文件不再自持一份 map——否则同进程会建两份表。 */
 
 /** 会话/模型仓储窄口（估算器只消费这一小撮读取方法）。 */
 export interface StreamTokenModelHintRuntime {
@@ -86,42 +89,6 @@ export interface StreamTokenModelHintRuntime {
       id: string,
     ): Promise<{vendorModelId: string} | null | undefined>;
   };
-}
-
-/** ranks 命名空间取默认导出兼容形态（ESM default vs CJS 命名导出）。 */
-function unwrapRanksModule(mod: unknown): unknown {
-  const candidate = mod as {default?: unknown} | null | undefined;
-  return candidate?.default ?? mod;
-}
-
-/** 取（或惰性构造）指定编码的编码表；构造失败返回 null 并缓存。 */
-function getOrCreateEncoding(
-  encodingName: StreamTokenEncodingName,
-): TiktokenEncoding | null {
-  const cached = encodingByCacheKey.get(encodingName);
-  if (cached !== undefined) {
-    return cached;
-  }
-  let encoding: TiktokenEncoding | null = null;
-  try {
-    const ranks =
-      encodingName === 'o200k_base'
-        ? unwrapRanksModule(o200kRanksModule)
-        : unwrapRanksModule(cl100kRanksModule);
-    encoding = new Tiktoken(ranks as never) as unknown as TiktokenEncoding;
-  } catch (err) {
-    console.warn(
-      '[novel-master/mobile] js-tiktoken encoding init failed, fallback to heuristic',
-      err,
-    );
-    encoding = null;
-  }
-  // 构造失败缓存 null 是**有意的「一次性降级，重试留给下次冷启动」**：同一
-  // 进程内反复重试同一条必然失败的构造只是白烧 CPU（缺 ranks / 环境未就绪
-  // 都不会在运行期自愈），代价是该进程后续一律走启发式——这是可接受的降级，
-  // 不是 bug。
-  encodingByCacheKey.set(encodingName, encoding);
-  return encoding;
 }
 
 /**
@@ -174,7 +141,7 @@ export function createStreamTokenEstimator(options?: {
   const encodingName = resolveStreamTokenEncodingName(
     options?.vendorModelId ?? null,
   );
-  const encoding = getOrCreateEncoding(encodingName);
+  const encoding = getRnEncoding(encodingName);
   if (encoding == null) {
     return null;
   }
@@ -265,10 +232,8 @@ export function primeStreamTokenModelHint(
       // 没赶上」的首 run（此时 `begin()` 会按 cl100k 起算并同步构造，不热就
       // 白付一次）。`setTimeout(..., 0)` 只是挪到下一个宏任务，不等于不卡。
       setTimeout(() => {
-        getOrCreateEncoding(
-          resolveStreamTokenEncodingName(vendorModelId),
-        );
-        getOrCreateEncoding('cl100k_base');
+        getRnEncoding(resolveStreamTokenEncodingName(vendorModelId));
+        getRnEncoding('cl100k_base');
       }, 0);
     })
     .catch(() => undefined)

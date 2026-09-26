@@ -23,6 +23,7 @@
   "countPromptLlmInput",
   "countPromptLlmInputHeuristicOnly",
   "countTokens",
+  "countTextWithIncrementalTokenizer",
   "createDefaultTokenCounterRegistry",
   "createLoggingFetch",
   "createModelRetryPolicyService",

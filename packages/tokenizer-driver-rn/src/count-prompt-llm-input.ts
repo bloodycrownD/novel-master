@@ -22,6 +22,7 @@ import {
   isNativeTokenizerAvailable,
   type NativeCountResponse,
 } from "./android-native-bridge.js";
+import { countTextWithDefaultEncoding } from "./impl/encoding-cache.js";
 
 type TiktokenModule = {
   encoding_for_model: (
@@ -63,6 +64,26 @@ function heuristicCount(text: string): number {
   return Math.ceil(text.length / CHARACTERS_PER_TOKEN_RATIO);
 }
 
+/**
+ * 兜底计数的**唯一落点**（stream-metrics-native ④）：真分词器（默认 cl100k）
+ * → 字符折算。
+ *
+ * 为什么兜底不再直接折算：`ceil(字符数 / 3.35)` 是**英文**口径，对中文正文
+ * （cl100k 约 1.64 字符/token）系统性低估 **82%~84%**。压缩阈值是拿这些数字
+ * 去卡上下文窗口的，低估意味着「快满了还在继续写」——这正是最该避免的组合。
+ * 换成 cl100k 后误差落到 0.5% 量级。
+ *
+ * 为什么这里**只有**字符折算作为最后一级：`countTextWithDefaultEncoding`
+ * 返回 null 的唯一原因是「整张编码表建不起来」（缺 ranks / 环境未就绪）。那种
+ * 情况下别无选择，但它是**一次性降级**（失败被缓存、本进程不重试），且返回的
+ * `counterKind` 仍是 `heuristic`，调用方（尤其压缩阈值）不会误以为这是家族级
+ * 的真分词器读数。
+ */
+function fallbackCount(text: string): number {
+  const real = countTextWithDefaultEncoding(text);
+  return real ?? heuristicCount(text);
+}
+
 interface SerializedCountResult {
   count: number;
   counterKind: TokenCounterKind;
@@ -90,7 +111,7 @@ async function countTiktoken(
   } catch {
     enc.free();
     return {
-      count: heuristicCount(serialized),
+      count: fallbackCount(serialized),
       counterKind: "heuristic",
       estimated: true,
     };
@@ -112,7 +133,7 @@ async function countSerialized(
 ): Promise<SerializedCountResult> {
   if (family === "heuristic") {
     return {
-      count: heuristicCount(serialized),
+      count: fallbackCount(serialized),
       counterKind: "heuristic",
       estimated: true,
     };
@@ -133,13 +154,17 @@ async function countSerialized(
       }
     }
     return {
-      count: heuristicCount(serialized),
-      counterKind: family,
+      count: fallbackCount(serialized),
+      // 原生分词器不可用（iOS / 未链接模块）时**必须**报 `heuristic` 而不是家族名：
+      // 这里跑的是 cl100k 近似，不是该家族的真 tokenizer。报家族名会让压缩阈值
+      // 把它当成「家族级精确读数」而不乘 0.85 安全系数，等于拿一个近似值卡精确
+      // 阈值——而 cl100k 对 claude/glm 这类非 OpenAI 家族本就有偏差。
+      counterKind: "heuristic",
       estimated: true,
     };
   }
   return {
-    count: heuristicCount(serialized),
+    count: fallbackCount(serialized),
     counterKind: "heuristic",
     estimated: true,
   };

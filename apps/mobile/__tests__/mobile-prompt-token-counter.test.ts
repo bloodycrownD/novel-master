@@ -61,12 +61,36 @@ jest.mock('tiktoken', () => ({
   encoding_for_model: (...args: unknown[]) => mockEncodingForModel(...args),
 }));
 
+// 兜底路径（原生不可用 / family=heuristic / 未知家族）现在走驱动自己的 cl100k
+// 编码表，而不是 app 侧或 driver 侧的字符折算。这里给一份**真 ranks**：
+// 「原生不可用时的读数到底有多大」正是本次改造要钉住的东西，用真表才量得出
+// 「远大于折算」这个差距（用 mock 假表量出来的倍数没有意义）。
+const {Tiktoken} = require('js-tiktoken/lite');
+const cl100kRanksModule = require('js-tiktoken/ranks/cl100k_base');
+const realCl100k = new Tiktoken(cl100kRanksModule.default ?? cl100kRanksModule);
+const cl100kCount = (text: string): number => realCl100k.encode(text).length;
+
+/** 中文正文（100 字符；折算会低估约 2 倍）。 */
+const ZH_TEXT =
+  '夜色如水，林间小径上落满了枯叶，风一吹便沙沙作响。她停下脚步，抬头望向灯火。';
+
 describe('tokenizer-driver-rn countPromptLlmInputRn', () => {
   beforeEach(() => {
     mockCountPrompt.mockReset();
     mockEncodingForModel.mockClear();
     nativeBridgeState.available = true;
     mockResolveFamily = 'claude';
+  });
+
+  afterEach(() => {
+    // 编码表单例是模块级缓存：故障注入用例改了构造器，必须还原，
+    // 否则会把「构造失败不再重试」的 null 缓存漏给后续用例。
+    const {
+      __resetRnEncodingCacheForTests,
+      __setRnEncodingFactoryForTests,
+    } = require('@novel-master/tokenizer-driver-rn');
+    __setRnEncodingFactoryForTests(null);
+    __resetRnEncodingCacheForTests();
   });
 
   it('calls native bridge for claude family', async () => {
@@ -141,7 +165,7 @@ describe('tokenizer-driver-rn countPromptLlmInputRn', () => {
     });
   });
 
-  it('falls back to heuristic when native bridge is unavailable', async () => {
+  it('原生不可用时改走 cl100k 真分词器（不再折算），counterKind 诚实标 heuristic', async () => {
     nativeBridgeState.available = false;
     const {__test__} = require('@novel-master/tokenizer-driver-rn');
 
@@ -153,10 +177,95 @@ describe('tokenizer-driver-rn countPromptLlmInputRn', () => {
 
     expect(mockCountPrompt).not.toHaveBeenCalled();
     expect(result).toEqual({
-      count: Math.ceil(10 / 3.35),
-      counterKind: 'claude',
+      count: cl100kCount('abcdefghij'),
+      counterKind: 'heuristic',
       estimated: true,
     });
+    // counterKind 报家族名 = 让压缩阈值以为这是 claude 真 tokenizer 的读数而不
+    // 乘 0.85 安全系数；实际跑的是 cl100k 近似，必须标 heuristic。
+    expect(result.counterKind).not.toBe('claude');
+  });
+
+  it('对照：原生不可用时中文读数远大于字符折算（钉住本次改造真的生效）', async () => {
+    nativeBridgeState.available = false;
+    const {__test__} = require('@novel-master/tokenizer-driver-rn');
+
+    const result = await __test__.countSerialized(
+      'claude',
+      ZH_TEXT,
+      'claude-3-5-sonnet',
+    );
+
+    const fold = Math.ceil(ZH_TEXT.length / 3.35);
+    // 折算对中文低估 82%~84%：cl100k 约 1.64 字符/token，真值应是折算的 2 倍
+    // 上下。1.5× 是保守下界，真值若与折算持平就说明改造没生效。
+    expect(result.count).toBeGreaterThan(fold * 1.5);
+    expect(result.count).toBe(cl100kCount(ZH_TEXT));
+    expect(result.counterKind).toBe('heuristic');
+    expect(result.estimated).toBe(true);
+  });
+
+  it('family=heuristic 与未知家族也走 cl100k 真计数（无折算落点）', async () => {
+    const {__test__} = require('@novel-master/tokenizer-driver-rn');
+
+    const heuristicFamily = await __test__.countSerialized(
+      'heuristic',
+      ZH_TEXT,
+      'local/any',
+    );
+    const unknownFamily = await __test__.countSerialized(
+      'brand-new-family' as never,
+      ZH_TEXT,
+      'vendor/whatever',
+    );
+
+    expect(heuristicFamily).toEqual({
+      count: cl100kCount(ZH_TEXT),
+      counterKind: 'heuristic',
+      estimated: true,
+    });
+    expect(unknownFamily).toEqual(heuristicFamily);
+  });
+
+  it('编码表建不起来时降级到字符折算，且失败不重试（缓存 null）', async () => {
+    const {
+      __test__,
+      __setRnEncodingFactoryForTests,
+      __resetRnEncodingCacheForTests,
+    } = require('@novel-master/tokenizer-driver-rn');
+    let attempts = 0;
+    __setRnEncodingFactoryForTests(() => {
+      attempts += 1;
+      throw new Error('ranks unavailable');
+    });
+    __resetRnEncodingCacheForTests();
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+    try {
+      const first = await __test__.countSerialized(
+        'claude',
+        'abcdefghij',
+        'claude-3-5-sonnet',
+      );
+      const second = await __test__.countSerialized(
+        'claude',
+        'abcdefghij',
+        'claude-3-5-sonnet',
+      );
+
+      const fold = Math.ceil(10 / 3.35);
+      expect(first).toEqual({
+        count: fold,
+        counterKind: 'heuristic',
+        estimated: true,
+      });
+      expect(second).toEqual(first);
+      // 「构造失败缓存 null 且不重试」是刻意的降级：同进程内反复重试同一条
+      // 必然失败的构造只是白烧 CPU。若这条红了，说明失败被重试了。
+      expect(attempts).toBe(1);
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 
   it('propagates native estimated:true on failure path', async () => {
@@ -181,7 +290,7 @@ describe('tokenizer-driver-rn countPromptLlmInputRn', () => {
     });
   });
 
-  it('heuristic uses 3.35 character ratio', () => {
+  it('字符折算仅剩最后一降级：3.35 口径本身不变（编码表建不起来时才用）', () => {
     const {__test__} = require('@novel-master/tokenizer-driver-rn');
     expect(__test__.heuristicCount('abcdefghij')).toBe(Math.ceil(10 / 3.35));
   });

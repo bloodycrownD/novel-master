@@ -27,6 +27,7 @@ export {
   mapVendorModelIdToTiktokenModel,
   isGpt0301TiktokenModel,
 } from "./logic/resolve-tokenizer-family.js";
+export { countTextWithIncrementalTokenizer } from "./logic/count-text-with-tokenizer.js";
 export { resolveContextWindowTokens } from "./logic/resolve-context-window.js";
 export { formatCounterKindLabel } from "./logic/format-counter-kind-label.js";
 export { formatTokenSourceLabel } from "./logic/format-token-source-label.js";

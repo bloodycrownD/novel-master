@@ -12,3 +12,15 @@ export {
   type NativeCountResponse,
 } from "./android-native-bridge.js";
 export { registerTokenizerRnDriver, RN_DRIVER_NAME } from "./register.js";
+export {
+  getRnEncoding,
+  getDefaultRnEncoding,
+  countTextWithDefaultEncoding,
+  DEFAULT_RN_ENCODING_NAME,
+  type RnEncodingName,
+  type RnTokenEncoding,
+} from "./impl/encoding-cache.js";
+export {
+  __resetRnEncodingCacheForTests,
+  __setRnEncodingFactoryForTests,
+} from "./impl/encoding-cache.js";

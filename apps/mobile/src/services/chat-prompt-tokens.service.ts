@@ -7,6 +7,12 @@
  * {@link resolveTokenCounterModeForModel} → `resolveCurrentPromptTokens`（API 优先，否则本地）。
  * {@link loadChatPromptTokenLabelResilient} falls back to visible-message heuristic
  * (`counterKind: "heuristic"`) when {@link buildSessionPromptInput} throws.
+ *
+ * stream-metrics-native ④：两处「拿不到模型 / 构建失败」的早退路径原本走
+ * `runtime.tokenCounters.heuristic.countText`（`ceil(字符数 / 3.35)`）。该折算
+ * 是**英文**口径，对中文正文系统性低估 82%~84%，而这两处恰恰是最需要保守
+ * 估计的场景，故已改走 RN 驱动的 cl100k 真分词器（`counterKind` 仍是
+ * `heuristic`、`estimated: true`——**近似**这件事不变，变的是读数本身）。
  */
 import {resolveSavedModelId} from '@novel-master/core/agent';
 
@@ -18,12 +24,32 @@ import {
   resolveTokenCounterModeForModel,
   serializePromptLlmInput,
 } from '@novel-master/core/provider';
+import {countTextWithDefaultEncoding} from '@novel-master/tokenizer-driver-rn/encoding';
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
 import {formatPromptTokenUsageLabel} from '@novel-master/core/common';
 import {
   buildSessionPromptInput,
   type SessionPromptScope,
 } from './session-prompt-input.service';
+
+/**
+ * 兜底口径的 token 数：真 cl100k 计数优先，编码表建不起来才退回字符折算。
+ *
+ * 为什么不直接用 `runtime.tokenCounters.heuristic.countText`：那个 port 是
+ * **同步**计数器且口径就是 `ceil(chars / 3.35)`，在中文下低估八成。RN 侧已经
+ * 有可用的真分词器（且会话切换时已被 `primeStreamTokenModelHint` 空闲预热过
+ * cl100k 兜底表），用它没有额外成本。
+ */
+function countFallbackTokens(
+  runtime: MobileNovelMasterRuntime,
+  serialized: string,
+): number {
+  const real = countTextWithDefaultEncoding(serialized);
+  if (real != null) {
+    return real;
+  }
+  return runtime.tokenCounters.heuristic.countText(serialized);
+}
 
 /**
  * 占用来源两态标签（`api` → 「上次请求」，其余 → 「预估」）由 core 的
@@ -69,7 +95,10 @@ export async function loadChatPromptTokenLabel(
     // 压缩评估路径由 agent-runner 传 tools，那是真口径（取舍说明见
     // `serializeToolsForTokenCount` 头注释）。
     const serialized = await serializePromptLlmInput(layout, ctx);
-    const count = runtime.tokenCounters.heuristic.countText(serialized);
+    // 无模型可用 → 只能按默认编码估算。仍然走真分词器（cl100k）而不是字符折算：
+    // 「预估」标签与 counterKind 语义不变，变的是读数——cl100k 已在会话切换
+    // 时被 primeStreamTokenModelHint 空闲预热，这里不会再白付一次构造。
+    const count = countFallbackTokens(runtime, serialized);
     return formatChatTokenLabel(
       {tokenCount: count, estimated: true, counterKind: 'heuristic', source: 'local'},
       undefined,
@@ -115,7 +144,7 @@ async function loadChatPromptTokenLabelFallback(
   const serialized = visible
     .map(m => `${m.role}: ${messageBodyText(m)}`)
     .join('\n\n');
-  const count = runtime.tokenCounters.heuristic.countText(serialized);
+  const count = countFallbackTokens(runtime, serialized);
 
   const workspaceModelId = (await runtime.state.getCurrentModelId()) ?? '';
   let savedModelId: string | undefined;
