@@ -27,14 +27,14 @@ dependency: docs/Iterations/mobile-perf-2026-09/prd.md
 - core 新增纯逻辑 `packages/core/src/infra/tokenizer/logic/incremental-token-counter.ts`（经 `@novel-master/core/format` 对双端开放）；
 - mobile 新增绑定 `apps/mobile/src/services/stream-token-estimator.ts`；`SessionStreamUnit` 增可选 `tokenEstimatorFactory`，由 `SessionStreamUnitManager` 透传、`novel-master-context.tsx` 装配；
 - desktop 新增绑定 `apps/desktop/renderer/hooks/stream-token-estimator.ts`；`useAgentStreamMetrics` 增可选估算器工厂参数，`ConversationPanel` 注入；
-- 无注入 = 旧启发式行为（既有测试与极简 runtime 零变化），投影形状不变。
+- 无注入时走旧启发式路径：**未收到 usage 前与旧口径严格一致；usage 到达后按 ①「基线 + 增量」口径**（见 `docs/Iterations/mobile-perf-2026-09/bugs/stream-multi-step-rate-freeze/spec.md`）。既有测试与极简 runtime 仍全绿，投影形状不变。
 
 ## 验收标准
 
 - **精度**（对同一文本全量 encode 真值）：中文长文误差 ≤1%、英文 ≤3%；
 - **性能**：单次 push（含读值）不退化成全量重算——纯中文无空白 12,000 字符的全量 encode 是 88s 量级，护栏必须能拦住它；
 - **健壮**：encode 抛错（特殊 token 文本）不崩、保持上一次读值；构造失败/解析不出编码时回退启发式；
-- **零回归**：不注入估算器的既有 path（含全部既有用例）行为不变。
+- **零回归**：不注入估算器的既有 path（含全部既有用例）**未收到 usage 前**行为不变；usage 到达后按 ① 的「基线 + 增量」口径，原 T-M5 断言已据此改写（见 ① spec 测试策略）。
 
 ## 测试用例
 

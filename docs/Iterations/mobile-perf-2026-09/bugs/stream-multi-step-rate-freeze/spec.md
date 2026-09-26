@@ -40,20 +40,20 @@ agile_trace: true
 ```
 
 - **不采用「每次 usage 都清窗」的更激进口径**：`gemini-sse-parser.ts` 每个候选块都 emit 一条 usage（累计值变化才发），而 `rateAt()` 没有回落值——逐条清窗会把实时速率反复清成 null（速率段闪没），是回归。窗口折叠重 seed 达到了同样的终态效果（`freeze()` 给出最后一段稳定速率）且无闪没。
-- 公开 API（`sample` / `rateAt` / `freeze` / `reset`）不变，既有 14 条 core 采样器用例全绿。
+- 公开 API（`sample` / `rateAt` / `freeze` / `reset`）不变：本轮改动前的基线是 **14 条** core 采样器用例，本轮新增 3 类后文件内共 **17 条**、全绿（`npx tsx --test test/domain/format/sliding-token-rate.test.ts` → `# tests 17 / # pass 17 / # fail 0`）。
 
 ### unit / hook：基线重锚
 
 - `completionTokens = max(0, 基线 + 增量估算)`；
 - usage 到达：`基线 = 真值 − 当时的增量估算`，`tokenSource = 'usage'` 保留为 provenance；
-- 未注入 token 估算器（见 `features/stream-live-token-estimator`）时，增量估算仍是 `ceil((textChars+thinkingChars)/3.35)`（对累计字符取 ceil），**与旧口径严格一致** → 既有 200+ 用例零行为变化；
+- 未注入 token 估算器（见 `features/stream-live-token-estimator`）时，增量估算仍是 `ceil((textChars+thinkingChars)/3.35)`（对累计字符取 ceil）：**未收到 usage 前与旧口径严格一致；usage 到达后按本 spec 的「基线 + 增量」口径**（这正是本条要治的缺陷）→ 既有用例仍全绿（断言已按「基线 + 增量」口径改写，见下方测试策略 T-M5）；
 - `metricsAcc` 形状不变（多个用例按精确形状 `toEqual`，内部状态不得混进投影），基线放单元私有字段。
 
 ## 测试策略
 
 ### 测试用例
 
-- core：窗口折叠后新样本重 seed（`freeze()` 回落折叠前末值）；跨静默（>2.5s）后旧样本不进窗口；时钟回拨分支不变（新增 3 类，合计 12 条采样器用例全绿）。
+- core：窗口折叠后新样本重 seed（`freeze()` 回落折叠前末值）；跨静默（>2.5s）后旧样本不进窗口；时钟回拨分支不变（新增 3 类，**合计 17 条**采样器用例全绿 = 基线 14 + 本轮 3）。
 - mobile：多步 run 用例（工具 step 无文本 + usage → 文本 step delta → token 继续增长、终态速率非 null）；原 T-M5 断言改写为「usage 后 delta 继续叠加」。
 - desktop：`noteUsage` 后增量累加、多 step。
 - 定向验证：core `test/domain/format/*`、`test/infra/tokenizer/*`（110 例全绿）；mobile 7 套件 120 例；desktop `use-agent-stream-metrics*` 8+10 例。

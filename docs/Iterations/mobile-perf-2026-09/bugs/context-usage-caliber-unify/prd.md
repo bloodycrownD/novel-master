@@ -46,6 +46,6 @@ dependency: docs/Iterations/mobile-perf-2026-09/prd.md
 
 ## 回归测试要点
 
-- core：读口跨重启语义（清空进程内热层后仍从 KKV 读到 api）、KKV 编解码容错（损坏/缺字段/指纹不符 → miss）、14 个失效挂点（至少覆盖 message.delete / rollback / 置位 / compaction / persistent-state）、tools 补计数（非空变大、空数组不变）；
+- core：读口跨重启语义（清空进程内热层后仍从 KKV 读到 api）、KKV 编解码容错（损坏/缺字段/指纹不符 → miss）、失效挂点覆盖消息增删改（至少覆盖 `message.append` / `message.delete` / rollback / 置位 / compaction / persistent-state）与切模型、切 Agent、导入、run 失败（**完整枚举见 spec 变更点表 #6**）、tools 补计数（非空变大、空数组不变）；
 - 压缩触发：KKV 命中（api，不吃 0.85 安全垫）与陈旧指纹降级两条路径 + 原 5 条阈值用例；
 - 双端显示：desktop / mobile 标签两态断言更新。

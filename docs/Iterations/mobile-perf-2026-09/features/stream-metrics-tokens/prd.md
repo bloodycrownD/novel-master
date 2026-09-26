@@ -23,7 +23,7 @@ dependency: []
 1. 新增流中 usage 事件（anthropic/gemini 流中累计、openai 流尾终值）；
 2. token 计数 usage 优先、heuristic 增量兜底、usage/done 到达时校正；
    - **2026-09-26 补充（用户拍板）**：校正语义定为「**usage 基线 + 增量偏移**」——usage 到达时把真值设为基线，此后 delta 的增量继续叠加（真值后不再停止回写）；速率采样在「source 翻转」与「窗口折叠后的首个新样本」两个校正点重 seed，保证多步 run（工具 step 静默 + 后续文本）终态仍有速率段。
-   - **2026-09-26 补充（用户拍板）**：实时估算从 `chars/3.35` 升级为 **js-tiktoken 尾窗增量**（纯中文/纯英文的误差各降一个量级）；估算器不注入时保持旧启发式行为不变（toolSource/source 字段语义与 DB 列不动）。
+   - **2026-09-26 补充（用户拍板）**：实时估算从 `chars/3.35` 升级为 **js-tiktoken 尾窗增量**（纯中文/纯英文的误差各降一个量级）；估算器不注入时走旧启发式路径（**未收到 usage 前与旧口径严格一致；usage 到达后按「基线 + 增量」口径**，见 spec 第 3 节；`tokenSource` 字段语义与 DB 列不动）。
 3. 速率改实时（时间窗口制，慢速流不冻结、高速流不抖动）；
 4. 双端数据链改造（mobile unit 投影 / desktop hook 直连 IPC，共用 core 格式与速率纯函数）；
 5. 中断现场恢复（run_state 持久化 token 口径）。
