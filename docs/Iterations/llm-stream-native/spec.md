@@ -54,7 +54,7 @@ SSE parser（增量，已就绪）→ runner（microtask 合并）→ unit 三�
 ### 2. 自建原生管子设计（Kotlin，`packages/llm-sse-native/`）
 
 - **不用 okhttp-sse**：port 纪律是「只搬字节不认协议」——SSE 帧解析留在 core JS（三家 parser 已就绪）；raw `response.body().source()` 读循环即可，零新增依赖。
-- 自有 `OkHttpClient`（独立 `ConnectionPool`；读超时默认 30s、callTimeout 默认 600s，均可 per-request 覆盖——OkHttp 克隆 builder 成本极低，RN 官方同款手法）。
+- 自有 `OkHttpClient`（独立 `ConnectionPool`；**client 级读超时恒禁用**——OkHttp readTimeout 从 connect 后首次读即计时，会罩住首字/响应等待；**流中空闲超时 30s 只在 headers 到达后经 `source.timeout()` 挂载**（首字豁免，对齐 ⑤ 回炉拍板，唯一兜底是 callTimeout）；callTimeout 默认 600s 整调用兜底，per-request 可覆盖——OkHttp 克隆 builder 成本极低，RN 官方同款手法。非流式 `request` 同享豁免：响应等待无 30s 界，仅 callTimeout 兜底。**实施修正记录（2026-09-26 真机验收反馈）**：初版把 readTimeout(30s) 设在 client 级，导致非流式大 prompt 等响应 >30s 超时 × 重试一次 ≈ 60s 报错（用户实锤），且流式首字等待也被 30s 罩住（违反首字豁免拍板，mock 实验首字毫秒级未暴露）——修正为上述分层形态）。
 - **合批**：native 读循环 append 进 StringBuilder 缓冲，100ms 定时器或 64KB 阈值先到者 flush 一次事件；flush 同时携带 `(requestId, text)`。
 - Native API 面（对齐 tokenizer 的 NativeModules 模式）：
   - `sseConnect(requestId, url, headersKv[], body, readTimeoutMs, callTimeoutMs)`；`sseAbort(requestId)`
@@ -112,7 +112,7 @@ parser 三家不动（已数组化）；`streamTextAccumRef`（RN 侧全量累�
 
 ### 7. 过渡态回收（`Connection: close` 条件化撤除）
 
-- **撤除形态是条件化的，不是全局删除**：`postSse` 逐请求运行时判定传输分支（第 3 节）——本次请求实际走 native 分支时不设 `Connection: close`（native 管子自带读超时 30s + callTimeout，首字与流中黑洞均有界）；运行时判定 **native transport 未注册/加载失败回落 XHR 时仍设 close**。理由：idle watchdog 构造时不武装、首个响应数据到达才启动空闲 deadline（`stream-watchdog.ts`——缓冲型模型首字可远超阈值的 ⑤ 回炉拍板），首字阶段的黑洞在 XHR 分支唯一兜底是 `xhr.timeout = SSE_WHOLE_CALL_TIMEOUT_MS`（600s）——若无 close 头，「高速流后死连接复用」黑洞会以 **10 分钟形态**回归，比过渡态前的永久挂起更隐蔽。close 头的设置从 XHR 分支无条件语句改为「XHR 分支且 native 未注册」条件语句。
+- **撤除形态是条件化的，不是全局删除**：`postSse` 逐请求运行时判定传输分支（第 3 节）——本次请求实际走 native 分支时不设 `Connection: close`（native 管子黑洞有界：首字由 callTimeout 600s 兜底、流中由空闲超时 30s + callTimeout 双重收敛）；运行时判定 **native transport 未注册/加载失败回落 XHR 时仍设 close**。理由：idle watchdog 构造时不武装、首个响应数据到达才启动空闲 deadline（`stream-watchdog.ts`——缓冲型模型首字可远超阈值的 ⑤ 回炉拍板），首字阶段的黑洞在 XHR 分支唯一兜底是 `xhr.timeout = SSE_WHOLE_CALL_TIMEOUT_MS`（600s）——若无 close 头，「高速流后死连接复用」黑洞会以 **10 分钟形态**回归，比过渡态前的永久挂起更隐蔽。close 头的设置从 XHR 分支无条件语句改为「XHR 分支且 native 未注册」条件语句。
 - 前置条件与回归实验（模拟器）：native 分支默认启用 + 读超时 30s 生效后，跑两组实验——native 注册路径：r1/r2 健康复用恢复（服务端日志同连接多请求）+ 死连接实验（杀服务器再发）在读超时窗口内收敛为可重试错误、无永久黑洞；回落路径（注销 native 模拟未注册）：请求头仍带 close（T-N3 断言），死连接场景由 close + xhr.timeout 兜底不回归。任一不过则整体保留 close 并登记。
 
 ## 最终项目结构

@@ -45,7 +45,13 @@ class LlmSseModule(reactContext: ReactApplicationContext) :
     const val EVENT_DONE = "LlmSseDone"
     const val EVENT_ERROR = "LlmSseError"
 
-    /** 读超时默认 30s：首字与流中黑洞的界；callTimeout 默认 600s：整调用兜底。 */
+    /**
+     * 流中空闲超时默认 30s：**只对已到达 headers 之后的读流生效**（sseConnect
+     * 在 execute() 返回后经 source.timeout() 挂载），首字等待不设此界——
+     * 缓冲型/推理型模型首字可远超 30s（llm-stream-timeout 回炉拍板：首字
+     * 豁免，唯一兜底是 callTimeout）；非流式 request 的响应等待同样豁免。
+     * callTimeout 默认 600s：整调用兜底（connect + 首字 + 流体全周期）。
+     */
     const val DEFAULT_READ_TIMEOUT_MS = 30_000L
     const val DEFAULT_CALL_TIMEOUT_MS = 600_000L
 
@@ -59,10 +65,18 @@ class LlmSseModule(reactContext: ReactApplicationContext) :
     private val JSON_MEDIA_TYPE = "application/json".toMediaType()
   }
 
-  /** 自有 OkHttpClient：独立 ConnectionPool（与 RN 网络层互不复用连接）。 */
+  /**
+   * 自有 OkHttpClient：独立 ConnectionPool（与 RN 网络层互不复用连接）。
+   *
+   * client 级读超时**恒禁用**（0 = 无限）：OkHttp 的 readTimeout 从 connect 后
+   * 的第一次读就开始计时，会罩住「等首字节/等响应」——非流式请求的响应
+   * 等待与流式的首字等待都是正常形态，不应设 30s 界（真机实锤：非流式
+   * 大 prompt 30s 超时 × 重试一次 = 用户看到的 ~60s 报错）。流中空闲检测
+   * 改在 headers 到达后经 source.timeout() 挂载（见 sseConnect）。
+   */
   private val baseClient: OkHttpClient = OkHttpClient.Builder()
     .connectionPool(ConnectionPool())
-    .readTimeout(DEFAULT_READ_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+    .readTimeout(0, TimeUnit.MILLISECONDS)
     .callTimeout(DEFAULT_CALL_TIMEOUT_MS, TimeUnit.MILLISECONDS)
     .build()
 
@@ -120,7 +134,9 @@ class LlmSseModule(reactContext: ReactApplicationContext) :
       emitError(requestId, "network", t.message ?: "build request failed")
       return
     }
-    val client = clientWithTimeouts(readTimeoutMs, callTimeoutMs)
+    val client = clientWithCallTimeout(callTimeoutMs)
+    // readTimeoutMs 语义 = 流中空闲超时（headers 到达后经 source.timeout() 挂载，
+    // 不罩首字等待——首字豁免，唯一兜底是 callTimeout）。
     val effectiveReadTimeoutMs =
       if (readTimeoutMs > 0) readTimeoutMs.toLong() else DEFAULT_READ_TIMEOUT_MS
     val call = client.newCall(request)
@@ -138,6 +154,9 @@ class LlmSseModule(reactContext: ReactApplicationContext) :
           if (source == null) {
             throw IOException("response body is null")
           }
+          // headers 已到（execute 返回）：从此刻起对流读挂 30s 空闲界——
+          // 流中停流检测；首字等待阶段已在 client 级豁免。
+          source.timeout().timeout(effectiveReadTimeoutMs, TimeUnit.MILLISECONDS)
           pumpStream(state, source)
           flushPending(state)
           finishStream(requestId, state)
@@ -239,18 +258,18 @@ class LlmSseModule(reactContext: ReactApplicationContext) :
   // 内部：请求构造 / 读循环 / 合批
   // ------------------------------------------------------------------
 
-  private fun clientWithTimeouts(readTimeoutMs: Int, callTimeoutMs: Int): OkHttpClient {
-    if (readTimeoutMs <= 0 && callTimeoutMs <= 0) {
+  /**
+   * per-request 整调用预算（克隆 builder 共享连接池，RN 官方同款手法）。
+   * 读超时不在此设置——client 级读超时已恒禁用（见 baseClient 注释），
+   * 流中空闲界由 sseConnect 在 headers 到达后经 source.timeout() 挂载。
+   */
+  private fun clientWithCallTimeout(callTimeoutMs: Int): OkHttpClient {
+    if (callTimeoutMs <= 0) {
       return baseClient
     }
-    val builder = baseClient.newBuilder()
-    if (readTimeoutMs > 0) {
-      builder.readTimeout(readTimeoutMs.toLong(), TimeUnit.MILLISECONDS)
-    }
-    if (callTimeoutMs > 0) {
-      builder.callTimeout(callTimeoutMs.toLong(), TimeUnit.MILLISECONDS)
-    }
-    return builder.build()
+    return baseClient.newBuilder()
+      .callTimeout(callTimeoutMs.toLong(), TimeUnit.MILLISECONDS)
+      .build()
   }
 
   private fun buildRequest(
