@@ -116,6 +116,30 @@ function summarizeBody(body: RequestInit["body"]): string | undefined {
   return `[${typeof body}]`;
 }
 
+/**
+ * 请求是否以流式形态发出。判据只看请求侧意图：
+ * - OpenAI / Anthropic：body JSON 的 `stream: true`；
+ * - Gemini：URL 的 `alt=sse`（其 body 不带 stream 字段）。
+ *
+ * 收窄理由：core 里唯一消费 `response.body` 的路径是 postSse 的 fetch 分支
+ * （`llm-sse-transport.ts` 的空 body 防御），因此「body 为 null 会让流式挂掉」
+ * 只对流式请求成立。非流式请求（含 mobile 走 native request 的 fetch shim）
+ * 成功响应 body 为 null 是正常形态，不该打「streaming may fail on RN」。
+ */
+function isStreamingRequest(url: string, body: RequestInit["body"]): boolean {
+  if (typeof body === "string") {
+    try {
+      const parsed: unknown = JSON.parse(body);
+      if (isRecord(parsed) && parsed.stream === true) {
+        return true;
+      }
+    } catch {
+      /* 非 JSON body 不是流式请求的形态，继续看 URL */
+    }
+  }
+  return /[?&]alt=sse(?:&|$)/.test(url);
+}
+
 /** Wraps fetch with console logging (no API keys). */
 export function createLoggingFetch(base: FetchFn = globalThis.fetch): FetchFn {
   return async (input, init) => {
@@ -157,7 +181,7 @@ export function createLoggingFetch(base: FetchFn = globalThis.fetch): FetchFn {
       } catch {
         /* ignore */
       }
-    } else if (hasBody === false) {
+    } else if (hasBody === false && isStreamingRequest(url, init?.body)) {
       console.warn(
         LOG_TAG,
         "  response.body is null (streaming may fail on RN)"

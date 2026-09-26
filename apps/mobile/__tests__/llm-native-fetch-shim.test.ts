@@ -5,11 +5,16 @@
  * - GET 分发（无 body，含 method 缺省）与 POST 分发（带 body）各一例
  * - 非 2xx 按 Response.ok 语义返回不 reject；网络/超时错误 reject
  *   NativeSseTransportError（有限收敛，不挂起）
+ * - 取消（shim-1）：signal 已 aborted 与请求途中 abort 两种时序均立刻
+ *   AbortError reject，不等 native 返回（连接不真断，限缩见 src 注释）
+ * - json()（shim-3）：非法 body 走 rejected Promise，不同步抛
  * - shim 被流式误用：body 为 null，postSse fetch 分支消费路径命中
  *   core「Empty streaming response body」防御抛 ProviderError
+ * - dev logging（shim-2）：body=null 的成功非流式响应不再误报
+ *   「streaming may fail on RN」；真实流式请求 body 缺失仍告警
  */
 
-import {NativeSseTransportError} from '@novel-master/llm-sse-native';
+import {NativeSseAbortError, NativeSseTransportError} from '@novel-master/llm-sse-native';
 import {
   LLM_NATIVE_FETCH_CALL_TIMEOUT_MS,
   createNativeRequestFetch,
@@ -31,6 +36,15 @@ const sseTransport = require('../../../packages/core/dist/infra/llm-protocol/log
   setShouldUseXhrForSseOverrideForTests: (value: boolean | undefined) => void;
   resetShouldUseXhrForSseCacheForTests: () => void;
 };
+
+/** native request 迟到 settle 用的 deferred（测取消时序）。 */
+function createDeferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((res) => {
+    resolve = res;
+  });
+  return {promise, resolve};
+}
 
 /** 造一个记录调用参数的 mock native request。 */
 function createMockRequest(
@@ -141,6 +155,26 @@ describe('llm-native-fetch-shim (T-N4)', () => {
       await expect(response.json()).resolves.toEqual({data: [{id: 'm-1'}]});
     });
 
+    it('json() 对非法 body 返回 rejected Promise（不同步抛，符合 fetch 契约）', async () => {
+      const request = createMockRequest({
+        status: 200,
+        contentType: 'text/plain',
+        body: 'not-json',
+      });
+      const shim = createNativeRequestFetch(request);
+
+      const response = await shim('https://api.example.com/v1/models', {
+        method: 'GET',
+      });
+
+      // 同步路径不得抛（旧实现 JSON.parse 在调用点直接执行）。
+      let promise: Promise<unknown> | undefined;
+      expect(() => {
+        promise = response.json();
+      }).not.toThrow();
+      await expect(promise).rejects.toBeInstanceOf(SyntaxError);
+    });
+
     it('非 2xx：按 Response.ok 语义返回不 reject，错误 body 经 text()/clone() 可读', async () => {
       const request = createMockRequest({
         status: 503,
@@ -211,6 +245,70 @@ describe('llm-native-fetch-shim (T-N4)', () => {
     });
   });
 
+  describe('取消语义（shim-1：读 init.signal，立刻收敛到 AbortError）', () => {
+    it('signal 已 aborted：立刻 reject AbortError，native 请求不发出', async () => {
+      const request = createMockRequest();
+      const shim = createNativeRequestFetch(request);
+      const controller = new AbortController();
+      controller.abort();
+
+      await expect(
+        shim('https://api.example.com/v1/models', {
+          method: 'GET',
+          signal: controller.signal,
+        }),
+      ).rejects.toMatchObject({name: 'AbortError'});
+      expect(request).not.toHaveBeenCalled();
+    });
+
+    it('请求途中 abort：立刻 reject AbortError，不等 native 返回（连接不真断，后台自结）', async () => {
+      const deferred = createDeferred<{
+        status: number;
+        contentType: string | null;
+        body: string;
+      }>();
+      const request = jest.fn(
+        () => deferred.promise,
+      ) as unknown as jest.Mock & LlmNativeRequestFn;
+      const shim = createNativeRequestFetch(request);
+      const controller = new AbortController();
+
+      const promise = shim('https://api.example.com/v1/chat', {
+        method: 'POST',
+        body: '{}',
+        signal: controller.signal,
+      });
+      controller.abort();
+      // abort 即 settle：native 的 deferred 还没 resolve，断言就能等到 rejection。
+      await expect(promise).rejects.toBeInstanceOf(NativeSseAbortError);
+      expect(request).toHaveBeenCalledTimes(1);
+
+      // native 侧迟到 settle：结果被丢弃，不产生未处理的 rejection、
+      // 也不再改写已 settle 的 promise。
+      deferred.resolve({
+        status: 200,
+        contentType: 'application/json',
+        body: '{"ok":true}',
+      });
+      await expect(promise).rejects.toMatchObject({name: 'AbortError'});
+    });
+
+    it('native 先 settle、abort 后到：按请求结果返回（赛跑口径）', async () => {
+      const request = createMockRequest();
+      const shim = createNativeRequestFetch(request);
+      const controller = new AbortController();
+
+      const response = await shim('https://api.example.com/v1/models', {
+        method: 'GET',
+        signal: controller.signal,
+      });
+      controller.abort();
+
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toEqual({ok: true});
+    });
+  });
+
   describe('流式误用边界（spec §4：body 置 null 命中 Empty body 防御）', () => {
     it('postSse fetch 分支消费 shim → 抛 Empty streaming response body ProviderError', async () => {
       // 强制 fetch 分支（绕过 XHR 择优），fetchFn 注入 shim——复现
@@ -236,6 +334,104 @@ describe('llm-native-fetch-shim (T-N4)', () => {
 
       // 误用不产生任何 chunk 投递（防御在 reader 建立前抛出）。
       expect(chunks).toEqual([]);
+    });
+  });
+
+  describe('dev logging（shim-2：收窄告警判据，非流式 body=null 不再误报）', () => {
+    // core 不公开 debug-fetch 子路径，告警判据在 core 侧；这里 deep-import dist
+    // 产物做黑盒断言（与上方 llm-sse-transport deep-import 同一口径；dist 重建
+    // 后本组即该判据的护栏）。
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const {createLoggingFetch: createLoggingFetchFromDist} = require('../../../packages/core/dist/infra/llm-protocol/logic/debug-fetch.js') as {
+      createLoggingFetch: (
+        base: typeof globalThis.fetch,
+      ) => typeof globalThis.fetch;
+    };
+
+    const originalDev = (globalThis as {__DEV__?: boolean}).__DEV__;
+    let logSpy: jest.SpyInstance;
+    let warnSpy: jest.SpyInstance;
+
+    beforeEach(() => {
+      (globalThis as {__DEV__?: boolean}).__DEV__ = true;
+      logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+      warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      (globalThis as {__DEV__?: boolean}).__DEV__ = originalDev;
+      logSpy.mockRestore();
+      warnSpy.mockRestore();
+    });
+
+    /** 是否命中「streaming may fail on RN」告警。 */
+    const warnedStreamingMayFail = (): boolean =>
+      warnSpy.mock.calls.some((call) =>
+        call.join(' ').includes('streaming may fail on RN'),
+      );
+
+    it('body=null 的成功非流式响应（GET / stream:false POST）不产生流式告警', async () => {
+      const request = createMockRequest({
+        status: 200,
+        contentType: 'application/json',
+        body: '{"data":[]}',
+      });
+      const logged = createLoggingFetchFromDist(
+        createNativeRequestFetch(request) as unknown as typeof globalThis.fetch,
+      );
+
+      await logged('https://api.example.com/v1/models', {
+        method: 'GET',
+        headers: {},
+      });
+      await logged('https://api.example.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({model: 'gpt-test', stream: false, messages: []}),
+      });
+
+      expect(warnedStreamingMayFail()).toBe(false);
+    });
+
+    it('真实流式请求（body stream:true）响应 body 缺失仍告警', async () => {
+      const request = createMockRequest({
+        status: 200,
+        contentType: 'text/event-stream',
+        body: 'data: {}\n\n',
+      });
+      const logged = createLoggingFetchFromDist(
+        createNativeRequestFetch(request) as unknown as typeof globalThis.fetch,
+      );
+
+      await logged('https://api.example.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({model: 'gpt-test', stream: true, messages: []}),
+      });
+
+      expect(warnedStreamingMayFail()).toBe(true);
+    });
+
+    it('Gemini 流式（URL alt=sse，body 无 stream 字段）响应 body 缺失仍告警', async () => {
+      const request = createMockRequest({
+        status: 200,
+        contentType: 'text/event-stream',
+        body: 'data: {}\n\n',
+      });
+      const logged = createLoggingFetchFromDist(
+        createNativeRequestFetch(request) as unknown as typeof globalThis.fetch,
+      );
+
+      await logged(
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini:streamGenerateContent?key=k&alt=sse',
+        {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({contents: []}),
+        },
+      );
+
+      expect(warnedStreamingMayFail()).toBe(true);
     });
   });
 });

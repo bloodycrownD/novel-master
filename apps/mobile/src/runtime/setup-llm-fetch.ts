@@ -23,9 +23,7 @@ import {createMobileLlmFetch} from '../services/llm-native-fetch-shim';
 
 let configured = false;
 
-/**
- * Registers native SSE transport + non-streaming fetch shim once per process.
- */
+/** 每进程注册一次：native SSE transport + 非流式 fetch shim。 */
 export function ensureLlmFetchConfigured(): void {
   if (configured) {
     return;

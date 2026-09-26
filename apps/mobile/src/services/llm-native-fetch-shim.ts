@@ -10,12 +10,17 @@
  *   的「Empty streaming response body」防御抛明确 ProviderError，不静默挂起。
  * - 本模块是纯传输适配，零日志组合逻辑；dev 日志由装配层
  *   `createLoggingFetch(shim)` 在最外层统一包装（setup-llm-fetch.ts）。
+ * - 取消：读 `init.signal`——已取消立刻以 AbortError 拒绝（native 请求不发出）；
+ *   请求途中取消同样立刻 reject。**已知限缩**：native `request` 没有 abort 面，
+ *   这次取消不会真断底层连接——那次请求仍在后台跑完（最迟 callTimeout 600s），
+ *   只是结果被丢弃。对外可见行为正确：停止按钮立刻生效，不再等 600s。
  *
  * @module services/llm-native-fetch-shim
  */
 
 import {NativeModules} from 'react-native';
 import {
+  NativeSseAbortError,
   NativeSseTransportError,
   flattenRequestHeaders,
 } from '@novel-master/llm-sse-native';
@@ -30,6 +35,9 @@ import type {LlmSseNativeModule} from '@novel-master/llm-sse-native/native';
  * 正常 listModels / chatNonStream（含长思考回复）远小于该预算。
  */
 export const LLM_NATIVE_FETCH_CALL_TIMEOUT_MS = 600_000;
+
+/** request 路径没有 requestId 路由（请求-响应一锤子），错误标签固定占位。 */
+const NATIVE_FETCH_REQUEST_ID = 'llm-native-fetch';
 
 /** native `request` 函数形状（装配层注入，测试 mock 点）。 */
 export type LlmNativeRequestFn = LlmSseNativeModule['request'];
@@ -75,7 +83,9 @@ function makeShimResponse(
     headers,
     body: null,
     text: () => Promise.resolve(bodyText),
-    json: () => Promise.resolve(JSON.parse(bodyText)),
+    // async 形状对齐 fetch Response 契约：JSON.parse 失败时返回 rejected
+    // Promise，而不是同步 throw（调用方按 Promise reject 捕才捕得到）。
+    json: async () => JSON.parse(bodyText),
     // logging 在 !ok 时会 clone().text() 打错误 body——body 文本在手，直接再造一份。
     clone: () => makeShimResponse(status, contentType, bodyText),
   };
@@ -95,8 +105,7 @@ function toTransportError(err: unknown): unknown {
     return new NativeSseTransportError(
       code,
       err instanceof Error ? err.message : String(err),
-      // request 路径没有 requestId 路由（请求-响应一锤子），用固定标签占位。
-      'llm-native-fetch',
+      NATIVE_FETCH_REQUEST_ID,
     );
   }
   return err;
@@ -114,18 +123,68 @@ function toUrlString(input: Parameters<FetchLike>[0]): string {
 }
 
 /**
+ * 让 native 调用与 `signal` 的 abort 事件赛跑：abort 先到就以 AbortError 形态
+ * 立刻 settle，native 那次请求放后台自行结束、结果丢弃。
+ *
+ * 已知限缩（与模块注释同一口径）：native `request` 暂无 abort 面，取消不会真断
+ * 底层连接——它最迟跑完整个 callTimeout（600s），只是没人再消费结果。用户可以
+ * 感知的部分是对的：停止按钮立刻生效。赛跑两侧都挂了 settle 处理，迟到结果
+ * （成功或失败）不会变成未处理的 rejection。
+ */
+function raceWithAbort<T>(call: Promise<T>, signal: AbortSignal): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    let settled = false;
+    const onAbort = (): void => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      reject(new NativeSseAbortError(NATIVE_FETCH_REQUEST_ID));
+    };
+    // once：命中后自动摘除；未命中则在 native 侧 settle 时手动摘除。
+    signal.addEventListener('abort', onAbort, {once: true});
+    call.then(
+      (value) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        signal.removeEventListener('abort', onAbort);
+        resolve(value);
+      },
+      (err: unknown) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        signal.removeEventListener('abort', onAbort);
+        reject(err);
+      },
+    );
+  });
+}
+
+/**
  * 以注入的 native `request` 为底座构建 fetch 形状函数（纯适配器，不读全局）。
  *
  * method 分发：按 `init.method` 分发到 native `request(method, ...)`——
  * GET 不传 body（listModels 三家均为 GET）；POST 携带 JSON string body
  * （chatNonStream 走 fetchJson 的请求-响应形态）。native `request` 只收
  * GET/POST（Kotlin 侧按 GET/其余 二分），其余 method 属误用，直接抛错。
+ *
+ * 取消：`init.signal` 已 aborted 时直接拒绝（native 请求不发出）；请求途中
+ * abort 也立刻以 AbortError 拒绝，不等 native 返回（限缩见 raceWithAbort）。
  */
 export function createNativeRequestFetch(request: LlmNativeRequestFn): FetchLike {
   const fetchLike = async (
     input: Parameters<FetchLike>[0],
     init?: Parameters<FetchLike>[1],
   ): Promise<ShimResponse> => {
+    const signal = init?.signal ?? undefined;
+    if (signal?.aborted === true) {
+      // fetch 语义：aborted signal 立即以 AbortError 拒绝；native 请求不发出。
+      throw new NativeSseAbortError(NATIVE_FETCH_REQUEST_ID);
+    }
     const url = toUrlString(input);
     const method = (init?.method ?? 'GET').toUpperCase();
     if (method !== 'GET' && method !== 'POST') {
@@ -149,7 +208,7 @@ export function createNativeRequestFetch(request: LlmNativeRequestFn): FetchLike
 
     let result: NativeRequestResult;
     try {
-      result = (await request(
+      const nativeCall = request(
         method,
         url,
         flattenRequestHeaders(init?.headers as Parameters<
@@ -157,8 +216,17 @@ export function createNativeRequestFetch(request: LlmNativeRequestFn): FetchLike
         >[0]),
         body,
         LLM_NATIVE_FETCH_CALL_TIMEOUT_MS,
-      )) as NativeRequestResult;
+      ) as Promise<NativeRequestResult>;
+      result =
+        signal == null
+          ? await nativeCall
+          : await raceWithAbort(nativeCall, signal);
     } catch (err) {
+      if (err instanceof NativeSseAbortError) {
+        // 用户取消是终态：AbortError 形态原样上抛，不套传输错误映射——core 的
+        // isAbortLikeError / isRequestAborted 按 name 识别。
+        throw err;
+      }
       // 网络失败 / callTimeout 到点：reject（与 fetch 的网络错误语义一致）；
       // 非 2xx 不在这里出现——native request 对非 2xx 不 reject，
       // status 与 body 原样带回，由 Response.ok 语义交给消费面 assertOk。
