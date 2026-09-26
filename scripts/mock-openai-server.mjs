@@ -16,6 +16,11 @@
  *   mock-dead  第 --hang-after N 次请求起挂死：收到请求永不响应，保持连接
  *   其它模型名按 mock-slow 的速率正常响应（日志标注 unknown），方便对照
  *
+ * task 工具触发（子会话 e2e）：**末条消息**含「派活」即下发一条 `task` 工具调用
+ *   （只看最后一条；`general` 子代理，子任务正文固定），用于在无真模型/不耗额度的
+ *   情况下把子会话跑起来；父会话拿到 tool 结果后的复问（末条是 tool 结果）、子会话
+ *   自身请求（末条是 task prompt，不含该词）均不触发，故不会递归派活。
+ *
  * SSE 形态忠实对齐 OpenAI：
  *   - 每个事件形如 `data: {json}\n\n`，逐 chunk 定时下发
  *   - 首个 chunk 带 delta.role，中间 chunk 带固定中文语料切出的 delta.content，
@@ -306,6 +311,108 @@ function estimatePromptTokens(messages) {
     n + (typeof m?.content === 'string' ? m.content.length : JSON.stringify(m?.content ?? '').length), 0);
 }
 
+/**
+ * 触发 task 工具调用的关键词：父会话 prompt 里带上它即「派活」（见
+ * {@link shouldEmitTaskCall}）。子会话侧的 task prompt 不含该词，故不会递归。
+ */
+const TASK_MARKER = '派活';
+
+/**
+ * 子会话 e2e 触发器：**最后一条消息**是带 {@link TASK_MARKER} 的用户消息时，
+ * 回一次 `task` 工具调用（把子智能体真派起来）。判定只看最后一条，避免两个坑：
+ * 历史里累积的旧 tool 结果不会误伤（父会话在同会话里再派活仍可触发）；父会话
+ * 拿到 tool 结果后的复问（末条是 tool 结果）与子会话自己的请求（末条是 task
+ * prompt，不含标记）都会走正常文本流，不会递归派活。
+ */
+function shouldEmitTaskCall(messages) {
+  if (!Array.isArray(messages) || messages.length === 0) return false;
+  const last = messages[messages.length - 1];
+  if (last?.role !== 'user') return false;
+  const text = typeof last.content === 'string'
+    ? last.content
+    : JSON.stringify(last.content ?? '');
+  return text.includes(TASK_MARKER);
+}
+
+/** SSE 流式回复：直接产出一条 task 工具调用（stream-metrics 子会话验证用） */
+function respondTaskToolCall(req, res, model, intervalMs, promptTokens, ctxLine) {
+  const args = JSON.stringify({
+    description: '夜景描写练习',
+    prompt: '写一段约 400 字的夜景描写，然后告诉我你写了多少字。',
+    subagentName: 'general',
+  });
+  // 参数按 24 字节切片分多个 delta 下发：覆盖解析器的 arguments 拼接路径
+  const pieces = args.match(/[\s\S]{1,24}/g) ?? [];
+  const id = 'chatcmpl-' + randomUUID().replace(/-/g, '').slice(0, 24);
+  const created = Math.floor(Date.now() / 1000);
+
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': cli.keepAlive ? 'keep-alive' : 'close',
+    'X-Mock-Model': model,
+  });
+  const send = (payload) => res.write(`data: ${JSON.stringify(payload)}\n\n`);
+  log(`${ctxLine} -> SSE task 工具调用（arguments ${args.length} 字节 / ${pieces.length} 片）`);
+
+  let step = 0;
+  let finished = false;
+  const finish = () => {
+    if (finished) return;
+    finished = true;
+    clearInterval(timer);
+  };
+
+  const timer = setInterval(() => {
+    if (res.destroyed || res.writableEnded) {
+      finish();
+      log(`${ctxLine} !! 客户端提前断开，task 调用在第 ${step} 步中止`);
+      return;
+    }
+    if (step === 0) {
+      send(chunkPayload(id, created, model, { role: 'assistant', content: '' }, null));
+    } else if (step === 1) {
+      send(chunkPayload(id, created, model, {
+        tool_calls: [{
+          index: 0,
+          id: 'call_task_1',
+          type: 'function',
+          function: { name: 'task', arguments: '' },
+        }],
+      }, null));
+    } else if (step <= pieces.length + 1) {
+      send(chunkPayload(id, created, model, {
+        tool_calls: [{ index: 0, function: { arguments: pieces[step - 2] } }],
+      }, null));
+    } else if (step === pieces.length + 2) {
+      send(chunkPayload(id, created, model, {}, 'tool_calls'));
+    } else if (step === pieces.length + 3) {
+      send({
+        id, object: 'chat.completion.chunk', created, model,
+        choices: [],
+        usage: {
+          prompt_tokens: promptTokens,
+          completion_tokens: 48,
+          total_tokens: promptTokens + 48,
+        },
+      });
+      res.write('data: [DONE]\n\n');
+      finish();
+      log(`${ctxLine} <- SSE task 调用完成（子会话应已开出）`);
+      res.end();
+      return;
+    }
+    step++;
+  }, Math.max(intervalMs, 8));
+
+  res.on('close', () => {
+    if (!res.writableEnded) {
+      finish();
+      log(`${ctxLine} !! 连接关闭，停止 task 调用下发（第 ${step} 步）`);
+    }
+  });
+}
+
 /** POST /v1/chat/completions 主逻辑：解析 -> 按模型编排 -> 流式/非流式 */
 async function handleChat(req, res, ctxLine) {
   let body;
@@ -356,6 +463,12 @@ async function handleChat(req, res, ctxLine) {
   const behavior = MODELS[model];
   const intervalMs = behavior?.intervalMs ?? cli.intervalMs;
   if (!behavior) log(`${ctxLine} 注意：未知模型 ${model}，按 --interval-ms=${cli.intervalMs} 正常回包`);
+
+  // ---- task 工具调用触发（子会话 e2e）：先于普通文本流分流 ----
+  if (stream && shouldEmitTaskCall(parsed.messages)) {
+    respondTaskToolCall(req, res, model, intervalMs, promptTokens, ctxLine);
+    return;
+  }
 
   if (stream) {
     respondStream(req, res, model, intervalMs, promptTokens, ctxLine);
