@@ -475,6 +475,7 @@
 ### D11 mobile-metrics/D-1/D-2/D-3（三句语义）
 
 - 处置：① 已由 `spec/K-3`（P2）闭合。
+- **2026-09-26 推翻注记**：D-1（「usage 后 heuristic 不回写」）在本迭代被推翻——`stream-metrics-native` ① 改为「usage 基线 + 增量偏移」（spec 第 3 节「usage 基线 + 增量偏移」），原「真值后不再回写」的门删除；D-2/D-3 无变化。历史处置记录保留原意，不追溯修改。
 
 ### D12 core-metrics 无偏离；mobile-render 无 open deviation（Q1/Q2 属待拍板/文案）
 
@@ -513,6 +514,7 @@
 ### Q7 usage 后 heuristic 不回写导致多 step 流中数字僵住（速率段可能消失、跨 step 长窗平均）
 
 - 建议倾向：接受现状 + 在 ④ spec 写明后果（多 step 下数字在 step 间可能停留、速率段可能消失）；改「usage 基线 + 增量偏移」需重新设计采样与落库，超出本轮修复面。
+- **2026-09-26 推翻注记**：本迭代已推翻该收窄，由 `stream-metrics-native` ① 修复（用户拍板「usage 基线 + 增量偏移 + 校正点重 seed 采样窗」）——`apps/mobile/src/services/session-stream-unit.ts` 与 `apps/desktop/renderer/hooks/useAgentStreamMetrics.ts` 删掉「真值后不再回写」的门、引入基线字段，`packages/core/src/domain/format/sliding-token-rate.ts` 增加「窗口折叠后首个新样本重 seed」。上文「超出本轮修复面」的判断作废，历史记录保留。
 
 ### Q8 块独立渲染与整文渲染的结构差异（无管道数据行的表格、被空行切开的有序列表 start）
 
@@ -588,6 +590,6 @@
 | 「已中断」单标识 | ✅ | 子会话流中强杀应用后，父会话页 `已中断` 徽标**恰好 1 次**；重启后子会话页无任何标识（子会话 run 不落库的既有行为，0 次≠重复） |
 | 停止键 | ✅ | 长流中点停止：服务端日志「响应流关闭（未自然结束，第 225 步）」，文案转终态「上次生成 · 6.8s · 输出 261 t · 82.8 t/s」，发送键恢复 |
 
-**验收副产物（观察项，已登记不阻塞）**：① 流式中 uiautomator dump 返回陈旧层级（`could not get idle state`）→ 流中取证改用截图；② 「极小响应→无速率」须**单 chunk** 才稳定触发（2 chunk 会形成两样本算出速率）；③ **多步 run（tool 调用+后续文本）终态无速率段**——正是 Q7/`D11` 已登记的「usage 后 heuristic 不回写」后果，非新问题；④ 长流实时 token 计数显著低于 usage 真值（`1,370 t`@22s vs 12,000 t 终值）——heuristic 中文低估 + 终值校正跳正，属 ④ 设计行为；⑤ 上下文用量显示重启前后不一致（`~0% · 214/128K` → `~3% · 3.6K/128K`），疑似估算口径/水合重算差异，**新观察，建议后续单查**。
+**验收副产物（观察项，已登记不阻塞）**：① 流式中 uiautomator dump 返回陈旧层级（`could not get idle state`）→ 流中取证改用截图；② 「极小响应→无速率」须**单 chunk** 才稳定触发（2 chunk 会形成两样本算出速率）；③ **多步 run（tool 调用+后续文本）终态无速率段**——~~正是 Q7/`D11` 已登记的「usage 后 heuristic 不回写」后果，非新问题~~ → **本迭代已推翻该收窄，由 `stream-metrics-native` ① 修复**（usage 基线 + 增量偏移 + 窗口折叠重 seed；验收由 mobile/desktop 的多步 run 用例守住）；④ 长流实时 token 计数显著低于 usage 真值（`1,370 t`@22s vs 12,000 t 终值）——heuristic 中文低估 + 终值校正跳正，属 ④ 设计行为（已由 `stream-metrics-native` ② 的 js-tiktoken 尾窗估算进一步收敛）；⑤ 上下文用量显示重启前后不一致（`~0% · 214/128K` → `~3% · 3.6K/128K`），疑似估算口径/水合重算差异，**新观察，建议后续单查**。
 
 **真机（DSLDU20407006179）**：截至本次记录，设备处前台活跃使用中（`mCurrentFocus=com.novelmaster/MainActivity`），未安装 1308、未做任何操作；真机验收需用户约定设备空闲窗口后进行（安装需屏幕唤醒+确认弹窗）。
