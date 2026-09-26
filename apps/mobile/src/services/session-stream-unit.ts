@@ -44,7 +44,10 @@
  */
 import type {ChatMessage} from '@novel-master/core/chat';
 import {createTokenRateSampler} from '@novel-master/core/format';
-import type {TokenRateSampler} from '@novel-master/core/format';
+import type {
+  StreamTokenSource,
+  TokenRateSampler,
+} from '@novel-master/core/format';
 import {CHARACTERS_PER_TOKEN_RATIO} from '@novel-master/core/provider';
 import type {StreamWireChunk, StreamWireKind} from './stream-wire-queue';
 import {appendWireChunk, coalesceWireQueue} from './stream-wire-queue';
@@ -158,8 +161,10 @@ export interface SessionStreamUnitMetrics {
   readonly tokenSource: SessionStreamUnitTokenSource;
 }
 
-/** token 计数来源：usage=事件真值（run 级累计）；heuristic=字符折算兜底。 */
-export type SessionStreamUnitTokenSource = 'usage' | 'heuristic';
+/** token 计数来源：usage=事件真值（run 级累计）；heuristic=字符折算兜底。
+ * 复用 core 的中立类型（别名）——联合字面量单一声明在 core 的
+ * `StreamTokenSource`，消费端不再各写一份。 */
+export type SessionStreamUnitTokenSource = StreamTokenSource;
 
 /**
  * 消息仓库窄口（单元消息管线回源 DB 用）。

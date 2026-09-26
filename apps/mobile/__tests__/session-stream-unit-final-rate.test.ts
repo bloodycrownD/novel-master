@@ -24,7 +24,11 @@ import {
   STREAM_METRICS_FINAL_RATE_KEY,
 } from '@novel-master/core/session-kkv';
 import type {SessionRunState} from '@novel-master/core/session-run-state';
-import {setMobileAgentActive} from '@/runtime/agent-activity';
+import {
+  isMobileAgentActive,
+  setMobileAgentActive,
+} from '@/runtime/agent-activity';
+import {buildChatStreamMetricsLine} from '@/hooks/useAgentStreamMetrics';
 import {
   SessionStreamUnitManager,
   type SessionStreamRunStateStore,
@@ -320,6 +324,104 @@ describe('冻结末值速率（stream-metrics-tokens-final-rate）', () => {
     // 消费型 run 不写持久层、不落 KKV（无跨重启读回路径，避免留无人读的行）。
     expect(settleCalls).not.toContain(childId);
     expect(kkv.read(childId)).toBeUndefined();
+
+    h.manager.dispose();
+  });
+
+  it('零输出 run 收尾删掉上一轮 KKV 速率：水合不再拼出凭空造数的 t/s（B-1）', async () => {
+    const kkv = createFakeSessionKkv();
+    const store = createFakeRunStateStore();
+    const first = buildHarness({runStateStore: store, sessionKkv: kkv.service});
+    await first.manager.hydrate();
+    // 第一轮：有流量的 run 把末值速率落进 KKV。
+    driveRun(first.eventBus, first.manager);
+    finishRun(first.eventBus);
+    expect(kkv.read('s1')).not.toBeUndefined();
+    expect(
+      first.manager.getSettledProjection('s1')!.rateTokensPerSecond,
+    ).not.toBeNull();
+
+    // 第二轮：同会话零输出 run（无 delta → 采样器无样本），事件路径收尾。
+    first.manager.startRun('s1', 'p1', '再来一次');
+    first.eventBus.publish(EVENT_AGENT_RUN_STARTED, {
+      sessionId: 's1',
+      projectId: 'p1',
+      runId: 'r2',
+    });
+    first.eventBus.publish(EVENT_AGENT_RUN_FINISHED, {
+      sessionId: 's1',
+      projectId: 'p1',
+      runId: 'r2',
+      stopReason: 'end_turn',
+    } as never);
+
+    // 本轮无速率：KKV 键必须已删（留着就是上一轮的陈旧值）。
+    expect(kkv.read('s1')).toBeUndefined();
+    expect(first.manager.getSettledProjection('s1')!.rateTokensPerSecond).toBe(
+      null,
+    );
+    first.manager.dispose();
+
+    // 「重启」：新 manager + 同一份 run_state 行与 KKV 数据水合。
+    const restarted = buildHarness({
+      runStateStore: store,
+      sessionKkv: kkv.service,
+    });
+    await restarted.manager.hydrate();
+    const hydrated = restarted.manager.getSettledProjection('s1');
+    expect(hydrated).not.toBeNull();
+    expect(hydrated!.rateTokensPerSecond).toBeNull();
+    // 文案省略速率段（缺值即省略，不把上一轮的速度拼到本轮「上次生成」上）。
+    expect(hydrated!.metrics.completionTokens).toBe(0);
+    expect(
+      buildChatStreamMetricsLine({
+        running: false,
+        elapsedMs: hydrated!.elapsedMs,
+        completionTokens: hydrated!.metrics.completionTokens,
+        tokenSource: hydrated!.metrics.tokenSource,
+        tokensPerSecond: hydrated!.rateTokensPerSecond,
+      }),
+    ).not.toContain('t/s');
+    restarted.manager.dispose();
+  });
+
+  it('消费型单元宽限到期出表：snapshot 归 null、投影仍在、refcount 不变（C-1）', () => {
+    const h = buildHarness();
+    const childId = 'child-1';
+    h.eventBus.publish(EVENT_AGENT_RUN_STARTED, {
+      sessionId: childId,
+      projectId: 'p1',
+      runId: 'rc',
+    });
+    for (let i = 0; i < 6; i += 1) {
+      h.eventBus.publish(EVENT_AGENT_STREAM_TEXT_DELTA, {
+        sessionId: childId,
+        runId: 'rc',
+        text: 'x'.repeat(50),
+      });
+      jest.advanceTimersByTime(250);
+    }
+    h.eventBus.publish(EVENT_AGENT_RUN_FINISHED, {
+      sessionId: childId,
+      projectId: 'p1',
+      runId: 'rc',
+      stopReason: 'end_turn',
+    } as never);
+
+    // 宽限窗口内：单元仍在表（终态投影平滑落点）。
+    expect(h.manager.snapshot(childId)).not.toBeNull();
+    expect(isMobileAgentActive()).toBe(false); // 消费型 run 不占 refcount
+
+    // 宽限到期：单元按 onGraceExpired 出表（此前无回调会永久残留）。
+    jest.advanceTimersByTime(TEST_SETTLED_GRACE_MS + 1);
+    expect(h.manager.snapshot(childId)).toBe(null);
+    // settled 投影仍在（子会话「上次生成」不断源）；refcount 不受摘除影响。
+    const projection = h.manager.getSettledProjection(childId);
+    expect(projection).not.toBeNull();
+    expect(h.manager.rateTokensPerSecond(childId, Date.now())).toBe(
+      projection!.rateTokensPerSecond,
+    );
+    expect(isMobileAgentActive()).toBe(false);
 
     h.manager.dispose();
   });

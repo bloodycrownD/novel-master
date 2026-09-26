@@ -1236,6 +1236,12 @@ export class SessionStreamUnitManager {
   /**
    * 建消费型单元（Step 6）：接收型落点，仅由 onRunStarted 在无单元时调用。
    * 状态机直接 idle → starting（begin），随后由调用方 markRunning 回填 runId。
+   *
+   * 宽限销毁与发起型 run 同口径（cr-fix-spec mobile-metrics/C-1）：不接
+   * `onGraceExpired` 的话，宽限到期后单元会永久残留在注册表里（snapshot
+   * 仍可读），LRU 也排在 settled 序列里不释放。`handleGraceExpired` 只做
+   * removeUnit + notifyChanged，不动 refcount（消费型单元从未 increment，
+   * 摘除是安全的）。
    */
   private adoptConsumptiveUnit(
     sessionId: string,
@@ -1245,6 +1251,8 @@ export class SessionStreamUnitManager {
       sessionId,
       projectId,
       messageStore: this.runtime.messages,
+      settledGraceMs: this.settledGraceMs,
+      onGraceExpired: expired => this.handleGraceExpired(sessionId, expired),
       onProjectionChanged: () => this.notifyChanged(),
     });
     unit.begin();
@@ -1343,15 +1351,10 @@ export class SessionStreamUnitManager {
       // 只写投影，不写 run_state、不落 session KKV（子会话 run 没有持久层行，
       // 跨重启也没有读回路径，落库只会留无人读的垃圾）；速率随投影一并冻结，
       // 与主会话同语义（末值快照）。
-      const consumptiveSnap = unit.snapshot();
-      this.settledProjections.set(sessionId, {
+      this.settledProjections.set(
         sessionId,
-        metrics: consumptiveSnap.metrics,
-        startedAtMs: consumptiveSnap.startedAtMs,
-        settledAtMs: consumptiveSnap.settledAtMs ?? Date.now(),
-        elapsedMs: consumptiveSnap.elapsedMs ?? 0,
-        rateTokensPerSecond: unit.getFinalRateTokensPerSecond(),
-      });
+        this.buildSettledProjection(unit, unit.snapshot()),
+      );
       this.evictSettledOverflow();
       this.notifyChanged();
       return;
@@ -1369,21 +1372,19 @@ export class SessionStreamUnitManager {
     this.upsertSettledRunStateQuietly(sessionId, unit.projectId, snap);
     // 末值速率（stream-metrics-tokens）：随 settled 投影冻结显示，并落
     // session KKV 供跨重启水合读回。展示派生值——写失败只丢速率段。
-    const rateTokensPerSecond = unit.getFinalRateTokensPerSecond();
-    this.settledProjections.set(sessionId, {
-      sessionId,
-      metrics: snap.metrics,
-      startedAtMs: snap.startedAtMs,
-      settledAtMs: snap.settledAtMs ?? Date.now(),
-      elapsedMs: snap.elapsedMs ?? 0,
-      rateTokensPerSecond,
-    });
-    if (rateTokensPerSecond != null) {
+    const projection = this.buildSettledProjection(unit, snap);
+    this.settledProjections.set(sessionId, projection);
+    if (projection.rateTokensPerSecond != null) {
       this.persistFinalRateQuietly(
         sessionId,
-        rateTokensPerSecond,
+        projection.rateTokensPerSecond,
         snap.metrics.completionTokens,
       );
+    } else {
+      // 本轮无速率（零输出/单样本不足）：必须清掉上一轮残留的 KKV 值——
+      // 水合只按 sessionId 读，残留旧值会被拼到本轮「上次生成」上，等于
+      // 凭空造数（cr-fix-spec mobile-metrics/B-1，缺值即省略速率段）。
+      this.deleteFinalRateQuietly(sessionId);
     }
     this.evictSettledOverflow();
     this.notifyChanged();
@@ -1658,6 +1659,28 @@ export class SessionStreamUnitManager {
       });
   }
 
+  /**
+   * settled 投影装配单点（消费型与非消费型两条收尾分支共用）：
+   * 冻结指标 + 历时（settledAtMs 缺省补当前时刻）+ 末值速率快照。
+   *
+   * 两分支的字段口径只在这里维护，防一侧改动另一侧漂移
+   * （cr-fix-spec mobile-metrics/C-2）。持久层/KKV 的差异留在调用方：
+   * 消费型 run 只进内存投影，发起型 run 另落 run_state 与 session KKV。
+   */
+  private buildSettledProjection(
+    unit: SessionStreamUnit,
+    snap: SessionStreamUnitView,
+  ): SessionStreamSettledProjection {
+    return {
+      sessionId: unit.sessionId,
+      metrics: snap.metrics,
+      startedAtMs: snap.startedAtMs,
+      settledAtMs: snap.settledAtMs ?? Date.now(),
+      elapsedMs: snap.elapsedMs ?? 0,
+      rateTokensPerSecond: unit.getFinalRateTokensPerSecond(),
+    };
+  }
+
   /** 读会话的冻结速率原值（无 sessionKkv 或行缺失 → null）。 */
   private async readFinalRateRaw(sessionId: string): Promise<string | null> {
     const kkv = this.runtime.sessionKkv;
@@ -1695,6 +1718,31 @@ export class SessionStreamUnitManager {
       .catch(err => {
         console.warn(
           '[novel-master/session-stream-unit-manager] final rate persist failed',
+          err,
+        );
+      });
+  }
+
+  /**
+   * 删掉本会话的冻结速率 KKV 行（fire-and-forget）：settle 时无速率
+   * （零输出/单样本不足）必须清掉上一轮的值，否则重启水合按 sessionId
+   * 读回陈旧速率、拼到本轮「上次生成」上（cr-fix-spec mobile-metrics/B-1）。
+   * 吞错口径同 set——展示派生值，失败只影响速率段显示。
+   */
+  private deleteFinalRateQuietly(sessionId: string): void {
+    const kkv = this.runtime.sessionKkv;
+    if (kkv == null) {
+      return;
+    }
+    void kkv
+      .delete(
+        sessionId,
+        SESSION_KKV_DOMAIN_STREAM_METRICS,
+        STREAM_METRICS_FINAL_RATE_KEY,
+      )
+      .catch(err => {
+        console.warn(
+          '[novel-master/session-stream-unit-manager] final rate delete failed',
           err,
         );
       });

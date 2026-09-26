@@ -23,7 +23,10 @@ import {
   toAgentStreamMetricsView,
 } from '@/hooks/useAgentStreamMetrics';
 import {useRuntime} from '@/hooks/useRuntime';
-import {isSessionStreamUnitSettled} from '@/services/session-stream-unit';
+import {
+  isSessionStreamUnitSettled,
+  type SessionStreamUnitView,
+} from '@/services/session-stream-unit';
 import {timingLog} from '@/debug/run-timing';
 import {ChatStreamMetricsBar} from './ChatStreamMetricsBar';
 
@@ -32,6 +35,26 @@ type Props = {
   /** 指标归属会话：切会话只换数据源，不重置（单元/ settled 投影按会话归属）。 */
   readonly sessionId: string | undefined;
 };
+
+/**
+ * 终态单元快照是否具备可显示的指标（本组件终态分支的可见性判据）。
+ *
+ * 判据 = 终态 + 全零守卫：受理即置起点后、starting 阶段被杀的 settled
+ * 单元带短历时（字数为零）——「已中断 · 数百 ms」比静默消失更可感知，
+ * 属预期口径；起点与累计指标皆无的极老形态才不显示空条。
+ *
+ * 导出给子会话屏复用：屏级「已中断」横幅只在指标条不可见时渲染，避免
+ * 同一中断态出现两次标识（cr-fix-spec mobile-metrics/C-4）。
+ */
+export function hasVisibleSettledMetrics(view: SessionStreamUnitView): boolean {
+  return (
+    isSessionStreamUnitSettled(view.status) &&
+    (view.startedAtMs > 0 ||
+      view.metrics.textChars > 0 ||
+      view.metrics.thinkingChars > 0 ||
+      view.metrics.completionTokens > 0)
+  );
+}
 
 export function ChatStreamMetricsBarLive({agentRunning, sessionId}: Props) {
   const runtime = useRuntime();
@@ -67,39 +90,32 @@ export function ChatStreamMetricsBarLive({agentRunning, sessionId}: Props) {
   let interrupted = false;
   if (sessionId != null) {
     const view = manager.snapshot(sessionId);
-    if (view != null && isSessionStreamUnitSettled(view.status)) {
+    if (view != null && hasVisibleSettledMetrics(view)) {
       // 终态快照即冻结指标。事件收尾的单元 elapsedMs 已冻结；水合
       // interrupted 单元 elapsedMs 为 null，以 settledAtMs-startedAtMs
       // 近似冻结历时；全零守卫兜底极老形态（起点与字数皆无的空行）。
       // 受理即置起点后，starting 阶段被杀的水合单元带短历时（字数为零）
       // ——「已中断 · 数百 ms」比静默消失更可感知，属预期口径。
-      if (
-        view.startedAtMs > 0 ||
-        view.metrics.textChars > 0 ||
-        view.metrics.thinkingChars > 0 ||
-        view.metrics.completionTokens > 0
-      ) {
-        interrupted = view.status === 'interrupted';
-        const elapsedMs =
-          view.elapsedMs != null
-            ? view.elapsedMs
-            : view.startedAtMs > 0
-              ? Math.max(
-                  0,
-                  (view.settledAtMs ?? Date.now()) - view.startedAtMs,
-                )
-              : 0;
-        // 冻结态：token 计数照显 + 收尾冻结的末值速率（无样本则省略速率段）。
-        metrics = toAgentStreamMetricsView(
-          false,
-          {
-            elapsedMs,
-            completionTokens: view.metrics.completionTokens,
-            tokenSource: view.metrics.tokenSource,
-          },
-          manager.rateTokensPerSecond(sessionId, Date.now()),
-        );
-      }
+      interrupted = view.status === 'interrupted';
+      const elapsedMs =
+        view.elapsedMs != null
+          ? view.elapsedMs
+          : view.startedAtMs > 0
+            ? Math.max(
+                0,
+                (view.settledAtMs ?? Date.now()) - view.startedAtMs,
+              )
+            : 0;
+      // 冻结态：token 计数照显 + 收尾冻结的末值速率（无样本则省略速率段）。
+      metrics = toAgentStreamMetricsView(
+        false,
+        {
+          elapsedMs,
+          completionTokens: view.metrics.completionTokens,
+          tokenSource: view.metrics.tokenSource,
+        },
+        manager.rateTokensPerSecond(sessionId, Date.now()),
+      );
     } else if (agentRunning && view != null && view.startedAtMs > 0) {
       // starting 阶段起点已随 begin() 置位（用户请求时刻），指标条自受理
       // 即显示（计时在走、token 为零的「准备中」形态），不等 RUN_STARTED。

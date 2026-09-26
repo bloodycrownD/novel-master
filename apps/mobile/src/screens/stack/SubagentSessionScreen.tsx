@@ -25,7 +25,10 @@ import {
   type RouteProp,
 } from '@react-navigation/native';
 import type {ChatMessage} from '@novel-master/core/chat';
-import {ChatStreamMetricsBarLive} from '../../components/chat/ChatStreamMetricsBarLive';
+import {
+  ChatStreamMetricsBarLive,
+  hasVisibleSettledMetrics,
+} from '../../components/chat/ChatStreamMetricsBarLive';
 import {ChatTranscriptWebView} from '../../components/chat/ChatTranscriptWebView';
 import {showAppToast} from '@/services/app-toast';
 import {chatLinkNotFoundMessage} from '@novel-master/core/chat';
@@ -258,10 +261,17 @@ export function SubagentSessionScreen() {
   const agentRunning =
     unitView?.status === 'starting' || unitView?.status === 'running';
   const displayMessages = unitView?.messages ?? messages;
+  // 中断态只有一处标识（cr-fix-spec mobile-metrics/C-4）：指标条已能显示
+  // 中断现场（终态快照带可显示指标 → 条上「已中断」徽标）时不重复渲染
+  // 屏级横幅；指标条不可见（起点与指标皆无）才由横幅兜底可感知性。
+  const interruptedBannerVisible =
+    unitView?.status === 'interrupted' &&
+    sessionId != null &&
+    !hasVisibleSettledMetrics(unitView);
 
   return (
     <View style={[styles.root, {backgroundColor: tokens.background}]}>
-      {unitView?.status === 'interrupted' ? (
+      {interruptedBannerVisible ? (
         // 中断现场的正面标识（Step 7，与主屏指标条同语义）：轻量文本行，
         // 复用既有视觉 token，不动 webview 协议。
         <View style={[styles.interruptedBanner, {borderColor: tokens.danger}]}>

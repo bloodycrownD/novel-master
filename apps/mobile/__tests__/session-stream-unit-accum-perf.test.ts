@@ -167,7 +167,12 @@ describe('SessionStreamUnit partial 数组化性能护栏（T-N5）', () => {
         runId: RUN_ID,
         startedAtMs: 0,
         settledAtMs: 1,
-        metrics: {textChars: TOTAL_CHARS, thinkingChars: 0},
+        metrics: {
+          textChars: TOTAL_CHARS,
+          thinkingChars: 0,
+          completionTokens: 0,
+          tokenSource: 'heuristic',
+        },
         partialText: expectedText,
         partialThinking: '',
         pendingChildren: [],
