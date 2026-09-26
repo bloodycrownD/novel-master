@@ -118,7 +118,7 @@ describe("countTextWithIncrementalTokenizer（整段文本真分词器计数）"
     );
   });
 
-  it("失败路径：encode 恒抛错时按 1:1 上界兜底、不崩", () => {
+  it("失败路径：encode 恒抛错时按 1 字符计 1 token 兜底、不崩", () => {
     const warnings = captureWarnings();
     try {
       const text = "这是一段无法编码的文本。".repeat(20);
@@ -172,10 +172,13 @@ describe("countTextWithIncrementalTokenizer（整段文本真分词器计数）"
       // 基准是「去掉毒串的正文」的全量 encode（禁止硬编码任何数字：ranks 表随
       // js-tiktoken 版本会变，写死必然在升级后变成假红）。
       const truth = cl100kEncode(passage);
-      // ⚠️ 必须**双边夹逼**，只写下界等于没断言：被本用例守的 bug 兜底值是
-      // `text.length`，中文下它 ≈ truth × 1.64，比真值**更大**，所以单边
-      // `count >= truth` 会被带 bug 的实现假绿通过；加上界后它必被抓住
-      // （1.64× > 1.05×），而修好后 count ≈ truth + 24（占比千分之一量级）。
+      // ⚠️ 必须**双边夹逼**，但**咬住 bug 的是下界、不是上界**——这条曾在本文件里
+      // 被写反过（写成「兜底值 ≈ 1.64× 真值、比真值更大」，那是 `units-1` 订正前的
+      // 单位倒置），照那种读法会以为下界是「假绿的那条」而把它删掉。正确口径：
+      // 被守的 bug 兜底值是 `text.length`，中文下 ≈ **0.61 ×** `encode(正文)`、
+      // **低于**真值 → 带 bug 时必跌破下界（wave-1 实测报错
+      // `不可编码尾段不得吞掉已固化计数：12224 < 真值 17200`）；上界 `× 1.05`
+      // 防的是另一侧（毒串按 1:1 计入等多算/虚高，≈ +1.3%）。
       assert.ok(
         count >= truth,
         `不可编码尾段不得吞掉已固化计数：${count} < 真值 ${truth}`,

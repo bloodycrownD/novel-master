@@ -41,8 +41,10 @@
  *   上一次成功读值；首次失败 `console.warn` 一次「尾窗不可编码，保持上一次
  *   读值」，**不计入** {@link IncrementalTokenCounter.unencodableChars}
  *   （本次没丢字，只是暂时读不出）；
- * - **固化路径**（固化段 encode 失败）：按「1 字符 ≈ 1 token」的最坏上界
- *   **兜底计入** `committedTokens`（宁可高估也不丢段，保证 `tokens` 单调不减），
+ * - **固化路径**（固化段 encode 失败）：按「1 字符 ≈ 1 token」**兜底计入**
+ *   `committedTokens`（保证不丢段、`tokens` 单调不减；⚠️ 对中文而言 1:1 仍可能
+ *   **低于**真值——cl100k 约 1.64 token/字符——所以方向是偏保守但**不是上界**，
+ *   别按「宁可高估」理解），
  *   首次失败 `console.warn` 一次并把本次字符数累加到
  *   {@link IncrementalTokenCounter.unencodableChars}；尾窗照常推进（固化路径
  *   存在的意义就是给内存封顶，不能因为失败就无限攒尾窗）。
@@ -281,9 +283,11 @@ export function createIncrementalTokenCounter(
     if (pieceTokens !== null) {
       committedTokens += pieceTokens;
     } else {
-      // 兜底计入：按「1 字符 ≈ 1 token」的最坏上界计，宁可高估也不丢段——
+      // 兜底计入：按「1 字符 ≈ 1 token」计，保证不丢段、读数不倒退——
       // 旧实现只跳过 committedTokens 却照常推进 tail，这一段字符会永久蒸发，
       // 且因为「固化部分没加、尾窗又短了」导致 tokens 读值倒退。
+      // ⚠️ 这不是「上界 / 宁可高估」：中文下 1:1 只有真值的约 0.61×（cl100k 约
+      // 1.64 token/字符），所以它是「偏保守但可能偏低」的兜底。
       committedTokens += piece.length;
       unencodableCharsValue += piece.length;
       if (!warnedCommitFailure) {

@@ -104,8 +104,8 @@ export function getDefaultRnEncoding(): RnTokenEncoding | null {
  *
  * 走 core 的 `countTextWithIncrementalTokenizer` 而不是直接 `encode`：后者对
  * 「无空白长中文串」是 O(len²)（实测 12K 字符 93s），前者把单次 encode 夹在
- * ≤64 字符、同一段文本耗时与全量 encode 打平（30K 中文 273ms vs 266ms），
- * 病态档还快 189 倍。
+ * ≤64 字符、同一段文本耗时与全量 encode 持平或略快（30K 中文 240–250ms vs 266ms），
+ * 病态档还快 175~195 倍。
  *
  * @param text 待计数文本。
  * @returns token 数；**编码表不可用时返回 null**，调用方须自行决定降级口径
