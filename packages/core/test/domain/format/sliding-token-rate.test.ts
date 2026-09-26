@@ -137,4 +137,60 @@ describe("createTokenRateSampler（T-M10 校正重置）", () => {
     const r2 = sampler.sample(200, "usage", 101_000);
     assert.ok(r1 != null && r2 != null && r2 < r1);
   });
+
+  it("rateAt 只读不记样本：同 nowMs 幂等、暂停期随 nowMs 衰减、样本不足 null", () => {
+    const sampler = createTokenRateSampler();
+    // 0/1 个样本：null（首秒不显示抖动速率）。
+    assert.equal(sampler.rateAt(100_000), null);
+    sampler.sample(100, "usage", 100_000);
+    assert.equal(sampler.rateAt(100_250), null);
+    sampler.sample(200, "usage", 100_250);
+    // 同 nowMs 连读两次同值（读数不改序列）。
+    assert.equal(sampler.rateAt(100_250), 400);
+    assert.equal(sampler.rateAt(100_250), 400);
+    // 暂停：只推进 nowMs，速率自然衰减；tokens 未变的采样不再产生样本，
+    // 读数与衰减值一致（80 = 100 t ÷ 1.25s）。
+    const decayed = sampler.rateAt(101_250);
+    assert.ok(decayed != null && decayed < 400);
+    sampler.sample(200, "usage", 101_250);
+    assert.equal(sampler.rateAt(101_250), 80);
+  });
+
+  it("freeze 末值快照：窗口以最后样本时刻收尾（收尾前停顿不拉低）", () => {
+    const sampler = createTokenRateSampler();
+    sampler.sample(0, "usage", 100_000);
+    for (let i = 1; i <= 8; i += 1) {
+      sampler.sample(i * 50, "usage", 100_000 + i * 250);
+    }
+    // 输出停下 3s 后才收尾：freeze 仍给「最后一段在稳定输出时」的 200 t/s，
+    // 而不是按收尾时刻算出的衰减值。
+    const frozen = sampler.freeze();
+    assert.ok(frozen != null && Math.abs(frozen - 200) <= 5, `freeze=${frozen}`);
+    // 对照：同刻 rateAt 已被停顿拖低（103s 时读数 ~117 t/s，105s 时归零）。
+    assert.ok(sampler.rateAt(103_250) != null);
+    assert.ok(
+      (sampler.rateAt(105_250) ?? 0) < 60,
+      "对照：同刻 rateAt 已被停顿拖低",
+    );
+  });
+
+  it("freeze 在样本不足以成窗口时回落到校正翻转前的末值（openai 收尾真值场景）", () => {
+    const sampler = createTokenRateSampler();
+    sampler.sample(0, "heuristic", 100_000);
+    for (let i = 1; i <= 6; i += 1) {
+      sampler.sample(i * 30, "heuristic", 100_000 + i * 250);
+    }
+    const heuristicTail = sampler.freeze();
+    assert.ok(heuristicTail != null);
+    // usage 真值在收尾到达：翻转重 seed → 只有 1 个样本，成不了窗口。
+    sampler.sample(600, "usage", 101_600);
+    assert.equal(sampler.freeze(), heuristicTail);
+    // 翻转后若又攒够样本，freeze 改用真值尺度的尾部窗口。
+    sampler.sample(630, "usage", 101_850);
+    const usageTail = sampler.freeze();
+    assert.ok(usageTail != null && Math.abs(usageTail - 120) <= 1);
+    // reset 清空回落值（跨 run 不残留）。
+    sampler.reset();
+    assert.equal(sampler.freeze(), null);
+  });
 });

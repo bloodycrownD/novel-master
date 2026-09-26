@@ -13,7 +13,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   buildStreamMetricsLine,
+  createTokenRateSampler,
   formatCharCount,
+  type TokenRateSampler,
 } from "@shared/logic/format";
 import { CHARACTERS_PER_TOKEN_RATIO } from "@novel-master/core/provider";
 
@@ -32,6 +34,8 @@ export type AgentStreamMetricsSnapshot = {
 
 export type AgentStreamMetricsView = AgentStreamMetricsSnapshot & {
   readonly running: boolean;
+  /** 速率（token/秒）：运行中为实时滑窗值；冻结态为收尾末值；null=省略速率段。 */
+  readonly tokensPerSecond: number | null;
 };
 
 type MetricsAcc = {
@@ -58,8 +62,9 @@ function snapshotFromAcc(
 function toView(
   running: boolean,
   snap: AgentStreamMetricsSnapshot,
+  tokensPerSecond: number | null,
 ): AgentStreamMetricsView {
-  return { ...snap, running };
+  return { ...snap, running, tokensPerSecond };
 }
 
 function emptyAcc(): MetricsAcc {
@@ -88,10 +93,11 @@ export function formatStreamElapsed(seconds: number): string {
 /**
  * 构建 metrics 条文案（供 AgentStreamMetricsBar 与单测共用）。
  *
- * `tokensPerSecond` 可选——组件侧采样喂入；缺省（含冻结态）省略速率段。
+ * `tokensPerSecond` 由 hook 的采样器给出（运行中=实时值、冻结态=末值）；
+ * null（样本不足）时省略速率段。
  */
 export function buildAgentStreamMetricsLabel(
-  metrics: AgentStreamMetricsView & { readonly tokensPerSecond?: number | null },
+  metrics: AgentStreamMetricsView,
 ): string {
   return buildStreamMetricsLine({
     running: metrics.running,
@@ -101,6 +107,12 @@ export function buildAgentStreamMetricsLabel(
   });
 }
 
+/** 冻结的「上次生成」快照：末值速率随快照一起冻结（见下 running 翻假的收尾分支）。 */
+type LastRunSnapshot = {
+  readonly snapshot: AgentStreamMetricsSnapshot;
+  readonly tokensPerSecond: number | null;
+};
+
 /** 运行中 live 统计；结束后保留「上次生成」直至下一轮。 */
 export function useAgentStreamMetrics(running: boolean): {
   readonly metrics: AgentStreamMetricsView | null;
@@ -109,23 +121,34 @@ export function useAgentStreamMetrics(running: boolean): {
   readonly noteUsage: (completionTokens: number) => void;
 } {
   const accRef = useRef<MetricsAcc>(emptyAcc());
-  const [lastRun, setLastRun] = useState<AgentStreamMetricsSnapshot | null>(
-    null,
-  );
+  /**
+   * 速率采样序列（core 共用采样器）：token 变化才记样本，heuristic→usage
+   * 校正点重 seed（翻转前末值留作 freeze 回落）。序列由本 hook 持有——
+   * live 与冻结读同一份，冻结值 = 收尾时的末值快照（窗口以最后样本时刻
+   * 收尾，停顿不拉低；无样本则省略速率段）。
+   */
+  const rateSamplerRef = useRef<TokenRateSampler>(createTokenRateSampler());
+  const [lastRun, setLastRun] = useState<LastRunSnapshot | null>(null);
   const [tick, setTick] = useState(0);
 
   useEffect(() => {
     if (running) {
       accRef.current = { ...emptyAcc(), startedAtMs: Date.now() };
+      // 新 run：采样序列重 seed（防跨 run 差分污染首个窗口）。
+      rateSamplerRef.current.reset();
       setLastRun(null);
       const id = setInterval(() => setTick((t) => t + 1), 250);
       return () => clearInterval(id);
     }
     const acc = accRef.current;
     if (acc.startedAtMs > 0) {
-      setLastRun(
-        snapshotFromAcc(acc, Math.max(0, Date.now() - acc.startedAtMs)),
-      );
+      setLastRun({
+        snapshot: snapshotFromAcc(
+          acc,
+          Math.max(0, Date.now() - acc.startedAtMs),
+        ),
+        tokensPerSecond: rateSamplerRef.current.freeze(),
+      });
       accRef.current = emptyAcc();
     }
     return undefined;
@@ -142,6 +165,11 @@ export function useAgentStreamMetrics(running: boolean): {
         acc.textChars + acc.thinkingChars,
       );
     }
+    rateSamplerRef.current.sample(
+      acc.completionTokens,
+      acc.tokenSource,
+      Date.now(),
+    );
   }, []);
 
   const noteThinkingDelta = useCallback((delta: string) => {
@@ -155,6 +183,11 @@ export function useAgentStreamMetrics(running: boolean): {
         acc.textChars + acc.thinkingChars,
       );
     }
+    rateSamplerRef.current.sample(
+      acc.completionTokens,
+      acc.tokenSource,
+      Date.now(),
+    );
   }, []);
 
   const noteUsage = useCallback((completionTokens: number) => {
@@ -164,6 +197,11 @@ export function useAgentStreamMetrics(running: boolean): {
     const acc = accRef.current;
     acc.completionTokens = completionTokens;
     acc.tokenSource = "usage";
+    rateSamplerRef.current.sample(
+      acc.completionTokens,
+      acc.tokenSource,
+      Date.now(),
+    );
   }, []);
 
   void tick;
@@ -174,9 +212,10 @@ export function useAgentStreamMetrics(running: boolean): {
     metrics = toView(
       true,
       snapshotFromAcc(accRef.current, elapsedMs),
+      rateSamplerRef.current.rateAt(Date.now()),
     );
   } else if (lastRun != null) {
-    metrics = toView(false, lastRun);
+    metrics = toView(false, lastRun.snapshot, lastRun.tokensPerSecond);
   }
 
   return { metrics, noteTextDelta, noteThinkingDelta, noteUsage };

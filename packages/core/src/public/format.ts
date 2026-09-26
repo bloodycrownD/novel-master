@@ -10,3 +10,8 @@ export {
   type TokenRateSample,
   type TokenRateSampler,
 } from "../domain/format/sliding-token-rate.js";
+export {
+  parseStreamFinalRateSnapshot,
+  serializeStreamFinalRateSnapshot,
+  type StreamFinalRateSnapshot,
+} from "../domain/format/stream-final-rate.js";

@@ -1,0 +1,270 @@
+/**
+ * 冻结末值速率（「上次生成 … · N t/s」）测试。
+ *
+ * 覆盖：
+ * - 活跃期实时速率可读（delta 累积下 > 0），暂停期随时刻自然衰减；
+ * - 收尾冻结：settle 取末值（窗口以最后样本时刻收尾）、随 settled 投影
+ *   常驻，单元宽限销毁后仍可读且**不随时刻衰减**；
+ * - session KKV 落库：settle 写 `stream_metrics/finalRate`（值可解析）；
+ * - 跨重启：新 manager + 同 KKV 数据水合 settled 行后，投影带回速率；
+ * - 极简 runtime（无 sessionKkv）：退化为内存冻结值，不抛错。
+ *
+ * @module test/session-stream-unit-final-rate
+ */
+import {afterEach, beforeEach, describe, expect, it, jest} from '@jest/globals';
+import {
+  EVENT_AGENT_RUN_FINISHED,
+  EVENT_AGENT_RUN_STARTED,
+  EVENT_AGENT_STREAM_TEXT_DELTA,
+  SimpleEventBus,
+} from '@novel-master/core/events';
+import {parseStreamFinalRateSnapshot} from '@novel-master/core/format';
+import {
+  SESSION_KKV_DOMAIN_STREAM_METRICS,
+  STREAM_METRICS_FINAL_RATE_KEY,
+} from '@novel-master/core/session-kkv';
+import type {SessionRunState} from '@novel-master/core/session-run-state';
+import {setMobileAgentActive} from '@/runtime/agent-activity';
+import {
+  SessionStreamUnitManager,
+  type SessionStreamRunStateStore,
+} from '@/services/session-stream-unit-manager.service';
+
+const TEST_SETTLED_GRACE_MS = 5_000;
+
+/** 内存版 run 状态服务（真实 upsert/settle/listByStatuses 语义）。 */
+function createFakeRunStateStore() {
+  const rows = new Map<string, SessionRunState>();
+  const store: SessionStreamRunStateStore = {
+    async upsert(state) {
+      rows.set(state.sessionId, {...state});
+    },
+    async settle(input) {
+      rows.set(input.sessionId, {
+        sessionId: input.sessionId,
+        projectId: input.projectId,
+        runId: input.runId,
+        status: 'settled',
+        startedAtMs: input.startedAtMs,
+        textChars: input.textChars,
+        thinkingChars: input.thinkingChars,
+        completionTokens: input.completionTokens,
+        tokenSource: input.tokenSource,
+        partialText: null,
+        partialThinking: null,
+        pendingChildrenJson: null,
+        updatedAtMs: input.updatedAtMs,
+      });
+    },
+    async listByStatuses(statuses) {
+      return [...rows.values()]
+        .filter(row => (statuses as readonly string[]).includes(row.status))
+        .map(row => ({...row}));
+    },
+  };
+  return store;
+}
+
+/** 内存版 session KKV（同步落 Map，供落库/回读断言）。 */
+function createFakeSessionKkv() {
+  const values = new Map<string, string>();
+  const cacheKey = (sessionId: string, domain: string, key: string) =>
+    `${sessionId}|${domain}|${key}`;
+  return {
+    values,
+    read: (sessionId: string) =>
+      values.get(cacheKey(sessionId, SESSION_KKV_DOMAIN_STREAM_METRICS, STREAM_METRICS_FINAL_RATE_KEY)),
+    service: {
+      async get(sessionId: string, domain: string, key: string) {
+        return values.get(cacheKey(sessionId, domain, key)) ?? null;
+      },
+      async set(sessionId: string, domain: string, key: string, value: string) {
+        values.set(cacheKey(sessionId, domain, key), value);
+      },
+      async delete(sessionId: string, domain: string, key: string) {
+        values.delete(cacheKey(sessionId, domain, key));
+      },
+      async clearDomain() {},
+      async clearSession() {},
+      async listKeys() {
+        return [];
+      },
+    },
+  };
+}
+
+function buildHarness(options?: {
+  runStateStore?: SessionStreamRunStateStore;
+  sessionKkv?: ReturnType<typeof createFakeSessionKkv>['service'];
+}) {
+  const eventBus = new SimpleEventBus();
+  const runAgentTurn = jest.fn(
+    async (_runtime: unknown, _scope: unknown, _content: string) => undefined,
+  );
+  const manager = new SessionStreamUnitManager({
+    runtime: {
+      eventBus,
+      abortRegistry: {has: () => false, abort: jest.fn()},
+      sessions: {get: async (sessionId: string) => ({id: sessionId, title: '会话'})},
+      projects: {get: async (projectId: string) => ({id: projectId, name: '项目'})},
+      messages: {
+        listBySessionTail: jest.fn(async () => []),
+        listBySessionPage: jest.fn(async () => []),
+      },
+      ...(options?.sessionKkv == null
+        ? {}
+        : {sessionKkv: options.sessionKkv}),
+    } as never,
+    runAgentTurn: runAgentTurn as never,
+    settledGraceMs: TEST_SETTLED_GRACE_MS,
+    runStateService: options?.runStateStore,
+    yieldQuantum: async () => undefined,
+  });
+  // 无持久层：水合手动标记完成（settled 投影读口受 hydrated 门禁约束）；
+  // 有持久层：交给构造 kick 的 hydrate（跨重启用例显式 await）。
+  if (options?.runStateStore == null) {
+    manager.markHydrated();
+  }
+  return {eventBus, manager};
+}
+
+/** 跑一轮带流量的 run（每 250ms 一个 50 字符 delta）。 */
+function driveRun(
+  eventBus: SimpleEventBus,
+  manager: SessionStreamUnitManager,
+  deltaCount = 8,
+): void {
+  manager.startRun('s1', 'p1', 'hi');
+  eventBus.publish(EVENT_AGENT_RUN_STARTED, {
+    sessionId: 's1',
+    projectId: 'p1',
+    runId: 'r1',
+  });
+  for (let i = 0; i < deltaCount; i += 1) {
+    eventBus.publish(EVENT_AGENT_STREAM_TEXT_DELTA, {
+      sessionId: 's1',
+      runId: 'r1',
+      text: 'x'.repeat(50),
+    });
+    jest.advanceTimersByTime(250);
+  }
+}
+
+function finishRun(eventBus: SimpleEventBus): void {
+  eventBus.publish(EVENT_AGENT_RUN_FINISHED, {
+    sessionId: 's1',
+    projectId: 'p1',
+    runId: 'r1',
+    stopReason: 'end_turn',
+  } as never);
+}
+
+describe('冻结末值速率（stream-metrics-tokens-final-rate）', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+    setMobileAgentActive(false);
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+    setMobileAgentActive(false);
+  });
+
+  it('活跃期实时速率可读，暂停期随时刻衰减', () => {
+    const h = buildHarness();
+    driveRun(h.eventBus, h.manager);
+
+    const live = h.manager.rateTokensPerSecond('s1', Date.now());
+    expect(live).not.toBeNull();
+    expect(live! > 0).toBe(true);
+
+    // 不再有 delta、只推进时刻：分子不变分母增大 → 衰减。
+    jest.advanceTimersByTime(3_000);
+    const decayed = h.manager.rateTokensPerSecond('s1', Date.now());
+    expect(decayed).not.toBeNull();
+    expect(decayed! < live!).toBe(true);
+
+    h.manager.dispose();
+  });
+
+  it('收尾冻结末值：随 settled 投影常驻，单元销毁后不随时间衰减', () => {
+    const h = buildHarness();
+    driveRun(h.eventBus, h.manager);
+    // 收尾前再停 3s：冻结值应取「最后一段在有输出时」的速度，不被停顿拉低。
+    jest.advanceTimersByTime(3_000);
+    const liveBeforeSettle = h.manager.rateTokensPerSecond('s1', Date.now());
+
+    finishRun(h.eventBus);
+    const projection = h.manager.getSettledProjection('s1');
+    expect(projection).not.toBeNull();
+    const frozen = projection!.rateTokensPerSecond;
+    expect(frozen).not.toBeNull();
+    expect(frozen! > 0).toBe(true);
+    // 冻结值 = 末值快照，不低于（被停顿拖低的）实时读数。
+    expect(frozen! >= liveBeforeSettle!).toBe(true);
+
+    // 宽限销毁：单元出表，读数走 settled 投影——冻结值不随时刻变化。
+    jest.advanceTimersByTime(TEST_SETTLED_GRACE_MS + 1_000);
+    expect(h.manager.snapshot('s1')).toBe(null);
+    expect(h.manager.rateTokensPerSecond('s1', Date.now())).toBe(frozen);
+    expect(h.manager.rateTokensPerSecond('s1', Date.now() + 600_000)).toBe(
+      frozen,
+    );
+
+    h.manager.dispose();
+  });
+
+  it('settle 把末值速率写入 session KKV（stream_metrics/finalRate，值可解析）', () => {
+    const kkv = createFakeSessionKkv();
+    const h = buildHarness({sessionKkv: kkv.service});
+    driveRun(h.eventBus, h.manager);
+    finishRun(h.eventBus);
+
+    const raw = kkv.read('s1');
+    const parsed = parseStreamFinalRateSnapshot(raw ?? null);
+    const projection = h.manager.getSettledProjection('s1');
+    expect(parsed).not.toBeNull();
+    expect(parsed!.rate).toBe(projection!.rateTokensPerSecond);
+    // 自检字段：采样当时的累计 token 与时刻都带上了。
+    expect(parsed!.tokens).toBe(projection!.metrics.completionTokens);
+    expect(parsed!.atMs > 0).toBe(true);
+
+    h.manager.dispose();
+  });
+
+  it('跨重启水合：新 manager 从 session KKV 读回冻结速率到 settled 投影', async () => {
+    const kkv = createFakeSessionKkv();
+    const store = createFakeRunStateStore();
+    const first = buildHarness({runStateStore: store, sessionKkv: kkv.service});
+    // 有持久层时投影读口受水合门禁约束：先等首次水合完成再跑本轮 run。
+    await first.manager.hydrate();
+    driveRun(first.eventBus, first.manager);
+    finishRun(first.eventBus);
+    const frozen = first.manager.getSettledProjection('s1')!.rateTokensPerSecond;
+    first.manager.dispose();
+    expect(frozen).not.toBeNull();
+
+    // 「重启」：新 manager 实例 + 同 run_state 行 + 同 session KKV 数据。
+    const second = buildHarness({runStateStore: store, sessionKkv: kkv.service});
+    await second.manager.hydrate();
+    const projection = second.manager.getSettledProjection('s1');
+    expect(projection).not.toBeNull();
+    expect(projection!.rateTokensPerSecond).toBe(frozen);
+    expect(second.manager.rateTokensPerSecond('s1', Date.now())).toBe(frozen);
+
+    second.manager.dispose();
+  });
+
+  it('极简 runtime（无 sessionKkv）：冻结值仍走内存投影，不抛错', () => {
+    const h = buildHarness();
+    driveRun(h.eventBus, h.manager);
+    finishRun(h.eventBus);
+    jest.advanceTimersByTime(TEST_SETTLED_GRACE_MS + 1_000);
+
+    const projection = h.manager.getSettledProjection('s1');
+    expect(projection).not.toBeNull();
+    expect(projection!.rateTokensPerSecond).not.toBeNull();
+
+    h.manager.dispose();
+  });
+});

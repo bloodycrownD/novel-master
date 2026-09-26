@@ -54,6 +54,12 @@ step done（无论协议）：runner 把该步 LlmChatResult.usage 并入 run �
 - **usage 校正点**：heuristic→usage 覆盖瞬间累计值跳变，速率窗口重置（样本序列清空重 seed），避免一次巨大差分污染速率。
 - **文案**：`format-stream-metrics-line.ts` 改「{prefix} · {elapsed} · 输出 {N} t · {rate} t/s」；正文/思考合并不再分列（思考期在 anthropic/gemini 下 usage 已含、heuristic 下随正文一并累计字符按 ceil 口径折算，天然并入输出）。t/s 数字格式对齐 `formatTokensPerSecond` 惯例（≥100 整数、否则 1 位小数）；token 数用 toLocaleString 千分位。`thinkingChars > 0` 的条件分列逻辑删除。
 - 流中速率显示条件：样本 ≥2 且窗口有时长；否则只显示「输出 N t」（避免除零/首秒抖动）。
+- **冻结末值速率（「上次生成」也带速率段）**：速率是纯渲染期派生值——冻结态要显示它，必须在收尾时**把末值冻下来**，而不是等显示时重算（重算只会得到「停顿后衰减到 0」的假值）。做法：
+  - 采样器加两个读口：`rateAt(nowMs)`（只读、不记样本；实时渲染节拍用，暂停期随 nowMs 衰减）与 `freeze()`（**窗口以最后一个样本时刻收尾**——收尾前的停顿不拉低它；样本不足以成窗口时回落到校正翻转前的末值，覆盖 openai「真值只在收尾到达、翻转后再无第二个样本」的形态）。
+  - 采样序列上移到**持有实时计数的一方**：mobile = session stream unit（token 每次变化处记样本、`begin()` 重置），desktop = `useAgentStreamMetrics` hook；UI 组件只读不采样（原「组件持有采样器」的写法退役——实时值与冻结值同源）。
+  - 收尾落库：运行结束把末值写 **session KKV**（域 `stream_metrics`、键 `finalRate`；值 JSON `{rate, tokens, atMs}`，编解码在 `domain/format/stream-final-rate.ts`）。选 KKV 而非 `run_state` 加列——这是展示派生值，缺失即省略速率段，不需要 DDL/align/BOOT_VERSION 三件套，也不受置位/压缩的 `clearDomain` 影响（session 删除走 `clearSession` 一并清）。
+  - 读取：会话内直接随 settled 投影冻结；**跨重启**由 mobile 水合 settled 行时读回 KKV 拼进投影；desktop 的「上次生成」本就仅会话内内存（未做 run_state 持久化），冻结值同域。
+  - 缺值（旧数据、KV 行缺失、解析失败、样本不足）= 省略速率段，不兜底造数。
 
 ## 最终项目结构
 
@@ -65,19 +71,21 @@ packages/core/src/
   public/events.ts                                             # 值 + payload 类型导出（登记①）
   service/agent/impl/agent-runner.ts                           # 透传 + run 级累计器外提 + step done 补发
   domain/format/format-stream-metrics-line.ts                  # 文案改版
-  domain/format/sliding-token-rate.ts                          # 新：滑窗速率纯函数
+  domain/format/sliding-token-rate.ts                          # 新：滑窗速率纯函数（rateAt/freeze 读口）
+  domain/format/stream-final-rate.ts                           # 新：末值速率快照编解码（session KKV 值）
+  domain/session-kkv/model/session-kkv-domains.ts              # 新域 stream_metrics + 键 finalRate
   bootstrap/session-run-state/session-run-state-schema.ts      # run_state 加列（canonical DDL 更新）
   bootstrap/schema-align/schema-column-alignments.ts           # 新列 align 条目
   bootstrap/novel-master-bootstrap.ts                          # SCHEMA_BOOT_VERSION bump（现值+1，不写死号）
 (登记) test/package-exports/snapshots/public-events-allowlist.json   # 快照更新（登记②）
 apps/mobile/src/
-  services/session-stream-unit.ts / -manager.service.ts        # ingestUsage + token metrics + run_state
+  services/session-stream-unit.ts / -manager.service.ts        # ingestUsage + token metrics + 速率采样（freeze）+ session KKV 落库/水合读回
   hooks/useAgentStreamMetrics.ts                               # 死代码收口（保留 buildChatStreamMetricsLine）
-  components/chat/ChatStreamMetricsBarLive.tsx                 # 采样喂速率
+  components/chat/ChatStreamMetricsBarLive.tsx                 # 只读速率（活跃=实时 / 冻结=末值）
 apps/desktop/
   src/main/ipc/forward-event-bus.ts + scripts/generate-desktop-events.mjs   # 登记③④（两处）
-  renderer/hooks/useAgentStream.ts / useAgentStreamMetrics.ts  # 事件处理 + token 化
-  renderer/features/chat/AgentStreamMetricsBar.tsx             # 采样喂速率
+  renderer/hooks/useAgentStream.ts / useAgentStreamMetrics.ts  # 事件处理 + token 化 + 速率采样/冻结
+  renderer/features/chat/AgentStreamMetricsBar.tsx             # 只读速率渲染
 ```
 
 ## 变更点清单
@@ -112,7 +120,7 @@ apps/desktop/
 - T-M5 — blocking: yes — mobile unit：usage 事件覆盖 heuristic 累计、source 翻转；step 边界不清零（run 级）；**openai 场景**——流中零 usage 事件段 heuristic 撑显示、step done 后收到 runner 补发的终值校正事件、覆盖 heuristic 跳正（映射 Step 3）
 - T-M6 — blocking: yes — run_state 持久化与水合：中断现场恢复 token 数与 source；legacy 库 align 后新列缺省回退（映射 Step 3）
 - T-M7 — blocking: yes — heuristic 口径：按累计字符长度取 ceil（`ceil(totalLen/3.35)`），逐 delta 更新与 `HeuristicTokenCounter.countText` 单次全量计数严格一致（映射 Step 3）
-- T-M8 — blocking: yes — 文案快照：「生成中 · 12.3s · 输出 1,234 t · 45 t/s」双端一致；无速率样本时省略速率段（映射 Step 5）
+- T-M8 — blocking: yes — 文案快照：「生成中 · 12.3s · 输出 1,234 t · 45 t/s」双端一致；**冻结态带末值速率**（「上次生成 · 39.2s · 输出 12,000 t · 96.7 t/s」——收尾末值快照，非衰减值）；无样本（旧数据/KV 行缺失/样本不足）才省略速率段（映射 Step 5 与「冻结末值速率」小节）
 - T-M9 — blocking: yes — 滑窗速率：fake timers 推进下 200 t/s 与 5 t/s 场景数值稳定；输出暂停 3s 后速率趋零；恢复回升（映射 Step 5）
 - T-M10 — blocking: yes — 校正重置：heuristic→usage 覆盖瞬间滑窗重 seed、速率无尖刺（映射 Step 5）
 - T-M11 — blocking: yes — 旧 hook 死代码移除后 mobile 全量绿（映射 Step 5）

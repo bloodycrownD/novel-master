@@ -97,6 +97,15 @@ import type {
 import type {SendAnnotateDraft} from '@novel-master/core/chat';
 import type {ChatMessage} from '@novel-master/core/chat';
 import type {EventSubscription} from '@novel-master/core/events';
+import {
+  parseStreamFinalRateSnapshot,
+  serializeStreamFinalRateSnapshot,
+} from '@novel-master/core/format';
+import {
+  SESSION_KKV_DOMAIN_STREAM_METRICS,
+  STREAM_METRICS_FINAL_RATE_KEY,
+} from '@novel-master/core/session-kkv';
+import type {SessionKkvService} from '@novel-master/core/session-kkv';
 import type {
   SessionRunState,
   SessionRunStateSettleInput,
@@ -159,7 +168,13 @@ interface IdleMessageView {
 export type SessionStreamManagerRuntime = Pick<
   MobileNovelMasterRuntime,
   'eventBus' | 'abortRegistry' | 'sessions' | 'projects' | 'messages'
->;
+> & {
+  /**
+   * session KKV 面（冻结末值速率的落库/读回）。缺省即速率不落库——
+   * 冻结值仍走内存 settled 投影，只是不跨重启（测试/极简 runtime 用）。
+   */
+  readonly sessionKkv?: SessionKkvService;
+};
 
 /** fire-and-forget 的 runAgentTurn 形状（测试可注入 mock）。 */
 type RunAgentTurnFn = (
@@ -237,6 +252,11 @@ export interface SessionStreamSettledProjection {
   readonly settledAtMs: number;
   /** 终态冻结的历时 =「上次生成」；回填时以 settledAtMs-startedAtMs 近似。 */
   readonly elapsedMs: number;
+  /**
+   * 收尾冻结的末值速率（token/秒）=「上次生成」的速率段数据源。
+   * null = 省略速率段（无样本、旧数据、session KKV 行缺失或解析失败）。
+   */
+  readonly rateTokensPerSecond: number | null;
 }
 
 export interface SessionStreamUnitManagerParams {
@@ -606,6 +626,11 @@ export class SessionStreamUnitManager {
           startedAtMs: row.startedAtMs,
           settledAtMs: row.updatedAtMs,
           elapsedMs: Math.max(0, row.updatedAtMs - row.startedAtMs),
+          // 冻结末值速率从 session KKV 读回（run_state 不存速率，见域常量注释）；
+          // 行缺失/解析失败即省略速率段——不造数、不报错。
+          rateTokensPerSecond: parseStreamFinalRateSnapshot(
+            await this.readFinalRateRaw(row.sessionId),
+          )?.rate ?? null,
         });
       }
       bootTimingLog(
@@ -638,6 +663,27 @@ export class SessionStreamUnitManager {
       return null;
     }
     return this.settledProjections.get(sessionId) ?? null;
+  }
+
+  /**
+   * 速率读数口（token/秒）：活跃单元给实时滑窗值（暂停期随 nowMs 增长自然
+   * 衰减）；终态单元给收尾冻结的末值（不随 nowMs 衰减）；无单元回落到
+   * settled 投影的冻结末值（水合完成后可读）。
+   *
+   * 活跃但样本不足时返回 null 而不回落上一轮冻结值——否则新一轮首秒会
+   * 显示上一轮的速度。
+   */
+  rateTokensPerSecond(sessionId: string, nowMs: number): number | null {
+    const unit = this.units.get(sessionId);
+    if (unit != null) {
+      return isSessionStreamUnitSettled(unit.getStatus())
+        ? unit.getFinalRateTokensPerSecond()
+        : unit.getRateTokensPerSecond(nowMs);
+    }
+    if (!this.hydratedValue) {
+      return null;
+    }
+    return this.settledProjections.get(sessionId)?.rateTokensPerSecond ?? null;
   }
 
   /**
@@ -1307,13 +1353,24 @@ export class SessionStreamUnitManager {
     // 宽限销毁/LRU 淘汰清除）。
     const snap = unit.snapshot();
     this.upsertSettledRunStateQuietly(sessionId, unit.projectId, snap);
+    // 末值速率（stream-metrics-tokens）：随 settled 投影冻结显示，并落
+    // session KKV 供跨重启水合读回。展示派生值——写失败只丢速率段。
+    const rateTokensPerSecond = unit.getFinalRateTokensPerSecond();
     this.settledProjections.set(sessionId, {
       sessionId,
       metrics: snap.metrics,
       startedAtMs: snap.startedAtMs,
       settledAtMs: snap.settledAtMs ?? Date.now(),
       elapsedMs: snap.elapsedMs ?? 0,
+      rateTokensPerSecond,
     });
+    if (rateTokensPerSecond != null) {
+      this.persistFinalRateQuietly(
+        sessionId,
+        rateTokensPerSecond,
+        snap.metrics.completionTokens,
+      );
+    }
     this.evictSettledOverflow();
     this.notifyChanged();
     decrementAgentActive();
@@ -1582,6 +1639,48 @@ export class SessionStreamUnitManager {
       .catch(err => {
         console.error(
           '[novel-master/session-stream-unit-manager] run_state settle failed',
+          err,
+        );
+      });
+  }
+
+  /** 读会话的冻结速率原值（无 sessionKkv 或行缺失 → null）。 */
+  private async readFinalRateRaw(sessionId: string): Promise<string | null> {
+    const kkv = this.runtime.sessionKkv;
+    if (kkv == null) {
+      return null;
+    }
+    return kkv.get(
+      sessionId,
+      SESSION_KKV_DOMAIN_STREAM_METRICS,
+      STREAM_METRICS_FINAL_RATE_KEY,
+    );
+  }
+
+  /**
+   * 末值速率落 session KKV（fire-and-forget）：冻结态「上次生成 … · N t/s」
+   * 的跨重启数据源。展示派生值——失败只丢速率段（下次收尾重写），不阻塞
+   * 收尾链、不冒泡错误（与导入缓存对齐同款吞错口径）。
+   */
+  private persistFinalRateQuietly(
+    sessionId: string,
+    rate: number,
+    tokens: number,
+  ): void {
+    const kkv = this.runtime.sessionKkv;
+    if (kkv == null) {
+      return;
+    }
+    void kkv
+      .set(
+        sessionId,
+        SESSION_KKV_DOMAIN_STREAM_METRICS,
+        STREAM_METRICS_FINAL_RATE_KEY,
+        serializeStreamFinalRateSnapshot({rate, tokens, atMs: Date.now()}),
+      )
+      .catch(err => {
+        console.warn(
+          '[novel-master/session-stream-unit-manager] final rate persist failed',
           err,
         );
       });

@@ -43,6 +43,8 @@
  * @module services/session-stream-unit
  */
 import type {ChatMessage} from '@novel-master/core/chat';
+import {createTokenRateSampler} from '@novel-master/core/format';
+import type {TokenRateSampler} from '@novel-master/core/format';
 import {CHARACTERS_PER_TOKEN_RATIO} from '@novel-master/core/provider';
 import type {StreamWireChunk, StreamWireKind} from './stream-wire-queue';
 import {appendWireChunk, coalesceWireQueue} from './stream-wire-queue';
@@ -265,6 +267,13 @@ export class SessionStreamUnit {
     completionTokens: 0,
     tokenSource: 'heuristic',
   };
+  /**
+   * 实时速率采样器（stream-metrics-tokens）：token 每变一次记一样本，
+   * 渲染侧只读（rateTokensPerSecond）；收尾时 freeze 出「上次生成」的
+   * 末值速率（窗口以最后样本时刻收尾，不受收尾前停顿影响）。单元自持而
+   * 非组件持有——冻结值要与实时值同源，且须跨单元存活/水合后的读取。
+   */
+  private readonly rateSampler: TokenRateSampler = createTokenRateSampler();
   private startedAtMsValue = 0;
   private elapsedMsValue: number | null = null;
   /**
@@ -342,6 +351,8 @@ export class SessionStreamUnit {
     }
     this.status = 'starting';
     this.startedAtMsValue = Date.now();
+    // 新 run：速率采样序列重 seed（防跨 run 差分污染首个窗口）。
+    this.rateSampler.reset();
     return true;
   }
 
@@ -490,6 +501,29 @@ export class SessionStreamUnit {
     return this.destroyed;
   }
 
+  /** 实时速率（token/秒；渲染节拍只读——暂停期随 nowMs 增长自然衰减）。 */
+  getRateTokensPerSecond(nowMs: number): number | null {
+    return this.rateSampler.rateAt(nowMs);
+  }
+
+  /**
+   * run 收尾的末值速率快照（「上次生成」的速率段数据源）：窗口以最后一个
+   * 样本时刻收尾，故收尾前的停顿不拉低它；样本不足以成窗口（如 openai
+   * 真值只在收尾到达、翻转后没有第二个样本）时回落到校正前的末值。
+   */
+  getFinalRateTokensPerSecond(): number | null {
+    return this.rateSampler.freeze();
+  }
+
+  /** 记一个速率样本（token 每次变化处调用；序列维护语义见 core 采样器）。 */
+  private sampleRate(): void {
+    this.rateSampler.sample(
+      this.metricsAcc.completionTokens,
+      this.metricsAcc.tokenSource,
+      Date.now(),
+    );
+  }
+
   /** 只读投影快照（每次调用新对象；messages/pendingChildrenByTitle 字段返回内部引用——见字段注释的引用稳定契约）。 */
   snapshot(): SessionStreamUnitView {
     return {
@@ -561,6 +595,7 @@ export class SessionStreamUnit {
       completionTokens,
       tokenSource: 'usage',
     };
+    this.sampleRate();
     return true;
   }
 
@@ -937,6 +972,7 @@ export class SessionStreamUnit {
           CHARACTERS_PER_TOKEN_RATIO,
       );
     }
+    this.sampleRate();
     appendWireChunk(this.ingressQueue, {kind, delta: text});
     if (this.ingressTimer == null) {
       this.ingressTimer = setTimeout(() => {

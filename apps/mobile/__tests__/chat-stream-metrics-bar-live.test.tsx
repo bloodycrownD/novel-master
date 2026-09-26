@@ -190,6 +190,40 @@ describe('ChatStreamMetricsBarLive 双源（快照优先 / settled 投影兜底�
     expect(line).not.toContain('0.0s'); // 历时 ≥ 1096ms，非零起点
   });
 
+  it('冻结态显示末值速率段（「上次生成 … · N t/s」）', () => {
+    const h = buildHarness();
+    mockManager = h.manager;
+    mockManager.startRun('s1', 'p1', 'hi');
+    h.eventBus.publish(EVENT_AGENT_RUN_STARTED, {
+      sessionId: 's1',
+      projectId: 'p1',
+      runId: 'r1',
+    });
+    for (let i = 0; i < 6; i += 1) {
+      h.eventBus.publish(EVENT_AGENT_STREAM_TEXT_DELTA, {
+        sessionId: 's1',
+        runId: 'r1',
+        text: 'x'.repeat(50),
+      });
+      act(() => {
+        jest.advanceTimersByTime(250);
+      });
+    }
+    h.eventBus.publish(EVENT_AGENT_RUN_FINISHED, {
+      sessionId: 's1',
+      projectId: 'p1',
+      runId: 'r1',
+      stopReason: 'end_turn',
+    } as never);
+
+    const line = renderMetricsLine(false, 's1');
+    expect(line).toContain('上次生成');
+    expect(line).toContain('输出 90 t'); // ceil(300/3.35)
+    // 末值速率段（此前冻结态整段省略）：有样本即显示，且不是衰减后的零头。
+    expect(line).toMatch(/\d+(\.\d)? t\/s/);
+    expect(line).not.toMatch(/(^| )0 t\/s/);
+  });
+
   it('活跃 run：快照 live 计时显示「生成中」（agentRunning=true）', () => {
     const h = buildHarness();
     mockManager = h.manager;

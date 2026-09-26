@@ -41,8 +41,22 @@ describe("buildAgentStreamMetricsLabel（T-M8 文案快照）", () => {
       thinkingChars: 42,
       completionTokens: 28,
       tokenSource: "heuristic",
+      tokensPerSecond: null,
     });
     assert.equal(label, "上次生成 · 5.0s · 输出 28 t");
+  });
+
+  it("冻结态带末值速率：显示「上次生成 … · N t/s」（收尾快照，非实时衰减值）", () => {
+    const label = buildAgentStreamMetricsLabel({
+      running: false,
+      elapsedMs: 39_200,
+      textChars: 12_000,
+      thinkingChars: 0,
+      completionTokens: 12_000,
+      tokenSource: "usage",
+      tokensPerSecond: 96.7,
+    });
+    assert.equal(label, "上次生成 · 39.2s · 输出 12,000 t · 96.7 t/s");
   });
 
   it("速率数字格式：≥100 取整数、否则一位小数（无尾随 .0）", () => {

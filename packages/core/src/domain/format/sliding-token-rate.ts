@@ -66,12 +66,25 @@ const MAX_RATE_SAMPLES = 512;
  * 采样器（组件渲染节拍驱动的序列维护，双端共用）：
  * - `tokens` 变化才记样本（暂停期不记——分母随 nowMs 增长即衰减趋零）；
  * - `source` 翻转视为 heuristic→usage 校正点：累计值跳变，样本序列清空
- *   重 seed，防一次巨大差分污染速率（校正后窗口从真值重新起算）；
+ *   重 seed，防一次巨大差分污染速率（校正后窗口从真值重新起算）；翻转前
+ *   序列的末值留作 {@link TokenRateSampler.freeze} 的回落值（openai 这类
+ *   「真值只在收尾到达」的链路，翻转后往往再没有第二个样本）；
  * - 新 run / 数据源切换由调用方 `reset()`。
  */
 export interface TokenRateSampler {
   /** 采样当前累计值并返回窗口速率（token/秒）；样本不足返回 null。 */
   sample(tokens: number, source: string, nowMs: number): number | null;
+  /**
+   * 只读当前窗口速率（不记样本、不改序列）——供渲染节拍读取：暂停期随
+   * nowMs 增长自然衰减，恢复输出后随新样本回升。
+   */
+  rateAt(nowMs: number): number | null;
+  /**
+   * 末值快照（run 收尾冻结用）：窗口以**最后一个样本时刻**收尾，不受调用
+   * 时刻影响——输出停下后读它仍是「最后一段在稳定输出时的速度」，而不是
+   * 被停顿拖低的值。样本不足以成窗口时回落到校正翻转前的末值。
+   */
+  freeze(): number | null;
   /** 重 seed（新 run / 切会话 / 冻结态退出）。 */
   reset(): void;
 }
@@ -81,10 +94,18 @@ export function createTokenRateSampler(): TokenRateSampler {
   let samples: TokenRateSample[] = [];
   let lastTokens: number | null = null;
   let lastSource: string | null = null;
+  /** 校正翻转前序列的末值（freeze 的回落值；reset 清空）。 */
+  let flippedRate: number | null = null;
+  /** 末值：窗口以最后一个样本时刻收尾（停顿不拉低）。 */
+  const tailRate = (): number | null => {
+    const last = samples[samples.length - 1];
+    return last == null ? null : slidingTokenRate(samples, last.tMs);
+  };
   return {
     sample(tokens, source, nowMs) {
       if (lastSource !== source) {
-        // 校正点（heuristic→usage 覆盖跳变）：清空重 seed。
+        // 校正点（heuristic→usage 覆盖跳变）：先留翻转前末值，再清空重 seed。
+        flippedRate = tailRate() ?? flippedRate;
         samples = [{tMs: nowMs, tokens}];
         lastSource = source;
       } else if (lastTokens !== tokens) {
@@ -96,10 +117,17 @@ export function createTokenRateSampler(): TokenRateSampler {
       lastTokens = tokens;
       return slidingTokenRate(samples, nowMs);
     },
+    rateAt(nowMs) {
+      return slidingTokenRate(samples, nowMs);
+    },
+    freeze() {
+      return tailRate() ?? flippedRate;
+    },
     reset() {
       samples = [];
       lastTokens = null;
       lastSource = null;
+      flippedRate = null;
     },
   };
 }

@@ -11,17 +11,13 @@
  * manager.subscribe 驱动收尾/切会话/水合回填的即时刷新；活跃期间另有
  * 250ms tick 刷新 live 计时。
  *
- * stream-metrics-tokens：活跃 run 的实时速率由本组件采样喂
- * slidingTokenRate——tick/通知驱动的每次重渲染把「当前累计 token」采成
- * (t, tokens) 样本；heuristic→usage 校正点（tokenSource 翻转、累计值跳变）
- * 样本序列清空重 seed，防一次巨大差分污染速率。冻结态不喂速率（无实时
- * 语义，文案省略速率段）。
+ * stream-metrics-tokens：速率读数统一走 manager.rateTokensPerSecond——活跃
+ * 单元给实时滑窗值（暂停期随 nowMs 衰减），终态单元给收尾冻结的末值
+ * （stream-metrics-tokens-final-rate：末值落 session KKV，重启水合后由
+ * settled 投影带回），无样本即 null、文案省略速率段。采样序列由单元维护
+ * （见 session-stream-unit 的 rateSampler），本组件只读不采样。
  */
-import React, {useEffect, useRef, useState} from 'react';
-import {
-  createTokenRateSampler,
-  type TokenRateSampler,
-} from '@novel-master/core/format';
+import React, {useEffect, useState} from 'react';
 import {
   type AgentStreamMetricsView,
   toAgentStreamMetricsView,
@@ -41,8 +37,6 @@ export function ChatStreamMetricsBarLive({agentRunning, sessionId}: Props) {
   const runtime = useRuntime();
   const manager = runtime.sessionStreamUnitManager;
   const [, setTick] = useState(0);
-  const samplerRef = useRef<TokenRateSampler>(createTokenRateSampler());
-  const samplerRunKeyRef = useRef('');
 
   // 活跃期间 250ms tick 刷新 live 计时；空闲时靠 manager 订阅触发
   // （收尾写 settled 投影、切会话换源、水合回填均经 notifyChanged）。
@@ -67,20 +61,6 @@ export function ChatStreamMetricsBarLive({agentRunning, sessionId}: Props) {
       timingLog('metrics bar rendered');
     }
   }, [agentRunning]);
-
-  /** 采样并算速率（渲染期调用，幂等——tokens 未变不产生新样本）。 */
-  const sampleRate = (
-    runKey: string,
-    tokens: number,
-    source: string,
-  ): number | null => {
-    // 新 run（或数据源切换）：整体重 seed，防跨 run 差分。
-    if (samplerRunKeyRef.current !== runKey) {
-      samplerRunKeyRef.current = runKey;
-      samplerRef.current.reset();
-    }
-    return samplerRef.current.sample(tokens, source, Date.now());
-  };
 
   let metrics: AgentStreamMetricsView | null = null;
   /** 中断现场的正面标识（Step 7）：仅水合出的 interrupted 单元冻结指标携带。 */
@@ -109,12 +89,16 @@ export function ChatStreamMetricsBarLive({agentRunning, sessionId}: Props) {
                   (view.settledAtMs ?? Date.now()) - view.startedAtMs,
                 )
               : 0;
-        // 冻结态：token 计数照显，速率段省略（无实时语义）。
-        metrics = toAgentStreamMetricsView(false, {
-          elapsedMs,
-          completionTokens: view.metrics.completionTokens,
-          tokenSource: view.metrics.tokenSource,
-        });
+        // 冻结态：token 计数照显 + 收尾冻结的末值速率（无样本则省略速率段）。
+        metrics = toAgentStreamMetricsView(
+          false,
+          {
+            elapsedMs,
+            completionTokens: view.metrics.completionTokens,
+            tokenSource: view.metrics.tokenSource,
+          },
+          manager.rateTokensPerSecond(sessionId, Date.now()),
+        );
       }
     } else if (agentRunning && view != null && view.startedAtMs > 0) {
       // starting 阶段起点已随 begin() 置位（用户请求时刻），指标条自受理
@@ -127,22 +111,22 @@ export function ChatStreamMetricsBarLive({agentRunning, sessionId}: Props) {
           completionTokens: view.metrics.completionTokens,
           tokenSource: view.metrics.tokenSource,
         },
-        sampleRate(
-          `${sessionId}:${view.runId ?? ''}`,
-          view.metrics.completionTokens,
-          view.metrics.tokenSource,
-        ),
+        manager.rateTokensPerSecond(sessionId, Date.now()),
       );
     }
   }
   if (metrics == null && sessionId != null) {
     const lastRun = manager.getSettledProjection(sessionId);
     if (lastRun != null) {
-      metrics = toAgentStreamMetricsView(false, {
-        elapsedMs: lastRun.elapsedMs,
-        completionTokens: lastRun.metrics.completionTokens,
-        tokenSource: lastRun.metrics.tokenSource,
-      });
+      metrics = toAgentStreamMetricsView(
+        false,
+        {
+          elapsedMs: lastRun.elapsedMs,
+          completionTokens: lastRun.metrics.completionTokens,
+          tokenSource: lastRun.metrics.tokenSource,
+        },
+        lastRun.rateTokensPerSecond,
+      );
     }
   }
 
