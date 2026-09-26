@@ -185,6 +185,7 @@ export function ConversationPanel({
     metrics: streamMetrics,
     noteTextDelta: noteMetricsTextDelta,
     noteThinkingDelta: noteMetricsThinkingDelta,
+    noteUsage: noteMetricsUsage,
   } = useAgentStreamMetrics(running);
   const [composerError, setComposerError] = useState<string | undefined>();
   const [composerText, setComposerText] = useState('');
@@ -511,6 +512,7 @@ export function ConversationPanel({
         getUiRunning,
         noteTextDelta: noteMetricsTextDelta,
         noteThinkingDelta: noteMetricsThinkingDelta,
+        noteUsage: noteMetricsUsage,
         onRunStarted: readOnlyOnRunStarted,
         onStepCommitted,
         onRunFinished: readOnlyOnRunFinished,
@@ -521,6 +523,7 @@ export function ConversationPanel({
         getUiRunning,
         noteTextDelta: noteMetricsTextDelta,
         noteThinkingDelta: noteMetricsThinkingDelta,
+        noteUsage: noteMetricsUsage,
         onRunStarted,
         onStepCommitted,
         onRunFinished,

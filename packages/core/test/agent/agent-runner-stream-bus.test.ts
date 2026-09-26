@@ -4,9 +4,11 @@ import {
   EVENT_AGENT_STREAM_TEXT_DELTA,
   EVENT_AGENT_STREAM_THINKING_DELTA,
   EVENT_AGENT_STREAM_TOOL_USE,
+  EVENT_AGENT_STREAM_USAGE,
   type AgentStreamTextDeltaPayload,
   type AgentStreamThinkingDeltaPayload,
   type AgentStreamToolUsePayload,
+  type AgentStreamUsagePayload,
 } from "../../src/domain/events/model/event-types.js";
 import { SimpleEventBus } from "../../src/infra/events/simple-event-bus.js";
 import { wrapStreamForBus } from "../../src/service/agent/impl/agent-runner.js";
@@ -191,5 +193,42 @@ describe("agent-runner stream bus", () => {
       );
     }
     assert.deepEqual(expected, [...eventSeq]);
+  });
+
+  it("T-M4: usage 事件透传走合并 microtask，step 口径经 usageBase 换算 run 级累计", async () => {
+    const bus = new SimpleEventBus();
+    const sessionId = "sess-usage";
+    const payloads: AgentStreamUsagePayload[] = [];
+    bus.subscribe(EVENT_AGENT_STREAM_USAGE, (p) => payloads.push(p));
+
+    // run 级基线：前序 step 已并入 100（step done 补发推进后的形态）
+    const usageBase = { completionTokens: 100 };
+    const onStream = wrapStreamForBus(bus, sessionId, RUN_ID, { usageBase });
+
+    onStream!({ type: "usage", usage: { completionTokens: 7 } });
+    // usage 缺输出侧（completionTokens undefined）→ 不发
+    onStream!({ type: "usage", usage: { promptTokens: 5 } });
+    assert.equal(payloads.length, 0, "publish 仍推迟到 microtask");
+
+    await drainMicrotasks();
+    assert.equal(payloads.length, 1);
+    assert.equal(payloads[0]!.sessionId, sessionId);
+    assert.equal(payloads[0]!.runId, RUN_ID);
+    // step 口径 7 + 基线 100 = run 级 107（消费端零算术）
+    assert.equal(payloads[0]!.completionTokens, 107);
+    assert.equal(payloads[0]!.source, "usage");
+  });
+
+  it("T-M4: 未注入 usageBase 时 step 累计值原样作为 run 级值（缺省兼容）", async () => {
+    const bus = new SimpleEventBus();
+    const payloads: AgentStreamUsagePayload[] = [];
+    bus.subscribe(EVENT_AGENT_STREAM_USAGE, (p) => payloads.push(p));
+
+    const onStream = wrapStreamForBus(bus, "sess-usage-2", RUN_ID);
+    onStream!({ type: "usage", usage: { completionTokens: 9 } });
+
+    await drainMicrotasks();
+    assert.equal(payloads.length, 1);
+    assert.equal(payloads[0]!.completionTokens, 9);
   });
 });

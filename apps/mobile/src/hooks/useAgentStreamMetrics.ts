@@ -1,13 +1,8 @@
 /**
- * Agent 流式生成计时与正文字数统计（不含 tool 参数计数）。
+ * 指标条 View 构造与文案（stream-metrics-tokens 起 hook 本体退役——
+ * 数据源已由 SessionStreamUnitManager 投影承担，本模块只保留被
+ * ChatStreamMetricsBar / ChatStreamMetricsBarLive 复用的纯函数与类型）。
  */
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type MutableRefObject,
-} from 'react';
 import {
   buildStreamMetricsLine,
   formatCharCount,
@@ -15,108 +10,29 @@ import {
 
 export {formatCharCount};
 
+/** token 计数来源：usage=事件真值（run 级累计）；heuristic=字符折算兜底。 */
+export type AgentStreamTokenSource = 'usage' | 'heuristic';
+
+/** 指标快照：历时与 token 计数（文案消费的最小集）。 */
 export type AgentStreamMetricsSnapshot = {
   readonly elapsedMs: number;
-  readonly textChars: number;
-  readonly thinkingChars: number;
+  readonly completionTokens: number;
+  readonly tokenSource: AgentStreamTokenSource;
 };
 
 export type AgentStreamMetricsView = AgentStreamMetricsSnapshot & {
   readonly running: boolean;
-  readonly totalChars: number;
-  readonly charsPerSecond: number;
+  /** 实时速率（token/秒，slidingTokenRate 产物）；null = 省略速率段。 */
+  readonly tokensPerSecond: number | null;
 };
 
-type MetricsAcc = {
-  textChars: number;
-  thinkingChars: number;
-  startedAtMs: number;
-};
-
-export type StreamMetricsAccRef = MutableRefObject<MetricsAcc>;
-
-export function emptyMetricsAcc(): MetricsAcc {
-  return {textChars: 0, thinkingChars: 0, startedAtMs: 0};
-}
-
-export function snapshotMetricsAcc(
-  acc: MetricsAcc,
-  elapsedMs: number,
-): AgentStreamMetricsSnapshot {
-  return {
-    elapsedMs,
-    textChars: acc.textChars,
-    thinkingChars: acc.thinkingChars,
-  };
-}
-
+/** 快照 → 展示 View（冻结态不喂速率，tokensPerSecond 缺省 null）。 */
 export function toAgentStreamMetricsView(
   running: boolean,
   snap: AgentStreamMetricsSnapshot,
+  tokensPerSecond: number | null = null,
 ): AgentStreamMetricsView {
-  const totalChars = snap.textChars + snap.thinkingChars;
-  const secs = snap.elapsedMs / 1000;
-  const charsPerSecond = secs > 0 ? totalChars / secs : 0;
-  return {...snap, running, totalChars, charsPerSecond};
-}
-
-/** Acc + notifiers only; display tick lives in ChatStreamMetricsBarLive. */
-export function useStreamMetricsAcc(running: boolean): {
-  readonly accRef: StreamMetricsAccRef;
-  readonly lastRun: AgentStreamMetricsSnapshot | null;
-  readonly noteTextDelta: (delta: string) => void;
-  readonly noteThinkingDelta: (delta: string) => void;
-} {
-  const accRef = useRef<MetricsAcc>(emptyMetricsAcc());
-  const [lastRun, setLastRun] = useState<AgentStreamMetricsSnapshot | null>(
-    null,
-  );
-
-  useEffect(() => {
-    if (running) {
-      accRef.current = {...emptyMetricsAcc(), startedAtMs: Date.now()};
-      setLastRun(null);
-      return undefined;
-    }
-    const acc = accRef.current;
-    if (acc.startedAtMs > 0) {
-      setLastRun(
-        snapshotMetricsAcc(acc, Math.max(0, Date.now() - acc.startedAtMs)),
-      );
-      accRef.current = emptyMetricsAcc();
-    }
-    return undefined;
-  }, [running]);
-
-  const noteTextDelta = useCallback((delta: string) => {
-    if (delta.length === 0) {
-      return;
-    }
-    accRef.current.textChars += delta.length;
-  }, []);
-
-  const noteThinkingDelta = useCallback((delta: string) => {
-    if (delta.length === 0) {
-      return;
-    }
-    accRef.current.thinkingChars += delta.length;
-  }, []);
-
-  return {accRef, lastRun, noteTextDelta, noteThinkingDelta};
-}
-
-/** 运行中每 250ms 触发一次重渲染，用于刷新 live 计时。 */
-function useTicker(running: boolean): void {
-  const [, setTick] = useState(0);
-  useEffect(() => {
-    if (!running) {
-      return undefined;
-    }
-    const id = setInterval(() => {
-      setTick(t => t + 1);
-    }, 250);
-    return () => clearInterval(id);
-  }, [running]);
+  return {...snap, running, tokensPerSecond};
 }
 
 /** 格式化秒数（60s 内一位小数，否则整数）。 */
@@ -132,28 +48,4 @@ export function buildChatStreamMetricsLine(
   metrics: AgentStreamMetricsView,
 ): string {
   return buildStreamMetricsLine(metrics);
-}
-
-/** 运行中 live 统计；结束后保留「上次生成」直至下一轮。 */
-export function useAgentStreamMetrics(running: boolean): {
-  readonly metrics: AgentStreamMetricsView | null;
-  readonly noteTextDelta: (delta: string) => void;
-  readonly noteThinkingDelta: (delta: string) => void;
-} {
-  const {accRef, lastRun, noteTextDelta, noteThinkingDelta} =
-    useStreamMetricsAcc(running);
-  useTicker(running);
-
-  let metrics: AgentStreamMetricsView | null = null;
-  if (running && accRef.current.startedAtMs > 0) {
-    const elapsedMs = Math.max(0, Date.now() - accRef.current.startedAtMs);
-    metrics = toAgentStreamMetricsView(
-      true,
-      snapshotMetricsAcc(accRef.current, elapsedMs),
-    );
-  } else if (lastRun != null) {
-    metrics = toAgentStreamMetricsView(false, lastRun);
-  }
-
-  return {metrics, noteTextDelta, noteThinkingDelta};
 }

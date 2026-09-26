@@ -20,6 +20,7 @@ import {
   type SseParseDiagnostics,
 } from "./sse-parse-errors.js";
 import { tryParseToolArgumentsJson } from "./tool-arguments-parse.js";
+import { parseAnthropicUsage } from "./usage-parser.js";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -46,6 +47,8 @@ export type AnthropicSseParserState = SseParseDiagnostics & {
   messageStartRaw: unknown;
   /** message_delta 事件原文（累计 output_tokens / stop_reason 在这里）。 */
   messageDeltaRaw: unknown;
+  /** 上一次 usage 事件 emit 的输出侧累计值（值不变不重发；undefined = 尚未 emit）。 */
+  lastEmittedCompletionTokens: number | undefined;
   degradedToolCalls: DegradedToolCall[];
 };
 
@@ -57,9 +60,33 @@ export function createAnthropicSseParserState(): AnthropicSseParserState {
     toolUses: [],
     messageStartRaw: undefined,
     messageDeltaRaw: undefined,
+    lastEmittedCompletionTokens: undefined,
     malformedLineCount: 0,
     degradedToolCalls: [],
   };
+}
+
+/**
+ * message_delta 到达时同步 emit 流中 usage 事件（输出侧累计口径）。
+ *
+ * 数据已在手（messageDeltaRaw 覆盖存储点），仅加 emit；累计 output_tokens
+ * 与上次 emit 相同（或缺失）时不发——协议层不节流，事件量由上层合批吸收。
+ */
+function emitAnthropicUsage(
+  state: AnthropicSseParserState,
+  onStream?: (event: LlmStreamEvent) => void
+): void {
+  const usage = parseAnthropicUsage(state.messageDeltaRaw);
+  const completionTokens = usage?.completionTokens;
+  if (
+    usage == null ||
+    completionTokens == null ||
+    completionTokens === state.lastEmittedCompletionTokens
+  ) {
+    return;
+  }
+  state.lastEmittedCompletionTokens = completionTokens;
+  onStream?.({ type: "usage", usage });
 }
 
 function flushActiveBlock(
@@ -195,6 +222,7 @@ function processAnthropicSseLine(
     state.messageStartRaw = event;
   } else if (type === "message_delta") {
     state.messageDeltaRaw = event;
+    emitAnthropicUsage(state, onStream);
   }
   if (type === "content_block_start") {
     flushActiveBlock(state, onStream, toolNames);

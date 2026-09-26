@@ -35,6 +35,8 @@ function makeRow(
     startedAtMs: 1000,
     textChars: 0,
     thinkingChars: 0,
+    completionTokens: 0,
+    tokenSource: "heuristic",
     partialText: null,
     partialThinking: null,
     pendingChildrenJson: null,
@@ -139,7 +141,8 @@ describe("SessionRunStateService", () => {
       })
     );
 
-    // 收尾：写 settled 行（partial 清空、metrics 冻结为最终值）。
+    // 收尾：写 settled 行（partial 清空、metrics 冻结为最终值——token 字段
+    // 随 metrics 一并保留，T-M6 的落库往返面）。
     await svc.settle({
       sessionId: sid,
       projectId: pid,
@@ -147,6 +150,8 @@ describe("SessionRunStateService", () => {
       startedAtMs: 3000,
       textChars: 100,
       thinkingChars: 25,
+      completionTokens: 1234,
+      tokenSource: "usage",
       updatedAtMs: 4000,
     });
 
@@ -158,6 +163,8 @@ describe("SessionRunStateService", () => {
     assert.equal(row!.pendingChildrenJson, null);
     assert.equal(row!.textChars, 100);
     assert.equal(row!.thinkingChars, 25);
+    assert.equal(row!.completionTokens, 1234);
+    assert.equal(row!.tokenSource, "usage");
     assert.equal(row!.runId, "run-final");
     assert.equal(row!.startedAtMs, 3000);
     assert.equal(row!.updatedAtMs, 4000);

@@ -10,6 +10,7 @@ export {
   EVENT_AGENT_STREAM_TEXT_DELTA,
   EVENT_AGENT_STREAM_THINKING_DELTA,
   EVENT_AGENT_STREAM_TOOL_USE,
+  EVENT_AGENT_STREAM_USAGE,
   EVENT_AGENT_STEP_COMMITTED,
   EVENT_SUBAGENT_CHILD_SESSION_CREATED,
 } from "../domain/events/model/event-types.js";
@@ -21,6 +22,7 @@ export type {
   AgentStreamTextDeltaPayload,
   AgentStreamThinkingDeltaPayload,
   AgentStreamToolUsePayload,
+  AgentStreamUsagePayload,
   AgentStepCommittedPayload,
   AgentStepCommittedPhase,
   SubagentChildSessionCreatedPayload,

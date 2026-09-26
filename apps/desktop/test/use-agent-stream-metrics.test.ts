@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { buildAgentStreamMetricsLabel } from "@/features/chat/AgentStreamMetricsBar";
+import { buildAgentStreamMetricsLabel } from "@/hooks/useAgentStreamMetrics";
 import {
   formatCharCount,
   formatStreamElapsed,
@@ -19,31 +19,56 @@ describe("useAgentStreamMetrics formatters", () => {
   });
 });
 
-describe("buildAgentStreamMetricsLabel", () => {
-  it("运行中显示生成中、正文、思考与速率", () => {
+describe("buildAgentStreamMetricsLabel（T-M8 文案快照）", () => {
+  it("生成中 · 秒 · 输出 token · 速率全段拼接（与 mobile 一致）", () => {
     const label = buildAgentStreamMetricsLabel({
       running: true,
-      elapsedMs: 10_000,
-      textChars: 5,
-      thinkingChars: 100,
-      totalChars: 105,
-      charsPerSecond: 10.5,
+      elapsedMs: 12_300,
+      textChars: 1_000,
+      thinkingChars: 300,
+      completionTokens: 1_234,
+      tokenSource: "usage",
+      tokensPerSecond: 45,
     });
-    assert.match(label, /生成中/);
-    assert.match(label, /正文/);
-    assert.match(label, /思考/);
-    assert.doesNotMatch(label, /工具/);
+    assert.equal(label, "生成中 · 12.3s · 输出 1,234 t · 45 t/s");
   });
 
-  it("结束后显示上次生成", () => {
+  it("无速率样本时省略速率段（上次生成冻结态）", () => {
     const label = buildAgentStreamMetricsLabel({
       running: false,
-      elapsedMs: 5000,
+      elapsedMs: 5_000,
       textChars: 0,
       thinkingChars: 42,
-      totalChars: 42,
-      charsPerSecond: 8.4,
+      completionTokens: 28,
+      tokenSource: "heuristic",
     });
-    assert.match(label, /上次生成/);
+    assert.equal(label, "上次生成 · 5.0s · 输出 28 t");
+  });
+
+  it("速率数字格式：≥100 取整数、否则一位小数（无尾随 .0）", () => {
+    assert.equal(
+      buildAgentStreamMetricsLabel({
+        running: true,
+        elapsedMs: 5_000,
+        textChars: 10,
+        thinkingChars: 0,
+        completionTokens: 600,
+        tokenSource: "usage",
+        tokensPerSecond: 123.4,
+      }),
+      "生成中 · 5.0s · 输出 600 t · 123 t/s"
+    );
+    assert.equal(
+      buildAgentStreamMetricsLabel({
+        running: true,
+        elapsedMs: 5_000,
+        textChars: 10,
+        thinkingChars: 0,
+        completionTokens: 28,
+        tokenSource: "usage",
+        tokensPerSecond: 5.52,
+      }),
+      "生成中 · 5.0s · 输出 28 t · 5.5 t/s"
+    );
   });
 });

@@ -6,4 +6,9 @@
 export {
   buildStreamMetricsLine,
   formatCharCount,
+  slidingTokenRate,
+  createTokenRateSampler,
+  SLIDING_TOKEN_RATE_WINDOW_MS,
+  type TokenRateSample,
+  type TokenRateSampler,
 } from "@novel-master/core/format";

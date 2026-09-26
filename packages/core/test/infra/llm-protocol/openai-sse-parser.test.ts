@@ -247,5 +247,39 @@ describe("openai-sse-parser", () => {
     assert.ok(toolUse && toolUse.type === "tool_use");
     assert.deepEqual(toolUse.input, {});
   });
+
+  it("T-M3: 协议层流中零 usage 事件；usage 终值只在 streamRaw（done 结果由 runner 补发）", () => {
+    const state = createOpenAiSseParserState();
+    const eventTypes: string[] = [];
+    const onStream = (ev: { type: string }) => {
+      eventTypes.push(ev.type);
+    };
+
+    feedOpenAiSseChunk(
+      state,
+      [
+        'data: {"choices":[{"delta":{"content":"Hel"}}]}',
+        "",
+        'data: {"choices":[{"delta":{"content":"lo"}}]}',
+        "",
+        // 协议限制：usage 只随最后一块到达（常为空 choices）——流中不 emit
+        'data: {"choices":[],"usage":{"prompt_tokens":5,"completion_tokens":2,"total_tokens":7}}',
+        "",
+        "data: [DONE]",
+        "",
+      ].join("\n"),
+      onStream,
+    );
+    finishOpenAiSse(state, onStream);
+
+    assert.ok(
+      !eventTypes.includes("usage"),
+      "openai 协议层流中不应 emit usage 事件（含最后一块携带 usage 时）"
+    );
+    // 终值出口锁定：done 的 LlmChatResult.usage 来自 streamRaw.usage（既有行为）
+    const { streamRaw } = finishOpenAiSse(state);
+    const usage = (streamRaw as { usage?: Record<string, number> }).usage;
+    assert.equal(usage?.completion_tokens, 2);
+  });
 });
 

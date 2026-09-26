@@ -1,13 +1,22 @@
-import { formatCharCount } from "./format-char-count.js";
+/**
+ * 流式 metrics 条文案（Mobile/Desktop 共用，stream-metrics-tokens 改版）。
+ *
+ * 形态：「{prefix} · {elapsed} · 输出 {N} t · {rate} t/s」。正文/思考不再
+ * 分列——思考期在 anthropic/gemini 下 usage 已含、heuristic 下随正文一并
+ * 累计字符按 ceil 口径折算，天然并入输出。速率段仅在实时速率可得时拼接
+ * （样本不足时省略，避免除零/首秒抖动）。
+ *
+ * @module domain/format/format-stream-metrics-line
+ */
 
-/** 流式 metrics 展示切片（Mobile/Desktop 共用）。 */
+/** 流式 metrics 展示切片。 */
 export type StreamMetricsLineInput = {
   readonly running: boolean;
   readonly elapsedMs: number;
-  readonly textChars: number;
-  readonly thinkingChars: number;
-  readonly totalChars: number;
-  readonly charsPerSecond: number;
+  /** run 级累计输出 token（usage 真值优先，heuristic 兜底折算）。 */
+  readonly completionTokens: number;
+  /** 实时速率（token/秒，slidingTokenRate 产物）；null = 省略速率段。 */
+  readonly tokensPerSecond: number | null;
 };
 
 function formatStreamElapsed(seconds: number): string {
@@ -17,27 +26,30 @@ function formatStreamElapsed(seconds: number): string {
   return `${Math.round(seconds)}s`;
 }
 
+/**
+ * t/s 数字格式（对齐统计页 formatTokensPerSecond 惯例：≥100 整数、否则
+ * 1 位小数；整数值不带尾随 .0——与 T-M8 例文「45 t/s」形态一致）。
+ */
+function formatTokensPerSecondValue(rate: number): string {
+  if (rate >= 100) {
+    return `${Math.round(rate)}`;
+  }
+  return `${Number.parseFloat(rate.toFixed(1))}`;
+}
+
 /** 构建 metrics 条文案（供 ChatStreamMetricsBar 与单测共用）。 */
 export function buildStreamMetricsLine(
-  metrics: StreamMetricsLineInput
+  metrics: StreamMetricsLineInput,
 ): string {
   const elapsedSec = metrics.elapsedMs / 1000;
   const elapsedLabel = formatStreamElapsed(elapsedSec);
-  const rate =
-    metrics.charsPerSecond >= 10
-      ? Math.round(metrics.charsPerSecond)
-      : Math.round(metrics.charsPerSecond * 10) / 10;
-
   const prefix = metrics.running ? "生成中" : "上次生成";
   const parts: string[] = [
     `${prefix} · ${elapsedLabel}`,
-    `正文 ${formatCharCount(metrics.textChars)} 字`,
+    `输出 ${metrics.completionTokens.toLocaleString("zh-CN")} t`,
   ];
-  if (metrics.thinkingChars > 0) {
-    parts.push(`思考 ${formatCharCount(metrics.thinkingChars)} 字`);
-  }
-  if (metrics.totalChars > 0 && elapsedSec > 0) {
-    parts.push(`${rate} 字/秒`);
+  if (metrics.tokensPerSecond != null) {
+    parts.push(`${formatTokensPerSecondValue(metrics.tokensPerSecond)} t/s`);
   }
   return parts.join(" · ");
 }

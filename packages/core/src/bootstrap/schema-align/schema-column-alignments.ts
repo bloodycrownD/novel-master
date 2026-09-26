@@ -131,6 +131,20 @@ export const SCHEMA_COLUMN_ALIGNMENTS: readonly SchemaColumnAlignment[] = [
     addColumnSql:
       "ALTER TABLE llm_provider ADD COLUMN body_params_json TEXT NOT NULL DEFAULT '{}'",
   },
+  // session_run_state token 加列（stream-metrics-tokens：指标条 token 化）。
+  // 旧库 align 后新列取缺省（0 / 'heuristic'），水合按 0 t 起算兜底。
+  {
+    table: "session_run_state",
+    column: "completion_tokens",
+    addColumnSql:
+      "ALTER TABLE session_run_state ADD COLUMN completion_tokens INTEGER NOT NULL DEFAULT 0",
+  },
+  {
+    table: "session_run_state",
+    column: "token_source",
+    addColumnSql:
+      "ALTER TABLE session_run_state ADD COLUMN token_source TEXT NOT NULL DEFAULT 'heuristic'",
+  },
   // vfs_content_blob.ref_count：双保险。entry-id migration 的 Step 5b 已先补列，
   // 此条目防「旧库跳过 migration 直进 align」的边角场景（理论上不会发生，但成本低）。
   {

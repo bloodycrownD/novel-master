@@ -25,7 +25,7 @@ import {
 import { createMemorySessionKkv } from "../helpers/prompt-layout-test-helpers.js";
 import { type VfsService } from "@novel-master/core/vfs";
 import { noopSavedModelRepository } from "../helpers/noop-saved-model-repo.js";
-import { SimpleEventBus } from "@novel-master/core/events";
+import { SimpleEventBus, EVENT_AGENT_STREAM_USAGE } from "@novel-master/core/events";
 import type { SavedModelRepository } from "../../src/domain/provider/repositories/saved-model.port.js";
 import { BUILTIN_PROVIDER_UUID_OPENAI } from "../../src/domain/provider/logic/builtin-providers.js";
 
@@ -50,8 +50,8 @@ const defaultRunScope = {
 function runnerDeps(deps: RunnerDepsInput): CreateAgentRunnerDeps {
   return {
     savedModels: noopSavedModelRepository(),
-    ...deps,
     eventBus: new SimpleEventBus(),
+    ...deps,
     sessionKkv: createMemorySessionKkv(),
     workplace: () =>
       ({
@@ -63,12 +63,12 @@ function runnerDeps(deps: RunnerDepsInput): CreateAgentRunnerDeps {
   };
 }
 
-// runnerDeps 的入参类型：savedModels 可覆盖（T-S3 用 stub repo 替换默认 noop）。
+// runnerDeps 的入参类型：savedModels / eventBus 可覆盖（T-S3 stub repo、T-M4 订阅 bus）。
 type RunnerDepsInput = Omit<
   CreateAgentRunnerDeps,
   "eventBus" | "sessionKkv" | "workplace" | "savedModels"
 > &
-  Partial<Pick<CreateAgentRunnerDeps, "savedModels">>;
+  Partial<Pick<CreateAgentRunnerDeps, "savedModels" | "eventBus">>;
 
 function mockVfs(): VfsService {
   const files = new Map<string, string>();
@@ -280,6 +280,143 @@ describe("agent-runner usage passthrough (T-S2)", () => {
       assert.ok(typeof firstTokenMs === "number");
       assert.ok(typeof durationMs === "number");
     }
+  });
+});
+
+describe("agent-runner 流中 usage 事件（T-M4）", () => {
+  /** 每 step 捕获 runner 装配的 onStream，供用例在请求期间注入流中 usage 事件。 */
+  function createStreamingMockModel(
+    steps: Array<{
+      streamUsage?: number[];
+      result: LlmChatResult;
+    }>,
+  ): ModelRequestService {
+    let calls = 0;
+    return {
+      request: mock.fn(async (_savedModelId: string, _userContent: string, options: { onStream?: (ev: { type: string; usage?: { completionTokens?: number } }) => void }) => {
+        const step = steps[calls];
+        calls += 1;
+        if (step == null) {
+          throw new Error("Unexpected extra model request");
+        }
+        for (const completionTokens of step.streamUsage ?? []) {
+          options.onStream?.({
+            type: "usage",
+            usage: { completionTokens },
+          });
+        }
+        return step.result;
+      }),
+    };
+  }
+
+  it("多 step：流中 step 口径换算 run 级累计、每 step 请求 done 后补发一条 run 级终值事件", async () => {
+    const session = new InMemoryAgentSession();
+    await session.append("user", textBlocks("go"));
+    const bus = new SimpleEventBus();
+    const usagePayloads: Array<{
+      sessionId: string;
+      runId: string;
+      completionTokens: number;
+      source: string;
+    }> = [];
+    bus.subscribe(EVENT_AGENT_STREAM_USAGE, (p) => usagePayloads.push(p));
+
+    // step1：流中累计 5→10（step 口径），done 终值 12（如流中最后一块后的校正）；
+    // step1 带 tool_use 触发 step2：流中累计 3，done 终值 7。
+    const model = createStreamingMockModel([
+      {
+        streamUsage: [5, 10],
+        result: {
+          assistantText: "",
+          blocks: [{ type: "tool_use", id: "t1", name: "ls", input: { path: "/" } }],
+          raw: {},
+          usage: { promptTokens: 1, completionTokens: 12, totalTokens: 13 },
+        },
+      },
+      {
+        streamUsage: [3],
+        result: {
+          assistantText: "done",
+          blocks: [{ type: "text", text: "done" }],
+          raw: {},
+          usage: { promptTokens: 2, completionTokens: 7, totalTokens: 9 },
+        },
+      },
+    ]);
+
+    const registry = new ToolRegistry();
+    registerBuiltinTools(registry);
+    const runner = createAgentRunner(
+      runnerDeps({
+        session,
+        modelRequests: model,
+        registry,
+        toolCtx: mockToolCtx(mockVfs()),
+        eventBus: bus,
+      }),
+    );
+
+    const result = await runner.run({
+      maxSteps: 3,
+      definition: minimalDefinition(),
+      stream: true,
+      ...defaultRunScope,
+    });
+
+    assert.equal(result.stopReason, "completed");
+    // step1 流中（基线 0）：5、10 → done 补发 12；
+    // step2 流中（基线 12）：12+3=15 → done 补发 12+7=19。
+    assert.deepEqual(
+      usagePayloads.map((p) => p.completionTokens),
+      [5, 10, 12, 15, 19],
+    );
+    for (const p of usagePayloads) {
+      assert.equal(p.sessionId, MOCK_SESSION_ID);
+      assert.equal(p.source, "usage");
+      assert.ok(p.runId.length > 0);
+    }
+  });
+
+  it("step done 无 usage（三方网关不给）→ 不并入不补发，全程零 usage 事件", async () => {
+    const session = new InMemoryAgentSession();
+    await session.append("user", textBlocks("go"));
+    const bus = new SimpleEventBus();
+    const usagePayloads: unknown[] = [];
+    bus.subscribe(EVENT_AGENT_STREAM_USAGE, (p) => usagePayloads.push(p));
+
+    const model = createStreamingMockModel([
+      {
+        // 流中零 usage 事件段（openai 网关不给 usage 的典型形态）
+        result: {
+          assistantText: "hi",
+          blocks: [{ type: "text", text: "hi" }],
+          raw: {},
+        },
+      },
+    ]);
+
+    const registry = new ToolRegistry();
+    registerBuiltinTools(registry);
+    const runner = createAgentRunner(
+      runnerDeps({
+        session,
+        modelRequests: model,
+        registry,
+        toolCtx: mockToolCtx(mockVfs()),
+        eventBus: bus,
+      }),
+    );
+
+    const result = await runner.run({
+      maxSteps: 1,
+      definition: minimalDefinition(),
+      stream: true,
+      ...defaultRunScope,
+    });
+
+    assert.equal(result.stopReason, "completed");
+    assert.equal(usagePayloads.length, 0);
   });
 });
 

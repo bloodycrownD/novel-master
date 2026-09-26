@@ -37,6 +37,8 @@ function makeRunningRow(
     startedAtMs: 1000,
     textChars: 42,
     thinkingChars: 7,
+    completionTokens: 13,
+    tokenSource: "usage",
     partialText: "在途 partial",
     partialThinking: "在途思考",
     pendingChildrenJson: '["child-1"]',

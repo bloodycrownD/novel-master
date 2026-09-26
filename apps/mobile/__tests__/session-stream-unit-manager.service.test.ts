@@ -420,7 +420,12 @@ describe('SessionStreamUnitManager', () => {
       expect.objectContaining({
         status: 'starting',
         runId: null,
-        metrics: {textChars: 0, thinkingChars: 0},
+        metrics: {
+          textChars: 0,
+          thinkingChars: 0,
+          completionTokens: 0,
+          tokenSource: 'heuristic',
+        },
         partialText: '',
         partialThinking: '',
         injected: false,
@@ -776,7 +781,12 @@ describe('SessionStreamUnit', () => {
         status: 'idle',
         sessionId: 's',
         projectId: 'p',
-        metrics: {textChars: 0, thinkingChars: 0},
+        metrics: {
+          textChars: 0,
+          thinkingChars: 0,
+          completionTokens: 0,
+          tokenSource: 'heuristic',
+        },
       }),
     );
 

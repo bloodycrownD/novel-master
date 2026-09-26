@@ -25,6 +25,7 @@ import {
   EVENT_AGENT_STEP_COMMITTED,
   EVENT_AGENT_STREAM_TEXT_DELTA,
   EVENT_AGENT_STREAM_THINKING_DELTA,
+  EVENT_AGENT_STREAM_USAGE,
   EVENT_SUBAGENT_CHILD_SESSION_CREATED,
   SimpleEventBus,
 } from '@novel-master/core/events';
@@ -32,6 +33,7 @@ import {
   isMobileAgentActive,
   setMobileAgentActive,
 } from '@/runtime/agent-activity';
+import {HeuristicTokenCounter} from '@novel-master/core/provider';
 import {SessionStreamUnitManager} from '@/services/session-stream-unit-manager.service';
 import {
   SESSION_STREAM_APPLY_INTERVAL_MS,
@@ -233,7 +235,13 @@ describe('SessionStreamUnit 事件管线（T-U2：切走后事件仍消费）', 
     const snap = h.manager.snapshot('a');
     expect(snap?.partialText).toBe('Hello world');
     expect(snap?.partialThinking).toBe('hmm');
-    expect(snap?.metrics).toEqual({textChars: 11, thinkingChars: 3});
+    // heuristic 折算：ceil((11+3)/3.35) = 5
+    expect(snap?.metrics).toEqual({
+      textChars: 11,
+      thinkingChars: 3,
+      completionTokens: 5,
+      tokenSource: 'heuristic',
+    });
     expect(snap?.startedAtMs).toBe(CLOCK_START_MS);
 
     // step 边界：partial 清零（core registry 重置对齐），指标是 run 级累计不清
@@ -241,7 +249,12 @@ describe('SessionStreamUnit 事件管线（T-U2：切走后事件仍消费）', 
     const afterStep = h.manager.snapshot('a');
     expect(afterStep?.partialText).toBe('');
     expect(afterStep?.partialThinking).toBe('');
-    expect(afterStep?.metrics).toEqual({textChars: 11, thinkingChars: 3});
+    expect(afterStep?.metrics).toEqual({
+      textChars: 11,
+      thinkingChars: 3,
+      completionTokens: 5,
+      tokenSource: 'heuristic',
+    });
 
     // 新 step 的 delta 重新累积
     publishTextDelta(h.eventBus, 'a', 'r1', 'next');
@@ -530,7 +543,12 @@ describe('指标语义（T-U4 五条 + T-M 平移）', () => {
     expect(h.manager.startRun('a', 'p', 'again').ok).toBe(true);
     const starting = h.manager.snapshot('a');
     expect(starting?.status).toBe('starting');
-    expect(starting?.metrics).toEqual({textChars: 0, thinkingChars: 0});
+    expect(starting?.metrics).toEqual({
+      textChars: 0,
+      thinkingChars: 0,
+      completionTokens: 0,
+      tokenSource: 'heuristic',
+    });
     expect(starting?.startedAtMs).toBeGreaterThan(0);
     expect(starting?.elapsedMs).toBe(null);
     expect(starting?.partialText).toBe('');
@@ -566,7 +584,12 @@ describe('指标语义（T-U4 五条 + T-M 平移）', () => {
     publishStepCommitted(h.eventBus, 'a', 'r1');
 
     const after = h.manager.snapshot('a');
-    expect(after?.metrics).toEqual({textChars: 3, thinkingChars: 0});
+    expect(after?.metrics).toEqual({
+      textChars: 3,
+      thinkingChars: 0,
+      completionTokens: 1, // ceil(3/3.35)
+      tokenSource: 'heuristic',
+    });
     expect(after?.startedAtMs).toBe(before?.startedAtMs);
   });
 
@@ -580,14 +603,24 @@ describe('指标语义（T-U4 五条 + T-M 平移）', () => {
     publishFinished(h.eventBus, 'a', 'r1');
     const settled = h.manager.snapshot('a');
     expect(settled?.elapsedMs).toBe(5000);
-    expect(settled?.metrics).toEqual({textChars: 3, thinkingChars: 0});
+    expect(settled?.metrics).toEqual({
+      textChars: 3,
+      thinkingChars: 0,
+      completionTokens: 1,
+      tokenSource: 'heuristic',
+    });
     expect(settled?.partialText).toBe('abc'); // settle 冲刷落地
 
     // 收尾后同 runId 的迟到 delta：状态守卫拒绝，指标不再增长
     publishTextDelta(h.eventBus, 'a', 'r1', 'late');
     advanceStreamTimers();
     const frozen = h.manager.snapshot('a');
-    expect(frozen?.metrics).toEqual({textChars: 3, thinkingChars: 0});
+    expect(frozen?.metrics).toEqual({
+      textChars: 3,
+      thinkingChars: 0,
+      completionTokens: 1,
+      tokenSource: 'heuristic',
+    });
     expect(frozen?.elapsedMs).toBe(5000);
   });
 
@@ -603,8 +636,18 @@ describe('指标语义（T-U4 五条 + T-M 平移）', () => {
 
     const snapA = h.manager.snapshot('sA');
     const snapB = h.manager.snapshot('sB');
-    expect(snapA?.metrics).toEqual({textChars: 3, thinkingChars: 2});
-    expect(snapB?.metrics).toEqual({textChars: 2, thinkingChars: 0});
+    expect(snapA?.metrics).toEqual({
+      textChars: 3,
+      thinkingChars: 2,
+      completionTokens: 2, // ceil(5/3.35)
+      tokenSource: 'heuristic',
+    });
+    expect(snapB?.metrics).toEqual({
+      textChars: 2,
+      thinkingChars: 0,
+      completionTokens: 1, // ceil(2/3.35)
+      tokenSource: 'heuristic',
+    });
     expect(snapA?.partialText).toBe('aaa');
     expect(snapB?.partialText).toBe('bb');
 
@@ -787,8 +830,18 @@ describe('T-U13: 跨项目并行等价', () => {
     const snapB = h.manager.snapshot('sb');
     expect(snapA?.projectId).toBe('p1');
     expect(snapB?.projectId).toBe('p2');
-    expect(snapA?.metrics).toEqual({textChars: 5, thinkingChars: 2});
-    expect(snapB?.metrics).toEqual({textChars: 4, thinkingChars: 0});
+    expect(snapA?.metrics).toEqual({
+      textChars: 5,
+      thinkingChars: 2,
+      completionTokens: 3, // ceil(7/3.35)
+      tokenSource: 'heuristic',
+    });
+    expect(snapB?.metrics).toEqual({
+      textChars: 4,
+      thinkingChars: 0,
+      completionTokens: 2, // ceil(4/3.35)
+      tokenSource: 'heuristic',
+    });
     expect(snapA?.pendingChildren).toEqual(['ca']);
     expect(snapB?.pendingChildren).toEqual(['cb']);
 
@@ -950,3 +1003,134 @@ function eventBusSettle(
     success: true,
   });
 }
+
+/** 发布 usage 事件（completionTokens 为 run 级累计，source 恒 usage）。 */
+function publishUsage(
+  eventBus: SimpleEventBus,
+  sessionId: string,
+  runId: string,
+  completionTokens: number,
+): void {
+  eventBus.publish(EVENT_AGENT_STREAM_USAGE, {
+    sessionId,
+    runId,
+    completionTokens,
+    source: 'usage',
+  });
+}
+
+describe('token 化指标（T-M5/T-M7）', () => {
+  beforeEach(() => {
+    setMobileAgentActive(false);
+    jest.clearAllMocks();
+    resetKeepAliveStateForTests();
+    jest.useFakeTimers();
+    jest.setSystemTime(CLOCK_START_MS);
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+    setMobileAgentActive(false);
+    resetKeepAliveStateForTests();
+  });
+
+  it('T-M7: heuristic 按累计字符长度取 ceil——逐 delta 更新与 HeuristicTokenCounter.countText 全量计数严格一致', () => {
+    const h = createHarness();
+    startRunningRun(h, 'a', 'r1');
+
+    // 分多条 delta（含正文/思考交替）逐次核对折算值。
+    const chunks = ['abc', '中文内容', 'de', '更多思考'];
+    let textLen = 0;
+    let thinkingLen = 0;
+    chunks.forEach((chunk, index) => {
+      if (index % 2 === 0) {
+        publishTextDelta(h.eventBus, 'a', 'r1', chunk);
+        textLen += chunk.length;
+      } else {
+        publishThinkingDelta(h.eventBus, 'a', 'r1', chunk);
+        thinkingLen += chunk.length;
+      }
+      const metrics = h.manager.snapshot('a')?.metrics;
+      expect(metrics?.tokenSource).toBe('heuristic');
+      expect(metrics?.completionTokens).toBe(
+        Math.ceil((textLen + thinkingLen) / 3.35),
+      );
+    });
+
+    // 与全量计数严格一致（单次 countText 口径，非逐 delta 浮点累加）。
+    const counter = new HeuristicTokenCounter();
+    expect(h.manager.snapshot('a')?.metrics.completionTokens).toBe(
+      counter.countText('x'.repeat(textLen + thinkingLen)),
+    );
+  });
+
+  it('T-M5: usage 事件覆盖 heuristic 累计、source 翻转；step 边界不清零（run 级）；真值后 heuristic 不回写', () => {
+    const h = createHarness();
+    startRunningRun(h, 'a', 'r1');
+
+    publishTextDelta(h.eventBus, 'a', 'r1', 'abcdef');
+    expect(h.manager.snapshot('a')?.metrics).toEqual(
+      expect.objectContaining({completionTokens: 2, tokenSource: 'heuristic'}),
+    );
+
+    // usage 事件（run 级累计真值）到达：覆盖 + 翻转。
+    publishUsage(h.eventBus, 'a', 'r1', 999);
+    expect(h.manager.snapshot('a')?.metrics).toEqual(
+      expect.objectContaining({completionTokens: 999, tokenSource: 'usage'}),
+    );
+
+    // 后续 delta 不回写 heuristic（真值优先，防估算抖动回退）。
+    publishTextDelta(h.eventBus, 'a', 'r1', 'ghij');
+    expect(h.manager.snapshot('a')?.metrics).toEqual(
+      expect.objectContaining({completionTokens: 999, tokenSource: 'usage'}),
+    );
+
+    // step 边界：token 与字数同为 run 级累计，不清零。
+    publishStepCommitted(h.eventBus, 'a', 'r1');
+    expect(h.manager.snapshot('a')?.metrics).toEqual(
+      expect.objectContaining({completionTokens: 999, tokenSource: 'usage'}),
+    );
+
+    // run 级累计持续覆盖（多 step 真值递增）。
+    publishUsage(h.eventBus, 'a', 'r1', 1234);
+    expect(h.manager.snapshot('a')?.metrics).toEqual(
+      expect.objectContaining({completionTokens: 1234, tokenSource: 'usage'}),
+    );
+  });
+
+  it('T-M5 openai 场景：流中零 usage 事件段 heuristic 撑显示，step done 补发的终值事件到达即覆盖跳正', () => {
+    const h = createHarness();
+    startRunningRun(h, 'a', 'r1');
+
+    // openai 流中零事件段：heuristic 估算撑住显示（ceil(13/3.35)=4）。
+    publishTextDelta(h.eventBus, 'a', 'r1', 'step one body');
+    expect(h.manager.snapshot('a')?.metrics).toEqual(
+      expect.objectContaining({completionTokens: 4, tokenSource: 'heuristic'}),
+    );
+    publishStepCommitted(h.eventBus, 'a', 'r1');
+
+    // step done 后 runner 补发的 run 级终值事件（同一 ingestUsage 管线）：
+    // 覆盖 heuristic、跳正到真值（校正链闭环不依赖 FINISHED）。
+    publishUsage(h.eventBus, 'a', 'r1', 87);
+    expect(h.manager.snapshot('a')?.metrics).toEqual(
+      expect.objectContaining({completionTokens: 87, tokenSource: 'usage'}),
+    );
+  });
+
+  it('T-M5: 陈旧 usage 事件（runId 不符 / 非 running 态）不计指标', () => {
+    const h = createHarness();
+    startRunningRun(h, 'a', 'r1');
+    publishTextDelta(h.eventBus, 'a', 'r1', 'abc');
+
+    // runId 不符：整体忽略。
+    publishUsage(h.eventBus, 'a', 'other-run', 500);
+    expect(h.manager.snapshot('a')?.metrics.tokenSource).toBe('heuristic');
+
+    // 收尾（settled）后迟到的 usage 不再生效：先收尾再发迟到事件。
+    publishFinished(h.eventBus, 'a', 'r1');
+    publishUsage(h.eventBus, 'a', 'r1', 700);
+    expect(h.manager.snapshot('a')?.metrics).toEqual(
+      expect.objectContaining({completionTokens: 1, tokenSource: 'heuristic'}),
+    );
+  });
+});

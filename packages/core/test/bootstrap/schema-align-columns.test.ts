@@ -464,4 +464,61 @@ describe("schema 列对齐（T-B3）", () => {
       await conn.close();
     }
   });
+
+  it("A14：v15 存量库（session_run_state 无 token 两列）bootstrap 后补列、存量行缺省 0/'heuristic'、版本升到位（T-M6）", async () => {
+    // stream-metrics-tokens 迭代：v15 存量库靠本轮 SCHEMA_BOOT_VERSION bump 走
+    // 慢路径，由 ALIGN 给 session_run_state 补 completion_tokens/token_source 两列；
+    // 存量行新列取 DEFAULT（0 / 'heuristic'），水合按 0 t 起算兜底，无存量回填。
+    const conn = await openInMemoryConnection();
+    try {
+      await bootstrapNovelMaster(conn);
+      // 补列前插入一行存量 running 行（无 token 两列的 v15 形态）
+      const legacySessionId = randomUUID();
+      const now = 1_700_000_000_000;
+      await conn.execute(
+        `INSERT INTO session_run_state (
+           session_id, project_id, run_id, status, started_at_ms,
+           text_chars, thinking_chars, partial_text, partial_thinking,
+           pending_children_json, updated_at_ms
+         ) VALUES (
+           '${legacySessionId}', '${randomUUID()}', 'run-v15', 'running', ${now},
+           120, 30, 'partial', NULL, NULL, ${now}
+         )`
+      );
+      await conn.execute(
+        "ALTER TABLE session_run_state DROP COLUMN completion_tokens"
+      );
+      await conn.execute(
+        "ALTER TABLE session_run_state DROP COLUMN token_source"
+      );
+      await conn.execute("PRAGMA user_version = 15");
+
+      await bootstrapNovelMaster(conn);
+
+      const columns = await tableColumnNames(conn, "session_run_state");
+      assert.ok(
+        columns.has("completion_tokens"),
+        "completion_tokens 应被 ALIGN 补列"
+      );
+      assert.ok(columns.has("token_source"), "token_source 应被 ALIGN 补列");
+
+      // 存量行走 DEFAULT：token 0、source 'heuristic'（repository 收窄层兜底同值）
+      const legacyRow = await conn.query<{
+        completion_tokens: number;
+        token_source: string;
+      }>(
+        `SELECT completion_tokens, token_source FROM session_run_state
+         WHERE session_id = '${legacySessionId}'`
+      );
+      assert.equal(legacyRow[0]?.completion_tokens, 0);
+      assert.equal(legacyRow[0]?.token_source, "heuristic");
+
+      const versionRows = await conn.query<{ user_version: number }>(
+        "PRAGMA user_version"
+      );
+      assert.equal(versionRows[0]?.user_version, SCHEMA_BOOT_VERSION);
+    } finally {
+      await conn.close();
+    }
+  });
 });

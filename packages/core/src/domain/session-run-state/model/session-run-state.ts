@@ -12,12 +12,16 @@
  */
 export type SessionRunStatus = "starting" | "running" | "settled";
 
+/** token 计数来源：usage=协议/补发事件真值；heuristic=字符折算兜底。 */
+export type SessionRunStateTokenSource = "usage" | "heuristic";
+
 /**
  * `session_run_state` 行模型（每 sessionId 至多一行）。
  *
  * `settled` 行的字段语义：`partialText`/`partialThinking`/`pendingChildrenJson`
- * 清空（null），仅保留 metrics 字段（`textChars`/`thinkingChars`/`startedAtMs`/
- * `updatedAtMs` 等），供跨重启的「上次生成」读取。
+ * 清空（null），仅保留 metrics 字段（`textChars`/`thinkingChars`/
+ * `completionTokens`/`tokenSource`/`startedAtMs`/`updatedAtMs` 等），供跨重启的
+ * 「上次生成」读取。
  */
 export interface SessionRunState {
   readonly sessionId: string;
@@ -27,6 +31,9 @@ export interface SessionRunState {
   readonly startedAtMs: number;
   readonly textChars: number;
   readonly thinkingChars: number;
+  /** run 级累计输出 token（usage 真值优先，heuristic 兜底折算）。 */
+  readonly completionTokens: number;
+  readonly tokenSource: SessionRunStateTokenSource;
   readonly partialText: string | null;
   readonly partialThinking: string | null;
   readonly pendingChildrenJson: string | null;

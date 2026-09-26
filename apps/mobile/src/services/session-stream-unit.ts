@@ -43,6 +43,7 @@
  * @module services/session-stream-unit
  */
 import type {ChatMessage} from '@novel-master/core/chat';
+import {CHARACTERS_PER_TOKEN_RATIO} from '@novel-master/core/provider';
 import type {StreamWireChunk, StreamWireKind} from './stream-wire-queue';
 import {appendWireChunk, coalesceWireQueue} from './stream-wire-queue';
 import {createStreamApplyBuffer} from './stream-apply-buffer';
@@ -138,11 +139,25 @@ export interface SessionStreamWebviewHandle {
   onControlMessage?(message: unknown): void;
 }
 
-/** 指标快照：run 级累计（新 run 重置=新单元天然零值；step 边界不清）。 */
+/**
+ * 指标快照：run 级累计（新 run 重置=新单元天然零值；step 边界不清）。
+ *
+ * token 字段（stream-metrics-tokens）：`completionTokens` 优先取 usage 事件
+ * 的 run 级累计真值，无真值段由 heuristic 按**累计**字符长度取 ceil 折算
+ * （`ceil(totalChars / CHARACTERS_PER_TOKEN_RATIO)`，与
+ * `HeuristicTokenCounter.countText` 单次全量计数严格一致）；`tokenSource`
+ * 记录当前值的来源（usage 事件到达即翻转，此后 heuristic 不再回写——
+ * 真值优先，防估算抖动）。
+ */
 export interface SessionStreamUnitMetrics {
   readonly textChars: number;
   readonly thinkingChars: number;
+  readonly completionTokens: number;
+  readonly tokenSource: SessionStreamUnitTokenSource;
 }
+
+/** token 计数来源：usage=事件真值（run 级累计）；heuristic=字符折算兜底。 */
+export type SessionStreamUnitTokenSource = 'usage' | 'heuristic';
 
 /**
  * 消息仓库窄口（单元消息管线回源 DB 用）。
@@ -238,7 +253,18 @@ export class SessionStreamUnit {
   private graceTimer: ReturnType<typeof setTimeout> | null = null;
   private destroyed = false;
 
-  private metricsAcc = {textChars: 0, thinkingChars: 0};
+  /** 指标累积器（可变内部形状；snapshot 时展开为 readonly 投影）。 */
+  private metricsAcc: {
+    textChars: number;
+    thinkingChars: number;
+    completionTokens: number;
+    tokenSource: SessionStreamUnitTokenSource;
+  } = {
+    textChars: 0,
+    thinkingChars: 0,
+    completionTokens: 0,
+    tokenSource: 'heuristic',
+  };
   private startedAtMsValue = 0;
   private elapsedMsValue: number | null = null;
   private partialTextValue = '';
@@ -492,6 +518,34 @@ export class SessionStreamUnit {
   /** 思考 delta 入口：语义同 {@link ingestTextDelta}。 */
   ingestThinkingDelta(runId: string, text: string): boolean {
     return this.ingestDelta(runId, 'thinking', text);
+  }
+
+  /**
+   * usage 事件入口（manager 按 sessionId 路由，EVENT_AGENT_STREAM_USAGE）。
+   *
+   * 事件携带的是 **run 级累计** `completionTokens`（runner 已换算，消费端零
+   * 算术），到达即覆盖累计值并置 `source=usage`——此后 heuristic 不再回写
+   * （真值优先）。openai 流中零事件段由 heuristic 撑显示，step done 后
+   * runner 补发的 run 级终值经本入口到达、覆盖 heuristic 跳正（校正链闭环
+   * 不依赖 FINISHED）。守卫同 delta：running 态 + runId 所有权（陈旧事件
+   * 不计指标）。返回是否生效（生效才触发写通快照 append）。
+   */
+  ingestUsage(runId: string, completionTokens: number): boolean {
+    if (
+      this.destroyed ||
+      this.status !== 'running' ||
+      this.runIdValue !== runId ||
+      !Number.isFinite(completionTokens) ||
+      completionTokens < 0
+    ) {
+      return false;
+    }
+    this.metricsAcc = {
+      ...this.metricsAcc,
+      completionTokens,
+      tokenSource: 'usage',
+    };
+    return true;
   }
 
   /**
@@ -857,6 +911,16 @@ export class SessionStreamUnit {
       this.metricsAcc.textChars += text.length;
     } else {
       this.metricsAcc.thinkingChars += text.length;
+    }
+    // heuristic 增量兜底（stream-metrics-tokens）：对**累计**字符长度取 ceil
+    // 折算（与 HeuristicTokenCounter.countText 单次全量计数严格一致——逐
+    // delta 浮点累加 len/3.35 再取整与全量 ceil 不等价）。usage 真值到手后
+    // （tokenSource=usage）heuristic 不再回写，防估算抖动回退真值。
+    if (this.metricsAcc.tokenSource === 'heuristic') {
+      this.metricsAcc.completionTokens = Math.ceil(
+        (this.metricsAcc.textChars + this.metricsAcc.thinkingChars) /
+          CHARACTERS_PER_TOKEN_RATIO,
+      );
     }
     appendWireChunk(this.ingressQueue, {kind, delta: text});
     if (this.ingressTimer == null) {

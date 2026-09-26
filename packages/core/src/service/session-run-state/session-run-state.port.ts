@@ -7,6 +7,7 @@
 import type {
   SessionRunState,
   SessionRunStatus,
+  SessionRunStateTokenSource,
 } from "@/domain/session-run-state/model/session-run-state.js";
 
 /** {@link SessionRunStateService.settle} 的 metrics 输入（不含 partial 字段）。 */
@@ -17,6 +18,8 @@ export interface SessionRunStateSettleInput {
   readonly startedAtMs: number;
   readonly textChars: number;
   readonly thinkingChars: number;
+  readonly completionTokens: number;
+  readonly tokenSource: SessionRunStateTokenSource;
   readonly updatedAtMs: number;
 }
 

@@ -81,6 +81,7 @@ import {
   EVENT_AGENT_STEP_COMMITTED,
   EVENT_AGENT_STREAM_TEXT_DELTA,
   EVENT_AGENT_STREAM_THINKING_DELTA,
+  EVENT_AGENT_STREAM_USAGE,
   EVENT_SUBAGENT_CHILD_SESSION_CREATED,
 } from '@novel-master/core/events';
 import type {
@@ -90,6 +91,7 @@ import type {
   AgentStepCommittedPayload,
   AgentStreamTextDeltaPayload,
   AgentStreamThinkingDeltaPayload,
+  AgentStreamUsagePayload,
   SubagentChildSessionCreatedPayload,
 } from '@novel-master/core/events';
 import type {SendAnnotateDraft} from '@novel-master/core/chat';
@@ -402,6 +404,22 @@ export class SessionStreamUnitManager {
         EVENT_AGENT_STEP_COMMITTED,
         (payload: AgentStepCommittedPayload) => this.onStepCommitted(payload),
       ),
+      // usage 事件（stream-metrics-tokens）：run 级累计 completionTokens 直达
+      // unit.ingestUsage 覆盖 heuristic（事件即归账，不经缓冲节拍——与
+      // textChars 同口径；风暴面由事件总线 microtask 合批兜住）。生效才把
+      // 写通快照 append 进 coalescer（陈旧事件不产生持久层写）。
+      this.runtime.eventBus.subscribe(
+        EVENT_AGENT_STREAM_USAGE,
+        (payload: AgentStreamUsagePayload) => {
+          const unit = this.units.get(payload.sessionId);
+          if (
+            unit != null &&
+            unit.ingestUsage(payload.runId, payload.completionTokens)
+          ) {
+            this.appendWritethroughSnapshot(unit);
+          }
+        },
+      ),
       this.runtime.eventBus.subscribe(
         EVENT_SUBAGENT_CHILD_SESSION_CREATED,
         (payload: SubagentChildSessionCreatedPayload) =>
@@ -559,6 +577,8 @@ export class SessionStreamUnitManager {
           metrics: {
             textChars: row.textChars,
             thinkingChars: row.thinkingChars,
+            completionTokens: row.completionTokens,
+            tokenSource: row.tokenSource,
           },
           partialText: row.partialText ?? '',
           partialThinking: row.partialThinking ?? '',
@@ -580,6 +600,8 @@ export class SessionStreamUnitManager {
           metrics: {
             textChars: row.textChars,
             thinkingChars: row.thinkingChars,
+            completionTokens: row.completionTokens,
+            tokenSource: row.tokenSource,
           },
           startedAtMs: row.startedAtMs,
           settledAtMs: row.updatedAtMs,
@@ -1034,6 +1056,8 @@ export class SessionStreamUnitManager {
       startedAtMs: 0,
       textChars: 0,
       thinkingChars: 0,
+      completionTokens: 0,
+      tokenSource: 'heuristic',
       partialText: null,
       partialThinking: null,
       pendingChildrenJson: null,
@@ -1508,6 +1532,8 @@ export class SessionStreamUnitManager {
       startedAtMs: snap.startedAtMs,
       textChars: snap.metrics.textChars,
       thinkingChars: snap.metrics.thinkingChars,
+      completionTokens: snap.metrics.completionTokens,
+      tokenSource: snap.metrics.tokenSource,
       partialText: snap.partialText.length > 0 ? snap.partialText : null,
       partialThinking:
         snap.partialThinking.length > 0 ? snap.partialThinking : null,
@@ -1549,6 +1575,8 @@ export class SessionStreamUnitManager {
         startedAtMs: snap.startedAtMs,
         textChars: snap.metrics.textChars,
         thinkingChars: snap.metrics.thinkingChars,
+        completionTokens: snap.metrics.completionTokens,
+        tokenSource: snap.metrics.tokenSource,
         updatedAtMs: Date.now(),
       })
       .catch(err => {

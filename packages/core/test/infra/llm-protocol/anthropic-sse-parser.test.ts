@@ -219,4 +219,62 @@ describe("anthropic-sse-parser", () => {
     assert.equal(parseAnthropicUsage(streamRaw), undefined);
   });
 
+  it("T-M1: message_delta 携带累计 output_tokens 时逐条 emit usage 事件（completionTokens 随 delta 增长）", () => {
+    const state = createAnthropicSseParserState();
+    const usageEvents: Array<{ completionTokens?: number }> = [];
+    const onStream = (ev: { type: string; usage?: { completionTokens?: number } }) => {
+      if (ev.type === "usage") {
+        usageEvents.push(ev.usage ?? {});
+      }
+    };
+
+    feedAnthropicSseChunk(
+      state,
+      [
+        // message_start 的输出侧（1）不 emit——emit 只挂 message_delta 分支
+        'data: {"type":"message_start","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"output_tokens":1}}}',
+        "",
+        'data: {"type":"content_block_start","content_block":{"type":"text","text":""}}',
+        "",
+        'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"Hi"}}',
+        "",
+        'data: {"type":"message_delta","delta":{"stop_reason":null},"usage":{"output_tokens":17}}',
+        "",
+        'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":" there"}}',
+        "",
+        'data: {"type":"message_delta","delta":{"stop_reason":null},"usage":{"output_tokens":42}}',
+        "",
+        // 累计值未变：不重发
+        'data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":42}}',
+        "",
+      ].join("\n"),
+      onStream,
+    );
+
+    assert.deepEqual(
+      usageEvents.map((u) => u.completionTokens),
+      [17, 42],
+    );
+  });
+
+  it("T-M1: message_delta 缺 usage 或缺 output_tokens 时不 emit", () => {
+    const state = createAnthropicSseParserState();
+    let usageCount = 0;
+    feedAnthropicSseChunk(
+      state,
+      [
+        'data: {"type":"message_delta","delta":{"stop_reason":null}}',
+        "",
+        'data: {"type":"message_delta","delta":{"stop_reason":null},"usage":{"output_tokens":5}}',
+        "",
+      ].join("\n"),
+      (ev) => {
+        if (ev.type === "usage") {
+          usageCount += 1;
+        }
+      },
+    );
+    assert.equal(usageCount, 1);
+  });
+
 });

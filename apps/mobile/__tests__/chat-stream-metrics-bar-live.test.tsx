@@ -15,6 +15,7 @@ import {
   EVENT_AGENT_RUN_FINISHED,
   EVENT_AGENT_RUN_STARTED,
   EVENT_AGENT_STREAM_TEXT_DELTA,
+  EVENT_AGENT_STREAM_USAGE,
 } from '@novel-master/core/events';
 import {setMobileAgentActive} from '@/runtime/agent-activity';
 import {SessionStreamUnitManager} from '@/services/session-stream-unit-manager.service';
@@ -109,7 +110,12 @@ describe('ChatStreamMetricsBarLive 双源（快照优先 / settled 投影兜底�
       runId: 'run-old',
       startedAtMs: 2_000,
       settledAtMs: 5_000,
-      metrics: {textChars: 123, thinkingChars: 45},
+      metrics: {
+        textChars: 123,
+        thinkingChars: 45,
+        completionTokens: 88,
+        tokenSource: 'usage',
+      },
       partialText: '中断正文',
       partialThinking: '',
       pendingChildren: [],
@@ -121,8 +127,8 @@ describe('ChatStreamMetricsBarLive 双源（快照优先 / settled 投影兜底�
     expect(line).toContain('已中断');
     expect(line).toContain('上次生成');
     expect(line).toContain('3.0s'); // 冻结历时 = 5000 - 2000
-    expect(line).toContain('正文 123 字');
-    expect(line).toContain('思考 45 字');
+    // T-M6/T-M8：中断现场恢复 token 数与 source（水合后 token 不归零）。
+    expect(line).toContain('输出 88 t');
   });
 
   it('starting 阶段被杀的 interrupted（计时与字数皆零）：不显示空指标条', () => {
@@ -133,7 +139,12 @@ describe('ChatStreamMetricsBarLive 双源（快照优先 / settled 投影兜底�
       runId: '',
       startedAtMs: 0,
       settledAtMs: 5_000,
-      metrics: {textChars: 0, thinkingChars: 0},
+      metrics: {
+        textChars: 0,
+        thinkingChars: 0,
+        completionTokens: 0,
+        tokenSource: 'heuristic',
+      },
       partialText: '',
       partialThinking: '',
       pendingChildren: [],
@@ -174,7 +185,8 @@ describe('ChatStreamMetricsBarLive 双源（快照优先 / settled 投影兜底�
 
     const line = renderMetricsLine(false, 's1');
     expect(line).toContain('上次生成');
-    expect(line).toContain('正文 5 字');
+    // 5 字符 heuristic 折算 ceil(5/3.35)=2：settled 投影带 token 冻结值。
+    expect(line).toContain('输出 2 t');
     expect(line).not.toContain('0.0s'); // 历时 ≥ 1096ms，非零起点
   });
 
@@ -198,12 +210,86 @@ describe('ChatStreamMetricsBarLive 双源（快照优先 / settled 投影兜底�
 
     const line = renderMetricsLine(true, 's1');
     expect(line).toContain('生成中');
-    expect(line).toContain('正文 5 字');
+    // 5 字符 heuristic 折算 ceil(5/3.35)=2（首秒样本不足省略速率段）。
+    expect(line).toContain('输出 2 t');
   });
 
   it('无单元且无 settled 投影：不渲染指标条', () => {
     const h = buildHarness();
     mockManager = h.manager;
     expect(renderMetricsLine(false, 's1')).toBe(null);
+  });
+
+  it('T-M10: heuristic→usage 覆盖瞬间滑窗重 seed，速率无尖刺', () => {
+    const h = buildHarness();
+    mockManager = h.manager;
+    mockManager.startRun('s1', 'p1', 'hi');
+    h.eventBus.publish(EVENT_AGENT_RUN_STARTED, {
+      sessionId: 's1',
+      projectId: 'p1',
+      runId: 'r1',
+    });
+
+    let tree!: TestRenderer.ReactTestRenderer;
+    const readLine = (): string | null => {
+      const textNodes = tree.root.findAllByType(Text);
+      return textNodes.length > 0
+        ? textNodes.map(node => String(node.props.children)).join(' | ')
+        : null;
+    };
+
+    act(() => {
+      tree = TestRenderer.create(
+        <ChatStreamMetricsBarLive agentRunning={true} sessionId="s1" />,
+      );
+    });
+
+    // heuristic 阶段：慢速积累（每秒 ~3 字符 ≈ 1 t）。
+    for (let i = 0; i < 6; i += 1) {
+      h.eventBus.publish(EVENT_AGENT_STREAM_TEXT_DELTA, {
+        sessionId: 's1',
+        runId: 'r1',
+        text: 'abc',
+      });
+      act(() => {
+        jest.advanceTimersByTime(1_000);
+      });
+    }
+    const beforeCorrection = readLine();
+    expect(beforeCorrection).toContain('生成中');
+    expect(beforeCorrection).toContain('输出 6 t'); // ceil(18/3.35)
+
+    // usage 校正：真值跳变到 1200（中文低估约半的典型幅度）。
+    h.eventBus.publish(EVENT_AGENT_STREAM_USAGE, {
+      sessionId: 's1',
+      runId: 'r1',
+      completionTokens: 1_200,
+      source: 'usage',
+    });
+    act(() => {
+      jest.advanceTimersByTime(500);
+    });
+    const atCorrection = readLine();
+    expect(atCorrection).toContain('输出 1,200 t');
+    // 重 seed 后窗口仅 1 个样本：速率段省略（绝无 4800 t/s 之类的尖刺数字）。
+    expect(atCorrection).not.toMatch(/\d+ t\/s/);
+
+    // 校正后从真值起算：继续 usage 递增，速率回到平滑小值。
+    h.eventBus.publish(EVENT_AGENT_STREAM_USAGE, {
+      sessionId: 's1',
+      runId: 'r1',
+      completionTokens: 1_206,
+      source: 'usage',
+    });
+    act(() => {
+      jest.advanceTimersByTime(1_000);
+    });
+    const afterRecovery = readLine();
+    expect(afterRecovery).toMatch(/输出 1,206 t/);
+    expect(afterRecovery).not.toMatch(/\d{3,} t\/s/); // 无三位数以上尖刺
+
+    act(() => {
+      tree.unmount();
+    });
   });
 });

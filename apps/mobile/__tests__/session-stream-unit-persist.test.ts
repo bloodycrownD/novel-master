@@ -101,6 +101,8 @@ function createFakeRunStateStore() {
         startedAtMs: input.startedAtMs,
         textChars: input.textChars,
         thinkingChars: input.thinkingChars,
+        completionTokens: input.completionTokens,
+        tokenSource: input.tokenSource,
         // settle 服务端语义：partial 三字段清空、metrics 保留。
         partialText: null,
         partialThinking: null,
@@ -268,6 +270,8 @@ function makeRow(
     startedAtMs: 2_000,
     textChars: 0,
     thinkingChars: 0,
+    completionTokens: 0,
+    tokenSource: 'heuristic',
     partialText: null,
     partialThinking: null,
     pendingChildrenJson: null,
@@ -527,6 +531,8 @@ describe('SessionStreamUnitManager 持久化接线（T-U7 / T-U12 / dispose）',
         startedAtMs: 2_000,
         textChars: 123,
         thinkingChars: 45,
+        completionTokens: 88,
+        tokenSource: 'usage',
         partialText: '中断正文',
         partialThinking: '中断思考',
         pendingChildrenJson: '["c1","c2"]',
@@ -551,7 +557,13 @@ describe('SessionStreamUnitManager 持久化接线（T-U7 / T-U12 / dispose）',
         settledAtMs: 5_000,
         partialText: '中断正文',
         partialThinking: '中断思考',
-        metrics: {textChars: 123, thinkingChars: 45},
+        metrics: {
+          textChars: 123,
+          thinkingChars: 45,
+          // T-M6：中断现场 token 数与 source 随水合恢复（token 不归零）
+          completionTokens: 88,
+          tokenSource: 'usage',
+        },
         pendingChildren: ['c1', 'c2'],
       }),
     );
@@ -600,7 +612,13 @@ describe('SessionStreamUnitManager 持久化接线（T-U7 / T-U12 / dispose）',
     // settled 投影：metrics + settledAtMs + elapsedMs（「上次生成」）
     const projection = h.manager.getSettledProjection('a');
     expect(projection).not.toBe(null);
-    expect(projection?.metrics).toEqual({textChars: 2, thinkingChars: 2});
+    expect(projection?.metrics).toEqual({
+      textChars: 2,
+      thinkingChars: 2,
+      // heuristic 兜底折算：ceil((2+2)/3.35) = 2
+      completionTokens: 2,
+      tokenSource: 'heuristic',
+    });
     expect(projection?.settledAtMs).toBeGreaterThanOrEqual(CLOCK_START_MS);
     expect(projection?.elapsedMs).toBeGreaterThanOrEqual(0);
 
@@ -665,7 +683,12 @@ describe('SessionStreamUnitManager 持久化接线（T-U7 / T-U12 / dispose）',
       expect.objectContaining({
         status: 'starting',
         runId: null,
-        metrics: {textChars: 0, thinkingChars: 0},
+        metrics: {
+          textChars: 0,
+          thinkingChars: 0,
+          completionTokens: 0,
+          tokenSource: 'heuristic',
+        },
         partialText: '',
         pendingChildren: [],
       }),
@@ -786,7 +809,12 @@ describe('SessionStreamUnitManager 持久化接线（T-U7 / T-U12 / dispose）',
     publishFinished(h.eventBus, 'a', 'r2');
     const projection = h.manager.getSettledProjection('a');
     expect(projection?.metrics.textChars).toBe(10);
-    expect(projection?.metrics).toEqual({textChars: 10, thinkingChars: 0});
+    expect(projection?.metrics).toEqual({
+      textChars: 10,
+      thinkingChars: 0,
+      completionTokens: 3, // ceil(10/3.35)
+      tokenSource: 'heuristic',
+    });
   });
 
   it('水合期间已被新 startRun 受理的会话跳过 adopt（新 run 优先于陈旧行）', async () => {

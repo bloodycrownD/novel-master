@@ -19,6 +19,7 @@ import {
   type SseParseDiagnostics,
 } from "./sse-parse-errors.js";
 import { tryParseToolArgumentsJson } from "./tool-arguments-parse.js";
+import { parseGeminiUsage } from "./usage-parser.js";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -39,6 +40,8 @@ export type GeminiSseParserState = SseParseDiagnostics & {
   functionCalls: Map<string, FunctionCallAccumulator>;
   streamRaw: unknown;
   emittedFunctionCallKeys: Set<string>;
+  /** 上一次 usage 事件 emit 的输出侧累计值（值不变不重发；undefined = 尚未 emit）。 */
+  lastEmittedCompletionTokens: number | undefined;
 };
 
 function readThoughtSignature(
@@ -57,7 +60,32 @@ export function createGeminiSseParserState(): GeminiSseParserState {
     streamRaw: undefined,
     malformedLineCount: 0,
     emittedFunctionCallKeys: new Set(),
+    lastEmittedCompletionTokens: undefined,
   };
+}
+
+/**
+ * 每个候选块到达时同步 emit 流中 usage 事件（usageMetadata.candidatesTokenCount
+ * 累计口径）。放在 `streamRaw` 覆盖存储点、candidates 早退之前——无候选内容的
+ * 块（如 usage-only 收尾块）也能 emit。累计值与上次 emit 相同（或缺失）时不发；
+ * 协议层不节流，每块必变的量由上层合批/节流吸收。
+ */
+function emitGeminiUsage(
+  state: GeminiSseParserState,
+  payload: Record<string, unknown>,
+  onStream?: (event: LlmStreamEvent) => void
+): void {
+  const usage = parseGeminiUsage(payload);
+  const completionTokens = usage?.completionTokens;
+  if (
+    usage == null ||
+    completionTokens == null ||
+    completionTokens === state.lastEmittedCompletionTokens
+  ) {
+    return;
+  }
+  state.lastEmittedCompletionTokens = completionTokens;
+  onStream?.({ type: "usage", usage });
 }
 
 function tryEmitGeminiToolUseIfComplete(
@@ -120,6 +148,7 @@ function processGeminiResponseChunk(
   onStream?: (event: LlmStreamEvent) => void
 ): void {
   state.streamRaw = payload;
+  emitGeminiUsage(state, payload, onStream);
   const candidates = payload.candidates;
   if (!Array.isArray(candidates) || candidates.length === 0) {
     return;

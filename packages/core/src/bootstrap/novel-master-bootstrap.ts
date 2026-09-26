@@ -94,8 +94,15 @@ import { IntegrityRepairRegistry } from "@/service/integrity-repair.js";
  * migration 在同一 bootstrap 事务内清空（清空重填口径：file_cache 可
  * 再生，各会话下次组装提示词时按新结构重填，重填即天然去重）；旧表
  * session_kkv_entry 不加列不改列。
+ * v16：session_run_state 新增 completion_tokens / token_source 两列
+ * （stream-metrics-tokens：指标条 token 化，usage 优先 / heuristic 兜底）。
+ * 老库（v15）靠本轮 bump 走慢路径由 ALIGN 补列，新列取缺省
+ * （0 / 'heuristic'），水合按 0 t 起算兜底，无存量回填。与
+ * message-content-compression 迭代同期 bump（该 spec 同以主干现值 +1 顺延、
+ * 不写死号）：本条在分支内原编号即 16（主干现值 15 + 1）；两迭代先后合并
+ * 入主干时后合者对合并后的现值再 +1 顺延，bump 落地前以主干实际值核对。
  */
-export const SCHEMA_BOOT_VERSION = 15;
+export const SCHEMA_BOOT_VERSION = 16;
 
 /** 各模块 DDL 语句，按依赖安全顺序排列。 */
 export const NOVEL_MASTER_SCHEMA_STATEMENTS: readonly string[] = [
