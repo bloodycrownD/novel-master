@@ -1,12 +1,98 @@
 import {switchToNative} from '../helpers/context';
 
+/**
+ * 首屏「版本检查」弹窗的关闭候选（「今日不再提醒」优先，避免误触「去下载」）。
+ *
+ * 为什么三重兜底：弹窗按钮**同时带 `resource-id` 与 `content-desc`**（实测 dump：
+ * `resource-id="update-check-result-snooze"` + `content-desc="今日不再提醒"`），
+ * 而 Appium 的 `~id`（accessibility id）在 Android 上优先按 content-desc 匹配——
+ * 只写 testID 可能查不到，所以显式 `resourceId` 打头、文案收尾。
+ */
+const UPDATE_MODAL_DISMISS_SELECTORS = [
+  'android=new UiSelector().resourceId("update-check-result-snooze")',
+  '~update-check-result-snooze',
+  'android=new UiSelector().text("今日不再提醒")',
+  'android=new UiSelector().text("关闭")',
+] as const;
+
+/**
+ * RN `testID` → 显式 `resourceId` 选择器。
+ *
+ * 为什么不能直接用 `~testID`：本机 Appium/UiAutomator2 的 `accessibility id` 只按
+ * **`content-desc`** 匹配，而 RN 的 `testID` 落到的是 **`resource-id`**、且这些元素
+ * 没有 `content-desc`（实测 dump：输入框 `id=text-prompt-input`、`desc=` 空）。
+ * 凡页对象里拿 `testID` 定位的地方，都要走这个助手。
+ */
+const byTestId = (testId: string): string =>
+  `android=new UiSelector().resourceId("${testId}")`;
+
 /** App shell: project/session bootstrap and tab navigation. */
 export class AppPage {
-  /** Wait until chat tab chrome is ready after cold start. */
+  /**
+   * 若「版本检查」弹窗开着就点掉，返回是否点掉了。
+   *
+   * 背景：该弹窗是**原生 `Modal`**，会另开窗口并**抢走整棵 a11y 树**——此后
+   * `~对话` / `~项目列表` 一律查不到，spec 的 `before all` 必然挂。检查失败
+   * （模拟器/CI 无外网）与成功（「当前已是最新版本」）**都会弹**，且每条 spec
+   * 都重装应用、24h snooze 存不住，所以页对象层必须每次兜底。
+   */
+  async dismissUpdateCheckModalOnce(): Promise<boolean> {
+    await switchToNative();
+    for (const selector of UPDATE_MODAL_DISMISS_SELECTORS) {
+      const button = await $(selector);
+      if (await button.isExisting()) {
+        await button.click();
+        await browser.pause(400);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /** 在 `waitMs` 窗口内轮询弹窗并点掉；返回是否点掉了。 */
+  async dismissUpdateCheckModalIfPresent(waitMs = 0): Promise<boolean> {
+    const deadline = Date.now() + waitMs;
+    do {
+      if (await this.dismissUpdateCheckModalOnce()) {
+        return true;
+      }
+      if (Date.now() >= deadline) {
+        return false;
+      }
+      await browser.pause(1000);
+    } while (Date.now() < deadline);
+    return false;
+  }
+
+  /**
+   * Wait until chat tab chrome is ready after cold start.
+   *
+   * 弹窗与主界面的先后顺序不确定（实测主界面约 20s、弹窗约 25s，但冷启动抖动大），
+   * 所以这里做**单循环互查**：每一轮先尝试点掉弹窗、再看主界面，而不是「等主界面
+   * → 再等弹窗」——后者会在弹窗先到时直接卡死在 `waitForDisplayed` 上。
+   */
   async waitForLaunch(): Promise<void> {
     await switchToNative();
-    const chatTab = await $('~对话');
-    await chatTab.waitForDisplayed({timeout: 60000});
+    const deadline = Date.now() + 90000;
+    let chatVisible = false;
+    while (Date.now() < deadline) {
+      await this.dismissUpdateCheckModalOnce();
+      const chatTab = await $('~对话');
+      chatVisible = await chatTab
+        .isDisplayed()
+        .catch(() => false);
+      if (chatVisible) {
+        break;
+      }
+      await browser.pause(1000);
+    }
+    if (!chatVisible) {
+      throw new Error(
+        '[e2e] 主界面 90s 内未就绪（可能被「版本检查」弹窗或启动失败挡住）',
+      );
+    }
+    // 收尾再探一次：弹窗可能刚好在主界面之后出现。
+    await this.dismissUpdateCheckModalIfPresent(5000);
   }
 
   async openProjectDrawer(): Promise<void> {
@@ -17,9 +103,17 @@ export class AppPage {
   }
 
   async closeProjectDrawerIfOpen(): Promise<void> {
-    const close = await $('~关闭项目列表');
-    if (await close.isExisting()) {
-      await close.click();
+    await switchToNative();
+    // 抽屉关闭按钮的 a11y label 在 2026-08-30「components 大收敛」后由
+    // 「关闭项目列表」换成了 `ModalShell` 的「关闭」——两个都试，避免页对象与实现
+    // 脱节（main 上既有债；抽屉关不掉会让下一次 `openProjectDrawer` 必然失败）。
+    for (const selector of ['~关闭项目列表', '~关闭']) {
+      const close = await $(selector);
+      if (await close.isExisting()) {
+        await close.click();
+        await browser.pause(300);
+        return;
+      }
     }
   }
 
@@ -28,13 +122,15 @@ export class AppPage {
     const createBtn = await $('android=new UiSelector().text("新建")');
     await createBtn.waitForDisplayed({timeout: 10000});
     await createBtn.click();
-    const input = await $('~text-prompt-input');
-    await input.waitForDisplayed({timeout: 5000});
+    // ⚠️ 等待放宽到 15s：模拟器（尤其冷启动后首个弹窗）里「新建项目」对话框
+    // 出现明显晚于真机——原 5s 实测会偶发超时（对话框其实几秒后才渲染出来）。
+    const input = await $(byTestId('text-prompt-input'));
+    await input.waitForDisplayed({timeout: 15000});
     await input.setValue(name);
-    const submit = await $('~text-prompt-submit');
+    const submit = await $(byTestId('text-prompt-submit'));
     await submit.click();
     const created = await $(`android=new UiSelector().text("${name}")`);
-    await created.waitForDisplayed({timeout: 10000});
+    await created.waitForDisplayed({timeout: 15000});
     await created.click();
     await this.closeProjectDrawerIfOpen();
   }
@@ -67,20 +163,20 @@ export class AppPage {
     );
     await sessionTitle.waitForDisplayed({timeout: 10000});
     await sessionTitle.click();
-    const chatTab = await $('~tab-chat');
+    const chatTab = await $(byTestId('tab-chat'));
     await chatTab.waitForDisplayed({timeout: 15000});
   }
 
   async switchToChatPanel(): Promise<void> {
     await switchToNative();
-    const tab = await $('~tab-chat');
+    const tab = await $(byTestId('tab-chat'));
     await tab.waitForDisplayed({timeout: 10000});
     await tab.click();
   }
 
   async switchToWorkspacePanel(): Promise<void> {
     await switchToNative();
-    const tab = await $('~tab-workspace');
+    const tab = await $(byTestId('tab-workspace'));
     await tab.waitForDisplayed({timeout: 10000});
     await tab.click();
   }
@@ -127,7 +223,7 @@ export class AppPage {
       return;
     }
 
-    const input = await $('~chat-composer-input');
+    const input = await $(byTestId('chat-composer-input'));
     if (await input.isExisting()) {
       const enabled = await input.isEnabled();
       if (enabled) {
