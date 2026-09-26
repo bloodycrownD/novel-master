@@ -127,6 +127,7 @@ export function ConversationPanel({
   const runLifecycle = useAgentRunLifecycle();
   const {
     uiRunning: running,
+    activeRunId,
     acceptRunEvent,
     beginUiRun,
     abortUiRun: abortUiRunBase,
@@ -181,12 +182,15 @@ export function ConversationPanel({
   useEffect(() => {
     onRunningChange?.(running);
   }, [running, onRunningChange]);
+  // run 身份（sessionId + activeRunId）随 run 变化驱动采样序列重 seed：
+  // 同一会话连续 run 时只靠 running 边沿可能在真值抵达前就复用上一轮样本。
+  const metricsRunKey = `${sessionId}:${activeRunId ?? ''}`;
   const {
     metrics: streamMetrics,
     noteTextDelta: noteMetricsTextDelta,
     noteThinkingDelta: noteMetricsThinkingDelta,
     noteUsage: noteMetricsUsage,
-  } = useAgentStreamMetrics(running);
+  } = useAgentStreamMetrics(running, metricsRunKey);
   const [composerError, setComposerError] = useState<string | undefined>();
   const [composerText, setComposerText] = useState('');
   const [composerAttachments, setComposerAttachments] = useState<

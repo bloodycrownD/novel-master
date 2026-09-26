@@ -1,10 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { buildAgentStreamMetricsLabel } from "@/hooks/useAgentStreamMetrics";
-import {
-  formatCharCount,
-  formatStreamElapsed,
-} from "@/hooks/useAgentStreamMetrics";
+// 文案格式化（含 elapsed）从 core 唯一实现经 @shared/logic/format 再导出消费：
+// desktop hook 不再保留本地副本（core-metrics/C-2）。
+import { formatCharCount, formatStreamElapsed } from "@shared/logic/format";
 
 describe("useAgentStreamMetrics formatters", () => {
   it("formatStreamElapsed 在 60s 内保留一位小数", () => {

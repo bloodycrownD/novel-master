@@ -55,6 +55,8 @@ export interface UseAgentStreamCallbacks {
   /**
    * usage 旁路（stream-metrics-tokens）：completionTokens 为 run 级累计，
    * 经 ~250ms 尾随节流下发（事件风暴防线，与 metrics 渲染 tick 同量级）。
+   * 节流的在途 pending 在 RUN_FINISHED / RUN_FAILED / 退订时同步冲刷，
+   * 保证收尾冻结读到的是 usage 真值（见 useAgentStream 内的 flushUsageNote）。
    */
   noteUsage?(completionTokens: number): void;
   onRunStarted?(payload: AgentRunStartedPayload): void;
@@ -138,7 +140,10 @@ export function useAgentStream(
     let usagePending: number | null = null;
     let usageTimer: ReturnType<typeof setTimeout> | null = null;
     const flushUsageNote = () => {
-      usageTimer = null;
+      if (usageTimer != null) {
+        clearTimeout(usageTimer);
+        usageTimer = null;
+      }
       if (usagePending != null) {
         const value = usagePending;
         usagePending = null;
@@ -226,6 +231,11 @@ export function useAgentStream(
           return;
         }
         if (useBatch) batchSinkRef.current.flush();
+        // 先冲刷 usage pending 再上抛收尾：onRunFinished 会把 uiRunning 翻假，
+        // 冻结分支随即读取 acc——若节流定时器晚于冻结，终值会写进已清空的
+        // acc（openai 单步 run 冻结在 heuristic 估值、anthropic/gemini 丢最后
+        // ≤250ms 增量）。
+        flushUsageNote();
         cb.onRunFinished?.(p);
         return;
       }
@@ -235,6 +245,8 @@ export function useAgentStream(
           return;
         }
         if (useBatch) batchSinkRef.current.flush();
+        // 同 RUN_FINISHED：失败收尾也要让 usage 真值参与冻结。
+        flushUsageNote();
         cb.onRunFailed?.(p);
       }
     });
