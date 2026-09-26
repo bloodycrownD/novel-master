@@ -8,6 +8,8 @@ head_sha_note: "head_sha = 最后一次实质改动提交（移除 lastPromptUsa
 dev_ready: yes
 user_decisions_after_dev_ready:
   - "OQ #4（lastPromptUsage 的 runId / lastMessageSeq 只写不读）→ 用户拍板移除，已落地 50e81d4d（含 agent-runner 里只为该字段服务的记账一并拆净；旧行无需迁移，解析对未知键宽容）"
+agile_items_after_dev_ready:
+  - "features/context-usage-real-tokenizer-fallback（2026-09-27，agile-dev 流程）：把上下文占用的字符折算兜底升级为真分词器计数；提交 f0186106 + 4e179e1a + acf1802d；dev-ready 后门禁复跑：core 2173/2 红（既有）、mobile 1505/1~2 红（基线 + 负载抖动）、desktop 527/527、三包构建与 typecheck 通过、零真回归；真机测点已并入 1310 QA 行"
 dag_version: 2
 reorchestration_note: "wave-6：两轮 readonly cr-func 均 func-ready:yes 但遗留 6 条 P2（无 P0/P1），插入 n9-fix 收口 + n10-crfunc 复检（dag_version 1→2）"
 scope_note: 32 条 must-fix（P1×2 / P2×30），两条 P1 置顶；用户已照准 4 条「按现状收窄」（#1 重 seed 口径=窗口折叠触发 / #2 commitStepChars 64 / #3 desktop v1 固定 cl100k / #5 实测数字区间 400–500ms）
