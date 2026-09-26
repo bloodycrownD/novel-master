@@ -20,6 +20,7 @@ import {
 } from "@novel-master/core/provider";
 
 import { assembleWorkplaceDisplay } from "@novel-master/core/workplace";
+import { countTextWithDefaultEncoding } from "@novel-master/tokenizer-driver-node";
 import type { NovelMasterRuntime } from "../runtime.js";
 import { loadAgentPromptLayoutFromYaml } from "../config/load-agent-prompt-layout.js";
 import { parseCliArgs } from "../vfs/parse-args.js";
@@ -128,7 +129,15 @@ export async function runPrompt(
       // CLI 口径说明：此处不计 tools 段（CLI 走取证/调试面，不参与压缩判定），
       // 与压缩评估的本地估算口径存在差异，仅供人工核对，不作为验收基准。
       const serialized = await serializePromptLlmInput(layout, ctx);
-      const tokenCount = rt.tokenCounters.heuristic.countText(serialized);
+      // stream-metrics-native ④：拿不到模型时改走 Node 驱动的默认 cl100k 真计数，
+      // 而不是 `rt.tokenCounters.heuristic.countText` 的 `ceil(chars / 3.35)`
+      // 字符折算（3.35 是英文口径，对中文正文低估 82%~84%）。下面 JSON 的
+      // `counter: "heuristic"` / `estimated: true` 不变——变的只是读数本身：
+      // cl100k 对任意模型都只是近似，报成精确档反而是误导。编码表建不起来
+      // （ranks 资源缺失）时才有最后一级折算兜底。
+      const real = countTextWithDefaultEncoding(serialized);
+      const tokenCount =
+        real ?? rt.tokenCounters.heuristic.countText(serialized);
       console.error(
         JSON.stringify({
           tokenCount,

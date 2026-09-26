@@ -16,9 +16,27 @@ import {
   wrapSerializedPromptAsSystemMessage,
   type OpenAiStyleMessage,
 } from "../logic/count-openai-style-message.js";
+import { countTextWithDefaultEncoding } from "./encoding-cache.js";
 import { getNodeTokenizerLoader } from "../node-tokenizer-loader.js";
 
 const heuristic = new HeuristicTokenCounter();
+
+/**
+ * 真 tokenizer 加载失败时的**兜底计数**（stream-metrics-native ④）。
+ *
+ * 为什么不直接 `heuristic.countText`（即 `ceil(字符数 / 3.35)`）：3.35 是**英文**
+ * 口径，cl100k 实际约 1.64 字符/token，折算对中文正文系统性低估 82%~84%。这里的
+ * 调用方（`countWebFamilyPrompt`）会在加载失败时把 `estimated` 置 true、`counterKind`
+ * 置 `heuristic`，也就是说**上层已经知道这是估算**——在已知是估算的前提下，没理由
+ * 再用误差八成的折算，用默认 cl100k 近似（误差 0.5% 量级）明显更划算。
+ *
+ * 只有「连 cl100k 表都建不起来」才退回字符折算：那是环境级故障（ranks 资源缺失），
+ * 别无选择，且失败被缓存、本进程不再重试。
+ */
+function fallbackCount(text: string): number {
+  const real = countTextWithDefaultEncoding(text);
+  return real ?? heuristic.countText(text);
+}
 
 /** Loads JSON assets and counts via ST web-tokenizer message conversion. */
 export class WebTokenizerCounter implements TokenCounter {
@@ -63,6 +81,11 @@ export class WebTokenizerCounter implements TokenCounter {
     }
   }
 
+  // 以下两个是**同步** `TokenCounter` port 的实现，保持字符折算不变（stream-metrics-native ④）：
+  // port 契约是同步的，而真 tiktoken 的编码表是 WASM 对象、只能惰性异步构造；
+  // 把同步方法改成「同步构造编码表」会在每次调用上白付一张 ranks 表的建表代价。
+  // 真正需要读数的路径都走 async `countSerializedPrompt` / 驱动的
+  // `countPromptLlmInput`，那里已经全部换成真计数。
   countText(text: string): number {
     return Math.ceil(text.length / CHARACTERS_PER_TOKEN_RATIO);
   }
@@ -75,11 +98,14 @@ export class WebTokenizerCounter implements TokenCounter {
     return Math.ceil(chars / CHARACTERS_PER_TOKEN_RATIO);
   }
 
-  /** ST-aligned prompt count; falls back to heuristic when load fails. */
+  /**
+   * ST-aligned prompt count; 加载失败时兜底到默认 cl100k 真计数
+   * （cl100k 也建不起来才退字符折算，见 {@link fallbackCount}）。
+   */
   async countSerializedPrompt(serialized: string): Promise<number> {
     const instance = await this.getInstance();
     if (instance == null) {
-      return heuristic.countText(serialized);
+      return fallbackCount(serialized);
     }
     const wrapped = wrapSerializedPromptAsSystemMessage(serialized);
     return countWebTokenizerMessages(

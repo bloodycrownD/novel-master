@@ -4,7 +4,15 @@ import { type ChatMessage } from "@novel-master/core/chat";
 
 import { type AgentPromptLayout, type PromptRenderContext } from "@novel-master/core/prompt";
 
-import { countPromptLlmInput, createDefaultTokenCounterRegistry, resolveContextWindowTokens } from "@novel-master/core/provider";
+import {
+  CHARACTERS_PER_TOKEN_RATIO,
+  countPromptLlmInput,
+  createDefaultTokenCounterRegistry,
+  resolveContextWindowTokens,
+  serializePromptLlmInput,
+  serializeToolsForTokenCount,
+} from "@novel-master/core/provider";
+import { countTextWithDefaultEncoding } from "../src/impl/encoding-cache.js";
 import { registerTokenizerNodeDriverForTests } from "../src/register-for-tests.js";
 
 function emptyRegistryDeps(): Record<string, never> {
@@ -96,13 +104,57 @@ describe("countPromptLlmInput", () => {
   });
 
   it("unknown model uses heuristic", async () => {
+    const { layout, ctx } = fixtureParams();
     const result = await countPromptLlmInput({
-      ...fixtureParams(),
+      layout,
+      ctx,
       savedModelId: "openai/my-custom/foo",
       registry,
     });
     assert.equal(result.tokenizerFamily, "heuristic");
+    assert.equal(result.counterKind, "heuristic");
     assert.equal(result.estimated, true);
+    // stream-metrics-native ④：兜底档的读数已是**真 cl100k 计数**，不再是
+    // `ceil(chars / 3.35)`。这里逐字对齐断言，把「换了口径」钉死在用例里——
+    // 只断言 counterKind 的话，将来有人改回折算这个用例会全绿。
+    const serialized =
+      (await serializePromptLlmInput(layout, ctx)) +
+      serializeToolsForTokenCount(undefined);
+    const real = countTextWithDefaultEncoding(serialized);
+    assert.notEqual(real, null);
+    assert.equal(result.tokenCount, real);
+    assert.notEqual(
+      result.tokenCount,
+      Math.ceil(serialized.length / CHARACTERS_PER_TOKEN_RATIO),
+    );
+  });
+
+  it("中文兜底读数远大于字符折算（钉住真分词器真的接上了）", async () => {
+    // 3.35 是英文口径；cl100k 对中文约 1.64 字符/token。折算对中文正文低估
+    // 82%~84%，所以只要这条用例还能过，就说明兜底确实在跑真分词器。
+    const cn = "他把伞收了，窗外的雨顺着玻璃往下淌，街灯在水洼里碎成一片橙。".repeat(
+      20,
+    );
+    const { layout, ctx } = fixtureParams({ systemContent: cn });
+    const result = await countPromptLlmInput({
+      layout,
+      ctx,
+      savedModelId: "openai/my-custom/foo",
+      registry,
+    });
+    const serialized =
+      (await serializePromptLlmInput(layout, ctx)) +
+      serializeToolsForTokenCount(undefined);
+    const charRatio = Math.ceil(serialized.length / CHARACTERS_PER_TOKEN_RATIO);
+
+    assert.equal(result.counterKind, "heuristic");
+    assert.equal(result.estimated, true);
+    assert.equal(result.tokenCount, countTextWithDefaultEncoding(serialized));
+    // 阈值取 3 倍：实测中文段约 5.2 倍，留足余量又不至于被小改动误伤。
+    assert.ok(
+      result.tokenCount > charRatio * 3,
+      `真计数 ${result.tokenCount} 应远大于字符折算 ${charRatio}`,
+    );
   });
 });
 

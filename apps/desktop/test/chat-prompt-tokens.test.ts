@@ -1,15 +1,24 @@
 /**
  * Desktop chat-prompt-tokens T-T9：source===api ⇒ estimated:false, counterKind:api。
+ *
+ * stream-metrics-native ④：补一条「无模型早退」用例，钉住这条早退路径的读数已经是
+ * 真 cl100k 计数（而不是 `ceil(chars / 3.35)` 字符折算）。
  */
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 import { sessionApiPromptTokenCache } from "@novel-master/core/provider";
 import { getDesktopRuntime } from "../src/main/runtime/desktop-runtime-singleton.js";
 import { handleAgentSetCurrent } from "../src/main/ipc/handlers/agent.js";
-import { handleAgentRegistryCreateBlank } from "../src/main/ipc/handlers/agent-registry.js";
+import {
+  handleAgentRegistryCreateBlank,
+  handleAgentRegistryUpsert,
+} from "../src/main/ipc/handlers/agent-registry.js";
 import { handleProjectsCreate } from "../src/main/ipc/handlers/projects.js";
 import { handleProvidersCreate } from "../src/main/ipc/handlers/providers.js";
-import { handleSessionsCreate } from "../src/main/ipc/handlers/sessions.js";
+import {
+  handleSessionsCreate,
+  handleSessionsSetModelOverride,
+} from "../src/main/ipc/handlers/sessions.js";
 import {
   formatChatTokenStatsLabel,
   loadChatPromptTokenStats,
@@ -23,6 +32,10 @@ describe("chat-prompt-tokens.service", () => {
   let tempDir: string;
   let projectId: string;
   let sessionId: string;
+  /** workspace 当前模型 id：清掉会话覆盖后要原样还原，别把用例间的状态串起来。 */
+  let savedModelId: string;
+  /** `before` 里建的空白 agent id：T-T9c 要改它的系统提示词。 */
+  let agentId: string;
 
   before(async () => {
     ({ tempDir } = await setupDesktopDbTestEnv("nm-desktop-chat-tokens-"));
@@ -46,6 +59,7 @@ describe("chat-prompt-tokens.service", () => {
     if (!setAgent.ok) {
       return;
     }
+    agentId = agent.data.agentId;
 
     // 新 core 下 providerModels.save 会校验 provider 存在，先注册一个 openai 协议网关，
     // 再拿它返回的 providerId 去保存模型并设为 workspace 当前模型。
@@ -66,6 +80,7 @@ describe("chat-prompt-tokens.service", () => {
       "gpt-4o",
     );
     await rt.state.setCurrentModelId(saved.id);
+    savedModelId = saved.id;
 
     const session = await handleSessionsCreate({
       projectId,
@@ -120,5 +135,86 @@ describe("chat-prompt-tokens.service", () => {
     assert.notEqual(stats.counterKind, "api");
     const label = formatChatTokenStatsLabel(stats);
     assert.match(label, /· 预估$/);
+  });
+
+  it("T-T9c: 无模型早退 ⇒ 真 cl100k 计数，而非 ceil(chars/3.35) 折算", async () => {
+    sessionApiPromptTokenCache.clearAll();
+
+    const rt = await getDesktopRuntime();
+    // 空白 agent 的系统提示词是空的，早退分支会数出 0——那样这条用例就什么也
+    // 证不了。先给它塞一段中文正文（也就是最吃亏于字符折算的那类文本）。
+    const chinese = "他把伞收了，窗外的雨顺着玻璃往下淌，街灯在水洼里碎成一片橙。".repeat(
+      20,
+    );
+
+    // 先取同一 session 的**精确档**读数（gpt-4o → tiktoken 家族）作为参照：
+    // 早退档与它编的是同一段序列化文本，差别只在「真分词器 vs 字符折算」。
+    const upserted = await handleAgentRegistryUpsert({
+      agentId,
+      definition: {
+        name: "token-stats-agent",
+        runtime: { maxSteps: 20 },
+        prompts: { system: chinese, persist: [], dynamic: [] },
+      },
+    });
+    assert.equal(upserted.ok, true);
+    const precise = await loadChatPromptTokenStats(rt, {
+      projectId,
+      sessionId,
+    });
+
+    // 清掉会话级模型覆盖 + agent 无 model pin ⇒ resolveSavedModelId 返回空
+    // ⇒ 走「无模型早退」分支。
+    const cleared = await handleSessionsSetModelOverride({
+      sessionId,
+      modelId: null,
+    });
+    assert.equal(cleared.ok, true);
+
+    try {
+      const stats = await loadChatPromptTokenStats(rt, {
+        projectId,
+        sessionId,
+      });
+
+      // 语义与 UI 文案不变：仍然是「本地预估 + heuristic 档」。
+      assert.equal(stats.source, "local");
+      assert.equal(stats.counterKind, "heuristic");
+      assert.equal(stats.estimated, true);
+      assert.equal(stats.contextWindow, undefined);
+      assert.match(formatChatTokenStatsLabel(stats), /^~/);
+      assert.ok(stats.tokenCount > 0);
+
+      // 读数本身已换成真分词器：同一段文本，真 cl100k 计数与精确档同量级（约 1:1）；
+      // 字符折算对中文正文会压到 1/5 左右（cl100k 约 1.64 字符/token，折算用的
+      // 3.35 是英文口径），所以 2 倍这条线足以把两者分开——若有人把早退路径改回
+      // `heuristic.countText`，本断言立刻红。
+      assert.ok(
+        stats.tokenCount > precise.tokenCount / 2,
+        `早退读数 ${stats.tokenCount} 相对精确档 ${precise.tokenCount} 偏低，像是仍在字符折算`,
+      );
+    } finally {
+      // 还原 agent 定义与会话模型覆盖，别把状态泄漏给其它用例。
+      // 注意两点：① 不能拿 `get` 返回的 raw wire 直接回灌（那是带元信息的存储
+      // 形态，upsert 会拒）；② `prompts.system` 要么不写、要么给非空串。
+      const restoredAgent = await handleAgentRegistryUpsert({
+        agentId,
+        definition: {
+          name: "token-stats-agent",
+          runtime: { maxSteps: 20 },
+          prompts: { persist: [], dynamic: [] },
+        },
+      });
+      assert.equal(
+        restoredAgent.ok,
+        true,
+        restoredAgent.ok ? "" : restoredAgent.error.message,
+      );
+      const restored = await handleSessionsSetModelOverride({
+        sessionId,
+        modelId: savedModelId,
+      });
+      assert.equal(restored.ok, true);
+    }
   });
 });
