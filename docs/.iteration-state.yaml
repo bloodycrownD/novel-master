@@ -14,7 +14,9 @@ cr_after_agile_item:
   - "集成评审（code-review-loop，base 5c63d27e → head f4cd067a）四轮收敛到 fix-spec-ready：docs/Iterations/stream-metrics-native-integration-cr/cr-fix-spec-v3.md（提交 bc360a57）"
   - "12 条 must-fix = P0×0 / P1×1 / P2×11 + 5 行 spec_deviations（均由条目闭合）+ 10 条 open questions"
   - "⚠️ 唯一 P1 落在已提交的敏捷项代码上：core countTextWithIncrementalTokenizer 在尾窗整段不可编码时会丢掉已固化计数、返回低于真值 36% 的数（实测 6024 vs 9421），且注释称其为「上界」；改法写死（tailChars:0 / commitStepChars:1 → 走固化路径）+ 护栏用例改双边夹逼"
-  - "v3 的 12 条**尚未执行**（CR 不改实现代码）；执行需用户指令（属新一笔开发任务，可走 code-dev-loop 或 agile-dev）"
+  - "v3 的 12 条**已执行完毕（2026-09-27 03:16）**：提交链 09d73e2a → 4fa2fb80 → 004ed97a → 59d40c1f → 146f3f6c → 638ed14d；两轮 readonly cr-func（RES-1~RES-5）已收敛"
+  - "执行期另修：packages/core 全量脚本缺 globstar（92/396 个测试文件从未被默认执行，补 -O globstar 后 2173→2748 条）+ 两条由此暴露的过期断言/护栏；教训已入 RULE"
+  - "验证账目：core 真全量 2748/2746 pass/2 红（仅既有时区）；desktop 528/528；mobile 1505/1 红 + 2 基线 suite；Node 驱动 13/13；三端 typecheck 零输出；v3 的 7 条验收 grep 全零。未 push / 未 merge / 未发版"
 dag_version: 2
 reorchestration_note: "wave-6：两轮 readonly cr-func 均 func-ready:yes 但遗留 6 条 P2（无 P0/P1），插入 n9-fix 收口 + n10-crfunc 复检（dag_version 1→2）"
 scope_note: 32 条 must-fix（P1×2 / P2×30），两条 P1 置顶；用户已照准 4 条「按现状收窄」（#1 重 seed 口径=窗口折叠触发 / #2 commitStepChars 64 / #3 desktop v1 固定 cl100k / #5 实测数字区间 400–500ms）
