@@ -3,11 +3,14 @@
  * - 段落（空行）/ 代码块（fence）闭合 / 表格闭合的边界判定用例集；
  * - 未闭合语法（流中开着的 fence、缺 delimiter 的表格）不提交；
  * - 超限判定按块：单块 >12k 仅该块 html 降级（undefined）、已提交块不受
- *   影响、<12k 多块流各块均 rich；终态/历史行全量 >12k 仍整体降级
+ *   影响、<12k 多块流各块均 rich；流式尾块全量 >12k 仍整体降级
  *   （prepareStreamTailHtml 既有语义回归断言）。
+ * - 终态/历史行 html 走 enrichTranscriptRows（无 12k 判定，与流式尾块
+ *   口径不同，G-1 补真实终态行断言）。
  */
 import {splitStreamBlocks} from '@/web/chat-transcript/stream/block-split';
 import {prepareStreamTailHtml} from '@/components/chat/prepare-stream-tail-html';
+import {enrichTranscriptRows} from '@/components/chat/enrich-transcript-rows';
 import {RICH_CONTENT_MAX_CHARS} from '@/components/rich-content/rich-content-limits';
 
 /** 不变式：blocks.join('') + activeTail === 原文（零丢失零重复）。 */
@@ -230,10 +233,57 @@ describe('T-N6 超限判定按块（与 RICH_CONTENT_MAX_CHARS 交互）', () =>
     expect(prepareStreamTailHtml(activeTail, true)).toBeDefined();
   });
 
-  it('终态/历史行全量 >12k 仍整体降级（既有语义回归断言）', () => {
+  it('流式尾块全量 >12k 整体降级（prepareStreamTailHtml 流式口径）', () => {
+    // G-1：原断言名写作「终态/历史行…仍整体降级」，但本断言只覆盖流式
+    // 尾块的 prepareStreamTailHtml 路径；终态/历史行 html 经 enrichTranscriptRows
+    // 且无 12k 判定（见下一条用例），故名实对齐后按流式口径表述。
     const full = '历史正文。'.repeat(RICH_CONTENT_MAX_CHARS);
     expect(full.length).toBeGreaterThan(RICH_CONTENT_MAX_CHARS);
     expect(prepareStreamTailHtml(full, true)).toBeUndefined();
+  });
+
+  it('终态/历史行 html 走 enrichTranscriptRows（无 12k 判定，与流式尾块口径不同）', () => {
+    // 真实终态行断言（G-1 补）：历史/终态 assistant 行经 enrichTranscriptRows
+    // 直出 html——该路径不看 RICH_CONTENT_MAX_CHARS，超限也照样富文本渲染
+    // （12k 仅约束流式尾块与 RN RenderHTML 回退提示）。
+    const bigText = '历史正文。'.repeat(RICH_CONTENT_MAX_CHARS);
+    expect(bigText.length).toBeGreaterThan(RICH_CONTENT_MAX_CHARS);
+    const rows = enrichTranscriptRows(
+      [
+        {
+          kind: 'message',
+          id: 'hist-1',
+          role: 'assistant',
+          hidden: false,
+          text: bigText,
+          thinking: '',
+        },
+      ],
+      true,
+    );
+    const row = rows[0];
+    expect(row?.kind).toBe('message');
+    if (row?.kind === 'message') {
+      expect(row.textHtml).toBeDefined();
+      expect(row.textHtml ?? '').toContain('历史正文。');
+    }
+    // richText 关闭时不做 html 注入（纯文本路径）
+    const plainRows = enrichTranscriptRows(
+      [
+        {
+          kind: 'message',
+          id: 'hist-2',
+          role: 'assistant',
+          hidden: false,
+          text: bigText,
+          thinking: '',
+        },
+      ],
+      false,
+    );
+    expect(
+      plainRows[0]?.kind === 'message' ? plainRows[0].textHtml : 'x',
+    ).toBeUndefined();
   });
 });
 

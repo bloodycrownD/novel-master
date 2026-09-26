@@ -174,10 +174,14 @@ export type HostToTranscriptMessage =
         html?: string;
         /** 完成块源文本（降级显示与显示态对齐）。 */
         text: string;
-        /** 块提交后活跃尾块的渲染 HTML（尾块空/超限时缺失）。 */
+        /**
+         * 块提交后活跃尾块的渲染 HTML（尾块空/超限时缺失）。
+         * C-orch-1：仅每 kind 每次切分的**最后一个** commit 携带，中间
+         * commit 缺省——webview 缺载荷时保持尾块现状。
+         */
         tailHtml?: string;
-        /** 块提交后活跃尾块源文本（webview 侧 350ms 轻量升级的输入）。 */
-        tailText: string;
+        /** 块提交后活跃尾块源文本（webview 侧 350ms 轻量升级的输入；同上仅末个 commit 携带）。 */
+        tailText?: string;
       }
     >
   | BridgeEnvelope<'streamReset', Record<string, never>>
@@ -201,7 +205,19 @@ export {CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION} from '../../services/chat-transcr
 export type {ChatTranscriptScrollSnapshot} from '../../services/chat-transcript-scroll-cache';
 
 export type TranscriptToHostMessage =
-  | BridgeEnvelope<'ready', {version: string; readyState?: string}>
+  | BridgeEnvelope<
+      'ready',
+      {
+        /** 辅助信息（不参与能力判定）；能力协商真源见 capabilities。 */
+        version: string;
+        /**
+         * webview 声明的能力清单（B-2）：缺省/未声明的能力按不支持处理——
+         * 旧 dist 未声明 streamBlockCommit 时 RN 不发块提交、退回全量 html。
+         */
+        capabilities?: readonly string[];
+        readyState?: string;
+      }
+    >
   | BridgeEnvelope<
       'scrollSnapshot',
       ChatTranscriptScrollSnapshot & {

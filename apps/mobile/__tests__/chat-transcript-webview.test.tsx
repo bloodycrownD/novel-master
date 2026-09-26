@@ -240,8 +240,18 @@ function simulateWebMessage(
   });
 }
 
-function simulateWebReady(root: TestRenderer.ReactTestInstance): void {
-  simulateWebMessage(root, 'ready', {version: 'test'});
+/**
+ * 模拟 webview ready（B-2 能力协商后默认按「现代 dist」口径声明
+ * streamBlockCommit 能力；用例可传 [] 模拟旧 dist 未声明）。
+ */
+function simulateWebReady(
+  root: TestRenderer.ReactTestInstance,
+  capabilities: readonly string[] = ['streamBlockCommit'],
+): void {
+  simulateWebMessage(root, 'ready', {
+    version: 'test',
+    capabilities: [...capabilities],
+  });
 }
 
 async function flushAnimationFrame(): Promise<void> {
@@ -1082,6 +1092,300 @@ describe('ChatTranscriptWebView', () => {
       expect(commitMsg.payload.text).toContain('block a');
       expect(commitMsg.payload.tailText).toContain('tail b');
     }
+  });
+
+  it('B-2: ready 未声明 streamBlockCommit 能力——不发块提交，delta html 退回全量累积', async () => {
+    // 旧 dist 场景：ready 无 capabilities 声明。修复前 RN 按硬编码开关照发
+    // streamBlockCommit，旧 dist 静默丢弃 → 流中只剩尾块；修复后整体退回
+    // 全量路径（html 为全量累积渲染，webview 整段替换语义）。
+    const messages = [sampleMessage('m1', 1)];
+    let tree: TestRenderer.ReactTestRenderer;
+    const ref =
+      React.createRef<
+        import('@/components/chat/ChatTranscriptWebView').ChatTranscriptWebViewHandle
+      >();
+
+    await act(async () => {
+      tree = TestRenderer.create(
+        <ChatTranscriptWebView
+          ref={ref}
+          sessionKey="p1:s1"
+          messages={messages}
+          flags={{richText: true}}
+        />,
+      );
+    });
+
+    simulateWebReady(tree!.root, []);
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const baseline = mockWebViewPostMessages.length;
+
+    await act(async () => {
+      ref.current?.pushStreamDelta('text', 'para one\n\npara two');
+    });
+    await flushAnimationFrame();
+
+    const sent = decodedMessagesSince(baseline);
+    expect(sent.filter(msg => msg.type === 'streamBlockCommit')).toHaveLength(
+      0,
+    );
+    const deltaMsg = sent.find(
+      msg => msg.type === 'streamDelta' && msg.payload.kind === 'text',
+    );
+    expect(deltaMsg?.type).toBe('streamDelta');
+    if (deltaMsg?.type === 'streamDelta') {
+      // 全量累积口径：已完成段与尾块同在一份 html（不再按尾块收窄）
+      expect(deltaMsg.payload.html ?? '').toContain('para one');
+      expect(deltaMsg.payload.html ?? '').toContain('para two');
+    }
+  });
+
+  it('B-3: 同一 RAF 内先 batch 后 delta——块切分与尾块按线上到达序累积', async () => {
+    // 修复前 batch 只在 RAF 内累加、delta 入队即累加：同一 RAF 内先 batch
+    // 后 delta 会把累积顺序倒置成「delta + batch」，块边界判定随之错位
+    // （本例会切不出任何块，块提交丢失）且被后续提交固化。
+    const messages = [sampleMessage('m1', 1)];
+    let tree: TestRenderer.ReactTestRenderer;
+    const ref =
+      React.createRef<
+        import('@/components/chat/ChatTranscriptWebView').ChatTranscriptWebViewHandle
+      >();
+
+    await act(async () => {
+      tree = TestRenderer.create(
+        <ChatTranscriptWebView
+          ref={ref}
+          sessionKey="p1:s1"
+          messages={messages}
+          flags={{richText: true}}
+        />,
+      );
+    });
+
+    simulateWebReady(tree!.root);
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const baseline = mockWebViewPostMessages.length;
+
+    await act(async () => {
+      ref.current?.pushStreamBatch({
+        segments: [{kind: 'text', delta: '块一\n\n'}],
+      });
+      ref.current?.pushStreamDelta('text', '尾二');
+    });
+    await flushAnimationFrame();
+
+    const sent = decodedMessagesSince(baseline);
+    const commitMsg = sent.find(msg => msg.type === 'streamBlockCommit');
+    expect(commitMsg?.type).toBe('streamBlockCommit');
+    if (commitMsg?.type === 'streamBlockCommit') {
+      // batch 先到：'块一\n\n' 是完成块；delta 后到：'尾二' 留在活跃尾块
+      expect(commitMsg.payload.text).toContain('块一');
+      expect(commitMsg.payload.tailText).toContain('尾二');
+    }
+    const batchMsg = sent.find(msg => msg.type === 'streamBatch');
+    if (batchMsg?.type === 'streamBatch') {
+      expect(batchMsg.payload.segments).toEqual([
+        {kind: 'text', delta: '块一\n\n'},
+      ]);
+    }
+  });
+
+  it('C-orch-1: 同 split 内 N 个 commit 仅最后一个携带 tailHtml/tailText', async () => {
+    // 一次 flush 切出两个完成块：中间 commit 不携带尾块载荷（同 split 内
+    // 尾块态相同，重复携带徒增逐帧载荷）；末个 commit 携带完整尾块态。
+    const messages = [sampleMessage('m1', 1)];
+    let tree: TestRenderer.ReactTestRenderer;
+    const ref =
+      React.createRef<
+        import('@/components/chat/ChatTranscriptWebView').ChatTranscriptWebViewHandle
+      >();
+
+    await act(async () => {
+      tree = TestRenderer.create(
+        <ChatTranscriptWebView
+          ref={ref}
+          sessionKey="p1:s1"
+          messages={messages}
+          flags={{richText: true}}
+        />,
+      );
+    });
+
+    simulateWebReady(tree!.root);
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const baseline = mockWebViewPostMessages.length;
+
+    await act(async () => {
+      ref.current?.pushStreamDelta('text', 'a\n\nb\n\nc');
+    });
+    await flushAnimationFrame();
+
+    const commits = decodedMessagesSince(baseline).filter(
+      msg => msg.type === 'streamBlockCommit',
+    );
+    expect(commits).toHaveLength(2);
+    const [firstCommit, lastCommit] = commits;
+    if (firstCommit?.type === 'streamBlockCommit') {
+      expect(firstCommit.payload.text).toContain('a');
+      expect(firstCommit.payload.tailText).toBeUndefined();
+      expect(firstCommit.payload.tailHtml).toBeUndefined();
+    }
+    if (lastCommit?.type === 'streamBlockCommit') {
+      expect(lastCommit.payload.text).toContain('b');
+      expect(lastCommit.payload.tailText).toContain('c');
+      expect(lastCommit.payload.tailHtml ?? '').toContain('c');
+    }
+  });
+
+  it('G-1: 回滚重推——上一轮文本不得当已完成块继续累积', async () => {
+    // 回滚（props 文本收缩）触发 resetStreamTail：本地累积与已提交块 parts
+    // 必须一并清空，重推时不得把上一轮文本当已完成块（否则会重复提交旧块）。
+    const messages = [sampleMessage('m1', 1)];
+    let tree: TestRenderer.ReactTestRenderer;
+    const ref =
+      React.createRef<
+        import('@/components/chat/ChatTranscriptWebView').ChatTranscriptWebViewHandle
+      >();
+
+    await act(async () => {
+      tree = TestRenderer.create(
+        <ChatTranscriptWebView
+          ref={ref}
+          sessionKey="p1:s1"
+          messages={messages}
+          flags={{richText: true}}
+          streamingText=""
+          streamingThinking=""
+        />,
+      );
+    });
+
+    simulateWebReady(tree!.root);
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    // 第一轮：'旧块一' 被切出成完成块（committed parts 非空）
+    await act(async () => {
+      tree!.update(
+        <ChatTranscriptWebView
+          ref={ref}
+          sessionKey="p1:s1"
+          messages={messages}
+          flags={{richText: true}}
+          streamingText={'旧块一\n\n旧尾'}
+          streamingThinking=""
+        />,
+      );
+    });
+    await flushAnimationFrame();
+    expect(
+      decodedMessagesSince(0).some(msg => msg.type === 'streamBlockCommit'),
+    ).toBe(true);
+
+    // 回滚：文本收缩 → resetStreamTail（清累积 + committed parts）
+    await act(async () => {
+      tree!.update(
+        <ChatTranscriptWebView
+          ref={ref}
+          sessionKey="p1:s1"
+          messages={messages}
+          flags={{richText: true}}
+          streamingText=""
+          streamingThinking=""
+        />,
+      );
+    });
+    await flushAnimationFrame();
+
+    const baseline = mockWebViewPostMessages.length;
+
+    // 重推：新内容不得携带上一轮文本
+    await act(async () => {
+      ref.current?.pushStreamDelta('text', '新一轮');
+    });
+    await flushAnimationFrame();
+
+    const sent = decodedMessagesSince(baseline);
+    expect(sent.filter(msg => msg.type === 'streamBlockCommit')).toHaveLength(
+      0,
+    );
+    const deltaMsg = sent.find(
+      msg => msg.type === 'streamDelta' && msg.payload.kind === 'text',
+    );
+    if (deltaMsg?.type === 'streamDelta') {
+      expect(deltaMsg.payload.html ?? '').toContain('新一轮');
+      expect(deltaMsg.payload.html ?? '').not.toContain('旧块一');
+      expect(deltaMsg.payload.html ?? '').not.toContain('旧尾');
+    }
+  });
+
+  it('G-1: 块提交后继续推 delta——delta html 不含已提交块', async () => {
+    // 块游标推进后，后续 delta 的 html 只覆盖新活跃尾块（已提交块只在
+    // insertAdjacentHTML 落过一份，不得在 delta html 中重复出现）。
+    const messages = [sampleMessage('m1', 1)];
+    let tree: TestRenderer.ReactTestRenderer;
+    const ref =
+      React.createRef<
+        import('@/components/chat/ChatTranscriptWebView').ChatTranscriptWebViewHandle
+      >();
+
+    await act(async () => {
+      tree = TestRenderer.create(
+        <ChatTranscriptWebView
+          ref={ref}
+          sessionKey="p1:s1"
+          messages={messages}
+          flags={{richText: true}}
+        />,
+      );
+    });
+
+    simulateWebReady(tree!.root);
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      ref.current?.pushStreamDelta('text', '第一块\n\n第二块');
+    });
+    await flushAnimationFrame();
+    // 首轮已切出完成块（'第一块\n\n'）并推进尾块游标（尾块 = '第二块'）
+    expect(
+      decodedMessagesSince(0).some(msg => msg.type === 'streamBlockCommit'),
+    ).toBe(true);
+
+    const baseline = mockWebViewPostMessages.length;
+
+    await act(async () => {
+      ref.current?.pushStreamDelta('text', '尾块续写');
+    });
+    await flushAnimationFrame();
+
+    const sent = decodedMessagesSince(baseline);
+    const deltaMsg = sent.find(
+      msg => msg.type === 'streamDelta' && msg.payload.kind === 'text',
+    );
+    expect(deltaMsg?.type).toBe('streamDelta');
+    if (deltaMsg?.type === 'streamDelta') {
+      // html 只覆盖活跃尾块（含尾块自身文本与后续 delta），已提交块不在其中
+      expect(deltaMsg.payload.html ?? '').toContain('尾块续写');
+      expect(deltaMsg.payload.html ?? '').toContain('第二块');
+      expect(deltaMsg.payload.html ?? '').not.toContain('第一块');
+    }
+    // 本轮无新块边界：不该重复提交已完成块
+    expect(sent.filter(msg => msg.type === 'streamBlockCommit')).toHaveLength(
+      0,
+    );
   });
 
   it('T-N6 RN: abort overlay 全量物化含已提交块（committed parts + 活跃尾块）', async () => {
@@ -1969,5 +2273,72 @@ describe('ChatTranscriptWebView', () => {
     const fresh = snapshotChunksSince(baseline);
     expect(fresh.flatMap(c => c.rowIds)).toContain('a1');
     expect(fresh.flatMap(c => c.rowIds)).toContain('a2');
+  });
+
+  it('B-4: 分片在途 + 仅 batch 非空——末片后 streamBatch 已发出（空队列不占 RAF）', async () => {
+    // 修复前补发路径 flushDelta + flushBatch 连调：delta 队列为空也会占一个
+    // RAF，batch 的 flush 因 rafRef 非空直接返回，占位 RAF 空转后队列再无
+    // 触发点 → 本批增量永久滞留（饿死）。修复后空队列入口早退，batch 独占
+    // RAF 正常发出。
+    const initialMessages = Array.from({length: 120}, (_, i) =>
+      sampleMessage(`u-${i + 1}`, i + 1),
+    );
+    let tree: TestRenderer.ReactTestRenderer;
+    const ref =
+      React.createRef<
+        import('@/components/chat/ChatTranscriptWebView').ChatTranscriptWebViewHandle
+      >();
+
+    await act(async () => {
+      tree = TestRenderer.create(
+        <ChatTranscriptWebView
+          ref={ref}
+          sessionKey="p1:s1"
+          messages={initialMessages}
+          agentRunning
+          uiRunning
+        />,
+      );
+    });
+    simulateWebReady(tree!.root);
+    await flushSnapshotChunks();
+
+    const baseline = mockWebViewPostMessages.length;
+
+    // force 分片启动（tool_use 落库）：分片在途窗口开启
+    await act(async () => {
+      tree!.update(
+        <ChatTranscriptWebView
+          ref={ref}
+          sessionKey="p1:s1"
+          messages={[...initialMessages, assistantWithToolUse('a1', 121)]}
+          agentRunning
+          uiRunning
+        />,
+      );
+    });
+    expect(messageTypesSince(baseline)).toContain('sessionSnapshot');
+
+    // 分片在途：只推 batch（delta 队列为空）——flush 入 deferred 占位
+    await act(async () => {
+      ref.current?.pushStreamBatch({
+        segments: [{kind: 'text', delta: '批次增量'}],
+      });
+    });
+    await flushAnimationFrame();
+    expect(messageTypesSince(baseline)).not.toContain('streamBatch');
+
+    await flushSnapshotChunks();
+    await flushAnimationFrame();
+
+    const batchMsg = decodedMessagesSince(baseline).find(
+      msg => msg.type === 'streamBatch',
+    );
+    expect(batchMsg?.type).toBe('streamBatch');
+    if (batchMsg?.type === 'streamBatch') {
+      expect(batchMsg.payload.segments).toEqual([
+        {kind: 'text', delta: '批次增量'},
+      ]);
+    }
   });
 });

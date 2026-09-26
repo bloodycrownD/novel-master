@@ -63,6 +63,10 @@ import {emitChatTranscriptTelemetry} from '@/services/chat-transcript-telemetry'
 import {useTheme} from '@/theme/ThemeProvider';
 import {prepareStreamTailHtml} from './prepare-stream-tail-html';
 import {splitStreamBlocks} from '@/web/chat-transcript/stream/block-split';
+import {
+  TRANSCRIPT_CAPABILITY_STREAM_BLOCK_COMMIT,
+  transcriptCapabilitiesInclude,
+} from '@/web/chat-transcript/transcript-capabilities';
 import type {StreamWireChunk} from '@/services/stream-wire-queue';
 import {appendWireChunk} from '@/services/stream-wire-queue';
 import {decodeLiteralHtmlEntities} from '@/components/rich-content/decode-literal-html-entities';
@@ -71,10 +75,13 @@ import {CHAT_TRANSCRIPT_SELECTION_MENU_ITEMS} from './chat-transcript-selection-
 export {CHAT_TRANSCRIPT_SELECTION_MENU_ITEMS} from './chat-transcript-selection-menu';
 
 /**
- * 渲染块级化开关（spec §6 风险节「渲染改造按 commit 协议独立开关」）：
- * 开启时 richText 流式走「完成块 markdown-it 渲一次 + streamBlockCommit
- * append」；关闭即整体退回旧全量路径（streamDelta.html 为全量累积渲染、
- * webview 整段替换），webview 侧两种模式并存、由消息形态自然区分。
+ * 渲染块级化默认开关（spec §6 风险节「渲染改造按 commit 协议独立开关」）：
+ * 这是**默认值**（回滚开关），运行时以 webview ready 上报的能力清单覆盖
+ * （B-2：未声明 streamBlockCommit 的旧 dist 一律按不支持处理——块提交会被
+ * 静默丢弃、流中只剩尾块）。开启时 richText 流式走「完成块 markdown-it
+ * 渲一次 + streamBlockCommit append」；关闭即整体退回旧全量路径
+ * （streamDelta.html 为全量累积渲染、webview 整段替换），webview 侧两种
+ * 模式并存、由消息形态自然区分。
  */
 const STREAM_BLOCK_RENDER_ENABLED = true;
 
@@ -379,6 +386,13 @@ export const ChatTranscriptWebView = memo(
       /** 已提交完成块源文本（块级渲染）：与活跃尾块拼接还原全量流式文本。 */
       const streamCommittedTextPartsRef = useRef<string[]>([]);
       const streamCommittedThinkingPartsRef = useRef<string[]>([]);
+      /**
+       * webview 块级渲染能力（B-2）：ready 上报 capabilities 声明
+       * streamBlockCommit 后为 true。未声明（旧 dist / ready 缺载荷）时不
+       * 发 streamBlockCommit、活跃尾块不切分（html 退回全量累积）——避免
+       * webview 静默丢弃块提交导致「流中只剩尾块」。
+       */
+      const streamBlockCapableRef = useRef(false);
       const richTextRef = useRef(flags?.richText ?? false);
       const streamActiveRef = useRef(false);
       /** streamCommit 已写入的行 id，用于 messages effect 去重 snapshot。 */
@@ -494,10 +508,16 @@ export const ChatTranscriptWebView = memo(
        * 提交的尾块重置中洗掉 delta 携带的已完成块字符，最终态无重复。
        * 超限判定按块（T-N6）：单块超 12k 仅该块 html 降级 undefined，
        * 已提交块与终态/历史路径的全量语义互不影响。
+       * B-2：webview 未声明 streamBlockCommit 能力时恒返回 []——累积游标不
+       * 推进，delta/batch 的 html 自然保持全量累积（旧契约语义）。
        */
       const takeStreamBlockSplits =
         useCallback((): PendingStreamBlockSplit[] => {
-          if (!richTextRef.current || !STREAM_BLOCK_RENDER_ENABLED) {
+          if (
+            !richTextRef.current ||
+            !STREAM_BLOCK_RENDER_ENABLED ||
+            !streamBlockCapableRef.current
+          ) {
             return [];
           }
           const splits: PendingStreamBlockSplit[] = [];
@@ -536,7 +556,13 @@ export const ChatTranscriptWebView = memo(
       const postStreamBlockSplits = useCallback(
         (splits: readonly PendingStreamBlockSplit[]) => {
           for (const split of splits) {
-            for (const commit of split.commits) {
+            const lastCommitIndex = split.commits.length - 1;
+            for (let i = 0; i < split.commits.length; i++) {
+              const commit = split.commits[i]!;
+              // C-orch-1：尾块载荷只挂在每 kind 每次切分的最后一个 commit 上
+              // ——同 split 内所有 commit 的尾块态相同，重复携带徒增逐帧载荷；
+              // webview 缺载荷时保持尾块现状（不重置）。
+              const carriesTail = i === lastCommitIndex;
               postToWeb({
                 v: 1,
                 type: 'streamBlockCommit',
@@ -544,8 +570,9 @@ export const ChatTranscriptWebView = memo(
                   kind: split.kind,
                   html: commit.html,
                   text: commit.text,
-                  tailHtml: split.tailHtml,
-                  tailText: split.tailText,
+                  ...(carriesTail
+                    ? {tailHtml: split.tailHtml, tailText: split.tailText}
+                    : {}),
                 },
               });
             }
@@ -555,6 +582,11 @@ export const ChatTranscriptWebView = memo(
       );
 
       const flushPendingStreamDeltas = useCallback(() => {
+        // 空队列早退（B-4）：不占 RAF 坑位——否则本可同帧发出的 batch 被
+        // 空 flush 推迟一帧（分片在途补发路径 flushDelta+flushBatch 连调时尤甚）。
+        if (pendingStreamDeltaSegmentsRef.current.length === 0) {
+          return;
+        }
         if (streamRafRef.current != null) {
           return;
         }
@@ -608,6 +640,10 @@ export const ChatTranscriptWebView = memo(
       ]);
 
       const flushPendingStreamBatch = useCallback(() => {
+        // 空队列早退（B-4）：同上，不占 RAF 坑位。
+        if (pendingStreamSegmentsRef.current.length === 0) {
+          return;
+        }
         if (streamRafRef.current != null) {
           return;
         }
@@ -623,13 +659,6 @@ export const ChatTranscriptWebView = memo(
             return;
           }
           pendingStreamSegmentsRef.current = [];
-          for (const seg of segments) {
-            if (seg.kind === 'text') {
-              streamTextAccumRef.current += seg.delta;
-            } else {
-              streamThinkingAccumRef.current += seg.delta;
-            }
-          }
           // 同 flushPendingStreamDeltas：块级化先切分推进尾块游标，
           // batch 的 html 只覆盖尾块，块提交随后补发。
           const richText = richTextRef.current;
@@ -692,6 +721,14 @@ export const ChatTranscriptWebView = memo(
           for (const seg of payload.segments) {
             if (seg.delta.length === 0) {
               continue;
+            }
+            // 累积单点化（B-3）：与 queueStreamDelta 对称，入队时即累加；
+            // RAF 内只做切分与发送——否则同一 RAF 内先 batch 后 delta 时
+            // 累积顺序与线上顺序倒置，并被块提交固化。
+            if (seg.kind === 'text') {
+              streamTextAccumRef.current += seg.delta;
+            } else {
+              streamThinkingAccumRef.current += seg.delta;
             }
             appendWireChunk(pendingStreamSegmentsRef.current, seg);
           }
@@ -1199,6 +1236,12 @@ export const ChatTranscriptWebView = memo(
           if (message.type === 'ready') {
             webReadyRef.current = true;
             setWebReady(true);
+            // 能力协商（B-2）：以 ready 上报的 capabilities 为准（缺省即不
+            // 支持），未声明 streamBlockCommit 时块级渲染整体退回全量路径。
+            streamBlockCapableRef.current = transcriptCapabilitiesInclude(
+              message.payload.capabilities,
+              TRANSCRIPT_CAPABILITY_STREAM_BLOCK_COMMIT,
+            );
             timingLog('webview ready (bridge handshake done)');
             bootTimingLog('webview ready (bridge handshake done)');
             onReady?.();

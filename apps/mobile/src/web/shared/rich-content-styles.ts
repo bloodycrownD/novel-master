@@ -36,6 +36,15 @@ export function buildRichContentCssRules(selectors: readonly string[]): string {
     .join(', ');
   const liAdjacent = selectors.map(s => `${s} li + li`).join(', ');
   const liParagraph = selectors.map(s => `${s} li > p`).join(', ');
+  // 块级渲染尾块容器（spec §6）：纯文本降级期补 pre-wrap（.rich 的
+  // white-space: normal 会继承下来把换行折叠，B-1）；已提交块存在时
+  // （尾块非首子元素）首段补回块间距，防块边界 5px 塌陷（C-1）。
+  const streamTailPlain = selectors
+    .map(s => `${s} .stream-active-tail.stream-tail-plain`)
+    .join(', ');
+  const streamTailFirstParagraph = selectors
+    .map(s => `${s} > .stream-active-tail:not(:first-child) > p:first-child`)
+    .join(', ');
   // 块级代码：pre 内 code 重置行内形态（透明背景/零 padding/无圆角）
   const preCode = selectors.map(s => `${s} pre code`).join(', ');
   const preLangLabel = selectors
@@ -74,6 +83,10 @@ export function buildRichContentCssRules(selectors: readonly string[]): string {
     ${child('p')} { margin: 0.35em 0; }
     ${child('p')}:first-child { margin-top: 0; }
     ${child('p')}:last-child { margin-bottom: 0; }
+    /* 流式尾块纯文本降级：转义文本需要 pre-wrap 保换行/缩进（B-1） */
+    ${streamTailPlain} { white-space: pre-wrap; overflow-wrap: anywhere; }
+    /* 尾块跟在已提交块之后：首段补块间距（块边界不塌陷，C-1） */
+    ${streamTailFirstParagraph} { margin-top: 0.35em; }
     /* Global reset strips list padding; indent so outside markers stay inside the content area. */
     ${child('ol')}, ${child(
     'ul',

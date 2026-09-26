@@ -9,6 +9,7 @@ import {
   getStreamActiveTailText,
   getStreamThinkingBody,
   setStreamBodyRichClass,
+  setStreamTailPlainClass,
   streamRenderTarget,
   type StreamKind,
 } from './stream';
@@ -101,14 +102,19 @@ export function paintStreamRichKind(tail: Element, kind: StreamKind): void {
       getStreamActiveTailText('thinking'),
     );
     if (!thinkingHtml) return;
-    applyTrustedHtml(streamRenderTarget(body), thinkingHtml);
+    const target = streamRenderTarget(body);
+    applyTrustedHtml(target, thinkingHtml);
+    // 轻量升级落富文本：清纯文本降级标记（B-1）
+    setStreamTailPlainClass(target, false);
     setStreamBodyRichClass(body, true);
     state.stream.thinkingHtml = thinkingHtml;
   } else {
     const textBody = ensureStreamTextBody(bubble);
     const textHtml = renderStreamingMarkdown(getStreamActiveTailText('text'));
     if (!textHtml) return;
-    applyTrustedHtml(streamRenderTarget(textBody), textHtml);
+    const target = streamRenderTarget(textBody);
+    applyTrustedHtml(target, textHtml);
+    setStreamTailPlainClass(target, false);
     setStreamBodyRichClass(textBody, true);
     state.stream.textHtml = textHtml;
   }

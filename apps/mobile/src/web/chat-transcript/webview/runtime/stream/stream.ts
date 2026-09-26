@@ -22,6 +22,18 @@ const streamBlockRender = {
   tailTextParts: {text: [] as string[], thinking: [] as string[]},
 };
 
+/** 活跃尾块容器类名（getStreamActiveTailEl 查询 / 纯文本降级目标判定同源）。 */
+const STREAM_ACTIVE_TAIL_CLASS = 'stream-active-tail';
+
+/**
+ * 纯文本降级标记类（B-1）：尾块容器走「转义文本 append」路径时挂上，
+ * CSS 单源（rich-content-styles）据此补 white-space: pre-wrap。
+ * WHY 不摘 .rich：`.rich` 实际挂在 .bubble-body / .thinking-body 上，
+ * 对尾块容器摘 `.rich` 是无效对象，body 的 white-space: normal 会继承
+ * 下来把尾块换行/缩进全部折叠；改摘 body 的 `.rich` 又会把已提交块一并降级。
+ */
+const STREAM_TAIL_PLAIN_CLASS = 'stream-tail-plain';
+
 /**
  * 显示态累积数组（spec §5 低优先项）：per-delta `+=` 改数组追加，物化收敛
  * 到块提交 / 回退渲染 / batch 收尾等读点（applyStreamBatch 一批物化一次）。
@@ -74,7 +86,37 @@ export function getStreamActiveTailEl(
   if (!body) {
     return null;
   }
-  return body.querySelector('.stream-active-tail') as HTMLElement | null;
+  return body.querySelector(
+    '.' + STREAM_ACTIVE_TAIL_CLASS,
+  ) as HTMLElement | null;
+}
+
+/**
+ * 纯文本降级标记：plain=true 挂标记类（CSS 单源补 pre-wrap），false 移除
+ * （HTML 替换成功后调用）。
+ */
+export function setStreamTailPlainClass(
+  el: Element | null | undefined,
+  plain: boolean,
+): void {
+  if (!el) return;
+  if (plain) {
+    el.classList.add(STREAM_TAIL_PLAIN_CLASS);
+  } else {
+    el.classList.remove(STREAM_TAIL_PLAIN_CLASS);
+  }
+}
+
+/**
+ * 纯文本渲染目标落标记（B-1）：目标是尾块容器时只挂标记类、不动 body 的
+ * `.rich`（摘了会把已提交块一并降级为纯文本样式）；非块级模式目标是
+ * body 自身，维持旧语义（摘自身 `.rich`，回到基础样式的 pre-wrap）。
+ */
+function markStreamPlainTarget(el: Element): void {
+  if (!el.classList.contains(STREAM_ACTIVE_TAIL_CLASS)) {
+    setStreamBodyRichClass(el, false);
+  }
+  setStreamTailPlainClass(el, true);
 }
 
 /**
@@ -87,7 +129,7 @@ function ensureStreamActiveTail(body: Element): HTMLElement {
     return tailEl;
   }
   tailEl = document.createElement('div');
-  tailEl.className = 'stream-active-tail';
+  tailEl.className = STREAM_ACTIVE_TAIL_CLASS;
   while (body.firstChild) {
     tailEl.appendChild(body.firstChild);
   }
@@ -166,11 +208,13 @@ export function getStreamThinkingBody(bubble: Element): Element | null {
 }
 
 /**
- * 转义后追加纯文本 delta，并清除 rich class（禁止明文走 TrustedHtml）。
+ * 转义后追加纯文本 delta（禁止明文走 TrustedHtml）。
+ * 纯文本降级走标记类补 pre-wrap（B-1）：尾块容器不摘 `.rich`，非块级模式
+ * （目标是 body）摘自身 `.rich` 维持旧行为。
  */
 export function appendEscapedDelta(el: Element, delta: string): void {
   el.insertAdjacentHTML('beforeend', escapeHtml(delta));
-  setStreamBodyRichClass(el, false);
+  markStreamPlainTarget(el);
 }
 
 /**
@@ -194,10 +238,12 @@ function syncStreamBodiesFromState(bubble: Element): void {
     const th = streamThinkingHtml();
     if (state.flags.richText && th) {
       applyTrustedHtml(target, th);
+      setStreamTailPlainClass(target, false);
       setStreamBodyRichClass(body, true);
     } else {
       target.textContent = String(getStreamActiveTailText('thinking') || '');
-      setStreamBodyRichClass(body, false);
+      // B-1：目标即尾块容器时不动 body 的 .rich（已提交块保持 rich）。
+      markStreamPlainTarget(target);
     }
     if (hasText || getStreamTailPhase() === 'idle-after-content') {
       body.classList.add('thinking-body-divided');
@@ -209,10 +255,12 @@ function syncStreamBodiesFromState(bubble: Element): void {
     const target = streamRenderTarget(textBody);
     if (state.flags.richText && state.stream.textHtml) {
       applyTrustedHtml(target, state.stream.textHtml);
+      setStreamTailPlainClass(target, false);
       setStreamBodyRichClass(textBody, true);
     } else if (hasText) {
       target.textContent = String(getStreamActiveTailText('text') || '');
-      setStreamBodyRichClass(textBody, false);
+      // B-1：同上，尾块容器只落纯文本标记，不摘 body 的 .rich。
+      markStreamPlainTarget(target);
     }
   }
   // tool-invoking 条由 StreamTail/ToolInvokingBar 声明式产出，此处不碰
@@ -347,7 +395,10 @@ export function appendStreamDeltaIncremental(
       return false;
     }
     if (html && state.flags.richText) {
-      applyTrustedHtml(streamRenderTarget(body), html);
+      const target = streamRenderTarget(body);
+      applyTrustedHtml(target, html);
+      // HTML 替换成功：清纯文本降级标记（B-1），避免富文本被 pre-wrap 影响。
+      setStreamTailPlainClass(target, false);
       setStreamBodyRichClass(body, true);
       bubble.className =
         'bubble assistant' +
@@ -371,7 +422,9 @@ export function appendStreamDeltaIncremental(
       // WHY: 保持与 RN prepareStreamTailHtml 的 rich 复用语义一致：
       // 有 html 且 rich 打开时直接信任边界替换（块级模式下 html 只覆盖
       // 活跃尾块，替换目标即尾块容器）；否则走 delta 增量追加，避免整泡重建。
-      applyTrustedHtml(streamRenderTarget(textBody), html);
+      const target = streamRenderTarget(textBody);
+      applyTrustedHtml(target, html);
+      setStreamTailPlainClass(target, false);
       setStreamBodyRichClass(textBody, true);
       bubble.className =
         'bubble assistant' +
@@ -425,6 +478,8 @@ export type StreamBlockCommitPayload = {
  * insertAdjacentHTML，append-only 零重渲），尾块容器重置为 RN 下发的尾块
  * 态——delta 先行携带的已完成块字符在重置中被洗掉，最终态无重复。
  * 块 html 缺失（单块超 12k 降级 / sanitize 失败）时按转义纯文本 append。
+ * 尾块载荷（tailHtml/tailText）按 C-orch-1 仅每 kind 每次切分的最后一个
+ * commit 携带：缺载荷时保持尾块现状（中间 commit 的尾块态与最后一个相同）。
  * 不触发图表懒加载（其只在 streamCommit / 历史路径，现状保持——T-MT2 契约）。
  */
 export function applyStreamBlockCommit(
@@ -435,6 +490,7 @@ export function applyStreamBlockCommit(
   const blockText = String(payload.text || '');
   const tailHtml = payload.tailHtml || '';
   const tailText = String(payload.tailText || '');
+  const hasTailPayload = payload.tailHtml != null || payload.tailText != null;
   const tail = document.getElementById('stream-tail');
   if (!tail) {
     renderRows();
@@ -464,18 +520,31 @@ export function applyStreamBlockCommit(
     blockHtml ? blockHtml : escapeHtml(blockText),
   );
   // 尾块重置：tailHtml 有值走信任边界替换，否则按源文本降级纯文本
-  if (tailHtml) {
-    applyTrustedHtml(tailEl, tailHtml);
-    setStreamBodyRichClass(body, true);
-    if (kind === 'text') {
-      state.stream.textHtml = tailHtml;
+  if (hasTailPayload) {
+    if (tailHtml) {
+      applyTrustedHtml(tailEl, tailHtml);
+      // HTML 分支成功：清纯文本降级标记（B-1）
+      setStreamTailPlainClass(tailEl, false);
+      setStreamBodyRichClass(body, true);
+      if (kind === 'text') {
+        state.stream.textHtml = tailHtml;
+      } else {
+        state.stream.thinkingHtml = tailHtml;
+      }
     } else {
-      state.stream.thinkingHtml = tailHtml;
+      tailEl.textContent = tailText;
+      // 无 tailHtml 分支（B-1）：与增量纯文本路径同口径落标记类补 pre-wrap，
+      // 并清 state 的尾块 html——否则回退路径（updateStreamBubble /
+      // streamThinkingHtml）会拿旧尾块 html 把纯文本覆盖回富文本。
+      markStreamPlainTarget(tailEl);
+      if (kind === 'text') {
+        state.stream.textHtml = '';
+      } else {
+        state.stream.thinkingHtml = '';
+      }
     }
-  } else {
-    tailEl.textContent = tailText;
+    streamBlockRender.tailTextParts[kind] = tailText ? [tailText] : [];
   }
-  streamBlockRender.tailTextParts[kind] = tailText ? [tailText] : [];
   materializeStreamDisplay(kind);
   bubble.className =
     'bubble assistant' +
