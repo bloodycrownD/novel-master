@@ -207,6 +207,94 @@ describe("llm-stream-timeout XHR 集成（回炉版）", () => {
     );
   });
 
+  it("B-1: 超时 settle 后迟到的 onprogress/onload 不得补投数据（settle 即终态）", async () => {
+    mock.timers.enable();
+    setShouldUseXhrForSseOverrideForTests(true);
+    const instances = installXhr();
+
+    const chunks: string[] = [];
+    const promise = postSse(
+      SSE_URL,
+      { method: "POST", body: "{}" },
+      (chunk) => chunks.push(chunk),
+    );
+    let rejected = false;
+    promise.catch(() => {
+      rejected = true;
+    });
+    await settleAsync();
+
+    // 0 数据黑洞形态：ontimeout 抢先 settle 为 first-chunk 超时
+    const xhr = instances[0]!;
+    xhr.ontimeout?.();
+    await settleAsync();
+    assert.equal(rejected, true, "超时先到并 settle");
+
+    // settle 之后 RN 补发的迟到进度/完成回调：不得再投递任何数据
+    xhr.responseText = 'data: {"late":1}\n\n';
+    xhr.onprogress?.();
+    xhr.status = 200;
+    xhr.onload?.();
+    await settleAsync();
+
+    assert.equal(chunks.length, 0, "超时 settle 后不得投递迟到数据");
+    await assert.rejects(
+      promise,
+      (err: unknown) =>
+        err instanceof LlmStreamTimeoutError && err.phase === "first-chunk",
+      "迟到 onload 不得把终态顶替成 resolve",
+    );
+  });
+
+  it("B-1 姊妹：有数据 → idle 分级 settle 后，迟到回调不追加投递、不顶替终态", async () => {
+    mock.timers.enable();
+    setShouldUseXhrForSseOverrideForTests(true);
+    const instances = installXhr();
+
+    const chunks: string[] = [];
+    const promise = postSse(
+      SSE_URL,
+      { method: "POST", body: "{}" },
+      (chunk) => chunks.push(chunk),
+    );
+    let settledError: unknown;
+    promise.catch((err: unknown) => {
+      settledError = err;
+    });
+    await settleAsync();
+
+    const xhr = instances[0]!;
+    // 先有输出 → 整调用到点判 idle 分级（不自动重试）
+    xhr.responseText = 'data: {"x":1}\n\n';
+    xhr.onprogress?.();
+
+    xhr.ontimeout?.();
+    await settleAsync();
+    assert.ok(
+      settledError instanceof LlmStreamTimeoutError &&
+        settledError.phase === "idle",
+      "有数据时按 idle 分级 settle",
+    );
+
+    // settle 后迟到回调：新数据不得追加投递，onload 不得改用 resolve 收尾
+    xhr.responseText += 'data: {"x":2}\n\n';
+    xhr.onprogress?.();
+    xhr.status = 200;
+    xhr.onload?.();
+    await settleAsync();
+
+    assert.ok(
+      !chunks.join("").includes('"x":2'),
+      "settle 后迟到的数据不得投递",
+    );
+    await assert.rejects(
+      promise,
+      (err: unknown) =>
+        err instanceof LlmStreamTimeoutError && err.phase === "idle",
+      "迟到 onload 不得改变既有 idle 超时终态",
+    );
+  });
+
   it("空闲超时已退役——有 chunk 后长静默不自动超时，onload 正常收尾", async () => {
     mock.timers.enable();
     setShouldUseXhrForSseOverrideForTests(true);

@@ -85,7 +85,12 @@ function uninstallXhr(): void {
 interface FakeTransportCall {
   url: string;
   init: RequestInit;
-  opts?: { providerId?: string; signal?: AbortSignal; logTag?: string };
+  opts?: {
+    providerId?: string;
+    signal?: AbortSignal;
+    logTag?: string;
+    wholeCallTimeoutMs?: number;
+  };
 }
 
 /**
@@ -183,6 +188,13 @@ describe("T-N3: 三分支逐请求择优（registered native > XHR > fetch）", 
     assert.equal(chunks.join(""), 'data: {"x":1}\n\n');
     assert.equal(fake.calls.length, 1, "registered transport 承载请求");
     assert.equal(fake.calls[0]!.url, SSE_URL);
+    // C-orch-1：整调用预算单点下发——core 以 SSE_WHOLE_CALL_TIMEOUT_MS
+    // 覆盖 wrapper 的 timeouts.callMs（wrapper 缺省时回退 Kotlin 默认 600s）。
+    assert.equal(
+      fake.calls[0]!.opts?.wholeCallTimeoutMs,
+      SSE_WHOLE_CALL_TIMEOUT_MS,
+      "core 向 native transport 下发整调用预算 600_000ms",
+    );
     assert.equal(
       instances.length,
       0,

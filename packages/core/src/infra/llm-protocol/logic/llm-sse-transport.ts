@@ -76,6 +76,10 @@ export interface PostSseOptions {
  *   reject（AbortError 形态或等价）；公共层超时 settle 后同样 abort 该
  *   signal 主动断流（wrapper 侧转发到原生 sseAbort）。用户取消（signal
  *   abort）抛出的错误原样上抛，与 `isRequestAborted` 判据链路兼容。
+ * - `opts.wholeCallTimeoutMs` 为整调用兜底预算（毫秒），由 core 单点下发
+ *   （{@link SSE_WHOLE_CALL_TIMEOUT_MS}）：实现应以之覆盖自身 callTimeout
+ *   配置；缺省时回退实现默认（native 侧保留 Kotlin 默认 600s 作后备），
+ *   避免预算口径在各层各写一份。
  */
 export interface SseTransport {
   post(
@@ -86,6 +90,8 @@ export interface SseTransport {
       providerId?: string;
       signal?: AbortSignal;
       logTag?: string;
+      /** 整调用兜底预算（毫秒），core 单点下发；缺省由实现回退自身默认。 */
+      wholeCallTimeoutMs?: number;
     }
   ): Promise<{ status: number; contentType: string | null }>;
 }
@@ -414,6 +420,9 @@ export function postSse(
           providerId,
           signal: controller.signal,
           logTag,
+          // 整调用预算单点下发（core-transport/C-orch-1）：wrapper 以之覆盖
+          // timeouts.callMs；缺省时回退 Kotlin 默认 600s 作后备。
+          wholeCallTimeoutMs: SSE_WHOLE_CALL_TIMEOUT_MS,
         })
         .then(
           (result) => {
@@ -426,9 +435,9 @@ export function postSse(
               return;
             }
             if (isTransportTimeoutError(error)) {
-              // native 读超时/callTimeout 到点：映射同一分级语义（spec §3，T-N2）。
-              // detail 透传 wrapper 错误的真实信息（如 "read timeout after 30000ms"），
-              // 固定文案会把 30s 读超时误标成 callTimeout 来源。
+              // native 整调用 callTimeout 到点：映射同一分级语义（spec §3，T-N2）。
+              // detail 透传 wrapper 错误的真实信息；终版无流式空闲界，
+              // SocketTimeoutException 仅存防御性文案路径。
               handleWholeCallTimeout(
                 `native timeout: ${
                   error instanceof Error ? error.message : String(error)
@@ -510,7 +519,11 @@ export function postSse(
       }
 
       xhr.onprogress = () => {
-        // 任何响应数据到达（含 UTF-8 解码滞后的空增量）：重置空闲 deadline。
+        // settle 即终态：超时/中止抢占 settle 后，RN 可能仍补发迟到进度
+        // 回调（run 上与 ontimeout 竞态），此时不得再投递任何数据。
+        if (settled) return;
+        // 任何响应数据到达（含 UTF-8 解码滞后的空增量）：更新观测打点
+        //（lastActivityAt / processedLength），不参与任何超时判定。
         noteActivity(0);
         deliverNewText();
       };
@@ -523,6 +536,9 @@ export function postSse(
       };
 
       xhr.onload = () => {
+        // settle 即终态：超时/中止 settle 后迟到的完成回调不得补投 tail、
+        // 也不得用 resolve/reject 顶替既有终态。
+        if (settled) return;
         deliverNewText();
         // Synchronous flush on complete: no async drain chain; guarantees tail delivery.
         const tail = emitter.flush();
@@ -640,8 +656,8 @@ export function postSse(
             }
             // fetch 在此完成 UTF-8 解码，再经公共 dispatchSseChunk 直投
             // onChunk（即时转发，无节流）；首包日志与 XHR 路径共用同一套
-            // 分发语义。noteActivity 同时覆盖「read() 返回即活动」语义
-            //（空 chunk 解码为空串，bytes 记 0 仍重置空闲 deadline）。
+            // 分发语义。noteActivity 只更新观测打点（lastActivityAt /
+            // processedLength），不参与任何超时判定（空闲看门狗已退役）。
             const chunk = decoder.decode(value, { stream: true });
             noteActivity(chunk.length);
             dispatchSseChunk(chunk, dispatchState, onChunk, (bytes) =>
