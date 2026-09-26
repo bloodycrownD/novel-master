@@ -96,13 +96,17 @@ function streamThrough(text: string, chunkChars = 7): {
  * 下 GC 与调度停顿随负载浮动（空闲机均摊 0.47ms／中位 0.5ms，全量并行时实测
  * 1.03ms），把线卡在 1ms 会拿环境噪声当回归。真正的退化形态是「每次 push 全量
  * 重算」：12,000 字量级 60–100ms/次、纯中文无空白串 88s 量级——因此取
- * 中位/均摊 ≤5ms、峰值 ≤50ms，两个数量级余量，退化必炸、噪声必过。
+ * 中位/均摊 ≤5ms、峰值 ≤150ms。**峰值线为什么是 150ms 而不是 50ms**：它是
+ * **单样本**极值，最容易被一次 GC 停顿打飞——2026-09-27 全量并行跑实测出现过
+ * 71ms 的单次尖峰（同一文件单独跑与紧邻的均摊/中位都正常）。退化的检测靠中位与
+ * 均摊那两条（退化形态每次 push 60–100ms，会把均摊顶到几十毫秒），峰值只当粗护栏，
+ * 故按数量级余量放宽，避免拿噪声当回归。
  * 精确的 O(1) 不变量（单次 encode 字符数有界）由 core 的
  * `incremental-token-counter.test.ts` 用计数假 encode 断言。
  */
 const ASSERT_MEDIAN_PUSH_MS = 5;
 const ASSERT_AVG_PUSH_MS = 5;
-const ASSERT_MAX_PUSH_MS = 50;
+const ASSERT_MAX_PUSH_MS = 150;
 
 describe('实时 token 估算器（js-tiktoken 尾窗增量）', () => {
   it('中文长文（≥3,000 字符）：相对全量 encode 误差 ≤1%', () => {
