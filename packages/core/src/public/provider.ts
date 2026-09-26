@@ -155,6 +155,7 @@ export {
   resolveContextWindowTokens,
   seedContextWindowTokens,
   formatCounterKindLabel,
+  formatTokenSourceLabel,
   getTokenizerDriver,
   resolveTokenizerDriver,
   clearTokenizerDrivers,

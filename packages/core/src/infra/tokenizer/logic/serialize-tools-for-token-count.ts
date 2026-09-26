@@ -18,6 +18,9 @@
  * `session-prompt-input` 的可见消息）拿不到 tools 定义，本轮不补——即 UI
  * 侧的本地预估仍不含 tools，压缩评估路径（由 agent-runner 传入 tools）含。
  *
+ * **恒不传 tools 的调用方不应写这行拼接**：传进来的必定是恒空串，写上只会
+ * 误导读者以为口径已覆盖 tools。拿不到 tools 定义就直接不拼，口径差另行登记。
+ *
  * @module infra/tokenizer/logic/serialize-tools-for-token-count
  */
 

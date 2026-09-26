@@ -29,6 +29,7 @@ export {
 } from "./logic/resolve-tokenizer-family.js";
 export { resolveContextWindowTokens } from "./logic/resolve-context-window.js";
 export { formatCounterKindLabel } from "./logic/format-counter-kind-label.js";
+export { formatTokenSourceLabel } from "./logic/format-token-source-label.js";
 export { seedContextWindowTokens } from "./logic/seed-context-window-tokens.js";
 export {
   CONTEXT_WINDOW_RULES,

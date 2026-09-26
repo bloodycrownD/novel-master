@@ -11,7 +11,6 @@ const mockResolveTokenCounterModeForModel = jest.fn();
 const mockBuildSessionPromptInput = jest.fn();
 const mockResolveSavedModelId = jest.fn();
 const mockSerializePromptLlmInput = jest.fn(() => 'serialized');
-const mockSerializeToolsForTokenCount = jest.fn(() => '');
 
 jest.mock('@novel-master/core/provider', () => ({
   resolvePromptTokensWithBackfill: (...args: unknown[]) =>
@@ -20,8 +19,8 @@ jest.mock('@novel-master/core/provider', () => ({
     mockResolveTokenCounterModeForModel(...args),
   serializePromptLlmInput: (...args: unknown[]) =>
     mockSerializePromptLlmInput(...args),
-  serializeToolsForTokenCount: (...args: unknown[]) =>
-    mockSerializeToolsForTokenCount(...args),
+  formatTokenSourceLabel: (source: string) =>
+    source === 'api' ? '上次请求' : '预估',
   formatCounterKindLabel: (kind: string) =>
     kind === 'api' || kind === 'heuristic' ? '自动' : kind,
 }));
@@ -81,7 +80,6 @@ describe('chat-prompt-tokens.service', () => {
     mockBuildSessionPromptInput.mockReset();
     mockResolveSavedModelId.mockReset();
     mockSerializePromptLlmInput.mockClear();
-    mockSerializeToolsForTokenCount.mockClear();
   });
 
   it('formatPromptTokenUsageLabel shows percentage with context window', () => {

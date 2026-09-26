@@ -33,6 +33,7 @@
   "formatLocalDateTime",
   "formatPromptTokenUsageLabel",
   "formatSavedModelDisplayName",
+  "formatTokenSourceLabel",
   "getProtocolAdapter",
   "getTokenizerDriver",
   "inferLlmProtocolFromApplicationModelId",

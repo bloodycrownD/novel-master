@@ -7,10 +7,10 @@ import { resolveSavedModelId } from "@novel-master/core/agent";
 
 import {
   countPromptLlmInputHeuristicOnly,
+  formatTokenSourceLabel,
   resolvePromptTokensWithBackfill,
   resolveTokenCounterModeForModel,
   serializePromptLlmInput,
-  serializeToolsForTokenCount,
 } from "@novel-master/core/provider";
 import type { PromptChatTokenStatsResponse } from "../../../shared/ipc-types.js";
 import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
@@ -20,17 +20,7 @@ import {
   type SessionPromptScope,
 } from "./session-prompt-input.service.js";
 
-/**
- * 占用来源两态标签：`api` → 「上次请求」（值取自上一次 completed run 的
- * `usage.prompt_tokens`），否则 → 「预估」（本地 tokenizer 估算）。
- *
- * 与分词器维度标签（`formatCounterKindLabel`，api/heuristic 都显示「自动」）
- * 有意分开：那个说的是「用哪个分词器」，这个说的是「值从哪来」，两义不合。
- */
-function formatTokenSourceLabel(source: 'api' | 'local'): string {
-  return source === 'api' ? '上次请求' : '预估';
-}
-
+/** 统计响应装配：`source` 原样带出，标签由 {@link formatChatTokenStatsLabel} 拼。 */
 function buildTokenStats(
   tokenCount: number,
   estimated: boolean,
@@ -52,6 +42,14 @@ function buildTokenStats(
   };
 }
 
+/**
+ * 组装 meta bar 的 token 标签。占用来源后缀由 core 的
+ * {@link formatTokenSourceLabel} 统一给出（`api` → 「上次请求」，其余 → 「预估」），
+ * 本文件不再自备一份映射。
+ *
+ * 它与分词器维度标签（`formatCounterKindLabel`，api/heuristic 都显示「自动」）
+ * 有意分开：那个说的是「用哪个分词器」，这个说的是「值从哪来」，两义不合。
+ */
 export function formatChatTokenStatsLabel(
   stats: PromptChatTokenStatsResponse,
 ): string {
@@ -103,12 +101,11 @@ async function computeChatPromptTokenStats(
   });
 
   if (!savedModelId) {
-    // UI 读口拿不到 tools 定义（`session-prompt-input` 不产 tools）：显式传
-    // undefined，本地预估仍不含 tools 段；压缩评估路径由 agent-runner 传
-    // tools（见 `serializeToolsForTokenCount` 头注释的取舍说明）。
-    const serialized =
-      (await serializePromptLlmInput(layout, ctx)) +
-      serializeToolsForTokenCount(undefined);
+    // 此处恒不拼 tools（UI 读口拿不到定义，`session-prompt-input` 不产 tools）：
+    // 口径差是已登记收窄（见 ③ spec `:46`），不要以为拼了就是全量。
+    // 压缩评估路径由 agent-runner 传 tools，那是真口径（取舍说明见
+    // `serializeToolsForTokenCount` 头注释）。
+    const serialized = await serializePromptLlmInput(layout, ctx);
     const count = runtime.tokenCounters.heuristic.countText(serialized);
     return buildTokenStats(count, true, "heuristic", undefined, "local");
   }
