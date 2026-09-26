@@ -17,6 +17,14 @@ export {
   type StreamFinalRateSnapshot,
 } from "../domain/format/stream-final-rate.js";
 /**
+ * 「基线 + 增量」读值口径的两个纯函数（stream-metrics-native ①）：双端
+ * 单元 / hook 共用的单点声明，避免同一公式各写一遍、命名各写一套。
+ */
+export {
+  composeStreamTokens,
+  reanchorStreamTokenBase,
+} from "../domain/format/stream-token-anchor.js";
+/**
  * 尾窗增量 token 计数器（stream-metrics-native ②）：双端实时 token 估算的
  * 共用纯逻辑（宿主注入 encode 绑定）。声明在 infra/tokenizer/logic，经本
  * barrel 就近转出，避免新增子路径依赖。

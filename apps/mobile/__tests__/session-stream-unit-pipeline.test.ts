@@ -1389,4 +1389,47 @@ describe('token 化指标（T-M5/T-M7）', () => {
 
     h.manager.dispose();
   });
+
+  it('C-1: 构造时不同步建估算器——水合单元零次，真实 run 在 begin() 建两次', () => {
+    // 首建 tiktoken 编码表 180–420ms。放在构造函数里的话，「启动水合 / 子
+    // 会话懒建」这类**根本不会发起 run** 的路径也要白付一次启动卡顿。
+    const factory = jest.fn(() => createIncrementalTokenCounter({
+      encode: text => text.length,
+    }));
+    const h = createHarness({tokenEstimatorFactory: factory});
+
+    // 水合路径：adoptInterruptedUnit（内部 settleAsInterrupted）→
+    // hydrateFromRunState，全程不经 begin()。
+    const hydrated = h.manager.adoptInterruptedUnit('hydrated', 'p');
+    expect(
+      hydrated.hydrateFromRunState({
+        runId: 'r-hydrated',
+        startedAtMs: 0,
+        settledAtMs: 1,
+        metrics: {
+          textChars: 12,
+          thinkingChars: 0,
+          completionTokens: 4_321,
+          tokenSource: 'usage',
+        },
+        partialText: 'twelve chars.',
+        partialThinking: '',
+        pendingChildren: [],
+      }),
+    ).toBe(true);
+    // 水合读值照旧（防御性重锚等价于 `读值 − ceil(chars/3.35)`）。
+    expect(h.manager.snapshot('hydrated')?.metrics.completionTokens).toBe(4_321);
+    expect(factory).not.toHaveBeenCalled();
+
+    // 真实 run：startRun → new + begin()，begin() 内建两条（text+thinking）。
+    // 不能在水合单元上调 begin() 凑这条断言：它的守卫是
+    // `status !== 'idle'`，水合单元是 interrupted、调了直接返回 false。
+    startRunningRun(h, 'running', 'r1');
+    expect(factory).toHaveBeenCalledTimes(2);
+    // 建完即归零，首个 delta 从 0 起算。
+    publishTextDelta(h.eventBus, 'running', 'r1', 'ab');
+    expect(h.manager.snapshot('running')?.metrics.completionTokens).toBe(2);
+
+    h.manager.dispose();
+  });
 });

@@ -7,6 +7,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 register("./electron-hook.mjs", import.meta.url);
 register("./core-at-alias-hook.mjs", import.meta.url);
+register("./js-tiktoken-hook.mjs", import.meta.url);
 
 const testNativeSqlite = path.join(__dirname, "..", ".test-native", "better-sqlite3");
 if (existsSync(path.join(testNativeSqlite, "package.json"))) {

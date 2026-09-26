@@ -15,7 +15,7 @@
  *
  * @module test/stream-token-estimator
  */
-import {describe, expect, it} from '@jest/globals';
+import {describe, expect, it, jest, afterEach} from '@jest/globals';
 import {Tiktoken} from 'js-tiktoken/lite';
 import * as cl100kRanksModule from 'js-tiktoken/ranks/cl100k_base';
 import * as o200kRanksModule from 'js-tiktoken/ranks/o200k_base';
@@ -238,5 +238,108 @@ describe('实时 token 估算器（js-tiktoken 尾窗增量）', () => {
     counter!.push('a b c');
     expect(counter!.tokens).toBeGreaterThan(0);
     await new Promise(resolve => setTimeout(resolve, 0));
+  });
+});
+
+/**
+ * 会话级提示缓存的时效（cr-fix-spec metrics/C-2）。
+ *
+ * `vendorModelHintBySession` 是模块私有 Map、没有 `__test__` 导出，因此这两条
+ * 走**可观测代理**：观察「读口 `createSessionStreamTokenEstimator` 建出来的是
+ * 哪张编码表」与「`runtime.sessions.getSessionAgentConfig` 的调用计数」。
+ */
+describe('会话级 vendorModelId 提示缓存的 TTL（metrics/C-2）', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  /** 造一个仓储口径 runtime；`setVendorModelId` 用于模拟「用户在会话内换模型」。 */
+  function createRuntime(initialVendorModelId: string): {
+    readonly runtime: StreamTokenModelHintRuntime;
+    readonly getSessionAgentConfig: jest.Mock<() => Promise<{agentId: string}>>;
+    readonly setVendorModelId: (id: string) => void;
+  } {
+    let vendorModelId = initialVendorModelId;
+    const getSessionAgentConfig = jest.fn(async () => ({agentId: 'a1'}));
+    const runtime: StreamTokenModelHintRuntime = {
+      sessions: {getSessionAgentConfig},
+      agentRegistry: {get: async () => ({model: 'saved-1'})},
+      providerModels: {
+        getSavedById: async () => ({vendorModelId}),
+      },
+    };
+    return {
+      runtime,
+      getSessionAgentConfig,
+      setVendorModelId: id => {
+        vendorModelId = id;
+      },
+    };
+  }
+
+  it('过期条目不被采信：读口走 cl100k 兜底，重新 prime 后取到新值', async () => {
+    const {runtime, setVendorModelId} = createRuntime('gpt-5');
+    primeStreamTokenModelHint(runtime, 'session-ttl');
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    // TTL 内：提示被采信，走 o200k 编码表。
+    const before = createSessionStreamTokenEstimator(runtime, 'session-ttl')!;
+    before.push('中文测试内容');
+    expect(before.tokens).toBe(
+      encodeFull(ranksOf(o200kRanksModule), '中文测试内容'),
+    );
+
+    // 同一会话内换成 cl100k 家族模型 + 时钟越过 10 分钟 TTL：只有「过期条目
+    // 不被采信」才看得到这个换模（否则会继续按旧 o200k 编码估算）。
+    setVendorModelId('gpt-3.5-turbo');
+    const realNowMs = Date.now();
+    const nowSpy = jest
+      .spyOn(Date, 'now')
+      .mockReturnValue(realNowMs + 11 * 60_000);
+    try {
+      // 读口判定过期 → 不采信旧提示 → 按 cl100k 起算，并顺手踢一次 prime。
+      const stale = createSessionStreamTokenEstimator(runtime, 'session-ttl')!;
+      stale.push('中文测试内容');
+      expect(stale.tokens).toBe(
+        encodeFull(ranksOf(cl100kRanksModule), '中文测试内容'),
+      );
+
+      // 重新 prime 落地后（条目已被淘汰，prime 的 has 守卫放行）取到新值
+      // ——与过期前那条 o200k 计数器逐 token 相同 ⟺ 换模真的被看见了。
+      await new Promise(resolve => setTimeout(resolve, 0));
+      const fresh = createSessionStreamTokenEstimator(runtime, 'session-ttl')!;
+      fresh.push('中文测试内容');
+      expect(fresh.tokens).toBe(stale.tokens);
+      expect(fresh.tokens).toBe(
+        encodeFull(ranksOf(cl100kRanksModule), '中文测试内容'),
+      );
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
+  it('过期条目已从 Map 淘汰：读口之后 getSessionAgentConfig 计数 +1（代理断言）', async () => {
+    const {runtime, getSessionAgentConfig} = createRuntime('gpt-5');
+    primeStreamTokenModelHint(runtime, 'session-ttl-delete');
+    await new Promise(resolve => setTimeout(resolve, 0));
+    // 预热已解析过一轮，计数为 1；此后不再有仓储调用。
+    expect(getSessionAgentConfig).toHaveBeenCalledTimes(1);
+
+    const realNowMs = Date.now();
+    const nowSpy = jest
+      .spyOn(Date, 'now')
+      .mockReturnValue(realNowMs + 11 * 60_000);
+    try {
+      // 读口命中但过期 → 判定为未命中并踢一次 prime。
+      createSessionStreamTokenEstimator(runtime, 'session-ttl-delete');
+      await new Promise(resolve => setTimeout(resolve, 0));
+
+      // `getSessionAgentConfig` 只在 `resolveStreamTokenVendorModelId` 里被调，
+      // 而 prime 的早退守卫是 `has()`。计数 +1 ⟺ 过期条目已从 Map 里 delete
+      // ⟺ has() 放行了。删掉 `readVendorModelHint` 里的 delete，这条必红。
+      expect(getSessionAgentConfig).toHaveBeenCalledTimes(2);
+    } finally {
+      nowSpy.mockRestore();
+    }
   });
 });

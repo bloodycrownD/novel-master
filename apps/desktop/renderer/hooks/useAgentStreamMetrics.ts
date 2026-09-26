@@ -19,7 +19,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   buildStreamMetricsLine,
+  composeStreamTokens,
   createTokenRateSampler,
+  reanchorStreamTokenBase,
   type IncrementalTokenCounter,
   type StreamTokenSource,
   type TokenRateSampler,
@@ -197,9 +199,9 @@ export function useAgentStreamMetrics(
   /** 重算 `completionTokens = max(0, 基线 + 增量估算)`（delta 归账后调用）。 */
   const recomputeCompletionTokens = useCallback((): void => {
     const acc = accRef.current;
-    acc.completionTokens = Math.max(
-      0,
-      acc.baseTokens + estimateIncrementTokens(),
+    acc.completionTokens = composeStreamTokens(
+      acc.baseTokens,
+      estimateIncrementTokens(),
     );
   }, [estimateIncrementTokens]);
 
@@ -294,7 +296,10 @@ export function useAgentStreamMetrics(
     }
     const acc = accRef.current;
     // 重锚基线：真值成为基线，后续 delta 的增量继续叠加（①）。
-    acc.baseTokens = completionTokens - estimateIncrementTokens();
+    acc.baseTokens = reanchorStreamTokenBase(
+      completionTokens,
+      estimateIncrementTokens(),
+    );
     acc.completionTokens = Math.max(0, completionTokens);
     acc.tokenSource = "usage";
     rateSampler.sample(

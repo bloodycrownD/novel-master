@@ -43,7 +43,11 @@
  * @module services/session-stream-unit
  */
 import type {ChatMessage} from '@novel-master/core/chat';
-import {createTokenRateSampler} from '@novel-master/core/format';
+import {
+  composeStreamTokens,
+  createTokenRateSampler,
+  reanchorStreamTokenBase,
+} from '@novel-master/core/format';
 import type {
   IncrementalTokenCounter,
   StreamTokenSource,
@@ -166,7 +170,8 @@ export interface SessionStreamUnitMetrics {
   readonly tokenSource: SessionStreamUnitTokenSource;
 }
 
-/** token 计数来源：usage=事件真值（run 级累计）；heuristic=字符折算兜底。
+/** token 计数来源：usage=基线来自事件真值（run 级累计），读值=基线+增量；
+ * heuristic=基线为 0 的纯估算。
  * 复用 core 的中立类型（别名）——联合字面量单一声明在 core 的
  * `StreamTokenSource`，消费端不再各写一份。 */
 export type SessionStreamUnitTokenSource = StreamTokenSource;
@@ -295,13 +300,18 @@ export class SessionStreamUnit {
    * **不是 metricsAcc 的字段**：snapshot() 会把 metricsAcc 整体透出，多个
    * 用例按精确形状比对，内部状态不得混进投影。
    */
-  private heuristicBaseTokens = 0;
+  private baseTokens = 0;
   /**
    * 实时 token 估算器（stream-metrics-native ②）：正文/思考各一条独立尾窗
    * 计数器（`createIncrementalTokenCounter` 的宿主绑定由装配方经
-   * `tokenEstimatorFactory` 注入）。两条都建不起来（未注入/构造失败）时保持
-   * null，走启发式兜底——投影形状与既有行为不变。
+   * `tokenEstimatorFactory` 注入）。工厂不在构造函数里调、在 `begin()` 里
+   * 调（首建编码表 180–420ms，水合 / 懒建路径不经 `begin()` 天然免付）；
+   * 两条都建不起来（未注入/构造失败）时保持 null，走启发式兜底——投影形状
+   * 与既有行为不变。
    */
+  private readonly tokenEstimatorFactory:
+    | ((sessionId: string) => IncrementalTokenCounter | null)
+    | undefined;
   private textTokenEstimator: IncrementalTokenCounter | null = null;
   private thinkingTokenEstimator: IncrementalTokenCounter | null = null;
   /**
@@ -370,25 +380,12 @@ export class SessionStreamUnit {
     this.onProjectionChanged = options.onProjectionChanged;
     this.settledGraceMs =
       options.settledGraceMs ?? SESSION_STREAM_SETTLED_GRACE_PERIOD_MS;
-    // 实时 token 估算器：单元创建时同步建（首次构造 tiktoken 编码表约
-    // 250–420ms，落在「run 开始到首字」之间，用户已接受）。两条都建成才启用
-    // 估算器路径——半套状态会让正文/思考的增量口径不一致，不如整体回退。
-    const factory = options.tokenEstimatorFactory;
-    if (factory != null) {
-      try {
-        const text = factory(options.sessionId);
-        const thinking = text == null ? null : factory(options.sessionId);
-        if (text != null && thinking != null) {
-          this.textTokenEstimator = text;
-          this.thinkingTokenEstimator = thinking;
-        }
-      } catch (err) {
-        console.warn(
-          '[novel-master/session-stream-unit] token estimator init failed, fallback to heuristic',
-          err,
-        );
-      }
-    }
+    // 实时 token 估算器**不在这里建**（构造时机＝会话切换时空闲预热，未就绪
+    // 时在 `begin()` 同步兜底，见下）：首建 tiktoken 编码表约 180–420ms，
+    // 放在构造函数里会让「启动水合 / 子会话懒建」白付一次启动卡顿。两条都
+    // 建成才启用估算器路径——半套状态会让正文/思考的增量口径不一致，
+    // 不如整体回退。
+    this.tokenEstimatorFactory = options.tokenEstimatorFactory;
     this.applyBuffer = createStreamApplyBuffer(
       segments => this.applyStreamSegments(segments),
       {flushIntervalMs: SESSION_STREAM_APPLY_INTERVAL_MS},
@@ -407,13 +404,44 @@ export class SessionStreamUnit {
     }
     this.status = 'starting';
     this.startedAtMsValue = Date.now();
+    // 估算器在此建（不在构造函数）：会话切换时的空闲预热多半已备好编码表、
+    // 这里命中缓存；没备好才真付一次 180–420ms。必须在请求发出前完成，
+    // 不推迟首个 delta。水合 / 中断单元不经 `begin()`，天然免付这一次。
+    this.buildTokenEstimators();
     // 新 run：速率采样序列重 seed（防跨 run 差分污染首个窗口）；token 基线
     // 与两条估算器一并归零（新 run 从零起算）。
     this.rateSampler.reset();
-    this.heuristicBaseTokens = 0;
+    this.baseTokens = 0;
     this.textTokenEstimator?.reset();
     this.thinkingTokenEstimator?.reset();
     return true;
+  }
+
+  /**
+   * 经注入的工厂建正文/思考两条估算器（`begin()` 里调用）。
+   *
+   * 两条都建成才启用——半套状态会让正文/思考的增量口径不一致，宁可整条
+   * 回退启发式；工厂抛错同样吞掉（构造失败只是「这次退启发式」，不该把
+   * run 受理打断）。
+   */
+  private buildTokenEstimators(): void {
+    const factory = this.tokenEstimatorFactory;
+    if (factory == null) {
+      return;
+    }
+    try {
+      const text = factory(this.sessionId);
+      const thinking = text == null ? null : factory(this.sessionId);
+      if (text != null && thinking != null) {
+        this.textTokenEstimator = text;
+        this.thinkingTokenEstimator = thinking;
+      }
+    } catch (err) {
+      console.warn(
+        '[novel-master/session-stream-unit] token estimator init failed, fallback to heuristic',
+        err,
+      );
+    }
   }
 
   /**
@@ -500,10 +528,11 @@ export class SessionStreamUnit {
     this.settledAtMsValue = state.settledAtMs;
     this.metricsAcc = {...state.metrics};
     // 防御性重锚：回填的 completionTokens 是「中断时的最终读值」（可能含
-    // usage 真值），而估算器从空开始——基线锚成 `读值 − 当前增量估算`，
-    // 保证水合后读值不被估算口径切换改写（无估算器时等价于
-    // `读值 − ceil(chars/3.35)`）。
-    this.reanchorHeuristicBase(state.metrics.completionTokens);
+    // usage 真值），基线锚成 `读值 − 当前增量估算`，保证水合后读值不被估算
+    // 口径切换改写。本单元未经 `begin()`（构造时已不同步建估算器），故没有
+    // 估算器、`estimateIncrementTokens()` 走的是启发式分支——重锚等价于
+    // `读值 − ceil(chars/3.35)`。
+    this.reanchorBase(state.metrics.completionTokens);
     // 回填的完整字符串直接充当物化缓存（无分段历史，无需 join）。
     this.partialTextSegments = [];
     this.partialThinkingSegments = [];
@@ -610,9 +639,9 @@ export class SessionStreamUnit {
 
   /** 重算 `completionTokens = max(0, 基线 + 增量估算)`（delta 归账后调用）。 */
   private recomputeCompletionTokens(): void {
-    this.metricsAcc.completionTokens = Math.max(
-      0,
-      this.heuristicBaseTokens + this.estimateIncrementTokens(),
+    this.metricsAcc.completionTokens = composeStreamTokens(
+      this.baseTokens,
+      this.estimateIncrementTokens(),
     );
   }
 
@@ -621,9 +650,12 @@ export class SessionStreamUnit {
    * 基线 = value − 当前增量估算，后续 delta 的增量继续叠加上去。
    * 未收到 usage 前基线恒 0（纯估算），故重锚只发生在校正点。
    */
-  private reanchorHeuristicBase(value: number): void {
-    this.heuristicBaseTokens = value - this.estimateIncrementTokens();
-    this.metricsAcc.completionTokens = Math.max(0, value);
+  private reanchorBase(value: number): void {
+    this.baseTokens = reanchorStreamTokenBase(
+      value,
+      this.estimateIncrementTokens(),
+    );
+    this.metricsAcc.completionTokens = composeStreamTokens(value, 0);
   }
 
   /** 只读投影快照（每次调用新对象；messages/pendingChildrenByTitle 字段返回内部引用——见字段注释的引用稳定契约）。 */
@@ -697,7 +729,7 @@ export class SessionStreamUnit {
       ...this.metricsAcc,
       tokenSource: 'usage',
     };
-    this.reanchorHeuristicBase(completionTokens);
+    this.reanchorBase(completionTokens);
     this.sampleRate();
     return true;
   }

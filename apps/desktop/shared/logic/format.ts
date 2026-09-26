@@ -18,4 +18,6 @@ export {
   type TokenRateSample,
   type TokenRateSampler,
   type IncrementalTokenCounter,
+  composeStreamTokens,
+  reanchorStreamTokenBase,
 } from "@novel-master/core/format";

@@ -44,7 +44,7 @@ export interface SessionRunState {
   readonly startedAtMs: number;
   readonly textChars: number;
   readonly thinkingChars: number;
-  /** run 级累计输出 token（usage 真值优先，heuristic 兜底折算）。 */
+  /** run 级累计输出 token（usage=基线来自事件真值，读值=基线+增量；heuristic=基线为 0 的纯估算）。 */
   readonly completionTokens: number;
   readonly tokenSource: SessionRunStateTokenSource;
   readonly partialText: string | null;

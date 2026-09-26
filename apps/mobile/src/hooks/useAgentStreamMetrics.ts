@@ -13,7 +13,8 @@ import {
 } from '@novel-master/core/format';
 
 /**
- * token 计数来源：usage=事件真值（run 级累计）；heuristic=字符折算兜底。
+ * token 计数来源：usage=基线来自事件真值（run 级累计），读值=基线+增量；
+ * heuristic=基线为 0 的纯估算。
  *
  * 复用 core 的中立类型（别名，不再本地重声明联合字面量）——新增来源时
  * 单点改 core，消费端不会漏改。

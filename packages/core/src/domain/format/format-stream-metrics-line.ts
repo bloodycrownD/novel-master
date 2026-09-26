@@ -15,7 +15,7 @@ import {formatCharCount} from "./format-char-count.js";
 export type StreamMetricsLineInput = {
   readonly running: boolean;
   readonly elapsedMs: number;
-  /** run 级累计输出 token（usage 真值优先，heuristic 兜底折算）。 */
+  /** run 级累计输出 token（usage=基线来自事件真值，读值=基线+增量；heuristic=基线为 0 的纯估算）。 */
   readonly completionTokens: number;
   /** 实时速率（token/秒，slidingTokenRate 产物）；null = 省略速率段。 */
   readonly tokensPerSecond: number | null;
