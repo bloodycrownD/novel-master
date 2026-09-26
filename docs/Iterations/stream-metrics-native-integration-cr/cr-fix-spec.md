@@ -572,4 +572,22 @@
 - **验证**：core 定向 113 例 + 全量嵌套面抽跑全绿、typecheck 干净；llm-sse-native 包 25 例 + tsc + eslint 全绿；mobile 定向 23 套件 283 例（cr-func 复跑 27 套件 319 例）+ tsc 全绿；desktop 14 例全绿、renderer tsc 349（基线 351，净减 2 无新增）；**Kotlin `:novel-master_llm-sse-native:compileDebugKotlin` BUILD SUCCESSFUL**（产物物证 `build/tmp/kotlin-classes/debug/.../LlmSseModule.class` 16:12）。
 - **cr-func 结论**：cr-func-core-native / cr-func-mobile / cr-func-desktop-docs 均 **func-ready: yes**；cr-func-delta **func-ready: yes**。
 - **需用户确认（不阻塞代码面）**：`D4`（AC-3 非流式死亡收敛未实测，T-N4 代偿）、`D5`（T-N8 事件率无打点，仅间接证据）、`D6`（Step 1 mattermost PoC 改静态核验）、`D7`/`D9`/`D10`（文档收窄注记已落，待确认）、`D8`（取登记路线）。
-- **残留风险（已登记，不阻塞）**：① Kotlin 仅编译通过，并发语义仍靠代码审查（无 Kotlin 单测基建）；② `mobile-metrics/B-1` 的可选 runId 加固未做（用户数据侧窗口极窄）；③ mobile 全量 jest 在本机有两条环境性基线红（CRLF 的 T-MF3、helpers 被当套件收），非本 diff 引入；④ 真机手动项见「合并后 QA」；⑤ 合并门 `core-metrics/B-3`（BOOT_VERSION 顺延）仍需在合并时核对主干现值。
+- **残留风险（已登记，不阻塞；含后续收敛更新）**：① Kotlin：`compileDebugKotlin` 已 BUILD SUCCESSFUL（1308 包出包也再次编译通过），但并发语义仍无自动化护栏（Kotlin 单测基建未引入）；② ~~runId 加固未做~~ **已于 `de36ccad` 实现并在模拟器实测**（旧格式值兼容显示 + 新格式带 runId 且与 settled 行一致 + 无速率时删键）；③ mobile 全量 jest 在本机有两条环境性基线红（CRLF 的 T-MF3、helpers 被当套件收），非本 diff 引入；④ 真机手动项见「合并后 QA」与下方验收记录；⑤ 合并门 `core-metrics/B-3`（BOOT_VERSION 顺延）仍需在合并时核对主干现值。
+
+## 验收记录（模拟器 emulator-5554，包 1308，2026-09-26）
+
+包：`app-debug.apk` versionCode=**1308** / 1.5.24-dev（内嵌 bundle `useDevSupport=false` + webview native 资产；短路径 junction `D:\nm7` 出包，绕开 CMake 260 字符上限；`MainApplication.kt` 临时改动已还原）。mock：`scripts/mock-openai-server.mjs` + `adb reverse tcp:8787`；库在验收后已还原（SHA-256 与备份一致）。
+
+| 项 | 结果 | 证据 |
+|---|---|---|
+| 旧格式（无 runId）冻结速率跨版本兼容 | ✅ | 会话 `ce138bb5` 显示「上次生成 · 111s · 输出 12,048 t · 50.5 t/s」（库内该行确为旧格式，无 runId） |
+| 新 run 实时指标（token + 速率、无 0 字停摆） | ✅ | 连拍逐字转写：`生成中 · 1.0s · 输出 0 t` → `3.1s · 0 t` → `5.1s · 67 t · 88.1 t/s` → `11.5s · 563 t · 95.9 t/s` → 终态 `50.4s · 12,000 t · 85.2 t/s`；run_state settled/12000/usage 与 KKV **新格式（带 runId，且与 settled 行一致）** |
+| 重启后冻结速率仍在（KKV 水合 + runId 校验） | ✅ | force-stop + 重启后同会话仍显示 `50.4s · 12,000 t · 85.2 t/s` |
+| 无速率 run → KKV 键被删（B-1） | ✅ | 单 chunk 响应后：库内该会话 `session_kkv_entry` **行已消失**；重启后文案为「上次生成 · 2.8s · 输出 8 t」**不带 t/s** |
+| 子会话指标条 | ✅（终态）/ ⚠️（活跃态未抢到） | 子会话页显示 `上次生成 · 3.0s · 输出 400 t · 78.1 t/s`；活跃态因 dump 陈旧 + 卡片滚动边界未捕获（受限于取证手段，非功能问题） |
+| 「已中断」单标识 | ✅ | 子会话流中强杀应用后，父会话页 `已中断` 徽标**恰好 1 次**；重启后子会话页无任何标识（子会话 run 不落库的既有行为，0 次≠重复） |
+| 停止键 | ✅ | 长流中点停止：服务端日志「响应流关闭（未自然结束，第 225 步）」，文案转终态「上次生成 · 6.8s · 输出 261 t · 82.8 t/s」，发送键恢复 |
+
+**验收副产物（观察项，已登记不阻塞）**：① 流式中 uiautomator dump 返回陈旧层级（`could not get idle state`）→ 流中取证改用截图；② 「极小响应→无速率」须**单 chunk** 才稳定触发（2 chunk 会形成两样本算出速率）；③ **多步 run（tool 调用+后续文本）终态无速率段**——正是 Q7/`D11` 已登记的「usage 后 heuristic 不回写」后果，非新问题；④ 长流实时 token 计数显著低于 usage 真值（`1,370 t`@22s vs 12,000 t 终值）——heuristic 中文低估 + 终值校正跳正，属 ④ 设计行为；⑤ 上下文用量显示重启前后不一致（`~0% · 214/128K` → `~3% · 3.6K/128K`），疑似估算口径/水合重算差异，**新观察，建议后续单查**。
+
+**真机（DSLDU20407006179）**：截至本次记录，设备处前台活跃使用中（`mCurrentFocus=com.novelmaster/MainActivity`），未安装 1308、未做任何操作；真机验收需用户约定设备空闲窗口后进行（安装需屏幕唤醒+确认弹窗）。
