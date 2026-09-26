@@ -36,8 +36,16 @@ import {
  *
  * 为什么不直接用 `runtime.tokenCounters.heuristic.countText`：那个 port 的实现就是
  * `ceil(chars / 3.35)`，在中文下低估八成。桌面端主进程本来就在加载 Node 驱动
- * （`runtime/connection.ts` 会 `registerTokenizerNodeDriver`），复用驱动里那张
- * **进程级单例**编码表不需要额外建表成本。
+ * （`runtime/connection.ts` 会 `registerTokenizerNodeDriver`），**复用驱动里那张
+ * 进程级单例编码表本身不产生额外建表成本**。
+ *
+ * ⚠️ 但「复用单例」**不等于「第一次也是免费的」**（stream-metrics-native `agile-3`）：
+ * `getNodeEncodingForModel` 的缓存键是 `model:<tiktokenModel>`、兜底档
+ * `getNodeEncodingByName` 的键是 `enc:cl100k_base`——**两个命名空间互不命中**，所以
+ * 兜底档**第一次**被走到时仍要现建一整张 cl100k WASM 表。`runtime/create-desktop-runtime.ts`
+ * 已在**启动路径跑完之后用 `setTimeout` 空闲预热**过一次（`try/catch` 静默、不阻塞启动），
+ * 这覆盖了大部分场景；但**首次兜底若抢在预热之前发生，仍会有一次约 250ms 的主进程同步
+ * 建表**（实测 185~248ms，期间事件循环阻塞、IPC 排队）。
  */
 function countFallbackTokens(
   runtime: DesktopNovelMasterRuntime,
@@ -77,11 +85,32 @@ function realFallbackTokenCounter(
   };
 }
 
-/** 注入真分词器版 heuristic 计数器的 registry 视图（不改动 runtime 上的原对象）。 */
-function withRealFallbackCounter(
+/**
+ * 注入真分词器版 heuristic 计数器的 registry 视图（不改动 runtime 上的原对象）。
+ *
+ * ⚠️ **禁令：不得用对象展开（浅拷贝 `{ ...base }` 那种写法）去复制
+ * `DefaultTokenCounterRegistry` 实例**——它的 `forSavedModel` / `forVendorModel` 是
+ * **原型方法**，不是自有可枚举属性，**对象展开后运行期直接消失**；而 TypeScript 会
+ * 因为 spread 的类型取自接口 `TokenCounterRegistry`（结构类型在类型层面看得到全部方法）
+ * 而**编译期零告警**。所以这里必须**逐个显式转发**。
+ *
+ * ⚠️ **别把这层当过度防御删掉**：今天没炸，只因 core 的
+ * `countPromptLlmInputHeuristicOnly` 恰好**只读 `registry.heuristic`**、没碰另外两个方法；
+ * 一旦 core 那条兜底开始调 `forVendorModel(...)`，这里就会抛
+ * `forVendorModel is not a function`——而这是 desktop 的**最后一道兜底**，抛错就没有下一层了。
+ */
+export function withRealFallbackCounter(
   runtime: DesktopNovelMasterRuntime,
 ): TokenCounterRegistry {
-  return { ...runtime.tokenCounters, heuristic: realFallbackTokenCounter(runtime) };
+  const base = runtime.tokenCounters;
+  return {
+    // `getTokenizerOverride` 虽是自有属性（构造函数里赋值），但它是**外部函数值**：
+    // 搬成新对象的自有属性后 `this` 会指向新对象而不是原实例，所以必须 `.bind(base)`。
+    getTokenizerOverride: base.getTokenizerOverride?.bind(base),
+    forSavedModel: (id, o) => base.forSavedModel(id, o),
+    forVendorModel: (id, o) => base.forVendorModel(id, o),
+    heuristic: realFallbackTokenCounter(runtime),
+  };
 }
 
 /** 统计响应装配：`source` 原样带出，标签由 {@link formatChatTokenStatsLabel} 拼。 */

@@ -3,6 +3,9 @@
  *
  * stream-metrics-native ④：补一条「无模型早退」用例，钉住这条早退路径的读数已经是
  * 真 cl100k 计数（而不是 `ceil(chars / 3.35)` 字符折算）。
+ *
+ * CR fix-spec v3 `agile-2`：再补一条形态护栏，钉住兜底 registry 视图是用**显式转发**
+ * 造的（原型方法 `forSavedModel` / `forVendorModel` 没被对象展开丢掉）。
  */
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
@@ -22,6 +25,7 @@ import {
 import {
   formatChatTokenStatsLabel,
   loadChatPromptTokenStats,
+  withRealFallbackCounter,
 } from "../src/main/services/chat-prompt-tokens.service.js";
 import {
   setupDesktopDbTestEnv,
@@ -186,9 +190,9 @@ describe("chat-prompt-tokens.service", () => {
       assert.ok(stats.tokenCount > 0);
 
       // 读数本身已换成真分词器：同一段文本，真 cl100k 计数与精确档同量级（约 1:1）；
-      // 字符折算对中文正文会压到 1/5 左右（cl100k 约 1.64 字符/token，折算用的
-      // 3.35 是英文口径），所以 2 倍这条线足以把两者分开——若有人把早退路径改回
-      // `heuristic.countText`，本断言立刻红。
+      // 字符折算对中文正文会压到 1/5 左右（cl100k 约 1.64 token/字符，即
+      // ≈0.61 字符/token；折算用的 3.35 是英文口径），所以 2 倍这条线足以把两者
+      // 分开——若有人把早退路径改回 `heuristic.countText`，本断言立刻红。
       assert.ok(
         stats.tokenCount > precise.tokenCount / 2,
         `早退读数 ${stats.tokenCount} 相对精确档 ${precise.tokenCount} 偏低，像是仍在字符折算`,
@@ -216,5 +220,32 @@ describe("chat-prompt-tokens.service", () => {
       });
       assert.equal(restored.ok, true);
     }
+  });
+
+  it("T-T9d: 兜底 registry 的 forSavedModel / forVendorModel 可调用（形态护栏）", async () => {
+    const rt = await getDesktopRuntime();
+    const registry = withRealFallbackCounter(rt);
+
+    // 形态护栏：`runtime.tokenCounters` 是 `DefaultTokenCounterRegistry` 的**类实例**，
+    // `forSavedModel` / `forVendorModel` 挂在**原型**上、不是自有可枚举属性。曾经这里
+    // 写的是「对象展开 runtime.tokenCounters 再覆盖 heuristic」，展开后这两个方法在
+    // 运行期直接消失，而 TS 因 spread 类型取自接口 `TokenCounterRegistry` 而**零告警**。
+    // 今天没炸只因 core 的 `countPromptLlmInputHeuristicOnly` 恰好只读 `heuristic`。
+    assert.equal(typeof registry.forSavedModel, "function");
+    assert.equal(typeof registry.forVendorModel, "function");
+
+    // 不止「存在」，还要「调得动」：core 兜底一旦用上这两个方法，抛错就没有下一层兜底。
+    const byVendor = registry.forVendorModel("gpt-4o");
+    assert.equal(typeof byVendor.countText, "function");
+    const bySaved = await registry.forSavedModel(savedModelId);
+    assert.equal(typeof bySaved.countText, "function");
+
+    // 显式转发不能把读数口径改回去：`heuristic` 必须仍是真 cl100k 适配器。
+    assert.equal(registry.heuristic.kind, "heuristic");
+    const chinese = "他把伞收了，窗外的雨顺着玻璃往下淌。";
+    assert.ok(
+      registry.heuristic.countText(chinese) > chinese.length / 3.35,
+      "兜底 registry 的 heuristic 像是退回 ceil(chars/3.35) 字符折算了",
+    );
   });
 });

@@ -59,7 +59,34 @@ import { getDesktopConnection } from "./connection.js";
 import { getPlatformSkspName } from "./register-platform-drivers.js";
 import { resolveDbPath } from "./resolve-db-path.js";
 import { ensureLlmFetchConfigured } from "./setup-llm-fetch.js";
+import { getDefaultNodeEncoding } from "@novel-master/tokenizer-driver-node";
 import type { DesktopNovelMasterRuntime } from "./types.js";
+
+/**
+ * 启动跑完后**空闲预热**一次 cl100k 编码表（stream-metrics-native `agile-3`）。
+ *
+ * 为什么不预热就会卡：`getNodeEncodingForModel` 的缓存键是 `model:<tiktokenModel>`、
+ * 兜底档 `getNodeEncodingByName` 的键是 `enc:cl100k_base`——**两个命名空间互不命中**。
+ * 所以「无模型早退 / web·SP 加载失败 / 主路径抛异常」三条兜底里，**第一次**触发时会在
+ * Electron 主进程**同步**建一整张 cl100k WASM 表（实测 185~248ms），期间事件循环阻塞、
+ * IPC 排队。这里把它挪到启动之后的空闲时段先建好。
+ *
+ * 三条硬约束（执行方不得违反）：
+ * ① **try/catch 静默**——预热失败（资产缺失 / WASM 加载异常）绝不影响启动，读数照走
+ *    既有降级路径（`countTextWithDefaultEncoding` 返回 `null` → 退回字符折算）；
+ * ② **不得阻塞启动**——只挂 `setTimeout`、**不 `await`**，不能把「偶发的一次性卡顿」
+ *    换成「启动失败」，那是净负收益；
+ * ③ 不许改成同步 `await getDefaultNodeEncoding()`。
+ */
+function scheduleCl100kEncodingWarmup(): void {
+  setTimeout(() => {
+    try {
+      getDefaultNodeEncoding();
+    } catch {
+      // 静默吞掉：预热只是「提前把表建好」，失败时兜底路径会自己再试一次。
+    }
+  }, 0);
+}
 
 /**
  * Opens the app DB once and returns service handles aligned with CLI/mobile runtime.
@@ -111,6 +138,10 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
   const agentRegistry = createAgentRegistryService(conn, state);
   const abortRegistry = createAgentAbortRegistry();
   const streamRegistry = createAgentStreamRegistry();
+
+  // 启动路径到此已全部走完（下面只是装配返回值），把 cl100k 建表挪到空闲时段，
+  // 避免第一次兜底读数在主进程同步阻塞 ~250ms。
+  scheduleCl100kEncodingWarmup();
 
   return {
     conn,
