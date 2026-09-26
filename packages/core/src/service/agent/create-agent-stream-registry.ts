@@ -16,7 +16,8 @@ import type {
  * - `reset` 仅清空累积文本、保留句柄（step 边界，下一步从空开始）；
  * - `append` 追加 delta（parts 数组 push，不做字符串重建——per-delta 的
  *   `text + delta` 会随流长增长产生超线性累积与 GC 垃圾）；
- * - `get` 返回只读快照（读频低，物化点收敛到这里：join 一次）；
+ * - `get` 返回只读快照（读频低，物化点收敛到这里：join 一次）；当前为
+ *   内部/测试用途（无生产调用方），保留以维持对称读口（core-transport Q3）；
  * - `unregister` 带句柄所有权比对，防误删新 run 的 partial。
  */
 export function createAgentStreamRegistry(): AgentStreamRegistry {
@@ -61,6 +62,8 @@ export function createAgentStreamRegistry(): AgentStreamRegistry {
         current.thinkingParts.push(delta.thinking);
       }
     },
+    // 只读快照口：当前为内部/测试用途（无生产调用方），保留以维持
+    // register/append/reset/get/has/unregister 的对称读口（core-transport Q3）。
     get(sessionId) {
       const current = map.get(sessionId);
       if (current == null) {

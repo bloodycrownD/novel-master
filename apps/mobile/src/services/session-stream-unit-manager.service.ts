@@ -627,10 +627,12 @@ export class SessionStreamUnitManager {
           settledAtMs: row.updatedAtMs,
           elapsedMs: Math.max(0, row.updatedAtMs - row.startedAtMs),
           // 冻结末值速率从 session KKV 读回（run_state 不存速率，见域常量注释）；
-          // 行缺失/解析失败即省略速率段——不造数、不报错。
-          rateTokensPerSecond: parseStreamFinalRateSnapshot(
+          // 行缺失/解析失败即省略速率段——不造数、不报错。快照自带 runId 时
+          // 与 settled 行的 runId 比对，不一致按缺值处理（见 resolveHydratedFinalRate）。
+          rateTokensPerSecond: this.resolveHydratedFinalRate(
             await this.readFinalRateRaw(row.sessionId),
-          )?.rate ?? null,
+            row.runId,
+          ),
         });
       }
       bootTimingLog(
@@ -1379,6 +1381,7 @@ export class SessionStreamUnitManager {
         sessionId,
         projection.rateTokensPerSecond,
         snap.metrics.completionTokens,
+        snap.runId,
       );
     } else {
       // 本轮无速率（零输出/单样本不足）：必须清掉上一轮残留的 KKV 值——
@@ -1695,14 +1698,49 @@ export class SessionStreamUnitManager {
   }
 
   /**
+   * 水合读回冻结速率（含 runId 一致性校验，cr-fix-spec mobile-metrics/B-1
+   * 的可选加固）：
+   *
+   * - 快照没带 runId（本字段上线前写的旧值，或 run 身份未知）→ **按兼容
+   *   处理**，照常采用速率——旧数据不因缺字段被判为坏值；
+   * - 快照带 runId 且与 settled 行的 runId 一致 → 采用速率；
+   * - 快照带 runId 但与 settled 行不一致（settled 行是两次收尾之间被新 run
+   *   覆盖、KKV 还留着上一轮的残留值等竞态窗口）→ 视为缺值返回 null，
+   *   展示层据此省略速率段，不把上一轮的速度拼到本轮「上次生成」上。
+   *
+   * settled 行取 runId 是天然可用的（`SessionRunState.runId` 与快照同源，
+   * 都是该次 run 签发时回填的 id），比「用 tokens 与 completionTokens 等值
+   * 校验」更直接：tokens 可能因 usage 事件晚到而与行值不等，等值校验会
+   * 误杀合法速率。
+   */
+  private resolveHydratedFinalRate(
+    raw: string | null,
+    settledRunId: string,
+  ): number | null {
+    const snapshot = parseStreamFinalRateSnapshot(raw);
+    if (snapshot == null) {
+      return null;
+    }
+    if (snapshot.runId != null && snapshot.runId !== settledRunId) {
+      return null;
+    }
+    return snapshot.rate;
+  }
+
+  /**
    * 末值速率落 session KKV（fire-and-forget）：冻结态「上次生成 … · N t/s」
    * 的跨重启数据源。展示派生值——失败只丢速率段（下次收尾重写），不阻塞
    * 收尾链、不冒泡错误（与导入缓存对齐同款吞错口径）。
+   *
+   * `runId` 为本次 run 身份（加固字段，cr-fix-spec mobile-metrics/B-1）：
+   * 水合读回时与 settled 行的 runId 比对，不一致即当缺值。传 null/空串
+   * （受理空窗内死亡的 run）时省略该字段，写出的就是旧格式值。
    */
   private persistFinalRateQuietly(
     sessionId: string,
     rate: number,
     tokens: number,
+    runId: string | null,
   ): void {
     const kkv = this.runtime.sessionKkv;
     if (kkv == null) {
@@ -1713,7 +1751,12 @@ export class SessionStreamUnitManager {
         sessionId,
         SESSION_KKV_DOMAIN_STREAM_METRICS,
         STREAM_METRICS_FINAL_RATE_KEY,
-        serializeStreamFinalRateSnapshot({rate, tokens, atMs: Date.now()}),
+        serializeStreamFinalRateSnapshot({
+          rate,
+          tokens,
+          atMs: Date.now(),
+          ...(runId != null && runId.length > 0 ? {runId} : {}),
+        }),
       )
       .catch(err => {
         console.warn(

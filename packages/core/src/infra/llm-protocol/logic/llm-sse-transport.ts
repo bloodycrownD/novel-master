@@ -25,7 +25,8 @@
  *    XHR）时设置。native 管子黑洞由整调用 callTimeout 兜底，不设 close
  *    以保留连接复用；回落 XHR 时死连接复用黑洞仍由 close 消灭。OkHttp
  *    尊重请求侧 close，连接用完即废不回池；h2 下该头被协议剥离（无害），
- *    由 2 兜底。
+ *    由 2 兜底。该条件由分支派发表达（`runXhr` 只在 registered transport
+ *    缺席时执行，函数内无条件设置 close），不再写函数内的恒真判断。
  * 2. 整调用兜底 `SSE_WHOLE_CALL_TIMEOUT_MS`：触发机制按分支表达——XHR 经
  *    `xhr.timeout`（RN 0.85.3 映射 OkHttp callTimeout，覆盖 connect/写/读
  *    全周期）；fetch 经公共层 whole-call 定时器 + controller.abort；native
@@ -585,12 +586,12 @@ export function postSse(
       // noNewExchangesOnConnection），连接用完即废不回池——「上一次流留下的
       // （可能已静默死亡的）连接」不再被下一次请求复用。h2 下该头被协议剥离
       // （无害），黑洞由 xhr.timeout 兜底。
-      // 条件化：仅当本次请求未走 registered native transport 时设置——进入
-      // XHR 分支即意味着运行时判定回落（当前该条件恒真，显式表达 spec §7
-      // 语义：native 分支不设 close 以保留连接复用，回落 XHR 保留兜底）。
-      if (!usedRegisteredTransport) {
-        xhr.setRequestHeader("Connection", "close");
-      }
+      // 条件化（spec §7）落地形态：native 分支不设 close 以保留连接复用，
+      // 回落 XHR 才设。本函数只在 registered transport 缺席时执行（分支判定
+      // 见下方 `transport != null` 派发），故此处无条件设置——native 注册态
+      // 根本不进这里，等价于原 `!usedRegisteredTransport` 判断（该判断在本
+      // 函数内恒真，已按 core-transport Q2 简化掉）。
+      xhr.setRequestHeader("Connection", "close");
       xhr.send(init.body ?? null);
     };
 

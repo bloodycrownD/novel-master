@@ -8,6 +8,8 @@
  *   常驻，单元宽限销毁后仍可读且**不随时刻衰减**；
  * - session KKV 落库：settle 写 `stream_metrics/finalRate`（值可解析）；
  * - 跨重启：新 manager + 同 KKV 数据水合 settled 行后，投影带回速率；
+ * - 水合 runId 一致性校验（B-1 加固）：旧格式值（无 runId）照常采用速率，
+ *   runId 与 settled 行不一致的残留快照当缺值（不显示 t/s）；
  * - 极简 runtime（无 sessionKkv）：退化为内存冻结值，不抛错。
  *
  * @module test/session-stream-unit-final-rate
@@ -162,6 +164,45 @@ function finishRun(eventBus: SimpleEventBus): void {
     runId: 'r1',
     stopReason: 'end_turn',
   } as never);
+}
+
+/**
+ * 直接铺一行 settled（水合回填用的持久层行）：只测「按 sessionId 读 KKV +
+ * 行身份比对」这一段，不跑真实收尾链路。
+ */
+async function seedSettledRow(
+  store: SessionStreamRunStateStore,
+  options?: {
+    readonly runId?: string;
+    readonly completionTokens?: number;
+  },
+): Promise<void> {
+  await store.settle({
+    sessionId: 's1',
+    projectId: 'p1',
+    runId: options?.runId ?? 'r1',
+    startedAtMs: 1_000,
+    textChars: 300,
+    thinkingChars: 0,
+    completionTokens: options?.completionTokens ?? 90,
+    tokenSource: 'heuristic',
+    updatedAtMs: 5_000,
+  });
+}
+
+/** settled 投影 → 指标条文案（与水合结果同一口径）。 */
+function buildLineFrom(
+  manager: SessionStreamUnitManager,
+  sessionId: string,
+): string {
+  const projection = manager.getSettledProjection(sessionId)!;
+  return buildChatStreamMetricsLine({
+    running: false,
+    elapsedMs: projection.elapsedMs,
+    completionTokens: projection.metrics.completionTokens,
+    tokenSource: projection.metrics.tokenSource,
+    tokensPerSecond: projection.rateTokensPerSecond,
+  });
 }
 
 describe('冻结末值速率（stream-metrics-tokens-final-rate）', () => {
@@ -438,6 +479,70 @@ describe('冻结末值速率（stream-metrics-tokens-final-rate）', () => {
         tokensPerSecond: hydrated!.rateTokensPerSecond,
       }),
     ).not.toContain('t/s');
+    restarted.manager.dispose();
+  });
+
+  it('旧格式快照（无 runId）水合仍正常显示速率：缺字段不判坏数据（B-1 加固的向后兼容）', async () => {
+    const kkv = createFakeSessionKkv();
+    const store = createFakeRunStateStore();
+    // settled 行是本轮 run（r2）的，KKV 里是加固前写下的旧格式值：只有
+    // rate/tokens/atMs 三个字段，没有任何 run 身份。
+    await seedSettledRow(store, {runId: 'r2', completionTokens: 90});
+    const legacyRaw = '{"rate":42.5,"tokens":90,"atMs":4000}';
+    await kkv.service.set(
+      's1',
+      SESSION_KKV_DOMAIN_STREAM_METRICS,
+      STREAM_METRICS_FINAL_RATE_KEY,
+      legacyRaw,
+    );
+
+    // 编解码侧：缺 runId 的旧值照常解析成功（不因缺字段判坏数据）。
+    const parsedLegacy = parseStreamFinalRateSnapshot(legacyRaw);
+    expect(parsedLegacy).not.toBeNull();
+    expect(parsedLegacy!.rate).toBe(42.5);
+    expect(parsedLegacy!.runId).toBeUndefined();
+
+    // 水合侧：无 runId 可比对 → 走兼容路径，速率照常带进 settled 投影与文案。
+    const h = buildHarness({runStateStore: store, sessionKkv: kkv.service});
+    await h.manager.hydrate();
+    const projection = h.manager.getSettledProjection('s1');
+    expect(projection).not.toBeNull();
+    expect(projection!.rateTokensPerSecond).toBe(42.5);
+    expect(h.manager.rateTokensPerSecond('s1', Date.now())).toBe(42.5);
+    expect(buildLineFrom(h.manager, 's1')).toContain('t/s');
+
+    h.manager.dispose();
+  });
+
+  it('水合 runId 不一致（上一轮快照残留）：当缺值，不显示速率（B-1 加固）', async () => {
+    const kkv = createFakeSessionKkv();
+    const store = createFakeRunStateStore();
+    // 第一轮 run r1 走真实收尾链路：row 与 KKV 都是 r1，快照带上 runId。
+    const first = buildHarness({runStateStore: store, sessionKkv: kkv.service});
+    await first.manager.hydrate();
+    driveRun(first.eventBus, first.manager);
+    finishRun(first.eventBus);
+    const rawAfterFirst = kkv.read('s1');
+    expect(parseStreamFinalRateSnapshot(rawAfterFirst ?? null)!.runId).toBe('r1');
+    expect(
+      first.manager.getSettledProjection('s1')!.rateTokensPerSecond,
+    ).not.toBeNull();
+    first.manager.dispose();
+
+    // 第二轮 run r2 只把 settled 行换成本轮身份——模拟「settle 行已落库、
+    // 上一轮的 KKV 值还在（收尾后即被杀进程 / 本轮 KKV 写尚未覆盖）：
+    // 没有校验的话，重启会把 r1 的速度拼到 r2 的「上次生成」上。
+    await seedSettledRow(store, {runId: 'r2', completionTokens: 0});
+
+    const restarted = buildHarness({runStateStore: store, sessionKkv: kkv.service});
+    await restarted.manager.hydrate();
+    const projection = restarted.manager.getSettledProjection('s1');
+    expect(projection).not.toBeNull();
+    expect(projection!.rateTokensPerSecond).toBeNull();
+    // 速率读口同样为 null（不回落上一轮冻结值），文案省略速率段。
+    expect(restarted.manager.rateTokensPerSecond('s1', Date.now())).toBeNull();
+    expect(buildLineFrom(restarted.manager, 's1')).not.toContain('t/s');
+
     restarted.manager.dispose();
   });
 
