@@ -3,7 +3,10 @@
  *
  * 形态照 `fs` 工具先例——单工具多 action 分发 + 扁平显式字段。
  * 工具内部经 `ctx.skills` 闭包调 {@link SkillService}，**不直接持有 vfs**；
- * path 禁 `..` 校验（schema refine 先行拦截，服务层 resolveSkillRelPath 兜底）。
+ * 参数校验（各 action 条件必填 + path 禁 `..`）全部由 `inputSchema` 承担，
+ * 失败经 {@link ToolRunner} 统一产出 `INVALID_ARGUMENT` + zod issue；
+ * `run()` 里的 `requiredField` 只做类型收窄，不是给模型看的报错路径。
+ * 服务层 `resolveSkillRelPath` 对 path 另行兜底。
  *
  * description 是 lambda（照 `subagent-tool` 先例）：从装配期预算好的
  * `ctx.skills.effective` 清单拼「可用技能」文案。求值时机 `toolsFromRegistry`
@@ -127,21 +130,74 @@ export type SkillToolOutput =
   | SkillToolEditOutput
   | SkillToolListOutput;
 
-/** 校验非空必填字符串字段，缺失时抛 INVALID_ARGUMENT（错误文案带字段名）。 */
-function requireString(
-  action: SkillToolInput["action"],
-  field: string,
-  value: string | undefined
-): string {
-  if (typeof value !== "string" || value.length === 0) {
+/**
+ * 各 action 的必填字段表（单一事实源）。
+ *
+ * WHY 不用 zod 判别联合：判别联合会让 `zodToJsonSchema` 产出 `anyOf`，多数
+ * provider 的 function-calling 对 `anyOf` 支持参差，工具定义会变难用。改为在扁平
+ * object 上挂 `superRefine` 表达条件必填——JSON Schema 保持扁平（条件规则由
+ * `.describe()` 讲给模型听），校验失败仍由 {@link ToolRunner} 统一产出
+ * `INVALID_ARGUMENT` + zod issue，无需手写错误文案。
+ */
+const SKILL_ACTION_REQUIRED_FIELDS: Record<
+  SkillToolInput["action"],
+  readonly (keyof SkillToolInput)[]
+> = {
+  load: ["name"],
+  read: ["name"],
+  write: ["name", "content"],
+  // domain 必填：同名技能可能同时有 project 副本与 global 本体，edit 打哪一份
+  // 是有歧义的，缺省猜 project 会让「改我刚 load 的那个」直接打到空域上
+  // （真实事故：全局技能被当成项目技能，报 Path not found）。
+  edit: ["name", "oldString", "newString", "domain"],
+  list: [],
+};
+
+/** 必填字段的错误文案（字段名用工具参数名，模型可直接照抄补参）。 */
+const SKILL_FIELD_LABELS: Partial<Record<keyof SkillToolInput, string>> = {
+  name: "技能名 name",
+  content: "整文件内容 content",
+  oldString: "匹配串 oldString",
+  newString: "替换串 newString",
+  domain: '技能域 domain（"global" 或 "project"）——edit 必须显式指定改哪一份副本',
+};
+
+/** 必填字段缺失时按 action 补 issue（superRefine 回调，zod 4 签名）。 */
+function refineRequiredFields(
+  input: { action: SkillToolInput["action"] } & Record<string, unknown>,
+  ctx: z.RefinementCtx
+): void {
+  for (const field of SKILL_ACTION_REQUIRED_FIELDS[input.action] ?? []) {
+    const value = input[field];
+    if (value === undefined || value === "") {
+      ctx.addIssue({
+        code: "custom",
+        path: [field],
+        message: `skill 的 ${input.action} 动作必须提供${
+          SKILL_FIELD_LABELS[field] ?? String(field)
+        }`,
+      });
+    }
+  }
+}
+
+/**
+ * 必填字段类型收窄。
+ *
+ * @remarks 缺参已由 schema 的 `superRefine` 拦下并报给模型；这里再抛一次只是
+ * 防御「schema 与本函数脱节」，不是给模型看的路径。
+ */
+function requiredField<T>(value: T | undefined, field: string): T {
+  if (value === undefined) {
     throw new ToolError(
       "INVALID_ARGUMENT",
-      `skill 的 ${action} 动作必须提供非空 ${field}`,
+      `skill 内部校验不一致：schema 放行了缺 ${field} 的调用`,
       { toolName: SKILL_TOOL_NAME }
     );
   }
   return value;
 }
+
 
 /** 从装配期预算好的生效清单拼给 LLM 看的「可用技能」文案（照 formatCallableList）。 */
 function formatEffectiveSkills(effective: readonly EffectiveSkill[]): string {
@@ -184,7 +240,7 @@ action 说明：
 - load：装载技能开工。name 必填，读生效副本（项目副本优先）的 SKILL.md 全文并附附属文件清单；若全文已在本请求提示词中则返回短提示
 - read：读取技能文件。name 必填；path 缺省 SKILL.md；domain 缺省读生效副本（项目副本优先，输出 domain 为实际命中域）
 - write：整文件覆盖写入。name / content 必填；domain 缺省 project；向新目录写 SKILL.md 即新建技能
-- edit：局部查找替换。name / oldString / newString 必填（可配 replaceAll）；domain 缺省 project
+- edit：局部查找替换。name / oldString / newString 必填（可配 replaceAll）；**domain 必填**，必须显式传 global 或 project——同名技能可能同时存在项目副本与全局本体，缺省会改错那一份
 - list：列技能清单。domain 缺省列当前项目合并视图（含禁用/覆盖标记）；显式 domain 列对应域
 
 参数说明：
@@ -209,7 +265,7 @@ action 说明：
       .enum(["global", "project"])
       .optional()
       .describe(
-        "技能域；read 缺省生效副本，write/edit 缺省 project，list 缺省合并视图"
+        "技能域；read 缺省读生效副本，write 缺省 project，list 缺省合并视图；edit 必须显式传"
       ),
     path: z
       .string()
@@ -229,7 +285,7 @@ action 说明：
       .optional()
       .describe("read 分页起始行（1-based）"),
     limit: z.number().int().min(1).optional().describe("read 分页行数上限"),
-  }),
+  }).superRefine(refineRequiredFields),
   outputSchema: z.discriminatedUnion("action", [
     z.object({
       action: z.literal("load"),
@@ -299,7 +355,7 @@ action 说明：
 
     switch (input.action) {
       case "load": {
-        const name = requireString("load", "name", input.name);
+        const name = requiredField(input.name, "name");
         const result = await service.readSkillFile(
           undefined,
           name,
@@ -349,7 +405,7 @@ action 说明：
         };
       }
       case "read": {
-        const name = requireString("read", "name", input.name);
+        const name = requiredField(input.name, "name");
         const result = await service.readSkillFile(
           input.domain,
           name,
@@ -404,8 +460,10 @@ action 说明：
         };
       }
       case "write": {
-        const name = requireString("write", "name", input.name);
-        const content = requireString("write", "content", input.content);
+        const name = requiredField(input.name, "name");
+        const content = requiredField(input.content, "content");
+        // write 保留缺省 project：写向项目域=建项目覆盖副本，是明确且安全的语义
+        // （不像 edit 那样有「打哪一份」的歧义），不必强求模型每次显式声明。
         const domain = input.domain ?? "project";
         const path = input.path ?? SKILL_DEFAULT_ENTRY;
         const { version } = await service.writeSkillFile(
@@ -418,10 +476,12 @@ action 说明：
         return { action: "write", domain, name, path, version };
       }
       case "edit": {
-        const name = requireString("edit", "name", input.name);
-        const oldString = requireString("edit", "oldString", input.oldString);
-        const newString = requireString("edit", "newString", input.newString);
-        const domain = input.domain ?? "project";
+        const name = requiredField(input.name, "name");
+        const oldString = requiredField(input.oldString, "oldString");
+        const newString = requiredField(input.newString, "newString");
+        // domain 必填（schema 保证）：同名技能可能同时有项目副本与全局本体，
+        // 缺省猜 project 会把「改我刚 load 的那个」打到空域上。
+        const domain = requiredField(input.domain, "domain");
         const path = input.path ?? SKILL_DEFAULT_ENTRY;
         const result = await service.editSkillFile(
           domain,
