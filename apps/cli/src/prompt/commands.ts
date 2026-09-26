@@ -29,6 +29,46 @@ import { parseCliArgs } from "../vfs/parse-args.js";
 const SKILL_TOOL_NAME = "skill";
 
 /**
+ * 「拿不到模型」那档计数兜底分支的**唯一落点**（可注入的纯函数）。
+ *
+ * 口径与抽取前逐字一致：真分词器读数优先，只有它返回 `null`（整张 cl100k 表
+ * 建不起来——ranks 资源缺失 / 环境未就绪）才退到字符折算。两个计数器**都靠
+ * 注入**，所以 `apps/cli/test/` 下能不拉起整套 CLI 就把这两条路径各自钉住——
+ * 这段逻辑原先只存在于 `prompt-tokens-e2e.test.ts` 里，而那个套件是长期基线
+ * 5/5 红、这段分支在 CI 里从未被执行过。
+ */
+export function resolveCliPromptTokens(
+  serialized: string,
+  countReal: (text: string) => number | null,
+  countByCharRatio: (text: string) => number,
+): number {
+  return countReal(serialized) ?? countByCharRatio(serialized);
+}
+
+/**
+ * 「拿不到模型」那档 JSON 输出的**唯一落点**。
+ *
+ * 抽成纯函数是为了让测试能**直接断言**「兜底读数切换不改 `counter` /
+ * `estimated` 两个字段的口径」——它们是 CLI 取证/调试面的对外契约。字段名、
+ * 字段顺序、字段值三者与抽取前完全一致，输出 JSON 逐字节相同。
+ */
+export function buildCliNoModelTokenDiagnostic(tokenCount: number): {
+  tokenCount: number;
+  model: null;
+  counter: "heuristic";
+  estimated: true;
+  tokenizerFamily: "heuristic";
+} {
+  return {
+    tokenCount,
+    model: null,
+    counter: "heuristic",
+    estimated: true,
+    tokenizerFamily: "heuristic",
+  };
+}
+
+/**
  * 预算提示词技能索引（与 desktop/mobile 的 prompt-preview.service 同模式）。
  *
  * CLI 的 YAML 只含 prompts 三区、无 tools policy，壳 definition 走
@@ -135,17 +175,13 @@ export async function runPrompt(
       // `counter: "heuristic"` / `estimated: true` 不变——变的只是读数本身：
       // cl100k 对任意模型都只是近似，报成精确档反而是误导。编码表建不起来
       // （ranks 资源缺失）时才有最后一级折算兜底。
-      const real = countTextWithDefaultEncoding(serialized);
-      const tokenCount =
-        real ?? rt.tokenCounters.heuristic.countText(serialized);
+      const tokenCount = resolveCliPromptTokens(
+        serialized,
+        countTextWithDefaultEncoding,
+        (text) => rt.tokenCounters.heuristic.countText(text),
+      );
       console.error(
-        JSON.stringify({
-          tokenCount,
-          model: null,
-          counter: "heuristic",
-          estimated: true,
-          tokenizerFamily: "heuristic",
-        }),
+        JSON.stringify(buildCliNoModelTokenDiagnostic(tokenCount)),
       );
       return;
     }
