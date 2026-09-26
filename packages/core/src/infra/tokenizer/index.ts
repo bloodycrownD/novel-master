@@ -45,14 +45,24 @@ export {
   sessionApiPromptTokenCache,
   type SessionApiPromptTokenCacheEntry,
 } from "./logic/session-api-prompt-token-cache.js";
+export {
+  serializeSessionApiPromptTokenEntry,
+  parseSessionApiPromptTokenEntry,
+  readSessionApiPromptTokenEntry,
+  writeSessionApiPromptTokenEntry,
+  invalidateSessionApiPromptTokenEntry,
+  type SessionApiPromptTokenEntry,
+} from "./logic/session-api-prompt-token-store.js";
 export { pickLastPromptUsage } from "./logic/pick-last-prompt-usage.js";
 export {
   resolveCurrentPromptTokens,
   type PromptTokenSource,
   type ResolvedPromptTokens,
+  type ResolveCurrentPromptTokensOptions,
 } from "./logic/resolve-current-prompt-tokens.js";
 export { resolvePromptTokensWithBackfill } from "./logic/resolve-prompt-tokens-with-backfill.js";
 export { serializePromptLlmInput } from "./logic/serialize-prompt-input.js";
+export { serializeToolsForTokenCount } from "./logic/serialize-tools-for-token-count.js";
 export {
   countTokens,
   type ChatTokenEncoder,

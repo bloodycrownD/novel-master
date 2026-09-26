@@ -62,7 +62,17 @@ import { runCompaction } from "./ConversationPanel";
 import { ChatHistorySearchPanel } from "./ChatHistorySearchPanel";
 import { SessionSkillPanel } from "./SessionSkillPanel";
 import { formatTokenCount } from "@novel-master/core/common";
-import { formatCounterKindLabel } from "@novel-master/core/provider";
+
+/**
+ * 占用来源两态标签：`api` → 「上次请求」（值取自上次 completed run 的
+ * `usage.prompt_tokens`），否则 → 「预估」（本地 tokenizer 估算）。
+ *
+ * 不再复用分词器维度的「自动」：那是「用哪个分词器」的标签，这个是
+ * 「值从哪来」。`~` 前缀仍由 `estimated` 决定（api ⇒ false）。
+ */
+function tokenSourceLabel(source: PromptChatTokenStatsResponse["source"]): string {
+  return source === "api" ? "上次请求" : "预估";
+}
 
 interface SessionDetailDrawerProps {
   open: boolean;
@@ -565,9 +575,9 @@ export function SessionDetailDrawer({
               </div>
               <div className="session-detail-drawer__tokens-foot">
                 <span>{tokenCountLabel(tokenStats)}</span>
-                <Tooltip content="分词器" placement="top">
+                <Tooltip content="占用来源" placement="top">
                   <span className="session-detail-drawer__tokens-tokenizer">
-                    {formatCounterKindLabel(tokenStats.counterKind)}
+                    {tokenSourceLabel(tokenStats.source)}
                   </span>
                 </Tooltip>
               </div>

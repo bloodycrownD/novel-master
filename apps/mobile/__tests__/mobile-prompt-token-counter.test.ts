@@ -185,4 +185,36 @@ describe('tokenizer-driver-rn countPromptLlmInputRn', () => {
     const {__test__} = require('@novel-master/tokenizer-driver-rn');
     expect(__test__.heuristicCount('abcdefghij')).toBe(Math.ceil(10 / 3.35));
   });
+
+  it('tools 段计入计数：非空变大，空数组与缺省一致', async () => {
+    const {countPromptLlmInputRn} = require('@novel-master/tokenizer-driver-rn');
+    const registry = {
+      heuristic: {countText: (text: string) => Math.ceil(text.length / 3.35)},
+      getTokenizerOverride: async () => 'heuristic',
+    };
+    const base = {
+      layout: {persist: [], dynamic: []},
+      ctx: {workplaceDisplay: '', messages: []},
+      savedModelId: 'local/any',
+      registry,
+      tokenizerOverride: 'heuristic',
+    };
+
+    const withoutTools = await countPromptLlmInputRn(base);
+    const withTools = await countPromptLlmInputRn({
+      ...base,
+      tools: [
+        {
+          name: 'read_file',
+          description: '读取工作区里的一个文件并返回正文。',
+          inputSchema: {type: 'object', properties: {path: {type: 'string'}}},
+        },
+      ],
+    });
+    const withEmptyTools = await countPromptLlmInputRn({...base, tools: []});
+
+    expect(withTools.tokenCount).toBeGreaterThan(withoutTools.tokenCount);
+    expect(withEmptyTools.tokenCount).toBe(withoutTools.tokenCount);
+    expect(withTools.counterKind).toBe('heuristic');
+  });
 });

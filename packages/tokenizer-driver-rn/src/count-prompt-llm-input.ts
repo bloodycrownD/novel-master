@@ -10,6 +10,7 @@ import {
   resolveTokenizerFamily,
   mapVendorModelIdToTiktokenModel,
   serializePromptLlmInput,
+  serializeToolsForTokenCount,
   countTokens,
   type CountPromptLlmInputParams,
   type PromptTokenCountResult,
@@ -167,7 +168,11 @@ export async function countPromptLlmInputRn(
     (await registry.getTokenizerOverride?.()) ??
     "auto";
   const family = resolveTokenizerFamily(vendorModelId, override);
-  const serialized = await serializePromptLlmInput(layout, ctx);
+  // tools 段与提示词同串计数（空 tools 时拼接为恒等）：RN 侧同样交给
+  // 原生 bridge / js-tiktoken / heuristic 处理同一个串，口径与 Node 端一致。
+  const serialized =
+    (await serializePromptLlmInput(layout, ctx)) +
+    serializeToolsForTokenCount(params.tools);
   const { count, counterKind, estimated } = await countSerialized(
     family,
     serialized,

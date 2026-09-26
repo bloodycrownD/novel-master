@@ -83,7 +83,7 @@ describe("chat-prompt-tokens.service", () => {
     await teardownDesktopDbTestEnv(tempDir);
   });
 
-  it("T-T9: source===api ⇒ estimated:false && counterKind:api", async () => {
+  it("T-T9: source===api ⇒ estimated:false && counterKind:api（标签「上次请求」）", async () => {
     sessionApiPromptTokenCache.set(sessionId, {
       promptTokens: 24_000,
       updatedAt: Date.now(),
@@ -98,9 +98,27 @@ describe("chat-prompt-tokens.service", () => {
     assert.equal(stats.estimated, false);
     assert.equal(stats.counterKind, "api");
     assert.equal(stats.tokenCount, 24_000);
+    assert.equal(stats.source, "api");
 
     const label = formatChatTokenStatsLabel(stats);
-    assert.match(label, /· 自动$/);
+    assert.match(label, /· 上次请求$/);
     assert.doesNotMatch(label, /^~/);
+  });
+
+  it("T-T9b: 无 API 占用 ⇒ source===local（标签「预估」）", async () => {
+    sessionApiPromptTokenCache.clearAll();
+
+    const rt = await getDesktopRuntime();
+    const stats = await loadChatPromptTokenStats(rt, {
+      projectId,
+      sessionId,
+    });
+
+    assert.equal(stats.source, "local");
+    // 本地档的 counterKind 取决于模型（tiktoken / claude / heuristic），
+    // 但一定不是 api——两态标签只看 source，与分词器档位解耦。
+    assert.notEqual(stats.counterKind, "api");
+    const label = formatChatTokenStatsLabel(stats);
+    assert.match(label, /· 预估$/);
   });
 });

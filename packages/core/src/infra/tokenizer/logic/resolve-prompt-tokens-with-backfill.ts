@@ -12,6 +12,7 @@ import type { ChatMessage } from "../../../domain/chat/model/message.js";
 import type { CountPromptLlmInputParams } from "./count-prompt-llm-input.js";
 import {
   resolveCurrentPromptTokens,
+  type ResolveCurrentPromptTokensOptions,
   type ResolvedPromptTokens,
 } from "./resolve-current-prompt-tokens.js";
 
@@ -20,11 +21,15 @@ import {
  *
  * `rawMessages` 参数已无实际用途，仅为兼容既有调用方签名保留；下个清理
  * 迭代可连同调用方一起移除。
+ *
+ * `options.sessionKkv` 透传给读口：双端 service 传入自己的 sessionKkv
+ * 后，重启也能读到上次 completed run 的 API 占用（同口径）。
  */
 export async function resolvePromptTokensWithBackfill(
   sessionId: string,
   _rawMessages: readonly ChatMessage[],
-  params: CountPromptLlmInputParams
+  params: CountPromptLlmInputParams,
+  options?: ResolveCurrentPromptTokensOptions
 ): Promise<ResolvedPromptTokens> {
-  return resolveCurrentPromptTokens(sessionId, params);
+  return resolveCurrentPromptTokens(sessionId, params, options);
 }

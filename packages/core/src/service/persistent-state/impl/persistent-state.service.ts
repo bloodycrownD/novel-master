@@ -7,8 +7,9 @@
 import { isSavedModelUuidFormat } from "@/domain/provider/logic/assert-saved-model-uuid.js";
 import { ProviderError } from "@/errors/provider-errors.js";
 import { isKkvError } from "@/errors/kkv-errors.js";
-import { sessionApiPromptTokenCache } from "@/infra/tokenizer/logic/session-api-prompt-token-cache.js";
+import { invalidateSessionApiPromptTokenEntry } from "@/infra/tokenizer/logic/session-api-prompt-token-store.js";
 import type { KkvService } from "@/service/kkv/kkv.port.js";
+import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
 import type { PersistentState } from "../persistent-state.port.js";
 import {
   KEY_CURRENT_AGENT_ID,
@@ -22,7 +23,16 @@ import {
 const MODULE = WORKSPACE_STATE_MODULE;
 
 export class DefaultPersistentState implements PersistentState {
-  constructor(private readonly kkv: KkvService) {}
+  /**
+   * @param kkv 工作区指针存储（`nm-workspace-state`）。
+   * @param sessionKkv 会话 KKV：切模型 / 切 Agent 后失效该会话的 API prompt
+   *   占用（进程内热层 + `prompt_tokens` 域行双删）。可选——缺省时失效只
+   *   退化为清进程内热层，不因装配缺失而报错。
+   */
+  constructor(
+    private readonly kkv: KkvService,
+    private readonly sessionKkv?: SessionKkvService | null
+  ) {}
 
   getCurrentProjectId(): Promise<string | undefined> {
     return this.get(KEY_CURRENT_PROJECT_ID);
@@ -114,7 +124,12 @@ export class DefaultPersistentState implements PersistentState {
     await this.kkv.set(MODULE, key, value);
   }
 
-  /** 切换模型 / Agent 成功后，丢弃当前会话陈旧 API 占用缓存。 */
+  /**
+   * 切换模型 / Agent 成功后，丢弃当前会话陈旧的 API 占用。
+   *
+   * 双删（进程内热层 + session KKV 行）：只清热层的话，重启后 KKV 里的
+   * 旧模型占用会被读回，按 api 口径参与阈值判定（跳掉 heuristic 安全系数）。
+   */
   private async setAndInvalidatePromptTokenCache(
     key: string,
     value: string
@@ -122,7 +137,7 @@ export class DefaultPersistentState implements PersistentState {
     await this.set(key, value);
     const sessionId = await this.getCurrentSessionId();
     if (sessionId != null) {
-      sessionApiPromptTokenCache.invalidate(sessionId);
+      invalidateSessionApiPromptTokenEntry(this.sessionKkv, sessionId);
     }
   }
 

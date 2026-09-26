@@ -11,6 +11,7 @@ const mockResolveTokenCounterModeForModel = jest.fn();
 const mockBuildSessionPromptInput = jest.fn();
 const mockResolveSavedModelId = jest.fn();
 const mockSerializePromptLlmInput = jest.fn(() => 'serialized');
+const mockSerializeToolsForTokenCount = jest.fn(() => '');
 
 jest.mock('@novel-master/core/provider', () => ({
   resolvePromptTokensWithBackfill: (...args: unknown[]) =>
@@ -19,6 +20,8 @@ jest.mock('@novel-master/core/provider', () => ({
     mockResolveTokenCounterModeForModel(...args),
   serializePromptLlmInput: (...args: unknown[]) =>
     mockSerializePromptLlmInput(...args),
+  serializeToolsForTokenCount: (...args: unknown[]) =>
+    mockSerializeToolsForTokenCount(...args),
   formatCounterKindLabel: (kind: string) =>
     kind === 'api' || kind === 'heuristic' ? '自动' : kind,
 }));
@@ -59,6 +62,15 @@ function stubRuntime(overrides?: {
       getSessionAgentConfig: jest.fn().mockResolvedValue({}),
     },
     messages: {listBySession: jest.fn()},
+    // 读口会把它透传给 core 的 resolvePromptTokensWithBackfill（跨重启取 API 值）
+    sessionKkv: {
+      get: jest.fn().mockResolvedValue(null),
+      set: jest.fn(),
+      delete: jest.fn(),
+      clearDomain: jest.fn(),
+      clearSession: jest.fn(),
+      listKeys: jest.fn().mockResolvedValue([]),
+    },
   } as unknown as MobileNovelMasterRuntime;
 }
 
@@ -69,6 +81,7 @@ describe('chat-prompt-tokens.service', () => {
     mockBuildSessionPromptInput.mockReset();
     mockResolveSavedModelId.mockReset();
     mockSerializePromptLlmInput.mockClear();
+    mockSerializeToolsForTokenCount.mockClear();
   });
 
   it('formatPromptTokenUsageLabel shows percentage with context window', () => {
@@ -81,7 +94,7 @@ describe('chat-prompt-tokens.service', () => {
     ).toBe('~1K tokens (est.)');
   });
 
-  it('loadChatPromptTokenLabel appends counterKind suffix', async () => {
+  it('loadChatPromptTokenLabel appends local-source suffix (预估)', async () => {
     mockBuildSessionPromptInput.mockResolvedValue({
       definition: {model: 'openai/gpt-4o'},
       layout: {persist: [], dynamic: []},
@@ -96,21 +109,24 @@ describe('chat-prompt-tokens.service', () => {
       source: 'local',
     });
 
-    const label = await loadChatPromptTokenLabel(stubRuntime(), {
+    const runtime = stubRuntime();
+    const label = await loadChatPromptTokenLabel(runtime, {
       sessionId: 's1',
       projectId: 'p1',
     });
 
-    expect(label).toBe('19% • 24K/128K · gemma');
+    expect(label).toBe('19% • 24K/128K · 预估');
     expect(mockResolvePromptTokensWithBackfill).toHaveBeenCalledWith(
       's1',
       // rawMessages 已无实际用途（回填废弃），仅签名兼容保留；mock bundle 不携带时为 undefined
       undefined,
       expect.objectContaining({tokenizerOverride: 'gemma'}),
+      // 第 4 参透传 sessionKkv：读口据此取跨重启的 API 值
+      {sessionKkv: runtime.sessionKkv},
     );
   });
 
-  it('T-T9: source===api ⇒ label 后缀 api 且无估算前缀', async () => {
+  it('T-T9: source===api ⇒ 标签「上次请求」且无估算前缀', async () => {
     mockBuildSessionPromptInput.mockResolvedValue({
       definition: {model: 'openai/gpt-4o'},
       layout: {persist: [], dynamic: []},
@@ -130,7 +146,7 @@ describe('chat-prompt-tokens.service', () => {
       projectId: 'p1',
     });
 
-    expect(label).toBe('19% • 24K/128K · 自动');
+    expect(label).toBe('19% • 24K/128K · 上次请求');
   });
 
   it('T-S6: service 把 buildSessionPromptInput 返回的 rawMessages 透传给 resolvePromptTokensWithBackfill', async () => {
@@ -165,9 +181,12 @@ describe('chat-prompt-tokens.service', () => {
 
     expect(mockResolvePromptTokensWithBackfill).toHaveBeenCalledTimes(1);
     const callArgs = mockResolvePromptTokensWithBackfill.mock.calls[0];
-    // [0]=sessionId, [1]=rawMessages, [2]=params
+    // [0]=sessionId, [1]=rawMessages, [2]=params, [3]=options（透传 sessionKkv）
     expect(callArgs[0]).toBe('s1');
     expect(callArgs[1]).toBe(rawMessages);
+    expect(callArgs[3]).toEqual({
+      sessionKkv: expect.objectContaining({get: expect.any(Function)}),
+    });
   });
 
   it('loadChatPromptTokenLabel without model uses heuristic suffix', async () => {
@@ -183,7 +202,7 @@ describe('chat-prompt-tokens.service', () => {
       projectId: 'p1',
     });
 
-    expect(label).toBe('~1K tokens (est.) · 自动');
+    expect(label).toBe('~1K tokens (est.) · 预估');
   });
 
   it('T7: loadChatPromptTokenLabelResilient falls back to heuristic suffix on build error', async () => {
@@ -205,7 +224,7 @@ describe('chat-prompt-tokens.service', () => {
       projectId: 'p1',
     });
 
-    expect(label).toBe('~1K tokens (est.) · 自动');
+    expect(label).toBe('~1K tokens (est.) · 预估');
   });
 
   it('T-S7: formatCounterKindLabel maps api/heuristic to 自动', () => {

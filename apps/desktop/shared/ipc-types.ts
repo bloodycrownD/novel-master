@@ -866,6 +866,13 @@ export type PromptChatTokenStatsResponse = {
   readonly pct?: number;
   readonly estimated: boolean;
   readonly counterKind: string;
+  /**
+   * 占用值的来源两态（展示标签用）：
+   * - `api`：上次 completed run 的 `usage.prompt_tokens`（精确，标签「上次请求」，无 `~`）；
+   * - `local`：本地 tokenizer 估算（标签「预估」，带 `~`）。
+   * 与 `counterKind`（分词器维度）分开：api 命中时 counterKind 固定 `api`。
+   */
+  readonly source: 'api' | 'local';
 };
 
 /** Token 用量统计：时间范围（本地自然日闭区间 `YYYY-MM-DD`，双端含；结构等效 core 的 UsageStatsRange，独立定义以免 renderer 引 core）。 */

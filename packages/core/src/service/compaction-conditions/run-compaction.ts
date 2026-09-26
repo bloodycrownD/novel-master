@@ -20,7 +20,7 @@ import {
   SESSION_KKV_DOMAIN_FILE_CACHE,
   SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
 } from "@/domain/session-kkv/model/session-kkv-domains.js";
-import { sessionApiPromptTokenCache } from "@/infra/tokenizer/logic/session-api-prompt-token-cache.js";
+import { invalidateSessionApiPromptTokenEntry } from "@/infra/tokenizer/logic/session-api-prompt-token-store.js";
 import type { MessageService } from "@/service/chat/message.port.js";
 import type { MessageTranscriptEffectsService } from "@/service/chat/message-transcript-effects.port.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
@@ -76,7 +76,10 @@ export async function runCompaction(
     params.sessionId,
     SESSION_KKV_DOMAIN_FILE_CACHE
   );
-  sessionApiPromptTokenCache.invalidate(params.sessionId);
+  // 压缩后可见 prompt 变了：API 占用双删（进程内热层 + session KKV 行）。
+  // 落库值若残留，重启后会按 api 口径参与阈值判定（跳掉 heuristic 安全
+  // 系数），陈旧值会放大误判，所以这里必须连 KKV 行一起清。
+  invalidateSessionApiPromptTokenEntry(deps.sessionKkv, params.sessionId);
 
   return { ok: true };
 }

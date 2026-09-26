@@ -13,10 +13,10 @@ import {resolveSavedModelId} from '@novel-master/core/agent';
 import {messageBodyText} from '@novel-master/core/prompt';
 
 import {
-  formatCounterKindLabel,
   resolvePromptTokensWithBackfill,
   resolveTokenCounterModeForModel,
   serializePromptLlmInput,
+  serializeToolsForTokenCount,
 } from '@novel-master/core/provider';
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
 import {formatPromptTokenUsageLabel} from '@novel-master/core/common';
@@ -25,14 +25,30 @@ import {
   type SessionPromptScope,
 } from './session-prompt-input.service';
 
+/**
+ * 占用来源两态标签：`api` → 「上次请求」（值取自上次 completed run 的
+ * `usage.prompt_tokens`），否则 → 「预估」（本地 tokenizer 估算）。
+ *
+ * 与分词器维度标签（`formatCounterKindLabel`，api/heuristic 都显示「自动」）
+ * 有意分开：那个说的是「用哪个分词器」，这个说的是「值从哪来」。
+ */
+function formatTokenSourceLabel(source: 'api' | 'local' | undefined): string {
+  return source === 'api' ? '上次请求' : '预估';
+}
+
 function formatChatTokenLabel(
-  result: {tokenCount: number; estimated: boolean; counterKind: string},
+  result: {
+    tokenCount: number;
+    estimated: boolean;
+    counterKind: string;
+    source?: 'api' | 'local';
+  },
   contextWindow: number | undefined,
 ): string {
   const base = formatPromptTokenUsageLabel(result.tokenCount, contextWindow, {
     estimated: result.estimated,
   });
-  return `${base} · ${formatCounterKindLabel(result.counterKind)}`;
+  return `${base} · ${formatTokenSourceLabel(result.source)}`;
 }
 
 /** Token label for chat header (e.g. `88% • 327/128K · gemma` 或 `· api`). */
@@ -55,10 +71,15 @@ export async function loadChatPromptTokenLabel(
   });
 
   if (!savedModelId) {
-    const serialized = await serializePromptLlmInput(layout, ctx);
+    // UI 读口拿不到 tools 定义（`session-prompt-input` 不产 tools）：显式传
+    // undefined，本地预估仍不含 tools 段；压缩评估路径由 agent-runner 传 tools
+    // （取舍说明见 `serializeToolsForTokenCount` 头注释）。
+    const serialized =
+      (await serializePromptLlmInput(layout, ctx)) +
+      serializeToolsForTokenCount(undefined);
     const count = runtime.tokenCounters.heuristic.countText(serialized);
     return formatChatTokenLabel(
-      {tokenCount: count, estimated: true, counterKind: 'heuristic'},
+      {tokenCount: count, estimated: true, counterKind: 'heuristic', source: 'local'},
       undefined,
     );
   }
@@ -69,7 +90,8 @@ export async function loadChatPromptTokenLabel(
   );
 
   // 直接 resolve（历史上的 cache miss 回填步骤已废弃：置位/压缩后旧值不准，
-  // 统一走本地 tokenizer 重算）。
+  // 统一走本地 tokenizer 重算）。传 sessionKkv：命中上次 completed run 落库的
+  // API 占用（含跨重启），与压缩评估同一读口、同一口径。
   const result = await resolvePromptTokensWithBackfill(
     scope.sessionId,
     rawMessages,
@@ -81,6 +103,7 @@ export async function loadChatPromptTokenLabel(
       tokenizerOverride,
       savedModels: {findById: id => runtime.providerModels.getSavedById(id)},
     },
+    {sessionKkv: runtime.sessionKkv},
   );
 
   const contextWindow = await runtime.providerModels.getContextWindow(
@@ -129,7 +152,7 @@ async function loadChatPromptTokenLabelFallback(
   }
 
   return formatChatTokenLabel(
-    {tokenCount: count, estimated: true, counterKind: 'heuristic'},
+    {tokenCount: count, estimated: true, counterKind: 'heuristic', source: 'local'},
     contextWindow,
   );
 }

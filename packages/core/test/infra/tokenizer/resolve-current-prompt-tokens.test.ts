@@ -1,19 +1,29 @@
 /**
  * T-T1 / T-T2 / T-T3 / T-T9：pickLastPromptUsage + resolveCurrentPromptTokens。
+ *
+ * T-T9 覆盖 API 占用的两种载体：进程内热层（Map）与 session KKV（跨重启）。
+ * 后者是本轮治本点——「清掉进程 Map = 模拟重启」后仍能读到同一份 API 值。
  */
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it } from "node:test";
 import { registerNodeTokenizerDriverForTests } from "../../helpers/register-node-tokenizer-driver-for-tests.js";
 import type { ModelRoundSummary } from "../../../src/domain/agent/model/agent-run-result.js";
 import {
+  PROMPT_TOKENS_LAST_USAGE_KEY,
+  SESSION_KKV_DOMAIN_PROMPT_TOKENS,
+} from "../../../src/domain/session-kkv/model/session-kkv-domains.js";
+import {
   createDefaultTokenCounterRegistry,
   pickLastPromptUsage,
   resolveCurrentPromptTokens,
   sessionApiPromptTokenCache,
 } from "../../../src/infra/tokenizer/index.js";
+import { serializeSessionApiPromptTokenEntry } from "../../../src/infra/tokenizer/logic/session-api-prompt-token-store.js";
+import { createMemorySessionKkv } from "../../helpers/prompt-layout-test-helpers.js";
 import { emptyRegistryDeps } from "./registry-test-helpers.js";
 
 const SESSION_ID = "sess-token-resolve";
+const RUN_MODEL_ID = "openai/gpt-4o";
 
 function round(
   partial: Partial<ModelRoundSummary> & Pick<ModelRoundSummary, "step">,
@@ -22,6 +32,15 @@ function round(
     hadToolUse: false,
     finished: false,
     ...partial,
+  };
+}
+
+function countParams() {
+  return {
+    layout: { persist: [], dynamic: [] },
+    ctx: { workplaceDisplay: "", messages: [] },
+    savedModelId: RUN_MODEL_ID,
+    registry: createDefaultTokenCounterRegistry(emptyRegistryDeps()),
   };
 }
 
@@ -58,49 +77,146 @@ describe("pickLastPromptUsage / resolveCurrentPromptTokens", () => {
     ];
     assert.equal(pickLastPromptUsage(rounds), undefined);
 
-    const registry = createDefaultTokenCounterRegistry(emptyRegistryDeps());
-    const resolved = await resolveCurrentPromptTokens(SESSION_ID, {
-      layout: { persist: [], dynamic: [] },
-      ctx: { workplaceDisplay: "", messages: [] },
-      savedModelId: "openai/gpt-4o",
-      registry,
-    });
+    const resolved = await resolveCurrentPromptTokens(SESSION_ID, countParams());
     assert.equal(resolved.source, "local");
     assert.notEqual(resolved.counterKind, "api");
     assert.ok(resolved.tokenCount >= 0);
+    assert.equal(resolved.atMs, undefined);
   });
 
-  it("T-T9: source===api ⇒ estimated===false && counterKind===api", async () => {
+  it("T-T9: 热层命中 ⇒ source===api && estimated===false && counterKind===api", async () => {
     sessionApiPromptTokenCache.set(SESSION_ID, {
       promptTokens: 1234,
       updatedAt: Date.now(),
     });
-    const registry = createDefaultTokenCounterRegistry(emptyRegistryDeps());
-    const resolved = await resolveCurrentPromptTokens(SESSION_ID, {
-      layout: { persist: [], dynamic: [] },
-      ctx: { workplaceDisplay: "", messages: [] },
-      savedModelId: "openai/gpt-4o",
-      registry,
-    });
+    const resolved = await resolveCurrentPromptTokens(SESSION_ID, countParams());
     assert.equal(resolved.source, "api");
     assert.equal(resolved.tokenCount, 1234);
     assert.equal(resolved.estimated, false);
     assert.equal(resolved.counterKind, "api");
   });
 
-  it("T-T6: invalidate 后回退 local", async () => {
+  it("T-T9(KKV): 热层 miss、KKV 命中 ⇒ api 并带上 atMs", async () => {
+    const sessionKkv = createMemorySessionKkv();
+    await sessionKkv.set(
+      SESSION_ID,
+      SESSION_KKV_DOMAIN_PROMPT_TOKENS,
+      PROMPT_TOKENS_LAST_USAGE_KEY,
+      serializeSessionApiPromptTokenEntry({
+        promptTokens: 12_729,
+        atMs: 1_700_000_000_000,
+        runId: "run-1",
+        savedModelId: RUN_MODEL_ID,
+        lastMessageSeq: 12,
+      }),
+    );
+
+    const resolved = await resolveCurrentPromptTokens(
+      SESSION_ID,
+      countParams(),
+      { sessionKkv }
+    );
+    assert.equal(resolved.source, "api");
+    assert.equal(resolved.tokenCount, 12_729);
+    assert.equal(resolved.estimated, false);
+    assert.equal(resolved.counterKind, "api");
+    assert.equal(resolved.atMs, 1_700_000_000_000);
+  });
+
+  it("T-T9(跨重启): 清掉进程 Map 后仍从 KKV 读回同一 API 值（口径不跳）", async () => {
+    const sessionKkv = createMemorySessionKkv();
+    const params = countParams();
+
+    // 命中同一模型前提下的「重启前」读数
+    writeEntryFor(sessionKkv, RUN_MODEL_ID, 3_926);
+    const before = await resolveCurrentPromptTokens(SESSION_ID, params, {
+      sessionKkv,
+    });
+    assert.equal(before.source, "api");
+    assert.equal(before.tokenCount, 3_926);
+
+    // 模拟进程重启：进程内热层清空，DB（KKV）留存
+    sessionApiPromptTokenCache.clearAll();
+    const after = await resolveCurrentPromptTokens(SESSION_ID, params, {
+      sessionKkv,
+    });
+    assert.equal(after.source, "api");
+    assert.equal(after.tokenCount, 3_926, "重启后口径不得跌回本地估算");
+    assert.equal(after.estimated, false);
+    assert.equal(after.counterKind, "api");
+  });
+
+  it("T-T9(指纹): KKV 值的 savedModelId 与本次请求不符 ⇒ 当 miss 走 local", async () => {
+    const sessionKkv = createMemorySessionKkv();
+    await sessionKkv.set(
+      SESSION_ID,
+      SESSION_KKV_DOMAIN_PROMPT_TOKENS,
+      PROMPT_TOKENS_LAST_USAGE_KEY,
+      serializeSessionApiPromptTokenEntry({
+        promptTokens: 99_999,
+        atMs: 1,
+        savedModelId: "anthropic/claude-old",
+      })
+    );
+    const resolved = await resolveCurrentPromptTokens(
+      SESSION_ID,
+      countParams(),
+      { sessionKkv }
+    );
+    assert.equal(resolved.source, "local");
+    assert.notEqual(resolved.tokenCount, 99_999);
+  });
+
+  it("T-T6: invalidate 后回退 local（进程内层）", async () => {
     sessionApiPromptTokenCache.set(SESSION_ID, {
       promptTokens: 999,
       updatedAt: Date.now(),
     });
     sessionApiPromptTokenCache.invalidate(SESSION_ID);
-    const registry = createDefaultTokenCounterRegistry(emptyRegistryDeps());
-    const resolved = await resolveCurrentPromptTokens(SESSION_ID, {
-      layout: { persist: [], dynamic: [] },
-      ctx: { workplaceDisplay: "", messages: [] },
-      savedModelId: "openai/gpt-4o",
-      registry,
-    });
+    const resolved = await resolveCurrentPromptTokens(SESSION_ID, countParams());
+    assert.equal(resolved.source, "local");
+  });
+
+  it("T-T6(KKV): KKV 行被删后跨重启也不复活（读回 local）", async () => {
+    const sessionKkv = createMemorySessionKkv();
+    await sessionKkv.set(
+      SESSION_ID,
+      SESSION_KKV_DOMAIN_PROMPT_TOKENS,
+      PROMPT_TOKENS_LAST_USAGE_KEY,
+      serializeSessionApiPromptTokenEntry({ promptTokens: 999, atMs: 1 })
+    );
+    sessionApiPromptTokenCache.clearAll();
+
+    await sessionKkv.delete(
+      SESSION_ID,
+      SESSION_KKV_DOMAIN_PROMPT_TOKENS,
+      PROMPT_TOKENS_LAST_USAGE_KEY
+    );
+
+    const resolved = await resolveCurrentPromptTokens(
+      SESSION_ID,
+      countParams(),
+      { sessionKkv }
+    );
     assert.equal(resolved.source, "local");
   });
 });
+
+/** 直接落一条 KKV 值（不经过写 helper，避免测试耦合写入实现）。 */
+async function writeEntryFor(
+  sessionKkv: ReturnType<typeof createMemorySessionKkv>,
+  savedModelId: string,
+  promptTokens: number
+): Promise<void> {
+  await sessionKkv.set(
+    SESSION_ID,
+    SESSION_KKV_DOMAIN_PROMPT_TOKENS,
+    PROMPT_TOKENS_LAST_USAGE_KEY,
+    serializeSessionApiPromptTokenEntry({
+      promptTokens,
+      atMs: Date.now(),
+      runId: "run-before-restart",
+      savedModelId,
+    })
+  );
+}

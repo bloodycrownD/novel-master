@@ -146,6 +146,7 @@ export {
   resolvePromptTokensWithBackfill,
   pickLastPromptUsage,
   sessionApiPromptTokenCache,
+  serializeToolsForTokenCount,
   resolveTokenizerFamily,
   mapVendorModelIdToTiktokenModel,
   isGpt0301TiktokenModel,

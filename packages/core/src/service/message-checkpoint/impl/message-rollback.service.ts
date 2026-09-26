@@ -43,8 +43,9 @@ import {
 } from "@/errors/session-fs-errors.js";
 import { isVfsError } from "@/errors/vfs-errors.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
-import { sessionApiPromptTokenCache } from "@/infra/tokenizer/logic/session-api-prompt-token-cache.js";
+import { invalidateSessionApiPromptTokenEntry } from "@/infra/tokenizer/logic/session-api-prompt-token-store.js";
 import { createScopedVfsService } from "@/service/vfs/create-scoped-vfs-service.js";
+import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
 import type { VfsService } from "@/service/vfs/vfs.port.js";
 import type {
   MessageRollbackService,
@@ -230,7 +231,13 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
       }
     }
 
-    sessionApiPromptTokenCache.invalidate(sessionId);
+    // 回滚成功后可见 prompt 变了：API 占用双删（进程内热层 + session KKV
+    // 行）。本类只持有 conn，就地建一个无状态的 SessionKkvService（在事务外，
+    // 删除是 fire-and-forget，见 helper 注释）。
+    invalidateSessionApiPromptTokenEntry(
+      createSessionKkvService(this.deps.conn),
+      sessionId
+    );
   }
 
   private async resolveRollbackPlan(

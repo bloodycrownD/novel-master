@@ -63,7 +63,13 @@ export class TokenRatioConditionTrigger implements CompactionConditionTrigger {
         savedModelId: evaluation.modelContext.savedModelId,
         registry: this.tokenCounters,
         tokenizerOverride,
-      }
+        // 压缩评估路径必传 tools：本地估算含 tools 段后与 API 口径可比，
+        // 否则本地值系统性偏小、阈值判定偏保守（详见 helper 头注释）。
+        ...(evaluation.tools != null ? { tools: evaluation.tools } : {}),
+      },
+      // sessionKkv 交给读口做跨重启的 API 值恢复（runner 填入；缺省退化为
+      // 纯进程内读，测试与旧调用方无需改动）。
+      { sessionKkv: evaluation.sessionKkv }
     );
 
     // heuristic 计数不精确（可能低估），触发保守阈值：

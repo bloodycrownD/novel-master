@@ -9,7 +9,7 @@ import {
   isSetFloorAnchorRole,
 } from "@/domain/chat/logic/message-set-floor-range.js";
 import { chatInvalidArgument, chatNotFound } from "@/errors/chat-errors.js";
-import { sessionApiPromptTokenCache } from "@/infra/tokenizer/logic/session-api-prompt-token-cache.js";
+import { invalidateSessionApiPromptTokenEntry } from "@/infra/tokenizer/logic/session-api-prompt-token-store.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { CoordinatedWrite } from "@/service/coordinated-write.js";
 import {
@@ -169,7 +169,9 @@ export class DefaultMessageTranscriptEffectsService
       },
     });
     await write.run();
-    sessionApiPromptTokenCache.invalidate(sessionId);
+    // 置位后上下文范围变了：API 占用双删（进程内热层 + session KKV 行），
+    // 否则重启后从 KKV 读回旧值，与置位后的可见 prompt 不符。
+    invalidateSessionApiPromptTokenEntry(this.deps.sessionKkv, sessionId);
 
     return { hiddenCount, shownCount };
   }

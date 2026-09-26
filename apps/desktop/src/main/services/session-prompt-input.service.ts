@@ -19,8 +19,8 @@ export interface SessionPromptInputBundle {
   readonly ctx: PromptRenderContext;
   readonly input: PromptLlmInput;
   /**
-   * `listBySession` 的原始结果（含 hidden 消息），供 cache miss 时回填
-   * `sessionApiPromptTokenCache` 复用，避免再开一次查询。
+   * `listBySession` 的原始结果（含 hidden 消息）：读口本地重算（
+   * `resolveCurrentPromptTokens`）直接消费，避免再开一次查询。
    */
   readonly rawMessages: readonly ChatMessage[];
 }

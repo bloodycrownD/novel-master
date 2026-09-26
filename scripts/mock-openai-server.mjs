@@ -29,6 +29,14 @@
  *     再发 `data: [DONE]`
  *   - 响应头固定 Content-Type: text/event-stream
  *
+ * usage 口径（重要）：本 mock 是零依赖近似实现，**不是真实 tokenizer**——
+ *   - prompt_tokens     = (messages content + 顶层 system + tools 序列化文本) 字符数 ÷ 3.35
+ *   - completion_tokens = 语料字符数 ÷ 3.35（task 工具调用分支 = arguments JSON 字符数 ÷ 3.35）
+ *   除以 3.35 是为了与 App 本地估算（同样按字符数 ÷ 3.35）同量级，便于在双端 UI 上
+ *   对照「上次请求（API 值）」与「预估（本地值）」两种口径；早先直接拿字符数当 token，
+ *   会让本地估算看起来只有 API 值的 1/3.35，把口径差异放大成 3 倍多的假差距。
+ *   注意 `--total-tokens` 仍是**语料字符数上界**（chunk 按字符切片），不是折算后的 token 数。
+ *
  * 日志（判别器核心）：stdout 全量输出；--log-file 可选同步落盘。
  *   - 请求级：时间戳 + 连接 id（自增）+ 请求序号 + 模型名 + stream 与否 +
  *     请求体字节数 + Authorization 前缀
@@ -57,8 +65,8 @@ const USAGE = `用法: node scripts/mock-openai-server.mjs [选项]
 选项:
   --port <n>            监听端口，默认 8787
   --interval-ms <n>     每个 SSE chunk 的下发间隔（mock-slow / 默认模型），默认 80
-  --tokens-per-chunk <n> 每个 chunk 携带的令牌数（中文一字一令牌），默认 4
-  --total-tokens <n>    一次回复的总令牌数，默认 256
+  --tokens-per-chunk <n> 每个 chunk 携带的语料字符数（≈中文令牌数），默认 4
+  --total-tokens <n>    一次回复的语料字符数上界，默认 256（上报 token 数按 ÷3.35 折算）
   --hang-after <n>      mock-dead 第 n 次请求起挂死（收请求不响应保持连接），默认 1
   --no-keepalive        响应带 Connection: close，供对照连接复用实验
   --log-file <path>     日志同步追加写入该文件（可选）
@@ -152,6 +160,20 @@ function buildChunks(totalTokens, tokensPerChunk) {
   return chunks;
 }
 
+/**
+ * 字符数 → 近似 token 的折算比例（与 App 本地估算口径一致）。
+ *
+ * 只按字符数折算，不跑真实 BPE/SentencePiece——中文一字≈一令牌、英文/JSON
+ * 约 3~4 字符一令牌，3.35 是折中值（与 core 的 CHARACTERS_PER_TOKEN_RATIO 同源）。
+ */
+const CHARS_PER_TOKEN = 3.35;
+
+/** 近似 token 数（四舍五入）：字符数 ÷ 3.35。 */
+function approxTokens(chars) {
+  if (!Number.isFinite(chars) || chars <= 0) return 0;
+  return Math.round(chars / CHARS_PER_TOKEN);
+}
+
 // 模型行为表：intervalMs 为 null 表示沿用全局 --interval-ms
 const MODELS = {
   'mock-fast': { intervalMs: 2 },
@@ -211,7 +233,8 @@ function chunkPayload(id, created, model, delta, finishReason, usage = null) {
 /** SSE 流式回复：首 chunk 带 role，中间按速率喷语料，尾 chunk stop，最后 usage + [DONE] */
 function respondStream(req, res, model, intervalMs, promptTokens, ctxLine) {
   const chunks = buildChunks(cli.totalTokens, cli.tokensPerChunk);
-  const completionTokens = chunks.reduce((n, c) => n + c.length, 0);
+  // 上报口径：语料字符数 ÷ 3.35（近似 token，与本地估算同一把尺子）
+  const completionTokens = approxTokens(chunks.reduce((n, c) => n + c.length, 0));
   const id = 'chatcmpl-' + randomUUID().replace(/-/g, '').slice(0, 24);
   const created = Math.floor(Date.now() / 1000);
 
@@ -278,6 +301,8 @@ function respondStream(req, res, model, intervalMs, promptTokens, ctxLine) {
 /** 非流式回复：一次性给完整 JSON */
 function respondJson(res, model, promptTokens, ctxLine) {
   const content = buildChunks(cli.totalTokens, cli.tokensPerChunk).join('');
+  // 同 respondStream：上报的是折算后的近似 token，不是字符数
+  const completionTokens = approxTokens(content.length);
   const body = {
     id: 'chatcmpl-' + randomUUID().replace(/-/g, '').slice(0, 24),
     object: 'chat.completion',
@@ -290,8 +315,8 @@ function respondJson(res, model, promptTokens, ctxLine) {
     }],
     usage: {
       prompt_tokens: promptTokens,
-      completion_tokens: content.length,
-      total_tokens: promptTokens + content.length,
+      completion_tokens: completionTokens,
+      total_tokens: promptTokens + completionTokens,
     },
   };
   const buf = Buffer.from(JSON.stringify(body));
@@ -301,14 +326,29 @@ function respondJson(res, model, promptTokens, ctxLine) {
     'X-Mock-Model': model,
   });
   res.end(buf);
-  log(`${ctxLine} <- JSON 完成，completion_tokens=${content.length}`);
+  log(`${ctxLine} <- JSON 完成，completion_tokens=${completionTokens}`);
 }
 
-/** 粗估 prompt 令牌数：messages 各条 content 的字符数总和（取证够用，不求精确） */
-function estimatePromptTokens(messages) {
-  if (!Array.isArray(messages)) return 0;
-  return messages.reduce((n, m) =>
-    n + (typeof m?.content === 'string' ? m.content.length : JSON.stringify(m?.content ?? '').length), 0);
+/** 粗估 prompt 令牌数：messages 各条 content + 顶层 system + tools 的文本量 ÷ 3.35（近似 token，非真实 tokenizer） */
+function estimatePromptTokens(body) {
+  if (body == null || typeof body !== 'object') return 0;
+  let chars = 0;
+  const messages = Array.isArray(body.messages) ? body.messages : [];
+  for (const m of messages) {
+    chars += contentChars(m?.content);
+  }
+  // 非 OpenAI 形态的顶层 system（Anthropic 风格）也计入，避免手工构造的请求少算。
+  if (typeof body.system === 'string') chars += body.system.length;
+  // tools 定义随请求一并发给模型、同样占上下文：按序列化文本量计入。
+  if (Array.isArray(body.tools)) chars += JSON.stringify(body.tools).length;
+  return approxTokens(chars);
+}
+
+/** content 文本量：字符串取长度，数组（多模态分段）/对象取序列化长度。 */
+function contentChars(content) {
+  if (typeof content === 'string') return content.length;
+  if (content == null) return 0;
+  return JSON.stringify(content).length;
 }
 
 /**
@@ -343,6 +383,8 @@ function respondTaskToolCall(req, res, model, intervalMs, promptTokens, ctxLine)
   });
   // 参数按 24 字节切片分多个 delta 下发：覆盖解析器的 arguments 拼接路径
   const pieces = args.match(/[\s\S]{1,24}/g) ?? [];
+  // 上报口径：arguments JSON 字符数 ÷ 3.35（早先硬编码 48，与文本量脱钩）
+  const completionTokens = approxTokens(args.length);
   const id = 'chatcmpl-' + randomUUID().replace(/-/g, '').slice(0, 24);
   const created = Math.floor(Date.now() / 1000);
 
@@ -392,13 +434,13 @@ function respondTaskToolCall(req, res, model, intervalMs, promptTokens, ctxLine)
         choices: [],
         usage: {
           prompt_tokens: promptTokens,
-          completion_tokens: 48,
-          total_tokens: promptTokens + 48,
+          completion_tokens: completionTokens,
+          total_tokens: promptTokens + completionTokens,
         },
       });
       res.write('data: [DONE]\n\n');
       finish();
-      log(`${ctxLine} <- SSE task 调用完成（子会话应已开出）`);
+      log(`${ctxLine} <- SSE task 调用完成（子会话应已开出），completion_tokens=${completionTokens}`);
       res.end();
       return;
     }
@@ -441,11 +483,12 @@ async function handleChat(req, res, ctxLine) {
 
   const model = typeof parsed.model === 'string' ? parsed.model : '(missing-model)';
   const stream = parsed.stream === true;
-  const promptTokens = estimatePromptTokens(parsed.messages);
+  const promptTokens = estimatePromptTokens(parsed);
   const msgCount = Array.isArray(parsed.messages) ? parsed.messages.length : 0;
   const includeUsage = parsed?.stream_options?.include_usage === true;
   log(`${ctxLine} model=${model} stream=${stream} bytes=${body.length} messages=${msgCount} ` +
-      `prompt_tokens≈${promptTokens} ${authPrefix(req)} include_usage=${includeUsage}`);
+      `prompt_tokens≈${promptTokens}（近似 token=字符数÷${CHARS_PER_TOKEN}，非真实 tokenizer） ` +
+      `${authPrefix(req)} include_usage=${includeUsage}`);
 
   // ---- mock-dead：第 --hang-after 次请求起挂死（收请求、不响应、保持连接） ----
   if (model === 'mock-dead') {

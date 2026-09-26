@@ -36,6 +36,24 @@ export const SESSION_KKV_DOMAIN_STREAM_METRICS = "stream_metrics" as const;
 export const STREAM_METRICS_FINAL_RATE_KEY = "finalRate" as const;
 
 /**
+ * prompt_tokens 域：最近一次 completed run 的 API prompt 占用（JSON，见
+ * `infra/tokenizer/logic/session-api-prompt-token-store`）。
+ *
+ * 治本点：API 口径的 `promptTokens` 原先只存在进程内 Map，重启即丢——
+ * 同一读口（`resolveCurrentPromptTokens`）重启前报 API 值（无 `~`）、
+ * 重启后跌回本地估算（带 `~`），显示与压缩判定双双跳口径。落 session KKV
+ * 后重启仍读到同一份 API 值。
+ *
+ * 失效口径：凡改变「当前可见 prompt」或模型绑定、且应丢弃陈旧 API 占用的
+ * 路径，成功后必须调 `invalidateSessionApiPromptTokenEntry`（进程内层 +
+ * 本域行双删）。会话/项目删除走 `clearSession` 整表清。
+ */
+export const SESSION_KKV_DOMAIN_PROMPT_TOKENS = "prompt_tokens" as const;
+
+/** prompt_tokens 域单键：最近一次 completed run 的 prompt 占用（JSON）。 */
+export const PROMPT_TOKENS_LAST_USAGE_KEY = "lastPromptUsage" as const;
+
+/**
  * Composer 无叉状态条相关、回滚可按域清空的 kkv 域。
  * - `file_cache` → workplace chip（相对已加载差集）
  * - `user_vfs_pending` → user_ops chip
@@ -62,6 +80,7 @@ export type SessionKkvDomain =
   | typeof SESSION_KKV_DOMAIN_USER_VFS_PENDING
   | typeof SESSION_KKV_DOMAIN_BACKFILL_CURSOR
   | typeof SESSION_KKV_DOMAIN_STREAM_METRICS
+  | typeof SESSION_KKV_DOMAIN_PROMPT_TOKENS
   | (string & {});
 
 /** 可写入 file_cache 的展示档位（不含 hidden）。 */

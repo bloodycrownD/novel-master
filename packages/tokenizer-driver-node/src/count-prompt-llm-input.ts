@@ -4,7 +4,7 @@
  * @module count-prompt-llm-input
  */
 
-import { HeuristicTokenCounter, mapVendorModelIdToTiktokenModel, resolveTokenizerFamily, serializePromptLlmInput, type CountPromptLlmInputParams, type PromptTokenCountResult, type TokenCounterKind, type TokenizerFamily } from "@novel-master/core/provider";
+import { HeuristicTokenCounter, mapVendorModelIdToTiktokenModel, resolveTokenizerFamily, serializePromptLlmInput, serializeToolsForTokenCount, type CountPromptLlmInputParams, type PromptTokenCountResult, type TokenCounterKind, type TokenizerFamily } from "@novel-master/core/provider";
 import { encoding_for_model, type Tiktoken } from "tiktoken";
 import { countSentencePieceFamilyPrompt } from "./impl/sentencepiece-token-counter.js";
 import { countWebFamilyPrompt } from "./impl/web-tokenizer-counter.js";
@@ -55,7 +55,11 @@ export async function countPromptLlmInput(
     (await registry.getTokenizerOverride?.()) ??
     "auto";
   const family = resolveTokenizerFamily(vendorModelId, override);
-  const serialized = await serializePromptLlmInput(layout, ctx);
+  // tools 段与提示词同串计数：本地估算含 tools 才与 API 的 promptTokens
+  // （本身就含 tools）可比。空 tools 时拼接为恒等（helper 返回空串）。
+  const serialized =
+    (await serializePromptLlmInput(layout, ctx)) +
+    serializeToolsForTokenCount(params.tools);
 
   let tokenCount: number;
   let counterKind: TokenCounterKind;

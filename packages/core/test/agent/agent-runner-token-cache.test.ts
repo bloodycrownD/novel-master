@@ -24,12 +24,68 @@ import { createMemorySessionKkv } from "../helpers/prompt-layout-test-helpers.js
 import { noopSavedModelRepository } from "../helpers/noop-saved-model-repo.js";
 import { registerNodeTokenizerDriverForTests } from "../helpers/register-node-tokenizer-driver-for-tests.js";
 import { createDefaultTokenCounterRegistry } from "../../src/infra/tokenizer/index.js";
+import {
+  PROMPT_TOKENS_LAST_USAGE_KEY,
+  SESSION_KKV_DOMAIN_PROMPT_TOKENS,
+} from "../../src/domain/session-kkv/model/session-kkv-domains.js";
+import type { SessionKkvService } from "../../src/service/session-kkv/session-kkv.port.js";
 import { emptyRegistryDeps } from "../infra/tokenizer/registry-test-helpers.js";
 import { TokenRatioConditionTrigger } from "../../src/domain/compaction-conditions/triggers/token-ratio.trigger.js";
 
 const RUN_MODEL_ID = "anthropic/claude";
 const PROJECT_ID = "p-token-cache";
 const SESSION_ID = "s-token-cache";
+
+/**
+ * 每个用例一个 session KKV：runner 的写/删断言直接落在它上面
+ * （写侧是 fire-and-forget，但内存实现同步落 Map，run 返回即可读）。
+ */
+let sessionKkv: SessionKkvService;
+
+/** 读 KKV 里落库的 prompt 占用原始值（null = 行不存在 / 已删）。 */
+function rawPromptTokenRow(): Promise<string | null> {
+  return sessionKkv.get(
+    SESSION_ID,
+    SESSION_KKV_DOMAIN_PROMPT_TOKENS,
+    PROMPT_TOKENS_LAST_USAGE_KEY
+  );
+}
+
+async function parsedPromptTokenRow(): Promise<
+  | {
+      promptTokens?: number;
+      atMs?: number;
+      runId?: string;
+      savedModelId?: string;
+      lastMessageSeq?: number;
+    }
+  | undefined
+> {
+  const raw = await rawPromptTokenRow();
+  return raw == null ? undefined : JSON.parse(raw);
+}
+
+/**
+ * 预置「上一轮 completed run 落下的」API 占用：热层 + KKV 双写，模拟
+ * 重启前的一致状态。非 completed 收尾必须把两层一起清干净。
+ */
+async function seedPromptTokenEntry(promptTokens: number): Promise<void> {
+  sessionApiPromptTokenCache.set(SESSION_ID, {
+    promptTokens,
+    updatedAt: Date.now(),
+  });
+  await sessionKkv.set(
+    SESSION_ID,
+    SESSION_KKV_DOMAIN_PROMPT_TOKENS,
+    PROMPT_TOKENS_LAST_USAGE_KEY,
+    JSON.stringify({
+      promptTokens,
+      atMs: Date.now(),
+      runId: "run-previous",
+      savedModelId: RUN_MODEL_ID,
+    })
+  );
+}
 
 function minimalDefinition(): AgentDefinition {
   return {
@@ -84,7 +140,7 @@ function runnerDeps(
     savedModels: noopSavedModelRepository(),
     ...deps,
     eventBus: new SimpleEventBus(),
-    sessionKkv: createMemorySessionKkv(),
+    sessionKkv,
     workplace: () =>
       ({
         scope: { kind: "session", projectId: PROJECT_ID, sessionId: SESSION_ID },
@@ -123,6 +179,7 @@ describe("AgentRunner session API prompt token cache", () => {
   beforeEach(() => {
     registerNodeTokenizerDriverForTests();
     sessionApiPromptTokenCache.clearAll();
+    sessionKkv = createMemorySessionKkv();
   });
 
   afterEach(() => {
@@ -161,13 +218,34 @@ describe("AgentRunner session API prompt token cache", () => {
     assert.equal(result.stopReason, "completed");
     assert.equal(sessionApiPromptTokenCache.get(SESSION_ID)?.promptTokens, 4242);
 
+    // 写侧双写：session KKV 行带上 runId / savedModelId / 末尾消息 seq
+    const row = await parsedPromptTokenRow();
+    assert.equal(row?.promptTokens, 4242);
+    assert.equal(row?.savedModelId, RUN_MODEL_ID);
+    assert.equal(typeof row?.runId, "string");
+    assert.ok((row?.runId ?? "").length > 0, "runId 应带上 run 身份");
+    assert.equal(typeof row?.lastMessageSeq, "number");
+
     const tokenRegistry = createDefaultTokenCounterRegistry(emptyRegistryDeps());
-    const resolved = await resolveCurrentPromptTokens(SESSION_ID, {
+    const params = {
       layout: { persist: [], dynamic: [] },
       ctx: { workplaceDisplay: "", messages: [] },
       savedModelId: RUN_MODEL_ID,
       registry: tokenRegistry,
-    });
+    };
+
+    // 跨重启语义：清掉进程内热层（≈ 进程重启）、只留 KKV，读口仍报同一 API 值
+    sessionApiPromptTokenCache.clearAll();
+    const afterRestart = await resolveCurrentPromptTokens(
+      SESSION_ID,
+      params,
+      { sessionKkv }
+    );
+    assert.equal(afterRestart.source, "api");
+    assert.equal(afterRestart.tokenCount, 4242);
+    assert.equal(afterRestart.estimated, false);
+
+    const resolved = await resolveCurrentPromptTokens(SESSION_ID, params);
     assert.equal(resolved.source, "api");
     assert.equal(resolved.tokenCount, 4242);
 
@@ -196,10 +274,7 @@ describe("AgentRunner session API prompt token cache", () => {
   });
 
   it("T-T5: cancelled → clear，resolve 回退 local（不保留旧 API）", async () => {
-    sessionApiPromptTokenCache.set(SESSION_ID, {
-      promptTokens: 7777,
-      updatedAt: Date.now(),
-    });
+    await seedPromptTokenEntry(7777);
 
     const session = new InMemoryAgentSession();
     await session.append("user", textBlocks("go"));
@@ -234,6 +309,8 @@ describe("AgentRunner session API prompt token cache", () => {
     });
     assert.equal(result.stopReason, "cancelled");
     assert.equal(sessionApiPromptTokenCache.get(SESSION_ID), undefined);
+    // 非 completed 收尾必须连 KKV 行一起清：否则重启后从 KKV 读回旧值
+    assert.equal(await rawPromptTokenRow(), null);
 
     const tokenRegistry = createDefaultTokenCounterRegistry(emptyRegistryDeps());
     const resolved = await resolveCurrentPromptTokens(SESSION_ID, {
@@ -246,10 +323,7 @@ describe("AgentRunner session API prompt token cache", () => {
   });
 
   it("T-T5 (max_steps): max_steps → clear，resolve 回退 local（不保留旧 API）", async () => {
-    sessionApiPromptTokenCache.set(SESSION_ID, {
-      promptTokens: 7777,
-      updatedAt: Date.now(),
-    });
+    await seedPromptTokenEntry(7777);
 
     const session = new InMemoryAgentSession();
     await session.append("user", textBlocks("go"));
@@ -288,6 +362,8 @@ describe("AgentRunner session API prompt token cache", () => {
     });
     assert.equal(result.stopReason, "max_steps");
     assert.equal(sessionApiPromptTokenCache.get(SESSION_ID), undefined);
+    // 非 completed 收尾必须连 KKV 行一起清：否则重启后从 KKV 读回旧值
+    assert.equal(await rawPromptTokenRow(), null);
 
     const tokenRegistry = createDefaultTokenCounterRegistry(emptyRegistryDeps());
     const resolved = await resolveCurrentPromptTokens(SESSION_ID, {
@@ -300,10 +376,7 @@ describe("AgentRunner session API prompt token cache", () => {
   });
 
   it("T-T5b: FAILED/throw 后必 clear，resolve 回退 local", async () => {
-    sessionApiPromptTokenCache.set(SESSION_ID, {
-      promptTokens: 8888,
-      updatedAt: Date.now(),
-    });
+    await seedPromptTokenEntry(8888);
 
     const session = new InMemoryAgentSession();
     await session.append("user", textBlocks("go"));
@@ -335,6 +408,8 @@ describe("AgentRunner session API prompt token cache", () => {
       /upstream boom/,
     );
     assert.equal(sessionApiPromptTokenCache.get(SESSION_ID), undefined);
+    // 非 completed 收尾必须连 KKV 行一起清：否则重启后从 KKV 读回旧值
+    assert.equal(await rawPromptTokenRow(), null);
 
     const tokenRegistry = createDefaultTokenCounterRegistry(emptyRegistryDeps());
     const resolved = await resolveCurrentPromptTokens(SESSION_ID, {

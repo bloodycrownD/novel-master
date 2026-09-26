@@ -35,7 +35,10 @@ import { PreferencesError } from "@/errors/preferences-errors.js";
 import type { MessageCheckpointService } from "@/service/message-checkpoint/message-checkpoint.port.js";
 import { toolsFromRegistry } from "@/infra/llm-protocol/logic/tool-definitions.js";
 import { pickLastPromptUsage } from "@/infra/tokenizer/logic/pick-last-prompt-usage.js";
-import { sessionApiPromptTokenCache } from "@/infra/tokenizer/logic/session-api-prompt-token-cache.js";
+import {
+  invalidateSessionApiPromptTokenEntry,
+  writeSessionApiPromptTokenEntry,
+} from "@/infra/tokenizer/logic/session-api-prompt-token-store.js";
 import type { ModelRequestService } from "../../provider/model-request.port.js";
 import {
   buildPromptLlmInputFromLayout,
@@ -246,6 +249,11 @@ export class DefaultAgentRunner implements AgentRunner {
      * false、composer 本就解锁，再追加错误消息只会造成双条提示。
      */
     let assistantAppendedInRun = false;
+    /**
+     * 本 run 最后落库消息的 seq（写 API prompt 占用时作为自检指纹一并带上）。
+     * 只服务自检/调试，不参与任何判定——调用方不会拿它做失效判断。
+     */
+    let lastAppendedSeq: number | undefined;
     const signal = options.signal;
     const toolUseWindow: ToolUseBlock[] = [];
     let vfsMutatedInRun = false;
@@ -440,6 +448,10 @@ export class DefaultAgentRunner implements AgentRunner {
                 promptInput,
                 layout: options.definition.prompts,
                 ctx: promptRenderCtx,
+                // 压缩评估的本地估算必须含 tools 段（与 API 口径可比）；
+                // sessionKkv 让读口能命中落库的 API 值（跨重启同口径）。
+                tools,
+                sessionKkv: this.deps.sessionKkv,
               }
             );
           if (signal?.aborted) {
@@ -628,6 +640,7 @@ export class DefaultAgentRunner implements AgentRunner {
             }
           );
           assistantAppendedInRun = true;
+          lastAppendedSeq = assistantMessage.seq;
           if (publishRunLifecycle) {
             bus.publish(EVENT_AGENT_STEP_COMMITTED, {
               sessionId,
@@ -660,10 +673,11 @@ export class DefaultAgentRunner implements AgentRunner {
         // 能走到这里且未置位，本 step 必无 tool_use，后继必然 finished。
         if (persistMessages && !assistantAppendedInRun) {
           try {
-            await session.append("assistant", {
+            const placeholder = await session.append("assistant", {
               blocks: [{ type: "text", text: "（本次生成无内容输出）" }],
             });
             assistantAppendedInRun = true;
+            lastAppendedSeq = placeholder.seq;
           } catch (appendError) {
             // 占位落库失败不把成功 run 翻成 FAILED：记日志后照常收尾。
             console.error(
@@ -806,7 +820,8 @@ export class DefaultAgentRunner implements AgentRunner {
           await handleAbort("after_tool_checkpoint");
           break;
         }
-        await session.append("user", { blocks: toolResults });
+        lastAppendedSeq = (await session.append("user", { blocks: toolResults }))
+          .seq;
         if (publishRunLifecycle) {
           bus.publish(EVENT_AGENT_STEP_COMMITTED, {
             sessionId,
@@ -853,8 +868,9 @@ export class DefaultAgentRunner implements AgentRunner {
             });
           }
         }
-        // FAILED / 非 Abort throw 不到达 FINISHED：必清 API 缓存，避免残留旧值
-        sessionApiPromptTokenCache.clear(sessionId);
+        // FAILED / 非 Abort throw 不到达 FINISHED：必清 API 占用（进程内热层 +
+        // session KKV 行双删），避免重启后从 KKV 读回旧值。
+        invalidateSessionApiPromptTokenEntry(this.deps.sessionKkv, sessionId);
         if (publishRunLifecycle) {
           bus.publish(EVENT_AGENT_RUN_FAILED, {
             sessionId,
@@ -877,15 +893,20 @@ export class DefaultAgentRunner implements AgentRunner {
       });
     }
 
-    // 仅 completed ∧ pick 有值（含合法 0）写缓存；FINISHED 旁路其他一律 clear
+    // 仅 completed ∧ pick 有值（含合法 0）写缓存；FINISHED 旁路其他一律失效。
+    // 写侧落 session KKV（进程内热层 + KKV 双写）：重启后仍读到同一份 API
+    // 口径的占用，不再出现「重启前报 API、重启后跌本地估算」的跳表。
     const picked = pickLastPromptUsage(rounds);
     if (stopReason === "completed" && picked !== undefined) {
-      sessionApiPromptTokenCache.set(sessionId, {
+      writeSessionApiPromptTokenEntry(this.deps.sessionKkv, sessionId, {
         promptTokens: picked,
-        updatedAt: Date.now(),
+        atMs: Date.now(),
+        runId,
+        savedModelId: options.savedModelId,
+        ...(lastAppendedSeq != null ? { lastMessageSeq: lastAppendedSeq } : {}),
       });
     } else {
-      sessionApiPromptTokenCache.clear(sessionId);
+      invalidateSessionApiPromptTokenEntry(this.deps.sessionKkv, sessionId);
     }
 
     return {

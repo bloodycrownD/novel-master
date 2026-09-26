@@ -7,10 +7,10 @@ import { resolveSavedModelId } from "@novel-master/core/agent";
 
 import {
   countPromptLlmInputHeuristicOnly,
-  formatCounterKindLabel,
   resolvePromptTokensWithBackfill,
   resolveTokenCounterModeForModel,
   serializePromptLlmInput,
+  serializeToolsForTokenCount,
 } from "@novel-master/core/provider";
 import type { PromptChatTokenStatsResponse } from "../../../shared/ipc-types.js";
 import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
@@ -20,11 +20,23 @@ import {
   type SessionPromptScope,
 } from "./session-prompt-input.service.js";
 
+/**
+ * 占用来源两态标签：`api` → 「上次请求」（值取自上一次 completed run 的
+ * `usage.prompt_tokens`），否则 → 「预估」（本地 tokenizer 估算）。
+ *
+ * 与分词器维度标签（`formatCounterKindLabel`，api/heuristic 都显示「自动」）
+ * 有意分开：那个说的是「用哪个分词器」，这个说的是「值从哪来」，两义不合。
+ */
+function formatTokenSourceLabel(source: 'api' | 'local'): string {
+  return source === 'api' ? '上次请求' : '预估';
+}
+
 function buildTokenStats(
   tokenCount: number,
   estimated: boolean,
   counterKind: string,
   contextWindow: number | undefined,
+  source: 'api' | 'local',
 ): PromptChatTokenStatsResponse {
   const pct =
     contextWindow != null && contextWindow > 0
@@ -36,6 +48,7 @@ function buildTokenStats(
     pct,
     estimated,
     counterKind,
+    source,
   };
 }
 
@@ -44,13 +57,14 @@ export function formatChatTokenStatsLabel(
 ): string {
   const prefix = stats.estimated ? "~" : "";
   const current = formatTokenCount(stats.tokenCount);
+  const suffix = formatTokenSourceLabel(stats.source);
   if (stats.contextWindow == null || stats.contextWindow <= 0) {
     return stats.estimated
-      ? `${prefix}${current} tokens (est.) · ${formatCounterKindLabel(stats.counterKind)}`
-      : `${current} tokens · ${formatCounterKindLabel(stats.counterKind)}`;
+      ? `${prefix}${current} tokens (est.) · ${suffix}`
+      : `${current} tokens · ${suffix}`;
   }
   const pct = stats.pct ?? 0;
-  return `${prefix}${pct}% • ${current}/${formatTokenCount(stats.contextWindow)} · ${formatCounterKindLabel(stats.counterKind)}`;
+  return `${prefix}${pct}% • ${current}/${formatTokenCount(stats.contextWindow)} · ${suffix}`;
 }
 
 // 共用的会话输入快照：避免主路径和 fallback 各自重复读取 sessionConfig。
@@ -64,6 +78,7 @@ type CountResult = {
   estimated: boolean;
   counterKind: string;
   contextWindow: number | undefined;
+  source: 'api' | 'local';
 };
 
 // 主路径与 fallback 的公共骨架：负责构造输入、读取 sessionConfig、解析 savedModelId，
@@ -88,14 +103,25 @@ async function computeChatPromptTokenStats(
   });
 
   if (!savedModelId) {
-    const serialized = await serializePromptLlmInput(layout, ctx);
+    // UI 读口拿不到 tools 定义（`session-prompt-input` 不产 tools）：显式传
+    // undefined，本地预估仍不含 tools 段；压缩评估路径由 agent-runner 传
+    // tools（见 `serializeToolsForTokenCount` 头注释的取舍说明）。
+    const serialized =
+      (await serializePromptLlmInput(layout, ctx)) +
+      serializeToolsForTokenCount(undefined);
     const count = runtime.tokenCounters.heuristic.countText(serialized);
-    return buildTokenStats(count, true, "heuristic", undefined);
+    return buildTokenStats(count, true, "heuristic", undefined, "local");
   }
 
-  const { tokenCount, estimated, counterKind, contextWindow } =
+  const { tokenCount, estimated, counterKind, contextWindow, source } =
     await countFn({ layout, ctx, savedModelId, rawMessages });
-  return buildTokenStats(tokenCount, estimated, counterKind, contextWindow);
+  return buildTokenStats(
+    tokenCount,
+    estimated,
+    counterKind,
+    contextWindow,
+    source,
+  );
 }
 
 export async function loadChatPromptTokenStats(
@@ -118,10 +144,13 @@ export async function loadChatPromptTokenStats(
     };
     // 直接 resolve（历史上的 cache miss 回填步骤已废弃：置位/压缩后旧值不准，
     // 统一走本地 tokenizer 重算）。compaction trigger 不走这里，行为不变。
+    // 传 sessionKkv：命中上次 completed run 落库的 API 占用（含跨重启），
+    // 与压缩评估同一读口、同一口径。
     const result = await resolvePromptTokensWithBackfill(
       scope.sessionId,
       rawMessages,
       params,
+      { sessionKkv: runtime.sessionKkv },
     );
     const contextWindow =
       await runtime.providerModels.getContextWindow(savedModelId);
@@ -130,6 +159,7 @@ export async function loadChatPromptTokenStats(
       estimated: result.estimated,
       counterKind: result.counterKind,
       contextWindow: contextWindow ?? undefined,
+      source: result.source,
     };
   });
 }
@@ -162,6 +192,7 @@ async function loadChatPromptTokenStatsFallback(
       estimated: result.estimated,
       counterKind: result.counterKind,
       contextWindow,
+      source: "local",
     };
   });
 }

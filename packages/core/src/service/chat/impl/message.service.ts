@@ -35,7 +35,8 @@ import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqli
 import { SqliteSessionKkvRepository } from "@/domain/session-kkv/repositories/impl/sqlite-session-kkv.repository.js";
 import { SESSION_KKV_DOMAIN_BACKFILL_CURSOR } from "@/domain/session-kkv/model/session-kkv-domains.js";
 import { chatInvalidArgument, chatNotFound } from "@/errors/chat-errors.js";
-import { sessionApiPromptTokenCache } from "@/infra/tokenizer/logic/session-api-prompt-token-cache.js";
+import { invalidateSessionApiPromptTokenEntry } from "@/infra/tokenizer/logic/session-api-prompt-token-store.js";
+import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
 import { SqliteSessionRepository } from "@/domain/chat/repositories/impl/sqlite-session.repository.js";
 import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
@@ -73,6 +74,20 @@ export interface MessageServiceDeps {
  */
 export class DefaultMessageService implements MessageService {
   constructor(private readonly deps: MessageServiceDeps) {}
+
+  /**
+   * 失效该会话的 API prompt 占用（进程内热层 + session KKV 行双删）。
+   *
+   * 本类只持有 conn：就地建一个 SessionKkvService（无状态、只是仓储包装），
+   * 与 message-transcript-effects / run-compaction 的失效口径一致。所有调用
+   * 点都在事务之外，KKV 删除是 fire-and-forget（见 helper 注释）。
+   */
+  private invalidatePromptTokens(sessionId: string): void {
+    invalidateSessionApiPromptTokenEntry(
+      createSessionKkvService(this.deps.conn),
+      sessionId
+    );
+  }
 
   listBySession(sessionId: string): Promise<ChatMessage[]> {
     return this.deps.messages.listBySession(sessionId);
@@ -183,7 +198,7 @@ export class DefaultMessageService implements MessageService {
       );
     });
     await runDeferredBlobGc(this.deps.conn);
-    sessionApiPromptTokenCache.invalidate(message.sessionId);
+    this.invalidatePromptTokens(message.sessionId);
   }
 
   async updateContent(
@@ -199,7 +214,7 @@ export class DefaultMessageService implements MessageService {
       throw chatNotFound("message", messageId);
     }
     const message = await this.get(messageId);
-    sessionApiPromptTokenCache.invalidate(message.sessionId);
+    this.invalidatePromptTokens(message.sessionId);
     return message;
   }
 
@@ -293,7 +308,7 @@ export class DefaultMessageService implements MessageService {
     if (!updated) {
       throw chatNotFound("message", messageId);
     }
-    sessionApiPromptTokenCache.invalidate(existing.sessionId);
+    this.invalidatePromptTokens(existing.sessionId);
   }
 
   async show(messageId: string): Promise<void> {
@@ -305,7 +320,7 @@ export class DefaultMessageService implements MessageService {
     if (!updated) {
       throw chatNotFound("message", messageId);
     }
-    sessionApiPromptTokenCache.invalidate(existing.sessionId);
+    this.invalidatePromptTokens(existing.sessionId);
   }
 
   async hideRange(
@@ -325,7 +340,7 @@ export class DefaultMessageService implements MessageService {
       true
     );
     if (count > 0) {
-      sessionApiPromptTokenCache.invalidate(sessionId);
+      this.invalidatePromptTokens(sessionId);
     }
     return count;
   }
@@ -347,7 +362,7 @@ export class DefaultMessageService implements MessageService {
       false
     );
     if (count > 0) {
-      sessionApiPromptTokenCache.invalidate(sessionId);
+      this.invalidatePromptTokens(sessionId);
     }
     return count;
   }
@@ -378,7 +393,7 @@ export class DefaultMessageService implements MessageService {
         }
         await messages.deleteBySession(sessionId);
       });
-      sessionApiPromptTokenCache.invalidate(sessionId);
+      this.invalidatePromptTokens(sessionId);
       return;
     }
 
@@ -393,7 +408,7 @@ export class DefaultMessageService implements MessageService {
     );
     if (tailIds.length === 0) {
       // 没有 tail 需要截断，也顺手 invalidate 一下 prompt 缓存保险
-      sessionApiPromptTokenCache.invalidate(sessionId);
+      this.invalidatePromptTokens(sessionId);
       return;
     }
 
@@ -408,7 +423,7 @@ export class DefaultMessageService implements MessageService {
       await checkpoints.deleteCheckpointsForMessages(sessionId, tailIds);
       await messages.deleteAfterSeq(sessionId, anchor.seq);
     });
-    sessionApiPromptTokenCache.invalidate(sessionId);
+    this.invalidatePromptTokens(sessionId);
   }
 
   async searchMessages(

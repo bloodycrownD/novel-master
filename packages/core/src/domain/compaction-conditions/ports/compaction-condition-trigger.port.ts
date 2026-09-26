@@ -10,6 +10,8 @@ import type {
   PromptLlmInput,
   PromptRenderContext,
 } from "@/domain/prompt/model/prompt-render-context.js";
+import type { LlmToolDefinition } from "@/infra/llm-protocol/ports/adapter.port.js";
+import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
 
 export interface CompactionConditionModelContext {
   readonly workspaceModelId: string;
@@ -23,6 +25,19 @@ export interface CompactionEvaluationContext {
   readonly promptInput: PromptLlmInput;
   readonly layout: AgentPromptLayout;
   readonly ctx: PromptRenderContext;
+  /**
+   * 本次请求随提示词发出的 tools 定义（runner 填入）。
+   *
+   * 本地 token 计数把 tools 段折算进同一序列化串（见
+   * `serializeToolsForTokenCount`），与 API 的 `promptTokens`（含 tools）
+   * 口径可比；缺省则不数 tools（非 runner 调用方的降级路径）。
+   */
+  readonly tools?: readonly LlmToolDefinition[];
+  /**
+   * 会话 KKV（runner 填入）：token 读口用它取跨重启的 API 占用值。
+   * 缺省时读口退化为纯进程内读（测试/非 runner 调用方）。
+   */
+  readonly sessionKkv?: SessionKkvService;
 }
 
 /** Returns true when this trigger slice is satisfied. */

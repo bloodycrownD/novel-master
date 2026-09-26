@@ -15,6 +15,11 @@ import { createMessageTranscriptEffectsService } from "../../src/service/chat/cr
 import { createCompactionConditionsStore } from "../../src/service/compaction-conditions/create-compaction-conditions-store.js";
 import { createKkvService } from "../../src/service/kkv/create-kkv-service.js";
 import { sessionApiPromptTokenCache } from "../../src/infra/tokenizer/logic/session-api-prompt-token-cache.js";
+import { serializeSessionApiPromptTokenEntry } from "../../src/infra/tokenizer/logic/session-api-prompt-token-store.js";
+import {
+  PROMPT_TOKENS_LAST_USAGE_KEY,
+  SESSION_KKV_DOMAIN_PROMPT_TOKENS,
+} from "../../src/domain/session-kkv/model/session-kkv-domains.js";
 import type { MessageTranscriptEffectsService } from "../../src/service/chat/message-transcript-effects.port.js";
 import type { MessageService } from "../../src/service/chat/message.port.js";
 import type { SessionKkvService } from "../../src/service/session-kkv/session-kkv.port.js";
@@ -51,6 +56,43 @@ async function appendMany(
   for (const role of roles) {
     await session.append(role, textBlocks(`${role}-${Math.random()}`));
   }
+}
+
+/** 读 prompt_tokens 域的落库原始值（null = 行不存在 / 已清）。 */
+async function promptTokenRow(
+  sessionId: string,
+  sessionKkv: SessionKkvService = getNovelMasterTestContext().sessionKkv,
+): Promise<string | null> {
+  return sessionKkv.get(
+    sessionId,
+    SESSION_KKV_DOMAIN_PROMPT_TOKENS,
+    PROMPT_TOKENS_LAST_USAGE_KEY,
+  );
+}
+
+/** 落一条 prompt_tokens KKV 行（模拟上一轮 completed run 的落库值）。 */
+async function seedPromptTokenRow(sessionId: string): Promise<void> {
+  await getNovelMasterTestContext().sessionKkv.set(
+    sessionId,
+    SESSION_KKV_DOMAIN_PROMPT_TOKENS,
+    PROMPT_TOKENS_LAST_USAGE_KEY,
+    serializeSessionApiPromptTokenEntry({
+      promptTokens: 1234,
+      atMs: Date.now(),
+      runId: "run-previous",
+    }),
+  );
+}
+
+/** 失效是 fire-and-forget：轮询等 KKV 行消失，50 × 5ms 上限。 */
+async function waitPromptTokenRowGone(sessionId: string): Promise<void> {
+  for (let i = 0; i < 50; i += 1) {
+    if ((await promptTokenRow(sessionId)) == null) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  assert.fail("prompt_tokens KKV 行未被清");
 }
 
 describe("runCompaction", () => {
@@ -105,11 +147,12 @@ describe("runCompaction", () => {
     // 预置 rule_snapshot / file_cache 数据，验证会被清空。
     await ctx.sessionKkv.set(sessionId, RULE_SNAPSHOT, "canon", "snap");
     await ctx.sessionKkv.set(sessionId, FILE_CACHE, "fc-key", "fc-val");
-    // 预置 prompt token cache，验证会被 invalidate。
+    // 预置 prompt token cache，验证会被 invalidate（热层 + KKV 行双删）。
     sessionApiPromptTokenCache.set(sessionId, {
       promptTokens: 1234,
       updatedAt: Date.now(),
     });
+    await seedPromptTokenRow(sessionId);
     assert.ok(sessionApiPromptTokenCache.get(sessionId) != null);
 
     const result = await runCompaction(
@@ -134,8 +177,9 @@ describe("runCompaction", () => {
     assert.deepEqual(snapKeys, []);
     assert.deepEqual(fcKeys, []);
 
-    // prompt token cache 失效。
+    // prompt token cache 失效（进程内热层 + session KKV 行双删）。
     assert.equal(sessionApiPromptTokenCache.get(sessionId), undefined);
+    await waitPromptTokenRowGone(sessionId);
   });
 
   it("T-CC3: hideStartDepth=10 时 hide-message 用 depth 10", async () => {
@@ -159,6 +203,7 @@ describe("runCompaction", () => {
       promptTokens: 99,
       updatedAt: Date.now(),
     });
+    await seedPromptTokenRow(sessionId);
 
     const result = await runCompaction(
       {
@@ -179,6 +224,7 @@ describe("runCompaction", () => {
     const snapKeys = await ctx.sessionKkv.listKeys(sessionId, RULE_SNAPSHOT);
     assert.deepEqual(snapKeys, []);
     assert.equal(sessionApiPromptTokenCache.get(sessionId), undefined);
+    await waitPromptTokenRowGone(sessionId);
   });
 
   it("T-CC4: hide-message 抛异常时返回 { ok: false }，不 crash 且不清 kkv", async () => {
@@ -207,6 +253,7 @@ describe("runCompaction", () => {
       promptTokens: 555,
       updatedAt: Date.now(),
     });
+    await seedPromptTokenRow(sessionId);
 
     const result = await runCompaction(
       {
@@ -225,5 +272,7 @@ describe("runCompaction", () => {
     assert.deepEqual(snapKeys, ["canon"]);
     assert.deepEqual(fcKeys, ["fc-key"]);
     assert.ok(sessionApiPromptTokenCache.get(sessionId) != null);
+    // KKV 行同样保留（result.ok 门控：压缩失败不得清任何缓存）
+    assert.ok((await promptTokenRow(sessionId)) != null);
   });
 });
