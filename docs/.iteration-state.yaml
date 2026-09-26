@@ -3,9 +3,11 @@ spec_path: docs/Iterations/stream-metrics-native-integration-cr/cr-fix-spec-v2.m
 prd_path: docs/Iterations/mobile-perf-2026-09/features/stream-metrics-tokens/prd.md
 branch: integration/stream-metrics-native
 base_sha: 5c63d27e
-head_sha: 71692b11
-head_sha_note: "head_sha = 最后一次实质改动提交（cr-func P2 收口）；编排状态与终态标注随其后的落盘提交进库，真实 HEAD 以 git log -1 为准"
+head_sha: 50e81d4d
+head_sha_note: "head_sha = 最后一次实质改动提交（移除 lastPromptUsage 的零读取方字段）；编排状态与终态标注随其后的落盘提交进库，真实 HEAD 以 git log -1 为准"
 dev_ready: yes
+user_decisions_after_dev_ready:
+  - "OQ #4（lastPromptUsage 的 runId / lastMessageSeq 只写不读）→ 用户拍板移除，已落地 50e81d4d（含 agent-runner 里只为该字段服务的记账一并拆净；旧行无需迁移，解析对未知键宽容）"
 dag_version: 2
 reorchestration_note: "wave-6：两轮 readonly cr-func 均 func-ready:yes 但遗留 6 条 P2（无 P0/P1），插入 n9-fix 收口 + n10-crfunc 复检（dag_version 1→2）"
 scope_note: 32 条 must-fix（P1×2 / P2×30），两条 P1 置顶；用户已照准 4 条「按现状收窄」（#1 重 seed 口径=窗口折叠触发 / #2 commitStepChars 64 / #3 desktop v1 固定 cl100k / #5 实测数字区间 400–500ms）

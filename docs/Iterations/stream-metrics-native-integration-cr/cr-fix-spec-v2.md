@@ -878,6 +878,7 @@
 2. **desktop 估算器建立时机**：`useAgentMetrics` 在 running 上升沿的 effect 里建，理论上首个 delta 不会早于 effect。评审倾向**不动**。
 3. **desktop 侧 `o200k` 编码解析（IPC 面）**是否值得下一迭代补？当前固定 cl100k，对 gpt-4o / o1 系别约 ±10%。
 4. **`runId` / `lastMessageSeq` 目前只写不读**：确认为「为后续留口」，还是可以砍到 `{promptTokens, atMs, savedModelId}`？**请用户拍板。**
+   - ✅ **已拍板（2026-09-27，用户：不用的就移除）**：值形状收敛为 `{promptTokens, atMs, savedModelId?}`，代码落 `50e81d4d`。解析保持「只解构已知键、未知键忽略」，**旧行不需要迁移或清库**；`agent-runner` 里只为该字段服务的 `lastAppendedSeq` 记账一并拆净（不留 `void` 保活的只写变量）。零读取方已由 `git grep` 双证（`lastMessageSeq` 全仓零命中；`runId` 在 `infra/tokenizer` 下零命中——`stream_metrics` / `finalRate` 那条**有读取方**的 `runId` 链路未动）。
 5. **指纹不符的行仍会回填热层**（后续每次读都判 miss，但不影响结果）——评审倾向**不动**。
 6. **`resolvePromptTokensWithBackfill` 已退化为纯透传**（`_rawMessages` 形参已死）：建议本轮**不动**，记入迭代 backlog。
 7. **emoji 折算**（1 个码点 ÷3.35 ≈ 0.3 token，真 tokenizer 约 2~3）：mock 定位取证用，判定**可接受不修**。
@@ -972,7 +973,7 @@
 | **spec_deviations** | 21 行；技术性 open **0**（#4/#6/#7/#8/#9/#10/#12/#13/#16/#17/#18/#19/#20/#21 均由 must-fix 条目闭合）；**待用户确认 4 条「按现状收窄」：#1（reseed 口径）/ #2（commitStepChars 64）/ #3（desktop v1 固定 cl100k）/ #5（实测数字区间）** |
 | **C-orch** | ✅ 已查（三处「显式具名再导出」漏网点已归口去重：`shared/logic/format.ts` 只由 `metrics/C-orch-1` 改；`shared/logic/provider.ts` 由 `ctx-usage/C-orch-2` 核；mobile 无同类 barrel 已实查） |
 | **C 类合并后 QA（manual_user）** | 不阻塞：本轮三条已在**真机 1309**（纯 UI、真模型 glm-5.3）验收过；fix-spec 执行后需出 **1310** 复验的项见「合并后 QA」节（`metrics/B-1` / `metrics/C-1` / `ctx-usage/A-1`+`A-2` / `ctx-usage/C-orch-2` / `metrics/E-1` / `ctx-usage/E-2`） |
-| **Open questions** | 16 条（不阻塞；其中 #1 同源 usage 下调夹 0、#4 runId/lastMessageSeq 只写不读、#11 A-2 两条产品语义、#15 8ms 门限、#16 死导出是否删净 建议用户一并看） |
+| **Open questions** | 16 条（不阻塞；其中 #1 同源 usage 下调夹 0、#11 A-2 两条产品语义、#15 8ms 门限、#16 死导出是否删净 建议用户一并看）。**#4（`runId` / `lastMessageSeq` 只写不读）已拍板移除并落地（2026-09-27，`50e81d4d`）** |
 
 **两条 P1（最要紧，执行顺序建议置顶）**：
 
@@ -986,4 +987,4 @@
 **仍未做（等用户指令，属协作红线）**：
 1. **出 `versionCode 1310` 真机包复验**——「合并后 QA」表列出的项（多步速率、`<|endoftext|>` 不倒退、切会话无卡顿、换 Agent 清值、双端标签、per-delta p50/p95、多 step run 流畅度）必须在真机上按**纯 UI 路径**走一遍，禁止写库注入（RULE）。
 2. **merge / push / 发版**——必须等用户明确指令。
-3. **Open questions 16 条**（不阻塞执行）中需用户拍板的：#1 同源 usage 下调夹 0、#4 `runId`/`lastMessageSeq` 只写不读、#11 A-2 两条产品语义、#15 8ms 门限、#16 `formatCounterKindLabel` 死导出是否删净。
+3. **Open questions 16 条**（不阻塞执行）：**#4 已由用户拍板移除并于 2026-09-27 落地**（`50e81d4d`）；仍需用户拍板的是 #1 同源 usage 下调夹 0、#11 A-2 两条产品语义、#15 8ms 门限、#16 `formatCounterKindLabel` 死导出是否删净。
