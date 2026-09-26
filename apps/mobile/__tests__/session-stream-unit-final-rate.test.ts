@@ -267,4 +267,60 @@ describe('冻结末值速率（stream-metrics-tokens-final-rate）', () => {
 
     h.manager.dispose();
   });
+
+  it('子会话（消费型 run）：也产出 settled 投影与冻结速率，且不写持久层/KKV', async () => {
+    const kkv = createFakeSessionKkv();
+    const store = createFakeRunStateStore();
+    const settleCalls: string[] = [];
+    const spyStore: SessionStreamRunStateStore = {
+      ...store,
+      async settle(input) {
+        settleCalls.push(input.sessionId);
+        return store.settle(input);
+      },
+    };
+    const h = buildHarness({runStateStore: spyStore, sessionKkv: kkv.service});
+    // 有持久层时投影读口受水合门禁约束：先等首次水合完成。
+    await h.manager.hydrate();
+    // 子会话 run：不经 manager.startRun 发起，事件到达时 lazy 建消费型单元。
+    const childId = 'child-1';
+    h.eventBus.publish(EVENT_AGENT_RUN_STARTED, {
+      sessionId: childId,
+      projectId: 'p1',
+      runId: 'rc',
+    });
+    for (let i = 0; i < 6; i += 1) {
+      h.eventBus.publish(EVENT_AGENT_STREAM_TEXT_DELTA, {
+        sessionId: childId,
+        runId: 'rc',
+        text: 'x'.repeat(50),
+      });
+      jest.advanceTimersByTime(250);
+    }
+    h.eventBus.publish(EVENT_AGENT_RUN_FINISHED, {
+      sessionId: childId,
+      projectId: 'p1',
+      runId: 'rc',
+      stopReason: 'end_turn',
+    } as never);
+
+    // 收尾即产出投影（含冻结速率）；此后推进时间不衰减，且速率读口可用——
+    // 单元被 LRU 淘汰后由投影兜底（子会话屏「上次生成」不断源）。
+    const atSettle = h.manager.getSettledProjection(childId);
+    expect(atSettle).not.toBeNull();
+    expect(atSettle!.metrics.completionTokens).toBe(90); // ceil(300/3.35)
+    const frozenRate = atSettle!.rateTokensPerSecond;
+    expect(frozenRate).not.toBeNull();
+    jest.advanceTimersByTime(TEST_SETTLED_GRACE_MS + 1_000);
+    expect(h.manager.getSettledProjection(childId)!.rateTokensPerSecond).toBe(
+      frozenRate,
+    );
+    expect(h.manager.rateTokensPerSecond(childId, Date.now())).toBe(frozenRate);
+
+    // 消费型 run 不写持久层、不落 KKV（无跨重启读回路径，避免留无人读的行）。
+    expect(settleCalls).not.toContain(childId);
+    expect(kkv.read(childId)).toBeUndefined();
+
+    h.manager.dispose();
+  });
 });

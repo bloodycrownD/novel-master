@@ -25,6 +25,7 @@ import {
   type RouteProp,
 } from '@react-navigation/native';
 import type {ChatMessage} from '@novel-master/core/chat';
+import {ChatStreamMetricsBarLive} from '../../components/chat/ChatStreamMetricsBarLive';
 import {ChatTranscriptWebView} from '../../components/chat/ChatTranscriptWebView';
 import {showAppToast} from '@/services/app-toast';
 import {chatLinkNotFoundMessage} from '@novel-master/core/chat';
@@ -269,6 +270,13 @@ export function SubagentSessionScreen() {
           </Text>
         </View>
       ) : null}
+      {/* 指标条与主会话同构（stream-metrics-tokens）：子会话 run 由 manager 的
+          消费型单元承接，数据源同为「单元快照 / settled 投影」双源，故直接复用
+          主会话那套组件——活跃期显示实时速率，终态显示收尾冻结的末值速率。 */}
+      <ChatStreamMetricsBarLive
+        agentRunning={agentRunning}
+        sessionId={sessionId}
+      />
       {displayMessages.length === 0 && !agentRunning ? (
         <View style={styles.center}>
           <Text style={{color: tokens.textSecondary}}>子会话暂无消息</Text>

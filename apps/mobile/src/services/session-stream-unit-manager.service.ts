@@ -1338,6 +1338,20 @@ export class SessionStreamUnitManager {
     // 参与——refcount 与持久层语义只覆盖经 startRun 发起的 run。
     if (this.consumptiveSessions.has(sessionId)) {
       this.clearPendingChildIndex(sessionId);
+      // 消费型 run（subagent 子会话）也产出**内存级** settled 投影：子会话屏
+      // 需要一个「上次生成」落点——单元宽限销毁/被 LRU 淘汰后指标条才有源。
+      // 只写投影，不写 run_state、不落 session KKV（子会话 run 没有持久层行，
+      // 跨重启也没有读回路径，落库只会留无人读的垃圾）；速率随投影一并冻结，
+      // 与主会话同语义（末值快照）。
+      const consumptiveSnap = unit.snapshot();
+      this.settledProjections.set(sessionId, {
+        sessionId,
+        metrics: consumptiveSnap.metrics,
+        startedAtMs: consumptiveSnap.startedAtMs,
+        settledAtMs: consumptiveSnap.settledAtMs ?? Date.now(),
+        elapsedMs: consumptiveSnap.elapsedMs ?? 0,
+        rateTokensPerSecond: unit.getFinalRateTokensPerSecond(),
+      });
       this.evictSettledOverflow();
       this.notifyChanged();
       return;

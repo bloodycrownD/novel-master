@@ -60,6 +60,7 @@ step done（无论协议）：runner 把该步 LlmChatResult.usage 并入 run �
   - 收尾落库：运行结束把末值写 **session KKV**（域 `stream_metrics`、键 `finalRate`；值 JSON `{rate, tokens, atMs}`，编解码在 `domain/format/stream-final-rate.ts`）。选 KKV 而非 `run_state` 加列——这是展示派生值，缺失即省略速率段，不需要 DDL/align/BOOT_VERSION 三件套，也不受置位/压缩的 `clearDomain` 影响（session 删除走 `clearSession` 一并清）。
   - 读取：会话内直接随 settled 投影冻结；**跨重启**由 mobile 水合 settled 行时读回 KKV 拼进投影；desktop 的「上次生成」本就仅会话内内存（未做 run_state 持久化），冻结值同域。
   - 缺值（旧数据、KV 行缺失、解析失败、样本不足）= 省略速率段，不兜底造数。
+- **覆盖范围（主会话 / 子会话同源）**：`task` 派生的子会话 run 由 manager 的**消费型单元**承接同一批事件（RUN_STARTED 到达时 lazy 建立），因此指标、速率采样与收尾冻结走的是同一套代码；mobile 子会话屏（`SubagentSessionScreen`）直接复用主会话的指标条组件，活跃期显示实时值、终态显示冻结值。差异只在持久化面：消费型 run **不写 `run_state`、不落 session KKV**（子会话没有持久层行，跨重启也没有读回路径，落库只会留无人读的行），故其冻结指标仅会话内（内存级 settled 投影）可见——重启后子会话不显示「上次生成」，主会话不受影响。desktop 端子会话面板复用同一 `ConversationPanel`，指标条天然覆盖。
 
 ## 最终项目结构
 
