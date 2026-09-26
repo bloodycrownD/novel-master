@@ -14,7 +14,7 @@
   - ③ `docs/Iterations/mobile-perf-2026-09/bugs/context-usage-caliber-unify/{prd.md,spec.md}`
   - ④ `docs/Iterations/mobile-perf-2026-09/features/stream-metrics-tokens/{prd.md,spec.md}`（被改写的原 spec）
 - **review_round**: 1（**修订轮 round 2**）→ 3（**v3 校对轮**）→ 4（**v4 收口轮**）/ **dag_version**: 4
-- **状态**: **fix-spec-ready**（主代理 2026-09-26 判定；4 条「按现状收窄」待用户确认，见文末 Closure 表与 Spec deviations #1/#2/#3/#5）
+- **状态**: **已执行完毕（dev-ready，2026-09-26）**——由 `code-dev-loop` 承接，**32 条 must-fix 全部落地**；4 条「按现状收窄」经用户**照准**（#1/#2/#3/#5）；两轮 readonly cr-func 均判 `func-ready: yes`，其遗留 6 条 P2 已收口。分支 `integration/stream-metrics-native`，执行前 `5c63d27e` → 执行后 HEAD `71692b11`（**未 push / 未 merge / 未发版**）。逐条执行结果见文末「执行记录」。
 - **说明**: 本文件是**增量第二轮** CR 的修复规格。上一轮整条分支 CR 见同目录 `cr-fix-spec.md`（状态已执行，只读参考，本次**未改动**）。评审为 readonly（只读代码 + 静态推演 + 局部实跑），分三个 scope：
   - `review-scope-metrics` → 覆盖 ① + ②，round 1 产出 7 条 must-fix（`metrics/*`，round 2 后共 9 条）；
   - `review-scope-context-usage` → 覆盖 ③ + `scripts/mock-openai-server.mjs`，round 1 产出 10 条 must-fix（`ctx-usage/*`，round 2 后共 11 条）；
@@ -637,6 +637,9 @@
 
 - **维度**: E（性能 / 实测口径）
 - **文件**: ② `features/stream-live-token-estimator/spec.md:48`（「单次 push（含读值）：Node 稳态峰值 0.92ms / 均摊 0.47ms…」）、④ `features/stream-metrics-tokens/spec.md:75`（「性能：中文单次 push（含读值）Node 稳态峰值 0.92ms、均摊 0.47ms…」）、实测路径 `apps/mobile/src/services/session-stream-unit.ts:1052`（`ingestDelta`）与 `:1075`（末尾的读值调用）
+  - ⚠️ **`full2/E-1` 回填（2026-09-26，执行后主代理实测）**：本条覆盖面**不止 mobile —— desktop 侧同样是每 delta 读值**。desktop 落点（`71692b11` 实测）：`apps/desktop/renderer/hooks/useAgentStreamMetrics.ts:202`（读值合成 `composeStreamTokens`）、`:299`（重锚 `reanchorStreamTokenBase`）；delta 入口在上游 `apps/desktop/renderer/hooks/useAgentStream.ts:98` / `:107`（`applyTextDelta` / `applyThinkingDelta`）；hook 内 `setInterval(() => setTick(t => t + 1), 250)` 在 `useAgentStreamMetrics.ts:244`——**它只节流渲染 tick，不节流每 delta 的读值**（同一事实的 desktop 版本）。
+  - ⚠️ **行号漂移订正**：mobile 侧因本轮改动漂移，`recomputeCompletionTokens` 定义现为 `session-stream-unit.ts:641`、`ingestDelta` 末尾的读值调用现为 `:1107`（原 `:612` / `:1075` 是 base 行号）。
+  - **条件改法 #3 若触发，desktop 侧同条件同改**（对齐 hook 内那个 250ms tick，而不是 mobile 的 `SESSION_STREAM_APPLY_INTERVAL_MS`——后者是 mobile 专有常量，desktop 全仓零命中）。
 - **问题**:
   - **事实 1：指标读值没有节流**。实查 `session-stream-unit.ts:1052` 的 `ingestDelta` 在**每一条 delta** 末尾都调 `this.recomputeCompletionTokens()`（`:1075`）。所谓「32ms 合批」（`SESSION_STREAM_INGRESS_COALESCE_MS = 32`，`:68`）只作用于 **webview 投喂**（投影快照推给渲染层的那一段），**指标读值本身每 delta 走一次完整 `tokens` getter**（含尾窗 re-encode）。所以 0.92ms / 0.47ms 那个数是「**单次** push + 读值」的口径，**不是每渲染帧的口径**——一条 delta 一个字符的慢速流，1 秒就是 20–50 次读值。
   - **事实 2：实测环境是 Node v22，不是真机**。② spec `:41` / ④ spec `:73` 的表头都写着「Node v22 + js-tiktoken 1.0.21 + cl100k_base，本次实跑」。真机是 **Hermes**（RN 的 JS 引擎），js-tiktoken 在 Hermes 上是**纯 JS 路径**，性能与 V8 有量级差异。**0.92ms 这个数字在真机上没有被验证过**，而它正是「不在 delta 路径上」这个结论的全部依据。
@@ -816,6 +819,56 @@
 
 ---
 
+## 执行记录（2026-09-26，`code-dev-loop`）
+
+> 执行编排：主代理编排 + 6 个 impl/fix 子代理（wave-1 四节点并行 → wave-2 metrics → wave-3 文档 → wave-6 P2 收口）+ 1 个 verify 子代理（全量门禁）+ 2 个 readonly cr-func 子代理。
+> 提交链：`5c63d27e`（base）→ `c78989f7`（core 计数器）→ `d6c1e0da`（core 失效挂点，A-1+A-2+A-3 同批）→ `2ca81325`（标签下沉 core）→ `344f6725`（CLI/mock）→ `286113be`（metrics 生命周期与公式）→ `5adc3ab0`（业务文档收口）→ **`71692b11`（HEAD，cr-func 遗留 P2 收口）**。**未 push / 未 merge / 未发版。**
+
+### Spec deviations 21 行执行结果（逐行过）
+
+| # | 执行结果 |
+|---|---|
+| 1 | **用户照准**（按现状收窄：reseed = source 翻转 + 窗口折叠触发，不做「每次 usage 清窗」） |
+| 2 | **用户照准**（`commitStepChars` = 64） |
+| 3 | **用户照准**（desktop v1 固定 `cl100k_base`，o200k 留后续迭代） |
+| 4 | **已闭合** by `metrics/B-1`：固化路径改 1:1 兜底 + `unencodableChars` 诊断量 + 两条失败路径各自告警 |
+| 5 | **用户照准**（实测区间放宽为约 400–500ms；④ spec `:75` 已改并注明评审实测 468ms） |
+| 6 | **已闭合** by `ctx-usage/A-1`：`updateSessionAgentConfig` 补挂点（就地建 KKV + `await` + overlay-merge 前后差异判定 + 反向用例） |
+| 7 | **已闭合** by `ctx-usage/A-2`：`message.append` 挂失效（落点在 `messages.insert` 之后） |
+| 8 | **已闭合** by `ctx-usage/C-orch-1`：死参数已删、工厂内部自建；③ spec `:39` + 变更点表 #7 均已改「工厂自建」 |
+| 9 | **已闭合** by `ctx-usage/C-1`：CLI 两处加中文注释登记口径差；③ spec 范围收窄段登记 CLI 不含 tools |
+| 10 | **已闭合** by `ctx-usage/A-4`：`atMs` 与 `promptTokens` 同为必填，缺失 / 非法一律 miss |
+| 11 | **已闭合** by `ctx-usage/C-orch-2` 改法 #5 + `full/A-3`：desktop main / mobile 两处过期 JSDoc 已收；③ spec `:55` 已如实改写 |
+| 12 | **已闭合** by `metrics/A-4`：8 处措辞收窄（① 与 ④ 的 `spec.md:49` 同批改） |
+| 13 | **已闭合** by `full/A-4`：① spec `:43` / `:56` 均按实跑 **17 条**改写 |
+| 14 | **已闭合**：③ spec 验证记录**追加**「2026-09-26 复跑」一行（core 2173/2 红、desktop 526/526、mobile 1501/1 红 + 2 个已知 suite 红），历史记录一字未删 |
+| 15 | **已闭合** by `metrics/A-5`：三处措辞改「空闲预热 + `begin()` 兜底」，删掉② `:74` 的待办句；代码注释同批改 |
+| 16 | **已闭合** by `ctx-usage/A-1` + `A-2`：③ spec 三处统一为「**18 个调用点 / 15 个公开入口方法**」（执行后实查复核一致：`invalidateSessionApiPromptTokenEntry(` 9 处 + `message.service` 私有 helper 10 个调用点） |
+| 17 | **已闭合** by `full/A-2`：③ 目录 4 处「14 个」全清（含 PRD），验收 grep 无输出 |
+| 18 | **已闭合** by `ctx-usage/C-orch-2` 改法 #5 + `full/A-3`：③ spec `:52` 补现状并带 **OQ #16** 编号 |
+| 19 | **已闭合** by `full/E-1`：② `:48` / ④ `:75` 加「Node v22 桌面口径 + Hermes 真机未测 + 读值在每 delta 路径」限定（`full2/E-1` 的双端覆盖面已回填进该条目） |
+| 20 | **已闭合** by `full/E-2`：③ spec 读放大段补 tools 每 step `JSON.stringify` 成本（**只登记、未改实现**） |
+| 21 | **已闭合** by `full/A-3`：③ spec `:51` 补「原『desktop main 的 label 拼接』落点在本 diff 后已不存在」 |
+
+### 执行期新增的两条事实订正（不在原 21 行内）
+
+- **`full2/A-2` 的预写数字有误**：条目改法 #1 写死「core 9 → **11**（本轮 +2）」，但 `metrics/B-1` 的第 2 条验收是**并入既有「encode 抛错」用例加断言**（②PRD 验收原文即写「保留现有第 5 条不动」）、不新增 `it()`。主代理逐行实测：**base `5c63d27e` 9 个 `it(` → HEAD 10 个 `it(`，实跑 `# tests 10`**，故真数是 **10（本轮 +1）**。② spec `:67` 按真数 10 落地（执行方未照抄错数），② PRD `:41` 的枚举已补上新增用例那一条。
+- **`full2/E-1` 的落点在本文件自己的 `full/E-1` 条目里**（不是业务文档），已由主代理回填（见该条目的 ⚠️ 回填段），并把「desktop 侧同样每 delta 读值」与订正后的行号一并写进去。
+
+### cr-func 两节点结论与遗留处置
+
+- `n8a-crfunc-metrics`（metrics scope）：**func-ready: yes** —— 9 条 metrics + `full/I-1` / `full/A-4` 全部 A 矩阵落地并有 `文件:行` 实证，13 条定向测试实跑全绿。
+- `n8b-crfunc-ctx-docs`（ctx-usage + 文档面）：**func-ready: yes** —— 两条 P1 与全部实现类改法实证落地、4 条硬门限 grep 零残留、技术性 open deviations = 0。
+- 两者合计提出 **6 条 P2（无 P0/P1）**，已由 `n9-crfunc-p2-fix` 全部收口（`71692b11`）：变更点表 #7 措辞、两处过期 JSDoc + ③ spec `:55` 反向假陈述、③ spec 验证记录复跑行、`C-4` 两条 barrel 结论留痕、② PRD 用例枚举补项。
+- **一处复核分歧由主代理实证裁决**：`n8b` 报「② spec `:67` 应为 9 条」，`n8a` / `n6` 报 10 条 —— 主代理逐行实测（base 9 → HEAD 10）确认 **10 为真数**，`n8b` 的基线计数有误，② spec 未改动。
+
+### 执行期暴露、但**不属于本 fix-spec 范围**的两条环境问题（仅登记，未修）
+
+- `apps/desktop` 的 `npm test` 在 Windows cmd 下会**收集到 0 条测试**（`scripts/run-tests.mjs` 的默认 glob 用单引号包裹，cmd 不把单引号当引号）——**既有平台缺陷**，会造成「本地显示全绿但其实一条没跑」的假象；本轮用等价双引号参数跑出 526/526。建议单开一条修。
+- mobile 的 `apps/mobile/android/app/src/main/assets/index.android.bundle` 是**旧产物**（gitignored、不进门禁），出 1310 真机包前必须重新 `react-native bundle`，否则 WebView 侧资产是旧的。
+
+---
+
 ## Open questions / 待拍板
 
 > 以下均**不阻塞** fix-spec 落地（`ready`），但影响执行后的收口判断，请用户逐条拍板。
@@ -907,7 +960,9 @@
 
 | 项 | 状态 |
 |---|---|
-| **fix-spec-ready** | **yes**（4 条「按现状收窄」待用户确认，见下） |
+| **fix-spec-ready** | **yes**（4 条「按现状收窄」**已由用户照准**，见下） |
+| **执行状态** | **已执行完毕 = dev-ready（2026-09-26，`code-dev-loop`）**：32 条 must-fix 全部落地；6 个 impl/fix 节点 + 1 个 verify 节点 + 2 个 readonly cr-func 节点；提交链 `5c63d27e` → `c78989f7` → `d6c1e0da` → `2ca81325` → `344f6725` → `286113be` → `5adc3ab0` → `71692b11`（HEAD）；**未 push / 未 merge / 未发版**。逐条结果见文末「执行记录」 |
+| **执行期验证** | core 全量 **2173 / 2 红**（既有时区归桶）；mobile 全量 **1501 / 1 红** + 2 个已知 suite 红；desktop 全量 **526/526**；core / mobile / cli typecheck 零输出；desktop renderer tsc 全仓 349 条既有债、**本轮改动文件新增 0**；renderer vite 出包成功（index 3,212 kB）。**无本轮引入的回归** |
 | **fix_spec_path** | `docs/Iterations/stream-metrics-native-integration-cr/cr-fix-spec-v2.md` |
 | **base_sha / head_sha** | `83a434d7` → `fad16a12` |
 | **dag_version / review_round** | 4 / 4 |
@@ -925,4 +980,9 @@
 
 **轮次记录**：round 1 两 scope（7+10 条）→ spec-fix v1（17 条）→ round 2 两 scope 复审（+3 条、11 处文本订正）→ spec-fix v2（20 条）→ round 3 两 scope + review-full（改错 4 处改法前提 + 补 2 处缺口 + 3 处文档偏离 + 5 条新维度 = 13 项）→ spec-fix v3（28 条、deviations 21 行、OQ 15 条）→ round 4 两 scope + review-full（13 项收口）→ spec-fix v4（**32 条**、OQ 16 条）。**第 4 轮三份终审一致结论：方向零误判、无推翻性发现，剩余全为收口型文本订正并已全部并入。**
 
-**下一步**：请用户确认（a）是否按本 fix-spec 开工执行；（b）4 条「按现状收窄」是否照准（尤其 #1 reseed 口径）。执行建议由 `code-dev-loop` 承接，并把强耦合的 `ctx-usage/A-2` 与 `A-3`（以及 `A-1` 的 await）放进**同一个 wave / 同一笔提交**——三条分开做会静默产出半成品。
+**⚠️ 执行已完成（2026-09-26）**：本 fix-spec 的 32 条 must-fix 已全部落地并在四道门禁上通过，当前状态 **dev-ready**（提交链与逐条结果见文末「执行记录」）。用户已照准 4 条「按现状收窄」（#1 reseed 口径 / #2 `commitStepChars` 64 / #3 desktop v1 固定 cl100k / #5 实测数字区间）。
+
+**仍未做（等用户指令，属协作红线）**：
+1. **出 `versionCode 1310` 真机包复验**——「合并后 QA」表列出的项（多步速率、`<|endoftext|>` 不倒退、切会话无卡顿、换 Agent 清值、双端标签、per-delta p50/p95、多 step run 流畅度）必须在真机上按**纯 UI 路径**走一遍，禁止写库注入（RULE）。
+2. **merge / push / 发版**——必须等用户明确指令。
+3. **Open questions 16 条**（不阻塞执行）中需用户拍板的：#1 同源 usage 下调夹 0、#4 `runId`/`lastMessageSeq` 只写不读、#11 A-2 两条产品语义、#15 8ms 门限、#16 `formatCounterKindLabel` 死导出是否删净。

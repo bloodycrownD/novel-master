@@ -1,31 +1,128 @@
-# code-dev-loop 编排状态——init-busy-yield-2026-09（dev-ready）
-spec_path: docs/Iterations/init-busy-yield-2026-09/spec.md
-prd_path: docs/Iterations/init-busy-yield-2026-09/prd.md
-branch: feat/agent-run-parallel-and-notify
-base_sha: e8533053
-head_sha: dd9d813a
+# code-dev-loop 编排状态——stream-metrics-native 增量第二轮 CR fix-spec 执行（cr-fix-spec-v2）
+spec_path: docs/Iterations/stream-metrics-native-integration-cr/cr-fix-spec-v2.md
+prd_path: docs/Iterations/mobile-perf-2026-09/features/stream-metrics-tokens/prd.md
+branch: integration/stream-metrics-native
+base_sha: 5c63d27e
+head_sha: 71692b11
 dev_ready: yes
-dev_dag_matrix:
-  impl-s1-yield: { status: done, head: cb73992e, executor: subagent }
-  impl-s4-backfill: { status: done, head: "d28e38c6,c43a904b", executor: subagent }
-  verify-s1: { status: done, executor: main, result: "4/4" }
-  verify-s4: { status: done, executor: main, result: "core 2107/2107" }
-  crfunc-w0: { status: done, func_ready: yes, executor: subagent }
-  impl-s2-hydrate: { status: done, head: "324d0677,0544f8f1", executor: subagent }
-  impl-s3-chattab: { status: done, head: 67e72627, executor: subagent }
-  impl-s5-rows: { status: done, head: 7af52a27, executor: subagent }
-  verify-w3: { status: done, executor: main, result: "typecheck+jest 197/1281" }
-  crfunc-w3: { status: done, func_ready: yes, executor: subagent }
-  impl-s6-snapshot-rn: { status: done, head: "86404b69,7cc2a70a,bdf2f3a3", executor: subagent }
-  verify-s6: { status: done, executor: main, result: "jest 198/1291 + build:webview" }
-  impl-s7-web: { status: done, head: "bb343863,dd9d813a", executor: subagent }
-  impl-s8-s9: { status: done, head: "700117bc,a529eacb", executor: subagent }
-  verify-final: { status: done, executor: main, result: "typecheck+jest 200/1317+build:webview+core 2107/2107" }
-  crfunc-final: { status: done, func_ready: yes, executor: subagent }
+dag_version: 2
+reorchestration_note: "wave-6：两轮 readonly cr-func 均 func-ready:yes 但遗留 6 条 P2（无 P0/P1），插入 n9-fix 收口 + n10-crfunc 复检（dag_version 1→2）"
+scope_note: 32 条 must-fix（P1×2 / P2×30），两条 P1 置顶；用户已照准 4 条「按现状收窄」（#1 重 seed 口径=窗口折叠触发 / #2 commitStepChars 64 / #3 desktop v1 固定 cl100k / #5 实测数字区间 400–500ms）
+discipline:
+  - 子代理一律禁止 git 写（不 add/commit/stash/checkout/revert）；主代理按节点分组统一提交
+  - 子代理只跑定向测试与 typecheck，不跑全量套件（全量在 verify 波次单节点顺序跑，避免并发负载抖动）
+  - 行号均为评审时快照，以实查为准
+wave_plan:
+  - [n1-core-counter, n2-core-invalidation, n3-orch-label-barrels, n4-cli-mock]
+  - [n5-metrics-lifecycle-formula]
+  - [n6-docs-closeout]
+  - [n7-verify-all]
+  - [n8a-crfunc-metrics, n8b-crfunc-ctx-docs]
+node_status:
+  n1-core-counter: { status: done, entries: [metrics/B-1, metrics/G-2, full/I-1], head: c78989f7, executor: subagent }
+  n2-core-invalidation: { status: done, entries: [ctx-usage/A-1, ctx-usage/A-2, ctx-usage/A-3, ctx-usage/A-4, ctx-usage/G-1], head: d6c1e0da, executor: subagent, note: "A-1+A-2+A-3 同批；越界一处已报备：resolve-current-prompt-tokens.test.ts 补 T-T6(KKV-badAtMs)" }
+  n3-orch-label-barrels: { status: done, entries: [ctx-usage/C-orch-1, ctx-usage/C-orch-2, ctx-usage/C-4, full/D-1], head: 2ca81325, executor: subagent, note: "越界一处已报备：serialize-tools-for-token-count.ts 头注释" }
+  n4-cli-mock: { status: done, entries: [ctx-usage/C-1, ctx-usage/D-1, ctx-usage/D-2], head: 344f6725, executor: subagent }
+  n5-metrics-lifecycle-formula: { status: done, entries: [metrics/C-1, metrics/C-2, metrics/C-3, metrics/C-orch-1, metrics/G-1], head: 286113be, executor: subagent }
+  n6-docs-closeout: { status: done, entries: [metrics/A-4, metrics/A-5, full/A-2, full/A-3, full/A-4, full/E-1, full/E-2, full2/A-2, full2/C-1, full2/A-3, full/K-1], head: 5adc3ab0, executor: subagent }
+  n7-verify-all: { status: done, executor: subagent, result: "core 2173/2 红（既有时区）| mobile 1501/1 红 + 2 已知 suite 红 | desktop 526/526 | 三端 typecheck 零输出 | renderer tsc 349 既有债，改动文件新增 0 | vite 出包 3212kB | 6 条验收 grep 全过" }
+  n8a-crfunc-metrics: { status: done, executor: subagent, readonly: true, func_ready: yes }
+  n8b-crfunc-ctx-docs: { status: done, executor: subagent, readonly: true, func_ready: yes, note: "提 6 条 P2；其中『② spec 应为 9 条』经主代理逐行实测证伪（真数 10）" }
+  n9-crfunc-p2-fix: { status: done, entries: ["P2-1 变更点表 #7 措辞", "P2-2 两处过期 JSDoc + ③ spec :55", "P2-3 ③ spec 验证记录复跑行", "P2-4 C-4 barrel 结论留痕", "P2-5 ② PRD 用例枚举补项"], head: 71692b11, executor: subagent }
+  n10-crfunc-final: { status: in_progress, executor: subagent, readonly: true }
+  main_agent_closeout: { status: in_progress, note: "cr-fix-spec-v2 终态标注（状态行 / 执行记录 / deviations 21 行结果 / full-E-1 回填 / Closure 表）+ 本状态文件" }
+file_ownership:
+  n1-core-counter:
+    - packages/core/src/infra/tokenizer/logic/incremental-token-counter.ts
+    - packages/core/test/infra/tokenizer/incremental-token-counter.test.ts
+    - apps/mobile/__tests__/session-stream-unit-pipeline.test.ts
+    - apps/mobile/__tests__/session-stream-unit-accum-perf.test.ts
+    - apps/desktop/test/use-agent-stream-metrics-hook.test.tsx
+    - apps/desktop/renderer/hooks/useAgentStreamMetrics.ts   # 仅 full/I-1 的工厂失败告警
+  n2-core-invalidation:
+    - packages/core/src/infra/tokenizer/logic/session-api-prompt-token-store.ts
+    - packages/core/src/service/chat/impl/message.service.ts
+    - packages/core/src/service/chat/impl/session.service.ts
+    - packages/core/src/service/chat/impl/message-transcript-effects.service.ts
+    - packages/core/src/service/message-checkpoint/impl/message-rollback.service.ts
+    - packages/core/src/service/compaction-conditions/run-compaction.ts
+    - packages/core/src/service/persistent-state/impl/persistent-state.service.ts
+    - packages/core/src/service/vfs/logic/clear-session-prompt-caches.ts
+    - packages/core/src/service/agent/impl/agent-runner.ts
+    - packages/core/test/infra/tokenizer/prompt-token-invalidation.test.ts
+    - packages/core/test/infra/tokenizer/session-api-prompt-token-store.test.ts
+    - packages/core/test/compaction-conditions/run-compaction.test.ts
+    - packages/core/test/agent/agent-runner-token-cache.test.ts
+  n3-orch-label-barrels:
+    - packages/core/src/infra/tokenizer/logic/format-token-source-label.ts   # 新增
+    - packages/core/src/infra/tokenizer/index.ts
+    - packages/core/src/public/provider.ts
+    - packages/core/test/package-exports/snapshots/public-provider-allowlist.json
+    - packages/core/src/service/persistent-state/create-persistent-state.ts
+    - apps/desktop/src/main/services/chat-prompt-tokens.service.ts
+    - apps/desktop/renderer/features/chat/SessionDetailDrawer.tsx
+    - apps/mobile/src/services/chat-prompt-tokens.service.ts
+    - apps/mobile/__tests__/chat-prompt-tokens.test.ts
+    - apps/desktop/shared/logic/provider.ts   # 核查（如需要则加具名再导出）
+  n4-cli-mock:
+    - apps/cli/src/prompt/commands.ts
+    - scripts/mock-openai-server.mjs
+  n5-metrics-lifecycle-formula:
+    - apps/mobile/src/services/session-stream-unit.ts
+    - apps/mobile/src/services/stream-token-estimator.ts
+    - apps/mobile/src/hooks/useAgentStreamMetrics.ts
+    - apps/mobile/__tests__/stream-token-estimator.test.ts
+    - apps/mobile/__tests__/session-stream-unit-pipeline.test.ts
+    - apps/desktop/renderer/hooks/useAgentStreamMetrics.ts
+    - apps/desktop/renderer/hooks/stream-token-estimator.ts
+    - apps/desktop/test/stream-token-estimator.test.ts   # 新增
+    - apps/desktop/shared/logic/format.ts
+    - packages/core/src/public/format.ts
+    - packages/core/src/domain/session-run-state/model/session-run-state.ts
+    - packages/core/src/domain/format/format-stream-metrics-line.ts
+  n6-docs-closeout:
+    - docs/Iterations/mobile-perf-2026-09/**   # ①②③④ 的 prd/spec
+    - CHANGELOG.md
+    - docs/Iterations/stream-metrics-native-integration-cr/cr-fix-spec.md   # 观察项 ⑤ 推翻注记
+  main_agent_only:
+    - docs/.iteration-state.yaml
+    - docs/Iterations/stream-metrics-native-integration-cr/cr-fix-spec-v2.md   # 状态/deviations/Closure 终态标注
+open_must_fix: [metrics/B-1, ctx-usage/A-1, metrics/A-4, metrics/A-5, metrics/C-1, metrics/C-2, metrics/C-3, metrics/C-orch-1, metrics/G-1, metrics/G-2, ctx-usage/A-2, ctx-usage/A-3, ctx-usage/A-4, ctx-usage/C-1, ctx-usage/C-orch-1, ctx-usage/C-orch-2, ctx-usage/C-4, ctx-usage/D-1, ctx-usage/D-2, ctx-usage/G-1, full/A-2, full/A-3, full/A-4, full/D-1, full/E-1, full/E-2, full/I-1, full/K-1, full2/A-2, full2/E-1, full2/C-1, full2/A-3]
 spec_deviations:
-  - closed: Step 3 去重落点在 refreshChatMeta 内部 inflight（覆盖面更广，语义等价有专测）
-  - closed: Step 5 selectTailTranscriptRows 顺带改预扫构建（等价论证+对拍测试）
-  - closed: Step 7 渐进渲染不做（与 T-S4 语义冲突，窗口化已降本）
-  - closed: Step 7 扩窗读位用行坐标线性重映射（scrollHeight 差值被扩窗污染，容差断言在）
-open_must_fix: []
-manual_pending: "Step 10 真机验收（GWT-1~5 + release 冷启动基线）归用户 manual_user"
+  - closed-by-user: "#1 采样器「校正点重 seed」收窄为「source 翻转 + 窗口折叠」，不做「每次 usage 清窗」"
+  - closed-by-user: "#2 commitStepChars 取 64（实测收紧，256 峰值 5.24ms 超线）"
+  - closed-by-user: "#3 desktop v1 固定 cl100k（o200k 留后续迭代）"
+  - closed-by-user: "#5 实测数字区间放宽为约 400–500ms（由 n6 改 ④ spec :75）"
+manual_pending: "fix-spec 执行后出 versionCode 1310 真机包复验（合并后 QA 表）；merge/发版等用户指令"
+
+# === 上一轮：init-busy-yield-2026-09（dev-ready 已完成，Bundle-full 存档于此供追溯）===
+# spec_path: docs/Iterations/init-busy-yield-2026-09/spec.md
+# prd_path: docs/Iterations/init-busy-yield-2026-09/prd.md
+# branch: feat/agent-run-parallel-and-notify
+# base_sha: e8533053
+# head_sha: dd9d813a
+# dev_ready: yes
+# dev_dag_matrix:
+#   impl-s1-yield: { status: done, head: cb73992e, executor: subagent }
+#   impl-s4-backfill: { status: done, head: "d28e38c6,c43a904b", executor: subagent }
+#   verify-s1: { status: done, executor: main, result: "4/4" }
+#   verify-s4: { status: done, executor: main, result: "core 2107/2107" }
+#   crfunc-w0: { status: done, func_ready: yes, executor: subagent }
+#   impl-s2-hydrate: { status: done, head: "324d0677,0544f8f1", executor: subagent }
+#   impl-s3-chattab: { status: done, head: 67e72627, executor: subagent }
+#   impl-s5-rows: { status: done, head: 7af52a27, executor: subagent }
+#   verify-w3: { status: done, executor: main, result: "typecheck+jest 197/1281" }
+#   crfunc-w3: { status: done, func_ready: yes, executor: subagent }
+#   impl-s6-snapshot-rn: { status: done, head: "86404b69,7cc2a70a,bdf2f3a3", executor: subagent }
+#   verify-s6: { status: done, executor: main, result: "jest 198/1291 + build:webview" }
+#   impl-s7-web: { status: done, head: "bb343863,dd9d813a", executor: subagent }
+#   impl-s8-s9: { status: done, head: "700117bc,a529eacb", executor: subagent }
+#   verify-final: { status: done, executor: main, result: "typecheck+jest 200/1317+build:webview+core 2107/2107" }
+#   crfunc-final: { status: done, func_ready: yes, executor: subagent }
+# spec_deviations:
+#   - closed: Step 3 去重落点在 refreshChatMeta 内部 inflight（覆盖面更广，语义等价有专测）
+#   - closed: Step 5 selectTailTranscriptRows 顺带改预扫构建（等价论证+对拍测试）
+#   - closed: Step 7 渐进渲染不做（与 T-S4 语义冲突，窗口化已降本）
+#   - closed: Step 7 扩窗读位用行坐标线性重映射（scrollHeight 差值被扩窗污染，容差断言在）
+# open_must_fix: []
+# manual_pending: "Step 10 真机验收（GWT-1~5 + release 冷启动基线）归用户 manual_user"
