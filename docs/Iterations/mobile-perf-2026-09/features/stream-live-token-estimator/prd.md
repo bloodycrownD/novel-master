@@ -38,5 +38,5 @@ dependency: docs/Iterations/mobile-perf-2026-09/prd.md
 
 ## 测试用例
 
-- core `test/infra/tokenizer/incremental-token-counter.test.ts`：分批/一次 push 一致、单调、reset、空 delta、encode 抛错回退、边界回看消除断词误差、单次 encode 入参 ≤64 字符、有界内存（累计 encode 字符量线性）、分桶均摊耗时线性；
+- core `test/infra/tokenizer/incremental-token-counter.test.ts`：分批/一次 push 一致、单调、reset、空 delta、encode 抛错回退、固化段 encode 抛错按 1:1 兜底计入、读值不倒退、边界回看消除断词误差、单次 encode 入参 ≤64 字符、有界内存（累计 encode 字符量线性）、分桶均摊耗时线性；
 - mobile `__tests__/stream-token-estimator.test.ts`：真 js-tiktoken 精度与性能护栏、无空白超长串拆段自保、实例状态独立、编码名解析（o200k 家族 vs cl100k 兜底）、会话估算器解析链路（含解析失败兜底）。

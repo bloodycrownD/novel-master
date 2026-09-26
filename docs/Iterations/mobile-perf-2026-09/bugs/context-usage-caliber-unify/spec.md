@@ -24,7 +24,7 @@ agile_trace: true
 | 4 | A | `.../logic/resolve-current-prompt-tokens.ts`、`resolve-prompt-tokens-with-backfill.ts` | 读口增可选 `{sessionKkv}`；命中返回 `source:'api'` + `atMs`；`savedModelId` 指纹不符当 miss |
 | 5 | A | `service/agent/impl/agent-runner.ts` | 写侧改 write helper（带 runId / savedModelId / 末尾消息 seq）；FAILED/非 completed 改 invalidate helper |
 | 6 | A | 18 个调用点 / 15 个公开入口方法（message.service ×10、message-transcript-effects、run-compaction、message-rollback、persistent-state、clear-session-prompt-caches、session.service.updateSessionAgentConfig、agent-runner ×2） | 一律改双删 helper |
-| 7 | A | `service/persistent-state/{create-persistent-state.ts,impl/persistent-state.service.ts}` | 注入 sessionKkv（工厂缺省自建，三端装配文件零改动） |
+| 7 | A | `service/persistent-state/{create-persistent-state.ts,impl/persistent-state.service.ts}` | 工厂内部**自建** sessionKkv（`createPersistentState(conn)` 单参；注入从未发生），三端装配文件零改动 |
 | 8 | B | `apps/desktop/shared/ipc-types.ts`、`src/main/services/chat-prompt-tokens.service.ts`、`renderer/features/chat/SessionDetailDrawer.tsx`、`apps/mobile/src/services/chat-prompt-tokens.service.ts` | 数据面加 `source: 'api' \| 'local'`；标签两态（`api` → 「上次请求」，否则「预估」）；`~` 仍由 `estimated` 驱动 |
 | 9 | C | `.../logic/count-prompt-llm-input.ts` + 新 `serialize-tools-for-token-count.ts`、`tokenizer-driver-node`、`tokenizer-driver-rn`、`compaction-condition-trigger.port.ts`、`agent-runner.ts` | `CountPromptLlmInputParams.tools?`；统一 helper 拼接；压缩评估由 runner 传现成 tools |
 | 10 | D | `scripts/mock-openai-server.mjs` | `prompt_tokens` / `completion_tokens` 改为**近似 token**：CJK 一字≈一词元（真 tokenizer 实测中文 0.93~1.38 t/字）+ 其余字符 ÷3.35（`approxTokens`），prompt 侧计入 messages + 顶层 system + tools 序列化文本；日志/帮助文案注明「近似 token，非真实 tokenizer」。**对照口径两次收口**：①早先直接拿字符数当 token → 把差距反向放大 3 倍多；②改成整段 ÷3.35 → 中文语料被低估约 3 倍，真机验收收尾校正会看到「数字凭空掉到三分之一」的假象；最终按 CJK 感知折算 |
@@ -48,11 +48,12 @@ agile_trace: true
 - `serializeToolsForTokenCount(tools)`（core 纯函数，`name/description/inputSchema` 稳定序列化；空/undefined 返回空串，非空带前导换行）——调用方一律「串 + helper(...)」，无判空分支，杜绝多处漂移；
 - **拼接点**：node driver、RN driver、core heuristic-only 路径**三处统一**（Kotlin 侧不需要改：tools 文本在 JS 侧序列化后交给驱动）；**CLI 也不含 tools**（`apps/cli/src/prompt/commands.ts` 的 heuristic 档 `serializePromptLlmInput` 与 `countPromptLlmInput` 两个调用点均未拼）——CLI 属**取证 / 调试面、不参与压缩判定**，与压缩评估存在口径差，**仅供人工核对**，本轮不要求与压缩评估同口径；
 - **范围收窄（登记）**：UI 读口拿不到 tools（`session-prompt-input` 不产 tools），双端 UI 的**预估**仍不含 tools 段；压缩评估路径（agent-runner 有现成 tools）必传。**UI 读口恒不拼 tools**——双端读口原有一行 `+ serializeToolsForTokenCount(undefined)` 对 `undefined` / `[]` 恒返回空串（一字符都不加）、已连同其 import 一并删掉：**不要以为拼了就是全量**。
+- **再导出层核查结论（C-4 留痕）**：desktop renderer 的显式具名再导出闭环已核：`apps/desktop/shared/logic/format.ts` 已追加 `composeStreamTokens` / `reanchorStreamTokenBase`（只追加不重排）；`apps/desktop/shared/logic/provider.ts` **无需追加**（`formatTokenSourceLabel` 由 renderer 直连 `@novel-master/core/provider`；该 barrel 现有导出都是采样相关）；**mobile 无同类具名再导出层**，一律直连 `@novel-master/core/*`，不需要同步动作。
 
 ### B 标签两态
 
 - 数据面双端各加 `source`（desktop IPC `PromptChatTokenStatsResponse.source` 必填；mobile 直接消费读口返回值）；
-- 文案落在调用侧（项目无 i18n 词条，硬编码中文）：desktop renderer chip（Tooltip 从「分词器」改「占用来源」）、desktop main 的 label 拼接、mobile `formatChatTokenLabel`。（**现状订正**：desktop main 侧**已无任何 `formatCounterKindLabel` 调用点**，只剩 `chat-prompt-tokens.service.ts` 一处提及该符号的**过期 JSDoc**（已随本 diff 收掉）；本 spec 原述「desktop main 的 label 拼接」落点在本 diff 之后**已不存在**——`loadChatPromptTokenLabelResilient` 走的是 `formatChatTokenStatsLabel` → `formatTokenSourceLabel`，与 `formatCounterKindLabel` 无关。）
+- 文案落在调用侧（项目无 i18n 词条，硬编码中文）：desktop renderer chip（Tooltip 从「分词器」改「占用来源」）、desktop main 的 label 拼接、mobile `formatChatTokenLabel`。（**现状订正**：本 diff 摘掉 `formatCounterKindLabel` 的最后三个生产调用点（desktop main service、`SessionDetailDrawer`、mobile service），并收掉 desktop main / mobile 两处提及该符号的过期 JSDoc；此后**仅剩 core 导出链 + 1 条 mobile 测试断言**。本 spec 原述「desktop main 的 label 拼接」落点在本 diff 之后**已不存在**——`loadChatPromptTokenLabelResilient` 走的是 `formatChatTokenStatsLabel` → `formatTokenSourceLabel`，与 `formatCounterKindLabel` 无关。）
 - **`formatCounterKindLabel` 的现状（不再「保持不动」）**：它是「用哪个分词器」的维度标签（api/heuristic 都显示「自动」），与「值从哪来」是两义、不合并；但**本 diff 摘掉了它的最后三个生产调用点**（desktop main service、`SessionDetailDrawer`、mobile service），此后**仅剩 core 导出链 + 1 条 mobile 测试断言**。是否本轮删净见 **CR Open questions #16**（`cr-fix-spec-v2.md`）——该导出是 `@novel-master/core` 的公开契约，删它属 breaking change，本轮按现状收窄、**不删**。
 
 ## 测试策略
@@ -63,6 +64,7 @@ agile_trace: true
 - core 改写：`resolve-current-prompt-tokens`（注入 fake sessionKkv + 「清进程热层后从 KKV 恢复 api」跨重启语义）、`agent-runner-token-cache`（KKV 写入/删除断言）、`token-ratio-trigger`（+3 条：KKV 命中、陈旧降级、0.85 安全垫）、`run-compaction`（KKV 行断言）；
 - 双端：`chat-prompt-tokens` 测试断言两态标签与 `source` 传递；`mobile-prompt-token-counter` 加 tools 非空/空数组用例；
 - 验证记录：core 定向 52/52 + 全量 2171 例（2 红为既有本地时区归桶失败，非本次引入）；`tokenizer-driver-node` 8/8；mobile 定向 15 例；desktop 全量 519/519。
+- 验证记录（2026-09-26 复跑，fix-spec 执行后）：core 全量 2173 例 / 2 红（2 红为既有本地时区归桶失败 `T-C2` / `T-C6`，非本轮引入）；desktop 全量 526/526（`npm test` 在 Windows cmd 下会因单引号 glob 收集 0 条——既有平台缺陷，改用等价的双引号 glob 参数后为 526/526）；mobile 全量 1501 例 / 1 红 + 2 个 suite 红（`mermaid-fullscreen` 的 `T-MF3` 产物断言、`helpers/read-webview-dist` 空套件，均为已知基线）。与上一行的差异来源：本轮新增用例 + 桌面等价参数跑法。
 
 ## 风险与回滚方案
 

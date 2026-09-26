@@ -46,9 +46,6 @@ function buildTokenStats(
  * 组装 meta bar 的 token 标签。占用来源后缀由 core 的
  * {@link formatTokenSourceLabel} 统一给出（`api` → 「上次请求」，其余 → 「预估」），
  * 本文件不再自备一份映射。
- *
- * 它与分词器维度标签（`formatCounterKindLabel`，api/heuristic 都显示「自动」）
- * 有意分开：那个说的是「用哪个分词器」，这个说的是「值从哪来」，两义不合。
  */
 export function formatChatTokenStatsLabel(
   stats: PromptChatTokenStatsResponse,

@@ -28,9 +28,6 @@ import {
 /**
  * 占用来源两态标签（`api` → 「上次请求」，其余 → 「预估」）由 core 的
  * `formatTokenSourceLabel` 统一给出，本文件不再自备一份映射。
- *
- * 与分词器维度标签（`formatCounterKindLabel`，api/heuristic 都显示「自动」）
- * 有意分开：那个说的是「用哪个分词器」，这个说的是「值从哪来」。
  */
 function formatChatTokenLabel(
   result: {
