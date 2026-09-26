@@ -7,6 +7,9 @@ branch: feat/llm-stream-native（HEAD b50771a6，实验代码零提交）
 
 # Step 8 E2E 硬指标验收报告
 
+> **初版语义记录**，终版见 `docs/Iterations/llm-stream-native/spec.md` §2 实施修正记录与 §7。
+> 本报告完成于「native 流中读超时 30s 生效」阶段，AC-4 的收敛结构（3 次尝试 × 30.0s 读超时、93s 失败终态）与文案里的 `read timeout after 30000ms` 均属初版语义留档。终版按产品拍板**去掉全部流式空闲限制**（client 级 readTimeout 恒禁用、空闲看门狗退役），唯一自动兜底为单次 callTimeout 600s、最多 3 次尝试，首字黑洞的自动上限 ≈ 30 分钟；产品口径以**手动终止**为快速路径。AC-1/AC-2/AC-5 的丝滑度、块级渲染与连接复用结论不受影响。
+
 Spec 依据：`docs/Iterations/llm-stream-native/spec.md` Step 8 + 测试策略 T-N8；PRD AC-1~AC-5 逐项对号。T-N9 真机验收留用户。
 
 ## 实验环境
@@ -45,9 +48,9 @@ Spec 依据：`docs/Iterations/llm-stream-native/spec.md` Step 8 + 测试策略 
 
 本轮实验链路未覆盖 listModels/chatNonStream 服务端死亡场景的模拟器实测；该项由 Step 4 的 T-N4 自动测试覆盖（fetch shim 超时收敛 + Empty body 防御），本轮 mock 日志可见一次 `GET /v1/models` 正常往返。留登记，不阻塞。
 
-### AC-4 mock-dead 收敛 + 新超时文案 —— **PASS**（停止按钮子项除外，见专项节）
+### AC-4 mock-dead 收敛 + 新超时文案 —— **PASS（初版语义）**（停止按钮子项除外，见专项节）
 
-- **收敛结构**（ac4stop 轮，tap 16:16:12.5 模拟器）：3 次尝试 × 30.0s 读超时，logcat 三次 `stream timeout { phase: 'first-chunk', source: 'native timeout: read timeout after 30000ms' }`（16:16:44.6/16:17:14.9/16:17:45.4，间隔精确 +30.3s）→ 最终 `LlmStreamTimeoutError`，**tap → 失败终态 93s**（UI：「上次生成 · 93s · 正文 0 字」），composer 恢复可再发（后续 ac4stop2/3 均发送成功）。重试上限 3、有界收敛、无永久黑洞。
+- **收敛结构**（ac4stop 轮，tap 16:16:12.5 模拟器，**初版 30s 读超时读数**）：3 次尝试 × 30.0s 读超时，logcat 三次 `stream timeout { phase: 'first-chunk', source: 'native timeout: read timeout after 30000ms' }`（16:16:44.6/16:17:14.9/16:17:45.4，间隔精确 +30.3s）→ 最终 `LlmStreamTimeoutError`，**tap → 失败终态 93s**（UI：「上次生成 · 93s · 正文 0 字」），composer 恢复可再发（后续 ac4stop2/3 均发送成功）。重试上限 3、有界收敛、无永久黑洞。**终版语义**：流式空闲界已退役，同场景不再有 30s 断连，每轮尝试由单次 callTimeout 600s 承接，自动上限 ≈ 3×600s≈30 分钟（手动终止为快速路径）——收敛有界性与「不永久黑洞」结论不变，窗口读数以终版为准。
 - **服务端留痕**：每次挂死连接都在挂死起点 +30s 整被客户端关闭（`HANG 结束：挂死连接被客户端关闭` ×3：16:17:11.168/16:17:41.485/16:18:11.997，均为起点 +30.000s）。
 - **新超时文案（b50771a6 修复实测）**：
   - logcat（权威全文）：`'LLM stream timed out after 600000ms waiting for the first chunk (native timeout: read timeout after 30000ms)'`——detail 从裸 `(native callTimeout)` 变为真实触发来源 **`native timeout: read timeout after 30000ms`**，实测通过。
@@ -63,6 +66,8 @@ Spec 依据：`docs/Iterations/llm-stream-native/spec.md` Step 8 + 测试策略 
 - **口径说明**：core 全量与双端定向测试由 Step 1-6 各步跑绿，本步不重复；desktop/CLI 零变化由 port 注入设计保证（未注册即回落）。
 
 ## 停止按钮专项（Step 7 遗留疑点复验）—— **无效，真 bug 实锤**
+
+> 本节复验在初版 30s 读超时语义下进行（当时读超时仍生效，故有「90s 有界收敛兜底」可被炸掉一说）；该 P0 已由 193821db 修复（bridge 组装弃 spread 改逐方法解构），终版收敛兜底改由 callTimeout 承接。
 
 **判定：停止链路故障（非 Step 7 疑点的「坐标漂移」解释）。且后果比 Step 7 登记的更严重：点终止后 run 状态机悬死，连 90s 有界收敛兜底也被炸掉。**
 
@@ -108,7 +113,7 @@ Spec 依据：`docs/Iterations/llm-stream-native/spec.md` Step 8 + 测试策略 
 | AC-1 12000 字丝滑 | **PASS** | 46.5s/12,000 字/260 字/s，截图序列每 4s 正文单调增长，无憋全文/无冻结/无尾部倾泻 |
 | AC-2 10 万字长文 | **PASS** | 192s/100,000 字/521 字/s，markdown 元素流中逐块出现，内存 +58MB 平稳，无渲染错乱 |
 | AC-3 非流式收敛 | 登记未实测 | T-N4 自动测试覆盖；本轮不阻塞 |
-| AC-4 挂死收敛+新文案 | **PASS** | 3×30s 整点断连（服务端留痕）→ 93s 失败终态；文案 detail 实测为 `native timeout: read timeout after 30000ms` |
+| AC-4 挂死收敛+新文案 | **PASS（初版语义）** | 3×30s 整点断连（服务端留痕）→ 93s 失败终态；文案 detail 实测为 `native timeout: read timeout after 30000ms`（终版：无 30s 空闲界，自动上限 ≈3×600s≈30 分钟，见文首留档注） |
 | AC-5 复用+三幕 | **PASS** | conn#3 连续承载两轮完整流（无断连无新建）；三幕（正常流/黑洞收敛/重发成功）复跑通过 |
 
 **Step 8 模拟器侧硬指标验收通过。新增 P0 级发现一项：终止键（running 态发送键）触发 TypeError 且 run 悬死，建议另立卡修复。** T-N9 真机高速模型长流体验验收留用户。

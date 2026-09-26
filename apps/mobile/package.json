@@ -11,7 +11,7 @@
     "lint": "eslint . --max-warnings 321",
     "format:check": "prettier --check .",
     "start": "react-native start",
-    "pretest": "npm run build -w @novel-master/core -w @novel-master/cloud-sync-driver-s3 && npm run build:webview",
+    "pretest": "npm run build -w @novel-master/core -w @novel-master/cloud-sync-driver-s3 -w @novel-master/llm-sse-native && npm run build:webview",
     "build:webview": "node scripts/build-webview.mjs",
     "build:webview:native": "node scripts/build-webview.mjs --copy-native",
     "test": "jest",

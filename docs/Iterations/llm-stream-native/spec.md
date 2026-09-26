@@ -27,7 +27,7 @@ date: 2026-09-25
 ## 总体方案（分层）
 
 ```
-[Kotlin] llm-sse-native：自有 OkHttpClient（读超时/callTimeout/独立池）+ native 合批（100ms | 64KB）+ request（非流式请求-响应，GET/POST）
+[Kotlin] llm-sse-native：自有 OkHttpClient（client 级读超时恒禁用/callTimeout/独立池）+ native 合批（100ms | 64KB 字符）+ request（非流式请求-响应，GET/POST）
     ↓ NativeEventEmitter（合批后 ~10 事件/s）
 [JS wrapper] packages/llm-sse-native JS 面：requestId 匹配 → core port 回调
     ↓ 注册（先例：configureLlmFetch / registerOpSqliteDriver）
@@ -55,11 +55,11 @@ SSE parser（增量，已就绪）→ runner（microtask 合并）→ unit 三�
 
 - **不用 okhttp-sse**：port 纪律是「只搬字节不认协议」——SSE 帧解析留在 core JS（三家 parser 已就绪）；raw `response.body().source()` 读循环即可，零新增依赖。
 - 自有 `OkHttpClient`（独立 `ConnectionPool`；**client 级读超时恒禁用，流式流体不设任何空闲界**——OkHttp readTimeout 从 connect 后首次读即计时，会罩住首字/响应等待；而流式的合法停顿（思考、GLM 工具调用非流段服务端憋生成（`tool_stream` 默认 false）、服务端排队）与死流无法区分，固定阈值必然误杀。唯一自动兜底是 callTimeout 默认 600s 整调用预算（connect + 首字 + 流体全周期），per-request 可覆盖；死流由用户手动终止。非流式 `request` 同享豁免：响应等待仅 callTimeout 兜底。**实施修正记录（2026-09-26 真机验收两轮反馈）**：初版把 readTimeout(30s) 设在 client 级 → 非流式大 prompt 等响应 >30s 超时 × 重试 ≈ 60s 报错（用户实锤）；二版改为「首字豁免 + 流中 30s `source.timeout()` 空闲界」→ 仍被 GLM 工具调用停顿误杀（服务端憋生成期间无任何数据）；终版按产品拍板**去掉全部流式空闲限制**——流式不应有固定空闲时限，见上所述）。
-- **合批**：native 读循环 append 进 StringBuilder 缓冲，100ms 定时器或 64KB 阈值先到者 flush 一次事件；flush 同时携带 `(requestId, text)`。
+- **合批**：native 读循环 append 进 StringBuilder 缓冲，100ms 定时器或 64KB 阈值先到者 flush 一次事件；flush 同时携带 `(requestId, text)`。**口径登记（D8）**：阈值按 **UTF-16 字符**计（`FLUSH_THRESHOLD_CHARS = 64 * 1024`，判定 `state.pending.length`，`LlmSseModule.kt:59,:350`）——即「≈64K 字符」，中文正文字节量约为其 3 倍（≈192KB 字节）；README/文档中「64KB」的表述按本口径读为 64K 字符。
 - Native API 面（对齐 tokenizer 的 NativeModules 模式）：
   - `sseConnect(requestId, url, headersKv[], body, readTimeoutMs, callTimeoutMs)`；`sseAbort(requestId)`
   - `request(method, url, headersKv[], body?, callTimeoutMs) → Promise<{status, contentType, body}>`——非流式请求-响应方法，`method` 取 `"GET" | "POST"`（原草案名 `postJson`，因 `listModels` 为 GET 且无 body，改名 `request` 并补 method 参数）。GET 调用不传 body（三家 `listModels` 均为 `method: "GET"` 经 `fetchJson(fetchFn, url, init)` 发出：`openai.adapter.ts:77` / `gemini.adapter.ts:46` / `anthropic.adapter.ts:85`）；POST 携带 JSON body（`chatNonStream`）。
-  - 事件：`LlmSseHeaders {requestId, status, contentType}` → `LlmSseChunk {requestId, text}`（合批后）→ `LlmSseDone {requestId}` / `LlmSseError {requestId, kind: "network"|"timeout"|"http", message}`
+  - 事件：`LlmSseHeaders {requestId, status, contentType}` → `LlmSseChunk {requestId, text}`（合批后）→ `LlmSseDone {requestId}` / `LlmSseError {requestId, kind: "network"|"timeout"|"http", message}`。**口径登记（D9）**：枚举里的 `kind:"http"` Kotlin 侧**从不主动发射**（native 只在网络/超时两类里归类）——HTTP 层失败由 JS 包装侧**据 `LlmSseHeaders` 携带的 status 归纳**（非 2xx 视为 `http`），枚举保留该值以便 JS 侧统一映射，读 Kotlin 源码时不必找 `"http"` 字面量。
 - JS 包装（~百行）：typed wrapper + `createNativeSseTransport(): SseTransport`。
 - **测试落点与先例（口径修正）**：JS 测试落在新包 `packages/llm-sse-native/test/`——wrapper 纯逻辑直测沿用 `tdbc-driver-rn/test/` 形态（`tsx --test test/**/*.test.ts`，纯逻辑、零原生依赖）；涉及 NativeEventEmitter mock 的集成形态挂 `apps/mobile` jest（`@react-native/jest-preset`，`jest.config.js:9`）。原稿「先例：tokenizer 包测试形态」失实——`tokenizer-driver-rn` 包根无任何 JS 测试文件，撤回该引用。
 - **Kotlin 单测基建不为本期引入（登记）**：合批定时逻辑在 Kotlin 读循环内，`fake timer` 是 JS 概念够不到该层；现有三包中 `tdbc-driver-rn` 为纯 JS 包无 android 模块、`sksp-android` 无 `src/test`，`tokenizer-driver-rn` 的 android 模块虽带 `src/test` Kotlin 测试与 junit 依赖（`build.gradle:43-46`）但未挂载任何脚本/CI（`release.yml:128-129` 仅跑 `:app:assembleRelease`，包 `package.json` 无 gradle test 任务）。llm-sse-native 的 Kotlin 侧正确性本期以 wrapper 级 JS 测试 + Step 7/8 manual 核验覆盖（合批事件率等精度指标归 T-N8/验收），Kotlin 单测基建如需另立。
@@ -76,7 +76,7 @@ SSE parser（增量，已就绪）→ runner（microtask 合并）→ unit 三�
   ```
   （`postSse` 的第五参 `options.fetchFn` 不进 port——port 自带传输；providerId/signal/logTag 语义与现 `PostSseOptions` 一致。）
 - `registerSseTransport(transport)` + 模块级持有；`postSse` 择优：registered native → XHR → fetch，**逐请求运行时判定**（每次调用时检查注册位，非进程启动时定死——native 未注册/加载失败时同进程内自动回落 XHR，这是第 7 节条件化撤除 close 的前提）。
-- **watchdog / 整调用超时上移的重构边界（一句话）**：⑤ 回炉版把 watchdog、whole-call 定时器、`rejectOnce` settle 守卫分别内嵌在 XHR 分支（`createStreamWatchdog` 装配 / `xhr.timeout = SSE_WHOLE_CALL_TIMEOUT_MS` / `Connection: close`）与 fetch 分支（controller + whole-call `setTimeout`）里，两份时序逻辑同构重复；本迭代将其**上移到 `postSse` 公共层**（三分支共用同一 watchdog 实例与 settle 守卫，分支内只留传输专属清理——XHR abort / fetch reader.cancel / native sseAbort）。既有 T-T 系列用例（依赖迭代 `llm-stream-timeout` spec 的 T-T1~T-T9，含 watchdog 原语级与双分支集成级）随上移迁至 port 公共层测试，断言语义不变，并为 native 分支补同一套时序用例；native 分支的 callTimeout 传 `SSE_WHOLE_CALL_TIMEOUT_MS`，ontimeout 语义由 native `LlmSseError(kind:"timeout")` 承接并映射同一 `LlmStreamTimeoutError` 分级（`processedLength>0 → idle`）。
+- **settle 守卫上移的重构边界（一句话）**：⑤ 回炉版把 watchdog、whole-call 定时器、`rejectOnce` settle 守卫分别内嵌在 XHR 分支（`createStreamWatchdog` 装配 / `xhr.timeout = SSE_WHOLE_CALL_TIMEOUT_MS` / `Connection: close`）与 fetch 分支（controller + whole-call `setTimeout`）里，两份时序逻辑同构重复；本迭代把 **settle 守卫与 whole-call 定时器上移到 `postSse` 公共层**（三分支共用同一守卫，分支内只留传输专属清理——XHR abort / fetch reader.cancel / native sseAbort）。**watchdog 不在上移面内**：⑤ 终版已按产品拍板整体退役（`stream-watchdog.ts` 原语与导出保留但无接入方，见 §2 实施修正记录与 `docs/apm/RULE.md:85`），本迭代不装配、不实例化，只保留其原语级单测。既有 T-T 系列用例（依赖迭代 `llm-stream-timeout` spec 的 T-T1~T-T9，含 watchdog 原语级与双分支集成级）随上移迁至 port 公共层测试，断言语义不变（watchdog 接入方断言按退役删除），并为 native 分支补同一套时序用例；native 分支的 callTimeout 传 `SSE_WHOLE_CALL_TIMEOUT_MS`，ontimeout 语义由 native `LlmSseError(kind:"timeout")` 承接并映射同一 `LlmStreamTimeoutError` 分级（`processedLength>0 → idle`）。
 - mobile 装配：runtime 初始化处注册（与驱动注册同址）；desktop/CLI 不注册、零变化。
 - 测试：`setSseTransportOverrideForTests` 强制位（沿用 XHR override 模式），假 port 跑全量传输语义测试。
 
@@ -100,19 +100,20 @@ parser 三家不动（已数组化）；`streamTextAccumRef`（RN 侧全量累�
 
 ### 6. 渲染块级化（richText 病灶根治）
 
-- **协议扩展**（`ChatTranscriptBridge.ts`）：新增 `streamBlockCommit {kind, html}`——某 markdown 块完成时由 RN 渲染一次并下发；`streamDelta/streamBatch` 保留但 `html` 字段**只在活跃尾块范围内**（不再全量）。
+- **协议扩展**（`ChatTranscriptBridge.ts:169-186`）：新增 `streamBlockCommit {kind, html?, text, tailHtml?, tailText}`——某 markdown 块完成时由 RN 渲染一次并下发（`kind` 取 `'text' | 'thinking'`；`html` 为完成块 HTML，单块超限降级纯文本时缺失；`text` 为完成块源文本；`tailHtml`/`tailText` 为块提交后活跃尾块的 HTML/源文本，按 C-orch-1 仅每 kind 每次切分的**最后一个** commit 携带、中间 commit 缺省）；`streamDelta/streamBatch` 保留但 `html` 字段**只在活跃尾块范围内**（不再全量）。
 - **RN 侧**：`prepareStreamTailHtml` 改造为块感知——维护「已提交块游标」，每帧只对活跃尾块跑 markdown-it；块边界判定（空行/代码块闭合/表格闭合）收敛为纯函数可单测。全量渲染仅发生在 `streamCommit`（收尾兜底）。
 - **webview 侧**：`applyTrustedHtml` 的整段替换退役为「块提交 append」（`insertAdjacentHTML` 到 body 容器尾）；活跃块维持现有纯文本增量 append + 350ms 轻量 markdown 升级（已就绪，`stream-markdown.ts`）。已完成消息零重渲（现有增量岛机制不变，`stream.ts:14-17` 注释约束继续有效）。
 - `streaming-markdown`（thetarnav，3kB gzip）登记为**备选**：现有自研轻量 markdown + 块提交模式已覆盖其核心价值；仅当块判定/尾块渲染实现遇阻时评估引入（须过 es2018/无 lookbehind 约束）。
 - **超限判定块级化语义（与既有 `RICH_CONTENT_MAX_CHARS` 的交互）**：现状 `prepareStreamTailHtml` 对**全量累积文本**判定超限（`isRichContentOverLimit`：`content.length > 12_000`，`rich-content-limits.ts:2/:13`；超限返回 `undefined` 整体降级纯文本，`prepare-stream-tail-html.ts:13`）。若块级化后维持全量判定，AC-2 的 10 万字场景在累计越过 12k 那一刻起全程纯文本——块级 rich 改造对主场景不生效。因此超限判定改为**按块**：流中每帧只对活跃尾块判定（`prepareStreamTailHtml` 的输入从全量累积改为活跃块文本），**单块超限仅该块降级纯文本**，已提交块的 html 不受影响；块边界（空行/代码块/表格闭合）天然限制单块长度，正常块远低于 12k，无空行超长段落整块降级可接受。一致性口径：
   - `streamCommit` 收尾：payload 仍是 `{rows, scrollIntent}`（`ChatTranscriptWebView.tsx:865-869`），终态行经 snapshot/append 管线按**历史路径**渲染；
-  - 历史路径**全量 12k 语义同步不改**（`MessageList.tsx:109` 与 snapshot 路径共用 `isRichContentOverLimit` 全量判定）：10 万字终态行整体降级纯文本——避免终态（冷启动/翻页/回读）一次性 10 万字 markdown 渲染成本，且历史路径零改动；流中已渲染块由 webview 增量岛保护（已完成消息零重渲，`stream.ts:14-17` 约束），收尾不发生「rich 回退纯文本」的视觉跳变；
-  - 换言之：**流中按块判定（主场景 rich 生效），终态重渲路径维持全量降级既有语义**——两条判定共存，改面收敛在流式链路内。
+  - **实现形态修正（2026-09-26 CR 核对，原描述与实现不符）**：终态/历史路径的「全量 12k 降级」**没有落到 webview 侧**——webview 的 snapshot / `streamCommit` 历史路径不含任何 12k 判定（`apps/mobile/src/web` 全文无 `isRichContentOverLimit`），10 万字终态行在 webview 内**仍按 rich 渲染**。`isRichContentOverLimit` 的全量判定实际只作用于 RN 侧 rich 渲染分支（`MessageList.tsx:109`、`RichContentBody.tsx:22`、`ThinkingBlockCard.tsx:45`），即 **legacy RN 消息列表路径**（转录引擎开关见 `storage/chat-transcript-engine.ts`；webview 转录为默认路径，不经该判定）。故「10 万字终态行整体降级纯文本」**不是现状**：实际形态是「流中按块判定 + 终态仍 rich」——收益是终态没有「rich 回退纯文本」的降级跳变、用户回读长文仍见富文本；代价是终态冷启动/翻页时 10 万字仍要付一次 markdown 渲染成本，由 webview 快照分片与增量岛缓解（Step 8 AC-2 实测 10 万字 +58MB PSS、无卡顿）；
+  - 换言之：**流中按块判定（主场景 rich 生效）；终态/历史路径维持 rich、原「全量 12k 降级」设计意图未实现**——本段以修正后的实现形态为准。若后续要把终态降级补齐（控制冷启动/翻页的大文本渲染成本），属独立优化项、不在本迭代改面。
 - mermaid/批注兼容：块提交 html 走既有 `prepareTranscriptRichHtml` 同一 sanitize 管线，mermaid 懒加载与批注锚点语义不变（`mermaid-core.ts` 只在 commit/历史路径触发，现状保持）。
 
 ### 7. 过渡态回收（`Connection: close` 条件化撤除）
 
 - **撤除形态是条件化的，不是全局删除**：`postSse` 逐请求运行时判定传输分支（第 3 节）——本次请求实际走 native 分支时不设 `Connection: close`（native 管子黑洞由 callTimeout 600s 整调用预算单层兜底）；运行时判定 **native transport 未注册/加载失败回落 XHR 时仍设 close**。理由：XHR 分支首字与流中黑洞的唯一兜底是 `xhr.timeout = SSE_WHOLE_CALL_TIMEOUT_MS`（600s）（流空闲看门狗已按产品拍板退役，见 §2 实施修正记录）——若无 close 头，「高速流后死连接复用」黑洞会以 **10 分钟形态**回归，比过渡态前的永久挂起更隐蔽。close 头的设置从 XHR 分支无条件语句改为「XHR 分支且 native 未注册」条件语句。
+- **首字黑洞的自动收敛上限（终版口径，2026-09-26 拍板）**：流式已不设任何空闲界，所以一次请求的最坏等待 = **单次 callTimeout 600s × 重试次数（maxRetries: 2 → 最多 3 次尝试）≈ 30 分钟**（叠加退避后略多于 30 分钟）。这是「放着不管也不会永远挂」的确定性下界，不是快速响应机制；**产品口径以手动终止为快速路径**——提示用户「要提前结束随时点停止」，自动兜底只保底不体验。Step 7/8 报告里「30s 读超时 / 90s 收敛」的读数是初版语义留档（两报告文首已加留档注），不能当终版现状引用。
 - 前置条件与回归实验（模拟器）：native 分支默认启用 + 整调用 callTimeout 生效后，跑两组实验——native 注册路径：r1/r2 健康复用恢复（服务端日志同连接多请求）+ 死连接实验（杀服务器再发）在收敛窗口内收敛为可重试错误、无永久黑洞（实验于 2026-09-25 完成，当时读数超时 30s 窗口；空闲界退役后收敛窗口为 callTimeout，语义不变）；回落路径（注销 native 模拟未注册）：请求头仍带 close（T-N3 断言），死连接场景由 close + xhr.timeout 兜底不回归。任一不过则整体保留 close 并登记。
 
 ## 最终项目结构
@@ -147,10 +148,10 @@ apps/mobile/src/services/                                  # native 装配 + fet
 
 - Step 1 — eval-gate — blocking: yes — qa: manual_agent + auto：mattermost PoC（模拟器 + mock：SSE POST/chunk 事件/abort/版本冲突核验）→ decision.md；不过即自建。
 - Step 2 — native-module — blocking: yes — qa: auto：Kotlin 模块 + JS 包装（合批/超时/abort/request(GET/POST)）+ mock 直测（包内 test/ + apps/mobile jest）。
-- Step 3 — core-port — blocking: yes — qa: auto：SseTransport port + 三分支 + watchdog/whole-call 上移 + 超时分级映射 + 假 port 全量传输测试。
+- Step 3 — core-port — blocking: yes — qa: auto：SseTransport port + 三分支 + settle 守卫/whole-call 上移（watchdog 不装配，已退役）+ 超时分级映射 + 假 port 全量传输测试。
 - Step 4 — mobile-wiring — blocking: yes — qa: auto：装配注册（native transport + fetch shim 生产注册、__DEV__ logging 最外层）+ 非流式超时收敛测试。
 - Step 5 — accumulation — blocking: yes — qa: auto：registry/unit 数组化 + 物化点测试（大文本基准：10 万字符模拟流，断言无 O(n²) 时间曲线）。
-- Step 6 — block-render — blocking: yes — qa: auto：block-split 纯函数单测 + webview jest（提交块 append/活跃块升级/mermaid 不回归）+ 双端手查。
+- Step 6 — block-render — blocking: yes — qa: auto：block-split 纯函数单测 + webview jest（提交块 append/活跃块升级/mermaid 不回归）+ 双端手查。**收窄登记（D7）**：块级渲染改造面**仅移动端**——桌面端转录不使用本迭代的 webview 块提交协议，其渲染路径不在改造面内，故本条「双端手查」的实际证据只有移动端（Step 8 报告同）；桌面端零行为变化由「不注册即回落」保证，非本步验收项。
 - Step 7 — pool-restore — blocking: yes — qa: manual_agent：`Connection: close` 条件化撤除 + 复用/死连接双路径回归实验（模拟器：native 注册路径 + 未注册回落 XHR 路径）。
 - Step 8 — e2e-hard-gates — blocking: no — qa: manual_user + manual_agent：AC-1~AC-5 硬指标验收（mock-fast 12000 丝滑 / 10 万字长文 / mock-dead 收敛 / 复用回归）+ CHANGELOG。
 
@@ -161,7 +162,7 @@ apps/mobile/src/services/                                  # native 装配 + fet
 - T-N3 — blocking — port 三分支：registered > XHR > fetch 择优；未注册平台零变化（现有 XHR/fetch 测试全绿即证）；**条件化撤除断言**——native 分支请求不带 `Connection: close`；注销 native（模拟未注册/加载失败）回落 XHR 时该头**保留**（首字黑洞仍由 close + `xhr.timeout` 兜底，见 §7）。
 - T-N4 — blocking — fetch shim：非流式请求经 native `request` 底座获得 callTimeout；GET 分发（listModels 无 body）与 POST 分发各一例；服务端死亡场景有限收敛；shim 被流式误用时命中 Empty body 防御抛错（§4 边界）。
 - T-N5 — blocking — 累积数组化：registry/unit 读数正确；10 万字符模拟流的耗时曲线线性断言（性能护栏测试）。
-- T-N6 — blocking — block-split 纯函数：段落/代码块/表格边界判定用例集（含未闭合语法）；**超限判定按块**——单块 >12k 仅该块 html 降级（undefined）、已提交块不受影响；<12k 多块流各块均 rich；终态/历史行全量 >12k 仍整体降级（既有语义回归断言）。
+- T-N6 — blocking — block-split 纯函数：段落/代码块/表格边界判定用例集（含未闭合语法）；**超限判定按块**——单块 >12k 仅该块 html 降级（undefined）、已提交块不受影响；<12k 多块流各块均 rich；**终态/历史路径的 12k 语义按修正后的实现形态断言**——webview snapshot/`streamCommit` 历史路径无 12k 判定（10 万字终态行仍 rich），全量 12k 降级只在 RN legacy `MessageList`/`RichContentBody` 渲染分支成立（见 §6 实现形态修正）。
 - T-N7 — blocking — webview：块提交只 append 不重渲已完成块；活跃块 350ms 升级不破坏增量岛；mermaid 懒加载仍只在 commit 触发。
 - T-N8 — blocking — e2e 三幕复跑 + 硬指标（AC-1/2/4）；native 合批精度 manual 核验：mock-fast 高速流下事件率观测（合批后 ~10 事件/s 量级，T-N1 不在 JS 侧断言的部分在此收口）。
 - T-N9 — manual_user：真机高速模型长流体验验收。

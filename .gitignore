@@ -21,6 +21,15 @@ DerivedData/
 # React Native
 *.jsbundle
 
+# Android 构建产物：RN 打包 bundle 与 autolink 自动拷贝进 res 的第三方资源
+# （index.android.bundle / node_modules 图标拷贝 / keep.xml 均为构建生成，勿入库）
+apps/mobile/android/app/src/main/assets/index.android.bundle
+apps/mobile/android/app/src/main/res/drawable-mdpi/
+apps/mobile/android/app/src/main/res/drawable-xhdpi/
+apps/mobile/android/app/src/main/res/drawable-xxhdpi/
+apps/mobile/android/app/src/main/res/drawable-xxxhdpi/
+apps/mobile/android/app/src/main/res/raw/keep.xml
+
 # Electron
 **/out/
 **/release/

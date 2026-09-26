@@ -45,14 +45,17 @@ step done（无论协议）：runner 把该步 LlmChatResult.usage 并入 run �
 ### 3. token 计数与兜底（双端各落地）
 
 - **mobile**（unit 投影链）：`SessionStreamUnitMetrics` 增 `completionTokens: number` 与 `tokenSource: "usage" | "heuristic"`；`ingestDelta` 时 heuristic **按累计字符长度取 ceil**（`ceil(totalChars / 3.35)`，复用 `CHARACTERS_PER_TOKEN_RATIO` 常量导出；与 `HeuristicTokenCounter.countText` 单次全量计数严格一致——逐 delta 浮点累加 `len/3.35` 再取整与全量 ceil 不等价，故统一为对累计长度取 ceil 的口径）；`ingestUsage`（新）到达时覆盖累计值、置 `source=usage`。openai 流中零 usage 事件段由 heuristic 撑显示，step done 后 runner 补发的 run 级终值事件经**同一 `ingestUsage` 管线**到达、覆盖 heuristic（校正链闭环不依赖 FINISHED）。`run_state` 持久化增 token 字段，`hydrateFromRunState` 恢复（中断现场 token 不归零）。
+  - **usage 到达后 heuristic 不再回写（语义补注）**：`tokenSource` 翻为 `usage` 后，后续 delta 的 heuristic 折算**不覆盖**已到达的真值（实现为 `if (tokenSource === 'heuristic')` 才写，防估算抖动把真值回退）。**多 step 流后果（已知、接受）**：run 级累计是「已 done 各 step 的 usage 之和」，本 step 正在流式输出的增量在 usage 事件到达前**没有对应的回写通道**——于是同一 step 内数字会停在上一条 usage 事件的累计值不动（看起来「僵住」）；若该 step 全程不再发 usage，数字到该 step done 前的补发才跳正。速率侧：数字停止增长期间样本不再增加，滑窗把不再变化的样本按时间淘汰后**速率段可能消失**（样本不足 → 省略速率段），到下一次 usage 跳变才重新出现。跨 step 时旧样本仍在窗口内，速率可能呈现长窗平均而非当前 step 的瞬时值。改「usage 基线 + 增量偏移」需重新设计采样与落库，超出本轮修复面（见「风险与回滚方案」）。
 - **desktop**（hook 链）：`useAgentStream` 处理新 IPC 事件（节流 ~250ms 与现有 metrics 旁路对齐）→ `useAgentStreamMetrics` acc 增 token 字段，同款 heuristic（按累计字符取 ceil）/usage 逻辑（与 mobile unit 语义一致，含 openai done 补发校正）。
 - 顺带收口：mobile `useAgentStreamMetrics` 旧 hook 的无调用方死代码（`noteTextDelta` 系列）移除；保留清单——`toAgentStreamMetricsView`、被复用的类型，以及 `buildChatStreamMetricsLine`（`ChatStreamMetricsBar.tsx:6-9` 在用，**须保留**）。
 
 ### 4. 速率与文案（core 共用）
 
 - **实时速率**：core 新纯函数 `slidingTokenRate(samples: Array<{tMs, tokens}>, nowMs, windowMs = 2500)`——取窗口内首尾样本差分 ÷ 时长；样本不足两端时用可用段；窗口外样本淘汰。落点 `domain/format/`（双端可用，纯函数可直测）。选用时间窗口制而非事件 EWMA：慢速流（5 t/s，delta 稀疏）按事件更新会长时间冻结显示（探索结论）。
+- **采样器共用封装（语义补注）**：采样序列与 seed/校正重置封在 core 的**单例工厂** `createTokenRateSampler()`（`domain/format/sliding-token-rate.ts`，与 `slidingTokenRate` 同文件导出、经 `@novel-master/core/format` 对双端开放）——双端各自 `createTokenRateSampler()` 各持一份实例（mobile 在 session stream unit 字段、desktop 在 `useAgentStreamMetrics` 的 ref），语义与实现单一来源；消费方只调 `begin()` / `note(tMs, tokens)` / `rateAt(nowMs)` / `freeze()`，不自行拼样本数组，避免两端口径漂移。
 - **usage 校正点**：heuristic→usage 覆盖瞬间累计值跳变，速率窗口重置（样本序列清空重 seed），避免一次巨大差分污染速率。
-- **文案**：`format-stream-metrics-line.ts` 改「{prefix} · {elapsed} · 输出 {N} t · {rate} t/s」；正文/思考合并不再分列（思考期在 anthropic/gemini 下 usage 已含、heuristic 下随正文一并累计字符按 ceil 口径折算，天然并入输出）。t/s 数字格式对齐 `formatTokensPerSecond` 惯例（≥100 整数、否则 1 位小数）；token 数用 toLocaleString 千分位。`thinkingChars > 0` 的条件分列逻辑删除。
+- **文案**：`format-stream-metrics-line.ts` 改「{prefix} · {elapsed} · 输出 {N} t · {rate} t/s」；正文/思考合并不再分列（思考期在 anthropic/gemini 下 usage 已含、heuristic 下随正文一并累计字符按 ceil 口径折算，天然并入输出）。t/s 数字格式对齐 `formatTokensPerSecond` 惯例（≥100 整数、否则 1 位小数；**整数值不带尾随 `.0`**——即 `45` 而非 `45.0`，与 T-M8 例文「45 t/s」一致；实现取 `parseFloat(rate.toFixed(1))` 消尾零）；token 数用 toLocaleString 千分位。`thinkingChars > 0` 的条件分列逻辑删除。
+  - 口径澄清（消 T-M8 矛盾）：原稿「否则 1 位小数」是「保留一位」的意思，**不是「不省略尾随 .0」**——44.96 → `45`、96.7 → `96.7`、99.94 → `99.9`、100.4 → `100`。T-M8 例文「输出 1,234 t · 45 t/s」与「输出 12,000 t · 96.7 t/s」均按此口径，二者不互斥。
 - 流中速率显示条件：样本 ≥2 且窗口有时长；否则只显示「输出 N t」（避免除零/首秒抖动）。
 - **冻结末值速率（「上次生成」也带速率段）**：速率是纯渲染期派生值——冻结态要显示它，必须在收尾时**把末值冻下来**，而不是等显示时重算（重算只会得到「停顿后衰减到 0」的假值）。做法：
   - 采样器加两个读口：`rateAt(nowMs)`（只读、不记样本；实时渲染节拍用，暂停期随 nowMs 衰减）与 `freeze()`（**窗口以最后一个样本时刻收尾**——收尾前的停顿不拉低它；样本不足以成窗口时回落到校正翻转前的末值，覆盖 openai「真值只在收尾到达、翻转后再无第二个样本」的形态）。
@@ -60,7 +63,7 @@ step done（无论协议）：runner 把该步 LlmChatResult.usage 并入 run �
   - 收尾落库：运行结束把末值写 **session KKV**（域 `stream_metrics`、键 `finalRate`；值 JSON `{rate, tokens, atMs}`，编解码在 `domain/format/stream-final-rate.ts`）。选 KKV 而非 `run_state` 加列——这是展示派生值，缺失即省略速率段，不需要 DDL/align/BOOT_VERSION 三件套，也不受置位/压缩的 `clearDomain` 影响（session 删除走 `clearSession` 一并清）。
   - 读取：会话内直接随 settled 投影冻结；**跨重启**由 mobile 水合 settled 行时读回 KKV 拼进投影；desktop 的「上次生成」本就仅会话内内存（未做 run_state 持久化），冻结值同域。
   - 缺值（旧数据、KV 行缺失、解析失败、样本不足）= 省略速率段，不兜底造数。
-- **覆盖范围（主会话 / 子会话同源）**：`task` 派生的子会话 run 由 manager 的**消费型单元**承接同一批事件（RUN_STARTED 到达时 lazy 建立），因此指标、速率采样与收尾冻结走的是同一套代码；mobile 子会话屏（`SubagentSessionScreen`）直接复用主会话的指标条组件，活跃期显示实时值、终态显示冻结值。差异只在持久化面：消费型 run **不写 `run_state`、不落 session KKV**（子会话没有持久层行，跨重启也没有读回路径，落库只会留无人读的行），故其冻结指标仅会话内（内存级 settled 投影）可见——重启后子会话不显示「上次生成」，主会话不受影响。desktop 端子会话面板复用同一 `ConversationPanel`，指标条天然覆盖。
+- **覆盖范围（主会话 / 子会话同源）**：`task` 派生的子会话 run 由 manager 的**消费型单元**承接同一批事件（RUN_STARTED 到达时 lazy 建立），因此指标、速率采样与收尾冻结走的是同一套代码；mobile 子会话屏（`SubagentSessionScreen`）直接复用主会话的指标条组件，活跃期显示实时值、终态显示冻结值。差异只在持久化面：消费型 run **不写 `run_state`、不落 session KKV**（子会话没有持久层行，跨重启也没有读回路径，落库只会留无人读的行），故其冻结指标仅会话内（内存级 settled 投影）可见——重启后子会话不显示「上次生成」，主会话不受影响。desktop 端子会话面板复用同一 `ConversationPanel`，指标条天然覆盖——**覆盖范围收窄登记（D10）：仅活跃 run 期**。子 run 运行中与主会话同构给实时指标；run 结束后是否显示「上次生成 · 冻结速率」取决于该面板的内存态是否仍在（desktop 不写 `stream_metrics` KKV、子会话无 run_state 行），故**不承诺终态持久覆盖**——重启或会话态丢失后 desktop 子会话不再有 settled 行，这是双端持久化不对称（Q10）的一部分，本轮接受。
 
 ## 最终项目结构
 
@@ -121,7 +124,7 @@ apps/desktop/
 - T-M5 — blocking: yes — mobile unit：usage 事件覆盖 heuristic 累计、source 翻转；step 边界不清零（run 级）；**openai 场景**——流中零 usage 事件段 heuristic 撑显示、step done 后收到 runner 补发的终值校正事件、覆盖 heuristic 跳正（映射 Step 3）
 - T-M6 — blocking: yes — run_state 持久化与水合：中断现场恢复 token 数与 source；legacy 库 align 后新列缺省回退（映射 Step 3）
 - T-M7 — blocking: yes — heuristic 口径：按累计字符长度取 ceil（`ceil(totalLen/3.35)`），逐 delta 更新与 `HeuristicTokenCounter.countText` 单次全量计数严格一致（映射 Step 3）
-- T-M8 — blocking: yes — 文案快照：「生成中 · 12.3s · 输出 1,234 t · 45 t/s」双端一致；**冻结态带末值速率**（「上次生成 · 39.2s · 输出 12,000 t · 96.7 t/s」——收尾末值快照，非衰减值）；无样本（旧数据/KV 行缺失/样本不足）才省略速率段（映射 Step 5 与「冻结末值速率」小节）
+- T-M8 — blocking: yes — 文案快照：「生成中 · 12.3s · 输出 1,234 t · 45 t/s」双端一致（t/s **整数值不带尾随 .0**，即例文为 `45` 而非 `45.0`；48.2→`48.2`、100.4→`100`，见第 4 节文案口径）；**冻结态带末值速率**（「上次生成 · 39.2s · 输出 12,000 t · 96.7 t/s」——收尾末值快照，非衰减值）；无样本（旧数据/KV 行缺失/样本不足）才省略速率段（映射 Step 5 与「冻结末值速率」小节）
 - T-M9 — blocking: yes — 滑窗速率：fake timers 推进下 200 t/s 与 5 t/s 场景数值稳定；输出暂停 3s 后速率趋零；恢复回升（映射 Step 5）
 - T-M10 — blocking: yes — 校正重置：heuristic→usage 覆盖瞬间滑窗重 seed、速率无尖刺（映射 Step 5）
 - T-M11 — blocking: yes — 旧 hook 死代码移除后 mobile 全量绿（映射 Step 5）
@@ -131,6 +134,7 @@ apps/desktop/
 - **openai 三方网关不给 usage**：heuristic 全程撑住显示，终值也不校正（无真值）——接受（显示层估算）；指标条不标注来源（避免文案抖动），真值差异由统计页（落库 usage）承载。
 - **heuristic 中文低估**：中文约 1.5~2 字/token，len/3.35 低估约半——usage 到达即校正；纯 openai 网关场景接受估算误差（用户已拍板 tokenizer 兜底口径）。
 - **事件风暴**（gemini 每块 emit）：上层 32ms/250ms 合批节流吸收；事件总线 publish 本就是 microtask 合批（wrapStreamForBus 既有）。
+- **usage 到达后 heuristic 不回写 → 多 step 流数字停在上一 step 终值**（已知、接受）：`tokenSource` 翻 `usage` 后不再接受 heuristic 覆盖，本 step 的流式增量在 usage 事件到达前没有回写通道——同 step 内数字可能停留不动，速率因样本不再增长、被窗口淘汰而**可能整段消失**，跨 step 时速率呈长窗平均。改「usage 基线 + 增量偏移」需重新设计采样与落库，超出本轮修复面；显示层接受现状（真值仍由统计页/落库承载）。
 - **run_state 加列**：session_run_state 为**具体列存储**（`bootstrap/session-run-state/session-run-state-schema.ts`：`text_chars`/`thinking_chars` INTEGER 等具体列，非 KKV/JSON）。token 字段（`completion_tokens INTEGER`、`token_source TEXT`）为加列，走 `SCHEMA_COLUMN_ALIGNMENTS` + `SCHEMA_BOOT_VERSION` bump 三件套纪律（canonical DDL 更新 + align 条目 + 版本 bump）。旧库 align 后新列取缺省（0 / `'heuristic'`），水合回退按 0 t 起算。**撞号注记**：与 message-content-compression 迭代同期 bump（该 spec 同样不写死号：写作基线 15、以主干现值 +1 顺延）——本 spec 不写死具体号，以主干 `SCHEMA_BOOT_VERSION` 现值 +1 为准；两迭代先后合并入主干时顺延（先合者 +1、后合者对合并后的现值再 +1），bump 落地前以主干实际值为准核对一次。
 - **回滚方案**：分层独立可 revert；文案层单独回退即恢复旧显示；事件新增不破坏既有消费方（未订阅者无感）。
 

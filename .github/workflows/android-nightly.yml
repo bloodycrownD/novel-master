@@ -50,7 +50,7 @@ jobs:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
-          key: ${{ runner.os }}-gradle-${{ hashFiles('apps/mobile/android/**/*.gradle*', 'apps/mobile/android/gradle/wrapper/gradle-wrapper.properties', 'packages/sksp-android/android/**/*.gradle*') }}
+          key: ${{ runner.os }}-gradle-${{ hashFiles('apps/mobile/android/**/*.gradle*', 'apps/mobile/android/gradle/wrapper/gradle-wrapper.properties', 'packages/sksp-android/android/**/*.gradle*', 'packages/llm-sse-native/android/**/*.gradle*') }}
           restore-keys: |
             ${{ runner.os }}-gradle-
 
@@ -61,7 +61,7 @@ jobs:
         run: |
           npm run build -w @novel-master/core
           npm run build -w @novel-master/cloud-sync-driver-s3
-          npm run build -w @novel-master/sksp-android -w @novel-master/tdbc-driver-rn -w @novel-master/tokenizer-driver-rn
+          npm run build -w @novel-master/llm-sse-native -w @novel-master/sksp-android -w @novel-master/tdbc-driver-rn -w @novel-master/tokenizer-driver-rn
           # dist gitignore，CI 须逐包构建；漏列会让 metro 解析 exports（./native → dist/native.js）失败
           npm run build -w @novel-master/tdbc-driver-op-sqlite
 

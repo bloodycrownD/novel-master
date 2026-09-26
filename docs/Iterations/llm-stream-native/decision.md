@@ -32,4 +32,6 @@
 
 ## 结论
 
-三项否决独立成立任一即出局，现核心增量事件流与依赖冲突两项同时实锤。自建面按 spec §2：自有 OkHttpClient（独立池 + 读超时 30s/callTimeout 600s per-request 可覆盖）+ `response.body().source()` 读循环 + 100ms|64KB 合批 + `sseConnect/sseAbort/request(GET|POST)` API 面——买入候选中值得借鉴的点（per-request 超时、bridgeless 适配）在自建里只是少量样板代码。
+三项否决独立成立任一即出局，现核心增量事件流与依赖冲突两项同时实锤。自建面按 spec §2：自有 OkHttpClient（独立池 + **client 级读超时恒禁用**/callTimeout 600s per-request 可覆盖）+ `response.body().source()` 读循环 + 100ms|64KB（字符口径）合批 + `sseConnect/sseAbort/request(GET|POST)` API 面——买入候选中值得借鉴的点（per-request 超时、bridgeless 适配）在自建里只是少量样板代码。
+
+> **终版口径修订（2026-09-26）**：本决策记录写作时的「读超时 30s」已在实施中被废止——真机两轮实锤（非流式大 prompt 等待被 30s 误杀、GLM 工具调用憋生成被流中 30s 误杀），终版按产品拍板**流式不设任何固定空闲界**（client 级 readTimeout 恒禁用；Kotlin `readTimeoutMs` 参数仅保留 JS 接口兼容与防御性错误文案位），唯一自动兜底是 callTimeout 600s 整调用预算，死流由用户手动终止。否决理由与自建选型结论不受影响，详见 ⑥ `spec.md` §2 实施修正记录与 `docs/apm/RULE.md:85`。
