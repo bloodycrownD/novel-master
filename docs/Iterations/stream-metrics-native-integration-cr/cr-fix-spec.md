@@ -4,7 +4,7 @@
 
 - repo：novel-master（worktree：`.worktree/i-stream-metrics-native`；branch：`integration/stream-metrics-native`）
 - base_sha：`0e4c2251`
-- head_sha：`7a63a779`
+- head_sha：`7a63a779`（CR 基线）→ 修复完成后 HEAD：`7b7e1175`
 - prd_path（④=stream-metrics-tokens，⑤=llm-stream-timeout，⑥=llm-stream-native）：
   - `docs/Iterations/llm-stream-native/prd.md`（⑥）
   - `docs/Iterations/mobile-perf-2026-09/features/stream-metrics-tokens/prd.md`（④）
@@ -15,7 +15,7 @@
   - `docs/Iterations/mobile-perf-2026-09/features/llm-stream-timeout/spec.md`（⑤）
 - review_round：2
 - dag_version：2
-- 状态：draft
+- 状态：**已执行**（code-dev-loop 于 2026-09-26 执行完毕，代码面 dev-ready；剩余「需用户确认」项见文末「执行记录」）
 
 > 本文件由 code-review-loop（round 1 的 7 个 scope 评审 + round 2 delta 小修）产出，仅登记修复方案与验收要求，不含实现代码改动；round 2 新增 `native-sse/docs-1`、`full/F-2`、`core-metrics/B-4` 三条，并完成勘误与补注。
 
@@ -563,3 +563,13 @@
 
 - 合并前逐项：mock 改动处置（`spec/K-2`）、未跟踪构建产物排除（`spec/K-6`）、SCHEMA_BOOT_VERSION 顺延核对（`core-metrics/B-3`）、CHANGELOG ④ 条目（`spec/K-1`）。
 - 建议一次 lint/format 过场与 `npm run build --workspaces`（本 skill 不跑，由下游执行）。
+
+## 执行记录（code-dev-loop，2026-09-26）
+
+- **dag_version 3 / wave**：wave-1 八个 impl 节点并行（core 格式层、core 传输层、原生管包、mobile 指标链、mobile 渲染、desktop、mobile shim 装配、文档交付面）→ 主代理按节点分组统一提交（避免并发写 index.lock）→ wave-2 统一构建（workspaces + webview）→ wave-3 四路 verify → wave-4 三个 readonly cr-func → 尾项 fix + 合并式 verify/cr-func delta 复核。
+- **提交**：`682142df`(core 格式) `32a092cb`(core 传输) `1813768b`(原生包) `ac33eb8d`(mobile 指标) `c86c0567`(mobile 渲染) `5b6223df`(shim/装配) `4fb63172`(desktop) `dd4b2a25`(mock 入库) `aa55b8e2`(文档/交付面) `7b7e1175`(cr-func 尾项) → HEAD `7b7e1175`。
+- **默认口径（用户未逐条拍板，按本文件建议执行，可回退）**：`spec/A-1` 走 (b) 历史留档 + CHANGELOG「单次 10 分钟，自动重试后极端约半小时」；`native-sse/shim-1` 取最小改法（AbortError 快速收敛，连接不真断）；`mobile-render/B-2` 能力协商用 `capabilities` 数组；`D8` 采「登记 64K 字符口径」。
+- **验证**：core 定向 113 例 + 全量嵌套面抽跑全绿、typecheck 干净；llm-sse-native 包 25 例 + tsc + eslint 全绿；mobile 定向 23 套件 283 例（cr-func 复跑 27 套件 319 例）+ tsc 全绿；desktop 14 例全绿、renderer tsc 349（基线 351，净减 2 无新增）；**Kotlin `:novel-master_llm-sse-native:compileDebugKotlin` BUILD SUCCESSFUL**（产物物证 `build/tmp/kotlin-classes/debug/.../LlmSseModule.class` 16:12）。
+- **cr-func 结论**：cr-func-core-native / cr-func-mobile / cr-func-desktop-docs 均 **func-ready: yes**；cr-func-delta **func-ready: yes**。
+- **需用户确认（不阻塞代码面）**：`D4`（AC-3 非流式死亡收敛未实测，T-N4 代偿）、`D5`（T-N8 事件率无打点，仅间接证据）、`D6`（Step 1 mattermost PoC 改静态核验）、`D7`/`D9`/`D10`（文档收窄注记已落，待确认）、`D8`（取登记路线）。
+- **残留风险（已登记，不阻塞）**：① Kotlin 仅编译通过，并发语义仍靠代码审查（无 Kotlin 单测基建）；② `mobile-metrics/B-1` 的可选 runId 加固未做（用户数据侧窗口极窄）；③ mobile 全量 jest 在本机有两条环境性基线红（CRLF 的 T-MF3、helpers 被当套件收），非本 diff 引入；④ 真机手动项见「合并后 QA」；⑤ 合并门 `core-metrics/B-3`（BOOT_VERSION 顺延）仍需在合并时核对主干现值。
