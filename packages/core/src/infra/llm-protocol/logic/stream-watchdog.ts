@@ -1,20 +1,19 @@
 /**
- * LLM 流式请求空闲看门狗（回炉版：仅 idle，无首字臂）。
+ * LLM 流式请求空闲看门狗（**已退役，无接入方**）。
  *
- * 传输无关的纯定时器原语：构造时不启动任何定时器（首字阶段不设自动
- * 超时——缓冲型模型首字可远超任何阈值，spec llm-stream-timeout 回炉
- * 拍板）；任何响应数据到达（XHR onprogress / fetch reader.read 返回）
- * 经 {@link StreamWatchdog.noteActivity} 重置空闲 deadline，静默超过
- * 阈值回调 onTimeout，调用方负责以超时错误 settle 请求 Promise、再
- * abort 断流清理（时序见 `llm-sse-transport.ts` 的装配注释）。
+ * 退役记录（2026-09-26，产品拍板）：流式的合法停顿（思考、工具调用非流段
+ * 服务端憋生成——GLM `tool_stream` 默认 false 实锤、服务端排队）与死流无法
+ * 区分，固定空闲阈值必然误杀；流式现无任何空闲自动超时，唯一自动兜底是
+ * 整调用预算（callTimeout / whole-call），死流由用户手动终止（sseAbort）。
+ * `llm-sse-transport.ts` 已移除本原语的装配与武装。
  *
- * 首字阶段的黑洞（请求发出后 0 字节）由传输层的整调用兜底覆盖
- * （XHR `xhr.timeout` / fetch whole-call 定时器，映射 OkHttp
- * callTimeout），不在本原语职责内。
+ * 本文件与原语级测试保留（纯定时器工具，无外部依赖），供未来配置化
+ * 空闲策略（如按 provider 开关）复用；`STREAM_IDLE_TIMEOUT_MS` 仍从
+ * provider 子入口导出（allowlist 冻结面）。
  *
- * 阈值取舍：空闲 30s——用户节奏「十几秒手动重试」下 30s 是流中静默的
- * 安全下限（thinking 模型连接建立后 delta 持续流出不受影响）。常量导出
- * 便于热调，暂不做 provider 级配置。
+ * 原语义留档：构造时不启动定时器；任何响应数据到达经
+ * {@link StreamWatchdog.noteActivity} 重置空闲 deadline，静默超过阈值回调
+ * onTimeout。
  *
  * @module infra/llm-protocol/logic/stream-watchdog
  */

@@ -8,10 +8,10 @@
  * - T-N2: transport 超时错误（native LlmSseError(kind:"timeout") 经 wrapper
  *   转换的两种契约形态）映射 `LlmStreamTimeoutError` 分级——0 数据 →
  *   first-chunk（可重试）；已投数据 → idle（不自动重试）。
- * - native 分支时序（公共层上移后与 XHR/fetch 同一套语义）：idle 看门狗、
- *   公共层超时经 opts.signal 断流、首字黑洞由 transport callTimeout 承接
- *   （JS 侧不开 whole-call 定时器）、用户取消 AbortError 原样上抛与
- *   isRequestAborted 判据链路兼容。
+ * - native 分支时序（公共层上移后与 XHR/fetch 同一套语义）：流中长静默不
+ *   自动超时（空闲看门狗已退役——产品拍板流式不设固定空闲限制）、首字黑洞
+ *   由 transport callTimeout 承接（JS 侧不开 whole-call 定时器）、用户取消
+ *   AbortError 原样上抛与 isRequestAborted 判据链路兼容。
  *
  * @module test/infra/llm-protocol/llm-sse-transport-port
  */
@@ -413,36 +413,42 @@ describe("T-N2: transport 超时错误映射 LlmStreamTimeoutError 分级", () =
 });
 
 describe("native 分支时序（公共层上移后与 XHR/fetch 同一套语义）", () => {
-  it("idle 看门狗：chunk 后静默到阈值 → 'idle' 超时 + 公共层经 opts.signal 断流", async () => {
+  it("流中长静默不自动超时（空闲看门狗已退役）：promise 保持 pending，收尾正常", async () => {
     mock.timers.enable();
     const fake = createHangingTransport();
     registerSseTransport(fake.transport);
 
     const promise = postSse(SSE_URL, { method: "POST", body: "{}" }, () => {});
+    let settledFlag = false;
+    promise.then(
+      () => {
+        settledFlag = true;
+      },
+      () => {
+        settledFlag = true;
+      },
+    );
     await settleAsync();
 
     fake.emit('data: {"x":1}\n\n');
-    // 静默到 idle 阈值前一刻不触发
-    mock.timers.tick(STREAM_IDLE_TIMEOUT_MS - 1);
-    mock.timers.tick(1);
-
-    await assert.rejects(
-      promise,
-      (err: unknown) =>
-        err instanceof LlmStreamTimeoutError &&
-        err.name === "LlmStreamTimeoutError" &&
-        err.phase === "idle",
+    // 推进远超原 idle 阈值的时长：不得产生任何自动超时/断流
+    mock.timers.tick(STREAM_IDLE_TIMEOUT_MS * 20);
+    await settleAsync();
+    assert.equal(
+      settledFlag,
+      false,
+      "流式不设固定空闲限制（产品拍板），长静默不得自动 settle",
     );
 
-    // 公共层超时断流钩子：传给 transport 的组合 signal 被 abort
-    //（wrapper 侧据此转发原生 sseAbort）
+    // 公共层组合 signal 在静默期间保持未 abort（无自动断流）
     const opts = fake.calls[0]!.opts;
     assert.ok(opts?.signal != null, "port 收到组合 signal");
-    assert.equal(
-      opts.signal.aborted,
-      true,
-      "idle 超时 settle 后公共层经 opts.signal 主动断流",
-    );
+    assert.equal(opts.signal.aborted, false, "静默期间不主动断流");
+
+    // transport 正常收尾：全链正常 settle
+    fake.resolve({ status: 200, contentType: "text/event-stream" });
+    await settleAsync();
+    assert.equal(settledFlag, true, "transport 收尾后 promise 正常 settle");
   });
 
   it("首字黑洞由 transport callTimeout 承接：JS 侧不开 whole-call 定时器", async () => {

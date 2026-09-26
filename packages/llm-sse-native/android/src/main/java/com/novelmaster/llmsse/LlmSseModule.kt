@@ -46,10 +46,9 @@ class LlmSseModule(reactContext: ReactApplicationContext) :
     const val EVENT_ERROR = "LlmSseError"
 
     /**
-     * 流中空闲超时默认 30s：**只对已到达 headers 之后的读流生效**（sseConnect
-     * 在 execute() 返回后经 source.timeout() 挂载），首字等待不设此界——
-     * 缓冲型/推理型模型首字可远超 30s（llm-stream-timeout 回炉拍板：首字
-     * 豁免，唯一兜底是 callTimeout）；非流式 request 的响应等待同样豁免。
+     * 已退役的空闲超时默认值（保留常量与 sseConnect 的 readTimeoutMs 参数
+     * 仅为 JS 接口兼容）：流式流体现在不设空闲界——首字与流体停顿均由
+     * callTimeout 单一兜底（产品拍板：流式不应有固定空闲时间限制）。
      * callTimeout 默认 600s：整调用兜底（connect + 首字 + 流体全周期）。
      */
     const val DEFAULT_READ_TIMEOUT_MS = 30_000L
@@ -135,8 +134,8 @@ class LlmSseModule(reactContext: ReactApplicationContext) :
       return
     }
     val client = clientWithCallTimeout(callTimeoutMs)
-    // readTimeoutMs 语义 = 流中空闲超时（headers 到达后经 source.timeout() 挂载，
-    // 不罩首字等待——首字豁免，唯一兜底是 callTimeout）。
+    // readTimeoutMs 已退役（流式不设空闲界）：param 仅保 JS 接口兼容，
+    // 该值当前只用于 SocketTimeoutException 的防御性错误文案。
     val effectiveReadTimeoutMs =
       if (readTimeoutMs > 0) readTimeoutMs.toLong() else DEFAULT_READ_TIMEOUT_MS
     val call = client.newCall(request)
@@ -154,9 +153,10 @@ class LlmSseModule(reactContext: ReactApplicationContext) :
           if (source == null) {
             throw IOException("response body is null")
           }
-          // headers 已到（execute 返回）：从此刻起对流读挂 30s 空闲界——
-          // 流中停流检测；首字等待阶段已在 client 级豁免。
-          source.timeout().timeout(effectiveReadTimeoutMs, TimeUnit.MILLISECONDS)
+          // headers 已到（execute 返回）：对流体**不设空闲界**——流式的合法
+          // 停顿（思考、工具调用非流段服务端憋生成、排队）与死流无法区分，
+          // 固定阈值必然误杀（GLM tool_stream 默认 false 实锤）。唯一自动
+          // 兜底是 client 级 callTimeout；死流由用户手动终止（sseAbort）。
           pumpStream(state, source)
           flushPending(state)
           finishStream(requestId, state)

@@ -1,12 +1,13 @@
 /**
- * LLM 流式黑洞根治——传输集成测试（spec llm-stream-timeout 回炉版）：
+ * LLM 流式黑洞根治——传输集成测试（spec llm-stream-timeout 回炉版 +
+ * llm-stream-native 修订：空闲看门狗已退役，流式无固定空闲限制）：
  *
  * - T-D3/T-D4/T-D5（XHR）：Connection: close 头、xhr.timeout 整调用预算、
  *   ontimeout 分级（0 数据 → first-chunk 可重试；有数据 → idle 不重试）；
- * - idle 看门狗（XHR 集成级）：静默到阈值 reject 'idle'；慢节奏零误杀；
+ * - 空闲超时退役（XHR 集成级）：长静默不自动超时；含超原阈值间隔的长流零误杀；
  * - T-D6（fetch）：whole-call 定时器同款分级；
- * - adapter 层：idle 超时错误经 adapter rethrow，不吞成 partial；
- * - 观测：onTimeout 打点字段按 spec 第 5 节口径可捕获并断言。
+ * - adapter 层：超时错误经 adapter rethrow，不吞成 partial；
+ * - 观测：整调用超时打点字段按 spec 第 5 节口径可捕获并断言。
  *
  * @module test/infra/llm-protocol/llm-stream-timeout
  */
@@ -206,7 +207,7 @@ describe("llm-stream-timeout XHR 集成（回炉版）", () => {
     );
   });
 
-  it("idle 看门狗——有 chunk 后静默到阈值 → reject LlmStreamTimeoutError('idle')；chunk 持续到达不触发", async () => {
+  it("空闲超时已退役——有 chunk 后长静默不自动超时，onload 正常收尾", async () => {
     mock.timers.enable();
     setShouldUseXhrForSseOverrideForTests(true);
     const instances = installXhr();
@@ -224,31 +225,31 @@ describe("llm-stream-timeout XHR 集成（回炉版）", () => {
     await settleAsync();
 
     const xhr = instances[0]!;
-    // 首个 chunk 到达（武装空闲 deadline）
+    // 首个 chunk 到达
     xhr.responseText = 'data: {"x":1}\n\n';
     xhr.onprogress?.();
 
-    // 静默到 idle 阈值前一刻不触发
-    mock.timers.tick(STREAM_IDLE_TIMEOUT_MS - 1);
-    // chunk 持续到达重置空闲计时：间隔 < 30s 的节奏推进 5 分钟不触发
-    for (let i = 0; i < 10; i++) {
-      xhr.responseText += `data: {"x":${i + 2}}\n\n`;
-      xhr.onprogress?.();
-      mock.timers.tick(29_000);
-    }
+    // 长静默：远超原 idle 阈值（产品拍板：流式不设固定空闲限制，
+    // 合法停顿与死流无法区分）——不得触发任何自动超时。
+    mock.timers.tick(STREAM_IDLE_TIMEOUT_MS * 10);
     await settleAsync();
-    assert.equal(rejected, false, "活跃节奏推进期间不应提前 reject");
+    assert.equal(rejected, false, "流中长静默不应触发空闲超时");
 
-    // 静默到 idle 到点触发
-    mock.timers.tick(STREAM_IDLE_TIMEOUT_MS);
-    await assert.rejects(
-      promise,
-      (err: unknown) =>
-        err instanceof LlmStreamTimeoutError && err.phase === "idle",
+    // 数据恢复到达 + 正常收尾
+    xhr.responseText += 'data: {"x":2}\n\n';
+    xhr.onprogress?.();
+    xhr.status = 200;
+    xhr.onload?.();
+
+    const result = await promise;
+    assert.equal(result.status, 200);
+    assert.ok(
+      chunks.join("").includes('"x":2'),
+      "静默前后数据均应完整交付",
     );
   });
 
-  it("零误杀——慢节奏长流正常 onload 收尾；dispose 后定时器清空", async () => {
+  it("零误杀——含超原阈值静默间隔的长流正常收尾", async () => {
     mock.timers.enable();
     setShouldUseXhrForSseOverrideForTests(true);
     const instances = installXhr();
@@ -262,28 +263,28 @@ describe("llm-stream-timeout XHR 集成（回炉版）", () => {
     await settleAsync();
 
     const xhr = instances[0]!;
-    // 慢节奏 chunk（间隔 20s < 30s），持续 8 分钟的长流
+    // 慢节奏 chunk（间隔 45s，超过原 30s 阈值），持续 9 分钟的长流
     xhr.responseText = 'data: {"x":0}\n\n';
     xhr.onprogress?.();
-    for (let i = 1; i <= 24; i++) {
-      mock.timers.tick(20_000);
+    for (let i = 1; i <= 12; i++) {
+      mock.timers.tick(45_000);
       xhr.responseText += `data: {"x":${i}}\n\n`;
       xhr.onprogress?.();
     }
     // 正常收尾
-    mock.timers.tick(20_000);
+    mock.timers.tick(45_000);
     xhr.status = 200;
     xhr.onload?.();
 
     const result = await promise;
     assert.equal(result.status, 200);
     assert.ok(
-      chunks.join("").includes('"x":24'),
+      chunks.join("").includes('"x":12'),
       "正常收尾应完整交付（onload flush 兜底）",
     );
 
-    // dispose 后定时器清空：再推进远超阈值的时长，promise 状态不再变化
-    mock.timers.tick(STREAM_IDLE_TIMEOUT_MS * 4 + SSE_WHOLE_CALL_TIMEOUT_MS);
+    // 收尾后再推进时间：promise 状态不再变化（幂等，无残留定时器副作用）
+    mock.timers.tick(STREAM_IDLE_TIMEOUT_MS * 4);
     await promise;
   });
 });
@@ -328,7 +329,7 @@ describe("llm-stream-timeout fetch 集成（回炉版）", () => {
     );
   });
 
-  it("idle 看门狗——首帧后挂起 → reject LlmStreamTimeoutError('idle') 而非 AbortError", async () => {
+  it("首帧后挂起——空闲超时退役后由整调用预算收敛（idle 分级，而非 AbortError）", async () => {
     mock.timers.enable();
     setShouldUseXhrForSseOverrideForTests(false);
 
@@ -354,10 +355,15 @@ describe("llm-stream-timeout fetch 集成（回炉版）", () => {
       undefined,
       { fetchFn: fetchFn as typeof fetch },
     );
-    // 让首帧 read() 返回（武装空闲 deadline）
+    // 让首帧 read() 返回
     await settleAsync();
 
-    mock.timers.tick(STREAM_IDLE_TIMEOUT_MS);
+    // 长静默远超原 idle 阈值：不得触发任何空闲自动超时
+    mock.timers.tick(STREAM_IDLE_TIMEOUT_MS * 10);
+    await settleAsync();
+
+    // 整调用预算到点：按已有数据判 idle 分级（非 AbortError）
+    mock.timers.tick(SSE_WHOLE_CALL_TIMEOUT_MS);
 
     await assert.rejects(
       promise,
@@ -370,7 +376,7 @@ describe("llm-stream-timeout fetch 集成（回炉版）", () => {
     );
   });
 
-  it("adapter 层: idle 超时经 anthropic adapter rethrow，不吞成 partial 正常完成", async () => {
+  it("adapter 层: 整调用预算超时经 anthropic adapter rethrow，不吞成 partial 正常完成", async () => {
     mock.timers.enable();
     setShouldUseXhrForSseOverrideForTests(false);
 
@@ -401,7 +407,7 @@ describe("llm-stream-timeout fetch 集成（回炉版）", () => {
     });
     await settleAsync();
 
-    mock.timers.tick(STREAM_IDLE_TIMEOUT_MS);
+    mock.timers.tick(SSE_WHOLE_CALL_TIMEOUT_MS);
 
     // isRequestAborted 对超时错误三条件全不命中 → adapter catch 走 rethrow，
     // 不会返回 partial blocks 正常完成
@@ -420,7 +426,7 @@ describe("llm-stream-timeout fetch 集成（回炉版）", () => {
 });
 
 describe("llm-stream-timeout 观测打点", () => {
-  it("XHR: onTimeout 打点字段 phase/lastActivityAt/processedLength/bufferedBytes（bufferedBytes 取 emitter 待发缓冲）", async () => {
+  it("XHR: 整调用打点字段 phase/lastActivityAt/processedLength/bufferedBytes（bufferedBytes 取 emitter 待发缓冲）", async () => {
     // 只 mock setTimeout：emitter 的 setInterval 保持真实——测试毫秒级完成，
     // 待发缓冲不会被 32ms tick 冲走，bufferedBytes 才能按观测口径断言堆积
     mock.timers.enable({ apis: ["setTimeout"] });
@@ -445,7 +451,8 @@ describe("llm-stream-timeout 观测打点", () => {
       xhr.responseText = "x".repeat(100);
       xhr.onprogress?.();
 
-      mock.timers.tick(STREAM_IDLE_TIMEOUT_MS);
+      // 整调用预算到点（XHR 分支经原生 xhr.timeout 回调；mock 下手动触发）
+      xhr.ontimeout?.();
 
       await assert.rejects(
         promise,
@@ -484,7 +491,7 @@ describe("llm-stream-timeout 观测打点", () => {
     }
   });
 
-  it("fetch: onTimeout 打点 bufferedBytes 记 0，processedLength 为读循环内累计", async () => {
+  it("fetch: 整调用打点 bufferedBytes 记 0，processedLength 为读循环内累计", async () => {
     mock.timers.enable();
     setShouldUseXhrForSseOverrideForTests(false);
 
@@ -515,7 +522,8 @@ describe("llm-stream-timeout 观测打点", () => {
       );
       await settleAsync();
 
-      mock.timers.tick(STREAM_IDLE_TIMEOUT_MS);
+      // 整调用预算到点（fetch 分支经公共层 whole-call 定时器）
+      mock.timers.tick(SSE_WHOLE_CALL_TIMEOUT_MS);
 
       await assert.rejects(
         promise,

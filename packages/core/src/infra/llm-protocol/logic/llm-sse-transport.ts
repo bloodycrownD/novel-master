@@ -16,16 +16,14 @@
  * *-sse-parser 经 feedSseLines 增量处理，跨路径一致。详见
  * `.apm/kb/docs/Iterations/mobile-sse-stream-resilience/spec.md`。
  *
- * 黑洞挂死根治（spec llm-stream-timeout 回炉版，三层防御；时序装配自
- * llm-stream-native 起上移到 postSse 公共层，三分支共用同一 watchdog 实例与
- * settle 守卫，分支内只留传输专属清理——XHR abort / fetch controller.abort /
- * native 经 opts.signal 断流）：
+ * 黑洞挂死根治（spec llm-stream-timeout 回炉版 + llm-stream-native 修订，
+ * 两层防御；时序装配上移到 postSse 公共层，三分支共用 settle 守卫，分支内
+ * 只留传输专属清理——XHR abort / fetch controller.abort / native 经
+ * opts.signal 断流）：
  * 1. XHR 路径请求带 `Connection: close`——**条件化**（spec llm-stream-native
  *    §7）：仅当本次请求未走 registered native transport（即运行时判定回落
- *    XHR）时设置。native 管子自带读超时 + callTimeout，黑洞有界，不设 close
- *    以保留连接复用；回落 XHR 时首字黑洞仍由 close + `xhr.timeout` 兜底——
- *    idle watchdog 构造时不武装（缓冲型模型首字不受任何自动超时约束），无
- *    close 头时「高速流后死连接复用」黑洞会以整调用预算形态回归。OkHttp
+ *    XHR）时设置。native 管子黑洞由整调用 callTimeout 兜底，不设 close
+ *    以保留连接复用；回落 XHR 时死连接复用黑洞仍由 close 消灭。OkHttp
  *    尊重请求侧 close，连接用完即废不回池；h2 下该头被协议剥离（无害），
  *    由 2 兜底。
  * 2. 整调用兜底 `SSE_WHOLE_CALL_TIMEOUT_MS`：触发机制按分支表达——XHR 经
@@ -34,8 +32,10 @@
  *    经 transport 内 callTimeout（到点以超时形态错误抛出，本文件按错误形态
  *    识别并映射同一分级）。到点按「是否已收到响应数据」分级——0 字节 =
  *    first-chunk（黑洞，可重试且天然走新连接）；有输出 = idle（不自动重试）。
- * 3. 流空闲安全网 {@link createStreamWatchdog}（仅 idle，无首字臂——缓冲型
- *    模型首字不受任何自动超时约束）。
+ *
+ * 已移除：流空闲看门狗（原 idle 30s 自动断流，见下方淘汰记录）——流式的
+ * 合法停顿（思考、GLM 工具调用非流段服务端憋生成、排队）与死流无法区分，
+ * 固定阈值必然误杀；死流现由用户手动终止 + 整调用预算兜底。
  *
  * @module infra/llm-protocol/logic/llm-sse-transport
  */
@@ -48,11 +48,6 @@ import {
   dispatchSseChunk,
 } from "./dispatch-sse-chunk.js";
 import { assertOk } from "./http-util.js";
-import {
-  createStreamWatchdog,
-  STREAM_IDLE_TIMEOUT_MS,
-  type StreamWatchdog,
-} from "./stream-watchdog.js";
 import { LlmStreamTimeoutError } from "./llm-stream-timeout-error.js";
 
 export type SseByteHandler = (chunk: string) => void;
@@ -256,8 +251,8 @@ function isTransportTimeoutError(error: unknown): boolean {
  * POST and deliver SSE text chunks incrementally (UTF-8 decoded strings).
  * HTTP 4xx/5xx throw {@link ProviderError} with code `HTTP_ERROR`.
  *
- * 传输三分支逐请求择优（registered native → XHR → fetch）；watchdog、
- * whole-call 语义与 settle 守卫在公共层装配（见模块文档）。
+ * 传输三分支逐请求择优（registered native → XHR → fetch）；whole-call
+ * 语义与 settle 守卫在公共层装配（见模块文档）。
  */
 export function postSse(
   url: string,
@@ -283,7 +278,7 @@ export function postSse(
   logSse(logTag, "→", { method, url, transport: kind });
 
   return new Promise((resolve, reject) => {
-    // ===== 公共层（watchdog / whole-call / settle 守卫上移，三分支共用）=====
+    // ===== 公共层（whole-call / settle 守卫上移，三分支共用）=====
     let settled = false;
     let processedLength = 0;
     let lastActivityAt = Date.now();
@@ -316,7 +311,7 @@ export function postSse(
       clearWholeCallTimer();
       resolve(value);
     };
-    // 放宽为 Error：watchdog 超时要以此 settle LlmStreamTimeoutError（非 ProviderError）。
+    // 放宽为 Error：整调用超时要以此 settle LlmStreamTimeoutError（非 ProviderError）。
     const rejectOnce = (error: Error) => {
       if (settled) return;
       settled = true;
@@ -324,33 +319,17 @@ export function postSse(
       reject(error);
     };
 
-    // 空闲看门狗（仅 idle，无首字臂——回炉版 spec 第 3 节）：
-    // onTimeout 时序关键——先 rejectOnce(超时错误) 抢占 settle，再经
-    // abortStream/cleanupBranch 断流清理。abort 触发的迟到回调（XHR onabort /
-    // fetch AbortError / native transport 错误）中的二次 settle 被 settled
-    // 守卫挡掉，超时错误原样上抛；若反过来寄望 abort 链传播，会被
-    // isRequestAborted 识别为用户取消、被 adapter 吞成 partial，分级语义全失效。
-    const watchdog: StreamWatchdog = createStreamWatchdog({
-      onTimeout: () => {
-        const phase = processedLength > 0 ? "idle" : "first-chunk";
-        logSse(logTag, "stream timeout", {
-          phase,
-          lastActivityAt,
-          processedLength,
-          bufferedBytes: bufferedBytesNow(),
-        });
-        rejectOnce(new LlmStreamTimeoutError(phase, STREAM_IDLE_TIMEOUT_MS));
-        watchdog.dispose();
-        abortStream?.();
-        cleanupBranch?.();
-      },
-    });
+    // 淘汰记录：流空闲看门狗（原 idle 30s 自动断流）已按产品拍板移除——
+    // 流式的合法停顿（思考、工具调用非流段服务端憋生成、排队）与死流无法
+    // 区分，固定阈值必然误杀（GLM tool_stream 默认 false 实锤）。流式现在
+    // 唯一的自动兜底是整调用预算（callTimeout/xhr.timeout/whole-call 定时器），
+    // 死流由用户手动终止。settle 守卫时序（先抢占 settle、再断流清理，防
+    // isRequestAborted 吞成 partial）仍由下方分支沿用。
 
     /** 响应数据到达（含空增量/解码滞后的增量）：`bytes` 为本次解码后新增字符数。 */
     const noteActivity = (bytes: number): void => {
       lastActivityAt = Date.now();
       processedLength += bytes;
-      watchdog.noteActivity();
     };
 
     /**
@@ -380,7 +359,6 @@ export function postSse(
           detail ?? "whole-call budget"
         )
       );
-      watchdog.dispose();
       abortStream?.();
       cleanupBranch?.();
     };
@@ -397,7 +375,7 @@ export function postSse(
 
     /**
      * native 分支：registered transport 承载传输（合批后的 chunk 事件由
-     * wrapper 转成 onChunk 调用）。watchdog/whole-call 语义全在公共层：
+     * wrapper 转成 onChunk 调用）。whole-call 语义在公共层：
      * callTimeout 由 transport 内部承接（超时按契约形态抛错），公共层
      * 不再开 JS 定时器避免双触发竞态。
      */
@@ -439,7 +417,6 @@ export function postSse(
         })
         .then(
           (result) => {
-            watchdog.dispose();
             resolveOnce(result);
           },
           (error: unknown) => {
@@ -459,7 +436,6 @@ export function postSse(
               );
               return;
             }
-            watchdog.dispose();
             rejectOnce(
               error instanceof Error ? error : new Error(String(error))
             );
@@ -519,7 +495,6 @@ export function postSse(
       if (signal != null) {
         if (signal.aborted) {
           emitter.dispose();
-          watchdog.dispose();
           rejectOnce(
             new ProviderError("HTTP_ERROR", "Request aborted", { providerId })
           );
@@ -548,7 +523,6 @@ export function postSse(
       };
 
       xhr.onload = () => {
-        watchdog.dispose();
         deliverNewText();
         // Synchronous flush on complete: no async drain chain; guarantees tail delivery.
         const tail = emitter.flush();
@@ -575,7 +549,6 @@ export function postSse(
       };
 
       xhr.onerror = () => {
-        watchdog.dispose();
         emitter.dispose();
         rejectOnce(
           new ProviderError("HTTP_ERROR", "XHR network error", { providerId })
@@ -583,7 +556,6 @@ export function postSse(
       };
 
       xhr.onabort = () => {
-        watchdog.dispose();
         emitter.dispose();
         rejectOnce(
           new ProviderError("HTTP_ERROR", "Request aborted", { providerId })
@@ -677,13 +649,11 @@ export function postSse(
             );
           }
 
-          watchdog.dispose();
           resolveOnce({
             status: response.status,
             contentType: response.headers.get("content-type"),
           });
         } catch (error) {
-          watchdog.dispose();
           if (settled) {
             // 公共层已以超时错误 settle：controller.abort() 导致的 AbortError
             // 在此丢弃，不让它顶替/竞态超时错误。
