@@ -169,15 +169,31 @@ function buildChunks(totalTokens, tokensPerChunk) {
  */
 const CHARS_PER_TOKEN = 3.35;
 
-/** 单个码点是否 CJK/日文/全角（这些字在真 tokenizer 下≈一字一词元）。 */
+/**
+ * 单个码点是否 CJK/日文/韩文/全角（这些字在真 tokenizer 下≈一字一词元）。
+ *
+ * 覆盖区间（与下方判断逐条对应）：
+ *   0x3000–0x303F  CJK 标点
+ *   0x3040–0x30FF  日文假名
+ *   0x3400–0x4DBF  扩展 A
+ *   0x4E00–0x9FFF  基本区汉字
+ *   0xAC00–0xD7A3  谚文音节（真 tokenizer 下约 0.5~1 词元/字）
+ *   0xF900–0xFAFF  兼容表意
+ *   0xFF00–0xFF60  全角
+ *   0xFF61–0xFF9F  半角片假名
+ *   0x20000–0x3FFFF 增补平面汉字
+ */
 function isCjkCodePoint(cp) {
   return (
     (cp >= 0x3000 && cp <= 0x303f) || // CJK 标点
     (cp >= 0x3040 && cp <= 0x30ff) || // 日文假名
     (cp >= 0x3400 && cp <= 0x4dbf) || // 扩展 A
     (cp >= 0x4e00 && cp <= 0x9fff) || // 基本区
+    (cp >= 0xac00 && cp <= 0xd7a3) || // 谚文音节
     (cp >= 0xf900 && cp <= 0xfaff) || // 兼容表意
-    (cp >= 0xff00 && cp <= 0xff60) // 全角
+    (cp >= 0xff00 && cp <= 0xff60) || // 全角
+    (cp >= 0xff61 && cp <= 0xff9f) || // 半角片假名
+    (cp >= 0x20000 && cp <= 0x3ffff) // 增补平面汉字
   );
 }
 
@@ -518,7 +534,7 @@ async function handleChat(req, res, ctxLine) {
   const msgCount = Array.isArray(parsed.messages) ? parsed.messages.length : 0;
   const includeUsage = parsed?.stream_options?.include_usage === true;
   log(`${ctxLine} model=${model} stream=${stream} bytes=${body.length} messages=${msgCount} ` +
-      `prompt_tokens≈${promptTokens}（近似 token=字符数÷${CHARS_PER_TOKEN}，非真实 tokenizer） ` +
+      `prompt_tokens≈${promptTokens}（CJK≈1 词元/字，其余字符÷${CHARS_PER_TOKEN}；非真实 tokenizer） ` +
       `${authPrefix(req)} include_usage=${includeUsage}`);
 
   // ---- mock-dead：第 --hang-after 次请求起挂死（收请求、不响应、保持连接） ----

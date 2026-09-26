@@ -125,6 +125,8 @@ export async function runPrompt(
     }
 
     if (savedModelId == null) {
+      // CLI 口径说明：此处不计 tools 段（CLI 走取证/调试面，不参与压缩判定），
+      // 与压缩评估的本地估算口径存在差异，仅供人工核对，不作为验收基准。
       const serialized = await serializePromptLlmInput(layout, ctx);
       const tokenCount = rt.tokenCounters.heuristic.countText(serialized);
       console.error(
@@ -148,6 +150,8 @@ export async function runPrompt(
     const tokenizerOverride = await rt.providerModels.getTokenCounterMode(
       savedModelId,
     );
+    // CLI 口径说明：此处不计 tools 段（CLI 走取证/调试面，不参与压缩判定），
+    // 与压缩评估的本地估算口径存在差异，仅供人工核对，不作为验收基准。
     const result = await countPromptLlmInput({
       layout,
       ctx,
