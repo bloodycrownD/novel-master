@@ -178,3 +178,13 @@ assistant:
 - `d457be3e` docs(apm)：本记忆文件
 
 worktree 内验证：`npm ci` + `npm run build -w @novel-master/tdbc-driver-better-sqlite3`（新 worktree 必须单独 build workspace 包，否则 core 测试报 tdbc-driver dist 缺失）→ typecheck 零错、skills + skill-tool 93 条全绿。
+
+---
+
+## 第七轮：合并与 changelog
+
+- `23af57b8` merge --no-ff 并入 main（基于 `0e4c2251`；合并前确认迭代分支领先的 9 个提交只碰 docs/ 与 scripts/，packages/core 与 main 逐字节一致）。搬运改动时用 `git stash push -u` 只挑本次 6 个文件，避免把既有的 20260923-mobile-perf-issues-batch.md 未提交修改卷进来。
+- `13868888` docs(changelog)：CHANGELOG 新建 `## [Unreleased]` 段（合并前该段不存在——v1.5.22 发版时被清空），补一条「修复：AI 修改技能时改不动、报错看不懂」。按用户要求**暂不发布新版本**，条目留在 Unreleased 等 publish skill 挪版本号。
+- 未推送。main 领先 origin/main 4 个提交。
+
+**顺带发现（未修，待用户决定）**：`CHANGELOG.md` 里 `## [1.5.10]` 到 `## [1.3.13]` 整段**重复了两遍**（第二段 683 行是第一段前 683 行的逐字副本，首个差异偏移 682）。已用 `git show 0e4c2251:CHANGELOG.md` 对照确认是**合并前既有**、与本次改动无关。
