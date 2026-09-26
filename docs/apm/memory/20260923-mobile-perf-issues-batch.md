@@ -1,8 +1,8 @@
 ---
-date: 2026-09-25 00:45
-title: mobile 性能批次全记录：5 spec→dev-ready（未 merge）+ ⑤回炉闭环（e2e 三幕）+ Phase 2 llm-stream-native 立项并 execute-ready（待确认）+ 压缩前状态快照
-keywords: 性能优化, content_json 压缩, 回滚卡顿, 后台停摆, SSE 定时器, Choreographer, 指标条, t/s, LLM 流卡死, XHR onprogress, 增量投递停摆, 真机实验, mock-openai-server, 内嵌 bundle, worktree 并行, dev-ready, 视觉幻觉, 坐标漂移, Connection close, callTimeout, 死连接复用, 黑洞, llm-stream-native, 原生 SSE 管子, 块级渲染, execute-ready
-abstract: 五命题全 dev-ready 未 merge（①635c714c ②19e4e841 ③61a14db9 ④64c0a0479 ⑤5826d19e 已回炉 e2e 三幕验证为合并候选）。Phase 2 迭代 llm-stream-native 已立项（原生 SSE 管子+累积数组化+转录块级渲染+非流式收编）经 spec-check-loop 两轮收敛至 execute-ready，**待用户确认后从 Step 1 评估门开工**。文档分支 iteration-docs-20260924 最新 ccc3cffb。合并红线与实验资产全记录在案，环境已收尾（真机还原、模拟器带修复版 APK 在线）。
+date: 2026-09-25 23:50
+title: mobile 性能批次全记录：5 spec→dev-ready（未 merge）+ ⑤回炉闭环（e2e 三幕）+ Phase 2 llm-stream-native 开发全程至 dev-ready（含终止键 P0 修复）
+keywords: 性能优化, content_json 压缩, 回滚卡顿, 后台停摆, SSE 定时器, Choreographer, 指标条, t/s, LLM 流卡死, XHR onprogress, 增量投递停摆, 真机实验, mock-openai-server, 内嵌 bundle, worktree 并行, dev-ready, 视觉幻觉, 坐标漂移, Connection close, callTimeout, 死连接复用, 黑洞, llm-stream-native, 原生 SSE 管子, 块级渲染, execute-ready, lazy TurboModule, spread 坑, 终止键 TypeError
+abstract: 五命题全 dev-ready 未 merge。Phase 2 llm-stream-native 经 code-dev-loop 开发完毕至 dev-ready：Step 1 静态核验实锤自建（mattermost 无增量事件流+OkHttp5 冲突）→ 四路并行 impl（Kotlin 管子/core port/累积数组化/块级渲染）→ wiring → verify/cr-func 两道闸 → Step 7 双路径全过撤 close 定案 → Step 8 AC 硬指标过 + 终止键 P0（lazy TurboModule spread 丢 sseAbort）根治复验。分支 feat/llm-stream-native@e7496de7（19 提交，基于 5826d19e），T-N9 真机验收留用户，全部未 merge。
 ---
 
 user:
@@ -237,3 +237,28 @@ assistant:
 【Phase 2 已定契约（spec 内有全文）】request(method,...) 带 GET；close 条件化撤除（XHR 且运行时判定 native 未注册时保留）；超限按块判定（流中块级/终态与历史全量降级双口径）；T-N1 wrapper 级测试；fetch shim=Response body 置 null 命中既有防御、__DEV__ 下 createLoggingFetch(shim) 最外层；不用 okhttp-sse（port 只搬字节）；Kotlin-only（iOS 工程存在但发布面仅 Android）；desktop/CLI 零变化。
 【环境终态】真机 DSLDU20407006179：DB 已还原 pristine（备份 %TEMP%\rt_db\pristine.db）、IME 已还原百度、诊断 APK 1.5.23-diag(1301) 仍装着（同签名顶替了 1.5.21，退回需旧 APK）；表单页 footer 裁剪 bug（ScreenFormLayout+StickyFormFooter，创建按钮零边界）已登记待专项。模拟器 Medium_Phone_API_36.1 在线：装着 ⑤ 回炉版诊断 APK（worktree 构建），repro/新会话1/新会话2 测试数据在库，adb reverse 已设。mock 服务器已停；D:\nm5 junction 已删；⑤ worktree 有未跟踪构建产物（assets bundle + res 目录，提交时勿纳入）；worktree 深路径构建须 junction 短路径（CMake 250 字符限制）。运维配方：composer 草稿 DB 注入（chat_session.composer_draft_json={"text","attachments"}）+ 无键盘态发送键 (990,2245)；lastMessageIsPlainUserText 会禁用 composer（t0 后静默 return 属设计）；真机 logcat 无 ReactNativeJS 输出（模拟器有）；视觉转写禁带格式示例（会诱导幻觉）。
 【会话工具沉淀】诊断构建配方（useDevSupport=false + bundle --dev true 进 assets + gradle；RN0.85 参数名注意）；mock-openai-server 用法全参数；uiautomator dump 解析脚本 %TEMP%\dump-parse.ps1（GBK 乱码可解码）。
+
+user:
+恢复记忆然后看看 llm-stream-native/spec.md，可以进行开发了 [$code-dev-loop]。
+
+assistant:
+（llm-stream-native 开发全程至 dev-ready，2026-09-25）
+【Step 1 评估门】静态核验即定案自建（decision.md，3c1b7f2c 前身提交）：mattermost react-native-network-client 1.11.3 Android 端无任何响应体增量事件（APIClientEvents 只有 upload/download/client_error 三事件、整包 Promise 模型）+ OkHttp 5.3.2/okio 3.16 硬编码 force 无覆盖入口（RN 0.85.3 用 4.9.2/2.9.0，装包即全局抬两大版本）——无需模拟器 PoC。
+【开发环境】worktree D:\nm6（短路径避 CMake 250 字符）分支 feat/llm-stream-native 基于 5826d19e + 从 iteration-docs-20260924 带入 prd/spec 文档（fa7e1d3d）。npm install + 各包 dist 装配（tdbc-better-sqlite3/op-sqlite/sksp/tokenizer 的 dist 是 worktree 环境债须逐包 build）。
+【wave-1 四路并行 impl】Step 2 原生包（Kotlin 自有 OkHttp+100ms|64KB 合批+request(GET/POST)，autolink 靠 mobile 依赖声明+包内 react-native 字段自动发现，release.yml 清单已补）a9dc4c37/c155c493/a1722ce7；Step 3 core port（SseTransport+三分支逐请求判定+watchdog/whole-call 上移公共层+close 条件化+LlmStreamTimeoutError 分级映射）6e203824——⑤ 的 T-T 系列 181 例零改动通过；Step 5 累积数组化（registry parts push+unit segments+dirty 物化缓存，T-N5 护栏末桶/首桶 core≈1.8x mobile≈1.0x）79e5de0d/9116b885；Step 6 块级渲染（block-split 纯函数+streamBlockCommit 协议+块游标+webview append-only+超限按块降级+STREAM_BLOCK_RENDER_ENABLED 开关）afdf9736/5420bd9c——block-split 因 tsconfig composite 排除 webview 目录上移到 chat-transcript/stream/（cr-func 裁定 accept，spec 已补记）。
+【wave-2-4】Step 4 wiring（fetch shim 生产统一注册+__DEV__ logging 最外层+registerNativeSseTransportWith）cc72523f/8e982c11；verify×5 独立复跑 4 pass + 1 新红（provider allowlist 快照缺 registerSseTransport）→ 主代理 trivial 修复（快照+release gradle cache key）ce6197bc → core 全量回基线 2161/2163（仅时区 2 红）；cr-func func-ready: yes（D1/D2/D3 偏离全 accept）。
+【Step 7 双路径回归实验】五实验全过（bbebc2cd）：a1 同连接复用恢复（native 撤 close 生效）/a2 杀服务器 8.2s 收敛/a3 挂死 3×30s 读超时有界+b1 回落 XHR 每请求新建即关（close 保留）/b2 回落死连接 9.6s 兜底——条件化撤 close 定案。实验揪出两个登记项：终止按钮存疑（当时判坐标漂移）+ 超时文案失真（600000ms 前缀）——后者已修（Kotlin 读超时 message 带数值+core detail 透传，b50771a6）。
+【Step 8 + P0】AC-1/2/4/5 模拟器侧全过（12000 字 260字/s 无冻结；10 万字 521字/s markdown 逐块出现；挂死 93s 收敛新文案实测；复用+三幕）740bad96；**终止键翻案为真 P0**：dump 实证 tap 命中、t0 send 后 28ms 抛 TypeError、连接不断、run 悬死。专项闭环（193821db）：根因=RN bridgeless 下 NativeModules 返回 lazy jsRepresentation（方法挂 HostObject 原型、首次属性访问才实体化 own property），createBridge 用 {...nativeModule} spread 只拷 own property→sseAbort 从未被 get 而丢失→wrapper onAbort 首句炸。修法双保险：逐方法解构+isNativeSseAvailable 补探测每个方法；防回归测试用「原型方法+get 实体化缓存」Proxy 精确模拟真机形态（负向验证过）；复验三断言过（+12.9s 主动断连/15.3s 终态/发送复活/TypeError 0 行）。jest 复现不了的原因=Node 语义无 lazy interop；取证关键是打点 typeof 恰好把 sseAbort 实体化「意外修好」的反差。
+【dev-ready 终态】分支 feat/llm-stream-native@e7496de7（19 提交，基线 5826d19e）：cr-func-final func-ready: yes（零 must-fix）；mobile tsc build 工程 0 错误；desktop 测试 Windows 0-run 为已知形态（desktop 零改动 git diff 实证+core fetch 分支测试兜底）；CHANGELOG Unreleased 4 条（措辞已校准：终止 bug 随本版原生层引入非既有）。遗留登记：T-N9 真机 manual_user 验收留用户；AC-3 非流式模拟器面由 T-N4 单测代偿；T-N8 合批事件率精确数值需打点（渲染丝滑行为证据已代偿）；600000ms 前缀数值失真维持登记；600s 常量三处分居（core/Kotlin/shim 注释互指）。环境终态：模拟器在线装修复版诊断 APK、mock 已停、adb reverse 保留、worktree 工作区全净（构建产物未跟踪态）。全部未 merge（协作红线等指令）；合并时注意与 ①④ 的 BOOT_VERSION 顺延、①② repository 冲突备忘仍然有效（本分支基于 ⑤，若 ⑤ 先合则本分支 rebase 干净续）。
+
+user:
+（第二轮验收）移除 5 的 worktree，启动 metro 安装应用到手机（先是我来测，后授权「你也来测，有配置好的服务商」）。测试中发现报错：60s 超时，非流/工具调用非流都没处理；随后修正归因——**GLM 的工具调用需要特殊传参才是流式，否则都是非流**（查智谱文档实证）；并给出判断：**你不应该对流式有这样的时间限制，很容易出问题**。
+
+assistant:
+（超时语义终版 + 真机复测闭环，2026-09-26，56301c4f→8cb69e8d，真机 1303/1304）
+【前期】移除 ⑤ worktree（分支保留，⑥ 历史含它；robocopy 空镜像法绕 Windows 长路径删除失败）；真机装包走命令行注入 `-PversionCode=1302/1303/1304 -PversionName=1.5.24-dev`（不动仓库文件；Honor 安装弹窗+息屏两次坑；metro 先于 gradle 构建会因 build 目录被清而 watcher 崩，顺序须先构建后 metro）。
+【真机测试发现（1303）】①非流式 30s 误杀（用户报错实锤）：baseClient readTimeout(30s) 被非流式 `request` 继承，大 prompt 等响应 >30s×重试≈60s 报错；且流式首字也被 30s 罩住（违反 ⑤ 首字豁免拍板）。修法 56301c4f：client 级读超时恒禁用 + 流中空闲 30s 移 source.timeout 挂载——真机 38.3s run 正常（首字豁免生效）。②但「思考完→工具调用」段仍被流中空闲 30s 掐断（[生成失败] idle），用户归因修正 + 智谱文档实锤：`tool_stream` 默认 **false**（仅 GLM-4.6/5 系列支持），GLM 工具调用默认服务端憋非流式生成（期间零数据），固定 idle 阈值必然误杀。
+【终版修法 8cb69e8d（用户拍板：流式不应有固定空闲限制）】core 移除 idle 看门狗装配全链（stream-watchdog.ts 退役留档、导出保留）；Kotlin 删 `source.timeout()` 挂载（readTimeoutMs 参数保 JS 接口兼容仅剩防御文案）；唯一自动兜底=callTimeout 600s 整调用预算，死流靠用户手动终止。测试改写 6 例（长静默不超时/超阈值间隔零误杀/整调用收敛分级/打点触发源换 whole-call）；core 全量回基线 2161/2163（仅时区 2 红）、llm-protocol 181/181、包内 22/22；spec §2/§7/T-N2 + CHANGELOG 4 条同步（「30s 静默兜底」条目→「合法停顿不误杀」）。
+【真机复测（1304）】GLM 工具调用全链路跑通：发「continue」→ 助手思考+工具调用（8.3KB）→ tool_result "ok" → 收尾回复「写进了『故事章节/杏花劫.md』」；DB 硬证据（run-as 拉库 better-sqlite3 查）：vfs_entry `/故事章节/杏花劫.md` version 1 落盘 + 消息链完整。对比 1303 同场景被掐断 = 修复生效。
+【可选增强（未实施，待拍板）】给 GLM 请求注入 `tool_stream: true` 让工具调用也真流式（根上消解长停顿）；需判定口径（baseUrl/模型名/中转站边界）且限 GLM-4.6+ 型号。
+【真机取证配方补充】dev 模式下 metro 的 console 转发在本环境不工作（真机 JS 日志仍无）；DB 直查用 `adb exec-out run-as <pkg> cat databases/novel_master_vfs`（主库名 novel_master_vfs，109MB）；vfs_entry 列名 = scope_key/path/entry_kind/head_version/content（无 scope_kind/size）；input text 逗号被吃须用 %s 空格；发送键无键盘态 dump 定位（SVG PathView，本次 958,1510 附近）。
