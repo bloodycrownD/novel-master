@@ -105,9 +105,7 @@ describe("pickLastPromptUsage / resolveCurrentPromptTokens", () => {
       serializeSessionApiPromptTokenEntry({
         promptTokens: 12_729,
         atMs: 1_700_000_000_000,
-        runId: "run-1",
         savedModelId: RUN_MODEL_ID,
-        lastMessageSeq: 12,
       }),
     );
 

@@ -63,9 +63,7 @@ async function parsedPromptTokenRow(): Promise<
   | {
       promptTokens?: number;
       atMs?: number;
-      runId?: string;
       savedModelId?: string;
-      lastMessageSeq?: number;
     }
   | undefined
 > {
@@ -89,7 +87,6 @@ async function seedPromptTokenEntry(promptTokens: number): Promise<void> {
     JSON.stringify({
       promptTokens,
       atMs: Date.now(),
-      runId: "run-previous",
       savedModelId: RUN_MODEL_ID,
     })
   );
@@ -226,13 +223,12 @@ describe("AgentRunner session API prompt token cache", () => {
     assert.equal(result.stopReason, "completed");
     assert.equal(sessionApiPromptTokenCache.get(SESSION_ID)?.promptTokens, 4242);
 
-    // 写侧双写：session KKV 行带上 runId / savedModelId / 末尾消息 seq
+    // 写侧双写：session KKV 行带上 promptTokens 与 savedModelId 指纹
+    // （两个零读取方的可选加固字段已从值形状里移除，这里只断言仍存在的字段。）
     const row = await parsedPromptTokenRow();
     assert.equal(row?.promptTokens, 4242);
     assert.equal(row?.savedModelId, RUN_MODEL_ID);
-    assert.equal(typeof row?.runId, "string");
-    assert.ok((row?.runId ?? "").length > 0, "runId 应带上 run 身份");
-    assert.equal(typeof row?.lastMessageSeq, "number");
+    assert.equal(typeof row?.atMs, "number");
 
     const tokenRegistry = createDefaultTokenCounterRegistry(emptyRegistryDeps());
     const params = {

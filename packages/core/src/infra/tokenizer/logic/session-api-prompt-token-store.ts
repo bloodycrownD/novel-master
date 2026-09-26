@@ -16,10 +16,16 @@
  * - **失效**：{@link invalidateSessionApiPromptTokenEntry} 双删（Map + KKV），
  *   口径同 `persistFinalRateQuietly`：失效是 best-effort，失败只影响下次读数。
  *
- * 值 JSON：`{promptTokens, atMs, runId?, savedModelId?, lastMessageSeq?}`；
- * `promptTokens` 与 `atMs` 同为必填，缺失或类型不对一律当 miss（`promptTokens`
- * 域是新增域，线上不存在缺 `atMs` 的旧行，退化成 0 会让时效判据失真）；三个
- * 可选加固字段缺失/非法即省略该键。
+ * 值 JSON：`{promptTokens, atMs, savedModelId?}`；`promptTokens` 与 `atMs` 同为
+ * 必填，缺失或类型不对一律当 miss（`promptTokens` 域是新增域，线上不存在缺
+ * `atMs` 的旧行，退化成 0 会让时效判据失真）；唯一可选指纹 `savedModelId` 缺失
+ * /非法即省略该键。
+ *
+ * **曾经多带的两个可选加固字段（run 身份、写入时的末尾消息 seq）已移除**——它们
+ * 实查为零读取方：只有写入、序列化搬运与测试断言，没有任何生产代码读出来做判断
+ * （读口命中判定只看 `savedModelId` 指纹）。解析走「只解构已知键」的写法，**未知
+ * 键一律静默忽略**：旧行照样能解析出 `{promptTokens, atMs, savedModelId?}`，既不
+ * 报错也不判 miss，因此**不需要数据迁移、不需要清库**。
  *
  * @module infra/tokenizer/logic/session-api-prompt-token-store
  */
@@ -35,35 +41,21 @@ import { sessionApiPromptTokenCache } from "./session-api-prompt-token-cache.js"
  * 落库/回读一条 prompt 占用值所需的全部字段。
  *
  * `atMs` 是写入时刻（epoch 毫秒）：供「上次请求」标签与时效判定（例如
- * 未来若加 TTL）使用；`runId` / `savedModelId` / `lastMessageSeq` 是可选
- * 加固字段，缺失时消费方按「无指纹可比对」的兼容路径处理。
+ * 未来若加 TTL）使用；`savedModelId` 是唯一可选指纹字段，缺失时消费方按
+ * 「无指纹可比对」的兼容路径处理。
  */
 export interface SessionApiPromptTokenEntry {
   readonly promptTokens: number;
   readonly atMs: number;
-  readonly runId?: string;
   readonly savedModelId?: string;
-  readonly lastMessageSeq?: number;
 }
 
-/** 可选加固字段：非空字符串 / 有限数才带上该键（缺省即无该指纹）。 */
-function optionalRunId(runId: string | undefined): { runId?: string } {
-  return runId != null && runId.length > 0 ? { runId } : {};
-}
-
+/** 可选指纹字段：非空字符串才带上该键（缺省即无该指纹）。 */
 function optionalSavedModelId(
   savedModelId: string | undefined
 ): { savedModelId?: string } {
   return savedModelId != null && savedModelId.length > 0
     ? { savedModelId }
-    : {};
-}
-
-function optionalLastMessageSeq(
-  lastMessageSeq: number | undefined
-): { lastMessageSeq?: number } {
-  return typeof lastMessageSeq === "number" && Number.isFinite(lastMessageSeq)
-    ? { lastMessageSeq }
     : {};
 }
 
@@ -74,21 +66,23 @@ export function serializeSessionApiPromptTokenEntry(
   return JSON.stringify({
     promptTokens: entry.promptTokens,
     atMs: entry.atMs,
-    ...optionalRunId(entry.runId),
     ...optionalSavedModelId(entry.savedModelId),
-    ...optionalLastMessageSeq(entry.lastMessageSeq),
   });
 }
 
 /**
  * 解析 session KKV 值；缺失 / 损坏 / `promptTokens` 非有限数或为负 /
- * `atMs` 缺失或非有限数 → 一律 null（读口据此回退本地估算）。三个可选
- * 加固字段只在类型正确且非空时带上。
+ * `atMs` 缺失或非有限数 → 一律 null（读口据此回退本地估算）。可选指纹
+ * `savedModelId` 只在类型正确且非空时带上。
  *
  * ⚠️ `atMs` 与 `promptTokens` 同为**必填**：本域是新增域，线上不存在缺
  * `atMs` 的旧行，把它退化成 0 会让基于时间的判据把它当「永远过期」，
  * 或被 `=== 0` 守卫静默放行——两种都不对，所以整体当 miss。`promptTokens === 0`
  * 本身是合法值，仍按 `>= 0` 放行。
+ *
+ * ⚠️ **只解构已知键，未知键一律忽略**：旧行里可能还带着已移除的那两个可选加固
+ * 字段，这些键既不参与判定，也不会导致报错或 miss——老行照常解析出
+ * `{promptTokens, atMs, savedModelId?}`，所以字段移除**不需要数据迁移/清库**。
  */
 export function parseSessionApiPromptTokenEntry(
   raw: string | null | undefined
@@ -105,7 +99,7 @@ export function parseSessionApiPromptTokenEntry(
   if (parsed == null || typeof parsed !== "object") {
     return null;
   }
-  const { promptTokens, atMs, runId, savedModelId, lastMessageSeq } =
+  const { promptTokens, atMs, savedModelId } =
     parsed as Partial<Record<keyof SessionApiPromptTokenEntry, unknown>>;
   if (
     typeof promptTokens !== "number" ||
@@ -120,13 +114,8 @@ export function parseSessionApiPromptTokenEntry(
   return {
     promptTokens,
     atMs,
-    ...(typeof runId === "string" && runId.length > 0 ? { runId } : {}),
     ...(typeof savedModelId === "string" && savedModelId.length > 0
       ? { savedModelId }
-      : {}),
-    ...(typeof lastMessageSeq === "number" &&
-    Number.isFinite(lastMessageSeq)
-      ? { lastMessageSeq }
       : {}),
   };
 }
@@ -147,9 +136,7 @@ export async function readSessionApiPromptTokenEntry(
     return {
       promptTokens: hot.promptTokens,
       atMs: hot.updatedAt,
-      ...optionalRunId(hot.runId),
       ...optionalSavedModelId(hot.savedModelId),
-      ...optionalLastMessageSeq(hot.lastMessageSeq),
     };
   }
   if (sessionKkv == null) {
@@ -179,9 +166,7 @@ export async function readSessionApiPromptTokenEntry(
   sessionApiPromptTokenCache.set(sessionId, {
     promptTokens: entry.promptTokens,
     updatedAt: entry.atMs,
-    ...optionalRunId(entry.runId),
     ...optionalSavedModelId(entry.savedModelId),
-    ...optionalLastMessageSeq(entry.lastMessageSeq),
   });
   return entry;
 }
@@ -200,9 +185,7 @@ export function writeSessionApiPromptTokenEntry(
   sessionApiPromptTokenCache.set(sessionId, {
     promptTokens: entry.promptTokens,
     updatedAt: entry.atMs,
-    ...optionalRunId(entry.runId),
     ...optionalSavedModelId(entry.savedModelId),
-    ...optionalLastMessageSeq(entry.lastMessageSeq),
   });
   if (sessionKkv == null) {
     return;

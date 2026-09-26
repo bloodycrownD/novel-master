@@ -249,11 +249,6 @@ export class DefaultAgentRunner implements AgentRunner {
      * false、composer 本就解锁，再追加错误消息只会造成双条提示。
      */
     let assistantAppendedInRun = false;
-    /**
-     * 本 run 最后落库消息的 seq（写 API prompt 占用时作为自检指纹一并带上）。
-     * 只服务自检/调试，不参与任何判定——调用方不会拿它做失效判断。
-     */
-    let lastAppendedSeq: number | undefined;
     const signal = options.signal;
     const toolUseWindow: ToolUseBlock[] = [];
     let vfsMutatedInRun = false;
@@ -640,7 +635,6 @@ export class DefaultAgentRunner implements AgentRunner {
             }
           );
           assistantAppendedInRun = true;
-          lastAppendedSeq = assistantMessage.seq;
           if (publishRunLifecycle) {
             bus.publish(EVENT_AGENT_STEP_COMMITTED, {
               sessionId,
@@ -673,11 +667,10 @@ export class DefaultAgentRunner implements AgentRunner {
         // 能走到这里且未置位，本 step 必无 tool_use，后继必然 finished。
         if (persistMessages && !assistantAppendedInRun) {
           try {
-            const placeholder = await session.append("assistant", {
+            await session.append("assistant", {
               blocks: [{ type: "text", text: "（本次生成无内容输出）" }],
             });
             assistantAppendedInRun = true;
-            lastAppendedSeq = placeholder.seq;
           } catch (appendError) {
             // 占位落库失败不把成功 run 翻成 FAILED：记日志后照常收尾。
             console.error(
@@ -820,8 +813,7 @@ export class DefaultAgentRunner implements AgentRunner {
           await handleAbort("after_tool_checkpoint");
           break;
         }
-        lastAppendedSeq = (await session.append("user", { blocks: toolResults }))
-          .seq;
+        await session.append("user", { blocks: toolResults });
         if (publishRunLifecycle) {
           bus.publish(EVENT_AGENT_STEP_COMMITTED, {
             sessionId,
@@ -905,9 +897,7 @@ export class DefaultAgentRunner implements AgentRunner {
       writeSessionApiPromptTokenEntry(this.deps.sessionKkv, sessionId, {
         promptTokens: picked,
         atMs: Date.now(),
-        runId,
         savedModelId: options.savedModelId,
-        ...(lastAppendedSeq != null ? { lastMessageSeq: lastAppendedSeq } : {}),
       });
     } else {
       // run 收尾不等 IO：这里刻意保持 fire-and-forget（不 await KKV 删除）。

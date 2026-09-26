@@ -9,17 +9,14 @@ export interface SessionApiPromptTokenCacheEntry {
   readonly promptTokens: number;
   readonly updatedAt: number;
   /**
-   * 产出该值的 run 身份（可选加固字段）。持久层（session KKV）读回时与
-   * 「同一会话里当前是否还是那一轮」比对用；进程内热层透传即可。
-   */
-  readonly runId?: string;
-  /**
    * 计数时的 savedModelId（可选指纹）。读口发现与当前请求的 savedModelId
    * 不一致即当 miss——换模型后旧口径的 prompt 占用不再适用。
+   *
+   * 这是热层里**唯一**的指纹字段：run 身份 / 末尾消息 seq 经实查零读取方
+   * （只写不读），已从条目形状里移除，见
+   * `session-api-prompt-token-store.ts` 的模块头说明。
    */
   readonly savedModelId?: string;
-  /** 写入时该会话的末尾消息 seq（自检/调试用，不参与判定）。 */
-  readonly lastMessageSeq?: number;
 }
 
 const store = new Map<string, SessionApiPromptTokenCacheEntry>();

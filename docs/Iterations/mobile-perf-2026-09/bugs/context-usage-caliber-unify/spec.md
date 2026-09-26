@@ -20,9 +20,9 @@ agile_trace: true
 |---|----|------|------|
 | 1 | A | `packages/core/src/domain/session-kkv/model/session-kkv-domains.ts` | 新域 `prompt_tokens` + 键 `lastPromptUsage`（登记进 `SessionKkvDomain`），`public/session-kkv.ts` 导出 |
 | 2 | A | `packages/core/src/infra/tokenizer/logic/session-api-prompt-token-store.ts`（新增） | 存取层：编解码 + 进程内热层 + KKV 冷层（读回填热层）+ 双写 + 双删；损坏/非法值一律按 miss |
-| 3 | A | `.../logic/session-api-prompt-token-cache.ts` | 条目增可选 `runId` / `savedModelId` / `lastMessageSeq` |
+| 3 | A | `.../logic/session-api-prompt-token-cache.ts` | 条目增可选 `savedModelId` 指纹 |
 | 4 | A | `.../logic/resolve-current-prompt-tokens.ts`、`resolve-prompt-tokens-with-backfill.ts` | 读口增可选 `{sessionKkv}`；命中返回 `source:'api'` + `atMs`；`savedModelId` 指纹不符当 miss |
-| 5 | A | `service/agent/impl/agent-runner.ts` | 写侧改 write helper（带 runId / savedModelId / 末尾消息 seq）；FAILED/非 completed 改 invalidate helper |
+| 5 | A | `service/agent/impl/agent-runner.ts` | 写侧改 write helper（带 `savedModelId` 指纹）；FAILED/非 completed 改 invalidate helper |
 | 6 | A | 18 个调用点 / 15 个公开入口方法（message.service ×10、message-transcript-effects、run-compaction、message-rollback、persistent-state、clear-session-prompt-caches、session.service.updateSessionAgentConfig、agent-runner ×2） | 一律改双删 helper |
 | 7 | A | `service/persistent-state/{create-persistent-state.ts,impl/persistent-state.service.ts}` | 工厂内部**自建** sessionKkv（`createPersistentState(conn)` 单参；注入从未发生），三端装配文件零改动 |
 | 8 | B | `apps/desktop/shared/ipc-types.ts`、`src/main/services/chat-prompt-tokens.service.ts`、`renderer/features/chat/SessionDetailDrawer.tsx`、`apps/mobile/src/services/chat-prompt-tokens.service.ts` | 数据面加 `source: 'api' \| 'local'`；标签两态（`api` → 「上次请求」，否则「预估」）；`~` 仍由 `estimated` 驱动 |
@@ -33,14 +33,14 @@ agile_trace: true
 
 ### A 落库与失效
 
-- 值 JSON：`{promptTokens, atMs, runId?, savedModelId?, lastMessageSeq?}`；可选字段缺失/类型不对即省略该键；**`atMs` 与 `promptTokens` 同为必填**，缺失或类型不对一律按 miss 处理（`prompt_tokens` 是本轮**新增的域**、线上不存在旧格式行，「旧格式值照常解析」是空转——`atMs` 缺失退化为 `0` 会与它的「时效判定」用途冲突）；`promptTokens = 0` 是合法值，保留；
+- 值 JSON：`{promptTokens, atMs, savedModelId?}`；可选字段缺失/类型不对即省略该键；**`atMs` 与 `promptTokens` 同为必填**，缺失或类型不对一律按 miss 处理（`prompt_tokens` 是本轮**新增的域**、线上不存在旧格式行，「旧格式值照常解析」是空转——`atMs` 缺失退化为 `0` 会与它的「时效判定」用途冲突）；`promptTokens = 0` 是合法值，保留；**不再带 `runId` / `lastMessageSeq`**（两者实查为零读取方，只有写入、序列化搬运与测试断言，生产代码从不读出来做判断；解析只解构已知键、忽略未知键，旧行照常解析出 `{promptTokens, atMs, savedModelId?}`，既不报错也不判 miss，因此**不需要数据迁移、不需要清库**）；
 - 读路径：**进程内 Map 热层 → KKV 冷层（回填热层）**——压缩评估每 step 都读 token 数，不能每步查库；KKV 读失败/行损坏按 miss 处理并记 warn（展示派生值，不打断 run）；
 - 写路径：同步写热层 + KKV fire-and-forget 吞错（口径同 `persistFinalRateQuietly`）；
 - 失效：**双删**（热层 + KKV 行），变更点表 #6 的 18 个调用点 / 15 个公开入口方法全量落地；`message.service` / `message-rollback` / `session.service.updateSessionAgentConfig` 只有 `conn` 的就地 `createSessionKkvService(conn)`（调用点都在事务外）；`persistent-state` 同样**由 `DefaultPersistentState` 构造器内部自建** KKV 门面（`createPersistentState(conn)` 单参，**删除死参数 `CreatePersistentStateOptions.sessionKkv`**——全仓 9 个调用文件 / 10 条调用语句全单参、注入从未发生，三端装配零改动）；会话/项目删除走既有 `clearSession` 整表清；
 - **已登记的产品语义（`message.append` 挂失效的连带影响）**：
   - **(i) run 期间占用标签回落**：append 一清值，**run 期间**占用 chip 会从「上次请求」回落为「预估」，直到本轮 run 结束、runner 写回新的 api 值为止；回落期间数字本身也明显偏低。**原因不是「本地估算不算 tools」**——回落期的预估不含 tools 段，是因为 **UI 读口拿不到 tools**（`session-prompt-input` 不产 tools，双端显式传 `undefined`）；**本地 `countPromptLlmInputHeuristicOnly` 本身是拼 tools 的**，压缩评估路径照常含 tools（`token-ratio.trigger.ts` 明确传 tools）。
   - **(ii) 压缩判定整个 run 内不再吃 api 值**：step-1 的压缩评估发生在 usage 写回之前，而 append 已把旧值清掉，所以**整个 run 期间压缩判定都走 `heuristic + 0.85` 安全垫**。这**比现状更准**（现状拿的是上一轮、不含本轮新增用户消息的 api 值，系统性低估、压缩偏晚），但它是一次**已登记的行为变更**（改前整个 run 用 api 值，改后全程启发式）。
-- **不做 runId 比对**：读口调用方（新 run 的每 step 压缩评估）与写入方的 runId 必然不同，按 runId 判 miss 会把「run 进行中读上一轮 completed 值」的核心语义废掉；runId 作为加固字段落库，`savedModelId` 指纹参与判定。
+- **不做 runId 比对**（结论不变，落地形态已收窄）：读口调用方（新 run 的每 step 压缩评估）与写入方的 run 身份必然不同，按 run 身份判 miss 会把「run 进行中读上一轮 completed 值」的核心语义废掉；因此 run 身份**既不落库也不参与判定**——`runId` / `lastMessageSeq` 两个只写不读的字段已从值形状里移除，读口唯一参与判定的指纹是 `savedModelId`。
 - **设计属性留痕（没有第二道防线）**：读口**只有 `savedModelId` 指纹、没有任何 agent 指纹**——换 Agent 时 `savedModelId` 可能不变而 system 段 / prompt layout 已变，读口本身**察觉不到**。因此**切 Agent 的正确性完全依赖 `session.service.updateSessionAgentConfig` 这一个失效挂点**：改法把挂点挂在「merge 后 `agentId` 或 `modelId` 确实变了」的口径上（patch 传与当前相同的值时**不清**），且该挂点**必须 `await`**，否则 KKV 删除不被等待、进程退出会复活陈旧行。**这条挂点被删/被绕过 = 换 Agent 后旧 `promptTokens` 以 `api` 身份跳过 0.85 安全垫参与压缩判定，并跨重启继续生效**——回归用例已按「seed 一条 `savedModelId` 相同的新行后直接调读口 → 断言 `source === 'local'`」钉住读口侧行为。
 
 ### C tools 补计数
@@ -68,7 +68,7 @@ agile_trace: true
 
 ## 风险与回滚方案
 
-- **陈旧值**：KKV 命中意味着重启后仍可能读到旧值——靠变更点表 #6 的失效挂点（18 个调用点 / 15 个公开入口方法）+ `savedModelId` 指纹 + 会话删除整表清兜底；runId 落库为后续更严格校验留口；
+- **陈旧值**：KKV 命中意味着重启后仍可能读到旧值——靠变更点表 #6 的失效挂点（18 个调用点 / 15 个公开入口方法）+ `savedModelId` 指纹 + 会话删除整表清兜底；值形状里**不再带 `runId` / `lastMessageSeq`**（两者实查零读取方，不存在「为后续更严格校验留口」），也没有第二个指纹闸门可依赖，所以陈旧值风险**完全落在上面三道兜底上**；
 - **压缩判定口径**：api 命中时 `counterKind='api'`、不吃 0.85 安全垫（现状语义不变）；落库后重启也会命中 api，行为与「重启前」一致（这正是治本目标）；
 - **读放大**：热层保证常态零 IO；热层空且 KKV 无行的会话首次压缩评估多一次主键 SELECT（量级可忽略，未加负缓存以免引入陈旧窗口）；**miss 路径上压缩评估每 step 还要把全量 tools schema（`name` / `description` / `inputSchema`）重新 `JSON.stringify` 一遍并多一次额外编码**——`serializeToolsForTokenCount` 每次调用都重新 `map` + 序列化全量 schema，而 tools schema 在整个 run 内不变，5 step 的 run 就是 5 次全量 stringify。**api 命中时不重算、零成本**，成本只落在 miss 路径（换模型后首次 run、首次 run，以及 `message.append` 清了旧值的那段 run 期间）——`message.append` 挂失效后 miss 路径命中率上升，故这是**本轮新引入的读放大**。**本轮只登记、不预先改实现**：真机跑 ≥5 step 的多工具 run 确认无明显掉帧后，才考虑在 runner 侧按 **run 级**缓存序列化结果（不是全局缓存——tools 会随 Agent 配置变；缓存正确性的唯一依据是「同一 run 内 tools 定义不变，故同输入必得同串」）；
 - **回滚**：A/B/C/D 四组可分别 revert；只回滚 A 即回到「进程内缓存」的旧行为（读口签名向后兼容、标签两态仍可用）；mock 改动只影响取证展示。

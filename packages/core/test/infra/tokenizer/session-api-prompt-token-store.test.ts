@@ -57,29 +57,45 @@ function countingKkv() {
 }
 
 describe("session-api-prompt-token-store 编解码", () => {
-  it("全字段往返：promptTokens / atMs / runId / savedModelId / lastMessageSeq", () => {
+  it("全字段往返：promptTokens / atMs / savedModelId", () => {
     const raw = serializeSessionApiPromptTokenEntry({
       promptTokens: 12_729,
       atMs: 1_700_000_000_000,
-      runId: "run-1",
       savedModelId: "openai/gpt-4o",
-      lastMessageSeq: 42,
     });
     assert.deepEqual(parseSessionApiPromptTokenEntry(raw), {
       promptTokens: 12_729,
       atMs: 1_700_000_000_000,
-      runId: "run-1",
       savedModelId: "openai/gpt-4o",
-      lastMessageSeq: 42,
     });
   });
 
-  it("只有两个必填字段（promptTokens / atMs）照常解析，三个可选键全省", () => {
+  it("旧行多带已移除的可选加固字段：忽略未知键，照常解析不判 miss", () => {
+    // 旧行可能还带着两个已移除的字段（run 身份、末尾消息 seq）。解析只解构
+    // 已知键，所以老行必须照样解析出来（不报错、不判 miss）——字段移除因此
+    // 不需要数据迁移或清库。这里用一个中立未知键表达同一件事。
+    assert.deepEqual(
+      parseSessionApiPromptTokenEntry(
+        JSON.stringify({
+          promptTokens: 12_729,
+          atMs: 1_700_000_000_000,
+          savedModelId: "openai/gpt-4o",
+          someRemovedLegacyKey: "whatever",
+        })
+      ),
+      {
+        promptTokens: 12_729,
+        atMs: 1_700_000_000_000,
+        savedModelId: "openai/gpt-4o",
+      }
+    );
+  });
+
+  it("只有两个必填字段（promptTokens / atMs）照常解析，指纹键省略", () => {
     const parsed = parseSessionApiPromptTokenEntry(
       JSON.stringify({ promptTokens: 100, atMs: 5 })
     );
     assert.deepEqual(parsed, { promptTokens: 100, atMs: 5 });
-    assert.equal("runId" in (parsed ?? {}), false);
     assert.equal("savedModelId" in (parsed ?? {}), false);
   });
 
@@ -87,9 +103,7 @@ describe("session-api-prompt-token-store 编解码", () => {
     const raw = serializeSessionApiPromptTokenEntry({
       promptTokens: 7,
       atMs: 1,
-      runId: "",
       savedModelId: "",
-      lastMessageSeq: Number.NaN,
     });
     assert.deepEqual(JSON.parse(raw), { promptTokens: 7, atMs: 1 });
     assert.deepEqual(
@@ -97,9 +111,7 @@ describe("session-api-prompt-token-store 编解码", () => {
         JSON.stringify({
           promptTokens: 7,
           atMs: 1,
-          runId: 9,
           savedModelId: "",
-          lastMessageSeq: "x",
         })
       ),
       { promptTokens: 7, atMs: 1 }
@@ -232,20 +244,23 @@ describe("session-api-prompt-token-store 写入与失效", () => {
     sessionApiPromptTokenCache.clearAll();
   });
 
-  it("写：热层立即可读且 KKV 行带上可选字段", async () => {
+  it("写：热层立即可读且 KKV 行带上可选指纹", async () => {
     const { kkv } = countingKkv();
     writeSessionApiPromptTokenEntry(kkv, SESSION_ID, {
       promptTokens: 1_234,
       atMs: 11,
-      runId: "run-x",
       savedModelId: "openai/gpt-4o",
-      lastMessageSeq: 3,
     });
 
     assert.equal(
       sessionApiPromptTokenCache.get(SESSION_ID)?.promptTokens,
       1_234,
       "热层同步写"
+    );
+    assert.equal(
+      sessionApiPromptTokenCache.get(SESSION_ID)?.savedModelId,
+      "openai/gpt-4o",
+      "热层透传指纹"
     );
     const raw = await kkv.get(
       SESSION_ID,
@@ -257,9 +272,7 @@ describe("session-api-prompt-token-store 写入与失效", () => {
       JSON.stringify({
         promptTokens: 1_234,
         atMs: 11,
-        runId: "run-x",
         savedModelId: "openai/gpt-4o",
-        lastMessageSeq: 3,
       })
     );
   });
