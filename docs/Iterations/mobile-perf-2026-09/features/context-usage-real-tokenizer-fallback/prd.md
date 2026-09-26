@@ -18,7 +18,7 @@ dependency: docs/Iterations/mobile-perf-2026-09/prd.md
 | 英文叙事 30K | 8,972 | 5,417 | +65.63%（反向高估） |
 | 结构化 prompt（XML+JSON 混排）30K | 9,144 | 11,752 | −22.19% |
 
-误差根因：cl100k 对中文约 **1.64 字符/token**，对英文约 3.5~3.6 字符/token——一个常数不可能同时拟合两种语言。
+误差根因：cl100k 对中文约 **1.64 token/字符**（≈ **0.61 字符/token**），对英文约 3.5~3.6 字符/token——一个常数不可能同时拟合两种语言。
 
 **为什么这件事严重**：这个数字有三条消费方——① UI 的「上下文占用」chip；② **压缩判定**（`token-ratio.trigger` 拿它跟上下文窗口比）③ 调试面（CLI）。中文会话下低估八成意味着「快满了还在继续写」，是**最危险的方向**。
 
@@ -29,7 +29,7 @@ dependency: docs/Iterations/mobile-perf-2026-09/prd.md
   - core 的**同步** `TokenCounter` port（`HeuristicTokenCounter.countText/countMessages`）——port 是同步契约，改成 async 会波及全部消费方；它只作为「真分词器也建不起来」的最后一级。
   - Kotlin 原生分词器路径（Android 上 Claude/GLM/Qwen 等本来就走真分词器，无需改）。
   - desktop renderer 流式指标条的「未注入估算器」兜底——属 (B) 实时输出估算那条链，与本条（上下文占用）无关。
-  - mobile 流式单元的「未注入估算器」兜底——`apps/mobile/src/services/session-stream-unit.ts:634-637`（`estimateIncrementTokens` 里两个估算器任一为 `null` 时仍走 `ceil(chars/3.35)`），与上一条同属另一条链。
+  - mobile 流式单元的「未注入估算器」兜底——`apps/mobile/src/services/session-stream-unit.ts:635-638`（`estimateIncrementTokens`（定义 `:629`）里两个估算器任一为 `null` 时仍走 `ceil(chars/3.35)`；⚠️ 行号以 `git grep` 实查为准，本文件落盘后可能漂移），与上一条同属另一条链。
 - **行为变更（需知悉）**：RN 原生分词器不可用时，`counterKind` 由「家族名」**纠正为 `heuristic`** → 这些场景首次吃上压缩判定的 0.85 安全系数（压缩比过去更早触发）。这是修「拿近似值卡精确阈值」的诚实性问题，方向是更安全。
 
 ## 影响模块与接口
@@ -55,9 +55,9 @@ dependency: docs/Iterations/mobile-perf-2026-09/prd.md
 
 | 组 | 文件 | 条数 | 覆盖 |
 |---|---|---|---|
-| core | `test/infra/tokenizer/count-text-with-tokenizer.test.ts` | 6 | 准确度 ≤1%、单次 encode ≤64 不变量、线性增长、两条失败路径（1:1 兜底 / 不倒退）、一次计数≈分块 |
+| core | `test/infra/tokenizer/count-text-with-tokenizer.test.ts` | 7 | 准确度 ≤1%、单次 encode ≤64 不变量、线性增长、两条失败路径（1:1 兜底 / 不倒退）、一次计数≈分块 |
 | mobile | `__tests__/mobile-prompt-token-counter.test.ts` | 10（改 2 增 3） | 原生不可用改真计数 + counterKind=heuristic、**对照：中文读数 ≫ 折算**、family=heuristic/未知家族同口径、编码表建不起来才降级且不重试 |
-| desktop | `test/chat-prompt-tokens.test.ts` | 3（增 T-T9c） | 无模型早退走真 cl100k（**反向验证过**：改回折算即红） |
+| desktop | `test/chat-prompt-tokens.test.ts` | 4（增 T-T9c、T-T9d） | 无模型早退走真 cl100k（**反向验证过**：改回折算即红）；兜底 registry 用显式转发、`forSavedModel` / `forVendorModel` 可调用（形态护栏，CR fix-spec v3 `agile-2` 补） |
 | Node 驱动 | `test/fallback-count.test.ts` + `test/count-prompt-llm-input.test.ts` | 4 + 1 新 1 改 | 两个 impl 加载失败走真计数、同步 port 仍折算、两级降级顺序、unknown-model 读数对齐真值（**该条已由扩断言的「改」覆盖**）、**新增：中文兜底读数远大于字符折算（`count-prompt-llm-input.test.ts`「中文兜底读数远大于字符折算（钉住真分词器真的接上了）」）** |
 
 ## 真机复验（并入 1310 包，见 CR fix-spec「合并后 QA」）

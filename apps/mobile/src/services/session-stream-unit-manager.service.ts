@@ -290,7 +290,8 @@ export interface SessionStreamUnitManagerParams {
   /**
    * 实时 token 估算器工厂（stream-metrics-native ②）：透传给每个单元的
    * `tokenEstimatorFactory`（正文/思考各建一条）。不注入 = 旧启发式行为
-   * （既有测试与极简 runtime 零变化）。
+   * （`ceil(chars/3.35)`），**未收到 usage 前**与旧口径严格一致；usage 到达后
+   * 按 ①「基线 + 增量」口径。
    */
   readonly tokenEstimatorFactory?: (
     sessionId: string,

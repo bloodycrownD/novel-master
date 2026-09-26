@@ -246,8 +246,9 @@ export interface SessionStreamUnitOptions {
   /**
    * 实时 token 估算器工厂（stream-metrics-native ②）：由 runtime 装配方注入
    * （真 tiktoken 绑定），单元为正文/思考各建一条独立估算器。
-   * **不注入 = 旧启发式行为**（`ceil(totalChars / 3.35)`），既有用例与无
-   * tokenizer 的极简 runtime 零变化；工厂返回 null（构造失败）同样回退。
+   * **不注入 = 旧启发式行为**（`ceil(totalChars / 3.35)`），**未收到 usage 前**
+   * 与旧口径严格一致；usage 到达后按 ①「基线 + 增量」口径。工厂返回 null
+   * （构造失败）同样回退。
    */
   readonly tokenEstimatorFactory?: (
     sessionId: string,

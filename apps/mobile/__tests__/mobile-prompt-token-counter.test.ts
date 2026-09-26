@@ -197,8 +197,9 @@ describe('tokenizer-driver-rn countPromptLlmInputRn', () => {
     );
 
     const fold = Math.ceil(ZH_TEXT.length / 3.35);
-    // 折算对中文低估 82%~84%：cl100k 约 1.64 字符/token，真值应是折算的 2 倍
-    // 上下。1.5× 是保守下界，真值若与折算持平就说明改造没生效。
+    // 折算对中文低估 82%~84%：cl100k 约 1.64 token/字符（≈0.61 字符/token），
+    // 真值应是折算的 2 倍上下。1.5× 是保守下界，真值若与折算持平就说明改造
+    // 没生效。
     expect(result.count).toBeGreaterThan(fold * 1.5);
     expect(result.count).toBe(cl100kCount(ZH_TEXT));
     expect(result.counterKind).toBe('heuristic');

@@ -8,14 +8,14 @@
 - **branch**: `integration/stream-metrics-native`
 - **base_sha**: `83a434d7a74a66eefca7fa7cb860ddf30154b028`
 - **head_sha**: `fad16a12620e676b6ae6beccbdcc55460edf928d`（**评审范围**的 head，即 CR 三轮评审覆盖到的最后一笔；执行后的 HEAD **不是**本字段，见下）
-- **执行后 HEAD**: `71692b11`（**本 fix-spec（v2）**执行的最后一次实质改动提交 = cr-func 遗留 P2 收口）。⚠️ **v3 集成评审 `ctx-exec-2` 订正**：本行**原先对 `71692b11` 之后提交范围的描述已被后续提交打破**（那段承诺已删，不要再引用回去）。实跑 `git log --oneline 71692b11..f4cd067a` 有 **8 笔**，事实链按序为：① `50e81d4d` —— OQ #4 `runId` / `lastMessageSeq` 字段移除（**用户拍板**）；② `f0186106` + `4e179e1a` + `acf1802d` —— 敏捷项 **`context-usage-real-tokenizer-fallback`**（真分词器兜底估算，**三笔含代码**）；③ `f4cd067a` —— 编排 / 文档落盘（**v3 集成评审范围的 head**）。**当前真实 HEAD 以 `git log -1` 为准**——本文件的状态标注写于自身那次提交之前，故无法自指）
+- **执行后 HEAD**: `71692b11`（**本 fix-spec（v2）**执行的最后一次实质改动提交 = cr-func 遗留 P2 收口）。⚠️ **v3 集成评审 `ctx-exec-2` 订正**：本行**原先对 `71692b11` 之后提交范围的描述已被后续提交打破**（那段承诺已删，不要再引用回去）。实跑 `git log --oneline 71692b11..f4cd067a` 有 **8 笔**，事实链按序为（**8 笔全列**，⚠️ 下游 v3 集成评审 `ctx-exec-2` 改法 #3 补全了原先只列 5 笔的枚举）：① `31923b2c` —— v2 终态标注（执行记录 21 行逐行结果 + `full/E-1` 回填 + 状态推进）；② `f9d0de90` —— dev-ready 终态落盘（消除 `head_sha` 自指歧义 + 状态文件收口）；③ `0d79f559` —— OQ #4 拍板落地标注（字段移除已执行 + 状态文件记用户决策）；④ `50e81d4d` —— OQ #4 `runId` / `lastMessageSeq` 字段移除（**用户拍板**，**改代码**）；⑤ `f0186106` + `4e179e1a` + `acf1802d` —— 敏捷项 **`context-usage-real-tokenizer-fallback`**（真分词器兜底估算，前两笔含代码、第三笔新建业务 spec）；⑥ `f4cd067a` —— 编排 / 文档落盘（**v3 集成评审范围的 head**）。**当前真实 HEAD 以 `git log -1` 为准**——本文件的状态标注写于自身那次提交之前，故无法自指）
 - **prd_path / spec_path**（四份业务文档，只读参考）:
   - ① `docs/Iterations/mobile-perf-2026-09/bugs/stream-multi-step-rate-freeze/{prd.md,spec.md}`
   - ② `docs/Iterations/mobile-perf-2026-09/features/stream-live-token-estimator/{prd.md,spec.md}`
   - ③ `docs/Iterations/mobile-perf-2026-09/bugs/context-usage-caliber-unify/{prd.md,spec.md}`
   - ④ `docs/Iterations/mobile-perf-2026-09/features/stream-metrics-tokens/{prd.md,spec.md}`（被改写的原 spec）
 - **review_round**: 1（**修订轮 round 2**）→ 3（**v3 校对轮**）→ 4（**v4 收口轮**）/ **dag_version**: 4
-- **状态**: **已执行完毕（dev-ready，2026-09-26）**——由 `code-dev-loop` 承接，**32 条 must-fix 全部落地**；4 条「按现状收窄」经用户**照准**（#1/#2/#3/#5）；两轮 readonly cr-func 均判 `func-ready: yes`，其遗留 6 条 P2 已收口，终态复检（`n10-crfunc-final`）亦判 `dev-ready: yes` 且零 must-fix。分支 `integration/stream-metrics-native`，执行前 `5c63d27e` → **本 fix-spec（v2）**最后一次实质改动提交 `71692b11`（**未 push / 未 merge / 未发版**）。⚠️ **v3 集成评审 `ctx-exec-2` 订正**：`71692b11` **之后另有 8 笔提交**（其中三笔实质改代码），本行**原先对 `71692b11` 之后提交范围的承诺已删**（已被后续提交打破）；事实链见「元信息」的「执行后 HEAD」行（`50e81d4d` → `f0186106` + `4e179e1a` + `acf1802d` → `f4cd067a`）。逐条执行结果见文末「执行记录」。
+- **状态**: **已执行完毕（dev-ready，2026-09-26）**——由 `code-dev-loop` 承接，**32 条 must-fix 全部落地**；4 条「按现状收窄」经用户**照准**（#1/#2/#3/#5）；两轮 readonly cr-func 均判 `func-ready: yes`，其遗留 6 条 P2 已收口，终态复检（`n10-crfunc-final`）亦判 `dev-ready: yes` 且零 must-fix。分支 `integration/stream-metrics-native`，执行前 `5c63d27e` → **本 fix-spec（v2）**最后一次实质改动提交 `71692b11`（**未 push / 未 merge / 未发版**）。⚠️ **v3 集成评审 `ctx-exec-2` 订正**：`71692b11` **之后另有 8 笔提交**（其中三笔实质改代码），本行**原先对 `71692b11` 之后提交范围的承诺已删**（已被后续提交打破）；事实链见「元信息」的「执行后 HEAD」行（**8 笔全列**：`31923b2c` → `f9d0de90` → `0d79f559` → `50e81d4d` → `f0186106` + `4e179e1a` + `acf1802d` → `f4cd067a`）。逐条执行结果见文末「执行记录」。
 - **说明**: 本文件是**增量第二轮** CR 的修复规格。上一轮整条分支 CR 见同目录 `cr-fix-spec.md`（状态已执行，只读参考，本次**未改动**）。评审为 readonly（只读代码 + 静态推演 + 局部实跑），分三个 scope：
   - `review-scope-metrics` → 覆盖 ① + ②，round 1 产出 7 条 must-fix（`metrics/*`，round 2 后共 9 条）；
   - `review-scope-context-usage` → 覆盖 ③ + `scripts/mock-openai-server.mjs`，round 1 产出 10 条 must-fix（`ctx-usage/*`，round 2 后共 11 条）；
@@ -60,7 +60,7 @@
     - `apps/desktop/renderer/hooks/stream-token-estimator.ts` 的静态具名 `import { Tiktoken }` 在 **`:20`**（`:21` 是 ranks 的 default import）；
     - `session-stream-unit.ts` 的两条估算器 `reset()` 在 **`:414-415`**（`:413` 是 `heuristicBaseTokens = 0`）；
     - `metrics/C-1` 要同批改的第二处注释：`session-stream-unit.ts:373-374`「单元创建时同步建」；
-    - desktop hook 也是**每 delta 读值**（`useAgentStreamMetrics.ts:249` / `:264` → `:188-194`；250ms 只节流 usage 事件与渲染 tick）——`full/E-1` 的覆盖面此前只写了 mobile，见 `full2/E-1`。
+    - desktop hook 也是**每 delta 读值**（`useAgentStreamMetrics.ts:272` / `:287` 是两条 delta 入口里的读值调用 → `:204` 的读值合成；250ms 只节流 usage 事件与渲染 tick）——⚠️ **行号以 `full/E-1` 的 ⚠️ 回填段与 `full2/E-1` 的「文件」栏为准**（本句不再自持一份副本）。`full/E-1` 的覆盖面此前只写了 mobile，见 `full2/E-1`。
 
 
 ---
@@ -129,7 +129,7 @@
      - **本条只保留增量**：「枚举里加上 `session.service.updateSessionAgentConfig`」这一件事。**所有数字统一由 deviations #16 + `full/A-2` 负责**，本条不再出现任何绝对数字。
 - **验收 / 测试**:
   - `packages/core/test/infra/tokenizer/prompt-token-invalidation.test.ts` 补一条：`seedRow` 后调 `sessions.updateSessionAgentConfig(session.id, { agentId: "other-agent" })`，断言 KKV 行消失；**再补一条反向用例**：patch 传**与当前相同**的 `agentId` / `modelId` → 断言 KKV 行**仍在**（钉住改法 #2 的收窄口径，防退化成「patch 里出现就清」）。
-  - 读侧一条改为：**seed 一条 `savedModelId` 相同的新行后（模拟「A-1 挂点失效/被绕过」的坏态），不调 `updateSessionAgentConfig`、直接调读口 `resolveCurrentPromptTokens` → 断言 `source === 'local'`**。
+  - 读侧一条改为：**读口无 agent 指纹 ⇒ 不设读侧用例**；改为在 ③ spec 留痕（已落地于 `spec.md:44`），回归由**挂点正反两条用例**承担。⚠️ **v3 集成评审 `ctx-exec-3` 改判**：本条原先要求「seed 一条 `savedModelId` 相同的新行 → 断言 `source === 'local'`」，按字面**不可满足**（读口只用 `savedModelId` 指纹，指纹相同必然返回 `api`，写出来就是一条必红的用例）——**不写**，理由与落地情况见文末「执行记录」deviation `#6`。
     - ⚠️ round 1 写的「同 `savedModelId`、但会话已换 agent layout → 解析结果回退 `local`」是把第 1 条重测一遍：读口**只**用 `savedModelId` 指纹（`resolve-current-prompt-tokens.ts:68`），**根本没有 agentId / prompt layout 指纹**，所以换没换 agent 它都判 `local`，这条断言不构成独立覆盖。
     - 请**在 ③ spec 留痕这条设计属性**：「**读口无 agent 指纹，切 agent 的正确性完全依赖 `updateSessionAgentConfig` 这一个失效挂点**」——没有第二道防线，所以这个挂点必须被上面那条用例钉住。
 - **来源**: review-scope-context-usage / round 1
@@ -638,8 +638,8 @@
 
 - **维度**: E（性能 / 实测口径）
 - **文件**: ② `features/stream-live-token-estimator/spec.md:48`（「单次 push（含读值）：Node 稳态峰值 0.92ms / 均摊 0.47ms…」）、④ `features/stream-metrics-tokens/spec.md:75`（「性能：中文单次 push（含读值）Node 稳态峰值 0.92ms、均摊 0.47ms…」）、实测路径 `apps/mobile/src/services/session-stream-unit.ts:1052`（`ingestDelta`）与 `:1075`（末尾的读值调用）
-  - ⚠️ **`full2/E-1` 回填（2026-09-26，执行后主代理实测）**：本条覆盖面**不止 mobile —— desktop 侧同样是每 delta 读值**。desktop 落点（`71692b11` 实测）：`apps/desktop/renderer/hooks/useAgentStreamMetrics.ts:202`（读值合成 `composeStreamTokens`）、`:299`（重锚 `reanchorStreamTokenBase`）；delta 入口在上游 `apps/desktop/renderer/hooks/useAgentStream.ts:98` / `:107`（`applyTextDelta` / `applyThinkingDelta`）；hook 内 `setInterval(() => setTick(t => t + 1), 250)` 在 `useAgentStreamMetrics.ts:244`——**它只节流渲染 tick，不节流每 delta 的读值**（同一事实的 desktop 版本）。
-  - ⚠️ **行号漂移订正**：mobile 侧因本轮改动漂移，`recomputeCompletionTokens` 定义现为 `session-stream-unit.ts:641`、`ingestDelta` 末尾的读值调用现为 `:1107`（原 `:612` / `:1075` 是 base 行号）。
+  - ⚠️ **`full2/E-1` 回填（2026-09-26，执行后主代理实测；行号于 v3 收尾轮 `n5b-docs-residue` 按 wave-1 之后的现状重查并同步）**：本条覆盖面**不止 mobile —— desktop 侧同样是每 delta 读值**。desktop 落点：`apps/desktop/renderer/hooks/useAgentStreamMetrics.ts:202` 是 **`recomputeCompletionTokens` 的定义行**（`useCallback` 开头）、`:204` 才是**它内部的读值合成 `composeStreamTokens`**、`:301` 是 `noteUsage` 内部的**重锚 `reanchorStreamTokenBase`**；两条 delta 入口的读值调用在同文件 `:272`（`noteTextDelta`）/ `:287`（`noteThinkingDelta`）；delta 入口本身在上游 `apps/desktop/renderer/hooks/useAgentStream.ts:98` / `:107`（`applyTextDelta` / `applyThinkingDelta`）；hook 内 `setInterval(() => setTick(t => t + 1), 250)` 在 `useAgentStreamMetrics.ts:246`——**它只节流渲染 tick，不节流每 delta 的读值**（同一事实的 desktop 版本，**本段结论一个字都不许改，只同步行号**）。⚠️ **行号以 `git grep` 实查为准，本文件落盘后可能漂移**；`71692b11` 时的旧值（`:202` 读值合成 / `:299` 重锚 / `:244` tick）**已作废**。
+  - ⚠️ **行号漂移订正**：mobile 侧因改动漂移，`recomputeCompletionTokens` 定义现为 `session-stream-unit.ts:642`、`ingestDelta` 末尾的读值调用现为 `:1108`（**v3 收尾轮 `n5b-docs-residue` 按 wave-1 之后现状再核一次**：原 base 行号 `:612` / `:1075`、以及中间那次订正出的 `:641` / `:1107` **均已作废**）。⚠️ **行号以 `git grep` 实查为准，本文件落盘后可能漂移**。
   - **条件改法 #3 若触发，desktop 侧同条件同改**（对齐 hook 内那个 250ms tick，而不是 mobile 的 `SESSION_STREAM_APPLY_INTERVAL_MS`——后者是 mobile 专有常量，desktop 全仓零命中）。
 - **问题**:
   - **事实 1：指标读值没有节流**。实查 `session-stream-unit.ts:1052` 的 `ingestDelta` 在**每一条 delta** 末尾都调 `this.recomputeCompletionTokens()`（`:1075`）。所谓「32ms 合批」（`SESSION_STREAM_INGRESS_COALESCE_MS = 32`，`:68`）只作用于 **webview 投喂**（投影快照推给渲染层的那一段），**指标读值本身每 delta 走一次完整 `tokens` getter**（含尾窗 re-encode）。所以 0.92ms / 0.47ms 那个数是「**单次** push + 读值」的口径，**不是每渲染帧的口径**——一条 delta 一个字符的慢速流，1 秒就是 20–50 次读值。
@@ -736,18 +736,20 @@
 ### full2/E-1 [P2] `full/E-1` 的覆盖面只写了 mobile，desktop 同样每 delta 读值
 
 - **维度**: E（性能 / 覆盖面）
-- **文件**: desktop 侧读值落点 `apps/desktop/renderer/hooks/useAgentStreamMetrics.ts:200`（`recomputeCompletionTokens` 定义）/ `:202`（读值合成 `composeStreamTokens`）/ `:270` / `:285`（两次调用，`:276` / `:291` 是 `useCallback` 依赖数组里的同名引用、不算调用），上游 `apps/desktop/renderer/hooks/useAgentStream.ts:98`（`applyTextDelta`）/ `:107`（`applyThinkingDelta`）；`full/E-1` 所列 mobile 落点照旧（**mobile 侧同步订正为 `session-stream-unit.ts:641` 定义 / `:1107` 调用**）。
-  - ⚠️ **本条行号已由 `full/E-1` 的 ⚠️ 回填段订正，验收以回填段为准。**（v3 集成评审 `metrics-exec-3` 同步；写就时用的 `:188` / `:249` / `:264` / `:223` 与 `useAgentStream.ts:172` / `:188` 是**旧行号**，照跑必红。**不要改 `full/E-1` 的回填段**——它是当前唯一正确的一份。）
+- **文件**: desktop 侧读值落点 `apps/desktop/renderer/hooks/useAgentStreamMetrics.ts:202`（`recomputeCompletionTokens` 定义）/ `:204`（其内部读值合成 `composeStreamTokens`）/ `:272` / `:287`（两次调用，`:278` / `:293` 是 `useCallback` 依赖数组里的同名引用、不算调用），上游 `apps/desktop/renderer/hooks/useAgentStream.ts:98`（`applyTextDelta`）/ `:107`（`applyThinkingDelta`）；`full/E-1` 所列 mobile 落点照旧（**mobile 侧同步订正为 `session-stream-unit.ts:642` 定义 / `:1108` 调用**）。
+  - ⚠️ **本条行号已由 `full/E-1` 的 ⚠️ 回填段订正，验收以回填段为准。**（v3 集成评审 `metrics-exec-3` 同步；写就时用的 `:188` / `:249` / `:264` / `:223` 与 `useAgentStream.ts:172` / `:188` 是**旧行号**，照跑必红。**不要改 `full/E-1` 的回填段的结论**——它是当前唯一正确的一份；只有行号随代码漂移才可同步，事实与「不节流」的结论一个字都不许动。）
+  - ⚠️ **v3 收尾轮（`n5b-docs-residue`）按 wave-1 之后的现状重查**：wave-1 在 `useAgentStreamMetrics.ts` 的注释上增删了行，这批锚点**整体 +2**、mobile `session-stream-unit.ts` **+1**，`useAgentStream.ts:98` / `:107` **未漂移**。本条目「文件栏」/「改法 #1」/「条件改法 #3」/「验收命令」与 `full/E-1` 的 ⚠️ 回填段**均已同步为现值**。⚠️ **行号以 `git grep` 实查为准，本文件落盘后可能漂移**——**符号名才是权威锚点**。
 - **问题**:
   - `full/E-1` 的「事实 1：指标读值没有节流」整段只举了 mobile 的 `session-stream-unit.ts:1052` / `:1075`，条件改法 #3 也只说 mobile。**desktop hook 同样是每 delta 读值**——只是它的 **250ms 只节流 usage 事件与渲染 tick，不节流读值**，所以「mobile 每 delta 读」这个事实在 desktop 侧同样成立、只是行号与节流常量不同。
   - 后果：执行方按 `full/E-1` 落地时**只改 mobile**，desktop 侧在条件改法触发时仍然是每 delta 读值，**门限过了却只修了一半**；更麻烦的是 QA 只测了 mobile 就会以为 desktop 侧已经收敛。
 - **改法**（**不新增动作，只把 `full/E-1` 的覆盖面补齐；真机数据未出前一律不动实现**）:
-  1. `full/E-1` 的「文件」栏补上 desktop 三处（`useAgentStreamMetrics.ts:202`（读值合成 `composeStreamTokens`）/ `:299`（重锚 `reanchorStreamTokenBase`）、`useAgentStream.ts:98`（`applyTextDelta`）/ `:107`（`applyThinkingDelta`））。⚠️ **v3 集成评审 `metrics-exec-3` 补订**：本句原先写的 `:249` / `:264` → `:188-194`、`:172` / `:188` 是**旧行号**（只改了本条目的文件栏 / 条件改法 #3 / 验收命令，漏了这一句），照抄会把旧行号写进 `full/E-1`。**行号一律以 `full/E-1` 的 ⚠️ 回填段与本条目「文件」栏为准。**
+  1. `full/E-1` 的「文件」栏补上 desktop 三处（`useAgentStreamMetrics.ts:204`（读值合成 `composeStreamTokens`）/ `:301`（重锚 `reanchorStreamTokenBase`）、`useAgentStream.ts:98`（`applyTextDelta`）/ `:107`（`applyThinkingDelta`））。⚠️ **v3 集成评审 `metrics-exec-3` 补订**：本句原先写的 `:249` / `:264` → `:188-194`、`:172` / `:188` 是**旧行号**（只改了本条目的文件栏 / 条件改法 #3 / 验收命令，漏了这一句），照抄会把旧行号写进 `full/E-1`。**行号一律以 `full/E-1` 的 ⚠️ 回填段与本条目「文件」栏为准。**
   2. `full/E-1` 的事实段加一句：「**desktop hook 同样是每 delta 读值**（250ms 只节流 usage 事件与渲染 tick，不节流读值）」。
-  3. 条件改法 #3 补一句「**desktop 同条件同改**」：读值节拍对齐 **hook 内既有的 250ms tick**（`useAgentStreamMetrics.ts:244`）——⚠️ **不要引用 `SESSION_STREAM_APPLY_INTERVAL_MS`**，那是 **mobile 专有常量**，desktop 侧根本没有它；写进去会让执行方去 desktop 找一个不存在的常量、或反过来把 mobile 常量硬搬到 desktop。
+  3. 条件改法 #3 补一句「**desktop 同条件同改**」：读值节拍对齐 **hook 内既有的 250ms tick**（`useAgentStreamMetrics.ts:246`）——⚠️ **不要引用 `SESSION_STREAM_APPLY_INTERVAL_MS`**，那是 **mobile 专有常量**，desktop 侧根本没有它；写进去会让执行方去 desktop 找一个不存在的常量、或反过来把 mobile 常量硬搬到 desktop。
   4. 门限仍**只对 mobile 提 p95**（Open questions #15），**desktop 顺带观察、不另设门限**——两端的 Hermes/JSC 引擎不同，混在一条门限里会互相掩盖。**真机数据未出前不动实现**。
 - **验收 / 测试**:
-  - `full/E-1` 条目里 desktop 三处行号与实查一致（**v3 集成评审 `metrics-exec-3` 已按 `full/E-1` 回填段同步为 HEAD 真值**）：`git grep -n "composeStreamTokens\|reanchorStreamTokenBase\|setInterval" -- apps/desktop/renderer/hooks/useAgentStreamMetrics.ts` 应命中 `:202`（读值合成）、`:299`（重锚）、`:244`（250ms tick）；`git grep -n "recomputeCompletionTokens" -- apps/desktop/renderer/hooks/useAgentStreamMetrics.ts` 应命中 `:200`（定义）、`:270`、`:285`（两次调用；`:276` / `:291` 是 `useCallback` 依赖数组里的同名引用，不算调用）；`git grep -n "applyTextDelta\|applyThinkingDelta" -- apps/desktop/renderer/hooks/useAgentStream.ts` 应命中 `:98` / `:107`；mobile 侧 `git grep -n "recomputeCompletionTokens" -- apps/mobile/src/services/session-stream-unit.ts` 应命中 `:641`（定义）、`:1107`（调用）。**逐条对读**。
+  - `full/E-1` 条目里 desktop 三处行号与实查一致（**v3 集成评审 `metrics-exec-3` 已按 `full/E-1` 回填段同步为 HEAD 真值；v3 收尾轮（`n5b-docs-residue`）又按 wave-1 之后的现状重查并再同步一次**）：`git grep -n "composeStreamTokens\|reanchorStreamTokenBase\|setInterval" -- apps/desktop/renderer/hooks/useAgentStreamMetrics.ts` 应命中 `:204`（读值合成）、`:301`（重锚）、`:246`（250ms tick）；`git grep -n "recomputeCompletionTokens" -- apps/desktop/renderer/hooks/useAgentStreamMetrics.ts` 应命中 `:202`（定义）、`:272`、`:287`（两次调用；`:278` / `:293` 是 `useCallback` 依赖数组里的同名引用，不算调用）；`git grep -n "applyTextDelta\|applyThinkingDelta" -- apps/desktop/renderer/hooks/useAgentStream.ts` 应命中 `:98` / `:107`；mobile 侧 `git grep -n "recomputeCompletionTokens" -- apps/mobile/src/services/session-stream-unit.ts` 应命中 `:642`（定义）、`:1108`（调用）。**逐条对读**。
+    - ⚠️ **行号以 `git grep` 实查为准，本文件落盘后可能漂移**；上面这组是 **wave-1 落盘后**的现值，wave-1 之前的旧值（`:200` / `:202` / `:299` / `:244` / `:270` / `:285` / `:276` / `:291`、mobile `:641` / `:1107`）**已全部作废**。上面四条命令里的 `\|` 组合在 Windows cmd 下不可靠，**拆成独立命令逐条跑**，别因为「一条命令没输出」就判绿。
   - 真机 QA（`full/E-1` 那行）**双端各测一次**，回报时**分开报 p50 / p95**，不要只报 mobile。
 - **来源**: review-scope-full / round 4（终审收口，扩 `full/E-1` 覆盖面）
 
@@ -835,7 +837,7 @@
 | 3 | **用户照准**（desktop v1 固定 `cl100k_base`，o200k 留后续迭代） |
 | 4 | **已闭合** by `metrics/B-1`：固化路径改 1:1 兜底 + `unencodableChars` 诊断量 + 两条失败路径各自告警 |
 | 5 | **用户照准**（实测区间放宽为约 400–500ms；④ spec `:75` 已改并注明评审实测 468ms） |
-| 6 | **已闭合** by `ctx-usage/A-1`：`updateSessionAgentConfig` 补挂点（就地建 KKV + `await` + overlay-merge 前后差异判定 + 反向用例） |
+| 6 | **已闭合** by `ctx-usage/A-1`：`updateSessionAgentConfig` 补挂点（就地建 KKV + `await` + overlay-merge 前后差异判定 + 反向用例）。⚠️ **v3 集成评审 `ctx-exec-3` 补记**：A-1 的**读侧验收按字面不可满足**（读口只用 `savedModelId` 指纹，指纹相同必然返回 `api`），**已改判为不设读侧用例 + ③ spec 留痕**（设计属性已登记于 `docs/Iterations/mobile-perf-2026-09/bugs/context-usage-caliber-unify/spec.md:44`），回归由上面那条**挂点正反两条用例**承担 |
 | 7 | **已闭合** by `ctx-usage/A-2`：`message.append` 挂失效（落点在 `messages.insert` 之后） |
 | 8 | **已闭合** by `ctx-usage/C-orch-1`：死参数已删、工厂内部自建；③ spec `:39` + 变更点表 #7 均已改「工厂自建」 |
 | 9 | **已闭合** by `ctx-usage/C-1`：CLI 两处加中文注释登记口径差；③ spec 范围收窄段登记 CLI 不含 tools |
@@ -965,7 +967,7 @@
 | 项 | 状态 |
 |---|---|
 | **fix-spec-ready** | **yes**（4 条「按现状收窄」**已由用户照准**，见下） |
-| **执行状态** | **已执行完毕 = dev-ready（2026-09-26，`code-dev-loop`）**：32 条 must-fix 全部落地；6 个 impl/fix 节点 + 1 个 verify 节点 + 2 个 readonly cr-func 节点；提交链 `5c63d27e` → `c78989f7` → `d6c1e0da` → `2ca81325` → `344f6725` → `286113be` → `5adc3ab0` → `71692b11`（**本 fix-spec 的终点**）。⚠️ **v3 集成评审 `ctx-exec-2` 订正**：`71692b11` **之后另有 8 笔提交**，其中 `50e81d4d`（OQ #4 字段移除，用户拍板）、`f0186106` + `4e179e1a`（敏捷项 `context-usage-real-tokenizer-fallback` 真分词器兜底估算）**三笔实质改代码**，`acf1802d` 新建业务 spec，`f4cd067a` 编排 / 文档落盘（**v3 评审范围 head**）——**本行原先对 `71692b11` 之后提交范围的承诺已删**。**未 push / 未 merge / 未发版**。逐条结果见文末「执行记录」 |
+| **执行状态** | **已执行完毕 = dev-ready（2026-09-26，`code-dev-loop`）**：32 条 must-fix 全部落地；6 个 impl/fix 节点 + 1 个 verify 节点 + 2 个 readonly cr-func 节点；提交链 `5c63d27e` → `c78989f7` → `d6c1e0da` → `2ca81325` → `344f6725` → `286113be` → `5adc3ab0` → `71692b11`（**本 fix-spec 的终点**）。⚠️ **v3 集成评审 `ctx-exec-2` 订正**：`71692b11` **之后另有 8 笔提交**，其中 `50e81d4d`（OQ #4 字段移除，用户拍板）、`f0186106` + `4e179e1a`（敏捷项 `context-usage-real-tokenizer-fallback` 真分词器兜底估算）**三笔实质改代码**，其余 `31923b2c` / `f9d0de90` / `0d79f559` 是本 fix-spec 自身的终态与拍板标注（v2 终态标注 / dev-ready 终态落盘 / OQ #4 拍板落地标注，按序排在 `50e81d4d` 之前与之后），`acf1802d` 新建业务 spec，`f4cd067a` 编排 / 文档落盘（**v3 评审范围 head**）——**8 笔全列**，本行原先对 `71692b11` 之后提交范围的承诺已删。**未 push / 未 merge / 未发版**。逐条结果见文末「执行记录」 |
 | **执行期验证** | core 全量 **2173 / 2 红**（既有时区归桶）；mobile 全量 **1501 / 1 红** + 2 个已知 suite 红；desktop 全量 **526/526**；core / mobile / cli typecheck 零输出；desktop renderer tsc 全仓 349 条既有债、**本轮改动文件新增 0**；renderer vite 出包成功（index 3,212 kB）。**无本轮引入的回归** |
 | **fix_spec_path** | `docs/Iterations/stream-metrics-native-integration-cr/cr-fix-spec-v2.md` |
 | **base_sha / head_sha** | `83a434d7` → `fad16a12`（**评审范围**；执行后的提交链见上一行「执行状态」，最后一次实质改动提交为 `71692b11`） |

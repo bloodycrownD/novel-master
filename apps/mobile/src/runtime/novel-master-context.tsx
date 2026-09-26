@@ -175,8 +175,9 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
         sessionStreamUnitManager: new SessionStreamUnitManager({
           runtime: rt,
           runStateService: createSessionRunStateService(rt.conn),
-          // 实时 token 估算（stream-metrics-native ②）：单元创建时建真 BPE
-          // 尾窗计数器（编码名按会话模型解析，未就绪按 cl100k 兜底）。
+          // 实时 token 估算（stream-metrics-native ②）：这里只**装配工厂**；编码表
+          // 在会话切换时空闲预热，估算器本体在单元 `begin()`（run 起手）同步兜底建
+          // （正文/思考各一条，编码名按会话模型解析，未就绪按 cl100k 兜底）。
           tokenEstimatorFactory: sessionId =>
             createSessionStreamTokenEstimator(rt, sessionId),
         }),

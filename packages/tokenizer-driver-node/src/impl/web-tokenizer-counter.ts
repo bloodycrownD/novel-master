@@ -25,9 +25,10 @@ const heuristic = new HeuristicTokenCounter();
  * 真 tokenizer 加载失败时的**兜底计数**（stream-metrics-native ④）。
  *
  * 为什么不直接 `heuristic.countText`（即 `ceil(字符数 / 3.35)`）：3.35 是**英文**
- * 口径，cl100k 实际约 1.64 字符/token，折算对中文正文系统性低估 82%~84%。这里的
- * 调用方（`countWebFamilyPrompt`）会在加载失败时把 `estimated` 置 true、`counterKind`
- * 置 `heuristic`，也就是说**上层已经知道这是估算**——在已知是估算的前提下，没理由
+ * 口径，cl100k 实际约 1.64 token/字符（≈0.61 字符/token），折算对中文正文系统性
+ * 低估 82%~84%。这里的调用方（`countWebFamilyPrompt`）会在加载失败时把
+ * `estimated` 置 true、`counterKind` 置 `heuristic`，也就是说**上层已经知道这是
+ * 估算**——在已知是估算的前提下，没理由
  * 再用误差八成的折算，用默认 cl100k 近似（误差 0.5% 量级）明显更划算。
  *
  * 只有「连 cl100k 表都建不起来」才退回字符折算：那是环境级故障（ranks 资源缺失），

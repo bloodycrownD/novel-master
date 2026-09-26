@@ -14,7 +14,8 @@
  *   节流在途的 pending 由 useAgentStream 在 RUN_FINISHED / RUN_FAILED 前同步
  *   冲刷，收尾冻结读到的即校正当刻的读值。
  * - 可选注入 token 估算器（②）：注入后增量估算升级为真 BPE 尾窗计数
- *   （正文/思考各一条），不注入保持启发式——既有用例零变化。
+ *   （正文/思考各一条），不注入保持启发式——**未收到 usage 前**与旧口径严格
+ *   一致；usage 到达后按 ①「基线 + 增量」口径。
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -147,8 +148,9 @@ type LastRunSnapshot = {
  * 先例）。缺省不传时退化为纯 running 边沿语义。
  *
  * `tokenEstimatorFactory`（可选，②）：给本 hook 注入实时 token 估算器
- * （真 BPE 尾窗计数）。**不注入 = 启发式**（`ceil(chars/3.35)`），既有用例零
- * 变化；工厂返回 null（如编码表构造失败）同样回退启发式。每个 run 起手建一套
+ * （真 BPE 尾窗计数）。**不注入 = 启发式**（`ceil(chars/3.35)`），**未收到 usage
+ * 前**与旧口径严格一致；usage 到达后按 ①「基线 + 增量」口径。工厂返回 null
+ * （如编码表构造失败）同样回退启发式。每个 run 起手建一套
  * （正文/思考各一条），与指标累积器同批重置。
  */
 export function useAgentStreamMetrics(
