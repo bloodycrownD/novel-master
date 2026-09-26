@@ -45,6 +45,7 @@
 import type {ChatMessage} from '@novel-master/core/chat';
 import {createTokenRateSampler} from '@novel-master/core/format';
 import type {
+  IncrementalTokenCounter,
   StreamTokenSource,
   TokenRateSampler,
 } from '@novel-master/core/format';
@@ -147,12 +148,16 @@ export interface SessionStreamWebviewHandle {
 /**
  * 指标快照：run 级累计（新 run 重置=新单元天然零值；step 边界不清）。
  *
- * token 字段（stream-metrics-tokens）：`completionTokens` 优先取 usage 事件
- * 的 run 级累计真值，无真值段由 heuristic 按**累计**字符长度取 ceil 折算
- * （`ceil(totalChars / CHARACTERS_PER_TOKEN_RATIO)`，与
- * `HeuristicTokenCounter.countText` 单次全量计数严格一致）；`tokenSource`
- * 记录当前值的来源（usage 事件到达即翻转，此后 heuristic 不再回写——
- * 真值优先，防估算抖动）。
+ * token 字段（stream-metrics-tokens / stream-metrics-native ①）：
+ * `completionTokens = max(0, 基线 + 增量估算)`，其中
+ * - 增量估算：未注入 token 估算器（②）时是启发式 `ceil(totalChars /
+ *   CHARACTERS_PER_TOKEN_RATIO)`（与 `HeuristicTokenCounter.countText` 单次
+ *   全量计数严格一致）；注入估算器时是「文本 + 思考尾窗增量估算」之和；
+ * - 基线：usage 事件到达时重锚为 `usageValue − 当时的增量估算`——真值成为
+ *   基线，此后每个 delta 的增量继续叠加上去（第二步文本流不再冻结在上一
+ *   步 usage 值上）。多步 run 的数字因此单调增长，而不是停在旧真值。
+ * `tokenSource` 记录当前基线的来源（usage=基线来自事件真值；heuristic=基线
+ * 为 0 的纯估算），不再表示「真值后不再回写」。
  */
 export interface SessionStreamUnitMetrics {
   readonly textChars: number;
@@ -233,6 +238,15 @@ export interface SessionStreamUnitOptions {
   readonly projectId: string;
   /** 消息仓库窄口（消息管线回源 DB 用；由 manager 从 runtime.messages 透传）。 */
   readonly messageStore?: SessionStreamMessageStore;
+  /**
+   * 实时 token 估算器工厂（stream-metrics-native ②）：由 runtime 装配方注入
+   * （真 tiktoken 绑定），单元为正文/思考各建一条独立估算器。
+   * **不注入 = 旧启发式行为**（`ceil(totalChars / 3.35)`），既有用例与无
+   * tokenizer 的极简 runtime 零变化；工厂返回 null（构造失败）同样回退。
+   */
+  readonly tokenEstimatorFactory?: (
+    sessionId: string,
+  ) => IncrementalTokenCounter | null;
   /** run 终态回调（由 manager 的事件收尾路径触发，吞错）。 */
   readonly onSettled?: (status: SessionStreamRunSettledStatus) => void;
   /** settled(finished|failed) 的宽限销毁时长；缺省用模块默认值。 */
@@ -272,6 +286,24 @@ export class SessionStreamUnit {
     completionTokens: 0,
     tokenSource: 'heuristic',
   };
+  /**
+   * usage 基线（stream-metrics-native ①）：`completionTokens = max(0, 基线 +
+   * 增量估算)`。未收到 usage 时为 0（退化为纯估算）；usage 到达时重锚为
+   * `usageValue − 当时的增量估算`，此后 delta 的增量继续叠加（多步 run 不再
+   * 冻结在上一 step 的真值上）。
+   *
+   * **不是 metricsAcc 的字段**：snapshot() 会把 metricsAcc 整体透出，多个
+   * 用例按精确形状比对，内部状态不得混进投影。
+   */
+  private heuristicBaseTokens = 0;
+  /**
+   * 实时 token 估算器（stream-metrics-native ②）：正文/思考各一条独立尾窗
+   * 计数器（`createIncrementalTokenCounter` 的宿主绑定由装配方经
+   * `tokenEstimatorFactory` 注入）。两条都建不起来（未注入/构造失败）时保持
+   * null，走启发式兜底——投影形状与既有行为不变。
+   */
+  private textTokenEstimator: IncrementalTokenCounter | null = null;
+  private thinkingTokenEstimator: IncrementalTokenCounter | null = null;
   /**
    * 实时速率采样器（stream-metrics-tokens）：token 每变一次记一样本，
    * 渲染侧只读（rateTokensPerSecond）；收尾时 freeze 出「上次生成」的
@@ -338,6 +370,25 @@ export class SessionStreamUnit {
     this.onProjectionChanged = options.onProjectionChanged;
     this.settledGraceMs =
       options.settledGraceMs ?? SESSION_STREAM_SETTLED_GRACE_PERIOD_MS;
+    // 实时 token 估算器：单元创建时同步建（首次构造 tiktoken 编码表约
+    // 250–420ms，落在「run 开始到首字」之间，用户已接受）。两条都建成才启用
+    // 估算器路径——半套状态会让正文/思考的增量口径不一致，不如整体回退。
+    const factory = options.tokenEstimatorFactory;
+    if (factory != null) {
+      try {
+        const text = factory(options.sessionId);
+        const thinking = text == null ? null : factory(options.sessionId);
+        if (text != null && thinking != null) {
+          this.textTokenEstimator = text;
+          this.thinkingTokenEstimator = thinking;
+        }
+      } catch (err) {
+        console.warn(
+          '[novel-master/session-stream-unit] token estimator init failed, fallback to heuristic',
+          err,
+        );
+      }
+    }
     this.applyBuffer = createStreamApplyBuffer(
       segments => this.applyStreamSegments(segments),
       {flushIntervalMs: SESSION_STREAM_APPLY_INTERVAL_MS},
@@ -356,8 +407,12 @@ export class SessionStreamUnit {
     }
     this.status = 'starting';
     this.startedAtMsValue = Date.now();
-    // 新 run：速率采样序列重 seed（防跨 run 差分污染首个窗口）。
+    // 新 run：速率采样序列重 seed（防跨 run 差分污染首个窗口）；token 基线
+    // 与两条估算器一并归零（新 run 从零起算）。
     this.rateSampler.reset();
+    this.heuristicBaseTokens = 0;
+    this.textTokenEstimator?.reset();
+    this.thinkingTokenEstimator?.reset();
     return true;
   }
 
@@ -444,6 +499,11 @@ export class SessionStreamUnit {
     this.startedAtMsValue = state.startedAtMs;
     this.settledAtMsValue = state.settledAtMs;
     this.metricsAcc = {...state.metrics};
+    // 防御性重锚：回填的 completionTokens 是「中断时的最终读值」（可能含
+    // usage 真值），而估算器从空开始——基线锚成 `读值 − 当前增量估算`，
+    // 保证水合后读值不被估算口径切换改写（无估算器时等价于
+    // `读值 − ceil(chars/3.35)`）。
+    this.reanchorHeuristicBase(state.metrics.completionTokens);
     // 回填的完整字符串直接充当物化缓存（无分段历史，无需 join）。
     this.partialTextSegments = [];
     this.partialThinkingSegments = [];
@@ -529,6 +589,43 @@ export class SessionStreamUnit {
     );
   }
 
+  /**
+   * 当前增量估算（不含基线）：注入估算器时 = 正文估算 + 思考估算（两条尾窗
+   * 计数器各自累计）；未注入/构造失败时 = 旧启发式 `ceil(totalChars /
+   * CHARACTERS_PER_TOKEN_RATIO)`（对**累计**字符取 ceil，与
+   * `HeuristicTokenCounter.countText` 单次全量计数严格一致——逐 delta 浮点
+   * 累加 len/3.35 再取整与全量 ceil 不等价）。
+   */
+  private estimateIncrementTokens(): number {
+    const text = this.textTokenEstimator;
+    const thinking = this.thinkingTokenEstimator;
+    if (text != null && thinking != null) {
+      return text.tokens + thinking.tokens;
+    }
+    return Math.ceil(
+      (this.metricsAcc.textChars + this.metricsAcc.thinkingChars) /
+        CHARACTERS_PER_TOKEN_RATIO,
+    );
+  }
+
+  /** 重算 `completionTokens = max(0, 基线 + 增量估算)`（delta 归账后调用）。 */
+  private recomputeCompletionTokens(): void {
+    this.metricsAcc.completionTokens = Math.max(
+      0,
+      this.heuristicBaseTokens + this.estimateIncrementTokens(),
+    );
+  }
+
+  /**
+   * 重锚基线（usage 事件到达 / 水合回填）：把 `value` 定为当前读值——
+   * 基线 = value − 当前增量估算，后续 delta 的增量继续叠加上去。
+   * 未收到 usage 前基线恒 0（纯估算），故重锚只发生在校正点。
+   */
+  private reanchorHeuristicBase(value: number): void {
+    this.heuristicBaseTokens = value - this.estimateIncrementTokens();
+    this.metricsAcc.completionTokens = Math.max(0, value);
+  }
+
   /** 只读投影快照（每次调用新对象；messages/pendingChildrenByTitle 字段返回内部引用——见字段注释的引用稳定契约）。 */
   snapshot(): SessionStreamUnitView {
     return {
@@ -579,11 +676,12 @@ export class SessionStreamUnit {
    * usage 事件入口（manager 按 sessionId 路由，EVENT_AGENT_STREAM_USAGE）。
    *
    * 事件携带的是 **run 级累计** `completionTokens`（runner 已换算，消费端零
-   * 算术），到达即覆盖累计值并置 `source=usage`——此后 heuristic 不再回写
-   * （真值优先）。openai 流中零事件段由 heuristic 撑显示，step done 后
-   * runner 补发的 run 级终值经本入口到达、覆盖 heuristic 跳正（校正链闭环
-   * 不依赖 FINISHED）。守卫同 delta：running 态 + runId 所有权（陈旧事件
-   * 不计指标）。返回是否生效（生效才触发写通快照 append）。
+   * 算术）。到达即把它设为**基线**（`base = 真值 − 当前增量估算`）并置
+   * `source=usage`——此后每个 delta 的增量继续叠在真值上（多步 run 的第二步
+   * 文本流不再冻结在上一 step 的真值上；不再有「真值后 heuristic 不回写」的
+   * 门）。openai 流中零事件段由估算撑显示，step done 后 runner 补发的 run 级
+   * 终值经本入口重锚、把估值校正到真值。守卫同 delta：running 态 + runId
+   * 所有权（陈旧事件不计指标）。返回是否生效（生效才触发写通快照 append）。
    */
   ingestUsage(runId: string, completionTokens: number): boolean {
     if (
@@ -597,9 +695,9 @@ export class SessionStreamUnit {
     }
     this.metricsAcc = {
       ...this.metricsAcc,
-      completionTokens,
       tokenSource: 'usage',
     };
+    this.reanchorHeuristicBase(completionTokens);
     this.sampleRate();
     return true;
   }
@@ -964,19 +1062,17 @@ export class SessionStreamUnit {
     }
     if (kind === 'text') {
       this.metricsAcc.textChars += text.length;
+      this.textTokenEstimator?.push(text);
     } else {
       this.metricsAcc.thinkingChars += text.length;
+      this.thinkingTokenEstimator?.push(text);
     }
-    // heuristic 增量兜底（stream-metrics-tokens）：对**累计**字符长度取 ceil
-    // 折算（与 HeuristicTokenCounter.countText 单次全量计数严格一致——逐
-    // delta 浮点累加 len/3.35 再取整与全量 ceil 不等价）。usage 真值到手后
-    // （tokenSource=usage）heuristic 不再回写，防估算抖动回退真值。
-    if (this.metricsAcc.tokenSource === 'heuristic') {
-      this.metricsAcc.completionTokens = Math.ceil(
-        (this.metricsAcc.textChars + this.metricsAcc.thinkingChars) /
-          CHARACTERS_PER_TOKEN_RATIO,
-      );
-    }
+    // token 估算（stream-metrics-native ①②）：每个 delta 归账后重算
+    // `基线 + 增量估算`。注入估算器时增量来自尾窗真 BPE 计数（正文/思考各
+    // 一条）；未注入时是旧启发式 `ceil(累计字符 / 3.35)`（基线为 0 时与既有
+    // 行为严格一致）。usage 真值成为基线后增量继续叠加——数字持续增长，
+    // 不再停在上一条 usage 的累计值上（多步 run 冻结缺陷的修复点）。
+    this.recomputeCompletionTokens();
     this.sampleRate();
     appendWireChunk(this.ingressQueue, {kind, delta: text});
     if (this.ingressTimer == null) {

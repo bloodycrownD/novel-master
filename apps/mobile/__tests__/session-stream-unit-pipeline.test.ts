@@ -40,6 +40,7 @@ import {
   SESSION_STREAM_INGRESS_COALESCE_MS,
 } from '@/services/session-stream-unit';
 import type {SessionStreamWebviewHandle} from '@/services/session-stream-unit';
+import type {IncrementalTokenCounter} from '@novel-master/core/format';
 import {resetKeepAliveStateForTests} from '@/services/agent-finished-notification';
 
 /** 时钟起点（fake timers 的 Date.now 从此起算，断言可精确）。 */
@@ -54,7 +55,12 @@ function advanceStreamTimers(extraMs = 10): void {
   );
 }
 
-function createHarness(options?: {readonly settledGraceMs?: number}) {
+function createHarness(options?: {
+  readonly settledGraceMs?: number;
+  readonly tokenEstimatorFactory?: (
+    sessionId: string,
+  ) => IncrementalTokenCounter | null;
+}) {
   const eventBus = new SimpleEventBus();
   const abortRegistry = {
     has: jest.fn((_sessionId: string) => false),
@@ -81,6 +87,7 @@ function createHarness(options?: {readonly settledGraceMs?: number}) {
     runtime: {eventBus, abortRegistry, sessions, projects} as never,
     runAgentTurn: runAgentTurn as never,
     settledGraceMs: options?.settledGraceMs,
+    tokenEstimatorFactory: options?.tokenEstimatorFactory,
     // Step 2 水合分片的让步点注入同步 mock（fake timers 下无需真实定时器）
     yieldQuantum: async () => undefined,
   });
@@ -1064,7 +1071,7 @@ describe('token 化指标（T-M5/T-M7）', () => {
     );
   });
 
-  it('T-M5: usage 事件覆盖 heuristic 累计、source 翻转；step 边界不清零（run 级）；真值后 heuristic 不回写', () => {
+  it('T-M5: usage 重锚基线、source 翻转；其后 delta 的增量继续叠加（run 级累计不冻结）', () => {
     const h = createHarness();
     startRunningRun(h, 'a', 'r1');
 
@@ -1073,32 +1080,134 @@ describe('token 化指标（T-M5/T-M7）', () => {
       expect.objectContaining({completionTokens: 2, tokenSource: 'heuristic'}),
     );
 
-    // usage 事件（run 级累计真值）到达：覆盖 + 翻转。
+    // usage 事件（run 级累计真值）到达：重锚基线 → 读值 = 真值。
     publishUsage(h.eventBus, 'a', 'r1', 999);
     expect(h.manager.snapshot('a')?.metrics).toEqual(
       expect.objectContaining({completionTokens: 999, tokenSource: 'usage'}),
     );
 
-    // 后续 delta 不回写 heuristic（真值优先，防估算抖动回退）。
+    // 后续 delta 继续叠加增量（基线 997 + ceil(10/3.35)=3 → 1000）：不再被
+    // 「真值后 heuristic 不回写」的门拦死（①多步 run 冻结缺陷的修复点）。
     publishTextDelta(h.eventBus, 'a', 'r1', 'ghij');
     expect(h.manager.snapshot('a')?.metrics).toEqual(
-      expect.objectContaining({completionTokens: 999, tokenSource: 'usage'}),
+      expect.objectContaining({completionTokens: 1000, tokenSource: 'usage'}),
     );
 
     // step 边界：token 与字数同为 run 级累计，不清零。
     publishStepCommitted(h.eventBus, 'a', 'r1');
     expect(h.manager.snapshot('a')?.metrics).toEqual(
-      expect.objectContaining({completionTokens: 999, tokenSource: 'usage'}),
+      expect.objectContaining({completionTokens: 1000, tokenSource: 'usage'}),
     );
 
-    // run 级累计持续覆盖（多 step 真值递增）。
+    // 第二条 usage（多 step 累计真值）到达：重锚到新真值，此后继续叠加
+    // （基线 1231 + ceil(11/3.35)=4 → 1235）。
     publishUsage(h.eventBus, 'a', 'r1', 1234);
     expect(h.manager.snapshot('a')?.metrics).toEqual(
       expect.objectContaining({completionTokens: 1234, tokenSource: 'usage'}),
     );
+    publishTextDelta(h.eventBus, 'a', 'r1', '一');
+    expect(h.manager.snapshot('a')?.metrics).toEqual(
+      expect.objectContaining({completionTokens: 1235, tokenSource: 'usage'}),
+    );
   });
 
-  it('T-M5 openai 场景：流中零 usage 事件段 heuristic 撑显示，step done 补发的终值事件到达即覆盖跳正', () => {
+  it('T-M5 多步 run：工具 step 静默后第二步文本流 token 继续增长，终态速率段不消失（①回归）', () => {
+    const h = createHarness();
+    startRunningRun(h, 'a', 'r1');
+
+    // step 1：每 250ms 一条 50 字符 delta（每拍 +15 t ≈ 60 t/s）。
+    for (let i = 0; i < 5; i += 1) {
+      publishTextDelta(h.eventBus, 'a', 'r1', 'x'.repeat(50));
+      jest.advanceTimersByTime(250);
+    }
+    publishStepCommitted(h.eventBus, 'a', 'r1');
+    // step 1 done：runner 补发 run 级 usage 真值。
+    publishUsage(h.eventBus, 'a', 'r1', 600);
+    expect(h.manager.snapshot('a')?.metrics.completionTokens).toBe(600);
+
+    // 工具 step：无文本 delta（mobile 不订阅 tool-use 事件），静默 3s——
+    // 超过 2.5s 速率窗口，旧样本折叠出窗。
+    jest.advanceTimersByTime(3_000);
+
+    // 第二步文本流首个 delta：token 必须继续增长（旧实现冻结在 600）。
+    publishTextDelta(h.eventBus, 'a', 'r1', 'y'.repeat(50));
+    const afterSecondStepFirstDelta = h.manager.snapshot('a')!.metrics;
+    expect(afterSecondStepFirstDelta.completionTokens).toBeGreaterThan(600);
+    expect(afterSecondStepFirstDelta.tokenSource).toBe('usage');
+
+    // 第二步继续流式输出（每 250ms +50 字符），新窗口重新成形。
+    for (let i = 0; i < 4; i += 1) {
+      jest.advanceTimersByTime(250);
+      publishTextDelta(h.eventBus, 'a', 'r1', 'y'.repeat(50));
+    }
+    expect(h.manager.snapshot('a')!.metrics.completionTokens).toBeGreaterThan(
+      600,
+    );
+    expect(h.manager.rateTokensPerSecond('a', Date.now())).not.toBeNull();
+
+    // 收尾：终态速率段必须存在（旧实现 freeze 折叠成单样本 → null /
+    // 第一步陈速率）。
+    publishFinished(h.eventBus, 'a', 'r1');
+    const projection = h.manager.getSettledProjection('a');
+    expect(projection).not.toBeNull();
+    expect(projection!.rateTokensPerSecond).not.toBeNull();
+    expect(projection!.metrics.completionTokens).toBeGreaterThan(600);
+
+    h.manager.dispose();
+  });
+
+  it('②注入估算器：token 由估算器给出（非字符折算），usage 重锚后增量继续叠加', () => {
+    // 假估算器：1 字符 = 1 token（与 ceil(chars/3.35) 可区分）；每条通道
+    // 一条独立实例（正文/思考分别累计）。
+    const createFakeEstimator = (): IncrementalTokenCounter => {
+      let text = '';
+      return {
+        push(delta: string) {
+          text += delta;
+        },
+        get tokens() {
+          return text.length;
+        },
+        reset() {
+          text = '';
+        },
+      };
+    };
+    const h = createHarness({tokenEstimatorFactory: () => createFakeEstimator()});
+    startRunningRun(h, 'a', 'r1');
+
+    // 正文 4 字符 → 估算 4 t（启发式会是 2 t）。
+    publishTextDelta(h.eventBus, 'a', 'r1', 'abcd');
+    expect(h.manager.snapshot('a')?.metrics).toEqual(
+      expect.objectContaining({completionTokens: 4, tokenSource: 'heuristic'}),
+    );
+    // 思考通道独立累计：2 字符 → 合计 6 t。
+    publishThinkingDelta(h.eventBus, 'a', 'r1', 'ab');
+    expect(h.manager.snapshot('a')?.metrics).toEqual(
+      expect.objectContaining({completionTokens: 6, tokenSource: 'heuristic'}),
+    );
+
+    // usage 重锚：基线 = 100 − 6 = 94。
+    publishUsage(h.eventBus, 'a', 'r1', 100);
+    expect(h.manager.snapshot('a')?.metrics).toEqual(
+      expect.objectContaining({completionTokens: 100, tokenSource: 'usage'}),
+    );
+    // 后续 delta：估算增量继续叠加（正文 8 → 94+8+2 = 104）。
+    publishTextDelta(h.eventBus, 'a', 'r1', 'efgh');
+    expect(h.manager.snapshot('a')?.metrics).toEqual(
+      expect.objectContaining({completionTokens: 104, tokenSource: 'usage'}),
+    );
+    // 第二条 usage 重锚后仍连续（500 → 后续 delta 501，不回退不冻结）。
+    publishUsage(h.eventBus, 'a', 'r1', 500);
+    publishTextDelta(h.eventBus, 'a', 'r1', 'i');
+    expect(h.manager.snapshot('a')?.metrics).toEqual(
+      expect.objectContaining({completionTokens: 501, tokenSource: 'usage'}),
+    );
+
+    h.manager.dispose();
+  });
+
+  it('T-M5 openai 场景：流中零 usage 事件段 heuristic 撑显示，step done 补发的终值事件到达即校正', () => {
     const h = createHarness();
     startRunningRun(h, 'a', 'r1');
 
@@ -1110,7 +1219,7 @@ describe('token 化指标（T-M5/T-M7）', () => {
     publishStepCommitted(h.eventBus, 'a', 'r1');
 
     // step done 后 runner 补发的 run 级终值事件（同一 ingestUsage 管线）：
-    // 覆盖 heuristic、跳正到真值（校正链闭环不依赖 FINISHED）。
+    // 重锚到真值（校正链闭环不依赖 FINISHED）。
     publishUsage(h.eventBus, 'a', 'r1', 87);
     expect(h.manager.snapshot('a')?.metrics).toEqual(
       expect.objectContaining({completionTokens: 87, tokenSource: 'usage'}),

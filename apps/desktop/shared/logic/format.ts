@@ -12,8 +12,10 @@ export {
   formatStreamElapsed,
   slidingTokenRate,
   createTokenRateSampler,
+  createIncrementalTokenCounter,
   SLIDING_TOKEN_RATE_WINDOW_MS,
   type StreamTokenSource,
   type TokenRateSample,
   type TokenRateSampler,
+  type IncrementalTokenCounter,
 } from "@novel-master/core/format";

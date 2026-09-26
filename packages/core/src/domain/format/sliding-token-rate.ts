@@ -16,8 +16,7 @@
  *   持续增长而分子不变，速率自然衰减趋零，恢复后随新样本回升。
  *
  * 组件侧的采样序列维护（token 变化才记样本、同刻去重、时钟回拨丢弃、
- * heuristic→usage 校正点重 seed）由 {@link createTokenRateSampler} 封装，
- * 双端共用同一语义。
+ * 校正点重 seed）由 {@link createTokenRateSampler} 封装，双端共用同一语义。
  *
  * @module domain/format/sliding-token-rate
  */
@@ -89,10 +88,19 @@ const MAX_RATE_SAMPLES = 512;
  *   窗口首=末同刻，整批增量 ÷ 几毫秒 → 瞬时可读速率爆表；
  * - 时钟回拨（nowMs 早于末样本）的样本**入口丢弃**，序列恒按 tMs 升序；
  *   累计值不丢——时钟恢复后第一个样本会带上这段增量；
- * - `source` 翻转视为 heuristic→usage 校正点：累计值跳变，样本序列清空
- *   重 seed，防一次巨大差分污染速率（校正后窗口从真值重新起算）；翻转前
- *   序列的末值留作 {@link TokenRateSampler.freeze} 的回落值（openai 这类
- *   「真值只在收尾到达」的链路，翻转后往往再没有第二个样本）；
+ * - **校正点重 seed** 覆盖两种情形：
+ *   1) `source` 翻转（heuristic→usage）：累计值尺度跳变，序列清空重 seed，
+ *      防一次巨大差分污染速率；翻转前序列的末值留作
+ *      {@link TokenRateSampler.freeze} 的回落值（openai 这类「真值只在收尾
+ *      到达」的链路，翻转后往往再没有第二个样本）；
+ *   2) **窗口折叠后的首个新样本**：与上一个样本相隔 ≥ 窗口时长时，旧样本
+ *      再也不会进任何未来窗口（`窗口起点 > 旧样本时刻`），等价于已折叠；
+ *      此时先把当前窗口末值刷进回落值再清空重 seed——多步 run 跨 step
+ *      静默后，`freeze()` 因此能给出「最后一段稳定输出的速率」，而不是
+ *      null 或第一步的陈速率。
+ *      不采用「每次 usage 事件都清窗」的更激进口径：gemini 每个候选块都
+ *      emit 一条 usage（累计值变化才发），逐条清窗会把实时速率反复清成
+ *      null（速率段闪没），是回归。
  * - 新 run / 数据源切换由调用方 `reset()`。
  */
 export interface TokenRateSampler {
@@ -110,7 +118,8 @@ export interface TokenRateSampler {
   /**
    * 末值快照（run 收尾冻结用）：窗口以**最后一个样本时刻**收尾，不受调用
    * 时刻影响——输出停下后读它仍是「最后一段在稳定输出时的速度」，而不是
-   * 被停顿拖低的值。样本不足以成窗口时回落到校正翻转前的末值。
+   * 被停顿拖低的值。样本不足以成窗口时回落到上一个稳定窗口的末值（校正点
+   * 重 seed 前的末值，含 source 翻转与窗口折叠两种校正点）。
    */
   freeze(): number | null;
   /** 重 seed（新 run / 切会话 / 冻结态退出）。 */
@@ -124,8 +133,11 @@ export function createTokenRateSampler(): TokenRateSampler {
   let lastSource: string | null = null;
   /** 末样本时刻（同刻去重与时钟回拨判定用；reset 清回 −∞）。 */
   let lastSampleMs = Number.NEGATIVE_INFINITY;
-  /** 校正翻转前序列的末值（freeze 的回落值；reset 清空）。 */
-  let flippedRate: number | null = null;
+  /**
+   * 上一个稳定窗口的末值 = `freeze()` 的回落值（样本不足以成窗口时用）。
+   * 写入点即校正点（source 翻转 / 窗口折叠）；reset 清空。
+   */
+  let lastSettledRate: number | null = null;
   /** 末值：窗口以最后一个样本时刻收尾（停顿不拉低）。 */
   const tailRate = (): number | null => {
     const last = samples[samples.length - 1];
@@ -135,12 +147,19 @@ export function createTokenRateSampler(): TokenRateSampler {
     sample(tokens, source, nowMs) {
       if (lastSource !== source) {
         // 校正点（heuristic→usage 覆盖跳变）：先留翻转前末值，再清空重 seed。
-        flippedRate = tailRate() ?? flippedRate;
+        lastSettledRate = tailRate() ?? lastSettledRate;
         samples = [{tMs: nowMs, tokens}];
         lastSampleMs = nowMs;
         lastSource = source;
       } else if (lastTokens !== tokens) {
         if (nowMs > lastSampleMs) {
+          if (nowMs - lastSampleMs >= SLIDING_TOKEN_RATE_WINDOW_MS) {
+            // 窗口折叠：与上个样本相隔 ≥ 窗口时长，旧样本再也不会进任何未来
+            // 窗口（多步 run 的 step 间静默即此形态）。先把当前窗口末值刷进
+            // 回落值，再清空重 seed——freeze() 才能给出最后一段稳定速率。
+            lastSettledRate = tailRate() ?? lastSettledRate;
+            samples = [];
+          }
           samples.push({tMs: nowMs, tokens});
           lastSampleMs = nowMs;
           if (samples.length > MAX_RATE_SAMPLES) {
@@ -159,14 +178,14 @@ export function createTokenRateSampler(): TokenRateSampler {
       return slidingTokenRate(samples, nowMs);
     },
     freeze() {
-      return tailRate() ?? flippedRate;
+      return tailRate() ?? lastSettledRate;
     },
     reset() {
       samples = [];
       lastTokens = null;
       lastSource = null;
       lastSampleMs = Number.NEGATIVE_INFINITY;
-      flippedRate = null;
+      lastSettledRate = null;
     },
   };
 }

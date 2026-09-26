@@ -14,8 +14,9 @@ export type SessionRunStatus = "starting" | "running" | "settled";
 
 /**
  * 输出 token 计数来源（中立命名，展示层与持久层 alias 同一份声明）：
- * - `usage`：协议事件 / step done 补发事件的真值（run 级累计）；
- * - `heuristic`：字符折算兜底；usage 到达后不再回写。
+ * - `usage`：协议事件 / step done 补发事件的真值（run 级累计）已到达，
+ *   当前读值以真值**基线 + 后续增量**构成；
+ * - `heuristic`：尚无 usage 真值，读值完全由字符折算 / 尾窗估算给出。
  */
 export type StreamTokenSource = "usage" | "heuristic";
 

@@ -42,6 +42,10 @@ import {
   type SessionStreamPrefBridge,
 } from '@/services/session-stream-unit-manager.service';
 import {createSessionRunStateService} from '@novel-master/core/session-run-state';
+import {
+  createSessionStreamTokenEstimator,
+  primeStreamTokenModelHint,
+} from '@/services/stream-token-estimator';
 import {showAppToast} from '@/services/app-toast';
 import {setKeepAliveResidentEnabled} from '@/services/agent-finished-notification';
 import {readMessageNotificationEnabled} from '@/storage/message-notification-pref';
@@ -171,6 +175,10 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
         sessionStreamUnitManager: new SessionStreamUnitManager({
           runtime: rt,
           runStateService: createSessionRunStateService(rt.conn),
+          // 实时 token 估算（stream-metrics-native ②）：单元创建时建真 BPE
+          // 尾窗计数器（编码名按会话模型解析，未就绪按 cl100k 兜底）。
+          tokenEstimatorFactory: sessionId =>
+            createSessionStreamTokenEstimator(rt, sessionId),
         }),
       });
       const loaded = await loadMobileScope(runtime);
@@ -246,6 +254,16 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
     const loaded = await loadMobileScope(runtime);
     setScope(loaded);
   }, [runtime]);
+
+  // 实时 token 估算的编码提示预热（stream-metrics-native ②）：会话切换时
+  // 异步解析该会话的 vendorModelId（供下一个 run 选 cl100k/o200k）；失败静默，
+  // 解析不出就按 cl100k 兜底。提示只影响估算精度，不影响任何持久化语义。
+  useEffect(() => {
+    if (runtime == null || scope.sessionId == null) {
+      return;
+    }
+    primeStreamTokenModelHint(runtime, scope.sessionId);
+  }, [runtime, scope.sessionId]);
 
   const setCurrentProject = useCallback(
     async (projectId: string) => {

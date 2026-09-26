@@ -174,6 +174,85 @@ describe("createTokenRateSampler（T-M10 校正重置）", () => {
     assert.equal(dropped, 0, "同源负增量应归零而非负值");
   });
 
+  it("窗口折叠后的首个新样本重 seed：freeze 回落到折叠前末值（多步 run 终态速率）", () => {
+    const sampler = createTokenRateSampler();
+    const startMs = 100_000;
+    // 第一步：200 t/s 跑 1.5s（每 250ms +50）。
+    for (let i = 1; i <= 6; i += 1) {
+      sampler.sample(i * 50, "usage", startMs + i * 250);
+    }
+    const firstStepTail = sampler.freeze();
+    assert.ok(
+      firstStepTail != null && Math.abs(firstStepTail - 200) <= 5,
+      `第一步末值速率应约 200：${firstStepTail}`,
+    );
+
+    // 工具 step 静默 3s（> 窗口 2.5s），第二步首个样本到达：与上个样本相隔
+    // 3s，旧样本再也不会进任何未来窗口 → 先进回落值再清空重 seed。
+    const afterSilence = sampler.sample(600, "usage", startMs + 4_500);
+    assert.equal(afterSilence, null, "跨静默重 seed 后样本不足，省略速率段");
+    // 关键回归：freeze 不返回 null 也不返回陈速率——回落「最后一段稳定输出」。
+    assert.equal(sampler.freeze(), firstStepTail);
+
+    // 第二步窗口从新样本起算（600→740，每 250ms +35 = 140 t/s）。
+    for (let i = 1; i <= 3; i += 1) {
+      sampler.sample(600 + i * 35, "usage", startMs + 4_500 + i * 250);
+    }
+    const secondStep = sampler.sample(740, "usage", startMs + 5_500);
+    assert.ok(
+      secondStep != null && Math.abs(secondStep - 140) <= 5,
+      `第二步速率应按新窗口起算（≈140）而非跨 step 长窗平均：${secondStep}`,
+    );
+    assert.ok(
+      Math.abs(sampler.freeze()! - 140) <= 5,
+      "第二步形成窗口后 freeze 改用新窗口末值",
+    );
+  });
+
+  it("跨静默（> 窗口时长）时旧样本不进新窗口；未超窗口的暂停仍走衰减语义", () => {
+    const sampler = createTokenRateSampler();
+    const startMs = 100_000;
+    sampler.sample(0, "usage", startMs);
+    sampler.sample(100, "usage", startMs + 250);
+    sampler.sample(200, "usage", startMs + 500);
+    // 暂停 2s（< 2.5s 窗口）：不重 seed，旧样本仍在窗口内，速率被分母拖低。
+    const paused = sampler.sample(200, "usage", startMs + 2_500);
+    assert.ok(
+      paused != null && paused > 0 && paused < 200,
+      `2s 暂停应走衰减语义（≈80）：${paused}`,
+    );
+    // 再产出：与上个样本相隔 2s（< 窗口）→ 不重 seed；窗口内可用段是
+    // 100@t+250 → 300@t+2750（增量 200 ÷ 2.5s = 80 t/s），旧样本按窗口裁剪。
+    const resumed = sampler.sample(300, "usage", startMs + 2_750);
+    assert.ok(
+      resumed != null && Math.abs(resumed - 80) <= 1,
+      `恢复后按窗口内可用段差分（≈80）：${resumed}`,
+    );
+
+    // 超过窗口时长的静默：旧样本被清掉，新窗口从新样本起算。
+    const afterLongSilence = sampler.sample(500, "usage", startMs + 8_000);
+    assert.equal(afterLongSilence, null, "跨窗口静默后的首个新样本无窗可算");
+    const nextWindow = sampler.sample(600, "usage", startMs + 8_250);
+    assert.ok(
+      nextWindow != null && Math.abs(nextWindow - 400) <= 1,
+      `新窗口只算静默后的增量（500→600 in 250ms = 400）：${nextWindow}`,
+    );
+  });
+
+  it("时钟回拨不触发窗口折叠重 seed（分支不变）", () => {
+    const sampler = createTokenRateSampler();
+    const startMs = 100_000;
+    sampler.sample(0, "usage", startMs);
+    for (let i = 1; i <= 6; i += 1) {
+      sampler.sample(i * 50, "usage", startMs + i * 250);
+    }
+    const beforeReset = sampler.freeze();
+    // 回拨到 1s 处采样（累计值也变了）：入口丢弃（不新增样本、不重 seed）。
+    sampler.sample(320, "usage", startMs + 1_000);
+    assert.equal(sampler.freeze(), beforeReset);
+    assert.equal(sampler.rateAt(startMs + 1_500), 200);
+  });
+
   it("reset 后跨 run 差分不残留", () => {
     const sampler = createTokenRateSampler();
     sampler.sample(5_000, "usage", 100_000);

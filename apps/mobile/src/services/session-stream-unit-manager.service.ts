@@ -138,6 +138,7 @@ import type {
 } from '@/services/session-stream-unit';
 import {createRunStateWritethrough} from '@/services/run-state-writethrough';
 import type {RunStateWritethrough} from '@/services/run-state-writethrough';
+import type {IncrementalTokenCounter} from '@novel-master/core/format';
 import {
   createRunFinishCalibrationProbe,
   type RunFinishCalibrationProbe,
@@ -286,6 +287,14 @@ export interface SessionStreamUnitManagerParams {
    * 注入同步 resolve 的 mock（fake timers 下无需真实定时器）。
    */
   readonly yieldQuantum?: () => Promise<void>;
+  /**
+   * 实时 token 估算器工厂（stream-metrics-native ②）：透传给每个单元的
+   * `tokenEstimatorFactory`（正文/思考各建一条）。不注入 = 旧启发式行为
+   * （既有测试与极简 runtime 零变化）。
+   */
+  readonly tokenEstimatorFactory?: (
+    sessionId: string,
+  ) => IncrementalTokenCounter | null;
 }
 
 /**
@@ -346,6 +355,10 @@ export class SessionStreamUnitManager {
   private readonly idleMessageViews = new Map<string, IdleMessageView>();
   /** 水合流程的单飞 promise（构造 kick 一次；hydrate 幂等复用）。 */
   private hydratePromise: Promise<void> | null = null;
+  /** 实时 token 估算器工厂（②；未注入 = 单元走启发式兜底）。 */
+  private readonly tokenEstimatorFactory?:
+    | ((sessionId: string) => IncrementalTokenCounter | null)
+    | undefined;
 
   private uiBridge: SessionStreamUiBridge | undefined;
   private prefBridge: SessionStreamPrefBridge | undefined;
@@ -372,6 +385,7 @@ export class SessionStreamUnitManager {
     this.runStateStore = params.runStateService;
     this.writethroughOptions = params.writethrough;
     this.yieldQuantum = params.yieldQuantum ?? createQuantumYield();
+    this.tokenEstimatorFactory = params.tokenEstimatorFactory;
 
     // 全量订阅 run 生命周期事件（不经 UI 面板过滤）。
     this.subscriptions.push(
@@ -1083,6 +1097,7 @@ export class SessionStreamUnitManager {
       sessionId,
       projectId,
       messageStore: this.runtime.messages,
+      tokenEstimatorFactory: this.tokenEstimatorFactory,
       onSettled: options?.onSettled,
       settledGraceMs: this.settledGraceMs,
       onGraceExpired: expired => this.handleGraceExpired(sessionId, expired),
@@ -1197,6 +1212,7 @@ export class SessionStreamUnitManager {
       sessionId,
       projectId,
       messageStore: this.runtime.messages,
+      tokenEstimatorFactory: this.tokenEstimatorFactory,
       settledGraceMs: this.settledGraceMs,
       onProjectionChanged: () => this.notifyChanged(),
     });
@@ -1253,6 +1269,7 @@ export class SessionStreamUnitManager {
       sessionId,
       projectId,
       messageStore: this.runtime.messages,
+      tokenEstimatorFactory: this.tokenEstimatorFactory,
       settledGraceMs: this.settledGraceMs,
       onGraceExpired: expired => this.handleGraceExpired(sessionId, expired),
       onProjectionChanged: () => this.notifyChanged(),

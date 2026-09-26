@@ -20,6 +20,7 @@ import { useAgentStream, type UseAgentStreamCallbacks } from '@/hooks/useAgentSt
 import { useAgentRunLifecycle, shouldApplyTranscriptReload } from '@/hooks/useAgentRunLifecycle';
 import { useChatMessagesScrollFollow } from '@/hooks/useChatMessagesScrollFollow';
 import { useAgentStreamMetrics } from '@/hooks/useAgentStreamMetrics';
+import { createDesktopStreamTokenEstimator } from '@/hooks/stream-token-estimator';
 import { useDesktopAgentActive } from '@/hooks/useDesktopAgentActive';
 import {
   ipcAppUiGet,
@@ -190,7 +191,7 @@ export function ConversationPanel({
     noteTextDelta: noteMetricsTextDelta,
     noteThinkingDelta: noteMetricsThinkingDelta,
     noteUsage: noteMetricsUsage,
-  } = useAgentStreamMetrics(running, metricsRunKey);
+  } = useAgentStreamMetrics(running, metricsRunKey, createDesktopStreamTokenEstimator);
   const [composerError, setComposerError] = useState<string | undefined>();
   const [composerText, setComposerText] = useState('');
   const [composerAttachments, setComposerAttachments] = useState<

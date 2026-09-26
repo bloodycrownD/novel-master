@@ -26,6 +26,7 @@ import {
 import { CHARACTERS_PER_TOKEN_RATIO } from "@novel-master/core/provider";
 import type { AgentStreamMetricsView } from "@/hooks/useAgentStreamMetrics";
 import type { UseAgentStreamCallbacks } from "@/hooks/useAgentStream";
+import type { IncrementalTokenCounter } from "@shared/logic/format";
 import type { ReactTestRenderer } from "react-test-renderer";
 
 // 见文件头：先注册解析钩子，再动态导入 react 家族与 hook（整棵依赖树统一根副本）。
@@ -91,18 +92,30 @@ type MetricsHostProps = {
   readonly runKey: string;
   /** 帧号：note* 不发 state，读新累计值要靠显式 update 触发重渲染。 */
   readonly frame: number;
+  /** 可选实时 token 估算器工厂（②；缺省 = 启发式路径）。 */
+  readonly estimatorFactory?:
+    | (() => IncrementalTokenCounter | null)
+    | undefined;
 };
 
-function MetricsHost({ box, running, runKey }: MetricsHostProps) {
-  box.api = useAgentStreamMetrics(running, runKey);
+function MetricsHost({ box, running, runKey, estimatorFactory }: MetricsHostProps) {
+  box.api = useAgentStreamMetrics(running, runKey, estimatorFactory);
   return null;
 }
 
-function createMetricsHarness() {
+function createMetricsHarness(
+  estimatorFactory?: () => IncrementalTokenCounter | null,
+) {
   const box: { api: MetricsHookApi | null } = { api: null };
   let renderer: ReactTestRenderer | undefined;
   const element = (running: boolean, runKey: string, frame: number) => (
-    <MetricsHost box={box} running={running} runKey={runKey} frame={frame} />
+    <MetricsHost
+      box={box}
+      running={running}
+      runKey={runKey}
+      frame={frame}
+      estimatorFactory={estimatorFactory}
+    />
   );
   return {
     api(): MetricsHookApi {
@@ -161,7 +174,7 @@ describe("useAgentStreamMetrics 状态机（desktop-metrics/test-1）", () => {
     }
   });
 
-  it("noteUsage 覆盖 heuristic 并翻转 source，后续 delta 不回写", async () => {
+  it("noteUsage 重锚基线并翻转 source，后续 delta 的增量继续叠加", async () => {
     const h = createMetricsHarness();
     try {
       await h.render(true, "s1:r1");
@@ -176,14 +189,113 @@ describe("useAgentStreamMetrics 状态机（desktop-metrics/test-1）", () => {
       assert.equal(h.api().metrics?.completionTokens, 777);
       assert.equal(h.api().metrics?.tokenSource, "usage");
 
-      // 真值已到：字符继续累计，但 token 不再被 heuristic 回写
+      // 真值成为基线（777 − 100 = 677）：字符继续累计，增量继续叠加而不是
+      // 冻结在真值上（677 + ceil(670/3.35)=200 → 877）。
       api.noteTextDelta("字".repeat(335));
       await h.refresh(true, "s1:r1", 3);
       const metrics = h.api().metrics;
       assert.ok(metrics != null);
-      assert.equal(metrics.completionTokens, 777);
+      assert.equal(
+        metrics.completionTokens,
+        777 + (Math.ceil(670 / CHARACTERS_PER_TOKEN_RATIO) - 100),
+      );
       assert.equal(metrics.tokenSource, "usage");
       assert.equal(metrics.textChars, 670);
+    } finally {
+      await h.unmount();
+    }
+  });
+
+  it("多步 run：工具 step 静默后第二步文本流 token 继续增长、终态速率段不消失", async () => {
+    const h = createMetricsHarness();
+    try {
+      await h.render(true, "s1:r1");
+      const api = h.api();
+      // step 1：每 1s 一条 100 字符 delta（≈30 t/s），四条。
+      for (let i = 0; i < 4; i += 1) {
+        api.noteTextDelta("字".repeat(100));
+        advance(1_000);
+      }
+      // step 1 done：run 级 usage 真值到达（同刻重锚）。
+      api.noteUsage(600);
+      await h.refresh(true, "s1:r1", 1);
+      assert.equal(h.api().metrics?.completionTokens, 600);
+
+      // 工具 step：无文本 delta，静默 3s（> 2.5s 速率窗口）。
+      advance(3_000);
+      // 第二步首条 delta：token 必须继续增长（旧实现冻结在 600）。
+      api.noteTextDelta("字".repeat(100));
+      await h.refresh(true, "s1:r1", 2);
+      const afterStepTwoFirst = h.api().metrics;
+      assert.ok(afterStepTwoFirst != null);
+      assert.ok(
+        afterStepTwoFirst.completionTokens > 600,
+        `第二步 token 应继续增长：${afterStepTwoFirst.completionTokens}`,
+      );
+
+      // 第二步持续输出：新窗口成形，实时速率非空。
+      for (let i = 0; i < 3; i += 1) {
+        advance(1_000);
+        api.noteTextDelta("字".repeat(100));
+      }
+      await h.refresh(true, "s1:r1", 3);
+      const live = h.api().metrics;
+      assert.ok(live != null);
+      assert.ok(
+        live.tokensPerSecond != null && live.tokensPerSecond > 20,
+        `第二步实时速率应成形：${live.tokensPerSecond}`,
+      );
+
+      // 收尾冻结：速率段必须存在（旧实现跨 step 折叠成单样本 → null）。
+      await h.refresh(false, "s1:r1", 4);
+      const frozen = h.api().metrics;
+      assert.ok(frozen != null);
+      assert.equal(frozen.running, false);
+      assert.ok(
+        frozen.tokensPerSecond != null,
+        "跨 step 静默后终态速率段不消失",
+      );
+      assert.ok(frozen.completionTokens > 600);
+    } finally {
+      await h.unmount();
+    }
+  });
+
+  it("注入估算器（②）：token 由估算器给出，usage 重锚后增量继续叠加", async () => {
+    // 假估算器：1 字符 = 1 token（与 ceil(chars/3.35) 可区分）。
+    const h = createMetricsHarness(() => {
+      let text = "";
+      return {
+        push(delta: string) {
+          text += delta;
+        },
+        get tokens() {
+          return text.length;
+        },
+        reset() {
+          text = "";
+        },
+      };
+    });
+    try {
+      await h.render(true, "s1:r1");
+      const api = h.api();
+      api.noteTextDelta("abcd"); // 估算 4 t（启发式会是 2 t）
+      await h.refresh(true, "s1:r1", 1);
+      assert.equal(h.api().metrics?.completionTokens, 4);
+      assert.equal(h.api().metrics?.tokenSource, "heuristic");
+
+      // thinking 走另一条独立估算器。
+      api.noteThinkingDelta("xy");
+      await h.refresh(true, "s1:r1", 2);
+      assert.equal(h.api().metrics?.completionTokens, 6);
+
+      // usage 重锚：基线 = 100 − 6 = 94，后续增量继续叠加。
+      api.noteUsage(100);
+      api.noteTextDelta("efgh");
+      await h.refresh(true, "s1:r1", 3);
+      assert.equal(h.api().metrics?.completionTokens, 104);
+      assert.equal(h.api().metrics?.tokenSource, "usage");
     } finally {
       await h.unmount();
     }
