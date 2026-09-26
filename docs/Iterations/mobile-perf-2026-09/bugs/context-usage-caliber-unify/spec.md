@@ -27,7 +27,7 @@ agile_trace: true
 | 7 | A | `service/persistent-state/{create-persistent-state.ts,impl/persistent-state.service.ts}` | 注入 sessionKkv（工厂缺省自建，三端装配文件零改动） |
 | 8 | B | `apps/desktop/shared/ipc-types.ts`、`src/main/services/chat-prompt-tokens.service.ts`、`renderer/features/chat/SessionDetailDrawer.tsx`、`apps/mobile/src/services/chat-prompt-tokens.service.ts` | 数据面加 `source: 'api' \| 'local'`；标签两态（`api` → 「上次请求」，否则「预估」）；`~` 仍由 `estimated` 驱动 |
 | 9 | C | `.../logic/count-prompt-llm-input.ts` + 新 `serialize-tools-for-token-count.ts`、`tokenizer-driver-node`、`tokenizer-driver-rn`、`compaction-condition-trigger.port.ts`、`agent-runner.ts` | `CountPromptLlmInputParams.tools?`；统一 helper 拼接；压缩评估由 runner 传现成 tools |
-| 10 | D | `scripts/mock-openai-server.mjs` | `prompt_tokens` = (messages + 顶层 system + tools 序列化文本) 字符数 ÷ 3.35；`completion_tokens` 同口径折算；日志/帮助文案注明「近似 token，非真实 tokenizer」 |
+| 10 | D | `scripts/mock-openai-server.mjs` | `prompt_tokens` / `completion_tokens` 改为**近似 token**：CJK 一字≈一词元（真 tokenizer 实测中文 0.93~1.38 t/字）+ 其余字符 ÷3.35（`approxTokens`），prompt 侧计入 messages + 顶层 system + tools 序列化文本；日志/帮助文案注明「近似 token，非真实 tokenizer」。**对照口径两次收口**：①早先直接拿字符数当 token → 把差距反向放大 3 倍多；②改成整段 ÷3.35 → 中文语料被低估约 3 倍，真机验收收尾校正会看到「数字凭空掉到三分之一」的假象；最终按 CJK 感知折算 |
 
 ## 详细改动说明
 

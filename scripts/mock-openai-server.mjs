@@ -30,11 +30,12 @@
  *   - 响应头固定 Content-Type: text/event-stream
  *
  * usage 口径（重要）：本 mock 是零依赖近似实现，**不是真实 tokenizer**——
- *   - prompt_tokens     = (messages content + 顶层 system + tools 序列化文本) 字符数 ÷ 3.35
- *   - completion_tokens = 语料字符数 ÷ 3.35（task 工具调用分支 = arguments JSON 字符数 ÷ 3.35）
- *   除以 3.35 是为了与 App 本地估算（同样按字符数 ÷ 3.35）同量级，便于在双端 UI 上
- *   对照「上次请求（API 值）」与「预估（本地值）」两种口径；早先直接拿字符数当 token，
- *   会让本地估算看起来只有 API 值的 1/3.35，把口径差异放大成 3 倍多的假差距。
+ *   - prompt_tokens     = (messages content + 顶层 system + tools 序列化文本) 的近似 token
+ *   - completion_tokens = 语料的近似 token（task 工具调用分支 = arguments JSON 的近似 token）
+ *   近似口径 = **CJK 一字≈一词元 + 其余字符 ÷ 3.35**（见 approxTokens）：语料与会话消息
+ *   都是中文，真 tokenizer 下中文约 0.93~1.38 t/字，全按 ÷3.35 会把中文低估约 3 倍、
+ *   验收时收尾校正看起来像「数字凭空掉到三分之一」（那是 mock 口径，不是 App 估算的问题）。
+ *   早先直接拿字符数当 token，则会把差距反向放大 3 倍多——两种都别再用。
  *   注意 `--total-tokens` 仍是**语料字符数上界**（chunk 按字符切片），不是折算后的 token 数。
  *
  * 日志（判别器核心）：stdout 全量输出；--log-file 可选同步落盘。
@@ -65,8 +66,8 @@ const USAGE = `用法: node scripts/mock-openai-server.mjs [选项]
 选项:
   --port <n>            监听端口，默认 8787
   --interval-ms <n>     每个 SSE chunk 的下发间隔（mock-slow / 默认模型），默认 80
-  --tokens-per-chunk <n> 每个 chunk 携带的语料字符数（≈中文令牌数），默认 4
-  --total-tokens <n>    一次回复的语料字符数上界，默认 256（上报 token 数按 ÷3.35 折算）
+  --tokens-per-chunk <n> 每个 chunk 携带的语料字符数（CJK 语料≈字符数即词元数），默认 4
+  --total-tokens <n>    一次回复的语料字符数上界，默认 256（上报 token 数按 CJK≈1/字、其余 ÷3.35 折算）
   --hang-after <n>      mock-dead 第 n 次请求起挂死（收请求不响应保持连接），默认 1
   --no-keepalive        响应带 Connection: close，供对照连接复用实验
   --log-file <path>     日志同步追加写入该文件（可选）
@@ -161,17 +162,45 @@ function buildChunks(totalTokens, tokensPerChunk) {
 }
 
 /**
- * 字符数 → 近似 token 的折算比例（与 App 本地估算口径一致）。
+ * 非 CJK 字符的折算比例（与 App 本地估算口径同源）。
  *
- * 只按字符数折算，不跑真实 BPE/SentencePiece——中文一字≈一令牌、英文/JSON
- * 约 3~4 字符一令牌，3.35 是折中值（与 core 的 CHARACTERS_PER_TOKEN_RATIO 同源）。
+ * 只按字符数折算，不跑真实 BPE/SentencePiece——英文/JSON 约 3~4 字符一令牌，
+ * 3.35 是折中值（与 core 的 CHARACTERS_PER_TOKEN_RATIO 同源）。
  */
 const CHARS_PER_TOKEN = 3.35;
 
-/** 近似 token 数（四舍五入）：字符数 ÷ 3.35。 */
-function approxTokens(chars) {
-  if (!Number.isFinite(chars) || chars <= 0) return 0;
-  return Math.round(chars / CHARS_PER_TOKEN);
+/** 单个码点是否 CJK/日文/全角（这些字在真 tokenizer 下≈一字一词元）。 */
+function isCjkCodePoint(cp) {
+  return (
+    (cp >= 0x3000 && cp <= 0x303f) || // CJK 标点
+    (cp >= 0x3040 && cp <= 0x30ff) || // 日文假名
+    (cp >= 0x3400 && cp <= 0x4dbf) || // 扩展 A
+    (cp >= 0x4e00 && cp <= 0x9fff) || // 基本区
+    (cp >= 0xf900 && cp <= 0xfaff) || // 兼容表意
+    (cp >= 0xff00 && cp <= 0xff60) // 全角
+  );
+}
+
+/**
+ * 文本 → 近似 token 数：**CJK 一字≈一词元**（真 tokenizer 实测中文 0.93~1.38
+ * t/字），其余字符按 {@link CHARS_PER_TOKEN} 折算。
+ *
+ * 仍不是真实 tokenizer，但比「整段按字符数 ÷ 3.35」贴合得多：本 mock 的语料与
+ * 会话消息都是中文，全按 ÷3.35 会把中文低估约 3 倍，验收时收尾校正会看到「数字
+ * 凭空掉到三分之一」的假象（那是 mock 口径问题，不是 App 估算的问题）。
+ */
+function approxTokens(text) {
+  if (typeof text !== 'string' || text.length === 0) return 0;
+  let cjk = 0;
+  let other = 0;
+  for (const ch of text) {
+    if (isCjkCodePoint(ch.codePointAt(0))) {
+      cjk += 1;
+    } else {
+      other += 1;
+    }
+  }
+  return Math.round(cjk + other / CHARS_PER_TOKEN);
 }
 
 // 模型行为表：intervalMs 为 null 表示沿用全局 --interval-ms
@@ -233,8 +262,10 @@ function chunkPayload(id, created, model, delta, finishReason, usage = null) {
 /** SSE 流式回复：首 chunk 带 role，中间按速率喷语料，尾 chunk stop，最后 usage + [DONE] */
 function respondStream(req, res, model, intervalMs, promptTokens, ctxLine) {
   const chunks = buildChunks(cli.totalTokens, cli.tokensPerChunk);
-  // 上报口径：语料字符数 ÷ 3.35（近似 token，与本地估算同一把尺子）
-  const completionTokens = approxTokens(chunks.reduce((n, c) => n + c.length, 0));
+  // 上报口径：CJK 一字≈一词元、其余 ÷3.35 的近似 token（见 approxTokens）
+  const completionTokens = approxTokens(
+    chunks.reduce((n, c) => n + c, ''),
+  );
   const id = 'chatcmpl-' + randomUUID().replace(/-/g, '').slice(0, 24);
   const created = Math.floor(Date.now() / 1000);
 
@@ -302,7 +333,7 @@ function respondStream(req, res, model, intervalMs, promptTokens, ctxLine) {
 function respondJson(res, model, promptTokens, ctxLine) {
   const content = buildChunks(cli.totalTokens, cli.tokensPerChunk).join('');
   // 同 respondStream：上报的是折算后的近似 token，不是字符数
-  const completionTokens = approxTokens(content.length);
+  const completionTokens = approxTokens(content);
   const body = {
     id: 'chatcmpl-' + randomUUID().replace(/-/g, '').slice(0, 24),
     object: 'chat.completion',
@@ -329,26 +360,26 @@ function respondJson(res, model, promptTokens, ctxLine) {
   log(`${ctxLine} <- JSON 完成，completion_tokens=${completionTokens}`);
 }
 
-/** 粗估 prompt 令牌数：messages 各条 content + 顶层 system + tools 的文本量 ÷ 3.35（近似 token，非真实 tokenizer） */
+/** 粗估 prompt 令牌数：messages 各条 content + 顶层 system + tools 的文本量（近似 token，非真实 tokenizer） */
 function estimatePromptTokens(body) {
   if (body == null || typeof body !== 'object') return 0;
-  let chars = 0;
+  const parts = [];
   const messages = Array.isArray(body.messages) ? body.messages : [];
   for (const m of messages) {
-    chars += contentChars(m?.content);
+    parts.push(contentText(m?.content));
   }
   // 非 OpenAI 形态的顶层 system（Anthropic 风格）也计入，避免手工构造的请求少算。
-  if (typeof body.system === 'string') chars += body.system.length;
+  if (typeof body.system === 'string') parts.push(body.system);
   // tools 定义随请求一并发给模型、同样占上下文：按序列化文本量计入。
-  if (Array.isArray(body.tools)) chars += JSON.stringify(body.tools).length;
-  return approxTokens(chars);
+  if (Array.isArray(body.tools)) parts.push(JSON.stringify(body.tools));
+  return approxTokens(parts.join('\n'));
 }
 
-/** content 文本量：字符串取长度，数组（多模态分段）/对象取序列化长度。 */
-function contentChars(content) {
-  if (typeof content === 'string') return content.length;
-  if (content == null) return 0;
-  return JSON.stringify(content).length;
+/** content 文本量：字符串原样，数组（多模态分段）/对象取序列化文本。 */
+function contentText(content) {
+  if (typeof content === 'string') return content;
+  if (content == null) return '';
+  return JSON.stringify(content);
 }
 
 /**
@@ -383,8 +414,8 @@ function respondTaskToolCall(req, res, model, intervalMs, promptTokens, ctxLine)
   });
   // 参数按 24 字节切片分多个 delta 下发：覆盖解析器的 arguments 拼接路径
   const pieces = args.match(/[\s\S]{1,24}/g) ?? [];
-  // 上报口径：arguments JSON 字符数 ÷ 3.35（早先硬编码 48，与文本量脱钩）
-  const completionTokens = approxTokens(args.length);
+  // 上报口径：arguments JSON 的近似 token（CJK≈1/字、其余 ÷3.35；早先硬编码 48 与文本量脱钩）
+  const completionTokens = approxTokens(args);
   const id = 'chatcmpl-' + randomUUID().replace(/-/g, '').slice(0, 24);
   const created = Math.floor(Date.now() / 1000);
 
