@@ -316,6 +316,7 @@ describe("skill 工具", () => {
       {
         action: "edit",
         name: "demo",
+        domain: "global",
         oldString: "旧文本",
         newString: "新文本",
         replaceAll: true,
@@ -324,13 +325,66 @@ describe("skill 工具", () => {
     );
     const editCall = svc.calls.find((c) => c.method === "editSkillFile");
     assert.ok(editCall != null);
-    assert.equal(editCall.args[0], "project");
+    assert.equal(editCall.args[0], "global");
     assert.deepEqual(editCall.args[3], {
       oldString: "旧文本",
       newString: "新文本",
       replaceAll: true,
     });
     assert.equal((out as { replacements: number }).replacements, 2);
+  });
+
+  it("edit：缺 domain 被 schema 拦截（不再静默缺省 project）", async () => {
+    const { runner } = makeRunner();
+    const svc = fakeSkillService();
+    await assert.rejects(
+      () =>
+        runner.call(
+          SKILL_TOOL_NAME,
+          {
+            action: "edit",
+            name: "demo",
+            oldString: "旧文本",
+            newString: "新文本",
+          },
+          skillToolCtx(svc),
+        ),
+      (e: unknown) =>
+        e instanceof ToolError &&
+        e.code === "INVALID_ARGUMENT" &&
+        JSON.stringify((e as ToolError).details).includes("domain"),
+    );
+    assert.equal(
+      svc.calls.length,
+      0,
+      "schema 拦截后不应触达 SkillService",
+    );
+  });
+
+  it("read/write/edit 缺必填字段：由 schema 统一报 INVALID_ARGUMENT", async () => {
+    const { runner } = makeRunner();
+    const cases: readonly { input: unknown; field: string }[] = [
+      { input: { action: "read" }, field: "name" },
+      { input: { action: "load" }, field: "name" },
+      { input: { action: "write", name: "demo" }, field: "content" },
+      { input: { action: "write", content: "x" }, field: "name" },
+      {
+        input: { action: "edit", name: "demo", domain: "global", newString: "y" },
+        field: "oldString",
+      },
+    ];
+    for (const c of cases) {
+      const svc = fakeSkillService();
+      await assert.rejects(
+        () => runner.call(SKILL_TOOL_NAME, c.input, skillToolCtx(svc)),
+        (e: unknown) =>
+          e instanceof ToolError &&
+          e.code === "INVALID_ARGUMENT" &&
+          JSON.stringify((e as ToolError).details).includes(c.field),
+        `输入 ${JSON.stringify(c.input)} 应因缺 ${c.field} 报 INVALID_ARGUMENT`,
+      );
+      assert.equal(svc.calls.length, 0, "schema 拦截后不应触达 SkillService");
+    }
   });
 
   it("path 含 .. 段被 schema 拒绝（INVALID_ARGUMENT，不触达服务层）", async () => {

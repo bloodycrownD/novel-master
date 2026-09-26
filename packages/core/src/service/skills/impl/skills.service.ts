@@ -29,6 +29,7 @@ import {
   skillMissingDomain,
   skillMissingProjectId,
   skillNotFound,
+  skillNotFoundInDomain,
 } from "@/errors/skill-errors.js";
 import { BUILTIN_SKILL_NAMES } from "@/bootstrap/skills/seed-builtin-skills.js";
 import { parseSkillFrontMatter } from "@/domain/skills/logic/parse-skill-front-matter.js";
@@ -163,6 +164,65 @@ export class SkillsService implements SkillService {
       vfs: this.deps.projectMetaVfs(scope.projectId),
       domain: "project",
     };
+  }
+
+  /**
+   * 探测另一域是否存在同名同路径的技能文件（仅用于错误文案提示）。
+   *
+   * @returns `true/false` = 存在/不存在；`null` = **无法确认**（project 域缺
+   * projectId 时无从探测）。三态不可并成两态：把「查不了」说成「没有」会误导
+   * 调用方去错误的方向新建。
+   */
+  private async skillFileExistsInDomain(
+    domain: SkillDomain,
+    name: string,
+    path: string,
+    projectId?: string
+  ): Promise<boolean | null> {
+    if (domain === "project" && (projectId == null || projectId.length === 0)) {
+      return null;
+    }
+    try {
+      const vfs = this.vfsForDomain(domain, projectId);
+      await vfs.read(`${SKILLS_ROOT}/${name}/${path}`);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * 写路径的 NOT_FOUND 转成可操作文案。
+   *
+   * WHY：edit/write 的域由调用方显式给，失败通常是「域选错」而非「技能不存在」。
+   * 裸 VfsError 会把 `Path not found: /meta/skills/...` 抛给调用方，既泄漏内部
+   * 逻辑路径，也看不出该补 domain 参数——模型据此无法自我修复。
+   *
+   * @returns 可直接抛出的 SkillError；非 NOT_FOUND 的错误原样抛出。
+   * （返回错误而非声明 `Promise<never>`：`await` 一个 `Promise<never>` 不足以让
+   * tsc 认定外层函数在此终止，会误报 TS2366。）
+   */
+  private async toWriteNotFoundError(
+    error: unknown,
+    name: string,
+    path: string,
+    domain: SkillDomain,
+    projectId?: string
+  ): Promise<SkillError> {
+    if (!isVfsError(error, "NOT_FOUND")) {
+      throw error;
+    }
+    const otherDomain: SkillDomain = domain === "global" ? "project" : "global";
+    const exists = await this.skillFileExistsInDomain(
+      otherDomain,
+      name,
+      path,
+      projectId
+    );
+    return skillNotFoundInDomain(name, path, domain, {
+      domain: otherDomain,
+      exists,
+    });
   }
 
   async listSkills(scope: SkillListScope): Promise<SkillListItem[]> {
@@ -309,7 +369,11 @@ export class SkillsService implements SkillService {
     }
     // write 对不存在的文件会自动补父目录——新建技能即向新目录写 SKILL.md。
     // 版本比对已从 VFS 底层移除：last-write-wins。
-    return vfs.write(`${SKILLS_ROOT}/${name}/${rel}`, content);
+    try {
+      return await vfs.write(`${SKILLS_ROOT}/${name}/${rel}`, content);
+    } catch (error) {
+      throw await this.toWriteNotFoundError(error, name, rel, domain, projectId);
+    }
   }
 
   async editSkillFile(
@@ -327,12 +391,16 @@ export class SkillsService implements SkillService {
     const vfs = this.vfsForDomain(domain, projectId);
     // replace 底层走 compute-replace-result（normalize-for-match 定位），
     // 与 edit 工具同一套匹配语义
-    return vfs.replace(
-      `${SKILLS_ROOT}/${name}/${rel}`,
-      match.oldString,
-      match.newString,
-      { replaceAll: match.replaceAll }
-    );
+    try {
+      return await vfs.replace(
+        `${SKILLS_ROOT}/${name}/${rel}`,
+        match.oldString,
+        match.newString,
+        { replaceAll: match.replaceAll }
+      );
+    } catch (error) {
+      throw await this.toWriteNotFoundError(error, name, rel, domain, projectId);
+    }
   }
 
   async setDisabled(

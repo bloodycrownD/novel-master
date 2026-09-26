@@ -110,6 +110,43 @@ export function skillNotFound(name: string, path?: string): SkillError {
   );
 }
 
+/**
+ * 写操作（write/edit）在指定域内找不到技能或技能文件。
+ *
+ * WHY 单独一类：edit/write 的 domain 由调用方显式决定，失败多半是「域选错了」
+ * 而不是「技能真不存在」。文案必须带上命中的域与另一域的存在性，否则调用方
+ * 只会看到裸 VFS 的 `Path not found: /meta/skills/...`，既认不出是域的问题，
+ * 也无从知道该补什么参数。
+ *
+ * @param other 另一域的探测结果。`exists: null` 表示**无法确认**（如未提供
+ * projectId 而另一域是 project），此时不得断言该域没有该技能。
+ */
+export function skillNotFoundInDomain(
+  name: string,
+  path: string,
+  domain: "global" | "project",
+  other?: {
+    readonly domain: "global" | "project";
+    readonly exists: boolean | null;
+  }
+): SkillError {
+  let hint: string;
+  if (other == null) {
+    hint = `如需在该域新建，请显式传 domain:"${domain}"。`;
+  } else if (other.exists === true) {
+    hint = `该技能存在于 ${other.domain} 域；如需修改它，请显式传 domain:"${other.domain}"。`;
+  } else if (other.exists === false) {
+    hint = `${other.domain} 域也没有该技能；如需在 ${domain} 域新建，请显式传 domain:"${domain}"。`;
+  } else {
+    hint = `未能确认 ${other.domain} 域是否存在该技能（缺 projectId 无法探测该域）。`;
+  }
+  return new SkillError(
+    "NOT_FOUND",
+    `技能 ${name} 在 ${domain} 域不存在（文件 ${path}）；${hint}`,
+    { skillName: name, path }
+  );
+}
+
 /** 删除内置技能（global 域内置名）。 */
 export function skillBuiltin(name: string): SkillError {
   return new SkillError("BUILTIN_SKILL", `内置技能不支持删除：${name}`, {
