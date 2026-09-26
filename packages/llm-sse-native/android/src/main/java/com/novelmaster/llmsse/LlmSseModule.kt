@@ -54,7 +54,7 @@ class LlmSseModule(reactContext: ReactApplicationContext) :
     const val DEFAULT_READ_TIMEOUT_MS = 30_000L
     const val DEFAULT_CALL_TIMEOUT_MS = 600_000L
 
-    /** 合批参数：100ms 定时与 64KB 阈值先到者 flush 一次。 */
+    /** 合批参数：100ms 定时与 64K 字符阈值先到者 flush 一次（阈值按 UTF-16 字符计，中文场景约 192KB 字节）。 */
     private const val FLUSH_INTERVAL_MS = 100L
     private const val FLUSH_THRESHOLD_CHARS = 64 * 1024
 
@@ -70,8 +70,8 @@ class LlmSseModule(reactContext: ReactApplicationContext) :
    * client 级读超时**恒禁用**（0 = 无限）：OkHttp 的 readTimeout 从 connect 后
    * 的第一次读就开始计时，会罩住「等首字节/等响应」——非流式请求的响应
    * 等待与流式的首字等待都是正常形态，不应设 30s 界（真机实锤：非流式
-   * 大 prompt 30s 超时 × 重试一次 = 用户看到的 ~60s 报错）。流中空闲检测
-   * 改在 headers 到达后经 source.timeout() 挂载（见 sseConnect）。
+   * 大 prompt 30s 超时 × 重试一次 = 用户看到的 ~60s 报错）。流式流体会话内
+   * 也不再挂任何空闲界（首字与流体停顿均由 callTimeout 单一兜底）。
    */
   private val baseClient: OkHttpClient = OkHttpClient.Builder()
     .connectionPool(ConnectionPool())
@@ -112,7 +112,8 @@ class LlmSseModule(reactContext: ReactApplicationContext) :
    *
    * @param headersKv 扁平键值对 ["k1","v1","k2","v2",...]（ReadableArray 传输最省）
    * @param readTimeoutMs / callTimeoutMs 传 0 或负数则用默认值（per-request
-   *   覆盖经 newBuilder 克隆 client，共享连接池——RN 官方同款手法）
+   *   覆盖经 newBuilder 克隆 client，共享连接池——RN 官方同款手法）；
+   *   readTimeoutMs 已退役（读超时恒禁用），保留入参仅为 JS 接口兼容。
    */
   @ReactMethod
   fun sseConnect(
@@ -218,7 +219,7 @@ class LlmSseModule(reactContext: ReactApplicationContext) :
           promise.resolve(result)
         }
       } catch (t: Throwable) {
-        // 非流式走 baseClient：读超时即默认值（无 per-request 覆盖）。
+        // 非流式走 baseClient：读超时已恒禁用（此处传默认数值仅供防御性文案）。
         val (kind, message) = classifyError(t, DEFAULT_READ_TIMEOUT_MS)
         promise.reject(kind, message, t)
       }
@@ -261,7 +262,7 @@ class LlmSseModule(reactContext: ReactApplicationContext) :
   /**
    * per-request 整调用预算（克隆 builder 共享连接池，RN 官方同款手法）。
    * 读超时不在此设置——client 级读超时已恒禁用（见 baseClient 注释），
-   * 流中空闲界由 sseConnect 在 headers 到达后经 source.timeout() 挂载。
+   * 流式全程不设空闲界；唯一自动兜底即此处的 callTimeout。
    */
   private fun clientWithCallTimeout(callTimeoutMs: Int): OkHttpClient {
     if (callTimeoutMs <= 0) {
@@ -365,9 +366,15 @@ class LlmSseModule(reactContext: ReactApplicationContext) :
     }
   }
 
-  /** flush 缓冲余量为一个 LlmSseChunk 事件；幂等，读循环与定时器线程均可调。 */
+  /**
+   * flush 缓冲余量为一个 LlmSseChunk 事件；幂等，读循环与定时器线程均可调。
+   *
+   * 「闸门检查 + emitChunk」整体在 state 锁内完成，与 [finishStream] 的
+   * 「关闸 + emitDone」互斥：否则定时器线程可能先取走缓冲、再被读循环的收尾
+   * 插队（Done 已发）→ 流尾批被静默丢弃；或反过来让 Chunk 落在 Done 之后。
+   */
   private fun flushPending(state: StreamState) {
-    val text = synchronized(state) {
+    synchronized(state) {
       state.flushTask?.cancel(false)
       state.flushTask = null
       if (state.pending.isEmpty()) {
@@ -375,34 +382,66 @@ class LlmSseModule(reactContext: ReactApplicationContext) :
       }
       val snapshot = state.pending.toString()
       state.pending.setLength(0)
-      snapshot
-    }
-    // 事件闸门：流已被 abort/终结时不再发（streams 移除即关闸）
-    if (streams.containsKey(state.requestId)) {
-      emitChunk(state.requestId, text)
+      // 事件闸门：流已被 abort/终结时不再发（streams 移除即关闸，余量丢弃）
+      if (!streams.containsKey(state.requestId)) {
+        return
+      }
+      emitChunk(state.requestId, snapshot)
     }
   }
 
+  /**
+   * 流收尾：同锁内完成「兜底 flush + 关闸 + emitDone」。
+   *
+   * 与 [flushPending] 共用 state 锁 → 同一 requestId 的 Chunk/Done 严格串行、
+   * Done 恒为最后一个事件：先到的 flush 一定先 emit，晚到的 flush 见闸门已关
+   * 即丢弃。闸门已被 abort 关掉时不重复发终结事件。
+   */
   private fun finishStream(requestId: String, state: StreamState) {
-    streams.remove(requestId)
-    emitDone(requestId)
+    synchronized(state) {
+      if (!streams.containsKey(requestId)) {
+        return
+      }
+      // 读循环收尾已显式 flush 过一次；这里再兜一层（幂等），保证 ≤100ms
+      // 窗口内的最后一批一定落在 Done 之前。
+      flushPending(state)
+      streams.remove(requestId)
+      emitDone(requestId)
+    }
   }
 
+  /**
+   * 读循环/建流失败收尾：同锁内「关闸 + emitError」，与 [flushPending] 的
+   * 闸门检查互斥（Error 同 Done：恒为该 requestId 的最后一个事件）。
+   */
   private fun handleStreamFailure(
     requestId: String,
     call: Call,
     t: Throwable,
     effectiveReadTimeoutMs: Long,
   ) {
-    streams.remove(requestId)
-    if (call.isCanceled()) {
-      return // 主动 abort：JS 侧已自行收尾，静默
+    val state = streams[requestId]
+    if (state == null) {
+      return // 闸门已关（abort 或正常收尾）：不再发终结事件
     }
     val (kind, message) = classifyError(t, effectiveReadTimeoutMs)
-    emitError(requestId, kind, message)
+    synchronized(state) {
+      if (!streams.containsKey(requestId)) {
+        return
+      }
+      streams.remove(requestId)
+      if (call.isCanceled()) {
+        return // 主动 abort：JS 侧已自行收尾，静默
+      }
+      emitError(requestId, kind, message)
+    }
   }
 
-  /** 错误分类：读超时（SocketTimeout）与 callTimeout（InterruptedIOException "timeout"）归 timeout。读超时 message 携带生效数值，供 JS 侧文案透传真实触发来源。 */
+  /**
+   * 错误分类：callTimeout（InterruptedIOException "timeout"）归 timeout。
+   * SocketTimeoutException 分支为防御性保留——client 级读超时恒禁用、流中
+   * 无空闲界，正常不可达；真触发时 message 携带数值供 JS 侧文案透传来源。
+   */
   private fun classifyError(t: Throwable, effectiveReadTimeoutMs: Long): Pair<String, String> =
     when (t) {
       is SocketTimeoutException ->

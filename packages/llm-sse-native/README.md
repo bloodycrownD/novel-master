@@ -1,6 +1,6 @@
 # @novel-master/llm-sse-native
 
-LLM SSE 原生字节管子（Android / Kotlin）：自有 OkHttpClient + native 合批（100ms | 64KB 先到者）+ 非流式 `request`（GET/POST）。port 纪律「只搬字节不认协议」——SSE 帧解析留在 core JS parser，native 不用 okhttp-sse。
+LLM SSE 原生字节管子（Android / Kotlin）：自有 OkHttpClient + native 合批（100ms | 64K 字符先到者；阈值按 UTF-16 字符计，中文场景 ≈192KB 字节）+ 非流式 `request`（GET/POST）。port 纪律「只搬字节不认协议」——SSE 帧解析留在 core JS parser，native 不用 okhttp-sse。
 
 ## Entry points
 
@@ -11,13 +11,15 @@ LLM SSE 原生字节管子（Android / Kotlin）：自有 OkHttpClient + native 
 
 ## Native API（Kotlin `LlmSseModule`，autolink 后 `NativeModules.LlmSseNative`）
 
-- `sseConnect(requestId, url, headersKv, body, readTimeoutMs, callTimeoutMs)` — 建流；事件驱动无 Promise
+- `sseConnect(requestId, url, headersKv, body, readTimeoutMs, callTimeoutMs)` — 建流；事件驱动无 Promise。`readTimeoutMs` 已退役（读超时恒禁用），参数仅为接口兼容保留
 - `sseAbort(requestId)` — 主动中止（`call.cancel()`，此后该 requestId 不再发事件）
 - `request(method, url, headersKv, body?, callTimeoutMs) → Promise<{status, contentType, body}>` — 非流式（listModels GET / chatNonStream POST 底座）；非 2xx 不 reject，status/body 带回由 JS 侧处理
 
 事件（`NativeEventEmitter`）按序到达：`LlmSseHeaders {requestId, status, contentType}` → `LlmSseChunk {requestId, text}`（合批后 ~10 事件/s）→ `LlmSseDone {requestId}` / `LlmSseError {requestId, kind: "network"|"timeout"|"http", message}`。
 
-超时默认：读 30s、callTimeout 600s；per-request 覆盖传非正值即用默认（克隆 builder 手法，共享连接池）。
+超时口径（终版语义）：读超时已退役——client 级读超时恒禁用，流式全程无空闲界（首字与流体停顿都不是错误），唯一自动兜底是 callTimeout 600s（connect + 首字 + 流体全周期）。per-request 覆盖传非正值即用默认（克隆 builder 手法，共享连接池）；`readMs` 仅保留接口兼容与错误文案位。
+
+core 下发的 `opts.wholeCallTimeoutMs` 存在时会覆盖 `timeouts.callMs`（整调用预算单点口径，见 core `SSE_WHOLE_CALL_TIMEOUT_MS`）。
 
 ## JS wrapper
 
@@ -39,5 +41,5 @@ if (isNativeSseAvailable()) {
 ## 测试
 
 - `npm test`（包内）：注入 fake bridge 直测 wrapper——requestId 匹配、事件 1:1 透传、错误/abort 映射
-- 合批精度（100ms/64KB、事件率）不在 JS 侧断言——归迭代 manual 核验（spec §2 登记口径）
+- 合批精度（100ms/64K 字符、事件率）不在 JS 侧断言——归迭代 manual 核验（spec §2 登记口径）
 - Kotlin 单测基建本期不引入（spec §2 登记）

@@ -58,6 +58,19 @@ interface StreamRoutes {
   onError(event: LlmSseErrorEvent): void;
 }
 
+/**
+ * requestId 的一次性实例前缀（6 位 base36 随机串）。
+ *
+ * 计数器在 JS 模块重载后会从 1 重来，而 native 侧可能仍存活上一份实例发起的
+ * 流（requestId 直到 abort/callTimeout 才释放）——不带前缀就会撞 id，native
+ * 报 "duplicate requestId" 直接把新请求打掉。加前缀后两份实例的 id 空间
+ * 天然不相交（热重载 / 双实例共存都安全）。
+ */
+const REQUEST_ID_INSTANCE_PREFIX = Math.random()
+  .toString(36)
+  .slice(2, 8)
+  .padEnd(6, "0");
+
 let nextRequestId = 1;
 
 /** init.headers 的三种 RequestInit 形态（无 DOM lib 环境下显式声明）。 */
@@ -133,12 +146,14 @@ export function createNativeSseTransportFromBridge(
 
   return {
     post(url, init, onChunk, opts) {
-      const requestId = `llm-sse-${nextRequestId++}`;
+      const requestId = `llm-sse-${REQUEST_ID_INSTANCE_PREFIX}-${nextRequestId++}`;
       const headersKv = flattenRequestHeaders(init.headers);
       const body = init.body == null ? "" : String(init.body);
       const timeouts = opts?.nativeTimeouts;
       const readTimeoutMs = timeouts?.readMs ?? -1;
-      const callTimeoutMs = timeouts?.callMs ?? -1;
+      // 整调用预算单点下发（core-transport/C-orch-1）：core 的 opts.wholeCallTimeoutMs
+      // 存在即覆盖 nativeTimeouts.callMs；两者都缺省传 -1，由 Kotlin 默认 600s 兜底。
+      const callTimeoutMs = opts?.wholeCallTimeoutMs ?? timeouts?.callMs ?? -1;
       const signal = opts?.signal ?? init.signal;
 
       return new Promise<{ status: number; contentType: string | null }>(

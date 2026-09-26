@@ -11,7 +11,7 @@ export interface LlmSseHeadersEvent {
   readonly contentType: string | null;
 }
 
-/** LlmSseChunk 事件载荷：native 合批（100ms | 64KB 先到者）后的文本批。 */
+/** LlmSseChunk 事件载荷：native 合批（100ms | 64K 字符先到者，阈值按 UTF-16 字符计）后的文本批。 */
 export interface LlmSseChunkEvent {
   readonly requestId: string;
   readonly text: string;
@@ -22,7 +22,7 @@ export interface LlmSseDoneEvent {
   readonly requestId: string;
 }
 
-/** LlmSseError 事件载荷：kind 语义——network 连接/读失败、timeout 读超时/callTimeout、http 状态错误。 */
+/** LlmSseError 事件载荷：kind 语义——network 连接/读失败、timeout callTimeout（读超时已退役，仅防御性文案路径）、http 状态错误。 */
 export interface LlmSseErrorEvent {
   readonly requestId: string;
   readonly kind: "network" | "timeout" | "http";
@@ -35,9 +35,16 @@ export const LLM_SSE_EVENT_CHUNK = "LlmSseChunk";
 export const LLM_SSE_EVENT_DONE = "LlmSseDone";
 export const LLM_SSE_EVENT_ERROR = "LlmSseError";
 
-/** native 读超时默认值（毫秒），与 Kotlin 侧一致。 */
+/**
+ * 已退役的 native 读超时默认值（毫秒）：流式流体现在不设空闲界（client 级
+ * 读超时恒禁用），Kotlin 侧保留常量与 `sseConnect` 的 `readTimeoutMs` 参数
+ * 仅为 JS 接口兼容，该值至多落进一条正常不可达的 SocketTimeoutException 文案。
+ *
+ * @deprecated 读超时已退役（恒禁用）；唯一自动兜底是整调用 callTimeout
+ * （见 {@link LLM_SSE_DEFAULT_CALL_TIMEOUT_MS}）。
+ */
 export const LLM_SSE_DEFAULT_READ_TIMEOUT_MS = 30_000;
-/** native 整调用超时默认值（毫秒），与 Kotlin 侧一致。 */
+/** native 整调用超时默认值（毫秒），与 Kotlin 侧一致：唯一自动兜底（connect + 首字 + 流体全周期）。 */
 export const LLM_SSE_DEFAULT_CALL_TIMEOUT_MS = 600_000;
 
 /**
@@ -78,6 +85,7 @@ export interface LlmSseNativeBridge extends LlmSseNativeModule {
  *
  * 本包不依赖 @novel-master/core 运行时——此接口是鸭子类型声明；
  * core 侧 Step 3 落地 `registerSseTransport(transport)` 后按结构兼容直接注册。
+ * `opts.wholeCallTimeoutMs` 为 core 下发的整调用预算（单点口径），
  * `opts.nativeTimeouts` 为本包扩展位（core port 不携带时用 native 默认值）。
  */
 export interface SseTransport {
@@ -89,7 +97,16 @@ export interface SseTransport {
       providerId?: string;
       signal?: AbortSignal;
       logTag?: string;
-      /** native 超时覆盖（毫秒；不传用 native 默认 30s/600s）。 */
+      /**
+       * core 下发的整调用预算（毫秒，= `SSE_WHOLE_CALL_TIMEOUT_MS` 600_000）；
+       * 存在时覆盖 `nativeTimeouts.callMs`，缺省传 -1 由 Kotlin 默认 600s 兜底。
+       */
+      wholeCallTimeoutMs?: number;
+      /**
+       * native 超时覆盖（毫秒；不传用 native 默认）。
+       * `callMs` 为整调用预算（缺省 600s）；`readMs` 已退役——读超时恒禁用，
+       * 仅保留接口兼容与错误文案位（同 Kotlin `sseConnect` 的入参）。
+       */
       nativeTimeouts?: { readMs?: number; callMs?: number };
     },
   ): Promise<{ status: number; contentType: string | null }>;

@@ -69,7 +69,7 @@ function createBridge(): LlmSseNativeBridge | null {
   // TurboModuleBinding.getModule）。spread 只枚举 own property，拿到的是
   // 「已被访问过」的方法子集：isNativeSseAvailable 只访问过 sseConnect/
   // request，sseAbort 缺失 → 终止链 bridge.sseAbort 为 undefined，abort
-  // 时抛 "undefined is not a function" 且连接不断（挂死 run 只能等读超时）。
+  // 时抛 "undefined is not a function" 且连接不断（挂死 run 只能等 callTimeout 兜底）。
   // 解构的属性访问走原型查找，三个方法引用在此刻全部取到。
   const {sseConnect, sseAbort, request} = nativeModule;
   return {sseConnect, sseAbort, request, events};

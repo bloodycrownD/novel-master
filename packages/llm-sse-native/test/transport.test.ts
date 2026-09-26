@@ -2,8 +2,9 @@
  * T-N1：wrapper 传输链路（spec llm-stream-native 测试策略）。
  *
  * mock bridge 高速注入 LlmSseChunk 事件，断言 requestId 匹配、事件 1:1 透传
- * （无丢失/重复/放大）、LlmSseError → transport 错误映射。
- * native 合批精度（100ms/64KB、事件率）不在此断言——归 Step 7/8 manual。
+ * （无丢失/重复/放大）、LlmSseError → transport 错误映射；含 requestId 实例
+ * 前缀（跨模块重载不撞 id）与 core 下发整调用预算（wholeCallTimeoutMs）透传。
+ * native 合批精度（100ms/64K 字符、事件率）不在此断言——归 Step 7/8 manual。
  */
 
 import assert from "node:assert/strict";
@@ -107,8 +108,9 @@ describe("createNativeSseTransportFromBridge（T-N1）", () => {
     assert.equal(mock.connects.length, 2);
     const [idA, idB] = mock.connects.map((c) => c.requestId);
     assert.notEqual(idA, idB);
-    assert.match(idA, /^llm-sse-\d+$/);
-    assert.match(idB, /^llm-sse-\d+$/);
+    // 一次性实例前缀（6 位 base36）+ 递增序号
+    assert.match(idA, /^llm-sse-[0-9a-z]{6}-\d+$/);
+    assert.match(idB, /^llm-sse-[0-9a-z]{6}-\d+$/);
 
     mock.emit(LLM_SSE_EVENT_HEADERS, { requestId: idA, status: 200, contentType: null });
     mock.emit(LLM_SSE_EVENT_HEADERS, { requestId: idB, status: 200, contentType: null });
@@ -123,6 +125,52 @@ describe("createNativeSseTransportFromBridge（T-N1）", () => {
     assert.deepEqual(chunksB, ["B1", "B2"]);
     assert.deepEqual(await promiseA, { status: 200, contentType: null });
     assert.deepEqual(await promiseB, { status: 200, contentType: null });
+  });
+
+  it("模块重载：第二份模块实例共用同一 native 总线也不撞 id（一次性实例前缀）", async () => {
+    const mock = createMockBridge();
+    // import query 绕过 ESM 模块缓存 → 第二份模块实例 ≈ JS 热重载（计数器复位）
+    const reloaded = (await import(
+      `../src/transport.js?reload=${Date.now()}`
+    )) as {
+      createNativeSseTransportFromBridge: typeof createNativeSseTransportFromBridge;
+    };
+
+    const chunksBefore: string[] = [];
+    const chunksAfter: string[] = [];
+    // 同一 mock bridge = 同一 native 模块：重载前后的旧 id 仍存活于 native 侧
+    const promiseBefore = createNativeSseTransportFromBridge(mock.bridge).post(
+      "https://before.test",
+      { method: "POST", body: "" },
+      (c) => chunksBefore.push(c),
+    );
+    const promiseAfter = reloaded.createNativeSseTransportFromBridge(mock.bridge).post(
+      "https://after.test",
+      { method: "POST", body: "" },
+      (c) => chunksAfter.push(c),
+    );
+
+    assert.equal(mock.connects.length, 2);
+    const [idBefore, idAfter] = mock.connects.map((c) => c.requestId);
+    // 两份实例的计数器都从 1 重来：id 必须靠前缀隔开（旧实现此处会重复）
+    const prefixOf = (requestId: string): string => requestId.split("-")[2] ?? "";
+    assert.match(idBefore, /^llm-sse-[0-9a-z]{6}-\d+$/);
+    assert.match(idAfter, /^llm-sse-[0-9a-z]{6}-\d+$/);
+    assert.notEqual(idBefore, idAfter);
+    assert.notEqual(prefixOf(idBefore), prefixOf(idAfter));
+
+    // 两套 id 空间互不串流、各自正常收尾
+    mock.emit(LLM_SSE_EVENT_HEADERS, { requestId: idBefore, status: 200, contentType: null });
+    mock.emit(LLM_SSE_EVENT_HEADERS, { requestId: idAfter, status: 200, contentType: null });
+    mock.emit(LLM_SSE_EVENT_CHUNK, { requestId: idAfter, text: "after" });
+    mock.emit(LLM_SSE_EVENT_CHUNK, { requestId: idBefore, text: "before" });
+    mock.emit(LLM_SSE_EVENT_DONE, { requestId: idBefore });
+    mock.emit(LLM_SSE_EVENT_DONE, { requestId: idAfter });
+
+    assert.deepEqual(chunksBefore, ["before"]);
+    assert.deepEqual(chunksAfter, ["after"]);
+    assert.deepEqual(await promiseBefore, { status: 200, contentType: null });
+    assert.deepEqual(await promiseAfter, { status: 200, contentType: null });
   });
 
   it("settle 后到达的迟到事件被丢弃（不重复 onChunk、不二次 settle）", async () => {
@@ -177,8 +225,8 @@ describe("createNativeSseTransportFromBridge（T-N1）", () => {
     assert.equal(connect.url, "https://example.test/stream");
     assert.deepEqual(connect.headersKv, ["Authorization", "Bearer tk", "Content-Type", "application/json"]);
     assert.equal(connect.body, '{"x":1}');
-    assert.equal(connect.readTimeoutMs, -1); // 未覆盖 → native 用默认 30s
-    assert.equal(connect.callTimeoutMs, -1); // 未覆盖 → native 用默认 600s
+    assert.equal(connect.readTimeoutMs, -1); // readMs 已退役（恒禁用）：未覆盖传 -1
+    assert.equal(connect.callTimeoutMs, -1); // 未覆盖 → Kotlin 默认整调用预算 600s
 
     mock.emit(LLM_SSE_EVENT_HEADERS, { requestId, status: 200, contentType: null });
     mock.emit(LLM_SSE_EVENT_DONE, { requestId });
@@ -198,6 +246,42 @@ describe("createNativeSseTransportFromBridge（T-N1）", () => {
     assert.ok(connect != null);
     assert.equal(connect.readTimeoutMs, 5000);
     assert.equal(connect.callTimeoutMs, 120000);
+
+    mock.emit(LLM_SSE_EVENT_HEADERS, { requestId: connect.requestId, status: 200, contentType: null });
+    mock.emit(LLM_SSE_EVENT_DONE, { requestId: connect.requestId });
+    await promise;
+  });
+
+  it("core 下发 wholeCallTimeoutMs：作为第 6 参透传给 sseConnect（单点整调用预算）", async () => {
+    const mock = createMockBridge();
+    const promise = createNativeSseTransportFromBridge(mock.bridge).post(
+      "https://example.test/stream",
+      { method: "POST", body: "" },
+      () => {},
+      { wholeCallTimeoutMs: 600_000 },
+    );
+    const connect = mock.connects[0];
+    assert.ok(connect != null);
+    assert.equal(connect.callTimeoutMs, 600_000);
+    assert.equal(connect.readTimeoutMs, -1); // 读超时仍恒禁用
+
+    mock.emit(LLM_SSE_EVENT_HEADERS, { requestId: connect.requestId, status: 200, contentType: null });
+    mock.emit(LLM_SSE_EVENT_DONE, { requestId: connect.requestId });
+    await promise;
+  });
+
+  it("wholeCallTimeoutMs 优先于 nativeTimeouts.callMs（core 单点口径覆盖本包扩展位）", async () => {
+    const mock = createMockBridge();
+    const promise = createNativeSseTransportFromBridge(mock.bridge).post(
+      "https://example.test/stream",
+      { method: "POST", body: "" },
+      () => {},
+      { wholeCallTimeoutMs: 600_000, nativeTimeouts: { readMs: 5000, callMs: 120000 } },
+    );
+    const connect = mock.connects[0];
+    assert.ok(connect != null);
+    assert.equal(connect.callTimeoutMs, 600_000);
+    assert.equal(connect.readTimeoutMs, 5000); // readMs 仍按接口兼容位透传（native 侧恒不用）
 
     mock.emit(LLM_SSE_EVENT_HEADERS, { requestId: connect.requestId, status: 200, contentType: null });
     mock.emit(LLM_SSE_EVENT_DONE, { requestId: connect.requestId });
