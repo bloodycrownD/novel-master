@@ -7,6 +7,8 @@ branch: feat/llm-stream-native（基于 740bad96）
 
 # 停止按钮 P0 修复报告（TypeError + 连接不断 + run 悬死）
 
+> **初版语义记录**（2026-09-25）：本文记录初版语义（当时存在 30s 读超时）；终版语义见 `docs/Iterations/llm-stream-native/spec.md` §2 实施修正记录——流式无任何空闲界，唯一自动兜底 callTimeout 600s。
+
 Step 8 e2e 报告登记的 P0：native SSE 路径 mock-dead 挂死窗口点终止键，
 `TypeError: undefined is not a function`（t0 send 后 ~28ms，无堆栈），
 挂死连接未被客户端中止（+30s 才被读超时关闭），run 悬死（无重试、无终态、

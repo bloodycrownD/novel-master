@@ -3,6 +3,7 @@
  *
  * 覆盖：
  * - 活跃期实时速率可读（delta 累积下 > 0），暂停期随时刻自然衰减；
+ * - 同 tick 多 delta：实时速率不爆表（core 采样器同刻去重的 mobile 侧交叉验收）；
  * - 收尾冻结：settle 取末值（窗口以最后样本时刻收尾）、随 settled 投影
  *   常驻，单元宽限销毁后仍可读且**不随时刻衰减**；
  * - session KKV 落库：settle 写 `stream_metrics/finalRate`（值可解析）；
@@ -187,6 +188,61 @@ describe('冻结末值速率（stream-metrics-tokens-final-rate）', () => {
     const decayed = h.manager.rateTokensPerSecond('s1', Date.now());
     expect(decayed).not.toBeNull();
     expect(decayed! < live!).toBe(true);
+
+    h.manager.dispose();
+  });
+
+  it('同 tick 多 delta 不产生爆表率：实时速率 0/null，第二时刻样本到达后恢复（B-1 交叉验收）', () => {
+    const h = buildHarness();
+    h.manager.startRun('s1', 'p1', 'hi');
+    h.eventBus.publish(EVENT_AGENT_RUN_STARTED, {
+      sessionId: 's1',
+      projectId: 'p1',
+      runId: 'r1',
+    });
+
+    // 同一毫秒内 6 条 delta（共 300 字符）：事件同 tick 到达的形态（核心 B-1
+    // 修复点是采样器同刻去重——本用例从 mobile 侧交叉验收）。
+    const t0 = Date.now();
+    for (let i = 0; i < 6; i += 1) {
+      h.eventBus.publish(EVENT_AGENT_STREAM_TEXT_DELTA, {
+        sessionId: 's1',
+        runId: 'r1',
+        text: 'x'.repeat(50),
+      });
+    }
+    const batchTokens = h.manager.snapshot('s1')!.metrics.completionTokens;
+    expect(batchTokens).toBe(90); // ceil(300 / 3.35)
+    // 旧实现（同刻不去重）的爆表形态 = 整批增量 ÷ 几毫秒：本批 90 t ÷ 5ms 即
+    // 万级 t/s（旧实现此处实际读数 15000 t/s——窗口首样本是批内首条 15 t）。
+    // 本用例的判据就是这种形态不能出现。
+    const burstForm = (batchTokens * 1_000) / 5;
+    expect(burstForm).toBeGreaterThan(1_000);
+
+    // 指标条实时读口（ChatStreamMetricsBarLive 读 manager.rateTokensPerSecond）：
+    // 同刻只剩 1 条样本 → 窗口样本不足 → 0/null，而不是整批÷几毫秒。
+    const atSameTick = h.manager.rateTokensPerSecond('s1', t0);
+    const justAfter = h.manager.rateTokensPerSecond('s1', t0 + 5);
+    expect(atSameTick === null || atSameTick === 0).toBe(true);
+    expect(justAfter === null || justAfter === 0).toBe(true);
+
+    // 第二时刻样本到达后恢复：窗口首样本 = 同刻最终累计值，速率按真实增量算。
+    jest.advanceTimersByTime(250);
+    h.eventBus.publish(EVENT_AGENT_STREAM_TEXT_DELTA, {
+      sessionId: 's1',
+      runId: 'r1',
+      text: 'x'.repeat(50),
+    });
+    const nextTokens = h.manager.snapshot('s1')!.metrics.completionTokens;
+    const recovered = h.manager.rateTokensPerSecond('s1', Date.now());
+    expect(recovered).not.toBeNull();
+    expect(recovered! > 0).toBe(true);
+    expect(recovered!).toBeCloseTo(
+      ((nextTokens - batchTokens) * 1_000) / 250,
+      6,
+    );
+    // 与爆表形态数量级拉开（真值 60 t/s vs 爆表形态万级）。
+    expect(recovered!).toBeLessThan(burstForm / 10);
 
     h.manager.dispose();
   });

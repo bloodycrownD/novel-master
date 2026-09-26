@@ -17,6 +17,7 @@
     "test": "jest",
     "prebuild": "npm run build -w @novel-master/core",
     "build": "tsc --noEmit -p tsconfig.build.json",
+    "pretypecheck": "npm run build -w @novel-master/core -w @novel-master/cloud-sync-driver-s3 -w @novel-master/llm-sse-native -w @novel-master/sksp-android -w @novel-master/tdbc-driver-op-sqlite -w @novel-master/tokenizer-driver-rn",
     "typecheck": "tsc --noEmit -p tsconfig.build.json && tsc --noEmit -p src/web/tsconfig.json && npm run e2e:tsc",
     "e2e": "node ./e2e/scripts/ensure-appium-driver.mjs && wdio run ./e2e/wdio.conf.ts",
     "e2e:fixture": "node ./e2e/scripts/inject-tool-turn-fixture.mjs",

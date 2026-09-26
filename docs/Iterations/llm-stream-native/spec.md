@@ -70,11 +70,12 @@ SSE parser（增量，已就绪）→ runner（microtask 合并）→ unit 三�
   ```ts
   interface SseTransport {
     post(url: string, init: RequestInit, onChunk: SseByteHandler,
-         opts?: { providerId?: string; signal?: AbortSignal; logTag?: string })
+         opts?: { providerId?: string; signal?: AbortSignal; logTag?: string;
+                  wholeCallTimeoutMs?: number })
       : Promise<{ status: number; contentType: string | null }>;
   }
   ```
-  （`postSse` 的第五参 `options.fetchFn` 不进 port——port 自带传输；providerId/signal/logTag 语义与现 `PostSseOptions` 一致。）
+  （`postSse` 的第五参 `options.fetchFn` 不进 port——port 自带传输；providerId/signal/logTag 语义与现 `PostSseOptions` 一致。`wholeCallTimeoutMs` 为整调用兜底预算（毫秒）：**600s 整调用预算由 core 单点下发**（`SSE_WHOLE_CALL_TIMEOUT_MS`，见 core-transport/C-orch-1），实现以之覆盖自身 callTimeout 配置，缺省回退实现默认（native 侧保留 Kotlin 默认 600s 作后备），预算口径不在各层各写一份。）
 - `registerSseTransport(transport)` + 模块级持有；`postSse` 择优：registered native → XHR → fetch，**逐请求运行时判定**（每次调用时检查注册位，非进程启动时定死——native 未注册/加载失败时同进程内自动回落 XHR，这是第 7 节条件化撤除 close 的前提）。
 - **settle 守卫上移的重构边界（一句话）**：⑤ 回炉版把 watchdog、whole-call 定时器、`rejectOnce` settle 守卫分别内嵌在 XHR 分支（`createStreamWatchdog` 装配 / `xhr.timeout = SSE_WHOLE_CALL_TIMEOUT_MS` / `Connection: close`）与 fetch 分支（controller + whole-call `setTimeout`）里，两份时序逻辑同构重复；本迭代把 **settle 守卫与 whole-call 定时器上移到 `postSse` 公共层**（三分支共用同一守卫，分支内只留传输专属清理——XHR abort / fetch reader.cancel / native sseAbort）。**watchdog 不在上移面内**：⑤ 终版已按产品拍板整体退役（`stream-watchdog.ts` 原语与导出保留但无接入方，见 §2 实施修正记录与 `docs/apm/RULE.md:85`），本迭代不装配、不实例化，只保留其原语级单测。既有 T-T 系列用例（依赖迭代 `llm-stream-timeout` spec 的 T-T1~T-T9，含 watchdog 原语级与双分支集成级）随上移迁至 port 公共层测试，断言语义不变（watchdog 接入方断言按退役删除），并为 native 分支补同一套时序用例；native 分支的 callTimeout 传 `SSE_WHOLE_CALL_TIMEOUT_MS`，ontimeout 语义由 native `LlmSseError(kind:"timeout")` 承接并映射同一 `LlmStreamTimeoutError` 分级（`processedLength>0 → idle`）。
 - mobile 装配：runtime 初始化处注册（与驱动注册同址）；desktop/CLI 不注册、零变化。
