@@ -41,6 +41,7 @@ const STATE_PAINTING_HOST_MESSAGES: ReadonlySet<string> = new Set([
   'appendTailRows',
   'streamDelta',
   'streamBatch',
+  'streamBlockCommit',
   'streamCommit',
   'streamReset',
   'streamToolInvoking',
@@ -61,12 +62,21 @@ import {
 import {emitChatTranscriptTelemetry} from '@/services/chat-transcript-telemetry';
 import {useTheme} from '@/theme/ThemeProvider';
 import {prepareStreamTailHtml} from './prepare-stream-tail-html';
+import {splitStreamBlocks} from '@/web/chat-transcript/stream/block-split';
 import type {StreamWireChunk} from '@/services/stream-wire-queue';
 import {appendWireChunk} from '@/services/stream-wire-queue';
 import {decodeLiteralHtmlEntities} from '@/components/rich-content/decode-literal-html-entities';
 import {CHAT_TRANSCRIPT_SELECTION_MENU_ITEMS} from './chat-transcript-selection-menu';
 
 export {CHAT_TRANSCRIPT_SELECTION_MENU_ITEMS} from './chat-transcript-selection-menu';
+
+/**
+ * 渲染块级化开关（spec §6 风险节「渲染改造按 commit 协议独立开关」）：
+ * 开启时 richText 流式走「完成块 markdown-it 渲一次 + streamBlockCommit
+ * append」；关闭即整体退回旧全量路径（streamDelta.html 为全量累积渲染、
+ * webview 整段替换），webview 侧两种模式并存、由消息形态自然区分。
+ */
+const STREAM_BLOCK_RENDER_ENABLED = true;
 
 export type ChatTranscriptWebViewHandle = {
   pushStreamDelta: (kind: 'text' | 'thinking', delta: string) => void;
@@ -359,8 +369,16 @@ export const ChatTranscriptWebView = memo(
       /** batch-off 回滚路径：按到达序排队，RAF 内逐条 post streamDelta（禁止 text/thinking 分区重排）。 */
       const pendingStreamDeltaSegmentsRef = useRef<StreamWireChunk[]>([]);
       const pendingStreamSegmentsRef = useRef<StreamWireChunk[]>([]);
+      /**
+       * 当前活跃尾块累积（spec §6 块级化后不再全量）：块边界切分出的完成
+       * 块经 streamBlockCommit 下发后，此处重置为剩余尾块。全量口径 =
+       * streamCommittedXxxPartsRef.join('') + 此处（abort overlay 物化用）。
+       */
       const streamTextAccumRef = useRef('');
       const streamThinkingAccumRef = useRef('');
+      /** 已提交完成块源文本（块级渲染）：与活跃尾块拼接还原全量流式文本。 */
+      const streamCommittedTextPartsRef = useRef<string[]>([]);
+      const streamCommittedThinkingPartsRef = useRef<string[]>([]);
       const richTextRef = useRef(flags?.richText ?? false);
       const streamActiveRef = useRef(false);
       /** streamCommit 已写入的行 id，用于 messages effect 去重 snapshot。 */
@@ -390,6 +408,8 @@ export const ChatTranscriptWebView = memo(
         pendingStreamSegmentsRef.current = [];
         streamTextAccumRef.current = '';
         streamThinkingAccumRef.current = '';
+        streamCommittedTextPartsRef.current = [];
+        streamCommittedThinkingPartsRef.current = [];
         prevStreamTextRef.current = '';
         prevStreamThinkingRef.current = '';
       }, []);
@@ -460,6 +480,80 @@ export const ChatTranscriptWebView = memo(
         });
       }, [webReady, streamGenerating, postToWeb]);
 
+      type PendingStreamBlockSplit = {
+        kind: 'text' | 'thinking';
+        commits: {html?: string; text: string}[];
+        tailHtml?: string;
+        tailText: string;
+      };
+
+      /**
+       * 块感知切分（spec §6）：对活跃尾块累积跑块边界判定，推进「已提交块
+       * 游标」（尾块重置为剩余、完成块入 committed parts）并返回待发块提交。
+       * 只切分不 post——delta 先行、块提交随后（顺序约束）：webview 在块
+       * 提交的尾块重置中洗掉 delta 携带的已完成块字符，最终态无重复。
+       * 超限判定按块（T-N6）：单块超 12k 仅该块 html 降级 undefined，
+       * 已提交块与终态/历史路径的全量语义互不影响。
+       */
+      const takeStreamBlockSplits =
+        useCallback((): PendingStreamBlockSplit[] => {
+          if (!richTextRef.current || !STREAM_BLOCK_RENDER_ENABLED) {
+            return [];
+          }
+          const splits: PendingStreamBlockSplit[] = [];
+          const kinds = [
+            {
+              kind: 'text' as const,
+              tail: streamTextAccumRef,
+              committed: streamCommittedTextPartsRef,
+            },
+            {
+              kind: 'thinking' as const,
+              tail: streamThinkingAccumRef,
+              committed: streamCommittedThinkingPartsRef,
+            },
+          ];
+          for (const {kind, tail, committed} of kinds) {
+            const {blocks, activeTail} = splitStreamBlocks(tail.current);
+            if (blocks.length === 0) {
+              continue;
+            }
+            tail.current = activeTail;
+            committed.current.push(...blocks);
+            splits.push({
+              kind,
+              commits: blocks.map(block => ({
+                html: prepareStreamTailHtml(block, true),
+                text: block,
+              })),
+              tailHtml: prepareStreamTailHtml(activeTail, true),
+              tailText: activeTail,
+            });
+          }
+          return splits;
+        }, []);
+
+      const postStreamBlockSplits = useCallback(
+        (splits: readonly PendingStreamBlockSplit[]) => {
+          for (const split of splits) {
+            for (const commit of split.commits) {
+              postToWeb({
+                v: 1,
+                type: 'streamBlockCommit',
+                payload: {
+                  kind: split.kind,
+                  html: commit.html,
+                  text: commit.text,
+                  tailHtml: split.tailHtml,
+                  tailText: split.tailText,
+                },
+              });
+            }
+          }
+        },
+        [postToWeb],
+      );
+
       const flushPendingStreamDeltas = useCallback(() => {
         if (streamRafRef.current != null) {
           return;
@@ -479,8 +573,11 @@ export const ChatTranscriptWebView = memo(
           pendingStreamDeltaSegmentsRef.current = [];
           // WHY（中文）：
           // - spec 要求 RN 保留 `prepareStreamTailHtml` 产物并透传 `payload.html`。
-          // - Web 侧在 richText 开启时会优先用 html 走 `innerHTML` 路径，以保证 text/thinking 的流式 rich 行为一致。
+          // - Web 侧在 richText 开启时会优先用 html 走替换路径，以保证 text/thinking 的流式 rich 行为一致。
+          // - 块级化（spec §6）：先切分推进尾块游标——html 随之只覆盖活跃尾块；
+          //   delta 先行、streamBlockCommit 随后（webview 尾块重置洗掉块字符重复）。
           const richText = richTextRef.current;
+          const blockSplits = takeStreamBlockSplits();
           const textHtml = prepareStreamTailHtml(
             streamTextAccumRef.current,
             richText,
@@ -501,8 +598,14 @@ export const ChatTranscriptWebView = memo(
               },
             });
           }
+          postStreamBlockSplits(blockSplits);
         });
-      }, [postToWeb, enqueueDeferredStreamFlush]);
+      }, [
+        postToWeb,
+        enqueueDeferredStreamFlush,
+        takeStreamBlockSplits,
+        postStreamBlockSplits,
+      ]);
 
       const flushPendingStreamBatch = useCallback(() => {
         if (streamRafRef.current != null) {
@@ -527,7 +630,10 @@ export const ChatTranscriptWebView = memo(
               streamThinkingAccumRef.current += seg.delta;
             }
           }
+          // 同 flushPendingStreamDeltas：块级化先切分推进尾块游标，
+          // batch 的 html 只覆盖尾块，块提交随后补发。
           const richText = richTextRef.current;
+          const blockSplits = takeStreamBlockSplits();
           const textHtml = prepareStreamTailHtml(
             streamTextAccumRef.current,
             richText,
@@ -548,8 +654,14 @@ export const ChatTranscriptWebView = memo(
               thinkingHtml,
             },
           });
+          postStreamBlockSplits(blockSplits);
         });
-      }, [postToWeb, enqueueDeferredStreamFlush]);
+      }, [
+        postToWeb,
+        enqueueDeferredStreamFlush,
+        takeStreamBlockSplits,
+        postStreamBlockSplits,
+      ]);
 
       const queueStreamDelta = useCallback(
         (kind: 'text' | 'thinking', delta: string) => {
@@ -631,11 +743,7 @@ export const ChatTranscriptWebView = memo(
             `snapshot begin (msgs=${snapshotMessages.length}, chunks=${chunkTotal}, gen=${generation})`,
           );
           try {
-            for (
-              let chunkIndex = 0;
-              chunkIndex < chunkTotal;
-              chunkIndex += 1
-            ) {
+            for (let chunkIndex = 0; chunkIndex < chunkTotal; chunkIndex += 1) {
               // 让步点校验：代次被新快照顶替（六条 force/直发路径均收敛到
               // 这里开新代次）或 WebView 重挂（webReady=false）即中止丢弃。
               if (
@@ -681,7 +789,9 @@ export const ChatTranscriptWebView = memo(
                 },
               });
               bootTimingLog(
-                `snapshot chunk ${chunkIndex + 1}/${chunkTotal} posted (rows=${rows.length})`,
+                `snapshot chunk ${chunkIndex + 1}/${chunkTotal} posted (rows=${
+                  rows.length
+                })`,
               );
               if (!isLastChunk) {
                 // 片间量子让步：防止分片构建本身又变成长任务。
@@ -928,8 +1038,14 @@ export const ChatTranscriptWebView = memo(
         if (!webReady) {
           return false;
         }
-        const text = streamTextAccumRef.current;
-        const thinking = streamThinkingAccumRef.current;
+        // 块级化后本地累积是「尾块」口径：全量 = 已提交块 parts + 活跃尾块
+        //（块边界不变式 blocks.join('') + activeTail === 原文保证零丢失）。
+        const text =
+          streamCommittedTextPartsRef.current.join('') +
+          streamTextAccumRef.current;
+        const thinking =
+          streamCommittedThinkingPartsRef.current.join('') +
+          streamThinkingAccumRef.current;
         if (text.length === 0 && thinking.length === 0) {
           return false;
         }

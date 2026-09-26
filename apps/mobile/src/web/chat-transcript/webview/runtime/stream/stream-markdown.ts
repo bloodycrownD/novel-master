@@ -6,8 +6,10 @@ import {scheduleStickIfNearBottom} from '../scroll/scroll';
 import {
   assistantBubbleExtraClasses,
   ensureStreamTextBody,
+  getStreamActiveTailText,
   getStreamThinkingBody,
   setStreamBodyRichClass,
+  streamRenderTarget,
   type StreamKind,
 } from './stream';
 
@@ -93,16 +95,20 @@ export function paintStreamRichKind(tail: Element, kind: StreamKind): void {
   if (kind === 'thinking') {
     const body = getStreamThinkingBody(bubble);
     if (!body) return;
-    const thinkingHtml = renderStreamingMarkdown(state.stream.thinking);
+    // 块级模式下只对活跃尾块做轻量升级（已提交块零重渲）；旧模式仍为
+    // 全量显示态（回滚开关关闭时的形态）
+    const thinkingHtml = renderStreamingMarkdown(
+      getStreamActiveTailText('thinking'),
+    );
     if (!thinkingHtml) return;
-    applyTrustedHtml(body, thinkingHtml);
+    applyTrustedHtml(streamRenderTarget(body), thinkingHtml);
     setStreamBodyRichClass(body, true);
     state.stream.thinkingHtml = thinkingHtml;
   } else {
     const textBody = ensureStreamTextBody(bubble);
-    const textHtml = renderStreamingMarkdown(state.stream.text);
+    const textHtml = renderStreamingMarkdown(getStreamActiveTailText('text'));
     if (!textHtml) return;
-    applyTrustedHtml(textBody, textHtml);
+    applyTrustedHtml(streamRenderTarget(textBody), textHtml);
     setStreamBodyRichClass(textBody, true);
     state.stream.textHtml = textHtml;
   }

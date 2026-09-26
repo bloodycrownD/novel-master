@@ -267,8 +267,19 @@ export class SessionStreamUnit {
   };
   private startedAtMsValue = 0;
   private elapsedMsValue: number | null = null;
-  private partialTextValue = '';
-  private partialThinkingValue = '';
+  /**
+   * 本 step 的 in-flight partial 累积分段（数组追加，不做 per-delta 字符串
+   * `+=`——64ms 节拍下的全量重建会随流长超线性）。物化点收敛到读取处
+   * （snapshot / 句柄注入），配 dirty 标志缓存：同一节拍内的多次读取
+   * （manager 的 appendWritethroughSnapshot 逐 delta 事件调 snapshot）只
+   * join 一次，物化频率受 apply 节拍约束而非 delta 事件频率。
+   */
+  private partialTextSegments: string[] = [];
+  private partialThinkingSegments: string[] = [];
+  private partialTextCache = '';
+  private partialThinkingCache = '';
+  private partialTextDirty = false;
+  private partialThinkingDirty = false;
   private injectedValue = false;
   /**
    * 子会话链接：title → childSessionId（同 title 覆盖；投影按 id 去重）。
@@ -417,8 +428,13 @@ export class SessionStreamUnit {
     this.startedAtMsValue = state.startedAtMs;
     this.settledAtMsValue = state.settledAtMs;
     this.metricsAcc = {...state.metrics};
-    this.partialTextValue = state.partialText;
-    this.partialThinkingValue = state.partialThinking;
+    // 回填的完整字符串直接充当物化缓存（无分段历史，无需 join）。
+    this.partialTextSegments = [];
+    this.partialThinkingSegments = [];
+    this.partialTextCache = state.partialText;
+    this.partialThinkingCache = state.partialThinking;
+    this.partialTextDirty = false;
+    this.partialThinkingDirty = false;
     this.pendingChildrenValue = [...state.pendingChildren];
     return true;
   }
@@ -485,8 +501,8 @@ export class SessionStreamUnit {
       metrics: {...this.metricsAcc},
       startedAtMs: this.startedAtMsValue,
       elapsedMs: this.elapsedMsValue,
-      partialText: this.partialTextValue,
-      partialThinking: this.partialThinkingValue,
+      partialText: this.materializePartialText(),
+      partialThinking: this.materializePartialThinking(),
       injected: this.injectedValue,
       pendingChildren: [...this.pendingChildrenValue],
       // 引用稳定（修隐藏 webview 被记脏）：messages 数组与 title 映射在内容
@@ -565,8 +581,7 @@ export class SessionStreamUnit {
       return false;
     }
     this.flushStreamBuffers();
-    this.partialTextValue = '';
-    this.partialThinkingValue = '';
+    this.resetPartial();
     this.injectedValue = false;
     // step 边界重置流式尾巴（reset-stream 广播）：partial 清零后下一 step
     // 从空开始，但 webview 侧的 stream tail 与 RN 组件的本地累积不清的话，
@@ -969,13 +984,47 @@ export class SessionStreamUnit {
     }
     for (const seg of segments) {
       if (seg.kind === 'text') {
-        this.partialTextValue += seg.delta;
+        this.partialTextSegments.push(seg.delta);
+        this.partialTextDirty = true;
       } else {
-        this.partialThinkingValue += seg.delta;
+        this.partialThinkingSegments.push(seg.delta);
+        this.partialThinkingDirty = true;
       }
     }
     this.pushStreamPayload({type: 'stream-batch', segments});
     this.onProjectionChanged?.();
+  }
+
+  /**
+   * 物化本 step 的正文 partial（读取处 join 一次；未置脏直接回缓存）。
+   * 读频受 apply 节拍约束：置脏发生在 applyStreamSegments（64ms），之后
+   * 同一节拍内的任意多次读取（快照/注入/写通载荷）共享同一次 join。
+   */
+  private materializePartialText(): string {
+    if (this.partialTextDirty) {
+      this.partialTextCache = this.partialTextSegments.join('');
+      this.partialTextDirty = false;
+    }
+    return this.partialTextCache;
+  }
+
+  /** 物化本 step 的思考 partial（语义同 {@link materializePartialText}）。 */
+  private materializePartialThinking(): string {
+    if (this.partialThinkingDirty) {
+      this.partialThinkingCache = this.partialThinkingSegments.join('');
+      this.partialThinkingDirty = false;
+    }
+    return this.partialThinkingCache;
+  }
+
+  /** 清零两段 partial（step 边界）：分段与缓存一起复位。 */
+  private resetPartial(): void {
+    this.partialTextSegments = [];
+    this.partialThinkingSegments = [];
+    this.partialTextCache = '';
+    this.partialThinkingCache = '';
+    this.partialTextDirty = false;
+    this.partialThinkingDirty = false;
   }
 
   /**
@@ -994,25 +1043,24 @@ export class SessionStreamUnit {
     if (this.status !== 'running') {
       return;
     }
-    if (
-      this.partialTextValue.length === 0 &&
-      this.partialThinkingValue.length === 0
-    ) {
+    const text = this.materializePartialText();
+    const thinking = this.materializePartialThinking();
+    if (text.length === 0 && thinking.length === 0) {
       return;
     }
     this.injectedValue = true;
-    if (this.partialTextValue.length > 0) {
+    if (text.length > 0) {
       this.emitStreamPayload(handle, {
         type: 'stream-delta',
         kind: 'text',
-        delta: this.partialTextValue,
+        delta: text,
       });
     }
-    if (this.partialThinkingValue.length > 0) {
+    if (thinking.length > 0) {
       this.emitStreamPayload(handle, {
         type: 'stream-delta',
         kind: 'thinking',
-        delta: this.partialThinkingValue,
+        delta: thinking,
       });
     }
   }

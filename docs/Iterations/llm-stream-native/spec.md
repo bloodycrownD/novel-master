@@ -54,7 +54,7 @@ SSE parser（增量，已就绪）→ runner（microtask 合并）→ unit 三�
 ### 2. 自建原生管子设计（Kotlin，`packages/llm-sse-native/`）
 
 - **不用 okhttp-sse**：port 纪律是「只搬字节不认协议」——SSE 帧解析留在 core JS（三家 parser 已就绪）；raw `response.body().source()` 读循环即可，零新增依赖。
-- 自有 `OkHttpClient`（独立 `ConnectionPool`；读超时默认 30s、callTimeout 默认 600s，均可 per-request 覆盖——OkHttp 克隆 builder 成本极低，RN 官方同款手法）。
+- 自有 `OkHttpClient`（独立 `ConnectionPool`；**client 级读超时恒禁用，流式流体不设任何空闲界**——OkHttp readTimeout 从 connect 后首次读即计时，会罩住首字/响应等待；而流式的合法停顿（思考、GLM 工具调用非流段服务端憋生成（`tool_stream` 默认 false）、服务端排队）与死流无法区分，固定阈值必然误杀。唯一自动兜底是 callTimeout 默认 600s 整调用预算（connect + 首字 + 流体全周期），per-request 可覆盖；死流由用户手动终止。非流式 `request` 同享豁免：响应等待仅 callTimeout 兜底。**实施修正记录（2026-09-26 真机验收两轮反馈）**：初版把 readTimeout(30s) 设在 client 级 → 非流式大 prompt 等响应 >30s 超时 × 重试 ≈ 60s 报错（用户实锤）；二版改为「首字豁免 + 流中 30s `source.timeout()` 空闲界」→ 仍被 GLM 工具调用停顿误杀（服务端憋生成期间无任何数据）；终版按产品拍板**去掉全部流式空闲限制**——流式不应有固定空闲时限，见上所述）。
 - **合批**：native 读循环 append 进 StringBuilder 缓冲，100ms 定时器或 64KB 阈值先到者 flush 一次事件；flush 同时携带 `(requestId, text)`。
 - Native API 面（对齐 tokenizer 的 NativeModules 模式）：
   - `sseConnect(requestId, url, headersKv[], body, readTimeoutMs, callTimeoutMs)`；`sseAbort(requestId)`
@@ -112,8 +112,8 @@ parser 三家不动（已数组化）；`streamTextAccumRef`（RN 侧全量累�
 
 ### 7. 过渡态回收（`Connection: close` 条件化撤除）
 
-- **撤除形态是条件化的，不是全局删除**：`postSse` 逐请求运行时判定传输分支（第 3 节）——本次请求实际走 native 分支时不设 `Connection: close`（native 管子自带读超时 30s + callTimeout，首字与流中黑洞均有界）；运行时判定 **native transport 未注册/加载失败回落 XHR 时仍设 close**。理由：idle watchdog 构造时不武装、首个响应数据到达才启动空闲 deadline（`stream-watchdog.ts`——缓冲型模型首字可远超阈值的 ⑤ 回炉拍板），首字阶段的黑洞在 XHR 分支唯一兜底是 `xhr.timeout = SSE_WHOLE_CALL_TIMEOUT_MS`（600s）——若无 close 头，「高速流后死连接复用」黑洞会以 **10 分钟形态**回归，比过渡态前的永久挂起更隐蔽。close 头的设置从 XHR 分支无条件语句改为「XHR 分支且 native 未注册」条件语句。
-- 前置条件与回归实验（模拟器）：native 分支默认启用 + 读超时 30s 生效后，跑两组实验——native 注册路径：r1/r2 健康复用恢复（服务端日志同连接多请求）+ 死连接实验（杀服务器再发）在读超时窗口内收敛为可重试错误、无永久黑洞；回落路径（注销 native 模拟未注册）：请求头仍带 close（T-N3 断言），死连接场景由 close + xhr.timeout 兜底不回归。任一不过则整体保留 close 并登记。
+- **撤除形态是条件化的，不是全局删除**：`postSse` 逐请求运行时判定传输分支（第 3 节）——本次请求实际走 native 分支时不设 `Connection: close`（native 管子黑洞由 callTimeout 600s 整调用预算单层兜底）；运行时判定 **native transport 未注册/加载失败回落 XHR 时仍设 close**。理由：XHR 分支首字与流中黑洞的唯一兜底是 `xhr.timeout = SSE_WHOLE_CALL_TIMEOUT_MS`（600s）（流空闲看门狗已按产品拍板退役，见 §2 实施修正记录）——若无 close 头，「高速流后死连接复用」黑洞会以 **10 分钟形态**回归，比过渡态前的永久挂起更隐蔽。close 头的设置从 XHR 分支无条件语句改为「XHR 分支且 native 未注册」条件语句。
+- 前置条件与回归实验（模拟器）：native 分支默认启用 + 整调用 callTimeout 生效后，跑两组实验——native 注册路径：r1/r2 健康复用恢复（服务端日志同连接多请求）+ 死连接实验（杀服务器再发）在收敛窗口内收敛为可重试错误、无永久黑洞（实验于 2026-09-25 完成，当时读数超时 30s 窗口；空闲界退役后收敛窗口为 callTimeout，语义不变）；回落路径（注销 native 模拟未注册）：请求头仍带 close（T-N3 断言），死连接场景由 close + xhr.timeout 兜底不回归。任一不过则整体保留 close 并登记。
 
 ## 最终项目结构
 
@@ -125,7 +125,7 @@ apps/mobile/src/services/session-stream-unit.ts                   # partialText 
 apps/mobile/src/components/chat/ChatTranscriptWebView.tsx         # 块感知渲染
 apps/mobile/src/components/chat/ChatTranscriptBridge.ts           # streamBlockCommit 协议
 apps/mobile/src/web/chat-transcript/webview/runtime/stream/stream.ts  # 块提交 append
-apps/mobile/src/web/chat-transcript/webview/runtime/stream/block-split.ts  # 新：块边界纯函数
+apps/mobile/src/web/chat-transcript/stream/block-split.ts  # 新：块边界纯函数（实施位置自 webview/runtime/stream/ 上移一级——tsconfig.build.json composite 工程排除 src/web/**/webview/**，RN 侧引用该目录必 TS6307；webview esbuild 侧不引用它）
 apps/mobile/src/services/                                  # native 装配 + fetch shim
 ```
 
@@ -157,7 +157,7 @@ apps/mobile/src/services/                                  # native 装配 + fet
 ## 测试策略
 
 - T-N1 — blocking — wrapper 传输链路（可测性路径，见 §2 登记）：mock NativeModules/NativeEventEmitter 高速注入 `LlmSseChunk` 事件（fake timer 驱动 JS 侧时间），断言 requestId 匹配、事件 1:1 透传到 port `onChunk`（无丢失/重复/放大）、`LlmSseError` → transport 错误映射。native 合批精度（100ms/64KB 阈值、事件率 ~10/s）**不在 JS 侧断言**——归 Step 7/8 manual 核验并写入 T-N8 与 AC-1 验收（mock-fast 高速流下观测事件率）。
-- T-N2 — blocking — native 超时：读超时触发 `LlmSseError(kind:"timeout")` → core 映射 `LlmStreamTimeoutError` 分级（0 数据→first-chunk 可重试）。
+- T-N2 — blocking — native 超时：callTimeout 触发 `LlmSseError(kind:"timeout")` → core 映射 `LlmStreamTimeoutError` 分级（0 数据→first-chunk 可重试；空闲看门狗退役后 native 超时唯一来源为 callTimeout）。
 - T-N3 — blocking — port 三分支：registered > XHR > fetch 择优；未注册平台零变化（现有 XHR/fetch 测试全绿即证）；**条件化撤除断言**——native 分支请求不带 `Connection: close`；注销 native（模拟未注册/加载失败）回落 XHR 时该头**保留**（首字黑洞仍由 close + `xhr.timeout` 兜底，见 §7）。
 - T-N4 — blocking — fetch shim：非流式请求经 native `request` 底座获得 callTimeout；GET 分发（listModels 无 body）与 POST 分发各一例；服务端死亡场景有限收敛；shim 被流式误用时命中 Empty body 防御抛错（§4 边界）。
 - T-N5 — blocking — 累积数组化：registry/unit 读数正确；10 万字符模拟流的耗时曲线线性断言（性能护栏测试）。

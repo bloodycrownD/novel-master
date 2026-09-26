@@ -36,6 +36,7 @@ import {
   type BuiltinToolContext,
 } from "@novel-master/core";
 import { type LlmChatResult, type ModelRequestService } from "@novel-master/core/provider";
+import { LlmStreamTimeoutError } from "@novel-master/core/provider";
 import { createMemorySessionKkv } from "../helpers/prompt-layout-test-helpers.js";
 import { noopSavedModelRepository } from "../helpers/noop-saved-model-repo.js";
 import type { VfsService } from "@novel-master/core/vfs";
@@ -245,6 +246,60 @@ describe("AgentRunner 失败收尾落 assistant 错误消息", () => {
     const msgs = await session.list();
     assert.equal(msgs.length, 1);
     assert.equal(msgs[0]!.role, "user");
+  });
+
+  it("T-T5: 流中断超时（idle）不重试——落 [生成失败] assistant 占位、发 FAILED 事件、原错误上抛", async () => {
+    const session = new InMemoryAgentSession();
+    await session.append("user", textBlocks("go"));
+
+    let calls = 0;
+    const model: ModelRequestService = {
+      request: async () => {
+        calls += 1;
+        // 模拟传输层 watchdog 空闲超时收敛上抛（流中断，已有部分输出）
+        throw new LlmStreamTimeoutError("idle", 90_000);
+      },
+    };
+    const registry = new ToolRegistry();
+    registerBuiltinTools(registry);
+    const bus = new SimpleEventBus();
+    const runner = createAgentRunner(
+      runnerDeps({ session, modelRequests: model, registry, toolCtx: mockToolCtx(), eventBus: bus }),
+    );
+
+    const failedPayloads: AgentRunFailedPayload[] = [];
+    bus.subscribe<AgentRunFailedPayload>(EVENT_AGENT_RUN_FAILED, (p) => {
+      failedPayloads.push(p);
+    });
+
+    // 超时错误非 AbortError：走主 catch else 分支（失败收尾），原错误上抛
+    await assert.rejects(
+      () =>
+        runner.run({
+          maxSteps: 3,
+          definition: minimalDefinition(),
+          ...defaultRunScope,
+        }),
+      (e: unknown) => e instanceof LlmStreamTimeoutError && e.phase === "idle",
+    );
+
+    // 不重试：model 仅调用一次（重试分级由 model-request.service 承接，runner 侧单次上抛）
+    assert.equal(calls, 1);
+
+    // FAILED 事件照发
+    assert.equal(failedPayloads.length, 1);
+    assert.match(failedPayloads[0]!.error, /idle for 90000ms/);
+
+    // [生成失败] assistant 占位落库（复用 run-fail 机制），尾部解锁 composer
+    const msgs = await session.list();
+    assert.equal(msgs.length, 2);
+    assert.equal(msgs[0]!.role, "user");
+    const tail = msgs[1]!;
+    assert.equal(tail.role, "assistant");
+    assert.match(
+      firstText(tail as never) ?? "",
+      /^\[生成失败\] LLM stream idle for 90000ms after the last chunk$/,
+    );
   });
 
   it("幂等防御：多步 run 已有 assistant 落库后再失败，不追加错误消息", async () => {

@@ -125,6 +125,15 @@ export {
   createLoggingFetch,
   isLlmFetchDebugEnabled,
 } from "../infra/llm-protocol/logic/debug-fetch.js";
+export { LlmStreamTimeoutError } from "../infra/llm-protocol/logic/llm-stream-timeout-error.js";
+export {
+  type LlmStreamTimeoutPhase,
+  LLM_STREAM_TIMEOUT_ERROR_NAME,
+} from "../infra/llm-protocol/logic/llm-stream-timeout-error.js";
+export { STREAM_IDLE_TIMEOUT_MS } from "../infra/llm-protocol/logic/stream-watchdog.js";
+export { SSE_WHOLE_CALL_TIMEOUT_MS } from "../infra/llm-protocol/logic/llm-sse-transport.js";
+export type { SseTransport } from "../infra/llm-protocol/logic/llm-sse-transport.js";
+export { registerSseTransport } from "../infra/llm-protocol/logic/llm-sse-transport.js";
 export {
   createDefaultTokenCounterRegistry,
   HeuristicTokenCounter,

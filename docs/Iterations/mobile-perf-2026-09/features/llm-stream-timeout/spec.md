@@ -1,118 +1,130 @@
 ---
-date: 2026-09-23
+date: 2026-09-24
 ---
 
-# LLM 流式超时兜底 技术规格（SPEC）
+# LLM 流式黑洞挂死根治 技术规格（SPEC，回炉版）
 
-需求来源：`docs/Iterations/mobile-perf-2026-09/features/llm-stream-timeout/prd.md`（用户实测 bug + 已登记遗留 bug「run 无超时挂死」，探索报告 2026-09-23）。
+需求来源：`docs/Iterations/mobile-perf-2026-09/features/llm-stream-timeout/prd.md`（回炉版）。
+证据链：2026-09-24 真机裁决实验（Honor EBG-AN00）+ 模拟器黑洞复现（AVD r1-r3）+ 三路源码研究（RN 0.85.3 本地 node_modules 源码精读，npm 包自带 ReactAndroid/ReactCommon 源）。
+
+## 根因模型（实证，决定设计）
+
+### P2 黑洞挂死（用户 bug 本体，本期主修）
+
+- **四超时全零**：RN 0.85.3 `OkHttpClientProvider.kt` L49-54——connect/read/write 超时全 0（注释自认 "No timeouts by default"），callTimeout 未设置（OkHttp 默认 0=无限）；连接池走 OkHttp 默认（5 条 / 5 分钟）。
+- **死连接复用防不住**：OkHttp 4.9.2 `RealConnection.isHealthy`——HTTP/1.1 仅当 `空闲 ≥10s` 才做 1ms 非阻塞探测，**「上一条流刚结束立刻发下一条」连探测都不做**；对静默半开连接（无 FIN/RST）探测返回 SocketTimeoutException 误判健康 → 复用 → 请求写入本机 TCP 缓冲即「成功」（writeTimeout=0 不报错）→ 读永久阻塞（readTimeout=0）→ XHR 四回调一个不来 → `postSseViaXhr` 的 Promise 永不 settle → run 的 await 永挂。模拟器 r3 实测：受理 → 「生成中 · 3.4s · 0 字」冻结 → 服务器复活也不自愈。
+- **「换模型/重启恢复」与机制精确吻合**：换 host = 池内无候选新建连接；重启 = 进程内连接池清空。
+- **abort 误重试（r3 实测新病灶）**：`isRetryableError` 对 `ProviderError("HTTP_ERROR")` 且消息中无 HTTP 状态码（如 "Request aborted"）走 `status == null → true` 分支判**可重试**——用户停止（或任何 abort 形态错误逃离 adapter 吞错窗口）会触发自动重发，重发又进同一个黑洞，形成僵尸循环。
+- **计时冻结（伴生现象）**：挂死态指标条秒数停摆——`ChatStreamMetricsBarLive` 本有 250ms tick（RN 定时器），挂死时定时器停摆（RN Android 定时器由 UI 线程 Choreographer 驱动）。计时冻结随黑洞根治而消失，不单独修。
+
+### P1 增量停摆（并存病灶，非用户主诉，登记不修）
+
+真机流式「前 ~37s 渐进 → 中途停摆 → 尾部一次性倾泻」：RN XHR 管线每事件超线性成本（`XMLHttpRequest.js:383` 的 `this._response += responseText` 在 Hermes 无 rope 字符串下累计 O(n²) + 字符串垃圾 GC 风暴；网络事件与定时器共用 RuntimeScheduler 队列，积压后渲染/计时全冻结；流结束队列突发排空 = 尾部倾泻）。**数据最终完整、onload 最终交付，不产生挂死**。`responseText` getter 只读 JS 侧累积值（native 无部分响应查询接口），**轮询绕行不可行**——已从源码定论。根治需原生 SSE 模块（Phase 2），本期登记。
 
 ## 设计目标
 
-传输层加双超时（首字/流空闲），任何失联在有限时间收敛；超时分级语义（首字前可重试/流中断不重试）；超时走既有 abort 链自愈 registry；XHR 与 fetch 双路径覆盖；零误杀。
+消灭「高速流结束后下一次请求落入死连接黑洞」的入口（连接不复用）；万落入（h2 等残余场景）有限时间收敛且语义分级；abort 任何形态绝不自动重试；零误杀（缓冲型慢启动模型不受任何首字自动杀死机制影响）。
 
-## 总体方案
+## 总体方案（三层防御 + 一处语义修正）
 
-### 1. 超时原语（core 纯逻辑，可测）
+### 1. 传输层防复用：`Connection: close`（XHR 路径，主修入口）
 
-`packages/core/src/infra/llm-protocol/logic/stream-watchdog.ts`（新）：
+`postSseViaXhr` 在 `applyXhrHeaders` **之后**、`send` 之前补 `xhr.setRequestHeader("Connection", "close")`（置于 applyXhrHeaders 之后 = 覆盖用户 provider.headers 里的同名头，强制生效）：
+
+- 依据：OkHttp `CallServerInterceptor` 尊重**请求侧** `Connection: close`——响应完成后 `noNewExchangesOnConnection()`，连接用完即废不回池（agent C 源码核实）；RN `NetworkingModule.extractHeaders` 无头黑名单，该头从 JS 原样到达 OkHttp。
+- 效果：mobile 的 SSE 流式请求永不复用池内连接——「上一条流（尤其高速大流）留下的连接」不再被下一条请求命中，黑洞入口关闭。重试/重发也天然走新连接。
+- 代价：每请求重建 TCP+TLS（约 100-300ms 首字节延迟）；LLM 请求天然秒级，可接受。仅 XHR（RN）路径设置——desktop fetch 路径不受本 bug 影响，不加。
+- 已知边界：HTTP/2 下该头被协议剥离（`Http2ExchangeCodec.HTTP_2_SKIPPED_REQUEST_HEADERS`）——无效但无害；h2 黑洞由第 2 层兜底。
+
+### 2. 整调用兜底：`xhr.timeout`（映射 OkHttp callTimeout，确定性网）
+
+`postSseViaXhr` 在 `open` 后设 `xhr.timeout = SSE_WHOLE_CALL_TIMEOUT_MS`（新导出常量，默认 **600_000 = 10 分钟**）：
+
+- 依据：RN 0.85.3 `NetworkingModule.kt` L412-418——`sendRequest` 收到非 0 timeout 时克隆 OkHttpClient builder 设 `callTimeout`（克隆共享池/分发器，开销极低）；JS 侧 `XMLHttpRequest.js` L614-626 透传、`_timedOut` 时 dispatch `timeout` 事件。**这是 JS 侧唯一对 h1/h2、connect/写/读全周期都生效的控制面。**
+- 阈值论证：必须显著大于最长健康流——200 t/s 下 10 分钟 ≈ 120K token 单次输出，超出生成合理上限；常量导出便于调整。它不是快速响应机制（用户节奏十几秒），而是「放着不管也不会永远挂」的确定性下界；快速收敛靠第 1 层（不再落入黑洞）+ 干净的手动停止。
+- **ontimeout 处理**：`watchdog.dispose(); emitter.dispose(); rejectOnce(new LlmStreamTimeoutError(processedLength > 0 ? "idle" : "first-chunk", SSE_WHOLE_CALL_TIMEOUT_MS))`——按「是否已收到响应数据」分级：黑洞（0 字节）→ `first-chunk` 语义（无输出无副作用，可重试，重试走新连接）；健康长流被总预算截断（有输出）→ `idle` 语义（不自动重试，走失败链）。rejectOnce 抢占 settle 后，RN 后续可能补发的 load/error/abort 回调被 settled 守卫丢弃。
+- **fetch 路径同构兜底**：`postSseViaFetch` 内补 whole-call 定时器（`setTimeout(SSE_WHOLE_CALL_TIMEOUT_MS)` → 同款分级 rejectOnce + `controller.abort()`；所有 settle 路径清理）。desktop 无黑洞 bug 报告，此为语义对齐（同一常量、同一分级），非必须但保持双路径对称。
+
+### 3. 流空闲安全网：watchdog 重校准（保留原语，去首字臂）
+
+`stream-watchdog.ts` 回炉为**仅 idle**：
+
+- **移除 first-chunk deadline**（`FIRST_CHUNK_TIMEOUT_MS` 及其定时器删除）——用户裁决：缓冲型（非流式）模型首字可以远超任何阈值，固定首字自动杀死 = 误杀。首字阶段的黑洞由第 2 层整调用兜底覆盖（10 分钟量级，慢但确定），交互路径靠手动停止（第 4 层保证干净）。
+- `STREAM_IDLE_TIMEOUT_MS`：90_000 → **30_000**——用户节奏「十几秒手动重试」；30s 对流中静默是安全下限（anthropic/gemini 连接建立后 thinking delta 持续流出不受影响；openai 兼容流式生成期间 chunk 间隔远小于秒级）。触发 → `LlmStreamTimeoutError("idle")` → 不自动重试 → 既有失败链（`[生成失败]` 占位 + FAILED + registry 反注册）。
+- 原语 API 相应简化：`createStreamWatchdog({ idleTimeoutMs?, onTimeout })`，`onTimeout()` 无参（transport 自行构造错误）；`noteActivity()` 重置 idle 定时器；`dispose()` 终态幂等。XHR `onprogress` 与 fetch `reader.read()` 返回处调用点不变。
+
+### 4. abort 语义修正：任何 abort 形态绝不自动重试
+
+`model-request.service.ts` 的 `isRetryableError` 在超时分支之后、`status == null → true` 之前显式增加：
 
 ```ts
-createStreamWatchdog({
-  firstChunkTimeoutMs,   // 默认 120_000（导出常量，thinking 模型首字慢）
-  idleTimeoutMs,         // 默认 90_000（导出常量）
-  onTimeout: (phase: "first-chunk" | "idle") => void,
-}): {
-  noteActivity(): void;   // 收到任何响应数据（onprogress/reader.read 返回）时调用
-  dispose(): void;
+if (
+  error instanceof ProviderError &&
+  error.code === "HTTP_ERROR" &&
+  error.message.toLowerCase().includes("abort")
+) {
+  return false;
 }
 ```
 
-实现：两个 deadline 定时器（`setTimeout`）；`noteActivity` 重置 idle 定时器并撤销 first-chunk 阶段；触发时回调（**调用方负责以超时错误 settle 请求 Promise，再 abort 断流清理**，见第 2/3 节时序）。纯回调设计，传输无关，fake timers 直测。
+依据：`isAbortLikeError` 只认 `name === "AbortError"`，而 XHR onabort 链 reject 的是 `ProviderError("HTTP_ERROR", "Request aborted")`——一旦因时序窗口逃离 adapter 的 `isRequestAborted` 吞错（signal 晚于错误读取等竞态），现状落入「无状态码 → 默认可重试」，r3 实测即触发僵尸重试。本分支与 `request-abort.ts` 的 `isRequestAborted` 第三判据（ProviderError+HTTP_ERROR+message 含 abort）口径对齐，双向一致：adapter 视为用户取消、retry 层视为不可重试。
 
-阈值取舍：空闲 90s 覆盖慢速模型 chunk 间隔（5 t/s 下 chunk 间隔远小于秒级；thinking 静默段在 anthropic/gemini 连接建立后即有 message_start/thinking delta 持续流出，不触发）。首字 120s 真正覆盖的不是模型思考耗时——thinking 开启时 thinking delta 会作为响应数据持续到达，首字并不会静默两分钟——而是网关排队、上游建连、中转缓冲等请求建立阶段的整体静默，取保守大值避免误杀重负载时段。两常量从 core 导出，暂不做 provider 级配置（YAGNI，后续需要再开口）。
+### 5. 观测（保留既有打点，随分级语义更新）
 
-### 2. XHR 路径接入（`llm-sse-transport.ts` `postSseViaXhr`）
-
-- 请求发出即启动 watchdog；`onprogress` 首行加 `noteActivity()`（含每次增量到达）；`onload/onerror/onabort` 与 reject/resolve 全路径 `dispose()`。
-- **onTimeout 时序（关键——超时错误不得走既有 onabort reject 链）**：回调内先 `rejectOnce(new LlmStreamTimeoutError(phase))` 抢占 settle，再 `xhr.abort()` + `emitter.dispose()` 仅作断流清理。`rejectOnce` 已有 `settled` 守卫（现状 `llm-sse-transport.ts` 的 `settled` 标志，Promise settled 语义同款）：abort 触发的 `onabort` 里二次 `rejectOnce` 被守卫挡掉，`ProviderError("HTTP_ERROR","Request aborted")` 根本不会产生，超时错误得以原样上抛。若反过来只调 `xhr.abort()` 寄望 onabort 链传播超时，该错误会被 `request-abort.ts` 的 `isRequestAborted`（对 ProviderError+HTTP_ERROR+message 含 "abort" 判 true）识别为用户取消，`anthropic.adapter.ts`（gemini/openai 同构）catch 吞错返回 partial 结果——不失败、不重试、不落占位，分级语义全失效。附带调整：`rejectOnce` 参数类型从 `ProviderError` 放宽为 `Error`。
-- AbortSignal（用户停止）优先级不变：signal abort → `xhr.abort()` → onabort reject `ProviderError("Request aborted")`。用户取消与 watchdog 超时天然互斥（先发生者 settle，后到者被守卫丢弃），用户取消语义零回归。
-
-### 3. fetch 路径接入（`postSseViaFetch`，desktop/cli）
-
-- `reader.read()` 每次返回（含空 chunk）即 `noteActivity()`。
-- **onTimeout 时序与 XHR 同构**：读循环包入带 `settled` 守卫的 Promise——回调内先 `rejectOnce(new LlmStreamTimeoutError(phase))` 抢占 settle，再 `controller.abort()`（请求 AbortController）仅作断流清理。随后 `reader.read()` 抛出的 AbortError 落入已 settle 分支被丢弃（`isAbortLikeError` 对其判 true 也无机会介入），最终传播的只会是超时错误。
-- Node 环境 setTimeout 正常，无后台停摆问题（桌面无后台场景）。
-
-### 4. 超时语义分级（与既有 retry/落库链对接）
-
-- 新错误类型 `LlmStreamTimeoutError extends Error { phase: "first-chunk" | "idle" }`（`sse-parse-errors.ts` 旁新文件或同文件），`name = "LlmStreamTimeoutError"`。
-- **retryable 接入点是 `model-request.service.ts` 的 `isRetryableError`**（重试循环本体 `attempt <= policy.maxRetries && isRetryableError(error)` 与退避均在该文件）。`model-retry-policy.service.ts` 仅做策略 KV 存取（getPolicy/setPolicy），不承载判定，不改动。现状 `isRetryableError`（68-84 行）对非 ProviderError 的未知错误**默认判 true**（未知传输错误视为瞬时），故必须显式增加分支并置于该默认分支之前：`error instanceof LlmStreamTimeoutError` → `phase === "first-chunk" ? true : false`。不加此分支，idle 超时会落进默认 true 被重试，与「idle 不重试」直接矛盾。
-- **错误为何不被 adapter 吞成 partial（依赖链，实施与测试须共同保持）**：现状 `anthropic.adapter.ts` 201-205 行（gemini/openai 同构）catch 中 `isRequestAborted(error, req.signal)` 为 true 时吞错、返回 partial 结果。`request-abort.ts` 的 `isRequestAborted` 对三种情形判 true：signal 已 abort、错误 name 为 AbortError、ProviderError+HTTP_ERROR+message 含 "abort"。超时错误三条全不命中——① watchdog 触发时用户的 AbortSignal 尚未 abort；② `LlmStreamTimeoutError.name` 非 "AbortError"，且经第 2/3 节的 rejectOnce 抢占后，含 "Request aborted" 的 ProviderError 根本不会产生；③ 它不是 ProviderError。因此 adapter catch 走 rethrow，错误上抛 runner 主 catch（`agent-runner.ts` 795-838 行现状成立）else 分支进入失败收尾。
-- **首字前超时**（first-chunk，无任何输出）：`isRetryableError` 判 true——与 429/5xx 同列，按既有重试上限/退避执行（复用重试链，不新造）。
-- **流中断**（idle，已有部分输出）：**不自动重试**（避免重复输出/重复计费）——错误上抛走 runner 主 catch → 既有失败收尾链（`[生成失败] …` assistant 占位消息 + FAILED 事件 + composer 解锁，run-fail 落消息机制（历史迭代引入，锚点见 agent-runner.ts 主 catch else 分支 :795-838）复用）。
-- 超时 settle 后 runner `await` 恢复 → finally 反注册 abortRegistry——**挂死泄漏与会话门禁锁死随本修复自然消除**（探索实证：现状挂死时 finally 不执行）。
-
-### 5. 观测（区分 provider 停流 vs 客户端不消费）
-
-`onTimeout` 时 `NM_DEBUG_LLM_FETCH` 门控日志：`{ phase, lastActivityAt, processedLength, bufferedBytes }`——provider 停流（lastActivityAt 早、processedLength 停）与客户端不消费（processedLength 增长中）可从同一行区分。挂死事故的后续归因（服务端槽位 vs 连接池）以此为入口。
-
-字段来源（两路径）：
-- XHR：`processedLength` 用 `postSseViaXhr` 现成变量（`llm-sse-transport.ts:168`，`deliverNewText` 维护的已消费文本长度）；`bufferedBytes` 取 SSE 节流 emitter 的待发缓冲长度——`sse-chunk-emitter.ts` 需新增 `bufferedLength()` 访问器，仅暴露既有内部 `buffer` 长度，不改缓冲行为。
-- fetch：读循环无现成累计变量，`processedLength` 在 `reader.read()` 循环内自行累计（`decoder.decode` 后的累计字符数）；fetch 路径即时转发、无节流缓冲，`bufferedBytes` 不适用（记 0）。
+onTimeout/ontimeout 打点沿用 NM_DEBUG 门控，字段 `{ phase, lastActivityAt, processedLength, bufferedBytes }` 不变；whole-call 触发时 phase 按分级记录，便于区分「黑洞（0 字节超总预算）」与「健康长流超总预算（有输出）」。
 
 ## 最终项目结构
 
 ```
 packages/core/src/infra/llm-protocol/logic/
-  stream-watchdog.ts                       # 新：双 deadline 原语 + 阈值常量导出
-  llm-stream-timeout-error.ts              # 新：错误类型（或并入 sse-parse-errors.ts）
-  llm-sse-transport.ts                     # 两路径接入（onTimeout 先 rejectOnce 抢占 settle，abort 仅作清理）
-  sse-chunk-emitter.ts                     # 暴露 bufferedLength()（观测用，只读）
-packages/core/src/service/provider/impl/model-request.service.ts   # isRetryableError 增加超时分支
-测试: packages/core/test/infra/llm-protocol/stream-watchdog.test.ts 等
+  stream-watchdog.ts            # 回炉：仅 idle deadline + STREAM_IDLE_TIMEOUT_MS(30s)
+  llm-stream-timeout-error.ts   # phase 语义不变（first-chunk/idle），消息文案补 whole-call 语境
+  llm-sse-transport.ts          # XHR: Connection:close + xhr.timeout + ontimeout 分级；fetch: whole-call 定时器；导出 SSE_WHOLE_CALL_TIMEOUT_MS
+packages/core/src/service/provider/impl/model-request.service.ts   # isRetryableError 补 abort 分支
+packages/core/src/public/provider.ts        # 导出面更新（去 FIRST_CHUNK_TIMEOUT_MS）
+测试: packages/core/test/infra/llm-protocol/{stream-watchdog,llm-stream-timeout}.test.ts、test/provider/model-request-retry.test.ts
 ```
 
 ## 变更点清单
 
 | # | 文件 | 变更 |
 |---|------|------|
-| 1 | `stream-watchdog.ts`（新） | 原语 + `FIRST_CHUNK_TIMEOUT_MS`/`STREAM_IDLE_TIMEOUT_MS` 导出 |
-| 2 | `llm-stream-timeout-error.ts`（新） | 错误类型与 phase（name 固定 `LlmStreamTimeoutError`） |
-| 3 | `llm-sse-transport.ts` | XHR/fetch 两路径 watchdog 装配；onTimeout 先 `rejectOnce(new LlmStreamTimeoutError(phase))` 抢占 settle、`xhr.abort()`/`controller.abort()` 仅作断流清理；`rejectOnce` 参数放宽为 `Error` |
-| 4 | `model-request.service.ts` | `isRetryableError` 显式增加 `LlmStreamTimeoutError` 分支（置于非 ProviderError 默认 true 之前）：first-chunk → true、idle → false |
-| 5 | `sse-chunk-emitter.ts` | 新增 `bufferedLength()` 供观测打点（仅暴露既有缓冲长度） |
-| 6 | 观测日志 | onTimeout 打点（NM_DEBUG 门控；字段来源见第 5 节） |
-| 7 | 测试 | T-T 系列 + 既有传输测试回归 |
-| 8 | 文档 | CHANGELOG；已知限制（后台 watchdog 停摆、非流式不覆盖，见 PRD） |
+| 1 | `stream-watchdog.ts` | 删首字臂与 `FIRST_CHUNK_TIMEOUT_MS`；`STREAM_IDLE_TIMEOUT_MS` 90s→30s；`onTimeout()` 无参化 |
+| 2 | `llm-stream-timeout-error.ts` | 构造器加可选 `detail`（whole-call 语境文案）；phase 语义不变 |
+| 3 | `llm-sse-transport.ts` | XHR：`Connection: close`（applyXhrHeaders 后）、`xhr.timeout`、`ontimeout` 分级 rejectOnce；fetch：whole-call 定时器；新导出 `SSE_WHOLE_CALL_TIMEOUT_MS = 600_000`；类型面补 `timeout`/`ontimeout` |
+| 4 | `model-request.service.ts` | `isRetryableError` 补 ProviderError-abort 不可重试分支 |
+| 5 | `public/provider.ts`（+allowlist 快照如有引用） | 导出面随 1/3 更新 |
+| 6 | 测试 | T-D 系列（见测试策略）+ 既有 T-T 系列改造 |
+| 7 | 文档 | CHANGELOG 重写；PRD/spec 回炉版；已知限制更新 |
 
 ## 详细实现步骤
 
-- Step 1 — phase-watchdog-core — blocking: yes — qa: auto：原语 + 错误类型；T-T1/T-T2/T-T3（原语级）。
-- Step 2 — phase-xhr-wiring — blocking: yes — qa: auto：XHR 路径装配（onTimeout 先 rejectOnce 抢占、abort 仅清理）；T-T1/T-T2/T-T3（集成级）+ 既有 XHR 传输用例回归。
-- Step 3 — phase-fetch-wiring — blocking: yes — qa: auto：fetch 路径装配（settled 守卫同构）；T-T7。
-- Step 4 — phase-retry-semantics — blocking: yes — qa: auto：`model-request.service.ts` 的 `isRetryableError` 超时分级 + adapter 不吞错（rethrow）+ runner 失败链对接；T-T4/T-T5/T-T6。
-- Step 5 — phase-observability — blocking: yes — qa: auto：超时打点（测试断言日志内容 T-T9）。
-- Step 6 — phase-regression — blocking: yes — qa: auto：core 全量 + mobile/desktop 定向 + typecheck。
-- Step 7 — phase-manual-verify — blocking: no — qa: manual_user：真机挂死复现路径（生成中开飞行模式 10s 关闭 → run 应在阈值内收敛失败、会话可再发）；高速模型长流稳定性观察。
+- Step 1 — watchdog-rework — blocking: yes — qa: auto：原语 idle-only 化 + 常量调整；T-D1/T-D2。
+- Step 2 — transport-hardening — blocking: yes — qa: auto：XHR Connection:close + xhr.timeout + ontimeout 分级；fetch whole-call；T-D3/T-D4/T-D5/T-D6。
+- Step 3 — retry-abort-semantics — blocking: yes — qa: auto：isRetryableError abort 分支；T-D7；回归 T-T4 形态（first-chunk 可重试/idle 不可重试，来源改为 whole-call 分级）。
+- Step 4 — export-surface — blocking: yes — qa: auto：public/provider.ts + allowlist 快照同步；typecheck。
+- Step 5 — regression — blocking: yes — qa: auto：core 全量 + mobile/desktop 定向。
+- Step 6 — e2e-blackhole — blocking: no — qa: manual_agent：模拟器诊断构建（内嵌 bundle）+ mock 服务器走查：正常流、死服务器黑洞→停止→干净收敛、复活后重发成功（见测试策略 T-D10）。
 
 ## 测试策略
 
-- T-T1 — blocking: yes — 首字超时：请求后 firstChunkTimeoutMs 无 onprogress → transport promise reject `LlmStreamTimeoutError("first-chunk")`（非 "Request aborted" ProviderError），xhr.abort 随后仅作清理（fake timers）（映射 Step 1/2）
-- T-T2 — blocking: yes — 空闲超时：有 chunk 后静默 idleTimeoutMs → reject `LlmStreamTimeoutError("idle")`；chunk 持续到达不触发（映射 Step 1/2）
-- T-T3 — blocking: yes — 零误杀：慢节奏 chunk（间隔 < idleTimeoutMs）长流全程不触发；正常收尾 dispose 后定时器清空（无泄漏断言）（映射 Step 1/2）
-- T-T4 — blocking: yes — 首字前超时经 `isRetryableError` 判 retryable 并按既有上限重试；idle 超时判不可重试（同测两分支，映射 Step 4）
-- T-T5 — blocking: yes — 流中断不重试：idle 错误经 adapter rethrow（`isRequestAborted` 判 false，不吞成 partial）→ runner 主 catch → `[生成失败]` assistant 占位落库 + FAILED 事件（复用既有断言形态）（映射 Step 4）
-- T-T6 — blocking: yes — registry 自愈：超时收敛后 abortRegistry 反注册（同会话 startRun 门禁放行）（映射 Step 4）
-- T-T7 — blocking: yes — fetch 路径同款双超时：reject `LlmStreamTimeoutError` 而非 AbortError（Node timers，fake timers 直测）（映射 Step 3）
-- T-T8 — manual_user：AC-1/AC-3 真机验证（映射 Step 7）
-- T-T9 — blocking: yes — onTimeout 打点字段断言：phase / lastActivityAt / processedLength / bufferedBytes 按第 5 节字段来源口径（XHR：processedLength 取 `postSseViaXhr` 现成变量、bufferedBytes 取 emitter `bufferedLength()`；fetch：processedLength 读循环内累计、bufferedBytes 记 0）可从打点日志捕获并断言（映射 Step 5）
+- T-D1 — blocking: yes — watchdog idle-only：有活动后静默 30s 触发；持续活动不触发；活动前无任何定时器（首字慢启动不触发）；dispose 后无泄漏（fake timers）（映射 Step 1）
+- T-D2 — blocking: yes — watchdog 无参 onTimeout + 自定义阈值（映射 Step 1）
+- T-D3 — blocking: yes — XHR 请求头断言：`setRequestHeader("Connection", "close")` 在用户头之后调用（覆盖用户同名头）（fake XHR harness）（映射 Step 2）
+- T-D4 — blocking: yes — XHR `timeout` 属性被设为 `SSE_WHOLE_CALL_TIMEOUT_MS`（映射 Step 2）
+- T-D5 — blocking: yes — ontimeout 分级：0 数据时 reject `LlmStreamTimeoutError("first-chunk")`；有数据时 `"idle"`；均不被后续 load/abort 回调顶替（settled 守卫）（映射 Step 2）
+- T-D6 — blocking: yes — fetch whole-call：到点 reject 分级超时错误 + controller.abort；正常完成路径定时器被清理（fake timers）（映射 Step 2）
+- T-D7 — blocking: yes — `isRetryableError`：`ProviderError("HTTP_ERROR", "Request aborted")` → false；超时错误分级判定回归（映射 Step 3）
+- T-D8 — 既有 T-T 系列改造：stream-watchdog.test（去首字用例）、llm-stream-timeout.test（XHR idle 保留、首字自动超时用例删除/改为 ontimeout 分级）、model-request-retry、run-agent-turn-abort-registry（语义不变应全绿）
+- T-D9 — core 全量回归 + typecheck
+- T-D10 — manual_agent e2e（模拟器）：(a) mock-fast 正常流完成且服务端日志显示连接不复用；(b) 杀服务器后发送 → 停止 → logcat 无自动重试 POST、run 收敛（partial/失败占位）、会话可再发；(c) 服务器复活后再发成功（新连接）
 
 ## 风险与回滚方案
 
-- **误杀风险**：阈值过紧误杀慢流——默认取保守值（120s/90s）+ 零误杀测试 + 真机长流观察；阈值常量导出便于热调。
-- **后台限制**：watchdog 的 setTimeout 在 RN 后台停摆（与 ③ 同根因）——后台挂死检测失效登记为已知限制；③ 交付后后台数据到达驱动推进，回前台 watchdog 恢复。不为本期目标。
-- **中转层行为**：超时主动断开即释放服务端并发槽（探索候选 2 的缓解面）；若 provider 侧槽位释放有延迟，重试退避（既有）自然错峰。
-- **回滚方案**：单点改动面（transport 装配 + `model-request.service.ts` retry 判定分支 + emitter 只读访问器），revert 即回到现状（挂死为既有已知行为，不劣化）。
+- **Connection: close 代价**：每请求 TLS 重建 ~100-300ms。若用户反馈首字变慢，可将其改为「仅 RN XHR 流式请求」的开关常量（本期即仅此范围）；回滚 = 删一行。
+- **xhr.timeout 误杀超长流**：600s 预算对正常生成不可达；若极端场景（超长单次生成）触及，常量可调；错误分级保证有输出时走失败链（不重发不双计费）。
+- **idle 30s 误杀慢静默流**：流式模型 chunk 间隔实际远小于秒级；thinking 模型连接后有持续事件。真机验证（AC-2）。
+- **回滚**：变更面集中（transport 装配 + watchdog 原语 + retry 一分支），revert 即回到现状。
 
 ## Context Bundle
 
@@ -120,18 +132,18 @@ packages/core/src/service/provider/impl/model-request.service.ts   # isRetryable
 iteration_name: mobile-perf-2026-09 / llm-stream-timeout
 requirement_path: docs/Iterations/mobile-perf-2026-09/features/llm-stream-timeout/prd.md
 spec_path: docs/Iterations/mobile-perf-2026-09/features/llm-stream-timeout/spec.md
-explore_summary: >
-  超时现状四类全缺失（XHR 无 timeout、fetch reader.read 无限等、retry 只对 throw、
-  AbortSignal 唯一来源是用户停止）；挂死点=agent-runner await modelRequests.request；
-  挂死时 finally 不执行→abortRegistry 恒真→同会话门禁锁死（换模型成功必是新会话/先停止）。
-  客户端无 per-model 状态（排除性实证）；「换模型恢复」最可能=服务端/中转 per-key/model
-  并发槽被死连接占用，重启断 TCP 释放。逐 delta 链路竞态与「缓存卡住」路径已排除。
-  XHR onload 同步 flush 兜底=短请求不挂、长流必挂。desktop fetch 同构。
+evidence:
+  blackhole_repro: 模拟器 r3（杀服务器→请求黑洞→计时冻结→stop 触发自动重试再黑洞→服务器复活不自愈）
+  healthy_reuse: 模拟器 r1/r2（conn#1 复用正常，健康服务器下复用无恙——病灶在死连接而非复用本身）
+  four_timeouts_zero: OkHttpClientProvider.kt L49-54（RN 0.85.3 本地源码）
+  xhr_timeout_maps_calltimeout: NetworkingModule.kt L412-418（0.85.3 已实现，克隆 builder 开销极低）
+  connection_close_honored: OkHttp CallServerInterceptor 尊重请求侧 close；h2 剥离（边界登记）
+  abort_retry_bug: isRetryableError 对 ProviderError("Request aborted") 走 status==null→true
 impact_files: 见变更点清单
 constraints:
-  - 重试复用 model-request.service 既有循环（isRetryableError + 退避，429/5xx 口径），不新造重试框架；model-retry-policy.service 仅策略存取不改动
-  - 失败落消息复用 run-fail 机制（[生成失败] 占位），不另建收尾
-  - 超时错误须绕开三处既有 abort 拦截（onabort reject 链 / isRequestAborted / adapter 吞 partial），时序与依赖链见 spec 第 2/3/4 节
-  - 探索报告的验证手段（飞行模式实验/PC 同 key 对照）作为 manual 验收素材
-blocking_steps: [1, 2, 3, 4, 5, 6]
+  - 不做首字自动超时（用户裁决：缓冲型模型零误杀）
+  - 超时分级语义沿用 first-chunk(可重试)/idle(不重试)，来源扩展为 whole-call 分级映射
+  - 失败落消息复用 run-fail 机制；重试复用 model-request 既有循环，不新造
+  - P1 增量停摆登记 Phase 2（原生 SSE 模块），本期不修
+blocking_steps: [1, 2, 3, 4, 5]
 ```

@@ -146,7 +146,11 @@ export type HostToTranscriptMessage =
       {
         kind: 'text' | 'thinking';
         delta?: string;
-        /** Full accumulated tail HTML when flags.richText (same limits as persisted rows). */
+        /**
+         * 尾块范围 HTML（spec §6 渲染块级化）：块级渲染开启后只覆盖活跃
+         * 尾块（不再是全量累积）；尾块为空/超限降级时缺失，webview 走纯
+         * 文本增量 append。块级渲染关闭时仍为全量累积渲染（回滚开关语义）。
+         */
         html?: string;
       }
     >
@@ -157,8 +161,23 @@ export type HostToTranscriptMessage =
           kind: 'text' | 'thinking';
           delta: string;
         }[];
+        /** 同 streamDelta.html：块级渲染开启后为尾块范围 HTML。 */
         textHtml?: string;
         thinkingHtml?: string;
+      }
+    >
+  | BridgeEnvelope<
+      'streamBlockCommit',
+      {
+        kind: 'text' | 'thinking';
+        /** 完成块的渲染 HTML（单块超限降级纯文本时缺失）。 */
+        html?: string;
+        /** 完成块源文本（降级显示与显示态对齐）。 */
+        text: string;
+        /** 块提交后活跃尾块的渲染 HTML（尾块空/超限时缺失）。 */
+        tailHtml?: string;
+        /** 块提交后活跃尾块源文本（webview 侧 350ms 轻量升级的输入）。 */
+        tailText: string;
       }
     >
   | BridgeEnvelope<'streamReset', Record<string, never>>
@@ -196,10 +215,7 @@ export type TranscriptToHostMessage =
       {messageId: string; pageX: number; pageY: number}
     >
   | BridgeEnvelope<'openToolFile', {path: string}>
-  | BridgeEnvelope<
-      'linkClick',
-      {href: string}
-    >
+  | BridgeEnvelope<'linkClick', {href: string}>
   | BridgeEnvelope<'openSubagentSession', {sessionId: string}>
   | BridgeEnvelope<
       'openSkillDetail',

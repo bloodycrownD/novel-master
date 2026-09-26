@@ -8,6 +8,8 @@ import {
 import {
   appendStreamDelta,
   applyStreamBatch,
+  applyStreamBlockCommit,
+  resetStreamBlockRenderState,
   setStreamToolInvokingDom,
 } from './stream/stream';
 import {clearStreamRichUpgrade} from './stream/stream-markdown';
@@ -69,8 +71,15 @@ export function handleHostMessage(raw: unknown): void {
       applyStreamBatch(p);
       break;
     }
+    case 'streamBlockCommit': {
+      // 块提交（spec §6）：完成块 append-only，不触发 mermaid（懒加载只在
+      // streamCommit / 历史路径，现状保持）
+      applyStreamBlockCommit(p);
+      break;
+    }
     case 'streamReset':
       clearStreamRichUpgrade();
+      resetStreamBlockRenderState();
       state.stream = {
         text: '',
         thinking: '',
@@ -82,6 +91,7 @@ export function handleHostMessage(raw: unknown): void {
       break;
     case 'streamCommit':
       clearStreamRichUpgrade();
+      resetStreamBlockRenderState();
       state.stream = {
         text: '',
         thinking: '',
