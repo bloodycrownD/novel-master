@@ -34,6 +34,7 @@ import {
   runDeferredBlobGc,
 } from "@/service/session-fs/create-session-fs-service.js";
 import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
+import { invalidateSessionApiPromptTokenEntry } from "@/infra/tokenizer/logic/session-api-prompt-token-store.js";
 import { runDeferredFileCacheGc } from "@/domain/session-kkv/logic/deferred-file-cache-gc.js";
 import { createSessionRunStateService } from "@/service/session-run-state/create-session-run-state-service.js";
 import { initializeSessionWorkspace } from "@/service/template/logic/initialize-session-workspace.js";
@@ -306,6 +307,21 @@ export class DefaultSessionService implements SessionService {
     );
     if (!updated) {
       throw chatNotFound("session", id);
+    }
+    // 会话级「切 Agent / 切模型」改变了 prompt 的 system 段与 layout：旧的
+    // api 占用按 savedModelId 指纹兜不住 agentId 变更，会以 api 口径（跳掉
+    // 0.85 安全垫）继续参与阈值判定，而且已落库 KKV、跨重启继续生效。
+    // 读口没有任何 agent 指纹可作第二道防线，正确性完全依赖这一个挂点。
+    // 口径收窄：只比较 overlay merge 前后真正变化的字段，避免把「patch 里
+    // 出现但值相同」的无效写也清掉（那会让收窄白写，还多一次 KKV 写）。
+    if (
+      validated.agentId !== baseline.agentId ||
+      validated.modelId !== baseline.modelId
+    ) {
+      await invalidateSessionApiPromptTokenEntry(
+        createSessionKkvService(this.deps.conn),
+        id
+      );
     }
     return validated;
   }

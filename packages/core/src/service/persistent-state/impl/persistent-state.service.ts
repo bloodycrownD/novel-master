@@ -137,7 +137,7 @@ export class DefaultPersistentState implements PersistentState {
     await this.set(key, value);
     const sessionId = await this.getCurrentSessionId();
     if (sessionId != null) {
-      invalidateSessionApiPromptTokenEntry(this.sessionKkv, sessionId);
+      await invalidateSessionApiPromptTokenEntry(this.sessionKkv, sessionId);
     }
   }
 

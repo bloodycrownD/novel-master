@@ -177,6 +177,29 @@ describe("pickLastPromptUsage / resolveCurrentPromptTokens", () => {
     assert.equal(resolved.source, "local");
   });
 
+  it("T-T6(KKV-badAtMs): KKV 行只有 promptTokens 无 atMs ⇒ 判 local（atMs 必填）", async () => {
+    const sessionKkv = createMemorySessionKkv();
+    // 直接落一行「缺 atMs」的坏值（绕过写 helper，模拟历史/损坏行）。
+    await sessionKkv.set(
+      SESSION_ID,
+      SESSION_KKV_DOMAIN_PROMPT_TOKENS,
+      PROMPT_TOKENS_LAST_USAGE_KEY,
+      JSON.stringify({ promptTokens: 999 })
+    );
+    sessionApiPromptTokenCache.clearAll();
+
+    const resolved = await resolveCurrentPromptTokens(
+      SESSION_ID,
+      countParams(),
+      { sessionKkv }
+    );
+    assert.equal(
+      resolved.source,
+      "local",
+      "atMs 缺失不得退化成 0 当合法值，必须整体按 miss 回退本地估算"
+    );
+  });
+
   it("T-T6(KKV): KKV 行被删后跨重启也不复活（读回 local）", async () => {
     const sessionKkv = createMemorySessionKkv();
     await sessionKkv.set(

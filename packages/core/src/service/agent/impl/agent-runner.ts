@@ -870,7 +870,11 @@ export class DefaultAgentRunner implements AgentRunner {
         }
         // FAILED / 非 Abort throw 不到达 FINISHED：必清 API 占用（进程内热层 +
         // session KKV 行双删），避免重启后从 KKV 读回旧值。
-        invalidateSessionApiPromptTokenEntry(this.deps.sessionKkv, sessionId);
+        // run 收尾不等 IO：这里刻意保持 fire-and-forget（不 await KKV 删除）。
+        void invalidateSessionApiPromptTokenEntry(
+          this.deps.sessionKkv,
+          sessionId
+        );
         if (publishRunLifecycle) {
           bus.publish(EVENT_AGENT_RUN_FAILED, {
             sessionId,
@@ -906,7 +910,11 @@ export class DefaultAgentRunner implements AgentRunner {
         ...(lastAppendedSeq != null ? { lastMessageSeq: lastAppendedSeq } : {}),
       });
     } else {
-      invalidateSessionApiPromptTokenEntry(this.deps.sessionKkv, sessionId);
+      // run 收尾不等 IO：这里刻意保持 fire-and-forget（不 await KKV 删除）。
+      void invalidateSessionApiPromptTokenEntry(
+        this.deps.sessionKkv,
+        sessionId
+      );
     }
 
     return {

@@ -171,7 +171,10 @@ export class DefaultMessageTranscriptEffectsService
     await write.run();
     // 置位后上下文范围变了：API 占用双删（进程内热层 + session KKV 行），
     // 否则重启后从 KKV 读回旧值，与置位后的可见 prompt 不符。
-    invalidateSessionApiPromptTokenEntry(this.deps.sessionKkv, sessionId);
+    await invalidateSessionApiPromptTokenEntry(
+      this.deps.sessionKkv,
+      sessionId
+    );
 
     return { hiddenCount, shownCount };
   }

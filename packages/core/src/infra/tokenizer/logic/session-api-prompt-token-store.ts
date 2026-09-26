@@ -17,7 +17,9 @@
  *   口径同 `persistFinalRateQuietly`：失效是 best-effort，失败只影响下次读数。
  *
  * 值 JSON：`{promptTokens, atMs, runId?, savedModelId?, lastMessageSeq?}`；
- * 可选字段缺失/非法即省略该键，旧格式值照常解析（向后兼容）。
+ * `promptTokens` 与 `atMs` 同为必填，缺失或类型不对一律当 miss（`promptTokens`
+ * 域是新增域，线上不存在缺 `atMs` 的旧行，退化成 0 会让时效判据失真）；三个
+ * 可选加固字段缺失/非法即省略该键。
  *
  * @module infra/tokenizer/logic/session-api-prompt-token-store
  */
@@ -44,7 +46,7 @@ export interface SessionApiPromptTokenEntry {
   readonly lastMessageSeq?: number;
 }
 
-/** 可选加固字段：非空字符串 / 有限数才带上该键（缺省即旧格式值）。 */
+/** 可选加固字段：非空字符串 / 有限数才带上该键（缺省即无该指纹）。 */
 function optionalRunId(runId: string | undefined): { runId?: string } {
   return runId != null && runId.length > 0 ? { runId } : {};
 }
@@ -79,9 +81,14 @@ export function serializeSessionApiPromptTokenEntry(
 }
 
 /**
- * 解析 session KKV 值；缺失/损坏/`promptTokens` 非有限数或为负 → null
- * （读口据此回退本地估算）。`atMs` 缺字段退化为 0；三个可选加固字段只
- * 在类型正确且非空时带上，旧格式值照常解析成功。
+ * 解析 session KKV 值；缺失 / 损坏 / `promptTokens` 非有限数或为负 /
+ * `atMs` 缺失或非有限数 → 一律 null（读口据此回退本地估算）。三个可选
+ * 加固字段只在类型正确且非空时带上。
+ *
+ * ⚠️ `atMs` 与 `promptTokens` 同为**必填**：本域是新增域，线上不存在缺
+ * `atMs` 的旧行，把它退化成 0 会让基于时间的判据把它当「永远过期」，
+ * 或被 `=== 0` 守卫静默放行——两种都不对，所以整体当 miss。`promptTokens === 0`
+ * 本身是合法值，仍按 `>= 0` 放行。
  */
 export function parseSessionApiPromptTokenEntry(
   raw: string | null | undefined
@@ -107,9 +114,12 @@ export function parseSessionApiPromptTokenEntry(
   ) {
     return null;
   }
+  if (typeof atMs !== "number" || !Number.isFinite(atMs)) {
+    return null;
+  }
   return {
     promptTokens,
-    atMs: typeof atMs === "number" && Number.isFinite(atMs) ? atMs : 0,
+    atMs,
     ...(typeof runId === "string" && runId.length > 0 ? { runId } : {}),
     ...(typeof savedModelId === "string" && savedModelId.length > 0
       ? { savedModelId }
@@ -216,27 +226,35 @@ export function writeSessionApiPromptTokenEntry(
  * 失效一条 prompt 占用值：进程内 Map 与 session KKV 行双删。
  *
  * 凡改变「当前可见 prompt」或模型绑定、应丢弃陈旧 API 占用的路径，成功后
- * 必须调本函数。KKV 删除失败同样吞错记 warn（残留行会靠下一次 completed
- * run 覆盖，或靠会话删除整表清兜底）。
+ * 必须调本函数。
+ *
+ * **热层同步清、KKV 删除返回一个可 await 的 Promise**：调用方只要还在
+ * async 路径上就应当 `await` 它——否则进程在 promise 落地前退出，KKV 行会
+ * 复活，陈旧值跨重启继续按 api 口径参与阈值判定。KKV 删除失败仍然吞错记
+ * warn（残留行会靠下一次 completed run 覆盖，或靠会话删除整表清兜底），
+ * 所以 await 不会让调用方冒泡错误。
+ *
+ * 唯一该保持 fire-and-forget 的是 `agent-runner` 的 run 收尾两处（run 收尾
+ * 不等 IO），那里显式写 `void` + 注释标明意图。
  */
-export function invalidateSessionApiPromptTokenEntry(
+export async function invalidateSessionApiPromptTokenEntry(
   sessionKkv: SessionKkvService | null | undefined,
   sessionId: string
-): void {
+): Promise<void> {
   sessionApiPromptTokenCache.invalidate(sessionId);
   if (sessionKkv == null) {
     return;
   }
-  void sessionKkv
-    .delete(
+  try {
+    await sessionKkv.delete(
       sessionId,
       SESSION_KKV_DOMAIN_PROMPT_TOKENS,
       PROMPT_TOKENS_LAST_USAGE_KEY
-    )
-    .catch((error) => {
-      console.warn(
-        `[novel-master/prompt-token-store] prompt token KKV 删除失败（session=${sessionId}）`,
-        error
-      );
-    });
+    );
+  } catch (error) {
+    console.warn(
+      `[novel-master/prompt-token-store] prompt token KKV 删除失败（session=${sessionId}）`,
+      error
+    );
+  }
 }

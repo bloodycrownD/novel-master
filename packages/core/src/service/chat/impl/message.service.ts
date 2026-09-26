@@ -79,11 +79,11 @@ export class DefaultMessageService implements MessageService {
    * 失效该会话的 API prompt 占用（进程内热层 + session KKV 行双删）。
    *
    * 本类只持有 conn：就地建一个 SessionKkvService（无状态、只是仓储包装），
-   * 与 message-transcript-effects / run-compaction 的失效口径一致。所有调用
-   * 点都在事务之外，KKV 删除是 fire-and-forget（见 helper 注释）。
+   * 与 message-transcript-effects / run-compaction 的失效口径一致。所有调用点
+   * 都在 `conn.transaction` 块外，KKV 删除已 await（失败只吞 warn，不冒泡）。
    */
-  private invalidatePromptTokens(sessionId: string): void {
-    invalidateSessionApiPromptTokenEntry(
+  private async invalidatePromptTokens(sessionId: string): Promise<void> {
+    await invalidateSessionApiPromptTokenEntry(
       createSessionKkvService(this.deps.conn),
       sessionId
     );
@@ -156,6 +156,10 @@ export class DefaultMessageService implements MessageService {
       ...(options?.usage != null ? { usage: options.usage } : {}),
     };
     await this.deps.messages.insert(message);
+    // 消息「增」同样改变当前可见 prompt：旧 api 占用（含 tools 段）不再适用，
+    // 不清就会以 api 口径残留整个 run、并落库跨重启继续参与阈值判定。
+    // 挂在这里即一次覆盖全部 append 调用方（runner / IPC / CLI / agent session）。
+    await this.invalidatePromptTokens(sessionId);
     return message;
   }
 
@@ -198,7 +202,7 @@ export class DefaultMessageService implements MessageService {
       );
     });
     await runDeferredBlobGc(this.deps.conn);
-    this.invalidatePromptTokens(message.sessionId);
+    await this.invalidatePromptTokens(message.sessionId);
   }
 
   async updateContent(
@@ -214,7 +218,7 @@ export class DefaultMessageService implements MessageService {
       throw chatNotFound("message", messageId);
     }
     const message = await this.get(messageId);
-    this.invalidatePromptTokens(message.sessionId);
+    await this.invalidatePromptTokens(message.sessionId);
     return message;
   }
 
@@ -308,7 +312,7 @@ export class DefaultMessageService implements MessageService {
     if (!updated) {
       throw chatNotFound("message", messageId);
     }
-    this.invalidatePromptTokens(existing.sessionId);
+    await this.invalidatePromptTokens(existing.sessionId);
   }
 
   async show(messageId: string): Promise<void> {
@@ -320,7 +324,7 @@ export class DefaultMessageService implements MessageService {
     if (!updated) {
       throw chatNotFound("message", messageId);
     }
-    this.invalidatePromptTokens(existing.sessionId);
+    await this.invalidatePromptTokens(existing.sessionId);
   }
 
   async hideRange(
@@ -340,7 +344,7 @@ export class DefaultMessageService implements MessageService {
       true
     );
     if (count > 0) {
-      this.invalidatePromptTokens(sessionId);
+      await this.invalidatePromptTokens(sessionId);
     }
     return count;
   }
@@ -362,7 +366,7 @@ export class DefaultMessageService implements MessageService {
       false
     );
     if (count > 0) {
-      this.invalidatePromptTokens(sessionId);
+      await this.invalidatePromptTokens(sessionId);
     }
     return count;
   }
@@ -393,7 +397,7 @@ export class DefaultMessageService implements MessageService {
         }
         await messages.deleteBySession(sessionId);
       });
-      this.invalidatePromptTokens(sessionId);
+      await this.invalidatePromptTokens(sessionId);
       return;
     }
 
@@ -408,7 +412,7 @@ export class DefaultMessageService implements MessageService {
     );
     if (tailIds.length === 0) {
       // 没有 tail 需要截断，也顺手 invalidate 一下 prompt 缓存保险
-      this.invalidatePromptTokens(sessionId);
+      await this.invalidatePromptTokens(sessionId);
       return;
     }
 
@@ -423,7 +427,7 @@ export class DefaultMessageService implements MessageService {
       await checkpoints.deleteCheckpointsForMessages(sessionId, tailIds);
       await messages.deleteAfterSeq(sessionId, anchor.seq);
     });
-    this.invalidatePromptTokens(sessionId);
+    await this.invalidatePromptTokens(sessionId);
   }
 
   async searchMessages(

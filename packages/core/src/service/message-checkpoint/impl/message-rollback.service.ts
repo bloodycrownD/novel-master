@@ -232,9 +232,9 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
     }
 
     // 回滚成功后可见 prompt 变了：API 占用双删（进程内热层 + session KKV
-    // 行）。本类只持有 conn，就地建一个无状态的 SessionKkvService（在事务外，
-    // 删除是 fire-and-forget，见 helper 注释）。
-    invalidateSessionApiPromptTokenEntry(
+    // 行）。本类只持有 conn，就地建一个无状态的 SessionKkvService（删除在
+    // `conn.transaction` 块外，已 await，失败只吞 warn）。
+    await invalidateSessionApiPromptTokenEntry(
       createSessionKkvService(this.deps.conn),
       sessionId
     );

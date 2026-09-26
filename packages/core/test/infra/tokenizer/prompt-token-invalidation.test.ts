@@ -4,7 +4,8 @@
  * helper 一起清）。
  *
  * 覆盖挂点：
- * - message.service：delete / updateContent / hide / truncateAfter
+ * - message.service：append / delete / updateContent / hide / truncateAfter
+ * - session.service：updateSessionAgentConfig（会话级切 Agent / 切模型）
  * - message-checkpoint：rollbackToMessage（回滚）
  * - message-transcript-effects：setMessageFloorAtMessage（置位）
  * - persistent-state：setCurrentModelId（切模型 / 切 Agent）
@@ -56,30 +57,27 @@ async function seedRow(
 }
 
 /**
- * 失效是 fire-and-forget（KKV 删除不阻塞调用方）：轮询等行消失。
- * 50 × 5ms 上限，超时即判失败（行仍在）。
+ * 断言该会话的 prompt_tokens 行已被清掉（进程内热层同步清 + KKV 行删除）。
+ *
+ * 失效删除现在被所有 async 调用方 `await`（agent-runner 的 run 收尾两处
+ * 除外，它们刻意保持 fire-and-forget），所以 await 返回后行必须已经消失——
+ * 直接断言，不再轮询等待。
  */
-async function waitRowGone(
+async function assertRowGone(
   sessionKkv: SessionKkvService,
   sessionId: string
 ): Promise<void> {
-  for (let i = 0; i < 50; i += 1) {
-    const raw = await sessionKkv.get(
-      sessionId,
-      SESSION_KKV_DOMAIN_PROMPT_TOKENS,
-      PROMPT_TOKENS_LAST_USAGE_KEY
-    );
-    if (raw == null) {
-      assert.equal(
-        sessionApiPromptTokenCache.get(sessionId),
-        undefined,
-        "进程内热层应同步清空"
-      );
-      return;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 5));
-  }
-  throw new Error(`prompt_tokens 行未被清掉（session=${sessionId}）`);
+  const raw = await sessionKkv.get(
+    sessionId,
+    SESSION_KKV_DOMAIN_PROMPT_TOKENS,
+    PROMPT_TOKENS_LAST_USAGE_KEY
+  );
+  assert.equal(raw, null, "prompt_tokens 行应已被清");
+  assert.equal(
+    sessionApiPromptTokenCache.get(sessionId),
+    undefined,
+    "进程内热层应同步清空"
+  );
 }
 
 async function makeSession() {
@@ -94,6 +92,14 @@ describe("prompt 占用失效挂点", () => {
     sessionApiPromptTokenCache.clearAll();
   });
 
+  it("message.append 后 KKV 行被清（消息「增」这一环）", async () => {
+    const { ctx, session } = await makeSession();
+    await seedRow(ctx.sessionKkv, session.id);
+
+    await ctx.messages.append(session.id, "user", textBlocks("new turn"));
+    await assertRowGone(ctx.sessionKkv, session.id);
+  });
+
   it("message.delete 后 KKV 行被清", async () => {
     const { ctx, session } = await makeSession();
     const message = await ctx.messages.append(
@@ -104,7 +110,7 @@ describe("prompt 占用失效挂点", () => {
     await seedRow(ctx.sessionKkv, session.id);
 
     await ctx.messages.delete(message.id);
-    await waitRowGone(ctx.sessionKkv, session.id);
+    await assertRowGone(ctx.sessionKkv, session.id);
   });
 
   it("message.updateContent 后 KKV 行被清", async () => {
@@ -117,7 +123,7 @@ describe("prompt 占用失效挂点", () => {
     await seedRow(ctx.sessionKkv, session.id);
 
     await ctx.messages.updateContent(message.id, textBlocks("after"));
-    await waitRowGone(ctx.sessionKkv, session.id);
+    await assertRowGone(ctx.sessionKkv, session.id);
   });
 
   it("message.hide 后 KKV 行被清", async () => {
@@ -130,7 +136,7 @@ describe("prompt 占用失效挂点", () => {
     await seedRow(ctx.sessionKkv, session.id);
 
     await ctx.messages.hide(message.id);
-    await waitRowGone(ctx.sessionKkv, session.id);
+    await assertRowGone(ctx.sessionKkv, session.id);
   });
 
   it("message.truncateAfter 后 KKV 行被清", async () => {
@@ -144,7 +150,7 @@ describe("prompt 占用失效挂点", () => {
     await seedRow(ctx.sessionKkv, session.id);
 
     await ctx.messages.truncateAfter(session.id, first.id);
-    await waitRowGone(ctx.sessionKkv, session.id);
+    await assertRowGone(ctx.sessionKkv, session.id);
   });
 
   it("回滚（sessionFs.rollbackToMessage）后 KKV 行被清", async () => {
@@ -174,7 +180,7 @@ describe("prompt 占用失效挂点", () => {
       project.id,
       assistant1.id
     );
-    await waitRowGone(ctx.sessionKkv, session.id);
+    await assertRowGone(ctx.sessionKkv, session.id);
   });
 
   it("置位（setMessageFloorAtMessage）后 KKV 行被清", async () => {
@@ -189,7 +195,7 @@ describe("prompt 占用失效挂点", () => {
 
     const effects = createMessageTranscriptEffectsService(ctx.conn);
     await effects.setMessageFloorAtMessage(project.id, session.id, anchor.id);
-    await waitRowGone(ctx.sessionKkv, session.id);
+    await assertRowGone(ctx.sessionKkv, session.id);
   });
 
   it("切模型（state.setCurrentModelId）后 KKV 行被清", async () => {
@@ -198,7 +204,7 @@ describe("prompt 占用失效挂点", () => {
     await seedRow(ctx.sessionKkv, session.id);
 
     await ctx.state.setCurrentModelId(TEST_SAVED_MODEL_ID);
-    await waitRowGone(ctx.sessionKkv, session.id);
+    await assertRowGone(ctx.sessionKkv, session.id);
   });
 
   it("切换 Agent（state.setCurrentAgentId）后 KKV 行被清", async () => {
@@ -207,7 +213,47 @@ describe("prompt 占用失效挂点", () => {
     await seedRow(ctx.sessionKkv, session.id);
 
     await ctx.state.setCurrentAgentId("test-default-agent");
-    await waitRowGone(ctx.sessionKkv, session.id);
+    await assertRowGone(ctx.sessionKkv, session.id);
+  });
+
+  it("切 Agent（sessions.updateSessionAgentConfig）后 KKV 行被清", async () => {
+    const { ctx, session } = await makeSession();
+    const before = await ctx.sessions.getSessionAgentConfig(session.id);
+    await seedRow(ctx.sessionKkv, session.id);
+
+    // agentId 变更时 savedModelId 指纹不变，读口没有任何 agent 指纹可作第二道
+    // 防线：正确性完全依赖这一个失效挂点，所以它必须被本用例钉住。
+    const after = await ctx.sessions.updateSessionAgentConfig(session.id, {
+      agentId: "other-agent",
+    });
+    assert.notEqual(after.agentId, before.agentId);
+    await assertRowGone(ctx.sessionKkv, session.id);
+  });
+
+  it("updateSessionAgentConfig 传与当前相同的配置 → KKV 行保留（收窄口径）", async () => {
+    const { ctx, session } = await makeSession();
+    const current = await ctx.sessions.getSessionAgentConfig(session.id);
+    await seedRow(ctx.sessionKkv, session.id);
+
+    // overlay 语义下 patch 常常带与当前相同的值（前端表单整体回传 / CLI 重放
+    // 同配置）。这类无效写不该清缓存，否则收窄白写、还多一次 KKV 写。
+    const after = await ctx.sessions.updateSessionAgentConfig(session.id, {
+      agentId: current.agentId,
+      ...(current.modelId != null ? { modelId: current.modelId } : {}),
+    });
+    assert.deepEqual(after, current);
+
+    const raw = await ctx.sessionKkv.get(
+      session.id,
+      SESSION_KKV_DOMAIN_PROMPT_TOKENS,
+      PROMPT_TOKENS_LAST_USAGE_KEY
+    );
+    assert.notEqual(raw, null, "配置未变时不应清掉 prompt_tokens 行");
+    assert.equal(
+      sessionApiPromptTokenCache.get(session.id)?.promptTokens,
+      4321,
+      "热层也应保留"
+    );
   });
 
   it("导入对齐（clearSessionPromptCaches）后 KKV 行被清，pending 域保留", async () => {
@@ -216,7 +262,7 @@ describe("prompt 占用失效挂点", () => {
     await ctx.sessionKkv.set(session.id, "user_vfs_pending", "queue", "[]");
 
     await clearSessionPromptCaches(session.id, ctx.sessionKkv);
-    await waitRowGone(ctx.sessionKkv, session.id);
+    await assertRowGone(ctx.sessionKkv, session.id);
 
     assert.equal(
       await ctx.sessionKkv.get(session.id, "user_vfs_pending", "queue"),

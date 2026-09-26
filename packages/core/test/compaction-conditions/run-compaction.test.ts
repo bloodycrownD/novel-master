@@ -84,15 +84,14 @@ async function seedPromptTokenRow(sessionId: string): Promise<void> {
   );
 }
 
-/** 失效是 fire-and-forget：轮询等 KKV 行消失，50 × 5ms 上限。 */
-async function waitPromptTokenRowGone(sessionId: string): Promise<void> {
-  for (let i = 0; i < 50; i += 1) {
-    if ((await promptTokenRow(sessionId)) == null) {
-      return;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 5));
-  }
-  assert.fail("prompt_tokens KKV 行未被清");
+/**
+ * 断言 prompt_tokens 行已被清掉。
+ *
+ * 失效删除现在被 `await`（runCompaction 内直接 await helper），所以 await
+ * 返回后行必须已经消失——直接断言，不再轮询等待。
+ */
+async function assertPromptTokenRowGone(sessionId: string): Promise<void> {
+  assert.equal(await promptTokenRow(sessionId), null);
 }
 
 describe("runCompaction", () => {
@@ -179,7 +178,7 @@ describe("runCompaction", () => {
 
     // prompt token cache 失效（进程内热层 + session KKV 行双删）。
     assert.equal(sessionApiPromptTokenCache.get(sessionId), undefined);
-    await waitPromptTokenRowGone(sessionId);
+    await assertPromptTokenRowGone(sessionId);
   });
 
   it("T-CC3: hideStartDepth=10 时 hide-message 用 depth 10", async () => {
@@ -224,7 +223,7 @@ describe("runCompaction", () => {
     const snapKeys = await ctx.sessionKkv.listKeys(sessionId, RULE_SNAPSHOT);
     assert.deepEqual(snapKeys, []);
     assert.equal(sessionApiPromptTokenCache.get(sessionId), undefined);
-    await waitPromptTokenRowGone(sessionId);
+    await assertPromptTokenRowGone(sessionId);
   });
 
   it("T-CC4: hide-message 抛异常时返回 { ok: false }，不 crash 且不清 kkv", async () => {

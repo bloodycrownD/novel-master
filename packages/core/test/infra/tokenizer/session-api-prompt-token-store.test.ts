@@ -2,7 +2,8 @@
  * session prompt token store 单测：KKV 值编解码 + 热层/KKV 读写 + 双删。
  *
  * 覆盖：
- * - 编解码：损坏 / 缺字段 / 非法可选字段 → null 或省略该键（旧值向后兼容）；
+ * - 编解码：损坏 / 缺字段 / 非法可选字段 → null 或省略该键；
+ *   `atMs` 与 `promptTokens` 同为必填（缺任一当 miss），`promptTokens===0` 合法；
  * - 读：Map 热层优先、KKV miss → null、KKV 命中回填 Map（第二次不再查库）、
  *   读库抛错 → 按 miss 处理不抛；
  * - 写：Map + KKV 双写，KKV 抛错吞掉不冒泡；
@@ -73,7 +74,7 @@ describe("session-api-prompt-token-store 编解码", () => {
     });
   });
 
-  it("旧格式值（只有 promptTokens / atMs）照常解析，不判坏数据", () => {
+  it("只有两个必填字段（promptTokens / atMs）照常解析，三个可选键全省", () => {
     const parsed = parseSessionApiPromptTokenEntry(
       JSON.stringify({ promptTokens: 100, atMs: 5 })
     );
@@ -129,10 +130,36 @@ describe("session-api-prompt-token-store 编解码", () => {
       parseSessionApiPromptTokenEntry(JSON.stringify({ promptTokens: -1 })),
       null
     );
-    // atMs 缺字段退化为 0（只服务时效展示，不影响判定）
-    assert.deepEqual(
+    // atMs 与 promptTokens 同为必填：缺失 / 类型不对 / 非有限数一律当 miss
+    // （退化 0 会让时效判据把它当「永远过期」，或被 ===0 守卫静默放行）。
+    assert.equal(
       parseSessionApiPromptTokenEntry(JSON.stringify({ promptTokens: 3 })),
-      { promptTokens: 3, atMs: 0 }
+      null
+    );
+    assert.equal(
+      parseSessionApiPromptTokenEntry(
+        JSON.stringify({ promptTokens: 3, atMs: "5" })
+      ),
+      null
+    );
+    assert.equal(
+      parseSessionApiPromptTokenEntry(
+        JSON.stringify({ promptTokens: 3, atMs: null })
+      ),
+      null
+    );
+    assert.equal(
+      parseSessionApiPromptTokenEntry(
+        JSON.stringify({ promptTokens: 3, atMs: Number.NaN })
+      ),
+      null
+    );
+    // promptTokens === 0 本身是合法值，仍放行（不被 atMs 校验顺手一起拒）。
+    assert.deepEqual(
+      parseSessionApiPromptTokenEntry(
+        JSON.stringify({ promptTokens: 0, atMs: 7 })
+      ),
+      { promptTokens: 0, atMs: 7 }
     );
   });
 });
@@ -267,7 +294,7 @@ describe("session-api-prompt-token-store 写入与失效", () => {
       updatedAt: 1,
     });
 
-    invalidateSessionApiPromptTokenEntry(kkv, SESSION_ID);
+    await invalidateSessionApiPromptTokenEntry(kkv, SESSION_ID);
 
     assert.equal(sessionApiPromptTokenCache.get(SESSION_ID), undefined);
     assert.equal(calls.delete, 1);
@@ -292,7 +319,7 @@ describe("session-api-prompt-token-store 写入与失效", () => {
       promptTokens: 1,
       updatedAt: 1,
     });
-    invalidateSessionApiPromptTokenEntry(kkv, SESSION_ID);
+    await invalidateSessionApiPromptTokenEntry(kkv, SESSION_ID);
     assert.equal(sessionApiPromptTokenCache.get(SESSION_ID), undefined);
     await Promise.resolve();
     await Promise.resolve();
