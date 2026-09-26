@@ -1,8 +1,8 @@
 ---
-date: 2026-09-25 23:50
-title: mobile 性能批次全记录：5 spec→dev-ready（未 merge）+ ⑤回炉闭环（e2e 三幕）+ Phase 2 llm-stream-native 开发全程至 dev-ready（含终止键 P0 修复）
-keywords: 性能优化, content_json 压缩, 回滚卡顿, 后台停摆, SSE 定时器, Choreographer, 指标条, t/s, LLM 流卡死, XHR onprogress, 增量投递停摆, 真机实验, mock-openai-server, 内嵌 bundle, worktree 并行, dev-ready, 视觉幻觉, 坐标漂移, Connection close, callTimeout, 死连接复用, 黑洞, llm-stream-native, 原生 SSE 管子, 块级渲染, execute-ready, lazy TurboModule, spread 坑, 终止键 TypeError
-abstract: 五命题全 dev-ready 未 merge。Phase 2 llm-stream-native 经 code-dev-loop 开发完毕至 dev-ready：Step 1 静态核验实锤自建（mattermost 无增量事件流+OkHttp5 冲突）→ 四路并行 impl（Kotlin 管子/core port/累积数组化/块级渲染）→ wiring → verify/cr-func 两道闸 → Step 7 双路径全过撤 close 定案 → Step 8 AC 硬指标过 + 终止键 P0（lazy TurboModule spread 丢 sseAbort）根治复验。分支 feat/llm-stream-native@e7496de7（19 提交，基于 5826d19e），T-N9 真机验收留用户，全部未 merge。
+date: 2026-09-26 11:15
+title: mobile 性能批次全记录：5 spec→dev-ready（未 merge）+ ⑤回炉闭环 + Phase 2 llm-stream-native 开发至 dev-ready 并三轮真机验收（超时语义终版/mock 500 字/秒压测）
+keywords: 性能优化, content_json 压缩, 回滚卡顿, 后台停摆, 指标条, t/s, LLM 流卡死, 增量投递停摆, 真机实验, mock-openai-server, 内嵌 bundle, worktree 并行, dev-ready, Connection close, callTimeout, 死连接复用, 黑洞, llm-stream-native, 原生 SSE 管子, 块级渲染, execute-ready, lazy TurboModule, 终止键, GLM tool_stream, 流式无空闲超时, 手插会话, metro 病态, 推库回退
+abstract: 五命题全 dev-ready 未 merge（①635c714c ②19e4e841 ③61a14db9 ④6c0a0479 ⑤5826d19e）。Phase 2 llm-stream-native 开发完毕并三轮真机验收（dev-ready@8cb69e8d，21 提交基于 5826d19e）：超时语义终版（流式去全部空闲限制，用户拍板）、lazy TurboModule 终止键 P0 根治、GLM 工具调用非流认知、mock 500 字/秒压测 5 轮全过。⑤ worktree 已删（⑥ 含 ⑤ 无需单独合）。真机 1304 在装、库已清理还原、RULE 已入两条新规则。
 ---
 
 user:
@@ -273,3 +273,15 @@ assistant:
 【测试中排除的三个环境坑（重要）】①**metro 病态态**：进程活着但 bundle 请求全卡 0%（旧实例，多次 bundle 未完成），app 靠缓存 bundle 跑而 run 链的按需模块加载永久挂起（症状：UI 正常但发送后消息不落库/请求不发/run「活跃中」）——重启 metro（--reset-cache）恢复；②**手插 chat_session 不可用于发送测试**：缺正常创建流程的初始化数据→run 启动链静默挂起（UI 乐观消息、库无消息、无请求）——**必须用 UI 建的会话再改 modelId/draft**；③自建 provider 需 API key（SKSP）——**mock 接入最省姿势 = 改内置 OpenCode Zen（defaultApiKey="public" 免 key）的 base_url + 模型行挂它**（测完还原）。另：IME 半死态反复（input text 静默失败，重试或 DB 草稿注入绕过）；**发送键/终止键坐标随键盘开合漂移，自动化点「终止键」多轮未命中**（非 bug——终止能力由模拟器三断言 + 用户日常点击覆盖，自动化不采信）。
 【传库操作教训】push 库会回退 app 期间的新写入——推旧副本会丢消息（本轮「hi」轮被回退实锤），**每次推库前必须重新拉最新副本**；app 写库正常时（UI 新建会话 ✓）外部推库只是替换文件，无锁问题。
 【环境终态】真机：1304（1.5.24-dev）、用户库已清理（测试 provider/模型/会话/消息全删、Zen base_url 还原 opencode.ai/zen/v1）、常亮已设（svc power stayon true + screen_off_timeout 1800000）、metro 在线；mock 已停；%TEMP% 测试副本已删（诊断脚本 nm-dump-*.ps1 保留可复用）。
+
+user:
+更新记忆，我要压缩上下文了。 [$apm-usage]
+
+assistant:
+（压缩前状态快照，2026-09-26 11:15）
+【恢复锚点（四选一开工）】① 用户给合并指令——⑥ llm-stream-native 已 dev-ready + 三轮真机验收（⑤ 无需单独合：⑥ 基线含它，合 ⑥ 即带入历史）；② ①②③④ 的真机验收/合并（① 压缩需实库副本先备份；③ 合并硬门禁=chrome inspect 后台 timer 停摆实证仍未做）；③ ⑥ 的可选增强拍板：GLM 请求注入 `tool_stream: true`（工具调用真流式，根消长停顿；需判定口径+限 GLM-4.6+，用户尚未表态）；④ 真机日常深度验收（1304 还装着、metro 在线、常亮已设）。
+【分支与提交全景】文档分支 iteration-docs-20260924：5188deb7（上轮快照）→ f6bb5997（RULE 拍板+二轮验收）→ 5b4c11f4（三轮验收，最新）。feat/llm-stream-native@**8cb69e8d**（21 提交，基线 5826d19e）：e7496de7→56301c4f（超时分层修正）→8cb69e8d（流式去全部空闲限制终版）。其余四分支未动：①635c714c / ②19e4e841 / ③61a14db9 / ④6c0a0479。**⑤ feat/llm-stream-timeout@5826d19e：worktree 已按用户指令删除（分支保留）**。全部未 merge（协作红线等指令）。
+【合并红线备忘】①④ 同 bump SCHEMA_BOOT_VERSION 须顺延（先合 +1 后合再 +1，断言引用常量、不写死号）；①② 同碰 sqlite-message.repository 小冲突；③ 硬门禁（chrome inspect 实证）未做；①②③④ manual_user 真机验收未做；④ desktop 指标条采样器跨 run 未 reset 为非阻塞 polish；⑥ 与其他分支无文件冲突（仅 CHANGELOG 交汇）；⑥ 含 ⑤ 全部提交。
+【⑥ 迭代终态与遗留】CHANGELOG Unreleased 已含 ⑥ 全部条目（原生传输/块级渲染/连接池/终止修复/非流式 60s/合法停顿不误杀）；RULE 已入两条（流式无空闲超时拍板 + lazy TurboModule spread 禁止）；真机三轮验收结论：GLM 工具调用链✓、超时语义✓、mock 500 字/秒 ×5 轮✓、客户侧无瓶颈（「GLM 慢」在模型侧：222 字/秒+超长思考）。遗留登记：T-N9 真机验收（部分完成）、合批事件率精确打点、600s 常量三处分居、AC-3 由单测代偿。
+【环境终态】真机 DSLDU20407006179：1304 诊断版（1.5.24-dev）在装、**常亮已设**（stayon+timeout）、用户库已还原干净（测试数据全清、Zen base_url 还原）、adb reverse 8081（可能还有 8787 残留）；metro 在线（D:\nm6\apps\mobile，--reset-cache 起过）。模拟器 emulator-5554 装 1304 修复版。D:\nm6 工作区干净（8cb69e8d）。D:\Dev\Js\novel-master 主仓在 iteration-docs-20260924@5b4c11f4。%TEMP%\nm-dump-*.ps1（UI 树解析）保留可复用。
+【本轮关键教训速查（详情见本轮前文）】流式无空闲超时（RULE）；lazy TurboModule spread 坑（RULE）；**手插 chat_session 不能用于发送测试**（run 启动链静默挂起——必须 UI 建会话再改 modelId/draft）；**metro 病态态**（活着但 bundle 卡 0% → run 链按需加载挂起 → --reset-cache 重启）；mock 接入最省姿势（改内置 OpenCode Zen base_url + 模型挂它，免 SKSP）；**推库前必须重新拉最新副本**（否则回退 app 新写入）；发送/终止键坐标随键盘漂移、IME 半死反复（自动化点击不可靠）。
