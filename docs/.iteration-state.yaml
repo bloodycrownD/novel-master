@@ -4,6 +4,7 @@ prd_path: docs/Iterations/mobile-perf-2026-09/features/stream-metrics-tokens/prd
 branch: integration/stream-metrics-native
 base_sha: 5c63d27e
 head_sha: 71692b11
+head_sha_note: "head_sha = 最后一次实质改动提交（cr-func P2 收口）；编排状态与终态标注随其后的落盘提交进库，真实 HEAD 以 git log -1 为准"
 dev_ready: yes
 dag_version: 2
 reorchestration_note: "wave-6：两轮 readonly cr-func 均 func-ready:yes 但遗留 6 条 P2（无 P0/P1），插入 n9-fix 收口 + n10-crfunc 复检（dag_version 1→2）"
@@ -29,8 +30,8 @@ node_status:
   n8a-crfunc-metrics: { status: done, executor: subagent, readonly: true, func_ready: yes }
   n8b-crfunc-ctx-docs: { status: done, executor: subagent, readonly: true, func_ready: yes, note: "提 6 条 P2；其中『② spec 应为 9 条』经主代理逐行实测证伪（真数 10）" }
   n9-crfunc-p2-fix: { status: done, entries: ["P2-1 变更点表 #7 措辞", "P2-2 两处过期 JSDoc + ③ spec :55", "P2-3 ③ spec 验证记录复跑行", "P2-4 C-4 barrel 结论留痕", "P2-5 ② PRD 用例枚举补项"], head: 71692b11, executor: subagent }
-  n10-crfunc-final: { status: in_progress, executor: subagent, readonly: true }
-  main_agent_closeout: { status: in_progress, note: "cr-fix-spec-v2 终态标注（状态行 / 执行记录 / deviations 21 行结果 / full-E-1 回填 / Closure 表）+ 本状态文件" }
+  n10-crfunc-final: { status: done, executor: subagent, readonly: true, func_ready: yes, dev_ready: yes, result: "零 must-fix（唯一 P3 = 三处 head_sha 自指盲区，主代理已消掉）；A 组 6 条 P2 全干净收口、21 行 deviations 抽查全有落地物、full/E-1 回填的 5 个行号实查全命中、7 条硬门限 grep 全过" }
+  main_agent_closeout: { status: done, note: "cr-fix-spec-v2 终态标注（状态行 / 元信息执行后 HEAD / 执行记录 / deviations 21 行结果 / full/E-1 回填 / Closure 表）+ 本状态文件" }
 file_ownership:
   n1-core-counter:
     - packages/core/src/infra/tokenizer/logic/incremental-token-counter.ts

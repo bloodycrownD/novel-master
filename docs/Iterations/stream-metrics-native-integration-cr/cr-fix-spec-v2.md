@@ -7,14 +7,15 @@
 - **repo**: `D:\Dev\Js\novel-master\.worktree\i-stream-metrics-native`
 - **branch**: `integration/stream-metrics-native`
 - **base_sha**: `83a434d7a74a66eefca7fa7cb860ddf30154b028`
-- **head_sha**: `fad16a12620e676b6ae6beccbdcc55460edf928d`
+- **head_sha**: `fad16a12620e676b6ae6beccbdcc55460edf928d`（**评审范围**的 head，即 CR 三轮评审覆盖到的最后一笔；执行后的 HEAD **不是**本字段，见下）
+- **执行后 HEAD**: `71692b11`（最后一次实质改动提交 = cr-func 遗留 P2 收口；其后仅剩本文件的终态标注与 `docs/.iteration-state.yaml` 的落盘提交，不再产生代码 / 业务文档改动。**当前真实 HEAD 以 `git log -1` 为准**——本文件的状态标注写于自身那次提交之前，故无法自指）
 - **prd_path / spec_path**（四份业务文档，只读参考）:
   - ① `docs/Iterations/mobile-perf-2026-09/bugs/stream-multi-step-rate-freeze/{prd.md,spec.md}`
   - ② `docs/Iterations/mobile-perf-2026-09/features/stream-live-token-estimator/{prd.md,spec.md}`
   - ③ `docs/Iterations/mobile-perf-2026-09/bugs/context-usage-caliber-unify/{prd.md,spec.md}`
   - ④ `docs/Iterations/mobile-perf-2026-09/features/stream-metrics-tokens/{prd.md,spec.md}`（被改写的原 spec）
 - **review_round**: 1（**修订轮 round 2**）→ 3（**v3 校对轮**）→ 4（**v4 收口轮**）/ **dag_version**: 4
-- **状态**: **已执行完毕（dev-ready，2026-09-26）**——由 `code-dev-loop` 承接，**32 条 must-fix 全部落地**；4 条「按现状收窄」经用户**照准**（#1/#2/#3/#5）；两轮 readonly cr-func 均判 `func-ready: yes`，其遗留 6 条 P2 已收口。分支 `integration/stream-metrics-native`，执行前 `5c63d27e` → 执行后 HEAD `71692b11`（**未 push / 未 merge / 未发版**）。逐条执行结果见文末「执行记录」。
+- **状态**: **已执行完毕（dev-ready，2026-09-26）**——由 `code-dev-loop` 承接，**32 条 must-fix 全部落地**；4 条「按现状收窄」经用户**照准**（#1/#2/#3/#5）；两轮 readonly cr-func 均判 `func-ready: yes`，其遗留 6 条 P2 已收口，终态复检（`n10-crfunc-final`）亦判 `dev-ready: yes` 且零 must-fix。分支 `integration/stream-metrics-native`，执行前 `5c63d27e` → 最后一次实质改动提交 `71692b11`（**未 push / 未 merge / 未发版**）。逐条执行结果见文末「执行记录」。
 - **说明**: 本文件是**增量第二轮** CR 的修复规格。上一轮整条分支 CR 见同目录 `cr-fix-spec.md`（状态已执行，只读参考，本次**未改动**）。评审为 readonly（只读代码 + 静态推演 + 局部实跑），分三个 scope：
   - `review-scope-metrics` → 覆盖 ① + ②，round 1 产出 7 条 must-fix（`metrics/*`，round 2 后共 9 条）；
   - `review-scope-context-usage` → 覆盖 ③ + `scripts/mock-openai-server.mjs`，round 1 产出 10 条 must-fix（`ctx-usage/*`，round 2 后共 11 条）；
@@ -964,7 +965,7 @@
 | **执行状态** | **已执行完毕 = dev-ready（2026-09-26，`code-dev-loop`）**：32 条 must-fix 全部落地；6 个 impl/fix 节点 + 1 个 verify 节点 + 2 个 readonly cr-func 节点；提交链 `5c63d27e` → `c78989f7` → `d6c1e0da` → `2ca81325` → `344f6725` → `286113be` → `5adc3ab0` → `71692b11`（HEAD）；**未 push / 未 merge / 未发版**。逐条结果见文末「执行记录」 |
 | **执行期验证** | core 全量 **2173 / 2 红**（既有时区归桶）；mobile 全量 **1501 / 1 红** + 2 个已知 suite 红；desktop 全量 **526/526**；core / mobile / cli typecheck 零输出；desktop renderer tsc 全仓 349 条既有债、**本轮改动文件新增 0**；renderer vite 出包成功（index 3,212 kB）。**无本轮引入的回归** |
 | **fix_spec_path** | `docs/Iterations/stream-metrics-native-integration-cr/cr-fix-spec-v2.md` |
-| **base_sha / head_sha** | `83a434d7` → `fad16a12` |
+| **base_sha / head_sha** | `83a434d7` → `fad16a12`（**评审范围**；执行后的提交链见上一行「执行状态」，最后一次实质改动提交为 `71692b11`） |
 | **dag_version / review_round** | 4 / 4 |
 | **P0 / P1 / P2（已写入 fix-spec）** | **0 / 2 / 30**（合计 32 条） |
 | **未写入的开放 must-fix** | **0**（第 4 轮终审的 13 项收口已全部并入 v4） |
