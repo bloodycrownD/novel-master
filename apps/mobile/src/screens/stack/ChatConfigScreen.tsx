@@ -14,7 +14,6 @@ import {FormField} from '../../components/form/FormField';
 import {FormSectionCard} from '../../components/form/FormSectionCard';
 import {FormTextInput} from '../../components/form/FormTextInput';
 import {ScreenFormLayout} from '../../components/form/ScreenFormLayout';
-import {StickyFormFooter} from '../../components/form/StickyFormFooter';
 import {useRuntime} from '../../hooks/useRuntime';
 import {useNovelMaster} from '../../runtime/novel-master-context';
 import {
@@ -62,7 +61,6 @@ export function ChatConfigScreen() {
   const [compactionHideStartDepth, setCompactionHideStartDepth] = useState(
     String(DEFAULT_HIDE_START_DEPTH),
   );
-  const [compactionSaving, setCompactionSaving] = useState(false);
 
   const refreshStreamPref = useCallback(async () => {
     setLlmStreamEnabled(await runtime.preferences.getLlmStreamEnabled());
@@ -160,53 +158,57 @@ export function ChatConfigScreen() {
     [showToast],
   );
 
-  const collectCompaction = (): CompactionConditions | null => {
-    const ratio = compactionTokenRatio.trim()
-      ? Number(compactionTokenRatio)
-      : undefined;
-    const hide = compactionHideStartDepth.trim()
-      ? Number(compactionHideStartDepth)
-      : undefined;
-    if (compactionEnabled && ratio == null) {
-      showToast('启用时至少填写 token 比例');
-      return null;
-    }
-    return {
-      schemaVersion: 4,
-      enabled: compactionEnabled,
-      ...(ratio != null ? {tokenRatio: ratio} : {}),
-      ...(hide != null ? {hideStartDepth: hide} : {}),
-    };
-  };
-
-  const handleSaveCompaction = async () => {
-    const conditions = collectCompaction();
-    if (!conditions) {
-      return;
-    }
-    setCompactionSaving(true);
-    try {
-      await runtime.compactionConditions.setConditions(conditions);
-      showToast('已保存压缩配置');
-    } catch (error) {
-      showToast(toastMessage('保存失败', error));
-    } finally {
-      setCompactionSaving(false);
-    }
-  };
+  // 压缩配置改为即时保存（保存按钮已移除）：开关切换 / 输入完成即落库。
+  // 从「即将生效的值」组装完整 conditions；校验失败或写库失败返回 false，
+  // 由调用方决定回滚（开关回滚到原值；输入框保留用户输入待下次提交）。
+  const persistCompaction = useCallback(
+    async (next?: {
+      enabled?: boolean;
+      tokenRatio?: string;
+      hideStartDepth?: string;
+    }): Promise<boolean> => {
+      const enabled = next?.enabled ?? compactionEnabled;
+      const ratioText = next?.tokenRatio ?? compactionTokenRatio;
+      const hideText = next?.hideStartDepth ?? compactionHideStartDepth;
+      const ratio = ratioText.trim() ? Number(ratioText) : undefined;
+      const hide = hideText.trim() ? Number(hideText) : undefined;
+      if (ratio != null && !Number.isFinite(ratio)) {
+        showToast('Token 比例需为数字');
+        return false;
+      }
+      if (hide != null && !Number.isFinite(hide)) {
+        showToast('隐藏起始深度需为数字');
+        return false;
+      }
+      if (enabled && ratio == null) {
+        showToast('启用时至少填写 token 比例');
+        return false;
+      }
+      const conditions: CompactionConditions = {
+        schemaVersion: 4,
+        enabled,
+        ...(ratio != null ? {tokenRatio: ratio} : {}),
+        ...(hide != null ? {hideStartDepth: hide} : {}),
+      };
+      try {
+        await runtime.compactionConditions.setConditions(conditions);
+        return true;
+      } catch (error) {
+        showToast(toastMessage('保存失败', error));
+        return false;
+      }
+    },
+    [
+      compactionEnabled,
+      compactionTokenRatio,
+      compactionHideStartDepth,
+      runtime,
+      showToast,
+    ],
+  );
 
   return (
-    <ScreenFormLayout
-      tokens={tokens}
-      footer={
-        <StickyFormFooter
-          tokens={tokens}
-          label="保存"
-          loading={compactionSaving}
-          onPress={() => handleSaveCompaction().catch(() => undefined)}
-        />
-      }
-    >
+    <ScreenFormLayout tokens={tokens}>
       <ProfileSwitchItem
         icon="⚡"
         label="流式输出"
@@ -318,6 +320,9 @@ export function ChatConfigScreen() {
             tokens={tokens}
             value={compactionHideStartDepth}
             onChangeText={setCompactionHideStartDepth}
+            onEndEditing={() => {
+              void persistCompaction();
+            }}
             keyboardType="number-pad"
             placeholder="6"
             style={styles.compactionInput}
@@ -326,7 +331,15 @@ export function ChatConfigScreen() {
         <FormField label="启用自动压缩" tokens={tokens} row>
           <Switch
             value={compactionEnabled}
-            onValueChange={setCompactionEnabled}
+            onValueChange={enabled => {
+              setCompactionEnabled(enabled);
+              // 即时保存：无效（启用但无有效比例）或写库失败都回滚开关。
+              void persistCompaction({enabled}).then(ok => {
+                if (!ok) {
+                  setCompactionEnabled(!enabled);
+                }
+              });
+            }}
             trackColor={{false: tokens.border, true: tokens.primary}}
           />
         </FormField>
@@ -336,6 +349,9 @@ export function ChatConfigScreen() {
               tokens={tokens}
               value={compactionTokenRatio}
               onChangeText={setCompactionTokenRatio}
+              onEndEditing={() => {
+                void persistCompaction();
+              }}
               keyboardType="decimal-pad"
               placeholder="0.8"
               style={styles.compactionInput}
