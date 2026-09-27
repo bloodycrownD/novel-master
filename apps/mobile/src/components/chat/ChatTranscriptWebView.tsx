@@ -339,6 +339,17 @@ function shouldSkipSnapshotAfterStreamCommit(
   return addedIds.length > 0 && addedIds.every(id => committedIds.includes(id));
 }
 
+/** 跳过 snapshot 的前提是 streamCommit 同步过的行仍全部在当前列表里：
+ *  回滚删尾后 tail 满页时条数不变但窗口前移，部分已 commit 的 id 已
+ *  不存在——此时 web 侧仍留着被删的行，必须走全量快照刷新。 */
+function committedStreamRowsStillPresent(
+  messages: readonly ChatMessage[],
+  committedIds: readonly string[],
+): boolean {
+  const idSet = new Set(messages.map(message => message.id));
+  return committedIds.every(id => idSet.has(id));
+}
+
 export const ChatTranscriptWebView = memo(
   forwardRef<ChatTranscriptWebViewHandle, ChatTranscriptWebViewProps>(
     function ChatTranscriptWebView(
@@ -1666,7 +1677,11 @@ export const ChatTranscriptWebView = memo(
           }
         } else if (
           lastStreamCommitIdsRef.current.length > 0 &&
-          messages.length === prevMessageCountRef.current
+          messages.length === prevMessageCountRef.current &&
+          committedStreamRowsStillPresent(
+            messages,
+            lastStreamCommitIdsRef.current,
+          )
         ) {
           lastStreamCommitIdsRef.current = [];
           prevFirstMessageIdRef.current = firstId;

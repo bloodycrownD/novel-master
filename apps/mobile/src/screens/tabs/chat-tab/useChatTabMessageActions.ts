@@ -189,7 +189,11 @@ export function useChatTabMessageActions({
         return;
       }
       if (agentRunning) {
-        showToast(toastMessage('请稍候', 'Agent 运行中无法回滚'));
+        // run 在途时回滚不可用。toast 一闪即逝，用户极易错过、感知为
+        // 「点了没反应/确认框迟迟不弹」——改用模态弹窗把原因说清楚。
+        Alert.alert('暂时无法回滚', 'Agent 正在运行，请先停止生成或等本轮完成后再回滚。', [
+          {text: '知道了', style: 'cancel'},
+        ]);
         return;
       }
 
@@ -269,10 +273,17 @@ export function useChatTabMessageActions({
           if (mode === 'rewind') {
             clearChatAnnotateDrafts(sessionId);
           }
-          await refreshComposerStatusAfterSessionKkvCleared(runtime, {
-            projectId,
-            sessionId,
-          });
+          // DB 截断事务已提交成功，后续刷新链（流式显示重置、tail
+          // reload、composer 恢复、toast）不允许被 composer 状态刷新
+          // 失败阻断——失败只记日志，列表照常刷新。
+          try {
+            await refreshComposerStatusAfterSessionKkvCleared(runtime, {
+              projectId,
+              sessionId,
+            });
+          } catch (err) {
+            console.warn('[rollback] composer status refresh failed', err);
+          }
           rollbackTimingLog('composer status refreshed');
           resetStreamingDisplay();
           rollbackTimingLog('streaming display reset');
