@@ -81,3 +81,15 @@ android/app/src/main/assets/webview/**
 !android/app/src/main/assets/webview/.gitkeep
 ios/NovelMaster/WebViewDist/**
 !ios/NovelMaster/WebViewDist/.gitkeep
+
+# 内嵌 bundle 出包产物（react-native bundle --assets-dest 落点，出「无 metro 验证包」时按配方重跑生成）
+android/app/src/main/assets/index.android.bundle
+android/app/src/main/assets/drawable-*/
+android/app/src/main/assets/raw/
+android/app/src/main/res/drawable-*/
+android/app/src/main/res/raw/
+
+# e2e 运行产物（截图 / uiautomator dump，仅目录占位入库）
+e2e/artifacts/**
+!e2e/artifacts/page-source/.gitkeep
+!e2e/artifacts/screenshots/.gitkeep

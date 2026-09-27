@@ -55,6 +55,9 @@ tmp/
 # Cursor IDE local files (debug logs, etc.)
 .cursor/
 
+# ZCode 客户端本地文件（忽略清单同步产物，不入库）
+.zcodeignore
+
 # 本地 worktree（agent 工作区）
 .worktree/
 
@@ -63,3 +66,8 @@ tmp/
 
 # 参考项目（仅本地查阅，不入库）
 .reference/
+
+# 本地调试/测试临时产物（mock 服务器日志、测试基线日志、临时 jest 配置副本）
+mock*.log
+.*.log
+.jc-*.js
