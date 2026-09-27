@@ -6,6 +6,8 @@
  *   `[nm-rollback] label +Nms` 形态（真机 logcat 过滤口径）。
  * - 未 reset（回滚窗口外）时 no-op——共享代码路径（快照构建等）埋点
  *   不产生日志。
+ * - B-01：窗口上限 10s 自动失效——t0 只开不关若无上限，首次回滚后
+ *   日常滚动会永久往同一条 t0 打点；超窗后首个站点自愈关窗。
  * - __DEV__=false（生产 bundle）时全 no-op。
  */
 import {beforeEach, afterEach, describe, expect, it, jest} from '@jest/globals';
@@ -63,5 +65,69 @@ describe('rollback timing 轴（T-R0）', () => {
     resetRollbackTiming();
     rollbackTimingLog('core rollback done');
     expect(logSpy).not.toHaveBeenCalled();
+  });
+});
+
+// B-01：窗口上限（ROLLBACK_TIMING_WINDOW_MS = 10s）自动失效。
+// 用 Date mock 钉住时钟，不依赖真实墙钟。
+describe('rollback timing 窗口上限（B-01）', () => {
+  const WINDOW_MS = 10000;
+  const T0 = 1_700_000_000_000;
+  let logSpy: jest.SpiedFunction<typeof console.log>;
+  let dateSpy: jest.SpiedFunction<typeof Date.now>;
+  let now: number;
+
+  beforeEach(() => {
+    now = T0;
+    dateSpy = jest.spyOn(Date, 'now').mockImplementation(() => now);
+    logSpy = jest.spyOn(console, 'log').mockImplementation(() => undefined);
+    // 每个用例都从「干净窗口」起步：重置模块拿到 rollbackT0=0 的新实例。
+    jest.resetModules();
+  });
+
+  afterEach(() => {
+    logSpy.mockRestore();
+    dateSpy.mockRestore();
+  });
+
+  it('窗口内（<10s）正常打点——elapsed 相对 t0 可读', () => {
+    const fresh = require('../src/debug/run-timing');
+    fresh.resetRollbackTiming();
+    logSpy.mockClear();
+
+    now = T0 + WINDOW_MS - 1;
+    fresh.rollbackTimingLog('core rollback done');
+
+    const lines = logSpy.mock.calls.map(call => String(call[0]));
+    expect(lines).toEqual([
+      `[nm-rollback] core rollback done +${WINDOW_MS - 1}ms`,
+    ]);
+  });
+
+  it('窗口超时（>10s）自动失效——首个超窗站点把 t0 复位为 0 且零输出', () => {
+    const fresh = require('../src/debug/run-timing');
+    fresh.resetRollbackTiming();
+    logSpy.mockClear();
+
+    now = T0 + WINDOW_MS + 1;
+    fresh.rollbackTimingLog('core rollback done');
+    expect(logSpy).not.toHaveBeenCalled();
+
+    // 关窗是自愈的：后续站点继续 no-op（t0 已被复位为 0）。
+    now = T0 + WINDOW_MS + 5000;
+    fresh.rollbackTimingLog('tail reload done');
+    expect(logSpy).not.toHaveBeenCalled();
+  });
+
+  it('恰好 10s 边界仍打点（判定为 > 而非 >=，窗口内含端点）', () => {
+    const fresh = require('../src/debug/run-timing');
+    fresh.resetRollbackTiming();
+    logSpy.mockClear();
+
+    now = T0 + WINDOW_MS;
+    fresh.rollbackTimingLog('boundary station');
+
+    const lines = logSpy.mock.calls.map(call => String(call[0]));
+    expect(lines).toEqual([`[nm-rollback] boundary station +${WINDOW_MS}ms`]);
   });
 });

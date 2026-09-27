@@ -186,19 +186,38 @@ function transcriptFlagsEqual(
 const SNAPSHOT_CHUNK_SIZE = 50;
 
 /**
+ * 惰性持有的 UTF-8 编码器（RN/Hermes 无全局 Buffer，故走 TextEncoder 全局；
+ * 与 packages/core 的 tool-output-limits 同款惯例）。模块求值期不构造，
+ * 规避个别环境缺该全局时直接炸掉整个模块。
+ */
+let snapshotChunkEncoder: TextEncoder | undefined;
+
+/** 字符串的 UTF-8 真实字节数（C-02 口径）；无 TextEncoder 全局时按 UTF-16 码元兜底。 */
+function utf8ByteLength(text: string): number {
+  if (typeof TextEncoder === 'undefined') {
+    return text.length;
+  }
+  snapshotChunkEncoder ??= new TextEncoder();
+  return snapshotChunkEncoder.encode(text).byteLength;
+}
+
+/**
  * 快照分片字节预算（rollback-large-jank Step 3）：单桶累计源 content JSON
  * 尺寸上限。大消息场景即使条数未到 {@link SNAPSHOT_CHUNK_SIZE} 也切多片，
  * 避免「40 条大消息挤单片 → 单次 rows 编码大包 → web 全量重建长任务」。
- * 度量口径 = 源消息 content 的 JSON 序列化尺寸（rows 编码前），与
- * rollback.plan.messages 打点的 contentBytes 同源。
+ * 度量口径（C-02）：源消息 content 的 JSON 序列化串的 **UTF-8 真实字节**
+ * （`TextEncoder`，全仓字节惯例同 packages/core 的 tool-output-limits），
+ * 即此处的 256KB 与线上真实字节预算同尺度。注意它与 rollback.plan.messages
+ * 打点的 contentBytes **不同源**——core 侧那处是 `.length`（UTF-16 code unit）
+ * 口径，中文正文下约为真字节的 1/3，两者不可直接对齐读数。
  */
 const SNAPSHOT_CHUNK_BYTES = 256 * 1024;
 
 /**
  * 按源尺寸贪心分桶（rollback-large-jank Step 3）：一遍量测一遍定桶边界
- * ——逐条累计源 content JSON 尺寸，条数到上限或累计字节超预算即封桶；
- * 单条自身超预算时独占一桶（无法再细分）。返回每桶 [start, end) 边界；
- * 空列表返回单空桶（chunkTotal=1，与旧单包空快照逐字节等价）。
+ * ——逐条累计源 content JSON 的 UTF-8 真实字节，条数到上限或累计字节超预算
+ * 即封桶；单条自身超预算时独占一桶（无法再细分）。返回每桶 [start, end)
+ * 边界；空列表返回单空桶（chunkTotal=1，与旧单包空快照逐字节等价）。
  */
 export function planSnapshotChunkBounds(
   messages: readonly ChatMessage[],
@@ -207,7 +226,7 @@ export function planSnapshotChunkBounds(
   let start = 0;
   let bytes = 0;
   for (let i = 0; i < messages.length; i += 1) {
-    const messageBytes = JSON.stringify(messages[i]!.content).length;
+    const messageBytes = utf8ByteLength(JSON.stringify(messages[i]!.content));
     const countInBucket = i - start + 1;
     if (
       countInBucket > SNAPSHOT_CHUNK_SIZE ||
@@ -829,6 +848,12 @@ export const ChatTranscriptWebView = memo(
           const generating = uiRunning;
           const generation = ++snapshotGenerationCounter;
           inFlightSnapshotGenerationRef.current = generation;
+          // A-01：打点起点必须早于两段 O(n) 预扫（配对上下文 + 分桶量测），
+          // 否则它们形成的百 ms 级独占段在回滚轴上不可见、AC-3 无法核验。
+          // 两站 elapsed 之差 = 预扫独占耗时（内含 C-02 的 UTF-8 真字节量测）。
+          rollbackTimingLog(
+            `snapshot build begin (msgs=${snapshotMessages.length})`,
+          );
           // 预扫全局配对上下文（Step 5 同款 O(n) 一次扫描）：逐片行转换共享，
           // 分片拼接结果与单次全量 buildTranscriptRows 严格全等。
           const pairingContext = buildToolPairingContext(snapshotMessages);
@@ -836,6 +861,9 @@ export const ChatTranscriptWebView = memo(
           // chunk 0 的 payload 即携带最终值（与旧「条数除法」同构）。
           const chunkBounds = planSnapshotChunkBounds(snapshotMessages);
           const chunkTotal = chunkBounds.length;
+          rollbackTimingLog(
+            `snapshot prescan done (pairing+bucket, chunks=${chunkTotal})`,
+          );
           const yieldFn = createQuantumYield();
           bootTimingLog(
             `snapshot begin (msgs=${snapshotMessages.length}, chunks=${chunkTotal}, gen=${generation})`,
@@ -1331,7 +1359,8 @@ export const ChatTranscriptWebView = memo(
             if (snap) {
               // 回滚窗口内的首个 scrollSnapshot 即「web 侧渲染回执」——
               // web 应用快照后才会 emit 滚动位置（T-S4 末片恰一次语义）。
-              // 回滚窗口外 no-op，不影响日常滚动路径。
+              // 窗口内（t0 起 ROLLBACK_TIMING_WINDOW_MS=10s 内）日常滚动同样
+              // 会打点（RN 侧回执与滚动回执不可区分，见 B-01 取舍），超窗后 no-op。
               rollbackTimingLog('web render receipt (scrollSnapshot)');
               lastScrollRef.current = {
                 nearBottom: snap.nearBottom,

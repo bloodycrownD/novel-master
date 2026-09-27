@@ -28,6 +28,7 @@ import {
   ChatTranscriptWebView,
   planSnapshotChunkBounds,
 } from '@/components/chat/ChatTranscriptWebView';
+import {resetRollbackTiming} from '@/debug/run-timing';
 import {
   clearMockWebViewPostMessages,
   mockWebViewPostMessages,
@@ -103,11 +104,26 @@ function textMessage(id: string, seq: number, text: string): ChatMessage {
   };
 }
 
+/** C-02 口径：源 content JSON 的 UTF-8 真实字节（与被测实现同口径）。
+ *  ASCII 正文下与旧的 `.length` 等值，中文正文下约为其 3 倍。 */
+function contentBytes(message: ChatMessage): number {
+  return new TextEncoder().encode(JSON.stringify(message.content)).byteLength;
+}
+
 function bigMessages(count: number): ChatMessage[] {
   // 每条源 JSON ~10KB：256KB 预算下贪心每桶 ~25 条，40 条切 2 桶。
   const filler = 'x'.repeat(10 * 1024);
   return Array.from({length: count}, (_, i) =>
     textMessage(`m${i}`, i + 1, `${i}:${filler}`),
+  );
+}
+
+/** C-02 中文正文：每条 8 万汉字 → JSON 真字节 ≈ 240KB（`.length` 口径仅 ≈80KB）。
+ *  单条已吃掉 256KB 预算的大半，故真字节口径下每桶恰 1 条。 */
+function chineseMessages(count: number): ChatMessage[] {
+  const filler = '汉'.repeat(80_000);
+  return Array.from({length: count}, (_, i) =>
+    textMessage(`c${i}`, i + 1, `${i}：${filler}`),
   );
 }
 
@@ -131,12 +147,12 @@ describe('快照分片字节预算 planSnapshotChunkBounds（T-R3 纯函数半�
       if (end - start > 1) {
         let bytes = 0;
         for (let i = start; i < end; i++) {
-          bytes += JSON.stringify(messages[i]!.content).length;
+          bytes += contentBytes(messages[i]!);
         }
         expect(bytes).toBeLessThanOrEqual(budget);
         // 贪心性：桶尾再加一条必超预算或超条数。
         if (end < messages.length) {
-          const withNext = bytes + JSON.stringify(messages[end]!.content).length;
+          const withNext = bytes + contentBytes(messages[end]!);
           expect(
             withNext > budget || end - start >= 50,
           ).toBe(true);
@@ -173,6 +189,28 @@ describe('快照分片字节预算 planSnapshotChunkBounds（T-R3 纯函数半�
 
   it('空列表返回单空桶——空快照仍发单包（等价旧行为）', () => {
     expect(planSnapshotChunkBounds([])).toEqual([[0, 0]]);
+  });
+
+  it('C-02: 中文正文按 UTF-8 真字节分桶——每条 8 万汉字（≈240KB）各占一桶', () => {
+    const messages = chineseMessages(7);
+    // 先钉住前置事实：单条真字节 ≈240KB（旧的 .length 口径仅 ≈80KB），
+    // 两者相差约 3 倍——这正是 C-02 要修的口径错位。
+    const one = contentBytes(messages[0]!);
+    expect(one).toBeGreaterThan(230 * 1024);
+    expect(one).toBeLessThanOrEqual(256 * 1024);
+    expect(JSON.stringify(messages[0]!.content).length).toBeLessThan(90 * 1024);
+
+    // 256KB 预算放不下两条 → 7 条切 7 桶（旧口径会切 3 桶，故本断言对口径敏感）。
+    const bounds = planSnapshotChunkBounds(messages);
+    expect(bounds).toEqual([
+      [0, 1],
+      [1, 2],
+      [2, 3],
+      [3, 4],
+      [4, 5],
+      [5, 6],
+      [6, 7],
+    ]);
   });
 });
 
@@ -323,5 +361,78 @@ describe('快照分片字节预算（T-R3 组件半）', () => {
     expect(final[0]!.rowIds).toEqual(messages.map(m => m.id));
 
     tree.unmount();
+  });
+
+  it('C-02: 中文正文 7 条 × 8 万汉字按真字节切 7 片——chunkTotal 与行覆盖', async () => {
+    const messages = chineseMessages(7);
+    let tree!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = renderWithMessages(messages);
+    });
+    simulateWebReady(tree.root);
+    await flushSnapshotChunks();
+
+    const {final} = finalGenerationChunks(snapshotChunks());
+    // 真字节口径：单条 ≈240KB > 预算的一半 → 每桶恰 1 条 → 7 片。
+    expect(final).toHaveLength(7);
+    expect(final[0]!.chunkTotal).toBe(7);
+    expect(final.map(c => c.chunkIndex)).toEqual([0, 1, 2, 3, 4, 5, 6]);
+    expect(final.flatMap(c => c.rowIds)).toEqual(messages.map(m => m.id));
+
+    tree.unmount();
+  });
+
+  it('A-01: 快照 build 预扫两站都打点——build begin 与 prescan done 成对出现', async () => {
+    // 200 条大消息触发 sendSessionSnapshotNow；打点起点必须早于配对上下文
+    // 与分桶量测两段 O(n) 预扫，否则预扫独占段在回滚轴上不可见。
+    const logSpy = jest
+      .spyOn(console, 'log')
+      .mockImplementation(() => undefined);
+    try {
+      // 窗口内打点：先 reset 定 t0，避免构造耗时撞上 B-01 的 10s 窗口上限。
+      resetRollbackTiming();
+      logSpy.mockClear();
+
+      const messages = bigMessages(200);
+      let tree!: TestRenderer.ReactTestRenderer;
+      await act(async () => {
+        tree = renderWithMessages(messages);
+      });
+      simulateWebReady(tree.root);
+      await flushSnapshotChunks(40);
+
+      const rollbackLines = logSpy.mock.calls
+        .map(call => String(call[0]))
+        .filter(line => line.startsWith('[nm-rollback] snapshot '));
+      const begin = rollbackLines.find(l =>
+        l.startsWith('[nm-rollback] snapshot build begin (msgs=200)'),
+      );
+      const prescan = rollbackLines.find(l =>
+        l.startsWith(
+          '[nm-rollback] snapshot prescan done (pairing+bucket, chunks=',
+        ),
+      );
+      expect(begin).toBeDefined();
+      expect(prescan).toBeDefined();
+
+      // 两站 elapsed 之差 = 预扫独占耗时。阈值取 2000ms：本机基线在百 ms 级，
+      // 放宽一个数量级只为吸收 CI 抖动，仍能拦住「预扫被挪到起点之外」的回归。
+      const beginMs = Number(/ \+(\d+)ms$/.exec(begin!)![1]);
+      const prescanMs = Number(/ \+(\d+)ms$/.exec(prescan!)![1]);
+      expect(prescanMs - beginMs).toBeGreaterThanOrEqual(0);
+      expect(prescanMs - beginMs).toBeLessThan(2000);
+
+      // 次序：build begin 必须早于首片 post——否则打点又被挪到了预扫之后。
+      const firstChunkPost = rollbackLines.findIndex(l =>
+        l.startsWith('[nm-rollback] snapshot chunk 1/'),
+      );
+      expect(firstChunkPost).toBeGreaterThan(0);
+      expect(rollbackLines.indexOf(begin!)).toBeLessThan(firstChunkPost);
+      expect(rollbackLines.indexOf(prescan!)).toBeLessThan(firstChunkPost);
+
+      tree.unmount();
+    } finally {
+      logSpy.mockRestore();
+    }
   });
 });

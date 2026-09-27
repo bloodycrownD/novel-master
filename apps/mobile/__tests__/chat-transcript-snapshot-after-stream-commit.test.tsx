@@ -91,6 +91,22 @@ function sampleMessage(id: string, seq: number): ChatMessage {
   };
 }
 
+/** 真实 message id 的 assistant 行（G-01 走 tryCommitStreamTail 的前提：
+ *  合成行 id 不在任何 messages 列表里，触发不了「已提交行是否仍在窗内」判定）。 */
+function assistantTextMessage(id: string, seq: number): ChatMessage {
+  return {
+    id,
+    sessionId: 's1',
+    seq,
+    role: 'assistant',
+    content: {blocks: [{type: 'text', text: `msg-${id}`}]},
+    provider: null,
+    raw: null,
+    createdAtMs: seq,
+    hidden: false,
+  };
+}
+
 describe('streamCommit 残留不吞回滚快照（P1 回归）', () => {
   beforeEach(() => {
     clearMockWebViewPostMessages();
@@ -218,6 +234,54 @@ describe('streamCommit 残留不吞回滚快照（P1 回归）', () => {
 
     // messages 引用未变 → effect 早退（prevMessagesRef === messages），零新快照。
     expect(completeSnapshotGenerations()).toBe(baseline);
+    tree.unmount();
+  });
+
+  it('tryCommitStreamTail 提交后等长同窗更新仍吞快照——「本该吞」侧的正向回归', async () => {
+    // G-01：另一条用例走的是 prevMessagesRef 同引用早退，与新判定无关。
+    // 本条钉住判定本身——streamCommit 已同步过的行仍全部在窗内时，
+    // 「新数组引用 / 条数不变 / 首条 id 不变 / hidden 未变」的更新
+    // 必须继续走吞快照分支，不得退化成全量快照。
+    const before = [sampleMessage('u1', 1)];
+    const assistant = assistantTextMessage('a1', 2);
+
+    let tree!: TestRenderer.ReactTestRenderer;
+    const ref = React.createRef<ChatTranscriptWebViewHandle>();
+    await act(async () => {
+      tree = TestRenderer.create(
+        <ChatTranscriptWebView ref={ref} sessionKey="p1:s1" messages={before} />,
+      );
+    });
+    simulateWebReady(tree.root);
+    await flushSnapshotChunks();
+    const baseline = completeSnapshotGenerations();
+    expect(baseline).toBeGreaterThanOrEqual(1);
+
+    // 真实 message id 提交（chat-transcript-webview.test.tsx:1767 同款）：
+    // lastStreamCommitIdsRef 置位为 ['a1']，且已提交行确实在 messages 里。
+    const committed = ref.current?.tryCommitStreamTail(
+      [...before, assistant],
+      before.length,
+    );
+    expect(committed).toBe(true);
+    await flushSnapshotChunks();
+    const afterCommit = completeSnapshotGenerations();
+    expect(afterCommit).toBe(baseline);
+
+    // 新数组引用、条数不变（2）、首条 id 不变（u1）、hidden 未变。
+    await act(async () => {
+      tree.update(
+        <ChatTranscriptWebView
+          ref={ref}
+          sessionKey="p1:s1"
+          messages={[...before, assistant]}
+        />,
+      );
+    });
+    await flushSnapshotChunks();
+
+    // 等长且已提交行仍在窗内 → 吞快照，零新增完整快照。
+    expect(completeSnapshotGenerations()).toBe(afterCommit);
     tree.unmount();
   });
 });
