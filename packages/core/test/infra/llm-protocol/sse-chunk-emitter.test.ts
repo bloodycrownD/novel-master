@@ -10,15 +10,18 @@ afterEach(() => {
 });
 
 /**
- * 真实 sleep：mock.timers 只 mock setInterval（setTimeout 走真实定时器），
- * Date 也是真实时钟——sleep 推进的就是闸门时钟（lastFlushAt 口径）。
+ * 真实 sleep：只用于 T-B1 / T-B2 —— 这两条只 mock setInterval（Date 走真实
+ * 时钟），靠 sleep 推进闸门时钟（lastFlushAt 口径），同时保持「interval
+ * 冻结」的模拟后台语义（若改成 mock tick 会顺带触发 interval，失去意义）。
  */
 const sleep = (ms: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 describe("sse-chunk-emitter", () => {
   it("U-01: append batches into one onChunk per tick", () => {
-    mock.timers.enable({ apis: ["setInterval"] });
+    // 连 Date 一起 mock：`lastFlushAt` 初始化为 Date.now()，真实时钟下
+    // 「创建到首个 append < 32ms」在 GC 停顿 / CI 高负载下会被打破而假失败。
+    mock.timers.enable({ apis: ["setInterval", "Date"] });
 
     const chunks: string[] = [];
     const emitter = createSseChunkEmitter((chunk) => chunks.push(chunk), {
@@ -38,7 +41,7 @@ describe("sse-chunk-emitter", () => {
   });
 
   it("U-02: flush returns tail and stops ticks; dispose prevents further emit", () => {
-    mock.timers.enable({ apis: ["setInterval"] });
+    mock.timers.enable({ apis: ["setInterval", "Date"] });
 
     const chunks: string[] = [];
     const emitter = createSseChunkEmitter((chunk) => chunks.push(chunk), {
@@ -50,7 +53,9 @@ describe("sse-chunk-emitter", () => {
     assert.equal(tail, "leftover");
     assert.equal(chunks.length, 0);
 
+    // flush 已进入终态：既不进缓冲、也不投递。
     emitter.append("ignored");
+    assert.equal(emitter.bufferedLength(), 0);
     mock.timers.tick(32);
     assert.equal(chunks.length, 0);
 
@@ -61,6 +66,52 @@ describe("sse-chunk-emitter", () => {
     emitter2.dispose();
     mock.timers.tick(DEFAULT_TICK_MS);
     assert.equal(chunks.filter((c) => c === "x").length, 0);
+  });
+
+  it("M1-a: dispose 之后 append 为 no-op（闸门已开也不投递）", () => {
+    mock.timers.enable({ apis: ["setInterval", "Date"] });
+
+    const chunks: string[] = [];
+    const emitter = createSseChunkEmitter((chunk) => chunks.push(chunk), {
+      tickMs: 32,
+    });
+
+    // 先过闸，确保下面的「不投递」不是因为闸门关闭，而是终态守卫生效。
+    mock.timers.tick(32);
+    emitter.append("before-dispose");
+    assert.equal(chunks.length, 1);
+
+    emitter.dispose();
+    emitter.append("after-dispose");
+    assert.equal(emitter.bufferedLength(), 0);
+    assert.equal(chunks.length, 1);
+
+    // 终态后 tick 也不会把任何东西送出去。
+    mock.timers.tick(64);
+    assert.deepEqual(chunks, ["before-dispose"]);
+  });
+
+  it("M1-b: flush 之后 append 为 no-op（闸门已开也不投递）", () => {
+    mock.timers.enable({ apis: ["setInterval", "Date"] });
+
+    const chunks: string[] = [];
+    const emitter = createSseChunkEmitter((chunk) => chunks.push(chunk), {
+      tickMs: 32,
+    });
+
+    mock.timers.tick(32);
+    emitter.append("before-flush");
+    assert.equal(chunks.length, 1);
+
+    // flush 时缓冲已空（被过闸 append 同步投递掉了），返回空串。
+    assert.equal(emitter.flush(), "");
+
+    emitter.append("after-flush");
+    assert.equal(emitter.bufferedLength(), 0);
+    assert.equal(chunks.length, 1);
+
+    mock.timers.tick(64);
+    assert.deepEqual(chunks, ["before-flush"]);
   });
 
   it("T-B1: interval 冻结（不 tick）下 append 驱动 flush，数据持续投递", async () => {
