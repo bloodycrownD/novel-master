@@ -18,9 +18,37 @@ import {
   truncateTailInTransaction,
 } from "../../src/service/message-checkpoint/truncate-tail-wiring.js";
 import { createSessionKkvService } from "../../src/service/session-kkv/create-session-kkv-service.js";
+import type { TdbcConnection } from "../../src/infra/tdbc/ports/connection.port.js";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
+
+/** 指定 entry_id 的孤儿 revision 行是否还在（该行 entry 不存在于 vfs_entry）。 */
+async function orphanRevisionExists(
+  conn: TdbcConnection,
+  entryId: number
+): Promise<boolean> {
+  const rows = await conn.query(
+    `SELECT COUNT(*) AS n FROM vfs_revision
+     WHERE entry_id = ? AND entry_id NOT IN (SELECT entry_id FROM vfs_entry)`,
+    [entryId]
+  );
+  return Number(rows[0]!.n) > 0;
+}
+
+/** 造一行孤儿 revision：entry_id 指向不存在的 entry、ref_count<=0。 */
+async function insertOrphanRevision(
+  conn: TdbcConnection,
+  entryId: number
+): Promise<void> {
+  // content_hash 置 NULL 且 status=deleted，避开 INSERT 触发器与
+  // active+NULL 的 CHECK 约束。
+  await conn.execute(
+    `INSERT INTO vfs_revision (entry_id, version, status, mtime_ms, content_hash, ref_count)
+     VALUES (?, 1, 'deleted', 0, NULL, 0)`,
+    [entryId]
+  );
+}
 
 describe("truncateTailInTransaction", () => {
   it("截断 seq > afterSeq 的消息并清理 checkpoint", async () => {
@@ -162,6 +190,70 @@ describe("truncateTailInTransaction", () => {
     assert.equal(
       await sessionKkv.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, "full:/a.md"),
       '{"body":"x","mtimeMs":1}',
+    );
+  });
+
+  // RB-CORE-01：sweepRevisions 的全局孤儿清扫归属是「调用方可选 defer」，
+  // 不是「所有截断路径都跳过」。缺省必须在事务内把全局孤儿 DELETE 做完，
+  // 否则共享函数的另一调用方（批量删 truncateMessagesAfter）会静默丢掉
+  // 这步清扫、且那条路径没有 deferred 补做，孤儿行永久残留。
+  it("sweepRevisions 缺省不 defer 时，事务内仍做全局孤儿清扫", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-gs-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+
+    const m1 = await ctx.messages.append(session.id, "user", textBlocks("1"));
+    await ctx.messages.append(session.id, "user", textBlocks("2"));
+
+    // 造一行孤儿 revision：entry_id 指向不存在的 entry、ref_count<=0
+    await insertOrphanRevision(ctx.conn, 999101);
+    assert.equal(
+      await orphanRevisionExists(ctx.conn, 999101),
+      true,
+      "前置：孤儿行已就位"
+    );
+
+    await ctx.conn.transaction(async (tx) => {
+      await truncateTailInTransaction(createTruncateTailDepsFromTx(tx), {
+        projectId: project.id,
+        sessionId: session.id,
+        afterSeq: m1.seq,
+        sweepRevisions: true,
+        // 关键：不传 deferGlobalOrphanGc —— 默认路径必须照做全局清扫。
+      });
+    });
+
+    assert.equal(
+      await orphanRevisionExists(ctx.conn, 999101),
+      false,
+      "未 defer 时全局孤儿 DELETE 应在事务内发生（同步路径，无需 deferred 补做）"
+    );
+  });
+
+  it("显式 deferGlobalOrphanGc 时事务内跳过全局孤儿清扫", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-gd-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+
+    const m1 = await ctx.messages.append(session.id, "user", textBlocks("1"));
+    await ctx.messages.append(session.id, "user", textBlocks("2"));
+
+    await insertOrphanRevision(ctx.conn, 999102);
+
+    await ctx.conn.transaction(async (tx) => {
+      await truncateTailInTransaction(createTruncateTailDepsFromTx(tx), {
+        projectId: project.id,
+        sessionId: session.id,
+        afterSeq: m1.seq,
+        sweepRevisions: true,
+        deferGlobalOrphanGc: true,
+      });
+    });
+
+    assert.equal(
+      await orphanRevisionExists(ctx.conn, 999102),
+      true,
+      "defer 时事务内只做 scoped 打扫，孤儿行留给调用方提交后 deferred 补做"
     );
   });
 });

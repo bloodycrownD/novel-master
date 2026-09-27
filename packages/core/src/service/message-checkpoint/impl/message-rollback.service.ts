@@ -237,6 +237,9 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
             sessionId: plan.sessionId,
             afterSeq: plan.truncateAfterSeq,
             sweepRevisions: true,
+            // 回滚链唯一 defer 点：全局孤儿全表 DELETE 与本会话无关，留在
+            // 事务内会挡在 resolve 与 UI 链之间，挪到提交后由本服务补调度。
+            deferGlobalOrphanGc: true,
           });
           this.probeIfEnabled("rollback.tx.truncate-done", {
             afterSeq: plan.truncateAfterSeq,

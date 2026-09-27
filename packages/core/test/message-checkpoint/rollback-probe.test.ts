@@ -51,7 +51,7 @@ describe("rollback chain probe (T-R0)", () => {
     const session = await ctx.sessions.create(project.id);
     const svfs = ctx.sessionVfs(project.id, session.id);
 
-    const user1 = await ctx.messages.append(session.id, "user", textBlocks("hi"));
+    await ctx.messages.append(session.id, "user", textBlocks("hi"));
     const assistant1 = await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "bye" }],
     });
@@ -105,7 +105,7 @@ describe("rollback chain probe (T-R0)", () => {
     );
     const session = await ctx.sessions.create(project.id);
 
-    const user1 = await ctx.messages.append(session.id, "user", textBlocks("a"));
+    await ctx.messages.append(session.id, "user", textBlocks("a"));
     const assistant1 = await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "b" }],
     });

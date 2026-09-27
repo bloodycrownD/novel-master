@@ -46,7 +46,7 @@ describe("deferred 全局孤儿清扫（T-R4）", () => {
     const project = await ctx.projects.create(`P-tr4a-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
 
-    const user1 = await ctx.messages.append(session.id, "user", textBlocks("a"));
+    await ctx.messages.append(session.id, "user", textBlocks("a"));
     const anchor = await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "b" }],
     });
@@ -102,7 +102,7 @@ describe("deferred 全局孤儿清扫（T-R4）", () => {
     const project = await ctx.projects.create(`P-tr4b-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
 
-    const user1 = await ctx.messages.append(session.id, "user", textBlocks("a"));
+    await ctx.messages.append(session.id, "user", textBlocks("a"));
     const anchor = await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "b" }],
     });

@@ -14,18 +14,36 @@ import { runDeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
 import { sweepSessionRevisions } from "@/domain/message-checkpoint/logic/revision-gc.js";
 import {
   createMessageRollbackService,
-  type MessageRollbackServiceOptions,
 } from "@/service/message-checkpoint/create-message-checkpoint-services.js";
+import type { RollbackProbe } from "@/service/message-checkpoint/message-rollback.port.js";
 import { DefaultSessionFsService } from "./impl/session-fs.service.js";
 import type { SessionFsService } from "./session-fs.port.js";
+
+/**
+ * {@link createSessionFsService} 可选装配项（均缺省 = 现状行为）。
+ *
+ * 本地定义而非复用 message-checkpoint 的 `MessageRollbackServiceOptions`：
+ * session-fs 只透传回滚服务的两个装配项，不必把上一层的 options 类型暴露
+ * 进自己的公开 API（避免跨层耦合）。须 export——`createSessionFsService` 是
+ * public API，模块私有类型会让 declaration emit 报「private name」。
+ */
+export interface SessionFsServiceOptions {
+  /** 回滚链分段打点探针（mobile 在 __DEV__ 下注入；desktop/cli 不注入）。 */
+  readonly probe?: RollbackProbe;
+  /** plan 拉取列表行解析的片间让步（mobile 传 createQuantumYield(16)）。 */
+  readonly yieldFn?: () => Promise<void>;
+}
 
 /** 为给定连接创建 {@link SessionFsService}（options 透传给回滚服务装配）。 */
 export function createSessionFsService(
   conn: TdbcConnection,
-  options?: MessageRollbackServiceOptions
+  options?: SessionFsServiceOptions
 ): SessionFsService {
   return new DefaultSessionFsService({
-    messageRollback: createMessageRollbackService(conn, options),
+    messageRollback: createMessageRollbackService(conn, {
+      probe: options?.probe,
+      yieldFn: options?.yieldFn,
+    }),
   });
 }
 

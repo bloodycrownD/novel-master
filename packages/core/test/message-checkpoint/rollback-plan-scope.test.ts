@@ -96,7 +96,7 @@ describe("rollback plan 拉取收窄（T-R1）", () => {
     const project = await ctx.projects.create(`P-tr1c-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
 
-    const user0 = await ctx.messages.append(session.id, "user", textBlocks("a"));
+    await ctx.messages.append(session.id, "user", textBlocks("a"));
     const assistant0 = await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "b" }],
     });

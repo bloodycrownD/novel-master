@@ -28,11 +28,12 @@ import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqli
 let orphanGcInFlight = false;
 
 /**
- * 执行一次全局孤儿 revision 清扫（需等待结果的调用方 / 测试使用）。
+ * 执行一次全局孤儿 revision 清扫（仅 {@link scheduleDeferredRevisionOrphanGc}
+ * 的清扫体使用）。
  *
  * @returns 删除的孤儿 revision 行数。
  */
-export async function runDeferredRevisionOrphanGc(
+async function runDeferredRevisionOrphanGc(
   conn: TdbcConnection
 ): Promise<number> {
   const revisions = new SqliteVfsRevisionRepository(conn);
@@ -75,9 +76,4 @@ export function scheduleDeferredRevisionOrphanGc(conn: TdbcConnection): void {
         );
       });
   });
-}
-
-/** 测试辅助：读取 in-flight 守卫状态（仅测试断言用）。 */
-export function isDeferredRevisionOrphanGcInFlight(): boolean {
-  return orphanGcInFlight;
 }
