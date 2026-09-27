@@ -43,19 +43,32 @@ export interface ChatServicesSessionDeps {
 }
 
 /**
+ * {@link createChatServices} 可选装配项（rollback-large-jank Step 2）。
+ *
+ * @remarks yieldFn 注入 messageRepo 列表行解析的片间让步（runtime.messages
+ * 链——token 标签、prompt input 等全量 listBySession 的消费方自动受益）；
+ * 缺省不传 → repository 直通同步 map，与现状逐字节等价（desktop/cli 零影响）。
+ */
+export interface ChatServicesOptions {
+  readonly yieldFn?: () => Promise<void>;
+}
+
+/**
  * Creates project, session, and message services sharing repositories.
  *
  * @param conn - Open connection after {@link bootstrapNovelMaster}
  * @param sessionDeps - Session service 创建会话时读 workspace 当前指针所需；
  *   projects/messages 不消费此参数。
+ * @param options - 可选装配项（yieldFn 列表解析让步）；缺省 = 现状行为。
  */
 export function createChatServices(
   conn: TdbcConnection,
-  sessionDeps: ChatServicesSessionDeps
+  sessionDeps: ChatServicesSessionDeps,
+  options?: ChatServicesOptions
 ): ChatServiceBundle {
   const projectRepo = new SqliteProjectRepository(conn);
   const sessionRepo = new SqliteSessionRepository(conn);
-  const messageRepo = new SqliteMessageRepository(conn);
+  const messageRepo = new SqliteMessageRepository(conn, options?.yieldFn);
   const vfsRepo = new SqliteVfsEntryRepository(conn);
   const checkpointRepo = new SqliteMessageCheckpointRepository(conn);
   const revisionRepo = new SqliteVfsRevisionRepository(conn);

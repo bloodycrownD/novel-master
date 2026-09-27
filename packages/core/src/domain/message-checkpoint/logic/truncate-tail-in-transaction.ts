@@ -22,6 +22,16 @@ export type TruncateTailParams = {
   readonly sessionId: string;
   readonly afterSeq: number;
   readonly sweepRevisions: boolean;
+  /**
+   * 是否把「全局孤儿清扫」推迟到事务提交后（rollback-large-jank Step 4）。
+   *
+   * 缺省即 `false`：事务内照常连同 scoped 打扫一起做全局孤儿 DELETE——本函数
+   * 是回滚与批量删共用的共享函数，只有回滚链（事务正挡住 resolve 与 UI 链）
+   * 才需要把它挪出去。置 `true` 时事务内只做 scoped 打扫，调用方**必须**自行
+   * 在事务提交后 deferred 调度 `scheduleDeferredRevisionOrphanGc` 兜底，否则
+   * 孤儿行永久残留。
+   */
+  readonly deferGlobalOrphanGc?: boolean;
 };
 
 /** {@link truncateTailInTransaction} 依赖。 */
@@ -41,14 +51,15 @@ export type TruncateTailDeps = {
  *
  * 1. 子查询列出 seq > afterSeq 的 tail → deleteCheckpointsForMessages（内含 −ref）
  * 2. messages.deleteAfterSeq(sessionId, afterSeq)
- * 3. 若 sweepRevisions → sweepSessionRevisions（仅 revision，无 sync blob）
+ * 3. 若 sweepRevisions → sweepSessionRevisions（scoped 打扫 + 全局孤儿兜底；
+ *    调用方传 deferGlobalOrphanGc 时跳过全局孤儿那一半）
  * 4. 若 tail 非空 → 清 backfill 游标（seq 复用防线）+ 清空 Composer 无叉 chip 对应 kkv 域
  */
 export async function truncateTailInTransaction(
   deps: TruncateTailDeps,
   params: TruncateTailParams
 ): Promise<void> {
-  const { projectId, sessionId, afterSeq, sweepRevisions } = params;
+  const { projectId, sessionId, afterSeq, sweepRevisions, deferGlobalOrphanGc } = params;
 
   const tailIds = await deps.messages.listIdsAfterSeq(sessionId, afterSeq);
 
@@ -58,13 +69,18 @@ export async function truncateTailInTransaction(
   await deps.messages.deleteAfterSeq(sessionId, afterSeq);
 
   if (sweepRevisions) {
+    // rollback-large-jank Step 4：默认保持原行为——scoped 打扫后接着做全局
+    // 孤儿兜底（全表 DELETE）。只有显式 deferGlobalOrphanGc 的调用方（回滚
+    // 链）才把它移出事务，改由该调用方在事务提交后 fire-and-forget 调度
+    // scheduleDeferredRevisionOrphanGc 补做。
     await sweepSessionRevisions(
       deps.revisions,
       deps.entries,
       deps.checkpoints,
       projectId,
       sessionId,
-      deps.conn
+      deps.conn,
+      deferGlobalOrphanGc === true ? {includeGlobalOrphans: false} : undefined
     );
   }
 

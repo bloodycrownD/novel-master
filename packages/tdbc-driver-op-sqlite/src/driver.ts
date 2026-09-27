@@ -22,12 +22,17 @@ export interface OpSqliteOpenOptions extends OpenOptions {
 export class OpSqliteDriver implements TdbcDriver {
   readonly name = OPSQLITE_DRIVER_NAME;
   private readonly defaultAdapter: OpSqliteAdapter;
+  private readonly isBackground?: () => boolean;
 
   /**
    * @param defaultAdapter - 必传；入口模块（{@link index.ts}、{@link native.ts}）注入 impl。
+   * @param isBackground - 可选后台探测函数（app 层经注册工厂注入）：返回
+   *   true 时事务内跳过休眠量子让步（RN 后台 JS 定时器停摆，`setTimeout(0)`
+   *   让步会让事务挂死到回前台）；未注入恒按前台口径让步，行为不变。
    */
-  constructor(defaultAdapter: OpSqliteAdapter) {
+  constructor(defaultAdapter: OpSqliteAdapter, isBackground?: () => boolean) {
     this.defaultAdapter = defaultAdapter;
+    this.isBackground = isBackground;
   }
 
   async open(options: OpSqliteOpenOptions & { url?: string }): Promise<TdbcConnection> {
@@ -73,6 +78,6 @@ export class OpSqliteDriver implements TdbcDriver {
     // 临时目录不可写，大事务会报 disk I/O error（op-sqlite issue #137）。
     // 即使编译 flag 因 monorepo 配置位置问题静默未生效，这里也能兜住。
     await adapter.execute("PRAGMA temp_store = MEMORY");
-    return new OpSqliteConnection(adapter);
+    return new OpSqliteConnection(adapter, this.isBackground);
   }
 }

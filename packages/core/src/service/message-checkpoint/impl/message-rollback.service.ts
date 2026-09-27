@@ -19,6 +19,7 @@ import {
   restorePathToRevision,
   restorePathToRevisionWithBackfill,
 } from "@/domain/message-checkpoint/logic/restore-path.js";
+import { scheduleDeferredRevisionOrphanGc } from "@/domain/message-checkpoint/logic/deferred-revision-orphan-gc.js";
 import {
   createTruncateTailDepsFromTx,
   truncateTailInTransaction,
@@ -50,6 +51,7 @@ import type { VfsService } from "@/service/vfs/vfs.port.js";
 import type {
   MessageRollbackService,
   RollbackOptions,
+  RollbackProbe,
 } from "../message-rollback.port.js";
 
 /** Dependencies for {@link DefaultMessageRollbackService}. */
@@ -59,6 +61,11 @@ export interface MessageRollbackServiceDeps {
   readonly entries: VfsEntryRepository;
   readonly revisions: VfsRevisionRepository;
   readonly checkpoints: MessageCheckpointRepository;
+  /**
+   * 回滚链分段打点探针（rollback-large-jank Step 1）：未注入（默认）时
+   * 所有探针点零开销；注入方负责 __DEV__ 门控（见 RollbackProbe 注释）。
+   */
+  readonly probe?: RollbackProbe;
 }
 
 /** 回滚计划：模式、anchor、tail、待 reconcile 路径与目标树。 */
@@ -125,6 +132,7 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
     options?: RollbackOptions
   ): Promise<void> {
     assertRollbackOptionsCompatible(options);
+    this.probeIfEnabled("rollback.begin", {sessionId});
 
     // A-22 乐观锁重试循环：plan 解析（多次 await 读）与事务开始之间有 TOCTOU 间隙，
     // 事务内重读会话消息计数与快照对比，不一致代表间隙期间有 agent 写入，重试整个 plan+事务。
@@ -181,6 +189,7 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
 
       try {
         await this.deps.conn.transaction(async (tx) => {
+          this.probeIfEnabled("rollback.tx.begin", {attempt});
           // A-22 乐观锁：事务刚开始，未写任何东西之前重读会话消息计数，
           // 与 plan 阶段记录的快照不一致代表间隙期间 agent 有写入。
           // 这里用 tx 作用域的 SqliteMessageRepository——驱动事务持锁期间，
@@ -189,6 +198,10 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
           // listBySession（拉全量行），避免大会话上拉回几百上千行只为取 length。
           const txMessages = new SqliteMessageRepository(tx);
           const currentCount = await txMessages.countBySession(sessionId);
+          this.probeIfEnabled("rollback.tx.count-check", {
+            snapshot: plan.messageCountSnapshot,
+            current: currentCount,
+          });
           if (currentCount !== plan.messageCountSnapshot) {
             throw sessionFsRollbackConflict(
               sessionId,
@@ -200,11 +213,18 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
 
           if (!options?.skipVfsReconcile) {
             try {
-              await this.reconcileVfsPaths(
+              const reconcileStats = await this.reconcileVfsPaths(
                 tx,
                 plan,
                 options?.revisionHeadBackfill === true
               );
+              this.probeIfEnabled("rollback.tx.reconcile-done", {
+                restored: reconcileStats.restored,
+                deleted: reconcileStats.deleted,
+                skipped:
+                  reconcileStats.skippedSameVersion +
+                  reconcileStats.skippedSameContentHash,
+              });
             } catch (cause) {
               throw sessionFsRollbackVfsRestoreFailed(
                 formatDegradableMessage(cause),
@@ -217,8 +237,16 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
             sessionId: plan.sessionId,
             afterSeq: plan.truncateAfterSeq,
             sweepRevisions: true,
+            // 回滚链唯一 defer 点：全局孤儿全表 DELETE 与本会话无关，留在
+            // 事务内会挡在 resolve 与 UI 链之间，挪到提交后由本服务补调度。
+            deferGlobalOrphanGc: true,
+          });
+          this.probeIfEnabled("rollback.tx.truncate-done", {
+            afterSeq: plan.truncateAfterSeq,
+            tailMessages: plan.tailMessageIds.length,
           });
         });
+        this.probeIfEnabled("rollback.tx.commit", {attempt});
         // 成功 → 跳出重试循环。
         break;
       } catch (error) {
@@ -238,6 +266,28 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
       createSessionKkvService(this.deps.conn),
       sessionId
     );
+    // 全局孤儿 revision 清扫（rollback-large-jank Step 4）：事务提交后
+    // fire-and-forget 调度——全表 DELETE 与本会话无关，不 await、不阻塞
+    // rollbackToMessage resolve；清扫中不重入（in-flight 去重），并发安全
+    // 由驱动层 AsyncMutex 串行化保证。放在失效 await 之后排队，避免全表
+    // DELETE 先占连接把失效挂点挡在后面。
+    scheduleDeferredRevisionOrphanGc(this.deps.conn);
+    this.probeIfEnabled("rollback.done", {sessionId});
+  }
+
+  /**
+   * 探针 helper：未注入时直接返回（detail 已在调用点求值——量小的标量，
+   * 大对象计算由调用方自行包在本 helper 之外），注入时透传给探针。
+   */
+  private probeIfEnabled(
+    label: string,
+    detail: Record<string, number | string>
+  ): void {
+    const probe = this.deps.probe;
+    if (probe == null) {
+      return;
+    }
+    probe(label, detail);
   }
 
   private async resolveRollbackPlan(
@@ -253,9 +303,33 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
       throw sessionFsRollbackMessageSessionMismatch(anchorMessageId, sessionId);
     }
 
-    const allMessages = await this.deps.messages.listBySession(sessionId);
+    // plan 拉取收窄（rollback-large-jank Step 2）：锚点解析只做 tool_result
+    // 前向配对（seq 更大方向）、tail 过滤只取锚点之后，锚点之前的消息对 plan
+    // 无用——拉取下界 = 触发消息（clicked）的 seq（含），大会话不再把锚点
+    // 之前的几百行 content_json 拉回来白 parse 一遍。
+    const [messagesFromClicked, messageCountSnapshot] = await Promise.all([
+      this.deps.messages.listBySessionFromSeq(sessionId, clicked.seq),
+      // A-22 计数快照：全量口径（会话消息总行数）。收窄后消息列表不再覆盖
+      // 全量，改用 countBySession（COUNT(*) 单行）取同一口径，事务内对比
+      // 逻辑零变化。
+      this.deps.messages.countBySession(sessionId),
+    ]);
+    if (this.deps.probe != null) {
+      // 字节量（源消息 content JSON 尺寸）只在探针注入时统计——量测本身
+      // 是 O(总字节) 的 stringify，生产路径不付这笔账。
+      let contentBytes = 0;
+      for (const message of messagesFromClicked) {
+        contentBytes += JSON.stringify(message.content).length;
+      }
+      this.probeIfEnabled("rollback.plan.messages", {
+        rows: messagesFromClicked.length,
+        contentBytes,
+        fromSeq: clicked.seq,
+      });
+    }
     const anchor =
-      resolveRollbackAnchorMessage(allMessages, anchorMessageId) ?? clicked;
+      resolveRollbackAnchorMessage(messagesFromClicked, anchorMessageId) ??
+      clicked;
 
     const mode: RollbackMode = isPlainUserUndoSendEligible(anchor)
       ? "undo_send"
@@ -264,8 +338,8 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
 
     const tail =
       mode === "undo_send"
-        ? allMessages.filter((m) => m.seq >= anchor.seq)
-        : allMessages.filter((m) => m.seq > anchor.seq);
+        ? messagesFromClicked.filter((m) => m.seq >= anchor.seq)
+        : messagesFromClicked.filter((m) => m.seq > anchor.seq);
     const tailMessageIds = tail.map((m) => m.id);
 
     let targetTree: Map<string, number>;
@@ -366,9 +440,9 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
       projectId,
       sessionId,
       scope,
-      // A-22 快照：plan 阶段本来就要 listBySession 拿消息内容，顺手取 length 作为计数快照；
-      // 事务内用 countBySession 重读同一口径（会话消息总行数）对比，不一致即判冲突。
-      messageCountSnapshot: allMessages.length,
+      // A-22 快照：全量口径计数（COUNT(*)），事务内用 countBySession 重读
+      // 同一口径（会话消息总行数）对比，不一致即判冲突。
+      messageCountSnapshot,
     };
   }
 

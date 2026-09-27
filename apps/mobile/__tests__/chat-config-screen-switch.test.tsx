@@ -10,7 +10,7 @@
  * ProfileSwitchItem mock 成可点击节点，文本里带 label 与当前值便于断言回滚。
  */
 import React from 'react';
-import {Platform} from 'react-native';
+import {Platform, Switch} from 'react-native';
 import {describe, expect, it, jest, beforeEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
 
@@ -91,15 +91,25 @@ jest.mock('@/components/profile/ProfileMenuItem', () => {
   };
 });
 
-jest.mock('@/components/form/FormField', () => ({FormField: () => null}));
-jest.mock('@/components/form/FormSectionCard', () => ({
-  FormSectionCard: () => null,
-}));
+jest.mock('@/components/form/FormField', () => {
+  // 渲染 children（压缩配置的 Switch 挂在 FormField 内，即时保存用例需要触达）；
+  // 无文本节点，不影响既有文本断言。
+  const mockReact = require('react');
+  return {
+    FormField: ({children}: {children?: unknown}) =>
+      mockReact.createElement(mockReact.Fragment, null, children),
+  };
+});
+jest.mock('@/components/form/FormSectionCard', () => {
+  // 同 FormField：渲染 children 以触达压缩配置区的 Switch，无文本节点。
+  const mockReact = require('react');
+  return {
+    FormSectionCard: ({children}: {children?: unknown}) =>
+      mockReact.createElement(mockReact.Fragment, null, children),
+  };
+});
 jest.mock('@/components/form/FormTextInput', () => ({
   FormTextInput: () => null,
-}));
-jest.mock('@/components/form/StickyFormFooter', () => ({
-  StickyFormFooter: () => null,
 }));
 
 jest.mock('@/components/form/ScreenFormLayout', () => {
@@ -122,6 +132,7 @@ const mockSetLlmStreamEnabled = jest.fn();
 const mockGetThinkingContextEnabled = jest.fn();
 const mockSetThinkingContextEnabled = jest.fn();
 const mockGetConditions = jest.fn();
+const mockSetConditions = jest.fn();
 
 const mockRuntime = {
   preferences: {
@@ -130,7 +141,10 @@ const mockRuntime = {
     getThinkingContextEnabled: mockGetThinkingContextEnabled,
     setThinkingContextEnabled: mockSetThinkingContextEnabled,
   },
-  compactionConditions: {getConditions: mockGetConditions},
+  compactionConditions: {
+    getConditions: mockGetConditions,
+    setConditions: mockSetConditions,
+  },
 };
 
 jest.mock('@/hooks/useRuntime', () => ({
@@ -279,6 +293,7 @@ describe('ChatConfigScreen 开关持久化失败回滚', () => {
       tokenRatio: 0.8,
       hideStartDepth: 6,
     });
+    mockSetConditions.mockReset().mockResolvedValue(undefined);
     mockReadChatRichTextEnabled.mockReset().mockResolvedValue(false);
     mockWriteChatRichTextEnabled.mockReset().mockResolvedValue(undefined);
   });
@@ -343,6 +358,7 @@ describe('ChatConfigScreen 消息通知开关与权限行（ui/G-1）', () => {
     });
     mockReadChatRichTextEnabled.mockReset().mockResolvedValue(false);
     mockWriteChatRichTextEnabled.mockReset().mockResolvedValue(undefined);
+    mockSetConditions.mockReset().mockResolvedValue(undefined);
     mockReadMessageNotificationEnabled.mockReset().mockResolvedValue(false);
     mockWriteMessageNotificationEnabled.mockReset().mockResolvedValue(undefined);
     mockSetKeepAliveResidentEnabled.mockReset().mockResolvedValue(undefined);
@@ -465,5 +481,87 @@ describe('ChatConfigScreen 消息通知开关与权限行（ui/G-1）', () => {
     expect(json(renderer)).not.toContain('通知权限:');
     // iOS 不查询权限状态（平台门禁在屏幕侧的读取口）
     expect(mockGetAgentNotificationPermissionStatus).not.toHaveBeenCalled();
+  });
+});
+
+// ── 压缩配置即时保存（保存按钮移除，改为修改即生效）────────────────────
+
+describe('ChatConfigScreen 压缩配置即时保存', () => {
+  beforeEach(() => {
+    mockShowToast.mockReset();
+    mockGetLlmStreamEnabled.mockReset().mockResolvedValue(false);
+    mockSetLlmStreamEnabled.mockReset().mockResolvedValue(undefined);
+    mockGetThinkingContextEnabled.mockReset().mockResolvedValue(false);
+    mockSetThinkingContextEnabled.mockReset().mockResolvedValue(undefined);
+    mockGetConditions.mockReset().mockResolvedValue({
+      schemaVersion: 4,
+      enabled: false,
+      tokenRatio: 0.8,
+      hideStartDepth: 6,
+    });
+    mockSetConditions.mockReset().mockResolvedValue(undefined);
+    mockReadChatRichTextEnabled.mockReset().mockResolvedValue(false);
+    mockWriteChatRichTextEnabled.mockReset().mockResolvedValue(undefined);
+    mockReadMessageNotificationEnabled.mockReset().mockResolvedValue(false);
+    mockWriteMessageNotificationEnabled.mockReset().mockResolvedValue(undefined);
+    mockSetKeepAliveResidentEnabled.mockReset().mockResolvedValue(undefined);
+    mockEnsureAgentNotificationPermission.mockReset().mockResolvedValue(true);
+    mockGetAgentNotificationPermissionStatus
+      .mockReset()
+      .mockResolvedValue('authorized');
+    mockRequestAgentNotificationPermissionManually
+      .mockReset()
+      .mockResolvedValue('authorized');
+    setPlatform('ios');
+  });
+
+  it('开启自动压缩开关即落库（无需保存按钮）', async () => {
+    const {renderer} = await renderScreen();
+    expect(renderer.root.findByType(Switch).props.value).toBe(false);
+
+    await act(async () => {
+      renderer.root.findByType(Switch).props.onValueChange(true);
+    });
+    await flushPersist();
+
+    expect(mockSetConditions).toHaveBeenCalledTimes(1);
+    expect(mockSetConditions).toHaveBeenCalledWith({
+      schemaVersion: 4,
+      enabled: true,
+      tokenRatio: 0.8,
+      hideStartDepth: 6,
+    });
+    expect(renderer.root.findByType(Switch).props.value).toBe(true);
+  });
+
+  it('启用但 token 比例为空 → toast 提示、开关回滚、不落库', async () => {
+    mockGetConditions.mockResolvedValue({
+      schemaVersion: 4,
+      enabled: false,
+      hideStartDepth: 6,
+    });
+    const {renderer} = await renderScreen();
+
+    await act(async () => {
+      renderer.root.findByType(Switch).props.onValueChange(true);
+    });
+    await flushPersist();
+
+    expect(mockSetConditions).not.toHaveBeenCalled();
+    expect(mockShowToast).toHaveBeenCalledWith('启用时至少填写 token 比例');
+    expect(renderer.root.findByType(Switch).props.value).toBe(false);
+  });
+
+  it('落库失败 → toast 且开关回滚', async () => {
+    mockSetConditions.mockRejectedValueOnce(new Error('盘炸了'));
+    const {renderer} = await renderScreen();
+
+    await act(async () => {
+      renderer.root.findByType(Switch).props.onValueChange(true);
+    });
+    await flushPersist();
+
+    expect(mockShowToast).toHaveBeenCalledWith('保存失败：盘炸了');
+    expect(renderer.root.findByType(Switch).props.value).toBe(false);
   });
 });

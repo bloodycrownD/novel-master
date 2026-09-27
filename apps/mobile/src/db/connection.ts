@@ -1,6 +1,7 @@
 /**
  * Single SQLite connection for mobile (VFS + SKSP share one DB).
  */
+import {AppState} from 'react-native';
 import {
   bootstrapNovelMaster,
   open,
@@ -38,6 +39,26 @@ function logCauseChain(label: string, err: unknown): void {
   }
 }
 
+/**
+ * 注册移动端 op-sqlite 驱动——移动端装配的**唯一入口**。
+ *
+ * 注入后台探测：RN 后台 JS 定时器停摆，事务内 setTimeout(0) 量子
+ * 让步会让事务挂死到回前台；AppState.currentState 由原生生命周期
+ * 驱动（不经 Choreographer），后台时驱动层跳过让步连续执行、回前台
+ * 自动恢复。探测函数在 app 层注入，驱动包保持零依赖。
+ *
+ * 驱动注册表是 last-wins：任何其它地方再调一次无参的
+ * `registerOpSqliteDriver()` 都会把这里的带参版本覆盖掉、静默丢掉
+ * 后台探测。因此 app 层所有需要打开 op-sqlite 连接的入口
+ * （如 db-backup 的服务商表恢复短连接）都必须调本函数。
+ */
+export function registerMobileOpSqliteDriver(): void {
+  registerOpSqliteDriver(
+    undefined,
+    () => AppState.currentState === 'background',
+  );
+}
+
 /** Opens (once) the app DB with core bootstrap and SKSP Android driver. */
 export async function getMobileConnection(): Promise<TdbcConnection> {
   if (conn) {
@@ -45,7 +66,7 @@ export async function getMobileConnection(): Promise<TdbcConnection> {
   }
   if (!initPromise) {
     initPromise = (async () => {
-      registerOpSqliteDriver();
+      registerMobileOpSqliteDriver();
       registerSkspAndroidDriver();
       registerTokenizerRnDriver();
       let c: TdbcConnection;

@@ -28,6 +28,7 @@ const mockScrubInDatabase = jest.fn();
 const mockRestoreSnapshot = jest.fn();
 const mockOpen = jest.fn();
 const mockRestoreConnClose = jest.fn();
+const mockRegisterDriver = jest.fn();
 
 const liveConn = {tag: 'live'};
 const restoreConn = {close: mockRestoreConnClose};
@@ -41,14 +42,12 @@ jest.mock('@novel-master/core', () => ({
   open: (...args: unknown[]) => mockOpen(...args),
 }));
 
-jest.mock('@novel-master/tdbc-driver-op-sqlite/native', () => ({
-  registerOpSqliteDriver: jest.fn(),
-}));
-
 jest.mock('@/db/connection', () => ({
   checkpointMobileDatabase: (...args: unknown[]) => mockCheckpoint(...args),
   closeMobileConnection: (...args: unknown[]) => mockClose(...args),
   getMobileConnection: (...args: unknown[]) => mockGetConnection(...args),
+  registerMobileOpSqliteDriver: (...args: unknown[]) =>
+    mockRegisterDriver(...args),
 }));
 
 jest.mock('@/db/db-file-path', () => ({
@@ -124,6 +123,7 @@ describe('db-backup.service', () => {
     mockRestoreSnapshot.mockReset().mockResolvedValue(undefined);
     mockOpen.mockReset().mockResolvedValue(restoreConn);
     mockRestoreConnClose.mockReset().mockResolvedValue(undefined);
+    mockRegisterDriver.mockReset();
     onRebootstrap.mockReset();
   });
 
@@ -182,6 +182,15 @@ describe('db-backup.service', () => {
     );
     expect(mockRestoreConnClose).toHaveBeenCalled();
     expect(onRebootstrap).toHaveBeenCalled();
+  });
+
+  it('provider-restore reopen registers the driver via the single-point helper', async () => {
+    // 驱动注册表是 last-wins：恢复用的短连接必须走 db/connection 导出的
+    // 单点注册（带 AppState 后台探测），不能自己直接调无参的
+    // registerOpSqliteDriver() 把带参版本覆盖掉。
+    await importDatabaseBackupFromPath('/cache/single-point.nmbackup');
+
+    expect(mockRegisterDriver).toHaveBeenCalledTimes(1);
   });
 
   it('rejects tiny backup via stat without reading body', async () => {
