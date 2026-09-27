@@ -12,7 +12,10 @@ import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqli
 import { DefaultMessageCheckpointService } from "./impl/message-checkpoint.service.js";
 import { DefaultMessageRollbackService } from "./impl/message-rollback.service.js";
 import type { MessageCheckpointService } from "./message-checkpoint.port.js";
-import type { MessageRollbackService } from "./message-rollback.port.js";
+import type {
+  MessageRollbackService,
+  RollbackProbe,
+} from "./message-rollback.port.js";
 
 /**
  * Creates a {@link MessageCheckpointService} for the given connection.
@@ -26,15 +29,31 @@ export function createMessageCheckpointService(
   });
 }
 
+/** {@link createMessageRollbackService} 可选装配项（均缺省 = 现状行为）。 */
+export interface MessageRollbackServiceOptions {
+  /**
+   * 回滚链分段打点探针（rollback-large-jank Step 1）：mobile 在 __DEV__
+   * 下注入；desktop/cli 不注入（恒 no-op）。
+   */
+  readonly probe?: RollbackProbe;
+  /**
+   * plan 拉取列表行解析的片间让步（rollback-large-jank Step 2）：mobile
+   * 传 createQuantumYield(16)；缺省不传 → 直通同步 map（现状行为）。
+   */
+  readonly yieldFn?: () => Promise<void>;
+}
+
 /** Creates a {@link MessageRollbackService} for the given connection. */
 export function createMessageRollbackService(
-  conn: TdbcConnection
+  conn: TdbcConnection,
+  options?: MessageRollbackServiceOptions
 ): MessageRollbackService {
   return new DefaultMessageRollbackService({
     conn,
-    messages: new SqliteMessageRepository(conn),
+    messages: new SqliteMessageRepository(conn, options?.yieldFn),
     entries: new SqliteVfsEntryRepository(conn),
     revisions: new SqliteVfsRevisionRepository(conn),
     checkpoints: new SqliteMessageCheckpointRepository(conn),
+    probe: options?.probe,
   });
 }

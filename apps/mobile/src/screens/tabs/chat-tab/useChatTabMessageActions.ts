@@ -38,6 +38,11 @@ import {
 } from '@/services/project-composer-status.service';
 import type {RollbackOptions} from '@novel-master/core/message-checkpoint';
 import {rollbackToMessage} from '@/services/message-rollback.service';
+import {
+  resetRollbackTiming,
+  rollbackTimingLog,
+} from '@/debug/run-timing';
+import type {SnapshotCompleteSignal} from '@/services/snapshot-complete-signal';
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
 import type {ChatSubview, ConversationPanel} from './useChatTabScope';
 
@@ -55,6 +60,12 @@ export type UseChatTabMessageActionsParams = {
   resetStreamingDisplay: () => void;
   showToast: (message: string) => void;
   refreshChatTokenLabel: () => Promise<void>;
+  /**
+   * 快照完成信号（rollback-large-jank Step 5）：回滚链的 token 全量重算
+   * 错峰到「reloadMessages 触发的快照末片 post + deferred 排空」之后；
+   * 缺省不传（测试/无 webview 场景）→ 保持现状时机立即刷新。
+   */
+  snapshotCompleteSignal?: SnapshotCompleteSignal;
   bumpWorktreeUiToken: () => void;
   reloadLists: () => Promise<void>;
   setCurrentSession: (sessionId: string) => Promise<void>;
@@ -76,6 +87,7 @@ export function useChatTabMessageActions({
   resetStreamingDisplay,
   showToast,
   refreshChatTokenLabel,
+  snapshotCompleteSignal,
   bumpWorktreeUiToken,
   reloadLists,
   setCurrentSession,
@@ -237,12 +249,18 @@ export function useChatTabMessageActions({
         options?: RollbackOptions,
       ) => {
         try {
+          // 回滚链分段打点（rollback-large-jank Step 1）：t0 定在确认回滚、
+          // core 调用发起前；各段耗时经 [nm-rollback] 轴输出（__DEV__ 门控，
+          // 生产 no-op）。core 事务内部子步由 runtime 注入的 probe 同轴输出。
+          resetRollbackTiming();
+          rollbackTimingLog('core rollback begin');
           await rollbackToMessage(
             runtime,
             {projectId, sessionId},
             targetMessageId,
             options,
           );
+          rollbackTimingLog('core rollback done');
           // assistant 锚点（rewind）：tail 里无 user 消息，没有 attach 可反投影，
           // 批注草稿应清空——与 user 锚点（undo_send）的反投影语义对称。
           // user 锚点（undo_send）的反投影在下方 applyComposerRestore 里处理：
@@ -255,13 +273,32 @@ export function useChatTabMessageActions({
             projectId,
             sessionId,
           });
+          rollbackTimingLog('composer status refreshed');
           resetStreamingDisplay();
-          await reloadMessages(true);
+          rollbackTimingLog('streaming display reset');
+          const reloaded = await reloadMessages(true);
+          rollbackTimingLog(
+            Array.isArray(reloaded)
+              ? `tail reload done (rows=${reloaded.length})`
+              : 'tail reload done',
+          );
           await applyComposerRestore();
-          void refreshChatTokenLabel();
+          rollbackTimingLog('composer restore done');
           showToast(
             options?.skipVfsReconcile ? '对话已截断，工作区未恢复' : '回滚成功',
           );
+          rollbackTimingLog('toast shown');
+          // token 刷新错峰（rollback-large-jank Step 5）：等「reloadMessages
+          // 触发的快照末片 post + deferred actions 排空」信号之后再发起
+          // token 全量重算——快照构建/post 与 token 重算不再同窗口排队；
+          // 信号迟到/超时兜底照旧刷新（回到现状时机，不悬挂）。toast 先于
+          // 等待发出，回滚结果反馈不被错峰推迟。
+          const tokenTrigger = snapshotCompleteSignal
+            ? await snapshotCompleteSignal.consumeNext(1500)
+            : 'no-signal';
+          rollbackTimingLog(`token refresh trigger=${tokenTrigger}`);
+          void refreshChatTokenLabel();
+          rollbackTimingLog('token refresh scheduled');
         } catch (error) {
           if (
             !options?.skipVfsReconcile &&
@@ -351,6 +388,7 @@ export function useChatTabMessageActions({
       resetStreamingDisplay,
       showToast,
       setDraftRestoreToken,
+      snapshotCompleteSignal,
     ],
   );
 

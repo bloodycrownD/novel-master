@@ -39,6 +39,14 @@ export function revisionReachableKey(entryId: number, version: number): string {
  *    （findings 发现 14：删文件后旧版 active revision 的 entry 已删，path-scoped
  *    扫描 JOIN 不到，靠这步兜底）。两步在同一 connection 上顺序执行。
  *
+ * rollback-large-jank Step 4：`options.includeGlobalOrphans = false` 时只做
+ * 第 1 步 scoped 打扫（回滚事务内调用——回滚正确性只依赖本会话 scope 的
+ * 打扫），全局孤儿兜底改由事务提交后 fire-and-forget 调度
+ * （`deferred-revision-orphan-gc.ts` 的 scheduleDeferredRevisionOrphanGc）
+ * ——全表 DELETE 与本会话无关，不再挡在回滚事务与 UI 链之间。缺省
+ * `includeGlobalOrphans: true`，其余调用方（删除链 / user-vfs-turn /
+ * 会话删除）行为不变。
+ *
  * blob GC 须经 {@link runDeferredBlobGc} 另行调度，本函数不再同步 collect/gc
  * （revision DELETE 触发器已能连带回收归零 blob）。
  *
@@ -50,7 +58,8 @@ export async function sweepSessionRevisions(
   _checkpoints: MessageCheckpointRepository,
   projectId: string,
   sessionId: string,
-  _conn: TdbcConnection
+  _conn: TdbcConnection,
+  options?: {includeGlobalOrphans?: boolean}
 ): Promise<number> {
   const scope: VfsScope = {
     kind: "session",
@@ -63,6 +72,10 @@ export async function sweepSessionRevisions(
     scopeKeyStr,
     "/"
   );
+  if (options?.includeGlobalOrphans === false) {
+    // scoped-only：全局孤儿兜底由调用方在事务提交后 deferred 调度。
+    return scoped;
+  }
   // path-scoped 清扫靠 JOIN vfs_entry 圈定范围，扫不到「删文件后 entry 已删」的
   // revision 孤儿；这里追加一次全局清扫兜底（同一 connection 上顺序执行）。
   const globalOrphans = await revisionRepo.deleteGlobalOrphans();

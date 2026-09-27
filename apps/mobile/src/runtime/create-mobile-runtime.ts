@@ -48,7 +48,27 @@ import {
 import {getMobileConnection} from '../db/connection';
 import {mobileSkspDriverName} from './mobile-sksp';
 import {ensureLlmFetchConfigured} from './setup-llm-fetch';
+import {rollbackTimingLog} from '../debug/run-timing';
+import {createQuantumYield} from '../services/yield-quantum';
 import type {MobileRuntimeCore} from './types';
+
+/**
+ * 回滚链分段打点探针（rollback-large-jank Step 1）：__DEV__ 下把 core 各
+ * 子步（plan 拉取/事务子步）转投回滚时间轴；生产（__DEV__=false）与
+ * desktop/cli（不注入）恒 no-op。detail 拼进单行 label 便于 logcat 过滤。
+ */
+function mobileRollbackProbe(
+  label: string,
+  detail?: Record<string, number | string>,
+): void {
+  const detailText =
+    detail == null
+      ? ''
+      : ` (${Object.entries(detail)
+          .map(([key, value]) => `${key}=${value}`)
+          .join(' ')})`;
+  rollbackTimingLog(`${label}${detailText}`);
+}
 
 /**
  * Opens the app DB once and returns service handles aligned with CLI runtime.
@@ -84,7 +104,13 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileRuntimeCor
   const eventBus = new SimpleEventBus();
   const compactionConditions = createCompactionConditionsStore(conn);
 
-  const chat = createChatServices(conn, {state, agentRegistry});
+  // 列表行解析让步（rollback-large-jank Step 2）：mobile 两处装配缝（runtime
+  // .messages 链 + 回滚 plan 拉取链）共用 16ms 量子让步——大结果集的
+  // content_json JSON.parse 按片执行，JS 线程不再被单次全量解析独占。
+  const messageParseYield = createQuantumYield(16);
+  const chat = createChatServices(conn, {state, agentRegistry}, {
+    yieldFn: messageParseYield,
+  });
   const {projects, sessions, messages, usageStats} = chat;
 
   const messageTranscriptEffects = createMessageTranscriptEffectsService(conn);
@@ -142,7 +168,12 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileRuntimeCor
     messages,
     usageStats,
     messageTranscriptEffects,
-    sessionFs: createSessionFsService(conn),
+    sessionFs: createSessionFsService(conn, {
+      yieldFn: messageParseYield,
+      ...(typeof __DEV__ !== 'undefined' && __DEV__
+        ? {probe: mobileRollbackProbe}
+        : {}),
+    }),
     messageCheckpoint: createMessageCheckpointService(conn),
     sessionKkv,
     globalVfs: () => createScopedVfsService(conn, {kind: 'global'}),

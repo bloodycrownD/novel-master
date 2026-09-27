@@ -16,7 +16,11 @@ import WebView, {type WebViewMessageEvent} from 'react-native-webview';
 // import type 会被擦除，不影响运行时打包。
 import type {WebViewOpenWindowEvent} from 'react-native-webview/lib/WebViewTypes';
 import {type ChatMessage} from '@novel-master/core/chat';
-import {bootTimingLog, timingLog} from '@/debug/run-timing';
+import {
+  bootTimingLog,
+  rollbackTimingLog,
+  timingLog,
+} from '@/debug/run-timing';
 import Clipboard from '@react-native-clipboard/clipboard';
 import {
   encodeHostToTranscript,
@@ -155,6 +159,13 @@ export type ChatTranscriptWebViewProps = {
   readonly onWebMermaidViewerOpenChange?: (open: boolean) => void;
   /** pending task 工具的子会话映射（title → childSessionId），让执行中的 task 卡片可点击。 */
   readonly pendingSubagentSessions?: ReadonlyMap<string, string>;
+  /**
+   * 快照完成信号（rollback-large-jank Step 5）：sendSessionSnapshotNow 的
+   * 末片 post 且 deferred actions 排空之后调用；被新代次顶替 / 重挂的
+   * aborted 路径不发（该次快照未生效，等下一轮代次）。回滚链据此把
+   * token 全量重算错峰到快照 post 完成之后。
+   */
+  readonly onSnapshotComplete?: () => void;
 };
 
 function transcriptFlagsEqual(
@@ -173,6 +184,44 @@ function transcriptFlagsEqual(
  * 故「按消息分片」与「按行分片」同界——单片行数 ≤ 本常量。
  */
 const SNAPSHOT_CHUNK_SIZE = 50;
+
+/**
+ * 快照分片字节预算（rollback-large-jank Step 3）：单桶累计源 content JSON
+ * 尺寸上限。大消息场景即使条数未到 {@link SNAPSHOT_CHUNK_SIZE} 也切多片，
+ * 避免「40 条大消息挤单片 → 单次 rows 编码大包 → web 全量重建长任务」。
+ * 度量口径 = 源消息 content 的 JSON 序列化尺寸（rows 编码前），与
+ * rollback.plan.messages 打点的 contentBytes 同源。
+ */
+const SNAPSHOT_CHUNK_BYTES = 256 * 1024;
+
+/**
+ * 按源尺寸贪心分桶（rollback-large-jank Step 3）：一遍量测一遍定桶边界
+ * ——逐条累计源 content JSON 尺寸，条数到上限或累计字节超预算即封桶；
+ * 单条自身超预算时独占一桶（无法再细分）。返回每桶 [start, end) 边界；
+ * 空列表返回单空桶（chunkTotal=1，与旧单包空快照逐字节等价）。
+ */
+export function planSnapshotChunkBounds(
+  messages: readonly ChatMessage[],
+): Array<readonly [number, number]> {
+  const bounds: Array<readonly [number, number]> = [];
+  let start = 0;
+  let bytes = 0;
+  for (let i = 0; i < messages.length; i += 1) {
+    const messageBytes = JSON.stringify(messages[i]!.content).length;
+    const countInBucket = i - start + 1;
+    if (
+      countInBucket > SNAPSHOT_CHUNK_SIZE ||
+      (bytes + messageBytes > SNAPSHOT_CHUNK_BYTES && countInBucket > 1)
+    ) {
+      bounds.push([start, i]);
+      start = i;
+      bytes = 0;
+    }
+    bytes += messageBytes;
+  }
+  bounds.push([start, messages.length]);
+  return bounds;
+}
 
 /**
  * 快照分片代次（模块级单调递增计数器）：每次 sendSessionSnapshotNow 开新
@@ -320,6 +369,7 @@ export const ChatTranscriptWebView = memo(
         onWebMenuOpenChange,
         onWebMermaidViewerOpenChange,
         pendingSubagentSessions,
+        onSnapshotComplete,
       },
       ref,
     ) {
@@ -771,10 +821,10 @@ export const ChatTranscriptWebView = memo(
           // 预扫全局配对上下文（Step 5 同款 O(n) 一次扫描）：逐片行转换共享，
           // 分片拼接结果与单次全量 buildTranscriptRows 严格全等。
           const pairingContext = buildToolPairingContext(snapshotMessages);
-          const chunkTotal = Math.max(
-            1,
-            Math.ceil(snapshotMessages.length / SNAPSHOT_CHUNK_SIZE),
-          );
+          // 先量测后分桶（Step 3 字节预算）：chunkTotal 预计算 = 桶数，
+          // chunk 0 的 payload 即携带最终值（与旧「条数除法」同构）。
+          const chunkBounds = planSnapshotChunkBounds(snapshotMessages);
+          const chunkTotal = chunkBounds.length;
           const yieldFn = createQuantumYield();
           bootTimingLog(
             `snapshot begin (msgs=${snapshotMessages.length}, chunks=${chunkTotal}, gen=${generation})`,
@@ -792,9 +842,10 @@ export const ChatTranscriptWebView = memo(
                 );
                 return;
               }
+              const [chunkStart, chunkEnd] = chunkBounds[chunkIndex]!;
               const chunkMessages = snapshotMessages.slice(
-                chunkIndex * SNAPSHOT_CHUNK_SIZE,
-                (chunkIndex + 1) * SNAPSHOT_CHUNK_SIZE,
+                chunkStart,
+                chunkEnd,
               );
               const rows = enrichTranscriptRows(
                 buildTranscriptRowsWithContext(
@@ -830,6 +881,11 @@ export const ChatTranscriptWebView = memo(
                   rows.length
                 })`,
               );
+              // 回滚窗口内的快照分片也上回滚轴（窗口外 no-op）——build+post
+              // 是回滚链收尾的第三段长任务来源，修复前后对比依赖此站数据。
+              rollbackTimingLog(
+                `snapshot chunk ${chunkIndex + 1}/${chunkTotal} posted (rows=${rows.length})`,
+              );
               if (!isLastChunk) {
                 // 片间量子让步：防止分片构建本身又变成长任务。
                 await yieldFn();
@@ -839,6 +895,9 @@ export const ChatTranscriptWebView = memo(
             // 快照末态一致」的既有时序语义；单片快照等价旧单包行为。
             syncStreamToolInvoking();
             bootTimingLog(`snapshot all chunks done (gen=${generation})`);
+            rollbackTimingLog(
+              `snapshot all chunks done (gen=${generation}, chunks=${chunkTotal})`,
+            );
             // 补发分片期间被推迟的动作（单一队列按入队原序，末片 post 先于
             // 全部补发消息）：T-S3 流式 flush + C-orch-1 三通道 post。
             const deferredActions = deferredSnapshotActionsRef.current;
@@ -853,6 +912,11 @@ export const ChatTranscriptWebView = memo(
                 }
               }
             }
+            // 快照完成信号（rollback-large-jank Step 5）：末片 post 且
+            // deferred actions 排空之后发出——aborted 路径（代次被顶替/
+            // 重挂）在循环内 return，不会走到这里。消费端（runRollback）
+            // 据此错峰 token 全量重算。
+            onSnapshotComplete?.();
           } finally {
             if (inFlightSnapshotGenerationRef.current === generation) {
               inFlightSnapshotGenerationRef.current = null;
@@ -872,6 +936,7 @@ export const ChatTranscriptWebView = memo(
           sessionKey,
           flags?.richText,
           uiRunning,
+          onSnapshotComplete,
           syncStreamToolInvoking,
           transcriptListOptions,
           flushPendingStreamDeltas,
@@ -1253,6 +1318,10 @@ export const ChatTranscriptWebView = memo(
           if (message.type === 'scrollSnapshot') {
             const snap = parseScrollSnapshotFromHost(message);
             if (snap) {
+              // 回滚窗口内的首个 scrollSnapshot 即「web 侧渲染回执」——
+              // web 应用快照后才会 emit 滚动位置（T-S4 末片恰一次语义）。
+              // 回滚窗口外 no-op，不影响日常滚动路径。
+              rollbackTimingLog('web render receipt (scrollSnapshot)');
               lastScrollRef.current = {
                 nearBottom: snap.nearBottom,
                 offsetY: snap.offsetY,

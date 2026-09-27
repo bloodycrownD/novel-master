@@ -18,8 +18,11 @@ module.exports = {
     'node_modules/(?!((jest-)?react-native|@react-native(-community|-documents)?|@react-navigation|@noble/hashes|sanitize-html|htmlparser2|domhandler|domutils|dom-serializer|domelementtype|entities|react-native-blob-util|@op-engineering)/)',
   ],
   // __tests__/helpers 下是测试辅助函数（如 read-webview-dist），不是测试套件，
-  // 别让 Jest 当测试跑而报 "must contain at least one test"。
-  testPathIgnorePatterns: ['/node_modules/', '<rootDir>/__tests__/helpers/'],
+  // 别让 Jest 当测试跑而报 "must contain at least one test"。不带 <rootDir>/
+  // 前缀的裸片段匹配在任意目录形态（含 git worktree 路径）下都稳定——
+  // <rootDir> 前缀展开出的绝对路径在 worktree 路径上会因正则元字符
+  // 失配，helper 又会被当成套件跑。
+  testPathIgnorePatterns: ['/node_modules/', '__tests__/helpers/'],
   // coverage 可见性（tests/G-6）：仅报告逻辑层目录，不设阈值门槛，
   // `jest --coverage` 出报告即可、不阻塞流水线。
   collectCoverageFrom: [

@@ -28,6 +28,18 @@ export interface MessageRepository {
    */
   listBySessionOffset(sessionId: string, offset: number): Promise<ChatMessage[]>;
 
+  /**
+   * 按 seq 升序列出「seq >= fromSeq（含下界）」的消息。
+   *
+   * 回滚 plan 拉取收窄口径（rollback-large-jank Step 2）：resolveRollbackPlan
+   * 对消息列表的全部消费都落在「触发消息自身 + seq 更大方向」（锚点解析只做
+   * tool_result 前向配对、tail 过滤只取锚点之后），锚点之前的消息不拉取。
+   */
+  listBySessionFromSeq(
+    sessionId: string,
+    fromSeq: number
+  ): Promise<ChatMessage[]>;
+
   listBySessionTail(sessionId: string, limit: number): Promise<ChatMessage[]>;
   listBySessionPage(
     sessionId: string,

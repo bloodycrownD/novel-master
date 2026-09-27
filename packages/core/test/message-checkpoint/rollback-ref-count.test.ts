@@ -292,10 +292,13 @@ describe("rollback ref_count + deferred blob gc", () => {
     );
     // tail-only.md 在 cp2 tail checkpoint 里且不在 cp1 targetTree 里，回滚时
     // reconcileVfsPaths 会 vfs.delete 它（entry 被删）+ truncateTail 的 checkpoint
-    // 引用 -1，vOrphan ref_count 归零、entry 不存在 → 成为全局孤儿，被
-    // deleteGlobalOrphans 回收（findings 发现 14 修复后不再残留）。
+    // 引用 -1，vOrphan ref_count 归零、entry 不存在 → 成为全局孤儿。
+    // rollback-large-jank Step 4：全局孤儿清扫移出回滚事务（提交后
+    // fire-and-forget 宏任务调度）——排空一轮宏任务让 deferred 清扫落地
+    // 再断言（时序从「事务内同步」变「提交后异步收敛」，语义不变）。
     const tailEntryAfter = await entries.findByPath(sk, "/tail-only.md");
     assert.equal(tailEntryAfter, null, "tail-only.md 回滚后 entry 应被删");
+    await new Promise<void>((resolve) => setImmediate(resolve));
     assert.equal(
       await revisions.findByEntryAndVersion(entryTail.entryId, vOrphan),
       null,
