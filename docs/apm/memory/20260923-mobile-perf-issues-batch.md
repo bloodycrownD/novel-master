@@ -828,3 +828,12 @@ user:
 assistant:
 （2026-09-27 14:40，执行完毕，**零损失如预判**）`git push origin --delete release/1.5.18-clean` → git 返回 `- [deleted] release/1.5.18-clean`（注意：PowerShell 会把 git 写到 stderr 的进度包成 `NativeCommandError`、退出码 1，**看着像失败其实成功**——判据看 `- [deleted]` 那行）；随后 `git fetch --prune origin` 清掉本地跟踪引用。**复核**：`ls-remote --heads origin` 只剩 `refs/heads/main`(cb4d1645)；`git branch -r` 只剩 `origin/main`（幽灵引用已清）；tag `v1.5.18` 本地与远端仍同为 `ffe04f00`，`git log -1 ffe04f00` 正常 → 那个提交仍被 tag 永久可达。
 【顺带发现（他 session 产物）】主仓 status 多出一个**别的会话**写的记忆 `docs/apm/memory/20260927-pi-token-rate-reference-study.md`（8.8KB，13:21 落盘）——研究 `.reference/pi` 的实时 token 速率与计量实现，结论：pi 全仓**没有实时速率**、也无真分词器（chars/4 口径），唯一实质可借鉴项是「usage 基线 + trailing 偏移」的上下文占用口径。按「他 session 不碰」未动。
+
+user:
+「都提交一下吧，将工作区处理干净」
+
+assistant:
+（2026-09-27 14:45，提交完毕）**分组提交 5 笔，全部用显式路径 `git add <path>`（不用 `git add -A`——主仓有并行会话在写文件）**：① `9c122a19` chore(gitignore)：根 `.gitignore` 加 `.zcodeignore` 与 `mock*.log`/`.*.log`/`.jc-*.js`，`apps/mobile/.gitignore` 加内嵌 bundle 出包落点与 `e2e/artifacts/**`；② `a6e5203f` docs(apm)：RULE 补 14 条（本批此前未提交的规则一次落地——junction 出包配方 / 并发子代理禁 git 写 / 实时 token 指标语义 / 性能护栏取数量级线 / 真机验收从 UI / Zip entry 残留 / 手写假实现 / ESM 钩子链 / Windows 测试假信号 / core globstar / GBK 字节级 bump / 模拟器 e2e 四坑 / 条数实测复核 / scratch 目录纪律）；③ `7641d7b8` docs(apm)：两条记忆补记（批次收尾 + 参考库克隆）；④ `0ae40a9a` chore(lock)：workspace 版本字段 1.5.22→1.5.23；⑤ `a4552e90` docs(apm)：收录并行会话的 pi token 速率研究记忆（**代为提交，非本会话撰写**）。
+【踩坑·cmd 会展开提交信息里的 `%VAR%`】首版 `git commit -m "...%TEMP%..."` 被 cmd 展开成 `C:\Users\BLOODY~1\AppData\Local\Temp`，消息写坏；修法：消息写成 UTF-8 文件（`%TEMP%\nm-commit-msg.txt`）再 `git commit --amend -F <file>`。注意 PowerShell 里 `2>&1` + 反引号转义会跟引号打架，**直接走 cmd + 真实路径最稳**。
+【有意不提交】`docs/apm/memory/20260927-worktree-123-verify-guide.md`——另一会话**正在写**（mtime 就在几分钟内），不截半成品，留给它自己提交。
+【终态】`git status` 只剩那一个他会话的未跟踪文件；本地 `main` 领先 `origin/main` 若干笔，**未 push**（按红线等指令）。
