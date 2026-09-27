@@ -14,11 +14,11 @@ import {
   scrubProviderTablesInDatabase,
   type TdbcConnection,
 } from '@novel-master/core';
-import {registerOpSqliteDriver} from '@novel-master/tdbc-driver-op-sqlite/native';
 import {
   checkpointMobileDatabase,
   closeMobileConnection,
   getMobileConnection,
+  registerMobileOpSqliteDriver,
 } from '../db/connection';
 import {resolveMobileDatabaseFilePath} from '../db/db-file-path';
 import {isMobileAgentActive} from '../runtime/agent-activity';
@@ -84,7 +84,9 @@ async function writeBytesToFileChunked(
  * 短连接打开 live DB，仅用于导入后恢复本机服务商三表（不跑 bootstrap）。
  */
 async function openDbForProviderRestore(): Promise<TdbcConnection> {
-  registerOpSqliteDriver();
+  // 必须走 db/connection 的单点注册：驱动注册表是 last-wins，直接调
+  // 无参的 registerOpSqliteDriver() 会把带后台探测的版本覆盖掉。
+  registerMobileOpSqliteDriver();
   return open(MOBILE_TDBC_URL, {driver: 'op-sqlite'});
 }
 
