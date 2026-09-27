@@ -837,3 +837,9 @@ assistant:
 【踩坑·cmd 会展开提交信息里的 `%VAR%`】首版 `git commit -m "...%TEMP%..."` 被 cmd 展开成 `C:\Users\BLOODY~1\AppData\Local\Temp`，消息写坏；修法：消息写成 UTF-8 文件（`%TEMP%\nm-commit-msg.txt`）再 `git commit --amend -F <file>`。注意 PowerShell 里 `2>&1` + 反引号转义会跟引号打架，**直接走 cmd + 真实路径最稳**。
 【有意不提交】`docs/apm/memory/20260927-worktree-123-verify-guide.md`——另一会话**正在写**（mtime 就在几分钟内），不截半成品，留给它自己提交。
 【终态】`git status` 只剩那一个他会话的未跟踪文件；本地 `main` 领先 `origin/main` 若干笔，**未 push**（按红线等指令）。
+
+user:
+「push吧」
+
+assistant:
+（2026-09-27 14:47，已推送）推送前核对：当前分支 `main`；`origin/main..main` 正好是本批 6 笔（无并行会话插入的提交）；工作区只剩他会话的未跟踪文件（未跟踪不参与推送）。`git push origin main` → **`cb4d1645..6aa29ca0  main -> main`** 成功；复核 `ls-remote --heads origin main` = `6aa29ca0`，`git status -sb` 显示 `## main...origin/main`（无 ahead/behind）。**本批全部落地并同步**——本批最后一次实质改动提交 = `6aa29ca0`（真实 HEAD 以 `git log -1` 为准，本条记录本身会再追加一笔）。工作区仅剩 `docs/apm/memory/20260927-worktree-123-verify-guide.md`（他会话在写，按「他 session 不碰」留着）。
