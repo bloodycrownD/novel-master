@@ -42,7 +42,7 @@ apps/mobile/src/
   components/agent/ + components/form/ 表单组件族  [改] disabled 通路与灰态（FormTextInput/FormChipGroup/sections 等）
   screens/stack/AgentsSettingsScreen.tsx         [改] handleCreate 传 mode
   services/agent-create.ts                       [改] createBlankAgent +mode 参数
-  screens/stack/AgentEditorScreen.tsx            [改] sentinel 分支渲染 BuiltinAgentDetail
+  screens/stack/AgentEditorScreen.tsx            [改] sentinel 分支渲染 AgentEditorForm readOnly + initialDefinition
 apps/mobile/__tests__/
   agent-list-tabs.test.tsx                       [新增] T-M1/T-M3
   agent-create-mode.test.ts                      [新增] T-M2（或并入 agent-list-tabs）
@@ -60,9 +60,9 @@ scripts/e2e/case-agents-tabs.mjs                 [新增] T-E1
 | 5 | `apps/desktop/src/main/ipc/handler-registry.ts` + `renderer/ipc/invoke-registry.ts` | createBlank 通道签名从 noArg 改可选 payload（照同文件既有 withXxx helper 模式，无合用者则新增） |
 | 6 | `apps/desktop/renderer/features/settings/SettingsViews.tsx` | AgentsSettingsView 重排：tabs 置顶（`.agents-manage__tabs` + SegmentedControl）→ ManageHeader（title/hint 随 tab）→ 单个 SettingsListSection 前端过滤；general 合成行（子 tab、`settings-tag--primary`「内置」）；「默认（全部）」行加 `settings-tag--muted`「全部」徽标；新建传 mode；删除兜底 `remaining` 排除 `"general"`；general 行不进批量勾选、⋮ 菜单仅「查看」 |
 | 7 | `apps/desktop/renderer/features/settings/AgentEditorView.tsx` | `agentId === "general"` 时**渲染与普通 agent 完全相同的完整表单 + 全禁用态**（用户拍板 2026-09-28 实测反馈：比独立只读卡片更统一、信息更全）——数据经 `shared/logic/agent.ts` 镜像的 `DEFAULT_SUBAGENT_DEFINITION` 以 `applyDefinition` 共用填充；顶层 `isBuiltin` 派生，全部 input/textarea/select/Switch/按钮 `disabled`；保存按钮保留渲染但禁用；顶部「内置智能体，不可编辑」说明条；不走 `ipcAgentRegistryGet`、dirty 恒 false；`PromptCollapsibleField` 补 disabled（堵全屏编辑 Modal 绕过） |
-| 8 | `apps/mobile/src/components/agent/AgentList.tsx` | tab state（`'primary'` 默认）+ SegmentedControl（options：主智能体/子智能体）+ `switchTab`（setTab + `batch.exit()`）+ `rows` 按过滤 memo + general 合成行（子 tab 头部，内置胶囊样式参照 `SearchEnginesScreen.tsx` BuiltinTag）+「全部」badge + 空态文案随 tab + `onCreate?: (tab) => void`；general 行不可勾选、菜单仅「查看」 |
+| 8 | `apps/mobile/src/components/agent/AgentList.tsx` | tab state（`'primary'` 默认）+ SegmentedControl（options：主智能体/子智能体）+ `switchTab`（setTab + `batch.exit()`）+ `rows` 按过滤 memo + general 合成行（子 tab 头部，内置胶囊样式参照 `SearchEnginesScreen.tsx` BuiltinTag）+「全部」badge + 空态文案随 tab + `onCreate?: (tab) => void`；general 行不可勾选、**整行点击进入只读详情，不渲染行内菜单**（用户拍板 2026-09-29 按现状收窄；desktop 侧保留 ⋮ 菜单仅「查看」，见变更点 6） |
 | 9 | `apps/mobile/src/services/agent-create.ts` + `AgentsSettingsScreen.tsx` | `createBlankAgent(runtime, id?, mode?)` 写入 `def.mode`；Screen 的 handleCreate 依 tab 传 mode |
-| 10 | `apps/mobile/src/screens/stack/AgentEditorScreen.tsx` + `BuiltinAgentDetail.tsx` | `agentId === "general"` 分支只读呈现（导航参数不扩，sentinel 直用） |
+| 10 | `apps/mobile/src/screens/stack/AgentEditorScreen.tsx`（`BuiltinAgentDetail.tsx` 已退役删除） | `agentId === "general"` 分支以 AgentEditorForm `readOnly + initialDefinition` 呈现完整编辑器禁用态（全字段禁用、不渲染保存栏；desktop 为完整表单全控件 disabled、保存按钮保留但禁用——双端同构不同收尾，导航参数不扩，sentinel 直用） |
 
 不改动：picker 过滤（`handlers/agent.ts:108-120`、`agent-picker.ts:17-23`）、task 过滤（`subagent-tool.ts:182-189`）、`MODE_OPTIONS` 与编辑表单、`AgentRegistryService` 本体、`agent-registry.port.ts`（createBlank 维持 app 层组合）。
 
@@ -71,7 +71,7 @@ scripts/e2e/case-agents-tabs.mjs                 [新增] T-E1
 - Step 1 — phase-core-mode-tab — blocking: yes — qa: auto：新增 `agent-mode-tab.ts` 判定函数并经 `config-forms/agent/index.ts` barrel 具名导出；`DEFAULT_SUBAGENT_DEFINITION` 经 `public/agent.ts` re-export（`/agent` 子路径）；core 单测锁口径（T-C1）与常量内容（T-C2）；desktop 镜像分置：`agentModeMatchesTab` 进 `shared/logic/config-forms-agent.ts`（自 `@novel-master/core/config-forms/agent`），`DEFAULT_SUBAGENT_DEFINITION` 进 `shared/logic/agent.ts`（自 `@novel-master/core/agent`——该文件本就是 `/agent` 的专用镜像，避免 config-forms-agent.ts 头注释与内容不符）；shared 层不受 renderer eslint X1 gate 限制，renderer 统一走镜像，禁止 export *。
 - Step 2 — phase-desktop-ipc — blocking: yes — qa: auto：ipc-types DTO/请求类型 + list/createBlank handler 改造 + 绑定与 invoke 封装同步；`agent-registry-handlers.test.ts` 补 T-D1（valid 带 mode / invalid 无 mode / undefined 省略）、T-D2（createBlank 带 mode 落库、不传兼容现行为）。
 - Step 3 — phase-desktop-ui — blocking: yes — qa: auto：AgentsSettingsView tab 化 + 合成行 + 徽标 + 删除兜底排除 + general 只读分支 + CSS；`settings-agents-tabs.test.ts` 源码断言（T-D3：SegmentedControl/modeMatchesTab 引用/「内置」徽标/general sentinel 分支存在）。
-- Step 4 — phase-mobile-ui — blocking: yes — qa: auto：AgentList tab 化 + createBlank mode + 只读详情；jest 测试 T-M1（tab 切换过滤 + 切 tab 退批量）、T-M2（onCreate 传 mode → createBlankAgent 落库）、T-M3（general 行子 tab 可见、主 tab 不可见、无删除入口）。
+- Step 4 — phase-mobile-ui — blocking: yes — qa: auto：AgentList tab 化 + createBlank mode + 只读编辑器形态（AgentEditorForm readOnly）；jest 测试 T-M1（tab 切换过滤 + 切 tab 退批量）、T-M2（onCreate 传 mode → createBlankAgent 落库）、T-M3（general 行子 tab 可见、主 tab 不可见、无删除入口）。
 - Step 5 — phase-e2e-verify — blocking: no — qa: manual_user：新增 `scripts/e2e/case-agents-tabs.mjs`（照 `case-subagent.mjs` 骨架：导航 agentsSettings → 断言 tab 控件 → 切子 tab → 断言 general 行；T-E1）；双端手动走查（过滤矩阵、invalid 行双边、新建默认值、批量独立性）——mobile 走 mobile-adb-vision 截图巡检，desktop 走 dev 走查。
 
 ## 测试策略

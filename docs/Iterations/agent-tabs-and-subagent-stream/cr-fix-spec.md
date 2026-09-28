@@ -63,8 +63,8 @@
 - 维度：G
 - 文件：`packages/core/test/service/agent/run-agent-turn-subagent-stream.test.ts`（对照实现 `packages/core/src/service/agent/logic/run-agent-turn.ts:864-871`）
 - 问题：实现 catch 有两条路径——`PreferencesError` 吞掉回退 true（T-S4 已用真实 KKV 直写脏值覆盖）、非 `PreferencesError` 时 `throw cause` 重抛（`run-agent-turn.ts:869`）。重抛分支零用例：把 `:869` 整行删掉（吞所有错误静默回退），T-S1~T-S4 全绿不红。另 T-S4 只断言「回退 true 且不炸」，未断言回退日志——先例 `packages/core/test/agent/agent-runner.test.ts:1693-1764`（MF-3，注意在 `test/agent/` 目录、与目标测试文件 `test/service/agent/` 不同目录）劫持 `console.error` 断言了标签日志，本测试相对先例少一档。
-- 改法：同一测试文件补用例 T-S5：`makeRuntime` 注入 `preferences: { getSubagentStreamEnabled: async () => { throw new Error("boom"); } }`（非 PreferencesError），`assert.rejects` 断言 `runAgentTurn` 整体抛出；T-S4 增强为照 MF-3 模式临时替换 `console.error`、断言 tag `"[agent-run] subagentStream pref read failed"` 被调用一次、`finally` 恢复原函数。
-- 验收/测试：删除实现 `:869` 重抛行后 T-S5 必红；删除实现 `console.error` 后 T-S4 增强断言必红。跑法（core 包内）：`npm run test:fast -- test/service/agent/run-agent-turn-subagent-stream.test.ts`。
+- 改法：同一测试文件补用例 T-S5：`makeRuntime` 注入 `preferences: { getSubagentStreamEnabled: async () => { throw new Error("boom"); } }`（非 PreferencesError），锁重抛分支。**断言口径（实现时 spike 实证修正）**：重抛的异常会被 `toolRunner`（`domain/tool/logic/tool-runner.ts:117-126`，单工具失败捕获不外抛的设计）包成 ToolError 转为失败 tool_result 回流主 run，`runAgentTurn` 不会整体拒绝——故断言三件可观察事实：① 主 run 正常完成（stopReason=completed）；② 恰好 2 次 model 调用（重抛发生在子 `runner.run` 之前，子 run 从未启动）；③ boom 以失败 tool_result（`Error: boom`）出现在主 run 第 2 次请求输入中。T-S4 增强为照 MF-3 模式临时替换 `console.error`、断言 tag `"[agent-run] subagentStream pref read failed"` 被调用一次、`finally` 恢复原函数。
+- 验收/测试：删除实现 `:869` 重抛行后 T-S5 三条断言必红（boom 被吞 → 子 run 启动消费响应 → ①②③ 全红）；删除实现 `console.error` 后 T-S4 增强断言必红。跑法（core 包内）：`npm run test:fast -- test/service/agent/run-agent-turn-subagent-stream.test.ts`。
 - 来源：review-scope-f2 / round 1（主代理已亲核实现与测试现场）
 
 ## Spec deviations
