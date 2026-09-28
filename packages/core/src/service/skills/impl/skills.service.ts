@@ -11,7 +11,6 @@
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import type { VfsService } from "@/domain/vfs/ports/vfs-service.port.js";
 import type { VfsListEntry } from "@/domain/vfs/model/vfs-list-entry.js";
-import { resolveLogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { sweepRevisionsUnderScope } from "@/domain/vfs/logic/vfs-tree-copy.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
@@ -33,6 +32,11 @@ import {
 } from "@/errors/skill-errors.js";
 import { BUILTIN_SKILL_NAMES } from "@/bootstrap/skills/seed-builtin-skills.js";
 import { parseSkillFrontMatter } from "@/domain/skills/logic/parse-skill-front-matter.js";
+import {
+  SKILL_ENTRY_FILE,
+  SKILLS_ROOT,
+  resolveSkillRelPathCore,
+} from "@/domain/skills/logic/skill-paths.js";
 import { withSkillFrontMatterValues } from "@/domain/skills/logic/with-skill-front-matter-values.js";
 import { computeEffectiveSkills } from "@/domain/skills/logic/effective-skills.js";
 import type { EffectiveSkill } from "@/domain/skills/logic/effective-skills.js";
@@ -52,12 +56,6 @@ import type {
   SkillWriteOptions,
 } from "../skills.port.js";
 
-/** 两域技能的逻辑根前缀。 */
-const SKILLS_ROOT = "/meta/skills";
-
-/** 技能入口文件（path 缺省值）。 */
-const SKILL_ENTRY_FILE = "SKILL.md";
-
 /** Dependencies for {@link SkillsService}。 */
 export interface SkillsServiceDeps {
   readonly conn: TdbcConnection;
@@ -73,24 +71,23 @@ export interface SkillsServiceDeps {
  * 把技能内相对路径解析为受控形态：缺省 SKILL.md，禁 `..` 段，
  * 归一化后必须仍在 `/meta/skills/{name}/` 内。
  *
+ * 纯逻辑在 domain 层 `skill-paths.ts`（tool 层同路径串行化分类器共用
+ * 同一内核），这里只包装成 SkillError。
+ *
  * @returns 相对技能目录的归一化路径。
  */
 function resolveSkillRelPath(name: string, path: string | undefined): string {
-  const raw = path ?? SKILL_ENTRY_FILE;
-  if (raw.trim().length === 0) {
-    throw skillInvalidPath(String(path), "技能文件路径不能为空");
+  const resolved = resolveSkillRelPathCore(name, path);
+  if (resolved.ok) {
+    return resolved.rel;
   }
-  // normalizePath 会把 `..` 消化成目录回溯而不是拒绝，这里必须先显式拦截，
-  // 否则 `notes/../../other/SKILL.md` 会被静默解析进隔壁技能目录。
-  if (raw.split("/").includes("..")) {
-    throw skillInvalidPath(raw, "技能文件路径不得包含 ..");
-  }
-  const dirPrefix = `${SKILLS_ROOT}/${name}/`;
-  const logical = resolveLogicalPath(`${dirPrefix}${raw}`);
-  if (!logical.startsWith(dirPrefix)) {
-    throw skillInvalidPath(raw, "技能文件路径必须位于技能目录内");
-  }
-  return logical.slice(dirPrefix.length);
+  const reason =
+    resolved.reason === "empty"
+      ? "技能文件路径不能为空"
+      : resolved.reason === "dotdot"
+        ? "技能文件路径不得包含 .."
+        : "技能文件路径必须位于技能目录内";
+  throw skillInvalidPath(String(path ?? SKILL_ENTRY_FILE), reason);
 }
 
 /** 位置 → VFS meta 域 scopeKey（entry/revision 清理用；project 域缺 projectId 时抛错）。 */

@@ -549,3 +549,108 @@ describe("assembleSkillsToolContext（主/子两装配点共用）", () => {
     );
   });
 });
+
+describe("skill 工具同路径串行化（runParallel）", () => {
+  const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+  it("同 step 多笔 skill edit 同名同域依次叠加，不丢更新", async () => {
+    let content = "aaa bbb ccc";
+    let editCalls = 0;
+    const service = fakeSkillService({
+      // 模拟 vfs.replace 语义：执行时才读当前内容，内存替换后整份写回。
+      // 首笔延迟制造竞态——若 runner 不排队，第二笔会基于旧快照整份
+      // 覆盖第一笔的改动（真实事故：同 step 多笔 skill edit 只有最后
+      // 一条生效）。
+      edit: async (_domain, _name, _path, match) => {
+        editCalls += 1;
+        const callNo = editCalls;
+        if (callNo === 1) {
+          await delay(30);
+        }
+        const snapshot = content;
+        if (!snapshot.includes(match.oldString)) {
+          throw new Error(`oldString 未命中: ${match.oldString}`);
+        }
+        content = snapshot.replace(match.oldString, match.newString);
+        return { version: 10 + callNo, replacements: 1 };
+      },
+    });
+    const { runner } = makeRunner();
+    const outcomes = await runner.runParallel(
+      [
+        {
+          name: "skill",
+          input: {
+            action: "edit",
+            name: "demo",
+            domain: "global",
+            oldString: "aaa",
+            newString: "AAA",
+          },
+        },
+        {
+          name: "skill",
+          input: {
+            action: "edit",
+            name: "demo",
+            domain: "global",
+            oldString: "ccc",
+            newString: "CCC",
+          },
+        },
+      ],
+      skillToolCtx(service),
+    );
+    assert.ok(outcomes.every((o) => o.ok));
+    assert.equal(editCalls, 2);
+    assert.equal(content, "AAA bbb CCC");
+  });
+
+  it("global 与 project 同名技能不互相排队（不同 domain 不同键）", async () => {
+    const events: string[] = [];
+    let calls = 0;
+    const service = fakeSkillService({
+      edit: async (domain) => {
+        calls += 1;
+        const callNo = calls;
+        events.push(`start:${domain}${callNo}`);
+        if (callNo === 1) {
+          await delay(30);
+        }
+        events.push(`end:${domain}${callNo}`);
+        return { version: 1, replacements: 1 };
+      },
+    });
+    const { runner } = makeRunner();
+    const outcomes = await runner.runParallel(
+      [
+        {
+          name: "skill",
+          input: {
+            action: "edit",
+            name: "demo",
+            domain: "global",
+            oldString: "a",
+            newString: "b",
+          },
+        },
+        {
+          name: "skill",
+          input: {
+            action: "edit",
+            name: "demo",
+            domain: "project",
+            oldString: "x",
+            newString: "y",
+          },
+        },
+      ],
+      skillToolCtx(service),
+    );
+    assert.ok(outcomes.every((o) => o.ok));
+    assert.equal(calls, 2);
+    // 首笔（global）延迟期间，第二笔（project）应已进入执行——若键未带
+    // domain，两笔会互相排队，events[1] 将是 end:global1。
+    assert.equal(events[1], "start:project2");
+  });
+});

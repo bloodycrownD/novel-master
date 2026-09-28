@@ -111,4 +111,75 @@ describe("classifyMutatingToolCall", () => {
       paths: null,
     });
   });
+
+  it("skill write/edit 返回带 domain 的合成键", () => {
+    // write 缺省 domain=project（与 skill-tool 的 write 分支同口径）
+    assert.deepEqual(
+      classifyMutatingToolCall("skill", {
+        action: "write",
+        name: "demo",
+        content: "x",
+      }),
+      { mutating: true, paths: ["skill:project:/meta/skills/demo/SKILL.md"] },
+    );
+    assert.deepEqual(
+      classifyMutatingToolCall("skill", {
+        action: "edit",
+        name: "demo",
+        domain: "global",
+        oldString: "a",
+        newString: "b",
+      }),
+      { mutating: true, paths: ["skill:global:/meta/skills/demo/SKILL.md"] },
+    );
+    // 嵌套相对路径归一化后进键（与 service 层 resolveSkillRelPath 同内核）
+    assert.deepEqual(
+      classifyMutatingToolCall("skill", {
+        action: "edit",
+        name: "demo",
+        domain: "global",
+        path: "./notes/a.md",
+        oldString: "a",
+        newString: "b",
+      }),
+      { mutating: true, paths: ["skill:global:/meta/skills/demo/notes/a.md"] },
+    );
+  });
+
+  it("skill load/read/list 只读；非法输入保守突变不排队", () => {
+    assert.deepEqual(
+      classifyMutatingToolCall("skill", { action: "load", name: "demo" }),
+      { mutating: false, paths: null },
+    );
+    assert.deepEqual(
+      classifyMutatingToolCall("skill", { action: "read", name: "demo" }),
+      { mutating: false, paths: null },
+    );
+    assert.deepEqual(classifyMutatingToolCall("skill", { action: "list" }), {
+      mutating: false,
+      paths: null,
+    });
+    // edit 缺 domain（schema 会拒）→ 突变但不排队
+    assert.deepEqual(
+      classifyMutatingToolCall("skill", {
+        action: "edit",
+        name: "demo",
+        oldString: "a",
+        newString: "b",
+      }),
+      { mutating: true, paths: null },
+    );
+    // path 带 .. → 突变但不排队
+    assert.deepEqual(
+      classifyMutatingToolCall("skill", {
+        action: "edit",
+        name: "demo",
+        domain: "global",
+        path: "../other/SKILL.md",
+        oldString: "a",
+        newString: "b",
+      }),
+      { mutating: true, paths: null },
+    );
+  });
 });
