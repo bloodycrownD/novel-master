@@ -1,6 +1,6 @@
 ---
-date: 2026-09-28 21:10
-title: ① 压缩分支真机全绿 + 去 base64 SPEC/A1 dev-ready 与首轮 CR（36 条）② 集成分支 integration/binary-storage 一次跑通（merge+A2+指标卡+真机升级链 111→64.8MB）③ 集成线增量全量 CR 四轮收敛 fix-spec-ready（cr-fix-spec-integration.md 36 条）——两份 fix-spec 待统筹开工
+date: 2026-09-28 23:30
+title: ① 压缩分支真机全绿 + 去 base64 SPEC/A1 dev-ready 与首轮 CR（36 条）② 集成分支 integration/binary-storage 一次跑通（merge+A2+指标卡+真机升级链 111→64.8MB）③ 集成线增量全量 CR 四轮收敛 fix-spec-ready（cr-fix-spec-integration.md 36 条）④ 两份 fix-spec 统筹执行完毕 dev-ready（71 条全落、六波 DAG、双轮 cr-func 收敛）
 keywords: worktree, message-content-compression, SCHEMA_BOOT_VERSION 撞号, 谓词驱动搬运, 真机测试, base64 历史包袱, op-sqlite BLOB 真机验证通过, 收益口径修正 61.3%, binary-blob-and-vfs-pack spec, code-dev-loop, runBlobBinaryNormalization, 零进展护栏, code-review-loop, cr-fix-spec 36 条, fix-spec-ready, 验收断言牙齿, 华为 coauth 安装门, integration/binary-storage, A2 chat_message 适配器, 存量数据迁移指标卡, cr-06 提前闭合, cr-01 P0 真机实证, 内嵌 bundle 必须 --dev false, 生产 bundle 启动崩 Got unexpected undefined, cr-fix-spec-integration, ic-01 P0 收尾维护直调, maintCalls 语义对齐, keyset 游标, Metro 构建切分支免重打包
 abstract: ① 压缩分支真机全绿（5350 条零丢失、111.1→79.0MB）；A1（VFS/file_cache 去 base64）dev-ready + 首轮全量 CR 四轮收敛（36 条，P0=稳态每启动白跑全库 VACUUM）。② 用户拍板集成分支（压缩与去 base64 同发版）+ 存储页三进度改指标卡（第三条=content json 压缩；消息去 base64 不设行）→ integration/binary-storage 一次跑通：merge（15 冲突 + BOOT 撞号顺延 17 + bytesToBase64 语义冲突搬迁）、A2（写侧恒二进制 + chat_message 适配器）、指标卡 + cr-06 闭合；真机完整升级链全绿（pre-mc 备份 111.1MB → 64.76MB/−46.4%、5350 条逐条零丢失、b64_rows=0）；cr-01 P0 真机实证（零待归一冷启动两次全文件重写、12 表逻辑零变化）。③ 集成线增量（mcdev 压缩线+merge 裁决+A2+指标卡，32 文件从未 CR）补审：四路 scope 并行 47 条 → 四轮收敛 fix-spec-ready，产物 cr-fix-spec-integration.md（36 条 = P0×1/P1×10/P2×25；P0 ic-01 = mcdev 收尾维护直调绕去重/兜底/busy，cr-01 族六合一）。现挂两份 fix-spec 待统筹开工（耦合：ic-03↔cr-04 合并、ic-01 前置 cr-26、ic-09 依赖 cr-08、ic-36 随姊妹条目）；发版前置遗留：内嵌生产 bundle 启动崩『Got unexpected undefined』未定位。
 ---
@@ -307,3 +307,31 @@ user:
 
 assistant:
 （两份 fix-spec 统筹开工：恢复记忆 + 读两份全文 + 耦合关系核对（ic-03↔cr-04 合并、ic-01 前置 cr-26、ic-09 依赖 cr-08、ic-36 随姊妹条目）→ 统筹 DAG 落 docs/.iteration-state.yaml 的 dev_loop_binstore_fix 块。wave-1 五路并行后台子代理：nA core-blob（cr-26/01/02/07/08/09/10/11/15/24/25/27/28/31/32/33/35 + ic-12/15/27/35 + NF-1 新测试文件 + ic-36a/b 三表化）、nB core-compaction（ic-01/05/07/09/25/32 + OQ-I7）、nC core-repo（ic-08/29/30/31/33）、nD core-misc（ic-10/11/13/24/26/28）、nG docs-cli（cr-16/22/23/29/30/34 + ic-14/17/36 + compression spec + CHANGELOG + RULE 措辞）——五节点文件集互不相交已核对；每路都带反向判据抽查要求。wave-2 计划 nE desktop / nF mobile 并行（派发前主代理先重建 core dist + 统一提交 wave-1）；随后 verify-all 全量 + cr-func 对照检查。【用户偏好记录】子代理派遣从 wave-2 起改用同步方式（同一波多 agent 并行发、同步等待返回），方便用户观察执行过程；后台异步仅本次 wave-1 使用。
+
+user:
+这个目录都能清理吗？（指 D:\Dev\nm-worktree）
+
+assistant:
+（核查后结论：**目录保留、文件全留，本轮未删任何东西**）① 目录本身不是 git worktree，是 RULE.md L63 用户 2026-09-27 拍板的约定 scratch 落点（「junction/短路径联接与临时产物一律集中此目录，禁止写 D 盘根」）——删了下次构建/junction 还得重建。② 7 个文件共 11KB：ws-min.mjs + cdp-bg-probe.mjs + probe-clear.mjs 是踩两坑（metro inspector proxy Origin 白名单 + Node 内置 WebSocket 不能设 Origin → 手搓 RFC6455）做出的 CDP 调试三件套（cdp-bg-probe import ws-min，须同留）；cleanup-worktrees.ps1 是 Windows 删大 worktree 的 robocopy /MIR 兜底法；bump-1524.mjs / bump-buildgradle.mjs 版本号硬编码属一次性（但 buildgradle 那个含「build.gradle 有历史非法 UTF-8 字节、必须 Buffer 字节级替换」的坑，下轮发版改字符串即复用）；rn-dev-prefs.xml 是模拟器 dev host=localhost:8081（adb reverse）配置。③ 真要清只有两个 bump 脚本勉强算纯一次性，但为与记忆「剩 7 个可复用文件」对齐建议原样留。④ 顺带核实：git worktree list 现仅主仓 + `.worktree/f-message-content-compression`（① 已合入集成分支但集成线未合 main、fix-spec 71 条在修，暂留）。
+
+user:
+如果有用，那应该用一个scripts目录整理，同时脚本名称要合理。
+
+assistant:
+（nm-worktree 7 文件收编仓内 `scripts/`，2026-09-28）映射：`ws-min.mjs`→`scripts/cdp-ws-client.mjs`（库，导出 wsConnect）、`cdp-bg-probe.mjs`→`cdp-bg-timer-probe.mjs`（删了从未被调用的 DEVICE/adb 死代码，补 wsUrl 获取说明：metro `http://localhost:8081/json` 的 webSocketDebuggerUrl + adb reverse）、`probe-clear.mjs`→`cdp-probe-clear.mjs`（import 路径随改）、`cleanup-worktrees.ps1`→`worktree-force-clean.ps1`（**参数化** `-Targets <dir[]> [-Repo]`、空目录改 TEMP+finally 清理、注释全 ASCII 化——RULE 的 PS5.1 ANSI 解码吞行纪律）、`bump-1524.mjs`+`bump-buildgradle.mjs` **合并参数化**为 `bump-version.mjs <新版本>`（from 自动读 desktop package.json；package.json 走 utf8 文本替换+解析验证、build.gradle 恒走 Buffer 字节级——该文件含历史非法 UTF-8 字节；不同步 SKIP+exit 1）、`rn-dev-prefs.xml` 原名入 scripts/（README 里提醒整文件覆盖会丢设备侧其它 prefs 键）。新增 `scripts/README.md`（三件套 Origin 白名单背景 + 判读口径 + 各用法）。验证：4 个 mjs `node --check` 全过；bump-version 同版本/坏格式两路 exit 1 实测（注意 cmd `%ERRORLEVEL%` 在 `&` 复合行是**解析期展开**的假 0，验退出码要 `&& / ||` 分流）；build.gradle needle `?: "1.5.24"` 唯一命中（first=4152/second=-1）；ps1 无参报 Mandatory、长路径真删全流程 CLEANING→REMOVED→PRUNE 走通。nm-worktree 原 7 文件已删、目录清空保留（RULE L63 已补分工：scratch 落点只收一次性产物，可复用工具一律进 `scripts/`）。**踩坑**：`%TEMP%` 是 8.3 短路径（`BLOODY~1`），Test-Path 在 ps1 脚本内对它假阴性（脚本外 True）——测 ps1 用长路径，别用 %TEMP%。新文件未 commit（工作区本有 dev_loop 进行中改动）。
+
+user:
+（隐含：wave-1 五路回来后的推进直至收尾）
+
+assistant:
+（wave-1 五路全绿收敛 → wave-2 双端接线 → verify-all → 双路 cr-func 判 no → 三路 fix → 复检 yes，**两份 fix-spec 71 条全部执行完毕，dev-ready**）
+
+【终态】分支 integration/binary-storage，HEAD 4143e347（真实以 git log -1 为准），10 个提交（e4f56ae5 之后：f35e209d/960e6cab/17502682/3856cd90/7d3015ea/2010777e/776e7a02/3ec78a43/12ce12b8/4143e347）。未 push / 未 merge / 未发版。验证账目：core 全量 2838/2840（唯二红=既有 usage-stats 时区基线）、desktop main tsc 0 错 + 全量 102 文件 0 失败、mobile 全量 1568/1569（唯一红=既有 mermaid 基线）、cli tsc 0 错。
+
+【执行实绩】A1 线 35 条 + 集成线 36 条全落：双 P0（cr-01 稳态白跑 VACUUM 门条件 + ic-01 收尾维护收口）、keyset 游标×2 + 收尾谓词校验×2、坏行隔离、beforeMaintenance/afterMaintenance 回调缝（finally 语义）、busy 计数/令牌配对下沉备份底层（两端同构）、状态采样 3s 节流（WeakMap 按连接隔离 + reset 钩子）、搜索 scanLimit+keyset 续扫+yieldFn 分片、死出口撤除×2、迁移行 tone 三态纯函数模块（两端）、mobile 5s 轮询、文档全同步（cr-22 十项/cr-23 映射表/ic-36 11 行姊妹修订/compression spec 残影/CHANGELOG）。
+
+【主代理裁决记录】① perf 倍率 6→25（全量并行下解压路径被拖慢而明文基线几乎不受影响，实测比值 3.6→11.4；RULE「拿环境噪声当回归」同族）；② ic-05 第二条验收按语义修正（游标是单次调用局部变量，「三轮严格递增」字面自相矛盾）；③ cr-35 的 allKnownFailed 反向判据不可达（游标化后该分支正常路径不可达，break/continue 等价——与 spec 自身「保留作防御」备注自洽）；④ cr-21 mobile 顺序按指标卡重构后现状断言（spec 旧布局假设）；⑤ renderer tsc +2 条 TS6307 同族债可接受；⑥ cr-22⑪ 为 cr-func 误报（spec:80 已有完整表述，主代理 grep 实证）。
+
+【cr-func 抓到的真缺口（wave-5 已补）】ic-06 状态采样节流是主代理漏派（P1，且 spec 已写「由 ic-06 缓解」险成虚假陈述）；cr-12/13/14 同批漏派；其余为注释口径/用例尾巴。教训：**按文件簇派节点时要把 fix-spec 条目号逐条过一遍映射表**——本轮 nA 的任务清单漏了 file-cache-store.test.ts 落点的 cr-12/13 与 db-maintenance.test.ts 落点的 cr-14。
+
+【仍待办】① 合并后 QA 三项真机（坏 base64 第三态文案/大会话搜索耗时/迁移中进度轮询推进）——等真机窗口；② 生产 bundle 启动崩 Got unexpected undefined 仍未定位（发版前置）；③ Part B（VFS 内容打包 3.06MB）待拍板；④ 设备现装 Metro 构建（依赖 PC Metro + adb reverse）。【用户偏好】子代理派遣用同步方式（同一波多 agent 并行发、同步等待），方便观察——wave-2 起已执行。

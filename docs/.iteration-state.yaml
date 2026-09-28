@@ -214,20 +214,32 @@ dev_loop_binstore_fix:
     - docs/Iterations/binary-blob-and-vfs-pack/cr-fix-spec.md（A1 线 35 条待执行；cr-06 已闭合）
     - docs/Iterations/binary-blob-and-vfs-pack/cr-fix-spec-integration.md（集成线 36 条）
   耦合关系: ic-03↔cr-04 合并执行；ic-01 前置 cr-26 回调缝（各文件独立实现同款）；ic-09 探针自带 execute 覆写；ic-36 修订随姊妹条目（nG 统一落姊妹文档）
-  dag_version: 1
+  dag_version: 3
   wave_plan:
     - [nA-core-blob, nB-core-compaction, nC-core-repo, nD-core-misc, nG-docs-cli]
     - [nE-desktop, nF-mobile]
     - [verify-all]
-    - [cr-func-all]
+    - [cr-func-a1, cr-func-int]
+    - [fix1-sampling, fix2-core-tests, fix3-apps]
+    - [verify-fix, cr-func-recheck]
   node_status:
-    nA-core-blob: { status: pending, executor: subagent, scope: "blob-binary-normalization.ts+db-maintenance.service.ts+两测试文件；条目 cr-26/01/02/07/08/09/10/11/15/24/25/27/28/31/32/33/35 + ic-12/15/27/35 + ic-36a/b 夹具三表化 + NF-1 新文件" }
-    nB-core-compaction: { status: pending, executor: subagent, scope: "message-content-compaction.ts+测试；条目 ic-01/05/07/09/25/32 + OQ-I2/I7" }
-    nC-core-repo: { status: pending, executor: subagent, scope: "sqlite-message.repository.ts+message.service.ts+message-search.test.ts；条目 ic-08(A)/29/30/31/33" }
-    nD-core-misc: { status: pending, executor: subagent, scope: "死出口 ic-13 + schema/perf/codec 测试 ic-10/11/24/26/28" }
-    nG-docs-cli: { status: pending, executor: subagent, scope: "文档全部：cr-16(两处 core 注释)/22/23/29/30/34 + ic-14/17/36 + compression spec SD + CHANGELOG + RULE 措辞 + cli runtime 注释" }
-    nE-desktop: { status: pending, executor: subagent, scope: "apps/desktop 全部：cr-03/05/19/33(桌面注释)/16(ipc-types) /17/20b + ic-01c接线/02/04/18/20/22 + ic-08B(yieldFn 注入)" }
-    nF-mobile: { status: pending, executor: subagent, scope: "apps/mobile 全部：cr-04+ic-03 合并 / cr-20a + ic-19/34/21/20/23/22" }
+    nA-core-blob: { status: done, executor: subagent, head_sha: f35e209d, result: "cr-26/01/02/07/08/09/10/11/15/24/25/27/28/31/32/33/35 + ic-12/15/27/35 + NF-1 新文件全落地；定向 28/28" }
+    nB-core-compaction: { status: done, executor: subagent, head_sha: 960e6cab, result: "ic-01(P0)/05/07/09/25/32 + OQ-I2/I7 全落地；定向 14/14" }
+    nC-core-repo: { status: done, executor: subagent, head_sha: 17502682, result: "ic-08/29/30/31/33 全落地；定向 36/36" }
+    nD-core-misc: { status: done, executor: subagent, head_sha: 3856cd90, result: "ic-10/11/13/24/26/28 全落地；定向 28/28；perf 倍率由主代理修正为 25×（并行负载）" }
+    nG-docs-cli: { status: done, executor: subagent, head_sha: 7d3015ea, result: "cr-16/22/23/29/30/34 + ic-14/17/36 + compression spec + CHANGELOG + RULE + cli 注释全落" }
+    nE-desktop: { status: done, executor: subagent, head_sha: 2010777e, result: "cr-03/05/19/33 + ic-01c/02/04/18/20/22 + yieldFn 注入全落地；定向 32/32 + 全量 102 文件 0 失败 + main tsc 0 错；renderer tsc 351=基线 349+2 同族 TS6307（已裁可接受）" }
+    nF-mobile: { status: done, executor: subagent, head_sha: 776e7a02, result: "cr-04+ic-03/cr-20a + ic-19/34/21/20/23/22 全落地；定向 8 套件 59 用例全绿 + typecheck 0 错" }
+    verify-all: { status: done, executor: main, result: "core 2833/2835（2 时区基线）/ desktop main tsc 0 + 全量 0 失败 + renderer 351 / mobile 1568/1569（1 mermaid 基线）/ cli tsc 0" }
+    cr-func-a1: { status: done, executor: subagent, readonly: true, func_ready: no, result: "30 done/3 partial/3 missing；must-fix：cr-12/13/14 漏派、cr-33 mobile 注释、cr-03/26 用例、cr-01 头注释、cr-22⑪（后裁定误报）" }
+    cr-func-int: { status: done, executor: subagent, readonly: true, func_ready: no, result: "32 done/3 partial/1 missing；must-fix：ic-06(P1 漏派)、ic-31 用例、ic-16 注释、ic-32 spec 登记" }
+    fix1-sampling: { status: done, executor: subagent, head_sha: 3ec78a43, result: "ic-06 节流(3s WeakMap+reset 钩子+验收) + ic-31/16/32 + spec 措辞；46/46 + tsc 净" }
+    fix2-core-tests: { status: done, executor: subagent, head_sha: 12ce12b8, result: "cr-12/13/14 全落；17/17 + 反向判据实测" }
+    fix3-apps: { status: done, executor: subagent, head_sha: 4143e347, result: "cr-33 mobile 三处 + cr-01 两端头注释 + cr-03/26 busy 复位用例；4/4 + tsc 0 错" }
+    verify-fix: { status: done, executor: main, result: "core 全量 2838/2840（唯二红=2 条既有 usage-stats 时区基线）" }
+    cr-func-recheck: { status: done, executor: subagent, readonly: true, func_ready: yes, result: "11 项 must-fix 全闭合（file:line 证据 + 47 用例抽跑全绿）；cr-22⑪ 裁定误报（spec:80 已有表述）；无新增 P0/P1" }
+  dev_ready: yes
+  dev_ready_note: "两份 fix-spec（A1 线 35 条 + 集成线 36 条）全部执行完毕并双轮 cr-func 收敛；HEAD 4143e347（真实以 git log -1 为准）；未 push / 未 merge / 未发版。基线更新：desktop renderer tsc 既有债 349→351（+2 同族 TS6307）。已知登记（非阻塞）：cr-35 的 allKnownFailed 反向判据不可达（分支正常路径不可达，整表可达性由 (b) 与 chat_message 100 坏用例钉住）；ic-05 第二条验收按语义修正（单调用内游标递增+跨调用重启归零）；cr-21 mobile 顺序按指标卡重构后现状断言。合并后 QA 三项真机（坏 base64 第三态/大会话搜索耗时/迁移中进度轮询）仍待真机窗口。"
   discipline:
     - 子代理一律不做任何 git 写；主代理在 wave 结束后按节点分组统一提交
     - 子代理只跑定向测试与 typecheck；全量套件由 verify-all 单节点顺序跑
