@@ -5,6 +5,7 @@ import {
   allocateAgentDisplayName,
   createDefaultAgentEditorPrompts,
   layoutFromFormInput,
+  type AgentMode,
 } from '@novel-master/core/config-forms/agent';
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
 
@@ -22,16 +23,23 @@ async function listAgentDisplayNameSlots(runtime: MobileNovelMasterRuntime) {
   return slots;
 }
 
-/** Creates blank agent in registry; returns new agentId. */
+/**
+ * Creates blank agent in registry; returns new agentId.
+ *
+ * `mode` 传入时作为新定义的默认作用域直接落库（主 tab → "primary"、
+ * 子 tab → "subagent"）；不传则维持既有行为（缺省 all，双侧可见）。
+ */
 export async function createBlankAgent(
   runtime: MobileNovelMasterRuntime,
   id = `agent-${Date.now()}`,
+  mode?: AgentMode,
 ): Promise<string> {
   const name = allocateAgentDisplayName(
     await listAgentDisplayNameSlots(runtime),
   );
   await runtime.agentRegistry.upsert(id, {
     name,
+    ...(mode != null ? {mode} : {}),
     runtime: {maxSteps: 20},
     prompts: layoutFromFormInput(createDefaultAgentEditorPrompts()),
   });

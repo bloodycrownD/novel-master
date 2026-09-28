@@ -58,6 +58,8 @@ type Props = {
     text: string,
     onSaved: (text: string) => void,
   ) => void;
+  /** 只读态（内置智能体详情）：全部区头开关、输入与块操作禁用灰显。 */
+  readOnly?: boolean;
 };
 
 export function PromptLayoutSection({
@@ -73,6 +75,7 @@ export function PromptLayoutSection({
   onDeleteDynamic,
   onAddDynamicBlock,
   openPromptEditor,
+  readOnly = false,
 }: Props) {
   /** 四区小标题；旧 core 包缺键时用本地兜底，避免标题空白。 */
   const promptSectionLabels = {
@@ -100,11 +103,13 @@ export function PromptLayoutSection({
         tokens={tokens}
         switchValue={form.systemEnabled}
         onSwitchChange={value => patch({systemEnabled: value})}
+        disabled={readOnly}
       />
       <View style={blockCardStyle}>
         {form.systemEnabled ? (
           <ExpandablePromptInput
             label={PROMPT_REGION_LABELS.systemContent}
+            disabled={readOnly}
             openEditor={() =>
               openPromptEditor(
                 PROMPT_REGION_LABELS.systemContent,
@@ -118,6 +123,7 @@ export function PromptLayoutSection({
                 value={form.systemContent}
                 onChangeText={value => patch({systemContent: value})}
                 multiline
+                disabled={readOnly}
                 style={ctx.style}
                 selection={ctx.selection}
                 onSelectionChange={ctx.onSelectionChange}
@@ -138,6 +144,7 @@ export function PromptLayoutSection({
         tokens={tokens}
         switchValue={form.skillsEnabled}
         onSwitchChange={value => patch({skillsEnabled: value})}
+        disabled={readOnly}
       />
       <View style={blockCardStyle}>
         {form.skillsEnabled ? (
@@ -147,6 +154,7 @@ export function PromptLayoutSection({
             </Text>
             <ExpandablePromptInput
               label="索引前缀语"
+              disabled={readOnly}
               openEditor={() =>
                 openPromptEditor('索引前缀语', form.skillsPrefixText, value =>
                   patch({skillsPrefixText: value}),
@@ -158,6 +166,7 @@ export function PromptLayoutSection({
                   value={form.skillsPrefixText}
                   onChangeText={value => patch({skillsPrefixText: value})}
                   multiline
+                  disabled={readOnly}
                   style={ctx.style}
                   selection={ctx.selection}
                   onSelectionChange={ctx.onSelectionChange}
@@ -177,6 +186,7 @@ export function PromptLayoutSection({
         label={WORKPLACE_BLOCK_LABEL}
         tokens={tokens}
         switchValue={form.workplaceEnabled}
+        disabled={readOnly}
         onSwitchChange={next => {
           const patched = withWorkplaceToggle(
             next,
@@ -192,10 +202,12 @@ export function PromptLayoutSection({
         {form.workplaceEnabled ? (
           <>
             <Text style={[styles.fieldHint, {color: tokens.textSecondary}]}>
-              {WORKPLACE_BLOCK_HINT}
+              {/* 只读态（内置 general）不说「可编辑」，避免禁用控件与文案矛盾 */}
+              {readOnly ? '助手确认语（只读）。' : WORKPLACE_BLOCK_HINT}
             </Text>
             <ExpandablePromptInput
               label={WORKPLACE_ASSISTANT_TEXT_LABEL}
+              disabled={readOnly}
               openEditor={() =>
                 openPromptEditor(
                   WORKPLACE_ASSISTANT_TEXT_LABEL,
@@ -209,6 +221,7 @@ export function PromptLayoutSection({
                   value={form.workplaceAssistantText}
                   onChangeText={value => patch({workplaceAssistantText: value})}
                   multiline
+                  disabled={readOnly}
                   style={ctx.style}
                   selection={ctx.selection}
                   onSelectionChange={ctx.onSelectionChange}
@@ -235,6 +248,7 @@ export function PromptLayoutSection({
         onMove={onMovePersist}
         onDelete={onDeletePersist}
         openPromptEditor={openPromptEditor}
+        readOnly={readOnly}
       />
 
       <PromptSectionHead
@@ -242,6 +256,7 @@ export function PromptLayoutSection({
         tokens={tokens}
         switchValue={form.customAttachEnabled}
         onSwitchChange={value => patch({customAttachEnabled: value})}
+        disabled={readOnly}
       />
       <View style={blockCardStyle}>
         <Text style={[styles.chatSlotHint, {color: tokens.textSecondary}]}>
@@ -250,6 +265,7 @@ export function PromptLayoutSection({
         {form.customAttachEnabled ? (
           <ExpandablePromptInput
             label={CUSTOM_ATTACH_TEXT_LABEL}
+            disabled={readOnly}
             openEditor={() =>
               openPromptEditor(
                 CUSTOM_ATTACH_TEXT_LABEL,
@@ -263,6 +279,7 @@ export function PromptLayoutSection({
                 value={form.customAttachText}
                 onChangeText={value => patch({customAttachText: value})}
                 placeholder="支持 $time、$week_cn、$filetree…"
+                disabled={readOnly}
                 style={ctx.style}
                 selection={ctx.selection}
                 onSelectionChange={ctx.onSelectionChange}
@@ -283,6 +300,7 @@ export function PromptLayoutSection({
         onMove={onMoveDynamic}
         onDelete={onDeleteDynamic}
         openPromptEditor={openPromptEditor}
+        readOnly={readOnly}
       />
     </FormSectionCard>
   );

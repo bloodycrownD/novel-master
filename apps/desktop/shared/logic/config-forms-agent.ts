@@ -3,9 +3,10 @@
  * 禁止 `export *`。
  */
 
-export type { AgentMode, ToolsMode } from "@novel-master/core/config-forms/agent";
+export type { AgentMode, AgentSettingsTab, ToolsMode } from "@novel-master/core/config-forms/agent";
 
 export {
+  agentModeMatchesTab,
   blockTypeLabel,
   buildAgentDefinitionFromForm,
   BUILTIN_TOOL_CATALOG,

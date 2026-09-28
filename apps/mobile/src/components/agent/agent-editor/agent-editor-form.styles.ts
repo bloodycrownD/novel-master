@@ -34,6 +34,8 @@ export const styles = StyleSheet.create({
   fieldHint: {fontSize: 12, lineHeight: 16, marginTop: -2},
   switchRow: {flexDirection: 'row', alignItems: 'center', gap: 8},
   yamlActions: {flexDirection: 'row', alignItems: 'center', gap: 16},
+  // 只读态下 YAML 导入/导出按钮灰显（与其他禁用控件同档 0.55）。
+  yamlActionDisabled: {opacity: 0.55},
   sectionHead: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -96,4 +98,6 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  // 禁用动作（添加/上移/下移/删除）灰显，与 FormSelectField 的 0.55 同档。
+  actionDisabled: {opacity: 0.55},
 });

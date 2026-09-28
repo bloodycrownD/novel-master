@@ -107,6 +107,42 @@ function createInitialFormState(): AgentEditorFormState {
   };
 }
 
+/**
+ * 同步把 definition 映射为完整表单状态（不经 registry/providers 装载）。
+ * 只读详情（内置 general）用出厂定义常量直接初始化表单走这里；
+ * loadAgent 路径复用同一映射后再异步回填模型三件套，两路不漂移。
+ */
+function formStateFromDefinition(def: AgentDefinition): AgentEditorFormState {
+  const promptForm = definitionToForm(def);
+  const toolsWire = toolsSelectionFromDefinition(def);
+  return {
+    ...createInitialFormState(),
+    name: def.name,
+    mode: def.mode ?? 'all',
+    maxSteps: String(def.runtime?.maxSteps ?? 20),
+    // 模型三件套先按 wire 简单回填；loadAgent 路径在 savedModels 装载后
+    // 会再精确覆盖（providerId 需查表），只读路径则不 pin（false/''）。
+    modelEnabled: Boolean(def.model),
+    providerId: '',
+    savedModelId: def.model ?? '',
+    systemEnabled: promptForm.systemEnabled,
+    systemContent: promptForm.systemContent,
+    persistEnabled: promptForm.persistEnabled,
+    dynamicEnabled: promptForm.dynamicEnabled,
+    workplaceEnabled: promptForm.workplaceEnabled,
+    workplaceAssistantText: promptForm.workplaceAssistantText,
+    customAttachEnabled: promptForm.customAttachEnabled ?? false,
+    customAttachText: promptForm.customAttachText ?? '',
+    skillsEnabled: promptForm.skillsEnabled ?? true,
+    skillsPrefixText: promptForm.skillsPrefixText ?? DEFAULT_SKILLS_INDEX_PREFIX,
+    description: promptForm.description ?? '',
+    persist: [...promptForm.persist],
+    dynamic: [...promptForm.dynamic],
+    toolsMode: toolsWire.mode,
+    toolsSelected: [...toolsWire.selected],
+  };
+}
+
 export function agentDisplayNameFromWire(
   raw: unknown,
   agentId: string,
@@ -129,15 +165,20 @@ export function useAgentEditorFormState(
   agentId: string,
   runtime: MobileRuntime,
   showToast: (message: string) => void,
+  /** 出厂定义直填（内置 general 只读详情）：同步初始化、无加载态。 */
+  initialDefinition?: AgentDefinition,
 ) {
-  const [form, setForm] = useState<AgentEditorFormState>(
-    createInitialFormState,
+  const [form, setForm] = useState<AgentEditorFormState>(() =>
+    initialDefinition
+      ? formStateFromDefinition(initialDefinition)
+      : createInitialFormState(),
   );
   const [providers, setProviders] = useState<SavedProviderOption[]>([]);
   const [savedModels, setSavedModels] = useState<SavedModelEntry[]>([]);
   const [savedBaseline, setSavedBaseline] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [loading, setLoading] = useState(true);
+  // 直填路径首帧即有数据，不走 loading；依赖拉取的路径保持原加载态。
+  const [loading, setLoading] = useState(initialDefinition == null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [invalidConfig, setInvalidConfig] = useState<InvalidAgentConfig | null>(
     null,
@@ -209,30 +250,11 @@ export function useAgentEditorFormState(
 
   const populateFormFromDefinition = useCallback(
     async (def: AgentDefinition) => {
+      // 字段映射与只读直填同源（formStateFromDefinition）；模型三件套
+      // 在下方 savedModels 装载后精确覆盖（providerId 依赖查表）。
       const promptForm = definitionToForm(def);
       const toolsWire = toolsSelectionFromDefinition(def);
-      setForm(prev => ({
-        ...prev,
-        name: def.name,
-        mode: def.mode ?? 'all',
-        maxSteps: String(def.runtime?.maxSteps ?? 20),
-        systemEnabled: promptForm.systemEnabled,
-        systemContent: promptForm.systemContent,
-        persistEnabled: promptForm.persistEnabled,
-        dynamicEnabled: promptForm.dynamicEnabled,
-        workplaceEnabled: promptForm.workplaceEnabled,
-        workplaceAssistantText: promptForm.workplaceAssistantText,
-        customAttachEnabled: promptForm.customAttachEnabled ?? false,
-        customAttachText: promptForm.customAttachText ?? '',
-        skillsEnabled: promptForm.skillsEnabled ?? true,
-        skillsPrefixText:
-          promptForm.skillsPrefixText ?? DEFAULT_SKILLS_INDEX_PREFIX,
-        description: promptForm.description ?? '',
-        persist: [...promptForm.persist],
-        dynamic: [...promptForm.dynamic],
-        toolsMode: toolsWire.mode,
-        toolsSelected: [...toolsWire.selected],
-      }));
+      setForm(prev => ({...prev, ...formStateFromDefinition(def)}));
       // 扁平化：一次性加载全服务商 savedModels，下拉直接选模型，不再二级联动。
       await loadProviders();
       const allModels = await loadAllSavedModels();

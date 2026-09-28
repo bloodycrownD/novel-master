@@ -41,6 +41,8 @@ type Props = {
     text: string,
     onSaved: (text: string) => void,
   ) => void;
+  /** 只读态（内置智能体详情）：开关/添加/块操作/输入全禁用灰显。 */
+  readOnly?: boolean;
 };
 
 export function PersistBlocksCard({
@@ -54,6 +56,7 @@ export function PersistBlocksCard({
   onMove,
   onDelete,
   openPromptEditor,
+  readOnly = false,
 }: Props) {
   /** 内层区块卡片统一样式：白底常规边框 + 左侧主题色粗边。 */
   const blockCardStyle = [
@@ -72,6 +75,7 @@ export function PersistBlocksCard({
         tokens={tokens}
         switchValue={persistEnabled}
         onSwitchChange={onPersistEnabledChange}
+        disabled={readOnly}
         {...(persistEnabled ? {onAdd} : {})}
       />
       <View style={blockCardStyle}>
@@ -109,12 +113,14 @@ export function PersistBlocksCard({
                       tokens={tokens}
                       onMove={onMove}
                       onDelete={onDelete}
+                      disabled={readOnly}
                     />
                   </View>
                   <FormField label="名称" tokens={tokens}>
                     <FormTextInput
                       tokens={tokens}
                       value={block.name}
+                      disabled={readOnly}
                       onChangeText={v =>
                         setPersist(prev =>
                           mapPersistTextBlocks(prev, (b, i) =>
@@ -142,6 +148,7 @@ export function PersistBlocksCard({
                       }
                       options={ROLE_OPTIONS}
                       sheetTitle="选择角色"
+                      disabled={readOnly}
                     />
                   </FormField>
                   <Text
@@ -160,6 +167,7 @@ export function PersistBlocksCard({
                     return (
                       <ExpandablePromptInput
                         label="内容"
+                        disabled={readOnly}
                         openEditor={() =>
                           openPromptEditor(block.name, block.content, v =>
                             setPersist(prev =>
@@ -175,6 +183,7 @@ export function PersistBlocksCard({
                             value={block.content}
                             onChangeText={updatePersistContent}
                             multiline
+                            disabled={readOnly}
                             style={ctx.style}
                             selection={ctx.selection}
                             onSelectionChange={ctx.onSelectionChange}

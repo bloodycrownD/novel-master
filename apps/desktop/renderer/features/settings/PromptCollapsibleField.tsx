@@ -21,6 +21,8 @@ type PromptCollapsibleFieldProps = {
   children: ReactNode;
   /** 透传给全屏按钮与全屏编辑器的无障碍标签。 */
   ariaLabel?: string;
+  /** 禁用全屏编辑按钮（如内置 general 只读态；内联控件由 children 自行禁用）。 */
+  disabled?: boolean;
 };
 
 export function PromptCollapsibleField({
@@ -28,6 +30,7 @@ export function PromptCollapsibleField({
   onChange,
   children,
   ariaLabel,
+  disabled,
 }: PromptCollapsibleFieldProps) {
   const [editorOpen, setEditorOpen] = useState(false);
   // Modal 内草稿副本，保存才回填。
@@ -60,6 +63,7 @@ export function PromptCollapsibleField({
       <button
         type="button"
         className="icon-btn prompt-field-inline__expand"
+        disabled={disabled}
         aria-label={ariaLabel ? `全屏编辑：${ariaLabel}` : "全屏编辑"}
         title="全屏编辑"
         onClick={() => {

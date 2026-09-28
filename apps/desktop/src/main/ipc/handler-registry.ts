@@ -65,8 +65,10 @@ import {
 } from './handlers/shell.js';
 import {
   handlePreferencesGetLlmStream,
+  handlePreferencesGetSubagentStream,
   handlePreferencesGetThinkingContext,
   handlePreferencesSetLlmStream,
+  handlePreferencesSetSubagentStream,
   handlePreferencesSetThinkingContext,
 } from './handlers/preferences.js';
 import {
@@ -335,6 +337,14 @@ export function registerHandlersFromRegistry(): void {
     handlePreferencesSetLlmStream,
   );
   bindNoArg(
+    IPC_CHANNELS.PREFERENCES_GET_SUBAGENT_STREAM,
+    handlePreferencesGetSubagentStream,
+  );
+  bindBool(
+    IPC_CHANNELS.PREFERENCES_SET_SUBAGENT_STREAM,
+    handlePreferencesSetSubagentStream,
+  );
+  bindNoArg(
     IPC_CHANNELS.PREFERENCES_GET_THINKING_CONTEXT,
     handlePreferencesGetThinkingContext,
   );
@@ -381,7 +391,8 @@ export function registerHandlersFromRegistry(): void {
   bindReq(IPC_CHANNELS.AGENT_REGISTRY_GET, handleAgentRegistryGet);
   bindReq(IPC_CHANNELS.AGENT_REGISTRY_UPSERT, handleAgentRegistryUpsert);
   bindReq(IPC_CHANNELS.AGENT_REGISTRY_DELETE, handleAgentRegistryDelete);
-  bindNoArg(
+  // 可选 payload：renderer 不传参时 req 为 undefined，handler 侧容忍（现行为回归）。
+  bindReq(
     IPC_CHANNELS.AGENT_REGISTRY_CREATE_BLANK,
     handleAgentRegistryCreateBlank,
   );

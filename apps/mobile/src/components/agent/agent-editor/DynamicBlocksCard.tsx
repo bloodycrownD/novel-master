@@ -41,6 +41,8 @@ type Props = {
     text: string,
     onSaved: (text: string) => void,
   ) => void;
+  /** 只读态（内置智能体详情）：开关/添加/块操作/输入全禁用灰显。 */
+  readOnly?: boolean;
 };
 
 export function DynamicBlocksCard({
@@ -54,6 +56,7 @@ export function DynamicBlocksCard({
   onMove,
   onDelete,
   openPromptEditor,
+  readOnly = false,
 }: Props) {
   /** 内层区块卡片统一样式：白底常规边框 + 左侧主题色粗边。 */
   const blockCardStyle = [
@@ -72,6 +75,7 @@ export function DynamicBlocksCard({
         tokens={tokens}
         switchValue={dynamicEnabled}
         onSwitchChange={onDynamicEnabledChange}
+        disabled={readOnly}
         {...(dynamicEnabled ? {onAdd} : {})}
       />
       <View style={blockCardStyle}>
@@ -105,12 +109,14 @@ export function DynamicBlocksCard({
                     tokens={tokens}
                     onMove={onMove}
                     onDelete={onDelete}
+                    disabled={readOnly}
                   />
                 </View>
                 <FormField label="名称" tokens={tokens}>
                   <FormTextInput
                     tokens={tokens}
                     value={block.name}
+                    disabled={readOnly}
                     onChangeText={v =>
                       setDynamic(prev =>
                         prev.map((b, i) => (i === index ? {...b, name: v} : b)),
@@ -133,12 +139,14 @@ export function DynamicBlocksCard({
                     }
                     options={ROLE_OPTIONS}
                     sheetTitle="选择角色"
+                    disabled={readOnly}
                   />
                 </FormField>
                 <FormSwitchRow
                   label="常驻"
                   tokens={tokens}
                   value={isDynamicBlockPersistent(block)}
+                  disabled={readOnly}
                   onValueChange={persistent =>
                     setDynamic(prev =>
                       prev.map((b, i) =>
@@ -166,6 +174,7 @@ export function DynamicBlocksCard({
                   return (
                     <ExpandablePromptInput
                       label="内容"
+                      disabled={readOnly}
                       openEditor={() =>
                         openPromptEditor(block.name, block.content, v =>
                           setDynamic(prev =>
@@ -181,6 +190,7 @@ export function DynamicBlocksCard({
                           value={block.content}
                           onChangeText={updateDynamicContent}
                           placeholder="支持 $time、$week_cn、$filetree…"
+                          disabled={readOnly}
                           style={ctx.style}
                           selection={ctx.selection}
                           onSelectionChange={ctx.onSelectionChange}

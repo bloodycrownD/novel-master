@@ -1,6 +1,6 @@
 /**
  * ChatConfigScreen 偏好开关持久化失败回滚（cr-fix-spec b2/B-3）：
- * 三个开关（流式输出 / 思考提示词 / 富文本消息）写入 reject 时
+ * 四个偏好开关（父会话流式 / 子会话流式 / 思考提示词 / 富文本消息）写入 reject 时
  * toast「保存失败」并把开关回滚到原值（实现选了「乐观更新 + 失败回滚」）。
  *
  * 另含消息通知开关回调与权限行三态的屏幕侧断言（cr-fix-spec ui/G-1，
@@ -129,6 +129,8 @@ const mockShowToast = jest.fn();
 
 const mockGetLlmStreamEnabled = jest.fn();
 const mockSetLlmStreamEnabled = jest.fn();
+const mockGetSubagentStreamEnabled = jest.fn();
+const mockSetSubagentStreamEnabled = jest.fn();
 const mockGetThinkingContextEnabled = jest.fn();
 const mockSetThinkingContextEnabled = jest.fn();
 const mockGetConditions = jest.fn();
@@ -138,6 +140,8 @@ const mockRuntime = {
   preferences: {
     getLlmStreamEnabled: mockGetLlmStreamEnabled,
     setLlmStreamEnabled: mockSetLlmStreamEnabled,
+    getSubagentStreamEnabled: mockGetSubagentStreamEnabled,
+    setSubagentStreamEnabled: mockSetSubagentStreamEnabled,
     getThinkingContextEnabled: mockGetThinkingContextEnabled,
     setThinkingContextEnabled: mockSetThinkingContextEnabled,
   },
@@ -285,6 +289,9 @@ describe('ChatConfigScreen 开关持久化失败回滚', () => {
     mockShowToast.mockReset();
     mockGetLlmStreamEnabled.mockReset().mockResolvedValue(false);
     mockSetLlmStreamEnabled.mockReset().mockResolvedValue(undefined);
+    // 子会话流式偏好默认开（chat.subagentStream 未设时 true），get 默认 resolve true。
+    mockGetSubagentStreamEnabled.mockReset().mockResolvedValue(true);
+    mockSetSubagentStreamEnabled.mockReset().mockResolvedValue(undefined);
     mockGetThinkingContextEnabled.mockReset().mockResolvedValue(false);
     mockSetThinkingContextEnabled.mockReset().mockResolvedValue(undefined);
     mockGetConditions.mockReset().mockResolvedValue({
@@ -298,17 +305,17 @@ describe('ChatConfigScreen 开关持久化失败回滚', () => {
     mockWriteChatRichTextEnabled.mockReset().mockResolvedValue(undefined);
   });
 
-  it('B-3: 流式输出写入失败回滚并 toast', async () => {
+  it('B-3: 父会话流式写入失败回滚并 toast', async () => {
     mockSetLlmStreamEnabled.mockRejectedValueOnce(new Error('盘炸了'));
     const {renderer} = await renderScreen();
-    expect(json(renderer)).toContain('流式输出:关');
+    expect(json(renderer)).toContain('父会话流式:关');
 
-    toggleSwitchSync(renderer.root, '流式输出');
-    expect(json(renderer)).toContain('流式输出:开');
+    toggleSwitchSync(renderer.root, '父会话流式');
+    expect(json(renderer)).toContain('父会话流式:开');
 
     // reject 落定后回滚到原值
     await flushPersist();
-    expect(json(renderer)).toContain('流式输出:关');
+    expect(json(renderer)).toContain('父会话流式:关');
     expect(mockShowToast).toHaveBeenCalledWith('保存失败：盘炸了');
   });
 
@@ -330,13 +337,37 @@ describe('ChatConfigScreen 开关持久化失败回滚', () => {
     expect(mockShowToast).toHaveBeenCalledWith('保存失败：盘炸了');
   });
 
+  it('T-M1: 子会话流式写入失败回滚并 toast', async () => {
+    mockSetSubagentStreamEnabled.mockRejectedValueOnce(new Error('盘炸了'));
+    const {renderer} = await renderScreen();
+    expect(json(renderer)).toContain('子会话流式:开');
+
+    toggleSwitchSync(renderer.root, '子会话流式');
+    expect(json(renderer)).toContain('子会话流式:关');
+
+    // reject 落定后回滚到原值
+    await flushPersist();
+    expect(json(renderer)).toContain('子会话流式:开');
+    expect(mockShowToast).toHaveBeenCalledWith('保存失败：盘炸了');
+  });
+
+  it('T-M1: 子会话流式写入成功保持新值且不 toast', async () => {
+    const {renderer} = await renderScreen();
+    expect(json(renderer)).toContain('子会话流式:开');
+
+    toggleSwitchSync(renderer.root, '子会话流式');
+    await flushPersist();
+    expect(json(renderer)).toContain('子会话流式:关');
+    expect(mockShowToast).not.toHaveBeenCalled();
+  });
+
   it('B-3: 写入成功保持新值且不 toast', async () => {
     const {renderer} = await renderScreen();
-    expect(json(renderer)).toContain('流式输出:关');
+    expect(json(renderer)).toContain('父会话流式:关');
 
-    toggleSwitchSync(renderer.root, '流式输出');
+    toggleSwitchSync(renderer.root, '父会话流式');
     await flushPersist();
-    expect(json(renderer)).toContain('流式输出:开');
+    expect(json(renderer)).toContain('父会话流式:开');
     expect(mockShowToast).not.toHaveBeenCalled();
   });
 });
@@ -348,6 +379,9 @@ describe('ChatConfigScreen 消息通知开关与权限行（ui/G-1）', () => {
     mockShowToast.mockReset();
     mockGetLlmStreamEnabled.mockReset().mockResolvedValue(false);
     mockSetLlmStreamEnabled.mockReset().mockResolvedValue(undefined);
+    // 子会话流式偏好默认开（chat.subagentStream 未设时 true），get 默认 resolve true。
+    mockGetSubagentStreamEnabled.mockReset().mockResolvedValue(true);
+    mockSetSubagentStreamEnabled.mockReset().mockResolvedValue(undefined);
     mockGetThinkingContextEnabled.mockReset().mockResolvedValue(false);
     mockSetThinkingContextEnabled.mockReset().mockResolvedValue(undefined);
     mockGetConditions.mockReset().mockResolvedValue({
@@ -491,6 +525,9 @@ describe('ChatConfigScreen 压缩配置即时保存', () => {
     mockShowToast.mockReset();
     mockGetLlmStreamEnabled.mockReset().mockResolvedValue(false);
     mockSetLlmStreamEnabled.mockReset().mockResolvedValue(undefined);
+    // 子会话流式偏好默认开（chat.subagentStream 未设时 true），get 默认 resolve true。
+    mockGetSubagentStreamEnabled.mockReset().mockResolvedValue(true);
+    mockSetSubagentStreamEnabled.mockReset().mockResolvedValue(undefined);
     mockGetThinkingContextEnabled.mockReset().mockResolvedValue(false);
     mockSetThinkingContextEnabled.mockReset().mockResolvedValue(undefined);
     mockGetConditions.mockReset().mockResolvedValue({

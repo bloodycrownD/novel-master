@@ -209,6 +209,43 @@ describe("preferences CLI e2e", () => {
     }
   });
 
+  it("T-L1: chat.subagentStream set/get/reset", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "nm-pref-subagent-stream-"));
+    const dbPath = join(dir, "novel.db");
+    try {
+      runNm([
+        "preferences",
+        "set",
+        "chat.subagentStream",
+        "false",
+        "--db",
+        dbPath,
+      ]);
+      const get = runNm([
+        "preferences",
+        "get",
+        "chat.subagentStream",
+        "--db",
+        dbPath,
+      ]);
+      assert.equal(get.status, 0, get.stderr);
+      assert.equal(get.stdout.trim(), "false");
+
+      runNm(["preferences", "reset", "chat.subagentStream", "--db", dbPath]);
+      const afterReset = runNm([
+        "preferences",
+        "get",
+        "chat.subagentStream",
+        "--db",
+        dbPath,
+      ]);
+      assert.equal(afterReset.status, 0, afterReset.stderr);
+      assert.equal(afterReset.stdout.trim(), "true");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("vfs.userVfsUnifiedToolTurn set/get/reset", async () => {
     const dir = await mkdtemp(join(tmpdir(), "nm-pref-vfs-flag-"));
     const dbPath = join(dir, "novel.db");

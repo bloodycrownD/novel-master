@@ -9,6 +9,7 @@ import {
 } from "@novel-master/core/config-forms/agent";
 import { assessAgentDefinitionWire } from "@novel-master/core/config-forms/stored-config-validity";
 import type {
+  AgentRegistryCreateBlankRequest,
   AgentRegistryDeleteRequest,
   AgentRegistryGetRequest,
   AgentRegistryGetResponse,
@@ -91,7 +92,15 @@ export async function handleAgentRegistryList(): Promise<
           decodeError: health.message,
         });
       } else {
-        rows.push({ agentId, name });
+        // valid 行从定义带出 mode；缺省时不写字段（JSON 序列化天然丢弃），
+        // 保持「未填写 = 双边显示」语义；invalid 行走上面分支，天然无 mode。
+        rows.push({
+          agentId,
+          name,
+          ...(health.value.mode != null
+            ? { mode: health.value.mode }
+            : {}),
+        });
       }
     }
     return { ok: true, data: rows };
@@ -152,9 +161,9 @@ export async function handleAgentRegistryDelete(
   }
 }
 
-export async function handleAgentRegistryCreateBlank(): Promise<
-  IpcResult<{ agentId: string }>
-> {
+export async function handleAgentRegistryCreateBlank(
+  req?: AgentRegistryCreateBlankRequest,
+): Promise<IpcResult<{ agentId: string }>> {
   try {
     const rt = await getDesktopRuntime();
     const agentId = `agent-${Date.now()}`;
@@ -180,6 +189,8 @@ export async function handleAgentRegistryCreateBlank(): Promise<
       agentId,
       {
         name,
+        // 可选作用域随 tab 落库；请求体缺省 / undefined 时容忍（= 现行为不设 mode）。
+        ...(req?.mode != null ? { mode: req.mode } : {}),
         runtime: { maxSteps: 20 },
         prompts: layoutFromFormInput(defaultPrompts),
       },

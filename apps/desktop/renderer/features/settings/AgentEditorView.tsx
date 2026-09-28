@@ -6,7 +6,10 @@ import {
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
-import { type AgentDefinition } from "@shared/logic/agent";
+import {
+  DEFAULT_SUBAGENT_DEFINITION,
+  type AgentDefinition,
+} from "@shared/logic/agent";
 
 import {
   type DynamicPromptBlock,
@@ -87,6 +90,9 @@ const inactiveDynamicTextareaRef: RefObject<HTMLTextAreaElement | null> = {
   current: null,
 };
 
+/** 内置 general 合成行 sentinel（与列表页同口径，不经库表读取）。 */
+const GENERAL_AGENT_ID = "general";
+
 type Nav = SettingsNavHandle;
 
 /** 从 wire 尽力读取显示名称。 */
@@ -105,6 +111,8 @@ function readAgentNameFromWire(raw: unknown, fallback: string): string {
 
 export function AgentEditorView({ nav }: { nav: Nav }) {
   const agentId = nav.navState.editingAgentId;
+  // 内置 general：复用完整编辑表单但全控件禁用（出厂常量直填，不落库）。
+  const isBuiltin = agentId === GENERAL_AGENT_ID;
   const [name, setName] = useState("");
   const [maxSteps, setMaxSteps] = useState("20");
   const [modelEnabled, setModelEnabled] = useState(false);
@@ -243,6 +251,60 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
   );
 
 
+  /** 把 def 填入全部表单 state 并落 dirty 基线（普通加载与内置 general 共用）。 */
+  const applyDefinition = useCallback(
+    (
+      def: AgentDefinition,
+      pinned: { providerId: string; modelId: string } | null,
+    ) => {
+      const promptForm = definitionToForm(def);
+      setName(def.name ?? "");
+      setMode(promptForm.mode);
+      setMaxSteps(String(def.runtime?.maxSteps ?? 20));
+      setSystemEnabled(promptForm.systemEnabled);
+      setSystemContent(promptForm.systemContent);
+      setPersistEnabled(promptForm.persistEnabled);
+      setDynamicEnabled(promptForm.dynamicEnabled);
+      setWorkplaceEnabled(promptForm.workplaceEnabled);
+      setWorkplaceAssistantText(promptForm.workplaceAssistantText);
+      // customAttach 从域 layout 反推开关，customAttachText 直读 prompts.customAttach。
+      setCustomAttachEnabled(promptForm.customAttachEnabled);
+      setCustomAttachText(promptForm.customAttachText);
+      setSkillsEnabled(promptForm.skillsEnabled ?? true);
+      setSkillsPrefixText(
+        promptForm.skillsPrefixText ?? DEFAULT_SKILLS_INDEX_PREFIX
+      );
+      setDescription(promptForm.description ?? "");
+      setPersist([...promptForm.persist]);
+      setDynamic([...promptForm.dynamic]);
+
+      const toolsWire = toolsSelectionFromDefinition(def);
+      setToolsMode(toolsWire.mode);
+      setToolsSelected([...toolsWire.selected]);
+
+      // 无 model pin（含 general 出厂态）：下拉停在「默认(跟随)」，不预填具体模型。
+      const modelOn = pinned != null;
+      setModelEnabled(modelOn);
+      setProviderId(pinned?.providerId ?? "");
+      setSavedModelId(pinned?.modelId ?? "");
+
+      setSavedBaseline(
+        formSnapshotJson({
+          name: def.name ?? "",
+          maxSteps: String(def.runtime?.maxSteps ?? 20),
+          modelEnabled: modelOn,
+          providerId: pinned?.providerId ?? "",
+          savedModelId: pinned?.modelId ?? "",
+          toolsMode: toolsWire.mode,
+          toolsSelected: [...toolsWire.selected],
+          ...promptForm,
+          persist: [...promptForm.persist],
+        })
+      );
+    },
+    [],
+  );
+
   const loadAgent = useCallback(async () => {
     if (!agentId) return;
     setLoading(true);
@@ -250,6 +312,13 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
     setInvalidHealth(null);
     setStoredWire(null);
     try {
+      // 内置 general：sentinel 短路不经 ipcAgentRegistryGet（必 404），也不拉
+      // providers/savedModels（出厂无 model pin，禁用下拉停在「默认(跟随)」）；
+      // 出厂常量直填只读表单，baseline 同值 → dirty 恒 false。
+      if (agentId === GENERAL_AGENT_ID) {
+        applyDefinition(DEFAULT_SUBAGENT_DEFINITION, null);
+        return;
+      }
       const [agentRes, providerRes] = await Promise.all([
         ipcAgentRegistryGet({ agentId }),
         ipcProvidersList(),
@@ -264,30 +333,6 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
         return;
       }
       const def = agentRes.data.value as AgentDefinition;
-      const promptForm = definitionToForm(def);
-      setName(def.name ?? "");
-      setMode(promptForm.mode);
-      setMaxSteps(String(def.runtime?.maxSteps ?? 20));
-      setSystemEnabled(promptForm.systemEnabled);
-      setSystemContent(promptForm.systemContent);
-      setPersistEnabled(promptForm.persistEnabled);
-      setDynamicEnabled(promptForm.dynamicEnabled);
-      setWorkplaceEnabled(promptForm.workplaceEnabled);
-      setWorkplaceAssistantText(promptForm.workplaceAssistantText);
-      // customAttach 从域 layout 反推开关，customAttachText 直读 prompts.customAttach。
-      setCustomAttachEnabled(promptForm.customAttachEnabled);
-      setSkillsEnabled(promptForm.skillsEnabled ?? true);
-      setSkillsPrefixText(
-        promptForm.skillsPrefixText ?? DEFAULT_SKILLS_INDEX_PREFIX
-      );
-      setCustomAttachText(promptForm.customAttachText);
-      setDescription(promptForm.description ?? "");
-      setPersist([...promptForm.persist]);
-      setDynamic([...promptForm.dynamic]);
-
-      const toolsWire = toolsSelectionFromDefinition(def);
-      setToolsMode(toolsWire.mode);
-      setToolsSelected([...toolsWire.selected]);
 
       const providerRows = providerRes.ok
         ? providerRes.data.map((p) => ({
@@ -297,47 +342,22 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
         : [];
       setProviders(providerRows);
 
-      let baselineProviderId = "";
-      let baselineSavedModelId = "";
-      let modelOn = false;
       // 扁平化：全量加载 savedModels，下拉直接选模型。
       const allModels = await loadAllSavedModels(providerRows);
-      if (def.model) {
-        const pinned = allModels.find((m) => m.id === def.model);
-        if (pinned) {
-          modelOn = true;
-          setModelEnabled(true);
-          setProviderId(pinned.providerId);
-          setSavedModelId(pinned.id);
-          baselineProviderId = pinned.providerId;
-          baselineSavedModelId = pinned.id;
-        } else {
-          setModelEnabled(false);
-          setSavedModelId("");
-        }
-      } else {
-        // 跟随聊天模型：下拉停在「默认(跟随)」，不预填具体模型。
-        setModelEnabled(false);
-        setSavedModelId("");
-      }
-
-      setSavedBaseline(
-        formSnapshotJson({
-          name: def.name ?? "",
-          maxSteps: String(def.runtime?.maxSteps ?? 20),
-          modelEnabled: modelOn,
-          providerId: baselineProviderId,
-          savedModelId: baselineSavedModelId,
-          toolsMode: toolsWire.mode,
-          toolsSelected: [...toolsWire.selected],
-          ...promptForm,
-          persist: [...promptForm.persist],
-        })
+      const pinned =
+        def.model != null
+          ? allModels.find((m) => m.id === def.model)
+          : undefined;
+      applyDefinition(
+        def,
+        pinned != null
+          ? { providerId: pinned.providerId, modelId: pinned.id }
+          : null,
       );
     } finally {
       setLoading(false);
     }
-  }, [agentId, loadAllSavedModels]);
+  }, [agentId, loadAllSavedModels, applyDefinition]);
 
   useEffect(() => {
     void loadAgent();
@@ -346,10 +366,25 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
   const displayName = name.trim() || "未命名 Agent";
 
   useEffect(() => {
-    if (!agentId || invalidHealth != null || loadError != null) return;
+    if (
+      !agentId ||
+      agentId === GENERAL_AGENT_ID ||
+      invalidHealth != null ||
+      loadError != null
+    ) {
+      return;
+    }
     nav.navState.editingAgentDisplayName = displayName;
     nav.setAgentEditorTitle?.(displayName);
   }, [agentId, invalidHealth, loadError, displayName, nav]);
+
+  // 内置 general：标题固定为 sentinel 名（不进 dirty / 保存链路）。
+  useEffect(() => {
+    if (agentId === GENERAL_AGENT_ID) {
+      nav.navState.editingAgentDisplayName = DEFAULT_SUBAGENT_DEFINITION.name;
+      nav.setAgentEditorTitle?.(DEFAULT_SUBAGENT_DEFINITION.name);
+    }
+  }, [agentId, nav]);
 
   if (!agentId) {
     return <p className="settings-hint">缺少 agentId</p>;
@@ -611,6 +646,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
         <button
           type="button"
           className="icon-btn"
+          disabled={isBuiltin}
           onClick={() => onMove(index, -1)}
           aria-label="上移"
         >
@@ -621,6 +657,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
         <button
           type="button"
           className="icon-btn"
+          disabled={isBuiltin}
           onClick={() => onMove(index, 1)}
           aria-label="下移"
         >
@@ -630,6 +667,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       <button
         type="button"
         className="icon-btn"
+        disabled={isBuiltin}
         onClick={() => onDelete(index)}
         aria-label="删除"
       >
@@ -643,14 +681,23 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       {loading ? <p className="settings-hint">加载中…</p> : null}
       <SettingsFormSection
         title="智能体配置"
-        desc={`编辑 ${displayName}${dirty ? " · 未保存" : ""}`}
+        desc={
+          isBuiltin
+            ? "内置智能体，不可编辑——general 为出厂内置的通用子代理，运行时虚拟注入（不落库），主智能体可随时委派调用。"
+            : `编辑 ${displayName}${dirty ? " · 未保存" : ""}`
+        }
         toolbar={
           <div className="settings-yaml-links">
-            <Button variant="secondary" onClick={() => setConfirmImport(true)}>
+            <Button
+              variant="secondary"
+              disabled={isBuiltin}
+              onClick={() => setConfirmImport(true)}
+            >
               导入 YAML
             </Button>
             <Button
               variant="secondary"
+              disabled={isBuiltin}
               onClick={() =>
                 void ipcAgentYamlExport({ agentId }).then((r) => {
                   if (r.ok && r.data === "saved")
@@ -666,7 +713,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
         footer={
           <Button
             variant="primary"
-            disabled={saving}
+            disabled={saving || isBuiltin}
             onClick={() => void save()}
           >
             {saving ? "保存中…" : "保存"}
@@ -678,6 +725,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
             <input
               type="text"
               value={name}
+              disabled={isBuiltin}
               onChange={(e) => setName(e.target.value)}
             />
           </SettingsField>
@@ -685,6 +733,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
             <textarea
               rows={3}
               value={description}
+              disabled={isBuiltin}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="向 task 工具说明这个智能体擅长什么，可留空。"
             />
@@ -695,6 +744,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
           <SettingsField label="作用域">
             <select
               value={mode}
+              disabled={isBuiltin}
               onChange={(e) => setMode(e.target.value as AgentMode)}
             >
               {MODE_OPTIONS.map((o) => (
@@ -713,6 +763,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
           >
             <select
               value={modelEnabled ? savedModelId : ""}
+              disabled={isBuiltin}
               onChange={(e) => handleModelSelect(e.target.value)}
             >
               <option value="">默认(跟随)</option>
@@ -736,6 +787,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
               type="number"
               min={1}
               value={maxSteps}
+              disabled={isBuiltin}
               onChange={(e) => setMaxSteps(e.target.value)}
             />
           </SettingsField>
@@ -746,6 +798,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
           <SettingsField label="模式">
             <select
               value={toolsMode}
+              disabled={isBuiltin}
               onChange={(e) => setToolsMode(e.target.value as ToolsMode)}
             >
               {TOOL_MODE_OPTIONS.map((o) => (
@@ -789,6 +842,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
               <Switch
                 checked={systemEnabled}
                 onChange={setSystemEnabled}
+                disabled={isBuiltin}
                 aria-label={PROMPT_REGION_LABELS.enableSystem}
               />
             </div>
@@ -798,11 +852,13 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                   <PromptCollapsibleField
                     value={systemContent}
                     onChange={setSystemContent}
+                    disabled={isBuiltin}
                     ariaLabel={PROMPT_REGION_LABELS.systemContent}
                   >
                     <textarea
                       rows={4}
                       value={systemContent}
+                      disabled={isBuiltin}
                       onChange={(e) => setSystemContent(e.target.value)}
                       onKeyDown={handlePromptTextareaKeyDown}
                       placeholder={PROMPT_REGION_LABELS.systemPlaceholder}
@@ -826,6 +882,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
               <Switch
                 checked={skillsEnabled}
                 onChange={setSkillsEnabled}
+                disabled={isBuiltin}
                 aria-label="开启技能注入与 skill 工具"
               />
             </div>
@@ -838,11 +895,13 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                   <PromptCollapsibleField
                     value={skillsPrefixText}
                     onChange={setSkillsPrefixText}
+                    disabled={isBuiltin}
                     ariaLabel="索引前缀语"
                   >
                     <textarea
                       rows={2}
                       value={skillsPrefixText}
+                      disabled={isBuiltin}
                       onChange={(e) => setSkillsPrefixText(e.target.value)}
                       placeholder={DEFAULT_SKILLS_INDEX_PREFIX}
                     />
@@ -853,6 +912,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
           </div>
 
           <AgentWorkplaceBlockCard
+            disabled={isBuiltin}
             checked={workplaceEnabled}
             onChange={(next) => {
               const patched = withWorkplaceToggle(next, workplaceAssistantText);
@@ -876,6 +936,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
               <Switch
                 checked={persistEnabled}
                 onChange={setPersistEnabled}
+                disabled={isBuiltin}
                 aria-label={PROMPT_REGION_LABELS.enablePersist}
               />
             </div>
@@ -889,6 +950,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                     <button
                       type="button"
                       className="settings-link-btn"
+                      disabled={isBuiltin}
                       onClick={() => addPersistTextBlock()}
                     >
                       添加
@@ -935,6 +997,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                           <SettingsField label="名称">
                             <input
                               value={block.name}
+                              disabled={isBuiltin}
                               onChange={(e) =>
                                 setPersist((prev) =>
                                   mapPersistTextBlocks(prev, (b, i) =>
@@ -949,6 +1012,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                           <SettingsField label="角色">
                             <select
                               value={block.role}
+                              disabled={isBuiltin}
                               onChange={(e) =>
                                 setPersist((prev) =>
                                   mapPersistTextBlocks(prev, (b, i) =>
@@ -983,11 +1047,13 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                                   )
                                 )
                               }
+                              disabled={isBuiltin}
                               ariaLabel={`常驻块 ${block.name} 内容`}
                             >
                               <textarea
                                 rows={4}
                                 value={block.content}
+                                disabled={isBuiltin}
                                 onChange={(e) =>
                                   setPersist((prev) =>
                                     mapPersistTextBlocks(prev, (b, i) =>
@@ -1026,6 +1092,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
               <Switch
                 checked={customAttachEnabled}
                 onChange={setCustomAttachEnabled}
+                disabled={isBuiltin}
                 aria-label="开启自定义附加信息"
               />
             </div>
@@ -1038,11 +1105,13 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                   <PromptCollapsibleField
                     value={customAttachText}
                     onChange={setCustomAttachText}
+                    disabled={isBuiltin}
                     ariaLabel="附加信息文本"
                   >
                     <textarea
                       rows={4}
                       value={customAttachText}
+                      disabled={isBuiltin}
                       onChange={(e) => setCustomAttachText(e.target.value)}
                       onKeyDown={handlePromptTextareaKeyDown}
                       placeholder="每条用户消息都会附带这段文本给模型"
@@ -1066,6 +1135,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
               <Switch
                 checked={dynamicEnabled}
                 onChange={setDynamicEnabled}
+                disabled={isBuiltin}
                 aria-label={PROMPT_REGION_LABELS.enableDynamic}
               />
             </div>
@@ -1079,6 +1149,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                     <button
                       type="button"
                       className="settings-link-btn"
+                      disabled={isBuiltin}
                       onClick={() => addDynamicBlock()}
                     >
                       添加
@@ -1119,6 +1190,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                           <SettingsField label="名称">
                             <input
                               value={block.name}
+                              disabled={isBuiltin}
                               onChange={(e) =>
                                 setDynamic((prev) =>
                                   prev.map((b, i) =>
@@ -1133,6 +1205,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                           <SettingsField label="角色">
                             <select
                               value={block.role}
+                              disabled={isBuiltin}
                               onChange={(e) =>
                                 setDynamic((prev) =>
                                   prev.map((b, i) =>
@@ -1172,6 +1245,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                                   )
                                 )
                               }
+                              disabled={isBuiltin}
                               aria-label="常驻"
                             />
                           </div>
@@ -1190,6 +1264,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                                   )
                                 )
                               }
+                              disabled={isBuiltin}
                               ariaLabel={`动态块 ${block.name} 内容`}
                             >
                               <PromptMacroTextarea
@@ -1200,6 +1275,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                                 }
                                 rows={4}
                                 value={block.content}
+                                disabled={isBuiltin}
                                 onFocus={() => setDynamicInsertIndex(index)}
                                 onKeyDown={handlePromptTextareaKeyDown}
                                 onChange={(content) =>
@@ -1221,6 +1297,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                                 key={macro.token}
                                 type="button"
                                 className="config-dep-chip"
+                                disabled={isBuiltin}
                                 onClick={() => {
                                   setDynamicInsertIndex(index);
                                   const ta =

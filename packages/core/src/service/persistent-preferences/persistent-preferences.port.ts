@@ -15,7 +15,14 @@ export interface PersistentPreferences {
   setLlmStreamEnabled(enabled: boolean): Promise<void>;
   resetLlmStreamEnabled(): Promise<void>;
 
-  /** 思考内容进入上下文（未设置时默认 true）。 */
+  /**
+   * Subagent session SSE streaming (default `true` when unset).
+   */
+  getSubagentStreamEnabled(): Promise<boolean>;
+  setSubagentStreamEnabled(enabled: boolean): Promise<void>;
+  resetSubagentStreamEnabled(): Promise<void>;
+
+  /** 思考内容进入上下文（未设置时默认 false，对齐 impl getBooleanPref 第二参）。 */
   getThinkingContextEnabled(): Promise<boolean>;
   setThinkingContextEnabled(enabled: boolean): Promise<void>;
   resetThinkingContextEnabled(): Promise<void>;

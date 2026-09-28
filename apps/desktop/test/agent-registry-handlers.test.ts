@@ -114,3 +114,127 @@ describe("agent-registry IPC handlers", () => {
     }
   });
 });
+
+describe("agent-registry mode 透传（agent-config-tabs T-D1/T-D2）", () => {
+  let tempDir: string;
+
+  before(async () => {
+    ({ tempDir } = await setupDesktopDbTestEnv("nm-agent-registry-mode-"));
+  });
+
+  after(async () => {
+    await teardownDesktopDbTestEnv(tempDir);
+  });
+
+  it("T-D1：list valid 行带出 mode 三档各一；mode 缺省 valid 行无 mode 字段；invalid 行无 mode", async () => {
+    // createBlank 的 agentId 为 `agent-<Date.now()>`，间隔数毫秒防同毫秒撞 id。
+    const primary = await handleAgentRegistryCreateBlank({ mode: "primary" });
+    assert.equal(primary.ok, true);
+    await new Promise((r) => setTimeout(r, 5));
+    const subagent = await handleAgentRegistryCreateBlank({ mode: "subagent" });
+    assert.equal(subagent.ok, true);
+    await new Promise((r) => setTimeout(r, 5));
+    const all = await handleAgentRegistryCreateBlank({ mode: "all" });
+    assert.equal(all.ok, true);
+    await new Promise((r) => setTimeout(r, 5));
+    const blank = await handleAgentRegistryCreateBlank();
+    assert.equal(blank.ok, true);
+    if (!primary.ok || !subagent.ok || !all.ok || !blank.ok) {
+      return;
+    }
+
+    // invalid 行（removed_feature）直接落库，读不出定义 → 天然无 mode。
+    const rt = await createDesktopNovelMasterRuntime();
+    const now = Date.now();
+    await rt.conn.execute(
+      `INSERT INTO agent_definition (
+        agent_id, prompts_json, created_at_ms, updated_at_ms
+      ) VALUES (?, ?, ?, ?)`,
+      [
+        "broken-mode-agent",
+        JSON.stringify({
+          schemaVersion: 1,
+          name: "broken-mode",
+          prompts: { blocks: {} },
+        }),
+        now,
+        now,
+      ],
+    );
+    await resetDesktopRuntimeForTest();
+
+    const listed = await handleAgentRegistryList();
+    assert.equal(listed.ok, true);
+    if (!listed.ok) {
+      return;
+    }
+
+    const primaryRow = listed.data.find(
+      (r) => r.agentId === primary.data.agentId,
+    );
+    assert.ok(primaryRow);
+    assert.equal(primaryRow!.mode, "primary");
+
+    const subagentRow = listed.data.find(
+      (r) => r.agentId === subagent.data.agentId,
+    );
+    assert.ok(subagentRow);
+    assert.equal(subagentRow!.mode, "subagent");
+
+    const allRow = listed.data.find((r) => r.agentId === all.data.agentId);
+    assert.ok(allRow);
+    assert.equal(allRow!.mode, "all");
+
+    // mode 缺省的 valid 行：响应体不含 mode 字段（未填写 = 双边显示语义）。
+    const blankRow = listed.data.find(
+      (r) => r.agentId === blank.data.agentId,
+    );
+    assert.ok(blankRow);
+    assert.equal(blankRow!.mode, undefined);
+    assert.equal("mode" in blankRow!, false);
+
+    const brokenRow = listed.data.find(
+      (r) => r.agentId === "broken-mode-agent",
+    );
+    assert.ok(brokenRow);
+    assert.ok(brokenRow!.invalid);
+    assert.equal("mode" in brokenRow!, false);
+  });
+
+  it("T-D2：createBlank 带 mode 落库 wire 含 mode；不传 payload 落库无 mode（现行为回归）", async () => {
+    const sub = await handleAgentRegistryCreateBlank({ mode: "subagent" });
+    assert.equal(sub.ok, true);
+    if (!sub.ok) {
+      return;
+    }
+    const rt = await createDesktopNovelMasterRuntime();
+    const subRows = await rt.conn.query<{ prompts_json: string }>(
+      `SELECT prompts_json FROM agent_definition WHERE agent_id = ?`,
+      [sub.data.agentId],
+    );
+    await resetDesktopRuntimeForTest();
+    assert.equal(subRows.length, 1);
+    const subWire = JSON.parse(
+      String(subRows[0]!.prompts_json),
+    ) as Record<string, unknown>;
+    assert.equal(subWire.mode, "subagent");
+
+    await new Promise((r) => setTimeout(r, 5));
+    const plain = await handleAgentRegistryCreateBlank();
+    assert.equal(plain.ok, true);
+    if (!plain.ok) {
+      return;
+    }
+    const rt2 = await createDesktopNovelMasterRuntime();
+    const plainRows = await rt2.conn.query<{ prompts_json: string }>(
+      `SELECT prompts_json FROM agent_definition WHERE agent_id = ?`,
+      [plain.data.agentId],
+    );
+    await resetDesktopRuntimeForTest();
+    assert.equal(plainRows.length, 1);
+    const plainWire = JSON.parse(
+      String(plainRows[0]!.prompts_json),
+    ) as Record<string, unknown>;
+    assert.equal("mode" in plainWire, false);
+  });
+});

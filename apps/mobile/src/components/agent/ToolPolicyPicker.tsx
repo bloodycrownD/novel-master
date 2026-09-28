@@ -31,6 +31,8 @@ type Props = {
   tokens: ThemeTokens;
   selected: readonly string[];
   onChange: (selected: string[]) => void;
+  /** 禁用态（只读详情）：trigger 禁点并灰显，不弹 sheet。 */
+  disabled?: boolean;
 };
 
 const TOTAL = BUILTIN_TOOL_CATALOG.length;
@@ -46,7 +48,7 @@ function buildTriggerLabel(selected: readonly string[]): string {
   return `已选工具（${selected.length}/${TOTAL}）`;
 }
 
-export function ToolPolicyPicker({tokens, selected, onChange}: Props) {
+export function ToolPolicyPicker({tokens, selected, onChange, disabled = false}: Props) {
   const overlay = useFormOverlay();
   const overlayKey = useId();
   const insets = useSafeAreaInsets();
@@ -198,11 +200,13 @@ export function ToolPolicyPicker({tokens, selected, onChange}: Props) {
 
   return (
     <Pressable
+      disabled={disabled}
       style={[
         styles.trigger,
         {
           backgroundColor: tokens.bgSecondary,
           borderColor: tokens.borderLight,
+          opacity: disabled ? 0.55 : 1,
         },
       ]}
       onPress={() => setOpen(true)}

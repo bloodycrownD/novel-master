@@ -190,6 +190,8 @@ import {AgentEditorScreen} from '@/screens/stack/AgentEditorScreen';
 import {AgentEditorForm} from '@/components/agent/AgentEditorForm';
 import {PromptEditorScreen} from '@/screens/stack/PromptEditorScreen';
 import {takePromptEditorOnSaved} from '@/components/agent/prompt-editor-callback';
+import {FormTextInput} from '@/components/form/FormTextInput';
+import {DEFAULT_SUBAGENT_DEFINITION} from '@novel-master/core/agent';
 
 function findBanner(root: TestRenderer.ReactTestInstance) {
   return root
@@ -336,5 +338,63 @@ describe('AgentEditor dirty 链路（T-AD1）', () => {
       await Promise.resolve();
     });
     expect(onDirtyChange).toHaveBeenLastCalledWith(false);
+  });
+});
+
+describe('AgentEditor general sentinel 只读表单（内置智能体详情）', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockRouteParams.agentId = 'general';
+    // 清空模块级回调残留（回调不走路由参数，改由 openPromptEditor 写入）。
+    takePromptEditorOnSaved();
+  });
+
+  it('以出厂定义直填全禁用编辑器：只读横幅在、无保存栏、不拉 registry、不误报未保存', async () => {
+    let tree!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(<AgentEditorScreen />);
+    });
+    // flush ExpandablePromptInput 的挂载置顶 timer（落在 act 内，避免 teardown 后触发）。
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
+    const root = tree.root;
+
+    // 顶部只读横幅（替代原 BuiltinAgentDetail 独立卡片）。
+    const readonlyBanner = root
+      .findAll(node => typeof node.children?.[0] === 'string')
+      .filter(node =>
+        String(node.children[0]).includes('内置智能体，不可编辑'),
+      );
+    expect(readonlyBanner).toHaveLength(1);
+
+    // 不误报「有未保存的更改」（savedBaseline 恒 null + 无输入通路）。
+    expect(findBanner(root)).toHaveLength(0);
+
+    // 保存栏不渲染（readOnly 免 StickyFormFooter）。
+    expect(root.findAllByProps({testID: 'form-save'})).toHaveLength(0);
+
+    // sentinel 不走 registry 拉取（出厂定义直填）。
+    expect(mockGetRawWire).not.toHaveBeenCalled();
+
+    // 名称字段以出厂 name 直填且挂禁用（readOnly 通路到达底层输入）。
+    const nameField = root
+      .findAllByType(FormTextInput)
+      .find(node => node.props.value === DEFAULT_SUBAGENT_DEFINITION.name);
+    expect(nameField).toBeDefined();
+    expect(nameField!.props.disabled).toBe(true);
+
+    // 全屏编辑按钮全部禁点（label 在 RN preset 会传播多层，取带 onPress 的那层）。
+    const fullscreenBtns = root
+      .findAllByProps({accessibilityLabel: '全屏编辑'})
+      .filter(node => typeof node.props.onPress === 'function');
+    expect(fullscreenBtns.length).toBeGreaterThan(0);
+    for (const btn of fullscreenBtns) {
+      expect(btn.props.disabled).toBe(true);
+    }
+
+    await act(async () => {
+      tree.unmount();
+    });
   });
 });

@@ -28,6 +28,32 @@ export async function handlePreferencesSetLlmStream(
   }
 }
 
+export async function handlePreferencesGetSubagentStream(): Promise<
+  IpcResult<boolean>
+> {
+  try {
+    const rt = await getDesktopRuntime();
+    return {
+      ok: true,
+      data: await rt.preferences.getSubagentStreamEnabled(),
+    };
+  } catch (err) {
+    return { ok: false, error: formatIpcError(err) };
+  }
+}
+
+export async function handlePreferencesSetSubagentStream(
+  enabled: boolean,
+): Promise<IpcResult<void>> {
+  try {
+    const rt = await getDesktopRuntime();
+    await rt.preferences.setSubagentStreamEnabled(enabled);
+    return { ok: true, data: undefined };
+  } catch (err) {
+    return { ok: false, error: formatIpcError(err) };
+  }
+}
+
 export async function handlePreferencesGetThinkingContext(): Promise<
   IpcResult<boolean>
 > {

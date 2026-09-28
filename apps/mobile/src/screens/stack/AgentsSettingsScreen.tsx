@@ -5,6 +5,7 @@ import React from 'react';
 import {StyleSheet, View} from 'react-native';
 import {useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
+import type {AgentSettingsTab} from '@novel-master/core/config-forms/agent';
 import {AgentList} from '@/components/agent/AgentList';
 import {useToast} from '@/components/chrome/ToastHost';
 import {toastMessage} from '@/errors/toast-message';
@@ -21,9 +22,14 @@ export function AgentsSettingsScreen() {
   const runtime = useRuntime();
   const navigation = useNavigation<Nav>();
 
-  const handleCreate = async () => {
+  // 新建默认作用域随 tab 落库：主 tab → primary、子 tab → subagent。
+  const handleCreate = async (tab: AgentSettingsTab) => {
     try {
-      const id = await createBlankAgent(runtime);
+      const id = await createBlankAgent(
+        runtime,
+        undefined,
+        tab === 'primary' ? 'primary' : 'subagent',
+      );
       navigation.navigate('AgentEditor', {agentId: id});
     } catch (error) {
       showToast(toastMessage('创建失败', error));
@@ -32,7 +38,7 @@ export function AgentsSettingsScreen() {
 
   return (
     <View style={[styles.root, {backgroundColor: tokens.background}]}>
-      <AgentList onCreate={() => handleCreate().catch(() => undefined)} />
+      <AgentList onCreate={tab => handleCreate(tab).catch(() => undefined)} />
     </View>
   );
 }

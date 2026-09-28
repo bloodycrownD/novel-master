@@ -5,6 +5,7 @@ import {
   IPC_CHANNELS,
   type AgentAbortRequest,
   type AgentListPickerResponse,
+  type AgentRegistryCreateBlankRequest,
   type AgentRegistryGetResponse,
   type AgentResolveCurrentResponse,
   type AgentRunIsActiveRequest,
@@ -139,6 +140,14 @@ function withReq<TReq, TRes>(
   invoke: InvokeFn,
   channel: string,
 ): (req: TReq) => Promise<TRes> {
+  return req => invoke<TRes>(channel, req);
+}
+
+/** 可选对象 payload：不传参时以 undefined 发送（handler 侧须容忍缺省）。 */
+function withOptionalReq<TReq extends object, TRes>(
+  invoke: InvokeFn,
+  channel: string,
+): (req?: TReq) => Promise<TRes> {
   return req => invoke<TRes>(channel, req);
 }
 
@@ -444,6 +453,14 @@ export function createInvokeClient(invoke: InvokeFn) {
       invoke,
       IPC_CHANNELS.PREFERENCES_SET_LLM_STREAM,
     ),
+    ipcPreferencesGetSubagentStream: noArg<IpcResult<boolean>>(
+      invoke,
+      IPC_CHANNELS.PREFERENCES_GET_SUBAGENT_STREAM,
+    ),
+    ipcPreferencesSetSubagentStream: withBool<IpcResult<void>>(
+      invoke,
+      IPC_CHANNELS.PREFERENCES_SET_SUBAGENT_STREAM,
+    ),
     ipcPreferencesGetThinkingContext: noArg<IpcResult<boolean>>(
       invoke,
       IPC_CHANNELS.PREFERENCES_GET_THINKING_CONTEXT,
@@ -518,10 +535,10 @@ export function createInvokeClient(invoke: InvokeFn) {
       invoke,
       IPC_CHANNELS.AGENT_REGISTRY_DELETE,
     ),
-    ipcAgentRegistryCreateBlank: noArg(
-      invoke,
-      IPC_CHANNELS.AGENT_REGISTRY_CREATE_BLANK,
-    ),
+    ipcAgentRegistryCreateBlank: withOptionalReq<
+      AgentRegistryCreateBlankRequest,
+      IpcResult<{ agentId: string }>
+    >(invoke, IPC_CHANNELS.AGENT_REGISTRY_CREATE_BLANK),
     ipcAgentYamlExport: withReq<{ agentId: string }, unknown>(
       invoke,
       IPC_CHANNELS.AGENT_YAML_EXPORT,

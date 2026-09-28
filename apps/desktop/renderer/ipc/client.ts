@@ -110,6 +110,8 @@ export const {
   ipcUsageStatsQuery,
   ipcPreferencesGetLlmStream,
   ipcPreferencesSetLlmStream,
+  ipcPreferencesGetSubagentStream,
+  ipcPreferencesSetSubagentStream,
   ipcPreferencesGetThinkingContext,
   ipcPreferencesSetThinkingContext,
   ipcProvidersList,

@@ -51,12 +51,16 @@ export function AgentWorkplaceBlockCard({
         <div className="config-block-card__body">
           {checked ? (
             <>
-              <p className="config-block-card__hint">{WORKPLACE_BLOCK_HINT}</p>
+              {/* 只读态（内置 general）不说「可编辑」，避免禁用控件与文案矛盾 */}
+              <p className="config-block-card__hint">
+                {disabled ? "助手确认语（只读）。" : WORKPLACE_BLOCK_HINT}
+              </p>
               <SettingsField label={WORKPLACE_ASSISTANT_TEXT_LABEL}>
                 <PromptCollapsibleField
                   value={assistantText}
                   onChange={onAssistantTextChange}
                   ariaLabel={WORKPLACE_ASSISTANT_TEXT_LABEL}
+                  disabled={disabled}
                 >
                   <textarea
                     rows={3}
