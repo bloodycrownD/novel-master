@@ -39,6 +39,7 @@ import {
 import {
   createPhysicalVfsService,
   createScopedVfsService,
+  SqliteVfsRevisionRepository,
   type VfsScope,
 } from "@novel-master/core/vfs";
 import {
@@ -137,6 +138,9 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
   const { projects, sessions, messages, usageStats } = chat;
   const messageTranscriptEffects = createMessageTranscriptEffectsService(conn);
   const sessionKkv = createSessionKkvService(conn);
+  // read 引用化（read-tool-result-ref Step 6）：同 conn 单实例——runAgentTurn
+  // 装配点由它推导 read +1 通道，prepare/parity 链用它 hydrate 引用块。
+  const revisionRepo = new SqliteVfsRevisionRepository(conn);
   const { userVfsTurn } = createUserVfsTurnServiceBundle(conn);
 
   const compactionConditionEvaluator = createCompactionConditionEvaluator({
@@ -194,5 +198,6 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
     smartSortRule,
     userVfsTurn,
     searchConfig,
+    revisionRepo,
   };
 }

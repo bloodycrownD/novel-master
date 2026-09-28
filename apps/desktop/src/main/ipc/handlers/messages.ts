@@ -9,7 +9,10 @@ import {
   type MessageContent,
 } from '@novel-master/core/chat';
 
-import { messageBodyText } from '@novel-master/core/prompt';
+import {
+  messageBodyText,
+  messageBodyTextFromBlocks,
+} from '@novel-master/core/prompt';
 import { type ContentBlock } from '@novel-master/core/chat';
 import type {
   ChatMessageDto,
@@ -64,6 +67,38 @@ function toContentBlockDto(block: ContentBlock): ContentBlockDto | null {
   }
 }
 
+/**
+ * read 引用态占位（read-tool-result-ref Step 6）：`bodyText` 是复制
+ * fallback 的纯文本投影——引用块（含 contentRef 且 content 为空串）没有
+ * 全文可投影，直接走 core 会只剩 `[tool_result id=…]` 头。这里对这类块的
+ * 投影文本换成 `[read ref: path]` 占位标记；legacy 块（无 contentRef）
+ * 逐字节不变。变换只作用于浅拷贝块数组，不写回消息本体（view-time 纪律）。
+ */
+function messageBodyTextWithReadRefPlaceholder(msg: ChatMessage): string {
+  const blocks = msg.content.blocks ?? [];
+  const hasReadRef = blocks.some(
+    (block) =>
+      block.type === 'tool_result' &&
+      block.contentRef != null &&
+      block.content === '',
+  );
+  if (!hasReadRef) {
+    return messageBodyText(msg);
+  }
+  return messageBodyTextFromBlocks(
+    blocks.map((block) => {
+      if (
+        block.type === 'tool_result' &&
+        block.contentRef != null &&
+        block.content === ''
+      ) {
+        return { ...block, content: `[read ref: ${block.contentRef.path}]` };
+      }
+      return block;
+    }),
+  );
+}
+
 function toDto(msg: ChatMessage): ChatMessageDto {
   const blocks = msg.content.blocks ?? [];
   const metadata = readMessageMetadata(msg.raw);
@@ -74,7 +109,7 @@ function toDto(msg: ChatMessage): ChatMessageDto {
     hidden: msg.hidden,
     seq: msg.seq,
     createdAtMs: msg.createdAtMs,
-    bodyText: messageBodyText(msg),
+    bodyText: messageBodyTextWithReadRefPlaceholder(msg),
     contentBlocks: blocks
       .map(toContentBlockDto)
       .filter((b): b is ContentBlockDto => b != null),

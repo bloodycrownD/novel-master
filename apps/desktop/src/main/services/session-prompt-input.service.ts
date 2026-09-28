@@ -65,6 +65,9 @@ export async function buildSessionPromptInput(
     // skillAttach hydrate（`$技能` 首次引用附全文），与 agent-runner 同源。
     skills: runtime.skills(),
     projectId: scope.projectId,
+    // read 引用块 hydrate（read-tool-result-ref Step 6）：parity 链（token
+    // 计数 / 压缩评估）与 agent-runner 主链共用 prepare，字符口径一致。
+    revisionRepo: runtime.revisionRepo,
   });
   const ctx: PromptRenderContext = {
     workplaceDisplay,

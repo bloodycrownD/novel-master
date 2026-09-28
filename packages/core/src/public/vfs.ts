@@ -64,6 +64,10 @@ export type {
   VfsGrepMatch,
   VfsContentSize,
 } from "../domain/vfs/ports/vfs-service.port.js";
+// read 引用化（read-tool-result-ref Step 6）：revision 仓库出口——三端
+// runtime 装配 read 计数通道与 hydrate 主链时构造（同 conn 单实例）。
+export { SqliteVfsRevisionRepository } from "../domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
+export type { VfsRevisionRepository } from "../domain/vfs/repositories/vfs-revision.port.js";
 export type { VfsScope } from "../domain/vfs/logic/vfs-path-mapper.js";
 export {
   resolveLogicalPath,

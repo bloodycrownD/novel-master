@@ -9,6 +9,7 @@ import type { ToolRegistry } from "@/domain/tool/logic/tool-registry.js";
 import type { BuiltinToolContext } from "@/domain/tool/builtin/builtin-tool-context.js";
 import type { ChatMessage } from "@/domain/chat/model/message.js";
 import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
+import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revision.port.js";
 import type { ProviderRepository } from "@/domain/provider/repositories/provider.port.js";
 import type { SavedModelRepository } from "@/domain/provider/repositories/saved-model.port.js";
 import type { ModelRequestService } from "../provider/model-request.port.js";
@@ -62,6 +63,13 @@ export interface CreateAgentRunnerDeps {
     PersistentPreferences,
     "getThinkingContextEnabled"
   >;
+  /**
+   * read 引用块 hydrate（read-tool-result-ref Step 6 生产装配）所需的
+   * revision 仓库：透传给每步 `prepareUserMessagesForPrompt` 的 runtime。
+   * 未注入且可见消息含 `contentRef` 块时 prepare 会 fail-fast（装配缺口
+   * 不静默降级——空 tool_result 发给 LLM 正是引用化要杜绝的错文形态）。
+   */
+  readonly revisionRepo?: VfsRevisionRepository;
 }
 
 /** Creates an agent runner with injected dependencies. */
