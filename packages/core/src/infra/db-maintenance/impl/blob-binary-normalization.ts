@@ -338,6 +338,40 @@ async function countPendingRows(
   return Number(rows[0]?.n ?? 0);
 }
 
+/**
+ * 状态采样节流窗口（ic-06①）：desktop 存储页 2s 轮询 + 全表 COUNT（谓词
+ * 不可索引）×未完成表 = 迁移期 IO 风暴，窗口内重复采样直接回放上次值。
+ * 取 3s（略大于 desktop 2s 轮询周期）：相邻两次轮询合并成一次真采样，
+ * 进度展示最多滞后一个窗口（mobile 5s 轮询周期大于窗口，每次仍真采样）。
+ */
+const STATUS_SAMPLING_THROTTLE_MS = 3000;
+
+/**
+ * 状态采样缓存（按连接实例隔离，ic-06①）。
+ *
+ * 取舍：`getBlobBinaryStatus` 三表一轮循环、返回值整体缓存——混合态（部分
+ * 表已完成）下已完成表的 KKV 标记读取结果也随窗缓存 3s（该部分本身免
+ * COUNT，缓存它只是让「刚置的完成标记」在窗口内不可见，采样只是进度
+ * 展示，滞后一个窗口无正确性影响）；per-table 细粒度缓存要把形状复杂化
+ * 成 WeakMap<conn, Map<tableId, ...>>，换来的只是这点新鲜度，不值。
+ * **只在真触过 COUNT 的采样轮写缓存**：稳态（三表全完成）一轮零 COUNT、
+ * 不写缓存——免 COUNT 快路径天然不受节流影响（每次调用仍只读 KKV 标记）。
+ */
+let statusSamplingThrottleCache = new WeakMap<
+  TdbcConnection,
+  { at: number; value: BlobBinaryStatus }
+>();
+
+/**
+ * 测试专用：清空状态采样节流缓存（WeakMap 无清空 API，直接换新实例）。
+ *
+ * @remarks 共享连接的测试用例之间必须调用，否则前序用例的未完成态采样
+ * 会在 3s 窗口内串值到后续用例（生产代码不得调用）。
+ */
+export function __resetStatusSamplingThrottleForTests(): void {
+  statusSamplingThrottleCache = new WeakMap();
+}
+
 /** 告警文案的错误摘要（Error 取 message，其余 String 化）。 */
 function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -417,12 +451,18 @@ function yieldToEventLoop(): Promise<void> {
  * 采样归一状态（存储页状态行 + 启动零成本短路共用）。
  *
  * 稳态（已完成）只读 KKV 标记一次即返回，零 COUNT 成本；未完成才 COUNT
- * 全表（仅归一期间，百万行量级库毫秒级）。
+ * 全表（仅归一期间，百万行量级库毫秒级）。触过 COUNT 的采样轮带 3s 节流
+ * （ic-06①，见 {@link STATUS_SAMPLING_THROTTLE_MS}）：窗口内重复调用回放
+ * 上次采样值——「2s 轮询 + 全表扫 = 迁移期 IO 风暴」。归一本体的完成判定
+ * 与收尾谓词校验不走本缓存（`countPendingRows` 直调，正确性不受采样节流
+ * 影响）；两端 app 消费侧（desktop 2s 轮询 / mobile 5s 轮询）无需感知：
+ * 节流发生在 core 层。
  */
 export async function getBlobBinaryStatus(
   conn: TdbcConnection
 ): Promise<BlobBinaryStatus> {
   const tables: BlobBinaryTableStatus[] = [];
+  let counted = false;
   for (const adapter of TABLE_ADAPTERS) {
     const marker = await readDoneMarker(conn, adapter);
     if (marker != null) {
@@ -434,7 +474,16 @@ export async function getBlobBinaryStatus(
       });
       continue;
     }
+    // 缓存检查放在「首次遇到标记未置的表」处（对齐 compaction 侧「先读
+    // 标记、未置才进节流域」的结构）：三表标记全置的稳态整轮不查不写
+    // 缓存——免 COUNT 快路径纯净；命中时丢弃本轮已累积的 tables、返回
+    // 缓存里完整的上一轮采样值（同为整轮值，形状完整）。
+    const cached = statusSamplingThrottleCache.get(conn);
+    if (cached != null && Date.now() - cached.at < STATUS_SAMPLING_THROTTLE_MS) {
+      return cached.value;
+    }
     const pendingCount = await countPendingRows(conn, adapter);
+    counted = true;
     tables.push({
       table: adapter.tableId,
       done: pendingCount === 0,
@@ -442,7 +491,12 @@ export async function getBlobBinaryStatus(
       failedCount: 0,
     });
   }
-  return { tables };
+  const status: BlobBinaryStatus = { tables };
+  // 只有真触过 COUNT 的采样轮才写缓存：稳态零 COUNT 路径不进节流域。
+  if (counted) {
+    statusSamplingThrottleCache.set(conn, { at: Date.now(), value: status });
+  }
+  return status;
 }
 
 /** 单表归一过程的对外返回（行数三态：归一 / 跳过坏行 / 未完成）。 */

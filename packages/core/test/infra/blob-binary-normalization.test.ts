@@ -16,6 +16,12 @@
  * 标记：共享库上用例自管状态（口径照 message-content-compaction.test.ts
  * 的 clearDoneMarker），用例之间互不污染计数。
  *
+ * 【ic-06① 节流串值】getBlobBinaryStatus 的谓词 COUNT 路径带 3s 模块级
+ * 节流（按连接实例缓存未完成态采样值），共享连接的用例之间会串值——
+ * {@link resetNormalizationState} 同时调 `__resetStatusSamplingThrottle
+ * ForTests()` 清节流缓存（「用例间清理」的既定缝，见实现侧导出注释）。
+ * 验收用例在独立进程的 status-sampling-throttle.test.ts 里承载。
+ *
  * base64 文本在测试内用 `Buffer` 现场编码，不引 blob-bytes-codec 的
  * `bytesToBase64`（A1 已删该导出，生产端无调用方）。
  *
@@ -48,6 +54,7 @@ import {
   runStartupMaintenanceOnce,
   type RunBlobBinaryNormalizationOptions,
 } from "../../src/infra/db-maintenance/index.js";
+import { __resetStatusSamplingThrottleForTests } from "../../src/infra/db-maintenance/impl/blob-binary-normalization.js";
 import {
   createSessionKkvService,
   SESSION_KKV_DOMAIN_FILE_CACHE,
@@ -84,6 +91,9 @@ function conn(): TdbcConnection {
  * 避免越界影响共享库其它用例（谓词命中的非本文件行不得被顺手删掉）。
  */
 async function resetNormalizationState(): Promise<void> {
+  // ic-06①：共享连接上清节流缓存——前序用例的未完成态采样不得在 3s
+  // 窗口内串值到本用例（见文件头注释「节流串值」段）。
+  __resetStatusSamplingThrottleForTests();
   const c = conn();
   await c.execute(`DELETE FROM vfs_content_blob WHERE ${PREDICATE}`);
   await c.execute(`DELETE FROM session_file_cache_blob WHERE ${PREDICATE}`);

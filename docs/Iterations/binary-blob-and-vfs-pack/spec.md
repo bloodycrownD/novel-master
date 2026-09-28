@@ -265,9 +265,10 @@ T 编号与实际落地用例的可追溯映射（行号为集成分支 `integra
 **Part A**
 
 - 风险：写入路径从 TEXT 挪到 BLOB 通道（真机已 6 项探针验证，剩余风险为并发/大值场景）；存量行形态长期混存（读路径天然兼容，不影响正确性）。
-- 风险：**状态查询的归一谓词 COUNT 不可索引**——`getBlobBinaryStatus` 每表一次 `COUNT(*) ... WHERE <归一谓词>`，谓词作用在 `bytes` 的 `TYPEOF`/长度上无法走索引；未完成态下 desktop 存储页的 2s 轮询会触发全表扫，接入大表（`chat_message` 约 43MB）后从「慢」升级为「持续吃 IO」。**已由本轮 ic-06（状态采样节流）落地缓解**；后续若再接入更大的表，须先复核采样口径（标记已置则直接读标记快照、不再 COUNT）。
+- 风险：**状态查询的归一谓词 COUNT 不可索引**——`getBlobBinaryStatus` 每表一次 `COUNT(*) ... WHERE <归一谓词>`，谓词作用在 `bytes` 的 `TYPEOF`/长度上无法走索引；未完成态下 desktop 存储页的 2s 轮询会触发全表扫，接入大表（`chat_message` 约 43MB）后从「慢」升级为「持续吃 IO」。**已由本轮 ic-06 落地缓解：core 采样侧对触 COUNT 的未完成态采样加 3s 节流**（窗口内重复调用回放上次采样值，desktop 2s 轮询合并为约一次/3s 真采样；谓词本身仍不可索引，可选索引随下一轮 `SCHEMA_BOOT_VERSION` bump）；后续若再接入更大的表，须先复核采样口径（标记已置则直接读标记快照、不再 COUNT）。
 - 风险：**`startupMaintenancePending` 在用户手动「数据清理」成功后会变陈旧**——手动清理把 freelist 收干净后该标记仍留在 `kkv_entry`，下次冷启动会多跑一次全库 VACUUM（一次性浪费、非正确性问题）；默认在手动路径成功后顺带清该标记。
 - 风险：**备份导入未完成库时，完成标记随库文件旅行**——导入「迁移进行到一半」的库文件后，标记与数据一起被覆盖，新库会重新压缩/归一（谓词重扫）。这是幂等设计的一部分（重扫幂等、无正确性损失），不修行为。
+- 风险：**压缩与归一双任务并发的理论态缝隙（ic-32）**——压缩任务恒写 `content_encoding='zlib'` + 二进制 BLOB；若某端驱动有缺陷把二进制绑成 TEXT 存回（归一谓词第二 disjunct 针对的历史脏形态），而归一的 `messageContentDone` 标记已置（该表已完成短路），这批新脏行不会被归一任务自动重扫。兜底手段：手动清 `messageContentDone`（KKV module `nm-blob-binary`）触发重扫（代码侧半边见 message-content-compaction.ts 文件头的风险登记）。
 - 回滚：停用归一任务即可（读路径两形态都认）；如需彻底回退形态，写一个谓词 `encoding='zlib' AND TYPEOF(bytes)='blob'` 的反向任务（注意这会把所有三端写入的二进制行一起转回，仅应急用）。
 
 **Part B**

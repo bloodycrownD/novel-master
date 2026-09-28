@@ -164,6 +164,36 @@ async function countPendingRows(conn: TdbcConnection): Promise<number> {
 }
 
 /**
+ * 状态采样节流窗口（ic-06①）：desktop 存储页 2s 轮询 + 全表 COUNT（谓词
+ * 不可索引）= 迁移期 IO 风暴，窗口内重复采样直接回放上次值。取 3s（略
+ * 大于 desktop 2s 轮询周期）：相邻两次轮询合并成一次真采样，进度展示
+ * 最多滞后一个窗口（mobile 5s 轮询周期大于窗口，每次仍真采样）。
+ */
+const STATUS_SAMPLING_THROTTLE_MS = 3000;
+
+/**
+ * 未完成态采样缓存（按连接实例隔离，ic-06①）。
+ *
+ * 只缓存「标记未置、真跑了谓词 COUNT」的采样值——`getMessageCompactionStatus`
+ * 里标记已置的免 COUNT 快路径在缓存检查**之前**就返回，天然不写缓存也
+ * 不受节流影响（稳态每次调用仍只读一次 KKV 标记）。
+ */
+let statusSamplingThrottleCache = new WeakMap<
+  TdbcConnection,
+  { at: number; value: MessageCompactionStatus }
+>();
+
+/**
+ * 测试专用：清空状态采样节流缓存（WeakMap 无清空 API，直接换新实例）。
+ *
+ * @remarks 共享连接的测试用例之间必须调用，否则前序用例的未完成态采样
+ * 会在 3s 窗口内串值到后续用例（生产代码不得调用）。
+ */
+export function __resetStatusSamplingThrottleForTests(): void {
+  statusSamplingThrottleCache = new WeakMap();
+}
+
+/**
  * 读 KKV 完成标记（两段式 module/key）。
  *
  * 标记值向后兼容：旧版是纯 ISO 时间戳字符串（无 failedCount 可言），
@@ -278,7 +308,12 @@ async function runPendingStartupMaintenance(
  * 采样搬运状态（双端存储页两态状态行 + 启动零成本短路共用）。
  *
  * 稳态（已完成）只读 KKV 标记一次即返回，零 COUNT 成本；未完成才
- * COUNT 全表（仅迁移期间，73MB 量级库毫秒级）。
+ * COUNT 全表（仅迁移期间，73MB 量级库毫秒级）。未完成态的谓词 COUNT
+ * 带 3s 节流（ic-06①，见 {@link STATUS_SAMPLING_THROTTLE_MS}）：窗口内
+ * 重复调用回放上次采样值——「2s 轮询 + 全表扫 = 迁移期 IO 风暴」，
+ * 采样只是进度展示，滞后一个窗口无正确性影响（搬运与完成判定都不走
+ * 本缓存）。两端 app 消费侧（desktop 2s 轮询 / mobile 5s 轮询）无需
+ * 感知：节流发生在 core 层。
  */
 export async function getMessageCompactionStatus(
   conn: TdbcConnection
@@ -286,8 +321,17 @@ export async function getMessageCompactionStatus(
   if (await readDoneMarker(conn)) {
     return { done: true, pendingCount: 0 };
   }
+  const cached = statusSamplingThrottleCache.get(conn);
+  if (cached != null && Date.now() - cached.at < STATUS_SAMPLING_THROTTLE_MS) {
+    return cached.value;
+  }
   const pendingCount = await countPendingRows(conn);
-  return { done: pendingCount === 0, pendingCount };
+  const status: MessageCompactionStatus = {
+    done: pendingCount === 0,
+    pendingCount,
+  };
+  statusSamplingThrottleCache.set(conn, { at: Date.now(), value: status });
+  return status;
 }
 
 /** 批间让步：setTimeout(0) 交还事件循环（desktop main / RN JS 线程）。 */
