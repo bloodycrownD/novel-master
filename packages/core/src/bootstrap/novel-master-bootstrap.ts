@@ -18,6 +18,7 @@ import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { VFS_SCHEMA_STATEMENTS } from "./vfs/vfs-schema.js";
 import { VFS_REVISION_SCHEMA_STATEMENTS } from "./vfs/vfs-revision-schema.js";
 import { VFS_CONTENT_BLOB_SCHEMA_STATEMENTS } from "./vfs/vfs-content-blob-schema.js";
+import { VFS_CONTENT_PACK_SCHEMA_STATEMENTS } from "./vfs/vfs-content-pack-schema.js";
 import { MESSAGE_CHECKPOINT_SCHEMA_STATEMENTS } from "./message-checkpoint/message-checkpoint-schema.js";
 import { KKV_SCHEMA_STATEMENTS } from "./kkv/kkv-schema.js";
 import { SESSION_KKV_SCHEMA_STATEMENTS } from "./session-kkv/session-kkv-schema.js";
@@ -107,14 +108,22 @@ import { IntegrityRepairRegistry } from "@/service/integrity-repair.js";
  * 撞号；并入集成分支时以现值 16 + 1 顺延为 v17（bump 纪律是「DDL/ALIGN
  * 变更必须 +1」本身而非具体号——与并行迭代撞号时以主干现值为准递增顺延，
  * v9/v10 真机事故的同款纪律）。
+ * v18：新增 vfs_content_pack / vfs_content_pack_member 两表与
+ * idx_vfs_content_pack_member_pack 索引（binary-blob-and-vfs-pack Part B：
+ * VFS 非 head 历史版本混合打包——小组 zlib-concat-v1 / 大组 fossil-chain-v1，
+ * member 按 content_hash 寻址进包）。老库（v17）靠本轮 bump 走慢路径由
+ * DDL 建出两表与索引；全新库直接建表；无存量回填（历史 blob 行由后台
+ * 打包任务跨启动续跑搬运）。v17 已被 v1.5.25 发布占用（run_state/chat
+ * 压缩列那轮：v16 token 列 + v17 chat 压缩两列），故本条顺延为 v18。
  */
-export const SCHEMA_BOOT_VERSION = 17;
+export const SCHEMA_BOOT_VERSION = 18;
 
 /** 各模块 DDL 语句，按依赖安全顺序排列。 */
 export const NOVEL_MASTER_SCHEMA_STATEMENTS: readonly string[] = [
   ...VFS_SCHEMA_STATEMENTS,
   ...VFS_REVISION_SCHEMA_STATEMENTS,
   ...VFS_CONTENT_BLOB_SCHEMA_STATEMENTS,
+  ...VFS_CONTENT_PACK_SCHEMA_STATEMENTS,
   ...MESSAGE_CHECKPOINT_SCHEMA_STATEMENTS,
   ...KKV_SCHEMA_STATEMENTS,
   ...SESSION_KKV_SCHEMA_STATEMENTS,
