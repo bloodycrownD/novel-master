@@ -22,23 +22,10 @@ jest.mock('@novel-master/tokenizer-driver-rn/android-native-bridge', () => {
   return {
     ...actual,
     isNativeTokenizerAvailable: () => nativeBridgeState.available,
-    countPromptViaNative: jest.fn(
-      async (req: {
-        serialized: string;
-        family: string;
-        vendorModelId: string;
-      }) => {
-        if (!nativeBridgeState.available) {
-          return null;
-        }
-        const result = await mockCountPrompt(
-          req.serialized,
-          req.family,
-          req.vendorModelId,
-        );
-        return result;
-      },
-    ),
+    // countPromptViaNative 用**真实实现**：Kotlin 契约变更（fa Step 4）后原生
+    // 失败一律 promise.reject，本文件靠真实桥现成的 catch→null 分支承接
+    // reject、断言 JS 侧兜底路径；底层调用经 react-native mock 落到
+    // mockCountPrompt（三参同序，与既有断言兼容）。
   };
 });
 
@@ -50,15 +37,6 @@ jest.mock('@novel-master/core', () => ({
   resolveTokenizerFamily: () => mockResolveFamily,
   mapVendorModelIdToTiktokenModel: () => 'gpt-4o',
   serializePromptLlmInput: () => '',
-}));
-
-const mockEncodingForModel = jest.fn(() => ({
-  encode: () => [1, 2, 3],
-  free: () => {},
-}));
-
-jest.mock('tiktoken', () => ({
-  encoding_for_model: (...args: unknown[]) => mockEncodingForModel(...args),
 }));
 
 // 兜底路径（原生不可用 / family=heuristic / 未知家族）现在走驱动自己的 cl100k
@@ -77,7 +55,6 @@ const ZH_TEXT =
 describe('tokenizer-driver-rn countPromptLlmInputRn', () => {
   beforeEach(() => {
     mockCountPrompt.mockReset();
-    mockEncodingForModel.mockClear();
     nativeBridgeState.available = true;
     mockResolveFamily = 'claude';
   });
@@ -86,11 +63,14 @@ describe('tokenizer-driver-rn countPromptLlmInputRn', () => {
     // 编码表单例是模块级缓存：故障注入用例改了构造器，必须还原，
     // 否则会把「构造失败不再重试」的 null 缓存漏给后续用例。
     const {
+      __test__,
       __resetRnEncodingCacheForTests,
       __setRnEncodingFactoryForTests,
     } = require('@novel-master/tokenizer-driver-rn');
     __setRnEncodingFactoryForTests(null);
     __resetRnEncodingCacheForTests();
+    // countTiktoken 的表源注入钩子同样要还原（表源注入用例用过它）。
+    __test__.setEncodingSourceForTests(null);
   });
 
   it('calls native bridge for claude family', async () => {
@@ -143,25 +123,97 @@ describe('tokenizer-driver-rn countPromptLlmInputRn', () => {
     expect(result.count).toBeGreaterThan(0);
   });
 
-  it('uses js-tiktoken encoding_for_model for tiktoken family', async () => {
-    mockResolveFamily = 'tiktoken';
+  it('GPT 家族 o200k 表域：真值 tiktoken/estimated=false，数值与 node 精确档同口径', async () => {
     const {__test__} = require('@novel-master/tokenizer-driver-rn');
-    __test__.setTiktokenModuleForTests(require('tiktoken'));
 
-    const result = await __test__.countSerialized(
+    // vendor 前缀形态（openai/gpt-4o）：直查不认识 → 走 core 映射第二跳 → o200k。
+    const en = await __test__.countSerialized(
       'tiktoken',
       'system prompt for gpt',
       'openai/gpt-4o',
     );
-
-    expect(mockEncodingForModel).toHaveBeenCalledWith('gpt-4o');
     expect(mockCountPrompt).not.toHaveBeenCalled();
-    // cr-fix-spec D1-06 整改：RN 的 js-tiktoken 包装粒度比 Node precise 档粗，
-    // counterKind 诚实标 heuristic，不能冒充精确 tiktoken（否则 compaction 按精确阈值判定易超限）。
-    expect(result).toEqual({
-      count: 9,
+    expect(en).toEqual({
+      count: 12,
+      counterKind: 'tiktoken',
+      estimated: false,
+    });
+
+    // 中文双字节同表复核。期望值来源：node 精确档（WASM tiktoken o200k 表 +
+    // 同一段 core countOpenAiStyleMessages）在 worktree 现跑取得——同算法同表，
+    // 容差 0（T-FA6 对拍口径）。
+    const zh = await __test__.countSerialized('tiktoken', ZH_TEXT, 'openai/gpt-4o');
+    expect(zh).toEqual({
+      count: 47,
+      counterKind: 'tiktoken',
+      estimated: false,
+    });
+  });
+
+  it('GPT 家族 cl100k 表域（裸模型名直查命中）：同口径真值；连续两次计数第二次不炸（无 free）', async () => {
+    const {__test__} = require('@novel-master/tokenizer-driver-rn');
+
+    // 裸标准 id（gpt-4）直查即命中 cl100k，不走映射第二跳。期望值同上：node
+    // 精确档现跑（WASM cl100k 表 + core countOpenAiStyleMessages）。
+    const first = await __test__.countSerialized('tiktoken', ZH_TEXT, 'gpt-4');
+    expect(first).toEqual({
+      count: 63,
+      counterKind: 'tiktoken',
+      estimated: false,
+    });
+
+    // 无 free 行为锁定（T-FA6）：编码表是共享单例，连续两次计数第二次必须复用
+    // 同一句柄且仍报精确档。真 js-tiktoken 句柄**没有** free 方法——若实现误调
+    // free 会 TypeError 落进 catch 变 heuristic；断言第二次仍 tiktoken/false/同值
+    // 即钉住「绝不 free」。
+    const second = await __test__.countSerialized('tiktoken', ZH_TEXT, 'gpt-4');
+    expect(second).toEqual(first);
+    expect(second.counterKind).toBe('tiktoken');
+    expect(second.estimated).toBe(false);
+  });
+
+  it('p50k / gpt2 家族出界：走 cl100k 兜底报 heuristic（边界声明，不冒充精确）', async () => {
+    const {__test__} = require('@novel-master/tokenizer-driver-rn');
+
+    // 真 p50k 域代表是 text-davinci-003（completion 系，tiktoken 官方映射
+    // p50k_base）。注意 gpt-3.5-turbo-0301 **不是** p50k——官方映射里 chat 系
+    // 0301 就是 cl100k_base，那条路径走的是精确档（与 node 同口径），不是兜底。
+    // 另外出界判定必须发生在 core 模型名映射**之前**：core 会把 text-davinci-003
+    // 改写成 gpt-3.5-turbo（cl100k），映射后再判就把 p50k 模型冒充成精确读数了。
+    const p50k = await __test__.countSerialized(
+      'tiktoken',
+      ZH_TEXT,
+      'text-davinci-003',
+    );
+    expect(p50k).toEqual({
+      count: cl100kCount(ZH_TEXT),
       counterKind: 'heuristic',
       estimated: true,
+    });
+
+    // gpt2 家族同样路由进 countTiktoken：编码名 gpt2 不在两表域 → 兜底。
+    const gpt2 = await __test__.countSerialized('gpt2', ZH_TEXT, 'gpt2');
+    expect(gpt2).toEqual(p50k);
+  });
+
+  it('表源注入钩子：setEncodingSourceForTests 可控 countTiktoken 的表源分支', async () => {
+    const {__test__} = require('@novel-master/tokenizer-driver-rn');
+    __test__.setEncodingSourceForTests(() => ({
+      encode: (text: string) => ({length: text.length}),
+    }));
+
+    // 假表按「字符数」计：precise 档包装 = 3 (perMessage) + encode('system') +
+    // encode(content) + 3 (尾部) = 3 + 6 + 6 + 3 = 18。验证 countTiktoken 的
+    // 表取用口确实被注入源接管（原 setTiktokenModuleForTests 钩子的替代形态）。
+    const result = await __test__.countSerialized(
+      'tiktoken',
+      'abcdef',
+      'openai/gpt-4o',
+    );
+    expect(result).toEqual({
+      count: 18,
+      counterKind: 'tiktoken',
+      estimated: false,
     });
   });
 
@@ -269,13 +321,11 @@ describe('tokenizer-driver-rn countPromptLlmInputRn', () => {
     }
   });
 
-  it('propagates native estimated:true on failure path', async () => {
-    mockCountPrompt.mockResolvedValue({
-      tokenCount: 12,
-      counterKind: 'gemma',
-      estimated: true,
-    });
-    mockResolveFamily = 'gemma';
+  it('原生桥 reject（Kotlin 新契约）：JS 桥 catch→null 承接，走 cl100k 兜底报 heuristic', async () => {
+    // fa Step 4 后 Kotlin 失败一律 promise.reject（不再 resolve 折算值），
+    // 「原生返回 estimated:true 半失败读数」不再有产生源；JS 侧由
+    // countPromptViaNative 现成的 catch→null 分支承接，落兜底计数（T-FA5）。
+    mockCountPrompt.mockRejectedValue(new Error('TOKENIZER_COUNT_FAILED'));
     const {__test__} = require('@novel-master/tokenizer-driver-rn');
 
     const result = await __test__.countSerialized(
@@ -285,8 +335,8 @@ describe('tokenizer-driver-rn countPromptLlmInputRn', () => {
     );
 
     expect(result).toEqual({
-      count: 12,
-      counterKind: 'gemma',
+      count: cl100kCount('short prompt'),
+      counterKind: 'heuristic',
       estimated: true,
     });
   });

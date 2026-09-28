@@ -2,8 +2,9 @@
  * React Native prompt token counter (NMTP RN driver).
  *
  * Hermes cannot run @agnai/web-tokenizers or @agnai/sentencepiece-js (Node fs/url/WASM).
- * GPT families lazy-load js-tiktoken on first use (Metro shim). WEB/SP delegate to Android
- * NovelMasterTokenizer when available; otherwise heuristic + estimated.
+ * GPT families count in JS via the shared js-tiktoken encoding tables from
+ * {@link ./impl/encoding-cache} (same-process singleton, never freed). WEB/SP delegate
+ * to Android NovelMasterTokenizer when available; otherwise heuristic + estimated.
  */
 import {
   CHARACTERS_PER_TOKEN_RATIO,
@@ -11,7 +12,8 @@ import {
   mapVendorModelIdToTiktokenModel,
   serializePromptLlmInput,
   serializeToolsForTokenCount,
-  countTokens,
+  countOpenAiStyleMessages,
+  wrapSerializedPromptAsSystemMessage,
   type CountPromptLlmInputParams,
   type PromptTokenCountResult,
   type TokenCounterKind,
@@ -22,22 +24,13 @@ import {
   isNativeTokenizerAvailable,
   type NativeCountResponse,
 } from "./android-native-bridge.js";
-import { countTextWithDefaultEncoding } from "./impl/encoding-cache.js";
-
-type TiktokenModule = {
-  encoding_for_model: (
-    model: string,
-  ) => { encode: (text: string) => { length: number }; free: () => void };
-};
-
-let tiktokenModule: TiktokenModule | null = null;
-
-async function getTiktoken(): Promise<TiktokenModule> {
-  if (tiktokenModule == null) {
-    tiktokenModule = (await import("tiktoken")) as TiktokenModule;
-  }
-  return tiktokenModule;
-}
+import {
+  countTextWithDefaultEncoding,
+  getRnEncoding,
+  type RnEncodingName,
+  type RnTokenEncoding,
+} from "./impl/encoding-cache.js";
+import { getEncodingNameForModel } from "js-tiktoken/lite";
 
 /** WEB JSON families — M1 native on Android. */
 const WEB_FAMILIES: ReadonlySet<TokenizerFamily> = new Set([
@@ -91,26 +84,111 @@ interface SerializedCountResult {
   estimated: boolean;
 }
 
+/** 编码名是否属于本驱动的两表域（cl100k / o200k）。 */
+function isSupportedRnEncodingName(name: string): name is RnEncodingName {
+  return name === "cl100k_base" || name === "o200k_base";
+}
+
+/**
+ * 问一次 tiktoken 官方模型→编码映射。
+ *
+ * 返回值三态：`undefined` = 模型名**不被认识**（调用方可换名字再问）；
+ * `null` = 认识但表不在本驱动两表域（p50k / gpt2 / r50k…，**出界**，换名字再问
+ * 也没有意义——那是在改写模型的真实编码）；`RnEncodingName` = 两表域内命中。
+ */
+function tryResolveEncodingName(
+  model: string,
+): RnEncodingName | null | undefined {
+  try {
+    // getEncodingNameForModel 的入参类型是字面量模型名联合，vendor 侧是任意
+    // 字符串（未知模型会抛错）——按 never 传入、异常兜底（与 mobile 的
+    // resolveStreamTokenEncodingName 同款手法，本函数是其精确档变体）。
+    const name = getEncodingNameForModel(model as never);
+    return isSupportedRnEncodingName(name) ? name : null;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * vendorModelId → 本驱动编码名（限定 cl100k_base / o200k_base 两值）。
+ *
+ * 解析顺序参照 mobile `resolveStreamTokenEncodingName` 先例：先拿 vendorModelId
+ * 直查官方映射（能命中 `gpt-4o` / `gpt-4` 这类标准 id），不认识（如 `openai/`
+ * vendor 前缀形态）才经 core 的 `mapVendorModelIdToTiktokenModel` 改写后再问一次，
+ * 且第二跳仅对 tiktoken 家族放行。**直查认识但出界时立即返回 null**：core 的
+ * 映射会把 `text-davinci-003`（真 p50k 模型）改写成 `gpt-3.5-turbo`（cl100k），
+ * 若继续走第二跳，等于拿 cl100k 冒充 p50k 的精确读数。
+ *
+ * 返回 null = p50k / gpt2 家族或两跳都解析不出 → 按 fa 边界声明走 cl100k 兜底、
+ * 报 heuristic，不冒充精确（spec P1-1：不引 p50k/gpt2 ranks 是刻意的 Metro 包体
+ * 取舍；对拍用例须限定两表覆盖域）。
+ */
+function resolveRnEncodingName(
+  vendorModelId: string,
+  tiktokenModel: string,
+): RnEncodingName | null {
+  const id = vendorModelId.trim();
+  if (id.length === 0) {
+    return null;
+  }
+  const direct = tryResolveEncodingName(id);
+  if (direct === undefined && resolveTokenizerFamily(id, "auto") === "tiktoken") {
+    const mapped = tryResolveEncodingName(tiktokenModel);
+    if (mapped !== undefined) {
+      return mapped;
+    }
+  }
+  return direct ?? null;
+}
+
+/**
+ * 表源覆盖钩子（仅测试用）：默认 null = 走驱动共享编码表
+ * {@link getRnEncoding}（同进程单例，绝不 free）。
+ * 注入 `(name) => 假 encoding / null` 即可在不建真表的情况下控制
+ * countTiktoken 的表源分支（替代旧「tiktoken 模块注入」钩子形态）。
+ */
+let encodingSourceForTests:
+  | ((name: RnEncodingName) => RnTokenEncoding | null)
+  | null = null;
+
+function resolveEncoding(name: RnEncodingName): RnTokenEncoding | null {
+  return encodingSourceForTests == null
+    ? getRnEncoding(name)
+    : encodingSourceForTests(name);
+}
+
 async function countTiktoken(
   serialized: string,
   vendorModelId: string,
 ): Promise<SerializedCountResult> {
-  const { encoding_for_model } = await getTiktoken();
-  const model = mapVendorModelIdToTiktokenModel(vendorModelId);
-  const enc = encoding_for_model(model);
+  const tiktokenModel = mapVendorModelIdToTiktokenModel(vendorModelId);
+  const encName = resolveRnEncodingName(vendorModelId, tiktokenModel);
+  // 取到的是共享单例句柄（impl/encoding-cache → registry）：绝不 free()，
+  // 生命周期由缓存层统一持有。
+  const encoding = encName == null ? null : resolveEncoding(encName);
+  if (encoding == null) {
+    // 解析出界（p50k / gpt2 家族）或表建不起来 → 走 cl100k 兜底并如实报
+    // heuristic：cl100k 对这些模型只是近似，冒充精确会让压缩阈值跳过
+    // 0.85 安全系数。
+    return {
+      count: fallbackCount(serialized),
+      counterKind: "heuristic",
+      estimated: true,
+    };
+  }
   try {
-    // RN 走 js-tiktoken，只 encode content、固定 +3+3，不区分 0301。
-    // 包装粒度比 Node 的 precise 档粗，所以 counterKind 诚实标 heuristic，
-    // 不能冒充精确 tiktoken——否则 compaction 会按精确阈值判定，容易超限。
-    const count = countTokens(
-      (text) => enc.encode(text).length,
-      [{ role: "system", content: serialized }],
-      "heuristic",
+    // OpenAI 消息包装对齐 node 精确档：core 下沉版 countOpenAiStyleMessages
+    // 内部按 tiktokenModel 区分 0301 的 +4/-1/+9 与 per-message overhead，
+    // 双端同算法同表。encode 保持整串、不加任何分块包装——分块保护由
+    // message-token-cache feature 后续在 core 下沉版内认领，本层不包。
+    const count = countOpenAiStyleMessages(
+      encoding,
+      [wrapSerializedPromptAsSystemMessage(serialized)],
+      tiktokenModel,
     );
-    enc.free();
-    return { count, counterKind: "heuristic", estimated: true };
+    return { count, counterKind: "tiktoken", estimated: false };
   } catch {
-    enc.free();
     return {
       count: fallbackCount(serialized),
       counterKind: "heuristic",
@@ -220,11 +298,13 @@ export const __test__ = {
   SP_FAMILIES,
   countSerialized,
   heuristicCount,
-  /** Jest cannot run `import('tiktoken')`; prime the lazy cache from require(). */
-  setTiktokenModuleForTests(mod: TiktokenModule): void {
-    tiktokenModule = mod;
-  },
-  resetTiktokenModuleForTests(): void {
-    tiktokenModule = null;
+  /**
+   * 表源注入（仅测试）：覆盖 countTiktoken 的编码表取用口（注入假 encoding 或
+   * factory）；传 `null` 还原为驱动的共享编码表 getRnEncoding。
+   */
+  setEncodingSourceForTests(
+    source: ((name: RnEncodingName) => RnTokenEncoding | null) | null,
+  ): void {
+    encodingSourceForTests = source;
   },
 };
