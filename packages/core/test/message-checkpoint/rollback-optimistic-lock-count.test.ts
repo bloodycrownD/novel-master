@@ -8,7 +8,9 @@
  * 断言口径（rollback-large-jank Step 2 更新）：plan 拉取收窄为 seq >= 触发消息
  * （含），计数快照也改走 COUNT(*)——全流程 COUNT(*) chat_message 出现 2 次
  * （plan 计数快照 + 事务内乐观锁），无 seq 限定的全量 listBySession 归零，
- * 收窄拉取（AND seq >= ?）恰 1 次。
+ * 收窄拉取（AND seq >= ?）恰 2 次（plan 收窄 1 次 + truncate-tail 的 read
+ * 引用对账拉取 1 次——read-tool-result-ref Step 3 起 tail 正文收集 refs 需要，
+ * 同样按 seq 收窄，非全量）。
  *
  * @module test/message-checkpoint/rollback-optimistic-lock-count
  */
@@ -110,8 +112,9 @@ describe("T-RB1 rollback 乐观锁用 countBySession", () => {
       `COUNT(*) chat_message 应出现 2 次（plan 计数快照 + 事务内乐观锁），实际 ${countSelects.length}`,
     );
     // 发现 10a 改造后乐观锁改 COUNT、全量 list 只剩 plan 1 次；rollback-large-jank
-    // Step 2 再把 plan 拉取收窄为 seq >= 触发消息（含）——全量 list 归零，
-    // 收窄拉取恰 1 次。
+    // Step 2 再把 plan 拉取收窄为 seq >= 触发消息（含）——全量 list 归零。
+    // read-tool-result-ref Step 3 起 truncate-tail 需拉 tail 正文做 read 引用 −1
+    // 对账（同样 seq 收窄），收窄拉取变 2 次；全量口径（fullListSelects）不变。
     assert.equal(
       fullListSelects.length,
       0,
@@ -119,8 +122,8 @@ describe("T-RB1 rollback 乐观锁用 countBySession", () => {
     );
     assert.equal(
       fromSeqSelects.length,
-      1,
-      `plan 收窄拉取（seq >=）应恰 1 次，实际 ${fromSeqSelects.length}`,
+      2,
+      `收窄拉取（seq >=）应恰 2 次（plan 收窄 + truncate-tail read 引用对账），实际 ${fromSeqSelects.length}`,
     );
   });
 });

@@ -319,6 +319,37 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
     }));
   }
 
+  async listKeysWithRefCountUnderScope(
+    scopeKey: string,
+    pathPrefix: string
+  ): Promise<
+    ReadonlyArray<{ entryId: number; version: number; refCount: number }>
+  > {
+    const base = normalizePrefix(pathPrefix);
+    const escaped = escapeLike(base);
+    const pattern = base === "/" ? "/%" : `${escaped}/%`;
+    const rows = await queryTemplate<{
+      entry_id: number;
+      version: number;
+      ref_count: number;
+    }>(
+      this.conn,
+      this.parser,
+      `SELECT r.entry_id AS entry_id, r.version AS version, r.ref_count AS ref_count
+       FROM vfs_revision r
+       JOIN vfs_entry e ON e.entry_id = r.entry_id
+       WHERE e.scope_key = #{scopeKey}
+         AND (e.path = #{path} OR e.path LIKE #{pattern} ESCAPE '\\')
+       ORDER BY r.entry_id, r.version`,
+      { scopeKey, path: base, pattern }
+    );
+    return rows.map((row) => ({
+      entryId: Number(row.entry_id),
+      version: Number(row.version),
+      refCount: Number(row.ref_count),
+    }));
+  }
+
   async deleteExceptReachable(
     scopeKey: string,
     pathPrefix: string,
