@@ -5,8 +5,8 @@ import React, {useState} from 'react';
 import {StyleSheet, Text, View} from 'react-native';
 import {useRoute} from '@react-navigation/native';
 import type {RouteProp} from '@react-navigation/native';
+import {DEFAULT_SUBAGENT_DEFINITION} from '@novel-master/core/agent';
 import {AgentEditorForm} from '@/components/agent/AgentEditorForm';
-import {BuiltinAgentDetail} from '@/components/agent/BuiltinAgentDetail';
 import {useUnsavedGuard} from '@/hooks/useUnsavedGuard';
 import type {RootStackParamList} from '@/navigation/types';
 import {useTheme} from '@/theme/ThemeProvider';
@@ -33,10 +33,19 @@ export function AgentEditorScreen() {
     );
   }
 
-  // 内置 general sentinel：registry 无此实体（get 为 AGENT_NOT_FOUND），
-  // 渲染只读详情，不走 AgentEditorForm（无保存、无 dirty 上报）。
+  // 内置 general sentinel：registry 无此实体（不落库），渲染与其他 agent 同构的
+  // 完整编辑器表单，但整体只读——数据由出厂定义常量直填（不走 registry 拉取），
+  // 全部控件禁用灰显、无保存栏；dirty 恒为 false，不触发未保存守卫。
   if (agentId === 'general') {
-    return <BuiltinAgentDetail />;
+    return (
+      <View style={[styles.root, {backgroundColor: tokens.background}]}>
+        <AgentEditorForm
+          agentId={agentId}
+          readOnly
+          initialDefinition={DEFAULT_SUBAGENT_DEFINITION}
+        />
+      </View>
+    );
   }
 
   return (

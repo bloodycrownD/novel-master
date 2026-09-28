@@ -47,6 +47,8 @@ type Props = {
   renderInline: (ctx: InlineRenderContext) => React.ReactNode;
   /** 打开全屏编辑页（保存才回填，取消不动）。 */
   openEditor: () => void;
+  /** 禁用态（只读详情）：全屏编辑按钮禁点并灰显。 */
+  disabled?: boolean;
   testID?: string;
 };
 
@@ -54,6 +56,7 @@ export function ExpandablePromptInput({
   label,
   renderInline,
   openEditor,
+  disabled = false,
   testID,
 }: Props) {
   const {tokens} = useTheme();
@@ -87,8 +90,9 @@ export function ExpandablePromptInput({
         <Pressable
           testID={testID ? `${testID}-fullscreen` : undefined}
           onPress={handleOpenPress}
+          disabled={disabled}
           accessibilityLabel="全屏编辑"
-          style={styles.openBtn}
+          style={[styles.openBtn, disabled ? styles.openBtnDisabled : null]}
           hitSlop={8}
         >
           <Text style={[styles.openGlyph, {color: tokens.textSecondary}]}>
@@ -126,6 +130,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   openGlyph: {fontSize: 20, lineHeight: 24, fontWeight: '600'},
+  // 禁用灰显（只读详情），与表单组件禁用态同档。
+  openBtnDisabled: {opacity: 0.55},
   // 集中管理内联限高（8 行），调用点统一吃这份补充样式。
   inlineInput: {
     maxHeight: PROMPT_INLINE_MAX_HEIGHT,

@@ -34,6 +34,8 @@ type Props = {
   onSelectionChange?: (
     event: NativeSyntheticEvent<TextInputSelectionChangeEventData>,
   ) => void;
+  /** 禁用态（只读详情）：输入框不可编辑、宏 chip 禁点并灰显。 */
+  disabled?: boolean;
 };
 
 export function PromptMacroTextInput({
@@ -44,6 +46,7 @@ export function PromptMacroTextInput({
   style,
   selection,
   onSelectionChange,
+  disabled = false,
 }: Props) {
   const selectionRef = useRef({start: value.length, end: value.length});
   const prevValueRef = useRef(value);
@@ -103,6 +106,7 @@ export function PromptMacroTextInput({
         placeholder={placeholder}
         autoCapitalize="none"
         autoCorrect={false}
+        disabled={disabled}
         style={style}
       >
         {/* RN TextInput：value 与 children 互斥；由 children 着色，onChangeText 驱动纯文本 */}
@@ -137,12 +141,14 @@ export function PromptMacroTextInput({
         {PROMPT_INSERTABLE_MACROS.map(macro => (
           <Pressable
             key={macro.token}
+            disabled={disabled}
             style={[
               styles.chip,
               {
                 backgroundColor: `${tokens.primary}14`,
                 borderColor: `${tokens.primary}33`,
               },
+              disabled ? styles.chipDisabled : null,
             ]}
             onPress={() => insertMacro(macro.token)}
           >
@@ -171,5 +177,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 5,
   },
+  chipDisabled: {opacity: 0.55},
   chipText: {fontSize: 13, fontWeight: '600'},
 });

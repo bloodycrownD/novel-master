@@ -27,6 +27,8 @@ type Props = {
   onDescriptionChange: (value: string) => void;
   onImportYaml: () => void;
   onExportYaml: () => void;
+  /** 只读态（内置智能体详情）：YAML 导入/导出与各输入控件全禁用灰显。 */
+  readOnly?: boolean;
 };
 
 export function AgentEditorBasicSection({
@@ -39,16 +41,25 @@ export function AgentEditorBasicSection({
   onDescriptionChange,
   onImportYaml,
   onExportYaml,
+  readOnly = false,
 }: Props) {
   return (
     <FormSectionCard title="基本信息" tokens={tokens}>
       <View style={styles.yamlActions}>
-        <Pressable onPress={() => onImportYaml()}>
+        <Pressable
+          disabled={readOnly}
+          style={readOnly ? styles.yamlActionDisabled : undefined}
+          onPress={() => onImportYaml()}
+        >
           <Text style={{color: tokens.primary, fontWeight: '600'}}>
             导入 YAML
           </Text>
         </Pressable>
-        <Pressable onPress={() => onExportYaml()}>
+        <Pressable
+          disabled={readOnly}
+          style={readOnly ? styles.yamlActionDisabled : undefined}
+          onPress={() => onExportYaml()}
+        >
           <Text style={{color: tokens.primary, fontWeight: '600'}}>
             导出 YAML
           </Text>
@@ -59,6 +70,7 @@ export function AgentEditorBasicSection({
           tokens={tokens}
           value={name}
           onChangeText={onNameChange}
+          disabled={readOnly}
         />
       </FormField>
       <FormField label="作用域" tokens={tokens}>
@@ -68,6 +80,7 @@ export function AgentEditorBasicSection({
           onChange={value => onModeChange(value as AgentMode)}
           options={MODE_OPTIONS}
           sheetTitle="选择作用域"
+          disabled={readOnly}
         />
       </FormField>
       <FormField
@@ -80,6 +93,7 @@ export function AgentEditorBasicSection({
           value={description}
           onChangeText={onDescriptionChange}
           multiline
+          disabled={readOnly}
           placeholder="例如：擅长检索代码库、写测试。"
         />
       </FormField>

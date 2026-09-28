@@ -300,7 +300,7 @@ describe('AgentList tabs (T-M1/T-M2/T-M3)', () => {
     expect(onCreate).toHaveBeenCalledWith('subagent');
   });
 
-  it('T-M3 general 合成行仅子 tab 可见、无删除菜单项，点击进只读详情', async () => {
+  it('T-M3 general 合成行仅子 tab 可见、无删除菜单项，点击进只读编辑器详情', async () => {
     const tree = await renderAgentList();
 
     // 主 tab 无 general 行。
@@ -320,7 +320,8 @@ describe('AgentList tabs (T-M1/T-M2/T-M3)', () => {
       tree.root.findAllByProps({testID: 'bottom-sheet-menu'}),
     ).toHaveLength(0);
 
-    // 行点击 → AgentEditor 的 general sentinel（只读详情入口）。
+    // 行点击 → AgentEditor 的 general sentinel（进入全禁用只读编辑器详情，
+    // AgentEditorScreen 以出厂定义直填 AgentEditorForm readOnly 渲染）。
     mockNavigate.mockClear();
     const rowPressable = generalRow.findAll(
       node => node.type === 'Pressable',

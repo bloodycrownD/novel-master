@@ -16,6 +16,8 @@ type Props<T extends string> = {
   options: ReadonlyArray<ChipOption<T>>;
   value: T;
   onChange: (value: T) => void;
+  /** 整组禁用：所有 chip 禁点并灰显（只读详情整表禁用用）。 */
+  disabled?: boolean;
 };
 
 export function FormChipGroup<T extends string>({
@@ -23,6 +25,7 @@ export function FormChipGroup<T extends string>({
   options,
   value,
   onChange,
+  disabled = false,
 }: Props<T>) {
   return (
     <View style={styles.wrap}>
@@ -31,13 +34,14 @@ export function FormChipGroup<T extends string>({
         return (
           <Pressable
             key={option.value}
-            disabled={option.disabled}
+            disabled={disabled || option.disabled}
             style={[
               styles.chip,
               {
                 borderColor: active ? tokens.primary : tokens.borderLight,
                 backgroundColor: active ? tokens.primary : tokens.bgSecondary,
-                opacity: option.disabled && !active ? 0.45 : 1,
+                opacity:
+                  disabled || (option.disabled && !active) ? 0.45 : 1,
               },
             ]}
             onPress={() => onChange(option.value)}

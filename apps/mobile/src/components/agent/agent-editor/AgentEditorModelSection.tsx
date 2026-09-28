@@ -14,6 +14,8 @@ type Props = {
   value: string;
   onChange: (id: string) => void;
   options: Array<{value: string; label: string; subtitle?: string}>;
+  /** 只读态（内置智能体详情）：下拉禁点并灰显。 */
+  readOnly?: boolean;
 };
 
 export function AgentEditorModelSection({
@@ -21,6 +23,7 @@ export function AgentEditorModelSection({
   value,
   onChange,
   options,
+  readOnly = false,
 }: Props) {
   return (
     <FormSectionCard title="模型" tokens={tokens}>
@@ -37,6 +40,7 @@ export function AgentEditorModelSection({
           sheetTitle="选择专属模型"
           placeholder="默认(跟随)"
           emptyLabel="请先在「服务商」页添加模型"
+          disabled={readOnly}
         />
       </FormField>
     </FormSectionCard>

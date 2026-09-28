@@ -38,7 +38,8 @@ apps/desktop/
   test/settings-agents-tabs.test.ts              [新增] T-D3（源码断言）
 apps/mobile/src/
   components/agent/AgentList.tsx                 [改] tab state/过滤/合成行/徽标/空态/onCreate(tab)；import 走两个既有子路径
-  components/agent/BuiltinAgentDetail.tsx        [新增] general 只读详情（import @novel-master/core/agent）
+  components/agent/AgentEditorForm.tsx            [改] +readOnly/initialDefinition prop（general 复用完整编辑器禁用态）
+  components/agent/ + components/form/ 表单组件族  [改] disabled 通路与灰态（FormTextInput/FormChipGroup/sections 等）
   screens/stack/AgentsSettingsScreen.tsx         [改] handleCreate 传 mode
   services/agent-create.ts                       [改] createBlankAgent +mode 参数
   screens/stack/AgentEditorScreen.tsx            [改] sentinel 分支渲染 BuiltinAgentDetail
@@ -58,7 +59,7 @@ scripts/e2e/case-agents-tabs.mjs                 [新增] T-E1
 | 4 | `apps/desktop/src/main/ipc/handlers/agent-registry.ts` | list 的 valid 分支从 `health.value` 带出 `mode`（`undefined` 时省略字段，JSON 序列化天然丢弃）；createBlank 读 `req?.mode` 落库，`undefined` 容忍 |
 | 5 | `apps/desktop/src/main/ipc/handler-registry.ts` + `renderer/ipc/invoke-registry.ts` | createBlank 通道签名从 noArg 改可选 payload（照同文件既有 withXxx helper 模式，无合用者则新增） |
 | 6 | `apps/desktop/renderer/features/settings/SettingsViews.tsx` | AgentsSettingsView 重排：tabs 置顶（`.agents-manage__tabs` + SegmentedControl）→ ManageHeader（title/hint 随 tab）→ 单个 SettingsListSection 前端过滤；general 合成行（子 tab、`settings-tag--primary`「内置」）；「默认（全部）」行加 `settings-tag--muted`「全部」徽标；新建传 mode；删除兜底 `remaining` 排除 `"general"`；general 行不进批量勾选、⋮ 菜单仅「查看」 |
-| 7 | `apps/desktop/renderer/features/settings/AgentEditorView.tsx` | `agentId === "general"` 时不走 `ipcAgentRegistryGet`，渲染只读卡片（经 `shared/logic/agent.ts` 镜像导出的 `DEFAULT_SUBAGENT_DEFINITION`：名称/描述/作用域/系统提示词/workplace 确记语），无 dirty 上报、无保存按钮 |
+| 7 | `apps/desktop/renderer/features/settings/AgentEditorView.tsx` | `agentId === "general"` 时**渲染与普通 agent 完全相同的完整表单 + 全禁用态**（用户拍板 2026-09-28 实测反馈：比独立只读卡片更统一、信息更全）——数据经 `shared/logic/agent.ts` 镜像的 `DEFAULT_SUBAGENT_DEFINITION` 以 `applyDefinition` 共用填充；顶层 `isBuiltin` 派生，全部 input/textarea/select/Switch/按钮 `disabled`；保存按钮保留渲染但禁用；顶部「内置智能体，不可编辑」说明条；不走 `ipcAgentRegistryGet`、dirty 恒 false；`PromptCollapsibleField` 补 disabled（堵全屏编辑 Modal 绕过） |
 | 8 | `apps/mobile/src/components/agent/AgentList.tsx` | tab state（`'primary'` 默认）+ SegmentedControl（options：主智能体/子智能体）+ `switchTab`（setTab + `batch.exit()`）+ `rows` 按过滤 memo + general 合成行（子 tab 头部，内置胶囊样式参照 `SearchEnginesScreen.tsx` BuiltinTag）+「全部」badge + 空态文案随 tab + `onCreate?: (tab) => void`；general 行不可勾选、菜单仅「查看」 |
 | 9 | `apps/mobile/src/services/agent-create.ts` + `AgentsSettingsScreen.tsx` | `createBlankAgent(runtime, id?, mode?)` 写入 `def.mode`；Screen 的 handleCreate 依 tab 传 mode |
 | 10 | `apps/mobile/src/screens/stack/AgentEditorScreen.tsx` + `BuiltinAgentDetail.tsx` | `agentId === "general"` 分支只读呈现（导航参数不扩，sentinel 直用） |

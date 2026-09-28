@@ -35,6 +35,7 @@ import {
   exportAgentYaml,
   importAgentYaml,
 } from '../../services/agent-yaml.service';
+import type {AgentDefinition} from '@novel-master/core/agent';
 import type {RootStackParamList} from '../../navigation/types';
 
 import {AgentEditorBasicSection} from './agent-editor/AgentEditorBasicSection';
@@ -54,10 +55,19 @@ type Props = {
   agentId: string;
   onDirtyChange?: (dirty: boolean) => void;
   onSaved?: () => void | Promise<void>;
+  /**
+   * 只读形态（内置 general sentinel）：以 initialDefinition 同步直填表单，
+   * 跳过 registry 拉取；全部控件禁用灰显、不渲染保存栏，dirty 恒为 false
+   * （savedBaseline 保持 null 且无输入通路，不会误报「有未保存的更改」）。
+   */
+  readOnly?: boolean;
+  /** 只读形态的表单数据源（出厂定义常量）。 */
+  initialDefinition?: AgentDefinition;
 };
 
 export function AgentEditorForm(props: Props) {
-  const {onDirtyChange, onSaved, agentId} = props;
+  const {onDirtyChange, onSaved, agentId, readOnly = false, initialDefinition} =
+    props;
   const {tokens} = useTheme();
   const {showToast} = useToast();
   const navigation = useNavigation<StackNav>();
@@ -88,15 +98,19 @@ export function AgentEditorForm(props: Props) {
     setRecovering,
     saving,
     setSaving,
-  } = useAgentEditorFormState(agentId, runtime, showToast);
+  } = useAgentEditorFormState(agentId, runtime, showToast, initialDefinition);
 
   useEffect(() => {
     onDirtyChange?.(isDirty);
   }, [isDirty, onDirtyChange]);
 
+  // 只读形态首帧即有数据（initialDefinition 直填），不走 registry 拉取。
   useEffect(() => {
+    if (readOnly) {
+      return;
+    }
     loadAgent().catch(err => showToast(toastMessage('加载失败', err)));
-  }, [loadAgent, showToast]);
+  }, [loadAgent, showToast, readOnly]);
 
   const handleDeleteBrokenAgent = useCallback(() => {
     Alert.alert('删除 Agent', `删除 Agent「${displayName ?? agentId}」？`, [
@@ -266,6 +280,16 @@ export function AgentEditorForm(props: Props) {
 
   return (
     <>
+      {/* 只读横幅（内置 general）与未保存标记同一位置，样式同构（unsavedWrap）。 */}
+      {readOnly ? (
+        <View style={styles.unsavedWrap}>
+          <FormSectionCard tokens={tokens}>
+            <Text style={[styles.unsaved, {color: tokens.textSecondary}]}>
+              内置智能体，不可编辑
+            </Text>
+          </FormSectionCard>
+        </View>
+      ) : null}
       {/* 未保存标记随 snapshot 同帧派生，避免跨组件 effect 通知在真机转场下刷新不及时 */}
       {isDirty ? (
         <View style={styles.unsavedWrap}>
@@ -279,12 +303,14 @@ export function AgentEditorForm(props: Props) {
       <ScreenFormLayout
         tokens={tokens}
         footer={
-          <StickyFormFooter
-            tokens={tokens}
-            label="保存"
-            loading={saving}
-            onPress={() => handleSave().catch(() => undefined)}
-          />
+          readOnly ? undefined : (
+            <StickyFormFooter
+              tokens={tokens}
+              label="保存"
+              loading={saving}
+              onPress={() => handleSave().catch(() => undefined)}
+            />
+          )
         }
       >
         <AgentEditorBasicSection
@@ -299,6 +325,7 @@ export function AgentEditorForm(props: Props) {
           onExportYaml={() => {
             handleExportYaml().catch(() => undefined);
           }}
+          readOnly={readOnly}
         />
 
         <AgentEditorModelSection
@@ -306,6 +333,7 @@ export function AgentEditorForm(props: Props) {
           value={form.modelEnabled ? form.savedModelId : ''}
           onChange={handleModelSelect}
           options={modelSelectOptions}
+          readOnly={readOnly}
         />
 
         <FormSectionCard title="运行时" tokens={tokens}>
@@ -319,6 +347,7 @@ export function AgentEditorForm(props: Props) {
               value={form.maxSteps}
               onChangeText={value => patch({maxSteps: value})}
               keyboardType="number-pad"
+              disabled={readOnly}
             />
           </FormField>
         </FormSectionCard>
@@ -329,6 +358,7 @@ export function AgentEditorForm(props: Props) {
           onToolsModeChange={value => patch({toolsMode: value})}
           toolsSelected={form.toolsSelected}
           onToolsSelectedChange={value => patch({toolsSelected: value})}
+          readOnly={readOnly}
         />
 
         <PromptLayoutSection
@@ -344,6 +374,7 @@ export function AgentEditorForm(props: Props) {
           onDeleteDynamic={deleteDynamic}
           onAddDynamicBlock={addDynamicBlock}
           openPromptEditor={openPromptEditor}
+          readOnly={readOnly}
         />
       </ScreenFormLayout>
     </>

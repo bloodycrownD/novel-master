@@ -63,10 +63,23 @@ describe("AgentsSettingsView 双 tab（agent-config-tabs T-D3）", () => {
     assert.match(source, /\{ label: "查看", action: "view" \}/);
   });
 
-  it("AgentEditorView general 只读分支：sentinel 短路 + 出厂常量展示 + 不可编辑说明", () => {
+  it("AgentEditorView general 只读分支：sentinel 短路 + 出厂常量填充完整表单 + 全禁用接线", () => {
     const source = readFileSync(agentEditorPath, "utf8");
+    // sentinel 分支存在：loadAgent 短路不经 ipcAgentRegistryGet（必 404）
     assert.match(source, /agentId === GENERAL_AGENT_ID/);
-    assert.match(source, /DEFAULT_SUBAGENT_DEFINITION/);
+    // 数据源为镜像导出的出厂常量（DEFAULT_SUBAGENT_DEFINITION 直填表单 state）
+    assert.match(source, /applyDefinition\(DEFAULT_SUBAGENT_DEFINITION, null\)/);
+    // 顶层派生 isBuiltin 并接线到全部 input/textarea/select/switch/按钮
+    assert.match(source, /const isBuiltin = agentId === GENERAL_AGENT_ID/);
+    const disabledCount =
+      (source.match(/disabled=\{isBuiltin\}/g) ?? []).length;
+    assert.ok(
+      disabledCount >= 20,
+      `disabled={isBuiltin} 接线数量不足：${disabledCount}`,
+    );
+    // 保存按钮保留渲染但禁用（与其他 agent 布局一致）
+    assert.match(source, /disabled=\{saving \|\| isBuiltin\}/);
+    // 顶部说明条保留「内置智能体，不可编辑」文案（挪入表单 desc）
     assert.match(source, /内置智能体，不可编辑/);
   });
 

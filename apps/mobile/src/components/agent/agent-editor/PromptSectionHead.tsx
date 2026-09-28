@@ -14,6 +14,8 @@ type Props = {
   onAdd?: () => void;
   switchValue?: boolean;
   onSwitchChange?: (value: boolean) => void;
+  /** 禁用态（只读详情）：添加按钮与开关均禁点并灰显。 */
+  disabled?: boolean;
 };
 
 export function PromptSectionHead({
@@ -22,13 +24,18 @@ export function PromptSectionHead({
   onAdd,
   switchValue,
   onSwitchChange,
+  disabled = false,
 }: Props) {
   return (
     <View style={styles.sectionHead}>
       <Text style={[styles.sectionLabel, {color: tokens.text}]}>{label}</Text>
       <View style={styles.sectionHeadActions}>
         {onAdd != null ? (
-          <Pressable onPress={onAdd}>
+          <Pressable
+            disabled={disabled}
+            style={disabled ? styles.actionDisabled : undefined}
+            onPress={onAdd}
+          >
             <Text style={{color: tokens.primary, fontWeight: '600'}}>添加</Text>
           </Pressable>
         ) : null}
@@ -36,6 +43,7 @@ export function PromptSectionHead({
           <Switch
             value={switchValue}
             onValueChange={onSwitchChange}
+            disabled={disabled}
             trackColor={{false: tokens.border, true: tokens.primary}}
           />
         ) : null}

@@ -25,6 +25,8 @@ type Props = {
   onToolsModeChange: (value: ToolsMode) => void;
   toolsSelected: readonly string[];
   onToolsSelectedChange: (value: string[]) => void;
+  /** 只读态（内置智能体详情）：模式下拉与工具选择器全禁用灰显。 */
+  readOnly?: boolean;
 };
 
 export function AgentEditorToolsSection({
@@ -33,6 +35,7 @@ export function AgentEditorToolsSection({
   onToolsModeChange,
   toolsSelected,
   onToolsSelectedChange,
+  readOnly = false,
 }: Props) {
   return (
     <FormSectionCard title="工具策略" tokens={tokens}>
@@ -43,6 +46,7 @@ export function AgentEditorToolsSection({
           onChange={value => onToolsModeChange(value as ToolsMode)}
           options={TOOL_MODE_OPTIONS}
           sheetTitle="工具名单模式"
+          disabled={readOnly}
         />
       </FormField>
       {toolsMode !== 'default' ? (
@@ -54,6 +58,7 @@ export function AgentEditorToolsSection({
             tokens={tokens}
             selected={toolsSelected}
             onChange={onToolsSelectedChange}
+            disabled={readOnly}
           />
         </FormField>
       ) : (
