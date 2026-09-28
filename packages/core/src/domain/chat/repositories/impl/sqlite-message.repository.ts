@@ -12,19 +12,22 @@ import {
 } from "@/infra/tdbc/logic/template-helper.js";
 import type { Row } from "@/infra/tdbc/types.js";
 import { parseMessageContent } from "../../content/parse-message-content.js";
-import {
-  escapeLikePattern,
-  type MessageSearchQuery,
-} from "../../content/message-content-match.js";
+import type { MessageSearchQuery } from "../../content/message-content-match.js";
+import { messageMatchesKeyword } from "../../content/message-content-match.js";
 import {
   parseAttachmentsJson,
   serializeAttachmentsJson,
 } from "../../model/message-attachment.schema.js";
 import type { ChatMessage } from "../../model/message.js";
+import type { MessageContent } from "../../model/content-block.js";
 import type { MessageUsage } from "../../model/message-usage.js";
+import {
+  decodeMessageContent,
+  encodeMessageContent,
+} from "../../logic/message-content-codec.js";
 import type { MessageRepository } from "../message.port.js";
 
-const MESSAGE_SELECT_COLUMNS = `id, session_id, seq, role, content_json, provider, provider_id, raw_json, created_at_ms, hidden, attachments_json, prompt_tokens, completion_tokens, total_tokens, cache_read_tokens, cache_creation_tokens, model_name, first_token_ms, duration_ms`;
+const MESSAGE_SELECT_COLUMNS = `id, session_id, seq, role, content_json, content_encoding, content_blob, provider, provider_id, raw_json, created_at_ms, hidden, attachments_json, prompt_tokens, completion_tokens, total_tokens, cache_read_tokens, cache_creation_tokens, model_name, first_token_ms, duration_ms`;
 
 /**
  * chat_message 的 INSERT 语句（`?` 占位），insert 与 batchInsert 共用。
@@ -33,22 +36,29 @@ const MESSAGE_SELECT_COLUMNS = `id, session_id, seq, role, content_json, provide
  */
 const MESSAGE_INSERT_SQL =
   `INSERT INTO chat_message ` +
-  `(id, session_id, seq, role, content_json, provider, provider_id, raw_json, created_at_ms, hidden, attachments_json, prompt_tokens, completion_tokens, total_tokens, cache_read_tokens, cache_creation_tokens, model_name, first_token_ms, duration_ms) ` +
-  `VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+  `(id, session_id, seq, role, content_json, content_encoding, content_blob, provider, provider_id, raw_json, created_at_ms, hidden, attachments_json, prompt_tokens, completion_tokens, total_tokens, cache_read_tokens, cache_creation_tokens, model_name, first_token_ms, duration_ms) ` +
+  `VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 
 /**
  * 把 ChatMessage 摊平成与 {@link MESSAGE_INSERT_SQL} 列顺序对齐的参数数组。
  *
  * insert 走 executeTemplate 时由 SqlTemplateParser 按 `#{xxx}` 出现顺序收集参数，
  * 这里手写数组必须保持同一顺序——两边的列/`?`/参数三者完全对齐。
+ *
+ * 消息正文压缩：content_json 置空串 ''（NOT NULL 约束自然满足，blocks JSON
+ * 恒非空串，'' 无歧义），正文走 content_encoding/content_blob 压缩两列
+ * （编码收口在 {@link encodeMessageContent}，三端零感知）。
  */
 function toMessageParams(message: ChatMessage): unknown[] {
+  const encoded = encodeMessageContent(JSON.stringify(message.content));
   return [
     message.id,
     message.sessionId,
     message.seq,
     message.role,
-    JSON.stringify(message.content),
+    "",
+    encoded.encoding,
+    encoded.blob,
     message.provider,
     message.providerId ?? null,
     message.raw == null ? null : JSON.stringify(message.raw),
@@ -67,8 +77,19 @@ function toMessageParams(message: ChatMessage): unknown[] {
   ];
 }
 
-function parseContent(json: string) {
-  return parseMessageContent(json);
+/** 双形态读：content_blob 非空走解压，否则 parse content_json 明文。 */
+function readRowContent(row: Row): MessageContent {
+  if (row.content_blob != null) {
+    return parseMessageContent(
+      decodeMessageContent(
+        row.content_encoding,
+        row.content_blob,
+        String(row.id)
+      )
+    );
+  }
+  // legacy 明文行（e2e fixture 直插 / 压缩任务未搬运 / 整体回滚写路径）。
+  return parseMessageContent(String(row.content_json));
 }
 
 function rowToMessage(row: Row): ChatMessage {
@@ -81,7 +102,7 @@ function rowToMessage(row: Row): ChatMessage {
     sessionId: String(row.session_id),
     seq: Number(row.seq),
     role: String(row.role),
-    content: parseContent(String(row.content_json)),
+    content: readRowContent(row),
     provider: row.provider == null ? null : String(row.provider),
     providerId: row.provider_id == null ? null : String(row.provider_id),
     modelName: row.model_name == null ? null : String(row.model_name),
@@ -309,12 +330,17 @@ export class SqliteMessageRepository implements MessageRepository {
     return maxSeq == null ? 1 : Number(maxSeq) + 1;
   }
 
-  async updateContent(id: string, contentJson: string): Promise<boolean> {
+  async updateContent(id: string, content: MessageContent): Promise<boolean> {
+    // JSON.stringify 下沉到 repository（消除 service 层序列化的不一致编码点；
+    // 压缩编码与 insert 同一收口）。
+    const encoded = encodeMessageContent(JSON.stringify(content));
     const result = await executeTemplate(
       this.conn,
       this.parser,
-      `UPDATE chat_message SET content_json = #{contentJson} WHERE id = #{id}`,
-      { id, contentJson }
+      `UPDATE chat_message
+       SET content_json = '', content_encoding = #{encoding}, content_blob = #{blob}
+       WHERE id = #{id}`,
+      { id, encoding: encoded.encoding, blob: encoded.blob }
     );
     return result.changes > 0;
   }
@@ -412,39 +438,45 @@ export class SqliteMessageRepository implements MessageRepository {
     sessionId: string,
     query: MessageSearchQuery
   ): Promise<ChatMessage[]> {
+    // 正文压缩存储后 content_json 恒为空串，SQL LIKE 粗筛失效——改为
+    // 全量拉取 + 内存精筛（messageMatchesKeyword 与 service 层同一匹配）。
+    // 旧 LIKE 只是超集预筛（且会漏 thinking/tool_result 块含关键词的场景
+    // 反被 role 粗筛误杀），新实现按 TextBlock 精确匹配，召回语义严格
+    // 不小于现状；大会话搜索多付解压成本，与 listBySession 全量路径同量级。
     const keyword = query.keyword?.trim() ?? "";
     const hasKeyword = keyword.length > 0;
-    // keyword 非空时加 role 粗筛 + LIKE 粗筛（LIKE 扫整个 content_json 是超集，内存层再精筛 TextBlock）；
-    // keyword 为空时不加 role / LIKE 过滤，返回所有类型消息。
-    const roleFilter = hasKeyword ? "AND role IN ('user', 'assistant')" : "";
-    // JS 源码双反斜杠 → 落到 SQL 是单反斜杠 ESCAPE '\'。
-    const likeFilter = hasKeyword
-      ? "AND content_json LIKE #{likePattern} ESCAPE '\\'"
-      : "";
-    const likePattern = hasKeyword ? `%${escapeLikePattern(keyword)}%` : null;
     const clampedLimit = Math.max(1, Math.floor(query.limit));
+    // keyword 非空：SQL 不 LIMIT——先精筛后截断（旧实现 SQL 先 LIMIT 再由
+    // service 精筛，命中数可能不足 limit；新语义一次给满）。
+    // keyword 为空：不做关键词/role 过滤，SQL 直接 LIMIT（与旧口径一致）。
+    const limitClause = hasKeyword ? "" : "LIMIT #{limit}";
     const rows = await queryTemplate(
       this.conn,
       this.parser,
       `SELECT ${MESSAGE_SELECT_COLUMNS}
        FROM chat_message
        WHERE session_id = #{sessionId}
-         ${roleFilter}
-         ${likeFilter}
          AND (#{beforeSeq} IS NULL OR seq < #{beforeSeq})
          AND (#{fromSeq} IS NULL OR seq >= #{fromSeq})
          AND (#{toSeq} IS NULL OR seq <= #{toSeq})
        ORDER BY seq DESC
-       LIMIT #{limit}`,
+       ${limitClause}`,
       {
         sessionId,
-        likePattern,
         beforeSeq: query.beforeSeq ?? null,
         fromSeq: query.fromSeq ?? null,
         toSeq: query.toSeq ?? null,
         limit: clampedLimit,
       }
     );
-    return this.mapRows(rows);
+    // mcdev 的内存精筛语义 + main 的分片映射（mapRows 分批让步，大会话
+    // 全量拉取路径不长时间占住 JS 线程）——两条改动的并集。
+    if (!hasKeyword) {
+      return this.mapRows(rows);
+    }
+    const messages = await this.mapRows(rows);
+    return messages
+      .filter((msg) => messageMatchesKeyword(msg, keyword))
+      .slice(0, clampedLimit);
   }
 }

@@ -5,6 +5,7 @@
  */
 
 import type { ChatMessage } from "../model/message.js";
+import type { MessageContent } from "../model/content-block.js";
 import type { MessageSearchQuery } from "../content/message-content-match.js";
 
 /** Persistence for `chat_message` rows. */
@@ -60,8 +61,13 @@ export interface MessageRepository {
    */
   batchInsert(messages: readonly ChatMessage[]): Promise<void>;
 
-  /** Replaces stored content JSON. Returns false when the row is missing. */
-  updateContent(id: string, contentJson: string): Promise<boolean>;
+  /**
+   * 替换存储的消息正文。行缺失时返回 false。
+   *
+   * 入参为 MessageContent 对象——JSON 序列化与压缩编码都收口在
+   * repository（service 层不再 stringify）。
+   */
+  updateContent(id: string, content: MessageContent): Promise<boolean>;
 
   delete(id: string): Promise<boolean>;
 
@@ -85,8 +91,10 @@ export interface MessageRepository {
   ): Promise<number>;
 
   /**
-   * 搜索会话内消息：keyword 非空时加 LIKE 粗筛 + role 粗筛，keyword 为空时全量拉；
-   * seq DESC LIMIT + 可选 beforeSeq；不在 SQL 层过滤 hidden（始终含隐藏消息）。
+   * 搜索会话内消息：keyword 非空时全量拉取后按 TextBlock 内存精筛再截断
+   * limit（正文压缩后无 SQL LIKE 粗筛），keyword 为空时全量返回（不过滤
+   * role）；seq DESC + 可选 beforeSeq/fromSeq/toSeq；不在 SQL 层过滤
+   * hidden（始终含隐藏消息）。
    */
   searchMessages(
     sessionId: string,

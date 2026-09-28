@@ -628,6 +628,27 @@ export function DataManagementView() {
           </div>
         }
       />
+      <SettingsActionSection
+        title="消息压缩"
+        desc={
+          dbStats?.messageCompaction?.done
+            ? "消息正文以 zlib 压缩存储，存储已优化完成。"
+            : "消息正文正在后台压缩为 zlib 存储（迁移期间随时可正常使用）；完成前升级新版本，会在首次启动时等待优化收尾（一次性）。"
+        }
+        action={
+          <Button
+            variant="secondary"
+            disabled={true}
+            onClick={() => undefined}
+          >
+            {dbStats?.messageCompaction == null
+              ? "—"
+              : dbStats.messageCompaction.done
+                ? "已完成"
+                : `进行中（剩余 ${dbStats.messageCompaction.pendingCount} 条）`}
+          </Button>
+        }
+      />
 
       <ConfirmModal
         open={confirmPull}

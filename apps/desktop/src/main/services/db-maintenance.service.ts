@@ -4,7 +4,11 @@
  * @module services/db-maintenance
  */
 import { stat } from "node:fs/promises";
-import { createDbMaintenanceService, getBlobBinaryStatus } from "@novel-master/core";
+import {
+  createDbMaintenanceService,
+  getBlobBinaryStatus,
+  getMessageCompactionStatus,
+} from "@novel-master/core";
 import { getDesktopRuntime } from "../runtime/desktop-runtime-singleton.js";
 import { resolveDbPath } from "../runtime/resolve-db-path.js";
 import { isDesktopAgentActive } from "../runtime/agent-activity.js";
@@ -13,26 +17,54 @@ import {
   isDesktopDbMaintenanceBusy,
   setDesktopDbMaintenanceBusy,
 } from "./db-maintenance-busy.js";
-import type { BlobBinaryStatusDto } from "../../../shared/ipc-types.js";
+import type {
+  BlobBinaryStatusDto,
+  MessageCompactionStatusDto,
+} from "../../../shared/ipc-types.js";
 
-/** 采样存储统计：库文件体积（main 侧 stat）+ freelist 可回收量（core PRAGMA）+ 形态归一状态。 */
+/** 采样存储统计：库文件体积（main 侧 stat）+ freelist 可回收量（core PRAGMA）+ 两类搬运状态。 */
 export async function getDbMaintenanceStats(): Promise<{
   fileBytes: number;
   reclaimableBytes: number;
   blobBinary: BlobBinaryStatusDto;
+  messageCompaction: MessageCompactionStatusDto;
 }> {
   // 先确保 runtime/库文件就绪再 stat：并行赛跑会在冷启动（库尚未
   // bootstrap 落盘）时拿到 ENOENT。
   const runtime = await getDesktopRuntime();
-  const [fileInfo, storage] = await Promise.all([
-    stat(resolveDbPath()),
-    createDbMaintenanceService(runtime.conn).getStorageStats(),
+  const fileInfo = await stat(resolveDbPath());
+  const maintenance = createDbMaintenanceService(runtime.conn);
+  const [storage, messageCompaction] = await Promise.all([
+    maintenance.getStorageStats(),
+    // 消息压缩状态行数据源（稳态已完成时只读 KKV 标记，零 COUNT 成本）。
+    sampleMessageCompactionStatus(runtime.conn),
   ]);
   return {
     fileBytes: fileInfo.size,
     reclaimableBytes: storage.reclaimableBytes,
     blobBinary: await sampleBlobBinaryStatus(runtime.conn),
+    messageCompaction,
   };
+}
+
+/**
+ * 采样消息正文压缩搬运状态（存储页状态行）。
+ *
+ * 与 {@link sampleBlobBinaryStatus} 同口径：附属信息采样失败不拖垮
+ * db/stats 主统计，吞掉异常按「未取到」展示。
+ */
+async function sampleMessageCompactionStatus(
+  conn: Parameters<typeof getMessageCompactionStatus>[0],
+): Promise<MessageCompactionStatusDto> {
+  try {
+    return await getMessageCompactionStatus(conn);
+  } catch (err) {
+    console.warn(
+      "[desktop] 采样消息压缩状态失败：",
+      err instanceof Error ? err.message : err,
+    );
+    return { done: false, pendingCount: 0 };
+  }
 }
 
 /**

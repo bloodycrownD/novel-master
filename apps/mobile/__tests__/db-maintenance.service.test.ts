@@ -3,8 +3,9 @@
  *
  * - T-DMM1：Agent 运行中两入口均 reject 中文错误且不触 stat/core；
  *   正常路径 getDatabaseMaintenanceStats 返回文件体积 + 可回收量 + blob
- *   归一状态（blobBinary 透传 core getBlobBinaryStatus 的 tables 数组）、
- *   runDatabaseMaintenance 按序 stat → core 维护 → stat 返回前后体积。
+ *   归一状态（blobBinary 透传 core getBlobBinaryStatus 的 tables 数组）
+ *   + 消息压缩状态、runDatabaseMaintenance 按序 stat → core 维护 → stat
+ *   返回前后体积。
  * - T-DMM2：core runDatabaseMaintenance 抛错时以 reject 语义上抛
  *   （可被调用方捕获），不吞错、错误后不再采后置体积。
  * - T-BB-S：归一状态数组原样透传（注册表增项不改本服务），Agent 守卫同样
@@ -24,6 +25,7 @@ const mockGetStorageStats = jest.fn();
 const mockRunMaintenance = jest.fn();
 const mockCreateService = jest.fn();
 const mockGetBlobBinaryStatus = jest.fn();
+const mockGetCompactionStatus = jest.fn();
 
 const liveConn = {tag: 'live'};
 
@@ -31,6 +33,8 @@ jest.mock('@novel-master/core', () => ({
   createDbMaintenanceService: (...args: unknown[]) =>
     mockCreateService(...args),
   getBlobBinaryStatus: (...args: unknown[]) => mockGetBlobBinaryStatus(...args),
+  getMessageCompactionStatus: (...args: unknown[]) =>
+    mockGetCompactionStatus(...args),
 }));
 
 jest.mock('@/db/db-file-path', () => ({
@@ -87,6 +91,9 @@ describe('db-maintenance.service', () => {
     mockGetStorageStats.mockReset().mockResolvedValue(STORAGE_STATS);
     mockRunMaintenance.mockReset().mockResolvedValue(MAINTENANCE_RESULT);
     mockGetBlobBinaryStatus.mockReset().mockResolvedValue(BLOB_BINARY_STATUS);
+    mockGetCompactionStatus
+      .mockReset()
+      .mockResolvedValue({done: true, pendingCount: 0});
     mockCreateService.mockReset().mockReturnValue({
       getStorageStats: (...args: unknown[]) => mockGetStorageStats(...args),
       runDatabaseMaintenance: (...args: unknown[]) =>
@@ -118,6 +125,7 @@ describe('db-maintenance.service', () => {
 
   it('T-DMM1: getDatabaseMaintenanceStats 正常路径返回文件体积、可回收量与 blob 归一状态', async () => {
     mockStat.mockResolvedValue({size: 1048576});
+    mockGetCompactionStatus.mockResolvedValue({done: false, pendingCount: 7});
 
     const stats = await getDatabaseMaintenanceStats(runtime);
 
@@ -126,6 +134,7 @@ describe('db-maintenance.service', () => {
     expect(mockGetStorageStats).toHaveBeenCalledTimes(1);
     expect(mockGetBlobBinaryStatus).toHaveBeenCalledTimes(1);
     expect(mockGetBlobBinaryStatus).toHaveBeenCalledWith(liveConn);
+    expect(mockGetCompactionStatus).toHaveBeenCalledWith(liveConn);
     expect(stats).toEqual({
       fileBytes: 1048576,
       reclaimableBytes: 40960,
@@ -133,6 +142,7 @@ describe('db-maintenance.service', () => {
         {table: 'vfsContent', done: false, pendingCount: 1100},
         {table: 'fileCache', done: true, pendingCount: 0},
       ],
+      messageCompaction: {done: false, pendingCount: 7},
     });
   });
 

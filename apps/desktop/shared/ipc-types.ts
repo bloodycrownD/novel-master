@@ -1532,12 +1532,21 @@ export type BlobBinaryStatusDto = {
   readonly tables: readonly BlobBinaryTableStatusDto[];
 };
 
+/** 消息正文压缩搬运状态（两态口径：进行中剩余 N 条 / 已完成）。 */
+export type MessageCompactionStatusDto = {
+  /** true = 已完成（KKV 标记已置或谓词空）。 */
+  readonly done: boolean;
+  /** 未压缩行计数（进行中态的「剩余 N 条」）。 */
+  readonly pendingCount: number;
+};
+
 /** 数据库存储统计（文件体积由 main 侧 stat 提供，可回收量为 freelist 口径）。 */
 export type DbStatsResult = {
   readonly fileBytes: number;
   readonly reclaimableBytes: number;
   /** 存量 blob 形态归一状态（存储页状态行数据源）。 */
   readonly blobBinary: BlobBinaryStatusDto;
+  readonly messageCompaction: MessageCompactionStatusDto;
 };
 
 /** 数据清理（GC + checkpoint + VACUUM）前后库文件体积。 */

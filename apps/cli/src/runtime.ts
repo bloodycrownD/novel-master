@@ -7,7 +7,7 @@
 import { mkdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { registerTokenizerNodeDriver } from "@novel-master/tokenizer-driver-node";
-import { bootstrapNovelMaster, createPersistentPreferences, createPersistentState, open, runBlobBinaryNormalization, type PersistentPreferences, type PersistentState, type TdbcConnection } from "@novel-master/core";
+import { bootstrapNovelMaster, createPersistentPreferences, createPersistentState, open, runBlobBinaryNormalization, runMessageContentCompaction, type PersistentPreferences, type PersistentState, type TdbcConnection } from "@novel-master/core";
 import { refreshUserVfsUnifiedToolTurnSnapshot } from "@novel-master/core/feature-flags";
 
 import { createAgentRegistryService, createAgentStreamRegistry } from "@novel-master/core/agent";
@@ -181,9 +181,13 @@ export async function createNovelMasterRuntime(
     driver: "better-sqlite3",
   });
   await bootstrapNovelMaster(conn);
+  // 消息正文压缩搬运：CLI 命令进程内同步跑（预算制 60s、幂等，跑完即快）。
+  // 已完成（KKV 标记已置）时零成本短路；未完成最多同步搬运 60s，残余
+  // 留待下次命令续跑（命令进程短命，无后台循环）。
+  await runMessageContentCompaction(conn);
   // 存量 blob 形态归一（zlib-b64 文本 → 二进制 BLOB）：命令进程内跑一轮
   // （带 60s 同步预算，超预算残余由下次命令或双端启动续跑）；任务幂等可重入，
-  // 收尾维护链路自带进程级去重。
+  // 收尾维护链路自带进程级去重。放在压缩之后——顺带归一压缩任务新写入的行。
   await runBlobBinaryNormalization(conn);
 
   const state = createPersistentState(conn);
