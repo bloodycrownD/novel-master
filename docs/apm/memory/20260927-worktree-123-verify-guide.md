@@ -1,5 +1,5 @@
 ---
-date: 2026-09-28 16:05
+date: 2026-09-28 21:10
 title: ① 压缩分支真机全绿 + 去 base64 SPEC/A1 dev-ready 与首轮 CR（36 条）② 集成分支 integration/binary-storage 一次跑通（merge+A2+指标卡+真机升级链 111→64.8MB）③ 集成线增量全量 CR 四轮收敛 fix-spec-ready（cr-fix-spec-integration.md 36 条）——两份 fix-spec 待统筹开工
 keywords: worktree, message-content-compression, SCHEMA_BOOT_VERSION 撞号, 谓词驱动搬运, 真机测试, base64 历史包袱, op-sqlite BLOB 真机验证通过, 收益口径修正 61.3%, binary-blob-and-vfs-pack spec, code-dev-loop, runBlobBinaryNormalization, 零进展护栏, code-review-loop, cr-fix-spec 36 条, fix-spec-ready, 验收断言牙齿, 华为 coauth 安装门, integration/binary-storage, A2 chat_message 适配器, 存量数据迁移指标卡, cr-06 提前闭合, cr-01 P0 真机实证, 内嵌 bundle 必须 --dev false, 生产 bundle 启动崩 Got unexpected undefined, cr-fix-spec-integration, ic-01 P0 收尾维护直调, maintCalls 语义对齐, keyset 游标, Metro 构建切分支免重打包
 abstract: ① 压缩分支真机全绿（5350 条零丢失、111.1→79.0MB）；A1（VFS/file_cache 去 base64）dev-ready + 首轮全量 CR 四轮收敛（36 条，P0=稳态每启动白跑全库 VACUUM）。② 用户拍板集成分支（压缩与去 base64 同发版）+ 存储页三进度改指标卡（第三条=content json 压缩；消息去 base64 不设行）→ integration/binary-storage 一次跑通：merge（15 冲突 + BOOT 撞号顺延 17 + bytesToBase64 语义冲突搬迁）、A2（写侧恒二进制 + chat_message 适配器）、指标卡 + cr-06 闭合；真机完整升级链全绿（pre-mc 备份 111.1MB → 64.76MB/−46.4%、5350 条逐条零丢失、b64_rows=0）；cr-01 P0 真机实证（零待归一冷启动两次全文件重写、12 表逻辑零变化）。③ 集成线增量（mcdev 压缩线+merge 裁决+A2+指标卡，32 文件从未 CR）补审：四路 scope 并行 47 条 → 四轮收敛 fix-spec-ready，产物 cr-fix-spec-integration.md（36 条 = P0×1/P1×10/P2×25；P0 ic-01 = mcdev 收尾维护直调绕去重/兜底/busy，cr-01 族六合一）。现挂两份 fix-spec 待统筹开工（耦合：ic-03↔cr-04 合并、ic-01 前置 cr-26、ic-09 依赖 cr-08、ic-36 随姊妹条目）；发版前置遗留：内嵌生产 bundle 启动崩『Got unexpected undefined』未定位。
@@ -301,3 +301,9 @@ assistant:
 【下一步待办（按优先级）】① **等用户一句话开工两份 fix-spec**（建议 wave-0 = cr-26 回调缝 + cr-08 探针补口先行 → P0 双线（ic-01 + cr-01 族）→ 其余按各自波次表；71 条总量，主代理统筹排波）。② **生产 bundle 启动崩排查**（发版前置，不阻塞 fix-spec 执行）。③ Part B（VFS 内容打包 3.06MB）待拍板。④ QA 三项真机：坏 base64 消息行第三态文案、大会话 keyword 搜索耗时（ic-08 落地后）、迁移进行中进度轮询推进（ic-23 落地后）。
 
 【不要再试的（本段新增）】① 把 mcdev 压缩任务的收尾维护直调当正确先例抄——它就是 ic-01 P0（直调 runDatabaseMaintenance 绕过去重/兜底/busy），修复前别引用。② 两份 fix-spec 并行时混用验收判据口径——maintCalls=「进入维护段次数（含去重短路）」与「真跑次数（VACUUM 探针）」是两个口径，r2 轮已对齐，执行时按各条目写的口径走。③ review 子代理的 prompt 必须显式禁写 docs/apm/ 与 git（本轮 5 个评审子代理零越界，纪律有效）。（此前已记仍有效：内嵌包 --dev false、绕 coauth 门、换压缩算法/CAS/CDC、探针事务内外层 conn、bridgeless console 双盲。）
+
+user:
+[$apm-recall] 恢复记忆，[$code-dev-loop] 按照两个 cr spec 修复（cr-fix-spec.md 35 条 + cr-fix-spec-integration.md 36 条），修复项目较多建议多分配 agent 提高效率。（随后补充）下次使用同步 agent，方便我观察。
+
+assistant:
+（两份 fix-spec 统筹开工：恢复记忆 + 读两份全文 + 耦合关系核对（ic-03↔cr-04 合并、ic-01 前置 cr-26、ic-09 依赖 cr-08、ic-36 随姊妹条目）→ 统筹 DAG 落 docs/.iteration-state.yaml 的 dev_loop_binstore_fix 块。wave-1 五路并行后台子代理：nA core-blob（cr-26/01/02/07/08/09/10/11/15/24/25/27/28/31/32/33/35 + ic-12/15/27/35 + NF-1 新测试文件 + ic-36a/b 三表化）、nB core-compaction（ic-01/05/07/09/25/32 + OQ-I7）、nC core-repo（ic-08/29/30/31/33）、nD core-misc（ic-10/11/13/24/26/28）、nG docs-cli（cr-16/22/23/29/30/34 + ic-14/17/36 + compression spec + CHANGELOG + RULE 措辞）——五节点文件集互不相交已核对；每路都带反向判据抽查要求。wave-2 计划 nE desktop / nF mobile 并行（派发前主代理先重建 core dist + 统一提交 wave-1）；随后 verify-all 全量 + cr-func 对照检查。【用户偏好记录】子代理派遣从 wave-2 起改用同步方式（同一波多 agent 并行发、同步等待返回），方便用户观察执行过程；后台异步仅本次 wave-1 使用。

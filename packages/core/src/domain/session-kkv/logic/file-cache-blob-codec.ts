@@ -2,8 +2,8 @@
  * file_cache 域 blob 编解码：FileCachePayload JSON 字符串 ↔ 两表写库字段。
  *
  * 压缩 / 哈希 / 字节收整（tightBytes、decodeCompressedBytes 等）
- * 全部复用 vfs ContentStore 侧共享模块（hash-content / zlib-codec /
- * blob-bytes-codec），落库形态与存量兼容口径对齐
+ * 全部复用 vfs ContentStore 侧共享模块（hash-content / zlib-codec），
+ * 落库形态与存量兼容口径对齐
  * SqliteVfsContentStore，不另起实现。
  *
  * @module domain/session-kkv/logic/file-cache-blob-codec

@@ -203,3 +203,35 @@ manual_pending: "真机验收已全部完成（2026-09-28），设备收尾状�
 #   dag_version 2；n1~n10 全 done，两轮 cr-func 均 func-ready: yes；
 #   终态：core 2748/2746 pass/2 红（既有时区）、desktop 528/528、mobile 1505/1 红、三端 typecheck 零输出；
 #   未 push / 未 merge / 未发版；manual_pending = 1310 真机包复验。
+
+# === code-dev-loop 编排状态（当前进行中：两份 fix-spec 统筹执行 · 2026-09-28）===
+dev_loop_binstore_fix:
+  skill: code-dev-loop
+  repo_path: D:\Dev\Js\novel-master
+  branch: integration/binary-storage
+  base_head_at_start: e4f56ae5
+  fix_specs:
+    - docs/Iterations/binary-blob-and-vfs-pack/cr-fix-spec.md（A1 线 35 条待执行；cr-06 已闭合）
+    - docs/Iterations/binary-blob-and-vfs-pack/cr-fix-spec-integration.md（集成线 36 条）
+  耦合关系: ic-03↔cr-04 合并执行；ic-01 前置 cr-26 回调缝（各文件独立实现同款）；ic-09 探针自带 execute 覆写；ic-36 修订随姊妹条目（nG 统一落姊妹文档）
+  dag_version: 1
+  wave_plan:
+    - [nA-core-blob, nB-core-compaction, nC-core-repo, nD-core-misc, nG-docs-cli]
+    - [nE-desktop, nF-mobile]
+    - [verify-all]
+    - [cr-func-all]
+  node_status:
+    nA-core-blob: { status: pending, executor: subagent, scope: "blob-binary-normalization.ts+db-maintenance.service.ts+两测试文件；条目 cr-26/01/02/07/08/09/10/11/15/24/25/27/28/31/32/33/35 + ic-12/15/27/35 + ic-36a/b 夹具三表化 + NF-1 新文件" }
+    nB-core-compaction: { status: pending, executor: subagent, scope: "message-content-compaction.ts+测试；条目 ic-01/05/07/09/25/32 + OQ-I2/I7" }
+    nC-core-repo: { status: pending, executor: subagent, scope: "sqlite-message.repository.ts+message.service.ts+message-search.test.ts；条目 ic-08(A)/29/30/31/33" }
+    nD-core-misc: { status: pending, executor: subagent, scope: "死出口 ic-13 + schema/perf/codec 测试 ic-10/11/24/26/28" }
+    nG-docs-cli: { status: pending, executor: subagent, scope: "文档全部：cr-16(两处 core 注释)/22/23/29/30/34 + ic-14/17/36 + compression spec SD + CHANGELOG + RULE 措辞 + cli runtime 注释" }
+    nE-desktop: { status: pending, executor: subagent, scope: "apps/desktop 全部：cr-03/05/19/33(桌面注释)/16(ipc-types) /17/20b + ic-01c接线/02/04/18/20/22 + ic-08B(yieldFn 注入)" }
+    nF-mobile: { status: pending, executor: subagent, scope: "apps/mobile 全部：cr-04+ic-03 合并 / cr-20a + ic-19/34/21/20/23/22" }
+  discipline:
+    - 子代理一律不做任何 git 写；主代理在 wave 结束后按节点分组统一提交
+    - 子代理只跑定向测试与 typecheck；全量套件由 verify-all 单节点顺序跑
+    - 同文件簇禁止并行 impl；wave-1 五节点文件集互不相交（已核对）
+    - wave-2 派发前主代理先重建 core dist（npm run build -w @novel-master/core）
+  known_baselines: core 2 条 usage-stats 时区红；mobile 1 条 mermaid-fullscreen 红；desktop renderer 349 条既有债
+  open_must_fix: []

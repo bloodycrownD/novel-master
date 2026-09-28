@@ -75,8 +75,9 @@ Part A 完成后真机库约 79.0MB → **约 65.7MB**；Part B 再降到 **约 
 - 每批 ≤100 行，`SELECT` 只取主键 + `encoding` + `bytes`；每行短事务：base64 解码 → 二进制 → `UPDATE ... SET bytes=?, encoding='zlib', byte_len=?`（谓词进 `WHERE` 保证并发幂等）。
 - 批间 `setTimeout(0)` 让步 + 单轮同步预算 60s（沿用既有 `DEFAULT_COMPACTION_SYNC_BUDGET_MS` 口径）；中断随时可重启，重启按谓词续扫。
 - 完成标记：KKV module `nm-blob-binary`，key 按表 `messageContentDone` / `vfsContentDone` / `fileCacheDone`（三表各自短路，互不牵连）。
-- 完成后挂一次 `runDatabaseMaintenance`（GC → checkpoint → VACUUM）；**新增会话级去重**（同一进程内已有任务触发过维护则跳过），避免多任务叠加多次全库 VACUUM。
-- 状态查询 `getBlobBinaryStatus(conn)` 返回三表各自的 `{ done, pendingCount }` 供存储页显示。
+- 收尾维护：**仅在本轮确有推进（成功改写 ≥1 行）且全部表完成时**跑一次收尾维护链路（GC → checkpoint → VACUUM，经会话级去重入口 `runStartupMaintenanceOnce` 挂载）——稳态（标记已置、谓词空）零成本短路；上一轮维护失败由持久化标记 `startupMaintenancePending` 补跑。**手动路径 `runDatabaseMaintenance` 刻意不受该去重约束**（用户手动点「数据清理」必须每次真跑）。
+- 状态查询 `getBlobBinaryStatus(conn)` 返回**已注册适配器**对应各表的 `{ done, pendingCount, failedCount }` 供存储页显示；**`done && failedCount > 0` 时状态行显示「已完成（N 条需人工处理）」**（第三态文案）。`failedCount` 的含义是「本轮跳过、解码失败的坏行，行原样保留、读路径按 miss 自愈」，不是「数据损坏待修」。未注册进适配器注册表的表不由 core 回报，UI 以 `—` 占位（与存储页既有占位风格一致）。
+- **两端形状不统一是有意为之，不要求统一**：desktop 走 IPC DTO 惯例，状态查询结果保留 `{ tables }` 包装以便后续加字段；mobile 不走 IPC、由 service 侧拍平成数组直接喂列表渲染。这是两端的惯例差异，不是待收敛的偏差。
 
 **为什么不用 schema migration**：`schema_migrations` 只有两态（`id` + `applied_at_ms`），无进度列；大库 data migrate 须「事务外、分批、可跨 boot 重入」，而 bootstrap 是单事务同步——既有纪律（空占位登记禁令 + `vfs-content-blob-zlib-v1` 先例）指向「谓词驱动后台任务」而非 migration。
 
@@ -169,7 +170,7 @@ apps/{mobile,desktop} 存储页                                        # A/B：�
 | 3 | `file-cache-blob-codec.ts` | 删 `forceZlibB64` 分支与参数；`byteLen` 改二进制长度 | A |
 | 4 | `message-content-codec.ts` | 同 #3（合并后主干执行） | A |
 | 5 | `infra/db-maintenance/impl/blob-binary-normalization.ts`（新） | 三表适配器 + 谓词 + 分批 + 每表 KKV 标记 + 状态查询 | A |
-| 6 | `db-maintenance.service.ts` | 维护链路（VACUUM）会话级去重 | A |
+| 6 | `db-maintenance.service.ts` | **新增 `runStartupMaintenanceOnce`：会话级去重的收尾维护入口**；手动路径 `runDatabaseMaintenance` **刻意不受其约束**（用户手动点「数据清理」必须每次真跑，不被启动去重标记 gate 住） | A |
 | 7 | `infra/db-maintenance/index.ts` + `src/index.ts` | 新任务与状态查询导出（同步 `test/package-exports/snapshots/main-entry-allowlist.json`） | A+B |
 | 8 | 三端调度 + 存储页 | 新增服务文件、挂载点、IPC DTO 字段、状态行（mobile `StorageConfigScreen` / desktop `SettingsViews.tsx`） | A+B |
 | 9 | `bootstrap/vfs/vfs-content-pack-schema.ts`（新）+ `novel-master-bootstrap.ts` | 两表 DDL + `SCHEMA_BOOT_VERSION` +1（含撞号顺延注释；**仅 Part B 需要**） | B |
@@ -178,6 +179,8 @@ apps/{mobile,desktop} 存储页                                        # A/B：�
 | 12 | `packages/tdbc-driver-op-sqlite/src/bindings.ts` | 更新「blob 绑参尚未真机验证」注释（已真机实测通过） | A |
 | 13 | 测试 | 见「测试策略」；`content-store.test.ts` / `file-cache-store.test.ts` / `message-content-codec-roundtrip.test.ts` 的 b64 写用例改写为存量读兼容用例 | A+B |
 | 14 | 文档 | CHANGELOG Unreleased；RULE.md（形态归一与打包列约定、`byte_len` 语义） | A+B |
+| 15 | KKV 新 key：`startupMaintenancePending` | 收尾维护失败时的兜底标记（module `nm-blob-binary`）：入口读到即无视 `processedAny` 强制补跑一次维护链路；**清标记以 `runStartupMaintenanceOnce` 返回非 `null` 为条件**（同进程重入时保留待下次冷启动） | A |
+| 16 | KKV 写路径总表 | 本迭代全部 KKV 写路径清点：`nm-blob-binary` ×4（`vfsContentDone` / `fileCacheDone` / `messageContentDone` / `startupMaintenancePending`）＋ `nm-message-content` ×2（`compactionDone` / `startupMaintenancePending`，消息压缩任务各自的独立 pending key，不共享单 key） | A |
 
 ## 详细实现步骤
 
@@ -205,12 +208,12 @@ apps/{mobile,desktop} 存储页                                        # A/B：�
 新增/改写（core `node:test`；跑法与 flag 见 RULE「Windows 下跑本仓测试的两个假信号」）：
 
 - T-BB1 — blocking: yes — 新写入恒二进制：三表各写一条后 SQL 直查 `encoding='zlib'` 且 `TYPEOF(bytes)='blob'`（映射 Step 1/2）
-- T-BB2 — blocking: yes — 存量 `zlib-b64` 文本行读回等值（三表，直插 SQL 构造）（映射 Step 1/2）
+- T-BB2 — blocking: yes — 存量 `zlib-b64` 文本行读回等值（三表，直插 SQL 构造）（映射 Step 1/2）。**口径更正**：file_cache 侧的实际用例编号是 **T-R7**（`file-cache-store.test.ts`），与 core/vfs 侧 T-BB2 同名不同物
 - T-BB3 — blocking: yes — `encoding='zlib'` + 文本字节的历史脏形态读回等值（映射 Step 1/2）
-- T-BB4 — blocking: yes — 归一任务幂等：连跑两遍，第二遍 `compactedCount=0` 且不产生 UPDATE（映射 Step 3）
-- T-BB5 — blocking: yes — 可重入：批间中断（模拟杀进程）后重启续跑收敛（映射 Step 3）
-- T-BB6 — blocking: yes — 归一后表单一致：`encoding='zlib'`、`TYPEOF(bytes)='blob'`、`byte_len = 物理字节长度`（映射 Step 3）
-- T-BB7 — blocking: yes — 零丢失：混合语料（中文长文 / 附件 / 工具块）归一前后逐条解压比对全等（映射 Step 3）
+- T-BB4 — blocking: yes — 归一任务幂等：连跑两遍，第二遍 `compactedCount=0` 且不产生 UPDATE（映射 Step 3）。**拆两条**：一条钉「标记短路」（连跑第二遍零改写零 SQL），一条钉「清标记后谓词幂等」（删两表完成标记后第二遍仍零改写——幂等由谓词保证、不被标记遮蔽）
+- T-BB5 — blocking: yes — 可重入：批间中断后重启续跑收敛（映射 Step 3）。**口径更正**：「模拟杀进程」的实际实现是**预算耗尽**（收紧单轮同步预算让任务在批间收手），不是真杀进程
+- T-BB6 — blocking: yes — 归一后表单一致：`encoding='zlib'`、`TYPEOF(bytes)='blob'`、`byte_len = 物理字节长度`（映射 Step 3）。**口径更正**：断言的形态组合数为 **5**（不是 6）
+- T-BB7 — blocking: yes — 零丢失：混合语料归一前后逐条解压比对全等（映射 Step 3）。**口径更正**：语料是**构造语料**（伪随机长文 / 中文文本 / 工具块模拟，并非真实附件形态）
 - T-BB8 — blocking: no — perf 阈值：单批 100 行耗时 ≤30s（含维护链路）、写入路径压缩耗时与改动前同级（映射 Step 2/5）
 - T-VP1 — blocking: yes — 打包后逐版本读回等值（含同组重复 hash 共享成员）（映射 Step 8）
 - T-VP2 — blocking: yes — live head 永不被打包：打包任务跑完后，所有 `vfs_entry.content_hash` 仍是 `vfs_content_blob` 行（映射 Step 8/10）
@@ -222,11 +225,49 @@ apps/{mobile,desktop} 存储页                                        # A/B：�
 - T-VP8 — blocking: yes — 打包幂等/可重入：中断不留半打包态；重跑不重复打包已打包版本（映射 Step 10）
 - T-VP10 — blocking: yes — 反向展开：`unpackVfsContent` 后 pack/member 清空、独立 blob 行齐备且读回等值，可重复执行（映射 Step 10）
 
+### T 编号 → 实际用例文件 → 断言要点映射（文档同步，2026-09-28）
+
+T 编号与实际落地用例的可追溯映射（行号为集成分支 `integration/binary-storage` 当前实测；fix-spec 修复轮新增用例落地后以实际用例名为准回填）：
+
+| T 编号 | 实际用例文件 | 断言要点 |
+|---|---|---|
+| T-BB1 | `packages/core/test/vfs/content-store.test.ts`（「T-BB1: 新写入恒为二进制 BLOB」）；fc 侧 `packages/core/test/session-kkv/file-cache-store.test.ts`（「T-BB1 encodeFileCacheValue 恒落二进制」+「T-BB1b set 落库」） | SQL 直查 `encoding='zlib'`、`TYPEOF(bytes)='blob'`、`byte_len` 为二进制物理长度 |
+| T-BB2（core/vfs 侧） | `packages/core/test/vfs/content-store.test.ts`（「T-BB2: 存量 zlib-b64 文本行仍可读」） | get / getMany / ensureBlob 对直插的存量 b64 文本行均认、读回等值 |
+| T-R7（fc 侧，即原记「T-BB2」） | `packages/core/test/session-kkv/file-cache-store.test.ts`（「T-R7 存量 zlib-b64 文本行」） | get 还原原文；bad-bytes 坏行对应 T-R8（get 返 null 不抛，自愈） |
+| T-BB3 | vfs 侧 `content-store.test.ts`（「encoding=zlib 且 bytes 为 base64 string 时兜底解码」）；fc 侧 `file-cache-store.test.ts`（「T-BB3 历史脏形态」） | 历史脏形态（`zlib` + base64 文本）读回等值 |
+| T-BB4（标记短路） | `packages/core/test/infra/blob-binary-normalization.test.ts`（「T-BB4：幂等——连跑两遍」+「标记短路面：已置完成标记的表不跑 COUNT」） | 第二遍 `normalizedCount=0`、零 UPDATE、数据快照不变；已置标记的表不跑谓词 COUNT |
+| T-BB4（清标记后谓词幂等，fix-spec cr-07 拆出） | 同上文件（以实际用例名为准） | 删两表完成标记后第二遍仍零改写——幂等由谓词保证，不被标记遮蔽 |
+| T-BB5 | `blob-binary-normalization.test.ts`（「T-BB5：可重入——批间中断（模拟杀进程）」） | 预算耗尽模拟中断，重启续跑收敛；中断轮内已完成的表标记已置 |
+| T-BB6 | `blob-binary-normalization.test.ts`（「T-BB6：形态一致」） | 三字段组合数 5；`byte_len = LENGTH(bytes)` |
+| T-BB7 | `blob-binary-normalization.test.ts`（「T-BB7：零丢失——混合语料」） | 构造语料归一前后逐条解压比对全等；fc 侧含真实读链路断言（fix-spec cr-11） |
+| T-BB8 | perf 阈值用例（以实际用例名为准） | 单批 100 行 ≤30s、写入路径压缩耗时与改动前同级 |
+| chat_message 适配器（A2 新增） | `blob-binary-normalization.test.ts`（「chat_message 适配器：zlib-b64 行转二进制、坏行跳过计数、legacy 明文行不动、独立完成标记」） | 列名映射（content_encoding/content_blob）、按 id 游标、`messageContentDone` 标记 |
+| cr-06 配套 | `blob-binary-normalization.test.ts`（「cr-06：旧版 ISO 字符串标记向后兼容 + 状态查询纯读无副作用」；坏行用例「解码失败的坏行不阻断收敛」） | 标记 JSON 可解析出 `failedCount`、旧 ISO 值兼容归零、状态查询前后 `kkv_entry` 不变 |
+| T-DM3 / T-DM4 | `packages/core/test/infra/db-maintenance.test.ts` | 启动维护链路去重（同进程第二次返 null）；手动「数据清理」不受启动去重标记影响 |
+
+**新增用例登记（fix-spec 修复轮配套，cr-07 ~ cr-21 / cr-24 ~ cr-35 及集成分支 ic 系列；统一以实际落地用例名为准）**：
+
+- **收尾维护观测（cr-01 / cr-25 / cr-31）**：`maintCalls` = 进入收尾维护段的次数（含被进程级去重短路的调用，不代表 VACUUM 真跑），判据一律走 `afterMaintenance` 回调计数——稳态 `maintCalls===0`、缺失标记但谓词空、首轮确有归一 `maintCalls===1`。
+- **NF-2 拆分两条互不重叠**：(a)「纯坏行表（0 正常行）」→ `normalizedCount===0`、`failedCount===100`、`done===true`、`maintCalls===0`；(b)「坏行满批 + 尾部正常行（100 坏 + 20 好）」→ 20 行全归一、`failedCount===100`、`maintCalls===1`。四处（cr-01/cr-02/cr-24/本清单）统一引用同一对名称与同一套期望。
+- **新测试文件** `packages/core/test/infra/blob-binary-normalization-maintenance.test.ts`（独立进程承载 pending 标记正向路径，已随集成分支落地）：:99「第一条：预置 startupMaintenancePending + 无待归一行 → maintCalls===1 且 pending 被清」；:133「稳态：三表标记已置、无 pending → maintCalls===0」。
+- **同进程二次调用**（cr-32）：预置 pending → 先跑一次 `runStartupMaintenanceOnce` 落位进程级标记 → 再调归一 → `maintCalls===1` 且 `startupMaintenancePending` **未被误清**。
+- **收尾谓词校验族**（cr-02 / cr-24 / cr-35）：既有「零进展护栏」用例改题「收尾谓词校验判定残留非坏行 → `stalled:true`、标记未置」（`updateCount===2`）；新增「1 正常行 + 1 打转行」反例；三表口径含「`chat_message` 前 100 条 id 全坏」专门用例（A2 三表化，ic-36a）。
+- **既有整对象断言补字段**（cr-27 / ic-36e）：core `blob-binary-normalization.test.ts` 与 mobile `db-maintenance.service.test.ts` 的 `deepEqual`/`toEqual` 断言以 `grep -n` 实测清单为准（core 至少 :372/:415/:736/:848/:871/:878 六处，另 :401/:406/:407/:612/:636/:890 同口径复核；mobile :138 全对象、:166 数组两处），只补 `failedCount` 字段、不得改成部分比对。
+- **空库首启三表化**（cr-09 / ic-36b）：空库状态查询断言含 `messageContent` 行；执行侧互不牵连（cr-10 / ic-36b）覆盖第三表。
+- **desktop busy 契约**（cr-03 / cr-26）：VACUUM 执行瞬间 `isDesktopDbMaintenanceBusy()===true`、VACUUM 抛错后仍复位、归一循环进行中不置 busy；**rebootstrap 重挂**（cr-05）：换连接后允许重挂。
+- **mobile 采样降级**（cr-04）：`getBlobBinaryStatus` 抛错时 `getDatabaseMaintenanceStats` 不整体 reject，`blobBinary` 返回空数组。
+- **三端源码 / handler 契约**（cr-21）：mobile 三行状态行顺序与取值；desktop 类名与「ORDER 从 LABELS 派生」；desktop handler 兜底（采样抛错时 `tables: []` 且 `fileBytes` 仍在）。
+- **OQ-C UI 第三态源码契约**（cr-06）：两端状态行渲染分支含 `failedCount > 0` 第三态与「需人工处理」字样。
+- 纯措辞/注释同步项（cr-33 的 `stalled` 三处文档、cr-34 / cr-36 的 spec 文本项）不产生用例，属文档 diff 复检。
+
 ## 风险与回滚方案
 
 **Part A**
 
 - 风险：写入路径从 TEXT 挪到 BLOB 通道（真机已 6 项探针验证，剩余风险为并发/大值场景）；存量行形态长期混存（读路径天然兼容，不影响正确性）。
+- 风险：**状态查询的归一谓词 COUNT 不可索引**——`getBlobBinaryStatus` 每表一次 `COUNT(*) ... WHERE <归一谓词>`，谓词作用在 `bytes` 的 `TYPEOF`/长度上无法走索引；未完成态下 desktop 存储页的 2s 轮询会触发全表扫，接入大表（`chat_message` 约 43MB）后从「慢」升级为「持续吃 IO」。**已由本轮 ic-06（状态采样节流）落地缓解**；后续若再接入更大的表，须先复核采样口径（标记已置则直接读标记快照、不再 COUNT）。
+- 风险：**`startupMaintenancePending` 在用户手动「数据清理」成功后会变陈旧**——手动清理把 freelist 收干净后该标记仍留在 `kkv_entry`，下次冷启动会多跑一次全库 VACUUM（一次性浪费、非正确性问题）；默认在手动路径成功后顺带清该标记。
+- 风险：**备份导入未完成库时，完成标记随库文件旅行**——导入「迁移进行到一半」的库文件后，标记与数据一起被覆盖，新库会重新压缩/归一（谓词重扫）。这是幂等设计的一部分（重扫幂等、无正确性损失），不修行为。
 - 回滚：停用归一任务即可（读路径两形态都认）；如需彻底回退形态，写一个谓词 `encoding='zlib' AND TYPEOF(bytes)='blob'` 的反向任务（注意这会把所有三端写入的二进制行一起转回，仅应急用）。
 
 **Part B**
@@ -246,15 +287,18 @@ A1（VFS + file_cache 去 base64 + 归一任务 + 三端接线）已按本 spec 
 | `stalled` + 零进展护栏 | 连续 3 批「谓词非空但 UPDATE 恒 `changes = 0`」即 warn 并 `stalled = true` 收手本轮；两端调度服务见 `stalled === true` 立即停止本进程重试（否则 app 层的「立即续跑」会把它放大成热循环）。护栏**不**要求满批——谓词是实时重扫的，任何批大小的零进展都是异常信号 |
 | 收尾维护容错 | 归一完成后挂的 `runStartupMaintenanceOnce` 包 try/catch：VACUUM 失败（磁盘满 / 库被锁）只 warn 不穿透——CLI 启动链路没有 try/catch，裸奔会让每条命令失败，且进程级去重在每个新进程复位、会反复重试注定失败的 VACUUM |
 | 预算常量分叉 | 新建 `DEFAULT_BLOB_BINARY_SYNC_BUDGET_MS = 60_000`（与消息侧 `DEFAULT_COMPACTION_SYNC_BUDGET_MS` 同值不同名）：后者所在文件在未合并的 `message-content-compression` 分支上，本分支无法引用 |
-| `messageContent` 类型预置 | `BlobBinaryTableId` 联合已含 `"messageContent"`，A2 只加适配器数据、不改类型定义；两端 UI 已预置标签映射（未注册的表显示 `—` 占位，与存储页既有占位风格一致、布局不随注册表增减跳动） |
+| `messageContent` 类型预置 | `BlobBinaryTableId` 联合已含 `"messageContent"`，A2 只加适配器数据、不改类型定义。两端 UI **有意不设 `messageContent` 状态行**（发版形态下压缩搬运直接写二进制，不存在用户可见的中间态，见「实现期补充二」的范围拍板）；未注册进适配器注册表的表才由 UI 以 `—` 占位（与存储页既有占位风格一致、布局不随注册表增减跳动） |
 | 三端守卫组合 | mobile 当前仅 `isMobileAgentActive`（main 上 mobile 无维护/备份 busy 标志，注释已留扩展点）；desktop 为 agent + 云同步 + 维护 busy 三条；cli 无守卫（进程内单轮） |
+| app 层失败策略 | mobile：归一任务 error → warn 并本进程收手；desktop：error → warn 并本进程收手；cli：error → 上抛（CLI 启动链路无 try/catch 兜底，裸抛让命令显式失败） |
+| CLI 内联预算制口径 | 稳态零成本短路；仅在本轮确有推进（成功改写 ≥1 行）且全部表完成时跑一次收尾维护链路；上一轮维护失败由持久化标记补跑。已知代价：CLI **首轮**（库中确有待搬运/待归一行时）仍同步阻塞——压缩与归一两任务各 60s 预算、最坏合计约 120s，超预算残余由下次命令或双端启动续跑 |
+| desktop 备份导入去重契约 | 「备份导入不重入」的契约是**去重键 = 连接身份**：`rebootstrapDesktopRuntime`（备份导入 / 云同步 pull）换连接后本任务视为可重入、允许重挂，远端库回灌后会重新归一；仅「连接仍在却失败」的真失败才 warn 并本进程收手 |
 | A1 / A2 拆分 | 本轮只做 VFS + file_cache 两表；`chat_message` 的写侧 codec 切换与归一适配器属 A2，待 `feat/message-content-compression` 合并（须用户指令）后执行 |
 
 验证证据（A1 终态，实测）：core 全量 2788/2786 pass（2 条既有 usage-stats 时区红灯）；core 定向 34/34；mobile `tsc -p tsconfig.build.json` 绿 + jest 定向 15/15（全量 1534/1535，唯一红为既有 `mermaid-fullscreen.test.ts`）；desktop main `tsc` 绿 + 相关测试 8/8（renderer `tsc` 为既有 349 条债，与本次改动行区间交集为 0）；cli `tsc` 绿 + 启动链路冒烟通过；实库副本端到端 `{done:true, normalizedCount:1136, failedCount:0, stalled:false}`、二次运行 `normalizedCount:0` 且不下发 UPDATE、1149 个 hash 逐条 sha256 比对零丢失、两表全 `blob`+`zlib` 且 `byte_len = LENGTH(bytes)`、副本 111,120,384 → 107,528,192 字节。
 
 ## 实现期补充二（集成分支 + A2 + 存储页指标卡 + 真机验收，2026-09-28 下午）
 
-**范围拍板（用户）**：压缩与去 base64 一起发布 → 开集成分支 `integration/binary-storage` 一起开发测试；存储页第三条进度是「content json 压缩」（真实用户升级要经历的长耗时搬运）而非「消息正文去 base64」（发版形态下压缩搬运直接写二进制，不存在用户可见中间态）；三条进度是指标不是菜单项，改指标卡只读展示。
+**范围拍板（用户）**：压缩与去 base64 一起发布 → 开集成分支 `integration/binary-storage` 一起开发测试；存储页第三条进度是「content json 压缩」（真实用户升级要经历的长耗时搬运）而非「消息正文去 base64」（发版形态下压缩搬运直接写二进制，不存在用户可见中间态）；三条进度是指标不是菜单项，改指标卡只读展示。**消息正文『去 base64』不设状态行——发版形态下压缩搬运直接写二进制，不存在用户可见的中间态（`messageContent` 的 `failedCount` 属 engine 内部观测，不入 UI）**；core 状态查询照常回报该表，仅两端迁移卡不渲染它。
 
 | 项 | 说明 |
 |---|---|

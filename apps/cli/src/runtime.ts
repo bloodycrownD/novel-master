@@ -181,13 +181,13 @@ export async function createNovelMasterRuntime(
     driver: "better-sqlite3",
   });
   await bootstrapNovelMaster(conn);
-  // 消息正文压缩搬运：CLI 命令进程内同步跑（预算制 60s、幂等，跑完即快）。
-  // 已完成（KKV 标记已置）时零成本短路；未完成最多同步搬运 60s，残余
-  // 留待下次命令续跑（命令进程短命，无后台循环）。
+  // 双任务各 60s 同步预算、最坏合计约 120s；命令进程短命，超预算残余由
+  // 下次命令或双端启动续跑。顺序无功能依赖——压缩谓词（content_json != ''）
+  // 与归一谓词（blob 形态）互不越界：A2 后压缩恒写二进制、不产出待归一行。
   await runMessageContentCompaction(conn);
-  // 存量 blob 形态归一（zlib-b64 文本 → 二进制 BLOB）：命令进程内跑一轮
-  // （带 60s 同步预算，超预算残余由下次命令或双端启动续跑）；任务幂等可重入，
-  // 收尾维护链路自带进程级去重。放在压缩之后——顺带归一压缩任务新写入的行。
+  // 存量 blob 形态归一（zlib-b64 文本 → 二进制 BLOB）：幂等可重入；收尾
+  // 维护仅在本轮确有推进（成功改写 ≥1 行）且全部表完成时触发一次（稳态
+  // 零成本短路），上一轮维护失败由持久化标记 startupMaintenancePending 补跑。
   await runBlobBinaryNormalization(conn);
 
   const state = createPersistentState(conn);

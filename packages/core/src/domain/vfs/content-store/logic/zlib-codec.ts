@@ -12,7 +12,7 @@ import {
 } from "./blob-bytes-codec.js";
 
 /**
- * ContentStore 落库 encoding：原始 zlib 字节（Node / Desktop）。
+ * ContentStore 落库 encoding：原始 zlib 字节（三端同形态：Node / Desktop / RN）。
  *
  * @remarks 写侧恒落本编码（二进制 BLOB，RN 与 Node 同一形态）；
  * `VFS_CONTENT_ENCODING_ZLIB_B64` 仅剩读侧存量兜底（见 blob-bytes-codec）；get 须同时支持二者。

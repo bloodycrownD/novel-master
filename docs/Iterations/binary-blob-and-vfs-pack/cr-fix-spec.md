@@ -19,6 +19,8 @@
 
 > **执行注记（2026-09-28 下午，主代理）**：fix-spec-ready 宣布后、用户开工指令前，随集成分支重构执行了 **cr-06**（`integration/binary-storage` @`05ffcb53`：完成标记值升 JSON 含 `failedCount` 快照（旧 ISO 值兼容归零）+ `getBlobBinaryStatus` 纯读回报 `failedCount` + DTO 增字段 + UI 第三态「已完成（N 条需人工处理）」，验收含用例 A/C、纯读断言、既有 deepEqual 补字段、两端源码契约）——该条**已闭合，剩 35 条待开工**。另：**cr-01（P0）已取得真机实证**（稳态零待归一冷启动两次 76MB 全文件重写、12 表跨启动逐字节逻辑零变化，详见业务 spec「实现期补充二」），修复本体仍在待办。基线分支 `feat/blob-binary-normalization` 已并入集成分支 `integration/binary-storage`，剩余条目在集成分支执行、条目语义不变。
 
+> **执行注记二（2026-09-28 晚，nG-docs-cli 文档节点）**：本节点执行姊妹文档 `cr-fix-spec-integration.md` 的 **ic-36 十一行姊妹条目修订**（已就地并入 cr-01 / cr-02 / cr-24 / cr-35 / cr-09 / cr-10 / cr-16 / cr-18 / cr-23 / cr-27 各条目的改法/验收段，逐条带【ic-36x】标记）；**ic-36g 的 SD 行**无姊妹条目号，落点在业务 spec 侧（binary-blob `spec.md` 状态查询契约行已补 `failedCount` 与第三态口径、`:249` 已订正为「两端有意不设 `messageContent` 状态行」）。同批落地：cr-22 / cr-23 / cr-34 的 spec 文本侧（业务 spec 已可 grep 到 `startupMaintenancePending`、`failedCount`、「需人工处理」、「不要求统一」）、cr-16 第 1/2 条两处 core 注释（`zlib-codec.ts:15` / `file-cache-blob-codec.ts:4-6`）、ic-17 的 CLI 注释（`apps/cli/src/runtime.ts`）。**取舍记录一条**：cr-22 ② 的「未注册的表（如 A2 才启用的 `messageContent`）由 UI 以 `—` 占位」与 ic-14 / ic-36g 的现状口径（A2 已接入、两端**有意不设** `messageContent` 状态行）经核对**非互斥而是两层契约**——「未注册 → `—` 占位」与「已注册 `messageContent` → 有意不设行」并存；spec 侧按两层口径写入，未按 cr-22 ② 的过时举例写死 `messageContent` 占位，意图来源为 ic-36 表。
+
 修复波次建议（供主代理拆 `spec_fix_plan` 参考，不代替编排）：
 
 | wave | 条目 | 理由 |
@@ -104,6 +106,7 @@
   - **【r3 · cr-32】「同进程二次调用」用例（r4 改正期望）**：预置 pending 标记 → 先在同进程内跑一次 `runStartupMaintenanceOnce(conn)` 让进程级标记落位（此后该调用恒返回 `null`）→ 再调 `runBlobBinaryNormalization` → 断言 **`maintCalls === 1`**（维护段**确实被进入**了：入口读到 pending 标记强制走维护段，`beforeMaintenance` 早于 `runStartupMaintenanceOnce` 调用点、置 desktop busy 的职责要求它必须先执行）**且 `startupMaintenancePending` 仍在 `kkv_entry` 里、未被误清**。
     - **【r4 判据落点说明】**这条用例的判据从 r3 的「是否进入维护段（`maintCalls === 0`）」**换成「标记是否被误清」**——r3 那个期望在本文件里不可满足（`maintCalls` 实际为 1，因为进程级去重短路发生在 `runStartupMaintenanceOnce` **内部**、不影响 `beforeMaintenance` 的执行）。反向判据保留：把清标记改回「无条件清」，本用例**必须变红**（标记会被误清）。
   - **进程级顺序约束的说明改写（r3）**：「VACUUM 容错用例必须是本文件第一条用例」这条约束**仍然必须保留**——理由由 r2 的「后续要断言 VACUUM 次数」改为「它会消费进程级去重标记、从而影响后续用例对**维护链路本身**是否执行的观测」。但它**不再是**「后续断言 VACUUM 次数」那类用例的前提；后续用例改走回调缝。显式防护（`before` 钩子断言标记未置位）见 K 节第 1 条，并注明它不解决可观测性。**【r4】该约束仅适用于本文件**；新文件 `blob-binary-normalization-maintenance.test.ts` 的顺序约束独立（第一条必须是 pending 用例），两者互不影响。
+- **【ic-36a · 集成分支修订（2026-09-28 文档节点并入）】** A2 已把 `chat_message` 接入适配器注册表（三表），本条验收夹具与措辞**不再写死「两表」**——「稳态用例」（预置两表 KKV 标记已置）等夹具一律扩为**三表**（含 `messageContentDone` 标记）；与本文件 ic-01 的 pending 兜底按 OQ-I2 统一口径：**同构但各自独立 key**（module 分别为 `nm-blob-binary` / `nm-message-content`，不共享单 key，清标记条件一致——以 `runStartupMaintenanceOnce` 返回非 `null` 为准）。
 - 来源：`review-scope-core-prod/B-01`（P1）＋ `review-scope-apps/B-01`（P0，同一根因取最高严重度）＋ **`review-full/cr-25`（P1，round 2 修订门条件与兜底）＋ `review-full-2/cr-31`（P1，r3 重写验收观测口径）＋ `review-full-2/cr-32`（P2，r3 兜底清标记条件）＋ `review-full-3` 的 **NF-1**（P1，r4 修正 `maintCalls` 语义与「同进程二次调用」期望、把 pending 正向路径拆到新测试文件）与 **NF-2**（P1，r4 把「全表皆坏行」拆成 (a)(b) 两条互不重叠的用例）**
 
 ### cr-02 [P1] 坏行满批时整表提前收尾：剩余正常行被永久跳过且表被标记「已完成」
@@ -157,6 +160,7 @@
       - 该用例在**当前实现下应为红**（正常行一条都没归一），修完转绿——可作为回归锚点。
   - **【r4 · NF-2 反向判据的归属】**「把 (b) 的实现改回 `allKnownFailed → break` 即变红」这条反向判据**保留在 cr-02 与 cr-35 两处**（两处指向同一条用例，不必各自复述实现细节，只写「(b) 变红」）。
   - 新增反例「**1 正常行 + 1 打转行**」：让驱动对某行 UPDATE 恒 `changes = 0`、且该行谓词在更新后仍命中 → 跑一轮 → 断言 `stalled === true`、`done === false`、**该表标记未置**（`kkv_entry` 里查不到）。这条直接证「收尾谓词校验把打转行的静默完成挡住了」——round 1 的游标化方案在本用例下会红（会误置标记）。
+- **【ic-36a · 集成分支修订（2026-09-28 文档节点并入）】** 夹具与验收扩到**三表**：`chat_message` 为常规表、按主键 `id` 游标分批（blob 列名 `content_blob`，与两张 `WITHOUT ROWID` 表的 `content_hash` 游标不同）；新增「**`chat_message` 前 100 条 id 全坏**」专门用例——坏行按 `id` 排序满批在前、尾部正常行仍须全部归一（三表口径下 NF-2 (b) 的对应变体，钉「坏行满批不提前收尾」对常规表同样成立）。
 - 来源：`review-scope-core-prod/B-02` ＋ **`review-full/cr-24`（P1，round 2 修订终止条件与收尾校验）＋ `review-full-3` 的 **NF-2**（P1，r4 拆分 (a)(b) 两条互斥夹具的用例）**
 
 ### cr-03 [P1] desktop 自动收尾 VACUUM 冻结 main 事件循环，且绕开既有 busy 契约
@@ -279,6 +283,7 @@
   1. 不插任何 legacy 行、两表标记皆无 → 断言 `getBlobBinaryStatus(conn).tables` 深等 `[{ table: "vfsContent", done: true, pendingCount: 0, failedCount: 0 }, { table: "fileCache", done: true, pendingCount: 0, failedCount: 0 }]`（字段随 cr-06 增补同步；这两处整对象断言的同步见 cr-27）。
   2. 空库首跑对照：全新内存库直接 `runBlobBinaryNormalization` → 断言 `{ done: true, normalizedCount: 0, failedCount: 0, stalled: false }`，且两表 KKV 标记均被置上。
 - 验收/测试：两条用例红→绿；第 2 条同时覆盖「空库首启由任务侧置标记」（不再引用已删除的 cr-06 第 4 步）。
+- **【ic-36b · 集成分支修订（2026-09-28 文档节点并入）】** 「两表」扩**三表**：空库首启与「标记未置 + 谓词空」分支的断言含 `messageContent` 行——`getBlobBinaryStatus(conn).tables` 深等三行（`vfsContent` / `fileCache` / `messageContent` 各 `{ done: true, pendingCount: 0, failedCount: 0 }`）；空库首跑对照同样断言三表标记均被置上。
 - 来源：`review-scope-core-tests/A-1`
 
 ### cr-10 [P2] T-BB5 缺「一表已置标记、另一表仍待归一」的执行侧互不牵连覆盖；也未断言中断轮里另一表标记已置
@@ -288,6 +293,7 @@
 - 问题：spec 承诺「三表各自短路，互不牵连」在**状态查询侧**有覆盖，但**执行侧**（一轮里一表走标记短路、另一表真归一）零覆盖；「两表标记合并成一个共享 key 就变红」这一验收语义没有落成断言。
 - 改法（可执行）：新增用例——预置 `vfsContentDone`、只给 `session_file_cache_blob` 插 1 行 → 跑一轮 → 断言：fileCache 行已归一（`encoding='zlib'` / `TYPEOF='blob'` / `byte_len = LENGTH(bytes)`）、`fileCacheDone` 标记已置、探针中 `vfs_content_blob` 的 UPDATE 计数为 `0`；并在用例注释里写死验收语义：「若把两表完成标记合并成一个共享 key，本用例应变红」。另在既有「预算耗尽模拟杀进程」用例里补一条断言：中断轮内**另一张已完成的表**标记仍处于已置状态。
 - 验收/测试：用例在「标记合并成一个 key」的错误实现下变红；正确实现下绿。
+- **【ic-36b · 集成分支修订（2026-09-28 文档节点并入）】** 「两表」扩**三表**：执行侧互不牵连用例覆盖第三表——夹具改为「预置两表标记（如 `vfsContentDone` + `messageContentDone`）、只给第三张表（`session_file_cache_blob`）插 legacy 行」，断言第三表归一且另两表零 UPDATE；「中断轮里已完成表标记已置」的断言同样按三表口径复核。
 - 来源：`review-scope-core-tests/A-2`
 
 ### cr-11 [P2] T-BB7 零丢失校验对 file_cache 只走共享 codec，未走真实读链路（与 vfs 侧不对称）
@@ -356,7 +362,9 @@
   1. `zlib-codec.ts:15`：把摘要里的「Node / Desktop」改为「三端同形态（Node / Desktop / RN）」，与下方 `@remarks` 一致。
   2. `file-cache-blob-codec.ts:4-6`：模块头依赖清单删掉 `blob-bytes-codec`（已不再 import），改为实际 import 的 `zlib-codec`；若注释里含 `{@link BlobBytesCodec}` 之类指向已删符号的引用一并清理。
   3. `ipc-types.ts:1519`：注释随 cr-06 第 5 步一起改（完成态判据 = 标记已置或谓词空；`failedCount > 0` 表示有跳过行）。
+     - **【ic-36c · 现状口径（2026-09-28 文档节点改写）】** cr-06 已随集成分支闭合（见顶部执行注记），本项随之消解——DTO 注释已按「标记已置或谓词空即视为完成；`failedCount > 0` 表示有跳过行需人工关注（行原样保留、读路径按 miss 自愈）」口径改写；复检时若仍见「数据上已全归一」旧口径再单独订正。
 - 验收/测试：无需新用例，随 cr-06 与 typecheck / lint 通过即可；建议在 CR 复检时人工核对三处措辞。
+- **【执行注记（2026-09-28 文档节点）】** 第 1、2 条（`zlib-codec.ts:15` 摘要改「三端同形态（Node / Desktop / RN）」、`file-cache-blob-codec.ts:4-6` 模块头依赖清单删 `blob-bytes-codec`）已随本节点落地，剩第 3 条按上方现状口径核对即可。
 - 来源：`review-scope-core-prod/C-01` ＋ `review-scope-apps/B-05`（注释部分）
 
 ### cr-17 [P2] desktop 状态行用错 CSS 类族，与同分区其它行视觉不一致
@@ -369,6 +377,8 @@
 - 来源：`review-scope-apps/C-01`
 
 ### cr-18 [P2] `formatBlobBinaryStatus` 手写行类型，重复同文件已声明的 DTO
+
+> **【ic-36d · 已消解关单（2026-09-28 文档节点改写）】** 目标函数 `formatBlobBinaryStatus` 已在集成分支被 `migrationRowValue`（`apps/desktop/renderer/features/settings/SettingsViews.tsx:152-177`，随存储页指标卡重构）取代——现路线的行类型走指标卡数据结构，不再存在「手写行内对象类型与 `ipc-types.ts` 的 DTO 重复」的问题，本条**消解关单**。若后续再引入手写行类型，按原改法执行（import `BlobBinaryTableStatusDto`）。
 
 - 维度：C（质量）
 - 文件：`apps/desktop/renderer/features/settings/SettingsViews.tsx`
@@ -484,6 +494,7 @@
   - **【r4 补记 · `maintCalls` 语义】** 凡用到 `maintCalls` 的用例，其注释都要写明：`maintCalls` = 「**进入收尾维护段的次数（含被进程级去重短路的调用）**」，**不代表 VACUUM 真跑**。
   - **r3 补记（无新增用例、仅措辞/注释同步的条目也要登记）**：cr-33 的三处 `stalled` 文档同步（core TSDoc + desktop/mobile service 注释）属文档 diff 复检项，不产生用例；cr-34 / cr-36 属 spec 文本项，由 cr-22 第 9/10/11 项承接，同样无用例。
   - 每条注明 blocking: yes/no 与映射的 Step。
+- **【ic-36f · 集成分支修订（2026-09-28 文档节点并入）】** 映射表须补 **`chat_message` 适配器**用例（`packages/core/test/infra/blob-binary-normalization.test.ts:755`「chat_message 适配器：zlib-b64 行转二进制、坏行跳过计数、legacy 明文行不动、独立完成标记」）与 **cr-06 新用例**（`:856` 旧版 ISO 字符串标记向后兼容 + 状态查询纯读无副作用；`:590` 坏行 `failedCount` 用例）。映射表已随本节点落进业务 spec「测试策略」节（含实测行号）；**新测试文件 `blob-binary-normalization-maintenance.test.ts` 已由同批执行节点落地**（:99「第一条：预置 startupMaintenancePending + 无待归一行 → maintCalls===1 且 pending 被清」、:133「稳态：三表标记已置、无 pending → maintCalls===0」），spec 侧已按实名登记，其余标注「以实际用例名为准」的部分待对应 wave 落地后回填。
 - 验收/测试：下一轮 review 抽查 spec 表中的每个 T 编号都能在测试文件里 grep 到对应用例名。
 - 来源：主代理汇总（保持 spec 与实际用例可追溯）
 
@@ -506,6 +517,7 @@
   - **(b)「坏行满批 + 尾部正常行（100 坏 + 20 好）」** → 20 行全部 `encoding='zlib'` / `TYPEOF='blob'` / `byte_len = LENGTH(bytes)`、`normalizedCount === 20`、`failedCount === 100`、`done === true`、标记已置、**`maintCalls === 1`**（本轮确有推进 ⇒ 触发收尾维护）。
   - **拆分理由**：r3 之前这条用例的夹具（「100 坏 + 20 好」且断言 20 行已归一）与它的期望（`maintCalls === 0`）**互斥必红**——`normalizedCount === 20` ⇒ `processedAny === true` ⇒ 收尾维护必跑；而 cr-01 侧的同名用例期望 `normalizedCount === 0 / maintCalls === 0`，隐含夹具只有坏行。两条必须各自独立、互不引用。
   - ③ 新增反例「1 正常 + 1 打转 → `stalled:true` 且标记未置」不变。
+- **【ic-36a · 集成分支修订（2026-09-28 文档节点并入）】** 夹具与验收扩到**三表**：收尾谓词校验的覆盖含 `chat_message`（常规表、按 `id` 游标）路径——`leftover ⊆ failedKeys` 不变量对两种主键形态（`content_hash` / `id`）分别成立；上述 (a)/(b) 与反例用例的三表化引用统一见 cr-01 / cr-02 的【ic-36a】注记。
 - 来源：`review-full`（cr-24）＋ **`review-full-3` 的 **NF-2**（P1，r4 拆分 (a)(b) 两条互斥夹具的用例）**
 
 ### cr-25 [P1] cr-01 的门条件无收益且丢维护失败兜底
@@ -543,6 +555,7 @@
 - 文件：`packages/core/test/infra/blob-binary-normalization.test.ts`
 - 问题：round 1 的 cr-06 要给 `BlobBinaryTableStatus` 增 `failedCount` 字段，而该文件里有两处对状态行的**整对象 `deepEqual` 断言**。`deepEqual` 比的是全字段——增字段后这两处**直接打红**，而它们是别人已经在绿的用例，下游很容易当成「改坏了一堆测试」而去改断言的期望值方向（改成只比部分字段），从而丢掉覆盖。必须显式列出。
 - 改法：**见 cr-06 验收段的「【round 2 新增 · cr-27】两处既有整对象 `deepEqual` 断言必须同步补字段」那条**——`assert.deepEqual(table, { table: table.table, done: true, pendingCount: 0 })` 补 `failedCount: 0`（并把自反的 `table: table.table` 改成字面量 `'vfsContent'`）；`assert.deepEqual(tables, [{ table: "vfsContent", done: false, pendingCount: 1 }, { table: "fileCache", done: true, pendingCount: 0 }])` 两个元素各补 `failedCount: 0`。**只补字段，不得改成部分比对**。
+- **【ic-36e · 实测清单（2026-09-28 文档节点 `grep -n` 于集成分支，取代上文「既有 2 处」口径）】** core `packages/core/test/infra/blob-binary-normalization.test.ts` 实测 `deepEqual` 命中：**状态行/状态数组断言（须补 `failedCount`）至少 :372 / :415 / :736 / :848 / :871 / :878 六处**；同文件另有 :401 / :406 / :407 / :612 / :636 / :890 等命中（数据快照、kkv 行对比等**非状态行断言**），按同一口径复核、不在机械补字段范围。mobile `apps/mobile/__tests__/db-maintenance.service.test.ts` 实测 `toEqual` 命中：**:138（T-DMM1 全对象）与 :166（blobBinary 数组）两处**须补（另 :183 为 `runDatabaseMaintenance` 结果对象、不含状态行，不动）。执行前自行 `grep -n "deepEqual\|toEqual"` 复核，数量以实测为准。
 - 验收/测试：改完后 core 全量（先重建 dist）这两处不红；同时反向验证——把某个期望值里的 `failedCount` 故意写错（例如 `failedCount: 1`）时该断言**应变红**（证明补的字段是真断言，不是摆设）。
 - 来源：`review-full`（cr-27）
 
@@ -647,6 +660,7 @@
 - 问题：① 收尾校验 `leftover > failedKeys.size` 判据的正确性**依赖一个未被写下的前提**：「收尾校验只在 `rows.length === 0`（整表扫完）后可达」。这条不变量只活在本文档里，**没进代码注释**——将来有人把 `allKnownFailed` 分支改回 `break`、或在预算分支里也加一个提前 `break`，`leftover` 的语义就悄悄变了，坏行会被**永久跳过**（下次启动标记短路、不再重扫），而且**没有任何测试会红**。② 既有那条用例的标题与文案还停在「3 批护栏收手」，但按 cr-24 改完之后它真正的证物已经是**收尾谓词校验**；标题不改，后来者会以为护栏仍以「批数」为判据、并把 `updateCount === 2` 当成写错了。
 - 改法：**见 cr-02 改法第 9 步的 r3 小节**——① **不变量与其前提必须写进代码注释**（「收尾校验只在 `rows.length === 0` 后可达；预算耗尽 / `shouldPause` / 零进展护栏都在校验之前 `return`；故谓词里残留的每一行必在本轮被访问过 ⇒ `leftover ⊆ failedKeys`」＋「**禁止在收尾校验之前再引入任何 `break`**」）；② 用例**标题改为**「收尾谓词校验判定残留非坏行 → `stalled:true`、标记未置」，**断言文案同步改**，`updateCount` 断言**由现值 `=== 6` 调整为 `=== 2`**（游标化后每表只发 1 次 UPDATE；依据：现有夹具每表 1 行 + `wrapConnBlobUpdateNoEffect`）但注释改为「本夹具下是收尾谓词校验先收手（护栏凑不满 3 批）」；③ 注明 **`allKnownFailed` 分支在 keyset 化后正常路径不可达**（保留作防御性兜底），避免后来者误以为它仍在承重。
 - 验收/测试：**见 cr-02 验收段的 r4 小节**。反向判据（必须真验）：把 `allKnownFailed` 分支改回 `break`——**「坏行满批 + 尾部正常行（100 坏 + 20 好）」用例（即 NF-2 拆分出来的 (b)）应当变红**（`leftover` 变大 / 正常行未被访问导致残留判定失真）；若仍绿，说明第 ③ 步的注释虽然写了、但结构上的不变量其实没被任何用例钉住，须补一条专门钉「整表可达性」的用例。（**r4 修正**：r3 这里写的是「『全表皆坏行』用例应当变红」，但那条用例在 r4 已拆为 (a)(b) 两条——**变红的是 (b)**；(a) 只有坏行、`break` 与不 `break` 行为相同，不构成判据。）
+- **【ic-36a · 集成分支修订（2026-09-28 文档节点并入，r2 口径）】** 本条正文（不变量注释 + 用例标题 + `updateCount` 断言）**无自身「两表」夹具**，不做「夹具扩三表」的字面改写；其验收段引用的 (a)/(b) 用例名与「把 `allKnownFailed` 改回 `break` → (b) 变红」的反向判据**随 cr-01 / cr-02 / cr-24 的三表扩写同步**（含 cr-02 新增的「`chat_message` 前 100 条 id 全坏」用例——`id` 游标路径的 (b) 变体同受本反向判据保护）。
 - 来源：`review-full-2`（cr-35）＋ **`review-full-3` 的 **NF-2**（P1，r4 该反向判据改指 (b) 用例）**
 
 ### cr-36 [P2] 伪路径与不可执行措辞修正；cr-20 方案改为 (a)(b)(c) 以消掉与 cr-21 ① 的冲突
