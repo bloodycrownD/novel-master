@@ -1,7 +1,9 @@
 /**
  * Agent registry list with context menu (rename, duplicate, delete).
+ * 双 tab（主智能体 / 子智能体）：过滤口径统一走 core 的 agentModeMatchesTab；
+ * 内置 general 子智能体在子 tab 以只读合成行展示（不可勾选、不可增删）。
  */
-import React, {useCallback, useState} from 'react';
+import React, {useCallback, useMemo, useState} from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -14,7 +16,14 @@ import {
 } from 'react-native';
 import {useFocusEffect, useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
-import {type AgentDefinition} from '@novel-master/core/agent';
+import {
+  DEFAULT_SUBAGENT_DEFINITION,
+  type AgentDefinition,
+} from '@novel-master/core/agent';
+import {
+  agentModeMatchesTab,
+  type AgentSettingsTab,
+} from '@novel-master/core/config-forms/agent';
 import {
   AGENT_LIST_LABELS,
   assessAgentDefinitionWire,
@@ -23,6 +32,7 @@ import {
 import {BatchCheckbox} from '../batch/BatchCheckbox';
 import {ManageHeader} from '../batch/ManageHeader';
 import {BottomSheetMenu} from '../sheet/BottomSheetMenu';
+import {SegmentedControl} from '../ui/SegmentedControl';
 import {ElevatedCard} from '../ui/ElevatedCard';
 import {PrimaryButton} from '../ui/Buttons';
 import {TextPromptModal} from '../ui/TextPromptModal';
@@ -43,6 +53,8 @@ interface AgentRow {
   name: string;
   def?: AgentDefinition;
   configInvalid?: boolean;
+  /** 内置 general 合成行：只读展示，不参与批量勾选与增删改。 */
+  builtin?: boolean;
   meta: string;
 }
 
@@ -63,6 +75,34 @@ function agentDisplayNameFromWire(raw: unknown, agentId: string): string {
 
 const AGENT_ICONS = ['🤖', '⚡', '📝', '🎯', '✨', '🚀'];
 
+/**
+ * 子 tab 头部合成的内置 general 行：运行时虚拟注入（registry 中无实体），
+ * 点击进入只读详情（AgentEditor 的 general sentinel 分支）。
+ */
+const GENERAL_ROW: AgentRow = {
+  id: 'general',
+  name: DEFAULT_SUBAGENT_DEFINITION.name,
+  def: DEFAULT_SUBAGENT_DEFINITION,
+  builtin: true,
+  meta: DEFAULT_SUBAGENT_DEFINITION.description ?? '',
+};
+
+const TAB_HINTS: Record<AgentSettingsTab, string> = {
+  primary: '主智能体可直接选用作为对话主体；标注「全部」的智能体在两个 tab 均可用。',
+  subagent:
+    '子智能体由主智能体通过任务委派调用；标注「全部」的智能体在两个 tab 均可用。',
+};
+
+const EMPTY_TEXTS: Record<AgentSettingsTab, string> = {
+  primary: '暂无主智能体，点击「新建」创建。',
+  subagent: '暂无子智能体，点击「新建」创建。',
+};
+
+/** valid 行的 mode 归一后为 all（显式 all 或缺省）时挂「全部」徽标。 */
+function isAllModeRow(row: AgentRow): boolean {
+  return row.def != null && (row.def.mode ?? 'all') === 'all';
+}
+
 function agentMeta(
   def: AgentDefinition,
   modelLabel: string,
@@ -74,7 +114,8 @@ function agentMeta(
 }
 
 type Props = {
-  onCreate?: () => void;
+  /** 新建回调：携带当前 tab（Screen 层据此决定新定义的默认作用域）。 */
+  onCreate?: (tab: AgentSettingsTab) => void;
 };
 
 export function AgentList({onCreate}: Props) {
@@ -82,6 +123,7 @@ export function AgentList({onCreate}: Props) {
   const {showToast} = useToast();
   const runtime = useRuntime();
   const navigation = useNavigation<Nav>();
+  const [tab, setTab] = useState<AgentSettingsTab>('primary');
   const [rows, setRows] = useState<AgentRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [menuAgentId, setMenuAgentId] = useState<string | undefined>();
@@ -157,6 +199,22 @@ export function AgentList({onCreate}: Props) {
       reload().catch(err => showToast(toastMessage('加载智能体列表失败', err)));
     }, [reload, showToast]),
   );
+
+  /** 切 tab 退出批量模式（照技能管理页先例，两侧勾选集不互通）。 */
+  const switchTab = (next: AgentSettingsTab) => {
+    setTab(next);
+    batch.exit();
+  };
+
+  // 全量加载后前端过滤（不重载）；invalid 行读不到 mode，按 all 双边显示。
+  // 子 tab 头部合成内置 general 行（GENERAL_ROW def.mode 为 subagent，
+  // 天然只落在子侧）。
+  const visibleRows = useMemo(() => {
+    const filtered = rows.filter(row =>
+      agentModeMatchesTab(row.def?.mode, tab),
+    );
+    return tab === 'subagent' ? [GENERAL_ROW, ...filtered] : filtered;
+  }, [rows, tab]);
 
   const handleRename = async (agentId: string, name: string) => {
     const trimmed = name.trim();
@@ -244,15 +302,39 @@ export function AgentList({onCreate}: Props) {
         hint="选择要删除的 Agent"
         normalActions={
           onCreate ? (
-            <PrimaryButton label="新建" tokens={tokens} onPress={onCreate} />
+            <PrimaryButton
+              label="新建"
+              tokens={tokens}
+              onPress={() => onCreate(tab)}
+            />
           ) : null
         }
       />
+      <SegmentedControl
+        options={[
+          {
+            value: 'primary',
+            label: '主智能体',
+            testID: 'agents-tab-primary',
+          },
+          {
+            value: 'subagent',
+            label: '子智能体',
+            testID: 'agents-tab-subagent',
+          },
+        ]}
+        value={tab}
+        onChange={switchTab}
+        tokens={tokens}
+      />
+      <Text style={[styles.tabHint, {color: tokens.textSecondary}]}>
+        {TAB_HINTS[tab]}
+      </Text>
       {loading && rows.length === 0 ? (
         <ActivityIndicator style={styles.loader} />
       ) : (
         <FlatList
-          data={rows}
+          data={visibleRows}
           keyExtractor={item => item.id}
           contentContainerStyle={styles.listContent}
           refreshControl={
@@ -260,14 +342,21 @@ export function AgentList({onCreate}: Props) {
           }
           ListEmptyComponent={
             <Text style={[styles.empty, {color: tokens.textSecondary}]}>
-              暂无 Agent，点击「新建」创建。
+              {EMPTY_TEXTS[tab]}
             </Text>
           }
           renderItem={({item, index}) => (
             <ElevatedCard
               tokens={tokens}
-              selected={batch.isSelected(item.id)}
+              selected={!item.builtin && batch.isSelected(item.id)}
               onPress={() => {
+                // 内置 general 行不可进入批量勾选：批量态下点击不响应。
+                if (item.builtin) {
+                  if (!batch.active) {
+                    navigation.navigate('AgentEditor', {agentId: item.id});
+                  }
+                  return;
+                }
                 if (batch.active) {
                   batch.toggle(item.id);
                 } else {
@@ -275,7 +364,7 @@ export function AgentList({onCreate}: Props) {
                 }
               }}
             >
-              {batch.active ? (
+              {batch.active && !item.builtin ? (
                 <BatchCheckbox
                   checked={batch.isSelected(item.id)}
                   onToggle={() => batch.toggle(item.id)}
@@ -285,17 +374,49 @@ export function AgentList({onCreate}: Props) {
                   style={[styles.avatar, {backgroundColor: tokens.bgSecondary}]}
                 >
                   <Text style={styles.avatarIcon}>
-                    {pickEntityIcon(item.id, AGENT_ICONS)}
+                    {item.builtin ? '🤖' : pickEntityIcon(item.id, AGENT_ICONS)}
                   </Text>
                 </View>
               )}
               <View style={styles.info}>
-                <Text
-                  style={[styles.name, {color: tokens.text}]}
-                  numberOfLines={1}
-                >
-                  {item.name}
-                </Text>
+                <View style={styles.nameRow}>
+                  <Text
+                    style={[styles.name, {color: tokens.text}]}
+                    numberOfLines={1}
+                  >
+                    {item.name}
+                  </Text>
+                  {item.builtin ? (
+                    <View
+                      style={[
+                        styles.tagBadge,
+                        {backgroundColor: `${tokens.primary}1A`},
+                      ]}
+                    >
+                      <Text
+                        style={[styles.tagBadgeText, {color: tokens.primary}]}
+                      >
+                        内置
+                      </Text>
+                    </View>
+                  ) : isAllModeRow(item) ? (
+                    <View
+                      style={[
+                        styles.tagBadge,
+                        {backgroundColor: `${tokens.textTertiary}1A`},
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.tagBadgeText,
+                          {color: tokens.textTertiary},
+                        ]}
+                      >
+                        全部
+                      </Text>
+                    </View>
+                  ) : null}
+                </View>
                 {item.configInvalid ? (
                   <View style={styles.metaRow}>
                     <View
@@ -332,7 +453,7 @@ export function AgentList({onCreate}: Props) {
                   </Text>
                 )}
               </View>
-              {!batch.active ? (
+              {!batch.active && !item.builtin ? (
                 <>
                   <Pressable
                     hitSlop={8}
@@ -403,6 +524,12 @@ const styles = StyleSheet.create({
   listContent: {paddingBottom: 24},
   loader: {marginTop: 32},
   empty: {textAlign: 'center', padding: 32},
+  tabHint: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    fontSize: 12,
+    lineHeight: 16,
+  },
   avatar: {
     width: 44,
     height: 44,
@@ -412,7 +539,16 @@ const styles = StyleSheet.create({
   },
   avatarIcon: {fontSize: 22},
   info: {flex: 1, minWidth: 0, gap: 4},
+  nameRow: {flexDirection: 'row', alignItems: 'center', gap: 6},
   name: {fontSize: 16, fontWeight: '600'},
+  // 徽标胶囊形状对齐 SearchEnginesScreen 的 BuiltinTag；
+  // 「内置」用 primary 色、「全部」用 muted 三级文本色。
+  tagBadge: {
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  tagBadgeText: {fontSize: 12, fontWeight: '600'},
   metaRow: {flexDirection: 'row', alignItems: 'center', gap: 6, minWidth: 0},
   invalidBadge: {
     borderRadius: 6,

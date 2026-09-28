@@ -6,6 +6,7 @@ import {StyleSheet, Text, View} from 'react-native';
 import {useRoute} from '@react-navigation/native';
 import type {RouteProp} from '@react-navigation/native';
 import {AgentEditorForm} from '@/components/agent/AgentEditorForm';
+import {BuiltinAgentDetail} from '@/components/agent/BuiltinAgentDetail';
 import {useUnsavedGuard} from '@/hooks/useUnsavedGuard';
 import type {RootStackParamList} from '@/navigation/types';
 import {useTheme} from '@/theme/ThemeProvider';
@@ -30,6 +31,12 @@ export function AgentEditorScreen() {
         </Text>
       </View>
     );
+  }
+
+  // 内置 general sentinel：registry 无此实体（get 为 AGENT_NOT_FOUND），
+  // 渲染只读详情，不走 AgentEditorForm（无保存、无 dirty 上报）。
+  if (agentId === 'general') {
+    return <BuiltinAgentDetail />;
   }
 
   return (
