@@ -10,9 +10,9 @@ date: 2026-09-28
 
 ## 总体方案
 
-1. **过滤口径单点收口 core**：新增纯函数 `agentModeMatchesTab(mode, tab)`（`mode ?? "all"` 归一；主 tab = `!== "subagent"`、子 tab = `!== "primary"`），与 `subagent-tool.ts` / 双端 picker 的字面口径一致。双端 UI 只消费该函数，不各自内联判断。
+1. **过滤口径单点收口 core**：新增纯函数 `agentModeMatchesTab(mode, tab)`（`mode ?? "all"` 归一；主 tab = `!== "subagent"`、子 tab = `!== "primary"`），与 `subagent-tool.ts` / 双端 picker 的字面口径一致。双端 UI 只消费该函数，不各自内联判断。函数放 `config-forms/agent/` 子路径下，**barrel（`config-forms/agent/index.ts`）须具名导出**（该子路径 exports 指向 `dist/config-forms/agent/index.js`，mobile jest moduleNameMapper 也映射到该 index——不加 barrel 双端 import 不到）。
 2. **照抄技能管理页模板**：双端均为「本地 tab state + SegmentedControl + 切 tab `batch.exit()` + 数据全量加载后前端过滤 + tab hint 文案 + 空态随 tab」。mobile 模板 `SkillsSettingsScreen.tsx`（L90/160-165/397-416）、desktop 模板 `SkillsManageView.tsx`（L43-51/125-128/263-297）。
-3. **general 合成行**：数据源维持 `listAgentIds()`（不含虚拟 general），由 core 导出 `DEFAULT_SUBAGENT_DEFINITION` 常量，双端在**子 tab** 前端合成只读行（sentinel `agentId === "general"`）。不换数据源为 `registry.list()`（mobile 依赖逐 id `getRawWire` health 流、desktop 走 DTO）。
+3. **general 合成行**：数据源维持 `listAgentIds()`（不含虚拟 general），由 core 经 **`@novel-master/core/agent` 子路径**导出 `DEFAULT_SUBAGENT_DEFINITION` 常量（在 `src/public/agent.ts` 加 re-export；该子路径 exports 与 mobile jest 映射均已存在，**不走根 barrel**——mobile jest 把根 `@novel-master/core` 映射到 `test-utils/core-shim.ts` 白名单，走根 barrel 须改 shim，子路径则零额外改动），双端在**子 tab** 前端合成只读行（sentinel `agentId === "general"`）。不换数据源为 `registry.list()`（mobile 依赖逐 id `getRawWire` health 流、desktop 走 DTO）。
 4. **general 只读详情走编辑器 sentinel 分支**：双端编辑器入口检测 `agentId === "general"` 渲染只读呈现，不新增路由/view（`get("general")` 本就 `AGENT_NOT_FOUND`，sentinel 与真实 id 不冲突——id 均为 `agent-<ts>` 格式且无自定义入口）。
 5. **新建默认作用域随 tab 即时落库**：双端 createBlank（现状「创建即 upsert」）增加可选 `mode` 参数直接写进定义（主 tab → `"primary"`、子 tab → `"subagent"`；不传 = 现行为缺省 all，向后兼容）。
 6. **desktop DTO 增量扩展**：`AgentRegistryListItemDto` 加可选 `mode`（invalid 行天然无该字段 → 按 all 双边）；createBlank 通道从无参改可选对象参数，handler 容忍 `undefined`。
@@ -22,11 +22,11 @@ date: 2026-09-28
 ```
 packages/core/src/
   config-forms/agent/agent-mode-tab.ts          [新增] agentModeMatchesTab + AgentSettingsTab 类型
-  service/agent/default-subagent-definition.ts  [改] 无需改内容；经 barrel 导出
-  index.ts                                       [改] 导出 DEFAULT_SUBAGENT_DEFINITION（如未导出）
+  config-forms/agent/index.ts                   [改] barrel 具名导出 agentModeMatchesTab / AgentSettingsTab
+  public/agent.ts                               [改] re-export DEFAULT_SUBAGENT_DEFINITION（经 /agent 子路径暴露）
 apps/desktop/
   shared/ipc-types.ts                            [改] ListItemDto +mode?；+AgentRegistryCreateBlankRequest
-  shared/logic/config-forms-agent.ts             [改] 镜像 re-export agentModeMatchesTab、DEFAULT_SUBAGENT_DEFINITION
+  shared/logic/config-forms-agent.ts             [改] 镜像 re-export agentModeMatchesTab（自 /config-forms/agent）与 DEFAULT_SUBAGENT_DEFINITION（自 /agent）
   src/main/ipc/handlers/agent-registry.ts        [改] list 带 mode；createBlank 落 mode
   src/main/ipc/handler-registry.ts               [改] createBlank 绑定改带参
   renderer/ipc/invoke-registry.ts                [改] ipcAgentRegistryCreateBlank 带参
@@ -36,8 +36,8 @@ apps/desktop/
   test/agent-registry-handlers.test.ts           [改] 补 T-D1/T-D2
   test/settings-agents-tabs.test.ts              [新增] T-D3（源码断言）
 apps/mobile/src/
-  components/agent/AgentList.tsx                 [改] tab state/过滤/合成行/徽标/空态/onCreate(tab)
-  components/agent/BuiltinAgentDetail.tsx        [新增] general 只读详情
+  components/agent/AgentList.tsx                 [改] tab state/过滤/合成行/徽标/空态/onCreate(tab)；import 走两个既有子路径
+  components/agent/BuiltinAgentDetail.tsx        [新增] general 只读详情（import @novel-master/core/agent）
   screens/stack/AgentsSettingsScreen.tsx         [改] handleCreate 传 mode
   services/agent-create.ts                       [改] createBlankAgent +mode 参数
   screens/stack/AgentEditorScreen.tsx            [改] sentinel 分支渲染 BuiltinAgentDetail
@@ -51,8 +51,8 @@ scripts/e2e/case-agents-tabs.mjs                 [新增] T-E1
 
 | # | 文件 | 变更 |
 |---|------|------|
-| 1 | `packages/core/src/config-forms/agent/agent-mode-tab.ts` | 新增 `AgentSettingsTab = "primary" \| "subagent"` 与 `agentModeMatchesTab(mode: AgentDefinition["mode"] \| undefined, tab): boolean` |
-| 2 | `packages/core/src/index.ts` | 导出 `DEFAULT_SUBAGENT_DEFINITION`（现状仅 core 内部引用） |
+| 1 | `packages/core/src/config-forms/agent/agent-mode-tab.ts` + `index.ts` | 新增 `AgentSettingsTab = "primary" \| "subagent"` 与 `agentModeMatchesTab(mode: AgentDefinition["mode"] \| undefined, tab): boolean`；**barrel（config-forms/agent/index.ts）具名导出两者**（子路径 exports 与 mobile jest 映射均指向该 index） |
+| 2 | `packages/core/src/public/agent.ts` | re-export `DEFAULT_SUBAGENT_DEFINITION`（现状仅 core 内部引用，未导出），经 `@novel-master/core/agent` 子路径暴露——mobile jest 对该子路径已有 moduleNameMapper 直连 dist 映射，**不动 core-shim、不动根 index.ts、不新增 exports 子路径**（子路径已存在，tsconfig.test.json paths 无需改） |
 | 3 | `apps/desktop/shared/ipc-types.ts` | `AgentRegistryListItemDto` + `mode?: "primary"\|"subagent"\|"all"`；新增 createBlank 请求类型 |
 | 4 | `apps/desktop/src/main/ipc/handlers/agent-registry.ts` | list 的 valid 分支从 `health.value` 带出 `mode`（`undefined` 时省略字段，JSON 序列化天然丢弃）；createBlank 读 `req?.mode` 落库，`undefined` 容忍 |
 | 5 | `apps/desktop/src/main/ipc/handler-registry.ts` + `renderer/ipc/invoke-registry.ts` | createBlank 通道签名从 noArg 改可选 payload（照同文件既有 withXxx helper 模式，无合用者则新增） |
@@ -66,7 +66,7 @@ scripts/e2e/case-agents-tabs.mjs                 [新增] T-E1
 
 ## 详细实现步骤
 
-- Step 1 — phase-core-mode-tab — blocking: yes — qa: auto：新增 `agent-mode-tab.ts` 判定函数 + barrel 导出 `DEFAULT_SUBAGENT_DEFINITION`；core 单测锁口径（T-C1）与常量内容（T-C2）；desktop `shared/logic/config-forms-agent.ts` 镜像 re-export（禁止 export *，具名补两行）。
+- Step 1 — phase-core-mode-tab — blocking: yes — qa: auto：新增 `agent-mode-tab.ts` 判定函数并经 `config-forms/agent/index.ts` barrel 具名导出；`DEFAULT_SUBAGENT_DEFINITION` 经 `public/agent.ts` re-export（`/agent` 子路径）；core 单测锁口径（T-C1）与常量内容（T-C2）；desktop `shared/logic/config-forms-agent.ts` 镜像 re-export `agentModeMatchesTab`（自 `@novel-master/core/config-forms/agent`）与 `DEFAULT_SUBAGENT_DEFINITION`（自 `@novel-master/core/agent`；shared 层不受 renderer eslint X1 gate 限制，renderer 统一走镜像，禁止 export *）。
 - Step 2 — phase-desktop-ipc — blocking: yes — qa: auto：ipc-types DTO/请求类型 + list/createBlank handler 改造 + 绑定与 invoke 封装同步；`agent-registry-handlers.test.ts` 补 T-D1（valid 带 mode / invalid 无 mode / undefined 省略）、T-D2（createBlank 带 mode 落库、不传兼容现行为）。
 - Step 3 — phase-desktop-ui — blocking: yes — qa: auto：AgentsSettingsView tab 化 + 合成行 + 徽标 + 删除兜底排除 + general 只读分支 + CSS；`settings-agents-tabs.test.ts` 源码断言（T-D3：SegmentedControl/modeMatchesTab 引用/「内置」徽标/general sentinel 分支存在）。
 - Step 4 — phase-mobile-ui — blocking: yes — qa: auto：AgentList tab 化 + createBlank mode + 只读详情；jest 测试 T-M1（tab 切换过滤 + 切 tab 退批量）、T-M2（onCreate 传 mode → createBlankAgent 落库）、T-M3（general 行子 tab 可见、主 tab 不可见、无删除入口）。
@@ -84,7 +84,7 @@ CI 硬门禁为四包 `npm test` 全绿（`.github/workflows/ci.yml`）。定向
 
 - T-C1 — blocking: yes — core `test/config-forms/agent-mode-tab.test.ts`：`primary→仅主 tab`、`subagent→仅子 tab`、`all→双`、`undefined→双`（四态 × 两 tab 断言矩阵；改错任一分支必红）。
 - T-C2 — blocking: yes — 同文件或 `test/agent/`：`DEFAULT_SUBAGENT_DEFINITION` 具备 `name === "general"`、`mode === "subagent"`（防导出面漂移）。
-- T-D1 — blocking: yes — `apps/desktop/test/agent-registry-handlers.test.ts`：list 返回项 valid 行含 mode（三 mode 值各一）；invalid 行无 mode 字段。
+- T-D1 — blocking: yes — `apps/desktop/test/agent-registry-handlers.test.ts`：list 返回项 valid 行含 mode（三 mode 值各一）且 **mode 缺省的 valid 行响应无 mode 字段**（未填写 = all 双边显示的语义支点）；invalid 行无 mode 字段。
 - T-D2 — blocking: yes — 同文件：createBlank 传 `{mode: "subagent"}` 后 `getRawWire` 落库 wire 含 mode；不传 payload 落库无 mode（现行为回归）。
 - T-D3 — blocking: yes — `apps/desktop/test/settings-agents-tabs.test.ts`（源码断言，抄 `settings-agents-delete-confirm.test.ts` 模式）：AgentsSettingsView 源码含 SegmentedControl、agentModeMatchesTab 调用、`"general"` sentinel、「内置」徽标类名。
 - T-M1 — blocking: yes — `apps/mobile/__tests__/agent-list-tabs.test.tsx`（抄 `agent-list-delete-confirm.test.tsx` 骨架：mock useRuntime + react-native FlatList → `agent-row-<id>`）：默认主 tab 只见 primary/all 行；切子 tab 只见 subagent/all 行；切 tab 后批量态退出。
