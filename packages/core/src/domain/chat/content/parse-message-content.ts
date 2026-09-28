@@ -10,6 +10,7 @@ import type {
   ImageBlock,
   ImageSource,
   MessageContent,
+  ReadResultRef,
   RedactedThinkingBlock,
   SkillToolRef,
   TextBlock,
@@ -79,6 +80,97 @@ function requireString(
     throw chatInvalidArgument(`${label}: ${key} must be a non-empty string`);
   }
   return v;
+}
+
+/** 必填非负整数（contentRef 数值字段共用口径）。 */
+function requireNonNegativeInt(
+  obj: Record<string, unknown>,
+  key: string,
+  label: string
+): number {
+  const v = obj[key];
+  if (typeof v !== "number" || !Number.isInteger(v) || v < 0) {
+    throw chatInvalidArgument(
+      `${label}: ${key} must be a non-negative integer`
+    );
+  }
+  return v;
+}
+
+/** 可选非负整数：字段不存在时返回 undefined；存在但类型非法时抛错。 */
+function optionalNonNegativeInt(
+  obj: Record<string, unknown>,
+  key: string,
+  label: string
+): number | undefined {
+  if (!(key in obj)) {
+    return undefined;
+  }
+  return requireNonNegativeInt(obj, key, label);
+}
+
+/**
+ * 解析 `contentRef`（read 工具结果引用，read-tool-result-ref）。
+ *
+ * 与 `meta.skillRef` 同一口径：缺省/未携带时返回 undefined；存在但字段
+ * 不合法时抛错——引用字段被静默丢弃会让 hydrate 悬空（wire 缺 read
+ * 全文），宁可拒收（fail-fast）也不丢字段。
+ */
+function parseReadResultRef(
+  value: unknown,
+  label: string
+): ReadResultRef | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (!isRecord(value)) {
+    throw chatInvalidArgument(`${label}: contentRef must be an object`);
+  }
+  const refLabel = `${label} contentRef`;
+  const path = requireString(value, "path", refLabel);
+  const entryId = requireNonNegativeInt(value, "entryId", refLabel);
+  const version = requireNonNegativeInt(value, "version", refLabel);
+  const contentHash = requireString(value, "contentHash", refLabel);
+  const totalBytes = requireNonNegativeInt(value, "totalBytes", refLabel);
+  const offset = requireNonNegativeInt(value, "offset", refLabel);
+  const limit = optionalNonNegativeInt(value, "limit", refLabel);
+  const returnedLines = requireNonNegativeInt(
+    value,
+    "returnedLines",
+    refLabel
+  );
+  const totalLines = requireNonNegativeInt(value, "totalLines", refLabel);
+  if (typeof value.truncated !== "boolean") {
+    throw chatInvalidArgument(
+      `${refLabel}: truncated must be a boolean`
+    );
+  }
+  const truncated = value.truncated;
+  if (
+    "lastLineTruncated" in value &&
+    typeof value.lastLineTruncated !== "boolean"
+  ) {
+    throw chatInvalidArgument(
+      `${refLabel}: lastLineTruncated must be a boolean`
+    );
+  }
+  const lastLineTruncated =
+    value.lastLineTruncated === true ? true : undefined;
+  const nextOffset = optionalNonNegativeInt(value, "nextOffset", refLabel);
+  return {
+    path,
+    entryId,
+    version,
+    contentHash,
+    totalBytes,
+    offset,
+    ...(limit != null ? { limit } : {}),
+    returnedLines,
+    totalLines,
+    truncated,
+    ...(lastLineTruncated != null ? { lastLineTruncated } : {}),
+    ...(nextOffset != null ? { nextOffset } : {}),
+  };
 }
 
 function parseImageSource(value: unknown): ImageSource {
@@ -200,6 +292,10 @@ function parseBlock(value: unknown, index: number): ContentBlock {
       }
       const ok = optionalBoolean(value.ok);
       const summary = optionalString(value.summary);
+      // contentRef（read 工具结果引用，read-tool-result-ref）：回构白名单
+      // 必须补上——parse 只回构显式列出的字段，静默丢弃会让 round-trip
+      // 丢引用（failureReason 已有丢失先例）。缺省时 undefined（legacy 兼容）。
+      const contentRef = parseReadResultRef(value.contentRef, label);
       return {
         type: "tool_result",
         toolUseId,
@@ -207,6 +303,7 @@ function parseBlock(value: unknown, index: number): ContentBlock {
         ...(ok !== undefined ? { ok } : {}),
         ...(summary !== undefined ? { summary } : {}),
         ...(meta !== undefined ? { meta } : {}),
+        ...(contentRef !== undefined ? { contentRef } : {}),
       } satisfies ToolResultBlock;
     }
     case "thinking": {

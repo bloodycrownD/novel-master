@@ -157,6 +157,22 @@ export interface AgentTurnRuntimePort extends AgentRunRuntimePort {
    * limitation，后续迭代 CLI 接入 kkv 后补一行装配即可启用）。
    */
   readonly searchConfig?: SearchConfigStore;
+  /**
+   * 可选：read 工具的 revision 引用计数 +1 通道（read-tool-result-ref）。
+   *
+   * 注入了才会透传到 toolCtx（主/子两个装配点同款）：read 在返回前同步
+   * +1 保活、输出携带 entryId 产 contentRef 引用块。未注入时 read 走
+   * legacy 全文形态（不 +1、不产引用块）——三端 runtime 装配随 hydrate
+   * （Step 4/6）就绪后打开，避免「产引用块但 wire 还原未接线」的中间态。
+   * 底层绑定 revision repo 的 `batchAdjustRefCountWithDelta`。
+   */
+  readonly adjustRevisionRefCount?: (
+    pointers: ReadonlyArray<{
+      readonly entryId: number;
+      readonly version: number;
+    }>,
+    delta: number
+  ) => Promise<void>;
 }
 
 export class AgentTurnError extends Error {
@@ -532,6 +548,11 @@ export async function runAgentTurn(
     listSessionMessages: (): Promise<readonly ChatMessage[]> =>
       runtime.messages.listBySession(scope.sessionId),
     sessionKkv: runtime.sessionKkv,
+    // read 引用计数 +1 通道（read-tool-result-ref）：未注入时 read 回落
+    // legacy 全文形态（vfs-tools read 分支判空跳过）。
+    ...(runtime.adjustRevisionRefCount != null
+      ? { adjustRevisionRefCount: runtime.adjustRevisionRefCount }
+      : {}),
     // 目录规则默认启用：write / mkdir 新路径时按本会话工作区补默认 workplace_dir_rule 行。
     workplace: runtime.workplace({
       kind: "session",
@@ -769,6 +790,11 @@ async function runChildAgent(args: {
       listSessionMessages: (): Promise<readonly ChatMessage[]> =>
         runtime.messages.listBySession(childSessionId),
       sessionKkv: runtime.sessionKkv,
+      // read 引用计数 +1 通道（read-tool-result-ref）：子 agent 与主 run 同款
+      // 透传（引用是全局键，跨会话直接指向源 revision，子/主一视同仁）。
+      ...(runtime.adjustRevisionRefCount != null
+        ? { adjustRevisionRefCount: runtime.adjustRevisionRefCount }
+        : {}),
       // 目录规则默认启用：子 agent 与父共享同一工作区（上面 vfs 同归属根父会话），
       // 补规则也写父工作区的 workplace_dir_rule。
       workplace: runtime.workplace({

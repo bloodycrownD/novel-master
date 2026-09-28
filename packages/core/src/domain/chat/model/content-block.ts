@@ -49,6 +49,15 @@ export interface ToolResultBlock {
   /** Short UI hint; not sent to LLM adapters. */
   readonly summary?: string;
   /**
+   * read 工具结果的引用化元数据（read-tool-result-ref）：存在时 `content`
+   * 为占位空串，发送提示词时按 `(entryId, version)` 全局键实时查
+   * revision/blob 重放 `formatReadOutput` 还原 wire 字节（hydrate）。
+   *
+   * legacy 行（无 contentRef、`content` 存全文）行为完全不变——加法式
+   * 可选字段演进，先例同 ok/summary/meta。
+   */
+  readonly contentRef?: ReadResultRef;
+  /**
    * meta 字段同时供 UI 卡片读取；task 工具 content 改全 JSON 后（59d84726），
    * subagentSessionId 与 failureReason 也会随 content 回流给 LLM。
    *
@@ -74,6 +83,40 @@ export interface SkillToolRef {
   /** project 域定位用；由解析方按会话上下文补齐，global 域缺省。 */
   readonly projectId?: string;
   readonly name: string;
+}
+
+/**
+ * read 工具结果的引用化元数据（read-tool-result-ref）。
+ *
+ * read 的 tool_result 不再存 `formatReadOutput` 全文，改存这条引用：引用键
+ * 用全局键 `(entryId, version)`（不用 path——导入重开 entry 会让 path 重绑
+ * 新 entryId；不用裸 contentHash——无 revision 锚点则无法挂引用计数保活），
+ * `contentHash` 是冗余校验（hydrate 后比对，防版本错位/内容漂移）。
+ *
+ * 截断管线的全部输入与派生参数自包含在 ref 里（offset/limit/returnedLines/
+ * totalLines/truncated/lastLineTruncated/nextOffset），保证
+ * `formatReadOutput`（冻结函数，演进需版本化）确定性重放。
+ */
+export interface ReadResultRef {
+  /** 展示用（hydrate 不依赖它定位）。 */
+  readonly path: string;
+  /** 全局键（源会话的 entry）。 */
+  readonly entryId: number;
+  /** 全局键。 */
+  readonly version: number;
+  /** 冗余校验：hydrate 后比对，防版本错位/内容漂移。 */
+  readonly contentHash: string;
+  /** 明文总字节（UTF-8）。 */
+  readonly totalBytes: number;
+  /** read 的输入参数（1 起始行号）。 */
+  readonly offset: number;
+  /** read 的输入参数。 */
+  readonly limit?: number;
+  readonly returnedLines: number;
+  readonly totalLines: number;
+  readonly truncated: boolean;
+  readonly lastLineTruncated?: boolean;
+  readonly nextOffset?: number;
 }
 
 export interface ThinkingBlock {

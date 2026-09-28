@@ -679,6 +679,25 @@ export type ContentBlockDto =
       readonly ok?: boolean;
       readonly summary?: string;
       /**
+       * read 工具结果引用（read-tool-result-ref）：镜像 core `ReadResultRef`。
+       * 存在时 content 为占位空串，wire 侧按 (entryId, version) hydrate 重放
+       * `formatReadOutput` 还原全文；legacy 行（无 contentRef）不受影响。
+       */
+      readonly contentRef?: {
+        readonly path: string;
+        readonly entryId: number;
+        readonly version: number;
+        readonly contentHash: string;
+        readonly totalBytes: number;
+        readonly offset: number;
+        readonly limit?: number;
+        readonly returnedLines: number;
+        readonly totalLines: number;
+        readonly truncated: boolean;
+        readonly lastLineTruncated?: boolean;
+        readonly nextOffset?: number;
+      };
+      /**
        * UI-only 旁路字段：task 工具携带 `subagentSessionId` 供卡片跳转子会话；
        * skill 携带 `skillRef`（read 由工具输出解析透传，write/edit 由输入侧解析）。
        */

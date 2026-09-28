@@ -9,6 +9,7 @@
  */
 
 import type {
+  ReadResultRef,
   SkillToolRef,
   ToolResultBlock,
 } from "@/domain/chat/model/content-block.js";
@@ -46,6 +47,65 @@ export function resolveToolResultOk(block: ToolResultBlock): boolean {
     return true;
   }
   return !block.content.trimStart().startsWith("Error:");
+}
+
+/**
+ * 从 read 成功输出解析 `contentRef`（read-tool-result-ref）。
+ *
+ * 仅 `toolName === "read"` 且输出携带 head 定位三件套
+ * （entryId/version/contentHash + totalBytes）时生效——vfs-tools 只在
+ * ctx 注入 adjustRevisionRefCount 并同步 +1 之后才把这些字段放进输出，
+ * 「有 entryId ⟺ revision 已保活」，这里产的引用块不会悬空。其余工具 /
+ * 旧形态输出（含 mock ctx 的测试）返回 undefined，走 legacy 全文 content。
+ *
+ * 派生参数（offset/limit/returnedLines/totalLines/truncated/
+ * lastLineTruncated/nextOffset）全部取自 read 截断管线的结果输出——
+ * `formatReadOutput` 重放要用的输入必须自包含在 ref 里。
+ */
+function resolveReadResultRefFromOutcome(
+  toolName: string | undefined,
+  output: unknown
+): ReadResultRef | undefined {
+  if (toolName !== "read" || !isRecord(output)) {
+    return undefined;
+  }
+  const { entryId, version, contentHash, totalBytes } = output;
+  if (
+    typeof entryId !== "number" ||
+    typeof version !== "number" ||
+    typeof contentHash !== "string" ||
+    contentHash === "" ||
+    typeof totalBytes !== "number"
+  ) {
+    return undefined;
+  }
+  const { path, offset, returnedLines, totalLines, truncated } = output;
+  if (
+    typeof path !== "string" ||
+    typeof offset !== "number" ||
+    typeof returnedLines !== "number" ||
+    typeof totalLines !== "number" ||
+    typeof truncated !== "boolean"
+  ) {
+    return undefined;
+  }
+  const limit = output.limit;
+  const lastLineTruncated = output.lastLineTruncated;
+  const nextOffset = output.nextOffset;
+  return {
+    path,
+    entryId,
+    version,
+    contentHash,
+    totalBytes,
+    offset,
+    ...(typeof limit === "number" ? { limit } : {}),
+    returnedLines,
+    totalLines,
+    truncated,
+    ...(lastLineTruncated === true ? { lastLineTruncated: true } : {}),
+    ...(typeof nextOffset === "number" ? { nextOffset } : {}),
+  };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -266,6 +326,15 @@ export function buildToolResultBlock(
       meta?.skillProjectId
     );
 
+    // read 引用块（read-tool-result-ref）：read 成功输出携带 head 定位三件套
+    // （vfs-tools 已同步 +1 保活）时产 contentRef——content 置占位空串，
+    // wire 侧 hydrate 按 (entryId, version) 重放 formatReadOutput 还原全文；
+    // summary 照旧生成（"N lines" / "truncated · N/M lines"，UI 卡片零改动）。
+    const contentRef = resolveReadResultRefFromOutcome(
+      meta?.toolName,
+      outcome.output
+    );
+
     // 中断回流（phase-1-abort-reflow）：outcome.ok=true 但 output.stopped=true 表示
     // 子 agent 被用户中断。tool-result 要标 ok=false（主 agent 区分「用户停止」与「崩溃」），
     // content 是 task 输出的 JSON 壳（含 text + stopped + failureReason + subagentSessionId），
@@ -294,7 +363,10 @@ export function buildToolResultBlock(
       type: "tool_result",
       toolUseId,
       ok: true,
-      content,
+      // 引用态 content 置空串（hydrate 重放还原 wire 字节）；legacy 态照旧全文。
+      ...(contentRef != null
+        ? { content: "", contentRef }
+        : { content }),
       ...(summary != null ? { summary } : {}),
       ...(subagentSessionId != null || skillRef != null
         ? {

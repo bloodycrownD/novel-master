@@ -55,6 +55,8 @@ function toContentBlockDto(block: ContentBlock): ContentBlockDto | null {
         content: block.content,
         ...(block.ok !== undefined ? { ok: block.ok } : {}),
         ...(block.summary !== undefined ? { summary: block.summary } : {}),
+        // read 工具结果引用（read-tool-result-ref）：透传给渲染层（DTO 已镜像）。
+        ...(block.contentRef != null ? { contentRef: block.contentRef } : {}),
         ...(block.meta != null ? { meta: block.meta } : {}),
       };
     default:
