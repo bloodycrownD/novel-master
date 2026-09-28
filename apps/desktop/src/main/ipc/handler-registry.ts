@@ -65,8 +65,10 @@ import {
 } from './handlers/shell.js';
 import {
   handlePreferencesGetLlmStream,
+  handlePreferencesGetSubagentStream,
   handlePreferencesGetThinkingContext,
   handlePreferencesSetLlmStream,
+  handlePreferencesSetSubagentStream,
   handlePreferencesSetThinkingContext,
 } from './handlers/preferences.js';
 import {
@@ -333,6 +335,14 @@ export function registerHandlersFromRegistry(): void {
   bindBool(
     IPC_CHANNELS.PREFERENCES_SET_LLM_STREAM,
     handlePreferencesSetLlmStream,
+  );
+  bindNoArg(
+    IPC_CHANNELS.PREFERENCES_GET_SUBAGENT_STREAM,
+    handlePreferencesGetSubagentStream,
+  );
+  bindBool(
+    IPC_CHANNELS.PREFERENCES_SET_SUBAGENT_STREAM,
+    handlePreferencesSetSubagentStream,
   );
   bindNoArg(
     IPC_CHANNELS.PREFERENCES_GET_THINKING_CONTEXT,

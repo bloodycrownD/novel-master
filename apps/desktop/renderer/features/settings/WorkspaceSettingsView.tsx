@@ -10,8 +10,10 @@ import {
   ipcModelListPicker,
   ipcModelSetCurrent,
   ipcPreferencesGetLlmStream,
+  ipcPreferencesGetSubagentStream,
   ipcPreferencesGetThinkingContext,
   ipcPreferencesSetLlmStream,
+  ipcPreferencesSetSubagentStream,
   ipcPreferencesSetThinkingContext,
 } from "@/ipc/client";
 
@@ -36,6 +38,7 @@ export function WorkspaceSettingsView() {
   const [modelLabel, setModelLabel] = useState("—");
   const [agentLabel, setAgentLabel] = useState("—");
   const [llmStream, setLlmStream] = useState(true);
+  const [subagentStream, setSubagentStream] = useState(true);
   const [thinkingContext, setThinkingContext] = useState(true);
   const [chatRichText, setChatRichText] = useState(true);
   const [compactionEnabled, setCompactionEnabled] = useState(false);
@@ -49,15 +52,23 @@ export function WorkspaceSettingsView() {
   const [currentAgentId, setCurrentAgentId] = useState<string | undefined>();
 
   const refresh = useCallback(async () => {
-    const [agentRes, modelRes, streamRes, richRes, compactionRes, thinkingRes] =
-      await Promise.all([
-        ipcAgentResolveCurrent(),
-        ipcModelListPicker(),
-        ipcPreferencesGetLlmStream(),
-        ipcAppUiGet(KEY_CHAT_RICH_TEXT),
-        ipcCompactionConditionsGet(),
-        ipcPreferencesGetThinkingContext(),
-      ]);
+    const [
+      agentRes,
+      modelRes,
+      streamRes,
+      richRes,
+      compactionRes,
+      thinkingRes,
+      subagentStreamRes,
+    ] = await Promise.all([
+      ipcAgentResolveCurrent(),
+      ipcModelListPicker(),
+      ipcPreferencesGetLlmStream(),
+      ipcAppUiGet(KEY_CHAT_RICH_TEXT),
+      ipcCompactionConditionsGet(),
+      ipcPreferencesGetThinkingContext(),
+      ipcPreferencesGetSubagentStream(),
+    ]);
     if (agentRes.ok) {
       setAgentLabel(agentRes.data.agentName);
       setCurrentAgentId(agentRes.data.agentId);
@@ -77,6 +88,9 @@ export function WorkspaceSettingsView() {
     }
     if (streamRes.ok) {
       setLlmStream(streamRes.data);
+    }
+    if (subagentStreamRes.ok) {
+      setSubagentStream(subagentStreamRes.data);
     }
     if (thinkingRes.ok) {
       setThinkingContext(thinkingRes.data);
@@ -196,6 +210,15 @@ export function WorkspaceSettingsView() {
             onChange={async (next) => {
               setLlmStream(next);
               await ipcPreferencesSetLlmStream(next);
+            }}
+          />
+          <SettingsSwitchRow
+            label="子会话流式"
+            desc="子智能体会话的实时输出；关闭后回复完成后一次性显示"
+            checked={subagentStream}
+            onChange={async (next) => {
+              setSubagentStream(next);
+              await ipcPreferencesSetSubagentStream(next);
             }}
           />
           <SettingsSwitchRow

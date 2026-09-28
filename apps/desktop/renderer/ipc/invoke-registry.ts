@@ -453,6 +453,14 @@ export function createInvokeClient(invoke: InvokeFn) {
       invoke,
       IPC_CHANNELS.PREFERENCES_SET_LLM_STREAM,
     ),
+    ipcPreferencesGetSubagentStream: noArg<IpcResult<boolean>>(
+      invoke,
+      IPC_CHANNELS.PREFERENCES_GET_SUBAGENT_STREAM,
+    ),
+    ipcPreferencesSetSubagentStream: withBool<IpcResult<void>>(
+      invoke,
+      IPC_CHANNELS.PREFERENCES_SET_SUBAGENT_STREAM,
+    ),
     ipcPreferencesGetThinkingContext: noArg<IpcResult<boolean>>(
       invoke,
       IPC_CHANNELS.PREFERENCES_GET_THINKING_CONTEXT,
