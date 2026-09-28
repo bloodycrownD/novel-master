@@ -1,8 +1,8 @@
 ---
-date: 2026-08-28 05:20
-title: 三处 UI 优化：收官归档——闪烁问题择期修复（ux-fixes-2026-08）
-keywords: composer 抖动, tag 闪烁, 多行重排, controlled-mentions, 编辑时降级纯文本, overlay 方案, ux-fixes-2026-08
-abstract: ux-fixes-2026-08 收官归档：除「tag 多行输入闪烁」择期修复外全部完成（head 3af3112）。闪烁最终定性：单行不闪/多行才闪/顶到高度上限仍闪→与高度无关，是多行文本变化全量重排重绘，胶囊 span 内联在 TextInput 里则无法避免；children 短路两条死路已验证不可行。候选方案已归档：①编辑中降级纯文本着色失焦恢复胶囊（约二十行，无库 patch）；②透明输入+高亮层 overlay（根治，工程量大）。metro 调试日志仍在代码里供未来定位，发版前应摘。
+date: 2026-09-28 10:50
+title: 三处 UI 优化收官 + tag 闪烁择期后的复查轮（换库调研与模拟器复现）
+keywords: composer 抖动, tag 闪烁, 多行重排, controlled-mentions, 编辑时降级纯文本, overlay 方案, ux-fixes-2026-08, 换库调研, 模拟器复现
+abstract: ux-fixes-2026-08 收官归档：除「tag 多行输入闪烁」择期修复外全部完成。闪烁定性＝库每键全量重推 children→Android spannable 重建→多行全量重排；两条死路（children 复用/库内短路）已验证。2026-09-28 复查轮：搜索确认无值得换的 RN mention 库（现库 293 星半弃维护、同类库全同构 children 内嵌 span 架构）；模拟器复现确认打字重绘仍在但淡背景（primary 22≈13% alpha）下肉眼闪烁不明显。根治方向仍是 overlay（桌面端现成蓝本），快速缓解是 focus 降级纯文本着色（未验证）。
 ---
 
 user:
@@ -118,3 +118,33 @@ desktop 验收反馈（节点 fix-prompt-ux-desktop）：折叠机制太复杂�
 
 assistant:
 按 write set 完成（未碰 mobile 与接线文件，组件签名不变）：①PromptCollapsibleField 简化为「.prompt-field-inline 容器 + 右上角 icon-btn 全屏按钮（⛶，复用 .icon-btn，平时 opacity 0.55）+ 原 Modal（CodeEditor/草稿/保存回填/Mod-s/点遮罩关闭均保留，另补 document keydown Esc 关闭，defaultPrevented 时不拦截）」，删除 clamp 预览/useLayoutEffect 实测/probe 重挂/measureOverflow/focusHold/pendingOpen/relatedTarget 全套防竞态；②删除 prompt-collapse.ts（无消费方，5 行语义写进 CSS 注释，PROMPT_INLINE_MAX_LINES=5）；③shell.css：.prompt-field-clamp 换为 .prompt-field-inline（position:relative）+ textarea max-height:calc(5*1.45em+18px)（settings textarea 13px×1.45≈18.85px/行，border-box 含 padding16+border2）。验证：npm run typecheck 过；eslint 本次三文件零命中（全仓 33 个既有问题，均在未碰文件）；tsconfig.renderer.json 兜底 standalone 失败但错误与改动前磁盘 tsbuildinfo 记录完全一致＝环境既有（packages/core dist 类型解析为 unknown 等），非本次引入。提交 cb592d4（1 commit，UX 简化）。经验：desktop 的门禁以 npm run typecheck（主 tsconfig）为准，renderer standalone 兜底在此 worktree 一直红。
+
+user:
+（2026-09-28 复查轮）老问题重提：输入框引用 skill 后的 tag 输入文字时不断闪烁。要求用搜索 MCP 找有没有好的 RN 库或方案解决，并可用模拟器复现。
+
+assistant:
+两探索子代理 + 搜索 + 模拟器复现的结论：①这是 RULE.md:21 归案的已知问题，根因与候选方案 unchanged；桌面端（透明 textarea + 高亮层 overlay，shell.css 负 margin 抵消 padding 保测量一致）就是根治候选②的现成蓝本。②换库无意义：react-native-controlled-mentions 293 星半弃维护（issue #92 长文本卡顿 2022 年开至今未修、#141/#142 多行滚动与光标问题挂着），但 RN 生态没有更好的——react-native-mentions（harshq）更老更弃、Stream Chat 是整套聊天 SDK 太重，且所有 mention 库都是同构架构（TextInput children 内嵌 span + 每键重推），换哪个都会复现同一闪烁；RN 官方 TextInput 无富文本支持，受控 value 重推致 spannable 重建是通病（react-native#24585 等），社区根治共识＝overlay 或原生 setSpan。③模拟器复现（emulator-5554，Metro 是 agent-tabs worktree 的但 chat 组件与 main 一致）：从零搭环境（OpenCode Zen 免 key provider + claude-fable-5 + 项目 flicker + 智能体 agent1tester + 会话），$ 引用内置技能 agent-config，两轮录屏（整词/逐字符 adb 注入）+ ffmpeg 抽帧帧差分析：打字期间输入框区域持续重绘确认仍在（逐字符轮 73/242 帧显著变化），但 tag 区域自身 0 帧变化——模拟器 + adb 注入 + 浅色主题下 tag 淡背景（primary 22≈13% alpha）肉眼闪烁不明显，与既往真机（荣耀 + 软键盘 IME 组合流）条件不同，闪烁主判定仍以 2026-08 真机日志实锤为准。④建议：要根治立新迭代走 overlay（前置小验证两个：RN TextInput onScroll 与高亮层滚动同步、RN 原生层 Text 胶囊圆角支持——TextInput children 内圆角会被 Android 忽略是已证限制，普通 Text 树未验证）；要快速缓解先试候选①（focus 降级纯文本着色，约二十行未验证）。证据存 tmp/tag-flicker-repro/（两轮视频+抽帧+分析脚本，tmp 不入库）；模拟器 app 里留了测试数据（项目 flicker / 智能体 agent1tester / OpenCode Zen claude-fable-5 模型配置），跑 e2e 前可按需清理。
+
+user:
+追问：把 react-native-controlled-mentions clone 进 packages 自己维护、直接改库，是不是比重写（overlay）更简单？
+
+assistant:
+结论：fork 有价值但修不了闪烁——fork 与 patch-package 只是改动载体不同（源码仓库 vs 补丁），库内可改的面完全同一批，而「减少重推」两条路 2026-08 已真机证死（children 重推是 span 存续载体）；在库内改造成 overlay＝背着库 API 重写，比 app 层自研更绕。fork 真正价值：上游半弃维护，外围 bug（#141 多行选建议滚动跳底、#142 光标移 mention 后报错）迟早撞上时作为修复载体；库内做增量解析可降每键 2 次全文 parseValue + diffChars 的 JS 开销（解决卡顿不解决闪烁）；解析层纯函数（parseValue/markup/triggersConfig）是 overlay 也需要的零件，MIT 协议直接拷文件保留声明即可，不必 fork 整库。推荐组合：根治＝app 层自研 overlay + 从库里拷解析函数（项目已有自研解析层 composer-at-path-mention.ts 的 promotePlainMentions/mentionValueToPlain）；fork 留给撞上外围 bug 或 patch-package 撑不住时的场景。库 license 确认 MIT。
+
+user:
+拍板「那你试试吧，实践出真知」，挂 prd-generate + spec-generate 立项 overlay 根治。
+
+assistant:
+prd-generate 流程：两探索子代理盘点「重写必须保持的行为面」（P0：value/onChangeText 恒 plain 契约、原子删、水化恢复、typeahead 光标驱动、IME 自愈两案行为底线；P1：max160 限高、pendingSelection 模式）与「桌面蓝本机制 + RN 移植三档差距」（可照搬：布局拓扑/互斥正则/原子删 plain 算法；需改写：嵌套 Text 树/滚动同步；RN 特有风险：TextInput.onScroll 无先例、普通 Text 树圆角未验证、无负 margin 先例、尾换行占位、IME 组合下划线可见性）。用户四拍板：手输即时高亮（对齐桌面，markup 状态制随之拆除）、统一真胶囊（Android 圆角不可用降级方角）、验收以模拟器为准、宏输入 PromptMacroTextInput 一并重写。PRD 落盘 docs/Iterations/composer-overlay/prd.md（9 条 GWT 验收、5 条前置风险），待用户确认后接 spec-generate。
+
+user:
+确认 PRD，挂 spec-generate 出技术规格。
+
+assistant:
+spec-generate 两轮探索补齐实现级细节：宏输入无 ref 契约、children 着色 + splitPromptMacroSegments 白名单切分（{{$key}} 闭合区间允许空格）、原子删已是 plain 版（prompt-macro-input.ts:111-147 prefix diff + 区间命中，与桌面逐行等价）；composer-at-path-mention.ts 全部导出的 src 消费方都在 ComposerAtPathInput 内→整文件可删（mentionValueToPlain 无发送/草稿侧引用）；测试用例级迁移映射（12+15+13+1 用例的保留/删除/迁移判定，桌面 Step5/Step20 segments 断言形态为蓝本）；e2e 仅依赖 testID+getText 不受影响；jest 基线 1534/1535（1 既有红灯 mermaid-fullscreen）。SPEC 落盘 docs/Iterations/composer-overlay/spec.md：受控 plain 零变换（1.5.9/1.5.10 丢字/降级源随架构消失，组合态序列 jest 守护）、原子删泛化 tryAtomicRangeDelete 单源双用（chat token ranges / 宏白名单 ranges）、滚动同步主线 a（onScroll 镜像）备选 b（单滚动域）、胶囊三档位以换行点一致为准绳（负 margin→pad0 保底）、7 Step（spike 前置→纯函数→基础设施→chat→宏→清理→验收），13 变更点、测试 T-HL/T-AD/T-OV/T-CR-HL/T-IME/T-MAC/T-DEP。待用户确认。
+
+user:
+挂 spec-check-loop 评审 composer-overlay 的 PRD/SPEC。
+
+assistant:
+spec-check-loop 第 1 轮审查（readonly 子代理对照代码库全量核验）：结论 Go（execute-ready），0 P0。关键断言抽查全过——composer-at-path-mention.ts 整删安全（8 值导出+2 type 导出的 src 消费方全在 Composer 内，唯一遗漏点是 composer-at-path.ts:3 死注释）、replaceActiveAt 移除后 fallback 路径行为等价属实、依赖清理面与 jest 配置判断正确、core 不误伤、A1-A9 与 Step/测试映射闭合。P1×2（typeahead 单路径化缺测试护栏、ExpandablePromptInput 挂载置顶视口对齐验证无归属）+ P2×7（手输退格语义明示、T-CR4② 差异化、判据与降级档联动、导出数更正、宏表单外观迁移、cursor/pendingSelection 契约显式化、措辞精度）已由主代理 doc-fix 全部闭合（PRD 需求 4 + SPEC 变更点 4/5/6/8/10/11、T-INT/T-MAC3/T-MAC4、Step 6/7）。状态：待用户确认 execute-ready；确认后可走 code-dev-loop 开工。
