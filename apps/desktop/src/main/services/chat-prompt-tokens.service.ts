@@ -216,7 +216,13 @@ async function computeChatPromptTokenStats(
   );
 }
 
-export async function loadChatPromptTokenStats(
+/**
+ * 真正执行底层计算的一跳（原 `loadChatPromptTokenStats` 函数体）。
+ *
+ * 对外入口 {@link loadChatPromptTokenStats} 已套防抖；本函数只被防抖执行链
+ * 调用，同一 sessionId 串行、绝不并发重入。
+ */
+async function loadChatPromptTokenStatsNow(
   runtime: DesktopNovelMasterRuntime,
   scope: SessionPromptScope,
 ): Promise<PromptChatTokenStatsResponse> {
@@ -254,6 +260,137 @@ export async function loadChatPromptTokenStats(
       source: result.source,
     };
   });
+}
+
+/**
+ * token 读口防抖窗口（message-token-cache Step 4 / T-TC6）：300ms trailing。
+ *
+ * renderer 侧 SessionDetailDrawer 有 5 个触发源（会话切换、消息收尾、编辑、
+ * 置位/压缩等）会在短时间内连发 IPC；本层在 service 侧把它们合并成一次底层
+ * 计算，renderer 零改动。窗口内的新触发会重置计时（最后一次触发后 300ms 才
+ * 执行——trailing 语义，保证最终一致性：最后一次触发必产生一次计算，绝不吞）。
+ */
+const CHAT_PROMPT_TOKEN_DEBOUNCE_MS = 300;
+
+/**
+ * 每个 sessionId 一个防抖槽：
+ * - `deferred`：trailing 计时挂起中，窗口内所有 caller 共享「这一次执行」；
+ * - `running`：正在执行的底层计算链（同 key 串行——到期执行若遇上一轮仍在
+ *   途，先挂到上一轮之后，绝不并发重入）；
+ * - `scope`：记录最后一次触发的 scope，trailing 到期按最新触发执行。
+ */
+type ChatPromptTokenDebounceSlot = {
+  timer: ReturnType<typeof setTimeout> | null;
+  deferred: {
+    promise: Promise<PromptChatTokenStatsResponse>;
+    resolve: (value: Promise<PromptChatTokenStatsResponse>) => void;
+  } | null;
+  running: Promise<PromptChatTokenStatsResponse> | null;
+  scope: SessionPromptScope;
+};
+
+const chatPromptTokenDebounceSlots = new Map<
+  string,
+  ChatPromptTokenDebounceSlot
+>();
+
+/** 测试观测：每 sessionId 的底层计算执行次数（T-TC6 断言「合并为 N 次」的口径）。 */
+const chatPromptTokenDebounceExecCounts = new Map<string, number>();
+
+function scheduleChatPromptTokenTrailing(
+  runtime: DesktopNovelMasterRuntime,
+  key: string,
+  slot: ChatPromptTokenDebounceSlot,
+): void {
+  if (slot.timer != null) {
+    clearTimeout(slot.timer);
+  }
+  slot.timer = setTimeout(() => {
+    slot.timer = null;
+    // 计时到期：取走窗口内 caller 共享的 deferred（可能为 null——那是「在途
+    // 期间新触发」安排的追赶轮，无等待者也要执行，新数据才算到位）。
+    const deferred = slot.deferred;
+    slot.deferred = null;
+    const previousRun = slot.running;
+    const run = (
+      previousRun ? previousRun.catch(() => undefined) : Promise.resolve()
+    ).then(() => {
+      chatPromptTokenDebounceExecCounts.set(
+        key,
+        (chatPromptTokenDebounceExecCounts.get(key) ?? 0) + 1,
+      );
+      return loadChatPromptTokenStatsNow(runtime, slot.scope);
+    });
+    slot.running = run;
+    const settle = () => {
+      if (slot.running === run) {
+        slot.running = null;
+      }
+    };
+    run.then(settle, settle);
+    // 兜底 handler：无 caller 的追赶轮 rejection 不会变 unhandled；有 caller
+    // 时多挂一个 handler 不影响失败向 caller 的原样传播（resilient 接住走 fallback）。
+    run.catch(() => undefined);
+    if (deferred != null) {
+      // caller 的 promise 直接接到本轮执行上（resolve 扁平化；失败原样传播，
+      // 由 resilient 包装接住走 fallback）。
+      deferred.resolve(run);
+    }
+  }, CHAT_PROMPT_TOKEN_DEBOUNCE_MS);
+}
+
+/**
+ * token 统计读口（IPC 并发语义保持）：按 sessionId 做 300ms trailing
+ * debounce + 同参在途 Promise 合并。
+ *
+ * - 窗口内（计时挂起中）重复触发：重置计时，所有 caller 共享同一次底层计算；
+ * - 底层计算在途时新触发：复用在途 Promise 返回，并安排 300ms 后的追赶轮
+ *   （在途落地后串行执行），新触发的数据变化最终必被计算；
+ * - 不同 sessionId 互不干扰（Map 按 key 隔离）。
+ */
+export function loadChatPromptTokenStats(
+  runtime: DesktopNovelMasterRuntime,
+  scope: SessionPromptScope,
+): Promise<PromptChatTokenStatsResponse> {
+  const key = scope.sessionId;
+  let slot = chatPromptTokenDebounceSlots.get(key);
+  if (slot == null) {
+    slot = { timer: null, deferred: null, running: null, scope };
+    chatPromptTokenDebounceSlots.set(key, slot);
+  }
+  slot.scope = scope;
+  if (slot.running != null) {
+    // 在途复用：并发请求直接挂正在跑的这一轮；追赶轮保证新触发最终被计算。
+    scheduleChatPromptTokenTrailing(runtime, key, slot);
+    return slot.running;
+  }
+  if (slot.deferred == null) {
+    let resolve!: (value: Promise<PromptChatTokenStatsResponse>) => void;
+    const promise = new Promise<PromptChatTokenStatsResponse>((res) => {
+      resolve = res;
+    });
+    slot.deferred = { promise, resolve };
+  }
+  scheduleChatPromptTokenTrailing(runtime, key, slot);
+  return slot.deferred.promise;
+}
+
+/** 测试钩子：清空防抖槽与执行计数（用例间隔离，防跨用例串扰）。 */
+export function resetChatPromptTokenDebounceForTests(): void {
+  for (const slot of chatPromptTokenDebounceSlots.values()) {
+    if (slot.timer != null) {
+      clearTimeout(slot.timer);
+    }
+  }
+  chatPromptTokenDebounceSlots.clear();
+  chatPromptTokenDebounceExecCounts.clear();
+}
+
+/** 测试钩子：读取某 sessionId 的底层计算执行次数。 */
+export function chatPromptTokenDebounceExecCountForTests(
+  sessionId: string,
+): number {
+  return chatPromptTokenDebounceExecCounts.get(sessionId) ?? 0;
 }
 
 /**

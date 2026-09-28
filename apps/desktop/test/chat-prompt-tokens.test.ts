@@ -6,9 +6,13 @@
  *
  * CR fix-spec v3 `agile-2`：再补一条形态护栏，钉住兜底 registry 视图是用**显式转发**
  * 造的（原型方法 `forSavedModel` / `forVendorModel` 没被对象展开丢掉）。
+ *
+ * message-token-cache Step 4 / T-TC6：读口已加 300ms trailing debounce + 同参
+ * 在途合并。扩展用例验证：rapid 双触发合并一次底层计算；并发 5 触发在途合并
+ * 一次；trailing 语义（窗口内不执行、窗口过后必有最终一次、不吞任何一击）。
  */
 import assert from "node:assert/strict";
-import { after, before, describe, it } from "node:test";
+import { after, before, beforeEach, describe, it } from "node:test";
 import { sessionApiPromptTokenCache } from "@novel-master/core/provider";
 import { getDesktopRuntime } from "../src/main/runtime/desktop-runtime-singleton.js";
 import { handleAgentSetCurrent } from "../src/main/ipc/handlers/agent.js";
@@ -23,8 +27,10 @@ import {
   handleSessionsSetModelOverride,
 } from "../src/main/ipc/handlers/sessions.js";
 import {
+  chatPromptTokenDebounceExecCountForTests,
   formatChatTokenStatsLabel,
   loadChatPromptTokenStats,
+  resetChatPromptTokenDebounceForTests,
   withRealFallbackCounter,
 } from "../src/main/services/chat-prompt-tokens.service.js";
 import {
@@ -99,6 +105,7 @@ describe("chat-prompt-tokens.service", () => {
 
   after(async () => {
     sessionApiPromptTokenCache.clearAll();
+    resetChatPromptTokenDebounceForTests();
     await teardownDesktopDbTestEnv(tempDir);
   });
 
@@ -247,5 +254,83 @@ describe("chat-prompt-tokens.service", () => {
       registry.heuristic.countText(chinese) > chinese.length / 3.35,
       "兜底 registry 的 heuristic 像是退回 ceil(chars/3.35) 字符折算了",
     );
+  });
+
+  describe("T-TC6: 读口防抖（300ms trailing + 在途合并）", () => {
+    const sleep = (ms: number) =>
+      new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+    beforeEach(() => {
+      sessionApiPromptTokenCache.clearAll();
+      resetChatPromptTokenDebounceForTests();
+    });
+
+    it("rapid 双触发（<300ms 窗口内）合并为一次底层计算", async () => {
+      const rt = await getDesktopRuntime();
+      const scope = { projectId, sessionId };
+
+      // 两个请求同帧连发（间隔远小于 300ms）：共享 trailing 窗口的同一次执行。
+      const [a, b] = await Promise.all([
+        loadChatPromptTokenStats(rt, scope),
+        loadChatPromptTokenStats(rt, scope),
+      ]);
+
+      assert.equal(
+        chatPromptTokenDebounceExecCountForTests(sessionId),
+        1,
+        "双触发应合并为一次底层计算",
+      );
+      // 合并的 caller 拿到同一份结果（读数一致，不出现两个口径）。
+      assert.deepEqual(a, b);
+      assert.equal(a.source, "local");
+    });
+
+    it("并发 5 触发在途合并为一次底层计算", async () => {
+      const rt = await getDesktopRuntime();
+      const scope = { projectId, sessionId };
+
+      const results = await Promise.all(
+        Array.from({ length: 5 }, () => loadChatPromptTokenStats(rt, scope)),
+      );
+
+      assert.equal(
+        chatPromptTokenDebounceExecCountForTests(sessionId),
+        1,
+        "并发 5 触发应合并为一次底层计算",
+      );
+      for (const stats of results) {
+        assert.deepEqual(stats, results[0]);
+      }
+    });
+
+    it("trailing：窗口内不执行，窗口过后必有最终一次计算，且不吞任何一击", async () => {
+      const rt = await getDesktopRuntime();
+      const scope = { projectId, sessionId };
+
+      // 单次触发：防抖是 trailing 而非 leading——窗口内（<300ms）不执行。
+      const first = loadChatPromptTokenStats(rt, scope);
+      await sleep(150);
+      assert.equal(
+        chatPromptTokenDebounceExecCountForTests(sessionId),
+        0,
+        "300ms 窗口内不应有底层计算（非 leading）",
+      );
+      // 窗口过后必须有最终一次计算（最终一致性：触发不悬挂）。
+      const stats = await first;
+      assert.equal(
+        chatPromptTokenDebounceExecCountForTests(sessionId),
+        1,
+        "trailing 到期后必产生一次底层计算",
+      );
+      assert.equal(stats.source, "local");
+
+      // 空闲后的再次触发不被吞：又产生一次计算（每一击最终都有计算）。
+      await loadChatPromptTokenStats(rt, scope);
+      assert.equal(
+        chatPromptTokenDebounceExecCountForTests(sessionId),
+        2,
+        "第二次触发也必须产生一次底层计算",
+      );
+    });
   });
 });
