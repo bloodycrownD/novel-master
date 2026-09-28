@@ -1,11 +1,13 @@
 /**
- * T-S1~T-S4（phase-core-consume / subagent-stream-toggle）：runChildAgent 的
+ * T-S1~T-S5（phase-core-consume / subagent-stream-toggle）：runChildAgent 的
  * stream 传导由 `chat.subagentStream` 偏好决定的集成测试。
  *
  * 走 runAgentTurn 完整路径（真实 in-memory DB + scriptedModel 按调用序回放），
  * 让 task 工具触发 runChildAgent，在 ModelRequestService.request 的 options
  * 缝上断言子 run 的 stream：偏好关 → false、偏好开（默认）→ true、runtime
- * 未注入 preferences → true（兼容口径）、偏好键脏值 → 回退 true 且 run 不炸。
+ * 未注入 preferences → true（兼容口径）、偏好键脏值 → 回退 true 且 run 不炸
+ * （T-S4 并断言回退标签日志恰好记一次）、偏好读抛非 PreferencesError →
+ * 重抛不吞（T-S5，见用例内注释的传导链说明）。
  *
  * @module test/service/agent/run-agent-turn-subagent-stream.test
  */
@@ -305,10 +307,17 @@ describe("runChildAgent stream 传导（chat.subagentStream 偏好）", () => {
     assert.equal(streams[1], true, "未注入 preferences 时子 run 应回退 true");
   });
 
-  it("T-S4：偏好键直写脏值 → 回退 true 且 run 不抛", async () => {
+  it("T-S4：偏好键直写脏值 → 回退 true 且 run 不抛，并记一次标签回退日志", async () => {
     const ctx = getNovelMasterTestContext();
     const kkv = createKkvService(ctx.conn);
     await kkv.set("nm-preferences", "chat.subagentStream", "not-a-bool");
+    // 照 MF-3（test/agent/agent-runner.test.ts）先例：临时替换 console.error
+    // 收集调用，finally 恢复原函数，防止污染其它用例的输出。
+    const consoleErrors: Array<{ tag: unknown; payload: unknown }> = [];
+    const originalError = console.error;
+    console.error = ((tag: unknown, payload: unknown) => {
+      consoleErrors.push({ tag, payload });
+    }) as typeof console.error;
     try {
       // runTaskTurn 内部已断言 stopReason === completed（run 不抛）
       const streams = await runTaskTurn(ctx.preferences);
@@ -317,8 +326,114 @@ describe("runChildAgent stream 传导（chat.subagentStream 偏好）", () => {
         true,
         "偏好脏值时子 run 应回退默认流式 true",
       );
+      // 回退路径必须留痕：恰好一条带该 tag 的标签日志（payload 为脏值
+      // PreferencesError）。
+      const tagged = consoleErrors.filter(
+        (e) => e.tag === "[agent-run] subagentStream pref read failed",
+      );
+      assert.equal(
+        tagged.length,
+        1,
+        `应恰好记录一次回退日志，实际=${tagged.length}（全部=${JSON.stringify(consoleErrors.map((e) => e.tag))}）`,
+      );
+      assert.ok(
+        tagged[0]!.payload instanceof Error,
+        "回退日志 payload 应为 PreferencesError（Error 子类）",
+      );
     } finally {
+      console.error = originalError;
       await ctx.preferences.resetSubagentStreamEnabled();
     }
+  });
+
+  it("T-S5：偏好读取抛非 PreferencesError → 重抛不吞：子 run 不启动，失败 tool_result 回流主 run", async () => {
+    const ctx = getNovelMasterTestContext();
+    await ctx.preferences.resetSubagentStreamEnabled();
+    await seedChildAgent(ctx);
+    await ensureDefaultAgentModel(ctx);
+
+    // 重抛分支（run-agent-turn.ts :869）的真实传导：boom 从 runChildAgent
+    // 抛出后，task 工具不吞——经 toolRunner 包成 ToolError（cause 保留 boom）
+    // 转为失败 tool_result 回流主 run（toolRunner.runParallel 的设计口径），
+    // 主 run 继续收尾。因此断言口径不是「runAgentTurn 整体抛出」，而是三件
+    // 可观察事实：① 主 run 正常完成；② 子 run 因重抛发生在子 runner.run
+    // 之前而从未发起 model 调用；③ boom 经 ToolError.cause 解包出现在第 2
+    // 次主 run 请求的输入里（formatToolErrorForLlm 输出 "Error: boom"）。
+    // 若实现删掉 :869 重抛行（catch 吞一切静默回退），boom 被吞、子 run 会
+    // 以 stream=true 启动并消费掉第 2 个响应，主 run 第 3 次调用无预设响应
+    // 而抛错——①②③ 全部转红。
+    const calls: Array<{
+      userContent: string;
+      historyText: string;
+    }> = [];
+    const modelRequests: ModelRequestService = {
+      request: async (
+        _savedModelId: string,
+        userContent: string,
+        options?: ModelRequestOptions,
+      ): Promise<LlmChatResult> => {
+        const responses = [
+          taskToolUseResponse("tu-s5"),
+          textDoneResponse("主代理收到失败结果"),
+        ];
+        const idx = calls.length;
+        calls.push({
+          userContent,
+          historyText: JSON.stringify(options?.history ?? []),
+        });
+        const r = responses[idx];
+        if (r == null) {
+          throw new Error(
+            `scriptedModel: 第 ${idx} 次调用无预设响应（responses.length=${responses.length}）`,
+          );
+        }
+        return r;
+      },
+    };
+
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id, "S-S5");
+
+    // 注入抛普通 Error（非 PreferencesError）的偏好窄切片。
+    const runtime = makeRuntime(ctx, {
+      modelRequests,
+      preferences: {
+        getThinkingContextEnabled: async () => false,
+        getSubagentStreamEnabled: async () => {
+          throw new Error("boom");
+        },
+      },
+    });
+    runtime.eventBus = realEventBus();
+
+    await ctx.state.setCurrentAgentId("test-default-agent");
+    await ctx.state.setCurrentModelId(TEST_SAVED_MODEL_ID);
+
+    const result = await runAgentTurn(
+      runtime,
+      { projectId: project.id, sessionId: session.id },
+      "请派生子代理完成任务",
+      { stream: false, onStream: () => {} },
+    );
+
+    // ① task 工具失败回流后主 run 继续收尾，run 本身不炸。
+    assert.equal(
+      result.stopReason,
+      "completed",
+      "task 失败回流后主 run 应继续完成",
+    );
+    // ② 重抛发生在子 runner.run 之前：全程只有主 run 的 2 次 model 调用。
+    assert.equal(
+      calls.length,
+      2,
+      `子 run 不应发起 model 调用（期望恰好 2 次主 run 调用），实际=${calls.length}`,
+    );
+    // ③ boom 未被静默吞掉：作为失败 tool_result 的 content 回流给主 run。
+    const secondCallInput = `${calls[1]!.userContent}\n${calls[1]!.historyText}`;
+    assert.match(
+      secondCallInput,
+      /boom/,
+      "boom 应以失败 tool_result（Error: boom）回流到主 run 第 2 次请求",
+    );
   });
 });

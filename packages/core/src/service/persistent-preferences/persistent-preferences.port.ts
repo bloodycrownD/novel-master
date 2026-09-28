@@ -22,7 +22,7 @@ export interface PersistentPreferences {
   setSubagentStreamEnabled(enabled: boolean): Promise<void>;
   resetSubagentStreamEnabled(): Promise<void>;
 
-  /** 思考内容进入上下文（未设置时默认 true）。 */
+  /** 思考内容进入上下文（未设置时默认 false，对齐 impl getBooleanPref 第二参）。 */
   getThinkingContextEnabled(): Promise<boolean>;
   setThinkingContextEnabled(enabled: boolean): Promise<void>;
   resetThinkingContextEnabled(): Promise<void>;

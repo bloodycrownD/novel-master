@@ -13,7 +13,7 @@ export const PREF_KEY_CHAT_LLM_STREAM = "chat.llmStream";
 /** v2: 子会话（subagent）流式输出（默认 true）。 */
 export const PREF_KEY_CHAT_SUBAGENT_STREAM = "chat.subagentStream";
 
-/** v2: 思考内容进入上下文（默认 true）。 */
+/** v2: 思考内容进入上下文（默认 false，对齐 impl getBooleanPref 第二参）。 */
 export const PREF_KEY_CHAT_THINKING_CONTEXT = "chat.thinkingContext";
 
 /** User VFS 统一 tool turn（默认 true）。关闭时回滚直写 VFS + 跳过 flush。 */
