@@ -11,11 +11,6 @@ import {
   executeTemplate,
   queryTemplate,
 } from "@/infra/tdbc/logic/template-helper.js";
-import {
-  bytesToBase64,
-  isReactNativeRuntime,
-  VFS_CONTENT_ENCODING_ZLIB_B64,
-} from "../logic/blob-bytes-codec.js";
 import { hashContent } from "../logic/hash-content.js";
 import {
   compressZlib,
@@ -33,29 +28,17 @@ import type { VfsContentStore } from "../vfs-content-store.port.js";
 const CONTENT_GETMANY_CHUNK_SIZE = 500;
 
 /**
- * ContentStore 构造可选注入，便于单测强制 RN / Node 落库形态。
- */
-export type SqliteVfsContentStoreOptions = {
-  /**
-   * 为 true 时 put 落 `zlib-b64`；为 false 时落 `zlib`。
-   * 未传则按 {@link isReactNativeRuntime} 探测。
-   */
-  preferZlibB64?: boolean;
-};
-
-/**
  * TDBC 后端的内容寻址存储。
+ *
+ * 写侧统一落 `zlib` 二进制 BLOB：op-sqlite 的 blob 绑参语义已在真机验证
+ * （见 tdbc-driver-op-sqlite/bindings），不再有 `zlib-b64` 文本分支。
+ * 读侧仍由 {@link decodeCompressedBytes} 兼容存量 `zlib-b64` / `zlib` + base64
+ * 文本两种历史形态。
  */
 export class SqliteVfsContentStore implements VfsContentStore {
   private readonly parser = new SqlTemplateParser();
-  private readonly preferZlibB64: boolean;
 
-  constructor(
-    private readonly conn: TdbcConnection,
-    options?: SqliteVfsContentStoreOptions
-  ) {
-    this.preferZlibB64 = options?.preferZlibB64 ?? isReactNativeRuntime();
-  }
+  constructor(private readonly conn: TdbcConnection) {}
 
   async put(plain: string): Promise<string> {
     const contentHash = hashContent(plain);
@@ -66,31 +49,13 @@ export class SqliteVfsContentStore implements VfsContentStore {
       { contentHash }
     );
     if (existing.length > 0) {
-      // 同 hash 复用已有行，不改 encoding / bytes。
+      // 同 hash 复用已有行，不改 encoding / bytes：存量行可能是 `zlib-b64`
+      // 文本形态，读侧认得了就没必要为省空间顺手改写。
       return contentHash;
     }
 
     const utf8 = new TextEncoder().encode(plain);
     const compressed = compressZlib(utf8);
-
-    if (this.preferZlibB64) {
-      // Hermes/RN：zlib 后再 base64，以 TEXT 写入，规避 quick-sqlite BLOB 绑参。
-      const b64 = bytesToBase64(compressed);
-      await executeTemplate(
-        this.conn,
-        this.parser,
-        `INSERT INTO vfs_content_blob (content_hash, encoding, bytes, byte_len)
-         VALUES (#{contentHash}, #{encoding}, #{bytes}, #{byteLen})`,
-        {
-          contentHash,
-          encoding: VFS_CONTENT_ENCODING_ZLIB_B64,
-          bytes: b64,
-          byteLen: b64.length,
-        }
-      );
-      return contentHash;
-    }
-
     const bytes = tightBytes(compressed);
     await executeTemplate(
       this.conn,

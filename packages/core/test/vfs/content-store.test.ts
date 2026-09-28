@@ -1,14 +1,12 @@
 /**
  * T-CS1 / T-CS2：ContentStore put/get/gc（含他 session 引用不可误删）。
+ * 另含 T-BB1 / T-BB2 / T-BB3：写侧恒二进制 + 存量 base64 文本行读兼容。
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
-import {
-  bytesToBase64,
-  VFS_CONTENT_ENCODING_ZLIB_B64,
-} from "@/domain/vfs/content-store/logic/blob-bytes-codec.js";
+import { VFS_CONTENT_ENCODING_ZLIB_B64 } from "@/domain/vfs/content-store/logic/blob-bytes-codec.js";
 import { hashContent } from "@/domain/vfs/content-store/logic/hash-content.js";
 import {
   compressZlib,
@@ -21,6 +19,13 @@ import {
 } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
+
+/** 构造 quick-sqlite 时代写入的 base64 文本行内容（bytes 列的 TEXT 形态）。 */
+function legacyB64Text(plain: string): string {
+  return Buffer.from(compressZlib(new TextEncoder().encode(plain))).toString(
+    "base64",
+  );
+}
 
 describe("VfsContentStore", () => {
   it("T-CS1: 相同明文 → 相同 hash，blob 表仅一行", async () => {
@@ -41,7 +46,7 @@ describe("VfsContentStore", () => {
 
   it("T-CS2: put/get 往返；encoding=zlib；byte_len=压缩后长度", async () => {
     const { conn } = getNovelMasterTestContext();
-    const store = new SqliteVfsContentStore(conn, { preferZlibB64: false });
+    const store = new SqliteVfsContentStore(conn);
 
     const cases = [
       "",
@@ -70,10 +75,10 @@ describe("VfsContentStore", () => {
     }
   });
 
-  it("zlib-b64: preferZlibB64 put/get 往返；byte_len=base64 字符串长度", async () => {
+  it("T-BB1: 新写入恒为二进制 BLOB（encoding=zlib，TYPEOF(bytes)=blob）", async () => {
     const { conn } = getNovelMasterTestContext();
-    const store = new SqliteVfsContentStore(conn, { preferZlibB64: true });
-    const plain = `rn-b64-${testIsolationSuffix()}-中文`;
+    const store = new SqliteVfsContentStore(conn);
+    const plain = `new-write-binary-${testIsolationSuffix()}-中文`;
 
     const hash = await store.put(plain);
     assert.equal(await store.get(hash), plain);
@@ -81,24 +86,55 @@ describe("VfsContentStore", () => {
     const meta = await conn.query<{
       encoding: string;
       byte_len: number;
-      bytes: string;
+      bytes: Uint8Array;
+      bytes_type: string;
     }>(
-      `SELECT encoding, byte_len, bytes FROM vfs_content_blob WHERE content_hash = ?`,
+      `SELECT encoding, byte_len, bytes, TYPEOF(bytes) AS bytes_type
+         FROM vfs_content_blob WHERE content_hash = ?`,
       [hash],
     );
     assert.equal(meta.length, 1);
-    assert.equal(meta[0]!.encoding, VFS_CONTENT_ENCODING_ZLIB_B64);
-    assert.equal(typeof meta[0]!.bytes, "string");
-    assert.equal(Number(meta[0]!.byte_len), meta[0]!.bytes.length);
+    assert.equal(meta[0]!.encoding, VFS_CONTENT_ENCODING_ZLIB);
+    assert.equal(meta[0]!.bytes_type, "blob");
+    assert.ok(meta[0]!.bytes instanceof Uint8Array);
+    // byte_len 必须是落库字节的物理长度，不是 base64 文本长度。
+    assert.equal(Number(meta[0]!.byte_len), meta[0]!.bytes.byteLength);
   });
 
-  it("get：encoding=zlib 且 bytes 为 base64 string 时兜底解码", async () => {
+  it("T-BB2: 存量 zlib-b64 文本行仍可读（get / getMany / ensureBlob 均认）", async () => {
     const { conn } = getNovelMasterTestContext();
-    const store = new SqliteVfsContentStore(conn, { preferZlibB64: false });
+    const store = new SqliteVfsContentStore(conn);
+    const plain = `legacy-zlib-b64-${testIsolationSuffix()}-中文`;
+    const contentHash = hashContent(plain);
+    const b64 = legacyB64Text(plain);
+
+    // 直插模拟 RN 存量库：encoding=zlib-b64，bytes 列存 base64 文本。
+    await conn.execute(
+      `INSERT INTO vfs_content_blob (content_hash, encoding, bytes, byte_len)
+       VALUES (?, ?, ?, ?)`,
+      [contentHash, VFS_CONTENT_ENCODING_ZLIB_B64, b64, b64.length],
+    );
+
+    assert.equal(await store.get(contentHash), plain);
+
+    const many = await store.getMany([contentHash]);
+    assert.equal(many.get(contentHash), plain);
+
+    // ensureBlob 认存量行，不触发 put 改写。
+    assert.equal(await store.ensureBlob(contentHash, null), contentHash);
+    const after = await conn.query<{ encoding: string }>(
+      `SELECT encoding FROM vfs_content_blob WHERE content_hash = ?`,
+      [contentHash],
+    );
+    assert.equal(after[0]!.encoding, VFS_CONTENT_ENCODING_ZLIB_B64);
+  });
+
+  it("T-BB3: get：encoding=zlib 且 bytes 为 base64 string 时兜底解码", async () => {
+    const { conn } = getNovelMasterTestContext();
+    const store = new SqliteVfsContentStore(conn);
     const plain = `legacy-zlib-string-${testIsolationSuffix()}`;
     const contentHash = hashContent(plain);
-    const compressed = compressZlib(new TextEncoder().encode(plain));
-    const b64 = bytesToBase64(compressed);
+    const b64 = legacyB64Text(plain);
 
     // 模拟存量：encoding 仍标 zlib，但列里实际是 base64 文本（RN 读回形态）。
     await conn.execute(
@@ -110,40 +146,37 @@ describe("VfsContentStore", () => {
     assert.equal(await store.get(contentHash), plain);
   });
 
-  it("get：手动插入 zlib-b64 行可按 encoding 解码", async () => {
+  it("同 hash 复用行不改 encoding / bytes（存量 b64 行不被 put 改写）", async () => {
     const { conn } = getNovelMasterTestContext();
     const store = new SqliteVfsContentStore(conn);
-    const plain = `manual-b64-${testIsolationSuffix()}`;
+    const plain = `reuse-encoding-${testIsolationSuffix()}`;
     const contentHash = hashContent(plain);
-    const compressed = compressZlib(new TextEncoder().encode(plain));
-    const b64 = bytesToBase64(compressed);
+    const b64 = legacyB64Text(plain);
 
+    // 先手插一条存量 zlib-b64 文本行，再 put 同明文：应复用、不改写。
     await conn.execute(
       `INSERT INTO vfs_content_blob (content_hash, encoding, bytes, byte_len)
        VALUES (?, ?, ?, ?)`,
       [contentHash, VFS_CONTENT_ENCODING_ZLIB_B64, b64, b64.length],
     );
 
-    assert.equal(await store.get(contentHash), plain);
-  });
+    const hash = await store.put(plain);
+    assert.equal(hash, contentHash);
 
-  it("同 hash 复用行不改 encoding（Node 行不被 RN put 改写）", async () => {
-    const { conn } = getNovelMasterTestContext();
-    const plain = `reuse-encoding-${testIsolationSuffix()}`;
-    const nodeStore = new SqliteVfsContentStore(conn, {
-      preferZlibB64: false,
-    });
-    const rnStore = new SqliteVfsContentStore(conn, { preferZlibB64: true });
-
-    const hash = await nodeStore.put(plain);
-    await rnStore.put(plain);
-
-    const meta = await conn.query<{ encoding: string }>(
-      `SELECT encoding FROM vfs_content_blob WHERE content_hash = ?`,
+    const meta = await conn.query<{
+      encoding: string;
+      bytes: string;
+      byte_len: number;
+    }>(
+      `SELECT encoding, bytes, byte_len FROM vfs_content_blob WHERE content_hash = ?`,
       [hash],
     );
-    assert.equal(meta[0]!.encoding, VFS_CONTENT_ENCODING_ZLIB);
-    assert.equal(await rnStore.get(hash), plain);
+    assert.equal(meta.length, 1);
+    assert.equal(meta[0]!.encoding, VFS_CONTENT_ENCODING_ZLIB_B64);
+    assert.equal(typeof meta[0]!.bytes, "string");
+    assert.equal(meta[0]!.bytes, b64);
+    assert.equal(Number(meta[0]!.byte_len), b64.length);
+    assert.equal(await store.get(hash), plain);
   });
 
   it("gc：删除孤立 blob，保留被 vfs_entry 引用的 blob", async () => {

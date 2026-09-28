@@ -8,10 +8,8 @@ import {
 } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
 import { serializeFileCachePayload } from "../../src/domain/workplace/logic/rule-snapshot-codec.js";
 import { encodeFileCacheValue } from "../../src/domain/session-kkv/logic/file-cache-blob-codec.js";
-import {
-  bytesToBase64,
-  VFS_CONTENT_ENCODING_ZLIB_B64,
-} from "../../src/domain/vfs/content-store/logic/blob-bytes-codec.js";
+import { VFS_CONTENT_ENCODING_ZLIB_B64 } from "../../src/domain/vfs/content-store/logic/blob-bytes-codec.js";
+import { VFS_CONTENT_ENCODING_ZLIB } from "../../src/domain/vfs/content-store/logic/zlib-codec.js";
 import type { TdbcConnection } from "@novel-master/core";
 import {
   getNovelMasterTestContext,
@@ -20,6 +18,11 @@ import {
 } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
+
+/** 构造 quick-sqlite 时代写入的 base64 文本行内容（bytes 列的 TEXT 形态）。 */
+function legacyB64Text(bytes: Uint8Array): string {
+  return Buffer.from(bytes).toString("base64");
+}
 
 /** 直查 entry 引用行，拿当前 content_hash（断言引用转移用）。 */
 async function currentEntryHash(
@@ -281,7 +284,53 @@ describe("session file_cache 分流存储（两新表）", () => {
     );
   });
 
-  it("T-R7 手工 INSERT zlib-b64 形态 blob+entry 行：get 还原原文（RN 落库形态）", async () => {
+  it("T-BB1 encodeFileCacheValue 恒落二进制：bytes 为 Uint8Array、encoding=zlib、byteLen 为二进制长度", () => {
+    const value = serializeFileCachePayload({
+      body: `new-write-binary-${testIsolationSuffix()}-中文`,
+      mtimeMs: 1758576000456,
+    });
+
+    const encoded = encodeFileCacheValue(value);
+    assert.notEqual(encoded, null);
+    assert.equal(encoded!.encoding, VFS_CONTENT_ENCODING_ZLIB);
+    assert.ok(encoded!.bytes instanceof Uint8Array);
+    assert.equal(typeof encoded!.bytes, "object");
+    // byte_len 是落库字节的物理长度，不是 base64 文本长度。
+    assert.equal(encoded!.byteLen, encoded!.bytes.byteLength);
+  });
+
+  it("T-BB1b set 落库：blob 行为 encoding=zlib 二进制（TYPEOF(bytes)=blob，byte_len 物理长度）", async () => {
+    const ctx = getNovelMasterTestContext();
+    const sk = createSessionKkvService(ctx.conn);
+    const sid = `r7b-${testIsolationSuffix()}`;
+    const key = "full:/new-binary.md";
+    const value = serializeFileCachePayload({
+      body: `new-binary-body-${testIsolationSuffix()}-中文`,
+      mtimeMs: 1758576000456,
+    });
+
+    await sk.set(sid, SESSION_KKV_DOMAIN_FILE_CACHE, key, value);
+    assert.equal(await sk.get(sid, SESSION_KKV_DOMAIN_FILE_CACHE, key), value);
+
+    const hash = await currentEntryHash(ctx.conn, sid, key);
+    assert.notEqual(hash, null);
+    const rows = await ctx.conn.query<{
+      encoding: string;
+      bytes: Uint8Array;
+      byte_len: number;
+      bytes_type: string;
+    }>(
+      "SELECT encoding, bytes, byte_len, TYPEOF(bytes) AS bytes_type FROM session_file_cache_blob WHERE content_hash = ?",
+      [hash!]
+    );
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0]!.encoding, VFS_CONTENT_ENCODING_ZLIB);
+    assert.equal(rows[0]!.bytes_type, "blob");
+    assert.ok(rows[0]!.bytes instanceof Uint8Array);
+    assert.equal(Number(rows[0]!.byte_len), rows[0]!.bytes.byteLength);
+  });
+
+  it("T-R7 存量 zlib-b64 文本行：get 还原原文（RN 旧版落库形态）", async () => {
     const ctx = getNovelMasterTestContext();
     const sk = createSessionKkvService(ctx.conn);
     const sid = `r7-${testIsolationSuffix()}`;
@@ -291,22 +340,17 @@ describe("session file_cache 分流存储（两新表）", () => {
       mtimeMs: 1758576000456,
     });
 
-    // forceZlibB64=true 注入 RN 形态（Node 测试环境默认落 zlib 二进制，
-    // 无法自然走到 zlib-b64 分支），断言产物确为 zlib-b64 / TEXT。
-    const encoded = encodeFileCacheValue(value, true);
+    // encodeFileCacheValue 已恒落二进制，存量 b64 文本行只能用直插 SQL 构造：
+    // 复用 encodeFileCacheValue 取 contentHash，把其二进制 bytes 转成 base64
+    // 文本模拟 RN 旧版落库形态。
+    const encoded = encodeFileCacheValue(value);
     assert.notEqual(encoded, null);
-    assert.equal(encoded!.encoding, VFS_CONTENT_ENCODING_ZLIB_B64);
-    assert.equal(typeof encoded!.bytes, "string");
+    const b64 = legacyB64Text(encoded!.bytes);
 
     // 手工 INSERT 模拟 RN 存量库：blob 行（TEXT bytes）+ entry 引用行。
     await ctx.conn.execute(
       "INSERT INTO session_file_cache_blob (content_hash, encoding, bytes, byte_len) VALUES (?, ?, ?, ?)",
-      [
-        encoded!.contentHash,
-        encoded!.encoding,
-        encoded!.bytes,
-        encoded!.byteLen,
-      ]
+      [encoded!.contentHash, VFS_CONTENT_ENCODING_ZLIB_B64, b64, b64.length],
     );
     await ctx.conn.execute(
       "INSERT INTO session_file_cache_entry (session_id, key, content_hash, mtime_ms) VALUES (?, ?, ?, ?)",
@@ -323,11 +367,10 @@ describe("session file_cache 分流存储（两新表）", () => {
     const key = "full:/corrupt.md";
 
     // 坏字节：合法 base64 文本，但解出的字节不是 zlib 流（解压必失败）——
-    // 覆盖 RN 形态 get 的解压失败分支（T-R6 只覆盖 blob 行整行缺失）。
-    const badBytes = bytesToBase64(Uint8Array.of(0x00, 0x01, 0x02, 0x03));
+    // 覆盖存量 b64 形态 get 的解压失败分支（T-R6 只覆盖 blob 行整行缺失）。
+    const badBytes = legacyB64Text(Uint8Array.of(0x00, 0x01, 0x02, 0x03));
     const encoded = encodeFileCacheValue(
       serializeFileCachePayload({ body: "unused", mtimeMs: 1 }),
-      false
     );
     assert.notEqual(encoded, null);
 

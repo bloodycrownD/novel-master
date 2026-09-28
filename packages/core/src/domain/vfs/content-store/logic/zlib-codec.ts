@@ -14,7 +14,8 @@ import {
 /**
  * ContentStore 落库 encoding：原始 zlib 字节（Node / Desktop）。
  *
- * @remarks RN 侧 put 使用 `VFS_CONTENT_ENCODING_ZLIB_B64`（见 blob-bytes-codec）；get 须同时支持二者。
+ * @remarks 写侧恒落本编码（二进制 BLOB，RN 与 Node 同一形态）；
+ * `VFS_CONTENT_ENCODING_ZLIB_B64` 仅剩读侧存量兜底（见 blob-bytes-codec）；get 须同时支持二者。
  */
 export const VFS_CONTENT_ENCODING_ZLIB = "zlib" as const;
 
