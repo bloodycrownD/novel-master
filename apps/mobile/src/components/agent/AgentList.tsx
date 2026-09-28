@@ -84,7 +84,9 @@ const GENERAL_ROW: AgentRow = {
   name: DEFAULT_SUBAGENT_DEFINITION.name,
   def: DEFAULT_SUBAGENT_DEFINITION,
   builtin: true,
-  meta: DEFAULT_SUBAGENT_DEFINITION.description ?? '',
+  // 双端文案对齐：desktop SettingsViews 合成行同款短文案；
+  // 完整 description 留给编辑器详情页（initialDefinition）展示。
+  meta: '通用助手 · 不可编辑',
 };
 
 const TAB_HINTS: Record<AgentSettingsTab, string> = {
@@ -98,9 +100,13 @@ const EMPTY_TEXTS: Record<AgentSettingsTab, string> = {
   subagent: '暂无子智能体，点击「新建」创建。',
 };
 
-/** valid 行的 mode 归一后为 all（显式 all 或缺省）时挂「全部」徽标。 */
+/**
+ * mode 归一后为 all（显式 all 或缺省）时挂「全部」徽标。
+ * invalid 行读不到 def（作用域未知）同样按「全部」呈现，
+ * 与 desktop `row.mode == null || row.mode === "all"` 语义对齐。
+ */
 function isAllModeRow(row: AgentRow): boolean {
-  return row.def != null && (row.def.mode ?? 'all') === 'all';
+  return (row.def?.mode ?? 'all') === 'all';
 }
 
 function agentMeta(

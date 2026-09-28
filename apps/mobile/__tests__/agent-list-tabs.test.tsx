@@ -236,6 +236,15 @@ function pressTab(tree: TestRenderer.ReactTestRenderer, testID: string) {
   });
 }
 
+/** 收集行内全部 Text 文本（字符串 children 拼接），用于整行文本断言。 */
+function collectRowText(row: TestRenderer.ReactTestInstance): string {
+  return row
+    .findAll(node => node.type === 'Text')
+    .flatMap(node => node.children ?? [])
+    .filter((child): child is string => typeof child === 'string')
+    .join('');
+}
+
 describe('AgentList tabs (T-M1/T-M2/T-M3)', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -251,6 +260,11 @@ describe('AgentList tabs (T-M1/T-M2/T-M3)', () => {
     for (const id of ['agent-primary', 'agent-all', 'agent-omit', 'agent-bad']) {
       expect(root.findByProps({testID: `agent-row-${id}`})).toBeDefined();
     }
+    // C-001 防回归：invalid 行读不到作用域（无 def），按「全部」挂徽标，
+    // 与 desktop `row.mode == null || row.mode === "all"` 口径一致。
+    expect(
+      collectRowText(root.findByProps({testID: 'agent-row-agent-bad'})),
+    ).toContain('全部');
     expect(root.findAllByProps({testID: 'agent-row-agent-sub'})).toHaveLength(
       0,
     );
@@ -310,6 +324,12 @@ describe('AgentList tabs (T-M1/T-M2/T-M3)', () => {
 
     pressTab(tree, 'agents-tab-subagent');
     const generalRow = tree.root.findByProps({testID: 'agent-row-general'});
+
+    // A-003 防回归：行内 meta 用短文案（双端对齐），不落完整
+    // description 长文案（长文案只出现在编辑器详情页）。
+    const generalRowText = collectRowText(generalRow);
+    expect(generalRowText).toContain('通用助手 · 不可编辑');
+    expect(generalRowText).not.toContain('读写文件');
 
     // 行内没有 ⋮ 菜单按钮（无删除/重命名/复制入口），菜单弹层未出现。
     const dots = generalRow
