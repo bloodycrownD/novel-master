@@ -67,6 +67,11 @@ import {
   parsePatternInput,
   splitSmartSortHighlightSegments,
 } from "@shared/logic/smart-sort";
+import {
+  agentModeMatchesTab,
+  type AgentSettingsTab,
+} from "@shared/logic/config-forms-agent";
+import { DEFAULT_SUBAGENT_DEFINITION } from "@shared/logic/agent";
 import type { SettingsNavHandle } from "./settings-nav";
 import {
   SettingsActionSection,
@@ -671,8 +676,12 @@ export function DataManagementView() {
   );
 }
 
+/** 内置 general 合成行 sentinel（真实 agent id 均为 `agent-<ts>` 格式，不冲突）。 */
+const GENERAL_AGENT_ID = "general";
+
 export function AgentsSettingsView({ nav }: { nav: Nav }) {
   const batch = useBatchSelection();
+  const [tab, setTab] = useState<AgentSettingsTab>("primary");
   const [rows, setRows] = useState<AgentRegistryListItemDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [agentMenu, setAgentMenu] = useState<{
@@ -711,8 +720,17 @@ export function AgentsSettingsView({ nav }: { nav: Nav }) {
     nav.push("agentEditor");
   };
 
+  /** 切 tab 自动退出批量模式（对齐技能页模板）。 */
+  const switchTab = (next: AgentSettingsTab) => {
+    setTab(next);
+    batch.exit();
+  };
+
   const createAgent = async () => {
-    const res = await ipcAgentRegistryCreateBlank();
+    // 新建默认作用域随 tab 落库：主 tab → primary、子 tab → subagent。
+    const res = await ipcAgentRegistryCreateBlank({
+      mode: tab === "primary" ? "primary" : "subagent",
+    });
     if (res.ok) {
       openAgentEditor(res.data.agentId);
       await reload();
@@ -723,6 +741,13 @@ export function AgentsSettingsView({ nav }: { nav: Nav }) {
     const menu = agentMenu;
     setAgentMenu(null);
     if (!menu) {
+      return;
+    }
+    // 内置 general 合成行：菜单仅「查看」，不走库表 CRUD。
+    if (menu.agentId === GENERAL_AGENT_ID) {
+      if (action === "view") {
+        openAgentEditor(GENERAL_AGENT_ID, DEFAULT_SUBAGENT_DEFINITION.name);
+      }
       return;
     }
     const row = rows.find((r) => r.agentId === menu.agentId);
@@ -779,9 +804,10 @@ export function AgentsSettingsView({ nav }: { nav: Nav }) {
       currentRes.data.agentId &&
       agentIds.includes(currentRes.data.agentId)
     ) {
+      // 兜底切当前排除内置 general 合成行（rows 数据源本就不含它，双保险）。
       const remaining = rows
         .map((r) => r.agentId)
-        .filter((id) => !agentIds.includes(id));
+        .filter((id) => !agentIds.includes(id) && id !== GENERAL_AGENT_ID);
       if (remaining.length > 0) {
         await ipcAgentSetCurrent({ agentId: remaining[0]! });
       }
@@ -829,36 +855,79 @@ export function AgentsSettingsView({ nav }: { nav: Nav }) {
     await reload();
   };
 
+  // 前端过滤：mode 缺省（含 invalid 行）按 all 双边显示，口径收口 core。
+  const visibleRows = rows.filter((row) => agentModeMatchesTab(row.mode, tab));
+  // 子 tab 头部合成内置 general 只读行，不参与批量勾选与删除。
+  const showGeneralRow = tab === "subagent";
+
   return (
     <SettingsPanel>
-      <SettingsListSection
-        header={
-          <ManageHeader
-            title="智能体配置"
-            batchMode={batch.active}
-            selectedCount={batch.selectedCount}
-            onEnterBatch={batch.enter}
-            onCancelBatch={batch.exit}
-            onDelete={() => {
-              if (batch.selectedCount === 0) {
-                return;
-              }
-              setDeleteConfirm({ kind: "batch", count: batch.selectedCount });
-            }}
-            hint="选择要删除的 Agent"
-            normalActions={
-              <button type="button" className="list-manage-header__btn list-manage-header__btn--primary" onClick={() => void createAgent()}>
-                新建 Agent
-              </button>
-            }
-          />
+      <div className="agents-manage__tabs">
+        <SegmentedControl
+          aria-label="智能体作用域"
+          value={tab}
+          options={[
+            { value: "primary", label: "主智能体" },
+            { value: "subagent", label: "子智能体" },
+          ]}
+          onChange={(next) => switchTab(next as AgentSettingsTab)}
+        />
+      </div>
+      <ManageHeader
+        title={tab === "primary" ? "主智能体" : "子智能体"}
+        batchMode={batch.active}
+        selectedCount={batch.selectedCount}
+        onEnterBatch={batch.enter}
+        onCancelBatch={batch.exit}
+        onDelete={() => {
+          if (batch.selectedCount === 0) {
+            return;
+          }
+          setDeleteConfirm({ kind: "batch", count: batch.selectedCount });
+        }}
+        hint={
+          tab === "primary"
+            ? "主智能体直接响应用户消息；作用域为「全部」的智能体双 tab 均显示。"
+            : "子智能体由主智能体委派调用；内置 general 为通用兜底，不可编辑。"
         }
-      >
+        normalActions={
+          <button type="button" className="list-manage-header__btn list-manage-header__btn--primary" onClick={() => void createAgent()}>
+            新建 Agent
+          </button>
+        }
+      />
+      <SettingsListSection>
         {loading ? <SettingsListEmpty>加载中…</SettingsListEmpty> : null}
-        {!loading && rows.length === 0 ? (
-          <SettingsListEmpty>暂无 Agent，点击上方按钮创建。</SettingsListEmpty>
+        {!loading && visibleRows.length === 0 && !showGeneralRow ? (
+          <SettingsListEmpty>
+            {tab === "primary"
+              ? "暂无主智能体，点击上方按钮创建。"
+              : "暂无子智能体，点击上方按钮创建。"}
+          </SettingsListEmpty>
         ) : null}
-        {rows.map((row) => (
+        {showGeneralRow ? (
+          <SettingsListItem
+            title={DEFAULT_SUBAGENT_DEFINITION.name}
+            meta={
+              <span className="settings-list-item__meta-row">
+                <span className="settings-tag settings-tag--primary">内置</span>
+                <span>{DEFAULT_SUBAGENT_DEFINITION.description ?? "—"}</span>
+              </span>
+            }
+            onClick={() =>
+              openAgentEditor(GENERAL_AGENT_ID, DEFAULT_SUBAGENT_DEFINITION.name)
+            }
+            onMenu={(e) => {
+              const rect = e.currentTarget.getBoundingClientRect();
+              setAgentMenu({
+                agentId: GENERAL_AGENT_ID,
+                x: Math.max(8, rect.left),
+                y: Math.max(8, rect.bottom + 4),
+              });
+            }}
+          />
+        ) : null}
+        {visibleRows.map((row) => (
           <SettingsListItem
             key={row.agentId}
             title={row.name}
@@ -868,6 +937,9 @@ export function AgentsSettingsView({ nav }: { nav: Nav }) {
                   <span className="settings-tag settings-tag--warn">
                     {AGENT_LIST_LABELS.configInvalid}
                   </span>
+                  {row.mode == null || row.mode === "all" ? (
+                    <span className="settings-tag settings-tag--muted">全部</span>
+                  ) : null}
                   <span
                     className="settings-list-item__meta-error"
                     title={row.invalid.message}
@@ -877,6 +949,8 @@ export function AgentsSettingsView({ nav }: { nav: Nav }) {
                     )}
                   </span>
                 </span>
+              ) : row.mode == null || row.mode === "all" ? (
+                <span className="settings-tag settings-tag--muted">全部</span>
               ) : undefined
             }
             batchMode={batch.active}
@@ -900,12 +974,16 @@ export function AgentsSettingsView({ nav }: { nav: Nav }) {
         open={agentMenu != null}
         x={agentMenu?.x ?? 0}
         y={agentMenu?.y ?? 0}
-        items={[
-          { label: "编辑", action: "edit" },
-          { label: "重命名", action: "rename" },
-          { label: "复制", action: "duplicate" },
-          { label: "删除", action: "delete", danger: true },
-        ]}
+        items={
+          agentMenu?.agentId === GENERAL_AGENT_ID
+            ? [{ label: "查看", action: "view" }]
+            : [
+                { label: "编辑", action: "edit" },
+                { label: "重命名", action: "rename" },
+                { label: "复制", action: "duplicate" },
+                { label: "删除", action: "delete", danger: true },
+              ]
+        }
         onSelect={(action) => void handleAgentMenuSelect(action)}
         onClose={() => setAgentMenu(null)}
       />

@@ -381,7 +381,8 @@ export function registerHandlersFromRegistry(): void {
   bindReq(IPC_CHANNELS.AGENT_REGISTRY_GET, handleAgentRegistryGet);
   bindReq(IPC_CHANNELS.AGENT_REGISTRY_UPSERT, handleAgentRegistryUpsert);
   bindReq(IPC_CHANNELS.AGENT_REGISTRY_DELETE, handleAgentRegistryDelete);
-  bindNoArg(
+  // 可选 payload：renderer 不传参时 req 为 undefined，handler 侧容忍（现行为回归）。
+  bindReq(
     IPC_CHANNELS.AGENT_REGISTRY_CREATE_BLANK,
     handleAgentRegistryCreateBlank,
   );

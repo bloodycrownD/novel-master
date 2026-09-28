@@ -7005,6 +7005,13 @@ pre:hover > .code-copy-btn,
   margin-bottom: 8px;
 }
 
+/* 智能体配置页双 tab（主 / 子），与技能管理页同构。 */
+.agents-manage__tabs {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 8px;
+}
+
 .skills-manage__group-title {
   font-size: 13px;
   font-weight: 600;

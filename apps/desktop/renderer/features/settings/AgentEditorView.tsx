@@ -6,7 +6,10 @@ import {
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
-import { type AgentDefinition } from "@shared/logic/agent";
+import {
+  DEFAULT_SUBAGENT_DEFINITION,
+  type AgentDefinition,
+} from "@shared/logic/agent";
 
 import {
   type DynamicPromptBlock,
@@ -86,6 +89,9 @@ import type { RefObject } from "react";
 const inactiveDynamicTextareaRef: RefObject<HTMLTextAreaElement | null> = {
   current: null,
 };
+
+/** 内置 general 合成行 sentinel（与列表页同口径，不经库表读取）。 */
+const GENERAL_AGENT_ID = "general";
 
 type Nav = SettingsNavHandle;
 
@@ -244,7 +250,8 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
 
 
   const loadAgent = useCallback(async () => {
-    if (!agentId) return;
+    // 内置 general 走只读 sentinel 分支，不经 ipcAgentRegistryGet（必 404）。
+    if (!agentId || agentId === GENERAL_AGENT_ID) return;
     setLoading(true);
     setLoadError(null);
     setInvalidHealth(null);
@@ -346,13 +353,60 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
   const displayName = name.trim() || "未命名 Agent";
 
   useEffect(() => {
-    if (!agentId || invalidHealth != null || loadError != null) return;
+    if (
+      !agentId ||
+      agentId === GENERAL_AGENT_ID ||
+      invalidHealth != null ||
+      loadError != null
+    ) {
+      return;
+    }
     nav.navState.editingAgentDisplayName = displayName;
     nav.setAgentEditorTitle?.(displayName);
   }, [agentId, invalidHealth, loadError, displayName, nav]);
 
+  // 内置 general：标题固定为 sentinel 名（不进 dirty / 保存链路）。
+  useEffect(() => {
+    if (agentId === GENERAL_AGENT_ID) {
+      nav.navState.editingAgentDisplayName = DEFAULT_SUBAGENT_DEFINITION.name;
+      nav.setAgentEditorTitle?.(DEFAULT_SUBAGENT_DEFINITION.name);
+    }
+  }, [agentId, nav]);
+
   if (!agentId) {
     return <p className="settings-hint">缺少 agentId</p>;
+  }
+
+  // 内置 general 只读分支：数据源为镜像导出的出厂常量，无加载/保存/YAML。
+  if (agentId === GENERAL_AGENT_ID) {
+    return (
+      <SettingsPanel>
+        <SettingsFormSection
+          title="内置智能体，不可编辑"
+          desc="general 为出厂内置的通用子代理，运行时虚拟注入（不落库），主智能体可随时委派调用。"
+        >
+          <SettingsSection title="基本信息">
+            <SettingsField label="名称">
+              <span>{DEFAULT_SUBAGENT_DEFINITION.name}</span>
+            </SettingsField>
+            <SettingsField label="描述">
+              <span>{DEFAULT_SUBAGENT_DEFINITION.description ?? "—"}</span>
+            </SettingsField>
+            <SettingsField label="作用域">
+              <span className="settings-tag settings-tag--primary">
+                仅子智能体
+              </span>
+            </SettingsField>
+          </SettingsSection>
+          <SettingsSection title="系统提示词">
+            <span>{DEFAULT_SUBAGENT_DEFINITION.prompts.system ?? "—"}</span>
+          </SettingsSection>
+          <SettingsSection title="Workplace 确记语">
+            <span>{DEFAULT_SUBAGENT_DEFINITION.prompts.workplace ?? "—"}</span>
+          </SettingsSection>
+        </SettingsFormSection>
+      </SettingsPanel>
+    );
   }
 
   const handleDeleteBrokenAgent = async () => {

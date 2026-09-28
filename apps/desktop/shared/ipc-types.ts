@@ -1216,11 +1216,21 @@ export type AgentRegistryListItemDto = {
   readonly agentId: string;
   readonly name: string;
   /**
+   * 作用域（valid 行从定义带出；缺省 = 未填写 = 双 tab 均显示）。
+   * invalid 行读不到定义，天然无该字段，同样按双侧显示。
+   */
+  readonly mode?: "primary" | "subagent" | "all";
+  /**
    * 配置失效详情；有值表示该 Agent 须修复或删除。
    * @deprecated 兼容旧 UI，请改用 `invalid`
    */
   readonly decodeError?: string;
   readonly invalid?: StoredConfigInvalidDto;
+};
+
+/** createBlank 可选请求体：不传 / 缺省 mode = 现行为（落库不设 mode，向后兼容）。 */
+export type AgentRegistryCreateBlankRequest = {
+  readonly mode?: "primary" | "subagent" | "all";
 };
 
 export type AgentRegistryGetRequest = {
