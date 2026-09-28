@@ -88,3 +88,34 @@ export function createDbMaintenanceService(
     },
   };
 }
+
+/**
+ * 进程级「维护链路已跑过」标记。
+ *
+ * @remarks 归一任务（blob-binary-normalization）等启动期后台任务完成后会
+ * 触发一次 VACUUM；同一进程内多个任务叠加时不应反复全库 VACUUM。手动
+ * 「数据清理」走 {@link DbMaintenanceService.runDatabaseMaintenance}，
+ * **不受**本标记约束——用户显式点击必须永远真执行。
+ */
+let startupMaintenanceRan = false;
+
+/**
+ * 启动期收尾的维护链路（会话级去重版）。
+ *
+ * 与 {@link DbMaintenanceService.runDatabaseMaintenance} 走同一条链路
+ * （缓存 GC → checkpoint → VACUUM），区别只在于**同一进程内只真跑一次**：
+ * 首个调用者执行并置标记，其余调用直接短路返回 null。标记在执行前置，
+ * 避免并发调用叠加出多次 VACUUM；VACUUM 失败也不回滚标记——失败不影响
+ * 正确性（数据已落好，页由后续手动「数据清理」或下次启动归还）。
+ *
+ * @returns 实际执行的维护结果；已跑过时返回 null（表示本进程跳过）。
+ */
+export async function runStartupMaintenanceOnce(
+  conn: TdbcConnection
+): Promise<DatabaseMaintenanceResult | null> {
+  if (startupMaintenanceRan) {
+    return null;
+  }
+  startupMaintenanceRan = true;
+  return await createDbMaintenanceService(conn).runDatabaseMaintenance();
+}

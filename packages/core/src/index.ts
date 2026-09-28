@@ -84,12 +84,25 @@ export type {
 
 /**
  * 数据库维护（数据清理）：存储统计 + 缓存 GC/checkpoint/VACUUM 维护链路
- * （VACUUM 须事务外调用，事务中调用由 SQLite 原生报错兜底）。
+ * （VACUUM 须事务外调用，事务中调用由 SQLite 原生报错兜底）；另含存量
+ * blob 行形态归一任务（zlib-b64 文本 → 二进制 BLOB）。
  */
-export { createDbMaintenanceService } from "./infra/db-maintenance/index.js";
+export {
+  BLOB_BINARY_KKV_MODULE,
+  createDbMaintenanceService,
+  DEFAULT_BLOB_BINARY_SYNC_BUDGET_MS,
+  getBlobBinaryStatus,
+  runBlobBinaryNormalization,
+  runStartupMaintenanceOnce,
+} from "./infra/db-maintenance/index.js";
 export type {
+  BlobBinaryRunResult,
+  BlobBinaryStatus,
+  BlobBinaryTableId,
+  BlobBinaryTableStatus,
   DatabaseMaintenanceResult,
   DbMaintenanceService,
+  RunBlobBinaryNormalizationOptions,
   StorageStats,
 } from "./infra/db-maintenance/index.js";
 

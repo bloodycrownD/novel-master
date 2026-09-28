@@ -1,0 +1,431 @@
+/**
+ * 存量 blob 行形态归一任务用例（T-BB4 ~ T-BB7 + 标记短路面）。
+ *
+ * 归一口径见 spec「Part A 归一任务」：谓词 `encoding = 'zlib-b64' OR
+ * (encoding = 'zlib' AND TYPEOF(bytes) = 'text')`，批 ≤100 行短事务，
+ * 每表各自置 KKV 完成标记（两段式 nm-blob-binary / vfsContentDone /
+ * fileCacheDone）。
+ *
+ * 测试数据一律**直插 SQL 构造**（不依赖写侧 codec——同 wave 的
+ * a1-core-codec 节点正在改写侧），并显式把 `byte_len` 写成三态混杂的
+ * 历史形态，验证归一后一律重算为物理字节长度。
+ *
+ * 每个用例开头 {@link resetNormalizationState} 清两表谓词命中行 + 完成
+ * 标记：共享库上用例自管状态（口径照 message-content-compaction.test.ts
+ * 的 clearDoneMarker），用例之间互不污染计数。
+ *
+ * base64 文本在测试内用 `Buffer` 现场编码，**不引** blob-bytes-codec 的
+ * `bytesToBase64`——同 wave 的写侧节点会删掉该导出（生产端已无调用方）。
+ *
+ * @module test/infra/blob-binary-normalization
+ */
+
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
+import { SqliteKkvRepository } from "../../src/domain/kkv/repositories/impl/sqlite-kkv.repository.js";
+import { hashContent } from "../../src/domain/vfs/content-store/logic/hash-content.js";
+import {
+  compressZlib,
+  decodeCompressedBytes,
+  decompressZlib,
+} from "../../src/domain/vfs/content-store/logic/zlib-codec.js";
+import { SqliteVfsContentStore } from "../../src/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
+import type { TdbcConnection } from "../../src/infra/tdbc/ports/connection.port.js";
+import type { SqlValue } from "../../src/infra/tdbc/types.js";
+import {
+  BLOB_BINARY_KKV_MODULE,
+  getBlobBinaryStatus,
+  runBlobBinaryNormalization,
+  type BlobBinaryTableStatus,
+} from "../../src/infra/db-maintenance/index.js";
+import {
+  getNovelMasterTestContext,
+  novelMasterTestFixture,
+} from "../helpers/novel-master-fixture.js";
+
+novelMasterTestFixture();
+
+/** 归一谓词（与实现同形，测试侧直查断言用）。 */
+const PREDICATE = `(encoding = 'zlib-b64' OR (encoding = 'zlib' AND TYPEOF(bytes) = 'text'))`;
+
+/** 本轮注册的两张 blob 表。 */
+type BlobTable = "vfs_content_blob" | "session_file_cache_blob";
+
+/** `byte_len` 存量三态：base64 文本长度 / 二进制长度 / 二进制长度 −2。 */
+type ByteLenStyle = "base64" | "binary" | "binaryMinusTwo";
+
+function conn(): TdbcConnection {
+  return getNovelMasterTestContext().conn;
+}
+
+/** 谓词命中行清零 + 完成标记清零（用例自管状态的地基）。 */
+async function resetNormalizationState(): Promise<void> {
+  const c = conn();
+  await c.execute(`DELETE FROM vfs_content_blob WHERE ${PREDICATE}`);
+  await c.execute(`DELETE FROM session_file_cache_blob WHERE ${PREDICATE}`);
+  await c.execute("DELETE FROM session_file_cache_entry WHERE key LIKE 'bb-%'");
+  await c.execute("DELETE FROM kkv_entry WHERE module = ?", [
+    BLOB_BINARY_KKV_MODULE,
+  ]);
+}
+
+async function pendingCount(table: BlobTable): Promise<number> {
+  const rows = await conn().query<{ n: number }>(
+    `SELECT COUNT(*) AS n FROM ${table} WHERE ${PREDICATE}`
+  );
+  return Number(rows[0]?.n ?? 0);
+}
+
+async function setDoneMarker(doneKey: string): Promise<void> {
+  await new SqliteKkvRepository(conn()).set(
+    BLOB_BINARY_KKV_MODULE,
+    doneKey,
+    new Date().toISOString()
+  );
+}
+
+/**
+ * 直插一条存量 base64 文本行。
+ *
+ * @param encoding 落库 encoding（`zlib-b64` 正规存量 / `zlib` 脏形态）。
+ * @param byteLenStyle `byte_len` 写法（三态混杂，验证归一后一律重算）。
+ */
+async function insertLegacyRow(
+  table: BlobTable,
+  contentHash: string,
+  plain: string,
+  encoding = "zlib-b64",
+  byteLenStyle: ByteLenStyle = "base64"
+): Promise<Uint8Array> {
+  const c = conn();
+  const compressed = compressZlib(new TextEncoder().encode(plain));
+  const b64 = Buffer.from(compressed).toString("base64");
+  const byteLen =
+    byteLenStyle === "base64"
+      ? b64.length
+      : byteLenStyle === "binary"
+        ? compressed.byteLength
+        : compressed.byteLength - 2;
+  if (table === "vfs_content_blob") {
+    await c.execute(
+      `INSERT INTO vfs_content_blob (content_hash, encoding, bytes, byte_len, ref_count)
+       VALUES (?, ?, ?, ?, 0)`,
+      [contentHash, encoding, b64, byteLen]
+    );
+  } else {
+    await c.execute(
+      `INSERT INTO session_file_cache_blob (content_hash, encoding, bytes, byte_len)
+       VALUES (?, ?, ?, ?)`,
+      [contentHash, encoding, b64, byteLen]
+    );
+    // 补一条 entry 引用行：维护链路的 file_cache GC 只删无引用 blob 行，
+    // 不补引用会让完成收尾的 GC 把本用例的语料扫掉。
+    await c.execute(
+      `INSERT INTO session_file_cache_entry (session_id, key, content_hash, mtime_ms)
+       VALUES ('bb-session', ?, ?, 0)`,
+      [contentHash, contentHash]
+    );
+  }
+  return compressed;
+}
+
+/** 读回一行的解码明文（走读侧共享 codec，兼容归一前后的全部形态）。 */
+async function readPlain(
+  table: BlobTable,
+  contentHash: string
+): Promise<string> {
+  const rows = await conn().query<{ encoding: string; bytes: SqlValue }>(
+    `SELECT encoding, bytes FROM ${table} WHERE content_hash = ?`,
+    [contentHash]
+  );
+  assert.equal(rows.length, 1, `${table} 应有一行 ${contentHash}`);
+  const compressed = decodeCompressedBytes(
+    String(rows[0]!.encoding),
+    rows[0]!.bytes,
+    `${table}.bytes`
+  );
+  return new TextDecoder().decode(decompressZlib(compressed));
+}
+
+/** 混合语料：长中文 + 长 base64 样串 + 工具块 JSON。 */
+function corpus(i: number): string {
+  return [
+    `第 ${i} 段长中文：${"混排标点与数字 0123456789 的长正文内容。".repeat(40 + (i % 5))}`,
+    `base64样串：${"QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVowMTIzNDU2Nzg5".repeat(20)}`,
+    `工具块：${JSON.stringify({ type: "tool_use", id: `tu-${i}`, input: { path: `/第${i}章.md` } })}`,
+  ].join("\n");
+}
+
+/** 行形态快照（幂等断言用：数据未变）。 */
+interface RowShape {
+  readonly encoding: string;
+  readonly typeOf: string;
+  readonly byteLen: number;
+  readonly physicalLen: number;
+}
+
+async function snapshotShapes(table: BlobTable, prefix: string): Promise<RowShape[]> {
+  const rows = await conn().query<{
+    encoding: string;
+    typeOf: string;
+    byte_len: number;
+    physical: number;
+  }>(
+    `SELECT encoding, TYPEOF(bytes) AS typeOf, byte_len, LENGTH(bytes) AS physical
+     FROM ${table} WHERE content_hash LIKE '${prefix}%' ORDER BY content_hash`
+  );
+  return rows.map((r) => ({
+    encoding: String(r.encoding),
+    typeOf: String(r.typeOf),
+    byteLen: Number(r.byte_len),
+    physicalLen: Number(r.physical),
+  }));
+}
+
+describe("存量 blob 形态归一任务（T-BB4 ~ T-BB7）", () => {
+  it("T-BB4：幂等——连跑两遍，第二遍 normalizedCount=0 且数据未变", async () => {
+    await resetNormalizationState();
+    await insertLegacyRow("vfs_content_blob", "bb-idem-1", corpus(1));
+    await insertLegacyRow("vfs_content_blob", "bb-idem-2", corpus(2));
+    await insertLegacyRow("session_file_cache_blob", "bb-idem-3", corpus(3));
+
+    // 未完成态采样：两表 pendingCount ≥ 1。
+    const before = await getBlobBinaryStatus(conn());
+    assert.equal(before.tables.length, 2);
+    for (const table of before.tables) {
+      assert.equal(table.done, false, `${table.table} 应处于进行中`);
+      assert.ok(table.pendingCount >= 1, `${table.table} 剩余行 ≥ 1`);
+    }
+
+    const first = await runBlobBinaryNormalization(conn());
+    assert.equal(first.done, true);
+    assert.equal(first.normalizedCount, 3);
+    assert.equal(await pendingCount("vfs_content_blob"), 0, "谓词应清空");
+    assert.equal(await pendingCount("session_file_cache_blob"), 0);
+    const afterFirst = {
+      vfs: await snapshotShapes("vfs_content_blob", "bb-idem"),
+      cache: await snapshotShapes("session_file_cache_blob", "bb-idem"),
+    };
+
+    // 第二遍：完成标记已置，零归一、数据逐字段未变。
+    const second = await runBlobBinaryNormalization(conn());
+    assert.equal(second.done, true);
+    assert.equal(second.normalizedCount, 0, "第二遍零归一");
+    assert.deepEqual(await snapshotShapes("vfs_content_blob", "bb-idem"), afterFirst.vfs);
+    assert.deepEqual(
+      await snapshotShapes("session_file_cache_blob", "bb-idem"),
+      afterFirst.cache
+    );
+
+    // 完成后状态采样为 done=true（零 COUNT 口径）。
+    const after = await getBlobBinaryStatus(conn());
+    for (const table of after.tables) {
+      assert.deepEqual(table, { table: table.table, done: true, pendingCount: 0 });
+    }
+  });
+
+  it("T-BB5：可重入——批间中断（模拟杀进程）后重启续跑收敛", async () => {
+    await resetNormalizationState();
+    // 120 条存量行：第一轮（预算 0ms）搬完第一批 100 行即中断，
+    // 剩余 20 条由第二次调用收敛（两表无 rowid，按主键排序分批）。
+    for (let i = 1; i <= 120; i++) {
+      await insertLegacyRow(
+        "vfs_content_blob",
+        `bb-enter-${String(i).padStart(6, "0")}`,
+        corpus(i)
+      );
+    }
+
+    const interrupted = await runBlobBinaryNormalization(conn(), {
+      syncBudgetMs: 0,
+    });
+    assert.equal(interrupted.done, false, "预算耗尽应返回未完成");
+    assert.equal(interrupted.normalizedCount, 100, "第一批 100 行已归一");
+    assert.equal(await pendingCount("vfs_content_blob"), 20, "中断时剩余 20 条");
+    const marker = await new SqliteKkvRepository(conn()).get(
+      BLOB_BINARY_KKV_MODULE,
+      "vfsContentDone"
+    );
+    assert.equal(marker, null, "中断时完成标记未置");
+
+    // 模拟重启：重新调用（默认预算），谓词重扫续跑收敛。
+    const resumed = await runBlobBinaryNormalization(conn());
+    assert.equal(resumed.done, true);
+    assert.equal(resumed.normalizedCount, 20, "只搬剩余 20 条（已归一行天然排除）");
+    assert.equal(await pendingCount("vfs_content_blob"), 0);
+    const doneMarker = await new SqliteKkvRepository(conn()).get(
+      BLOB_BINARY_KKV_MODULE,
+      "vfsContentDone"
+    );
+    assert.ok(doneMarker, "续跑收敛后完成标记已置");
+
+    // 全量读回：120 条一条不少。
+    const rows = await conn().query<{ n: number }>(
+      "SELECT COUNT(*) AS n FROM vfs_content_blob WHERE content_hash LIKE 'bb-enter-%'"
+    );
+    assert.equal(Number(rows[0]?.n ?? 0), 120);
+  });
+
+  it("T-BB6：形态一致——encoding=zlib、TYPEOF=blob、byte_len=物理字节长度", async () => {
+    await resetNormalizationState();
+    // 覆盖两种存量 encoding × byte_len 三态写法。
+    const styles: Array<[string, ByteLenStyle]> = [
+      ["zlib-b64", "base64"],
+      ["zlib-b64", "binary"],
+      ["zlib-b64", "binaryMinusTwo"],
+      ["zlib", "base64"],
+      ["zlib", "binaryMinusTwo"],
+    ];
+    const tables: BlobTable[] = ["vfs_content_blob", "session_file_cache_blob"];
+    const expected = new Map<string, number>();
+    for (const table of tables) {
+      for (let i = 0; i < styles.length; i++) {
+        const [encoding, style] = styles[i]!;
+        const hash = `bb-shape-${table === "vfs_content_blob" ? "v" : "f"}-${i}`;
+        const compressed = await insertLegacyRow(table, hash, corpus(i + 1), encoding, style);
+        expected.set(`${table}:${hash}`, compressed.byteLength);
+      }
+    }
+
+    const result = await runBlobBinaryNormalization(conn());
+    assert.equal(result.done, true);
+    assert.equal(result.normalizedCount, 10);
+
+    for (const table of tables) {
+      const rows = await conn().query<{
+        content_hash: string;
+        encoding: string;
+        typeOf: string;
+        byte_len: number;
+        physical: number;
+      }>(
+        `SELECT content_hash, encoding, TYPEOF(bytes) AS typeOf,
+                byte_len, LENGTH(bytes) AS physical
+         FROM ${table} WHERE content_hash LIKE 'bb-shape-%' ORDER BY content_hash`
+      );
+      assert.equal(rows.length, styles.length);
+      for (const row of rows) {
+        assert.equal(row.encoding, "zlib", "encoding 归一为 zlib");
+        assert.equal(row.typeOf, "blob", "bytes 落为二进制 BLOB");
+        assert.equal(
+          Number(row.byte_len),
+          Number(row.physical),
+          "byte_len = 物理字节长度"
+        );
+        assert.equal(
+          Number(row.byte_len),
+          expected.get(`${table}:${String(row.content_hash)}`),
+          "byte_len = 解码后二进制长度（不受存量写法影响）"
+        );
+      }
+    }
+  });
+
+  it("T-BB7：零丢失——混合语料归一前后逐条解压比对全等", async () => {
+    await resetNormalizationState();
+    const tables: BlobTable[] = ["vfs_content_blob", "session_file_cache_blob"];
+    const inserted: Array<{ table: BlobTable; hash: string; plain: string }> = [];
+    for (const table of tables) {
+      for (let i = 1; i <= 12; i++) {
+        const plain = corpus(i);
+        // content_hash 取真实 sha256：让归一后还能走读路径
+        // （SqliteVfsContentStore.get）复核，而不只是直查 SQL。
+        const hash = table === "vfs_content_blob" ? hashContent(plain) : `bb-zero-${i}`;
+        const encoding = i % 4 === 0 ? "zlib" : "zlib-b64";
+        await insertLegacyRow(table, hash, plain, encoding, "base64");
+        inserted.push({ table, hash, plain });
+      }
+    }
+
+    const result = await runBlobBinaryNormalization(conn());
+    assert.equal(result.done, true);
+    assert.equal(result.normalizedCount, inserted.length);
+
+    for (const item of inserted) {
+      assert.equal(
+        await readPlain(item.table, item.hash),
+        item.plain,
+        `${item.table} ${item.hash} 归一前后逐字节一致`
+      );
+    }
+
+    // 读路径复核：vfs content store 走真实解码链路取回明文。
+    const store = new SqliteVfsContentStore(conn());
+    for (let i = 1; i <= 12; i++) {
+      const plain = corpus(i);
+      assert.equal(await store.get(hashContent(plain)), plain, "读路径等值");
+    }
+  });
+
+  it("历史脏形态：encoding='zlib' 但存 base64 文本的行也被归一", async () => {
+    await resetNormalizationState();
+    // 只插 zlib + 文本形态：谓词的 TYPEOF 分支单独生效。
+    await insertLegacyRow("vfs_content_blob", "bb-dirty-v", corpus(41), "zlib");
+    await insertLegacyRow(
+      "session_file_cache_blob",
+      "bb-dirty-f",
+      corpus(42),
+      "zlib"
+    );
+    assert.equal(await pendingCount("vfs_content_blob"), 1);
+    assert.equal(await pendingCount("session_file_cache_blob"), 1);
+
+    const result = await runBlobBinaryNormalization(conn());
+    assert.equal(result.done, true);
+    assert.equal(result.normalizedCount, 2);
+
+    for (const table of ["vfs_content_blob", "session_file_cache_blob"] as const) {
+      const rows = await conn().query<{ typeOf: string; byte_len: number }>(
+        `SELECT TYPEOF(bytes) AS typeOf, byte_len FROM ${table}
+         WHERE content_hash LIKE 'bb-dirty-%'`
+      );
+      assert.equal(rows.length, 1);
+      assert.equal(String(rows[0]!.typeOf), "blob");
+      assert.ok(Number(rows[0]!.byte_len) > 0);
+    }
+    assert.equal(await readPlain("vfs_content_blob", "bb-dirty-v"), corpus(41));
+    assert.equal(
+      await readPlain("session_file_cache_blob", "bb-dirty-f"),
+      corpus(42)
+    );
+  });
+
+  it("标记短路面：已置完成标记的表不跑 COUNT", async () => {
+    await resetNormalizationState();
+    await insertLegacyRow("vfs_content_blob", "bb-short-v", corpus(51));
+    await insertLegacyRow("session_file_cache_blob", "bb-short-f", corpus(52));
+    await setDoneMarker("fileCacheDone");
+
+    // 包裹 conn.query 记录实际下发的 SQL：file_cache 表已标记，应零 COUNT。
+    const c = conn();
+    const original = c.query.bind(c);
+    const seen: string[] = [];
+    (c as unknown as { query: (sql: string, p?: readonly unknown[]) => Promise<unknown[]> }).query =
+      (sql: string, p?: readonly unknown[]) => {
+        seen.push(sql);
+        return original(sql, p);
+      };
+    let tables: BlobBinaryTableStatus[] = [];
+    try {
+      tables = [...(await getBlobBinaryStatus(c)).tables];
+    } finally {
+      (c as unknown as { query: typeof original }).query = original;
+    }
+
+    assert.deepEqual(tables, [
+      { table: "vfsContent", done: false, pendingCount: 1 },
+      { table: "fileCache", done: true, pendingCount: 0 },
+    ]);
+    assert.equal(
+      seen.filter(
+        (sql) => sql.includes("COUNT(*)") && sql.includes("session_file_cache_blob")
+      ).length,
+      0,
+      "已标记表不应下 COUNT"
+    );
+    assert.ok(
+      seen.some((sql) => sql.includes("COUNT(*)") && sql.includes("vfs_content_blob")),
+      "未标记表仍走 COUNT"
+    );
+  });
+});
