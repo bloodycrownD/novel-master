@@ -271,3 +271,19 @@ assistant:
 （文档四件套落盘：spec 实现期补充二 / iteration-state exec_note+manual_pending 终态 / cr-fix-spec 执行注记 / RULE 出包坑条目；本记忆 front matter 刷新 + 本轮追加。）
 
 【下一步待办（压缩后照此恢复）】① **cr-fix-spec 剩余 35 条待用户开工确认**（wave-0 回调先行；在集成分支上执行）；② **生产 bundle 启动崩『Got unexpected undefined』未定位——发版前置**，复现配方 --dev false --minify false；③ Part B（VFS 内容打包 3.06MB）仍待拍板；④ 设备上装的是 Metro 构建，用户日常用 app 需 PC 侧 Metro 在跑（或换回 mcdev worktree 包，同样依赖 Metro）。
+
+user:
+[$code-review-loop] 你看看合并到集成分支后，参考cr spec，是不是有一部分代码没cr？可以cr下。（其间网络卡了两次，用户让继续/重新处理）
+
+assistant:
+（确认 CR 盲区 → 四路并行 scope 评审 → 4 轮收敛到 fix-spec-ready，产物 docs/Iterations/binary-blob-and-vfs-pack/cr-fix-spec-integration.md）
+
+【范围确认】既有 cr-fix-spec 只覆盖 A1 线（02d2fcc9..feat/blob-binary-normalization）；集成分支上 5bef27b6..43e83245 共 32 文件 +2039/−246 全是盲区：mcdev 压缩线（从未 CR）+ merge 裁决 + A2 + 指标卡重构。fix-spec 落新文件与 A1 的 35 条分开编（ic-XX vs cr-XX）。
+
+【评审编排】dag v1→4：wave1 四路并行 scope（mcdev-core / integration-core / apps / core-tests，全 readonly、prompt 显式禁写 docs/apm/ 与 git）→ 47 条原始 must-fix，主代理去重合并 33（六条同根因并成 ic-01 P0）→ spec-fix-r1 写档 → review-full（建议 no：11 处判据/措辞缺口，最要紧是 ic-01 验收撞姊妹 cr-31 的 maintCalls 语义=修完必红伪断言）→ spec-fix-r2 定点修订+新增 3 条 P2=36 条（1 P0/10 P1/25 P2，原 ic-33 顺延 ic-36）→ review-full-int-2（剩 4 处 P2/P3）→ r3 主代理 trivial 豁免直接修（MF-1~5）→ review-full-int-3（剩 2 处一句话级）→ r4 trivial 修完 → 主代理宣布 fix-spec-ready + Closure。网络中断杀过一个子代理，重派即恢复。
+
+【关键发现（详见 fix-spec）】P0 一条：mcdev 压缩任务收尾维护直调 runDatabaseMaintenance——绕开 runStartupMaintenanceOnce 进程级去重（同进程双全库 VACUUM：CLI 升级后第一条命令两次 76MB 重写）+ 无 try/catch（VACUUM 失败每条 CLI 命令崩）+ 标记先置（页空间永不回收）+ 无 busy/回调（desktop 冻 main 期间可点出第二个 VACUUM）——cr-01/03/25/26/32 同族六条合并。P1 十条：desktop 循环 rebootstrap 永久死亡（cr-05 同类更重）、mobile Promise.all 第四失败源（与 cr-04 互斥须合并）、desktop 兜底渲染「进行中（剩 0 条）」、批查询无 keyset 游标（真机 2 分钟收敛主成本≈4GB 读）、COUNT 全表扫挂 2s 轮询（cr-22#8 A2 前置未落实）、护栏/收尾校验/changes/坏行四连缺、搜索全量解压冻 main、测试恒真族×5（compaction 侧 cr-07 同类、schema 字面量 15 锁不住忘 bump、快路径恒真、perf 阈值 15~100 倍余量）。P2 二十五条含：failedCount 负数透传、死出口×2（MESSAGE_COMPACTION_KKV_* 与 escapeLikePattern）、云同步绕 busy（desktop 同病、busy 下沉+计数/令牌配对选型）、mobile 调度无去重、指标卡不轮询、两端着色不一致、CLI 注释因果颠倒、ic-36 既有 11 条姊妹条目修订索引（cr-18 消解关单等）。全维补查无新 P0/P1；B/D/E/H 核过「无新发现」面已列明。
+
+【教训（复用 A1 线的牙齿判据又抓到一批）】mcdev 测试三处恒真（第二遍 compactionCount=0、零 COUNT 无观测缝、schema 快路径）全是 A1 CR 修过的同型；「多评审员独立撞出同一 P0」是合并条目的好信号；review-full 两轮都在抓「验收判据与姊妹文档语义互斥」——两份 fix-spec 并行时，判据口径必须显式对齐（maintCalls=进入段次数 vs 真跑次数）。
+
+【状态与下一步】cr_loop_int 编排块落 iteration-state（dag 4/round 4/status fix-spec-ready）；两份 fix-spec（A1 线 35 条 + 集成线 36 条）待用户统筹开工，合并/前置关系已写进 Closure 执行顺序提示（ic-03↔cr-04 合并、ic-01 前置 cr-26、ic-09 依赖 cr-08、ic-36 随姊妹条目）。QA 三项留真机：坏 base64 消息行第三态、大会话搜索耗时、迁移中进度轮询。

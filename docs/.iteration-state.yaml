@@ -1,4 +1,39 @@
 # === code-review-loop 编排状态（当前进行中：对 feat/blob-binary-normalization 做首轮全量 CR）===
+cr_loop_int:
+  skill: code-review-loop
+  repo_path: D:\Dev\Js\novel-master
+  branch: integration/binary-storage
+  base_sha: 5bef27b6
+  head_sha: 43e83245
+  prd_path: 未提供（需求为用户口述，见业务 spec「需求来源」）
+  spec_path: docs/Iterations/message-content-compression/spec.md + docs/Iterations/binary-blob-and-vfs-pack/spec.md
+  fix_spec_path: docs/Iterations/binary-blob-and-vfs-pack/cr-fix-spec-integration.md
+  mode: scope → full（首轮四 scope 并行：mcdev-core / integration-core / apps / core-tests，末轮 review-full-int）
+  范围口径: A1 线（blob-binary-normalization 及其三端接线）已由 cr_loop 覆盖（36 条，cr-06 已闭合、35 条待执行）；本 loop 只审 5bef27b6..43e83245 的未 CR 增量 = mcdev 压缩线 + merge 裁决 + A2 + 存储页指标卡重构；同类问题新实例须上报并注明「cr-XX 同类」
+  dag_version: 4
+  review_round: 4
+  wave_plan:
+    - [review-scope-mcdev-core, review-scope-integration-core, review-scope-apps, review-scope-core-tests]
+    - [spec-fix-int-r1]
+    - [review-full-int]
+    - [spec-fix-int-r2]
+    - [review-full-int-2]
+    - [spec-fix-int-r3-trivial(主代理), review-full-int-3]
+  node_status:
+    review-scope-mcdev-core: { status: done, executor: subagent, readonly: true, scope_ready: "no", result: "15 条（P0×1：收尾维护直调绕去重无兜底 cr-01 同族；P1×7：busy/回调缺失、批查询 O(n²) 无 keyset、COUNT 全表扫挂 2s 轮询（cr-22#8 前置未落实）、标记先置无 pending 兜底、rebootstrap 死亡、搜索全量解压冻 main、护栏/收尾校验/changes/坏行四连缺）；P2×7；OQ×4；SD×6（含 SD-1 平台分支 spec 三处未同步、SD-6 搜索风险评估偏低）" }
+    review-scope-integration-core: { status: done, executor: subagent, readonly: true, scope_ready: "no", result: "11 条（P1×3：与 P0 同根因的收尾维护 + cr-01/cr-02 波及三表）；P2×8（failedCount 负数/非整数透传、at 死字段、死出口 KKV 常量、messageContent failedCount UI 零消费、列名 chat_message.bytes 文案、出口注释残影、既有条目修订清单 cr-18 关单等）；OQ×6；SD×5；核实无问题清单：谓词边界/别名/双参/畸形标记解析/出口并集" }
+    review-scope-apps: { status: done, executor: subagent, readonly: true, scope_ready: "no", result: "11 条（P1×4：busy/回调（并入 P0 族）、desktop rebootstrap 死亡、mobile Promise.all 第四失败源（cr-04 同类且互斥须合并）、desktop 兜底渲染「进行中（剩 0 条）」）；P2×7（着色不一致 #a60、mobile 调度无去重、云同步绕 busy、blob 循环不认 busy、契约测试无牙、CLI 注释/120s 预算、mobile 指标卡不轮询）；OQ×5；SD×5" }
+    review-scope-core-tests: { status: done, executor: subagent, readonly: true, scope_ready: "no", result: "10 条（P1×5：T-C7 第二遍恒真 cr-07 同类、零 COUNT 无观测缝、schema 字面量 15 锁不住忘 bump、schema 快路径用例恒真、perf 阈值近乎恒真+内容断言只看 type）；P2×5（缺第三形态用例、T-C8 假杀进程、perf 耦合未清标记、reset DELETE 未限前缀、CHECK 值域+空串/NULL 不可分）；OQ×4；SD×5（SD-E message-search 未审 → 已由 mcdev-core/B-12 覆盖）；核实：allowlist 快照核对通过、cr-06 纯读断言有牙" }
+    spec-fix-int-r1: { status: done, executor: subagent, result: "cr-fix-spec-integration.md 已创建（33 条 = P0×1 / P1×10 / P2×22，四要素 33/33；SD×10 / OQ×10（OQ-I*）/ QA×3 / K 节 / 既有条目修订索引表 ic-33）；主代理抽查 ic-01~05 通过；三个待裁决点均已按默认动作落：ic-03 与 cr-04 合并执行、ic-01 方案 b 走 startupMaintenancePending（OQ-I2 对齐 cr-32 条件式清标记、验收落独立测试文件）、CLI 共享预算改为 spec 登记项" }
+    review-full-int: { status: done, executor: subagent, readonly: true, result: "建议 fix-spec-ready: no（定点修订后可 yes）——覆盖面 47→33 双射无漏、四要素 33/33、0 条只批评无改法；缺口 8 处判据/措辞级：① [P1] ic-01 验收判据与姊妹 cr-31 maintCalls 语义冲突（改真跑次数口径：VACUUM 探针/返回非 null 计数）；② ic-33 三处（cr-35 行方向存疑、grep「两表」验收与 11 行索引不闭合（另有 8 处未纳入）、ic-33e deepEqual 计数与 head 不符（core 实测 6 处 + mobile 2 处））；③ ic-14/ic-26 问题描述与 head 不符（收窄改法）；④ ic-20 desktop 侧升确定项 + busy 清位时序限定；⑤ ic-09 对齐 cr-08；⑥ 新增 3 条 P2（escapeLikePattern 死导出、context 调用点注释、normalizeTable:384 过期注释）；⑦ 补原 19 条 OQ/SD 去向索引；⑧ 2 处行号漂移。全维补查无新 P0/P1；B/D/E/H/I/J/K 各维已核'无新发现'面已列明" }
+    spec-fix-int-r2: { status: done, executor: subagent, result: "11 处定点修订全部落地：ic-01 验收改「真跑次数」（VACUUM 探针 ===1，旁注回调计数按 cr-31 语义 1+1 不断言）+ cr-26 前置 + pending 各自独立 key 明确句；原 ic-33 → ic-36（cr-35 行改写、验收收窄为索引 11 行、deepEqual 清单以 grep 实测 6+2 处）；ic-14 收窄（仅剩 spec 登记）、ic-20 升确定项+清位时序选型、ic-26 防御性措辞、ic-09 对齐 cr-08；新增 ic-33（escapeLikePattern 死导出）/ic-34（context 注释并入 ic-19）/ic-35（normalizeTable 注释并入 ic-15）；OQ 19 行去向索引 + SD 去向标注；行号订正 2 处。终态 36 = P0×1 / P1×10 / P2×25（grep 核验）" }
+    review-full-int-2: { status: done, executor: subagent, readonly: true, result: "建议 no（4 处定点修订后可 yes）——11 处 r2 修订中 9 处完全落地逐行吻合；剩 MF-1 [P2]（ic-20 时序选型与验收互斥→默认计数/令牌配对+清位落点+push 措辞）、MF-2 [P2]（ic-01 探针须覆写 conn.execute+备选判据改可观测）、MF-3 [P2]（两表清单 9→22 处）、MF-4/MF-5 [P3]（编号区间、ic-33 连带 2 处）+ 3 条 OQ 注记（apps SD-5/int SD-4 落点、cr-01 行关联列、chat-history-search spec 残影自定）；无新 P0/P1" }
+    spec-fix-int-r3: { status: done, executor: main(/trivial 豁免), result: "trivial 直接执行：MF-1（ic-20 选型定稿计数/令牌配对+外层 rebootstrap 后 release+验收对齐+push 措辞订正）、MF-2（ic-01 探针 conn.execute 前提+备选判据改『收尾后手动调 runStartupMaintenanceOnce 断言返回 null』）、MF-3（两表全量 22 处行号）、MF-4（已豁免节编号区间表述）、MF-5（ic-33 连带 :18/:344）、SD 去向补 apps SD-5→ic-04 / int SD-4→ic-17 两行、cr-01 表格行关联列补 ic-36a；均带【r3 修订】标记" }
+    review-full-int-3: { status: done, executor: subagent, readonly: true, result: "建议 no（窄口径，2 处微调后可 yes）——MF-1~5 与 3 条 OQ 注记全部落地实测吻合、36 条计数与交叉引用无新错、四条 ready 判据通过；剩余：N1（ic-20 改法 1 与计数选型互斥）N2（mobile pull 的 rebootstrap 落点 :203-224 → pullCloudSync :293-345/:323）两处 P3 措辞 + nit×2（:501 r3 标记与措辞、:306 bootstrap.ts:25 补注）+ OQ×2（ic-01 用例次序前提、chat-history-search 残影留痕）；无新 P0/P1/P2" }
+    spec-fix-int-r4: { status: done, executor: main(/trivial 豁免), result: "trivial 直接执行 6 处：N1（ic-20 改法 1 改为外层 acquire 计数配对）N2（mobile 外层落点改 pullCloudSync :293-345/:323 + push 由底层覆盖）nit2（:501 加 r3 标记 + 共用→同构措辞）、:306 bootstrap.ts:25 补注、ic-01 验收补用例次序前提（NF-1 纪律）、K 节补 chat-history-search 残影留痕；元信息 review_round→4；均带【r4 修订】标记" }
+  must_fix: []   # 全部落档：47 原始 + r2 新增 3 = 36 条终态（1 P0 / 10 P1 / 25 P2），无开放项
+  spec_fix_plan: []
+  status: **fix-spec-ready**（2026-09-28 主代理宣布：round-4 终检「2 处微调后可 yes」+ r4 微调已 trivial 落地；Closure 表已附文档末尾；待用户确认开工——与姊妹 cr-fix-spec 的 35 条建议统筹排波：ic-03↔cr-04 合并、ic-01 前置 cr-26、ic-09 依赖 cr-08、ic-36 随姊妹条目）
 cr_loop:
   skill: code-review-loop
   repo_path: D:\Dev\Js\novel-master
