@@ -1,5 +1,5 @@
 /**
- * 聊天相关偏好：流式输出、思考提示词、富文本消息，以及压缩配置。
+ * 聊天相关偏好：流式输出、子会话流式、思考提示词、富文本消息，以及压缩配置。
  */
 import React, {useCallback, useState} from 'react';
 import {
@@ -47,6 +47,7 @@ export function ChatConfigScreen() {
   const runtime = useRuntime();
   const {appUi} = useNovelMaster();
   const [llmStreamEnabled, setLlmStreamEnabled] = useState(true);
+  const [subagentStreamEnabled, setSubagentStreamEnabled] = useState(true);
   const [thinkingContextEnabled, setThinkingContextEnabled] = useState(true);
   const [chatRichTextEnabled, setChatRichTextEnabled] = useState(false);
   const [messageNotificationEnabled, setMessageNotificationEnabled] =
@@ -64,6 +65,12 @@ export function ChatConfigScreen() {
 
   const refreshStreamPref = useCallback(async () => {
     setLlmStreamEnabled(await runtime.preferences.getLlmStreamEnabled());
+  }, [runtime]);
+
+  const refreshSubagentStreamPref = useCallback(async () => {
+    setSubagentStreamEnabled(
+      await runtime.preferences.getSubagentStreamEnabled(),
+    );
   }, [runtime]);
 
   const refreshThinkingContextPref = useCallback(async () => {
@@ -116,6 +123,7 @@ export function ChatConfigScreen() {
   useFocusEffect(
     useCallback(() => {
       refreshStreamPref().catch(() => undefined);
+      refreshSubagentStreamPref().catch(() => undefined);
       refreshThinkingContextPref().catch(() => undefined);
       refreshChatRichTextPref().catch(() => undefined);
       refreshMessageNotificationPref().catch(() => undefined);
@@ -123,6 +131,7 @@ export function ChatConfigScreen() {
       refreshCompaction().catch(() => undefined);
     }, [
       refreshStreamPref,
+      refreshSubagentStreamPref,
       refreshThinkingContextPref,
       refreshChatRichTextPref,
       refreshMessageNotificationPref,
@@ -222,6 +231,24 @@ export function ChatConfigScreen() {
           void persistSwitchWithRollback(
             () => runtime.preferences.setLlmStreamEnabled(enabled),
             () => setLlmStreamEnabled(!enabled),
+          );
+        }}
+      />
+      <ProfileSwitchItem
+        icon="🤖"
+        label="子会话流式"
+        subtitle={
+          subagentStreamEnabled
+            ? '子智能体回复边生成边显示'
+            : '子智能体回复完成后一次性显示'
+        }
+        value={subagentStreamEnabled}
+        tokens={tokens}
+        onValueChange={enabled => {
+          setSubagentStreamEnabled(enabled);
+          void persistSwitchWithRollback(
+            () => runtime.preferences.setSubagentStreamEnabled(enabled),
+            () => setSubagentStreamEnabled(!enabled),
           );
         }}
       />
