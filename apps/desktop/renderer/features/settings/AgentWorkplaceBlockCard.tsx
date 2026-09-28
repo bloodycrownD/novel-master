@@ -60,6 +60,7 @@ export function AgentWorkplaceBlockCard({
                   value={assistantText}
                   onChange={onAssistantTextChange}
                   ariaLabel={WORKPLACE_ASSISTANT_TEXT_LABEL}
+                  disabled={disabled}
                 >
                   <textarea
                     rows={3}

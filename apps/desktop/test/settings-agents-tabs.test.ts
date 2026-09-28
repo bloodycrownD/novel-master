@@ -28,6 +28,14 @@ const shellCssPath = path.join(
   "styles",
   "shell.css",
 );
+const agentWorkplaceBlockCardPath = path.join(
+  __dirname,
+  "..",
+  "renderer",
+  "features",
+  "settings",
+  "AgentWorkplaceBlockCard.tsx",
+);
 
 describe("AgentsSettingsView 双 tab（agent-config-tabs T-D3）", () => {
   it("tab 化：SegmentedControl 置顶 + agentModeMatchesTab 前端过滤 + 新建随 tab 落库", () => {
@@ -86,5 +94,24 @@ describe("AgentsSettingsView 双 tab（agent-config-tabs T-D3）", () => {
   it("shell.css 含 .agents-manage__tabs（复刻技能页 tabs 容器样式）", () => {
     const css = readFileSync(shellCssPath, "utf8");
     assert.match(css, /\.agents-manage__tabs\s*\{/);
+  });
+});
+
+describe("CR 修复防回归（cr-fix-spec f1/B-001 + f1/A-003 desktop 半）", () => {
+  it("AgentWorkplaceBlockCard：PromptCollapsibleField 透传 disabled（堵 general 只读态全屏编辑绕过）", () => {
+    const source = readFileSync(agentWorkplaceBlockCardPath, "utf8");
+    // 全屏编辑按钮禁用经由 disabled={disabled} 透传（同卡 Switch / textarea 均已接）
+    assert.match(
+      source,
+      /<PromptCollapsibleField[^>]*disabled=\{disabled\}/,
+    );
+  });
+
+  it("general 合成行：行内用短文案「通用助手 · 不可编辑」，不再引用完整 description", () => {
+    const source = readFileSync(settingsViewsPath, "utf8");
+    // 双端文案对齐：mobile AgentList 合成行同款
+    assert.match(source, /通用助手 · 不可编辑/);
+    // 详情页完整描述走 AgentEditorView 的 applyDefinition，本文件不应再引用 description
+    assert.doesNotMatch(source, /DEFAULT_SUBAGENT_DEFINITION\.description/);
   });
 });

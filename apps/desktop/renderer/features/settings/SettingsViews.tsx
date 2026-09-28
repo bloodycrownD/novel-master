@@ -911,7 +911,8 @@ export function AgentsSettingsView({ nav }: { nav: Nav }) {
             meta={
               <span className="settings-list-item__meta-row">
                 <span className="settings-tag settings-tag--primary">内置</span>
-                <span>{DEFAULT_SUBAGENT_DEFINITION.description ?? "—"}</span>
+                {/* 双端文案对齐：mobile AgentList 合成行同款 */}
+                <span>通用助手 · 不可编辑</span>
               </span>
             }
             onClick={() =>
