@@ -6,9 +6,10 @@ date: 2026-09-28
 
 需求来源：用户口述（2026-09-28：「方案还是收敛到那两件：先去 base64（消息 +33%、VFS 2.37MB、file_cache 0.07MB，零风险），然后 VFS 做 delta」）
 ＋ 上游实测结论（`docs/apm/memory/20260927-worktree-123-verify-guide.md`）
-＋ **本轮复测修正**（见「实测基线与口径修正」——「VFS delta 82.6% / 10.7MB」为重复计数口径错误，真实值 61.3% / 3.06MB）。
+＋ **本轮复测修正**（见「实测基线与口径修正」——「VFS delta 82.6% / 10.7MB」为重复计数口径错误，真实值 61.3% / 3.06MB）
+＋ **Part B 重写（2026-09-28 晚，用户拍板）**：原纯 pack 方案经真库 PoC（五路线对比）与归因分析（差距由成员明文 vs deflate 32KB 窗口驱动）重写为**混合方案**（小组 pack + 大文件组 fossil-delta 链，两张表 format 分派）；MCP 调研推翻「纯 JS 无 delta 编码器」旧结论（`fossil-delta`）；混合 dry-run 在真库副本全绿（`tmp/poc-hybrid.mjs`）。方案讨论全程见同主题记忆文件。
 
-前置依赖：`docs/Iterations/message-content-compression/`（分支 `feat/message-content-compression`，**尚未合并**）。本 SPEC 的 Part A 必须在该分支合并到 main 之后执行（合并前先解 CHANGELOG / `sqlite-message.repository.ts` / `SCHEMA_BOOT_VERSION`（分支为 17）三处合并冲突）。
+前置依赖：~~`docs/Iterations/message-content-compression/`（尚未合并）~~ **已满足**——Part A 已随 v1.5.25 发布（2026-09-28），本 SPEC Part B 基于发布后 main（`feat/vfs-content-pack` 分支基 `71527442`）。
 
 ---
 
@@ -18,12 +19,12 @@ date: 2026-09-28
 
 | 线 | 内容 | 预期收益（真库副本实测） | 风险 | 是否本期必做 |
 |---|---|---|---|---|
-| **Part A** | 落库压缩形态去 base64（RN 端由 `zlib-b64` 文本改二进制 BLOB），三张 blob 表统一 | **省 13.30MB**（message 10.864 + VFS 2.366 + file_cache 0.07） | 低（读路径三形态已兼容、无 schema 变更、降级安全） | 是 |
-| **Part B** | VFS 同一 entry 的非 head 版本打包成一个压缩流 + 偏移索引（pack），替代「每版本一条独立压缩 blob」 | **省 3.06MB**（VFS 内容侧 6.080MB → 3.020MB） | 高（跨 8 处「hash ⇒ blob 行」隐含契约、新增两张表与后台任务） | 待用户拍板（收益远小于 Part A，工程量数倍于 Part A） |
+| **Part A** | 落库压缩形态去 base64（RN 端由 `zlib-b64` 文本改二进制 BLOB），三张 blob 表统一 | **省 13.30MB**（message 10.864 + VFS 2.366 + file_cache 0.07） | 低（读路径三形态已兼容、无 schema 变更、降级安全） | ✅ 已随 v1.5.25 发布 |
+| **Part B（混合方案）** | VFS 同一 entry 的非 head 历史版本打包：**小文件组 pack（拼接单流 zlib）+ 大文件组 fossil-delta 链式差量**，两张旁路表，`format` 列分派 | 新库 dry-run：VFS 内容存储 **-51.9%**（8.81→4.23MB 表占用）、全库 **-7.4%**（61.78→57.22MB，含 VACUUM） | 中（收口 content store 六方法 + 两张新表；fossil 住 pack 容器规避行间引用） | 本轮执行（2026-09-28 重写定稿） |
 
-Part A 完成后真机库约 79.0MB → **约 65.7MB**；Part B 再降到 **约 62.6MB**（均含 VACUUM 归还，按真库副本口径推算）。
+Part A 已随 v1.5.25 发布（真机升级链全绿，64.76MB 收敛态）。Part B 在该形态上再降到 **约 57.2MB**（新库 `tmp/nm-real-v2.db` dry-run 实测口径：候选 740 hash、155 组、流 1.62MB，`tmp/poc-hybrid.mjs` 可复跑）。
 
-非目标（本期不做，均已实测否决，见「已否决方案与依据」）：换压缩算法、内容级去重（CAS/CDC）、按会话打包、git 式 diff delta 编码器、字典链压缩、CHECK 值域收窄。
+非目标（本期不做，均已实测否决，见「已否决方案与依据」）：换压缩算法、内容级去重（CAS/CDC）、按会话打包、delta 住 blob 原表（行间引用形态）、字典链压缩、CHECK 值域收窄。
 
 ## 实测基线与口径修正
 
@@ -85,17 +86,25 @@ Part A 完成后真机库约 79.0MB → **约 65.7MB**；Part B 再降到 **约 
 
 **降级安全**：老版本 app 的 `decodeCompressedBytes` 同样认 `zlib` + 二进制，新形态对降级安装可读（`zlib-b64` 行也不消失）。
 
-### Part B：VFS 同一 entry 的非 head 版本打包（content pack）
+### Part B（2026-09-28 重写）：VFS 非 head 历史版本混合打包（pack + fossil-delta）
 
-**核心思路**：把一个 entry 的多个历史版本明文按版本序拼成一个连续流、单次 deflate 压缩，配一张偏移索引；读取时按 `content_hash` 查索引、整组解压后切片返回。**对外语义完全不变**——所有调用方仍只看到「`content_hash` → 明文」。
+**方案演进**：原方案为纯 pack（拼接单流）。2026-09-28 重写为**混合方案**——归因实测发现 pack 的收益损失集中在「成员明文 > 32KB 的组」（deflate 滑动窗口只看得到前版本末 32KB，该类组 pack 只省 32.3%）；引入 `fossil-delta`（纯 JS 双向 delta 编解码器，fossil SCM 算法，跨窗口显式 copy/insert 匹配）处理大文件组后，该类组省幅升到 79.5%。**fossil 住进 pack 容器（组内链式、base 为同组前驱成员），规避了 delta 住 blob 原表的全部结构性代价（行间引用 / GC 保活 / 回滚物化 / byte_len 失真）**。全部数字来自真库 dry-run（`tmp/nm-real-v2.db`，v1.5.25 归一后形态；脚本 `tmp/poc-hybrid.mjs`、`tmp/poc-breakdown.mjs` 可复跑）。
 
-存储模型（两张新表，canonical DDL + `SCHEMA_BOOT_VERSION` +1）：
+**核心思路**：一个 entry 的非 head 历史版本按版本序分组（≤8 成员/组、≤1MB 明文/组），**小组用 pack**（明文拼接、单流 zlib）**、大组用 fossil 链**（首成员全量 zlib + 后续成员相对前驱的 `createDelta` 差量再 zlib），配一张 member 偏移索引；读取时按 `content_hash` 先查 blob 表、未命中查 member 按 `format` 分派解码。**对外语义完全不变**——所有调用方仍只看到「`content_hash` → 明文」。
+
+**分组与编码选型**（全部有实测依据）：
+
+- 候选谓词：`vfs_revision.status='active' AND content_hash IS NOT NULL`，且该 hash **仍是 blob 行**（`JOIN vfs_content_blob`）、**未被任何 entry 作为 live head**（`NOT EXISTS (SELECT 1 FROM vfs_entry e WHERE e.content_hash = r.content_hash)`）；按 `entry_id` 分组，`COUNT(DISTINCT content_hash) >= 2` 才处理；跨 entry 共享 hash 归首遇 entry（member 主键一 hash 一行）。
+- 编码选型阈值：**组内成员平均明文 ≥ `FOSSIL_GROUP_PLAIN_THRESHOLD_BYTES = 24KB` → fossil 链，否则 zlib-concat**。阈值扫描（16/24/32/48/64KB）实测 24KB 最优（流 1.608MB）、16~32KB 区间平缓（总差 26KB）——阈值不脆，微调无风险。归因数据：平均 <32KB 的组（150 个）fossil 反输 pack 5.2%，平均 ≥32KB 的组（5 个）fossil 赢 79.5%——**差距由「单版本明文 vs deflate 32KB 窗口」驱动**。
+- 已生成的 pack 永不重写（零写放大）；新版本照常独立 blob 行落库，攒够下一组再打下一包。
+
+**存储模型**（两张新表，canonical DDL + `SCHEMA_BOOT_VERSION` 17→18）：
 
 ```sql
 CREATE TABLE IF NOT EXISTS vfs_content_pack (
   pack_id INTEGER PRIMARY KEY AUTOINCREMENT,
   entry_id INTEGER NOT NULL,
-  format TEXT NOT NULL CHECK (format IN ('zlib-concat-v1')),
+  format TEXT NOT NULL CHECK (format IN ('zlib-concat-v1','fossil-chain-v1')),
   bytes BLOB NOT NULL,
   byte_len INTEGER NOT NULL,
   member_count INTEGER NOT NULL,
@@ -112,30 +121,49 @@ CREATE INDEX IF NOT EXISTS idx_vfs_content_pack_member_pack
   ON vfs_content_pack_member(pack_id);
 ```
 
-- `member.length` = 明文切片字节数（解压流内 `slice(offset, offset+length)`）；`member.compressed_byte_len` = **从被替换的 blob 行原样复制的 `byte_len`**，使 `findContentSizeByPath` 的闸门口径与今天逐字节一致。
-- 流内重复明文（同组内同一 hash 出现多次）只保留一份，多个成员指向同一 `(offset, length)`；`content_hash` 主键保证一 hash 一行。
+**`member.offset/length` 的语义按 `format` 解释**（dry-run 已验证的布局）：
 
-**读路径**（`SqliteVfsContentStore`，唯一收口点）：
+- `zlib-concat-v1`：offset/length = **组流解压后明文**的切片区间（`unzlibSync(bytes).subarray(offset, offset+length)`）。
+- `fossil-chain-v1`：offset/length = **`bytes` 内的段区间**（length = 段压缩字节长）。段表布局：`4B 段数（LE）+ N×4B 各段压缩长（LE）+ 段数据连排`；段 0 = `zlib(首成员明文全量)`，段 i = `zlib(createDelta(明文[i-1], 明文[i]))`。读成员 k = 解段表 → 解段 0 得 v0 → 沿链 `applyDelta` 到段 k（组内 ≤8 段，链式读放大有界）。
+- `member.compressed_byte_len` 恒为**从被替换 blob 行原样复制的 `byte_len`**（两格式同口径）——fossil 组严禁记 delta 长度，否则 `findContentSizeByPath` 的大文件闸门（`CHARACTER_CARD_BLOB_COMPRESSED_GATE_BYTES`，按压缩侧 4× 折算）会完全失真、超大文件被放行。
+- 流内重复明文（同组同 hash 多次出现）只保留一份，多成员共享 `(offset, length)`；`content_hash` 主键保证一 hash 一行。
 
-- `get(hash)`：先查 `vfs_content_blob`（命中即走原路径，热路径零改动）→ 未命中再查 `vfs_content_pack_member` → 命中则整组解压 + 切片；两者都无 → 维持原错误语义 `vfs_content_blob 缺失: {hash}`。
-- `getMany(hashes)`：批量查 blob；缺失项按 `pack_id` 聚合，**每组只解压一次**再切片填表。
-- `ensureBlob(hash, null)` 与 `findExistingBlobHashes()`：必须把 member 视为「已存在」，否则 tree-copy / seed / fork-copy 会对已打包的 hash 误报缺失。
-- `put(plain)`：插入新 blob 行时，若同 hash 存在 member 行则删除该 member（保证「一 hash 只有一处权威副本」，避免双份存储）。
-- `gc()`：在原 blob 清扫之后追加两步——(1) 删孤儿 member（`content_hash NOT IN (entry ∪ revision)`）；(2) 删**已无任何成员**的 pack（按 member 表实际 `COUNT(*)` 判定，**不依赖 `member_count` 列**——该列只作写入期校验与观测用，避免反规范化计数漂移）。单层 `NOT IN` 判定，**不需要不动点迭代**（pack 自包含，不存在链式引用）。
+**读路径**（`SqliteVfsContentStore` 唯一收口点，六方法 + 一处回退；现状行号见探索报告：put:43 / get:75 / getMany:99 / findExistingBlobHashes:136 / ensureBlob:158 / gc:178）：
 
-**打包任务**（core，新增 `runVfsContentPacking`）：
+- `get(hash)`：先查 `vfs_content_blob`（命中走原路径，**热路径零改动**）→ 未命中查 member（JOIN pack 取 format+bytes）→ 按 format 分派（pack 切片 / fossil 沿链 apply）→ 两者都无维持原错误文案 `vfs_content_blob 缺失: {hash}`（文案被测试与调用方依赖，不改）。
+- `getMany(hashes)`：维持 500 分块（`CONTENT_GETMANY_CHUNK_SIZE`）；blob 命中走原路；member 命中按 `pack_id` 聚合——pack 组整组只解压一次、fossil 组沿链 apply 时复用中间结果（同组连续成员共享前驱明文）；`resolveScanRows` 的缺失升级语义不变。
+- `ensureBlob(hash, null)` 与 `findExistingBlobHashes()`：**UNION member 表判定「已存在」**——`seed-live-head-revisions`（L70，fallback null 必抛）、`seed-fork-copy-parity`（L77）、`backfill-missing-revision`（L58）、`vfs-tree-copy`（L220 快路径判定）对已打包 hash 均不得误报缺失。
+- `put(plain)`：插入 blob 行时若同 hash 存在 member 行则删除该 member（**回滚抽回语义**：`resetHeadToVersion`/`revive-deleted-entry` 的 put 幂等保活把历史版本抽回独立 blob 行当 head；pack 流内该段成死区，等整组无成员随空 pack GC——dry-run 已验证此语义，含最难的 fossil 首成员抽回：同组剩余 7 成员仍从段链读回全等）。
+- `gc()`：原 blob 清扫后追加两步——(1) 删孤儿 member（`content_hash NOT IN (entry ∪ revision)`，复用 `gc()` 现有引用集 SQL 口径，防两套口径漂移）；(2) 删空 pack（按 member 表实际 `COUNT(*)`，不信任 `member_count` 列）。单层判定、无不动点（pack 自包含，fossil 的 base 是同组段内前驱、非跨行引用）。
+- `findContentSizeByPath`（`sqlite-vfs-entry.repository.ts` L241-253）：blob 行缺失时回退 `member.compressed_byte_len`，闸门口径与今天逐字节一致。
 
-- 候选谓词：`vfs_revision.status='active' AND content_hash IS NOT NULL AND ref_count > 0`，且该 hash **仍是 blob 行**（`JOIN vfs_content_blob`）、**未被任何 entry 作为 live head**（`NOT EXISTS (SELECT 1 FROM vfs_entry e WHERE e.content_hash = r.content_hash)`）；按 `entry_id` 分组，`COUNT(DISTINCT content_hash) >= 2` 才处理。
-- 每批一个 entry：取组内明文（走 content store，自动兼容混存形态）→ 按 ≤8 版本 / ≤1MB 明文切组 → **单事务**落 `vfs_content_pack` + members + 删除对应 blob 行（原子，中断不留半打包态）。
-- 已打包 hash 的 blob 行已删，谓词天然排除 → 幂等；新版本继续以独立 blob 落库，攒够 2 个再打新包（**已生成的 pack 永不重写**，零写放大）。
-- 无终态完成标记（版本会持续增长），状态查询 `getVfsContentPackStatus(conn)` 直接返回 `{ pendingGroups, memberCount, streamBytes, invalidCount }`；`invalidCount = 0` 即「无需处理」。
-- 完整性校验 + 回滚：`verifyVfsContentPacks(conn)` 逐 member 校验「切片明文 hash == content_hash」，`unpackVfsContent(conn)` 把 pack 反向展开为独立 blob 行（先写后删、可重复执行）——这是 Part B 的回滚/应急手段。
+**触发器不变量**（ref_count 三触发器安全的前提，探索报告核实成立）：
 
-**为什么是 pack 而不是另外两条路**（均有实测数据）：
+- INV1 **live head 必有 blob 行**：打包谓词排除所有 entry 的 head；head 变更走 put（member 抽回）。
+- INV2 **新 revision 只引用 live head hash 或新 put 的 hash**：tree-copy / seed / backfill / fork-copy 引用的都是 head（探索报告逐点核实）；两者都必有 blob 行 → `trg_revision_insert_inc_blob_ref` 的 UPDATE 永不命中 0 行。
+- INV3 **一 hash 至多一处权威副本**（blob 行或 member 之一）：put 抽回 + 打包删行双向保证。
+- 配套：`integrity-repair` 可选增加检测项「head hash 无 blob 行」作防御（INV1 违例即报警）。
 
-- **字典链**（每版本用前一版本明文当 fflate preset dictionary，head 独立）：实测 depth≤8 时 2.945MB、depth→∞ 时 2.771MB——**比 pack 略好（约 75KB）**，但代价是「blob 行之间出现引用」，`gc()` 的 `NOT IN` 要加保活规则、深链读放大（最深 72）、`byte_len` 失真。为 75KB 引入跨行依赖不划算。
-- **git 式 diff delta 编码器**：仓库无现成实现，Hermes 无 WebAssembly（RULE 已登记），需自研编码器 + 解码器 + 链深/重定基策略，且实测的 61.3% 本来就来自「拼接单流」这个机制，没有证据支持再上一套 diff。
-- **字典窗口的物理上限**（实测 fflate 0.8.3）：preset dictionary 只对**末尾 32KB** 有效（40KB 字典里靠前的段完全用不上），这也是「大词典」方案被否决的原因。
+**打包任务**（core，新增 `runVfsContentPacking`，对齐 `blob-binary-normalization.ts` 骨架）：
+
+- **无终态完成标记**（版本持续增长，与骨架模板的最大分叉）：每次入口重扫候选谓词；真库候选谓词查询毫秒级（115 组），无需缓存。
+- 每组单事务：**事务外**经 content store 读组内明文（三形态兼容，与归一任务交错安全——归一只改 encoding/bytes 形态不改明文）→ 选编码 → 事务内 INSERT pack + members + DELETE blob 行（原子，中断不留半打包态）。**事务回调内不得引用外层 conn**（AsyncMutex 不可重入）。
+- 坏组（某成员明文解压失败）整组跳过、计入 `failedGroups`、收尾校验「剩余候选组 == failedGroups」否则 `stalled: true`（照骨架语义：谓词天然收敛，打转即异常）。
+- KKV module `nm-vfs-pack`：`startupMaintenancePending`（收尾维护兜底，照骨架）+ `failedGroups` 快照（UI 第三态）。
+- 预算 `DEFAULT_VFS_PACK_SYNC_BUDGET_MS = 30_000`（CLI 三任务串行最坏 60+60+30=150s；真库 Node 实测搬运全程 1.85s，Hermes 放大后仍在预算内）；批间 `setTimeout(0)` 让步 + `shouldPause` 三端守卫（mobile: agent+maintenanceBusy；desktop: agent+cloudSync+maintenanceBusy；cli 无守卫）。
+- 收尾维护：仅本轮 `packedGroups > 0` 时挂 `runStartupMaintenanceOnce`（删 blob 行的页回收需要 VACUUM）；desktop 照抄 `beforeMaintenance/afterMaintenance` 回调缝包住 VACUUM 段置 busy。
+- 状态查询 `getVfsContentPackStatus(conn)`：`{ pendingGroups, memberCount, streamBytes, failedGroups }`；**自建 3s 采样节流**（照 blobBinary 私有 WeakMap 模式 + `__resetStatusSamplingThrottleForTests` 钩子；desktop 2s 轮询下合并为约一次/3s 真采样，完成判定不走缓存直调）。UI 两态「无需处理 / 剩余 N 组」+ `failedGroups > 0` 第三态。
+
+**完整性校验 + 反向展开（应急回滚）**：
+
+- `verifyVfsContentPacks(conn)`：逐 member 校验——pack 组切片明文 hash == content_hash；fossil 组沿链 apply 后 hash == content_hash。
+- `unpackVfsContent(conn)`：先写后删、可重复执行；**重建 blob 行的 `ref_count` = `COUNT(vfs_revision WHERE content_hash = ?)` 现场重算**（ref_count 只由 revision 触发器维护，unpack 绕过触发器直接 INSERT，必须重算——本条为旧方案缺口，T-VP16 锁定）。
+
+**为什么是混合而不是另两条路**（全部有实测）：
+
+- **纯 pack**：小文件组最优（deflate 熵编码 + 整流上下文），大文件组受 32KB 窗口限死（该类组省 32.3%）。
+- **纯 fossil 链**：全库口径反而比混合差 4.5%（1.697 vs 1.608MB）——小文件上 delta 指令流开销 + insert 段失去整流上下文，输给 pack 5.2%。
+- **delta 住 blob 原表 / 字典链**：行间引用、GC 保活、回滚物化、byte_len 失真——已否决（见「已否决方案与依据」）；fossil 进 pack 容器后这四条全部消失。
 
 ## 最终项目结构
 
@@ -193,15 +221,15 @@ apps/{mobile,desktop} 存储页                                        # A/B：�
 - Step 5 — phase-debase64-regression — blocking: yes — qa: auto：core 全量（先重建 dist）＋ desktop ＋ mobile ＋ 全仓 typecheck。
 - Step 6 — phase-debase64-verify — blocking: no — qa: manual_user：真机（荣耀 EBG-AN00）验收——库体积、三表形态直查（`SELECT encoding, TYPEOF(bytes), COUNT(*)`）、逐条解压校验、二次启动零重扫、读写/搜索/回滚正常。
 
-**Part B（用户拍板 2026-09-28：暂不执行，留作待办——两张新表 + 8 处契约散点改造的成本被认为偏高；方案待优化后再议。优化方向存档：可探索不加表形态（如 blob 表内新 encoding 载体 / 复用现有结构记 member 映射）、或等移动端压缩能力（wasm/纯 JS 编码器）成熟后重估收益）**
+**Part B（2026-09-28 重写为混合方案定稿；前置：Part A 已随 v1.5.25 发布，分支 `feat/vfs-content-pack` 基 `main@71527442`）**
 
-- Step 7 — phase-vfs-pack-schema — blocking: yes — qa: auto：两表 DDL + `SCHEMA_BOOT_VERSION` +1 + bootstrap 测试（新库建表 / 存量库慢路径建表 / 快路径不建）。
-- Step 8 — phase-vfs-pack-store — blocking: yes — qa: auto：store 读路径（`get`/`getMany` 先 blob 后 member）、`ensureBlob` / `findExistingBlobHashes` 认 member、`put` 删同 hash member、`gc` 两步清扫；T-VP1~T-VP5。
-- Step 9 — phase-vfs-pack-size — blocking: yes — qa: auto：`findContentSizeByPath` 回退 member；T-VP6。
-- Step 10 — phase-vfs-pack-task — blocking: yes — qa: auto：`runVfsContentPacking` + 状态 + 校验 + 反向展开；T-VP3、T-VP8、T-VP10。
-- Step 11 — phase-vfs-pack-wire — blocking: yes — qa: auto：三端调度 + 存储页状态行（「无需处理 / 剩余 N 项」两态）。
-- Step 12 — phase-vfs-pack-regression — blocking: yes — qa: auto：core 全量（重点回滚/检查点链路）+ 三端 + typecheck；T-VP7。
-- Step 13 — phase-vfs-pack-verify — blocking: no — qa: manual_user：真机验收——VFS 内容体积、文件树/预览/读写、历史版本回滚、checkpoint 恢复、二次启动收敛。
+- Step 7 — phase-vfs-pack-deps — blocking: yes — qa: auto（依赖引入 + Node 侧回环）；Hermes 探针部分 qa: manual_user（真机 + Metro 热更，探针脚本落库断言）：`packages/core` 引入 `fossil-delta@^2.0.0`（dependencies，照 fflate 同位；ESM-only 无坑——npm 元数据实测 `type: module` + 有 `main` 无 exports map，三端全链 ESM/Metro 可解析）；**Hermes 真机探针验证**（探针挂 Metro 热更，不用重打包；结果落库 + adb 拉库断言，沿用 tmp 探针先例）：createDelta/applyDelta 回环正确性 + 1MB 语料编码耗时（Node 实测 1.85s 全量 / 单组毫秒级，Hermes 放大 5-10× 预算内）。**若 Hermes 不通：降级为纯 pack（阈值分支移除，format 只留 zlib-concat-v1），本步骤是 fossil 线的硬门禁。**
+- Step 8 — phase-vfs-pack-schema — blocking: yes — qa: auto：两表 DDL（`vfs-content-pack-schema.ts` 新文件，注册进 `NOVEL_MASTER_SCHEMA_STATEMENTS` 排 blob 表之后）+ `SCHEMA_BOOT_VERSION` 17→18（撞号顺延注释）+ schema 三用例（新库建表 / 存量库慢路径 / 快路径不建）；T-VP17。
+- Step 9 — phase-vfs-pack-store — blocking: yes — qa: auto：content store 六方法改造（`get`/`getMany` 按 format 分派、`ensureBlob`/`findExistingBlobHashes` UNION member、`put` 抽回删 member、`gc` 追加两步）+ `findContentSizeByPath` 回退 `member.compressed_byte_len`；T-VP1/2/4/5/6/11/14/15。
+- Step 10 — phase-vfs-pack-task — blocking: yes — qa: auto：`runVfsContentPacking`（谓词/分组/选型阈值/单事务/预算/坏组/stalled/收尾维护回调缝）+ `getVfsContentPackStatus`（3s 采样节流）+ `verifyVfsContentPacks` + `unpackVfsContent`（ref_count 重算）；T-VP3/8/10/12/13/16/18~21。
+- Step 11 — phase-vfs-pack-wire — blocking: yes — qa: auto：三端调度接线（mobile/desktop 新服务 + cli 内联追加，预算 30s）+ 双端指标卡第四行「历史版本打包」（mobile `migrationRows` + `storage-config-migration-values.ts` 取值纯函数；desktop `MIGRATION_ROWS` + `migrationRowValue` + DTO + `getDbMaintenanceStats` 采样）+ 导出并入主入口区 + `main-entry-allowlist.json` 快照同步；T-VP22。
+- Step 12 — phase-vfs-pack-regression — blocking: yes — qa: auto：core 全量（先重建 dist；重点回滚/checkpoint/tree-copy/fork-copy/scanContents 链路）+ desktop + mobile + 全仓 typecheck（renderer 不新增债）；T-VP7。
+- Step 13 — phase-vfs-pack-verify — blocking: no — qa: manual_user：真机验收——VFS 内容体积（对照 dry-run 预期 −4.5MB 量级）、文件树/预览/读写、历史版本回滚（重点 fossil 组 entry）、checkpoint 恢复、二次启动收敛、指标卡第四行两态渲染。
 
 ## 测试策略
 
@@ -215,15 +243,30 @@ apps/{mobile,desktop} 存储页                                        # A/B：�
 - T-BB6 — blocking: yes — 归一后表单一致：`encoding='zlib'`、`TYPEOF(bytes)='blob'`、`byte_len = 物理字节长度`（映射 Step 3）。**口径更正**：断言的形态组合数为 **5**（不是 6）
 - T-BB7 — blocking: yes — 零丢失：混合语料归一前后逐条解压比对全等（映射 Step 3）。**口径更正**：语料是**构造语料**（伪随机长文 / 中文文本 / 工具块模拟，并非真实附件形态）
 - T-BB8 — blocking: no — perf 阈值：单批 100 行耗时 ≤30s（含维护链路）、写入路径压缩耗时与改动前同级（映射 Step 2/5）
-- T-VP1 — blocking: yes — 打包后逐版本读回等值（含同组重复 hash 共享成员）（映射 Step 8）
-- T-VP2 — blocking: yes — live head 永不被打包：打包任务跑完后，所有 `vfs_entry.content_hash` 仍是 `vfs_content_blob` 行（映射 Step 8/10）
-- T-VP3 — blocking: yes — pack 自包含校验：逐 member `hash(切片明文) == content_hash`（映射 Step 10）
-- T-VP4 — blocking: yes — GC 语义：无引用 pack 被回收；任一成员被引用则整包保留；孤儿 member 回收；`ref_count` 触发器与 pack 删除互不干扰（映射 Step 8）
-- T-VP5 — blocking: yes — `ensureBlob(hash, null)` 与 `findExistingBlobHashes` 对已打包 hash 判定为「已存在」，tree-copy / seed / fork-copy 不误报（映射 Step 8）
-- T-VP6 — blocking: yes — `findContentSizeByPath` 对已打包 hash 返回原 `byte_len`（闸门口径不变，超限文件仍走占位）（映射 Step 9）
+- T-VP1 — blocking: yes — 打包后逐版本读回等值（含同组重复 hash 共享成员；pack 与 fossil 两种 format 各至少一组）（映射 Step 9）
+- T-VP2 — blocking: yes — live head 永不被打包：打包任务跑完后，所有 `vfs_entry.content_hash` 仍是 `vfs_content_blob` 行（INV1）（映射 Step 9/10）
+- T-VP3 — blocking: yes — pack 自包含校验：逐 member `hash(还原明文) == content_hash`（pack 切片 / fossil 链 apply 两种还原路径都校验）（映射 Step 10）
+- T-VP4 — blocking: yes — GC 语义：无引用 pack 被回收；任一成员被引用则整包保留；孤儿 member 回收；`ref_count` 触发器与 pack 删除互不干扰（映射 Step 9）
+- T-VP5 — blocking: yes — `ensureBlob(hash, null)` 与 `findExistingBlobHashes` 对已打包 hash 判定为「已存在」，tree-copy / seed / fork-copy 不误报（映射 Step 9）
+- T-VP6 — blocking: yes — `findContentSizeByPath` 对已打包 hash 返回原 `byte_len`（fossil 组断言不回退 delta 长度；闸门口径不变，超限文件仍走占位）（映射 Step 9）
 - T-VP7 — blocking: yes — 回滚链路在 pack 形态下全绿：`resetHeadToVersion` / `restore-path` / `revive-deleted-entry` / checkpoint capture-restore / `sweepSessionRevisions`（映射 Step 12）
-- T-VP8 — blocking: yes — 打包幂等/可重入：中断不留半打包态；重跑不重复打包已打包版本（映射 Step 10）
+- T-VP8 — blocking: yes — 打包幂等/可重入：中断不留半打包态；重跑不重复打包已打包版本（谓词天然收敛）（映射 Step 10）
 - T-VP10 — blocking: yes — 反向展开：`unpackVfsContent` 后 pack/member 清空、独立 blob 行齐备且读回等值，可重复执行（映射 Step 10）
+  （注：无 T-VP9——旧版用例清单即无该编号，编号不回收；新用例自 T-VP11 起）
+- T-VP11 — blocking: yes — fossil 链编解码回环：段表解析、逐层 apply 后明文与原件逐字节全等（Node 侧 740/740 已验，测试用构造语料固化）（映射 Step 9）
+- T-VP12 — blocking: yes — 阈值分组：24KB 上下两组分别落 `zlib-concat-v1` / `fossil-chain-v1` 的 format 断言（映射 Step 10）
+- T-VP13 — blocking: yes — fossil 组读放大上限：单次读 = 解首段 + ≤7 次 apply；构造最坏组（8 成员 × 大明文）Node 耗时护栏 ≤50ms 量级（数量级回归线，非实测值卡线）（映射 Step 10）
+- T-VP14 — blocking: yes — 抽回死区语义：put 抽回 fossil 组首成员后，H0 走 blob 路径读回全等、同组剩余成员仍从段链读回全等、pack 流字节不变（dry-run 实测场景固化）（映射 Step 9）
+- T-VP15 — blocking: yes — 混合 getMany：跨 blob / pack / fossil 三源批量读取，pack 组只解压一次、fossil 组复用链式中间结果（映射 Step 9）
+- T-VP16 — blocking: yes — unpack 的 ref_count 重算：展开后 blob 行 `ref_count == COUNT(vfs_revision 引用数)`，后续 revision 删除触发器归零回收不误删（映射 Step 10）
+- T-VP17 — blocking: yes — schema 三用例：新库 DDL 建表（`user_version === SCHEMA_BOOT_VERSION` 常量断言）/ 存量库慢路径补建 / 快路径不建（照 `session-run-state-schema.test.ts` 先例）（映射 Step 8）
+- T-VP18 — blocking: yes — 坏组跳过：某成员明文解压失败的组整组保留、`failedGroups` 计数、不阻断其它组收敛（映射 Step 10）
+- T-VP19 — blocking: yes — 预算中断续跑：收紧预算让任务批间收手，重启续跑收敛（映射 Step 10）
+- T-VP20 — blocking: yes — stalled：剩余候选组 ≠ failedGroups 时 `stalled: true` 不挂收尾维护（映射 Step 10）
+- T-VP21 — blocking: yes — 收尾维护观测：`maintCalls` 回调计数——首轮确有打包 `maintCalls===1`、稳态零候选 `maintCalls===0`、pending 兜底路径（**独立测试文件**承载进程级标记正向路径，照 `blob-binary-normalization-maintenance.test.ts` 先例）（映射 Step 10）
+- T-VP22 — blocking: yes — 三端源码/UI 契约（照 Part A 的 cr-21/cr-06 先例）：mobile 指标卡第四行渲染两态 + 取值纯函数（`storage-config-migration-values` 直 import 测试）；desktop `MIGRATION_ROWS` 顺序与 `migrationRowValue` 分支 + DTO 字段 + handler 兜底（采样抛错时指标卡字段降级不拖垮主统计）（映射 Step 11）
+
+**实测数字与产物口径注记**：`流 1.608MB` = 阈值扫描 24KB 档最优值；`1.620MB` = 32KB 档（dry-run 实际采用档位）——两数并存是阈值扫描结果，非矛盾。dry-run 脚本与库副本为主仓 `tmp/` 本地实测产物（`tmp/poc-hybrid.mjs`、`tmp/nm-real-v2.db`、`tmp/nm-hybrid-sim.db`），不随分支提交；关键行为结论（读回全等/幂等/抽回死区/ref_count 语义）已固化为 T-VP1/3/10/14/16 用例，实现侧无需依赖本地产物。
 
 ### T 编号 → 实际用例文件 → 断言要点映射（文档同步，2026-09-28）
 
@@ -277,11 +320,12 @@ T 编号与实际落地用例的可追溯映射（行号为集成分支 `integra
 - **V1（约 10 个 tag 后退役，与 message-content-compression spec 的迁移生命周期 V1 及 RULE 的 migration 清理节奏同轮执行）**：删除迁移代码确保整洁——归一任务本体与适配器注册表、三端调度接线（mobile / desktop / cli 服务）、KKV 标记（module `nm-blob-binary` 全部 key）、读路径的 zlib-b64 与存量 base64 文本兼容分支（zlib-codec 收敛为单形态二进制）、相关测试与指标卡「去 base64」两行。**删除前提**与 compression 侧 V1 同款：启动收尾须保证库里无 zlib-b64 残留（强制收尾门/基线抬升的细则届时与 compression V1 一并细化，两任务本就同批调度）。
 - 参考时点：本批发版 tag 起 10 个 tag 后（本版预计 v1.5.25 → 约 v1.5.35）。
 
-**Part B**
+**Part B（混合方案）**
 
-- 风险（按严重度）：① 跨「`hash` ⇒ blob 行」的 8 处隐含契约（`get`/`getMany`/`ensureBlob`/`findExistingBlobHashes`/`put`/`gc`/`findContentSizeByPath`/触发器注释），漏一处即读失败或双份存储；② GC 误删导致明文丢失——由「pack 自包含 + 单层引用判定 + T-VP3 校验」三重兜底，且回滚前可先 `verifyVfsContentPacks`；③ 读放大：读一个已打包版本需整组解压（单组上限 1MB 明文 / 215KB 流），`getMany` 按组去重；④ 回滚卡顿敏感路径（`rollback-large-jank` 刚修）新增解压成本，需在 Step 12 用既有回滚用例回归。
-- 回滚：`unpackVfsContent` 反向展开（可重复执行）→ 删两张表 → `SCHEMA_BOOT_VERSION` 不回退（只升不降，对齐既有纪律）。
-- 决策建议：Part B 收益 3.06MB，改动面覆盖 VFS 读写的所有主力路径，**建议作为 Part A 合并后的独立迭代单独评审**；若用户认为 3MB 不值得该风险，可只做 Part A（本 SPEC 的 Part B 即为该决策的完备案卷）。
+- 风险（按严重度）：① 跨「`hash` ⇒ blob 行」契约的收口改造（`get`/`getMany`/`ensureBlob`/`findExistingBlobHashes`/`put`/`gc`/`findContentSizeByPath` + seed/fork/tree-copy/backfill 消费方），漏一处即读失败或双份存储——探索报告已给全部落点，T-VP 系列逐点覆盖；② GC 误删导致明文丢失——「pack 自包含 + 单层引用判定 + T-VP3 校验」三重兜底，回滚前可先 `verifyVfsContentPacks`；③ 读放大：pack 组整组解压（≤1MB 明文）/ fossil 组 ≤7 次链 apply，Node 实测最坏 7.1ms、Hermes 预估 ×5-10（Step 7 真机探针实测定案）；④ 回滚卡顿敏感路径（`rollback-large-jank` 刚修）新增解压成本，Step 12 用既有回滚用例回归；⑤ **不可降级**：旧版本 app 读不到已打包 hash（member 概念不存在）——发布后回退 APK 将无法读历史版本，回退路径 = 装新版跑 `unpackVfsContent`（**发版前须用户知情确认**）；⑥ fossil-delta 供应链：npm 单包、零运行时依赖、BSD，锁 `^2.0.0`；Hermes 兼容性 Step 7 实测，不通则降级纯 pack（阈值分支移除，方案退化为已验证的 zlib-concat 单格式）；⑦ 触发器 0 行 UPDATE 的静默性——INV1/INV2 不变量保证不触发，`integrity-repair` 增加检测项作防御。
+- 回滚：`unpackVfsContent` 反向展开（ref_count 重算，可重复执行）→ 删两张表 → `SCHEMA_BOOT_VERSION` 不回退（只升不降）。
+- 实证基线（新库 dry-run，`tmp/poc-hybrid.mjs`）：155 组（150 pack + 5 fossil）、740 成员读回 740/740 全等、head 228/228 零影响、幂等谓词剩 144（= 不可成组孤立 hash）、GC 0/0、抽回事务 7.7ms + 死区语义全绿、库 61.78→57.22MB（−7.4%，对照实验排除 VACUUM 虚胖）。
+- **与 `read-tool-result-ref` 迭代的集成备注（2026-09-29 审查轮确认正交）**：两者在 `contentStore.get` 汇合（read-ref 的 hydrate → `findByEntryAndVersion` → `contentStore.get`；本方案恰改造 `get` 加 member 分派且签名不变），任一先上线链路均闭合；但两者 Step 12 / Step 7 均点名回滚/fork 套件——**两者都落地后需合跑一次回滚 + fork + checkpoint 套件回归**（记入合并后 QA）。
 
 ## 实现期补充（A1 落地记录，2026-09-28）
 
@@ -330,41 +374,49 @@ A1（VFS + file_cache 去 base64 + 归一任务 + 三端接线）已按本 spec 
 | 换压缩算法（brotli / zstd） | 逐条口径最多 +12%（brotli q9/zstd19 = 2.51:1 vs deflate 2.24:1）；Hermes 无 WebAssembly，wasm 套件不可用；纯 TS `zstdify` 实测会崩且更差 |
 | 内容级去重（CAS / CDC 分块） | 消息精确去重仅 0.03%；CDC 去重 + 逐块压缩反而更差（2.01:1 vs 2.24:1） |
 | 按会话/时序打包（消息侧） | 移动端只值 +12%（deflate），读放大涨到 1MB |
-| git 式 diff delta 编码器 | 无现成实现，需自研编解码；实测收益已由「拼接单流」取得，无增量证据 |
-| 字典链（前一版本作字典） | 与 pack 相当（depth≤8 时 2.945MB vs 3.020MB），但引入跨行引用/GC 保活/链深读放大，为 75KB 不值得 |
+| ~~git 式 diff delta 编码器：无现成实现~~ | **2026-09-28 修正**：MCP 调研找到 `fossil-delta`（纯 JS 双向、BSD、零依赖）——「无现成实现」不再成立。其显式跨窗口匹配对大文件组比 pack 好 79.5%，**已纳入混合方案**（fossil 进 pack 容器）；「delta 住 blob 原表 / 行间引用」形态仍否决（见下行） |
+| delta 住 blob 原表（不加表形态） | 行间引用（base 依赖）、GC 保活（组长行保活语义碎裂）、回滚抽回首成员需重组整组、byte_len 失真——「省两张表的可见成本、埋核心表的隐性成本」，否决 |
+| 字典链（前一版本作字典） | 与 pack 相当（depth≤8 时 2.945MB vs 3.020MB）；**归因补正（2026-09-28）**：其弱势根源是 fflate 字典只对末 32KB 生效（deflate 窗口物理上限）——大文件组（成员 >32KB）正是 fossil 显式匹配的碾压区 |
 | preset dictionary 大词典 | fflate 实测只对**末尾 32KB** 生效；deflate 窗口物理上限 |
 | 收窄 `encoding` CHECK 值域为只 `'zlib'` | SQLite 不支持 ALTER CHECK，需整表 rebuild，收益为 0（读路径本就兼容多形态） |
+| 纯 fossil（全组链式） | 全库口径比混合差 4.5%（1.697 vs 1.608MB）：小文件上 delta 指令流开销 + insert 段失去整流上下文，输 pack 5.2% |
+| bsdiff / HDiffPatch（后缀数组类） | patch 质量最优（比 fossil 类好 10-20%）但编码端计算重；无纯 JS 实现，Hermes 上后缀排序不可行；「桌面编码移动只 apply」不成立（mobile 也产生新组）——将来上 JSI 原生模块再重估 |
 
 ## Context Bundle
 
 ```yaml
 iteration_name: binary-blob-and-vfs-pack
-requirement_path: 用户口述（2026-09-28）＋ docs/apm/memory/20260927-worktree-123-verify-guide.md
+requirement_path: 用户口述（2026-09-28）＋ docs/apm/memory/20260927-worktree-123-verify-guide.md（Part B 2026-09-28 晚重写：混合方案）
 spec_path: docs/Iterations/binary-blob-and-vfs-pack/spec.md
 explore_summary: >
-  写侧形态分叉共 3 处（vfs content store put / file cache codec / message codec），全部靠
-  isReactNativeRuntime 运行时探测，注入参数只有单测在用；读路径 decodeCompressedBytes 三形态
-  兼容已是既有契约（存量 zlib-b64 行不转换也能读）；直接 SQL 读 blob 表只有 2 个真实落点
-  （content store 全方法、entry repo 的 findContentSizeByPath）；三表 encoding CHECK 均已含
-  'zlib'，去 base64 不需要任何 schema 变更。VFS 侧 hash→明文的所有读取都收敛在 content store，
-  但 ensureBlob / findExistingBlobHashes / gcd 与 ref_count 触发器都隐含「hash ⇒ blob 行」假设。
-  搬运基建可复用 message-content-compaction（谓词 + 分批 + 单行短事务 + KKV 标记 + 挂 VACUUM），
-  schema migration 框架无进度语义、不可用于数据搬运。
+  Part A 已随 v1.5.25 发布（三表二进制化 + 归一任务 + 指标卡）。Part B（2026-09-28 重写）：
+  content store port 六方法（put:43/get:75/getMany:99/findExistingBlobHashes:136/ensureBlob:158/
+  gc:178）是 hash→明文唯一收口；blob 表 WITHOUT ROWID + TEXT PK，ref_count 三触发器只认
+  vfs_revision 行（entry 不参与 ref_count，仅参与 gc 引用集）、「hash ⇒ blob 行」契约散点 =
+  content store 六方法 + findContentSizeByPath(L241-253) + seed/fork/tree-copy/backfill 消费方；
+  打包任务骨架照 blob-binary-normalization（谓词/keyset/单行短事务/KKV/预算/回调缝/maintCalls
+  模式），最大分叉 = 无终态标记（入口重扫谓词 + 状态查询自建 3s 节流）；fossil-delta ESM-only
+  实测无模块形态坑（type:module + 有 main 无 exports map）；SCHEMA_BOOT_VERSION 当前 17 → 18；
+  UI 指标卡第四行走 ic-22 纯函数模块模式。真库 PoC/dry-run 全绿：五路线对比、归因（大小驱动）、
+  混合 dry-run（建表/搬运/读校验/幂等/GC/抽回死区/对账 −7.4%）。
 impact_files:
-  - packages/core/src/domain/vfs/content-store/impl/sqlite-vfs-content-store.ts
-  - packages/core/src/domain/vfs/content-store/logic/blob-bytes-codec.ts
-  - packages/core/src/domain/session-kkv/logic/file-cache-blob-codec.ts
-  - packages/core/src/domain/chat/logic/message-content-codec.ts
-  - packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.ts
-  - packages/core/src/infra/db-maintenance/impl/
-  - packages/core/src/bootstrap/vfs/vfs-content-pack-schema.ts (新)
-  - apps/{mobile,desktop,cli} 调度与存储页
+  - packages/core/package.json（fossil-delta 依赖）
+  - packages/core/src/bootstrap/vfs/vfs-content-pack-schema.ts（新）+ novel-master-bootstrap.ts（注册 + BOOT 18）
+  - packages/core/src/domain/vfs/content-store/impl/sqlite-vfs-content-store.ts（六方法）
+  - packages/core/src/domain/vfs/content-store/logic/（pack/fossil 解码逻辑，与 zlib-codec 平级）
+  - packages/core/src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.ts（findContentSizeByPath 回退）
+  - packages/core/src/infra/db-maintenance/impl/vfs-content-packing.ts（新）+ index.ts + src/index.ts
+  - apps/{mobile,desktop}/src/services 或 main/services（新调度服务）+ 挂载点 + 指标卡第四行 + DTO
+  - apps/cli/src/runtime.ts（内联预算制追加）
+  - packages/core/test/（vfs-content-packing.test.ts 新 + 独立维护观测姊妹文件 + schema 三用例 + allowlist 快照）
 constraints:
-  - Part A 不 bump SCHEMA_BOOT_VERSION（无 DDL/align 变更）；Part B 必须 bump（新表）
-  - 大库数据搬运禁走 migration 框架（无进度语义 + 空占位登记禁令），一律谓词驱动后台任务
-  - VACUUM 必须事务外直调；事务回调内不得使用外层 conn（AsyncMutex 不可重入，死锁无异常）
-  - 读路径多形态兼容是契约，不得写死单一 encoding
-  - mobile jest 消费 core dist，回归前必须重建；新增 core 导出须同步 main-entry-allowlist 快照
-  - 真机验收一律从 UI 操作，库只读（拉取查完即弃）
-blocking_steps: [1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12]
+  - Part B bump SCHEMA_BOOT_VERSION 17→18（新表 DDL）；blob 表 DDL 与三触发器冻结不动
+  - 大库数据搬运禁走 migration 框架；谓词驱动后台任务 + 每组单事务 + 事务内禁用外层 conn
+  - 读路径多形态兼容是契约；错误文案「vfs_content_blob 缺失: {hash}」不变
+  - INV1/INV2/INV3 触发器不变量（head 必有 blob 行 / 新 revision 只引用 head 或新 put / 一 hash 一权威副本）
+  - member.compressed_byte_len 恒为原 blob 行 byte_len 复制（fossil 组严禁记 delta 长度）
+  - mobile jest 消费 core dist；新增导出同步 main-entry-allowlist 快照；断言按 scope 过滤（bootstrap 种子污染）
+  - 验收断言牙齿三判据（恒真/恒红/互斥夹具）；收尾维护观测走 maintCalls 回调计数 + 独立测试文件
+  - 真机验收一律从 UI 操作，库只读；Hermes 探针验证先行（Step 7，不通降级纯 pack）
+blocking_steps: [7, 8, 9, 10, 11, 12]
 ```
