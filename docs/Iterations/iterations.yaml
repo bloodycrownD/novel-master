@@ -210,6 +210,21 @@ iterations:
       冲突）。PRD+spec 已落盘，Step 1-8 已实施、Step 7/8 模拟器侧报告落盘，
       CR 修复中待合主干。
 
+  # ---- 智能体配置双 tab 与子会话流式开关（2026-09-28 立项，2026-09-29 合入）----
+  - id: agent-tabs-and-subagent-stream
+    status: merged
+    notes: >
+      两个 feature：agent-config-tabs（双端智能体配置页拆主/子双 tab——过滤
+      口径与运行侧 picker/task 对齐、all/未填双边+「全部」徽标、内置 general
+      完整编辑器禁用态、新建默认作用域随 tab、批量按 tab 独立）+
+      subagent-stream-toggle（聊天配置「子会话流式」开关与更名的「父会话
+      流式」并排，偏好 chat.subagentStream 下沉 core 由 runChildAgent 读取、
+      默认开，CLI preferences 同步注册）。全生命周期：brainstorm 四轮 →
+      PRD/spec → spec-check 两轮 Go → dev-loop 七波 → 真机双保险验证 →
+      CR loop 两轮（7 条 must-fix 全落）→ merge bf2359c2。遗留合并后 QA：
+      f2 Step6 手动验收（关子会话流式后的终止行为）、case-agents-tabs.mjs
+      随桌面回归真跑。
+
 
 # ---- S-2 漂移对齐跟踪表（9 处）----
 # #1 sksp/spec.md L248            —— fixed（Step 16, 6dadb65e）
