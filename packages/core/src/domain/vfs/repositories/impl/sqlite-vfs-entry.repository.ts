@@ -245,12 +245,29 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
          WHERE content_hash = #{contentHash}`,
         { contentHash }
       );
-      if (blobRows.length === 0) {
+      if (blobRows.length > 0) {
+        return {
+          kind: "blobCompressedBytes",
+          size: Number(blobRows[0]!.byte_len),
+          mtimeMs: Number(row.mtime_ms),
+        };
+      }
+      // blob 行缺失 → 回退 member.compressed_byte_len。该列恒为从被替换 blob 行
+      // 原样复制的 byte_len（两 format 同口径，fossil 组严禁记 delta 长度），故
+      // 大文件闸门（按压缩侧折算）口径与独立 blob 形态逐字节一致。
+      const memberRows = await queryTemplate<{ compressed_byte_len: number }>(
+        this.conn,
+        this.parser,
+        `SELECT compressed_byte_len FROM vfs_content_pack_member
+         WHERE content_hash = #{contentHash}`,
+        { contentHash }
+      );
+      if (memberRows.length === 0) {
         return null;
       }
       return {
         kind: "blobCompressedBytes",
-        size: Number(blobRows[0]!.byte_len),
+        size: Number(memberRows[0]!.compressed_byte_len),
         mtimeMs: Number(row.mtime_ms),
       };
     }
