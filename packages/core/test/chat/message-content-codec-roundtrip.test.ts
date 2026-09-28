@@ -126,21 +126,25 @@ describe("消息正文压缩存储 codec（T-C1 ~ T-C5、T-C12）", () => {
     assert.deepEqual(list[0]!.content, content);
   });
 
-  it("T-C2：RN 分支——forceZlibB64 注入下 encoding='zlib-b64'、blob 为 base64 文本，读回等价", async () => {
+  it("T-C2：写侧无平台分支——encode 恒二进制 zlib；存量 zlib-b64 行读回等价（三形态兼容）", async () => {
     const { sessionId, repo } = await newSession();
     const ctx = getNovelMasterTestContext();
     const content = textBlocks("移动端 zlib-b64 形态验证：中文正文与 emoji 😀");
     const message = makeMessage({ sessionId, seq: 1, role: "assistant", content, createdAtMs: 2 });
     await repo.insert(message);
 
-    // repository 调用点不传注入（运行时探测）；此处直调 codec 产物手工落库，
-    // 验证 RN 形态的写库字段与读路径三形态兼容（decodeCompressedBytes）。
-    const encoded = encodeMessageContent(JSON.stringify(content), true);
-    assert.equal(encoded.encoding, "zlib-b64");
-    assert.equal(typeof encoded.blob, "string", "zlib-b64 应为 base64 文本形态");
+    // A2（blob-binary-normalization）起编码器无平台分支：三端恒 zlib +
+    // 二进制（forceZlibB64 注入点已随 RN 写侧分支一并删除）。
+    const encoded = encodeMessageContent(JSON.stringify(content));
+    assert.equal(encoded.encoding, "zlib");
+    assert.ok(encoded.blob instanceof Uint8Array, "写侧应恒为二进制形态");
+
+    // 存量 zlib-b64 文本行（RN 旧版落库形态）手工直插，读路径三形态兼容
+    // （decodeCompressedBytes）；该形态由归一任务的 chat_message 适配器搬运。
+    const b64 = Buffer.from(encoded.blob).toString("base64");
     await ctx.conn.execute(
-      `UPDATE chat_message SET content_json = '', content_encoding = ?, content_blob = ? WHERE id = ?`,
-      [encoded.encoding, encoded.blob, message.id]
+      `UPDATE chat_message SET content_json = '', content_encoding = 'zlib-b64', content_blob = ? WHERE id = ?`,
+      [b64, message.id]
     );
 
     const raw = await rawCompressionColumns(message.id);

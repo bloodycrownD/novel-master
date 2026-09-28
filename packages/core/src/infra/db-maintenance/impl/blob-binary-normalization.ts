@@ -7,25 +7,29 @@
  * 每表 KKV 完成标记 → 完成后挂一次维护链路。不注册 schema migration
  * （无进度语义、空占位登记禁令）。
  *
- * - 谓词（三表同形）：`encoding = 'zlib-b64' OR (encoding = 'zlib' AND
- *   TYPEOF(bytes) = 'text')`。**必须用 TYPEOF 判别而不是只看 encoding**
- *   ——quick-sqlite 时代遗留「encoding=zlib 但存的是 base64 文本」的脏
- *   形态，只看 encoding 会漏掉那批行。
- * - 表适配器化：一张表一个 adapter（表名、主键列、SELECT/UPDATE SQL、
- *   完成标记 key），由 {@link TABLE_ADAPTERS} 数组驱动；新增表只加一条
- *   适配器，不改流程代码。SELECT 只取主键 + encoding + bytes（搬运源），
- *   不碰其它列。
- * - **不按 rowid 排序**：本任务注册的表都是 `WITHOUT ROWID`，`rowid`
- *   不存在——按主键列排序 + LIMIT 分批。
+ * - 谓词（两张 blob 表同形，chat_message 列名不同、形状同构）：
+ *   `encoding = 'zlib-b64' OR (encoding = 'zlib' AND TYPEOF(bytes) = 'text')`。
+ *   **必须用 TYPEOF 判别而不是只看 encoding**——quick-sqlite 时代遗留
+ *   「encoding=zlib 但存的是 base64 文本」的脏形态，只看 encoding 会漏掉
+ *   那批行。chat_message 的 legacy 明文行（content_encoding IS NULL）不
+ *   命中——那是 message-content-compaction 任务的谓词范围。
+ * - 表适配器化：一张表一个 adapter（表名、主键列、谓词、SELECT/UPDATE
+ *   SQL、完成标记 key、有无 byte_len 列），由 {@link TABLE_ADAPTERS} 数组
+ *   驱动；新增表只加一条适配器，不改流程代码。SELECT 只取主键 +
+ *   encoding + bytes（搬运源，chat_message 用列别名映射成同形），不碰
+ *   其它列。
+ * - **不按 rowid 排序**：blob 两表是 `WITHOUT ROWID`（rowid 不存在），
+ *   chat_message 是常规表——统一按主键列排序 + LIMIT 分批。
  * - 并发幂等：UPDATE 的 WHERE 带同一谓词，另一端/上一轮已归一时
  *   `changes = 0`，静默跳过。
- * - 归一动作：base64 文本 → 二进制 Uint8Array，置 `encoding = 'zlib'`
- *   与 `byte_len = ` 物理字节长度。存量 `byte_len` 写法三态混杂（base64
- *   文本长度 / 二进制长度 / 二进制长度 −2），故本任务**一律重算**。
+ * - 归一动作：base64 文本 → 二进制 Uint8Array，置 `encoding = 'zlib'`，
+ *   blob 两表同时置 `byte_len = ` 物理字节长度（chat_message 无该列）。
+ *   存量 `byte_len` 写法三态混杂（base64 文本长度 / 二进制长度 /
+ *   二进制长度 −2），故一律重算。
  * - 可重入：中断（杀进程/预算耗尽）随时停，重启后谓词重扫续跑，已归一
  *   行天然排除。完成判定两态同 compaction：进行中（剩余 N 条，谓词
  *   COUNT）/ 已完成（谓词空 → 置 KKV 完成标记）。
- * - 无 schema 变更：三表 `encoding` CHECK 值域已含 `'zlib'`，读路径
+ * - 无 schema 变更：三表 encoding/CHECK 值域已含 `'zlib'`，读路径
  *   `decodeCompressedBytes` 三形态兼容是既有契约，存量行不转换也能读。
  * - **坏行不阻断收敛**：单行 base64 解码失败只跳过该行（行原样保留、
  *   不写库），其余行照常归一；本表仍照常置 KKV 完成标记，否则每次启动
@@ -74,7 +78,7 @@ const ZERO_PROGRESS_BATCH_LIMIT = 3;
 export const DEFAULT_BLOB_BINARY_SYNC_BUDGET_MS = 60_000;
 
 /**
- * 归一谓词（两表同形，逐字复用进 SELECT 的 WHERE 与 UPDATE 的 WHERE）。
+ * 归一谓词（两张 blob 表同形，逐字复用进 SELECT 的 WHERE 与 UPDATE 的 WHERE）。
  *
  * @remarks `TYPEOF(bytes) = 'text'` 覆盖「encoding='zlib' 但列里存的是
  * base64 文本」的历史脏形态；只看 encoding 会漏掉这批行。
@@ -82,11 +86,15 @@ export const DEFAULT_BLOB_BINARY_SYNC_BUDGET_MS = 60_000;
 const PREDICATE = `(encoding = 'zlib-b64' OR (encoding = 'zlib' AND TYPEOF(bytes) = 'text'))`;
 
 /**
- * 归一任务覆盖的表标识（与完成标记 key 一一对应，互不牵连）。
+ * chat_message 侧同形谓词（列名不同：content_encoding / content_blob）。
  *
- * @remarks `"messageContent"`（`chat_message` 表）由 **A2 波次**启用：A2
- * 追加该表适配器时只往 {@link TABLE_ADAPTERS} 加数据，不再改这个联合
- * 类型——先在这里占位以对齐 spec 契约。
+ * @remarks legacy 明文行（content_encoding IS NULL）天然不命中——那是
+ * message-content-compaction 任务的谓词范围，两任务互不越界。
+ */
+const MESSAGE_PREDICATE = `(content_encoding = 'zlib-b64' OR (content_encoding = 'zlib' AND TYPEOF(content_blob) = 'text'))`;
+
+/**
+ * 归一任务覆盖的表标识（与完成标记 key 一一对应，互不牵连）。
  */
 export type BlobBinaryTableId = "vfsContent" | "fileCache" | "messageContent";
 
@@ -96,10 +104,14 @@ interface BlobTableAdapter {
   readonly tableId: BlobBinaryTableId;
   /** 物理表名（错误文案与日志用）。 */
   readonly table: string;
-  /** 主键列名（本轮两表同为 content_hash）。 */
+  /** 主键列名（blob 两表为 content_hash，chat_message 为 id）。 */
   readonly primaryKeyColumn: string;
   /** 该表的 KKV 完成标记 key。 */
   readonly doneKey: string;
+  /** 该表的归一谓词（SELECT/UPDATE/COUNT 共用，保证三处同一口径）。 */
+  readonly predicate: string;
+  /** UPDATE 是否带 byte_len 参数（chat_message 无该列）。 */
+  readonly hasByteLen: boolean;
   /** 谓词批查询 SQL（只取主键 + encoding + bytes，按主键排序分批）。 */
   readonly selectSql: string;
   /** 逐行归一 UPDATE SQL（WHERE 带同一谓词保证并发幂等）。 */
@@ -109,9 +121,10 @@ interface BlobTableAdapter {
 /**
  * 注册表清单（数组驱动流程）。
  *
- * @remarks `chat_message` 适配器属 A2 波次（该表在
- * message-content-compression 分支上，合并后再追加），本轮只归一两表。
- * 两表均为 `WITHOUT ROWID`，故排序用主键列而非 rowid。
+ * @remarks 前两张为 `WITHOUT ROWID`，chat_message 为常规表——统一按主键列
+ * 排序分批（rowid 对前两张不存在，对第三张无必要），SELECT 用列别名把
+ * chat_message 的 content_encoding/content_blob 映射成统一的
+ * encoding/bytes 行形状，流程代码零分叉。
  */
 const TABLE_ADAPTERS: readonly BlobTableAdapter[] = [
   {
@@ -119,6 +132,8 @@ const TABLE_ADAPTERS: readonly BlobTableAdapter[] = [
     table: "vfs_content_blob",
     primaryKeyColumn: "content_hash",
     doneKey: "vfsContentDone",
+    predicate: PREDICATE,
+    hasByteLen: true,
     selectSql: `SELECT content_hash, encoding, bytes FROM vfs_content_blob
        WHERE ${PREDICATE}
        ORDER BY content_hash
@@ -132,6 +147,8 @@ const TABLE_ADAPTERS: readonly BlobTableAdapter[] = [
     table: "session_file_cache_blob",
     primaryKeyColumn: "content_hash",
     doneKey: "fileCacheDone",
+    predicate: PREDICATE,
+    hasByteLen: true,
     selectSql: `SELECT content_hash, encoding, bytes FROM session_file_cache_blob
        WHERE ${PREDICATE}
        ORDER BY content_hash
@@ -139,6 +156,21 @@ const TABLE_ADAPTERS: readonly BlobTableAdapter[] = [
     updateSql: `UPDATE session_file_cache_blob
        SET bytes = ?, encoding = '${VFS_CONTENT_ENCODING_ZLIB}', byte_len = ?
        WHERE content_hash = ? AND ${PREDICATE}`,
+  },
+  {
+    tableId: "messageContent",
+    table: "chat_message",
+    primaryKeyColumn: "id",
+    doneKey: "messageContentDone",
+    predicate: MESSAGE_PREDICATE,
+    hasByteLen: false,
+    selectSql: `SELECT id, content_encoding AS encoding, content_blob AS bytes FROM chat_message
+       WHERE ${MESSAGE_PREDICATE}
+       ORDER BY id
+       LIMIT ${BATCH_SIZE}`,
+    updateSql: `UPDATE chat_message
+       SET content_blob = ?, content_encoding = '${VFS_CONTENT_ENCODING_ZLIB}'
+       WHERE id = ? AND ${MESSAGE_PREDICATE}`,
   },
 ];
 
@@ -214,7 +246,7 @@ async function countPendingRows(
   adapter: BlobTableAdapter
 ): Promise<number> {
   const rows = await conn.query<{ n: number }>(
-    `SELECT COUNT(*) AS n FROM ${adapter.table} WHERE ${PREDICATE}`
+    `SELECT COUNT(*) AS n FROM ${adapter.table} WHERE ${adapter.predicate}`
   );
   return Number(rows[0]?.n ?? 0);
 }
@@ -337,13 +369,13 @@ async function normalizeTable(
       allKnownFailed = false;
 
       const result = await conn.transaction(async (tx) => {
-        // 单条短事务 UPDATE：置 bytes + encoding + byte_len（物理字节
-        // 长度）。条件带谓词防并发重复归一（changes=0 静默跳过）。
-        return await tx.execute(adapter.updateSql, [
-          compressed,
-          compressed.byteLength,
-          primaryKey,
-        ]);
+        // 单条短事务 UPDATE：置 bytes + encoding（blob 两表另有 byte_len =
+        // 物理字节长度；chat_message 无该列，两个占位）。条件带谓词防并发
+        // 重复归一（changes=0 静默跳过）。
+        const params: SqlValue[] = adapter.hasByteLen
+          ? [compressed, compressed.byteLength, primaryKey]
+          : [compressed, primaryKey];
+        return await tx.execute(adapter.updateSql, params);
       });
       // 只计实际落库的行走数：谓词命中但 changes=0 说明已被并发端搬走。
       if (result.changes > 0) {

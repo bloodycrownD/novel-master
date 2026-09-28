@@ -1507,9 +1507,8 @@ export type BackupImportResult = 'imported' | 'cancelled';
 /**
  * 存量 blob 形态归一覆盖的表标识全集。
  *
- * core 按适配器注册表回报状态，本波次只注册 vfsContent / fileCache；
- * messageContent 待 A2 波次（该表在 message-content-compression 分支上）
- * 合并后再纳入，故 renderer 侧缺席的那张按「未取到」展示。
+ * core 按适配器注册表回报状态（vfsContent / fileCache / messageContent
+ * 三张均已注册）；`tables` 缺席的表按「未取到」展示。
  */
 export type BlobBinaryTableIdDto = 'vfsContent' | 'fileCache' | 'messageContent';
 

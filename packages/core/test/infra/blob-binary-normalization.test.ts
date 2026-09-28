@@ -1,21 +1,23 @@
 /**
- * 存量 blob 行形态归一任务用例（T-BB4 ~ T-BB7 + 标记短路面）。
+ * 存量 blob 行形态归一任务用例（T-BB4 ~ T-BB7 + 标记短路面 + chat_message
+ * 适配器）。
  *
  * 归一口径见 spec「Part A 归一任务」：谓词 `encoding = 'zlib-b64' OR
  * (encoding = 'zlib' AND TYPEOF(bytes) = 'text')`，批 ≤100 行短事务，
  * 每表各自置 KKV 完成标记（两段式 nm-blob-binary / vfsContentDone /
- * fileCacheDone）。
+ * fileCacheDone / messageContentDone）。chat_message（A2 适配器）列名为
+ * content_encoding / content_blob、无 byte_len 列，legacy 明文行
+ * （content_encoding IS NULL）不命中谓词——那是 compaction 任务的谓词范围。
  *
- * 测试数据一律**直插 SQL 构造**（不依赖写侧 codec——同 wave 的
- * a1-core-codec 节点正在改写侧），并显式把 `byte_len` 写成三态混杂的
- * 历史形态，验证归一后一律重算为物理字节长度。
+ * 测试数据一律**直插 SQL 构造**（不依赖写侧 codec），并显式把 `byte_len`
+ * 写成三态混杂的历史形态，验证归一后一律重算为物理字节长度。
  *
- * 每个用例开头 {@link resetNormalizationState} 清两表谓词命中行 + 完成
+ * 每个用例开头 {@link resetNormalizationState} 清三表谓词命中行 + 完成
  * 标记：共享库上用例自管状态（口径照 message-content-compaction.test.ts
  * 的 clearDoneMarker），用例之间互不污染计数。
  *
- * base64 文本在测试内用 `Buffer` 现场编码，**不引** blob-bytes-codec 的
- * `bytesToBase64`——同 wave 的写侧节点会删掉该导出（生产端已无调用方）。
+ * base64 文本在测试内用 `Buffer` 现场编码，不引 blob-bytes-codec 的
+ * `bytesToBase64`（A1 已删该导出，生产端无调用方）。
  *
  * @module test/infra/blob-binary-normalization
  */
@@ -48,6 +50,9 @@ novelMasterTestFixture();
 /** 归一谓词（与实现同形，测试侧直查断言用）。 */
 const PREDICATE = `(encoding = 'zlib-b64' OR (encoding = 'zlib' AND TYPEOF(bytes) = 'text'))`;
 
+/** chat_message 侧同形谓词（列名不同）。 */
+const MESSAGE_PREDICATE = `(content_encoding = 'zlib-b64' OR (content_encoding = 'zlib' AND TYPEOF(content_blob) = 'text'))`;
+
 /** 本轮注册的两张 blob 表。 */
 type BlobTable = "vfs_content_blob" | "session_file_cache_blob";
 
@@ -63,6 +68,7 @@ async function resetNormalizationState(): Promise<void> {
   const c = conn();
   await c.execute(`DELETE FROM vfs_content_blob WHERE ${PREDICATE}`);
   await c.execute(`DELETE FROM session_file_cache_blob WHERE ${PREDICATE}`);
+  await c.execute(`DELETE FROM chat_message WHERE ${MESSAGE_PREDICATE}`);
   await c.execute("DELETE FROM session_file_cache_entry WHERE key LIKE 'bb-%'");
   await c.execute("DELETE FROM kkv_entry WHERE module = ?", [
     BLOB_BINARY_KKV_MODULE,
@@ -357,10 +363,19 @@ describe("存量 blob 形态归一任务（T-BB4 ~ T-BB7）", () => {
     await insertLegacyRow("vfs_content_blob", "bb-idem-2", corpus(2));
     await insertLegacyRow("session_file_cache_blob", "bb-idem-3", corpus(3));
 
-    // 未完成态采样：两表 pendingCount ≥ 1。
+    // 未完成态采样：两张 blob 表 pendingCount ≥ 1；chat_message 空表
+    // （谓词零命中）等价完成态。
     const before = await getBlobBinaryStatus(conn());
-    assert.equal(before.tables.length, 2);
+    assert.equal(before.tables.length, 3);
     for (const table of before.tables) {
+      if (table.table === "messageContent") {
+        assert.deepEqual(table, {
+          table: "messageContent",
+          done: true,
+          pendingCount: 0,
+        });
+        continue;
+      }
       assert.equal(table.done, false, `${table.table} 应处于进行中`);
       assert.ok(table.pendingCount >= 1, `${table.table} 剩余行 ≥ 1`);
     }
@@ -715,10 +730,12 @@ describe("存量 blob 形态归一任务（T-BB4 ~ T-BB7）", () => {
     assert.deepEqual(tables, [
       { table: "vfsContent", done: false, pendingCount: 1 },
       { table: "fileCache", done: true, pendingCount: 0 },
+      { table: "messageContent", done: true, pendingCount: 0 },
     ]);
     assert.equal(
       seen.filter(
-        (sql) => sql.includes("COUNT(*)") && sql.includes("session_file_cache_blob")
+        (sql) =>
+          sql.includes("COUNT(*)") && sql.includes("session_file_cache_blob")
       ).length,
       0,
       "已标记表不应下 COUNT"
@@ -727,5 +744,101 @@ describe("存量 blob 形态归一任务（T-BB4 ~ T-BB7）", () => {
       seen.some((sql) => sql.includes("COUNT(*)") && sql.includes("vfs_content_blob")),
       "未标记表仍走 COUNT"
     );
+  });
+
+  it("chat_message 适配器：zlib-b64 行转二进制、坏行跳过计数、legacy 明文行不动、独立完成标记", async () => {
+    await resetNormalizationState();
+    const ctx = getNovelMasterTestContext();
+    // 先建 project/session（chat_message 有 session 外键）。
+    const project = await ctx.projects.create(`P-bbmsg-${Date.now()}`);
+    const session = await ctx.sessions.create(project.id, `S-bbmsg-${Date.now()}`);
+    const sessionId = session.id;
+
+    // 一条好的 zlib-b64 存量行（RN 旧版形态：content_blob 存 base64 文本）。
+    const plain = corpus(101);
+    const compressed = compressZlib(new TextEncoder().encode(plain));
+    const b64 = Buffer.from(compressed).toString("base64");
+    const goodId = `bb-msg-good-${Date.now()}`;
+    await conn().execute(
+      `INSERT INTO chat_message (id, session_id, seq, role, content_json, content_encoding, content_blob, created_at_ms, hidden)
+       VALUES (?, ?, 1, 'assistant', '', 'zlib-b64', ?, 1, 0)`,
+      [goodId, sessionId, b64]
+    );
+    // 一条坏的 zlib-b64 行（base64 非法，解码必失败）。
+    const badId = `bb-msg-bad-${Date.now()}`;
+    await conn().execute(
+      `INSERT INTO chat_message (id, session_id, seq, role, content_json, content_encoding, content_blob, created_at_ms, hidden)
+       VALUES (?, ?, 2, 'assistant', '', 'zlib-b64', ?, 2, 0)`,
+      [badId, sessionId, "not-base64!!"]
+    );
+    // 一条 legacy 明文行（content_encoding IS NULL）——不在本任务谓词内，
+    // 由 message-content-compaction 任务负责，本任务不得触碰。
+    const legacyId = `bb-msg-legacy-${Date.now()}`;
+    const legacyJson = JSON.stringify({ blocks: [{ type: "text", text: "legacy 明文" }] });
+    await conn().execute(
+      `INSERT INTO chat_message (id, session_id, seq, role, content_json, created_at_ms, hidden)
+       VALUES (?, ?, 3, 'user', ?, 3, 0)`,
+      [legacyId, sessionId, legacyJson]
+    );
+
+    const result = await runBlobBinaryNormalization(conn());
+    assert.equal(result.done, true);
+    assert.equal(result.normalizedCount, 1, "只有好的 b64 行被归一");
+    assert.equal(result.failedCount, 1, "坏行跳过并计数");
+
+    // 好行形态：encoding=zlib、TYPEOF(content_blob)=blob，且读回明文一致。
+    const good = await conn().query<{
+      content_encoding: string;
+      typeOf: string;
+    }>(
+      `SELECT content_encoding, TYPEOF(content_blob) AS typeOf FROM chat_message WHERE id = ?`,
+      [goodId]
+    );
+    assert.equal(good[0]!.content_encoding, "zlib");
+    assert.equal(String(good[0]!.typeOf), "blob");
+    const readBack = await conn().query<{ content_blob: SqlValue }>(
+      `SELECT content_blob FROM chat_message WHERE id = ?`,
+      [goodId]
+    );
+    const decoded = new TextDecoder().decode(
+      decompressZlib(readBack[0]!.content_blob as Uint8Array)
+    );
+    assert.equal(decoded, plain, "归一后逐字节一致");
+
+    // 坏行原样保留；legacy 明文行一字未动（compaction 的谓词范围）。
+    const bad = await conn().query<{
+      content_encoding: string;
+      content_blob: string;
+    }>(
+      `SELECT content_encoding, CAST(content_blob AS TEXT) AS content_blob FROM chat_message WHERE id = ?`,
+      [badId]
+    );
+    assert.equal(bad[0]!.content_encoding, "zlib-b64");
+    assert.equal(bad[0]!.content_blob, "not-base64!!");
+    const legacy = await conn().query<{
+      content_json: string;
+      content_encoding: string | null;
+    }>(
+      `SELECT content_json, content_encoding FROM chat_message WHERE id = ?`,
+      [legacyId]
+    );
+    assert.equal(legacy[0]!.content_json, legacyJson, "legacy 明文行不得被触碰");
+    assert.equal(legacy[0]!.content_encoding, null);
+
+    // 独立完成标记 + 状态行（含坏行仍置标记：不阻断收敛）。
+    assert.ok(
+      await new SqliteKkvRepository(conn()).get(
+        BLOB_BINARY_KKV_MODULE,
+        "messageContentDone"
+      ),
+      "chat_message 完成标记已置"
+    );
+    const status = await getBlobBinaryStatus(conn());
+    const messageStatus = status.tables.find((t) => t.table === "messageContent");
+    assert.deepEqual(messageStatus, {
+      table: "messageContent",
+      done: true,
+      pendingCount: 0,
+    });
   });
 });

@@ -2,16 +2,15 @@
  * chat 侧消息正文 blob 编解码薄封装：`content_json` 明文 ↔
  * `content_blob`/`content_encoding` 写库字段。
  *
- * 压缩 / base64 / 字节收整（tightBytes、decodeCompressedBytes 等）全部
- * 复用 vfs ContentStore 侧共享模块（zlib-codec / blob-bytes-codec），
- * 平台分支与存量兼容口径对齐 file-cache-blob-codec 先例，不另起实现。
+ * 压缩 / 字节收整（tightBytes、decodeCompressedBytes 等）复用 vfs
+ * ContentStore 侧共享模块（zlib-codec），不另起实现。写侧自 A2
+ * （blob-binary-normalization 迭代）起**三端一律二进制 `zlib` BLOB**——
+ * RN op-sqlite 的 BLOB 绑参已真机验证可用，旧 `zlib-b64` 文本形态只
+ * 保留在读路径三形态兼容与归一任务的谓词里（存量行由归一任务搬运）。
  *
  * @module domain/chat/logic/message-content-codec
  */
 
-import {
-  VFS_CONTENT_ENCODING_ZLIB_B64,
-} from "@/domain/vfs/content-store/logic/blob-bytes-codec.js";
 import {
   compressZlib,
   decodeCompressedBytes,
@@ -21,67 +20,26 @@ import {
 } from "@/domain/vfs/content-store/logic/zlib-codec.js";
 import { chatInvalidArgument } from "@/errors/chat-errors.js";
 
-/**
- * 将字节序列编码为 base64 字符串（对齐 sksp-android：纯 JS btoa）。
- *
- * 合并搬迁注记：原与 base64ToBytes/isReactNativeRuntime 同住
- * blob-bytes-codec；blob-binary-normalization（A1）把 VFS/file_cache 写侧
- * 切二进制后删掉了这两个写侧帮手，消息侧（A2 前）仍走 zlib-b64，故内联
- * 为本模块私有。
- */
-function bytesToBase64(bytes: Uint8Array): string {
-  let binary = "";
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i]!);
-  }
-  return btoa(binary);
-}
-
-/**
- * 探测当前运行时是否为 React Native（不依赖 RN Platform）。
- *
- * @remarks 与 llm-sse-transport 一致：看 `navigator.product === "ReactNative"`。
- */
-function isReactNativeRuntime(): boolean {
-  return (
-    (globalThis as { navigator?: { product?: string } }).navigator?.product ===
-    "ReactNative"
-  );
-}
-
 /** {@link encodeMessageContent} 产物：写 chat_message 压缩两列所需字段。 */
 export interface EncodedMessageContent {
-  /** `zlib`（Node/Desktop/CLI）或 `zlib-b64`（RN，规避 op-sqlite BLOB 绑参）。 */
+  /** 恒 `zlib`（三端统一二进制；`zlib-b64` 仅是读侧兼容的存量形态）。 */
   readonly encoding: string;
-  /** 压缩字节（zlib）或 base64 文本（zlib-b64）。 */
-  readonly blob: Uint8Array | string;
+  /** 压缩字节。 */
+  readonly blob: Uint8Array;
 }
 
 /**
  * 将 content blocks JSON 明文编码为压缩两列写库字段。
  *
- * 平台分支照 file-cache-blob-codec / SqliteVfsContentStore 先例：RN 走
- * zlib-b64（fflate 压缩 + 纯 JS base64，规避 BLOB 绑参缺口，+33% 膨胀
- * 计入 mobile 压缩比预期）；Node 走 zlib 二进制 Uint8Array。压缩级别
+ * 无平台分支：RN 与 Node 同一形态（二进制 Uint8Array + `zlib`）。压缩级别
  * 沿用 fflate 默认 level 6（全仓先例一致）。
  *
  * @param json content blocks 的 JSON 明文（恒非空串——blocks JSON 不会是 ''）。
- * @param forceZlibB64 单测注入点：强制落 `zlib-b64`（RN 形态）或 `zlib`
- *   （Node 形态）；缺省按 {@link isReactNativeRuntime} 运行时探测。
- *   repository 调用点不传，仅测试直调。
  */
 export function encodeMessageContent(
-  json: string,
-  forceZlibB64?: boolean
+  json: string
 ): EncodedMessageContent {
   const compressed = compressZlib(new TextEncoder().encode(json));
-
-  if (forceZlibB64 ?? isReactNativeRuntime()) {
-    // Hermes/RN：zlib 后再 base64，以 TEXT 写入 content_blob 列。
-    const b64 = bytesToBase64(compressed);
-    return { encoding: VFS_CONTENT_ENCODING_ZLIB_B64, blob: b64 };
-  }
-
   return {
     encoding: VFS_CONTENT_ENCODING_ZLIB,
     blob: tightBytes(compressed),
