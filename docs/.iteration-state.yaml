@@ -98,7 +98,7 @@ discipline:
   - 子代理一律禁止 git 写（不 add/commit/stash/checkout/revert）；主代理按节点分组统一提交
   - 子代理只跑定向测试与 typecheck，不跑全量套件（全量在 verify 波次单节点顺序跑，避免并发负载抖动）
   - 同文件禁止并行 impl；本 DAG 的 wave-0 两节点文件集互不重叠
-manual_pending: "合并后真机（荣耀 EBG-AN00）验收：三表形态直查 / 逐条解压校验 / 库体积 / 二次启动零重扫（spec Step 6）"
+manual_pending: "A1 真机验收（spec Step 6）已准备到「只差安装」：① 包已出——内嵌 bundle 的 debug 包（versionCode 1316 与手机已装版对齐，便于来回替换），落在 apps/mobile/android/app/build/outputs/apk/debug/app-debug.apk，并已推到设备 /data/local/tmp/nm-a1.apk 与 /sdcard/Download/nm-a1-debase64.apk；② 库已备份——databases/novel_master_vfs.pre-debase64-test.bak（79,020,032 字节，force-stop 后整库 cp，现场无 wal/shm）；③ **卡点：荣耀 EBG-AN00 对 PC 工具来源的安装一律弹华为 coauth 锁屏密码门（`adb install` / `pm install` 都拦，与是否已解锁无关），agent 过不去 → 需用户在手机上输密码，或改用「本地文件安装」（点 Download 里那个包）**。装好后按 spec Step 6 走：三表形态直查 / 逐条解压校验 / 库体积 / 二次启动零重扫。⚠️ 两个必须知道的点：a) 本分支不含 message-content-compression，装上后**聊天正文会读成空**（该库 content_json='' 而正文在 content_blob）——验收只覆盖 VFS/file_cache 与存储页状态行；b) 测完要还原：`run-as cp` 回备份 + 装回 mcdev 包（.worktree/f-message-content-compression 内的 app-debug.apk 仍在，注意该包依赖 Metro 才能启动）。"
 
 # === 归档：上一轮 stream-metrics-native 增量 CR fix-spec 执行（dev-ready: yes） ===
 # 完整 Bundle 见 git 历史：git log -p docs/.iteration-state.yaml

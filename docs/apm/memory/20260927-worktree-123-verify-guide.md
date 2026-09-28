@@ -1,5 +1,5 @@
 ---
-date: 2026-09-28 09:05
+date: 2026-09-28 09:52
 title: ① 消息正文压缩分支真机实测全绿 + 后续两件（去 base64 / VFS 打包）SPEC 定稿 + **Part A1（VFS/file_cache 去 base64）经 code-dev-loop 跑完 dev-ready**——含收益口径修正「VFS delta 82.6% 实为 61.3%」
 keywords: worktree, message-content-compression, SCHEMA_BOOT_VERSION 撞号, 谓词驱动搬运, 真机测试, subst 短路径, base64 历史包袱, op-sqlite BLOB 真机验证通过, Hermes 无 WebAssembly, 收益口径修正 61.3%, 内容哈希去重计数, fflate 字典 32KB 窗口, byte_len 三态混杂, binary-blob-and-vfs-pack spec, code-dev-loop, runBlobBinaryNormalization, nm-blob-binary, BlobBinaryRunResult stalled, 零进展护栏, cr-func 判 no 与 fix, dev-ready, AsyncMutex 重入死锁, MCP 会话握手
 abstract: ① 压缩分支（feat/message-content-compression）真机实测**全绿**（BOOT_VERSION 顺延 17 + ALIGN 补列、5350 条全量搬运、逐条字节校验零差异、库 111.1MB→79.0MB、二次启动零重扫）；**真机 BLOB 验证 6 项全 PASS → base64 可去**（+33%）。压缩率归因（84.6% 中文、英文对照 6.01:1 vs 中文 2.61:1、tool_result 占 60.9%）与算法横评（逐条最多 +12%；整块 7.7~9.4:1 全来自长程重复；**Hermes 无 WebAssembly** + 纯 TS zstdify 崩 → 移动端算法杠杆关闭）。**2026-09-28 复测修正**：旧记「VFS delta 省 10.7MB / 82.6%」把被多版本共享的 blob 按 revision 行重复计数，按 `content_hash` 去重后真实为 **6.080MB → 3.020MB（省 3.06MB / 61.3%）**；同批复测：消息去 base64 省 10.864MB、VFS 省 2.366MB、file_cache 省 0.06MB，**Part A 合计省 13.30MB（79.0→约 65.7MB）**。已**生成 SPEC `docs/Iterations/binary-blob-and-vfs-pack/spec.md`（Part A 去 base64 立即做；Part B VFS 内容打包收益仅 3.06MB、改动面覆盖 VFS 主力读写，待用户拍板）**，并实测否决了字典链（2.945MB，引入跨行依赖）、diff delta（无实现无增量证据）、大词典（fflate 只对末尾 32KB 生效）。另发现 `vfs_content_blob.byte_len` 写法三态混杂（859/71/97 行三种口径）需一并归一。
@@ -191,3 +191,17 @@ assistant:
 【产物与基线】新增 core 任务 `runBlobBinaryNormalization`（表适配器注册表 + 谓词分批 + 单行短事务 + KKV `nm-blob-binary` 每表完成标记 + 收尾维护去重 `runStartupMaintenanceOnce`）与 `getBlobBinaryStatus`；三端各自调度（mobile 仅 agent 守卫、desktop 三守卫、cli 内联）；双端存储页三行状态（未注册表显示 `—` 占位）。**baseline 已写进 `docs/.iteration-state.yaml` 的 `known_baselines`**（core 2 条时区红 / mobile 1 条 mermaid 红 / desktop renderer 349 条既有债），后续 wave 别把这三样当回归。CHANGELOG 已加 `[Unreleased]` 条目；RULE 两条纪律（体积收益按内容哈希去重统计、数据搬运走谓词任务）随本轮提交。
 
 【留给用户的三个决定】① `feat/message-content-compression` 何时合并（合并后我做 A2：message 写侧切换 + chat_message 适配器）；② Part B（VFS 内容打包，3.06MB）做不做；③ A1 真机验收（spec Step 6 / manual_user）：升级安装后查两表形态与库体积、二次启动零重扫。
+
+user:
+记得真机测试
+
+assistant:
+（A1 真机验收：包与备份都就位了，**卡在华为安装密码门**）
+
+【已就位（下次继续不用重做）】① **出包**：用 RULE 的「内嵌 bundle」配方从主仓出 debug 包（临时给 `MainApplication.kt` 的 `getDefaultReactHost(` 加 `useDevSupport = false` → `build:webview:native` → `react-native bundle --dev true` → gradle，**finally 里还原 Kotlin 文件**）；versionCode 对齐手机已装的 **1316** 便于来回替换安装；产物 214,513,653 字节，已确认包内含 `assets/index.android.bundle`（= 可脱离 Metro 独立启动）。② **库已备份**：`am force-stop` 后 `run-as cp` 整库 → `databases/novel_master_vfs.pre-debase64-test.bak`（79,020,032 字节，与主库同尺寸；现场无 wal/shm 说明上次退出已 checkpoint）。③ APK 已推到设备 `/data/local/tmp/nm-a1.apk` 与 `/sdcard/Download/nm-a1-debase64.apk`（本地也留了一份构建产物）。
+
+【卡点（agent 过不去，必须用户在场）】荣耀 EBG-AN00 对**任何 PC 工具来源的安装**都弹华为 coauth「请输入锁屏密码继续安装」（只有「取消」可选）：`adb install` 与 `adb shell pm install` 都拦、**与屏幕是否已解锁无关**（实测 `dumpsys trust` 里 deviceLocked=0 也照样弹）。两条可行路：① 用户在手机上输密码；② 改用**本地文件安装**——点 `/sdcard/Download/nm-a1-debase64.apk`（走未知来源授权，不走 PC 工具门）。诊断手法：对话框会置 FLAG_SECURE → `screencap` 返回 **0 字节空图**（不是 adb 坏了，也不是屏幕关了）；此时用 `uiautomator dump` + 解析 XML 拿文字与 bounds 最稳（我写了个 `tmp/dump-ui.mjs`，把 dump 的 XML 打成「文字 | 坐标 | 类名 | 可点」清单，点击坐标直接从 bounds 中点取）。另一个误判点：214MB debug 包的 `adb install` 会长时间无输出（设备侧 dexopt/解压，`top` 里能看到 `com.android.packageinstaller` 吃 44% CPU），而链路其实飞快（`adb push` 实测 69–71MB/s、20MB 探针 0.02s）——**别 kill，等**。
+
+【验收前置注意 + 收尾清单】① 本分支**不含** message-content-compression：装上后该库 `chat_message` 的 `content_json` 全是空串、正文在 `content_blob`，主仓代码会把**聊天正文读成空**——A1 验收只覆盖 VFS/file_cache（文件树可读、存储页状态行）与库体积，别去开会话自找困惑。② 测完必须还原：`run-as cp` 回 `pre-debase64-test.bak` + 装回 mcdev 包（`.worktree/f-message-content-compression` 内的 `app-debug.apk` 仍在，注意那个包**依赖 Metro** 才能启动）。③ 顺手记：设备 `/data/local/tmp` 里堆着 2GB+ 历史测试 APK（nm-1211~1220 等，不是本轮的），要清可以一起清。
+
+【本轮其他实锤（已进 RULE）】PowerShell 5.1 读 .ps1 按 ANSI 解码：**中文注释会把下一行代码吞掉**（第一次出包就栽在这——`Set-Location` 被吃掉，npm 在仓根跑导致「Missing script」）；`.ps1` 一律 ASCII-only 用 `-File` 跑。`-PversionName=1.5.25-debase64` 这类带点号的参数经 PowerShell 传给 native 命令会被拆坏（报 `Task '.5.25-debase64' not found`）→ 出包改成 `cmd /c "cd /d <android> && gradlew.bat ..."` 的 RULE 原配方。
