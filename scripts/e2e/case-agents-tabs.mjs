@@ -51,14 +51,18 @@ try {
   await shot(page, "652", "agents-general-readonly");
   const ro = await page.evaluate(() => {
     const text = document.querySelector(".settings-view")?.textContent ?? "";
+    // desktop 形态：保存按钮保留渲染但禁用（文本仍是「保存」）；按钮不存在（mobile 式无保存栏）亦通过。
+    const saveBtn = [...document.querySelectorAll(".settings-view button")].find(
+      (b) => b.textContent?.trim() === "保存",
+    );
     return {
       builtinNotice: text.includes("内置智能体"),
-      noSave: ![...document.querySelectorAll(".settings-view button")].some((b) => b.textContent?.trim() === "保存"),
+      saveDisabled: !saveBtn || saveBtn.disabled === true,
     };
   });
   console.log("READONLY_STATE", JSON.stringify(ro));
-  if (!ro.builtinNotice || !ro.noSave) {
-    throw new Error("general 只读分支缺失：内置说明或保存按钮异常");
+  if (!ro.builtinNotice || !ro.saveDisabled) {
+    throw new Error("general 只读分支缺失：内置说明缺失或保存按钮未禁用");
   }
 
   await page.click('button[aria-label="关闭设置"]').catch(() => page.keyboard.press("Escape"));
