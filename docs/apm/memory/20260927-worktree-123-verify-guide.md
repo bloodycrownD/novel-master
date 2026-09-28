@@ -353,3 +353,13 @@ user:
 
 assistant:
 （v1.5.25 确认 + 发版前置崩溃的完整根因定位——**「Got unexpected undefined」= nullthrows(undefined)，根因链**：① bundle 里的 nullthrows polyfill（if(null!=t)…'Got unexpected '+t）抛出；② logcat Abort message 含完整 minified JS 栈（logcat -d 全量缓冲里挖，*:E 只有第一行）；③ 栈链 = reanimated 的 STYLE_PROPERTIES_CONFIG 模块（bundle 模块号 594，特征串 camelizeKebabCase/convertPropertiesToArrays/[Reanimated] Max process depth）require 期 → get UIManager@ReactNativePrivateInterface → UIManager.js → BridgelessUIManager；④ **BridgelessUIManager.js 编译后在模块顶层捕获 global.RN$LegacyInterop_UIManager_getConstants 的值**（var f=g.RN$…），而该全局由 native 侧 ReactInstance.kt:221 的 UIConstantsProviderBinding.install 经 unbufferedRuntimeExecutor **异步排队**安装且受 feature flag useNativeViewConfigsInBridgelessMode 门控；⑤ **内嵌 bundle 执行快于 install 排队任务 → 顶层捕获 undefined 且闭包永不重读 → reanimated 触发 nullthrows(undefined) 启动崩**。Metro dev 模式因网络拉包延迟天然躲过——这解释了 dev 全绿/生产崩的分裂。**关键物证**：MainApplication.kt 原代码不传 useDevSupport（默认=BuildConfig.DEBUG），出包脚本是「debug 壳 + 强关 useDevSupport + 内嵌生产 bundle」的杂交形态；**1.5.24 的 CI 真 release 包（同 RN 0.85.3 + reanimated）一直正常启动**——推断崩溃是本地验证配方特有时序，CI release 形态大概率无恙。**验证路径**：本地出真 release 变体（assembleRelease + android.injected.signing.* 注入 debug keystore，versionCode 1318 / 1.5.25-rc2）真机启动验证——通过即可放行发版。排查工具留存：tmp/search-bundle.mjs（bundle 字节码搜字符串）、tmp/extract-mods.mjs（按模块号提取 __d 函数体）。）
+
+user:
+（发布推送后）清理 worktree 和开发分支。（随后追问）.novel-master / .vscode / tmp 这些是不是都没什么用？可以删除吗？
+
+assistant:
+（v1.5.25 发布完成：merge ff（80 文件 +11821/−570）→ 版本三件套 bump（package.json ×2 字符串替换 + build.gradle GBK 字节级，diff 全 1 1）→ CHANGELOG [1.5.25] - 2026-09-28 → tag v1.5.25 + push tag（触发 Release #109）+ push main（fe874b46）。发版前置崩溃已闭环：真 release 构建验证包（assembleRelease + debug keystore 注入 absolute path——相对路径会被 gradle 解析到 daemon 目录）真机启动正常，用户确认后发布。）
+
+【清理执行】worktree：.worktree/f-message-content-compression 删除（--force 撞 Filename too long 老坑 → robocopy 空目录 /MIR 兜底 + prune；其内未提交的 BOOT 17 已在 main、1316 mcdev APK 过时）；分支 ×4 删（feat/message-content-compression、feat/blob-binary-normalization、integration/binary-storage、iteration-docs-20260924——全部 merge-base --is-ancestor main 验证后 -d）；保留 archive/stash-* ×5、test/desk-e2e-maintenance；subst 无挂载。设备 scratch：nm-1525-rc*.apk 待设备重连删（掉线中）。
+
+【目录清理答复】.novel-master = CLI 运行时残留（config 会话指针 + 5 月测试库 + 旧日志）已删；.vscode = git 跟踪的仓库文件（pendant 编辑器设置）不删；tmp 708MB → 0.1MB：删 nm-real.db + device-db-* 取证副本 ×6（发布闭环使命完成）+ 构建日志 + 一次性排查脚本（find-*×8、parse-ui 等），保留 Part B 测量组（vfs-pack-measure*/dict-* + out.txt，待办优化要用）、崩溃排查工具（search-bundle.mjs 按 bundle 字节码搜字符串 / extract-mods.mjs 按模块号提取 __d 体）、真 release 出包配方 build-rc2.ps1、取证工具（verify-device-db/dump-ui/uidump/p0-watch/dbinspect/cap.bat/mcp-search.ps1）。build-rc.log 句柄占用未删（重启后可清）。Metro 后台进程已随验证结束退出。
