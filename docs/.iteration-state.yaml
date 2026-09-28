@@ -4,6 +4,7 @@ prd_path: null   # 需求为用户口述（2026-09-28），来源与约束见 sp
 branch: feat/blob-binary-normalization
 base_sha: 02d2fcc9
 head_sha: 78bf9ab2
+head_sha_note: "head_sha = 最后一次实质改动提交（fix2）；其后的落盘提交只改文档，真实 HEAD 以 `git log -1` 为准"
 dag_version: 3
 reorchestration_note: "wave-2 cr-func（func-ready: yes）提 7 条 must-fix + 6 条 deviations；M1（坏行抛穿整轮）为真实健壮性缺陷 → 插入 a1-fix-core 与三个 app 接线节点同 wave 并行（文件集不重叠），合并原 wave-3/4 为 wave-3，verify 与 cr-func 顺延为 wave-4/5（dag_version 1→2）；wave-5 cr-func 判 no（收尾 VACUUM 未容错会打死 CLI、零进展护栏漏不满批 + app 层 sleep(0) 放大成热循环）→ 插入 a1-fix2，verify/cr-func 再顺延为 wave-6/7（dag_version 2→3），两节点同 wave 并行复核"
 known_baselines:
