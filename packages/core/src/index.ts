@@ -96,8 +96,6 @@ export {
   DEFAULT_COMPACTION_SYNC_BUDGET_MS,
   getBlobBinaryStatus,
   getMessageCompactionStatus,
-  MESSAGE_COMPACTION_KKV_KEY,
-  MESSAGE_COMPACTION_KKV_MODULE,
   runBlobBinaryNormalization,
   runMessageContentCompaction,
   runStartupMaintenanceOnce,

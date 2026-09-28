@@ -67,15 +67,27 @@ async function newSession(): Promise<{
   return { sessionId: session.id, repo: new SqliteMessageRepository(ctx.conn) };
 }
 
-/** 直查某行的压缩两列原始形态。 */
+/**
+ * 直查某行的压缩两列原始形态。
+ *
+ * ic-28②：contentJson 严格区分 ''（已压缩行——明文迁出置空串）与
+ * null（legacy 行——两列皆 NULL 的明文形态），不做 `?? ""` 归一——
+ * 「压缩后 content_json 应为空串而非 NULL」的契约靠 isNull === false
+ * 与严格空串断言锁住。
+ */
 async function rawCompressionColumns(
   id: string
-): Promise<{ encoding: string | null; blob: Uint8Array | string | null; contentJson: string }> {
+): Promise<{
+  encoding: string | null;
+  blob: Uint8Array | string | null;
+  contentJson: string | null;
+  isNull: boolean;
+}> {
   const ctx = getNovelMasterTestContext();
   const rows = await ctx.conn.query<{
     content_encoding: string | null;
     content_blob: unknown;
-    content_json: string;
+    content_json: string | null;
   }>(
     "SELECT content_encoding, content_blob, content_json FROM chat_message WHERE id = ?",
     [id]
@@ -89,7 +101,8 @@ async function rawCompressionColumns(
         : row.content_blob instanceof Uint8Array
           ? row.content_blob
           : String(row.content_blob),
-    contentJson: String(row.content_json ?? ""),
+    contentJson: row.content_json == null ? null : String(row.content_json),
+    isNull: row.content_json == null,
   };
 }
 
@@ -103,11 +116,13 @@ describe("消息正文压缩存储 codec（T-C1 ~ T-C5、T-C12）", () => {
     const message = makeMessage({ sessionId, seq: 1, role: "user", content, createdAtMs: 1 });
     await repo.insert(message);
 
-    // SQL 层读出为压缩形态：encoding=zlib、blob 为二进制 BLOB、明文列空串。
+    // SQL 层读出为压缩形态：encoding=zlib、blob 为二进制 BLOB、明文列空串
+    // （ic-28②：严格空串断言 + isNull === false，区分 NULL 行）。
     const raw = await rawCompressionColumns(message.id);
     assert.equal(raw.encoding, "zlib");
     assert.ok(raw.blob instanceof Uint8Array, "content_blob 应为二进制形态");
     assert.equal(raw.contentJson, "");
+    assert.equal(raw.isNull, false, "压缩行明文列应为空串而非 NULL");
     // zlib 二进制不是合法 UTF-8 明文（粗防退化为明文存储）。
     assert.notEqual(new TextDecoder().decode(raw.blob as Uint8Array), JSON.stringify(content));
 
@@ -150,10 +165,31 @@ describe("消息正文压缩存储 codec（T-C1 ~ T-C5、T-C12）", () => {
     const raw = await rawCompressionColumns(message.id);
     assert.equal(raw.encoding, "zlib-b64");
     assert.equal(typeof raw.blob, "string");
+    assert.equal(raw.contentJson, "");
+    assert.equal(raw.isNull, false);
 
     const read = await repo.findById(message.id);
     assert.ok(read);
     assert.deepEqual(read!.content, content);
+
+    // 第三形态（ic-24，A2 真机脏形态）：content_encoding='zlib' 但
+    // content_blob 存的是 base64 文本——归一谓词第二 disjunct
+    // （TYPEOF(content_blob) = 'text'）专为它存在。手工 UPDATE 造脏行，
+    // repo.findById 读回与原文等价（标题「三形态兼容」的最后一块拼图）。
+    await ctx.conn.execute(
+      `UPDATE chat_message SET content_json = '', content_encoding = 'zlib', content_blob = ? WHERE id = ?`,
+      [b64, message.id]
+    );
+
+    const rawZlibText = await rawCompressionColumns(message.id);
+    assert.equal(rawZlibText.encoding, "zlib");
+    assert.equal(typeof rawZlibText.blob, "string", "脏形态：blob 为 base64 文本");
+    assert.equal(rawZlibText.contentJson, "");
+    assert.equal(rawZlibText.isNull, false);
+
+    const readZlibText = await repo.findById(message.id);
+    assert.ok(readZlibText);
+    assert.deepEqual(readZlibText!.content, content);
   });
 
   it("T-C3：混存自愈——legacy 明文行与压缩行并存，list/get 均正确还原", async () => {
@@ -184,6 +220,14 @@ describe("消息正文压缩存储 codec（T-C1 ~ T-C5、T-C12）", () => {
     assert.equal(list.length, 2);
     assert.deepEqual(list[0]!.content, textBlocks("压缩形态消息"));
     assert.deepEqual(list[1]!.content, textBlocks("legacy 明文形态消息"));
+
+    // ic-28②：legacy 明文行的 content_json 是明文 JSON 文本（非 NULL 非
+    // 空串）——与压缩行的严格空串形态互斥，两形态靠 isNull / 空串区分。
+    const rawLegacy = await rawCompressionColumns(legacyId);
+    assert.equal(rawLegacy.encoding, null);
+    assert.equal(rawLegacy.blob, null);
+    assert.notEqual(rawLegacy.contentJson, null);
+    assert.equal(rawLegacy.isNull, false);
 
     const got = await repo.findById(legacyId);
     assert.ok(got);
@@ -251,6 +295,7 @@ describe("消息正文压缩存储 codec（T-C1 ~ T-C5、T-C12）", () => {
     assert.equal(raw.encoding, "zlib");
     assert.ok(raw.blob instanceof Uint8Array);
     assert.equal(raw.contentJson, "");
+    assert.equal(raw.isNull, false, "压缩行明文列应为空串而非 NULL");
     const plain = new TextDecoder().decode(decompressZlib(raw.blob as Uint8Array));
     assert.equal(plain, JSON.stringify(edited));
 
