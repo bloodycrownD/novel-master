@@ -27,7 +27,7 @@ export async function getDbMaintenanceStats(): Promise<{
   fileBytes: number;
   reclaimableBytes: number;
   blobBinary: BlobBinaryStatusDto;
-  messageCompaction: MessageCompactionStatusDto;
+  messageCompaction: MessageCompactionStatusDto | null;
 }> {
   // 先确保 runtime/库文件就绪再 stat：并行赛跑会在冷启动（库尚未
   // bootstrap 落盘）时拿到 ENOENT。
@@ -51,11 +51,13 @@ export async function getDbMaintenanceStats(): Promise<{
  * 采样消息正文压缩搬运状态（存储页状态行）。
  *
  * 与 {@link sampleBlobBinaryStatus} 同口径：附属信息采样失败不拖垮
- * db/stats 主统计，吞掉异常按「未取到」展示。
+ * db/stats 主统计，吞掉异常按「未取到」展示——返回 `null`（ic-04），
+ * renderer 侧 null 分支显示占位 '—'；不再用 `{done:false,pendingCount:0}`
+ * 假数据（会被渲染成不真的「进行中（剩余 0 条）」）。
  */
 async function sampleMessageCompactionStatus(
   conn: Parameters<typeof getMessageCompactionStatus>[0],
-): Promise<MessageCompactionStatusDto> {
+): Promise<MessageCompactionStatusDto | null> {
   try {
     return await getMessageCompactionStatus(conn);
   } catch (err) {
@@ -63,7 +65,7 @@ async function sampleMessageCompactionStatus(
       "[desktop] 采样消息压缩状态失败：",
       err instanceof Error ? err.message : err,
     );
-    return { done: false, pendingCount: 0 };
+    return null;
   }
 }
 

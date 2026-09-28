@@ -22,6 +22,10 @@ import {
 import { clearDesktopRuntimeHandle } from "../runtime/desktop-runtime-singleton.js";
 import { resolveDbPath } from "../runtime/resolve-db-path.js";
 import { isDesktopAgentActive } from "../runtime/agent-activity.js";
+import {
+  acquireDesktopDbMaintenanceBusy,
+  releaseDesktopDbMaintenanceBusy,
+} from "./db-maintenance-busy.js";
 import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
 
 /** Close live DB only after dropping the runtime handle (avoids stale conn use). */
@@ -59,87 +63,113 @@ async function openDbForProviderRestore(): Promise<TdbcConnection> {
 /**
  * 将数据库导出到指定路径（checkpoint → 拷贝 → 清除服务商三表），无文件对话框。
  * 调用方负责 Agent 守卫与目标路径管理。
+ *
+ * ic-20：busy 为计数/令牌配对——底层入口 acquire、出口 finally release
+ * 自平衡（云同步等直接调底层的路径「期间 true、结束后 false」天然成立）；
+ * 最外层流程（备份导入 / 云同步 pull）另持一枚令牌、在 rebootstrap 完成
+ * 之后 release，含重建窗口的完整互斥。计数语义下嵌套调用互不提前清位。
  */
 export async function exportDatabaseBackupToPath(
   runtime: DesktopNovelMasterRuntime,
   destPath: string,
 ): Promise<void> {
-  await checkpointDesktopDatabase(runtime.conn);
-  const dbPath = resolveDbPath();
-  await copyFile(dbPath, destPath);
-  await scrubProviderTablesInDatabase(
-    runtime.conn,
-    destPath,
-    EXPORT_ATTACH_ALIAS,
-  );
+  acquireDesktopDbMaintenanceBusy();
+  try {
+    await checkpointDesktopDatabase(runtime.conn);
+    const dbPath = resolveDbPath();
+    await copyFile(dbPath, destPath);
+    await scrubProviderTablesInDatabase(
+      runtime.conn,
+      destPath,
+      EXPORT_ATTACH_ALIAS,
+    );
+  } finally {
+    releaseDesktopDbMaintenanceBusy();
+  }
 }
 
 /**
  * 从本地快照文件导入数据库（dump → close → cp 替换 → restore），无对话框与 rebootstrap。
  * 调用方须在成功后执行 rebootstrap。
+ *
+ * ic-20：busy 为计数/令牌配对——底层 acquire/release 自平衡，覆盖「关连接
+ * + 覆盖库文件」窗口；最外层流程在 rebootstrap 完成之后 release（见
+ * backup.ts / cloud-sync.ts 调用路径），含重建窗口的完整互斥。
  */
 export async function importDatabaseBackupFromPath(
   srcPath: string,
 ): Promise<void> {
-  const header = await readFile(srcPath, { encoding: null });
-  assertSqliteFile(new Uint8Array(header.subarray(0, 16)));
-
-  const dbPath = resolveDbPath();
-  const bakPath = `${dbPath}.nmbackup.bak`;
-
-  const liveConn = await getDesktopConnection();
-  const providerSnapshot = await dumpProviderTableSnapshot(liveConn);
-
+  acquireDesktopDbMaintenanceBusy();
   try {
-    await copyFile(dbPath, bakPath).catch(() => undefined);
-    await closeLiveDbForBackupImport();
-    await copyFile(srcPath, dbPath);
+    const header = await readFile(srcPath, { encoding: null });
+    assertSqliteFile(new Uint8Array(header.subarray(0, 16)));
 
-    const restoreConn = await openDbForProviderRestore();
+    const dbPath = resolveDbPath();
+    const bakPath = `${dbPath}.nmbackup.bak`;
+
+    const liveConn = await getDesktopConnection();
+    const providerSnapshot = await dumpProviderTableSnapshot(liveConn);
+
     try {
-      await restoreProviderTableSnapshot(restoreConn, providerSnapshot);
+      await copyFile(dbPath, bakPath).catch(() => undefined);
+      await closeLiveDbForBackupImport();
+      await copyFile(srcPath, dbPath);
+
+      const restoreConn = await openDbForProviderRestore();
+      try {
+        await restoreProviderTableSnapshot(restoreConn, providerSnapshot);
+      } finally {
+        await restoreConn.close();
+      }
+    } catch (error) {
+      await copyFile(bakPath, dbPath).catch(() => undefined);
+      throw error;
     } finally {
-      await restoreConn.close();
+      await unlink(bakPath).catch(() => undefined);
     }
-  } catch (error) {
-    await copyFile(bakPath, dbPath).catch(() => undefined);
-    throw error;
   } finally {
-    await unlink(bakPath).catch(() => undefined);
+    releaseDesktopDbMaintenanceBusy();
   }
 }
 
 /**
  * 从内存中的备份字节导入数据库（dump → close → replace → restore），无对话框与 rebootstrap。
  * 调用方须在成功后执行 rebootstrap。
+ *
+ * ic-20：busy 为计数/令牌配对——同 {@link importDatabaseBackupFromPath}。
  */
 export async function importDatabaseBackupFromBytes(
   bytes: Uint8Array,
 ): Promise<void> {
-  assertSqliteFile(bytes);
-
-  const dbPath = resolveDbPath();
-  const bakPath = `${dbPath}.nmbackup.bak`;
-
-  const liveConn = await getDesktopConnection();
-  const providerSnapshot = await dumpProviderTableSnapshot(liveConn);
-
+  acquireDesktopDbMaintenanceBusy();
   try {
-    await copyFile(dbPath, bakPath).catch(() => undefined);
-    await closeLiveDbForBackupImport();
-    await writeFile(dbPath, bytes);
+    assertSqliteFile(bytes);
 
-    const restoreConn = await openDbForProviderRestore();
+    const dbPath = resolveDbPath();
+    const bakPath = `${dbPath}.nmbackup.bak`;
+
+    const liveConn = await getDesktopConnection();
+    const providerSnapshot = await dumpProviderTableSnapshot(liveConn);
+
     try {
-      await restoreProviderTableSnapshot(restoreConn, providerSnapshot);
+      await copyFile(dbPath, bakPath).catch(() => undefined);
+      await closeLiveDbForBackupImport();
+      await writeFile(dbPath, bytes);
+
+      const restoreConn = await openDbForProviderRestore();
+      try {
+        await restoreProviderTableSnapshot(restoreConn, providerSnapshot);
+      } finally {
+        await restoreConn.close();
+      }
+    } catch (error) {
+      await copyFile(bakPath, dbPath).catch(() => undefined);
+      throw error;
     } finally {
-      await restoreConn.close();
+      await unlink(bakPath).catch(() => undefined);
     }
-  } catch (error) {
-    await copyFile(bakPath, dbPath).catch(() => undefined);
-    throw error;
   } finally {
-    await unlink(bakPath).catch(() => undefined);
+    releaseDesktopDbMaintenanceBusy();
   }
 }
 

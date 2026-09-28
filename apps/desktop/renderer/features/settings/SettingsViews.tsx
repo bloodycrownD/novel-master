@@ -135,46 +135,14 @@ function formatStorageBytes(bytes: number): string {
 }
 
 /**
- * 存量数据迁移卡片的三行进度（用户拍板 2026-09-28）：消息正文压缩 +
- * 两张 blob 表去 base64，只读状态行（非菜单项）。消息正文「去 base64」
- * 不设状态行——发版形态下压缩搬运直接写二进制，不存在用户可见的中间
- * 态，仅开发机历史形态由归一任务静默收敛。
+ * 存量数据迁移卡片的三行进度与取值逻辑（用户拍板 2026-09-28）已抽到同目录
+ * 纯 ts 模块 {@link ./migration-row-value}（ic-22：测试直接 import 喂夹具，
+ * 不拖 React 组件树）。
  */
-const MIGRATION_ROWS = [
-  { kind: "messageCompaction", label: "消息正文压缩" },
-  { kind: "vfsContent", label: "版本内容去 base64" },
-  { kind: "fileCache", label: "文件缓存去 base64" },
-] as const;
-
-type MigrationRowValue = { text: string; warning: boolean };
-
-/** 单行迁移状态文案（cr-06 三态）：已完成 / 已完成（N 条需人工处理）/ 进行中 / 未取到 '—'。 */
-function migrationRowValue(
-  dbStats: DbStatsResult | null,
-  row: (typeof MIGRATION_ROWS)[number],
-): MigrationRowValue {
-  if (row.kind === "messageCompaction") {
-    const status = dbStats?.messageCompaction;
-    if (status == null) {
-      return { text: "—", warning: false };
-    }
-    return status.done
-      ? { text: "已完成", warning: false }
-      : { text: `进行中（剩余 ${status.pendingCount} 条）`, warning: false };
-  }
-  const status = dbStats?.blobBinary.tables.find(
-    (item) => item.table === row.kind,
-  );
-  if (!status) {
-    return { text: "—", warning: false };
-  }
-  if (status.done) {
-    return status.failedCount > 0
-      ? { text: `已完成（${status.failedCount} 条需人工处理）`, warning: true }
-      : { text: "已完成", warning: false };
-  }
-  return { text: `进行中（剩余 ${status.pendingCount} 条）`, warning: false };
-}
+import {
+  MIGRATION_ROWS,
+  migrationRowValue,
+} from "./migration-row-value";
 
 export function DataManagementView() {
   const { retry } = useNovelMaster();
@@ -621,14 +589,21 @@ export function DataManagementView() {
               const value = migrationRowValue(dbStats, row);
               return (
                 <div key={row.kind} className="settings-row settings-row--static">
-                  <span className="settings-field__label">{row.label}</span>
+                  {/* cr-17：与同分区其它行同一类族（settings-row__*），
+                      缩进由 label 的 flex:1 承担，不写内联左移样式。 */}
+                  <span className="settings-row__label">{row.label}</span>
                   <span
-                    className="settings-status"
+                    className="settings-row__value"
                     style={{
-                      marginLeft: "auto",
-                      color: value.warning
-                        ? "var(--warning, #a60)"
-                        : undefined,
+                      /* ic-18：tone 三态着色走主题变量，不再有硬编码
+                          兜底色（两主题均已定义 --success/--warning，
+                          兜底只会让主题外泄）。 */
+                      color:
+                        value.tone === "success"
+                          ? "var(--success)"
+                          : value.tone === "warning"
+                            ? "var(--warning)"
+                            : undefined,
                     }}
                   >
                     {value.text}

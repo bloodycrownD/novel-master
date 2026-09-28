@@ -1533,7 +1533,11 @@ export type BlobBinaryStatusDto = {
   readonly tables: readonly BlobBinaryTableStatusDto[];
 };
 
-/** 消息正文压缩搬运状态（两态口径：进行中剩余 N 条 / 已完成）。 */
+/**
+ * 消息正文压缩搬运状态：两态 + 未取到（null）三态口径——进行中剩余
+ * N 条 / 已完成为两态本体；`DbStatsResult.messageCompaction` 上的 `null`
+ * = 未取到（采样失败），renderer 显示占位 '—'，与 `blobBinary` 空表同口径。
+ */
 export type MessageCompactionStatusDto = {
   /** true = 已完成（KKV 标记已置或谓词空）。 */
   readonly done: boolean;
@@ -1547,7 +1551,11 @@ export type DbStatsResult = {
   readonly reclaimableBytes: number;
   /** 存量 blob 形态归一状态（存储页状态行数据源）。 */
   readonly blobBinary: BlobBinaryStatusDto;
-  readonly messageCompaction: MessageCompactionStatusDto;
+  /**
+   * 消息正文压缩搬运状态：两态 + 未取到（null）三态；null = 未取到
+   * （采样失败），renderer 显示 '—'；与 blobBinary 空表同口径。
+   */
+  readonly messageCompaction: MessageCompactionStatusDto | null;
 };
 
 /** 数据清理（GC + checkpoint + VACUUM）前后库文件体积。 */

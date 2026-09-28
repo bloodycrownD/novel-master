@@ -19,11 +19,8 @@ import {
 } from "@novel-master/core/provider";
 import { SimpleEventBus } from "@novel-master/core/events";
 import {
-  createMessageService,
+  createChatServices,
   createMessageTranscriptEffectsService,
-  createProjectService,
-  createSessionService,
-  createUsageStatsService,
   createUserVfsTurnServiceBundle,
 } from "@novel-master/core/chat";
 import {
@@ -123,8 +120,21 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
 
   const eventBus = new SimpleEventBus();
   const compactionConditions = createCompactionConditionsStore(conn);
-  const messages = createMessageService(conn);
-  const usageStats = createUsageStatsService(conn);
+  const agentRegistry = createAgentRegistryService(conn, state);
+  const abortRegistry = createAgentAbortRegistry();
+  const streamRegistry = createAgentStreamRegistry();
+
+  // 消息列表行解析让步（ic-08B 方案 B）：与 mobile 的 messageParseYield 同款
+  // 机制（见 apps/mobile/src/runtime/create-mobile-runtime.ts 装配）——大会话
+  // 下搜索/列表的全量行解压 + JSON.parse 按片让步，main 事件循环不再被单次
+  // 同步 map 冻结（ic-08）。desktop 侧无 mobile 的 16ms 量子让步模块，用
+  // setTimeout(0) 宏任务让步等价达成「片间交还事件循环」。
+  const messageParseYield = (): Promise<void> =>
+    new Promise((resolve) => setTimeout(resolve, 0));
+  const chat = createChatServices(conn, { state, agentRegistry }, {
+    yieldFn: messageParseYield,
+  });
+  const { projects, sessions, messages, usageStats } = chat;
   const messageTranscriptEffects = createMessageTranscriptEffectsService(conn);
   const sessionKkv = createSessionKkvService(conn);
   const { userVfsTurn } = createUserVfsTurnServiceBundle(conn);
@@ -134,10 +144,6 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
     tokenCounters,
     providerModels: providerBundle.providerModels,
   });
-
-  const agentRegistry = createAgentRegistryService(conn, state);
-  const abortRegistry = createAgentAbortRegistry();
-  const streamRegistry = createAgentStreamRegistry();
 
   // 启动路径到此已全部走完（下面只是装配返回值），把 cl100k 建表挪到空闲时段，
   // 避免第一次兜底读数在主进程同步阻塞 ~250ms。
@@ -156,8 +162,8 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
     abortRegistry,
     streamRegistry,
     tokenCounters,
-    projects: createProjectService(conn),
-    sessions: createSessionService(conn, { state, agentRegistry }),
+    projects,
+    sessions,
     messages,
     usageStats,
     messageTranscriptEffects,
