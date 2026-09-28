@@ -252,6 +252,26 @@ A1（VFS + file_cache 去 base64 + 归一任务 + 三端接线）已按本 spec 
 
 验证证据（A1 终态，实测）：core 全量 2788/2786 pass（2 条既有 usage-stats 时区红灯）；core 定向 34/34；mobile `tsc -p tsconfig.build.json` 绿 + jest 定向 15/15（全量 1534/1535，唯一红为既有 `mermaid-fullscreen.test.ts`）；desktop main `tsc` 绿 + 相关测试 8/8（renderer `tsc` 为既有 349 条债，与本次改动行区间交集为 0）；cli `tsc` 绿 + 启动链路冒烟通过；实库副本端到端 `{done:true, normalizedCount:1136, failedCount:0, stalled:false}`、二次运行 `normalizedCount:0` 且不下发 UPDATE、1149 个 hash 逐条 sha256 比对零丢失、两表全 `blob`+`zlib` 且 `byte_len = LENGTH(bytes)`、副本 111,120,384 → 107,528,192 字节。
 
+## 实现期补充二（集成分支 + A2 + 存储页指标卡 + 真机验收，2026-09-28 下午）
+
+**范围拍板（用户）**：压缩与去 base64 一起发布 → 开集成分支 `integration/binary-storage` 一起开发测试；存储页第三条进度是「content json 压缩」（真实用户升级要经历的长耗时搬运）而非「消息正文去 base64」（发版形态下压缩搬运直接写二进制，不存在用户可见中间态）；三条进度是指标不是菜单项，改指标卡只读展示。
+
+| 项 | 说明 |
+|---|---|
+| 集成 merge `15721863` | `feat/message-content-compression` 并入：15 处文本冲突全按并集解；**BOOT_VERSION 撞号实锤**——两边都是 16 但含义不同（main v16 = stream-metrics 两列，mcdev v16 = chat_message 压缩两列；其真机构建用的 17 一直没提交回分支、设备库已是 17），按撞号纪律顺延为 **17**（v16 保留主干含义，压缩两列重编号 v17；若用 16，真实 1.5.24 存量库走快路径、压缩列永远补不上） |
+| 语义冲突（合并工具不可见） | mcdev 的 `message-content-codec` 引用 A1 已删除的 `bytesToBase64`/`isReactNativeRuntime`——merge 提交内联为私有（保持 mcdev zlib-b64 写侧行为），随后 A2 翻转时整体删除 |
+| A2 `27273a2f` | `encodeMessageContent` 删平台分支与 `forceZlibB64`：三端恒 `zlib`+二进制；归一任务注册 `chat_message` 适配器（谓词 per-adapter 列名映射、无 `byte_len` 列双参 UPDATE、SELECT 列别名统一行形状）；legacy 明文行（`content_encoding IS NULL`）不命中谓词，与 compaction 任务互不越界 |
+| 存储页指标卡 `05ffcb53` + cr-06 | mobile `FormSectionCard`「存量数据迁移」三行静态状态行（消息正文压缩 / 版本内容去 base64 / 文件缓存去 base64），desktop 同语义 `SettingsActionSection`；cr-06 一并落地：完成标记值升 JSON（含 `failedCount` 快照、旧 ISO 值兼容归零）、`getBlobBinaryStatus` 纯读回报 `failedCount`、UI 第三态「已完成（N 条需人工处理）」 |
+| 测试账目 | core 归一套件 12/12（含 chat_message 适配器用例、cr-06 A/C + 纯读断言）+ 压缩/维护/file_cache/VFS 27/27 + codec 回环 7/7；mobile jest 19/19；desktop 8/8；三端 typecheck 绿 |
+
+真机验收（荣耀 EBG-AN00，Metro 构建跑集成分支 JS）：
+
+- **A1 单独链**（pre-debase64 快照起步）：两表 1112+40 行全 `zlib`+`blob`、`byte_len` 零违例、1112 个 hash 逐条零丢失、VFS 9,931,792 → 7,449,238（−2.37MB 与副本预测吻合）、`chat_message` 5350 行未波及、双标记 11:42:27 落位。
+- **cr-01 P0 真机实证**：稳态（标记已置、谓词空）下两次无操作冷启动，76MB 主库两次全文件重写（mtime 11:53/11:55），12 张表跨启动**逐字节内容零变化**（含 5350 行 chat_message、100,276 行 message_checkpoint_file）——零数据变更的全文件重写即维护链路白跑的现场证据。rootpage 对比在「刚 VACUUM 过的干净库」上不可判别（VACUUM 确定性复制出相同布局），逻辑层 diff 才是可靠判据。
+- **集成完整升级链**（恢复 pre-mc 备份 111.1MB、user_version 16 起步）：BOOT 17 慢路径补列 → 压缩搬运 5350 条（**直接写二进制，`b64_rows=0`**）→ 三表归一 → 收尾维护，约 2 分钟收敛到 **64,757,760 字节（−46.4MB / −41.8%）**；消息 5350/5350 逐条解压与迁移前明文比对零差异；vfs 1112 hash 零丢失；三个完成标记均为新 JSON 格式；存储页指标卡三行「已完成」实测渲染正确。
+
+**遗留开放问题（发版前置）**：内嵌生产 bundle（`--dev false` + `useDevSupport=false`）启动即崩——第一崩『SettingsManager not found』是 dev bundle 配 devSupport=false（内嵌包必须 `--dev false`，已定位并修正出包脚本）；换生产 bundle 后另崩『Error: Got unexpected undefined』（minified 栈指向 `get UIManager`，未定位）。发版走的正是生产 bundle，需用 `--dev false --minify false` 出可读栈的包复现查清。
+
 ## 已否决方案与依据（避免重复调研）
 
 | 方案 | 实测/结论 |

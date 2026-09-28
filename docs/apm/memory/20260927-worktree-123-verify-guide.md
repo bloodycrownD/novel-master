@@ -1,8 +1,8 @@
 ---
-date: 2026-09-28 11:15
-title: ① 消息正文压缩分支真机实测全绿 + 去 base64 的 SPEC 定稿 + **A1（VFS/file_cache 去 base64）跑完 code-dev-loop 的 dev-ready 与首轮全量 CR 的 fix-spec-ready（36 条 must-fix）**——含收益口径修正「VFS delta 82.6% 实为 61.3%」与「验收断言牙齿」教训
-keywords: worktree, message-content-compression, SCHEMA_BOOT_VERSION 撞号, 谓词驱动搬运, 真机测试, subst 短路径, base64 历史包袱, op-sqlite BLOB 真机验证通过, Hermes 无 WebAssembly, 收益口径修正 61.3%, 内容哈希去重计数, fflate 字典 32KB 窗口, byte_len 三态混杂, binary-blob-and-vfs-pack spec, code-dev-loop, runBlobBinaryNormalization, nm-blob-binary, BlobBinaryRunResult stalled, 零进展护栏, cr-func 判 no 与 fix, dev-ready, code-review-loop, cr-fix-spec 36 条, fix-spec-ready, 验收断言牙齿 恒真 恒红 互斥夹具, startupMaintenancePending, keyset 游标, 华为 coauth 安装门, .ps1 ASCII-only, 子代理不得写记忆 第二次实锤, AsyncMutex 重入死锁, MCP 会话握手
-abstract: ① 压缩分支（feat/message-content-compression）真机实测**全绿**（BOOT_VERSION 顺延 17 + ALIGN 补列、5350 条全量搬运、逐条字节校验零差异、库 111.1MB→79.0MB、二次启动零重扫）；**真机 BLOB 验证 6 项全 PASS → base64 可去**（+33%）。压缩率归因（84.6% 中文、英文对照 6.01:1 vs 中文 2.61:1、tool_result 占 60.9%）与算法横评（逐条最多 +12%；整块 7.7~9.4:1 全来自长程重复；**Hermes 无 WebAssembly** + 纯 TS zstdify 崩 → 移动端算法杠杆关闭）。**2026-09-28 复测修正**：旧记「VFS delta 省 10.7MB / 82.6%」把被多版本共享的 blob 按 revision 行重复计数，按 `content_hash` 去重后真实为 **6.080MB → 3.020MB（省 3.06MB / 61.3%）**；同批复测：消息去 base64 省 10.864MB、VFS 省 2.366MB、file_cache 省 0.06MB，**Part A 合计省 13.30MB（79.0→约 65.7MB）**。已**生成 SPEC `docs/Iterations/binary-blob-and-vfs-pack/spec.md`（Part A 去 base64 立即做；Part B VFS 内容打包收益仅 3.06MB、改动面覆盖 VFS 主力读写，待用户拍板）**，并实测否决了字典链（2.945MB，引入跨行依赖）、diff delta（无实现无增量证据）、大词典（fflate 只对末尾 32KB 生效）。另发现 `vfs_content_blob.byte_len` 写法三态混杂（859/71/97 行三种口径）需一并归一。**A1 落地与首轮全量 CR**：code-dev-loop 把 A1 跑到 dev-ready（9 wave / 8 提交；实库副本端到端 1136 行归一、1149 个 hash 逐条 sha256 零丢失、二次启动幂等）；随后 code-review-loop **4 轮收敛到 fix-spec-ready**（产物 `docs/Iterations/binary-blob-and-vfs-pack/cr-fix-spec.md`，36 条 = P0×1 / P1×9 / P2×26；P0 = 稳态下每次进程启动、每条 CLI 命令都白跑一次全库 VACUUM）。四轮里三轮都在抓同一类缺陷——**验收断言没有牙齿**（恒真 / 恒红 / 互斥夹具），三条判据已进 RULE；同批入 RULE 的还有华为 coauth 安装门、`.ps1` 必须 ASCII-only、带点号 `-P` 参数走 `cmd /c`、「子代理不得写记忆」第二次实锤。**下一步：等用户确认后按 cr-fix-spec 开工（wave-0 回调先行）；真机 A1 验收仍卡 coauth 门；Part B 待拍板。**
+date: 2026-09-28 13:10
+title: ① 压缩分支真机全绿 + 去 base64 SPEC 定稿 + A1 dev-ready 与首轮全量 CR fix-spec-ready（36 条）——含收益口径修正与「验收断言牙齿」教训 + ② 集成分支 integration/binary-storage 一次跑通（merge + A2 + 存储页指标卡 + 真机完整升级链 111→64.8MB / 5350 条零丢失）
+keywords: worktree, message-content-compression, SCHEMA_BOOT_VERSION 撞号, 谓词驱动搬运, 真机测试, subst 短路径, base64 历史包袱, op-sqlite BLOB 真机验证通过, Hermes 无 WebAssembly, 收益口径修正 61.3%, 内容哈希去重计数, fflate 字典 32KB 窗口, byte_len 三态混杂, binary-blob-and-vfs-pack spec, code-dev-loop, runBlobBinaryNormalization, nm-blob-binary, BlobBinaryRunResult stalled, 零进展护栏, cr-func 判 no 与 fix, dev-ready, code-review-loop, cr-fix-spec 36 条, fix-spec-ready, 验收断言牙齿 恒真 恒红 互斥夹具, startupMaintenancePending, keyset 游标, 华为 coauth 安装门, .ps1 ASCII-only, 子代理不得写记忆 第二次实锤, AsyncMutex 重入死锁, MCP 会话握手, integration/binary-storage, A2 chat_message 适配器, 存量数据迁移指标卡, cr-06 提前闭合, cr-01 P0 真机实证, 内嵌 bundle 必须 --dev false, 生产 bundle 启动崩 Got unexpected undefined
+abstract: ① 压缩分支（feat/message-content-compression）真机实测**全绿**（BOOT_VERSION 顺延 17 + ALIGN 补列、5350 条全量搬运、逐条字节校验零差异、库 111.1MB→79.0MB）；真机 BLOB 验证 6 项全 PASS → base64 可去（+33%）。收益口径修正：按 content_hash 去重后 VFS delta 真实为 6.080→3.020MB（61.3%）。A1 经 code-dev-loop 跑到 dev-ready、首轮全量 CR 四轮收敛 fix-spec-ready（36 条 = P0×1 / P1×9 / P2×26；四轮里三轮抓同一类「验收断言没牙齿」缺陷，判据已进 RULE）。② 2026-09-28 下午：用户拍板**集成分支**（压缩与去 base64 同发版、一起开发测试）+ 存储页三条进度改**指标卡**（第三条 = content json 压缩进度；消息去 base64 不设行——发版形态压缩直写二进制无中间态）→ `integration/binary-storage` 一次跑通：merge 15721863（15 冲突并集 + BOOT 撞号 16/16 顺延 17 + bytesToBase64 语义冲突搬迁）、A2 27273a2f（写侧恒二进制 + chat_message 适配器）、指标卡 + cr-06 05ffcb53；**真机完整升级链全绿**（恢复 pre-mc 备份 111.1MB 起步 → 压缩直写二进制 b64_rows=0 → 三表归一 → 64.76MB（−46.4MB）、5350 条逐条零丢失、指标卡三行已完成实测渲染）；cr-01 P0 真机实证（零待归一冷启动两次 76MB 全文件重写、12 表跨启动逐字节逻辑零变化——rootpage 对比在刚 VACUUM 过的库上不可判别，逻辑层 diff 才可靠）。**遗留发版前置**：内嵌生产 bundle 启动崩『Error: Got unexpected undefined』（get UIManager，未定位；dev bundle 配 devSupport=false 崩 SettingsManager 已定位——内嵌必须 --dev false，均进 RULE）。
 ---
 
 user:
@@ -235,3 +235,39 @@ assistant:
 【下一步待办（按优先级）】① **等用户一句话就按 cr-fix-spec 开工**：wave-0 先落 `beforeMaintenance`/`afterMaintenance` 两个回调（P0 的验收判据依赖它）→ wave-1 收 **P0**（`processedAny` 门条件 + `startupMaintenancePending` 持久化兜底 + 新测试文件 `blob-binary-normalization-maintenance.test.ts`）→ wave-2 坏行 **keyset 游标化 + 收尾谓词校验** + 不变量注释 → wave-3 其余 core（含 T-BB 系列补牙）→ wave-4 apps 与文档项。② 三个待拍板默认动作（不确认就按默认走）：维护失败兜底走「加持久化标记 + 自动补跑」；状态查询**保持纯读**不补写标记；状态行本轮就做最小文案「已完成（N 条需人工处理）」。可选：主入口是否撤下两个常量导出（倾向维持现状）。③ **Part B（VFS 内容打包 3.06MB）**待拍板——spec 里有完整方案（两张新表 + ≤8 版本/≤1MB 分组 + 自包含校验 + 反向展开）与选型依据（pack vs 字典链 vs diff delta）。④ **真机 A1 验收**：等用户过 coauth 门（输密码 / 本地文件安装）→ 装包 → 查两表形态与库体积、二次启动零重扫 → 拉库跑 `tmp/verify-device-db.mjs` → **还原库 + 装回 mcdev 包**。⑤ 合并 `feat/message-content-compression`（3 处冲突）→ 合并后做 **A2**（message 写侧 codec 切换 + `chat_message` 归一适配器；适配器注册表与 `messageContent` 类型都已预留，纯增量）。
 
 【不要再试的（本轮新增）】① 用「探针里的 VACUUM / wal_checkpoint 次数」做归一任务的验收判据（进程级去重标记会被同文件第一条用例消费 → 要么恒真要么恒红）；改用 cr-26 的回调计数器（`maintCalls`）。② 试图绕过华为 coauth 安装门（不该绕；两条正路：用户输密码 / 本地文件安装）。③ 在 PowerShell 里直接给 native 命令传带点号的 `-P` 参数；在 `.ps1` 里写中文注释。④ 让子代理「顺手补记忆」（RULE 第二次实锤；派单时要**显式**写「禁止创建或修改 `docs/apm/` 下任何文件」）。⑤ 用「零进展护栏收手」当坏行场景的判据（keyset 化后真正的判据是**收尾谓词校验** `leftover > failedKeys.size`）。（此前已记的仍有效：换压缩算法 / CAS / CDC / 会话聚簇打包 / 强迁移 / 大词典 / wasm；探针在事务回调里用外层 `conn`；bridgeless 下 `console` 输出两边都收不到。）
+
+user:
+（记忆压缩后恢复）[$apm-usage] 你能看出记忆被压缩过吧？恢复下记忆，回忆下 cr spec。然后华为安装上了，继续真机测试——正好验证 CR 的内容，补上缺少的真机测试。
+
+assistant:
+（记忆恢复 + 真机 A1 验收全绿 + cr-01 P0 铁证；途中定位两个出包坑）
+
+【记忆恢复】外置记忆完整读回（交接块/RULE/cr-fix-spec），分支 feat/blob-binary-normalization、A1 dev-ready、CR fix-spec-ready 36 条未执行、真机卡华为 coauth 门——用户已装好 A1 包（1.5.25-debase64），库还是干净的 79,020,032 @ 00:53。
+
+【两个出包坑（都进了 RULE）】① 首启即崩『Invariant Violation: TurboModuleRegistry.getEnforcing: SettingsManager not found』——**dev bundle（--dev true）配 useDevSupport=false 是组合矛盾**：dev bundle 初始化要求 dev 支持类原生模块，关掉 dev support 后不注册 → 内嵌包必须 `--dev false`。② 换生产 bundle 后**另崩**『Error: Got unexpected undefined』（minified 栈 get UIManager@23:5183）——**未定位，发版前置**（发版走的就是生产 bundle；复现方案 --dev false --minify false 拿可读栈）。本地 findstr 全 node_modules 没搜到该字符串。验收最终走 **Metro 路线**：原生 debug 包（dev support 开）+ PC 起 Metro + adb reverse——工作区切到集成分支后 JS 即时生效，不用重打包（后续所有验证都吃这个红利）。
+
+【A1 数据层验收全绿】1112+40 行全 zlib+blob、byte_len 零违例、1112 hash 逐条零丢失、VFS 9,931,792→7,449,238（−2.37MB 与桌面副本预测 2.366MB 吻合）、chat_message 5350 行未波及、双标记 11:42:27 落位、可回收 0KB（VACUUM 生效）。
+
+【cr-01 P0 真机铁证】稳态（标记已置、谓词空）下两次无操作冷启动：76MB 主库两次全文件重写（受控观察 t+10.3s 文件 mtime 跳变），而 12 张表跨启动**逐字节逻辑零变化**（含 5350 行 chat_message、100,276 行 message_checkpoint_file）——零数据变更的全文件重写 = 维护链路白跑现场。**取证技巧**：rootpage 对比在「刚 VACUUM 过的干净库」上不可判别（VACUUM 是确定性复制、布局相同）；mtime 单独不足为凭（正常启动写也会碰）；**逐表内容哈希 diff 才是可靠判据**。轮询器 tmp/p0-watch.mjs（注意 ls 输出行尾 \r 要 trim）。
+
+user:
+稍等，这个设计不对。我们没有发版，所以应该是 content json 压缩进度。然后版本内容和文件缓存去 base64 加上压缩进度，这是三个状态条了，UI 上不能用这种菜单卡片，应该是类似存储空间那种指标卡片更合适。
+
+assistant:
+（设计修正接收 + 集成分支一次跑通：merge + A2 + 指标卡 + 真机完整升级链全绿）
+
+【设计修正的 why】没发版 ⇒ 真实用户升级走的是 content_json→压缩 blob 搬运，**用户设备上不存在「base64 消息 blob」这个状态**（那是只有开发机才有的中间形态）⇒ 第三条进度 = 消息正文压缩；消息去 base64（A2）不设状态行、纯内部整理。三条是「指标」不是「菜单项」→ 指标卡只读展示（mobile FormSectionCard 三行静态行；desktop SettingsActionSection 同构——注意它只收 action 不收 children）。用户进一步拍板：**集成分支**（这些变动一起发版 → 一起开发测试更好）。
+
+【集成分支 integration/binary-storage 四个提交】① merge 15721863：15 处文本冲突全并集（CHANGELOG/runtime/三端服务/屏幕/测试/出口/allowlist）；**BOOT_VERSION 撞号实锤**——两边都 16 但含义不同（main v16=stream-metrics 列、mcdev v16=chat 压缩列；其真机构建用的 17 一直没提交回分支、设备库已是 17）→ 按纪律顺延 **17**（用 16 的话真实 1.5.24 库走快路径、压缩列永远补不上，直接砖）；**语义冲突**（合并工具不可见）：mcdev 的 message-content-codec 引用 A1 已删的 bytesToBase64/isReactNativeRuntime → merge 提交内联私有、A2 再删。② A2 27273a2f：encodeMessageContent 删平台分支与 forceZlibB64（三端恒 zlib+二进制）；归一任务注册 chat_message 适配器——**谓词与 byte_len 都做成 per-adapter**（列名映射 content_encoding/content_blob、无 byte_len 列 UPDATE 双参、SELECT 列别名统一行形状）；legacy 明文行（encoding IS NULL）不命中谓词、与 compaction 互不越界；CLI 顺序 = compaction 先、归一后。③ 指标卡 05ffcb53 + **cr-06 一并闭合**（标记值升 JSON 含 failedCount 快照、旧 ISO 值兼容归零、getBlobBinaryStatus 纯读回报 failedCount、UI 第三态「已完成（N 条需人工处理）」——注意 kkv.get 返回 KkvEntry 对象要取 .value）。测试：core 归一 12/12 + 相关 27/27 + 回环 7/7、mobile 19/19、desktop 8/8、三端 typecheck 绿。
+
+【真机完整升级链（集成重测）全绿】恢复 pre-mc 备份（111.1MB、user_version 16、明文库）→ Metro 构建（装的是 dev support 开的原生包，JS 由 PC Metro 供——**切分支不用重打包**）启动：BOOT 17 慢路径补列 → 压缩搬运 5350 条**直写二进制（b64_rows=0）**→ 三表归一 → 收尾维护，约 2 分钟收敛 **64,757,760 字节（−46.4MB/−41.8%；比 mcdev 单独的 79MB 又省 14.3MB，与预测 65.7 吻合）**；5350 条逐条解压与迁移前明文零差异、1112 vfs hash 零丢失、三标记新 JSON 格式、指标卡三行「已完成」uiautomator 实测渲染正确（库体积 61.8MB 与文件字节数一致）。
+
+【收尾与状态】设备库已还原 pre-debase64-test.bak（用户真实数据 79MB；下次打开自动增量归一再省约 13MB）；暂存 APK 已删；设备现装 Metro 构建（依赖 PC Metro + adb reverse）。cr-fix-spec 已加执行注记：cr-06 闭合、剩 35 条待开工、cr-01 有真机实证。spec「实现期补充二」+ iteration-state + CHANGELOG 同步。
+
+user:
+（隐含：继续按此推进）——本 assistant 轮为收尾文档与记忆落盘。
+
+assistant:
+（文档四件套落盘：spec 实现期补充二 / iteration-state exec_note+manual_pending 终态 / cr-fix-spec 执行注记 / RULE 出包坑条目；本记忆 front matter 刷新 + 本轮追加。）
+
+【下一步待办（压缩后照此恢复）】① **cr-fix-spec 剩余 35 条待用户开工确认**（wave-0 回调先行；在集成分支上执行）；② **生产 bundle 启动崩『Got unexpected undefined』未定位——发版前置**，复现配方 --dev false --minify false；③ Part B（VFS 内容打包 3.06MB）仍待拍板；④ 设备上装的是 Metro 构建，用户日常用 app 需 PC 侧 Metro 在跑（或换回 mcdev worktree 包，同样依赖 Metro）。

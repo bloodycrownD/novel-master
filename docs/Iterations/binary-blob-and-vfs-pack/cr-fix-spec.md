@@ -17,6 +17,8 @@
 
 本轮汇总口径：round 1 的三条 scope 评审产出 23 条 must-fix（P0 1 条 / P1 6 条 / P2 16 条），全部写入。**round 1 末轮 `review-full` 判 `no`**，新增 cr-24 ~ cr-30 七条 must-fix，并**按其结论修订** cr-01 / cr-02 / cr-03 / cr-06 / cr-07 五条既有条目的改法（r2 版共 30 条：P0 1 条 / P1 8 条 / P2 21 条）。**round 2 末轮复检 `review-full-2` 判 `no`**，新增 cr-31 ~ cr-36 六条 must-fix（P1 1 条 / P2 5 条），并**定点改写** cr-01 / cr-02 / cr-06 / cr-20 / cr-22 五条既有条目（不重排整体结构）→ **r3 版共 36 条：P0 1 条 / P1 9 条 / P2 26 条**。**round 3 末轮复检 `review-full-3` 仍判 `no`**，新增 NF-1（`maintCalls` 语义与「pending 标记真跑成功后会被清」在本测试文件内不可观测，须拆新测试文件）/ NF-2（「全表皆坏行」在 cr-01/cr-02/cr-24 三处是互斥夹具）/ NF-3（cr-36 验收 ② 与 cr-21 ① 互斥）三条**文档内部一致性**问题，**不新增 must-fix**，只**定点改写** cr-01 / cr-02 / cr-20 / cr-23 / cr-24 / cr-25 / cr-31 / cr-32 / cr-35 / cr-36 十条既有条目的验收与措辞（不重排整体结构），另做三处措辞级微调（波次表 cr-26 重复列示 / 本段口径 / cr-02 的 `updateCount` 与护栏措辞）→ **r4 版仍为 36 条：P0 1 条 / P1 9 条 / P2 26 条**。另落成三条 advisory 注记（进 K 节 / 条目注记，不计 must-fix）。**本节点只写本文档，不改实现代码、不改测试、不改业务 spec、不改 `docs/.iteration-state.yaml`；全程无任何 git 写操作。**
 
+> **执行注记（2026-09-28 下午，主代理）**：fix-spec-ready 宣布后、用户开工指令前，随集成分支重构执行了 **cr-06**（`integration/binary-storage` @`05ffcb53`：完成标记值升 JSON 含 `failedCount` 快照（旧 ISO 值兼容归零）+ `getBlobBinaryStatus` 纯读回报 `failedCount` + DTO 增字段 + UI 第三态「已完成（N 条需人工处理）」，验收含用例 A/C、纯读断言、既有 deepEqual 补字段、两端源码契约）——该条**已闭合，剩 35 条待开工**。另：**cr-01（P0）已取得真机实证**（稳态零待归一冷启动两次 76MB 全文件重写、12 表跨启动逐字节逻辑零变化，详见业务 spec「实现期补充二」），修复本体仍在待办。基线分支 `feat/blob-binary-normalization` 已并入集成分支 `integration/binary-storage`，剩余条目在集成分支执行、条目语义不变。
+
 修复波次建议（供主代理拆 `spec_fix_plan` 参考，不代替编排）：
 
 | wave | 条目 | 理由 |

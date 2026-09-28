@@ -37,6 +37,14 @@ cr_loop:
   fix_spec_path: docs/Iterations/binary-blob-and-vfs-pack/cr-fix-spec.md
   spec_fix_plan: []   # 已 fix-spec-ready，无待写章节
   status: **fix-spec-ready**（2026-09-28 宣布；待用户确认是否按 fix-spec 开工执行 —— 确认前不改代码）
+  exec_note: >-
+    2026-09-28 下午起两点变化：① 36 条中的 cr-06 已随「存储页存量数据迁移指标卡」
+    重构提前落地（integration/binary-storage @05ffcb53，含标记 JSON 升级 / failedCount
+    纯读回报 / UI 第三态）；cr-01（P0）已取得真机实证（零待归一冷启动两次 76MB 全文件
+    重写、12 表逻辑零变化），修复本体仍待开工。② CR 的基线分支
+    feat/blob-binary-normalization 已并入集成分支 integration/binary-storage
+    （merge @15721863，另含 message-content-compression + A2 @27273a2f + 指标卡重构），
+    剩余 35 条修复在集成分支上执行、fix-spec 条目语义不变。
   spec_deviations:
     - open: "收尾维护链路触发条件宽于 spec（稳态每进程都挂）→ 由 fix-spec cr-01 闭合"
     - open: "「坏行不阻断收敛」实际覆盖面窄于 spec 自述（坏行满批时后续正常行被跳过）→ 由 fix-spec cr-02 闭合"
@@ -46,7 +54,7 @@ cr_loop:
   scope_boundary:
     - "A2（message 侧写侧 codec + chat_message 归一适配器，待 feat/message-content-compression 合并）不在评审范围"
     - "Part B（VFS 内容打包）未做，不在评审范围"
-    - "spec Step 6 真机验收（qa: manual_user）进行中：包与库备份已就位，卡在华为 coauth 锁屏密码门（见下方 manual_pending）"
+    - "spec Step 6 真机验收（qa: manual_user）已完成（2026-09-28）：A1 数据层全绿（1112+40 行零丢失、−2.37MB 与预测吻合）+ cr-01 P0 真机实证；集成链另测（integration/binary-storage，恢复 pre-mc 备份走完整升级）：全绿收敛 111.1→64.8MB（−46.4MB）、5350 条消息逐条零丢失、chat_message 直写二进制（b64_rows=0）、三状态条「已完成」"
   prior:
     - "code-dev-loop 已把本迭代 A1 跑到 dev-ready（9 wave / 8 提交），含两轮 cr-func 功能小检，闭合 12 条 must-fix"
     - "已记录项见本文件 known_baselines / known_nonblocking / spec_deviations；评审请勿重复报为「新发现」，但对判断有异议可指出"
@@ -152,7 +160,7 @@ discipline:
   - 子代理一律禁止 git 写（不 add/commit/stash/checkout/revert）；主代理按节点分组统一提交
   - 子代理只跑定向测试与 typecheck，不跑全量套件（全量在 verify 波次单节点顺序跑，避免并发负载抖动）
   - 同文件禁止并行 impl；本 DAG 的 wave-0 两节点文件集互不重叠
-manual_pending: "A1 真机验收（spec Step 6）已准备到「只差安装」：① 包已出——内嵌 bundle 的 debug 包（versionCode 1316 与手机已装版对齐，便于来回替换），落在 apps/mobile/android/app/build/outputs/apk/debug/app-debug.apk，并已推到设备 /data/local/tmp/nm-a1.apk 与 /sdcard/Download/nm-a1-debase64.apk；② 库已备份——databases/novel_master_vfs.pre-debase64-test.bak（79,020,032 字节，force-stop 后整库 cp，现场无 wal/shm）；③ **卡点：荣耀 EBG-AN00 对 PC 工具来源的安装一律弹华为 coauth 锁屏密码门（`adb install` / `pm install` 都拦，与是否已解锁无关），agent 过不去 → 需用户在手机上输密码，或改用「本地文件安装」（点 Download 里那个包）**。装好后按 spec Step 6 走：三表形态直查 / 逐条解压校验 / 库体积 / 二次启动零重扫。⚠️ 两个必须知道的点：a) 本分支不含 message-content-compression，装上后**聊天正文会读成空**（该库 content_json='' 而正文在 content_blob）——验收只覆盖 VFS/file_cache 与存储页状态行；b) 测完要还原：`run-as cp` 回备份 + 装回 mcdev 包（.worktree/f-message-content-compression 内的 app-debug.apk 仍在，注意该包依赖 Metro 才能启动）。"
+manual_pending: "真机验收已全部完成（2026-09-28），设备收尾状态：① 库已还原为用户真实数据 pre-debase64-test.bak（79,020,032 字节，2026-09-28 09:12 快照；下次打开 app 时后台任务会自动做增量归一——该库的 vfs/file_cache/消息 zlib-b64 存量约再省 13MB）；② 设备上现装 integration/binary-storage 的 Metro 构建（1.5.25-debase642，依赖 PC 侧 Metro 8081 + adb reverse 才能启动）；③ 本轮暂存的两个 APK（/data/local/tmp/nm-a1.apk、/sdcard/Download/nm-a1-debase64.apk）已删，mcdev worktree 的 app-debug.apk 仍在（也依赖 Metro）；④ ⚠️ 遗留开放问题：**内嵌生产 bundle（--dev false + useDevSupport=false）启动即崩**——dev bundle 配 devSupport=false 崩『SettingsManager not found』已定位（内嵌包必须 --dev false）；但改 --dev false 后另崩『Error: Got unexpected undefined』（minified 栈 get UIManager，未定位）——发版用的正是生产 bundle，此问题**发版前置**必须查清（可用 --dev false --minify false 出可读栈的包复现）。"
 
 # === 归档：上一轮 stream-metrics-native 增量 CR fix-spec 执行（dev-ready: yes） ===
 # 完整 Bundle 见 git 历史：git log -p docs/.iteration-state.yaml
