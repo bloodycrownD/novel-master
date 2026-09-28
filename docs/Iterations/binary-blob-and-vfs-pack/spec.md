@@ -271,6 +271,12 @@ T 编号与实际落地用例的可追溯映射（行号为集成分支 `integra
 - 风险：**压缩与归一双任务并发的理论态缝隙（ic-32）**——压缩任务恒写 `content_encoding='zlib'` + 二进制 BLOB；若某端驱动有缺陷把二进制绑成 TEXT 存回（归一谓词第二 disjunct 针对的历史脏形态），而归一的 `messageContentDone` 标记已置（该表已完成短路），这批新脏行不会被归一任务自动重扫。兜底手段：手动清 `messageContentDone`（KKV module `nm-blob-binary`）触发重扫（代码侧半边见 message-content-compaction.ts 文件头的风险登记）。
 - 回滚：停用归一任务即可（读路径两形态都认）；如需彻底回退形态，写一个谓词 `encoding='zlib' AND TYPEOF(bytes)='blob'` 的反向任务（注意这会把所有三端写入的二进制行一起转回，仅应急用）。
 
+**迁移生命周期（退役时间表，用户拍板 2026-09-28）**
+
+- **V0（本迭代）**：后台归一任务（`runBlobBinaryNormalization` + 适配器注册表）+ 三形态读兼容（zlib 二进制 / zlib+存量 base64 文本 / zlib-b64）常驻运行。
+- **V1（约 10 个 tag 后退役，与 message-content-compression spec 的迁移生命周期 V1 及 RULE 的 migration 清理节奏同轮执行）**：删除迁移代码确保整洁——归一任务本体与适配器注册表、三端调度接线（mobile / desktop / cli 服务）、KKV 标记（module `nm-blob-binary` 全部 key）、读路径的 zlib-b64 与存量 base64 文本兼容分支（zlib-codec 收敛为单形态二进制）、相关测试与指标卡「去 base64」两行。**删除前提**与 compression 侧 V1 同款：启动收尾须保证库里无 zlib-b64 残留（强制收尾门/基线抬升的细则届时与 compression V1 一并细化，两任务本就同批调度）。
+- 参考时点：本批发版 tag 起 10 个 tag 后（本版预计 v1.5.25 → 约 v1.5.35）。
+
 **Part B**
 
 - 风险（按严重度）：① 跨「`hash` ⇒ blob 行」的 8 处隐含契约（`get`/`getMany`/`ensureBlob`/`findExistingBlobHashes`/`put`/`gc`/`findContentSizeByPath`/触发器注释），漏一处即读失败或双份存储；② GC 误删导致明文丢失——由「pack 自包含 + 单层引用判定 + T-VP3 校验」三重兜底，且回滚前可先 `verifyVfsContentPacks`；③ 读放大：读一个已打包版本需整组解压（单组上限 1MB 明文 / 215KB 流），`getMany` 按组去重；④ 回滚卡顿敏感路径（`rollback-large-jank` 刚修）新增解压成本，需在 Step 12 用既有回滚用例回归。

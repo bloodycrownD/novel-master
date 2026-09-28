@@ -341,3 +341,9 @@ Part B 先不改吧，留做待办，我觉得方案可以之后再优化下。�
 
 assistant:
 （拍板落盘：Part B 暂不执行、留待办。spec Part B 标题行改为「用户拍板 2026-09-28：暂不执行……方案待优化」，优化方向存档：不加表形态（blob 表内新 encoding 载体/复用现有结构记 member 映射）或等移动端压缩能力成熟后重估。iteration-state 待办同步。此拍板不阻塞本版发布——本版只含 Part A。）
+
+user:
+对了，Part A 记录下在 10 个 tag 版本后会移除迁移代码，确保代码整洁。
+
+assistant:
+（退役时间表落盘三处：binary-blob spec 新增「迁移生命周期」小节——V0 本迭代常驻 / V1 约 10 tag 后删归一任务+适配器+三端接线+KKV 标记+zlib-b64 读兼容分支+测试与指标卡两行，删除前提与 compression 侧 V1 同款强制收尾保证无残留，参考时点 ≈ v1.5.35；RULE 的 migration 清理节奏条目补「同轮退役后台迁移类任务」一句；与 message-content-compression spec 既有三段式 V1 同轮对齐。）
