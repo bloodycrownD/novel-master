@@ -1504,10 +1504,40 @@ export type CompactionConditionsSetRequest = {
 export type BackupExportResult = 'saved' | 'cancelled';
 export type BackupImportResult = 'imported' | 'cancelled';
 
+/**
+ * 存量 blob 形态归一覆盖的表标识全集。
+ *
+ * core 按适配器注册表回报状态，本波次只注册 vfsContent / fileCache；
+ * messageContent 待 A2 波次（该表在 message-content-compression 分支上）
+ * 合并后再纳入，故 renderer 侧缺席的那张按「未取到」展示。
+ */
+export type BlobBinaryTableIdDto = 'vfsContent' | 'fileCache' | 'messageContent';
+
+/** 单表归一状态：已完成 / 进行中（剩余 N 条）。 */
+export type BlobBinaryTableStatusDto = {
+  readonly table: BlobBinaryTableIdDto;
+  /** 已完成：KKV 完成标记已置，或谓词已空（数据上已全归一）。 */
+  readonly done: boolean;
+  /** 未归一行数（进行中态的「剩余 N 条」，已完成恒为 0）。 */
+  readonly pendingCount: number;
+};
+
+/**
+ * 存量 blob 形态归一状态（base64 文本 → 二进制 BLOB）。
+ *
+ * `tables` 只含 core 已注册的适配器，故本类型不含「未知表」兜底行；
+ * 采样失败时为空数组，renderer 按未取到展示占位。
+ */
+export type BlobBinaryStatusDto = {
+  readonly tables: readonly BlobBinaryTableStatusDto[];
+};
+
 /** 数据库存储统计（文件体积由 main 侧 stat 提供，可回收量为 freelist 口径）。 */
 export type DbStatsResult = {
   readonly fileBytes: number;
   readonly reclaimableBytes: number;
+  /** 存量 blob 形态归一状态（存储页状态行数据源）。 */
+  readonly blobBinary: BlobBinaryStatusDto;
 };
 
 /** 数据清理（GC + checkpoint + VACUUM）前后库文件体积。 */

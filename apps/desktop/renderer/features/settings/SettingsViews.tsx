@@ -87,6 +87,8 @@ import {
 } from "@shared/logic/config-forms-stored-config-validity";
 import type {
   AgentRegistryListItemDto,
+  BlobBinaryTableIdDto,
+  DbStatsResult,
   SmartSortCaptureKindDto,
   SmartSortRuleDto,
   SmartSortRuleMatchResultDto,
@@ -133,6 +135,36 @@ function formatStorageBytes(bytes: number): string {
   return `${rounded} ${units[unit]}`;
 }
 
+/**
+ * 存量 blob 形态归一（base64 文本 → 二进制 BLOB）状态行。
+ *
+ * 展示顺序固定为表标识全集：core 只回报已注册适配器，缺席的那张（本波次
+ * messageContent 尚未纳入）按「未取到」显示 '—'，布局不随注册表增减跳动。
+ */
+const BLOB_BINARY_TABLE_ORDER: readonly BlobBinaryTableIdDto[] = [
+  "vfsContent",
+  "fileCache",
+  "messageContent",
+];
+
+const BLOB_BINARY_TABLE_LABELS: Record<BlobBinaryTableIdDto, string> = {
+  vfsContent: "版本内容去 base64",
+  fileCache: "文件缓存去 base64",
+  messageContent: "消息正文去 base64",
+};
+
+/** 单表归一状态文案：已完成 / 进行中（剩余 N 条）/ 未取到 '—'。 */
+function formatBlobBinaryStatus(
+  tables: readonly { table: BlobBinaryTableIdDto; done: boolean; pendingCount: number }[],
+  table: BlobBinaryTableIdDto,
+): string {
+  const row = tables.find((item) => item.table === table);
+  if (!row) {
+    return "—";
+  }
+  return row.done ? "已完成" : `进行中（剩余 ${row.pendingCount} 条）`;
+}
+
 export function DataManagementView() {
   const { retry } = useNovelMaster();
   const [busy, setBusy] = useState(false);
@@ -152,10 +184,7 @@ export function DataManagementView() {
   const [status, setStatus] = useState<CloudSyncStatusState | null>(null);
   const [confirmPull, setConfirmPull] = useState(false);
   const [confirmPushOverwrite, setConfirmPushOverwrite] = useState(false);
-  const [dbStats, setDbStats] = useState<{
-    fileBytes: number;
-    reclaimableBytes: number;
-  } | null>(null);
+  const [dbStats, setDbStats] = useState<DbStatsResult | null>(null);
   const [confirmMaintenance, setConfirmMaintenance] = useState(false);
 
   const reloadStatus = useCallback(async () => {
@@ -576,9 +605,27 @@ export function DataManagementView() {
         title="数据清理"
         desc={`回收缓存冗余与空闲页并压缩数据库文件。当前库体积 ${dbStats ? formatStorageBytes(dbStats.fileBytes) : "—"} · 可回收约 ${dbStats ? formatStorageBytes(dbStats.reclaimableBytes) : "—"}。`}
         action={
-          <Button variant="primary" disabled={controlsDisabled} onClick={() => setConfirmMaintenance(true)}>
-            清理
-          </Button>
+          <div
+            className="settings-actions"
+            style={{ flexDirection: "column", alignItems: "flex-start" }}
+          >
+            {/* 存量 blob 形态归一状态：随既有 2s 轮询的 db/stats 一起刷新，不另起定时器 */}
+            <div className="settings-rows">
+              {BLOB_BINARY_TABLE_ORDER.map((table) => (
+                <div key={table} className="settings-row settings-row--static">
+                  <span className="settings-field__label">
+                    {BLOB_BINARY_TABLE_LABELS[table]}
+                  </span>
+                  <span className="settings-status" style={{ marginLeft: "auto" }}>
+                    {formatBlobBinaryStatus(dbStats?.blobBinary.tables ?? [], table)}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <Button variant="primary" disabled={controlsDisabled} onClick={() => setConfirmMaintenance(true)}>
+              清理
+            </Button>
+          </div>
         }
       />
 

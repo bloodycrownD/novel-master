@@ -23,6 +23,7 @@ import { setComposerAttachmentsSuggestForwardTarget } from "./ipc/forward-compos
 import { setUserMessageAppendedForwardTarget } from "./ipc/forward-user-message-appended.js";
 import { registerIpcHandlers } from "./ipc/register-handlers.js";
 import { getDesktopRuntime } from "./runtime/desktop-runtime-singleton.js";
+import { scheduleDesktopBlobBinaryNormalization } from "./services/blob-binary-normalization.service.js";
 import {
   configureWindowChrome,
   installApplicationMenu,
@@ -168,6 +169,9 @@ async function bootstrapMainServices(): Promise<void> {
     runtime.eventBus,
   );
   detachAgentActivityForwarder = attachAgentActivityForwarder();
+  // 存量 blob 形态归一（base64 文本 → 二进制 BLOB）：后台任务自身带
+  // 守卫与失败兜底，不参与启动成败判定，故 fire-and-forget 不 await。
+  scheduleDesktopBlobBinaryNormalization();
 }
 
 app.whenReady().then(async () => {
