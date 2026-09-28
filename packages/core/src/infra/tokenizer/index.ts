@@ -71,6 +71,12 @@ export {
   type TokenChunkCacheItem,
   type AdvanceGenerationOptions,
 } from "./logic/token-chunk-cache.js";
+// message-token-cache Step 3：双驱动块流程需要与 core 同源的确定性切分
+// （golden 锁定行为），切分器本体不动、只接出导出面。
+export {
+  splitTextIntoChunks,
+  MAX_CHUNK_CHARS,
+} from "./logic/chunk-splitter.js";
 export {
   resolveCurrentPromptTokens,
   type PromptTokenSource,

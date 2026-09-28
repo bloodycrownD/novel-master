@@ -16,6 +16,7 @@ import {
   type CountPromptLlmInputParams,
 } from "./count-prompt-llm-input.js";
 import { readSessionApiPromptTokenEntry } from "./session-api-prompt-token-store.js";
+import { tokenChunkCache } from "./token-chunk-cache.js";
 
 /** 占用结果来源。 */
 export type PromptTokenSource = "api" | "local";
@@ -76,7 +77,26 @@ export async function resolveCurrentPromptTokens(
     };
   }
 
+  // message-token-cache 分层挂接（主代理定稿）：驱动层只做内存层（L1 整串
+  // 查/写 + L2 块查/写），**代际推进与 KKV 持久化挂本读口的本地计数分支**——
+  // 驱动签名零改动，CLI / 测试直接调驱动时不推代、不落盘，行为与无缓存前
+  // 的计数路径一致。
+  //
+  // - 调驱动前：有 session KKV 时先 `seedFromKkv`（进程重启后把上次落盘的
+  //   块表载入为最旧可用代种子，跨重启续命 L2 命中）；
+  // - 驱动返回后：`advanceGeneration` 收尾这一轮「本地计数周期」——代际轮换
+  //   无条件执行（无 sessionKkv 的 CLI / 测试场景只推内存代、不 persist），
+  //   KKV 落盘仅在 sessionKkv 装配且本轮为真实刷新时发生（realRefresh 恒
+  //   true：读口的本地分支本身就是用户可见的真实刷新，不存在预热路径）。
+  const sessionKkv = options?.sessionKkv ?? null;
+  if (sessionKkv != null) {
+    await tokenChunkCache.seedFromKkv(sessionKkv, sessionId);
+  }
   const local = await countPromptLlmInput(params);
+  tokenChunkCache.advanceGeneration(sessionId, {
+    persist: { sessionKkv },
+    realRefresh: true,
+  });
   return {
     tokenCount: local.tokenCount,
     source: "local",

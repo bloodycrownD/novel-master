@@ -152,6 +152,8 @@ export {
   chunkHash16,
   parseTokenChunkCachePayload,
   CHUNK_CACHE_MAX_TOTAL_ENTRIES,
+  splitTextIntoChunks,
+  MAX_CHUNK_CHARS,
   sessionApiPromptTokenCache,
   serializeToolsForTokenCount,
   resolveTokenizerFamily,

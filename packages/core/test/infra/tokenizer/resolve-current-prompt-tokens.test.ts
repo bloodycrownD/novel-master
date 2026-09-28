@@ -11,12 +11,16 @@ import type { ModelRoundSummary } from "../../../src/domain/agent/model/agent-ru
 import {
   PROMPT_TOKENS_LAST_USAGE_KEY,
   SESSION_KKV_DOMAIN_PROMPT_TOKENS,
+  SESSION_KKV_DOMAIN_TOKEN_CHUNKS,
+  TOKEN_CHUNKS_CACHE_KEY,
 } from "../../../src/domain/session-kkv/model/session-kkv-domains.js";
 import {
   createDefaultTokenCounterRegistry,
   pickLastPromptUsage,
+  promptWholeCache,
   resolveCurrentPromptTokens,
   sessionApiPromptTokenCache,
+  tokenChunkCache,
 } from "../../../src/infra/tokenizer/index.js";
 import { serializeSessionApiPromptTokenEntry } from "../../../src/infra/tokenizer/logic/session-api-prompt-token-store.js";
 import { createMemorySessionKkv } from "../../helpers/prompt-layout-test-helpers.js";
@@ -240,3 +244,74 @@ async function writeEntryFor(
     })
   );
 }
+
+/**
+ * T-TC5 读口侧（message-token-cache Step 3 分层挂接）：驱动层只做内存层，
+ * 代际推进 + KKV 持久化挂本读口的本地计数分支——seedFromKkv（计数前）与
+ * advanceGeneration（计数后，realRefresh 持久化）。
+ */
+describe("message-token-cache 读口挂接（T-TC5 读口侧）", () => {
+  beforeEach(() => {
+    registerNodeTokenizerDriverForTests();
+    sessionApiPromptTokenCache.clearAll();
+    promptWholeCache.clearForTests();
+    tokenChunkCache.clearForTests();
+  });
+
+  /** 带正文的参数（空 layout 序列化为空串、产不出可断言的块）。 */
+  function countParamsWithText(text: string) {
+    return {
+      layout: { persist: [], dynamic: [], system: text },
+      ctx: { workplaceDisplay: "", messages: [] },
+      savedModelId: RUN_MODEL_ID,
+      registry: createDefaultTokenCounterRegistry(emptyRegistryDeps()),
+    };
+  }
+
+  it("本地计数后推进代际并写 token_chunks KKV；清 L2 热层后种子载入、同内容零 miss", async () => {
+    const sessionKkv = createMemorySessionKkv();
+    const params = countParamsWithText(
+      "夜色如水，林间小径上落满了枯叶。她停下脚步，抬头望向灯火。",
+    );
+
+    const first = await resolveCurrentPromptTokens(SESSION_ID, params, {
+      sessionKkv,
+    });
+    assert.equal(first.source, "local");
+
+    // advanceGeneration(realRefresh)：本地计数收尾把当前代整表写进了 KKV。
+    const raw = await sessionKkv.get(
+      SESSION_ID,
+      SESSION_KKV_DOMAIN_TOKEN_CHUNKS,
+      TOKEN_CHUNKS_CACHE_KEY
+    );
+    assert.notEqual(raw, null, "本地计数后应写入 token_chunks/chunkCache 行");
+
+    // 模拟进程重启：L1/L2 热层全清，KKV 留存——同内容再计数应靠种子全命中。
+    promptWholeCache.clearForTests();
+    tokenChunkCache.clearForTests();
+    const second = await resolveCurrentPromptTokens(SESSION_ID, params, {
+      sessionKkv,
+    });
+    assert.equal(second.source, "local");
+    assert.equal(second.tokenCount, first.tokenCount);
+    assert.equal(
+      tokenChunkCache.stats().misses,
+      0,
+      "种子载入后同内容计数不得再有 L2 miss（块计数全部来自 KKV 种子）"
+    );
+  });
+
+  it("无 sessionKkv（CLI / 测试）：本地计数只推内存代、不持久化", async () => {
+    const params = countParamsWithText("他把伞收了，窗外的雨顺着玻璃往下淌。");
+    const resolved = await resolveCurrentPromptTokens(SESSION_ID, params);
+    assert.equal(resolved.source, "local");
+    // 驱动把块写进当前代，读口 advanceGeneration 推代后条目落第二代
+    // （当前代清空待下轮计数复用）。
+    const { genCounts } = tokenChunkCache.stats();
+    assert.ok(
+      genCounts[1] > 0,
+      `本地计数收尾应推进代际（块条目应在第二代，实际 ${JSON.stringify(genCounts)}）`
+    );
+  });
+});

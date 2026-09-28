@@ -2,13 +2,16 @@
  * OpenAI-style single-message token count (ST `/openai/count` path).
  *
  * 自 node 驱动 `tokenizer-driver-node/src/logic/` 下沉（fallback-caliber-align
- * D 线）：逻辑逐字节保持原样，node 驱动原路径改为本模块的 re-export，RN 侧
- * 复用同一份实现。注意 encode 的分块包装**不在本模块**——由 message-token-cache
- * feature 在此基础上统一认领，当前保持整串 encode 原样。
+ * D 线）：node 驱动原路径改为本模块的 re-export，RN 侧复用同一份实现。
+ *
+ * encode 的分块包装**唯一落点在本模块**（message-token-cache Step 3 认领，
+ * spec「分块接入」定稿：fa 下沉时保持原样，本步统一包上——rn 调用侧不另包，
+ * 避免双重包装）。只包「文本 encode」这一层，per-message overhead 公式不动。
  *
  * @module infra/tokenizer/logic/count-openai-style-message
  */
 
+import { countTextWithIncrementalTokenizer } from "./count-text-with-tokenizer.js";
 import { countTokens } from "./count-tokens.js";
 
 /**
@@ -44,8 +47,17 @@ export function countOpenAiStyleMessages(
   messages: readonly OpenAiStyleMessage[],
   tiktokenModel: string,
 ): number {
+  // message-token-cache 分块接入（唯一落点）：传入 countTokens 的 encode 函数
+  // 包上 {@link countTextWithIncrementalTokenizer}——单次 encode 被内部切成
+  // ≤64 字符的自然边界段逐段求和，「无空白长中文串」的 O(len²) 病态由这里
+  // 兜住（实测 12K 字符 88s → 亚秒级）。per-message overhead 公式不动：
+  // role / content / name 每段**文本**各自走包装，+3/+9/0301 调整保持原样。
+  // 数值口径因此从「整串 encode」变为「边界段加和」——正常文本误差
+  // -0.02%~+0.35%（spec 实测），T-FA2 的逐字节基准已按 spec 时序迁移至
+  // T-TC5 的 ≤1% 容差口径。
+  const baseEncode = (text: string): number => encoding.encode(text).length;
   return countTokens(
-    (text) => encoding.encode(text).length,
+    (text) => countTextWithIncrementalTokenizer(baseEncode, text),
     messages,
     "precise",
     { tiktokenModel },

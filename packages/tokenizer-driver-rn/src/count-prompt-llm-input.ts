@@ -5,13 +5,25 @@
  * GPT families count in JS via the shared js-tiktoken encoding tables from
  * {@link ./impl/encoding-cache} (same-process singleton, never freed). WEB/SP delegate
  * to Android NovelMasterTokenizer when available; otherwise heuristic + estimated.
+ *
+ * message-token-cache Step 3（分层挂接，主代理定稿）：入口挂 L1 整串缓存；
+ * JS 档（countTiktoken 成功路径与 fallbackCount）与 node 驱动同构走 L2 块平面
+ * 缓存；native 档（WEB/SP 过桥）**仅 L1**——计数结果写 L1、L1 命中则不过桥
+ * （Android 侧整串计数，块粒度无意义，spec：WEB/SP 家族不分块）。代际推进与
+ * KKV 持久化挂 core 读口（resolve-current-prompt-tokens），驱动签名零改动。
  */
 import {
   CHARACTERS_PER_TOKEN_RATIO,
+  buildCounterScope,
+  chunkHash16,
+  countTextWithIncrementalTokenizer,
   resolveTokenizerFamily,
   mapVendorModelIdToTiktokenModel,
+  promptWholeCache,
   serializePromptLlmInput,
   serializeToolsForTokenCount,
+  splitTextIntoChunks,
+  tokenChunkCache,
   countOpenAiStyleMessages,
   wrapSerializedPromptAsSystemMessage,
   type CountPromptLlmInputParams,
@@ -25,7 +37,7 @@ import {
   type NativeCountResponse,
 } from "./android-native-bridge.js";
 import {
-  countTextWithDefaultEncoding,
+  getDefaultRnEncoding,
   getRnEncoding,
   type RnEncodingName,
   type RnTokenEncoding,
@@ -57,25 +69,57 @@ function heuristicCount(text: string): number {
   return Math.ceil(text.length / CHARACTERS_PER_TOKEN_RATIO);
 }
 
+/** 与 `register.ts` 的 RN_DRIVER_NAME 同值（L2 计数器身份段；import 会成环，故就地重复）。 */
+const DRIVER_NAME = "rn";
+
 /**
- * 兜底计数的**唯一落点**（stream-metrics-native ④）：真分词器（默认 cl100k）
- * → 字符折算。
+ * 块级 L2 计数（与 node 驱动同构，spec 计数流程第 3 步）：
+ * `splitTextIntoChunks(整串)` → 逐块查 L2 → miss 块经
+ * `countTextWithIncrementalTokenizer` 现算写回 → 求和。
+ */
+function countChunksWithL2(
+  text: string,
+  scope: string,
+  encodeText: (text: string) => number,
+): number {
+  let total = 0;
+  for (const chunk of splitTextIntoChunks(text)) {
+    const hash = chunkHash16(chunk);
+    const hit = tokenChunkCache.lookup(hash, scope);
+    if (hit !== undefined) {
+      total += hit;
+      continue;
+    }
+    const count = countTextWithIncrementalTokenizer(encodeText, chunk);
+    tokenChunkCache.record(hash, scope, count);
+    total += count;
+  }
+  return total;
+}
+
+/**
+ * 兜底计数的**唯一落点**（stream-metrics-native ④ + message-token-cache L2 块
+ * 流程）：真分词器（默认 cl100k，逐块查 L2）→ 字符折算。
  *
  * 为什么兜底不再直接折算：`ceil(字符数 / 3.35)` 是**英文**口径，对中文正文
  * （cl100k 约 1.64 token/字符，即 ≈0.61 字符/token）系统性低估 **82%~84%**。
  * 压缩阈值是拿这些数字去卡上下文窗口的，低估意味着「快满了还在继续写」——这
- * 正是最该避免的组合。
- * 换成 cl100k 后误差落到 0.5% 量级。
+ * 正是最该避免的组合。换成 cl100k 后误差落到 0.5% 量级。
  *
- * 为什么这里**只有**字符折算作为最后一级：`countTextWithDefaultEncoding`
- * 返回 null 的唯一原因是「整张编码表建不起来」（缺 ranks / 环境未就绪）。那种
- * 情况下别无选择，但它是**一次性降级**（失败被缓存、本进程不重试），且返回的
+ * 与 node 侧的口径差异只有一层：整串一次增量计数 → 按块分别增量计数再求和
+ * （正常文本差 -0.02%~+0.35%，spec 实测；对拍用例按 1% 容差迁移，见 T-TC5）。
+ *
+ * 为什么这里**只有**字符折算作为最后一级：编码表建不起来（缺 ranks / 环境未
+ * 就绪）时别无选择，但它是**一次性降级**（失败被缓存、本进程不重试），且返回的
  * `counterKind` 仍是 `heuristic`，调用方（尤其压缩阈值）不会误以为这是家族级
- * 的真分词器读数。
+ * 的真分词器读数。该档不进 L2——没有真分词器就没有可缓存的稳定读数。
  */
-function fallbackCount(text: string): number {
-  const real = countTextWithDefaultEncoding(text);
-  return real ?? heuristicCount(text);
+function fallbackCount(text: string, scope: string): number {
+  const encoding = getDefaultRnEncoding();
+  if (encoding == null) {
+    return heuristicCount(text);
+  }
+  return countChunksWithL2(text, scope, (chunk) => encoding.encode(chunk).length);
 }
 
 interface SerializedCountResult {
@@ -161,6 +205,7 @@ function resolveEncoding(name: RnEncodingName): RnTokenEncoding | null {
 async function countTiktoken(
   serialized: string,
   vendorModelId: string,
+  scope: string,
 ): Promise<SerializedCountResult> {
   const tiktokenModel = mapVendorModelIdToTiktokenModel(vendorModelId);
   const encName = resolveRnEncodingName(vendorModelId, tiktokenModel);
@@ -172,25 +217,30 @@ async function countTiktoken(
     // heuristic：cl100k 对这些模型只是近似，冒充精确会让压缩阈值跳过
     // 0.85 安全系数。
     return {
-      count: fallbackCount(serialized),
+      count: fallbackCount(serialized, scope),
       counterKind: "heuristic",
       estimated: true,
     };
   }
   try {
-    // OpenAI 消息包装对齐 node 精确档：core 下沉版 countOpenAiStyleMessages
-    // 内部按 tiktokenModel 区分 0301 的 +4/-1/+9 与 per-message overhead，
-    // 双端同算法同表。encode 保持整串、不加任何分块包装——分块保护由
-    // message-token-cache feature 后续在 core 下沉版内认领，本层不包。
-    const count = countOpenAiStyleMessages(
+    // message-token-cache L2 块流程（与 node 精确档同构）：overhead 经 core
+    // 下沉版 countOpenAiStyleMessages 对**空 content** 求得（per-message
+    // overhead 公式零复刻——空串在增量计数器里短路不调 encode，恰剩
+    // perMessage + w(role) + tail，与 node 侧 countOpenAiStyleChunked 同一
+    // 组装），content 部分按 splitTextIntoChunks 块求和过 L2。数值与整串
+    // 口径差 ≤1%（T-TC5）。
+    const overhead = countOpenAiStyleMessages(
       encoding,
-      [wrapSerializedPromptAsSystemMessage(serialized)],
+      [wrapSerializedPromptAsSystemMessage("")],
       tiktokenModel,
     );
+    const count =
+      overhead +
+      countChunksWithL2(serialized, scope, (text) => encoding.encode(text).length);
     return { count, counterKind: "tiktoken", estimated: false };
   } catch {
     return {
-      count: fallbackCount(serialized),
+      count: fallbackCount(serialized, scope),
       counterKind: "heuristic",
       estimated: true,
     };
@@ -209,20 +259,33 @@ async function countSerialized(
   family: TokenizerFamily,
   serialized: string,
   vendorModelId: string,
+  chunkScope?: string,
 ): Promise<SerializedCountResult> {
+  // L2 计数器身份：入口（countPromptLlmInputRn）会传入含 override 的完整
+  // scope；直接调用（测试钩子）缺省时按 (模型, 家族, rn 驱动) 拼——两套键
+  // 各自独立、语义一致，不会互串。
+  const scope =
+    chunkScope ??
+    buildCounterScope({
+      vendorModelId,
+      tokenizerFamily: family,
+      driverName: DRIVER_NAME,
+    });
   if (family === "heuristic") {
     return {
-      count: fallbackCount(serialized),
+      count: fallbackCount(serialized, scope),
       counterKind: "heuristic",
       estimated: true,
     };
   }
   // GPT path stays in JS — js-tiktoken is exact and Metro-safe (M0/M1).
   if (family === "tiktoken" || family === "gpt2") {
-    return countTiktoken(serialized, vendorModelId);
+    return countTiktoken(serialized, vendorModelId, scope);
   }
   if (WEB_FAMILIES.has(family) || SP_FAMILIES.has(family)) {
     if (isNativeTokenizerAvailable()) {
+      // native 档（WEB/SP 过桥）：Android 侧整串计数，**不切块**（spec：
+      // native 档仅 L1——L1 命中的拦截在驱动入口，这里只负责真实计数）。
       const nativeResult = await countPromptViaNative({
         serialized,
         family,
@@ -233,7 +296,7 @@ async function countSerialized(
       }
     }
     return {
-      count: fallbackCount(serialized),
+      count: fallbackCount(serialized, scope),
       // 原生分词器不可用（iOS / 未链接模块）时**必须**报 `heuristic` 而不是家族名：
       // 这里跑的是 cl100k 近似，不是该家族的真 tokenizer。报家族名会让压缩阈值
       // 把它当成「家族级精确读数」而不乘 0.85 安全系数，等于拿一个近似值卡精确
@@ -243,7 +306,7 @@ async function countSerialized(
     };
   }
   return {
-    count: fallbackCount(serialized),
+    count: fallbackCount(serialized, scope),
     counterKind: "heuristic",
     estimated: true,
   };
@@ -277,11 +340,45 @@ export async function countPromptLlmInputRn(
   const serialized =
     (await serializePromptLlmInput(layout, ctx)) +
     serializeToolsForTokenCount(params.tools);
+
+  // ---- L1 整串缓存（message-token-cache Step 3）----
+  // 键 = 内容指纹（hashContent(整串+tools 串) 前 16 hex，与 L2 块键同口径）
+  // × 计数器身份。native 档的 L1 拦截就在这里：命中直接返回、不过桥。
+  // 驱动内部查 L1 传**空 sessionId**（键含内容指纹，跨会话共享安全）；
+  // sessionId 段的会话语义由读口层决定，驱动不越层。
+  const scope = buildCounterScope({
+    vendorModelId,
+    tokenizerOverride: override,
+    tokenizerFamily: family,
+    driverName: DRIVER_NAME,
+  });
+  const contentHash = chunkHash16(serialized);
+  const cached = promptWholeCache.lookup("", scope, contentHash);
+  if (cached != null) {
+    return {
+      tokenCount: cached.tokenCount,
+      counterKind: cached.counterKind,
+      estimated: cached.estimated,
+      savedModelId,
+      vendorModelId,
+      tokenizerFamily: family,
+    };
+  }
+
   const { count, counterKind, estimated } = await countSerialized(
     family,
     serialized,
     vendorModelId,
+    scope,
   );
+
+  // miss 后写 L1（JS 档与 native 档都写：native 档靠它挡「无变更重复过桥」）。
+  promptWholeCache.record("", scope, contentHash, {
+    tokenCount: count,
+    counterKind,
+    estimated,
+  });
+
   return {
     tokenCount: count,
     counterKind,

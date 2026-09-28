@@ -378,3 +378,141 @@ describe('tokenizer-driver-rn countPromptLlmInputRn', () => {
     expect(withTools.counterKind).toBe('heuristic');
   });
 });
+
+/**
+ * T-TC5（message-token-cache Step 3）rn 侧：驱动层 L1/L2 的调用计数断言。
+ * 口径与 node 侧一致——缓存全命中时 encode / 桥调用 0 次；单块内部可能被
+ * 增量计数器按自然边界多切（spec 注记），不得断言「单块 = 1 次 encode」，
+ * 局部性用例以无标点连续中文夹具把变化块内部钉在 1 段。
+ */
+describe('T-TC5 驱动缓存（message-token-cache Step 3 / rn）', () => {
+  beforeEach(() => {
+    mockCountPrompt.mockReset();
+    nativeBridgeState.available = true;
+    // L1/L2 是进程级单例：跨用例清空，避免被上方既有用例的缓存条目污染。
+    const {promptWholeCache, tokenChunkCache} = require('@novel-master/core/provider');
+    promptWholeCache.clearForTests();
+    tokenChunkCache.clearForTests();
+  });
+
+  afterEach(() => {
+    const {
+      __test__,
+      __resetRnEncodingCacheForTests,
+      __setRnEncodingFactoryForTests,
+    } = require('@novel-master/tokenizer-driver-rn');
+    __setRnEncodingFactoryForTests(null);
+    __resetRnEncodingCacheForTests();
+    __test__.setEncodingSourceForTests(null);
+  });
+
+  it('native 档：同输入两次计数，第二次原生桥调用 0 次（L1 命中不过桥）', async () => {
+    mockCountPrompt.mockResolvedValue({
+      tokenCount: 42,
+      counterKind: 'claude',
+      estimated: false,
+    });
+    const {countPromptLlmInputRn} = require('@novel-master/tokenizer-driver-rn');
+    const params = {
+      layout: {persist: [], dynamic: []},
+      ctx: {workplaceDisplay: '', messages: []},
+      savedModelId: 'anthropic/claude-3-5-sonnet',
+      registry: {
+        heuristic: {countText: (text: string) => Math.ceil(text.length / 3.35)},
+      },
+    };
+
+    const first = await countPromptLlmInputRn(params);
+    expect(first.tokenCount).toBe(42);
+    expect(first.counterKind).toBe('claude');
+    expect(mockCountPrompt).toHaveBeenCalledTimes(1);
+
+    const second = await countPromptLlmInputRn(params);
+    expect(second.tokenCount).toBe(42);
+    expect(second.counterKind).toBe('claude');
+    expect(second.estimated).toBe(false);
+    expect(mockCountPrompt).toHaveBeenCalledTimes(
+      1,
+      'L1 命中：同输入第二次不得再过原生桥',
+    );
+  });
+
+  it('JS 档：同输入两次计数，第二次编码表 encode 调用 0 次（L1 命中）', async () => {
+    let encodeCalls = 0;
+    const {__test__, countPromptLlmInputRn} = require('@novel-master/tokenizer-driver-rn');
+    __test__.setEncodingSourceForTests(() => ({
+      encode: (text: string) => {
+        encodeCalls += 1;
+        return {length: text.length};
+      },
+    }));
+
+    const params = {
+      layout: {persist: [], dynamic: []},
+      ctx: {workplaceDisplay: '', messages: []},
+      savedModelId: 'openai/gpt-4o',
+      registry: {
+        heuristic: {countText: (text: string) => Math.ceil(text.length / 3.35)},
+      },
+    };
+    const first = await countPromptLlmInputRn(params);
+    expect(first.counterKind).toBe('tiktoken');
+    const callsAfterFirst = encodeCalls;
+    expect(callsAfterFirst).toBeGreaterThan(0);
+
+    const second = await countPromptLlmInputRn(params);
+    expect(second.tokenCount).toBe(first.tokenCount);
+    expect(mockCountPrompt).not.toHaveBeenCalled();
+    expect(encodeCalls).toBe(
+      callsAfterFirst,
+      'L1 命中：同输入第二次不得再调编码表 encode',
+    );
+  });
+
+  it('JS 档：改一处正文后仅变化块重算（新增 encode 调用 = 变化块数 + 1 次 role encode）', async () => {
+    let encodeCalls = 0;
+    const {__test__} = require('@novel-master/tokenizer-driver-rn');
+    __test__.setEncodingSourceForTests(() => ({
+      encode: (text: string) => {
+        encodeCalls += 1;
+        return {length: text.length};
+      },
+    }));
+
+    // 无标点连续中文：块内无自然边界，增量计数器对每块恰好 1 次 encode
+    // （夹具控制，见 describe 头注记）。
+    const baseText =
+      '这是一段完全没有标点与空白的连续中文正文用来验证编辑局部性'.repeat(6);
+    const first = await __test__.countSerialized(
+      'tiktoken',
+      baseText,
+      'openai/gpt-4o',
+    );
+    expect(first.counterKind).toBe('tiktoken');
+    const callsAfterFirst = encodeCalls;
+    expect(callsAfterFirst).toBeGreaterThan(0);
+
+    const editedText = baseText.replace('连续', '衔接');
+    expect(editedText).not.toBe(baseText);
+    const second = await __test__.countSerialized(
+      'tiktoken',
+      editedText,
+      'openai/gpt-4o',
+    );
+    expect(second.counterKind).toBe('tiktoken');
+
+    const {splitTextIntoChunks, chunkHash16} = require('@novel-master/core/provider');
+    const hashesA = splitTextIntoChunks(baseText).map((c: string) => chunkHash16(c));
+    const hashesB = splitTextIntoChunks(editedText).map((c: string) => chunkHash16(c));
+    expect(hashesA.length).toBe(hashesB.length);
+    let changedChunks = 0;
+    for (let i = 0; i < hashesA.length; i += 1) {
+      if (hashesA[i] !== hashesB[i]) {
+        changedChunks += 1;
+      }
+    }
+    expect(changedChunks).toBe(1);
+    // +1 = overhead 路径对 role "system" 的 encode（无边界恒 1 段）。
+    expect(encodeCalls - callsAfterFirst).toBe(changedChunks + 1);
+  });
+});
