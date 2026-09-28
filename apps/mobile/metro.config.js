@@ -17,6 +17,8 @@ const coreDistSmokeFiles = [
   'domain/workplace/logic/default-dir-rule.js',
   'infra/tokenizer/logic/resolve-context-window.js',
   'infra/tokenizer/logic/count-prompt-llm-input.js',
+  'infra/tokenizer/logic/count-openai-style-message.js',
+  'infra/tokenizer/encoding-registry.js',
   'infra/nmtp/logic/registry.js',
   'service/compaction-conditions/create-compaction-condition-evaluator.js',
 ];

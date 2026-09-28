@@ -72,6 +72,24 @@ export {
   type ChatTokenCountKind,
   type CountTokensOptions,
 } from "./logic/count-tokens.js";
+export {
+  countOpenAiStyleMessages,
+  wrapSerializedPromptAsSystemMessage,
+  convertMessagesForWebTokenizer,
+  countWebTokenizerMessages,
+  type OpenAiStyleMessage,
+  type CountOpenAiStyleMessageOptions,
+  type TokenEncoder,
+} from "./logic/count-openai-style-message.js";
+export {
+  getEncoding,
+  clearForTests,
+  setFactoryForTests,
+  setClockForTests,
+  ENCODING_RETRY_TTL_MS,
+  type EncodingHandle,
+  type EncodingFactory,
+} from "./encoding-registry.js";
 export { tokenizerAssetPaths } from "./logic/tokenizer-asset-paths.js";
 export {
   parseTokenCounterModePref,
