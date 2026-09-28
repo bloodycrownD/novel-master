@@ -1,11 +1,12 @@
 /**
- * 存储配置：存储空间概览、云端配置入口、数据清理与数据库导入导出。
- * 云同步状态与拉取/推送操作已迁移至 CloudSyncStorageScreen。
+ * 存储配置：存储空间概览、存量数据迁移进度、云端配置入口、数据清理与
+ * 数据库导入导出。云同步状态与拉取/推送操作已迁移至 CloudSyncStorageScreen。
  */
 import React, {useCallback, useEffect, useState} from 'react';
-import {Alert, ScrollView, StyleSheet} from 'react-native';
+import {Alert, ScrollView, StyleSheet, Text, View} from 'react-native';
 import {useFocusEffect, useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
+import {FormSectionCard} from '../../components/form/FormSectionCard';
 import {ProfileMenuItem} from '../../components/profile/ProfileMenuItem';
 import {ProfileStatusCard} from '../../components/profile/ProfileStatusCard';
 import {useToast} from '../../components/chrome/ToastHost';
@@ -31,26 +32,11 @@ import {useTheme} from '../../theme/ThemeProvider';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
-/**
- * 存量 blob 行形态归一（去 base64）状态行的展示文案。
- *
- * 表标识由 core 归一任务的注册表决定，且各波次注册进度不同（本波次只注册
- * 了 vfsContent / fileCache，messageContent 待消息压缩那条线合并后才进
- * 注册表），故 key 用宽 string 而非 core 的表标识联合：未注册的表照样出
- * 一行，value 落 '—' 占位。新增表时在此补一行映射即可。
- */
-const BLOB_BINARY_LABELS: Record<string, string> = {
-  vfsContent: '版本内容去 base64',
-  fileCache: '文件缓存去 base64',
-  messageContent: '消息正文去 base64',
-};
-
-/** 每个注册表一行；顺序与 core 归一任务的注册表一致。 */
-const BLOB_BINARY_ROWS: ReadonlyArray<{table: string; label: string}> =
-  Object.keys(BLOB_BINARY_LABELS).map(table => ({
-    table,
-    label: BLOB_BINARY_LABELS[table],
-  }));
+/** 迁移状态行的取值三态（颜色映射：success / warning / 默认正文色）。 */
+interface MigrationValue {
+  readonly value: string;
+  readonly tone: 'default' | 'success' | 'warning';
+}
 
 export function StorageConfigScreen() {
   const {tokens} = useTheme();
@@ -123,15 +109,64 @@ export function StorageConfigScreen() {
   };
 
   /**
-   * 归一状态文案两态：已完成 / 进行中（剩余 N 条）；未取到状态（如 Agent
-   * 运行中采样被守卫拒绝、该表尚未注册适配器）显示占位 '—'。
+   * 消息正文压缩（content json → zlib 压缩存储）状态行取值。
+   * 未取到状态（如 Agent 运行中采样被守卫拒绝）显示占位 '—'。
    */
-  const blobBinaryValue = (table: string): string => {
+  const messageCompactionValue = (): MigrationValue => {
+    if (messageCompaction == null) {
+      return {value: '—', tone: 'default'};
+    }
+    return messageCompaction.done
+      ? {value: '已完成', tone: 'success'}
+      : {
+          value: `进行中（剩余 ${messageCompaction.pendingCount} 条）`,
+          tone: 'default',
+        };
+  };
+
+  /**
+   * 去 base64 状态行取值（cr-06 三态）：已完成 / 已完成（N 条需人工处理）
+   * / 进行中（剩余 N 条）；未取到状态显示占位 '—'。
+   */
+  const blobBinaryValue = (table: string): MigrationValue => {
     const status = blobBinary.find(row => row.table === table);
     if (!status) {
-      return '—';
+      return {value: '—', tone: 'default'};
     }
-    return status.done ? '已完成' : `进行中（剩余 ${status.pendingCount} 条）`;
+    if (status.done) {
+      return status.failedCount > 0
+        ? {
+            value: `已完成（${status.failedCount} 条需人工处理）`,
+            tone: 'warning',
+          }
+        : {value: '已完成', tone: 'success'};
+    }
+    return {
+      value: `进行中（剩余 ${status.pendingCount} 条）`,
+      tone: 'default',
+    };
+  };
+
+  /**
+   * 迁移卡片三行（用户拍板 2026-09-28）：消息正文压缩 + 两张 blob 表去
+   * base64，指标卡形态只读展示（非菜单项）。消息正文「去 base64」不设
+   * 状态行——发版形态下压缩搬运直接写二进制，不存在用户可见的中间态，
+   * 仅开发机历史形态由归一任务静默收敛。
+   */
+  const migrationRows: ReadonlyArray<{label: string} & MigrationValue> = [
+    {label: '消息正文压缩', ...messageCompactionValue()},
+    {label: '版本内容去 base64', ...blobBinaryValue('vfsContent')},
+    {label: '文件缓存去 base64', ...blobBinaryValue('fileCache')},
+  ];
+
+  const migrationValueColor = (tone: MigrationValue['tone']): string => {
+    if (tone === 'success') {
+      return tokens.success;
+    }
+    if (tone === 'warning') {
+      return tokens.warning;
+    }
+    return tokens.text;
   };
 
   useEffect(() => {
@@ -161,6 +196,27 @@ export function StorageConfigScreen() {
         ]}
         tokens={tokens}
       />
+      <FormSectionCard
+        title="存量数据迁移"
+        hint="后台自动整理存量数据（压缩与二进制化），期间可正常使用，Agent 运行时自动让路"
+        tokens={tokens}>
+        {migrationRows.map(row => (
+          <View key={row.label} style={styles.migrationRow}>
+            <Text
+              style={[styles.migrationLabel, {color: tokens.textSecondary}]}
+              numberOfLines={2}>
+              {row.label}
+            </Text>
+            <Text
+              style={[
+                styles.migrationValue,
+                {color: migrationValueColor(row.tone)},
+              ]}>
+              {row.value}
+            </Text>
+          </View>
+        ))}
+      </FormSectionCard>
       <ProfileMenuItem
         icon="☁️"
         label="云端配置"
@@ -201,50 +257,6 @@ export function StorageConfigScreen() {
               },
             ],
           );
-        }}
-      />
-      {BLOB_BINARY_ROWS.map(({table, label}) => (
-        <ProfileMenuItem
-          key={table}
-          icon="🧬"
-          label={label}
-          value={blobBinaryValue(table)}
-          tokens={tokens}
-          onPress={() => {
-            // 归一是后台自动任务，无需手动触发；点按只解释当前进度。
-            const value = blobBinaryValue(table);
-            Alert.alert(
-              label,
-              value === '—'
-                ? '尚未采样到该表的归一状态（任务可能尚未开始，或该表当前版本未纳入归一）。应用空闲时会自动在后台完成，无需手动操作。'
-                : value === '已完成'
-                ? '该表的存量内容已全部转为二进制形态，库体积已相应减小。'
-                : '后台正在把该表的存量内容从 base64 文本转为二进制，剩余条目见右侧。应用空闲时自动继续，期间 Agent 运行时会自动让路，无需手动操作。',
-              [{text: '知道了', style: 'cancel'}],
-            );
-          }}
-        />
-      ))}
-      <ProfileMenuItem
-        icon="🗜️"
-        label="消息压缩"
-        value={
-          messageCompaction == null
-            ? '—'
-            : messageCompaction.done
-              ? '已完成'
-              : `进行中（剩余 ${messageCompaction.pendingCount} 条）`
-        }
-        tokens={tokens}
-        onPress={() => {
-          // 两态状态行：只读展示（点击刷新状态），副文案在详情提示里给足。
-          Alert.alert(
-            '消息压缩',
-            messageCompaction?.done
-              ? '消息正文以 zlib 压缩存储，存储已优化完成。'
-              : '消息正文正在后台压缩为 zlib 存储（迁移期间随时可正常使用）；完成前升级新版本，会在首次启动时等待优化收尾（一次性）。',
-          );
-          refreshMaintenanceStats().catch(() => undefined);
         }}
       />
       <ProfileMenuItem
@@ -302,4 +314,23 @@ export function StorageConfigScreen() {
 const styles = StyleSheet.create({
   scroll: {flex: 1},
   scrollContent: {paddingBottom: 24},
+  migrationRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+    gap: 12,
+    paddingVertical: 6,
+  },
+  migrationLabel: {
+    flexShrink: 1,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  migrationValue: {
+    flexShrink: 0,
+    fontSize: 14,
+    lineHeight: 20,
+    fontVariant: ['tabular-nums'],
+    textAlign: 'right',
+  },
 });

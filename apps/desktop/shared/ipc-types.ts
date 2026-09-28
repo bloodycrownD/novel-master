@@ -1512,13 +1512,15 @@ export type BackupImportResult = 'imported' | 'cancelled';
  */
 export type BlobBinaryTableIdDto = 'vfsContent' | 'fileCache' | 'messageContent';
 
-/** 单表归一状态：已完成 / 进行中（剩余 N 条）。 */
+/** 单表归一状态：已完成（含需人工处理的坏行计数）/ 进行中（剩余 N 条）。 */
 export type BlobBinaryTableStatusDto = {
   readonly table: BlobBinaryTableIdDto;
-  /** 已完成：KKV 完成标记已置，或谓词已空（数据上已全归一）。 */
+  /** 已完成：KKV 完成标记已置，或谓词已空（等价完成）。 */
   readonly done: boolean;
   /** 未归一行数（进行中态的「剩余 N 条」，已完成恒为 0）。 */
   readonly pendingCount: number;
+  /** 完成时被跳过的坏行数（原样保留、读路径按 miss 自愈，需人工关注）。 */
+  readonly failedCount: number;
 };
 
 /**

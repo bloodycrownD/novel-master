@@ -73,11 +73,11 @@ const MAINTENANCE_RESULT = {
   reclaimedBytes: 40960,
 };
 
-/** core 归一任务注册表状态（本波次只注册 vfsContent / fileCache）。 */
+/** core 归一任务注册表状态（三张表均已注册；failedCount 来自标记快照）。 */
 const BLOB_BINARY_STATUS = {
   tables: [
-    {table: 'vfsContent', done: false, pendingCount: 1100},
-    {table: 'fileCache', done: true, pendingCount: 0},
+    {table: 'vfsContent', done: false, pendingCount: 1100, failedCount: 0},
+    {table: 'fileCache', done: true, pendingCount: 0, failedCount: 0},
   ],
 };
 
@@ -139,8 +139,8 @@ describe('db-maintenance.service', () => {
       fileBytes: 1048576,
       reclaimableBytes: 40960,
       blobBinary: [
-        {table: 'vfsContent', done: false, pendingCount: 1100},
-        {table: 'fileCache', done: true, pendingCount: 0},
+        {table: 'vfsContent', done: false, pendingCount: 1100, failedCount: 0},
+        {table: 'fileCache', done: true, pendingCount: 0, failedCount: 0},
       ],
       messageCompaction: {done: false, pendingCount: 7},
     });
@@ -150,18 +150,23 @@ describe('db-maintenance.service', () => {
     // 模拟后续波次注册第三张表：本服务只做透传，不硬编码表清单
     mockGetBlobBinaryStatus.mockResolvedValue({
       tables: [
-        {table: 'vfsContent', done: true, pendingCount: 0},
-        {table: 'fileCache', done: true, pendingCount: 0},
-        {table: 'messageContent', done: false, pendingCount: 42},
+        {table: 'vfsContent', done: true, pendingCount: 0, failedCount: 0},
+        {table: 'fileCache', done: true, pendingCount: 0, failedCount: 0},
+        {
+          table: 'messageContent',
+          done: true,
+          pendingCount: 0,
+          failedCount: 2,
+        },
       ],
     });
 
     const stats = await getDatabaseMaintenanceStats(runtime);
 
     expect(stats.blobBinary).toEqual([
-      {table: 'vfsContent', done: true, pendingCount: 0},
-      {table: 'fileCache', done: true, pendingCount: 0},
-      {table: 'messageContent', done: false, pendingCount: 42},
+      {table: 'vfsContent', done: true, pendingCount: 0, failedCount: 0},
+      {table: 'fileCache', done: true, pendingCount: 0, failedCount: 0},
+      {table: 'messageContent', done: true, pendingCount: 0, failedCount: 2},
     ]);
   });
 

@@ -77,3 +77,23 @@ describe("SettingsViews 数据清理 UI（T-UID1）", () => {
     assert.match(body, /toastSettingsError\(res\.error\.message\)/);
   });
 });
+
+describe("SettingsViews 存量数据迁移卡片（指标卡形态，用户拍板 2026-09-28）", () => {
+  const source = readFileSync(settingsViewsPath, "utf8");
+
+  it("三行进度：消息正文压缩 + 版本内容去 base64 + 文件缓存去 base64", () => {
+    assert.match(source, /title="存量数据迁移"/);
+    assert.match(source, /label: "消息正文压缩"/);
+    assert.match(source, /label: "版本内容去 base64"/);
+    assert.match(source, /label: "文件缓存去 base64"/);
+  });
+
+  it("cr-06 第三态：done 且 failedCount > 0 显示「已完成（N 条需人工处理）」", () => {
+    assert.match(source, /failedCount > 0/);
+    assert.match(source, /条需人工处理/);
+  });
+
+  it("消息正文「去 base64」不设状态行（发版形态无用户可见中间态）", () => {
+    assert.doesNotMatch(source, /消息正文去 base64/);
+  });
+});

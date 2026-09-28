@@ -180,8 +180,15 @@ export interface BlobBinaryTableStatus {
   readonly table: BlobBinaryTableId;
   /** 已完成：KKV 标记已置，或谓词空（数据上已全归一，等价完成）。 */
   readonly done: boolean;
-  /** 未归一行计数（进行中态的「剩余 N 条」）。 */
+  /** 未归一行计数（进行中态的「剩余 N 条」，已完成恒为 0）。 */
   readonly pendingCount: number;
+  /**
+   * 完成时被跳过的坏行数（解码失败、原样保留需人工关注）。
+   *
+   * @remarks 来自完成标记里的快照（置标记时记录）；`done = false` 时恒 0。
+   * 读路径对同类坏行按 miss 自愈，> 0 只表示该表存在需人工关注的行。
+   */
+  readonly failedCount: number;
 }
 
 /** {@link getBlobBinaryStatus} 结果。 */
@@ -230,14 +237,45 @@ export interface BlobBinaryRunResult {
   readonly stalled: boolean;
 }
 
-/** 读该表的 KKV 完成标记（两段式 module/key）。 */
+/** 完成标记值（JSON；旧版为纯 ISO 时间戳字符串，解析兜底见 readDoneMarker）。 */
+interface BlobBinaryDoneMarker {
+  /** 置标记时间。 */
+  readonly at: string;
+  /** 置标记时本表累计跳过的坏行数（需人工关注的行）。 */
+  readonly failedCount: number;
+}
+
+/**
+ * 读该表的 KKV 完成标记（两段式 module/key）。
+ *
+ * 标记值向后兼容：旧版是纯 ISO 时间戳字符串（无 failedCount 可言），
+ * JSON.parse 失败一律按 `{ failedCount: 0 }` 处理——不抛、不刷屏，
+ * 旧库升级后状态行照常显示（failedCount 归零口径与「旧标记时代无此
+ * 信号」一致）。
+ */
 async function readDoneMarker(
   conn: TdbcConnection,
   adapter: BlobTableAdapter
-): Promise<boolean> {
+): Promise<BlobBinaryDoneMarker | null> {
   const kkv = new SqliteKkvRepository(conn);
   const entry = await kkv.get(BLOB_BINARY_KKV_MODULE, adapter.doneKey);
-  return entry != null;
+  if (entry == null) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(entry.value) as Partial<BlobBinaryDoneMarker>;
+    return {
+      at: typeof parsed.at === "string" ? parsed.at : entry.value,
+      failedCount:
+        typeof parsed.failedCount === "number" &&
+        Number.isFinite(parsed.failedCount)
+          ? parsed.failedCount
+          : 0,
+    };
+  } catch {
+    // 旧版纯 ISO 字符串标记：无 failedCount 快照，按 0 处理。
+    return { at: entry.value, failedCount: 0 };
+  }
 }
 
 /** 谓词 COUNT（仅未完成的表跑，稳态零成本）。 */
@@ -267,8 +305,14 @@ export async function getBlobBinaryStatus(
 ): Promise<BlobBinaryStatus> {
   const tables: BlobBinaryTableStatus[] = [];
   for (const adapter of TABLE_ADAPTERS) {
-    if (await readDoneMarker(conn, adapter)) {
-      tables.push({ table: adapter.tableId, done: true, pendingCount: 0 });
+    const marker = await readDoneMarker(conn, adapter);
+    if (marker != null) {
+      tables.push({
+        table: adapter.tableId,
+        done: true,
+        pendingCount: 0,
+        failedCount: marker.failedCount,
+      });
       continue;
     }
     const pendingCount = await countPendingRows(conn, adapter);
@@ -276,6 +320,7 @@ export async function getBlobBinaryStatus(
       table: adapter.tableId,
       done: pendingCount === 0,
       pendingCount,
+      failedCount: 0,
     });
   }
   return { tables };
@@ -417,11 +462,12 @@ async function normalizeTable(
 
   // 谓词空（或仅剩解码失败的坏行）→ 置该表的 KKV 完成标记（两表各自
   // 短路，互不牵连）。坏行不阻断标记：否则每次启动都要重扫同一批坏行
-  // 再抛一遍，任务永远收敛不了。
+  // 再抛一遍，任务永远收敛不了。标记值存 JSON（含 failedCount 快照，
+  // cr-06：状态行据它显示「已完成（N 条需人工处理）」第三态）。
   await new SqliteKkvRepository(conn).set(
     BLOB_BINARY_KKV_MODULE,
     adapter.doneKey,
-    new Date().toISOString()
+    JSON.stringify({ at: new Date().toISOString(), failedCount })
   );
   return { done: true, normalizedCount, failedCount, stalled: false };
 }

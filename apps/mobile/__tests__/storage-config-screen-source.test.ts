@@ -81,3 +81,27 @@ describe('StorageConfigScreen 数据清理行为 — T-UIM1', () => {
     expect(source).toMatch(/清理完成/);
   });
 });
+
+describe('StorageConfigScreen 存量数据迁移卡片 — 指标卡形态（用户拍板 2026-09-28）', () => {
+  it('三行进度：消息正文压缩 + 版本内容去 base64 + 文件缓存去 base64', () => {
+    expect(source).toMatch(/title="存量数据迁移"/);
+    expect(source).toMatch(/label: '消息正文压缩'/);
+    expect(source).toMatch(/label: '版本内容去 base64'/);
+    expect(source).toMatch(/label: '文件缓存去 base64'/);
+  });
+
+  it('指标卡只读展示：迁移行不以 ProfileMenuItem 菜单项渲染', () => {
+    expect(source).not.toMatch(/label="消息正文压缩"/);
+    expect(source).not.toMatch(/label="版本内容去 base64"/);
+    expect(source).not.toMatch(/label="文件缓存去 base64"/);
+  });
+
+  it('cr-06 第三态：done 且 failedCount > 0 时显示「已完成（N 条需人工处理）」', () => {
+    expect(source).toMatch(/failedCount > 0/);
+    expect(source).toMatch(/条需人工处理/);
+  });
+
+  it('消息正文「去 base64」不设状态行（发版形态无用户可见中间态）', () => {
+    expect(source).not.toMatch(/消息正文去 base64/);
+  });
+});

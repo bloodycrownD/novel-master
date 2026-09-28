@@ -373,6 +373,7 @@ describe("存量 blob 形态归一任务（T-BB4 ~ T-BB7）", () => {
           table: "messageContent",
           done: true,
           pendingCount: 0,
+          failedCount: 0,
         });
         continue;
       }
@@ -408,10 +409,15 @@ describe("存量 blob 形态归一任务（T-BB4 ~ T-BB7）", () => {
       afterFirst.cache
     );
 
-    // 完成后状态采样为 done=true（零 COUNT 口径）。
+    // 完成后状态采样为 done=true（零 COUNT 口径，failedCount 来自标记快照）。
     const after = await getBlobBinaryStatus(conn());
     for (const table of after.tables) {
-      assert.deepEqual(table, { table: table.table, done: true, pendingCount: 0 });
+      assert.deepEqual(table, {
+        table: table.table,
+        done: true,
+        pendingCount: 0,
+        failedCount: 0,
+      });
     }
   });
 
@@ -728,9 +734,9 @@ describe("存量 blob 形态归一任务（T-BB4 ~ T-BB7）", () => {
     }
 
     assert.deepEqual(tables, [
-      { table: "vfsContent", done: false, pendingCount: 1 },
-      { table: "fileCache", done: true, pendingCount: 0 },
-      { table: "messageContent", done: true, pendingCount: 0 },
+      { table: "vfsContent", done: false, pendingCount: 1, failedCount: 0 },
+      { table: "fileCache", done: true, pendingCount: 0, failedCount: 0 },
+      { table: "messageContent", done: true, pendingCount: 0, failedCount: 0 },
     ]);
     assert.equal(
       seen.filter(
@@ -825,20 +831,62 @@ describe("存量 blob 形态归一任务（T-BB4 ~ T-BB7）", () => {
     assert.equal(legacy[0]!.content_json, legacyJson, "legacy 明文行不得被触碰");
     assert.equal(legacy[0]!.content_encoding, null);
 
-    // 独立完成标记 + 状态行（含坏行仍置标记：不阻断收敛）。
-    assert.ok(
-      await new SqliteKkvRepository(conn()).get(
-        BLOB_BINARY_KKV_MODULE,
-        "messageContentDone"
-      ),
-      "chat_message 完成标记已置"
+    // 独立完成标记 + 状态行（含坏行仍置标记：不阻断收敛；failedCount 经
+    // 标记 JSON 快照透出，UI 第三态「已完成（N 条需人工处理）」数据源）。
+    const kkv = new SqliteKkvRepository(conn());
+    const markerValue = await kkv.get(
+      BLOB_BINARY_KKV_MODULE,
+      "messageContentDone"
     );
+    assert.ok(markerValue, "chat_message 完成标记已置");
+    const parsedMarker = JSON.parse(markerValue.value) as {
+      failedCount: number;
+    };
+    assert.equal(parsedMarker.failedCount, 1, "标记 JSON 快照含 failedCount");
     const status = await getBlobBinaryStatus(conn());
     const messageStatus = status.tables.find((t) => t.table === "messageContent");
     assert.deepEqual(messageStatus, {
       table: "messageContent",
       done: true,
       pendingCount: 0,
+      failedCount: 1,
     });
+  });
+
+  it("cr-06：旧版 ISO 字符串标记向后兼容 + 状态查询纯读无副作用", async () => {
+    await resetNormalizationState();
+    // 手工写旧版纯 ISO 时间戳标记（升级前格式），另一表留空对照。
+    await new SqliteKkvRepository(conn()).set(
+      BLOB_BINARY_KKV_MODULE,
+      "vfsContentDone",
+      "2026-09-01T00:00:00.000Z"
+    );
+    const kkvRowsBefore = await conn().query<{ key: string; value: string }>(
+      "SELECT key, value FROM kkv_entry WHERE module = ? ORDER BY key",
+      [BLOB_BINARY_KKV_MODULE]
+    );
+
+    const status = await getBlobBinaryStatus(conn());
+    const vfs = status.tables.find((t) => t.table === "vfsContent");
+    assert.deepEqual(vfs, {
+      table: "vfsContent",
+      done: true,
+      pendingCount: 0,
+      failedCount: 0,
+    }, "旧版 ISO 标记不抛、failedCount 归零");
+    const fileCache = status.tables.find((t) => t.table === "fileCache");
+    assert.deepEqual(fileCache, {
+      table: "fileCache",
+      done: true,
+      pendingCount: 0,
+      failedCount: 0,
+    }, "谓词空未置标记 = 等价完成态");
+
+    // 纯读断言：查询前后 kkv_entry 完全一致（不得借查询补写标记）。
+    const kkvRowsAfter = await conn().query<{ key: string; value: string }>(
+      "SELECT key, value FROM kkv_entry WHERE module = ? ORDER BY key",
+      [BLOB_BINARY_KKV_MODULE]
+    );
+    assert.deepEqual(kkvRowsAfter, kkvRowsBefore, "状态查询必须零写副作用");
   });
 });

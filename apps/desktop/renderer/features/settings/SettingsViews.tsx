@@ -87,7 +87,6 @@ import {
 } from "@shared/logic/config-forms-stored-config-validity";
 import type {
   AgentRegistryListItemDto,
-  BlobBinaryTableIdDto,
   DbStatsResult,
   SmartSortCaptureKindDto,
   SmartSortRuleDto,
@@ -136,33 +135,45 @@ function formatStorageBytes(bytes: number): string {
 }
 
 /**
- * 存量 blob 形态归一（base64 文本 → 二进制 BLOB）状态行。
- *
- * 展示顺序固定为表标识全集：core 只回报已注册适配器，缺席的那张（本波次
- * messageContent 尚未纳入）按「未取到」显示 '—'，布局不随注册表增减跳动。
+ * 存量数据迁移卡片的三行进度（用户拍板 2026-09-28）：消息正文压缩 +
+ * 两张 blob 表去 base64，只读状态行（非菜单项）。消息正文「去 base64」
+ * 不设状态行——发版形态下压缩搬运直接写二进制，不存在用户可见的中间
+ * 态，仅开发机历史形态由归一任务静默收敛。
  */
-const BLOB_BINARY_TABLE_ORDER: readonly BlobBinaryTableIdDto[] = [
-  "vfsContent",
-  "fileCache",
-  "messageContent",
-];
+const MIGRATION_ROWS = [
+  { kind: "messageCompaction", label: "消息正文压缩" },
+  { kind: "vfsContent", label: "版本内容去 base64" },
+  { kind: "fileCache", label: "文件缓存去 base64" },
+] as const;
 
-const BLOB_BINARY_TABLE_LABELS: Record<BlobBinaryTableIdDto, string> = {
-  vfsContent: "版本内容去 base64",
-  fileCache: "文件缓存去 base64",
-  messageContent: "消息正文去 base64",
-};
+type MigrationRowValue = { text: string; warning: boolean };
 
-/** 单表归一状态文案：已完成 / 进行中（剩余 N 条）/ 未取到 '—'。 */
-function formatBlobBinaryStatus(
-  tables: readonly { table: BlobBinaryTableIdDto; done: boolean; pendingCount: number }[],
-  table: BlobBinaryTableIdDto,
-): string {
-  const row = tables.find((item) => item.table === table);
-  if (!row) {
-    return "—";
+/** 单行迁移状态文案（cr-06 三态）：已完成 / 已完成（N 条需人工处理）/ 进行中 / 未取到 '—'。 */
+function migrationRowValue(
+  dbStats: DbStatsResult | null,
+  row: (typeof MIGRATION_ROWS)[number],
+): MigrationRowValue {
+  if (row.kind === "messageCompaction") {
+    const status = dbStats?.messageCompaction;
+    if (status == null) {
+      return { text: "—", warning: false };
+    }
+    return status.done
+      ? { text: "已完成", warning: false }
+      : { text: `进行中（剩余 ${status.pendingCount} 条）`, warning: false };
   }
-  return row.done ? "已完成" : `进行中（剩余 ${row.pendingCount} 条）`;
+  const status = dbStats?.blobBinary.tables.find(
+    (item) => item.table === row.kind,
+  );
+  if (!status) {
+    return { text: "—", warning: false };
+  }
+  if (status.done) {
+    return status.failedCount > 0
+      ? { text: `已完成（${status.failedCount} 条需人工处理）`, warning: true }
+      : { text: "已完成", warning: false };
+  }
+  return { text: `进行中（剩余 ${status.pendingCount} 条）`, warning: false };
 }
 
 export function DataManagementView() {
@@ -602,50 +613,38 @@ export function DataManagementView() {
         }
       />
       <SettingsActionSection
-        title="数据清理"
-        desc={`回收缓存冗余与空闲页并压缩数据库文件。当前库体积 ${dbStats ? formatStorageBytes(dbStats.fileBytes) : "—"} · 可回收约 ${dbStats ? formatStorageBytes(dbStats.reclaimableBytes) : "—"}。`}
+        title="存量数据迁移"
+        desc="后台自动整理存量数据（压缩与二进制化），期间可正常使用，Agent 运行时自动让路。"
         action={
-          <div
-            className="settings-actions"
-            style={{ flexDirection: "column", alignItems: "flex-start" }}
-          >
-            {/* 存量 blob 形态归一状态：随既有 2s 轮询的 db/stats 一起刷新，不另起定时器 */}
-            <div className="settings-rows">
-              {BLOB_BINARY_TABLE_ORDER.map((table) => (
-                <div key={table} className="settings-row settings-row--static">
-                  <span className="settings-field__label">
-                    {BLOB_BINARY_TABLE_LABELS[table]}
-                  </span>
-                  <span className="settings-status" style={{ marginLeft: "auto" }}>
-                    {formatBlobBinaryStatus(dbStats?.blobBinary.tables ?? [], table)}
+          <div className="settings-rows">
+            {MIGRATION_ROWS.map((row) => {
+              const value = migrationRowValue(dbStats, row);
+              return (
+                <div key={row.kind} className="settings-row settings-row--static">
+                  <span className="settings-field__label">{row.label}</span>
+                  <span
+                    className="settings-status"
+                    style={{
+                      marginLeft: "auto",
+                      color: value.warning
+                        ? "var(--warning, #a60)"
+                        : undefined,
+                    }}
+                  >
+                    {value.text}
                   </span>
                 </div>
-              ))}
-            </div>
-            <Button variant="primary" disabled={controlsDisabled} onClick={() => setConfirmMaintenance(true)}>
-              清理
-            </Button>
+              );
+            })}
           </div>
         }
       />
       <SettingsActionSection
-        title="消息压缩"
-        desc={
-          dbStats?.messageCompaction?.done
-            ? "消息正文以 zlib 压缩存储，存储已优化完成。"
-            : "消息正文正在后台压缩为 zlib 存储（迁移期间随时可正常使用）；完成前升级新版本，会在首次启动时等待优化收尾（一次性）。"
-        }
+        title="数据清理"
+        desc={`回收缓存冗余与空闲页并压缩数据库文件。当前库体积 ${dbStats ? formatStorageBytes(dbStats.fileBytes) : "—"} · 可回收约 ${dbStats ? formatStorageBytes(dbStats.reclaimableBytes) : "—"}。`}
         action={
-          <Button
-            variant="secondary"
-            disabled={true}
-            onClick={() => undefined}
-          >
-            {dbStats?.messageCompaction == null
-              ? "—"
-              : dbStats.messageCompaction.done
-                ? "已完成"
-                : `进行中（剩余 ${dbStats.messageCompaction.pendingCount} 条）`}
+          <Button variant="primary" disabled={controlsDisabled} onClick={() => setConfirmMaintenance(true)}>
+            清理
           </Button>
         }
       />
