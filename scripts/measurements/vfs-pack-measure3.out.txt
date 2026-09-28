@@ -1,0 +1,24 @@
+== byte_len 约定统计（vfs_content_blob）==
+  {"e":"zlib","n":13,"eq_text_len":13,"eq_bin_len":0,"eq_bin_len2":0,"text_bytes":6012,"blen":6012}
+  {"e":"zlib-b64","n":1099,"eq_text_len":859,"eq_bin_len":71,"eq_bin_len2":97,"text_bytes":9925780,"blen":9183233}
+
+== 全库（unique hash）==
+ rows = 1112  原文合计 = 14.374 MB
+ 现状存储 = 9.472 MB（含 base64 文本） → 去 base64 后 = 7.105 MB  省 2.366 MB
+ 二进制口径压缩比 = 2.02:1
+
+== 分类（按 hash 是否属于多版本 entry，去重后不重复计数）==
+ 多版本 entry = 150  命中 hash = 876  其二进制独立压 = 6.080 MB
+ 其余 hash = 236  其二进制 = 1.026 MB
+ 合计 = 7.105 MB（应等于 7.105 ）
+
+== pack 结果（二进制口径）==
+ 多版本 hash 独立压 = 6.080 MB → 全链单流 = 2.242 MB（省 3.838 MB / 63.1%）
+ 分组 pack 流 = 2.353 MB + 独立 head = 0.668 MB = 3.020 MB（省 3.727 MB / 61.3%）
+ 组数 = 190  单组最大明文 = 503KB 单组最大流 = 215KB
+
+== 全库总量预测 ==
+ 现状二进制口径 = 7.105 MB（文本口径 9.472 MB）
+ 去 base64 + pack 后 = 4.046 MB
+ 相对现状文本口径省 = 5.426 MB / 57.3%
+ 其中去 base64 贡献 = 2.366 MB，pack 贡献 = 3.727 MB

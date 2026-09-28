@@ -1,0 +1,59 @@
+== user_version == 16
+chat_message cols has content_encoding: false
+
+== F1 chat_message（迁移前副本，全部明文行）==
+ rows = 5350  plaintext = 73.199 MB
+ 压缩后二进制合计 = 32.571 MB  压缩比 = 2.25:1
+ 若按 zlib-b64 存（base64 文本）= 43.435 MB  压缩比 = 1.69:1
+ 去 base64 可省 = 10.864 MB （占二进制口径 +33.4%）
+
+== F1 vfs_content_blob / session_file_cache_blob 按 encoding / TYPEOF ==
+ vfs_content_blob {"e":"zlib","t":"blob","n":13,"bytes":6012,"blen":6012}
+ vfs_content_blob {"e":"zlib-b64","t":"text","n":1099,"bytes":9925780,"blen":9183233}
+ session_file_cache_blob {"e":"zlib-b64","t":"text","n":37,"bytes":291004,"blen":291004}
+
+== VFS 规模 ==
+ entries = 599  active revisions(hash) = 6273  deleted revs = 303  blob rows = 1112
+ 引用不到 blob 行的 active revision 数 = 0
+
+== 多版本 entry（>=2 active 版本） ==
+ count = 226  plaintext = 90.503 MB  independent = 43.760 MB  concat(deflate) = 16.587 MB  saving = 62.1%
+ 全版本<=32KB 的 entry: n=204 25.863 -> 1.968  saving=92.4%
+ 含>32KB 版本的 entry: n=22 17.897 -> 14.619  saving=18.3%
+
+ top10 multi-version entry:
+  eid=253 v=54 plain=4117KB indep=1798KB concat=1723KB maxVersion=76KB /原著/第02部/(12)怀孕产种.md
+  eid=265 v=54 plain=3403KB indep=1459KB concat=1370KB maxVersion=63KB /原著/第03部/(12)奇迹的价值.md
+  eid=260 v=54 plain=3006KB indep=1304KB concat=1225KB maxVersion=56KB /原著/第03部/(07)暴风之夜.md
+  eid=1765 v=48 plain=1845KB indep=1140KB concat=613KB maxVersion=74KB 
+  eid=248 v=54 plain=2453KB indep=1077KB concat=989KB maxVersion=45KB /原著/第02部/(07)臣下凌辱.md
+  eid=266 v=54 plain=2261KB indep=1024KB concat=940KB maxVersion=42KB /原著/第03部/(13)日后谈.md
+  eid=261 v=54 plain=2288KB indep=977KB concat=896KB maxVersion=42KB /原著/第03部/(08)迷茫的心.md
+  eid=262 v=54 plain=1983KB indep=886KB concat=803KB maxVersion=37KB /原著/第03部/(09)命运的相遇.md
+  eid=254 v=54 plain=1921KB indep=876KB concat=782KB maxVersion=36KB /原著/第03部/(01)绝望的尽头.md
+  eid=255 v=54 plain=1864KB indep=832KB concat=742KB maxVersion=35KB /原著/第03部/(02)乖巧女犬.md
+
+== pack 模拟 maxVersions=8 maxPlain=1024KB ==
+ groups = 765  pack stream total = 19.071 MB  kept-head standalone = 1.398 MB
+ 预计 vfs_content_blob 侧总量 = 20.469 MB（现状 multi-entry 独立压 = 43.760 MB）  省 = 24.689 MB / 56.4%
+ 单组最大明文 = 610KB  单组最大流 = 256KB
+
+== pack 模拟 maxVersions=8 maxPlain=512KB ==
+ groups = 768  pack stream total = 19.075 MB  kept-head standalone = 1.398 MB
+ 预计 vfs_content_blob 侧总量 = 20.474 MB（现状 multi-entry 独立压 = 43.760 MB）  省 = 24.685 MB / 56.4%
+ 单组最大明文 = 504KB  单组最大流 = 212KB
+
+== pack 模拟 maxVersions=16 maxPlain=1024KB ==
+ groups = 482  pack stream total = 17.567 MB  kept-head standalone = 1.398 MB
+ 预计 vfs_content_blob 侧总量 = 18.965 MB（现状 multi-entry 独立压 = 43.760 MB）  省 = 26.193 MB / 59.9%
+ 单组最大明文 = 1008KB  单组最大流 = 416KB
+
+== pack 模拟 maxVersions=4 maxPlain=512KB ==
+ groups = 1408  pack stream total = 22.312 MB  kept-head standalone = 1.398 MB
+ 预计 vfs_content_blob 侧总量 = 23.710 MB（现状 multi-entry 独立压 = 43.760 MB）  省 = 21.449 MB / 49.0%
+ 单组最大明文 = 305KB  单组最大流 = 129KB
+
+== vfs_content_blob 总存储 = 9.472 MB（其中 multi-entry 独立压部分 = 43.760 MB）
+
+== 解码失败/走兜底分支的样本（前 12 条）==
+ 失败次数 = 0  兜底命中次数 = 0
