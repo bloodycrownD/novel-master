@@ -1,5 +1,5 @@
 ---
-date: 2026-09-28 09:52
+date: 2026-09-28 11:15
 title: ① 消息正文压缩分支真机实测全绿 + 后续两件（去 base64 / VFS 打包）SPEC 定稿 + **Part A1（VFS/file_cache 去 base64）经 code-dev-loop 跑完 dev-ready**——含收益口径修正「VFS delta 82.6% 实为 61.3%」
 keywords: worktree, message-content-compression, SCHEMA_BOOT_VERSION 撞号, 谓词驱动搬运, 真机测试, subst 短路径, base64 历史包袱, op-sqlite BLOB 真机验证通过, Hermes 无 WebAssembly, 收益口径修正 61.3%, 内容哈希去重计数, fflate 字典 32KB 窗口, byte_len 三态混杂, binary-blob-and-vfs-pack spec, code-dev-loop, runBlobBinaryNormalization, nm-blob-binary, BlobBinaryRunResult stalled, 零进展护栏, cr-func 判 no 与 fix, dev-ready, AsyncMutex 重入死锁, MCP 会话握手
 abstract: ① 压缩分支（feat/message-content-compression）真机实测**全绿**（BOOT_VERSION 顺延 17 + ALIGN 补列、5350 条全量搬运、逐条字节校验零差异、库 111.1MB→79.0MB、二次启动零重扫）；**真机 BLOB 验证 6 项全 PASS → base64 可去**（+33%）。压缩率归因（84.6% 中文、英文对照 6.01:1 vs 中文 2.61:1、tool_result 占 60.9%）与算法横评（逐条最多 +12%；整块 7.7~9.4:1 全来自长程重复；**Hermes 无 WebAssembly** + 纯 TS zstdify 崩 → 移动端算法杠杆关闭）。**2026-09-28 复测修正**：旧记「VFS delta 省 10.7MB / 82.6%」把被多版本共享的 blob 按 revision 行重复计数，按 `content_hash` 去重后真实为 **6.080MB → 3.020MB（省 3.06MB / 61.3%）**；同批复测：消息去 base64 省 10.864MB、VFS 省 2.366MB、file_cache 省 0.06MB，**Part A 合计省 13.30MB（79.0→约 65.7MB）**。已**生成 SPEC `docs/Iterations/binary-blob-and-vfs-pack/spec.md`（Part A 去 base64 立即做；Part B VFS 内容打包收益仅 3.06MB、改动面覆盖 VFS 主力读写，待用户拍板）**，并实测否决了字典链（2.945MB，引入跨行依赖）、diff delta（无实现无增量证据）、大词典（fflate 只对末尾 32KB 生效）。另发现 `vfs_content_blob.byte_len` 写法三态混杂（859/71/97 行三种口径）需一并归一。
@@ -205,3 +205,19 @@ assistant:
 【验收前置注意 + 收尾清单】① 本分支**不含** message-content-compression：装上后该库 `chat_message` 的 `content_json` 全是空串、正文在 `content_blob`，主仓代码会把**聊天正文读成空**——A1 验收只覆盖 VFS/file_cache（文件树可读、存储页状态行）与库体积，别去开会话自找困惑。② 测完必须还原：`run-as cp` 回 `pre-debase64-test.bak` + 装回 mcdev 包（`.worktree/f-message-content-compression` 内的 `app-debug.apk` 仍在，注意那个包**依赖 Metro** 才能启动）。③ 顺手记：设备 `/data/local/tmp` 里堆着 2GB+ 历史测试 APK（nm-1211~1220 等，不是本轮的），要清可以一起清。
 
 【本轮其他实锤（已进 RULE）】PowerShell 5.1 读 .ps1 按 ANSI 解码：**中文注释会把下一行代码吞掉**（第一次出包就栽在这——`Set-Location` 被吃掉，npm 在仓根跑导致「Missing script」）；`.ps1` 一律 ASCII-only 用 `-File` 跑。`-PversionName=1.5.25-debase64` 这类带点号的参数经 PowerShell 传给 native 命令会被拆坏（报 `Task '.5.25-debase64' not found`）→ 出包改成 `cmd /c "cd /d <android> && gradlew.bat ..."` 的 RULE 原配方。
+
+user:
+[$code-review-loop] 变动较多，且该分支上次应该没CR？
+
+assistant:
+（首轮全量 CR：3 个 readonly scope 并行 → r1 → review-full → r2 → review-full-2 → r3 → review-full-3 → r4 → review-full-4，**4 轮收敛到 fix-spec-ready**）
+
+【结论】产物 **`docs/Iterations/binary-blob-and-vfs-pack/cr-fix-spec.md`**：**36 条 must-fix（P0×1 / P1×9 / P2×26）全部写入且四要素齐备**（文件 / 问题 / 可执行改法 / 验收）+ 9 条 spec_deviations（全部映射到具体 cr）+ 15 条 open_questions（12 + OQ-A/B/C，各带「未拍板时的默认动作」）+ 合并后 QA 6 项 + K 节 9 条 + 3 条 advisory。**四轮末轮复检：前 3 轮判 no、第 4 轮判 yes**。未改一行实现代码、未跑测试、未宣称可合并。
+
+【P0 一条（真问题，我亲自核过源码）】稳态下**每次进程启动 / 每条 CLI 命令都跑一次全库 GC+checkpoint+VACUUM**：`runBlobBinaryNormalization` 的 `allDone` 初值 true、已置完成标记的表走 `continue` 不参与计算 → 尾部 `if (allDone)` 恒真；而 `startupMaintenanceOnce` 的去重只是**进程级**，CLI 每条命令一个进程 → 完全无效。修法：加「本轮确有推进」门条件 + `startupMaintenancePending` 持久化兜底（维护失败不再被永久跳过）。另 8 条 P1 覆盖：坏行满批时剩余正常行被跳过并误标完成、desktop 自动 VACUUM 冻 main 且绕开 busy 契约、mobile `Promise.all` 让新失败源打掉既有指标、desktop 在 rebootstrap/云同步后循环永久死亡不重挂、`failedCount` 三端全丢致假「已完成」、T-BB4 断言恒真无牙。
+
+【最值得记的教训：**验收断言的「牙齿」**】四轮里三轮都在抓同一类缺陷，且都出在**修复说明书自己的验收段**上：① **恒真**——「第二遍不下发 UPDATE」在「标记短路」与「谓词已空」两条路径下都必然为空，删掉被测代码也绿（cr-func2 的 must-fix #5 名义闭合、实质未闭合）；② **恒红**——把观测从「探针里的 VACUUM 次数」换成回调计数后，忘了「进程级去重标记会被本文件第一条用例消费」⇒ 文件尾部「标记被清」「同进程二次调用 maintCalls=0」两条期望**永远不可满足**（r3 自己请回来的缺陷）；③ **互斥夹具**——同一个用例名「全表皆坏行」在 cr-01（纯坏行、期望 `maintCalls=0`）与 cr-02（100 坏+20 好、必然 `maintCalls=1`）两处给出互斥期望。**规矩：写验收断言时先问「把被测实现改成错的，这条会红吗？（有牙）」「在我这个测试文件的进程/事务/顺序约束下，这条可能恒真或恒红吗？」**——两者缺一即为废断言。
+
+【同族的第二类教训：**子代理会自己「补记忆」**】code-review-loop 的 spec-fix 子代理越界创建了 `docs/apm/memory/20260928-binary-blob-cr-fix-spec-r4.md`（违反 RULE「子代理不得写记忆」，这是**第二次实锤**）——派 spec-fix/impl/review 子代理时，prompt 必须显式写「禁止创建或修改 `docs/apm/` 下任何文件」，只说「只改 fix-spec」拦不住它按 AGENTS.md 自作主张。主代理已删除该文件并把内容并入本记忆。另一处小坑：出包脚本 `.ps1` 混中文注释被 PowerShell 按 ANSI 解码后**吞掉了下一行 `Set-Location`**（npm 在仓根跑、报「Missing script」）——ASCII-only 是硬要求（已进 RULE）。
+
+【本轮的编排事实】DAG 从 dag_version 1 递增到 7：wave=[3 scope 并行] → [r1] → [review-full] → [r2] → [review-full-2] → [r3] → [review-full-3] → [r4] → [review-full-4]；每轮 not-ready 都**先改 fix-spec 再复检**，无一轮是「只描述改法不落盘」。**待用户确认**：是否按该 fix-spec 开工执行（本 skill 在用户确认前不动代码）。另：Part B（VFS 内容打包 3.06MB）仍待拍板；真机验收（manual_user）仍卡华为 coauth 锁屏密码门。

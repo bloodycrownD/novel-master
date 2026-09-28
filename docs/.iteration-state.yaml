@@ -1,3 +1,57 @@
+# === code-review-loop 编排状态（当前进行中：对 feat/blob-binary-normalization 做首轮全量 CR）===
+cr_loop:
+  skill: code-review-loop
+  repo_path: D:\Dev\Js\novel-master
+  branch: feat/blob-binary-normalization
+  base_sha: 02d2fcc9
+  head_sha: ae6a8257
+  prd_path: 未提供（需求为用户口述，见业务 spec「需求来源」）
+  spec_path: docs/Iterations/binary-blob-and-vfs-pack/spec.md
+  fix_spec_path: docs/Iterations/binary-blob-and-vfs-pack/cr-fix-spec.md
+  mode: scope → full（首轮三 scope 并行，末轮 review-full）
+  dag_version: 7
+  review_round: 4
+  wave_plan:
+    - [review-scope-core-prod, review-scope-core-tests, review-scope-apps]
+    - [spec-fix-r1]
+    - [review-full]
+    - [spec-fix-r2]
+    - [review-full-2]
+    - [spec-fix-r3]
+    - [review-full-3]
+    - [spec-fix-r4]
+    - [review-full-4]
+  node_status:
+    review-scope-core-prod: { status: done, executor: subagent, readonly: true, scope_ready: "no", result: "1×P1 + 4×P2 + 4 open_questions；A 维度（写侧三处收口干净、读路径三形态契约未破）与 C-orch 整体通过" }
+    review-scope-core-tests: { status: done, executor: subagent, readonly: true, scope_ready: "no", result: "1×P1（T-BB4 断言恒真无牙齿）+ 8×P2（探针漏 conn.execute、status done 分支无覆盖、互不牵连执行侧无覆盖、fc 读路径不对称、fc 前置形态断言缺失、fc 复用承诺无回归、恒真断言、重复探针）+ 4 deviations" }
+    review-scope-apps: { status: done, executor: subagent, readonly: true, scope_ready: "no", result: "1×P0（稳态每启动/每命令全库 VACUUM）+ 4×P1（desktop 冻 main 不置 busy、mobile Promise.all 扩散失败、desktop rebootstrap 后不再重挂、failedCount 丢失致假「已完成」）+ 5×P2；三端 × 六维对照表已出" }
+    spec-fix-r1: { status: done, executor: subagent, result: "cr-fix-spec.md 已创建：23/23 条全部写入（P0×1 / P1×6 / P2×16）+ 8 条 spec_deviations + 12 条 open_questions + 合并后 QA + K 节；并给出 4 波修复建议" }
+    review-full: { status: done, executor: subagent, readonly: true, result: "建议 fix-spec-ready: no —— 主代理已亲核 cr-01/cr-02 属实；新发现 7 条（cr-24 P1 cr-02 改法会把零进展护栏中和并误置完成标记；cr-25 P1 cr-01 门条件无收益且丢维护失败兜底；cr-26 P2 cr-03 改法在 app 层不可执行；cr-27 P2 cr-06 会打红两处既有整对象断言；cr-28 P2 cr-06 把只读状态查询变写者且挂在 2s 轮询；cr-29 P2 K 节缺设备侧收尾与发版前置；cr-30 P2 三处文档同步缺口 + 新增 SD-9）+ OQ-A/B/C；四要素齐备率 15/23，无「只批评无改法」条目" }
+    spec-fix-r2: { status: done, executor: subagent, result: "已把 cr-24~cr-30 写入并覆盖修订 cr-01/02/03/06/07；新增 SD-9；OQ-A/B/C 增补（各带默认动作）；波次建议表更新；自评四要素齐备 30/30" }
+    review-full-2: { status: done, executor: subagent, readonly: true, result: "建议 fix-spec-ready: no —— 新提 cr-31~cr-36（P1×1 / P2×5）；已排除两大疑点（cr-24 收尾校验不会导致永不收敛、cr-03 回调注入有 shouldPause 先例）；SD-1~9 全部映射到具体 cr" }
+    spec-fix-r3: { status: done, executor: subagent, result: "cr-31~cr-36 写入 + 定点改写 cr-01（验收段改用 cr-26 回调缝的 maintCalls 判据）/cr-02（不变量注释 + 用例标题）/cr-06（路径）/cr-20（整条重写为 (a)(b)(c)）/cr-22（10 项）/cr-07/25 注记；计数自洽 36 条（P0×1 / P1×9 / P2×26）" }
+    review-full-3: { status: done, executor: subagent, readonly: true, result: "建议 no —— 新提 NF-1/NF-2/NF-3（r3 自己引入的「照字面实现必然打红」验收断言）；cr-33/34/35 闭合、cr-31/32/36 只闭了改法侧" }
+    spec-fix-r4: { status: done, executor: subagent, result: "NF-1/2/3 闭合：maintCalls 语义六处同口径、pending 正向路径拆到新测试文件 blob-binary-normalization-maintenance.test.ts（四处登记 + 第一条约束）、(a)/(b) 两条用例四处逐字一致、cr-36 ② 收窄；C1/C2/C3 落位；计数仍 36（1/9/26）。⚠️ 该子代理越界创建了 docs/apm/memory/20260928-binary-blob-cr-fix-spec-r4.md（违反 RULE「子代理不得写记忆」），主代理已删除" }
+    review-full-4: { status: done, executor: subagent, readonly: true, result: "建议 fix-spec-ready: **yes** —— 无新 must-fix；NF-1/2/3 逐条核实闭合（maintCalls 六处同口径、新文件五处登记、a/b 四处一致、NF-3 互斥消除）；计数/SD/OQ/K/QA/advisory 全自洽；仅剩 4 处措辞/事实残影（非阻塞，主代理已订正）" }
+  must_fix: []   # 36 条（P0×1 / P1×9 / P2×26）全部写入 fix-spec；round 4 复检后无新增
+  fix_spec_path: docs/Iterations/binary-blob-and-vfs-pack/cr-fix-spec.md
+  spec_fix_plan: []   # 已 fix-spec-ready，无待写章节
+  status: **fix-spec-ready**（2026-09-28 宣布；待用户确认是否按 fix-spec 开工执行 —— 确认前不改代码）
+  spec_deviations:
+    - open: "收尾维护链路触发条件宽于 spec（稳态每进程都挂）→ 由 fix-spec cr-01 闭合"
+    - open: "「坏行不阻断收敛」实际覆盖面窄于 spec 自述（坏行满批时后续正常行被跳过）→ 由 fix-spec cr-02 闭合"
+    - open: "app 层失败策略三端三种（error/warn/上抛）spec 未规定；状态行契约未写「表标识全集 vs 已注册子集」；CLI「内联预算制执行」被放大为「每条命令付一次维护链路」；desktop「不重入调度」实际后果比 spec 记录更严重 → 由 fix-spec 文档项闭合"
+    - open: "测试口径四项（T-BB7 语料非真实附件形态、T-BB6 组合数 5 非 6、T-BB5 用预算耗尽模拟杀进程、fc 侧 T-BB2 编号记为 T-R7）→ 由 fix-spec 文档项闭合"
+  status: 待下轮审查（等 spec-fix-r1 落盘）
+  scope_boundary:
+    - "A2（message 侧写侧 codec + chat_message 归一适配器，待 feat/message-content-compression 合并）不在评审范围"
+    - "Part B（VFS 内容打包）未做，不在评审范围"
+    - "spec Step 6 真机验收（qa: manual_user）进行中：包与库备份已就位，卡在华为 coauth 锁屏密码门（见下方 manual_pending）"
+  prior:
+    - "code-dev-loop 已把本迭代 A1 跑到 dev-ready（9 wave / 8 提交），含两轮 cr-func 功能小检，闭合 12 条 must-fix"
+    - "已记录项见本文件 known_baselines / known_nonblocking / spec_deviations；评审请勿重复报为「新发现」，但对判断有异议可指出"
+  note: "本轮为首次全量 CR（此前只有 code-dev-loop 的波次内功能小检，未做过 B–K 全维评审）"
+
 # code-dev-loop 编排状态——binary-blob-and-vfs-pack Part A1（落库形态去 base64：VFS + file_cache）
 spec_path: docs/Iterations/binary-blob-and-vfs-pack/spec.md
 prd_path: null   # 需求为用户口述（2026-09-28），来源与约束见 spec「需求来源 / 设计目标」
