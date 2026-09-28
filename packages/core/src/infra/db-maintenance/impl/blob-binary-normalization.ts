@@ -54,15 +54,21 @@ export const BLOB_BINARY_KKV_MODULE = "nm-blob-binary";
 const BATCH_SIZE = 100;
 
 /**
- * 零进展护栏阈值：连续多少个**满批**（`rows.length === BATCH_SIZE`）的
- * UPDATE 全部 `changes === 0` 即判定异常打转。
+ * 零进展护栏阈值：连续多少个**零进展批**（本批 UPDATE 全部 `changes === 0`
+ * 且无新增坏行、又不全是本轮已知坏行）即判定异常打转。
  *
  * @remarks 护的是「某端驱动把二进制值绑成 TEXT 存回、谓词反复命中同一批
- * 行」这类行原地打转的死循环——纯烧同步预算。阈值取 3 而不是 1，是因为
- * 并发端刚归一掉一个完整批时本批 `changes` 合法地全 0，属正常现象，
- * 单批全 0 不能作为判据。
+ * 行」这类行原地打转的死循环——纯烧同步预算。
+ *
+ * **不要求满批**：谓词是每轮实时重扫的，被并发端搬走的行下一轮不会再出现，
+ * 所以「同一批行反复被 SELECT 出来、UPDATE 却全 0」在**任何批大小**下都
+ * 是可靠的异常信号。旧口径的满批条件（`rows.length === BATCH_SIZE`）会让
+ * 「卡住行数 < 100」的情形永远不触发护栏，恰好漏掉最该兜底的那类库。
+ *
+ * 阈值仍取 3 而不是 1：容忍偶发的并发抢写/写锁抖动，又把无界空转压在
+ * 3 批以内。
  */
-const ZERO_PROGRESS_FULL_BATCH_LIMIT = 3;
+const ZERO_PROGRESS_BATCH_LIMIT = 3;
 
 /** 升级首启同步收尾预算默认值（超预算残余转后台，spec 拍板 ≤60s）。 */
 export const DEFAULT_BLOB_BINARY_SYNC_BUDGET_MS = 60_000;
@@ -160,8 +166,8 @@ export interface RunBlobBinaryNormalizationOptions {
    */
   readonly syncBudgetMs?: number;
   /**
-   * 批间守卫（app 层组合守卫按端取用：agent 活跃/云同步/维护 busy）。
-   * 返回 true 时本轮暂停并立即返回 done=false。
+   * 批间守卫，按端取用组合（mobile 当前仅 agent 活跃；desktop 另有云同步 /
+   * 维护 busy）。返回 true 时本轮暂停并立即返回 done=false。
    */
   readonly shouldPause?: () => boolean;
 }
@@ -180,6 +186,16 @@ export interface BlobBinaryRunResult {
    * 存在需人工关注的行：数据本身已损坏，读路径对同类行按 miss 自愈处理。
    */
   readonly failedCount: number;
+  /**
+   * 本轮是否被**零进展护栏**主动收手（见 {@link ZERO_PROGRESS_BATCH_LIMIT}）。
+   *
+   * @remarks `true` 仅表示「谓词反复命中同一批行、UPDATE 恒 `changes = 0`」
+   * 这一种异常：此时该表未置完成标记、整轮 `done = false`，但**继续立即
+   * 重跑也不会有任何进展**，故调用方应本进程停止重试（下个冷启动再试），
+   * 而不是「零延迟续跑」把空转放大成热循环。预算耗尽、守卫暂停等普通的
+   * `done = false` 一律为 `false`。
+   */
+  readonly stalled: boolean;
 }
 
 /** 读该表的 KKV 完成标记（两段式 module/key）。 */
@@ -238,6 +254,8 @@ interface NormalizeTableResult {
   readonly done: boolean;
   readonly normalizedCount: number;
   readonly failedCount: number;
+  /** 是否被零进展护栏收手（见 {@link ZERO_PROGRESS_BATCH_LIMIT}）。 */
+  readonly stalled: boolean;
 }
 
 /**
@@ -261,12 +279,12 @@ async function normalizeTable(
   let failedCount = 0;
   /** 本轮已确认解码失败的主键（行原样保留，会被后续 SELECT 反复命中）。 */
   const failedKeys = new Set<string>();
-  /** 连续零进展满批计数（护栏用，见 {@link ZERO_PROGRESS_FULL_BATCH_LIMIT}）。 */
-  let zeroProgressFullBatches = 0;
+  /** 连续零进展批计数（护栏用，见 {@link ZERO_PROGRESS_BATCH_LIMIT}）。 */
+  let zeroProgressBatches = 0;
 
   for (;;) {
     if (shouldPause?.()) {
-      return { done: false, normalizedCount, failedCount };
+      return { done: false, normalizedCount, failedCount, stalled: false };
     }
 
     // 每批 ≤100 行：只取主键 + encoding + bytes。WITHOUT ROWID 表按主键
@@ -340,26 +358,27 @@ async function normalizeTable(
         // 收标记（下面的置标记分支照常执行），避免对同一批坏行空转。
         break;
       }
-      // 并发端可能刚归一掉整批：单批全 0 属正常，不作为判据。
-      if (rows.length === BATCH_SIZE) {
-        zeroProgressFullBatches += 1;
-        if (zeroProgressFullBatches >= ZERO_PROGRESS_FULL_BATCH_LIMIT) {
-          // 连续满批零进展：谓词反复命中同一批行走（典型是某端驱动把
-          // 二进制值绑成 TEXT 存回），继续只是白烧同步预算——告警后
-          // 本轮收手不置标记，下轮/下个版本再试。
-          console.warn(
-            `[blob-binary-normalization] ${adapter.table} 连续 ${ZERO_PROGRESS_FULL_BATCH_LIMIT} 个满批归一零进展，疑似谓词原地打转，本轮中止`
-          );
-          return { done: false, normalizedCount, failedCount };
-        }
+      // 零进展批：谓词实时重扫，上一批被并发端搬走的行本轮不会再出现，
+      // 所以「同一批行反复被 SELECT 出来、UPDATE 却全 0」在任何批大小
+      // 下都是异常信号——不设满批条件（不满批的卡住行数 <100 才是旧口径
+      // 漏掉、且最该兜底的那类）。连续 3 批即判定原地打转。
+      zeroProgressBatches += 1;
+      if (zeroProgressBatches >= ZERO_PROGRESS_BATCH_LIMIT) {
+        // 继续只是白烧同步预算：告警后本轮主动收手、**不置完成标记**，
+        // 并把 stalled 透给 app 层，让它本进程停止重试（否则 app 的
+        // 「零延迟续跑」会把空转放大成无界热循环）。下个冷启动再试。
+        console.warn(
+          `[blob-binary-normalization] ${adapter.table} 连续 ${ZERO_PROGRESS_BATCH_LIMIT} 批归一零进展，疑似谓词原地打转，本轮中止`
+        );
+        return { done: false, normalizedCount, failedCount, stalled: true };
       }
     } else {
-      zeroProgressFullBatches = 0;
+      zeroProgressBatches = 0;
     }
 
     // 批间让步：预算检查放批粒度（行粒度事务已足够短）。
     if (Date.now() >= deadline) {
-      return { done: false, normalizedCount, failedCount };
+      return { done: false, normalizedCount, failedCount, stalled: false };
     }
     await yieldToEventLoop();
   }
@@ -372,7 +391,7 @@ async function normalizeTable(
     adapter.doneKey,
     new Date().toISOString()
   );
-  return { done: true, normalizedCount, failedCount };
+  return { done: true, normalizedCount, failedCount, stalled: false };
 }
 
 /**
@@ -392,6 +411,7 @@ export async function runBlobBinaryNormalization(
   let normalizedCount = 0;
   let failedCount = 0;
   let allDone = true;
+  let stalled = false;
 
   for (const adapter of TABLE_ADAPTERS) {
     // 启动先查标记即走：此后每次启动零成本（spec 拍板）。
@@ -407,12 +427,26 @@ export async function runBlobBinaryNormalization(
     normalizedCount += result.normalizedCount;
     failedCount += result.failedCount;
     allDone = allDone && result.done;
+    stalled = stalled || result.stalled;
   }
 
   if (allDone) {
-    // 归一释放的页挂 freelist，VACUUM 归还文件系统。VACUUM 失败不影响
-    // 正确性（标记已置，用户手动「数据清理」同样可收缩）。
-    await runStartupMaintenanceOnce(conn);
+    // 归一释放的页挂 freelist，VACUUM 归还文件系统。
+    //
+    // 必须吞掉异常：VACUUM 在磁盘满 / 库被别处锁住时会抛，而本函数的调用方
+    // （CLI 启动链路等）没有 try/catch，裸奔上去会让**每一条 CLI 命令**都
+    // 失败；且完成标记已置、进程级去重在新进程复位，等于每条命令都白重跑
+    // 一次注定失败的 VACUUM。失败只丢空间回收、不影响正确性：标记已置，
+    // 数据也已归一，用户手动「数据清理」同样可收缩。
+    try {
+      await runStartupMaintenanceOnce(conn);
+    } catch (error) {
+      console.warn(
+        `[blob-binary-normalization] 收尾维护链路（缓存 GC / checkpoint / VACUUM）失败，不影响归一结果：${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+    }
   }
-  return { done: allDone, normalizedCount, failedCount };
+  return { done: allDone, normalizedCount, failedCount, stalled };
 }

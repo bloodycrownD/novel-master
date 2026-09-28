@@ -31,7 +31,7 @@ import {
 } from "../../src/domain/vfs/content-store/logic/zlib-codec.js";
 import { SqliteVfsContentStore } from "../../src/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
 import type { TdbcConnection } from "../../src/infra/tdbc/ports/connection.port.js";
-import type { SqlValue } from "../../src/infra/tdbc/types.js";
+import type { Row, SqlValue } from "../../src/infra/tdbc/types.js";
 import {
   BLOB_BINARY_KKV_MODULE,
   getBlobBinaryStatus,
@@ -200,8 +200,158 @@ async function snapshotShapes(table: BlobTable, prefix: string): Promise<RowShap
   }));
 }
 
+/** 探针覆写的连接成员（只覆 `query` / `transaction`，其余不动）。 */
+type ProbedConn = {
+  query: TdbcConnection["query"];
+  transaction: TdbcConnection["transaction"];
+};
+
+/** 探针覆写的 tx 成员（只覆 `execute`）。 */
+type ProbedTx = {
+  execute: TdbcConnection["execute"];
+};
+
+/**
+ * 包一层 SQL 探针：记录本轮实际下发给连接（含事务内 `tx`）的 SQL。
+ *
+ * @remarks 归一任务只用到 `conn.query` / `conn.transaction` / `tx.execute`
+ * 三个口，探针即按这三个口最小实现；用完在 `finally` 里还原（共享连接不能
+ * 带伤往下传给后续用例）。
+ */
+async function withSqlProbe<T>(
+  fn: () => Promise<T>
+): Promise<{ result: T; seen: string[] }> {
+  const c = conn();
+  const seen: string[] = [];
+  const originalQuery = c.query;
+  const originalTransaction = c.transaction;
+  const probe = c as unknown as ProbedConn;
+  probe.query = ((sql: string, parameters?: readonly unknown[]) => {
+    seen.push(sql);
+    return originalQuery.call(c, sql, parameters);
+  }) as TdbcConnection["query"];
+  probe.transaction = (<T>(inner: (tx: TdbcConnection) => Promise<T>) =>
+    originalTransaction.call(c, async (tx) => {
+      const originalExecute = tx.execute;
+      const txProbe = tx as unknown as ProbedTx;
+      txProbe.execute = ((sql: string, parameters?: readonly unknown[]) => {
+        seen.push(sql);
+        return originalExecute.call(tx, sql, parameters);
+      }) as TdbcConnection["execute"];
+      try {
+        return await inner(tx);
+      } finally {
+        txProbe.execute = originalExecute;
+      }
+    })) as TdbcConnection["transaction"];
+  try {
+    return { result: await fn(), seen };
+  } finally {
+    probe.query = originalQuery;
+    probe.transaction = originalTransaction;
+  }
+}
+
+/** 两张 blob 表的 UPDATE 识别（探针与零进展替身共用同一口径）。 */
+function isBlobTableUpdate(sql: string): boolean {
+  return /^\s*UPDATE\s+(?:vfs_content_blob|session_file_cache_blob)\b/i.test(sql);
+}
+
+/**
+ * 让两张 blob 表的 UPDATE 恒返回 `changes = 0` 的连接替身。
+ *
+ * 模拟「写回不生效」——典型是某端驱动把二进制值绑成 TEXT 存回，谓词下一轮
+ * 仍反复命中同一批行。UPDATE **不真正执行**（直接短路返回），行原样留在
+ * 谓词里，零进展护栏的输入就此造好。
+ *
+ * @remarks 归一任务只用到 `conn.query` / `conn.transaction` / `conn.execute`，
+ * 替身按这三个口最小实现，**不改生产代码结构**；非 blob 表的语句照常转发
+ * 给真实事务，KKV 完成标记的写入仍能落库——这样断言的才是「护栏收手故未
+ * 置标记」，而不是「写不进去」。
+ */
+function wrapConnBlobUpdateNoEffect(): {
+  readonly conn: TdbcConnection;
+  /** 被短路的 blob 表 UPDATE 次数（每表一轮批 = 1 次）。 */
+  readonly updateCount: () => number;
+} {
+  const c = conn();
+  let updates = 0;
+  const wrapTx = (realTx: TdbcConnection): TdbcConnection => ({
+    execute: (sql, parameters) => {
+      if (isBlobTableUpdate(sql)) {
+        updates += 1;
+        return Promise.resolve({ changes: 0, lastInsertRowid: 0 });
+      }
+      return realTx.execute(sql, parameters);
+    },
+    query: <R extends Row>(sql: string, parameters?: readonly unknown[]) =>
+      realTx.query<R>(sql, parameters),
+    batch: (sql, parametersList) => realTx.batch(sql, parametersList),
+    transaction: <T>(fn: (tx: TdbcConnection) => Promise<T>) =>
+      realTx.transaction<T>((nested) => fn(wrapTx(nested))),
+    close: () => realTx.close(),
+  });
+  return { conn: wrapTx(c), updateCount: () => updates };
+}
+
 describe("存量 blob 形态归一任务（T-BB4 ~ T-BB7）", () => {
-  it("T-BB4：幂等——连跑两遍，第二遍 normalizedCount=0 且数据未变", async () => {
+  /**
+   * 收尾维护链路抛错（磁盘满 / 库被锁时的 VACUUM 失败）只 warn、不上抛。
+   *
+   * @remarks **必须声明为本文件第一条用例**：`runStartupMaintenanceOnce` 是
+   * 模块级进程去重，本进程内首个调用者才会真跑维护链路。若前面已有用例跑过
+   * 归一并置了去重标记，这条用例就短路成「什么都没跑」，断言会失去意义。
+   */
+  it("收尾维护链路失败（VACUUM 抛错）只 warn：归一结果照常返回，不影响启动链路", async () => {
+    await resetNormalizationState();
+    await insertLegacyRow("vfs_content_blob", "bb-vacuum-v", corpus(91));
+
+    // VACUUM 直接抛（模拟磁盘满 / 库被锁），其余语句照常走真实连接。
+    const c = conn();
+    const wrapped: TdbcConnection = {
+      execute: async (sql, parameters) => {
+        if (/^\s*VACUUM\b/i.test(sql)) {
+          throw new Error("模拟磁盘满：VACUUM 失败");
+        }
+        return await c.execute(sql, parameters);
+      },
+      query: <R extends Row>(sql, parameters) => c.query<R>(sql, parameters),
+      batch: (sql, parametersList) => c.batch(sql, parametersList),
+      transaction: <T>(fn: (tx: TdbcConnection) => Promise<T>) =>
+        c.transaction<T>((nested) => fn(nested)),
+      close: () => c.close(),
+    };
+
+    const warnings: string[] = [];
+    const originalWarn = console.warn;
+    console.warn = (...args: unknown[]) => {
+      warnings.push(args.map((a) => String(a)).join(" "));
+    };
+    let result: Awaited<ReturnType<typeof runBlobBinaryNormalization>>;
+    try {
+      // 关键：不抛。归一数据已落好，维护失败只丢空间回收。
+      result = await runBlobBinaryNormalization(wrapped);
+    } finally {
+      console.warn = originalWarn;
+    }
+
+    assert.equal(result!.done, true, "维护失败不影响归一完成态");
+    assert.equal(result!.normalizedCount, 1, "数据已落好");
+    assert.ok(
+      warnings.some((line) => line.includes("收尾维护链路")),
+      "维护失败应只 warn 告警"
+    );
+    assert.equal(await pendingCount("vfs_content_blob"), 0);
+    assert.ok(
+      await new SqliteKkvRepository(conn()).get(
+        BLOB_BINARY_KKV_MODULE,
+        "vfsContentDone"
+      ),
+      "完成标记照置"
+    );
+  });
+
+  it("T-BB4：幂等——连跑两遍，第二遍 normalizedCount=0、不下发 UPDATE 且数据未变", async () => {
     await resetNormalizationState();
     await insertLegacyRow("vfs_content_blob", "bb-idem-1", corpus(1));
     await insertLegacyRow("vfs_content_blob", "bb-idem-2", corpus(2));
@@ -217,6 +367,7 @@ describe("存量 blob 形态归一任务（T-BB4 ~ T-BB7）", () => {
 
     const first = await runBlobBinaryNormalization(conn());
     assert.equal(first.done, true);
+    assert.equal(first.stalled, false, "正常收敛不报停机");
     assert.equal(first.normalizedCount, 3);
     assert.equal(await pendingCount("vfs_content_blob"), 0, "谓词应清空");
     assert.equal(await pendingCount("session_file_cache_blob"), 0);
@@ -225,10 +376,17 @@ describe("存量 blob 形态归一任务（T-BB4 ~ T-BB7）", () => {
       cache: await snapshotShapes("session_file_cache_blob", "bb-idem"),
     };
 
-    // 第二遍：完成标记已置，零归一、数据逐字段未变。
-    const second = await runBlobBinaryNormalization(conn());
-    assert.equal(second.done, true);
-    assert.equal(second.normalizedCount, 0, "第二遍零归一");
+    // 第二遍：完成标记已置 → 零归一、**不下发任何 blob 表 UPDATE**、
+    // 数据逐字段未变。探针覆盖连接口与事务内 tx 两个下发路径。
+    const second = await withSqlProbe(() => runBlobBinaryNormalization(conn()));
+    assert.equal(second.result.done, true);
+    assert.equal(second.result.stalled, false);
+    assert.equal(second.result.normalizedCount, 0, "第二遍零归一");
+    assert.deepEqual(
+      second.seen.filter((sql) => isBlobTableUpdate(sql)),
+      [],
+      "标记已置后不得再下发 vfs_content_blob / session_file_cache_blob 的 UPDATE"
+    );
     assert.deepEqual(await snapshotShapes("vfs_content_blob", "bb-idem"), afterFirst.vfs);
     assert.deepEqual(
       await snapshotShapes("session_file_cache_blob", "bb-idem"),
@@ -469,6 +627,7 @@ describe("存量 blob 形态归一任务（T-BB4 ~ T-BB7）", () => {
       shouldPause: () => true,
     });
     assert.equal(paused.done, false, "暂停即未完成");
+    assert.equal(paused.stalled, false, "守卫暂停不是零进展护栏");
     assert.equal(paused.normalizedCount, 0, "暂停时一行都不搬");
     assert.equal(paused.failedCount, 0);
 
@@ -486,6 +645,48 @@ describe("存量 blob 形态归一任务（T-BB4 ~ T-BB7）", () => {
       await kkv.get(BLOB_BINARY_KKV_MODULE, "fileCacheDone"),
       null,
       "暂停时不得置 fileCache 标记"
+    );
+  });
+
+  it("零进展护栏：UPDATE 恒 changes=0 时 3 批内 stalled=true、零归一、两表标记均未置", async () => {
+    await resetNormalizationState();
+    // 每表只放 1 行（< BATCH_SIZE）：旧口径的「满批」条件在这种卡住行数下
+    // 永远不会触发护栏，正是本用例要回归的漏洞（卡住的行数恰恰通常不满批）。
+    await insertLegacyRow("vfs_content_blob", "bb-stall-v", corpus(81));
+    await insertLegacyRow("session_file_cache_blob", "bb-stall-f", corpus(82));
+    assert.equal(await pendingCount("vfs_content_blob"), 1);
+    assert.equal(await pendingCount("session_file_cache_blob"), 1);
+
+    const probe = wrapConnBlobUpdateNoEffect();
+    const result = await runBlobBinaryNormalization(probe.conn);
+
+    assert.equal(result.done, false, "护栏收手即未完成");
+    assert.equal(
+      result.stalled,
+      true,
+      "必须给出可区分的停机信号：app 层据此停止重试而非零延迟续跑"
+    );
+    assert.equal(result.normalizedCount, 0, "UPDATE 未生效，一行都没搬走");
+    assert.equal(result.failedCount, 0, "零进展不是解码失败");
+    assert.equal(
+      probe.updateCount(),
+      6,
+      "每表 3 批即收手（护栏阈值 3，不做无界空转）"
+    );
+
+    // 语料原样留在谓词里、且不置完成标记：下个冷启动还会重试。
+    assert.equal(await pendingCount("vfs_content_blob"), 1);
+    assert.equal(await pendingCount("session_file_cache_blob"), 1);
+    const kkv = new SqliteKkvRepository(conn());
+    assert.equal(
+      await kkv.get(BLOB_BINARY_KKV_MODULE, "vfsContentDone"),
+      null,
+      "护栏收手不得置 vfsContent 标记"
+    );
+    assert.equal(
+      await kkv.get(BLOB_BINARY_KKV_MODULE, "fileCacheDone"),
+      null,
+      "护栏收手不得置 fileCache 标记"
     );
   });
 

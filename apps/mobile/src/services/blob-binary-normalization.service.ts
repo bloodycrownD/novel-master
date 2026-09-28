@@ -19,9 +19,13 @@
  * 收尾不调 `runStartupMaintenanceOnce`：core 内部在全部注册表归一完成
  * 时已自挂一次进程级去重的维护链路，app 侧再调会重复。
  *
+ * 三种 `done = false` 的收手口径：完成（`done = true`）直接收工；零进展护栏
+ * 收手（`stalled = true`）本进程不再重试（`sleep(0)` 续跑只会把空转放大成
+ * 无界热循环），下个冷启动再试；预算耗尽 / 守卫暂停照旧零延迟续跑。
+ *
  * @module services/blob-binary-normalization.service
  */
-import {runBlobBinaryNormalization} from '@novel-master/core';
+import {runBlobBinaryNormalization, type BlobBinaryRunResult} from '@novel-master/core';
 import {isMobileAgentActive} from '../runtime/agent-activity';
 import type {MobileNovelMasterRuntime} from '../runtime/types';
 
@@ -43,6 +47,7 @@ function sleep(ms: number): Promise<void> {
  *
  * 任何一轮抛错都只 `console.error` 后 return：归一是幂等的纯优化，
  * 下一轮 app 启动会按谓词续扫，用户无感知；上抛反而会污染启动链路。
+ * `stalled = true`（零进展护栏收手）同样直接 return：本进程不再重试。
  */
 async function runNormalizationLoop(
   runtime: MobileNovelMasterRuntime,
@@ -53,19 +58,27 @@ async function runNormalizationLoop(
       await sleep(GUARD_RETRY_DELAY_MS);
       continue;
     }
-    let done: boolean;
+    let result: BlobBinaryRunResult;
     try {
       // 守卫在 core 批间再查一次（长批次内部 Agent 可能起跑），
       // 命中即返回 done=false，本层零延迟续跑下一轮。
-      const result = await runBlobBinaryNormalization(runtime.conn, {
+      result = await runBlobBinaryNormalization(runtime.conn, {
         shouldPause: () => isMobileAgentActive(),
       });
-      done = result.done;
     } catch (err) {
       console.error('[blob-binary] 归一循环中止', err);
       return;
     }
-    if (done) {
+    if (result.done) {
+      return;
+    }
+    if (result.stalled) {
+      // 零进展护栏收手：谓词反复命中同一批行、UPDATE 恒 changes=0，
+      // 立刻续跑也不会有任何进展。这里必须收手（本进程不再重试、下个冷
+      // 启动再试），否则 sleep(0) 的「立即续跑」会把空转放大成无界热循环。
+      console.warn(
+        '[blob-binary] 归一零进展（疑似谓词原地打转），本进程停止重试，下次启动再试',
+      );
       return;
     }
     await sleep(0);
