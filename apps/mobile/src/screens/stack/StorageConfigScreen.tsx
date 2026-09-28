@@ -21,7 +21,13 @@ import {
   getDatabaseMaintenanceStats,
   runDatabaseMaintenance,
   type BlobBinaryTableStatus,
+  type MessageCompactionStatus,
 } from '../../services/db-maintenance.service';
+import {
+  blobBinaryValue,
+  messageCompactionValue,
+  type MigrationValue,
+} from './storage-config-migration-values';
 import {getCloudSyncLocalStatus} from '../../services/cloud-sync-config.store';
 import {
   isMobileAgentActive,
@@ -32,11 +38,13 @@ import {useTheme} from '../../theme/ThemeProvider';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
-/** 迁移状态行的取值三态（颜色映射：success / warning / 默认正文色）。 */
-interface MigrationValue {
-  readonly value: string;
-  readonly tone: 'default' | 'success' | 'warning';
-}
+/**
+ * 维护指标轮询间隔（ic-23，方案 A）：长耗时搬运期间页面聚焦时按此间隔
+ * 重采样，进度不再停在进页快照。取区间上沿 5s——blobBinary 未完成态的
+ * 谓词 COUNT 不可索引（每表一次全表扫），mobile 端从宽留 IO 余量；
+ * 稳态只读 KKV 标记，零 COUNT 成本。
+ */
+const MAINTENANCE_STATS_POLL_INTERVAL_MS = 5_000;
 
 export function StorageConfigScreen() {
   const {tokens} = useTheme();
@@ -52,10 +60,9 @@ export function StorageConfigScreen() {
     null,
   );
   const [blobBinary, setBlobBinary] = useState<BlobBinaryTableStatus[]>([]);
-  const [messageCompaction, setMessageCompaction] = useState<{
-    done: boolean;
-    pendingCount: number;
-  } | null>(null);
+  const [messageCompaction, setMessageCompaction] = useState<
+    MessageCompactionStatus | null
+  >(null);
 
   const refreshCloudConfigured = useCallback(async () => {
     try {
@@ -109,54 +116,22 @@ export function StorageConfigScreen() {
   };
 
   /**
-   * 消息正文压缩（content json → zlib 压缩存储）状态行取值。
-   * 未取到状态（如 Agent 运行中采样被守卫拒绝）显示占位 '—'。
-   */
-  const messageCompactionValue = (): MigrationValue => {
-    if (messageCompaction == null) {
-      return {value: '—', tone: 'default'};
-    }
-    return messageCompaction.done
-      ? {value: '已完成', tone: 'success'}
-      : {
-          value: `进行中（剩余 ${messageCompaction.pendingCount} 条）`,
-          tone: 'default',
-        };
-  };
-
-  /**
-   * 去 base64 状态行取值（cr-06 三态）：已完成 / 已完成（N 条需人工处理）
-   * / 进行中（剩余 N 条）；未取到状态显示占位 '—'。
-   */
-  const blobBinaryValue = (table: string): MigrationValue => {
-    const status = blobBinary.find(row => row.table === table);
-    if (!status) {
-      return {value: '—', tone: 'default'};
-    }
-    if (status.done) {
-      return status.failedCount > 0
-        ? {
-            value: `已完成（${status.failedCount} 条需人工处理）`,
-            tone: 'warning',
-          }
-        : {value: '已完成', tone: 'success'};
-    }
-    return {
-      value: `进行中（剩余 ${status.pendingCount} 条）`,
-      tone: 'default',
-    };
-  };
-
-  /**
    * 迁移卡片三行（用户拍板 2026-09-28）：消息正文压缩 + 两张 blob 表去
    * base64，指标卡形态只读展示（非菜单项）。消息正文「去 base64」不设
    * 状态行——发版形态下压缩搬运直接写二进制，不存在用户可见的中间态，
-   * 仅开发机历史形态由归一任务静默收敛。
+   * 仅开发机历史形态由归一任务静默收敛。取值逻辑在
+   * storage-config-migration-values（ic-22 抽出的纯函数，四组夹具直测）。
    */
   const migrationRows: ReadonlyArray<{label: string} & MigrationValue> = [
-    {label: '消息正文压缩', ...messageCompactionValue()},
-    {label: '版本内容去 base64', ...blobBinaryValue('vfsContent')},
-    {label: '文件缓存去 base64', ...blobBinaryValue('fileCache')},
+    {...messageCompactionValue(messageCompaction), label: '消息正文压缩'},
+    {
+      ...blobBinaryValue(blobBinary.find(row => row.table === 'vfsContent')),
+      label: '版本内容去 base64',
+    },
+    {
+      ...blobBinaryValue(blobBinary.find(row => row.table === 'fileCache')),
+      label: '文件缓存去 base64',
+    },
   ];
 
   const migrationValueColor = (tone: MigrationValue['tone']): string => {
@@ -178,6 +153,13 @@ export function StorageConfigScreen() {
     useCallback(() => {
       refreshCloudConfigured().catch(() => undefined);
       refreshMaintenanceStats().catch(() => undefined);
+      // ic-23（方案 A）：聚焦期间轮询重采样，长耗时搬运的进度不停在
+      // 进页快照；同一 cleanup 覆盖失焦与卸载，离开页面即停（不再空转
+      // 采样）。与「后台自动整理、期间可正常使用」的文案预期对齐。
+      const interval = setInterval(() => {
+        refreshMaintenanceStats().catch(() => undefined);
+      }, MAINTENANCE_STATS_POLL_INTERVAL_MS);
+      return () => clearInterval(interval);
     }, [refreshCloudConfigured, refreshMaintenanceStats]),
   );
 

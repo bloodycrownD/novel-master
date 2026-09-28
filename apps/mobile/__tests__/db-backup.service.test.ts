@@ -5,6 +5,7 @@ import {
   importDatabaseBackupFromBytes,
   importDatabaseBackupFromPath,
 } from '@/services/db-backup.service';
+import {isMobileDbMaintenanceBusy} from '@/services/db-maintenance-busy';
 
 const mockCheckpoint = jest.fn();
 const mockClose = jest.fn();
@@ -270,5 +271,66 @@ describe('db-backup.service', () => {
     );
     expect(mockDumpSnapshot).not.toHaveBeenCalled();
     expect(mockWriteStream).not.toHaveBeenCalled();
+  });
+
+  it('ic-20: exportDatabaseBackupToPath 期间 busy 为 true，结束后 false（底层覆盖云同步直调）', async () => {
+    expect(isMobileDbMaintenanceBusy()).toBe(false);
+    const busySamples: boolean[] = [];
+    // 采样点挂在链路中段（scrub）：底层 acquire 之后、release 之前
+    mockScrubInDatabase.mockImplementation(async () => {
+      busySamples.push(isMobileDbMaintenanceBusy());
+    });
+
+    await exportDatabaseBackupToPath(runtime, '/cache/busy-probe.nmbackup');
+
+    expect(busySamples).toEqual([true]);
+    expect(isMobileDbMaintenanceBusy()).toBe(false);
+  });
+
+  it('ic-20: importDatabaseBackupFromPath 期间 busy 恒 true（含「关连接+覆盖库文件」窗口），结束后 false', async () => {
+    expect(isMobileDbMaintenanceBusy()).toBe(false);
+    const busySamples: boolean[] = [];
+    mockDumpSnapshot.mockImplementation(async () => {
+      busySamples.push(isMobileDbMaintenanceBusy());
+      return emptySnapshot;
+    });
+    mockRestoreSnapshot.mockImplementation(async () => {
+      busySamples.push(isMobileDbMaintenanceBusy());
+    });
+
+    await importDatabaseBackupFromPath('/cache/busy-probe.nmbackup');
+
+    expect(busySamples).toEqual([true, true]);
+    expect(isMobileDbMaintenanceBusy()).toBe(false);
+  });
+
+  it('ic-20: 上层 importDatabaseBackup 外层计数兜底——链路期间 true、onRebootstrap 之后 false', async () => {
+    expect(isMobileDbMaintenanceBusy()).toBe(false);
+    mockPick.mockResolvedValue([{uri: 'content://backup'}]);
+    mockKeepLocalCopy.mockResolvedValue([
+      {status: 'success', localUri: 'file:///cache/import.nmbackup'},
+    ]);
+    const busyAtRestore: boolean[] = [];
+    mockRestoreSnapshot.mockImplementation(async () => {
+      busyAtRestore.push(isMobileDbMaintenanceBusy());
+    });
+
+    await importDatabaseBackup(onRebootstrap);
+
+    // 底层 + 外层嵌套计数期间为 true；结束后（onRebootstrap 已先于 release
+    // 执行）归零
+    expect(busyAtRestore).toEqual([true]);
+    expect(onRebootstrap).toHaveBeenCalled();
+    expect(isMobileDbMaintenanceBusy()).toBe(false);
+  });
+
+  it('ic-20: 底层导入失败路径同样释放计数（finally 配对，不泄漏）', async () => {
+    expect(isMobileDbMaintenanceBusy()).toBe(false);
+    mockStat.mockResolvedValue({size: 8});
+
+    await expect(
+      importDatabaseBackupFromPath('/cache/too-small.nmbackup'),
+    ).rejects.toThrow(/文件过小/);
+    expect(isMobileDbMaintenanceBusy()).toBe(false);
   });
 });

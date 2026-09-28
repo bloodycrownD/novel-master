@@ -24,7 +24,10 @@ import {resolveMobileDatabaseFilePath} from '../db/db-file-path';
 import {isMobileAgentActive} from '../runtime/agent-activity';
 import type {MobileNovelMasterRuntime} from '../runtime/types';
 import {MOBILE_TDBC_URL} from '../vfs/constants';
-import {setMobileDbMaintenanceBusy} from './db-maintenance-busy';
+import {
+  acquireMobileDbMaintenanceBusy,
+  releaseMobileDbMaintenanceBusy,
+} from './db-maintenance-busy';
 import {exportBytesViaDocumentPicker, pickToLocalPath} from './document-io';
 import {blobFs, bytesToAsciiString} from './rn-file-io';
 
@@ -94,64 +97,83 @@ async function openDbForProviderRestore(): Promise<TdbcConnection> {
 /**
  * 将数据库导出到指定路径（checkpoint → 拷贝 → 清除服务商表），无分享对话框。
  * 调用方负责 Agent 守卫与目标路径管理。
+ *
+ * busy 互斥在此底层置位（计数/令牌配对）：云同步等直调路径不经上层包装
+ * 也能被覆盖，期间归一/压缩后台循环让路。
  */
 export async function exportDatabaseBackupToPath(
   runtime: MobileNovelMasterRuntime,
   destPath: string,
 ): Promise<void> {
-  await checkpointMobileDatabase(runtime.conn);
-  const dbPath = await resolveMobileDatabaseFilePath();
-  await blobFs().cp(dbPath, destPath);
-  await scrubProviderTablesInDatabase(
-    runtime.conn,
-    destPath,
-    EXPORT_ATTACH_ALIAS,
-  );
+  acquireMobileDbMaintenanceBusy();
+  try {
+    await checkpointMobileDatabase(runtime.conn);
+    const dbPath = await resolveMobileDatabaseFilePath();
+    await blobFs().cp(dbPath, destPath);
+    await scrubProviderTablesInDatabase(
+      runtime.conn,
+      destPath,
+      EXPORT_ATTACH_ALIAS,
+    );
+  } finally {
+    releaseMobileDbMaintenanceBusy();
+  }
 }
 
 /**
  * 从本地快照文件导入数据库（dump → close → cp 替换 → restore），无选择器与 rebootstrap。
  * 调用方须在成功后执行 rebootstrap。
+ *
+ * busy 互斥在此底层置位（计数/令牌配对）：「关连接 + 覆盖库文件」的
+ * 最危险窗口与恢复三表全程覆盖，云同步直调路径同样被保护。
  */
 export async function importDatabaseBackupFromPath(
   srcPath: string,
 ): Promise<void> {
-  await assertSqliteBackupAtPath(srcPath);
-
-  const dbPath = await resolveMobileDatabaseFilePath();
-  const bakPath = `${dbPath}.nmbackup.bak`;
-
-  const liveConn = await getMobileConnection();
-  const providerSnapshot = await dumpProviderTableSnapshot(liveConn);
-
-  const fs = blobFs();
-  const dbExists = await fs.exists(dbPath);
-  if (dbExists) {
-    await fs.cp(dbPath, bakPath);
-  }
-
+  acquireMobileDbMaintenanceBusy();
   try {
-    await closeMobileConnection();
-    await fs.cp(srcPath, dbPath);
+    await assertSqliteBackupAtPath(srcPath);
 
-    const restoreConn = await openDbForProviderRestore();
+    const dbPath = await resolveMobileDatabaseFilePath();
+    const bakPath = `${dbPath}.nmbackup.bak`;
+
+    const liveConn = await getMobileConnection();
+    const providerSnapshot = await dumpProviderTableSnapshot(liveConn);
+
+    const fs = blobFs();
+    const dbExists = await fs.exists(dbPath);
+    if (dbExists) {
+      await fs.cp(dbPath, bakPath);
+    }
+
     try {
-      await restoreProviderTableSnapshot(restoreConn, providerSnapshot);
-    } finally {
-      await restoreConn.close();
+      await closeMobileConnection();
+      await fs.cp(srcPath, dbPath);
+
+      const restoreConn = await openDbForProviderRestore();
+      try {
+        await restoreProviderTableSnapshot(restoreConn, providerSnapshot);
+      } finally {
+        await restoreConn.close();
+      }
+    } catch (error) {
+      const bakExists = await fs.exists(bakPath);
+      if (bakExists) {
+        await fs.cp(bakPath, dbPath).catch(() => undefined);
+      }
+      throw error;
     }
-  } catch (error) {
-    const bakExists = await fs.exists(bakPath);
-    if (bakExists) {
-      await fs.cp(bakPath, dbPath).catch(() => undefined);
-    }
-    throw error;
+  } finally {
+    releaseMobileDbMaintenanceBusy();
   }
 }
 
 /**
  * 从内存中的备份字节导入：先分块落盘再走路径级 cp（禁止整包 base64 writeFile）。
  * 调用方须在成功后执行 rebootstrap。
+ *
+ * busy 互斥由内部 `importDatabaseBackupFromPath` 的底层 acquire/release
+ * 覆盖（含落盘窗口），本函数无需再叠加。
  */
 export async function importDatabaseBackupFromBytes(
   bytes: Uint8Array,
@@ -179,8 +201,10 @@ export async function exportDatabaseBackup(
     throw new Error('Agent 运行中，请稍后再导出数据库');
   }
 
-  // 备份期间置模块级 busy：消息压缩后台循环据此让路（与备份互斥）。
-  setMobileDbMaintenanceBusy(true);
+  // 外层 acquire（计数配对，不是幂等空操作）：把选择器弹出窗口也纳入
+  // 互斥——底层 exportDatabaseBackupToPath 内部另有一层自平衡的
+  // acquire/release，嵌套计数不会互相提前清位。
+  acquireMobileDbMaintenanceBusy();
   try {
     return await exportBytesViaDocumentPicker({
       fileName: backupFileName(),
@@ -189,7 +213,7 @@ export async function exportDatabaseBackup(
       write: destPath => exportDatabaseBackupToPath(runtime, destPath),
     });
   } finally {
-    setMobileDbMaintenanceBusy(false);
+    releaseMobileDbMaintenanceBusy();
   }
 }
 
@@ -205,8 +229,12 @@ export async function importDatabaseBackup(
     throw new Error('Agent 运行中，请稍后再导入数据库');
   }
 
-  // 导入替换数据库期间置模块级 busy：消息压缩后台循环据此让路。
-  setMobileDbMaintenanceBusy(true);
+  // 外层 acquire（计数配对）：把选择器窗口到 rebootstrap 完成的完整
+  // 链路纳入互斥——底层 importDatabaseBackupFromPath 内部的
+  // acquire/release 只覆盖到它自己返回，库文件已替换、连接仍处重建窗口
+  // 的尾段由这层兜住。release 放 finally 且 onRebootstrap 在 try 内最后
+  // 一步执行，故清位必然发生在 rebootstrap 完成之后。
+  acquireMobileDbMaintenanceBusy();
   try {
     const picked = await pickToLocalPath({
       mimeTypes: [types.allFiles],
@@ -219,6 +247,6 @@ export async function importDatabaseBackup(
     await importDatabaseBackupFromPath(picked.fsPath);
     onRebootstrap();
   } finally {
-    setMobileDbMaintenanceBusy(false);
+    releaseMobileDbMaintenanceBusy();
   }
 }

@@ -11,10 +11,9 @@
  *   短事务写库，与 Agent 的读写同抢 op-sqlite 连接，插队会让首 token
  *   延迟明显。与既有 `db-maintenance.service` / `db-backup.service`
  *   的 Agent 门禁同源。
- * - 本仓 main 上 mobile 侧**没有**维护/备份/云同步的 busy 互斥标志
- *   （desktop 侧才有 `isDesktopCloudSyncBusy` + `db-maintenance-busy`），
- *   故这里只挂 Agent 守卫一条。将来 mobile 补上 busy 标志时，在
- *   `shouldPause` 里追加一个 `||` 即可，循环形态不用动。
+ * - `isMobileDbMaintenanceBusy()`（数据清理/备份/云同步互斥）：数据
+ *   清理 VACUUM / 备份导入「关连接 + 覆盖库文件」/ 云同步快照替换期间
+ *   逐行短事务让路，与消息压缩循环同一守卫口径。
  *
  * 收尾不调 `runStartupMaintenanceOnce`：core 内部在全部注册表归一完成
  * 时已自挂一次进程级去重的维护链路，app 侧再调会重复。
@@ -27,6 +26,7 @@
  */
 import {runBlobBinaryNormalization, type BlobBinaryRunResult} from '@novel-master/core';
 import {isMobileAgentActive} from '../runtime/agent-activity';
+import {isMobileDbMaintenanceBusy} from './db-maintenance-busy';
 import type {MobileNovelMasterRuntime} from '../runtime/types';
 
 /** 起步让路：等首屏渲染与 runtime 水合跑完再抢库。 */
@@ -39,6 +39,11 @@ let scheduledRuntime: MobileNovelMasterRuntime | undefined;
 
 function sleep(ms: number): Promise<void> {
   return new Promise<void>(resolve => setTimeout(resolve, ms));
+}
+
+/** 归一循环的让路守卫：Agent 活跃或维护/备份/云同步 busy 任一命中。 */
+function mobileNormalizationBlocked(): boolean {
+  return isMobileAgentActive() || isMobileDbMaintenanceBusy();
 }
 
 /**
@@ -54,7 +59,7 @@ async function runNormalizationLoop(
 ): Promise<void> {
   await sleep(WARMUP_DELAY_MS);
   for (;;) {
-    if (isMobileAgentActive()) {
+    if (mobileNormalizationBlocked()) {
       await sleep(GUARD_RETRY_DELAY_MS);
       continue;
     }
@@ -63,7 +68,7 @@ async function runNormalizationLoop(
       // 守卫在 core 批间再查一次（长批次内部 Agent 可能起跑），
       // 命中即返回 done=false，本层零延迟续跑下一轮。
       result = await runBlobBinaryNormalization(runtime.conn, {
-        shouldPause: () => isMobileAgentActive(),
+        shouldPause: mobileNormalizationBlocked,
       });
     } catch (err) {
       console.error('[blob-binary] 归一循环中止', err);

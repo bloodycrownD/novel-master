@@ -6,7 +6,9 @@
  * 四件事——Agent 运行守卫、数据库文件体积采样（blob-util stat），以及
  * 两类后台搬运的状态透传（存量 blob 行形态归一「去 base64」+ 消息正文
  * 压缩，均只读 KKV 标记/谓词计数，存储页状态行数据源）。
- * 错误一律以 reject 语义上抛（由调用方 toast），不吞错。
+ * 错误口径：主链路（统计主指标/清理执行）以 reject 语义上抛（由调用方
+ * toast）；两类状态采样是附属展示字段，独立兜底降级不上抛（见各自
+ * sample 函数）。
  *
  * @module services/db-maintenance.service
  */
@@ -16,14 +18,16 @@ import {
   getMessageCompactionStatus,
   type BlobBinaryTableStatus,
   type MessageCompactionStatus,
+  type TdbcConnection,
 } from '@novel-master/core';
 import {resolveMobileDatabaseFilePath} from '../db/db-file-path';
 import {isMobileAgentActive} from '../runtime/agent-activity';
 import type {MobileNovelMasterRuntime} from '../runtime/types';
 import {blobFs} from './rn-file-io';
 import {
+  acquireMobileDbMaintenanceBusy,
   isMobileDbMaintenanceBusy,
-  setMobileDbMaintenanceBusy,
+  releaseMobileDbMaintenanceBusy,
 } from './db-maintenance-busy';
 
 /** 归一状态行 DTO 直通 core 类型，调用方无需再引 core（app 层单一出口）。 */
@@ -37,13 +41,54 @@ async function statDatabaseFileBytes(): Promise<number> {
 }
 
 /**
+ * blob 归一状态采样（附属展示字段，独立兜底）：失败只 console.warn 一次
+ * 后返回空数组，不打拖主统计（库体积/可回收量）——对齐 desktop 侧同名
+ * sample 的降级口径，空数组由 UI 渲染成占位 '—'。
+ */
+async function sampleBlobBinaryStatus(
+  conn: TdbcConnection,
+): Promise<BlobBinaryTableStatus[]> {
+  try {
+    // 数组直接给列表渲染用：FlatList 需要稳定的扁平数组，故在此拍平；
+    // desktop 走 IPC DTO 惯例保留 { tables } 包装，两端形状不统一是
+    // 有意为之。
+    return [...(await getBlobBinaryStatus(conn)).tables];
+  } catch (err) {
+    console.warn('[db-maintenance] blobBinary 状态采样失败，展示为空', err);
+    return [];
+  }
+}
+
+/**
+ * 消息压缩状态采样（附属展示字段，独立兜底）：失败只 console.warn 一次
+ * 后返回 null，UI 侧 null → 占位 '—'（与 blobBinary 空表同口径）。
+ */
+async function sampleMessageCompactionStatus(
+  conn: TdbcConnection,
+): Promise<MessageCompactionStatus | null> {
+  try {
+    return await getMessageCompactionStatus(conn);
+  } catch (err) {
+    console.warn(
+      '[db-maintenance] messageCompaction 状态采样失败，展示为占位',
+      err,
+    );
+    return null;
+  }
+}
+
+/**
  * 采样当前存储统计：数据库文件体积 + VACUUM 理论可回收量（只读 PRAGMA）
  * + 存量 blob 行形态归一（去 base64）各注册表的进度 + 消息压缩状态。
  *
- * `blobBinary` 直接透传 core `getBlobBinaryStatus` 的结果数组（只含已注册
- * 适配器的表，顺序与 core 注册表一致），调用方按 `table` 渲染状态行。
+ * `blobBinary` 为 core `getBlobBinaryStatus` 结果数组的拍平形态（只含已
+ * 注册适配器的表，顺序与 core 注册表一致），调用方按 `table` 渲染状态行。
  * 两类状态稳态均为只读 KKV 标记，零 COUNT 成本。仅用于展示，Agent 运行
  * 中抛中文 Error，由调用方决定静默或提示。
+ *
+ * 主统计（体积/可回收量）与两类状态采样各自独立兜底：状态采样失败只
+ * warn 一次并降级（blobBinary → 空数组、messageCompaction → null），
+ * 不把附属展示字段的失败源传染给主统计指标（与 desktop 同口径）。
  */
 export async function getDatabaseMaintenanceStats(
   runtime: MobileNovelMasterRuntime,
@@ -51,29 +96,29 @@ export async function getDatabaseMaintenanceStats(
   fileBytes: number;
   reclaimableBytes: number;
   blobBinary: BlobBinaryTableStatus[];
-  messageCompaction: MessageCompactionStatus;
+  messageCompaction: MessageCompactionStatus | null;
 }> {
   if (isMobileAgentActive()) {
     throw new Error('Agent 运行中，请稍后再操作');
   }
-  const [fileBytes, stats, blobBinary, messageCompaction] = await Promise.all([
+  const [fileBytes, stats] = await Promise.all([
     statDatabaseFileBytes(),
     createDbMaintenanceService(runtime.conn).getStorageStats(),
-    getBlobBinaryStatus(runtime.conn),
-    getMessageCompactionStatus(runtime.conn),
   ]);
+  const blobBinary = await sampleBlobBinaryStatus(runtime.conn);
+  const messageCompaction = await sampleMessageCompactionStatus(runtime.conn);
   return {
     fileBytes,
     reclaimableBytes: stats.reclaimableBytes,
-    blobBinary: [...blobBinary.tables],
+    blobBinary,
     messageCompaction,
   };
 }
 
 /**
  * 执行数据清理（缓存 GC → checkpoint → VACUUM），返回前后文件体积。
- * VACUUM 耗时随库体积增长（大库数十秒）；期间置模块级 busy——消息
- * 压缩后台循环据此让路（与数据清理互斥）。
+ * VACUUM 耗时随库体积增长（大库数十秒）；期间计数式置 busy——消息
+ * 压缩与 blob 归一后台循环据此让路（与数据清理互斥）。
  */
 export async function runDatabaseMaintenance(
   runtime: MobileNovelMasterRuntime,
@@ -81,14 +126,14 @@ export async function runDatabaseMaintenance(
   if (isMobileAgentActive()) {
     throw new Error('Agent 运行中，请稍后再操作');
   }
-  setMobileDbMaintenanceBusy(true);
+  acquireMobileDbMaintenanceBusy();
   try {
     const beforeBytes = await statDatabaseFileBytes();
     await createDbMaintenanceService(runtime.conn).runDatabaseMaintenance();
     const afterBytes = await statDatabaseFileBytes();
     return {beforeBytes, afterBytes};
   } finally {
-    setMobileDbMaintenanceBusy(false);
+    releaseMobileDbMaintenanceBusy();
   }
 }
 

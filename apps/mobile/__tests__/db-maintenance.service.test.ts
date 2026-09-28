@@ -170,6 +170,38 @@ describe('db-maintenance.service', () => {
     ]);
   });
 
+  it('cr-04: getBlobBinaryStatus 抛错时整体不 reject，主指标有值、blobBinary 降级为空数组', async () => {
+    // 附属展示字段不得把主统计（库体积/可回收量）打掉：采样独立兜底
+    mockGetBlobBinaryStatus.mockRejectedValue(
+      new Error('blob binary status boom'),
+    );
+
+    const stats = await getDatabaseMaintenanceStats(runtime);
+
+    // 归一状态采样失败被吞掉（warn 一次 + 空数组），主指标照常返回
+    expect(stats.fileBytes).toEqual(1024);
+    expect(stats.reclaimableBytes).toEqual(40960);
+    expect(stats.blobBinary).toEqual([]);
+    expect(mockGetCompactionStatus).toHaveBeenCalledWith(liveConn);
+  });
+
+  it('ic-03: getMessageCompactionStatus 抛错时整体不 reject，messageCompaction 降级为 null 且其余指标有值', async () => {
+    // 与 cr-04 对称：压缩状态采样（第四个失败源）独立兜底，不传染
+    mockGetCompactionStatus.mockRejectedValue(
+      new Error('message compaction status boom'),
+    );
+
+    const stats = await getDatabaseMaintenanceStats(runtime);
+
+    expect(stats.fileBytes).toEqual(1024);
+    expect(stats.reclaimableBytes).toEqual(40960);
+    expect(stats.messageCompaction).toBeNull();
+    expect(stats.blobBinary).toEqual([
+      {table: 'vfsContent', done: false, pendingCount: 1100, failedCount: 0},
+      {table: 'fileCache', done: true, pendingCount: 0, failedCount: 0},
+    ]);
+  });
+
   it('T-DMM1: runDatabaseMaintenance 正常路径 stat 前后各一次并返回前后体积', async () => {
     mockStat
       .mockResolvedValueOnce({size: 1048576})

@@ -227,9 +227,9 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
     }
     const manager = runtime.sessionStreamUnitManager;
     // 消息正文压缩搬运：runtime 就绪后低优先后台调度（fire-and-forget，
-    // 幂等——已完成时零成本；Agent 活跃/数据清理 busy 自动让路；
-    // retry 换新 runtime 时对新连接重新挂一次，旧循环随旧连接失效
-    // 自然终止——任务谓词幂等，重复调度无副作用）。
+    // 幂等——已完成时零成本；Agent 活跃/数据清理 busy 自动让路）。
+    // 同一 runtime 重复调度不叠加循环（runtime 身份去重）；retry 换新
+    // runtime 时对新连接重挂一次，旧循环随旧连接失效自然终止。
     scheduleMobileMessageContentCompaction(runtime);
     manager.setUiBridge({onError: message => showAppToast(message)});
     // 消息通知总开关：完成通知与常驻保活一体启停；appUi 未就绪的降级

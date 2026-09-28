@@ -34,6 +34,10 @@ import {
   importDatabaseBackupFromBytes,
   importDatabaseBackupFromPath,
 } from './db-backup.service';
+import {
+  acquireMobileDbMaintenanceBusy,
+  releaseMobileDbMaintenanceBusy,
+} from './db-maintenance-busy';
 import {hashSnapshotFile, sha256Hex} from './snapshot-file-hash';
 import {
   buildS3StorageConfig,
@@ -198,6 +202,11 @@ async function createCoordinator(
       return bytes;
     },
     getSnapshotBytes: getFileSize,
+    // dbSync 三条快照路径直调 db-backup 底层函数（不经上层备份包装）：
+    // busy 互斥由底层 exportDatabaseBackupToPath / importDatabaseBackup
+    // 系列内部的 acquire/release 计数配对覆盖——快照导出与「关连接 +
+    // 覆盖库文件」窗口期间归一/压缩后台循环让路；pull 侧 rebootstrap
+    // 之后的重建窗口由 pullCloudSync 的外层 acquire/release 兜住。
     dbSync: {
       isAgentActive: () => isMobileAgentActive(),
       exportSnapshotToPath: async dest => {
@@ -300,6 +309,20 @@ export async function pullCloudSync(
     throw new CloudSyncError('NOT_CONFIGURED', '请先配置云存储');
   }
 
+  // 外层 acquire（计数/令牌配对）：底层导入函数的 acquire/release 只
+  // 覆盖到它自己返回，「库文件已替换、连接仍处重建窗口」的尾段由这层
+  // 兜住——release 必须发生在 onRebootstrap() 完成之后（含重建窗口的
+  // 完整互斥），其余出口（错误 / already-up-to-date）由 finally 兜底，
+  // 令牌标记保证幂等不重复 release。
+  acquireMobileDbMaintenanceBusy();
+  let pullBusyHeld = true;
+  const releasePullBusy = (): void => {
+    if (pullBusyHeld) {
+      pullBusyHeld = false;
+      releaseMobileDbMaintenanceBusy();
+    }
+  };
+
   const progress = createCloudSyncProgress('pull', {
     onUiProgress: options?.onProgress,
   });
@@ -321,6 +344,8 @@ export async function pullCloudSync(
       lastPullResult: 'success',
     });
     onRebootstrap();
+    // rebootstrap 已完成，重建窗口结束，此处释放外层互斥。
+    releasePullBusy();
     progress.done({rev: result.rev});
     return {rev: result.rev, alreadyUpToDate: false};
   } catch (error) {
@@ -339,6 +364,7 @@ export async function pullCloudSync(
     progress.fail(error);
     throw mapSdkError(error);
   } finally {
+    releasePullBusy();
     await ReactNativeBlobUtil.fs.unlink(exportTempPath).catch(() => undefined);
     await ReactNativeBlobUtil.fs.unlink(importTempPath).catch(() => undefined);
   }
