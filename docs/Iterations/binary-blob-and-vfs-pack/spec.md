@@ -193,7 +193,7 @@ apps/{mobile,desktop} 存储页                                        # A/B：�
 - Step 5 — phase-debase64-regression — blocking: yes — qa: auto：core 全量（先重建 dist）＋ desktop ＋ mobile ＋ 全仓 typecheck。
 - Step 6 — phase-debase64-verify — blocking: no — qa: manual_user：真机（荣耀 EBG-AN00）验收——库体积、三表形态直查（`SELECT encoding, TYPEOF(bytes), COUNT(*)`）、逐条解压校验、二次启动零重扫、读写/搜索/回滚正常。
 
-**Part B（需用户拍板后执行）**
+**Part B（用户拍板 2026-09-28：暂不执行，留作待办——两张新表 + 8 处契约散点改造的成本被认为偏高；方案待优化后再议。优化方向存档：可探索不加表形态（如 blob 表内新 encoding 载体 / 复用现有结构记 member 映射）、或等移动端压缩能力（wasm/纯 JS 编码器）成熟后重估收益）**
 
 - Step 7 — phase-vfs-pack-schema — blocking: yes — qa: auto：两表 DDL + `SCHEMA_BOOT_VERSION` +1 + bootstrap 测试（新库建表 / 存量库慢路径建表 / 快路径不建）。
 - Step 8 — phase-vfs-pack-store — blocking: yes — qa: auto：store 读路径（`get`/`getMany` 先 blob 后 member）、`ensureBlob` / `findExistingBlobHashes` 认 member、`put` 删同 hash member、`gc` 两步清扫；T-VP1~T-VP5。

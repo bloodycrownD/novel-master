@@ -335,3 +335,9 @@ assistant:
 【cr-func 抓到的真缺口（wave-5 已补）】ic-06 状态采样节流是主代理漏派（P1，且 spec 已写「由 ic-06 缓解」险成虚假陈述）；cr-12/13/14 同批漏派；其余为注释口径/用例尾巴。教训：**按文件簇派节点时要把 fix-spec 条目号逐条过一遍映射表**——本轮 nA 的任务清单漏了 file-cache-store.test.ts 落点的 cr-12/13 与 db-maintenance.test.ts 落点的 cr-14。
 
 【仍待办】① 合并后 QA 三项真机（坏 base64 第三态文案/大会话搜索耗时/迁移中进度轮询推进）——等真机窗口；② 生产 bundle 启动崩 Got unexpected undefined 仍未定位（发版前置）；③ Part B（VFS 内容打包 3.06MB）待拍板；④ 设备现装 Metro 构建（依赖 PC Metro + adb reverse）。【用户偏好】子代理派遣用同步方式（同一波多 agent 并行发、同步等待），方便观察——wave-2 起已执行。
+
+user:
+Part B 先不改吧，留做待办，我觉得方案可以之后再优化下。因为我觉得加两张表其实成本挺高的。（此前追问：拼接单流原理？会废弃 vfs 底表吗——答：不废弃，entry/revision/blob 三件套原样，pack 是旁路新增；去 base64 改的是 vfs_content_blob 落库形态不是挪表）
+
+assistant:
+（拍板落盘：Part B 暂不执行、留待办。spec Part B 标题行改为「用户拍板 2026-09-28：暂不执行……方案待优化」，优化方向存档：不加表形态（blob 表内新 encoding 载体/复用现有结构记 member 映射）或等移动端压缩能力成熟后重估。iteration-state 待办同步。此拍板不阻塞本版发布——本版只含 Part A。）
