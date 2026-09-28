@@ -202,7 +202,8 @@ export function PromptLayoutSection({
         {form.workplaceEnabled ? (
           <>
             <Text style={[styles.fieldHint, {color: tokens.textSecondary}]}>
-              {WORKPLACE_BLOCK_HINT}
+              {/* 只读态（内置 general）不说「可编辑」，避免禁用控件与文案矛盾 */}
+              {readOnly ? '助手确认语（只读）。' : WORKPLACE_BLOCK_HINT}
             </Text>
             <ExpandablePromptInput
               label={WORKPLACE_ASSISTANT_TEXT_LABEL}
