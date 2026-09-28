@@ -48,6 +48,7 @@ import {
 } from '@/services/stream-token-estimator';
 import {showAppToast} from '@/services/app-toast';
 import {setKeepAliveResidentEnabled} from '@/services/agent-finished-notification';
+import {scheduleMobileBlobBinaryNormalization} from '@/services/blob-binary-normalization.service';
 import {readMessageNotificationEnabled} from '@/storage/message-notification-pref';
 import {tokensForMode} from '../theme/tokens';
 
@@ -220,10 +221,10 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
   // 桥未注入期间（bootstrap 早期与 retry 窗口）的降级：失败 toast 与完成通知
   // 不发，refcount 与单元维护不依赖桥，始终生效。
   useEffect(() => {
-    const manager = runtime?.sessionStreamUnitManager;
-    if (!manager) {
+    if (!runtime) {
       return;
     }
+    const manager = runtime.sessionStreamUnitManager;
     manager.setUiBridge({onError: message => showAppToast(message)});
     // 消息通知总开关：完成通知与常驻保活一体启停；appUi 未就绪的降级
     // 口径取「关」（与开关默认关对齐），appUi 就绪后按存储真值。
@@ -246,6 +247,10 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
     // （fire-and-forget；retry 重建 runtime 后本 effect 重跑，dispose 全停
     // → 重新拉起的秒级闪断 PRD 已接受）。
     void ensureKeepAliveResidentBoot(appUiRef.current);
+    // 存量 blob 行形态归一（去 base64）的后台循环：同样 fire-and-forget，
+    // 幂等挂载（同一 runtime 重复调用不叠加循环）；retry 换新 runtime 时
+    // 本 effect 重跑，对新连接重挂一次。
+    scheduleMobileBlobBinaryNormalization(runtime);
   }, [runtime]);
 
   const refreshScope = useCallback(async () => {

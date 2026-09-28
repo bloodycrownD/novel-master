@@ -19,6 +19,7 @@ import {
 import {
   getDatabaseMaintenanceStats,
   runDatabaseMaintenance,
+  type BlobBinaryTableStatus,
 } from '../../services/db-maintenance.service';
 import {getCloudSyncLocalStatus} from '../../services/cloud-sync-config.store';
 import {
@@ -29,6 +30,27 @@ import type {RootStackParamList} from '../../navigation/types';
 import {useTheme} from '../../theme/ThemeProvider';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
+
+/**
+ * 存量 blob 行形态归一（去 base64）状态行的展示文案。
+ *
+ * 表标识由 core 归一任务的注册表决定，且各波次注册进度不同（本波次只注册
+ * 了 vfsContent / fileCache，messageContent 待消息压缩那条线合并后才进
+ * 注册表），故 key 用宽 string 而非 core 的表标识联合：未注册的表照样出
+ * 一行，value 落 '—' 占位。新增表时在此补一行映射即可。
+ */
+const BLOB_BINARY_LABELS: Record<string, string> = {
+  vfsContent: '版本内容去 base64',
+  fileCache: '文件缓存去 base64',
+  messageContent: '消息正文去 base64',
+};
+
+/** 每个注册表一行；顺序与 core 归一任务的注册表一致。 */
+const BLOB_BINARY_ROWS: ReadonlyArray<{table: string; label: string}> =
+  Object.keys(BLOB_BINARY_LABELS).map(table => ({
+    table,
+    label: BLOB_BINARY_LABELS[table],
+  }));
 
 export function StorageConfigScreen() {
   const {tokens} = useTheme();
@@ -43,6 +65,7 @@ export function StorageConfigScreen() {
   const [dbReclaimableBytes, setDbReclaimableBytes] = useState<number | null>(
     null,
   );
+  const [blobBinary, setBlobBinary] = useState<BlobBinaryTableStatus[]>([]);
 
   const refreshCloudConfigured = useCallback(async () => {
     try {
@@ -60,10 +83,12 @@ export function StorageConfigScreen() {
       const stats = await getDatabaseMaintenanceStats(runtime);
       setDbFileBytes(stats.fileBytes);
       setDbReclaimableBytes(stats.reclaimableBytes);
+      setBlobBinary(stats.blobBinary);
     } catch {
       // 统计仅用于展示（Agent 运行中会被守卫拒绝），失败静默占位
       setDbFileBytes(null);
       setDbReclaimableBytes(null);
+      setBlobBinary([]);
     }
   }, [runtime]);
 
@@ -89,6 +114,18 @@ export function StorageConfigScreen() {
       return 'Agent 运行中';
     }
     return '清理数据库空间';
+  };
+
+  /**
+   * 归一状态文案两态：已完成 / 进行中（剩余 N 条）；未取到状态（如 Agent
+   * 运行中采样被守卫拒绝、该表尚未注册适配器）显示占位 '—'。
+   */
+  const blobBinaryValue = (table: string): string => {
+    const status = blobBinary.find(row => row.table === table);
+    if (!status) {
+      return '—';
+    }
+    return status.done ? '已完成' : `进行中（剩余 ${status.pendingCount} 条）`;
   };
 
   useEffect(() => {
@@ -160,6 +197,28 @@ export function StorageConfigScreen() {
           );
         }}
       />
+      {BLOB_BINARY_ROWS.map(({table, label}) => (
+        <ProfileMenuItem
+          key={table}
+          icon="🧬"
+          label={label}
+          value={blobBinaryValue(table)}
+          tokens={tokens}
+          onPress={() => {
+            // 归一是后台自动任务，无需手动触发；点按只解释当前进度。
+            const value = blobBinaryValue(table);
+            Alert.alert(
+              label,
+              value === '—'
+                ? '尚未采样到该表的归一状态（任务可能尚未开始，或该表当前版本未纳入归一）。应用空闲时会自动在后台完成，无需手动操作。'
+                : value === '已完成'
+                ? '该表的存量内容已全部转为二进制形态，库体积已相应减小。'
+                : '后台正在把该表的存量内容从 base64 文本转为二进制，剩余条目见右侧。应用空闲时自动继续，期间 Agent 运行时会自动让路，无需手动操作。',
+              [{text: '知道了', style: 'cancel'}],
+            );
+          }}
+        />
+      ))}
       <ProfileMenuItem
         icon="💾"
         label="导出数据库"
