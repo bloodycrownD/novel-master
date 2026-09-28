@@ -2,10 +2,10 @@
  * Desktop blob 归一调度服务接线用例（cr-fix-spec cr-03 / cr-05 / cr-33 的
  * desktop 验收）。
  *
- * - cr-03：core 收尾维护链路（GC/checkpoint/VACUUM）执行瞬间 busy=true、
- *   结束复位；归一循环本身（批间）不置 busy——renderer「清理」按钮的
- *   controlsDisabled 只透传 isDesktopDbMaintenanceBusy()，主进程侧断言即
- *   等价钉住。
+ * - cr-03：core 收尾维护链路（GC/checkpoint/VACUUM）执行瞬间 busy=true；
+ *   VACUUM 抛错（afterMaintenance 的 finally 语义）也必须复位；归一循环
+ *   本身（批间）不置 busy——renderer「清理」按钮的 controlsDisabled 只
+ *   透传 isDesktopDbMaintenanceBusy()，主进程侧断言即等价钉住。
  * - cr-05：挂载去重键=runtime 连接身份；轮内「connection is not open」
  *   不算失败收手——退避后下一轮重取 runtime 重挂。
  *
@@ -56,7 +56,12 @@ describe("desktop blob 归一调度服务（cr-03 / cr-05）", () => {
     await teardownDesktopDbTestEnv(tempDir);
   });
 
-  it("cr-03：自动收尾维护段 VACUUM 执行瞬间 busy=true、结束后复位 false", async () => {
+  it("cr-03：自动收尾维护段 VACUUM 瞬间 busy=true；VACUUM 抛错后 busy 仍复位（finally 语义）", async () => {
+    // 【必须是本文件首条真跑维护段的用例】`runStartupMaintenanceOnce` 是
+    // 模块级进程去重（执行前置位、失败不回滚），本用例消费掉该标记后，
+    // 后续用例对「VACUUM 是否真跑」的观测一律不可用（照 core 测试
+    // blob-binary-normalization.test.ts 的既有纪律；busy 断言不依赖
+    // VACUUM 成功，抛错路径才是 finally 语义的试金石）。
     const runtime = await getDesktopRuntime();
     // 空库（谓词空=done）+ 预置维护兜底标记 → 满足 allDone &&
     // maintenancePending 门条件，进维护段触发 VACUUM。
@@ -77,6 +82,10 @@ describe("desktop blob 归一调度服务（cr-03 / cr-05）", () => {
     conn.execute = async (sql: string, ...rest: unknown[]) => {
       if (sql.includes("VACUUM")) {
         busyAtVacuum = isDesktopDbMaintenanceBusy();
+        // 构造 VACUUM 抛错（磁盘满/库被锁的真实失败形态，照姊妹文件
+        // message-content-compaction-service.test.ts 的注入范式）：证
+        // afterMaintenance 的 finally 语义——抛错也必须复位 busy。
+        throw new Error("注入：VACUUM 失败（模拟磁盘满）");
       }
       return originalExecute(sql, ...rest);
     };
@@ -96,7 +105,18 @@ describe("desktop blob 归一调度服务（cr-03 / cr-05）", () => {
       5_000,
       "等待 afterMaintenance 复位 busy",
     );
-    assert.equal(isDesktopDbMaintenanceBusy(), false);
+    assert.equal(
+      isDesktopDbMaintenanceBusy(),
+      false,
+      "VACUUM 抛错后 busy 必须复位（afterMaintenance 的 finally 语义）",
+    );
+    // 维护失败只影响空间回收，不影响归一完成态（core 吞错只 warn）。
+    const status = await getBlobBinaryStatus(runtime.conn);
+    assert.equal(
+      status.tables.every((table) => table.done),
+      true,
+      "维护失败不影响归一完成态",
+    );
   });
 
   it("cr-03：归一循环进行中（未进维护段）busy=false，清理按钮不被归一置位", async () => {

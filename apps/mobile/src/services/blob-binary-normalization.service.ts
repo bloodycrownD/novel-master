@@ -15,12 +15,16 @@
  *   清理 VACUUM / 备份导入「关连接 + 覆盖库文件」/ 云同步快照替换期间
  *   逐行短事务让路，与消息压缩循环同一守卫口径。
  *
- * 收尾不调 `runStartupMaintenanceOnce`：core 内部在全部注册表归一完成
- * 时已自挂一次进程级去重的维护链路，app 侧再调会重复。
+ * 收尾不调 `runStartupMaintenanceOnce`：core 内部的收尾维护仅在本轮
+ * 确有推进（成功改写 ≥1 行）且全部表完成时触发一次，稳态零成本，app
+ * 侧再调会重复；上一轮维护失败会由持久化标记（`startupMaintenancePending`）
+ * 补跑。
  *
- * 三种 `done = false` 的收手口径：完成（`done = true`）直接收工；零进展护栏
- * 收手（`stalled = true`）本进程不再重试（`sleep(0)` 续跑只会把空转放大成
- * 无界热循环），下个冷启动再试；预算耗尽 / 守卫暂停照旧零延迟续跑。
+ * 三种 `done = false` 的收手口径：完成（`done = true`）直接收工；
+ * `stalled = true` 表示收尾谓词校验判定谓词内仍有非坏行残留（三种成因：
+ * 原地打转的 UPDATE 恒 `changes = 0` / 并发端抢写 / 降级期新写入的 legacy
+ * 行）→ 本进程停手、下个冷启动按谓词重扫（`sleep(0)` 续跑只会把空转放大
+ * 成无界热循环）；预算耗尽 / 守卫暂停照旧零延迟续跑。
  *
  * @module services/blob-binary-normalization.service
  */
@@ -52,7 +56,10 @@ function mobileNormalizationBlocked(): boolean {
  *
  * 任何一轮抛错都只 `console.error` 后 return：归一是幂等的纯优化，
  * 下一轮 app 启动会按谓词续扫，用户无感知；上抛反而会污染启动链路。
- * `stalled = true`（零进展护栏收手）同样直接 return：本进程不再重试。
+ * `stalled = true` 表示收尾谓词校验判定谓词内仍有非坏行残留（三种成因：
+ * 原地打转的 UPDATE 恒 `changes = 0` / 并发端抢写 / 降级期新写入的 legacy
+ * 行）→ `console.warn` 后返回（本进程停手、下个冷启动按谓词重扫，`sleep(0)`
+ * 续跑只会把空转放大成无界热循环）。
  */
 async function runNormalizationLoop(
   runtime: MobileNovelMasterRuntime,
@@ -78,11 +85,11 @@ async function runNormalizationLoop(
       return;
     }
     if (result.stalled) {
-      // 零进展护栏收手：谓词反复命中同一批行、UPDATE 恒 changes=0，
-      // 立刻续跑也不会有任何进展。这里必须收手（本进程不再重试、下个冷
-      // 启动再试），否则 sleep(0) 的「立即续跑」会把空转放大成无界热循环。
+      // 收尾谓词校验判定谓词内仍有非坏行残留（三种成因：原地打转的
+      // UPDATE 恒 changes=0 / 并发端抢写 / 降级期新写入的 legacy 行）
+      // → 本进程停手、下个冷启动按谓词重扫。
       console.warn(
-        '[blob-binary] 归一零进展（疑似谓词原地打转），本进程停止重试，下次启动再试',
+        '[blob-binary] 归一收尾谓词校验仍有非坏行残留（打转/并发抢写/降级期新写入），本进程停手，下个冷启动按谓词重扫',
       );
       return;
     }
