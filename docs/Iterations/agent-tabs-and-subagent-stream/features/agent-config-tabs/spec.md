@@ -26,7 +26,8 @@ packages/core/src/
   public/agent.ts                               [改] re-export DEFAULT_SUBAGENT_DEFINITION（经 /agent 子路径暴露）
 apps/desktop/
   shared/ipc-types.ts                            [改] ListItemDto +mode?；+AgentRegistryCreateBlankRequest
-  shared/logic/config-forms-agent.ts             [改] 镜像 re-export agentModeMatchesTab（自 /config-forms/agent）与 DEFAULT_SUBAGENT_DEFINITION（自 /agent）
+  shared/logic/config-forms-agent.ts             [改] 镜像 re-export agentModeMatchesTab（自 /config-forms/agent）
+  shared/logic/agent.ts                          [改] 镜像 re-export DEFAULT_SUBAGENT_DEFINITION（自 /agent，该文件为 /agent 既有专用镜像）
   src/main/ipc/handlers/agent-registry.ts        [改] list 带 mode；createBlank 落 mode
   src/main/ipc/handler-registry.ts               [改] createBlank 绑定改带参
   renderer/ipc/invoke-registry.ts                [改] ipcAgentRegistryCreateBlank 带参
@@ -57,7 +58,7 @@ scripts/e2e/case-agents-tabs.mjs                 [新增] T-E1
 | 4 | `apps/desktop/src/main/ipc/handlers/agent-registry.ts` | list 的 valid 分支从 `health.value` 带出 `mode`（`undefined` 时省略字段，JSON 序列化天然丢弃）；createBlank 读 `req?.mode` 落库，`undefined` 容忍 |
 | 5 | `apps/desktop/src/main/ipc/handler-registry.ts` + `renderer/ipc/invoke-registry.ts` | createBlank 通道签名从 noArg 改可选 payload（照同文件既有 withXxx helper 模式，无合用者则新增） |
 | 6 | `apps/desktop/renderer/features/settings/SettingsViews.tsx` | AgentsSettingsView 重排：tabs 置顶（`.agents-manage__tabs` + SegmentedControl）→ ManageHeader（title/hint 随 tab）→ 单个 SettingsListSection 前端过滤；general 合成行（子 tab、`settings-tag--primary`「内置」）；「默认（全部）」行加 `settings-tag--muted`「全部」徽标；新建传 mode；删除兜底 `remaining` 排除 `"general"`；general 行不进批量勾选、⋮ 菜单仅「查看」 |
-| 7 | `apps/desktop/renderer/features/settings/AgentEditorView.tsx` | `agentId === "general"` 时不走 `ipcAgentRegistryGet`，渲染只读卡片（经镜像导出的 `DEFAULT_SUBAGENT_DEFINITION`：名称/描述/作用域/系统提示词/workplace 确记语），无 dirty 上报、无保存按钮 |
+| 7 | `apps/desktop/renderer/features/settings/AgentEditorView.tsx` | `agentId === "general"` 时不走 `ipcAgentRegistryGet`，渲染只读卡片（经 `shared/logic/agent.ts` 镜像导出的 `DEFAULT_SUBAGENT_DEFINITION`：名称/描述/作用域/系统提示词/workplace 确记语），无 dirty 上报、无保存按钮 |
 | 8 | `apps/mobile/src/components/agent/AgentList.tsx` | tab state（`'primary'` 默认）+ SegmentedControl（options：主智能体/子智能体）+ `switchTab`（setTab + `batch.exit()`）+ `rows` 按过滤 memo + general 合成行（子 tab 头部，内置胶囊样式参照 `SearchEnginesScreen.tsx` BuiltinTag）+「全部」badge + 空态文案随 tab + `onCreate?: (tab) => void`；general 行不可勾选、菜单仅「查看」 |
 | 9 | `apps/mobile/src/services/agent-create.ts` + `AgentsSettingsScreen.tsx` | `createBlankAgent(runtime, id?, mode?)` 写入 `def.mode`；Screen 的 handleCreate 依 tab 传 mode |
 | 10 | `apps/mobile/src/screens/stack/AgentEditorScreen.tsx` + `BuiltinAgentDetail.tsx` | `agentId === "general"` 分支只读呈现（导航参数不扩，sentinel 直用） |
@@ -66,7 +67,7 @@ scripts/e2e/case-agents-tabs.mjs                 [新增] T-E1
 
 ## 详细实现步骤
 
-- Step 1 — phase-core-mode-tab — blocking: yes — qa: auto：新增 `agent-mode-tab.ts` 判定函数并经 `config-forms/agent/index.ts` barrel 具名导出；`DEFAULT_SUBAGENT_DEFINITION` 经 `public/agent.ts` re-export（`/agent` 子路径）；core 单测锁口径（T-C1）与常量内容（T-C2）；desktop `shared/logic/config-forms-agent.ts` 镜像 re-export `agentModeMatchesTab`（自 `@novel-master/core/config-forms/agent`）与 `DEFAULT_SUBAGENT_DEFINITION`（自 `@novel-master/core/agent`；shared 层不受 renderer eslint X1 gate 限制，renderer 统一走镜像，禁止 export *）。
+- Step 1 — phase-core-mode-tab — blocking: yes — qa: auto：新增 `agent-mode-tab.ts` 判定函数并经 `config-forms/agent/index.ts` barrel 具名导出；`DEFAULT_SUBAGENT_DEFINITION` 经 `public/agent.ts` re-export（`/agent` 子路径）；core 单测锁口径（T-C1）与常量内容（T-C2）；desktop 镜像分置：`agentModeMatchesTab` 进 `shared/logic/config-forms-agent.ts`（自 `@novel-master/core/config-forms/agent`），`DEFAULT_SUBAGENT_DEFINITION` 进 `shared/logic/agent.ts`（自 `@novel-master/core/agent`——该文件本就是 `/agent` 的专用镜像，避免 config-forms-agent.ts 头注释与内容不符）；shared 层不受 renderer eslint X1 gate 限制，renderer 统一走镜像，禁止 export *。
 - Step 2 — phase-desktop-ipc — blocking: yes — qa: auto：ipc-types DTO/请求类型 + list/createBlank handler 改造 + 绑定与 invoke 封装同步；`agent-registry-handlers.test.ts` 补 T-D1（valid 带 mode / invalid 无 mode / undefined 省略）、T-D2（createBlank 带 mode 落库、不传兼容现行为）。
 - Step 3 — phase-desktop-ui — blocking: yes — qa: auto：AgentsSettingsView tab 化 + 合成行 + 徽标 + 删除兜底排除 + general 只读分支 + CSS；`settings-agents-tabs.test.ts` 源码断言（T-D3：SegmentedControl/modeMatchesTab 引用/「内置」徽标/general sentinel 分支存在）。
 - Step 4 — phase-mobile-ui — blocking: yes — qa: auto：AgentList tab 化 + createBlank mode + 只读详情；jest 测试 T-M1（tab 切换过滤 + 切 tab 退批量）、T-M2（onCreate 传 mode → createBlankAgent 落库）、T-M3（general 行子 tab 可见、主 tab 不可见、无删除入口）。
