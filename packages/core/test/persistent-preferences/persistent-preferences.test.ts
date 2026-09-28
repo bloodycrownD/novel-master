@@ -78,6 +78,43 @@ describe("PersistentPreferences", () => {
     });
   });
 
+  describe("chat.subagentStream", () => {
+    it("T-P1: defaults to true when unset", async () => {
+      const ctx = getNovelMasterTestContext();
+      assert.equal(await ctx.preferences.getSubagentStreamEnabled(), true);
+      await ctx.preferences.resetSubagentStreamEnabled();
+    });
+
+    it("T-P2: set/get round-trip（false 与 true 双向）", async () => {
+      const ctx = getNovelMasterTestContext();
+      await ctx.preferences.setSubagentStreamEnabled(false);
+      assert.equal(await ctx.preferences.getSubagentStreamEnabled(), false);
+      await ctx.preferences.setSubagentStreamEnabled(true);
+      assert.equal(await ctx.preferences.getSubagentStreamEnabled(), true);
+      await ctx.preferences.resetSubagentStreamEnabled();
+    });
+
+    it("T-P3: reset restores default true", async () => {
+      const ctx = getNovelMasterTestContext();
+      await ctx.preferences.setSubagentStreamEnabled(false);
+      assert.equal(await ctx.preferences.getSubagentStreamEnabled(), false);
+      await ctx.preferences.resetSubagentStreamEnabled();
+      assert.equal(await ctx.preferences.getSubagentStreamEnabled(), true);
+    });
+
+    it("T-P4: throws PreferencesError on invalid stored boolean", async () => {
+      const ctx = getNovelMasterTestContext();
+      const kkv = createKkvService(ctx.conn);
+      await kkv.set("nm-preferences", "chat.subagentStream", "not-a-bool");
+      await assert.rejects(
+        () => ctx.preferences.getSubagentStreamEnabled(),
+        (e: unknown) => e instanceof PreferencesError && e.code === "INVALID_VALUE",
+      );
+      // 清理：同库共享一条 in-memory DB，list 排序断言是全量 deepEqual，不能留脏值
+      await ctx.preferences.resetSubagentStreamEnabled();
+    });
+  });
+
   describe("chat.thinkingContext", () => {
     it("defaults to false when unset", async () => {
       const ctx = getNovelMasterTestContext();

@@ -11,6 +11,7 @@ import type { KkvService } from "@/service/kkv/kkv.port.js";
 import type { PersistentPreferences } from "../persistent-preferences.port.js";
 import {
   PREF_KEY_CHAT_LLM_STREAM,
+  PREF_KEY_CHAT_SUBAGENT_STREAM,
   PREF_KEY_CHAT_THINKING_CONTEXT,
   PREF_KEY_VFS_USER_VFS_UNIFIED_TOOL_TURN,
   PREFERENCES_MODULE,
@@ -33,6 +34,22 @@ export class DefaultPersistentPreferences implements PersistentPreferences {
 
   async resetLlmStreamEnabled(): Promise<void> {
     await this.deletePref(PREF_KEY_CHAT_LLM_STREAM);
+  }
+
+  async getSubagentStreamEnabled(): Promise<boolean> {
+    return this.getBooleanPref(PREF_KEY_CHAT_SUBAGENT_STREAM, true);
+  }
+
+  async setSubagentStreamEnabled(enabled: boolean): Promise<void> {
+    await this.kkv.set(
+      PREFERENCES_MODULE,
+      PREF_KEY_CHAT_SUBAGENT_STREAM,
+      formatBoolean(enabled)
+    );
+  }
+
+  async resetSubagentStreamEnabled(): Promise<void> {
+    await this.deletePref(PREF_KEY_CHAT_SUBAGENT_STREAM);
   }
 
   async getThinkingContextEnabled(): Promise<boolean> {

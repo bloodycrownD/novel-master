@@ -41,6 +41,7 @@ import type { SearchConfigStore } from "@/domain/tool/builtin/search/search-conf
 import { ToolRegistry } from "@/domain/tool/logic/tool-registry.js";
 import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { SimpleEventBus } from "@/infra/events/simple-event-bus.js";
+import { PreferencesError } from "@/errors/preferences-errors.js";
 import { textBlocks } from "@/domain/chat/content/text-blocks.js";
 import { EVENT_SUBAGENT_CHILD_SESSION_CREATED } from "@/domain/events/model/event-types.js";
 import type { ChatMessage } from "@/domain/chat/model/message.js";
@@ -138,13 +139,14 @@ export interface AgentTurnRuntimePort extends AgentRunRuntimePort {
    */
   readonly skills?: () => SkillService;
   /**
-   * 思考上下文偏好窄切片。三端 runtime 对象均已携带完整
+   * 偏好窄切片。三端 runtime 对象均已携带完整
    * `preferences: PersistentPreferences` 字段，结构化兼容无需 app 端改动；
-   * 声明为可选是为了不强制旧测试 mock 补字段（未注入时等同默认开）。
+   * 声明为可选是为了不强制旧测试 mock 补字段——thinkingContext 未注入
+   * 时等同默认关，subagentStream 未注入时等同默认开。
    */
   readonly preferences?: Pick<
     PersistentPreferences,
-    "getThinkingContextEnabled"
+    "getThinkingContextEnabled" | "getSubagentStreamEnabled"
   >;
   /**
    * 搜索配置存储（search 工具用）：desktop / mobile runtime 用 core 导出
@@ -855,6 +857,19 @@ async function runChildAgent(args: {
       })
     );
 
+    // 子会话流式开关（每 run 快照，与 thinkingContext 口径一致）：run 进行中
+    // 切开关不影响当次子 run；递归各层闭包捕获同一 runtime，读的是同一偏好。
+    // 偏好读失败（如手工写入脏值）时只兜 PreferencesError——回退默认流式并记
+    // 标签日志，不炸 run；其余异常重抛，避免静默吞掉装配类 bug。
+    let childStream = true;
+    try {
+      childStream =
+        (await runtime.preferences?.getSubagentStreamEnabled()) ?? true;
+    } catch (cause) {
+      if (!(cause instanceof PreferencesError)) throw cause;
+      console.error("[agent-run] subagentStream pref read failed", cause);
+    }
+
     const maxSteps =
       opts.maxSteps ?? def.runtime?.maxSteps ?? DEFAULT_AGENT_MAX_STEPS;
     return await runner.run({
@@ -864,10 +879,10 @@ async function runChildAgent(args: {
       savedModelId: opts.savedModelId,
       workspaceModelId: opts.workspaceModelId,
       maxSteps,
-      // run 期：persistMessages=true 落库供 UI 浏览；publishRunLifecycle=true 发事件供子会话浏览页实时刷新（主会话按 sessionId 过滤不会串）；stream=true 走流式供子会话浏览页实时输出。
+      // run 期：persistMessages=true 落库供 UI 浏览；publishRunLifecycle=true 发事件供子会话浏览页实时刷新（主会话按 sessionId 过滤不会串）；流式与否由 chat.subagentStream 偏好决定，默认流式；非流式时子会话浏览页无实时增量，靠 STEP_COMMITTED 整步刷新。
       persistMessages: true,
       publishRunLifecycle: true,
-      stream: true,
+      stream: childStream,
       signal: childController.signal,
     });
   } finally {

@@ -10,6 +10,9 @@ export const PREFERENCES_MODULE = "nm-preferences";
 /** v2: LLM chat SSE streaming. */
 export const PREF_KEY_CHAT_LLM_STREAM = "chat.llmStream";
 
+/** v2: 子会话（subagent）流式输出（默认 true）。 */
+export const PREF_KEY_CHAT_SUBAGENT_STREAM = "chat.subagentStream";
+
 /** v2: 思考内容进入上下文（默认 true）。 */
 export const PREF_KEY_CHAT_THINKING_CONTEXT = "chat.thinkingContext";
 
