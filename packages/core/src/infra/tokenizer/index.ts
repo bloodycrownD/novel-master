@@ -57,6 +57,21 @@ export {
 } from "./logic/session-api-prompt-token-store.js";
 export { pickLastPromptUsage } from "./logic/pick-last-prompt-usage.js";
 export {
+  promptWholeCache,
+  PROMPT_WHOLE_CACHE_LRU_PER_SESSION,
+  type PromptWholeCacheEntry,
+} from "./logic/prompt-whole-cache.js";
+export {
+  tokenChunkCache,
+  buildCounterScope,
+  chunkHash16,
+  parseTokenChunkCachePayload,
+  CHUNK_CACHE_MAX_TOTAL_ENTRIES,
+  type CounterScopeInput,
+  type TokenChunkCacheItem,
+  type AdvanceGenerationOptions,
+} from "./logic/token-chunk-cache.js";
+export {
   resolveCurrentPromptTokens,
   type PromptTokenSource,
   type ResolvedPromptTokens,

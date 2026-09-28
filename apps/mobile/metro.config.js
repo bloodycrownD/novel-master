@@ -18,6 +18,8 @@ const coreDistSmokeFiles = [
   'infra/tokenizer/logic/resolve-context-window.js',
   'infra/tokenizer/logic/count-prompt-llm-input.js',
   'infra/tokenizer/logic/count-openai-style-message.js',
+  'infra/tokenizer/logic/prompt-whole-cache.js',
+  'infra/tokenizer/logic/token-chunk-cache.js',
   'infra/tokenizer/encoding-registry.js',
   'infra/nmtp/logic/registry.js',
   'service/compaction-conditions/create-compaction-condition-evaluator.js',

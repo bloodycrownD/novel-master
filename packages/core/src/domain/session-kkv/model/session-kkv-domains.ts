@@ -54,6 +54,22 @@ export const SESSION_KKV_DOMAIN_PROMPT_TOKENS = "prompt_tokens" as const;
 export const PROMPT_TOKENS_LAST_USAGE_KEY = "lastPromptUsage" as const;
 
 /**
+ * token_chunks 域：L2 块 token 平面缓存的持久化整表（JSON，见
+ * `infra/tokenizer/logic/token-chunk-cache`）。
+ *
+ * 治理说明：块计数是纯派生加速数据——条目丢失 / 损坏只退化性能（下一轮
+ * 计数现算回填），不影响任何账本语义，坏行一律静默按 miss 处理。写入口
+ * 径：代际推进且源于**真实刷新**（非预热）时，把当前代整表覆盖写本域；
+ * 读取口径：本地计数开始时若热层对该会话无种子，读本域载入为最旧可用代
+ * 种子（不顶当前代）。会话删除随 session KKV `clearSession` 整表级联清理，
+ * 无独立 GC。
+ */
+export const SESSION_KKV_DOMAIN_TOKEN_CHUNKS = "token_chunks" as const;
+
+/** token_chunks 域单键：当前代块计数整表（紧凑 JSON）。 */
+export const TOKEN_CHUNKS_CACHE_KEY = "chunkCache" as const;
+
+/**
  * Composer 无叉状态条相关、回滚可按域清空的 kkv 域。
  * - `file_cache` → workplace chip（相对已加载差集）
  * - `user_vfs_pending` → user_ops chip
@@ -81,6 +97,7 @@ export type SessionKkvDomain =
   | typeof SESSION_KKV_DOMAIN_BACKFILL_CURSOR
   | typeof SESSION_KKV_DOMAIN_STREAM_METRICS
   | typeof SESSION_KKV_DOMAIN_PROMPT_TOKENS
+  | typeof SESSION_KKV_DOMAIN_TOKEN_CHUNKS
   | (string & {});
 
 /** 可写入 file_cache 的展示档位（不含 hidden）。 */
