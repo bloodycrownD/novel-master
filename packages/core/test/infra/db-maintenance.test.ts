@@ -244,9 +244,9 @@ describe("数据库维护（infra/db-maintenance）", () => {
     );
     assert.ok(freelistBefore > 0, "删除数据后 freelist 应大于 0");
 
-    // 去重标记已置，但手动路径照样返回真实结果（不是 null）并把 freelist 清零。
+    // 去重标记已置，但手动路径照样真执行并把 freelist 清零。
+    // 判据在下方：若手动路径被启动去重标记 gate 住，freelistAfter 会停在 >0，下方断言即红。
     const result = await maintenance.runDatabaseMaintenance();
-    assert.notEqual(result, null, "手动「数据清理」不受启动去重标记约束");
     assert.equal(result.after.freelistPages, 0, "VACUUM 后 freelist 归零");
     const freelistAfter = Number(
       (

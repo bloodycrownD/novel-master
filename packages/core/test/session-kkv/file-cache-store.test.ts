@@ -357,6 +357,68 @@ describe("session file_cache 分流存储（两新表）", () => {
       [sid, key, encoded!.contentHash, encoded!.mtimeMs]
     );
 
+    // 前置形态断言：夹具若误建成二进制，读路径兜底分支同样能还原，
+    // 用例会绿但没测到存量 base64 文本这条路——先把形态钉死再谈还原
+    // （照 T-BB3 的写法；encoding 顺手写死为 zlib-b64 字面量，与夹具
+    // 写入所引常量解耦，常量值漂移时此处先红）。
+    const shapeRows = await ctx.conn.query<{
+      encoding: string;
+      bytes_type: string;
+    }>(
+      "SELECT encoding, TYPEOF(bytes) AS bytes_type FROM session_file_cache_blob WHERE content_hash = ?",
+      [encoded!.contentHash]
+    );
+    assert.equal(shapeRows.length, 1);
+    assert.equal(shapeRows[0]!.encoding, "zlib-b64");
+    assert.equal(String(shapeRows[0]!.bytes_type), "text", "前置形态确为 TEXT");
+
+    assert.equal(await sk.get(sid, SESSION_KKV_DOMAIN_FILE_CACHE, key), value);
+  });
+
+  it("T-R9 同 hash 复用不改写存量行：set 命中 INSERT OR IGNORE，存量 zlib-b64 文本行原样保留", async () => {
+    const ctx = getNovelMasterTestContext();
+    const sk = createSessionKkvService(ctx.conn);
+    const sid = `r9-${testIsolationSuffix()}`;
+    const key = "full:/reuse-same-hash.md";
+    const value = serializeFileCachePayload({
+      body: `reuse-body-${testIsolationSuffix()}-中文`,
+      mtimeMs: 1758576000321,
+    });
+
+    // 构造手法照 T-R7 的直插：先落一行 encoding=zlib-b64 + TEXT 形态的
+    // 存量 blob 行，连同对应 entry 引用行（无引用行的 blob 会被 GC 扫掉）。
+    const encoded = encodeFileCacheValue(value);
+    assert.notEqual(encoded, null);
+    const b64 = legacyB64Text(encoded!.bytes);
+    await ctx.conn.execute(
+      "INSERT INTO session_file_cache_blob (content_hash, encoding, bytes, byte_len) VALUES (?, ?, ?, ?)",
+      [encoded!.contentHash, VFS_CONTENT_ENCODING_ZLIB_B64, b64, b64.length],
+    );
+    await ctx.conn.execute(
+      "INSERT INTO session_file_cache_entry (session_id, key, content_hash, mtime_ms) VALUES (?, ?, ?, ?)",
+      [sid, key, encoded!.contentHash, encoded!.mtimeMs]
+    );
+
+    // 再对同一 contentHash 调 sk.set（同一 value 编码出同一 hash）：blob 写入
+    // 必须命中 INSERT OR IGNORE 复用存量行，而不是把已归一前的旧形态改写。
+    await sk.set(sid, SESSION_KKV_DOMAIN_FILE_CACHE, key, value);
+
+    assert.equal(await blobCountByHash(ctx.conn, encoded!.contentHash), 1, "同 hash 复用：blob 表仍只有 1 行");
+    const rows = await ctx.conn.query<{
+      encoding: string;
+      byte_len: number;
+      bytes_type: string;
+    }>(
+      "SELECT encoding, byte_len, TYPEOF(bytes) AS bytes_type FROM session_file_cache_blob WHERE content_hash = ?",
+      [encoded!.contentHash]
+    );
+    assert.equal(rows[0]!.encoding, "zlib-b64", "encoding 未被改写");
+    assert.equal(String(rows[0]!.bytes_type), "text", "TYPEOF(bytes) 未被改写");
+    assert.equal(Number(rows[0]!.byte_len), b64.length, "byte_len 未被改写");
+
+    // 反向判据：把实现里的 INSERT OR IGNORE 改成 INSERT OR REPLACE 时本用例
+    // 变红——存量 b64 文本行会被新二进制形态整行替换（encoding→zlib、
+    // TYPEOF→blob、byte_len 变短），上面三条形态断言先崩。
     assert.equal(await sk.get(sid, SESSION_KKV_DOMAIN_FILE_CACHE, key), value);
   });
 
