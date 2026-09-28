@@ -40,7 +40,6 @@ if (!coreChatSource.includes('matchUserVfsTurnAt')) {
   );
 }
 const zodRoot = path.resolve(monorepoRoot, 'node_modules/zod');
-const tiktokenShim = path.resolve(__dirname, 'src/shims/tiktoken.js');
 const awsXmlParserShim = path.resolve(__dirname, 'src/shims/aws-xml-parser.js');
 const nodeFsShim = path.resolve(__dirname, 'src/shims/node-fs.js');
 const readableStream = require.resolve('readable-stream', {paths: [__dirname]});
@@ -69,10 +68,6 @@ const markdownEntitiesJson = path.resolve(
 
 const defaultConfig = getDefaultConfig(__dirname);
 const defaultResolveRequest = defaultConfig.resolver.resolveRequest;
-
-function isTiktokenModule(moduleName) {
-  return moduleName === 'tiktoken' || moduleName.startsWith('tiktoken/');
-}
 
 /** Prefer zod's precompiled CJS build (Metro cannot parse zod v4 ESM). */
 function resolveZodModule(moduleName) {
@@ -302,10 +297,6 @@ const config = {
       const opSqliteNative = resolveOpSqliteNative(moduleName);
       if (opSqliteNative != null) {
         return {type: 'sourceFile', filePath: opSqliteNative};
-      }
-
-      if (isTiktokenModule(moduleName)) {
-        return {type: 'sourceFile', filePath: tiktokenShim};
       }
 
       const zodPath = resolveZodModule(moduleName);

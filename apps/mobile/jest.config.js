@@ -48,7 +48,6 @@ module.exports = {
     '^@op-engineering/op-sqlite$': '<rootDir>/test-utils/op-sqlite-mock.ts',
     '^@react-native-documents/picker$':
       '<rootDir>/test-utils/document-picker-mock.ts',
-    '^tiktoken$': '<rootDir>/src/shims/tiktoken.js',
     // RN Jest resolves package "browser"/"default" exports; yaml's browser entry
     // is ESM and breaks. Force the Node CJS build (also needed once core/vfs
     // re-exports character-card which imports stringify-text → yaml).

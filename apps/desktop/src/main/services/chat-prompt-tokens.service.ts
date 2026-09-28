@@ -40,12 +40,14 @@ import {
  * 进程级单例编码表本身不产生额外建表成本**。
  *
  * ⚠️ 但「复用单例」**不等于「第一次也是免费的」**（stream-metrics-native `agile-3`）：
- * `getNodeEncodingForModel` 的缓存键是 `model:<tiktokenModel>`、兜底档
- * `getNodeEncodingByName` 的键是 `enc:cl100k_base`——**两个命名空间互不命中**，所以
- * 兜底档**第一次**被走到时仍要现建一整张 cl100k WASM 表。`runtime/create-desktop-runtime.ts`
+ * 历史上的 `model:` / `enc:` 双命名空间已随 registry 收敛废除
+ * （fallback-caliber-align A 线）——`getNodeEncodingForModel` 现在把模型名解析
+ * 成编码名后进 registry 的 `enc:cl100k_base` 单键空间，所以**精确档（gpt-4 等
+ * cl100k 家族）、兜底档与启动预热共享同一张表**。`runtime/create-desktop-runtime.ts`
  * 已在**启动路径跑完之后用 `setTimeout` 空闲预热**过一次（`try/catch` 静默、不阻塞启动），
  * 这覆盖了大部分场景；但**首次兜底若抢在预热之前发生，仍会有一次约 250ms 的主进程同步
- * 建表**（实测 185~248ms，期间事件循环阻塞、IPC 排队）。
+ * 建表**（实测 185~248ms，期间事件循环阻塞、IPC 排队）——只是这笔开销从此被精确档
+ * 一并复用，不再是双命名空间时代的「各建各的」。
  */
 function countFallbackTokens(
   runtime: DesktopNovelMasterRuntime,
