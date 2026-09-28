@@ -1,140 +1,107 @@
-# code-dev-loop 编排状态——stream-metrics-native 增量第二轮 CR fix-spec 执行（cr-fix-spec-v2）
-spec_path: docs/Iterations/stream-metrics-native-integration-cr/cr-fix-spec-v2.md
-prd_path: docs/Iterations/mobile-perf-2026-09/features/stream-metrics-tokens/prd.md
-branch: integration/stream-metrics-native
-base_sha: 5c63d27e
-head_sha: 50e81d4d
-head_sha_note: "head_sha = 最后一次实质改动提交（移除 lastPromptUsage 的零读取方字段）；编排状态与终态标注随其后的落盘提交进库，真实 HEAD 以 git log -1 为准"
+# code-dev-loop 编排状态——binary-blob-and-vfs-pack Part A1（落库形态去 base64：VFS + file_cache）
+spec_path: docs/Iterations/binary-blob-and-vfs-pack/spec.md
+prd_path: null   # 需求为用户口述（2026-09-28），来源与约束见 spec「需求来源 / 设计目标」
+branch: feat/blob-binary-normalization
+base_sha: 02d2fcc9
+head_sha: 78bf9ab2
+dag_version: 3
+reorchestration_note: "wave-2 cr-func（func-ready: yes）提 7 条 must-fix + 6 条 deviations；M1（坏行抛穿整轮）为真实健壮性缺陷 → 插入 a1-fix-core 与三个 app 接线节点同 wave 并行（文件集不重叠），合并原 wave-3/4 为 wave-3，verify 与 cr-func 顺延为 wave-4/5（dag_version 1→2）；wave-5 cr-func 判 no（收尾 VACUUM 未容错会打死 CLI、零进展护栏漏不满批 + app 层 sleep(0) 放大成热循环）→ 插入 a1-fix2，verify/cr-func 再顺延为 wave-6/7（dag_version 2→3），两节点同 wave 并行复核"
+known_baselines:
+  - "core 全量 2788 条中 2 条既有红灯：test/chat/usage-stats.service.test.ts 的 T-C2 / T-C6（本机时区 UTC 导致的挂钟日断言偏，与 blob 改动无关）"
+  - "mobile 全量 jest 1535 条中 1 条既有红灯：__tests__/mermaid-fullscreen.test.ts（rich-document 源码正则被中间注释打断，最后一次相关改动 f466efa5 早于本分支全部提交）"
+  - "desktop renderer tsc 既有 349 条错误（test/** 被 include + ipc client unknown 化等历史债）；本次改动行区间与其交集为 0"
+scope_decision:
+  - "用户以 /code-dev-loop 启动（未附带参数）：视为 spec 已确认、开工。"
+  - "spec 的 Part B（VFS 内容打包，实测收益 3.06MB / 61.3%）在 spec 内标注「待用户拍板」→ 本轮不纳入，保留为独立迭代。"
+  - "spec 规定 Part A 必须晚于 feat/message-content-compression 合并执行；合并属协作红线（须用户指令）→ 本轮拆为 A1（VFS + file_cache，独立于该分支，立即执行）与 A2（message 侧：写侧 codec 切换 + chat_message 归一适配器，待合并后追加）。"
+  - "冲突预判：A1 与未合并分支在约 10 个文件重叠（packages/core/src/index.ts、infra/db-maintenance/index.ts、main-entry-allowlist 快照、三端 wiring、双端存储页、apps/desktop/shared/ipc-types.ts、两端 db-maintenance.service.ts），合并顺序由用户决定；本轮只在 feat/blob-binary-normalization 上提交，不碰 main。"
+contracts:
+  - "core 新导出 runBlobBinaryNormalization(conn, options?) → { done, normalizedCount, failedCount, stalled }；options: { syncBudgetMs?, shouldPause? }（后两个字段为实现期新增，见 spec「实现期补充」）"
+  - "core 新导出 getBlobBinaryStatus(conn) → { tables: Array<{ table: 'vfsContent' | 'fileCache' | 'messageContent'; done: boolean; pendingCount: number }> }（数组只含已注册适配器，A2 追加 messageContent 时三端 UI 零改动）"
+  - "谓词（两表同形）：encoding = 'zlib-b64' OR (encoding = 'zlib' AND TYPEOF(bytes) = 'text')；归一后 encoding='zlib'、bytes 为二进制 BLOB、byte_len = 物理字节长度"
+  - "KKV 完成标记：module 'nm-blob-binary'，key = vfsContentDone / fileCacheDone（A2 追加 messageContentDone）"
+  - "维护链路新导出 runStartupMaintenanceOnce(conn)：会话级去重（同一进程已跑过则跳过），搬运任务收尾专用；既有 runDatabaseMaintenance 语义不变（手动「数据清理」永远真执行）"
+files_touched_plan:
+  core-codec:
+    - packages/core/src/domain/vfs/content-store/impl/sqlite-vfs-content-store.ts
+    - packages/core/src/domain/vfs/content-store/logic/blob-bytes-codec.ts
+    - packages/core/src/domain/session-kkv/logic/file-cache-blob-codec.ts
+    - packages/tdbc-driver-op-sqlite/src/bindings.ts
+    - packages/core/test/vfs/content-store.test.ts
+    - packages/core/test/session-kkv/file-cache-store.test.ts
+  core-task:
+    - packages/core/src/infra/db-maintenance/impl/blob-binary-normalization.ts   # 新增
+    - packages/core/src/infra/db-maintenance/impl/db-maintenance.service.ts
+    - packages/core/src/infra/db-maintenance/index.ts
+    - packages/core/src/index.ts
+    - packages/core/test/package-exports/snapshots/main-entry-allowlist.json
+    - packages/core/test/infra/blob-binary-normalization.test.ts   # 新增
+  impl-mobile:
+    - apps/mobile/src/services/blob-binary-normalization.service.ts   # 新增
+    - apps/mobile/src/runtime/novel-master-context.tsx
+    - apps/mobile/src/screens/stack/StorageConfigScreen.tsx
+    - apps/mobile/src/services/db-maintenance.service.ts
+    - apps/mobile/__tests__/db-maintenance.service.test.ts
+  impl-desktop:
+    - apps/desktop/src/main/services/blob-binary-normalization.service.ts   # 新增
+    - apps/desktop/src/main/main.ts
+    - apps/desktop/src/main/services/db-maintenance.service.ts
+    - apps/desktop/shared/ipc-types.ts
+    - apps/desktop/renderer/features/settings/SettingsViews.tsx
+  impl-cli:
+    - apps/cli/src/runtime.ts
+  docs:
+    - CHANGELOG.md
+    - docs/apm/RULE.md
+wave_plan:
+  - [a1-core-codec, a1-core-task]
+  - [a1-verify-core]
+  - [a1-crfunc-core]
+  - [a1-fix-core, a1-impl-mobile, a1-impl-desktop, a1-impl-cli]
+  - [a1-verify-all]
+  - [a1-crfunc-all]
+  - [a1-fix2]
+  - [a1-verify2, a1-crfunc2]
+  - [a1-docs]
+node_status:
+  a1-core-codec: { status: done, executor: subagent, spec_steps: [1, 2], head_sha: 801d2347 }
+  a1-core-task: { status: done, executor: subagent, spec_steps: [3], head_sha: 41cad8f9 }
+  a1-verify-core: { status: done, executor: subagent, result: "core 2781/2779 pass/2 红（既有 usage-stats 时区基线）；build + typecheck 零输出；grep 写侧 b64 零残留；实库副本端到端 1136 行归一、1149 hash 逐条 sha256 比对零丢失、二次幂等、VACUUM 111,120,384→107,528,192" }
+  a1-crfunc-core: { status: done, executor: subagent, readonly: true, func_ready: yes, result: "7 条 must-fix（M1 中、其余低）+ 6 条 deviations；Step1/2/3 矩阵与 T-BB4~T-BB7 断言实核通过" }
+  a1-fix-core: { status: done, executor: subagent, head_sha: 92c409c4, result: "M1 单行容错 + M6 零进展护栏 + D1 类型补 messageContent + M2/M3/M4 补用例 + M5/M7 注释校正，定向 25/25 绿" }
+  a1-impl-mobile: { status: done, executor: subagent, spec_steps: [4], head_sha: 8aa75884, result: "守卫=isMobileAgentActive（main 无 busy 标志，已在注释留扩展点）；jest 6/6 + 源码契约套件 9/9 + tsc 绿" }
+  a1-impl-desktop: { status: done, executor: subagent, spec_steps: [4], head_sha: b97585f5, result: "三守卫组合；main tsc 0 错；renderer tsc 与 HEAD 基线逐错误码同集（零新增）；相关测试 3/3、6/6、20/20 绿" }
+  a1-impl-cli: { status: done, executor: main, spec_steps: [4], head_sha: 2233e166, result: "runtime 内联 await runBlobBinaryNormalization(conn)；tsc 绿" }
+  a1-verify-all: { status: done, executor: subagent, result: "core 全量 2786/2784/2；定向 32/32；mobile tsc 绿 + jest 15/15；desktop main tsc 绿 + 相关 8/8；cli tsc 绿 + 启动链路冒烟；接线取证 file:line 齐；实库副本复跑 failedCount=0 + 幂等 + 两表全 blob+zlib；库 105.97→102.55MB" }
+  a1-crfunc-all: { status: done, executor: subagent, readonly: true, func_ready: no, result: "5 条 must-fix（#1 收尾 VACUUM 未容错会打死 CLI；#2 零进展护栏漏不满批 + app 层 sleep(0) 放大成热循环；#3~#5 注释/死导出/断言强度）+ 5 条 deviations；独立实跑 31/31 + 16/16 + 8/8 + 6/6、四处 tsc 绿" }
+  a1-fix2: { status: done, executor: subagent, head_sha: 78bf9ab2, result: "#1 VACUUM 包 try/catch；#2 护栏去掉满批条件 + 新增 stalled 字段 + 两端见 stalled 即停手；#3 注释改准；#4 删死导出；#5 T-BB4 补「第二遍不下发 UPDATE」探针；新增护栏与 VACUUM 失败两条用例，定向 15/15 绿" }
+  a1-verify2: { status: done, executor: subagent, result: "core 全量 2788/2786/2（+2 即本轮新增用例，红灯仍只 2 条基线）；定向 34/34；三端 tsc 全绿；mobile 全量 1534/1535（唯一红=mermaid 既有）；实库副本 {done,1136,0,failedCount0,stalled:false} 二次幂等；无顺序依赖" }
+  a1-crfunc2: { status: done, executor: subagent, readonly: true, func_ready: yes, result: "5 条 must-fix + 1 附带项全部闭合（实读 + 实跑 11/11、core/desktop/mobile 三处 tsc 零错、mobile 6/6）；4 条非阻塞低危观察（护栏灵敏度、失败 VACUUM 每进程一次、stalled 无 UI 信号、app 层 stalled 分支无单测）" }
+  a1-docs: { status: done, executor: main, spec_steps: [6], blocking: no, result: "spec 追加「实现期补充（A1 落地记录）」+ CHANGELOG [Unreleased] 条目 + RULE 两条纪律 + 本状态文件" }
 dev_ready: yes
-user_decisions_after_dev_ready:
-  - "OQ #4（lastPromptUsage 的 runId / lastMessageSeq 只写不读）→ 用户拍板移除，已落地 50e81d4d（含 agent-runner 里只为该字段服务的记账一并拆净；旧行无需迁移，解析对未知键宽容）"
-agile_items_after_dev_ready:
-  - "features/context-usage-real-tokenizer-fallback（2026-09-27，agile-dev 流程）：把上下文占用的字符折算兜底升级为真分词器计数；提交 f0186106 + 4e179e1a + acf1802d；dev-ready 后门禁复跑：core 2173/2 红（既有）、mobile 1505/1~2 红（基线 + 负载抖动）、desktop 527/527、三包构建与 typecheck 通过、零真回归；真机测点已并入 1310 QA 行"
-cr_after_agile_item:
-  - "集成评审（code-review-loop，base 5c63d27e → head f4cd067a）四轮收敛到 fix-spec-ready：docs/Iterations/stream-metrics-native-integration-cr/cr-fix-spec-v3.md（提交 bc360a57）"
-  - "12 条 must-fix = P0×0 / P1×1 / P2×11 + 5 行 spec_deviations（均由条目闭合）+ 10 条 open questions"
-  - "⚠️ 唯一 P1 落在已提交的敏捷项代码上：core countTextWithIncrementalTokenizer 在尾窗整段不可编码时会丢掉已固化计数、返回低于真值 36% 的数（实测 6024 vs 9421），且注释称其为「上界」；改法写死（tailChars:0 / commitStepChars:1 → 走固化路径）+ 护栏用例改双边夹逼"
-  - "v3 的 12 条**已执行完毕（2026-09-27 03:16）**：提交链 09d73e2a → 4fa2fb80 → 004ed97a → 59d40c1f → 146f3f6c → 638ed14d；两轮 readonly cr-func（RES-1~RES-5）已收敛"
-  - "执行期另修：packages/core 全量脚本缺 globstar（92/396 个测试文件从未被默认执行，补 -O globstar 后 2173→2748 条）+ 两条由此暴露的过期断言/护栏；教训已入 RULE"
-  - "验证账目：core 真全量 2748/2746 pass/2 红（仅既有时区）；desktop 528/528；mobile 1505/1 红 + 2 基线 suite；Node 驱动 13/13；三端 typecheck 零输出；v3 的 7 条验收 grep 全零。未 push / 未 merge / 未发版"
-dag_version: 2
-reorchestration_note: "wave-6：两轮 readonly cr-func 均 func-ready:yes 但遗留 6 条 P2（无 P0/P1），插入 n9-fix 收口 + n10-crfunc 复检（dag_version 1→2）"
-scope_note: 32 条 must-fix（P1×2 / P2×30），两条 P1 置顶；用户已照准 4 条「按现状收窄」（#1 重 seed 口径=窗口折叠触发 / #2 commitStepChars 64 / #3 desktop v1 固定 cl100k / #5 实测数字区间 400–500ms）
+dev_ready_note: "A1 范围（spec Part A 的 VFS + file_cache 侧）dev-ready；A2（message 侧）与 Part B（VFS 内容打包）为 scope 边界，待用户指令/拍板；未 merge、未 push、未发版"
+open_must_fix: []
+spec_deviations:
+  - open: "Part A 拆为 A1（本轮）与 A2（message 侧：message-content-codec 写侧切换 + chat_message 归一适配器），A2 待 feat/message-content-compression 合并后执行（合并须用户指令）"
+  - open: "Part B（VFS 内容打包）本轮不纳入，待用户拍板"
+  - recorded-in-spec: "实现期新增/分叉（failedCount 单行容错、stalled + 零进展护栏、收尾 VACUUM 容错、预算常量分叉 DEFAULT_BLOB_BINARY_SYNC_BUDGET_MS、messageContent 类型预置、三端守卫组合、A1/A2 拆分）已写入 spec「实现期补充（A1 落地记录）」一节"
+  - accepted: "主入口额外导出 BLOB_BINARY_KKV_MODULE / DEFAULT_BLOB_BINARY_SYNC_BUDGET_MS（供 DB 直查口径与预算复用；cr-func deviations #2 判为非缺陷）"
+  - accepted: "T-BB8（perf，blocking: no）无独立用例：证据 = 实库副本 1136 行 8154ms（≈0.72s/批，远低于 30s 阈值）+ 写侧删除 base64 编码属纯减少；cr-func deviations #4 判为证据不足但非阻塞"
+  - accepted: "T-BB3 在本波次只覆盖 vfs + file_cache 两表（chat_message 属 A2）；M2 已补 file_cache 侧脏形态用例"
+known_nonblocking:
+  - "零进展护栏的复位把「新增坏行」也算进展，存在灵敏度下降窗口（不会无界空转：failedKeys 单调增长 + 预算/守卫收束）；cr-func2 判非正确性问题"
+  - "VACUUM 持续失败（磁盘满）时每个新进程仍会重试一次注定失败的 VACUUM，已降级为 warn"
+  - "`stalled` 无用户可见信号：本进程收手后存储页仍显示「进行中（剩余 N 条）」"
+  - "两端调度服务的 `stalled` 分支无单元测试（该层服务本仓无测试先例，靠 typecheck + 走查保证）"
 discipline:
   - 子代理一律禁止 git 写（不 add/commit/stash/checkout/revert）；主代理按节点分组统一提交
   - 子代理只跑定向测试与 typecheck，不跑全量套件（全量在 verify 波次单节点顺序跑，避免并发负载抖动）
-  - 行号均为评审时快照，以实查为准
-wave_plan:
-  - [n1-core-counter, n2-core-invalidation, n3-orch-label-barrels, n4-cli-mock]
-  - [n5-metrics-lifecycle-formula]
-  - [n6-docs-closeout]
-  - [n7-verify-all]
-  - [n8a-crfunc-metrics, n8b-crfunc-ctx-docs]
-node_status:
-  n1-core-counter: { status: done, entries: [metrics/B-1, metrics/G-2, full/I-1], head: c78989f7, executor: subagent }
-  n2-core-invalidation: { status: done, entries: [ctx-usage/A-1, ctx-usage/A-2, ctx-usage/A-3, ctx-usage/A-4, ctx-usage/G-1], head: d6c1e0da, executor: subagent, note: "A-1+A-2+A-3 同批；越界一处已报备：resolve-current-prompt-tokens.test.ts 补 T-T6(KKV-badAtMs)" }
-  n3-orch-label-barrels: { status: done, entries: [ctx-usage/C-orch-1, ctx-usage/C-orch-2, ctx-usage/C-4, full/D-1], head: 2ca81325, executor: subagent, note: "越界一处已报备：serialize-tools-for-token-count.ts 头注释" }
-  n4-cli-mock: { status: done, entries: [ctx-usage/C-1, ctx-usage/D-1, ctx-usage/D-2], head: 344f6725, executor: subagent }
-  n5-metrics-lifecycle-formula: { status: done, entries: [metrics/C-1, metrics/C-2, metrics/C-3, metrics/C-orch-1, metrics/G-1], head: 286113be, executor: subagent }
-  n6-docs-closeout: { status: done, entries: [metrics/A-4, metrics/A-5, full/A-2, full/A-3, full/A-4, full/E-1, full/E-2, full2/A-2, full2/C-1, full2/A-3, full/K-1], head: 5adc3ab0, executor: subagent }
-  n7-verify-all: { status: done, executor: subagent, result: "core 2173/2 红（既有时区）| mobile 1501/1 红 + 2 已知 suite 红 | desktop 526/526 | 三端 typecheck 零输出 | renderer tsc 349 既有债，改动文件新增 0 | vite 出包 3212kB | 6 条验收 grep 全过" }
-  n8a-crfunc-metrics: { status: done, executor: subagent, readonly: true, func_ready: yes }
-  n8b-crfunc-ctx-docs: { status: done, executor: subagent, readonly: true, func_ready: yes, note: "提 6 条 P2；其中『② spec 应为 9 条』经主代理逐行实测证伪（真数 10）" }
-  n9-crfunc-p2-fix: { status: done, entries: ["P2-1 变更点表 #7 措辞", "P2-2 两处过期 JSDoc + ③ spec :55", "P2-3 ③ spec 验证记录复跑行", "P2-4 C-4 barrel 结论留痕", "P2-5 ② PRD 用例枚举补项"], head: 71692b11, executor: subagent }
-  n10-crfunc-final: { status: done, executor: subagent, readonly: true, func_ready: yes, dev_ready: yes, result: "零 must-fix（唯一 P3 = 三处 head_sha 自指盲区，主代理已消掉）；A 组 6 条 P2 全干净收口、21 行 deviations 抽查全有落地物、full/E-1 回填的 5 个行号实查全命中、7 条硬门限 grep 全过" }
-  main_agent_closeout: { status: done, note: "cr-fix-spec-v2 终态标注（状态行 / 元信息执行后 HEAD / 执行记录 / deviations 21 行结果 / full/E-1 回填 / Closure 表）+ 本状态文件" }
-file_ownership:
-  n1-core-counter:
-    - packages/core/src/infra/tokenizer/logic/incremental-token-counter.ts
-    - packages/core/test/infra/tokenizer/incremental-token-counter.test.ts
-    - apps/mobile/__tests__/session-stream-unit-pipeline.test.ts
-    - apps/mobile/__tests__/session-stream-unit-accum-perf.test.ts
-    - apps/desktop/test/use-agent-stream-metrics-hook.test.tsx
-    - apps/desktop/renderer/hooks/useAgentStreamMetrics.ts   # 仅 full/I-1 的工厂失败告警
-  n2-core-invalidation:
-    - packages/core/src/infra/tokenizer/logic/session-api-prompt-token-store.ts
-    - packages/core/src/service/chat/impl/message.service.ts
-    - packages/core/src/service/chat/impl/session.service.ts
-    - packages/core/src/service/chat/impl/message-transcript-effects.service.ts
-    - packages/core/src/service/message-checkpoint/impl/message-rollback.service.ts
-    - packages/core/src/service/compaction-conditions/run-compaction.ts
-    - packages/core/src/service/persistent-state/impl/persistent-state.service.ts
-    - packages/core/src/service/vfs/logic/clear-session-prompt-caches.ts
-    - packages/core/src/service/agent/impl/agent-runner.ts
-    - packages/core/test/infra/tokenizer/prompt-token-invalidation.test.ts
-    - packages/core/test/infra/tokenizer/session-api-prompt-token-store.test.ts
-    - packages/core/test/compaction-conditions/run-compaction.test.ts
-    - packages/core/test/agent/agent-runner-token-cache.test.ts
-  n3-orch-label-barrels:
-    - packages/core/src/infra/tokenizer/logic/format-token-source-label.ts   # 新增
-    - packages/core/src/infra/tokenizer/index.ts
-    - packages/core/src/public/provider.ts
-    - packages/core/test/package-exports/snapshots/public-provider-allowlist.json
-    - packages/core/src/service/persistent-state/create-persistent-state.ts
-    - apps/desktop/src/main/services/chat-prompt-tokens.service.ts
-    - apps/desktop/renderer/features/chat/SessionDetailDrawer.tsx
-    - apps/mobile/src/services/chat-prompt-tokens.service.ts
-    - apps/mobile/__tests__/chat-prompt-tokens.test.ts
-    - apps/desktop/shared/logic/provider.ts   # 核查（如需要则加具名再导出）
-  n4-cli-mock:
-    - apps/cli/src/prompt/commands.ts
-    - scripts/mock-openai-server.mjs
-  n5-metrics-lifecycle-formula:
-    - apps/mobile/src/services/session-stream-unit.ts
-    - apps/mobile/src/services/stream-token-estimator.ts
-    - apps/mobile/src/hooks/useAgentStreamMetrics.ts
-    - apps/mobile/__tests__/stream-token-estimator.test.ts
-    - apps/mobile/__tests__/session-stream-unit-pipeline.test.ts
-    - apps/desktop/renderer/hooks/useAgentStreamMetrics.ts
-    - apps/desktop/renderer/hooks/stream-token-estimator.ts
-    - apps/desktop/test/stream-token-estimator.test.ts   # 新增
-    - apps/desktop/shared/logic/format.ts
-    - packages/core/src/public/format.ts
-    - packages/core/src/domain/session-run-state/model/session-run-state.ts
-    - packages/core/src/domain/format/format-stream-metrics-line.ts
-  n6-docs-closeout:
-    - docs/Iterations/mobile-perf-2026-09/**   # ①②③④ 的 prd/spec
-    - CHANGELOG.md
-    - docs/Iterations/stream-metrics-native-integration-cr/cr-fix-spec.md   # 观察项 ⑤ 推翻注记
-  main_agent_only:
-    - docs/.iteration-state.yaml
-    - docs/Iterations/stream-metrics-native-integration-cr/cr-fix-spec-v2.md   # 状态/deviations/Closure 终态标注
-open_must_fix: [metrics/B-1, ctx-usage/A-1, metrics/A-4, metrics/A-5, metrics/C-1, metrics/C-2, metrics/C-3, metrics/C-orch-1, metrics/G-1, metrics/G-2, ctx-usage/A-2, ctx-usage/A-3, ctx-usage/A-4, ctx-usage/C-1, ctx-usage/C-orch-1, ctx-usage/C-orch-2, ctx-usage/C-4, ctx-usage/D-1, ctx-usage/D-2, ctx-usage/G-1, full/A-2, full/A-3, full/A-4, full/D-1, full/E-1, full/E-2, full/I-1, full/K-1, full2/A-2, full2/E-1, full2/C-1, full2/A-3]
-spec_deviations:
-  - closed-by-user: "#1 采样器「校正点重 seed」收窄为「source 翻转 + 窗口折叠」，不做「每次 usage 清窗」"
-  - closed-by-user: "#2 commitStepChars 取 64（实测收紧，256 峰值 5.24ms 超线）"
-  - closed-by-user: "#3 desktop v1 固定 cl100k（o200k 留后续迭代）"
-  - closed-by-user: "#5 实测数字区间放宽为约 400–500ms（由 n6 改 ④ spec :75）"
-manual_pending: "fix-spec 执行后出 versionCode 1310 真机包复验（合并后 QA 表）；merge/发版等用户指令"
+  - 同文件禁止并行 impl；本 DAG 的 wave-0 两节点文件集互不重叠
+manual_pending: "合并后真机（荣耀 EBG-AN00）验收：三表形态直查 / 逐条解压校验 / 库体积 / 二次启动零重扫（spec Step 6）"
 
-# === 上一轮：init-busy-yield-2026-09（dev-ready 已完成，Bundle-full 存档于此供追溯）===
-# spec_path: docs/Iterations/init-busy-yield-2026-09/spec.md
-# prd_path: docs/Iterations/init-busy-yield-2026-09/prd.md
-# branch: feat/agent-run-parallel-and-notify
-# base_sha: e8533053
-# head_sha: dd9d813a
-# dev_ready: yes
-# dev_dag_matrix:
-#   impl-s1-yield: { status: done, head: cb73992e, executor: subagent }
-#   impl-s4-backfill: { status: done, head: "d28e38c6,c43a904b", executor: subagent }
-#   verify-s1: { status: done, executor: main, result: "4/4" }
-#   verify-s4: { status: done, executor: main, result: "core 2107/2107" }
-#   crfunc-w0: { status: done, func_ready: yes, executor: subagent }
-#   impl-s2-hydrate: { status: done, head: "324d0677,0544f8f1", executor: subagent }
-#   impl-s3-chattab: { status: done, head: 67e72627, executor: subagent }
-#   impl-s5-rows: { status: done, head: 7af52a27, executor: subagent }
-#   verify-w3: { status: done, executor: main, result: "typecheck+jest 197/1281" }
-#   crfunc-w3: { status: done, func_ready: yes, executor: subagent }
-#   impl-s6-snapshot-rn: { status: done, head: "86404b69,7cc2a70a,bdf2f3a3", executor: subagent }
-#   verify-s6: { status: done, executor: main, result: "jest 198/1291 + build:webview" }
-#   impl-s7-web: { status: done, head: "bb343863,dd9d813a", executor: subagent }
-#   impl-s8-s9: { status: done, head: "700117bc,a529eacb", executor: subagent }
-#   verify-final: { status: done, executor: main, result: "typecheck+jest 200/1317+build:webview+core 2107/2107" }
-#   crfunc-final: { status: done, func_ready: yes, executor: subagent }
-# spec_deviations:
-#   - closed: Step 3 去重落点在 refreshChatMeta 内部 inflight（覆盖面更广，语义等价有专测）
-#   - closed: Step 5 selectTailTranscriptRows 顺带改预扫构建（等价论证+对拍测试）
-#   - closed: Step 7 渐进渲染不做（与 T-S4 语义冲突，窗口化已降本）
-#   - closed: Step 7 扩窗读位用行坐标线性重映射（scrollHeight 差值被扩窗污染，容差断言在）
-# open_must_fix: []
-# manual_pending: "Step 10 真机验收（GWT-1~5 + release 冷启动基线）归用户 manual_user"
+# === 归档：上一轮 stream-metrics-native 增量 CR fix-spec 执行（dev-ready: yes） ===
+# 完整 Bundle 见 git 历史：git log -p docs/.iteration-state.yaml
+# 摘要：branch integration/stream-metrics-native，base 5c63d27e → head 50e81d4d；
+#   dag_version 2；n1~n10 全 done，两轮 cr-func 均 func-ready: yes；
+#   终态：core 2748/2746 pass/2 红（既有时区）、desktop 528/528、mobile 1505/1 红、三端 typecheck 零输出；
+#   未 push / 未 merge / 未发版；manual_pending = 1310 真机包复验。
