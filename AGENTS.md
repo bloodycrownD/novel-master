@@ -53,3 +53,13 @@
 > 要是光看 cache 里有没有对应的 key 就下判断，日常多轮会把历史上的首次全文也冲掉，前后行为就对不上了。更稳一点的做法是：平时以可见历史里的首次引用为准；置位或压缩的时候，可见窗口和 cache 一起清掉，两边同步重新开始。
 >
 > 嗯哼～这样应该懂了吧？没懂的话……人家再讲一遍也不是不行啦。
+
+## 移动端 debug 真机/模拟器测试的硬规则（2026-09-28 用户拍板，违者浪费时间）
+
+**debug 包的唯一正确跑法是 Metro dev server，永远不要打「内嵌 JS bundle」的 debug 包**：
+
+1. 标准流程：① 从**真实路径**起 Metro（`cd apps/mobile && npx react-native start`；Metro 禁止从 subst 盘启动，workspace 符号链接解析会挂）→ ② `adb -s <设备> reverse tcp:8081 tcp:8081` → ③ `adb install` debug APK → ④ 打开 app；红屏界面上的 RELOAD 按钮可重载。
+2. **不要尝试内嵌 bundle**（bundleInDebug / 手动把 index.android.bundle 放 src/main/assets）：RN 插件对 debuggable variant 默认跳过打包，mergeDebugAssets 也不收 src/main/assets 根下的 bundle——改了也不会进 APK，白烧时间（2026-09-28 实锤一整轮）。真要离线包走 release 内嵌路线（CI）。
+3. **真机测试包统一 versionCode=1**（build.gradle fallback 本来就是 1，不要传 -PversionCode）：装之前先 `adb uninstall com.novelmaster` 再全新 `adb install`，不存在降级拦截，任何分支 worktree 都适用。
+4. 荣耀真机（DSLDU20407006179）对 PC 来源安装一律弹锁屏密码/确认门（覆盖装与全新装都拦），必须用户在场配合点确认；adb install 失败报 `INSTALL_FAILED_ABORTED` 时不要反复重试，直接请用户配合或转 `/sdcard/Download/` 本地安装。
+5. gradle 出包从 subst 盘跑（路径超长问题），Metro 从真实路径跑——两者不可互换。
