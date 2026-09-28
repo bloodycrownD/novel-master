@@ -177,6 +177,23 @@ iterations:
       stream-metrics-tokens、llm-stream-timeout 与 llm-stream-native 已并入
       集成分支 integration/stream-metrics-native（CR 修复中，待合主干）。
 
+  # ---- 上下文占用计数大修（2026-09-28 立项）----
+  - id: context-usage-overhaul
+    status: active
+    notes: >
+      上下文占用 chip 大修三件套：消息级 token 缓存（消灭每 step/回滚/
+      压缩置位的全量重算）+ 标签体系更换（【源记号 连接符 百分比
+      上下文】：远程= usage 真值 / 家族名= 词表精确 / gpt = OpenAI 家族
+      精确 / gpt ≈ cl100k 估算兜底——源记号如实反映实际词表、天然
+      杜绝谎报，~ 前缀退役）+ 兜底对齐（Android Kotlin 失败兜底撤字符
+      折算对齐 cl100k、counterKind 两处谎报修复）+ 编码表缓存收敛
+      （node/rn/shim 三份收敛单一实现路径，OQ#2 了结）。缘起：2026-09-28
+      用户反馈本地计数慢的两轮 brainstorm（链路诊断见 docs/apm/memory/
+      20260928-context-usage-token-perf.md）。计划四 feature：
+      message-token-cache / token-source-label / fallback-caliber-align /
+      metric-detail-sheet（指标条点击弹窗：最近请求 + 会话累计 token
+      计量详情，口径对齐用量统计页）。
+
   # ---- LLM 流式原生传输与渲染丝滑化（2026-09-25 立项，Phase 2）----
   - id: llm-stream-native
     status: active
