@@ -7,7 +7,7 @@
 import { mkdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { registerTokenizerNodeDriver } from "@novel-master/tokenizer-driver-node";
-import { bootstrapNovelMaster, createPersistentPreferences, createPersistentState, open, type PersistentPreferences, type PersistentState, type TdbcConnection } from "@novel-master/core";
+import { bootstrapNovelMaster, createPersistentPreferences, createPersistentState, open, runBlobBinaryNormalization, type PersistentPreferences, type PersistentState, type TdbcConnection } from "@novel-master/core";
 import { refreshUserVfsUnifiedToolTurnSnapshot } from "@novel-master/core/feature-flags";
 
 import { createAgentRegistryService, createAgentStreamRegistry } from "@novel-master/core/agent";
@@ -181,6 +181,10 @@ export async function createNovelMasterRuntime(
     driver: "better-sqlite3",
   });
   await bootstrapNovelMaster(conn);
+  // 存量 blob 形态归一（zlib-b64 文本 → 二进制 BLOB）：命令进程内跑一轮
+  // （带 60s 同步预算，超预算残余由下次命令或双端启动续跑）；任务幂等可重入，
+  // 收尾维护链路自带进程级去重。
+  await runBlobBinaryNormalization(conn);
 
   const state = createPersistentState(conn);
   const smartSortRule = createSmartSortRuleService(conn);
