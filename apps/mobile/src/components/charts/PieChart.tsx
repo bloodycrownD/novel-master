@@ -60,10 +60,10 @@ const SIZE = 200;
 const CENTER = SIZE / 2;
 const RADIUS = 80;
 
-/** 扇区内百分比标注的最小占比（用户拍板 2026-09-08）：仅 ≥30% 的扇区
- * 在弧心位置标注百分比，小扇区不标避免拥挤；口径与图例行一致
- * （分母为传入的窗口 totalTokens）。 */
-const SLICE_LABEL_MIN_SHARE = 0.3;
+/** 扇区内百分比标注的最小占比（用户拍板 2026-09-28：由 30% 放宽至 10%）：
+ * ≥10% 的扇区在弧心位置标注百分比，更小的扇区不标避免拥挤；口径与图例
+ * 行一致（分母为传入的窗口 totalTokens）。 */
+const SLICE_LABEL_MIN_SHARE = 0.1;
 
 /** 扇区标注位置：弧心角方向、约 0.62 半径处（视觉居中且远离圆心与弧缘）。 */
 const LABEL_RADIUS = RADIUS * 0.62;
@@ -151,7 +151,7 @@ export function PieChart({
             {sectors.map(({datum, start, end, sweep}, index) => {
               const color = palette[index % palette.length];
               const selectedSector = datum.key === selectedKey;
-              // 扇区百分比标注（≥30% 才标，口径与图例同轨）：满圆退化场景
+              // 扇区百分比标注（≥10% 才标，口径与图例同轨）：满圆退化场景
               // 放圆心，其余放弧心角 0.62 半径处；白色文字在色板八色上均可读。
               const slicePercent =
                 totalTokens > 0

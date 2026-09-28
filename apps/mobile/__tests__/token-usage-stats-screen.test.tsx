@@ -803,14 +803,14 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
     expect(
       nodeText(findByTestId(renderer.root, 'pie-legend-__np__::__unlogged__')!),
     ).toContain('24%');
-    // 扇区内百分比标注（用户拍板 2026-09-08：≥30% 才标）：仅 gpt-4o 38%
-    // 达标在弧心标注；未记录 24% 及其余小扇区均不标。
+    // 扇区内百分比标注（用户拍板 2026-09-28：≥10% 才标，原 30%）：gpt-4o
+    // 38% 与未记录 24% 达标在弧心标注；其余小扇区（四舍五入后 2%）不标。
     expect(
       nodeText(findByTestId(renderer.root, 'pie-slice-label-p1::gpt-4o')!),
     ).toContain('38%');
     expect(
-      findByTestId(renderer.root, 'pie-slice-label-__np__::__unlogged__'),
-    ).toBeUndefined();
+      nodeText(findByTestId(renderer.root, 'pie-slice-label-__np__::__unlogged__')!),
+    ).toContain('24%');
     expect(
       findByTestId(renderer.root, 'pie-slice-label-p1::__unlogged__'),
     ).toBeUndefined();
