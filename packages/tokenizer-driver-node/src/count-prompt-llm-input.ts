@@ -126,12 +126,16 @@ export async function countPromptLlmInput(
     } else if (WEB_FAMILIES.has(family)) {
       const web = await countWebFamilyPrompt(family, serialized);
       tokenCount = web.count;
-      counterKind = family;
+      // 资产加载失败时 estimated=true 且读数已退到 cl100k 近似——此时 counterKind
+      // 必须跟着降级为 heuristic，否则家族名冒充精确读数，压缩阈值会跳过 0.85
+      // 安全系数（fallback-caliber-align C 线：修 WEB/SP 失败分支谎报）。
+      counterKind = web.estimated ? "heuristic" : family;
       estimated = web.estimated;
     } else if (SP_FAMILIES.has(family)) {
       const sp = await countSentencePieceFamilyPrompt(family, serialized);
       tokenCount = sp.count;
-      counterKind = family;
+      // SP 家族同理：加载失败 → cl100k 近似 + heuristic，不冒充家族级精确读数。
+      counterKind = sp.estimated ? "heuristic" : family;
       estimated = sp.estimated;
     } else {
       // 未来新增的家族尚未接上真 tokenizer：走默认 cl100k 近似而非字符折算。

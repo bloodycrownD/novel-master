@@ -62,11 +62,16 @@ import type { DesktopNovelMasterRuntime } from "./types.js";
 /**
  * 启动跑完后**空闲预热**一次 cl100k 编码表（stream-metrics-native `agile-3`）。
  *
- * 为什么不预热就会卡：`getNodeEncodingForModel` 的缓存键是 `model:<tiktokenModel>`、
- * 兜底档 `getNodeEncodingByName` 的键是 `enc:cl100k_base`——**两个命名空间互不命中**。
- * 所以「无模型早退 / web·SP 加载失败 / 主路径抛异常」三条兜底里，**第一次**触发时会在
- * Electron 主进程**同步**建一整张 cl100k WASM 表（实测 185~248ms），期间事件循环阻塞、
- * IPC 排队。这里把它挪到启动之后的空闲时段先建好。
+ * 为什么不预热就会卡：兜底计数（「无模型早退 / web·SP 加载失败 / 主路径抛异常」
+ * 三条路径）第一次触发时会在 Electron 主进程**同步**建一整张 cl100k WASM 表
+ * （实测 185~248ms），期间事件循环阻塞、IPC 排队。这里把它挪到启动之后的空闲
+ * 时段先建好。
+ *
+ * 编码表经 core `encoding-registry` 的 `enc:<encodingName>` 单命名空间收敛
+ * （fallback-caliber-align A/B 线）：历史上 `model:` / `enc:` 双命名空间互不命中、
+ * 同一张 cl100k 会因按模型名与按编码名各取一次而构造两份——单键化后精确档
+ * （gpt-4 / gpt-3.5-turbo 等 cl100k 系模型）与兜底档**共享预热产物这张表**；
+ * gpt-4o（o200k）系模型首次精确计数仍会另建自己的表，不在本预热范围。
  *
  * 三条硬约束（执行方不得违反）：
  * ① **try/catch 静默**——预热失败（资产缺失 / WASM 加载异常）绝不影响启动，读数照走
