@@ -7,6 +7,7 @@ import {
   bootstrapNovelMaster,
   createDbMaintenanceService,
   open,
+  runStartupMaintenanceOnce,
   type TdbcConnection,
 } from "@novel-master/core";
 import {
@@ -64,6 +65,24 @@ async function blobTotalRows(): Promise<number> {
   );
   return Number(rows[0]?.n ?? 0);
 }
+
+/**
+ * 构造**不可压缩**的确定性正文（线性同余伪随机 ASCII）。
+ *
+ * @remarks T-DM4 需要真实占用整页：重复字符（"x".repeat(16KB) 之类）经 zlib
+ * 后只剩几十字节，删掉几行连一个页都腾不出来，freelist 恒为 0，断言就废了。
+ * 同理正文必须逐行不同，否则 content_hash 相同会被去重合并成一行。
+ */
+function pseudoRandomBody(seed: number, chars: number): string {
+  let state = seed >>> 0;
+  let out = "";
+  for (let i = 0; i < chars; i++) {
+    state = (state * 1664525 + 1013904223) >>> 0;
+    out += String.fromCharCode(33 + (state % 90));
+  }
+  return out;
+}
+
 
 describe("数据库维护（infra/db-maintenance）", () => {
   it("T-DM1 文件库：写入→删除产生 freelist→maintenance 回收（freelist 归零、体积下降、缓存 GC 生效）", async () => {
@@ -173,5 +192,67 @@ describe("数据库维护（infra/db-maintenance）", () => {
         await createDbMaintenanceService(tx).runDatabaseMaintenance();
       })
     );
+  });
+
+  it("T-DM3 启动维护链路去重：同进程第二次 runStartupMaintenanceOnce 返回 null", async () => {
+    // 去重标记是**模块级、进程级**的（不是连接级），与本文件其它用例的
+    // 执行顺序解耦：用例内先跑一次让标记落位，再断言第二次短路。
+    // T-DM1/T-DM2 走的是 `maintenance.runDatabaseMaintenance` 手动路径，
+    // 不碰这个标记，故首个调用必然是真执行。
+    const first = await runStartupMaintenanceOnce(conn);
+    assert.notEqual(first, null, "首个调用应真执行维护链路");
+
+    const second = await runStartupMaintenanceOnce(conn);
+    assert.equal(second, null, "同进程第二次调用应短路返回 null");
+  });
+
+  it("T-DM4 手动「数据清理」不受启动去重标记影响：仍真执行并 VACUUM 回收", async () => {
+    // 前置：确保启动去重标记已落位，手动路径必须与它无关。
+    await runStartupMaintenanceOnce(conn);
+
+    // 制造 freelist：24 份互不相同、且不可压缩的 8KB body（约占 48 页），
+    // 写完连 entry 引用行与 blob 行一起删掉。
+    const sk = createSessionKkvService(conn);
+    const session = "dm4-temp";
+    for (let i = 0; i < 24; i++) {
+      await sk.set(
+        session,
+        SESSION_KKV_DOMAIN_FILE_CACHE,
+        `full:/dm4-${i}.md`,
+        serializeFileCachePayload({
+          body: pseudoRandomBody(i + 1, 8 * 1024),
+          mtimeMs: i,
+        })
+      );
+    }
+    const hashes = await entryHashes(session);
+    assert.equal(hashes.length, 24, "24 份正文互不相同（未被去重合并）");
+    await conn.execute(
+      "DELETE FROM session_file_cache_entry WHERE session_id = ?",
+      [session]
+    );
+    for (const hash of hashes) {
+      await conn.execute(
+        "DELETE FROM session_file_cache_blob WHERE content_hash = ?",
+        [hash]
+      );
+    }
+    const freelistBefore = Number(
+      (
+        await conn.query<{ freelist_count: number }>("PRAGMA freelist_count")
+      )[0]!.freelist_count
+    );
+    assert.ok(freelistBefore > 0, "删除数据后 freelist 应大于 0");
+
+    // 去重标记已置，但手动路径照样返回真实结果（不是 null）并把 freelist 清零。
+    const result = await maintenance.runDatabaseMaintenance();
+    assert.notEqual(result, null, "手动「数据清理」不受启动去重标记约束");
+    assert.equal(result.after.freelistPages, 0, "VACUUM 后 freelist 归零");
+    const freelistAfter = Number(
+      (
+        await conn.query<{ freelist_count: number }>("PRAGMA freelist_count")
+      )[0]!.freelist_count
+    );
+    assert.equal(freelistAfter, 0, "PRAGMA 直读复核：VACUUM 真跑了");
   });
 });

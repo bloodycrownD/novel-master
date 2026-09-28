@@ -129,6 +129,24 @@ async function insertLegacyRow(
   return compressed;
 }
 
+/**
+ * 直插一条 base64 非法的存量行（解码必失败的坏行）。
+ *
+ * @remarks 坏行只往 `vfs_content_blob` 插：file_cache 表的坏行还得补
+ * entry 引用行（否则完成收尾的 GC 会把行扫掉），而坏行断言不需要走
+ * file_cache。
+ */
+async function insertCorruptRow(
+  contentHash: string,
+  badText = "not-base64!!"
+): Promise<void> {
+  await conn().execute(
+    `INSERT INTO vfs_content_blob (content_hash, encoding, bytes, byte_len, ref_count)
+     VALUES (?, 'zlib-b64', ?, ?, 0)`,
+    [contentHash, badText, badText.length]
+  );
+}
+
 /** 读回一行的解码明文（走读侧共享 codec，兼容归一前后的全部形态）。 */
 async function readPlain(
   table: BlobTable,
@@ -387,6 +405,87 @@ describe("存量 blob 形态归一任务（T-BB4 ~ T-BB7）", () => {
     assert.equal(
       await readPlain("session_file_cache_blob", "bb-dirty-f"),
       corpus(42)
+    );
+  });
+
+  it("解码失败的坏行不阻断收敛：坏行原样保留、failedCount=1、标记照置、第二遍幂等", async () => {
+    await resetNormalizationState();
+    for (let i = 1; i <= 3; i++) {
+      await insertLegacyRow("vfs_content_blob", `bb-bad-good-${i}`, corpus(60 + i));
+    }
+    await insertCorruptRow("bb-bad-corrupt");
+    const badBefore = await snapshotShapes("vfs_content_blob", "bb-bad-corrupt");
+    assert.equal(badBefore.length, 1);
+    assert.equal(badBefore[0]!.typeOf, "text", "坏行前置形态应为 TEXT");
+
+    // 关键：不抛。整轮跑完且把坏行记进 failedCount。
+    const first = await runBlobBinaryNormalization(conn());
+    assert.equal(first.done, true, "坏行不阻断完成态");
+    assert.equal(first.normalizedCount, 3, "正常行全部归一");
+    assert.equal(first.failedCount, 1, "坏行被跳过并计数");
+    assert.equal(
+      await pendingCount("vfs_content_blob"),
+      1,
+      "谓词里只剩那条坏行"
+    );
+
+    // 坏行原样保留：encoding / TYPEOF / byte_len / 物理长度一字未改。
+    assert.deepEqual(
+      await snapshotShapes("vfs_content_blob", "bb-bad-corrupt"),
+      badBefore,
+      "坏行必须原样保留、不写库"
+    );
+    // 同批的正常行照常归一、可解码回原文。
+    for (let i = 1; i <= 3; i++) {
+      assert.equal(
+        await readPlain("vfs_content_blob", `bb-bad-good-${i}`),
+        corpus(60 + i)
+      );
+    }
+    // 标记照置：否则每次启动都要重扫坏行、任务永远收敛不了。
+    const kkv = new SqliteKkvRepository(conn());
+    assert.ok(
+      await kkv.get(BLOB_BINARY_KKV_MODULE, "vfsContentDone"),
+      "有坏行也置完成标记"
+    );
+
+    // 第二遍：标记已置 → 零归一、不再解码坏行（幂等）。
+    const second = await runBlobBinaryNormalization(conn());
+    assert.equal(second.done, true);
+    assert.equal(second.normalizedCount, 0);
+    assert.equal(second.failedCount, 0, "标记已置后不再扫坏行");
+    assert.deepEqual(
+      await snapshotShapes("vfs_content_blob", "bb-bad-corrupt"),
+      badBefore
+    );
+  });
+
+  it("shouldPause 守卫：首轮即暂停返回 done=false、零归一、两表标记均未置", async () => {
+    await resetNormalizationState();
+    await insertLegacyRow("vfs_content_blob", "bb-pause-v", corpus(71));
+    await insertLegacyRow("session_file_cache_blob", "bb-pause-f", corpus(72));
+
+    const paused = await runBlobBinaryNormalization(conn(), {
+      shouldPause: () => true,
+    });
+    assert.equal(paused.done, false, "暂停即未完成");
+    assert.equal(paused.normalizedCount, 0, "暂停时一行都不搬");
+    assert.equal(paused.failedCount, 0);
+
+    // 两表各一行仍在谓词里：守卫在批粒度生效，语料未被搬走。
+    assert.equal(await pendingCount("vfs_content_blob"), 1);
+    assert.equal(await pendingCount("session_file_cache_blob"), 1);
+
+    const kkv = new SqliteKkvRepository(conn());
+    assert.equal(
+      await kkv.get(BLOB_BINARY_KKV_MODULE, "vfsContentDone"),
+      null,
+      "暂停时不得置 vfsContent 标记"
+    );
+    assert.equal(
+      await kkv.get(BLOB_BINARY_KKV_MODULE, "fileCacheDone"),
+      null,
+      "暂停时不得置 fileCache 标记"
     );
   });
 

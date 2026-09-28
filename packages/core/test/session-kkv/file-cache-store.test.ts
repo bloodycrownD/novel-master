@@ -360,6 +360,42 @@ describe("session file_cache 分流存储（两新表）", () => {
     assert.equal(await sk.get(sid, SESSION_KKV_DOMAIN_FILE_CACHE, key), value);
   });
 
+  it("T-BB3 历史脏形态：encoding=zlib 但存 base64 文本，get 还原原文（归一任务跑之前的存量）", async () => {
+    const ctx = getNovelMasterTestContext();
+    const sk = createSessionKkvService(ctx.conn);
+    const sid = `bb3-${testIsolationSuffix()}`;
+    const key = "full:/dirty-zlib-text.md";
+    const value = serializeFileCachePayload({
+      body: `dirty-zlib-text-${testIsolationSuffix()}-中文`,
+      mtimeMs: 1758576000789,
+    });
+
+    // 与 T-R7 的差别只在 encoding：这里是 quick-sqlite 时代「encoding=zlib
+    // 但列里存 base64 文本」的脏形态（归一谓词的 TYPEOF 分支），读路径
+    // 必须同样能还原——归一任务跑之前它就是库里的常态。
+    const encoded = encodeFileCacheValue(value);
+    assert.notEqual(encoded, null);
+    const b64 = legacyB64Text(encoded!.bytes);
+
+    await ctx.conn.execute(
+      "INSERT INTO session_file_cache_blob (content_hash, encoding, bytes, byte_len) VALUES (?, ?, ?, ?)",
+      [encoded!.contentHash, VFS_CONTENT_ENCODING_ZLIB, b64, b64.length]
+    );
+    // entry 引用行必须一并插：无引用行的 blob 会被 file_cache GC 扫掉。
+    await ctx.conn.execute(
+      "INSERT INTO session_file_cache_entry (session_id, key, content_hash, mtime_ms) VALUES (?, ?, ?, ?)",
+      [sid, key, encoded!.contentHash, encoded!.mtimeMs]
+    );
+
+    const rows = await ctx.conn.query<{ bytes_type: string }>(
+      "SELECT TYPEOF(bytes) AS bytes_type FROM session_file_cache_blob WHERE content_hash = ?",
+      [encoded!.contentHash]
+    );
+    assert.equal(String(rows[0]!.bytes_type), "text", "前置形态确为 TEXT");
+
+    assert.equal(await sk.get(sid, SESSION_KKV_DOMAIN_FILE_CACHE, key), value);
+  });
+
   it("T-R8 手工 INSERT 坏字节 blob 行（zlib-b64）：get 返回 null 不抛（解压失败自愈）", async () => {
     const ctx = getNovelMasterTestContext();
     const sk = createSessionKkvService(ctx.conn);
