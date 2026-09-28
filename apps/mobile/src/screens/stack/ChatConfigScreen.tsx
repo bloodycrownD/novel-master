@@ -1,5 +1,5 @@
 /**
- * 聊天相关偏好：流式输出、子会话流式、思考提示词、富文本消息，以及压缩配置。
+ * 聊天相关偏好：父会话流式、子会话流式、思考提示词、富文本消息，以及压缩配置。
  */
 import React, {useCallback, useState} from 'react';
 import {
@@ -220,9 +220,9 @@ export function ChatConfigScreen() {
     <ScreenFormLayout tokens={tokens}>
       <ProfileSwitchItem
         icon="⚡"
-        label="流式输出"
+        label="父会话流式"
         subtitle={
-          llmStreamEnabled ? '边生成边显示（推荐）' : '完成后一次性显示回复'
+          llmStreamEnabled ? '主对话回复边生成边显示（推荐）' : '主对话回复完成后一次性显示'
         }
         value={llmStreamEnabled}
         tokens={tokens}

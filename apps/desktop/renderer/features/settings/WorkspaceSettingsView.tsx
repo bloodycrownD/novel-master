@@ -205,7 +205,8 @@ export function WorkspaceSettingsView() {
       >
         <SettingsRows>
           <SettingsSwitchRow
-            label="流式输出"
+            label="父会话流式"
+            desc="主对话的实时输出；关闭后回复完成后一次性显示"
             checked={llmStream}
             onChange={async (next) => {
               setLlmStream(next);

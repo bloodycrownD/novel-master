@@ -34,10 +34,10 @@ describe("WorkspaceSettingsView subagentStream 开关（T-D2）", () => {
     assert.match(source, /ipcPreferencesSetSubagentStream\(next\)/);
   });
 
-  it("「子会话流式」紧邻「流式输出」之后", () => {
-    const llmIdx = source.indexOf('label="流式输出"');
+  it("「子会话流式」紧邻「父会话流式」之后", () => {
+    const llmIdx = source.indexOf('label="父会话流式"');
     const subIdx = source.indexOf('label="子会话流式"');
-    assert.ok(llmIdx >= 0, "「流式输出」行缺失");
-    assert.ok(subIdx > llmIdx, "「子会话流式」应位于「流式输出」之后");
+    assert.ok(llmIdx >= 0, "「父会话流式」行缺失");
+    assert.ok(subIdx > llmIdx, "「子会话流式」应位于「父会话流式」之后");
   });
 });
