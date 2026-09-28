@@ -9,12 +9,12 @@ import java.io.File
 import java.nio.file.Files
 import java.nio.file.Paths
 import java.nio.file.StandardCopyOption
-import kotlin.math.ceil
 
 /**
  * Native WEB (HF JSON) and SP (.model) counting — parity with core tokenizers.
  * SP uses DJL {@link SpTokenizer} (official SentencePiece JNI, matches @agnai encodeIds).
- * On load/encode failure returns heuristic + estimated (never throws to JS).
+ * Missing assets / load failure / encode failure always throw (no heuristic fallback);
+ * the bridge module converts them into a JS promise rejection.
  */
 internal class TokenizerEngine(private val context: Context) {
   data class CountResult(
@@ -27,11 +27,12 @@ internal class TokenizerEngine(private val context: Context) {
   private val spCache = LruCache<String, SpTokenizer>(8)
 
   fun count(serialized: String, family: String): CountResult {
-    val spec = TokenizerAssetPaths.forFamily(family) ?: return heuristic(serialized, family)
+    val spec = resolveAssetSpecFor(family)
     return when (spec.kind) {
       "json" -> countWebFamily(serialized, family, spec)
       "model" -> countSpFamily(serialized, family, spec)
-      else -> heuristic(serialized, family)
+      // resolveAssetSpecFor 已校验 kind，此分支仅为防御性兜底。
+      else -> throw IllegalStateException("家族 $family 的资产类型未知: ${spec.kind}")
     }
   }
 
@@ -40,15 +41,17 @@ internal class TokenizerEngine(private val context: Context) {
     family: String,
     spec: AssetPathSpec,
   ): CountResult {
-    val tokenizer = loadWebTokenizer(family, spec) ?: return heuristic(serialized, family)
+    val tokenizer =
+      loadWebTokenizer(family, spec)
+        ?: throw IllegalStateException("家族 $family 的 WEB 分词器资产缺失或加载失败")
     return try {
       val count =
         WebPromptConverter.countWebSerialized(serialized) { text ->
           encodeWeb(tokenizer, text)
         }
       CountResult(count, family, estimated = false)
-    } catch (_: Throwable) {
-      heuristic(serialized, family)
+    } catch (e: Throwable) {
+      throw IllegalStateException("家族 $family 的 WEB 编码失败: ${e.message}", e)
     }
   }
 
@@ -89,12 +92,14 @@ internal class TokenizerEngine(private val context: Context) {
     family: String,
     spec: AssetPathSpec,
   ): CountResult {
-    val tokenizer = loadSpTokenizer(family, spec) ?: return heuristic(serialized, family)
+    val tokenizer =
+      loadSpTokenizer(family, spec)
+        ?: throw IllegalStateException("家族 $family 的 SP 分词器资产缺失或加载失败")
     return try {
       val ids = tokenizer.processor.encode(serialized)
       CountResult(ids.size, family, estimated = false)
-    } catch (_: Throwable) {
-      heuristic(serialized, family)
+    } catch (e: Throwable) {
+      throw IllegalStateException("家族 $family 的 SP 编码失败: ${e.message}", e)
     }
   }
 
@@ -126,10 +131,18 @@ internal class TokenizerEngine(private val context: Context) {
   }
 
   companion object {
-    fun heuristic(serialized: String, counterKind: String): CountResult {
-      val count =
-        ceil(serialized.length / TokenizerConstants.CHARACTERS_PER_TOKEN_RATIO).toInt()
-      return CountResult(count, counterKind, estimated = true)
+    /**
+     * 静态纯函数：解析家族对应的资产 spec（不持有 android Context，可 JVM 直测）。
+     * 家族无资产 spec 或 kind 未知时抛 [IllegalStateException]——失败不再折算为启发式计数。
+     */
+    fun resolveAssetSpecFor(family: String): AssetPathSpec {
+      val spec =
+        TokenizerAssetPaths.forFamily(family)
+          ?: throw IllegalStateException("家族 $family 无原生分词器资产配置")
+      if (spec.kind != "json" && spec.kind != "model") {
+        throw IllegalStateException("家族 $family 的资产类型未知: ${spec.kind}")
+      }
+      return spec
     }
   }
 }
