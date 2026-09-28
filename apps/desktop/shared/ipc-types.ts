@@ -1557,6 +1557,23 @@ export type MessageCompactionStatusDto = {
   readonly pendingCount: number;
 };
 
+/**
+ * VFS 历史版本打包状态：无终态（新版本持续攒组），两态口径为「剩余
+ * N 组 / 无需处理」+ 坏组第三态「已完成（N 组需人工处理）」；
+ * `DbStatsResult.vfsPack` 上的 `null` = 未取到（采样失败），renderer
+ * 显示占位 '—'，与 `messageCompaction` null 同口径。
+ */
+export type VfsContentPackStatusDto = {
+  /** 候选组数（entry 口径近似；UI「剩余 N 组」）。 */
+  readonly pendingGroups: number;
+  /** 已打包成员数（pack member 表总行数）。 */
+  readonly memberCount: number;
+  /** pack 流字节总量（SUM(byte_len)）。 */
+  readonly streamBytes: number;
+  /** 上次收敛轮的坏组数快照（无快照为 0；第三态数据源）。 */
+  readonly failedGroups: number;
+};
+
 /** 数据库存储统计（文件体积由 main 侧 stat 提供，可回收量为 freelist 口径）。 */
 export type DbStatsResult = {
   readonly fileBytes: number;
@@ -1568,6 +1585,11 @@ export type DbStatsResult = {
    * （采样失败），renderer 显示 '—'；与 blobBinary 空表同口径。
    */
   readonly messageCompaction: MessageCompactionStatusDto | null;
+  /**
+   * VFS 历史版本打包状态（迁移卡第四行数据源）；null = 未取到（采样
+   * 失败），renderer 显示 '—'；与 messageCompaction null 同口径。
+   */
+  readonly vfsPack: VfsContentPackStatusDto | null;
 };
 
 /** 数据清理（GC + checkpoint + VACUUM）前后库文件体积。 */

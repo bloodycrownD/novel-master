@@ -8,6 +8,7 @@
 import type {
   BlobBinaryTableStatus,
   MessageCompactionStatus,
+  VfsContentPackStatus,
 } from '@/services/db-maintenance.service';
 
 /** 迁移状态行的取值三态（颜色映射：success / warning / 默认正文色）。 */
@@ -56,4 +57,35 @@ export function blobBinaryValue(
     value: `进行中（剩余 ${status.pendingCount} 条）`,
     tone: 'default',
   };
+}
+
+/**
+ * VFS 历史版本打包状态行取值（第四行）：无需处理 / 剩余 N 组两态 +
+ * failedGroups > 0 第三态「已完成（N 组需人工处理）」；未取到状态（采样
+ * 失败）显示占位 '—'。
+ *
+ * 与 blobBinaryValue 的 done 分支不同：打包无终态（新版本持续攒组），
+ * 「收敛」判定取 `pendingGroups === 0`——此时尚有坏组（failedGroups
+ * 快照非零）则显示第三态，完全干净则显示「无需处理」（新库从未打包 /
+ * 存量已全部打包收敛，从用户视角均无可等待的迁移进度）。
+ */
+export function vfsPackValue(
+  status: VfsContentPackStatus | null,
+): MigrationValue {
+  if (status == null) {
+    return {value: '—', tone: 'default'};
+  }
+  if (status.pendingGroups > 0) {
+    return {
+      value: `剩余 ${status.pendingGroups} 组`,
+      tone: 'default',
+    };
+  }
+  if (status.failedGroups > 0) {
+    return {
+      value: `已完成（${status.failedGroups} 组需人工处理）`,
+      tone: 'warning',
+    };
+  }
+  return {value: '无需处理', tone: 'success'};
 }

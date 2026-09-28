@@ -8,6 +8,7 @@ import {
   createDbMaintenanceService,
   getBlobBinaryStatus,
   getMessageCompactionStatus,
+  getVfsContentPackStatus,
 } from "@novel-master/core";
 import { getDesktopRuntime } from "../runtime/desktop-runtime-singleton.js";
 import { resolveDbPath } from "../runtime/resolve-db-path.js";
@@ -20,14 +21,16 @@ import {
 import type {
   BlobBinaryStatusDto,
   MessageCompactionStatusDto,
+  VfsContentPackStatusDto,
 } from "../../../shared/ipc-types.js";
 
-/** 采样存储统计：库文件体积（main 侧 stat）+ freelist 可回收量（core PRAGMA）+ 两类搬运状态。 */
+/** 采样存储统计：库文件体积（main 侧 stat）+ freelist 可回收量（core PRAGMA）+ 三类搬运状态。 */
 export async function getDbMaintenanceStats(): Promise<{
   fileBytes: number;
   reclaimableBytes: number;
   blobBinary: BlobBinaryStatusDto;
   messageCompaction: MessageCompactionStatusDto | null;
+  vfsPack: VfsContentPackStatusDto | null;
 }> {
   // 先确保 runtime/库文件就绪再 stat：并行赛跑会在冷启动（库尚未
   // bootstrap 落盘）时拿到 ENOENT。
@@ -44,6 +47,7 @@ export async function getDbMaintenanceStats(): Promise<{
     reclaimableBytes: storage.reclaimableBytes,
     blobBinary: await sampleBlobBinaryStatus(runtime.conn),
     messageCompaction,
+    vfsPack: await sampleVfsPackStatus(runtime.conn),
   };
 }
 
@@ -88,6 +92,28 @@ async function sampleBlobBinaryStatus(
       err instanceof Error ? err.message : err,
     );
     return { tables: [] };
+  }
+}
+
+/**
+ * 采样 VFS 历史版本打包状态（迁移卡第四行）。
+ *
+ * 与 {@link sampleMessageCompactionStatus} 同口径：附属信息采样失败不
+ * 拖垮 db/stats 主统计，吞掉异常按「未取到」展示——返回 `null`，
+ * renderer 侧 null 分支显示占位 '—'。core 侧自带 3s 采样节流（候选谓词
+ * 查询防 2s 轮询 IO 放大），本层不再节流。
+ */
+async function sampleVfsPackStatus(
+  conn: Parameters<typeof getVfsContentPackStatus>[0],
+): Promise<VfsContentPackStatusDto | null> {
+  try {
+    return await getVfsContentPackStatus(conn);
+  } catch (err) {
+    console.warn(
+      "[desktop] 采样 VFS 历史版本打包状态失败：",
+      err instanceof Error ? err.message : err,
+    );
+    return null;
   }
 }
 

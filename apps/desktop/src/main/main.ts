@@ -25,6 +25,7 @@ import { registerIpcHandlers } from "./ipc/register-handlers.js";
 import { getDesktopRuntime } from "./runtime/desktop-runtime-singleton.js";
 import { scheduleDesktopBlobBinaryNormalization } from "./services/blob-binary-normalization.service.js";
 import { scheduleDesktopMessageContentCompaction } from "./services/message-content-compaction.service.js";
+import { scheduleDesktopVfsContentPacking } from "./services/vfs-content-packing.service.js";
 import {
   configureWindowChrome,
   installApplicationMenu,
@@ -176,6 +177,10 @@ async function bootstrapMainServices(): Promise<void> {
   // 存量 blob 形态归一（base64 文本 → 二进制 BLOB）：后台任务自身带
   // 守卫与失败兜底，不参与启动成败判定，故 fire-and-forget 不 await。
   scheduleDesktopBlobBinaryNormalization();
+  // VFS 非 head 历史版本混合打包：同款 fire-and-forget（守卫 + busy 回调缝
+  // + rebootstrap 重挂全在服务内），无终态——本轮收敛即收工，新版本攒的
+  // 新组由下次冷启动收敛。
+  scheduleDesktopVfsContentPacking();
 }
 
 app.whenReady().then(async () => {

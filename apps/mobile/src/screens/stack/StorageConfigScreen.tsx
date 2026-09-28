@@ -22,10 +22,12 @@ import {
   runDatabaseMaintenance,
   type BlobBinaryTableStatus,
   type MessageCompactionStatus,
+  type VfsContentPackStatus,
 } from '../../services/db-maintenance.service';
 import {
   blobBinaryValue,
   messageCompactionValue,
+  vfsPackValue,
   type MigrationValue,
 } from './storage-config-migration-values';
 import {getCloudSyncLocalStatus} from '../../services/cloud-sync-config.store';
@@ -63,6 +65,7 @@ export function StorageConfigScreen() {
   const [messageCompaction, setMessageCompaction] = useState<
     MessageCompactionStatus | null
   >(null);
+  const [vfsPack, setVfsPack] = useState<VfsContentPackStatus | null>(null);
 
   const refreshCloudConfigured = useCallback(async () => {
     try {
@@ -82,12 +85,14 @@ export function StorageConfigScreen() {
       setDbReclaimableBytes(stats.reclaimableBytes);
       setBlobBinary(stats.blobBinary);
       setMessageCompaction(stats.messageCompaction);
+      setVfsPack(stats.vfsPack);
     } catch {
       // 统计仅用于展示（Agent 运行中会被守卫拒绝），失败静默占位
       setDbFileBytes(null);
       setDbReclaimableBytes(null);
       setBlobBinary([]);
       setMessageCompaction(null);
+      setVfsPack(null);
     }
   }, [runtime]);
 
@@ -116,10 +121,11 @@ export function StorageConfigScreen() {
   };
 
   /**
-   * 迁移卡片三行（用户拍板 2026-09-28）：消息正文压缩 + 两张 blob 表去
-   * base64，指标卡形态只读展示（非菜单项）。消息正文「去 base64」不设
-   * 状态行——发版形态下压缩搬运直接写二进制，不存在用户可见的中间态，
-   * 仅开发机历史形态由归一任务静默收敛。取值逻辑在
+   * 迁移卡片四行（前三行用户拍板 2026-09-28；第四行随 vfs-content-pack
+   * 迭代新增）：消息正文压缩 + 两张 blob 表去 base64 + VFS 历史版本打包，
+   * 指标卡形态只读展示（非菜单项）。消息正文「去 base64」不设状态行——
+   * 发版形态下压缩搬运直接写二进制，不存在用户可见的中间态，仅开发机
+   * 历史形态由归一任务静默收敛。取值逻辑在
    * storage-config-migration-values（ic-22 抽出的纯函数，四组夹具直测）。
    */
   const migrationRows: ReadonlyArray<{label: string} & MigrationValue> = [
@@ -132,6 +138,9 @@ export function StorageConfigScreen() {
       ...blobBinaryValue(blobBinary.find(row => row.table === 'fileCache')),
       label: '文件缓存去 base64',
     },
+    // 第四行（vfs-content-pack）：非 head 历史版本混合打包，无终态——
+    // 两态「无需处理 / 剩余 N 组」+ 坏组第三态，取值在 vfsPackValue。
+    {...vfsPackValue(vfsPack), label: '历史版本打包'},
   ];
 
   const migrationValueColor = (tone: MigrationValue['tone']): string => {

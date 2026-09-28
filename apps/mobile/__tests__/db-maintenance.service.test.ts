@@ -26,6 +26,7 @@ const mockRunMaintenance = jest.fn();
 const mockCreateService = jest.fn();
 const mockGetBlobBinaryStatus = jest.fn();
 const mockGetCompactionStatus = jest.fn();
+const mockGetVfsPackStatus = jest.fn();
 
 const liveConn = {tag: 'live'};
 
@@ -35,6 +36,8 @@ jest.mock('@novel-master/core', () => ({
   getBlobBinaryStatus: (...args: unknown[]) => mockGetBlobBinaryStatus(...args),
   getMessageCompactionStatus: (...args: unknown[]) =>
     mockGetCompactionStatus(...args),
+  getVfsContentPackStatus: (...args: unknown[]) =>
+    mockGetVfsPackStatus(...args),
 }));
 
 jest.mock('@/db/db-file-path', () => ({
@@ -81,6 +84,14 @@ const BLOB_BINARY_STATUS = {
   ],
 };
 
+/** core 打包任务状态（T-VP22 第四行数据源；pendingGroups>0 的进行中态）。 */
+const VFS_PACK_STATUS = {
+  pendingGroups: 5,
+  memberCount: 40,
+  streamBytes: 655_360,
+  failedGroups: 0,
+};
+
 describe('db-maintenance.service', () => {
   const runtime = {conn: liveConn} as never;
 
@@ -94,6 +105,7 @@ describe('db-maintenance.service', () => {
     mockGetCompactionStatus
       .mockReset()
       .mockResolvedValue({done: true, pendingCount: 0});
+    mockGetVfsPackStatus.mockReset().mockResolvedValue(VFS_PACK_STATUS);
     mockCreateService.mockReset().mockReturnValue({
       getStorageStats: (...args: unknown[]) => mockGetStorageStats(...args),
       runDatabaseMaintenance: (...args: unknown[]) =>
@@ -143,6 +155,7 @@ describe('db-maintenance.service', () => {
         {table: 'fileCache', done: true, pendingCount: 0, failedCount: 0},
       ],
       messageCompaction: {done: false, pendingCount: 7},
+      vfsPack: VFS_PACK_STATUS,
     });
   });
 
@@ -200,6 +213,24 @@ describe('db-maintenance.service', () => {
       {table: 'vfsContent', done: false, pendingCount: 1100, failedCount: 0},
       {table: 'fileCache', done: true, pendingCount: 0, failedCount: 0},
     ]);
+  });
+
+  it('T-VP22: getVfsContentPackStatus 抛错时整体不 reject，vfsPack 降级为 null 且其余指标有值', async () => {
+    // 与 cr-04/ic-03 对称：打包状态采样（第五个失败源）独立兜底，不传染
+    mockGetVfsPackStatus.mockRejectedValue(
+      new Error('vfs pack status boom'),
+    );
+
+    const stats = await getDatabaseMaintenanceStats(runtime);
+
+    expect(stats.fileBytes).toEqual(1024);
+    expect(stats.reclaimableBytes).toEqual(40960);
+    expect(stats.vfsPack).toBeNull();
+    expect(stats.blobBinary).toEqual([
+      {table: 'vfsContent', done: false, pendingCount: 1100, failedCount: 0},
+      {table: 'fileCache', done: true, pendingCount: 0, failedCount: 0},
+    ]);
+    expect(stats.messageCompaction).toEqual({done: true, pendingCount: 0});
   });
 
   it('T-DMM1: runDatabaseMaintenance 正常路径 stat 前后各一次并返回前后体积', async () => {
