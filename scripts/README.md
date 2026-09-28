@@ -13,7 +13,7 @@
 | `verify-device-db.mjs` | 拉回的真机库查形态 / byte_len / KKV 标记 / 与迁移前副本逐哈希比对 |
 | `dbinspect.mjs` / `dbinspect2.mjs` | 库直查工具（后者为演进版） |
 
-## release/build-release-apk.ps1 — 真 release 出包配方
+## build-release-apk.ps1 — 真 release 出包配方
 
 本地出「CI 等价」的 release 验证包（assembleRelease + debug keystore 注入）。与内嵌 debug 壳配方（已证伪：见 RULE 出包条目）的关键差别：**不改 MainApplication、全 release 原生配置**，是验证生产 bundle 启动问题的唯一可信形态。keystore 路径必须传**绝对路径**（相对路径会被 gradle 解析到 daemon 目录）。签名注入：`-Pandroid.injected.signing.store.file=<绝对路径> -Pandroid.injected.signing.store.password=android -Pandroid.injected.signing.key.alias=androiddebugkey -Pandroid.injected.signing.key.password=android`，产物按 ABI 分包在 `outputs/apk/release/`。
 
