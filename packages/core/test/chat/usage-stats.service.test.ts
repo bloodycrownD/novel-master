@@ -80,6 +80,8 @@ interface MsgSeed {
   providerId?: string | null;
   modelName?: string | null;
   hidden?: boolean;
+  /** 自定义 content 块（tool_use 计数用例）；缺省为单 text 块。 */
+  blocks?: ChatMessage["content"]["blocks"];
   usage?: {
     prompt?: number;
     completion?: number;
@@ -125,7 +127,10 @@ async function seedMsg(
     sessionId,
     seq,
     role: seed.role ?? "assistant",
-    content: textBlocks("usage-stats-seed"),
+    content:
+      seed.blocks != null
+        ? { blocks: seed.blocks }
+        : textBlocks("usage-stats-seed"),
     provider: seed.provider ?? null,
     providerId: seed.providerId ?? null,
     modelName: seed.modelName ?? null,
@@ -1250,5 +1255,176 @@ describe("usage stats service 速率/TTFT 聚合（T-US2/3/4）", () => {
         /offset/
       );
     }
+  });
+});
+
+describe("usage stats service 会话维度详情（T-MD1/T-MD2，metric-detail-sheet）", () => {
+  /** tool_use 块工厂（toolUseCount 用例的 content 构造）。 */
+  function toolUseBlock(id: string) {
+    return { type: "tool_use" as const, id, name: "read", input: {} };
+  }
+
+  it("T-MD1: 多协议聚合——anthropic 双 cache 列 / openai 仅 cache_read / 无 cache 行不入 billed 分母；hidden 行计入累计", async () => {
+    const { ctx, project, session } = await seedSession();
+    // 对照会话：session 谓词界定，他 session 的行不计入本会话累计。
+    const otherSession = await ctx.sessions.create(project.id, "md-other");
+    const now = Date.now();
+
+    // seq 1 anthropic：billed = 100 + 2048 + 512 = 2660。
+    await seedMsg(ctx, session.id, 1, {
+      createdAtMs: now - 30_000,
+      provider: "anthropic",
+      modelName: "claude-x",
+      usage: {
+        prompt: 100,
+        completion: 40,
+        total: 140,
+        cacheRead: 2048,
+        cacheCreation: 512,
+      },
+    });
+    // seq 2 hidden anthropic：hidden 行计入累计（口径脚注「累计含隐藏消息」）。
+    await seedMsg(ctx, session.id, 2, {
+      createdAtMs: now - 20_000,
+      hidden: true,
+      provider: "anthropic",
+      usage: { prompt: 10, completion: 5, total: 15, cacheRead: 100 },
+    });
+    // seq 3 openai：仅 cache_read（openai prompt 已含 cached，billed = 200）。
+    await seedMsg(ctx, session.id, 3, {
+      createdAtMs: now - 10_000,
+      provider: "openai",
+      modelName: "gpt-x",
+      usage: { prompt: 200, completion: 60, total: 260, cacheRead: 50 },
+    });
+    // seq 4 openai 无 cache 行：不入 billed 分母（缺失行不拉低命中率）。
+    await seedMsg(ctx, session.id, 4, {
+      createdAtMs: now,
+      provider: "openai",
+      usage: { prompt: 999, completion: 1, total: 1000 },
+    });
+    // seq 5 user 行（带 usage 也不计）与 seq 6 无 usage 行（abort）不入累计。
+    await seedMsg(ctx, session.id, 5, {
+      createdAtMs: now,
+      role: "user",
+      usage: { prompt: 999, total: 999 },
+    });
+    await seedMsg(ctx, session.id, 6, { createdAtMs: now });
+    // 他会话的 anthropic 行：金额再大也不入本会话。
+    await seedMsg(ctx, otherSession.id, 1, {
+      createdAtMs: now,
+      provider: "anthropic",
+      usage: { prompt: 5000, completion: 5000, cacheRead: 1, cacheCreation: 1 },
+    });
+
+    const svc = createUsageStatsService(ctx.conn);
+    const detail = await svc.getSessionUsageDetail(session.id);
+    // totals：4 条 usage 行（含 hidden 的 seq 2）。
+    assert.equal(detail.totals!.assistantRows, 4);
+    assert.equal(detail.totals!.promptTokens, 100 + 10 + 200 + 999);
+    assert.equal(detail.totals!.completionTokens, 40 + 5 + 60 + 1);
+    assert.equal(detail.totals!.cacheReadTokens, 2048 + 100 + 50);
+    assert.equal(detail.totals!.cacheCreationTokens, 512);
+    // billed 分母：anthropic 2660 + hidden anthropic 110 + openai 200（seq 4 无 cache 不入）。
+    assert.equal(detail.totals!.billedInputTokens, 2660 + 110 + 200);
+    // 最近行：seq 最大且 usage 非空 → seq 4（seq 5 是 user、seq 6 无 usage）。
+    assert.equal(detail.last!.seq, 4);
+    assert.equal(detail.last!.provider, "openai");
+    assert.equal(detail.last!.modelName, null);
+    assert.equal(detail.last!.promptTokens, 999);
+    assert.equal(detail.last!.cacheReadTokens, null);
+    assert.equal(detail.last!.cacheCreationTokens, null);
+    assert.equal(detail.last!.atMs, now);
+    // 可见消息数：6 条里 hidden 1 条 → 5；本用例无 tool_use 块。
+    assert.equal(detail.visibleMessageCount, 5);
+    assert.equal(detail.toolUseCount, 0);
+  });
+
+  it("T-MD1: 最近行跳过末尾 usage 空行（abort）——取 seq 更小但 usage 非空那条", async () => {
+    const { ctx, session } = await seedSession();
+    const now = Date.now();
+    await seedMsg(ctx, session.id, 1, {
+      createdAtMs: now - 2000,
+      provider: "anthropic",
+      modelName: "claude-x",
+      usage: { prompt: 30, completion: 3, total: 33 },
+    });
+    // seq 2/3 均为 usage 空行（比如连续 abort）：最近行应回落 seq 1。
+    await seedMsg(ctx, session.id, 2, { createdAtMs: now - 1000 });
+    await seedMsg(ctx, session.id, 3, { createdAtMs: now });
+
+    const svc = createUsageStatsService(ctx.conn);
+    const detail = await svc.getSessionUsageDetail(session.id);
+    assert.equal(detail.last!.seq, 1);
+    assert.equal(detail.last!.modelName, "claude-x");
+    assert.equal(detail.totals!.assistantRows, 1);
+  });
+
+  it("T-MD2: 空会话 → last/totals 为 null、visibleMessageCount=0、toolUseCount=0", async () => {
+    const { ctx, project } = await seedSession();
+    const empty = await ctx.sessions.create(project.id, "md-empty");
+    const svc = createUsageStatsService(ctx.conn);
+    const detail = await svc.getSessionUsageDetail(empty.id);
+    assert.equal(detail.last, null);
+    assert.equal(detail.totals, null);
+    assert.equal(detail.visibleMessageCount, 0);
+    assert.equal(detail.toolUseCount, 0);
+  });
+
+  it("T-MD2: 可见消息数剔 hidden（不筛角色）；工具计数只数 assistant 的 tool_use 块且含 hidden 行", async () => {
+    const { ctx, session } = await seedSession();
+    const now = Date.now();
+    // user 文本行（计入可见数）。
+    await seedMsg(ctx, session.id, 1, {
+      createdAtMs: now - 5000,
+      role: "user",
+      usage: undefined,
+    });
+    // assistant 带 2 个 tool_use 块。
+    await seedMsg(ctx, session.id, 2, {
+      createdAtMs: now - 4000,
+      blocks: [
+        { type: "text", text: "call tools" },
+        toolUseBlock("t1"),
+        toolUseBlock("t2"),
+      ],
+      usage: { prompt: 10, completion: 4, total: 14 },
+    });
+    // user 回 tool_result（不是 tool_use，不计数）。
+    await seedMsg(ctx, session.id, 3, {
+      createdAtMs: now - 3000,
+      role: "user",
+      blocks: [
+        {
+          type: "tool_result",
+          toolUseId: "t1",
+          content: "ok",
+        },
+      ],
+    });
+    // hidden 的 assistant 带 1 个 tool_use：不计可见数、计入工具调用数。
+    await seedMsg(ctx, session.id, 4, {
+      createdAtMs: now - 2000,
+      hidden: true,
+      blocks: [toolUseBlock("t3")],
+      usage: { prompt: 5, completion: 2, total: 7 },
+    });
+
+    const svc = createUsageStatsService(ctx.conn);
+    const detail = await svc.getSessionUsageDetail(session.id);
+    // 可见数：4 条里 hidden 1 条 → 3（user 行照计——listVisibleSorted 同源不筛角色）。
+    assert.equal(detail.visibleMessageCount, 3);
+    // 工具计数：2（可见 assistant）+ 1（hidden assistant）= 3；tool_result 不数。
+    assert.equal(detail.toolUseCount, 3);
+    assert.equal(detail.totals!.assistantRows, 2);
+  });
+
+  it("空 sessionId 抛 chatInvalidArgument（不触达 SQL）", async () => {
+    const { ctx } = await seedSession();
+    const svc = createUsageStatsService(ctx.conn);
+    await assert.rejects(
+      () => svc.getSessionUsageDetail(""),
+      ChatError
+    );
   });
 });

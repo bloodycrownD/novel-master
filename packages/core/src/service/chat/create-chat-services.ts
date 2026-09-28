@@ -100,7 +100,7 @@ export function createChatServices(
     revisions: revisionRepo,
   });
 
-  const usageStats = new DefaultUsageStatsService(conn);
+  const usageStats = new DefaultUsageStatsService(conn, messages);
 
   return { projects, sessions, messages, usageStats };
 }

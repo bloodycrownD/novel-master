@@ -29,8 +29,13 @@ export {
 } from "./logic/resolve-tokenizer-family.js";
 export { countTextWithIncrementalTokenizer } from "./logic/count-text-with-tokenizer.js";
 export { resolveContextWindowTokens } from "./logic/resolve-context-window.js";
-export { formatCounterKindLabel } from "./logic/format-counter-kind-label.js";
-export { formatTokenSourceLabel } from "./logic/format-token-source-label.js";
+// token-source-label：badge 与完整占用标签的单源在 common/format-token-count.ts，
+// 此处经 logic 文件具名再导出（供 public/provider 链使用）。
+export {
+  formatTokenSourceBadge,
+  formatContextUsageLabel,
+  type TokenSourceBadge,
+} from "./logic/format-token-source-badge.js";
 export { seedContextWindowTokens } from "./logic/seed-context-window-tokens.js";
 export {
   CONTEXT_WINDOW_RULES,
@@ -39,7 +44,6 @@ export {
 export {
   countPromptLlmInput,
   countPromptLlmInputHeuristicOnly,
-  formatPromptTokenUsageLabel,
   type CountPromptLlmInputParams,
   type PromptTokenCountResult,
 } from "./logic/count-prompt-llm-input.js";

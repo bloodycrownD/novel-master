@@ -8,8 +8,13 @@ import { SqlTemplateParser } from "@/infra/sql-template/index.js";
 import { queryTemplate } from "@/infra/tdbc/logic/template-helper.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import type { Row } from "@/infra/tdbc/types.js";
+import { listVisibleSorted } from "@/domain/chat/logic/message-visible-floor.js";
 import { chatInvalidArgument } from "@/errors/chat-errors.js";
+import type { MessageService } from "../message.port.js";
 import type {
+  SessionUsageDetail,
+  SessionUsageLastRequest,
+  SessionUsageTotals,
   UsageStatsBucket,
   UsageStatsFilter,
   UsageStatsModelRow,
@@ -159,7 +164,15 @@ const ZERO_AGG_ROW: Row = {
 export class DefaultUsageStatsService implements UsageStatsService {
   private readonly parser = new SqlTemplateParser();
 
-  constructor(private readonly conn: TdbcConnection) {}
+  /**
+   * @param messages - 会话详情（getSessionUsageDetail）的可见消息计数与
+   *   tool_use 块计数走 messages service 的 `listBySession`（消息正文为
+   *   压缩 blob，SQL 数不了块，须 JS 解压后现算）；统计页既有查询不消费。
+   */
+  constructor(
+    private readonly conn: TdbcConnection,
+    private readonly messages: Pick<MessageService, "listBySession">
+  ) {}
 
   async getSummary(filter: UsageStatsFilter): Promise<UsageStatsSummary> {
     const { fromMs, toMs } = this.resolveOptionalRange(filter.range);
@@ -424,6 +437,97 @@ export class DefaultUsageStatsService implements UsageStatsService {
       {}
     );
     return rows.map((row) => String(row.vendor_model_id));
+  }
+
+  async getSessionUsageDetail(sessionId: string): Promise<SessionUsageDetail> {
+    if (typeof sessionId !== "string" || sessionId.length === 0) {
+      throw chatInvalidArgument(
+        `getSessionUsageDetail 须提供 sessionId，收到：${String(sessionId)}`
+      );
+    }
+    // 聚合（统计页同口径谓词 + session 界定）与最近行两条 SQL、消息列表
+    // 一次 JS 遍历（可见计数 + tool_use 计数共用）并行取数——弹窗打开时
+    // 一次现算，非热路径。
+    const [aggRows, lastRows, chatMessages] = await Promise.all([
+      queryTemplate<Row>(
+        this.conn,
+        this.parser,
+        `SELECT COUNT(*) AS calls,
+                COALESCE(SUM(prompt_tokens), 0) AS prompt_tokens,
+                COALESCE(SUM(completion_tokens), 0) AS completion_tokens,
+                COALESCE(SUM(cache_read_tokens), 0) AS cache_read_tokens,
+                COALESCE(SUM(cache_creation_tokens), 0) AS cache_creation_tokens,
+                COALESCE(${BILLED_INPUT_SUM_SQL}, 0) AS billed_input_tokens
+         FROM chat_message
+         WHERE ${USAGE_NOT_NULL_SQL} AND session_id = #{sessionId}`,
+        { sessionId }
+      ),
+      queryTemplate<Row>(
+        this.conn,
+        this.parser,
+        `SELECT seq, model_name, provider, prompt_tokens, completion_tokens,
+                cache_read_tokens, cache_creation_tokens, created_at_ms
+         FROM chat_message
+         WHERE ${USAGE_NOT_NULL_SQL} AND session_id = #{sessionId}
+         ORDER BY seq DESC
+         LIMIT 1`,
+        { sessionId }
+      ),
+      this.messages.listBySession(sessionId),
+    ]);
+    const agg = aggRows[0];
+    const calls = Number(agg?.calls ?? 0);
+    const totals: SessionUsageTotals | null =
+      calls > 0
+        ? {
+            promptTokens: Number(agg!.prompt_tokens),
+            completionTokens: Number(agg!.completion_tokens),
+            cacheReadTokens: Number(agg!.cache_read_tokens),
+            cacheCreationTokens: Number(agg!.cache_creation_tokens),
+            billedInputTokens: Number(agg!.billed_input_tokens),
+            assistantRows: calls,
+          }
+        : null;
+    const lastRow = lastRows[0];
+    const last: SessionUsageLastRequest | null =
+      lastRow == null
+        ? null
+        : {
+            seq: Number(lastRow.seq),
+            modelName:
+              lastRow.model_name == null
+                ? null
+                : String(lastRow.model_name),
+            provider:
+              lastRow.provider == null ? null : String(lastRow.provider),
+            promptTokens: Number(lastRow.prompt_tokens ?? 0),
+            completionTokens: Number(lastRow.completion_tokens ?? 0),
+            cacheReadTokens:
+              lastRow.cache_read_tokens == null
+                ? null
+                : Number(lastRow.cache_read_tokens),
+            cacheCreationTokens:
+              lastRow.cache_creation_tokens == null
+                ? null
+                : Number(lastRow.cache_creation_tokens),
+            atMs: Number(lastRow.created_at_ms),
+          };
+    // 可见消息数：listVisibleSorted 同源口径（只剔 hidden，不筛角色）。
+    const visibleMessageCount = listVisibleSorted(chatMessages).length;
+    // 工具调用数：会话内 assistant 消息 tool_use 块总数（含 hidden 行——
+    // 与 totals 同为累计口径；user 侧 tool_result 不计）。
+    let toolUseCount = 0;
+    for (const message of chatMessages) {
+      if (message.role !== "assistant") {
+        continue;
+      }
+      for (const block of message.content.blocks) {
+        if (block.type === "tool_use") {
+          toolUseCount += 1;
+        }
+      }
+    }
+    return { last, totals, visibleMessageCount, toolUseCount };
   }
 
   /**

@@ -10,10 +10,21 @@
  * message-token-cache Step 4 / T-TC6：读口已加 300ms trailing debounce + 同参
  * 在途合并。扩展用例验证：rapid 双触发合并一次底层计算；并发 5 触发在途合并
  * 一次；trailing 语义（窗口内不执行、窗口过后必有最终一次、不吞任何一击）。
+ *
+ * token-source-label T-TL3：label 已由 main 的 buildTokenStats 经 core
+ * formatTokenSourceBadge/formatContextUsageLabel 拼好随 stats 下发
+ * （PromptChatTokenStatsResponse.label），deprecated 的
+ * formatChatTokenStatsLabel/loadChatPromptTokenLabelResilient 链已删除；
+ * renderer 纯渲染 stats.label（X1 清零 + 无 `~` 拼装残留）。
  */
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { after, before, beforeEach, describe, it } from "node:test";
-import { sessionApiPromptTokenCache } from "@novel-master/core/provider";
+import {
+  formatContextUsageLabel,
+  formatTokenSourceBadge,
+  sessionApiPromptTokenCache,
+} from "@novel-master/core/provider";
 import { getDesktopRuntime } from "../src/main/runtime/desktop-runtime-singleton.js";
 import { handleAgentSetCurrent } from "../src/main/ipc/handlers/agent.js";
 import {
@@ -28,7 +39,6 @@ import {
 } from "../src/main/ipc/handlers/sessions.js";
 import {
   chatPromptTokenDebounceExecCountForTests,
-  formatChatTokenStatsLabel,
   loadChatPromptTokenStats,
   resetChatPromptTokenDebounceForTests,
   withRealFallbackCounter,
@@ -109,7 +119,7 @@ describe("chat-prompt-tokens.service", () => {
     await teardownDesktopDbTestEnv(tempDir);
   });
 
-  it("T-T9: source===api ⇒ estimated:false && counterKind:api（标签「上次请求」）", async () => {
+  it("T-T9: source===api ⇒ estimated:false && counterKind:api（label 记号「远程 =」）", async () => {
     sessionApiPromptTokenCache.set(sessionId, {
       promptTokens: 24_000,
       updatedAt: Date.now(),
@@ -126,12 +136,18 @@ describe("chat-prompt-tokens.service", () => {
     assert.equal(stats.tokenCount, 24_000);
     assert.equal(stats.source, "api");
 
-    const label = formatChatTokenStatsLabel(stats);
-    assert.match(label, /· 上次请求$/);
-    assert.doesNotMatch(label, /^~/);
+    // T-TL3 对拍：main 下发的 label 与 core 单源（badge + 拼装）重算完全一致。
+    const expected = formatContextUsageLabel(
+      stats.tokenCount,
+      stats.contextWindow,
+      formatTokenSourceBadge(stats.source, stats.counterKind, stats.estimated),
+    );
+    assert.equal(stats.label, expected);
+    // api 真值 → 远程 =（无 ~，无「上次请求」旧后缀）。
+    assert.match(stats.label, /^远程 = \d+% 24K\/128K$/);
   });
 
-  it("T-T9b: 无 API 占用 ⇒ source===local（标签「预估」）", async () => {
+  it("T-T9b: 无 API 占用 ⇒ source===local（label 按分词器档位落记号）", async () => {
     sessionApiPromptTokenCache.clearAll();
 
     const rt = await getDesktopRuntime();
@@ -142,10 +158,17 @@ describe("chat-prompt-tokens.service", () => {
 
     assert.equal(stats.source, "local");
     // 本地档的 counterKind 取决于模型（tiktoken / claude / heuristic），
-    // 但一定不是 api——两态标签只看 source，与分词器档位解耦。
+    // 但一定不是 api——记号不再只看 source，与分词器档位联动。
     assert.notEqual(stats.counterKind, "api");
-    const label = formatChatTokenStatsLabel(stats);
-    assert.match(label, /· 预估$/);
+    // gpt-4o 在 node 驱动下报 tiktoken/false → 精确档记号「gpt =」。
+    assert.equal(stats.counterKind, "tiktoken");
+    assert.match(stats.label, /^gpt = \d+% \S+\/128K$/);
+    const expected = formatContextUsageLabel(
+      stats.tokenCount,
+      stats.contextWindow,
+      formatTokenSourceBadge(stats.source, stats.counterKind, stats.estimated),
+    );
+    assert.equal(stats.label, expected);
   });
 
   it("T-T9c: 无模型早退 ⇒ 真 cl100k 计数，而非 ceil(chars/3.35) 折算", async () => {
@@ -188,12 +211,12 @@ describe("chat-prompt-tokens.service", () => {
         sessionId,
       });
 
-      // 语义与 UI 文案不变：仍然是「本地预估 + heuristic 档」。
+      // 语义与 UI 文案不变：仍然是「本地计数 + heuristic 兜底档」→ 记号 gpt ≈。
       assert.equal(stats.source, "local");
       assert.equal(stats.counterKind, "heuristic");
       assert.equal(stats.estimated, true);
       assert.equal(stats.contextWindow, undefined);
-      assert.match(formatChatTokenStatsLabel(stats), /^~/);
+      assert.match(stats.label, /^gpt ≈ \S+ tokens$/);
       assert.ok(stats.tokenCount > 0);
 
       // 读数本身已换成真分词器：同一段文本，真 cl100k 计数与精确档同量级（约 1:1）；
@@ -253,6 +276,39 @@ describe("chat-prompt-tokens.service", () => {
     assert.ok(
       registry.heuristic.countText(chinese) > chinese.length / 3.35,
       "兜底 registry 的 heuristic 像是退回 ceil(chars/3.35) 字符折算了",
+    );
+  });
+
+  it("T-TL3: renderer 纯渲染 stats.label——X1 清零、无 ~ 拼装残留、UI 渲染口径一致", async () => {
+    const src = await readFile(
+      new URL(
+        "../renderer/features/chat/SessionDetailDrawer.tsx",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+    // X1：renderer 不能直连 @novel-master/core（label 拼装已上移 main）。
+    assert.equal(
+      src.includes("@novel-master/core"),
+      false,
+      "SessionDetailDrawer 不应 import @novel-master/core（X1）",
+    );
+    // 旧「预估/~」体系清零：无 ~ 字面量、无本地拼装函数、无旧标签函数名。
+    assert.equal(src.includes("~"), false, "SessionDetailDrawer 残留 ~ 拼装");
+    assert.equal(
+      src.includes("tokenCountLabel"),
+      false,
+      "本地拼装 tokenCountLabel 应已删除",
+    );
+    assert.equal(
+      src.includes("formatTokenSourceLabel"),
+      false,
+      "旧 formatTokenSourceLabel 引用应已删除",
+    );
+    // UI 渲染口径：头部直接渲染 main 下发的 stats.label（渲染与下发一致）。
+    assert.ok(
+      src.includes("{tokenStats.label}"),
+      "头部应直接渲染 stats.label",
     );
   });
 

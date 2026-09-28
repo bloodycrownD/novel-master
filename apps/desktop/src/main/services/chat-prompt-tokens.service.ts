@@ -15,7 +15,8 @@ import { messageBodyText } from "@novel-master/core/prompt";
 
 import {
   countPromptLlmInputHeuristicOnly,
-  formatTokenSourceLabel,
+  formatContextUsageLabel,
+  formatTokenSourceBadge,
   resolvePromptTokensWithBackfill,
   resolveTokenCounterModeForModel,
   serializePromptLlmInput,
@@ -25,7 +26,6 @@ import {
 import { countTextWithDefaultEncoding } from "@novel-master/tokenizer-driver-node";
 import type { PromptChatTokenStatsResponse } from "../../../shared/ipc-types.js";
 import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
-import { formatTokenCount } from "@novel-master/core/common";
 import {
   buildSessionPromptInput,
   type SessionPromptScope,
@@ -115,7 +115,11 @@ export function withRealFallbackCounter(
   };
 }
 
-/** 统计响应装配：`source` 原样带出，标签由 {@link formatChatTokenStatsLabel} 拼。 */
+/**
+ * 统计响应装配：main 在产出时把完整 label 拼好（core 的
+ * {@link formatTokenSourceBadge} + {@link formatContextUsageLabel} 单源），
+ * renderer 纯渲染 `stats.label`，不再本地拼装（X1：renderer 不能 import core）。
+ */
 function buildTokenStats(
   tokenCount: number,
   estimated: boolean,
@@ -127,6 +131,8 @@ function buildTokenStats(
     contextWindow != null && contextWindow > 0
       ? Math.min(999, Math.round((tokenCount / contextWindow) * 100))
       : undefined;
+  const badge = formatTokenSourceBadge(source, counterKind, estimated);
+  const label = formatContextUsageLabel(tokenCount, contextWindow, badge);
   return {
     tokenCount,
     contextWindow,
@@ -134,27 +140,8 @@ function buildTokenStats(
     estimated,
     counterKind,
     source,
+    label,
   };
-}
-
-/**
- * 组装 meta bar 的 token 标签。占用来源后缀由 core 的
- * {@link formatTokenSourceLabel} 统一给出（`api` → 「上次请求」，其余 → 「预估」），
- * 本文件不再自备一份映射。
- */
-export function formatChatTokenStatsLabel(
-  stats: PromptChatTokenStatsResponse,
-): string {
-  const prefix = stats.estimated ? "~" : "";
-  const current = formatTokenCount(stats.tokenCount);
-  const suffix = formatTokenSourceLabel(stats.source);
-  if (stats.contextWindow == null || stats.contextWindow <= 0) {
-    return stats.estimated
-      ? `${prefix}${current} tokens (est.) · ${suffix}`
-      : `${current} tokens · ${suffix}`;
-  }
-  const pct = stats.pct ?? 0;
-  return `${prefix}${pct}% • ${current}/${formatTokenCount(stats.contextWindow)} · ${suffix}`;
 }
 
 // 共用的会话输入快照：避免主路径和 fallback 各自重复读取 sessionConfig。
@@ -444,11 +431,6 @@ export async function loadChatPromptTokenStatsResilient(
   }
 }
 
-/** @deprecated Use loadChatPromptTokenStatsResilient — kept for label-only callers. */
-export async function loadChatPromptTokenLabelResilient(
-  runtime: DesktopNovelMasterRuntime,
-  scope: SessionPromptScope,
-): Promise<string> {
-  const stats = await loadChatPromptTokenStatsResilient(runtime, scope);
-  return formatChatTokenStatsLabel(stats);
-}
+// 此前的 deprecated 链（loadChatPromptTokenLabelResilient + formatChatTokenStatsLabel）
+// 已随 token-source-label 收敛删除：label 现由 buildTokenStats 产出并随 stats 下发
+// （PromptChatTokenStatsResponse.label），零生产消费方，无需迁移。

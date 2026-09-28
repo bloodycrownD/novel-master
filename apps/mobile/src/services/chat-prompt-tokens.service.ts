@@ -19,14 +19,19 @@ import {resolveSavedModelId} from '@novel-master/core/agent';
 import {messageBodyText} from '@novel-master/core/prompt';
 
 import {
-  formatTokenSourceLabel,
   resolvePromptTokensWithBackfill,
   resolveTokenCounterModeForModel,
   serializePromptLlmInput,
 } from '@novel-master/core/provider';
 import {countTextWithDefaultEncoding} from '@novel-master/tokenizer-driver-rn/encoding';
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
-import {formatPromptTokenUsageLabel} from '@novel-master/core/common';
+// badge/label 走 common 入口取真身实现（token-source-label 单源；本套件的
+// jest 会整体 mock `@novel-master/core/provider`，经 common 直取可让 T-TL4
+// 对拍 core 真实现而非 mock 行为）。
+import {
+  formatContextUsageLabel,
+  formatTokenSourceBadge,
+} from '@novel-master/core/common';
 import {
   buildSessionPromptInput,
   type SessionPromptScope,
@@ -52,8 +57,9 @@ function countFallbackTokens(
 }
 
 /**
- * 占用来源两态标签（`api` → 「上次请求」，其余 → 「预估」）由 core 的
- * `formatTokenSourceLabel` 统一给出，本文件不再自备一份映射。
+ * 占用标签（源记号 + =/≈ 连接符 + pct + 占比）由 core 的
+ * `formatTokenSourceBadge` + `formatContextUsageLabel` 统一给出，
+ * 本文件不再自备一份映射（与 desktop main 的 buildTokenStats 同源同形）。
  */
 function formatChatTokenLabel(
   result: {
@@ -64,13 +70,15 @@ function formatChatTokenLabel(
   },
   contextWindow: number | undefined,
 ): string {
-  const base = formatPromptTokenUsageLabel(result.tokenCount, contextWindow, {
-    estimated: result.estimated,
-  });
-  return `${base} · ${formatTokenSourceLabel(result.source)}`;
+  const badge = formatTokenSourceBadge(
+    result.source,
+    result.counterKind,
+    result.estimated,
+  );
+  return formatContextUsageLabel(result.tokenCount, contextWindow, badge);
 }
 
-/** Token label for chat header (e.g. `88% • 327/128K · gemma` 或 `· api`). */
+/** Token label for chat header (e.g. `gemma = 19% 24K/128K` 或 `远程 = 19% 24K/128K`). */
 export async function loadChatPromptTokenLabel(
   runtime: MobileNovelMasterRuntime,
   scope: SessionPromptScope,

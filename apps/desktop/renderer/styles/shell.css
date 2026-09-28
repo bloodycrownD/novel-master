@@ -3901,6 +3901,17 @@ html[data-theme="dark"] .conversation-tab.is-active {
   padding: 6px 16px;
   background: var(--surface);
   border-bottom: 1px solid var(--border-light);
+  /* metric-detail-sheet：button 化后保留原视觉，补可点击交互态 */
+  width: 100%;
+  border-left: none;
+  border-right: none;
+  border-top: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.agent-stream-metrics-bar:hover {
+  background: var(--background);
 }
 
 .agent-stream-metrics-bar__line {
@@ -3908,6 +3919,77 @@ html[data-theme="dark"] .conversation-tab.is-active {
   font-size: 12px;
   line-height: 1.45;
   color: var(--text-secondary);
+}
+
+/* metric-detail-sheet 用量详情弹窗（picker-modal 面板风格基类复用） */
+.metrics-detail-popover {
+  position: fixed;
+  z-index: 320;
+  width: min(320px, calc(100vw - 32px));
+  max-height: min(440px, 80vh);
+  overflow-y: auto;
+  background: var(--surface);
+  border-radius: 16px;
+  box-shadow: var(--shadow-elevated);
+  border: 1px solid var(--border-light);
+  padding: 12px 16px 10px;
+}
+
+.metrics-detail-popover__title {
+  font-size: 15px;
+  font-weight: 600;
+  padding-bottom: 6px;
+}
+
+.metrics-detail-popover__section-title {
+  margin-top: 10px;
+  padding-bottom: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border-light);
+}
+
+.metrics-detail-popover__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 5px 0;
+  font-size: 13px;
+}
+
+.metrics-detail-popover__row-label {
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.metrics-detail-popover__row-value {
+  color: var(--text);
+  font-weight: 500;
+  text-align: right;
+}
+
+.metrics-detail-popover__empty,
+.metrics-detail-popover__loading {
+  padding: 8px 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.metrics-detail-popover__error {
+  padding: 8px 0;
+  font-size: 13px;
+  color: var(--danger, #d33);
+}
+
+.metrics-detail-popover__footnote {
+  margin-top: 10px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border-light);
+  font-size: 11px;
+  color: var(--text-secondary);
+  opacity: 0.85;
 }
 
 .chat-messages__empty {

@@ -1,5 +1,7 @@
-import {formatPromptTokenUsageLabel} from '@novel-master/core/common';
-import {formatCounterKindLabel} from '@novel-master/core/provider';
+import {
+  formatContextUsageLabel,
+  formatTokenSourceBadge,
+} from '@novel-master/core/common';
 import {
   loadChatPromptTokenLabel,
   loadChatPromptTokenLabelResilient,
@@ -22,6 +24,8 @@ jest.mock('@novel-master/tokenizer-driver-rn/encoding', () => ({
     mockCountTextWithDefaultEncoding(text),
 }));
 
+// badge/label 走 `@novel-master/core/common` 取 core 真实现（不被本 mock 覆盖），
+// 因此本套件断言的标签字符串与 desktop 测试同源对拍（token-source-label T-TL4）。
 jest.mock('@novel-master/core/provider', () => ({
   resolvePromptTokensWithBackfill: (...args: unknown[]) =>
     mockResolvePromptTokensWithBackfill(...args),
@@ -29,10 +33,6 @@ jest.mock('@novel-master/core/provider', () => ({
     mockResolveTokenCounterModeForModel(...args),
   serializePromptLlmInput: (...args: unknown[]) =>
     mockSerializePromptLlmInput(...args),
-  formatTokenSourceLabel: (source: string) =>
-    source === 'api' ? '上次请求' : '预估',
-  formatCounterKindLabel: (kind: string) =>
-    kind === 'api' || kind === 'heuristic' ? '自动' : kind,
 }));
 
 jest.mock('@novel-master/core/agent', () => ({
@@ -93,17 +93,27 @@ describe('chat-prompt-tokens.service', () => {
     mockCountTextWithDefaultEncoding.mockClear();
   });
 
-  it('formatPromptTokenUsageLabel shows percentage with context window', () => {
-    expect(formatPromptTokenUsageLabel(64000, 128000)).toBe('50% • 64K/128K');
-  });
-
-  it('formatPromptTokenUsageLabel marks estimated fallback', () => {
+  it('T-TL4 对拍：service 输出与 core 单源（badge + label）重算一致（家族精确档）', () => {
+    const result = {
+      tokenCount: 24_000,
+      estimated: false,
+      counterKind: 'gemma',
+      source: 'local' as const,
+    };
+    const contextWindow = 128_000;
+    const badge = formatTokenSourceBadge(
+      result.source,
+      result.counterKind,
+      result.estimated,
+    );
+    // 与 desktop T-T9b 同口径：local + 家族名 + est=false → 家族展示名 =。
+    expect(badge).toEqual({mark: 'gemma', connector: '='});
     expect(
-      formatPromptTokenUsageLabel(1000, undefined, {estimated: true}),
-    ).toBe('~1K tokens (est.)');
+      formatContextUsageLabel(result.tokenCount, contextWindow, badge),
+    ).toBe('gemma = 19% 24K/128K');
   });
 
-  it('loadChatPromptTokenLabel appends local-source suffix (预估)', async () => {
+  it('loadChatPromptTokenLabel 家族精确档：gemma = 19% 24K/128K', async () => {
     mockBuildSessionPromptInput.mockResolvedValue({
       definition: {model: 'openai/gpt-4o'},
       layout: {persist: [], dynamic: []},
@@ -124,7 +134,7 @@ describe('chat-prompt-tokens.service', () => {
       projectId: 'p1',
     });
 
-    expect(label).toBe('19% • 24K/128K · 预估');
+    expect(label).toBe('gemma = 19% 24K/128K');
     expect(mockResolvePromptTokensWithBackfill).toHaveBeenCalledWith(
       's1',
       // rawMessages 已无实际用途（回填废弃），仅签名兼容保留；mock bundle 不携带时为 undefined
@@ -135,7 +145,7 @@ describe('chat-prompt-tokens.service', () => {
     );
   });
 
-  it('T-T9: source===api ⇒ 标签「上次请求」且无估算前缀', async () => {
+  it('T-T9: source===api ⇒ label 记号「远程 =」且无估算符', async () => {
     mockBuildSessionPromptInput.mockResolvedValue({
       definition: {model: 'openai/gpt-4o'},
       layout: {persist: [], dynamic: []},
@@ -155,7 +165,7 @@ describe('chat-prompt-tokens.service', () => {
       projectId: 'p1',
     });
 
-    expect(label).toBe('19% • 24K/128K · 上次请求');
+    expect(label).toBe('远程 = 19% 24K/128K');
   });
 
   it('T-S6: service 把 buildSessionPromptInput 返回的 rawMessages 透传给 resolvePromptTokensWithBackfill', async () => {
@@ -198,7 +208,7 @@ describe('chat-prompt-tokens.service', () => {
     });
   });
 
-  it('无模型早退：改走 cl100k 真计数，不再走 heuristic.countText', async () => {
+  it('无模型早退：改走 cl100k 真计数，label 记号 gpt ≈', async () => {
     mockBuildSessionPromptInput.mockResolvedValue({
       definition: {},
       layout: {persist: [], dynamic: []},
@@ -215,7 +225,10 @@ describe('chat-prompt-tokens.service', () => {
     // 折算 port（stub 里恒返回 1000）一次都不该被碰——碰了就说明改造没生效。
     expect(runtime.tokenCounters.heuristic.countText).not.toHaveBeenCalled();
     expect(mockCountTextWithDefaultEncoding).toHaveBeenCalledWith('serialized');
-    expect(label).toBe('~2.3K tokens (est.) · 预估');
+    // 无窗口 + heuristic 兜底 → gpt ≈ N tokens（无 ~ 前缀、无 (est.) 后缀）。
+    expect(label).toBe('gpt ≈ 2.3K tokens');
+    expect(label).not.toMatch(/^~/);
+    expect(label).not.toContain('预估');
   });
 
   it('T7: loadChatPromptTokenLabelResilient 构建失败时兜底也改走真分词器', async () => {
@@ -241,7 +254,7 @@ describe('chat-prompt-tokens.service', () => {
     expect(mockCountTextWithDefaultEncoding).toHaveBeenCalledWith(
       'user: hello',
     );
-    expect(label).toBe('~2.3K tokens (est.) · 预估');
+    expect(label).toBe('gpt ≈ 2.3K tokens');
   });
 
   it('兜底：真分词器不可用（编码表建不起来）时才退回 heuristic.countText', async () => {
@@ -262,12 +275,19 @@ describe('chat-prompt-tokens.service', () => {
     expect(runtime.tokenCounters.heuristic.countText).toHaveBeenCalledWith(
       'serialized',
     );
-    expect(label).toBe('~1K tokens (est.) · 预估');
+    expect(label).toBe('gpt ≈ 1K tokens');
   });
 
-  it('T-S7: formatCounterKindLabel maps api/heuristic to 自动', () => {
-    expect(formatCounterKindLabel('api')).toBe('自动');
-    expect(formatCounterKindLabel('heuristic')).toBe('自动');
-    expect(formatCounterKindLabel('tiktoken')).toBe('tiktoken');
+  it('T-S7（重写）：tiktoken 精确档与 heuristic 兜底档的记号分档（旧 formatCounterKindLabel 已退役）', () => {
+    // 旧断言（api/heuristic → 「自动」）随 format-counter-kind-label 退役删除；
+    // 新体系下同输入的记号断言（与 core T-TL1 单源映射一致）。
+    expect(formatTokenSourceBadge('local', 'tiktoken', false)).toEqual({
+      mark: 'gpt',
+      connector: '=',
+    });
+    expect(formatTokenSourceBadge('local', 'heuristic', true)).toEqual({
+      mark: 'gpt',
+      connector: '≈',
+    });
   });
 });

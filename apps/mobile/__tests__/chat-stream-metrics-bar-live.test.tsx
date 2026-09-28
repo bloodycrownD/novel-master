@@ -5,6 +5,8 @@
  * - starting 阶段被杀的 interrupted（计时与字数皆零）：无内容不显示空指标条；
  * - 无单元（宽限销毁后）：退 manager 级 settled 投影「上次生成」不断源；
  * - 活跃 run：快照 live 计时显示「生成中」（既有行为不回归）。
+ * - metric-detail-sheet：指标条 onPress 打开用量 sheet（visible 翻真自取），
+ *   弹窗状态独立于 250ms tick（metrics props 引用不随弹窗开关变化）。
  */
 import React from 'react';
 import {afterEach, beforeEach, describe, expect, it, jest} from '@jest/globals';
@@ -25,9 +27,14 @@ const mockRunAgentTurn = jest.fn(
 );
 
 let mockManager: SessionStreamUnitManager | undefined;
+/** MetricDetailSheet 经 useRuntime().usageStats 自取（弹窗用例注入 stub）。 */
+const mockGetSessionUsageDetail = jest.fn();
 
 jest.mock('../src/hooks/useRuntime', () => ({
-  useRuntime: () => ({sessionStreamUnitManager: mockManager}),
+  useRuntime: () => ({
+    sessionStreamUnitManager: mockManager,
+    usageStats: {getSessionUsageDetail: mockGetSessionUsageDetail},
+  }),
 }));
 
 jest.mock('../src/theme/ThemeProvider', () => ({
@@ -36,8 +43,28 @@ jest.mock('../src/theme/ThemeProvider', () => ({
   }),
 }));
 
+// AppModal 走 RN 原生 Modal，jest 环境渲染不出内容，换透传 View
+// （metric-detail-sheet 的 sheet 用例需要，范式同 directory-rule-sheet.test）。
+jest.mock('../src/components/ui/AppModal', () => {
+  const mockReact = require('react');
+  return {
+    AppModal: ({
+      children,
+      visible,
+    }: {
+      children?: React.ReactNode;
+      visible?: boolean;
+    }) =>
+      visible
+        ? mockReact.createElement('View', {testID: 'app-modal'}, children)
+        : null,
+  };
+});
+
 // eslint-disable-next-line import/first
 import {ChatStreamMetricsBarLive} from '../src/components/chat/ChatStreamMetricsBarLive';
+// eslint-disable-next-line import/first
+import {ChatStreamMetricsBar} from '../src/components/chat/ChatStreamMetricsBar';
 
 function buildHarness(): {
   manager: SessionStreamUnitManager;
@@ -96,6 +123,7 @@ describe('ChatStreamMetricsBarLive 双源（快照优先 / settled 投影兜底�
   afterEach(() => {
     mockManager?.dispose();
     mockManager = undefined;
+    mockGetSessionUsageDetail.mockClear();
     jest.useRealTimers();
     setMobileAgentActive(false);
   });
@@ -321,6 +349,80 @@ describe('ChatStreamMetricsBarLive 双源（快照优先 / settled 投影兜底�
     const afterRecovery = readLine();
     expect(afterRecovery).toMatch(/输出 1,206 t/);
     expect(afterRecovery).not.toMatch(/\d{3,} t\/s/); // 无三位数以上尖刺
+
+    act(() => {
+      tree.unmount();
+    });
+  });
+
+  it('metric-detail-sheet：onPress 打开用量 sheet（按 sessionId 自取）；弹窗开关不改指标条 metrics props 引用', async () => {
+    const h = buildHarness();
+    mockManager = h.manager;
+    // 冻结指标现场（settled 投影兜底也行，这里用快照优先路径）。
+    const unit = mockManager.adoptInterruptedUnit('s1', 'p1');
+    unit.hydrateFromRunState({
+      runId: 'run-old',
+      startedAtMs: 2_000,
+      settledAtMs: 5_000,
+      metrics: {
+        textChars: 10,
+        thinkingChars: 0,
+        completionTokens: 8,
+        tokenSource: 'usage',
+      },
+      partialText: 'x',
+      partialThinking: '',
+      pendingChildren: [],
+    });
+    mockGetSessionUsageDetail.mockResolvedValue({
+      last: {
+        seq: 3,
+        modelName: 'claude-x',
+        provider: 'anthropic',
+        promptTokens: 100,
+        completionTokens: 40,
+        cacheReadTokens: 2048,
+        cacheCreationTokens: null,
+        atMs: 1,
+      },
+      totals: {
+        promptTokens: 300,
+        completionTokens: 80,
+        cacheReadTokens: 2048,
+        cacheCreationTokens: 512,
+        billedInputTokens: 2860,
+        assistantRows: 3,
+      },
+      visibleMessageCount: 5,
+      toolUseCount: 2,
+    });
+
+    let tree!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(
+        <ChatStreamMetricsBarLive agentRunning={false} sessionId="s1" />,
+      );
+    });
+    const barBefore = tree.root.findByType(ChatStreamMetricsBar);
+    const metricsBefore = barBefore.props.metrics;
+    // 打开前 sheet 不可见（AppModal mock visible=false 渲 null，无取数）。
+    expect(mockGetSessionUsageDetail).not.toHaveBeenCalled();
+
+    await act(async () => {
+      barBefore.props.onPress();
+    });
+    // sheet 打开：按 Live 层的 sessionId 自取并渲染两段内容。
+    expect(mockGetSessionUsageDetail).toHaveBeenCalledWith('s1');
+    const texts = tree.root
+      .findAllByType(Text)
+      .map(node => String(node.props.children));
+    expect(texts.join()).toContain('用量详情');
+    expect(texts.join()).toContain('claude-x');
+    // 指标条 metrics props 值未变（弹窗状态独立 state，不进 metrics 快照；
+    // 引用每帧重建是 Live 既有行为——250ms tick 亦然，隔离语义取值相等）。
+    const barAfter = tree.root.findByType(ChatStreamMetricsBar);
+    expect(barAfter.props.metrics).toStrictEqual(metricsBefore);
+    expect(barAfter.props.interrupted).toBe(true);
 
     act(() => {
       tree.unmount();

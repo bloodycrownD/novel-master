@@ -134,6 +134,58 @@ export interface UsageStatsRequestPage {
   readonly total: number;
 }
 
+/**
+ * 会话详情 · 最近一次请求：会话内 `seq` 最大且 usage 非空的 assistant 行
+ * （OpenAI/Gemini 等无 cache_creation 概念的协议 cache 列为 null，展示层
+ * 出「—」；`atMs` 为该行落库时刻，本地时区展示）。
+ */
+export interface SessionUsageLastRequest {
+  readonly seq: number;
+  readonly modelName: string | null;
+  readonly provider: string | null;
+  readonly promptTokens: number;
+  readonly completionTokens: number;
+  readonly cacheReadTokens: number | null;
+  readonly cacheCreationTokens: number | null;
+  readonly atMs: number;
+}
+
+/**
+ * 会话详情 · 会话累计：`assistant` 且 usage 非空的全量行求和（统计页同口径
+ * 谓词——hidden 行与子会话行照常计入）；`billedInputTokens` 与
+ * `UsageStatsSummary` 同口径（anthropic 加回 cache 双列，仅 cache 列非 NULL
+ * 的行入分母求和）。
+ */
+export interface SessionUsageTotals {
+  readonly promptTokens: number;
+  readonly completionTokens: number;
+  readonly cacheReadTokens: number;
+  readonly cacheCreationTokens: number;
+  readonly billedInputTokens: number;
+  /** 入累计的 assistant 请求数（一条 assistant 消息 = 一次 LLM 请求）。 */
+  readonly assistantRows: number;
+}
+
+/**
+ * 会话维度用量详情（metric-detail-sheet 弹窗数据）。**不含 contextUsage**
+ * ——`resolveCurrentPromptTokens` 的 params 组装链只存在于双端 app 层，core
+ * 装配注入不了；弹窗的「当前上下文占用」由端侧直接复用 chip 现有读数
+ * （spec-check 第 1 轮 P0-2 拍板）。空会话返回
+ * `{last: null, totals: null, visibleMessageCount: 0, toolUseCount: 0}`。
+ */
+export interface SessionUsageDetail {
+  readonly last: SessionUsageLastRequest | null;
+  readonly totals: SessionUsageTotals | null;
+  /** 可见口径消息数（`listVisibleSorted` 同源：hidden 剔除，不筛角色）。 */
+  readonly visibleMessageCount: number;
+  /**
+   * 会话内 assistant 消息 `tool_use` 块总数（含 hidden 行——累计口径）。
+   * 消息正文为压缩 blob，SQL 数不了块，由服务注入的 messages service
+   * `listBySession` 后 JS 现算（弹窗打开时一次，非热路径）。
+   */
+  readonly toolUseCount: number;
+}
+
 /** Token 用量统计聚合服务。 */
 export interface UsageStatsService {
   /** 范围内汇总（`filter.range` 缺省时为全历史）。 */
@@ -175,4 +227,12 @@ export interface UsageStatsService {
    * 「其他」桶由 UI 侧补齐。
    */
   listModels(): Promise<string[]>;
+
+  /**
+   * 会话维度用量详情（metric-detail-sheet 弹窗）：最近一条 usage 行 +
+   * 会话累计（含 hidden，统计页同口径谓词 + `session_id` 界定）+ 可见
+   * 消息数 + 工具调用数。不进 `UsageStatsFilter`——filter 服务统计页
+   * 时间轴语义，会话详情是独立读型（spec 拍板）。
+   */
+  getSessionUsageDetail(sessionId: string): Promise<SessionUsageDetail>;
 }

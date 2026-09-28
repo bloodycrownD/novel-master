@@ -27,7 +27,7 @@ export interface ChatAgentMeta {
   readonly agentId: string | undefined;
   readonly agentName: string;
   readonly modelLabel: string;
-  /** Full prompt token estimate (e.g. `2.5K / 12K tokens`). */
+  /** Full prompt token label（core 单源拼装，e.g. `gemma = 19% 24K/128K`、`远程 = 19% 24K/128K`、`gpt ≈ 2.3K tokens`）. */
   readonly tokenLabel: string;
   /** Agent has dedicated model pin (no workspace suffix). */
   readonly hasDedicatedModel: boolean;
