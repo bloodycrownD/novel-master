@@ -168,6 +168,13 @@ export class SqliteMessageRepository implements MessageRepository {
   private static readonly ROW_PARSE_CHUNK = 50;
 
   /**
+   * batchInsert 参数构造分片大小：每片至多构造 200 条（toMessageParams 内
+   * 含 encodeMessageContent 同步压缩），片间让步一次——fork/copy 大会话
+   * 时压缩成本按片摊开，不长时间占住 JS 线程。
+   */
+  private static readonly BATCH_BUILD_CHUNK = 200;
+
+  /**
    * @param conn - 数据库连接。
    * @param yieldFn - 列表行解析（rowToMessage 含 content_json JSON.parse）的
    *   片间让步函数（rollback-large-jank Step 2）：缺省不传 → 直通同步 map，
@@ -355,10 +362,23 @@ export class SqliteMessageRepository implements MessageRepository {
     if (messages.length === 0) {
       return;
     }
-    await this.conn.batch(
-      MESSAGE_INSERT_SQL,
-      messages.map((m) => toMessageParams(m))
-    );
+    // 参数构造阶段分片（ic-30）：toMessageParams 内逐条 encodeMessageContent
+    // 同步压缩，5000+ 条一次性构造会把主线程压成单个长任务。200 条一片、
+    // 片间 await this.yieldFn?.() 让步；无 yieldFn 时（desktop/cli/测试缺省）
+    // 让步退化成 await undefined，构造仍是同步一次完成，行为与现状一致。
+    // 让步函数与 mapRows 共用同一个（构造器注入），两端装配只注入一处即可。
+    const chunkSize = SqliteMessageRepository.BATCH_BUILD_CHUNK;
+    const parameters: unknown[][] = [];
+    for (let start = 0; start < messages.length; start += chunkSize) {
+      const end = Math.min(start + chunkSize, messages.length);
+      for (let i = start; i < end; i++) {
+        parameters.push(toMessageParams(messages[i]!));
+      }
+      if (end < messages.length) {
+        await this.yieldFn?.();
+      }
+    }
+    await this.conn.batch(MESSAGE_INSERT_SQL, parameters);
   }
 
   async delete(id: string): Promise<boolean> {
@@ -439,44 +459,89 @@ export class SqliteMessageRepository implements MessageRepository {
     query: MessageSearchQuery
   ): Promise<ChatMessage[]> {
     // 正文压缩存储后 content_json 恒为空串，SQL LIKE 粗筛失效——改为
-    // 全量拉取 + 内存精筛（messageMatchesKeyword 与 service 层同一匹配）。
+    // 拉取 + 内存精筛（messageMatchesKeyword 与 service 层同一匹配）。
     // 旧 LIKE 只是超集预筛（且会漏 thinking/tool_result 块含关键词的场景
     // 反被 role 粗筛误杀），新实现按 TextBlock 精确匹配，召回语义严格
     // 不小于现状；大会话搜索多付解压成本，与 listBySession 全量路径同量级。
     const keyword = query.keyword?.trim() ?? "";
     const hasKeyword = keyword.length > 0;
     const clampedLimit = Math.max(1, Math.floor(query.limit));
-    // keyword 非空：SQL 不 LIMIT——先精筛后截断（旧实现 SQL 先 LIMIT 再由
-    // service 精筛，命中数可能不足 limit；新语义一次给满）。
-    // keyword 为空：不做关键词/role 过滤，SQL 直接 LIMIT（与旧口径一致）。
-    const limitClause = hasKeyword ? "" : "LIMIT #{limit}";
-    const rows = await queryTemplate(
-      this.conn,
-      this.parser,
-      `SELECT ${MESSAGE_SELECT_COLUMNS}
-       FROM chat_message
-       WHERE session_id = #{sessionId}
-         AND (#{beforeSeq} IS NULL OR seq < #{beforeSeq})
-         AND (#{fromSeq} IS NULL OR seq >= #{fromSeq})
-         AND (#{toSeq} IS NULL OR seq <= #{toSeq})
-       ORDER BY seq DESC
-       ${limitClause}`,
-      {
-        sessionId,
-        beforeSeq: query.beforeSeq ?? null,
-        fromSeq: query.fromSeq ?? null,
-        toSeq: query.toSeq ?? null,
-        limit: clampedLimit,
-      }
-    );
-    // mcdev 的内存精筛语义 + main 的分片映射（mapRows 分批让步，大会话
-    // 全量拉取路径不长时间占住 JS 线程）——两条改动的并集。
     if (!hasKeyword) {
+      // keyword 为空：不做关键词/role 过滤，SQL 直接 LIMIT（与旧口径一致）。
+      const rows = await queryTemplate(
+        this.conn,
+        this.parser,
+        `SELECT ${MESSAGE_SELECT_COLUMNS}
+         FROM chat_message
+         WHERE session_id = #{sessionId}
+           AND (#{beforeSeq} IS NULL OR seq < #{beforeSeq})
+           AND (#{fromSeq} IS NULL OR seq >= #{fromSeq})
+           AND (#{toSeq} IS NULL OR seq <= #{toSeq})
+         ORDER BY seq DESC
+         LIMIT #{limit}`,
+        {
+          sessionId,
+          beforeSeq: query.beforeSeq ?? null,
+          fromSeq: query.fromSeq ?? null,
+          toSeq: query.toSeq ?? null,
+          limit: clampedLimit,
+        }
+      );
       return this.mapRows(rows);
     }
-    const messages = await this.mapRows(rows);
-    return messages
-      .filter((msg) => messageMatchesKeyword(msg, keyword))
-      .slice(0, clampedLimit);
+    // keyword 非空：SQL 加扫描上限（ic-08 方案 A）——scanLimit = max(limit*20, 200)，
+    // 按 seq DESC keyset 续扫（AND seq < 游标），本段命中不足 limit 且本段拉满
+    // scanLimit 行（可能还有剩余）时继续下一段，直到凑满 limit 或本段返回行数
+    // 小于 scanLimit（SQLite LIMIT 语义保证此时已无剩余行）。
+    // 语义红线：召回不得小于全量精筛——只有「凑满 limit」或「扫完全部行」
+    // 两个出口，绝不在中途放弃续扫，返回结果恒为「最新的 limit 条命中」。
+    const scanLimit = Math.max(clampedLimit * 20, 200);
+    const matched: ChatMessage[] = [];
+    // 游标初值即 beforeSeq（seq < beforeSeq 的翻页口径原样保留在第一段），
+    // 后续段游标 = 上一段最小 seq（严格递减，恒不构成死循环）。
+    let cursor: number | null = query.beforeSeq ?? null;
+    for (;;) {
+      const rows = await queryTemplate(
+        this.conn,
+        this.parser,
+        `SELECT ${MESSAGE_SELECT_COLUMNS}
+         FROM chat_message
+         WHERE session_id = #{sessionId}
+           AND (#{cursor} IS NULL OR seq < #{cursor})
+           AND (#{fromSeq} IS NULL OR seq >= #{fromSeq})
+           AND (#{toSeq} IS NULL OR seq <= #{toSeq})
+         ORDER BY seq DESC
+         LIMIT #{scanLimit}`,
+        {
+          sessionId,
+          cursor,
+          fromSeq: query.fromSeq ?? null,
+          toSeq: query.toSeq ?? null,
+          scanLimit,
+        }
+      );
+      if (rows.length === 0) {
+        break;
+      }
+      // mcdev 的内存精筛语义 + main 的分片映射（mapRows 分批让步，大会话
+      // 搜索不长时间占住 JS 线程）——两条改动的并集；按段拉取后每段独立
+      // 精筛，命中按 seq DESC 顺序累计。
+      const messages = await this.mapRows(rows);
+      for (const msg of messages) {
+        if (messageMatchesKeyword(msg, keyword)) {
+          matched.push(msg);
+        }
+      }
+      if (matched.length >= clampedLimit) {
+        break;
+      }
+      if (rows.length < scanLimit) {
+        // 本段未拉满 scanLimit：剩余行已扫尽，允许返回不足 limit 的结果。
+        break;
+      }
+      // keyset 续扫：下一段从本段最小 seq 之前继续（seq DESC 排序下末行最小）。
+      cursor = Number(rows[rows.length - 1]!.seq);
+    }
+    return matched.slice(0, clampedLimit);
   }
 }

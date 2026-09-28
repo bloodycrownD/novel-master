@@ -60,7 +60,6 @@
   "elideChatLinkPath",
   "emptyWorkspaceFlushSnapshot",
   "escapeAnnotateSourceText",
-  "escapeLikePattern",
   "estimateSoftOffsetRangeFromPlainOffsets",
   "estimateSoftOffsetRangeFromQuoteContext",
   "estimateSoftRangeFromOriginalText",

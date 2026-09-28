@@ -444,6 +444,11 @@ export class DefaultMessageService implements MessageService {
     // 仓储层（SqliteMessageRepository）已在内存层按 TextBlock 精筛——这里是
     // 防御性重筛：port 合同允许其它实现退回超集召回（如曾经的 SQL LIKE 粗筛），
     // messageMatchesKeyword 是最终判定口径（幂等，对已精筛结果零开销）。
-    return candidates.filter((msg) => messageMatchesKeyword(msg, keyword));
+    // 精筛后防御性截断到 limit（ic-31）：换一个「退回超集召回」的 port 实现
+    // 时不会把超量结果透传给 UI——截断口径与仓储层 clampedLimit 一致
+    // （Math.max(1, Math.floor(limit))，规避负数/浮点）。
+    return candidates
+      .filter((msg) => messageMatchesKeyword(msg, keyword))
+      .slice(0, Math.max(1, Math.floor(query.limit)));
   }
 }

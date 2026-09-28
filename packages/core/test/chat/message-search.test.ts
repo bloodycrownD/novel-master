@@ -1,8 +1,9 @@
 /**
- * 聊天记录查询 core 基座单元测试（T-CS1 ~ T-CS10）。
+ * 聊天记录查询 core 基座单元测试（T-CS1 ~ T-CS20）。
  *
- * 同时覆盖仓储层 `SqliteMessageRepository.searchMessages` 和 service 层
- * `DefaultMessageService.searchMessages`（透传 + 内存精筛）。
+ * 同时覆盖仓储层 `SqliteMessageRepository.searchMessages`（含扫描上限 +
+ * keyset 续扫）和 service 层 `DefaultMessageService.searchMessages`
+ * （透传 + 防御性重筛与截断）。
  *
  * @module test/chat/message-search
  */
@@ -11,13 +12,12 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
+import type { TdbcConnection } from "../../src/infra/tdbc/ports/connection.port.js";
+import type { Row } from "../../src/infra/tdbc/types.js";
 import { SqliteMessageRepository } from "../../src/domain/chat/repositories/impl/sqlite-message.repository.js";
 import type { ChatMessage, MessageContent } from "../../src/domain/chat/model/message.js";
 import type { ContentBlock } from "../../src/domain/chat/model/content-block.js";
-import {
-  escapeLikePattern,
-  messageMatchesKeyword,
-} from "../../src/domain/chat/content/message-content-match.js";
+import { messageMatchesKeyword } from "../../src/domain/chat/content/message-content-match.js";
 import {
   getNovelMasterTestContext,
   novelMasterTestFixture,
@@ -65,14 +65,71 @@ async function newSession(): Promise<{ sessionId: string; repo: SqliteMessageRep
   };
 }
 
-describe("聊天记录查询 core 基座", () => {
-  describe("escapeLikePattern", () => {
-    it("转义 \\ % _ 三个 LIKE 元字符", () => {
-      assert.equal(escapeLikePattern("a%c_d\\z"), "a\\%c\\_d\\\\z");
-      assert.equal(escapeLikePattern("普通文字"), "普通文字");
-    });
-  });
+/**
+ * 探针连接（ic-08 验收用）：包装真实连接，记录每次 query 返回的行数——
+ * 用来断言 keyword 搜索的每段 SQL 下发行数不超过扫描上限（scanLimit），
+ * 全量下发的旧实现下该断言必红。
+ */
+class QueryRowProbe implements TdbcConnection {
+  /** 每次 query 返回的行数，按下发顺序记录。 */
+  readonly rowCounts: number[] = [];
 
+  constructor(private readonly inner: TdbcConnection) {}
+
+  query<T extends Row = Row>(
+    sql: string,
+    parameters?: readonly unknown[]
+  ): Promise<T[]> {
+    return this.inner.query<T>(sql, parameters).then((rows) => {
+      this.rowCounts.push(rows.length);
+      return rows;
+    });
+  }
+
+  execute(sql: string, parameters?: readonly unknown[]) {
+    return this.inner.execute(sql, parameters);
+  }
+
+  batch(
+    sql: string,
+    parametersList: readonly (readonly unknown[])[]
+  ) {
+    return this.inner.batch(sql, parametersList);
+  }
+
+  transaction<T>(fn: (tx: TdbcConnection) => Promise<T>) {
+    return this.inner.transaction(fn);
+  }
+
+  close(): Promise<void> {
+    return this.inner.close();
+  }
+}
+
+/** 批量造 seq 1..n 的 user 消息数组（命中集合外的正文不含 keyword）。 */
+function makeSeqMessages(
+  sessionId: string,
+  count: number,
+  hitSeqs: ReadonlySet<number>,
+  keyword: string,
+): ChatMessage[] {
+  const messages: ChatMessage[] = [];
+  for (let i = 1; i <= count; i++) {
+    const text = hitSeqs.has(i) ? `第 ${i} 层藏有${keyword}` : `m-${i}`;
+    messages.push(
+      makeMessage({
+        sessionId,
+        seq: i,
+        role: "user",
+        createdAtMs: i,
+        content: textBlocks(text),
+      }),
+    );
+  }
+  return messages;
+}
+
+describe("聊天记录查询 core 基座", () => {
   describe("messageMatchesKeyword 纯函数", () => {
     it("T-CS2 辅助：只匹配 user/assistant 的 TextBlock，其他块类型忽略", () => {
       const msg: ChatMessage = makeMessage({
@@ -156,7 +213,7 @@ describe("聊天记录查询 core 基座", () => {
   });
 
   describe("T-CS2：tool_result / thinking 含 keyword 但 TextBlock 不含的不被召回", () => {
-    it("仓储 LIKE 召回后 service 精筛过滤掉无 TextBlock 命中的行", async () => {
+    it("仓储内存精筛召回后 service 防御性重筛，过滤掉无 TextBlock 命中的行", async () => {
       const ctx = getNovelMasterTestContext();
       const { sessionId, repo } = await newSession();
       // assistant 消息：thinking 块含 keyword，text 块不含
@@ -279,8 +336,8 @@ describe("聊天记录查询 core 基座", () => {
     });
   });
 
-  describe("T-CS9：LIKE 转义（keyword 含 % _ \\ 不触发通配）", () => {
-    it("精准模式 keyword 含 LIKE 元字符时精确匹配，不通配", async () => {
+  describe("T-CS9：字面匹配（keyword 含 % _ \\ 按字面匹配，无 LIKE 通配）", () => {
+    it("keyword 含 % _ \\ 时按字面精确匹配，不通配", async () => {
       const ctx = getNovelMasterTestContext();
       const { sessionId, repo } = await newSession();
       // 一条含字面量 % 的消息
@@ -341,8 +398,8 @@ describe("聊天记录查询 core 基座", () => {
         [3],
       );
 
-      // 反斜杠转义由 escapeLikePattern 单元测试覆盖；此处额外验证 keyword 含反斜杠
-      // 不会当作 LIKE 通配符匹配全表（返回空而非误召回无关行）。
+      // keyword 含反斜杠时按字面匹配（内存 includes 语义，无 LIKE 通配概念），
+      // 不会当作通配符匹配全表（返回空而非误召回无关行）。
       await repo.insert(
         makeMessage({
           sessionId,
@@ -595,6 +652,145 @@ describe("聊天记录查询 core 基座", () => {
       assert.deepEqual(
         result.map((m) => m.seq),
         [35, 34, 33, 32, 31, 29, 28, 27, 26, 25],
+      );
+    });
+  });
+
+  describe("T-CS17：命中数 > limit 时恰返回 limit 条（最新 limit 条降序）", () => {
+    it("100 条命中 keyword、limit 10 → 恰返回 seq 99..90", async () => {
+      const { sessionId, repo } = await newSession();
+      const messages = makeSeqMessages(
+        sessionId,
+        100,
+        new Set(Array.from({ length: 100 }, (_, i) => i + 1)),
+        "玄铁",
+      );
+      await repo.batchInsert(messages);
+
+      const result = await repo.searchMessages(sessionId, {
+        keyword: "玄铁",
+        limit: 10,
+      });
+      // 新语义：keyword 命中数 > limit 时返回恰 limit 条（最新 10 条，seq DESC）。
+      // seq 1..100 的最新 10 条是 100..91。旧实现（SQL 先 LIMIT 再精筛）
+      // 在该场景语义不同，此处钉住新口径。
+      assert.equal(result.length, 10);
+      assert.deepEqual(
+        result.map((m) => m.seq),
+        Array.from({ length: 10 }, (_, i) => 100 - i),
+      );
+    });
+  });
+
+  describe("T-CS18：扫描上限——2000 行会话 keyword 搜索每段 SQL 下发 ≤ scanLimit", () => {
+    it("命中稀疏时逐段续扫扫完全部行，每次 query 行数 ≤ 200", async () => {
+      const ctx = getNovelMasterTestContext();
+      const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+      const session = await ctx.sessions.create(project.id, `S-${testIsolationSuffix()}`);
+      const probe = new QueryRowProbe(ctx.conn);
+      const repo = new SqliteMessageRepository(probe);
+      // 2000 行、全库只有 3 条命中（seq 5 / 1005 / 1995），limit 10 →
+      // scanLimit = max(10*20, 200) = 200：必须穷尽全部 2000 行（10 段拉满
+      // + 1 段空）才允许返回不足 limit 的结果——红线是召回不得小于全量精筛。
+      await repo.batchInsert(
+        makeSeqMessages(session.id, 2000, new Set([5, 1005, 1995]), "星髓")
+      );
+
+      const result = await repo.searchMessages(session.id, {
+        keyword: "星髓",
+        limit: 10,
+      });
+      assert.deepEqual(
+        result.map((m) => m.seq),
+        [1995, 1005, 5],
+      );
+      // 10 段各拉满 200 行 + 第 11 段 0 行（扫尽出口）。
+      assert.equal(probe.rowCounts.length, 11);
+      // 探针核心断言：任何一段 SQL 下发行数都不超过扫描上限——
+      // 全量下发的旧实现（一次 query 2000 行）在此必红。
+      assert.ok(
+        probe.rowCounts.every((n) => n <= 200),
+        `每段下发 ≤ 200，实际 ${JSON.stringify(probe.rowCounts)}`,
+      );
+      assert.deepEqual(
+        probe.rowCounts.slice(0, 10),
+        Array.from({ length: 10 }, () => 200),
+      );
+    });
+  });
+
+  describe("T-CS19：keyset 续扫——本段命中不足 limit 时续扫凑满（含 beforeSeq 边界）", () => {
+    it("450 行命中分散在 5 个 seq，limit 5 → 跨段凑满恰 5 条；beforeSeq 250 → 扫完返回 3 条", async () => {
+      const { sessionId, repo } = await newSession();
+      // 命中 seq {400, 300, 200, 100, 50}，scanLimit = 200：
+      // 段1 [450..251] 命中 2 条 < 5 且拉满 → 续扫；段2 [250..51] 累计 4 < 5
+      // 且拉满 → 续扫；段3 [50..1] 凑满第 5 条。
+      await repo.batchInsert(
+        makeSeqMessages(sessionId, 450, new Set([50, 100, 200, 300, 400]), "玄冰")
+      );
+
+      const full = await repo.searchMessages(sessionId, {
+        keyword: "玄冰",
+        limit: 5,
+      });
+      assert.equal(full.length, 5);
+      assert.deepEqual(
+        full.map((m) => m.seq),
+        [400, 300, 200, 100, 50],
+      );
+
+      // beforeSeq 边界：第一段从 seq < 250 起扫（200 行拉满），第二段
+      // [49..1] 49 行扫尽——命中只有 3 条（200/100/50），扫完后允许返回
+      // 不足 limit 的结果，且恰为该范围内最新的命中。
+      const paged = await repo.searchMessages(sessionId, {
+        keyword: "玄冰",
+        limit: 5,
+        beforeSeq: 250,
+      });
+      assert.deepEqual(
+        paged.map((m) => m.seq),
+        [200, 100, 50],
+      );
+    });
+  });
+
+  describe("T-CS20：yieldFn 分片让步——batchInsert 构造与搜索行解析均按片让步", () => {
+    it("batchInsert 500 条让步 ≥2 次；450 行多段搜索让步 ≥2 次", async () => {
+      const ctx = getNovelMasterTestContext();
+      const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+      const session = await ctx.sessions.create(project.id, `S-${testIsolationSuffix()}`);
+      let insertYields = 0;
+      let searchYields = 0;
+      const mode = { search: false };
+      const repo = new SqliteMessageRepository(ctx.conn, async () => {
+        if (mode.search) {
+          searchYields++;
+        } else {
+          insertYields++;
+        }
+      });
+      // batchInsert 500 条：构造分片 200/200/100 → 片间让步 2 次。
+      await repo.batchInsert(
+        makeSeqMessages(session.id, 500, new Set([50, 100, 200, 300, 400]), "月华")
+      );
+      assert.ok(
+        insertYields >= 2,
+        `batchInsert 构造分片让步 ≥2 次，实际 ${insertYields}`,
+      );
+
+      // 搜索 450 行：mapRows 每段 200 行 → 4 片 3 让步 × 多段 → 让步 ≥2 次。
+      mode.search = true;
+      const result = await repo.searchMessages(session.id, {
+        keyword: "月华",
+        limit: 5,
+      });
+      assert.deepEqual(
+        result.map((m) => m.seq),
+        [400, 300, 200, 100, 50],
+      );
+      assert.ok(
+        searchYields >= 2,
+        `搜索行解析分片让步 ≥2 次，实际 ${searchYields}`,
       );
     });
   });

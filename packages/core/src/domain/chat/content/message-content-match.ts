@@ -1,18 +1,10 @@
 /**
- * 聊天记录查询：关键词匹配纯函数 + LIKE 转义 + 查询入参类型。
+ * 聊天记录查询：关键词匹配纯函数 + 查询入参类型。
  *
  * @module domain/chat/content/message-content-match
  */
 
 import type { ChatMessage } from "../model/message.js";
-
-/**
- * 转义 SQLite LIKE 通配符（`\` `%` `_`），每个特殊字符前加反斜杠。
- * 配合 SQL 侧 `LIKE ... ESCAPE '\'` 使用，避免用户输入的通配符被当成 LIKE 元字符。
- */
-export function escapeLikePattern(s: string): string {
-  return s.replace(/[\\%_]/g, (ch) => `\\${ch}`);
-}
 
 /** 聊天记录查询入参。keyword 为空/undefined 时不做关键词过滤。 */
 export interface MessageSearchQuery {
