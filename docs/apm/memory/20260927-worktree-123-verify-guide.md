@@ -347,3 +347,9 @@ user:
 
 assistant:
 （退役时间表落盘三处：binary-blob spec 新增「迁移生命周期」小节——V0 本迭代常驻 / V1 约 10 tag 后删归一任务+适配器+三端接线+KKV 标记+zlib-b64 读兼容分支+测试与指标卡两行，删除前提与 compression 侧 V1 同款强制收尾保证无残留，参考时点 ≈ v1.5.35；RULE 的 migration 清理节奏条目补「同轮退役后台迁移类任务」一句；与 message-content-compression spec 既有三段式 V1 同轮对齐。）
+
+user:
+（发布阶段）进入发布阶段吧，应该是 1.5.25 对吧？——随后真机装 rc 包（1.5.25-rc / 1317，本地出包脚本的内嵌生产 bundle 形态）打开就崩溃。
+
+assistant:
+（v1.5.25 确认 + 发版前置崩溃的完整根因定位——**「Got unexpected undefined」= nullthrows(undefined)，根因链**：① bundle 里的 nullthrows polyfill（if(null!=t)…'Got unexpected '+t）抛出；② logcat Abort message 含完整 minified JS 栈（logcat -d 全量缓冲里挖，*:E 只有第一行）；③ 栈链 = reanimated 的 STYLE_PROPERTIES_CONFIG 模块（bundle 模块号 594，特征串 camelizeKebabCase/convertPropertiesToArrays/[Reanimated] Max process depth）require 期 → get UIManager@ReactNativePrivateInterface → UIManager.js → BridgelessUIManager；④ **BridgelessUIManager.js 编译后在模块顶层捕获 global.RN$LegacyInterop_UIManager_getConstants 的值**（var f=g.RN$…），而该全局由 native 侧 ReactInstance.kt:221 的 UIConstantsProviderBinding.install 经 unbufferedRuntimeExecutor **异步排队**安装且受 feature flag useNativeViewConfigsInBridgelessMode 门控；⑤ **内嵌 bundle 执行快于 install 排队任务 → 顶层捕获 undefined 且闭包永不重读 → reanimated 触发 nullthrows(undefined) 启动崩**。Metro dev 模式因网络拉包延迟天然躲过——这解释了 dev 全绿/生产崩的分裂。**关键物证**：MainApplication.kt 原代码不传 useDevSupport（默认=BuildConfig.DEBUG），出包脚本是「debug 壳 + 强关 useDevSupport + 内嵌生产 bundle」的杂交形态；**1.5.24 的 CI 真 release 包（同 RN 0.85.3 + reanimated）一直正常启动**——推断崩溃是本地验证配方特有时序，CI release 形态大概率无恙。**验证路径**：本地出真 release 变体（assembleRelease + android.injected.signing.* 注入 debug keystore，versionCode 1318 / 1.5.25-rc2）真机启动验证——通过即可放行发版。排查工具留存：tmp/search-bundle.mjs（bundle 字节码搜字符串）、tmp/extract-mods.mjs（按模块号提取 __d 函数体）。）
