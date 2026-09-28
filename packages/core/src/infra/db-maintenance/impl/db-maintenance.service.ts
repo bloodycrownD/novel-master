@@ -77,6 +77,27 @@ export function createDbMaintenanceService(
       await conn.execute("VACUUM");
 
       const after = await readStorageStats(conn);
+
+      // advisory③（cr-01 方案 A）：手动「数据清理」成功返回前顺带清归一
+      // 任务的 startupMaintenancePending 补跑标记。手动链路同样回收了
+      // freelist 页，标记留着只会让下次冷启动多跑一次全库 VACUUM（纯浪费、
+      // 无正确性损失）。key 用字面量而不 import
+      // blob-binary-normalization 的常量——那边已经 import 了本模块的
+      // runStartupMaintenanceOnce，反向引用会形成循环依赖。清失败只
+      // warn：最坏后果就是那一次多余的 VACUUM，不得让手动清理报错。
+      try {
+        await conn.execute(
+          "DELETE FROM kkv_entry WHERE module = ? AND key = ?",
+          ["nm-blob-binary", "startupMaintenancePending"]
+        );
+      } catch (error) {
+        console.warn(
+          `[db-maintenance] 清 startupMaintenancePending 兜底标记失败，下次冷启动可能多跑一次维护：${
+            error instanceof Error ? error.message : String(error)
+          }`
+        );
+      }
+
       return {
         before,
         after,
