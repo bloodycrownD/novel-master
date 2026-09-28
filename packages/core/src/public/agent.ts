@@ -83,3 +83,4 @@ export {
   type AssembleAgentRunnerDepsInput,
 } from "../service/agent/logic/assemble-agent-runner-deps.js";
 export { DEFAULT_AGENT_MAX_STEPS } from "../service/agent/logic/agent-run-max-steps.js";
+export { DEFAULT_SUBAGENT_DEFINITION } from "../service/agent/default-subagent-definition.js";
