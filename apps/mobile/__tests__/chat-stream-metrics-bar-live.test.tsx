@@ -218,7 +218,7 @@ describe('ChatStreamMetricsBarLive 双源（快照优先 / settled 投影兜底�
     expect(line).not.toContain('0.0s'); // 历时 ≥ 1096ms，非零起点
   });
 
-  it('冻结态显示末值速率段（「上次生成 … · N t/s」）', () => {
+  it('冻结态显示末值速率段（「上次生成 … · N tok/s」）', () => {
     const h = buildHarness();
     mockManager = h.manager;
     mockManager.startRun('s1', 'p1', 'hi');
@@ -248,8 +248,8 @@ describe('ChatStreamMetricsBarLive 双源（快照优先 / settled 投影兜底�
     expect(line).toContain('上次生成');
     expect(line).toContain('输出 90 t'); // ceil(300/3.35)
     // 末值速率段（此前冻结态整段省略）：有样本即显示，且不是衰减后的零头。
-    expect(line).toMatch(/\d+(\.\d)? t\/s/);
-    expect(line).not.toMatch(/(^| )0 t\/s/);
+    expect(line).toMatch(/\d+(\.\d)? tok\/s/);
+    expect(line).not.toMatch(/(^| )0 tok\/s/);
   });
 
   it('活跃 run：快照 live 计时显示「生成中」（agentRunning=true）', () => {
@@ -333,8 +333,8 @@ describe('ChatStreamMetricsBarLive 双源（快照优先 / settled 投影兜底�
     });
     const atCorrection = readLine();
     expect(atCorrection).toContain('输出 1,200 t');
-    // 重 seed 后窗口仅 1 个样本：速率段省略（绝无 4800 t/s 之类的尖刺数字）。
-    expect(atCorrection).not.toMatch(/\d+ t\/s/);
+    // 重 seed 后窗口仅 1 个样本：速率段省略（绝无 4800 tok/s 之类的尖刺数字）。
+    expect(atCorrection).not.toMatch(/\d+ tok\/s/);
 
     // 校正后从真值起算：继续 usage 递增，速率回到平滑小值。
     h.eventBus.publish(EVENT_AGENT_STREAM_USAGE, {
@@ -348,7 +348,7 @@ describe('ChatStreamMetricsBarLive 双源（快照优先 / settled 投影兜底�
     });
     const afterRecovery = readLine();
     expect(afterRecovery).toMatch(/输出 1,206 t/);
-    expect(afterRecovery).not.toMatch(/\d{3,} t\/s/); // 无三位数以上尖刺
+    expect(afterRecovery).not.toMatch(/\d{3,} tok\/s/); // 无三位数以上尖刺
 
     act(() => {
       tree.unmount();

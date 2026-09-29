@@ -1116,7 +1116,7 @@ describe('token 化指标（T-M5/T-M7）', () => {
     const h = createHarness();
     startRunningRun(h, 'a', 'r1');
 
-    // step 1：每 250ms 一条 50 字符 delta（每拍 +15 t ≈ 60 t/s）。
+    // step 1：每 250ms 一条 50 字符 delta（每拍 +15 t ≈ 60 tok/s）。
     for (let i = 0; i < 5; i += 1) {
       publishTextDelta(h.eventBus, 'a', 'r1', 'x'.repeat(50));
       jest.advanceTimersByTime(250);

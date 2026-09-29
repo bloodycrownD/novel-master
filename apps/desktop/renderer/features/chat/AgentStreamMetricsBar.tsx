@@ -3,7 +3,7 @@
  *
  * stream-metrics-tokens：速率读数由 useAgentStreamMetrics 统一提供——
  * 运行中为实时滑窗值（采样序列在 hook 内维护，暂停期随 nowMs 衰减），
- * 冻结态为收尾冻结的末值（「上次生成 … · N t/s」），无样本时省略速率段。
+ * 冻结态为收尾冻结的末值（「上次生成 … · N tok/s」），无样本时省略速率段。
  * 本组件只渲染，不采样。
  *
  * metric-detail-sheet：根节点 button 化（语义点击入口 + aria-live 保留），

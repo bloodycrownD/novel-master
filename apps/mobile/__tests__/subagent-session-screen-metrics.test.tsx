@@ -4,7 +4,7 @@
  *
  * 三态覆盖：
  * - 活跃：消费型单元的 running 快照 → 「生成中」；
- * - 终态：FINISHED 收尾后的冻结快照 → 「上次生成 · 历时 · 输出 N t · N t/s」；
+ * - 终态：FINISHED 收尾后的冻结快照 → 「上次生成 · 历时 · 输出 N t · N tok/s」；
  * - 中断：水合 interrupted 单元 → 「已中断」在屏上**只出现一次**
  *   （cr-fix-spec mobile-metrics/C-4：指标条能显示时不再叠屏级横幅；
  *   指标条不可见时由横幅兜底，仍是单标识）。
@@ -213,7 +213,7 @@ describe('SubagentSessionScreen 指标条渲染（G-2）', () => {
     unmount();
   });
 
-  it('终态：FINISHED 后冻结为「上次生成 · 历时 · 输出 N t · N t/s」', async () => {
+  it('终态：FINISHED 后冻结为「上次生成 · 历时 · 输出 N t · N tok/s」', async () => {
     const h = buildHarness();
     mockManager = h.manager;
     mockRuntime = {sessionStreamUnitManager: h.manager, usageStats: {getSessionUsageDetail: mockGetSessionUsageDetail}};
@@ -224,7 +224,7 @@ describe('SubagentSessionScreen 指标条渲染（G-2）', () => {
     const line = texts.join(' | ');
     expect(line).toContain('上次生成');
     expect(line).toContain('输出 90 t'); // ceil(300/3.35)
-    expect(line).toMatch(/\d+(\.\d)? t\/s/);
+    expect(line).toMatch(/\d+(\.\d)? tok\/s/);
     expect(line).not.toContain('生成中');
     unmount();
   });

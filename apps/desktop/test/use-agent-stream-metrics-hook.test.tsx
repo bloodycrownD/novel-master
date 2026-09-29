@@ -147,7 +147,7 @@ describe("useAgentStreamMetrics 状态机（desktop-metrics/test-1）", () => {
     try {
       await h.render(true, "s1:r1");
       const api = h.api();
-      // 每 100 字符 ≈ ceil(100/3.35)=30 token，1s 一读 → 30 t/s
+      // 每 100 字符 ≈ ceil(100/3.35)=30 token，1s 一读 → 30 tok/s
       api.noteTextDelta("字".repeat(100));
       advance(1_000);
       api.noteTextDelta("字".repeat(100));
@@ -212,7 +212,7 @@ describe("useAgentStreamMetrics 状态机（desktop-metrics/test-1）", () => {
     try {
       await h.render(true, "s1:r1");
       const api = h.api();
-      // step 1：每 1s 一条 100 字符 delta（≈30 t/s），四条。
+      // step 1：每 1s 一条 100 字符 delta（≈30 tok/s），四条。
       for (let i = 0; i < 4; i += 1) {
         api.noteTextDelta("字".repeat(100));
         advance(1_000);
@@ -461,7 +461,7 @@ describe("useAgentStreamMetrics 状态机（desktop-metrics/test-1）", () => {
       assert.equal(reset.tokenSource, "heuristic");
       assert.equal(reset.tokensPerSecond, null); // 不是上一轮残留
 
-      // 新 run 自建窗口：30 t/s（若旧样本混入，同刻差分会被压成 0）
+      // 新 run 自建窗口：30 tok/s（若旧样本混入，同刻差分会被压成 0）
       api.noteTextDelta("字".repeat(100)); // 30 @T0+2.5s
       advance(1_000);
       api.noteTextDelta("字".repeat(100)); // 60 @T0+3.5s

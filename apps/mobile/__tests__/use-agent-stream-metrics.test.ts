@@ -14,7 +14,7 @@ describe('buildChatStreamMetricsLine（T-M8 文案快照）', () => {
       tokenSource: 'usage',
       tokensPerSecond: 45,
     });
-    expect(line).toBe('生成中 · 12.3s · 输出 1,234 t · 45 t/s');
+    expect(line).toBe('生成中 · 12.3s · 输出 1,234 t · 45 tok/s');
   });
 
   it('无速率样本时省略速率段（上次生成冻结态）', () => {
