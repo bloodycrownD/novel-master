@@ -9,6 +9,7 @@
  *
  * @module services/chat-prompt-tokens
  */
+import { app } from "electron";
 import { resolveSavedModelId } from "@novel-master/core/agent";
 import type { ChatMessage } from "@novel-master/core/chat";
 import { messageBodyText } from "@novel-master/core/prompt";
@@ -260,7 +261,14 @@ async function loadChatPromptTokenStatsNow(
         params,
         { sessionKkv: runtime.sessionKkv },
       )
-        .catch(() => undefined)
+        .catch((error: unknown) => {
+          // 暖机失败只丢「下次首帧直读精确」的加速，不影响正确性；但完全
+          // 静默会让 chip 永停估算档且无从排查（cr-fix-spec-r2 full/I-1）——
+          // 开发期留痕与首帧失败同款。
+          if (!app.isPackaged) {
+            console.warn("[chat] prompt token precise warm-up failed", error);
+          }
+        })
         .finally(() => preciseWarmInflight.delete(scope.sessionId));
     }
     const contextWindow =

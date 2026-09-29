@@ -222,9 +222,10 @@ export interface UsageStatsService {
 
   /**
    * 会话维度用量详情（metric-detail-sheet 弹窗）：最近一条 usage 行 +
-   * 会话累计（含 hidden，统计页同口径谓词 + `session_id` 界定）+ 可见
-   * 消息数 + 工具调用数。不进 `UsageStatsFilter`——filter 服务统计页
-   * 时间轴语义，会话详情是独立读型（spec 拍板）。
+   * 可见消息数 + 工具调用数（会话 KKV 缓存优先，miss 现算回填）。会话
+   * 累计输入/输出已移除（2026-09-29 拍板，含 hidden 的累计对用户无意义）。
+   * 不进 `UsageStatsFilter`——filter 服务统计页时间轴语义，会话详情是
+   * 独立读型（spec 拍板）。
    */
   getSessionUsageDetail(sessionId: string): Promise<SessionUsageDetail>;
 }

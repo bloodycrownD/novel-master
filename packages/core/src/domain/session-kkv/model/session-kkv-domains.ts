@@ -73,13 +73,16 @@ export const TOKEN_CHUNKS_CACHE_KEY = "chunkCache" as const;
 /**
  * usage_stats 域：用量详情弹窗的会话级展示派生缓存。
  *
- * `toolUseCount` 键（十进制字符串）：会话内 assistant 消息 tool_use 块总数
- * （含 hidden 行）。读口（usage-stats getSessionUsageDetail）miss 时现算
- * （解压 assistant 行数块）并回填；失效口径：**新增含 tool_use 的消息 /
- * 编辑消息 / 删除消息 / 回滚截断 / 会话导入清缓存**（message.service 与
- * rollback/import 的既有失效挂点旁路双删）；hide/show 不失效（含 hidden
- * 口径下可见性变化不改变计数）。纯加速数据：行丢失只退化性能（下次现算），
- * 残留不造成错误读数的责任在失效挂点。会话删除走 `clearSession` 整表清。
+ * `toolUseCount` 键：会话内 assistant 消息 tool_use 块总数（含 hidden 行）。
+ * 读口（usage-stats getSessionUsageDetail）miss 时现算（解压 assistant 行
+ * 数块）并回填；失效口径：**新增含 tool_use 的消息 / 编辑消息 / 删除消息 /
+ * 回滚截断 / 会话导入清缓存**（message.service 与 rollback/import 的既有
+ * 失效挂点旁路）；hide/show 不失效（含 hidden 口径下可见性变化不改变计数）。
+ * **失效写法是哨兵空串 `""` 而非 delete**（cr-fix-spec-r2 s3/B-1）：读口
+ * 回填前复核「原值是否仍等于 miss 时所见」，防现算期间失效被陈旧回写
+ * 覆盖；`Number.parseInt("")` = NaN 天然当 miss。纯加速数据：行丢失只
+ * 退化性能（下次现算），残留不造成错误读数的责任在失效挂点。会话删除
+ * 走 `clearSession` 整表清。
  */
 export const SESSION_KKV_DOMAIN_USAGE_STATS = "usage_stats" as const;
 

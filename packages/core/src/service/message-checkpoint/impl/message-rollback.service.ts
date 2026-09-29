@@ -271,12 +271,14 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
       sessionId
     );
     // 回滚物理删尾：工具调用数缓存一并失效（含 hidden 口径下被删的 assistant
-    // 行不再计入；best-effort 同上）。
+    // 行不再计入）。写哨兵空串而非 delete（cr-fix-spec-r2 s3/B-1：与读口
+    // 「现算回填前复核原值」配合防陈旧回写），best-effort 同上。
     try {
-      await createSessionKkvService(this.deps.conn).delete(
+      await createSessionKkvService(this.deps.conn).set(
         sessionId,
         SESSION_KKV_DOMAIN_USAGE_STATS,
-        USAGE_STATS_TOOL_USE_COUNT_KEY
+        USAGE_STATS_TOOL_USE_COUNT_KEY,
+        ""
       );
     } catch (error) {
       console.warn(

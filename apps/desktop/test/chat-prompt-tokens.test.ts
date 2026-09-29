@@ -23,6 +23,7 @@ import { after, before, beforeEach, describe, it } from "node:test";
 import {
   formatContextUsageLabel,
   formatTokenSourceBadge,
+  promptWholeCache,
   sessionApiPromptTokenCache,
 } from "@novel-master/core/provider";
 import { getDesktopRuntime } from "../src/main/runtime/desktop-runtime-singleton.js";
@@ -147,28 +148,48 @@ describe("chat-prompt-tokens.service", () => {
     assert.match(stats.label, /^远程 = 24k \/ 128k \(\d+%\)$/);
   });
 
-  it("T-T9b: 无 API 占用 ⇒ source===local（label 按分词器档位落记号）", async () => {
+  it("T-T9b: 无 API 占用 ⇒ 两阶段：首帧估算（L1 冷）→ 后台暖机 → 二次读 L1 精确", async () => {
     sessionApiPromptTokenCache.clearAll();
+    // L1 清空：本用例要锁「首帧估算」态，前序用例/其它内容的整串条目
+    // 虽按内容指纹寻址，清掉最稳（fresh 库无 KKV 种子，无跨重启残留）。
+    promptWholeCache.clearForTests();
 
     const rt = await getDesktopRuntime();
-    const stats = await loadChatPromptTokenStats(rt, {
+    // 首帧：preferEstimate 且 L1 冷 → 廉价估算即回（gpt ≈），服务侧安排
+    // 后台暖机（家族真分词器 + L1 写入）。
+    const first = await loadChatPromptTokenStats(rt, {
       projectId,
       sessionId,
     });
+    assert.equal(first.source, "local");
+    assert.equal(first.counterKind, "heuristic");
+    assert.equal(first.estimated, true);
+    assert.match(first.label, /^gpt ≈ \S+ \/ 128k \(\d+%\)$/);
 
-    assert.equal(stats.source, "local");
-    // 本地档的 counterKind 取决于模型（tiktoken / claude / heuristic），
-    // 但一定不是 api——记号不再只看 source，与分词器档位联动。
-    assert.notEqual(stats.counterKind, "api");
-    // gpt-4o 在 node 驱动下报 tiktoken/false → 精确档记号「gpt =」。
-    assert.equal(stats.counterKind, "tiktoken");
-    assert.match(stats.label, /^gpt = \S+ \/ 128k \(\d+%\)$/);
+    // 暖机是 fire-and-forget（cl100k 小串毫秒级）；防抖入口每呼 300ms
+    // trailing，轮询直到 L1 命中精确档（cr-fix-spec-r2 s2/G-1：preferEstimate
+    // 先查 L1——命中零成本直读，chip 不再锁死估算档）。
+    let second: Awaited<ReturnType<typeof loadChatPromptTokenStats>> | null =
+      null;
+    for (let i = 0; i < 20 && second == null; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      const next = await loadChatPromptTokenStats(rt, {
+        projectId,
+        sessionId,
+      });
+      if (next.counterKind === "tiktoken") {
+        second = next;
+      }
+    }
+    assert.ok(second != null, "暖机后二次读应命中 L1 精确档（gpt =）");
+    assert.equal(second.estimated, false);
+    assert.match(second.label, /^gpt = \S+ \/ 128k \(\d+%\)$/);
     const expected = formatContextUsageLabel(
-      stats.tokenCount,
-      stats.contextWindow,
-      formatTokenSourceBadge(stats.source, stats.counterKind, stats.estimated),
+      second.tokenCount,
+      second.contextWindow,
+      formatTokenSourceBadge(second.source, second.counterKind, second.estimated),
     );
-    assert.equal(stats.label, expected);
+    assert.equal(second.label, expected);
   });
 
   it("T-T9c: 无模型早退 ⇒ 真 cl100k 计数，而非 ceil(chars/3.35) 折算", async () => {
@@ -183,6 +204,9 @@ describe("chat-prompt-tokens.service", () => {
 
     // 先取同一 session 的**精确档**读数（gpt-4o → tiktoken 家族）作为参照：
     // 早退档与它编的是同一段序列化文本，差别只在「真分词器 vs 字符折算」。
+    // 两阶段下首次调用是估算档（gpt ≈）并安排后台暖机——参照必须取暖机
+    // 完成后的二次读（L1 命中精确档；cr-fix-spec-r2 s2/G-1），否则拿到的是
+    // 估算值、「精确档参照」失真。
     const upserted = await handleAgentRegistryUpsert({
       agentId,
       definition: {
@@ -192,10 +216,23 @@ describe("chat-prompt-tokens.service", () => {
       },
     });
     assert.equal(upserted.ok, true);
-    const precise = await loadChatPromptTokenStats(rt, {
+    await loadChatPromptTokenStats(rt, {
       projectId,
       sessionId,
     });
+    let precise: Awaited<ReturnType<typeof loadChatPromptTokenStats>> | null =
+      null;
+    for (let i = 0; i < 20 && precise == null; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      const next = await loadChatPromptTokenStats(rt, {
+        projectId,
+        sessionId,
+      });
+      if (next.counterKind === "tiktoken") {
+        precise = next;
+      }
+    }
+    assert.ok(precise != null, "暖机后应命中 L1 精确档作为参照");
 
     // 清掉会话级模型覆盖 + agent 无 model pin ⇒ resolveSavedModelId 返回空
     // ⇒ 走「无模型早退」分支。

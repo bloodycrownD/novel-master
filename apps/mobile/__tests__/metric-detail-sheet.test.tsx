@@ -3,7 +3,8 @@
  * - 打开自取：visible 翻真调 runtime.usageStats.getSessionUsageDetail(sessionId)，
  *   加载态「加载中…」→ 数据落地渲染两段（最近请求 / 会话累计）+ 口径脚注；
  * - cache_creation 缺失（协议无此概念）显示「—」；命中率复用统计页公式；
- * - 空态：last/totals 为 null 出占位行；
+ * - 空态：last 为 null 出占位行（会话累计输入/输出已随 totals 移除，
+ *   2026-09-29 拍板——含 hidden 的累计对用户无意义）；
  * - 「上下文占用」行直渲染传入的 contextTokenLabel（与 chip 同源，不取新数）；
  * - visible=false 不触取数。
  *
@@ -86,14 +87,6 @@ const DETAIL: SessionUsageDetail = {
     cacheCreationTokens: null,
     atMs: 1_800_000_000_000,
   },
-  totals: {
-    promptTokens: 12_000,
-    completionTokens: 8000,
-    cacheReadTokens: 2048,
-    cacheCreationTokens: 512,
-    billedInputTokens: 3600,
-    assistantRows: 6,
-  },
   visibleMessageCount: 11,
   toolUseCount: 4,
 };
@@ -141,17 +134,18 @@ describe('MetricDetailSheet (mobile) — 打开自取与两段渲染', () => {
     expect(line).toContain('缓存命中率67%');
   });
 
-  it('会话累计段：可见消息数 / 工具调用 / 累计输入输出 + 口径脚注', async () => {
+  it('会话累计段：可见消息数 / 工具调用 + 口径脚注（累计输入输出已移除）', async () => {
     mockGetSessionUsageDetail.mockResolvedValue(DETAIL);
     const {texts} = await renderSheet();
     const line = texts.join('');
     expect(line).toContain('消息数（可见）11');
     expect(line).toContain('工具调用4');
-    expect(line).toContain('累计输入12K');
-    expect(line).toContain('累计输出8K');
-    expect(line).toContain('累计含隐藏消息 · 消息数为可见口径');
+    expect(line).toContain('消息数为可见口径 · 工具调用含已隐藏消息');
     // cr-md-1：弹窗内标注「最近请求」与指标条整轮读数不同源（与 desktop 同文）。
     expect(line).toContain('最近请求为单步真值，与指标条整轮读数不同源');
+    // 累计输入/输出行已随 totals 字段移除（2026-09-29 拍板）——负向断言锁死。
+    expect(line).not.toContain('累计输入');
+    expect(line).not.toContain('累计输出');
   });
 
   it('「上下文占用」行直渲染传入读数（与 chip 同源，不取新数）', async () => {
@@ -160,17 +154,15 @@ describe('MetricDetailSheet (mobile) — 打开自取与两段渲染', () => {
     expect(texts.join('')).toContain('上下文占用远程 = 24k / 128k (19%)');
   });
 
-  it('空态：last/totals 为 null 时出占位行，contextTokenLabel 缺省出「—」', async () => {
+  it('空态：last 为 null 出占位行，contextTokenLabel 缺省出「—」', async () => {
     mockGetSessionUsageDetail.mockResolvedValue({
       last: null,
-      totals: null,
       visibleMessageCount: 0,
       toolUseCount: 0,
     });
     const {texts} = await renderSheet({contextTokenLabel: undefined});
     const line = texts.join('');
     expect(line).toContain('暂无请求记录');
-    expect(line).toContain('暂无累计数据');
     expect(line).toContain('上下文占用—');
   });
 

@@ -28,6 +28,8 @@ import {
   tokenChunkCache,
 } from "../../../src/infra/tokenizer/index.js";
 import { serializeSessionApiPromptTokenEntry } from "../../../src/infra/tokenizer/logic/session-api-prompt-token-store.js";
+import { estimateTokensCjkAware } from "../../../src/infra/tokenizer/logic/estimate-tokens-cjk-aware.js";
+import { formatChatMessageForCliPreview } from "../../../src/domain/chat/content/message-body-text.js";
 import { createMemorySessionKkv } from "../../helpers/prompt-layout-test-helpers.js";
 import { emptyRegistryDeps } from "./registry-test-helpers.js";
 
@@ -314,6 +316,42 @@ describe("resolveCurrentPromptTokens 统计优先（api 基线+增量，本地�
     );
   });
 
+  it("增量取 max(heuristic, CJK 感知) 的精确值：heuristic 压小后 CJK 下限必须生效（s1/G-1①）", async () => {
+    // 可控 registry：heuristic 恒返 1，最大化区分「max 是否走了 CJK 下限」。
+    // 旧断言只断 `> 基线`——把实现改回纯 heuristic（甚至删掉 max）仍绿；
+    // 本用例把期望值钉到 estimateTokensCjkAware 对序列化 tail 的精确值。
+    const tinyHeuristicRegistry = {
+      heuristic: { countText: () => 1 },
+    } as unknown as ReturnType<typeof createDefaultTokenCounterRegistry>;
+    const baseline = 50_000;
+    const params = {
+      layout: { persist: [], dynamic: [] },
+      ctx: { workplaceDisplay: "", messages: [msg(9, "九"), msg(10, "十号消息正文")] },
+      savedModelId: RUN_MODEL_ID,
+      registry: tinyHeuristicRegistry,
+    };
+    sessionApiPromptTokenCache.set(SESSION_ID, {
+      promptTokens: baseline,
+      updatedAt: Date.now(),
+      savedModelId: RUN_MODEL_ID,
+      anchorSeq: 9,
+    });
+
+    // 期望值：按读口的序列化口径复算 tail（seq > 9 且非 hidden）的 CJK 下限。
+    const expectedTail = [msg(10, "十号消息正文")]
+      .map((m) =>
+        formatChatMessageForCliPreview(m)
+          .map((segment) => `${segment.role}: ${segment.body}`)
+          .join("\n\n")
+      )
+      .join("\n\n");
+    const expectedDelta = estimateTokensCjkAware(expectedTail);
+    assert.ok(expectedDelta > 1, "中文 tail 的 CJK 下限应远大于 heuristic 的 1");
+
+    const resolved = await resolveCurrentPromptTokens(SESSION_ID, params);
+    assert.equal(resolved.tokenCount, baseline + expectedDelta);
+  });
+
   it("api 命中 + 锚点后无追加（或无锚点）→ 基线原样", async () => {
     // 锚点 ≥ 当前最大 seq：无增量
     sessionApiPromptTokenCache.set(SESSION_ID, {
@@ -480,6 +518,42 @@ describe("resolveCurrentPromptTokens 统计优先（api 基线+增量，本地�
     assert.equal(apiHit.source, "api");
     assert.equal(apiHit.tokenCount, 9_999);
     assert.equal(captured.driverCalled, 0);
+  });
+
+  it("preferEstimate 先查 L1：完整口径暖出的整串条目被首帧直读（cr-fix-spec-r2 s2/G-1）", async () => {
+    promptWholeCache.clearForTests();
+    const params = {
+      layout: { persist: [], dynamic: [], system: "暖机后首帧直读的精确占位" },
+      ctx: { workplaceDisplay: "", messages: [] },
+      savedModelId: RUN_MODEL_ID,
+      registry: createDefaultTokenCounterRegistry(emptyRegistryDeps()),
+    };
+
+    // 冷 L1 首帧：估算档（gpt ≈ 语义）。
+    const cold = await resolveCurrentPromptTokens(SESSION_ID, params, {
+      preferEstimate: true,
+    });
+    assert.equal(cold.estimated, true);
+    assert.equal(cold.counterKind, "heuristic");
+
+    // 暖机：完整口径计数一次（真 node 驱动 → tiktoken 精确档 + L1 写入）。
+    const warm = await resolveCurrentPromptTokens(SESSION_ID, params);
+    assert.equal(warm.estimated, false);
+    assert.equal(warm.counterKind, "tiktoken");
+
+    // 暖后首帧：L1 命中 → 精确档直读、数值与暖机一致。旧实现（早退不查
+    // L1）这里仍是 heuristic/estimated:true——本断言即回归锁。
+    const warmFirst = await resolveCurrentPromptTokens(SESSION_ID, params, {
+      preferEstimate: true,
+    });
+    assert.equal(warmFirst.source, "local");
+    assert.equal(
+      warmFirst.estimated,
+      false,
+      "L1 命中应直读精确档而非估算（暖机写的 L1 必须有人消费）"
+    );
+    assert.equal(warmFirst.counterKind, "tiktoken");
+    assert.equal(warmFirst.tokenCount, warm.tokenCount);
   });
 });
 

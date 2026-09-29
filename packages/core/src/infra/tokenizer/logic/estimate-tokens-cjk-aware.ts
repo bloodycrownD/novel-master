@@ -20,7 +20,14 @@ export const CJK_TOKENS_PER_CHAR = 1.64;
 /** 非 CJK 字符沿用既有英文口径的倒数（1 / 3.35）。 */
 const NON_CJK_CHARS_PER_TOKEN = 3.35;
 
-/** CJK 统用表意文字 + 假名 + 谚文（不含全角标点——按非 CJK 宽松处理）。 */
+/**
+ * CJK 统用表意文字 + 假名 + 谚文。区间起点 \u2E80 覆盖 CJK 部首/康熙
+ * 部首区，**含 U+3000-303F 区标点（。、「」【】等，按 CJK ×1.64 计——
+ * 方向保守）**；**不含 U+FF00-FF5E 全角 ASCII 变体（，！？等，按非 CJK
+ * ÷3.35 宽松处理，低估方向、已知取舍）**；扩展 B-F 区生僻字（U+20000+
+ * 代理对）同样按非 CJK 处理（同上取舍）。分类以本正则为准，测试用例
+ * （estimate-tokens-cjk-aware.test.ts）与注释同口径。
+ */
 const CJK_CHAR_PATTERN = /[\u2E80-\u9FFF\uF900-\uFAFF\u3040-\u30FF\uAC00-\uD7AF]/g;
 
 function countCjkChars(text: string): number {

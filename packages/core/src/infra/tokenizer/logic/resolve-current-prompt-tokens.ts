@@ -29,12 +29,20 @@ import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.j
 import { formatChatMessageForCliPreview } from "@/domain/chat/content/message-body-text.js";
 import {
   countPromptLlmInput,
+  resolveVendorModelIdFromSaved,
   type CountPromptLlmInputParams,
 } from "./count-prompt-llm-input.js";
 import { estimateTokensCjkAware } from "./estimate-tokens-cjk-aware.js";
 import { promptWholeCache } from "./prompt-whole-cache.js";
+import type { PromptWholeCacheEntry } from "./prompt-whole-cache.js";
+import { resolveTokenizerDriver } from "../../nmtp/logic/registry.js";
+import { resolveTokenizerFamily } from "./resolve-tokenizer-family.js";
 import { readSessionApiPromptTokenEntry } from "./session-api-prompt-token-store.js";
-import { tokenChunkCache } from "./token-chunk-cache.js";
+import {
+  buildCounterScope,
+  chunkHash16,
+  tokenChunkCache,
+} from "./token-chunk-cache.js";
 import { serializePromptLlmInput } from "./serialize-prompt-input.js";
 import { serializeToolsForTokenCount } from "./serialize-tools-for-token-count.js";
 
@@ -66,13 +74,15 @@ export interface ResolveCurrentPromptTokensOptions {
    */
   readonly sessionKkv?: SessionKkvService | null;
   /**
-   * 估算优先（2026-09-29 切模型慢复验加）：本地分支不做真分词器计数，直接
-   * heuristic 折算（`counterKind:"heuristic"`、`estimated:true`，不进任何
-   * 缓存）。api 命中分支不受影响（仍精确）。
+   * 估算优先（2026-09-29 切模型慢复验加）：本地分支不做真分词器计数——
+   * **先查 L1 整串缓存**（命中零成本直读现成读数，含跨重启种子；cr-fix-spec
+   * r2 s2/G-1），miss 才序列化 + heuristic/CJK 折算（`counterKind:"heuristic"`、
+   * `estimated:true`，不进任何缓存）。api 命中分支不受影响（仍精确）。
    *
    * 消费方：压缩评估（无统计时估算+0.85 保守系数，**绝不**为阈值判定阻塞
    * run——glm 原生整串大上下文单次 ~5.8s）；UI 标签的首帧（后台再跑精确
-   * 全量计数升级显示并暖 L1）。缺省 false = 完整口径（家族计数器 + 缓存）。
+   * 全量计数升级显示并暖 L1，L1 暖后首帧即精确、无降级闪烁）。缺省
+   * false = 完整口径（家族计数器 + 缓存）。
    */
   readonly preferEstimate?: boolean;
 }
@@ -126,6 +136,62 @@ function estimateAnchoredDelta(
 }
 
 /**
+ * preferEstimate 分支的 L1 整串缓存预查：键构造与驱动层完全同款
+ * （scope = vendorModelId/override/family/driverName；指纹 = 整串+tools 串
+ * 前 16 hex），命中即可零成本返回现成读数。进程内 miss 且带 session KKV
+ * 时先种再查一次（跨重启续命——后台暖机/上一轮精确计数落过盘）；种子
+ * 失败/无行由 seedFromKkv 自身静默，这里按 miss 走估算。
+ *
+ * 驱动未注册（触发器测试等无驱动场景）返回 null——没有 L1 可查，也不该
+ * 在估算档里抛错。
+ */
+async function lookupWholeCacheEntry(
+  sessionId: string,
+  params: CountPromptLlmInputParams,
+  serialized: string,
+  sessionKkv: SessionKkvService | null
+): Promise<PromptWholeCacheEntry | null> {
+  // 预查是纯优化：任何一步失败（驱动解析异常 / registry 抛错 / KKV 种子
+  // 失败）都静默按 miss 走估算——估算路径是首帧与压缩评估的关键路径，
+  // 不能被 L1 预查带崩。
+  try {
+    let driverName: string;
+    try {
+      driverName = resolveTokenizerDriver().name;
+    } catch {
+      return null;
+    }
+    const override =
+      params.tokenizerOverride ??
+      (await params.registry.getTokenizerOverride?.()) ??
+      "auto";
+    const vendorModelId = await resolveVendorModelIdFromSaved(
+      params.savedModelId,
+      params.savedModels
+    );
+    const family = resolveTokenizerFamily(vendorModelId, override);
+    const scope = buildCounterScope({
+      vendorModelId,
+      tokenizerOverride: override,
+      tokenizerFamily: family,
+      driverName,
+    });
+    const contentHash = chunkHash16(serialized);
+    const hit = promptWholeCache.lookup("", scope, contentHash);
+    if (hit != null) {
+      return hit;
+    }
+    if (sessionKkv != null) {
+      await promptWholeCache.seedFromKkv(sessionKkv, sessionId);
+      return promptWholeCache.lookup("", scope, contentHash) ?? null;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * 展示与压缩共用的唯一读口。签名必带 `sessionId`。
  *
  * 命中判定：热层（进程内 Map）→ session KKV。两条路径上若值的
@@ -168,15 +234,32 @@ export async function resolveCurrentPromptTokens(
   //   true：读口的本地分支本身就是用户可见的真实刷新，不存在预热路径）。
   const sessionKkv = options?.sessionKkv ?? null;
 
-  // 估算优先：无统计可用时不做真分词器计数——序列化 + 廉价估算即回（不进
-  // L1/L2、不推代际、不落 KKV：瞬态估读没有缓存价值）。取
-  // `max(registry heuristic, CJK 感知保守下限)`：heuristic 的 /3.35 是英文
-  // 口径、中文低估八成，CJK 下限把偏差压回有界（消费方语义见
-  // ResolveCurrentPromptTokensOptions.preferEstimate）。
+  // 估算优先：无统计可用时不做真分词器计数——但**先查 L1 整串缓存**
+  // （cr-fix-spec-r2 s2/G-1，2026-09-29）：L1 命中是零成本现成精确值，
+  // 拒读它会让「后台暖机写的 L1 永远没人消费」、chip 在 api miss 期间锁死
+  // 估算档（mobile 同病为「精确→估算→升级」降级闪烁）——与统计优先
+  // 「有哪个用哪个」口径相悖。键构造与驱动层完全同款（scope = 模型/
+  // override/家族/驱动名，指纹 = 整串+tools 串前 16 hex）；驱动未注册时
+  // （触发器测试场景）跳过预查，直接估算。
+  // miss 时序列化 + 廉价估算即回（不进 L1/L2、不推代际、不落 KKV：瞬态
+  // 估读没有缓存价值）。取 `max(registry heuristic, CJK 感知保守下限)`：
+  // heuristic 的 /3.35 是英文口径、中文低估八成，CJK 下限把偏差压回有界
+  // （消费方语义见 ResolveCurrentPromptTokensOptions.preferEstimate）。
   if (options?.preferEstimate === true) {
     const serialized =
       (await serializePromptLlmInput(params.layout, params.ctx)) +
       serializeToolsForTokenCount(params.tools);
+    const cached = await lookupWholeCacheEntry(sessionId, params, serialized, sessionKkv);
+    if (cached != null) {
+      // 命中即原样返回（与驱动层 L1 命中同语义；条目可能是精确档或
+      // heuristic 档——后者与下方估算等价，返回谁都不是降级）。
+      return {
+        tokenCount: cached.tokenCount,
+        source: "local",
+        estimated: cached.estimated,
+        counterKind: cached.counterKind,
+      };
+    }
     const tokenCount = Math.max(
       params.registry.heuristic.countText(serialized),
       estimateTokensCjkAware(serialized)

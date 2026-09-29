@@ -5,8 +5,8 @@
  * 「基线 + anchorSeq 后增量估算」覆盖（2026-09-29 真机复验拍板）。
  *
  * 覆盖挂点：
- * - message.service：delete / updateContent / hide / truncateAfter
- *   （append 不失效，见首条用例）
+ * - message.service：delete / updateContent / hide / show / hideRange /
+ *   showRange / truncateAfter（append 不失效，见首条用例）
  * - session.service：updateSessionAgentConfig（会话级切 Agent / 切模型）
  * - message-checkpoint：rollbackToMessage（回滚）
  * - message-transcript-effects：setMessageFloorAtMessage（置位）
@@ -147,6 +147,49 @@ describe("prompt 占用失效挂点", () => {
     await seedRow(ctx.sessionKkv, session.id);
 
     await ctx.messages.hide(message.id);
+    await assertRowGone(ctx.sessionKkv, session.id);
+  });
+
+  it("message.show 后 KKV 行被清（可见性恢复同样改变可见 prompt）", async () => {
+    const { ctx, session } = await makeSession();
+    const message = await ctx.messages.append(
+      session.id,
+      "user",
+      textBlocks("show me")
+    );
+    await ctx.messages.hide(message.id);
+    await seedRow(ctx.sessionKkv, session.id);
+
+    await ctx.messages.show(message.id);
+    await assertRowGone(ctx.sessionKkv, session.id);
+  });
+
+  it("message.hideRange 后 KKV 行被清", async () => {
+    const { ctx, session } = await makeSession();
+    const message = await ctx.messages.append(
+      session.id,
+      "user",
+      textBlocks("hide range")
+    );
+    await seedRow(ctx.sessionKkv, session.id);
+
+    const count = await ctx.messages.hideRange(session.id, message.seq, message.seq);
+    assert.equal(count, 1);
+    await assertRowGone(ctx.sessionKkv, session.id);
+  });
+
+  it("message.showRange 后 KKV 行被清", async () => {
+    const { ctx, session } = await makeSession();
+    const message = await ctx.messages.append(
+      session.id,
+      "user",
+      textBlocks("show range")
+    );
+    await ctx.messages.hideRange(session.id, message.seq, message.seq);
+    await seedRow(ctx.sessionKkv, session.id);
+
+    const count = await ctx.messages.showRange(session.id, message.seq, message.seq);
+    assert.equal(count, 1);
     await assertRowGone(ctx.sessionKkv, session.id);
   });
 

@@ -341,11 +341,13 @@ export class DefaultAgentRunner implements AgentRunner {
      * 下一步的压缩评估与 chip 刷新直接命中 api 档——run 内不再为读数付
      * 本地整串计数（glm 原生大上下文单次 ~5.8s）。
      *
-     * 消息追加会失效该条目（message.service 的 invalidatePromptTokens 口径），
-     * 所以写入点必须在**本 step 全部消息落库之后**：完成/空回复分支
-     * （toolUses 为空处）与 tool_results 落库后，共两个 chokepoint。
-     * `lastAnchorSeq` 镜像最后一次写入携带的锚点（含 undefined），供 run
-     * 收尾的终值写沿用——picked 与锚点出自同一步，不会错位。
+     * 写入点必须在**本 step 全部消息落库之后**（完成/空回复分支与
+     * tool_results 落库后，共两个 chokepoint）：`anchorSeq` 是提示词末条
+     * 消息的 seq，必须与 usage 对应**同一批可见消息**——锚点后追加的消息
+     * 由读口的增量估算覆盖（纯追加不失效基线，2026-09-29 拍板），锚定
+     * 早了会把已计入基线的消息再算一遍增量。`lastAnchorSeq` 镜像最后一次
+     * 写入携带的锚点（含 undefined），供 run 收尾的终值写沿用——picked
+     * 与锚点出自同一步，不会错位。
      */
     let lastAnchorSeq: number | undefined;
     const anchorStepUsage = (
@@ -857,8 +859,9 @@ export class DefaultAgentRunner implements AgentRunner {
           break;
         }
         await session.append("user", { blocks: toolResults });
-        // chokepoint ②：tool_results 落库后回锚本 step 的 usage（assistant
-        // 落库时失效的条目在这里重建，下一步评估走 api 档零计数）。
+        // chokepoint ②：tool_results 落库后回锚本 step 的 usage（锚点与
+        // usage 对齐到同一批可见消息——纯追加不失效基线，下一步评估走
+        // api 档零计数、锚点后增量由读口覆盖）。
         anchorStepUsage(result.usage, stepAnchorSeq);
         if (publishRunLifecycle) {
           bus.publish(EVENT_AGENT_STEP_COMMITTED, {

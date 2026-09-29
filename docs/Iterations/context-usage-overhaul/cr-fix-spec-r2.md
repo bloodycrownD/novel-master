@@ -147,10 +147,11 @@
 ## Fix-Spec Closure
 | 项 | 状态 |
 | fix-spec-ready | yes（终轮修订闭合：P0 改法绑定 L1 方案并保留否决口、B-1 补跨会话层、C-3 与 B-1 冲突消解、C-1 验收措辞可达、新增 C-1/C-2/I-1 三条 P2 已入册） |
+| **执行状态** | **已执行完毕**（2026-09-29，方案乙落地；全部 14 条闭合，证据见 verify-record「CR r2 十四条修复执行」轮） |
 | fix_spec_path | docs/Iterations/context-usage-overhaul/cr-fix-spec-r2.md |
 | dag_version / review_round | 3 / 2 |
 | P0 / P1 / P2（已写入 fix-spec） | 1 / 4 / 9 |
 | 未写入的开放 must-fix | 0 |
 | spec_deviations | none |
 | C-orch | ✅（三 scope + 终轮均无偶然 hop；双端 parity 缺口随 s2/G-1、s2/G-2 闭合；review-full 判定「不需要再开新一轮代码评审」） |
-| C 类合并后 QA | 已附（manual_user 不阻塞） |
+| C 类合并后 QA | 已附（manual_user 不阻塞）——另注：真机复验项 = 弹窗首开/复开、切模型 chip 节奏、L1 已暖刷新无闪烁 |

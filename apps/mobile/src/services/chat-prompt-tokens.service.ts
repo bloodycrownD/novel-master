@@ -151,11 +151,21 @@ async function loadChatTokenLabelWithFlag(
 const preciseUpgradeInflight = new Set<string>();
 
 /**
+ * 会话首帧刷新代数（升级回调新鲜度闸，cr-fix-spec-r2 s2/B-1）：每次
+ * `loadChatPromptTokenLabelResilient` 首帧成功即 `gen++`。升级轮记录发起时
+ * 的 gen，回调前比对——不等则丢弃：升级在途的 ~5.8s 里若发生切模型/新
+ * 消息触发的刷新（必有新首帧、gen 必变），旧家族的精确标签（如 `glm =`）
+ * 不得覆盖新首帧读数。
+ */
+const sessionRefreshGen = new Map<string, number>();
+
+/**
  * 两阶段标签（统计优先口径的 UI 面，2026-09-29 切模型慢复验定稿）：
  * 首帧 `preferEstimate` 即回（api 命中=精确；miss=CJK 感知廉价估算，`gpt ≈`）；
  * 首帧是估算档时后台跑一次完整 resolve（家族真分词器 + L1 整串缓存暖机），
  * 完成后经 `onPreciseUpgrade` 回调升级标签（`glm =` 等）。之后 api 真值到达
- * （下一次请求）自然接管。
+ * （下一次请求）自然接管。升级回调带新鲜度闸（见 {@link sessionRefreshGen}）；
+ * 被丢弃的升级由下次刷新的 api 真值/新一轮升级自愈。
  */
 export async function loadChatPromptTokenLabelResilient(
   runtime: MobileNovelMasterRuntime,
@@ -174,18 +184,26 @@ export async function loadChatPromptTokenLabelResilient(
     }
     return loadChatPromptTokenLabelFallback(runtime, scope);
   }
+  const sessionId = scope.sessionId;
+  const gen = (sessionRefreshGen.get(sessionId) ?? 0) + 1;
+  sessionRefreshGen.set(sessionId, gen);
   if (first.upgradeWorthy && onPreciseUpgrade != null) {
-    const sessionId = scope.sessionId;
     if (!preciseUpgradeInflight.has(sessionId)) {
       preciseUpgradeInflight.add(sessionId);
       void (async () => {
         try {
           const precise = await loadChatTokenLabelWithFlag(runtime, scope, false);
-          if (precise.label !== first.label) {
+          // 新鲜度闸：升级期间该会话出现过更新的首帧（gen 已推进）→ 本次
+          // 升级结果陈旧，静默丢弃（不改写在途集合语义，finally 照常释放）。
+          if (sessionRefreshGen.get(sessionId) === gen && precise.label !== first.label) {
             onPreciseUpgrade(precise.label);
           }
-        } catch {
-          // 升级失败保持首帧估算标签；下次刷新/api 真值自愈。
+        } catch (error) {
+          // 升级失败保持首帧估算标签；下次刷新/api 真值自愈。开发期留痕
+          // （cr-fix-spec-r2 full/I-1）：静默失败会让 chip 永停估算档且无从排查。
+          if (__DEV__) {
+            console.warn('[chat] prompt token precise upgrade failed', error);
+          }
         } finally {
           preciseUpgradeInflight.delete(sessionId);
         }

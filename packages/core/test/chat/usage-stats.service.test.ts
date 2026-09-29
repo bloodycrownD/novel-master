@@ -104,13 +104,13 @@ async function seedSession() {
   return { ctx, project, session };
 }
 
-/** 直接走 repo.insert 落一条时间戳/模型/usage 完全受控的消息。 */
+/** 直接走 repo.insert 落一条时间戳/模型/usage 完全受控的消息，返回消息 id。 */
 async function seedMsg(
   ctx: ReturnType<typeof getNovelMasterTestContext>,
   sessionId: string,
   seq: number,
   seed: MsgSeed
-): Promise<void> {
+): Promise<string> {
   const u = seed.usage;
   const usage =
     u == null
@@ -144,6 +144,7 @@ async function seedMsg(
     ...(usage != null ? { usage } : {}),
   };
   await new SqliteMessageRepository(ctx.conn).insert(message);
+  return message.id;
 }
 
 describe("usage stats service (T-S5)", () => {
@@ -1517,5 +1518,180 @@ describe("usage stats service 会话维度详情（T-MD1/T-MD2，metric-detail-s
       () => svc.getSessionUsageDetail(""),
       ChatError
     );
+  });
+
+  it("失效矩阵：delete/updateContent/truncateAfter 失效、hide/show 不失效（cr-fix-spec-r2 s3/G-2）", async () => {
+    const { ctx, session } = await seedSession();
+    const { createMessageService } = await import(
+      "../../src/service/chat/create-chat-services.js"
+    );
+    const messages = createMessageService(ctx.conn);
+    const svc = createUsageStatsService(ctx.conn);
+    const now = Date.now();
+
+    // 布局：seq1 assistant 带 2 个 tool_use、seq2 assistant 带 1 个、
+    // seq3 assistant 纯文本（后作 updateContent 的对象）。
+    const seq1 = await seedMsg(ctx, session.id, 1, {
+      createdAtMs: now - 3000,
+      blocks: [{ type: "text", text: "a" }, toolUseBlock("t1"), toolUseBlock("t2")],
+    });
+    const seq2 = await seedMsg(ctx, session.id, 2, {
+      createdAtMs: now - 2000,
+      blocks: [{ type: "text", text: "b" }, toolUseBlock("t3")],
+    });
+    const seq3 = await seedMsg(ctx, session.id, 3, {
+      createdAtMs: now - 1000,
+      blocks: [{ type: "text", text: "plain" }],
+    });
+
+    // 预热缓存（miss 现算 3 → 回填）。
+    assert.equal((await svc.getSessionUsageDetail(session.id)).toolUseCount, 3);
+
+    // hide/show：可见性变化不改含 hidden 口径的计数 → 缓存不失效（读数
+    // 仍是缓存值；若失效会触发现算——值相同无法区分，故以「缓存行值
+    // 不变」+ 下一步 delete 的对照来锁）。
+    await messages.hide(seq2);
+    await messages.show(seq2);
+    const afterVisibility = await ctx.conn.query<{ value: string }>(
+      `SELECT value FROM session_kkv_entry
+       WHERE session_id = ? AND domain = 'usage_stats' AND key = 'toolUseCount'`,
+      [session.id]
+    );
+    assert.equal(afterVisibility[0]?.value, "3", "hide/show 不得失效缓存");
+
+    // delete：删掉 seq2（1 个 tool_use）→ 失效 → 重算 2。
+    await messages.delete(seq2);
+    assert.equal(
+      (await svc.getSessionUsageDetail(session.id)).toolUseCount,
+      2,
+      "delete 后应失效重算"
+    );
+
+    // updateContent：把 seq3 改成带 1 个 tool_use → 失效 → 重算 3。
+    await messages.updateContent(seq3, {
+      blocks: [{ type: "text", text: "edited" }, toolUseBlock("t9")],
+    });
+    assert.equal(
+      (await svc.getSessionUsageDetail(session.id)).toolUseCount,
+      3,
+      "updateContent 后应失效重算"
+    );
+
+    // truncateAfter：截掉 seq3（含 1 个 tool_use）→ 失效 → 重算 2。
+    // 锚 seq1（seq2 已被本用例前段删除，不能再当锚）。
+    await messages.truncateAfter(session.id, seq1);
+    assert.equal(
+      (await svc.getSessionUsageDetail(session.id)).toolUseCount,
+      2,
+      "truncateAfter 后应失效重算"
+    );
+  });
+
+  it("坏行（损坏 content_blob）按 0 计不抛；KKV 脏值（非数字）当 miss 重算回填（cr-fix-spec-r2 s3/G-2）", async () => {
+    const { ctx, session } = await seedSession();
+    const now = Date.now();
+    // 好行 1 个 tool_use + 坏行（encoding 声称 zlib、字节非法）。
+    await seedMsg(ctx, session.id, 1, {
+      createdAtMs: now - 1000,
+      blocks: [{ type: "text", text: "a" }, toolUseBlock("t1")],
+    });
+    await ctx.conn.execute(
+      `INSERT INTO chat_message (
+         id, session_id, seq, role, content_json, created_at_ms, hidden,
+         content_encoding, content_blob
+       ) VALUES (?, ?, 2, 'assistant', '', ?, 0, 'zlib', ?)`,
+      [randomUUID(), session.id, now, Buffer.from([0x00, 0x01, 0xff])]
+    );
+
+    const svc = createUsageStatsService(ctx.conn);
+    const detail = await svc.getSessionUsageDetail(session.id);
+    // 坏行按 0 计：总数 = 好行 1；不抛（弹窗不该被单条历史坏行打挂）。
+    assert.equal(detail.toolUseCount, 1);
+
+    // 脏缓存值（非数字串）：当 miss 重算并覆盖回填。
+    await ctx.conn.execute(
+      `INSERT OR REPLACE INTO session_kkv_entry (session_id, domain, key, value)
+       VALUES (?, 'usage_stats', 'toolUseCount', 'abc')`,
+      [session.id]
+    );
+    const dirty = await svc.getSessionUsageDetail(session.id);
+    assert.equal(dirty.toolUseCount, 1, "脏值当 miss 重算");
+    const after = await ctx.conn.query<{ value: string }>(
+      `SELECT value FROM session_kkv_entry
+       WHERE session_id = ? AND domain = 'usage_stats' AND key = 'toolUseCount'`,
+      [session.id]
+    );
+    assert.equal(after[0]?.value, "1", "重算值应覆盖脏值");
+  });
+
+  it("回填前复核（s3/B-1）：现算期间发生失效（哨兵）→ 放弃回填，下次读重算回填", async () => {
+    const { ctx, session } = await seedSession();
+    const now = Date.now();
+    // 布局：seq1/seq2 各带 1 个 tool_use（现算结果 2）。
+    await seedMsg(ctx, session.id, 1, {
+      createdAtMs: now - 2000,
+      blocks: [{ type: "text", text: "a" }, toolUseBlock("t1")],
+    });
+    await seedMsg(ctx, session.id, 2, {
+      createdAtMs: now - 1000,
+      blocks: [{ type: "text", text: "b" }, toolUseBlock("t2")],
+    });
+    const svc = createUsageStatsService(ctx.conn);
+
+    // 拦截 assistant 投影 SELECT（现算起点），返回后立刻写哨兵——模拟
+    // 现算的数百毫秒里另一路径发生失效（此时 miss 所见原值是 null）。
+    const originalQuery = ctx.conn.query.bind(ctx.conn);
+    const originalExecute = ctx.conn.execute.bind(ctx.conn);
+    let armed = true;
+    (ctx.conn as unknown as { query: typeof ctx.conn.query }).query = async (
+      sql: string,
+      params?: readonly unknown[]
+    ) => {
+      const rows = await originalQuery(sql, params);
+      if (
+        armed &&
+        typeof sql === "string" &&
+        sql.includes("role = 'assistant'")
+      ) {
+        armed = false;
+        await originalExecute(
+          `INSERT OR REPLACE INTO session_kkv_entry (session_id, domain, key, value)
+           VALUES (?, 'usage_stats', 'toolUseCount', '')`,
+          [session.id]
+        );
+      }
+      return rows;
+    };
+
+    try {
+      const first = await svc.getSessionUsageDetail(session.id);
+      // 本次返回值已出：现算结果 2，不受回填拦截影响。
+      assert.equal(first.toolUseCount, 2);
+      const cacheAfter = await originalQuery<{ value: string }>(
+        `SELECT value FROM session_kkv_entry
+         WHERE session_id = ? AND domain = 'usage_stats' AND key = 'toolUseCount'`,
+        [session.id]
+      );
+      assert.equal(
+        cacheAfter[0]?.value,
+        "",
+        "回填被复核拦截，缓存仍是哨兵（未被陈旧值覆盖）"
+      );
+
+      // 下次读：哨兵当 miss 重算（原值=哨兵、无人再动 → 复核通过）正常
+      // 回填——终轮抽检 B 裁决的无死循环回归锁。
+      const second = await svc.getSessionUsageDetail(session.id);
+      assert.equal(second.toolUseCount, 2);
+      const cacheFinal = await originalQuery<{ value: string }>(
+        `SELECT value FROM session_kkv_entry
+         WHERE session_id = ? AND domain = 'usage_stats' AND key = 'toolUseCount'`,
+        [session.id]
+      );
+      assert.equal(cacheFinal[0]?.value, "2", "哨兵场景正常回填不循环");
+    } finally {
+      // 共享连接：用完还原 query 包装，不带伤传给后续用例。
+      (ctx.conn as unknown as { query: typeof ctx.conn.query }).query =
+        originalQuery;
+    }
   });
 });

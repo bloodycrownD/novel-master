@@ -373,4 +373,205 @@ describe('chat-prompt-tokens.service', () => {
     expect(upgrades).toEqual([]);
     expect(mockResolvePromptTokensWithBackfill).toHaveBeenCalledTimes(1);
   });
+
+  /** 两阶段用例的公共 mock：首帧估算、完整口径按 fabricate 产出。 */
+  function mockTwoPhaseResolve(
+    fabricate: () => Promise<{
+      tokenCount: number;
+      estimated: boolean;
+      counterKind: string;
+      source: 'local';
+    }>
+  ): void {
+    mockBuildSessionPromptInput.mockResolvedValue({
+      definition: {model: 'zai/glm-4.6'},
+      layout: {persist: [], dynamic: []},
+      ctx: {workplaceDisplay: '', messages: []},
+    });
+    mockResolveSavedModelId.mockReturnValue('zai/glm-4.6');
+    mockResolveTokenCounterModeForModel.mockResolvedValue('glm');
+    mockResolvePromptTokensWithBackfill.mockImplementation(
+      (_sid: string, _raw: unknown, _params: unknown, options?: unknown) => {
+        const preferEstimate = (
+          options as {preferEstimate?: boolean} | undefined
+        )?.preferEstimate;
+        if (preferEstimate === true) {
+          return Promise.resolve({
+            tokenCount: 30_000,
+            estimated: true,
+            counterKind: 'heuristic',
+            source: 'local',
+          });
+        }
+        return fabricate();
+      },
+    );
+  }
+
+  it('两阶段边界①：升级在途时再次刷新复用同一次后台轮（不堆叠第三次 resolve）', async () => {
+    let releaseUpgrade: (() => void) | undefined;
+    mockTwoPhaseResolve(
+      () =>
+        new Promise(resolve => {
+          releaseUpgrade = () =>
+            resolve({
+              tokenCount: 99_300,
+              estimated: false,
+              counterKind: 'glm',
+              source: 'local',
+            });
+        }),
+    );
+
+    const runtime = stubRuntime({contextWindow: 128_000});
+    const upgrades: string[] = [];
+    await loadChatPromptTokenLabelResilient(
+      runtime,
+      {projectId: 'p', sessionId: 's-inflight'},
+      l => upgrades.push(l),
+    );
+    // 升级在途（releaseUpgrade 尚未调用）时再次刷新：首帧照出估算，
+    // 但后台轮被 inflight 去重复用——总调用次数 3（两首帧 + 一升级）而非 4。
+    const second = await loadChatPromptTokenLabelResilient(
+      runtime,
+      {projectId: 'p', sessionId: 's-inflight'},
+      l => upgrades.push(l),
+    );
+    expect(second).toBe('gpt ≈ 30k / 128k (23%)');
+    expect(mockResolvePromptTokensWithBackfill).toHaveBeenCalledTimes(3);
+
+    // 放行升级：第二次刷新已推进新鲜度代数 → 陈旧升级结果被闸丢弃
+    // （不作回调用例——新鲜度语义由场景②专项锁定，这里只锁去重）。
+    releaseUpgrade!();
+    await new Promise(resolve => setImmediate(resolve));
+    await new Promise(resolve => setImmediate(resolve));
+    expect(upgrades).toEqual([]);
+  });
+
+  it('两阶段边界②：后台轮失败无回调、inflight 释放后下次刷新可再次启动升级', async () => {
+    let upgradeAttempts = 0;
+    mockTwoPhaseResolve(() => {
+      upgradeAttempts += 1;
+      if (upgradeAttempts === 1) {
+        return Promise.reject(new Error('count-boom'));
+      }
+      return Promise.resolve({
+        tokenCount: 99_300,
+        estimated: false,
+        counterKind: 'glm',
+        source: 'local',
+      });
+    });
+
+    const runtime = stubRuntime({contextWindow: 128_000});
+    const upgrades: string[] = [];
+    // 第一次升级 reject：保持首帧估算标签、无回调。
+    await loadChatPromptTokenLabelResilient(
+      runtime,
+      {projectId: 'p', sessionId: 's-retry'},
+      l => upgrades.push(l),
+    );
+    await new Promise(resolve => setImmediate(resolve));
+    await new Promise(resolve => setImmediate(resolve));
+    expect(upgrades).toEqual([]);
+
+    // inflight 已释放：下一次刷新重新启动升级（第二次不 reject）→ 回调到位。
+    await loadChatPromptTokenLabelResilient(
+      runtime,
+      {projectId: 'p', sessionId: 's-retry'},
+      l => upgrades.push(l),
+    );
+    await new Promise(resolve => setImmediate(resolve));
+    await new Promise(resolve => setImmediate(resolve));
+    expect(upgrades).toEqual(['glm = 99.3k / 128k (78%)']);
+    expect(upgradeAttempts).toBe(2);
+  });
+
+  it('两阶段边界③（B-1 场景②）：升级在途切模型 → 旧家族精确标签被新鲜度闸丢弃，新模型下一轮升级到位', async () => {
+    // 同会话切模型：model A（glm）升在途，切到 model B（tiktoken）后 A 的
+    // 精确标签不得落 UI（否则 chip 长期显示旧家族记号）。
+    let family: 'glm' | 'tiktoken' = 'glm';
+    const releaseQueue: Array<() => void> = [];
+    mockBuildSessionPromptInput.mockResolvedValue({
+      definition: {model: 'switchable'},
+      layout: {persist: [], dynamic: []},
+      ctx: {workplaceDisplay: '', messages: []},
+    });
+    mockResolveSavedModelId.mockImplementation(() =>
+      family === 'glm' ? 'zai/glm-4.6' : 'openai/gpt-4o',
+    );
+    mockResolveTokenCounterModeForModel.mockImplementation(() =>
+      Promise.resolve(family),
+    );
+    mockResolvePromptTokensWithBackfill.mockImplementation(
+      (_sid: string, _raw: unknown, _params: unknown, options?: unknown) => {
+        const preferEstimate = (
+          options as {preferEstimate?: boolean} | undefined
+        )?.preferEstimate;
+        if (preferEstimate === true) {
+          return Promise.resolve({
+            tokenCount: 30_000,
+            estimated: true,
+            counterKind: 'heuristic',
+            source: 'local',
+          });
+        }
+        const familyAtCall = family;
+        return new Promise(resolve => {
+          releaseQueue.push(() =>
+            resolve(
+              familyAtCall === 'glm'
+                ? {
+                    tokenCount: 99_300,
+                    estimated: false,
+                    counterKind: 'glm',
+                    source: 'local',
+                  }
+                : {
+                    tokenCount: 24_000,
+                    estimated: false,
+                    counterKind: 'tiktoken',
+                    source: 'local',
+                  },
+            ),
+          );
+        });
+      },
+    );
+
+    const runtime = stubRuntime({contextWindow: 128_000});
+    const upgrades: string[] = [];
+    // ① model A 首帧 + 升级在途。
+    await loadChatPromptTokenLabelResilient(
+      runtime,
+      {projectId: 'p', sessionId: 's-switch-model'},
+      l => upgrades.push(l),
+    );
+    // ② 切到 model B 并刷新：新首帧（推进新鲜度代数）；B 的升级被 inflight 去重跳过。
+    family = 'tiktoken';
+    const afterSwitch = await loadChatPromptTokenLabelResilient(
+      runtime,
+      {projectId: 'p', sessionId: 's-switch-model'},
+      l => upgrades.push(l),
+    );
+    expect(afterSwitch).toBe('gpt ≈ 30k / 128k (23%)');
+    // ③ 放行 A 的升级：gen 已变 → 丢弃，不回调旧家族标签。
+    releaseQueue[0]!();
+    await new Promise(resolve => setImmediate(resolve));
+    await new Promise(resolve => setImmediate(resolve));
+    expect(upgrades).toEqual([]);
+    // ④ 下一次刷新：inflight 已释放，B 的升级启动并到位（升级轮启动是异步的，
+    // 先让微任务跑起来再放行）。
+    await loadChatPromptTokenLabelResilient(
+      runtime,
+      {projectId: 'p', sessionId: 's-switch-model'},
+      l => upgrades.push(l),
+    );
+    await new Promise(resolve => setImmediate(resolve));
+    await new Promise(resolve => setImmediate(resolve));
+    releaseQueue[1]!();
+    await new Promise(resolve => setImmediate(resolve));
+    await new Promise(resolve => setImmediate(resolve));
+    expect(upgrades).toEqual(['gpt = 24k / 128k (19%)']);
+  });
 });

@@ -7,11 +7,11 @@
  *   window.novelMasterDesktop.invoke 按 channel 路由，token-usage-stats-view
  *   范式）；
  * - MetricsDetailPanel 两段渲染：最近请求（模型/输入/输出/cache 拆分/命中率
- *   — 态——cache_creation 缺失显示「—」）+ 会话累计（可见消息数/工具调用/
- *   累计输入输出）+ 口径脚注；
+ *   — 态——cache_creation 缺失显示「—」）+ 会话累计（可见消息数/工具调用，
+ *   累计输入/输出已移除）+ 口径脚注；
  * - 「上下文占用」行与 chip 读数同源：渲染值 === 传入 contextUsageLabel
  *   （端侧复用不取新数，P0-2）；
- * - 空态：last/totals null 时出占位行。
+ * - 空态：last 为 null 时出占位行。
  *
  * portal 外壳（createPortal + 定位 + 外点关闭）不在本套件：node:test 无
  * DOM，react-test-renderer 渲不了 portal（与 workspace-push 的 ContextMenu

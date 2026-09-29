@@ -41,4 +41,30 @@ describe("estimateTokensCjkAware", () => {
       Math.ceil(4 * CJK_TOKENS_PER_CHAR)
     );
   });
+
+  it("CJK 标点（U+3000-303F）计入 CJK 段；全角 ASCII 变体（U+FF00 区）不在正则内（full/C-1 口径锁定）", () => {
+    // U+3000-303F（CJK 标点）落在 \u2E80-\u9FFF 区间内 → 按 CJK ×1.64 计。
+    const cjkPunct = "。、「」【】"; // 6 个 U+3000-303F 区标点
+    assert.equal(
+      estimateTokensCjkAware(cjkPunct),
+      Math.ceil(6 * CJK_TOKENS_PER_CHAR)
+    );
+    // 全角 ASCII 变体（，U+FF0C、！U+FF01 等）在 U+FF00-FF5E、不在正则
+    // 区间内 → 按非 CJK ÷3.35 宽松处理（低估方向，已知取舍；注释与用例
+    // 同口径）。
+    const fullwidthAscii = "，！？"; // 3 个 U+FF00 区字符
+    assert.equal(
+      estimateTokensCjkAware(fullwidthAscii),
+      Math.ceil(3 / 3.35)
+    );
+  });
+
+  it("整数倍 CJK 无浮点偏差的取样锁定：25 字 → 41（25×1.64 恰为精确值）", () => {
+    const text = "夜".repeat(25);
+    // 25 × 1.64 在 IEEE754 下恰为 41（乘法无偏差）；本用例钉住「公式 =
+    // ceil(CJK×1.64 + rest/3.35)」的取样行为——若未来改整数算术或改系数，
+    // 本用例会红，届时按拍板同步口径。
+    assert.equal(25 * CJK_TOKENS_PER_CHAR, 41);
+    assert.equal(estimateTokensCjkAware(text), 41);
+  });
 });

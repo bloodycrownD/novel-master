@@ -90,6 +90,11 @@ export function useChatTabScope({
   // 在途时新触发复用在途并安排追赶轮（最后一次触发必产生一次计算）。
   const CHAT_TOKEN_LABEL_DEBOUNCE_MS = 300;
 
+  // 升级回调的会话身份闸（cr-fix-spec-r2 s2/B-1 场景①）：记录最近一次
+  // 刷新所属会话，升级回调写回前比对——跨会话切换后，旧会话在途升级的
+  // 精确标签不得写进新会话的 meta（service 层 gen 闸之外的双保险）。
+  const tokenLabelSessionRef = useRef<string | null>(null);
+
   const runChatTokenLabelRefresh = useCallback(async () => {
     // meta 未加载（undefined）时保持未加载态：partial 更新不能凭空造出
     // 残缺的 meta 对象（缺字段的假 meta 会被当成已加载渲染）。
@@ -97,6 +102,7 @@ export function useChatTabScope({
       setAgentMeta(prev => (prev == null ? prev : {...prev, tokenLabel: ''}));
       return;
     }
+    tokenLabelSessionRef.current = sessionId;
     // 已有标签时保留旧值而非 '…'：压缩/发送后的重算在大上下文上可达数秒
     // （native 整串计数），旧读数先顶着、新值落地即替换；会话切换路径由
     // loadChatAgentMeta 重建 meta（tokenLabel 归 ''）先清场，不会串显。
@@ -109,8 +115,12 @@ export function useChatTabScope({
         {projectId, sessionId},
         // 两阶段升级回调（统计优先口径）：首帧若是估算档（如切模型后无 api
         // 基线），后台跑完家族真分词器精确计数后回填——`glm =` 稍后到位，
-        // 首帧 `gpt ≈` 先顶着，不再干等原生整串计数 ~5.8s。
+        // 首帧 `gpt ≈` 先顶着，不再干等原生整串计数 ~5.8s。写回前过会话
+        // 身份闸：本回调发起后若已切到别的会话，旧会话的标签就地丢弃。
         upgraded => {
+          if (tokenLabelSessionRef.current !== sessionId) {
+            return;
+          }
           setAgentMeta(prev =>
             prev == null ? prev : {...prev, tokenLabel: upgraded},
           );

@@ -102,13 +102,19 @@ export class DefaultMessageService implements MessageService {
    * 失效口径（见 session-kkv-domains 的 usage_stats 域注释）：新增含
    * tool_use 的消息 / 编辑 / 删除 / 回滚截断。hide/show 不失效——计数含
    * hidden 行，可见性变化不改计数。纯文本追加不失效（不触发无谓重算）。
+   *
+   * 失效写法是**哨兵空串**而非 delete（cr-fix-spec-r2 s3/B-1）：读口
+   * 「现算回填」与失效存在竞态——SELECT 快照与回填 set 之间隔数百毫秒
+   * 解压循环，delete 先落、陈旧 set 后写会让失效被覆盖且不自愈；哨兵让
+   * 读口回填前能复核「原值是否仍等于 miss 时所见」，不等即放弃回填。
    */
   private async invalidateToolUseCount(sessionId: string): Promise<void> {
     try {
-      await createSessionKkvService(this.deps.conn).delete(
+      await createSessionKkvService(this.deps.conn).set(
         sessionId,
         SESSION_KKV_DOMAIN_USAGE_STATS,
-        USAGE_STATS_TOOL_USE_COUNT_KEY
+        USAGE_STATS_TOOL_USE_COUNT_KEY,
+        ""
       );
     } catch (error) {
       console.warn(
@@ -204,9 +210,10 @@ export class DefaultMessageService implements MessageService {
     await this.deps.messages.insert(message);
     // 消息「增」不再失效 API 占用（统计优先口径，2026-09-29 真机复验拍板）：
     // 纯追加由读口的「基线 + anchorSeq 之后追加消息的增量估算」覆盖（metric
-    // 同款），失效反而会让 run 起步的压缩评估跌进本地整串计数。删除/改写/
-    // 隐藏类路径（delete/updateContent/hide/show/hideRange/showRange/
-    // truncateAfter）的失效保留——增量表达不了内容消失。
+    // 同款），失效反而会让 run 起步的压缩评估与 chip 首帧跌回估算档（评估
+    // 已 preferEstimate 廉价即回，真正多付的是 UI 刷新路径的后台精确计数）。
+    // 删除/改写/隐藏类路径（delete/updateContent/hide/show/hideRange/
+    // showRange/truncateAfter）的失效保留——增量表达不了内容消失。
     // 工具调用数缓存：仅含 tool_use 块的追加失效（run 的工具步在此失效、
     // 纯文本追加不动缓存——避免 run 内每步无谓重算）。
     if (role === "assistant" && countToolUseBlocks(content) > 0) {

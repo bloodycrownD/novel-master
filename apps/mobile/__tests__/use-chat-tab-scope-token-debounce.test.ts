@@ -49,10 +49,13 @@ async function flushMicrotasks(rounds = 10) {
 }
 
 /**
- * 挂载真实 hook；runtime 的 getCurrentModelId 与 loadChatAgentMeta 都挂起
- * （refreshChatMeta 永远停在半路），token 标签只能由测试手动触发。
+ * 挂载真实 hook；默认 runtime 的 getCurrentModelId 与 loadChatAgentMeta 都
+ * 挂起（refreshChatMeta 永远停在半路），token 标签只能由测试手动触发。
+ * `modelId` 传入时放行 getCurrentModelId（meta 可完整落地，供断言
+ * tokenLabel 写入面——B-1 场景①回归用）。sessionId 走可变持有者：
+ * 场景①回归要在挂载后切会话重渲染。
  */
-async function mountScopeHarness() {
+async function mountScopeHarness(options?: {modelId?: string}) {
   const runtime: any = {
     projects: {
       list: jest.fn(async () => [{id: 'p1', name: 'P1'}]),
@@ -60,18 +63,22 @@ async function mountScopeHarness() {
     },
     sessions: {listByProject: jest.fn(async () => [])},
     state: {
-      getCurrentModelId: jest.fn(() => createDeferred<string>().promise),
+      getCurrentModelId:
+        options?.modelId != null
+          ? jest.fn(async () => options.modelId)
+          : jest.fn(() => createDeferred<string>().promise),
     },
     sessionVfs: jest.fn(() => ({})),
     workplace: jest.fn(() => ({})),
     projectVfs: jest.fn(() => ({})),
   };
+  const sessionHolder = {sessionId: 's1'};
   let api: ReturnType<typeof useChatTabScope> | undefined;
   const Harness = () => {
     api = useChatTabScope({
       runtime,
       projectId: 'p1',
-      sessionId: 's1',
+      sessionId: sessionHolder.sessionId,
       setCurrentProject: jest.fn(async () => undefined),
       setCurrentSession: jest.fn(async () => undefined),
       refreshScope: jest.fn(async () => undefined),
@@ -87,6 +94,12 @@ async function mountScopeHarness() {
   });
   return {
     api: () => api!,
+    setSessionId: (sessionId: string) => {
+      sessionHolder.sessionId = sessionId;
+      act(() => {
+        renderer.update(React.createElement(Harness));
+      });
+    },
     unmount: () => {
       act(() => {
         renderer.unmount();
@@ -178,7 +191,7 @@ describe('useChatTabScope refreshChatTokenLabel 防抖（T-TC6）', () => {
     loadLabelMock.mockImplementationOnce(() => pendingLabel.promise);
 
     await act(async () => {
-      void harness.api().refreshChatTokenLabel();
+      void harness!.api().refreshChatTokenLabel();
       jest.advanceTimersByTime(300);
       await flushMicrotasks();
     });
@@ -186,7 +199,7 @@ describe('useChatTabScope refreshChatTokenLabel 防抖（T-TC6）', () => {
 
     // 在途期间再触发 + 追赶计时到期：复用在途并串行排队，不并发第二轮。
     await act(async () => {
-      void harness.api().refreshChatTokenLabel();
+      void harness!.api().refreshChatTokenLabel();
       jest.advanceTimersByTime(300);
       await flushMicrotasks();
     });
@@ -198,5 +211,70 @@ describe('useChatTabScope refreshChatTokenLabel 防抖（T-TC6）', () => {
       await flushMicrotasks();
     });
     expect(loadLabelMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('B-1 场景①：升级回调带会话身份闸——切会话后旧会话的升级标签不写进新会话 meta', async () => {
+    // 本用例需要 meta 真实落地（tokenLabel 写入面）：放行 loadChatAgentMeta，
+    // 退出本文件其余用例的「meta 挂起」约定（其余用例在 beforeEach 重挂挂起）。
+    loadChatAgentMetaMock.mockResolvedValue({
+      tokenLabel: '',
+      modelName: 'gpt-4o',
+      agentName: 'a',
+      projectName: 'p',
+    });
+    harness = await mountScopeHarness({modelId: 'gpt-4o'});
+
+    // 按会话记录 service 传入的升级回调（挂载链可能自带一次自动刷新，
+    // 用「最近一次」取用，不依赖调用次数/顺序）。
+    const callbacksBySession = new Map<string, (label: string) => void>();
+    loadLabelMock.mockImplementation(
+      async (
+        _runtime: unknown,
+        scope: {sessionId: string},
+        onUpgrade?: unknown,
+      ) => {
+        if (typeof onUpgrade === 'function') {
+          callbacksBySession.set(
+            scope.sessionId,
+            onUpgrade as (label: string) => void,
+          );
+        }
+        return '1K tokens · 预估';
+      },
+    );
+
+    // s1 刷新：首帧标签落地。
+    await act(async () => {
+      void harness!.api().refreshChatTokenLabel();
+      jest.advanceTimersByTime(300);
+      await flushMicrotasks();
+    });
+    expect(callbacksBySession.has('s1')).toBe(true);
+    expect(harness!.api().agentMeta?.tokenLabel).toBe('1K tokens · 预估');
+
+    // 切到 s2 并刷新：s2 首帧标签落地。
+    harness!.setSessionId('s2');
+    await act(async () => {
+      void harness!.api().refreshChatTokenLabel();
+      jest.advanceTimersByTime(300);
+      await flushMicrotasks();
+    });
+    expect(callbacksBySession.has('s2')).toBe(true);
+    expect(harness!.api().agentMeta?.tokenLabel).toBe('1K tokens · 预估');
+
+    // s1 的升级现在才回来：身份闸（tokenLabelSessionRef 已是 s2）应丢弃，
+    // meta 不得出现旧会话的精确标签。
+    await act(async () => {
+      callbacksBySession.get('s1')!('glm = 99.3k / 128k (78%)');
+      await flushMicrotasks();
+    });
+    expect(harness!.api().agentMeta?.tokenLabel).toBe('1K tokens · 预估');
+
+    // s2 自己的升级回调照常写回。
+    await act(async () => {
+      callbacksBySession.get('s2')!('gpt = 24k / 128k (19%)');
+      await flushMicrotasks();
+    });
+    expect(harness!.api().agentMeta?.tokenLabel).toBe('gpt = 24k / 128k (19%)');
   });
 });

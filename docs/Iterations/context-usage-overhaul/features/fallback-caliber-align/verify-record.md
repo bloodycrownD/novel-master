@@ -256,6 +256,63 @@ desktop main tsc 干净、mobile 涉改文件 tsc 无错。**真机终验**（�
 必须 `adb exec-out run-as ... cat`；② tmp 下 .ts 脚本被 tsx 按 CJS 处理
 （无 package.json type 域），顶层 await 报错——改静态 import 或 .mts。
 
+## 追加轮：CR r2 十四条修复执行（cr-fix-spec-r2）
+
+两轮 CR（wave1 三 scope + wave2 review-full）产出 1 P0 / 4 P1 / 9 P2，
+逐条执行完毕（P0 走方案乙：core 读口回填设计意图）：
+
+1. **P0 s2/G-1（desktop 两阶段永不升级）**：`preferEstimate` 早退前先查
+   L1——新增 `lookupWholeCacheEntry`（键构造与驱动层同款：scope =
+   vendorModelId/override/family/driverName、指纹 = 整串+tools 串前 16
+   hex；进程内 miss 且带 KKV 时先 seed 再查；任何一步异常静默按 miss，
+   估算路径不被预查带崩；驱动未注册跳过——触发器测试场景）。命中即回
+   现成读数（精确档 `glm =`/降级档原样，与驱动层 L1 命中同语义）。连带
+   治好 mobile 的「精确→估算→升级」降级闪烁。T-T9b 重写为两态断言
+   （首帧 `gpt ≈` → 暖机后二次读 `gpt =`，轮询等待 fire-and-forget 暖机）、
+   T-T9c 的 precise 参照改取暖机后二次读数；core 新增「冷 L1 估算 → 完整
+   口径暖机 → 首帧直读精确」回归锁。
+2. **P1 s3/G-1（mobile 弹窗测试脱节）**：fixture 删 totals、断言改新文案
+   + 负向断言（不得含「累计输入/输出」）、空态用例同步、头注释对齐。
+3. **P1 s2/B-1（升级回调新鲜度）**：service 层 per-session 代数映射
+   （每首帧 gen++，升级回调前比对，不等即丢——堵切模型场景）+ hook 层
+   会话身份闸（`tokenLabelSessionRef`，回调写回前比对当前 sessionId——
+   堵跨会话场景；双保险）。
+4. **P1 s2/G-2**：mobile 四条边界用例——inflight 去重（总调用数 3 而非
+   4）、后台轮失败无回调且 inflight 释放后可重试、切模型丢弃回归（旧家族
+   标签不落、新模型下轮升级到位）、跨会话守卫回归（hook 层，s1 回调不写
+   s2 的 meta）；hook 测试基建加 `modelId` 放行选项（meta 需真实落地才能
+   断言 tokenLabel 写入面）。
+5. **P1 s3/B-1（回填竞态）**：三处失效挂点（message.service / 回滚服务 /
+   导入清缓存）由 delete 改**哨兵空串**；读口回填前复核「原值仍等于 miss
+   时所见」才 set（不等即放弃，本次返回值已出、下次读重算）。已知残余
+   （miss 时原值本就是哨兵、现算期间再失效——幂等不可分辨）已写入代码
+   注释与 fix-spec；测试锁「窗口内注入哨兵 → 回填被拦 + 缓存仍哨兵 →
+   下次读正常回填不循环」。
+6. **P2 批**：agent-runner ×2 与 trigger 注释口径同步（append 不失效 /
+   anchorSeq 对齐可见批 / preferEstimate 估算档）、message.service:207
+   精化、估算器注释改准（U+3000-303F 计入 CJK、U+FF00-FF5E 全角 ASCII
+   与非 BMP 生僻字不入正则）、tool-use-count 消费方注释、usage-stats.port
+   方法级 docstring、desktop 弹窗测试头注释、双端后台轮失败 `__DEV__`/
+   `isPackaged` 留痕（desktop 侧补 electron `app` import，测试 stub 已带
+   `isPackaged:false`）、clear-session-prompt-caches 文档改四件套。
+7. **P2 测试**：失效矩阵（delete/updateContent/truncateAfter 失效 +
+   hide/show 不失效以缓存值存在性锁）；坏行按 0 计不抛 + KKV 脏值当 miss
+   重算覆盖；增量 CJK 下限精确断言（可控 registry 恒返 1 + 复算期望值，
+   换掉恒真的 `> 50_000`）；估算器边界（CJK 标点归类 + 25 字整数倍取样）；
+   show/showRange/hideRange 失效三例 + invalidation 头注释挂点清单。
+
+**测试**：core 631/633（挂的仅既有 T-C2/T-C6 时区基线 2 例；dist 重建；
+desktop 三套件 33/33（T-T9b 两态真跑通——P0 端到端验收）；desktop main
+tsc 干净；mobile jest 全量 1595/1596（挂的仅既有 mermaid autocrlf 基线，
+CRLF 假红）、涉改文件 tsc 无错（:35 的 TS2556 为已登记在建噪声）。
+真机 force-stop 重启载新码无崩溃。
+
+**教训入档**：① 修行为要连带扫**注释与测试**——本轮 P0 的成因就是
+「实现改了、docstring 承诺没兑现」；② 跨目录测试漏改（撤回轮只搜了
+`src/__tests__`，漏掉 `apps/mobile/__tests__/`）——找测试文件按「测试
+目录 + 文件名」双搜；③ 断言有牙的检验方式：把实现改错看它红不红
+（增量用例旧断言 `> 基线` 在纯 heuristic 下仍绿）。
+
 ## 追加轮：列方案撤回 → 会话 KKV 缓存 + 移除累计输入输出（终态 v3）
 
 用户两轮拍板：①「只为统计工具调用数加一列不值当」「宁愿接受实时查询，
