@@ -53,10 +53,11 @@ import {
 } from './ComposerInputBridge';
 
 /**
- * 高度台阶过渡时长：高度按行粒度跳（22px 一跳），120ms 的出缓动足够把「弹一下」
- * 抹成「长出来」，又不至于让盒子明显落后于文字（打字时每行只跳一次）。
+ * 高度台阶过渡时长：高度按行粒度跳（22px 一跳），80ms 的出缓动足够把「弹一下」
+ * 抹成「长出来」，又尽量贴近文字（打字时每行只跳一次；调高会更柔但盒子追得更慢，
+ * 调低趋近硬跳）。
  */
-const HEIGHT_TRANSITION_MS = 120;
+const HEIGHT_TRANSITION_MS = 80;
 
 export type ComposerInputWebViewProps = {
   /** 高亮分段来源：chat 链 token / 宏链白名单宏。 */
