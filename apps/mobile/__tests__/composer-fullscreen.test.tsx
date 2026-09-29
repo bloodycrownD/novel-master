@@ -1,37 +1,27 @@
 /**
- * T-FS1..4：chat 全屏编辑链（⛶ 入口 / 全屏屏 / 接线与保存回填）。
+ * T-FS1..3：chat 全屏编辑链（⛶ 入口 / 接线 / 退出回填）。
  *
- * 两块断言面：
- * 1) 入口与接线（真实 ChatTabScreen → ChatConversationPanel → ChatComposer 全链，
- *    照 `chat-tab-screen.integration.test.tsx` 的 mock 底座；输入驱动照
- *    `composer-input-webview.test.tsx` 的 mock WebView 协议范式）——
- *    T-FS1 ⛶ 存在与 testID；T-FS2 进入携带当前文本（callback take + 跳转）；
- *    T-FS3 保存回填（会话草稿文本更新 + ChatComposer 经 setText 桥消息回填）。
- * 2) 全屏屏（`ChatComposerEditorScreen`，真实 EditorScreenShell + 真实
- *    ComposerInputWebView）—— T-FS2 初值下发（init.mode/metrics 全高 + setText）、
- *    T-FS3 保存走 onSaved 并返回、T-FS4 系统返回被 useUnsavedGuard 拦截。
+ * 断言面（真实 ChatTabScreen → ChatConversationPanel → ChatComposer 全链，照
+ * `chat-tab-screen.integration.test.tsx` 的 mock 底座；输入驱动照
+ * `composer-input-webview.test.tsx` 的 mock WebView 协议范式）：
+ * - T-FS1 ⛶ 存在、带 testID，且**与同排 @ / $ 同款圆钮**（尺寸/圆角/描边一致）；
+ * - T-FS2 点 ⛶ 跳智能体配置那套全屏编辑页（PromptEditor 的 composer 变体），
+ *   路由参数只带纯数据（初始文本 + title + variant）；
+ * - T-FS3 退出回填：回写会话草稿文本 + bump 令牌，ChatComposer 经 setText 桥
+ *   消息把文本落回输入框。
  *
- * 说明：进入全屏的导航事件用 mock 的 `navigation.navigate` 断言（jest 无真实
- * 导航栈），系统返回用 guard 注册的 `beforeRemove` 事件等价构造（与
- * `prompt-editor-screen.test.tsx` 同口径）。
+ * 退出即回填（无保存按钮、无未保存拦截）与编辑器本体（markdown 预览/编辑互切）
+ * 的屏内断言在 `prompt-editor-screen.test.tsx` 的 composer 变体用例里。
  */
 import React from 'react';
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  jest,
-} from '@jest/globals';
-import {Alert} from 'react-native';
+import {afterEach, beforeEach, describe, expect, it, jest} from '@jest/globals';
+import {StyleSheet, type ViewStyle} from 'react-native';
 import TestRenderer, {act} from 'react-test-renderer';
 import {SimpleEventBus} from '@novel-master/core/events';
 import {SessionStreamUnitManager} from '../src/services/session-stream-unit-manager.service';
 import {
   COMPOSER_INPUT_BRIDGE_VERSION,
   decodeHostToComposerInput,
-  type ComposerInputMetrics,
   type HostToComposerInputMessage,
 } from '@/components/chat/ComposerInputBridge';
 import {
@@ -301,17 +291,11 @@ jest.mock('@/components/skills/SkillPicker', () => ({
 (global as any).__DEV__ = false;
 
 import {ChatTabScreen} from '@/screens/tabs/ChatTabScreen';
-import {ChatComposerEditorScreen} from '@/screens/stack/ChatComposerEditorScreen';
 import {
   readChatComposerDraftState,
   clearChatComposerDraft,
 } from '@/storage/chat-composer-draft';
-import {
-  setComposerEditorCallback,
-  takeComposerEditorCallback,
-} from '@/components/chat/composer-editor-callback';
-
-const alertSpy = jest.spyOn(Alert, 'alert');
+import {takePromptEditorOnSaved} from '@/components/agent/prompt-editor-callback';
 
 /** mock WebView 的 onMessage 入口（composer 宿主实例）。 */
 function findComposerWebView(
@@ -400,21 +384,9 @@ function findPressableByText(
   return node;
 }
 
-/** 全屏屏的「保存」动作（EditorScreenShell 左上动作位）。 */
-function pressScreenSave(tree: TestRenderer.ReactTestRenderer): void {
-  act(() => {
-    findPressableByTestId(tree.root, 'composer-editor-save').props.onPress();
-  });
-}
-
-/** 模拟导航 beforeRemove 事件（guard 拦截/放行的入口）。 */
-function emitBeforeRemove(): jest.Mock {
-  const preventDefault = jest.fn();
-  mockBeforeRemoveHandlers[0]!({
-    preventDefault,
-    data: {action: {type: 'GO_BACK'}},
-  });
-  return preventDefault;
+/** 同排工具按钮（@ / $ / ⛶）的展平样式，用于断言「风格一致」。 */
+function flattenedStyle(node: TestRenderer.ReactTestInstance): ViewStyle {
+  return StyleSheet.flatten(node.props.style) as ViewStyle;
 }
 
 describe('T-FS1/T-FS2/T-FS3 入口与接线（ChatTabScreen → 面板 → ChatComposer）', () => {
@@ -444,7 +416,7 @@ describe('T-FS1/T-FS2/T-FS3 入口与接线（ChatTabScreen → 面板 → ChatC
     clearChatComposerDraft('s1');
     clearMockWebViewPostMessages();
     // 模块级回调不留残留（各用例自行 set）。
-    takeComposerEditorCallback();
+    takePromptEditorOnSaved();
     mockHarnessManager?.dispose();
     mockRuntime.eventBus = new SimpleEventBus();
     mockHarnessManager = buildHarnessManager();
@@ -461,22 +433,30 @@ describe('T-FS1/T-FS2/T-FS3 入口与接线（ChatTabScreen → 面板 → ChatC
     mockHarnessManager = undefined;
   });
 
-  it('T-FS1: 工具栏 ⛶ 入口存在且带 testID（与 @/$ 同排、可按压）', async () => {
+  it('T-FS1: ⛶ 与同排 @/$ 同款圆钮（同尺寸/圆角/描边，可按压）', async () => {
     const tree = await mountConversation();
 
     const matches = tree.root.findAllByProps({
       testID: 'chat-composer-fullscreen',
     });
     expect(matches.length).toBeGreaterThan(0);
-    const button = findPressableByTestId(
-      tree.root,
-      'chat-composer-fullscreen',
-    );
+    const button = findPressableByTestId(tree.root, 'chat-composer-fullscreen');
     expect(button.props.accessibilityLabel).toBe('全屏编辑');
     expect(button.props.disabled).toBe(false);
+
+    // 同排风格一致（用户反馈：⛶ 曾是 28 无边框小触达，与 36 圆钮的 @/$ 不齐）。
+    const atButton = tree.root
+      .findAll(n => typeof n.props?.onPress === 'function')
+      .find(n => n.props?.accessibilityLabel === '引用文件')!;
+    const glyph = flattenedStyle(button);
+    const at = flattenedStyle(atButton);
+    expect(glyph.width).toBe(at.width);
+    expect(glyph.height).toBe(at.height);
+    expect(glyph.borderRadius).toBe(at.borderRadius);
+    expect(glyph.borderWidth).toBe(at.borderWidth);
   });
 
-  it('T-FS2: 点 ⛶ 携带当前输入文本（跳转 + callback take 值正确）', async () => {
+  it('T-FS2: 点 ⛶ 带当前文本跳智能体配置那套全屏编辑页（composer 变体）', async () => {
     const tree = await mountConversation();
     const webView = findComposerWebView(tree.root);
     simulateWebMessage(webView, 'ready');
@@ -487,19 +467,23 @@ describe('T-FS1/T-FS2/T-FS3 入口与接线（ChatTabScreen → 面板 → ChatC
     await flush();
 
     act(() => {
-      findPressableByTestId(tree.root, 'chat-composer-fullscreen').props.onPress();
+      findPressableByTestId(
+        tree.root,
+        'chat-composer-fullscreen',
+      ).props.onPress();
     });
 
-    expect(mockNavigate).toHaveBeenCalledWith('ChatComposerEditor');
-    // 路由参数只传纯数据：初始文本与回调走模块级存取（take 即清空）。
-    const pending = takeComposerEditorCallback();
-    expect(pending?.initialText).toBe('当前的草稿文本');
-    expect(typeof pending?.onSaved).toBe('function');
-    // take 即清空：再取为 null（防串台）。
-    expect(takeComposerEditorCallback()).toBeNull();
+    // 复用 PromptEditor（与智能体配置同一屏同一组件），变体决定「无保存、退出回填」。
+    expect(mockNavigate).toHaveBeenCalledWith('PromptEditor', {
+      title: '编辑消息',
+      initialText: '当前的草稿文本',
+      variant: 'composer',
+    });
+    // 回调走模块级存取（不可序列化，不进路由参数），未消费前只有 set 的这一次。
+    expect(typeof takePromptEditorOnSaved()).toBe('function');
   });
 
-  it('T-FS3: 保存回填 —— 写会话草稿并 bump 令牌，ChatComposer 重读后经 setText 回填', async () => {
+  it('T-FS3: 退出即回填 —— 写会话草稿并 bump 令牌，ChatComposer 重读后经 setText 回填', async () => {
     const tree = await mountConversation();
     const webView = findComposerWebView(tree.root);
     simulateWebMessage(webView, 'ready');
@@ -508,138 +492,24 @@ describe('T-FS1/T-FS2/T-FS3 入口与接线（ChatTabScreen → 面板 → ChatC
     await flush();
 
     act(() => {
-      findPressableByTestId(tree.root, 'chat-composer-fullscreen').props.onPress();
+      findPressableByTestId(
+        tree.root,
+        'chat-composer-fullscreen',
+      ).props.onPress();
     });
-    const pending = takeComposerEditorCallback();
-    expect(pending?.initialText).toBe('全屏前文本');
+    const onExit = takePromptEditorOnSaved();
+    expect(onExit).not.toBeNull();
 
-    // 全屏屏保存 → 父层注入的回填：草稿 store 更新 + 令牌 bump。
+    // 全屏屏卸载（返回/手势）时把当拍草稿交回：草稿 store 更新 + 令牌 bump。
     await act(async () => {
-      pending!.onSaved('全屏保存后的文本');
+      onExit!('全屏改完的文本');
     });
     await flush();
 
-    expect(readChatComposerDraftState('s1').text).toBe('全屏保存后的文本');
+    expect(readChatComposerDraftState('s1').text).toBe('全屏改完的文本');
     // ChatComposer 从草稿重读 → 外部 value 变化 → 宿主下发 setText（回填落地）。
     expect(hostPayloadsOfType('setText')).toContainEqual({
-      text: '全屏保存后的文本',
+      text: '全屏改完的文本',
     });
-  });
-});
-
-describe('T-FS2/T-FS3/T-FS4 全屏屏（ChatComposerEditorScreen）', () => {
-  const mountedTrees: TestRenderer.ReactTestRenderer[] = [];
-
-  function renderScreen(): TestRenderer.ReactTestRenderer {
-    let tree!: TestRenderer.ReactTestRenderer;
-    act(() => {
-      tree = TestRenderer.create(<ChatComposerEditorScreen />);
-    });
-    mountedTrees.push(tree);
-    return tree;
-  }
-
-  beforeEach(() => {
-    jest.clearAllMocks();
-    mockFocusInvoked = false;
-    mockBeforeRemoveHandlers.length = 0;
-    clearMockWebViewPostMessages();
-    takeComposerEditorCallback();
-  });
-
-  afterEach(async () => {
-    for (const tree of mountedTrees.splice(0)) {
-      await act(async () => {
-        tree.unmount();
-      });
-    }
-  });
-
-  it('T-FS2: 挂载即以 callback 的初始文本起步，init 下发 composer-token 全高 metrics', async () => {
-    setComposerEditorCallback({initialText: '初稿文本', onSaved: jest.fn()});
-    const tree = renderScreen();
-
-    // 未 ready 不下发任何下行消息；ready 后 init + 初始文本一次落地。
-    expect(hostMessages()).toHaveLength(0);
-    simulateWebMessage(findComposerWebView(tree.root), 'ready');
-    await flush();
-
-    const expectedMetrics: ComposerInputMetrics = {
-      fontSize: 16,
-      lineHeight: 22,
-      paddingH: 4,
-      paddingV: 6,
-      minHeight: 56,
-      maxHeight: null,
-    };
-    expect(hostPayloadsOfType('init')).toEqual([
-      expect.objectContaining({
-        mode: 'composer-token',
-        disabled: false,
-        metrics: expectedMetrics,
-      }),
-    ]);
-    // 全屏口径：解除限高（容器 flex 全高、web 侧内滚）。
-    expect(hostPayloadsOfType('setText')).toEqual([{text: '初稿文本'}]);
-  });
-
-  it('T-FS3: 保存以草稿调 onSaved 并返回；未改稿时保存禁用', async () => {
-    const onSaved = jest.fn();
-    setComposerEditorCallback({initialText: '初稿', onSaved});
-    const tree = renderScreen();
-    const webView = findComposerWebView(tree.root);
-    simulateWebMessage(webView, 'ready');
-    await flush();
-
-    // 干净态：保存禁用（与 PromptEditorScreen 同口径）。
-    expect(
-      findPressableByTestId(tree.root, 'composer-editor-save').props.disabled,
-    ).toBe(true);
-
-    simulateWebMessage(webView, 'change', {text: '改后的草稿'});
-    await flush();
-    expect(
-      findPressableByTestId(tree.root, 'composer-editor-save').props.disabled,
-    ).toBe(false);
-
-    pressScreenSave(tree);
-    expect(onSaved).toHaveBeenCalledTimes(1);
-    expect(onSaved).toHaveBeenCalledWith('改后的草稿');
-    // 保存即返回（与宏链全屏「保存后停留」不同：这里回填后离开）。
-    expect(mockGoBack).toHaveBeenCalledTimes(1);
-    // 基线推进：保存后回到干净态。
-    expect(
-      findPressableByTestId(tree.root, 'composer-editor-save').props.disabled,
-    ).toBe(true);
-  });
-
-  it('T-FS4: 未保存改动被 useUnsavedGuard 拦截（干净态放行、保存后放行）', async () => {
-    const onSaved = jest.fn();
-    setComposerEditorCallback({initialText: '初稿', onSaved});
-    const tree = renderScreen();
-    const webView = findComposerWebView(tree.root);
-    simulateWebMessage(webView, 'ready');
-    await flush();
-
-    // 干净态：beforeRemove 直接放行，不弹确认。
-    expect(emitBeforeRemove()).not.toHaveBeenCalled();
-    expect(alertSpy).not.toHaveBeenCalled();
-
-    // 改稿（dirty）：拦截 + 弹「未保存」确认，回调不发（取消即丢弃）。
-    simulateWebMessage(webView, 'change', {text: '不落盘的改动'});
-    await flush();
-    expect(emitBeforeRemove()).toHaveBeenCalledTimes(1);
-    expect(alertSpy).toHaveBeenCalledWith(
-      '未保存',
-      '有未保存的更改，确定离开？',
-      expect.anything(),
-    );
-    expect(onSaved).not.toHaveBeenCalled();
-
-    // 保存后（干净态）：再次退出直接放行，不弹确认。
-    pressScreenSave(tree);
-    expect(onSaved).toHaveBeenCalledTimes(1);
-    expect(emitBeforeRemove()).not.toHaveBeenCalled();
-    expect(alertSpy).toHaveBeenCalledTimes(1);
   });
 });

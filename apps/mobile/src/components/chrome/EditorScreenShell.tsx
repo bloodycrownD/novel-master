@@ -7,6 +7,10 @@
  * 屏差异全部走 props：保存禁用态与文案、标题（含 danger 着色与「点按收起
  * 键盘」变体）、toolbar 下附加行（如文件编辑的统计行）、预览渲染档位配置，
  * 以及 preview / editor 两个内容 slot。
+ *
+ * `save` 可不传：**无「保存」概念的编辑器**（chat 输入框全屏——文本要的只是
+ * 退出即回填，不是显式落盘）不渲染左位按钮，标题居中口径与既有「只读文件
+ * 编辑无右位切换」同款（单侧动作时标题框自然偏侧）。
  */
 import React from 'react';
 import {Platform, Pressable, StyleSheet, Text, View} from 'react-native';
@@ -20,9 +24,13 @@ import {AndroidKeyboardClipBody} from '@/components/chrome/AndroidKeyboardClipBo
 
 export type EditorScreenShellProps<T extends string> = {
   tokens: ThemeTokens;
-  /** toolbar 底部分隔线颜色（两屏分别取 tokens.border / borderLight）。 */
+  /** toolbar 底部分隔线颜色（各屏分别取 tokens.border / borderLight）。 */
   toolbarBorderColor: string;
-  save: {
+  /** 有未保存改动时调用方改传「未保存」，由 shell 统一 danger 着色。 */
+  title: string;
+  titleDanger: boolean;
+  /** 不提供则不渲染左位保存按钮（如 chat 输入框全屏：退出即回填）。 */
+  save?: {
     testID?: string;
     accessibilityLabel?: string;
     /** 如「保存 / 保存中…」。 */
@@ -30,9 +38,6 @@ export type EditorScreenShellProps<T extends string> = {
     disabled: boolean;
     onPress: () => void;
   };
-  /** 有未保存改动时调用方改传「未保存」，由 shell 统一 danger 着色。 */
-  title: string;
-  titleDanger: boolean;
   /** 标题字号，默认 13（旧 PromptEditor 值）；文件屏传 14 还原旧默认字号。 */
   titleFontSize?: number;
   /** 提供时标题区渲染为可点按（收起键盘）变体，如文件编辑聚焦态。 */
@@ -80,22 +85,24 @@ export function EditorScreenShell<T extends string>({
   const body = (
     <>
       <View style={[styles.toolbar, {borderBottomColor: toolbarBorderColor}]}>
-        <Pressable
-          testID={save.testID}
-          accessibilityLabel={save.accessibilityLabel}
-          style={styles.toolbarBtn}
-          onPress={save.onPress}
-          disabled={save.disabled}
-        >
-          <Text
-            style={[
-              styles.toolbarText,
-              {color: save.disabled ? tokens.textSecondary : tokens.primary},
-            ]}
+        {save ? (
+          <Pressable
+            testID={save.testID}
+            accessibilityLabel={save.accessibilityLabel}
+            style={styles.toolbarBtn}
+            onPress={save.onPress}
+            disabled={save.disabled}
           >
-            {save.label}
-          </Text>
-        </Pressable>
+            <Text
+              style={[
+                styles.toolbarText,
+                {color: save.disabled ? tokens.textSecondary : tokens.primary},
+              ]}
+            >
+              {save.label}
+            </Text>
+          </Pressable>
+        ) : null}
         {titlePress ? (
           <Pressable
             testID={titlePress.testID}

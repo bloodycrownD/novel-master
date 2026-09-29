@@ -19,10 +19,7 @@ import {useMobileScope} from '@/hooks/useMobileScope';
 import {useTheme} from '@/theme/ThemeProvider';
 import {resolveChatTabBarStyle} from '@/navigation/main-tab-bar-style';
 import type {MainTabParamList, RootStackParamList} from '@/navigation/types';
-import {
-  setComposerEditorCallback,
-  type ComposerEditorPending,
-} from '@/components/chat/composer-editor-callback';
+import {setPromptEditorOnSaved} from '@/components/agent/prompt-editor-callback';
 import {writeChatComposerDraft} from '@/storage/chat-composer-draft';
 import {ChatConversationPanel} from './chat-tab/ChatConversationPanel';
 import {ChatSessionListPanel} from './chat-tab/ChatSessionListPanel';
@@ -148,8 +145,9 @@ function ChatTabScreenContent({
   }, [controller, sessionBatch, ctx.scope]);
 
   // ⛶ 全屏编辑（照 onOpenSessionDetail 先例：chat-tab 目录零导航依赖，惯例是
-  // 父层注入回调）：打开前把初始文本与保存回填写进模块级存取（回调不可序列化，
-  // 不走路由参数），再跳转全屏屏。
+  // 父层注入回调）：跳的就是智能体配置那套全屏编辑页（PromptEditor 的 composer
+  // 变体——同一组件同一条键盘链，带 markdown 预览/编辑互切）。初始文本走路由
+  // 参数；退出回填写进模块级存取（回调不可序列化，不走路由参数）。
   const setDraftRestoreToken = ctx.messages.setDraftRestoreToken;
   const runtime = ctx.runtime;
   const onOpenComposerFullscreen = useCallback(
@@ -158,17 +156,18 @@ function ChatTabScreenContent({
       if (ctx.projectId == null || targetSessionId == null) {
         return;
       }
-      const pending: ComposerEditorPending = {
+      // composer 变体没有保存按钮：编辑器卸载（返回/手势）即回填——写入会话草稿
+      // （内联输入 onChangeText 落的是同一条 store），再 bump 草稿恢复令牌触发
+      // ChatComposer 从草稿重读（undo_send 同款回填链路）。
+      setPromptEditorOnSaved(text => {
+        writeChatComposerDraft(targetSessionId, text, runtime.sessions);
+        setDraftRestoreToken(token => token + 1);
+      });
+      navigation.navigate('PromptEditor', {
+        title: '编辑消息',
         initialText: payload.text,
-        // 回填 = 写入会话草稿（内联输入 onChangeText 落的是同一条 store），再
-        // bump 草稿恢复令牌触发 ChatComposer 从草稿重读（undo_send 同款回填链路）。
-        onSaved: text => {
-          writeChatComposerDraft(targetSessionId, text, runtime.sessions);
-          setDraftRestoreToken(token => token + 1);
-        },
-      };
-      setComposerEditorCallback(pending);
-      navigation.navigate('ChatComposerEditor');
+        variant: 'composer',
+      });
     },
     [ctx.projectId, ctx.sessionId, runtime, setDraftRestoreToken, navigation],
   );

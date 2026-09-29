@@ -1,16 +1,17 @@
 /**
- * Composer 输入框 WebView 通用宿主（chat 内联 / 宏内联 / chat 全屏三处复用）。
+ * Composer 输入框 WebView 通用宿主（chat 内联 / 宏内联两处复用）。
  *
  * 受控桥模式照 `components/vfs/CodeEditorWebView.tsx`：web 侧自持真源——打字只在
  * web 内 `input` 事件后上报 `change`，宿主收到只上抛 onChangeText、**绝不回写**
- * （v1.5.9 的 IME 防线）；`setText` 仅外部变化（水化 / typeahead 点选 / 清空 /
- * 全屏回填）时下发。一切下行以 `ready` 为门控。
+ * （v1.5.9 的 IME 防线）；`setText` 仅外部变化（水化 / typeahead 点选 / 清空）时
+ * 下发。一切下行以 `ready` 为门控。
  *
- * 高度所有权在 web：`heightChange`（值已按 metrics clamp）驱动宿主容器高度跟随；
- * `metrics.maxHeight = null`（chat 全屏）时 web 不上报，容器 flex 全高。
+ * 高度所有权在 web：`heightChange`（值已按 metrics clamp）驱动宿主容器高度跟随。
+ * `metrics.maxHeight = null`（不限高、容器 flex 全高）这条分支**当前无生产消费方**：
+ * 它原为 chat 全屏编辑屏而加，全屏现已改走 PromptEditor（智能体配置那套编辑屏），
+ * 留着给下次「不限高 composers」用，勿当作无用代码删。
  *
- * metrics 为挂载期静态参数（协议无 setMetrics）：全屏屏用独立实例 + 解除限高，
- * 不复用内联实例改尺寸。
+ * metrics 为挂载期静态参数（协议无 setMetrics）。
  */
 import React, {
   forwardRef,

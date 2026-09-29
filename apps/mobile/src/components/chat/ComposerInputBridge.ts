@@ -17,7 +17,8 @@ export type BridgeEnvelope<T extends string, P> = {
 export type ComposerInputMode = 'composer-token' | 'prompt-macro';
 
 /**
- * 尺寸口径：maxHeight = null 表示不限高（chat 全屏，web 侧不上报 heightChange）。
+ * 尺寸口径：maxHeight = null 表示不限高（web 侧不上报 heightChange，容器 flex 全高）。
+ * 当前无生产消费方（原 chat 全屏已改走 PromptEditor 编辑屏），保留为协议能力。
  */
 export type ComposerInputMetrics = {
   readonly fontSize: number;

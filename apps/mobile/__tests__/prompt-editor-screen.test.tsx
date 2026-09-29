@@ -17,7 +17,11 @@ const alertSpy = jest.spyOn(Alert, 'alert');
 const mockGoBack = jest.fn();
 const mockDispatch = jest.fn();
 const mockRoute = {
-  params: {initialText: '初稿'} as {title?: string; initialText: string},
+  params: {initialText: '初稿'} as {
+    title?: string;
+    initialText: string;
+    variant?: 'form' | 'composer';
+  },
 };
 // 捕获 useUnsavedGuard 注册的 beforeRemove handler（effect 随 isDirty 重跑，槽位始终存最新）。
 const mockBeforeRemoveHandlers: ((event: {
@@ -175,6 +179,7 @@ describe('PromptEditorScreen (T-PE3 + R5 + R6)', () => {
     mockRoute.params = {initialText: '初稿'} as {
       title?: string;
       initialText: string;
+      variant?: 'form' | 'composer';
     };
   });
 
@@ -347,5 +352,102 @@ describe('PromptEditorScreen (T-PE3 + R5 + R6)', () => {
     } finally {
       (Platform as {OS: string}).OS = originalOS;
     }
+  });
+});
+
+/**
+ * composer 变体（chat 输入框 ⛶）：与提示词字段同一个编辑屏、同一套编辑/预览，
+ * 差别只在保存语义——那块文本就是输入框内容本身，**没有保存、退出即回填**。
+ */
+describe('PromptEditorScreen composer 变体（chat 输入框全屏）', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockEditorProps.length = 0;
+    mockPreviewProps.length = 0;
+    mockSegmentedProps.length = 0;
+    mockBeforeRemoveHandlers.length = 0;
+    takePromptEditorOnSaved();
+  });
+
+  afterEach(() => {
+    mockRoute.params = {initialText: '初稿'} as {
+      title?: string;
+      initialText: string;
+      variant?: 'form' | 'composer';
+    };
+  });
+
+  it('无保存按钮、标题不显「未保存」，退出（卸载）以当拍草稿回填', () => {
+    const onSaved = jest.fn();
+    setPromptEditorOnSaved(onSaved);
+    mockRoute.params = {
+      initialText: '初稿',
+      title: '编辑消息',
+      variant: 'composer',
+    };
+    const tree = renderScreen();
+
+    // 输入框全屏没有「保存」概念：左位动作位整体不渲染。
+    expect(
+      tree.root.findAllByProps({testID: 'prompt-editor-save'}),
+    ).toHaveLength(0);
+
+    // 改稿不进「未保存」态（标题仍是路由给的「编辑消息」）。
+    act(() => {
+      mockEditorProps[0]!.onChange('全屏里改的文本');
+    });
+    const texts = tree.root
+      .findAll(node => typeof node.children?.[0] === 'string')
+      .map(node => String(node.children[0]));
+    expect(texts).toContain('编辑消息');
+    expect(texts).not.toContain('未保存');
+
+    // 也不拦退出（无改动可丢）：beforeRemove 直接放行、不弹确认。
+    expect(emitBeforeRemove()).not.toHaveBeenCalled();
+    expect(alertSpy).not.toHaveBeenCalled();
+    // 改动前还没回填。
+    expect(onSaved).not.toHaveBeenCalled();
+
+    // 退出（返回/手势）＝卸载：当拍草稿交回调用方，文本落回输入框。
+    act(() => {
+      tree.unmount();
+    });
+    expect(onSaved).toHaveBeenCalledTimes(1);
+    expect(onSaved).toHaveBeenCalledWith('全屏里改的文本');
+  });
+
+  it('编辑/预览互切与提示词字段同款：预览吃当前草稿、md 伪路径、可切文本档', () => {
+    mockRoute.params = {initialText: '初稿', variant: 'composer'};
+    const tree = renderScreen();
+    act(() => {
+      mockEditorProps[0]!.onChange('# 全屏草稿');
+    });
+
+    pressToggle(tree);
+    expect(mockPreviewProps[0]!.content).toBe('# 全屏草稿');
+    expect(mockPreviewProps[0]!.path).toBe('prompt.md');
+    expect(mockPreviewProps[0]!.previewFill).toBe(true);
+    expect(mockSegmentedProps[0]!.value).toBe('markdown');
+    act(() => {
+      mockSegmentedProps[0]!.onChange('txt');
+    });
+    expect(mockPreviewProps[0]!.renderKind).toBe('txt');
+
+    // 切回编辑：草稿不丢。
+    pressToggle(tree);
+    expect(mockEditorProps[0]!.value).toBe('# 全屏草稿');
+  });
+
+  it('未 set 回调时退出不抛错（回调缺失＝原文本不动）', () => {
+    mockRoute.params = {initialText: '初稿', variant: 'composer'};
+    const tree = renderScreen();
+    act(() => {
+      mockEditorProps[0]!.onChange('改了但没人接');
+    });
+    expect(() => {
+      act(() => {
+        tree.unmount();
+      });
+    }).not.toThrow();
   });
 });

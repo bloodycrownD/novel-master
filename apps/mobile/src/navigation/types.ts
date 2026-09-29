@@ -53,16 +53,15 @@ export type RootStackParamList = {
   };
   /** 会话技能面板：当前项目合并视图 + 启停开关（写项目负清单）。 */
   SkillPanel: {projectId: string};
-  /** 全屏提示词编辑页：草稿副本编辑，保存才回填，取消/返回键不动原值。
+  /** 全屏编辑页：智能体配置的提示词字段与 chat 输入框全屏共用同一套编辑屏。
+   *  variant 决定保存语义——`form` 草稿副本编辑、保存才回填（缺省）；
+   *  `composer` 无保存概念、退出即回填（那块文本就是输入框内容本身）。
    *  回调不走路由参数（不可序列化），由 prompt-editor-callback 模块级存取。 */
   PromptEditor: {
     title?: string;
     initialText: string;
+    variant?: 'form' | 'composer';
   };
-  /** chat 输入框全屏编辑页：草稿副本编辑，保存才回填，返回即丢弃。
-   *  初始文本与保存回调都不走路由参数（不可序列化），由
-   *  composer-editor-callback 模块级存取（take 即清空）。 */
-  ChatComposerEditor: undefined;
   /** 设置·技能管理页：全局默认 / 项目分组双 tab。 */
   SkillsSettings: undefined;
   /** 技能详情页：文件浏览 + 新建/删除辅助文件。 */

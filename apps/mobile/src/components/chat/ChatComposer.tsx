@@ -95,7 +95,8 @@ type Props = {
    * 后续若恢复按钮再从解构里取回即可。 */
   onOpenMore?: () => void;
 
-  /** 打开全屏编辑（父层注入导航 + 保存回填链路，见 ChatComposerEditorScreen）。
+  /** 打开全屏编辑（父层注入导航 + 退出回填链路；全屏落地在 PromptEditor 的
+   *  composer 变体——与智能体配置提示词字段同一个编辑屏）。
    *
    * 载荷是当前输入文本；本组件不做任何导航依赖（chat-tab 目录零导航依赖的
    * 惯例由父层承担）。缺省时不渲染 ⛶ 入口之外的任何行为。 */
@@ -612,7 +613,9 @@ export function ChatComposer({
             testID="chat-composer-fullscreen"
             onPress={() => onOpenComposerFullscreen?.({text})}
             disabled={onOpenComposerFullscreen == null}
-            style={styles.fullscreenBtn}
+            /* 同排按钮风格一致：与 @ / $ 同款圆钮（同尺寸、同描边），
+               字形保留 20（⛶ 笔画细、同样字号下视觉比 @/$ 小一档）。 */
+            style={[styles.toolBtn, {borderColor: tokens.border}]}
             accessibilityLabel="全屏编辑"
           >
             <Text style={{color: tokens.textSecondary, fontSize: 20}}>⛶</Text>
@@ -743,19 +746,12 @@ const styles = StyleSheet.create({
   toolbarSpacer: {
     flex: 1,
   },
+  /** 引用类工具按钮（@ / $ / ⛶ 共用）：36 圆钮 + 细描边。 */
   toolBtn: {
     width: 36,
     height: 36,
     borderRadius: 18,
     borderWidth: StyleSheet.hairlineWidth,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  /** ⛶ 全屏编辑：无边框小触达（28×28），与 @ / $ 的圆钮排在同一条 toolbar 行。 */
-  fullscreenBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
