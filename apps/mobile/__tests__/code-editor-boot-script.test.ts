@@ -64,8 +64,10 @@ describe('code-editor WebView boot (dist)', () => {
     // 双处镜像常量：web 侧 COMPOSER_TOKEN_PATH 与 RN 侧 PromptEditorScreen 同值，
     // 改一边不同步会让胶囊在真机上彻底不亮——只能靠 dist 断言把住（capsule/G-2）
     expect(script).toContain('composer.md');
-    // 选区上报协议（capsule/B-1 之后仅 composer 路径发，消息本身仍须在产物里）
-    expect(script).toContain('selectionChange');
+    // 选区上报协议（capsule/B-1 之后仅 composer 路径发，消息本身仍须在产物里）。
+    // 锁「post("selectionChange"」这个发送点而不是裸词——裸词在 CM 自带产物里
+    // 出现 10 处（this.selectionChanged 等内部字段），删掉 editor.ts 的 post 也不会红
+    expect(script).toMatch(/post\d*\(['"]selectionChange['"]/);
   });
 
   it('T-CE-CAPSULE-02: 胶囊 CSS 与 --primary-muted（宿主算色，capsule/C-orch-1 + C-2/C-3）', () => {
