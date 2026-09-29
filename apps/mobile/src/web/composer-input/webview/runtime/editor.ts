@@ -338,6 +338,11 @@ function clampIndex(value: number, length: number): number {
 
 /* ---- host 下行应用的对外入口 ---- */
 
+/** 不限高模式（全屏）：容器铺满视口（CSS 类），textarea 与高亮层去掉封顶。 */
+export function resolveUnbounded(metrics: ComposerMetrics): boolean {
+  return metrics.maxHeight == null;
+}
+
 export function applyMetrics(metrics: ComposerMetrics): void {
   const state = editor;
   if (state == null) {
@@ -353,6 +358,12 @@ export function applyMetrics(metrics: ComposerMetrics): void {
   // 不限高（全屏）时交给 flex 全高容器：去掉封顶，textarea 自身仍可内滚
   state.highlight.style.maxHeight =
     metrics.maxHeight == null ? 'none' : `${metrics.maxHeight}px`;
+  // 容器高度=内容高度的流式布局在限高模式正确；全屏须显式撑满视口，否则
+  // 触摸区只到内容底部（`.composer-input` 默认无高度，靠 CSS 类补 height:100%）。
+  state.root.classList.toggle(
+    'composer-input--unbounded',
+    resolveUnbounded(metrics),
+  );
   scheduleMeasure(state);
 }
 

@@ -16,10 +16,13 @@ body {
   color: var(--text, #111);
   font-family: -apple-system, 'Helvetica Neue', 'Segoe UI', Roboto, sans-serif;
   overflow: hidden;
+  /* 全高链路（供 .composer-input--unbounded 撑满 WebView 视口用；限高模式不受影响） */
+  height: 100%;
 }
 
 #root {
   position: relative;
+  height: 100%;
 }
 
 .composer-input {
@@ -27,6 +30,11 @@ body {
   /* 字号/行高由 JS 按 metrics 覆盖（此处为 init 前的兜底；16 是 iOS 聚焦不缩放的下限） */
   font-size: 16px;
   line-height: 22px;
+}
+
+/* 不限高模式（全屏，metrics.maxHeight=null）：铺满 WebView 视口，触摸区全屏 */
+.composer-input--unbounded {
+  height: 100%;
 }
 
 .composer-input--disabled {

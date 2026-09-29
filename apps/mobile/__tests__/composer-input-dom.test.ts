@@ -10,6 +10,7 @@ import {
   resolveAtomicCaret,
   resolveAtomicDelete,
   resolveReportedHeight,
+  resolveUnbounded,
   shouldReportChange,
 } from '@web/composer-input/webview/runtime/editor';
 import type {ComposerMetrics} from '@web/composer-input/webview/runtime/model';
@@ -168,5 +169,15 @@ describe('resolveReportedHeight（T-CW9 高度 clamp / 全屏跳过）', () => {
     expect(
       resolveReportedHeight(100, {...METRICS, maxHeight: null}),
     ).toBeNull();
+  });
+});
+
+describe('resolveUnbounded（T-CW10 全屏铺满判定）', () => {
+  // 回归背景：全屏（maxHeight=null）时容器若仍按内容高度流式布局，触摸区只到内容底部
+  // （验收实测中部点击不达），需据此判定切换 `.composer-input--unbounded`（height:100%）。
+  it('maxHeight=null → 不限高（需铺满视口）；数值或未给 → 限高', () => {
+    expect(resolveUnbounded({...METRICS, maxHeight: null})).toBe(true);
+    expect(resolveUnbounded(METRICS)).toBe(false);
+    expect(resolveUnbounded({...METRICS, maxHeight: 176})).toBe(false);
   });
 });
