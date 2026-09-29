@@ -15,9 +15,14 @@
  *   会话必再付一次。`record` 顺带把 `estimated:false` 的精确档条目收进
  *   pending 列表；读口（resolve-current-prompt-tokens）在计数前后调
  *   {@link promptWholeCache.seedFromKkv} / {@link promptWholeCache.persistPendingWrites}
- *   把该会话最近 16 条整串计数经 session KKV（token_chunks 域
- *   `promptWholeCache` 键）跨重启续命。只收精确档：heuristic 条目可能源于
+ *   把整串计数经 session KKV（token_chunks 域 `promptWholeCache` 键，
+ *   ≤16 条环形）跨重启续命。只收精确档：heuristic 条目可能源于
  *   「cl100k 表暂缺」的瞬态，持久化会把降级读数固化成重启后的长期读数。
+ *   **归属语义（跨会话共享，CR 收窄口径）**：pending 列表全局收集、不带
+ *   sessionId，persist 时归入**最近一次调用 persist 的会话**行——条目键为
+ *   内容指纹 × 计数器身份（内容寻址），落哪个会话行只影响加速续命位置、
+ *   无脏读；会话删除的级联清理会连带丢他会话条目，**只丢加速不丢正确性**
+ *   （下次计数重算即可）。
  *
  * @module infra/tokenizer/logic/prompt-whole-cache
  */

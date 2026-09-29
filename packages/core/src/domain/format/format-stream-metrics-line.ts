@@ -1,7 +1,7 @@
 /**
  * 流式 metrics 条文案（Mobile/Desktop 共用，stream-metrics-tokens 改版）。
  *
- * 形态：「{prefix} · {elapsed} · 输出 {N} t · {rate} tok/s」。正文/思考不再
+ * 形态：「{prefix} · {elapsed} · 输出 {N} tok · {rate} tok/s」。正文/思考不再
  * 分列——思考期在 anthropic/gemini 下 usage 已含、heuristic 下随正文一并
  * 累计字符按 ceil 口径折算，天然并入输出。速率段仅在实时速率可得时拼接
  * （样本不足时省略，避免除零/首秒抖动）。

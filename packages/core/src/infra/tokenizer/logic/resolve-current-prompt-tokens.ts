@@ -158,6 +158,10 @@ export async function resolveCurrentPromptTokens(
   // 单次 ~5.8s），自动读路径不付这个钱——强制 tiktoken 走 cl100k 分块估算。
   // 家族判定与驱动同源（vendorModelId → resolveTokenizerFamily，override
   // 语义一致）；tiktoken（JS 分块本就快、精确）与 heuristic（本就廉价）不强制。
+  // **前提（CR 注）**：这里只消费 params.tokenizerOverride，不查
+  // registry.getTokenizerOverride——该钩子当前仅测试注入（产品运行时不注入
+  // 偏好，见 create-default-registry 注释）；若未来产品注入该偏好，本判定
+  // 须与驱动同步查询，否则两边家族解析可能分叉。
   // 强制档的 L1/L2 键含 override 段，与原生档天然隔离、互不污染。
   const vendorModelId = await resolveVendorModelIdFromSaved(
     params.savedModelId,

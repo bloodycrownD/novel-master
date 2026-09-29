@@ -57,8 +57,11 @@ export interface CounterScopeInput {
 }
 
 /**
- * 拼计数器身份（scope）：四段以 NUL 分隔——模型名 / 驱动名理论上是自由
- * 字符串，用不出现在标识符里的 `\u0000` 作分隔符防「字段组合碰撞」。
+ * 拼计数器身份（scope）：四段以字面 `\u0000` 六字符文本分隔——模型名 /
+ * 驱动名理论上是自由字符串，该文本不会出现在标识符里，防「字段组合碰撞」。
+ * 注：join 的实参是 `"\\u0000"`（源码双反斜杠，运行时为字面文本而非 NUL），
+ * 功能等价；**勿改成真 NUL**——会整体更换 scope 键、全部 L1/L2/KKV 缓存
+ * 一次性 miss。
  */
 export function buildCounterScope(input: CounterScopeInput): string {
   return [
@@ -147,6 +150,11 @@ function enforceTotalCap(): void {
 /**
  * 序列化当前代整表为紧凑 JSON：`{v:1, items:[[hash16,scope,count],...]}`。
  * 当前代为空时返回 `null`（空表不落库）。
+ *
+ * 归属语义与 promptWholeCache 同形态（CR 收窄口径）：缓存平面跨会话共享
+ * （键 = 内容指纹 × scope），整表按当前调用方 sessionId 落行——落哪个会话
+ * 行只影响加速续命位置、无脏读；会话删除级联只丢加速不丢正确性。tc spec
+ * 「把当前代整表写 session KKV」为该形态的字面背书。
  */
 function serializeCurrentGeneration(): string | null {
   if (genCurrent.size === 0) {

@@ -110,9 +110,10 @@ function countChunksWithL2(
  * （正常文本差 -0.02%~+0.35%，spec 实测；对拍用例按 1% 容差迁移，见 T-TC5）。
  *
  * 为什么这里**只有**字符折算作为最后一级：编码表建不起来（缺 ranks / 环境未
- * 就绪）时别无选择，但它是**一次性降级**（失败被缓存、本进程不重试），且返回的
- * `counterKind` 仍是 `heuristic`，调用方（尤其压缩阈值）不会误以为这是家族级
- * 的真分词器读数。该档不进 L2——没有真分词器就没有可缓存的稳定读数。
+ * 就绪）时别无选择，但它是**限时降级**（失败缓存 null，TTL 5 分钟后允许重试
+ * ——encoding-registry 的重试语义，见其模块头），且返回的 `counterKind` 仍是
+ * `heuristic`，调用方（尤其压缩阈值）不会误以为这是家族级的真分词器读数。
+ * 该档不进 L2——没有真分词器就没有可缓存的稳定读数。
  */
 function fallbackCount(text: string, scope: string): number {
   const encoding = getDefaultRnEncoding();
