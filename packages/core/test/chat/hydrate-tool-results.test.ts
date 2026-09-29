@@ -29,6 +29,7 @@ import { registerBuiltinTools } from "../../src/domain/tool/builtin/register-bui
 import type { BuiltinToolContext } from "../../src/domain/tool/builtin/builtin-tool-context.js";
 import type { ReadToolOutput } from "../../src/domain/tool/builtin/vfs-tools.js";
 import { SqliteVfsRevisionRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
+import type { VfsRevisionRepository } from "../../src/domain/vfs/repositories/vfs-revision.port.js";
 import { createSessionKkvService } from "../../src/service/session-kkv/create-session-kkv-service.js";
 import { normalizeOrphanToolResultsForLlm } from "../../src/service/prompt/normalize-orphan-tool-results-for-llm.js";
 import type { TdbcConnection } from "../../src/infra/tdbc/ports/connection.port.js";
@@ -309,8 +310,10 @@ describe("read-tool-result-ref Step 4: T-RR11 contentHash 校验 fail-fast", () 
       "tu-rr11b"
     );
     const ref = block.contentRef!;
-    // 直接篡改 DB：A 的 revision 行 content_hash 指到 B 的 blob——
-    // findByEntryAndVersion 解出 B 明文，与 ref 记录的 A 指纹比对失败。
+    // 直接篡改 DB：A 的 revision 行 content_hash 指到 B 的 blob。
+    // 新语义（W2 元数据比对）下这一改在元数据阶段就暴露：行上的
+    // content_hash ≠ ref 记录的 A 指纹 → 仍报 HASH_MISMATCH，且比旧实现
+    // （解出 B 明文再重算比对）更早失败。
     const bRows = await conn.query<{ content_hash: string }>(
       `SELECT r.content_hash FROM vfs_revision r
        JOIN vfs_entry e ON e.entry_id = r.entry_id
@@ -387,6 +390,221 @@ describe("read-tool-result-ref Step 4: T-RR11 contentHash 校验 fail-fast", () 
         assert.equal(error.code, "READ_REF_REPO_MISSING");
         return true;
       }
+    );
+  });
+});
+
+describe("read-tool-result-ref: W2 元数据校验降本与调用内去重", () => {
+  it("同一次 hydrate 内重复引用同一 ref：只查一次元数据、只解一次明文，wire 全等", async () => {
+    const { conn, sessionVfs } = getNovelMasterTestContext();
+    const suffix = testIsolationSuffix();
+    const projectId = `pj-dedup-${suffix}`;
+    const sessionId = `ss-dedup-${suffix}`;
+    const vfs = sessionVfs(projectId, sessionId);
+    await vfs.write("/dedup.md", "d1\nd2\nd3\nd4");
+
+    const { block, baseline } = await readViaTool(
+      { vfs, projectId, sessionId, listSessionMessages: async () => [] },
+      conn,
+      { path: "/dedup.md" },
+      "tu-dedup"
+    );
+    const ref = block.contentRef!;
+    const revisionRepo = new SqliteVfsRevisionRepository(conn);
+    const calls = { meta: 0, find: 0 };
+    const countingRepo = {
+      findMetaByEntryAndVersion: async (entryId: number, version: number) => {
+        calls.meta += 1;
+        return revisionRepo.findMetaByEntryAndVersion(entryId, version);
+      },
+      findByEntryAndVersion: async (entryId: number, version: number) => {
+        calls.find += 1;
+        return revisionRepo.findByEntryAndVersion(entryId, version);
+      },
+    } as unknown as VfsRevisionRepository;
+    assert.ok(ref.contentHash !== "");
+
+    // 3 条消息引用同一 ref（真实形态：同一步里多段引用同一版本文件）
+    const messages = [0, 1, 2].map((i) =>
+      toolResultMessage(block, `tr-dedup-${i}`)
+    );
+    const hydrated = await hydrateToolResultsForPrompt(messages, countingRepo);
+
+    assert.equal(calls.meta, 1, "同一 ref 三次引用只发一次元数据查询");
+    assert.equal(calls.find, 1, "同一 ref 三次引用只解一次 blob 明文");
+    for (const msg of hydrated) {
+      const outBlock = msg.content.blocks[0] as ToolResultBlock;
+      assert.equal(outBlock.content, baseline, "去重不改变 wire 文本");
+      assert.deepEqual(outBlock.contentRef, block.contentRef);
+    }
+  });
+
+  it("同 revision 不同 offset/limit：明文只解一次，wire 各自重放（不与旧实现等价即红）", async () => {
+    const { conn, sessionVfs } = getNovelMasterTestContext();
+    const suffix = testIsolationSuffix();
+    const projectId = `pj-dedup2-${suffix}`;
+    const sessionId = `ss-dedup2-${suffix}`;
+    const vfs = sessionVfs(projectId, sessionId);
+    await vfs.write("/dedup2.md", "l1\nl2\nl3\nl4\nl5\nl6");
+
+    const revisionRepo = new SqliteVfsRevisionRepository(conn);
+    const calls = { meta: 0, find: 0 };
+    const countingRepo = {
+      findMetaByEntryAndVersion: async (entryId: number, version: number) => {
+        calls.meta += 1;
+        return revisionRepo.findMetaByEntryAndVersion(entryId, version);
+      },
+      findByEntryAndVersion: async (entryId: number, version: number) => {
+        calls.find += 1;
+        return revisionRepo.findByEntryAndVersion(entryId, version);
+      },
+    } as unknown as VfsRevisionRepository;
+
+    const parts = [
+      { offset: 1, limit: 2 },
+      { offset: 3, limit: 2 },
+      { offset: 5, limit: 2 },
+    ];
+    const messages = [];
+    const baselines = [];
+    for (const [i, p] of parts.entries()) {
+      const { block, baseline } = await readViaTool(
+        { vfs, projectId, sessionId, listSessionMessages: async () => [] },
+        conn,
+        { path: "/dedup2.md", ...p },
+        `tu-dedup2-${i}`
+      );
+      messages.push(toolResultMessage(block, `tr-dedup2-${i}`));
+      baselines.push(baseline);
+    }
+
+    const hydrated = await hydrateToolResultsForPrompt(messages, countingRepo);
+    assert.equal(calls.meta, 1, "同一 (entryId, version) 三个分页段只查一次元数据");
+    assert.equal(calls.find, 1, "同一 (entryId, version) 三个分页段只解一次明文");
+    for (const [i, msg] of hydrated.entries()) {
+      assert.equal(
+        (msg.content.blocks[0] as ToolResultBlock).content,
+        baselines[i],
+        `第 ${i} 段的 wire 必须与 read 当时逐字节全等（缓存键含 offset/limit）`
+      );
+    }
+    // 三段 wire 互不相同 → 证明上面的「全等」不是恒真断言
+    assert.equal(new Set(baselines).size, 3);
+  });
+
+  it("篡改 ref.contentHash（未命中明文缓存）→ 元数据阶段 fail-fast，解码路径不被触到", async () => {
+    const { conn, sessionVfs } = getNovelMasterTestContext();
+    const suffix = testIsolationSuffix();
+    const projectId = `pj-meta-${suffix}`;
+    const sessionId = `ss-meta-${suffix}`;
+    const vfs = sessionVfs(projectId, sessionId);
+    await vfs.write("/meta.md", "m1\nm2");
+
+    const { block, revisionRepo } = await readViaTool(
+      { vfs, projectId, sessionId, listSessionMessages: async () => [] },
+      conn,
+      { path: "/meta.md" },
+      "tu-meta"
+    );
+    const tampered: ToolResultBlock = {
+      ...block,
+      contentRef: {
+        ...block.contentRef!,
+        contentHash: "0".repeat(64),
+      },
+    };
+    let decodeCalls = 0;
+    const noDecodeRepo = {
+      findMetaByEntryAndVersion: (entryId: number, version: number) =>
+        revisionRepo.findMetaByEntryAndVersion(entryId, version),
+      findByEntryAndVersion: async () => {
+        decodeCalls += 1;
+        throw new Error("元数据不匹配时不该走到解码");
+      },
+    } as unknown as VfsRevisionRepository;
+
+    await assert.rejects(
+      hydrateToolResultsForPrompt([toolResultMessage(tampered)], noDecodeRepo),
+      (error: unknown) => {
+        assert.ok(error instanceof ReadResultHydrateError);
+        assert.equal(error.code, "READ_REF_HASH_MISMATCH");
+        return true;
+      }
+    );
+    assert.equal(decodeCalls, 0, "校验必须在解 blob 之前完成（零解码 fail-fast）");
+  });
+
+  it("revision 行 status=deleted → READ_REF_CONTENT_DELETED（四种 fail-fast 语义之一保留）", async () => {
+    const { conn, sessionVfs } = getNovelMasterTestContext();
+    const suffix = testIsolationSuffix();
+    const projectId = `pj-deleted-${suffix}`;
+    const sessionId = `ss-deleted-${suffix}`;
+    const vfs = sessionVfs(projectId, sessionId);
+    await vfs.write("/deleted.md", "will-be-deleted");
+
+    const { block, revisionRepo } = await readViaTool(
+      { vfs, projectId, sessionId, listSessionMessages: async () => [] },
+      conn,
+      { path: "/deleted.md" },
+      "tu-deleted"
+    );
+    // 牙齿：标记 deleted 前同一块 hydrate 正常（不是恒真的失败）
+    const ok = await hydrateToolResultsForPrompt(
+      [toolResultMessage(block)],
+      revisionRepo
+    );
+    assert.match((ok[0]!.content.blocks[0] as ToolResultBlock).content, /1\|will-be-deleted/);
+
+    const ref = block.contentRef!;
+    await conn.execute(
+      `UPDATE vfs_revision SET status = 'deleted' WHERE entry_id = ? AND version = ?`,
+      [ref.entryId, ref.version]
+    );
+    await assert.rejects(
+      hydrateToolResultsForPrompt([toolResultMessage(block)], revisionRepo),
+      (error: unknown) => {
+        assert.ok(error instanceof ReadResultHydrateError);
+        assert.equal(error.code, "READ_REF_CONTENT_DELETED");
+        assert.match(error.message, /明文不可再生/);
+        assert.match(error.message, /deleted/);
+        return true;
+      }
+    );
+  });
+
+  it("active 行 content_hash 非空是 schema 约束（元数据比对不会误判成「缺指纹」）", async () => {
+    const { conn, sessionVfs } = getNovelMasterTestContext();
+    const suffix = testIsolationSuffix();
+    const projectId = `pj-nohash-${suffix}`;
+    const sessionId = `ss-nohash-${suffix}`;
+    const vfs = sessionVfs(projectId, sessionId);
+    await vfs.write("/nohash.md", "n1\nn2\nn3");
+
+    const { block, baseline, revisionRepo } = await readViaTool(
+      { vfs, projectId, sessionId, listSessionMessages: async () => [] },
+      conn,
+      { path: "/nohash.md" },
+      "tu-nohash"
+    );
+    const ref = block.contentRef!;
+    // 新语义的可行性前提：active 行不可能没有 content_hash（schema CHECK 挡着），
+    // 所以 meta.contentHash 与 ref.contentHash 是「两枚真实指纹」的比对，不会
+    // 因为行上缺指纹而把正常引用误判成漂移。CHECK 若被移除，本断言转红。
+    await assert.rejects(
+      conn.execute(
+        `UPDATE vfs_revision SET content_hash = NULL WHERE entry_id = ? AND version = ?`,
+        [ref.entryId, ref.version]
+      ),
+      /CHECK constraint failed/
+    );
+    // 前提成立 → 同一块照常 hydrate（不是「fail-fast 恒真」）
+    const hydrated = await hydrateToolResultsForPrompt(
+      [toolResultMessage(block)],
+      revisionRepo
+    );
+    assert.equal(
+      (hydrated[0]!.content.blocks[0] as ToolResultBlock).content,
+      baseline
     );
   });
 });
