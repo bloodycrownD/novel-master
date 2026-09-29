@@ -49,7 +49,8 @@ export interface RunCompactionResult {
 }
 
 /**
- * 执行一次压缩：hide-message → 清 rule_snapshot/file_cache → 失效 prompt token cache。
+ * 执行一次压缩：hide-message → 失效 prompt token cache（rule_snapshot/file_cache
+ * 不清，见模块头注释）。
  *
  * hide-message 抛异常时返回 `{ ok: false }`，不向上传播——与旧编排器
  * `emit()` 在 result.ok 为 false 时跳过 kkv 清理的语义一致（异常路径下不清缓存）。

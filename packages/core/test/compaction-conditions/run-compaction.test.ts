@@ -120,7 +120,7 @@ describe("runCompaction", () => {
     assert.equal(parsed.hideStartDepth, 6);
   });
 
-  it("T-CC2: 正常执行时 hide-message 生效，清 RULE_SNAPSHOT + FILE_CACHE，invalidate token cache", async () => {
+  it("T-CC2: 正常执行时 hide-message 生效，保留 RULE_SNAPSHOT + FILE_CACHE，invalidate token cache", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const sessionRow = await ctx.sessions.create(project.id);

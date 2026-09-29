@@ -91,6 +91,11 @@ export class DefaultMessageTranscriptEffectsService
       // get 的 not-found 不带会话上下文，包回原错误形态（含 sessionId）。
       throw chatNotFound("message", messageId, { sessionId });
     }
+    // 锚点必须归属本会话：get 全局按 id 查，跨会话传入他会话的合法消息 id
+    // 会拿他会话的 seq 对本会话错误范围执行 hide/show，按旧实现的 404 口径拦下。
+    if (anchor.sessionId !== sessionId) {
+      throw chatNotFound("message", messageId, { sessionId });
+    }
     if (!isSetFloorAnchorRole(anchor.role)) {
       throw chatInvalidArgument(
         `set-floor anchor role must be user, got: ${anchor.role}`
