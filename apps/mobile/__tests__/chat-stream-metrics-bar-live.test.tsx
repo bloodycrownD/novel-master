@@ -156,7 +156,7 @@ describe('ChatStreamMetricsBarLive 双源（快照优先 / settled 投影兜底�
     expect(line).toContain('上次生成');
     expect(line).toContain('3.0s'); // 冻结历时 = 5000 - 2000
     // T-M6/T-M8：中断现场恢复 token 数与 source（水合后 token 不归零）。
-    expect(line).toContain('输出 88 t');
+    expect(line).toContain('输出 88 tok');
   });
 
   it('starting 阶段被杀的 interrupted（计时与字数皆零）：不显示空指标条', () => {
@@ -214,7 +214,7 @@ describe('ChatStreamMetricsBarLive 双源（快照优先 / settled 投影兜底�
     const line = renderMetricsLine(false, 's1');
     expect(line).toContain('上次生成');
     // 5 字符 heuristic 折算 ceil(5/3.35)=2：settled 投影带 token 冻结值。
-    expect(line).toContain('输出 2 t');
+    expect(line).toContain('输出 2 tok');
     expect(line).not.toContain('0.0s'); // 历时 ≥ 1096ms，非零起点
   });
 
@@ -246,7 +246,7 @@ describe('ChatStreamMetricsBarLive 双源（快照优先 / settled 投影兜底�
 
     const line = renderMetricsLine(false, 's1');
     expect(line).toContain('上次生成');
-    expect(line).toContain('输出 90 t'); // ceil(300/3.35)
+    expect(line).toContain('输出 90 tok'); // ceil(300/3.35)
     // 末值速率段（此前冻结态整段省略）：有样本即显示，且不是衰减后的零头。
     expect(line).toMatch(/\d+(\.\d)? tok\/s/);
     expect(line).not.toMatch(/(^| )0 tok\/s/);
@@ -273,7 +273,7 @@ describe('ChatStreamMetricsBarLive 双源（快照优先 / settled 投影兜底�
     const line = renderMetricsLine(true, 's1');
     expect(line).toContain('生成中');
     // 5 字符 heuristic 折算 ceil(5/3.35)=2（首秒样本不足省略速率段）。
-    expect(line).toContain('输出 2 t');
+    expect(line).toContain('输出 2 tok');
   });
 
   it('无单元且无 settled 投影：不渲染指标条', () => {
@@ -306,7 +306,7 @@ describe('ChatStreamMetricsBarLive 双源（快照优先 / settled 投影兜底�
       );
     });
 
-    // heuristic 阶段：慢速积累（每秒 ~3 字符 ≈ 1 t）。
+    // heuristic 阶段：慢速积累（每秒 ~3 字符 ≈ 1 tok）。
     for (let i = 0; i < 6; i += 1) {
       h.eventBus.publish(EVENT_AGENT_STREAM_TEXT_DELTA, {
         sessionId: 's1',
@@ -319,7 +319,7 @@ describe('ChatStreamMetricsBarLive 双源（快照优先 / settled 投影兜底�
     }
     const beforeCorrection = readLine();
     expect(beforeCorrection).toContain('生成中');
-    expect(beforeCorrection).toContain('输出 6 t'); // ceil(18/3.35)
+    expect(beforeCorrection).toContain('输出 6 tok'); // ceil(18/3.35)
 
     // usage 校正：真值跳变到 1200（中文低估约半的典型幅度）。
     h.eventBus.publish(EVENT_AGENT_STREAM_USAGE, {
@@ -332,7 +332,7 @@ describe('ChatStreamMetricsBarLive 双源（快照优先 / settled 投影兜底�
       jest.advanceTimersByTime(500);
     });
     const atCorrection = readLine();
-    expect(atCorrection).toContain('输出 1,200 t');
+    expect(atCorrection).toContain('输出 1,200 tok');
     // 重 seed 后窗口仅 1 个样本：速率段省略（绝无 4800 tok/s 之类的尖刺数字）。
     expect(atCorrection).not.toMatch(/\d+ tok\/s/);
 

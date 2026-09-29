@@ -54,7 +54,7 @@ export function buildStreamMetricsLine(
   const prefix = metrics.running ? "生成中" : "上次生成";
   const parts: string[] = [
     `${prefix} · ${elapsedLabel}`,
-    `输出 ${formatCharCount(metrics.completionTokens)} t`,
+    `输出 ${formatCharCount(metrics.completionTokens)} tok`,
   ];
   if (metrics.tokensPerSecond != null) {
     parts.push(`${formatTokensPerSecondValue(metrics.tokensPerSecond)} tok/s`);

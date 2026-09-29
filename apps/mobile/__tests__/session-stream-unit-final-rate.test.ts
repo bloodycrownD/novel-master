@@ -254,8 +254,8 @@ describe('冻结末值速率（stream-metrics-tokens-final-rate）', () => {
     }
     const batchTokens = h.manager.snapshot('s1')!.metrics.completionTokens;
     expect(batchTokens).toBe(90); // ceil(300 / 3.35)
-    // 旧实现（同刻不去重）的爆表形态 = 整批增量 ÷ 几毫秒：本批 90 t ÷ 5ms 即
-    // 万级 tok/s（旧实现此处实际读数 15000 tok/s——窗口首样本是批内首条 15 t）。
+    // 旧实现（同刻不去重）的爆表形态 = 整批增量 ÷ 几毫秒：本批 90 tok ÷ 5ms 即
+    // 万级 tok/s（旧实现此处实际读数 15000 tok/s——窗口首样本是批内首条 15 tok）。
     // 本用例的判据就是这种形态不能出现。
     const burstForm = (batchTokens * 1_000) / 5;
     expect(burstForm).toBeGreaterThan(1_000);

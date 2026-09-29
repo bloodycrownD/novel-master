@@ -208,7 +208,7 @@ describe('SubagentSessionScreen 指标条渲染（G-2）', () => {
     const {texts, unmount} = await renderScreen();
     expect(texts.join(' | ')).toContain('生成中');
     // 3 × 50 字符 heuristic 折算 ceil(150/3.35)=45。
-    expect(texts.join(' | ')).toContain('输出 45 t');
+    expect(texts.join(' | ')).toContain('输出 45 tok');
     expect(texts.join(' | ')).not.toContain('上次生成');
     unmount();
   });
@@ -223,7 +223,7 @@ describe('SubagentSessionScreen 指标条渲染（G-2）', () => {
     const {texts, unmount} = await renderScreen();
     const line = texts.join(' | ');
     expect(line).toContain('上次生成');
-    expect(line).toContain('输出 90 t'); // ceil(300/3.35)
+    expect(line).toContain('输出 90 tok'); // ceil(300/3.35)
     expect(line).toMatch(/\d+(\.\d)? tok\/s/);
     expect(line).not.toContain('生成中');
     unmount();
@@ -254,7 +254,7 @@ describe('SubagentSessionScreen 指标条渲染（G-2）', () => {
     // C-4：屏级横幅与指标条徽标不再同时出现——「已中断」恰好一次。
     expect(countText(texts, '已中断')).toBe(1);
     expect(texts.join(' | ')).toContain('上次生成');
-    expect(texts.join(' | ')).toContain('输出 30 t');
+    expect(texts.join(' | ')).toContain('输出 30 tok');
     unmount();
   });
 

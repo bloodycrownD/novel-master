@@ -1116,7 +1116,7 @@ describe('token 化指标（T-M5/T-M7）', () => {
     const h = createHarness();
     startRunningRun(h, 'a', 'r1');
 
-    // step 1：每 250ms 一条 50 字符 delta（每拍 +15 t ≈ 60 tok/s）。
+    // step 1：每 250ms 一条 50 字符 delta（每拍 +15 tok ≈ 60 tok/s）。
     for (let i = 0; i < 5; i += 1) {
       publishTextDelta(h.eventBus, 'a', 'r1', 'x'.repeat(50));
       jest.advanceTimersByTime(250);
@@ -1181,12 +1181,12 @@ describe('token 化指标（T-M5/T-M7）', () => {
     const h = createHarness({tokenEstimatorFactory: () => createFakeEstimator()});
     startRunningRun(h, 'a', 'r1');
 
-    // 正文 4 字符 → 估算 4 t（启发式会是 2 t）。
+    // 正文 4 字符 → 估算 4 tok（启发式会是 2 tok）。
     publishTextDelta(h.eventBus, 'a', 'r1', 'abcd');
     expect(h.manager.snapshot('a')?.metrics).toEqual(
       expect.objectContaining({completionTokens: 4, tokenSource: 'heuristic'}),
     );
-    // 思考通道独立累计：2 字符 → 合计 6 t。
+    // 思考通道独立累计：2 字符 → 合计 6 tok。
     publishThinkingDelta(h.eventBus, 'a', 'r1', 'ab');
     expect(h.manager.snapshot('a')?.metrics).toEqual(
       expect.objectContaining({completionTokens: 6, tokenSource: 'heuristic'}),
@@ -1323,12 +1323,12 @@ describe('token 化指标（T-M5/T-M7）', () => {
       },
     });
     startRunningRun(h, 'a', 'r1');
-    // 首个 run 累计 8 t（1 字符 = 1 token 的假估算器，启发式只会给 3）。
+    // 首个 run 累计 8 tok（1 字符 = 1 token 的假估算器，启发式只会给 3）。
     publishTextDelta(h.eventBus, 'a', 'r1', 'abcdefgh');
     expect(h.manager.snapshot('a')?.metrics.completionTokens).toBe(8);
     expect(created).toHaveLength(2);
 
-    // 收尾后同会话再发起：读数从零起算，不串入上一 run 的 8 t。
+    // 收尾后同会话再发起：读数从零起算，不串入上一 run 的 8 tok。
     publishFinished(h.eventBus, 'a', 'r1');
     advanceStreamTimers();
     h.runAgentTurn.mockImplementation(() => new Promise(() => undefined));

@@ -14,7 +14,7 @@ describe('buildChatStreamMetricsLine（T-M8 文案快照）', () => {
       tokenSource: 'usage',
       tokensPerSecond: 45,
     });
-    expect(line).toBe('生成中 · 12.3s · 输出 1,234 t · 45 tok/s');
+    expect(line).toBe('生成中 · 12.3s · 输出 1,234 tok · 45 tok/s');
   });
 
   it('无速率样本时省略速率段（上次生成冻结态）', () => {
@@ -25,7 +25,7 @@ describe('buildChatStreamMetricsLine（T-M8 文案快照）', () => {
       tokenSource: 'heuristic',
       tokensPerSecond: null,
     });
-    expect(line).toBe('上次生成 · 5.0s · 输出 28 t');
+    expect(line).toBe('上次生成 · 5.0s · 输出 28 tok');
   });
 
   it('正文/思考不再分列（token 化改版后的形态锁定）', () => {
@@ -38,6 +38,6 @@ describe('buildChatStreamMetricsLine（T-M8 文案快照）', () => {
     });
     expect(line).not.toContain('正文');
     expect(line).not.toContain('思考');
-    expect(line).toContain('输出 90 t');
+    expect(line).toContain('输出 90 tok');
   });
 });

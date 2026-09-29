@@ -285,7 +285,7 @@ describe("useAgentStreamMetrics 状态机（desktop-metrics/test-1）", () => {
     try {
       await h.render(true, "s1:r1");
       const api = h.api();
-      api.noteTextDelta("abcd"); // 估算 4 t（启发式会是 2 t）
+      api.noteTextDelta("abcd"); // 估算 4 tok（启发式会是 2 tok）
       await h.refresh(true, "s1:r1", 1);
       assert.equal(h.api().metrics?.completionTokens, 4);
       assert.equal(h.api().metrics?.tokenSource, "heuristic");
