@@ -146,8 +146,12 @@ function ChatTabScreenContent({
 
   // ⛶ 全屏编辑（照 onOpenSessionDetail 先例：chat-tab 目录零导航依赖，惯例是
   // 父层注入回调）：跳的就是智能体配置那套全屏编辑页（PromptEditor 的 composer
-  // 变体——同一组件同一条键盘链，带 markdown 预览/编辑互切）。初始文本走路由
-  // 参数；退出回填写进模块级存取（回调不可序列化，不走路由参数）。
+  // 变体——同一组件同一条键盘链，纯编辑态：预览/档位切换与保存按钮都不渲染，
+  // 编辑器退出即回填，没有显式保存动作）。初始文本走路由参数；退出回填写进
+  // 模块级存取（回调不可序列化，不走路由参数）。
+  // 本回调自身对 scope 缺 projectId/sessionId 时静默 return，面板侧另按
+  // scopeReady 决定要不要注入（见 ChatConversationPanel 的 scopeReady 注释），
+  // 让 ⛶ 走既有 disabled 通路而不是变成点了没反应的死按钮。
   const setDraftRestoreToken = ctx.messages.setDraftRestoreToken;
   const runtime = ctx.runtime;
   const onOpenComposerFullscreen = useCallback(

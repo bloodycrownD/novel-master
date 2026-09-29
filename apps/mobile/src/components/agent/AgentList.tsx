@@ -164,8 +164,9 @@ export function AgentList({onCreate}: Props) {
       const enriched: AgentRow[] = [];
       for (const id of ids) {
         const raw = await runtime.agentRegistry.getRawWire(id);
-        // 内置 general 子智能体由 registry list 虚拟注入、无实体行，getRawWire 返回 undefined；
-        // 此前的循环直接访问 raw.name 会崩「Cannot read property 'name' of undefined」（列表页白屏）
+        // 空值防御：getRawWire 只在「行已进 listIds、逐条读之前被并发删掉」的
+        // 窗口里返回空；直接访问 raw.name 会崩（列表页白屏），跳过该行避免
+        // 渲染半截行。注：内置 general 走 GENERAL_ROW 合成、不经本循环。
         if (raw == null) {
           continue;
         }

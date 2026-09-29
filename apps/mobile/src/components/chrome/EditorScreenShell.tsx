@@ -95,7 +95,10 @@ export function EditorScreenShell<T extends string>({
   const body = (
     <>
       {hasToolbar ? (
-        <View style={[styles.toolbar, {borderBottomColor: toolbarBorderColor}]}>
+        <View
+          testID="editor-screen-toolbar"
+          style={[styles.toolbar, {borderBottomColor: toolbarBorderColor}]}
+        >
           {save ? (
             <Pressable
               testID={save.testID}

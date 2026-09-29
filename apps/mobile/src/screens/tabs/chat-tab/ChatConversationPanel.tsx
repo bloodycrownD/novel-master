@@ -135,6 +135,12 @@ export function ChatConversationPanel({
     return {kind: 'session', projectId, sessionId};
   }, [projectId, sessionId]);
 
+  // 会话 scope 是否就绪：⛶ 入口的可用性判据（照 onOpenSessionDetail 先例，
+  // 回调只在 scope 就绪时注入）。未就绪时传 undefined，ChatComposer 按
+  // 「回调为 null 即 disabled」的既有通路把 ⛶ 置灰——而不是让用户点了
+  // 一个静默 return 的死按钮（fullscreen/B-1）。
+  const scopeReady = projectId != null && sessionId != null;
+
   const emitWorkspaceBackState = useCallback(() => {
     if (setWorkspaceBackState == null) {
       return;
@@ -279,7 +285,9 @@ export function ChatConversationPanel({
         canResumeWithoutInput={canResumeWithoutInput}
         lastMessageIsPlainUserText={lastMessageIsPlainUserText}
         draftRestoreToken={draftRestoreToken}
-        onOpenComposerFullscreen={onOpenComposerFullscreen}
+        onOpenComposerFullscreen={
+          scopeReady ? onOpenComposerFullscreen : undefined
+        }
         // 「更多」按钮已在 ChatComposer 内注释隐藏，这里不再传 onOpenMore，
         // 避免传了却没人响应造成误解。压缩/切换等入口改由会话详情页抽屉承担。
         // onOpenMore={() => setSessionDrawerOpen(true)}
