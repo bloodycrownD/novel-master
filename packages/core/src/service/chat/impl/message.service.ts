@@ -14,6 +14,7 @@ import {
 import type { MessageContent } from "@/domain/chat/model/content-block.js";
 import type {
   ChatMessage,
+  ChatMessageHeader,
   MessageAttachment,
 } from "@/domain/chat/model/message.js";
 import type { MessageUsage } from "@/domain/chat/model/message-usage.js";
@@ -94,6 +95,19 @@ export class DefaultMessageService implements MessageService {
     options?: { includeHidden?: boolean }
   ): Promise<ChatMessage[]> {
     return this.deps.messages.listBySession(sessionId, options);
+  }
+
+  listMessageHeadersBySession(
+    sessionId: string
+  ): Promise<ChatMessageHeader[]> {
+    return this.deps.messages.listMessageHeadersBySession(sessionId);
+  }
+
+  listBySessionFromSeq(
+    sessionId: string,
+    fromSeq: number
+  ): Promise<ChatMessage[]> {
+    return this.deps.messages.listBySessionFromSeq(sessionId, fromSeq);
   }
 
   listBySessionTail(

@@ -18,7 +18,7 @@ import {
   parseAttachmentsJson,
   serializeAttachmentsJson,
 } from "../../model/message-attachment.schema.js";
-import type { ChatMessage } from "../../model/message.js";
+import type { ChatMessage, ChatMessageHeader } from "../../model/message.js";
 import type { MessageContent } from "../../model/content-block.js";
 import type { MessageUsage } from "../../model/message-usage.js";
 import {
@@ -243,6 +243,28 @@ export class SqliteMessageRepository implements MessageRepository {
       { sessionId, fromSeq }
     );
     return this.mapRows(rows);
+  }
+
+  async listMessageHeadersBySession(
+    sessionId: string
+  ): Promise<ChatMessageHeader[]> {
+    // 头投影：只取 id/seq/role/hidden/created_at_ms——不选 content 列即不解压
+    // 正文（压缩/置位等区间逻辑在大会话上曾是秒级全量解压的主源之一）。
+    const rows = await queryTemplate(
+      this.conn,
+      this.parser,
+      `SELECT id, session_id, seq, role, hidden, created_at_ms
+       FROM chat_message WHERE session_id = #{sessionId} ORDER BY seq ASC`,
+      { sessionId }
+    );
+    return rows.map((row) => ({
+      id: String(row.id),
+      sessionId: String(row.session_id),
+      seq: Number(row.seq),
+      role: String(row.role),
+      hidden: Number(row.hidden) === 1,
+      createdAtMs: Number(row.created_at_ms),
+    }));
   }
 
   async countBySession(sessionId: string): Promise<number> {

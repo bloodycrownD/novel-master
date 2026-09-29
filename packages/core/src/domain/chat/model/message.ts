@@ -46,3 +46,17 @@ export interface ChatMessage {
    */
   readonly usage?: MessageUsage;
 }
+
+/**
+ * 消息头投影（无正文）：depth/区间类逻辑只需要 id/seq/role/hidden 的轻量
+ * 场景（压缩 hide 动作、置位锚定）专用——SQL 不取 content 列，跳过全量
+ * 解压。需要正文检查时（如 tool_result 锚定）按窗口补拉全量行。
+ */
+export interface ChatMessageHeader {
+  readonly id: string;
+  readonly sessionId: string;
+  readonly seq: number;
+  readonly role: string;
+  readonly hidden: boolean;
+  readonly createdAtMs: number;
+}

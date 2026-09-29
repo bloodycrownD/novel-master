@@ -81,9 +81,14 @@ export class DefaultMessageTranscriptEffectsService
     sessionId: string,
     messageId: string
   ): Promise<SetMessageFloorResult> {
-    const messages = await this.deps.messages.listBySession(sessionId);
-    const anchor = messages.find((m) => m.id === messageId);
-    if (anchor == null) {
+    // 读路径（2026-09-29 治本）：原先全量 listBySession（大会话连解压秒级）
+    // 只为找锚点 + 算 MAX(seq)——锚点单行 get，MAX(seq) 用尾部一条（含
+    // hidden、按 seq 取最大，与原口径一致）。
+    let anchor;
+    try {
+      anchor = await this.deps.messages.get(messageId);
+    } catch {
+      // get 的 not-found 不带会话上下文，包回原错误形态（含 sessionId）。
       throw chatNotFound("message", messageId, { sessionId });
     }
     if (!isSetFloorAnchorRole(anchor.role)) {
@@ -92,8 +97,10 @@ export class DefaultMessageTranscriptEffectsService
       );
     }
 
-    const sessionMaxSeq =
-      messages.length > 0 ? Math.max(...messages.map((m) => m.seq)) : 0;
+    const tail = await this.deps.messages.listBySessionTail(sessionId, {
+      limit: 1,
+    });
+    const sessionMaxSeq = tail.length > 0 ? tail[0]!.seq : 0;
     const { hidePrefix, showSuffix } = computeSetFloorRanges(
       anchor.seq,
       sessionMaxSeq

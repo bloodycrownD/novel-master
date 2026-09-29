@@ -4,7 +4,7 @@
  * @module domain/chat/repositories/message.port
  */
 
-import type { ChatMessage } from "../model/message.js";
+import type { ChatMessage, ChatMessageHeader } from "../model/message.js";
 import type { MessageContent } from "../model/content-block.js";
 import type { MessageSearchQuery } from "../content/message-content-match.js";
 
@@ -18,6 +18,14 @@ export interface MessageRepository {
     sessionId: string,
     options?: { includeHidden?: boolean }
   ): Promise<ChatMessage[]>;
+
+  /**
+   * 消息头投影（无正文，不解压 content）：压缩 hide / 置位锚定等只需要
+   * id/seq/role/hidden 的区间逻辑专用，大会话上替代全量解压。
+   */
+  listMessageHeadersBySession(
+    sessionId: string
+  ): Promise<ChatMessageHeader[]>;
 
   /**
    * 统计会话消息行数（`SELECT COUNT(*) ... WHERE session_id = ?`）。

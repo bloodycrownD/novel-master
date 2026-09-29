@@ -72,6 +72,30 @@ describe("Message visibility", () => {
     assert.equal(all[1]!.hidden, true);
   });
 
+  it("listMessageHeadersBySession：头投影含 hidden、按 seq 升序、字段齐（不解压正文）", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id, "S");
+    const m1 = await ctx.messages.append(session.id, "user", textBlocks("h1"));
+    await ctx.messages.append(session.id, "assistant", textBlocks("h2"));
+    const m3 = await ctx.messages.append(session.id, "user", textBlocks("h3"));
+    await ctx.messages.hide(m3.id);
+
+    const headers = await ctx.messages.listMessageHeadersBySession(session.id);
+    assert.equal(headers.length, 3);
+    assert.deepEqual(
+      headers.map((h) => [h.seq, h.role, h.hidden]),
+      [
+        [1, "user", false],
+        [2, "assistant", false],
+        [3, "user", true],
+      ]
+    );
+    assert.equal(headers[0]!.id, m1.id);
+    assert.equal(headers[0]!.sessionId, session.id);
+    assert.ok(headers[0]!.createdAtMs > 0);
+  });
+
   it("shows a range of messages by seq", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);

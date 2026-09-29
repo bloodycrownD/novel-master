@@ -6,6 +6,7 @@
 
 import type {
   ChatMessage,
+  ChatMessageHeader,
   MessageAttachment,
   MessageContent,
 } from "@/domain/chat/model/message.js";
@@ -19,6 +20,17 @@ export interface MessageService {
   listBySession(
     sessionId: string,
     options?: { includeHidden?: boolean }
+  ): Promise<ChatMessage[]>;
+
+  /** 消息头投影（无正文不解压）——压缩/置位的区间逻辑专用轻量读。 */
+  listMessageHeadersBySession(
+    sessionId: string
+  ): Promise<ChatMessageHeader[]>;
+
+  /** 按 seq 升序取 `seq >= fromSeq` 的全量消息（锚定窗口补拉真行用）。 */
+  listBySessionFromSeq(
+    sessionId: string,
+    fromSeq: number
   ): Promise<ChatMessage[]>;
   listBySessionTail(
     sessionId: string,
