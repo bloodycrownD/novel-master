@@ -251,12 +251,13 @@ async function writeEntryFor(
 }
 
 /**
- * 统计优先（2026-09-29 用户拍板「像 metric 一样有哪个用哪个」）读口语义：
- * - API 命中 = 基线 + 采样锚点后追加消息的增量估算（不付计数）；
- * - 本地 miss 对 WEB/SP 家族（glm 等）强制 cl100k 估算档（estimated:true），
- *   绝不过原生整串桥；tiktoken / heuristic 档不强制。
+ * 统计优先（2026-09-29 用户拍板「像 metric 一样有哪个用哪个」；当晚真机
+ * 复验二次修正）读口语义：
+ * - API 命中 = 基线 + 采样锚点后追加消息的增量估算（纯追加不失效基线）；
+ * - 本地 miss 回落模型自身家族计数器（glm→原生、gpt→tiktoken 分块），
+ *   读口不改写调用方 override（强制 cl100k 估算档已撤回）。
  */
-describe("resolveCurrentPromptTokens 统计优先（api 增量 + 本地强制估算档）", () => {
+describe("resolveCurrentPromptTokens 统计优先（api 基线+增量，本地回落家族计数器）", () => {
   beforeEach(() => {
     registerNodeTokenizerDriverForTests();
     sessionApiPromptTokenCache.clearAll();
@@ -363,8 +364,8 @@ describe("resolveCurrentPromptTokens 统计优先（api 增量 + 本地强制估
     );
   });
 
-  it("本地 miss + WEB 家族（glm）→ 强制 tiktoken 估算档且 estimated:true（不过原生桥）", async () => {
-    const captured: { override?: unknown; family?: unknown } = {};
+  it("本地 miss → 透传模型家族计数器（glm 不再强制估算档，真机复验拍板）", async () => {
+    const captured: { override?: unknown } = {};
     clearTokenizerDrivers();
     registerTokenizerDriver({
       name: "mock-stats-first",
@@ -372,11 +373,11 @@ describe("resolveCurrentPromptTokens 统计优先（api 增量 + 本地强制估
         captured.override = params.tokenizerOverride;
         return {
           tokenCount: 1_234,
-          counterKind: "tiktoken",
+          counterKind: "glm",
           estimated: false,
           savedModelId: params.savedModelId,
           vendorModelId: "zai/glm-4.6",
-          tokenizerFamily: "tiktoken",
+          tokenizerFamily: "glm",
         };
       },
     });
@@ -386,16 +387,16 @@ describe("resolveCurrentPromptTokens 统计优先（api 增量 + 本地强制估
       paramsWithMessages([], "zai/glm-4.6")
     );
     assert.equal(resolved.source, "local");
-    assert.equal(captured.override, "tiktoken", "WEB 家族必须被强制到估算档");
     assert.equal(
-      resolved.estimated,
-      true,
-      "cl100k 对 glm 只是近似，读口必须如实标 estimated（标签 gpt ≈ / 阈值乘保守系数）"
+      captured.override,
+      undefined,
+      "读口不得改写调用方 override——WEB 家族回落自身家族计数器（强制 cl100k 估算档已撤回）"
     );
-    assert.equal(resolved.counterKind, "tiktoken");
+    assert.equal(resolved.counterKind, "glm");
+    assert.equal(resolved.estimated, false, "驱动结果原样透传");
   });
 
-  it("本地 miss + tiktoken 家族 / heuristic override → 不强制（透传调用方 override）", async () => {
+  it("本地 miss + 调用方显式 override → 原样透传（heuristic 不被改写）", async () => {
     const captured: { override?: unknown } = {};
     clearTokenizerDrivers();
     registerTokenizerDriver({
@@ -413,14 +414,14 @@ describe("resolveCurrentPromptTokens 统计优先（api 增量 + 本地强制估
       },
     });
 
-    // tiktoken 家族：override 原样透传（未传即 undefined）
+    // 未传 override：undefined 原样透传
     await resolveCurrentPromptTokens(
       SESSION_ID,
       paramsWithMessages([], RUN_MODEL_ID)
     );
     assert.equal(captured.override, undefined);
 
-    // 调用方显式 heuristic：廉价档不强制
+    // 调用方显式 heuristic：透传不改写
     await resolveCurrentPromptTokens(SESSION_ID, {
       ...paramsWithMessages([], RUN_MODEL_ID),
       tokenizerOverride: "heuristic",

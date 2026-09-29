@@ -7,17 +7,19 @@
  * KKV 命中时仍返回 `source:"api"`，并附 `atMs`（「上次请求」标签与时效
  * 判定用）。
  *
- * **统计优先（2026-09-29，用户拍板「像 metric 一样有哪个用哪个」）**：
+ * **统计优先（2026-09-29，用户拍板「像 metric 一样有哪个用哪个」；当晚
+ * 真机复验二次修正）**：
  * - API 命中分支：`读值 = 基线 + 增量估算`（与实时速率条同款语义，RULE
  *   「实时 token 指标语义」条）。基线是上次请求的精确 `promptTokens`，
- *   增量是采样锚点（`anchorSeq`）之后追加的消息按 heuristic 折算——不
- *   再为「刷新一下读数」付费计数。
- * - 本地分支：WEB/SP 家族（glm/qwen2/gemma/claude…）的真分词器计数在
- *   真机上是原生整串过桥（glm 大上下文单次 ~5.8s），自动读路径**绝不
- *   同步付费**——强制 `tokenizerOverride:"tiktoken"` 走 cl100k 分块估算
- *   （JS 侧、L1/L2 缓存照常生效），结果标 `estimated:true`（标签 `gpt ≈`
- *   档）。tiktoken 家族（gpt 系，JS 分块本就快）与 heuristic 档保持原样。
- *   家族真分词器的精确计数只留给 CLI 直调驱动的显式路径。
+ *   增量是采样锚点（`anchorSeq`）之后追加的消息折算——不为「刷新一下读数」
+ *   付费计数。消息**追加不再失效**该值（增量可覆盖）；删除/隐藏/改写类
+ *   路径仍失效。
+ * - 本地分支：回落**模型自身家族**的计数器（glm→原生 DJL、gpt→tiktoken
+ *   分块），与 fa 的路由语义一致——曾试过对 WEB/SP 家族强制 cl100k 估算
+ *   （首次估算计数 + 块表 KKV 读写链在真机上引入新卡顿，且 glm 档消失），
+ *   真机复验后撤回：run 内评估与刷新靠每 step usage 回锚走 api 档零计数，
+ *   本地计数只剩「无统计可用」的低频场景（首开/回滚/置位后），L1 整串
+ *   缓存挡重复。
  *
  * @module infra/tokenizer/logic/resolve-current-prompt-tokens
  */
@@ -27,13 +29,11 @@ import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.j
 import { formatChatMessageForCliPreview } from "@/domain/chat/content/message-body-text.js";
 import {
   countPromptLlmInput,
-  resolveVendorModelIdFromSaved,
   type CountPromptLlmInputParams,
 } from "./count-prompt-llm-input.js";
 import { promptWholeCache } from "./prompt-whole-cache.js";
 import { readSessionApiPromptTokenEntry } from "./session-api-prompt-token-store.js";
 import { tokenChunkCache } from "./token-chunk-cache.js";
-import { resolveTokenizerFamily } from "./resolve-tokenizer-family.js";
 
 /** 占用结果来源。 */
 export type PromptTokenSource = "api" | "local";
@@ -65,17 +65,21 @@ export interface ResolveCurrentPromptTokensOptions {
 }
 
 /**
- * API 命中时的增量估算：锚点之后追加的可见消息按 heuristic 折算 token。
+ * API 命中时的增量估算：锚点之后追加的可见消息折算 token。
  *
  * 口径说明：
  * - 序列化用 `formatChatMessageForCliPreview`（`role: body` 段、`\n\n` 连接），
  *   与驱动整串序列化的消息段同构——增量本来就是估算，不追求逐 token 对齐。
- * - heuristic 是 `ceil(字符/3.35)` 的英文口径、对中文低估八成，但增量本体
- *   小（run 内一步的 assistant + tool_results，或一条新 user 消息），绝对
- *   误差几百 token 量级、相对基线可忽略；下一次请求的 usage 到达即被真值
- *   覆盖（agent-runner 每 step 回锚）。
+ *   传入的 ctx.messages 是 prepare 之后的消息（附件已 wrap 进文本块），
+ *   大附件的正文天然计入增量。
+ * - heuristic 是 `ceil(字符/3.35)` 的英文口径、对中文低估八成，取
+ *   `max(heuristic, ceil(字符数/2))` 作保守下限——中文增量不被低估过半
+ *   （阈值方向安全），英文小幅高估无害；增量本体小（run 内一步的
+ *   assistant + tool_results，或一条新 user 消息），下一次请求的 usage
+ *   到达即被真值覆盖（agent-runner 每 step 回锚）。
  * - 回滚把尾部物理删除后 seq 复用，锚点可能短暂指向「已不存在的高 seq」→
- *   过滤结果为空、delta=0，基线原样使用，下一次 usage 自愈。
+ *   过滤结果为空、delta=0，基线原样使用，下一次 usage 自愈（回滚路径本身
+ *   会失效该条目，此为双保险）。
  */
 function estimateAnchoredDelta(
   anchorSeq: number | undefined,
@@ -102,7 +106,10 @@ function estimateAnchoredDelta(
   if (text.length === 0) {
     return 0;
   }
-  return params.registry.heuristic.countText(text);
+  return Math.max(
+    params.registry.heuristic.countText(text),
+    Math.ceil(text.length / 2)
+  );
 }
 
 /**
@@ -154,27 +161,10 @@ export async function resolveCurrentPromptTokens(
     await promptWholeCache.seedFromKkv(sessionKkv, sessionId);
   }
 
-  // 统计优先：WEB/SP 家族的本地真分词器计数是原生整串过桥（glm 大上下文
-  // 单次 ~5.8s），自动读路径不付这个钱——强制 tiktoken 走 cl100k 分块估算。
-  // 家族判定与驱动同源（vendorModelId → resolveTokenizerFamily，override
-  // 语义一致）；tiktoken（JS 分块本就快、精确）与 heuristic（本就廉价）不强制。
-  // **前提（CR 注）**：这里只消费 params.tokenizerOverride，不查
-  // registry.getTokenizerOverride——该钩子当前仅测试注入（产品运行时不注入
-  // 偏好，见 create-default-registry 注释）；若未来产品注入该偏好，本判定
-  // 须与驱动同步查询，否则两边家族解析可能分叉。
-  // 强制档的 L1/L2 键含 override 段，与原生档天然隔离、互不污染。
-  const vendorModelId = await resolveVendorModelIdFromSaved(
-    params.savedModelId,
-    params.savedModels
-  );
-  const family = resolveTokenizerFamily(
-    vendorModelId,
-    params.tokenizerOverride ?? "auto"
-  );
-  const forceEstimate = family !== "tiktoken" && family !== "heuristic";
-  const local = await countPromptLlmInput(
-    forceEstimate ? { ...params, tokenizerOverride: "tiktoken" } : params
-  );
+  // 本地分支回落模型自身家族的计数器（fa 路由语义；强制 cl100k 估算档曾于
+  // 2026-09-29 试行、真机复验后撤回——见模块头「统计优先」说明）。估读的
+  // estimated / counterKind 透传驱动结果（fallback 档如实报 heuristic）。
+  const local = await countPromptLlmInput(params);
   tokenChunkCache.advanceGeneration(sessionId, {
     persist: { sessionKkv },
     realRefresh: true,
@@ -183,9 +173,7 @@ export async function resolveCurrentPromptTokens(
   return {
     tokenCount: local.tokenCount,
     source: "local",
-    // 强制估算档如实标 estimated（cl100k 对非 OpenAI 家族只是近似，标签落
-    // `gpt ≈` 档、压缩阈值据此乘保守系数）；未强制时透传驱动结果。
-    estimated: forceEstimate ? true : local.estimated,
+    estimated: local.estimated,
     counterKind: local.counterKind,
   };
 }

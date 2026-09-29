@@ -173,10 +173,11 @@ export class DefaultMessageService implements MessageService {
       ...(options?.usage != null ? { usage: options.usage } : {}),
     };
     await this.deps.messages.insert(message);
-    // 消息「增」同样改变当前可见 prompt：旧 api 占用（含 tools 段）不再适用，
-    // 不清就会以 api 口径残留整个 run、并落库跨重启继续参与阈值判定。
-    // 挂在这里即一次覆盖全部 append 调用方（runner / IPC / CLI / agent session）。
-    await this.invalidatePromptTokens(sessionId);
+    // 消息「增」不再失效 API 占用（统计优先口径，2026-09-29 真机复验拍板）：
+    // 纯追加由读口的「基线 + anchorSeq 之后追加消息的增量估算」覆盖（metric
+    // 同款），失效反而会让 run 起步的压缩评估跌进本地整串计数。删除/改写/
+    // 隐藏类路径（delete/updateContent/hide/show/hideRange/showRange/
+    // truncateAfter）的失效保留——增量表达不了内容消失。
     return message;
   }
 

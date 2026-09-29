@@ -1,10 +1,12 @@
 /**
- * prompt 占用失效挂点回归：凡改变「当前可见 prompt / 模型绑定」的路径，
- * 成功后必须把 session KKV 里的 `prompt_tokens` 行清掉（进程内热层由同一
- * helper 一起清）。
+ * prompt 占用失效挂点回归：凡**移除/改写**「当前可见 prompt / 模型绑定」的
+ * 路径，成功后必须把 session KKV 里的 `prompt_tokens` 行清掉（进程内热层由
+ * 同一 helper 一起清）。纯**追加**（append）不失效——统计优先口径下由读口
+ * 「基线 + anchorSeq 后增量估算」覆盖（2026-09-29 真机复验拍板）。
  *
  * 覆盖挂点：
- * - message.service：append / delete / updateContent / hide / truncateAfter
+ * - message.service：delete / updateContent / hide / truncateAfter
+ *   （append 不失效，见首条用例）
  * - session.service：updateSessionAgentConfig（会话级切 Agent / 切模型）
  * - message-checkpoint：rollbackToMessage（回滚）
  * - message-transcript-effects：setMessageFloorAtMessage（置位）
@@ -91,12 +93,22 @@ describe("prompt 占用失效挂点", () => {
     sessionApiPromptTokenCache.clearAll();
   });
 
-  it("message.append 后 KKV 行被清（消息「增」这一环）", async () => {
+  it("message.append 后 KKV 行保留（纯追加由增量估算覆盖，统计优先口径）", async () => {
     const { ctx, session } = await makeSession();
     await seedRow(ctx.sessionKkv, session.id);
 
     await ctx.messages.append(session.id, "user", textBlocks("new turn"));
-    await assertRowGone(ctx.sessionKkv, session.id);
+    const raw = await ctx.sessionKkv.get(
+      session.id,
+      SESSION_KKV_DOMAIN_PROMPT_TOKENS,
+      PROMPT_TOKENS_LAST_USAGE_KEY
+    );
+    assert.notEqual(raw, null, "纯追加不得失效 API 基线（读口用 anchorSeq 增量覆盖）");
+    assert.equal(
+      sessionApiPromptTokenCache.get(session.id)?.promptTokens,
+      4321,
+      "热层保留"
+    );
   });
 
   it("message.delete 后 KKV 行被清", async () => {
