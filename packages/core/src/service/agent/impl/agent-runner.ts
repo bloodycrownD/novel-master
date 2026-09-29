@@ -115,7 +115,8 @@ export interface DefaultAgentRunnerDeps {
   readonly messageTranscriptEffects?: MessageTranscriptEffectsService;
   /** 按 sessionId 累积 in-flight 流式 partial，供子会话首次进入查询。 */
   readonly streamRegistry?: AgentStreamRegistry;
-  readonly listAllSessionMessages?: () => Promise<readonly ChatMessage[]>;
+  /** 每步 tool_use 查找源（可见-only；见 {@link CreateAgentRunnerDeps} 同名字段）。 */
+  readonly listVisibleSessionMessages?: () => Promise<readonly ChatMessage[]>;
   /** 思考上下文偏好窄切片（每 run 一次快照；未注入时等同默认开）。 */
   readonly preferences?: Pick<
     PersistentPreferences,
@@ -562,9 +563,15 @@ export class DefaultAgentRunner implements AgentRunner {
         });
         const llmMessages = normalizeOrphanToolResultsForLlm(strippedMessages);
 
+        // tool_use 查找源：解析出站 tool_result 的函数名（Gemini
+        // functionResponse 必须有合法 name）。取可见-only 即可——上面的
+        // normalizeOrphanToolResultsForLlm 按可见历史配对，残留 tool_result
+        // 的 tool_use 必在可见集内；hidden 行既给不出解析力，又要为每条
+        // 解压正文（千条会话全量读 212ms vs 可见读 14ms，每步一发）。
+        // 懒求值：放在这里而不是 step 开头，是为了纳入本 step 的压缩产物。
         let toolUseLookupMessages: readonly ChatMessage[] | undefined;
-        if (this.deps.listAllSessionMessages != null) {
-          toolUseLookupMessages = await this.deps.listAllSessionMessages();
+        if (this.deps.listVisibleSessionMessages != null) {
+          toolUseLookupMessages = await this.deps.listVisibleSessionMessages();
         }
 
         // 计时采集（spec 指标口径）：requestStartedAtMs 为请求发起时刻；

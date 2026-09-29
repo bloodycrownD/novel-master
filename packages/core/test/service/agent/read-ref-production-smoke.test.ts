@@ -120,12 +120,14 @@ describe("read-tool-result-ref Step 6: 生产链路 smoke（runner 全链）", (
       workplace: createWorkplaceService(ctx.conn, scope),
     };
 
-    // 捕获每轮发给模型的 history（prepare 之后的内存态）。
+    // 捕获每轮发给模型的 history（prepare 之后的内存态）与 tool_use 查找源。
     const histories: Array<readonly ChatMessage[]> = [];
+    const lookups: Array<readonly ChatMessage[]> = [];
     let modelCall = 0;
     const model: ModelRequestService = {
       request: async (_savedModelId, _userContent, options) => {
         histories.push(options?.history ?? []);
+        lookups.push(options?.toolUseLookupMessages ?? []);
         modelCall += 1;
         if (modelCall === 1) {
           return {
@@ -151,6 +153,10 @@ describe("read-tool-result-ref Step 6: 生产链路 smoke（runner 全链）", (
 
     const agentSession = new ChatAgentSession(ctx.messages, sessionId);
     await agentSession.append("user", textBlocks("请读取 smoke.md"));
+    // 收窄验证用：库里放一条 hidden 行（压缩/置位产物形态），
+    // 全量读含它、可见-only 读不含它——下面的查找源断言因此非恒真。
+    const hiddenSeed = await agentSession.append("user", textBlocks("更早的旧轮次"));
+    await agentSession.hideRange(hiddenSeed.seq, hiddenSeed.seq);
 
     // assembleAgentRunnerDeps 装配（生产单点）：runtime.revisionRepo 透传到
     // runner deps，再由 prepare 消费（hydrate 主链接线验证）。
@@ -241,5 +247,26 @@ describe("read-tool-result-ref Step 6: 生产链路 smoke（runner 全链）", (
     );
     // contentRef 原样保留（块身份不变）
     assert.deepEqual(wireBlock.contentRef, ref);
+
+    // ④ 每步 tool_use 查找源收窄为可见-only（P1-3）：hidden 行不进；
+    //    但仍然覆盖本轮 tool_result 的 tool_use id（解析力不降级）。
+    const persistedFull = await ctx.messages.listBySession(sessionId);
+    const hiddenRows = persistedFull.filter((m) => m.hidden);
+    assert.equal(hiddenRows.length, 1, "库里确有 hidden 行（断言非恒真的前提）");
+    assert.ok(lookups.length >= 2, "两步请求都应带查找源");
+    for (const [i, lookup] of lookups.entries()) {
+      assert.ok(lookup.length > 0, `第 ${i + 1} 步查找源非空`);
+      assert.ok(
+        lookup.every((m) => !m.hidden),
+        `第 ${i + 1} 步查找源不含 hidden 行（收窄生效）`
+      );
+    }
+    const lookupToolUseIds = lookups[1]!.flatMap((m) =>
+      m.content.blocks.filter((b) => b.type === "tool_use").map((b) => b.id)
+    );
+    assert.ok(
+      lookupToolUseIds.includes("tu-rrsmoke"),
+      "可见-only 查找源仍覆盖本轮 tool_use（functionResponse.name 解析不受影响）"
+    );
   });
 });

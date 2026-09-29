@@ -55,7 +55,15 @@ export interface CreateAgentRunnerDeps {
   readonly messages?: MessageService;
   /** 压缩执行所需的 transcript effects；对话轨由 assembleAgentRunnerDeps 注入。 */
   readonly messageTranscriptEffects?: MessageTranscriptEffectsService;
-  readonly listAllSessionMessages?: () => Promise<readonly ChatMessage[]>;
+  /**
+   * 每步模型请求的 tool_use 查找源（Gemini `functionResponse.name` 解析 +
+   * hidden tool_use 的合成 model turn）。**可见-only**：出站历史先经
+   * `normalizeOrphanToolResultsForLlm`（按可见历史配对，hidden 的 tool_use
+   * 不算配对），残留 tool_result 的 tool_use 必在可见集内——所以可见集
+   * 解析力等价于全量，却省掉 hidden 行的逐条解压（全量读 212ms → 14ms）。
+   * 懒求值：本 step 的可见窗口落定后再取（含本 step 压缩产物）。
+   */
+  readonly listVisibleSessionMessages?: () => Promise<readonly ChatMessage[]>;
   /** 按 sessionId 累积 in-flight 流式 partial，供子会话首次进入查询。 */
   readonly streamRegistry?: AgentStreamRegistry;
   /** 思考上下文偏好窄切片（每 run 一次快照；未注入时等同默认开）。 */
