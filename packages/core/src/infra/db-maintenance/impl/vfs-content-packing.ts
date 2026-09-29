@@ -5,7 +5,15 @@
  * 骨架对齐 blob-binary-normalization（谓词驱动后台任务 + 单轮同步预算 +
  * KKV 兜底标记 + 收尾维护回调缝），**最大分叉是无终态完成标记**——VFS 版本
  * 持续增长，「打完」不是终态，每次入口重扫候选谓词（真库该查询毫秒级、
- * 115 组，无需缓存）；已生成的 pack 永不重写，新版本攒够下一组再打下一包。
+ * 115 组）；已生成的 pack 永不重写，新版本攒够下一组再打下一包。
+ *
+ * P1-1 零候选水位：谓词在稳态不返回候选 entry 也必须整表扫（真库打包态
+ * 实测 121ms/轮），入口每次都付。「完整扫描收敛为候选=0 且 failedGroups=0」
+ * 后把候选相关表的**廉价聚合指纹**（见 {@link matchesZeroCandidateWatermark}）
+ * 记入 KKV；下一轮入口指纹一致即短路谓词（<10ms）。这是**自失效的负结果
+ * 缓存，不是完成标记**：指纹是数据面纯函数，任何可能新增候选的变更都令它
+ * 自失效——与上文「无终态标记」不冲突，谓词仍是唯一权威，水位只是「上一轮
+ * 完整扫描为负 + 数据面未变」的快速通道。
  *
  * 候选谓词（SPEC binary-blob-and-vfs-pack Part B）：`vfs_revision.status=
  * 'active' AND content_hash IS NOT NULL`，且该 hash **仍是 blob 行**
@@ -73,6 +81,12 @@ const STARTUP_MAINTENANCE_PENDING_KEY = "startupMaintenancePending";
 
 /** 坏组数快照 key（UI 第三态「剩余 N 组（M 组需人工处理）」数据源）。 */
 const FAILED_GROUPS_KEY = "failedGroups";
+
+/**
+ * 零候选水位 key（自失效负结果缓存；字段集与论证见
+ * {@link matchesZeroCandidateWatermark}）。
+ */
+const ZERO_CANDIDATE_WATERMARK_KEY = "zeroCandidateWatermark";
 
 /**
  * 编码选型阈值：组内成员平均明文 ≥ 24KB → fossil 链，否则 zlib-concat。
@@ -405,6 +419,220 @@ async function writeFailedGroupsSnapshot(
 }
 
 // ---------------------------------------------------------------------------
+// P1-1 零候选水位（自失效负结果缓存）
+// ---------------------------------------------------------------------------
+
+/**
+ * 水位指纹：均取自候选相关表的廉价聚合 + entry 头部摘要。
+ *
+ * @remarks 不含时间戳——`at` 只是快照观测字段，比较时忽略。
+ */
+interface ZeroCandidateFingerprint {
+  /** `COUNT(vfs_revision)`（revision 只有 INSERT/DELETE 变更面）。 */
+  readonly revisionCount: number;
+  /** `COUNT(vfs_entry)`。 */
+  readonly entryCount: number;
+  /** entry 行 `(entry_id, head_version, content_hash)` 有序序列的 sha256。 */
+  readonly entryHeadDigest: string;
+  /** `COUNT(vfs_content_blob)`。 */
+  readonly blobCount: number;
+  /** `COUNT(vfs_content_pack)`。 */
+  readonly packCount: number;
+  /** `COUNT(vfs_content_pack_member)`。 */
+  readonly memberCount: number;
+}
+
+/** 指纹逐字段比较（只比六个字段，忽略快照里的 `at` 观测字段）。 */
+function sameZeroCandidateFingerprint(
+  a: ZeroCandidateFingerprint,
+  b: ZeroCandidateFingerprint
+): boolean {
+  return (
+    a.revisionCount === b.revisionCount &&
+    a.entryCount === b.entryCount &&
+    a.entryHeadDigest === b.entryHeadDigest &&
+    a.blobCount === b.blobCount &&
+    a.packCount === b.packCount &&
+    a.memberCount === b.memberCount
+  );
+}
+
+/**
+ * 现场计算水位指纹。
+ *
+ * @remarks `entryHeadDigest` 是唯一需要读行的一步：按 `entry_id` 序把
+ * `entry_id|head_version|content_hash` 逐行喂进 sha256。真库（599 entry /
+ * 6.5k revision）实测亚毫秒级，相对谓词扫描（加索引后 68ms）可忽略；行数
+ * 远小于 revision 规模（entry 是文件数、revision 是文件×版本数）。
+ */
+async function computeZeroCandidateFingerprint(
+  conn: TdbcConnection
+): Promise<ZeroCandidateFingerprint> {
+  const aggregates = await conn.query<{
+    revision_count: number;
+    entry_count: number;
+    blob_count: number;
+    pack_count: number;
+    member_count: number;
+  }>(
+    `SELECT
+       (SELECT COUNT(*) FROM vfs_revision) AS revision_count,
+       (SELECT COUNT(*) FROM vfs_entry) AS entry_count,
+       (SELECT COUNT(*) FROM vfs_content_blob) AS blob_count,
+       (SELECT COUNT(*) FROM vfs_content_pack) AS pack_count,
+       (SELECT COUNT(*) FROM vfs_content_pack_member) AS member_count`
+  );
+  const headRows = await conn.query<{
+    entry_id: number;
+    head_version: number;
+    content_hash: string | null;
+  }>(`SELECT entry_id, head_version, content_hash FROM vfs_entry ORDER BY entry_id`);
+  const hasher = sha256.create();
+  const encoder = new TextEncoder();
+  for (const row of headRows) {
+    hasher.update(
+      encoder.encode(
+        `${Number(row.entry_id)}|${Number(row.head_version)}|${
+          row.content_hash ?? ""
+        }\n`
+      )
+    );
+  }
+  return {
+    revisionCount: Number(aggregates[0]?.revision_count ?? 0),
+    entryCount: Number(aggregates[0]?.entry_count ?? 0),
+    entryHeadDigest: bytesToHex(hasher.digest()),
+    blobCount: Number(aggregates[0]?.blob_count ?? 0),
+    packCount: Number(aggregates[0]?.pack_count ?? 0),
+    memberCount: Number(aggregates[0]?.member_count ?? 0),
+  };
+}
+
+/** 读水位快照；无快照/值损坏一律 null（等价「未命中」，回退完整扫描）。 */
+async function readZeroCandidateWatermark(
+  conn: TdbcConnection
+): Promise<ZeroCandidateFingerprint | null> {
+  try {
+    const entry = await new SqliteKkvRepository(conn).get(
+      VFS_PACK_KKV_MODULE,
+      ZERO_CANDIDATE_WATERMARK_KEY
+    );
+    if (entry == null) {
+      return null;
+    }
+    const parsed = JSON.parse(entry.value) as Partial<ZeroCandidateFingerprint>;
+    const nonNegativeInt = (value: unknown): value is number =>
+      typeof value === "number" && Number.isInteger(value) && value >= 0;
+    if (
+      !nonNegativeInt(parsed.revisionCount) ||
+      !nonNegativeInt(parsed.entryCount) ||
+      typeof parsed.entryHeadDigest !== "string" ||
+      parsed.entryHeadDigest.length === 0 ||
+      !nonNegativeInt(parsed.blobCount) ||
+      !nonNegativeInt(parsed.packCount) ||
+      !nonNegativeInt(parsed.memberCount)
+    ) {
+      return null;
+    }
+    return {
+      revisionCount: parsed.revisionCount,
+      entryCount: parsed.entryCount,
+      entryHeadDigest: parsed.entryHeadDigest,
+      blobCount: parsed.blobCount,
+      packCount: parsed.packCount,
+      memberCount: parsed.memberCount,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 写零候选水位（**仅**在完整扫描收敛为「候选 entry=0 且 failedGroups=0」时调用）。
+ *
+ * @remarks 写失败只 warn：最坏后果是下轮入口回退完整扫描，无正确性损失。
+ */
+async function writeZeroCandidateWatermark(conn: TdbcConnection): Promise<void> {
+  try {
+    const fingerprint = await computeZeroCandidateFingerprint(conn);
+    await new SqliteKkvRepository(conn).set(
+      VFS_PACK_KKV_MODULE,
+      ZERO_CANDIDATE_WATERMARK_KEY,
+      JSON.stringify({ at: new Date().toISOString(), ...fingerprint })
+    );
+  } catch (error) {
+    console.warn(
+      `[vfs-content-packing] 写 zeroCandidateWatermark 水位失败，下轮入口回退完整扫描：${errorText(error)}`
+    );
+  }
+}
+
+/**
+ * 清零候选水位（非收敛轮防御性清除：即使指纹论证有漏网，也不让水位跨过
+ * 一次真扫描失败活下来）。失败只 warn。
+ */
+async function clearZeroCandidateWatermark(conn: TdbcConnection): Promise<void> {
+  try {
+    await new SqliteKkvRepository(conn).delete(
+      VFS_PACK_KKV_MODULE,
+      ZERO_CANDIDATE_WATERMARK_KEY
+    );
+  } catch (error) {
+    console.warn(
+      `[vfs-content-packing] 清 zeroCandidateWatermark 水位失败：${errorText(error)}`
+    );
+  }
+}
+
+/**
+ * 命中零候选水位？（入口廉价查询；未命中/读失败一律回退完整谓词扫描）
+ *
+ * @remarks **这是自失效的负结果缓存，不是完成标记**：指纹是数据面的纯函数，
+ * 一轮完整扫描收敛为「候选=0 且 failedGroups=0」后写入；任何新增候选的变更
+ * 都令指纹自失效，与 spec「无终态完成标记」（入口重扫谓词）语义不冲突——
+ * 谓词仍是唯一权威，水位只是「上一轮完整扫描的负结果 + 数据面未变」的短路。
+ *
+ * 字段集与「任何可能新增候选的变更都会改指纹」的逐项论证（候选谓词 =
+ * `vfs_revision` active 非空 hash JOIN `vfs_content_blob` 仍存在 AND
+ * `NOT EXISTS(vfs_entry.content_hash)`）：
+ * - `revisionCount`：`vfs_revision` 只有 INSERT/DELETE 两条变更面（status 无
+ *   原位 UPDATE——墓碑是 INSERT `status='deleted'`；`content_hash` 无 UPDATE
+ *   写路径，触发器里的 `UPDATE OF content_hash` 只是防御；`ref_count` 的
+ *   UPDATE 不参与候选判定）。任何 revision 增删都改计数。
+ * - `entryCount`：entry 的 INSERT/DELETE（新建 / hardDelete / 复活重建）都改
+ *   计数。
+ * - `entryHeadDigest`：覆盖**只改头部不改任何计数**的路径——
+ *   `resetHeadToVersion` 回滚到「目标 hash 已是 blob 行」的旧版本时 put 不新增
+ *   blob、无新 revision、计数全不变，但旧 head hash 从此不再被任何 entry 引用
+ *   （跨 entry 共享 hash 时会改变候选归属/凑组），是计数类字段的漏网面。
+ * - `blobCount`：put 新内容 / put 抽回（member→blob）/ revision 触发器归零删行 /
+ *   gc / unpack 都改计数。
+ * - `packCount` / `memberCount`：打包落库（+pack +member −blob）、unpack、
+ *   put 抽回删 member、gc 删孤儿 member 都改计数。
+ * 残余面：revision 行 status/content_hash 的原位 UPDATE 与 blob 行
+ * content_hash 改写——全仓无此写路径（vfs 各仓储 SQL 与触发器注释可查），
+ * 故不设字段；若未来出现该写路径，必须补字段或改回每次全扫。
+ */
+async function matchesZeroCandidateWatermark(
+  conn: TdbcConnection
+): Promise<boolean> {
+  const stored = await readZeroCandidateWatermark(conn);
+  if (stored == null) {
+    // 无水位时不付指纹计算（entryHeadDigest 要读 entry 全表）。
+    return false;
+  }
+  try {
+    const current = await computeZeroCandidateFingerprint(conn);
+    return sameZeroCandidateFingerprint(stored, current);
+  } catch (error) {
+    console.warn(
+      `[vfs-content-packing] 计算 zeroCandidateWatermark 指纹失败，本轮回退完整扫描：${errorText(error)}`
+    );
+    return false;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // 单组打包（每组单事务）
 // ---------------------------------------------------------------------------
 
@@ -481,6 +709,11 @@ async function packOneGroup(
  * 无终态完成标记：每次入口重扫候选谓词，已打包 hash 因 blob 行被删而天然
  * 排除（谓词幂等）；预算耗尽 / 守卫暂停随时可停，重启续跑。
  *
+ * P1-1：入口先查零候选水位（{@link matchesZeroCandidateWatermark}），命中
+ * 即跳过谓词与收尾重扫；未命中走完整扫描，收敛为「候选=0 且坏组=0」时写
+ * 水位、否则防御性清除。维护补跑兜底标记（startupMaintenancePending）在
+ * 短路命中也生效。
+ *
  * 收尾校验（stalled 判据的口径推导）：正常收敛下，每个仍未收敛的候选
  * entry 必含至少一个坏组（好组落库后 blob 行已删、该 entry 若无坏组则整
  * 体退出候选），故**剩余候选 entry 数 ≤ failedGroups** 是不变量；违反即
@@ -498,8 +731,12 @@ export async function runVfsContentPacking(
   let failedGroups = 0;
   // 入口读维护失败兜底标记：读到则本轮强制走一次维护段（仍需 done）。
   const maintenancePending = await readStartupMaintenancePending(conn);
+  // P1-1：零候选水位命中即跳过候选谓词的完整扫描（自失效负结果缓存，见
+  // matchesZeroCandidateWatermark 的字段集论证）。维护兜底标记仍生效——
+  // 命中且 pending 时走「空扫描 + 维护补跑段」，与完整扫描后的行为一致。
+  const watermarkHit = await matchesZeroCandidateWatermark(conn);
 
-  const entries = await collectCandidateEntries(conn);
+  const entries = watermarkHit ? [] : await collectCandidateEntries(conn);
   // 事务外经 content store 读明文（三形态兼容；blob 命中热路径零改动）。
   const store = new SqliteVfsContentStore(conn);
   const encoder = new TextEncoder();
@@ -554,13 +791,28 @@ export async function runVfsContentPacking(
   }
 
   // ── 收尾校验（stalled 判定权；见函数头注释的口径推导）──────────────
-  const remaining = (await collectCandidateEntries(conn)).length;
+  // 水位命中时跳过收尾重扫：零候选已由指纹背书（写入前提即「完整扫描后
+  // 候选=0 且 failedGroups=0」）。
+  const remaining = watermarkHit
+    ? 0
+    : (await collectCandidateEntries(conn)).length;
   const stalled = remaining > failedGroups;
   const done = !stalled;
   if (done) {
     // 坏组 blob 行原样保留、下轮入口重扫自然重试；快照只记收敛轮的计数。
-    await writeFailedGroupsSnapshot(conn, failedGroups);
+    if (!watermarkHit) {
+      await writeFailedGroupsSnapshot(conn, failedGroups);
+      if (remaining === 0 && failedGroups === 0) {
+        // 完整扫描收敛为零候选：写水位（下一轮入口短路）。
+        await writeZeroCandidateWatermark(conn);
+      } else {
+        // 候选/坏组仍在：防御性清水位（水位与本次完整扫描的真相对不符时
+        // 必须失效，宁保守不冒进）。
+        await clearZeroCandidateWatermark(conn);
+      }
+    }
   } else {
+    await clearZeroCandidateWatermark(conn);
     console.warn(
       `[vfs-content-packing] 收尾校验发现 ${remaining} 个候选 entry 未收敛（本轮坏组仅 ${failedGroups}），疑似打转或并发抢写，本轮停手`
     );
@@ -656,8 +908,13 @@ export async function getVfsContentPackStatus(
   if (cached != null && Date.now() - cached.at < STATUS_SAMPLING_THROTTLE_MS) {
     return cached.value;
   }
+  // P1-1：水位命中 → 候选谓词短路（pendingGroups 恒 0，memberCount/streamBytes
+  // 仍真采样；短路只省谓词，不改状态语义）。
+  const watermarkHit = await matchesZeroCandidateWatermark(conn);
   const [pendingGroups, aggregates] = await Promise.all([
-    collectCandidateEntries(conn).then((entries) => entries.length),
+    watermarkHit
+      ? Promise.resolve(0)
+      : collectCandidateEntries(conn).then((entries) => entries.length),
     conn.query<{ member_count: number; stream_bytes: number }>(
       `SELECT
          (SELECT COUNT(*) FROM vfs_content_pack_member) AS member_count,

@@ -289,6 +289,33 @@ function connWithSwallowedBlobDelete(): TdbcConnection {
   }));
 }
 
+/**
+ * 候选谓词查询探针连接（W1-P1-1）：计数「下发过 collectCandidateEntries 同款
+ * 谓词」的次数（判据是 SQL 里的 `NOT EXISTS (SELECT 1 FROM vfs_entry`）。
+ * 水位短路的牙齿：短路被去掉后，稳态入口/状态采样会重新下发谓词、计数 > 0。
+ */
+function connWithCandidatePredicateProbe(): {
+  readonly conn: TdbcConnection;
+  readonly predicateQueries: () => number;
+} {
+  const real = conn();
+  let count = 0;
+  const probe: TdbcConnection = {
+    execute: (sql, parameters) => real.execute(sql, parameters),
+    query: <R extends Row>(sql: string, parameters?: readonly unknown[]) => {
+      if (/NOT EXISTS\s*\(\s*SELECT 1 FROM vfs_entry/i.test(sql)) {
+        count += 1;
+      }
+      return real.query<R>(sql, parameters);
+    },
+    batch: (sql, parametersList) => real.batch(sql, parametersList),
+    transaction: <T>(fn: (tx: TdbcConnection) => Promise<T>) =>
+      real.transaction<T>((tx) => fn(tx)),
+    close: () => real.close(),
+  };
+  return { conn: probe, predicateQueries: () => count };
+}
+
 describe("VFS 历史版本打包任务（T-VP3/8/10/12/13/16/18/19/20/21）", () => {
   /** 文档性防护：文件起始不得残留 startupMaintenancePending（会伪造「强制补跑」输入）。 */
   before(async () => {
@@ -882,6 +909,223 @@ describe("VFS 历史版本打包任务（T-VP3/8/10/12/13/16/18/19/20/21）", ()
       stalled: false,
     });
     assert.equal(counter.maintCalls(), 1, "稳态零候选不得再进收尾维护段");
+  });
+
+  // -------------------------------------------------------------------------
+  // W1-P1-1 零候选水位（自失效负结果缓存）
+  // -------------------------------------------------------------------------
+
+  it("W1-P1-1a：零候选收敛写水位；指纹未变时 run/status 均短路谓词（执行计数 0）", async () => {
+    await resetPackState();
+    const c = conn();
+    const suffix = testIsolationSuffix();
+    // 单 hash entry：有一个 active 非 head 版本但 DISTINCT hash=1 不成组 →
+    // 完整扫描后候选 entry=0（谓词仍可能返回行，水位短路的是「扫描」）。
+    await seedEntry(
+      `${SCOPE_PREFIX}wm-${suffix}`,
+      `/wm-${suffix}.md`,
+      [textOf(4 * 1024, `vpk-wm-v1-${suffix}`)],
+      `vpk-corrupt-wm-${suffix}`,
+      textOf(1024, `vpk-wm-head-${suffix}`)
+    );
+
+    const first = connWithCandidatePredicateProbe();
+    const firstResult = await runVfsContentPacking(first.conn);
+    assert.deepEqual(firstResult, {
+      done: true,
+      packedGroups: 0,
+      failedGroups: 0,
+      stalled: false,
+    });
+    assert.ok(
+      first.predicateQueries() > 0,
+      "无水位时入口必须走完整谓词扫描"
+    );
+
+    const kkv = new SqliteKkvRepository(c);
+    const watermark = await kkv.get(
+      VFS_PACK_KKV_MODULE,
+      "zeroCandidateWatermark"
+    );
+    assert.ok(watermark, "完整扫描收敛为零候选后应写水位");
+    const parsed = JSON.parse(watermark.value) as Record<string, unknown>;
+    assert.equal(
+      parsed.revisionCount,
+      await countOf("SELECT COUNT(*) AS n FROM vfs_revision"),
+      "水位应记当前 revisionCount"
+    );
+    assert.equal(
+      parsed.entryCount,
+      await countOf("SELECT COUNT(*) AS n FROM vfs_entry")
+    );
+    assert.equal(
+      parsed.blobCount,
+      await countOf("SELECT COUNT(*) AS n FROM vfs_content_blob")
+    );
+    assert.equal(parsed.packCount, 0);
+    assert.equal(parsed.memberCount, 0);
+    assert.match(String(parsed.entryHeadDigest), /^[0-9a-f]{64}$/);
+
+    // 牙齿：去掉入口短路，本用例立刻变红（第二轮会重新下发谓词查询）。
+    const second = connWithCandidatePredicateProbe();
+    const secondResult = await runVfsContentPacking(second.conn);
+    assert.deepEqual(secondResult, {
+      done: true,
+      packedGroups: 0,
+      failedGroups: 0,
+      stalled: false,
+    });
+    assert.equal(
+      second.predicateQueries(),
+      0,
+      "指纹未变时入口不得下发候选谓词"
+    );
+
+    // status 同口径：pendingGroups 恒 0 且不跑谓词（memberCount/streamBytes 仍真采样）。
+    __resetVfsPackStatusSamplingThrottleForTests();
+    const statusProbe = connWithCandidatePredicateProbe();
+    const status = await getVfsContentPackStatus(statusProbe.conn);
+    assert.equal(status.pendingGroups, 0, "短路时 pendingGroups 语义仍为 0");
+    assert.equal(status.memberCount, 0);
+    assert.equal(
+      statusProbe.predicateQueries(),
+      0,
+      "水位命中时 status 不得下发候选谓词"
+    );
+  });
+
+  it("W1-P1-1b：新增 revision/新 blob 令水位失效、全扫恢复打包并重写水位", async () => {
+    await resetPackState();
+    const c = conn();
+    const suffix = testIsolationSuffix();
+    const store = new SqliteVfsContentStore(c);
+    const seeded = await seedEntry(
+      `${SCOPE_PREFIX}wm2-${suffix}`,
+      `/wm2-${suffix}.md`,
+      [textOf(4 * 1024, `vpk-wm2-v1-${suffix}`)],
+      `vpk-corrupt-wm2-${suffix}`,
+      textOf(1024, `vpk-wm2-head-${suffix}`)
+    );
+    await runVfsContentPacking(c);
+    const kkv = new SqliteKkvRepository(c);
+    assert.ok(
+      await kkv.get(VFS_PACK_KKV_MODULE, "zeroCandidateWatermark"),
+      "前置：零候选收敛后应有水位"
+    );
+
+    // 追加两条新 revision（各带新 blob，非 head）：该 entry 凑出 ≥2 候选 hash。
+    const hashB = await store.put(textOf(4 * 1024, `vpk-wm2-v2-${suffix}`));
+    const hashC = await store.put(textOf(4 * 1024, `vpk-wm2-v3-${suffix}`));
+    await insertRevision(seeded.entryId, 3, hashB);
+    await insertRevision(seeded.entryId, 4, hashC);
+
+    const probe = connWithCandidatePredicateProbe();
+    const packed = await runVfsContentPacking(probe.conn);
+    assert.equal(packed.packedGroups, 1, "新候选应被全扫重新发现并打包");
+    assert.ok(
+      probe.predicateQueries() > 0,
+      "指纹失效（revision/blob 计数变）后必须回退完整扫描"
+    );
+    assert.ok(
+      await kkv.get(VFS_PACK_KKV_MODULE, "zeroCandidateWatermark"),
+      "再次收敛后水位应重写"
+    );
+
+    const again = connWithCandidatePredicateProbe();
+    await runVfsContentPacking(again.conn);
+    assert.equal(again.predicateQueries(), 0, "重写后的水位应继续生效");
+  });
+
+  it("W1-P1-1c：failedGroups>0 不写水位（绝不把「有坏组」当零候选）", async () => {
+    await resetPackState();
+    const c = conn();
+    const suffix = testIsolationSuffix();
+    // 全坏 entry：两版本都直插垃圾 bytes → 整组跳过、候选 entry 仍在。
+    await seedEntry(
+      `${SCOPE_PREFIX}wmbad-${suffix}`,
+      `/wmbad-${suffix}.md`,
+      [
+        { corruptBytes: new Uint8Array([0xde, 0xad, 0xbe, 0xef]) },
+        { corruptBytes: new Uint8Array([0x00, 0x11, 0x22, 0x33]) },
+      ],
+      `vpk-corrupt-wmbad-${suffix}`,
+      textOf(1024, `vpk-wmbad-head-${suffix}`)
+    );
+
+    const { result } = await captureWarnings(() => runVfsContentPacking(c));
+    assert.equal(result.done, true);
+    assert.equal(result.failedGroups, 1);
+    const kkv = new SqliteKkvRepository(c);
+    assert.equal(
+      await kkv.get(VFS_PACK_KKV_MODULE, "zeroCandidateWatermark"),
+      null,
+      "有坏组（候选仍非零）不得写水位"
+    );
+
+    // 再跑一遍仍走完整扫描（无水位可短路），坏组继续计数。
+    const probe = connWithCandidatePredicateProbe();
+    const second = await runVfsContentPacking(probe.conn);
+    assert.ok(probe.predicateQueries() > 0, "无水位时必须回退完整扫描");
+    assert.equal(second.failedGroups, 1);
+    assert.equal(
+      await kkv.get(VFS_PACK_KKV_MODULE, "zeroCandidateWatermark"),
+      null,
+      "坏组轮不得写水位"
+    );
+  });
+
+  it("W1-P1-1d：只改 entry head（计数全不变）也令水位失效（entryHeadDigest 牙齿）", async () => {
+    await resetPackState();
+    const c = conn();
+    const suffix = testIsolationSuffix();
+    const seeded = await seedEntry(
+      `${SCOPE_PREFIX}wmhead-${suffix}`,
+      `/wmhead-${suffix}.md`,
+      [textOf(4 * 1024, `vpk-wmhead-v1-${suffix}`)],
+      `vpk-corrupt-wmhead-${suffix}`,
+      textOf(1024, `vpk-wmhead-head-${suffix}`)
+    );
+    await runVfsContentPacking(c);
+    const kkv = new SqliteKkvRepository(c);
+    assert.ok(
+      await kkv.get(VFS_PACK_KKV_MODULE, "zeroCandidateWatermark"),
+      "前置：零候选收敛后应有水位"
+    );
+
+    const before = {
+      revisionCount: await countOf("SELECT COUNT(*) AS n FROM vfs_revision"),
+      entryCount: await countOf("SELECT COUNT(*) AS n FROM vfs_entry"),
+      blobCount: await countOf("SELECT COUNT(*) AS n FROM vfs_content_blob"),
+      packCount: await countOf("SELECT COUNT(*) AS n FROM vfs_content_pack"),
+      memberCount: await countOf("SELECT COUNT(*) AS n FROM vfs_content_pack_member"),
+    };
+
+    // 模拟 resetHeadToVersion 回滚到「目标 hash 已是 blob 行」的旧版本：
+    // put 命回既有 blob → 无 revision/blob 增删、计数全不变，只有 entry
+    // 头部字段变（真实数据面最小形态）。counts 类字段在此完全失明，
+    // 必须靠 entryHeadDigest 兜住。
+    await c.execute(
+      `UPDATE vfs_entry SET content_hash = ?, head_version = 1 WHERE entry_id = ?`,
+      [seeded.hashes[0], seeded.entryId]
+    );
+    assert.deepEqual(
+      {
+        revisionCount: await countOf("SELECT COUNT(*) AS n FROM vfs_revision"),
+        entryCount: await countOf("SELECT COUNT(*) AS n FROM vfs_entry"),
+        blobCount: await countOf("SELECT COUNT(*) AS n FROM vfs_content_blob"),
+        packCount: await countOf("SELECT COUNT(*) AS n FROM vfs_content_pack"),
+        memberCount: await countOf("SELECT COUNT(*) AS n FROM vfs_content_pack_member"),
+      },
+      before,
+      "本用例前提：head 变更不动任何计数（只考验 digest 字段）"
+    );
+
+    const probe = connWithCandidatePredicateProbe();
+    await runVfsContentPacking(probe.conn);
+    assert.ok(
+      probe.predicateQueries() > 0,
+      "head-only 变更必须令指纹失效（否则回滚后的候选变化会被短路吞掉）"
+    );
   });
 });
 
