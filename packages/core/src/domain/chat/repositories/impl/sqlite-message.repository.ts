@@ -256,6 +256,24 @@ export class SqliteMessageRepository implements MessageRepository {
     return Number(rows[0]!.n);
   }
 
+  async sessionMessageStamp(
+    sessionId: string
+  ): Promise<{ visibleCount: number; maxSeq: number | null }> {
+    // 单行聚合：token 标签 memo 的变更指纹只取「可见条数 + 最大 seq」，
+    // 不捞正文不解压——append/删除动 maxSeq，压缩/置位（hide）动 visibleCount。
+    const rows = await queryTemplate<{ vis: number; mx: number | null }>(
+      this.conn,
+      this.parser,
+      `SELECT COUNT(*) FILTER (WHERE hidden = 0) AS vis, MAX(seq) AS mx
+       FROM chat_message WHERE session_id = #{sessionId}`,
+      { sessionId }
+    );
+    return {
+      visibleCount: Number(rows[0]?.vis ?? 0),
+      maxSeq: rows[0]?.mx == null ? null : Number(rows[0].mx),
+    };
+  }
+
   async listBySessionOffset(
     sessionId: string,
     offset: number

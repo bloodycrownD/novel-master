@@ -145,6 +145,8 @@ export {
   formatContextUsageLabel,
   resolveCurrentPromptTokens,
   resolvePromptTokensWithBackfill,
+  chatTokenLabelMemo,
+  computeChatTokenLabelStamp,
   pickLastPromptUsage,
   promptWholeCache,
   PROMPT_WHOLE_CACHE_LRU_PER_SESSION,
