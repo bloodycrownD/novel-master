@@ -28,6 +28,14 @@ export interface MessageRepository {
   countBySession(sessionId: string): Promise<number>;
 
   /**
+   * 会话消息变更指纹（单行聚合：可见条数 + 最大 seq，不捞正文）。
+   * token 标签 memo 用它廉价判断「重进会话期间消息面有没有变」。
+   */
+  sessionMessageStamp(
+    sessionId: string
+  ): Promise<{ visibleCount: number; maxSeq: number | null }>;
+
+  /**
    * 按 seq 升序跳过前 `offset` 行，取余下全部消息（backfill 圈「新增段」用）。
    *
    * `offset` 是行偏移而非 seq 值（seq 可能因删除有洞）；SQLite 方言

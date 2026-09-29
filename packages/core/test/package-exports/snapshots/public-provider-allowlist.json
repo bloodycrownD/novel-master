@@ -61,6 +61,8 @@
   "parseTokenCounterModePref",
   "pickLastPromptUsage",
   "promptWholeCache",
+  "chatTokenLabelMemo",
+  "computeChatTokenLabelStamp",
   "providerApiKeyRef",
   "registerSseTransport",
   "resolveContextWindowTokens",

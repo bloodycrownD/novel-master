@@ -96,6 +96,12 @@ export class DefaultMessageService implements MessageService {
     return this.deps.messages.listBySession(sessionId, options);
   }
 
+  sessionMessageStamp(
+    sessionId: string
+  ): Promise<{ visibleCount: number; maxSeq: number | null }> {
+    return this.deps.messages.sessionMessageStamp(sessionId);
+  }
+
   listBySessionTail(
     sessionId: string,
     options: { limit: number }

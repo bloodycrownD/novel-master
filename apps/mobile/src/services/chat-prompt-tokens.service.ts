@@ -23,6 +23,10 @@ import {
   resolveTokenCounterModeForModel,
   serializePromptLlmInput,
 } from '@novel-master/core/provider';
+import {
+  chatTokenLabelMemo,
+  computeChatTokenLabelStamp,
+} from '@novel-master/core/provider';
 import {countTextWithDefaultEncoding} from '@novel-master/tokenizer-driver-rn/encoding';
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
 // badge/label 走 common 入口取真身实现（token-source-label 单源；本套件的
@@ -83,20 +87,39 @@ export async function loadChatPromptTokenLabel(
   runtime: MobileNovelMasterRuntime,
   scope: SessionPromptScope,
 ): Promise<string> {
+  // ---- memo 快路径（chat-token-label-memo）----
+  // 计数链已全缓存（L1），但重组装（拉消息+规则快照+file_cache 解压+序列化）
+  // 在大会话上仍是数百 ms；重进会话无变更时用 stamp 指纹直接返回上次标签，
+  // 组装/序列化/哈希全跳。盲区与拍板见 memo 模块头注释。
+  const sessionConfig = await runtime.sessions.getSessionAgentConfig(
+    scope.sessionId,
+  );
+  const stamp = await computeChatTokenLabelStamp(
+    scope.sessionId,
+    {
+      sessions: runtime.sessions,
+      messages: runtime.messages,
+      sessionKkv: runtime.sessionKkv,
+    },
+    sessionConfig.modelId,
+  );
+  const memoized = chatTokenLabelMemo.get(scope.sessionId, stamp);
+  if (memoized != null) {
+    return memoized;
+  }
+
   const {definition, layout, ctx, rawMessages} = await buildSessionPromptInput(
     runtime,
     scope,
   );
 
   // core 移除 workspace 回退后，savedModelId 解析优先级为 agent pin → session modelId。
-  const sessionConfig = await runtime.sessions.getSessionAgentConfig(
-    scope.sessionId,
-  );
   const savedModelId = resolveSavedModelId({
     agentModelId: definition.model,
     sessionModelId: sessionConfig.modelId,
   });
 
+  let label: string;
   if (!savedModelId) {
     // 此处恒不拼 tools（UI 读口拿不到定义，`session-prompt-input` 不产 tools）：
     // 口径差是已登记收窄（见 ③ spec `:46`），不要以为拼了就是全量。
@@ -107,39 +130,42 @@ export async function loadChatPromptTokenLabel(
     // 「预估」标签与 counterKind 语义不变，变的是读数——cl100k 已在会话切换
     // 时被 primeStreamTokenModelHint 空闲预热，这里不会再白付一次构造。
     const count = countFallbackTokens(runtime, serialized);
-    return formatChatTokenLabel(
+    label = formatChatTokenLabel(
       {tokenCount: count, estimated: true, counterKind: 'heuristic', source: 'local'},
       undefined,
     );
+  } else {
+    const tokenizerOverride = await resolveTokenCounterModeForModel(
+      runtime.providerModels,
+      savedModelId,
+    );
+
+    // 直接 resolve（历史上的 cache miss 回填步骤已废弃：置位/压缩后旧值不准，
+    // 统一走本地 tokenizer 重算）。传 sessionKkv：命中上次 completed run 落库的
+    // API 占用（含跨重启），与压缩评估同一读口、同一口径。
+    const result = await resolvePromptTokensWithBackfill(
+      scope.sessionId,
+      rawMessages,
+      {
+        layout,
+        ctx,
+        savedModelId,
+        registry: runtime.tokenCounters,
+        tokenizerOverride,
+        savedModels: {findById: id => runtime.providerModels.getSavedById(id)},
+      },
+      {sessionKkv: runtime.sessionKkv},
+    );
+
+    const contextWindow = await runtime.providerModels.getContextWindow(
+      savedModelId,
+    );
+
+    label = formatChatTokenLabel(result, contextWindow ?? undefined);
   }
 
-  const tokenizerOverride = await resolveTokenCounterModeForModel(
-    runtime.providerModels,
-    savedModelId,
-  );
-
-  // 直接 resolve（历史上的 cache miss 回填步骤已废弃：置位/压缩后旧值不准，
-  // 统一走本地 tokenizer 重算）。传 sessionKkv：命中上次 completed run 落库的
-  // API 占用（含跨重启），与压缩评估同一读口、同一口径。
-  const result = await resolvePromptTokensWithBackfill(
-    scope.sessionId,
-    rawMessages,
-    {
-      layout,
-      ctx,
-      savedModelId,
-      registry: runtime.tokenCounters,
-      tokenizerOverride,
-      savedModels: {findById: id => runtime.providerModels.getSavedById(id)},
-    },
-    {sessionKkv: runtime.sessionKkv},
-  );
-
-  const contextWindow = await runtime.providerModels.getContextWindow(
-    savedModelId,
-  );
-
-  return formatChatTokenLabel(result, contextWindow ?? undefined);
+  chatTokenLabelMemo.set(scope.sessionId, stamp, label);
+  return label;
 }
 
 /** Message-only heuristic when full prompt build fails (still useful in meta bar). */

@@ -88,6 +88,11 @@ export {
   type ResolveCurrentPromptTokensOptions,
 } from "./logic/resolve-current-prompt-tokens.js";
 export { resolvePromptTokensWithBackfill } from "./logic/resolve-prompt-tokens-with-backfill.js";
+export {
+  chatTokenLabelMemo,
+  computeChatTokenLabelStamp,
+  type ChatTokenLabelStampDeps,
+} from "./logic/chat-token-label-memo.js";
 export { serializePromptLlmInput } from "./logic/serialize-prompt-input.js";
 export { serializeToolsForTokenCount } from "./logic/serialize-tools-for-token-count.js";
 export {
