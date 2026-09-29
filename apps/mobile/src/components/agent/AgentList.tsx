@@ -164,6 +164,11 @@ export function AgentList({onCreate}: Props) {
       const enriched: AgentRow[] = [];
       for (const id of ids) {
         const raw = await runtime.agentRegistry.getRawWire(id);
+        // 内置 general 子智能体由 registry list 虚拟注入、无实体行，getRawWire 返回 undefined；
+        // 此前的循环直接访问 raw.name 会崩「Cannot read property 'name' of undefined」（列表页白屏）
+        if (raw == null) {
+          continue;
+        }
         const health = assessAgentDefinitionWire(raw);
         if (health.status === 'valid') {
           const def = health.value;
