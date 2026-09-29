@@ -13,23 +13,6 @@ const mockResolveTokenCounterModeForModel = jest.fn();
 const mockBuildSessionPromptInput = jest.fn();
 const mockResolveSavedModelId = jest.fn();
 const mockSerializePromptLlmInput = jest.fn(() => 'serialized');
-// memo 快路径的两个 core 导出（chat-token-label-memo）：stamp 默认每次调用
-// 唯一（既有用例互不命中），memo 行为用例里再覆写为固定值。
-let stampCounter = 0;
-const mockComputeChatTokenLabelStamp = jest.fn(
-  async () => `stamp-${++stampCounter}`,
-);
-const memoStore = new Map<string, {stamp: string; payload: unknown}>();
-const mockChatTokenLabelMemo = {
-  get: (sessionId: string, stamp: string) => {
-    const entry = memoStore.get(sessionId);
-    return entry != null && entry.stamp === stamp ? entry.payload : null;
-  },
-  set: (sessionId: string, stamp: string, payload: unknown) => {
-    memoStore.set(sessionId, {stamp, payload});
-  },
-  clearForTests: () => memoStore.clear(),
-};
 // 兜底路径（无模型早退 / build 失败）改走 RN 驱动的 cl100k 真分词器，不再走
 // `tokenCounters.heuristic.countText`。本套件整体 mock 掉了 `@novel-master/core/provider`，
 // 驱动的 encoding 子模块要从那里取 core 的计数 helper，因此这里连驱动一起 mock
@@ -50,13 +33,6 @@ jest.mock('@novel-master/core/provider', () => ({
     mockResolveTokenCounterModeForModel(...args),
   serializePromptLlmInput: (...args: unknown[]) =>
     mockSerializePromptLlmInput(...args),
-  computeChatTokenLabelStamp: (...args: unknown[]) =>
-    mockComputeChatTokenLabelStamp(...args),
-  // 工厂被提升到 const 初始化前执行，直接引用会拿到 undefined——用 getter
-  // 惰性求值（与其它导出的箭头包装同理）。
-  get chatTokenLabelMemo() {
-    return mockChatTokenLabelMemo;
-  },
 }));
 
 jest.mock('@novel-master/core/agent', () => ({
@@ -115,11 +91,6 @@ describe('chat-prompt-tokens.service', () => {
     mockResolveSavedModelId.mockReset();
     mockSerializePromptLlmInput.mockClear();
     mockCountTextWithDefaultEncoding.mockClear();
-    mockComputeChatTokenLabelStamp.mockReset();
-    mockComputeChatTokenLabelStamp.mockImplementation(
-      async () => `stamp-${++stampCounter}`,
-    );
-    memoStore.clear();
   });
 
   it('T-TL4 对拍：service 输出与 core 单源（badge + label）重算一致（家族精确档）', () => {
@@ -318,49 +289,5 @@ describe('chat-prompt-tokens.service', () => {
       mark: 'gpt',
       connector: '≈',
     });
-  });
-
-  it('memo 快路径：stamp 未变的第二次调用直接返回上次标签，不重组装（chat-token-label-memo）', async () => {
-    mockComputeChatTokenLabelStamp.mockImplementation(async () => 'same-stamp');
-    mockBuildSessionPromptInput.mockResolvedValue({
-      definition: {model: 'openai/gpt-4o'},
-      layout: {persist: [], dynamic: []},
-      ctx: {workplaceDisplay: '', messages: []},
-      rawMessages: [],
-    });
-    mockResolveSavedModelId.mockReturnValue('openai/gpt-4o');
-    mockResolveTokenCounterModeForModel.mockResolvedValue('auto');
-    mockResolvePromptTokensWithBackfill.mockResolvedValue({
-      tokenCount: 24_000,
-      estimated: false,
-      counterKind: 'api',
-      source: 'api',
-    });
-
-    const first = await loadChatPromptTokenLabel(stubRuntime(), {
-      sessionId: 's1',
-      projectId: 'p1',
-    });
-    expect(first).toBe('远程 = 24k / 128k (19%)');
-    expect(mockBuildSessionPromptInput).toHaveBeenCalledTimes(1);
-
-    // 第二次（重进会话）：stamp 相同 → memo 命中，组装与 resolve 全跳。
-    const second = await loadChatPromptTokenLabel(stubRuntime(), {
-      sessionId: 's1',
-      projectId: 'p1',
-    });
-    expect(second).toBe('远程 = 24k / 128k (19%)');
-    expect(mockBuildSessionPromptInput).toHaveBeenCalledTimes(1);
-    expect(mockResolvePromptTokensWithBackfill).toHaveBeenCalledTimes(1);
-
-    // stamp 变化（消息/模型/规则/API 真值任一）→ 重组装并刷新 memo。
-    mockComputeChatTokenLabelStamp.mockImplementation(async () => 'new-stamp');
-    const third = await loadChatPromptTokenLabel(stubRuntime(), {
-      sessionId: 's1',
-      projectId: 'p1',
-    });
-    expect(third).toBe('远程 = 24k / 128k (19%)');
-    expect(mockBuildSessionPromptInput).toHaveBeenCalledTimes(2);
-    expect(mockResolvePromptTokensWithBackfill).toHaveBeenCalledTimes(2);
   });
 });

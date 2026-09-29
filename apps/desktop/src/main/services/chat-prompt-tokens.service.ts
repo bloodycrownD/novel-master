@@ -14,8 +14,6 @@ import type { ChatMessage } from "@novel-master/core/chat";
 import { messageBodyText } from "@novel-master/core/prompt";
 
 import {
-  chatTokenLabelMemo,
-  computeChatTokenLabelStamp,
   countPromptLlmInputHeuristicOnly,
   formatContextUsageLabel,
   formatTokenSourceBadge,
@@ -215,31 +213,7 @@ async function loadChatPromptTokenStatsNow(
   runtime: DesktopNovelMasterRuntime,
   scope: SessionPromptScope,
 ): Promise<PromptChatTokenStatsResponse> {
-  // ---- memo 快路径（chat-token-label-memo）----
-  // 计数链已全缓存（L1），但重组装（拉消息+规则快照+file_cache 解压+序列化）
-  // 在大会话上仍是数百 ms；无变更触发（防抖追赶轮 / 重开 drawer）用 stamp
-  // 指纹直接返回上次 stats，组装/序列化全跳。盲区见 memo 模块头注释。
-  const sessionConfig = await runtime.sessions.getSessionAgentConfig(
-    scope.sessionId,
-  );
-  const stamp = await computeChatTokenLabelStamp(
-    scope.sessionId,
-    {
-      sessions: runtime.sessions,
-      messages: runtime.messages,
-      sessionKkv: runtime.sessionKkv,
-    },
-    sessionConfig.modelId,
-  );
-  const memoStats = chatTokenLabelMemo.get<PromptChatTokenStatsResponse>(
-    scope.sessionId,
-    stamp,
-  );
-  if (memoStats != null) {
-    return memoStats;
-  }
-
-  const stats = await computeChatPromptTokenStats(runtime, scope, async (args) => {
+  return computeChatPromptTokenStats(runtime, scope, async (args) => {
     const { layout, ctx, savedModelId, rawMessages } = args;
     const tokenizerOverride = await resolveTokenCounterModeForModel(
       runtime.providerModels,
@@ -273,8 +247,6 @@ async function loadChatPromptTokenStatsNow(
       source: result.source,
     };
   });
-  chatTokenLabelMemo.set(scope.sessionId, stamp, stats);
-  return stats;
 }
 
 /**

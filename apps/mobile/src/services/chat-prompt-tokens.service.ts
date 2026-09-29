@@ -23,10 +23,6 @@ import {
   resolveTokenCounterModeForModel,
   serializePromptLlmInput,
 } from '@novel-master/core/provider';
-import {
-  chatTokenLabelMemo,
-  computeChatTokenLabelStamp,
-} from '@novel-master/core/provider';
 import {countTextWithDefaultEncoding} from '@novel-master/tokenizer-driver-rn/encoding';
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
 // badge/label 走 common 入口取真身实现（token-source-label 单源；本套件的
@@ -87,33 +83,15 @@ export async function loadChatPromptTokenLabel(
   runtime: MobileNovelMasterRuntime,
   scope: SessionPromptScope,
 ): Promise<string> {
-  // ---- memo 快路径（chat-token-label-memo）----
-  // 计数链已全缓存（L1），但重组装（拉消息+规则快照+file_cache 解压+序列化）
-  // 在大会话上仍是数百 ms；重进会话无变更时用 stamp 指纹直接返回上次标签，
-  // 组装/序列化/哈希全跳。盲区与拍板见 memo 模块头注释。
-  const sessionConfig = await runtime.sessions.getSessionAgentConfig(
-    scope.sessionId,
-  );
-  const stamp = await computeChatTokenLabelStamp(
-    scope.sessionId,
-    {
-      sessions: runtime.sessions,
-      messages: runtime.messages,
-      sessionKkv: runtime.sessionKkv,
-    },
-    sessionConfig.modelId,
-  );
-  const memoized = chatTokenLabelMemo.get(scope.sessionId, stamp);
-  if (memoized != null) {
-    return memoized;
-  }
-
   const {definition, layout, ctx, rawMessages} = await buildSessionPromptInput(
     runtime,
     scope,
   );
 
   // core 移除 workspace 回退后，savedModelId 解析优先级为 agent pin → session modelId。
+  const sessionConfig = await runtime.sessions.getSessionAgentConfig(
+    scope.sessionId,
+  );
   const savedModelId = resolveSavedModelId({
     agentModelId: definition.model,
     sessionModelId: sessionConfig.modelId,
@@ -164,7 +142,6 @@ export async function loadChatPromptTokenLabel(
     label = formatChatTokenLabel(result, contextWindow ?? undefined);
   }
 
-  chatTokenLabelMemo.set(scope.sessionId, stamp, label);
   return label;
 }
 

@@ -20,14 +20,6 @@ export interface MessageService {
     sessionId: string,
     options?: { includeHidden?: boolean }
   ): Promise<ChatMessage[]>;
-
-  /**
-   * 会话消息变更指纹（可见条数 + 最大 seq，单行聚合）。token 标签 memo
-   * 的廉价变更判定用，见 `infra/tokenizer/logic/chat-token-label-memo`。
-   */
-  sessionMessageStamp(
-    sessionId: string
-  ): Promise<{ visibleCount: number; maxSeq: number | null }>;
   listBySessionTail(
     sessionId: string,
     options: { limit: number }
