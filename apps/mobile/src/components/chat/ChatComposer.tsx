@@ -65,6 +65,9 @@ import type {EffectiveSkill} from '@novel-master/core/skills';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {resetRunTiming, timingLog} from '@/debug/run-timing';
 
+/** ⛶ 全屏编辑入口载荷：当前输入文本原样带给父层（父层负责导航与保存回填）。 */
+export type ComposerFullscreenPayload = {text: string};
+
 type Props = {
   scope: AgentRunScope;
 
@@ -91,6 +94,12 @@ type Props = {
    * 暂未使用：工具栏「更多」按钮已注释隐藏，调用方也不再传该 prop。保留接口，
    * 后续若恢复按钮再从解构里取回即可。 */
   onOpenMore?: () => void;
+
+  /** 打开全屏编辑（父层注入导航 + 保存回填链路，见 ChatComposerEditorScreen）。
+   *
+   * 载荷是当前输入文本；本组件不做任何导航依赖（chat-tab 目录零导航依赖的
+   * 惯例由父层承担）。缺省时不渲染 ⛶ 入口之外的任何行为。 */
+  onOpenComposerFullscreen?: (payload: ComposerFullscreenPayload) => void;
 };
 
 export function ChatComposer({
@@ -102,6 +111,7 @@ export function ChatComposer({
   canResumeWithoutInput,
   lastMessageIsPlainUserText,
   draftRestoreToken,
+  onOpenComposerFullscreen,
 }: Props) {
   const {tokens} = useTheme();
   const insets = useSafeAreaInsets();
@@ -601,6 +611,15 @@ export function ChatComposer({
           */}
           <View style={styles.toolbarSpacer} />
           <Pressable
+            testID="chat-composer-fullscreen"
+            onPress={() => onOpenComposerFullscreen?.({text})}
+            disabled={onOpenComposerFullscreen == null}
+            style={styles.fullscreenBtn}
+            accessibilityLabel="全屏编辑"
+          >
+            <Text style={{color: tokens.textSecondary, fontSize: 20}}>⛶</Text>
+          </Pressable>
+          <Pressable
             onPress={() => setPickerOpen(true)}
             disabled={inputDisabled}
             style={[styles.toolBtn, {borderColor: tokens.border}]}
@@ -731,6 +750,14 @@ const styles = StyleSheet.create({
     height: 36,
     borderRadius: 18,
     borderWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  /** ⛶ 全屏编辑：无边框小触达（28×28），与 @ / $ 的圆钮排在同一条 toolbar 行。 */
+  fullscreenBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
