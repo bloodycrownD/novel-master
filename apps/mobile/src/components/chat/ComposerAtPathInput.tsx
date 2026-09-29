@@ -36,6 +36,7 @@ import type {
 } from './ComposerInputBridge';
 import {
   ComposerInputWebView,
+  toNativeSelectionEvent,
   type ComposerInputWebViewHandle,
 } from './ComposerInputWebView';
 
@@ -155,16 +156,10 @@ export const ComposerAtPathInput = forwardRef<
 
   const {metrics, container} = useMemo(() => splitInputStyle(style), [style]);
 
-  /**
-   * 合成 RN 选区事件（ChatComposer 读 `nativeEvent.selection.start`）。
-   * `TextInputSelectionChangeEventData` 的 target 等字段为 TextInput 专属，
-   * 这里只补 selection，其余按 main 版口径整体断言类型。
-   */
+  /** 合成 RN 选区事件（ChatComposer 读 `nativeEvent.selection.start`）。 */
   const emitSelection = useCallback(
-    (start: number, end: number) => {
-      onSelectionChange?.({
-        nativeEvent: {selection: {start, end}},
-      } as NativeSyntheticEvent<TextInputSelectionChangeEventData>);
+    (next: ComposerInputSelection) => {
+      onSelectionChange?.(toNativeSelectionEvent(next));
     },
     [onSelectionChange],
   );
@@ -174,7 +169,7 @@ export const ComposerAtPathInput = forwardRef<
     (selection: ComposerInputSelection) => {
       // 用户选区到达即解除短暂受控（对齐 main 版：原生已应用选区后置空 pendingSelection）。
       setPendingSelection(null);
-      emitSelection(selection.start, selection.end);
+      emitSelection(selection);
     },
     [emitSelection],
   );
@@ -203,8 +198,9 @@ export const ComposerAtPathInput = forwardRef<
     }
     lastValueRef.current = value;
     const pos = clampCursor(cursor, value.length);
-    setPendingSelection({start: pos, end: pos});
-    emitSelection(pos, pos);
+    const next = {start: pos, end: pos};
+    setPendingSelection(next);
+    emitSelection(next);
   }, [value, cursor, emitSelection]);
 
   useImperativeHandle(
@@ -215,12 +211,15 @@ export const ComposerAtPathInput = forwardRef<
         // 本条写入由 RN 发起：差分基线先行推进（value prop 回流不算外部变化），
         // web 侧文本基线由宿主 setText 同步；光标经 setText.selection 一次落位。
         lastValueRef.current = text;
-        setPendingSelection(null);
+        // 短暂受控选区**不置 null**：就绪时靠它让宿主的 setSelection 必然放行一次
+        // （宿主的 handle.setText 自带 selection 并推进基线，这条只作兜底）；
+        // 未就绪时它随 ready 后的 selection effect 补发，避免光标期望静默丢失。
+        setPendingSelection({start: pos, end: pos});
         webRef.current?.setText(text, {start: pos, end: pos});
         // main 版同口径：程序化写入同样回调 onChangeText（ChatComposer 的 text /
         // 草稿状态靠它同步）与合成选区事件（cursor 落位）。
         onChangeText(text);
-        emitSelection(pos, pos);
+        emitSelection({start: pos, end: pos});
       },
     }),
     [emitSelection, onChangeText],

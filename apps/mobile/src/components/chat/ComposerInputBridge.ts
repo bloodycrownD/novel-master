@@ -80,9 +80,6 @@ export type ComposerInputToHostMessage =
   | BridgeEnvelope<'blur', Record<string, never>>
   | BridgeEnvelope<'heightChange', {height: number}>;
 
-export type HostToComposerInputType = HostToComposerInputMessage['type'];
-export type ComposerInputToHostType = ComposerInputToHostMessage['type'];
-
 export function encodeHostToComposerInput(
   message: HostToComposerInputMessage,
 ): string {

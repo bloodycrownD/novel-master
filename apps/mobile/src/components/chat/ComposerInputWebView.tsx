@@ -25,7 +25,9 @@ import React, {
 import {
   Linking,
   StyleSheet,
+  type NativeSyntheticEvent,
   type StyleProp,
+  type TextInputSelectionChangeEventData,
   type ViewStyle,
 } from 'react-native';
 import WebView, {type WebViewMessageEvent} from 'react-native-webview';
@@ -67,8 +69,6 @@ export type ComposerInputWebViewProps = {
   readonly onChangeText: (text: string) => void;
   /** web 上报的选区（宿主合成为普通对象，RN 侧壳再包装成事件形状）。 */
   readonly onSelectionChange?: (selection: ComposerInputSelection) => void;
-  /** 内容高度上报（已按 metrics clamp；容器高度由此驱动）。 */
-  readonly onHeight?: (height: number) => void;
   readonly disabled?: boolean;
   /**
    * 外部受控选区：变化（且非自身回声）时下发 setSelection。
@@ -93,12 +93,15 @@ export type ComposerInputWebViewHandle = {
    * 光标随 payload 一次落位；web 侧 suppressChange 包裹，不回抛 change。
    */
   setText: (text: string, selection?: ComposerInputSelection | null) => void;
-  /** 外部要求失焦（照 code-editor）。 */
+  /**
+   * 外部要求失焦（照 code-editor）。
+   * 当前无调用方，留作发送后收键盘等未来需求。
+   */
   blur: () => void;
 };
 
 /** 主题组装：tokens → 桥主题（胶囊 = primary 字 + primaryMuted 底）。 */
-function themeFromTokens(tokens: ThemeTokens): ComposerInputTheme {
+export function themeFromTokens(tokens: ThemeTokens): ComposerInputTheme {
   return {
     background: tokens.background,
     text: tokens.text,
@@ -107,6 +110,22 @@ function themeFromTokens(tokens: ThemeTokens): ComposerInputTheme {
     primaryMuted: `${tokens.primary}22`,
     selection: tokens.selection,
   };
+}
+
+/**
+ * web 上报的选区 → RN 事件形状（`nativeEvent.selection`，ChatComposer 的 setCursor 链）。
+ *
+ * `TextInputSelectionChangeEventData` 的 target 等字段为 TextInput 专属，RN 侧两壳
+ * 只消费 `nativeEvent.selection`，这里按 main 版口径整体断言类型。
+ */
+export function toNativeSelectionEvent(
+  selection: ComposerInputSelection,
+): NativeSyntheticEvent<TextInputSelectionChangeEventData> {
+  return {
+    nativeEvent: {
+      selection: {start: selection.start, end: selection.end},
+    },
+  } as NativeSyntheticEvent<TextInputSelectionChangeEventData>;
 }
 
 function finiteOrNull(value: unknown): number | null {
@@ -129,7 +148,6 @@ export const ComposerInputWebView = forwardRef<
     value,
     onChangeText,
     onSelectionChange,
-    onHeight,
     disabled = false,
     selection = null,
     metrics,
@@ -171,10 +189,8 @@ export const ComposerInputWebView = forwardRef<
 
   const onChangeTextRef = useRef(onChangeText);
   const onSelectionChangeRef = useRef(onSelectionChange);
-  const onHeightRef = useRef(onHeight);
   onChangeTextRef.current = onChangeText;
   onSelectionChangeRef.current = onSelectionChange;
-  onHeightRef.current = onHeight;
 
   const resolvedTheme = useMemo(
     () => theme ?? themeFromTokens(tokens),
@@ -250,7 +266,6 @@ export const ComposerInputWebView = forwardRef<
       const height = finiteOrNull(message.payload.height);
       if (height != null) {
         applyHeight(height);
-        onHeightRef.current?.(height);
       }
       return;
     }
@@ -296,6 +311,13 @@ export const ComposerInputWebView = forwardRef<
   }, [webReady, resolvedTheme, postToWeb]);
 
   // setText：仅外部变化（水化 / 清空 / 回填）；与 web 基线相同则短路（web 自持真源）。
+  //
+  // 下发后**作废选区基线**：web 侧 value 赋值必然把光标推到文末，旧基线（宿主
+  // 记录的「web 现在光标在哪」）从此不成立。若壳随后的 setSelection 恰与该旧基线
+  // 同值，会被回声抑制吞掉，光标就永久停在文末——违反「按 clamp(旧 cursor, 新长度)
+  // 落位」口径。置 null 后下面 setSelection effect（声明序在本条之后，同一 commit
+  // 内先作废后放行）必然下发一次。命令式 handle.setText 不作废：它自带 selection，
+  // web 落位即期望位，保留基线反而白赚一次回声抑制。
   useEffect(() => {
     if (!webReady) {
       return;
@@ -304,6 +326,7 @@ export const ComposerInputWebView = forwardRef<
       return;
     }
     webTextRef.current = value;
+    lastSelectionRef.current = null;
     postToWeb({
       v: COMPOSER_INPUT_BRIDGE_VERSION,
       type: 'setText',

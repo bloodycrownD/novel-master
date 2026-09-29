@@ -52,6 +52,7 @@ import {
   findActiveAtQuery,
 } from './composer-at-path';
 import {composerDockBottomPadding} from './composer-dock-padding';
+import {composerToolBtnStyle} from './composer-toolbar-style';
 import {
   buildTokenInsertion,
   statusOnlyComposerAttachments,
@@ -249,11 +250,15 @@ export function ChatComposer({
 
   /** 提交正文变更：有输入壳时整段写入（web 侧纯文本 + 光标一次落位），
    * 无壳时同步 draft（只留状态 chip）与光标。
-   * mention:false 供 onChangeText 等回写路径使用——replaceCommittedText 会
+   * viaShell:false 供 onChangeText 回声路径使用——replaceCommittedText 会
    * 回调 onChangeText，再走整段写入会无限递归。 */
   const commitComposerText = useCallback(
-    (next: string, nextCursor?: number, opts?: {mention?: boolean}) => {
-      if (opts?.mention !== false && atPathInputRef.current) {
+    (
+      next: string,
+      nextCursor?: number,
+      opts?: {viaShell?: boolean},
+    ) => {
+      if (opts?.viaShell !== false && atPathInputRef.current) {
         atPathInputRef.current.replaceCommittedText(next, nextCursor);
         return;
       }
@@ -586,7 +591,7 @@ export function ChatComposer({
           value={text}
           cursor={cursor}
           onChangeText={next => {
-            commitComposerText(next, undefined, {mention: false});
+            commitComposerText(next, undefined, {viaShell: false});
           }}
           onSelectionChange={e => {
             setCursor(e.nativeEvent.selection.start);
@@ -600,7 +605,7 @@ export function ChatComposer({
           <Pressable
             onPress={onOpenMore}
             disabled={onOpenMore == null}
-            style={[styles.toolBtn, { borderColor: tokens.border }]}
+            style={[composerToolBtnStyle, { borderColor: tokens.border }]}
             accessibilityLabel="更多选项"
           >
             <Text style={{ color: tokens.textSecondary, fontSize: 18 }}>
@@ -615,7 +620,7 @@ export function ChatComposer({
             disabled={onOpenComposerFullscreen == null}
             /* 同排按钮风格一致：与 @ / $ 同款圆钮（同尺寸、同描边），
                字形保留 20（⛶ 笔画细、同样字号下视觉比 @/$ 小一档）。 */
-            style={[styles.toolBtn, {borderColor: tokens.border}]}
+            style={[composerToolBtnStyle, {borderColor: tokens.border}]}
             accessibilityLabel="全屏编辑"
           >
             <Text style={{color: tokens.textSecondary, fontSize: 20}}>⛶</Text>
@@ -623,7 +628,7 @@ export function ChatComposer({
           <Pressable
             onPress={() => setPickerOpen(true)}
             disabled={inputDisabled}
-            style={[styles.toolBtn, {borderColor: tokens.border}]}
+            style={[composerToolBtnStyle, {borderColor: tokens.border}]}
             accessibilityLabel="引用文件"
           >
             <Text style={{color: tokens.textSecondary, fontSize: 16}}>@</Text>
@@ -631,7 +636,7 @@ export function ChatComposer({
           <Pressable
             onPress={() => setSkillPickerOpen(true)}
             disabled={inputDisabled}
-            style={[styles.toolBtn, {borderColor: tokens.border}]}
+            style={[composerToolBtnStyle, {borderColor: tokens.border}]}
             accessibilityLabel="引用技能"
           >
             <Text style={{color: tokens.textSecondary, fontSize: 16}}>$</Text>
@@ -746,15 +751,6 @@ const styles = StyleSheet.create({
   },
   toolbarSpacer: {
     flex: 1,
-  },
-  /** 引用类工具按钮（@ / $ / ⛶ 共用）：36 圆钮 + 细描边。 */
-  toolBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    borderWidth: StyleSheet.hairlineWidth,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   sendBtn: {
     width: 40,

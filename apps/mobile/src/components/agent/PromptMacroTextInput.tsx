@@ -37,6 +37,8 @@ import type {
 } from '@/components/chat/ComposerInputBridge';
 import {
   ComposerInputWebView,
+  themeFromTokens,
+  toNativeSelectionEvent,
   type ComposerInputWebViewHandle,
 } from '@/components/chat/ComposerInputWebView';
 import {
@@ -105,16 +107,12 @@ export function PromptMacroTextInput({
     [style],
   );
 
-  /** 主题走 props.tokens 通道（chat 壳用 useTheme；宏壳保持外部传入语义）。 */
+  /**
+   * 主题走 props.tokens 通道（chat 壳用 useTheme；宏壳保持外部传入语义）。
+   * 字段映射与 chat 壳共用 `themeFromTokens`（单一真源，勿再写内联字面量）。
+   */
   const theme = useMemo<ComposerInputTheme>(
-    () => ({
-      background: tokens.background,
-      text: tokens.text,
-      textSecondary: tokens.textSecondary,
-      primary: tokens.primary,
-      primaryMuted: `${tokens.primary}22`,
-      selection: tokens.selection,
-    }),
+    () => themeFromTokens(tokens),
     [tokens],
   );
 
@@ -123,9 +121,7 @@ export function PromptMacroTextInput({
     (next: ComposerInputSelection) => {
       selectionRef.current = next;
       setPendingSelection(null);
-      onSelectionChange?.({
-        nativeEvent: {selection: {start: next.start, end: next.end}},
-      } as NativeSyntheticEvent<TextInputSelectionChangeEventData>);
+      onSelectionChange?.(toNativeSelectionEvent(next));
     },
     [onSelectionChange],
   );
@@ -162,6 +158,14 @@ export function PromptMacroTextInput({
           ref={webRef}
           mode="prompt-macro"
           value={value}
+          /* 裸传 onChangeText：宏链父层（DynamicBlocksCard / PromptLayoutSection）
+             虽是受控回写，但它写回的文本与 web 上报严格同值——回写必然等于
+             宿主的 webTextRef 基线，`value` 差分 effect 短路，不会被误判成
+             外部写入再摆一次选区。chat 壳另需「先推进 lastValueRef」是因为那边
+             程序化写入（replaceCommittedText）会主动回调 onChangeText，那条回流
+             路径需要壳级差分基线兜底；宏壳的程序化写入（insertMacro）同样先调
+             命令式 setText（同步推进宿主基线）再上抛，链路上无第三条回写路径，
+             故此处不加壳级差分包装。 */
           onChangeText={onChangeText}
           onSelectionChange={handleSelectionChange}
           disabled={disabled}

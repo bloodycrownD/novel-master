@@ -43,8 +43,18 @@ jest.mock('../src/components/chat/FileReferencePicker', () => ({
   },
 }));
 
+// `$` 选择器同样捕获 onConfirm（照 FileReferencePicker 的 mock 形态）。
+const mockSkillPickerProps: {
+  onConfirm?: (skillName: string) => void;
+} = {};
+
 jest.mock('../src/components/skills/SkillPicker', () => ({
-  SkillPicker: () => null,
+  SkillPicker: (props: {
+    onConfirm: (skillName: string) => void;
+  }) => {
+    mockSkillPickerProps.onConfirm = props.onConfirm;
+    return null;
+  },
 }));
 
 // T-INT：捕获两个 typeahead 的 onSelect，驱动「点选 → 单路径整段写入」护栏。
@@ -223,6 +233,8 @@ function Harness(props: {
       get: async () => ({projectId: 'p'}),
     },
     workplace: () => ({}),
+    // `$` 技能候选链（ChatComposer 的 activeSkill 投影 / SkillPicker 列举共用）。
+    skills: () => ({effectiveSkills: async () => []}),
     sessionStreamUnitManager: manager,
   });
   return (
@@ -318,6 +330,7 @@ describe('ChatComposer integration', () => {
     setMobileAgentActive(false);
     mockRunAgentTurn.mockClear();
     mockFilePickerProps.onConfirm = undefined;
+    mockSkillPickerProps.onConfirm = undefined;
     mockGetComposerDraftJson.mockReset();
     mockGetComposerDraftJson.mockResolvedValue(null);
     mockProjectComposerStatus.mockReset();
@@ -819,7 +832,8 @@ describe('ChatComposer integration', () => {
     // 对外 value 与 web 上报严格相等（plain），draft 同步。
     expect(composerShell(root).props.value).toBe(report);
     expect(readChatComposerDraftState('s').text).toBe(report);
-    expect(report.includes('{@}')).toBe(false);
+    // 真值断言：对外 value 不得含 token markup（web 侧只有 plain 进 textarea）
+    expect(composerShell(root).props.value).not.toContain('{@}');
     // 打字不回写：change 之后不得有 setText（web 自持真源）。
     expect(hostTypesSince(changeBaseline)).not.toContain('setText');
     await act(async () => {
@@ -859,10 +873,151 @@ describe('ChatComposer integration', () => {
     });
     expect(composerShell(root).props.value).toBe(expectedMerged);
     expect(readChatComposerDraftState('s').text).toBe(expectedMerged);
-    // 两次插入独立幸存：两个 token 各出现一次，且无 markup 残留。
-    expect(expectedMerged.indexOf('@/a.md')).toBe(0);
-    expect(expectedMerged.split('@/b.md')).toHaveLength(2);
-    expect(expectedMerged.includes('{@}')).toBe(false);
+    await act(async () => {
+      tree.unmount();
+    });
+  });
+
+  it('T-G1: 「5 行封顶」锁生产路径——init.metrics.maxHeight = paddingV×2 + lineHeight×5', async () => {
+    // composer-at-path 的 DEFAULT_METRICS 只是兜底锁；真正会被生产消费的是
+    // ChatComposer.styles.input 经 splitInputStyle 拆出的 metrics。改回老值 160
+    // 时本例必红。断言写成关系式而非魔数，避免「5 行」口径与实现各改一处。
+    let tree!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(<Harness canResumeWithoutInput={false} />);
+    });
+    const root = tree.root;
+    simulateWebMessage(root, 'ready', {version: COMPOSER_INPUT_BRIDGE_VERSION});
+    await flush();
+
+    const init = hostPayloadOfType(0, 'init') as {
+      mode: string;
+      metrics: {
+        fontSize: number;
+        lineHeight: number;
+        paddingV: number;
+        minHeight: number;
+        /** 生产路径是封顶内滚（老值 160 的时代口径），此处断言它非 null。 */
+        maxHeight: number;
+      };
+    } | null;
+    expect(init).not.toBeNull();
+    expect(init!.mode).toBe('composer-token');
+    expect(init!.metrics.maxHeight).toBe(
+      init!.metrics.paddingV * 2 + init!.metrics.lineHeight * 5,
+    );
+    // 顺带锁住「不低于一行」这个下界：关系式相等也可能是 0/负的畸形值。
+    expect(init!.metrics.maxHeight).toBeGreaterThan(init!.metrics.lineHeight);
+    expect(init!.metrics.minHeight).toBeLessThanOrEqual(
+      init!.metrics.maxHeight,
+    );
+    await act(async () => {
+      tree.unmount();
+    });
+  });
+
+  it('T-G2①: `$` 选择器确认 → setText 带选区 + cursor 落位 + 草稿同步', async () => {
+    // 覆盖 insertSkillToken 的「无活跃 `$` 查询 → replaceStart = cursor」分支。
+    // 牙齿：把 insertSkillToken 回退成「忽略 cursor / 退回旧双路」（不经
+    // replaceCommittedText 整段写入）时，载荷与草稿断言同时红。
+    let tree!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(<Harness canResumeWithoutInput={false} />);
+    });
+    const root = tree.root;
+    simulateWebMessage(root, 'ready', {version: COMPOSER_INPUT_BRIDGE_VERSION});
+    await flush();
+
+    // 手输正文，光标落文末（'看这里' 长度 3）
+    simulateWebMessage(root, 'change', {text: '看这里'});
+    simulateWebMessage(root, 'selectionChange', {start: 3, end: 3});
+    await flush();
+
+    const baseline = mockWebViewPostMessages.length;
+    await act(async () => {
+      mockSkillPickerProps.onConfirm!('写作');
+    });
+
+    // 无活跃查询 → 从光标插入：前补空格、后补尾空格、光标落插入段末尾
+    expect(hostPayloadOfType(baseline, 'setText')).toEqual({
+      text: '看这里 $写作 ',
+      selectionStart: 8,
+      selectionEnd: 8,
+    });
+    expect(composerShell(root).props.value).toBe('看这里 $写作 ');
+    expect(composerShell(root).props.cursor).toBe(8);
+    expect(readChatComposerDraftState('s').text).toBe('看这里 $写作 ');
+    await act(async () => {
+      tree.unmount();
+    });
+  });
+
+  it('T-G2②: 已有活跃 `$` 查询时点 `$` 选择器 → 从 `$` 起替换，不残留半截', async () => {
+    // 覆盖 insertSkillToken 的 replaceStart = activeSkill.start 分支：
+    // 半截 `$写` 必须被整段替换，不能留下 `看 $写 $写作 ` 这种双截。
+    let tree!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(<Harness canResumeWithoutInput={false} />);
+    });
+    const root = tree.root;
+    simulateWebMessage(root, 'ready', {version: COMPOSER_INPUT_BRIDGE_VERSION});
+    await flush();
+
+    // '$' 前是空格（findActiveAtQuery 的空白守卫）→ activeSkill 成立，start=2
+    simulateWebMessage(root, 'change', {text: '看 $写'});
+    simulateWebMessage(root, 'selectionChange', {start: 4, end: 4});
+    await flush();
+
+    const baseline = mockWebViewPostMessages.length;
+    await act(async () => {
+      mockSkillPickerProps.onConfirm!('写作');
+    });
+
+    // 半截 `$写` 被整段替换为 `$写作 `，前缀 '看 ' 保留
+    expect(hostPayloadOfType(baseline, 'setText')).toEqual({
+      text: '看 $写作 ',
+      selectionStart: 6,
+      selectionEnd: 6,
+    });
+    const value = composerShell(root).props.value as string;
+    expect(value).toBe('看 $写作 ');
+    // 牙齿锚点：若 replaceStart 退回 cursor，结果会是 '看 $写 $写作 '（cursor 10）
+    expect(value).not.toBe('看 $写 $写作 ');
+    expect(value.match(/\$/g)).toHaveLength(1);
+    await act(async () => {
+      tree.unmount();
+    });
+  });
+
+  it('T-G2③: 已有活跃 `@` 查询时点 `@` 选择器 → 从 `@` 起替换，不残留半截', async () => {
+    // 覆盖 insertTokensIntoComposer 的 replaceStart = activeAt.start 分支。
+    let tree!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(<Harness canResumeWithoutInput={false} />);
+    });
+    const root = tree.root;
+    simulateWebMessage(root, 'ready', {version: COMPOSER_INPUT_BRIDGE_VERSION});
+    await flush();
+
+    simulateWebMessage(root, 'change', {text: '看 @a'});
+    simulateWebMessage(root, 'selectionChange', {start: 4, end: 4});
+    await flush();
+
+    const baseline = mockWebViewPostMessages.length;
+    await act(async () => {
+      mockFilePickerProps.onConfirm!(['@/a.md']);
+    });
+
+    expect(hostPayloadOfType(baseline, 'setText')).toEqual({
+      text: '看 @/a.md ',
+      selectionStart: 9,
+      selectionEnd: 9,
+    });
+    const value = composerShell(root).props.value as string;
+    expect(value).toBe('看 @/a.md ');
+    // 牙齿锚点：若 replaceStart 退回 cursor，结果会是 '看 @a @/a.md '（cursor 11）
+    expect(value).not.toBe('看 @a @/a.md ');
+    expect(readChatComposerDraftState('s').text).toBe('看 @/a.md ');
     await act(async () => {
       tree.unmount();
     });
