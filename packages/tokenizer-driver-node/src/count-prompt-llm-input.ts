@@ -262,6 +262,20 @@ async function computeCount(
       tokenCount = countOpenAiStyleChunked(encoding, serialized, tiktokenModel, scope);
       // 精确档：真 tiktoken 家族读数，counterKind 如实报 `tiktoken`。
       counterKind = "tiktoken";
+      // cr-tok-1：强制档必须如实标 estimated。当 tiktoken 身份来自 override
+      // 强制（读口对 WEB/SP 家族传 "tiktoken"，或用户显式强制）而非模型自身
+      // 解析时，这里算的是 cl100k 对非 OpenAI 家族的**近似**，不是该家族真
+      // 分词器读数——若谎报 est:false，上层会按精确档处理：标签漏掉 `gpt ≈`、
+      // 压缩阈值跳过 0.85 保守系数、L1 还会把条目收进 pendingWrites 跨重启
+      // 落 KKV（promptWholeCache 只收精确档的约束被绕过）。判定口径：auto
+      // 下模型自身解析不出 tiktoken 家族 ⇒ 身份来自强制。gpt 系模型（auto
+      // 即 tiktoken）不受影响，仍为精确档 est:false。
+      if (
+        family === "tiktoken" &&
+        resolveTokenizerFamily(vendorModelId, "auto") !== "tiktoken"
+      ) {
+        estimated = true;
+      }
     } else if (WEB_FAMILIES.has(family)) {
       const web = await countWebFamilyPrompt(family, serialized);
       tokenCount = web.count;

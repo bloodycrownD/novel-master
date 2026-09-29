@@ -537,3 +537,102 @@ describe("T-TC5 驱动缓存（message-token-cache Step 3）", () => {
     }
   });
 });
+
+/**
+ * cr-tok-1（round-2 CR）：强制 tiktoken 档的 estimated 口径。
+ *
+ * 读口（core resolve-current-prompt-tokens）对 WEB/SP 家族强制传
+ * `tokenizerOverride:"tiktoken"` 走 cl100k 估算——驱动侧必须同步如实标
+ * `estimated:true`（该档是 cl100k 对非 OpenAI 家族的近似，不是家族真分词器
+ * 读数），否则 CLI / 测试直调驱动会拿到谎报的精确档，且 est:false 条目会
+ * 被 L1 record 收进 pendingWrites 跨重启落 KKV（promptWholeCache 只收精确
+ * 档的约束被绕过）。
+ */
+describe("cr-tok-1：强制 tiktoken 档如实报 estimated", () => {
+  const registry = createDefaultTokenCounterRegistry(emptyRegistryDeps());
+
+  before(() => {
+    registerTokenizerNodeDriverForTests();
+  });
+
+  beforeEach(() => {
+    promptWholeCache.clearForTests();
+    tokenChunkCache.clearForTests();
+  });
+
+  it("WEB 家族（glm）+ tokenizerOverride:tiktoken → estimated:true + counterKind:tiktoken", async () => {
+    const { layout, ctx } = fixtureParams();
+    const result = await countPromptLlmInput({
+      layout,
+      ctx,
+      // 无 savedModels 注入时 savedModelId 即 vendorModelId：auto 下解析为
+      // glm（WEB 家族），tiktoken 身份只能来自 override 强制。
+      savedModelId: "zai/glm-4.6",
+      registry,
+      tokenizerOverride: "tiktoken",
+    });
+    assert.equal(result.tokenizerFamily, "tiktoken");
+    assert.equal(result.counterKind, "tiktoken");
+    assert.equal(
+      result.estimated,
+      true,
+      "强制档是 cl100k 对 glm 的近似，必须如实标 estimated",
+    );
+  });
+
+  it("gpt 系 + 无 override → estimated:false（防回归：真 tiktoken 精确档不受影响）", async () => {
+    const { layout, ctx } = fixtureParams();
+    const result = await countPromptLlmInput({
+      layout,
+      ctx,
+      savedModelId: "openai/gpt-4o",
+      registry,
+    });
+    assert.equal(result.counterKind, "tiktoken");
+    assert.equal(
+      result.estimated,
+      false,
+      "gpt 系 auto 解析即 tiktoken 家族，读数是真精确档，不得被误标 estimated",
+    );
+  });
+
+  it("强制档条目不进 L1 持久化队列；精确档照进（pendingWrites 只收精确档）", async () => {
+    // 观测手段：persistPendingWrites 在 batch 为空时直接 return、不碰
+    // sessionKkv.set——用计数 set 调用的 mock KKV 反推 pendingWrites 是否
+    // 被收集。双向钉死：强制档（est:true）不得进队列，精确档（est:false）
+    // 照常进队列。
+    const setCalls: unknown[][] = [];
+    const mockKkv = {
+      get: async () => null,
+      set: async (...args: unknown[]) => {
+        setCalls.push(args);
+      },
+    } as never;
+
+    const { layout, ctx } = fixtureParams();
+    await countPromptLlmInput({
+      layout,
+      ctx,
+      savedModelId: "zai/glm-4.6",
+      registry,
+      tokenizerOverride: "tiktoken",
+    });
+    promptWholeCache.persistPendingWrites(mockKkv, "sess-cr-tok-1");
+    assert.equal(
+      setCalls.length,
+      0,
+      "强制档 est:true 条目不得进 pendingWrites 跨重启落 KKV",
+    );
+
+    // 对照组：同夹具下 gpt-4o 精确档（est:false）必须照常进队列落库——
+    // 若 record 侧被改成「一律不持久化」，这里必红。
+    await countPromptLlmInput({
+      layout,
+      ctx,
+      savedModelId: "openai/gpt-4o",
+      registry,
+    });
+    promptWholeCache.persistPendingWrites(mockKkv, "sess-cr-tok-1");
+    assert.equal(setCalls.length, 1, "精确档 est:false 条目应照常持久化");
+  });
+});

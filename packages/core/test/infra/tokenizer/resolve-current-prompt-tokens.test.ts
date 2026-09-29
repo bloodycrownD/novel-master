@@ -340,6 +340,29 @@ describe("resolveCurrentPromptTokens 统计优先（api 增量 + 本地强制估
     assert.equal(noAnchor.tokenCount, 60_000);
   });
 
+  it("api 命中 + anchorSeq 严格大于现存最大 seq（回滚删尾后悬空）→ 基线原样", async () => {
+    // cr-test-1①：回滚把尾部物理删除后，锚点可能悬空指向「已不存在的高
+    // seq」——过滤结果为空、delta=0、基线原样（下一次 usage 回锚自愈）。
+    // 现有「锚点后无追加」用例只覆盖锚点 == 最大 seq，这里钉严格大于形态。
+    sessionApiPromptTokenCache.set(SESSION_ID, {
+      promptTokens: 50_000,
+      updatedAt: Date.now(),
+      savedModelId: RUN_MODEL_ID,
+      anchorSeq: 99,
+    });
+    const resolved = await resolveCurrentPromptTokens(
+      SESSION_ID,
+      paramsWithMessages([msg(9, "九"), msg(10, "十")])
+    );
+    assert.equal(resolved.source, "api");
+    assert.equal(resolved.estimated, false);
+    assert.equal(
+      resolved.tokenCount,
+      50_000,
+      "悬空锚点不得产生负增量或误判 miss，基线原样使用"
+    );
+  });
+
   it("本地 miss + WEB 家族（glm）→ 强制 tiktoken 估算档且 estimated:true（不过原生桥）", async () => {
     const captured: { override?: unknown; family?: unknown } = {};
     clearTokenizerDrivers();
