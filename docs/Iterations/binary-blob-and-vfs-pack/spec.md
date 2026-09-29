@@ -367,6 +367,15 @@ A1（VFS + file_cache 去 base64 + 归一任务 + 三端接线）已按本 spec 
 
 **遗留开放问题（发版前置）**：内嵌生产 bundle（`--dev false` + `useDevSupport=false`）启动即崩——第一崩『SettingsManager not found』是 dev bundle 配 devSupport=false（内嵌包必须 `--dev false`，已定位并修正出包脚本）；换生产 bundle 后另崩『Error: Got unexpected undefined』（minified 栈指向 `get UIManager`，未定位）。发版走的正是生产 bundle，需用 `--dev false --minify false` 出可读栈的包复现查清。
 
+## 实现期补充三（性能修复轮，2026-09-29）
+
+合并 main@4cd06bb0（v1.5.27）后，按全局压缩性能盘点（brain-storm 三路真库实测）落三项修复，均为实现期对 spec 原文的口径补充：
+
+- **vfs_entry(content_hash) 索引**（对 spec「候选谓词查询毫秒级…无需缓存」的升级）：谓词 `NOT EXISTS` 原为 O(revision×entry) 无索引全扫——真库形态 121→68ms、合成 2 万 revision/5 千 entry 8.9s→0.37s。随 v18 语句集建出、不单独 bump（本分支未发布）；同轮把 `assertMinimumBaseline` 提前到 DDL 循环之前——pre-1.4.27 老库原会被索引 DDL 的 `no such column` 顶掉友好升级提示。
+- **零候选水位短路**（对「无终态标记」的补充而非替代）：KKV `nm-vfs-pack/zeroCandidateWatermark` 存自失效指纹（revisionCount / entryCount / entryHeadDigest / blobCount / packCount / memberCount），仅完整扫描收敛为零候选且零坏组时写入；任何可能新增候选的数据面变更都会改指纹并恢复全扫（entryHeadDigest 兜住 resetHeadToVersion 类计数不变但审计改变的面）。稳态入口轮 265.9→1.74ms、status 采样 126.6→1.91ms。
+- **Node 侧原生 zlib 加速器**：`registerZlibCodecAccelerator` 宿主注册制（core src 禁静态 `node:` import 保 Metro 安全）；desktop main / cli runtime 注册 node:zlib；未注册/异常一律回落 fflate。千条会话 listBySession 254.4→99.2ms、解压 6.9×、写侧 deflate 不劣化。
+- 测试账目：索引 5 例 + 水位 4 例 + 加速器 5 例；core 全量 3005（唯二红=既有 usage-stats 时区基线）；desktop/cli typecheck 绿；v17 副本实跑升级链（索引与 pack 两表均建出）。
+
 ## 已否决方案与依据（避免重复调研）
 
 | 方案 | 实测/结论 |
