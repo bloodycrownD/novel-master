@@ -34,7 +34,12 @@ import type { MessageCheckpointRepository } from "@/domain/message-checkpoint/re
 import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revision.port.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import { SqliteSessionKkvRepository } from "@/domain/session-kkv/repositories/impl/sqlite-session-kkv.repository.js";
-import { SESSION_KKV_DOMAIN_BACKFILL_CURSOR } from "@/domain/session-kkv/model/session-kkv-domains.js";
+import {
+  SESSION_KKV_DOMAIN_BACKFILL_CURSOR,
+  SESSION_KKV_DOMAIN_USAGE_STATS,
+  USAGE_STATS_TOOL_USE_COUNT_KEY,
+} from "@/domain/session-kkv/model/session-kkv-domains.js";
+import { countToolUseBlocks } from "@/domain/chat/logic/tool-use-count.js";
 import { chatInvalidArgument, chatNotFound } from "@/errors/chat-errors.js";
 import { invalidateSessionApiPromptTokenEntry } from "@/infra/tokenizer/logic/session-api-prompt-token-store.js";
 import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
@@ -88,6 +93,30 @@ export class DefaultMessageService implements MessageService {
       createSessionKkvService(this.deps.conn),
       sessionId
     );
+  }
+
+  /**
+   * 失效该会话的工具调用数缓存（usage_stats.toolUseCount，纯加速数据：
+   * 失败只影响下次读数现算，best-effort 不冒泡）。
+   *
+   * 失效口径（见 session-kkv-domains 的 usage_stats 域注释）：新增含
+   * tool_use 的消息 / 编辑 / 删除 / 回滚截断。hide/show 不失效——计数含
+   * hidden 行，可见性变化不改计数。纯文本追加不失效（不触发无谓重算）。
+   */
+  private async invalidateToolUseCount(sessionId: string): Promise<void> {
+    try {
+      await createSessionKkvService(this.deps.conn).delete(
+        sessionId,
+        SESSION_KKV_DOMAIN_USAGE_STATS,
+        USAGE_STATS_TOOL_USE_COUNT_KEY
+      );
+    } catch (error) {
+      console.warn(
+        `[message-service] 工具调用数缓存失效失败（下次读数将现算）：${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+    }
   }
 
   listBySession(
@@ -178,6 +207,11 @@ export class DefaultMessageService implements MessageService {
     // 同款），失效反而会让 run 起步的压缩评估跌进本地整串计数。删除/改写/
     // 隐藏类路径（delete/updateContent/hide/show/hideRange/showRange/
     // truncateAfter）的失效保留——增量表达不了内容消失。
+    // 工具调用数缓存：仅含 tool_use 块的追加失效（run 的工具步在此失效、
+    // 纯文本追加不动缓存——避免 run 内每步无谓重算）。
+    if (role === "assistant" && countToolUseBlocks(content) > 0) {
+      await this.invalidateToolUseCount(sessionId);
+    }
     return message;
   }
 
@@ -221,6 +255,7 @@ export class DefaultMessageService implements MessageService {
     });
     await runDeferredBlobGc(this.deps.conn);
     await this.invalidatePromptTokens(message.sessionId);
+    await this.invalidateToolUseCount(message.sessionId);
   }
 
   async updateContent(
@@ -235,6 +270,7 @@ export class DefaultMessageService implements MessageService {
     }
     const message = await this.get(messageId);
     await this.invalidatePromptTokens(message.sessionId);
+    await this.invalidateToolUseCount(message.sessionId);
     return message;
   }
 
@@ -414,6 +450,7 @@ export class DefaultMessageService implements MessageService {
         await messages.deleteBySession(sessionId);
       });
       await this.invalidatePromptTokens(sessionId);
+      await this.invalidateToolUseCount(sessionId);
       return;
     }
 
@@ -444,6 +481,7 @@ export class DefaultMessageService implements MessageService {
       await messages.deleteAfterSeq(sessionId, anchor.seq);
     });
     await this.invalidatePromptTokens(sessionId);
+    await this.invalidateToolUseCount(sessionId);
   }
 
   async searchMessages(

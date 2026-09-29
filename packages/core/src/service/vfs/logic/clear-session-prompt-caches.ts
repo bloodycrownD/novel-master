@@ -7,6 +7,8 @@
 import {
   SESSION_KKV_DOMAIN_FILE_CACHE,
   SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
+  SESSION_KKV_DOMAIN_USAGE_STATS,
+  USAGE_STATS_TOOL_USE_COUNT_KEY,
 } from "@/domain/session-kkv/model/session-kkv-domains.js";
 import { invalidateSessionApiPromptTokenEntry } from "@/infra/tokenizer/logic/session-api-prompt-token-store.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
@@ -30,6 +32,12 @@ export async function clearSessionPromptCaches(
     // API prompt 占用双删（进程内热层 + prompt_tokens 域行）：导入后提示词
     // 全变，落库的旧占用若残留会在重启后被读回、按 api 口径参与阈值判定。
     await invalidateSessionApiPromptTokenEntry(sessionKkv, sessionId);
+    // 工具调用数缓存一并失效（导入可能带入含 tool_use 的消息，best-effort）。
+    await sessionKkv.delete(
+      sessionId,
+      SESSION_KKV_DOMAIN_USAGE_STATS,
+      USAGE_STATS_TOOL_USE_COUNT_KEY
+    );
   } catch (error) {
     console.warn(
       `clearSessionPromptCaches: best-effort 清空提示词缓存失败（session=${sessionId}）`,

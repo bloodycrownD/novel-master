@@ -168,14 +168,4 @@ export const SCHEMA_COLUMN_ALIGNMENTS: readonly SchemaColumnAlignment[] = [
     column: "content_blob",
     addColumnSql: "ALTER TABLE chat_message ADD COLUMN content_blob BLOB NULL",
   },
-  // 工具调用计数列（metric-detail 弹窗读路径）：老库靠 SCHEMA_BOOT_VERSION
-  // v18 bump 走慢路径补列；新列全 NULL = 存量行未回填，读侧 SUM+兜底现算，
-  // 存量回填由后台任务（infra/db-maintenance/tool-use-count-backfill）谓词
-  // 驱动完成，不在 align 里回填（空占位 migration 禁令；同 v17 先例）。
-  {
-    table: "chat_message",
-    column: "tool_use_count",
-    addColumnSql:
-      "ALTER TABLE chat_message ADD COLUMN tool_use_count INTEGER NULL",
-  },
 ];

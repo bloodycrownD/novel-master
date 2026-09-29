@@ -107,14 +107,13 @@ import { IntegrityRepairRegistry } from "@/service/integrity-repair.js";
  * 撞号；并入集成分支时以现值 16 + 1 顺延为 v17（bump 纪律是「DDL/ALIGN
  * 变更必须 +1」本身而非具体号——与并行迭代撞号时以主干现值为准递增顺延，
  * v9/v10 真机事故的同款纪律）。
- * v18：chat_message 新增 tool_use_count 列（用量详情弹窗读路径提速：
- * 工具调用数写入时维护、读侧一条 SUM，不再解压正文现算——实测真机
- * 全量解压 600~1200ms 是弹窗打开慢的主因）。老库（v17）靠本轮 bump 走
- * 慢路径由 ALIGN 补列；新列全 NULL = 存量行未回填，读侧 SUM + NULL 行
- * 兜底现算（随回填收敛到零），存量回填由后台谓词驱动的
- * runToolUseCountBackfill 任务跨启动续跑（见 infra/db-maintenance）。
+ * v18（**已撤回，未发布**）：曾为用量详情弹窗加 chat_message.tool_use_count
+ * 列（写入时维护 + SUM 读 + 后台回填），同日用户拍板改为「会话 KKV 缓存
+ * + 实时算兜底」并移除累计输入输出——DDL/ALIGN 全撤、版本回到 17。该列
+ * 只在 feature 分支的测试机库上残留（user_version 已升 18、列与回填标记
+ * 为无害孤儿，无任何读写方），正式库从未有过此形态，无需清理动作。
  */
-export const SCHEMA_BOOT_VERSION = 18;
+export const SCHEMA_BOOT_VERSION = 17;
 
 /** 各模块 DDL 语句，按依赖安全顺序排列。 */
 export const NOVEL_MASTER_SCHEMA_STATEMENTS: readonly string[] = [

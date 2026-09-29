@@ -138,7 +138,6 @@ export function MetricsDetailPanel({
     );
   }
   const last = detail?.last ?? null;
-  const totals = detail?.totals ?? null;
   return (
     <div className="metrics-detail-popover__content" data-state="ready">
       <div className="metrics-detail-popover__title">用量详情</div>
@@ -192,41 +191,23 @@ export function MetricsDetailPanel({
         </>
       )}
       <SectionTitle>会话累计</SectionTitle>
-      {totals == null ? (
-        <div className="metrics-detail-popover__empty" data-row="totals-empty">
-          暂无累计数据
-        </div>
-      ) : (
-        <>
-          <Row
-            testKey="totals-visible-messages"
-            label="消息数（可见）"
-            value={String(detail?.visibleMessageCount ?? 0)}
-          />
-          <Row
-            testKey="totals-tool-use"
-            label="工具调用"
-            value={String(detail?.toolUseCount ?? 0)}
-          />
-          <Row
-            testKey="totals-input"
-            label="累计输入"
-            value={formatTokenCount(totals.promptTokens)}
-          />
-          <Row
-            testKey="totals-output"
-            label="累计输出"
-            value={formatTokenCount(totals.completionTokens)}
-          />
-        </>
-      )}
+      <Row
+        testKey="totals-visible-messages"
+        label="消息数（可见）"
+        value={String(detail?.visibleMessageCount ?? 0)}
+      />
+      <Row
+        testKey="totals-tool-use"
+        label="工具调用"
+        value={String(detail?.toolUseCount ?? 0)}
+      />
       <Row
         testKey="context-usage"
         label="上下文占用"
         value={contextUsageLabel ?? "—"}
       />
       <div className="metrics-detail-popover__footnote">
-        累计含隐藏消息 · 消息数为可见口径
+        消息数为可见口径 · 工具调用含已隐藏消息
         <br />
         最近请求为单步真值，与指标条整轮读数不同源
       </div>

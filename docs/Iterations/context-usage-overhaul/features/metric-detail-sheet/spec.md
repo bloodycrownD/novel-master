@@ -29,7 +29,13 @@ SQL：聚合查询复用 `usage-stats.service.ts` 的 `BILLED_INPUT_SUM_SQL` / `
 
 **工具调用数**：`getSessionUsageDetail` 内经注入的 messages service `listBySession` + `listVisibleSorted` 过滤后 JS 遍历累加 `blocks.filter(b => b.type === "tool_use").length`（assistant 消息）。消息正文为压缩 blob，SQL 无法数块，JS 现算（弹窗打开时一次，非热路径）。**装配改动**：`DefaultUsageStatsService` 现构造仅 `conn`（usage-stats.service.ts:162、create-chat-services.ts:103），注入 messages 须改构造签名并在 `create-chat-services.ts` 装配（同时核查 `createUsageStatsService` 其余调用点如 CLI 是否需同步）。
 
-> **收窄（2026-09-29，用户拍板「弹窗没必要实时算大账」）**：上面「全量 listBySession 现算」的取数方式已废——真机大会话打开秒级卡顿（hidden 行占多数 + raw_json/附件逐条解压）。**终态（同日二轮，实测驱动）**：`chat_message` 新增 `tool_use_count` 列（schema v18，DDL + ALIGN + boot bump 三件套），写入时由 repository 维护（`toMessageParams`/`updateContent` 经 `countToolUseBlocks` 单源计数；user 行恒 0、新行恒非 NULL），读侧一条 `SUM(tool_use_count)` 即得、零解压零解析。存量行由后台任务 `runToolUseCountBackfill`（infra/db-maintenance，message-content-compaction 同款谓词驱动骨架：批 ≤100 短事务 + keyset 游标 + KKV 完成标记 + 坏行写 0 隔离，mobile/desktop 各自低优先调度）回填；回填未完的 NULL 行读侧兜底现算（只投影 NULL 行 content 三列），随回填收敛到零。可见消息数 `COUNT(*) WHERE session_id=? AND hidden=0`（口径不变，只剔 hidden 不筛角色）。`DefaultUsageStatsService` 构造回到仅 `conn`（messages 注入整体拆除）。**实测依据**：真机库副本分项计时——四条 SQL 合计 ~7ms；剩余 700~800ms 全在 JS 侧 fflate 全量解压（最大会话 516 条 assistant / 3.1MB，PC 209ms 其中 inflate 占 93%，Hermes 放大 3~6 倍），列方案把这条路从读路径整体移除。口径回归由 T-MD1/T-MD2/T-MD3 用例锁定（含 hidden 剔除、tool_result 不计、NULL 行兜底三条）。
+> **收窄（2026-09-29，用户拍板「弹窗没必要实时算大账」）**：上面「全量 listBySession 现算」的取数方式已废——真机大会话打开秒级卡顿（hidden 行占多数 + raw_json/附件逐条解压）。**终态（同日三轮拍板）**：
+> 1. **移除「会话累计输入/累计输出」两行**（含 hidden 的累计求和对用户无意义）——`SessionUsageDetail`/DTO 的 `totals` 字段整体删除，弹窗剩：最近请求 + 消息数（可见）+ 工具调用 + 上下文占用。
+> 2. **工具调用数 = 会话 KKV `usage_stats.toolUseCount` 缓存**：读口 miss 时解压 assistant 行现算（含 hidden、双形态读、坏行按 0 计 warn）并回填；缓存跟随会话生命周期（fork 新会话天然 miss 重算）。失效挂点 = 新增含 tool_use 的消息（run 的工具步在此失效、纯文本追加不动）/ updateContent / delete / truncateAfter / 回滚 / 会话导入清缓存——全部挂在 message.service 与 rollback/import 的**既有失效点**旁。hide/show 不失效（含 hidden 口径下可见性不改计数）。
+> 3. 可见消息数 `COUNT(*) WHERE session_id=? AND hidden=0`（口径不变）。
+> 4. `DefaultUsageStatsService` 构造回到仅 `conn`（messages 注入拆除）。
+>
+> **注记**：中间曾落过 `chat_message.tool_use_count` 列方案（schema v18 写入时维护 + SUM + 后台回填，commit 62ebac0f），同日用户拍板「为统计数加列不值当」撤回——DDL/ALIGN/SCHEMA_BOOT_VERSION（回 17）全撤，回填任务与双端调度删除；正式库从未有过该列，feature 分支测试机库残留孤儿列无害。实测依据（真机库副本只读计时）：SQL 四条合计 ~7ms 无辜，残余 700~800ms 全在 fflate 全量解压（inflate 占 93%，Hermes 放大 3~6 倍）——缓存方案把这笔现算收敛到「失效后首次打开」一次。口径回归由 T-MD1/T-MD2/T-MD3 用例锁定（最近行跳过空行、可见剔 hidden、缓存 miss/命中/失效三态、纯文本追加不失效）。
 
 **desktop**：
 - IPC：`UsageStatsQueryRequest` 的 kind 联合加 `"sessionDetail"`（req 携带 `sessionId`，**`filter` 为必填字段且 handler :136 无条件访问 `req.filter.range`——sessionDetail 请求携带 `filter: {}` 占位（DTO 注释注明），不动 filter 可选性**），`shared/ipc-types.ts` 加 `SessionUsageDetailDto` 镜像（renderer 禁 import core）；handler `usage-stats.ts` 分发到新 port 方法（switch 的 `default: never` 穷尽检查会强制加 case）。

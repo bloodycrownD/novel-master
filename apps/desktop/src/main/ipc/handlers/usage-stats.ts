@@ -132,8 +132,9 @@ function toRequestRowDto(row: UsageStatsRequestRow): UsageStatsRequestRowDto {
 }
 
 /**
- * 会话详情 DTO 映射（逐字段守住类型边界；last/totals 空态 null 透传，
- * cache 列 nullable 语义与 core 一致——缺失协议列 null 保真到展示层「—」）。
+ * 会话详情 DTO 映射（逐字段守住类型边界；last 空态 null 透传，cache 列
+ * nullable 语义与 core 一致——缺失协议列 null 保真到展示层「—」）。会话
+ * 累计输入/输出已随 totals 字段移除（2026-09-29 用户拍板）。
  */
 function toSessionDetailDto(detail: SessionUsageDetail): SessionUsageDetailDto {
   return {
@@ -149,17 +150,6 @@ function toSessionDetailDto(detail: SessionUsageDetail): SessionUsageDetailDto {
             cacheReadTokens: detail.last.cacheReadTokens,
             cacheCreationTokens: detail.last.cacheCreationTokens,
             atMs: detail.last.atMs,
-          },
-    totals:
-      detail.totals == null
-        ? null
-        : {
-            promptTokens: detail.totals.promptTokens,
-            completionTokens: detail.totals.completionTokens,
-            cacheReadTokens: detail.totals.cacheReadTokens,
-            cacheCreationTokens: detail.totals.cacheCreationTokens,
-            billedInputTokens: detail.totals.billedInputTokens,
-            assistantRows: detail.totals.assistantRows,
           },
     visibleMessageCount: detail.visibleMessageCount,
     toolUseCount: detail.toolUseCount,

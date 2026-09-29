@@ -151,37 +151,29 @@ export interface SessionUsageLastRequest {
 }
 
 /**
- * 会话详情 · 会话累计：`assistant` 且 usage 非空的全量行求和（统计页同口径
- * 谓词——hidden 行与子会话行照常计入）；`billedInputTokens` 与
- * `UsageStatsSummary` 同口径（anthropic 加回 cache 双列，仅 cache 列非 NULL
- * 的行入分母求和）。
+ * 会话详情 · 会话累计（**已移除**，2026-09-29 用户拍板）：曾为
+ * `SessionUsageTotals`（assistant usage 行全量求和，含 hidden），随弹窗
+ * 「累计输入/输出」两行一并删除——含隐藏消息的累计对用户无意义。最近
+ * 请求段（`SessionUsageLastRequest`）不受影响。
  */
-export interface SessionUsageTotals {
-  readonly promptTokens: number;
-  readonly completionTokens: number;
-  readonly cacheReadTokens: number;
-  readonly cacheCreationTokens: number;
-  readonly billedInputTokens: number;
-  /** 入累计的 assistant 请求数（一条 assistant 消息 = 一次 LLM 请求）。 */
-  readonly assistantRows: number;
-}
 
 /**
  * 会话维度用量详情（metric-detail-sheet 弹窗数据）。**不含 contextUsage**
  * ——`resolveCurrentPromptTokens` 的 params 组装链只存在于双端 app 层，core
  * 装配注入不了；弹窗的「当前上下文占用」由端侧直接复用 chip 现有读数
- * （spec-check 第 1 轮 P0-2 拍板）。空会话返回
- * `{last: null, totals: null, visibleMessageCount: 0, toolUseCount: 0}`。
+ * （spec-check 第 1 轮 P0-2 拍板）。**不含会话累计输入/输出**（2026-09-29
+ * 用户拍板移除：含 hidden 的累计求和对用户无意义）。空会话返回
+ * `{last: null, visibleMessageCount: 0, toolUseCount: 0}`。
  */
 export interface SessionUsageDetail {
   readonly last: SessionUsageLastRequest | null;
-  readonly totals: SessionUsageTotals | null;
   /** 可见口径消息数（`listVisibleSorted` 同源：hidden 剔除，不筛角色）。 */
   readonly visibleMessageCount: number;
   /**
    * 会话内 assistant 消息 `tool_use` 块总数（含 hidden 行——累计口径）。
-   * 消息正文为压缩 blob，SQL 数不了块，由服务注入的 messages service
-   * `listBySession` 后 JS 现算（弹窗打开时一次，非热路径）。
+   * 会话 KKV `usage_stats.toolUseCount` 缓存优先（跟随会话生命周期）；
+   * miss 时解压 assistant 行现算并回填缓存。失效挂点见
+   * `session-kkv-domains` 的 usage_stats 域注释。
    */
   readonly toolUseCount: number;
 }

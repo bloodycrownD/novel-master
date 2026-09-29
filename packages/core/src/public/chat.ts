@@ -345,7 +345,6 @@ export type {
   UsageStatsRequestPageQuery,
   SessionUsageDetail,
   SessionUsageLastRequest,
-  SessionUsageTotals,
 } from "../service/chat/usage-stats.port.js";
 export type {
   MessageTranscriptEffectsService,

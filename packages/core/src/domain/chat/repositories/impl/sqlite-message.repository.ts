@@ -25,7 +25,6 @@ import {
   decodeMessageContent,
   encodeMessageContent,
 } from "../../logic/message-content-codec.js";
-import { countToolUseBlocks } from "../../logic/tool-use-count.js";
 import type { MessageRepository } from "../message.port.js";
 
 const MESSAGE_SELECT_COLUMNS = `id, session_id, seq, role, content_json, content_encoding, content_blob, provider, provider_id, raw_json, created_at_ms, hidden, attachments_json, prompt_tokens, completion_tokens, total_tokens, cache_read_tokens, cache_creation_tokens, model_name, first_token_ms, duration_ms`;
@@ -37,8 +36,8 @@ const MESSAGE_SELECT_COLUMNS = `id, session_id, seq, role, content_json, content
  */
 const MESSAGE_INSERT_SQL =
   `INSERT INTO chat_message ` +
-  `(id, session_id, seq, role, content_json, content_encoding, content_blob, provider, provider_id, raw_json, created_at_ms, hidden, attachments_json, prompt_tokens, completion_tokens, total_tokens, cache_read_tokens, cache_creation_tokens, model_name, first_token_ms, duration_ms, tool_use_count) ` +
-  `VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+  `(id, session_id, seq, role, content_json, content_encoding, content_blob, provider, provider_id, raw_json, created_at_ms, hidden, attachments_json, prompt_tokens, completion_tokens, total_tokens, cache_read_tokens, cache_creation_tokens, model_name, first_token_ms, duration_ms) ` +
+  `VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 
 /**
  * 把 ChatMessage 摊平成与 {@link MESSAGE_INSERT_SQL} 列顺序对齐的参数数组。
@@ -49,9 +48,6 @@ const MESSAGE_INSERT_SQL =
  * 消息正文压缩：content_json 置空串 ''（NOT NULL 约束自然满足，blocks JSON
  * 恒非空串，'' 无歧义），正文走 content_encoding/content_blob 压缩两列
  * （编码收口在 {@link encodeMessageContent}，三端零感知）。
- *
- * tool_use_count 恒写非 NULL（无 tool_use 块记 0）：新行不走存量回填，
- * 读侧 SUM 无需兜底。NULL 只属于 v18 补列前的存量行。
  */
 function toMessageParams(message: ChatMessage): unknown[] {
   const encoded = encodeMessageContent(JSON.stringify(message.content));
@@ -78,7 +74,6 @@ function toMessageParams(message: ChatMessage): unknown[] {
     message.modelName ?? null,
     message.usage?.firstTokenMs ?? null,
     message.usage?.durationMs ?? null,
-    countToolUseBlocks(message.content),
   ];
 }
 
@@ -374,17 +369,15 @@ export class SqliteMessageRepository implements MessageRepository {
 
   async updateContent(id: string, content: MessageContent): Promise<boolean> {
     // JSON.stringify 下沉到 repository（消除 service 层序列化的不一致编码点；
-    // 压缩编码与 insert 同一收口）。tool_use_count 随正文重写同步重算——
-    // 编辑可能增删 tool_use 块（列口径是「本行当前 blocks 的块数」）。
+    // 压缩编码与 insert 同一收口）。
     const encoded = encodeMessageContent(JSON.stringify(content));
     const result = await executeTemplate(
       this.conn,
       this.parser,
       `UPDATE chat_message
-       SET content_json = '', content_encoding = #{encoding}, content_blob = #{blob},
-           tool_use_count = #{toolUseCount}
+       SET content_json = '', content_encoding = #{encoding}, content_blob = #{blob}
        WHERE id = #{id}`,
-      { id, encoding: encoded.encoding, blob: encoded.blob, toolUseCount: countToolUseBlocks(content) }
+      { id, encoding: encoded.encoding, blob: encoded.blob }
     );
     return result.changes > 0;
   }

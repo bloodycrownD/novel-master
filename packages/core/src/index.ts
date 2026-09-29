@@ -84,24 +84,21 @@ export type {
 
 /**
  * 数据库维护（数据清理）：存储统计 + 缓存 GC/checkpoint/VACUUM 维护链路
- * （VACUUM 须事务外调用，事务中调用由 SQLite 原生报错兜底）；另含三个
- * 谓词驱动、幂等可重入的后台任务——存量 blob 行形态归一（zlib-b64
- * 文本 → 二进制 BLOB）、消息正文压缩搬运（完成后各挂一次维护链路）与
- * chat_message.tool_use_count 存量回填（不新增 exports 子路径——
- * `./compaction` 已被上下文裁剪域占用）。
+ * （VACUUM 须事务外调用，事务中调用由 SQLite 原生报错兜底）；另含两个
+ * 谓词驱动、幂等可重入的后台搬运任务——存量 blob 行形态归一（zlib-b64
+ * 文本 → 二进制 BLOB）与消息正文压缩搬运（完成后各挂一次维护链路；不
+ * 新增 exports 子路径——`./compaction` 已被上下文裁剪域占用）。
  */
 export {
   BLOB_BINARY_KKV_MODULE,
   createDbMaintenanceService,
   DEFAULT_BLOB_BINARY_SYNC_BUDGET_MS,
   DEFAULT_COMPACTION_SYNC_BUDGET_MS,
-  DEFAULT_TOOL_USE_COUNT_SYNC_BUDGET_MS,
   getBlobBinaryStatus,
   getMessageCompactionStatus,
   runBlobBinaryNormalization,
   runMessageContentCompaction,
   runStartupMaintenanceOnce,
-  runToolUseCountBackfill,
 } from "./infra/db-maintenance/index.js";
 export type {
   BlobBinaryRunResult,
@@ -114,9 +111,7 @@ export type {
   MessageCompactionStatus,
   RunBlobBinaryNormalizationOptions,
   RunMessageContentCompactionOptions,
-  RunToolUseCountBackfillOptions,
   StorageStats,
-  ToolUseCountBackfillRunResult,
 } from "./infra/db-maintenance/index.js";
 
 /**

@@ -85,7 +85,6 @@ export function MetricDetailSheet({
   }, [visible, sessionId]);
 
   const last = detail?.last ?? null;
-  const totals = detail?.totals ?? null;
 
   return (
     <ModalShell
@@ -165,32 +164,16 @@ export function MetricDetailSheet({
             </>
           )}
           <SectionLabel text="会话累计" tokens={tokens} />
-          {totals == null ? (
-            <EmptyRow text="暂无累计数据" tokens={tokens} />
-          ) : (
-            <>
-              <Row
-                label="消息数（可见）"
-                value={String(detail?.visibleMessageCount ?? 0)}
-                tokens={tokens}
-              />
-              <Row
-                label="工具调用"
-                value={String(detail?.toolUseCount ?? 0)}
-                tokens={tokens}
-              />
-              <Row
-                label="累计输入"
-                value={formatTokenCount(totals.promptTokens)}
-                tokens={tokens}
-              />
-              <Row
-                label="累计输出"
-                value={formatTokenCount(totals.completionTokens)}
-                tokens={tokens}
-              />
-            </>
-          )}
+          <Row
+            label="消息数（可见）"
+            value={String(detail?.visibleMessageCount ?? 0)}
+            tokens={tokens}
+          />
+          <Row
+            label="工具调用"
+            value={String(detail?.toolUseCount ?? 0)}
+            tokens={tokens}
+          />
           <Row
             label="上下文占用"
             value={contextTokenLabel ?? '—'}
@@ -202,7 +185,7 @@ export function MetricDetailSheet({
             testID="metric-detail-sheet-footnote"
             style={[styles.footnote, {color: tokens.textTertiary}]}
           >
-            累计含隐藏消息 · 消息数为可见口径
+            消息数为可见口径 · 工具调用含已隐藏消息
           </Text>
           <Text style={[styles.footnoteLine2, {color: tokens.textTertiary}]}>
             最近请求为单步真值，与指标条整轮读数不同源

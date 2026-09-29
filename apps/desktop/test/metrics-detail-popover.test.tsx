@@ -83,14 +83,6 @@ const DETAIL_FIXTURE = {
     cacheCreationTokens: null,
     atMs: 1_800_000_000_000,
   },
-  totals: {
-    promptTokens: 12_000,
-    completionTokens: 8_000,
-    cacheReadTokens: 2_048,
-    cacheCreationTokens: 512,
-    billedInputTokens: 3_600,
-    assistantRows: 6,
-  },
   visibleMessageCount: 11,
   toolUseCount: 4,
 };
@@ -231,20 +223,21 @@ describe("MetricsDetailPanel 两段渲染（T-MD4 + T-MD2 同源断言）", () =
     assert.ok(rowText(renderer, "last-hit-rate").includes("67%"));
   });
 
-  it("会话累计段：可见消息数/工具调用/累计输入输出 + 口径脚注", () => {
+  it("会话累计段：可见消息数/工具调用 + 口径脚注（累计输入/输出已移除）", () => {
     const renderer = mountPanel();
     assert.ok(
       rowText(renderer, "totals-visible-messages").includes("11")
     );
     assert.ok(rowText(renderer, "totals-tool-use").includes("4"));
-    assert.ok(rowText(renderer, "totals-input").includes("12K"));
-    assert.ok(rowText(renderer, "totals-output").includes("8K"));
     const text = collectText(renderer.toJSON() as never);
-    assert.ok(text.includes("累计含隐藏消息 · 消息数为可见口径"));
+    assert.ok(text.includes("消息数为可见口径 · 工具调用含已隐藏消息"));
     // 口径标注（cr-md-1 desktop 半）：最近请求为单步真值，与指标条整轮读数不同源。
     assert.ok(
       text.includes("最近请求为单步真值，与指标条整轮读数不同源")
     );
+    // 累计输入/输出行已随 totals 字段移除（2026-09-29 拍板）——不再出现。
+    assert.ok(!text.includes("累计输入"));
+    assert.ok(!text.includes("累计输出"));
   });
 
   it("「上下文占用」行渲染值 === 传入读数（与 chip 同源，不取新数）", () => {
@@ -252,18 +245,16 @@ describe("MetricsDetailPanel 两段渲染（T-MD4 + T-MD2 同源断言）", () =
     assert.ok(rowText(renderer, "context-usage").includes("~3.1k / 200k"));
   });
 
-  it("空态：last/totals 为 null 时出占位行，上下文占用缺读取数出「—」", () => {
+  it("空态：last 为 null 时出占位行，上下文占用缺读取数出「—」", () => {
     const renderer = mountPanel({
       detail: {
         last: null,
-        totals: null,
         visibleMessageCount: 0,
         toolUseCount: 0,
       },
       contextUsageLabel: null,
     });
     assert.ok(rowText(renderer, "last-empty").includes("暂无请求记录"));
-    assert.ok(rowText(renderer, "totals-empty").includes("暂无累计数据"));
     assert.ok(rowText(renderer, "context-usage").includes("—"));
   });
 

@@ -11,11 +11,15 @@ import type { Row } from "@/infra/tdbc/types.js";
 import { parseMessageContent } from "@/domain/chat/content/parse-message-content.js";
 import { decodeMessageContent } from "@/domain/chat/logic/message-content-codec.js";
 import { countToolUseBlocks } from "@/domain/chat/logic/tool-use-count.js";
+import {
+  SESSION_KKV_DOMAIN_USAGE_STATS,
+  USAGE_STATS_TOOL_USE_COUNT_KEY,
+} from "@/domain/session-kkv/model/session-kkv-domains.js";
+import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
 import { chatInvalidArgument } from "@/errors/chat-errors.js";
 import type {
   SessionUsageDetail,
   SessionUsageLastRequest,
-  SessionUsageTotals,
   UsageStatsBucket,
   UsageStatsFilter,
   UsageStatsModelRow,
@@ -438,27 +442,14 @@ export class DefaultUsageStatsService implements UsageStatsService {
         `getSessionUsageDetail 须提供 sessionId，收到：${String(sessionId)}`
       );
     }
-    // 聚合（统计页同口径谓词 + session 界定）、最近行、可见计数、工具调用
-    // 计数五路并行取数。工具调用读 tool_use_count 列（写入时维护）一条
-    // SUM 即得——不再解压正文现算（真机实测全量 fflate 解压 600~1200ms
-    // 是弹窗打开慢的主因，2026-09-29 用户拍板「弹窗不实时算大账」）。
-    // NULL 行（v18 补列前存量、回填任务未跑完）兜底现算：只投影这些行的
-    // content 三列，随回填收敛到零。可见数 SQL 数行（hidden 列判定，与
-    // listVisibleSorted 同口径——只剔 hidden 不筛角色）。
-    const [aggRows, lastRows, visibleRows, toolRows] = await Promise.all([
-      queryTemplate<Row>(
-        this.conn,
-        this.parser,
-        `SELECT COUNT(*) AS calls,
-                COALESCE(SUM(prompt_tokens), 0) AS prompt_tokens,
-                COALESCE(SUM(completion_tokens), 0) AS completion_tokens,
-                COALESCE(SUM(cache_read_tokens), 0) AS cache_read_tokens,
-                COALESCE(SUM(cache_creation_tokens), 0) AS cache_creation_tokens,
-                COALESCE(${BILLED_INPUT_SUM_SQL}, 0) AS billed_input_tokens
-         FROM chat_message
-         WHERE ${USAGE_NOT_NULL_SQL} AND session_id = #{sessionId}`,
-        { sessionId }
-      ),
+    // 最近行 + 可见计数两条 SQL 与会话 KKV 缓存读并行。可见数 SQL 数行
+    // （hidden 列判定，与 listVisibleSorted 同口径——只剔 hidden 不筛角色）。
+    // 工具调用数走会话 KKV `usage_stats.toolUseCount` 缓存（2026-09-29 用户
+    // 拍板「实时算 + 缓存，失效挂 run/编辑/删除」；缓存跟随会话生命周期，
+    // fork 新会话天然 miss 重算）；miss 时解压 assistant 行现算并回填——
+    // 大会话这笔现算数百毫秒量级，由失效挂点保证只在「真的变了之后」付
+    // 一次。会话累计输入/输出已移除（含 hidden 的累计对用户无意义）。
+    const [lastRows, visibleRows, cachedToolUseCount] = await Promise.all([
       queryTemplate<Row>(
         this.conn,
         this.parser,
@@ -478,30 +469,12 @@ export class DefaultUsageStatsService implements UsageStatsService {
          WHERE session_id = #{sessionId} AND hidden = 0`,
         { sessionId }
       ),
-      queryTemplate<Row>(
-        this.conn,
-        this.parser,
-        `SELECT COALESCE(SUM(tool_use_count), 0) AS tool_use_total,
-                COALESCE(SUM(CASE WHEN tool_use_count IS NULL THEN 1 ELSE 0 END), 0)
-                  AS tool_use_missing
-         FROM chat_message
-         WHERE session_id = #{sessionId} AND role = 'assistant'`,
-        { sessionId }
+      createSessionKkvService(this.conn).get(
+        sessionId,
+        SESSION_KKV_DOMAIN_USAGE_STATS,
+        USAGE_STATS_TOOL_USE_COUNT_KEY
       ),
     ]);
-    const agg = aggRows[0];
-    const calls = Number(agg?.calls ?? 0);
-    const totals: SessionUsageTotals | null =
-      calls > 0
-        ? {
-            promptTokens: Number(agg!.prompt_tokens),
-            completionTokens: Number(agg!.completion_tokens),
-            cacheReadTokens: Number(agg!.cache_read_tokens),
-            cacheCreationTokens: Number(agg!.cache_creation_tokens),
-            billedInputTokens: Number(agg!.billed_input_tokens),
-            assistantRows: calls,
-          }
-        : null;
     const lastRow = lastRows[0];
     const last: SessionUsageLastRequest | null =
       lastRow == null
@@ -526,46 +499,60 @@ export class DefaultUsageStatsService implements UsageStatsService {
                 : Number(lastRow.cache_creation_tokens),
             atMs: Number(lastRow.created_at_ms),
           };
-    // 可见消息数：hidden=0 的行数（listVisibleSorted 同源口径，只剔 hidden
-    // 不筛角色）。
     const visibleMessageCount = Number(visibleRows[0]?.n ?? 0);
-    // 工具调用数：tool_use_count 列 SUM（含 hidden 行——与 totals 同为累计
-    // 口径；user 侧 tool_result 不计）。存量 NULL 行（回填未跑完）兜底现算
-    // ——只投影 NULL 行的 content 三列，坏行（解压/parse 失败）按 0 计并
-    // warn：计数是统计读数，单条历史坏行不该让整个弹窗报错。
-    let toolUseCount = Number(toolRows[0]?.tool_use_total ?? 0);
-    const toolUseMissing = Number(toolRows[0]?.tool_use_missing ?? 0);
-    if (toolUseMissing > 0) {
-      const pendingRows = await queryTemplate<Row>(
-        this.conn,
-        this.parser,
-        `SELECT id, content_json, content_encoding, content_blob
-         FROM chat_message
-         WHERE session_id = #{sessionId} AND role = 'assistant'
-           AND tool_use_count IS NULL`,
-        { sessionId }
-      );
-      for (const row of pendingRows) {
-        try {
-          const raw =
-            row.content_blob != null
-              ? decodeMessageContent(
-                  row.content_encoding,
-                  row.content_blob,
-                  String(row.id)
-                )
-              : String(row.content_json);
-          toolUseCount += countToolUseBlocks(parseMessageContent(raw));
-        } catch (error) {
-          console.warn(
-            `[usage-stats] 存量行 tool_use_count 兜底解析失败（按 0 计，待回填任务写 0）：${
-              error instanceof Error ? error.message : String(error)
-            }`
-          );
-        }
+    const cached =
+      cachedToolUseCount != null ? Number.parseInt(cachedToolUseCount, 10) : NaN;
+    if (Number.isFinite(cached)) {
+      return { last, visibleMessageCount, toolUseCount: cached };
+    }
+    // 缓存 miss：解压 assistant 行现算（含 hidden 行——累计口径；user 侧
+    // tool_result 不计）。只投影 content 三列，不选 raw_json/attachments、
+    // 不解压 user 行。坏行（解压/parse 失败）按 0 计并 warn：计数是统计
+    // 读数，单条历史坏行不该让整个弹窗报错。回填缓存 best-effort（失败只
+    // 影响下次读数，不冒泡）。
+    const assistantRows = await queryTemplate<Row>(
+      this.conn,
+      this.parser,
+      `SELECT id, content_json, content_encoding, content_blob
+       FROM chat_message
+       WHERE session_id = #{sessionId} AND role = 'assistant'`,
+      { sessionId }
+    );
+    let toolUseCount = 0;
+    for (const row of assistantRows) {
+      try {
+        const raw =
+          row.content_blob != null
+            ? decodeMessageContent(
+                row.content_encoding,
+                row.content_blob,
+                String(row.id)
+              )
+            : String(row.content_json);
+        toolUseCount += countToolUseBlocks(parseMessageContent(raw));
+      } catch (error) {
+        console.warn(
+          `[usage-stats] 工具调用现算遇坏行（按 0 计）：${
+            error instanceof Error ? error.message : String(error)
+          }`
+        );
       }
     }
-    return { last, totals, visibleMessageCount, toolUseCount };
+    try {
+      await createSessionKkvService(this.conn).set(
+        sessionId,
+        SESSION_KKV_DOMAIN_USAGE_STATS,
+        USAGE_STATS_TOOL_USE_COUNT_KEY,
+        String(toolUseCount)
+      );
+    } catch (error) {
+      console.warn(
+        `[usage-stats] 工具调用缓存回填失败（不影响本次读数）：${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+    }
+    return { last, visibleMessageCount, toolUseCount };
   }
 
   /**

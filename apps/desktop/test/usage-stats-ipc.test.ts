@@ -114,7 +114,8 @@ const REQUEST_PAGE = {
   total: 12,
 };
 
-/** kind=sessionDetail 的 core 返回体样例（字段与 core SessionUsageDetail 一致）。 */
+/** kind=sessionDetail 的 core 返回体样例（字段与 core SessionUsageDetail 一致；
+ *  会话累计输入/输出已随 totals 字段移除，2026-09-29 拍板）。 */
 const SESSION_DETAIL = {
   last: {
     seq: 7,
@@ -125,14 +126,6 @@ const SESSION_DETAIL = {
     cacheReadTokens: 2048,
     cacheCreationTokens: null,
     atMs: 1_800_000_000_000,
-  },
-  totals: {
-    promptTokens: 1309,
-    completionTokens: 106,
-    cacheReadTokens: 2098,
-    cacheCreationTokens: 512,
-    billedInputTokens: 3919,
-    assistantRows: 4,
   },
   visibleMessageCount: 9,
   toolUseCount: 3,
@@ -537,7 +530,7 @@ describe("usage stats IPC handler（T-S6 + Step 2 适配）", () => {
     ]);
   });
 
-  it("kind=sessionDetail 空态 last/totals null 透传（cache 列缺失协议出「—」的原料）", async () => {
+  it("kind=sessionDetail 空态 last null 透传（cache 列缺失协议出「—」的原料）", async () => {
     const calls = installStubRuntime();
     const g = globalThis as unknown as {
       __usageStatsTestRuntime?: { usageStats: Record<string, unknown> };
@@ -548,7 +541,6 @@ describe("usage stats IPC handler（T-S6 + Step 2 适配）", () => {
       calls.push({ method: "getSessionUsageDetail", args: [sessionId] });
       return {
         last: null,
-        totals: null,
         visibleMessageCount: 0,
         toolUseCount: 0,
       };
@@ -564,7 +556,6 @@ describe("usage stats IPC handler（T-S6 + Step 2 适配）", () => {
     }
     assert.deepEqual(res.data, {
       last: null,
-      totals: null,
       visibleMessageCount: 0,
       toolUseCount: 0,
     });

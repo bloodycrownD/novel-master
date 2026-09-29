@@ -255,3 +255,31 @@ desktop main tsc 干净、mobile 涉改文件 tsc 无错。**真机终验**（�
 **坑两枚**：① `adb shell cat` 拉 SQLite 副本必坏（pty 把 \n 翻成 \r\n），
 必须 `adb exec-out run-as ... cat`；② tmp 下 .ts 脚本被 tsx 按 CJS 处理
 （无 package.json type 域），顶层 await 报错——改静态 import 或 .mts。
+
+## 追加轮：列方案撤回 → 会话 KKV 缓存 + 移除累计输入输出（终态 v3）
+
+用户两轮拍板：①「只为统计工具调用数加一列不值当」「宁愿接受实时查询，
+加个缓存就好，失效按是否 run 过」；②「含 hidden 的累计没意义，移除累计
+输入输出」；③「这是测试机，别把 DDL 带进正式版本」。撤回 + 重落：
+
+1. **schema 全撤**：chat_message.tool_use_count 从 DDL/ALIGN 删除、
+   SCHEMA_BOOT_VERSION 18→17（带墓碑注释：v18 未发布、测试机孤儿列
+   18>17 走快路径无害、正式库从未有此形态）；repository 写入撤回、
+   回填任务与双端调度删除。**教训入档**：feature 分支上「测试机已升
+   版本」不是存量库形态——别为它保留死 DDL。
+2. **工具调用数 = 会话 KKV usage_stats.toolUseCount**：读口 miss 现算
+   （解压 assistant 行、含 hidden、坏行按 0 计）并回填；缓存随会话
+   生命周期（clearSession 级联、fork 天然 miss）。失效挂点全在既有
+   失效基建旁：message.service（append 含 tool_use 才失效——纯文本
+   追加不动缓存；updateContent/delete/truncateAfter）+ 回滚服务 +
+   导入清缓存 helper；hide/show 不失效（口径含 hidden）。
+3. **移除累计输入/输出**：SessionUsageDetail/DTO 的 totals 字段整体
+   删除（port/public/双端 UI/IPC handler/四份测试同步），弹窗脚注改
+   「消息数为可见口径 · 工具调用含已隐藏消息」。
+
+测试：core chat 436/438（仅时区基线 2 例）+ db-maintenance/回滚族 44/44
++ desktop 弹窗/IPC 25/25；core build、desktop main tsc、mobile 涉改文件
+tsc 全干净。T-MD3 重写为缓存三态用例（miss 现算落缓存→绕过失效直删行
+仍读缓存→append 含 tool_use 失效后重算出**异于陈旧值**的新数；纯文本
+追加以「缓存行存在性」观测未失效）。dist 重建、真机 force-stop 重启载
+新码无崩溃。

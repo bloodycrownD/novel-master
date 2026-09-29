@@ -990,29 +990,21 @@ export type SessionUsageLastRequestDto = {
 };
 
 /**
- * 会话详情 · 会话累计（含隐藏消息——统计页同口径谓词 + session 界定；
- * billedInputTokens 与 UsageStatsSummaryDto 同口径）。
+ * 会话详情 · 会话累计（**已移除**，2026-09-29 用户拍板）：曾为
+ * `SessionUsageTotalsDto`（含隐藏消息的全量求和），随弹窗「累计输入/输出」
+ * 两行一并删除——含 hidden 的累计对用户无意义。
  */
-export type SessionUsageTotalsDto = {
-  readonly promptTokens: number;
-  readonly completionTokens: number;
-  readonly cacheReadTokens: number;
-  readonly cacheCreationTokens: number;
-  readonly billedInputTokens: number;
-  readonly assistantRows: number;
-};
 
 /**
  * 会话维度用量详情（指标条弹窗数据）。不含 contextUsage——「当前上下文
  * 占用」由 renderer 复用 drawer 同源的 PromptChatTokenStatsResponse 读数，
- * 不新增取数通路。
+ * 不新增取数通路。不含会话累计输入/输出（2026-09-29 拍板移除）。
  */
 export type SessionUsageDetailDto = {
   readonly last: SessionUsageLastRequestDto | null;
-  readonly totals: SessionUsageTotalsDto | null;
   /** 可见口径消息数（hidden 剔除，不筛角色）。 */
   readonly visibleMessageCount: number;
-  /** 会话内 assistant 消息 tool_use 块总数（含隐藏行）。 */
+  /** 会话内 assistant 消息 tool_use 块总数（含隐藏行；会话 KKV 缓存优先）。 */
   readonly toolUseCount: number;
 };
 
