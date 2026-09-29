@@ -8,9 +8,9 @@ import { SqlTemplateParser } from "@/infra/sql-template/index.js";
 import { queryTemplate } from "@/infra/tdbc/logic/template-helper.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import type { Row } from "@/infra/tdbc/types.js";
-import { listVisibleSorted } from "@/domain/chat/logic/message-visible-floor.js";
+import { parseMessageContent } from "@/domain/chat/content/parse-message-content.js";
+import { decodeMessageContent } from "@/domain/chat/logic/message-content-codec.js";
 import { chatInvalidArgument } from "@/errors/chat-errors.js";
-import type { MessageService } from "../message.port.js";
 import type {
   SessionUsageDetail,
   SessionUsageLastRequest,
@@ -164,15 +164,7 @@ const ZERO_AGG_ROW: Row = {
 export class DefaultUsageStatsService implements UsageStatsService {
   private readonly parser = new SqlTemplateParser();
 
-  /**
-   * @param messages - 会话详情（getSessionUsageDetail）的可见消息计数与
-   *   tool_use 块计数走 messages service 的 `listBySession`（消息正文为
-   *   压缩 blob，SQL 数不了块，须 JS 解压后现算）；统计页既有查询不消费。
-   */
-  constructor(
-    private readonly conn: TdbcConnection,
-    private readonly messages: Pick<MessageService, "listBySession">
-  ) {}
+  constructor(private readonly conn: TdbcConnection) {}
 
   async getSummary(filter: UsageStatsFilter): Promise<UsageStatsSummary> {
     const { fromMs, toMs } = this.resolveOptionalRange(filter.range);
@@ -445,10 +437,15 @@ export class DefaultUsageStatsService implements UsageStatsService {
         `getSessionUsageDetail 须提供 sessionId，收到：${String(sessionId)}`
       );
     }
-    // 聚合（统计页同口径谓词 + session 界定）与最近行两条 SQL、消息列表
-    // 一次 JS 遍历（可见计数 + tool_use 计数共用）并行取数——弹窗打开时
-    // 一次现算，非热路径。
-    const [aggRows, lastRows, chatMessages] = await Promise.all([
+    // 聚合（统计页同口径谓词 + session 界定）、最近行、可见计数三条 SQL
+    // 与 assistant 行 content 投影并行取数。计数不拉全量消息列表：可见数
+    // SQL 数行（hidden 列判定，与 listVisibleSorted 同口径——只剔 hidden
+    // 不筛角色）；工具调用数只取 assistant 行的 content 三列（tool_use 块
+    // 只在 assistant 消息里，hidden 行照计，user/tool_result 行不参与），
+    // 不选 raw_json/attachments 列、不解压 user 行——曾经经 listBySession
+    // 全量拉取（含 hidden 多数行 + raw_json/附件逐条解压）在大会话上秒级
+    // 卡顿（2026-09-29 用户拍板：弹窗计数行不实时算大账，与列读数对齐）。
+    const [aggRows, lastRows, visibleRows, assistantRows] = await Promise.all([
       queryTemplate<Row>(
         this.conn,
         this.parser,
@@ -473,7 +470,22 @@ export class DefaultUsageStatsService implements UsageStatsService {
          LIMIT 1`,
         { sessionId }
       ),
-      this.messages.listBySession(sessionId),
+      queryTemplate<{ n: number }>(
+        this.conn,
+        this.parser,
+        `SELECT COUNT(*) AS n
+         FROM chat_message
+         WHERE session_id = #{sessionId} AND hidden = 0`,
+        { sessionId }
+      ),
+      queryTemplate<Row>(
+        this.conn,
+        this.parser,
+        `SELECT id, content_json, content_encoding, content_blob
+         FROM chat_message
+         WHERE session_id = #{sessionId} AND role = 'assistant'`,
+        { sessionId }
+      ),
     ]);
     const agg = aggRows[0];
     const calls = Number(agg?.calls ?? 0);
@@ -512,16 +524,23 @@ export class DefaultUsageStatsService implements UsageStatsService {
                 : Number(lastRow.cache_creation_tokens),
             atMs: Number(lastRow.created_at_ms),
           };
-    // 可见消息数：listVisibleSorted 同源口径（只剔 hidden，不筛角色）。
-    const visibleMessageCount = listVisibleSorted(chatMessages).length;
-    // 工具调用数：会话内 assistant 消息 tool_use 块总数（含 hidden 行——
-    // 与 totals 同为累计口径；user 侧 tool_result 不计）。
+    // 可见消息数：hidden=0 的行数（listVisibleSorted 同源口径，只剔 hidden
+    // 不筛角色）。
+    const visibleMessageCount = Number(visibleRows[0]?.n ?? 0);
+    // 工具调用数：assistant 行 content 块里的 tool_use 总数（含 hidden 行
+    // ——与 totals 同为累计口径；user 侧 tool_result 不计）。投影行经与
+    // repository 相同的双形态读（blob 解压 / legacy 明文）取 blocks。
     let toolUseCount = 0;
-    for (const message of chatMessages) {
-      if (message.role !== "assistant") {
-        continue;
-      }
-      for (const block of message.content.blocks) {
+    for (const row of assistantRows) {
+      const raw =
+        row.content_blob != null
+          ? decodeMessageContent(
+              row.content_encoding,
+              row.content_blob,
+              String(row.id)
+            )
+          : String(row.content_json);
+      for (const block of parseMessageContent(raw).blocks) {
         if (block.type === "tool_use") {
           toolUseCount += 1;
         }

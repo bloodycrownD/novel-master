@@ -184,3 +184,32 @@ desktop 8。dist 重建、真机已载。
 拍板：内存只随使用家族数走，cl100k 兜底表已有 prime 预热即可）。探针测试
 （TokenizerScalingProbeTest）保留为线性证据。GBK 的 app/build.gradle 走
 Buffer 字节级补丁（numstat 13/0 纯增量）。
+
+## 追加轮：用量详情弹窗取数 SQL 化 + LruCache 2→4
+
+用户反馈：用量详情弹窗打开也有点慢——「不是和上下文统计一样的链路吗？
+没必要实时算」。排查定性：弹窗的 token 数字本身全是列读数（输入/输出/缓存/
+上下文占用都不调分词器），**慢的在「消息数（可见）」「工具调用」两行**——
+`getSessionUsageDetail` 曾经 `listBySession(sessionId)` 全量拉取（不带
+`includeHidden:false`，hidden 行占多数的压缩会话全解压；且 `rowToMessage`
+连 `raw_json`/附件一起 JSON.parse），只为 JS 里数两个数——repository 注释
+里自己警告过的秒级卡顿路径。落地两件：
+
+1. **取数 SQL 化**（usage-stats.service.ts）：四路并行——可见数
+   `COUNT(*) WHERE session_id=? AND hidden=0`（口径不变：只剔 hidden 不筛
+   角色）；工具调用数只投影 assistant 行的
+   `id/content_json/content_encoding/content_blob` 四列（tool_use 块只在
+   assistant 消息里、hidden 行照计、user/tool_result 不参与），双形态读
+   （blob 解压/legacy 明文，与 repository 同款 codec）后 JS 数块——不选
+   raw_json/attachments、不解压 user 行。`DefaultUsageStatsService` 构造
+   回到仅 `conn`（messages 注入整体拆除，工厂签名本就没暴露过第二参）。
+   口径回归由既有 T-MD1/T-MD2 五用例锁定（全绿），metric-detail-sheet
+   spec 补收窄记录。
+2. **Kotlin LruCache 2→4**（TokenizerEngine web/sp 两处，用户拍板
+   「4 种模型比较合理」）：四家族（glm/gpt/claude/qwen 级别）同时驻留
+   不互踢，淘汰后仍懒加载重付。
+
+测试：usage-stats 定向 30/32（挂的仅既有 T-C2/T-C6 时区基线 2 例，与本次
+无关）；core build（tsc）干净、dist 已重建。APK 增量重编 38s、
+`install -r -d` 装机成功（reverse 隧道重建、app 重启载新码）。
+CHANGELOG Unreleased 补「用量详情弹窗打开提速」条目。

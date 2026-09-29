@@ -23,11 +23,12 @@ internal class TokenizerEngine(private val context: Context) {
     val estimated: Boolean,
   )
 
-  // 缓存容量 2（2026-09-29 拍板）：WEB json 解析后内存可达数十 MB/家族
-  // （glm 词表 15 万词 + 31.8 万合并），常态用户就一两个家族；LRU 淘汰后
-  // 下次使用再懒加载一次即可。SP 词表（.model protobuf）同理收紧。
-  private val webCache = LruCache<String, HuggingFaceTokenizer>(2)
-  private val spCache = LruCache<String, SpTokenizer>(2)
+  // 缓存容量 4（2026-09-29 二次拍板 2→4）：WEB json 解析后内存可达数十 MB/
+  // 家族（glm 词表 15 万词 + 31.8 万合并），常态用户一两个家族、多模型用户
+  // 四个家族（glm/gpt/claude/qwen 级别）同时驻留也够用；LRU 淘汰后下次使用
+  // 再懒加载一次即可。SP 词表（.model protobuf）同理。
+  private val webCache = LruCache<String, HuggingFaceTokenizer>(4)
+  private val spCache = LruCache<String, SpTokenizer>(4)
 
   fun count(serialized: String, family: String): CountResult {
     val spec = resolveAssetSpecFor(family)
