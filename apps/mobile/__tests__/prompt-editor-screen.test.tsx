@@ -392,15 +392,17 @@ describe('PromptEditorScreen composer 变体（chat 输入框全屏）', () => {
       tree.root.findAllByProps({testID: 'prompt-editor-save'}),
     ).toHaveLength(0);
 
-    // 改稿不进「未保存」态（标题仍是路由给的「编辑消息」）。
-    act(() => {
-      mockEditorProps[0]!.onChange('全屏里改的文本');
-    });
+    // 页内 toolbar 不渲染（标题只在导航栏；页内再叠一个就是「两个 编辑消息」）。
     const texts = tree.root
       .findAll(node => typeof node.children?.[0] === 'string')
       .map(node => String(node.children[0]));
-    expect(texts).toContain('编辑消息');
+    expect(texts).not.toContain('编辑消息');
     expect(texts).not.toContain('未保存');
+
+    // 改稿（不进「未保存」态：没有 toolbar 标题可切）。
+    act(() => {
+      mockEditorProps[0]!.onChange('全屏里改的文本');
+    });
 
     // 也不拦退出（无改动可丢）：beforeRemove 直接放行、不弹确认。
     expect(emitBeforeRemove()).not.toHaveBeenCalled();

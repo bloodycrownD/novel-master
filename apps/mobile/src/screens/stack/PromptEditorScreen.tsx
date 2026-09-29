@@ -46,8 +46,11 @@ import {useTheme} from '../../theme/ThemeProvider';
 /** 伪路径以 .md 结尾：编辑器按 markdown 高亮，预览走 markdown 渲染管线。 */
 const PROMPT_EDITOR_PATH = 'prompt.md';
 
-/** 变体缺省标题（form 走「提示词」，composer 走「编辑消息」）。 */
-const DEFAULT_TITLES = {form: '提示词', composer: '编辑消息'} as const;
+/**
+ * 页内 toolbar 标题缺省值（仅 form 变体用；composer 变体不渲染 toolbar，
+ * 它的「编辑消息」走导航栏标题）。
+ */
+const DEFAULT_FORM_TITLE = '提示词';
 
 type PromptEditorRoute = RouteProp<RootStackParamList, 'PromptEditor'>;
 
@@ -140,10 +143,10 @@ export function PromptEditorScreen() {
               onPress: handleSave,
             }
       }
-      title={
-        isDirty && !isComposer ? '未保存' : title ?? DEFAULT_TITLES[variant]
-      }
-      titleDanger={isDirty && !isComposer}
+      /* composer 变体不传 title：页内 toolbar 整行不渲染——导航栏已经有「编辑消息」
+         （route.params.title → stackOverride），页内再居中写一个就是两个标题叠着。 */
+      title={isComposer ? undefined : isDirty ? '未保存' : title ?? DEFAULT_FORM_TITLE}
+      titleDanger={!isComposer && isDirty}
       /* composer 变体是**纯编辑态**（用户定案：输入框全屏只要编辑，不要预览）：
          不传 toggle / segmented / preview，shell 只渲染 toolbar + 编辑器。 */
       toggle={

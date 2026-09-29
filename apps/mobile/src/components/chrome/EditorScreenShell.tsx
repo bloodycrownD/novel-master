@@ -29,9 +29,11 @@ export type EditorScreenShellProps<T extends string> = {
   tokens: ThemeTokens;
   /** toolbar 底部分隔线颜色（各屏分别取 tokens.border / borderLight）。 */
   toolbarBorderColor: string;
+  /** 标题（含 danger 着色）；**不传且无 save/toggle/titlePress 时整个 toolbar 不渲染**
+   * ——导航栏已有标题、页面内又只有一个重复标题的场景（chat 输入框全屏纯编辑态）。 */
+  title?: string;
   /** 有未保存改动时调用方改传「未保存」，由 shell 统一 danger 着色。 */
-  title: string;
-  titleDanger: boolean;
+  titleDanger?: boolean;
   /** 不提供则不渲染左位保存按钮（如 chat 输入框全屏：退出即回填）。 */
   save?: {
     testID?: string;
@@ -86,38 +88,57 @@ export function EditorScreenShell<T extends string>({
   editor,
 }: EditorScreenShellProps<T>) {
   const titleColor = titleDanger ? tokens.danger : tokens.textSecondary;
+  /** 无标题、无动作位 → 整行不渲染：导航栏已有标题时别在页内再叠一个重复标题。 */
+  const hasToolbar =
+    save != null || title != null || titlePress != null || toggle != null;
 
   const body = (
     <>
-      <View style={[styles.toolbar, {borderBottomColor: toolbarBorderColor}]}>
-        {save ? (
-          <Pressable
-            testID={save.testID}
-            accessibilityLabel={save.accessibilityLabel}
-            style={styles.toolbarBtn}
-            onPress={save.onPress}
-            disabled={save.disabled}
-          >
-            <Text
-              style={[
-                styles.toolbarText,
-                {color: save.disabled ? tokens.textSecondary : tokens.primary},
-              ]}
+      {hasToolbar ? (
+        <View style={[styles.toolbar, {borderBottomColor: toolbarBorderColor}]}>
+          {save ? (
+            <Pressable
+              testID={save.testID}
+              accessibilityLabel={save.accessibilityLabel}
+              style={styles.toolbarBtn}
+              onPress={save.onPress}
+              disabled={save.disabled}
             >
-              {save.label}
-            </Text>
-          </Pressable>
-        ) : null}
-        {titlePress ? (
-          <Pressable
-            testID={titlePress.testID}
-            style={styles.toolbarTitle}
-            onPress={titlePress.onPress}
-            accessibilityRole="button"
-            accessibilityLabel="收起键盘"
-          >
+              <Text
+                style={[
+                  styles.toolbarText,
+                  {
+                    color: save.disabled ? tokens.textSecondary : tokens.primary,
+                  },
+                ]}
+              >
+                {save.label}
+              </Text>
+            </Pressable>
+          ) : null}
+          {title == null ? null : titlePress ? (
+            <Pressable
+              testID={titlePress.testID}
+              style={styles.toolbarTitle}
+              onPress={titlePress.onPress}
+              accessibilityRole="button"
+              accessibilityLabel="收起键盘"
+            >
+              <Text
+                style={[
+                  styles.toolbarTitleText,
+                  {color: titleColor, fontSize: titleFontSize},
+                ]}
+                numberOfLines={1}
+                ellipsizeMode="tail"
+              >
+                {title}
+              </Text>
+            </Pressable>
+          ) : (
             <Text
               style={[
+                styles.toolbarTitle,
                 styles.toolbarTitleText,
                 {color: titleColor, fontSize: titleFontSize},
               ]}
@@ -126,42 +147,30 @@ export function EditorScreenShell<T extends string>({
             >
               {title}
             </Text>
-          </Pressable>
-        ) : (
-          <Text
-            style={[
-              styles.toolbarTitle,
-              styles.toolbarTitleText,
-              {color: titleColor, fontSize: titleFontSize},
-            ]}
-            numberOfLines={1}
-            ellipsizeMode="tail"
-          >
-            {title}
-          </Text>
-        )}
-        {toggle ? (
-          <Pressable
-            testID={toggle.testID}
-            accessibilityLabel={toggle.accessibilityLabel}
-            style={styles.toolbarBtn}
-            onPress={toggle.onPress}
-          >
-            <Text
-              style={[
-                styles.toolbarText,
-                {
-                  color: toggle.previewMode
-                    ? tokens.primary
-                    : tokens.textSecondary,
-                },
-              ]}
+          )}
+          {toggle ? (
+            <Pressable
+              testID={toggle.testID}
+              accessibilityLabel={toggle.accessibilityLabel}
+              style={styles.toolbarBtn}
+              onPress={toggle.onPress}
             >
-              {toggle.previewMode ? '编辑' : '预览'}
-            </Text>
-          </Pressable>
-        ) : null}
-      </View>
+              <Text
+                style={[
+                  styles.toolbarText,
+                  {
+                    color: toggle.previewMode
+                      ? tokens.primary
+                      : tokens.textSecondary,
+                  },
+                ]}
+              >
+                {toggle.previewMode ? '编辑' : '预览'}
+              </Text>
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
       {toolbarExtra}
       {previewMode && segmented ? (
         <SegmentedControl
