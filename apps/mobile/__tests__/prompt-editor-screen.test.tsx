@@ -77,6 +77,10 @@ const mockSkillPickerComponent = jest.fn((props: {
   mockSkillPickerProps[0] = props;
   return null;
 });
+/** runtime 可变持有（capsule/B-2 用例置 null 模拟未就绪；beforeEach 复位）。 */
+const mockRuntimeHolder: {runtime: typeof mockRuntime | null} = {
+  runtime: null,
+};
 // 捕获 FileMarkdownPreview stub 的 props，断言预览吃到内存草稿。
 const mockPreviewProps: {
   path: string;
@@ -135,7 +139,10 @@ jest.mock('@/components/vfs/CodeEditorWebView', () => {
 });
 
 jest.mock('@/runtime/novel-master-context', () => ({
-  useNovelMaster: () => ({status: 'ready', runtime: mockRuntime}),
+  useNovelMaster: () => ({
+    status: mockRuntimeHolder.runtime == null ? 'loading' : 'ready',
+    runtime: mockRuntimeHolder.runtime,
+  }),
 }));
 
 // 工厂在 import 期执行，jest.fn 常量那时还未初始化（TDZ）——包一层函数把
@@ -256,6 +263,7 @@ describe('PromptEditorScreen (T-PE3 + R5 + R6)', () => {
         overridden: false,
       },
     ]);
+    mockRuntimeHolder.runtime = mockRuntime;
     // 清空模块级回调残留，各用例自行决定是否 set。
     takePromptEditorOnSaved();
   });
@@ -451,6 +459,9 @@ describe('PromptEditorScreen composer 变体（chat 输入框全屏）', () => {
     mockPreviewProps.length = 0;
     mockSegmentedProps.length = 0;
     mockBeforeRemoveHandlers.length = 0;
+    mockFilePickerProps.length = 0;
+    mockSkillPickerProps.length = 0;
+    mockRuntimeHolder.runtime = mockRuntime;
     takePromptEditorOnSaved();
   });
 
@@ -520,6 +531,11 @@ describe('PromptEditorScreen composer 变体（chat 输入框全屏）', () => {
     expect(mockEditorProps[0]!.value).toBe('# 全屏草稿');
     // composer 伪路径：web 侧按此挂 @/$ 胶囊扩展（高亮 + 原子删）。
     expect(mockEditorProps[0]!.path).toBe('composer.md');
+    // toolbar 整行不渲染（fullscreen/G-2）：不只是「没有标题文字」，
+    // 连空 bar 都没有——守卫被拆掉时这条会红。
+    expect(
+      tree.root.findAllByProps({testID: 'editor-screen-toolbar'}),
+    ).toHaveLength(0);
   });
 
   it('composer 变体：`$` 打字触发技能 typeahead，点选经 setText 插入 $技能名', async () => {
@@ -607,6 +623,95 @@ describe('PromptEditorScreen composer 变体（chat 输入框全屏）', () => {
     expect(mockSkillPickerComponent).not.toHaveBeenCalled();
   });
 
+  it('composer 变体：runtime 未就绪同样降级——按钮禁用、选择器不挂载', () => {
+    mockRuntimeHolder.runtime = null;
+    mockRoute.params = {
+      initialText: '',
+      variant: 'composer',
+      projectId: 'p1',
+      sessionId: 's1',
+    };
+    const tree = renderScreen();
+    // capsule/B-2：选择器内部走 useRuntime 会抛，canTypeahead 必须看 runtime。
+    expect(
+      tree.root.findByProps({testID: 'composer-editor-at-btn'}).props.disabled,
+    ).toBe(true);
+    expect(
+      tree.root.findByProps({testID: 'composer-editor-skill-btn'}).props
+        .disabled,
+    ).toBe(true);
+    expect(mockFilePickerComponent).not.toHaveBeenCalled();
+    expect(mockSkillPickerComponent).not.toHaveBeenCalled();
+  });
+
+  it('capsule/B-4：进全屏不点编辑器直接插 token——RN 侧 cursor 初值在文末', () => {
+    mockRoute.params = {
+      initialText: '已有文本',
+      variant: 'composer',
+      projectId: 'p1',
+      sessionId: 's1',
+    };
+    const tree = renderScreen();
+    // 不触发 onSelectionChange（模拟没点编辑器）：插入链只能吃 cursor 初值。
+    act(() => {
+      tree.root.findByProps({testID: 'composer-editor-skill-btn'}).props.onPress();
+    });
+    expect(mockSkillPickerComponent).toHaveBeenCalled();
+    act(() => {
+      mockSkillPickerProps[0]!.onConfirm('写作');
+    });
+    // buildTokenInsertion('已有文本', 4, 4, '$写作')：前导空格 + token + 尾空格，
+    // 光标落插入段末尾——cursor 若停在 0 会插到整篇开头（该回归的本体）。
+    expect(mockEditorSetText).toHaveBeenCalledWith('已有文本 $写作 ', {
+      start: 9,
+      end: 9,
+    });
+    expect(mockEditorProps[0]!.value).toBe('已有文本 $写作 ');
+    act(() => {
+      tree.unmount();
+    });
+  });
+
+  it('capsule/G-3：$ 选择器确认（活跃查询时替换半截）与空数组早退', () => {
+    mockRoute.params = {
+      initialText: '',
+      variant: 'composer',
+      projectId: 'p1',
+      sessionId: 's1',
+    };
+    const tree = renderScreen();
+    // 手输孤立 `$`（光标 1）：SkillPicker 确认时 replaceStart 取活跃查询起点。
+    act(() => {
+      mockEditorProps[0]!.onChange('$');
+    });
+    act(() => {
+      mockEditorProps[0]!.onSelectionChange!({start: 1, end: 1});
+    });
+    act(() => {
+      tree.root.findByProps({testID: 'composer-editor-skill-btn'}).props.onPress();
+    });
+    act(() => {
+      mockSkillPickerProps[0]!.onConfirm('写作');
+    });
+    // 活跃 $ 查询 [0,1) 被整段替换（不残留半截查询）。
+    expect(mockEditorSetText).toHaveBeenCalledWith('$写作 ', {
+      start: 4,
+      end: 4,
+    });
+    // FileReferencePicker 空选早退：零写入。
+    act(() => {
+      tree.root.findByProps({testID: 'composer-editor-at-btn'}).props.onPress();
+    });
+    expect(mockFilePickerComponent).toHaveBeenCalled();
+    act(() => {
+      mockFilePickerProps[0]!.onConfirm([]);
+    });
+    expect(mockEditorSetText).toHaveBeenCalledTimes(1);
+    act(() => {
+      tree.unmount();
+    });
+  });
+
   it('form 变体不受影响：右侧「预览」切换仍在（对照断言）', () => {
     mockRoute.params = {initialText: '初稿'};
     const tree = renderScreen();
@@ -615,6 +720,28 @@ describe('PromptEditorScreen composer 变体（chat 输入框全屏）', () => {
     ).toBeGreaterThan(0);
     pressToggle(tree);
     expect(mockPreviewProps[0]!.content).toBe('初稿');
+    // form 对照（fullscreen/G-2）：toolbar 行存在（不数精确值——测试环境里
+    // 键盘包装层下会出现一个无内容的同名镜像实例；真正的牙齿在 composer 侧
+    // 的 toHaveLength(0)，守卫被拆时那条必红）。
+    expect(
+      tree.root.findAllByProps({testID: 'editor-screen-toolbar'}).length,
+    ).toBeGreaterThan(0);
+  });
+
+  it('form 变体对照：卸载（未保存退出）不回填——锁死回填 cleanup 的 isComposer 守卫', () => {
+    const onSaved = jest.fn();
+    setPromptEditorOnSaved(onSaved);
+    mockRoute.params = {initialText: '初稿'};
+    const tree = renderScreen();
+    act(() => {
+      mockEditorProps[0]!.onChange('改了但没保存');
+    });
+    act(() => {
+      tree.unmount();
+    });
+    // form 的退出语义是「确认离开即丢弃」（useUnsavedGuard 管），不走 onSaved；
+    // 若 isComposer 守卫被拆，提示词字段的退出会变成静默回填调用方表单。
+    expect(onSaved).not.toHaveBeenCalled();
   });
 
   it('未 set 回调时退出不抛错（回调缺失＝原文本不动）', () => {

@@ -68,6 +68,7 @@ import {
 } from '../../components/chat/composer-token-insert';
 import {FileReferencePicker} from '../../components/chat/FileReferencePicker';
 import {SkillPicker} from '../../components/skills/SkillPicker';
+import {composerToolBtnStyle} from '../../components/chat/composer-toolbar-style';
 import type {EffectiveSkill} from '@novel-master/core/skills';
 import type {WorkplaceListRow} from '@novel-master/core/workplace';
 import {useNovelMaster} from '../../runtime/novel-master-context';
@@ -117,8 +118,12 @@ export function PromptEditorScreen() {
 
   /* ---- composer 变体的 tag 插入链（typeahead / 选择器；form 变体不参与） ---- */
   const {runtime} = useNovelMaster();
-  /** 光标（typeahead 活跃查询判定用；来自 web 选区上报）。 */
-  const [cursor, setCursor] = useState(0);
+  /** 光标（typeahead 活跃查询判定用；来自 web 选区上报）。
+   * 初值＝文末：进全屏不点正文直接插 token 时落在末尾（与 web 侧 mount 默认
+   * 选区成对——CM 挂载不触发 selectionChange，RN 侧若停在 0 会插到整篇开头）。 */
+  const [cursor, setCursor] = useState(() =>
+    isComposer ? (initialText ?? '').length : 0,
+  );
   const [skillPickerOpen, setSkillPickerOpen] = useState(false);
   const [pathPickerOpen, setPathPickerOpen] = useState(false);
   /** `$` 技能 typeahead 候选源（当前项目合并视图，不走会话工作区）。 */
@@ -126,8 +131,10 @@ export function PromptEditorScreen() {
   /** `@` 路径 typeahead 候选源（会话工作区行）。 */
   const [typeaheadRows, setTypeaheadRows] = useState<WorkplaceListRow[]>([]);
 
-  /** typeahead/选择器可用：composer 变体且路由带齐 scope（旧调用方缺参时降级）。 */
-  const canTypeahead = isComposer && projectId != null && sessionId != null;
+  /** typeahead/选择器可用：composer 变体、路由带齐 scope 且 runtime 就绪
+   * （选择器内部走 useRuntime 会抛——未就绪时静默降级，旧调用方缺参同理）。 */
+  const canTypeahead =
+    isComposer && projectId != null && sessionId != null && runtime != null;
   const activeAt = canTypeahead ? findActiveAtQuery(draft, cursor) : null;
   const activeSkill = canTypeahead
     ? findActiveAtQuery(draft, cursor, '$')
@@ -407,13 +414,13 @@ export function PromptEditorScreen() {
                   onSelect={applySkillTypeaheadToken}
                 />
               </View>
-              {/* 底排动作行：@ / $ 同款 36 圆钮（与 ChatComposer 工具栏一致） */}
+              {/* 底排动作行：@ / $ 同款 36 圆钮（与 ChatComposer 工具栏同源单一样式） */}
               <View style={[styles.actionRow, {borderTopColor: tokens.border}]}>
                 <Pressable
                   testID="composer-editor-at-btn"
                   onPress={() => setPathPickerOpen(true)}
                   disabled={!canTypeahead}
-                  style={[styles.actionBtn, {borderColor: tokens.border}]}
+                  style={[composerToolBtnStyle, {borderColor: tokens.border}]}
                   accessibilityLabel="引用文件"
                 >
                   <Text style={{color: tokens.textSecondary, fontSize: 16}}>
@@ -424,7 +431,7 @@ export function PromptEditorScreen() {
                   testID="composer-editor-skill-btn"
                   onPress={() => setSkillPickerOpen(true)}
                   disabled={!canTypeahead}
-                  style={[styles.actionBtn, {borderColor: tokens.border}]}
+                  style={[composerToolBtnStyle, {borderColor: tokens.border}]}
                   accessibilityLabel="引用技能"
                 >
                   <Text style={{color: tokens.textSecondary, fontSize: 16}}>
@@ -443,7 +450,9 @@ export function PromptEditorScreen() {
           )
         }
       />
-      {isComposer && projectId != null && sessionId != null ? (
+      {/* 选择器挂载也看 runtime：其内部走 useRuntime()，未就绪渲染即抛——
+          与 canTypeahead 同源降级（按钮 disabled + 选择器不挂载）。 */}
+      {isComposer && projectId != null && sessionId != null && runtime != null ? (
         <>
           <FileReferencePicker
             visible={pathPickerOpen}
@@ -482,14 +491,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderTopWidth: StyleSheet.hairlineWidth,
-  },
-  /** 与 ChatComposer 的 toolBtn 同款：36 圆钮 + 细描边。 */
-  actionBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    borderWidth: StyleSheet.hairlineWidth,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
 });
