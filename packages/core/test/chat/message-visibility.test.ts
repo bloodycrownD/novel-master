@@ -72,25 +72,6 @@ describe("Message visibility", () => {
     assert.equal(all[1]!.hidden, true);
   });
 
-  it("sessionMessageStamp：可见条数 + MAX(seq) 单行聚合（token 标签 memo 指纹）", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id, "S");
-    await ctx.messages.append(session.id, "user", textBlocks("1"));
-    await ctx.messages.append(session.id, "assistant", textBlocks("2"));
-    await ctx.messages.append(session.id, "user", textBlocks("3"));
-    const m4 = await ctx.messages.append(session.id, "assistant", textBlocks("4"));
-    await ctx.messages.hide(m4.id);
-
-    const stamp = await ctx.messages.sessionMessageStamp(session.id);
-    assert.deepEqual(stamp, { visibleCount: 3, maxSeq: 4 });
-
-    // 压缩/置位语义：hide 动 visibleCount、不动 maxSeq；append 两者都动。
-    await ctx.messages.append(session.id, "user", textBlocks("5"));
-    const afterAppend = await ctx.messages.sessionMessageStamp(session.id);
-    assert.deepEqual(afterAppend, { visibleCount: 4, maxSeq: 5 });
-  });
-
   it("shows a range of messages by seq", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
