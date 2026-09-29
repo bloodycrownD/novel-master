@@ -4,7 +4,7 @@
 
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 
-import {Pressable, StyleSheet, Text, TextInput, View} from 'react-native';
+import {Pressable, StyleSheet, Text, View} from 'react-native';
 
 import Svg, {Path, Rect} from 'react-native-svg';
 
@@ -140,8 +140,8 @@ export function ChatComposer({
   const [skillRows, setSkillRows] = useState<EffectiveSkill[]>([]);
   /** 文件批注 store 变更时 bump，驱动 hasAnnotateDrafts 重算。 */
   const [annotateEpoch, setAnnotateEpoch] = useState(0);
-  const inputRef = useRef<TextInput>(null);
-  /** 程序化插入 @path tag 走 mentions 提交路径。 */
+  /** 程序化整段写入句柄：typeahead 点选 / 引用选择器插入统一走
+   * `replaceCommittedText`（单路径，见 commitComposerText）。 */
   const atPathInputRef = useRef<ComposerAtPathInputHandle>(null);
 
   const streamHandlersRef = useRef({
@@ -246,10 +246,10 @@ export function ChatComposer({
     [sessionId],
   );
 
-  /** 提交正文变更：mention 输入在位时整段写入（新 token 提成 mention），
-   * 纯文本 fallback 时同步 draft（只留状态 chip）与光标。
+  /** 提交正文变更：有输入壳时整段写入（web 侧纯文本 + 光标一次落位），
+   * 无壳时同步 draft（只留状态 chip）与光标。
    * mention:false 供 onChangeText 等回写路径使用——replaceCommittedText 会
-   * 回调 onChangeText，再走 mention 分支会无限递归。 */
+   * 回调 onChangeText，再走整段写入会无限递归。 */
   const commitComposerText = useCallback(
     (next: string, nextCursor?: number, opts?: {mention?: boolean}) => {
       if (opts?.mention !== false && atPathInputRef.current) {
@@ -428,12 +428,11 @@ export function ChatComposer({
     [activeAt, cursor, text, commitComposerText],
   );
 
+  /** `@` typeahead 点选：单路径整段写入（从活跃 `@` 起替换到光标）。
+   * WebView 化后无「提成 mention tag」概念——插入就是 plain 文本 + 尾空格，
+   * 高亮由 web 单引擎按 token 分段即时渲染。 */
   const applyTypeaheadToken = useCallback(
     (token: string) => {
-      // 优先 mentions onSelect；失败再整段 replaceCommittedText
-      if (atPathInputRef.current?.replaceActiveAt(token)) {
-        return;
-      }
       if (activeAt == null) {
         return;
       }
@@ -443,17 +442,18 @@ export function ChatComposer({
     [activeAt, cursor, text, commitComposerText],
   );
 
-  /** `$` typeahead 点选：插 `$技能名` token（mention tag + 尾空格）。 */
+  /** `$` typeahead 点选：插 `$技能名` token（同 `@` 单路径：plain + 尾空格）。 */
   const applySkillTypeaheadToken = useCallback(
     (skillName: string) => {
-      const token = `$${skillName}`;
-      if (atPathInputRef.current?.replaceActiveAt(token, 'skill')) {
-        return;
-      }
       if (activeSkill == null) {
         return;
       }
-      const next = buildTokenInsertion(text, cursor, activeSkill.start, token);
+      const next = buildTokenInsertion(
+        text,
+        cursor,
+        activeSkill.start,
+        `$${skillName}`,
+      );
       commitComposerText(next.text, next.cursor);
     },
     [activeSkill, cursor, text, commitComposerText],
@@ -579,11 +579,9 @@ export function ChatComposer({
         />
         <ComposerAtPathInput
           ref={atPathInputRef}
-          inputRef={inputRef}
           testID="chat-composer-input"
           style={styles.input}
           placeholder={inputPlaceholder}
-          placeholderTextColor={tokens.textSecondary}
           value={text}
           cursor={cursor}
           onChangeText={next => {

@@ -2,17 +2,16 @@
  * Mobile Composer 输入壳（chat 链）：props 面保持 main 版，内部换
  * `ComposerInputWebView`（单引擎 WebView 输入框，mode=composer-token）。
  *
- * main 版 controlled-mentions 全链（useMentions / nativeTruthRef 自愈对账 /
- * promotePlainMentions / replaceActiveAt 的 mention onSelect）随 WebView 化整体消失：
- * 高亮分段、原子删、选区真源都在 web 单引擎内（`composer-highlight` +
- * `atomic-range-delete` 进 web bundle），RN 侧只做 props ↔ 桥消息的搬运。
+ * main 版 mention 库全链（useMentions / nativeTruthRef 自愈对账 / promotePlainMentions
+ * / replaceActiveAt 的 onSelect）随 WebView 化整体消失：高亮分段、原子删、选区真源
+ * 都在 web 单引擎内（`composer-highlight` + `atomic-range-delete` 进 web bundle），
+ * RN 侧只做 props ↔ 桥消息的搬运。
+ * 失效 props（main 版 TextInput 引用 `inputRef`、占位色 `placeholderTextColor`）
+ * 已随单路径化删除：占位色由 web 主题驱动，程序化写入只有
+ * `replaceCommittedText` 一条路径。
  *
  * 对外口径不变：`value` / `onChangeText` 始终为展示 plain；`onSelectionChange`
  * 合成 RN 事件形状（`nativeEvent.selection.start`，ChatComposer 的 setCursor 链）。
- *
- * 失效但保留的 props（Step 7 与 ChatComposer 一并删除，现在删会打红 typecheck）：
- * `inputRef`（main 版 TextInput 引用，已无消费）、`placeholderTextColor`
- * （占位色改由 web 主题驱动）。
  */
 import React, {
   forwardRef,
@@ -104,21 +103,13 @@ function splitInputStyle(style: StyleProp<TextStyle>): {
 
 export type ComposerAtPathInputHandle = {
   /**
-   * 程序化整段写入（typeahead 点选 / 引用选择器插入）。
-   * 手输即时高亮后无「提升成 tag」概念：整段纯文本写入 + 光标一次落位。
+   * 程序化整段写入（typeahead 点选 / 引用选择器插入）。手输即时高亮后无「提升成
+   * tag」概念：整段纯文本写入 + 光标一次落位。
    */
   replaceCommittedText: (text: string, cursor?: number) => void;
-  /**
-   * @deprecated typeahead 点选已统一走 `replaceCommittedText` 单路径（本迭代口径）；
-   * 方法保留只为类型兼容（ChatComposer 的旧分支，Step 7 拆除）。恒返回 false，
-   * 调用方随即回落到 buildTokenInsertion + replaceCommittedText。
-   */
-  replaceActiveAt: (token: string, trigger?: 'atPath' | 'skill') => boolean;
 };
 
 export type ComposerAtPathInputProps = {
-  /** 已失效：main 版 TextInput 引用（Step 7 删）。 */
-  inputRef?: unknown;
   value: string;
   onChangeText: (text: string) => void;
   onSelectionChange?: (
@@ -126,8 +117,6 @@ export type ComposerAtPathInputProps = {
   ) => void;
   editable?: boolean;
   placeholder?: string;
-  /** 已失效：占位色由 web 主题驱动（Step 7 删）。 */
-  placeholderTextColor?: unknown;
   testID?: string;
   /** 与 ChatComposer 原 input 样式对齐：metrics 白名单键驱动 web，其余透传容器。 */
   style?: StyleProp<TextStyle>;
@@ -213,10 +202,6 @@ export const ComposerAtPathInput = forwardRef<
         // 草稿状态靠它同步）与合成选区事件（cursor 落位）。
         onChangeText(text);
         emitSelection(pos, pos);
-      },
-      replaceActiveAt() {
-        // 保留方法体：恒 false，调用方回落单路径（见类型注释）。
-        return false;
       },
     }),
     [emitSelection, onChangeText],
