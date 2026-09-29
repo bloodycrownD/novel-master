@@ -729,7 +729,8 @@ const styles = StyleSheet.create({
   },
   input: {
     minHeight: 56,
-    maxHeight: 160,
+    /* 5 行封顶（12 + 22×5）；原 160 是老 RN 输入框沿用值，偏高压屏。 */
+    maxHeight: 122,
     fontSize: 16,
     lineHeight: 22,
     paddingHorizontal: 4,

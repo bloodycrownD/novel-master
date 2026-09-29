@@ -240,6 +240,67 @@ describe('composer-at-path (T-ATD* / T-AT* / T-SC1)', () => {
     });
   });
 
+  it('打字回流（父层 value 回声）不被当成外部写入：不下发 setSelection，光标不被拽回', async () => {
+    // 真机实报症状：键盘输入时光标偶尔往回跳一两个字。
+    // 病根：web 上报的文本经父层写回 value 时，壳里没推进差分基线 → 被当成「外部
+    // 写入」→ 按上一拍的 cursor 强制摆一次选区，setSelectionRange 打在正在输入
+    // （尤其 IME 组合态）的 textarea 上就把光标拽回去。
+    clearMockWebViewPostMessages();
+    // 父层回声 + 故意把 cursor 留旧值（模拟 RN 状态滞后一拍）。
+    function Harness() {
+      const [text, setText] = React.useState('');
+      return (
+        <ComposerAtPathInput
+          value={text}
+          cursor={0}
+          onChangeText={next => setText(next)}
+        />
+      );
+    }
+    let tree!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(<Harness />);
+    });
+    const root = tree.root;
+    simulateWebReady(root);
+    await flush();
+
+    const typingBaseline = mockWebViewPostMessages.length;
+    simulateWebMessage(root, 'change', {text: '终于'});
+    await flush();
+    simulateWebMessage(root, 'change', {text: '终于写'});
+    await flush();
+
+    // 回声不算外部写入：全程零 setSelection（有它会打断 IME 组合态并拽光标）。
+    expect(hostTypesSince(typingBaseline)).not.toContain('setSelection');
+    expect(hostTypesSince(typingBaseline)).not.toContain('setText');
+    await act(async () => {
+      tree.unmount();
+    });
+  });
+
+  it('5 行封顶：默认 metrics 的 maxHeight = paddingV×2 + lineHeight×5（不再吃老 160）', async () => {
+    clearMockWebViewPostMessages();
+    let tree!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(
+        <ComposerAtPathInput value="" onChangeText={jest.fn()} />,
+      );
+    });
+    simulateWebReady(tree.root);
+    await flush();
+
+    const init = hostPayloadOfType(0, 'init') as {
+      metrics: {lineHeight: number; paddingV: number; maxHeight: number};
+    };
+    expect(init.metrics.maxHeight).toBe(
+      init.metrics.paddingV * 2 + init.metrics.lineHeight * 5,
+    );
+    await act(async () => {
+      tree.unmount();
+    });
+  });
+
   it('程序化 replaceCommittedText → setText{text, selection}，对外 plain 无 {@}', async () => {
     clearMockWebViewPostMessages();
     const handleRef = React.createRef<ComposerAtPathInputHandle>();

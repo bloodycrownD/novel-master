@@ -55,14 +55,14 @@ Object.defineProperty(Platform, 'OS', {
   get: () => 'android',
 });
 
-/** chat 壳（ComposerAtPathInput）的默认 metrics 组装口径。 */
+/** chat 壳（ComposerAtPathInput）的默认 metrics 组装口径（5 行封顶：12 + 22×5）。 */
 const CHAT_METRICS: ComposerInputMetrics = {
   fontSize: 16,
   lineHeight: 22,
   paddingH: 4,
   paddingV: 6,
   minHeight: 56,
-  maxHeight: 160,
+  maxHeight: 122,
 };
 
 type WebViewMockComponent = React.ComponentType<{

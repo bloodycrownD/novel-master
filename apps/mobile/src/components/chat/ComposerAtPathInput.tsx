@@ -39,14 +39,17 @@ import {
   type ComposerInputWebViewHandle,
 } from './ComposerInputWebView';
 
-/** chat 内联口径（与 main 版 TextInput 样式同值）：56 起、160 封顶后内滚。 */
+/**
+ * chat 内联口径（与 main 版 TextInput 样式同值，仅封顶下调）：56 起、**5 行封顶**
+ * 后内滚（12 + 22×5 = 122；原 160 是老 RN 输入框沿用的值，偏高压屏）。
+ */
 const DEFAULT_METRICS = {
   fontSize: 16,
   lineHeight: 22,
   paddingH: 4,
   paddingV: 6,
   minHeight: 56,
-  maxHeight: 160,
+  maxHeight: 122,
 } satisfies ComposerInputMetrics;
 
 /** style 中由 metrics 消费的键；其余键原样透传给容器。 */
@@ -176,6 +179,22 @@ export const ComposerAtPathInput = forwardRef<
     [emitSelection],
   );
 
+  /**
+   * web 上报的文本就是打字真源：**先把差分基线推进再上抛**。
+   *
+   * 不推进的话，父层把文本原样写回 `value` 时会被下面那条 effect 误判成「外部写入」，
+   * 于是按上一拍的 `cursor` 强制摆一次选区——`setSelectionRange` 打在正在输入（尤其
+   * IME 组合态）的 textarea 上会把光标拽回去一两个字（真机实报症状）。程序化写入
+   * （replaceCommittedText）自带基线推进，不经过这里。
+   */
+  const handleWebChangeText = useCallback(
+    (next: string) => {
+      lastValueRef.current = next;
+      onChangeText(next);
+    },
+    [onChangeText],
+  );
+
   // 外部 value 变化（草稿水化 / 发送清空 / 全屏回填）：光标期望对齐 cursor 后随
   // setText 下发；选区期望由 selection prop 走宿主受控通道（web 上报即解除）。
   useEffect(() => {
@@ -214,7 +233,7 @@ export const ComposerAtPathInput = forwardRef<
       testID={testID}
       style={container}
       value={value}
-      onChangeText={onChangeText}
+      onChangeText={handleWebChangeText}
       onSelectionChange={handleSelectionChange}
       disabled={!editable}
       selection={pendingSelection}
