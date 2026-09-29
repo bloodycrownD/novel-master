@@ -136,3 +136,26 @@ dist 重建、真机已重启载新码。**教训**：assistant 落库与回锚�
 此前靠「append 即失效 + 下一步回锚」掩盖，统计优先把窗口暴露给了 UI
 刷新路径——改失效语义时必须把 UI 事件时序（STEP_COMMITTED assistant
 相位）一并考虑。
+
+## 追加轮：切模型重算 7~8s → 首帧估算 + 后台精确升级（27bd59b2）
+
+用户复验：切模型后 token 重算体感 7~8s。对账：切模型失效 API 基线
+（占用值模型绑定，必须按新词表重数）→ chip 首帧与下一步压缩评估都跌
+本地分支 → glm 原生整串 ~5.8s + 组装 ~1s。计算没变慢，是**挡在交互路径
+上**。三件落地：
+
+1. **读口 `preferEstimate`**：本地分支不做真分词器计数——序列化 +
+   `max(registry heuristic, estimateTokensCjkAware)` 即回（不调驱动、
+   不进 L1/L2、不推代际）。新增 CJK 感知廉价估算器
+   （CJK×1.64 + 其余÷3.35；/3.35 对中文低估八成、0.85 系数兜不住，
+   先例=mock 上报的 CJK 感知口径）。
+2. **压缩评估估算优先**：无统计时估算+0.85 保守系数，run 永不为本地
+   计数阻塞（否则切模型后首个 step 卡 5.8s）。
+3. **双端 chip 两阶段**：mobile 首帧估算即显（gpt ≈）→ 后台家族真分词
+   器算完经 onPreciseUpgrade 回调升级（glm = 稍后到位）+ 暖 L1；
+   desktop 首帧估算 + 后台暖 L1（renderer 下次触发即精确）。api 命中
+   不受影响（仍精确直返）。
+
+测试：core 定向（trigger/resolve/估算器）+ 全量 2939/2941（仅时区基线
+2 例）+ tsc 干净；mobile 10+6（chat-prompt-tokens 含两条两阶段新用例）；
+desktop 8。dist 重建、真机已载。
