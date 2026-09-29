@@ -11,6 +11,9 @@
  * `save` 可不传：**无「保存」概念的编辑器**（chat 输入框全屏——文本要的只是
  * 退出即回填，不是显式落盘）不渲染左位按钮，标题居中口径与既有「只读文件
  * 编辑无右位切换」同款（单侧动作时标题框自然偏侧）。
+ *
+ * 预览三件套（`toggle` / `segmented` / `previewMode`+`preview`）全部可选：
+ * 都不传 = **纯编辑态**（chat 输入框全屏就只要编辑），不渲染右侧切换与档位条。
  */
 import React from 'react';
 import {Platform, Pressable, StyleSheet, Text, View} from 'react-native';
@@ -54,14 +57,16 @@ export type EditorScreenShellProps<T extends string> = {
   };
   /** toolbar 与 SegmentedControl 之间的附加行（如更新时间/字数统计）。 */
   toolbarExtra?: React.ReactNode;
-  /** 预览态渲染档位（markdown/文本），两屏共用同一组选项。 */
-  segmented: {
+  /** 预览态渲染档位（markdown/文本），两屏共用同一组选项；纯编辑态可不传。 */
+  segmented?: {
     options: readonly SegmentOption<T>[];
     value: T;
     onChange: (value: T) => void;
   };
-  previewMode: boolean;
-  preview: React.ReactNode;
+  /** 缺省 false = 纯编辑态（不渲染预览区，见下方 preview 说明）。 */
+  previewMode?: boolean;
+  /** 预览内容；与 `previewMode` 一起提供才渲染预览分支。 */
+  preview?: React.ReactNode;
   editor: React.ReactNode;
 };
 
@@ -158,7 +163,7 @@ export function EditorScreenShell<T extends string>({
         ) : null}
       </View>
       {toolbarExtra}
-      {previewMode ? (
+      {previewMode && segmented ? (
         <SegmentedControl
           options={segmented.options}
           value={segmented.value}

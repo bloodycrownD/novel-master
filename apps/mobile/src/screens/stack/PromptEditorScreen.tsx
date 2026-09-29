@@ -1,22 +1,24 @@
 /**
  * 全屏编辑页：智能体配置的提示词字段（R3→R6 起）与 chat 输入框全屏
- * （composer-webview 起）共用的同一个编辑屏——顶栏完全照搬工作区
- * FileEditorScreen：左「保存」+ 中 标题/「未保存」+ 右「编辑/预览」单按钮互切。
+ * （composer-webview 起）共用的同一个编辑屏——顶栏照搬工作区
+ * FileEditorScreen：左「保存」+ 中 标题/「未保存」+ 右「编辑/预览」单按钮互切
+ * （切换与预览**只属于 form 变体**，见下）。
  *
  * 两个变体由 `route.params.variant` 决定：
  * - `form`（缺省，提示词字段）：保存语义同工作区——保存后停留在当前态、清除
  *   未保存标记、toast 提示；区别在于没有 VFS 写入，保存只发 onSaved 回调
  *   （回填调用方表单）。退出走 header 返回/手势，未保存改动由 useUnsavedGuard
- *   弹确认拦截（与工作区同款），确认离开即丢弃草稿。
- * - `composer`（chat 输入框 ⛶）：没有「保存」概念——这块文本本来就是输入框
- *   内容，**退出即回填**（卸载时发 onSaved），所以不渲染左位保存按钮、也不拦
- *   退出（无「丢掉」可言）。进全屏前调用方已把当前文本交进来，退出后原样回到
- *   输入框。
+ *   弹确认拦截（与工作区同款），确认离开即丢弃草稿。预览按 markdown 渲染
+ *   （FileMarkdownPreview 只吃内存 content，不涉及 VFS 读写）。
+ * - `composer`（chat 输入框 ⛶）：**纯编辑态**——用户定案「输入框全屏只要编辑」
+ *   （2026-09-29），不传 toggle/segmented/preview，也没有「保存」概念：这块文本
+ *   本来就是输入框内容，**退出即回填**（卸载时发 onSaved），所以不渲染左位保存
+ *   按钮、也不拦退出（无「丢掉」可言）。进全屏前调用方已把当前文本交进来，退出
+ *   后原样回到输入框。
  *
  * 编辑区一律是 CodeEditorWebView（与工作区文件编辑同组件）；伪路径 prompt.md
- * 让编辑器按 markdown 高亮、预览走 markdown 渲染（FileMarkdownPreview 只吃
- * 内存 content，不涉及 VFS 读写）。回调不走路由参数（不可序列化），挂载时从
- * 模块级存取取走（读后即清）。顶栏/预览二态/键盘三分支外壳由
+ * 让编辑器按 markdown 高亮。回调不走路由参数（不可序列化），挂载时从模块级
+ * 存取取走（读后即清）。顶栏/预览二态/键盘三分支外壳由
  * components/chrome/EditorScreenShell 统一提供（与工作区 FileEditorScreen 共用）。
  */
 import React, {useCallback, useEffect, useRef, useState} from 'react';
@@ -142,29 +144,41 @@ export function PromptEditorScreen() {
         isDirty && !isComposer ? '未保存' : title ?? DEFAULT_TITLES[variant]
       }
       titleDanger={isDirty && !isComposer}
-      toggle={{
-        testID: 'prompt-editor-toggle',
-        accessibilityLabel: previewMode ? '编辑' : '预览',
-        previewMode,
-        onPress: togglePreview,
-      }}
-      segmented={{
-        options: [
-          {value: 'markdown', label: 'Markdown'},
-          {value: 'txt', label: '文本'},
-        ],
-        value: previewRenderKind,
-        onChange: setPreviewRenderKind,
-      }}
-      previewMode={previewMode}
+      /* composer 变体是**纯编辑态**（用户定案：输入框全屏只要编辑，不要预览）：
+         不传 toggle / segmented / preview，shell 只渲染 toolbar + 编辑器。 */
+      toggle={
+        isComposer
+          ? undefined
+          : {
+              testID: 'prompt-editor-toggle',
+              accessibilityLabel: previewMode ? '编辑' : '预览',
+              previewMode,
+              onPress: togglePreview,
+            }
+      }
+      segmented={
+        isComposer
+          ? undefined
+          : {
+              options: [
+                {value: 'markdown', label: 'Markdown'},
+                {value: 'txt', label: '文本'},
+              ],
+              value: previewRenderKind,
+              onChange: setPreviewRenderKind,
+            }
+      }
+      previewMode={isComposer ? false : previewMode}
       preview={
-        <FileMarkdownPreview
-          path={PROMPT_EDITOR_PATH}
-          content={draft}
-          tokens={tokens}
-          previewFill
-          renderKind={previewRenderKind}
-        />
+        isComposer ? undefined : (
+          <FileMarkdownPreview
+            path={PROMPT_EDITOR_PATH}
+            content={draft}
+            tokens={tokens}
+            previewFill
+            renderKind={previewRenderKind}
+          />
+        )
       }
       editor={
         <CodeEditorWebView

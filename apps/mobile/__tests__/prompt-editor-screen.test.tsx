@@ -416,26 +416,32 @@ describe('PromptEditorScreen composer 变体（chat 输入框全屏）', () => {
     expect(onSaved).toHaveBeenCalledWith('全屏里改的文本');
   });
 
-  it('编辑/预览互切与提示词字段同款：预览吃当前草稿、md 伪路径、可切文本档', () => {
+  it('纯编辑态：无预览切换、无档位条、不挂预览组件，编辑器恒在场', () => {
     mockRoute.params = {initialText: '初稿', variant: 'composer'};
     const tree = renderScreen();
     act(() => {
       mockEditorProps[0]!.onChange('# 全屏草稿');
     });
 
-    pressToggle(tree);
-    expect(mockPreviewProps[0]!.content).toBe('# 全屏草稿');
-    expect(mockPreviewProps[0]!.path).toBe('prompt.md');
-    expect(mockPreviewProps[0]!.previewFill).toBe(true);
-    expect(mockSegmentedProps[0]!.value).toBe('markdown');
-    act(() => {
-      mockSegmentedProps[0]!.onChange('txt');
-    });
-    expect(mockPreviewProps[0]!.renderKind).toBe('txt');
-
-    // 切回编辑：草稿不丢。
-    pressToggle(tree);
+    // 用户定案「输入框全屏只要编辑」：右侧切换、Markdown/文本 档位条、预览都不渲染。
+    expect(
+      tree.root.findAllByProps({testID: 'prompt-editor-toggle'}),
+    ).toHaveLength(0);
+    expect(mockSegmentedProps[0]).toBeUndefined();
+    expect(mockPreviewProps[0]).toBeUndefined();
+    // 编辑器恒在场且草稿保留（没有切换态，也就没有切回来的问题）。
     expect(mockEditorProps[0]!.value).toBe('# 全屏草稿');
+    expect(mockEditorProps[0]!.path).toBe('prompt.md');
+  });
+
+  it('form 变体不受影响：右侧「预览」切换仍在（对照断言）', () => {
+    mockRoute.params = {initialText: '初稿'};
+    const tree = renderScreen();
+    expect(
+      tree.root.findAllByProps({testID: 'prompt-editor-toggle'}).length,
+    ).toBeGreaterThan(0);
+    pressToggle(tree);
+    expect(mockPreviewProps[0]!.content).toBe('初稿');
   });
 
   it('未 set 回调时退出不抛错（回调缺失＝原文本不动）', () => {
