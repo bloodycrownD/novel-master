@@ -32,7 +32,10 @@ function buildExtensions(path: string): Extension[] {
     EditorView.updateListener.of(update => {
       // 选区上报（typeahead 的活跃查询判定在 RN 侧，需要光标位置）。
       // 程序化 setSelection 的回声也走这里：宿主侧同值去重，无回环风险。
-      if (update.selectionSet) {
+      // 仅 composer 伪路径上报（capsule/B-1）：胶囊扩展本就只挂该路径，选区上报
+      // 与它同源同门。文件编辑不消费 selectionChange（无 onSelectionChange 消费方），
+      // 无条件上报等于每步打字都白跨一次桥。
+      if (update.selectionSet && composerTokenEnabled(currentPath)) {
         const sel = update.state.selection.main;
         post('selectionChange', {start: sel.from, end: sel.to});
       }
@@ -138,7 +141,13 @@ export function mountEditor(
     state: EditorState.create({
       doc: text,
       extensions: buildExtensions(path),
-      selection: selectionSpec(text, selection),
+      // 缺省选区按路径分流（capsule/B-3）：composer 伪路径默认落文末——全屏进屏
+      // 不点编辑器直接按 @/$ 时，token 要插在草稿末尾而不是整篇开头（RN 侧
+      // cursor 初值同步落文末，见 PromptEditorScreen）。
+      // 文件编辑保持现状（不传 selection → CM 落 0），「文件编辑也落文末」待拍板。
+      selection:
+        selectionSpec(text, selection) ??
+        (composerTokenEnabled(path) ? {anchor: text.length} : undefined),
     }),
     parent,
   });

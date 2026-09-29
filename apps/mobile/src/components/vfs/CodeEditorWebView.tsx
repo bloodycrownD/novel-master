@@ -60,6 +60,9 @@ function themeFromTokens(tokens: ThemeTokens): CodeEditorTheme {
     text: tokens.text,
     textSecondary: tokens.textSecondary,
     primary: tokens.primary,
+    // 胶囊底色由宿主派生下发（capsule/C-orch-1）：与 composer-input 同口径的
+    // primary + 0x22 alpha，web 侧 applyHostTheme 条件式写入 --primary-muted。
+    primaryMuted: `${tokens.primary}22`,
     surface: tokens.surface,
     borderLight: tokens.borderLight,
   };

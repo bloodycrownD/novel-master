@@ -14,6 +14,12 @@ export type CodeEditorTheme = {
   readonly text: string;
   readonly textSecondary: string;
   readonly primary: string;
+  /**
+   * primary 的低透明派生（胶囊底色 --primary-muted）。宿主算色、口径与
+   * composer-input 一致（capsule/C-orch-1）：web 侧只做条件式写入，不自拼 alpha。
+   * 可选——缺省不写入，由 web 侧 CSS 兜底。
+   */
+  readonly primaryMuted?: string;
   readonly surface: string;
   readonly borderLight: string;
 };
