@@ -80,3 +80,34 @@ workplace 进程内读缓存之外，重组装 miss 路径的主要剩余成本�
   token-perf.md 当轮记录）：清理测试会话时坐标复用 + 盲点确认框连删，误删
   新会话4/5/6 三条真实会话（37 条消息）；恢复源 = 事发前 force-stop 状态的
   整库副本（quick_check ok），等待用户拍板整库还原。
+
+## 追加轮：统计优先口径——压缩评估/压后刷新不再实时整串计数（4f0a0eeb）
+
+用户拍板（2026-09-29）：「无论是 usage 还是本地，就像 metric 一样，有哪个
+就用哪个；已经有上下文统计了才进行压缩」。此前的问题实锤：每 step 的
+`result.usage.promptTokens` 在 step 循环里就拿到了，却只在 run **结束**且
+completed 才写回；而消息一追加就失效旧值——于是 run 内每 step 的压缩评估、
+压后刷新全都跌进本地整串计数（glm 原生大上下文单次 ~5.8s）。四件落地：
+
+1. **每 step usage 回锚**（agent-runner）：请求完成后在本 step 全部消息
+   落库之后回锚（两 chokepoint：完成/空回复分支 + tool_results 落库后），
+   `anchorSeq` = 提示词末条消息 seq；run 内下一步评估与 chip 刷新直接命中
+   api 档零计数。run 末终值写沿用最后锚点；非 completed 收尾失效语义不动
+   （T-T5 系列）。
+2. **读口 api 命中 = 基线 + 增量估算**：锚点后追加的消息按 heuristic 折算
+   加回（`formatChatMessageForCliPreview` 序列化；metric 基线+增量同款，
+   RULE「实时 token 指标语义」先例）。增量本体小（一步的 assistant +
+   tool_results 或一条新 user 消息），heuristic 低估被基线精确性兜底，下一
+   次 usage 即覆盖。
+3. **读口本地 miss 强制估算档**：WEB/SP 家族（glm/qwen2/gemma/claude…）
+   强制 `tokenizerOverride:"tiktoken"` 走 cl100k 分块估算（JS 侧，L1/L2
+   缓存照常），如实标 `estimated:true`（标签 `gpt ≈`）；tiktoken/heuristic
+   档不强制。家族真分词器精确计数只留给 CLI 直调驱动。**口径后果**：本地
+   `glm =` 档不再实时出现（仅存量 L1 持久化命中时可见），日常显示为
+   `远程 =`（api）或 `gpt ≈`（估算）。
+4. **触发器保守系数扩到 `estimated:true`**：估算档（含强制 cl100k 档）一律
+   乘 0.85 安全系数，与 heuristic 档同待遇。
+
+测试：core 全量 2925/2927（仅既有 usage-stats 时区 2 例）+ typecheck 干净；
+mobile 35、desktop 9 定向全绿。顺手修 `createMemorySessionKkv` 缺
+`getMany` 的存量红（c6d28a62 遗留，T-WT16 两例当场红、helper 补齐即绿）。
