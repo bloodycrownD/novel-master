@@ -1,7 +1,7 @@
 import React from 'react';
 import {describe, expect, it, jest} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
-import {Alert, TextInput} from 'react-native';
+import {Alert} from 'react-native';
 
 jest.mock('../src/errors/format-error', () => ({
   formatError: (err: unknown) => String(err),
@@ -46,6 +46,30 @@ jest.mock('../src/components/chat/FileReferencePicker', () => ({
 jest.mock('../src/components/skills/SkillPicker', () => ({
   SkillPicker: () => null,
 }));
+
+// T-INT：捕获两个 typeahead 的 onSelect，驱动「点选 → 单路径整段写入」护栏。
+// （组件本体改由 mock 捕获；候选过滤等纯函数走 SkillTypeahead 的其余导出。）
+const mockAtPathTypeaheadProps: {onSelect?: (token: string) => void} = {};
+jest.mock('../src/components/chat/AtPathTypeahead', () => ({
+  AtPathTypeahead: (props: {onSelect: (token: string) => void}) => {
+    mockAtPathTypeaheadProps.onSelect = props.onSelect;
+    return null;
+  },
+}));
+
+const mockSkillTypeaheadProps: {onSelect?: (name: string) => void} = {};
+jest.mock('../src/components/chat/SkillTypeahead', () => {
+  const actual = jest.requireActual(
+    '../src/components/chat/SkillTypeahead',
+  ) as Record<string, unknown>;
+  return {
+    ...actual,
+    SkillTypeahead: (props: {onSelect: (name: string) => void}) => {
+      mockSkillTypeaheadProps.onSelect = props.onSelect;
+      return null;
+    },
+  };
+});
 
 jest.mock('../src/components/chat/AttachmentDraftChips', () => {
   const actual = jest.requireActual(
@@ -110,9 +134,14 @@ import {serializeComposerDraftJson} from '@novel-master/core/chat';
 import {ChatComposer} from '../src/components/chat/ChatComposer';
 import {ComposerAtPathInput} from '../src/components/chat/ComposerAtPathInput';
 import {
-  formatAtPathMentionMarkup,
-  mentionValueToPlain,
-} from '../src/components/chat/composer-at-path-mention';
+  COMPOSER_INPUT_BRIDGE_VERSION,
+  decodeHostToComposerInput,
+  type HostToComposerInputMessage,
+} from '../src/components/chat/ComposerInputBridge';
+import {
+  clearMockWebViewPostMessages,
+  mockWebViewPostMessages,
+} from '../test-utils/react-native-webview-mock';
 import {SessionStreamUnitManager} from '../src/services/session-stream-unit-manager.service';
 import {
   isMobileAgentActive,
@@ -213,30 +242,75 @@ function Harness(props: {
 }
 
 /**
- * 定位 ComposerAtPathInput 内部的原生 TextInput（mention 库的 handleChangeText
- * 挂在该节点上）。注意：按 testID 直接 find 会命中外层 ComposerAtPathInput
- * 组件自身的 props（同名 testID），绕过 mention 层，故先按类型再按 testID 过滤。
+ * 找 composer 宿主（WebView 化后输入驱动入口）。
+ *
+ * 判据用 `source.uri`：composer 宿主的 URI 走 composer-input 包
+ * （`.../webview/composer-input/index.html`），transcript 宿主是另一个包——
+ * 页面里并存多个 WebView 时按包名区分，不用「第几个」这种位置判据。
  */
-function findNativeComposerInput(
-  root: TestRenderer.ReactTestRenderer,
+function findComposerWebView(
+  root: TestRenderer.ReactTestInstance,
 ): TestRenderer.ReactTestInstance {
-  return root.root
-    .findAllByType(TextInput)
-    .find(node => node.props?.testID === 'chat-composer-input')!;
+  const WebViewMock = require('react-native-webview')
+    .default as React.ComponentType<unknown>;
+  const node = root
+    .findAllByType(WebViewMock)
+    .find(instance =>
+      String(instance.props?.source?.uri ?? '').includes('composer-input'),
+    );
+  if (node == null) {
+    throw new Error('composer WebView 未挂载');
+  }
+  return node;
 }
 
-/**
- * ComposerAtPathInput 的回推 children：mention 库按 part 渲染的 plain 投影段。
- * 内部为纯文本时只有一段；mention 幸存时按 part 边界分段（tag 段独立成段）。
- */
-function composerChildrenPartTexts(
-  input: TestRenderer.ReactTestInstance,
-): string[] {
-  const wrapper = input.props.children as {props: {children: unknown}};
-  const partEls = Array.isArray(wrapper.props.children)
-    ? (wrapper.props.children as {props: {children: unknown}}[])
-    : [wrapper];
-  return partEls.map(part => String(part.props.children));
+/** 模拟 web → host 上报（信封 v 取本包 BRIDGE_V）。 */
+function simulateWebMessage(
+  root: TestRenderer.ReactTestInstance,
+  type: string,
+  payload: Record<string, unknown> = {},
+): void {
+  const webView = findComposerWebView(root);
+  act(() => {
+    webView.props.onMessage?.({
+      nativeEvent: {
+        data: JSON.stringify({v: COMPOSER_INPUT_BRIDGE_VERSION, type, payload}),
+      },
+    });
+  });
+}
+
+/** chat 壳实例：对外 value / cursor 的观察点（ChatComposer 受控下传）。 */
+function composerShell(
+  root: TestRenderer.ReactTestInstance,
+): TestRenderer.ReactTestInstance {
+  return root.findByType(ComposerAtPathInput);
+}
+
+function hostMessagesFrom(clearAfterIndex: number): HostToComposerInputMessage[] {
+  return mockWebViewPostMessages
+    .slice(clearAfterIndex)
+    .map(raw => decodeHostToComposerInput(raw));
+}
+
+function hostTypesSince(clearAfterIndex: number): string[] {
+  return hostMessagesFrom(clearAfterIndex).map(message => message.type);
+}
+
+function hostPayloadOfType(clearAfterIndex: number, type: string): unknown {
+  const found = hostMessagesFrom(clearAfterIndex).find(
+    message => message.type === type,
+  );
+  return found == null ? null : found.payload;
+}
+
+/** 冲净 effect 与异步批（real timers）。 */
+async function flush(): Promise<void> {
+  await act(async () => {
+    await new Promise<void>(resolve => {
+      setTimeout(resolve, 0);
+    });
+  });
 }
 
 describe('ChatComposer integration', () => {
@@ -250,6 +324,7 @@ describe('ChatComposer integration', () => {
     mockProjectComposerStatus.mockResolvedValue([]);
     clearChatComposerDraft('s');
     resetChatAnnotateDraftStoreForTests();
+    clearMockWebViewPostMessages();
     harnessEventBus = undefined;
     harnessManager?.dispose();
     harnessManager = undefined;
@@ -320,13 +395,10 @@ describe('ChatComposer integration', () => {
     await act(async () => {
       tree = TestRenderer.create(<Harness canResumeWithoutInput={true} />);
     });
-    const input = (tree as TestRenderer.ReactTestRenderer).root.find(
-      node => node.props?.testID === 'chat-composer-input',
-    );
-    await act(async () => {
-      input.props.onChangeText('first');
-    });
-    const sendBtn = (tree as TestRenderer.ReactTestRenderer).root.find(
+    const root = (tree as TestRenderer.ReactTestRenderer).root;
+    // 输入驱动走桥协议：web 侧自持真源，change 上报 plain 文本。
+    simulateWebMessage(root, 'change', {text: 'first'});
+    const sendBtn = root.find(
       node => node.props?.accessibilityLabel === '发送',
     );
     await act(async () => {
@@ -335,9 +407,7 @@ describe('ChatComposer integration', () => {
     expect(mockRunAgentTurn).toHaveBeenCalledTimes(1);
 
     // 第一个 run 仍 in-flight（entry 处 starting）：第二次发送被拒、不再调 run
-    await act(async () => {
-      input.props.onChangeText('second');
-    });
+    simulateWebMessage(root, 'change', {text: 'second'});
     await act(async () => {
       sendBtn.props.onPress();
     });
@@ -381,10 +451,8 @@ describe('ChatComposer integration', () => {
         <Harness canResumeWithoutInput={false} draftRestoreToken={0} />,
       );
     });
-    const input = (tree as TestRenderer.ReactTestRenderer).root.find(
-      node => node.props?.testID === 'chat-composer-input',
-    );
-    expect(input.props.value).toBe('restored text');
+    const root = (tree as TestRenderer.ReactTestRenderer).root;
+    expect(composerShell(root).props.value).toBe('restored text');
 
     mockGetComposerDraftJson.mockResolvedValue(
       serializeComposerDraftJson({
@@ -398,7 +466,7 @@ describe('ChatComposer integration', () => {
         <Harness canResumeWithoutInput={false} draftRestoreToken={1} />,
       );
     });
-    expect(input.props.value).toBe('after rollback');
+    expect(composerShell(root).props.value).toBe('after rollback');
     await act(async () => {
       (tree as TestRenderer.ReactTestRenderer).unmount();
     });
@@ -412,13 +480,9 @@ describe('ChatComposer integration', () => {
     await act(async () => {
       tree = TestRenderer.create(<Harness canResumeWithoutInput={false} />);
     });
-    const input = (tree as TestRenderer.ReactTestRenderer).root.find(
-      node => node.props?.testID === 'chat-composer-input',
-    );
-    await act(async () => {
-      input.props.onChangeText('after tool result');
-    });
-    const sendBtn = (tree as TestRenderer.ReactTestRenderer).root.find(
+    const root = (tree as TestRenderer.ReactTestRenderer).root;
+    simulateWebMessage(root, 'change', {text: 'after tool result'});
+    const sendBtn = root.find(
       node => node.props?.accessibilityLabel === '发送',
     );
     await act(async () => {
@@ -478,12 +542,8 @@ describe('ChatComposer integration', () => {
     await act(async () => {
       tree = TestRenderer.create(<Harness canResumeWithoutInput={false} />);
     });
-    const input = (tree as TestRenderer.ReactTestRenderer).root.find(
-      node => node.props?.testID === 'chat-composer-input',
-    );
-    await act(async () => {
-      input.props.onChangeText('hello');
-    });
+    const root = (tree as TestRenderer.ReactTestRenderer).root;
+    simulateWebMessage(root, 'change', {text: 'hello'});
     addChatAnnotateDraft('s', {
       name: '/a.md',
       start: 0,
@@ -498,13 +558,13 @@ describe('ChatComposer integration', () => {
         return new Promise(() => undefined);
       },
     );
-    const sendBtn = (tree as TestRenderer.ReactTestRenderer).root.find(
+    const sendBtn = root.find(
       node => node.props?.accessibilityLabel === '发送',
     );
     await act(async () => {
       sendBtn.props.onPress();
     });
-    expect(input.props.value).toBe('');
+    expect(composerShell(root).props.value).toBe('');
     expect(listChatAnnotateDrafts('s')).toHaveLength(0);
     await act(async () => {
       (tree as TestRenderer.ReactTestRenderer).unmount();
@@ -516,20 +576,16 @@ describe('ChatComposer integration', () => {
     await act(async () => {
       tree = TestRenderer.create(<Harness canResumeWithoutInput={false} />);
     });
-    const input = (tree as TestRenderer.ReactTestRenderer).root.find(
-      node => node.props?.testID === 'chat-composer-input',
-    );
-    await act(async () => {
-      input.props.onChangeText('keep me');
-    });
+    const root = (tree as TestRenderer.ReactTestRenderer).root;
+    simulateWebMessage(root, 'change', {text: 'keep me'});
     mockRunAgentTurn.mockImplementationOnce(() => new Promise(() => undefined));
-    const sendBtn = (tree as TestRenderer.ReactTestRenderer).root.find(
+    const sendBtn = root.find(
       node => node.props?.accessibilityLabel === '发送',
     );
     await act(async () => {
       sendBtn.props.onPress();
     });
-    expect(input.props.value).toBe('keep me');
+    expect(composerShell(root).props.value).toBe('keep me');
     await act(async () => {
       (tree as TestRenderer.ReactTestRenderer).unmount();
     });
@@ -546,19 +602,15 @@ describe('ChatComposer integration', () => {
         />,
       );
     });
-    const input = (tree as TestRenderer.ReactTestRenderer).root.find(
-      node => node.props?.testID === 'chat-composer-input',
-    );
-    await act(async () => {
-      input.props.onChangeText('hi');
-    });
+    const root = (tree as TestRenderer.ReactTestRenderer).root;
+    simulateWebMessage(root, 'change', {text: 'hi'});
     mockRunAgentTurn.mockImplementationOnce(
       async (_rt: unknown, _scope: unknown, _content: string, options: any) => {
         options?.onUserMessageAppended?.();
         return new Promise(() => undefined);
       },
     );
-    const sendBtn = (tree as TestRenderer.ReactTestRenderer).root.find(
+    const sendBtn = root.find(
       node => node.props?.accessibilityLabel === '发送',
     );
     await act(async () => {
@@ -732,88 +784,192 @@ describe('ChatComposer integration', () => {
     });
   });
 
-  it('T-CR4①: 库重建值 ≠ 原生上报时自愈回原生文本', async () => {
-    // 回归护栏（2026-09 输入变删除案）：emitMentionValue 对账——库差分重建
-    // 结果与原生上报不等时以原生文本为准（resolved=truth，一次消费即清空）。
+  it('T-CR4①: 程序化整段写入 → 续打只认 web 上报的 plain、宿主不回写', async () => {
+    // 回归护栏（2026-09 输入变删除案 / v1.5.9 防线）的协议版：程序化写入
+    // （选择器 → replaceCommittedText）之后用户续打，value 必须与 web 上报严格
+    // 相等（plain、不丢 token），且 change 上报绝不触发 setText 回写——回写会
+    // 打断 IME 组合态。
     let tree!: TestRenderer.ReactTestRenderer;
     await act(async () => {
       tree = TestRenderer.create(<Harness canResumeWithoutInput={false} />);
     });
     const root = tree.root;
-    const input = findNativeComposerInput(tree);
+    simulateWebMessage(root, 'ready', {version: COMPOSER_INPUT_BRIDGE_VERSION});
+    await flush();
 
-    // 构造不等分支：先程序化写入 @/a.md——内部 mentionValue 为 markup 形态
-    // （children 分段可见 tag 段），库重建必然把幸存 mention 映射回 markup
-    // （getValueFromParts → data.original），与下面的 plain 原生上报必然不等。
+    // 程序化写入：@ 选择器确认 → buildTokenInsertion + replaceCommittedText
+    // （单路径）→ 宿主 setText{text, selection} 一次落位。
+    const writeBaseline = mockWebViewPostMessages.length;
     await act(async () => {
       mockFilePickerProps.onConfirm!(['@/a.md']);
     });
-    expect(readChatComposerDraftState('s').text).toBe('@/a.md ');
-    expect(composerChildrenPartTexts(input)).toEqual(['@/a.md', ' ']);
-
-    // 模拟原生上报：native 侧内容为 plain 投影 + 用户续打（真实库在测试环境
-    // 不主动吃字，不等分支由「内部 markup ↔ 上报 plain」构造）。
-    const nativeReport = '@/a.md 查一下';
-    await act(async () => {
-      input.props.onChangeText(nativeReport);
+    expect(hostPayloadOfType(writeBaseline, 'setText')).toEqual({
+      text: '@/a.md ',
+      selectionStart: 7,
+      selectionEnd: 7,
     });
+    expect(readChatComposerDraftState('s').text).toBe('@/a.md ');
 
-    // 对外 onChangeText 最终收到 mentionValueToPlain(原生上报)，受控 value 同步
-    expect(readChatComposerDraftState('s').text).toBe(
-      mentionValueToPlain(nativeReport),
-    );
-    expect(root.findByType(ComposerAtPathInput).props.value).toBe(
-      mentionValueToPlain(nativeReport),
-    );
-    // 对账在 plain 空间比较：库重建（markup）的 plain 投影与原生上报一致，
-    // 不触发自愈、直接采用库值——@/a.md tag 幸存（v1.5.9 回归：旧对账拿
-    // markup 与 plain 比较恒不等 → resolved=truth → tag 必死）。
-    expect(composerChildrenPartTexts(input)).toEqual(['@/a.md', ' 查一下']);
+    // 模拟 web 续打上报：plain 投影 + 新字（markup 从不进 web textarea）。
+    const report = '@/a.md 查一下';
+    const changeBaseline = mockWebViewPostMessages.length;
+    simulateWebMessage(root, 'change', {text: report});
+    await flush();
+
+    // 对外 value 与 web 上报严格相等（plain），draft 同步。
+    expect(composerShell(root).props.value).toBe(report);
+    expect(readChatComposerDraftState('s').text).toBe(report);
+    expect(report.includes('{@}')).toBe(false);
+    // 打字不回写：change 之后不得有 setText（web 自持真源）。
+    expect(hostTypesSince(changeBaseline)).not.toContain('setText');
     await act(async () => {
       tree.unmount();
     });
   });
 
-  it('T-CR4②: 对账后 truth 已清空——后续程序化写入不被陈旧 truth 覆盖', async () => {
+  it('T-CR4②: 连续两次程序化写入互不覆盖（多 token 序列，plain 合并正确）', async () => {
     let tree!: TestRenderer.ReactTestRenderer;
     await act(async () => {
       tree = TestRenderer.create(<Harness canResumeWithoutInput={false} />);
     });
     const root = tree.root;
-    const input = findNativeComposerInput(tree);
+    simulateWebMessage(root, 'ready', {version: COMPOSER_INPUT_BRIDGE_VERSION});
+    await flush();
 
-    // 同①构造：程序化写入 @/a.md（内部 markup）后驱动原生上报，对账消费并清空 truth。
+    // 第一次程序化写入 @/a.md，随后 web 续打（光标停在 token 后）。
     await act(async () => {
       mockFilePickerProps.onConfirm!(['@/a.md']);
     });
-    await act(async () => {
-      input.props.onChangeText('@/a.md 查一下');
-    });
+    simulateWebMessage(root, 'change', {text: '@/a.md 查一下'});
+    await flush();
 
-    // 对账后继续 replaceCommittedText 程序化写入 @/b.md（cursor 停在 token 后，
-    // 插入到「查一下」之前）。若 truth 未清空（回归），emitMentionValue 会以
-    // 陈旧 truth 覆盖写入——/b.md token 丢失、draft 仍停留在上报文本。
+    // 第二次程序化写入 @/b.md：从光标（token 后的位置）插入到「查一下」之前。
+    // 回归口径：旧实现的陈旧对账 truth 会把第二次写入整段覆盖掉，两个 token
+    // 都活不下来。
+    const secondBaseline = mockWebViewPostMessages.length;
     await act(async () => {
       mockFilePickerProps.onConfirm!(['@/b.md']);
     });
 
-    const expectedMerged = `@/a.md ${formatAtPathMentionMarkup(
-      '/b.md',
-    )} 查一下`;
-    expect(readChatComposerDraftState('s').text).toBe(
-      mentionValueToPlain(expectedMerged),
-    );
-    expect(root.findByType(ComposerAtPathInput).props.value).toBe(
-      mentionValueToPlain(expectedMerged),
-    );
-    // 写入生效且 /a.md、/b.md 均为独立 mention 段（未被陈旧 truth 冲掉）。
-    // v1.5.9 修复后首轮对账 tag 幸存，空格成为独立 plain 段。
-    expect(composerChildrenPartTexts(input)).toEqual([
-      '@/a.md',
-      ' ',
-      '@/b.md',
-      ' 查一下',
-    ]);
+    const expectedMerged = '@/a.md @/b.md 查一下';
+    expect(hostPayloadOfType(secondBaseline, 'setText')).toEqual({
+      text: expectedMerged,
+      selectionStart: 14,
+      selectionEnd: 14,
+    });
+    expect(composerShell(root).props.value).toBe(expectedMerged);
+    expect(readChatComposerDraftState('s').text).toBe(expectedMerged);
+    // 两次插入独立幸存：两个 token 各出现一次，且无 markup 残留。
+    expect(expectedMerged.indexOf('@/a.md')).toBe(0);
+    expect(expectedMerged.split('@/b.md')).toHaveLength(2);
+    expect(expectedMerged.includes('{@}')).toBe(false);
+    await act(async () => {
+      tree.unmount();
+    });
+  });
+
+  it('T-INT: typeahead 点选走单路径——plain + 补尾空格 + 光标落位 + 宿主 setText', async () => {
+    // 变更 10 的护栏：`@` / `$` typeahead 点选不再走 mentions onSelect，
+    // 与选择器插入共用 buildTokenInsertion + replaceCommittedText 单路径。
+    let tree!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(<Harness canResumeWithoutInput={false} />);
+    });
+    const root = tree.root;
+    simulateWebMessage(root, 'ready', {version: COMPOSER_INPUT_BRIDGE_VERSION});
+    await flush();
+
+    // 手输「见 @a」：change 上报文本 + selectionChange 落光标（typeahead 开合靠它）。
+    simulateWebMessage(root, 'change', {text: '见 @a'});
+    simulateWebMessage(root, 'selectionChange', {start: 4, end: 4});
+    await flush();
+
+    const atBaseline = mockWebViewPostMessages.length;
+    act(() => {
+      mockAtPathTypeaheadProps.onSelect!('@/a.md');
+    });
+    expect(hostPayloadOfType(atBaseline, 'setText')).toEqual({
+      text: '见 @/a.md ',
+      selectionStart: 9,
+      selectionEnd: 9,
+    });
+    expect(composerShell(root).props.value).toBe('见 @/a.md ');
+    expect(composerShell(root).props.cursor).toBe(9);
+    expect(composerShell(root).props.value.endsWith(' ')).toBe(true);
+    expect(readChatComposerDraftState('s').text).toBe('见 @/a.md ');
+
+    // `$` 技能 typeahead 同路径：`$技能名` + 补尾空格 + 光标落位。
+    simulateWebMessage(root, 'change', {text: '再看 $写'});
+    simulateWebMessage(root, 'selectionChange', {start: 6, end: 6});
+    await flush();
+
+    const skillBaseline = mockWebViewPostMessages.length;
+    act(() => {
+      mockSkillTypeaheadProps.onSelect!('写作技能');
+    });
+    expect(hostPayloadOfType(skillBaseline, 'setText')).toEqual({
+      text: '再看 $写作技能 ',
+      selectionStart: 9,
+      selectionEnd: 9,
+    });
+    expect(composerShell(root).props.value).toBe('再看 $写作技能 ');
+    expect(composerShell(root).props.cursor).toBe(9);
+    expect(composerShell(root).props.value.endsWith(' ')).toBe(true);
+    await act(async () => {
+      tree.unmount();
+    });
+  });
+
+  it('T-IME1: 组合态 churn 序列——value 与最后上报严格相等、不丢字、零回写', async () => {
+    // IME 组合态无法在 jest 里构造原生 composition 事件（RN 时代即如此），
+    // 用 change 消息序列（含拼到一半的拼音串）守护：每个中间态都必须原样落地，
+    // 且不得有任何宿主回写（回写 = 组合态被打断、候选窗乱跳的根因）。
+    let tree!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(<Harness canResumeWithoutInput={false} />);
+    });
+    const root = tree.root;
+    simulateWebMessage(root, 'ready', {version: COMPOSER_INPUT_BRIDGE_VERSION});
+    await flush();
+
+    const sequence = ['n', 'ni', 'nih', 'niha', 'nihao', '你好', '你好世', '你好世界'];
+    const baseline = mockWebViewPostMessages.length;
+    for (const text of sequence) {
+      simulateWebMessage(root, 'change', {text});
+      expect(composerShell(root).props.value).toBe(text);
+    }
+    // 最后上报即最终值：不丢字、无合并残留。
+    expect(readChatComposerDraftState('s').text).toBe('你好世界');
+    expect(hostTypesSince(baseline)).not.toContain('setText');
+    await act(async () => {
+      tree.unmount();
+    });
+  });
+
+  it('T-IME2: 带 token 长文续打 value 恒 plain（token 原样、不被 markup 化）', async () => {
+    let tree!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(<Harness canResumeWithoutInput={false} />);
+    });
+    const root = tree.root;
+    simulateWebMessage(root, 'ready', {version: COMPOSER_INPUT_BRIDGE_VERSION});
+    await flush();
+
+    // 程序化写入一个 @path token（草稿水化 / 点选等价通路），再续打长文。
+    await act(async () => {
+      mockFilePickerProps.onConfirm!(['/chapters/01.md']);
+    });
+    const long = `${'这是一段很长的续打文本，'.repeat(20)}请接着写`;
+    const report = `看 @/chapters/01.md 这段${long}`;
+    simulateWebMessage(root, 'change', {text: report});
+    await flush();
+
+    const value = composerShell(root).props.value as string;
+    expect(value).toBe(report);
+    expect(value.split('@/chapters/01.md')).toHaveLength(2);
+    expect(value.includes('{@}')).toBe(false);
+    expect(value.includes('</')).toBe(false);
+    expect(readChatComposerDraftState('s').text).toBe(report);
     await act(async () => {
       tree.unmount();
     });
