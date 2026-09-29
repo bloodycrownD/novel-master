@@ -15,6 +15,7 @@ import {
   countPromptLlmInput,
   type CountPromptLlmInputParams,
 } from "./count-prompt-llm-input.js";
+import { promptWholeCache } from "./prompt-whole-cache.js";
 import { readSessionApiPromptTokenEntry } from "./session-api-prompt-token-store.js";
 import { tokenChunkCache } from "./token-chunk-cache.js";
 
@@ -91,12 +92,16 @@ export async function resolveCurrentPromptTokens(
   const sessionKkv = options?.sessionKkv ?? null;
   if (sessionKkv != null) {
     await tokenChunkCache.seedFromKkv(sessionKkv, sessionId);
+    // L1 整串条目同样跨重启续命：native 档（WEB/SP 过桥）只有 L1 可挡
+    // 「重进会话重复原生整串计数」，重启后靠这份种子直接命中。
+    await promptWholeCache.seedFromKkv(sessionKkv, sessionId);
   }
   const local = await countPromptLlmInput(params);
   tokenChunkCache.advanceGeneration(sessionId, {
     persist: { sessionKkv },
     realRefresh: true,
   });
+  promptWholeCache.persistPendingWrites(sessionKkv, sessionId);
   return {
     tokenCount: local.tokenCount,
     source: "local",

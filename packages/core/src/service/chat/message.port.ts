@@ -15,7 +15,11 @@ import type { MessageSearchQuery } from "@/domain/chat/content/message-content-m
 
 /** Message CRUD and fork (branch) operations. */
 export interface MessageService {
-  listBySession(sessionId: string): Promise<ChatMessage[]>;
+  /** `includeHidden: false` 只取可见消息（SQL 层过滤，不解压隐藏行正文）。 */
+  listBySession(
+    sessionId: string,
+    options?: { includeHidden?: boolean }
+  ): Promise<ChatMessage[]>;
   listBySessionTail(
     sessionId: string,
     options: { limit: number }

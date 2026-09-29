@@ -108,7 +108,7 @@ async function renderSheet(
       <MetricDetailSheet
         visible
         sessionId="s1"
-        contextTokenLabel="远程 = 19% 24K/128K"
+        contextTokenLabel="远程 = 24k / 128k (19%)"
         onClose={jest.fn()}
         {...props}
       />
@@ -155,7 +155,7 @@ describe('MetricDetailSheet (mobile) — 打开自取与两段渲染', () => {
   it('「上下文占用」行直渲染传入读数（与 chip 同源，不取新数）', async () => {
     mockGetSessionUsageDetail.mockResolvedValue(DETAIL);
     const {texts} = await renderSheet();
-    expect(texts.join('')).toContain('上下文占用远程 = 19% 24K/128K');
+    expect(texts.join('')).toContain('上下文占用远程 = 24k / 128k (19%)');
   });
 
   it('空态：last/totals 为 null 时出占位行，contextTokenLabel 缺省出「—」', async () => {

@@ -337,9 +337,6 @@ export async function countPromptLlmInputRn(
   const family = resolveTokenizerFamily(vendorModelId, override);
   // tools 段与提示词同串计数（空 tools 时拼接为恒等）：RN 侧同样交给
   // 原生 bridge / js-tiktoken / heuristic 处理同一个串，口径与 Node 端一致。
-  const serialized =
-    (await serializePromptLlmInput(layout, ctx)) +
-    serializeToolsForTokenCount(params.tools);
 
   // ---- L1 整串缓存（message-token-cache Step 3）----
   // 键 = 内容指纹（hashContent(整串+tools 串) 前 16 hex，与 L2 块键同口径）
@@ -352,6 +349,9 @@ export async function countPromptLlmInputRn(
     tokenizerFamily: family,
     driverName: DRIVER_NAME,
   });
+  const serialized =
+    (await serializePromptLlmInput(layout, ctx)) +
+    serializeToolsForTokenCount(params.tools);
   const contentHash = chunkHash16(serialized);
   const cached = promptWholeCache.lookup("", scope, contentHash);
   if (cached != null) {

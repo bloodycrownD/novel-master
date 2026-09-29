@@ -2,8 +2,9 @@
  * 紧凑的 token 数量与 usage 标签格式化（跨端共用）。
  *
  * 大数值会用 K / M 后缀压缩（例如 2500 → "2.5K"），避免 UI 上挤一长串数字。
- * `formatContextUsageLabel` 在已知 context window 时会输出「记号 =/≈ 百分比
- * 占比」形式（`远程 = 42% 55/128K`），未知时退回纯计数（`gpt ≈ 2.3K tokens`）。
+ * `formatContextUsageLabel` 在已知 context window 时会输出「记号 =/≈ 计数
+ * 占比」形式（`glm = 78k / 128k (78%)`），未知时退回纯计数
+ * （`gpt ≈ 2.3k tokens`）。
  *
  * `formatTokenSourceBadge`（占用来源 → 记号 + 连接符）是这套标签的唯一事实
  * 来源：实现放在本文件（common）是为了让 mobile 在整体 mock `core/provider`
@@ -68,9 +69,11 @@ export function formatTokenSourceBadge(
 }
 
 /**
- * 完整上下文占用标签：`{mark} {connector} {pct}% {cur}/{cw}`（已知窗口）或
- * `{mark} {connector} {X} tokens`（未知窗口）。badge 缺省时退化为无前缀形态
- * （`{pct}% {cur}/{cw}` / `{X} tokens`）。pct 封顶 999；非法 count 显示 `—`。
+ * 完整上下文占用标签：`{mark} {connector} {cur} / {cw} ({pct}%)`（已知窗口，
+ * 2026-09-29 用户拍板格式，例如 `glm = 78k / 128k (78%)`）或
+ * `{mark} {connector} {X} tokens`（未知窗口）。badge 缺省时退化为无前缀形态。
+ * 本标签内的数量单位用小写 k/m（与统计页大写 K 的 formatTokenCount 区分，
+ * 标签视觉更轻）；pct 封顶 999；非法 count 显示 `—`。
  */
 export function formatContextUsageLabel(
   count: number,
@@ -81,12 +84,20 @@ export function formatContextUsageLabel(
   if (!Number.isFinite(count) || count < 0) {
     return `${prefix}—`;
   }
-  const current = formatTokenCount(count);
+  const current = labelCount(count);
   if (contextWindow == null || contextWindow <= 0) {
     return `${prefix}${current} tokens`;
   }
   const pct = Math.min(999, Math.round((count / contextWindow) * 100));
-  return `${prefix}${pct}% ${current}/${formatTokenCount(contextWindow)}`;
+  return `${prefix}${current} / ${labelCount(contextWindow)} (${pct}%)`;
+}
+
+/**
+ * 上下文占用标签专用的紧凑计数：与 {@link formatTokenCount} 同算法，但单位
+ * 字母小写（`7.1k` / `2m`）。仅标签内使用；统计页卡片等场景仍走大写 K/M。
+ */
+function labelCount(n: number): string {
+  return formatTokenCount(n).replace(/[KM]$/, (unit) => unit.toLowerCase());
 }
 
 /**

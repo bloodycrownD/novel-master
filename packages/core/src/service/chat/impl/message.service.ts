@@ -89,8 +89,11 @@ export class DefaultMessageService implements MessageService {
     );
   }
 
-  listBySession(sessionId: string): Promise<ChatMessage[]> {
-    return this.deps.messages.listBySession(sessionId);
+  listBySession(
+    sessionId: string,
+    options?: { includeHidden?: boolean }
+  ): Promise<ChatMessage[]> {
+    return this.deps.messages.listBySession(sessionId, options);
   }
 
   listBySessionTail(

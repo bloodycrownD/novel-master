@@ -18,8 +18,8 @@ describe('formatTokenCount', () => {
 });
 
 describe('formatPromptTokenUsageLabel（token-source-label 新形态：badge 参数，无 ~ / estimated）', () => {
-  it('shows percent and ratio against max tokens', () => {
-    expect(formatPromptTokenUsageLabel(327, 128_000)).toBe('0% 327/128K');
+  it('shows count and ratio with percent against max tokens（2026-09-29 格式）', () => {
+    expect(formatPromptTokenUsageLabel(327, 128_000)).toBe('327 / 128k (0%)');
   });
 
   it('falls back to count only without max', () => {
@@ -32,13 +32,13 @@ describe('formatPromptTokenUsageLabel（token-source-label 新形态：badge 参
         mark: '远程',
         connector: '=',
       }),
-    ).toBe('远程 = 50% 64K/128K');
+    ).toBe('远程 = 64k / 128k (50%)');
     expect(
       formatPromptTokenUsageLabel(2_345, undefined, {
         mark: 'gpt',
         connector: '≈',
       }),
-    ).toBe('gpt ≈ 2.3K tokens');
+    ).toBe('gpt ≈ 2.3k tokens');
   });
 
   it('非法 count 显示 —（不再输出 ~ 或 tokens (est.)）', () => {

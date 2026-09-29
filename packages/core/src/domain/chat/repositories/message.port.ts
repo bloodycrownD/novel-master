@@ -10,7 +10,14 @@ import type { MessageSearchQuery } from "../content/message-content-match.js";
 
 /** Persistence for `chat_message` rows. */
 export interface MessageRepository {
-  listBySession(sessionId: string): Promise<ChatMessage[]>;
+  /**
+   * 按 seq 升序列出会话消息。`includeHidden: false` 在 SQL 层滤掉 hidden
+   * 行（默认含 hidden——回滚锚定等既有口径依赖「含隐藏全量」）。
+   */
+  listBySession(
+    sessionId: string,
+    options?: { includeHidden?: boolean }
+  ): Promise<ChatMessage[]>;
 
   /**
    * 统计会话消息行数（`SELECT COUNT(*) ... WHERE session_id = ?`）。

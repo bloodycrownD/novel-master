@@ -54,10 +54,11 @@ export const SESSION_KKV_DOMAIN_PROMPT_TOKENS = "prompt_tokens" as const;
 export const PROMPT_TOKENS_LAST_USAGE_KEY = "lastPromptUsage" as const;
 
 /**
- * token_chunks 域：L2 块 token 平面缓存的持久化整表（JSON，见
- * `infra/tokenizer/logic/token-chunk-cache`）。
+ * token_chunks 域：token 计数缓存族的持久化产物（JSON）——L2 块平面缓存
+ * 整表（`infra/tokenizer/logic/token-chunk-cache`）与 L1 整串缓存近期条目
+ * （`infra/tokenizer/logic/prompt-whole-cache`）。
  *
- * 治理说明：块计数是纯派生加速数据——条目丢失 / 损坏只退化性能（下一轮
+ * 治理说明：两者都是纯派生加速数据——条目丢失 / 损坏只退化性能（下一轮
  * 计数现算回填），不影响任何账本语义，坏行一律静默按 miss 处理。写入口
  * 径：代际推进且源于**真实刷新**（非预热）时，把当前代整表覆盖写本域；
  * 读取口径：本地计数开始时若热层对该会话无种子，读本域载入为最旧可用代
@@ -68,6 +69,16 @@ export const SESSION_KKV_DOMAIN_TOKEN_CHUNKS = "token_chunks" as const;
 
 /** token_chunks 域单键：当前代块计数整表（紧凑 JSON）。 */
 export const TOKEN_CHUNKS_CACHE_KEY = "chunkCache" as const;
+
+/**
+ * token_chunks 域单键：L1 整串计数近期条目（紧凑 JSON，最多 16 条）。
+ *
+ * 治的是「native 档（WEB/SP 过桥）重启后 L1 清零、重进会话必再付整串原生
+ * 重算」——glm 家族 139KB 提示词实测原生计数 5.8s，而 L2 块缓存对 native
+ * 档不适用（整串过桥、不切块）。条目按内容指纹寻址，重启后 seed 回 L1，
+ * 无变更重进直接命中。只持久化 `estimated:false` 的精确档条目。
+ */
+export const PROMPT_WHOLE_CACHE_KEY = "promptWholeCache" as const;
 
 /**
  * Composer 无叉状态条相关、回滚可按域清空的 kkv 域。

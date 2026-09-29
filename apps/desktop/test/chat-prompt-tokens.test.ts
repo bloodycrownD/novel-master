@@ -144,7 +144,7 @@ describe("chat-prompt-tokens.service", () => {
     );
     assert.equal(stats.label, expected);
     // api 真值 → 远程 =（无 ~，无「上次请求」旧后缀）。
-    assert.match(stats.label, /^远程 = \d+% 24K\/128K$/);
+    assert.match(stats.label, /^远程 = 24k \/ 128k \(\d+%\)$/);
   });
 
   it("T-T9b: 无 API 占用 ⇒ source===local（label 按分词器档位落记号）", async () => {
@@ -162,7 +162,7 @@ describe("chat-prompt-tokens.service", () => {
     assert.notEqual(stats.counterKind, "api");
     // gpt-4o 在 node 驱动下报 tiktoken/false → 精确档记号「gpt =」。
     assert.equal(stats.counterKind, "tiktoken");
-    assert.match(stats.label, /^gpt = \d+% \S+\/128K$/);
+    assert.match(stats.label, /^gpt = \S+ \/ 128k \(\d+%\)$/);
     const expected = formatContextUsageLabel(
       stats.tokenCount,
       stats.contextWindow,

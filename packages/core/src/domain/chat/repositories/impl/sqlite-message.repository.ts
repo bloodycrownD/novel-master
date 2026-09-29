@@ -210,12 +210,20 @@ export class SqliteMessageRepository implements MessageRepository {
     return messages;
   }
 
-  async listBySession(sessionId: string): Promise<ChatMessage[]> {
+  async listBySession(
+    sessionId: string,
+    options?: { includeHidden?: boolean }
+  ): Promise<ChatMessage[]> {
+    // includeHidden=false 在 SQL 层就滤掉 hidden 行：隐藏消息（压缩/置位产
+    // 物）不必捞回并逐条解压正文——大会话（数千条、hidden 占多数）的 UI
+    // 读口（token chip 的 prompt 组装只消费可见历史）曾因此全量解压秒级卡顿。
+    const hiddenFilter =
+      options?.includeHidden === false ? " AND hidden = 0" : "";
     const rows = await queryTemplate(
       this.conn,
       this.parser,
       `SELECT ${MESSAGE_SELECT_COLUMNS}
-       FROM chat_message WHERE session_id = #{sessionId} ORDER BY seq ASC`,
+       FROM chat_message WHERE session_id = #{sessionId}${hiddenFilter} ORDER BY seq ASC`,
       { sessionId }
     );
     return this.mapRows(rows);

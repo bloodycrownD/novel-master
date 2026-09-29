@@ -78,7 +78,7 @@ function formatChatTokenLabel(
   return formatContextUsageLabel(result.tokenCount, contextWindow, badge);
 }
 
-/** Token label for chat header (e.g. `gemma = 19% 24K/128K` 或 `远程 = 19% 24K/128K`). */
+/** Token label for chat header (e.g. `gemma = 24k / 128k (19%)` 或 `远程 = 24k / 128k (19%)`). */
 export async function loadChatPromptTokenLabel(
   runtime: MobileNovelMasterRuntime,
   scope: SessionPromptScope,

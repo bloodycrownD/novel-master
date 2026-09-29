@@ -110,10 +110,10 @@ describe('chat-prompt-tokens.service', () => {
     expect(badge).toEqual({mark: 'gemma', connector: '='});
     expect(
       formatContextUsageLabel(result.tokenCount, contextWindow, badge),
-    ).toBe('gemma = 19% 24K/128K');
+    ).toBe('gemma = 24k / 128k (19%)');
   });
 
-  it('loadChatPromptTokenLabel 家族精确档：gemma = 19% 24K/128K', async () => {
+  it('loadChatPromptTokenLabel 家族精确档：gemma = 24k / 128k (19%)', async () => {
     mockBuildSessionPromptInput.mockResolvedValue({
       definition: {model: 'openai/gpt-4o'},
       layout: {persist: [], dynamic: []},
@@ -134,7 +134,7 @@ describe('chat-prompt-tokens.service', () => {
       projectId: 'p1',
     });
 
-    expect(label).toBe('gemma = 19% 24K/128K');
+    expect(label).toBe('gemma = 24k / 128k (19%)');
     expect(mockResolvePromptTokensWithBackfill).toHaveBeenCalledWith(
       's1',
       // rawMessages 已无实际用途（回填废弃），仅签名兼容保留；mock bundle 不携带时为 undefined
@@ -165,7 +165,7 @@ describe('chat-prompt-tokens.service', () => {
       projectId: 'p1',
     });
 
-    expect(label).toBe('远程 = 19% 24K/128K');
+    expect(label).toBe('远程 = 24k / 128k (19%)');
   });
 
   it('T-S6: service 把 buildSessionPromptInput 返回的 rawMessages 透传给 resolvePromptTokensWithBackfill', async () => {
@@ -226,7 +226,7 @@ describe('chat-prompt-tokens.service', () => {
     expect(runtime.tokenCounters.heuristic.countText).not.toHaveBeenCalled();
     expect(mockCountTextWithDefaultEncoding).toHaveBeenCalledWith('serialized');
     // 无窗口 + heuristic 兜底 → gpt ≈ N tokens（无 ~ 前缀、无 (est.) 后缀）。
-    expect(label).toBe('gpt ≈ 2.3K tokens');
+    expect(label).toBe('gpt ≈ 2.3k tokens');
     expect(label).not.toMatch(/^~/);
     expect(label).not.toContain('预估');
   });
@@ -254,7 +254,7 @@ describe('chat-prompt-tokens.service', () => {
     expect(mockCountTextWithDefaultEncoding).toHaveBeenCalledWith(
       'user: hello',
     );
-    expect(label).toBe('gpt ≈ 2.3K tokens');
+    expect(label).toBe('gpt ≈ 2.3k tokens');
   });
 
   it('兜底：真分词器不可用（编码表建不起来）时才退回 heuristic.countText', async () => {
@@ -275,7 +275,7 @@ describe('chat-prompt-tokens.service', () => {
     expect(runtime.tokenCounters.heuristic.countText).toHaveBeenCalledWith(
       'serialized',
     );
-    expect(label).toBe('gpt ≈ 1K tokens');
+    expect(label).toBe('gpt ≈ 1k tokens');
   });
 
   it('T-S7（重写）：tiktoken 精确档与 heuristic 兜底档的记号分档（旧 formatCounterKindLabel 已退役）', () => {

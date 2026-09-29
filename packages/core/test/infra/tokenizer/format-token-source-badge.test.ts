@@ -131,15 +131,15 @@ describe("formatTokenSourceBadge（T-TL1 映射表逐行）", () => {
 });
 
 describe("formatContextUsageLabel（T-TL2 完整标签格式）", () => {
-  it("有窗口：{mark} {connector} {pct}% {cur}/{cw}，K/M 压缩沿用 formatTokenCount", () => {
-    // 55000/128000 = 42.97% → 43；55K/128K。
+  it("有窗口：{mark} {connector} {cur} / {cw} ({pct}%)，单位小写 k/m（2026-09-29 拍板）", () => {
+    // 55000/128000 = 42.97% → 43；55k / 128k (43%)。
     assert.equal(
       formatContextUsageLabel(
         55_000,
         128_000,
         formatTokenSourceBadge("api", "api", false),
       ),
-      "远程 = 43% 55K/128K",
+      "远程 = 55k / 128k (43%)",
     );
     assert.equal(
       formatContextUsageLabel(
@@ -147,7 +147,7 @@ describe("formatContextUsageLabel（T-TL2 完整标签格式）", () => {
         128_000,
         formatTokenSourceBadge("local", "glm", false),
       ),
-      "glm = 999% 2.4M/128K",
+      "glm = 2.4m / 128k (999%)",
     );
   });
 
@@ -158,7 +158,7 @@ describe("formatContextUsageLabel（T-TL2 完整标签格式）", () => {
         1_000,
         formatTokenSourceBadge("local", "heuristic", true),
       ),
-      "gpt ≈ 999% 2M/1K",
+      "gpt ≈ 2m / 1k (999%)",
     );
   });
 
@@ -169,7 +169,7 @@ describe("formatContextUsageLabel（T-TL2 完整标签格式）", () => {
         undefined,
         formatTokenSourceBadge("local", "heuristic", true),
       ),
-      "gpt ≈ 2.3K tokens",
+      "gpt ≈ 2.3k tokens",
     );
     // 窗口非法（<=0）按未知处理。
     assert.equal(
@@ -183,7 +183,7 @@ describe("formatContextUsageLabel（T-TL2 完整标签格式）", () => {
   });
 
   it("badge 缺省 → 无前缀形态（旧调用方纯数字场景）", () => {
-    assert.equal(formatContextUsageLabel(64_000, 128_000), "50% 64K/128K");
+    assert.equal(formatContextUsageLabel(64_000, 128_000), "64k / 128k (50%)");
     assert.equal(formatContextUsageLabel(327), "327 tokens");
   });
 
@@ -207,7 +207,7 @@ describe("formatContextUsageLabel（T-TL2 完整标签格式）", () => {
         mark: "远程",
         connector: "=",
       }),
-      "远程 = 50% 64K/128K",
+      "远程 = 64k / 128k (50%)",
     );
   });
 });
