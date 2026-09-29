@@ -57,3 +57,17 @@ body {
 .cm-selectionBackground {
   background-color: var(--editor-selection, rgba(0, 122, 255, 0.25)) !important;
 }
+
+/* composer-token 胶囊（chat 输入框全屏，与 composer-input 的
+   .composer-input__token 同款）：muted 底 + primary 字；padding 用负 margin
+   抵消，避免胶囊把字符撑宽造成光标错位。双类选择器压过语法高亮的单类着色。 */
+.cm-content .cm-composer-token {
+  color: var(--primary, #007aff);
+  background: var(--primary-muted, rgba(0, 122, 255, 0.13));
+  border-radius: 4px;
+  padding: 1px 4px;
+  margin: 0 -4px;
+  /* 跨行时两端各自完整（旧内核降级为断口，纯视觉） */
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}

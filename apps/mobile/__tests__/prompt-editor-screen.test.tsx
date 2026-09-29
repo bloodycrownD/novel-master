@@ -21,6 +21,8 @@ const mockRoute = {
     title?: string;
     initialText: string;
     variant?: 'form' | 'composer';
+    projectId?: string;
+    sessionId?: string;
   },
 };
 // 捕获 useUnsavedGuard 注册的 beforeRemove handler（effect 随 isDirty 重跑，槽位始终存最新）。
@@ -28,12 +30,53 @@ const mockBeforeRemoveHandlers: ((event: {
   preventDefault: () => void;
   data: {action: unknown};
 }) => void)[] = [];
-// 捕获 CodeEditorWebView stub 的 props，模拟编辑器回传 onChange（jest.mock 工厂仅可引用 mock 前缀变量）。
+// 捕获 CodeEditorWebView stub 的 props，模拟编辑器回传 onChange / 选区上报
+// （jest.mock 工厂仅可引用 mock 前缀变量）。
 const mockEditorProps: {
   value: string;
   path: string;
   onChange: (text: string) => void;
+  onSelectionChange?: (selection: {start: number; end: number}) => void;
 }[] = [];
+// 编辑器 handle 桩：token 插入链（commitDraft → setText）的断言面。
+const mockEditorSetText = jest.fn();
+const mockEditorBlur = jest.fn();
+// composer 变体的候选源与选择器（typeahead 插入链的 mock 底座）。
+const mockEffectiveSkills = jest.fn();
+const mockRuntime = {
+  skills: () => ({effectiveSkills: mockEffectiveSkills}),
+  sessions: {get: jest.fn(async () => ({id: 's1', projectId: 'p1'}))},
+  workplace: jest.fn(),
+};
+const mockFilePickerProps: {
+  visible: boolean;
+  projectId: string;
+  sessionId: string;
+  onConfirm: (atPathTokens: string[]) => void;
+}[] = [];
+const mockSkillPickerProps: {
+  visible: boolean;
+  projectId: string;
+  onConfirm: (skillName: string) => void;
+}[] = [];
+/** jest.fn 组件桩：调用次数也是断言面（缺 scope 用例断言本用例内零渲染）。 */
+const mockFilePickerComponent = jest.fn((props: {
+  visible: boolean;
+  projectId: string;
+  sessionId: string;
+  onConfirm: (atPathTokens: string[]) => void;
+}) => {
+  mockFilePickerProps[0] = props;
+  return null;
+});
+const mockSkillPickerComponent = jest.fn((props: {
+  visible: boolean;
+  projectId: string;
+  onConfirm: (skillName: string) => void;
+}) => {
+  mockSkillPickerProps[0] = props;
+  return null;
+});
 // 捕获 FileMarkdownPreview stub 的 props，断言预览吃到内存草稿。
 const mockPreviewProps: {
   path: string;
@@ -77,14 +120,41 @@ jest.mock('@/components/vfs/CodeEditorWebView', () => {
         value: string;
         path: string;
         onChange: (text: string) => void;
+        onSelectionChange?: (selection: {start: number; end: number}) => void;
       },
-      _ref: unknown,
+      ref: unknown,
     ) {
       mockEditorProps[0] = props;
+      mockReact.useImperativeHandle(ref, () => ({
+        blur: mockEditorBlur,
+        setText: mockEditorSetText,
+      }));
       return null;
     }),
   };
 });
+
+jest.mock('@/runtime/novel-master-context', () => ({
+  useNovelMaster: () => ({status: 'ready', runtime: mockRuntime}),
+}));
+
+// 工厂在 import 期执行，jest.fn 常量那时还未初始化（TDZ）——包一层函数把
+// 引用延迟到渲染期，mockFilePickerComponent 才拿得到真值。
+jest.mock('@/components/chat/FileReferencePicker', () => ({
+  FileReferencePicker: (props: {
+    visible: boolean;
+    projectId: string;
+    sessionId: string;
+    onConfirm: (atPathTokens: string[]) => void;
+  }) => mockFilePickerComponent(props),
+}));
+jest.mock('@/components/skills/SkillPicker', () => ({
+  SkillPicker: (props: {
+    visible: boolean;
+    projectId: string;
+    onConfirm: (skillName: string) => void;
+  }) => mockSkillPickerComponent(props),
+}));
 
 jest.mock('@/components/vfs/FileMarkdownPreview', () => ({
   FileMarkdownPreview: (props: {
@@ -171,6 +241,21 @@ describe('PromptEditorScreen (T-PE3 + R5 + R6)', () => {
     mockPreviewProps.length = 0;
     mockSegmentedProps.length = 0;
     mockBeforeRemoveHandlers.length = 0;
+    mockFilePickerProps.length = 0;
+    mockSkillPickerProps.length = 0;
+    mockEditorSetText.mockClear();
+    mockEditorBlur.mockClear();
+    // `$` 技能候选源缺省返回一条可用技能（typeahead 用例可覆盖）。
+    mockEffectiveSkills.mockReset().mockResolvedValue([
+      {
+        name: '写作',
+        description: '',
+        valid: true,
+        disabled: false,
+        domain: 'global',
+        overridden: false,
+      },
+    ]);
     // 清空模块级回调残留，各用例自行决定是否 set。
     takePromptEditorOnSaved();
   });
@@ -433,7 +518,93 @@ describe('PromptEditorScreen composer 变体（chat 输入框全屏）', () => {
     expect(mockPreviewProps[0]).toBeUndefined();
     // 编辑器恒在场且草稿保留（没有切换态，也就没有切回来的问题）。
     expect(mockEditorProps[0]!.value).toBe('# 全屏草稿');
-    expect(mockEditorProps[0]!.path).toBe('prompt.md');
+    // composer 伪路径：web 侧按此挂 @/$ 胶囊扩展（高亮 + 原子删）。
+    expect(mockEditorProps[0]!.path).toBe('composer.md');
+  });
+
+  it('composer 变体：`$` 打字触发技能 typeahead，点选经 setText 插入 $技能名', async () => {
+    mockRoute.params = {
+      initialText: '',
+      variant: 'composer',
+      projectId: 'p1',
+      sessionId: 's1',
+    };
+    const tree = renderScreen();
+
+    // web 上报打字与选区：光标在孤立 `$` 后（空查询 = 全量候选）。
+    act(() => {
+      mockEditorProps[0]!.onChange('$');
+    });
+    act(() => {
+      mockEditorProps[0]!.onSelectionChange!({start: 1, end: 1});
+    });
+    await act(async () => {});
+
+    const row = tree.root.findByProps({testID: 'skill-typeahead-写作'});
+    act(() => {
+      row.props.onPress();
+    });
+
+    // 插入 = 程序化一次写入 + 光标落位（buildTokenInsertion：token + 尾空格）。
+    expect(mockEditorSetText).toHaveBeenCalledTimes(1);
+    expect(mockEditorSetText).toHaveBeenCalledWith('$写作 ', {
+      start: 4,
+      end: 4,
+    });
+    // 本地草稿同步推进（退出即回填读的就是它）。
+    expect(mockEditorProps[0]!.value).toBe('$写作 ');
+    // 收尾卸载：挂载着选择器/typeahead 的树若留着，后续用例的 act 会全局
+    // flush 它的 pending 重渲、把捕获槽再写一遍（跨用例污染断言面）。
+    act(() => {
+      tree.unmount();
+    });
+  });
+
+  it('composer 变体：`@` 选择器确认多 token 插入（空文档、光标落插入段末尾）', () => {
+    mockRoute.params = {
+      initialText: '',
+      variant: 'composer',
+      projectId: 'p1',
+      sessionId: 's1',
+    };
+    const tree = renderScreen();
+    expect(mockEditorProps[0]!.path).toBe('composer.md');
+
+    act(() => {
+      tree.root.findByProps({testID: 'composer-editor-at-btn'}).props.onPress();
+    });
+    expect(mockFilePickerProps[0]!.visible).toBe(true);
+    act(() => {
+      mockFilePickerProps[0]!.onConfirm(['@docs/', '@notes.md']);
+    });
+
+    // 多 token 空格连接 + 尾空格，光标落插入段末尾。
+    expect(mockEditorSetText).toHaveBeenCalledWith('@docs/ @notes.md ', {
+      start: 17,
+      end: 17,
+    });
+    expect(mockEditorProps[0]!.value).toBe('@docs/ @notes.md ');
+    // 收尾卸载（同上：防止跨用例的捕获污染）。
+    act(() => {
+      tree.unmount();
+    });
+  });
+
+  it('composer 变体：路由缺 scope 时按钮降级禁用、选择器不挂载（tag 高亮不受影响）', () => {
+    mockRoute.params = {initialText: '', variant: 'composer'};
+    const tree = renderScreen();
+    // 旧调用方缺参：胶囊高亮（web 侧按 path 判定）仍在，插入链静默降级。
+    expect(mockEditorProps[0]!.path).toBe('composer.md');
+    expect(
+      tree.root.findByProps({testID: 'composer-editor-at-btn'}).props.disabled,
+    ).toBe(true);
+    expect(
+      tree.root.findByProps({testID: 'composer-editor-skill-btn'}).props
+        .disabled,
+    ).toBe(true);
+    // 选择器不挂载：本用例内零渲染（jest.fn 次数经 beforeEach 清零）。
+    expect(mockFilePickerComponent).not.toHaveBeenCalled();
+    expect(mockSkillPickerComponent).not.toHaveBeenCalled();
   });
 
   it('form 变体不受影响：右侧「预览」切换仍在（对照断言）', () => {

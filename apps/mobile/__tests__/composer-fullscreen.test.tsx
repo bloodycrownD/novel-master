@@ -474,10 +474,13 @@ describe('T-FS1/T-FS2/T-FS3 入口与接线（ChatTabScreen → 面板 → ChatC
     });
 
     // 复用 PromptEditor（与智能体配置同一屏同一组件），变体决定「无保存、退出回填」。
+    // projectId/sessionId 是 @/$ tag typeahead/选择器的 scope（纯数据，可序列化）。
     expect(mockNavigate).toHaveBeenCalledWith('PromptEditor', {
       title: '编辑消息',
       initialText: '当前的草稿文本',
       variant: 'composer',
+      projectId: 'p1',
+      sessionId: 's1',
     });
     // 回调走模块级存取（不可序列化，不进路由参数），未消费前只有 set 的这一次。
     expect(typeof takePromptEditorOnSaved()).toBe('function');

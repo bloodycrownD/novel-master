@@ -30,11 +30,18 @@ export function handleHostMessage(raw: unknown): void {
     const payload = (msg.payload ?? {}) as SetDocumentPayload;
     const text = String(payload.text ?? '');
     const path = String(payload.path ?? '');
+    const selection =
+      payload.selectionStart != null
+        ? {
+            start: payload.selectionStart,
+            end: payload.selectionEnd ?? payload.selectionStart,
+          }
+        : undefined;
     const root = document.getElementById('root');
     if (root && !root.querySelector('.cm-editor')) {
-      mountEditor(root, text, path);
+      mountEditor(root, text, path, selection);
     } else {
-      setDocument(text, path);
+      setDocument(text, path, selection);
     }
     return;
   }

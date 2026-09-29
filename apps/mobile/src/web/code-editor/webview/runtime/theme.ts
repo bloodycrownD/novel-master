@@ -86,4 +86,12 @@ export function applyTheme(theme: HostTheme | null | undefined): void {
       borderLight: ['--editor-gutter-border'],
     },
   });
+  // 胶囊底色 --primary-muted 不在 HostTheme 超集里（composer-input 同款派生：
+  // primary 拼 22 alpha 后缀）；条件式写入 + CSS 兜底，口径与 host-theme 一致。
+  if (theme?.primary) {
+    document.documentElement.style.setProperty(
+      '--primary-muted',
+      `${theme.primary}22`,
+    );
+  }
 }

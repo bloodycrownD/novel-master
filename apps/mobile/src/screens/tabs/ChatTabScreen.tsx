@@ -167,6 +167,9 @@ function ChatTabScreenContent({
         title: '编辑消息',
         initialText: payload.text,
         variant: 'composer',
+        // @/$ tag 的 typeahead 与选择器需要 scope（技能合并视图 / 会话工作区）
+        projectId: ctx.projectId,
+        sessionId: targetSessionId,
       });
     },
     [ctx.projectId, ctx.sessionId, runtime, setDraftRestoreToken, navigation],

@@ -56,11 +56,15 @@ export type RootStackParamList = {
   /** 全屏编辑页：智能体配置的提示词字段与 chat 输入框全屏共用同一套编辑屏。
    *  variant 决定保存语义——`form` 草稿副本编辑、保存才回填（缺省）；
    *  `composer` 无保存概念、退出即回填（那块文本就是输入框内容本身）。
-   *  回调不走路由参数（不可序列化），由 prompt-editor-callback 模块级存取。 */
+   *  composer 变体带 projectId/sessionId 时启用 @/$ tag 的 typeahead 与选择器
+   *  （缺省静默降级——tag 胶囊高亮仍生效）。回调不走路由参数（不可序列化），
+   *  由 prompt-editor-callback 模块级存取。 */
   PromptEditor: {
     title?: string;
     initialText: string;
     variant?: 'form' | 'composer';
+    projectId?: string;
+    sessionId?: string;
   };
   /** 设置·技能管理页：全局默认 / 项目分组双 tab。 */
   SkillsSettings: undefined;
