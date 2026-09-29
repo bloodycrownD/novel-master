@@ -352,6 +352,11 @@ export class DefaultAgentRunner implements AgentRunner {
       usage: { readonly promptTokens?: number } | undefined,
       anchorSeq: number | undefined
     ): void => {
+      // overlay 内存会话（persistMessages=false）的 usage 不落持久层：
+      // append 不落库也不触发失效，写进 KKV 会与 overlay 语义错位。
+      if (!persistMessages) {
+        return;
+      }
       const promptTokens = usage?.promptTokens;
       if (typeof promptTokens !== "number" || !Number.isFinite(promptTokens)) {
         return;
@@ -935,8 +940,14 @@ export class DefaultAgentRunner implements AgentRunner {
     // 口径的占用，不再出现「重启前报 API、重启后跌本地估算」的跳表。
     // anchorSeq 沿用本 run 最后一次回锚的锚点（picked 与锚点同源同 step；
     // 终 step usage 缺 promptTokens 而 picked 取自前步时，锚点也是前步的）。
+    // persistMessages=false（overlay run）的终值同样不落——锚点口径属持久
+    // 会话，与 anchorStepUsage / 失败消息落库同一条豁免，走 else 连旧值失效。
     const picked = pickLastPromptUsage(rounds);
-    if (stopReason === "completed" && picked !== undefined) {
+    if (
+      persistMessages &&
+      stopReason === "completed" &&
+      picked !== undefined
+    ) {
       writeSessionApiPromptTokenEntry(this.deps.sessionKkv, sessionId, {
         promptTokens: picked,
         atMs: Date.now(),

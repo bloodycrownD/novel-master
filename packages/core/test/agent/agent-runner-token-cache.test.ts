@@ -37,6 +37,10 @@ import {
   SESSION_KKV_DOMAIN_PROMPT_TOKENS,
 } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
 import type { SessionKkvService } from "../../src/service/session-kkv/session-kkv.port.js";
+import {
+  EVENT_AGENT_STEP_COMMITTED,
+  type AgentStepCommittedPayload,
+} from "../../src/domain/events/model/event-types.js";
 import { emptyRegistryDeps } from "../infra/tokenizer/registry-test-helpers.js";
 import { TokenRatioConditionTrigger } from "../../src/domain/compaction-conditions/triggers/token-ratio.trigger.js";
 
@@ -276,6 +280,89 @@ describe("AgentRunner session API prompt token cache", () => {
       }),
       true,
     );
+  });
+
+  it("T-T4 (persistMessages=false): overlay completed run 不落热层/KKV", async () => {
+    const session = new InMemoryAgentSession();
+    await session.append("user", textBlocks("go"));
+
+    // 两步 run：step1 tool_use（usage 4000，chokepoint ② 落 tool_results 后）、
+    // step2 收尾文本（usage 5000）。观察点用 STEP_COMMITTED 事件而非压缩评估
+    // 回调——压缩评估本身有 persistMessages 守卫（overlay run 不进），而
+    // tool_results 相位的事件恰在 anchorStepUsage 之后发布：此刻 run 末
+    // invalidate 还没跑，热层若有 overlay 回锚值必被抓到。
+    const model = createMockModel([
+      {
+        assistantText: "",
+        blocks: [
+          {
+            type: "tool_use",
+            id: "tu1",
+            name: "demo",
+            input: {},
+          },
+        ],
+        raw: {},
+        usage: { promptTokens: 4_000 },
+      },
+      {
+        assistantText: "done",
+        blocks: [{ type: "text", text: "done" }],
+        raw: {},
+        usage: { promptTokens: 5_000 },
+      },
+    ]);
+
+    const midRunAnchors: Array<unknown> = [];
+    const bus = new SimpleEventBus();
+    bus.subscribe(
+      EVENT_AGENT_STEP_COMMITTED,
+      (payload: AgentStepCommittedPayload) => {
+        if (payload.phase === "tool_results") {
+          midRunAnchors.push(sessionApiPromptTokenCache.get(SESSION_ID));
+        }
+      },
+    );
+
+    const registry = new ToolRegistry();
+    registry.register({
+      name: "demo",
+      description: () => "demo tool",
+      inputSchema: z.object({}),
+      run: async () => ({}) as never,
+    });
+
+    const runner = createAgentRunner({
+      ...runnerDeps({
+        session,
+        modelRequests: model,
+        registry: registry as never,
+        toolCtx: mockToolCtx(mockVfs()),
+      }),
+      eventBus: bus,
+    });
+
+    const result = await runner.run({
+      maxSteps: 5,
+      definition: minimalDefinition(),
+      ...defaultRunScope,
+      persistMessages: false,
+    });
+    assert.equal(result.stopReason, "completed");
+    assert.ok(
+      midRunAnchors.length > 0,
+      "step1 的 tool_results 提交事件应至少触发一次"
+    );
+    // run 进行中：step1 的 anchorStepUsage（chokepoint ②）已执行、run 末
+    // invalidate 未跑——此刻热层必须仍为空，overlay 的 usage 不得中途落盘。
+    assert.ok(
+      midRunAnchors.every((entry) => entry === undefined),
+      `overlay run 中途热层不得有回锚值：${JSON.stringify(midRunAnchors)}`
+    );
+    // run 末：overlay（内存会话）的 usage 不落持久层——热层与 session KKV
+    // 行都不写（终值写守卫缺失时此处必红：completed + picked 有值会走 if 分支）。
+    assert.equal(sessionApiPromptTokenCache.get(SESSION_ID), undefined);
+    assert.equal(await rawPromptTokenRow(), null);
   });
 
   it("T-T5: cancelled → clear，resolve 回退 local（不保留旧 API）", async () => {
