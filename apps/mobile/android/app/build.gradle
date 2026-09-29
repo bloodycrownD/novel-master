@@ -84,6 +84,19 @@ android {
     compileSdk rootProject.ext.compileSdkVersion
 
     namespace "com.novelmaster"
+    // DJL tokenizers/sentencepiece jars ship desktop natives as resources;
+    // Android loads libdjl_tokenizer.so from jniLibs instead. Dropping the
+    // dead ~9.2MB (deflated) of win/osx binaries from the APK.
+    packagingOptions {
+        resources {
+            excludes +=
+                ['native/lib/win-x86_64/**', 'native/lib/win-x86_32/**',
+                 'native/lib/osx-x86_64/**', 'native/lib/osx-aarch64/**',
+                 'native/lib/linux-x86_64/**', 'native/lib/linux-x86_32/**',
+                 'native/lib/linux-aarch64/**', 'native/lib/linux-ppc64le/**']
+        }
+    }
+
     defaultConfig {
         applicationId "com.novelmaster"
         minSdkVersion rootProject.ext.minSdkVersion

@@ -23,8 +23,11 @@ internal class TokenizerEngine(private val context: Context) {
     val estimated: Boolean,
   )
 
-  private val webCache = LruCache<String, HuggingFaceTokenizer>(8)
-  private val spCache = LruCache<String, SpTokenizer>(8)
+  // 缓存容量 2（2026-09-29 拍板）：WEB json 解析后内存可达数十 MB/家族
+  // （glm 词表 15 万词 + 31.8 万合并），常态用户就一两个家族；LRU 淘汰后
+  // 下次使用再懒加载一次即可。SP 词表（.model protobuf）同理收紧。
+  private val webCache = LruCache<String, HuggingFaceTokenizer>(2)
+  private val spCache = LruCache<String, SpTokenizer>(2)
 
   fun count(serialized: String, family: String): CountResult {
     val spec = resolveAssetSpecFor(family)
@@ -116,11 +119,15 @@ internal class TokenizerEngine(private val context: Context) {
   private fun copyAssetToCache(assetPath: String): String? {
     val fileName = assetPath.replace('/', '_')
     val dest = File(context.cacheDir, "nm_tok_$fileName")
-    if (dest.exists() && dest.length() > 0L) {
-      return dest.absolutePath
-    }
     return try {
       context.assets.open(assetPath).use { input ->
+        // 长度校验（2026-09-29）：词表资产会随版本更新（如 glm.json 紧凑化
+        // 20.4MB→8.2MB），只判「文件存在」会让旧缓存跨版本滞留、瘦身白做。
+        // 资产流 available() 即条目长度，同名同长的错配概率可忽略。
+        val assetSize = input.available().toLong()
+        if (dest.exists() && dest.length() == assetSize) {
+          return dest.absolutePath
+        }
         dest.parentFile?.mkdirs()
         Files.copy(input, dest.toPath(), StandardCopyOption.REPLACE_EXISTING)
       }
