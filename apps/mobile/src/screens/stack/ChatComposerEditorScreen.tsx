@@ -65,7 +65,7 @@ export function ChatComposerEditorScreen() {
 
   const isDirty = draft !== savedDraft;
   // 退出拦截同工作区：未保存改动离开前弹确认，确认离开即丢弃。
-  useUnsavedGuard(isDirty);
+  const {allowLeaveWithoutPrompt} = useUnsavedGuard(isDirty);
 
   // 保存：回填调用方（父层注入的 onSaved 写草稿并刷新输入框）后返回。
   const handleSave = useCallback(() => {
@@ -74,8 +74,11 @@ export function ChatComposerEditorScreen() {
     }
     pending?.onSaved(draft);
     setSavedDraft(draft);
+    // setSavedDraft 是异步 state：goBack 的 beforeRemove 当拍仍会读到旧 isDirty，
+    // 必须同步放行标记，否则保存后被自己的未保存拦截弹窗拦下。
+    allowLeaveWithoutPrompt();
     navigation.goBack();
-  }, [draft, isDirty, navigation, pending]);
+  }, [draft, isDirty, navigation, pending, allowLeaveWithoutPrompt]);
 
   return (
     <EditorScreenShell
