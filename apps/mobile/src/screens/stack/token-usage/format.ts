@@ -98,7 +98,7 @@ export function formatHitRate(rate: number | null): string {
   return rate == null ? '—' : `${Math.round(rate * 100)}%`;
 }
 
-/** 平均 token 速率展示：`x.x t/s`；无数据时返回调用方传入的空态文案。 */
+/** 平均 token 速率展示：`x.x tok/s`（与桌面端统计页单位一致，用户拍板 2026-09-28）；无数据时返回调用方传入的空态文案。 */
 export function formatTokensPerSecond(
   v: number | null,
   emptyText: string,
@@ -106,7 +106,7 @@ export function formatTokensPerSecond(
   if (v == null) {
     return emptyText;
   }
-  return `${v >= 100 ? Math.round(v) : v.toFixed(1)} t/s`;
+  return `${v >= 100 ? Math.round(v) : v.toFixed(1)} tok/s`;
 }
 
 /** 平均首字延迟展示：秒级 `x.x s` / 毫秒级 `xxx ms`；无数据时返回调用方传入的空态文案。 */
