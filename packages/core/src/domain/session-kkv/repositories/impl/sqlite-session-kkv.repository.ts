@@ -27,6 +27,24 @@ import {
 import { serializeFileCachePayload } from "@/domain/workplace/logic/rule-snapshot-codec.js";
 import type { SessionKkvRepository } from "../session-kkv.port.js";
 
+/** getMany IN 子句分片大小（双驱动绑参上限的保守值）。 */
+const GET_MANY_CHUNK_SIZE = 400;
+
+/** 构造 IN (#{p0}, #{p1}, …) 形态的绑定与片段（对齐 vfs-revision 先例）。 */
+function buildInBindings(
+  values: readonly string[],
+  prefix: string
+): { bindings: Record<string, string>; inList: string } {
+  const bindings: Record<string, string> = {};
+  const inList = values
+    .map((value, index) => {
+      bindings[`${prefix}${index}`] = value;
+      return `#{${prefix}${index}}`;
+    })
+    .join(", ");
+  return { bindings, inList };
+}
+
 function rowToEntry(row: Row): SessionKkvEntry {
   return {
     sessionId: String(row.session_id),
@@ -53,6 +71,115 @@ export class SqliteSessionKkvRepository implements SessionKkvRepository {
       return this.getFileCacheEntry(sessionId, key);
     }
     return this.getLegacyEntry(sessionId, domain, key);
+  }
+
+  /**
+   * 批量 get：file_cache 域两条 IN 查询（entries + blobs）替代每键两跳——
+   * workplace 组装几十个规则文件时的读链从 2N 条串行 SQL 收敛到常数条，
+   * 这是单连接串行执行下唯一正确的提速形态（并发查询不解决问题，见
+   * TDBC AsyncMutex 设计说明）。miss 键不进结果（与单键 get 缺失即 miss
+   * 同口径）；键去重、超 400 分片。
+   */
+  async getMany(
+    sessionId: string,
+    domain: string,
+    keys: readonly string[]
+  ): Promise<Map<string, string>> {
+    const out = new Map<string, string>();
+    const unique = [...new Set(keys)];
+    if (unique.length === 0) {
+      return out;
+    }
+    if (domain === SESSION_KKV_DOMAIN_FILE_CACHE) {
+      const missing: string[] = [];
+      for (let i = 0; i < unique.length; i += GET_MANY_CHUNK_SIZE) {
+        const chunk = unique.slice(i, i + GET_MANY_CHUNK_SIZE);
+        const keyBindings = buildInBindings(chunk, "k");
+        const entries = await queryTemplate<{
+          key: string;
+          content_hash: string;
+          mtime_ms: number;
+        }>(
+          this.conn,
+          this.parser,
+          `SELECT key, content_hash, mtime_ms FROM session_file_cache_entry
+           WHERE session_id = #{sessionId} AND key IN (${keyBindings.inList})`,
+          { sessionId, ...keyBindings.bindings }
+        );
+        if (entries.length === 0) {
+          missing.push(...chunk);
+          continue;
+        }
+        const foundKeys = new Set(entries.map((row) => String(row.key)));
+        for (const key of chunk) {
+          if (!foundKeys.has(key)) {
+            missing.push(key);
+          }
+        }
+        const hashes = [...new Set(entries.map((row) => String(row.content_hash)))];
+        const hashBindings = buildInBindings(hashes, "h");
+        const blobs = await queryTemplate<{
+          content_hash: string;
+          encoding: string;
+          bytes: SqlValue;
+        }>(
+          this.conn,
+          this.parser,
+          `SELECT content_hash, encoding, bytes FROM session_file_cache_blob
+           WHERE content_hash IN (${hashBindings.inList})`,
+          hashBindings.bindings
+        );
+        const blobByHash = new Map(blobs.map((row) => [String(row.content_hash), row]));
+        for (const entry of entries) {
+          const blob = blobByHash.get(String(entry.content_hash));
+          if (blob == null) {
+            continue;
+          }
+          try {
+            const body = decodeFileCacheBlobBody(String(blob.encoding), blob.bytes);
+            out.set(String(entry.key), serializeFileCachePayload({
+              body,
+              mtimeMs: Number(entry.mtime_ms),
+            }));
+          } catch {
+            // 解压 / 解码失败：按 miss 跳过（上层自愈重读），与单键 get 同口径。
+          }
+        }
+      }
+      // 退化路径（旧表行）批量补齐：新表没命中的键查一次 legacy。
+      if (missing.length > 0) {
+        const legacy = await this.getManyLegacy(sessionId, domain, missing);
+        for (const [key, value] of legacy) {
+          out.set(key, value);
+        }
+      }
+      return out;
+    }
+    return this.getManyLegacy(sessionId, domain, unique);
+  }
+
+  /** 旧表（session_kkv_entry）批量读，供非 file_cache 域与退化路径共用。 */
+  private async getManyLegacy(
+    sessionId: string,
+    domain: string,
+    keys: readonly string[]
+  ): Promise<Map<string, string>> {
+    const out = new Map<string, string>();
+    for (let i = 0; i < keys.length; i += GET_MANY_CHUNK_SIZE) {
+      const chunk = keys.slice(i, i + GET_MANY_CHUNK_SIZE);
+      const { bindings, inList } = buildInBindings(chunk, "k");
+      const rows = await queryTemplate<{ key: string; value: string }>(
+        this.conn,
+        this.parser,
+        `SELECT key, value FROM session_kkv_entry
+         WHERE session_id = #{sessionId} AND domain = #{domain} AND key IN (${inList})`,
+        { sessionId, domain, ...bindings }
+      );
+      for (const row of rows) {
+        out.set(String(row.key), String(row.value));
+      }
+    }
+    return out;
   }
 
   async set(

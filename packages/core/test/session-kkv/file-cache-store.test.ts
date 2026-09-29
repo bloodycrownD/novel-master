@@ -90,6 +90,59 @@ describe("file-cache-blob-codec 拆分（先哈希后压缩）", () => {
   });
 });
 
+describe("getMany 批量读（两条 IN 查询替代逐键两跳）", () => {
+  it("T-M1 多键混合命中/未命中：命中逐字节还原、miss 键不进结果", async () => {
+    const ctx = getNovelMasterTestContext();
+    const sk = createSessionKkvService(ctx.conn);
+    const sid = `m1-${testIsolationSuffix()}`;
+    const v1 = serializeFileCachePayload({ body: "甲文件内容", mtimeMs: 1 });
+    const v2 = serializeFileCachePayload({ body: "乙文件内容", mtimeMs: 2 });
+    await sk.set(sid, SESSION_KKV_DOMAIN_FILE_CACHE, "full:/a.md", v1);
+    await sk.set(sid, SESSION_KKV_DOMAIN_FILE_CACHE, "full:/b.md", v2);
+
+    const got = await sk.getMany(sid, SESSION_KKV_DOMAIN_FILE_CACHE, [
+      "full:/a.md",
+      "full:/b.md",
+      "full:/missing.md",
+      "full:/a.md", // 重复键去重
+    ]);
+    assert.equal(got.size, 2);
+    assert.equal(got.get("full:/a.md"), v1);
+    assert.equal(got.get("full:/b.md"), v2);
+    assert.equal(got.has("full:/missing.md"), false);
+  });
+
+  it("T-M2 与单键 get 结果一致（含 mtime 还原）；空键数组返回空 Map", async () => {
+    const ctx = getNovelMasterTestContext();
+    const sk = createSessionKkvService(ctx.conn);
+    const sid = `m2-${testIsolationSuffix()}`;
+    const value = serializeFileCachePayload({ body: "中文正文", mtimeMs: 1758576000123 });
+    await sk.set(sid, SESSION_KKV_DOMAIN_FILE_CACHE, "header:/c.md", value);
+    const single = await sk.get(sid, SESSION_KKV_DOMAIN_FILE_CACHE, "header:/c.md");
+    const batch = await sk.getMany(sid, SESSION_KKV_DOMAIN_FILE_CACHE, ["header:/c.md"]);
+    assert.equal(batch.get("header:/c.md"), single);
+
+    const empty = await sk.getMany(sid, SESSION_KKV_DOMAIN_FILE_CACHE, []);
+    assert.equal(empty.size, 0);
+  });
+
+  it("T-M3 非 file_cache 域走旧表批量（rule_snapshot canon 等普通域）", async () => {
+    const ctx = getNovelMasterTestContext();
+    const sk = createSessionKkvService(ctx.conn);
+    const sid = `m3-${testIsolationSuffix()}`;
+    await sk.set(sid, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY, "[]");
+    await sk.set(sid, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, "other", "x");
+    const got = await sk.getMany(sid, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, [
+      RULE_SNAPSHOT_CANON_KEY,
+      "other",
+      "nope",
+    ]);
+    assert.equal(got.size, 2);
+    assert.equal(got.get(RULE_SNAPSHOT_CANON_KEY), "[]");
+    assert.equal(got.get("other"), "x");
+  });
+});
+
 describe("session file_cache 分流存储（两新表）", () => {
   it("T-R1 set→get 逐字节还原（中文 body、任意 mtimeMs）", async () => {
     const ctx = getNovelMasterTestContext();

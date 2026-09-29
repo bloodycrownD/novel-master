@@ -142,7 +142,9 @@ describe("runCompaction", () => {
 
     const effects = createMessageTranscriptEffectsService(ctx.conn);
 
-    // 预置 rule_snapshot / file_cache 数据，验证会被清空。
+    // 预置 rule_snapshot / file_cache 数据，验证压缩**不清**这两域
+    // （2026-09-29 修正：压缩只动消息可见性，与文件缓存正交；用户主动的
+    // 置位/导入仍清）。
     await ctx.sessionKkv.set(sessionId, RULE_SNAPSHOT, "canon", "snap");
     await ctx.sessionKkv.set(sessionId, FILE_CACHE, "fc-key", "fc-val");
     // 预置 prompt token cache，验证会被 invalidate（热层 + KKV 行双删）。
@@ -169,11 +171,11 @@ describe("runCompaction", () => {
     const hiddenCount = list.filter((m) => m.hidden).length;
     assert.ok(hiddenCount > 0, "expected some messages to be hidden");
 
-    // rule_snapshot / file_cache 被清空。
+    // rule_snapshot / file_cache 保留（压缩不清，2026-09-29 修正）。
     const snapKeys = await ctx.sessionKkv.listKeys(sessionId, RULE_SNAPSHOT);
     const fcKeys = await ctx.sessionKkv.listKeys(sessionId, FILE_CACHE);
-    assert.deepEqual(snapKeys, []);
-    assert.deepEqual(fcKeys, []);
+    assert.deepEqual(snapKeys, ["canon"]);
+    assert.deepEqual(fcKeys, ["fc-key"]);
 
     // prompt token cache 失效（进程内热层 + session KKV 行双删）。
     assert.equal(sessionApiPromptTokenCache.get(sessionId), undefined);
@@ -218,9 +220,10 @@ describe("runCompaction", () => {
     const list = await ctx.messages.listBySession(sessionId);
     assert.equal(list.filter((m) => m.hidden).length, 0);
 
-    // 但 kkv 清理 + cache 失效仍执行（hide-message 无匹配不视为失败）。
+    // 但 cache 失效仍执行（hide-message 无匹配不视为失败）；
+    // rule_snapshot 不清（2026-09-29 修正，见 run-compaction 头注释）。
     const snapKeys = await ctx.sessionKkv.listKeys(sessionId, RULE_SNAPSHOT);
-    assert.deepEqual(snapKeys, []);
+    assert.deepEqual(snapKeys, ["canon"]);
     assert.equal(sessionApiPromptTokenCache.get(sessionId), undefined);
     await assertPromptTokenRowGone(sessionId);
   });
