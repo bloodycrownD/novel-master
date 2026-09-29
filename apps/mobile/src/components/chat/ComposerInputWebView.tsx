@@ -25,11 +25,16 @@ import React, {
 import {
   Linking,
   StyleSheet,
-  View,
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
 import WebView, {type WebViewMessageEvent} from 'react-native-webview';
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
 import type {ThemeTokens} from '@/theme/tokens';
 import {useTheme} from '@/theme/ThemeProvider';
 import {
@@ -46,6 +51,12 @@ import {
   type ComposerInputTheme,
   type HostToComposerInputMessage,
 } from './ComposerInputBridge';
+
+/**
+ * 高度台阶过渡时长：高度按行粒度跳（22px 一跳），120ms 的出缓动足够把「弹一下」
+ * 抹成「长出来」，又不至于让盒子明显落后于文字（打字时每行只跳一次）。
+ */
+const HEIGHT_TRANSITION_MS = 120;
 
 export type ComposerInputWebViewProps = {
   /** 高亮分段来源：chat 链 token / 宏链白名单宏。 */
@@ -131,8 +142,22 @@ export const ComposerInputWebView = forwardRef<
   const {tokens} = useTheme();
   const webRef = useRef<WebView>(null);
   const [webReady, setWebReady] = useState(false);
-  /** 容器高度：初始按 metrics.minHeight，随 heightChange 跟随（web 侧已 clamp）。 */
+  /** 容器高度目标值：初始按 metrics.minHeight，随 heightChange 跟随（web 侧已 clamp）。 */
   const [currentHeight, setCurrentHeight] = useState(() => metrics.minHeight);
+  /**
+   * 容器高度动画：高度变化按行粒度离散跳变（22px 一跳），直接换值会像「猛地弹一下」，
+   * 且下方转录区跟着同拍位移；这里把每个台阶抹成一段短过渡。
+   *
+   * 只做「抹平台阶」，不负责跨引擎滞后：文字在 web 内核里同帧就长了，容器高度要等
+   * 桥消息回到 RN 才动（1~2 帧），那段时间新行会被盒子底边裁掉——本轮只把台阶做顺，
+   * 滞后另说（要再压短需 web 侧上报提前，属 webview 资产改动）。
+   */
+  const heightAV = useSharedValue(currentHeight);
+  const animatedHeightStyle = useAnimatedStyle(() => ({
+    height: heightAV.value,
+  }));
+  /** 首个上报高度不走过渡：挂载时的一次性落位，过渡反而像开场跳一下。 */
+  const hasReportedHeightRef = useRef(false);
 
   /** web 侧文本基线：change 上报或我们下发 setText 时推进；value 差分基准。 */
   const webTextRef = useRef('');
@@ -175,6 +200,23 @@ export const ComposerInputWebView = forwardRef<
     webRef.current?.postMessage(encodeHostToComposerInput(message));
   }, []);
 
+  /** 高度落位：目标值进 state（测试/无障碍可见），视觉高度走缓动过渡。 */
+  const applyHeight = useCallback(
+    (height: number) => {
+      setCurrentHeight(height);
+      if (!hasReportedHeightRef.current) {
+        hasReportedHeightRef.current = true;
+        heightAV.value = height;
+        return;
+      }
+      heightAV.value = withTiming(height, {
+        duration: HEIGHT_TRANSITION_MS,
+        easing: Easing.out(Easing.quad),
+      });
+    },
+    [heightAV],
+  );
+
   const handleMessage = useCallback((event: WebViewMessageEvent) => {
     let message: ReturnType<typeof decodeComposerInputToHost>;
     try {
@@ -206,13 +248,13 @@ export const ComposerInputWebView = forwardRef<
     if (message.type === 'heightChange') {
       const height = finiteOrNull(message.payload.height);
       if (height != null) {
-        setCurrentHeight(height);
+        applyHeight(height);
         onHeightRef.current?.(height);
       }
       return;
     }
     // focus / blur：键盘链路由 keyboard-controller insets 驱动，当前无消费，丢弃。
-  }, []);
+  }, [applyHeight]);
 
   // init：ready 后一次（web 一切装配的入口）。
   useEffect(() => {
@@ -363,8 +405,8 @@ export const ComposerInputWebView = forwardRef<
   const unbounded = metrics.maxHeight == null;
 
   return (
-    <View
-      style={[unbounded ? styles.fill : {height: currentHeight}, style]}
+    <Animated.View
+      style={[unbounded ? styles.fill : animatedHeightStyle, style]}
       testID={testID}
     >
       <WebView
@@ -385,7 +427,7 @@ export const ComposerInputWebView = forwardRef<
         showsVerticalScrollIndicator={false}
         keyboardDisplayRequiresUserAction={false}
       />
-    </View>
+    </Animated.View>
   );
 });
 
