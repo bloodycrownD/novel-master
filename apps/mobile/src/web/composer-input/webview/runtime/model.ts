@@ -14,7 +14,8 @@ export type ComposerMode = 'composer-token' | 'prompt-macro';
 
 /**
  * 尺寸口径（RN 宿主组装下发，web 不做尺寸推断）。
- * maxHeight = null 表示不限高（chat 全屏），web 侧不上报 heightChange。
+ * maxHeight = null 表示不限高（当前无生产消费方——chat 全屏已改走
+ * PromptEditor/CodeEditorWebView，保留为协议能力勿当死代码删），web 侧不上报 heightChange。
  */
 export type ComposerMetrics = {
   readonly fontSize: number;

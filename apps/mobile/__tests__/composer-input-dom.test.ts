@@ -50,6 +50,10 @@ describe('renderHighlightHtml（composer-token 模式）', () => {
     expect(renderHighlightHtml('第一行\n', 'composer-token')).toBe(
       '第一行\n<br/>',
     );
+    // 宏模式同款口径：尾换行占位与分段来源无关
+    expect(renderHighlightHtml('第一行\n', 'prompt-macro')).toBe(
+      '第一行\n<br/>',
+    );
     // 中间换行由 pre-wrap 自己占位，不补 br；末尾那个才补
     expect(renderHighlightHtml('a\nb\n', 'composer-token')).toBe('a\nb\n<br/>');
   });
@@ -122,6 +126,13 @@ describe('atomicDeleteRanges / resolveAtomicDelete（T-CW7 原子删纯逻辑）
     ]);
     expect(resolveAtomicDelete(prev, raw, 'prompt-macro')).toBe('前缀后缀');
     expect(resolveAtomicCaret(prev, raw, '前缀后缀')).toBe(2);
+  });
+
+  it('选中删除跨进 token 内侧：删除窗起点早于区间起点 → caret 取删除窗起点', () => {
+    // 选中 ' @t'（删除窗 [1,4)）删进 token 区间 [2,6)：整段摘除后光标落在
+    // 删除窗起点（1），不被推到被删内容右侧——min() 另一支的回归锁。
+    expect(resolveAtomicDelete('a @tok', 'aok', 'composer-token')).toBe('a ');
+    expect(resolveAtomicCaret('a @tok', 'aok', 'a ')).toBe(1);
   });
 
   it('双源互不串台（token 模式不认宏区间，反之亦然）', () => {

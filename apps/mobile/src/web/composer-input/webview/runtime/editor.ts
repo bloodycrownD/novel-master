@@ -187,7 +187,8 @@ export function shouldReportChange(
 
 /**
  * 内容高度按 metrics 归一：封顶后 textarea 自身内滚。
- * @returns 需上报的高度；null 表示本帧不上报（maxHeight=null 的全屏模式不下发）
+ * @returns 需上报的高度；null 表示本帧不上报（maxHeight=null 的不限高模式
+ * 无生产消费方，不下发）
  */
 export function resolveReportedHeight(
   contentHeight: number,
@@ -338,7 +339,7 @@ function clampIndex(value: number, length: number): number {
 
 /* ---- host 下行应用的对外入口 ---- */
 
-/** 不限高模式（全屏）：容器铺满视口（CSS 类），textarea 与高亮层去掉封顶。 */
+/** 不限高模式（当前无生产消费方，保留为协议能力）：容器铺满视口（CSS 类），textarea 与高亮层去掉封顶。 */
 export function resolveUnbounded(metrics: ComposerMetrics): boolean {
   return metrics.maxHeight == null;
 }

@@ -154,7 +154,8 @@ android {
 }
 
 /**
- * WebView 壳（chat-transcript / rich-document / code-editor 三包）由
+ * WebView 壳（chat-transcript / rich-document / code-editor / composer-input 四包）由
+ * 清单须与 scripts/build-webview.mjs 的 PACKAGES 同步。
  * `npm run build:webview:native` 拷入 `src/main/assets/webview/`（gitignore）�&#65533;
  * 若漏�&#65533; gradlew 编译�&#65533; APK 会缺文件，运行时会报 net::ERR_FILE_NOT_FOUND�&#65533;
  * 所以在 preBuild 前强制失败，避免静默打出损坏包�&#65533;

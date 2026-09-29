@@ -32,8 +32,16 @@ body {
   line-height: 22px;
 }
 
-/* 不限高模式（全屏，metrics.maxHeight=null）：铺满 WebView 视口，触摸区全屏 */
+/* 不限高模式（metrics.maxHeight=null）：当前无生产消费方（chat 全屏已改走
+   PromptEditor/CodeEditorWebView），保留为协议能力，勿当死代码删。
+   铺满 WebView 视口，触摸区全屏；高亮层也必须限到视口高（见下）。 */
 .composer-input--unbounded {
+  height: 100%;
+}
+
+/* 不限高模式下高亮层与 textarea 同为视口高、同一滚动体——不设 100% 时高亮层
+   是流内内容高（被 body overflow:hidden 裁掉且自身不滚），长文滚动即两层错位。 */
+.composer-input--unbounded .composer-input__highlight {
   height: 100%;
 }
 
@@ -72,6 +80,12 @@ body {
 .composer-input__input {
   position: absolute;
   inset: 0;
+  /* longhand 兜底：inset 需 Chromium 87+，老厂商内核不识别时 absolute 缺
+     top/left 会整体塌位（不是视觉降级） */
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   width: 100%;
   height: 100%;
   /* padding 与高亮层一致由 JS 按 metrics 同步写入；换行口径也必须与高亮层一致 */
