@@ -28,10 +28,29 @@ export const VFS_ENTRY_SCOPE_PATH_INDEX_DDL = `
 CREATE INDEX IF NOT EXISTS idx_vfs_entry_scope_path
   ON vfs_entry(scope_key, path)`.trim();
 
+/**
+ * content_hash 索引：打包候选谓词的 `NOT EXISTS (vfs_entry.content_hash)` 反查
+ * 与 head 引用判定用。
+ *
+ * @remarks 真库形态实测：候选谓词整条 126–141ms → 加索引后 67–76ms（vfs_entry
+ * 全表扫在谓词每行上重复发生，是主耗时项）；合成 2 万 revision / 5 千 entry
+ * 规模从 8.9s → 0.37s。写放大可忽略（entry 行数远小于 revision）。
+ *
+ * v18 canonical DDL 的一部分，**BOOT 不因它单独 bump**：本迭代 v18 未发布，
+ * 存量 v17 库走 17→18 慢路径时随本语句集一并建出；已在分支内测试机落 v18
+ * 的库不会补建（无发布面，接受）。
+ */
+export const VFS_ENTRY_CONTENT_HASH_INDEX_DDL = `
+CREATE INDEX IF NOT EXISTS idx_vfs_entry_content_hash
+  ON vfs_entry(content_hash)`.trim();
+
 /** All bootstrap statements in execution order.
  *
  * 注意：`scope_key` / `entry_id` 上的具名索引不在此数组内——`UNIQUE(scope_key, path)`
  * 的隐式索引已覆盖前缀扫描需求，其余具名索引曾被视为纯写放大而不再建出
  * （历史上由 vfs-entry-id-redesign-v1 的 rebuildIndexes 统一管理，该函数为刻意空实现，
- * migration 已随第二轮退役删除）。 */
-export const VFS_SCHEMA_STATEMENTS: readonly string[] = [VFS_ENTRY_TABLE_DDL];
+ * migration 已随第二轮退役删除）；content_hash 索引是打包谓词实测定案的例外。 */
+export const VFS_SCHEMA_STATEMENTS: readonly string[] = [
+  VFS_ENTRY_TABLE_DDL,
+  VFS_ENTRY_CONTENT_HASH_INDEX_DDL,
+];

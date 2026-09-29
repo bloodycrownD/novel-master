@@ -121,6 +121,10 @@ import { IntegrityRepairRegistry } from "@/service/integrity-repair.js";
  * 打包任务跨启动续跑搬运）。占号说明：main 侧曾占 v18 后当日撤回（上段，
  * 未发布），故本迭代直接取 v18、无需再顺延；合并顺序上以主干现值为准，
  * 若 main 后续再占 18 则本迭代顺延。
+ * v18 同轮追加：`idx_vfs_entry_content_hash`（打包候选谓词的 head 引用
+ * 反查用；真库形态谓词 126–141ms → 67–76ms）。它也在 v18 canonical DDL 里，
+ * **不单独 bump**——本迭代尚未发布，存量 v17 库走 17→18 慢路径随语句集
+ * 一并建出；分支内测试机已落 v18 的库不会补建（无发布面，可接受）。
  */
 export const SCHEMA_BOOT_VERSION = 18;
 
@@ -353,10 +357,14 @@ export async function bootstrapNovelMaster(
       return;
     }
 
+    // 基线检查先于 DDL：低版本老库的表形态可能与 canonical DDL 不兼容
+    //（如 legacy vfs_entry（path 主键）没有 content_hash 列，索引 DDL 会以
+    //「no such column」炸掉、顶掉本应给出的升级提示）。事务内抛错整体回滚，
+    // 先后顺序对非 legacy 库无持久影响。
+    await assertMinimumBaseline(tx);
     for (const sql of NOVEL_MASTER_SCHEMA_STATEMENTS) {
       await tx.execute(sql);
     }
-    await assertMinimumBaseline(tx);
     await runPendingSchemaMigrations(tx);
     await alignSchemaColumns(tx);
     // parent_session_id 索引不能放在 DDL 里——老库升级路径下 DDL 阶段该列还没被
