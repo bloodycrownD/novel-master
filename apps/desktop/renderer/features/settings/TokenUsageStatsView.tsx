@@ -28,6 +28,7 @@ import type {
 } from "@shared/ipc-types";
 import { SettingsListEmpty, SettingsPanel, SettingsSection } from "./settings-ui";
 import { formatTokenCount } from "@shared/logic/format-token-count";
+import { formatHitRate, hitRate } from "@shared/logic/hit-rate";
 import {
   formatDurationMs,
   formatRequestTime,
@@ -86,18 +87,6 @@ function parseLocalDate(s: string): Date | null {
 /** Date → `<input type="date">` 接受的本地 `YYYY-MM-DD` 值。 */
 function toDateInputValue(d: Date): string {
   return toLocalDayKey(d.getTime());
-}
-
-/** 命中率（0-1）；计费口径分母无数据时返回 null（展示「暂无数据」而非 0%）。 */
-function hitRate(cacheRead: number, billed: number): number | null {
-  if (billed <= 0) {
-    return null;
-  }
-  return cacheRead / billed;
-}
-
-function formatHitRate(rate: number | null): string {
-  return rate == null ? "—" : `${Math.round(rate * 100)}%`;
 }
 
 /** 平均 token 速率展示：`x.x tok/s`（≥100 取整避免小数位过长）；无数据显示空态。 */

@@ -47,6 +47,55 @@ describe("Message visibility", () => {
     assert.equal(list[3]!.hidden, false); // seq 4
   });
 
+  it("listBySession includeHidden:false 在 SQL 层只回可见消息（chip 读口口径）", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id, "S");
+    await ctx.messages.append(session.id, "user", textBlocks("visible-1"));
+    const m2 = await ctx.messages.append(session.id, "assistant", textBlocks("hidden-1"));
+    await ctx.messages.append(session.id, "user", textBlocks("visible-2"));
+    await ctx.messages.hide(m2.id);
+
+    const visibleOnly = await ctx.messages.listBySession(session.id, {
+      includeHidden: false,
+    });
+    assert.deepEqual(
+      visibleOnly.map((m) => m.hidden),
+      [false, false],
+      "隐藏行不出现在结果里"
+    );
+    assert.equal(visibleOnly.length, 2);
+
+    // 默认口径不变：含 hidden 全量（回滚锚定等既有消费方）。
+    const all = await ctx.messages.listBySession(session.id);
+    assert.equal(all.length, 3);
+    assert.equal(all[1]!.hidden, true);
+  });
+
+  it("listMessageHeadersBySession：头投影含 hidden、按 seq 升序、字段齐（不解压正文）", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id, "S");
+    const m1 = await ctx.messages.append(session.id, "user", textBlocks("h1"));
+    await ctx.messages.append(session.id, "assistant", textBlocks("h2"));
+    const m3 = await ctx.messages.append(session.id, "user", textBlocks("h3"));
+    await ctx.messages.hide(m3.id);
+
+    const headers = await ctx.messages.listMessageHeadersBySession(session.id);
+    assert.equal(headers.length, 3);
+    assert.deepEqual(
+      headers.map((h) => [h.seq, h.role, h.hidden]),
+      [
+        [1, "user", false],
+        [2, "assistant", false],
+        [3, "user", true],
+      ]
+    );
+    assert.equal(headers[0]!.id, m1.id);
+    assert.equal(headers[0]!.sessionId, session.id);
+    assert.ok(headers[0]!.createdAtMs > 0);
+  });
+
   it("shows a range of messages by seq", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);

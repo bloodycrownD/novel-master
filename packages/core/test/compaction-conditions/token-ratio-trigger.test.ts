@@ -152,8 +152,8 @@ describe("TokenRatioConditionTrigger", () => {
     assert.equal(await trigger.shouldTrigger(session, evaluation), false);
   });
 
-  it("uses heuristic override when resolveTokenizerOverride returns heuristic (T5)", async () => {
-    const captured: { tokenizerOverride?: string; counterKind?: string } = {};
+  it("无统计可用时评估走 heuristic 估算、不调驱动（preferEstimate，T5 改版）", async () => {
+    const captured: { driverCalled: number } = { driverCalled: 0 };
     clearTokenizerDrivers();
     setNodeTokenizerLoader(
       createNodeTokenizerLoader(defaultTokenizerAssetsRoot()),
@@ -161,10 +161,8 @@ describe("TokenRatioConditionTrigger", () => {
     registerTokenizerDriver({
       name: NODE_DRIVER_NAME,
       countPromptLlmInput: async (params) => {
-        const result = await nodeCountPromptLlmInput(params);
-        captured.tokenizerOverride = params.tokenizerOverride;
-        captured.counterKind = result.counterKind;
-        return result;
+        captured.driverCalled += 1;
+        return nodeCountPromptLlmInput(params);
       },
     });
 
@@ -182,29 +180,20 @@ describe("TokenRatioConditionTrigger", () => {
     );
 
     await trigger.shouldTrigger(session, evaluation);
-    assert.equal(captured.tokenizerOverride, "heuristic");
-    assert.equal(captured.counterKind, "heuristic");
+    // 评估路径估算优先：读口 heuristic 即回，驱动（真分词器）一次都不被调
+    // ——压缩判定不得为本地计数阻塞 run（glm 原生整串 ~5.8s）。
+    assert.equal(captured.driverCalled, 0, "评估的本地分支不得调驱动");
   });
 
-  it("heuristic 计数走保守阈值，比精确档更早触发压缩", async () => {
-    // 用 mock driver 可控返回 counterKind / tokenCount，避免依赖真实 tokenizer 数值。
-    const captured: { counterKind?: string; tokenCount?: number } = {};
-    clearTokenizerDrivers();
-    registerTokenizerDriver({
-      name: "mock",
-      countPromptLlmInput: async () => ({
-        tokenCount: captured.tokenCount ?? 0,
-        counterKind: (captured.counterKind ?? "tiktoken") as never,
-        estimated: captured.counterKind === "heuristic",
-        savedModelId: "openai/test",
-        vendorModelId: "openai/test",
-        tokenizerFamily: "heuristic",
-      }),
-    });
-
+  it("heuristic 估算走保守阈值，比 api 精确档更早触发压缩", async () => {
     const session = new InMemoryAgentSession();
-    const registry = createDefaultTokenCounterRegistry(emptyRegistryDeps());
-    const evaluation = systemOnlyEvaluation("sys");
+    // 可控 heuristic 计数的 registry：估算优先路径的读数完全来自它。
+    let heuristicCount = 0;
+    const registry = {
+      heuristic: { countText: (text: string) => heuristicCount },
+    } as unknown as ReturnType<typeof createDefaultTokenCounterRegistry>;
+    const sessionKkv = createMemorySessionKkv();
+    const evaluation = systemOnlyEvaluation("sys", "sess-heuristic-factor", sessionKkv);
 
     // contextWindow=100000、tokenRatio=0.8：精确阈值=80000，heuristic 默认阈值=68000。
     const makeTrigger = (heuristicSafetyFactor?: number) =>
@@ -219,18 +208,21 @@ describe("TokenRatioConditionTrigger", () => {
       );
 
     // 75000 落在「保守阈值之上、精确阈值之下」区间。
-    captured.tokenCount = 75_000;
-
-    captured.counterKind = "tiktoken";
-    assert.equal(await makeTrigger().shouldTrigger(session, evaluation), false);
-
-    captured.counterKind = "heuristic";
-    assert.equal(await makeTrigger().shouldTrigger(session, evaluation), true);
-
-    // safetyFactor=1 时 heuristic 退化回精确阈值，不再提前触发。
+    heuristicCount = 75_000;
     assert.equal(
-      await makeTrigger(1).shouldTrigger(session, evaluation),
+      await makeTrigger().shouldTrigger(session, evaluation),
+      true,
+      "heuristic 估算（估算优先路径的必然档位）必须走保守阈值",
+    );
+    // safetyFactor=1 时退化回精确阈值，不再提前触发。
+    assert.equal(await makeTrigger(1).shouldTrigger(session, evaluation), false);
+
+    // 对照：同数值走 api 精确档（counterKind=api）不乘系数 → 不触发。
+    await seedKkvEntry(sessionKkv, "sess-heuristic-factor", 75_000);
+    assert.equal(
+      await makeTrigger().shouldTrigger(session, evaluation),
       false,
+      "api 基线命中时不乘保守系数",
     );
   });
 

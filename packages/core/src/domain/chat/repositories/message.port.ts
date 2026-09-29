@@ -4,13 +4,28 @@
  * @module domain/chat/repositories/message.port
  */
 
-import type { ChatMessage } from "../model/message.js";
+import type { ChatMessage, ChatMessageHeader } from "../model/message.js";
 import type { MessageContent } from "../model/content-block.js";
 import type { MessageSearchQuery } from "../content/message-content-match.js";
 
 /** Persistence for `chat_message` rows. */
 export interface MessageRepository {
-  listBySession(sessionId: string): Promise<ChatMessage[]>;
+  /**
+   * 按 seq 升序列出会话消息。`includeHidden: false` 在 SQL 层滤掉 hidden
+   * 行（默认含 hidden——回滚锚定等既有口径依赖「含隐藏全量」）。
+   */
+  listBySession(
+    sessionId: string,
+    options?: { includeHidden?: boolean }
+  ): Promise<ChatMessage[]>;
+
+  /**
+   * 消息头投影（无正文，不解压 content）：压缩 hide / 置位锚定等只需要
+   * id/seq/role/hidden 的区间逻辑专用，大会话上替代全量解压。
+   */
+  listMessageHeadersBySession(
+    sessionId: string
+  ): Promise<ChatMessageHeader[]>;
 
   /**
    * 统计会话消息行数（`SELECT COUNT(*) ... WHERE session_id = ?`）。

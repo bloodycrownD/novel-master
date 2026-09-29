@@ -45,6 +45,10 @@ import {
 import { isVfsError } from "@/errors/vfs-errors.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { invalidateSessionApiPromptTokenEntry } from "@/infra/tokenizer/logic/session-api-prompt-token-store.js";
+import {
+  SESSION_KKV_DOMAIN_USAGE_STATS,
+  USAGE_STATS_TOOL_USE_COUNT_KEY,
+} from "@/domain/session-kkv/model/session-kkv-domains.js";
 import { createScopedVfsService } from "@/service/vfs/create-scoped-vfs-service.js";
 import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
 import type { VfsService } from "@/service/vfs/vfs.port.js";
@@ -266,6 +270,23 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
       createSessionKkvService(this.deps.conn),
       sessionId
     );
+    // 回滚物理删尾：工具调用数缓存一并失效（含 hidden 口径下被删的 assistant
+    // 行不再计入）。写哨兵空串而非 delete（cr-fix-spec-r2 s3/B-1：与读口
+    // 「现算回填前复核原值」配合防陈旧回写），best-effort 同上。
+    try {
+      await createSessionKkvService(this.deps.conn).set(
+        sessionId,
+        SESSION_KKV_DOMAIN_USAGE_STATS,
+        USAGE_STATS_TOOL_USE_COUNT_KEY,
+        ""
+      );
+    } catch (error) {
+      console.warn(
+        `[message-rollback] 工具调用数缓存失效失败（下次读数将现算）：${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+    }
     // 全局孤儿 revision 清扫（rollback-large-jank Step 4）：事务提交后
     // fire-and-forget 调度——全表 DELETE 与本会话无关，不 await、不阻塞
     // rollbackToMessage resolve；清扫中不重入（in-flight 去重），并发安全

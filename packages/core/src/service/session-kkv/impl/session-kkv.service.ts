@@ -22,6 +22,14 @@ export class DefaultSessionKkvService implements SessionKkvService {
     return entry?.value ?? null;
   }
 
+  getMany(
+    sessionId: string,
+    domain: string,
+    keys: readonly string[]
+  ): Promise<Map<string, string>> {
+    return this.repo.getMany(sessionId, domain, keys);
+  }
+
   set(
     sessionId: string,
     domain: string,

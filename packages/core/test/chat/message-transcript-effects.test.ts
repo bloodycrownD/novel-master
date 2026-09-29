@@ -5,6 +5,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { textBlocks } from '@novel-master/core/chat';
+import { ChatError } from '../../src/errors/chat-errors.js';
 import { createMessageTranscriptEffectsService } from '../../src/service/chat/create-message-transcript-effects.js';
 import { DefaultMessageTranscriptEffectsService } from '../../src/service/chat/impl/message-transcript-effects.service.js';
 import { createSessionKkvService } from '../../src/service/session-kkv/create-session-kkv-service.js';
@@ -348,6 +349,85 @@ describe('MessageTranscriptEffectsService', () => {
     assert.deepEqual(
       after.map(m => ({ id: m.id, hidden: m.hidden })),
       before.map(m => ({ id: m.id, hidden: m.hidden })),
+    );
+  });
+
+  // cr-chat-1：get 全局按 id 查，跨会话传入他会话的合法 user 消息 id 时，
+  // 必须按旧实现的 404 口径拦下——不得拿他会话的 seq 对本会话错误范围执行
+  // hide/show、清 KKV 两域或失效 token cache。
+  it('cr-chat-1：跨会话锚点 id 抛 chatNotFound，两会话消息与 KKV 域零变化', async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const sessionA = await ctx.sessions.create(project.id);
+    const sessionB = await ctx.sessions.create(project.id);
+    const effects = createMessageTranscriptEffectsService(ctx.conn);
+    const sk = createSessionKkvService(ctx.conn);
+
+    // 会话 A：user + assistant 两条（若副作用发生，前缀会被错误 hide）。
+    await ctx.messages.append(sessionA.id, 'user', textBlocks('a1'));
+    await ctx.messages.append(sessionA.id, 'assistant', {
+      blocks: [{ type: 'text', text: 'a2' }],
+    });
+    // 会话 B：一条合法 user 消息，跨会话传入。
+    const anchorB = await ctx.messages.append(
+      sessionB.id,
+      'user',
+      textBlocks('b1'),
+    );
+
+    // 预置 A 的 rule_snapshot / file_cache，验证拒绝时不会被清。
+    await sk.set(
+      sessionA.id,
+      SESSION_KKV_DOMAIN_FILE_CACHE,
+      'full:/a.md',
+      JSON.stringify({ body: 'x', mtimeMs: 1 }),
+    );
+    await sk.set(
+      sessionA.id,
+      SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
+      RULE_SNAPSHOT_CANON_KEY,
+      '[]',
+    );
+
+    const beforeA = await ctx.messages.listBySession(sessionA.id);
+    const beforeB = await ctx.messages.listBySession(sessionB.id);
+
+    await assert.rejects(
+      () =>
+        effects.setMessageFloorAtMessage(project.id, sessionA.id, anchorB.id),
+      (err: unknown) => {
+        assert.ok(err instanceof ChatError);
+        assert.equal(err.code, 'NOT_FOUND');
+        assert.equal(err.sessionId, sessionA.id);
+        assert.equal(err.messageId, anchorB.id);
+        return true;
+      },
+    );
+
+    // 两会话消息 hidden 状态零变化。
+    const afterA = await ctx.messages.listBySession(sessionA.id);
+    const afterB = await ctx.messages.listBySession(sessionB.id);
+    assert.deepEqual(
+      afterA.map(m => ({ id: m.id, hidden: m.hidden })),
+      beforeA.map(m => ({ id: m.id, hidden: m.hidden })),
+    );
+    assert.deepEqual(
+      afterB.map(m => ({ id: m.id, hidden: m.hidden })),
+      beforeB.map(m => ({ id: m.id, hidden: m.hidden })),
+    );
+
+    // KKV 两域未被清（清域副作用未发生）。
+    assert.equal(
+      await sk.get(sessionA.id, SESSION_KKV_DOMAIN_FILE_CACHE, 'full:/a.md'),
+      JSON.stringify({ body: 'x', mtimeMs: 1 }),
+    );
+    assert.equal(
+      await sk.get(
+        sessionA.id,
+        SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
+        RULE_SNAPSHOT_CANON_KEY,
+      ),
+      '[]',
     );
   });
 });

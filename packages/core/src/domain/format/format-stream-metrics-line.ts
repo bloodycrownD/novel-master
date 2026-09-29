@@ -1,7 +1,7 @@
 /**
  * 流式 metrics 条文案（Mobile/Desktop 共用，stream-metrics-tokens 改版）。
  *
- * 形态：「{prefix} · {elapsed} · 输出 {N} t · {rate} t/s」。正文/思考不再
+ * 形态：「{prefix} · {elapsed} · 输出 {N} tok · {rate} tok/s」。正文/思考不再
  * 分列——思考期在 anthropic/gemini 下 usage 已含、heuristic 下随正文一并
  * 累计字符按 ceil 口径折算，天然并入输出。速率段仅在实时速率可得时拼接
  * （样本不足时省略，避免除零/首秒抖动）。
@@ -35,8 +35,8 @@ export function formatStreamElapsed(seconds: number): string {
 }
 
 /**
- * t/s 数字格式（对齐统计页 formatTokensPerSecond 惯例：≥100 整数、否则
- * 1 位小数；整数值不带尾随 .0——与 T-M8 例文「45 t/s」形态一致）。
+ * tok/s 数字格式（对齐统计页 formatTokensPerSecond 惯例：≥100 整数、否则
+ * 1 位小数；整数值不带尾随 .0——与 T-M8 例文「45 tok/s」形态一致）。
  */
 function formatTokensPerSecondValue(rate: number): string {
   if (rate >= 100) {
@@ -54,10 +54,10 @@ export function buildStreamMetricsLine(
   const prefix = metrics.running ? "生成中" : "上次生成";
   const parts: string[] = [
     `${prefix} · ${elapsedLabel}`,
-    `输出 ${formatCharCount(metrics.completionTokens)} t`,
+    `输出 ${formatCharCount(metrics.completionTokens)} tok`,
   ];
   if (metrics.tokensPerSecond != null) {
-    parts.push(`${formatTokensPerSecondValue(metrics.tokensPerSecond)} t/s`);
+    parts.push(`${formatTokensPerSecondValue(metrics.tokensPerSecond)} tok/s`);
   }
   return parts.join(" · ");
 }

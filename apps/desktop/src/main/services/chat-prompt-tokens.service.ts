@@ -9,13 +9,15 @@
  *
  * @module services/chat-prompt-tokens
  */
+import { app } from "electron";
 import { resolveSavedModelId } from "@novel-master/core/agent";
 import type { ChatMessage } from "@novel-master/core/chat";
 import { messageBodyText } from "@novel-master/core/prompt";
 
 import {
   countPromptLlmInputHeuristicOnly,
-  formatTokenSourceLabel,
+  formatContextUsageLabel,
+  formatTokenSourceBadge,
   resolvePromptTokensWithBackfill,
   resolveTokenCounterModeForModel,
   serializePromptLlmInput,
@@ -25,7 +27,6 @@ import {
 import { countTextWithDefaultEncoding } from "@novel-master/tokenizer-driver-node";
 import type { PromptChatTokenStatsResponse } from "../../../shared/ipc-types.js";
 import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
-import { formatTokenCount } from "@novel-master/core/common";
 import {
   buildSessionPromptInput,
   type SessionPromptScope,
@@ -40,12 +41,14 @@ import {
  * 进程级单例编码表本身不产生额外建表成本**。
  *
  * ⚠️ 但「复用单例」**不等于「第一次也是免费的」**（stream-metrics-native `agile-3`）：
- * `getNodeEncodingForModel` 的缓存键是 `model:<tiktokenModel>`、兜底档
- * `getNodeEncodingByName` 的键是 `enc:cl100k_base`——**两个命名空间互不命中**，所以
- * 兜底档**第一次**被走到时仍要现建一整张 cl100k WASM 表。`runtime/create-desktop-runtime.ts`
+ * 历史上的 `model:` / `enc:` 双命名空间已随 registry 收敛废除
+ * （fallback-caliber-align A 线）——`getNodeEncodingForModel` 现在把模型名解析
+ * 成编码名后进 registry 的 `enc:cl100k_base` 单键空间，所以**精确档（gpt-4 等
+ * cl100k 家族）、兜底档与启动预热共享同一张表**。`runtime/create-desktop-runtime.ts`
  * 已在**启动路径跑完之后用 `setTimeout` 空闲预热**过一次（`try/catch` 静默、不阻塞启动），
  * 这覆盖了大部分场景；但**首次兜底若抢在预热之前发生，仍会有一次约 250ms 的主进程同步
- * 建表**（实测 185~248ms，期间事件循环阻塞、IPC 排队）。
+ * 建表**（实测 185~248ms，期间事件循环阻塞、IPC 排队）——只是这笔开销从此被精确档
+ * 一并复用，不再是双命名空间时代的「各建各的」。
  */
 function countFallbackTokens(
   runtime: DesktopNovelMasterRuntime,
@@ -113,7 +116,11 @@ export function withRealFallbackCounter(
   };
 }
 
-/** 统计响应装配：`source` 原样带出，标签由 {@link formatChatTokenStatsLabel} 拼。 */
+/**
+ * 统计响应装配：main 在产出时把完整 label 拼好（core 的
+ * {@link formatTokenSourceBadge} + {@link formatContextUsageLabel} 单源），
+ * renderer 纯渲染 `stats.label`，不再本地拼装（X1：renderer 不能 import core）。
+ */
 function buildTokenStats(
   tokenCount: number,
   estimated: boolean,
@@ -125,6 +132,8 @@ function buildTokenStats(
     contextWindow != null && contextWindow > 0
       ? Math.min(999, Math.round((tokenCount / contextWindow) * 100))
       : undefined;
+  const badge = formatTokenSourceBadge(source, counterKind, estimated);
+  const label = formatContextUsageLabel(tokenCount, contextWindow, badge);
   return {
     tokenCount,
     contextWindow,
@@ -132,27 +141,8 @@ function buildTokenStats(
     estimated,
     counterKind,
     source,
+    label,
   };
-}
-
-/**
- * 组装 meta bar 的 token 标签。占用来源后缀由 core 的
- * {@link formatTokenSourceLabel} 统一给出（`api` → 「上次请求」，其余 → 「预估」），
- * 本文件不再自备一份映射。
- */
-export function formatChatTokenStatsLabel(
-  stats: PromptChatTokenStatsResponse,
-): string {
-  const prefix = stats.estimated ? "~" : "";
-  const current = formatTokenCount(stats.tokenCount);
-  const suffix = formatTokenSourceLabel(stats.source);
-  if (stats.contextWindow == null || stats.contextWindow <= 0) {
-    return stats.estimated
-      ? `${prefix}${current} tokens (est.) · ${suffix}`
-      : `${current} tokens · ${suffix}`;
-  }
-  const pct = stats.pct ?? 0;
-  return `${prefix}${pct}% • ${current}/${formatTokenCount(stats.contextWindow)} · ${suffix}`;
 }
 
 // 共用的会话输入快照：避免主路径和 fallback 各自重复读取 sessionConfig。
@@ -214,7 +204,24 @@ async function computeChatPromptTokenStats(
   );
 }
 
-export async function loadChatPromptTokenStats(
+/**
+ * 后台精确计数暖机在途标记（按 sessionId）：首帧估算档后安排一次完整
+ * resolve（家族真分词器 + L1 整串缓存写入），结果丢弃、只为暖缓存——
+ * renderer 下一次触发（消息/step 事件）即命中 L1 拿到精确标签。
+ */
+const preciseWarmInflight = new Set<string>();
+
+/**
+ * 真正执行底层计算的一跳（原 `loadChatPromptTokenStats` 函数体）。
+ *
+ * 对外入口 {@link loadChatPromptTokenStats} 已套防抖；本函数只被防抖执行链
+ * 调用，同一 sessionId 串行、绝不并发重入。
+ *
+ * 两阶段（统计优先口径，2026-09-29）：首帧 `preferEstimate`——api 命中仍
+ * 精确返回；miss 时廉价估算即回（不调真分词器，切模型/回滚后的首帧不干等
+ * 家族计数），估算档则后台暖一次精确 L1。
+ */
+async function loadChatPromptTokenStatsNow(
   runtime: DesktopNovelMasterRuntime,
   scope: SessionPromptScope,
 ): Promise<PromptChatTokenStatsResponse> {
@@ -240,8 +247,30 @@ export async function loadChatPromptTokenStats(
       scope.sessionId,
       rawMessages,
       params,
-      { sessionKkv: runtime.sessionKkv },
+      { sessionKkv: runtime.sessionKkv, preferEstimate: true },
     );
+    if (
+      result.source === "local" &&
+      result.estimated &&
+      !preciseWarmInflight.has(scope.sessionId)
+    ) {
+      preciseWarmInflight.add(scope.sessionId);
+      void resolvePromptTokensWithBackfill(
+        scope.sessionId,
+        rawMessages,
+        params,
+        { sessionKkv: runtime.sessionKkv },
+      )
+        .catch((error: unknown) => {
+          // 暖机失败只丢「下次首帧直读精确」的加速，不影响正确性；但完全
+          // 静默会让 chip 永停估算档且无从排查（cr-fix-spec-r2 full/I-1）——
+          // 开发期留痕与首帧失败同款。
+          if (!app.isPackaged) {
+            console.warn("[chat] prompt token precise warm-up failed", error);
+          }
+        })
+        .finally(() => preciseWarmInflight.delete(scope.sessionId));
+    }
     const contextWindow =
       await runtime.providerModels.getContextWindow(savedModelId);
     return {
@@ -252,6 +281,137 @@ export async function loadChatPromptTokenStats(
       source: result.source,
     };
   });
+}
+
+/**
+ * token 读口防抖窗口（message-token-cache Step 4 / T-TC6）：300ms trailing。
+ *
+ * renderer 侧 SessionDetailDrawer 有 5 个触发源（会话切换、消息收尾、编辑、
+ * 置位/压缩等）会在短时间内连发 IPC；本层在 service 侧把它们合并成一次底层
+ * 计算，renderer 零改动。窗口内的新触发会重置计时（最后一次触发后 300ms 才
+ * 执行——trailing 语义，保证最终一致性：最后一次触发必产生一次计算，绝不吞）。
+ */
+const CHAT_PROMPT_TOKEN_DEBOUNCE_MS = 300;
+
+/**
+ * 每个 sessionId 一个防抖槽：
+ * - `deferred`：trailing 计时挂起中，窗口内所有 caller 共享「这一次执行」；
+ * - `running`：正在执行的底层计算链（同 key 串行——到期执行若遇上一轮仍在
+ *   途，先挂到上一轮之后，绝不并发重入）；
+ * - `scope`：记录最后一次触发的 scope，trailing 到期按最新触发执行。
+ */
+type ChatPromptTokenDebounceSlot = {
+  timer: ReturnType<typeof setTimeout> | null;
+  deferred: {
+    promise: Promise<PromptChatTokenStatsResponse>;
+    resolve: (value: Promise<PromptChatTokenStatsResponse>) => void;
+  } | null;
+  running: Promise<PromptChatTokenStatsResponse> | null;
+  scope: SessionPromptScope;
+};
+
+const chatPromptTokenDebounceSlots = new Map<
+  string,
+  ChatPromptTokenDebounceSlot
+>();
+
+/** 测试观测：每 sessionId 的底层计算执行次数（T-TC6 断言「合并为 N 次」的口径）。 */
+const chatPromptTokenDebounceExecCounts = new Map<string, number>();
+
+function scheduleChatPromptTokenTrailing(
+  runtime: DesktopNovelMasterRuntime,
+  key: string,
+  slot: ChatPromptTokenDebounceSlot,
+): void {
+  if (slot.timer != null) {
+    clearTimeout(slot.timer);
+  }
+  slot.timer = setTimeout(() => {
+    slot.timer = null;
+    // 计时到期：取走窗口内 caller 共享的 deferred（可能为 null——那是「在途
+    // 期间新触发」安排的追赶轮，无等待者也要执行，新数据才算到位）。
+    const deferred = slot.deferred;
+    slot.deferred = null;
+    const previousRun = slot.running;
+    const run = (
+      previousRun ? previousRun.catch(() => undefined) : Promise.resolve()
+    ).then(() => {
+      chatPromptTokenDebounceExecCounts.set(
+        key,
+        (chatPromptTokenDebounceExecCounts.get(key) ?? 0) + 1,
+      );
+      return loadChatPromptTokenStatsNow(runtime, slot.scope);
+    });
+    slot.running = run;
+    const settle = () => {
+      if (slot.running === run) {
+        slot.running = null;
+      }
+    };
+    run.then(settle, settle);
+    // 兜底 handler：无 caller 的追赶轮 rejection 不会变 unhandled；有 caller
+    // 时多挂一个 handler 不影响失败向 caller 的原样传播（resilient 接住走 fallback）。
+    run.catch(() => undefined);
+    if (deferred != null) {
+      // caller 的 promise 直接接到本轮执行上（resolve 扁平化；失败原样传播，
+      // 由 resilient 包装接住走 fallback）。
+      deferred.resolve(run);
+    }
+  }, CHAT_PROMPT_TOKEN_DEBOUNCE_MS);
+}
+
+/**
+ * token 统计读口（IPC 并发语义保持）：按 sessionId 做 300ms trailing
+ * debounce + 同参在途 Promise 合并。
+ *
+ * - 窗口内（计时挂起中）重复触发：重置计时，所有 caller 共享同一次底层计算；
+ * - 底层计算在途时新触发：复用在途 Promise 返回，并安排 300ms 后的追赶轮
+ *   （在途落地后串行执行），新触发的数据变化最终必被计算；
+ * - 不同 sessionId 互不干扰（Map 按 key 隔离）。
+ */
+export function loadChatPromptTokenStats(
+  runtime: DesktopNovelMasterRuntime,
+  scope: SessionPromptScope,
+): Promise<PromptChatTokenStatsResponse> {
+  const key = scope.sessionId;
+  let slot = chatPromptTokenDebounceSlots.get(key);
+  if (slot == null) {
+    slot = { timer: null, deferred: null, running: null, scope };
+    chatPromptTokenDebounceSlots.set(key, slot);
+  }
+  slot.scope = scope;
+  if (slot.running != null) {
+    // 在途复用：并发请求直接挂正在跑的这一轮；追赶轮保证新触发最终被计算。
+    scheduleChatPromptTokenTrailing(runtime, key, slot);
+    return slot.running;
+  }
+  if (slot.deferred == null) {
+    let resolve!: (value: Promise<PromptChatTokenStatsResponse>) => void;
+    const promise = new Promise<PromptChatTokenStatsResponse>((res) => {
+      resolve = res;
+    });
+    slot.deferred = { promise, resolve };
+  }
+  scheduleChatPromptTokenTrailing(runtime, key, slot);
+  return slot.deferred.promise;
+}
+
+/** 测试钩子：清空防抖槽与执行计数（用例间隔离，防跨用例串扰）。 */
+export function resetChatPromptTokenDebounceForTests(): void {
+  for (const slot of chatPromptTokenDebounceSlots.values()) {
+    if (slot.timer != null) {
+      clearTimeout(slot.timer);
+    }
+  }
+  chatPromptTokenDebounceSlots.clear();
+  chatPromptTokenDebounceExecCounts.clear();
+}
+
+/** 测试钩子：读取某 sessionId 的底层计算执行次数。 */
+export function chatPromptTokenDebounceExecCountForTests(
+  sessionId: string,
+): number {
+  return chatPromptTokenDebounceExecCounts.get(sessionId) ?? 0;
 }
 
 /**
@@ -305,11 +465,6 @@ export async function loadChatPromptTokenStatsResilient(
   }
 }
 
-/** @deprecated Use loadChatPromptTokenStatsResilient — kept for label-only callers. */
-export async function loadChatPromptTokenLabelResilient(
-  runtime: DesktopNovelMasterRuntime,
-  scope: SessionPromptScope,
-): Promise<string> {
-  const stats = await loadChatPromptTokenStatsResilient(runtime, scope);
-  return formatChatTokenStatsLabel(stats);
-}
+// 此前的 deprecated 链（loadChatPromptTokenLabelResilient + formatChatTokenStatsLabel）
+// 已随 token-source-label 收敛删除：label 现由 buildTokenStats 产出并随 stats 下发
+// （PromptChatTokenStatsResponse.label），零生产消费方，无需迁移。

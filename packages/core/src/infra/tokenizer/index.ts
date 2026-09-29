@@ -29,8 +29,13 @@ export {
 } from "./logic/resolve-tokenizer-family.js";
 export { countTextWithIncrementalTokenizer } from "./logic/count-text-with-tokenizer.js";
 export { resolveContextWindowTokens } from "./logic/resolve-context-window.js";
-export { formatCounterKindLabel } from "./logic/format-counter-kind-label.js";
-export { formatTokenSourceLabel } from "./logic/format-token-source-label.js";
+// token-source-label：badge 与完整占用标签的单源在 common/format-token-count.ts，
+// 此处经 logic 文件具名再导出（供 public/provider 链使用）。
+export {
+  formatTokenSourceBadge,
+  formatContextUsageLabel,
+  type TokenSourceBadge,
+} from "./logic/format-token-source-badge.js";
 export { seedContextWindowTokens } from "./logic/seed-context-window-tokens.js";
 export {
   CONTEXT_WINDOW_RULES,
@@ -39,7 +44,6 @@ export {
 export {
   countPromptLlmInput,
   countPromptLlmInputHeuristicOnly,
-  formatPromptTokenUsageLabel,
   type CountPromptLlmInputParams,
   type PromptTokenCountResult,
 } from "./logic/count-prompt-llm-input.js";
@@ -57,6 +61,27 @@ export {
 } from "./logic/session-api-prompt-token-store.js";
 export { pickLastPromptUsage } from "./logic/pick-last-prompt-usage.js";
 export {
+  promptWholeCache,
+  PROMPT_WHOLE_CACHE_LRU_PER_SESSION,
+  type PromptWholeCacheEntry,
+} from "./logic/prompt-whole-cache.js";
+export {
+  tokenChunkCache,
+  buildCounterScope,
+  chunkHash16,
+  parseTokenChunkCachePayload,
+  CHUNK_CACHE_MAX_TOTAL_ENTRIES,
+  type CounterScopeInput,
+  type TokenChunkCacheItem,
+  type AdvanceGenerationOptions,
+} from "./logic/token-chunk-cache.js";
+// message-token-cache Step 3：双驱动块流程需要与 core 同源的确定性切分
+// （golden 锁定行为），切分器本体不动、只接出导出面。
+export {
+  splitTextIntoChunks,
+  MAX_CHUNK_CHARS,
+} from "./logic/chunk-splitter.js";
+export {
   resolveCurrentPromptTokens,
   type PromptTokenSource,
   type ResolvedPromptTokens,
@@ -72,6 +97,24 @@ export {
   type ChatTokenCountKind,
   type CountTokensOptions,
 } from "./logic/count-tokens.js";
+export {
+  countOpenAiStyleMessages,
+  wrapSerializedPromptAsSystemMessage,
+  convertMessagesForWebTokenizer,
+  countWebTokenizerMessages,
+  type OpenAiStyleMessage,
+  type CountOpenAiStyleMessageOptions,
+  type TokenEncoder,
+} from "./logic/count-openai-style-message.js";
+export {
+  getEncoding,
+  clearForTests,
+  setFactoryForTests,
+  setClockForTests,
+  ENCODING_RETRY_TTL_MS,
+  type EncodingHandle,
+  type EncodingFactory,
+} from "./encoding-registry.js";
 export { tokenizerAssetPaths } from "./logic/tokenizer-asset-paths.js";
 export {
   parseTokenCounterModePref,

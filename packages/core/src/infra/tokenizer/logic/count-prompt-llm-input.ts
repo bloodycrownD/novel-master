@@ -55,7 +55,7 @@ export async function countPromptLlmInput(
   return resolveTokenizerDriver().countPromptLlmInput(params);
 }
 
-async function resolveVendorModelIdFromSaved(
+export async function resolveVendorModelIdFromSaved(
   savedModelId: string,
   savedModels?: Pick<SavedModelRepository, "findById">
 ): Promise<string> {
@@ -91,41 +91,6 @@ export async function countPromptLlmInputHeuristicOnly(
   };
 }
 
-/** Formats prompt token usage label: percentage when context window known. */
-export function formatPromptTokenUsageLabel(
-  count: number,
-  contextWindowTokens?: number,
-  options?: { readonly estimated?: boolean }
-): string {
-  const prefix = options?.estimated ? "~" : "";
-  const current = formatCompact(count);
-  if (contextWindowTokens == null || contextWindowTokens <= 0) {
-    return options?.estimated
-      ? `${prefix}${current} tokens (est.)`
-      : `${current} tokens`;
-  }
-  const pct = Math.min(999, Math.round((count / contextWindowTokens) * 100));
-  return `${prefix}${pct}% • ${current}/${formatCompact(contextWindowTokens)}`;
-}
-
-function formatCompact(n: number): string {
-  if (!Number.isFinite(n) || n < 0) {
-    return "—";
-  }
-  const rounded = Math.round(n);
-  if (rounded < 1000) {
-    return String(rounded);
-  }
-  if (rounded < 1_000_000) {
-    const k = rounded / 1000;
-    if (k >= 100) {
-      return `${Math.round(k)}K`;
-    }
-    return `${String(k.toFixed(1)).replace(/\.0$/, "")}K`;
-  }
-  const m = rounded / 1_000_000;
-  if (m >= 100) {
-    return `${Math.round(m)}M`;
-  }
-  return `${String(m.toFixed(1)).replace(/\.0$/, "")}M`;
-}
+// usage label 拼装已随 token-source-label 收敛进 common/format-token-count.ts
+// （formatContextUsageLabel，badge 单源）；本文件此前的第二份
+// formatPromptTokenUsageLabel/formatCompact 系零生产调用方的重复实现，已删除。
