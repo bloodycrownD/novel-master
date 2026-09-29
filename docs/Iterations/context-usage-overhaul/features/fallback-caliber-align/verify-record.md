@@ -111,3 +111,28 @@ completed 才写回；而消息一追加就失效旧值——于是 run 内每 s
 测试：core 全量 2925/2927（仅既有 usage-stats 时区 2 例）+ typecheck 干净；
 mobile 35、desktop 9 定向全绿。顺手修 `createMemorySessionKkv` 缺
 `getMany` 的存量红（c6d28a62 遗留，T-WT16 两例当场红、helper 补齐即绿）。
+
+## 追加轮：统计优先二次修正——撤回强制估算档（84595532）
+
+真机复验两症状（卡顿 + glm 显示 gpt 兜底）实锤强制估算档收过头：
+① run 内 assistant 落库（`STEP_COMMITTED(assistant)` 事件即触发 chip 刷新）
+与 tool_results 落库后的回锚（chokepoint ②）之间存在**失效窗口**——刷新
+跌进本地分支被强制 cl100k 估算：首次整串块计数（Hermes 上秒级）+ 块表
+KKV 读/写链（每次本地计数 seed 解析整表 + advanceGeneration 整表回写）
+= 新卡顿源；② glm 家族路由永不触发，`glm =` 档消失、恒显 `gpt ≈`。
+修正（4 文件）：
+
+1. 读口本地分支回落**模型自身家族计数器**（glm→原生 DJL、gpt→tiktoken
+   分块），不改写调用方 override；估读 estimated/counterKind 原样透传。
+2. `message.append` **不再失效** API 基线（纯追加由「基线+anchorSeq 增量」
+   覆盖——run 起步评估不再跌本地整串计数；这是撤回强制档的前提，否则
+   glm 每 run 起步 5.8s）。删除/改写/隐藏/置位/导入/切模型类失效保留。
+3. 增量估算取 `max(heuristic, ceil(字符/2))` 保守下限（CJK 不被低估过半；
+   附件经 prepare wrap 已入 text blocks，delta 天然计入）。
+
+测试：定向 83/83；core 全量 2933/2935（仅时区基线 2 例）+ tsc 干净；
+invalidation 测试 append 用例翻转为「保留」（其余 12 挂点不动）。
+dist 重建、真机已重启载新码。**教训**：assistant 落库与回锚之间的窗口
+此前靠「append 即失效 + 下一步回锚」掩盖，统计优先把窗口暴露给了 UI
+刷新路径——改失效语义时必须把 UI 事件时序（STEP_COMMITTED assistant
+相位）一并考虑。
