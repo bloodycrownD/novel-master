@@ -1371,6 +1371,50 @@ describe("usage stats service 会话维度详情（T-MD1/T-MD2，metric-detail-s
     assert.equal(detail.toolUseCount, 0);
   });
 
+  it("T-MD3: 工具计数读列 SUM——存量 NULL 行（v18 前直插）兜底现算计入", async () => {
+    const { ctx, session } = await seedSession();
+    const now = Date.now();
+    // repository 正常写入的 assistant 行：写入时落列，SUM 直接命中。
+    await seedMsg(ctx, session.id, 1, {
+      createdAtMs: now - 3000,
+      blocks: [
+        { type: "text", text: "call" },
+        toolUseBlock("t1"),
+        toolUseBlock("t2"),
+      ],
+      usage: { prompt: 10, completion: 4, total: 14 },
+    });
+    // legacy 直插行（tool_use_count NULL）：读侧兜底现算——content_json
+    // 明文带 1 个 tool_use 块（双形态读的明文分支）。
+    await ctx.conn.execute(
+      `INSERT INTO chat_message (
+         id, session_id, seq, role, content_json, created_at_ms, hidden
+       ) VALUES (?, ?, 2, 'assistant', ?, ?, 0)`,
+      [
+        randomUUID(),
+        session.id,
+        JSON.stringify({
+          blocks: [
+            { type: "text", text: "legacy" },
+            {
+              type: "tool_use",
+              id: "tu-l1",
+              name: "write",
+              input: { path: "/a.md", content: "x" },
+            },
+          ],
+        }),
+        now,
+      ]
+    );
+
+    const svc = createUsageStatsService(ctx.conn);
+    const detail = await svc.getSessionUsageDetail(session.id);
+    // 2（列 SUM）+ 1（NULL 行兜底）= 3。
+    assert.equal(detail.toolUseCount, 3);
+    assert.equal(detail.visibleMessageCount, 2);
+  });
+
   it("T-MD2: 可见消息数剔 hidden（不筛角色）；工具计数只数 assistant 的 tool_use 块且含 hidden 行", async () => {
     const { ctx, session } = await seedSession();
     const now = Date.now();

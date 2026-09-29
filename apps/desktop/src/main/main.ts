@@ -25,6 +25,7 @@ import { registerIpcHandlers } from "./ipc/register-handlers.js";
 import { getDesktopRuntime } from "./runtime/desktop-runtime-singleton.js";
 import { scheduleDesktopBlobBinaryNormalization } from "./services/blob-binary-normalization.service.js";
 import { scheduleDesktopMessageContentCompaction } from "./services/message-content-compaction.service.js";
+import { scheduleDesktopToolUseCountBackfill } from "./services/tool-use-count-backfill.service.js";
 import {
   configureWindowChrome,
   installApplicationMenu,
@@ -176,6 +177,8 @@ async function bootstrapMainServices(): Promise<void> {
   // 存量 blob 形态归一（base64 文本 → 二进制 BLOB）：后台任务自身带
   // 守卫与失败兜底，不参与启动成败判定，故 fire-and-forget 不 await。
   scheduleDesktopBlobBinaryNormalization();
+  // tool_use_count 存量回填（用量详情弹窗读路径提速）：同款后台幂等任务。
+  scheduleDesktopToolUseCountBackfill();
 }
 
 app.whenReady().then(async () => {

@@ -213,3 +213,45 @@ Buffer 字节级补丁（numstat 13/0 纯增量）。
 无关）；core build（tsc）干净、dist 已重建。APK 增量重编 38s、
 `install -r -d` 装机成功（reverse 隧道重建、app 重启载新码）。
 CHANGELOG Unreleased 补「用量详情弹窗打开提速」条目。
+
+## 追加轮：弹窗残余 700~800ms → tool_use_count 列写入时维护（终态）
+
+用户复验：SQL 化后弹窗仍有七八百毫秒——「按你的意思这两 SQL 用不了这么
+长吧？」对（真机库副本分项计时，只读副本查完即弃）：**四条 SQL 合计
+~7ms 全部无辜**（聚合 1.1 / 最近行 0.1 / 可见 COUNT 0.4 / assistant 投影
+取行 5.2，UNIQUE(session_id,seq) 索引命中）；残余全在 JS 解压循环——最大
+会话（1032 行 / 516 assistant / 3.1MB blob）PC/V8 计 209ms，其中 **inflate
+占 195ms（93%）**、parse 仅 12ms；fflate 是纯 JS 实现，Hermes 放大 3~6 倍
+→ 真机 600~1200ms，与体感吻合。**顺带实锤：Hermes 的 JSON.parse 本身是
+引擎原生 C++，「换 JS 解析库」无空间；wasm 移动端死路（无 WebAssembly）；
+真正有效的只有「不解析/不解压」或「原生侧聚合返回标量」。**
+
+修法（用户口径「写入时维护、读时直接读」的彻底版）：
+
+1. **schema v18**：`chat_message.tool_use_count INTEGER NULL` 列
+   （DDL + SCHEMA_COLUMN_ALIGNMENTS + SCHEMA_BOOT_VERSION 17→18 三件套）。
+2. **写入时维护**：`toMessageParams`（insert/batchInsert 共用，含 fork/
+   copy/导入全路径）与 `updateContent` 经 `countToolUseBlocks`（新增
+   domain/chat/logic 单源 helper）计数落列，新行恒非 NULL；user 行恒 0。
+   每行自带计数 → 回滚（删行）/分叉/导入零失效逻辑。
+3. **读侧一条 SUM**：`SUM(tool_use_count) + NULL 行计数`；NULL 行（v18 前
+   存量、回填未完）兜底现算（只投影 NULL 行 content 三列，坏行按 0 计
+   warn——统计读数不因单条历史坏行让弹窗报错），随回填收敛到零。
+4. **存量回填任务** `runToolUseCountBackfill`（infra/db-maintenance，
+   message-content-compaction 同款骨架：谓词 `role='assistant' AND
+   tool_use_count IS NULL`、批 ≤100 短事务、keyset 游标、零进展护栏、
+   KKV `nm-tool-use-count/backfillDone`、坏行写 0 隔离；不挂 VACUUM——
+   只写小整数不释放页空间）；mobile（10s 延迟低优先循环）/desktop
+   （守卫 + 连接重建退避同款）各自调度；CLI 不挂（非常驻，与 compaction
+   同口径）。
+
+测试：test/chat 全量 436/438（仅时区基线 2 例）+ db-maintenance 族 44/44 +
+回填新套件 4/4 + T-MD3 新用例（SUM 列 + NULL 兜底混算）；core build 干净、
+desktop main tsc 干净、mobile 涉改文件 tsc 无错。**真机终验**（纯 JS 改动
+无需重编 APK，Metro 新包 force-stop 重启）：user_version=18、列存在、
+**assistant NULL 行剩余 0、完成标记 failedCount=0**（启动后 ~40s 内收敛），
+弹窗常态四路查询全为纯 SQL（NULL 兜底路径已收敛不可达）。
+
+**坑两枚**：① `adb shell cat` 拉 SQLite 副本必坏（pty 把 \n 翻成 \r\n），
+必须 `adb exec-out run-as ... cat`；② tmp 下 .ts 脚本被 tsx 按 CJS 处理
+（无 package.json type 域），顶层 await 报错——改静态 import 或 .mts。

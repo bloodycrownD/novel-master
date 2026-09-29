@@ -10,6 +10,7 @@ import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import type { Row } from "@/infra/tdbc/types.js";
 import { parseMessageContent } from "@/domain/chat/content/parse-message-content.js";
 import { decodeMessageContent } from "@/domain/chat/logic/message-content-codec.js";
+import { countToolUseBlocks } from "@/domain/chat/logic/tool-use-count.js";
 import { chatInvalidArgument } from "@/errors/chat-errors.js";
 import type {
   SessionUsageDetail,
@@ -437,15 +438,14 @@ export class DefaultUsageStatsService implements UsageStatsService {
         `getSessionUsageDetail 须提供 sessionId，收到：${String(sessionId)}`
       );
     }
-    // 聚合（统计页同口径谓词 + session 界定）、最近行、可见计数三条 SQL
-    // 与 assistant 行 content 投影并行取数。计数不拉全量消息列表：可见数
-    // SQL 数行（hidden 列判定，与 listVisibleSorted 同口径——只剔 hidden
-    // 不筛角色）；工具调用数只取 assistant 行的 content 三列（tool_use 块
-    // 只在 assistant 消息里，hidden 行照计，user/tool_result 行不参与），
-    // 不选 raw_json/attachments 列、不解压 user 行——曾经经 listBySession
-    // 全量拉取（含 hidden 多数行 + raw_json/附件逐条解压）在大会话上秒级
-    // 卡顿（2026-09-29 用户拍板：弹窗计数行不实时算大账，与列读数对齐）。
-    const [aggRows, lastRows, visibleRows, assistantRows] = await Promise.all([
+    // 聚合（统计页同口径谓词 + session 界定）、最近行、可见计数、工具调用
+    // 计数五路并行取数。工具调用读 tool_use_count 列（写入时维护）一条
+    // SUM 即得——不再解压正文现算（真机实测全量 fflate 解压 600~1200ms
+    // 是弹窗打开慢的主因，2026-09-29 用户拍板「弹窗不实时算大账」）。
+    // NULL 行（v18 补列前存量、回填任务未跑完）兜底现算：只投影这些行的
+    // content 三列，随回填收敛到零。可见数 SQL 数行（hidden 列判定，与
+    // listVisibleSorted 同口径——只剔 hidden 不筛角色）。
+    const [aggRows, lastRows, visibleRows, toolRows] = await Promise.all([
       queryTemplate<Row>(
         this.conn,
         this.parser,
@@ -481,7 +481,9 @@ export class DefaultUsageStatsService implements UsageStatsService {
       queryTemplate<Row>(
         this.conn,
         this.parser,
-        `SELECT id, content_json, content_encoding, content_blob
+        `SELECT COALESCE(SUM(tool_use_count), 0) AS tool_use_total,
+                COALESCE(SUM(CASE WHEN tool_use_count IS NULL THEN 1 ELSE 0 END), 0)
+                  AS tool_use_missing
          FROM chat_message
          WHERE session_id = #{sessionId} AND role = 'assistant'`,
         { sessionId }
@@ -527,22 +529,39 @@ export class DefaultUsageStatsService implements UsageStatsService {
     // 可见消息数：hidden=0 的行数（listVisibleSorted 同源口径，只剔 hidden
     // 不筛角色）。
     const visibleMessageCount = Number(visibleRows[0]?.n ?? 0);
-    // 工具调用数：assistant 行 content 块里的 tool_use 总数（含 hidden 行
-    // ——与 totals 同为累计口径；user 侧 tool_result 不计）。投影行经与
-    // repository 相同的双形态读（blob 解压 / legacy 明文）取 blocks。
-    let toolUseCount = 0;
-    for (const row of assistantRows) {
-      const raw =
-        row.content_blob != null
-          ? decodeMessageContent(
-              row.content_encoding,
-              row.content_blob,
-              String(row.id)
-            )
-          : String(row.content_json);
-      for (const block of parseMessageContent(raw).blocks) {
-        if (block.type === "tool_use") {
-          toolUseCount += 1;
+    // 工具调用数：tool_use_count 列 SUM（含 hidden 行——与 totals 同为累计
+    // 口径；user 侧 tool_result 不计）。存量 NULL 行（回填未跑完）兜底现算
+    // ——只投影 NULL 行的 content 三列，坏行（解压/parse 失败）按 0 计并
+    // warn：计数是统计读数，单条历史坏行不该让整个弹窗报错。
+    let toolUseCount = Number(toolRows[0]?.tool_use_total ?? 0);
+    const toolUseMissing = Number(toolRows[0]?.tool_use_missing ?? 0);
+    if (toolUseMissing > 0) {
+      const pendingRows = await queryTemplate<Row>(
+        this.conn,
+        this.parser,
+        `SELECT id, content_json, content_encoding, content_blob
+         FROM chat_message
+         WHERE session_id = #{sessionId} AND role = 'assistant'
+           AND tool_use_count IS NULL`,
+        { sessionId }
+      );
+      for (const row of pendingRows) {
+        try {
+          const raw =
+            row.content_blob != null
+              ? decodeMessageContent(
+                  row.content_encoding,
+                  row.content_blob,
+                  String(row.id)
+                )
+              : String(row.content_json);
+          toolUseCount += countToolUseBlocks(parseMessageContent(raw));
+        } catch (error) {
+          console.warn(
+            `[usage-stats] 存量行 tool_use_count 兜底解析失败（按 0 计，待回填任务写 0）：${
+              error instanceof Error ? error.message : String(error)
+            }`
+          );
         }
       }
     }

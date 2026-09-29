@@ -53,6 +53,11 @@ export const CHAT_SCHEMA_STATEMENTS: readonly string[] = [
     -- 仍可用的地基。
     content_encoding TEXT NULL CHECK (content_encoding IN ('zlib', 'zlib-b64')),
     content_blob BLOB NULL,
+    -- 工具调用计数（metric-detail 弹窗读路径，2026-09-29）：assistant 消息
+    -- 的 tool_use 块数写入时维护，读侧一条 SUM 即得（不再解压正文现算）。
+    -- NULL = 存量行未回填（读侧兜底现算，由后台任务谓词驱动收敛）；
+    -- user/tool 行恒 0（tool_use 块只在 assistant 消息里）。
+    tool_use_count INTEGER NULL,
     UNIQUE (session_id, seq)
   )`,
   `CREATE INDEX IF NOT EXISTS idx_chat_message_created_at

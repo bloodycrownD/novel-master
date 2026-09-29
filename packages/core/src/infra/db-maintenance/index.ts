@@ -44,3 +44,13 @@ export type {
   MessageCompactionStatus,
   RunMessageContentCompactionOptions,
 } from "./impl/message-content-compaction.js";
+export {
+  DEFAULT_TOOL_USE_COUNT_SYNC_BUDGET_MS,
+  TOOL_USE_COUNT_KKV_KEY,
+  TOOL_USE_COUNT_KKV_MODULE,
+  runToolUseCountBackfill,
+} from "./impl/tool-use-count-backfill.js";
+export type {
+  RunToolUseCountBackfillOptions,
+  ToolUseCountBackfillRunResult,
+} from "./impl/tool-use-count-backfill.js";
