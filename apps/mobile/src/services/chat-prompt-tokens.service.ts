@@ -78,17 +78,30 @@ function formatChatTokenLabel(
   return formatContextUsageLabel(result.tokenCount, contextWindow, badge);
 }
 
-/** Token label for chat header (e.g. `gemma = 24k / 128k (19%)` 或 `远程 = 24k / 128k (19%)`). */
+/**
+ * 单发标签（完整口径：api 优先、miss 走家族计数器）。两阶段 UI 刷新用
+ * {@link loadChatPromptTokenLabelResilient}；本函数留给单测与一次性取数场景。
+ */
 export async function loadChatPromptTokenLabel(
   runtime: MobileNovelMasterRuntime,
   scope: SessionPromptScope,
 ): Promise<string> {
+  return (await loadChatTokenLabelWithFlag(runtime, scope, false)).label;
+}
+
+/**
+ * 估算首帧是否值得后台升级：只有「resolve 走了本地估算档」才升级（api 命中
+ * 已精确、无模型/构建失败路径没有更好的档位可升）。
+ */
+async function loadChatTokenLabelWithFlag(
+  runtime: MobileNovelMasterRuntime,
+  scope: SessionPromptScope,
+  preferEstimate: boolean,
+): Promise<{label: string; upgradeWorthy: boolean}> {
   const {definition, layout, ctx, rawMessages} = await buildSessionPromptInput(
     runtime,
     scope,
   );
-
-  // core 移除 workspace 回退后，savedModelId 解析优先级为 agent pin → session modelId。
   const sessionConfig = await runtime.sessions.getSessionAgentConfig(
     scope.sessionId,
   );
@@ -96,53 +109,90 @@ export async function loadChatPromptTokenLabel(
     agentModelId: definition.model,
     sessionModelId: sessionConfig.modelId,
   });
-
-  let label: string;
   if (!savedModelId) {
-    // 此处恒不拼 tools（UI 读口拿不到定义，`session-prompt-input` 不产 tools）：
-    // 口径差是已登记收窄（见 ③ spec `:46`），不要以为拼了就是全量。
-    // 压缩评估路径由 agent-runner 传 tools，那是真口径（取舍说明见
-    // `serializeToolsForTokenCount` 头注释）。
     const serialized = await serializePromptLlmInput(layout, ctx);
-    // 无模型可用 → 只能按默认编码估算。仍然走真分词器（cl100k）而不是字符折算：
-    // 「预估」标签与 counterKind 语义不变，变的是读数——cl100k 已在会话切换
-    // 时被 primeStreamTokenModelHint 空闲预热，这里不会再白付一次构造。
     const count = countFallbackTokens(runtime, serialized);
-    label = formatChatTokenLabel(
-      {tokenCount: count, estimated: true, counterKind: 'heuristic', source: 'local'},
-      undefined,
-    );
-  } else {
-    const tokenizerOverride = await resolveTokenCounterModeForModel(
-      runtime.providerModels,
-      savedModelId,
-    );
-
-    // 直接 resolve（历史上的 cache miss 回填步骤已废弃：置位/压缩后旧值不准，
-    // 统一走本地 tokenizer 重算）。传 sessionKkv：命中上次 completed run 落库的
-    // API 占用（含跨重启），与压缩评估同一读口、同一口径。
-    const result = await resolvePromptTokensWithBackfill(
-      scope.sessionId,
-      rawMessages,
-      {
-        layout,
-        ctx,
-        savedModelId,
-        registry: runtime.tokenCounters,
-        tokenizerOverride,
-        savedModels: {findById: id => runtime.providerModels.getSavedById(id)},
-      },
-      {sessionKkv: runtime.sessionKkv},
-    );
-
-    const contextWindow = await runtime.providerModels.getContextWindow(
-      savedModelId,
-    );
-
-    label = formatChatTokenLabel(result, contextWindow ?? undefined);
+    return {
+      label: formatChatTokenLabel(
+        {tokenCount: count, estimated: true, counterKind: 'heuristic', source: 'local'},
+        undefined,
+      ),
+      upgradeWorthy: false,
+    };
   }
+  const tokenizerOverride = await resolveTokenCounterModeForModel(
+    runtime.providerModels,
+    savedModelId,
+  );
+  const result = await resolvePromptTokensWithBackfill(
+    scope.sessionId,
+    rawMessages,
+    {
+      layout,
+      ctx,
+      savedModelId,
+      registry: runtime.tokenCounters,
+      tokenizerOverride,
+      savedModels: {findById: id => runtime.providerModels.getSavedById(id)},
+    },
+    {
+      sessionKkv: runtime.sessionKkv,
+      ...(preferEstimate ? {preferEstimate: true} : {}),
+    },
+  );
+  const contextWindow = await runtime.providerModels.getContextWindow(savedModelId);
+  return {
+    label: formatChatTokenLabel(result, contextWindow ?? undefined),
+    upgradeWorthy: result.source === 'local' && result.estimated,
+  };
+}
 
-  return label;
+/** 后台精确升级在途标记（按 sessionId）：避免事件风暴下堆叠重复整串计数。 */
+const preciseUpgradeInflight = new Set<string>();
+
+/**
+ * 两阶段标签（统计优先口径的 UI 面，2026-09-29 切模型慢复验定稿）：
+ * 首帧 `preferEstimate` 即回（api 命中=精确；miss=CJK 感知廉价估算，`gpt ≈`）；
+ * 首帧是估算档时后台跑一次完整 resolve（家族真分词器 + L1 整串缓存暖机），
+ * 完成后经 `onPreciseUpgrade` 回调升级标签（`glm =` 等）。之后 api 真值到达
+ * （下一次请求）自然接管。
+ */
+export async function loadChatPromptTokenLabelResilient(
+  runtime: MobileNovelMasterRuntime,
+  scope: SessionPromptScope,
+  onPreciseUpgrade?: (label: string) => void,
+): Promise<string> {
+  let first: {label: string; upgradeWorthy: boolean};
+  try {
+    first = await loadChatTokenLabelWithFlag(runtime, scope, true);
+  } catch (error) {
+    if (__DEV__) {
+      console.warn(
+        '[chat] prompt token count failed, using message fallback',
+        error,
+      );
+    }
+    return loadChatPromptTokenLabelFallback(runtime, scope);
+  }
+  if (first.upgradeWorthy && onPreciseUpgrade != null) {
+    const sessionId = scope.sessionId;
+    if (!preciseUpgradeInflight.has(sessionId)) {
+      preciseUpgradeInflight.add(sessionId);
+      void (async () => {
+        try {
+          const precise = await loadChatTokenLabelWithFlag(runtime, scope, false);
+          if (precise.label !== first.label) {
+            onPreciseUpgrade(precise.label);
+          }
+        } catch {
+          // 升级失败保持首帧估算标签；下次刷新/api 真值自愈。
+        } finally {
+          preciseUpgradeInflight.delete(sessionId);
+        }
+      })();
+    }
+  }
+  return first.label;
 }
 
 /** Message-only heuristic when full prompt build fails (still useful in meta bar). */
@@ -187,24 +237,4 @@ async function loadChatPromptTokenLabelFallback(
     {tokenCount: count, estimated: true, counterKind: 'heuristic', source: 'local'},
     contextWindow,
   );
-}
-
-/**
- * Full prompt token estimate; falls back to visible messages only on error.
- */
-export async function loadChatPromptTokenLabelResilient(
-  runtime: MobileNovelMasterRuntime,
-  scope: SessionPromptScope,
-): Promise<string> {
-  try {
-    return await loadChatPromptTokenLabel(runtime, scope);
-  } catch (error) {
-    if (__DEV__) {
-      console.warn(
-        '[chat] prompt token count failed, using message fallback',
-        error,
-      );
-    }
-    return loadChatPromptTokenLabelFallback(runtime, scope);
-  }
 }

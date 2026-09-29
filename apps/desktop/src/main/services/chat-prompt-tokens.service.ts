@@ -204,10 +204,21 @@ async function computeChatPromptTokenStats(
 }
 
 /**
+ * 后台精确计数暖机在途标记（按 sessionId）：首帧估算档后安排一次完整
+ * resolve（家族真分词器 + L1 整串缓存写入），结果丢弃、只为暖缓存——
+ * renderer 下一次触发（消息/step 事件）即命中 L1 拿到精确标签。
+ */
+const preciseWarmInflight = new Set<string>();
+
+/**
  * 真正执行底层计算的一跳（原 `loadChatPromptTokenStats` 函数体）。
  *
  * 对外入口 {@link loadChatPromptTokenStats} 已套防抖；本函数只被防抖执行链
  * 调用，同一 sessionId 串行、绝不并发重入。
+ *
+ * 两阶段（统计优先口径，2026-09-29）：首帧 `preferEstimate`——api 命中仍
+ * 精确返回；miss 时廉价估算即回（不调真分词器，切模型/回滚后的首帧不干等
+ * 家族计数），估算档则后台暖一次精确 L1。
  */
 async function loadChatPromptTokenStatsNow(
   runtime: DesktopNovelMasterRuntime,
@@ -235,8 +246,23 @@ async function loadChatPromptTokenStatsNow(
       scope.sessionId,
       rawMessages,
       params,
-      { sessionKkv: runtime.sessionKkv },
+      { sessionKkv: runtime.sessionKkv, preferEstimate: true },
     );
+    if (
+      result.source === "local" &&
+      result.estimated &&
+      !preciseWarmInflight.has(scope.sessionId)
+    ) {
+      preciseWarmInflight.add(scope.sessionId);
+      void resolvePromptTokensWithBackfill(
+        scope.sessionId,
+        rawMessages,
+        params,
+        { sessionKkv: runtime.sessionKkv },
+      )
+        .catch(() => undefined)
+        .finally(() => preciseWarmInflight.delete(scope.sessionId));
+    }
     const contextWindow =
       await runtime.providerModels.getContextWindow(savedModelId);
     return {

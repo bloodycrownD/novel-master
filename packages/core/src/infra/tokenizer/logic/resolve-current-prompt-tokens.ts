@@ -31,9 +31,12 @@ import {
   countPromptLlmInput,
   type CountPromptLlmInputParams,
 } from "./count-prompt-llm-input.js";
+import { estimateTokensCjkAware } from "./estimate-tokens-cjk-aware.js";
 import { promptWholeCache } from "./prompt-whole-cache.js";
 import { readSessionApiPromptTokenEntry } from "./session-api-prompt-token-store.js";
 import { tokenChunkCache } from "./token-chunk-cache.js";
+import { serializePromptLlmInput } from "./serialize-prompt-input.js";
+import { serializeToolsForTokenCount } from "./serialize-tools-for-token-count.js";
 
 /** 占用结果来源。 */
 export type PromptTokenSource = "api" | "local";
@@ -62,6 +65,16 @@ export interface ResolveCurrentPromptTokensOptions {
    * （与落库前行为一致，旧调用方无需改动）。
    */
   readonly sessionKkv?: SessionKkvService | null;
+  /**
+   * 估算优先（2026-09-29 切模型慢复验加）：本地分支不做真分词器计数，直接
+   * heuristic 折算（`counterKind:"heuristic"`、`estimated:true`，不进任何
+   * 缓存）。api 命中分支不受影响（仍精确）。
+   *
+   * 消费方：压缩评估（无统计时估算+0.85 保守系数，**绝不**为阈值判定阻塞
+   * run——glm 原生整串大上下文单次 ~5.8s）；UI 标签的首帧（后台再跑精确
+   * 全量计数升级显示并暖 L1）。缺省 false = 完整口径（家族计数器 + 缓存）。
+   */
+  readonly preferEstimate?: boolean;
 }
 
 /**
@@ -73,10 +86,10 @@ export interface ResolveCurrentPromptTokensOptions {
  *   传入的 ctx.messages 是 prepare 之后的消息（附件已 wrap 进文本块），
  *   大附件的正文天然计入增量。
  * - heuristic 是 `ceil(字符/3.35)` 的英文口径、对中文低估八成，取
- *   `max(heuristic, ceil(字符数/2))` 作保守下限——中文增量不被低估过半
- *   （阈值方向安全），英文小幅高估无害；增量本体小（run 内一步的
- *   assistant + tool_results，或一条新 user 消息），下一次请求的 usage
- *   到达即被真值覆盖（agent-runner 每 step 回锚）。
+ *   `max(heuristic, CJK 感知保守下限)`——中文增量不被低估过半（阈值方向
+ *   安全）、英文小幅高估无害；增量本体小（run 内一步的 assistant +
+ *   tool_results，或一条新 user 消息），下一次请求的 usage 到达即被真值
+ *   覆盖（agent-runner 每 step 回锚）。
  * - 回滚把尾部物理删除后 seq 复用，锚点可能短暂指向「已不存在的高 seq」→
  *   过滤结果为空、delta=0，基线原样使用，下一次 usage 自愈（回滚路径本身
  *   会失效该条目，此为双保险）。
@@ -108,7 +121,7 @@ function estimateAnchoredDelta(
   }
   return Math.max(
     params.registry.heuristic.countText(text),
-    Math.ceil(text.length / 2)
+    estimateTokensCjkAware(text)
   );
 }
 
@@ -154,6 +167,28 @@ export async function resolveCurrentPromptTokens(
   //   KKV 落盘仅在 sessionKkv 装配且本轮为真实刷新时发生（realRefresh 恒
   //   true：读口的本地分支本身就是用户可见的真实刷新，不存在预热路径）。
   const sessionKkv = options?.sessionKkv ?? null;
+
+  // 估算优先：无统计可用时不做真分词器计数——序列化 + 廉价估算即回（不进
+  // L1/L2、不推代际、不落 KKV：瞬态估读没有缓存价值）。取
+  // `max(registry heuristic, CJK 感知保守下限)`：heuristic 的 /3.35 是英文
+  // 口径、中文低估八成，CJK 下限把偏差压回有界（消费方语义见
+  // ResolveCurrentPromptTokensOptions.preferEstimate）。
+  if (options?.preferEstimate === true) {
+    const serialized =
+      (await serializePromptLlmInput(params.layout, params.ctx)) +
+      serializeToolsForTokenCount(params.tools);
+    const tokenCount = Math.max(
+      params.registry.heuristic.countText(serialized),
+      estimateTokensCjkAware(serialized)
+    );
+    return {
+      tokenCount,
+      source: "local",
+      estimated: true,
+      counterKind: "heuristic",
+    };
+  }
+
   if (sessionKkv != null) {
     await tokenChunkCache.seedFromKkv(sessionKkv, sessionId);
     // L1 整串条目同样跨重启续命：native 档（WEB/SP 过桥）只有 L1 可挡

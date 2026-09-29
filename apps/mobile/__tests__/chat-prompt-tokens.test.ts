@@ -290,4 +290,87 @@ describe('chat-prompt-tokens.service', () => {
       connector: '≈',
     });
   });
+
+  it('两阶段：首帧估算即回 + 后台精确升级回调（切模型后不再干等原生计数）', async () => {
+    mockBuildSessionPromptInput.mockResolvedValue({
+      definition: {model: 'zai/glm-4.6'},
+      layout: {persist: [], dynamic: []},
+      ctx: {workplaceDisplay: '', messages: []},
+    });
+    mockResolveSavedModelId.mockReturnValue('zai/glm-4.6');
+    mockResolveTokenCounterModeForModel.mockResolvedValue('glm');
+    mockResolvePromptTokensWithBackfill.mockImplementation(
+      (_sid: string, _raw: unknown, _params: unknown, options?: unknown) => {
+        const preferEstimate = (options as {preferEstimate?: boolean} | undefined)
+          ?.preferEstimate;
+        if (preferEstimate === true) {
+          return Promise.resolve({
+            tokenCount: 30_000,
+            estimated: true,
+            counterKind: 'heuristic',
+            source: 'local',
+          });
+        }
+        return Promise.resolve({
+          tokenCount: 99_300,
+          estimated: false,
+          counterKind: 'glm',
+          source: 'local',
+        });
+      },
+    );
+
+    const runtime = stubRuntime({contextWindow: 128_000});
+    const upgrades: string[] = [];
+    const first = await loadChatPromptTokenLabelResilient(
+      runtime,
+      {projectId: 'p', sessionId: 's-two-phase'},
+      label => {
+        upgrades.push(label);
+      },
+    );
+    // 首帧：CJK 感知估算档（gpt ≈）立即返回，不等原生整串计数
+    expect(first).toBe('gpt ≈ 30k / 128k (23%)');
+    // 首帧确实带 preferEstimate
+    expect(
+      (mockResolvePromptTokensWithBackfill.mock.calls[0]![3] as {preferEstimate?: boolean})
+        .preferEstimate,
+    ).toBe(true);
+
+    // 后台升级轮：完整口径（家族真分词器）→ 回调换上 glm = 精确标签
+    await new Promise(resolve => setImmediate(resolve));
+    await new Promise(resolve => setImmediate(resolve));
+    expect(upgrades).toEqual(['glm = 99.3k / 128k (78%)']);
+    expect(mockResolvePromptTokensWithBackfill).toHaveBeenCalledTimes(2);
+  });
+
+  it('两阶段：api 命中即精确，不触发后台升级', async () => {
+    mockBuildSessionPromptInput.mockResolvedValue({
+      definition: {model: 'openai/gpt-4o'},
+      layout: {persist: [], dynamic: []},
+      ctx: {workplaceDisplay: '', messages: []},
+    });
+    mockResolveSavedModelId.mockReturnValue('openai/gpt-4o');
+    mockResolveTokenCounterModeForModel.mockResolvedValue('auto');
+    mockResolvePromptTokensWithBackfill.mockResolvedValue({
+      tokenCount: 50_000,
+      estimated: false,
+      counterKind: 'api',
+      source: 'api',
+    });
+
+    const runtime = stubRuntime({contextWindow: 128_000});
+    const upgrades: string[] = [];
+    const label = await loadChatPromptTokenLabelResilient(
+      runtime,
+      {projectId: 'p', sessionId: 's-two-phase-api'},
+      l => {
+        upgrades.push(l);
+      },
+    );
+    expect(label).toBe('远程 = 50k / 128k (39%)');
+    await new Promise(resolve => setImmediate(resolve));
+    expect(upgrades).toEqual([]);
+    expect(mockResolvePromptTokensWithBackfill).toHaveBeenCalledTimes(1);
+  });
 });

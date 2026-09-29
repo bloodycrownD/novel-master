@@ -428,6 +428,59 @@ describe("resolveCurrentPromptTokens 统计优先（api 基线+增量，本地�
     });
     assert.equal(captured.override, "heuristic");
   });
+
+  it("preferEstimate：不调驱动、CJK 下限生效、api 命中不受影响", async () => {
+    const captured: { driverCalled: number } = { driverCalled: 0 };
+    clearTokenizerDrivers();
+    registerTokenizerDriver({
+      name: "mock-prefer-estimate",
+      countPromptLlmInput: async () => {
+        captured.driverCalled += 1;
+        return {
+          tokenCount: 1,
+          counterKind: "tiktoken",
+          estimated: false,
+          savedModelId: "openai/gpt-4o",
+          vendorModelId: "openai/gpt-4o",
+          tokenizerFamily: "tiktoken",
+        };
+      },
+    });
+
+    // 本地 miss + preferEstimate：heuristic 即回（CJK 感知下限），驱动零调用
+    const cjkParams = {
+      layout: { persist: [], dynamic: [], system: "夜色如水林间小径" },
+      ctx: { workplaceDisplay: "", messages: [] },
+      savedModelId: RUN_MODEL_ID,
+      registry: createDefaultTokenCounterRegistry(emptyRegistryDeps()),
+    };
+    const estimated = await resolveCurrentPromptTokens(
+      SESSION_ID,
+      cjkParams,
+      { preferEstimate: true }
+    );
+    assert.equal(captured.driverCalled, 0, "估算优先不得调驱动");
+    assert.equal(estimated.source, "local");
+    assert.equal(estimated.counterKind, "heuristic");
+    assert.equal(estimated.estimated, true);
+    // 「夜色如水林间小径」8 个 CJK 字符 → 下限 ceil(8×1.64)=14 > /3.35 的 3
+    assert.ok(estimated.tokenCount >= 14, "CJK 下限必须压过英文口径的低估");
+
+    // api 命中 + preferEstimate：仍走 api 精确分支（不受影响）
+    sessionApiPromptTokenCache.set(SESSION_ID, {
+      promptTokens: 9_999,
+      updatedAt: Date.now(),
+      savedModelId: RUN_MODEL_ID,
+    });
+    const apiHit = await resolveCurrentPromptTokens(
+      SESSION_ID,
+      { ...cjkParams, layout: { persist: [], dynamic: [] } },
+      { preferEstimate: true }
+    );
+    assert.equal(apiHit.source, "api");
+    assert.equal(apiHit.tokenCount, 9_999);
+    assert.equal(captured.driverCalled, 0);
+  });
 });
 
 /**

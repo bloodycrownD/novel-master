@@ -104,10 +104,18 @@ export function useChatTabScope({
       prev == null ? prev : {...prev, tokenLabel: prev.tokenLabel || '…'},
     );
     try {
-      const tokenLabel = await loadChatPromptTokenLabelResilient(runtime, {
-        projectId,
-        sessionId,
-      });
+      const tokenLabel = await loadChatPromptTokenLabelResilient(
+        runtime,
+        {projectId, sessionId},
+        // 两阶段升级回调（统计优先口径）：首帧若是估算档（如切模型后无 api
+        // 基线），后台跑完家族真分词器精确计数后回填——`glm =` 稍后到位，
+        // 首帧 `gpt ≈` 先顶着，不再干等原生整串计数 ~5.8s。
+        upgraded => {
+          setAgentMeta(prev =>
+            prev == null ? prev : {...prev, tokenLabel: upgraded},
+          );
+        },
+      );
       setAgentMeta(prev => (prev == null ? prev : {...prev, tokenLabel}));
     } catch {
       setAgentMeta(prev => (prev == null ? prev : {...prev, tokenLabel: ''}));
