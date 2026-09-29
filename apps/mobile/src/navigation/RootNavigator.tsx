@@ -41,6 +41,7 @@ import {SkillPanelScreen} from '../screens/stack/SkillPanelScreen';
 import {SkillsSettingsScreen} from '../screens/stack/SkillsSettingsScreen';
 import {SkillDetailScreen} from '../screens/stack/SkillDetailScreen';
 import {PromptEditorScreen} from '../screens/stack/PromptEditorScreen';
+import {ChatComposerEditorScreen} from '../screens/stack/ChatComposerEditorScreen';
 
 import {ChatHistorySearchScreen} from '../screens/stack/ChatHistorySearchScreen';
 import {TokenUsageStatsScreen} from '../screens/stack/TokenUsageStatsScreen';
@@ -186,6 +187,10 @@ const PromptEditorStackScreen = withStackLayout(
   'PromptEditor',
   PromptEditorScreen,
 );
+const ChatComposerEditorStackScreen = withStackLayout(
+  'ChatComposerEditor',
+  ChatComposerEditorScreen,
+);
 const ChatHistorySearchStackScreen = withStackLayout(
   'ChatHistorySearch',
   ChatHistorySearchScreen,
@@ -289,6 +294,10 @@ export function RootNavigator() {
             <Stack.Screen
               name="PromptEditor"
               component={PromptEditorStackScreen}
+            />
+            <Stack.Screen
+              name="ChatComposerEditor"
+              component={ChatComposerEditorStackScreen}
             />
             <Stack.Screen
               name="SkillsSettings"

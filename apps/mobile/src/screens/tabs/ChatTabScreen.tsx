@@ -19,6 +19,11 @@ import {useMobileScope} from '@/hooks/useMobileScope';
 import {useTheme} from '@/theme/ThemeProvider';
 import {resolveChatTabBarStyle} from '@/navigation/main-tab-bar-style';
 import type {MainTabParamList, RootStackParamList} from '@/navigation/types';
+import {
+  setComposerEditorCallback,
+  type ComposerEditorPending,
+} from '@/components/chat/composer-editor-callback';
+import {writeChatComposerDraft} from '@/storage/chat-composer-draft';
 import {ChatConversationPanel} from './chat-tab/ChatConversationPanel';
 import {ChatSessionListPanel} from './chat-tab/ChatSessionListPanel';
 import {ChatTabProvider, useChatTabContext} from './chat-tab/ChatTabProvider';
@@ -142,6 +147,32 @@ function ChatTabScreenContent({
     );
   }, [controller, sessionBatch, ctx.scope]);
 
+  // ⛶ 全屏编辑（照 onOpenSessionDetail 先例：chat-tab 目录零导航依赖，惯例是
+  // 父层注入回调）：打开前把初始文本与保存回填写进模块级存取（回调不可序列化，
+  // 不走路由参数），再跳转全屏屏。
+  const setDraftRestoreToken = ctx.messages.setDraftRestoreToken;
+  const runtime = ctx.runtime;
+  const onOpenComposerFullscreen = useCallback(
+    (payload: {text: string}) => {
+      const targetSessionId = ctx.sessionId;
+      if (ctx.projectId == null || targetSessionId == null) {
+        return;
+      }
+      const pending: ComposerEditorPending = {
+        initialText: payload.text,
+        // 回填 = 写入会话草稿（内联输入 onChangeText 落的是同一条 store），再
+        // bump 草稿恢复令牌触发 ChatComposer 从草稿重读（undo_send 同款回填链路）。
+        onSaved: text => {
+          writeChatComposerDraft(targetSessionId, text, runtime.sessions);
+          setDraftRestoreToken(token => token + 1);
+        },
+      };
+      setComposerEditorCallback(pending);
+      navigation.navigate('ChatComposerEditor');
+    },
+    [ctx.projectId, ctx.sessionId, runtime, setDraftRestoreToken, navigation],
+  );
+
   const sessionRenameModal = (
     <TextPromptModal
       visible={ctx.scope.sessionRenamePrompt != null}
@@ -165,7 +196,11 @@ function ChatTabScreenContent({
     <View style={[styles.root, {backgroundColor: tokens.background}]}>
       <AppHeader pageKey="chat" />
       {ctx.chatSubview === 'conversation' ? (
-        <ChatConversationPanel tokens={tokens} visible />
+        <ChatConversationPanel
+          tokens={tokens}
+          visible
+          onOpenComposerFullscreen={onOpenComposerFullscreen}
+        />
       ) : null}
       <ChatSessionListPanel
         tokens={tokens}

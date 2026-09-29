@@ -59,6 +59,10 @@ export type RootStackParamList = {
     title?: string;
     initialText: string;
   };
+  /** chat 输入框全屏编辑页：草稿副本编辑，保存才回填，返回即丢弃。
+   *  初始文本与保存回调都不走路由参数（不可序列化），由
+   *  composer-editor-callback 模块级存取（take 即清空）。 */
+  ChatComposerEditor: undefined;
   /** 设置·技能管理页：全局默认 / 项目分组双 tab。 */
   SkillsSettings: undefined;
   /** 技能详情页：文件浏览 + 新建/删除辅助文件。 */
