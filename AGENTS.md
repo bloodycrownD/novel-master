@@ -60,6 +60,6 @@
 
 1. 标准流程：① 从**真实路径**起 Metro（`cd apps/mobile && npx react-native start`；Metro 禁止从 subst 盘启动，workspace 符号链接解析会挂）→ ② `adb -s <设备> reverse tcp:8081 tcp:8081` → ③ `adb install` debug APK → ④ 打开 app；红屏界面上的 RELOAD 按钮可重载。
 2. **不要尝试内嵌 bundle**（bundleInDebug / 手动把 index.android.bundle 放 src/main/assets）：RN 插件对 debuggable variant 默认跳过打包，mergeDebugAssets 也不收 src/main/assets 根下的 bundle——改了也不会进 APK，白烧时间（2026-09-28 实锤一整轮）。真要离线包走 release 内嵌路线（CI）。
-3. **真机测试包统一 versionCode=1**（build.gradle fallback 本来就是 1，不要传 -PversionCode）：装之前先 `adb uninstall com.novelmaster` 再全新 `adb install`，不存在降级拦截，任何分支 worktree 都适用。
+3. **真机测试包统一 versionCode=1**（build.gradle fallback 本来就是 1，不要传 -PversionCode）：一律 `adb install -r -d` 覆盖安装（`-r` 保留应用数据、`-d` 放行 debug 包降级）。**任何设备永远禁止 `adb uninstall` / `pm uninstall` / 清除应用数据**（2026-09-29 事故拍板：卸载会连同应用内用户数据一起删除，已造成真数据损失；安装因降级/冲突被拦时停下报告用户、由用户决定，绝不允许以卸载绕过）。
 4. 荣耀真机（DSLDU20407006179）对 PC 来源安装一律弹锁屏密码/确认门（覆盖装与全新装都拦），必须用户在场配合点确认；adb install 失败报 `INSTALL_FAILED_ABORTED` 时不要反复重试，直接请用户配合或转 `/sdcard/Download/` 本地安装。
 5. gradle 出包从 subst 盘跑（路径超长问题），Metro 从真实路径跑——两者不可互换。

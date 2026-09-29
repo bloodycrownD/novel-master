@@ -326,8 +326,8 @@ export function TokenUsageStatsScreen() {
       : comboFilter.providerId === null
       ? '未记录服务商'
       : comboFilter.model === null
-      ? `${providerLabelOf(comboFilter.providerId)} · 其他模型`
-      : `${providerLabelOf(comboFilter.providerId)} · ${comboFilter.model}`;
+      ? `${providerLabelOf(comboFilter.providerId)}/其他模型`
+      : `${providerLabelOf(comboFilter.providerId)}/${comboFilter.model}`;
 
   const rangeLabel =
     rangeKind === 'custom' && customFrom && customTo

@@ -28,12 +28,18 @@ import {
   type SessionStreamUnitView,
 } from '@/services/session-stream-unit';
 import {timingLog} from '@/debug/run-timing';
+import {MetricDetailSheet} from '../sheet/MetricDetailSheet';
 import {ChatStreamMetricsBar} from './ChatStreamMetricsBar';
 
 type Props = {
   readonly agentRunning: boolean;
   /** 指标归属会话：切会话只换数据源，不重置（单元/ settled 投影按会话归属）。 */
   readonly sessionId: string | undefined;
+  /**
+   * 「上下文占用」行现成读数（metric-detail-sheet）：主屏传
+   * agentMeta.tokenLabel（与 chip 同源）；子会话屏无 meta chip，不传出「—」。
+   */
+  readonly contextTokenLabel?: string;
 };
 
 /**
@@ -56,10 +62,18 @@ export function hasVisibleSettledMetrics(view: SessionStreamUnitView): boolean {
   );
 }
 
-export function ChatStreamMetricsBarLive({agentRunning, sessionId}: Props) {
+export function ChatStreamMetricsBarLive({
+  agentRunning,
+  sessionId,
+  contextTokenLabel,
+}: Props) {
   const runtime = useRuntime();
   const manager = runtime.sessionStreamUnitManager;
   const [, setTick] = useState(0);
+  // metric-detail-sheet：详情 sheet 独立 state（不进 metrics 快照——
+  // 250ms tick 只重渲本子树的计时读数，弹窗状态不随 tick 抖动；打开时
+  // 由 MetricDetailSheet 按 sessionId 自取，本层零取数）。
+  const [detailOpen, setDetailOpen] = useState(false);
 
   // 活跃期间 250ms tick 刷新 live 计时；空闲时靠 manager 订阅触发
   // （收尾写 settled 投影、切会话换源、水合回填均经 notifyChanged）。
@@ -150,5 +164,21 @@ export function ChatStreamMetricsBarLive({agentRunning, sessionId}: Props) {
     return null;
   }
 
-  return <ChatStreamMetricsBar metrics={metrics} interrupted={interrupted} />;
+  return (
+    <>
+      <ChatStreamMetricsBar
+        metrics={metrics}
+        interrupted={interrupted}
+        onPress={() => setDetailOpen(true)}
+      />
+      {sessionId != null ? (
+        <MetricDetailSheet
+          visible={detailOpen}
+          sessionId={sessionId}
+          contextTokenLabel={contextTokenLabel}
+          onClose={() => setDetailOpen(false)}
+        />
+      ) : null}
+    </>
+  );
 }

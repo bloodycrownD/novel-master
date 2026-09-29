@@ -1,8 +1,10 @@
 /**
  * Manual 压缩 IPC 测试：handleCompactionManual 调 runCompaction 后的行为。
  *
- * T-IPC1：runCompaction 成功后清预置的 session kkv（file_cache / rule_snapshot），
- * 保留 user_vfs_pending，并调 notifyComposerStatusAfterFloorOrCompaction（SPEC L274）。
+ * T-IPC1：runCompaction 成功后**不清**预置的 session kkv（file_cache /
+ * rule_snapshot 都保留——2026-09-29 修正：压缩只动消息可见性，与按内容
+ * 寻址的文件缓存正交；置位 / 导入 / 规则刷新才清），保留 user_vfs_pending，
+ * 并调 notifyComposerStatusAfterFloorOrCompaction（SPEC L274）。
  * 该函数最终经 notifyComposerAttachmentsSuggestToRenderer 向 renderer 广播
  * COMPOSER_ATTACHMENTS_SUGGEST，用 setComposerAttachmentsSuggestForwardTarget 注入假 webContents
  * 捕获 send，即可观测调用是否发生（与同目录其他测试同范式）。
@@ -69,7 +71,7 @@ describe("handleCompactionManual", () => {
     await teardownDesktopDbTestEnv(tempDir);
   });
 
-  it("T-IPC1: manual 压缩 runCompaction 成功后清 file_cache + rule_snapshot，保留 pending", async () => {
+  it("T-IPC1: manual 压缩 runCompaction 成功后不清 file_cache / rule_snapshot（2026-09-29 修正），保留 pending", async () => {
     const rt = await getDesktopRuntime();
     const pendingJson = JSON.stringify([
       {
@@ -107,13 +109,18 @@ describe("handleCompactionManual", () => {
 
     const result = await handleCompactionManual({ projectId, sessionId });
     assert.equal(result.ok, true);
+    // 压缩只动消息可见性：file_cache / rule_snapshot 均保留（2026-09-29
+    // 修正——历史行为是清两域，与按内容寻址的文件缓存正交且回合中段清
+    // 缓存违背「前缀回合内冻结」不变量；置位 / 导入 / 规则刷新才清）。
     assert.equal(
       await rt.sessionKkv.get(sessionId, "file_cache", "full:/a.md"),
-      null,
+      JSON.stringify({ body: "x", mtimeMs: 1 }),
+      "压缩不得清 file_cache",
     );
     assert.equal(
       await rt.sessionKkv.get(sessionId, "rule_snapshot", "canon"),
-      null,
+      "[]",
+      "压缩不得清 rule_snapshot",
     );
     assert.equal(
       await rt.sessionKkv.get(sessionId, "user_vfs_pending", "queue"),

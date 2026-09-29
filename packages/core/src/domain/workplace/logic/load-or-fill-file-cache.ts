@@ -49,6 +49,17 @@ export async function loadOrFillFileCache(
       return parsed;
     }
   }
+  return fillFileCacheFromVfs(deps);
+}
+
+/**
+ * 缓存 miss 后的回填半段（loadOrFill 与 assemble 批量预取共用）：
+ * 超限探测 → VFS 读取 → 写回 file_cache。
+ */
+export async function fillFileCacheFromVfs(
+  deps: LoadOrFillFileCacheDeps
+): Promise<FileCachePayload> {
+  const key = fileCacheKey(deps.status, deps.path);
 
   if (deps.status !== "filename") {
     const placeholder = await probeOversizePlaceholder(deps.vfs, deps.path);

@@ -4,6 +4,7 @@
  * modelBreakdown 的 provider×model 复合行原样透传（不按 modelName 归并——饼图以复合维度展示）。
  */
 import type {
+  SessionUsageDetail,
   UsageStatsBucket,
   UsageStatsFilter,
   UsageStatsModelRow,
@@ -14,6 +15,7 @@ import type {
 
 import type {
   IpcResult,
+  SessionUsageDetailDto,
   UsageStatsBucketDto,
   UsageStatsFilterDto,
   UsageStatsModelRowDto,
@@ -129,6 +131,31 @@ function toRequestRowDto(row: UsageStatsRequestRow): UsageStatsRequestRowDto {
   };
 }
 
+/**
+ * 会话详情 DTO 映射（逐字段守住类型边界；last 空态 null 透传，cache 列
+ * nullable 语义与 core 一致——缺失协议列 null 保真到展示层「—」）。会话
+ * 累计输入/输出已随 totals 字段移除（2026-09-29 用户拍板）。
+ */
+function toSessionDetailDto(detail: SessionUsageDetail): SessionUsageDetailDto {
+  return {
+    last:
+      detail.last == null
+        ? null
+        : {
+            seq: detail.last.seq,
+            modelName: detail.last.modelName,
+            provider: detail.last.provider,
+            promptTokens: detail.last.promptTokens,
+            completionTokens: detail.last.completionTokens,
+            cacheReadTokens: detail.last.cacheReadTokens,
+            cacheCreationTokens: detail.last.cacheCreationTokens,
+            atMs: detail.last.atMs,
+          },
+    visibleMessageCount: detail.visibleMessageCount,
+    toolUseCount: detail.toolUseCount,
+  };
+}
+
 export async function handleUsageStatsQuery(
   req: UsageStatsQueryRequest
 ): Promise<IpcResult<UsageStatsQueryResponse>> {
@@ -182,6 +209,15 @@ export async function handleUsageStatsQuery(
           data: { rows: page.rows.map(toRequestRowDto), total: page.total },
         };
       }
+      case "sessionDetail":
+        // 会话详情不走 filter（req.filter 为必填占位 `filter:{}`，此处不读）；
+        // sessionId 缺失传空串，由服务层 chatInvalidArgument 拒绝并落入 error。
+        return {
+          ok: true,
+          data: toSessionDetailDto(
+            await svc.getSessionUsageDetail(req.sessionId ?? "")
+          ),
+        };
       default: {
         const exhaustive: never = req.kind;
         return {

@@ -63,20 +63,21 @@ export function StatsFilterBar({
   onCloseModelPicker: () => void;
   tokens: ThemeTokens;
 }) {
-  // 选项集（CR-2 方案 A）：全部 / 配置组合「{服务商} · {模型}」/ 每服务商
-  // 「{服务商} · 其他模型」（该服务商下不在配置集的模型行，含零配置服务商）/
+  // 选项集（CR-2 方案 A）：全部 / 配置组合「{服务商}/{模型}」/ 每服务商
+  // 「{服务商}/其他模型」（该服务商下不在配置集的模型行，含零配置服务商）/
   // 「未记录服务商」（provider_id IS NULL 的合并行，模型在不在配置集均归此）
   // ——保证无筛选返回的每类 (providerId, modelName) 组合行都有选项可筛。
+  // 斜杠格式与聊天侧模型选择下拉一致（2026-09-28 统一）。
   const pickerOptions: readonly ModelPickerOption[] = [
     {id: MODEL_OPTION_ALL, label: '全部模型', value: undefined},
     ...combos.map(c => ({
       id: providerModelKey(c.providerId, c.model),
-      label: `${c.providerLabel} · ${c.model}`,
+      label: `${c.providerLabel}/${c.model}`,
       value: {providerId: c.providerId, model: c.model},
     })),
     ...providers.map(p => ({
       id: providerModelKey(p.id, MODEL_OTHER_KEY),
-      label: `${p.label} · 其他模型`,
+      label: `${p.label}/其他模型`,
       value: {providerId: p.id, model: null},
     })),
     {

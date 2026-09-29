@@ -134,6 +134,50 @@ export interface UsageStatsRequestPage {
   readonly total: number;
 }
 
+/**
+ * 会话详情 · 最近一次请求：会话内 `seq` 最大且 usage 非空的 assistant 行
+ * （OpenAI/Gemini 等无 cache_creation 概念的协议 cache 列为 null，展示层
+ * 出「—」；`atMs` 为该行落库时刻，本地时区展示）。
+ */
+export interface SessionUsageLastRequest {
+  readonly seq: number;
+  readonly modelName: string | null;
+  readonly provider: string | null;
+  readonly promptTokens: number;
+  readonly completionTokens: number;
+  readonly cacheReadTokens: number | null;
+  readonly cacheCreationTokens: number | null;
+  readonly atMs: number;
+}
+
+/**
+ * 会话详情 · 会话累计（**已移除**，2026-09-29 用户拍板）：曾为
+ * `SessionUsageTotals`（assistant usage 行全量求和，含 hidden），随弹窗
+ * 「累计输入/输出」两行一并删除——含隐藏消息的累计对用户无意义。最近
+ * 请求段（`SessionUsageLastRequest`）不受影响。
+ */
+
+/**
+ * 会话维度用量详情（metric-detail-sheet 弹窗数据）。**不含 contextUsage**
+ * ——`resolveCurrentPromptTokens` 的 params 组装链只存在于双端 app 层，core
+ * 装配注入不了；弹窗的「当前上下文占用」由端侧直接复用 chip 现有读数
+ * （spec-check 第 1 轮 P0-2 拍板）。**不含会话累计输入/输出**（2026-09-29
+ * 用户拍板移除：含 hidden 的累计求和对用户无意义）。空会话返回
+ * `{last: null, visibleMessageCount: 0, toolUseCount: 0}`。
+ */
+export interface SessionUsageDetail {
+  readonly last: SessionUsageLastRequest | null;
+  /** 可见口径消息数（`listVisibleSorted` 同源：hidden 剔除，不筛角色）。 */
+  readonly visibleMessageCount: number;
+  /**
+   * 会话内 assistant 消息 `tool_use` 块总数（含 hidden 行——累计口径）。
+   * 会话 KKV `usage_stats.toolUseCount` 缓存优先（跟随会话生命周期）；
+   * miss 时解压 assistant 行现算并回填缓存。失效挂点见
+   * `session-kkv-domains` 的 usage_stats 域注释。
+   */
+  readonly toolUseCount: number;
+}
+
 /** Token 用量统计聚合服务。 */
 export interface UsageStatsService {
   /** 范围内汇总（`filter.range` 缺省时为全历史）。 */
@@ -175,4 +219,13 @@ export interface UsageStatsService {
    * 「其他」桶由 UI 侧补齐。
    */
   listModels(): Promise<string[]>;
+
+  /**
+   * 会话维度用量详情（metric-detail-sheet 弹窗）：最近一条 usage 行 +
+   * 可见消息数 + 工具调用数（会话 KKV 缓存优先，miss 现算回填）。会话
+   * 累计输入/输出已移除（2026-09-29 拍板，含 hidden 的累计对用户无意义）。
+   * 不进 `UsageStatsFilter`——filter 服务统计页时间轴语义，会话详情是
+   * 独立读型（spec 拍板）。
+   */
+  getSessionUsageDetail(sessionId: string): Promise<SessionUsageDetail>;
 }

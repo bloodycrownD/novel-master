@@ -11,7 +11,8 @@ import com.facebook.react.bridge.WritableNativeMap
  *
  * Input is the serialized prompt string from `serializePromptLlmInput`. WEB families
  * wrap it as a single system message before encode (ST / core web path). SP families
- * encode plain serialized text. Failures resolve with heuristic + estimated — no reject.
+ * encode plain serialized text. Failures reject the promise — JS side
+ * (`countPromptViaNative`) catches and falls back to the cl100k path.
  */
 class TokenizerModule(reactContext: ReactApplicationContext) :
   ReactContextBaseJavaModule(reactContext) {
@@ -34,13 +35,9 @@ class TokenizerModule(reactContext: ReactApplicationContext) :
       map.putString("counterKind", result.counterKind)
       map.putBoolean("estimated", result.estimated)
       promise.resolve(map)
-    } catch (_: Throwable) {
-      val fallback = TokenizerEngine.heuristic(serialized, family)
-      val map = WritableNativeMap()
-      map.putInt("tokenCount", fallback.tokenCount)
-      map.putString("counterKind", fallback.counterKind)
-      map.putBoolean("estimated", true)
-      promise.resolve(map)
+    } catch (e: Throwable) {
+      // 失败一律 reject：不再折算 heuristic 值，由 JS 桥的 catch→null 分支走兜底路径。
+      promise.reject("TOKENIZER_COUNT_FAILED", e.message ?: "原生分词计数失败", e)
     }
   }
 }

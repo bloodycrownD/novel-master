@@ -55,7 +55,7 @@ export class TokenRatioConditionTrigger implements CompactionConditionTrigger {
     const tokenizerOverride = await this.options.resolveTokenizerOverride(
       evaluation
     );
-    const { tokenCount, counterKind } = await resolveCurrentPromptTokens(
+    const { tokenCount, counterKind, estimated } = await resolveCurrentPromptTokens(
       evaluation.sessionId,
       {
         layout: evaluation.layout,
@@ -68,14 +68,22 @@ export class TokenRatioConditionTrigger implements CompactionConditionTrigger {
         ...(evaluation.tools != null ? { tools: evaluation.tools } : {}),
       },
       // sessionKkv 交给读口做跨重启的 API 值恢复（runner 填入；缺省退化为
-      // 纯进程内读，测试与旧调用方无需改动）。
-      { sessionKkv: evaluation.sessionKkv }
+      // 纯进程内读，测试与旧调用方无需改动）。preferEstimate：无统计可用时
+      // 读口直接 heuristic 折算——压缩判定**绝不**为本地计数阻塞 run（glm
+      // 原生整串大上下文单次 ~5.8s，切模型/回滚后首个 step 会踩）；heuristic
+      // 档自动乘保守系数，方向安全。
+      {
+        sessionKkv: evaluation.sessionKkv,
+        preferEstimate: true,
+      }
     );
 
-    // heuristic 计数不精确（可能低估），触发保守阈值：
-    // 把比例阈值再乘一个 < 1 的安全系数，让压缩比精确计数更早发生。
+    // 非精确计数（heuristic 或任何 estimated 估算档——preferEstimate 的
+    // heuristic+CJK 下限估算，或家族计数器的降级估读）不精确、可能低估，
+    // 触发保守阈值：把比例阈值再乘一个 < 1 的安全系数，让压缩比精确计数
+    // 更早发生。
     const safetyFactor =
-      counterKind === "heuristic"
+      counterKind === "heuristic" || estimated
         ? this.options.heuristicSafetyFactor ?? DEFAULT_HEURISTIC_SAFETY_FACTOR
         : 1;
     const effective = Math.floor(

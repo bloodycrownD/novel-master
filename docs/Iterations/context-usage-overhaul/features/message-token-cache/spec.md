@@ -30,6 +30,8 @@ date: 2026-09-28
 
 native WEB/SP 档（node @agnai / Android 原生桥）不分块，仅走 L1。
 
+**L1 持久化形态（CR 收窄注记，2026-09-29 用户拍板「按现状收窄」）**：上文「L1 Map（sessionId+身份 → 结果）」为 spec 撰写期的初始设计；实际落地形态为——L1 键 = 内容指纹（hashContent 前 16 hex，含 tools 串）× 计数器身份，**驱动层查/写传空 sessionId（"" 桶）实现跨会话共享**；进程内持久层之外，性能修复链追加 **L1 KKV 持久化**（token_chunks 域 `promptWholeCache` 键、每会话 ≤16 条环形、只收 `estimated:false` 精确档读数），重启经 seedFromKkv 续命。pendingWrites 为全局收集、归入最近 persist 的会话行——条目内容寻址、会话删除级联只丢加速不丢正确性。该形态为既定口径（跨会话共享是性能红利），不再按「sessionId 入键」收口。
+
 **分块接入（node 精确档）**：`count-openai-style-message.ts`（fa feature 下沉版）encode 函数包 `countTextWithIncrementalTokenizer`，per-message overhead 公式不动。**本变更是该模块分块包装的唯一落点（spec-check 第 1 轮 P1-5 定稿：fa 下沉时保持原样，rn 调用侧不另包——避免双重包装，fa T-FA2 的逐字节基准在本 feature 合入后迁移至 T-TC5 的 ≤1% 容差口径）。**
 
 **防抖**：desktop `loadChatPromptTokenStats` 入口按 sessionId 300ms trailing debounce + 同参在途 Promise 合并；mobile `refreshChatTokenLabel` 同款（复用 inflight 槽模式）；mobile 回滚 1500ms 错峰保留。

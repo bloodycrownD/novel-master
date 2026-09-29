@@ -39,7 +39,6 @@ import type {
 } from "@shared/ipc-types";
 import { PickerModal } from "@/components/ui/PickerModal";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
-import { Tooltip } from "@/components/ui/Tooltip";
 import { showToast } from "@/components/ui/show-toast";
 import {
   ipcAgentListPicker,
@@ -56,13 +55,11 @@ import {
   EVENT_AGENT_STEP_COMMITTED,
   type AgentRunFinishedPayload,
   type AgentStepCommittedPayload,
-} from "@novel-master/core/events";
+} from "@shared/logic/events";
 import { useShellNav } from "@/providers/ShellNavProvider";
 import { runCompaction } from "./ConversationPanel";
 import { ChatHistorySearchPanel } from "./ChatHistorySearchPanel";
 import { SessionSkillPanel } from "./SessionSkillPanel";
-import { formatTokenCount } from "@novel-master/core/common";
-import { formatTokenSourceLabel } from "@novel-master/core/provider";
 
 interface SessionDetailDrawerProps {
   open: boolean;
@@ -72,19 +69,6 @@ interface SessionDetailDrawerProps {
   onClose: () => void;
   /** 重命名成功后通知父级同步导航处会话名。 */
   onRenamed?: (newName: string) => void;
-}
-
-function tokenCountLabel(stats: PromptChatTokenStatsResponse): string {
-  const prefix = stats.estimated ? "~" : "";
-  const current = formatTokenCount(stats.tokenCount);
-  if (stats.contextWindow == null || stats.contextWindow <= 0) {
-    return stats.estimated
-      ? `${prefix}${current} tokens (est.)`
-      : `${current} tokens`;
-  }
-  return `${prefix}${formatTokenCount(stats.tokenCount)} / ${formatTokenCount(
-    stats.contextWindow,
-  )}`;
 }
 
 export function SessionDetailDrawer({
@@ -539,16 +523,15 @@ export function SessionDetailDrawer({
 
           {tokenStats ? (
             <div className="session-detail-drawer__tokens">
+              {/* label 一行化：main 拼好的完整标签（源记号 + =/≈ + pct + 占比）
+                  直接渲染，头部不再单独拼 pct，底部拼装行已随旧标签体系删除。 */}
               <div className="session-detail-drawer__tokens-head">
                 <span className="session-detail-drawer__tokens-title">
                   上下文占用
                 </span>
-                {tokenStats.pct != null ? (
-                  <span className="session-detail-drawer__tokens-pct">
-                    {tokenStats.estimated ? "~" : ""}
-                    {tokenStats.pct}%
-                  </span>
-                ) : null}
+                <span className="session-detail-drawer__tokens-label">
+                  {tokenStats.label}
+                </span>
               </div>
               <div
                 className="session-detail-drawer__tokens-bar"
@@ -562,14 +545,6 @@ export function SessionDetailDrawer({
                   className="session-detail-drawer__tokens-bar-fill"
                   style={{ width: `${barPct}%` }}
                 />
-              </div>
-              <div className="session-detail-drawer__tokens-foot">
-                <span>{tokenCountLabel(tokenStats)}</span>
-                <Tooltip content="占用来源" placement="top">
-                  <span className="session-detail-drawer__tokens-tokenizer">
-                    {formatTokenSourceLabel(tokenStats.source)}
-                  </span>
-                </Tooltip>
               </div>
             </div>
           ) : null}

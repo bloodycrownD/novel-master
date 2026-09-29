@@ -282,7 +282,9 @@ export function SubagentSessionScreen() {
       ) : null}
       {/* 指标条与主会话同构（stream-metrics-tokens）：子会话 run 由 manager 的
           消费型单元承接，数据源同为「单元快照 / settled 投影」双源，故直接复用
-          主会话那套组件——活跃期显示实时速率，终态显示收尾冻结的末值速率。 */}
+          主会话那套组件——活跃期显示实时速率，终态显示收尾冻结的末值速率。
+          metric-detail-sheet：点击弹用量详情 sheet（数据按子会话自身 sessionId
+          统计）；子会话屏无 meta chip，上下文占用行不传读数（出「—」）。 */}
       <ChatStreamMetricsBarLive
         agentRunning={agentRunning}
         sessionId={sessionId}

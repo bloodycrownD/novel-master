@@ -4,7 +4,7 @@
  *
  * 三态覆盖：
  * - 活跃：消费型单元的 running 快照 → 「生成中」；
- * - 终态：FINISHED 收尾后的冻结快照 → 「上次生成 · 历时 · 输出 N t · N t/s」；
+ * - 终态：FINISHED 收尾后的冻结快照 → 「上次生成 · 历时 · 输出 N tok · N tok/s」；
  * - 中断：水合 interrupted 单元 → 「已中断」在屏上**只出现一次**
  *   （cr-fix-spec mobile-metrics/C-4：指标条能显示时不再叠屏级横幅；
  *   指标条不可见时由横幅兜底，仍是单标识）。
@@ -31,6 +31,8 @@ const CHILD_SESSION_ID = 'child-1';
 
 let mockManager: SessionStreamUnitManager | undefined;
 let mockRuntime: unknown;
+/** metric-detail-sheet 用例的 usageStats 自取 stub（子会话统计断言）。 */
+const mockGetSessionUsageDetail = jest.fn();
 
 jest.mock('../src/hooks/useRuntime', () => ({
   useRuntime: () => mockRuntime,
@@ -51,12 +53,33 @@ jest.mock('../src/theme/ThemeProvider', () => ({
   useTheme: () => ({
     tokens: {
       background: '#000',
+      text: '#111',
       textSecondary: '#ccc',
+      textTertiary: '#999',
       danger: '#f00',
       border: '#222',
     },
   }),
 }));
+
+// AppModal 走 RN 原生 Modal，jest 环境渲染不出内容，换透传 View
+// （metric-detail-sheet 起指标条挂 MetricDetailSheet，范式同
+// directory-rule-sheet.test）。
+jest.mock('../src/components/ui/AppModal', () => {
+  const mockReact = require('react');
+  return {
+    AppModal: ({
+      children,
+      visible,
+    }: {
+      children?: React.ReactNode;
+      visible?: boolean;
+    }) =>
+      visible
+        ? mockReact.createElement('View', {testID: 'app-modal'}, children)
+        : null,
+  };
+});
 
 jest.mock('../src/components/chrome/ToastHost', () => ({
   useToast: () => ({showToast: jest.fn()}),
@@ -171,36 +194,37 @@ describe('SubagentSessionScreen 指标条渲染（G-2）', () => {
     mockManager?.dispose();
     mockManager = undefined;
     mockRuntime = undefined;
+    mockGetSessionUsageDetail.mockClear();
     jest.useRealTimers();
     setMobileAgentActive(false);
   });
 
-  it('活跃：消费型 run 运行中显示「生成中 · 输出 N t」', async () => {
+  it('活跃：消费型 run 运行中显示「生成中 · 输出 N tok」', async () => {
     const h = buildHarness();
     mockManager = h.manager;
-    mockRuntime = {sessionStreamUnitManager: h.manager};
+    mockRuntime = {sessionStreamUnitManager: h.manager, usageStats: {getSessionUsageDetail: mockGetSessionUsageDetail}};
     driveConsumptiveRun(h.eventBus, 3);
 
     const {texts, unmount} = await renderScreen();
     expect(texts.join(' | ')).toContain('生成中');
     // 3 × 50 字符 heuristic 折算 ceil(150/3.35)=45。
-    expect(texts.join(' | ')).toContain('输出 45 t');
+    expect(texts.join(' | ')).toContain('输出 45 tok');
     expect(texts.join(' | ')).not.toContain('上次生成');
     unmount();
   });
 
-  it('终态：FINISHED 后冻结为「上次生成 · 历时 · 输出 N t · N t/s」', async () => {
+  it('终态：FINISHED 后冻结为「上次生成 · 历时 · 输出 N tok · N tok/s」', async () => {
     const h = buildHarness();
     mockManager = h.manager;
-    mockRuntime = {sessionStreamUnitManager: h.manager};
+    mockRuntime = {sessionStreamUnitManager: h.manager, usageStats: {getSessionUsageDetail: mockGetSessionUsageDetail}};
     driveConsumptiveRun(h.eventBus, 6);
     finishRun(h.eventBus);
 
     const {texts, unmount} = await renderScreen();
     const line = texts.join(' | ');
     expect(line).toContain('上次生成');
-    expect(line).toContain('输出 90 t'); // ceil(300/3.35)
-    expect(line).toMatch(/\d+(\.\d)? t\/s/);
+    expect(line).toContain('输出 90 tok'); // ceil(300/3.35)
+    expect(line).toMatch(/\d+(\.\d)? tok\/s/);
     expect(line).not.toContain('生成中');
     unmount();
   });
@@ -208,7 +232,7 @@ describe('SubagentSessionScreen 指标条渲染（G-2）', () => {
   it('中断（指标条可见）：「已中断」只在条上出现一次（不叠屏级横幅）', async () => {
     const h = buildHarness();
     mockManager = h.manager;
-    mockRuntime = {sessionStreamUnitManager: h.manager};
+    mockRuntime = {sessionStreamUnitManager: h.manager, usageStats: {getSessionUsageDetail: mockGetSessionUsageDetail}};
     // 重启水合现场：run 被杀 → interrupted 单元（常驻，无 settled 投影）。
     const unit = h.manager.adoptInterruptedUnit(CHILD_SESSION_ID, 'p1');
     unit.hydrateFromRunState({
@@ -230,14 +254,14 @@ describe('SubagentSessionScreen 指标条渲染（G-2）', () => {
     // C-4：屏级横幅与指标条徽标不再同时出现——「已中断」恰好一次。
     expect(countText(texts, '已中断')).toBe(1);
     expect(texts.join(' | ')).toContain('上次生成');
-    expect(texts.join(' | ')).toContain('输出 30 t');
+    expect(texts.join(' | ')).toContain('输出 30 tok');
     unmount();
   });
 
   it('中断（指标条不可见）：「已中断」由屏级横幅兜底，仍是单标识', async () => {
     const h = buildHarness();
     mockManager = h.manager;
-    mockRuntime = {sessionStreamUnitManager: h.manager};
+    mockRuntime = {sessionStreamUnitManager: h.manager, usageStats: {getSessionUsageDetail: mockGetSessionUsageDetail}};
     // starting 阶段被杀：起点与指标皆零 → 指标条全零守卫不渲染。
     const unit = h.manager.adoptInterruptedUnit(CHILD_SESSION_ID, 'p1');
     unit.hydrateFromRunState({
@@ -259,5 +283,76 @@ describe('SubagentSessionScreen 指标条渲染（G-2）', () => {
     expect(countText(texts, '已中断')).toBe(1);
     expect(texts.join(' | ')).not.toContain('上次生成');
     unmount();
+  });
+
+  it('metric-detail-sheet：指标条可点开用量 sheet，数据按子会话自身 sessionId 统计', async () => {
+    const h = buildHarness();
+    mockManager = h.manager;
+    mockRuntime = {
+      sessionStreamUnitManager: h.manager,
+      usageStats: {getSessionUsageDetail: mockGetSessionUsageDetail},
+    };
+    // 冻结指标现场：指标条可见 → 详情入口存在。
+    const unit = h.manager.adoptInterruptedUnit(CHILD_SESSION_ID, 'p1');
+    unit.hydrateFromRunState({
+      runId: 'rc-old',
+      startedAtMs: 1_000,
+      settledAtMs: 4_000,
+      metrics: {
+        textChars: 100,
+        thinkingChars: 0,
+        completionTokens: 30,
+        tokenSource: 'usage',
+      },
+      partialText: '中断正文',
+      partialThinking: '',
+      pendingChildren: [],
+    });
+    mockGetSessionUsageDetail.mockResolvedValue({
+      last: {
+        seq: 2,
+        modelName: 'gpt-x',
+        provider: 'openai',
+        promptTokens: 50,
+        completionTokens: 20,
+        cacheReadTokens: null,
+        cacheCreationTokens: null,
+        atMs: 1,
+      },
+      totals: {
+        promptTokens: 80,
+        completionTokens: 30,
+        cacheReadTokens: 0,
+        cacheCreationTokens: 0,
+        billedInputTokens: 80,
+        assistantRows: 2,
+      },
+      visibleMessageCount: 3,
+      toolUseCount: 1,
+    });
+
+    let tree!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(<SubagentSessionScreen />);
+    });
+    const pressable = tree.root.find(
+      node =>
+        node.props?.accessibilityRole === 'button' &&
+        typeof node.props?.onPress === 'function' &&
+        Array.isArray(node.props?.style) === false // 指标条 Pressable（屏上还有停止按钮等）
+    );
+    await act(async () => {
+      pressable.props.onPress();
+    });
+    // 数据按子会话自身 sessionId（child-1）统计，非父会话。
+    expect(mockGetSessionUsageDetail).toHaveBeenCalledWith(CHILD_SESSION_ID);
+    const texts = tree.root
+      .findAllByType(Text)
+      .map(node => String(node.props.children));
+    expect(texts.join()).toContain('用量详情');
+    expect(texts.join()).toContain('gpt-x');
+    act(() => {
+      tree.unmount();
+    });
   });
 });

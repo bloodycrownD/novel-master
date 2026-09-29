@@ -5,6 +5,8 @@
  * - starting 阶段被杀的 interrupted（计时与字数皆零）：无内容不显示空指标条；
  * - 无单元（宽限销毁后）：退 manager 级 settled 投影「上次生成」不断源；
  * - 活跃 run：快照 live 计时显示「生成中」（既有行为不回归）。
+ * - metric-detail-sheet：指标条 onPress 打开用量 sheet（visible 翻真自取），
+ *   弹窗状态独立于 250ms tick（metrics props 引用不随弹窗开关变化）。
  */
 import React from 'react';
 import {afterEach, beforeEach, describe, expect, it, jest} from '@jest/globals';
@@ -25,9 +27,14 @@ const mockRunAgentTurn = jest.fn(
 );
 
 let mockManager: SessionStreamUnitManager | undefined;
+/** MetricDetailSheet 经 useRuntime().usageStats 自取（弹窗用例注入 stub）。 */
+const mockGetSessionUsageDetail = jest.fn();
 
 jest.mock('../src/hooks/useRuntime', () => ({
-  useRuntime: () => ({sessionStreamUnitManager: mockManager}),
+  useRuntime: () => ({
+    sessionStreamUnitManager: mockManager,
+    usageStats: {getSessionUsageDetail: mockGetSessionUsageDetail},
+  }),
 }));
 
 jest.mock('../src/theme/ThemeProvider', () => ({
@@ -36,8 +43,28 @@ jest.mock('../src/theme/ThemeProvider', () => ({
   }),
 }));
 
+// AppModal 走 RN 原生 Modal，jest 环境渲染不出内容，换透传 View
+// （metric-detail-sheet 的 sheet 用例需要，范式同 directory-rule-sheet.test）。
+jest.mock('../src/components/ui/AppModal', () => {
+  const mockReact = require('react');
+  return {
+    AppModal: ({
+      children,
+      visible,
+    }: {
+      children?: React.ReactNode;
+      visible?: boolean;
+    }) =>
+      visible
+        ? mockReact.createElement('View', {testID: 'app-modal'}, children)
+        : null,
+  };
+});
+
 // eslint-disable-next-line import/first
 import {ChatStreamMetricsBarLive} from '../src/components/chat/ChatStreamMetricsBarLive';
+// eslint-disable-next-line import/first
+import {ChatStreamMetricsBar} from '../src/components/chat/ChatStreamMetricsBar';
 
 function buildHarness(): {
   manager: SessionStreamUnitManager;
@@ -96,6 +123,7 @@ describe('ChatStreamMetricsBarLive 双源（快照优先 / settled 投影兜底�
   afterEach(() => {
     mockManager?.dispose();
     mockManager = undefined;
+    mockGetSessionUsageDetail.mockClear();
     jest.useRealTimers();
     setMobileAgentActive(false);
   });
@@ -128,7 +156,7 @@ describe('ChatStreamMetricsBarLive 双源（快照优先 / settled 投影兜底�
     expect(line).toContain('上次生成');
     expect(line).toContain('3.0s'); // 冻结历时 = 5000 - 2000
     // T-M6/T-M8：中断现场恢复 token 数与 source（水合后 token 不归零）。
-    expect(line).toContain('输出 88 t');
+    expect(line).toContain('输出 88 tok');
   });
 
   it('starting 阶段被杀的 interrupted（计时与字数皆零）：不显示空指标条', () => {
@@ -186,11 +214,11 @@ describe('ChatStreamMetricsBarLive 双源（快照优先 / settled 投影兜底�
     const line = renderMetricsLine(false, 's1');
     expect(line).toContain('上次生成');
     // 5 字符 heuristic 折算 ceil(5/3.35)=2：settled 投影带 token 冻结值。
-    expect(line).toContain('输出 2 t');
+    expect(line).toContain('输出 2 tok');
     expect(line).not.toContain('0.0s'); // 历时 ≥ 1096ms，非零起点
   });
 
-  it('冻结态显示末值速率段（「上次生成 … · N t/s」）', () => {
+  it('冻结态显示末值速率段（「上次生成 … · N tok/s」）', () => {
     const h = buildHarness();
     mockManager = h.manager;
     mockManager.startRun('s1', 'p1', 'hi');
@@ -218,10 +246,10 @@ describe('ChatStreamMetricsBarLive 双源（快照优先 / settled 投影兜底�
 
     const line = renderMetricsLine(false, 's1');
     expect(line).toContain('上次生成');
-    expect(line).toContain('输出 90 t'); // ceil(300/3.35)
+    expect(line).toContain('输出 90 tok'); // ceil(300/3.35)
     // 末值速率段（此前冻结态整段省略）：有样本即显示，且不是衰减后的零头。
-    expect(line).toMatch(/\d+(\.\d)? t\/s/);
-    expect(line).not.toMatch(/(^| )0 t\/s/);
+    expect(line).toMatch(/\d+(\.\d)? tok\/s/);
+    expect(line).not.toMatch(/(^| )0 tok\/s/);
   });
 
   it('活跃 run：快照 live 计时显示「生成中」（agentRunning=true）', () => {
@@ -245,7 +273,7 @@ describe('ChatStreamMetricsBarLive 双源（快照优先 / settled 投影兜底�
     const line = renderMetricsLine(true, 's1');
     expect(line).toContain('生成中');
     // 5 字符 heuristic 折算 ceil(5/3.35)=2（首秒样本不足省略速率段）。
-    expect(line).toContain('输出 2 t');
+    expect(line).toContain('输出 2 tok');
   });
 
   it('无单元且无 settled 投影：不渲染指标条', () => {
@@ -278,7 +306,7 @@ describe('ChatStreamMetricsBarLive 双源（快照优先 / settled 投影兜底�
       );
     });
 
-    // heuristic 阶段：慢速积累（每秒 ~3 字符 ≈ 1 t）。
+    // heuristic 阶段：慢速积累（每秒 ~3 字符 ≈ 1 tok）。
     for (let i = 0; i < 6; i += 1) {
       h.eventBus.publish(EVENT_AGENT_STREAM_TEXT_DELTA, {
         sessionId: 's1',
@@ -291,7 +319,7 @@ describe('ChatStreamMetricsBarLive 双源（快照优先 / settled 投影兜底�
     }
     const beforeCorrection = readLine();
     expect(beforeCorrection).toContain('生成中');
-    expect(beforeCorrection).toContain('输出 6 t'); // ceil(18/3.35)
+    expect(beforeCorrection).toContain('输出 6 tok'); // ceil(18/3.35)
 
     // usage 校正：真值跳变到 1200（中文低估约半的典型幅度）。
     h.eventBus.publish(EVENT_AGENT_STREAM_USAGE, {
@@ -304,9 +332,9 @@ describe('ChatStreamMetricsBarLive 双源（快照优先 / settled 投影兜底�
       jest.advanceTimersByTime(500);
     });
     const atCorrection = readLine();
-    expect(atCorrection).toContain('输出 1,200 t');
-    // 重 seed 后窗口仅 1 个样本：速率段省略（绝无 4800 t/s 之类的尖刺数字）。
-    expect(atCorrection).not.toMatch(/\d+ t\/s/);
+    expect(atCorrection).toContain('输出 1,200 tok');
+    // 重 seed 后窗口仅 1 个样本：速率段省略（绝无 4800 tok/s 之类的尖刺数字）。
+    expect(atCorrection).not.toMatch(/\d+ tok\/s/);
 
     // 校正后从真值起算：继续 usage 递增，速率回到平滑小值。
     h.eventBus.publish(EVENT_AGENT_STREAM_USAGE, {
@@ -320,7 +348,81 @@ describe('ChatStreamMetricsBarLive 双源（快照优先 / settled 投影兜底�
     });
     const afterRecovery = readLine();
     expect(afterRecovery).toMatch(/输出 1,206 t/);
-    expect(afterRecovery).not.toMatch(/\d{3,} t\/s/); // 无三位数以上尖刺
+    expect(afterRecovery).not.toMatch(/\d{3,} tok\/s/); // 无三位数以上尖刺
+
+    act(() => {
+      tree.unmount();
+    });
+  });
+
+  it('metric-detail-sheet：onPress 打开用量 sheet（按 sessionId 自取）；弹窗开关不改指标条 metrics props 引用', async () => {
+    const h = buildHarness();
+    mockManager = h.manager;
+    // 冻结指标现场（settled 投影兜底也行，这里用快照优先路径）。
+    const unit = mockManager.adoptInterruptedUnit('s1', 'p1');
+    unit.hydrateFromRunState({
+      runId: 'run-old',
+      startedAtMs: 2_000,
+      settledAtMs: 5_000,
+      metrics: {
+        textChars: 10,
+        thinkingChars: 0,
+        completionTokens: 8,
+        tokenSource: 'usage',
+      },
+      partialText: 'x',
+      partialThinking: '',
+      pendingChildren: [],
+    });
+    mockGetSessionUsageDetail.mockResolvedValue({
+      last: {
+        seq: 3,
+        modelName: 'claude-x',
+        provider: 'anthropic',
+        promptTokens: 100,
+        completionTokens: 40,
+        cacheReadTokens: 2048,
+        cacheCreationTokens: null,
+        atMs: 1,
+      },
+      totals: {
+        promptTokens: 300,
+        completionTokens: 80,
+        cacheReadTokens: 2048,
+        cacheCreationTokens: 512,
+        billedInputTokens: 2860,
+        assistantRows: 3,
+      },
+      visibleMessageCount: 5,
+      toolUseCount: 2,
+    });
+
+    let tree!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(
+        <ChatStreamMetricsBarLive agentRunning={false} sessionId="s1" />,
+      );
+    });
+    const barBefore = tree.root.findByType(ChatStreamMetricsBar);
+    const metricsBefore = barBefore.props.metrics;
+    // 打开前 sheet 不可见（AppModal mock visible=false 渲 null，无取数）。
+    expect(mockGetSessionUsageDetail).not.toHaveBeenCalled();
+
+    await act(async () => {
+      barBefore.props.onPress();
+    });
+    // sheet 打开：按 Live 层的 sessionId 自取并渲染两段内容。
+    expect(mockGetSessionUsageDetail).toHaveBeenCalledWith('s1');
+    const texts = tree.root
+      .findAllByType(Text)
+      .map(node => String(node.props.children));
+    expect(texts.join()).toContain('用量详情');
+    expect(texts.join()).toContain('claude-x');
+    // 指标条 metrics props 值未变（弹窗状态独立 state，不进 metrics 快照；
+    // 引用每帧重建是 Live 既有行为——250ms tick 亦然，隔离语义取值相等）。
+    const barAfter = tree.root.findByType(ChatStreamMetricsBar);
+    expect(barAfter.props.metrics).toStrictEqual(metricsBefore);
+    expect(barAfter.props.interrupted).toBe(true);
 
     act(() => {
       tree.unmount();

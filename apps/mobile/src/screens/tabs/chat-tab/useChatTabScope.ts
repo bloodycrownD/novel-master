@@ -83,24 +83,140 @@ export function useChatTabScope({
   );
   const [hasWorkspaceModel, setHasWorkspaceModel] = useState(false);
 
-  const refreshChatTokenLabel = useCallback(async () => {
+  // token 标签刷新防抖窗口（message-token-cache Step 4 / T-TC6）：300ms
+  // trailing。transcript 变化、回滚、置位/压缩、meta 刷新链尾等多个触发源
+  // 会在短时间内连发，这里在 hook 读口把它们合并成一次 service 调用。
+  // 与 desktop service 层同款语义：窗口内触发重置计时共享同一次执行；
+  // 在途时新触发复用在途并安排追赶轮（最后一次触发必产生一次计算）。
+  const CHAT_TOKEN_LABEL_DEBOUNCE_MS = 300;
+
+  // 升级回调的会话身份闸（cr-fix-spec-r2 s2/B-1 场景①）：记录最近一次
+  // 刷新所属会话，升级回调写回前比对——跨会话切换后，旧会话在途升级的
+  // 精确标签不得写进新会话的 meta（service 层 gen 闸之外的双保险）。
+  const tokenLabelSessionRef = useRef<string | null>(null);
+
+  const runChatTokenLabelRefresh = useCallback(async () => {
     // meta 未加载（undefined）时保持未加载态：partial 更新不能凭空造出
     // 残缺的 meta 对象（缺字段的假 meta 会被当成已加载渲染）。
     if (projectId == null || sessionId == null) {
       setAgentMeta(prev => (prev == null ? prev : {...prev, tokenLabel: ''}));
       return;
     }
-    setAgentMeta(prev => (prev == null ? prev : {...prev, tokenLabel: '…'}));
+    tokenLabelSessionRef.current = sessionId;
+    // 已有标签时保留旧值而非 '…'：压缩/发送后的重算在大上下文上可达数秒
+    // （native 整串计数），旧读数先顶着、新值落地即替换；会话切换路径由
+    // loadChatAgentMeta 重建 meta（tokenLabel 归 ''）先清场，不会串显。
+    setAgentMeta(prev =>
+      prev == null ? prev : {...prev, tokenLabel: prev.tokenLabel || '…'},
+    );
     try {
-      const tokenLabel = await loadChatPromptTokenLabelResilient(runtime, {
-        projectId,
-        sessionId,
-      });
+      const tokenLabel = await loadChatPromptTokenLabelResilient(
+        runtime,
+        {projectId, sessionId},
+        // 两阶段升级回调（统计优先口径）：首帧若是估算档（如切模型后无 api
+        // 基线），后台跑完家族真分词器精确计数后回填——`glm =` 稍后到位，
+        // 首帧 `gpt ≈` 先顶着，不再干等原生整串计数 ~5.8s。写回前过会话
+        // 身份闸：本回调发起后若已切到别的会话，旧会话的标签就地丢弃。
+        upgraded => {
+          if (tokenLabelSessionRef.current !== sessionId) {
+            return;
+          }
+          setAgentMeta(prev =>
+            prev == null ? prev : {...prev, tokenLabel: upgraded},
+          );
+        },
+      );
       setAgentMeta(prev => (prev == null ? prev : {...prev, tokenLabel}));
     } catch {
       setAgentMeta(prev => (prev == null ? prev : {...prev, tokenLabel: ''}));
     }
   }, [runtime, projectId, sessionId]);
+
+  // 防抖槽（复用 refreshChatMetaInflightRef 的在途槽模式，单槽服务当前会话）：
+  // - deferred：trailing 计时挂起中，窗口内所有 caller 共享「这一次执行」；
+  // - running：在途执行链（到期执行若上一轮仍在途则挂其后串行，绝不并发）。
+  const chatTokenLabelDebounceRef = useRef<{
+    key: string;
+    timer: ReturnType<typeof setTimeout> | null;
+    deferred: {
+      promise: Promise<void>;
+      resolve: (value: Promise<void>) => void;
+    } | null;
+    running: Promise<void> | null;
+  }>({key: '', timer: null, deferred: null, running: null});
+
+  const refreshChatTokenLabel = useCallback((): Promise<void> => {
+    const key = `${projectId ?? ''}#${sessionId ?? ''}`;
+    const slot = chatTokenLabelDebounceRef.current;
+    if (slot.key !== key) {
+      // 换会话：旧 key 的计时作废（在途一轮让它自然落定，不再挂新 caller）。
+      if (slot.timer != null) {
+        clearTimeout(slot.timer);
+        slot.timer = null;
+      }
+      slot.key = key;
+      slot.deferred = null;
+      slot.running = null;
+    }
+    const scheduleTrailing = () => {
+      if (slot.timer != null) {
+        clearTimeout(slot.timer);
+      }
+      const timerKey = key;
+      slot.timer = setTimeout(() => {
+        slot.timer = null;
+        // 计时期间又切了会话（无新触发清理）：本轮按旧 key 作废。
+        if (slot.key !== timerKey) {
+          return;
+        }
+        const deferred = slot.deferred;
+        slot.deferred = null;
+        const previousRun = slot.running;
+        const run = (
+          previousRun ? previousRun.catch(() => undefined) : Promise.resolve()
+        ).then(() => runChatTokenLabelRefresh());
+        slot.running = run;
+        const settle = () => {
+          if (slot.running === run) {
+            slot.running = null;
+          }
+        };
+        run.then(settle, settle);
+        // runner 内部已全 try/catch、理论上不 reject；这里仍挂兜底，保证
+        // caller（多为 void 调用）不接 rejection 也不产生 unhandled。
+        run.catch(() => undefined);
+        if (deferred != null) {
+          deferred.resolve(run);
+        }
+      }, CHAT_TOKEN_LABEL_DEBOUNCE_MS);
+    };
+    if (slot.running != null) {
+      // 在途复用：并发触发直接挂正在跑的一轮；追赶轮保证新触发最终被计算。
+      scheduleTrailing();
+      return slot.running;
+    }
+    if (slot.deferred == null) {
+      let resolve!: (value: Promise<void>) => void;
+      const promise = new Promise<void>(res => {
+        resolve = res;
+      });
+      slot.deferred = {promise, resolve};
+    }
+    scheduleTrailing();
+    return slot.deferred.promise;
+  }, [projectId, sessionId, runChatTokenLabelRefresh]);
+
+  // 卸载清理：别让挂起的防抖计时在组件卸载后再触发 setState。
+  useEffect(
+    () => () => {
+      const slot = chatTokenLabelDebounceRef.current;
+      if (slot.timer != null) {
+        clearTimeout(slot.timer);
+        slot.timer = null;
+      }
+    },
+    [],
+  );
 
   // refreshChatMeta 的在途复用槽：首屏三处触发（本 hook 的 dep effect、
   // Provider 的 conversation effect、useFocusEffect）在同一挂载周期内

@@ -11,12 +11,14 @@ export interface SessionApiPromptTokenCacheEntry {
   /**
    * 计数时的 savedModelId（可选指纹）。读口发现与当前请求的 savedModelId
    * 不一致即当 miss——换模型后旧口径的 prompt 占用不再适用。
-   *
-   * 这是热层里**唯一**的指纹字段：run 身份 / 末尾消息 seq 经实查零读取方
-   * （只写不读），已从条目形状里移除，见
-   * `session-api-prompt-token-store.ts` 的模块头说明。
    */
   readonly savedModelId?: string;
+  /**
+   * 采样时刻提示词已含的末条消息 seq（可选增量锚点，2026-09-29 加）：
+   * 读口用它把「采样之后追加的消息」折成增量估算加回（metric 基线+增量
+   * 同款）。与此前被移除的「末尾消息 seq」死字段不同——这个有真实读取方。
+   */
+  readonly anchorSeq?: number;
 }
 
 const store = new Map<string, SessionApiPromptTokenCacheEntry>();

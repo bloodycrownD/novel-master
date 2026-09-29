@@ -342,6 +342,43 @@ export class DefaultAgentRunner implements AgentRunner {
       stopReason = "cancelled";
     };
 
+    /**
+     * 每 step usage 回锚（统计优先口径，2026-09-29 用户拍板「有哪个统计用
+     * 哪个」）：请求完成的 usage 带着精确 promptTokens，落进热层/KKV 后，
+     * 下一步的压缩评估与 chip 刷新直接命中 api 档——run 内不再为读数付
+     * 本地整串计数（glm 原生大上下文单次 ~5.8s）。
+     *
+     * 写入点必须在**本 step 全部消息落库之后**（完成/空回复分支与
+     * tool_results 落库后，共两个 chokepoint）：`anchorSeq` 是提示词末条
+     * 消息的 seq，必须与 usage 对应**同一批可见消息**——锚点后追加的消息
+     * 由读口的增量估算覆盖（纯追加不失效基线，2026-09-29 拍板），锚定
+     * 早了会把已计入基线的消息再算一遍增量。`lastAnchorSeq` 镜像最后一次
+     * 写入携带的锚点（含 undefined），供 run 收尾的终值写沿用——picked
+     * 与锚点出自同一步，不会错位。
+     */
+    let lastAnchorSeq: number | undefined;
+    const anchorStepUsage = (
+      usage: { readonly promptTokens?: number } | undefined,
+      anchorSeq: number | undefined
+    ): void => {
+      // overlay 内存会话（persistMessages=false）的 usage 不落持久层：
+      // append 不落库也不触发失效，写进 KKV 会与 overlay 语义错位。
+      if (!persistMessages) {
+        return;
+      }
+      const promptTokens = usage?.promptTokens;
+      if (typeof promptTokens !== "number" || !Number.isFinite(promptTokens)) {
+        return;
+      }
+      lastAnchorSeq = anchorSeq;
+      writeSessionApiPromptTokenEntry(this.deps.sessionKkv, sessionId, {
+        promptTokens,
+        atMs: Date.now(),
+        savedModelId: options.savedModelId,
+        ...(anchorSeq != null ? { anchorSeq } : {}),
+      });
+    };
+
     try {
       // wt 提升到循环外（仅取一次）：工厂每次调用会 new 新服务实例，
       // 每步重建会让 liveViewInFlight 并发去重跨 step 失效。
@@ -406,6 +443,11 @@ export class DefaultAgentRunner implements AgentRunner {
           await handleAbort("after_prepare_user_messages");
           break;
         }
+
+        // API 占用增量锚点：本 step 请求的提示词以这批可见消息为尾，usage
+        // 回锚时记下末条 seq，读口据此把「此后追加的消息」折成增量估算。
+        const stepAnchorSeq =
+          visible.length > 0 ? visible[visible.length - 1]!.seq : undefined;
 
         // skill load seen 共享（方向 A）：把本请求可见窗口内 `$` 引用过的
         // 技能名回填进 skills 闭包，load 工具据此返回短提示（与 $ 附件
@@ -702,6 +744,9 @@ export class DefaultAgentRunner implements AgentRunner {
         );
 
         if (toolUses.length === 0) {
+          // chokepoint ①：完成/空回复路径的全部落库已结束，回锚本 step 的
+          // usage（下一步评估与 chip 刷新命中 api 档；见 anchorStepUsage 注释）。
+          anchorStepUsage(result.usage, stepAnchorSeq);
           finished = true;
           stopReason = "completed";
           rounds.push({
@@ -826,6 +871,10 @@ export class DefaultAgentRunner implements AgentRunner {
           break;
         }
         await session.append("user", { blocks: toolResults });
+        // chokepoint ②：tool_results 落库后回锚本 step 的 usage（锚点与
+        // usage 对齐到同一批可见消息——纯追加不失效基线，下一步评估走
+        // api 档零计数、锚点后增量由读口覆盖）。
+        anchorStepUsage(result.usage, stepAnchorSeq);
         if (publishRunLifecycle) {
           bus.publish(EVENT_AGENT_STEP_COMMITTED, {
             sessionId,
@@ -904,12 +953,21 @@ export class DefaultAgentRunner implements AgentRunner {
     // 仅 completed ∧ pick 有值（含合法 0）写缓存；FINISHED 旁路其他一律失效。
     // 写侧落 session KKV（进程内热层 + KKV 双写）：重启后仍读到同一份 API
     // 口径的占用，不再出现「重启前报 API、重启后跌本地估算」的跳表。
+    // anchorSeq 沿用本 run 最后一次回锚的锚点（picked 与锚点同源同 step；
+    // 终 step usage 缺 promptTokens 而 picked 取自前步时，锚点也是前步的）。
+    // persistMessages=false（overlay run）的终值同样不落——锚点口径属持久
+    // 会话，与 anchorStepUsage / 失败消息落库同一条豁免，走 else 连旧值失效。
     const picked = pickLastPromptUsage(rounds);
-    if (stopReason === "completed" && picked !== undefined) {
+    if (
+      persistMessages &&
+      stopReason === "completed" &&
+      picked !== undefined
+    ) {
       writeSessionApiPromptTokenEntry(this.deps.sessionKkv, sessionId, {
         promptTokens: picked,
         atMs: Date.now(),
         savedModelId: options.savedModelId,
+        ...(lastAnchorSeq != null ? { anchorSeq: lastAnchorSeq } : {}),
       });
     } else {
       // run 收尾不等 IO：这里刻意保持 fire-and-forget（不 await KKV 删除）。
