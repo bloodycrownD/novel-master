@@ -59,6 +59,16 @@ export {
 } from "./bootstrap/novel-master-bootstrap.js";
 
 /**
+ * 宿主注册的 zlib 加速器（Node 侧 `node:zlib`）：desktop main / CLI 启动
+ * 装配期注册；未注册（RN / 测试默认）时全部热路径走 fflate，现行为零变化。
+ */
+export {
+  registerZlibCodecAccelerator,
+  clearZlibCodecAccelerator,
+} from "./domain/vfs/content-store/logic/zlib-accelerator.js";
+export type { ZlibCodecAccelerator } from "./domain/vfs/content-store/logic/zlib-accelerator.js";
+
+/**
  * 延期 file_cache 缓存 GC：回收无 entry 引用行的 `session_file_cache_blob`
  * （引用集 = session_file_cache_entry 全表；须在删除引用行的事务提交后调度）。
  */

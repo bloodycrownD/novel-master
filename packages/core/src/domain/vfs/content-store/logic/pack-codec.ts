@@ -10,14 +10,15 @@
  *   解段表 → 解段 0 得 v0 → 沿链 applyDelta 到段 k（组内 ≤8 段，链式读放大有界）。
  *
  * 读侧（SqliteVfsContentStore 的 get/getMany member 分派）与写侧（后台打包任务）
- * 共用本模块，段表布局只有这一份实现。另附解压计数探针，供测试断言「pack 组整组
+ * 共用本模块，段表布局只有这一份实现。压缩/解压复用 zlib-codec（宿主注册的
+ * zlib 加速器分派；未注册恒 fflate）。另附解压计数探针，供测试断言「pack 组整组
  * 只解压一次、fossil 组沿链复用中间结果」（见 `__getVfsPackDecodeCountersForTests`）。
  *
  * @module domain/vfs/content-store/logic/pack-codec
  */
 
-import { unzlibSync, zlibSync } from "fflate";
 import { applyDelta, createDelta } from "fossil-delta";
+import { compressZlib, decompressZlib } from "./zlib-codec.js";
 
 /** 小组 format：明文拼接、单流 zlib。 */
 export const VFS_PACK_FORMAT_ZLIB_CONCAT_V1 = "zlib-concat-v1" as const;
@@ -95,7 +96,7 @@ export function encodeZlibConcatPack(
     spans.push({ offset: cursor, length: plain.byteLength });
     cursor += plain.byteLength;
   }
-  return { bytes: zlibSync(concat), spans };
+  return { bytes: compressZlib(concat), spans };
 }
 
 /**
@@ -108,7 +109,7 @@ export function decodeZlibConcatSpans(
   spans: ReadonlyArray<VfsPackSpan>
 ): Uint8Array[] {
   decodeCounters.zlibConcatInflates++;
-  const plainAll = unzlibSync(packBytes);
+  const plainAll = decompressZlib(packBytes);
   return spans.map((span) => {
     assertSpanWithin(span, plainAll.byteLength, "zlib-concat-v1");
     return plainAll.subarray(span.offset, span.offset + span.length);
@@ -139,8 +140,8 @@ export function encodeFossilChainPack(
   }
   const segmentBytes = memberPlains.map((plain, index) =>
     index === 0
-      ? zlibSync(plain)
-      : zlibSync(createDelta(memberPlains[index - 1]!, plain))
+      ? compressZlib(plain)
+      : compressZlib(createDelta(memberPlains[index - 1]!, plain))
   );
   const header = new Uint8Array(4 + 4 * segmentBytes.length);
   const headerView = new DataView(header.buffer);
@@ -262,7 +263,9 @@ function inflateFossilSegment(
   segment: VfsPackSpan
 ): Uint8Array {
   decodeCounters.fossilSegmentInflates++;
-  return unzlibSync(packBytes.subarray(segment.offset, segment.offset + segment.length));
+  return decompressZlib(
+    packBytes.subarray(segment.offset, segment.offset + segment.length)
+  );
 }
 
 function assertSpanWithin(

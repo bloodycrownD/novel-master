@@ -4,7 +4,8 @@
  */
 import { mkdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
-import { bootstrapNovelMaster, open, type TdbcConnection } from "@novel-master/core";
+import { deflateSync, inflateSync } from "node:zlib";
+import { bootstrapNovelMaster, open, registerZlibCodecAccelerator, type TdbcConnection } from "@novel-master/core";
 import { registerBetterSqlite3Driver } from "@novel-master/tdbc-driver-better-sqlite3";
 import { registerTokenizerNodeDriver } from "@novel-master/tokenizer-driver-node";
 import { registerPlatformSkspDriver } from "./register-platform-drivers.js";
@@ -22,6 +23,13 @@ function ensureDriversRegistered(): void {
   registerBetterSqlite3Driver();
   registerPlatformSkspDriver();
   registerTokenizerNodeDriver({ assetsRoot: resolveTokenizerAssetsRoot() });
+  // Node 侧原生 zlib 加速器（P1-4）：core 禁止静态 import node: 模块，
+  // 由 desktop main（唯一跑解压的进程；renderer 不引 core 解压路径）注册。
+  registerZlibCodecAccelerator({
+    deflate: (data, level) =>
+      level === undefined ? deflateSync(data) : deflateSync(data, { level }),
+    inflate: (data) => inflateSync(data),
+  });
   registered = true;
 }
 

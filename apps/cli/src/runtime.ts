@@ -6,8 +6,9 @@
 
 import { mkdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
+import { deflateSync, inflateSync } from "node:zlib";
 import { registerTokenizerNodeDriver } from "@novel-master/tokenizer-driver-node";
-import { bootstrapNovelMaster, createPersistentPreferences, createPersistentState, open, runBlobBinaryNormalization, runMessageContentCompaction, runVfsContentPacking, type PersistentPreferences, type PersistentState, type TdbcConnection } from "@novel-master/core";
+import { bootstrapNovelMaster, createPersistentPreferences, createPersistentState, open, registerZlibCodecAccelerator, runBlobBinaryNormalization, runMessageContentCompaction, runVfsContentPacking, type PersistentPreferences, type PersistentState, type TdbcConnection } from "@novel-master/core";
 import { refreshUserVfsUnifiedToolTurnSnapshot } from "@novel-master/core/feature-flags";
 
 import { createAgentRegistryService, createAgentStreamRegistry } from "@novel-master/core/agent";
@@ -174,6 +175,13 @@ export async function createNovelMasterRuntime(
   registerBetterSqlite3Driver();
   const skspName = registerPlatformSkspDriver();
   registerTokenizerNodeDriver();
+  // Node 侧原生 zlib 加速器（P1-4）：core 禁止静态 import node: 模块，
+  // 由 CLI 运行时注册。未注册（RN）时 core 全走 fflate，行为不变。
+  registerZlibCodecAccelerator({
+    deflate: (data, level) =>
+      level === undefined ? deflateSync(data) : deflateSync(data, { level }),
+    inflate: (data) => inflateSync(data),
+  });
   const dbPath = resolve(resolveDbPath(argv));
   await mkdir(dirname(dbPath), { recursive: true });
 
