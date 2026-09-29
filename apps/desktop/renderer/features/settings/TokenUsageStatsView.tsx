@@ -640,10 +640,11 @@ export function TokenUsageStatsView() {
     () =>
       sortedModelRows.map((row, index) => {
         const modelPart = row.modelName ?? "其他模型";
+        // label 斜杠格式（{服务商}/{模型}）与聊天侧模型选择下拉一致（2026-09-28 统一）。
         const label =
           row.providerId == null
             ? "未记录服务商"
-            : `${providerNames.get(row.providerId) ?? "未知服务商"} · ${modelPart}`;
+            : `${providerNames.get(row.providerId) ?? "未知服务商"}/${modelPart}`;
         return {
           key: `${row.providerId ?? "__no_provider__"}::${row.modelName ?? "__other_model__"}`,
           label,
