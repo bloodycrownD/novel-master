@@ -159,3 +159,28 @@ dist 重建、真机已重启载新码。**教训**：assistant 落库与回锚�
 测试：core 定向（trigger/resolve/估算器）+ 全量 2939/2941（仅时区基线
 2 例）+ tsc 干净；mobile 10+6（chat-prompt-tokens 含两条两阶段新用例）；
 desktop 8。dist 重建、真机已载。
+
+## 追加轮：词表资产与 APK 瘦身（78f73724）
+
+原生性能解剖（JVM 探针 + 真 glm.json）：**拆分对原生侧无益**——Rust 编码
+线性无病态（139KB 自然中文 PC 94ms；无空白中文 1K~8K → 3/4/7/16ms 完美
+线性，js-tiktoken 的平方病态不存在于 Rust）；**首次 5.8s 大头=词表加载**
+（20.4MB JSON：15 万词 + 31.8 万合并，PC 862ms / 真机 3~5s，一次性）；
+**glm.json 的 12.2MB 是纯 pretty-print 缩进空白**（142 万行 \r\n 缩进，其余
+8 个词表均紧凑格式，qwen2 同规模 15 万词仅 4.5MB）。落地四件：
+
+1. 两处 glm.json（rn/node assets）紧凑化 20.4→8.2MB；等价自检 + JVM 探针
+   计数逐 token 不变（38738/128000/6547 与瘦身前完全一致）；
+2. `copyAssetToCache` 缓存判据 存在性→长度比对（防资产更新后旧缓存滞留）；
+3. packagingOptions 排除 DJL 桌面 natives（win/osx/linux 的 dll/dylib 被
+   jar 资源误 merge 进 Android APK，压缩后 9.2MB 死重量；Android 走
+   lib/arm64-v8a/libdjl_tokenizer.so 标准渠道）——desktop-native 残留 0、
+   **APK 191→182.5MB**；
+4. Kotlin LruCache 8→2（解析后内存数十 MB/家族；淘汰后懒加载重付）。
+
+**诚实修正**：紧凑化对加载提速有限（PC 862→776ms——空白对 JSON 解析近似
+免费，大头在 HashMap 构建）；主要收益是磁盘缓存 -12MB 与 APK 纯净。加载慢
+由两阶段 UI（估算首帧 + 后台升级）兜住，**预热方案否决、维持懒加载**（用户
+拍板：内存只随使用家族数走，cl100k 兜底表已有 prime 预热即可）。探针测试
+（TokenizerScalingProbeTest）保留为线性证据。GBK 的 app/build.gradle 走
+Buffer 字节级补丁（numstat 13/0 纯增量）。
