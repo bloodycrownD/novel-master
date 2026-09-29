@@ -55,7 +55,7 @@ export async function countPromptLlmInput(
   return resolveTokenizerDriver().countPromptLlmInput(params);
 }
 
-async function resolveVendorModelIdFromSaved(
+export async function resolveVendorModelIdFromSaved(
   savedModelId: string,
   savedModels?: Pick<SavedModelRepository, "findById">
 ): Promise<string> {

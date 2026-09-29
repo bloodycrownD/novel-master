@@ -64,6 +64,7 @@ async function parsedPromptTokenRow(): Promise<
       promptTokens?: number;
       atMs?: number;
       savedModelId?: string;
+      anchorSeq?: number;
     }
   | undefined
 > {
@@ -423,6 +424,133 @@ describe("AgentRunner session API prompt token cache", () => {
       registry: tokenRegistry,
     });
     assert.equal(resolved.source, "local");
+  });
+});
+
+/**
+ * 每 step usage 回锚（统计优先口径，2026-09-29）：run 内 step N 请求完成的
+ * usage 必须在该 step 全部落库后写进热层/KKV，让 step N+1 的压缩评估直接
+ * 命中 api 档——不再为读数付本地整串计数。
+ */
+describe("AgentRunner 每 step usage 回锚", () => {
+  beforeEach(() => {
+    registerNodeTokenizerDriverForTests();
+    sessionApiPromptTokenCache.clearAll();
+    sessionKkv = createMemorySessionKkv();
+  });
+
+  afterEach(() => {
+    sessionApiPromptTokenCache.clearAll();
+  });
+
+  it("两步 run：step2 的压缩评估命中 step1 回锚的 api 基线（含增量），run 末终值带锚点", async () => {
+    const session = new InMemoryAgentSession();
+    await session.append("user", textBlocks("go"));
+
+    // step1：tool_use（usage 4000）→ step2：收尾文本（usage 5000）
+    const model = createMockModel([
+      {
+        assistantText: "",
+        blocks: [
+          {
+            type: "tool_use",
+            id: "tu1",
+            name: "demo",
+            input: {},
+          },
+        ],
+        raw: {},
+        usage: { promptTokens: 4_000 },
+      },
+      {
+        assistantText: "done",
+        blocks: [{ type: "text", text: "done" }],
+        raw: {},
+        usage: { promptTokens: 5_000 },
+      },
+    ]);
+
+    const tokenRegistry = createDefaultTokenCounterRegistry(emptyRegistryDeps());
+    const seen: { tokenCount: number; counterKind: string }[] = [];
+
+    const registry = new ToolRegistry();
+    registry.register({
+      name: "demo",
+      description: () => "demo tool",
+      inputSchema: z.object({}),
+      run: async () => ({}) as never,
+    });
+
+    const runner = createAgentRunner(
+      runnerDeps({
+        session,
+        modelRequests: model,
+        registry: registry as never,
+        toolCtx: mockToolCtx(mockVfs()),
+        compactionConditions: {
+          async shouldRequestCompaction(s, evaluation) {
+            const resolved = await resolveCurrentPromptTokens(
+              evaluation.sessionId,
+              {
+                layout: evaluation.layout,
+                ctx: evaluation.ctx,
+                savedModelId: evaluation.modelContext.savedModelId,
+                registry: tokenRegistry,
+                ...(evaluation.tools != null
+                  ? { tools: evaluation.tools }
+                  : {}),
+              },
+              { sessionKkv: evaluation.sessionKkv }
+            );
+            seen.push({
+              tokenCount: resolved.tokenCount,
+              counterKind: resolved.counterKind,
+            });
+            return false;
+          },
+          async getHideStartDepth() {
+            return 6;
+          },
+        },
+        messages: {
+          listBySession: async () => [],
+        } as unknown as MessageService,
+        messageTranscriptEffects: {
+          hideMessagesInRange: async () => {},
+          showMessagesInRange: async () => {},
+          truncateMessagesAfter: async () => {},
+          setMessageFloorAtMessage: async () => {},
+        } as unknown as MessageTranscriptEffectsService,
+      }),
+    );
+
+    const result = await runner.run({
+      maxSteps: 5,
+      definition: minimalDefinition(),
+      ...defaultRunScope,
+    });
+    assert.equal(result.stopReason, "completed");
+    assert.equal(seen.length, 2, "两步各评估一次");
+
+    // step1：无基线 → 本地估算档（counterKind 是驱动家族名，非 api）
+    assert.notEqual(seen[0]!.counterKind, "api");
+
+    // step2：step1 的 usage（4000）已回锚 → api 基线 + 锚点后追加消息的增量
+    assert.equal(
+      seen[1]!.counterKind,
+      "api",
+      "step1 回锚后，step2 评估必须命中 api 档（零计数）"
+    );
+    assert.ok(
+      seen[1]!.tokenCount > 4_000,
+      "api 读值 = 基线 4000 + step1 追加消息（assistant + tool_results）的增量"
+    );
+
+    // run 末终值：step2 的 usage 5000，锚点 = step2 提示词末条消息 seq（3）
+    const row = await parsedPromptTokenRow();
+    assert.equal(row?.promptTokens, 5_000);
+    assert.equal(row?.anchorSeq, 3);
+    assert.equal(row?.savedModelId, RUN_MODEL_ID);
   });
 });
 

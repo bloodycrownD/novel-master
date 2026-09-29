@@ -55,7 +55,7 @@ export class TokenRatioConditionTrigger implements CompactionConditionTrigger {
     const tokenizerOverride = await this.options.resolveTokenizerOverride(
       evaluation
     );
-    const { tokenCount, counterKind } = await resolveCurrentPromptTokens(
+    const { tokenCount, counterKind, estimated } = await resolveCurrentPromptTokens(
       evaluation.sessionId,
       {
         layout: evaluation.layout,
@@ -72,10 +72,11 @@ export class TokenRatioConditionTrigger implements CompactionConditionTrigger {
       { sessionKkv: evaluation.sessionKkv }
     );
 
-    // heuristic 计数不精确（可能低估），触发保守阈值：
-    // 把比例阈值再乘一个 < 1 的安全系数，让压缩比精确计数更早发生。
+    // 非精确计数（heuristic 或任何 estimated 估算档——含读口为 WEB/SP 家族
+    // 强制的 cl100k 估算）不精确、可能低估，触发保守阈值：把比例阈值再乘
+    // 一个 < 1 的安全系数，让压缩比精确计数更早发生。
     const safetyFactor =
-      counterKind === "heuristic"
+      counterKind === "heuristic" || estimated
         ? this.options.heuristicSafetyFactor ?? DEFAULT_HEURISTIC_SAFETY_FACTOR
         : 1;
     const effective = Math.floor(

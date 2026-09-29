@@ -13,6 +13,16 @@ export function createMemorySessionKkv(): SessionKkvService {
     async get(sessionId, domain, key) {
       return map.get(slot(sessionId, domain, key)) ?? null;
     },
+    async getMany(sessionId, domain, keys) {
+      const found = new Map<string, string>();
+      for (const key of keys) {
+        const value = map.get(slot(sessionId, domain, key));
+        if (value != null) {
+          found.set(key, value);
+        }
+      }
+      return found;
+    },
     async set(sessionId, domain, key, value) {
       map.set(slot(sessionId, domain, key), value);
     },

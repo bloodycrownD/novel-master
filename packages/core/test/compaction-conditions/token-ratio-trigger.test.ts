@@ -188,14 +188,18 @@ describe("TokenRatioConditionTrigger", () => {
 
   it("heuristic 计数走保守阈值，比精确档更早触发压缩", async () => {
     // 用 mock driver 可控返回 counterKind / tokenCount，避免依赖真实 tokenizer 数值。
-    const captured: { counterKind?: string; tokenCount?: number } = {};
+    const captured: {
+      counterKind?: string;
+      tokenCount?: number;
+      estimated?: boolean;
+    } = {};
     clearTokenizerDrivers();
     registerTokenizerDriver({
       name: "mock",
       countPromptLlmInput: async () => ({
         tokenCount: captured.tokenCount ?? 0,
         counterKind: (captured.counterKind ?? "tiktoken") as never,
-        estimated: captured.counterKind === "heuristic",
+        estimated: captured.estimated ?? captured.counterKind === "heuristic",
         savedModelId: "openai/test",
         vendorModelId: "openai/test",
         tokenizerFamily: "heuristic",
@@ -232,6 +236,19 @@ describe("TokenRatioConditionTrigger", () => {
       await makeTrigger(1).shouldTrigger(session, evaluation),
       false,
     );
+
+    // 统计优先（2026-09-29）：估算档（estimated:true，如 WEB/SP 家族被读口
+    // 强制的 cl100k 档）即使 counterKind 不是 heuristic 也必须乘保守系数——
+    // cl100k 对非 OpenAI 家族只是近似，可能低估。
+    captured.counterKind = "tiktoken";
+    captured.estimated = true;
+    assert.equal(
+      await makeTrigger().shouldTrigger(session, evaluation),
+      true,
+      "estimated:true 的估算档必须走保守阈值"
+    );
+    assert.equal(await makeTrigger(1).shouldTrigger(session, evaluation), false);
+    captured.estimated = undefined;
   });
 
   it("KKV 命中（跨重启）：进程内热层空时仍按 API 值判定", async () => {

@@ -7,7 +7,12 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it } from "node:test";
 import { registerNodeTokenizerDriverForTests } from "../../helpers/register-node-tokenizer-driver-for-tests.js";
+import type { ChatMessage } from "../../../src/domain/chat/model/message.js";
 import type { ModelRoundSummary } from "../../../src/domain/agent/model/agent-run-result.js";
+import {
+  clearTokenizerDrivers,
+  registerTokenizerDriver,
+} from "../../../src/infra/nmtp/index.js";
 import {
   PROMPT_TOKENS_LAST_USAGE_KEY,
   SESSION_KKV_DOMAIN_PROMPT_TOKENS,
@@ -244,6 +249,162 @@ async function writeEntryFor(
     })
   );
 }
+
+/**
+ * 统计优先（2026-09-29 用户拍板「像 metric 一样有哪个用哪个」）读口语义：
+ * - API 命中 = 基线 + 采样锚点后追加消息的增量估算（不付计数）；
+ * - 本地 miss 对 WEB/SP 家族（glm 等）强制 cl100k 估算档（estimated:true），
+ *   绝不过原生整串桥；tiktoken / heuristic 档不强制。
+ */
+describe("resolveCurrentPromptTokens 统计优先（api 增量 + 本地强制估算档）", () => {
+  beforeEach(() => {
+    registerNodeTokenizerDriverForTests();
+    sessionApiPromptTokenCache.clearAll();
+    promptWholeCache.clearForTests();
+    tokenChunkCache.clearForTests();
+  });
+
+  function msg(
+    seq: number,
+    text: string,
+    role = "user"
+  ): ChatMessage {
+    return {
+      id: `m-${seq}`,
+      sessionId: SESSION_ID,
+      seq,
+      role,
+      content: { blocks: [{ type: "text", text }] },
+      provider: null,
+      raw: null,
+      createdAtMs: 0,
+      hidden: false,
+    };
+  }
+
+  function paramsWithMessages(
+    messages: ChatMessage[],
+    savedModelId: string = RUN_MODEL_ID
+  ) {
+    return {
+      layout: { persist: [], dynamic: [] },
+      ctx: { workplaceDisplay: "", messages },
+      savedModelId,
+      registry: createDefaultTokenCounterRegistry(emptyRegistryDeps()),
+    };
+  }
+
+  it("api 命中 + anchorSeq + 锚点后有追加消息 → 基线 + 增量（> 基线，不付计数）", async () => {
+    const params = paramsWithMessages([msg(9, "九"), msg(10, "十号消息正文")]);
+    sessionApiPromptTokenCache.set(SESSION_ID, {
+      promptTokens: 50_000,
+      updatedAt: Date.now(),
+      savedModelId: RUN_MODEL_ID,
+      anchorSeq: 9,
+    });
+
+    const resolved = await resolveCurrentPromptTokens(SESSION_ID, params);
+    assert.equal(resolved.source, "api");
+    assert.equal(resolved.counterKind, "api");
+    assert.equal(resolved.estimated, false);
+    assert.ok(
+      resolved.tokenCount > 50_000,
+      "锚点后追加了 seq=10 的消息，读值应是基线+增量"
+    );
+  });
+
+  it("api 命中 + 锚点后无追加（或无锚点）→ 基线原样", async () => {
+    // 锚点 ≥ 当前最大 seq：无增量
+    sessionApiPromptTokenCache.set(SESSION_ID, {
+      promptTokens: 50_000,
+      updatedAt: Date.now(),
+      savedModelId: RUN_MODEL_ID,
+      anchorSeq: 10,
+    });
+    const noDelta = await resolveCurrentPromptTokens(
+      SESSION_ID,
+      paramsWithMessages([msg(9, "九"), msg(10, "十")])
+    );
+    assert.equal(noDelta.tokenCount, 50_000);
+
+    // 无锚点（老行）：delta 按 0
+    sessionApiPromptTokenCache.set(SESSION_ID, {
+      promptTokens: 60_000,
+      updatedAt: Date.now(),
+      savedModelId: RUN_MODEL_ID,
+    });
+    const noAnchor = await resolveCurrentPromptTokens(
+      SESSION_ID,
+      paramsWithMessages([msg(9, "九")])
+    );
+    assert.equal(noAnchor.tokenCount, 60_000);
+  });
+
+  it("本地 miss + WEB 家族（glm）→ 强制 tiktoken 估算档且 estimated:true（不过原生桥）", async () => {
+    const captured: { override?: unknown; family?: unknown } = {};
+    clearTokenizerDrivers();
+    registerTokenizerDriver({
+      name: "mock-stats-first",
+      countPromptLlmInput: async (params) => {
+        captured.override = params.tokenizerOverride;
+        return {
+          tokenCount: 1_234,
+          counterKind: "tiktoken",
+          estimated: false,
+          savedModelId: params.savedModelId,
+          vendorModelId: "zai/glm-4.6",
+          tokenizerFamily: "tiktoken",
+        };
+      },
+    });
+
+    const resolved = await resolveCurrentPromptTokens(
+      SESSION_ID,
+      paramsWithMessages([], "zai/glm-4.6")
+    );
+    assert.equal(resolved.source, "local");
+    assert.equal(captured.override, "tiktoken", "WEB 家族必须被强制到估算档");
+    assert.equal(
+      resolved.estimated,
+      true,
+      "cl100k 对 glm 只是近似，读口必须如实标 estimated（标签 gpt ≈ / 阈值乘保守系数）"
+    );
+    assert.equal(resolved.counterKind, "tiktoken");
+  });
+
+  it("本地 miss + tiktoken 家族 / heuristic override → 不强制（透传调用方 override）", async () => {
+    const captured: { override?: unknown } = {};
+    clearTokenizerDrivers();
+    registerTokenizerDriver({
+      name: "mock-stats-first-2",
+      countPromptLlmInput: async (params) => {
+        captured.override = params.tokenizerOverride;
+        return {
+          tokenCount: 10,
+          counterKind: "tiktoken",
+          estimated: false,
+          savedModelId: params.savedModelId,
+          vendorModelId: "openai/gpt-4o",
+          tokenizerFamily: "tiktoken",
+        };
+      },
+    });
+
+    // tiktoken 家族：override 原样透传（未传即 undefined）
+    await resolveCurrentPromptTokens(
+      SESSION_ID,
+      paramsWithMessages([], RUN_MODEL_ID)
+    );
+    assert.equal(captured.override, undefined);
+
+    // 调用方显式 heuristic：廉价档不强制
+    await resolveCurrentPromptTokens(SESSION_ID, {
+      ...paramsWithMessages([], RUN_MODEL_ID),
+      tokenizerOverride: "heuristic",
+    });
+    assert.equal(captured.override, "heuristic");
+  });
+});
 
 /**
  * T-TC5 读口侧（message-token-cache Step 3 分层挂接）：驱动层只做内存层，
