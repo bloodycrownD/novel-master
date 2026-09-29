@@ -4,7 +4,7 @@
  *
  * 三态覆盖：
  * - 活跃：消费型单元的 running 快照 → 「生成中」；
- * - 终态：FINISHED 收尾后的冻结快照 → 「上次生成 · 历时 · 输出 N t · N tok/s」；
+ * - 终态：FINISHED 收尾后的冻结快照 → 「上次生成 · 历时 · 输出 N tok · N tok/s」；
  * - 中断：水合 interrupted 单元 → 「已中断」在屏上**只出现一次**
  *   （cr-fix-spec mobile-metrics/C-4：指标条能显示时不再叠屏级横幅；
  *   指标条不可见时由横幅兜底，仍是单标识）。
@@ -199,7 +199,7 @@ describe('SubagentSessionScreen 指标条渲染（G-2）', () => {
     setMobileAgentActive(false);
   });
 
-  it('活跃：消费型 run 运行中显示「生成中 · 输出 N t」', async () => {
+  it('活跃：消费型 run 运行中显示「生成中 · 输出 N tok」', async () => {
     const h = buildHarness();
     mockManager = h.manager;
     mockRuntime = {sessionStreamUnitManager: h.manager, usageStats: {getSessionUsageDetail: mockGetSessionUsageDetail}};
@@ -213,7 +213,7 @@ describe('SubagentSessionScreen 指标条渲染（G-2）', () => {
     unmount();
   });
 
-  it('终态：FINISHED 后冻结为「上次生成 · 历时 · 输出 N t · N tok/s」', async () => {
+  it('终态：FINISHED 后冻结为「上次生成 · 历时 · 输出 N tok · N tok/s」', async () => {
     const h = buildHarness();
     mockManager = h.manager;
     mockRuntime = {sessionStreamUnitManager: h.manager, usageStats: {getSessionUsageDetail: mockGetSessionUsageDetail}};

@@ -529,7 +529,7 @@ export function SessionDetailDrawer({
                 <span className="session-detail-drawer__tokens-title">
                   上下文占用
                 </span>
-                <span className="session-detail-drawer__tokens-pct">
+                <span className="session-detail-drawer__tokens-label">
                   {tokenStats.label}
                 </span>
               </div>

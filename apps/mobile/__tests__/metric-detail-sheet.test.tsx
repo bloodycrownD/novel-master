@@ -150,6 +150,8 @@ describe('MetricDetailSheet (mobile) — 打开自取与两段渲染', () => {
     expect(line).toContain('累计输入12K');
     expect(line).toContain('累计输出8K');
     expect(line).toContain('累计含隐藏消息 · 消息数为可见口径');
+    // cr-md-1：弹窗内标注「最近请求」与指标条整轮读数不同源（与 desktop 同文）。
+    expect(line).toContain('最近请求为单步真值，与指标条整轮读数不同源');
   });
 
   it('「上下文占用」行直渲染传入读数（与 chip 同源，不取新数）', async () => {

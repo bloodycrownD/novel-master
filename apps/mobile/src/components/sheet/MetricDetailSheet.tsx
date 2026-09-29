@@ -196,11 +196,16 @@ export function MetricDetailSheet({
             value={contextTokenLabel ?? '—'}
             tokens={tokens}
           />
+          {/* 口径脚注第二行（cr-md-1）：「最近请求」是单步真值，与指标条
+              整轮读数不同源——文案与 desktop 侧同文，勿单侧改写。 */}
           <Text
             testID="metric-detail-sheet-footnote"
             style={[styles.footnote, {color: tokens.textTertiary}]}
           >
             累计含隐藏消息 · 消息数为可见口径
+          </Text>
+          <Text style={[styles.footnoteLine2, {color: tokens.textTertiary}]}>
+            最近请求为单步真值，与指标条整轮读数不同源
           </Text>
         </ScrollView>
       )}
@@ -290,5 +295,9 @@ const styles = StyleSheet.create({
   footnote: {
     fontSize: 11,
     marginTop: 12,
+  },
+  footnoteLine2: {
+    fontSize: 11,
+    marginTop: 2,
   },
 });

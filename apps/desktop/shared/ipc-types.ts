@@ -877,7 +877,7 @@ export type PromptChatTokenStatsResponse = {
   /**
    * main 拼好的完整占用标签（core `formatContextUsageLabel` 单源产出）：
    * 有窗口 `{mark} {connector} {cur} / {cw} ({pct}%)`（如 `远程 = 24k / 128k (19%)`），
-   * 无窗口 `{mark} {connector} {X} tokens`（如 `gpt ≈ 2.3K tokens`）。
+   * 无窗口 `{mark} {connector} {X} tokens`（如 `gpt ≈ 2.3k tokens`）。
    * renderer 纯渲染本字段，不再本地拼装（X1：renderer 不能 import core）。
    */
   readonly label: string;

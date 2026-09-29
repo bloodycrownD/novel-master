@@ -6725,7 +6725,7 @@ pre:hover > .code-copy-btn,
   color: var(--text-tertiary);
 }
 
-.session-detail-drawer__tokens-pct {
+.session-detail-drawer__tokens-label {
   font-size: 13px;
   font-weight: 700;
   color: var(--primary);

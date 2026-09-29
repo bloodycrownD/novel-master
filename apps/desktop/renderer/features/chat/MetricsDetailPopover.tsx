@@ -16,6 +16,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 // X1 门禁：renderer 不 import core，formatTokenCount 走 shared 镜像。
 import { formatTokenCount } from "@shared/logic/format-token-count";
+import { formatHitRate, hitRate } from "@shared/logic/hit-rate";
 import { ipcUsageStatsQuery } from "@/ipc/client";
 import type { SessionUsageDetailDto } from "@shared/ipc-types";
 
@@ -36,18 +37,6 @@ function lastRowBilledInput(last: NonNullable<SessionUsageDetailDto["last"]>): n
         (last.cacheReadTokens ?? 0) +
         (last.cacheCreationTokens ?? 0)
     : last.promptTokens;
-}
-
-/** 命中率（0-1）；计费口径分母无数据时返回 null（展示「—」，口径同统计页）。 */
-function hitRate(cacheRead: number | null, billed: number): number | null {
-  if (cacheRead == null || billed <= 0) {
-    return null;
-  }
-  return cacheRead / billed;
-}
-
-function formatHitRate(rate: number | null): string {
-  return rate == null ? "—" : `${Math.round(rate * 100)}%`;
 }
 
 /**
@@ -238,6 +227,8 @@ export function MetricsDetailPanel({
       />
       <div className="metrics-detail-popover__footnote">
         累计含隐藏消息 · 消息数为可见口径
+        <br />
+        最近请求为单步真值，与指标条整轮读数不同源
       </div>
     </div>
   );

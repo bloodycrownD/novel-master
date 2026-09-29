@@ -241,6 +241,10 @@ describe("MetricsDetailPanel 两段渲染（T-MD4 + T-MD2 同源断言）", () =
     assert.ok(rowText(renderer, "totals-output").includes("8K"));
     const text = collectText(renderer.toJSON() as never);
     assert.ok(text.includes("累计含隐藏消息 · 消息数为可见口径"));
+    // 口径标注（cr-md-1 desktop 半）：最近请求为单步真值，与指标条整轮读数不同源。
+    assert.ok(
+      text.includes("最近请求为单步真值，与指标条整轮读数不同源")
+    );
   });
 
   it("「上下文占用」行渲染值 === 传入读数（与 chip 同源，不取新数）", () => {
