@@ -313,6 +313,21 @@ CRLF 假红）、涉改文件 tsc 无错（:35 的 TS2556 为已登记在建噪�
 目录 + 文件名」双搜；③ 断言有牙的检验方式：把实现改错看它红不红
 （增量用例旧断言 `> 基线` 在纯 heuristic 下仍绿）。
 
+## 追加轮：装机核查——真机 bundle 来源审计（安装前必查）
+
+用户装机复验时发现 **8081 端口的 Metro 已换成 composer-overlay worktree**
+（cuo 的 Metro 进程中途死亡，另一个 worktree 的实例占了 8081）——设备
+reverse 隧道仍指 8081 时，「force-stop 重启载新码」实际加载的是**别的
+worktree 的 JS bundle**，前几轮的「真机无崩溃」验证存在来源污染（功能
+验证以自动化测试为准、未受影响，但真机复验证据无效）。处置：cuo Metro
+从真实路径重启（`--port 8082`，8082 空闲）→ 设备 reverse 重指
+`tcp:8081 → tcp:8082` → 增量重编 APK（40s）→ `install -r -d` 覆盖装 →
+重启 app → **读 cuo Metro 日志确认 bundle 请求落入本实例**（2908 模块
+从 `nm-worktree\cuo\node_modules` 解析、0%→99% 编完）→ 前台无崩溃。
+**规程**：多 worktree 并行时，真机「载新码」验证必须附带「Metro 日志里
+的 bundle 请求 + 模块路径属本 worktree」证据，不能只看 app 起没起来
+（任一 worktree 的 bundle 都能把 app 拉起来）。
+
 ## 追加轮：列方案撤回 → 会话 KKV 缓存 + 移除累计输入输出（终态 v3）
 
 用户两轮拍板：①「只为统计工具调用数加一列不值当」「宁愿接受实时查询，
