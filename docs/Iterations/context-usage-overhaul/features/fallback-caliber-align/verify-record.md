@@ -44,6 +44,29 @@ worktree Metro（真实路径起服，`adb reverse tcp:8081`）。证据截图�
 3. 标签格式改版（用户拍板）：`glm = 99.3k / 128k (78%)`（真机渲染证据
    10-new-format.png）。
 
+## 追加轮：用户复验「重进仍 ~1s」→ chat-token-label-memo（d8496e4b）
+
+用户复验快了但仍 ~1s。定位：L1 已让计数零成本（l1=HIT），剩余是**重组装**
+（拉可见消息 100ms + 规则快照/file_cache 逐条解压 ~400ms + agent 解析
+~150ms + 序列化哈希 ~30ms）+ 300ms 防抖。file_cache/rule_snapshot 是
+**落盘**缓存（KKV 压缩 blob），无进程内读层——每次组装都从库里读回并解压，
+这就是 workplace 的 ~400ms。
+
+修法：`chat-token-label-memo`（core 新模块）——廉价变更指纹
+（会话 updatedAt + 新 sessionMessageStamp[可见条数+MAX(seq)] + 会话模型 +
+canon 指纹 + API 真值指纹[读 store 热层]）判定「重组装结果必然不变」，
+直接返回上次标签，组装/序列化/哈希全跳；命中路径 ≈ 3 个单行查询 +
+300ms 防抖。已知盲区（注释拍板）：agent model pin / tokenizer override
+设置变更不进 stamp，低频用户操作、下轮消息变更自愈。双端 service 接入
+（mobile 存 label 串、desktop 存 stats 对象）。
+
+**遗留优化候选（未做）**：KKV 仓储给 rule_snapshot/file_cache 加进程内
+读缓存（写/清即失效）——能把 miss 路径的 workplace 400ms 也压到几十 ms，
+且每轮 agent 回合的 workplace 组装同样受益；需谨慎设计事务回滚污染面。
+
+workplace 进程内读缓存之外，重组装 miss 路径的主要剩余成本为 agent 解析
+（~150ms，VFS 读 + 解压）与可见消息拉取（~100ms），量级可接受。
+
 ## 过程记录（教训入库）
 
 - 出包：subst 虚拟盘方案在 cuo 上**不可用**——Node 侧路径解析把包位置还原成
