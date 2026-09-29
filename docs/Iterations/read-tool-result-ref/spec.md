@@ -222,3 +222,12 @@ constraints:
   - mobile jest 消费 core dist；新增导出同步 main-entry-allowlist 快照
 blocking_steps: [1, 2, 3, 4, 5, 6, 7]
 ```
+
+## 实现期补充（性能修复轮，2026-09-29）
+
+合并 main@4cd06bb0（v1.5.27）后，按全局压缩性能盘点（brain-storm 三路真库实测）落的 hydrate 降本与每步读收窄，为实现期对 spec 的口径补充：
+
+- **hydrate 完整性校验降本**：由「逐块对还原明文重算 sha256」改为「revision.content_hash 元数据比对（`findMetaByEntryAndVersion`，零解码前 fail-fast）」。四种 fail-fast 码与语义不变；传输/落盘损坏由 zlib adler32 兜底；**如实登记损失面**——「blob 键不变、压缩字节被刻意重编码」不再可检（需 DB 写权限，本地单用户威胁模型外）。T-RR11 四用例在新语义下逐条复核仍有牙。
+- **单次 hydrate 调用内去重**：明文键含期望 hash（防篡改借缓存绕过校验）、wire 键含 offset/limit/path；**不跨调用持久缓存**——dangling/deleted 的 fail-fast 是保活链安全网，跨调用缓存会盖住它。重复引用场景 -92%~-99%；100 个互异 ref 压测 -16%（sha 占 24%，剩余为解压+重放本质成本，批量读方案另议）。
+- **每步读收窄**：`ChatAgentSession.list()` 与 tool_use 查找源改可见-only（`includeHidden:false`；`listAllSessionMessages` 更名 `listVisibleSessionMessages`）。依据：`normalizeOrphanToolResultsForLlm` 按可见集配对 → hidden 行零解析力；唯一消费者 gemini `buildToolUseLookup` 需要正文块故不适用头投影。每步两发 368.2→23.9ms（-93.5%）。
+- 测试账目：read-ref 六文件 47/47、agent 相关套件全绿、core 全量 3013（唯二红=既有 usage-stats 时区基线）；三端 typecheck 绿；wire 逐字节等值 100/100。
