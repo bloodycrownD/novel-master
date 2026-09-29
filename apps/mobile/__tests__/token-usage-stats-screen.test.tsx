@@ -444,7 +444,7 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
     await act(async () => {
       findByTestId(renderer.root, 'model-filter-entry')!.props.onPress();
     });
-    // 选项生成：配置组合「智谱 · gpt-4o」+ 服务商归并「智谱 · 其他模型」+
+    // 选项生成：配置组合「智谱/gpt-4o」+ 服务商归并「智谱/其他模型」+
     // 全局归并「未记录服务商」（provider_id IS NULL，模型在不在
     // 配置集均归此）。
     expect(findByTestId(renderer.root, 'model-option-p1::gpt-4o')).toBeTruthy();
@@ -481,7 +481,7 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
     expect(
       nodeText(findByTestId(renderer.root, 'model-filter-entry')!),
     ).toContain('未记录服务商');
-    // {服务商} · 其他模型：model: null + providerId: P——覆盖「P × 未配置模型」存量行。
+    // {服务商}/其他模型：model: null + providerId: P——覆盖「P × 未配置模型」存量行。
     await act(async () => {
       findByTestId(renderer.root, 'model-filter-entry')!.props.onPress();
     });
@@ -499,7 +499,7 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
     });
     expect(
       nodeText(findByTestId(renderer.root, 'model-filter-entry')!),
-    ).toContain('智谱 · 其他模型');
+    ).toContain('智谱/其他模型');
   });
 
   it('筛选 parity：无筛选返回的每个 (providerId, modelName) 组合至少被一个筛选项命中', async () => {
@@ -793,7 +793,7 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
     const legendText = nodeText(
       findByTestId(renderer.root, 'pie-legend-p1::gpt-4o')!,
     );
-    expect(legendText).toContain('智谱 · gpt-4o');
+    expect(legendText).toContain('智谱/gpt-4o');
     // 图例行常驻百分比（T-MC4）：与详情行同分母（窗口 2500），
     // gpt-4o 950/2500=38%，未记录 600/2500=24%。
     expect(legendText).toContain('38%');
@@ -814,8 +814,8 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
     expect(
       findByTestId(renderer.root, 'pie-slice-label-p1::__unlogged__'),
     ).toBeUndefined();
-    // 新增两行的扇区与兜底 label：p1·modelName=null →「{服务商} · 其他模型」；
-    // ghost 不在 providers mock 中 →「未知服务商 · x」。若 UI 去掉兜底
+    // 新增两行的扇区与兜底 label：p1·modelName=null →「{服务商}/其他模型」；
+    // ghost 不在 providers mock 中 →「未知服务商/x」。若 UI 去掉兜底
     // 分支（直接取 providerLabels[id] 得 undefined），此处断言即红。
     expect(
       findByTestId(renderer.root, 'pie-sector-p1::__unlogged__'),
@@ -823,10 +823,10 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
     expect(findByTestId(renderer.root, 'pie-sector-ghost::x')).toBeTruthy();
     expect(
       nodeText(findByTestId(renderer.root, 'pie-legend-p1::__unlogged__')!),
-    ).toContain('智谱 · 其他模型');
+    ).toContain('智谱/其他模型');
     expect(
       nodeText(findByTestId(renderer.root, 'pie-legend-ghost::x')!),
-    ).toContain('未知服务商 · x');
+    ).toContain('未知服务商/x');
     // 未选时无详情行。
     expect(findByTestId(renderer.root, 'pie-detail')).toBeUndefined();
     // 点选扇区：详情行 = 服务商·模型 / 用量 / 次数 / 占比（950/2500=38%，
@@ -836,7 +836,7 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
       await flushPromises();
     });
     const detail = nodeText(findByTestId(renderer.root, 'pie-detail')!);
-    expect(detail).toContain('智谱 · gpt-4o');
+    expect(detail).toContain('智谱/gpt-4o');
     expect(detail).toContain('950');
     expect(detail).toContain('调用 4 次');
     expect(detail).toContain('38%');
@@ -1409,7 +1409,7 @@ describe('T-MB 新指标卡与长按详情', () => {
       'summary-metric-avgTokensPerSecond',
     );
     expect(rateTile).toBeTruthy();
-    expect(nodeText(rateTile!)).toContain('45.5 t/s');
+    expect(nodeText(rateTile!)).toContain('45.5 tok/s');
     const ttftTile = findByTestId(
       renderer.root,
       'summary-metric-avgFirstTokenMs',
@@ -1448,7 +1448,7 @@ describe('T-MB 新指标卡与长按详情', () => {
       await flushPromises();
     });
     let json = JSON.stringify(renderer.toJSON());
-    expect(json).toContain('25.0 t/s');
+    expect(json).toContain('25.0 tok/s');
     expect(json).toContain('900 ms');
 
     // null 形态：第二天为存量 null

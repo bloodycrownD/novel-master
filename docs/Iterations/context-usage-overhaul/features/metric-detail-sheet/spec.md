@@ -29,6 +29,14 @@ SQL：聚合查询复用 `usage-stats.service.ts` 的 `BILLED_INPUT_SUM_SQL` / `
 
 **工具调用数**：`getSessionUsageDetail` 内经注入的 messages service `listBySession` + `listVisibleSorted` 过滤后 JS 遍历累加 `blocks.filter(b => b.type === "tool_use").length`（assistant 消息）。消息正文为压缩 blob，SQL 无法数块，JS 现算（弹窗打开时一次，非热路径）。**装配改动**：`DefaultUsageStatsService` 现构造仅 `conn`（usage-stats.service.ts:162、create-chat-services.ts:103），注入 messages 须改构造签名并在 `create-chat-services.ts` 装配（同时核查 `createUsageStatsService` 其余调用点如 CLI 是否需同步）。
 
+> **收窄（2026-09-29，用户拍板「弹窗没必要实时算大账」）**：上面「全量 listBySession 现算」的取数方式已废——真机大会话打开秒级卡顿（hidden 行占多数 + raw_json/附件逐条解压）。**终态（同日三轮拍板）**：
+> 1. **移除「会话累计输入/累计输出」两行**（含 hidden 的累计求和对用户无意义）——`SessionUsageDetail`/DTO 的 `totals` 字段整体删除，弹窗剩：最近请求 + 消息数（可见）+ 工具调用 + 上下文占用。
+> 2. **工具调用数 = 会话 KKV `usage_stats.toolUseCount` 缓存**：读口 miss 时解压 assistant 行现算（含 hidden、双形态读、坏行按 0 计 warn）并回填；缓存跟随会话生命周期（fork 新会话天然 miss 重算）。失效挂点 = 新增含 tool_use 的消息（run 的工具步在此失效、纯文本追加不动）/ updateContent / delete / truncateAfter / 回滚 / 会话导入清缓存——全部挂在 message.service 与 rollback/import 的**既有失效点**旁。hide/show 不失效（含 hidden 口径下可见性不改计数）。
+> 3. 可见消息数 `COUNT(*) WHERE session_id=? AND hidden=0`（口径不变）。
+> 4. `DefaultUsageStatsService` 构造回到仅 `conn`（messages 注入拆除）。
+>
+> **注记**：中间曾落过 `chat_message.tool_use_count` 列方案（schema v18 写入时维护 + SUM + 后台回填，commit 62ebac0f），同日用户拍板「为统计数加列不值当」撤回——DDL/ALIGN/SCHEMA_BOOT_VERSION（回 17）全撤，回填任务与双端调度删除；正式库从未有过该列，feature 分支测试机库残留孤儿列无害。实测依据（真机库副本只读计时）：SQL 四条合计 ~7ms 无辜，残余 700~800ms 全在 fflate 全量解压（inflate 占 93%，Hermes 放大 3~6 倍）——缓存方案把这笔现算收敛到「失效后首次打开」一次。口径回归由 T-MD1/T-MD2/T-MD3 用例锁定（最近行跳过空行、可见剔 hidden、缓存 miss/命中/失效三态、纯文本追加不失效）。
+
 **desktop**：
 - IPC：`UsageStatsQueryRequest` 的 kind 联合加 `"sessionDetail"`（req 携带 `sessionId`，**`filter` 为必填字段且 handler :136 无条件访问 `req.filter.range`——sessionDetail 请求携带 `filter: {}` 占位（DTO 注释注明），不动 filter 可选性**），`shared/ipc-types.ts` 加 `SessionUsageDetailDto` 镜像（renderer 禁 import core）；handler `usage-stats.ts` 分发到新 port 方法（switch 的 `default: never` 穷尽检查会强制加 case）。
 - UI：`AgentStreamMetricsBar.tsx` 根节点改 `<button type="button">`（保留 aria-live），onClick 由父层 `ConversationPanel.tsx` 传入；新组件 `features/chat/MetricsDetailPopover.tsx`——锚定指标条（参照 `Tooltip.tsx` 的 `getBoundingClientRect` 定位 [:87-88] + createPortal [:165] + 外点关闭），面板内容两段（最近请求 / 会话累计），打开时经 `ipcUsageStatsQuery({kind:"sessionDetail", sessionId})` 自取数据 + 加载态；「上下文占用」行直接渲染 drawer 已有的 stats（label 或计数），不新增取数。CSS 追加 `apps/desktop/renderer/styles/shell.css`（复用 picker-modal 面板样式基类）。

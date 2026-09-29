@@ -70,6 +70,82 @@ describe("session-api-prompt-token-store 编解码", () => {
     });
   });
 
+  it("anchorSeq 全链往返：序列化 → 解析 → 热层写/读都带着", async () => {
+    const raw = serializeSessionApiPromptTokenEntry({
+      promptTokens: 4_242,
+      atMs: 1_700_000_000_000,
+      savedModelId: "zai/glm-4.6",
+      anchorSeq: 37,
+    });
+    assert.deepEqual(parseSessionApiPromptTokenEntry(raw), {
+      promptTokens: 4_242,
+      atMs: 1_700_000_000_000,
+      savedModelId: "zai/glm-4.6",
+      anchorSeq: 37,
+    });
+
+    // 写 → 热层 → 读：锚点必须穿透热层（读口增量估算靠它）。
+    const { kkv } = countingKkv();
+    sessionApiPromptTokenCache.clearAll();
+    writeSessionApiPromptTokenEntry(kkv, "sess-anchor", {
+      promptTokens: 4_242,
+      atMs: 11,
+      savedModelId: "zai/glm-4.6",
+      anchorSeq: 37,
+    });
+    assert.equal(sessionApiPromptTokenCache.get("sess-anchor")?.anchorSeq, 37);
+    assert.deepEqual(await readSessionApiPromptTokenEntry(kkv, "sess-anchor"), {
+      promptTokens: 4_242,
+      atMs: 11,
+      savedModelId: "zai/glm-4.6",
+      anchorSeq: 37,
+    });
+    // KKV 行也带着（跨重启续命）
+    assert.equal(
+      await kkv.get(
+        "sess-anchor",
+        SESSION_KKV_DOMAIN_PROMPT_TOKENS,
+        PROMPT_TOKENS_LAST_USAGE_KEY
+      ),
+      JSON.stringify({
+        promptTokens: 4_242,
+        atMs: 11,
+        savedModelId: "zai/glm-4.6",
+        anchorSeq: 37,
+      })
+    );
+    sessionApiPromptTokenCache.clearAll();
+  });
+
+  it("anchorSeq 非法（负数 / 非有限数 / 字符串）→ 序列化与解析都省略该键", () => {
+    for (const bad of [-1, Number.NaN, Number.POSITIVE_INFINITY]) {
+      const raw = serializeSessionApiPromptTokenEntry({
+        promptTokens: 7,
+        atMs: 1,
+        anchorSeq: bad,
+      });
+      assert.deepEqual(JSON.parse(raw), { promptTokens: 7, atMs: 1 });
+    }
+    assert.deepEqual(
+      parseSessionApiPromptTokenEntry(
+        JSON.stringify({ promptTokens: 7, atMs: 1, anchorSeq: "37" })
+      ),
+      { promptTokens: 7, atMs: 1 }
+    );
+  });
+
+  it("老行（无 anchorSeq 键）照常解析、不带锚点——读口 delta 按 0 处理", () => {
+    const parsed = parseSessionApiPromptTokenEntry(
+      JSON.stringify({ promptTokens: 100, atMs: 5, savedModelId: "zai/glm-4.6" })
+    );
+    assert.deepEqual(parsed, {
+      promptTokens: 100,
+      atMs: 5,
+      savedModelId: "zai/glm-4.6",
+    });
+    assert.equal("anchorSeq" in (parsed ?? {}), false);
+  });
+
   it("旧行多带已移除的可选加固字段：忽略未知键，照常解析不判 miss", () => {
     // 旧行可能还带着两个已移除的字段（run 身份、末尾消息 seq）。解析只解构
     // 已知键，所以老行必须照样解析出来（不报错、不判 miss）——字段移除因此

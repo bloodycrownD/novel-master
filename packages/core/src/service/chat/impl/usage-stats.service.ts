@@ -8,8 +8,18 @@ import { SqlTemplateParser } from "@/infra/sql-template/index.js";
 import { queryTemplate } from "@/infra/tdbc/logic/template-helper.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import type { Row } from "@/infra/tdbc/types.js";
+import { parseMessageContent } from "@/domain/chat/content/parse-message-content.js";
+import { decodeMessageContent } from "@/domain/chat/logic/message-content-codec.js";
+import { countToolUseBlocks } from "@/domain/chat/logic/tool-use-count.js";
+import {
+  SESSION_KKV_DOMAIN_USAGE_STATS,
+  USAGE_STATS_TOOL_USE_COUNT_KEY,
+} from "@/domain/session-kkv/model/session-kkv-domains.js";
+import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
 import { chatInvalidArgument } from "@/errors/chat-errors.js";
 import type {
+  SessionUsageDetail,
+  SessionUsageLastRequest,
   UsageStatsBucket,
   UsageStatsFilter,
   UsageStatsModelRow,
@@ -424,6 +434,138 @@ export class DefaultUsageStatsService implements UsageStatsService {
       {}
     );
     return rows.map((row) => String(row.vendor_model_id));
+  }
+
+  async getSessionUsageDetail(sessionId: string): Promise<SessionUsageDetail> {
+    if (typeof sessionId !== "string" || sessionId.length === 0) {
+      throw chatInvalidArgument(
+        `getSessionUsageDetail 须提供 sessionId，收到：${String(sessionId)}`
+      );
+    }
+    // 最近行 + 可见计数两条 SQL 与会话 KKV 缓存读并行。可见数 SQL 数行
+    // （hidden 列判定，与 listVisibleSorted 同口径——只剔 hidden 不筛角色）。
+    // 工具调用数走会话 KKV `usage_stats.toolUseCount` 缓存（2026-09-29 用户
+    // 拍板「实时算 + 缓存，失效挂 run/编辑/删除」；缓存跟随会话生命周期，
+    // fork 新会话天然 miss 重算）；miss 时解压 assistant 行现算并回填——
+    // 大会话这笔现算数百毫秒量级，由失效挂点保证只在「真的变了之后」付
+    // 一次。会话累计输入/输出已移除（含 hidden 的累计对用户无意义）。
+    const [lastRows, visibleRows, cachedToolUseCount] = await Promise.all([
+      queryTemplate<Row>(
+        this.conn,
+        this.parser,
+        `SELECT seq, model_name, provider, prompt_tokens, completion_tokens,
+                cache_read_tokens, cache_creation_tokens, created_at_ms
+         FROM chat_message
+         WHERE ${USAGE_NOT_NULL_SQL} AND session_id = #{sessionId}
+         ORDER BY seq DESC
+         LIMIT 1`,
+        { sessionId }
+      ),
+      queryTemplate<{ n: number }>(
+        this.conn,
+        this.parser,
+        `SELECT COUNT(*) AS n
+         FROM chat_message
+         WHERE session_id = #{sessionId} AND hidden = 0`,
+        { sessionId }
+      ),
+      createSessionKkvService(this.conn).get(
+        sessionId,
+        SESSION_KKV_DOMAIN_USAGE_STATS,
+        USAGE_STATS_TOOL_USE_COUNT_KEY
+      ),
+    ]);
+    const lastRow = lastRows[0];
+    const last: SessionUsageLastRequest | null =
+      lastRow == null
+        ? null
+        : {
+            seq: Number(lastRow.seq),
+            modelName:
+              lastRow.model_name == null
+                ? null
+                : String(lastRow.model_name),
+            provider:
+              lastRow.provider == null ? null : String(lastRow.provider),
+            promptTokens: Number(lastRow.prompt_tokens ?? 0),
+            completionTokens: Number(lastRow.completion_tokens ?? 0),
+            cacheReadTokens:
+              lastRow.cache_read_tokens == null
+                ? null
+                : Number(lastRow.cache_read_tokens),
+            cacheCreationTokens:
+              lastRow.cache_creation_tokens == null
+                ? null
+                : Number(lastRow.cache_creation_tokens),
+            atMs: Number(lastRow.created_at_ms),
+          };
+    const visibleMessageCount = Number(visibleRows[0]?.n ?? 0);
+    const cached =
+      cachedToolUseCount != null ? Number.parseInt(cachedToolUseCount, 10) : NaN;
+    if (Number.isFinite(cached)) {
+      return { last, visibleMessageCount, toolUseCount: cached };
+    }
+    // 缓存 miss：解压 assistant 行现算（含 hidden 行——累计口径；user 侧
+    // tool_result 不计）。只投影 content 三列，不选 raw_json/attachments、
+    // 不解压 user 行。坏行（解压/parse 失败）按 0 计并 warn：计数是统计
+    // 读数，单条历史坏行不该让整个弹窗报错。
+    const assistantRows = await queryTemplate<Row>(
+      this.conn,
+      this.parser,
+      `SELECT id, content_json, content_encoding, content_blob
+       FROM chat_message
+       WHERE session_id = #{sessionId} AND role = 'assistant'`,
+      { sessionId }
+    );
+    let toolUseCount = 0;
+    for (const row of assistantRows) {
+      try {
+        const raw =
+          row.content_blob != null
+            ? decodeMessageContent(
+                row.content_encoding,
+                row.content_blob,
+                String(row.id)
+              )
+            : String(row.content_json);
+        toolUseCount += countToolUseBlocks(parseMessageContent(raw));
+      } catch (error) {
+        console.warn(
+          `[usage-stats] 工具调用现算遇坏行（按 0 计）：${
+            error instanceof Error ? error.message : String(error)
+          }`
+        );
+      }
+    }
+    // 回填前复核（cr-fix-spec-r2 s3/B-1）：现算的数百毫秒里若发生失效
+    // （写哨兵空串），miss 时所见原值已变——放弃回填（本次返回值已出，
+    // 下次读重算），防止陈旧值覆盖失效结果。已知残余（接受，见 fix-spec）：
+    // miss 时原值本就是哨兵、现算期间再失效（哨兵幂等不可分辨）→ 复核
+    // 通过回填陈旧值，窗口延续到下次失效自愈——两次失效夹一次现算的低
+    // 概率场景，不引入版本化哨兵。回填 best-effort，失败只影响下次读数。
+    try {
+      const sessionKkv = createSessionKkvService(this.conn);
+      const current = await sessionKkv.get(
+        sessionId,
+        SESSION_KKV_DOMAIN_USAGE_STATS,
+        USAGE_STATS_TOOL_USE_COUNT_KEY
+      );
+      if (current === cachedToolUseCount) {
+        await sessionKkv.set(
+          sessionId,
+          SESSION_KKV_DOMAIN_USAGE_STATS,
+          USAGE_STATS_TOOL_USE_COUNT_KEY,
+          String(toolUseCount)
+        );
+      }
+    } catch (error) {
+      console.warn(
+        `[usage-stats] 工具调用缓存回填失败（不影响本次读数）：${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+    }
+    return { last, visibleMessageCount, toolUseCount };
   }
 
   /**

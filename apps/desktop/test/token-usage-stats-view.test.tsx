@@ -460,7 +460,7 @@ describe("TokenUsageStatsView（Step 3 适配）", () => {
         "p1::gpt-4o",
         "__no_provider__::__other_model__",
       ]);
-      assert.equal(legendText(root, "p1::gpt-4o"), "OpenAI 官方 · gpt-4o");
+      assert.equal(legendText(root, "p1::gpt-4o"), "OpenAI 官方/gpt-4o");
       assert.equal(
         legendText(root, "__no_provider__::__other_model__"),
         "未记录服务商"
@@ -470,7 +470,7 @@ describe("TokenUsageStatsView（Step 3 适配）", () => {
       await clickLegend(root, "p1::gpt-4o");
       const detail = sliceDetailText(root);
       assert.ok(detail != null, "点图例后应出现详情行");
-      assert.ok(detail.includes("OpenAI 官方 · gpt-4o"));
+      assert.ok(detail.includes("OpenAI 官方/gpt-4o"));
       assert.ok(detail.includes("1.2K"), `详情行应含用量 1.2K：${detail}`);
       assert.ok(detail.includes("10 次"));
       assert.ok(detail.includes("40%"), `占比应为 1200/3000=40%：${detail}`);
@@ -1653,22 +1653,22 @@ describe("TokenUsageStatsView 新增行为（T-D1~T-D6）", () => {
         "p2::__other_model__",
       ]);
       // label 三态 + 未知服务商兜底；null-provider 合并行 label 固定「未记录服务商」，不拼模型后缀
-      assert.equal(legendText(root, "p1::gpt-4o"), "OpenAI 官方 · gpt-4o");
+      assert.equal(legendText(root, "p1::gpt-4o"), "OpenAI 官方/gpt-4o");
       assert.equal(
         legendText(root, "__no_provider__::__other_model__"),
         "未记录服务商"
       );
-      assert.equal(legendText(root, "p-gone::glm-4.6"), "未知服务商 · glm-4.6");
+      assert.equal(legendText(root, "p-gone::glm-4.6"), "未知服务商/glm-4.6");
       assert.equal(
         legendText(root, "p2::__other_model__"),
-        "智谱中转 · 其他模型"
+        "智谱中转/其他模型"
       );
 
       // 扇区为 button 包装（P2-6 键盘可达）且带 aria-label
       const slice = root.findByProps({ "data-slice": "p1::gpt-4o" });
       assert.equal(slice.type, "button");
       assert.ok(
-        String(slice.props["aria-label"]).includes("OpenAI 官方 · gpt-4o")
+        String(slice.props["aria-label"]).includes("OpenAI 官方/gpt-4o")
       );
 
       // 点扇区 → 详情行（用量 / 次数 / 占比，分母 = summary.totalTokens = 3000）
@@ -1687,7 +1687,7 @@ describe("TokenUsageStatsView 新增行为（T-D1~T-D6）", () => {
       // 点图例 → 切换到另一行（未知服务商形态）
       await clickLegend(root, "p-gone::glm-4.6");
       detail = sliceDetailText(root);
-      assert.ok(detail != null && detail.includes("未知服务商 · glm-4.6"));
+      assert.ok(detail != null && detail.includes("未知服务商/glm-4.6"));
       assert.ok(
         detail != null && detail.includes("17%"),
         `占比 500/3000≈17%：${detail}`
@@ -1753,7 +1753,7 @@ describe("TokenUsageStatsView 新增行为（T-D1~T-D6）", () => {
         String(slice.props["aria-label"]).includes("占比 100%"),
         `aria-label 应含占比 100%：${String(slice.props["aria-label"])}`
       );
-      assert.equal(legendText(root, "p1::gpt-4o"), "OpenAI 官方 · gpt-4o");
+      assert.equal(legendText(root, "p1::gpt-4o"), "OpenAI 官方/gpt-4o");
     } finally {
       await act(async () => {
         renderer?.unmount();
@@ -1817,7 +1817,7 @@ describe("TokenUsageStatsView 新增行为（T-D1~T-D6）", () => {
       await clickLegend(root, "p2::glm-4.6");
       const detail = sliceDetailText(root);
       assert.ok(
-        detail != null && detail.includes("未知服务商 · glm-4.6"),
+        detail != null && detail.includes("未知服务商/glm-4.6"),
         `0 值行图例点选应出详情行：${detail}`
       );
     } finally {
@@ -1849,22 +1849,22 @@ describe("TokenUsageStatsView 新增行为（T-D1~T-D6）", () => {
       const root = renderer.root;
 
       // 首帧 providers 未到：p1 解析不到 → label 兜底「未知服务商」
-      assert.equal(legendText(root, "p1::gpt-4o"), "未知服务商 · gpt-4o");
+      assert.equal(legendText(root, "p1::gpt-4o"), "未知服务商/gpt-4o");
 
       // 挂起期间点选该扇区：详情行以兜底名出现
       await clickSlice(root, "p1::gpt-4o");
       let detail = sliceDetailText(root);
-      assert.ok(detail != null && detail.includes("未知服务商 · gpt-4o"));
+      assert.ok(detail != null && detail.includes("未知服务商/gpt-4o"));
 
       // providers 列表到达：label 翻转为配置显示名
       await act(async () => {
         resolveProviders?.({ ok: true, data: PROVIDERS });
       });
-      assert.equal(legendText(root, "p1::gpt-4o"), "OpenAI 官方 · gpt-4o");
+      assert.equal(legendText(root, "p1::gpt-4o"), "OpenAI 官方/gpt-4o");
 
       // 翻转后选中态不丢：详情行仍在且同步翻转为新 label；扇区/图例保持 is-selected
       detail = sliceDetailText(root);
-      assert.ok(detail != null && detail.includes("OpenAI 官方 · gpt-4o"));
+      assert.ok(detail != null && detail.includes("OpenAI 官方/gpt-4o"));
       const sliceBtn = root.findByProps({ "data-slice": "p1::gpt-4o" });
       assert.ok(
         String(sliceBtn.props.className).includes("is-selected"),

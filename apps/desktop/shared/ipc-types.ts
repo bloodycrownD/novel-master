@@ -869,12 +869,20 @@ export type PromptChatTokenStatsResponse = {
   readonly estimated: boolean;
   readonly counterKind: string;
   /**
-   * 占用值的来源两态（展示标签用）：
-   * - `api`：上次 completed run 的 `usage.prompt_tokens`（精确，标签「上次请求」，无 `~`）；
-   * - `local`：本地 tokenizer 估算（标签「预估」，带 `~`）。
+   * 占用值的来源两态（label 拼装的输入之一，由 main 经 core 的
+   * `formatTokenSourceBadge` 消费）：
+   * - `api`：上次 completed run 的 `usage.prompt_tokens`（精确，记号「远程 =」）；
+   * - `local`：本地 tokenizer 计数（记号按 counterKind/estimated 落家族名 = 或 gpt ≈）。
    * 与 `counterKind`（分词器维度）分开：api 命中时 counterKind 固定 `api`。
    */
   readonly source: 'api' | 'local';
+  /**
+   * main 拼好的完整占用标签（core `formatContextUsageLabel` 单源产出）：
+   * 有窗口 `{mark} {connector} {cur} / {cw} ({pct}%)`（如 `远程 = 24k / 128k (19%)`），
+   * 无窗口 `{mark} {connector} {X} tokens`（如 `gpt ≈ 2.3k tokens`）。
+   * renderer 纯渲染本字段，不再本地拼装（X1：renderer 不能 import core）。
+   */
+  readonly label: string;
 };
 
 /** Token 用量统计：时间范围（本地自然日闭区间 `YYYY-MM-DD`，双端含；结构等效 core 的 UsageStatsRange，独立定义以免 renderer 引 core）。 */
@@ -968,15 +976,55 @@ export type UsageStatsRequestPageDto = {
   readonly total: number;
 };
 
+/**
+ * 会话详情 · 最近一次请求（metric-detail-sheet 弹窗；cache 列 nullable——
+ * OpenAI/Gemini 等协议无 cache_creation 概念，展示层出「—」）。
+ */
+export type SessionUsageLastRequestDto = {
+  readonly seq: number;
+  readonly modelName: string | null;
+  readonly provider: string | null;
+  readonly promptTokens: number;
+  readonly completionTokens: number;
+  readonly cacheReadTokens: number | null;
+  readonly cacheCreationTokens: number | null;
+  readonly atMs: number;
+};
+
+/**
+ * 会话详情 · 会话累计（**已移除**，2026-09-29 用户拍板）：曾为
+ * `SessionUsageTotalsDto`（含隐藏消息的全量求和），随弹窗「累计输入/输出」
+ * 两行一并删除——含 hidden 的累计对用户无意义。
+ */
+
+/**
+ * 会话维度用量详情（指标条弹窗数据）。不含 contextUsage——「当前上下文
+ * 占用」由 renderer 复用 drawer 同源的 PromptChatTokenStatsResponse 读数，
+ * 不新增取数通路。不含会话累计输入/输出（2026-09-29 拍板移除）。
+ */
+export type SessionUsageDetailDto = {
+  readonly last: SessionUsageLastRequestDto | null;
+  /** 可见口径消息数（hidden 剔除，不筛角色）。 */
+  readonly visibleMessageCount: number;
+  /** 会话内 assistant 消息 tool_use 块总数（含隐藏行；会话 KKV 缓存优先）。 */
+  readonly toolUseCount: number;
+};
+
 /** `nm:usageStats/query` 响应体：一次调用按 kind 分发（避免多个 channel）。 */
 export type UsageStatsQueryResponse =
   | UsageStatsSummaryDto
   | UsageStatsBucketDto[]
   | UsageStatsModelRowDto[]
   | UsageStatsRequestPageDto
+  | SessionUsageDetailDto
   | string[];
 
-/** `nm:usageStats/query` 请求体（dayLocalDate 仅 kind='hourly'，offset/limit 仅 kind='requests' 使用）。 */
+/**
+ * `nm:usageStats/query` 请求体（dayLocalDate 仅 kind='hourly'，offset/limit 仅
+ * kind='requests'，sessionId 仅 kind='sessionDetail' 使用）。filter 为必填字段
+ * 且 handler 对其它 kind 无条件访问 filter.range——sessionDetail 请求携带
+ * `filter: {}` 空对象占位（handler 的该 case 不读 req.filter）。
+ */
 export type UsageStatsQueryRequest = {
   readonly kind:
     | 'summary'
@@ -984,11 +1032,14 @@ export type UsageStatsQueryRequest = {
     | 'hourly'
     | 'models'
     | 'modelBreakdown'
-    | 'requests';
+    | 'requests'
+    | 'sessionDetail';
   readonly filter: UsageStatsFilterDto;
   readonly dayLocalDate?: string;
   readonly offset?: number;
   readonly limit?: number;
+  /** kind='sessionDetail' 的目标会话 id。 */
+  readonly sessionId?: string;
 };
 
 export type CompactionManualRequest = PromptScopeRequest;

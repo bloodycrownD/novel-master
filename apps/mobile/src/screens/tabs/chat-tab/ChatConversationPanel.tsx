@@ -195,6 +195,10 @@ export function ChatConversationPanel({
         <ChatStreamMetricsBarLive
           agentRunning={unitActive}
           sessionId={sessionId}
+          // 「上下文占用」行与顶部 chip 同源（agentMeta.tokenLabel 现成字符串）。
+          contextTokenLabel={
+            agentMeta?.tokenLabel ? agentMeta.tokenLabel : undefined
+          }
         />
       </>
     ) : null;

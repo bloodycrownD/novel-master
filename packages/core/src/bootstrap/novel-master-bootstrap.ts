@@ -108,13 +108,19 @@ import { IntegrityRepairRegistry } from "@/service/integrity-repair.js";
  * 撞号；并入集成分支时以现值 16 + 1 顺延为 v17（bump 纪律是「DDL/ALIGN
  * 变更必须 +1」本身而非具体号——与并行迭代撞号时以主干现值为准递增顺延，
  * v9/v10 真机事故的同款纪律）。
- * v18：新增 vfs_content_pack / vfs_content_pack_member 两表与
+ * v18（**已撤回，未发布**）：曾为用量详情弹窗加 chat_message.tool_use_count
+ * 列（写入时维护 + SUM 读 + 后台回填），同日用户拍板改为「会话 KKV 缓存
+ * + 实时算兜底」并移除累计输入输出——DDL/ALIGN 全撤、版本回到 17。该列
+ * 只在 feature 分支的测试机库上残留（user_version 已升 18、列与回填标记
+ * 为无害孤儿，无任何读写方），正式库从未有过此形态，无需清理动作。
+ * v18（本迭代启用）：新增 vfs_content_pack / vfs_content_pack_member 两表与
  * idx_vfs_content_pack_member_pack 索引（binary-blob-and-vfs-pack Part B：
  * VFS 非 head 历史版本混合打包——小组 zlib-concat-v1 / 大组 fossil-chain-v1，
  * member 按 content_hash 寻址进包）。老库（v17）靠本轮 bump 走慢路径由
  * DDL 建出两表与索引；全新库直接建表；无存量回填（历史 blob 行由后台
- * 打包任务跨启动续跑搬运）。v17 已被 v1.5.25 发布占用（run_state/chat
- * 压缩列那轮：v16 token 列 + v17 chat 压缩两列），故本条顺延为 v18。
+ * 打包任务跨启动续跑搬运）。占号说明：main 侧曾占 v18 后当日撤回（上段，
+ * 未发布），故本迭代直接取 v18、无需再顺延；合并顺序上以主干现值为准，
+ * 若 main 后续再占 18 则本迭代顺延。
  */
 export const SCHEMA_BOOT_VERSION = 18;
 

@@ -28,14 +28,14 @@ describe("formatStreamElapsed（core-metrics/C-2：core 单点实现，双端复
 });
 
 describe("buildStreamMetricsLine（T-M8 文案快照）", () => {
-  it("生成中 · 秒 · 输出 token · 速率全段拼接（千分位 + t/s 惯例）", () => {
+  it("生成中 · 秒 · 输出 token · 速率全段拼接（千分位 + tok/s 惯例）", () => {
     const line = buildStreamMetricsLine({
       running: true,
       elapsedMs: 12_300,
       completionTokens: 1_234,
       tokensPerSecond: 45,
     });
-    assert.equal(line, "生成中 · 12.3s · 输出 1,234 t · 45 t/s");
+    assert.equal(line, "生成中 · 12.3s · 输出 1,234 tok · 45 tok/s");
   });
 
   it("无速率样本时省略速率段（仅输出 token）", () => {
@@ -45,7 +45,7 @@ describe("buildStreamMetricsLine（T-M8 文案快照）", () => {
       completionTokens: 2_500,
       tokensPerSecond: null,
     });
-    assert.equal(line, "上次生成 · 61s · 输出 2,500 t");
+    assert.equal(line, "上次生成 · 61s · 输出 2,500 tok");
   });
 
   it("速率数字格式：≥100 取整数、否则一位小数", () => {
@@ -56,7 +56,7 @@ describe("buildStreamMetricsLine（T-M8 文案快照）", () => {
         completionTokens: 600,
         tokensPerSecond: 123.4,
       }),
-      "生成中 · 5.0s · 输出 600 t · 123 t/s"
+      "生成中 · 5.0s · 输出 600 tok · 123 tok/s"
     );
     assert.equal(
       buildStreamMetricsLine({
@@ -65,7 +65,7 @@ describe("buildStreamMetricsLine（T-M8 文案快照）", () => {
         completionTokens: 28,
         tokensPerSecond: 5.52,
       }),
-      "生成中 · 5.0s · 输出 28 t · 5.5 t/s"
+      "生成中 · 5.0s · 输出 28 tok · 5.5 tok/s"
     );
   });
 

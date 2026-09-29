@@ -16,6 +16,16 @@ export interface SessionKkvRepository {
     key: string
   ): Promise<SessionKkvEntry | null>;
 
+  /**
+   * 批量按键读值（miss 键不进结果）。file_cache 域两条 IN 查询完成全部
+   * 键——workplace 组装等 N 键消费方的读链从 2N 条串行 SQL 收敛到常数条。
+   */
+  getMany(
+    sessionId: string,
+    domain: string,
+    keys: readonly string[]
+  ): Promise<Map<string, string>>;
+
   set(
     sessionId: string,
     domain: string,

@@ -6,10 +6,26 @@
  *
  * CR fix-spec v3 `agile-2`：再补一条形态护栏，钉住兜底 registry 视图是用**显式转发**
  * 造的（原型方法 `forSavedModel` / `forVendorModel` 没被对象展开丢掉）。
+ *
+ * message-token-cache Step 4 / T-TC6：读口已加 300ms trailing debounce + 同参
+ * 在途合并。扩展用例验证：rapid 双触发合并一次底层计算；并发 5 触发在途合并
+ * 一次；trailing 语义（窗口内不执行、窗口过后必有最终一次、不吞任何一击）。
+ *
+ * token-source-label T-TL3：label 已由 main 的 buildTokenStats 经 core
+ * formatTokenSourceBadge/formatContextUsageLabel 拼好随 stats 下发
+ * （PromptChatTokenStatsResponse.label），deprecated 的
+ * formatChatTokenStatsLabel/loadChatPromptTokenLabelResilient 链已删除；
+ * renderer 纯渲染 stats.label（X1 清零 + 无 `~` 拼装残留）。
  */
 import assert from "node:assert/strict";
-import { after, before, describe, it } from "node:test";
-import { sessionApiPromptTokenCache } from "@novel-master/core/provider";
+import { readFile } from "node:fs/promises";
+import { after, before, beforeEach, describe, it } from "node:test";
+import {
+  formatContextUsageLabel,
+  formatTokenSourceBadge,
+  promptWholeCache,
+  sessionApiPromptTokenCache,
+} from "@novel-master/core/provider";
 import { getDesktopRuntime } from "../src/main/runtime/desktop-runtime-singleton.js";
 import { handleAgentSetCurrent } from "../src/main/ipc/handlers/agent.js";
 import {
@@ -23,8 +39,9 @@ import {
   handleSessionsSetModelOverride,
 } from "../src/main/ipc/handlers/sessions.js";
 import {
-  formatChatTokenStatsLabel,
+  chatPromptTokenDebounceExecCountForTests,
   loadChatPromptTokenStats,
+  resetChatPromptTokenDebounceForTests,
   withRealFallbackCounter,
 } from "../src/main/services/chat-prompt-tokens.service.js";
 import {
@@ -99,10 +116,11 @@ describe("chat-prompt-tokens.service", () => {
 
   after(async () => {
     sessionApiPromptTokenCache.clearAll();
+    resetChatPromptTokenDebounceForTests();
     await teardownDesktopDbTestEnv(tempDir);
   });
 
-  it("T-T9: source===api ⇒ estimated:false && counterKind:api（标签「上次请求」）", async () => {
+  it("T-T9: source===api ⇒ estimated:false && counterKind:api（label 记号「远程 =」）", async () => {
     sessionApiPromptTokenCache.set(sessionId, {
       promptTokens: 24_000,
       updatedAt: Date.now(),
@@ -119,26 +137,59 @@ describe("chat-prompt-tokens.service", () => {
     assert.equal(stats.tokenCount, 24_000);
     assert.equal(stats.source, "api");
 
-    const label = formatChatTokenStatsLabel(stats);
-    assert.match(label, /· 上次请求$/);
-    assert.doesNotMatch(label, /^~/);
+    // T-TL3 对拍：main 下发的 label 与 core 单源（badge + 拼装）重算完全一致。
+    const expected = formatContextUsageLabel(
+      stats.tokenCount,
+      stats.contextWindow,
+      formatTokenSourceBadge(stats.source, stats.counterKind, stats.estimated),
+    );
+    assert.equal(stats.label, expected);
+    // api 真值 → 远程 =（无 ~，无「上次请求」旧后缀）。
+    assert.match(stats.label, /^远程 = 24k \/ 128k \(\d+%\)$/);
   });
 
-  it("T-T9b: 无 API 占用 ⇒ source===local（标签「预估」）", async () => {
+  it("T-T9b: 无 API 占用 ⇒ 两阶段：首帧估算（L1 冷）→ 后台暖机 → 二次读 L1 精确", async () => {
     sessionApiPromptTokenCache.clearAll();
+    // L1 清空：本用例要锁「首帧估算」态，前序用例/其它内容的整串条目
+    // 虽按内容指纹寻址，清掉最稳（fresh 库无 KKV 种子，无跨重启残留）。
+    promptWholeCache.clearForTests();
 
     const rt = await getDesktopRuntime();
-    const stats = await loadChatPromptTokenStats(rt, {
+    // 首帧：preferEstimate 且 L1 冷 → 廉价估算即回（gpt ≈），服务侧安排
+    // 后台暖机（家族真分词器 + L1 写入）。
+    const first = await loadChatPromptTokenStats(rt, {
       projectId,
       sessionId,
     });
+    assert.equal(first.source, "local");
+    assert.equal(first.counterKind, "heuristic");
+    assert.equal(first.estimated, true);
+    assert.match(first.label, /^gpt ≈ \S+ \/ 128k \(\d+%\)$/);
 
-    assert.equal(stats.source, "local");
-    // 本地档的 counterKind 取决于模型（tiktoken / claude / heuristic），
-    // 但一定不是 api——两态标签只看 source，与分词器档位解耦。
-    assert.notEqual(stats.counterKind, "api");
-    const label = formatChatTokenStatsLabel(stats);
-    assert.match(label, /· 预估$/);
+    // 暖机是 fire-and-forget（cl100k 小串毫秒级）；防抖入口每呼 300ms
+    // trailing，轮询直到 L1 命中精确档（cr-fix-spec-r2 s2/G-1：preferEstimate
+    // 先查 L1——命中零成本直读，chip 不再锁死估算档）。
+    let second: Awaited<ReturnType<typeof loadChatPromptTokenStats>> | null =
+      null;
+    for (let i = 0; i < 20 && second == null; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      const next = await loadChatPromptTokenStats(rt, {
+        projectId,
+        sessionId,
+      });
+      if (next.counterKind === "tiktoken") {
+        second = next;
+      }
+    }
+    assert.ok(second != null, "暖机后二次读应命中 L1 精确档（gpt =）");
+    assert.equal(second.estimated, false);
+    assert.match(second.label, /^gpt = \S+ \/ 128k \(\d+%\)$/);
+    const expected = formatContextUsageLabel(
+      second.tokenCount,
+      second.contextWindow,
+      formatTokenSourceBadge(second.source, second.counterKind, second.estimated),
+    );
+    assert.equal(second.label, expected);
   });
 
   it("T-T9c: 无模型早退 ⇒ 真 cl100k 计数，而非 ceil(chars/3.35) 折算", async () => {
@@ -153,6 +204,9 @@ describe("chat-prompt-tokens.service", () => {
 
     // 先取同一 session 的**精确档**读数（gpt-4o → tiktoken 家族）作为参照：
     // 早退档与它编的是同一段序列化文本，差别只在「真分词器 vs 字符折算」。
+    // 两阶段下首次调用是估算档（gpt ≈）并安排后台暖机——参照必须取暖机
+    // 完成后的二次读（L1 命中精确档；cr-fix-spec-r2 s2/G-1），否则拿到的是
+    // 估算值、「精确档参照」失真。
     const upserted = await handleAgentRegistryUpsert({
       agentId,
       definition: {
@@ -162,10 +216,23 @@ describe("chat-prompt-tokens.service", () => {
       },
     });
     assert.equal(upserted.ok, true);
-    const precise = await loadChatPromptTokenStats(rt, {
+    await loadChatPromptTokenStats(rt, {
       projectId,
       sessionId,
     });
+    let precise: Awaited<ReturnType<typeof loadChatPromptTokenStats>> | null =
+      null;
+    for (let i = 0; i < 20 && precise == null; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      const next = await loadChatPromptTokenStats(rt, {
+        projectId,
+        sessionId,
+      });
+      if (next.counterKind === "tiktoken") {
+        precise = next;
+      }
+    }
+    assert.ok(precise != null, "暖机后应命中 L1 精确档作为参照");
 
     // 清掉会话级模型覆盖 + agent 无 model pin ⇒ resolveSavedModelId 返回空
     // ⇒ 走「无模型早退」分支。
@@ -181,12 +248,12 @@ describe("chat-prompt-tokens.service", () => {
         sessionId,
       });
 
-      // 语义与 UI 文案不变：仍然是「本地预估 + heuristic 档」。
+      // 语义与 UI 文案不变：仍然是「本地计数 + heuristic 兜底档」→ 记号 gpt ≈。
       assert.equal(stats.source, "local");
       assert.equal(stats.counterKind, "heuristic");
       assert.equal(stats.estimated, true);
       assert.equal(stats.contextWindow, undefined);
-      assert.match(formatChatTokenStatsLabel(stats), /^~/);
+      assert.match(stats.label, /^gpt ≈ \S+ tokens$/);
       assert.ok(stats.tokenCount > 0);
 
       // 读数本身已换成真分词器：同一段文本，真 cl100k 计数与精确档同量级（约 1:1）；
@@ -247,5 +314,116 @@ describe("chat-prompt-tokens.service", () => {
       registry.heuristic.countText(chinese) > chinese.length / 3.35,
       "兜底 registry 的 heuristic 像是退回 ceil(chars/3.35) 字符折算了",
     );
+  });
+
+  it("T-TL3: renderer 纯渲染 stats.label——X1 清零、无 ~ 拼装残留、UI 渲染口径一致", async () => {
+    const src = await readFile(
+      new URL(
+        "../renderer/features/chat/SessionDetailDrawer.tsx",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+    // X1：renderer 不能直连 @novel-master/core（label 拼装已上移 main）。
+    assert.equal(
+      src.includes("@novel-master/core"),
+      false,
+      "SessionDetailDrawer 不应 import @novel-master/core（X1）",
+    );
+    // 旧「预估/~」体系清零：无 ~ 字面量、无本地拼装函数、无旧标签函数名。
+    assert.equal(src.includes("~"), false, "SessionDetailDrawer 残留 ~ 拼装");
+    assert.equal(
+      src.includes("tokenCountLabel"),
+      false,
+      "本地拼装 tokenCountLabel 应已删除",
+    );
+    assert.equal(
+      src.includes("formatTokenSourceLabel"),
+      false,
+      "旧 formatTokenSourceLabel 引用应已删除",
+    );
+    // UI 渲染口径：头部直接渲染 main 下发的 stats.label（渲染与下发一致）。
+    assert.ok(
+      src.includes("{tokenStats.label}"),
+      "头部应直接渲染 stats.label",
+    );
+  });
+
+  describe("T-TC6: 读口防抖（300ms trailing + 在途合并）", () => {
+    const sleep = (ms: number) =>
+      new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+    beforeEach(() => {
+      sessionApiPromptTokenCache.clearAll();
+      resetChatPromptTokenDebounceForTests();
+    });
+
+    it("rapid 双触发（<300ms 窗口内）合并为一次底层计算", async () => {
+      const rt = await getDesktopRuntime();
+      const scope = { projectId, sessionId };
+
+      // 两个请求同帧连发（间隔远小于 300ms）：共享 trailing 窗口的同一次执行。
+      const [a, b] = await Promise.all([
+        loadChatPromptTokenStats(rt, scope),
+        loadChatPromptTokenStats(rt, scope),
+      ]);
+
+      assert.equal(
+        chatPromptTokenDebounceExecCountForTests(sessionId),
+        1,
+        "双触发应合并为一次底层计算",
+      );
+      // 合并的 caller 拿到同一份结果（读数一致，不出现两个口径）。
+      assert.deepEqual(a, b);
+      assert.equal(a.source, "local");
+    });
+
+    it("并发 5 触发在途合并为一次底层计算", async () => {
+      const rt = await getDesktopRuntime();
+      const scope = { projectId, sessionId };
+
+      const results = await Promise.all(
+        Array.from({ length: 5 }, () => loadChatPromptTokenStats(rt, scope)),
+      );
+
+      assert.equal(
+        chatPromptTokenDebounceExecCountForTests(sessionId),
+        1,
+        "并发 5 触发应合并为一次底层计算",
+      );
+      for (const stats of results) {
+        assert.deepEqual(stats, results[0]);
+      }
+    });
+
+    it("trailing：窗口内不执行，窗口过后必有最终一次计算，且不吞任何一击", async () => {
+      const rt = await getDesktopRuntime();
+      const scope = { projectId, sessionId };
+
+      // 单次触发：防抖是 trailing 而非 leading——窗口内（<300ms）不执行。
+      const first = loadChatPromptTokenStats(rt, scope);
+      await sleep(150);
+      assert.equal(
+        chatPromptTokenDebounceExecCountForTests(sessionId),
+        0,
+        "300ms 窗口内不应有底层计算（非 leading）",
+      );
+      // 窗口过后必须有最终一次计算（最终一致性：触发不悬挂）。
+      const stats = await first;
+      assert.equal(
+        chatPromptTokenDebounceExecCountForTests(sessionId),
+        1,
+        "trailing 到期后必产生一次底层计算",
+      );
+      assert.equal(stats.source, "local");
+
+      // 空闲后的再次触发不被吞：又产生一次计算（每一击最终都有计算）。
+      await loadChatPromptTokenStats(rt, scope);
+      assert.equal(
+        chatPromptTokenDebounceExecCountForTests(sessionId),
+        2,
+        "第二次触发也必须产生一次底层计算",
+      );
+    });
   });
 });

@@ -1,5 +1,5 @@
 /**
- * 冻结末值速率（「上次生成 … · N t/s」）测试。
+ * 冻结末值速率（「上次生成 … · N tok/s」）测试。
  *
  * 覆盖：
  * - 活跃期实时速率可读（delta 累积下 > 0），暂停期随时刻自然衰减；
@@ -9,7 +9,7 @@
  * - session KKV 落库：settle 写 `stream_metrics/finalRate`（值可解析）；
  * - 跨重启：新 manager + 同 KKV 数据水合 settled 行后，投影带回速率；
  * - 水合 runId 一致性校验（B-1 加固）：旧格式值（无 runId）照常采用速率，
- *   runId 与 settled 行不一致的残留快照当缺值（不显示 t/s）；
+ *   runId 与 settled 行不一致的残留快照当缺值（不显示 tok/s）；
  * - 极简 runtime（无 sessionKkv）：退化为内存冻结值，不抛错。
  *
  * @module test/session-stream-unit-final-rate
@@ -254,8 +254,8 @@ describe('冻结末值速率（stream-metrics-tokens-final-rate）', () => {
     }
     const batchTokens = h.manager.snapshot('s1')!.metrics.completionTokens;
     expect(batchTokens).toBe(90); // ceil(300 / 3.35)
-    // 旧实现（同刻不去重）的爆表形态 = 整批增量 ÷ 几毫秒：本批 90 t ÷ 5ms 即
-    // 万级 t/s（旧实现此处实际读数 15000 t/s——窗口首样本是批内首条 15 t）。
+    // 旧实现（同刻不去重）的爆表形态 = 整批增量 ÷ 几毫秒：本批 90 tok ÷ 5ms 即
+    // 万级 tok/s（旧实现此处实际读数 15000 tok/s——窗口首样本是批内首条 15 tok）。
     // 本用例的判据就是这种形态不能出现。
     const burstForm = (batchTokens * 1_000) / 5;
     expect(burstForm).toBeGreaterThan(1_000);
@@ -282,7 +282,7 @@ describe('冻结末值速率（stream-metrics-tokens-final-rate）', () => {
       ((nextTokens - batchTokens) * 1_000) / 250,
       6,
     );
-    // 与爆表形态数量级拉开（真值 60 t/s vs 爆表形态万级）。
+    // 与爆表形态数量级拉开（真值 60 tok/s vs 爆表形态万级）。
     expect(recovered!).toBeLessThan(burstForm / 10);
 
     h.manager.dispose();
@@ -425,7 +425,7 @@ describe('冻结末值速率（stream-metrics-tokens-final-rate）', () => {
     h.manager.dispose();
   });
 
-  it('零输出 run 收尾删掉上一轮 KKV 速率：水合不再拼出凭空造数的 t/s（B-1）', async () => {
+  it('零输出 run 收尾删掉上一轮 KKV 速率：水合不再拼出凭空造数的 tok/s（B-1）', async () => {
     const kkv = createFakeSessionKkv();
     const store = createFakeRunStateStore();
     const first = buildHarness({runStateStore: store, sessionKkv: kkv.service});
@@ -478,7 +478,7 @@ describe('冻结末值速率（stream-metrics-tokens-final-rate）', () => {
         tokenSource: hydrated!.metrics.tokenSource,
         tokensPerSecond: hydrated!.rateTokensPerSecond,
       }),
-    ).not.toContain('t/s');
+    ).not.toContain('tok/s');
     restarted.manager.dispose();
   });
 
@@ -509,7 +509,7 @@ describe('冻结末值速率（stream-metrics-tokens-final-rate）', () => {
     expect(projection).not.toBeNull();
     expect(projection!.rateTokensPerSecond).toBe(42.5);
     expect(h.manager.rateTokensPerSecond('s1', Date.now())).toBe(42.5);
-    expect(buildLineFrom(h.manager, 's1')).toContain('t/s');
+    expect(buildLineFrom(h.manager, 's1')).toContain('tok/s');
 
     h.manager.dispose();
   });
@@ -541,7 +541,7 @@ describe('冻结末值速率（stream-metrics-tokens-final-rate）', () => {
     expect(projection!.rateTokensPerSecond).toBeNull();
     // 速率读口同样为 null（不回落上一轮冻结值），文案省略速率段。
     expect(restarted.manager.rateTokensPerSecond('s1', Date.now())).toBeNull();
-    expect(buildLineFrom(restarted.manager, 's1')).not.toContain('t/s');
+    expect(buildLineFrom(restarted.manager, 's1')).not.toContain('tok/s');
 
     restarted.manager.dispose();
   });

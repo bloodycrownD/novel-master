@@ -1,5 +1,6 @@
 /**
- * RN 侧 js-tiktoken 编码表的**单例缓存**（stream-metrics-native ④）。
+ * RN 侧 js-tiktoken 编码表取用口——core `encoding-registry` 的**薄包装**
+ * （fallback-caliber-align A/B 线）。
  *
  * 为什么要沉到驱动层（而不是留在 app 的 `stream-token-estimator` 里）：
  * - 编码表构造很贵。`new Tiktoken(ranks)` 实测每次 **185–248ms**（要解析整份
@@ -8,21 +9,28 @@
  * - 驱动方向是「app 依赖驱动」。反过来让驱动 import app 的私有缓存既违反依赖
  *   方向，tsc 上也不通（`tsconfig.base.json` 无 paths、驱动 `rootDir: ./src`），
  *   所以正确的落点只能在驱动里、app 侧改为 import 本模块。
- * - 本模块**不引入任何 RN 运行时依赖**（只依赖 `js-tiktoken` 与 core 的纯
- *   计数 helper），因此可以被 app 的纯逻辑服务直接引用而不必拖进
+ * - 本模块**不引入任何 RN 运行时依赖**（只依赖 `js-tiktoken` 与 core 的纯计数
+ *   helper / registry），因此可以被 app 的纯逻辑服务直接引用而不必拖进
  *   `react-native` / 原生 bridge。
  *
- * 缓存策略照搬 app 侧既有口径，不重新发明：
- * - 惰性构造：不在模块顶层建表（RN 依赖 `fast-text-encoding` polyfill 先执行，
- *   顶层构造有环境未就绪风险）；
- * - 按编码名单例（cl100k / o200k 各一份）；
- * - **构造失败缓存 null 且不再重试**——同一进程内反复重试同一条必然失败的构造
- *   只是白烧 CPU（缺 ranks / 环境未就绪都不会在运行期自愈），代价是该进程后续
- *   一律走降级路径。这是可接受的降级，不是 bug。
+ * 缓存本体已收敛到 core 的 {@link getEncoding}（`encoding-registry`，键
+ * `enc:<encodingName>` 单命名空间），本模块只注入 js-tiktoken 构造、按编码名取用。
+ * 缓存策略沿用既有口径：惰性构造（不在模块顶层建表——RN 依赖
+ * `fast-text-encoding` polyfill 先执行，顶层构造有环境未就绪风险）、按编码名单例。
+ *
+ * 失败语义（与旧实现的差别）：构造失败仍缓存 `null`，但由 registry 的
+ * **TTL 5 分钟**接管——窗口内不重试，超窗后允许重试（资产恢复 / 环境就绪后有
+ * 机会自愈）。旧「失败永不重试」会把一次瞬时故障放大成整个进程寿命的降级，
+ * 已废弃。
  *
  * @module tokenizer-driver-rn/impl/encoding-cache
  */
-import { countTextWithIncrementalTokenizer } from "@novel-master/core/provider";
+import {
+  clearForTests,
+  countTextWithIncrementalTokenizer,
+  getEncoding,
+  setFactoryForTests,
+} from "@novel-master/core/provider";
 import { Tiktoken } from "js-tiktoken/lite";
 import * as cl100kRanksModule from "js-tiktoken/ranks/cl100k_base";
 import * as o200kRanksModule from "js-tiktoken/ranks/o200k_base";
@@ -46,17 +54,6 @@ export interface RnTokenEncoding {
  */
 export const DEFAULT_RN_ENCODING_NAME: RnEncodingName = "cl100k_base";
 
-/** 编码表按编码名缓存；null = 构造失败（不再重试，见模块头注释）。 */
-const encodingByName = new Map<RnEncodingName, RnTokenEncoding | null>();
-
-/**
- * 构造器覆盖钩子（仅测试用）：`null` = 走默认 `new Tiktoken(ranks)`。
- * 设成抛错的函数即可在真机上复现「编码表建不起来」这条降级路径。
- */
-let encodingFactory:
-  | ((name: RnEncodingName) => RnTokenEncoding)
-  | null = null;
-
 /**
  * ranks 命名空间取默认导出兼容形态。
  *
@@ -68,30 +65,18 @@ function unwrapRanksModule(mod: unknown): unknown {
   return candidate?.default ?? mod;
 }
 
-/** 取（或惰性构造）指定编码的编码表；构造失败返回 null 并缓存该失败。 */
+/** js-tiktoken 构造注入：按编码名取对应 ranks 建表。 */
+function buildJsTiktokenEncoding(name: RnEncodingName): RnTokenEncoding {
+  const ranks =
+    name === "o200k_base"
+      ? unwrapRanksModule(o200kRanksModule)
+      : unwrapRanksModule(cl100kRanksModule);
+  return new Tiktoken(ranks as never) as unknown as RnTokenEncoding;
+}
+
+/** 取（或惰性构造）指定编码的编码表；构造失败返回 null（TTL 内不重试）。 */
 export function getRnEncoding(name: RnEncodingName): RnTokenEncoding | null {
-  const cached = encodingByName.get(name);
-  if (cached !== undefined) {
-    return cached;
-  }
-  let encoding: RnTokenEncoding | null = null;
-  try {
-    encoding = encodingFactory
-      ? encodingFactory(name)
-      : (new Tiktoken(
-          (name === "o200k_base"
-            ? unwrapRanksModule(o200kRanksModule)
-            : unwrapRanksModule(cl100kRanksModule)) as never,
-        ) as unknown as RnTokenEncoding);
-  } catch (err) {
-    console.warn(
-      "[novel-master/tokenizer-driver-rn] js-tiktoken encoding init failed",
-      err,
-    );
-    encoding = null;
-  }
-  encodingByName.set(name, encoding);
-  return encoding;
+  return getEncoding(name, () => buildJsTiktokenEncoding(name));
 }
 
 /** 默认（cl100k）编码表取用口。 */
@@ -123,21 +108,26 @@ export function countTextWithDefaultEncoding(text: string): number | null {
 }
 
 /**
- * 测试钩子：只清空编码表单例缓存（不动构造器）。
+ * 测试钩子：只清空编码表缓存（不动构造器）。转发 registry 的同名钩子。
  *
- * 刻意与 {@link __setRnEncodingFactoryForTests} 分开：后者已经会顺带作废缓存，
- * 若这里再顺手把构造器也还原，「先注入故障构造器、再清缓存」这种最自然的
- * 测试写法就会被悄悄 undo，故两个钩子各管一件事。
+ * 注意这里**不 `free()`**（js-tiktoken 实例本就没有该方法，句柄由 registry 持有）。
  */
 export function __resetRnEncodingCacheForTests(): void {
-  encodingByName.clear();
+  clearForTests();
 }
 
-/** 测试钩子：覆盖编码表构造器（传 `null` 还原默认实现）。 */
+/**
+ * 测试钩子：覆盖编码表构造器（传 `null` 还原默认实现）。
+ * 构造器换了，已缓存的表不再由它产出，registry 会一并作废缓存。
+ */
 export function __setRnEncodingFactoryForTests(
   factory: ((name: RnEncodingName) => RnTokenEncoding) | null,
 ): void {
-  encodingFactory = factory;
-  // 构造器换了，已缓存的表不再由它产出，必须一并作废。
-  encodingByName.clear();
+  // 适配一层：registry 的工厂槽以「任意编码名字符串」调用，本驱动的注入形态
+  // 收窄为 RnEncodingName（实际传入值只会是两表之一）。
+  setFactoryForTests(
+    factory == null
+      ? null
+      : (encodingName: string) => factory(encodingName as RnEncodingName),
+  );
 }

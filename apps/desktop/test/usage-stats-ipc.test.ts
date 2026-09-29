@@ -114,6 +114,23 @@ const REQUEST_PAGE = {
   total: 12,
 };
 
+/** kind=sessionDetail 的 core 返回体样例（字段与 core SessionUsageDetail 一致；
+ *  会话累计输入/输出已随 totals 字段移除，2026-09-29 拍板）。 */
+const SESSION_DETAIL = {
+  last: {
+    seq: 7,
+    modelName: "claude-x",
+    provider: "anthropic",
+    promptTokens: 100,
+    completionTokens: 40,
+    cacheReadTokens: 2048,
+    cacheCreationTokens: null,
+    atMs: 1_800_000_000_000,
+  },
+  visibleMessageCount: 9,
+  toolUseCount: 3,
+};
+
 interface RecordedCall {
   method: string;
   args: unknown[];
@@ -154,6 +171,10 @@ function makeStubUsageStats(
     listRequestUsage: async (filter: unknown, page: unknown) => {
       calls.push({ method: "listRequestUsage", args: [filter, page] });
       return REQUEST_PAGE;
+    },
+    getSessionUsageDetail: async (sessionId: string) => {
+      calls.push({ method: "getSessionUsageDetail", args: [sessionId] });
+      return SESSION_DETAIL;
     },
   };
   return { usageStats };
@@ -487,6 +508,88 @@ describe("usage stats IPC handler（T-S6 + Step 2 适配）", () => {
       }
     }
     assert.equal(calls.length, 0, "校验失败不应转发 service");
+  });
+
+  it("kind=sessionDetail 转发 getSessionUsageDetail：filter:{} 占位不触达、DTO 逐字段映射（T-MD3）", async () => {
+    const calls = installStubRuntime();
+    const res = await handleUsageStatsQuery({
+      kind: "sessionDetail",
+      // filter 为必填字段：sessionDetail 携带空对象占位（handler 该 case 不读）。
+      filter: {},
+      sessionId: "sess-1",
+    });
+    assert.equal(res.ok, true);
+    if (!res.ok) {
+      return;
+    }
+    // DTO 镜像逐字段映射：deepEqual 同时钉死「无 undefined 字段」
+    // （renderer 拿到的对象与 core 返回体结构一致，cache null 透传）。
+    assert.deepEqual(res.data, SESSION_DETAIL);
+    assert.deepEqual(calls, [
+      { method: "getSessionUsageDetail", args: ["sess-1"] },
+    ]);
+  });
+
+  it("kind=sessionDetail 空态 last null 透传（cache 列缺失协议出「—」的原料）", async () => {
+    const calls = installStubRuntime();
+    const g = globalThis as unknown as {
+      __usageStatsTestRuntime?: { usageStats: Record<string, unknown> };
+    };
+    g.__usageStatsTestRuntime!.usageStats.getSessionUsageDetail = async (
+      sessionId: string
+    ) => {
+      calls.push({ method: "getSessionUsageDetail", args: [sessionId] });
+      return {
+        last: null,
+        visibleMessageCount: 0,
+        toolUseCount: 0,
+      };
+    };
+    const res = await handleUsageStatsQuery({
+      kind: "sessionDetail",
+      filter: {},
+      sessionId: "empty",
+    });
+    assert.equal(res.ok, true);
+    if (!res.ok) {
+      return;
+    }
+    assert.deepEqual(res.data, {
+      last: null,
+      visibleMessageCount: 0,
+      toolUseCount: 0,
+    });
+    assert.deepEqual(calls, [
+      { method: "getSessionUsageDetail", args: ["empty"] },
+    ]);
+  });
+
+  it("kind=sessionDetail 缺 sessionId 时传空串，由服务层校验拒绝落入 IpcResult error", async () => {
+    const calls = installStubRuntime();
+    const g = globalThis as unknown as {
+      __usageStatsTestRuntime?: { usageStats: Record<string, unknown> };
+    };
+    g.__usageStatsTestRuntime!.usageStats.getSessionUsageDetail = async (
+      sessionId: string
+    ) => {
+      calls.push({ method: "getSessionUsageDetail", args: [sessionId] });
+      throw Object.assign(new Error("sessionId 须提供"), {
+        name: "ChatError",
+        code: "INVALID_ARGUMENT",
+      });
+    };
+    const res = await handleUsageStatsQuery({
+      kind: "sessionDetail",
+      filter: {},
+    });
+    assert.equal(res.ok, false);
+    if (res.ok) {
+      return;
+    }
+    assert.equal(res.error.code, "INVALID_ARGUMENT");
+    assert.deepEqual(calls, [
+      { method: "getSessionUsageDetail", args: [""] },
+    ]);
   });
 
   it("service 抛 ChatError 时返回 IpcResult error 形态（code/message 透传）", async () => {

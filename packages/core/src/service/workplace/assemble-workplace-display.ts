@@ -10,9 +10,12 @@ import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { VfsService } from "@/domain/vfs/ports/vfs-service.port.js";
 import {
   RULE_SNAPSHOT_CANON_KEY,
+  SESSION_KKV_DOMAIN_FILE_CACHE,
   SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
+  fileCacheKey,
 } from "@/domain/session-kkv/model/session-kkv-domains.js";
-import { loadOrFillFileCache } from "@/domain/workplace/logic/load-or-fill-file-cache.js";
+import { fillFileCacheFromVfs } from "@/domain/workplace/logic/load-or-fill-file-cache.js";
+import { parseFileCachePayload } from "@/domain/workplace/logic/rule-snapshot-codec.js";
 import {
   joinFileBlocks,
   renderFileBlock,
@@ -95,23 +98,37 @@ export async function assembleWorkplaceDisplay(
     return { workplaceDisplay: "", prefixPaths: [] };
   }
 
+  // 批量预取 file_cache：两条 IN 查询（entries + blobs）替代每文件两跳
+  // 串行 SQL——大会话几十个规则文件的读链曾是 workplace 组装的主要成本
+  // （单连接串行执行下，并发救不了，只能减查询数）。
+  const cacheKeys = entries.map((entry) => fileCacheKey(entry.status, entry.path));
+  const prefetched = await deps.sessionKkv.getMany(
+    kkvSessionId,
+    SESSION_KKV_DOMAIN_FILE_CACHE,
+    cacheKeys
+  );
+
   const prefixPaths: string[] = [];
   const blocks: string[] = [];
   for (const entry of entries) {
     prefixPaths.push(normalizePromptSeenPath(entry.path));
-    const cached = await loadOrFillFileCache({
-      sessionId: kkvSessionId,
-      sessionKkv: deps.sessionKkv,
-      vfs: deps.vfs,
-      path: entry.path,
-      status: entry.status,
-    });
+    const raw = prefetched.get(fileCacheKey(entry.status, entry.path));
+    const cached = raw != null ? parseFileCachePayload(raw) : null;
+    const payload =
+      cached ??
+      (await fillFileCacheFromVfs({
+        sessionId: kkvSessionId,
+        sessionKkv: deps.sessionKkv,
+        vfs: deps.vfs,
+        path: entry.path,
+        status: entry.status,
+      }));
     blocks.push(
       renderFileBlock({
         logicalPath: entry.path,
-        mtimeMs: cached.mtimeMs,
+        mtimeMs: payload.mtimeMs,
         display: entry.status,
-        content: cached.body,
+        content: payload.body,
       })
     );
   }

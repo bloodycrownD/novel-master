@@ -11,17 +11,43 @@
  * claude / glm / qwen 这类非 OpenAI 家族只是近似，报成家族级精确读数会让压缩
  * 阈值跳过 0.85 安全系数，等于拿近似值卡精确阈值。
  *
+ * message-token-cache Step 3（分层挂接，主代理定稿）：本驱动只做**内存层**——
+ * 入口挂 L1 整串缓存（挡无变更重复刷新），tiktoken 家族与 heuristic 兜底档的
+ * 文本计数走 L2 块平面缓存（splitTextIntoChunks 逐块查/写）；**代际推进与 KKV
+ * 持久化不在这里**——挂 core 读口（`resolve-current-prompt-tokens`）的本地计数
+ * 分支，驱动签名零改动。WEB/SP 家族（@agnai）整串计数只挂 L1、不切块（spec：
+ * node 侧这两族走 JSON 资产 / SentencePiece 模型，块粒度对它们没有意义）。
+ *
  * @module count-prompt-llm-input
  */
 
-import { HeuristicTokenCounter, mapVendorModelIdToTiktokenModel, resolveTokenizerFamily, serializePromptLlmInput, serializeToolsForTokenCount, type CountPromptLlmInputParams, type PromptTokenCountResult, type TokenCounterKind, type TokenizerFamily } from "@novel-master/core/provider";
-import { countTextWithDefaultEncoding, getNodeEncodingForModel } from "./impl/encoding-cache.js";
+import {
+  HeuristicTokenCounter,
+  buildCounterScope,
+  chunkHash16,
+  countTextWithIncrementalTokenizer,
+  mapVendorModelIdToTiktokenModel,
+  promptWholeCache,
+  resolveTokenizerFamily,
+  serializePromptLlmInput,
+  serializeToolsForTokenCount,
+  splitTextIntoChunks,
+  tokenChunkCache,
+  type CountPromptLlmInputParams,
+  type PromptTokenCountResult,
+  type TokenCounterKind,
+  type TokenizerFamily,
+} from "@novel-master/core/provider";
+import { getDefaultNodeEncoding, getNodeEncodingForModel } from "./impl/encoding-cache.js";
 import { countSentencePieceFamilyPrompt } from "./impl/sentencepiece-token-counter.js";
 import { countWebFamilyPrompt } from "./impl/web-tokenizer-counter.js";
 import {
   countOpenAiStyleMessages,
   wrapSerializedPromptAsSystemMessage,
 } from "./logic/count-openai-style-message.js";
+
+/** 与 `register.ts` 的 NODE_DRIVER_NAME 同值（L2 计数器身份段；import 会成环，故就地重复）。 */
+const DRIVER_NAME = "node";
 
 const WEB_FAMILIES: ReadonlySet<TokenizerFamily> = new Set([
   "claude",
@@ -46,21 +72,84 @@ const SP_FAMILIES: ReadonlySet<TokenizerFamily> = new Set([
 const charRatioCounter = new HeuristicTokenCounter();
 
 /**
- * 兜底计数的**唯一落点**：真分词器（默认 cl100k）→ 字符折算。
+ * 块级 L2 计数：`splitTextIntoChunks(整串)` → 逐块查 L2（命中任意一代即提升）
+ * → miss 块经 `countTextWithIncrementalTokenizer` 现算并写回 → 求和。
  *
- * 为什么兜底不再直接折算：`ceil(字符数 / 3.35)` 是**英文**口径，对中文正文
- * （cl100k 约 1.64 token/字符，即 ≈0.61 字符/token）系统性低估 82%~84%。折算的
- * 读数还要去卡上下文窗口的压缩阈值，低估意味着「快满了还在继续写」——这正是
- * 最该避免的组合。
- *
- * 为什么最后一级仍保留折算：`countTextWithDefaultEncoding` 返回 `null` 的唯一
- * 原因是「整张编码表建不起来」（ranks 资源缺失 / 环境未就绪）。那时别无选择，但
- * 它是**一次性降级**（失败被缓存、同进程不重试），且调用方拿到的 `counterKind`
- * 仍是 `heuristic`，压缩阈值不会误以为这是家族级真分词器读数。
+ * 这是 spec 计数流程第 3 步的驱动侧实现：块 = 句末贪吃 / 软边界 / 64 上限的
+ * 确定性切分（与 core golden 同源），编辑局部性（改 5 字符仅 ~2 块 miss）与
+ * 跨会话内容共享（34.7% 重复块）都建立在这个粒度上。连接符已被句末贪吃自然
+ * 并入块内，无需额外补偿（spec 实测误差已含此效应）。
  */
-function fallbackCount(text: string): number {
-  const real = countTextWithDefaultEncoding(text);
-  return real ?? charRatioCounter.countText(text);
+function countChunksWithL2(
+  text: string,
+  scope: string,
+  encodeText: (text: string) => number,
+): number {
+  let total = 0;
+  for (const chunk of splitTextIntoChunks(text)) {
+    const hash = chunkHash16(chunk);
+    const hit = tokenChunkCache.lookup(hash, scope);
+    if (hit !== undefined) {
+      total += hit;
+      continue;
+    }
+    const count = countTextWithIncrementalTokenizer(encodeText, chunk);
+    tokenChunkCache.record(hash, scope, count);
+    total += count;
+  }
+  return total;
+}
+
+/**
+ * 兜底计数的**唯一落点**（L2 块流程版）：真分词器（默认 cl100k，逐块查 L2）
+ * → 字符折算。
+ *
+ * 与 stream-metrics-native ④ 的口径差异只有一层：整串一次增量计数 → 按块
+ * 分别增量计数再求和（正常文本差 -0.02%~+0.35%，spec 实测；对拍用例按 1%
+ * 容差迁移，见 T-TC5）。为什么兜底不再直接折算、最后一级为何仍保留折算的
+ * 完整理由见模块头与原版注释——语义未动：`cl100k 表建不起来`（返回 null）
+ * 是一次性降级且不进 L2（没有真分词器就没有可缓存的稳定读数）。
+ */
+function fallbackCount(text: string, scope: string): number {
+  const encoding = getDefaultNodeEncoding();
+  if (encoding == null) {
+    return charRatioCounter.countText(text);
+  }
+  return countChunksWithL2(text, scope, (chunk) => encoding.encode(chunk).length);
+}
+
+/**
+ * tiktoken 精确档的 L2 组装（overhead 不丢不重是这里的硬约束）。
+ *
+ * 现有数值组装结构：`countOpenAiStyleMessages(encoding, [wrap(serialized)],
+ * model)` = perMessage + w(role) + w(serialized) + tail（w = core 包装后的
+ * encode，0301 再 +4/-1/+9）。块流程套在 **content 层**而不是复刻 overhead：
+ *
+ * ```
+ * 分块口径 = countOpenAiStyleMessages(encoding, [wrap("")], model)  // 纯 overhead
+ *         + Σ L2(块)                                               // content 分块求和
+ * ```
+ *
+ * 空串 content 的 `w("") === 0`（增量计数器空串短路、不调 encode），所以
+ * overhead 恰好等于 perMessage + w(role) + tail——公式零复刻、零漂移（将来
+ * core 公式变这里自动跟）；content 部分从 `w(serialized)` 换成块求和，正是
+ * spec 计数流程第 3 步。数值与整串口径差 ≤1%（T-TC5 对拍）。
+ */
+function countOpenAiStyleChunked(
+  encoding: { encode(text: string): { readonly length: number } },
+  serialized: string,
+  tiktokenModel: string,
+  scope: string,
+): number {
+  const overhead = countOpenAiStyleMessages(
+    encoding,
+    [wrapSerializedPromptAsSystemMessage("")],
+    tiktokenModel,
+  );
+  return (
+    overhead +
+    countChunksWithL2(serialized, scope, (chunk) => encoding.encode(chunk).length)
+  );
 }
 
 async function resolveVendorModelId(
@@ -92,6 +181,60 @@ export async function countPromptLlmInput(
     (await serializePromptLlmInput(layout, ctx)) +
     serializeToolsForTokenCount(params.tools);
 
+  // ---- L1 整串缓存（message-token-cache Step 3）----
+  // 键 = 内容指纹（hashContent(整串+tools 串) 前 16 hex，与 L2 块键同口径——
+  // 64 bit 碰撞在会话级 32 条 LRU 下概率可忽略，且免为 L1 单独引完整
+  // hashContent 导出）× 计数器身份（模型/override/家族/驱动，任一变化换键）。
+  // 驱动内部查 L1 传**空 sessionId**：键已含内容指纹，跨会话共享安全；sessionId
+  // 段的会话语义由读口层（resolve-current-prompt-tokens）决定，驱动不越层。
+  const scope = buildCounterScope({
+    vendorModelId,
+    tokenizerOverride: override,
+    tokenizerFamily: family,
+    driverName: DRIVER_NAME,
+  });
+  const contentHash = chunkHash16(serialized);
+  const cached = promptWholeCache.lookup("", scope, contentHash);
+  if (cached != null) {
+    // L1 命中：内容与计数器身份都没变，口径三件套原样返回，不进任何计数路径。
+    return pack(savedModelId, vendorModelId, family, cached.tokenCount, cached.counterKind, cached.estimated);
+  }
+
+  const { tokenCount, counterKind, estimated } = await computeCount(
+    family,
+    serialized,
+    vendorModelId,
+    scope,
+  );
+
+  // miss 后写 L1（无论哪一档——WEB/SP 整串读数同样受益于「无变更重复刷新」）。
+  promptWholeCache.record("", scope, contentHash, {
+    tokenCount,
+    counterKind,
+    estimated,
+  });
+
+  return pack(
+    savedModelId,
+    vendorModelId,
+    family,
+    tokenCount,
+    counterKind,
+    estimated,
+  );
+}
+
+/** 各档实际计数（L1 miss 后进入；tiktoken / 兜底档走 L2 块流程，WEB/SP 整串）。 */
+async function computeCount(
+  family: TokenizerFamily,
+  serialized: string,
+  vendorModelId: string,
+  scope: string,
+): Promise<{
+  readonly tokenCount: number;
+  readonly counterKind: TokenCounterKind;
+  readonly estimated: boolean;
+}> {
   let tokenCount: number;
   let counterKind: TokenCounterKind;
   let estimated = false;
@@ -99,7 +242,7 @@ export async function countPromptLlmInput(
   try {
     if (family === "heuristic") {
       // 家族本身就解析不出（未知模型 / 用户强制 heuristic）→ 走默认 cl100k 近似。
-      tokenCount = fallbackCount(serialized);
+      tokenCount = fallbackCount(serialized, scope);
       counterKind = "heuristic";
       estimated = true;
     } else if (family === "tiktoken" || family === "gpt2") {
@@ -111,48 +254,55 @@ export async function countPromptLlmInput(
       if (encoding == null) {
         // 模型名不被 tiktoken 认识（编码表建不起来）→ 仍走真分词器近似，
         // 只是降级到默认 cl100k，而不是退回字符折算。
-        tokenCount = fallbackCount(serialized);
+        tokenCount = fallbackCount(serialized, scope);
         counterKind = "heuristic";
         estimated = true;
-        return pack(savedModelId, vendorModelId, family, tokenCount, counterKind, estimated);
+        return { tokenCount, counterKind, estimated };
       }
-      tokenCount = countOpenAiStyleMessages(
-        encoding,
-        [wrapSerializedPromptAsSystemMessage(serialized)],
-        tiktokenModel,
-      );
+      tokenCount = countOpenAiStyleChunked(encoding, serialized, tiktokenModel, scope);
       // 精确档：真 tiktoken 家族读数，counterKind 如实报 `tiktoken`。
       counterKind = "tiktoken";
+      // cr-tok-1：强制档必须如实标 estimated。当 tiktoken 身份来自 override
+      // 强制（读口对 WEB/SP 家族传 "tiktoken"，或用户显式强制）而非模型自身
+      // 解析时，这里算的是 cl100k 对非 OpenAI 家族的**近似**，不是该家族真
+      // 分词器读数——若谎报 est:false，上层会按精确档处理：标签漏掉 `gpt ≈`、
+      // 压缩阈值跳过 0.85 保守系数、L1 还会把条目收进 pendingWrites 跨重启
+      // 落 KKV（promptWholeCache 只收精确档的约束被绕过）。判定口径：auto
+      // 下模型自身解析不出 tiktoken 家族 ⇒ 身份来自强制。gpt 系模型（auto
+      // 即 tiktoken）不受影响，仍为精确档 est:false。
+      if (
+        family === "tiktoken" &&
+        resolveTokenizerFamily(vendorModelId, "auto") !== "tiktoken"
+      ) {
+        estimated = true;
+      }
     } else if (WEB_FAMILIES.has(family)) {
       const web = await countWebFamilyPrompt(family, serialized);
       tokenCount = web.count;
-      counterKind = family;
+      // 资产加载失败时 estimated=true 且读数已退到 cl100k 近似——此时 counterKind
+      // 必须跟着降级为 heuristic，否则家族名冒充精确读数，压缩阈值会跳过 0.85
+      // 安全系数（fallback-caliber-align C 线：修 WEB/SP 失败分支谎报）。
+      counterKind = web.estimated ? "heuristic" : family;
       estimated = web.estimated;
     } else if (SP_FAMILIES.has(family)) {
       const sp = await countSentencePieceFamilyPrompt(family, serialized);
       tokenCount = sp.count;
-      counterKind = family;
+      // SP 家族同理：加载失败 → cl100k 近似 + heuristic，不冒充家族级精确读数。
+      counterKind = sp.estimated ? "heuristic" : family;
       estimated = sp.estimated;
     } else {
       // 未来新增的家族尚未接上真 tokenizer：走默认 cl100k 近似而非字符折算。
-      tokenCount = fallbackCount(serialized);
+      tokenCount = fallbackCount(serialized, scope);
       counterKind = "heuristic";
       estimated = true;
     }
   } catch {
-    tokenCount = fallbackCount(serialized);
+    tokenCount = fallbackCount(serialized, scope);
     counterKind = "heuristic";
     estimated = true;
   }
 
-  return pack(
-    savedModelId,
-    vendorModelId,
-    family,
-    tokenCount,
-    counterKind,
-    estimated,
-  );
+  return { tokenCount, counterKind, estimated };
 }
 
 function pack(

@@ -5,6 +5,7 @@ import ai.djl.sentencepiece.SpTokenizer
 import org.json.JSONObject
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Assume.assumeTrue
 import org.junit.Test
 import java.io.File
@@ -45,16 +46,26 @@ class TokenizerParityTest {
     }
   }
 
+  @Test
+  fun unknownFamilyPropagatesExceptionInsteadOfHeuristicFallback() {
+    // 新契约：无资产家族不再折算 heuristic，异常必须从计数路径直接传播（T-FA5）。
+    try {
+      countNative("You are helpful.\n\nuser: Hello", "gpt-4o")
+      fail("无资产家族应抛 IllegalStateException 而非返回折算值")
+    } catch (_: IllegalStateException) {
+      // 预期：异常传播
+    }
+  }
+
   private data class NativeCount(val tokenCount: Int, val estimated: Boolean)
 
   private fun countNative(serialized: String, family: String): NativeCount {
-    val spec =
-      TokenizerAssetPaths.forFamily(family)
-        ?: return NativeCount(TokenizerEngine.heuristic(serialized, family).tokenCount, true)
+    // 失败（无资产 spec / kind 未知）由 resolveAssetSpecFor 直接抛异常传播。
+    val spec = TokenizerEngine.resolveAssetSpecFor(family)
     return when (spec.kind) {
       "json" -> countWebNative(serialized, family, spec)
       "model" -> countSpNative(serialized, family, spec)
-      else -> NativeCount(TokenizerEngine.heuristic(serialized, family).tokenCount, true)
+      else -> throw IllegalStateException("家族 $family 的资产类型未知: ${spec.kind}")
     }
   }
 
@@ -63,12 +74,14 @@ class TokenizerParityTest {
     family: String,
     spec: AssetPathSpec,
   ): NativeCount {
-    val asset = resolveAssetFile("tokenizers/${spec.primary}") ?: return heuristicNative(serialized, family)
+    val asset =
+      resolveAssetFile("tokenizers/${spec.primary}")
+        ?: throw IllegalStateException("家族 $family 的 WEB 分词器资产缺失")
     val tokenizer =
       try {
         HuggingFaceTokenizer.newInstance(Paths.get(asset.absolutePath))
-      } catch (_: Throwable) {
-        return heuristicNative(serialized, family)
+      } catch (e: Throwable) {
+        throw IllegalStateException("家族 $family 的 WEB 分词器加载失败: ${e.message}", e)
       }
     val count =
       WebPromptConverter.countWebSerialized(serialized) { text ->
@@ -82,20 +95,17 @@ class TokenizerParityTest {
     family: String,
     spec: AssetPathSpec,
   ): NativeCount {
-    val asset = resolveAssetFile("tokenizers/${spec.primary}") ?: return heuristicNative(serialized, family)
+    val asset =
+      resolveAssetFile("tokenizers/${spec.primary}")
+        ?: throw IllegalStateException("家族 $family 的 SP 分词器资产缺失")
     return try {
       SpTokenizer(Paths.get(asset.absolutePath)).use { tokenizer ->
         val ids = tokenizer.processor.encode(serialized)
         NativeCount(ids.size, estimated = false)
       }
-    } catch (_: Throwable) {
-      heuristicNative(serialized, family)
+    } catch (e: Throwable) {
+      throw IllegalStateException("家族 $family 的 SP 分词器加载或编码失败: ${e.message}", e)
     }
-  }
-
-  private fun heuristicNative(serialized: String, family: String): NativeCount {
-    val h = TokenizerEngine.heuristic(serialized, family)
-    return NativeCount(h.tokenCount, h.estimated)
   }
 
   private fun resolveAssetFile(relative: String): File? {

@@ -18,7 +18,7 @@ import {
   parseAttachmentsJson,
   serializeAttachmentsJson,
 } from "../../model/message-attachment.schema.js";
-import type { ChatMessage } from "../../model/message.js";
+import type { ChatMessage, ChatMessageHeader } from "../../model/message.js";
 import type { MessageContent } from "../../model/content-block.js";
 import type { MessageUsage } from "../../model/message-usage.js";
 import {
@@ -210,12 +210,20 @@ export class SqliteMessageRepository implements MessageRepository {
     return messages;
   }
 
-  async listBySession(sessionId: string): Promise<ChatMessage[]> {
+  async listBySession(
+    sessionId: string,
+    options?: { includeHidden?: boolean }
+  ): Promise<ChatMessage[]> {
+    // includeHidden=false 在 SQL 层就滤掉 hidden 行：隐藏消息（压缩/置位产
+    // 物）不必捞回并逐条解压正文——大会话（数千条、hidden 占多数）的 UI
+    // 读口（token chip 的 prompt 组装只消费可见历史）曾因此全量解压秒级卡顿。
+    const hiddenFilter =
+      options?.includeHidden === false ? " AND hidden = 0" : "";
     const rows = await queryTemplate(
       this.conn,
       this.parser,
       `SELECT ${MESSAGE_SELECT_COLUMNS}
-       FROM chat_message WHERE session_id = #{sessionId} ORDER BY seq ASC`,
+       FROM chat_message WHERE session_id = #{sessionId}${hiddenFilter} ORDER BY seq ASC`,
       { sessionId }
     );
     return this.mapRows(rows);
@@ -235,6 +243,28 @@ export class SqliteMessageRepository implements MessageRepository {
       { sessionId, fromSeq }
     );
     return this.mapRows(rows);
+  }
+
+  async listMessageHeadersBySession(
+    sessionId: string
+  ): Promise<ChatMessageHeader[]> {
+    // 头投影：只取 id/seq/role/hidden/created_at_ms——不选 content 列即不解压
+    // 正文（压缩/置位等区间逻辑在大会话上曾是秒级全量解压的主源之一）。
+    const rows = await queryTemplate(
+      this.conn,
+      this.parser,
+      `SELECT id, session_id, seq, role, hidden, created_at_ms
+       FROM chat_message WHERE session_id = #{sessionId} ORDER BY seq ASC`,
+      { sessionId }
+    );
+    return rows.map((row) => ({
+      id: String(row.id),
+      sessionId: String(row.session_id),
+      seq: Number(row.seq),
+      role: String(row.role),
+      hidden: Number(row.hidden) === 1,
+      createdAtMs: Number(row.created_at_ms),
+    }));
   }
 
   async countBySession(sessionId: string): Promise<number> {

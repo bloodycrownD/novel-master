@@ -54,6 +54,52 @@ export const SESSION_KKV_DOMAIN_PROMPT_TOKENS = "prompt_tokens" as const;
 export const PROMPT_TOKENS_LAST_USAGE_KEY = "lastPromptUsage" as const;
 
 /**
+ * token_chunks 域：token 计数缓存族的持久化产物（JSON）——L2 块平面缓存
+ * 整表（`infra/tokenizer/logic/token-chunk-cache`）与 L1 整串缓存近期条目
+ * （`infra/tokenizer/logic/prompt-whole-cache`）。
+ *
+ * 治理说明：两者都是纯派生加速数据——条目丢失 / 损坏只退化性能（下一轮
+ * 计数现算回填），不影响任何账本语义，坏行一律静默按 miss 处理。写入口
+ * 径：代际推进且源于**真实刷新**（非预热）时，把当前代整表覆盖写本域；
+ * 读取口径：本地计数开始时若热层对该会话无种子，读本域载入为最旧可用代
+ * 种子（不顶当前代）。会话删除随 session KKV `clearSession` 整表级联清理，
+ * 无独立 GC。
+ */
+export const SESSION_KKV_DOMAIN_TOKEN_CHUNKS = "token_chunks" as const;
+
+/** token_chunks 域单键：当前代块计数整表（紧凑 JSON）。 */
+export const TOKEN_CHUNKS_CACHE_KEY = "chunkCache" as const;
+
+/**
+ * usage_stats 域：用量详情弹窗的会话级展示派生缓存。
+ *
+ * `toolUseCount` 键：会话内 assistant 消息 tool_use 块总数（含 hidden 行）。
+ * 读口（usage-stats getSessionUsageDetail）miss 时现算（解压 assistant 行
+ * 数块）并回填；失效口径：**新增含 tool_use 的消息 / 编辑消息 / 删除消息 /
+ * 回滚截断 / 会话导入清缓存**（message.service 与 rollback/import 的既有
+ * 失效挂点旁路）；hide/show 不失效（含 hidden 口径下可见性变化不改变计数）。
+ * **失效写法是哨兵空串 `""` 而非 delete**（cr-fix-spec-r2 s3/B-1）：读口
+ * 回填前复核「原值是否仍等于 miss 时所见」，防现算期间失效被陈旧回写
+ * 覆盖；`Number.parseInt("")` = NaN 天然当 miss。纯加速数据：行丢失只
+ * 退化性能（下次现算），残留不造成错误读数的责任在失效挂点。会话删除
+ * 走 `clearSession` 整表清。
+ */
+export const SESSION_KKV_DOMAIN_USAGE_STATS = "usage_stats" as const;
+
+/** usage_stats 域单键：会话工具调用总数（十进制字符串）。 */
+export const USAGE_STATS_TOOL_USE_COUNT_KEY = "toolUseCount" as const;
+
+/**
+ * token_chunks 域单键：L1 整串计数近期条目（紧凑 JSON，最多 16 条）。
+ *
+ * 治的是「native 档（WEB/SP 过桥）重启后 L1 清零、重进会话必再付整串原生
+ * 重算」——glm 家族 139KB 提示词实测原生计数 5.8s，而 L2 块缓存对 native
+ * 档不适用（整串过桥、不切块）。条目按内容指纹寻址，重启后 seed 回 L1，
+ * 无变更重进直接命中。只持久化 `estimated:false` 的精确档条目。
+ */
+export const PROMPT_WHOLE_CACHE_KEY = "promptWholeCache" as const;
+
+/**
  * Composer 无叉状态条相关、回滚可按域清空的 kkv 域。
  * - `file_cache` → workplace chip（相对已加载差集）
  * - `user_vfs_pending` → user_ops chip
@@ -81,6 +127,7 @@ export type SessionKkvDomain =
   | typeof SESSION_KKV_DOMAIN_BACKFILL_CURSOR
   | typeof SESSION_KKV_DOMAIN_STREAM_METRICS
   | typeof SESSION_KKV_DOMAIN_PROMPT_TOKENS
+  | typeof SESSION_KKV_DOMAIN_TOKEN_CHUNKS
   | (string & {});
 
 /** 可写入 file_cache 的展示档位（不含 hidden）。 */

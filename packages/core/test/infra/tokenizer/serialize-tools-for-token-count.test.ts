@@ -22,6 +22,7 @@ import {
   createDefaultTokenCounterRegistry,
   serializePromptLlmInput,
   serializeToolsForTokenCount,
+  splitTextIntoChunks,
 } from "../../../src/infra/tokenizer/index.js";
 import { emptyRegistryDeps } from "./registry-test-helpers.js";
 
@@ -124,14 +125,20 @@ describe("本地计数含 tools 段", () => {
     );
     // 期望值必须与实现同一把尺子：node 驱动的 heuristic 档自 ④ 起用真分词器（cl100k）
     // 计数（`counterKind` 仍标 heuristic），所以这里不能再拿 `registry.heuristic.countText`
-    // 的字符折算值去比——那是改版前的契约（旧期望 81，真计数 90）。
-    const expected = countTextWithDefaultEncoding(
-      serialized + serializeToolsForTokenCount(TOOLS)
-    );
-    assert.ok(
-      expected != null,
-      "真分词器计数不可用（编码表建不起来），本用例无法表达「tools 按同一序列化拼接」的契约"
-    );
+    // 的字符折算值去比——那是改版前的契约（旧期望 81，整串真计数 90）。
+    // message-token-cache Step 3（T-TC5 迁移注记）：驱动 heuristic 档挂 L2 块
+    // 流程后，期望从「整串一次增量计数」迁移为「splitTextIntoChunks 块逐个
+    // 计数求和」（本夹具 89 vs 整串 90，差 1 token 属英文串边界效应）。
+    const text = serialized + serializeToolsForTokenCount(TOOLS);
+    let expected = 0;
+    for (const chunk of splitTextIntoChunks(text)) {
+      const perChunk = countTextWithDefaultEncoding(chunk);
+      assert.ok(
+        perChunk != null,
+        "真分词器计数不可用（编码表建不起来），本用例无法表达「tools 按同一序列化拼接」的契约"
+      );
+      expected += perChunk;
+    }
     assert.equal(withTools.tokenCount, expected);
     assert.ok(withTools.tokenCount > without.tokenCount);
   });

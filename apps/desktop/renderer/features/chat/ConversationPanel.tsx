@@ -32,6 +32,7 @@ import {
   ipcMessagesList,
   ipcMessagesRollback,
   ipcMessagesSetFloor,
+  ipcPromptChatTokenLabel,
   ipcSessionsGetComposerDraft,
   ipcSessionsProjectComposerStatus,
   ipcSessionsSetComposerDraft,
@@ -63,6 +64,7 @@ import {
 import { MessageList } from './MessageList';
 import { RealPromptPanel } from './RealPromptPanel';
 import { AgentStreamMetricsBar } from './AgentStreamMetricsBar';
+import { MetricsDetailPopover } from './MetricsDetailPopover';
 import { useReadOnlyRunProbe } from './useReadOnlyRunProbe';
 
 interface ConversationPanelProps {
@@ -209,6 +211,37 @@ export function ConversationPanel({
     initialText: string;
   } | null>(null);
   const [confirmState, setConfirmState] = useState<ConfirmState>(null);
+
+  // ===== metric-detail-sheet：指标条用量详情弹窗状态 =====
+  // 弹窗独立于流式采样（打开只取一次，不随 250ms 级 tick 重渲）。
+  const metricsBarButtonRef = useRef<HTMLButtonElement | null>(null);
+  const [metricsDetailOpen, setMetricsDetailOpen] = useState(false);
+  // 「上下文占用」行现成读数：打开时经 drawer 同通道（ipcPromptChatTokenLabel）
+  // 取一次并格式化，弹窗内只渲染不取数（P0-2 拍板，与 chip 同源）。
+  const [metricsContextUsageLabel, setMetricsContextUsageLabel] = useState<
+    string | null
+  >(null);
+
+  const openMetricsDetail = useCallback(() => {
+    void ipcPromptChatTokenLabel({ projectId, sessionId })
+      .then(res => {
+        // stats.label 由 main 侧 core formatContextUsageLabel 单源拼好
+        // （tl 后 drawer/chip 同源），renderer 纯透传（X1）。
+        setMetricsContextUsageLabel(res.ok ? res.data.label : null);
+      })
+      .catch(() => {
+        setMetricsContextUsageLabel(null);
+      })
+      .finally(() => {
+        setMetricsDetailOpen(true);
+      });
+  }, [projectId, sessionId]);
+
+  // 切换会话即关弹窗：锚点与数据都按会话归属，跨会话残留会显示错读数。
+  useEffect(() => {
+    setMetricsDetailOpen(false);
+    setMetricsContextUsageLabel(null);
+  }, [sessionId]);
 
   const reloadMessages = useCallback(async () => {
     const result = await ipcMessagesList({ sessionId });
@@ -907,7 +940,19 @@ export function ConversationPanel({
         hidden={tab !== 'chat'}
       >
         {streamMetrics != null ? (
-          <AgentStreamMetricsBar metrics={streamMetrics} />
+          <AgentStreamMetricsBar
+            metrics={streamMetrics}
+            buttonRef={metricsBarButtonRef}
+            onClick={openMetricsDetail}
+          />
+        ) : null}
+        {metricsDetailOpen && metricsBarButtonRef.current != null ? (
+          <MetricsDetailPopover
+            anchorEl={metricsBarButtonRef.current}
+            sessionId={sessionId}
+            contextUsageLabel={metricsContextUsageLabel}
+            onClose={() => setMetricsDetailOpen(false)}
+          />
         ) : null}
         <div ref={chatMessagesRef} className="chat-messages" id="chat-messages">
           <MessageList

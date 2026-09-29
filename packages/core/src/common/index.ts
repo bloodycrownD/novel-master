@@ -13,6 +13,11 @@ export {
 export {
   formatTokenCount,
   formatPromptTokenUsageLabel,
+  // token-source-label：badge 与完整占用标签的单源（infra/tokenizer 与
+  // public/provider 经 logic 文件再导出同一份实现）。
+  formatTokenSourceBadge,
+  formatContextUsageLabel,
+  type TokenSourceBadge,
 } from "./format-token-count.js";
 export { normalizeYamlError } from "./normalize-yaml-error.js";
 export {

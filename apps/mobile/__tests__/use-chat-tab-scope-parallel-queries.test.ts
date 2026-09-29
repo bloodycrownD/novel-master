@@ -12,7 +12,7 @@
  * 只 mock runtime 与 meta/token 服务；被测 hook 用真实实现。
  * 受控 deferred：挂起中「另一路已发起」即并行证明（串行版必须等前路完成）。
  */
-import {beforeEach, describe, expect, it, jest} from '@jest/globals';
+import {afterEach, beforeEach, describe, expect, it, jest} from '@jest/globals';
 import React from 'react';
 import TestRenderer, {act} from 'react-test-renderer';
 import {useChatTabScope} from '../src/screens/tabs/chat-tab/useChatTabScope';
@@ -148,6 +148,16 @@ describe('useChatTabScope 查询并行化（T-C1）', () => {
     });
   });
 
+  // token 标签刷新已套 300ms 防抖（T-TC6）：用例内放行 meta 后链尾会挂起
+  // 防抖计时，若不吸收会在测试结束后触发 setState（act 警告）。这里统一
+  // 等过窗口再收尾。
+  afterEach(async () => {
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 350));
+      await flushMicrotasks();
+    });
+  });
+
   describe('reloadLists', () => {
     it('get 与 listByProject 并行发起（发起时间交叠），结果与串行版等价', async () => {
       const {runtime, pendingProjectGet, pendingSessionsList} =
@@ -264,8 +274,14 @@ describe('useChatTabScope 查询并行化（T-C1）', () => {
       expect(api.agentMeta?.source).toBe('session');
       expect(api.agentMeta?.agentName).toBe('Agent');
       expect(api.agentMeta?.modelLabel).toBe('Model');
-      // 成功链尾随的 token 标签刷新（mock 立即返回 ''）。
-      expect(api.agentMeta?.tokenLabel).toBe('');
+      // 成功链尾随的 token 标签刷新已套 300ms 防抖（T-TC6）：meta 落位时
+      // 仍是占位 '…'，trailing 窗口过后（mock 立即返回 ''）标签才落位。
+      expect(api.agentMeta?.tokenLabel).toBe('…');
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 350));
+        await flushMicrotasks();
+      });
+      expect(scope.api().agentMeta?.tokenLabel).toBe('');
     });
 
     it('在途重入合并为一轮（首屏三触发去重）；落定后新调用新起一轮', async () => {

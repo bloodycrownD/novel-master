@@ -16,10 +16,10 @@
  * - **失效**：{@link invalidateSessionApiPromptTokenEntry} 双删（Map + KKV），
  *   口径同 `persistFinalRateQuietly`：失效是 best-effort，失败只影响下次读数。
  *
- * 值 JSON：`{promptTokens, atMs, savedModelId?}`；`promptTokens` 与 `atMs` 同为
- * 必填，缺失或类型不对一律当 miss（`promptTokens` 域是新增域，线上不存在缺
- * `atMs` 的旧行，退化成 0 会让时效判据失真）；唯一可选指纹 `savedModelId` 缺失
- * /非法即省略该键。
+ * 值 JSON：`{promptTokens, atMs, savedModelId?, anchorSeq?}`；`promptTokens` 与
+ * `atMs` 同为必填，缺失或类型不对一律当 miss（`prompt_tokens` 域是新增域，线上
+ * 不存在缺 `atMs` 的旧行，退化成 0 会让时效判据失真）；可选指纹 `savedModelId`
+ * 与可选增量锚点 `anchorSeq` 缺失/非法即省略该键（老行照常解析、无需迁移）。
  *
  * **曾经多带的两个可选加固字段（run 身份、写入时的末尾消息 seq）已移除**——它们
  * 实查为零读取方：只有写入、序列化搬运与测试断言，没有任何生产代码读出来做判断
@@ -41,13 +41,21 @@ import { sessionApiPromptTokenCache } from "./session-api-prompt-token-cache.js"
  * 落库/回读一条 prompt 占用值所需的全部字段。
  *
  * `atMs` 是写入时刻（epoch 毫秒）：供「上次请求」标签与时效判定（例如
- * 未来若加 TTL）使用；`savedModelId` 是唯一可选指纹字段，缺失时消费方按
+ * 未来若加 TTL）使用；`savedModelId` 是指纹字段，缺失时消费方按
  * 「无指纹可比对」的兼容路径处理。
+ *
+ * `anchorSeq` 是采样时刻提示词已含的末条消息 seq（增量锚点，2026-09-29
+ * 加）：读口命中 API 值时用它把「采样之后追加的消息」折成增量估算加回去
+ * （metric 基线+增量同款语义）。agent-runner 每 step 请求完成后回锚写入。
+ * 与此前被移除的「写入时末尾消息 seq」加固字段不同——那个是零读取方的
+ * 死字段，这个有真实消费方（读口 delta 估算）。老行没有该键 → 读口 delta
+ * 按 0 处理，值原样使用。
  */
 export interface SessionApiPromptTokenEntry {
   readonly promptTokens: number;
   readonly atMs: number;
   readonly savedModelId?: string;
+  readonly anchorSeq?: number;
 }
 
 /** 可选指纹字段：非空字符串才带上该键（缺省即无该指纹）。 */
@@ -59,6 +67,15 @@ function optionalSavedModelId(
     : {};
 }
 
+/** 可选增量锚点：有限数且 ≥ 0 才带上（缺省即无锚点、读口不加增量）。 */
+function optionalAnchorSeq(
+  anchorSeq: number | undefined
+): { anchorSeq?: number } {
+  return anchorSeq != null && Number.isFinite(anchorSeq) && anchorSeq >= 0
+    ? { anchorSeq }
+    : {};
+}
+
 /** 序列化为 session KKV 值（紧凑 JSON）。 */
 export function serializeSessionApiPromptTokenEntry(
   entry: SessionApiPromptTokenEntry
@@ -67,6 +84,7 @@ export function serializeSessionApiPromptTokenEntry(
     promptTokens: entry.promptTokens,
     atMs: entry.atMs,
     ...optionalSavedModelId(entry.savedModelId),
+    ...optionalAnchorSeq(entry.anchorSeq),
   });
 }
 
@@ -99,7 +117,7 @@ export function parseSessionApiPromptTokenEntry(
   if (parsed == null || typeof parsed !== "object") {
     return null;
   }
-  const { promptTokens, atMs, savedModelId } =
+  const { promptTokens, atMs, savedModelId, anchorSeq } =
     parsed as Partial<Record<keyof SessionApiPromptTokenEntry, unknown>>;
   if (
     typeof promptTokens !== "number" ||
@@ -116,6 +134,11 @@ export function parseSessionApiPromptTokenEntry(
     atMs,
     ...(typeof savedModelId === "string" && savedModelId.length > 0
       ? { savedModelId }
+      : {}),
+    ...(typeof anchorSeq === "number" &&
+    Number.isFinite(anchorSeq) &&
+    anchorSeq >= 0
+      ? { anchorSeq }
       : {}),
   };
 }
@@ -137,6 +160,7 @@ export async function readSessionApiPromptTokenEntry(
       promptTokens: hot.promptTokens,
       atMs: hot.updatedAt,
       ...optionalSavedModelId(hot.savedModelId),
+      ...optionalAnchorSeq(hot.anchorSeq),
     };
   }
   if (sessionKkv == null) {
@@ -167,6 +191,7 @@ export async function readSessionApiPromptTokenEntry(
     promptTokens: entry.promptTokens,
     updatedAt: entry.atMs,
     ...optionalSavedModelId(entry.savedModelId),
+    ...optionalAnchorSeq(entry.anchorSeq),
   });
   return entry;
 }
@@ -186,6 +211,7 @@ export function writeSessionApiPromptTokenEntry(
     promptTokens: entry.promptTokens,
     updatedAt: entry.atMs,
     ...optionalSavedModelId(entry.savedModelId),
+    ...optionalAnchorSeq(entry.anchorSeq),
   });
   if (sessionKkv == null) {
     return;

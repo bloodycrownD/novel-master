@@ -1,14 +1,21 @@
 /**
- * 压缩执行器：直调化的 hide-message + kkv 清理 + token cache 失效。
+ * 压缩执行器：直调化的 hide-message + token cache 失效。
  *
  * 本模块把原先散落在 `event-orchestrator.service.ts`（kkv 清理 + token cache 失效）
  * 与 `hide-message.handler.ts`（hide-message action）里的逻辑收拢成一个入口，
  * 让 agent-runner / 手动压缩不再绕事件编排器。
  *
- * 行为口径与旧路径完全一致：
+ * 行为口径（2026-09-29 修正，用户拍板「压缩与文件缓存无关」）：
  * 1. 按 `hideStartDepth` 构造 open-ended depth slice，调用 hide-message；
- * 2. 成功后清 session kkv 的 `rule_snapshot` + `file_cache` 两个域（保留 `user_vfs_pending`）；
- * 3. 失效该会话的 prompt token 进程内缓存。
+ * 2. 失效该会话的 prompt token 进程内缓存（可见 prompt 变了，API 占用必须丢）。
+ *
+ * **不再清 `rule_snapshot` + `file_cache`**（历史行为，自置位照搬）：压缩只
+ * 改消息可见性，不改文件内容与规则——这两个域按内容寻址、与消息面正交，
+ * 清掉只会强制下一次组装全量重读 VFS + 重写缓存（压缩卡顿的主源之一）。
+ * 更重要的是压缩发生在 agent 回合**中段**，回合快照语义要求前缀回合内冻结
+ * （`loadOrFillFileCache` 命中无条件返回），中途清缓存反而破坏该不变量。
+ * 用户主动的「重置」语义（置位 setMessageFloorAtMessage、导入缓存对齐）仍清
+ * 这两域，不受影响。
  *
  * @module service/compaction-conditions/run-compaction
  */
@@ -16,10 +23,6 @@
 import { runHideMessageAction } from "@/service/compaction-conditions/hide-message.action.js";
 import type { DepthSlice } from "@/domain/depth/logic/depth-slice.js";
 import { DEFAULT_HIDE_START_DEPTH } from "@/domain/compaction-conditions/model/compaction-conditions.js";
-import {
-  SESSION_KKV_DOMAIN_FILE_CACHE,
-  SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
-} from "@/domain/session-kkv/model/session-kkv-domains.js";
 import { invalidateSessionApiPromptTokenEntry } from "@/infra/tokenizer/logic/session-api-prompt-token-store.js";
 import type { MessageService } from "@/service/chat/message.port.js";
 import type { MessageTranscriptEffectsService } from "@/service/chat/message-transcript-effects.port.js";
@@ -46,7 +49,8 @@ export interface RunCompactionResult {
 }
 
 /**
- * 执行一次压缩：hide-message → 清 rule_snapshot/file_cache → 失效 prompt token cache。
+ * 执行一次压缩：hide-message → 失效 prompt token cache（rule_snapshot/file_cache
+ * 不清，见模块头注释）。
  *
  * hide-message 抛异常时返回 `{ ok: false }`，不向上传播——与旧编排器
  * `emit()` 在 result.ok 为 false 时跳过 kkv 清理的语义一致（异常路径下不清缓存）。
@@ -67,18 +71,10 @@ export async function runCompaction(
     return { ok: false };
   }
 
-  // hide-message 成功后才清缓存：与旧编排器 `result.ok` 门控同口径。
-  await deps.sessionKkv.clearDomain(
-    params.sessionId,
-    SESSION_KKV_DOMAIN_RULE_SNAPSHOT
-  );
-  await deps.sessionKkv.clearDomain(
-    params.sessionId,
-    SESSION_KKV_DOMAIN_FILE_CACHE
-  );
   // 压缩后可见 prompt 变了：API 占用双删（进程内热层 + session KKV 行）。
   // 落库值若残留，重启后会按 api 口径参与阈值判定（跳掉 heuristic 安全
   // 系数），陈旧值会放大误判，所以这里必须连 KKV 行一起清。
+  // rule_snapshot / file_cache 不清——见模块头注释（2026-09-29 修正）。
   await invalidateSessionApiPromptTokenEntry(
     deps.sessionKkv,
     params.sessionId

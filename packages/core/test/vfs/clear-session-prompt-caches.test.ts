@@ -1,5 +1,7 @@
 /**
- * clearSessionPromptCaches 单测：三件套顺序清空、pending 域保留、故障注入吞错。
+ * clearSessionPromptCaches 单测：四件套（rule_snapshot/file_cache 两域清空、
+ * prompt token cache 失效、工具调用数缓存失效写哨兵）、pending 域保留、
+ * 故障注入吞错。
  *
  * 用内存 SessionKkv（createMemorySessionKkv）做故障注入，
  * 不依赖真实 DB（DB 集成路径由 character-card-import / vfs-zip-io 测试覆盖）。
@@ -9,7 +11,9 @@ import { afterEach, describe, it } from "node:test";
 import {
   SESSION_KKV_DOMAIN_FILE_CACHE,
   SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
+  SESSION_KKV_DOMAIN_USAGE_STATS,
   SESSION_KKV_DOMAIN_USER_VFS_PENDING,
+  USAGE_STATS_TOOL_USE_COUNT_KEY,
 } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
 import { sessionApiPromptTokenCache } from "../../src/infra/tokenizer/logic/session-api-prompt-token-cache.js";
 import type { SessionKkvService } from "../../src/service/session-kkv/session-kkv.port.js";
@@ -53,6 +57,29 @@ describe("clearSessionPromptCaches", () => {
       "[]",
     );
     assert.equal(sessionApiPromptTokenCache.get(sessionId), undefined);
+  });
+
+  it("第四件：工具调用数缓存失效写哨兵空串（cr-fix-spec-r2 s3/C-3）", async () => {
+    const kkv = createMemorySessionKkv();
+    const sessionId = "s-clear-tool-use";
+    await kkv.set(
+      sessionId,
+      SESSION_KKV_DOMAIN_USAGE_STATS,
+      USAGE_STATS_TOOL_USE_COUNT_KEY,
+      "12",
+    );
+
+    await clearSessionPromptCaches(sessionId, kkv);
+
+    // 哨兵语义（s3/B-1）：键在、值非数字（parseInt("")=NaN 当 miss）——
+    // 与 delete 不同，读口靠它复核「原值仍等于 miss 时所见」防陈旧回写。
+    const value = await kkv.get(
+      sessionId,
+      SESSION_KKV_DOMAIN_USAGE_STATS,
+      USAGE_STATS_TOOL_USE_COUNT_KEY,
+    );
+    assert.equal(value, "");
+    assert.ok(Number.isNaN(Number.parseInt(value ?? "", 10)));
   });
 
   it("clearDomain 抛错时吞错 + console.warn，且短路后续步骤不抛出", async () => {

@@ -1,83 +1,26 @@
 /**
- * OpenAI-style single-message token count (ST `/openai/count` path).
+ * 本模块已下沉 core（fallback-caliber-align D 线）：实现移至
+ * `@novel-master/core` 的 `infra/tokenizer/logic/count-openai-style-message`，
+ * node 驱动与 RN 侧共用同一份。这里保留原路径做**全量 re-export**——下游
+ * `count-prompt-llm-input.ts` 与 `impl/web-tokenizer-counter.ts` 的 import
+ * 不动；导出面必须覆盖原模块的全部符号（四个函数 + 两个接口），少一个下游
+ * 就编译失败。
  *
- * @module logic/count-openai-style-message
- */
-
-import { countTokens } from "@novel-master/core/provider";
-import type { Tiktoken } from "tiktoken";
-
-export interface OpenAiStyleMessage {
-  readonly role: string;
-  readonly content: string;
-  readonly name?: string;
-}
-
-export interface CountOpenAiStyleMessageOptions {
-  /** Claude web path uses full prompt conversion without `-2` name adjustment. */
-  readonly full?: boolean;
-}
-
-/**
- * Counts tokens for chat-style messages using OpenAI billing overhead.
+ * 类型差异说明：原首参类型 `import type { Tiktoken } from "tiktoken"` 在下沉版
+ * 改为本地窄接口 `TokenEncoder`（core 无 tiktoken 运行时依赖）；WASM tiktoken
+ * 的 `Tiktoken.encode` 返回 `number[]`，结构兼容，调用方无需改动。
  *
- * 骨架走 core 公共纯函数 {@link countTokens}（`precise` 档），
- * 这里只负责把 tiktoken encoding 适配成 `ChatTokenEncoder`。
- * 与 SillyTavern `/api/tokenizers/openai/count` 行为一致。
+ * @module tokenizer-driver-node/logic/count-openai-style-message
  */
-export function countOpenAiStyleMessages(
-  encoding: Tiktoken,
-  messages: readonly OpenAiStyleMessage[],
-  tiktokenModel: string,
-): number {
-  return countTokens(
-    (text) => encoding.encode(text).length,
-    messages,
-    "precise",
-    { tiktokenModel },
-  );
-}
 
-/**
- * Wraps serialized prompt as a single system message for ST-aligned counting.
- */
-export function wrapSerializedPromptAsSystemMessage(
-  serialized: string,
-): OpenAiStyleMessage {
-  return { role: "system", content: serialized };
-}
-
-/** Converts messages to a Claude-style prompt string for web tokenizers. */
-export function convertMessagesForWebTokenizer(
-  messages: readonly OpenAiStyleMessage[],
-): string {
-  const parts: string[] = [];
-  for (const msg of messages) {
-    const role = msg.role.toLowerCase();
-    const content = msg.content ?? "";
-    if (role === "system") {
-      parts.push(content);
-    } else if (role === "user" || role === "human") {
-      parts.push(`\n\nHuman: ${content}`);
-    } else if (role === "assistant") {
-      parts.push(`\n\nAssistant: ${content}`);
-    } else {
-      parts.push(`\n\n${msg.role}: ${content}`);
-    }
-  }
-  if (!parts.some((p) => p.includes("Assistant:"))) {
-    parts.push("\n\nAssistant:");
-  }
-  return parts.join("").trimStart();
-}
-
-/**
- * Web tokenizer count aligned with ST `countWebTokenizerTokens`.
- */
-export function countWebTokenizerMessages(
-  encode: (text: string) => { length: number },
-  messages: readonly OpenAiStyleMessage[],
-): number {
-  const converted = convertMessagesForWebTokenizer(messages);
-  return encode(converted).length;
-}
+export {
+  countOpenAiStyleMessages,
+  wrapSerializedPromptAsSystemMessage,
+  convertMessagesForWebTokenizer,
+  countWebTokenizerMessages,
+} from "@novel-master/core/provider";
+export type {
+  OpenAiStyleMessage,
+  CountOpenAiStyleMessageOptions,
+  TokenEncoder,
+} from "@novel-master/core/provider";
