@@ -20,8 +20,9 @@ import type { Row, SqlValue } from "@/infra/tdbc/types.js";
 import type { SessionKkvEntry } from "../../model/session-kkv-entry.js";
 import { SESSION_KKV_DOMAIN_FILE_CACHE } from "../../model/session-kkv-domains.js";
 import {
+  compressFileCacheBodyForBlob,
   decodeFileCacheBlobBody,
-  encodeFileCacheValue,
+  hashFileCachePayload,
 } from "../../logic/file-cache-blob-codec.js";
 import { serializeFileCachePayload } from "@/domain/workplace/logic/rule-snapshot-codec.js";
 import type { SessionKkvRepository } from "../session-kkv.port.js";
@@ -61,8 +62,12 @@ export class SqliteSessionKkvRepository implements SessionKkvRepository {
     value: string
   ): Promise<void> {
     if (domain === SESSION_KKV_DOMAIN_FILE_CACHE) {
-      const encoded = encodeFileCacheValue(value);
-      if (encoded == null) {
+      // 先哈希、查 blob 是否已存在、未命中才压缩（file-cache-blob-codec）：
+      // 压缩后回填（置位/压缩清域后的常规路径）内容多数未变，blob 已在库
+      // 里时压缩产物会被 INSERT OR IGNORE 整体丢弃——Hermes 纯 JS deflate
+      // 一个大文件几十 ms、N 个文件串起来就是可感知的卡顿。
+      const hashed = hashFileCachePayload(value);
+      if (hashed == null) {
         // 退化分支（理论不发生）：value 非 FileCachePayload 形态 JSON 时
         // codec 返回 null，退回旧表存储，保证 get 对任意字符串逐字节还原。
         await this.setLegacyEntry(sessionId, domain, key, value);
@@ -72,19 +77,29 @@ export class SqliteSessionKkvRepository implements SessionKkvRepository {
       // 绝不悬空引用（get 失败返回 null 走既有 miss 自愈链路）。
       // INSERT OR IGNORE 幂等：同 hash 已存在则复用原行，不改 encoding/bytes
       //（对齐 SqliteVfsContentStore.put 的复用分支）。
-      await executeTemplate(
+      const existing = await queryTemplate<{ hit: number }>(
         this.conn,
         this.parser,
-        `INSERT OR IGNORE INTO session_file_cache_blob
-           (content_hash, encoding, bytes, byte_len)
-         VALUES (#{contentHash}, #{encoding}, #{bytes}, #{byteLen})`,
-        {
-          contentHash: encoded.contentHash,
-          encoding: encoded.encoding,
-          bytes: encoded.bytes,
-          byteLen: encoded.byteLen,
-        }
+        `SELECT 1 AS hit FROM session_file_cache_blob
+         WHERE content_hash = #{contentHash}`,
+        { contentHash: hashed.contentHash }
       );
+      if (existing.length === 0) {
+        const blob = compressFileCacheBodyForBlob(hashed.body);
+        await executeTemplate(
+          this.conn,
+          this.parser,
+          `INSERT OR IGNORE INTO session_file_cache_blob
+             (content_hash, encoding, bytes, byte_len)
+           VALUES (#{contentHash}, #{encoding}, #{bytes}, #{byteLen})`,
+          {
+            contentHash: hashed.contentHash,
+            encoding: blob.encoding,
+            bytes: blob.bytes,
+            byteLen: blob.byteLen,
+          }
+        );
+      }
       await executeTemplate(
         this.conn,
         this.parser,
@@ -96,8 +111,8 @@ export class SqliteSessionKkvRepository implements SessionKkvRepository {
         {
           sessionId,
           key,
-          contentHash: encoded.contentHash,
-          mtimeMs: encoded.mtimeMs,
+          contentHash: hashed.contentHash,
+          mtimeMs: hashed.mtimeMs,
         }
       );
       return;

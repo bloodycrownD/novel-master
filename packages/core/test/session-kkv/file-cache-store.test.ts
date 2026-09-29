@@ -7,7 +7,11 @@ import {
   RULE_SNAPSHOT_CANON_KEY,
 } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
 import { serializeFileCachePayload } from "../../src/domain/workplace/logic/rule-snapshot-codec.js";
-import { encodeFileCacheValue } from "../../src/domain/session-kkv/logic/file-cache-blob-codec.js";
+import {
+  compressFileCacheBodyForBlob,
+  encodeFileCacheValue,
+  hashFileCachePayload,
+} from "../../src/domain/session-kkv/logic/file-cache-blob-codec.js";
 import { VFS_CONTENT_ENCODING_ZLIB_B64 } from "../../src/domain/vfs/content-store/logic/blob-bytes-codec.js";
 import { VFS_CONTENT_ENCODING_ZLIB } from "../../src/domain/vfs/content-store/logic/zlib-codec.js";
 import type { TdbcConnection } from "@novel-master/core";
@@ -48,6 +52,43 @@ async function blobCountByHash(
   );
   return Number(rows[0]!.n);
 }
+
+describe("file-cache-blob-codec 拆分（先哈希后压缩）", () => {
+  it("hashFileCachePayload：hash/mtime/body 三件套；非 payload 形态返回 null", () => {
+    const value = serializeFileCachePayload({body: "正文", mtimeMs: 42});
+    const hashed = hashFileCachePayload(value);
+    assert.notEqual(hashed, null);
+    assert.equal(hashed!.mtimeMs, 42);
+    assert.equal(hashed!.body, "正文");
+    assert.equal(
+      hashed!.contentHash,
+      encodeFileCacheValue(value)!.contentHash,
+      "与 encodeFileCacheValue 的 hash 同源"
+    );
+    assert.equal(hashFileCachePayload("not-a-payload"), null);
+  });
+
+  it("compressFileCacheBodyForBlob：zlib 二进制形态（encoding/bytes 一致）", () => {
+    const blob = compressFileCacheBodyForBlob("正文");
+    assert.equal(blob.encoding, VFS_CONTENT_ENCODING_ZLIB);
+    assert.equal(blob.byteLen, blob.bytes.byteLength);
+  });
+
+  it("T-R-skip：blob 已存在时重复 set 仍逐字节还原（存在性检查路径不破坏写合同）", async () => {
+    const ctx = getNovelMasterTestContext();
+    const sk = createSessionKkvService(ctx.conn);
+    const sid = `skip-${testIsolationSuffix()}`;
+    const value = serializeFileCachePayload({body: "压缩后回填的常见形态", mtimeMs: 7});
+    await sk.set(sid, SESSION_KKV_DOMAIN_FILE_CACHE, "full:/a.md", value);
+    // 清 entry 模拟压缩/置位清域（blob 表全库共享、clearDomain 只删 entry），
+    // 再 set 同内容 → 走「blob 已存在跳过压缩」路径。
+    await sk.clearDomain(sid, SESSION_KKV_DOMAIN_FILE_CACHE);
+    await sk.set(sid, SESSION_KKV_DOMAIN_FILE_CACHE, "full:/a.md", value);
+    const got = await sk.get(sid, SESSION_KKV_DOMAIN_FILE_CACHE, "full:/a.md");
+    assert.equal(got, value);
+    assert.equal(await blobCountByHash(ctx.conn, hashFileCachePayload(value)!.contentHash), 1);
+  });
+});
 
 describe("session file_cache 分流存储（两新表）", () => {
   it("T-R1 set→get 逐字节还原（中文 body、任意 mtimeMs）", async () => {

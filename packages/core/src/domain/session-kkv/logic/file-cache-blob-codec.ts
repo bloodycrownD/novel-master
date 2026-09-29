@@ -33,9 +33,53 @@ export interface EncodedFileCacheValue {
   readonly mtimeMs: number;
 }
 
+/** {@link hashFileCachePayload} 产物：entry 引用行字段 + 待压缩明文。 */
+export interface HashedFileCachePayload {
+  /** sha256(body)，blob 表主键（mtime 不参与哈希）。 */
+  readonly contentHash: string;
+  /** 留在 entry 引用行的 mtime——同 body 不同 mtime 共享 blob 且各自还原。 */
+  readonly mtimeMs: number;
+  /** body 明文（未压缩）：blob 行已存在时无需再压缩，直接丢弃。 */
+  readonly body: string;
+}
+
+/**
+ * 只哈希不压缩：set 侧「先查 blob 是否已存在、未命中才压缩」的前半段。
+ * 压缩（尤其 Hermes 纯 JS deflate）远贵于哈希——压缩后回填（置位/压缩清
+ * 域后的常规路径）内容多数未变，blob 已在库里时压缩产物会被 INSERT OR
+ * IGNORE 整体丢弃，纯属浪费。
+ */
+export function hashFileCachePayload(
+  value: string
+): HashedFileCachePayload | null {
+  const payload = parseFileCachePayload(value);
+  if (payload == null) {
+    return null;
+  }
+  return {
+    contentHash: hashContent(payload.body),
+    mtimeMs: payload.mtimeMs,
+    body: payload.body,
+  };
+}
+
+/** 压缩 body 为 blob 行字段（blob 未命中时才调用）。 */
+export function compressFileCacheBodyForBlob(body: string): {
+  encoding: string;
+  bytes: Uint8Array;
+  byteLen: number;
+} {
+  const compressed = compressZlib(new TextEncoder().encode(body));
+  const bytes = tightBytes(compressed);
+  return {
+    encoding: VFS_CONTENT_ENCODING_ZLIB,
+    bytes,
+    byteLen: bytes.byteLength,
+  };
+}
+
 /**
  * 将 file_cache 域 value（FileCachePayload JSON）编码为两表写库字段。
- *
  * hash 只算 body：同 body 不同 mtime 的会话共享同一 blob 行。压缩编码恒为
  * `zlib` 二进制 Uint8Array（与 SqliteVfsContentStore 的 put 同一形态）；
  * 存量 `zlib-b64` / `zlib` + base64 文本行只由读侧 decodeFileCacheBlobBody 兜底。
@@ -46,19 +90,17 @@ export interface EncodedFileCacheValue {
  *   session_kkv_entry 原表存储，保证 get 逐字节还原的合同对任意字符串成立。
  */
 export function encodeFileCacheValue(value: string): EncodedFileCacheValue | null {
-  const payload = parseFileCachePayload(value);
-  if (payload == null) {
+  const hashed = hashFileCachePayload(value);
+  if (hashed == null) {
     return null;
   }
-  const contentHash = hashContent(payload.body);
-  const compressed = compressZlib(new TextEncoder().encode(payload.body));
-  const bytes = tightBytes(compressed);
+  const blob = compressFileCacheBodyForBlob(hashed.body);
   return {
-    contentHash,
-    encoding: VFS_CONTENT_ENCODING_ZLIB,
-    bytes,
-    byteLen: bytes.byteLength,
-    mtimeMs: payload.mtimeMs,
+    contentHash: hashed.contentHash,
+    encoding: blob.encoding,
+    bytes: blob.bytes,
+    byteLen: blob.byteLen,
+    mtimeMs: hashed.mtimeMs,
   };
 }
 

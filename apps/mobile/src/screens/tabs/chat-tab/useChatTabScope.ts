@@ -97,7 +97,12 @@ export function useChatTabScope({
       setAgentMeta(prev => (prev == null ? prev : {...prev, tokenLabel: ''}));
       return;
     }
-    setAgentMeta(prev => (prev == null ? prev : {...prev, tokenLabel: '…'}));
+    // 已有标签时保留旧值而非 '…'：压缩/发送后的重算在大上下文上可达数秒
+    // （native 整串计数），旧读数先顶着、新值落地即替换；会话切换路径由
+    // loadChatAgentMeta 重建 meta（tokenLabel 归 ''）先清场，不会串显。
+    setAgentMeta(prev =>
+      prev == null ? prev : {...prev, tokenLabel: prev.tokenLabel || '…'},
+    );
     try {
       const tokenLabel = await loadChatPromptTokenLabelResilient(runtime, {
         projectId,
