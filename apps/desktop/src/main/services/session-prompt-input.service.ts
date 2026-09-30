@@ -13,6 +13,30 @@ export interface SessionPromptScope {
   readonly sessionId: string;
 }
 
+/**
+ * chip 刷新的中途弃权信号（r3-dt-align 第 3 层，与 mobile 同款）：读口的
+ * build 与发送链共享 main 进程的单事件循环与单 SQLite 连接，会话消息一多，
+ * build 整串装配本身就是秒级重活。**build 分段间 + build/resolve 关键边界
+ * 检查**（本类只覆盖 build 段内部的分段检查点；build→resolve 之间那道与
+ * resolve 段内部的整串级重活分别由读口的边界检查点与 core 抛的
+ * `PromptTokenResolveBailedError` 负责——三类弃权点在读口同款 catch 里收成
+ * 同一个 null 哨兵）命中即抛本错误，调用方（token 读口）捕获后按「保留旧
+ * 标签」收场，**不触发 fallback 重算**。
+ *
+ * 非读口消费方（预览 `prompt-preview.service` 等）不传 shouldBail，行为不变。
+ */
+export class ChatPromptBuildBailedError extends Error {
+  constructor() {
+    super("chat prompt build bailed (run in flight)");
+    this.name = "ChatPromptBuildBailedError";
+  }
+}
+
+export interface BuildSessionPromptInputOptions {
+  /** 分段间防御性退出判定；真值即抛 {@link ChatPromptBuildBailedError}。 */
+  readonly shouldBail?: () => boolean;
+}
+
 export interface SessionPromptInputBundle {
   readonly definition: AgentDefinition;
   readonly layout: AgentPromptLayout;
@@ -30,11 +54,23 @@ export async function buildSessionPromptInput(
   runtime: DesktopNovelMasterRuntime,
   scope: SessionPromptScope,
   definition?: AgentDefinition,
+  options?: BuildSessionPromptInputOptions,
 ): Promise<SessionPromptInputBundle> {
+  // 分段弃权：每段之间看一眼「run 是不是已经起步了」。mobile 真机实锤过
+  // 这条链会把 POST 派发从 +1.2s 拖到 +19.6s（build 与发送链抢同一条 SQLite
+  // 连接），desktop main 是同进程同连接，问题一模一样。
+  const shouldBail = options?.shouldBail;
+  const bail = (): void => {
+    if (shouldBail?.() === true) {
+      throw new ChatPromptBuildBailedError();
+    }
+  };
+
   const resolved =
     definition ??
     (await resolveAgentForProject(runtime, scope.projectId, scope.sessionId))
       .definition;
+  bail();
 
   // 只拉可见消息（SQL 层滤 hidden）：chip 的 prompt 组装只消费可见历史，
   // 大会话里 hidden（压缩/置位产物）往往占多数，全量拉回并逐条解压正文
@@ -43,6 +79,7 @@ export async function buildSessionPromptInput(
     scope.sessionId,
     { includeHidden: false },
   );
+  bail();
   const wtScope = {
     kind: "session" as const,
     projectId: scope.projectId,
@@ -60,6 +97,7 @@ export async function buildSessionPromptInput(
       layout: resolved.prompts,
     },
   );
+  bail();
   const messages = await prepareUserMessagesForPrompt(visibleMessages, {
     sessionId: scope.sessionId,
     sessionKkv: runtime.sessionKkv,
@@ -72,6 +110,7 @@ export async function buildSessionPromptInput(
     skills: runtime.skills(),
     projectId: scope.projectId,
   });
+  bail();
   const ctx: PromptRenderContext = {
     workplaceDisplay,
     messages,

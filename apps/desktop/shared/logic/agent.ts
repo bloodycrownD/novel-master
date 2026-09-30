@@ -9,6 +9,7 @@ export type { AgentDefinition } from "@novel-master/core/agent";
 
 export {
   DEFAULT_SUBAGENT_DEFINITION,
+  PENDING_RUN_ID,
   shouldAcceptRunEvent,
   shouldApplyTranscriptReload,
   shouldIgnoreStaleRunStarted,

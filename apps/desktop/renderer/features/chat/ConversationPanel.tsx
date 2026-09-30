@@ -36,6 +36,7 @@ import {
   ipcSessionsGetComposerDraft,
   ipcSessionsProjectComposerStatus,
   ipcSessionsSetComposerDraft,
+  onPromptChatTokenUpdated,
 } from '@/ipc/client';
 import { useShellNav } from '@/providers/ShellNavProvider';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
@@ -60,6 +61,7 @@ import { MessageEditModal } from './MessageEditModal';
 import {
   handleRunFinishedAbortRetain,
   handleStepCommittedAbortRetain,
+  shouldReloadOnRunFinished,
 } from './conversation-abort-retain';
 import { MessageList } from './MessageList';
 import { RealPromptPanel } from './RealPromptPanel';
@@ -227,7 +229,13 @@ export function ConversationPanel({
       .then(res => {
         // stats.label 由 main 侧 core formatContextUsageLabel 单源拼好
         // （tl 后 drawer/chip 同源），renderer 纯透传（X1）。
-        setMetricsContextUsageLabel(res.ok ? res.data.label : null);
+        //
+        // data 为 null = 读口本轮被抑制（run 在途）/ 中途弃权（r3-dt-align）：
+        // 与抽屉 chip 同口径——不写 state，弹窗里已有的读数原样留着，不退化成
+        // 占位/空值。main 会在 run 结束后补跑一拍并推送精确档。
+        if (res.ok && res.data != null) {
+          setMetricsContextUsageLabel(res.data.label);
+        }
       })
       .catch(() => {
         setMetricsContextUsageLabel(null);
@@ -242,6 +250,21 @@ export function ConversationPanel({
     setMetricsDetailOpen(false);
     setMetricsContextUsageLabel(null);
   }, [sessionId]);
+
+  // 两阶段读数的第二相（与 SessionDetailDrawer 同源通道）：弹窗打开期间 main
+  // 后台精确计数完成 → 把「上下文占用」行从估算档（`gpt ≈`）升级为家族记号。
+  // 推送恒为精确档，弹窗不做「不回退」判断（它自己那次取数可能落后于推送）。
+  useEffect(() => {
+    if (!metricsDetailOpen || sessionId == null) {
+      return;
+    }
+    return onPromptChatTokenUpdated((payload) => {
+      if (payload.sessionId !== sessionId || payload.stats.estimated) {
+        return;
+      }
+      setMetricsContextUsageLabel(payload.stats.label);
+    });
+  }, [metricsDetailOpen, sessionId]);
 
   const reloadMessages = useCallback(async () => {
     const result = await ipcMessagesList({ sessionId });
@@ -385,9 +408,21 @@ export function ConversationPanel({
 
   const onRunFinished = useCallback(
     (payload: AgentRunFinishedPayload) => {
-      const shouldReload = shouldApplyTranscriptReload(
+      // r3-run-1 步骤 4（前奏终态强制 reload）：runId 为空串 = core 在前奏检查点
+      // 命中、runner 从未起步。这种 run 一条 delta / step 都没发过，面板上除了
+      // 「已落库的用户消息」之外没有任何可增量更新的东西，所以全量 reload 是唯一
+      // （且安全的）收口方式。
+      //
+      // 不强制会坏在哪：「发送→立刻停止」——abortUiRun 先行（uiRunning=false、
+      // freezeCount!=null），shouldApplyTranscriptReload 两个判据都不满足 →
+      // shouldReload=false；而本轮既没有 step 也没有 assistant 增量，
+      // abort-retain 的 overlay 兜底又是空的（没有半截流式文本）→ 用户消息
+      // 已落库却永不刷新，而 composer 正文已被清空 = 消息凭空消失。
+      // 判据实现与理由见 shouldReloadOnRunFinished 的注释。
+      const shouldReload = shouldReloadOnRunFinished(
         getUiRunning(),
         getTranscriptFreezeCount(),
+        payload.runId,
       );
       const accepted = handleRunFinishedAbortRetain(payload, abortRetainLifecycle, {
         finishUiRun,
