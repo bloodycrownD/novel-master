@@ -278,3 +278,17 @@ constraints:
 blocking_steps: [1, 2, 3, 4, 5, 6, 7, 9, 10]
 optional_steps: [8 (skill load，可量化后裁剪), 11 (manual_user)]
 ```
+
+
+## 实现期补充（dev-loop 执行注记，2026-10-01）
+
+Step 1-8 由四个 impl 节点完成（c3c1dee9 / 34159ea2 / 6dddb0cb / ec2c8c2b），与 spec 的偏离与决策如下：
+
+1. **encodeMessageContent 的删除时序**（nA 偏离 Step 4 表述）：Step 4 时点 `message-content-compaction.ts` 仍在 import 它（Step 3 才删），故函数本体实际随 Step 3（nC）一并删除——spec「随 Step 4 删」的表述按依赖实况修正为「调用点随 Step 1、本体随 Step 3」。
+2. **T-MP3 口径修正**（nB）：原表述「读路径对坏行仍可读（旧压缩内容语义正确）」字面不成立——反向任务与 readRowContent 共用同一纯函数 decodeMessageContent，任务解不开的行读路径同样解不开。按更诚实的口径钉死两条：坏行原样保留压缩字节（明文列绝不被写入错数据，blob 一旦可解立刻读回原正文）+ 读路径 fail-fast 抛错带消息 id（不静默丢行）；「未搬完的好压缩行可读」由 T-MP4 覆盖。
+3. **status 快路径不自愈**（nB 取舍）：`getMessageDecompressStatus` 的标记已置位快路径不做 LIMIT 1 探测（高频轮询展示面不宜每次带库查询），自愈只在低频任务入口——标记与数据脱节最迟下一轮任务入口修正。
+4. **maintenance 测试处置升级**（nC）：`message-content-compaction-maintenance.test.ts` 整删（反向不挂 VACUUM，原断言反向不成立）并在 desktop 侧补更强独立用例（真实搬完一轮、探针统计 VACUUM 下发恰 0 次、覆盖 query+execute 两个口）；`message-content-compaction.test.ts` 整删（骨架用例已由 decompression 测试全量覆盖，采样节流迁移至 status-sampling-throttle）。
+5. **beforeMaintenance/afterMaintenance 语义反转**（nC）：反向任务仅消费旧 pending 欠账时进维护段；desktop service 与 core 注释改述，cr-03 用例改为「维护失败欠账标记保留」口径。
+6. **contentHash 的 in 判**（nD）：readSkillFile 透传三件套时 contentHash 用 `"contentHash" in result` 判——无 hash 行上它真为 null，用 != null 会吞掉键位与可空语义不符。
+7. **hydrate memo 键加 kind:action**（nD）：load 与 read 常共享同一 (entryId, version)，不加 action 会串 wire 缓存。
+8. **known-env**：desktop typecheck 经 core dist 解析类型，dist 陈旧会产生假错误（重建 core 归零，RULE 既有条目再确认）；mobile tsconfig（含 __tests__）595 条既有债不属本迭代，jest 全绿为准。
