@@ -48,6 +48,12 @@ const PACKAGES = [
     cssRel: 'code-editor/styles/editor.css',
     htmlRel: 'code-editor/index.html',
   },
+  {
+    id: 'composer-input',
+    entryRel: 'composer-input/webview/main.ts',
+    cssRel: 'composer-input/styles/composer-input.css',
+    htmlRel: 'composer-input/index.html',
+  },
 ];
 
 function readWeb(rel) {

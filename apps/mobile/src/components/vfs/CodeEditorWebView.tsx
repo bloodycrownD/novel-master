@@ -24,6 +24,7 @@ import type {ThemeTokens} from '@/theme/tokens';
 import {
   encodeHostToCodeEditor,
   decodeCodeEditorToHost,
+  type CodeEditorSelection,
   type CodeEditorTheme,
   type HostToCodeEditorMessage,
 } from './CodeEditorBridge';
@@ -37,6 +38,8 @@ export type CodeEditorWebViewProps = {
   readonly value: string;
   readonly path: string;
   readonly onChange: (text: string) => void;
+  /** 光标/选区上报（打字、点选、程序化写入的回声都走这里；宿主自行按需消费）。 */
+  readonly onSelectionChange?: (selection: CodeEditorSelection) => void;
   readonly style?: StyleProp<ViewStyle>;
   readonly testID?: string;
   readonly onFocusChange?: (focused: boolean) => void;
@@ -44,6 +47,11 @@ export type CodeEditorWebViewProps = {
 
 export type CodeEditorWebViewHandle = {
   blur: () => void;
+  /**
+   * 程序化整段写入（token 插入等）：光标随写入一次落位。web 侧 suppressChange
+   * 包裹不回抛 change；调用方自行推进本地 value/光标状态。
+   */
+  setText: (text: string, selection?: CodeEditorSelection) => void;
 };
 
 function themeFromTokens(tokens: ThemeTokens): CodeEditorTheme {
@@ -52,6 +60,9 @@ function themeFromTokens(tokens: ThemeTokens): CodeEditorTheme {
     text: tokens.text,
     textSecondary: tokens.textSecondary,
     primary: tokens.primary,
+    // 胶囊底色由宿主派生下发（capsule/C-orch-1）：与 composer-input 同口径的
+    // primary + 0x22 alpha，web 侧 applyHostTheme 条件式写入 --primary-muted。
+    primaryMuted: `${tokens.primary}22`,
     surface: tokens.surface,
     borderLight: tokens.borderLight,
   };
@@ -61,15 +72,17 @@ export const CodeEditorWebView = forwardRef<
   CodeEditorWebViewHandle,
   CodeEditorWebViewProps
 >(function CodeEditorWebView(
-  {value, path, onChange, style, testID, onFocusChange},
+  {value, path, onChange, onSelectionChange, style, testID, onFocusChange},
   ref,
 ) {
   const {tokens} = useTheme();
   const webRef = useRef<WebView>(null);
   const [webReady, setWebReady] = useState(false);
   const onChangeRef = useRef(onChange);
+  const onSelectionChangeRef = useRef(onSelectionChange);
   const onFocusChangeRef = useRef(onFocusChange);
   onChangeRef.current = onChange;
+  onSelectionChangeRef.current = onSelectionChange;
   onFocusChangeRef.current = onFocusChange;
 
   const postToWeb = useCallback((message: HostToCodeEditorMessage) => {
@@ -90,8 +103,23 @@ export const CodeEditorWebView = forwardRef<
       blur: () => {
         postToWeb({v: 1, type: 'blur', payload: {}});
       },
+      setText: (text: string, selection?: CodeEditorSelection) => {
+        postToWeb({
+          v: 1,
+          type: 'setDocument',
+          payload:
+            selection == null
+              ? {text, path}
+              : {
+                  text,
+                  path,
+                  selectionStart: selection.start,
+                  selectionEnd: selection.end,
+                },
+        });
+      },
     }),
-    [postToWeb],
+    [postToWeb, path],
   );
 
   const handleMessage = useCallback((event: WebViewMessageEvent) => {
@@ -103,6 +131,16 @@ export const CodeEditorWebView = forwardRef<
       }
       if (message.type === 'change') {
         onChangeRef.current(String(message.payload.text ?? ''));
+        return;
+      }
+      if (message.type === 'selectionChange') {
+        const payload = message.payload;
+        const start = Number(payload.start);
+        const end = Number(payload.end);
+        onSelectionChangeRef.current?.({
+          start: Number.isFinite(start) ? start : 0,
+          end: Number.isFinite(end) ? end : 0,
+        });
         return;
       }
       if (message.type === 'focus') {

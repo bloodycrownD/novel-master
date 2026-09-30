@@ -6,6 +6,7 @@ import {Platform, Pressable, StyleSheet, Text, View} from 'react-native';
 import {type VfsScope} from '@novel-master/core/vfs';
 import {AgentPickerModal} from '@/components/agent/AgentPickerModal';
 import {ChatComposer} from '@/components/chat/ChatComposer';
+import type {ComposerFullscreenPayload} from '@/components/chat/ChatComposer';
 import {ChatMetaBar} from '@/components/chat/ChatMetaBar';
 import {ChatStreamMetricsBarLive} from '@/components/chat/ChatStreamMetricsBarLive';
 import {ChatTranscriptWebView} from '@/components/chat/ChatTranscriptWebView';
@@ -33,6 +34,11 @@ import {useInterruptedPartialCommit} from './useInterruptedPartialCommit';
 export type ChatConversationPanelProps = {
   tokens: ThemeTokens;
   visible: boolean;
+  /**
+   * ⛶ 全屏编辑入口：父层（ChatTabScreen）注入，透传给 ChatComposer。
+   * 本面板不做导航（chat-tab 目录零导航依赖），只当通道。
+   */
+  onOpenComposerFullscreen?: (payload: ComposerFullscreenPayload) => void;
 };
 
 /**
@@ -45,6 +51,7 @@ export type ChatConversationPanelProps = {
 export function ChatConversationPanel({
   tokens,
   visible,
+  onOpenComposerFullscreen,
 }: ChatConversationPanelProps) {
   const ctx = useChatTabContext();
   const controller = useChatTabController();
@@ -127,6 +134,12 @@ export function ChatConversationPanel({
     }
     return {kind: 'session', projectId, sessionId};
   }, [projectId, sessionId]);
+
+  // 会话 scope 是否就绪：⛶ 入口的可用性判据（照 onOpenSessionDetail 先例，
+  // 回调只在 scope 就绪时注入）。未就绪时传 undefined，ChatComposer 按
+  // 「回调为 null 即 disabled」的既有通路把 ⛶ 置灰——而不是让用户点了
+  // 一个静默 return 的死按钮（fullscreen/B-1）。
+  const scopeReady = projectId != null && sessionId != null;
 
   const emitWorkspaceBackState = useCallback(() => {
     if (setWorkspaceBackState == null) {
@@ -276,6 +289,9 @@ export function ChatConversationPanel({
         canResumeWithoutInput={canResumeWithoutInput}
         lastMessageIsPlainUserText={lastMessageIsPlainUserText}
         draftRestoreToken={draftRestoreToken}
+        onOpenComposerFullscreen={
+          scopeReady ? onOpenComposerFullscreen : undefined
+        }
         // 「更多」按钮已在 ChatComposer 内注释隐藏，这里不再传 onOpenMore，
         // 避免传了却没人响应造成误解。压缩/切换等入口改由会话详情页抽屉承担。
         // onOpenMore={() => setSessionDrawerOpen(true)}

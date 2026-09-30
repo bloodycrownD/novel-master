@@ -14,6 +14,12 @@ export type CodeEditorTheme = {
   readonly text: string;
   readonly textSecondary: string;
   readonly primary: string;
+  /**
+   * primary 的低透明派生（胶囊底色 --primary-muted）。宿主算色、口径与
+   * composer-input 一致（capsule/C-orch-1）：web 侧只做条件式写入，不自拼 alpha。
+   * 可选——缺省不写入，由 web 侧 CSS 兜底。
+   */
+  readonly primaryMuted?: string;
   readonly surface: string;
   readonly borderLight: string;
 };
@@ -22,15 +28,32 @@ export type CodeEditorTheme = {
 export type HostToCodeEditorMessage =
   | BridgeEnvelope<'init', {theme: CodeEditorTheme}>
   | BridgeEnvelope<'themeUpdate', {theme: CodeEditorTheme}>
-  | BridgeEnvelope<'setDocument', {text: string; path: string}>
+  | BridgeEnvelope<
+      'setDocument',
+      {
+        text: string;
+        path: string;
+        /** 外部受控选区（token 插入等程序化写入的光标一次落位）。 */
+        selectionStart?: number;
+        selectionEnd?: number;
+      }
+    >
   | BridgeEnvelope<'blur', Record<string, never>>;
 
 /** Code editor WebView → host */
 export type CodeEditorToHostMessage =
   | BridgeEnvelope<'ready', {version: number}>
   | BridgeEnvelope<'change', {text: string}>
+  /** 光标/选区上报（typeahead 的活跃查询判定在 RN 侧）。 */
+  | BridgeEnvelope<'selectionChange', {start: number; end: number}>
   | BridgeEnvelope<'focus', Record<string, never>>
   | BridgeEnvelope<'blur', Record<string, never>>;
+
+/** 编辑器上报的选区（plain 文本偏移，与 change 的 text 同一坐标系）。 */
+export type CodeEditorSelection = {
+  readonly start: number;
+  readonly end: number;
+};
 
 export function encodeHostToCodeEditor(
   message: HostToCodeEditorMessage,

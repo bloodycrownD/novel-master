@@ -1,12 +1,16 @@
 /**
- * T-AT1 / T-AT2 / T-AT3 / T-SC1 + 既有 T-ATD*：
- * Mobile `@路径` 插入、mention 口径、原子删、无 attach chip、选中色。
+ * T-ATD2/3/4 / T-AT3 / T-SC1 + v1.5.9 回归（壳桥协议版）：
+ * Mobile `@路径` token 口径、无 attach chip、选中色载荷、打字不回写。
+ *
+ * WebView 化后本文件的两块断言面变了：core 纯函数用例（token 生成 / 扫描 /
+ * 候选过滤 / 活动查询）原样保留；组件层不再断言 TextInput children / mention
+ * span / markup 对账（main 版 mention 库全链已随单引擎 WebView 消失），
+ * 改断言宿主桥消息（mock WebView 范式照 `composer-input-webview.test.tsx`）。
+ * 原子删行为在 web 侧（`atomic-range-delete` 纯函数套件 T-AD*）另有覆盖。
  */
 import {describe, expect, it, jest} from '@jest/globals';
 import React from 'react';
-import {TextInput} from 'react-native';
 import TestRenderer, {act} from 'react-test-renderer';
-import {parseValue} from 'react-native-controlled-mentions';
 import {
   partitionComposerChipAttachments,
   scanAtPathAttachments,
@@ -20,19 +24,19 @@ import {
   replaceActiveAtWithToken,
 } from '@/components/chat/composer-at-path';
 import {
-  formatAtPathMentionMarkup,
-  mentionValueToPlain,
-  mergeProgrammaticPlainIntoMentionValue,
-  promotePlainMentions,
-  suggestionFromAtPathToken,
-  tryAtomicMentionDelete,
-  type ComposerAtPathTriggersConfig,
-} from '@/components/chat/composer-at-path-mention';
-import {
   ComposerAtPathInput,
   type ComposerAtPathInputHandle,
 } from '@/components/chat/ComposerAtPathInput';
+import {
+  COMPOSER_INPUT_BRIDGE_VERSION,
+  decodeHostToComposerInput,
+  type HostToComposerInputMessage,
+} from '@/components/chat/ComposerInputBridge';
 import {darkTheme, lightTheme} from '@/theme/tokens';
+import {
+  clearMockWebViewPostMessages,
+  mockWebViewPostMessages,
+} from '../test-utils/react-native-webview-mock';
 
 jest.mock('@/theme/ThemeProvider', () => {
   const {lightTheme: theme} =
@@ -48,14 +52,68 @@ jest.mock('@/theme/ThemeProvider', () => {
   };
 });
 
-const triggersConfig: ComposerAtPathTriggersConfig = {
-  atPath: {
-    trigger: '@',
-    allowedSpacesCount: 0,
-    isInsertSpaceAfterMention: true,
-    getPlainString: mention => `@${mention.name}`,
-  },
-};
+/** 找 composer 宿主 WebView（与本包 URI 判据，勿用位置判据）。 */
+function findComposerWebView(
+  root: TestRenderer.ReactTestInstance,
+): TestRenderer.ReactTestInstance {
+  const WebViewMock = require('react-native-webview')
+    .default as React.ComponentType<unknown>;
+  const node = root
+    .findAllByType(WebViewMock)
+    .find(instance =>
+      String(instance.props?.source?.uri ?? '').includes('composer-input'),
+    );
+  if (node == null) {
+    throw new Error('composer WebView 未挂载');
+  }
+  return node;
+}
+
+/** 模拟 web → host 上报（信封 v 取本包 BRIDGE_V）。 */
+function simulateWebMessage(
+  root: TestRenderer.ReactTestInstance,
+  type: string,
+  payload: Record<string, unknown> = {},
+): void {
+  const webView = findComposerWebView(root);
+  act(() => {
+    webView.props.onMessage?.({
+      nativeEvent: {
+        data: JSON.stringify({v: COMPOSER_INPUT_BRIDGE_VERSION, type, payload}),
+      },
+    });
+  });
+}
+
+function simulateWebReady(root: TestRenderer.ReactTestInstance): void {
+  simulateWebMessage(root, 'ready', {version: COMPOSER_INPUT_BRIDGE_VERSION});
+}
+
+function hostMessagesFrom(clearAfterIndex: number): HostToComposerInputMessage[] {
+  return mockWebViewPostMessages
+    .slice(clearAfterIndex)
+    .map(raw => decodeHostToComposerInput(raw));
+}
+
+function hostTypesSince(clearAfterIndex: number): string[] {
+  return hostMessagesFrom(clearAfterIndex).map(message => message.type);
+}
+
+function hostPayloadOfType(clearAfterIndex: number, type: string): unknown {
+  const found = hostMessagesFrom(clearAfterIndex).find(
+    message => message.type === type,
+  );
+  return found == null ? null : found.payload;
+}
+
+/** 冲净 effect 与异步批（real timers）。 */
+async function flush(): Promise<void> {
+  await act(async () => {
+    await new Promise<void>(resolve => {
+      setTimeout(resolve, 0);
+    });
+  });
+}
 
 describe('composer-at-path (T-ATD* / T-AT* / T-SC1)', () => {
   it('T-ATD2: Picker token 为 @path；目录尾 /；扫描落库带前导 /', () => {
@@ -100,89 +158,6 @@ describe('composer-at-path (T-ATD* / T-AT* / T-SC1)', () => {
     expect(countScannedAtPathAttachments('看')).toBe(0);
   });
 
-  it('T-AT1: mergeProgrammaticPlain 后 mention part 存在；plain 无 {@}', () => {
-    const markup = `见 ${formatAtPathMentionMarkup(
-      '/a.md',
-    )} 与 ${formatAtPathMentionMarkup('/notes/')} 补充`;
-    const plain = mentionValueToPlain(markup);
-    expect(plain).toBe('见 @/a.md 与 @/notes/ 补充');
-    expect(plain.includes('{@}')).toBe(false);
-    expect(plain.includes('<span')).toBe(false);
-    expect(suggestionFromAtPathToken('@/a.md')).toEqual({
-      id: '/a.md',
-      name: '/a.md',
-    });
-
-    const withPicker = mergeProgrammaticPlainIntoMentionValue(
-      '',
-      '见 @/a.md ',
-      triggersConfig,
-    );
-    expect(mentionValueToPlain(withPicker)).toBe('见 @/a.md ');
-    expect(withPicker.includes('{@}')).toBe(true);
-    expect(mentionValueToPlain(withPicker).includes('{@}')).toBe(false);
-    const state = parseValue(withPicker, [triggersConfig.atPath]);
-    expect(state.parts.some(p => p.data != null)).toBe(true);
-  });
-
-  it('T-AT2: 原子删整段 @/path；手输纯文本不成 tag', () => {
-    // 手输纯文本不提升
-    const withHandTyped = mergeProgrammaticPlainIntoMentionValue(
-      '见 @/x ',
-      '见 @/x ',
-      triggersConfig,
-    );
-    expect(withHandTyped).toBe('见 @/x ');
-    expect(withHandTyped.includes('{@}')).toBe(false);
-
-    // 选择器再插入 @/a.md → 仅新增段成 mention
-    const withPicker = mergeProgrammaticPlainIntoMentionValue(
-      withHandTyped,
-      '见 @/x @/a.md ',
-      triggersConfig,
-    );
-    expect(mentionValueToPlain(withPicker)).toBe('见 @/x @/a.md ');
-    expect(withPicker.includes(formatAtPathMentionMarkup('/a.md'))).toBe(true);
-    expect(withPicker.includes(formatAtPathMentionMarkup('/x'))).toBe(false);
-
-    const state = parseValue(withPicker, [triggersConfig.atPath]);
-    expect(state.parts.some(p => p.data != null)).toBe(true);
-
-    // 退一格碰到 mention → 整段删
-    const tokenEnd = '见 @/x @/a.md'.length;
-    const oneCharDeleted = `${state.plainText.slice(
-      0,
-      tokenEnd - 1,
-    )}${state.plainText.slice(tokenEnd)}`;
-    const afterAtomic = tryAtomicMentionDelete(
-      withPicker,
-      oneCharDeleted,
-      triggersConfig,
-    );
-    expect(afterAtomic).not.toBeNull();
-    expect(mentionValueToPlain(afterAtomic!)).toBe('见 @/x  ');
-    expect(afterAtomic!.includes('{@}')).toBe(false);
-
-    // 手输纯文本 @/x：退格不原子删
-    const hand = '见 @/x';
-    const handEnd = hand.length;
-    const handDeleted = `${hand.slice(0, handEnd - 1)}${hand.slice(handEnd)}`;
-    expect(
-      tryAtomicMentionDelete(hand, handDeleted, triggersConfig),
-    ).toBeNull();
-  });
-
-  it('T-AT2b: 纯文本快速路径——无 mention 标记时打字/删除均直接短路', () => {
-    // 长纯文本：无论打字（文本变长）还是删除，都不得进入全文解析路径
-    const long = '很长的纯文本'.repeat(200);
-    expect(
-      tryAtomicMentionDelete(long, long + '字', triggersConfig),
-    ).toBeNull();
-    expect(
-      tryAtomicMentionDelete(long, long.slice(0, long.length - 3)),
-    ).toBeNull();
-  });
-
   it('T-AT3: 仅 @path 扫描为 source:attach，不进状态 chip', () => {
     const scanned = scanAtPathAttachments('请看 @/a.md');
     expect(scanned.length).toBeGreaterThan(0);
@@ -192,71 +167,149 @@ describe('composer-at-path (T-ATD* / T-AT* / T-SC1)', () => {
     expect(attach).toHaveLength(scanned.length);
   });
 
-  it('T-SC1: selectionColor 用 tokens.selection，≠ primary 原色', () => {
+  it('T-SC1: 宿主 init.theme 载荷带 tokens.selection（≠ primary 原色）', async () => {
     expect(lightTheme.selection).not.toBe(lightTheme.primary);
     expect(darkTheme.selection).not.toBe(darkTheme.primary);
     expect(lightTheme.selection.startsWith(lightTheme.primary)).toBe(true);
     expect(darkTheme.selection.startsWith(darkTheme.primary)).toBe(true);
 
+    // 选中色从 TextInput.selectionColor 改为 web 主题（::selection）驱动：
+    // 断言面落在宿主 init.theme 载荷。
+    clearMockWebViewPostMessages();
     const onChangeText = jest.fn();
-    let tree: TestRenderer.ReactTestRenderer;
-    act(() => {
+    let tree!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
       tree = TestRenderer.create(
         <ComposerAtPathInput value="" onChangeText={onChangeText} />,
       );
     });
-    const input = tree!.root.findByType(TextInput);
-    expect(input.props.selectionColor).toBe(lightTheme.selection);
-    expect(input.props.selectionColor).not.toBe(lightTheme.primary);
-    // 默认非全程受控：无 pending 时 selection 为 undefined
-    expect(input.props.selection).toBeUndefined();
+    simulateWebReady(tree.root);
+    await flush();
+
+    const init = hostPayloadOfType(0, 'init') as {
+      theme: {selection: string; primary: string; primaryMuted: string};
+    };
+    expect(init.theme.selection).toBe(lightTheme.selection);
+    expect(init.theme.selection).not.toBe(lightTheme.primary);
+    expect(init.theme.primaryMuted).toBe(`${lightTheme.primary}22`);
+    // 默认非全程受控：无 pending 选区时不下发 setSelection。
+    expect(hostTypesSince(0)).not.toContain('setSelection');
+    await act(async () => {
+      tree.unmount();
+    });
   });
 
-  it('带 tag 打字不丢 tag——自愈对账按 plain 空间比较（v1.5.9 回归）', () => {
-    // 场景：草稿水化出 @path tag → 原生上报 plain 形态 + 新字（markup 从不进
-    // 原生 buffer）。旧对账拿 markup 与 plain 比较恒不等 → resolved=truth
-    // 把 markup 整个替换成 plain → tag 一打字必死。修复后 plain 空间比较。
+  it('带 token 打字不丢 token——web 上报 plain 原样落地、宿主不回写（v1.5.9 回归）', async () => {
+    // 场景：草稿水化出带 @path 的文本 → web 侧续打上报 plain + 新字。
+    // 旧实现（mention 库对账）拿 markup 与 plain 比较恒不等 → tag 一打字必死；
+    // 单引擎后高亮只在 web 内按 token 分段，RN 侧 value 恒等于上报文本。
+    clearMockWebViewPostMessages();
+    const onChangeText = jest.fn();
+    const renderShell = (value: string) => (
+      <ComposerAtPathInput value={value} onChangeText={onChangeText} />
+    );
+    let tree!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(renderShell(''));
+    });
+    const root = tree.root;
+    simulateWebReady(root);
+    await flush();
+
     const plain0 = '看 @/chapters/01.md 这段';
-    let text = '';
-    const onChangeText = jest.fn((next: string) => {
-      text = next;
+    const hydrateBaseline = mockWebViewPostMessages.length;
+    await act(async () => {
+      tree.update(renderShell(plain0));
     });
-    let tree: TestRenderer.ReactTestRenderer;
-    act(() => {
-      tree = TestRenderer.create(
-        <ComposerAtPathInput value="" onChangeText={onChangeText} />,
-      );
+    await flush();
+    // 水化：外部 value 变化 → setText 全量写入（web 侧自行按 token 高亮）。
+    expect(hostPayloadOfType(hydrateBaseline, 'setText')).toEqual({
+      text: plain0,
     });
-    act(() => {
-      tree!.update(
-        <ComposerAtPathInput value={plain0} onChangeText={onChangeText} />,
-      );
-    });
-    const input = () => tree!.root.findByType(TextInput);
-    // 水化后：children 为 plain 形态，且存在着色 mention span
-    expect(collectText(input().props.children)).toBe(plain0);
-    expect(hasMentionSpan(input().props.children)).toBe(true);
+    expect(plain0.includes('{@}')).toBe(false);
 
-    // 模拟原生上报：plain + 一个中文字
-    act(() => {
-      input().props.onChangeText(`${plain0}字`);
-    });
-    expect(collectText(input().props.children)).toBe(`${plain0}字`);
-    expect(hasMentionSpan(input().props.children)).toBe(true);
-    expect(text).toBe(`${plain0}字`);
-    act(() => {
-      tree!.unmount();
+    // web 上报：plain + 一个中文字（web 自持真源）。
+    const changeBaseline = mockWebViewPostMessages.length;
+    simulateWebMessage(root, 'change', {text: `${plain0}字`});
+    await flush();
+    expect(onChangeText).toHaveBeenCalledWith(`${plain0}字`);
+    // 打字不回写：change 之后无 setText（回写会打断 IME 组合态）。
+    expect(hostTypesSince(changeBaseline)).not.toContain('setText');
+    await act(async () => {
+      tree.unmount();
     });
   });
 
-  it('程序化 replaceCommittedText 后对外 plain 无 {@}，且短暂设 selection', () => {
+  it('打字回流（父层 value 回声）不被当成外部写入：不下发 setSelection，光标不被拽回', async () => {
+    // 真机实报症状：键盘输入时光标偶尔往回跳一两个字。
+    // 病根：web 上报的文本经父层写回 value 时，壳里没推进差分基线 → 被当成「外部
+    // 写入」→ 按上一拍的 cursor 强制摆一次选区，setSelectionRange 打在正在输入
+    // （尤其 IME 组合态）的 textarea 上就把光标拽回去。
+    clearMockWebViewPostMessages();
+    // 父层回声 + 故意把 cursor 留旧值（模拟 RN 状态滞后一拍）。
+    function Harness() {
+      const [text, setText] = React.useState('');
+      return (
+        <ComposerAtPathInput
+          value={text}
+          cursor={0}
+          onChangeText={next => setText(next)}
+        />
+      );
+    }
+    let tree!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(<Harness />);
+    });
+    const root = tree.root;
+    simulateWebReady(root);
+    await flush();
+
+    const typingBaseline = mockWebViewPostMessages.length;
+    simulateWebMessage(root, 'change', {text: '终于'});
+    await flush();
+    simulateWebMessage(root, 'change', {text: '终于写'});
+    await flush();
+
+    // 回声不算外部写入：全程零 setSelection（有它会打断 IME 组合态并拽光标）。
+    expect(hostTypesSince(typingBaseline)).not.toContain('setSelection');
+    expect(hostTypesSince(typingBaseline)).not.toContain('setText');
+    await act(async () => {
+      tree.unmount();
+    });
+  });
+
+  it('5 行封顶：默认 metrics 的 maxHeight = paddingV×2 + lineHeight×5（不再吃老 160）', async () => {
+    clearMockWebViewPostMessages();
+    let tree!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(
+        <ComposerAtPathInput value="" onChangeText={jest.fn()} />,
+      );
+    });
+    simulateWebReady(tree.root);
+    await flush();
+
+    const init = hostPayloadOfType(0, 'init') as {
+      metrics: {lineHeight: number; paddingV: number; maxHeight: number};
+    };
+    expect(init.metrics.maxHeight).toBe(
+      init.metrics.paddingV * 2 + init.metrics.lineHeight * 5,
+    );
+    await act(async () => {
+      tree.unmount();
+    });
+  });
+
+  it('程序化 replaceCommittedText → setText{text, selection}，对外 plain 无 {@}', async () => {
+    clearMockWebViewPostMessages();
     const handleRef = React.createRef<ComposerAtPathInputHandle>();
     let text = '';
     const onChangeText = jest.fn((next: string) => {
       text = next;
     });
-    let tree: TestRenderer.ReactTestRenderer;
-    act(() => {
+    let tree!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
       tree = TestRenderer.create(
         <ComposerAtPathInput
           ref={handleRef}
@@ -265,70 +318,25 @@ describe('composer-at-path (T-ATD* / T-AT* / T-SC1)', () => {
         />,
       );
     });
+    simulateWebReady(tree.root);
+    await flush();
 
+    const baseline = mockWebViewPostMessages.length;
     act(() => {
       handleRef.current?.replaceCommittedText('见 @/a.md ', 9);
-      tree!.update(
-        <ComposerAtPathInput
-          ref={handleRef}
-          value={text}
-          onChangeText={onChangeText}
-        />,
-      );
     });
+    await flush();
 
-    expect(onChangeText).toHaveBeenCalled();
+    expect(hostPayloadOfType(baseline, 'setText')).toEqual({
+      text: '见 @/a.md ',
+      selectionStart: 9,
+      selectionEnd: 9,
+    });
+    expect(onChangeText).toHaveBeenCalledWith('见 @/a.md ');
     expect(text).toBe('见 @/a.md ');
     expect(text.includes('{@}')).toBe(false);
-
-    const input = tree!.root.findByType(TextInput);
-    expect(input.props.selection).toEqual({start: 9, end: 9});
+    await act(async () => {
+      tree.unmount();
+    });
   });
 });
-
-describe('promotePlainMentions（草稿水化恢复 tag）', () => {
-  it('完整 @path / $skill 全部提为 mention，plain 不变', () => {
-    const config: import('@/components/chat/composer-at-path-mention').ComposerTriggersConfig =
-      {
-        atPath: triggersConfig.atPath,
-        skill: {
-          trigger: '$',
-          allowedSpacesCount: 0,
-          isInsertSpaceAfterMention: true,
-          getPlainString: mention => `$${mention.name}`,
-        },
-      };
-    const plain = '看 @/chapters/01.md 与 $写作技能 再回我';
-    const promoted = promotePlainMentions(plain, config);
-    expect(promoted).toContain('{@}[/chapters/01.md](/chapters/01.md)');
-    expect(promoted).toContain('{$}[写作技能](写作技能)');
-    expect(mentionValueToPlain(promoted)).toBe(plain);
-  });
-
-  it('空串 / 无 token 原样返回', () => {
-    expect(promotePlainMentions('', triggersConfig)).toBe('');
-    expect(promotePlainMentions('普通文本', triggersConfig)).toBe('普通文本');
-  });
-});
-
-function collectText(node: unknown): string {
-  if (node == null || typeof node === 'boolean') return '';
-  if (typeof node === 'string' || typeof node === 'number') return String(node);
-  if (Array.isArray(node)) return node.map(collectText).join('');
-  const el = node as {props?: {children?: unknown}};
-  return el?.props && 'children' in el.props
-    ? collectText(el.props.children)
-    : '';
-}
-
-function hasMentionSpan(node: unknown): boolean {
-  if (Array.isArray(node)) return node.some(hasMentionSpan);
-  const el = node as {
-    props?: {style?: Record<string, unknown>; children?: unknown};
-  };
-  const style = el?.props?.style;
-  if (style && style.borderRadius === 6) return true;
-  return el?.props && 'children' in el.props
-    ? hasMentionSpan(el.props.children)
-    : false;
-}
