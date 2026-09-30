@@ -35,6 +35,11 @@ import {
 import { estimateTokensCjkAware } from "./estimate-tokens-cjk-aware.js";
 import { promptWholeCache } from "./prompt-whole-cache.js";
 import type { PromptWholeCacheEntry } from "./prompt-whole-cache.js";
+import {
+  buildChatTokenEstimateMemoKey,
+  lookupChatTokenEstimateMemo,
+  rememberChatTokenEstimateMemo,
+} from "./chat-token-estimate-memo.js";
 import { resolveTokenizerDriver } from "../../nmtp/logic/registry.js";
 import { resolveTokenizerFamily } from "./resolve-tokenizer-family.js";
 import { readSessionApiPromptTokenEntry } from "./session-api-prompt-token-store.js";
@@ -305,6 +310,27 @@ export async function resolveCurrentPromptTokens(
     // lookupWholeCacheEntry 内部的 chunkHash16 各自把整串过一遍（真机上大
     // 会话就是秒级），检查点放在序列化之后等于「观察点在重活后面」。
     bail();
+    // 估算读数记忆（2026-09-30 切会话重算治本）：同「workplace 指纹 + 消息
+    // 尾戳 + tools + 模型」⇒ 序列化产物必然同值，serialize/hash/count 三趟
+    // 整串线性扫（真机 ~2s）全免。条目也可能来自精确分支的回写（升级语义：
+    // 命中即精确档，与下方 L1 预查同精神，不给「锁死估算档」留口）。
+    const memoKey = buildChatTokenEstimateMemoKey({
+      savedModelId: params.savedModelId,
+      workplaceFingerprint: params.ctx?.workplaceFingerprint,
+      messages: params.ctx?.messages,
+      tools: params.tools,
+    });
+    if (memoKey != null) {
+      const memoHit = lookupChatTokenEstimateMemo(sessionId, memoKey);
+      if (memoHit != null) {
+        return {
+          tokenCount: memoHit.tokenCount,
+          source: "local",
+          estimated: memoHit.estimated,
+          counterKind: memoHit.counterKind,
+        };
+      }
+    }
     const serialized =
       (await serializePromptLlmInput(params.layout, params.ctx)) +
       serializeToolsForTokenCount(params.tools);
@@ -319,10 +345,18 @@ export async function resolveCurrentPromptTokens(
         counterKind: cached.counterKind,
       };
     }
-    const tokenCount = Math.max(
-      params.registry.heuristic.countText(serialized),
-      estimateTokensCjkAware(serialized)
-    );
+    // 单趟计数（2026-09-30）：原 `max(heuristic, CJK 感知)` 是两趟整串扫，
+    // 数学上 CJK 感知恒 ≥ heuristic（CJK 部分 1.64 > 1/3.35，非 CJK 部分
+    // 同为 /3.35，仅在纯非 CJK 文本上差一个 ceil 取整）——大串上第二趟纯
+    // 浪费，直接用 CJK 感知单趟。
+    const tokenCount = estimateTokensCjkAware(serialized);
+    if (memoKey != null) {
+      rememberChatTokenEstimateMemo(sessionId, memoKey, {
+        tokenCount,
+        estimated: true,
+        counterKind: "heuristic",
+      });
+    }
     return {
       tokenCount,
       source: "local",
@@ -341,10 +375,28 @@ export async function resolveCurrentPromptTokens(
   // 弃权检查点②：L1/L2 seed 之后、countPromptLlmInput 之前。家族原生计数器
   // 整串计数（glm ~5.8s）是 resolve 链最重的一步，必须让它成为「起跑前先看
   // 一眼」的形态——落在它之后就等于没有弃权点。
-  // 弃权检查点②：L1/L2 seed 之后、countPromptLlmInput 之前。家族原生计数器
-  // 整串计数（glm ~5.8s）是 resolve 链最重的一步，必须让它成为「起跑前先看
-  // 一眼」的形态——落在它之后就等于没有弃权点。
   bail();
+  // 精确档记忆预查（2026-09-30 真机实锤补）：后台精确升级**每次进会话都会
+  // 跑**，即便 L1 已有整串条目也要付 serialize+hash（真机 ~1.3s）。同键记忆
+  // 里已有精确读数（上一轮升级/完整口径回写）时直接复用，重复进入的成本归
+  // 零。命中但只有估读时照旧走真计数——升级本来就是来补精确值的。
+  const preciseMemoKey = buildChatTokenEstimateMemoKey({
+    savedModelId: params.savedModelId,
+    workplaceFingerprint: params.ctx?.workplaceFingerprint,
+    messages: params.ctx?.messages,
+    tools: params.tools,
+  });
+  if (preciseMemoKey != null) {
+    const preciseMemoHit = lookupChatTokenEstimateMemo(sessionId, preciseMemoKey);
+    if (preciseMemoHit != null && preciseMemoHit.estimated === false) {
+      return {
+        tokenCount: preciseMemoHit.tokenCount,
+        source: "local",
+        estimated: false,
+        counterKind: preciseMemoHit.counterKind,
+      };
+    }
+  }
   // 本地分支回落模型自身家族的计数器（fa 路由语义；强制 cl100k 估算档曾于
   // 2026-09-29 试行、真机复验后撤回——见模块头「统计优先」说明）。估读的
   // estimated / counterKind 透传驱动结果（fallback 档如实报 heuristic）。
@@ -354,6 +406,17 @@ export async function resolveCurrentPromptTokens(
     realRefresh: true,
   });
   promptWholeCache.persistPendingWrites(sessionKkv, sessionId);
+  // 精确读数回写记忆（升级语义，见 chat-token-estimate-memo 模块头）：后台
+  // 精确升级完成后，下一次估算帧在同一内容键上直接命中精确档——不需要 L1
+  // 预查兜底也不存在「锁死估算档」的回归口。失败/降级读数（heuristic 档）
+  // 同样如实入册：同键复用与当场重算同值，不是缓存污染。
+  if (preciseMemoKey != null) {
+    rememberChatTokenEstimateMemo(sessionId, preciseMemoKey, {
+      tokenCount: local.tokenCount,
+      estimated: local.estimated,
+      counterKind: local.counterKind,
+    });
+  }
   return {
     tokenCount: local.tokenCount,
     source: "local",

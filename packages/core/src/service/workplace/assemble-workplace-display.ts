@@ -50,6 +50,37 @@ export interface AssembleWorkplaceDisplayResult {
    * 无 workplace 块或快照为空时为 `[]`。
    */
   readonly prefixPaths: string[];
+  /**
+   * 本次组装内容的**廉价指纹**（`path|status|mtimeMs` 列表 join，2026-09-30）：
+   * 组装是最贵的读链（冷 5~16s、暖几百 ms 全在 inflate/读盘），但「同样这批
+   * 文件、同样 mtime」的组装产物必然逐字节相同——下游（chip 估算读数的记忆
+   * 缓存）用这个指纹免掉对产物串本身的哈希/序列化。指纹只覆盖文件身份与
+   * mtime，不哈希正文（正文变了 mtime 必然变，VFS 语义保证）。
+   */
+  readonly fingerprint: string;
+}
+
+/**
+ * workplace 组装被中止（2026-09-30「停止要等 14 秒」实锤的治本点）。
+ *
+ * 背景：组装段曾是**无观察点的原子块**——回滚触发的 chip 组装与发送触发的
+ * run 组装在单 SQLite 连接 + JS 线程上互相排队，叠加到 16 秒；期间用户连点
+ * 17 次停止，abort 全部真派发了（0~1ms）却要等组装跑完才能兑现。「停止必须
+ * 从受理即可停」这条 RULE 在组装内部同样成立：按文件粒度检查
+ * {@link AssembleWorkplaceDisplayOptions.shouldStop}，命中即抛本错误。
+ *
+ * 两个消费族的收口方式：
+ * - **run 侧**（agent-runner）：`shouldStop = () => signal.aborted`，错误沿
+ *   既有 catch 冒泡——`signal?.aborted` 为真即路由进统一 abort 处理
+ *   （`handleAbort("catch_abort")`），无需专门 catch；
+ * - **chip 侧**（mobile/desktop 的 build）：`shouldStop` 接 build 的分段弃权
+ *   判据，build 里 catch 本错误并转抛各自的 bail 哨兵类（空串/null 语义）。
+ */
+export class WorkplaceAssemblyAbortedError extends Error {
+  constructor() {
+    super("workplace assembly aborted (stop requested mid-files)");
+    this.name = "WorkplaceAssemblyAbortedError";
+  }
 }
 
 /**
@@ -72,6 +103,13 @@ export interface AssembleWorkplaceDisplayOptions {
    * 进行，但快照与缓存写进子 session 自己的 KKV。
    */
   readonly kkvSessionId?: string;
+  /**
+   * 按文件粒度的中止判据（2026-09-30）：真值即抛
+   * {@link WorkplaceAssemblyAbortedError}。检查点在快照加载后 + 每个文件的
+   * 缓存解析/VFS 回填之前——单个大文件的读取本身仍是原子单元（可接受：
+   * 粒度从「整个组装 16s」细化到「单个文件」）。缺省不检查。
+   */
+  readonly shouldStop?: () => boolean;
 }
 
 /**
@@ -90,13 +128,18 @@ export async function assembleWorkplaceDisplay(
   options?: AssembleWorkplaceDisplayOptions
 ): Promise<AssembleWorkplaceDisplayResult> {
   if (!layoutHasWorkplace(deps.layout)) {
-    return { workplaceDisplay: "", prefixPaths: [] };
+    return { workplaceDisplay: "", prefixPaths: [], fingerprint: "" };
   }
 
   const kkvSessionId = options?.kkvSessionId ?? scope.sessionId;
   const entries = await loadOrCreateRuleSnapshot(kkvSessionId, deps);
   if (entries.length === 0) {
-    return { workplaceDisplay: "", prefixPaths: [] };
+    return { workplaceDisplay: "", prefixPaths: [], fingerprint: "" };
+  }
+  // 快照加载是组装的第一段 IO（可能触发规则评估），加载完先看一眼再进
+  // 文件循环——批量预取那条 IN 查询之后全是逐文件重活。
+  if (options?.shouldStop?.() === true) {
+    throw new WorkplaceAssemblyAbortedError();
   }
 
   // 批量预取 file_cache：两条 IN 查询（entries + blobs）替代每文件两跳
@@ -111,7 +154,14 @@ export async function assembleWorkplaceDisplay(
 
   const prefixPaths: string[] = [];
   const blocks: string[] = [];
+  const fingerprintParts: string[] = [];
   for (const entry of entries) {
+    // 按文件粒度的中止观察点（见 AssembleWorkplaceDisplayOptions.shouldStop）
+    // ——2026-09-30 实锤：16s 原子组装段里 17 次停止点按全部真派发却无从
+    // 兑现。单文件的「缓存解析 + VFS 回填」仍是本轮的最小原子单元。
+    if (options?.shouldStop?.() === true) {
+      throw new WorkplaceAssemblyAbortedError();
+    }
     prefixPaths.push(normalizePromptSeenPath(entry.path));
     const raw = prefetched.get(fileCacheKey(entry.status, entry.path));
     const cached = raw != null ? parseFileCachePayload(raw) : null;
@@ -138,10 +188,14 @@ export async function assembleWorkplaceDisplay(
         content: payload.body,
       })
     );
+    fingerprintParts.push(`${entry.path}|${entry.status}|${payload.mtimeMs}`);
   }
   return {
     workplaceDisplay: wrapWorkplaceDisplay(joinFileBlocks(blocks)),
     prefixPaths,
+    // 指纹在循环里逐文件拼：entry 顺序即快照序（稳定），mtimeMs 来自缓存/回填
+    // 载荷。指纹串长度 ≈ path 数 × 几十字节，远小于哈希正文串本身。
+    fingerprint: fingerprintParts.join(";"),
   };
 }
 

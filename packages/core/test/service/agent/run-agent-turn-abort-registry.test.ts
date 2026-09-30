@@ -28,7 +28,10 @@ import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/r
 import {
   BACKFILL_CURSOR_LAST_SCANNED_COUNT_KEY,
   SESSION_KKV_DOMAIN_BACKFILL_CURSOR,
+  RULE_SNAPSHOT_CANON_KEY,
+  SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
 } from "@/domain/session-kkv/model/session-kkv-domains.js";
+import { serializeRuleSnapshot } from "@/domain/workplace/logic/rule-snapshot-codec.js";
 import { createAgentAbortRegistry } from "@/service/agent/create-agent-abort-registry.js";
 import type { AgentAbortRegistry } from "@/service/agent/agent-abort-registry.port.js";
 import { createAgentStreamRegistry } from "@/service/agent/create-agent-stream-registry.js";
@@ -638,6 +641,116 @@ describe("abort 注册前移：前奏期间的停止不丢（2026-09-30 用户�
       abortRegistry.has(session.id),
       false,
       "run 收尾后必须反注册（门禁不得锁死）",
+    );
+  });
+
+  // 2026-09-30「停止要等 14 秒」治本点：workplace 组装曾是 16s 级无观察点
+  // 原子块（真机实锤：17 次停止点按全部真派发、POST 都没发出去、run 要等
+  // 组装跑完才收尾）。修法 = assemble 按文件粒度检查 signal，本用例在
+  // runner 期（STARTED 之后、模型请求之前）的组装窗口内按停止。
+  it("T-ASSEMBLE-ABORT: 组装期间停止 → 第二个文件前兑现，cancelled、零模型请求、恰好一条 FINISHED", async () => {
+    const ctx = getNovelMasterTestContext();
+    // workplace 开启的默认 agent（ensureDefaultAgentModel 的定义不带 workplace
+    // 块，assemble 会短路——这里就地 upsert 一份带块的）。
+    const registry = createAgentRegistryService(ctx.conn, ctx.state);
+    await registry.upsert("test-default-agent", {
+      name: "测试默认 Agent",
+      prompts: { persist: [], dynamic: [], workplace: "【工作区】" },
+      model: TEST_SAVED_MODEL_ID,
+    });
+
+    const abortRegistry = createAgentAbortRegistry();
+    let modelCalls = 0;
+    const modelRequests: ModelRequestService = {
+      request: async () => {
+        modelCalls += 1;
+        return textDoneResponse("组装期间停止不该走到模型");
+      },
+    };
+
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id, "S-ASM-ABORT");
+    // 预置两条 full 文件的规则快照且不写 VFS 正文：file_cache miss → 逐文件
+    // 回填（read 进 (missing) 兜底），「文件之间」的窗口由 read 闸门制造。
+    await ctx.sessionKkv.set(
+      session.id,
+      SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
+      RULE_SNAPSHOT_CANON_KEY,
+      serializeRuleSnapshot([
+        { path: "/a.md", status: "full" },
+        { path: "/b.md", status: "full" },
+      ]),
+    );
+
+    const runtime = makeRuntime(ctx, { modelRequests, abortRegistry });
+    const events = recordingEventBus();
+    runtime.eventBus = events.bus;
+
+    let releaseRead!: () => void;
+    const readGate = new Promise<void>((resolve) => {
+      releaseRead = resolve;
+    });
+    let readEntered!: () => void;
+    const entered = new Promise<void>((resolve) => {
+      readEntered = resolve;
+    });
+    let readCalls = 0;
+    const realSessionVfs = runtime.sessionVfs;
+    runtime.sessionVfs = (projectId, sessionId) => {
+      const vfs = realSessionVfs(projectId, sessionId);
+      return new Proxy(vfs, {
+        get(target, prop, receiver) {
+          if (prop === "read") {
+            return async (path: string) => {
+              readCalls += 1;
+              readEntered();
+              await readGate;
+              return target.read(path);
+            };
+          }
+          return Reflect.get(target, prop, receiver);
+        },
+      }) as ReturnType<typeof realSessionVfs>;
+    };
+
+    await ctx.state.setCurrentAgentId("test-default-agent");
+    await ctx.state.setCurrentModelId(TEST_SAVED_MODEL_ID);
+
+    const runPromise = runAgentTurn(
+      runtime,
+      { projectId: project.id, sessionId: session.id },
+      "组装期间按停止",
+      { stream: false, onStream: () => {} },
+    );
+
+    await entered;
+    assert.equal(
+      abortRegistry.has(session.id),
+      true,
+      "runner 期（组装中）必须判活为真",
+    );
+    abortRegistry.abort(session.id);
+    releaseRead();
+
+    const result = await runPromise;
+    assert.equal(result.stopReason, "cancelled", "组装期间停止必须兑现为 cancelled");
+    assert.equal(modelCalls, 0, "停止后不得发模型请求（POST 未派出即收口）");
+    assert.equal(
+      readCalls,
+      1,
+      "第一个文件读完就该在第二个文件前中止（文件粒度检查点）",
+    );
+    assert.equal(events.failed().length, 0, "中止不是失败：不得发 FAILED");
+    assert.equal(events.finished().length, 1, "恰好一条 FINISHED");
+    const runId = events.finished()[0]?.payload.runId;
+    assert.ok(
+      typeof runId === "string" && runId.length > 0,
+      "runner 期终态带真实 runId（非前奏空串形态）",
+    );
+    assert.equal(
+      abortRegistry.has(session.id),
+      false,
+      "run 收尾后必须反注册",
     );
   });
 

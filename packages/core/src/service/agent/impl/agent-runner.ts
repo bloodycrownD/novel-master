@@ -411,6 +411,9 @@ export class DefaultAgentRunner implements AgentRunner {
         // assemble 先于 prepare：常驻前缀 S0 计入 seen，与最终提示词可见序一致。
         // 规则评估按 wtScope（子 agent 时=父工作区）；rule_snapshot / file_cache
         // 的 KKV 存取按 session.kkvScopeSessionId（永远=自身，子会话快照隔离）。
+        // shouldStop（2026-09-30）：组装段曾是 16s 级无观察点原子块，停止要等
+        // 它跑完才能兑现；按文件粒度检查 signal，抛 WorkplaceAssemblyAbortedError
+        // 后沿下方 catch 的 signal?.aborted 分支路由进统一 abort 处理。
         const { workplaceDisplay, prefixPaths } =
           await assembleWorkplaceDisplay(
             wtScope,
@@ -420,7 +423,10 @@ export class DefaultAgentRunner implements AgentRunner {
               vfs: this.deps.toolCtx.vfs,
               layout: options.definition.prompts,
             },
-            { kkvSessionId: session.kkvScopeSessionId }
+            {
+              kkvSessionId: session.kkvScopeSessionId,
+              shouldStop: () => signal?.aborted === true,
+            }
           );
         if (signal?.aborted) {
           await handleAbort("after_assemble_workplace");
