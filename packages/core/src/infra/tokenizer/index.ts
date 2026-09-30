@@ -83,6 +83,7 @@ export {
 } from "./logic/chunk-splitter.js";
 export {
   resolveCurrentPromptTokens,
+  PromptTokenResolveBailedError,
   type PromptTokenSource,
   type ResolvedPromptTokens,
   type ResolveCurrentPromptTokensOptions,

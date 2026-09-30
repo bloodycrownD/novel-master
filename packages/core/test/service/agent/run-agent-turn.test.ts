@@ -54,6 +54,12 @@ function makeRuntime(overrides: {
   readonly listBySession?: () => Promise<
     ReadonlyArray<{ id?: string; role: string; content: unknown; raw?: unknown }>
   >;
+  readonly listBySessionTail?: (
+    sessionId: string,
+    options: { limit: number },
+  ) => Promise<
+    ReadonlyArray<{ id?: string; role: string; content: unknown; raw?: unknown }>
+  >;
   readonly append?: (
     sessionId: string,
     role: string,
@@ -100,6 +106,8 @@ function makeRuntime(overrides: {
     messages: {
       listBySession:
         overrides.listBySession ?? (async () => []),
+      listBySessionTail:
+        overrides.listBySessionTail ?? (async () => []),
       append:
         overrides.append ??
         (async () => ({ id: "m1", role: "user", content: { blocks: [] } })),
@@ -167,8 +175,13 @@ describe("runAgentTurn", () => {
 
   it("does not append user message on empty resume when last is user", async () => {
     let appended = false;
+    let fullListCalls = 0;
     const runtime = makeRuntime({
-      listBySession: async () => [{ role: "user", content: { blocks: [] } }],
+      listBySession: async () => {
+        fullListCalls += 1;
+        return [{ role: "user", content: { blocks: [] } }];
+      },
+      listBySessionTail: async () => [{ role: "user", content: { blocks: [] } }],
       append: async () => {
         appended = true;
         return { id: "m-new" };
@@ -185,6 +198,14 @@ describe("runAgentTurn", () => {
       // Runner deps are stubbed; reaching runner means resume gate passed.
     }
     assert.equal(appended, false);
+    // 回归锁（2026-09-30 真机实锤）：续跑判定只许 tail(1) 单行读。全量
+    // listBySession 含 hidden 整表解压，压缩会话上是秒级前奏（实测 ~4s），
+    // 且落在停止观察点之前——用户连点停止无响应。
+    assert.equal(
+      fullListCalls,
+      0,
+      "续跑判定不得走全量 listBySession（含 hidden 整表解压）",
+    );
   });
 
   it("rejects empty resume when last message is not user", async () => {
@@ -192,7 +213,7 @@ describe("runAgentTurn", () => {
       () =>
         runAgentTurn(
           makeRuntime({
-            listBySession: async () => [
+            listBySessionTail: async () => [
               { role: "assistant", content: { blocks: [] } },
             ],
           }),

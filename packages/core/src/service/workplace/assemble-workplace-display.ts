@@ -80,7 +80,8 @@ export interface AssembleWorkplaceDisplayOptions {
  * 1. 无 workplace 块 → `{ workplaceDisplay: "", prefixPaths: [] }`，不触 kkv
  * 2. 读 `rule_snapshot`/`canon`（按 `options.kkvSessionId` 路由）；空 → 规则引擎（按
  *    scope 评估）→ 写快照（写回 kkvSessionId）
- * 3. 按 path/status 读 `file_cache`（kkvSessionId）；miss → VFS（scope 视图）→ 写缓存
+ * 3. 按 path/status 读 `file_cache`（kkvSessionId）；miss → VFS（scope 视图）→ 内容直接
+ *    用于组装，压缩+落库后台 fire-and-forget（不挡读者，见 load-or-fill-file-cache）
  * 4. `renderFileBlock` + `joinFileBlocks`；返回前包 `<workplace>`；`prefixPaths` = 快照全部可见 path（规范化）
  */
 export async function assembleWorkplaceDisplay(
@@ -116,13 +117,19 @@ export async function assembleWorkplaceDisplay(
     const cached = raw != null ? parseFileCachePayload(raw) : null;
     const payload =
       cached ??
-      (await fillFileCacheFromVfs({
-        sessionId: kkvSessionId,
-        sessionKkv: deps.sessionKkv,
-        vfs: deps.vfs,
-        path: entry.path,
-        status: entry.status,
-      }));
+      (await fillFileCacheFromVfs(
+        {
+          sessionId: kkvSessionId,
+          sessionKkv: deps.sessionKkv,
+          vfs: deps.vfs,
+          path: entry.path,
+          status: entry.status,
+        },
+        // 冷 miss 后先服务于读者：正文已读到即用于组装，压缩+落库交给
+        // 后台 fire-and-forget（推迟一个宏任务，不跟同轮读链抢 JS 线程）。
+        // file_cache 只是加速层，丢了下次再回填。
+        { deferBackfillWrite: true }
+      ));
     blocks.push(
       renderFileBlock({
         logicalPath: entry.path,

@@ -24,6 +24,10 @@ import {
  *
  * `options.sessionKkv` 透传给读口：双端 service 传入自己的 sessionKkv
  * 后，重启也能读到上次 completed run 的 API 占用（同口径）。
+ *
+ * `options.shouldBail` 同样原样透传（r3-chip-1）：本函数不再有任何自己的
+ * 步骤，弃权观察点全在 {@link resolveCurrentPromptTokens} 内部的两处整串级
+ * 重活之前——读口传进来即生效，不传则恒不弃权（既有调用方零影响）。
  */
 export async function resolvePromptTokensWithBackfill(
   sessionId: string,

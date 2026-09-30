@@ -71,10 +71,17 @@ export class DefaultMessageCheckpointService
    * 避免并发 backfill 读到未提交的 head；与导入路径同一份纯逻辑。
    * 入口先做两段式「无空窗」短路判定（游标计数比对 + 新增段有界覆盖比对），
    * 判定不确定时保守回退全量扫描；判定与游标读写均在本事务内完成。
+   *
+   * r3-run-4：`signal` 供前奏期的停止意图在扫描中途兑现弃权。**中途退出提交
+   * 已写部分**（事务正常提交）——安全，因为 backfill 幂等：已写的 checkpoint 行
+   * 不会被覆盖、下一轮发送接着补齐剩余空窗；且中断路径下 `confirmedNoGap` 恒为
+   * false → 游标**不写** → 下轮判定必然回退全量，绝不会把「只补了一半」误认成
+   * 「已确认无空窗」。不传 signal 时与旧版逐字节等价。
    */
   async backfillMissingBaselines(
     sessionId: string,
-    projectId: string
+    projectId: string,
+    signal?: AbortSignal
   ): Promise<void> {
     await this.deps.conn.transaction(async (tx) => {
       const txEntries = new SqliteVfsEntryRepository(tx);
@@ -90,6 +97,12 @@ export class DefaultMessageCheckpointService
       });
 
       if (decision.kind === "short-circuit") {
+        // 弃权点（r3-run-4）：短路判定本身就是几次单行读、窗口极短，但把它放在
+        // 游标写入**之前**检查——短路写入只前移游标、不补数据，中途退出无害，
+        // 而「停了却仍写游标」纯属没必要的副作用。
+        if (signal?.aborted === true) {
+          return;
+        }
         // 游标只在值前移时写（count == 游标的短路不产生写入）。
         if (decision.newCursor !== decision.previousCursor) {
           await txSessionKkv.set(
@@ -109,7 +122,8 @@ export class DefaultMessageCheckpointService
         txMessages,
         txCheckpoints,
         projectId,
-        sessionId
+        sessionId,
+        signal
       );
       if (result.confirmedNoGap) {
         await txSessionKkv.set(

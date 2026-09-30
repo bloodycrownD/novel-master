@@ -49,6 +49,27 @@ import { serializeToolsForTokenCount } from "./serialize-tools-for-token-count.j
 /** 占用结果来源。 */
 export type PromptTokenSource = "api" | "local";
 
+/**
+ * resolve 段中途弃权（cr-fix-spec-r3 r3-chip-1，2026-09-30 治本点）。
+ *
+ * 背景：chip 读口的 build 段已有分段 bail（app 层的
+ * `ChatPromptBuildBailedError`），但**进得去停不下**——resolve 链整段无观察
+ * 点，其中 glm 原生整串计数单次 ~5.8s，与发送链共享 JS 线程与单 SQLite 连接。
+ * 读口在 run 起步后无从兑现弃权。
+ *
+ * 为什么定义在 core 而不是让读口自己判：读口（mobile/desktop 的
+ * chat-prompt-tokens service）在 `@novel-master/core` 之上，core 引不到 app 层的
+ * 错误类；反向则让「弃权」这件事在内部分支里散成 return/null 两种形态，后者
+ * 要放宽 `ResolvedPromptTokens` 返回类型并给 `token-ratio.trigger.ts` 单独加
+ * 分支，改动面更大更脏。
+ */
+export class PromptTokenResolveBailedError extends Error {
+  constructor() {
+    super("prompt token resolve bailed (run in flight)");
+    this.name = "PromptTokenResolveBailedError";
+  }
+}
+
 /** {@link resolveCurrentPromptTokens} 返回值。 */
 export interface ResolvedPromptTokens {
   readonly tokenCount: number;
@@ -85,6 +106,37 @@ export interface ResolveCurrentPromptTokensOptions {
    * false = 完整口径（家族计数器 + 缓存）。
    */
   readonly preferEstimate?: boolean;
+  /**
+   * 中途弃权判定（r3-chip-1）：真值即抛 {@link PromptTokenResolveBailedError}。
+   *
+   * 缺省 `undefined` = 永不弃权，对既有调用方（含唯一不透传的
+   * `token-ratio.trigger.ts`）零影响。读口（mobile/desktop chat-prompt-tokens
+   * service）把「run 在途」判据透传进来后，resolve 链的每处整串级重活之前
+   * 都有观察点，不再出现「进得去停不下」。
+   *
+   * 检查点两处（均为「重活之前」而非「重活之后」）：
+   * 1. preferEstimate 早退段**序列化之前**——序列化 + `lookupWholeCacheEntry`
+   *    内的二次序列化都是整串级的；
+   * 2. L1/L2 seed 之后、`countPromptLlmInput` 之前——原生家族计数器整串计数
+   *    （glm ~5.8s）之前。
+   *
+   * api 命中分支不设检查点：它只做一次 KKV 读 + 小增量估算，无整串级重活。
+   */
+  readonly shouldBail?: () => boolean;
+}
+
+/**
+ * 弃权检查点的执行器：未传 `shouldBail` 时是一个恒假的空判定（调用点写
+ * `bail()` 即可，缺省路径零分支成本可言）。
+ */
+function makeBailCheck(
+  shouldBail: (() => boolean) | undefined
+): () => void {
+  return () => {
+    if (shouldBail?.() === true) {
+      throw new PromptTokenResolveBailedError();
+    }
+  };
 }
 
 /**
@@ -204,6 +256,9 @@ export async function resolveCurrentPromptTokens(
   params: CountPromptLlmInputParams,
   options?: ResolveCurrentPromptTokensOptions
 ): Promise<ResolvedPromptTokens> {
+  // r3-chip-1 弃权检查点执行器（api 命中分支不用：只一次 KKV 读 + 小增量
+  // 估算，无整串级重活，不值得为它加判据）。
+  const bail = makeBailCheck(options?.shouldBail);
   const entry = await readSessionApiPromptTokenEntry(
     options?.sessionKkv,
     sessionId
@@ -246,6 +301,10 @@ export async function resolveCurrentPromptTokens(
   // heuristic 的 /3.35 是英文口径、中文低估八成，CJK 下限把偏差压回有界
   // （消费方语义见 ResolveCurrentPromptTokensOptions.preferEstimate）。
   if (options?.preferEstimate === true) {
+    // 弃权检查点①：必须在**序列化之前**。下方 serializePromptLlmInput 与
+    // lookupWholeCacheEntry 内部的 chunkHash16 各自把整串过一遍（真机上大
+    // 会话就是秒级），检查点放在序列化之后等于「观察点在重活后面」。
+    bail();
     const serialized =
       (await serializePromptLlmInput(params.layout, params.ctx)) +
       serializeToolsForTokenCount(params.tools);
@@ -279,6 +338,13 @@ export async function resolveCurrentPromptTokens(
     await promptWholeCache.seedFromKkv(sessionKkv, sessionId);
   }
 
+  // 弃权检查点②：L1/L2 seed 之后、countPromptLlmInput 之前。家族原生计数器
+  // 整串计数（glm ~5.8s）是 resolve 链最重的一步，必须让它成为「起跑前先看
+  // 一眼」的形态——落在它之后就等于没有弃权点。
+  // 弃权检查点②：L1/L2 seed 之后、countPromptLlmInput 之前。家族原生计数器
+  // 整串计数（glm ~5.8s）是 resolve 链最重的一步，必须让它成为「起跑前先看
+  // 一眼」的形态——落在它之后就等于没有弃权点。
+  bail();
   // 本地分支回落模型自身家族的计数器（fa 路由语义；强制 cl100k 估算档曾于
   // 2026-09-29 试行、真机复验后撤回——见模块头「统计优先」说明）。估读的
   // estimated / counterKind 透传驱动结果（fallback 档如实报 heuristic）。
