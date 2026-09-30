@@ -43,6 +43,7 @@ jest.mock('../src/services/chat-agent-meta', () => ({
 
 jest.mock('../src/services/chat-prompt-tokens.service', () => ({
   loadChatPromptTokenLabelResilient: jest.fn(async () => ''),
+  isChatTokenPreciseWarmInflight: jest.fn(() => false),
 }));
 
 const deletedSessionIds: string[] = [];

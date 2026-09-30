@@ -1,14 +1,13 @@
 /**
- * ChatSessionListPanel 徽标三态判定测试（T-X1，Step 9 / GWT-6）。
+ * ChatSessionListPanel 徽标判定测试（Step 9 / GWT-6；2026-09-30 GWT-7 回归）。
  *
- * 优先级 running > interrupted > isCurrent：
- * - running（activeRunIds 含该会话）→「生成中」徽标；
- * - interrupted（interruptedRunIds 含该会话，无论是否当前会话）→「已中断」徽标；
- * - isCurrent 且非上述两态 → 保留「 · 活跃中」meta 语义。
+ * 状态判定两态：running（activeRunIds 含该会话）→「生成中」徽标；
+ * interrupted（interruptedRunIds 含该会话，无论是否当前会话）→「已中断」
+ * 徽标；「当前」位置徽标与运行态正交、照常按 isCurrent 出。
  *
- * 「当前会话×interrupted」必须落「已中断」——会话中断后重启 app 且当前停留
- * 在该会话时，按「interrupted 且非当前会话」判定会把该组合吞进「活跃中」、
- * bug 原样保留，此处正是该场景的原样复现断言。
+ * 「 · 活跃中」meta 的唯一判据是 isRunning（manager 的真实判活），**不是**
+ * isCurrent：挂在 isCurrent 上时它退化成「当前会话」标记，run 收尾后与 app
+ * 重启后都不消失（GWT-7 原样复现，见下）。
  */
 import React from 'react';
 import {describe, expect, it, jest, beforeEach} from '@jest/globals';
@@ -147,7 +146,7 @@ async function unmountPanel(
   });
 }
 
-describe('T-X1: ChatSessionListPanel 徽标三态（running > interrupted > isCurrent）', () => {
+describe('ChatSessionListPanel 徽标（running / interrupted）与「活跃中」meta 判活', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockListeners.length = 0;
@@ -155,7 +154,7 @@ describe('T-X1: ChatSessionListPanel 徽标三态（running > interrupted > isCu
     mockManager.interruptedSessionIds.mockReturnValue(new Set());
   });
 
-  it('running→生成中；interrupted（无论是否当前会话）→已中断；不与活跃中并存', async () => {
+  it('running→生成中；interrupted（无论是否当前会话）→已中断', async () => {
     // 当前会话 c 恰为中断态：GWT-6 原样复现场景
     mockManager.activeSessionIds.mockReturnValue(['a']);
     mockManager.interruptedSessionIds.mockReturnValue(new Set(['b', 'c']));
@@ -166,28 +165,86 @@ describe('T-X1: ChatSessionListPanel 徽标三态（running > interrupted > isCu
     ]);
     const contents = textContents(renderer.root);
 
-    // a（running，非当前）：生成中
+    // a（running，非当前）：生成中 + 唯一那一份「 · 活跃中」meta
     expect(countContaining(contents, '生成中')).toBe(1);
+    expect(countContaining(contents, ' · 活跃中')).toBe(1);
     // b（interrupted 非当前）+ c（interrupted 当前）：各一枚已中断徽标
     expect(countContaining(contents, '已中断')).toBe(2);
-    // c 是当前会话但处于中断态：活跃中 meta 必须被「已中断」压掉（不许吞进活跃中）
-    expect(countContaining(contents, ' · 活跃中')).toBe(0);
     // 「当前」位置徽标与状态正交，c 照常保留
     expect(contents.filter(content => content === '当前')).toHaveLength(1);
     await unmountPanel(renderer);
   });
 
-  it('普通当前会话（非 running 非 interrupted）保留「活跃中」语义', async () => {
+  it('interrupted 会话（当前与非当前）都不是运行态：一律不出「活跃中」meta', async () => {
+    // 与上面那条对照，把 a 从活跃集里摘掉：此时三枚徽标里只剩「已中断」，
+    // 「 · 活跃中」必须归零——它是判活 meta，不许退化回 isCurrent 标记。
+    mockManager.activeSessionIds.mockReturnValue([]);
+    mockManager.interruptedSessionIds.mockReturnValue(new Set(['b', 'c']));
+    const renderer = await renderPanel('c', [
+      makeSession('b'),
+      makeSession('c'),
+    ]);
+    const contents = textContents(renderer.root);
+
+    expect(countContaining(contents, '已中断')).toBe(2);
+    expect(countContaining(contents, ' · 活跃中')).toBe(0);
+    expect(countContaining(contents, '生成中')).toBe(0);
+    expect(contents.filter(content => content === '当前')).toHaveLength(1);
+    await unmountPanel(renderer);
+  });
+
+  it('GWT-7: 空闲当前会话（run 已收尾、无 run）不再显示「活跃中」', async () => {
+    // 真机实录原样复现：新会话4 的一轮 run 已正常收尾（active 集清空），
+    // 期间无新 run——旧的 isCurrent 判定会让「 · 活跃中」永久挂着。
     const renderer = await renderPanel('d', [
       makeSession('a'),
       makeSession('d'),
     ]);
     const contents = textContents(renderer.root);
 
-    expect(countContaining(contents, ' · 活跃中')).toBe(1);
+    expect(countContaining(contents, ' · 活跃中')).toBe(0);
+    // 「当前」位置徽标与 meta 行正交，照常保留（当前会话身份没有丢）
     expect(contents.filter(content => content === '当前')).toHaveLength(1);
     expect(countContaining(contents, '生成中')).toBe(0);
     expect(countContaining(contents, '已中断')).toBe(0);
+    // meta 行只剩相对时间，不残留任何「活跃」字样
+    expect(countContaining(contents, '活跃')).toBe(0);
+    await unmountPanel(renderer);
+  });
+
+  it('GWT-7: 真在运行的会话（当前与非当前）照常显示「 · 活跃中」meta + 生成中徽标', async () => {
+    mockManager.activeSessionIds.mockReturnValue(['a', 'c']);
+    const renderer = await renderPanel('c', [
+      makeSession('a'),
+      makeSession('c'),
+    ]);
+    const contents = textContents(renderer.root);
+
+    // 两个活跃会话各一份 meta + 徽标；当前会话 c 另有「当前」位置徽标
+    expect(countContaining(contents, ' · 活跃中')).toBe(2);
+    expect(countContaining(contents, '生成中')).toBe(2);
+    expect(contents.filter(content => content === '当前')).toHaveLength(1);
+    await unmountPanel(renderer);
+  });
+
+  it('GWT-7: run 收尾经 manager.subscribe 驱动刷新——活跃中 meta 与生成中徽标同时消失', async () => {
+    mockManager.activeSessionIds.mockReturnValue(['a']);
+    const renderer = await renderPanel('a', [makeSession('a')]);
+    expect(countContaining(textContents(renderer.root), ' · 活跃中')).toBe(1);
+    expect(countContaining(textContents(renderer.root), '生成中')).toBe(1);
+
+    // RUN_FINISHED → 单元 settle 出 active 集 → notifyChanged → UI 刷新：
+    // 收尾后徽标必须即时消失，不能留着当「还在跑」。
+    mockManager.activeSessionIds.mockReturnValue([]);
+    await act(async () => {
+      for (const listener of [...mockListeners]) {
+        listener();
+      }
+    });
+    const contents = textContents(renderer.root);
+    expect(countContaining(contents, ' · 活跃中')).toBe(0);
+    expect(countContaining(contents, '生成中')).toBe(0);
+    expect(contents.filter(content => content === '当前')).toHaveLength(1);
     await unmountPanel(renderer);
   });
 

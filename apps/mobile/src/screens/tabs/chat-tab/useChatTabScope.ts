@@ -15,7 +15,10 @@ import {
   loadChatAgentMeta,
   type ChatAgentMeta,
 } from '@/services/chat-agent-meta';
-import {loadChatPromptTokenLabelResilient} from '@/services/chat-prompt-tokens.service';
+import {
+  isChatTokenPreciseWarmInflight,
+  loadChatPromptTokenLabelResilient,
+} from '@/services/chat-prompt-tokens.service';
 import type {RootStackParamList} from '@/navigation/types';
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
 import {
@@ -95,6 +98,22 @@ export function useChatTabScope({
   // 精确标签不得写进新会话的 meta（service 层 gen 闸之外的双保险）。
   const tokenLabelSessionRef = useRef<string | null>(null);
 
+  // 防抖槽（复用 refreshChatMetaInflightRef 的在途槽模式，单槽服务当前会话）：
+  // - deferred：trailing 计时挂起中，窗口内所有 caller 共享「这一次执行」；
+  // - running：在途执行链（到期执行若上一轮仍在途则挂其后串行，绝不并发）；
+  // - hasLabel：本会话是否已刷出过非空标签——run 在途冻结的「有东西可看」
+  //   判据（声明在 runChatTokenLabelRefresh 之前，供其在执行时读写）。
+  const chatTokenLabelDebounceRef = useRef<{
+    key: string;
+    hasLabel: boolean;
+    timer: ReturnType<typeof setTimeout> | null;
+    deferred: {
+      promise: Promise<void>;
+      resolve: (value: Promise<void>) => void;
+    } | null;
+    running: Promise<void> | null;
+  }>({key: '', hasLabel: false, timer: null, deferred: null, running: null});
+
   const runChatTokenLabelRefresh = useCallback(async () => {
     // meta 未加载（undefined）时保持未加载态：partial 更新不能凭空造出
     // 残缺的 meta 对象（缺字段的假 meta 会被当成已加载渲染）。
@@ -103,6 +122,21 @@ export function useChatTabScope({
       return;
     }
     tokenLabelSessionRef.current = sessionId;
+    // run 在途冻结（2026-09-30 拍板「chip 首帧先修」）：run 进行中提示词
+    // 不变，而一次首帧刷新 = 整串装配 0.7~1.2s + 读口 resolve 1.2~1.7s，
+    // 与流式渲染同拍挤占 JS 线程与单 SQLite 连接（append/settle 各一轮
+    // ~2.4s，真机实锤）。判定放在防抖**执行时**而非排程时：run 结束沿
+    // （onSettled / 末条转录事件）触发的刷新 300ms 后才执行，彼时 core 的
+    // finally 已反注册 abortRegistry，补刷照常落地。只在该会话已显示过
+    // 标签时冻结——切进运行中会话的首帧不冻，否则 chip 会空白到 run 结束。
+    const debounceSlot = chatTokenLabelDebounceRef.current;
+    if (
+      debounceSlot.key === `${projectId}#${sessionId}` &&
+      debounceSlot.hasLabel &&
+      runtime.abortRegistry.has(sessionId)
+    ) {
+      return;
+    }
     // 已有标签时保留旧值而非 '…'：压缩/发送后的重算在大上下文上可达数秒
     // （native 整串计数），旧读数先顶着、新值落地即替换；会话切换路径由
     // loadChatAgentMeta 重建 meta（tokenLabel 归 ''）先清场，不会串显。
@@ -125,27 +159,38 @@ export function useChatTabScope({
             prev == null ? prev : {...prev, tokenLabel: upgraded},
           );
         },
+        {
+          // 中途弃权（2026-09-30 回滚竞态）：本刷新起跑后 run 才注册时，冻结闸
+          // 管不到已经在跑的这一轮——build 分段间检查本判定，run 起步即弃权
+          // 返回空串，把 JS 线程与 SQLite 让给发送链（曾把 POST 从 +1.2s 拖到
+          // +19.6s）。只在已有标签可保时弃权：切进运行中会话的首帧照算。
+          shouldBail: () =>
+            chatTokenLabelDebounceRef.current.hasLabel &&
+            runtime.abortRegistry.has(sessionId),
+        },
       );
-      setAgentMeta(prev => (prev == null ? prev : {...prev, tokenLabel}));
+      // 空串 = 中途弃权：保留旧标签，不写 meta、不置 hasLabel。
+      if (tokenLabel) {
+        setAgentMeta(prev => (prev == null ? prev : {...prev, tokenLabel}));
+        // 冻结判据维护：刷出非空标签后，本会话才有「可冻结的旧值」可保。
+        if (
+          chatTokenLabelDebounceRef.current.key ===
+          `${projectId}#${sessionId}`
+        ) {
+          chatTokenLabelDebounceRef.current.hasLabel = true;
+        }
+      }
     } catch {
       setAgentMeta(prev => (prev == null ? prev : {...prev, tokenLabel: ''}));
     }
   }, [runtime, projectId, sessionId]);
 
-  // 防抖槽（复用 refreshChatMetaInflightRef 的在途槽模式，单槽服务当前会话）：
-  // - deferred：trailing 计时挂起中，窗口内所有 caller 共享「这一次执行」；
-  // - running：在途执行链（到期执行若上一轮仍在途则挂其后串行，绝不并发）。
-  const chatTokenLabelDebounceRef = useRef<{
-    key: string;
-    timer: ReturnType<typeof setTimeout> | null;
-    deferred: {
-      promise: Promise<void>;
-      resolve: (value: Promise<void>) => void;
-    } | null;
-    running: Promise<void> | null;
-  }>({key: '', timer: null, deferred: null, running: null});
-
   const refreshChatTokenLabel = useCallback((): Promise<void> => {
+    // 压缩预热窗口（warmChatTokenLabelAfterCompaction）：chip 冻结旧标签，
+    // 预热完成后由压缩流程补一次刷新（首帧 L1 命中精确档，无 gpt ≈ 跳变）。
+    if (sessionId != null && isChatTokenPreciseWarmInflight(sessionId)) {
+      return Promise.resolve();
+    }
     const key = `${projectId ?? ''}#${sessionId ?? ''}`;
     const slot = chatTokenLabelDebounceRef.current;
     if (slot.key !== key) {
@@ -155,6 +200,8 @@ export function useChatTabScope({
         slot.timer = null;
       }
       slot.key = key;
+      // 换会话即换「有东西可看」判据：新会话还没刷出过标签，冻结不生效。
+      slot.hasLabel = false;
       slot.deferred = null;
       slot.running = null;
     }

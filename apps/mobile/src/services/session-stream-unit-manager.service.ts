@@ -4,11 +4,12 @@
  * 以 agent-run-manager.service.ts 为模板原样吸收其契约（Step 2；旧文件的
  * 拆除与调用方接线分别在 Step 7 / Step 6 完成）：
  * - per-session 门禁：该会话存在 starting|running 状态的单元，或
- *   abortRegistry.has(sessionId) 任一为真即拒绝（封住「受理 → core register」
- *   之间的异步空窗）；settled 单元（interrupted/finished/failed，含宽限中）
- *   不阻塞新 run——interrupted 单元在 startRun 时被替换/吸收（删旧建新：
- *   run_id 更新、状态机回 starting、partial/注入标记与 metrics 随新单元
- *   天然重置），不产生双单元并存；
+ *   abortRegistry.has(sessionId) 任一为真即拒绝（registry 是 run 在途的第二
+ *   道判据，core 的 register 在 runAgentTurn 函数入口执行，受理即在途；
+ *   starting 单元判据仍独立保留）；settled 单元（interrupted/finished/failed，
+ *   含宽限中）不阻塞新 run——interrupted 单元在 startRun 时被替换/吸收（删旧
+ *   建新：run_id 更新、状态机回 starting、partial/注入标记与 metrics 随新
+ *   单元天然重置），不产生双单元并存；
  * - 全局 refcount 收口：increment 在 startRun 受理路径同步执行，decrement
  *   由全量 FINISHED/FAILED 事件订阅 / finally 早退兜底驱动（不经 UI 面板的
  *   sessionId 过滤）；
@@ -62,7 +63,8 @@
  * Step 7 新增：收尾校准探针接线（services/run-finish-calibration-probe，
  * 自旧 use-run-resume-probe 收尾方向迁入的最小版）——低频轮询 + 前台回焦
  * 校准「running 单元 + registry 无注册」的悬挂现场（终态事件丢失兜底），
- * 走 finishRun('failed') 等效收尾；starting 单元不参与（受理空窗防误杀）。
+ * 走 finishRun('failed') 等效收尾；starting 单元不参与（runId 未回填，
+ * 判据与 registry 注册时机无关）。
  *
  * Step 7 新增（消息面收口，方案 a）：无单元会话的消息面由本 manager 承担
  * ——loadSessionTailMessages/loadOlderSessionMessages 的 idle 路径（view
@@ -478,8 +480,9 @@ export class SessionStreamUnitManager {
 
     // 收尾校准探针（Step 7 自旧 run 探针的收尾方向迁入）：低频轮询 +
     // 前台回焦校准「running 单元 + registry 无注册」的悬挂现场，防 core
-    // 终态事件丢失导致「生成中」永久残留。starting 单元不参与（受理空窗
-    // 内 registry 尚未注册，校准必误杀；该场景由 finally 兜底）。
+    // 终态事件丢失导致「生成中」永久残留。starting 单元不参与（runId 未
+    // 回填；core 的 register 在 runAgentTurn 函数入口执行，受理即在途，
+    // 与注册时机无关；该场景由 finally 兜底）。
     this.calibrationProbe = createRunFinishCalibrationProbe({
       activeSessionIds: () => this.listCalibratableSessionIds(),
       isRunRegistered: sessionId => this.runtime.abortRegistry.has(sessionId),
@@ -1057,9 +1060,9 @@ export class SessionStreamUnitManager {
    * 发起 run：per-session 门禁 + fire-and-forget。
    *
    * 门禁钉死「该会话存在 starting|running 单元或 abortRegistry.has 为真即
-   * 拒绝，返回明确错误而非静默」——core 的 register 要到 run-agent-turn 内
-   * 用户消息 append 之后才执行，只看 registry 会在受理空窗内漏放第二个
-   * 同会话 run。settled 单元不阻塞：interrupted/finished/failed（含宽限中）
+   * 拒绝，返回明确错误而非静默」——core 的 register 在 runAgentTurn 函数
+   * 入口执行（受理即在途），单看 registry 仍会在受理空窗内漏放第二个同会话
+   * run。settled 单元不阻塞：interrupted/finished/failed（含宽限中）
    * 的旧单元被替换吸收——删旧建新（run_id 更新、状态机回 starting、
    * partial/注入标记/metrics 随新单元重置），无双单元并存。
    *
@@ -1084,7 +1087,6 @@ export class SessionStreamUnitManager {
       return {ok: false, error: '该会话已有进行中的生成，请先等待完成或停止'};
     }
 
-    // settled 旧单元（interrupted/finished/failed，含宽限中）替换吸收：删旧建新。
     // settled 旧单元（interrupted/finished/failed，含宽限中）替换吸收：删旧建新。
     // 句柄迁移：旧单元销毁会清空句柄注册表，而 hasUnit 在旧→新之间连续
     // （不触发屏幕侧 attach effect 重挂）——不迁移的话新 run 的流式推送
@@ -1139,6 +1141,25 @@ export class SessionStreamUnitManager {
         allowResumeWithoutInput: options?.allowResumeWithoutInput,
         onUserMessageAppended: options?.onUserMessageAppended,
       })
+      .then(result => {
+        // 前奏期停止（2026-09-30）：core 在检查点命中 abort 时以合成 cancelled
+        // 结果收尾（stepsExecuted=0、无模型请求）。
+        //
+        // r3-run-1 起 core 会在返回前补发一条终态事件：检查点命中发
+        // FINISHED(runId:'')、前奏抛错发 FAILED(runId:'')——**事件路径优先
+        // 收口**，所以这段 .then **降级为幂等兜底**：事件已收口过时单元已
+        // settled，finishRun 的 settle 状态机把它挡成 no-op。之所以还留着，
+        // 是为了兜住「事件真的丢了」的形态；受理时写的 starting 行与
+        // starting 单元仍需按 FINISHED 同款语义收尾（cancelled 归 finished
+        // 家族，流式中途停止同样走 finishRun('finished')）。
+        // RunAgentTurnFn 契约是 Promise<unknown>，按 stopReason 字段窄化取用。
+        if ((result as {stopReason?: unknown} | null | undefined)?.stopReason === 'cancelled') {
+          const current = this.units.get(sessionId);
+          if (current === unit && current.getRunId() == null) {
+            this.finishRun(sessionId, '', 'finished');
+          }
+        }
+      })
       .catch(err => {
         console.error('[novel-master/session-stream-unit-manager] run failed', {
           sessionId,
@@ -1148,12 +1169,18 @@ export class SessionStreamUnitManager {
               ? {name: err.name, message: err.message}
               : String(err),
         });
-        // 仅 resolve/register 阶段错误（RUN_STARTED 未达，FAILED 事件永远不会来）
-        // 才由 throw 路径兜底 toast；RUN_STARTED 已达的失败 core 必发
-        // EVENT_AGENT_RUN_FAILED，事件路径（finishRun）已 onError，这里再弹
-        // 就是同一次失败的双 toast。单元非本次（事件已收尾或已被替换）同理不弹。
+        // toast 只由「throw 路径独占」的那一种形态弹：事件路径（core 必发
+        // EVENT_AGENT_RUN_FAILED——runner 期带真实 runId，r3-run-1 之后前奏
+        // 抛错也发 FAILED(runId:'')，事件收口 finishRun 里已经 onError 过
+        // 一次）会在这里被 settled 判据拦下。缺了
+        // `!isSessionStreamUnitSettled(...)` 这半个条件，前奏抛错会双弹。
+        // 单元非本次（事件已收尾或已被替换）同理不弹。
         const current = this.units.get(sessionId);
-        if (current === unit && current.getRunId() == null) {
+        if (
+          current === unit &&
+          current.getRunId() == null &&
+          !isSessionStreamUnitSettled(current.getStatus())
+        ) {
           this.uiBridge?.onError(
             err instanceof Error ? err.message : String(err),
           );
@@ -1179,6 +1206,15 @@ export class SessionStreamUnitManager {
         // runId 所有权 + settle 状态守卫是另一道双保险。
         // 此路径不走 settle（非正常终态）：直接销毁单元出表。
         this.removeUnit(sessionId, unit);
+        // r3-run-1 步骤 6（E3-A3/A4）：补一个终态出口。走到这里意味着
+        // 「事件路径与 .then 兜底**双双失手**」——最窄的一例是
+        // r3-run-1 之后 core 前奏抛错：FAILED(runId:'') 事件到达时若
+        // getRunId() 因异常时序仍不匹配本单元，finishRun 的所有权校验就把它
+        // 当 stale 丢掉了（设计如此，迟到的旧 run 事件不能动新 run 的单元）。
+        // 没了这个 invokeOnSettled，草稿区不清理、token chip 不刷新——用户在
+        // 界面上看不到任何收尾痕迹。invokeOnSettled 自带 try/catch 且对已
+        // destroy 的单元安全，这里无条件调。
+        unit.invokeOnSettled('failed');
         this.notifyChanged();
         decrementAgentActive();
         this.stopKeepAliveQuietly(sessionId);
@@ -1196,9 +1232,11 @@ export class SessionStreamUnitManager {
    */
   stopRun(sessionId: string): boolean {
     if (!this.runtime.abortRegistry.has(sessionId)) {
+      timingLog('stopRun: no controller (dropped)');
       return false;
     }
     this.runtime.abortRegistry.abort(sessionId);
+    timingLog('stopRun: abort dispatched');
     return true;
   }
 
@@ -1347,13 +1385,22 @@ export class SessionStreamUnitManager {
     status: SessionStreamRunSettledStatus,
     errorMessage?: string,
   ): void {
+    timingLog(`finishRun(${status}) entered`);
     // 子会话 run 终态（sessionId 为子会话 id）不摘除父单元的 pending 链接：
     // 并行 task 批的 tool_results 要等最慢子 agent 完成才整批落库
     // （meta.subagentSessionId 才接管任务卡可点性），窗口期里 pending 映射
     // 是任务卡唯一可点数据源。链接由父 run 收尾（settle 内
     // clearPendingChildren + 下方父分支 clearPendingChildIndex）统一清空。
     const unit = this.units.get(sessionId);
-    if (unit == null || unit.getRunId() !== runId) {
+    // runId='' 允许匹配「RUN_STARTED 未达」的受理期单元（getRunId()==null）：
+    // 前奏期停止（core runAgentTurn 以合成 cancelled 结果收尾、不发事件）由
+    // startRun 的 .then 补调 finishRun('', 'finished')——受理时写的 starting
+    // 行必须收成 settled 行，否则重启水合会把「用户已停止的发送」误判为中断现场。
+    const unitRunId = unit?.getRunId() ?? null;
+    if (
+      unit == null ||
+      (unitRunId !== runId && !(runId === '' && unitRunId == null))
+    ) {
       return;
     }
     // settle 状态守卫（已销毁/已收尾的单元不再收尾——防同 runId 双事件或
@@ -1837,9 +1884,9 @@ export class SessionStreamUnitManager {
 
   /**
    * 校准探针的活跃会话列举：只含 runId 已回填的 running 单元。starting
-   * 单元（受理空窗内 registry 尚未注册）不参与校准——查 registry 必为
-   * false，会把正常受理中的 run 误判为丢失；该形态的死单由 startRun 的
-   * promise 链尾 finally 兜底收口。
+   * 单元（runId 由 RUN_STARTED 回填）不参与校准——**判据是 runId 非空，与
+   * registry 注册时机无关**（core 的 register 在 runAgentTurn 函数入口执行，
+   * 受理即在途）；该形态的死单由 startRun 的 promise 链尾 finally 兜底收口。
    */
   private listCalibratableSessionIds(): readonly string[] {
     const ids: string[] = [];

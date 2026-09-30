@@ -7,6 +7,8 @@
  * - 并发 5 触发在途合并为一次 service 调用；
  * - trailing 语义：窗口内不执行、窗口过后必有最终一次计算、不吞任何一击；
  * - 计算在途时新触发复用在途（不并发第二轮），随后追赶轮保证新数据最终被算。
+ * - 两道前置冻结闸：run 在途（abortRegistry.has，有标签可保才冻）与压缩预热
+ *   在途（isChatTokenPreciseWarmInflight，命中即不排程）。
  *
  * 只 mock runtime 与 meta/token 服务；被测 hook 用真实实现。meta 查询全程
  * 挂起（refreshChatMeta 停在 getCurrentModelId），排除挂载链对 token 标签
@@ -17,7 +19,10 @@ import React from 'react';
 import TestRenderer, {act} from 'react-test-renderer';
 import {useChatTabScope} from '../src/screens/tabs/chat-tab/useChatTabScope';
 import {loadChatAgentMeta} from '../src/services/chat-agent-meta';
-import {loadChatPromptTokenLabelResilient} from '../src/services/chat-prompt-tokens.service';
+import {
+  isChatTokenPreciseWarmInflight,
+  loadChatPromptTokenLabelResilient,
+} from '../src/services/chat-prompt-tokens.service';
 
 jest.mock('../src/services/chat-agent-meta', () => ({
   loadChatAgentMeta: jest.fn(),
@@ -25,10 +30,12 @@ jest.mock('../src/services/chat-agent-meta', () => ({
 
 jest.mock('../src/services/chat-prompt-tokens.service', () => ({
   loadChatPromptTokenLabelResilient: jest.fn(async () => '1K tokens · 预估'),
+  isChatTokenPreciseWarmInflight: jest.fn(() => false),
 }));
 
 const loadChatAgentMetaMock = loadChatAgentMeta as jest.Mock;
 const loadLabelMock = loadChatPromptTokenLabelResilient as jest.Mock;
+const warmInflightMock = isChatTokenPreciseWarmInflight as jest.Mock;
 
 function createDeferred<T>() {
   let resolve!: (value: T) => void;
@@ -53,9 +60,13 @@ async function flushMicrotasks(rounds = 10) {
  * 挂起（refreshChatMeta 永远停在半路），token 标签只能由测试手动触发。
  * `modelId` 传入时放行 getCurrentModelId（meta 可完整落地，供断言
  * tokenLabel 写入面——B-1 场景①回归用）。sessionId 走可变持有者：
- * 场景①回归要在挂载后切会话重渲染。
+ * 场景①回归要在挂载后切会话重渲染。`abortHas` 传入时接到 runtime 的
+ * abortRegistry.has（run 在途冻结用例的控制面）。
  */
-async function mountScopeHarness(options?: {modelId?: string}) {
+async function mountScopeHarness(options?: {
+  modelId?: string;
+  abortHas?: () => boolean;
+}) {
   const runtime: any = {
     projects: {
       list: jest.fn(async () => [{id: 'p1', name: 'P1'}]),
@@ -67,6 +78,9 @@ async function mountScopeHarness(options?: {modelId?: string}) {
         options?.modelId != null
           ? jest.fn(async () => options.modelId)
           : jest.fn(() => createDeferred<string>().promise),
+    },
+    abortRegistry: {
+      has: jest.fn(options?.abortHas ?? (() => false)),
     },
     sessionVfs: jest.fn(() => ({})),
     workplace: jest.fn(() => ({})),
@@ -276,5 +290,176 @@ describe('useChatTabScope refreshChatTokenLabel 防抖（T-TC6）', () => {
       await flushMicrotasks();
     });
     expect(harness!.api().agentMeta?.tokenLabel).toBe('gpt = 24k / 128k (19%)');
+  });
+});
+
+describe('useChatTabScope refreshChatTokenLabel run 在途冻结（2026-09-30）', () => {
+  let harness: Awaited<ReturnType<typeof mountScopeHarness>> | undefined;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.useFakeTimers();
+    // meta 查询挂起：refreshChatMeta 停在 getCurrentModelId，不链触发标签刷新。
+    loadChatAgentMetaMock.mockImplementation(
+      () => createDeferred<unknown>().promise,
+    );
+  });
+
+  afterEach(() => {
+    harness?.unmount();
+    harness = undefined;
+    jest.useRealTimers();
+  });
+
+  it('run 在途时，已显示过标签的刷新触发被冻结；run 结束后的触发照常计算', async () => {
+    const abortState = {inFlight: false};
+    harness = await mountScopeHarness({abortHas: () => abortState.inFlight});
+
+    // run 前一轮正常刷新：刷出标签（hasLabel 判据置位）。
+    await act(async () => {
+      void harness.api().refreshChatTokenLabel();
+      jest.advanceTimersByTime(300);
+      await flushMicrotasks();
+    });
+    expect(loadLabelMock).toHaveBeenCalledTimes(1);
+
+    // run 在途：转录/append/settle 连发触发，防抖到期后全被冻结闸拦下。
+    // 分两批各过一次 300ms 窗口，确认不是只冻第一轮。
+    await act(async () => {
+      abortState.inFlight = true;
+      for (let i = 0; i < 3; i++) {
+        void harness.api().refreshChatTokenLabel();
+      }
+      jest.advanceTimersByTime(300);
+      await flushMicrotasks();
+      void harness.api().refreshChatTokenLabel();
+      jest.advanceTimersByTime(300);
+      await flushMicrotasks();
+    });
+    expect(loadLabelMock).toHaveBeenCalledTimes(1);
+
+    // run 结束（registry 已反注册，core finally 先于防抖到期）：结束沿的
+    // 触发（onSettled / 末条转录事件）照常计算，chip 补上新读数。
+    await act(async () => {
+      abortState.inFlight = false;
+      void harness.api().refreshChatTokenLabel();
+      jest.advanceTimersByTime(300);
+      await flushMicrotasks();
+    });
+    expect(loadLabelMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('切进运行中的会话：首帧不冻（否则 chip 空白到 run 结束），第二击起冻结', async () => {
+    harness = await mountScopeHarness({abortHas: () => true});
+
+    // 首帧照算：hasLabel 尚未置位，冻结不生效——否则切进运行中会话时
+    // chip 会一直空白到 run 结束。
+    await act(async () => {
+      void harness.api().refreshChatTokenLabel();
+      jest.advanceTimersByTime(300);
+      await flushMicrotasks();
+    });
+    expect(loadLabelMock).toHaveBeenCalledTimes(1);
+
+    // 首帧刷出标签后：同样 run 在途，第二击起冻结。
+    await act(async () => {
+      void harness.api().refreshChatTokenLabel();
+      jest.advanceTimersByTime(300);
+      await flushMicrotasks();
+    });
+    expect(loadLabelMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('中途弃权（服务返回空串哨兵）：chip 保留旧标签，不清空', async () => {
+    // meta 真实落地（tokenLabel 写入面可断言）——同 B-1 用例的退出挂起约定。
+    loadChatAgentMetaMock.mockResolvedValue({
+      tokenLabel: '',
+      modelName: 'gpt-4o',
+      agentName: 'a',
+      projectName: 'p',
+    });
+    harness = await mountScopeHarness({modelId: 'gpt-4o'});
+
+    // 第一轮正常刷出标签。
+    await act(async () => {
+      void harness.api().refreshChatTokenLabel();
+      jest.advanceTimersByTime(300);
+      await flushMicrotasks();
+    });
+    expect(harness.api().agentMeta?.tokenLabel).toBe('1K tokens · 预估');
+
+    // 第二轮被 run 起步打断（服务层 shouldBail 命中返回 ''）：旧标签保留，
+    // 绝不能把 chip 清成空/占位。
+    loadLabelMock.mockImplementationOnce(async () => '');
+    await act(async () => {
+      void harness.api().refreshChatTokenLabel();
+      jest.advanceTimersByTime(300);
+      await flushMicrotasks();
+    });
+    expect(harness.api().agentMeta?.tokenLabel).toBe('1K tokens · 预估');
+  });
+});
+
+describe('useChatTabScope refreshChatTokenLabel 压缩预热冻结闸（r3-test-1 ③）', () => {
+  let harness: Awaited<ReturnType<typeof mountScopeHarness>> | undefined;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.useFakeTimers();
+    // meta 查询挂起：refreshChatMeta 停在 getCurrentModelId，不链触发标签刷新。
+    loadChatAgentMetaMock.mockImplementation(
+      () => createDeferred<unknown>().promise,
+    );
+  });
+
+  afterEach(() => {
+    harness?.unmount();
+    harness = undefined;
+    jest.useRealTimers();
+  });
+
+  it('预热在途（isChatTokenPreciseWarmInflight 翻真）：本轮不排程、零 service 调用；预热落定后下一击照常计算', async () => {
+    // 压缩暖机窗口（runCompactionWithTokenWarm → warmChatTokenLabelAfterCompaction）
+    // 里 chip 冻结在旧标签，等预热算出的精确档由压缩流程补写。这道闸在防抖
+    // 排程**之前**：命中即 return，连计时器都不建——否则窗口内的转录/settle
+    // 触发会各起一轮抢跑，把预热那一轮整串计数的时间预算吃掉。
+    //
+    // 旧覆盖（run 在途冻结那组）只钉 abortRegistry.has 那一道闸；本组钉的是
+    // 同函数里紧邻的 isChatTokenPreciseWarmInflight 那道——删掉它本用例立刻红
+    // （300ms 窗口过后 service 被调 1 次）。
+    const warm = {inflight: false};
+    warmInflightMock.mockImplementation(() => warm.inflight);
+    harness = await mountScopeHarness();
+
+    // 预热前一轮正常计算：把「窗口外读口是通的」这一前提立起来。
+    await act(async () => {
+      void harness.api().refreshChatTokenLabel();
+      jest.advanceTimersByTime(300);
+      await flushMicrotasks();
+    });
+    expect(loadLabelMock).toHaveBeenCalledTimes(1);
+
+    // 预热窗口内：翻真 → 触发不排程。窗口跨过两轮 300ms 仍零调用
+    // （闸若只挡一次，第二轮就会漏进来）。
+    await act(async () => {
+      warm.inflight = true;
+      for (let i = 0; i < 2; i++) {
+        void harness.api().refreshChatTokenLabel();
+        jest.advanceTimersByTime(300);
+        await flushMicrotasks();
+      }
+    });
+    expect(warmInflightMock).toHaveBeenCalled();
+    expect(loadLabelMock).toHaveBeenCalledTimes(1);
+
+    // 预热落定：下一击照常排程计算（闸不吞触发，chip 由压缩流程补写后
+    // 还能继续跟读数）。
+    await act(async () => {
+      warm.inflight = false;
+      void harness.api().refreshChatTokenLabel();
+      jest.advanceTimersByTime(300);
+      await flushMicrotasks();
+    });
+    expect(loadLabelMock).toHaveBeenCalledTimes(2);
   });
 });
