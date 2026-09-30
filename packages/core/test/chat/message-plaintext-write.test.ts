@@ -268,6 +268,48 @@ describe("chat_message 全库明文化（T-MP1 / T-MP4 / T-MP6）", () => {
     assert.deepEqual((await repo.findById(compressedId2))!.content, {
       blocks: [{ type: "text", text: "第二条压缩正文" }],
     });
+
+    // searchMessages 一路：keyword「形态」命中 seq 1（压缩行）与 seq 2（明文
+    // 行），两种形态都要召回且各自解出正确正文——迁移期压缩分支在搜索口的
+    // 唯一覆盖（batchInsert 改明文后，其余用例的库全是明文行）。
+    const hits = await repo.searchMessages(sessionId, {
+      keyword: "形态",
+      limit: 10,
+    });
+    assert.deepEqual(
+      hits.map((m) => [m.seq, m.content]),
+      [
+        [2, plainContent], // seq DESC：明文行在前
+        [1, compressedContent], // 压缩行解压还原
+      ]
+    );
+  });
+
+  it("batchInsert 嵌套在 conn.transaction 内（生产 fork/copy 形态）不抛 NESTED_TRANSACTION 且插入完整", async () => {
+    const ctx = getNovelMasterTestContext();
+    const { sessionId } = await newSession();
+    const rows = [
+      messageFixture(sessionId, 1, textBlocks("事务内批量第一条")),
+      messageFixture(sessionId, 2, textBlocks("事务内批量第二条")),
+      messageFixture(sessionId, 3, textBlocks("事务内批量第三条")),
+    ];
+
+    // 生产路径形态：fork（message.service）与 copy（session.service）都在
+    // conn.transaction(async tx => reposFor(tx)) 的**外层事务内**调
+    // batchInsert，repo 持有的 this.conn 就是 tx 句柄——tx 句柄的
+    // transaction() 无条件抛 NESTED_TRANSACTION，batchInsert 必须运行时
+    // 判定并回落 fn(tx) 直通，否则 fork/copy 当场炸。
+    // 没有这条，嵌套判定若被移除，事务外直调用例依然全绿。
+    await ctx.conn.transaction(async (tx) => {
+      await new SqliteMessageRepository(tx).batchInsert(rows);
+    });
+
+    const list = await ctx.messages.listBySession(sessionId);
+    assert.equal(list.length, 3, "事务内 batchInsert 的三行都应落库且已提交");
+    assert.deepEqual(
+      list.map((m) => m.content),
+      rows.map((m) => m.content)
+    );
   });
 
   it("T-MP6：池删除正确性——存量压缩行重复读结果一致（无 messageContentPool 环境）", async () => {

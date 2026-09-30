@@ -6,6 +6,7 @@
 
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { SqlTemplateParser } from "@/infra/sql-template/index.js";
+import { TdbcError } from "@/infra/tdbc/errors.js";
 import {
   executeTemplate,
   queryTemplate,
@@ -73,6 +74,51 @@ function toMessageParams(message: ChatMessage): unknown[] {
     message.usage?.firstTokenMs ?? null,
     message.usage?.durationMs ?? null,
   ];
+}
+
+/**
+ * 无外层事务时开一个事务跑 `fn`；已经身处事务中则直接复用 `conn` 跑。
+ *
+ * 惯例来源：`service/vfs/impl/revision-aware-vfs.service.ts` 的同名模块私有
+ * 函数（那里未导出，这里按同一形状复制一份，避免 domain 层反向依赖 service 层）。
+ *
+ * 边界（务必保留，别"顺手"改成 try/finally 或吞错）：这个兜底**只**针对
+ * `conn.transaction()` 入口抛出的 `NESTED_TRANSACTION`——三驱动契约里 tx 句柄的
+ * `transaction()` 无条件 reject 且**不执行** `fn`（connection.port.ts:37），
+ * 所以捕获后用 `fn(conn)` 直通是等价且安全的。若 `fn` 内部自己抛出同码错误，
+ * 会被误判成「已在事务内」而重跑一遍，已执行的写操作将被重放。
+ */
+async function runInTransactionOrConn<T>(
+  conn: TdbcConnection,
+  fn: (tx: TdbcConnection) => Promise<T>
+): Promise<T> {
+  try {
+    return await conn.transaction(fn);
+  } catch (error) {
+    if (error instanceof TdbcError && error.code === "NESTED_TRANSACTION") {
+      return fn(conn);
+    }
+    throw error;
+  }
+}
+
+/**
+ * keyword 里出现这些字符时，LIKE 不能当 parse 前粗筛用（见
+ * {@link SqliteMessageRepository.searchMessages} 的召回守卫说明）：
+ * - `"` `\` 与 C0 控制字符：`content_json` 是 JSON 字符串，原字符会被转义成
+ *   `\"` / `\\` / `\uXXXX`，按原字符 LIKE 必然漏命中；
+ * - 任何非 ASCII 字符：内存判据 `messageMatchesKeyword` 是 Unicode 感知的
+ *   `toLowerCase().includes()`，而 SQLite 内建 LIKE 只折叠 ASCII 大小写
+ *   （正文存 `ÄRGER`、`LIKE '%ärger%'` 命中 0）。
+ *
+ * 注意 `%` / `_` 是 LIKE 通配符但**不在**此列：通配只会造成过宽（多 parse 几行，
+ * 内存精筛再滤掉），不违反「召回不得小于全量精筛」的红线，不拦。
+ */
+const LIKE_PREFILTER_UNSAFE_RE = /["\\\x00-\x1f]|[^\x00-\x7f]/;
+
+/** keyword 是否可安全用作 SQL LIKE 粗筛（false = 退回全量精筛）。 */
+function canPrefilterWithLike(keyword: string): boolean {
+  return !LIKE_PREFILTER_UNSAFE_RE.test(keyword);
 }
 
 /** 双形态读：content_blob 非空走解压，否则 parse content_json 明文。 */
@@ -167,13 +213,14 @@ export class SqliteMessageRepository implements MessageRepository {
   private static readonly ROW_PARSE_CHUNK = 50;
 
   /**
-   * batchInsert 参数构造分片大小：每片至多构造 200 条。
+   * batchInsert 分片大小：每片至多 200 条，参数**按片构造**、SQL **按片下发**。
    *
-   * 明文化后 toMessageParams 已无同步压缩，但分片让步继续有效——理由从
-   * CPU 换成了两件事：JSON.stringify 本身是同步重活，且参数数组会在内存
-   * 里驻留全量消息的明文 JSON（fork/copy 全会话，2-3× 于压缩 blob，见
-   * 消费处矩阵 #7）。200 条一片、片间让步，让这批内存与事件循环占用按片
-   * 摊开，不在主线程上堆成一个长任务。
+   * 明文化后 toMessageParams 已无同步压缩，但 JSON.stringify 本身仍是同步重活，
+   * 且参数数组里驻留的是明文 JSON（fork/copy 是全会话，2-3× 于压缩 blob，见
+   * 消费处矩阵 #7）。按片构造 + 按片下发后，峰值内存从「全会话 ×1」降为
+   * O(片大小)——构造与下发都不再堆成单个长任务。
+   *
+   * chunk 按下标区间切分 messages（`slice` 只复制引用数组，不复制消息体）。
    */
   private static readonly BATCH_PARAM_BUILD_CHUNK = 200;
 
@@ -217,9 +264,12 @@ export class SqliteMessageRepository implements MessageRepository {
     sessionId: string,
     options?: { includeHidden?: boolean }
   ): Promise<ChatMessage[]> {
-    // includeHidden=false 在 SQL 层就滤掉 hidden 行：隐藏消息（压缩/置位产
-    // 物）不必捞回并逐条解压正文——大会话（数千条、hidden 占多数）的 UI
-    // 读口（token chip 的 prompt 组装只消费可见历史）曾因此全量解压秒级卡顿。
+    // includeHidden=false 在 SQL 层就滤掉 hidden 行：置位产物不必捞回——
+    // 大会话（数千条、hidden 占多数）的 UI 读口（token chip 的 prompt 组装
+    // 只消费可见历史）因此不必把不可见行的正文字节取回来。
+    // 正文读取本身按形态分派（见 readRowContent）：明文行 parse
+    // content_json，压缩行才需解压——迁移期压缩行与明文行共存时，不做这层
+    // 过滤就得为不可见的压缩行逐条解压。
     const hiddenFilter =
       options?.includeHidden === false ? " AND hidden = 0" : "";
     const rows = await queryTemplate(
@@ -400,25 +450,27 @@ export class SqliteMessageRepository implements MessageRepository {
     if (messages.length === 0) {
       return;
     }
-    // 参数构造阶段分片：toMessageParams 逐条 JSON.stringify 出明文，且参数
-    // 数组会驻留全量明文 JSON，5000+ 条一次性构造会把主线程压成单个长任务。
-    // 200 条一片、片间 await this.yieldFn?.() 让步；无 yieldFn 时
-    // （desktop/cli/测试缺省）让步退化成 await undefined，构造仍是同步一次
-    // 完成，行为与现状一致。让步函数与 mapRows 共用同一个（构造器注入），
-    // 两端装配只注入一处即可。
+    // 参数按片构造、按片下发：峰值内存 O(片大小)。
+    // this.conn 可能是根连接（测试直调）也可能是事务句柄（生产 fork/copy 在
+    // 外层事务内调 batchInsert：session.service 的 copy、message.service 的
+    // fork 都在 conn.transaction(...) 里用 tx 句柄建 repo）——嵌套
+    // transaction 抛 NESTED_TRANSACTION，必须运行时判定而非静态假设，故走
+    // runInTransactionOrConn（兜底边界见该函数注释：只针对 conn.transaction()
+    // 入口抛出的嵌套码，fn 内部若将来自行抛该码会被误判重跑）。
+    // 独占窗口不新增：生产路径的连接本就被外层事务独占整段；根连接路径
+    // （测试直调）与原先的单次 batch 等价地包一层小事务，原子性不变。
+    // 让步语义照旧：mobile 注入 createQuantumYield 时真正让出事件循环，
+    // desktop/CLI/测试缺省注入时退化为一次 microtask 让步（与构造器注入的
+    // mapRows 共用同一个 yieldFn，装配端只注入一处）。
     const chunkSize = SqliteMessageRepository.BATCH_PARAM_BUILD_CHUNK;
-    const parameters: unknown[][] = [];
-    for (let start = 0; start < messages.length; start += chunkSize) {
-      const end = Math.min(start + chunkSize, messages.length);
-      for (let i = start; i < end; i++) {
-        const message = messages[i]!;
-        parameters.push(toMessageParams(message));
-      }
-      if (end < messages.length) {
+    await runInTransactionOrConn(this.conn, async (c) => {
+      for (let start = 0; start < messages.length; start += chunkSize) {
+        const end = Math.min(start + chunkSize, messages.length);
+        const parameters = messages.slice(start, end).map(toMessageParams);
+        await c.batch(MESSAGE_INSERT_SQL, parameters);
         await this.yieldFn?.();
       }
-    }
-    await this.conn.batch(MESSAGE_INSERT_SQL, parameters);
+    });
   }
 
   async delete(id: string): Promise<boolean> {
@@ -538,6 +590,18 @@ export class SqliteMessageRepository implements MessageRepository {
     // 两个出口，绝不在中途放弃续扫，返回结果恒为「最新的 limit 条命中」。
     const scanLimit = Math.max(clampedLimit * 20, 200);
     const matched: ChatMessage[] = [];
+    // parse 前粗筛：明文化后 JSON.parse 成了搜索的主导成本（inflate 消失，
+    // parse 顶上），5350 行库一次罕见关键词搜索就是 5350 次 parse，零护栏。
+    // 谓词只放行「可能命中」的行：压缩行 content_json 是空串、正文在 blob
+    // 里，LIKE 必然不命中，故 content_blob 非空一律放行；明文行 LIKE 命中
+    // 才进 mapRows 去 parse。
+    // 召回红线（不得小于全量精筛）：LIKE 只是粗筛，命中与否最终仍由内存
+    // 精筛 messageMatchesKeyword 决定。守卫（见 LIKE_PREFILTER_UNSAFE_RE）：
+    // keyword 含 JSON 转义字符或任何非 ASCII 字符时**不加**粗筛，退回全量
+    // 精筛——两个方向都会让 LIKE 漏召回（转义 / Unicode 大小写）。
+    const keywordPrefilter = canPrefilterWithLike(keyword)
+      ? ` AND (content_blob IS NOT NULL OR content_json LIKE '%' || #{keyword} || '%')`
+      : "";
     // 游标初值即 beforeSeq（seq < beforeSeq 的翻页口径原样保留在第一段），
     // 后续段游标 = 上一段最小 seq（严格递减，恒不构成死循环）。
     let cursor: number | null = query.beforeSeq ?? null;
@@ -550,7 +614,7 @@ export class SqliteMessageRepository implements MessageRepository {
          WHERE session_id = #{sessionId}
            AND (#{cursor} IS NULL OR seq < #{cursor})
            AND (#{fromSeq} IS NULL OR seq >= #{fromSeq})
-           AND (#{toSeq} IS NULL OR seq <= #{toSeq})
+           AND (#{toSeq} IS NULL OR seq <= #{toSeq})${keywordPrefilter}
          ORDER BY seq DESC
          LIMIT #{scanLimit}`,
         {
@@ -559,6 +623,7 @@ export class SqliteMessageRepository implements MessageRepository {
           fromSeq: query.fromSeq ?? null,
           toSeq: query.toSeq ?? null,
           scanLimit,
+          keyword,
         }
       );
       if (rows.length === 0) {
