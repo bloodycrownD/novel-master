@@ -20,6 +20,7 @@ import { revisionPairKey } from "@/domain/vfs/logic/revision-pair-key.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import { deleteSessionFsData } from "@/service/session-fs/create-session-fs-service.js";
+import { clearDecodedContentCaches } from "@/infra/content-cache/logic/decoded-content-cache.js";
 import {
   getNovelMasterTestContext,
   novelMasterTestFixture,
@@ -396,6 +397,15 @@ describe("rollback ref_count + deferred blob gc", () => {
     // content_hash 列始终存 hashContent() 输出的 hex 格式（SHA-256 hex），
     // zlib b64 只影响 bytes 列编码，不影响 content_hash 列。可直接精确验证 blob gc。
     await runDeferredBlobGc(ctx.conn);
+    // 观测面（2026-09-30 换）：读路径已接进程内解压产物层（按内容哈希索引、
+    // 命中即返回），该 hash 只要在本进程里读成功过一次就不再必然抛错——故
+    // 「行已删」直查 vfs_content_blob，「缺失必抛」的清池冷态读分开断言。
+    const blobRows = await ctx.conn.query<{ n: number }>(
+      "SELECT COUNT(*) AS n FROM vfs_content_blob WHERE content_hash = ?",
+      [orphanHash]
+    );
+    assert.equal(Number(blobRows[0]!.n), 0, "orphan blob 行已被 gc");
+    clearDecodedContentCaches();
     await assert.rejects(() => contentStore.get(orphanHash));
     assert.equal((await svfs.read("/defer.md")).content, "keep-final");
   });

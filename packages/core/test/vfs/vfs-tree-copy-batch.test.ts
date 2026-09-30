@@ -3,7 +3,8 @@
  *
  * - T-BATCH-1 快路径：project scope → session scope 一次 replaceVfsSubtree，
  *   断言目标 entry content_hash 正确、共享 blob ref_count = 2（源 revision 1 + 目标种子 revision 1）。
- * - T-BATCH-2 慢路径 / 缺失 blob：删除某 blob 行后再 copy，走慢路径失败
+ * - T-BATCH-2 慢路径 / 缺失 blob：删除某 blob 行并清空进程内解压产物层
+ *   （否则正文可从内存层复原、缺失不可观测）后再 copy，走慢路径失败
  *   （scanContents 或 ensureBlob 抛错），且事务回滚、目标 scope 不落半套 entry。
  * - T-BATCH-3 seed 批量：replaceVfsSubtree 后 target 每文件恰好 1 条 revision（ref_count=1），
  *   重复 seed 幂等（第二次返回 0、不重复 +1 blob ref_count）。
@@ -19,6 +20,7 @@ import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import { replaceVfsSubtree } from "@/domain/vfs/logic/vfs-tree-copy.js";
 import { seedLiveHeadRevisionsUnderPrefix } from "@/domain/vfs/logic/seed-live-head-revisions.js";
+import { clearDecodedContentCaches } from "@/infra/content-cache/logic/decoded-content-cache.js";
 import {
   getNovelMasterTestContext,
   novelMasterTestFixture,
@@ -126,6 +128,12 @@ describe("replaceVfsSubtree 快慢路径 / copyVfsTree 批量", () => {
       `DELETE FROM vfs_content_blob WHERE content_hash = ?`,
       [hashA],
     );
+
+    // 进程内解压产物层（infra/content-cache）按内容哈希供正文：第一次拷贝
+    // 已把 a.txt 读进池，不清池的话第二次 replace 能从内存里把正文复原、
+    // 「源侧明文不可回退」这个前提就不成立（缺失失败不可观测）。本用例要
+    // 验的是那个前提下的失败与回滚，故先把池清成冷态。
+    clearDecodedContentCaches();
 
     // 第二次 replace（走慢路径）：scanContents/ensureBlob 缺失即抛，事务应回滚
     await assert.rejects(
