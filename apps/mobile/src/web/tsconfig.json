@@ -31,6 +31,8 @@
     "code-editor/webview/**/*.ts",
     "composer-input/webview/**/*.ts",
     "composer-input/webview/**/*.tsx",
+    "chat-conversation/webview/**/*.ts",
+    "chat-conversation/webview/**/*.tsx",
     "shared/**/*.ts",
     "shared/**/*.tsx"
   ]

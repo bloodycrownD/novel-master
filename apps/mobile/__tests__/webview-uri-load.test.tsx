@@ -1,5 +1,5 @@
 /**
- * T-BB-04：URI helper + WebView 必配 props 矩阵（静态断言；三包 CT/RD/code-editor）。
+ * T-BB-04：URI helper + WebView 必配 props 矩阵（静态断言；包 CT/RD/code-editor/conversation）。
  */
 import React from 'react';
 import {Platform} from 'react-native';
@@ -20,6 +20,10 @@ import {
   getCodeEditorPackageDirUri,
   getCodeEditorUri,
 } from '@/webview-host/code-editor/uri';
+import {
+  getChatConversationPackageDirUri,
+  getChatConversationUri,
+} from '@/webview-host/chat-conversation/uri';
 
 jest.mock('@/theme/ThemeProvider', () => ({
   useTheme: () => ({
@@ -88,6 +92,12 @@ describe('WebView URI load (T-BB-04)', () => {
       expect(getCodeEditorPackageDirUri()).toBe(
         'file:///android_asset/webview/code-editor/',
       );
+      expect(getChatConversationUri()).toBe(
+        'file:///android_asset/webview/chat-conversation/index.html',
+      );
+      expect(getChatConversationPackageDirUri()).toBe(
+        'file:///android_asset/webview/chat-conversation/',
+      );
     });
 
     it('iOS 用 MainBundleDir 拼 WebViewDist file:// URI', () => {
@@ -112,6 +122,12 @@ describe('WebView URI load (T-BB-04)', () => {
       );
       expect(getCodeEditorPackageDirUri()).toBe(
         'file:///App/NovelMaster.app/WebViewDist/code-editor/',
+      );
+      expect(getChatConversationUri()).toBe(
+        'file:///App/NovelMaster.app/WebViewDist/chat-conversation/index.html',
+      );
+      expect(getChatConversationPackageDirUri()).toBe(
+        'file:///App/NovelMaster.app/WebViewDist/chat-conversation/',
       );
     });
   });

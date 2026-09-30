@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <link rel="stylesheet" href="./app.css" />
+  </head>
+  <body>
+    <!--
+      chat-conversation 合成包壳（chat-webview-unify）：转录区 + 输入框 dock 同一文档。
+      #app 四属性（display:flex / flex-direction:column / height:100% / min-height:0）缺一
+      则 dock 不贴底——本节点只落骨架，完整布局与 dock 内容见 Step 3/4。
+    -->
+    <div id="app">
+      <div id="scroller"><div id="rows"></div></div>
+      <div id="composer-dock">
+        <!-- composer runtime 挂载点（createComposerRuntime('#composer-input', …)） -->
+        <div id="composer-input"></div>
+      </div>
+    </div>
+    <!-- Portal 等价宿主：MenuOverlay render 至此，避免与 #rows 互毁。
+         刻意留在 body 直接子级——fixed 定位的包含块语境与 chat-transcript 一致，勿移入 #app。 -->
+    <div id="menu-portal"></div>
+    <!-- Mermaid 全屏覆盖层宿主：与 #menu-portal 平级，renderRows 重建不冲掉；同上为 body 直接子级。 -->
+    <div id="mermaid-viewer-portal"></div>
+    <script src="./app.js"></script>
+  </body>
+</html>

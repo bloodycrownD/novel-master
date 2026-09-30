@@ -1,5 +1,6 @@
 /**
- * 用 esbuild 双入口打包 WebView 资源（chat-transcript / rich-document）。
+ * 用 esbuild 多入口打包 WebView 资源（chat-transcript / rich-document /
+ * code-editor / composer-input / chat-conversation）。
  *
  * 真源：`src/web/{pkg}/webview/main.ts` + styles + 短 index.html
  * 产出（gitignore）：`webview-dist/{pkg}/index.html` + `app.js` + `app.css`
@@ -53,6 +54,17 @@ const PACKAGES = [
     entryRel: 'composer-input/webview/main.ts',
     cssRel: 'composer-input/styles/composer-input.css',
     htmlRel: 'composer-input/index.html',
+  },
+  {
+    // chat-conversation（chat-webview-unify Step 2）：转录 + 输入框 dock 合成包。
+    // cssRel 保持单值——自持一份 chat-conversation.css（transcript 基底 + dock 移植段），
+    // 不做数组 join（spec §CSS 定案：两份 CSS 各自演化的漂移风险已记入风险表）。
+    id: 'chat-conversation',
+    entryRel: 'chat-conversation/webview/main.ts',
+    cssRel: 'chat-conversation/styles/chat-conversation.css',
+    htmlRel: 'chat-conversation/index.html',
+    richCssKey: 'CHAT_TRANSCRIPT_RICH_CSS',
+    mermaidFullscreenCss: true,
   },
 ];
 
