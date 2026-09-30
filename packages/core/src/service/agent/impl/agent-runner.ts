@@ -414,7 +414,12 @@ export class DefaultAgentRunner implements AgentRunner {
         // shouldStop（2026-09-30）：组装段曾是 16s 级无观察点原子块，停止要等
         // 它跑完才能兑现；按文件粒度检查 signal，抛 WorkplaceAssemblyAbortedError
         // 后沿下方 catch 的 signal?.aborted 分支路由进统一 abort 处理。
-        const { workplaceDisplay, prefixPaths } =
+        // fingerprint（2026-09-30）：组装顺产的内容指纹不能丢——压缩评估链
+        // （token-ratio trigger 消费 evaluation.ctx）靠它命中估算记忆、走增量
+        // 分解；丢掉则 run 侧全程无指纹（既不命中记忆也不分解，①②批收益在
+        // 评估链归零）。与 desktop build 的 ctx 同款透传（见
+        // session-prompt-input.service.ts 的 `workplaceFingerprint: fingerprint`）。
+        const { workplaceDisplay, prefixPaths, fingerprint } =
           await assembleWorkplaceDisplay(
             wtScope,
             {
@@ -486,6 +491,9 @@ export class DefaultAgentRunner implements AgentRunner {
           workplace: wt,
           filetree: turnFiletree,
           skillsIndex,
+          // 组装指纹随 ctx 进压缩评估（r4-core-2）：只被 token 读口
+          // （记忆键 / 增量分解的按指纹缓存）消费，渲染侧忽略——零行为影响。
+          workplaceFingerprint: fingerprint,
         };
         const promptInput = await buildPromptLlmInputFromLayout(
           options.definition.prompts,

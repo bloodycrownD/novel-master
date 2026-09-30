@@ -51,11 +51,16 @@ export interface AssembleWorkplaceDisplayResult {
    */
   readonly prefixPaths: string[];
   /**
-   * 本次组装内容的**廉价指纹**（`path|status|mtimeMs` 列表 join，2026-09-30）：
-   * 组装是最贵的读链（冷 5~16s、暖几百 ms 全在 inflate/读盘），但「同样这批
-   * 文件、同样 mtime」的组装产物必然逐字节相同——下游（chip 估算读数的记忆
-   * 缓存）用这个指纹免掉对产物串本身的哈希/序列化。指纹只覆盖文件身份与
-   * mtime，不哈希正文（正文变了 mtime 必然变，VFS 语义保证）。
+   * 本次组装内容的**廉价指纹**（`path|status|mtimeMs|bodyLength` 列表 join，
+   * 2026-09-30）：组装是最贵的读链（冷 5~16s、暖几百 ms 全在 inflate/读盘），
+   * 但「同样这批文件、同样 mtime、同样正文体量」的组装产物必然逐字节相同——
+   * 下游（chip 估算读数的记忆缓存）用这个指纹免掉对产物串本身的哈希/序列化。
+   *
+   * 指纹只覆盖文件身份、mtime 与正文字符数，**不哈希正文**：mtime 前进必变，
+   * `bodyLength` 段再加一道——树复制（vfs-tree-copy）保留源 mtime、写侧只有
+   * 毫秒精度，「mtime 同、正文异」的路径确实存在（r4-core-4），长度不同的
+   * 改写在指纹上照样可辨。长度与 mtime 双双相同的同长改写仍在覆盖外（下一
+   * 次 mtime 前进或消息事件自愈，与消息尾戳同款取舍）。
    */
   readonly fingerprint: string;
 }
@@ -188,13 +193,19 @@ export async function assembleWorkplaceDisplay(
         content: payload.body,
       })
     );
-    fingerprintParts.push(`${entry.path}|${entry.status}|${payload.mtimeMs}`);
+    // 末段 bodyLength（r4-core-4）：mtime 是毫秒精度且树复制会保留源 mtime，
+    // 「mtime 同、正文异」会让指纹假同 → 下游记忆/指纹估读返回陈旧值。
+    // 体量是零成本字段（payload 已在手），长度异即指纹异。
+    fingerprintParts.push(
+      `${entry.path}|${entry.status}|${payload.mtimeMs}|${payload.body.length}`
+    );
   }
   return {
     workplaceDisplay: wrapWorkplaceDisplay(joinFileBlocks(blocks)),
     prefixPaths,
-    // 指纹在循环里逐文件拼：entry 顺序即快照序（稳定），mtimeMs 来自缓存/回填
-    // 载荷。指纹串长度 ≈ path 数 × 几十字节，远小于哈希正文串本身。
+    // 指纹在循环里逐文件拼：entry 顺序即快照序（稳定），mtimeMs / 正文长度
+    // 来自缓存/回填载荷。指纹串长度 ≈ path 数 × 几十字节，远小于哈希正文串
+    // 本身。
     fingerprint: fingerprintParts.join(";"),
   };
 }

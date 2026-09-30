@@ -5,8 +5,9 @@
  * - shouldStop：快照加载后 + 每个文件的缓存解析/VFS 回填之前检查，真值抛
  *   WorkplaceAssemblyAbortedError。观测面用 vfs.read 调用次数——「下一个
  *   文件不再读」是中止真正生效的直接证据。
- * - fingerprint：path|status|mtimeMs 列表 join。同输入同指纹；任一文件的
- *   mtime 变了指纹必须变（这是下游估算记忆「内容没变」判定的全部依据）。
+ * - fingerprint：`path|status|mtimeMs|bodyLength` 列表 join。同输入同指纹；
+ *   任一文件的 mtime 变了、或正文体量变了指纹必须变（这是下游估算记忆
+ *   「内容没变」判定的全部依据；r4-core-4 补体量段，挡「mtime 同、正文异」）。
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -18,8 +19,15 @@ import {
   WorkplaceAssemblyAbortedError,
 } from "../../src/service/workplace/assemble-workplace-display.js";
 import {
+  RULE_SNAPSHOT_CANON_KEY,
   SESSION_KKV_DOMAIN_FILE_CACHE,
+  SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
+  fileCacheKey,
 } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
+import {
+  parseRuleSnapshotJson,
+  serializeFileCachePayload,
+} from "../../src/domain/workplace/logic/rule-snapshot-codec.js";
 import { settlePendingFileCacheBackfills } from "../../src/domain/workplace/logic/load-or-fill-file-cache.js";
 import {
   getNovelMasterTestContext,
@@ -177,5 +185,62 @@ describe("assembleWorkplaceDisplay：内容指纹", () => {
       layout: layoutWithWorkplace(),
     });
     assert.equal(second.fingerprint, third.fingerprint);
+  });
+
+  it("同 path/status/mtimeMs、正文体量不同 → 指纹必须不同（r4-core-4 bodyLength 段）", async () => {
+    const {scope, sk, wt, realVfs} = await seedTwoFiles();
+    // 「mtime 同、正文异」的现实路径：树复制（vfs-tree-copy）保留源 mtime、
+    // 写侧只有毫秒精度。直接在 file_cache 里造这个形态——固定 mtime，只让
+    // 正文长度变。
+    const snapshot = parseRuleSnapshotJson(
+      (await sk.get(
+        scope.sessionId,
+        SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
+        RULE_SNAPSHOT_CANON_KEY,
+      )) ?? "",
+    );
+    assert.ok(
+      snapshot != null && snapshot.length > 0,
+      "前提不成立：规则快照未就绪（seedTwoFiles 应先预热）",
+    );
+    const FIXED_MTIME = 1_700_000_000_000;
+    const shortBody = "正文";
+    const longBody = "正文".repeat(20);
+    assert.notEqual(shortBody.length, longBody.length, "前提：两份正文长度不同");
+    const seedFixedMtimeCache = async (body: string): Promise<void> => {
+      for (const entry of snapshot) {
+        await sk.set(
+          scope.sessionId,
+          SESSION_KKV_DOMAIN_FILE_CACHE,
+          fileCacheKey(entry.status, entry.path),
+          serializeFileCachePayload({body, mtimeMs: FIXED_MTIME}),
+        );
+      }
+    };
+    const assembleOnce = () =>
+      assembleWorkplaceDisplay(scope, {
+        sessionKkv: sk,
+        workplace: wt,
+        vfs: realVfs,
+        layout: layoutWithWorkplace(),
+      });
+
+    await seedFixedMtimeCache(shortBody);
+    const first = await assembleOnce();
+    await seedFixedMtimeCache(longBody);
+    const second = await assembleOnce();
+
+    // 前提自检：两次的 path|status|mtimeMs 三段逐字相同（差异只可能来自
+    // 体量段，否则本用例的牙不在 bodyLength 上）。
+    for (const entry of snapshot) {
+      const head = `${entry.path}|${entry.status}|${FIXED_MTIME}|`;
+      assert.ok(first.fingerprint.includes(head), `first 缺段：${head}`);
+      assert.ok(second.fingerprint.includes(head), `second 缺段：${head}`);
+    }
+    assert.notEqual(
+      first.fingerprint,
+      second.fingerprint,
+      "mtime 相同、正文长度不同 → 指纹必须不同（否则下游记忆会复用陈旧读数）",
+    );
   });
 });
