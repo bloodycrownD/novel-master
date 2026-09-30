@@ -27,6 +27,20 @@ export interface SkillFileContent {
   readonly path: string;
   readonly content: string;
   readonly version: number;
+  /**
+   * 以下三字段（skill-result-ref）逐字对齐上游 {@link VfsReadResult}：
+   * 技能文件与普通文件落同一张 `vfs_revision` 版本链（meta 域），skill
+   * read / load 据此产 `contentRef` 引用块。
+   *
+   * 全部可选 / 可空（`contentHash` 在无 hash 行上真为 `null`）——旧实现
+   * 与三个既有测试 mock 未透出时，skill 工具回落 legacy 全文形态
+   * （不 +1、不产引用块）。
+   */
+  readonly entryId?: number;
+  /** read 时点 head 的内容寻址 hash（hydrate 冗余校验用；文件行无 hash 时为 null）。 */
+  readonly contentHash?: string | null;
+  /** 明文总字节（UTF-8）。 */
+  readonly totalBytes?: number;
 }
 
 /** edit 局部修改的匹配参数（语义同 VFS replace / edit 工具）。 */

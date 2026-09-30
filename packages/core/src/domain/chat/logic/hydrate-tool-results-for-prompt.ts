@@ -1,16 +1,22 @@
 /**
- * read 工具结果引用块的 view-time hydrate（read-tool-result-ref Step 4）。
+ * 工具结果引用块的 view-time hydrate（read-tool-result-ref Step 4 +
+ * skill-result-ref 延伸）。
  *
  * 含 `contentRef` 的 tool_result 块在发送提示词前按全局键
  * `(entryId, version)` 查 revision 元数据（`findMetaByEntryAndVersion`
  * 只取 status / content_hash 两列，**零解码**）与 `ref.contentHash` 比对
  * 冗余校验（不匹配 = 版本错位 / 错键，fail-fast 抛
  * {@link ReadResultHydrateError}——绝不静默把空 content 或错文发给 LLM），
- * 元数据通过后才解 blob 明文，再以 ref 自包含参数重放 read 的截断管线
- * （`sliceLinesFromOffset` + `capUtf8BytesFill`，与 read 执行时逐字节
- * 同参）经 `formatReadOutput`（冻结函数，演进须版本化）还原 wire 文本，
- * 填回块 `content`——**内存态，不写回 content_json**（prepare 的
- * attach hydrate 同款纪律）。legacy 块（无 contentRef）零处理。
+ * 元数据通过后才解 blob 明文，再以 ref 自包含参数重放对应工具的截断管线
+ * 经冻结 formatter（vfs read → `formatReadOutput`；skill read → skill 自己
+ * 的 truncateLine+capUtf8Bytes 管线后 `formatReadOutput`；skill load →
+ * `formatSkillLoadOutput`）还原 wire 文本，填回块 `content`——**内存态，
+ * 不写回 content_json**（prepare 的 attach hydrate 同款纪律）。legacy 块
+ * （无 contentRef）零处理。
+ *
+ * 三类引用共用同一条校验链（同一四码 fail-fast 体系与同一 memo）：窄化只判
+ * `contentRef.kind === "skill"`（read 引用缺省即 read——存量行无 kind 键，
+ * 向后兼容零迁移）。
  *
  * 单次调用内按 ref 键去重（同一批消息重复引用同一 revision / 同一
  * 重放参数只解码一次），**不跨调用持久缓存**——取舍见 {@link HydrateMemo}。
@@ -40,10 +46,18 @@
 import type {
   ContentBlock,
   ReadResultRef,
+  SkillResultRef,
   ToolResultBlock,
 } from "../model/content-block.js";
 import type { ChatMessage } from "../model/message.js";
-import { formatReadOutput } from "@/domain/tool/logic/format-tool-output.js";
+import {
+  formatReadOutput,
+  formatSkillLoadOutput,
+} from "@/domain/tool/logic/format-tool-output.js";
+import {
+  deriveSkillLoadTruncation,
+  deriveSkillReadTruncation,
+} from "@/domain/tool/logic/skill-read-truncation.js";
 import {
   capUtf8BytesFill,
   sliceLinesFromOffset,
@@ -86,9 +100,13 @@ export class ReadResultHydrateError extends Error {
  *   元数据校验的 revision 明文；同一次装配里多个块引用同一 `(entryId, version)`
  *   时只查一次、只解一次 blob（长文件分段 read、同文件多轮 read 的重复引用是
  *   常态）。期望 hash 拼进键，篡改 ref 不会借缓存绕过校验。
- * - `wireByReplayKey`：键在上述基础上再加 `offset:limit:path` → 重放后的 wire
- *   文本；`replayReadWireText` 只依赖这四个量（ref 里的 returnedLines 等派生
- *   字段都是重放重算的），同参重复引用直接复用字符串。
+ * - `wireByReplayKey`：键在上述基础上再加 `kind:action:offset:limit:path` →
+ *   重放后的 wire 文本；`replayReadWireText` / `replaySkillReadWireText` /
+ *   `replaySkillLoadWireText` 只依赖这五个量（ref 里的 returnedLines 等派生
+ *   字段都是重放重算的），同参重复引用直接复用字符串。**action 必须进键**
+ *   ——skill read 与 skill load 的 ref 共享 `(entryId, version)`（load 后
+ *   再 read 同一 SKILL.md 是常态），不加 action 会拿 read 的 wire 去当 load
+ *   的 wire 发给 LLM。
  *
  * 刻意**不做跨调用持久缓存**：dangling / 已删除的 fail-fast 是保活链断裂的
  * 安全网——revision 被 GC 或 mark-deleted 后，同一内存消息下一次 hydrate 必须
@@ -147,6 +165,53 @@ function replayReadWireText(ref: ReadResultRef, plain: string): string {
   });
 }
 
+/**
+ * skill read 引用块的重放（skill-result-ref）。
+ *
+ * wire 走 `formatReadOutput`（skill read 输出字段全齐，`isReadOutput` 命中，
+ * 与 vfs read 同一冻结 formatter），但**截断管线不同**：skill 走
+ * `truncateLine` + `capUtf8Bytes`（不是 read 的 `capUtf8BytesFill`）。
+ * 推导调 `deriveSkillReadTruncation` —— 与 skill-tool 执行时**同一个纯
+ * 函数**（单源，不是复刻两份），元数据 hash 校验已保证明文就是读时那一版，
+ * 纯函数确定性重放即逐字节等值。
+ */
+function replaySkillReadWireText(ref: SkillResultRef, plain: string): string {
+  const { content, returnedLines, totalLines, truncated, nextOffset } =
+    deriveSkillReadTruncation(
+      plain,
+      ref.offset,
+      ref.limit ?? TOOL_OUTPUT_MAX_LINES
+    );
+  return formatReadOutput({
+    path: ref.path,
+    content,
+    offset: ref.offset,
+    totalLines,
+    returnedLines,
+    truncated,
+    ...(nextOffset != null ? { nextOffset } : {}),
+  });
+}
+
+/**
+ * skill load 引用块的重放（skill-result-ref）。
+ *
+ * wire 走 `formatSkillLoadOutput`（正文行号段 + 附属文件清单尾注）。load
+ * 输出**本就没有** totalLines / returnedLines（工具侧只记 offset/limit/… 的
+ * read 侧字段），故这里也不补——`formatReadOutput` 的 truncated 提示分支
+ * 对 `totalLines !== number` 本就跳过，补 0 会凭空多出「Total lines: 0.」
+ * 一句，逐字节等值就破了。files 来自 ref（清单不存则重放不出尾注）。
+ */
+function replaySkillLoadWireText(ref: SkillResultRef, plain: string): string {
+  const { content, truncated } = deriveSkillLoadTruncation(plain);
+  return formatSkillLoadOutput({
+    path: ref.path,
+    content,
+    truncated,
+    files: ref.files,
+  });
+}
+
 /** 单个引用块的 hydrate：查 revision 元数据 → 校验 → 解明文 → 重放 → 填回 content。 */
 async function hydrateReadResultBlock(
   block: ToolResultBlock,
@@ -154,14 +219,22 @@ async function hydrateReadResultBlock(
   memo: HydrateMemo
 ): Promise<ToolResultBlock> {
   const ref = block.contentRef!;
+  const isSkill = ref.kind === "skill";
+  // fail-fast 文案用工具名 + path 定位，两类引用共用同一四码体系。
+  const refLabel = isSkill
+    ? `skill ${ref.action} 引用`
+    : "read 引用";
+  const locKey = `${isSkill ? `${ref.action}:` : ""}${ref.path}`;
   if (revisionRepo == null) {
     throw new ReadResultHydrateError(
       "READ_REF_REPO_MISSING",
-      `read 引用块缺少 revision 仓库：${ref.path} (entryId=${ref.entryId}, version=${ref.version})——hydrate 未装配时引用块 content 为空串，静默放行会把空 tool_result 发给 LLM`
+      `${refLabel}块缺少 revision 仓库：${locKey} (entryId=${ref.entryId}, version=${ref.version})——hydrate 未装配时引用块 content 为空串，静默放行会把空 tool_result 发给 LLM`
     );
   }
   // 明文缓存键含期望 hash：把它拼进键，篡改过的 ref（同 revision 但
   // contentHash 指别的 blob）不会命中缓存，校验一步都省不掉。
+  // 明文本身与 kind/action 无关（同一 revision 的同一版正文），故不把
+  // kind 进 plainKey——load 与 read 共用一份解码结果。
   const plainKey = `${ref.entryId}:${ref.version}:${ref.contentHash}`;
   let plain = memo.plainByRefKey.get(plainKey);
   if (plain == null) {
@@ -174,19 +247,19 @@ async function hydrateReadResultBlock(
     if (meta == null) {
       throw new ReadResultHydrateError(
         "READ_REF_REVISION_MISSING",
-        `read 引用悬空：${ref.path} 的 (entryId=${ref.entryId}, version=${ref.version}) 无 revision 行（ref_count 保活链被破坏或引用键被篡改）`
+        `${refLabel}悬空：${locKey} 的 (entryId=${ref.entryId}, version=${ref.version}) 无 revision 行（ref_count 保活链被破坏或引用键被篡改）`
       );
     }
     if (meta.status === "deleted") {
       throw new ReadResultHydrateError(
         "READ_REF_CONTENT_DELETED",
-        `read 引用指向已删除 revision：${ref.path} (entryId=${ref.entryId}, version=${ref.version}) status=${meta.status}，明文不可再生`
+        `${refLabel}指向已删除 revision：${locKey} (entryId=${ref.entryId}, version=${ref.version}) status=${meta.status}，明文不可再生`
       );
     }
     if (meta.contentHash !== ref.contentHash) {
       throw new ReadResultHydrateError(
         "READ_REF_HASH_MISMATCH",
-        `read 引用内容漂移：${ref.path} (entryId=${ref.entryId}, version=${ref.version}) 期望 contentHash=${ref.contentHash}，实际=${meta.contentHash}（版本错位或引用键错配：行上的 content_hash 指向了另一版明文）`
+        `${refLabel}内容漂移：${locKey} (entryId=${ref.entryId}, version=${ref.version}) 期望 contentHash=${ref.contentHash}，实际=${meta.contentHash}（版本错位或引用键错配：行上的 content_hash 指向了另一版明文）`
       );
     }
     const revision = await revisionRepo.findByEntryAndVersion(
@@ -197,7 +270,7 @@ async function hydrateReadResultBlock(
       // 元数据命中后行被并发删/GC 的兜底（同 REVISION_MISSING 语义）。
       throw new ReadResultHydrateError(
         "READ_REF_REVISION_MISSING",
-        `read 引用悬空：${ref.path} 的 (entryId=${ref.entryId}, version=${ref.version}) 无 revision 行（ref_count 保活链被破坏或引用键被篡改）`
+        `${refLabel}悬空：${locKey} 的 (entryId=${ref.entryId}, version=${ref.version}) 无 revision 行（ref_count 保活链被破坏或引用键被篡改）`
       );
     }
     if (revision.content == null) {
@@ -205,18 +278,26 @@ async function hydrateReadResultBlock(
       // 同样按「明文不可再生」fail-fast，不放空串过去。
       throw new ReadResultHydrateError(
         "READ_REF_CONTENT_DELETED",
-        `read 引用指向已删除 revision：${ref.path} (entryId=${ref.entryId}, version=${ref.version}) status=${revision.status}，明文不可再生`
+        `${refLabel}指向已删除 revision：${locKey} (entryId=${ref.entryId}, version=${ref.version}) status=${revision.status}，明文不可再生`
       );
     }
     plain = revision.content;
     memo.plainByRefKey.set(plainKey, plain);
   }
-  // wire 文本是 (明文, path, offset, limit) 的确定性函数（replayReadWireText
-  // 纯重放），同参重复引用直接复用，不再跑一遍切行 / 字节帽 / 格式化。
-  const wireKey = `${plainKey}:${ref.offset}:${ref.limit ?? ""}:${ref.path}`;
+  // wire 文本是 (明文, kind/action, path, offset, limit) 的确定性函数
+  // （重放纯函数），同参重复引用直接复用，不再跑一遍切行 / 字节帽 /
+  // 格式化。**kind/action 必须进键**：skill load 与 skill read 引用同一
+  // `(entryId, version)`（load 后再 read 同一 SKILL.md 是常态）但 wire
+  // 不同（formatSkillLoadOutput vs formatReadOutput）。
+  const actionKey = isSkill ? `skill:${ref.action}` : "read";
+  const wireKey = `${plainKey}:${actionKey}:${ref.offset}:${ref.limit ?? ""}:${ref.path}`;
   let wire = memo.wireByReplayKey.get(wireKey);
   if (wire == null) {
-    wire = replayReadWireText(ref, plain);
+    wire = isSkill
+      ? ref.action === "load"
+        ? replaySkillLoadWireText(ref, plain)
+        : replaySkillReadWireText(ref, plain)
+      : replayReadWireText(ref, plain);
     memo.wireByReplayKey.set(wireKey, wire);
   }
   // view-time：只填回内存态 content，contentRef 原样保留（块身份不变，

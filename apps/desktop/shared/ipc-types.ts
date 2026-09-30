@@ -680,24 +680,47 @@ export type ContentBlockDto =
       readonly ok?: boolean;
       readonly summary?: string;
       /**
-       * read 工具结果引用（read-tool-result-ref）：镜像 core `ReadResultRef`。
-       * 存在时 content 为占位空串，wire 侧按 (entryId, version) hydrate 重放
-       * `formatReadOutput` 还原全文；legacy 行（无 contentRef）不受影响。
+       * 工具结果引用：镜像 core 的 `ReadResultRef | SkillResultRef`。
+       * 存在时 content 为占位空串，wire 侧按 (entryId, version) hydrate
+       * 重放对应冻结 formatter 还原全文；legacy 行（无 contentRef）不受影响。
+       *
+       * 判别口径与 core 一致：**`kind` 缺省即 read**（存量行无 kind 键），
+       * skill 引用必带 `kind: "skill"`。渲染层分文案时按此窄化。
        */
-      readonly contentRef?: {
-        readonly path: string;
-        readonly entryId: number;
-        readonly version: number;
-        readonly contentHash: string;
-        readonly totalBytes: number;
-        readonly offset: number;
-        readonly limit?: number;
-        readonly returnedLines: number;
-        readonly totalLines: number;
-        readonly truncated: boolean;
-        readonly lastLineTruncated?: boolean;
-        readonly nextOffset?: number;
-      };
+      readonly contentRef?:
+        | {
+            readonly kind?: 'read';
+            readonly path: string;
+            readonly entryId: number;
+            readonly version: number;
+            readonly contentHash: string;
+            readonly totalBytes: number;
+            readonly offset: number;
+            readonly limit?: number;
+            readonly returnedLines: number;
+            readonly totalLines: number;
+            readonly truncated: boolean;
+            readonly lastLineTruncated?: boolean;
+            readonly nextOffset?: number;
+          }
+        | {
+            readonly kind: 'skill';
+            readonly action: 'load' | 'read';
+            readonly domain: 'global' | 'project';
+            readonly name: string;
+            readonly path: string;
+            readonly entryId: number;
+            readonly version: number;
+            readonly contentHash: string;
+            readonly totalBytes: number;
+            readonly offset: number;
+            readonly limit?: number;
+            readonly returnedLines: number;
+            readonly totalLines: number;
+            readonly truncated: boolean;
+            readonly nextOffset?: number;
+            readonly files: string[];
+          };
       /**
        * UI-only 旁路字段：task 工具携带 `subagentSessionId` 供卡片跳转子会话；
        * skill 携带 `skillRef`（read 由工具输出解析透传，write/edit 由输入侧解析）。

@@ -68,11 +68,16 @@ function toContentBlockDto(block: ContentBlock): ContentBlockDto | null {
 }
 
 /**
- * read 引用态占位（read-tool-result-ref Step 6）：`bodyText` 是复制
- * fallback 的纯文本投影——引用块（含 contentRef 且 content 为空串）没有
- * 全文可投影，直接走 core 会只剩 `[tool_result id=…]` 头。这里对这类块的
- * 投影文本换成 `[read ref: path]` 占位标记；legacy 块（无 contentRef）
- * 逐字节不变。变换只作用于浅拷贝块数组，不写回消息本体（view-time 纪律）。
+ * 引用态占位（read-tool-result-ref Step 6 + skill-result-ref）：`bodyText`
+ * 是复制 fallback 的纯文本投影——引用块（含 contentRef 且 content 为空串）
+ * 没有全文可投影，直接走 core 会只剩 `[tool_result id=…]` 头。这里对这类
+ * 块的投影文本换成占位标记；legacy 块（无 contentRef）逐字节不变。变换只作用
+ * 于浅拷贝块数组，不写回消息本体（view-time 纪律）。
+ *
+ * 分文案按 `contentRef.kind` 窄化（缺省即 read——存量行无 kind 键）：
+ * skill 引用块标 `[skill ref: domain/name]` 而非误标 `[read ref: path]`
+ * ——skill ref 的 path 是**技能目录内的相对路径**（如 `SKILL.md`），脱离
+ * domain/name 单独投影既无信息量又会误导用户。
  */
 function messageBodyTextWithReadRefPlaceholder(msg: ChatMessage): string {
   const blocks = msg.content.blocks ?? [];
@@ -92,7 +97,14 @@ function messageBodyTextWithReadRefPlaceholder(msg: ChatMessage): string {
         block.contentRef != null &&
         block.content === ''
       ) {
-        return { ...block, content: `[read ref: ${block.contentRef.path}]` };
+        const ref = block.contentRef;
+        return {
+          ...block,
+          content:
+            ref.kind === 'skill'
+              ? `[skill ref: ${ref.domain}/${ref.name}]`
+              : `[read ref: ${ref.path}]`,
+        };
       }
       return block;
     }),

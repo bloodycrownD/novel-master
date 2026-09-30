@@ -10,6 +10,7 @@
 
 import type {
   ReadResultRef,
+  SkillResultRef,
   SkillToolRef,
   ToolResultBlock,
 } from "@/domain/chat/model/content-block.js";
@@ -110,6 +111,109 @@ function resolveReadResultRefFromOutcome(
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * 从 skill 成功输出解析 `contentRef`（skill-result-ref）。
+ *
+ * 仅 `toolName === "skill"` 且 `action ∈ {load, read}`、输出携带 head 定位
+ * 三件套时生效——skill-tool 只在 ctx 注入 adjustRevisionRefCount 并同步 +1
+ * 之后才把这些字段放进输出，「有 entryId ⟺ revision 已保活」，这里产的
+ * 引用块不会悬空。其余 action（write/edit/list）与旧形态输出（含 mock ctx
+ * 的测试）返回 undefined，走 legacy 全文 content。
+ *
+ * **字段校验按 action 拆两套**（wire 冻结函数的入参面不同）：
+ * - read：wire 走 `formatReadOutput`，全量校验分页派生参数（offset /
+ *   limit / returnedLines / totalLines / truncated / nextOffset）；
+ * - load：wire 走 `formatSkillLoadOutput`，只吃 path/content/truncated/
+ *   files，load 输出本无分页字段（恒记 offset=1 / returnedLines=0 /
+ *   totalLines=0 作占位）——故只校验 version/truncated/files/三件套。
+ *
+ * alreadyReferenced 形态不带三件套（工具不 +1、不产 ref），自然落回
+ * legacy 全文。
+ */
+function resolveSkillResultRefFromOutcome(
+  toolName: string | undefined,
+  output: unknown
+): SkillResultRef | undefined {
+  if (toolName !== "skill" || !isRecord(output)) {
+    return undefined;
+  }
+  const { action, domain, name, path, entryId, version, contentHash, totalBytes } =
+    output;
+  if (action !== "load" && action !== "read") {
+    return undefined;
+  }
+  if (
+    (domain !== "global" && domain !== "project") ||
+    typeof name !== "string" ||
+    typeof path !== "string" ||
+    typeof entryId !== "number" ||
+    typeof version !== "number" ||
+    typeof contentHash !== "string" ||
+    contentHash === "" ||
+    typeof totalBytes !== "number"
+  ) {
+    return undefined;
+  }
+  const truncated = output.truncated;
+  if (typeof truncated !== "boolean") {
+    return undefined;
+  }
+  if (action === "load") {
+    const files = output.files;
+    if (!Array.isArray(files) || files.some((f) => typeof f !== "string")) {
+      return undefined;
+    }
+    return {
+      kind: "skill",
+      action: "load",
+      domain,
+      name,
+      path,
+      entryId,
+      version,
+      contentHash,
+      totalBytes,
+      // load 无分页参数：常量占位，让 hydrate 侧两条 action 共用一套字段
+      // 校验与 parse 白名单（wire 重放不读这三个数）。
+      offset: 1,
+      returnedLines: 0,
+      totalLines: 0,
+      truncated,
+      files: files as string[],
+    };
+  }
+  const { offset, returnedLines, totalLines } = output;
+  const limit = output.limit;
+  const nextOffset = output.nextOffset;
+  if (
+    typeof offset !== "number" ||
+    typeof returnedLines !== "number" ||
+    typeof totalLines !== "number"
+  ) {
+    return undefined;
+  }
+  return {
+    kind: "skill",
+    action: "read",
+    domain,
+    name,
+    path,
+    entryId,
+    version,
+    contentHash,
+    totalBytes,
+    offset,
+    ...(typeof limit === "number" ? { limit } : {}),
+    returnedLines,
+    totalLines,
+    truncated,
+    ...(typeof nextOffset === "number" ? { nextOffset } : {}),
+    // load 专属字段（read 不产出）：空清单占位，使 parse 白名单与 hydrate
+    // 侧无需按 action 二次分派。
+    files: [],
+  };
 }
 
 /** 字节数格式化：1024 进位（B/KB/MB）、保留 1 位小数（整数位不带 .0）。 */
@@ -326,14 +430,14 @@ export function buildToolResultBlock(
       meta?.skillProjectId
     );
 
-    // read 引用块（read-tool-result-ref）：read 成功输出携带 head 定位三件套
-    // （vfs-tools 已同步 +1 保活）时产 contentRef——content 置占位空串，
-    // wire 侧 hydrate 按 (entryId, version) 重放 formatReadOutput 还原全文；
-    // summary 照旧生成（"N lines" / "truncated · N/M lines"，UI 卡片零改动）。
-    const contentRef = resolveReadResultRefFromOutcome(
-      meta?.toolName,
-      outcome.output
-    );
+    // 引用块（read-tool-result-ref / skill-result-ref）：read / skill read /
+    // skill load 成功输出携带 head 定位三件套（工具已同步 +1 保活）时产
+    // contentRef——content 置占位空串，wire 侧 hydrate 按 (entryId, version)
+    // 重放对应冻结 formatter 还原全文；summary 照旧生成（UI 卡片零改动）。
+    // 二者互斥（工具名不同），先 read 后 skill。
+    const contentRef =
+      resolveReadResultRefFromOutcome(meta?.toolName, outcome.output) ??
+      resolveSkillResultRefFromOutcome(meta?.toolName, outcome.output);
 
     // 中断回流（phase-1-abort-reflow）：outcome.ok=true 但 output.stopped=true 表示
     // 子 agent 被用户中断。tool-result 要标 ok=false（主 agent 区分「用户停止」与「崩溃」），
