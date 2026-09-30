@@ -12,8 +12,14 @@
  * （messages.listBySession / sessionVkv / vfs），段与段的边界用各段内部依赖
  * 的调用与否钉住。
  *
- * 这里用最小 runtime stub 走真实 buildSessionPromptInput：workplace layout 不开 →
- * assembleWorkplaceDisplay 短路；user 消息无附件 → prepare 内不触 vfs/sessionKkv。
+ * fixture 两种形态（r4-app-3：检查点计数不许依赖「组装恰好短路」这个隐形前提）：
+ * - **最小形态**（缺省；T-CA5 与「不传 shouldBail」用例）：workplace layout
+ *   不开 → assembleWorkplaceDisplay 短路，组装段的 shouldStop 一次都不问；
+ *   user 消息无附件 → prepare 内不触 vfs/sessionKkv。
+ * - **组装参与形态**（`workplaceFiles` 非空；分段弃权用例）：workplace 块
+ *   真开，组装段真跑（规则快照 → evaluateRuleView → file_cache 预取命中 →
+ *   逐文件渲染），组装内 shouldStop（快照加载后 1 次 + 每文件 1 次）真实
+ *   发生。检查点序号与总数按「build 段界 4 道 + 组装内 1 + N」写死。
  */
 import {describe, expect, it, jest} from '@jest/globals';
 import {textBlocks} from '@novel-master/core/chat';
@@ -45,7 +51,38 @@ function bodyText(content: unknown): string {
     .join('\n');
 }
 
-function makeStubRuntime(): MobileNovelMasterRuntime {
+/** 组装参与形态的规则文件（快照行顺序）；数量直接进入检查点计数公式。 */
+const WORKPLACE_FILES = ['/规则/玩法.md', '/规则/文风.md'] as const;
+
+/**
+ * runtime stub（只搭最底层 IO，段内逻辑全真跑）。
+ *
+ * @param options.workplaceFiles 非空时开 workplace 块并让组装段真跑
+ *   （r4-app-3）：`workplace.evaluateRuleView` 给出这批 file 行、
+ *   `sessionKkv.getMany` 直接命中 file_cache 预取（不触 vfs、不排后台
+ *   回填），组装内按文件粒度的 shouldStop 检查点因此真实发生。
+ */
+function makeStubRuntime(options?: {
+  readonly workplaceFiles?: readonly string[];
+}): MobileNovelMasterRuntime {
+  const workplaceFiles = options?.workplaceFiles ?? [];
+  /** 组装段的第一笔输入：快照 miss → evaluateRuleView 的返回值。 */
+  const ruleView = {
+    rows: workplaceFiles.map(path => ({
+      kind: 'file' as const,
+      path,
+      inclusionMode: 'show' as const,
+      displayState: 'full' as const,
+    })),
+    displayByPath: new Map(workplaceFiles.map(path => [path, 'full' as const])),
+  };
+  /** file_cache 预取命中（键形如 `{status}:{path}`，与 fileCacheKey 同形）。 */
+  const prefetched = new Map(
+    workplaceFiles.map(path => [
+      `full:${path}`,
+      JSON.stringify({body: `# ${path}\n规则正文`, mtimeMs: 1000}),
+    ]),
+  );
   return {
     messages: {
       listBySession: jest.fn(async () => [
@@ -60,13 +97,16 @@ function makeStubRuntime(): MobileNovelMasterRuntime {
       ]),
     },
     state: {},
-    workplace: jest.fn(() => ({})),
+    workplace: jest.fn(() => ({
+      evaluateRuleView: jest.fn(async () => ruleView),
+    })),
     sessionVfs: jest.fn(() => ({})),
     // skillAttach hydrate 用的技能服务工厂；本用例消息无 skillAttach 附件，
     // prepare 惰性预算不会真正调用，给个空壳即可。
     skills: jest.fn(() => ({})),
     sessionKkv: {
       get: jest.fn(async () => null),
+      getMany: jest.fn(async () => prefetched),
       set: jest.fn(async () => undefined),
       delete: jest.fn(async () => undefined),
       clearSession: jest.fn(async () => undefined),
@@ -103,16 +143,45 @@ describe('buildSessionPromptInput (T-CA5 mobile)', () => {
 });
 
 describe('buildSessionPromptInput 分段弃权检查点（r3-test-1 ④）', () => {
-  /** 段序（与实现一一对应）：resolve agent → messages → workplace → prepare。 */
-  const buildWithBailAt = async (bailAtCall: number) => {
-    const runtime = makeStubRuntime();
+  /**
+   * 段序（与实现一一对应，含组装段内部检查点）：resolve agent → messages →
+   * workplace（组装内：快照加载后 1 次 + 每文件 1 次）→ prepare。
+   *
+   * 检查点序号（N = {@link WORKPLACE_FILES} 的个数）：
+   * 1 = resolve 后；2 = messages 后；3..(2+N) = 组装内；
+   * (4+N) = 组装段后（build 的第三道段界）；(5+N) = prepare 后（第四道）。
+   * 组装真跑 ⇒ 序号与总数都含这 N 次逐文件检查，不随「组装短路」漂移。
+   */
+  const N = WORKPLACE_FILES.length;
+  /** 组装内检查点数：快照加载后 1 次 + 每文件 1 次。 */
+  const ASSEMBLY_CHECKPOINTS = N + 1;
+  /** 恒假弃权开关下一轮问过的检查点总数 = build 段界 4 道 + 组装内。 */
+  const TOTAL_CHECKPOINTS = 4 + ASSEMBLY_CHECKPOINTS;
+
+  /** 组装参与形态的 runtime（开 workplace 块；见文件头 fixture 形态说明）。 */
+  const makeBailRuntime = (): MobileNovelMasterRuntime =>
+    makeStubRuntime({workplaceFiles: WORKPLACE_FILES});
+
+  const makeBailDefinition = () => {
     const definition = buildDefaultAgentDefinitionPreservingName('bail-agent');
+    // 显式开 workplace 块：不这样的话组装短路、检查点只剩 build 的 4 道，
+    // 断言含义就跟着 fixture 形态跑了（r4-app-3）。
+    definition.prompts = {...definition.prompts, workplace: '【工作区】'};
+    return definition;
+  };
+
+  const buildWithBailAt = async (bailAtCall: number) => {
+    const runtime = makeBailRuntime();
+    const definition = makeBailDefinition();
     let calls = 0;
     const observed = {
       listBySession: () => (runtime.messages.listBySession as jest.Mock).mock.calls.length,
       workplace: () => (runtime.workplace as jest.Mock).mock.calls.length,
       sessionVfs: () => (runtime.sessionVfs as jest.Mock).mock.calls.length,
       skills: () => (runtime.skills as jest.Mock).mock.calls.length,
+      // 组装段的 file_cache 批量预取次数（> 0 即证明组装真跑进了文件循环）。
+      prefetch: () =>
+        (runtime.sessionKkv.getMany as jest.Mock).mock.calls.length,
     };
     const shouldBail = () => {
       calls += 1;
@@ -127,9 +196,9 @@ describe('buildSessionPromptInput 分段弃权检查点（r3-test-1 ④）', () 
     return {promise, observed, bailCalls: () => calls};
   };
 
-  it('弃权开关恒假：build 走完全程，四道检查点各问一次', async () => {
-    const runtime = makeStubRuntime();
-    const definition = buildDefaultAgentDefinitionPreservingName('no-bail-agent');
+  it('弃权开关恒假：build 走完全程，全部检查点各问一次', async () => {
+    const runtime = makeBailRuntime();
+    const definition = makeBailDefinition();
     const shouldBail = jest.fn(() => false);
     const bundle = await buildSessionPromptInput(
       runtime,
@@ -138,13 +207,20 @@ describe('buildSessionPromptInput 分段弃权检查点（r3-test-1 ④）', () 
       {shouldBail},
     );
     expect(bundle.input).toBeDefined();
-    expect(shouldBail).toHaveBeenCalledTimes(4);
+    // 构成：build 的四道段界检查点（resolve 后 / messages 后 / 组装后 /
+    // prepare 后）+ 组装内 shouldStop（快照加载后 1 次 + 每文件 1 次）。
+    // 本夹具 N=2，实测总数 = 4 + 3 = 7（开块前是 4）。
+    expect(shouldBail).toHaveBeenCalledTimes(TOTAL_CHECKPOINTS);
+    // 前提：组装段真的跑了（否则总数退化成 4，断言就不表达「组装参与」了）。
+    expect(runtime.workplace as jest.Mock).toHaveBeenCalledTimes(1);
+    expect(runtime.sessionKkv.getMany as jest.Mock).toHaveBeenCalledTimes(1);
   });
 
   it('第 1 段翻真（agent 解析后）：抛 ChatPromptBuildBailedError，消息段未执行', async () => {
     const {promise, observed} = await buildWithBailAt(1);
     await expect(promise).rejects.toBeInstanceOf(ChatPromptBuildBailedError);
     expect(observed.listBySession()).toBe(0);
+    expect(observed.prefetch()).toBe(0);
   });
 
   it('第 2 段翻真（消息拉取后）：抛错，workplace 段未执行', async () => {
@@ -153,23 +229,30 @@ describe('buildSessionPromptInput 分段弃权检查点（r3-test-1 ④）', () 
     expect(observed.listBySession()).toBe(1);
     expect(observed.workplace()).toBe(0);
     expect(observed.skills()).toBe(0);
+    expect(observed.prefetch()).toBe(0);
   });
 
   it('第 3 段翻真（workplace 组装后）：抛错，prepare 段未执行', async () => {
-    const {promise, observed} = await buildWithBailAt(3);
+    // 第 (4+N) 次 = 组装内检查点问完之后、build 的第三道段界。
+    const {promise, observed} = await buildWithBailAt(4 + N);
     await expect(promise).rejects.toBeInstanceOf(ChatPromptBuildBailedError);
     expect(observed.workplace()).toBe(1);
     expect(observed.sessionVfs()).toBe(1);
+    // 前提：组装真跑进了文件循环（否则这道「组装后」的段界是空的）。
+    expect(observed.prefetch()).toBe(1);
     // prepare 的入参（含 skills()）整段未求值
     expect(observed.skills()).toBe(0);
   });
 
   it('第 4 段翻真（prepare 后）：抛错，layout 组装段未执行', async () => {
-    const {promise, observed, bailCalls} = await buildWithBailAt(4);
+    // 第 (5+N) 次 = prepare 跑完、build 的第四道（最后一道）段界。
+    const {promise, observed, bailCalls} = await buildWithBailAt(5 + N);
     await expect(promise).rejects.toBeInstanceOf(ChatPromptBuildBailedError);
     expect(observed.skills()).toBe(1);
-    // 只问了 4 次：第 4 次之后没有 layout 段的检查点，也没有落库式副作用
-    expect(bailCalls()).toBe(4);
+    expect(observed.prefetch()).toBe(1);
+    // 只问了 5+N 次（= 4 道段界 + 组装内 1+N）：第 4 道段界之后没有 layout
+    // 段的检查点，也没有落库式副作用。
+    expect(bailCalls()).toBe(TOTAL_CHECKPOINTS);
   });
 
   it('不传 shouldBail：行为不变（预览等非 chip 消费方不受弃权影响）', async () => {

@@ -22,6 +22,11 @@
  *   同时服务 vfs.read（文件预览 / 工具读盘 / workplace 冷回填）与 file_cache
  *   读链。**这池不需要任何失效机制**：键是内容的密码学哈希，同键必同值
  *   （value 是 key 的函数），不存在陈旧窗口——这就是用户要的「内容寻址」。
+ *   注意「命中不查库」的后果：某条 blob 行被 GC 回收后，同进程内照样读得到
+ *   该正文（正文正确性由 hash 保证，与行在不在无关）；因此
+ *   `scanContents` 那条「缺 blob 必抛」的失败语义只在冷态成立，热态静默成功
+ *   （见 `sqlite-vfs-entry.repository.ts` 的 scanContents 分支）。生产接受这个
+ *   取舍：内存层只是把明文的寿命延长到进程结束，重启即回到冷态、语义复原。
  * - **消息正文池**（`messageContentPool`）：键 = message id。chat_message 没有
  *   内容哈希列（曾有过加列方案，同日撤回），只能以主键为身份 + 写入点显式
  *   失效：唯一会「同 id 换正文」的写口是 `updateContent`，它必须调用
@@ -29,6 +34,13 @@
  *   （append/fork/copy 均新 id），所以删除/回滚留下的死条目没有正确性风险，
  *   由 LRU 自然回收；后台压缩搬运与 blob 归一任务只换字节形态、正文不变，
  *   同样无需失效。
+ *
+ * ## 池的作用域是进程，不是连接/库
+ *
+ * 两池都是模块级单例，按**进程**共享，前提是每进程单库单连接（desktop /
+ * mobile 现状）。同进程若出现第二个连接或换库，两池会继续拿旧库的内容作答
+ * （消息池按 id 取，串池最明显），必须走 `bootstrapNovelMaster` 清池——它已在
+ * 入口调用 {@link clearDecodedContentCaches}（见 bootstrap 模块头的说明）。
  *
  * ## 只存字符串，不存解析结果
  *

@@ -56,6 +56,10 @@ import {
 } from "../../src/infra/db-maintenance/index.js";
 import { __resetStatusSamplingThrottleForTests } from "../../src/infra/db-maintenance/impl/blob-binary-normalization.js";
 import {
+  clearDecodedContentCaches,
+  lookupDecodedContentBody,
+} from "../../src/infra/content-cache/logic/decoded-content-cache.js";
+import {
   createSessionKkvService,
   SESSION_KKV_DOMAIN_FILE_CACHE,
 } from "../../src/service/session-kkv/index.js";
@@ -712,6 +716,108 @@ describe("存量 blob 形态归一任务（T-BB4 ~ T-BB7）", () => {
     for (let i = 1; i <= 12; i++) {
       const plain = corpus(i);
       assert.equal(await store.get(hashContent(plain)), plain, "读路径等值");
+    }
+  });
+
+  it("r4q-4：归一只换字节形态——归一前经读链路取到的明文，归一后逐字节不变", async () => {
+    await resetNormalizationState();
+    // 进程内解压产物池是模块级单例（与生产同一条），本用例自管池状态。
+    clearDecodedContentCaches();
+
+    // 同一明文在两套内容寻址存储里同 hash（hashContent 是共享纯函数）：
+    // vfs_content_blob 走 content-store 读链路，session_file_cache_blob 走
+    // file_cache 读链路——两条读口共用同一条内存条目（解压产物层的「内容
+    // 正文池」）。encoding 一 b64、一脏形态，顺带覆盖谓词两个分支。
+    const plains = [corpus(151), corpus(152)];
+    const hashes = plains.map((plain) => hashContent(plain));
+    for (let i = 0; i < plains.length; i++) {
+      const encoding = i === 0 ? "zlib-b64" : "zlib";
+      await insertLegacyRow(
+        "vfs_content_blob",
+        hashes[i]!,
+        plains[i]!,
+        encoding,
+        "base64"
+      );
+      await insertLegacyRow(
+        "session_file_cache_blob",
+        hashes[i]!,
+        plains[i]!,
+        encoding,
+        "base64"
+      );
+    }
+
+    const store = new SqliteVfsContentStore(conn());
+    const sessionKkv = createSessionKkvService(conn());
+    /** 两条读口各读一遍（store + file_cache），按 [store, cache] 交替返回。 */
+    const readBoth = async (): Promise<string[]> => {
+      const reads: string[] = [];
+      for (const hash of hashes) {
+        reads.push(await store.get(hash));
+        const raw = await sessionKkv.get(
+          "bb-session",
+          SESSION_KKV_DOMAIN_FILE_CACHE,
+          hash
+        );
+        assert.ok(raw != null, `file_cache 读链路应命中 ${hash}`);
+        reads.push((JSON.parse(raw) as { body: string }).body);
+      }
+      return reads;
+    };
+    const assertReads = (reads: readonly string[], label: string): void => {
+      assert.equal(reads.length, hashes.length * 2);
+      for (let i = 0; i < hashes.length; i++) {
+        assert.equal(reads[i * 2], plains[i], `${label}：content-store 读回原文`);
+        assert.equal(reads[i * 2 + 1], plains[i], `${label}：file_cache 读回原文`);
+      }
+    };
+
+    // ① 归一前先读：明文经两条读链路各走一遍。生产里这一步就是「组装已经
+    // 读过这些文件、进程内解压产物池里已有正文」，而接下来跑归一任务的正是
+    // 同一进程、同一个池——所以「只换字节形态」是这层缓存能继续命中的前提。
+    const before = await readBoth();
+    assertReads(before, "归一前");
+    // 前提检查（本用例的「前提被制造」）：池里确实已有这两条明文，否则后面
+    // 的「热读」退化成又一次冷读、断言含义就没了。
+    for (let i = 0; i < hashes.length; i++) {
+      assert.equal(
+        lookupDecodedContentBody(hashes[i]!),
+        plains[i],
+        `归一前读应已回填进程内解压产物池（${hashes[i]}）`
+      );
+    }
+
+    // ② 跑归一任务：只换字节形态（base64 文本 → 二进制 BLOB）。
+    const result = await runBlobBinaryNormalization(conn());
+    assert.equal(result.done, true);
+    assert.equal(result.normalizedCount, plains.length * 2, "两表各两行都被归一");
+    assert.equal(await pendingCount("vfs_content_blob"), 0);
+    assert.equal(await pendingCount("session_file_cache_blob"), 0);
+
+    // ③ 归一后热读（池命中）：消费方读到的仍是原明文——内容池按 hash 寻址，
+    // 正文字节没变就无需失效（模块头「只换字节形态、正文不变，无需失效」）。
+    const warm = await readBoth();
+    assertReads(warm, "归一后热读");
+    assert.deepEqual(warm, before, "归一后热读（池命中）与归一前逐条相同");
+
+    // ④ 清池后冷读（绕过内存层、真解码归一后的字节）：仍与 ① 逐字节相同。
+    // 这是本用例的牙——归一若动了明文（换一段别的合法 zlib 也是这种形态），
+    // 只有绕开池的这一次读才暴露得出来。
+    clearDecodedContentCaches();
+    assert.equal(
+      lookupDecodedContentBody(hashes[0]!),
+      null,
+      "clearDecodedContentCaches 之后池应为空（本步「绕过内存层」的口径前提）"
+    );
+    const after = await readBoth();
+    assert.equal(after.length, before.length);
+    for (let i = 0; i < after.length; i++) {
+      assert.deepEqual(
+        Buffer.from(after[i]!, "utf8"),
+        Buffer.from(before[i]!, "utf8"),
+        `归一前/后明文逐字节一致（第 ${i} 条读口产物）`
+      );
     }
   });
 
