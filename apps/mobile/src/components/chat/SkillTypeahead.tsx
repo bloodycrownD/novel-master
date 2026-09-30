@@ -8,29 +8,9 @@ import type {EffectiveSkill} from '@novel-master/core/skills';
 import {useTheme} from '@/theme/ThemeProvider';
 import {TypeaheadList, typeaheadItemStyle} from './TypeaheadList';
 
-/** 候选过滤：仅有效技能；名称 / 描述模糊匹配，最多 `limit` 条（默认 5）。 */
-export function filterSkillTypeaheadCandidates(
-  skills: readonly EffectiveSkill[],
-  query: string,
-  limit = 5,
-): EffectiveSkill[] {
-  const q = query.trim().toLowerCase();
-  const out: EffectiveSkill[] = [];
-  for (const skill of skills) {
-    if (!skill.valid) {
-      continue;
-    }
-    const nameLower = skill.name.toLowerCase();
-    const descLower = skill.description?.toLowerCase() ?? '';
-    if (q === '' || nameLower.includes(q) || descLower.includes(q)) {
-      out.push(skill);
-      if (out.length >= limit) {
-        break;
-      }
-    }
-  }
-  return out;
-}
+// 候选过滤已抽到纯 .ts（随 dock WebView 化要入 web bundle），本文件 re-export
+// 以保持既有消费方（ChatComposer / PromptEditorScreen 等）的 import 路径不变。
+export {filterSkillTypeaheadCandidates} from './skill-typeahead-filter';
 
 export type SkillTypeaheadProps = {
   open: boolean;
