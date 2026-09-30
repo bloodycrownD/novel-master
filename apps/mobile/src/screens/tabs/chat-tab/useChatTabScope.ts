@@ -98,6 +98,23 @@ export function useChatTabScope({
   // 精确标签不得写进新会话的 meta（service 层 gen 闸之外的双保险）。
   const tokenLabelSessionRef = useRef<string | null>(null);
 
+  // 切会话立即清 chip（2026-09-30 用户实报「切换会话显示上一个会话的
+  // token 才刷新」）：token 标签属于它会话——会话一变就同步归位 '…'
+  // （加载态），并让身份闸接管所有权（旧会话迟到的一切写回被丢弃）。
+  // 原本下方两处「保留旧值」的注释以为 loadChatAgentMeta 重建 meta 时会
+  // 清场，实现里 `...meta` 不含 tokenLabel、显式的 `prev?.tokenLabel` 又
+  // 把旧值带进来——残留整整一轮刷新窗口（防抖 300ms + 装配/读数 ~1s）的
+  // **错误数字**。同会话内的刷新（压缩/发送后重算）不受影响：sessionId
+  // 没变，本 effect 不触发，保留旧值的语义照旧成立。
+  useEffect(() => {
+    tokenLabelSessionRef.current = sessionId ?? null;
+    setAgentMeta(prev =>
+      prev == null || sessionId == null
+        ? prev
+        : {...prev, tokenLabel: '…'},
+    );
+  }, [sessionId]);
+
   // 防抖槽（复用 refreshChatMetaInflightRef 的在途槽模式，单槽服务当前会话）：
   // - deferred：trailing 计时挂起中，窗口内所有 caller 共享「这一次执行」；
   // - running：在途执行链（到期执行若上一轮仍在途则挂其后串行，绝不并发）；
@@ -170,7 +187,10 @@ export function useChatTabScope({
         },
       );
       // 空串 = 中途弃权：保留旧标签，不写 meta、不置 hasLabel。
-      if (tokenLabel) {
+      // 落地前过会话身份闸（2026-09-30 切会话残留第三源）：防抖槽换 key 不
+      // 取消在途轮，本刷新闭包里的 sessionId 若已被切走，读数就地丢弃——
+      // 与升级回调（上方 upgraded 闸）同一口径。
+      if (tokenLabel && tokenLabelSessionRef.current === sessionId) {
         setAgentMeta(prev => (prev == null ? prev : {...prev, tokenLabel}));
         // 冻结判据维护：刷出非空标签后，本会话才有「可冻结的旧值」可保。
         if (
@@ -181,7 +201,10 @@ export function useChatTabScope({
         }
       }
     } catch {
-      setAgentMeta(prev => (prev == null ? prev : {...prev, tokenLabel: ''}));
+      // 失败清标签同样过闸：旧会话的失败不得抹掉新会话的显示。
+      if (tokenLabelSessionRef.current === sessionId) {
+        setAgentMeta(prev => (prev == null ? prev : {...prev, tokenLabel: ''}));
+      }
     }
   }, [runtime, projectId, sessionId]);
 

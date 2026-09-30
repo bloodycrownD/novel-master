@@ -291,6 +291,49 @@ describe('useChatTabScope refreshChatTokenLabel 防抖（T-TC6）', () => {
     });
     expect(harness!.api().agentMeta?.tokenLabel).toBe('gpt = 24k / 128k (19%)');
   });
+
+  it('切会话立即清 chip（2026-09-30 用户实报残留）：旧数字一帧都不许出现，在途读数被身份闸丢弃', async () => {
+    loadChatAgentMetaMock.mockResolvedValue({
+      tokenLabel: '',
+      modelName: 'gpt-4o',
+      agentName: 'a',
+      projectName: 'p',
+    });
+    harness = await mountScopeHarness({modelId: 'gpt-4o'});
+
+    // s1 的刷新挂起（受控）：制造「读数在途」窗口。
+    const pendingS1 = createDeferred<string>();
+    loadLabelMock.mockImplementationOnce(() => pendingS1.promise);
+
+    await act(async () => {
+      void harness!.api().refreshChatTokenLabel();
+      jest.advanceTimersByTime(300);
+      await flushMicrotasks();
+    });
+    expect(loadLabelMock).toHaveBeenCalledTimes(1);
+
+    // 切到 s2：**立即**必须是加载态——上一会话的数字（哪怕它还挂在 state 里）
+    // 不许以任何形式漏到新会话的 chip 上。
+    harness!.setSessionId('s2');
+    expect(harness!.api().agentMeta?.tokenLabel).toBe('…');
+
+    // s1 的在途读数现在才回来：身份闸丢弃，s2 保持加载态。
+    await act(async () => {
+      pendingS1.resolve('glm = 69k / 128k (54%)');
+      await flushMicrotasks();
+    });
+    expect(harness!.api().agentMeta?.tokenLabel).toBe('…');
+
+    // s2 自己的刷新照常落地新数字（Once：不污染后续用例的默认实现——
+    // clearAllMocks 只清调用记录不清 implementation）。
+    loadLabelMock.mockImplementationOnce(async () => 'gpt = 24k / 128k (19%)');
+    await act(async () => {
+      void harness!.api().refreshChatTokenLabel();
+      jest.advanceTimersByTime(300);
+      await flushMicrotasks();
+    });
+    expect(harness!.api().agentMeta?.tokenLabel).toBe('gpt = 24k / 128k (19%)');
+  });
 });
 
 describe('useChatTabScope refreshChatTokenLabel run 在途冻结（2026-09-30）', () => {
