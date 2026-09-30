@@ -29,7 +29,7 @@ date: 2026-09-30
 
 - **不动 vfs_content_blob / session_file_cache_blob 的压缩**（独立迭代，contentBodyPool 继续服务它们）。
 - **不删 chat_message 的两列**（列保留、数据清空；schema CHECK 约束原样——`content_encoding NULL` 天然合法）。SCHEMA_BOOT_VERSION 不 bump。
-- **不做 searchMessages 的 LIKE 恢复**（存量行迁移期 content_blob 非空、LIKE 恒不命中；即使搬完也是独立优化项，与本迭代解耦）。全量精筛路径零改动。
+- **不做 searchMessages 的 LIKE 召回**（召回语义仍以内存精筛为准；即使搬完 LIKE 召回也是独立优化项，与本迭代解耦）。**parse 前性能粗筛**（cr-p3）：纯 ASCII 且不含 JSON 转义字符的 keyword 走 `content_json LIKE` 粗筛、命中才 parse（压缩行 `content_blob IS NOT NULL` 保守放行）；keyword 命中转义/非 ASCII 时退回全量精筛保召回红线（SQLite LIKE 只折叠 ASCII，内存判据是 Unicode 感知的）。
 - **不动 f-vfs-pack 分支的任何代码**（zlib 加速器、pack、fossil 都在另一分支，合并时零冲突预期）。
 
 ## 总体方案
@@ -52,10 +52,10 @@ date: 2026-09-30
 - 谓词：`content_blob IS NOT NULL`（UPDATE 同条件进 WHERE 保并发幂等）。
 - 行级动作：`decodeMessageContent(encoding, blob, id)` 解压 → `SET content_json = 明文, content_blob = NULL, content_encoding = NULL`。
 - **坏行隔离**（decode 抛错只跳本行、行保持压缩形态、计入 `failedCount`、不阻断完成标记）——与正向坏行先例同款；fail-fast 会让一行坏数据让整轮永不收敛，而读路径双形态对压缩行本就自愈。
-- KKV module **`nm-message-decompress`**（key `decompressDone`，值 JSON `{at, failedCount}`）——不复用旧 `nm-message-content` module，避免新旧语义混淆。
+- KKV module **`nm-message-decompress`**（key `decompressDone`，值 JSON `{at, failedCount, failedIds}`——`failedIds` 为坏行 id 清单（cr-d1：供探针排除与运维定位），读侧向后兼容：字段缺失或非数组视空数组）——不复用旧 `nm-message-content` module，避免新旧语义混淆。
 - **不挂收尾维护链路（VACUUM/checkpoint）**：解压是增容不是释放，无 freelist 可归还，VACUUM 只会全库重写白烧（与正向任务的语义差异，注释钉死）。
 - **旧 pending 消费**：入口先读 `nm-message-content/startupMaintenancePending`（正向任务遗留），置位则补跑一次 **`runStartupMaintenanceOnce`**（进程级去重版——勿用手动的 `runDatabaseMaintenance`，后者不受去重约束、会与 blob 归一任务叠加出双 VACUUM），返回值非 null 才清 pending——与正向 `:277-290` 同款口径；`runPendingStartupMaintenance` / `runStartupMaintenanceOnce` 的公共逻辑随正向文件删除**搬迁**到反向文件（或抽到 db-maintenance 公共模块），保证历史库的维护欠账不悬空。
-- **完成标记自愈**（防「标记闩锁」）：入口在 `decompressDone` 已置位时，先跑 `SELECT 1 FROM chat_message WHERE content_blob IS NOT NULL LIMIT 1`——命中（快照回灌等场景导致标记与数据形态脱节）即清标记继续搬；未命中才短路返回。成本一次索引级探测，永久消除「标记随整库快照 travels 且写死不校验 → 该库永久停在压缩态」这一整类问题。
+- **完成标记自愈**（防「标记闩锁」）：入口在 `decompressDone` 已置位时，先跑排除已知坏行的存在性探测 `SELECT 1 FROM chat_message WHERE content_blob IS NOT NULL AND id NOT IN (已知 failedIds) LIMIT 1`（raw-SQL `?` 占位拼接；failedIds 为空退化为裸谓词）——命中（快照回灌等场景导致标记与数据形态脱节）即清标记继续搬；未命中才短路返回。**探针排除已知坏行是承重的**：坏行按设计永留谓词，裸谓词探针会让永久坏行导致每次冷启动「清标记→全表重扫→再撞坏行→重置标记」永不收敛（cr-d1）。成本一次部分索引（`idx_chat_message_pending_blob ON chat_message(id) WHERE content_blob IS NOT NULL`，bootstrap 事务外无条件幂等建——**不可落 CHAT_SCHEMA_STATEMENTS**：快路径 user_version=17 整段跳 DDL，存量库永远建不出；索引落点在 bootstrap 事务之外的无条件段，与 idx_chat_session_parent 同款手法但先例位置在慢路径内不可照抄；V1' 退役时删除）上的存在性探测，永久消除「标记随整库快照 travels 且写死不校验 → 该库永久停在压缩态」这一整类问题。
 - **收尾不变量**（与正向逐字对齐的承重约束）：收尾谓词校验 `leftover > failedKeys.size → stalled = true + 不置标记`——任何「看着扫完了」的提前退出都会让残留行被永久跳过（驱动静默写回不生效时游标扫完但谓词仍有行、failedKeys 为空，若无此校验任务会谎报完成并把残留行永久锁死在压缩态）。
 - 采样节流：`getMessageDecompressStatus` 复用 3s WeakMap 按连接节流模式（`status-sampling-throttle` 先例）。
 - 预算/守卫：`syncBudgetMs` 默认 60s、`shouldPause`、批间让步——全部同款。
@@ -69,7 +69,7 @@ date: 2026-09-30
 | desktop | `apps/desktop/src/main/services/message-content-compaction.service.ts` | 重命名为 `message-content-decompression.service.ts`，调用换 `runMessageContentDecompress`；守卫组合（agent/maintenance/cloudSync busy）、5s 退避、重取 runtime、`isConnectionClosedError` 重挂、stalled 收手全保留 |
 | desktop | `apps/desktop/src/main/main.ts:28,177` | import 与启动挂点改名 |
 | mobile | `apps/mobile/src/services/message-content-compaction.service.ts` + `runtime/novel-master-context.tsx:52,233` | 同款换向（启动 3s 延迟、runtime 身份去重保留） |
-| cli | `apps/cli/src/runtime.ts:10,187` | 内联 `await runMessageContentDecompress(conn)`（默认预算），注释更新 |
+| cli | `apps/cli/src/runtime.ts:10,195` | 内联 `await runMessageContentDecompress(conn, {syncBudgetMs: 5_000})`（**CLI 是三端唯一 await 进命令关键路径的端**，预算收窄到 5s + 归一 60s 最坏合计 ~65s，剩余留给下次命令），注释更新 |
 
 **UI 状态行**（两端同构，`MIGRATION_ROWS` 行保留但语义反转）：
 
@@ -95,7 +95,7 @@ date: 2026-09-30
 
 1. **port 透传**：`skills.port.ts:23-30` `SkillFileContent` 加 `entryId?: number; contentHash?: string | null; totalBytes?: number`——**与上游 `VfsReadResult`（`vfs-service.port.ts:30-34`）逐字对齐的可选/可空形态**（contentHash 在无 hash 行上真为 null）；`skills.service.ts:328-335`（readSkillFile）把 `vfs.read()` 已返回的三件套挑出来透传（数据在手，只差挑选）。可选声明同时避免打穿三个既有测试 mock（`agent-runner.test.ts:135`、`prepare-skill-attach.test.ts:113/272`、`skill-tool.test.ts:56`）。
 2. **skill-tool +1 与输出补字段**（`skill-tool.ts`）：read 分支（:409-414 后）与 load 分支（:359-364 后）照抄 vfs read 的模式——`refAnchored = entryId != null && typeof contentHash === "string" && contentHash !== "" && totalBytes != null && ctx.adjustRevisionRefCount != null`（判空口径照抄 `vfs-tools.ts:238-241`），先 `await ctx.adjustRevisionRefCount([{entryId, version}], +1)`（NOT_FOUND 即调用失败），输出带 `entryId/contentHash/totalBytes`。**outputSchema 必须同步声明**（`skill-tool.ts:289-344` 的 `z.discriminatedUnion` read/load 两支各加 `entryId: z.number().int().optional()` / `contentHash: z.string().optional()` / `totalBytes: z.number().int().optional()`——照 `vfs-tools.ts:171-173` 先例；**不声明会被 zod strip 静默剥离**：`tool-runner.ts:109-113` 的 `safeParse` 对未声明键不报错直接丢弃，产块门拿不到 entryId → skill read 静默回落 legacy 全文、不 +1 不产引用块，整块收益归零且无任何报错）。**alreadyReferenced 的 load 不 +1、不产 ref**——seen 判定保持在 `readSkillFile` 之后原位（现有代码顺序），tip 分支照旧返回 `version`（seen 前置会拿不到 `result.version` 且 outputSchema 的 version 必填——不改现有顺序，只是该形态天然无引用化收益，块体极小）。
-3. **ref 类型扩展与窄化策略**：`content-block.ts:100-120` 新增 `SkillResultRef`（判别字段 `kind: "skill"`；字段 `action: "load" | "read"`、`domain`、`name`、`path`、`entryId`、`version`、`contentHash`、`totalBytes`、`offset`、`limit`、`returnedLines`、`totalLines`、`truncated`、`nextOffset?: number`（skill read 的 wire 经 formatReadOutput，`truncated=true` 时附 `Continue with offset=N.`，与 `ReadResultRef` 同款透传）、load 专属 `files: string[]`）；`ToolResultBlock.contentRef: ReadResultRef | SkillResultRef`（:59）。**窄化策略（向后兼容）**：`ReadResultRef` 加 `kind?: "read"`（缺省即 read——存量行与存量 JSON 均无 kind），全链窄化统一判 `contentRef.kind === "skill"`，parse 先按 kind 分派再走各自白名单（`parseReadResultRef` 不得吞掉 skill ref 的 `action/domain/name/files`）；hydrate 读 `lastLineTruncated` 等字段处、desktop `handlers/messages.ts:95` 占位、DTO 镜像三处同口径窄化。**产块门字段校验按 action 拆两套**：read 分支校验全量（含 offset/limit/returnedLines/totalLines/truncated/nextOffset）；load 分支只校验 `version/truncated/files/三件套`（load 输出本无分页字段，`formatSkillLoadOutput` 只吃 path/content/truncated/files）。**desktop DTO 镜像同步**（`apps/desktop/shared/ipc-types.ts:687-700` 的 contentRef 镜像扩为带 kind 的 union；`handlers/messages.ts:77-100` 的占位渲染按 kind 分文案——skill 引用块显示 `[skill ref: domain/name]` 而非误标 `[read ref: path]`）。
+3. **ref 类型扩展与窄化策略**：`content-block.ts:100-120` 新增 `SkillResultRef`（判别字段 `kind: "skill"`；字段 `action: "load" | "read"`、`domain`、`name`、`path`、`entryId`、`version`、`contentHash`、`totalBytes`、`offset`、`limit`、`returnedLines`、`totalLines`、`truncated`、`nextOffset?: number`（skill read 的 wire 经 formatReadOutput，`truncated=true` 时附 `Continue with offset=N.`，与 `ReadResultRef` 同款透传）、load 专属 `files: string[]`。**占位说明（cr-f9）**：load 动作的 `offset:1 / returnedLines:0 / totalLines:0` 是占位假值（真实值由 `deriveSkillLoadTruncation` 重算、从不落 ref；read 侧的 `files: []` 同理为空占位）——为让 parse 白名单与 hydrate 无需按 action 二次分派；字段注释已钉死「消费方禁读 load 侧三件占位」）；`ToolResultBlock.contentRef: ReadResultRef | SkillResultRef`（:59）。**窄化策略（向后兼容）**：`ReadResultRef` 加 `kind?: "read"`（缺省即 read——存量行与存量 JSON 均无 kind），全链窄化统一判 `contentRef.kind === "skill"`，parse 先按 kind 分派再走各自白名单（`parseReadResultRef` 不得吞掉 skill ref 的 `action/domain/name/files`）；hydrate 读 `lastLineTruncated` 等字段处、desktop `handlers/messages.ts:95` 占位、DTO 镜像三处同口径窄化。**产块门字段校验按 action 拆两套**：read 分支校验全量（含 offset/limit/returnedLines/totalLines/truncated/nextOffset）；load 分支只校验 `version/truncated/files/三件套`（load 输出本无分页字段，`formatSkillLoadOutput` 只吃 path/content/truncated/files）。**desktop DTO 镜像同步**（`apps/desktop/shared/ipc-types.ts:687-700` 的 contentRef 镜像扩为带 kind 的 union；`handlers/messages.ts:77-100` 的占位渲染按 kind 分文案——skill 引用块显示 `[skill ref: domain/name]` 而非误标 `[read ref: path]`）。
 4. **产块门**：`build-tool-result-block.ts` 新增 `resolveSkillResultRefFromOutcome(toolName, output)`（判 `toolName === "skill" && action ∈ {load, read}` + 必需字段校验），与 `resolveReadResultRefFromOutcome`（:65-109）在调用点（:333-336）并列二选一；summary 分支（:172-214）零改动（UI 卡片继续吃 summary）。
 5. **hydrate 重放**：`hydrate-tool-results-for-prompt.ts` 新增 `replaySkillReadWireText` 与 `replaySkillLoadWireText`（`formatSkillLoadOutput` + ref 内 `files`，输入全确定性）；**截断推导单源化**——把 skill-tool read 分支的内联推导（`skill-tool.ts:426-446` 的 truncateLine+capUtf8Bytes 管线与 returnedLines/truncated/nextOffset 推导）抽为纯函数置于 `domain/tool/logic/`（避免 chat/logic 反向依赖 builtin），skill-tool 与 hydrate 重放共用同一份（「单源」指共享推导函数，不是复制两份管线）；memo 键带 action；fail-fast 码复用四码体系（修订五路径删除挂点对 skill ref 同样生效——消息删除的 refs 扫描按块类型含 SkillResultRef）。
 6. **parse 白名单**：`parse-message-content.ts:119-175` 加 `SkillResultRef` 分支（逐字段 fail-fast，口径与 ReadResultRef 一致）。
@@ -117,11 +117,11 @@ date: 2026-09-30
 |---|---|---|---|---|
 | 1 | agent 每 step 读 | `chat-agent-session.ts:30-39` → `listBySession(includeHidden:false)` | SQL 取字节 2-3×↑、inflate 归零，净收益 | T-MP-P0 |
 | 2 | 提示词拼接 | `agent-runner.ts:449` prepare、`run-agent-turn.ts:912/1269` | 同 #1，纯 CPU↓ | T-MP-P0 |
-| 3 | token 统计/压缩阈值 | `usage-stats.service.ts:512-539`、compaction-conditions 走 evaluation | SQL 字节↑、inflate↓ | 正确性用例 |
+| 3 | token 统计/压缩阈值 | `usage-stats.service.ts:512-539`、compaction-conditions 走 evaluation | SQL 字节↑、inflate↓、明文化后 parse 成主导（无 keyword 语义无粗筛面，全量 parse 为固有成本） | 正确性用例 |
 | 4 | desktop 会话面板全量列表 IPC | `handlers/messages.ts:128` → toDto → ConversationPanel | **IPC 载荷不变**（DTO 恒为解码后明文，压缩从未减少 IPC 字节）；变的是 main 进程 SQL 取字节 | T-MP-P0 + IPC 断言（DTO 不含 raw blob 形态） |
 | 5 | mobile 列表读 | `session-stream-unit.ts:988/1053`（page/tail）、manager `:963/994`、SubagentSessionScreen `:97` | 同进程无序列化，SQL 字节↑/inflate↓；WebView bridge 载荷不变（`message-blocks.ts:268` 恒明文） | T-MP-P0 |
-| 6 | 搜索 | `sqlite-message.repository.ts:502-591` keyset 精筛 | 同上；LIKE 不恢复（边界） | 既有用例 |
-| 7 | fork/copy | `message.service.ts:320/381`、`session.service.ts:388/396` 全量读→batchInsert | **参数数组驻留明文 JSON（2-3× 内存↑），本迭代唯一内存/GC 恶化点** | BATCH_BUILD_CHUNK 改名保留（见 Part 1） |
+| 6 | 搜索 | `sqlite-message.repository.ts:502-591` keyset 精筛 | 同上；**明文化后 JSON.parse + 全量块校验成主导成本**——纯 ASCII keyword 走 parse 前 LIKE 粗筛（命中才 parse，召回语义仍以内存精筛为准；边界见 Part 2 边界节） | 既有用例 + T-CS21 召回守卫 |
+| 7 | fork/copy | `message.service.ts:320/381`、`session.service.ts:388/396` 全量读→batchInsert | 构造按片进行、**峰值 O(chunk)**（cr-p2：按片构造+按片下发，runInTransactionOrConn 运行时判定连接句柄——生产 fork/copy 本就在外层事务内）；连接独占语义不变 | BATCH_BUILD_CHUNK 改名保留（见 Part 1） |
 | 8 | usage-stats 现算 | 同 #3 | 同 #3 | 正确性用例 |
 | 9 | checkpoint backfill | `backfill-baseline-checkpoints.ts:114` offset 段 + `:156/249` 头投影 | 新增段小、头投影不选 content 列零影响 | 既有用例 |
 | 10 | db-maintenance 双任务 | 反向任务新文件；blob 归一 `blob-binary-normalization.ts:113` | 两任务谓词**可交叠**（`zlib-b64` 行同时命中反向谓词与归一谓词）但**收敛顺序无关**（任一先跑，另一谓词重扫后自然收敛）；归一的 messageContent adapter 迁移完成后成死代码（V1' 删） | T-MP2/3 |
@@ -248,6 +248,7 @@ core 新增/改写（T-MP = 明文化、T-SR = skill 引用化）：
 1. 删 `readRowContent` 的 blob 分支与 `decodeMessageContent`（含 message-content-codec.ts 文件）——**前置消费者四处**：readRowContent、usage-stats、`revision-ref-count.ts:183`（repair 全表扫）、反向任务本体；
 2. usage-stats 三元收口单形态、revision-ref-count 同步收口；
 3. 删 `message-content-decompression.ts` 与三端调度器、状态行、DTO、allowlist 符号；
+   同时删 bootstrap 事务外无条件段的 `idx_chat_message_pending_blob` 部分索引（配套探针/EXPLAIN 断言一并退役）；
 4. 删 blob 归一任务的 `messageContent` adapter（谓词恒空的死代码）；
 5. schema CHECK 约束收窄评估（`content_encoding` 列是否随列清理一并处理，届时拍板）；
 6. 本 spec 的「压缩行永远合法」契约声明随之退役。

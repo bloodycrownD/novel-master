@@ -25,6 +25,7 @@
   2. **落点通道（round-3 修订：先例在慢路径内不可照抄位置；round-4 补失败语义）**：`bootstrapNovelMaster` 的快路径是**提前 return**（novel-master-bootstrap.ts:348-355，`bootVersion >= SCHEMA_BOOT_VERSION(=17)` 即 return），`idx_chat_session_parent` 先例（:365）位于该 return **之后**——只在慢路径执行，真实用户库（user_version=17）永远到不了。因此落点是 **bootstrap 事务之外的无条件段**（与 :376 `seedBuiltinSkills` / :385 发号器安全网同一层）：`await conn.execute("CREATE INDEX IF NOT EXISTS idx_chat_message_pending_blob ON chat_message(id) WHERE content_blob IS NOT NULL")`——**与 idx_chat_session_parent 同款的幂等建手法，但落点在事务外**（先例位置不可照抄）。**失败语义（round-4）**：与同层两处的「try/catch 失败仅记日志不阻断启动」策略**有意不同**——本条**不包 try/catch、fail loud**（静默吞掉建索引失败会让探测永久退回全表扫且无痕迹），注释里写明这个差异的理由。新库慢路径跑完语句集后也会经过这段，`IF NOT EXISTS` 幂等；不 bump `SCHEMA_BOOT_VERSION`、不注册 schema migration（纯 DDL 幂等建非数据搬运，与空占位禁令不冲突）。
   3. `:239-241` 与文件头 `:24-27` 注释、`spec.md:58` 措辞改为与实现一致（「部分索引上的存在性探测；稳态索引空」）。**round-4 口径钉死**：全仓「索引级」共 5 处——impl 文件头 `:27`、`:240`、`:311`、`test/.../message-content-decompression.test.ts:593`、`spec.md:58`；本条改 `:27/:240` 与 `spec.md:58` 三处，`impl:311` 与 `test:593` 两处在索引落地后语义成立、**可不改**（一次钉死，执行者勿反复纠结）。
   4. spec 的 V1' 退役清单补一条：退役时删除该索引（bootstrap 循环外那两行一并删）。
+  5. **执行期偏离记录（fixA，合理采纳）**：无条件段建索引前加一道 `pragma_table_info` 前置判定——`content_blob` 列缺失的库（pre-1.4.27 老库形态，T-C10 负面教材演示过）直接跳过建索引（那种库探测退回全表扫只是慢，不该让 App 起不来）；列在则照建、建失败仍 fail loud。连带：T-C10「快路径零 DDL」不变量按「有且仅有那条幂等部分索引 DDL」收紧断言。
 - 验收/测试：在 `user_version = SCHEMA_BOOT_VERSION` 的存量库上 bootstrap 后 `sqlite_master` 能查到该索引（**快路径断言**，不是慢路径）；`EXPLAIN QUERY PLAN` 显示探测与 `countPendingRows` 走 `idx_chat_message_pending_blob`；**批查询 EXPLAIN 一并钉住**（实测改后仍 `SEARCH ... USING INTEGER PRIMARY KEY (rowid>?)` 不受拖累，防回归）；decompression 既有测试全绿。
 - 来源：cr-w1-perf/E-1 + cr-w1-decompress/B-2 + cr-w1-safety/B-2（三 scope 同源合并）；round-2 修正当量：review-full/E-1（rowid DDL）+ review-full/H-1（快路径 no-op）+ spec-check judge P0-1/P0-2（同两处，实测复核）
 
@@ -180,13 +181,13 @@
 - 验收/测试：`git status --short` 输出为空或仅含预期文件。
 - 来源：cr-w1-ends-doc/K-7（cr-func 遗留观察 3 同源）
 
-#### cr-f6 [P2] 解压炸弹前置闸门（ISIZE 尾字段）
+#### cr-f6 [P2] 解压炸弹前置闸门
 - 维度：D
-- 文件：`packages/core/src/domain/chat/logic/message-content-codec.ts:52-57`
+- 文件：`packages/core/src/domain/chat/logic/message-content-codec.ts:52-57`、`packages/core/src/domain/vfs/content-store/logic/zlib-codec.ts`
 - 问题：`decompressZlib` 无输出上限（实测 614KB blob 可膨胀 600MB）；且暴露面从「按需读」扩大到「启动即全量遍历」。注意 fflate 传小 `out` 缓冲**不抛错而静默截断**，不能当护栏。
-- 改法：inflate 前读 zlib ISIZE 尾字段（`[len-8,len-4)` uint32 BE 即解压后长度）判上限，超阈值抛类型化错误走坏行隔离。阈值建议 64MB（明显大于单条消息合理体量，纵深防御，不替代 cr-s1 主闸门）。`decodeCompressedBytes` 只出 zlib/zlib-b64 两种真 zlib 流，ISIZE 闸门成立（round-2 已核）。
-- 验收/测试：新用例——构造 ISIZE 超阈值的压缩行，断言 decode 抛错、坏行隔离保留原字节。
-- 来源：cr-w1-safety/D-1
+- 改法（**执行期勘误（fixA 实测）：原「读 zlib ISIZE 尾字段」不可行——zlib 流根本没有 ISIZE 字段（那是 gzip 概念），fflate `zlibSync` 只追加 4 字节 adler32，照原方案读 `[len-8,len-4)` 读到的是 adler32、每一行正常压缩行都会被误判成炸弹（首轮 19/19 全红实锤）。改为流式有界解压**：zlib-codec.ts 新增导出 `decompressZlibBounded(compressed, maxBytes)`——输入按 4KB 切片喂流式 `Unzlib`，两道闸（累计产出超上限、按已观测膨胀比投影剩余输入潜在产出，炸弹在第一片收手，实测 73MB 膨胀炸弹 RSS 峰值从 ~52MB 收到 ~4MB）；正常消息一段读完零额外开销。阈值 64MB、类型化错误、坏行隔离保留原字节。五轮审查均未抓住此处，作为 spec 勘误记录。
+- 验收/测试：新用例——构造真 70MB 膨胀的压缩行，断言 decode 抛错、坏行隔离保留原字节。
+- 来源：cr-w1-safety/D-1（执行期勘误：fixA 实测 fflate 源码 `wbytes(d, d.length-4, a.d())` 无 ISIZE 写入）
 
 #### cr-f7 [P2] skill 引用四条测试补齐
 - 维度：G
