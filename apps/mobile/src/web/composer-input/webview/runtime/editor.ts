@@ -224,6 +224,18 @@ type ComposerEditorState = {
   measureScheduled: boolean;
   /** init 到齐后才测高上报：init 前是兜底口径，报出去只会多一次抖动。 */
   initialized: boolean;
+  /** 高度上报闸门（工厂参数 heightReport）：false 时 measure 照跑、只是不发消息。 */
+  heightReport: boolean;
+};
+
+/** 挂载选项：仅 heightReport 一项（其余装配口径不变）。 */
+export type MountComposerEditorOptions = {
+  /**
+   * 是否上报 heightChange（缺省 true = 旧包行为）。
+   * 关闭后 `measureByClamp` 与 ResizeObserver 链路保持原样（clamp / lastHeight 去重
+   * 照算），仅在发消息前早退——用于高度改由文档内布局消化的宿主（合成包 dock）。
+   */
+  readonly heightReport?: boolean;
 };
 
 let editor: ComposerEditorState | null = null;
@@ -275,6 +287,11 @@ function syncScroll(state: ComposerEditorState): void {
 }
 
 function measureByClamp(state: ComposerEditorState): void {
+  // 上报闸门先于一切测量口径：heightReport:false 时本函数整体早退（measure /
+  // ResizeObserver / rAF 合并链路照跑，只是没有 heightChange 上行）。
+  if (!state.heightReport) {
+    return;
+  }
   if (!state.initialized) {
     return;
   }
@@ -609,8 +626,12 @@ function bindViewportCaretGuard(state: ComposerEditorState): Array<() => void> {
 /* ---- 生命周期 ---- */
 
 /** 装配高亮层 + 透明 textarea（单实例；重复调用先拆旧实例）。 */
-export function mountComposerEditor(parent: HTMLElement): void {
+export function mountComposerEditor(
+  parent: HTMLElement,
+  options: MountComposerEditorOptions = {},
+): void {
   destroyComposerEditor();
+  const heightReport = options.heightReport !== false;
 
   const root = document.createElement('div');
   root.className = 'composer-input';
@@ -644,6 +665,7 @@ export function mountComposerEditor(parent: HTMLElement): void {
     lastSelection: null,
     measureScheduled: false,
     initialized: false,
+    heightReport,
   };
   editor = state;
 
