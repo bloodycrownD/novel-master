@@ -24,6 +24,10 @@ import {
   decodeFileCacheBlobBody,
   hashFileCachePayload,
 } from "../../logic/file-cache-blob-codec.js";
+import {
+  lookupDecodedContentBody,
+  rememberDecodedContentBody,
+} from "@/infra/content-cache/logic/decoded-content-cache.js";
 import { serializeFileCachePayload } from "@/domain/workplace/logic/rule-snapshot-codec.js";
 import type { SessionKkvRepository } from "../session-kkv.port.js";
 
@@ -116,34 +120,71 @@ export class SqliteSessionKkvRepository implements SessionKkvRepository {
             missing.push(key);
           }
         }
-        const hashes = [...new Set(entries.map((row) => String(row.content_hash)))];
-        const hashBindings = buildInBindings(hashes, "h");
-        const blobs = await queryTemplate<{
-          content_hash: string;
-          encoding: string;
-          bytes: SqlValue;
-        }>(
-          this.conn,
-          this.parser,
-          `SELECT content_hash, encoding, bytes FROM session_file_cache_blob
-           WHERE content_hash IN (${hashBindings.inList})`,
-          hashBindings.bindings
-        );
-        const blobByHash = new Map(blobs.map((row) => [String(row.content_hash), row]));
+        // 解压产物进程内层（infra/content-cache）：entry 行给 hash，
+        // 命中即免掉「blob 行读取 + inflate」——workplace 每次进会话
+        // 都要把整批文件正文重新解压一遍，这里正是那笔钱。只把 miss
+        // 的 hash 投进 blob IN 查询（内存命中时连这趟 SQL 都省了）。
+        const bodies = new Map<string, string>();
+        const hashesToLoad: string[] = [];
+        const pendingHashes = new Set<string>();
         for (const entry of entries) {
-          const blob = blobByHash.get(String(entry.content_hash));
-          if (blob == null) {
+          const contentHash = String(entry.content_hash);
+          if (bodies.has(contentHash) || pendingHashes.has(contentHash)) {
             continue;
           }
-          try {
-            const body = decodeFileCacheBlobBody(String(blob.encoding), blob.bytes);
-            out.set(String(entry.key), serializeFileCachePayload({
+          const cachedBody = lookupDecodedContentBody(contentHash);
+          if (cachedBody != null) {
+            bodies.set(contentHash, cachedBody);
+            continue;
+          }
+          pendingHashes.add(contentHash);
+          hashesToLoad.push(contentHash);
+        }
+        if (hashesToLoad.length > 0) {
+          const hashBindings = buildInBindings(hashesToLoad, "h");
+          const blobs = await queryTemplate<{
+            content_hash: string;
+            encoding: string;
+            bytes: SqlValue;
+          }>(
+            this.conn,
+            this.parser,
+            `SELECT content_hash, encoding, bytes FROM session_file_cache_blob
+             WHERE content_hash IN (${hashBindings.inList})`,
+            hashBindings.bindings
+          );
+          const blobByHash = new Map(
+            blobs.map((row) => [String(row.content_hash), row])
+          );
+          for (const contentHash of hashesToLoad) {
+            const blob = blobByHash.get(contentHash);
+            if (blob == null) {
+              continue;
+            }
+            try {
+              const body = decodeFileCacheBlobBody(
+                String(blob.encoding),
+                blob.bytes
+              );
+              rememberDecodedContentBody(contentHash, body);
+              bodies.set(contentHash, body);
+            } catch {
+              // 解压 / 解码失败：按 miss 跳过（上层自愈重读），与单键 get 同口径。
+            }
+          }
+        }
+        for (const entry of entries) {
+          const body = bodies.get(String(entry.content_hash));
+          if (body == null) {
+            continue;
+          }
+          out.set(
+            String(entry.key),
+            serializeFileCachePayload({
               body,
               mtimeMs: Number(entry.mtime_ms),
-            }));
-          } catch {
-            // 解压 / 解码失败：按 miss 跳过（上层自愈重读），与单键 get 同口径。
-          }
+            })
+          );
         }
       }
       // 退化路径（旧表行）批量补齐：新表没命中的键查一次 legacy。
@@ -381,12 +422,25 @@ export class SqliteSessionKkvRepository implements SessionKkvRepository {
       return this.getLegacyEntry(sessionId, SESSION_KKV_DOMAIN_FILE_CACHE, key);
     }
     const entry = entries[0]!;
+    const contentHash = String(entry.content_hash);
+    const mtimeMs = Number(entry.mtime_ms);
+    // 解压产物进程内层（见 getMany 的说明）：命中即免掉 blob 行读取与
+    // inflate，直接用 entry 行的 mtime 还原出与 set 时同形的 JSON。
+    const cachedBody = lookupDecodedContentBody(contentHash);
+    if (cachedBody != null) {
+      return {
+        sessionId,
+        domain: SESSION_KKV_DOMAIN_FILE_CACHE,
+        key,
+        value: serializeFileCachePayload({ body: cachedBody, mtimeMs }),
+      };
+    }
     const blobs = await queryTemplate<{ encoding: string; bytes: SqlValue }>(
       this.conn,
       this.parser,
       `SELECT encoding, bytes FROM session_file_cache_blob
        WHERE content_hash = #{contentHash}`,
-      { contentHash: String(entry.content_hash) }
+      { contentHash }
     );
     if (blobs.length === 0) {
       return null;
@@ -394,14 +448,12 @@ export class SqliteSessionKkvRepository implements SessionKkvRepository {
     const blob = blobs[0]!;
     try {
       const body = decodeFileCacheBlobBody(String(blob.encoding), blob.bytes);
+      rememberDecodedContentBody(contentHash, body);
       return {
         sessionId,
         domain: SESSION_KKV_DOMAIN_FILE_CACHE,
         key,
-        value: serializeFileCachePayload({
-          body,
-          mtimeMs: Number(entry.mtime_ms),
-        }),
+        value: serializeFileCachePayload({ body, mtimeMs }),
       };
     } catch {
       // 解压 / 解码失败：按 miss 自愈返回 null，不向调用方抛异常。
