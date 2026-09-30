@@ -403,8 +403,9 @@ export function applyTheme(theme: ComposerTheme | null | undefined): void {
   if (theme.primary) {
     root.style.setProperty('--primary', theme.primary);
   }
-  // primaryMuted / selection 不在 shared/host-theme 的 HostTheme 超集里
-  // （胶囊与选区底色是本包专有消费），按同一「条件式写入 + CSS 兜底」口径直写
+  // primaryMuted / selection 现已进入 shared/host-theme 的 HostTheme 超集
+  // （chat-conversation 合成包 9 键超集把 selection 并入 THEME_VARS）。本包仍保留
+  // 直写并行分支：旧链的 `applyTheme` 口径冻结、不改走 applyHostTheme（行为零变化）。
   if (theme.primaryMuted) {
     root.style.setProperty('--primary-muted', theme.primaryMuted);
   }

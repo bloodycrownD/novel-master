@@ -7,7 +7,7 @@
  */
 import {inferThemeModeFromBg} from './theme-mode';
 
-/** 宿主下发的主题 token 超集（chat 域含 danger；其余域未消费亦容忍）。 */
+/** 宿主下发的主题 token 超集（chat 域含 danger/selection；其余域未消费亦容忍）。 */
 export type HostTheme = {
   background?: string;
   text?: string;
@@ -20,6 +20,13 @@ export type HostTheme = {
    * 可选：chat-transcript / rich-document 不消费，缺省不写入，由 CSS 兜底。
    */
   primaryMuted?: string;
+  /**
+   * 文本选区底色（`::selection`）。chat-conversation 合成包把它并入本超集
+   * （9 键超集 = transcript 7 ∪ composer 6 去重），否则 `::selection` 会
+   * 回落 `--primary-muted` 变色。composer-input 旧包的 `applyTheme` 仍直写
+   * 并行分支（旧链不动）。
+   */
+  selection?: string;
   danger?: string;
   surface?: string;
   borderLight?: string;
@@ -32,6 +39,7 @@ const THEME_VARS: Array<{key: keyof HostTheme; cssVar: string}> = [
   {key: 'textSecondary', cssVar: '--text-secondary'},
   {key: 'primary', cssVar: '--primary'},
   {key: 'primaryMuted', cssVar: '--primary-muted'},
+  {key: 'selection', cssVar: '--selection'},
   {key: 'danger', cssVar: '--danger'},
   {key: 'surface', cssVar: '--surface'},
   {key: 'borderLight', cssVar: '--border'},

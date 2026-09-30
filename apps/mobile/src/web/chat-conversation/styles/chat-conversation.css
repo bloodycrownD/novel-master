@@ -1,15 +1,20 @@
 /*
- * chat-conversation 合成包样式（chat-webview-unify）。
+ * chat-conversation 合成包样式（chat-webview-unify Step 2/3/4）。
  *
- * 基底取自 `chat-transcript/styles/transcript.css`，本节点（Step 2）只落**最小子集**：
- * 让文档能构建、能过 dist 契约测即可；转录气泡/tool-card/menu 全套规则与 dock 的
- * hintRow / chips / typeahead / toolbar 复刻分别在 Step 3、Step 4 迁入。
+ * 基底取自 `chat-transcript/styles/transcript.css`，本文件在基底之上补齐两段：
+ * ① composer dock 段——从 `composer-input.css` + RN 组件的 StyleSheet 数值单源迁入
+ *    （hintRow / error / box / chips / typeahead / toolbar / input 六值 metrics）。
+ * ② 键盘态 dock 底 padding（键盘弹起归零，否则 max(8, safeAreaBottom)）——**纯样式
+ *    应用**，键盘态经 `composerState.keyboardUp` 由 RN 侧下发，web 不自判
+ *    （visualViewport 自判方案已废弃，理由见 spec §键盘与 dock padding 归属）。
  *
  * CSS 双份漂移纪律（spec 风险表）：本文件是合成包自持的一份，改
  * `composer-input.css` 的 dock 段（::selection / token 胶囊 / 输入区）须同步本文件，
  * 反之改本文件的 dock 段不回灌 composer-input 旧包（宏链活依赖，行为冻结）。
  * 反面清单：`composer-input.css` 的 `html,body{background:transparent}` **不搬**——
  * 与本文件的 `background: var(--bg, #fff)` 直接冲突。
+ *
+ * 【来源锚点】下方「dock 段」的每条规则都标注了现网 RN 出处，改数值时照着锚点改。
  */
 * {
   box-sizing: border-box;
@@ -22,6 +27,9 @@ body {
   background: var(--bg, #fff);
   color: var(--text, #111);
   font-family: system-ui, -apple-system, sans-serif;
+  /* 键盘态：Android 侧 AndroidKeyboardClipBody 以 marginBottom 裁切单 WebView 容器，
+     与 dock 的 padding 职责互补（clip 管视口收缩、padding 管 dock 底部余量）。 */
+  overflow: hidden;
 }
 
 /* 四属性缺一则 dock 不贴底（spec §文档布局） */
@@ -71,19 +79,275 @@ body {
   }
 }
 
-/* composer dock 容器占位：Step 4 迁入 styles.dock 完整数值
-   （paddingHorizontal:12 / paddingTop:4 / paddingBottom:8 + tokens.background 实底），
-   底 padding 届时按 composerState.keyboardUp 在 max(8, safeAreaBottom) ↔ 0 间切换。 */
+/* ================================================================== *
+ * dock 段（来源：ChatComposer.tsx styles.dock / styles.box / styles.hintRow /
+ * styles.error、AttachmentDraftChips.tsx、TypeaheadList.tsx、
+ * AtPathTypeahead.tsx、SkillTypeahead.tsx、composer-toolbar-style.ts）
+ * ================================================================== */
+
+/* styles.dock：flexShrink:0 / paddingHorizontal:12 / paddingTop:4 / paddingBottom:8，
+   实底 tokens.background。paddingBottom 由 composerState.keyboardUp 在
+   max(8, safeAreaBottom) ↔ 0 间切换（初始 8 = base，init 到达后由 JS 改写）。 */
 #composer-dock {
   flex: 0 0 auto;
   display: flex;
   flex-direction: column;
   padding: 4px 12px 8px;
   background: var(--bg, #fff);
-  border-top: 1px solid var(--border, #e5e5ea);
 }
+
+/* styles.hintRow：marginBottom:6。显隐由 hasModel 判据驱动（JS hidden 属性）。 */
+.dock__hint-row {
+  margin-bottom: 6px;
+  color: var(--primary, #007aff);
+  font-size: 14px;
+}
+.dock__hint-row[hidden] {
+  display: none;
+}
+
+/* styles.error：marginBottom:6 / fontSize:13，字色 tokens.danger。 */
+.dock__error {
+  margin-bottom: 6px;
+  color: var(--danger, #d93025);
+  font-size: 13px;
+}
+.dock__error[hidden] {
+  display: none;
+}
+
+/* styles.box：hairline 描边 + borderRadius:12 + paddingHorizontal:8 /
+   paddingTop:4 / paddingBottom:6，底色 tokens.surface。单一视觉容器，
+   中间不能被横切的 WebView 接缝切开。 */
+.dock__box {
+  position: relative;
+  border: 0.5px solid var(--border, #e5e5ea);
+  border-radius: 12px;
+  padding: 4px 8px 6px;
+  background: var(--surface, #fff);
+}
+
+/* --- chips 行（AttachmentDraftChips + transparentRow 变体）---
+   chat 链走 transparentRow：行底色透明 + marginBottom:4（非 transparent 变体的
+   maxHeight:36 / marginBottom:6 不适用）。横向滚动对应 RN 的 ScrollView horizontal。 */
+.chips__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+  padding-right: 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  background: transparent;
+}
+.chips__row::-webkit-scrollbar {
+  display: none;
+}
+.chips__row[hidden] {
+  display: none;
+}
+.chip {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  max-width: 200px;
+  padding: 6px 10px;
+  border: 0.5px solid var(--border, #e5e5ea);
+  border-radius: 14px;
+  background: var(--surface, #fff);
+  /* 不随 inputDisabled 置灰：现网 disabled 是透传后未使用的死参数（spec 风险表） */
+}
+.chip__label {
+  flex-shrink: 1;
+  max-width: 160px;
+  font-size: 12px;
+  color: var(--text, #111);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* --- typeahead 浮层（TypeaheadList + AtPathTypeahead / SkillTypeahead）---
+   absolute 锚定 dock 内 input 上缘：浮层是 #composer-input-area（定位上下文）
+   的 absolute 子节点 + `bottom:100%`，因此贴着 input 区顶边向上展开、**不推挤
+   布局**（chips 行被覆盖是 absolute 浮层的正常语义，RN 侧则是把 input 往下推）。 */
+.dock__input-area {
+  position: relative;
+}
+.typeahead {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 100%;
+  z-index: 20;
+  max-height: 240px;
+  margin-bottom: 4px;
+  border: 0.5px solid var(--border, #e5e5ea);
+  border-radius: 10px;
+  background: var(--surface, #fff);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.typeahead[hidden] {
+  display: none;
+}
+/* typeaheadItemStyle：paddingHorizontal:10 / paddingVertical:8 */
+.typeahead__row {
+  display: flex;
+  align-items: center;
+  padding: 8px 10px;
+  color: var(--text, #111);
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* SkillTypeahead styles.item：flexDirection:row / alignItems:center / gap:8 */
+.typeahead__row--skill {
+  gap: 8px;
+}
+.typeahead__label {
+  flex-shrink: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* styles.tag：fontSize:11 */
+.typeahead__tag {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--text-secondary, #8e8e93);
+}
+
+/* --- input（composer-input 段移植 + metrics 六值由 JS 按 init 写内联样式）---
+   反面清单：composer-input.css 的 `html,body{background:transparent}` 不搬。
+   兜底数值取 CONVERSATION_COMPOSER_METRICS 六值（fontSize:16 / lineHeight:22 /
+   paddingH:4 / paddingV:6 / minHeight:56 / maxHeight:122），init 到达后由
+   editor.applyMetrics 覆盖同一批 CSS 属性。 */
 #composer-input {
   position: relative;
+}
+.composer-input {
+  position: relative;
+  font-size: 16px;
+  line-height: 22px;
+}
+.composer-input--unbounded {
+  height: 100%;
+}
+.composer-input--unbounded .composer-input__highlight {
+  height: 100%;
+}
+.composer-input--disabled {
+  opacity: 0.55;
+}
+.composer-input__highlight {
+  width: 100%;
+  padding: 6px 4px;
+  min-height: 56px;
+  max-height: 122px;
+  overflow: auto;
+  color: var(--text, #111);
+  white-space: pre-wrap;
+  word-break: break-word;
+  pointer-events: none;
+  -webkit-overflow-scrolling: touch;
+}
+/* 胶囊 token：muted 底 + primary 字；负 margin 抵消 padding，避免光标与文字错位 */
+.composer-input__token {
+  color: var(--primary, #007aff);
+  background: var(--primary-muted, rgba(0, 122, 255, 0.13));
+  border-radius: 4px;
+  padding: 1px 4px;
+  margin: 0 -4px;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+.composer-input__input {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  /* longhand 兜底：inset 需 Chromium 87+，老厂商内核不识别时 absolute 缺
+     top/left 会整体塌位（不是视觉降级） */
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 6px 4px;
+  border: none;
+  outline: none;
+  font: inherit;
+  color: transparent;
+  caret-color: var(--text, #111);
+  background: transparent;
+  resize: none;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  -webkit-overflow-scrolling: touch;
+}
+.composer-input__input::placeholder {
+  color: var(--text-secondary, #8e8e93);
+}
+.composer-input__input::selection {
+  /* 文字透明，选区只剩底色（--selection 缺省回落到胶囊底色） */
+  background: var(--selection, var(--primary-muted, rgba(0, 122, 255, 0.25)));
+}
+
+/* --- toolbar（styles.toolbar + composerToolBtnStyle + styles.sendBtn）---
+   flexDirection:row / alignItems:center / marginTop:4 / gap:8 */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+.toolbar__spacer {
+  flex: 1;
+}
+/* composerToolBtnStyle：36 见方圆钮 + hairline 描边 + 内容居中 */
+.toolbar__btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 0.5px solid var(--border, #e5e5ea);
+  border-radius: 18px;
+  background: transparent;
+  color: var(--text-secondary, #8e8e93);
+  padding: 0;
+  line-height: 1;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.toolbar__btn:disabled {
+  opacity: 0.4;
+}
+/* styles.sendBtn：40 见方 + borderRadius:20 */
+.toolbar__send {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: 20px;
+  padding: 0;
+  -webkit-appearance: none;
+  appearance: none;
+}
+/* 发送态配色：sendDisabled → tokens.border；running → tokens.danger；否则 primary */
+.toolbar__send--primary {
+  background: var(--primary, #007aff);
+}
+.toolbar__send--danger {
+  background: var(--danger, #d93025);
+}
+.toolbar__send--disabled {
+  background: var(--border, #e5e5ea);
 }
 
 /* __RICH_CSS__ */

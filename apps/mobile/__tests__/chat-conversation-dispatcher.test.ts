@@ -1,0 +1,336 @@
+/**
+ * chat-conversation 合成 dispatcher 单测（T-CDV 系列 · 纯函数层）。
+ *
+ * 断言面 = §下行消息路由表：聚合 init 拆包、`themeUpdate` fan-out 三方、
+ * transcript / composer / dock 三域各自命中且**不串**（一条消息只投该投的域），
+ * 以及坏输入静默丢弃的宽容口径。
+ *
+ * 环境：RN jest preset（node，无 jsdom，本仓既有约定），故全部走纯函数——
+ * `routeHostMessage` 不碰 DOM、不 post，副作用投递由 `dispatchRoute` 单独断言。
+ */
+import {
+  coerceComposerState,
+  coerceTypeaheadSource,
+  createConversationDispatcher,
+  dispatchRoute,
+  routeHostMessage,
+  splitInitPayload,
+  type ConversationDockRoute,
+  type ConversationDispatcherDeps,
+} from '@web/chat-conversation/webview/dispatcher';
+import {
+  CONVERSATION_BRIDGE_V,
+  CONVERSATION_CAPABILITY_COMPOSER_DOCK,
+  CONVERSATION_DOCK_ACTIONS,
+  CONVERSATION_READY_VERSION,
+  CONVERSATION_THEME_KEYS,
+  conversationCapabilities,
+} from '@web/chat-conversation/webview/model';
+
+/** 9 键超集：transcript 7 ∪ composer 6 去重（selection 是合成包补进 HostTheme 的那一键）。 */
+const THEME = {
+  background: '#fff',
+  text: '#111',
+  textSecondary: '#8e8e93',
+  primary: '#007aff',
+  primaryMuted: 'rgba(0,122,255,0.13)',
+  selection: 'rgba(0,122,255,0.25)',
+  danger: '#d93025',
+  surface: '#f7f7f9',
+  borderLight: '#e5e5ea',
+};
+
+const METRICS = {
+  fontSize: 16,
+  lineHeight: 22,
+  paddingH: 4,
+  paddingV: 6,
+  minHeight: 56,
+  maxHeight: 122,
+};
+
+const v2 = (type: string, payload: Record<string, unknown> = {}) => ({
+  v: CONVERSATION_BRIDGE_V,
+  type,
+  payload,
+});
+
+describe('协议常量（T-CU3：双端一致的前提）', () => {
+  it('T-CDV-01：CONVERSATION_BRIDGE_V = 2，与旧包 BRIDGE_V = 1 刻意不同名', () => {
+    expect(CONVERSATION_BRIDGE_V).toBe(2);
+  });
+
+  it('T-CDV-02：ready 版本标识 u1；theme 超集 9 键且含 selection', () => {
+    expect(CONVERSATION_READY_VERSION).toBe('u1');
+    expect(CONVERSATION_THEME_KEYS).toHaveLength(9);
+    expect(CONVERSATION_THEME_KEYS).toContain('selection');
+  });
+
+  it('T-CDV-03：capabilities 含 composer-dock，且该位不进共享常量数组', () => {
+    const caps = conversationCapabilities();
+    expect(caps).toContain('streamBlockCommit');
+    expect(caps).toContain(CONVERSATION_CAPABILITY_COMPOSER_DOCK);
+    // 共享常量数组本身不得被污染（旧 chat-transcript 包的 ready 靠它保持「未声明即降级」）
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const shared = require('@web/chat-transcript/transcript-capabilities');
+    expect(shared.TRANSCRIPT_CAPABILITIES).not.toContain(
+      CONVERSATION_CAPABILITY_COMPOSER_DOCK,
+    );
+  });
+
+  it('T-CDV-04：dockAction 枚举六项齐备', () => {
+    expect(CONVERSATION_DOCK_ACTIONS).toEqual([
+      'send',
+      'terminate',
+      'needModel',
+      'fullscreen',
+      'atPicker',
+      'skillPicker',
+    ]);
+  });
+});
+
+describe('聚合 init 拆包（T-CU2 / 契约第 5 条）', () => {
+  it('T-CDV-05：拆成 transcript {theme,flags} + composer {mode,disabled,theme,metrics,placeholder}', () => {
+    const split = splitInitPayload({
+      theme: THEME,
+      flags: {richText: true, menuDisabled: false},
+      composer: {
+        mode: 'composer-token',
+        disabled: true,
+        metrics: METRICS,
+        placeholder: '选择模型后可发送',
+        safeAreaBottom: 34,
+      },
+    });
+    expect(Object.keys(split.transcript).sort()).toEqual(['flags', 'theme']);
+    expect(split.composer.mode).toBe('composer-token');
+    expect(split.composer.disabled).toBe(true);
+    // theme 用同一份 9 键超集喂两方；metrics 六值全量透传
+    expect(split.composer.theme).toBe(THEME);
+    expect(split.composer.metrics).toEqual(METRICS);
+    expect(split.composer.placeholder).toBe('选择模型后可发送');
+    // safeAreaBottom 不下喂 runtime，由 dock 消费
+    expect(split.safeAreaBottom).toBe(34);
+    expect(Object.keys(split.composer)).not.toContain('safeAreaBottom');
+  });
+
+  it('T-CDV-06：init 一次投三方（transcript + composer + dock 的 safeAreaBottom）', () => {
+    const route = routeHostMessage(
+      v2('init', {
+        theme: THEME,
+        flags: {richText: false, menuDisabled: true},
+        composer: {disabled: false, metrics: METRICS, placeholder: '输入消息…', safeAreaBottom: 0},
+      }),
+    );
+    expect(route?.transcript).toEqual({
+      v: 1,
+      type: 'init',
+      payload: {theme: THEME, flags: {richText: false, menuDisabled: true}},
+    });
+    expect(route?.composer?.v).toBe(1);
+    expect(route?.composer?.type).toBe('init');
+    expect(route?.dock).toEqual({kind: 'init', safeAreaBottom: 0});
+    // 主题不重复投 dock（init 的 theme 由两份 runtime 各自消费；dock 只吃 safeAreaBottom）
+    expect(route?.theme).toBeNull();
+  });
+});
+
+describe('themeUpdate fan-out 三方（契约第 2 条）', () => {
+  it('T-CDV-07：9 键超集同时喂 transcript + composer + dock', () => {
+    const route = routeHostMessage(v2('themeUpdate', {theme: THEME}));
+    expect(route?.transcript).toEqual({
+      v: 1,
+      type: 'themeUpdate',
+      payload: {theme: THEME},
+    });
+    expect(route?.composer).toEqual(route?.transcript);
+    expect(route?.theme).toBe(THEME);
+    expect(route?.dock).toBeNull();
+    // 键集完整性：themeUpdate 一次带齐 9 键
+    expect(Object.keys(route?.transcript?.payload?.theme ?? {})).toHaveLength(9);
+  });
+
+  it('T-CDV-08：theme 缺 payload 时三方全空（不误投）', () => {
+    const route = routeHostMessage(v2('themeUpdate', {}));
+    expect(route?.transcript).toBeNull();
+    expect(route?.composer).toBeNull();
+    expect(route?.theme).toBeNull();
+  });
+});
+
+describe('三域路由各自命中且不串', () => {
+  it('T-CDV-09：transcript 域八类 type 全部重打包为 v1 且只投 transcript', () => {
+    for (const type of [
+      'sessionSnapshot',
+      'prependPage',
+      'appendTailRows',
+      'streamDelta',
+      'streamBatch',
+      'streamBlockCommit',
+      'streamReset',
+      'streamCommit',
+      'streamToolInvoking',
+      'flagsUpdate',
+      'closeMenu',
+      'closeMermaidViewer',
+      'stickIfNearBottom',
+    ]) {
+      const route = routeHostMessage(v2(type, {marker: type}));
+      expect(route?.transcript).toEqual({v: 1, type, payload: {marker: type}});
+      expect(route?.composer).toBeNull();
+      expect(route?.dock).toBeNull();
+      expect(route?.theme).toBeNull();
+    }
+  });
+
+  it('T-CDV-10：composer 域四项只投 composer（setText 属 composer 域，不进 deferred）', () => {
+    for (const type of ['setText', 'setSelection', 'setDisabled', 'blur']) {
+      const route = routeHostMessage(v2(type, {marker: type}));
+      expect(route?.composer).toEqual({v: 1, type, payload: {marker: type}});
+      expect(route?.transcript).toBeNull();
+      expect(route?.dock).toBeNull();
+    }
+  });
+
+  it('T-CDV-11：dock 域三项只投 dock，runtime 两域零命中', () => {
+    const state = routeHostMessage(v2('composerState', {hasModel: false}));
+    expect(state?.transcript).toBeNull();
+    expect(state?.composer).toBeNull();
+    expect(state?.dock?.kind).toBe('composerState');
+
+    const paste = routeHostMessage(v2('composerPaste', {text: '粘来的'}));
+    expect(paste?.transcript).toBeNull();
+    expect(paste?.composer).toBeNull();
+    expect(paste?.dock).toEqual({kind: 'composerPaste', text: '粘来的'});
+
+    const selectAll = routeHostMessage(v2('selectAll', {}));
+    expect(selectAll?.transcript).toBeNull();
+    expect(selectAll?.composer).toBeNull();
+    expect(selectAll?.dock).toEqual({kind: 'selectAll'});
+  });
+});
+
+describe('宽容口径（坏输入静默丢弃）', () => {
+  it('T-CDV-12：v≠2 / 无 type / 坏 JSON 一律不路由', () => {
+    expect(routeHostMessage({v: 1, type: 'init', payload: {}})).toBeNull();
+    expect(routeHostMessage({v: 2, payload: {}})).toBeNull();
+    expect(routeHostMessage('{不是 json')).toBeNull();
+    expect(routeHostMessage(null)).toBeNull();
+  });
+
+  it('T-CDV-13：未知 type 路由为空（不串进任何域）', () => {
+    const route = routeHostMessage(v2('someLegacyMessage', {a: 1}));
+    expect(route).toEqual({transcript: null, composer: null, dock: null, theme: null});
+  });
+});
+
+describe('composerState 宽松取值（T-CU6：坏字段不打挂 dock）', () => {
+  it('T-CDV-14：缺字段逐项回落默认值，error 为空串时不出现', () => {
+    const state = coerceComposerState({});
+    expect(state).toEqual({
+      inputDisabled: false,
+      hasModel: false,
+      sendDisabled: false,
+      running: false,
+      fullscreenEnabled: false,
+      placeholder: '',
+      chips: [],
+      keyboardUp: false,
+      typeahead: {files: [], skills: []},
+    });
+    expect(state.error).toBeUndefined();
+  });
+
+  it('T-CDV-15：全字段透传（含 error / chips / keyboardUp / typeahead 候选源）', () => {
+    const chips = [{source: 'workplace', name: 'src', path: 'src', type: 'text', content: null}];
+    const state = coerceComposerState({
+      inputDisabled: true,
+      hasModel: true,
+      sendDisabled: true,
+      running: true,
+      error: '上一轮失败',
+      fullscreenEnabled: true,
+      placeholder: '输入消息…',
+      chips,
+      keyboardUp: true,
+      typeahead: {
+        files: [{path: 'src/a.ts', kind: 'file'}],
+        skills: [{name: 'refactor', valid: true, domain: 'project'}],
+      },
+    });
+    expect(state.error).toBe('上一轮失败');
+    expect(state.chips).toBe(chips);
+    expect(state.keyboardUp).toBe(true);
+    expect(state.typeahead?.files).toHaveLength(1);
+    expect(state.typeahead?.skills).toHaveLength(1);
+  });
+
+  it('T-CDV-16：typeahead 坏形状回落空源', () => {
+    expect(coerceTypeaheadSource(undefined)).toEqual({files: [], skills: []});
+    expect(coerceTypeaheadSource({files: 'oops', skills: 3})).toEqual({
+      files: [],
+      skills: [],
+    });
+  });
+});
+
+describe('副作用投递（dispatchRoute / createConversationDispatcher）', () => {
+  function makeDeps() {
+    const calls: string[] = [];
+    const deps: ConversationDispatcherDeps & {
+      transcript: unknown[];
+      composer: unknown[];
+      dockRoutes: ConversationDockRoute[];
+      themes: unknown[];
+    } = {
+      calls,
+      transcript: [],
+      composer: [],
+      dockRoutes: [],
+      themes: [],
+      handleTranscript: raw => {
+        calls.push('transcript');
+        deps.transcript.push(raw);
+      },
+      handleComposer: raw => {
+        calls.push('composer');
+        deps.composer.push(raw);
+      },
+      applyDockRoute: route => {
+        calls.push('dock');
+        deps.dockRoutes.push(route);
+      },
+      applyDockTheme: theme => {
+        calls.push('theme');
+        deps.themes.push(theme);
+      },
+    };
+    return deps;
+  }
+
+  it('T-CDV-17：null 路由零副作用', () => {
+    const deps = makeDeps();
+    dispatchRoute(deps, null);
+    expect(deps.calls).toEqual([]);
+  });
+
+  it('T-CDV-18：themeUpdate 的 fan-out 落到三方各一次', () => {
+    const deps = makeDeps();
+    dispatchRoute(deps, routeHostMessage(v2('themeUpdate', {theme: THEME})));
+    expect(deps.calls.sort()).toEqual(['composer', 'theme', 'transcript']);
+    expect(deps.themes).toEqual([THEME]);
+  });
+
+  it('T-CDV-19：入口闭包可消费宿主消息，且只投该投的域', () => {
+    const deps = makeDeps();
+    const dispatcher = createConversationDispatcher(deps);
+    dispatcher(JSON.stringify(v2('setDisabled', {disabled: true})));
+    expect(deps.calls).toEqual(['composer']);
+    expect(deps.composer[0]).toEqual({
+      v: 1,
+      type: 'setDisabled',
+      payload: {disabled: true},
+    });
+  });
+});

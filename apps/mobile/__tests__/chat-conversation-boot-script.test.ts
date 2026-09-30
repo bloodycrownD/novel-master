@@ -73,7 +73,6 @@ describe('chat-conversation WebView boot (dist)', () => {
     expect(html).not.toContain('type="module"');
     expect(html).not.toContain('https://novel-master.local/');
   });
-
   it('T-CC-ASM-02: 双 portal 为 body 直接子级（fixed 包含块语境，勿移入 #app）', () => {
     const html = indexHtml();
     const nodes = parseShell(html);
@@ -96,8 +95,11 @@ describe('chat-conversation WebView boot (dist)', () => {
     expect(nodes.get('scroller')?.parent).toBe('app');
     expect(nodes.get('rows')?.parent).toBe('scroller');
     expect(nodes.get('composer-dock')?.parent).toBe('app');
-    // composer runtime 挂载点在 dock 内（createComposerRuntime('#composer-input')）
-    expect(nodes.get('composer-input')?.parent).toBe('composer-dock');
+    // composer runtime 挂载点在 dock 子树内（createComposerRuntime('#composer-input')）：
+    // dock → box（styles.box 单一视觉容器）→ input-area（typeahead 定位上下文）→ input
+    expect(nodes.get('composer-box')?.parent).toBe('composer-dock');
+    expect(nodes.get('composer-input-area')?.parent).toBe('composer-box');
+    expect(nodes.get('composer-input')?.parent).toBe('composer-input-area');
     // 反面：portal 不得被卷进 #app
     expect(nodes.get('menu-portal')?.parent).not.toBe('app');
     expect(nodes.get('mermaid-viewer-portal')?.parent).not.toBe('app');
@@ -166,5 +168,238 @@ describe('chat-conversation WebView boot (dist)', () => {
     ]) {
       expect(buildScript).toContain(`id: '${id}'`);
     }
+  });
+});
+
+/* ================================================================== *
+ * Step 3 / 4 / 5：dock 壳、样式数值清单、协议装配（chat-webview-unify）
+ * ================================================================== */
+
+describe('chat-conversation dock 壳（Step 3 · 文档布局）', () => {
+  it('T-CC-DOCK-01: dock 六段齐备且纵向次序为 hintRow → error → box(chips → typeahead → input → toolbar)', () => {
+    const nodes = parseShell(indexHtml());
+    for (const id of [
+      'composer-hint-row',
+      'composer-error',
+      'composer-box',
+      'composer-chips',
+      'composer-typeahead',
+      'composer-input',
+      'composer-toolbar',
+    ]) {
+      expect(nodes.get(id)).toBeDefined();
+    }
+    // hintRow / error 直接挂在 dock 上（box 之外——现网同构：提示与报错在 box 上方）
+    expect(nodes.get('composer-hint-row')?.parent).toBe('composer-dock');
+    expect(nodes.get('composer-error')?.parent).toBe('composer-dock');
+    // box 内次序
+    expect(nodes.get('composer-chips')?.parent).toBe('composer-box');
+    expect(nodes.get('composer-input-area')?.parent).toBe('composer-box');
+    // input-area 内次序：typeahead 浮层在 input 上方
+    expect(nodes.get('composer-typeahead')?.parent).toBe('composer-input-area');
+    expect(nodes.get('composer-toolbar')?.parent).toBe('composer-input-area');
+  });
+
+  it('T-CC-DOCK-02: dock 壳带 web 化 testID（testID 统一到 web data-testid）', () => {
+    const html = indexHtml();
+    for (const testId of [
+      'composer-hint-row',
+      'composer-error',
+      'composer-chips',
+      'composer-typeahead',
+      'composer-toolbar',
+    ]) {
+      expect(html).toContain(`data-testid="${testId}"`);
+    }
+  });
+});
+
+describe('chat-conversation dock 样式数值清单（Step 4 · T-CU10 样式相等）', () => {
+  /** 取某选择器的第一条规则体（CSS 被注入拼接后可能有重复，取首个命中）。 */
+  function rule(css: string, selector: string): string {
+    const re = new RegExp(
+      `(^|[},])\\s*${selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\{([^}]*)\\}`,
+      'm',
+    );
+    const match = re.exec(css);
+    if (match == null) {
+      throw new Error(`app.css 缺少规则 ${selector}`);
+    }
+    return match[2];
+  }
+
+  it('T-CC-CSS-04: styles.dock 四值 + 实底（paddingH12 / padT4 / padB8 / background 非 transparent）', () => {
+    const dock = rule(appCss(), '#composer-dock');
+    expect(dock).toMatch(/padding:\s*4px\s+12px\s+8px/);
+    expect(dock).toMatch(/background:\s*var\(--bg/);
+    // 反面清单（源级）：合成包自持 CSS 不搬 composer-input.css 的
+    // `html,body{background:transparent}`——与本文件的 `--bg` 实底直接冲突。
+    // （注入段 CHAT_TRANSCRIPT_RICH_CSS 自带的规则不在本断言面内，故读源文件；
+    //   源文件的说明注释里恰好引用了这条反面清单，先剥注释再判。）
+    const source = readFileSync(
+      join(
+        __dirname,
+        '../src/web/chat-conversation/styles/chat-conversation.css',
+      ),
+      'utf8',
+    ).replace(/\/\*[\s\S]*?\*\//g, '');
+    expect(source).not.toMatch(
+      /html,\s*body\s*\{[^}]*background:\s*transparent/,
+    );
+    // 源文件的 html,body 底色必须是 --bg 实底
+    expect(source).toMatch(/html,\s*body\s*\{[^}]*background:\s*var\(--bg/);
+  });
+
+  it('T-CC-CSS-05: styles.box（hairline 描边 / radius 12 / paddingH 8 / padT 4 / padB 6 / surface 实底）', () => {
+    const box = rule(appCss(), '.dock__box');
+    expect(box).toMatch(/border:\s*0\.5px solid/);
+    expect(box).toMatch(/border-radius:\s*12px/);
+    expect(box).toMatch(/padding:\s*4px\s+8px\s+6px/);
+    expect(box).toMatch(/background:\s*var\(--surface/);
+  });
+
+  it('T-CC-CSS-06: hintRow marginBottom:6；error marginBottom:6 + fontSize:13', () => {
+    const css = appCss();
+    expect(rule(css, '.dock__hint-row')).toMatch(/margin-bottom:\s*6px/);
+    const error = rule(css, '.dock__error');
+    expect(error).toMatch(/margin-bottom:\s*6px/);
+    expect(error).toMatch(/font-size:\s*13px/);
+  });
+
+  it('T-CC-CSS-07: chips 数值清单（chip padV6/padH10/radius14/hairline/maxW200；label 12/maxW160；transparentRow marginBottom4；content gap6/padR8；横向滚动）', () => {
+    const css = appCss();
+    const row = rule(css, '.chips__row');
+    // transparentRow 变体：行底色透明 + marginBottom:4（maxHeight:36/marginBottom:6 属非 transparent 变体）
+    expect(row).toMatch(/margin-bottom:\s*4px/);
+    expect(row).toMatch(/gap:\s*6px/);
+    expect(row).toMatch(/padding-right:\s*8px/);
+    expect(row).toMatch(/overflow-x:\s*auto/);
+    expect(row).toMatch(/background:\s*transparent/);
+    expect(row).not.toMatch(/max-height:\s*36px/);
+
+    const chip = rule(css, '.chip');
+    expect(chip).toMatch(/max-width:\s*200px/);
+    expect(chip).toMatch(/padding:\s*6px\s+10px/);
+    expect(chip).toMatch(/border-radius:\s*14px/);
+    expect(chip).toMatch(/border:\s*0\.5px solid/);
+
+    const label = rule(css, '.chip__label');
+    expect(label).toMatch(/font-size:\s*12px/);
+    expect(label).toMatch(/max-width:\s*160px/);
+  });
+
+  it('T-CC-CSS-08: typeahead 浮层（absolute 锚 input 上缘 / radius 10 / hairline / surface 底 + 行内边距 8×10）', () => {
+    const css = appCss();
+    const area = rule(css, '.dock__input-area');
+    expect(area).toMatch(/position:\s*relative/);
+    const list = rule(css, '.typeahead');
+    expect(list).toMatch(/position:\s*absolute/);
+    expect(list).toMatch(/bottom:\s*100%/);
+    expect(list).toMatch(/border-radius:\s*10px/);
+    expect(list).toMatch(/border:\s*0\.5px solid/);
+    expect(list).toMatch(/background:\s*var\(--surface/);
+    const row = rule(css, '.typeahead__row');
+    expect(row).toMatch(/padding:\s*8px\s+10px/);
+    expect(rule(css, '.typeahead__tag')).toMatch(/font-size:\s*11px/);
+  });
+
+  it('T-CC-CSS-09: input metrics 六值兜底（16/22/4/6/56/122）—— maxHeight 122 = paddingV×2 + lineHeight×5', () => {
+    const css = appCss();
+    expect(rule(css, '.composer-input')).toMatch(/font-size:\s*16px/);
+    expect(rule(css, '.composer-input')).toMatch(/line-height:\s*22px/);
+    const highlight = rule(css, '.composer-input__highlight');
+    expect(highlight).toMatch(/padding:\s*6px\s+4px/);
+    expect(highlight).toMatch(/min-height:\s*56px/);
+    expect(highlight).toMatch(/max-height:\s*122px/);
+    // 透明 textarea：文字不可见、插入符显式着色、选区只剩底色
+    const input = rule(css, '.composer-input__input');
+    expect(input).toMatch(/color:\s*transparent/);
+    expect(input).toMatch(/caret-color:\s*var\(--text/);
+    expect(rule(css, '.composer-input__input::selection')).toMatch(
+      /background:\s*var\(--selection/,
+    );
+  });
+
+  it('T-CC-CSS-10: toolbar 数值（gap 8 / marginTop 4 / 36 圆钮 radius 18 hairline / 发送钮 40 半径 20 + 三态配色）', () => {
+    const css = appCss();
+    const toolbar = rule(css, '.toolbar');
+    expect(toolbar).toMatch(/gap:\s*8px/);
+    expect(toolbar).toMatch(/margin-top:\s*4px/);
+    expect(rule(css, '.toolbar__spacer')).toMatch(/flex:\s*1/);
+    const btn = rule(css, '.toolbar__btn');
+    expect(btn).toMatch(/width:\s*36px/);
+    expect(btn).toMatch(/height:\s*36px/);
+    expect(btn).toMatch(/border-radius:\s*18px/);
+    expect(btn).toMatch(/border:\s*0\.5px solid/);
+    const send = rule(css, '.toolbar__send');
+    expect(send).toMatch(/width:\s*40px/);
+    expect(send).toMatch(/height:\s*40px/);
+    expect(send).toMatch(/border-radius:\s*20px/);
+    expect(rule(css, '.toolbar__send--primary')).toMatch(/var\(--primary/);
+    expect(rule(css, '.toolbar__send--danger')).toMatch(/var\(--danger/);
+    expect(rule(css, '.toolbar__send--disabled')).toMatch(/var\(--border/);
+  });
+});
+
+describe('chat-conversation 协议装配（Step 5 · T-CU1 / T-CU3 契约）', () => {
+  it('T-CC-V2-01: dist 含 dispatcher / dock handler 与 v2 身份符号', () => {
+    const script = bootScript();
+    expect(script).toContain('createConversationDispatcher');
+    expect(script).toContain('createConversationDock');
+    expect(script).toContain('routeHostMessage');
+    // v:2 身份：自有能力位 + ready 版本标识
+    expect(script).toContain('composer-dock');
+    expect(script).toContain('"u1"');
+    // dock 域三 type
+    expect(script).toContain('composerState');
+    expect(script).toContain('composerPaste');
+    expect(script).toContain('selectAll');
+    // dockAction 六项
+    for (const action of [
+      'send',
+      'terminate',
+      'needModel',
+      'fullscreen',
+      'atPicker',
+      'skillPicker',
+    ]) {
+      expect(script).toContain(action);
+    }
+  });
+
+  it('T-CC-V2-02: 桥版本为 2（新包下行信封），且单次 bindHostMessageChannel 在两工厂之前', () => {
+    const script = bootScript();
+    // 下行信封 v=2：`CONVERSATION_BRIDGE_V = 2` 参与 matchHostMessage 与 createBoundPost
+    expect(script).toMatch(/CONVERSATION_BRIDGE_V\s*=\s*2/);
+    expect(script).toMatch(
+      /matchHostMessage\(raw,\s*CONVERSATION_BRIDGE_V\)/,
+    );
+    // 上行 v:2 出口只服务 ready / dockAction
+    expect(script).toContain('createBoundPost(CONVERSATION_BRIDGE_V)');
+
+    // 顺序红线：入口装配块内 bindHostMessageChannel 必须早于两工厂
+    const entryAt = script.indexOf('src/web/chat-conversation/webview/main.ts');
+    expect(entryAt).toBeGreaterThan(-1);
+    const entry = script.slice(entryAt, entryAt + 1600);
+    const bindAt = entry.indexOf('bindHostMessageChannel(dispatcher)');
+    const transcriptAt = entry.indexOf('createTranscriptRuntime(');
+    const composerAt = entry.indexOf('createComposerRuntime(');
+    const mountAt = entry.indexOf('dock.mount()');
+    expect(bindAt).toBeGreaterThan(-1);
+    expect(transcriptAt).toBeGreaterThan(bindAt);
+    expect(composerAt).toBeGreaterThan(bindAt);
+    // dock handler 在两 runtime 之后挂载（textarea 由 composer 挂出）
+    expect(mountAt).toBeGreaterThan(composerAt);
+    // 单次注册：入口块内 bindHostMessageChannel 只出现一次
+    expect(entry.split('bindHostMessageChannel(').length - 1).toBe(1);
+  });
+
+  it('T-CC-V2-03: 零 heightChange 上行链（heightReport:false）与零 composer ready', () => {
+    const script = bootScript();
+    // 两 runtime 均以 emitReady:false 装配 → 合成包内 composer 不发自己的 ready
+    expect(script).toMatch(/emitReady:\s*false/);
+    expect(script).toMatch(/heightReport:\s*false/);
+    // ready 版本标识是字符串字面量 "u1"（不是旧包的数字 1 / 'm4'）
+    expect(script).toContain('"u1"');
   });
 });

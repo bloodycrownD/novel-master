@@ -12,13 +12,42 @@
     <!--
       chat-conversation 合成包壳（chat-webview-unify）：转录区 + 输入框 dock 同一文档。
       #app 四属性（display:flex / flex-direction:column / height:100% / min-height:0）缺一
-      则 dock 不贴底——本节点只落骨架，完整布局与 dock 内容见 Step 3/4。
+      则 dock 不贴底。纵向排布见 spec §文档布局：
+        #scroller(flex:1) / #composer-dock(styles.dock) → hintRow / error / box(chips +
+        typeahead 浮层 + #composer-input + toolbar)
+      双 portal 刻意留在 body 直接子级——fixed 定位包含块语境与旧包一致。
     -->
     <div id="app">
       <div id="scroller"><div id="rows"></div></div>
       <div id="composer-dock">
-        <!-- composer runtime 挂载点（createComposerRuntime('#composer-input', …)） -->
-        <div id="composer-input"></div>
+        <!-- !hasModel 时的可点提示行（dockAction.needModel；判据是 hasModel 不是 inputDisabled） -->
+        <div id="composer-hint-row" class="dock__hint-row" data-testid="composer-hint-row" hidden>
+          请先选择工作区模型
+        </div>
+        <!-- composerState.error 的报错文本行 -->
+        <div id="composer-error" class="dock__error" data-testid="composer-error" hidden></div>
+        <!-- styles.box：单一视觉容器（横向 WebView 接缝不该切开它） -->
+        <div id="composer-box" class="dock__box">
+          <!-- 状态 chip 行（纯展示、不可点、不随 inputDisabled 置灰；横向滚动） -->
+          <div id="composer-chips" class="chips__row" data-testid="composer-chips" hidden></div>
+          <!-- input 区定位上下文：typeahead 浮层是它的 absolute 子节点，
+               `bottom:100%` 即「锚定 input 上缘」，不推挤布局。纵向次序仍是
+               chips → typeahead → input → toolbar（spec §文档布局）。
+               比在 box 上做 absolute 多一层壳，是为了把锚点定在 input 上缘而非 box 顶。 -->
+          <div id="composer-input-area" class="dock__input-area">
+            <!-- typeahead 浮层（web 自治，零跨桥） -->
+            <div
+              id="composer-typeahead"
+              class="typeahead"
+              data-testid="composer-typeahead"
+              hidden
+            ></div>
+            <!-- composer runtime 挂载点（createComposerRuntime('#composer-input', …)） -->
+            <div id="composer-input"></div>
+            <!-- toolbar：spacer + ⛶ + @ + $ + 发送/终止（由 dock handler 装配） -->
+            <div id="composer-toolbar" class="toolbar" data-testid="composer-toolbar"></div>
+          </div>
+        </div>
       </div>
     </div>
     <!-- Portal 等价宿主：MenuOverlay render 至此，避免与 #rows 互毁。
