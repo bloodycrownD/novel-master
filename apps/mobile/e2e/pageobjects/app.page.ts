@@ -223,12 +223,17 @@ export class AppPage {
       return;
     }
 
+    // composer 输入探测：testID 现在落在 WebView 容器 View 上（之前是原生 TextInput，
+    // 见 ComposerAtPathInput → ComposerInputWebView）。RN testID 仍落 resource-id，
+    // 容器照样可探。
+    //
+    // 注记（变更 14）：探测语义退化为「存在性」——View 没有 disabled 概念，
+    // isEnabled() 恒 true。若后续要判「可用态」（inputDisabled：无模型 / running /
+    // 末条纯文本），需切到 WEBVIEW context 断言 textarea 的 readOnly，别在本探测上
+    // 加回 enabled 分支。现状该探测仅作存在性用，不扩面。
     const input = await $(byTestId('chat-composer-input'));
     if (await input.isExisting()) {
-      const enabled = await input.isEnabled();
-      if (enabled) {
-        return;
-      }
+      return;
     }
 
     // 对话态底栏隐藏，不可点「我的」：先回列表

@@ -1,58 +1,119 @@
 /**
- * Mobile Composer：基于 react-native-controlled-mentions 的单层输入。
+ * Mobile Composer 输入壳（chat 链）：props 面保持 main 版，内部换
+ * `ComposerInputWebView`（单引擎 WebView 输入框，mode=composer-token）。
  *
- * - `@path`：选择器 / typeahead 程序化插入成 mention（着色 + 退格整段删）
- * - 手输 `@/path` 为普通字：不成 tag、不整段删
- * - 对外 value / onChangeText 始终为展示 plain
- * - selection 仅短暂受控（对齐 PromptMacroTextInput 的 pendingSelection）
+ * main 版 mention 库全链（useMentions / nativeTruthRef 自愈对账 / promotePlainMentions
+ * / replaceActiveAt 的 onSelect）随 WebView 化整体消失：高亮分段、原子删、选区真源
+ * 都在 web 单引擎内（`composer-highlight` + `atomic-range-delete` 进 web bundle），
+ * RN 侧只做 props ↔ 桥消息的搬运。
+ * 失效 props（main 版 TextInput 引用 `inputRef`、占位色 `placeholderTextColor`）
+ * 已随单路径化删除：占位色由 web 主题驱动，程序化写入只有
+ * `replaceCommittedText` 一条路径。
+ *
+ * 对外口径不变：`value` / `onChangeText` 始终为展示 plain；`onSelectionChange`
+ * 合成 RN 事件形状（`nativeEvent.selection.start`，ChatComposer 的 setCursor 链）。
  */
 import React, {
   forwardRef,
   useCallback,
+  useEffect,
   useImperativeHandle,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
-  type RefObject,
 } from 'react';
 import {
   StyleSheet,
-  TextInput,
   type NativeSyntheticEvent,
+  type StyleProp,
   type TextInputSelectionChangeEventData,
   type TextStyle,
+  type ViewStyle,
 } from 'react-native';
+import type {
+  ComposerInputMetrics,
+  ComposerInputSelection,
+} from './ComposerInputBridge';
 import {
-  useMentions,
-  type TriggersConfig,
-} from 'react-native-controlled-mentions';
-import {useTheme} from '@/theme/ThemeProvider';
-import {
-  mentionValueToPlain,
-  mergeProgrammaticPlainIntoMentionValue,
-  promotePlainMentions,
-  suggestionFromAtPathToken,
-  suggestionFromSkillToken,
-  tryAtomicMentionDelete,
-  type ComposerTriggersConfig,
-} from './composer-at-path-mention';
+  ComposerInputWebView,
+  toNativeSelectionEvent,
+  type ComposerInputWebViewHandle,
+} from './ComposerInputWebView';
+
+/**
+ * chat 内联口径（与 main 版 TextInput 样式同值，仅封顶下调）：56 起、**5 行封顶**
+ * 后内滚（12 + 22×5 = 122；原 160 是老 RN 输入框沿用的值，偏高压屏）。
+ */
+const DEFAULT_METRICS = {
+  fontSize: 16,
+  lineHeight: 22,
+  paddingH: 4,
+  paddingV: 6,
+  minHeight: 56,
+  maxHeight: 122,
+} satisfies ComposerInputMetrics;
+
+/** style 中由 metrics 消费的键；其余键原样透传给容器。 */
+const METRIC_STYLE_KEYS: readonly string[] = [
+  'fontSize',
+  'lineHeight',
+  'paddingHorizontal',
+  'paddingVertical',
+  'minHeight',
+  'maxHeight',
+];
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+/** 光标落点归一到 [0, text.length]（对齐 main 版 clamp 口径）。 */
+function clampCursor(value: number, length: number): number {
+  if (!Number.isFinite(value)) {
+    return length;
+  }
+  return Math.max(0, Math.min(Math.floor(value), length));
+}
+
+/**
+ * style 拆分：白名单键覆盖合入 metrics，其余键透传容器
+ * （ChatComposer 的 `styles.input` 里 width / textAlignVertical 归容器）。
+ */
+function splitInputStyle(style: StyleProp<TextStyle>): {
+  metrics: ComposerInputMetrics;
+  container: StyleProp<ViewStyle>;
+} {
+  const flat = (StyleSheet.flatten(style) ?? {}) as Record<string, unknown>;
+  const numberOr = (key: string, fallback: number): number => {
+    const value = flat[key];
+    return isFiniteNumber(value) ? value : fallback;
+  };
+  const metrics: ComposerInputMetrics = {
+    fontSize: numberOr('fontSize', DEFAULT_METRICS.fontSize),
+    lineHeight: numberOr('lineHeight', DEFAULT_METRICS.lineHeight),
+    paddingH: numberOr('paddingHorizontal', DEFAULT_METRICS.paddingH),
+    paddingV: numberOr('paddingVertical', DEFAULT_METRICS.paddingV),
+    minHeight: numberOr('minHeight', DEFAULT_METRICS.minHeight),
+    maxHeight: numberOr('maxHeight', DEFAULT_METRICS.maxHeight),
+  };
+  const container: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(flat)) {
+    if (!METRIC_STYLE_KEYS.includes(key)) {
+      container[key] = value;
+    }
+  }
+  return {metrics, container: container as ViewStyle};
+}
 
 export type ComposerAtPathInputHandle = {
   /**
-   * 程序化整段写入（选择器插入等）。
-   * 新增片段内的完整 `@path` 提成 mention；既有手输纯文本 `@path` 不提升。
+   * 程序化整段写入（typeahead 点选 / 引用选择器插入）。手输即时高亮后无「提升成
+   * tag」概念：整段纯文本写入 + 光标一次落位。
    */
   replaceCommittedText: (text: string, cursor?: number) => void;
-  /**
-   * 程序化替换当前活跃 `@` / `$`（typeahead 点选）。
-   * 走 mentions `onSelect`；无活跃 keyword 时返回 false。
-   */
-  replaceActiveAt: (token: string, trigger?: 'atPath' | 'skill') => boolean;
 };
 
 export type ComposerAtPathInputProps = {
-  inputRef?: RefObject<TextInput | null>;
   value: string;
   onChangeText: (text: string) => void;
   onSelectionChange?: (
@@ -60,13 +121,12 @@ export type ComposerAtPathInputProps = {
   ) => void;
   editable?: boolean;
   placeholder?: string;
-  placeholderTextColor?: string;
   testID?: string;
-  /** 与 ChatComposer 原 input 样式对齐的附加 style。 */
-  style?: TextStyle;
+  /** 与 ChatComposer 原 input 样式对齐：metrics 白名单键驱动 web，其余透传容器。 */
+  style?: StyleProp<TextStyle>;
   /**
-   * 外部受控光标（插入 token / typeahead 替换后）。
-   * 程序化写入后用于对齐 selection。
+   * 外部受控光标（插入 token / 水化 / 清空后）。
+   * 与 main 版同语义：仅在 value 主动变化时对齐，用户划选后不再受控。
    */
   cursor?: number;
 };
@@ -76,224 +136,108 @@ export const ComposerAtPathInput = forwardRef<
   ComposerAtPathInputProps
 >(function ComposerAtPathInput(
   {
-    inputRef,
     value,
     onChangeText,
     onSelectionChange,
     editable = true,
     placeholder,
-    placeholderTextColor,
     testID,
     style,
     cursor = 0,
   },
   ref,
 ) {
-  const {tokens} = useTheme();
+  const webRef = useRef<ComposerInputWebViewHandle | null>(null);
+  /** 最近一次对外的 value：差分识别水化 / 清空等外部写入（main 版 lastPlainRef）。 */
+  const lastValueRef = useRef(value);
+  /** 外部写入的光标期望（短暂受控）：web 上报用户选区后解除。 */
+  const [pendingSelection, setPendingSelection] =
+    useState<ComposerInputSelection | null>(null);
 
-  const triggersConfig: ComposerTriggersConfig = useMemo(
-    () => ({
-      atPath: {
-        trigger: '@',
-        // 路径无空格；避免把后续字吞进 keyword
-        allowedSpacesCount: 0,
-        isInsertSpaceAfterMention: true,
-        // 字色 + 轻底胶囊，与柔和 selection tint 可区分
-        textStyle: {
-          color: tokens.primary,
-          backgroundColor: `${tokens.primary}22`,
-          borderRadius: 6,
-          paddingHorizontal: 3,
-        },
-        // 展示为 @/path（name 已含前导 /）
-        getPlainString: mention => `@${mention.name}`,
-      },
-      // `$技能名` 显式引用：与 @path 同款着色 / 原子删 / 尾空格
-      skill: {
-        trigger: '$',
-        allowedSpacesCount: 0,
-        isInsertSpaceAfterMention: true,
-        textStyle: {
-          color: tokens.primary,
-          backgroundColor: `${tokens.primary}22`,
-          borderRadius: 6,
-          paddingHorizontal: 3,
-        },
-        getPlainString: mention => `$${mention.name}`,
-      },
-    }),
-    [tokens.primary],
-  );
+  const {metrics, container} = useMemo(() => splitInputStyle(style), [style]);
 
-  /** 内部 mention 值（可含 `{@}[…](…)`）；对外只发展示 plain。初次挂载即提升完整 token，恢复 tag 效果。 */
-  const [mentionValue, setMentionValue] = useState(() =>
-    promotePlainMentions(value, triggersConfig),
-  );
-  /** 仅程序化写入时短暂传入 TextInput；用户划选后清空，避免全程受控。 */
-  const [pendingSelection, setPendingSelection] = useState<{
-    start: number;
-    end: number;
-  } | null>(null);
-  const lastPlainRef = useRef(value);
-  const mentionValueRef = useRef(mentionValue);
-  mentionValueRef.current = mentionValue;
-  // 自愈对账用：handleChangeText 进入库处理前记录原生上报（markup 形态），
-  // emitMentionValue 消费后清空；原子删/程序化写入不设置、不受影响。
-  const nativeTruthRef = useRef<string | null>(null);
-  const triggersRef = useRef<ReturnType<typeof useMentions>['triggers'] | null>(
-    null,
-  );
-
-  const emitMentionValue = useCallback(
-    (nextMention: string) => {
-      // 自愈对账（2026-09 输入变删除案）：mention 库的差分→重建在 IME
-      // 组合期会吃字符（实测：原生 660 → 重建值 657，光标处组合文本整段丢失）。
-      // 注意原生 buffer 存的是展示 plain（children 拼接即 getPlainString 形态，
-      // markup 从不进原生），因此对账必须在 plain 空间比较：库重建的 plain
-      // 与原生上报一致 → 库无损，直接采用（保留 tag markup）；不一致 →
-      // 库吃了字，以原生上报为准重建 markup（token 重新提升为 tag）。
-      // truth 每次消费后即清空：原子删/程序化写入路径不受影响。
-      let resolved = nextMention;
-      const truth = nativeTruthRef.current;
-      if (truth != null && mentionValueToPlain(resolved) !== truth) {
-        resolved = promotePlainMentions(truth, triggersConfig);
-      }
-      nativeTruthRef.current = null;
-      const plain = mentionValueToPlain(resolved);
-      lastPlainRef.current = plain;
-      mentionValueRef.current = resolved;
-      setMentionValue(resolved);
-      onChangeText(plain);
-    },
-    [onChangeText, triggersConfig],
-  );
-
-  const applyPendingSelection = useCallback(
-    (start: number, end: number) => {
-      setPendingSelection({start, end});
-      onSelectionChange?.({
-        nativeEvent: {selection: {start, end}},
-      } as NativeSyntheticEvent<TextInputSelectionChangeEventData>);
+  /** 合成 RN 选区事件（ChatComposer 读 `nativeEvent.selection.start`）。 */
+  const emitSelection = useCallback(
+    (next: ComposerInputSelection) => {
+      onSelectionChange?.(toNativeSelectionEvent(next));
     },
     [onSelectionChange],
   );
 
-  const {textInputProps, triggers} = useMentions({
-    value: mentionValue,
-    onChange: emitMentionValue,
-    triggersConfig: triggersConfig as TriggersConfig<'atPath' | 'skill'>,
-    onSelectionChange: sel => {
-      // 原生已应用选区后解除短暂受控（对照 PromptMacroTextInput）
+  /** web 上报选区 → 合成 RN 事件形状。 */
+  const handleSelectionChange = useCallback(
+    (selection: ComposerInputSelection) => {
+      // 用户选区到达即解除短暂受控（对齐 main 版：原生已应用选区后置空 pendingSelection）。
       setPendingSelection(null);
-      onSelectionChange?.({
-        nativeEvent: {selection: {start: sel.start, end: sel.end}},
-      } as NativeSyntheticEvent<TextInputSelectionChangeEventData>);
+      emitSelection(selection);
     },
-  });
-  triggersRef.current = triggers;
+    [emitSelection],
+  );
 
-  // 外部 value（草稿水化 / 清空）→ 内部；提升完整 token 恢复 tag，纯文本不成 tag 的语义不变
-  useLayoutEffect(() => {
-    if (value === lastPlainRef.current) {
+  /**
+   * web 上报的文本就是打字真源：**先把差分基线推进再上抛**。
+   *
+   * 不推进的话，父层把文本原样写回 `value` 时会被下面那条 effect 误判成「外部写入」，
+   * 于是按上一拍的 `cursor` 强制摆一次选区——`setSelectionRange` 打在正在输入（尤其
+   * IME 组合态）的 textarea 上会把光标拽回去一两个字（真机实报症状）。程序化写入
+   * （replaceCommittedText）自带基线推进，不经过这里。
+   */
+  const handleWebChangeText = useCallback(
+    (next: string) => {
+      lastValueRef.current = next;
+      onChangeText(next);
+    },
+    [onChangeText],
+  );
+
+  // 外部 value 变化（草稿水化 / 发送清空 / 全屏回填）：光标期望对齐 cursor 后随
+  // setText 下发；选区期望由 selection prop 走宿主受控通道（web 上报即解除）。
+  useEffect(() => {
+    if (value === lastValueRef.current) {
       return;
     }
-    lastPlainRef.current = value;
-    const hydrated = promotePlainMentions(value, triggersConfig);
-    mentionValueRef.current = hydrated;
-    setMentionValue(hydrated);
-    const pos = Math.max(0, Math.min(cursor, value.length));
-    applyPendingSelection(pos, pos);
-  }, [value, cursor, applyPendingSelection, triggersConfig]);
+    lastValueRef.current = value;
+    const pos = clampCursor(cursor, value.length);
+    const next = {start: pos, end: pos};
+    setPendingSelection(next);
+    emitSelection(next);
+  }, [value, cursor, emitSelection]);
 
   useImperativeHandle(
     ref,
     () => ({
       replaceCommittedText(text: string, cursorPos?: number) {
-        const next = mergeProgrammaticPlainIntoMentionValue(
-          mentionValueRef.current,
-          text,
-          triggersConfig,
-        );
-        emitMentionValue(next);
-        const pos =
-          cursorPos != null
-            ? Math.max(0, Math.min(cursorPos, text.length))
-            : text.length;
-        applyPendingSelection(pos, pos);
-      },
-      replaceActiveAt(token: string, trigger: 'atPath' | 'skill' = 'atPath') {
-        const t = triggersRef.current?.[trigger];
-        if (t == null || t.keyword == null) {
-          return false;
-        }
-        t.onSelect(
-          trigger === 'skill'
-            ? suggestionFromSkillToken(token)
-            : suggestionFromAtPathToken(token),
-        );
-        return true;
+        const pos = clampCursor(cursorPos ?? text.length, text.length);
+        // 本条写入由 RN 发起：差分基线先行推进（value prop 回流不算外部变化），
+        // web 侧文本基线由宿主 setText 同步；光标经 setText.selection 一次落位。
+        lastValueRef.current = text;
+        // 短暂受控选区**不置 null**：就绪时靠它让宿主的 setSelection 必然放行一次
+        // （宿主的 handle.setText 自带 selection 并推进基线，这条只作兜底）；
+        // 未就绪时它随 ready 后的 selection effect 补发，避免光标期望静默丢失。
+        setPendingSelection({start: pos, end: pos});
+        webRef.current?.setText(text, {start: pos, end: pos});
+        // main 版同口径：程序化写入同样回调 onChangeText（ChatComposer 的 text /
+        // 草稿状态靠它同步）与合成选区事件（cursor 落位）。
+        onChangeText(text);
+        emitSelection({start: pos, end: pos});
       },
     }),
-    [applyPendingSelection, emitMentionValue, triggersConfig],
-  );
-
-  const setMergedRef = useCallback(
-    (node: TextInput | null) => {
-      if (inputRef) {
-        (inputRef as React.MutableRefObject<TextInput | null>).current = node;
-      }
-    },
-    [inputRef],
-  );
-
-  const handleChangeText = useCallback(
-    (changedPlain: string) => {
-      const atomic = tryAtomicMentionDelete(
-        mentionValue,
-        changedPlain,
-        triggersConfig,
-      );
-      if (atomic != null) {
-        emitMentionValue(atomic);
-        return;
-      }
-      // 记录原生上报供 emitMentionValue 对账（原子删已提前 return，不会误伤）。
-      nativeTruthRef.current = changedPlain;
-      textInputProps.onChangeText(changedPlain);
-    },
-    [emitMentionValue, mentionValue, textInputProps, triggersConfig],
+    [emitSelection, onChangeText],
   );
 
   return (
-    <TextInput
-      ref={setMergedRef}
+    <ComposerInputWebView
+      ref={webRef}
+      mode="composer-token"
       testID={testID}
-      style={[styles.input, style, {color: tokens.text}]}
+      style={container}
+      value={value}
+      onChangeText={handleWebChangeText}
+      onSelectionChange={handleSelectionChange}
+      disabled={!editable}
+      selection={pendingSelection}
+      metrics={metrics}
       placeholder={placeholder}
-      placeholderTextColor={placeholderTextColor}
-      editable={editable}
-      multiline
-      caretHidden={false}
-      selectionColor={tokens.selection}
-      selection={pendingSelection ?? undefined}
-      // 库要求：勿直接传 value；由 children 着色 + onChangeText 驱动
-      onChangeText={handleChangeText}
-      onSelectionChange={textInputProps.onSelectionChange}
-    >
-      {textInputProps.children}
-    </TextInput>
+    />
   );
-});
-
-const styles = StyleSheet.create({
-  input: {
-    minHeight: 56,
-    maxHeight: 160,
-    fontSize: 16,
-    lineHeight: 22,
-    paddingHorizontal: 4,
-    paddingVertical: 6,
-    width: '100%',
-    textAlignVertical: 'top',
-  },
 });

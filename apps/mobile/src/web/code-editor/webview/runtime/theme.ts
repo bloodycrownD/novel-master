@@ -77,6 +77,10 @@ export const editorSyntaxHighlighting = syntaxHighlighting(highlightStyle, {
 /**
  * 主题应用统一走 @web/shared/host-theme（web/C-orch-2）：条件式写入 + CSS 兜底；
  * --editor-* 派生变量经 extraVars 与对应 token 同步写入。
+ *
+ * 胶囊底色 --primary-muted 同样是宿主算色（capsule/C-orch-1）：由 HostTheme
+ * 的 primaryMuted 字段条件式写入，本文件不再自拼 `primary + '22'`——自算会让
+ * code-editor 与 composer-input 两条链的派生口径分裂（一边宿主拼、一边 web 拼）。
  */
 export function applyTheme(theme: HostTheme | null | undefined): void {
   applyHostTheme(theme, {
