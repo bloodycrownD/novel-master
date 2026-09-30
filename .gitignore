@@ -21,8 +21,8 @@ DerivedData/
 # React Native
 *.jsbundle
 
-# Android �������RN ��� bundle �� autolink �Զ������� res �ĵ�������Դ
-# ��index.android.bundle / node_modules ͼ�꿽�� / keep.xml ��Ϊ�������ɣ�����⣩
+# Android 构建产物：RN 打包 bundle 与 autolink 自动拷贝进 res 的第三方资源
+# 内嵌 bundle 出包落点与 e2e 运行产物（appium 本地驱动等）
 apps/mobile/android/app/src/main/assets/index.android.bundle
 apps/mobile/android/app/src/main/res/drawable-mdpi/
 apps/mobile/android/app/src/main/res/drawable-xhdpi/
@@ -55,19 +55,19 @@ tmp/
 # Cursor IDE local files (debug logs, etc.)
 .cursor/
 
-# ZCode �ͻ��˱����ļ��������嵥ͬ���������⣩
+# ZCode 客户端本地文件（忽略清单同步产物，不入库）
 .zcodeignore
 
-# ���� worktree��agent ��������
+# 本地 worktree（agent 工作区）
 .worktree/
 
 # Git worktrees for parallel feature development
 .woktree/
 
-# �ο���Ŀ�������ز��ģ�����⣩
+# 参考项目（仅本地查阅，不入库）
 .reference/
 
-# ���ص���/������ʱ���mock ��������־�����Ի�����־����ʱ jest ���ø�����
+# 本地调试/测试临时产物（mock 服务器日志 / 临时 jest 配置）
 mock*.log
 .*.log
 .jc-*.js

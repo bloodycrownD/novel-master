@@ -213,7 +213,7 @@ core 新增/改写（T-MP = 明文化、T-SR = skill 引用化）：
 - 删（**随 Step 4 执行**，与 codec/池删除同批）：`chat/message-content-codec-roundtrip.test.ts`、`chat/message-content-decode-cache.test.ts`。
 - 改（随 Step 4）：`infra/content-cache/decoded-content-cache.test.ts`（1 条消息池 `it` + 3 处 import 随 API 删除而清，contentBodyPool 用例保留——该文件是 Step 4 删池的必红点，缺它清单不完整）；（随 Step 9 收口）：`chat/message-content-perf-threshold.test.ts`（两条正向护栏→T-MP-P0/P1/P2，基线构造改 compressZlib+裸 INSERT）、`infra/message-content-compaction*.test.ts` 三件（骨架改写为 decompression 测试，OQ-I7 互斥断言删、bad-row 桩点换 decode、maintenance 夹具改压缩行）、`infra/status-sampling-throttle.test.ts`（谓词换向）、`chat/usage-stats.service.test.ts`（:1590 坏 blob 行用例改「迁移期双形态」口径）、allowlist 快照删 3 增 3、desktop 四件（compaction-service/migration-row-value/db-maintenance-handlers/settings-db-maintenance-ui）、mobile 四件（compaction-service/db-maintenance/storage-config-migration-values/storage-config-screen-source）。
 - 保留零改动：`bootstrap/message-content-compression-schema.test.ts`（列不删、v17 锚点仍成立）、`schema-align-columns.test.ts`、`bootstrap-no-migrate.test.ts`、`legacy-db-fixtures.ts`、`db-maintenance.test.ts`、e2e fixture。
-- 新增：`infra/message-content-decompression.test.ts`（T-MP2 含收尾不变量与自愈断言 / T-MP2b 断点续跑 / T-MP3 / T-MP-P1 / T-MP-P2 / T-MP5 pending 消费）、`chat/skill-result-ref.test.ts`（T-SR1~7 全量含 T-SR6 删除保活与 T-SR7 改名定位；skill 夹具用真 service 建 global/project 两域技能文件）。
+- 新增：`infra/message-content-decompression.test.ts`（T-MP2 含收尾不变量与自愈断言 / T-MP2b 断点续跑 / T-MP3 / T-MP-P1 / T-MP-P2 / T-MP5 pending 消费）、`chat/skill-result-ref.test.ts`（T-SR1~7 全量含 T-SR6 删除保活与 T-SR7 改名定位；skill 夹具用真 service 建 global/project 两域技能文件；CR 后补 T-SR1b 跨域同名（缺省域命中 project、显式 global 两 entryId 不等各自等值）、T-SR8 悬空与篡改 fail-fast、desktop [skill ref:] 占位用例）。
 
 ### 回归面
 
