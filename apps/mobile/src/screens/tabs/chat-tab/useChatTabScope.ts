@@ -1,7 +1,14 @@
 /**
  * Chat tab local UI scope: projects/sessions lists, subviews, drawers, VFS handles.
  */
-import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import {Alert, DeviceEventEmitter, Linking} from 'react-native';
 import {showAppToast} from '@/services/app-toast';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
@@ -106,7 +113,12 @@ export function useChatTabScope({
   // 把旧值带进来——残留整整一轮刷新窗口（防抖 300ms + 装配/读数 ~1s）的
   // **错误数字**。同会话内的刷新（压缩/发送后重算）不受影响：sessionId
   // 没变，本 effect 不触发，保留旧值的语义照旧成立。
-  useEffect(() => {
+  // 用 useLayoutEffect 而非 useEffect（r4-app-2）：清场必须发生在**提交后、
+  // 绘制前**——useEffect 是 post-paint 的，切会话那一帧仍可能把旧数字绘出来，
+  // 「一帧不漏」就只剩注释里的口号。布局阶段同步归位后（布局期写 state 的
+  // 补渲染也在绘制前完成），旧数字没有任何一帧可见；跨会话切换一次会话
+  // 才走一遍，这次额外渲染的代价可忽略。
+  useLayoutEffect(() => {
     tokenLabelSessionRef.current = sessionId ?? null;
     setAgentMeta(prev =>
       prev == null || sessionId == null
@@ -291,10 +303,16 @@ export function useChatTabScope({
   // refreshChatMeta 的在途复用槽：首屏三处触发（本 hook 的 dep effect、
   // Provider 的 conversation effect、useFocusEffect）在同一挂载周期内
   // 重入，同参调用共享在途 promise，只跑一轮查询。
+  // round 是落地的会话身份闸（r4-app-1）：每新起一轮自增，落定前与槽内
+  // 轮次比对——只有仍是槽内最新一轮的读数才许落地。切会话后旧会话在途的
+  // loadChatAgentMeta 落定（含失败）一律丢弃，否则旧会话的 agentName /
+  // modelLabel 会写进新会话（tokenLabel 因显式保留恰好幸免，其余字段不是）。
   const refreshChatMetaInflightRef = useRef<{
     key: string;
+    round: number;
     promise: Promise<void>;
   } | null>(null);
+  const refreshChatMetaRoundRef = useRef(0);
 
   // showToast 经 ref 取用：它随渲染可能换引用（消费方 context mock 每次
   // 渲染给新函数），若进 refreshChatMeta 依赖会连锁重建 → dep effect 无限
@@ -310,6 +328,10 @@ export function useChatTabScope({
     if (inflight != null && inflight.key === key) {
       return inflight.promise;
     }
+    const round = ++refreshChatMetaRoundRef.current;
+    // 落地权判据：在途槽里还是这一轮（中途没被别的会话/参数的轮次顶掉）。
+    const isCurrentRound = () =>
+      refreshChatMetaInflightRef.current?.round === round;
     const promise = (async () => {
       // getCurrentModelId 与 loadChatAgentMeta 互不依赖（后者只需
       // projectId/sessionId），并行发起；两路赋值顺序保持
@@ -326,11 +348,20 @@ export function useChatTabScope({
       if (metaPromise == null) {
         // 无项目或无活动会话时无法解析 session 绑定：保持未加载（锁定）态，
         // 不用 source:'none' 占位——那会被消费方当成「已删待重选」。
-        setAgentMeta(undefined);
+        // 同样过身份闸：本轮的「无会话」结论不能清掉切换后新会话已落地的 meta。
+        if (isCurrentRound()) {
+          setAgentMeta(undefined);
+        }
         return;
       }
       try {
         const meta = await metaPromise;
+        // 会话身份闸（r4-app-1）：旧会话在途的 meta 落定不得写进新会话——
+        // 合并写回与链尾标签刷新整段都要「仍是最新一轮」才执行（标签刷新
+        // 一旦放行会把身份闸重新指到旧会话，残留就从 meta 字段漏回来）。
+        if (!isCurrentRound()) {
+          return;
+        }
         setAgentMeta(prev => ({
           ...prev,
           ...meta,
@@ -340,12 +371,16 @@ export function useChatTabScope({
       } catch (error) {
         // loadChatAgentMeta 仅归一 AgentRunResolveError（→none meta）；走到
         // 这里的是 ChatError 等其它异常——保持未加载（锁定）态并提示错误，
-        // 绝不冒充「已删待重选」（au/B-1 / au/C-orch-2）。
+        // 绝不冒充「已删待重选」（au/B-1 / au/C-orch-2）。失败清场同样过闸：
+        // 旧会话的失败既不该清掉新会话的 meta，也不该弹与新会话无关的提示。
+        if (!isCurrentRound()) {
+          return;
+        }
         setAgentMeta(undefined);
         showToastRef.current(toastMessage('智能体信息加载失败', error));
       }
     })();
-    refreshChatMetaInflightRef.current = {key, promise};
+    refreshChatMetaInflightRef.current = {key, round, promise};
     // 落定后清引用：只清自己这一轮，避免覆盖后继（不同参数）的刷新；
     // 完成后无 inflight，下次调用（如重新聚焦）正常发起新一轮。
     const settleInflight = () => {

@@ -13,16 +13,30 @@
  * 只 mock runtime 与 meta/token 服务；被测 hook 用真实实现。meta 查询全程
  * 挂起（refreshChatMeta 停在 getCurrentModelId），排除挂载链对 token 标签
  * 触发次数的干扰，断言面只剩手动触发的 refreshChatTokenLabel。
+ *
+ * 例外两组（r4 增补）：refreshChatMeta 会话身份闸（r4-app-1）与切会话清场
+ * 机制锁（r4-app-2）要观测 meta 落地面 / 源码机制，各自放行 getCurrentModelId
+ * 与受控 meta 查询，不依赖上面的「meta 挂起」默认约定。
  */
+import {readFileSync} from 'fs';
+import {join} from 'path';
 import {beforeEach, afterEach, describe, expect, it, jest} from '@jest/globals';
 import React from 'react';
 import TestRenderer, {act} from 'react-test-renderer';
 import {useChatTabScope} from '../src/screens/tabs/chat-tab/useChatTabScope';
-import {loadChatAgentMeta} from '../src/services/chat-agent-meta';
+import {
+  loadChatAgentMeta,
+  type ChatAgentMeta,
+} from '../src/services/chat-agent-meta';
 import {
   isChatTokenPreciseWarmInflight,
   loadChatPromptTokenLabelResilient,
 } from '../src/services/chat-prompt-tokens.service';
+
+const HOOK_PATH = join(
+  __dirname,
+  '../src/screens/tabs/chat-tab/useChatTabScope.ts',
+);
 
 jest.mock('../src/services/chat-agent-meta', () => ({
   loadChatAgentMeta: jest.fn(),
@@ -48,6 +62,19 @@ function createDeferred<T>() {
 }
 
 type Deferred<T> = ReturnType<typeof createDeferred<T>>;
+
+/** meta 形状与真实 loadChatAgentMeta 的 session 档对齐（只断言 agentName/modelLabel）。 */
+function buildMeta(agentName: string, modelLabel: string): ChatAgentMeta {
+  return {
+    source: 'session',
+    agentId: 'a1',
+    agentName,
+    modelLabel,
+    tokenLabel: '',
+    hasDedicatedModel: false,
+    modelSource: 'session',
+  };
+}
 
 async function flushMicrotasks(rounds = 10) {
   for (let i = 0; i < rounds; i++) {
@@ -87,6 +114,9 @@ async function mountScopeHarness(options?: {
     projectVfs: jest.fn(() => ({})),
   };
   const sessionHolder = {sessionId: 's1'};
+  // 稳定引用：消费方 context 每次渲染给新函数会连锁重建 hook 的 dep（hook 内
+  // 已用 ref 取最新引用），这里稳定下来，测试侧才好断言「闸拦下的失败不弹提示」。
+  const showToastMock = jest.fn();
   let api: ReturnType<typeof useChatTabScope> | undefined;
   const Harness = () => {
     api = useChatTabScope({
@@ -96,7 +126,7 @@ async function mountScopeHarness(options?: {
       setCurrentProject: jest.fn(async () => undefined),
       setCurrentSession: jest.fn(async () => undefined),
       refreshScope: jest.fn(async () => undefined),
-      showToast: jest.fn(),
+      showToast: showToastMock,
       navigation: {navigate: jest.fn()} as any,
     });
     return null;
@@ -108,6 +138,7 @@ async function mountScopeHarness(options?: {
   });
   return {
     api: () => api!,
+    showToast: showToastMock,
     setSessionId: (sessionId: string) => {
       sessionHolder.sessionId = sessionId;
       act(() => {
@@ -292,7 +323,7 @@ describe('useChatTabScope refreshChatTokenLabel 防抖（T-TC6）', () => {
     expect(harness!.api().agentMeta?.tokenLabel).toBe('gpt = 24k / 128k (19%)');
   });
 
-  it('切会话立即清 chip（2026-09-30 用户实报残留）：旧数字一帧都不许出现，在途读数被身份闸丢弃', async () => {
+  it('切会话立即清 chip（r4-app-2/4）：s1 旧数字真落地过，切会话一帧不漏，在途读数被身份闸丢弃', async () => {
     loadChatAgentMetaMock.mockResolvedValue({
       tokenLabel: '',
       modelName: 'gpt-4o',
@@ -301,19 +332,29 @@ describe('useChatTabScope refreshChatTokenLabel 防抖（T-TC6）', () => {
     });
     harness = await mountScopeHarness({modelId: 'gpt-4o'});
 
-    // s1 的刷新挂起（受控）：制造「读数在途」窗口。
-    const pendingS1 = createDeferred<string>();
-    loadLabelMock.mockImplementationOnce(() => pendingS1.promise);
-
+    // 先让 s1 的标签**真落地**（防抖到期 + 读数回填出非 '…' 的值）：切会话前
+    // chip 上摆着旧会话的数字，「切走即归位 '…'」才有前提——否则切会话瞬间
+    // state 本来就是 '…'，删掉清场 effect 也照样过（r4-app-4 旧断言恒真）。
     await act(async () => {
       void harness!.api().refreshChatTokenLabel();
       jest.advanceTimersByTime(300);
       await flushMicrotasks();
     });
-    expect(loadLabelMock).toHaveBeenCalledTimes(1);
+    expect(harness!.api().agentMeta?.tokenLabel).toBe('1K tokens · 预估');
 
-    // 切到 s2：**立即**必须是加载态——上一会话的数字（哪怕它还挂在 state 里）
-    // 不许以任何形式漏到新会话的 chip 上。
+    // 再制造「s1 还有一轮读数在途」的窗口（受控 deferred）。
+    const pendingS1 = createDeferred<string>();
+    loadLabelMock.mockImplementationOnce(() => pendingS1.promise);
+    await act(async () => {
+      void harness!.api().refreshChatTokenLabel();
+      jest.advanceTimersByTime(300);
+      await flushMicrotasks();
+    });
+    expect(loadLabelMock).toHaveBeenCalledTimes(2);
+
+    // 切到 s2：**首个 commit 即**加载态（清场是 pre-paint 的布局阶段，
+    // r4-app-2）——上一会话的数字（'1K tokens · 预估'，此刻还挂在 state 里）
+    // 不许以任何形式漏到新会话的 chip 上，一帧都不行。
     harness!.setSessionId('s2');
     expect(harness!.api().agentMeta?.tokenLabel).toBe('…');
 
@@ -333,6 +374,110 @@ describe('useChatTabScope refreshChatTokenLabel 防抖（T-TC6）', () => {
       await flushMicrotasks();
     });
     expect(harness!.api().agentMeta?.tokenLabel).toBe('gpt = 24k / 128k (19%)');
+  });
+});
+
+describe('useChatTabScope refreshChatMeta 会话身份闸（r4-app-1）', () => {
+  let harness: Awaited<ReturnType<typeof mountScopeHarness>> | undefined;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.useFakeTimers();
+  });
+
+  afterEach(() => {
+    harness?.unmount();
+    harness = undefined;
+    jest.useRealTimers();
+  });
+
+  /**
+   * 按会话记录挂起的 meta 查询：s1 / s2 各一轮受控，谁先放行由测试决定。
+   * getCurrentModelId 走 modelId 选项（立即 resolve），refreshChatMeta 才能
+   * 推进到 meta 落定那一步。
+   */
+  function hangMetaBySession() {
+    const metaBySession = new Map<string, Deferred<ChatAgentMeta>>();
+    loadChatAgentMetaMock.mockImplementation(
+      (_runtime: unknown, _projectId: string, sid: string) => {
+        const deferred = createDeferred<ChatAgentMeta>();
+        metaBySession.set(sid, deferred);
+        return deferred.promise;
+      },
+    );
+    return metaBySession;
+  }
+
+  it('s1 的 loadChatAgentMeta 落定晚于切会话：旧会话 meta 字段不写进新会话（成功分支）', async () => {
+    const metaBySession = hangMetaBySession();
+    harness = await mountScopeHarness({modelId: 'gpt-4o'});
+    expect(metaBySession.has('s1')).toBe(true);
+
+    // 切到 s2：新会话的 meta 轮立即发起（不复用 s1 在途），并先落地。
+    harness!.setSessionId('s2');
+    await act(async () => {
+      await flushMicrotasks();
+    });
+    expect(metaBySession.has('s2')).toBe(true);
+    await act(async () => {
+      metaBySession.get('s2')!.resolve(buildMeta('Agent-S2', 'Model-S2'));
+      await flushMicrotasks();
+    });
+    expect(harness!.api().agentMeta?.agentName).toBe('Agent-S2');
+    expect(harness!.api().agentMeta?.modelLabel).toBe('Model-S2');
+
+    // s1 的 meta 现在才落定：身份闸丢弃——新会话的字段一个都不许被覆盖。
+    await act(async () => {
+      metaBySession.get('s1')!.resolve(buildMeta('Agent-S1', 'Model-S1'));
+      await flushMicrotasks();
+    });
+    expect(harness!.api().agentMeta?.agentName).toBe('Agent-S2');
+    expect(harness!.api().agentMeta?.modelLabel).toBe('Model-S2');
+  });
+
+  it('s1 的 loadChatAgentMeta 失败晚于切会话：不清新会话 meta、不弹旧会话的错误（失败分支）', async () => {
+    const metaBySession = hangMetaBySession();
+    harness = await mountScopeHarness({modelId: 'gpt-4o'});
+
+    harness!.setSessionId('s2');
+    await act(async () => {
+      await flushMicrotasks();
+    });
+    await act(async () => {
+      metaBySession.get('s2')!.resolve(buildMeta('Agent-S2', 'Model-S2'));
+      await flushMicrotasks();
+    });
+    expect(harness!.api().agentMeta?.agentName).toBe('Agent-S2');
+    harness!.showToast.mockClear();
+
+    // s1 的 meta 以失败告终：失败清场同样过闸——新会话的 meta 不许被清成
+    // 未加载态，也不该弹一条与新会话无关的错误提示。
+    await act(async () => {
+      metaBySession.get('s1')!.reject(new Error('chat config broken'));
+      await flushMicrotasks();
+    });
+    expect(harness!.api().agentMeta?.agentName).toBe('Agent-S2');
+    expect(harness!.showToast).not.toHaveBeenCalled();
+  });
+});
+
+describe('useChatTabScope 切会话清场机制锁（r4-app-2 静态守卫）', () => {
+  // jsdom + act 没有「绘制」这一步：act 会把 passive effect 一并冲掉，
+  // useEffect / useLayoutEffect 的渲染序列完全一致——「旧数字一帧不漏」在行为
+  // 断言里天然不可区分（改前源码就是 useEffect，同一条断言照样绿）。所以机制
+  // 本身静态锁死：清场必须是 useLayoutEffect（提交后、绘制前），且第一句是
+  // 会话身份交接（tokenLabelSessionRef 指到新会话）——两者任一被改回/删掉，
+  // 这里立刻红灯，而不是等用户实报残留。
+  const source = readFileSync(HOOK_PATH, 'utf8');
+
+  it('清场走 useLayoutEffect（pre-paint）且先交接会话身份', () => {
+    expect(source).toMatch(
+      /useLayoutEffect\(\(\) => \{\s*tokenLabelSessionRef\.current = sessionId/,
+    );
+  });
+
+  it('守卫文件存在（防路径漂移导致空跑）', () => {
+    expect(source).toContain('useChatTabScope');
   });
 });
 
