@@ -23,6 +23,7 @@ import {
   clearChatTokenEstimateMemo,
   lookupChatTokenEstimateMemo,
   rememberChatTokenEstimateMemo,
+  rememberWorkplaceEstimateByFingerprint,
   stampMessagesForEstimateMemo,
 } from "../../../src/infra/tokenizer/logic/chat-token-estimate-memo.js";
 import type { PromptRenderContext } from "../../../src/domain/prompt/model/prompt-render-context.js";
@@ -53,9 +54,16 @@ function ctxWith(overrides: {
   };
 }
 
-function params(ctx: PromptRenderContext) {
+function params(
+  ctx: PromptRenderContext,
+  layout: {persist?: unknown[]; dynamic?: unknown[]; workplace?: string} = {},
+) {
   return {
-    layout: { persist: [], dynamic: [] },
+    layout: {
+      persist: [],
+      dynamic: [],
+      ...(layout.workplace != null ? {workplace: layout.workplace} : {}),
+    },
     ctx,
     savedModelId: "openai/gpt-4o",
     registry: createDefaultTokenCounterRegistry(emptyRegistryDeps()),
@@ -242,5 +250,47 @@ describe("chat-token-estimate-memo（resolve 集成）", () => {
     );
     assert.equal(result.estimated, false, "完整口径必须出精确读数（估读不拦截）");
     assert.notEqual(result.tokenCount, 111);
+  });
+
+  it("增量分解：workplace 估读按指纹缓存并被采用（注入值=牙齿），只现算消息段", async () => {
+    const ctx = ctxWith({fingerprint: "fp-inc"});
+    // 注入夸张的指纹估读：分解路径必须采用缓存值（删掉 lookup 即现算真值
+    // ≠ 注入值，断言即红）。layout 带 workplace 块（render 门控对齐）。
+    rememberWorkplaceEstimateByFingerprint("fp-inc", 12345);
+    const result = await resolveCurrentPromptTokens(
+      "sess-inc",
+      params(ctx, {workplace: "【工作区】"}),
+      { preferEstimate: true },
+    );
+    // 结果 = 12345 + 消息/system/tools/合成对包装段的小额估读。
+    assert.ok(
+      result.tokenCount >= 12345 && result.tokenCount < 12400,
+      `分解估读应采用注入的指纹缓存值（got ${result.tokenCount}）`,
+    );
+    // 跨会话共享：另一个会话同指纹不再重算 workplace 段（结果同值口径）。
+    const other = await resolveCurrentPromptTokens(
+      "sess-inc-2",
+      params(ctxWith({fingerprint: "fp-inc"}), {workplace: "【工作区】"}),
+      { preferEstimate: true },
+    );
+    assert.ok(other.tokenCount >= 12345 && other.tokenCount < 12400);
+  });
+
+  it("增量分解与整串估算口径一致（哨兵替换法，差值 ≤ 各段 ceil 常数）", async () => {
+    const wpLayout = {workplace: "【工作区】"};
+    const decomposed = await resolveCurrentPromptTokens(
+      "sess-parity-a",
+      params(ctxWith({fingerprint: "fp-parity"}), wpLayout),
+      { preferEstimate: true },
+    );
+    const whole = await resolveCurrentPromptTokens(
+      "sess-parity-b",
+      params(ctxWith({fingerprint: undefined}), wpLayout),
+      { preferEstimate: true },
+    );
+    assert.ok(
+      Math.abs(decomposed.tokenCount - whole.tokenCount) <= 2,
+      `分解口径偏差 ${decomposed.tokenCount - whole.tokenCount} 应在 ceil 常数内`,
+    );
   });
 });

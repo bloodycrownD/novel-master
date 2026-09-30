@@ -38,7 +38,9 @@ import type { PromptWholeCacheEntry } from "./prompt-whole-cache.js";
 import {
   buildChatTokenEstimateMemoKey,
   lookupChatTokenEstimateMemo,
+  lookupWorkplaceEstimateByFingerprint,
   rememberChatTokenEstimateMemo,
+  rememberWorkplaceEstimateByFingerprint,
 } from "./chat-token-estimate-memo.js";
 import { resolveTokenizerDriver } from "../../nmtp/logic/registry.js";
 import { resolveTokenizerFamily } from "./resolve-tokenizer-family.js";
@@ -50,6 +52,7 @@ import {
 } from "./token-chunk-cache.js";
 import { serializePromptLlmInput } from "./serialize-prompt-input.js";
 import { serializeToolsForTokenCount } from "./serialize-tools-for-token-count.js";
+import { layoutHasWorkplace } from "@/domain/prompt/model/agent-prompt-layout.js";
 
 /** 占用结果来源。 */
 export type PromptTokenSource = "api" | "local";
@@ -330,6 +333,54 @@ export async function resolveCurrentPromptTokens(
           counterKind: memoHit.counterKind,
         };
       }
+    }
+    // 增量分解估算（2026-09-30「增量优化哪去了」的落地）：CJK 估算是逐字符
+    // 计数、完全可加——workplace 段的估读按指纹缓存（同前缀跨刷新/跨会话零
+    // 成本），只对消息/system/tools 段现算。内容变更后的估算从 O(整串三趟)
+    // 降到 O(消息段)。
+    //
+    // 分解口径（哨兵替换法）：render-prompt 把 display **原样**嵌进 workplace
+    // 合成消息（appendWorkplacePair*：`body = ctx.workplaceDisplay`，无转义），
+    // 故用单字符哨兵替换 display 再序列化——成对合成消息（user 正文 +
+    // assistant done 应答）与全部包装结构都留在「哨兵版」串里，估读
+    // = cjk(哨兵串) − cjk(哨兵) + 指纹缓存值，与整串口径的差异只剩各段
+    // ceil 的 ±1。门控对齐 render 侧：layout 无 workplace 块时 display 根本
+    // 不进序列化产物（appendWorkplacePairIfPresent 早退），不分解。
+    // 有指纹时也跳过下方 L1 预查——它要 serialize+hash 整串（真机 ~1.3s），
+    // 恰是要消灭的成本；「同内容已有精确读数」由上方记忆精确条目覆盖。
+    const fingerprint = params.ctx?.workplaceFingerprint;
+    if (
+      fingerprint != null &&
+      params.ctx != null &&
+      layoutHasWorkplace(params.layout) &&
+      params.ctx.workplaceDisplay.length > 0
+    ) {
+      let wpEstimate = lookupWorkplaceEstimateByFingerprint(fingerprint);
+      if (wpEstimate == null) {
+        wpEstimate = estimateTokensCjkAware(params.ctx.workplaceDisplay);
+        rememberWorkplaceEstimateByFingerprint(fingerprint, wpEstimate);
+      }
+      const WP_SENTINEL = "W";
+      const sentinelSerialized =
+        (await serializePromptLlmInput(params.layout, {
+          ...params.ctx,
+          workplaceDisplay: WP_SENTINEL,
+        })) + serializeToolsForTokenCount(params.tools);
+      const tokenCount =
+        wpEstimate +
+        estimateTokensCjkAware(sentinelSerialized) -
+        estimateTokensCjkAware(WP_SENTINEL);
+      rememberChatTokenEstimateMemo(sessionId, memoKey!, {
+        tokenCount,
+        estimated: true,
+        counterKind: "heuristic",
+      });
+      return {
+        tokenCount,
+        source: "local",
+        estimated: true,
+        counterKind: "heuristic",
+      };
     }
     const serialized =
       (await serializePromptLlmInput(params.layout, params.ctx)) +

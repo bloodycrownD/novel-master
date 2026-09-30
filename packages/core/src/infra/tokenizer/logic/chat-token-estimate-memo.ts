@@ -36,6 +36,36 @@ export interface ChatTokenEstimateMemoEntry {
 /** 每会话一条（最新键覆盖旧键）：消息一变键就变，旧条目自然被挤掉。 */
 const memo = new Map<string, {key: string; entry: ChatTokenEstimateMemoEntry}>();
 
+/**
+ * workplace 段估读按指纹的独立缓存（2026-09-30 增量分解）：同一份前缀正文
+ * 的 CJK 估读只算一次，跨会话共享（键只有指纹，不含会话/模型——CJK 估读
+ * 本就模型无关）。这是「内容变了也只算增量」的最后一层：消息追加后，
+ * workplace 段零成本、只现算消息/system/tools 段。
+ */
+const workplaceEstimateByFp = new Map<string, number>();
+
+/** 指纹估读命中；miss 返回 null（调用方现算并回填）。 */
+export function lookupWorkplaceEstimateByFingerprint(
+  fingerprint: string
+): number | null {
+  return workplaceEstimateByFp.get(fingerprint) ?? null;
+}
+
+/** 回填指纹估读（覆盖式）。容量上界：指纹随文件 mtime 演进，旧条目不再被
+ * 查询——按 64 条 LRU 式截断（超限删最旧插入序），防长会话漂移累积。 */
+export function rememberWorkplaceEstimateByFingerprint(
+  fingerprint: string,
+  estimate: number
+): void {
+  if (!workplaceEstimateByFp.has(fingerprint) && workplaceEstimateByFp.size >= 64) {
+    const oldest = workplaceEstimateByFp.keys().next().value;
+    if (oldest != null) {
+      workplaceEstimateByFp.delete(oldest);
+    }
+  }
+  workplaceEstimateByFp.set(fingerprint, estimate);
+}
+
 /** 命中条件 = 会话在册且键逐字符相同；否则 null（调用方按 miss 走全价路径）。 */
 export function lookupChatTokenEstimateMemo(
   sessionId: string,
@@ -61,6 +91,7 @@ export function rememberChatTokenEstimateMemo(
 export function clearChatTokenEstimateMemo(sessionId?: string): void {
   if (sessionId == null) {
     memo.clear();
+    workplaceEstimateByFp.clear();
   } else {
     memo.delete(sessionId);
   }
