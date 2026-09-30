@@ -22,6 +22,11 @@ function androidCapabilities(): Record<string, unknown> {
     'appium:autoGrantPermissions': true,
     'appium:newCommandTimeout': 240,
   };
+  // 协作红线（2026-09-29 用户拍板）：任何设备（真机/模拟器）一律禁止卸载或清除应用数据。
+  // 一律 noReset:true——即使下方提供 appium:app 走安装，Appium 也不会卸载/清数据。
+  // 代价：spec 间应用状态会残留（旧「每条 spec 重装清数据」的隔离手段随之失效），
+  // 测试隔离改由 spec 自建自清（UI 内删除），与 wave-6b 的页对象更新一并处理。
+  base['appium:noReset'] = true;
   if (fs.existsSync(debugApk)) {
     base['appium:app'] = debugApk;
   } else {
@@ -29,7 +34,6 @@ function androidCapabilities(): Record<string, unknown> {
     console.warn(
       `[e2e] Debug APK not found at ${debugApk} — launching installed app via appPackage.`,
     );
-    base['appium:noReset'] = true;
   }
   return base;
 }
