@@ -22,6 +22,42 @@ function appCss(): string {
 
 type ShellNode = {tag: string; id: string | null; parent: string | null};
 
+/** 合成包源文件（基底 + dock 段单源）。 */
+const CONVERSATION_CSS_SRC = join(
+  __dirname,
+  '../src/web/chat-conversation/styles/chat-conversation.css',
+);
+/** 转录包源文件（合成包的基底真源）。 */
+const TRANSCRIPT_CSS_SRC = join(
+  __dirname,
+  '../src/web/chat-transcript/styles/transcript.css',
+);
+
+/**
+ * 剥注释后取全部顶层规则（selector 归一化）→ 声明体。
+ * 与文件顺序无关，故适合做「两份 CSS 的 selector 覆盖差集」类断言。
+ * `@supports` / `@keyframes` 这类嵌套块不进 selector 面（另行断言）。
+ */
+function cssRules(css: string): Map<string, string> {
+  const stripped = css.replace(/\/\*[\s\S]*?\*\//g, '');
+  const map = new Map<string, string>();
+  const re = /([^{}]+)\{([^{}]*)\}/g;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(stripped)) !== null) {
+    const selector = match[1].trim().replace(/\s+/g, ' ');
+    if (selector.startsWith('@')) {
+      continue;
+    }
+    map.set(selector, match[2].trim().replace(/\s+/g, ' '));
+  }
+  return map;
+}
+
+/** 源文件里的注入占位注释出现次数（构建期 injectCss 依赖它们定位，各只应有一份）。 */
+function placeholderCount(css: string, placeholder: string): number {
+  return css.split(placeholder).length - 1;
+}
+
 /**
  * 极简 HTML 结构解析：只取标签栈与 id / 父级 id，足以断言「谁包住谁」。
  * RN jest preset 是 node 环境（无 DOM），故不依赖 DOMParser/jsdom。
@@ -250,6 +286,68 @@ describe('chat-conversation dock 样式数值清单（Step 4 · T-CU10 样式相
     expect(source).toMatch(/html,\s*body\s*\{[^}]*background:\s*var\(--bg/);
   });
 
+  it('T-CC-CSS-11: dist 含转录段关键 selector（基底补全的回归防线）', () => {
+    const rules = cssRules(appCss());
+    // 这批 selector 只可能来自 transcript.css 基底——dock 段没有同名物。
+    // 缺任意一条 = 基底被截断（合成包会退化成「只有壳 + dock」的空白转录区）。
+    for (const selector of [
+      '.bubble',
+      '.row.user .bubble',
+      '.bubble-body',
+      '.bubble-body.rich',
+      '.thinking-header',
+      '.thinking-body',
+      '.tool-card',
+      '.tool-group-header',
+      '.tool-invoking-bar',
+      '.menu-backdrop',
+      '.context-menu',
+      '.context-menu.scrollable',
+      '.menu-item',
+      '.menu-item.danger',
+      'body.menu-open',
+      '.row-window-spacer',
+      '.load-older',
+      '.empty-state',
+      '.message-menu-row',
+      '.message-menu-btn',
+    ]) {
+      expect(rules.has(selector)).toBe(true);
+    }
+  });
+
+  it('T-CC-CSS-12: 源文件保留且只保留一份注入占位注释；dist 里两个占位均已消失', () => {
+    const source = readFileSync(CONVERSATION_CSS_SRC, 'utf8');
+    expect(placeholderCount(source, '/* __RICH_CSS__ */')).toBe(1);
+    expect(
+      placeholderCount(source, '/* __MERMAID_FULLSCREEN_CSS__ */'),
+    ).toBe(1);
+    // 占位在 dist 消失 = injectCss 命中（漏一个就会原样留在产物里）
+    const css = appCss();
+    expect(css).not.toContain('/* __RICH_CSS__ */');
+    expect(css).not.toContain('/* __MERMAID_FULLSCREEN_CSS__ */');
+  });
+
+  it('T-CC-CSS-13: 合成包源覆盖 transcript.css 全部顶层 selector（基底 = 全文）', () => {
+    const transcript = cssRules(readFileSync(TRANSCRIPT_CSS_SRC, 'utf8'));
+    const conversation = cssRules(readFileSync(CONVERSATION_CSS_SRC, 'utf8'));
+    const missing = [...transcript.keys()].filter(s => !conversation.has(s));
+    expect(missing).toEqual([]);
+    // 反面：只挑几条关键 selector 抄一遍不算基底补全（漂移会静默复发），
+    // 故此处以全量差集为零作为契约。
+  });
+
+  it('T-CC-CSS-14: toolbar 按钮无自创 :disabled 置灰（现网 RN disabled 无灰化变体）', () => {
+    const rules = cssRules(appCss());
+    // 反面清单：`:disabled { opacity }` 是合成包自创的置灰，现网 RN 侧 disabled
+    // 只是透传的死参数，没有视觉变体——留它会让圆钮凭空变灰。
+    expect(rules.has('.toolbar__btn:disabled')).toBe(false);
+    // 发送键的 disabled 视觉走底色态（tokens.border），保留
+    expect(rules.get('.toolbar__send--disabled')).toMatch(/var\(--border/);
+    // chips 同样不置灰（走的是「不随 inputDisabled 变灰」的既约定）
+    expect(rules.get('.chip') ?? '').not.toMatch(/opacity/);
+  });
+
   it('T-CC-CSS-05: styles.box（hairline 描边 / radius 12 / paddingH 8 / padT 4 / padB 6 / surface 实底）', () => {
     const box = rule(appCss(), '.dock__box');
     expect(box).toMatch(/border:\s*0\.5px solid/);
@@ -288,12 +386,18 @@ describe('chat-conversation dock 样式数值清单（Step 4 · T-CU10 样式相
     expect(label).toMatch(/max-width:\s*160px/);
   });
 
-  it('T-CC-CSS-08: typeahead 浮层（absolute 锚 input 上缘 / radius 10 / hairline / surface 底 + 行内边距 8×10）', () => {
+  it('T-CC-CSS-08: typeahead 浮层（absolute 锚 input 上缘 / 与 input 等宽 left0·right0 / radius 10 / hairline / surface 底 + 行内边距 8×10）', () => {
     const css = appCss();
     const area = rule(css, '.dock__input-area');
     expect(area).toMatch(/position:\s*relative/);
     const list = rule(css, '.typeahead');
     expect(list).toMatch(/position:\s*absolute/);
+    // 与 input 等宽：现网 typeahead 是 box 的直接子 View，两侧贴边不内缩。
+    // 写成 left/right: 8px 会让浮层比输入框窄一圈——现网不存在这 8px 内缩。
+    expect(list).toMatch(/left:\s*0/);
+    expect(list).toMatch(/right:\s*0/);
+    expect(list).not.toMatch(/left:\s*8px/);
+    expect(list).not.toMatch(/right:\s*8px/);
     expect(list).toMatch(/bottom:\s*100%/);
     expect(list).toMatch(/border-radius:\s*10px/);
     expect(list).toMatch(/border:\s*0\.5px solid/);

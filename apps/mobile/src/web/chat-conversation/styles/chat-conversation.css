@@ -1,21 +1,42 @@
 /*
  * chat-conversation 合成包样式（chat-webview-unify Step 2/3/4）。
  *
- * 基底取自 `chat-transcript/styles/transcript.css`，本文件在基底之上补齐两段：
- * ① composer dock 段——从 `composer-input.css` + RN 组件的 StyleSheet 数值单源迁入
- *    （hintRow / error / box / chips / typeahead / toolbar / input 六值 metrics）。
- * ② 键盘态 dock 底 padding（键盘弹起归零，否则 max(8, safeAreaBottom)）——**纯样式
- *    应用**，键盘态经 `composerState.keyboardUp` 由 RN 侧下发，web 不自判
- *    （visualViewport 自判方案已废弃，理由见 spec §键盘与 dock padding 归属）。
+ * 【结构】基底 = `chat-transcript/styles/transcript.css` 全文 + dock 段叠加。
+ *   ① 基底段：转录侧全部规则（row / bubble / thinking / tool-* / menu-* / windowing /
+ *      empty-state / 划词菜单等）从 transcript.css 原样合入——合成包与旧转录包
+ *      共用同一份转录样式语义，任何转录视觉改动都要落在两边。
+ *      基底段末尾保留两个构建期注入占位注释（__RICH_CSS__ / __MERMAID_FULLSCREEN_CSS__，
+ *      各只一份，build-webview.mjs 的 injectCss 依赖它们定位）。
+ *   ② 壳段：#app 四属性 + #scroller 覆盖（见下「与基底的差异」第 2、3 条）。
+ *   ③ dock 段：从 `composer-input.css` + RN 组件的 StyleSheet 数值单源迁入
+ *      （hintRow / error / box / chips / typeahead / toolbar / input 六值 metrics），
+ *      叠加键盘态 dock 底 padding（键盘弹起归零，否则 max(8, safeAreaBottom)）——
+ *      **纯样式应用**，键盘态经 `composerState.keyboardUp` 由 RN 侧下发，web 不自判
+ *      （visualViewport 自判方案已废弃，理由见 spec §键盘与 dock padding 归属）。
  *
- * CSS 双份漂移纪律（spec 风险表）：本文件是合成包自持的一份，改
- * `composer-input.css` 的 dock 段（::selection / token 胶囊 / 输入区）须同步本文件，
- * 反之改本文件的 dock 段不回灌 composer-input 旧包（宏链活依赖，行为冻结）。
+ * 【与基底的三处差异，其余逐条原样，勿"顺手对齐"】
+ *   1. `html, body`：叠 `overflow: hidden`（height / 底色 / 字色 / 字体与基底同值）。
+ *      基底无此条——旧转录包无 dock，滚动由 #scroller 自己管；合成包把滚动收归
+ *      #scroller，文档级禁止溢出。
+ *   2. `#scroller`：`height: 100%` → `flex: 1; min-height: 0`（dock 高度在文档内消化，
+ *      否则转录区把 dock 顶出视口）。
+ *   3. `#app`：基底没有（#app 是 #scroller 的父容器，dock 是它的兄弟——dock 四属性
+ *      缺一则不贴底，见 spec §文档布局）。
+ *
+ * 【CSS 双份漂移纪律（spec 风险表）】基底段与 `transcript.css` 须同步；dock 段改
+ * `composer-input.css` 的 dock 相关规则（::selection / token 胶囊 / 输入区）须同步
+ * 本文件，反之改本文件的 dock 段不回灌 composer-input 旧包（宏链活依赖，行为冻结）。
  * 反面清单：`composer-input.css` 的 `html,body{background:transparent}` **不搬**——
  * 与本文件的 `background: var(--bg, #fff)` 直接冲突。
  *
- * 【来源锚点】下方「dock 段」的每条规则都标注了现网 RN 出处，改数值时照着锚点改。
+ * 【来源锚点】dock 段的每条规则都标注了现网 RN 出处，改数值时照着锚点改。
  */
+
+/* ================================================================== *
+ * 基底段：chat-transcript/styles/transcript.css 全文
+ * （合成包的三处差异见文件头；其余规则与旧转录包逐条一致）
+ * ================================================================== */
+
 * {
   box-sizing: border-box;
   margin: 0;
@@ -27,20 +48,12 @@ body {
   background: var(--bg, #fff);
   color: var(--text, #111);
   font-family: system-ui, -apple-system, sans-serif;
-  /* 键盘态：Android 侧 AndroidKeyboardClipBody 以 marginBottom 裁切单 WebView 容器，
+  /* 合成包差异 1：文档级禁止溢出，滚动全部收归 #scroller。
+     键盘态：Android 侧 AndroidKeyboardClipBody 以 marginBottom 裁切单 WebView 容器，
      与 dock 的 padding 职责互补（clip 管视口收缩、padding 管 dock 底部余量）。 */
   overflow: hidden;
 }
-
-/* 四属性缺一则 dock 不贴底（spec §文档布局） */
-#app {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  min-height: 0;
-}
-
-/* 转录滚动容器：由旧包 height:100% 改 flex:1（dock 高度在文档内消化） */
+/* 合成包差异 2：由基底 height:100% 改 flex:1（dock 高度在文档内消化） */
 #scroller {
   flex: 1;
   min-height: 0;
@@ -48,6 +61,15 @@ body {
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
   overflow-anchor: none;
+}
+
+/* #app：文档级 flex 列容器，#scroller 与 #composer-dock 是它的两个子节点。
+   四属性缺一则 dock 不贴底（spec §文档布局）。 */
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
 }
 #rows {
   display: flex;
@@ -62,8 +84,26 @@ body {
   width: 100%;
   flex-direction: column;
 }
+.row.user {
+  align-items: flex-end;
+}
+.row.assistant,
+.row.stream,
+.row.tool {
+  align-items: flex-start;
+}
+.bubble {
+  position: relative;
+  max-width: 85%;
+  padding: 10px 14px;
+  border-radius: 16px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 15px;
+  line-height: 1.4;
+}
 
-/* 用户气泡内 `@路径` / `$技能` 引用胶囊（与 composer tag 视觉对齐；从 transcript.css 原样迁移） */
+/* 用户气泡内 `@路径` / `$技能` 引用胶囊（与 composer tag 视觉对齐） */
 .ref-token {
   display: inline-block;
   padding: 0 6px;
@@ -78,6 +118,425 @@ body {
     background: color-mix(in srgb, var(--primary, #007aff) 12%, transparent);
   }
 }
+
+/* 用户气泡是 primary 底白字：胶囊反色，避免蓝上蓝隐形 */
+.row.user .ref-token {
+  background: rgba(255, 255, 255, 0.26);
+  color: #fff;
+}
+@supports (background: color-mix(in srgb, red 10%, transparent)) {
+  .row.user .ref-token {
+    background: color-mix(in srgb, #fff 26%, transparent);
+  }
+}
+/* 消息顶行：角色标签 + ⋯（对齐 Desktop；占一行、正文全宽） */
+.message-menu-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 22px;
+  margin: -2px 0 4px;
+}
+.message-role-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary, #666);
+  line-height: 1.2;
+}
+.row.user .message-role-label {
+  color: rgba(255, 255, 255, 0.85);
+}
+.message-menu-btn {
+  position: static;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  margin: 0 0 0 auto;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  opacity: 0.55;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+  flex-shrink: 0;
+}
+.message-menu-btn:active {
+  opacity: 1;
+  background: rgba(0, 0, 0, 0.08);
+}
+.row.user .message-menu-btn {
+  color: rgba(255, 255, 255, 0.85);
+}
+.row.assistant .message-menu-btn,
+.row.stream .message-menu-btn {
+  color: var(--text-secondary, #666);
+}
+.row.user .bubble {
+  background: var(--primary, #007aff);
+  color: #fff;
+}
+/* 含附件：仍用用户蓝气泡，附件组嵌在同条消息内；卡片用半透明玻璃态适配蓝底 */
+.row.user .bubble.bubble--user-compose {
+  width: 85%;
+  max-width: 85%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.row.user .bubble.bubble--user-compose .tool-group-title,
+.row.user .bubble.bubble--user-compose .tool-group-chevron {
+  color: rgba(255, 255, 255, 0.85);
+}
+.row.user .bubble.bubble--user-compose .tool-group-divided {
+  border-bottom-color: rgba(255, 255, 255, 0.35);
+}
+.row.user .bubble.bubble--user-compose .attach-group-divided-above {
+  padding-top: 8px;
+  margin-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.35);
+}
+.row.user .bubble.bubble--user-compose .attach-card.tool-card {
+  background: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.28);
+  color: #fff;
+}
+.row.user .bubble.bubble--user-compose .attach-card .tool-name {
+  color: #fff;
+}
+.row.user .bubble.bubble--user-compose .attach-card .tool-status,
+.row.user .bubble.bubble--user-compose .attach-card .tool-status.success {
+  color: rgba(255, 255, 255, 0.8);
+}
+.row.user .bubble.bubble--user-compose .bubble-body {
+  color: #fff;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.row.assistant .bubble,
+.row.stream .bubble {
+  background: var(--surface, #f2f2f7);
+  color: var(--text, #111);
+}
+.row.hidden .bubble {
+  opacity: 0.45;
+}
+.bubble .thinking-section {
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  max-width: none;
+}
+.thinking-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.thinking-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary, #666);
+}
+.thinking-chevron {
+  font-size: 10px;
+  color: var(--text-secondary, #888);
+}
+.thinking-body {
+  margin-top: 6px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text-secondary, #666);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.thinking-body.rich {
+  white-space: normal;
+}
+.thinking-body-divided {
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--border, #e5e5ea);
+}
+.bubble-body {
+  font-size: 15px;
+  line-height: 1.4;
+  color: inherit;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.bubble .tool-group-section {
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  max-width: none;
+}
+.tool-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.tool-group-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary, #666);
+}
+.tool-group-chevron {
+  font-size: 10px;
+  color: var(--text-secondary, #888);
+}
+.tool-group-items {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.tool-group-divided {
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--border, #e5e5ea);
+}
+.tool-card {
+  max-width: 92%;
+  width: 100%;
+  margin: 2px 0;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border, #e5e5ea);
+  background: var(--surface, #f2f2f7);
+}
+.bubble .tool-group-item.tool-card {
+  max-width: none;
+  width: 100%;
+  margin: 0;
+  background: var(--bg, #fff);
+}
+.tool-card.tappable {
+  border-color: var(--primary, #007aff);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.tool-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.tool-name {
+  flex: 1;
+  font-weight: 600;
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tool-status {
+  font-size: 12px;
+  font-weight: 500;
+}
+.tool-status.success {
+  color: var(--primary, #007aff);
+}
+.tool-status.error {
+  color: #ff3b30;
+}
+.tool-status.pending {
+  color: var(--text-secondary, #888);
+}
+.tool-status.interrupted {
+  color: var(--text-secondary, #888);
+}
+.tool-phase-bar {
+  margin-top: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary, #888);
+}
+.tool-invoking-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border, #e5e5ea);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--primary, #007aff);
+}
+.tool-invoking-dot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--primary, #007aff);
+  animation: tool-invoking-pulse 1.2s ease-in-out infinite;
+}
+.row.stream.stream--waiting-first {
+  align-items: flex-start;
+  width: 100%;
+}
+.stream-waiting-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 2px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--primary, #007aff);
+}
+.stream--waiting-first .stream-waiting-indicator {
+  border-top: none;
+  margin-top: 0;
+  padding-top: 0;
+}
+@keyframes tool-invoking-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.85);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.tool-summary {
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--text-secondary, #666);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.tool-open-hint {
+  margin-top: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--primary, #007aff);
+}
+.load-older {
+  align-self: center;
+  padding: 10px 16px;
+  font-size: 14px;
+  color: var(--primary, #007aff);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+/* 窗口化占位（init-busy-yield Step 7）：撑高未渲染区，不参与交互 */
+.row-window-spacer {
+  pointer-events: none;
+}
+.bubble-body.rich {
+  white-space: normal;
+}
+.row.assistant .bubble.bubble--fill-width {
+  width: 85%;
+  max-width: 85%;
+  box-sizing: border-box;
+}
+.row.user.vfs-turn-row .bubble.bubble--fill-width {
+  width: 85%;
+  max-width: 85%;
+  box-sizing: border-box;
+}
+.empty-state {
+  align-self: center;
+  margin-top: 32px;
+  padding: 0 24px;
+  text-align: center;
+  color: var(--text-secondary, #666);
+  font-size: 14px;
+}
+.menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  background: rgba(0, 0, 0, 0.35);
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+.context-menu {
+  position: fixed;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  height: fit-content;
+  min-width: 132px;
+  max-width: 200px;
+  border-radius: 10px;
+  border: 1px solid var(--border, #e5e5ea);
+  background: var(--surface, #f2f2f7);
+  overflow-x: hidden;
+  overflow-y: hidden;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  touch-action: manipulation;
+}
+.context-menu.scrollable {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.menu-item {
+  flex: 0 0 auto;
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 12px;
+  border: none;
+  border-bottom: 1px solid var(--border, #e5e5ea);
+  background: transparent;
+  color: var(--text, #111);
+  font-size: 15px;
+  text-align: center;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  touch-action: manipulation;
+}
+body.menu-open {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+.menu-item:last-child {
+  border-bottom: none;
+}
+.row.user.vfs-turn-row .vfs-turn-bubble {
+  background: var(--surface, #f2f2f7);
+  color: var(--text, #111);
+  text-align: left;
+}
+.row.user.vfs-turn-row .tool-group-title {
+  color: var(--primary, #007aff);
+}
+.menu-item.danger {
+  color: #ff3b30;
+}
+/* __RICH_CSS__ */
+/* __MERMAID_FULLSCREEN_CSS__ */
 
 /* ================================================================== *
  * dock 段（来源：ChatComposer.tsx styles.dock / styles.box / styles.hintRow /
@@ -178,8 +637,9 @@ body {
 }
 .typeahead {
   position: absolute;
-  left: 8px;
-  right: 8px;
+  /* 与 input 等宽：现网 typeahead 是 box 的直接子 View，left/right 各贴边不内缩 */
+  left: 0;
+  right: 0;
   bottom: 100%;
   z-index: 20;
   max-height: 240px;
@@ -323,9 +783,8 @@ body {
   -webkit-appearance: none;
   appearance: none;
 }
-.toolbar__btn:disabled {
-  opacity: 0.4;
-}
+/* 反面：无 :disabled 置灰。现网 RN 的 disabled 只是透传的死参数，没有灰化变体；
+   发送键的 disabled 视觉由 .toolbar__send--disabled（底色走 tokens.border）承担。 */
 /* styles.sendBtn：40 见方 + borderRadius:20 */
 .toolbar__send {
   display: flex;
@@ -350,5 +809,3 @@ body {
   background: var(--border, #e5e5ea);
 }
 
-/* __RICH_CSS__ */
-/* __MERMAID_FULLSCREEN_CSS__ */
