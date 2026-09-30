@@ -39,9 +39,17 @@ export async function handlePromptRealPreview(
   }
 }
 
+/**
+ * chat token 占用读口 IPC。
+ *
+ * `data` 允许为 `null`（r3-dt-align 第 2 层的返回契约）：run 在途时读口跳过本轮
+ * （整串级重活与发送链抢同一条 SQLite 连接），或中途被弃权，两种情况都回
+ * `{ok:true, data:null}`。renderer 收到 null 必须**保留旧标签**——不清空、不显示
+ * 占位（与 mobile 的空串哨兵同口径）。
+ */
 export async function handlePromptChatTokenLabel(
   req: PromptScopeRequest,
-): Promise<IpcResult<PromptChatTokenStatsResponse>> {
+): Promise<IpcResult<PromptChatTokenStatsResponse | null>> {
   try {
     const rt = await getDesktopRuntime();
     const stats = await loadChatPromptTokenStatsResilient(rt, req);

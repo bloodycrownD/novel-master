@@ -23,6 +23,11 @@
  *   内容指纹 × 计数器身份（内容寻址），落哪个会话行只影响加速续命位置、
  *   无脏读；会话删除的级联清理会连带丢他会话条目，**只丢加速不丢正确性**
  *   （下次计数重算即可）。
+ * - **seed-once（2026-09-30 r3-cache-2）**：每会话每进程只真读一次 L1 那一行
+ *   （与 L2 的节流相互独立、但同源同理由——该行在本进程内只会被覆盖写成
+ *   更新的内容，重复读只是把热层已有且更新的数据再 parse 一遍）。读失败 /
+ *   坏行会撤销登记，下轮读到正常行仍可正常载入。只影响读时机，不影响任何
+ *   计数口径。
  *
  * @module infra/tokenizer/logic/prompt-whole-cache
  */
@@ -71,6 +76,22 @@ const pendingWrites: {
 
 /** 每会话已持久化的条目表（seed 时初始化；persist 合并去重后覆盖）。 */
 const persistedItems = new Map<string, PersistItem[]>();
+
+/**
+ * 已完成 KKV 种子载入的会话（L1 侧每会话每进程只 seed 一次，
+ * 2026-09-30 r3-cache-2）。
+ *
+ * **与 L2 的 `tokenChunkCache.seededSessions` 是两份独立登记**：两层读的
+ * 是同一个 `token_chunks` 域下的**不同键**（`promptWholeCache` /
+ * `chunkCache`），节流也各自计一次；共用一份会让先跑的那层把另一层的
+ * 登记提前吃掉，另一层此后再也读不到自己那行（加速没了，跨重启续命失效）。
+ *
+ * 节流理由与 L2 同源（2026-09-30 真机 12.5s）：同一行在本进程内只会被
+ * {@link promptWholeCache.persistPendingWrites} 覆盖成更新的内容，重复读只是
+ * 把热层已有的数据再 parse 一遍。漏 seed 的唯一后果是该会话跨重启少一批
+ * 精确档整串条目（首帧退回估算/重算），口径不受影响。
+ */
+const seededSessions = new Set<string>();
 
 /** 完整缓存键：`l1:${sessionId}:${scope}:${contentHash}`。 */
 function buildWholeCacheKey(
@@ -229,6 +250,15 @@ export const promptWholeCache = {
    * 从 session KKV 载入该会话的持久化整串条目并 seed 回 L1（记入 `""`
    * 会话桶——驱动内部查 L1 用的就是这个桶；条目按内容指纹寻址，跨会话
    * 共享安全）。坏 JSON / 版本不符 / 字段非法一律静默忽略。返回载入条数。
+   *
+   * **每会话每进程只真读一次**（2026-09-30 r3-cache-2）：已 seed 过的会话
+   * 直接返回 0，连 `sessionKkv.get` 都不发；登记点**必须在 KKV get 之前**
+   * （先登记再 await），并发调用也只发一次读。`clearForTests` 复位这份记录。
+   *
+   * **失败可重试**：读抛错、以及「行存在但解析不出来」两个失败分支都**撤销
+   * 登记**（与 L2 的 r3-l2-1 同款，别把刚修的 bug 复刻到 L1）——登记只在
+   * 「这次读确实成功，或库里确实没这一行」时才有资格留下，一次瞬时读错不该
+   * 锁死整个进程内该会话的 L1 续命。
    */
   async seedFromKkv(
     sessionKkv: SessionKkvService | null | undefined,
@@ -237,6 +267,11 @@ export const promptWholeCache = {
     if (sessionKkv == null) {
       return 0;
     }
+    if (seededSessions.has(sessionId)) {
+      return 0;
+    }
+    // 先登记再 await：并发调用也只发一次读（同一行读两遍没有意义）。
+    seededSessions.add(sessionId);
     let raw: string | null;
     try {
       raw = await sessionKkv.get(
@@ -249,11 +284,19 @@ export const promptWholeCache = {
         "[novel-master/prompt-whole-cache] promptWhole KKV 读取失败，按无种子处理",
         error
       );
+      // 撤销登记：读失败是瞬时的，不撤销则本进程内该会话永远失去 L1 种子。
+      seededSessions.delete(sessionId);
       return 0;
     }
     const items = parsePersistPayload(raw);
     if (items == null) {
       persistedItems.delete(sessionId);
+      // 只有「行存在但坏」才撤销登记（与 L2 的 r3-l2-1 同款，别把刚修的 bug
+      // 复刻到 L1）：行不存在 = 该会话还没落过盘，本来就没东西可 seed，撤销
+      // 等于把 seed-once 整个废掉（此后每轮都白读一次）。
+      if (raw != null && raw.length > 0) {
+        seededSessions.delete(sessionId);
+      }
       return 0;
     }
     for (const [hash16, scope, count, kind] of items) {
@@ -327,6 +370,9 @@ export const promptWholeCache = {
     buckets.clear();
     pendingWrites.length = 0;
     persistedItems.clear();
+    // 一并复位 seed-once：否则「模拟进程重启后重新 seed」的后续用例会静默
+    // 按已 seed 处理（与 L2 clearForTests 同一份约定）。
+    seededSessions.clear();
   },
 
   /** 观测用：会话桶数与总条目数。 */

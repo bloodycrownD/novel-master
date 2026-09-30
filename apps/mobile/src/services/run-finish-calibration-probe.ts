@@ -13,8 +13,10 @@
  * - 无 React 依赖——纯服务（React 树外），由 SessionStreamUnitManager
  *   装配并接线，回调用 ref 持有的需求不复存在（manager 恒定）；
  * - 校准对象只含已回填 runId 的 running 单元（manager 侧过滤）——
- *   starting（受理空窗内 registry 尚未注册）不参与，防误杀；starting
- *   死单由 startRun 的 promise 链尾 finally 兜底。
+ *   starting（runId 由 RUN_STARTED 回填）不参与；**该判据是 runId 非空，
+ *   与 registry 注册时机无关**（core 的 register 在 runAgentTurn 函数入口
+ *   执行，受理即在途）。starting 死单由 startRun 的 promise 链尾 finally
+ *   兜底。
  *
  * 复询防抖的原因：mobile 查的是本进程内存里的 core registry 注册状态，
  * run 被 main 主动结束、unregister 事件还没派发到 renderer 时，has 可能

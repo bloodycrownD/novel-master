@@ -4,7 +4,7 @@
 
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 
-import {Pressable, StyleSheet, Text, TextInput, View} from 'react-native';
+import {Pressable, StyleSheet, Text, View} from 'react-native';
 
 import Svg, {Path, Rect} from 'react-native-svg';
 
@@ -52,6 +52,7 @@ import {
   findActiveAtQuery,
 } from './composer-at-path';
 import {composerDockBottomPadding} from './composer-dock-padding';
+import {composerToolBtnStyle} from './composer-toolbar-style';
 import {
   buildTokenInsertion,
   statusOnlyComposerAttachments,
@@ -64,6 +65,9 @@ import {SkillTypeahead, filterSkillTypeaheadCandidates} from './SkillTypeahead';
 import type {EffectiveSkill} from '@novel-master/core/skills';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {resetRunTiming, timingLog} from '@/debug/run-timing';
+
+/** ⛶ 全屏编辑入口载荷：当前输入文本原样带给父层（父层负责导航与保存回填）。 */
+export type ComposerFullscreenPayload = {text: string};
 
 type Props = {
   scope: AgentRunScope;
@@ -91,6 +95,13 @@ type Props = {
    * 暂未使用：工具栏「更多」按钮已注释隐藏，调用方也不再传该 prop。保留接口，
    * 后续若恢复按钮再从解构里取回即可。 */
   onOpenMore?: () => void;
+
+  /** 打开全屏编辑（父层注入导航 + 退出回填链路；全屏落地在 PromptEditor 的
+   *  composer 变体——与智能体配置提示词字段同一个编辑屏）。
+   *
+   * 载荷是当前输入文本；本组件不做任何导航依赖（chat-tab 目录零导航依赖的
+   * 惯例由父层承担）。缺省时不渲染 ⛶ 入口之外的任何行为。 */
+  onOpenComposerFullscreen?: (payload: ComposerFullscreenPayload) => void;
 };
 
 export function ChatComposer({
@@ -102,6 +113,7 @@ export function ChatComposer({
   canResumeWithoutInput,
   lastMessageIsPlainUserText,
   draftRestoreToken,
+  onOpenComposerFullscreen,
 }: Props) {
   const {tokens} = useTheme();
   const insets = useSafeAreaInsets();
@@ -130,8 +142,8 @@ export function ChatComposer({
   const [skillRows, setSkillRows] = useState<EffectiveSkill[]>([]);
   /** 文件批注 store 变更时 bump，驱动 hasAnnotateDrafts 重算。 */
   const [annotateEpoch, setAnnotateEpoch] = useState(0);
-  const inputRef = useRef<TextInput>(null);
-  /** 程序化插入 @path tag 走 mentions 提交路径。 */
+  /** 程序化整段写入句柄：typeahead 点选 / 引用选择器插入统一走
+   * `replaceCommittedText`（单路径，见 commitComposerText）。 */
   const atPathInputRef = useRef<ComposerAtPathInputHandle>(null);
 
   const streamHandlersRef = useRef({
@@ -236,13 +248,17 @@ export function ChatComposer({
     [sessionId],
   );
 
-  /** 提交正文变更：mention 输入在位时整段写入（新 token 提成 mention），
-   * 纯文本 fallback 时同步 draft（只留状态 chip）与光标。
-   * mention:false 供 onChangeText 等回写路径使用——replaceCommittedText 会
-   * 回调 onChangeText，再走 mention 分支会无限递归。 */
+  /** 提交正文变更：有输入壳时整段写入（web 侧纯文本 + 光标一次落位），
+   * 无壳时同步 draft（只留状态 chip）与光标。
+   * viaShell:false 供 onChangeText 回声路径使用——replaceCommittedText 会
+   * 回调 onChangeText，再走整段写入会无限递归。 */
   const commitComposerText = useCallback(
-    (next: string, nextCursor?: number, opts?: {mention?: boolean}) => {
-      if (opts?.mention !== false && atPathInputRef.current) {
+    (
+      next: string,
+      nextCursor?: number,
+      opts?: {viaShell?: boolean},
+    ) => {
+      if (opts?.viaShell !== false && atPathInputRef.current) {
         atPathInputRef.current.replaceCommittedText(next, nextCursor);
         return;
       }
@@ -418,12 +434,11 @@ export function ChatComposer({
     [activeAt, cursor, text, commitComposerText],
   );
 
+  /** `@` typeahead 点选：单路径整段写入（从活跃 `@` 起替换到光标）。
+   * WebView 化后无「提成 mention tag」概念——插入就是 plain 文本 + 尾空格，
+   * 高亮由 web 单引擎按 token 分段即时渲染。 */
   const applyTypeaheadToken = useCallback(
     (token: string) => {
-      // 优先 mentions onSelect；失败再整段 replaceCommittedText
-      if (atPathInputRef.current?.replaceActiveAt(token)) {
-        return;
-      }
       if (activeAt == null) {
         return;
       }
@@ -433,17 +448,18 @@ export function ChatComposer({
     [activeAt, cursor, text, commitComposerText],
   );
 
-  /** `$` typeahead 点选：插 `$技能名` token（mention tag + 尾空格）。 */
+  /** `$` typeahead 点选：插 `$技能名` token（同 `@` 单路径：plain + 尾空格）。 */
   const applySkillTypeaheadToken = useCallback(
     (skillName: string) => {
-      const token = `$${skillName}`;
-      if (atPathInputRef.current?.replaceActiveAt(token, 'skill')) {
-        return;
-      }
       if (activeSkill == null) {
         return;
       }
-      const next = buildTokenInsertion(text, cursor, activeSkill.start, token);
+      const next = buildTokenInsertion(
+        text,
+        cursor,
+        activeSkill.start,
+        `$${skillName}`,
+      );
       commitComposerText(next.text, next.cursor);
     },
     [activeSkill, cursor, text, commitComposerText],
@@ -569,15 +585,13 @@ export function ChatComposer({
         />
         <ComposerAtPathInput
           ref={atPathInputRef}
-          inputRef={inputRef}
           testID="chat-composer-input"
           style={styles.input}
           placeholder={inputPlaceholder}
-          placeholderTextColor={tokens.textSecondary}
           value={text}
           cursor={cursor}
           onChangeText={next => {
-            commitComposerText(next, undefined, {mention: false});
+            commitComposerText(next, undefined, {viaShell: false});
           }}
           onSelectionChange={e => {
             setCursor(e.nativeEvent.selection.start);
@@ -591,7 +605,7 @@ export function ChatComposer({
           <Pressable
             onPress={onOpenMore}
             disabled={onOpenMore == null}
-            style={[styles.toolBtn, { borderColor: tokens.border }]}
+            style={[composerToolBtnStyle, { borderColor: tokens.border }]}
             accessibilityLabel="更多选项"
           >
             <Text style={{ color: tokens.textSecondary, fontSize: 18 }}>
@@ -601,9 +615,20 @@ export function ChatComposer({
           */}
           <View style={styles.toolbarSpacer} />
           <Pressable
+            testID="chat-composer-fullscreen"
+            onPress={() => onOpenComposerFullscreen?.({text})}
+            disabled={onOpenComposerFullscreen == null}
+            /* 同排按钮风格一致：与 @ / $ 同款圆钮（同尺寸、同描边），
+               字形保留 20（⛶ 笔画细、同样字号下视觉比 @/$ 小一档）。 */
+            style={[composerToolBtnStyle, {borderColor: tokens.border}]}
+            accessibilityLabel="全屏编辑"
+          >
+            <Text style={{color: tokens.textSecondary, fontSize: 20}}>⛶</Text>
+          </Pressable>
+          <Pressable
             onPress={() => setPickerOpen(true)}
             disabled={inputDisabled}
-            style={[styles.toolBtn, {borderColor: tokens.border}]}
+            style={[composerToolBtnStyle, {borderColor: tokens.border}]}
             accessibilityLabel="引用文件"
           >
             <Text style={{color: tokens.textSecondary, fontSize: 16}}>@</Text>
@@ -611,7 +636,7 @@ export function ChatComposer({
           <Pressable
             onPress={() => setSkillPickerOpen(true)}
             disabled={inputDisabled}
-            style={[styles.toolBtn, {borderColor: tokens.border}]}
+            style={[composerToolBtnStyle, {borderColor: tokens.border}]}
             accessibilityLabel="引用技能"
           >
             <Text style={{color: tokens.textSecondary, fontSize: 16}}>$</Text>
@@ -709,7 +734,8 @@ const styles = StyleSheet.create({
   },
   input: {
     minHeight: 56,
-    maxHeight: 160,
+    /* 5 行封顶（12 + 22×5）；原 160 是老 RN 输入框沿用值，偏高压屏。 */
+    maxHeight: 122,
     fontSize: 16,
     lineHeight: 22,
     paddingHorizontal: 4,
@@ -725,14 +751,6 @@ const styles = StyleSheet.create({
   },
   toolbarSpacer: {
     flex: 1,
-  },
-  toolBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    borderWidth: StyleSheet.hairlineWidth,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   sendBtn: {
     width: 40,

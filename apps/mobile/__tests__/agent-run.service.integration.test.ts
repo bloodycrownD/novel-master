@@ -37,6 +37,8 @@ function baseRuntime(overrides: Partial<any> = {}) {
     },
     messages: {
       listBySession: async () => [],
+      // 续跑判定走 tail(1) 单行读（2026-09-30 替换全量 listBySession）。
+      listBySessionTail: async () => [],
       append: jest.fn(async () => undefined),
     },
     sessionVfs: () => ({}),
@@ -69,6 +71,7 @@ describe('runAgentTurn integration', () => {
     const runtime = baseRuntime({
       messages: {
         listBySession: async () => [{role: 'user', content: {blocks: []}}],
+        listBySessionTail: async () => [{role: 'user', content: {blocks: []}}],
         append: jest.fn(async () => undefined),
       },
     });
@@ -86,6 +89,9 @@ describe('runAgentTurn integration', () => {
     const runtime = baseRuntime({
       messages: {
         listBySession: async () => [{role: 'assistant', content: {blocks: []}}],
+        listBySessionTail: async () => [
+          {role: 'assistant', content: {blocks: []}},
+        ],
         append: jest.fn(async () => undefined),
       },
     });

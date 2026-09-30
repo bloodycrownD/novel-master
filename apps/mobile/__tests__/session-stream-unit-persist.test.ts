@@ -653,6 +653,13 @@ describe('SessionStreamUnitManager 持久化接线（T-U7 / T-U12 / dispose）',
     // 无 starting/running 行 → 不建单元（settled 不复活为 interrupted）
     expect(second.manager.unitCount()).toBe(0);
     expect(second.manager.snapshot('a')).toBe(null);
+    // GWT-7 数据源侧前提锁（2026-09-30 真机实录）：重启后 session_run_state
+    // 只有 settled 行时，两个徽标数据源都必须是空的——会话列表「 · 活跃中」
+    // meta 由 activeSessionIds 驱动，settled 行若被误建成 starting/running
+    // 单元（或 settled 行误复活成 interrupted），重启后徽标就会凭空出现。
+    expect(second.manager.activeSessionIds()).toEqual([]);
+    expect(new Set(second.manager.interruptedSessionIds())).toEqual(new Set());
+    expect(second.manager.hasActiveRun('a')).toBe(false);
   });
 
   it('T-U12 完整版: interrupted 单元上 startRun——门禁不阻塞、替换吸收、无双单元、指标按新 run 重置、无旧写覆盖新行', async () => {

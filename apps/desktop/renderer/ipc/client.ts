@@ -8,6 +8,7 @@ import {
   type VfsScopeRequest,
   type WorkspaceMutatedPayload,
   type ComposerAttachmentsSuggestPayload,
+  type PromptChatTokenUpdatedPayload,
   type AgentUserMessageAppendedPayload,
   type VfsStartDragFailedPayload,
 } from '@shared/ipc-types';
@@ -220,6 +221,19 @@ export function onComposerAttachmentsSuggest(
 ): () => void {
   return bridge().on(
     IPC_CHANNELS.COMPOSER_ATTACHMENTS_SUGGEST,
+    callback as (p: unknown) => void,
+  );
+}
+
+/**
+ * 订阅会话 prompt 占用读数的第二相推送（main 后台精确计数完成）。
+ * 载荷恒为精确档；订阅方只在当前展示估算档时采纳（见 payload 类型注释）。
+ */
+export function onPromptChatTokenUpdated(
+  callback: (payload: PromptChatTokenUpdatedPayload) => void,
+): () => void {
+  return bridge().on(
+    IPC_CHANNELS.PROMPT_CHAT_TOKEN_UPDATED,
     callback as (p: unknown) => void,
   );
 }

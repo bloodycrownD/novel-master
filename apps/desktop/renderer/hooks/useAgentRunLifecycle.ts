@@ -2,6 +2,7 @@
  * Agent run UI 生命周期：仅管理 uiRunning 与 activeRunId（不触碰 agentActive refcount）。
  */
 import {
+  PENDING_RUN_ID,
   shouldAcceptRunEvent,
   shouldApplyTranscriptReload,
   shouldIgnoreStaleRunStarted,
@@ -15,6 +16,7 @@ import type {
 } from "@novel-master/core/events";
 
 export {
+  PENDING_RUN_ID,
   shouldAcceptRunEvent,
   shouldApplyTranscriptReload,
   shouldIgnoreStaleRunStarted,
@@ -80,12 +82,19 @@ export function useAgentRunLifecycle(): AgentRunLifecycle {
   }, []);
 
   const beginUiRun = useCallback(() => {
-    syncActiveRunId(null);
+    // 只改 ref、不入 state（r3-run-1 步骤 4）：activeRunId 入 state 会触发
+    // ConversationPanel 的 metricsRunKey 变化 → 指标条多一次 re-seed，纯浪费。
+    // 之所以必须同步置哨兵：core 前奏期可能**一个事件都不发**就直接返回
+    // （背压极小、runner 秒起步），那时 activeRunIdRef 若还停在 null，那条
+    // runId='' 的前奏终态会被 shouldAcceptRunEvent 拒掉 → uiRunning 卡死。
+    // 置哨兵后「受理中」这个前提在事件回调里同步可读（bus 回调同步分发，
+    // 读 state 会拿到上一帧）。
+    activeRunIdRef.current = PENDING_RUN_ID;
     transcriptFreezeCountRef.current = null;
     abortRetainPendingRef.current = false;
     externalRunEndedRef.current = false;
     setUiRunningSynced(true);
-  }, [syncActiveRunId, setUiRunningSynced]);
+  }, [setUiRunningSynced]);
 
   const abortUiRun = useCallback(
     (freezeAt?: number) => {

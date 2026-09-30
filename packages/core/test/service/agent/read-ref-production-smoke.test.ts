@@ -31,12 +31,36 @@ import type { ModelRequestService } from "../../../src/service/provider/model-re
 import type { AgentDefinition } from "../../../src/domain/agent/model/agent-definition.js";
 import type { ChatMessage } from "../../../src/domain/chat/model/message.js";
 import type { ToolResultBlock } from "../../../src/domain/chat/model/content-block.js";
-import { noopSavedModelRepository } from "../../helpers/noop-saved-model-repo.js";
+import { BUILTIN_PROVIDER_UUID_GOOGLE } from "../../../src/domain/provider/logic/builtin-providers.js";
+import type { SavedModel } from "../../../src/domain/provider/model/saved-model.js";
+import type { SavedModelRepository } from "../../../src/domain/provider/repositories/saved-model.port.js";
 import {
   getNovelMasterTestContext,
   novelMasterTestFixture,
   testIsolationSuffix,
 } from "../../helpers/novel-master-fixture.js";
+
+/**
+ * gemini 协议 stub：agent-runner 的 tool_use 查找源**仅在该协议下读取**
+ * （openai / anthropic 不消费，main 侧收窄），而本测试的查找源断言
+ * （④ 可见-only 收窄）必须在查找源真实存在的路径上验证才非恒真。
+ */
+function geminiSavedModelRepository(): SavedModelRepository {
+  const fake = {
+    id: "smoke/model",
+    providerId: BUILTIN_PROVIDER_UUID_GOOGLE,
+    settings: { generation: { thinkingLevel: "off" } },
+  } as unknown as SavedModel;
+  return {
+    listByProvider: async () => [],
+    findById: async (id: string) =>
+      id.trim() === "smoke/model" ? fake : null,
+    insert: async () => undefined,
+    updateById: async () => undefined,
+    deleteById: async () => false,
+    deleteByProvider: async () => undefined,
+  };
+}
 
 novelMasterTestFixture();
 
@@ -172,7 +196,7 @@ describe("read-tool-result-ref Step 6: 生产链路 smoke（runner 全链）", (
         sessionKkv: ctx.sessionKkv,
         revisionRepo,
         workplace: (wtScope) => createWorkplaceService(ctx.conn, wtScope),
-        savedModelRepo: noopSavedModelRepository(),
+        savedModelRepo: geminiSavedModelRepository(),
       } as Pick<
         AgentTurnRuntimePort,
         | "messages"
@@ -184,7 +208,7 @@ describe("read-tool-result-ref Step 6: 生产链路 smoke（runner 全链）", (
         | "revisionRepo"
       > & {
         workplace: AgentTurnRuntimePort["workplace"];
-        savedModelRepo: ReturnType<typeof noopSavedModelRepository>;
+        savedModelRepo: ReturnType<typeof geminiSavedModelRepository>;
       },
       registry,
       toolCtx,

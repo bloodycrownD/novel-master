@@ -11,7 +11,6 @@ import {
   resolveRollbackConfirmMessage,
 } from '@novel-master/core/chat';
 
-import {runCompaction} from '@novel-master/core/compaction';
 import {formatError} from '@/errors/format-error';
 import {toastMessage} from '@/errors/toast-message';
 import {
@@ -38,6 +37,7 @@ import {
 } from '@/services/project-composer-status.service';
 import type {RollbackOptions} from '@novel-master/core/message-checkpoint';
 import {rollbackToMessage} from '@/services/message-rollback.service';
+import {runCompactionWithTokenWarm} from '@/services/compaction-warm-orchestration.service';
 import {
   resetRollbackTiming,
   rollbackTimingLog,
@@ -109,33 +109,42 @@ export function useChatTabMessageActions({
       {
         text: '压缩',
         onPress: () => {
-          void (async () => {
-            try {
-              const hideStartDepth =
-                await runtime.compactionConditionEvaluator.getHideStartDepth();
-              const result = await runCompaction(
-                {
-                  sessionKkv: runtime.sessionKkv,
-                  messages: runtime.messages,
-                  messageTranscriptEffects: runtime.messageTranscriptEffects,
-                },
-                {sessionId, projectId, hideStartDepth},
-              );
-              await reloadMessages(true);
-              void refreshChatTokenLabel();
-              if (!result.ok) {
-                showToast(toastMessage('压缩失败'));
-              } else {
+          // 冻结/压缩/预热/解冻的编排收在 runCompactionWithTokenWarm（r3-orc-1：
+          // 详情页那份手工副本曾与之漂移五处），本处只留 UI 尾巴。
+          void runCompactionWithTokenWarm(
+            runtime,
+            {projectId, sessionId},
+            {
+              // 失败出口：压缩本体明确失败（error 为 undefined）才重载消息面
+              // 并补刷 chip；抛错出口只弹提示（旧副本同款差异）。
+              onFailed: error => {
+                if (error === undefined) {
+                  void reloadMessages(true);
+                  void refreshChatTokenLabel();
+                  showToast(toastMessage('压缩失败'));
+                  return;
+                }
+                showToast(toastMessage('压缩失败', error));
+              },
+              onSucceeded: async () => {
+                // 精确预热由编排层并行起跑（压缩改串 L1 必 miss，直接刷新首帧必是
+                // 估算档再后台升级；这里期间 chip 冻结旧标签，暖完补刷见 onFinally）。
+                await reloadMessages(true);
+                void refreshChatTokenLabel();
                 await refreshComposerStatusAfterFloorOrCompaction(runtime, {
                   projectId,
                   sessionId,
                 });
                 showToast('已压缩');
-              }
-            } catch (error) {
-              showToast(toastMessage('压缩失败', error));
-            }
-          })();
+              },
+              // 预热落定 + 冻结已解之后：此刻 L1 已命中，补刷一次即精确档（消跳变）。
+              onFinally: outcome => {
+                if (outcome.ok) {
+                  void refreshChatTokenLabel();
+                }
+              },
+            },
+          );
         },
       },
     ]);

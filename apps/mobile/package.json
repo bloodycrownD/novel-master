@@ -1,6 +1,6 @@
 {
   "name": "@novel-master/mobile",
-  "version": "1.5.27",
+  "version": "1.5.28",
   "private": true,
   "//android": "禁止移除 Metro 自动启动：默认 android 不得加 --no-packager；端口占用再用 android:no-packager。勿再改回 no-packager 默认。",
   "scripts": {
@@ -59,7 +59,6 @@
     "react": "19.2.3",
     "react-native": "0.85.3",
     "react-native-blob-util": "^0.22.2",
-    "react-native-controlled-mentions": "^3.1.0",
     "react-native-gesture-handler": "^2.24.0",
     "react-native-get-random-values": "^1.11.0",
     "react-native-keyboard-controller": "^1.22.2",

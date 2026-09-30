@@ -1,5 +1,13 @@
 /**
  * T-GC1 / T-GC2：sweep + runDeferredBlobGc 全库 blob gc（唯一算法入口）。
+ *
+ * 「blob 行已被回收」的观测面在 2026-09-30 换过一次：此前直接拿
+ * `contentStore.get(hash)` 必抛当证据，但 vfs content-store 已接入进程内
+ * 解压产物层（infra/content-cache，按内容哈希索引、命中即返回）——同一个
+ * hash 只要在本进程里读成功过一次，正文就常驻内存，行缺失不再必然抛错。
+ * 于是观测面一分为二（对应两件不同的事）：
+ * - **blob 行是否真被删** → 直查 `vfs_content_blob`（GC 本身的判据）；
+ * - **缺失时的完整性契约是否还在** → 清空池成冷态后读，必抛。
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -15,6 +23,8 @@ import {
 } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
+import { clearDecodedContentCaches } from "@/infra/content-cache/logic/decoded-content-cache.js";
+import type { TdbcConnection } from "@novel-master/core";
 import {
   getNovelMasterTestContext,
   novelMasterTestFixture,
@@ -22,6 +32,27 @@ import {
 } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
+
+/** blob 行是否还在（GC 的直接观测面，见文件头）。 */
+async function blobRowCount(
+  conn: TdbcConnection,
+  contentHash: string
+): Promise<number> {
+  const rows = await conn.query<{ n: number }>(
+    "SELECT COUNT(*) AS n FROM vfs_content_blob WHERE content_hash = ?",
+    [contentHash]
+  );
+  return Number(rows[0]!.n);
+}
+
+/** 行已缺失 + 池冷态 ⇒ 读必抛（完整性契约冷态不变）。 */
+async function assertColdReadRejects(
+  store: SqliteVfsContentStore,
+  contentHash: string
+): Promise<void> {
+  clearDecodedContentCaches();
+  await assert.rejects(() => store.get(contentHash));
+}
 
 describe("sweepSessionRevisions + blob gc", () => {
   it("T-GC1: 不可达 revision 删除后，无引用 blob 被 gc（经唯一入口）", async () => {
@@ -80,7 +111,8 @@ describe("sweepSessionRevisions + blob gc", () => {
       afterKeys.some((k) => k.entryId === entry.entryId && k.version === 2),
       false,
     );
-    await assert.rejects(() => contentStore.get(orphanHash));
+    assert.equal(await blobRowCount(ctx.conn, orphanHash), 0, "orphan blob 行已被 gc");
+    await assertColdReadRejects(contentStore, orphanHash);
     // live 正文仍可读
     assert.equal((await svfs.read("/gc1.md")).content, "keep-live-v3");
   });
@@ -119,7 +151,8 @@ describe("sweepSessionRevisions + blob gc", () => {
     );
     await runDeferredBlobGc(ctx.conn);
 
-    await assert.rejects(() => contentStore.get(onlyAHash));
+    assert.equal(await blobRowCount(ctx.conn, onlyAHash), 0, "无引用 blob 行已被 gc");
+    await assertColdReadRejects(contentStore, onlyAHash);
     assert.equal(await contentStore.get(sharedHash), sharedPlain);
     assert.equal((await svfsB.read("/b.md")).content, sharedPlain);
     assert.equal((await svfsA.read("/a.md")).content, sharedPlain);

@@ -108,6 +108,7 @@ export const IPC_CHANNELS = {
 
   PROMPT_REAL_PREVIEW: 'nm:prompt/realPreview',
   PROMPT_CHAT_TOKEN_LABEL: 'nm:prompt/chatTokenLabel',
+  PROMPT_CHAT_TOKEN_UPDATED: 'nm:prompt/chatTokenUpdated',
   PROMPT_AGENT_META: 'nm:prompt/agentMeta',
 
   COMPACTION_MANUAL: 'nm:compaction/manual',
@@ -1151,6 +1152,22 @@ export type ComposerAttachmentsSuggestPayload = {
 /** Main → renderer：用户消息 append 成功（清 annotate store）。 */
 export type AgentUserMessageAppendedPayload = {
   readonly sessionId: string;
+};
+
+/**
+ * Main → renderer：会话 prompt 占用读数的「第二相」推送。
+ *
+ * 读口是两阶段的（首帧 `preferEstimate` 廉价估算即回，后台再跑家族真分词器
+ * 精确计数），第二相必须能主动送到 UI：手动压缩/置位/回滚这类**一次性**动作
+ * 之后没有「下一次触发」再让 renderer 自己去问，旧设计只暖 L1 不推送，导致
+ * chip 停在估算档 `gpt ≈`（用户实报「手动压缩后分词器变成 gpt 兜底」）。
+ *
+ * `stats` 恒为精确档（`estimated:false`，main 侧已过滤）——renderer 只在当前
+ * 展示估算档时采纳，绝不回退/覆盖更新的读数。
+ */
+export type PromptChatTokenUpdatedPayload = {
+  readonly sessionId: string;
+  readonly stats: PromptChatTokenStatsResponse;
 };
 
 export type PreviewFileSelection = {

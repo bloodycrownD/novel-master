@@ -206,6 +206,109 @@ describe('SessionStreamUnitManager', () => {
     );
   });
 
+  it('前奏期停止（core 合成 cancelled）：starting 行收成 settled、单元收 finished；registry 依在途时序翻真/假', async () => {
+    // 2026-09-30「停止失灵」修复的 mobile 侧收口：core runAgentTurn 在前奏
+    // 检查点命中 abort 时以合成 cancelled 结果 resolve——manager 必须补
+    // finishRun('', 'finished')，否则受理时写的 starting 行无人收尾，重启水合
+    // 会把「用户已停止的发送」误判为中断现场。
+    // r3-run-1 起 core 在返回前还会补发一条 FINISHED(runId:'')；本用例钉的是
+    // 「事件也没来」的更窄形态（.then 兜底必须真能收口）。
+    //
+    // r3-test-1 ②：abortRegistry.has 不再是恒 false 的假模型——按 startRun
+    // 调起的 run 生命周期翻真/假（core 的 register 落在 runAgentTurn 函数入口，
+    // 受理即在途；run 结束即反注册）。恒值模型下「在途/已收尾」两种 registry
+    // 读数观测不出差别，下面的 stopRun 前后两断与受理即真全都退化成恒假断言。
+    const eventBus = new SimpleEventBus();
+    const registryState = {inFlight: false};
+    let releasePrelude!: () => void;
+    const preludeGate = {
+      promise: new Promise<void>(res => {
+        releasePrelude = res;
+      }),
+    };
+    const abortRegistry = {
+      has: jest.fn((_sessionId: string) => registryState.inFlight),
+      abort: jest.fn(),
+      register: jest.fn(),
+      unregister: jest.fn(),
+    };
+    const runAgentTurn = jest.fn(async () => {
+      // 受理即在途：core 的 register 落在 runAgentTurn 入口（同步）。
+      registryState.inFlight = true;
+      try {
+        // 前奏检查点：run 停在 abort 判定上，由用例放行后以合成 cancelled 返回。
+        await preludeGate.promise;
+        return {
+          stepsExecuted: 0,
+          finished: false,
+          stopReason: 'cancelled',
+          rounds: [],
+        };
+      } finally {
+        // run 结束即反注册。
+        registryState.inFlight = false;
+      }
+    });
+    const store = {
+      upsert: jest.fn(async () => undefined),
+      settle: jest.fn(async () => undefined),
+      listByStatuses: jest.fn(async () => []),
+    };
+    const manager = new SessionStreamUnitManager({
+      runtime: {
+        eventBus,
+        abortRegistry,
+        sessions: {
+          get: jest.fn(async (id: string) => ({id, title: `会话-${id}`})),
+        },
+        projects: {
+          get: jest.fn(async (id: string) => ({id, name: `项目-${id}`})),
+        },
+      } as never,
+      runAgentTurn: runAgentTurn as never,
+      runStateService: store,
+      yieldQuantum: async () => undefined,
+    });
+    liveManagers.push(manager);
+    manager.markHydrated();
+
+    expect(manager.startRun('a', 'p', '前奏期停止').ok).toBe(true);
+    // 受理即写 starting 行（既有语义）
+    expect(store.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({sessionId: 'a', status: 'starting'}),
+    );
+    // 受理空窗内 registry 已是真（core register 在 runAgentTurn 入口执行）：
+    // 这条正是 r3-doc-1 纠偏的那条时序，恒值模型下观测不到。
+    expect(abortRegistry.has('a')).toBe(true);
+    // 空窗期 stopRun 转发得到（读口真按 registry 判活，非恒假）
+    expect(manager.stopRun('a')).toBe(true);
+    expect(abortRegistry.abort).toHaveBeenCalledWith('a');
+
+    // 前奏检查点命中 abort：core 以合成 cancelled 返回
+    releasePrelude();
+    await flushAsync();
+    await flushAsync();
+
+    // 无任何事件发布，但 .then 补调 finishRun：settled 行落库覆盖 starting 行
+    expect(store.settle).toHaveBeenCalledTimes(1);
+    expect(store.settle).toHaveBeenCalledWith(
+      expect.objectContaining({sessionId: 'a'}),
+    );
+    // 单元收尾为 finished（宽限内保留终态投影），发送门禁放行
+    expect(manager.snapshot('a')).toEqual(
+      expect.objectContaining({status: 'finished'}),
+    );
+    expect(manager.hasActiveRun('a')).toBe(false);
+    // 数据源侧同步收口：会话列表「 · 活跃中」meta 读的是 activeSessionIds()，
+    // 这条沿必须在无终态事件的受理空窗收尾里也出集（否则该 meta 永久残留）。
+    expect(manager.activeSessionIds()).toEqual([]);
+    // run 结束后 registry 反注册：读数翻假、stopRun 不再转发、门禁放行下一轮
+    expect(abortRegistry.has('a')).toBe(false);
+    expect(manager.stopRun('a')).toBe(false);
+    expect(manager.startRun('a', 'p', '再来一轮').ok).toBe(true);
+    await flushAsync();
+  });
+
   it('T-P1: session A run 进行中 startRun(B) 正常受理，事件与状态互不串扰', () => {
     const h = createHarness();
     h.runAgentTurn.mockImplementation(
@@ -383,6 +486,85 @@ describe('SessionStreamUnitManager', () => {
     publishFinished(h.eventBus, 'a', 'r1'); // 真正的终态仍正常收尾
     expect(h.manager.snapshot('a')?.status).toBe('finished');
     expect(isMobileAgentActive()).toBe(false);
+  });
+
+  it('r3-run-1: 前奏 FAILED(空串) 事件收口后 throw 路径不双弹 toast', async () => {
+    // core 前奏抛错时发的是 FAILED(runId:'')——走的是**同一条** finishRun
+    // 收口、同样已 onError 过一次。.catch 的 toast 条件必须补
+    // `!isSessionStreamUnitSettled(...)`，否则这里会弹第二次。
+    const h = createHarness();
+    h.runAgentTurn.mockRejectedValue(new Error('前奏炸了'));
+    const onError = jest.fn();
+    h.manager.setUiBridge({onError});
+
+    h.manager.startRun('a', 'p', 'hi');
+    // RUN_STARTED 从未发出；事件入口已有 runId === '' 放行分支。
+    h.eventBus.publish(EVENT_AGENT_RUN_FAILED, {
+      sessionId: 'a',
+      projectId: 'p',
+      runId: '',
+      error: '前奏炸了',
+    });
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(isMobileAgentActive()).toBe(false);
+
+    await flushAsync(); // throw 路径随后到达
+    // 前奏 FAILED(空串) 已弹过一次，throw 路径不得再弹
+    // （双弹正是 r3-run-1 步骤 5 补 !isSessionStreamUnitSettled 要防的）。
+    expect(onError).toHaveBeenCalledTimes(1);
+  });
+
+  it('r3-run-1: 前奏 FINISHED(空串) 事件收口后 .then 兜底是 no-op', async () => {
+    const h = createHarness();
+    h.runAgentTurn.mockResolvedValue({
+      stepsExecuted: 0,
+      finished: false,
+      stopReason: 'cancelled',
+      rounds: [],
+    });
+    h.manager.startRun('a', 'p', 'hi');
+    h.eventBus.publish(EVENT_AGENT_RUN_FINISHED, {
+      sessionId: 'a',
+      projectId: 'p',
+      runId: '',
+      stopReason: 'cancelled',
+      vfsMutated: false,
+    });
+    expect(h.manager.snapshot('a')?.status).toBe('finished');
+    expect(isMobileAgentActive()).toBe(false);
+
+    await flushAsync();
+    // 事件路径已收口，.then 的兜底 finishRun 必须是 no-op：宽限单元不被销毁、
+    // 终态投影不被二次改写、refcount 不被减成负。
+    expect(h.manager.snapshot('a')?.status).toBe('finished');
+    expect(isMobileAgentActive()).toBe(false);
+  });
+
+  it('r3-run-1 步骤 6: 事件+.then 双失时 .finally 仍 invokeOnSettled(failed)', async () => {
+    // 最窄的一例：前奏 FAILED('') 事件到达时所有权校验把它当 stale 丢掉
+    //（收尾所有权比对按设计如此——迟到的旧 run 事件不能动在途单元）。
+    // 这时 onSettled 回调再不发，草稿区不清理、token chip 不刷新，
+    // 用户在界面上看不到任何收尾痕迹。
+    const h = createHarness();
+    h.runAgentTurn.mockRejectedValue(new Error('前奏炸了'));
+    const onSettled = jest.fn();
+    h.manager.startRun('a', 'p', 'hi', {onSettled});
+
+    // 只发一个不匹配的 runId：事件路径不会 settle 任何东西。
+    h.eventBus.publish(EVENT_AGENT_RUN_FAILED, {
+      sessionId: 'a',
+      projectId: 'p',
+      runId: 'run-from-previous',
+      error: 'stale',
+    });
+    expect(onSettled).not.toHaveBeenCalled();
+    expect(h.manager.snapshot('a')?.status).toBe('starting');
+
+    await flushAsync();
+    // .finally 必须补一个终态出口，否则草稿 / token chip 永久悬着。
+    expect(onSettled).toHaveBeenCalledWith('failed');
+    expect(isMobileAgentActive()).toBe(false);
+    expect(h.manager.hasActiveRun('a')).toBe(false);
   });
 
   it('迟到的 RUN_STARTED 不改 settled 投影（markRunning 状态守卫）', () => {
@@ -583,6 +765,49 @@ describe('SessionStreamUnitManager', () => {
     h.manager.forgetSession('b');
     expect(h.manager.interruptedSessionIds().size).toBe(0);
     expect(notified).toBeGreaterThan(notifiedAfterAdopt);
+  });
+
+  it('GWT-7: activeSessionIds 数据源——受理入集、RUN_FINISHED 即时出集并经 subscribe 通知（会话列表「 · 活跃中」meta 的唯一判活源）', () => {
+    // 2026-09-30 真机实录的前提锁：徽标一旦改由本数据源驱动，就要求
+    // 「收尾即出集」与「迁移即通知」两条都成立，否则徽标会变陈旧。
+    const h = createHarness();
+    h.runAgentTurn.mockImplementation(() => new Promise(() => undefined));
+    let notified = 0;
+    h.manager.subscribe(() => {
+      notified += 1;
+    });
+
+    // 受理即 starting → 入集
+    expect(h.manager.startRun('a', 'p', 'hi').ok).toBe(true);
+    expect(new Set(h.manager.activeSessionIds())).toEqual(new Set(['a']));
+    const afterStart = notified;
+
+    // RUN_STARTED → running，仍在集内（run 期间徽标照常显示）
+    publishStarted(h.eventBus, 'a', 'r1');
+    expect(h.manager.snapshot('a')).toEqual(
+      expect.objectContaining({status: 'running', runId: 'r1'}),
+    );
+    expect(new Set(h.manager.activeSessionIds())).toEqual(new Set(['a']));
+    expect(notified).toBeGreaterThan(afterStart);
+
+    // FINISHED → 单元 settle 出集（settled 单元宽限内仍在注册表，但非 active）
+    const afterRunning = notified;
+    publishFinished(h.eventBus, 'a', 'r1');
+    expect(h.manager.snapshot('a')).toEqual(
+      expect.objectContaining({status: 'finished'}),
+    );
+    expect(h.manager.unitCount()).toBe(1);
+    expect(h.manager.hasActiveRun('a')).toBe(false);
+    expect(h.manager.activeSessionIds()).toEqual([]);
+    // 同步总线：事件分发返回前集合已更新且已通知，UI 侧同名回调不读旧值
+    expect(notified).toBeGreaterThan(afterRunning);
+
+    // 另一会话在跑时本会话收尾：集合只剩对方（per-session 判定，非全局）
+    expect(h.manager.startRun('b', 'p', 'hi').ok).toBe(true);
+    publishStarted(h.eventBus, 'b', 'r2');
+    expect(new Set(h.manager.activeSessionIds())).toEqual(new Set(['b']));
+    publishFinished(h.eventBus, 'b', 'r2');
+    expect(h.manager.activeSessionIds()).toEqual([]);
   });
 
   describe('保活前台服务（吸收契约 smoke）', () => {
@@ -813,6 +1038,47 @@ describe('SessionStreamUnit', () => {
     expect(interrupted.settleAsInterrupted()).toBe(true);
     expect(interrupted.getStatus()).toBe('interrupted');
     expect(interrupted.getSettledAtMs()).not.toBeNull();
+  });
+
+  it('r3-test-1 ⑤: starting 段可直接 settle（前奏受理空窗收尾），状态机放行、宽限定时器照启', () => {
+    // 2026-09-30 wave-0 改动：settle 的状态守卫放行 starting 段。前奏期停止
+    // 时 RUN_STARTED 从未到达（runId 未回填），受理时建的 starting 单元必须
+    // 能被收口，否则 starting 行/单元无人收尾。既有覆盖全在 manager 集成层
+    // （r3-run-1 的前奏 FINISHED 用例），单元状态机本身这条迁移没有牙齿。
+    jest.useFakeTimers();
+    try {
+      const expired = jest.fn();
+      const unit = new SessionStreamUnit({
+        sessionId: 's',
+        projectId: 'p',
+        settledGraceMs: 1000,
+        onGraceExpired: expired,
+      });
+      expect(unit.begin()).toBe(true);
+      expect(unit.getStatus()).toBe('starting');
+      expect(unit.getRunId()).toBe(null);
+
+      // 未经 markRunning 直接收尾：迁移被放行
+      expect(unit.settle('finished')).toBe(true);
+      expect(unit.getStatus()).toBe('finished');
+      expect(unit.getRunId()).toBe(null); // runId 始终未回填
+      expect(unit.getSettledAtMs()).not.toBeNull();
+      expect(unit.snapshot()).toEqual(
+        expect.objectContaining({status: 'finished', runId: null}),
+      );
+
+      // 收尾后状态机照旧封闭：迟到的 STARTED 不再迁移、重复 settle 被拒
+      expect(unit.markRunning('r-late')).toBe(false);
+      expect(unit.settle('failed')).toBe(false);
+      expect(unit.getStatus()).toBe('finished');
+      expect(unit.getRunId()).toBe(null);
+
+      // 宽限定时器照启：starting 收尾同样进宽限期（投影保留语义不打折）
+      jest.advanceTimersByTime(1000);
+      expect(expired).toHaveBeenCalledWith(unit);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it('T-U1: 非法迁移被拒绝（状态机守卫；销毁后一切迁移拒绝）', () => {

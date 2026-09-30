@@ -9,6 +9,7 @@
   "DEFAULT_SUBAGENT_DEFINITION",
   "DOOM_LOOP_THRESHOLD",
   "InMemoryAgentSession",
+  "PENDING_RUN_ID",
   "agentDefinitionDocumentSchema",
   "agentDefinitionSchema",
   "assembleAgentRunnerDeps",

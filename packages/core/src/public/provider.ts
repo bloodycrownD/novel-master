@@ -176,6 +176,9 @@ export {
   wrapSerializedPromptAsSystemMessage,
   convertMessagesForWebTokenizer,
   countWebTokenizerMessages,
+  // r3-chip-1：resolve 段弃权错误类必须经 public/provider 出到 app 层（core
+  // 引不到 app 层的 ChatPromptBuildBailedError，两类错误由读口同款 catch）。
+  PromptTokenResolveBailedError,
   type TokenCounter,
   type TokenCounterRegistry,
   type TokenCounterKind,

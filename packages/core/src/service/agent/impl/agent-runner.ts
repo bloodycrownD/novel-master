@@ -239,9 +239,16 @@ export class DefaultAgentRunner implements AgentRunner {
 
     const runId = generateAgentRunId();
 
-    if (publishRunLifecycle) {
-      bus.publish(EVENT_AGENT_RUN_STARTED, { sessionId, projectId, runId });
-    }
+    // 注意：EVENT_AGENT_RUN_STARTED 的 publish 位置已下移到主 try 紧前
+    // （r3-run-2 步骤 1）。原先在 `generateAgentRunId()` 之后立刻发，导致
+    // 本段到主 try 之间（savedModels.findById / preferences 读 / wt 解析）
+    // 抛错时「STARTED 已发、终态一个都没有」——desktop 侧 refcount 永久泄漏、
+    // 后续全部 AGENT_BUSY，mobile 侧靠 .finally 兜住只是侥幸。
+    // 下移后这条窗口里的抛错不发 STARTED，由入口壳 run-agent-turn 的收口
+    // try 补 FAILED(runId:'')（r3-run-1）——STARTED 与终态天然配对。
+    // round-2 已核下移安全：中间无事件、shouldIgnoreStaleRunStarted 恒等
+    // !uiRunning、mobile starting 单元由 begin() 建立、listCalibratableSessionIds
+    // 语义不变。
 
     const rounds: ModelRoundSummary[] = [];
     let stepsExecuted = 0;
@@ -380,6 +387,14 @@ export class DefaultAgentRunner implements AgentRunner {
       });
     };
 
+    // STARTED 下移落点（r3-run-2）：紧贴主 try 之前，与主 try 的 FAILED /
+    // FINISHED 构成「要么都发、要么都不发」的配对（细因见上方 generateAgentRunId
+    // 处的注释）。紧邻 try 也保证 publish 与随后的失败处理之间没有其他 await
+    // 缝隙——事件到达时下游一定还能看到紧随其后的终态。
+    if (publishRunLifecycle) {
+      bus.publish(EVENT_AGENT_RUN_STARTED, { sessionId, projectId, runId });
+    }
+
     try {
       // wt 提升到循环外（仅取一次）：工厂每次调用会 new 新服务实例，
       // 每步重建会让 liveViewInFlight 并发去重跨 step 失效。
@@ -404,7 +419,15 @@ export class DefaultAgentRunner implements AgentRunner {
         // assemble 先于 prepare：常驻前缀 S0 计入 seen，与最终提示词可见序一致。
         // 规则评估按 wtScope（子 agent 时=父工作区）；rule_snapshot / file_cache
         // 的 KKV 存取按 session.kkvScopeSessionId（永远=自身，子会话快照隔离）。
-        const { workplaceDisplay, prefixPaths } =
+        // shouldStop（2026-09-30）：组装段曾是 16s 级无观察点原子块，停止要等
+        // 它跑完才能兑现；按文件粒度检查 signal，抛 WorkplaceAssemblyAbortedError
+        // 后沿下方 catch 的 signal?.aborted 分支路由进统一 abort 处理。
+        // fingerprint（2026-09-30）：组装顺产的内容指纹不能丢——压缩评估链
+        // （token-ratio trigger 消费 evaluation.ctx）靠它命中估算记忆、走增量
+        // 分解；丢掉则 run 侧全程无指纹（既不命中记忆也不分解，①②批收益在
+        // 评估链归零）。与 desktop build 的 ctx 同款透传（见
+        // session-prompt-input.service.ts 的 `workplaceFingerprint: fingerprint`）。
+        const { workplaceDisplay, prefixPaths, fingerprint } =
           await assembleWorkplaceDisplay(
             wtScope,
             {
@@ -413,7 +436,10 @@ export class DefaultAgentRunner implements AgentRunner {
               vfs: this.deps.toolCtx.vfs,
               layout: options.definition.prompts,
             },
-            { kkvSessionId: session.kkvScopeSessionId }
+            {
+              kkvSessionId: session.kkvScopeSessionId,
+              shouldStop: () => signal?.aborted === true,
+            }
           );
         if (signal?.aborted) {
           await handleAbort("after_assemble_workplace");
@@ -478,6 +504,9 @@ export class DefaultAgentRunner implements AgentRunner {
           workplace: wt,
           filetree: turnFiletree,
           skillsIndex,
+          // 组装指纹随 ctx 进压缩评估（r4-core-2）：只被 token 读口
+          // （记忆键 / 增量分解的按指纹缓存）消费，渲染侧忽略——零行为影响。
+          workplaceFingerprint: fingerprint,
         };
         const promptInput = await buildPromptLlmInputFromLayout(
           options.definition.prompts,
@@ -564,13 +593,16 @@ export class DefaultAgentRunner implements AgentRunner {
         const llmMessages = normalizeOrphanToolResultsForLlm(strippedMessages);
 
         // tool_use 查找源：解析出站 tool_result 的函数名（Gemini
-        // functionResponse 必须有合法 name）。取可见-only 即可——上面的
-        // normalizeOrphanToolResultsForLlm 按可见历史配对，残留 tool_result
-        // 的 tool_use 必在可见集内；hidden 行既给不出解析力，又要为每条
-        // 解压正文（千条会话全量读 212ms vs 可见读 14ms，每步一发）。
+        // functionResponse 必须有合法 name）。两个收窄正交叠加：
+        // ① 仅 gemini 协议才读——openai / anthropic 适配器不消费它（仅
+        // gemini.adapter 透传），别为它们每 step 白读一遍会话正文；
+        // ② 可见-only——上面的 normalizeOrphanToolResultsForLlm 按可见历史
+        // 配对，出站残留 tool_result 的 tool_use 必在可见集内（hidden 行零
+        // 解析力，等价断言钉在 gemini-content-mapper 测试），gemini lookup
+        // 用可见集即完备。
         // 懒求值：放在这里而不是 step 开头，是为了纳入本 step 的压缩产物。
         let toolUseLookupMessages: readonly ChatMessage[] | undefined;
-        if (this.deps.listVisibleSessionMessages != null) {
+        if (protocol === "gemini" && this.deps.listVisibleSessionMessages != null) {
           toolUseLookupMessages = await this.deps.listVisibleSessionMessages();
         }
 

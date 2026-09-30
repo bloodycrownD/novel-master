@@ -427,3 +427,305 @@ describe("token-chunk-cache KKV 持久化（T-TC3）", () => {
     assert.equal(await tokenChunkCache.seedFromKkv(null, SESSION_ID), 0);
   });
 });
+
+/**
+ * 2026-09-30 真机 12.5s 病根的回归护栏：整表 KKV 链（读=整表 select + parse +
+ * 全量 Map 重建；写=整表序列化 + 覆盖写）在历史消息多的会话上是一条 MB 级
+ * 的链，而读口**每一轮本地计数都重走一遍**。两条止血各有牙齿的断言：
+ * seed-once（第二轮不再发 KKV 读）与脏标记跳过持久化（无新记录的轮次根本
+ * 不发 KKV 写）。观测口径一律数 KKV 的 get/set 实际调用次数。
+ */
+describe("token-chunk-cache 整表链节流（2026-09-30 12.5s 止血）", () => {
+  beforeEach(() => {
+    tokenChunkCache.clearForTests();
+  });
+
+  /** 数 `token_chunks/chunkCache` 这一行的实际 get / set 次数（其余键不计入）。 */
+  function instrumentChunkRowKkv(): {
+    kkv: ReturnType<typeof createMemorySessionKkv>;
+    gets: () => number;
+    sets: () => number;
+  } {
+    const base = createMemorySessionKkv();
+    let gets = 0;
+    let sets = 0;
+    const isChunkRow = (domain: string, key: string): boolean =>
+      domain === SESSION_KKV_DOMAIN_TOKEN_CHUNKS && key === TOKEN_CHUNKS_CACHE_KEY;
+    const kkv = {
+      ...base,
+      async get(sessionId: string, domain: string, key: string) {
+        if (isChunkRow(domain, key)) gets += 1;
+        return base.get(sessionId, domain, key);
+      },
+      async set(
+        sessionId: string,
+        domain: string,
+        key: string,
+        value: string
+      ): Promise<void> {
+        if (isChunkRow(domain, key)) sets += 1;
+        await base.set(sessionId, domain, key, value);
+      },
+    };
+    return { kkv, gets: () => gets, sets: () => sets };
+  }
+
+  /** 预置一条可解析的种子载荷（不经 record，直接写库模拟上次落盘）。 */
+  async function seedRow(
+    kkv: ReturnType<typeof createMemorySessionKkv>,
+    sessionId: string,
+    items: [string, string, number][]
+  ): Promise<void> {
+    await kkv.set(
+      sessionId,
+      SESSION_KKV_DOMAIN_TOKEN_CHUNKS,
+      TOKEN_CHUNKS_CACHE_KEY,
+      JSON.stringify({ v: 1, items })
+    );
+  }
+
+  it("seed-once：同会话连续两次 seedFromKkv 只发一次 KKV 读（第二次连读都不发）", async () => {
+    const { kkv, gets } = instrumentChunkRowKkv();
+    await seedRow(kkv, SESSION_ID, [[chunkHash16("种子块。"), SCOPE, 7]]);
+
+    assert.equal(await tokenChunkCache.seedFromKkv(kkv, SESSION_ID), 1, "首轮载入种子");
+    assert.equal(gets(), 1, "首轮应发一次 KKV 读");
+
+    assert.equal(
+      await tokenChunkCache.seedFromKkv(kkv, SESSION_ID),
+      0,
+      "已 seed 的会话重复 seed 直接返回 0"
+    );
+    assert.equal(gets(), 1, "第二轮不得再读 KKV（整表 JSON.parse + Map 重建是纯浪费）");
+    assert.equal(
+      tokenChunkCache.lookup(chunkHash16("种子块。"), SCOPE),
+      7,
+      "首次载入的种子条目仍在（重复 seed 没有副作用）"
+    );
+  });
+
+  it("seed-once 按会话隔离：另一个会话仍各自 seed 一次", async () => {
+    const { kkv, gets } = instrumentChunkRowKkv();
+    await seedRow(kkv, SESSION_ID, [[chunkHash16("甲块。"), SCOPE, 3]]);
+    await seedRow(kkv, "sess-other", [[chunkHash16("乙块。"), SCOPE, 4]]);
+
+    assert.equal(await tokenChunkCache.seedFromKkv(kkv, SESSION_ID), 1);
+    assert.equal(await tokenChunkCache.seedFromKkv(kkv, "sess-other"), 1);
+    assert.equal(gets(), 2, "两个会话各读一次");
+    assert.equal(await tokenChunkCache.seedFromKkv(kkv, "sess-other"), 0);
+    assert.equal(gets(), 2, "已 seed 的会话不再重复读");
+    assert.equal(tokenChunkCache.lookup(chunkHash16("甲块。"), SCOPE), 3);
+    assert.equal(tokenChunkCache.lookup(chunkHash16("乙块。"), SCOPE), 4);
+  });
+
+  it("clearForTests 复位 seed-once：模拟进程重启后可重新 seed", async () => {
+    const { kkv, gets } = instrumentChunkRowKkv();
+    await seedRow(kkv, SESSION_ID, [[chunkHash16("重启块。"), SCOPE, 6]]);
+    assert.equal(await tokenChunkCache.seedFromKkv(kkv, SESSION_ID), 1);
+
+    tokenChunkCache.clearForTests(); // 模拟进程重启
+    assert.equal(await tokenChunkCache.seedFromKkv(kkv, SESSION_ID), 1, "重启后重新 seed");
+    assert.equal(gets(), 2);
+    assert.equal(tokenChunkCache.lookup(chunkHash16("重启块。"), SCOPE), 6);
+  });
+
+  it("脏标记：有新 record 的轮次照常落库，随后无新记录的轮次跳过整表写", async () => {
+    const { kkv, sets } = instrumentChunkRowKkv();
+
+    // 轮次 1：有新块 → 脏 → 整表落库
+    assert.ok(countRound("甲句正文。乙句正文。", SCOPE).length > 0);
+    tokenChunkCache.advanceGeneration(SESSION_ID, {
+      persist: { sessionKkv: kkv },
+      realRefresh: true,
+    });
+    await flushMicrotasks();
+    assert.equal(sets(), 1, "有新记录的轮次必须落库");
+    const first = await kkv.get(
+      SESSION_ID,
+      SESSION_KKV_DOMAIN_TOKEN_CHUNKS,
+      TOKEN_CHUNKS_CACHE_KEY
+    );
+    assert.ok(first != null);
+
+    // 轮次 2：全部命中、零 record → 干净 → 跳过序列化与写入
+    assert.equal(countRound("甲句正文。乙句正文。", SCOPE).length, 0, "夹具前提：本轮零 record");
+    tokenChunkCache.advanceGeneration(SESSION_ID, {
+      persist: { sessionKkv: kkv },
+      realRefresh: true,
+    });
+    await flushMicrotasks();
+    assert.equal(sets(), 1, "无新记录的轮次不得重复整表落库");
+    assert.equal(
+      await kkv.get(
+        SESSION_ID,
+        SESSION_KKV_DOMAIN_TOKEN_CHUNKS,
+        TOKEN_CHUNKS_CACHE_KEY
+      ),
+      first,
+      "跳过的轮次库里内容原样不动"
+    );
+    // 代际轮换照旧执行（内存语义不变）
+    assert.deepEqual(tokenChunkCache.stats().genCounts, [0, 2, 0]);
+
+    // 轮次 3：又有新块 → 重新落库
+    assert.ok(countRound("丙句正文。", SCOPE).length > 0);
+    tokenChunkCache.advanceGeneration(SESSION_ID, {
+      persist: { sessionKkv: kkv },
+      realRefresh: true,
+    });
+    await flushMicrotasks();
+    assert.equal(sets(), 2, "脏标记复位后有记录的轮次重新落库");
+    assert.notEqual(
+      await kkv.get(
+        SESSION_ID,
+        SESSION_KKV_DOMAIN_TOKEN_CHUNKS,
+        TOKEN_CHUNKS_CACHE_KEY
+      ),
+      first,
+      "新一轮的整表内容确实变了"
+    );
+  });
+
+  it("脏标记在安排写入后清：随后只有「提升」（零 record）的轮次不再整表写", async () => {
+    const { kkv, sets } = instrumentChunkRowKkv();
+    const chunk = "甲句正文。";
+
+    assert.ok(countRound(chunk, SCOPE).length > 0, "夹具前提：本轮有新块 → 脏");
+    tokenChunkCache.advanceGeneration(SESSION_ID, {
+      persist: { sessionKkv: kkv },
+      realRefresh: true,
+    });
+    await flushMicrotasks();
+    assert.equal(sets(), 1, "脏轮次落库一次");
+
+    // 触碰同一块（命中并提升回当前代，零 record）后推进：内容没变，不该再写
+    assert.ok(
+      tokenChunkCache.lookup(chunkHash16(chunk), SCOPE) !== undefined,
+      "夹具前提：块可命中（提升路径）"
+    );
+    tokenChunkCache.advanceGeneration(SESSION_ID, {
+      persist: { sessionKkv: kkv },
+      realRefresh: true,
+    });
+    await flushMicrotasks();
+    assert.equal(sets(), 1, "写入安排过之后，零 record 的轮次不得重复整表写");
+  });
+
+  it("未装配持久化通道的轮次不清脏：下一轮真实刷新照常落库", async () => {
+    const { kkv, sets } = instrumentChunkRowKkv();
+    const chunk = "甲句正文。";
+
+    countRound(chunk, SCOPE); // 脏 → 但本轮没装配持久化通道
+    tokenChunkCache.advanceGeneration(SESSION_ID);
+    assert.equal(sets(), 0, "未装配持久化通道不落库");
+
+    // 触碰提升（零 record）后走一条真实刷新轮次：脏标记仍在 → 照常落库
+    assert.ok(tokenChunkCache.lookup(chunkHash16(chunk), SCOPE) !== undefined);
+    tokenChunkCache.advanceGeneration(SESSION_ID, {
+      persist: { sessionKkv: kkv },
+      realRefresh: true,
+    });
+    await flushMicrotasks();
+    assert.equal(sets(), 1, "跳过持久化的轮次不能顺手把脏标记清了");
+    const raw = await kkv.get(
+      SESSION_ID,
+      SESSION_KKV_DOMAIN_TOKEN_CHUNKS,
+      TOKEN_CHUNKS_CACHE_KEY
+    );
+    assert.deepEqual(JSON.parse(raw as string).items, [
+      [chunkHash16(chunk), SCOPE, chunk.length],
+    ]);
+  });
+
+  /**
+   * r3-l2-1：seed-once 的登记**只在读成功时才有资格留下**。读抛错 / 坏行
+   * 两个失败分支必须撤销登记，否则一次瞬时读错（库忙、连接瞬断、并发写坏
+   * 行）就把整个进程内该会话的跨重启续命锁死——既永远拿不到种子，又每轮
+   * 白付一次整表读。
+   */
+  it("seed 读抛错会撤销登记：第二轮仍发 KKV 读（gets===2）并能正常载入种子", async () => {
+    const base = createMemorySessionKkv();
+    await seedRow(base, SESSION_ID, [[chunkHash16("重试种子块。"), SCOPE, 9]]);
+    let gets = 0;
+    let failNext = true;
+    const flakyKkv = {
+      ...base,
+      async get(sessionId: string, domain: string, key: string) {
+        if (domain === SESSION_KKV_DOMAIN_TOKEN_CHUNKS && key === TOKEN_CHUNKS_CACHE_KEY) {
+          gets += 1;
+          if (failNext) {
+            failNext = false;
+            throw new Error("db busy");
+          }
+        }
+        return base.get(sessionId, domain, key);
+      },
+    };
+
+    const warnings = captureWarnings();
+    let seeded: number;
+    try {
+      seeded = await tokenChunkCache.seedFromKkv(flakyKkv, SESSION_ID);
+    } finally {
+      warnings.restore();
+    }
+    assert.equal(seeded, 0, "首轮读抛错：按无种子处理");
+    assert.equal(gets, 1, "首轮发了 KKV 读");
+    assert.equal(
+      tokenChunkCache.lookup(chunkHash16("重试种子块。"), SCOPE),
+      undefined,
+      "读失败不得造数"
+    );
+
+    // 第二轮：登记必须已被撤销 → 真的再发一次读，并成功载入种子
+    assert.equal(
+      await tokenChunkCache.seedFromKkv(flakyKkv, SESSION_ID),
+      1,
+      "读失败后第二轮应重试并载入种子"
+    );
+    assert.equal(gets, 2, "读失败不得把会话永久登记成已 seed（r3-l2-1）");
+    assert.equal(tokenChunkCache.lookup(chunkHash16("重试种子块。"), SCOPE), 9);
+
+    // 第三轮：读成功了才轮到节流生效
+    assert.equal(await tokenChunkCache.seedFromKkv(flakyKkv, SESSION_ID), 0);
+    assert.equal(gets, 2, "成功读过一次后才节流");
+  });
+
+  it("seed 读到坏行同样撤销登记：下一轮读到正常行仍能载入（gets===2）", async () => {
+    const base = createMemorySessionKkv();
+    // 库里的行本身是好的（模拟「瞬时被写坏、随后被写侧修好」）：只有读到的
+    // 那一次返回坏载荷，底层存储不被本次用例改动。
+    await seedRow(base, SESSION_ID, [[chunkHash16("修好后块。"), SCOPE, 8]]);
+    let gets = 0;
+    let badNext = true;
+    const flakyKkv = {
+      ...base,
+      async get(sessionId: string, domain: string, key: string) {
+        if (domain === SESSION_KKV_DOMAIN_TOKEN_CHUNKS && key === TOKEN_CHUNKS_CACHE_KEY) {
+          gets += 1;
+          if (badNext) {
+            badNext = false;
+            return "{broken";
+          }
+        }
+        return base.get(sessionId, domain, key);
+      },
+    };
+
+    assert.equal(
+      await tokenChunkCache.seedFromKkv(flakyKkv, SESSION_ID),
+      0,
+      "首轮坏行：静默按无种子处理"
+    );
+    assert.equal(gets, 1);
+    assert.equal(tokenChunkCache.stats().total, 0, "坏行不得载入任何条目");
+
+    assert.equal(
+      await tokenChunkCache.seedFromKkv(flakyKkv, SESSION_ID),
+      1,
+      "坏行后下一轮应重试"
+    );
+    assert.equal(gets, 2, "坏行不得把会话永久登记成已 seed（r3-l2-1）");
+    assert.equal(tokenChunkCache.lookup(chunkHash16("修好后块。"), SCOPE), 8);
+  });
+});

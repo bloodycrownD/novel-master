@@ -34,8 +34,20 @@ import { createDefaultTokenCounterRegistry } from "../../src/infra/tokenizer/ind
 import { invalidateSessionApiPromptTokenEntry } from "../../src/infra/tokenizer/logic/session-api-prompt-token-store.js";
 import {
   PROMPT_TOKENS_LAST_USAGE_KEY,
+  RULE_SNAPSHOT_CANON_KEY,
+  SESSION_KKV_DOMAIN_FILE_CACHE,
   SESSION_KKV_DOMAIN_PROMPT_TOKENS,
+  SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
+  fileCacheKey,
 } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
+import {
+  serializeFileCachePayload,
+  serializeRuleSnapshot,
+} from "../../src/domain/workplace/logic/rule-snapshot-codec.js";
+import {
+  clearChatTokenEstimateMemo,
+  lookupWorkplaceEstimateByFingerprint,
+} from "../../src/infra/tokenizer/logic/chat-token-estimate-memo.js";
 import type { SessionKkvService } from "../../src/service/session-kkv/session-kkv.port.js";
 import {
   EVENT_AGENT_STEP_COMMITTED,
@@ -895,5 +907,141 @@ describe("AgentRunner → TokenRatioConditionTrigger → 读口 接线 (G-1)", (
       longRun.tokenCount > shortRun.tokenCount * 10,
       `tools 段应进压缩评估的估算串：short=${shortRun.tokenCount} long=${longRun.tokenCount}`
     );
+  });
+});
+
+/**
+ * r4-core-2（P1）：run 侧曾把 assemble 顺产的 `fingerprint` 丢在解构外，
+ * `promptRenderCtx` 里也没有 `workplaceFingerprint` → 压缩评估链（token-ratio
+ * trigger 消费 `evaluation.ctx`）全程无指纹：既不命中估算记忆、也不走增量
+ * 分解，①②批的收益在 run 侧评估链归零。
+ *
+ * 本组钉住那一行透传：真 runner + 真 assemble（走 KKV 缓存命中）+ 真读口。
+ * 自验方式：删掉 `promptRenderCtx` 里的 `workplaceFingerprint` 一行，本组必红。
+ */
+describe("AgentRunner → 压缩评估 ctx 的组装指纹透传 (r4-core-2)", () => {
+  beforeEach(() => {
+    registerNodeTokenizerDriverForTests();
+    sessionApiPromptTokenCache.clearAll();
+    sessionKkv = createMemorySessionKkv();
+    clearChatTokenEstimateMemo();
+  });
+
+  afterEach(() => {
+    sessionApiPromptTokenCache.clearAll();
+    clearChatTokenEstimateMemo();
+  });
+
+  it("评估那次 resolve 收到的 ctx.workplaceFingerprint 非空、等于 assemble 产物、且增量分解的按指纹缓存被填充", async () => {
+    // sessionId 三合一（workplaceScope / kkvScope 都指自身）：assemble 的
+    // kkvSessionId = session.kkvScopeSessionId，必须与下面预置的 KKV 同键。
+    const session = new InMemoryAgentSession(SESSION_ID);
+    await session.append("user", textBlocks("go"));
+
+    // 预置规则快照 + file_cache：assemble 走「缓存命中」路径，不需要 workplace
+    // 评估也不需要读 VFS——本用例锁的是「指纹有没有传下去」，不是组装本身。
+    const FIXED_MTIME = 1_700_000_000_000;
+    const body = "正文甲".repeat(30);
+    await sessionKkv.set(
+      SESSION_ID,
+      SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
+      RULE_SNAPSHOT_CANON_KEY,
+      serializeRuleSnapshot([{ path: "/a.md", status: "full" }])
+    );
+    await sessionKkv.set(
+      SESSION_ID,
+      SESSION_KKV_DOMAIN_FILE_CACHE,
+      fileCacheKey("full", "/a.md"),
+      serializeFileCachePayload({ body, mtimeMs: FIXED_MTIME })
+    );
+
+    const model = createMockModel([
+      {
+        assistantText: "done",
+        blocks: [{ type: "text", text: "done" }],
+        raw: {},
+      },
+    ]);
+    const tokenRegistry = createDefaultTokenCounterRegistry(emptyRegistryDeps());
+    const evaluatedFingerprints: Array<string | undefined> = [];
+
+    const runner = createAgentRunner(
+      runnerDeps({
+        session,
+        modelRequests: model,
+        registry: new ToolRegistry(),
+        toolCtx: mockToolCtx(mockVfs()),
+        compactionConditions: {
+          async shouldRequestCompaction(_session, evaluation) {
+            evaluatedFingerprints.push(evaluation.ctx.workplaceFingerprint);
+            // 与真 trigger 同款消费口径（preferEstimate + tools + sessionKkv）：
+            // 指纹若真到了 ctx，这里就会走增量分解并按指纹回填估读缓存。
+            await resolveCurrentPromptTokens(
+              evaluation.sessionId,
+              {
+                layout: evaluation.layout,
+                ctx: evaluation.ctx,
+                savedModelId: evaluation.modelContext.savedModelId,
+                registry: tokenRegistry,
+                ...(evaluation.tools != null
+                  ? { tools: evaluation.tools }
+                  : {}),
+              },
+              { sessionKkv: evaluation.sessionKkv, preferEstimate: true },
+            );
+            return false;
+          },
+          async getHideStartDepth() {
+            return 6;
+          },
+        },
+        messages: {
+          listBySession: async () => [],
+        } as unknown as MessageService,
+        messageTranscriptEffects: {
+          hideMessagesInRange: async () => {},
+          showMessagesInRange: async () => {},
+          truncateMessagesAfter: async () => {},
+          setMessageFloorAtMessage: async () => {},
+        } as unknown as MessageTranscriptEffectsService,
+      }),
+    );
+
+    const result = await runner.run({
+      maxSteps: 1,
+      definition: {
+        name: "test",
+        // 开 workplace 块：否则 assemble 短路返回空指纹，本用例的牙就没了。
+        prompts: { workplace: "【done】", persist: [], dynamic: [] },
+      },
+      ...defaultRunScope,
+    });
+    assert.equal(result.stopReason, "completed");
+    assert.ok(
+      evaluatedFingerprints.length >= 1,
+      "压缩评估应至少被调一次（否则本用例观察不到 ctx）"
+    );
+
+    const expected = `/a.md|full|${FIXED_MTIME}|${body.length}`;
+    for (const fingerprint of evaluatedFingerprints) {
+      assert.equal(
+        typeof fingerprint,
+        "string",
+        "评估 ctx 必须带 workplaceFingerprint（run 侧不得丢指纹）"
+      );
+      assert.ok(
+        (fingerprint ?? "").length > 0,
+        "评估 ctx 的 workplaceFingerprint 必须非空"
+      );
+      assert.equal(
+        fingerprint,
+        expected,
+        "指纹应逐字等于 assemble 产物（path|status|mtimeMs|bodyLength）"
+      );
+      assert.ok(
+        lookupWorkplaceEstimateByFingerprint(fingerprint!) != null,
+        "增量分解的按指纹估读缓存应被填充（证明指纹真到了 resolve，而非只到 trigger）"
+      );
+    }
   });
 });

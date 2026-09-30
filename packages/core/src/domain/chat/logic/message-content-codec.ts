@@ -18,6 +18,10 @@ import {
   tightBytes,
   VFS_CONTENT_ENCODING_ZLIB,
 } from "@/domain/vfs/content-store/logic/zlib-codec.js";
+import {
+  lookupDecodedMessageContent,
+  rememberDecodedMessageContent,
+} from "@/infra/content-cache/logic/decoded-content-cache.js";
 import { chatInvalidArgument } from "@/errors/chat-errors.js";
 
 /** {@link encodeMessageContent} 产物：写 chat_message 压缩两列所需字段。 */
@@ -54,15 +58,25 @@ export function encodeMessageContent(
  * 失败同语义：消息是用户数据本体，fail-fast 不做 file_cache 式静默
  * miss 自愈。
  *
+ * 本函数是进程内**消息正文统一读口**：解压产物按 messageId 记进
+ * `infra/content-cache`（转录展示 / token 组装 / 发送前奏 / 用量弹窗
+ * 工具计数都从这里取），重复读不再逐次 inflate。身份契约见该模块头
+ * ——同 id 换正文只走 `updateContent`，那里必须 forget。
+ *
  * @param encoding `content_encoding` 列值。
  * @param blob `content_blob` 列值（zlib 二进制 / zlib-b64 文本或 UTF-8 字节）。
- * @param messageId 错误文案中的消息 id（T-C4：损坏 blob 不静默丢行）。
+ * @param messageId 消息 id：错误文案用，也是缓存键（须传真实主键，
+ *   伪造/复用同一 id 配不同正文会读到旧值）。
  */
 export function decodeMessageContent(
   encoding: unknown,
   blob: unknown,
   messageId: string
 ): string {
+  const cached = lookupDecodedMessageContent(messageId);
+  if (cached != null) {
+    return cached;
+  }
   const encodingText =
     typeof encoding === "string"
       ? encoding
@@ -74,7 +88,9 @@ export function decodeMessageContent(
       blob,
       `chat_message.content_blob`
     );
-    return new TextDecoder().decode(decompressZlib(compressed));
+    const json = new TextDecoder().decode(decompressZlib(compressed));
+    rememberDecodedMessageContent(messageId, json);
+    return json;
   } catch (error) {
     throw chatInvalidArgument(
       `消息正文解压失败（不静默丢行，请反馈此 id）: ${messageId}: ${

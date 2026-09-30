@@ -20,6 +20,7 @@ import {
 } from "./ipc/forward-agent-activity.js";
 import { setWorkspaceMutatedForwardTarget } from "./ipc/forward-workspace-mutated.js";
 import { setComposerAttachmentsSuggestForwardTarget } from "./ipc/forward-composer-attachments-suggest.js";
+import { setPromptChatTokenUpdatedForwardTarget } from "./ipc/forward-prompt-chat-token-updated.js";
 import { setUserMessageAppendedForwardTarget } from "./ipc/forward-user-message-appended.js";
 import { registerIpcHandlers } from "./ipc/register-handlers.js";
 import { getDesktopRuntime } from "./runtime/desktop-runtime-singleton.js";
@@ -117,6 +118,7 @@ function createMainWindow(): BrowserWindow {
   };
   setWorkspaceMutatedForwardTarget(resolvePushWebContents);
   setComposerAttachmentsSuggestForwardTarget(resolvePushWebContents);
+  setPromptChatTokenUpdatedForwardTarget(resolvePushWebContents);
   setUserMessageAppendedForwardTarget(resolvePushWebContents);
   setAgentActivityForwardTarget(resolvePushWebContents);
 

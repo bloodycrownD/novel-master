@@ -23,6 +23,19 @@
  * 的 parse 防御）；KKV 写失败只 warn 不抛——缓存是纯加速数据，持久化不该
  * 把计数路径打断。
  *
+ * **每轮省掉整表链（2026-09-30 真机 12.5s 病根）**：整表是一条 MB 级 JSON
+ * 链（读=整表 select + `JSON.parse` + 全量 Map 重建；写=整表序列化 + 覆盖
+ * 写），历史消息多的会话一次本地计数就能把它走满一遍。两条止血：
+ * - **seed-once**（{@link tokenChunkCache.seedFromKkv}）：每会话每进程只
+ *   真读一次 KKV 行。热层里只会有更新的数据（我们自己覆盖写的就是最新一
+ *   份），重复 seed 是纯粹的重复劳动。
+ * - **脏标记跳过持久化**（`record` 置脏、{@link tokenChunkCache.advanceGeneration}
+ *   消费）：本轮周期没有任何新块计数时，当前代与上一次落盘的内容一致，整表
+ *   序列化 + 覆盖写整条省掉。**代际轮换照旧执行**（内存语义不变），只省持久化。
+ *
+ * 两处都只影响加速数据的落/读时机，不影响任何计数口径：漏种子或漏写只会
+ * 让下次进程重启少一批种子块（重算一次），绝不会算错。
+ *
  * @module infra/tokenizer/logic/token-chunk-cache
  */
 
@@ -124,6 +137,26 @@ let genThird = new Map<string, number>();
 let maxTotalEntries = CHUNK_CACHE_MAX_TOTAL_ENTRIES;
 let hits = 0;
 let misses = 0;
+
+/**
+ * 已完成 KKV 种子载入的会话（每会话每进程只 seed 一次）。
+ *
+ * 该 KKV 行在本进程内只会被 {@link tokenChunkCache.advanceGeneration} 的
+ * 覆盖写更新，写出去的就是更完整的一份；重复读回来 parse + 重建只是把热层
+ * 已有（且更新鲜）的数据又灌一遍最旧代。漏 seed 的唯一后果是跨重启少一批
+ * 种子块（首次计数重算），口径不受影响。
+ */
+const seededSessions = new Set<string>();
+
+/**
+ * 当前代自上次**安排**持久化以来是否有过新记录（`record` 置位）。
+ *
+ * false ⇒ 当前代与上次落盘的内容逐条相同，整表序列化 + 覆盖写纯浪费，跳过。
+ * 注意只被 `record` 置位：`lookup` 的「提升至当前代」不改任何计数，漏记它
+ * 最多让某条块计数不进这次的种子表（下次重启重算一次），不值得为它每轮多
+ * 写一次整表。
+ */
+let currentGenDirty = false;
 
 /** 总量超限时淘汰：先清最旧代，仍超再清次旧代，最后按插入序裁当前代。 */
 function enforceTotalCap(): void {
@@ -255,16 +288,21 @@ export const tokenChunkCache = {
   /** 记一块的 token 数（写当前代，覆盖同键旧值），随后执行总量上限淘汰。 */
   record(hash16: string, scope: string, count: number): void {
     genCurrent.set(buildEntryKey(hash16, scope), count);
+    currentGenDirty = true;
     enforceTotalCap();
   },
 
   /**
    * 推进一代（当前→二→三淘汰），一轮整 prompt 计数收尾调用一次。
    *
-   * 当 `options.persist.sessionKkv` 存在且 `options.realRefresh === true`
-   * 时，把**推进前**的当前代整表（即刚完成的这轮计数周期）序列化写
-   * session KKV（域 `token_chunks`、键 `chunkCache`）。写是 fire-and-forget：
-   * 失败只 warn——缓存持久化不值得打断计数路径。
+   * 当 `options.persist.sessionKkv` 存在、`options.realRefresh === true`
+   * **且本轮周期有过新记录**（`currentGenDirty`）时，把**推进前**的当前代
+   * 整表（即刚完成的这轮计数周期）序列化写 session KKV（域 `token_chunks`、
+   * 键 `chunkCache`）。写是 fire-and-forget：失败只 warn——缓存持久化不值得
+   * 打断计数路径。
+   *
+   * 无新记录的轮次跳过序列化与写入（整表内容与上次落盘逐条相同）；**代际
+   * 轮换在任何分支都照旧执行**，内存语义与优化前完全一致。
    */
   advanceGeneration(
     sessionId: string,
@@ -272,7 +310,7 @@ export const tokenChunkCache = {
   ): void {
     const sessionKkv = options?.persist?.sessionKkv;
     const payload =
-      sessionKkv != null && options?.realRefresh === true
+      sessionKkv != null && options?.realRefresh === true && currentGenDirty
         ? serializeCurrentGeneration()
         : null;
 
@@ -284,6 +322,9 @@ export const tokenChunkCache = {
     genCurrent = evicted;
 
     if (sessionKkv != null && payload != null) {
+      // 脏标记在**安排**写入后即清（不等落库结果）：整表写入是 fire-and-forget
+      // 的覆盖写，没有重试语义；等落库反而会让写失败时下一轮又付一次整表代价。
+      currentGenDirty = false;
       void sessionKkv
         .set(sessionId, SESSION_KKV_DOMAIN_TOKEN_CHUNKS, TOKEN_CHUNKS_CACHE_KEY, payload)
         .catch((error) => {
@@ -299,6 +340,20 @@ export const tokenChunkCache = {
    * 从 session KKV 载入持久化整表为**最旧可用代**种子（第三代，不顶当前
    * 代——热层当前代的条目更新鲜）。返回载入条数；KKV 行缺失 / 坏 JSON /
    * `v` 不符 / 字段非法 / 读库异常一律静默返回 0（按无种子处理，不抛错）。
+   *
+   * **每会话每进程只真读一次**（2026-09-30 真机 12.5s 止血）：已 seed 过的
+   * 会话直接返回 0，连 `sessionKkv.get` 都不发——该行在本进程内只会被
+   * {@link tokenChunkCache.advanceGeneration} 覆盖成更新的内容，重复读只是把
+   * 热层已有的数据再 parse 一遍。`clearForTests` 会复位这份记录。
+   *
+   * **失败可重试（2026-09-30 r3-l2-1）**：读抛错、以及「行存在但解析不出来」
+   * （截断 / `v` 不符 / 字段非法）两个失败分支都**撤销登记**
+   * （`seededSessions.delete(sessionId)` 再 return 0）——seed-once 的登记只
+   * 在「这次读确实成功，或库里确实没这一行」时才有资格留下。库忙、连接瞬断、
+   * 并发写坏行都是瞬态，一次读错就锁死整个进程内该会话的跨重启续命（每轮
+   * 都白付一次整表读、又永远拿不到种子）是最坏结果。留下的代价：库里长期是
+   * 坏行时每轮都会重试一次整表读（与 12.5s 止血目标相反），但「加速」让位于
+   * 「正确性」，且坏行属于应当被上游写侧修掉的异常形态，不是常态。
    */
   async seedFromKkv(
     sessionKkv: SessionKkvService | null | undefined,
@@ -307,6 +362,11 @@ export const tokenChunkCache = {
     if (sessionKkv == null) {
       return 0;
     }
+    if (seededSessions.has(sessionId)) {
+      return 0;
+    }
+    // 先登记再 await：并发调用也只发一次读（同一行读两遍没有意义）。
+    seededSessions.add(sessionId);
     let raw: string | null;
     try {
       raw = await sessionKkv.get(
@@ -319,10 +379,20 @@ export const tokenChunkCache = {
         `[novel-master/token-chunk-cache] token_chunks KKV 读取失败（session=${sessionId}），按无种子处理`,
         error
       );
+      // 撤销登记：读失败是瞬时的，不撤销则本进程内该会话永远失去种子。
+      seededSessions.delete(sessionId);
       return 0;
     }
     const items = parseTokenChunkCachePayload(raw);
     if (items == null) {
+      // 只有「行存在但坏」（截断 / 版本不符 / 字段非法）才撤销登记：那种行
+      // 可能是别的写入方瞬态写坏、随后被修好，留着登记会让本进程永久按
+      // 「无种子」处理。**行不存在（首次运行/该会话还没落过盘）不是失败**——
+      // 那就是「本来就没东西可 seed」，撤销登记等于把 seed-once 整个废掉
+      // （此后每轮都白读一次整表，正是本次要治的病）。
+      if (raw != null && raw.length > 0) {
+        seededSessions.delete(sessionId);
+      }
       return 0;
     }
     for (const [hash16, scope, count] of items) {
@@ -333,7 +403,12 @@ export const tokenChunkCache = {
     return items.length;
   },
 
-  /** 测试用：清空三代与命中计数，并恢复默认总量上限。 */
+  /**
+   * 测试用：清空三代与命中计数，并恢复默认总量上限。
+   *
+   * 同时复位 {@link seededSessions} 与脏标记——否则 seed-once 会让「模拟进程
+   * 重启后重新 seed」的后续用例静默按已 seed 处理。
+   */
   clearForTests(): void {
     genCurrent.clear();
     genSecond.clear();
@@ -341,6 +416,8 @@ export const tokenChunkCache = {
     hits = 0;
     misses = 0;
     maxTotalEntries = CHUNK_CACHE_MAX_TOTAL_ENTRIES;
+    seededSessions.clear();
+    currentGenDirty = false;
   },
 
   /** 测试用：注入小总量上限（clearForTests 会恢复默认值）。 */
