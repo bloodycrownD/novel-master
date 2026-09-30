@@ -5,56 +5,55 @@
  * zlib 解压（Hermes 纯 JS inflate 是数倍放大，实测占读链 90%+ 成本）。
  * 而同一份内容被反复读取的场景非常密集：
  * - workplace 常驻前缀：每次进会话 / 每次 chip 刷新都把同一批文件正文
- *   再解压一遍（暖组装几百 ms 全在这里）；
- * - 消息正文：token 组装、转录展示、发送前奏、用量弹窗工具计数各读各的，
- *   同一批可见消息一天要解压几十遍。
+ *   再解压一遍（暖组装几百 ms 全在这里）。
  *
- * 本模块把这些**解压后的产物**按内容身份收进进程内 LRU，作为唯一一层
+ * 本模块把**解压后的产物**按内容身份收进进程内 LRU，作为唯一一层
  * （不是每个读口一份补丁）：谁先读谁付一次解压，之后全是内存命中。
- * 三个读口共用本层——vfs content-store、session-kkv file_cache、
- * chat_message 正文解码。
  *
- * ## 两个池，两种身份
+ * ## 单池：内容正文池（contentBodyPool）
  *
- * - **内容正文池**（`contentBodyPool`）：键 = 明文 sha256 hex。`vfs_content_blob`
- *   与 `session_file_cache_blob` 的 content_hash 都是 `hashContent(明文)`
- *   （同一个纯函数），所以同一位文件正文在两套存储里天然同键——一份内存
- *   同时服务 vfs.read（文件预览 / 工具读盘 / workplace 冷回填）与 file_cache
- *   读链。**这池不需要任何失效机制**：键是内容的密码学哈希，同键必同值
- *   （value 是 key 的函数），不存在陈旧窗口——这就是用户要的「内容寻址」。
- *   注意「命中不查库」的后果：某条 blob 行被 GC 回收后，同进程内照样读得到
- *   该正文（正文正确性由 hash 保证，与行在不在无关）；因此
- *   `scanContents` 那条「缺 blob 必抛」的失败语义只在冷态成立，热态静默成功
- *   （见 `sqlite-vfs-entry.repository.ts` 的 scanContents 分支）。生产接受这个
- *   取舍：内存层只是把明文的寿命延长到进程结束，重启即回到冷态、语义复原。
- * - **消息正文池**（`messageContentPool`）：键 = message id。chat_message 没有
- *   内容哈希列（曾有过加列方案，同日撤回），只能以主键为身份 + 写入点显式
- *   失效：唯一会「同 id 换正文」的写口是 `updateContent`，它必须调用
- *   {@link forgetDecodedMessageContent}。id 全仓 `randomUUID()` 生成、从不复用
- *   （append/fork/copy 均新 id），所以删除/回滚留下的死条目没有正确性风险，
- *   由 LRU 自然回收；后台压缩搬运与 blob 归一任务只换字节形态、正文不变，
- *   同样无需失效。
+ * 键 = 明文 sha256 hex。`vfs_content_blob` 与 `session_file_cache_blob`
+ * 的 content_hash 都是 `hashContent(明文)`（同一个纯函数），所以同一位文件
+ * 正文在两套存储里天然同键——一份内存同时服务 vfs.read（文件预览 / 工具
+ * 读盘 / workplace 冷回填）与 file_cache 读链。**这池不需要任何失效
+ * 机制**：键是内容的密码学哈希，同键必同值（value 是 key 的函数），不存在
+ * 陈旧窗口——这就是用户要的「内容寻址」。注意「命中不查库」的后果：某条
+ * blob 行被 GC 回收后，同进程内照样读得到该正文（正文正确性由 hash 保证，
+ * 与行在不在无关）；因此 `scanContents` 那条「缺 blob 必抛」的失败语义只
+ * 在冷态成立，热态静默成功（见 `sqlite-vfs-entry.repository.ts` 的
+ * scanContents 分支）。生产接受这个取舍：内存层只是把明文的寿命延长到
+ * 进程结束，重启即回到冷态、语义复原。
+ *
+ * ## chat_message 正文已退出本层（2026-09-30 message-plaintext 迭代）
+ *
+ * 曾经的第二个池（消息正文池，键 = message id）与它的三 API
+ * （lookup / remember / forget）随 chat_message 全库明文化一并删除：本迭代
+ * 决定新行直写明文，压缩仅剩存量待搬运的形态，聊天侧再不值得为它维持一个
+ * 「同 id 换正文必须失效」的不变式（那个义务过去挂在 updateContent / insert
+ * / batchInsert / delete 四处写口上，是压缩形态独有的复杂度）。存量压缩行在
+ * 反向搬运收敛前重复读退化为每次解压——短窗口代价，换取彻底删掉一层缓存
+ * 与四处失效纪律，迁移完成后连 decodeMessageContent 一并退役（V1'）。
  *
  * ## 池的作用域是进程，不是连接/库
  *
- * 两池都是模块级单例，按**进程**共享，前提是每进程单库单连接（desktop /
- * mobile 现状）。同进程若出现第二个连接或换库，两池会继续拿旧库的内容作答
- * （消息池按 id 取，串池最明显），必须走 `bootstrapNovelMaster` 清池——它已在
- * 入口调用 {@link clearDecodedContentCaches}（见 bootstrap 模块头的说明）。
+ * 池是模块级单例，按**进程**共享，前提是每进程单库单连接（desktop /
+ * mobile 现状）。同进程若出现第二个连接或换库，池会继续拿旧库的内容作答，
+ * 必须走 `bootstrapNovelMaster` 清池——它已在入口调用
+ * {@link clearDecodedContentCaches}（见 bootstrap 模块头的说明）。
  *
  * ## 只存字符串，不存解析结果
  *
- * 池里存的是「解压产物」原样（文件正文 / 消息 blocks JSON 串），不是
- * parse 出来的对象：返回值会被多个消费方共享，存对象就等于把可变引用
- * 发到各处，谁改一下缓存就烂了。JSON.parse 本身远便宜于 inflate。
+ * 池里存的是「解压产物」原样（文件正文），不是 parse 出来的对象：返回值
+ * 会被多个消费方共享，存对象就等于把可变引用发到各处，谁改一下缓存就烂
+ * 了。JSON.parse 本身远便宜于 inflate。
  *
  * ## 内存上界
  *
- * 双上界（条数 + 字符数）：正文条目体量差异极大（一条消息几百字节、
- * 一个文件几 MB），只按条数兜不住。超限逐出最旧（Map 迭代序 = 插入序，
- * 命中时先删再插刷新 LRU）。单条超过整个池预算的**不收录**——收录即把
- * 别的条目全逐出去、下次读自己又被逐出，纯抖动。预算必须大于「一次
- * 会话的可见工作集」，否则顺序扫描会把自己逐出去退化成 0 命中。
+ * 双上界（条数 + 字符数）：正文条目体量差异极大（一条几百字节、一个文件
+ * 几 MB），只按条数兜不住。超限逐出最旧（Map 迭代序 = 插入序，命中时先删
+ * 再插刷新 LRU）。单条超过整个池预算的**不收录**——收录即把别的条目全逐
+ * 出去、下次读自己又被逐出，纯抖动。预算必须大于「一次会话的可见工作集」，
+ * 否则顺序扫描会把自己逐出去退化成 0 命中。
  *
  * @module infra/content-cache/logic/decoded-content-cache
  */
@@ -170,32 +169,17 @@ export class DecodedContentPool {
  * 内容正文池预算：8M 字符（UTF-16 计 ≈ 16MB 上限）。
  *
  * 标定口径：novel 项目的 workplace 是「几百 KB ~ 几 MB 的规则文件集」，
- * 压缩会话的可见消息集同量级；8M 字符足以一次容纳完整工作集，保住
+ * 压缩会话的可见文件集同量级；8M 字符足以一次容纳完整工作集，保住
  * 「顺序扫一遍即全部常驻」的命中形态。真要调小，先确认最大工作集
  * ——池小于工作集会退化成 0 命中（见模块头）。
  */
 const CONTENT_BODY_POOL_MAX_CHARS = 8_000_000;
 const CONTENT_BODY_POOL_MAX_ENTRIES = 1024;
 
-/**
- * 消息正文池预算：4M 字符 + 4096 条。
- *
- * 条数上界对齐「千条级会话的可见消息集」；字符上界同时兜长正文会话
- * （单条 20KB × 数百条 ≈ 数 M 字符）。
- */
-const MESSAGE_CONTENT_POOL_MAX_CHARS = 4_000_000;
-const MESSAGE_CONTENT_POOL_MAX_ENTRIES = 4096;
-
 const contentBodyPool = new DecodedContentPool({
   name: "content-body",
   maxEntries: CONTENT_BODY_POOL_MAX_ENTRIES,
   maxChars: CONTENT_BODY_POOL_MAX_CHARS,
-});
-
-const messageContentPool = new DecodedContentPool({
-  name: "message-content",
-  maxEntries: MESSAGE_CONTENT_POOL_MAX_ENTRIES,
-  maxChars: MESSAGE_CONTENT_POOL_MAX_CHARS,
 });
 
 /**
@@ -222,39 +206,12 @@ export function rememberDecodedContentBody(
   contentBodyPool.set(contentHash, body);
 }
 
-/** 查消息正文 JSON（键 = message id；口径见模块头「消息正文池」）。 */
-export function lookupDecodedMessageContent(messageId: string): string | null {
-  return messageContentPool.get(messageId);
-}
-
-/**
- * 回填消息正文 JSON。
- *
- * @param json blocks JSON 明文（`decodeMessageContent` 的产物形态）。
- */
-export function rememberDecodedMessageContent(
-  messageId: string,
-  json: string
-): void {
-  messageContentPool.set(messageId, json);
-}
-
-/**
- * 失效一条消息正文（**同 id 换正文的唯一写口 updateContent 必须调用**）。
- *
- * @remarks 删除/回滚不调用：id 不复用，死条目由 LRU 回收（模块头）。
- */
-export function forgetDecodedMessageContent(messageId: string): void {
-  messageContentPool.delete(messageId);
-}
-
-/** 仅测试与诊断：清空两池（条目与计数器一并归零，保证用例隔离）。 */
+/** 仅测试与诊断：清空内容正文池（条目与计数器一并归零，保证用例隔离）。 */
 export function clearDecodedContentCaches(): void {
   contentBodyPool.clear();
-  messageContentPool.clear();
 }
 
-/** 两池快照（测试断言命中形态 / 排查内存占用时用）。 */
+/** 内容正文池快照（测试断言命中形态 / 排查内存占用时用）。 */
 export function decodedContentCacheStats(): readonly DecodedContentPoolStats[] {
-  return [contentBodyPool.stats(), messageContentPool.stats()];
+  return [contentBodyPool.stats()];
 }

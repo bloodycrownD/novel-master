@@ -21,11 +21,7 @@ import {
 import type { ChatMessage, ChatMessageHeader } from "../../model/message.js";
 import type { MessageContent } from "../../model/content-block.js";
 import type { MessageUsage } from "../../model/message-usage.js";
-import {
-  decodeMessageContent,
-  encodeMessageContent,
-} from "../../logic/message-content-codec.js";
-import { forgetDecodedMessageContent } from "@/infra/content-cache/logic/decoded-content-cache.js";
+import { decodeMessageContent } from "../../logic/message-content-codec.js";
 import type { MessageRepository } from "../message.port.js";
 
 const MESSAGE_SELECT_COLUMNS = `id, session_id, seq, role, content_json, content_encoding, content_blob, provider, provider_id, raw_json, created_at_ms, hidden, attachments_json, prompt_tokens, completion_tokens, total_tokens, cache_read_tokens, cache_creation_tokens, model_name, first_token_ms, duration_ms`;
@@ -46,20 +42,21 @@ const MESSAGE_INSERT_SQL =
  * insert 走 executeTemplate 时由 SqlTemplateParser 按 `#{xxx}` 出现顺序收集参数，
  * 这里手写数组必须保持同一顺序——两边的列/`?`/参数三者完全对齐。
  *
- * 消息正文压缩：content_json 置空串 ''（NOT NULL 约束自然满足，blocks JSON
- * 恒非空串，'' 无歧义），正文走 content_encoding/content_blob 压缩两列
- * （编码收口在 {@link encodeMessageContent}，三端零感知）。
+ * 消息正文明文化（2026-09-30 拍板的全库明文决策）：content_json 直存
+ * blocks JSON 明文，content_encoding/content_blob 显式绑 NULL。两列名保留
+ * 在 INSERT 列清单里（列不删，schema CHECK 约束原样），只是新行恒为空——
+ * 读路径的双形态判定（{@link readRowContent} 的 blob 分支）在此期间为存量
+ * 压缩行服务，明文行为唯一正形态。
  */
 function toMessageParams(message: ChatMessage): unknown[] {
-  const encoded = encodeMessageContent(JSON.stringify(message.content));
   return [
     message.id,
     message.sessionId,
     message.seq,
     message.role,
-    "",
-    encoded.encoding,
-    encoded.blob,
+    JSON.stringify(message.content),
+    null,
+    null,
     message.provider,
     message.providerId ?? null,
     message.raw == null ? null : JSON.stringify(message.raw),
@@ -89,7 +86,8 @@ function readRowContent(row: Row): MessageContent {
       )
     );
   }
-  // legacy 明文行（e2e fixture 直插 / 压缩任务未搬运 / 整体回滚写路径）。
+  // 明文行是唯一正形态（2026-09-30 起写侧直写明文）：新写行、以及被反向
+  // 搬运任务解压回明文的存量行都走这里。压缩行仅在反向搬运收敛前共存。
   return parseMessageContent(String(row.content_json));
 }
 
@@ -169,11 +167,15 @@ export class SqliteMessageRepository implements MessageRepository {
   private static readonly ROW_PARSE_CHUNK = 50;
 
   /**
-   * batchInsert 参数构造分片大小：每片至多构造 200 条（toMessageParams 内
-   * 含 encodeMessageContent 同步压缩），片间让步一次——fork/copy 大会话
-   * 时压缩成本按片摊开，不长时间占住 JS 线程。
+   * batchInsert 参数构造分片大小：每片至多构造 200 条。
+   *
+   * 明文化后 toMessageParams 已无同步压缩，但分片让步继续有效——理由从
+   * CPU 换成了两件事：JSON.stringify 本身是同步重活，且参数数组会在内存
+   * 里驻留全量消息的明文 JSON（fork/copy 全会话，2-3× 于压缩 blob，见
+   * 消费处矩阵 #7）。200 条一片、片间让步，让这批内存与事件循环占用按片
+   * 摊开，不在主线程上堆成一个长任务。
    */
-  private static readonly BATCH_BUILD_CHUNK = 200;
+  private static readonly BATCH_PARAM_BUILD_CHUNK = 200;
 
   /**
    * @param conn - 数据库连接。
@@ -249,8 +251,9 @@ export class SqliteMessageRepository implements MessageRepository {
   async listMessageHeadersBySession(
     sessionId: string
   ): Promise<ChatMessageHeader[]> {
-    // 头投影：只取 id/seq/role/hidden/created_at_ms——不选 content 列即不解压
-    // 正文（压缩/置位等区间逻辑在大会话上曾是秒级全量解压的主源之一）。
+    // 头投影：只取 id/seq/role/hidden/created_at_ms——不选 content 列即不取
+    // 正文字节（新行本就是明文、存量行才需解压；不选列让两者都零成本，
+    // 大会话上这曾是秒级全量解压的主源之一）。
     const rows = await queryTemplate(
       this.conn,
       this.parser,
@@ -369,28 +372,25 @@ export class SqliteMessageRepository implements MessageRepository {
   }
 
   async updateContent(id: string, content: MessageContent): Promise<boolean> {
-    // JSON.stringify 下沉到 repository（消除 service 层序列化的不一致编码点；
-    // 压缩编码与 insert 同一收口）。
-    const encoded = encodeMessageContent(JSON.stringify(content));
+    // JSON.stringify 下沉到 repository（消除 service 层序列化的不一致编码点）。
+    //
+    // P0 约束——三列必须齐置：content_json 写新明文的同时，content_encoding
+    // 与 content_blob 一起置 NULL。编辑一条存量压缩行时若只写 content_json，
+    // 读路径 readRowContent 的「blob 非空优先」分支仍会解压出**旧正文**：
+    // 不崩溃、不报错，只是静默返回错内容（数据错乱，比崩溃更难发现）。
+    // 反例由 test/chat/message-plaintext-write.test.ts 的 T-MP1 锁死。
     const result = await executeTemplate(
       this.conn,
       this.parser,
       `UPDATE chat_message
-       SET content_json = '', content_encoding = #{encoding}, content_blob = #{blob}
+       SET content_json = #{json}, content_encoding = NULL, content_blob = NULL
        WHERE id = #{id}`,
-      { id, encoding: encoded.encoding, blob: encoded.blob }
+      { id, json: JSON.stringify(content) }
     );
-    // 进程内解压产物层按 id 缓存（infra/content-cache）：本处是「同 id 换
-    // 正文」的唯一写口，写入后必须失效，否则读路径会一直拿旧正文
-    // （编辑保存 / run 收尾改写都走这里）。
-    forgetDecodedMessageContent(id);
     return result.changes > 0;
   }
 
   async insert(message: ChatMessage): Promise<void> {
-    // id 理论不复用（全仓 randomUUID），防御性失效：万一有调用方拿固定 id
-    // 重插（测试夹具 / 未来导入），不留下旧正文。
-    forgetDecodedMessageContent(message.id);
     await this.conn.execute(MESSAGE_INSERT_SQL, toMessageParams(message));
   }
 
@@ -400,19 +400,18 @@ export class SqliteMessageRepository implements MessageRepository {
     if (messages.length === 0) {
       return;
     }
-    // 参数构造阶段分片（ic-30）：toMessageParams 内逐条 encodeMessageContent
-    // 同步压缩，5000+ 条一次性构造会把主线程压成单个长任务。200 条一片、
-    // 片间 await this.yieldFn?.() 让步；无 yieldFn 时（desktop/cli/测试缺省）
-    // 让步退化成 await undefined，构造仍是同步一次完成，行为与现状一致。
-    // 让步函数与 mapRows 共用同一个（构造器注入），两端装配只注入一处即可。
-    const chunkSize = SqliteMessageRepository.BATCH_BUILD_CHUNK;
+    // 参数构造阶段分片：toMessageParams 逐条 JSON.stringify 出明文，且参数
+    // 数组会驻留全量明文 JSON，5000+ 条一次性构造会把主线程压成单个长任务。
+    // 200 条一片、片间 await this.yieldFn?.() 让步；无 yieldFn 时
+    // （desktop/cli/测试缺省）让步退化成 await undefined，构造仍是同步一次
+    // 完成，行为与现状一致。让步函数与 mapRows 共用同一个（构造器注入），
+    // 两端装配只注入一处即可。
+    const chunkSize = SqliteMessageRepository.BATCH_PARAM_BUILD_CHUNK;
     const parameters: unknown[][] = [];
     for (let start = 0; start < messages.length; start += chunkSize) {
       const end = Math.min(start + chunkSize, messages.length);
       for (let i = start; i < end; i++) {
         const message = messages[i]!;
-        // 与 insert 同款的防御性失效（id 理论不复用，见 insert 注释）。
-        forgetDecodedMessageContent(message.id);
         parameters.push(toMessageParams(message));
       }
       if (end < messages.length) {
@@ -429,10 +428,6 @@ export class SqliteMessageRepository implements MessageRepository {
       `DELETE FROM chat_message WHERE id = #{id}`,
       { id }
     );
-    // 删除不必为正确性失效（id 不复用，见 infra/content-cache 模块头：
-    // 死条目由 LRU 回收），这里顺手清掉是因为删除路径天然知道 id，
-    // 让它占着预算没有意义。
-    forgetDecodedMessageContent(id);
     return result.changes > 0;
   }
 
@@ -503,8 +498,9 @@ export class SqliteMessageRepository implements MessageRepository {
     sessionId: string,
     query: MessageSearchQuery
   ): Promise<ChatMessage[]> {
-    // 正文压缩存储后 content_json 恒为空串，SQL LIKE 粗筛失效——改为
-    // 拉取 + 内存精筛（messageMatchesKeyword 与 service 层同一匹配）。
+    // 全量精筛（不做 LIKE 粗筛）：明文化让 content_json 重新有了明文，
+    // LIKE 看似可恢复，但存量行迁移期 content_blob 非空、LIKE 恒不命中，
+    // 搬完也是独立优化项——与本迭代解耦，全量精筛路径零改动。
     // 旧 LIKE 只是超集预筛（且会漏 thinking/tool_result 块含关键词的场景
     // 反被 role 粗筛误杀），新实现按 TextBlock 精确匹配，召回语义严格
     // 不小于现状；大会话搜索多付解压成本，与 listBySession 全量路径同量级。
