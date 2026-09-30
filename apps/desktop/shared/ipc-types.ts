@@ -1661,7 +1661,7 @@ export type BlobBinaryStatusDto = {
  * = 未取到（采样失败），renderer 显示占位 '—'，与 `blobBinary` 空表同口径。
  */
 export type MessageDecompressStatusDto = {
-  /** true = 已完成（KKV 标记已置且入口自愈探测未命中剩余压缩行）。 */
+  /** true = 已完成：KKV 标记已置位，或谓词计数为 0；本采样不做入口自愈探测（自愈只在搬运入口）。 */
   readonly done: boolean;
   /** 剩余压缩行计数（进行中态的「剩余 N 条」）。 */
   readonly pendingCount: number;

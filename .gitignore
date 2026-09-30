@@ -21,8 +21,8 @@ DerivedData/
 # React Native
 *.jsbundle
 
-# Android ¹¹½¨²úÎï£ºRN ´ò°ü bundle Óë autolink ×Ô¶¯¿½±´½ø res µÄµÚÈý·½×ÊÔ´
-# £¨index.android.bundle / node_modules Í¼±ê¿½±´ / keep.xml ¾ùÎª¹¹½¨Éú³É£¬ÎðÈë¿â£©
+# Android ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï£ºRN ï¿½ï¿½ï¿½ bundle ï¿½ï¿½ autolink ï¿½Ô¶ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ res ï¿½Äµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ô´
+# ï¿½ï¿½index.android.bundle / node_modules Í¼ï¿½ê¿½ï¿½ï¿½ / keep.xml ï¿½ï¿½Îªï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½É£ï¿½ï¿½ï¿½ï¿½ï¿½â£©
 apps/mobile/android/app/src/main/assets/index.android.bundle
 apps/mobile/android/app/src/main/res/drawable-mdpi/
 apps/mobile/android/app/src/main/res/drawable-xhdpi/
@@ -55,19 +55,25 @@ tmp/
 # Cursor IDE local files (debug logs, etc.)
 .cursor/
 
-# ZCode ¿Í»§¶Ë±¾µØÎÄ¼þ£¨ºöÂÔÇåµ¥Í¬²½²úÎï£¬²»Èë¿â£©
+# ZCode ï¿½Í»ï¿½ï¿½Ë±ï¿½ï¿½ï¿½ï¿½Ä¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½åµ¥Í¬ï¿½ï¿½ï¿½ï¿½ï¿½ï£¬ï¿½ï¿½ï¿½ï¿½â£©
 .zcodeignore
 
-# ±¾µØ worktree£¨agent ¹¤×÷Çø£©
+# ï¿½ï¿½ï¿½ï¿½ worktreeï¿½ï¿½agent ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 .worktree/
 
 # Git worktrees for parallel feature development
 .woktree/
 
-# ²Î¿¼ÏîÄ¿£¨½ö±¾µØ²éÔÄ£¬²»Èë¿â£©
+# ï¿½Î¿ï¿½ï¿½ï¿½Ä¿ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ø²ï¿½ï¿½Ä£ï¿½ï¿½ï¿½ï¿½ï¿½â£©
 .reference/
 
-# ±¾µØµ÷ÊÔ/²âÊÔÁÙÊ±²úÎï£¨mock ·þÎñÆ÷ÈÕÖ¾¡¢²âÊÔ»ùÏßÈÕÖ¾¡¢ÁÙÊ± jest ÅäÖÃ¸±±¾£©
+# ï¿½ï¿½ï¿½Øµï¿½ï¿½ï¿½/ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê±ï¿½ï¿½ï¿½ï£¨mock ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ö¾ï¿½ï¿½ï¿½ï¿½ï¿½Ô»ï¿½ï¿½ï¿½ï¿½ï¿½Ö¾ï¿½ï¿½ï¿½ï¿½Ê± jest ï¿½ï¿½ï¿½Ã¸ï¿½ï¿½ï¿½ï¿½ï¿½
 mock*.log
 .*.log
 .jc-*.js
+
+
+# æœ¬åœ°è°ƒè¯•/æµ‹è¯•ä¸´æ—¶äº§ç‰©
+.nm-regr-tmp/
+tmp-*.log
+docs/Iterations/*/cache/

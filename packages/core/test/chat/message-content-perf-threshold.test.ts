@@ -82,15 +82,27 @@ const MAX_RATIO = 1;
 const RATIO_FLOOR_MS = 5;
 
 /**
+ * 两侧夹具共用的 role 序列（T-MP-P0：护栏同构前提）。
+ *
+ * 压缩基线侧与明文侧必须逐行同 role——role 一旦进读路径（例如按 role
+ * 过滤/拼接），两侧不同构就会让护栏的「唯一差别是存储形态」失真，劣化
+ * 静默通过。故此处抽成单一函数，两侧都调它，不允许各写一份表达式。
+ */
+function roleAt(index: number): ChatMessage["role"] {
+  return index % 2 === 0 ? "assistant" : "user";
+}
+
+/**
  * 裸 INSERT 造一条压缩形态行（不经生产写路径：明文化后无 API 可造）。
  *
  * 形态与生产写侧逐字对齐：content_json 置空串、content_encoding='zlib'、
- * content_blob 为二进制 zlib 字节。
+ * content_blob 为二进制 zlib 字节。role 走与明文侧同一序列（见 roleAt）。
  */
 async function insertCompressedRow(args: {
   sessionId: string;
   seq: number;
   blocksJson: string;
+  role: ChatMessage["role"];
 }): Promise<void> {
   const ctx = getNovelMasterTestContext();
   const blob = compressZlib(new TextEncoder().encode(args.blocksJson));
@@ -98,8 +110,16 @@ async function insertCompressedRow(args: {
     `INSERT INTO chat_message (
        id, session_id, seq, role, content_json, content_encoding, content_blob,
        created_at_ms, hidden
-     ) VALUES (?, ?, ?, 'user', '', ?, ?, ?, 0)`,
-    [randomUUID(), args.sessionId, args.seq, VFS_CONTENT_ENCODING_ZLIB, blob, Date.now() + args.seq]
+     ) VALUES (?, ?, ?, ?, '', ?, ?, ?, 0)`,
+    [
+      randomUUID(),
+      args.sessionId,
+      args.seq,
+      args.role,
+      VFS_CONTENT_ENCODING_ZLIB,
+      blob,
+      Date.now() + args.seq,
+    ]
   );
 }
 
@@ -135,6 +155,7 @@ describe("稳态读性能护栏（T-MP-P0：明文化对读是纯收益）", () 
         sessionId: compressedSession.id,
         seq: i,
         blocksJson,
+        role: roleAt(i),
       });
     }
     const compressed = await timeTail(compressedSession.id);
@@ -154,7 +175,7 @@ describe("稳态读性能护栏（T-MP-P0：明文化对读是纯收益）", () 
         id: randomUUID(),
         sessionId: plainSession.id,
         seq: i,
-        role: i % 2 === 0 ? "assistant" : "user",
+        role: roleAt(i),
         content: textBlocks(body),
         provider: null,
         raw: null,

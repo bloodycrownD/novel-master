@@ -1,7 +1,7 @@
 /**
  * 数据库维护（清理/导入/导出/云同步）进程级忙碌状态：独立小模块持有。
  *
- * 对齐 desktop 侧 db-maintenance-busy.ts：消息正文压缩搬运与 blob 归一的
+ * 对齐 desktop 侧 db-maintenance-busy.ts：消息正文解压搬运与 blob 归一的
  * 后台循环需要读「用户是否正在清理/导入导出/云同步」以让路（spec 拍板：
  * 与备份互斥），而 UI 组件的 dbBusy 是本地 state，后台任务读不到——收敛
  * 到模块级。

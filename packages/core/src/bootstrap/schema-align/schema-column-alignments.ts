@@ -153,9 +153,10 @@ export const SCHEMA_COLUMN_ALIGNMENTS: readonly SchemaColumnAlignment[] = [
     addColumnSql:
       "ALTER TABLE vfs_content_blob ADD COLUMN ref_count INTEGER NOT NULL DEFAULT 0",
   },
-  // 消息正文压缩存储两列（message-content-compression）：老库靠
-  // SCHEMA_BOOT_VERSION v17 bump 走慢路径补列；新列全 NULL = legacy 明文行
-  // 合法形态，存量搬运由后台压缩任务（infra/db-maintenance）谓词驱动完成，
+  // 消息正文存储两列（明文为正形态）：老库靠
+  // SCHEMA_BOOT_VERSION v17 bump 走慢路径补列；新列全 NULL = 明文行的
+  // 正常形态，存量压缩行的搬运由后台解压任务 runMessageContentDecompress
+  // （infra/db-maintenance）谓词驱动完成，
   // 不在 align 里回填（空占位 migration 禁令；数据迁移走后台任务拍板）。
   {
     table: "chat_message",
