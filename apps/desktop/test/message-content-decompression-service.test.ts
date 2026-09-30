@@ -30,9 +30,8 @@ import {
   teardownDesktopDbTestEnv,
 } from "./desktop-db-test-env.js";
 
-/** 反向任务完成标记（两段式 module/key；core 常量未从主入口导出，此处取字面量）。 */
+/** 反向任务完成标记 module 段（key 为 "decompressDone"；core 常量未从主入口导出，此处取字面量）。 */
 const DECOMPRESS_MODULE = "nm-message-decompress";
-const DECOMPRESS_KEY = "decompressDone";
 /** 正向任务遗留的 pending 欠账标记（module/key 同款字面量）。 */
 const LEGACY_MODULE = "nm-message-content";
 const LEGACY_PENDING_KEY = "startupMaintenancePending";
