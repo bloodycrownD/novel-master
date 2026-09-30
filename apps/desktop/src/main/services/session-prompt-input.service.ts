@@ -4,7 +4,10 @@
 import { type AgentDefinition, resolveAgentForProject } from "@novel-master/core/agent";
 import { prepareUserMessagesForPrompt } from "@novel-master/core/chat";
 import { buildPromptLlmInputFromLayout, type AgentPromptLayout, type PromptLlmInput, type PromptRenderContext } from "@novel-master/core/prompt";
-import { assembleWorkplaceDisplay } from "@novel-master/core/workplace";
+import {
+  assembleWorkplaceDisplay,
+  WorkplaceAssemblyAbortedError,
+} from "@novel-master/core/workplace";
 import type { ChatMessage } from "@novel-master/core/chat";
 import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
 
@@ -87,16 +90,30 @@ export async function buildSessionPromptInput(
   };
   const wt = runtime.workplace(wtScope);
   const vfs = runtime.sessionVfs(scope.projectId, scope.sessionId);
-  // assemble → prepare(S0)，与 agent-runner 同源。
-  const { workplaceDisplay, prefixPaths } = await assembleWorkplaceDisplay(
-    wtScope,
-    {
-      sessionKkv: runtime.sessionKkv,
-      workplace: wt,
-      vfs,
-      layout: resolved.prompts,
-    },
-  );
+  // assemble → prepare(S0)，与 agent-runner 同源。workplace 段内部按文件粒度
+  // 挂分段弃权判据（2026-09-30 mobile「16s 原子组装段」治本的同款下沉）：
+  // run 起步后本刷新在第一个文件边界就死；中止错误就地转抛 build 的统一
+  // 哨兵类，读口 catch 的判定不变。fingerprint 透传给 ctx——token 估算读数
+  // 的记忆缓存靠它免掉重复序列化/计数。
+  let assembled: Awaited<ReturnType<typeof assembleWorkplaceDisplay>>;
+  try {
+    assembled = await assembleWorkplaceDisplay(
+      wtScope,
+      {
+        sessionKkv: runtime.sessionKkv,
+        workplace: wt,
+        vfs,
+        layout: resolved.prompts,
+      },
+      { shouldStop: () => shouldBail?.() === true },
+    );
+  } catch (error) {
+    if (error instanceof WorkplaceAssemblyAbortedError) {
+      throw new ChatPromptBuildBailedError();
+    }
+    throw error;
+  }
+  const { workplaceDisplay, prefixPaths, fingerprint } = assembled;
   bail();
   const messages = await prepareUserMessagesForPrompt(visibleMessages, {
     sessionId: scope.sessionId,
@@ -116,6 +133,7 @@ export async function buildSessionPromptInput(
     messages,
     workplace: wt,
     vfs,
+    workplaceFingerprint: fingerprint,
   };
   // 预览与 token 计数默认 agentStepIndex 为 0，含 once dynamic 块
   const input = await buildPromptLlmInputFromLayout(resolved.prompts, ctx);

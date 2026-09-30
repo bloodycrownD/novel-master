@@ -16,7 +16,7 @@ import {
   type PromptLlmInput,
   type PromptRenderContext,
 } from '@novel-master/core/prompt';
-import {assembleWorkplaceDisplay} from '@novel-master/core/workplace';
+import {assembleWorkplaceDisplay, WorkplaceAssemblyAbortedError} from '@novel-master/core/workplace';
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
 
 export interface SessionPromptScope {
@@ -107,16 +107,30 @@ export async function buildSessionPromptInput(
   };
   const wt = runtime.workplace(wtScope);
   const vfs = runtime.sessionVfs(scope.projectId, scope.sessionId);
-  // assemble 鈫?prepare(S0)锛屼笌 agent-runner 鍚屾簮銆?
-  const {workplaceDisplay, prefixPaths} = await assembleWorkplaceDisplay(
-    wtScope,
-    {
-      sessionKkv: runtime.sessionKkv,
-      workplace: wt,
-      vfs,
-      layout: resolved.prompts,
-    },
-  );
+  // assemble → prepare(S0)，与 agent-runner 同源。workplace 段内部按文件粒度
+  // 挂分段弃权判据（2026-09-30「16s 原子组装段」治本）：run 起步后本刷新在
+  // 第一个文件边界就死，不再把整段组装跑完才弃权；中止错误就地转抛 build 的
+  // 统一哨兵类，读口 catch 的判定不变。fingerprint 透传给 ctx——token 估算
+  // 读数的记忆缓存靠它免掉重复序列化/计数。
+  let assembled: Awaited<ReturnType<typeof assembleWorkplaceDisplay>>;
+  try {
+    assembled = await assembleWorkplaceDisplay(
+      wtScope,
+      {
+        sessionKkv: runtime.sessionKkv,
+        workplace: wt,
+        vfs,
+        layout: resolved.prompts,
+      },
+      {shouldStop: () => shouldBail?.() === true},
+    );
+  } catch (error) {
+    if (error instanceof WorkplaceAssemblyAbortedError) {
+      throw new ChatPromptBuildBailedError();
+    }
+    throw error;
+  }
+  const {workplaceDisplay, prefixPaths, fingerprint} = assembled;
   bail();
   if (__DEV__) {
     console.log(`[nm-chip-build] workplace +${Date.now() - diagT0}ms`);
@@ -142,6 +156,7 @@ export async function buildSessionPromptInput(
     messages,
     workplace: wt,
     vfs,
+    workplaceFingerprint: fingerprint,
   };
   const input = await buildPromptLlmInputFromLayout(resolved.prompts, ctx);
   if (__DEV__) {

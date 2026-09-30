@@ -14,6 +14,7 @@ import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
 import { buildDefaultAgentDefinitionPreservingName } from "@novel-master/core/config-forms/stored-config-validity";
+import { serializeRuleSnapshot } from "@novel-master/core/workplace";
 import { handleProjectsCreate } from "../src/main/ipc/handlers/projects.js";
 import { handleAgentRegistryCreateBlank } from "../src/main/ipc/handlers/agent-registry.js";
 import { handleAgentSetCurrent } from "../src/main/ipc/handlers/agent.js";
@@ -282,6 +283,74 @@ describe("session-prompt-input.service：build 分段弃权（r3-dt-align）", (
       counts.list >= 1 && counts.workplace >= 1 && counts.skills >= 1,
       "第④检查点前 list/workplace/skills 三段足迹都该在（证明翻真位置正确）",
     );
+  });
+
+  it("workplace 段内中止：assemble 文件粒度抛错 → build 转抛 ChatPromptBuildBailedError", async () => {
+    const rt = await getDesktopRuntime();
+    const project = await handleProjectsCreate({ name: "wp-bail" });
+    assert.equal(project.ok, true);
+    if (!project.ok) return;
+    const session = await handleSessionsCreate({
+      projectId: project.data.id,
+      title: "wp-bail",
+    });
+    assert.equal(session.ok, true);
+    if (!session.ok) return;
+    const { projectId, sessionId } = {
+      projectId: project.data.id,
+      sessionId: session.data.id,
+    };
+
+    // 预置两条 full 文件的规则快照（域/键字面量与 core 常量一致），不写
+    // VFS 正文 → file_cache miss → 逐文件回填（read 走 (missing) 兜底）。
+    await rt.sessionKkv.set(
+      sessionId,
+      "rule_snapshot",
+      "canon",
+      serializeRuleSnapshot([
+        { path: "/a.md", status: "full" },
+        { path: "/b.md", status: "full" },
+      ]),
+    );
+
+    // 数 vfs.read：shouldBail 在第一个文件回填后翻真，第二个文件的检查点
+    // 上 assemble 抛 WorkplaceAssemblyAbortedError → build 必须转抛统一哨兵。
+    let readCalls = 0;
+    const realSessionVfs = rt.sessionVfs.bind(rt);
+    const wrapped: typeof realSessionVfs = (pid, sid) => {
+      const vfs = realSessionVfs(pid, sid);
+      return new Proxy(vfs, {
+        get(target, prop, receiver) {
+          if (prop === "read") {
+            return async (path: string) => {
+              readCalls += 1;
+              return target.read(path);
+            };
+          }
+          return Reflect.get(target, prop, receiver);
+        },
+      }) as ReturnType<typeof realSessionVfs>;
+    };
+    rt.sessionVfs = wrapped;
+    try {
+      const definition = buildDefaultAgentDefinitionPreservingName("wp-bail");
+      definition.prompts = {
+        ...definition.prompts,
+        persist: [],
+        dynamic: [],
+        workplace: "【工作区】",
+      };
+      await assert.rejects(
+        buildSessionPromptInput(rt, { projectId, sessionId }, definition, {
+          shouldBail: () => readCalls >= 1,
+        }),
+        (error: unknown) => error instanceof ChatPromptBuildBailedError,
+        "assemble 的文件粒度中止必须转抛成 build 的统一哨兵类",
+      );
+      assert.equal(readCalls, 1, "第二个文件的 read 不该发生（文件粒度检查点）");
+    } finally {
+      rt.sessionVfs = realSessionVfs;
+    }
   });
 
   it("判据恒假 / 不传 options ⇒ 行为零变化（弃权检查点不许误伤）", async () => {
