@@ -8,10 +8,10 @@
  * `decompressDone`）。共享库上每个用例自管标记状态（开头清标记，含正向
  * 任务遗留的 `nm-message-content/startupMaintenancePending`）。
  *
- * **夹具口径**：压缩行**不经生产写路径**——Step 4 后 `encodeMessageContent`
- * 已删、`batchInsert` 已写明文，已无生产 API 能造压缩行；用 `compressZlib`
- * + 裸 `INSERT INTO chat_message` 直造（照 message-content-perf-threshold
- * 的 T-MP-P0 基线构造同款口径）。
+ * **夹具口径**：压缩行**不经生产写路径**——`encodeMessageContent`
+ * 已随 Step 3 删除、`batchInsert` 已写明文，已无生产 API 能造压缩行；用
+ * `compressZlib` + 裸 `INSERT INTO chat_message` 直造（与 T-MP-P0
+ * 基线构造同款口径）。
  *
  * **用例顺序纪律**：`runStartupMaintenanceOnce` 是模块级进程去重，本文件
  * 首条进入维护段的用例必须是 T-MP5 的「pending 置位库被消费」（它需要进程
@@ -176,8 +176,9 @@ async function insertCorruptRow(args: {
 }
 
 // ---------------------------------------------------------------------------
-// SQL 探针（照 message-content-compaction.test.ts 同款：自带 conn.execute 口
-// 覆写——VACUUM / wal_checkpoint 都走该口，只覆 query/transaction 会漏观测）。
+// SQL 探针（自带 conn.execute 口
+// 覆写——UPDATE / VACUUM / wal_checkpoint 都走该口，只覆 query/transaction
+// 会漏观测）。
 // ---------------------------------------------------------------------------
 
 /** 探针记录：语句 + 参数 + 结果行数（execute 为 -1）。 */

@@ -1,8 +1,8 @@
 /**
  * 存量 blob 行形态归一任务（zlib-b64 base64 文本 → 二进制 BLOB）。
  *
- * 骨架对齐 message-content-compaction 任务（该任务在未合并分支上，此处
- * 只做结构对齐、不做符号引用）：谓词查询 → 每批
+ * 骨架对齐 message-content-decompression 任务（同目录姊妹文件）：谓词
+ * 查询 → 每批
  * ≤100 行 → 每行短事务 → 批间 setTimeout(0) 让步 → 单轮同步预算 →
  * 每表 KKV 完成标记 → 完成后挂一次维护链路。不注册 schema migration
  * （无进度语义、空占位登记禁令）。
@@ -12,7 +12,7 @@
  *   **必须用 TYPEOF 判别而不是只看 encoding**——quick-sqlite 时代遗留
  *   「encoding=zlib 但存的是 base64 文本」的脏形态，只看 encoding 会漏掉
  *   那批行。chat_message 的 legacy 明文行（content_encoding IS NULL）不
- *   命中——那是 message-content-compaction 任务的谓词范围。
+ *   命中——那是反向解压任务的谓词范围之外的形态。
  * - 表适配器化：一张表一个 adapter（表名、主键列、blob 列名、谓词、
  *   SELECT/UPDATE SQL、完成标记 key、有无 byte_len 列），由
  *   {@link TABLE_ADAPTERS} 数组驱动；新增表只加一条适配器，不改流程代码。
@@ -107,8 +107,9 @@ const PREDICATE = `(encoding = 'zlib-b64' OR (encoding = 'zlib' AND TYPEOF(bytes
 /**
  * chat_message 侧同形谓词（列名不同：content_encoding / content_blob）。
  *
- * @remarks legacy 明文行（content_encoding IS NULL）天然不命中——那是
- * message-content-compaction 任务的谓词范围，两任务互不越界。
+ * @remarks legacy 明文行（content_encoding IS NULL）天然不命中——明文是
+ * chat_message 的正形态；反向解压任务命中的是「压缩行」，两任务谓词可交叠
+ * （zlib-b64 行同时命中）但收敛顺序无关：任一先跑，另一谓词重扫后收敛。
  */
 const MESSAGE_PREDICATE = `(content_encoding = 'zlib-b64' OR (content_encoding = 'zlib' AND TYPEOF(content_blob) = 'text'))`;
 

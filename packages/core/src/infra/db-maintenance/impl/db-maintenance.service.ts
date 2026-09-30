@@ -3,7 +3,7 @@
  * 外加启动期维护欠账的 pending 补跑公共逻辑。
  *
  * **为什么 pending 补跑落在本模块**（message-plaintext 迭代）：它的唯一定义
- * 原先内联在正向压缩任务 `message-content-compaction.ts` 里，而该文件会随
+ * 原先内联在正向压缩任务 `message-content-compaction.ts` 里，而该文件已随
  * Step 3 整文件删除——留着会留下悬空的历史库维护欠账（旧
  * `nm-message-content/startupMaintenancePending` 再无人消费、页空间永不归还）。
  * 故把这段逻辑提到本公共模块并参数化 module/key，两代任务共用同一实现：
@@ -156,7 +156,7 @@ export async function runStartupMaintenanceOnce(
 /**
  * 安全执行 app 层维护回调：回调异常只 warn，不得带崩 core 收尾链路。
  *
- * @param logTag 日志前缀（`[message-content-compaction]` 之类），让告警可
+ * @param logTag 日志前缀（`[message-content-decompress]` 之类），让告警可
  *   溯源到具体任务。
  */
 export function callMaintenanceHook(

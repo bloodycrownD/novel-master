@@ -21,11 +21,11 @@ import {
   getDatabaseMaintenanceStats,
   runDatabaseMaintenance,
   type BlobBinaryTableStatus,
-  type MessageCompactionStatus,
+  type MessageDecompressStatus,
 } from '../../services/db-maintenance.service';
 import {
   blobBinaryValue,
-  messageCompactionValue,
+  messageDecompressValue,
   type MigrationValue,
 } from './storage-config-migration-values';
 import {getCloudSyncLocalStatus} from '../../services/cloud-sync-config.store';
@@ -60,8 +60,8 @@ export function StorageConfigScreen() {
     null,
   );
   const [blobBinary, setBlobBinary] = useState<BlobBinaryTableStatus[]>([]);
-  const [messageCompaction, setMessageCompaction] = useState<
-    MessageCompactionStatus | null
+  const [messageDecompress, setMessageDecompress] = useState<
+    MessageDecompressStatus | null
   >(null);
 
   const refreshCloudConfigured = useCallback(async () => {
@@ -81,13 +81,13 @@ export function StorageConfigScreen() {
       setDbFileBytes(stats.fileBytes);
       setDbReclaimableBytes(stats.reclaimableBytes);
       setBlobBinary(stats.blobBinary);
-      setMessageCompaction(stats.messageCompaction);
+      setMessageDecompress(stats.messageDecompress);
     } catch {
       // 统计仅用于展示（Agent 运行中会被守卫拒绝），失败静默占位
       setDbFileBytes(null);
       setDbReclaimableBytes(null);
       setBlobBinary([]);
-      setMessageCompaction(null);
+      setMessageDecompress(null);
     }
   }, [runtime]);
 
@@ -116,14 +116,14 @@ export function StorageConfigScreen() {
   };
 
   /**
-   * 迁移卡片三行（用户拍板 2026-09-28）：消息正文压缩 + 两张 blob 表去
+   * 迁移卡片三行（用户拍板 2026-09-28）：消息正文明文化 + 两张 blob 表去
    * base64，指标卡形态只读展示（非菜单项）。消息正文「去 base64」不设
-   * 状态行——发版形态下压缩搬运直接写二进制，不存在用户可见的中间态，
+   * 状态行——发版形态下解压搬运直接写明文，不存在用户可见的中间态，
    * 仅开发机历史形态由归一任务静默收敛。取值逻辑在
    * storage-config-migration-values（ic-22 抽出的纯函数，四组夹具直测）。
    */
   const migrationRows: ReadonlyArray<{label: string} & MigrationValue> = [
-    {...messageCompactionValue(messageCompaction), label: '消息正文压缩'},
+    {...messageDecompressValue(messageDecompress), label: '消息正文明文化'},
     {
       ...blobBinaryValue(blobBinary.find(row => row.table === 'vfsContent')),
       label: '版本内容去 base64',
@@ -180,7 +180,7 @@ export function StorageConfigScreen() {
       />
       <FormSectionCard
         title="存量数据迁移"
-        hint="后台自动整理存量数据（压缩与二进制化），期间可正常使用，Agent 运行时自动让路"
+        hint="后台自动整理存量数据（消息正文解回明文、二进制化），期间可正常使用，Agent 运行时自动让路"
         tokens={tokens}>
         {migrationRows.map(row => (
           <View key={row.label} style={styles.migrationRow}>

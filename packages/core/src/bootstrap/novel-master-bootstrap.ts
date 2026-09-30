@@ -102,8 +102,8 @@ import { IntegrityRepairRegistry } from "@/service/integrity-repair.js";
  * v17：chat_message 新增 content_encoding / content_blob 两列（消息正文
  * zlib 压缩存储，message-content-compression）。老库（v16）靠本轮 bump
  * 走慢路径由 ALIGN 补列；两列全 NULL = legacy 明文行合法形态。存量明文
- * 不在 bootstrap 里搬运（空占位 migration 禁令），由后台谓词驱动的
- * runMessageContentCompaction 任务跨启动续跑（见 infra/db-maintenance）。
+ * 不在 bootstrap 里搬运（空占位 migration 禁令），该迭代的后台谓词驱动
+ * 任务已于 message-plaintext 迭代整文件删除。
  * 注：该迭代在分支内原编号 v16，与 main 的 v16（stream-metrics-tokens）
  * 撞号；并入集成分支时以现值 16 + 1 顺延为 v17（bump 纪律是「DDL/ALIGN
  * 变更必须 +1」本身而非具体号——与并行迭代撞号时以主干现值为准递增顺延，

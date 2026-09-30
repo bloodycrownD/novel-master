@@ -92,9 +92,9 @@ describe("SettingsViews 存量数据迁移卡片（指标卡形态，用户拍�
   /** 迁移行定义随取值逻辑抽到同目录纯函数模块（ic-22），label 字面量在彼处。 */
   const migrationRowsSource = readFileSync(migrationRowsModulePath, "utf8");
 
-  it("三行进度：消息正文压缩 + 版本内容去 base64 + 文件缓存去 base64", () => {
+  it("三行进度：消息正文明文化 + 版本内容去 base64 + 文件缓存去 base64", () => {
     assert.match(source, /title="存量数据迁移"/);
-    assert.match(migrationRowsSource, /label: "消息正文压缩"/);
+    assert.match(migrationRowsSource, /label: "消息正文明文化"/);
     assert.match(migrationRowsSource, /label: "版本内容去 base64"/);
     assert.match(migrationRowsSource, /label: "文件缓存去 base64"/);
   });
@@ -148,10 +148,14 @@ describe("SettingsViews 存量数据迁移卡片（cr-17 / cr-18 / cr-20b / ic-2
     assert.match(source, /migrationRowValue\(dbStats, row\)/);
   });
 
-  it("ic-04：消息压缩状态行 null 分支显示占位 '—'（三态口径）", () => {
+  it("ic-04：消息解压状态行 null 分支显示占位 '—'（三态口径）", () => {
     // null → '—' 的分支行为由 test/migration-row-value.test.ts 的夹具直测；
     // 此处锁纯函数模块里消费的是升级后可空 DTO（status == null → '—'）。
-    assert.match(migrationRowsSource, /dbStats\?\.messageCompaction/);
+    assert.match(migrationRowsSource, /dbStats\?\.messageDecompress/);
     assert.match(migrationRowsSource, /status == null/);
+    // 行 kind/label 换向钉死：防止回退成旧的压缩语义与旧字段名。
+    assert.match(migrationRowsSource, /kind: "messageDecompress"/);
+    assert.match(migrationRowsSource, /label: "消息正文明文化"/);
+    assert.doesNotMatch(migrationRowsSource, /messageCompaction/);
   });
 });

@@ -7,7 +7,7 @@ import { stat } from "node:fs/promises";
 import {
   createDbMaintenanceService,
   getBlobBinaryStatus,
-  getMessageCompactionStatus,
+  getMessageDecompressStatus,
 } from "@novel-master/core";
 import { getDesktopRuntime } from "../runtime/desktop-runtime-singleton.js";
 import { resolveDbPath } from "../runtime/resolve-db-path.js";
@@ -19,7 +19,7 @@ import {
 } from "./db-maintenance-busy.js";
 import type {
   BlobBinaryStatusDto,
-  MessageCompactionStatusDto,
+  MessageDecompressStatusDto,
 } from "../../../shared/ipc-types.js";
 
 /** 采样存储统计：库文件体积（main 侧 stat）+ freelist 可回收量（core PRAGMA）+ 两类搬运状态。 */
@@ -27,42 +27,42 @@ export async function getDbMaintenanceStats(): Promise<{
   fileBytes: number;
   reclaimableBytes: number;
   blobBinary: BlobBinaryStatusDto;
-  messageCompaction: MessageCompactionStatusDto | null;
+  messageDecompress: MessageDecompressStatusDto | null;
 }> {
   // 先确保 runtime/库文件就绪再 stat：并行赛跑会在冷启动（库尚未
   // bootstrap 落盘）时拿到 ENOENT。
   const runtime = await getDesktopRuntime();
   const fileInfo = await stat(resolveDbPath());
   const maintenance = createDbMaintenanceService(runtime.conn);
-  const [storage, messageCompaction] = await Promise.all([
+  const [storage, messageDecompress] = await Promise.all([
     maintenance.getStorageStats(),
-    // 消息压缩状态行数据源（稳态已完成时只读 KKV 标记，零 COUNT 成本）。
-    sampleMessageCompactionStatus(runtime.conn),
+    // 消息解压状态行数据源（稳态已完成时只读 KKV 标记，零 COUNT 成本）。
+    sampleMessageDecompressStatus(runtime.conn),
   ]);
   return {
     fileBytes: fileInfo.size,
     reclaimableBytes: storage.reclaimableBytes,
     blobBinary: await sampleBlobBinaryStatus(runtime.conn),
-    messageCompaction,
+    messageDecompress,
   };
 }
 
 /**
- * 采样消息正文压缩搬运状态（存储页状态行）。
+ * 采样消息正文解压搬运状态（存储页状态行）。
  *
  * 与 {@link sampleBlobBinaryStatus} 同口径：附属信息采样失败不拖垮
  * db/stats 主统计，吞掉异常按「未取到」展示——返回 `null`（ic-04），
  * renderer 侧 null 分支显示占位 '—'；不再用 `{done:false,pendingCount:0}`
  * 假数据（会被渲染成不真的「进行中（剩余 0 条）」）。
  */
-async function sampleMessageCompactionStatus(
-  conn: Parameters<typeof getMessageCompactionStatus>[0],
-): Promise<MessageCompactionStatusDto | null> {
+async function sampleMessageDecompressStatus(
+  conn: Parameters<typeof getMessageDecompressStatus>[0],
+): Promise<MessageDecompressStatusDto | null> {
   try {
-    return await getMessageCompactionStatus(conn);
+    return await getMessageDecompressStatus(conn);
   } catch (err) {
     console.warn(
-      "[desktop] 采样消息压缩状态失败：",
+      "[desktop] 采样消息解压状态失败：",
       err instanceof Error ? err.message : err,
     );
     return null;

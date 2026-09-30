@@ -4,9 +4,8 @@
  * **明文是 chat_message 的正形态**（2026-09-30 用户拍板的全库明文决策）：
  * 写侧直写 `content_json` 明文、压缩两列恒 NULL。本文件因此只为**迁移期
  * 的存量压缩行**服务——反向搬运任务把它们解压回明文后，连同本文件
- * （含 decodeMessageContent 与仍留着的 encodeMessageContent）在 V1'
- * 一并退役。当前消费方四处：readRowContent、usage-stats 双形态读、
- * read-ref repair 全表扫、反向搬运任务本体。
+ * （decodeMessageContent）在 V1' 一并退役。当前消费方四处：readRowContent、
+ * usage-stats 双形态读、read-ref repair 全表扫、反向搬运任务本体。
  *
  * 压缩 / 字节收整（tightBytes、decodeCompressedBytes 等）复用 vfs
  * ContentStore 侧共享模块（zlib-codec），不另起实现。写侧自 A2
@@ -18,44 +17,10 @@
  */
 
 import {
-  compressZlib,
   decodeCompressedBytes,
   decompressZlib,
-  tightBytes,
-  VFS_CONTENT_ENCODING_ZLIB,
 } from "@/domain/vfs/content-store/logic/zlib-codec.js";
 import { chatInvalidArgument } from "@/errors/chat-errors.js";
-
-/** {@link encodeMessageContent} 产物：写 chat_message 压缩两列所需字段。 */
-export interface EncodedMessageContent {
-  /** 恒 `zlib`（三端统一二进制；`zlib-b64` 仅是读侧兼容的存量形态）。 */
-  readonly encoding: string;
-  /** 压缩字节。 */
-  readonly blob: Uint8Array;
-}
-
-/**
- * 将 content blocks JSON 明文编码为压缩两列写库字段。
- *
- * **过渡期存量**：写路径已不再调用本函数（Step 1 起 chat_message 直写明文）。
- * 唯一残余消费方是正向压缩搬运任务 `message-content-compaction.ts`——它
- * 将在 Step 3 随该任务整文件删除，本函数届时一并删除，**不要给新写路径
- * 用**。
- *
- * 无平台分支：RN 与 Node 同一形态（二进制 Uint8Array + `zlib`）。压缩级别
- * 沿用 fflate 默认 level 6（全仓先例一致）。
- *
- * @param json content blocks 的 JSON 明文（恒非空串——blocks JSON 不会是 ''）。
- */
-export function encodeMessageContent(
-  json: string
-): EncodedMessageContent {
-  const compressed = compressZlib(new TextEncoder().encode(json));
-  return {
-    encoding: VFS_CONTENT_ENCODING_ZLIB,
-    blob: tightBytes(compressed),
-  };
-}
 
 /**
  * 将压缩两列解出 content blocks JSON 明文（**纯函数，无进程内缓存**）。

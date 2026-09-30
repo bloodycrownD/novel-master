@@ -93,14 +93,14 @@ describe('StorageConfigScreen 数据清理行为 — T-UIM1', () => {
 });
 
 describe('StorageConfigScreen 存量数据迁移卡片 — 指标卡形态（用户拍板 2026-09-28）', () => {
-  it('三行状态行：消息正文压缩 + 版本内容去 base64 + 文件缓存去 base64（相对顺序钉住）', () => {
+  it('三行状态行：消息正文明文化 + 版本内容去 base64 + 文件缓存去 base64（相对顺序钉住）', () => {
     expect(source).toMatch(/title="存量数据迁移"/);
-    // 三行状态行按此相对顺序渲染（消息正文压缩在前，两张 blob 表在后）
-    const compactionIdx = source.indexOf(`label: '消息正文压缩'`);
+    // 三行状态行按此相对顺序渲染（消息正文明文化在前，两张 blob 表在后）
+    const decompressIdx = source.indexOf(`label: '消息正文明文化'`);
     const vfsIdx = source.indexOf(`label: '版本内容去 base64'`);
     const fileCacheIdx = source.indexOf(`label: '文件缓存去 base64'`);
-    expect(compactionIdx).toBeGreaterThanOrEqual(0);
-    expect(vfsIdx).toBeGreaterThan(compactionIdx);
+    expect(decompressIdx).toBeGreaterThanOrEqual(0);
+    expect(vfsIdx).toBeGreaterThan(decompressIdx);
     expect(fileCacheIdx).toBeGreaterThan(vfsIdx);
   });
 
@@ -127,7 +127,7 @@ describe('StorageConfigScreen 存量数据迁移卡片 — 指标卡形态（用
   });
 
   it('指标卡只读展示：迁移行不以 ProfileMenuItem 菜单项渲染', () => {
-    expect(source).not.toMatch(/label="消息正文压缩"/);
+    expect(source).not.toMatch(/label="消息正文明文化"/);
     expect(source).not.toMatch(/label="版本内容去 base64"/);
     expect(source).not.toMatch(/label="文件缓存去 base64"/);
   });

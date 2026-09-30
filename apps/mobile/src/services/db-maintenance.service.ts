@@ -5,7 +5,7 @@
  * checkpoint → VACUUM，事务外、驱动层互斥串行）；本服务只补 mobile 侧
  * 四件事——Agent 运行守卫、数据库文件体积采样（blob-util stat），以及
  * 两类后台搬运的状态透传（存量 blob 行形态归一「去 base64」+ 消息正文
- * 压缩，均只读 KKV 标记/谓词计数，存储页状态行数据源）。
+ * 解压回明文，均只读 KKV 标记/谓词计数，存储页状态行数据源）。
  * 错误口径：主链路（统计主指标/清理执行）以 reject 语义上抛（由调用方
  * toast）；两类状态采样是附属展示字段，独立兜底降级不上抛（见各自
  * sample 函数）。
@@ -15,9 +15,9 @@
 import {
   createDbMaintenanceService,
   getBlobBinaryStatus,
-  getMessageCompactionStatus,
+  getMessageDecompressStatus,
   type BlobBinaryTableStatus,
-  type MessageCompactionStatus,
+  type MessageDecompressStatus,
   type TdbcConnection,
 } from '@novel-master/core';
 import {resolveMobileDatabaseFilePath} from '../db/db-file-path';
@@ -31,7 +31,7 @@ import {
 } from './db-maintenance-busy';
 
 /** 归一状态行 DTO 直通 core 类型，调用方无需再引 core（app 层单一出口）。 */
-export type {BlobBinaryTableStatus, MessageCompactionStatus};
+export type {BlobBinaryTableStatus, MessageDecompressStatus};
 
 /** 数据库文件体积采样（blob-util stat 的 size 为字符串，统一转 number）。 */
 async function statDatabaseFileBytes(): Promise<number> {
@@ -60,17 +60,17 @@ async function sampleBlobBinaryStatus(
 }
 
 /**
- * 消息压缩状态采样（附属展示字段，独立兜底）：失败只 console.warn 一次
+ * 消息解压状态采样（附属展示字段，独立兜底）：失败只 console.warn 一次
  * 后返回 null，UI 侧 null → 占位 '—'（与 blobBinary 空表同口径）。
  */
-async function sampleMessageCompactionStatus(
+async function sampleMessageDecompressStatus(
   conn: TdbcConnection,
-): Promise<MessageCompactionStatus | null> {
+): Promise<MessageDecompressStatus | null> {
   try {
-    return await getMessageCompactionStatus(conn);
+    return await getMessageDecompressStatus(conn);
   } catch (err) {
     console.warn(
-      '[db-maintenance] messageCompaction 状态采样失败，展示为占位',
+      '[db-maintenance] messageDecompress 状态采样失败，展示为占位',
       err,
     );
     return null;
@@ -79,7 +79,7 @@ async function sampleMessageCompactionStatus(
 
 /**
  * 采样当前存储统计：数据库文件体积 + VACUUM 理论可回收量（只读 PRAGMA）
- * + 存量 blob 行形态归一（去 base64）各注册表的进度 + 消息压缩状态。
+ * + 存量 blob 行形态归一（去 base64）各注册表的进度 + 消息解压状态。
  *
  * `blobBinary` 为 core `getBlobBinaryStatus` 结果数组的拍平形态（只含已
  * 注册适配器的表，顺序与 core 注册表一致），调用方按 `table` 渲染状态行。
@@ -87,7 +87,7 @@ async function sampleMessageCompactionStatus(
  * 中抛中文 Error，由调用方决定静默或提示。
  *
  * 主统计（体积/可回收量）与两类状态采样各自独立兜底：状态采样失败只
- * warn 一次并降级（blobBinary → 空数组、messageCompaction → null），
+ * warn 一次并降级（blobBinary → 空数组、messageDecompress → null），
  * 不把附属展示字段的失败源传染给主统计指标（与 desktop 同口径）。
  */
 export async function getDatabaseMaintenanceStats(
@@ -96,7 +96,7 @@ export async function getDatabaseMaintenanceStats(
   fileBytes: number;
   reclaimableBytes: number;
   blobBinary: BlobBinaryTableStatus[];
-  messageCompaction: MessageCompactionStatus | null;
+  messageDecompress: MessageDecompressStatus | null;
 }> {
   if (isMobileAgentActive()) {
     throw new Error('Agent 运行中，请稍后再操作');
@@ -106,19 +106,21 @@ export async function getDatabaseMaintenanceStats(
     createDbMaintenanceService(runtime.conn).getStorageStats(),
   ]);
   const blobBinary = await sampleBlobBinaryStatus(runtime.conn);
-  const messageCompaction = await sampleMessageCompactionStatus(runtime.conn);
+  const messageDecompress = await sampleMessageDecompressStatus(
+    runtime.conn,
+  );
   return {
     fileBytes,
     reclaimableBytes: stats.reclaimableBytes,
     blobBinary,
-    messageCompaction,
+    messageDecompress,
   };
 }
 
 /**
  * 执行数据清理（缓存 GC → checkpoint → VACUUM），返回前后文件体积。
  * VACUUM 耗时随库体积增长（大库数十秒）；期间计数式置 busy——消息
- * 压缩与 blob 归一后台循环据此让路（与数据清理互斥）。
+ * 解压与 blob 归一后台循环据此让路（与数据清理互斥）。
  */
 export async function runDatabaseMaintenance(
   runtime: MobileNovelMasterRuntime,
@@ -137,5 +139,5 @@ export async function runDatabaseMaintenance(
   }
 }
 
-/** 消息压缩后台循环的让路守卫再导出（备份服务共用同一互斥口径）。 */
+/** 消息解压后台循环的让路守卫再导出（备份服务共用同一互斥口径）。 */
 export {isMobileDbMaintenanceBusy};

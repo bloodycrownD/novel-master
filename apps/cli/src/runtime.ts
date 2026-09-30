@@ -7,7 +7,7 @@
 import { mkdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { registerTokenizerNodeDriver } from "@novel-master/tokenizer-driver-node";
-import { bootstrapNovelMaster, createPersistentPreferences, createPersistentState, open, runBlobBinaryNormalization, runMessageContentCompaction, type PersistentPreferences, type PersistentState, type TdbcConnection } from "@novel-master/core";
+import { bootstrapNovelMaster, createPersistentPreferences, createPersistentState, open, runBlobBinaryNormalization, runMessageContentDecompress, type PersistentPreferences, type PersistentState, type TdbcConnection } from "@novel-master/core";
 import { refreshUserVfsUnifiedToolTurnSnapshot } from "@novel-master/core/feature-flags";
 
 import { createAgentRegistryService, createAgentStreamRegistry } from "@novel-master/core/agent";
@@ -189,9 +189,10 @@ export async function createNovelMasterRuntime(
   });
   await bootstrapNovelMaster(conn);
   // 双任务各 60s 同步预算、最坏合计约 120s；命令进程短命，超预算残余由
-  // 下次命令或双端启动续跑。顺序无功能依赖——压缩谓词（content_json != ''）
-  // 与归一谓词（blob 形态）互不越界：A2 后压缩恒写二进制、不产出待归一行。
-  await runMessageContentCompaction(conn);
+  // 下次命令或双端启动续跑。顺序无功能依赖——解压谓词（content_blob IS NOT
+  // NULL）与归一谓词（blob 形态）可交叠但收敛顺序无关：任一先跑，另一
+  // 谓词重扫后自然收敛。
+  await runMessageContentDecompress(conn);
   // 存量 blob 形态归一（zlib-b64 文本 → 二进制 BLOB）：幂等可重入；收尾
   // 维护仅在本轮确有推进（成功改写 ≥1 行）且全部表完成时触发一次（稳态
   // 零成本短路），上一轮维护失败由持久化标记 startupMaintenancePending 补跑。

@@ -103,7 +103,7 @@ const STATS_SNAPSHOT_A = {
   blobBinary: [
     {table: 'vfsContent', done: false, pendingCount: 1100, failedCount: 0},
   ],
-  messageCompaction: {done: false, pendingCount: 100},
+  messageDecompress: {done: false, pendingCount: 100},
 };
 const STATS_SNAPSHOT_B = {
   fileBytes: 1_048_576,
@@ -111,7 +111,7 @@ const STATS_SNAPSHOT_B = {
   blobBinary: [
     {table: 'vfsContent', done: false, pendingCount: 550, failedCount: 0},
   ],
-  messageCompaction: {done: false, pendingCount: 50},
+  messageDecompress: {done: false, pendingCount: 50},
 };
 
 /** 收集渲染树上的全部文本节点（宿主 Text 的 children）。 */
