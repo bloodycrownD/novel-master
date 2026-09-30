@@ -94,10 +94,13 @@ export {
   createDbMaintenanceService,
   DEFAULT_BLOB_BINARY_SYNC_BUDGET_MS,
   DEFAULT_COMPACTION_SYNC_BUDGET_MS,
+  DEFAULT_DECOMPRESS_SYNC_BUDGET_MS,
   getBlobBinaryStatus,
   getMessageCompactionStatus,
+  getMessageDecompressStatus,
   runBlobBinaryNormalization,
   runMessageContentCompaction,
+  runMessageContentDecompress,
   runStartupMaintenanceOnce,
 } from "./infra/db-maintenance/index.js";
 export type {
@@ -109,8 +112,11 @@ export type {
   DbMaintenanceService,
   MessageCompactionRunResult,
   MessageCompactionStatus,
+  MessageDecompressRunResult,
+  MessageDecompressStatus,
   RunBlobBinaryNormalizationOptions,
   RunMessageContentCompactionOptions,
+  RunMessageContentDecompressOptions,
   StorageStats,
 } from "./infra/db-maintenance/index.js";
 

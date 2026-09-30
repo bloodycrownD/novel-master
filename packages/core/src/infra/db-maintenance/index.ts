@@ -32,6 +32,24 @@ export type {
   DbMaintenanceService,
   StorageStats,
 } from "./db-maintenance.port.js";
+/**
+ * 消息正文解压搬运（反向任务，message-plaintext 迁移层）：存量压缩行
+ * → 明文。KKV 常量从此出口导出（迁移期断言完成标记需要）。
+ */
+export {
+  DEFAULT_DECOMPRESS_SYNC_BUDGET_MS,
+  getMessageDecompressStatus,
+  LEGACY_MAINTENANCE_PENDING_KKV_KEY,
+  LEGACY_MESSAGE_CONTENT_KKV_MODULE,
+  MESSAGE_DECOMPRESS_KKV_KEY,
+  MESSAGE_DECOMPRESS_KKV_MODULE,
+  runMessageContentDecompress,
+} from "./impl/message-content-decompression.js";
+export type {
+  MessageDecompressRunResult,
+  MessageDecompressStatus,
+  RunMessageContentDecompressOptions,
+} from "./impl/message-content-decompression.js";
 export {
   DEFAULT_COMPACTION_SYNC_BUDGET_MS,
   MESSAGE_COMPACTION_KKV_KEY,

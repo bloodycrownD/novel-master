@@ -49,7 +49,14 @@
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { SqliteKkvRepository } from "@/domain/kkv/repositories/impl/sqlite-kkv.repository.js";
 import { encodeMessageContent } from "@/domain/chat/logic/message-content-codec.js";
-import { runStartupMaintenanceOnce } from "./db-maintenance.service.js";
+import {
+  callMaintenanceHook,
+  runPendingStartupMaintenance,
+  runStartupMaintenanceOnce,
+} from "./db-maintenance.service.js";
+
+/** 本任务的日志标签（收尾维护相关告警的溯源前缀）。 */
+const LOG_TAG = "message-content-compaction";
 
 /** KKV 完成标记两段式命名（module 为 nm- 短横线、key 为 camelCase，
  * 先例 `nm-search` / `nm-compaction-conditions`）。 */
@@ -229,82 +236,6 @@ async function readDoneMarker(
 }
 
 /**
- * 安全执行 app 层维护回调：回调异常只 warn，不得带崩 core 收尾链路。
- */
-function callMaintenanceHook(
-  hook: (() => void) | undefined,
-  label: string
-): void {
-  if (hook == null) {
-    return;
-  }
-  try {
-    hook();
-  } catch (error) {
-    console.warn(
-      `[message-content-compaction] ${label} 回调抛错，已忽略：${
-        error instanceof Error ? error.message : String(error)
-      }`
-    );
-  }
-}
-
-/**
- * 入口的 pending 补跑（ic-01 方案 b 的持久化兜底）。
- *
- * 库里存有 `startupMaintenancePending` 标记 = 上次收尾维护链路失败过
- * （页空间尚未回收）。此时无视「本轮无进展」——包括完成标记已置的
- * 稳态短路路径——强制补跑一次维护；清标记以 {@link
- * runStartupMaintenanceOnce} 返回非 null 为条件（本进程真跑了维护且
- * 未抛错）。返回 null 说明本进程已跑过维护（进程级去重短路），无法
- * 确认那次成功与否，保守保留标记待下次冷启动补跑——这是正常场景
- * （多补一次 VACUUM 无害，漏补则页空间永不回收），warn 说明即可。
- */
-async function runPendingStartupMaintenance(
-  conn: TdbcConnection,
-  options: RunMessageContentCompactionOptions
-): Promise<void> {
-  const kkv = new SqliteKkvRepository(conn);
-  const entry = await kkv.get(
-    MESSAGE_COMPACTION_KKV_MODULE,
-    MESSAGE_COMPACTION_MAINTENANCE_PENDING_KKV_KEY
-  );
-  if (entry == null) {
-    return;
-  }
-  callMaintenanceHook(options.beforeMaintenance, "beforeMaintenance");
-  try {
-    const result = await runStartupMaintenanceOnce(conn);
-    if (result !== null) {
-      try {
-        await kkv.delete(
-          MESSAGE_COMPACTION_KKV_MODULE,
-          MESSAGE_COMPACTION_MAINTENANCE_PENDING_KKV_KEY
-        );
-      } catch (error) {
-        console.warn(
-          `[message-content-compaction] 清除 startupMaintenancePending 标记失败（下次启动会多补跑一次维护，无害）：${
-            error instanceof Error ? error.message : String(error)
-          }`
-        );
-      }
-    } else {
-      console.warn(
-        "[message-content-compaction] startupMaintenancePending 补跑被进程级去重短路（本进程已跑过维护链路），保留标记待下次冷启动补跑——正常场景"
-      );
-    }
-  } catch (error) {
-    console.warn(
-      `[message-content-compaction] startupMaintenancePending 补跑维护链路失败，保留标记待下次启动重试：${
-        error instanceof Error ? error.message : String(error)
-      }`
-    );
-  } finally {
-    callMaintenanceHook(options.afterMaintenance, "afterMaintenance");
-  }
-}
-
-/**
  * 采样搬运状态（双端存储页两态状态行 + 启动零成本短路共用）。
  *
  * 稳态（已完成）只读 KKV 标记一次即返回，零 COUNT 成本；未完成才
@@ -350,8 +281,16 @@ export async function runMessageContentCompaction(
   conn: TdbcConnection,
   options: RunMessageContentCompactionOptions = {}
 ): Promise<MessageCompactionRunResult> {
-  // pending 兜底放在最前：完成标记短路的稳态路径也要补跑（见函数注释）。
-  await runPendingStartupMaintenance(conn, options);
+  // pending 兜底放在最前：完成标记短路的稳态路径也要补跑（见
+  // runPendingStartupMaintenance 的注释——该实现已随 message-plaintext
+  // 迭代上移到 db-maintenance.service.ts，反向搬运任务共用同一份）。
+  await runPendingStartupMaintenance(conn, {
+    kkvModule: MESSAGE_COMPACTION_KKV_MODULE,
+    pendingKey: MESSAGE_COMPACTION_MAINTENANCE_PENDING_KKV_KEY,
+    logTag: LOG_TAG,
+    beforeMaintenance: options.beforeMaintenance,
+    afterMaintenance: options.afterMaintenance,
+  });
 
   // 启动先查标记即走：此后每次启动零成本（spec 拍板）。
   const marker = await readDoneMarker(conn);
@@ -504,7 +443,11 @@ export async function runMessageContentCompaction(
   // 返回 null（本进程已跑过）时不动 pending：无法确认那次成功与否，
   // 保守保留待下次冷启动，对齐入口补跑的同款口径。
   const kkv = new SqliteKkvRepository(conn);
-  callMaintenanceHook(options.beforeMaintenance, "beforeMaintenance");
+  callMaintenanceHook(
+    options.beforeMaintenance,
+    "beforeMaintenance",
+    LOG_TAG
+  );
   try {
     const maintenanceResult = await runStartupMaintenanceOnce(conn);
     if (maintenanceResult !== null) {
@@ -544,7 +487,11 @@ export async function runMessageContentCompaction(
     }
   } finally {
     // finally 语义：维护抛错也必须复位 app 的 busy 信号。
-    callMaintenanceHook(options.afterMaintenance, "afterMaintenance");
+    callMaintenanceHook(
+      options.afterMaintenance,
+      "afterMaintenance",
+      LOG_TAG
+    );
   }
   return { done: true, compactedCount, failedCount, stalled: false };
 }
