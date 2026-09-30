@@ -34,6 +34,29 @@ export function stepCommittedShouldReload(
   );
 }
 
+/**
+ * RUN_FINISHED 之后是否要全量 reload 转录。
+ *
+ * 普通 run 走既有判据（uiRunning + freeze 双保险）。**前奏终态**（`runId === ''`，
+ * core 在前奏检查点命中 / 前奏抛错时发的收口事件，r3-run-1 步骤 4）强制 reload。
+ *
+ * 为什么必须强制：这种 run 一条 delta / step 都没发过，面板上除「已落库的用户
+ * 消息」外没有任何可增量更新的东西；而「发送→立刻停止」这一格里
+ * abortUiRun 先行（uiRunning=false、freezeCount!=null），既有判据两个条件都不
+ * 满足 → 不 reload；abort-retain 的 overlay 兜底又因无半截流式文本而空转。
+ * 三者叠加的结果是：用户消息已落库、composer 正文已清空、面板永不刷新 =
+ * 消息凭空消失。强制全量 reload 是这里唯一安全且充分的收口。
+ */
+export function shouldReloadOnRunFinished(
+  uiRunning: boolean,
+  freezeCount: number | null,
+  runId: string,
+): boolean {
+  return (
+    runId === "" || shouldApplyTranscriptReload(uiRunning, freezeCount)
+  );
+}
+
 export async function commitAbortOverlayFallbackIfNeeded(options: {
   sessionId: string;
   streamingText: string;

@@ -25,6 +25,7 @@ import {
   decodeMessageContent,
   encodeMessageContent,
 } from "../../logic/message-content-codec.js";
+import { forgetDecodedMessageContent } from "@/infra/content-cache/logic/decoded-content-cache.js";
 import type { MessageRepository } from "../message.port.js";
 
 const MESSAGE_SELECT_COLUMNS = `id, session_id, seq, role, content_json, content_encoding, content_blob, provider, provider_id, raw_json, created_at_ms, hidden, attachments_json, prompt_tokens, completion_tokens, total_tokens, cache_read_tokens, cache_creation_tokens, model_name, first_token_ms, duration_ms`;
@@ -379,10 +380,17 @@ export class SqliteMessageRepository implements MessageRepository {
        WHERE id = #{id}`,
       { id, encoding: encoded.encoding, blob: encoded.blob }
     );
+    // 进程内解压产物层按 id 缓存（infra/content-cache）：本处是「同 id 换
+    // 正文」的唯一写口，写入后必须失效，否则读路径会一直拿旧正文
+    // （编辑保存 / run 收尾改写都走这里）。
+    forgetDecodedMessageContent(id);
     return result.changes > 0;
   }
 
   async insert(message: ChatMessage): Promise<void> {
+    // id 理论不复用（全仓 randomUUID），防御性失效：万一有调用方拿固定 id
+    // 重插（测试夹具 / 未来导入），不留下旧正文。
+    forgetDecodedMessageContent(message.id);
     await this.conn.execute(MESSAGE_INSERT_SQL, toMessageParams(message));
   }
 
@@ -402,7 +410,10 @@ export class SqliteMessageRepository implements MessageRepository {
     for (let start = 0; start < messages.length; start += chunkSize) {
       const end = Math.min(start + chunkSize, messages.length);
       for (let i = start; i < end; i++) {
-        parameters.push(toMessageParams(messages[i]!));
+        const message = messages[i]!;
+        // 与 insert 同款的防御性失效（id 理论不复用，见 insert 注释）。
+        forgetDecodedMessageContent(message.id);
+        parameters.push(toMessageParams(message));
       }
       if (end < messages.length) {
         await this.yieldFn?.();
@@ -418,6 +429,10 @@ export class SqliteMessageRepository implements MessageRepository {
       `DELETE FROM chat_message WHERE id = #{id}`,
       { id }
     );
+    // 删除不必为正确性失效（id 不复用，见 infra/content-cache 模块头：
+    // 死条目由 LRU 回收），这里顺手清掉是因为删除路径天然知道 id，
+    // 让它占着预算没有意义。
+    forgetDecodedMessageContent(id);
     return result.changes > 0;
   }
 

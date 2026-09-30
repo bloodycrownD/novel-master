@@ -57,3 +57,50 @@ body {
 .cm-selectionBackground {
   background-color: var(--editor-selection, rgba(0, 122, 255, 0.25)) !important;
 }
+
+/* composer-token 胶囊（chat 输入框全屏，与 composer-input 的
+   .composer-input__token 同款）：muted 底 + primary 字；padding 用负 margin
+   抵消，避免胶囊把字符撑宽造成光标错位。 */
+.cm-content .cm-composer-token {
+  color: var(--primary, #007aff);
+  background: var(--primary-muted, rgba(0, 122, 255, 0.13));
+  border-radius: 4px;
+  padding: 1px 4px;
+  margin: 0 -4px;
+  /* 跨行时两端各自完整（旧内核降级为断口，纯视觉） */
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+
+/* 胶囊内层让字色透回胶囊（capsule/C-2）。
+ *
+ * 成因（2026-09-29 实读 @codemirror/view 与 @codemirror/language 产物确认，
+ * 不是猜的）：语法高亮与 composer-token 是**两个独立的 mark 装饰**，不是同一个
+ * 元素上的双 class——
+ *   1) @codemirror/language 的 TreeHighlighter.buildDeco 走
+ *      `Decoration.mark({class: style})`（dist/index.js:1785），tagName 默认 span；
+ *   2) 高亮 class 由 HighlightStyle 构造器 `StyleModule.newName()` 生成，
+ *      样式以 `"." + cls` 单类选择器注入 style-mod（dist/index.js:1669-1672），
+ *      特异性只有 0,1,0；
+ *   3) view 侧 TileUpdate.emit 用 RangeSet.spans 拿到该区间**全部**活跃装饰，
+ *      TileBuilder.ensureMarks 对每个 mark 各建一个 MarkTile 并层层嵌套
+ *      （dist/index.js:2383-2400）——不同 class 即不同元素，不合并。
+ *   区间不同则严格嵌套（`@http://x`：token 覆盖全段、URL 高亮只覆盖 `http://x`，
+ *   高亮 span 落在 .cm-composer-token 内部）；区间相同（整段同属一种 tag）时两者
+ *   一起活跃，也仍是两层嵌套 span——class 不同就不合并。
+ * 结果：内层高亮 span 自带 color（link/字符串/注释类 token），把胶囊字色盖掉。
+ *
+ * 改法选择：`.cm-composer-token` 自身是 0,2,0，已稳压高亮的 0,1,0，无需
+ * !important 也无需提特异性；缺的只是「内层不许重新着色」这一条，所以让内层
+ * `color: inherit` 沿胶囊字色走。选择器写成逗号分隔的普通列表，不收进
+ * :is 这类匹配函数——它需 Chromium 88+，与包内「老 WebView 禁新语法」纪律
+ * 冲突（capsule/C-3）。
+ * 列表覆盖 CM 高亮可能产出的内联标记元素 + markdown 内联标签：胶囊自身
+ * 0,2,0 的规则只会被 0,1,0 的后代规则压住，其余内层元素不列进来即可。 */
+.cm-content .cm-composer-token span,
+.cm-content .cm-composer-token em,
+.cm-content .cm-composer-token strong,
+.cm-content .cm-composer-token a,
+.cm-content .cm-composer-token code {
+  color: inherit;
+}

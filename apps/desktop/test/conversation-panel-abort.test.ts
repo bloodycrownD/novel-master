@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { describe, it, test } from "node:test";
 import {
   handleRunFinishedAbortRetain,
   handleStepCommittedAbortRetain,
   shouldAcceptStreamIngress,
+  shouldReloadOnRunFinished,
   type AbortRetainLifecycle,
 } from "@/features/chat/conversation-abort-retain";
 
@@ -185,4 +186,31 @@ test("T-ARP-D3：FINISHED fallback 失败仍 clearAbortRetainPending + onStreamR
   });
   assert.equal(resetCount, 1);
   assert.equal(lifecycle.getAbortRetainPending(), false);
+});
+
+/**
+ * r3-run-1 步骤 4：前奏终态（runId === ''）强制全量 reload。
+ *
+ * 「发送→立刻停止」这一格是本条的全部意义：abort 先行让 uiRunning=false、
+ * freezeCount!=null，既有判据两个条件都不满足；而这一轮既没有 step 也没有
+ * assistant 增量可等，overlay 兜底又因无半截文本而空转——不强制 reload 的话，
+ * 用户消息凭空消失。
+ */
+describe("T-PRELUDE-RELOAD：前奏终态强制 reload", () => {
+  it("「发送→立刻停止」形态（uiRunning=false + freeze!=null）仍 reload", () => {
+    assert.equal(shouldReloadOnRunFinished(false, 5, ""), true);
+  });
+
+  it("前奏终态的其它形态一律 reload（无 delta 可增量更新）", () => {
+    assert.equal(shouldReloadOnRunFinished(true, null, ""), true);
+    assert.equal(shouldReloadOnRunFinished(true, 0, ""), true);
+    assert.equal(shouldReloadOnRunFinished(false, null, ""), true);
+  });
+
+  it("普通 runId 仍走既有判据，不被这条规则放宽", () => {
+    assert.equal(shouldReloadOnRunFinished(false, 5, "run-1"), false);
+    assert.equal(shouldReloadOnRunFinished(false, null, "run-1"), false);
+    assert.equal(shouldReloadOnRunFinished(true, null, "run-1"), true);
+    assert.equal(shouldReloadOnRunFinished(true, 3, "run-1"), false);
+  });
 });

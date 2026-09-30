@@ -23,7 +23,10 @@ jest.mock('../src/services/chat-agent-meta', () => ({
 }));
 
 jest.mock('../src/services/chat-prompt-tokens.service', () => ({
-  loadChatPromptTokenLabelResilient: jest.fn(async () => ''),
+  // 返回真标签而非 ''：空串是「中途弃权（保留旧标签）」哨兵（2026-09-30
+  // 回滚竞态修复），写不进 meta——本套件要观测的是防抖后写入落位。
+  loadChatPromptTokenLabelResilient: jest.fn(async () => '1K tokens · 预估'),
+  isChatTokenPreciseWarmInflight: jest.fn(() => false),
 }));
 
 const loadChatAgentMetaMock = loadChatAgentMeta as jest.Mock;
@@ -275,13 +278,13 @@ describe('useChatTabScope 查询并行化（T-C1）', () => {
       expect(api.agentMeta?.agentName).toBe('Agent');
       expect(api.agentMeta?.modelLabel).toBe('Model');
       // 成功链尾随的 token 标签刷新已套 300ms 防抖（T-TC6）：meta 落位时
-      // 仍是占位 '…'，trailing 窗口过后（mock 立即返回 ''）标签才落位。
+      // 仍是占位 '…'，trailing 窗口过后（mock 立即返回真标签）标签才落位。
       expect(api.agentMeta?.tokenLabel).toBe('…');
       await act(async () => {
         await new Promise(resolve => setTimeout(resolve, 350));
         await flushMicrotasks();
       });
-      expect(scope.api().agentMeta?.tokenLabel).toBe('');
+      expect(scope.api().agentMeta?.tokenLabel).toBe('1K tokens · 预估');
     });
 
     it('在途重入合并为一轮（首屏三触发去重）；落定后新调用新起一轮', async () => {

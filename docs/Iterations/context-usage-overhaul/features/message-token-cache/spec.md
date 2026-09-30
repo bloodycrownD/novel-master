@@ -22,6 +22,10 @@ date: 2026-09-28
 
 **持久化（转正）**：每次「代际推进」且该次计数源于真实刷新（非预热）时，把当前代整表序列化写 session KKV（域 `token_chunks`、键 `chunkCache`，值 = 紧凑 JSON：`{v: 1, items: [hash16, count, ...]}` 数组或 map）。读取：本地计数开始时若热层对该会话无种子，则读 KKV 载入为一代（作为第 2 代种子，不顶当前代）；坏行 / `v` 不符 → 静默忽略按 miss（模式抄 `session-api-prompt-token-store` 的 parse 防御）。会话删除随 session KKV 级联清理，无独立 GC。写盘频率受防抖约束（run 收尾/防抖后至多一次）。
 
+**L2 种子形态（CR 收窄注记，2026-09-30，r3-l2-1 / r3-cache-2 随执行批偏离——两处合一记录）**：上文「本地计数开始时若热层对该会话无种子，则读 KKV 载入为一代（作为第 2 代种子，不顶当前代）」为 spec 撰写期的初始形态，实际落地收窄为两条：① **seed-once**：每会话每进程只真读一次该行（该行在本进程内只会被 `advanceGeneration` 覆盖成更新的内容，重复读只是把热层已有且更新的整表再 `JSON.parse` + 全量 Map 重建一遍；真机 12.5s 整表链病根的止血项之一）——登记点在 KKV `get` 之前（并发去重），**读抛错 / 行存在但解析不出来（截断、版本不符、字段非法）会撤销登记、下轮重试**（一次瞬时读错不该锁死整进程的跨重启续命）；**行不存在不算失败**（该会话还没落过盘＝本来就没东西可 seed），此时保留登记，否则 seed-once 会被整体废掉、每轮都白读一次整表；② **落代**：种子并入**第 3 代（最旧可用代）**而非第 2 代，理由同上——它是「上次落盘那一刻」的快照，不该顶到仅次于当前代的位置。L1 侧（`promptWholeCache` 键）同款 seed-once 与失败重试、且与 L2 **相互独立的节流登记**（同域不同键，两层各读各的行）。两处偏离都只影响加速数据的**读/落时机**，不影响任何计数口径：漏种子只是下次进程重启少一批种子块/条目（重算一次），绝不会算错。
+
+**workplace 冷 miss 回填的写回时序（CR 注记，2026-09-30）**：本 spec 描述的 L1/L2 只管 token 计数加速，**workplace 常驻前缀的 `file_cache` 是同一条读链上的另一层加速**（`buildSessionPromptInput` 组装段经 `assembleWorkplaceDisplay` 触达）。它的**冷 miss 回填写入是 fire-and-forget**：`fillFileCacheFromVfs` 的 `deferBackfillWrite` 用 `setTimeout(0)` 宏任务把「压缩 + 落库」推迟出组装关键路径，先让本轮读链跑完再落盘。理由与上面「写盘频率受防抖约束」同源——写侧只是让下次组装变快，读侧要的正文本轮已经拿到；写失败静默，下次重新回填。因此**首次冷 miss 后紧接着的第二次组装仍会再付一次 VFS 读**（后台写尚未落地），这是该形态的已知代价，不按 bug 记。
+
 **计数流程**（替换原「段级」设计——句子块平面寻址不需要段结构，`serializePromptSegments` 导出砍掉）：
 1. 查 L1（`hashContent(整串+tools串) + 身份` → `{tokenCount, counterKind, estimated}`）→ 命中直接返回；
 2. `serializePromptLlmInput` 产整串（既有函数不动，CLI parity 契约保持）；

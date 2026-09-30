@@ -3,6 +3,7 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, it } from "node:test";
 import {
+  PENDING_RUN_ID,
   shouldAcceptRunEvent,
   shouldIgnoreStaleRunStarted,
   shouldReloadTranscriptOnRunEvent,
@@ -19,7 +20,7 @@ describe("shouldAcceptRunEvent", () => {
     assert.equal(shouldAcceptRunEvent(null, undefined), false);
   });
 
-  it("runId 为空时拒绝", () => {
+  it("runId 为空时拒绝（非 PENDING 态）", () => {
     assert.equal(shouldAcceptRunEvent("run-1", undefined), false);
     assert.equal(shouldAcceptRunEvent("run-1", ""), false);
   });
@@ -34,6 +35,36 @@ describe("shouldAcceptRunEvent", () => {
 
   it("abort 后保留 activeRunId 时 RUN_FINISHED 仍可 accept", () => {
     assert.equal(shouldAcceptRunEvent("run-abort", "run-abort"), true);
+  });
+});
+
+/**
+ * r3-run-1 步骤 4：前奏终态（runId === ''）的放行。
+ *
+ * core 在前奏检查点命中 / 前奏抛错时发的是 `runId: ''` 的终态，renderer 这边
+ * 此时还没收到 RUN_STARTED、activeRunId 只能是 beginUiRun 置的 PENDING 哨兵。
+ * 不放行 ⇒ uiRunning 永久 true、abort 冻结永久挂起（「发送后立刻停止」按钮卡死）。
+ */
+describe("shouldAcceptRunEvent 前奏终态放行（r3-run-1）", () => {
+  it("PENDING 态接受空串终态", () => {
+    assert.equal(shouldAcceptRunEvent(PENDING_RUN_ID, ""), true);
+  });
+
+  it("PENDING 态不接受 null / undefined runId", () => {
+    assert.equal(shouldAcceptRunEvent(PENDING_RUN_ID, undefined), false);
+    assert.equal(shouldAcceptRunEvent(PENDING_RUN_ID, null), false);
+  });
+
+  it("空串终态不放宽到其他 activeRunId（含 null）", () => {
+    assert.equal(shouldAcceptRunEvent(null, ""), false);
+    assert.equal(shouldAcceptRunEvent("run-1", ""), false);
+  });
+
+  it("PENDING 哨兵不是真实 runId：真实事件不因哨兵而放行", () => {
+    // RUN_STARTED 到达后 activeRunId 被真实 runId 覆盖；这里只确认哨兵
+    // 与真实 runId 互不匹配（防有人把 PENDING_RUN_ID 当成 runId 上报）。
+    assert.equal(shouldAcceptRunEvent(PENDING_RUN_ID, "run-1"), false);
+    assert.notEqual(PENDING_RUN_ID, "");
   });
 });
 
@@ -240,5 +271,113 @@ describe("useAgentRunLifecycle transcriptFreezeCount (T-AC2-5)", () => {
 
     assert.equal(lifecycle.getTranscriptFreezeCount(), null);
     assert.equal(lifecycle.getUiRunning(), true);
+  });
+});
+
+/**
+ * r3-run-1 步骤 4 的 hook 级验收：未收 STARTED 直接收前奏终态。
+ *
+ * 这是「core 前奏期不发 RUN_STARTED」在 UI 侧的完整链路断言——修前
+ * shouldAcceptRunEvent 拒收空串终态，uiRunning 会永远停在 true。
+ */
+describe("useAgentRunLifecycle 前奏终态收口（r3-run-1）", () => {
+  function mountLifecycle(): AgentRunLifecycle {
+    const api: { current?: AgentRunLifecycle } = {};
+
+    function Harness() {
+      api.current = useAgentRunLifecycle();
+      return null;
+    }
+
+    renderToStaticMarkup(React.createElement(Harness));
+    assert.ok(api.current);
+    return api.current;
+  }
+
+  it("T-PENDING-1: beginUiRun 后未收 STARTED，FINISHED('') 也能收口", () => {
+    const lifecycle = mountLifecycle();
+    lifecycle.beginUiRun();
+    assert.equal(lifecycle.getUiRunning(), true);
+    // 前奏期 core 一个事件都不发，这里直接收终态。
+    assert.equal(lifecycle.acceptRunEvent(""), true);
+
+    const accepted = lifecycle.onRunFinished({
+      sessionId: "s1",
+      projectId: "p1",
+      runId: "",
+      stopReason: "cancelled",
+      vfsMutated: false,
+    });
+
+    assert.equal(accepted, true, "前奏 FINISHED('') 必须被 accept");
+    assert.equal(lifecycle.getUiRunning(), false, "uiRunning 必须解锁");
+    assert.equal(lifecycle.getTranscriptFreezeCount(), null);
+  });
+
+  it("T-PENDING-2: FAILED('') 同样收口（composer 解锁的另一半）", () => {
+    const lifecycle = mountLifecycle();
+    lifecycle.beginUiRun();
+
+    const accepted = lifecycle.onRunFailed({
+      sessionId: "s1",
+      projectId: "p1",
+      runId: "",
+      error: "前奏炸了",
+    });
+
+    assert.equal(accepted, true);
+    assert.equal(lifecycle.getUiRunning(), false);
+  });
+
+  it("T-PENDING-3: 「发送→立刻停止」后收 FINISHED('')，freeze 被清", () => {
+    const lifecycle = mountLifecycle();
+    lifecycle.beginUiRun();
+    // 用户在 core 还在前奏时按了停止：abort 快照先行（uiRunning=false、freeze!=null）。
+    lifecycle.abortUiRun(5);
+    assert.equal(lifecycle.getAbortRetainPending(), true);
+
+    const accepted = lifecycle.onRunFinished({
+      sessionId: "s1",
+      projectId: "p1",
+      runId: "",
+      stopReason: "cancelled",
+      vfsMutated: false,
+    });
+
+    assert.equal(accepted, true);
+    assert.equal(lifecycle.getUiRunning(), false);
+    assert.equal(
+      lifecycle.getTranscriptFreezeCount(),
+      null,
+      "freeze 必须清，否则面板永久冻在前奏那一刻",
+    );
+  });
+
+  it("T-PENDING-4: 真实 RUN_STARTED 覆盖 PENDING 哨兵，后续按真实 runId 匹配", () => {
+    const lifecycle = mountLifecycle();
+    lifecycle.beginUiRun();
+    lifecycle.onRunStarted({
+      sessionId: "s1",
+      projectId: "p1",
+      runId: "run-real",
+    });
+
+    assert.equal(lifecycle.acceptRunEvent("run-real"), true);
+    assert.equal(
+      lifecycle.acceptRunEvent(""),
+      false,
+      "STARTED 已到之后空串终态不该再被放行（那是上一轮的迟到事件）",
+    );
+  });
+
+  it("T-PENDING-5: resetUiForSessionChange 后空串终态不再放行", () => {
+    const lifecycle = mountLifecycle();
+    lifecycle.beginUiRun();
+    lifecycle.resetUiForSessionChange();
+    assert.equal(
+      lifecycle.acceptRunEvent(""),
+      false,
+      "切会话后 activeRunId 归 null，前奏终态不得被误 accept",
+    );
   });
 });

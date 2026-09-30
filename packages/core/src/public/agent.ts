@@ -72,6 +72,7 @@ export type {
   RunAgentTurnAfterResolveContext,
 } from "../service/agent/logic/run-agent-turn.js";
 export {
+  PENDING_RUN_ID,
   shouldAcceptRunEvent,
   shouldApplyTranscriptReload,
   shouldIgnoreStaleRunStarted,

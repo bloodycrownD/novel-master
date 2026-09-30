@@ -42,6 +42,7 @@ import {
   runPendingSchemaMigrations,
 } from "./schema-migrations/index.js";
 import { createVfsEntrySequenceRepairOperation } from "@/domain/vfs/logic/entry-sequence-repair.js";
+import { clearDecodedContentCaches } from "@/infra/content-cache/logic/decoded-content-cache.js";
 import { IntegrityRepairRegistry } from "@/service/integrity-repair.js";
 
 /**
@@ -341,11 +342,21 @@ export async function assertMinimumBaseline(tx: TdbcConnection): Promise<void> {
 /**
  * 确保所有实体表存在并写入内置 provider。可安全重复调用。
  *
+ * **入口清进程内派生缓存（2026-09-30）**：bootstrap 是双端「拿到库句柄」的
+ * 必经之路，也是**整库被替换后**的唯一收口——备份导入 / 云同步 pull 的流程是
+ * `close 连接 → 覆盖库文件 → 重新 open + bootstrap`（desktop 侧见
+ * `rebootstrapDesktopRuntime` / `db-backup.service`）。at-rest 压缩正文的
+ * 进程内解压产物层（`infra/content-cache`）若不在这里清，就会出现「同一 id
+ * 在库里是旧正文、内存里是新正文」的陈旧读数（编辑后 pull 回旧库即可复现）。
+ * 内容池按内容哈希索引、本身免清（同 hash 必同明文），一起清是为了守住
+ * 「派生缓存与库同寿命」这条一句话能讲清的纪律。
+ *
  * @param conn - 已打开的 TDBC 连接
  */
 export async function bootstrapNovelMaster(
   conn: TdbcConnection
 ): Promise<void> {
+  clearDecodedContentCaches();
   await conn.transaction(async (tx) => {
     const bootVersion = await readSchemaBootVersion(tx);
     if (bootVersion >= SCHEMA_BOOT_VERSION) {

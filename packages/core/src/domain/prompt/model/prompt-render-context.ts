@@ -32,6 +32,14 @@ export interface PromptRenderContext {
    * （`SkillService.effectiveSkills`）；空/缺省不产生技能索引段。
    */
   readonly skillsIndex?: readonly PromptSkillIndexEntry[];
+  /**
+   * workplaceDisplay 的**廉价内容指纹**（`assembleWorkplaceDisplay` 产出，
+   * `path|status|mtimeMs|bodyLen` 列表 join，2026-09-30；体量段为 r4-core-4
+   * 所补，挡「mtime 同、正文异」的指纹假同）：token 估算读数的记忆缓存
+   * 用它识别「前缀没变」，免掉对组装产物串本身的序列化/哈希。缺省视为
+   * 「无指纹」——记忆缓存按 miss 处理（不缓存，行为与无此字段前一致）。
+   */
+  readonly workplaceFingerprint?: string;
 }
 
 /** Structured input for model request services. */

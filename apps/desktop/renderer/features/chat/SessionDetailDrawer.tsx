@@ -49,6 +49,7 @@ import {
   ipcSessionsSetAgentBinding,
   ipcSessionsSetModelOverride,
   onAgentStream,
+  onPromptChatTokenUpdated,
 } from "@/ipc/client";
 import {
   EVENT_AGENT_RUN_FINISHED,
@@ -133,7 +134,10 @@ export function SessionDetailDrawer({
       setMetaLoadFailed(true);
       showToast("智能体信息加载失败");
     }
-    if (tokens.ok) {
+    // data 为 null = 读口本轮被抑制（run 在途）或中途弃权（r3-dt-align）：
+    // **保留旧标签**，不清空也不显示占位。run 结束后 main 那边会补跑一拍
+    // （终态钩子 → 防抖读口），所以旧标签只是短暂停留，不会过期。
+    if (tokens.ok && tokens.data != null) {
       setTokenStats(tokens.data);
     }
   }, [projectId, sessionId]);
@@ -185,6 +189,25 @@ export function SessionDetailDrawer({
     window.addEventListener('messages-rollback', handler);
     return () => window.removeEventListener('messages-rollback', handler);
   }, [open, sessionId, reload]);
+
+  // 两阶段读数的第二相（main 后台精确计数完成后的推送）：首帧估算档
+  // （`gpt ≈`）在收到精确档时升级为家族记号（`glm =` / `gpt =`）。只在当前
+  // 展示估算档（或还没有读数）时采纳——精确标签不回退、不覆盖更新的读数；
+  // 这条通道是「手动压缩后 chip 停在 gpt ≈」的修复点（一次性动作之后没有
+  // 「下一次触发」再让 renderer 自己去问）。
+  useEffect(() => {
+    if (!open || sessionId == null) {
+      return;
+    }
+    return onPromptChatTokenUpdated((payload) => {
+      if (payload.sessionId !== sessionId || payload.stats.estimated) {
+        return;
+      }
+      setTokenStats((prev) =>
+        prev != null && !prev.estimated ? prev : payload.stats,
+      );
+    });
+  }, [open, sessionId]);
 
   // 置位（set floor）/ 手动压缩（manual compaction）改变了上下文范围，
   // ConversationPanel 在这两条路径成功后会 dispatch context-changed（按 sessionId 过滤）。

@@ -467,10 +467,19 @@ export class SessionStreamUnit {
    * 收尾前先冲刷两段缓冲（蓝本：FINISHED/FAILED 先 flush，保证在途 delta
    * 先于落库 reload 到达、不被 clear 丢弃）；历时冻结为「上次生成」。
    * 仅 running 可收尾（事件路径的 runId 所有权校验在 manager 侧；
-   * 这里是状态机第二道守卫）。
+   * 这里是状态机第二道守卫）。**starting 例外（2026-09-30）**：前奏期停止
+   * 由 manager 补调 finishRun('', 'finished')——受理期单元同样要收
+   * settled，否则 starting 行/单元无人收口（重启水合误判中断现场）。
+   * **事件口径（r3-run-1 后）**：core 前奏终态发 FINISHED/FAILED(runId:'')，
+   * 事件路径优先收口，manager 的 .then/.catch 仅为幂等兜底。starting 段
+   * 无流缓冲、runId 未回填，下方各步对其天然 no-op；`startedAtMs` 仍由
+   * begin() 置位，故 elapsed 按受理时刻起算（非 0）。
    */
   settle(status: SessionStreamRunSettledStatus): boolean {
-    if (this.destroyed || this.status !== 'running') {
+    if (
+      this.destroyed ||
+      (this.status !== 'running' && this.status !== 'starting')
+    ) {
       return false;
     }
     this.flushStreamBuffers();

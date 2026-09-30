@@ -28,8 +28,13 @@ export class ChatAgentSession implements AgentSession {
   ) {}
 
   async list(): Promise<readonly ChatMessage[]> {
-    const all = await this.messages.listBySession(this.sessionId);
-    return all.filter((m) => !m.hidden);
+    // SQL 层滤 hidden（返回集合与原先的 JS 侧 filter 完全一致）：本方法被
+    // agent-runner **每 step** 调一次，而压缩/置位后的会话里 hidden 行常占
+    // 多数——全量拉回再逐条解压正文是大会话上的秒级卡顿源（与 UI 读口同款
+    // 修法，2026-09-30 首字延迟排查实锤）。
+    return this.messages.listBySession(this.sessionId, {
+      includeHidden: false,
+    });
   }
 
   append(

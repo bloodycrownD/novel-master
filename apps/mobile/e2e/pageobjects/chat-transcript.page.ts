@@ -1,6 +1,31 @@
 import {switchToNative, switchToWebView} from '../helpers/context';
 import {withRetry} from '../helpers/retry';
 
+/** composer WebView 内的 textarea（composer-input 包自带 data-testid）。 */
+const COMPOSER_TEXTAREA = 'textarea[data-testid="composer-input"]';
+
+/**
+ * 切到 composer 宿主 WebView 的 context。
+ *
+ * 聊天页现在有两个 WebView（transcript + composer），而 `switchToWebView()` 只取
+ * 「第一个」WEBVIEW context——可能落到 transcript 上（那里没有 textarea）。所以先
+ * 按现成 helper 切一次，探测不到 composer textarea 时再逐个 context 找。
+ */
+async function switchToComposerWebView(): Promise<void> {
+  await switchToWebView();
+  if (await $(COMPOSER_TEXTAREA).isExisting()) {
+    return;
+  }
+  const contexts = await browser.getContexts();
+  for (const context of contexts.filter(c => String(c).includes('WEBVIEW'))) {
+    await browser.switchContext(String(context));
+    if (await $(COMPOSER_TEXTAREA).isExisting()) {
+      return;
+    }
+  }
+  throw new Error(`[e2e] composer WebView 未就绪：${COMPOSER_TEXTAREA}`);
+}
+
 /** WebView chat transcript: messages, context menu, rollback. */
 export class ChatTranscriptPage {
   async openWebView(): Promise<void> {
@@ -68,28 +93,58 @@ export class ChatTranscriptPage {
   }
 
   async sendComposerMessage(text: string): Promise<void> {
+    await this.setComposerText(text);
+    // 发送按钮仍在 RN 原生工具栏（WEBVIEW 里没有它）：切回 NATIVE 再点。
     await switchToNative();
-    const input = await $('~chat-composer-input');
-    await input.waitForDisplayed({timeout: 10000});
-    await input.setValue(text);
     const send = await $('~发送');
+    await send.waitForDisplayed({timeout: 10000});
     await send.click();
     await browser.pause(1200);
   }
 
   async setComposerText(text: string): Promise<void> {
-    await switchToNative();
-    const input = await $('~chat-composer-input');
+    await switchToComposerWebView();
+    const input = await $(COMPOSER_TEXTAREA);
     await input.waitForDisplayed({timeout: 10000});
-    await input.setValue(text);
+    // 受控 textarea 坑：直接 `el.value = v` 不会触发 web 侧的 input 监听，
+    // 「原子删拦截 → post('change')」整条链路都不跑，宿主永远收不到文本。
+    // 必须走 native value setter + dispatch input 事件，模拟真实打字。
+    const filled = await browser.execute(
+      (selector: string, value: string) => {
+        const el = document.querySelector<HTMLTextAreaElement>(selector);
+        if (el == null) {
+          return false;
+        }
+        const setter = Object.getOwnPropertyDescriptor(
+          HTMLTextAreaElement.prototype,
+          'value',
+        )?.set;
+        setter?.call(el, value);
+        el.focus();
+        el.dispatchEvent(new Event('input', {bubbles: true}));
+        return true;
+      },
+      COMPOSER_TEXTAREA,
+      text,
+    );
+    if (filled !== true) {
+      throw new Error(`[e2e] composer textarea 写入失败：${COMPOSER_TEXTAREA}`);
+    }
     await browser.pause(300);
   }
 
   async getComposerText(): Promise<string> {
-    await switchToNative();
-    const input = await $('~chat-composer-input');
+    await switchToComposerWebView();
+    const input = await $(COMPOSER_TEXTAREA);
     await input.waitForDisplayed({timeout: 10000});
-    return input.getText();
+    const value = await browser.execute((selector: string) => {
+      const el = document.querySelector<HTMLTextAreaElement>(selector);
+      return el == null ? null : el.value;
+    }, COMPOSER_TEXTAREA);
+    if (typeof value !== 'string') {
+      throw new Error(`[e2e] composer textarea 读取失败：${COMPOSER_TEXTAREA}`);
+    }
+    return value;
   }
 
   async expectComposerText(expected: string): Promise<void> {

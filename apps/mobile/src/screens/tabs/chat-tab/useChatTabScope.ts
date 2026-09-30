@@ -1,7 +1,14 @@
 /**
  * Chat tab local UI scope: projects/sessions lists, subviews, drawers, VFS handles.
  */
-import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import {Alert, DeviceEventEmitter, Linking} from 'react-native';
 import {showAppToast} from '@/services/app-toast';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
@@ -15,7 +22,10 @@ import {
   loadChatAgentMeta,
   type ChatAgentMeta,
 } from '@/services/chat-agent-meta';
-import {loadChatPromptTokenLabelResilient} from '@/services/chat-prompt-tokens.service';
+import {
+  isChatTokenPreciseWarmInflight,
+  loadChatPromptTokenLabelResilient,
+} from '@/services/chat-prompt-tokens.service';
 import type {RootStackParamList} from '@/navigation/types';
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
 import {
@@ -95,6 +105,44 @@ export function useChatTabScope({
   // 精确标签不得写进新会话的 meta（service 层 gen 闸之外的双保险）。
   const tokenLabelSessionRef = useRef<string | null>(null);
 
+  // 切会话立即清 chip（2026-09-30 用户实报「切换会话显示上一个会话的
+  // token 才刷新」）：token 标签属于它会话——会话一变就同步归位 '…'
+  // （加载态），并让身份闸接管所有权（旧会话迟到的一切写回被丢弃）。
+  // 原本下方两处「保留旧值」的注释以为 loadChatAgentMeta 重建 meta 时会
+  // 清场，实现里 `...meta` 不含 tokenLabel、显式的 `prev?.tokenLabel` 又
+  // 把旧值带进来——残留整整一轮刷新窗口（防抖 300ms + 装配/读数 ~1s）的
+  // **错误数字**。同会话内的刷新（压缩/发送后重算）不受影响：sessionId
+  // 没变，本 effect 不触发，保留旧值的语义照旧成立。
+  // 用 useLayoutEffect 而非 useEffect（r4-app-2）：清场必须发生在**提交后、
+  // 绘制前**——useEffect 是 post-paint 的，切会话那一帧仍可能把旧数字绘出来，
+  // 「一帧不漏」就只剩注释里的口号。布局阶段同步归位后（布局期写 state 的
+  // 补渲染也在绘制前完成），旧数字没有任何一帧可见；跨会话切换一次会话
+  // 才走一遍，这次额外渲染的代价可忽略。
+  useLayoutEffect(() => {
+    tokenLabelSessionRef.current = sessionId ?? null;
+    setAgentMeta(prev =>
+      prev == null || sessionId == null
+        ? prev
+        : {...prev, tokenLabel: '…'},
+    );
+  }, [sessionId]);
+
+  // 防抖槽（复用 refreshChatMetaInflightRef 的在途槽模式，单槽服务当前会话）：
+  // - deferred：trailing 计时挂起中，窗口内所有 caller 共享「这一次执行」；
+  // - running：在途执行链（到期执行若上一轮仍在途则挂其后串行，绝不并发）；
+  // - hasLabel：本会话是否已刷出过非空标签——run 在途冻结的「有东西可看」
+  //   判据（声明在 runChatTokenLabelRefresh 之前，供其在执行时读写）。
+  const chatTokenLabelDebounceRef = useRef<{
+    key: string;
+    hasLabel: boolean;
+    timer: ReturnType<typeof setTimeout> | null;
+    deferred: {
+      promise: Promise<void>;
+      resolve: (value: Promise<void>) => void;
+    } | null;
+    running: Promise<void> | null;
+  }>({key: '', hasLabel: false, timer: null, deferred: null, running: null});
+
   const runChatTokenLabelRefresh = useCallback(async () => {
     // meta 未加载（undefined）时保持未加载态：partial 更新不能凭空造出
     // 残缺的 meta 对象（缺字段的假 meta 会被当成已加载渲染）。
@@ -103,6 +151,21 @@ export function useChatTabScope({
       return;
     }
     tokenLabelSessionRef.current = sessionId;
+    // run 在途冻结（2026-09-30 拍板「chip 首帧先修」）：run 进行中提示词
+    // 不变，而一次首帧刷新 = 整串装配 0.7~1.2s + 读口 resolve 1.2~1.7s，
+    // 与流式渲染同拍挤占 JS 线程与单 SQLite 连接（append/settle 各一轮
+    // ~2.4s，真机实锤）。判定放在防抖**执行时**而非排程时：run 结束沿
+    // （onSettled / 末条转录事件）触发的刷新 300ms 后才执行，彼时 core 的
+    // finally 已反注册 abortRegistry，补刷照常落地。只在该会话已显示过
+    // 标签时冻结——切进运行中会话的首帧不冻，否则 chip 会空白到 run 结束。
+    const debounceSlot = chatTokenLabelDebounceRef.current;
+    if (
+      debounceSlot.key === `${projectId}#${sessionId}` &&
+      debounceSlot.hasLabel &&
+      runtime.abortRegistry.has(sessionId)
+    ) {
+      return;
+    }
     // 已有标签时保留旧值而非 '…'：压缩/发送后的重算在大上下文上可达数秒
     // （native 整串计数），旧读数先顶着、新值落地即替换；会话切换路径由
     // loadChatAgentMeta 重建 meta（tokenLabel 归 ''）先清场，不会串显。
@@ -125,27 +188,44 @@ export function useChatTabScope({
             prev == null ? prev : {...prev, tokenLabel: upgraded},
           );
         },
+        {
+          // 中途弃权（2026-09-30 回滚竞态）：本刷新起跑后 run 才注册时，冻结闸
+          // 管不到已经在跑的这一轮——build 分段间检查本判定，run 起步即弃权
+          // 返回空串，把 JS 线程与 SQLite 让给发送链（曾把 POST 从 +1.2s 拖到
+          // +19.6s）。只在已有标签可保时弃权：切进运行中会话的首帧照算。
+          shouldBail: () =>
+            chatTokenLabelDebounceRef.current.hasLabel &&
+            runtime.abortRegistry.has(sessionId),
+        },
       );
-      setAgentMeta(prev => (prev == null ? prev : {...prev, tokenLabel}));
+      // 空串 = 中途弃权：保留旧标签，不写 meta、不置 hasLabel。
+      // 落地前过会话身份闸（2026-09-30 切会话残留第三源）：防抖槽换 key 不
+      // 取消在途轮，本刷新闭包里的 sessionId 若已被切走，读数就地丢弃——
+      // 与升级回调（上方 upgraded 闸）同一口径。
+      if (tokenLabel && tokenLabelSessionRef.current === sessionId) {
+        setAgentMeta(prev => (prev == null ? prev : {...prev, tokenLabel}));
+        // 冻结判据维护：刷出非空标签后，本会话才有「可冻结的旧值」可保。
+        if (
+          chatTokenLabelDebounceRef.current.key ===
+          `${projectId}#${sessionId}`
+        ) {
+          chatTokenLabelDebounceRef.current.hasLabel = true;
+        }
+      }
     } catch {
-      setAgentMeta(prev => (prev == null ? prev : {...prev, tokenLabel: ''}));
+      // 失败清标签同样过闸：旧会话的失败不得抹掉新会话的显示。
+      if (tokenLabelSessionRef.current === sessionId) {
+        setAgentMeta(prev => (prev == null ? prev : {...prev, tokenLabel: ''}));
+      }
     }
   }, [runtime, projectId, sessionId]);
 
-  // 防抖槽（复用 refreshChatMetaInflightRef 的在途槽模式，单槽服务当前会话）：
-  // - deferred：trailing 计时挂起中，窗口内所有 caller 共享「这一次执行」；
-  // - running：在途执行链（到期执行若上一轮仍在途则挂其后串行，绝不并发）。
-  const chatTokenLabelDebounceRef = useRef<{
-    key: string;
-    timer: ReturnType<typeof setTimeout> | null;
-    deferred: {
-      promise: Promise<void>;
-      resolve: (value: Promise<void>) => void;
-    } | null;
-    running: Promise<void> | null;
-  }>({key: '', timer: null, deferred: null, running: null});
-
   const refreshChatTokenLabel = useCallback((): Promise<void> => {
+    // 压缩预热窗口（warmChatTokenLabelAfterCompaction）：chip 冻结旧标签，
+    // 预热完成后由压缩流程补一次刷新（首帧 L1 命中精确档，无 gpt ≈ 跳变）。
+    if (sessionId != null && isChatTokenPreciseWarmInflight(sessionId)) {
+      return Promise.resolve();
+    }
     const key = `${projectId ?? ''}#${sessionId ?? ''}`;
     const slot = chatTokenLabelDebounceRef.current;
     if (slot.key !== key) {
@@ -155,6 +235,8 @@ export function useChatTabScope({
         slot.timer = null;
       }
       slot.key = key;
+      // 换会话即换「有东西可看」判据：新会话还没刷出过标签，冻结不生效。
+      slot.hasLabel = false;
       slot.deferred = null;
       slot.running = null;
     }
@@ -221,10 +303,16 @@ export function useChatTabScope({
   // refreshChatMeta 的在途复用槽：首屏三处触发（本 hook 的 dep effect、
   // Provider 的 conversation effect、useFocusEffect）在同一挂载周期内
   // 重入，同参调用共享在途 promise，只跑一轮查询。
+  // round 是落地的会话身份闸（r4-app-1）：每新起一轮自增，落定前与槽内
+  // 轮次比对——只有仍是槽内最新一轮的读数才许落地。切会话后旧会话在途的
+  // loadChatAgentMeta 落定（含失败）一律丢弃，否则旧会话的 agentName /
+  // modelLabel 会写进新会话（tokenLabel 因显式保留恰好幸免，其余字段不是）。
   const refreshChatMetaInflightRef = useRef<{
     key: string;
+    round: number;
     promise: Promise<void>;
   } | null>(null);
+  const refreshChatMetaRoundRef = useRef(0);
 
   // showToast 经 ref 取用：它随渲染可能换引用（消费方 context mock 每次
   // 渲染给新函数），若进 refreshChatMeta 依赖会连锁重建 → dep effect 无限
@@ -240,6 +328,10 @@ export function useChatTabScope({
     if (inflight != null && inflight.key === key) {
       return inflight.promise;
     }
+    const round = ++refreshChatMetaRoundRef.current;
+    // 落地权判据：在途槽里还是这一轮（中途没被别的会话/参数的轮次顶掉）。
+    const isCurrentRound = () =>
+      refreshChatMetaInflightRef.current?.round === round;
     const promise = (async () => {
       // getCurrentModelId 与 loadChatAgentMeta 互不依赖（后者只需
       // projectId/sessionId），并行发起；两路赋值顺序保持
@@ -256,11 +348,20 @@ export function useChatTabScope({
       if (metaPromise == null) {
         // 无项目或无活动会话时无法解析 session 绑定：保持未加载（锁定）态，
         // 不用 source:'none' 占位——那会被消费方当成「已删待重选」。
-        setAgentMeta(undefined);
+        // 同样过身份闸：本轮的「无会话」结论不能清掉切换后新会话已落地的 meta。
+        if (isCurrentRound()) {
+          setAgentMeta(undefined);
+        }
         return;
       }
       try {
         const meta = await metaPromise;
+        // 会话身份闸（r4-app-1）：旧会话在途的 meta 落定不得写进新会话——
+        // 合并写回与链尾标签刷新整段都要「仍是最新一轮」才执行（标签刷新
+        // 一旦放行会把身份闸重新指到旧会话，残留就从 meta 字段漏回来）。
+        if (!isCurrentRound()) {
+          return;
+        }
         setAgentMeta(prev => ({
           ...prev,
           ...meta,
@@ -270,12 +371,16 @@ export function useChatTabScope({
       } catch (error) {
         // loadChatAgentMeta 仅归一 AgentRunResolveError（→none meta）；走到
         // 这里的是 ChatError 等其它异常——保持未加载（锁定）态并提示错误，
-        // 绝不冒充「已删待重选」（au/B-1 / au/C-orch-2）。
+        // 绝不冒充「已删待重选」（au/B-1 / au/C-orch-2）。失败清场同样过闸：
+        // 旧会话的失败既不该清掉新会话的 meta，也不该弹与新会话无关的提示。
+        if (!isCurrentRound()) {
+          return;
+        }
         setAgentMeta(undefined);
         showToastRef.current(toastMessage('智能体信息加载失败', error));
       }
     })();
-    refreshChatMetaInflightRef.current = {key, promise};
+    refreshChatMetaInflightRef.current = {key, round, promise};
     // 落定后清引用：只清自己这一轮，避免覆盖后继（不同参数）的刷新；
     // 完成后无 inflight，下次调用（如重新聚焦）正常发起新一轮。
     const settleInflight = () => {

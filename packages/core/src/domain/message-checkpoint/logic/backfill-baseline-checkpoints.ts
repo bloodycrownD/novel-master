@@ -131,20 +131,29 @@ export async function decideBackfillShortCircuit(args: {
  * - 如果会话里没有任何 checkpoint，则从第一条消息开始全部补。
  * - 没有任何 message 或没有任何 live 文件时是空操作（`confirmedNoGap=false`：
  *   无 live 文件时无法建点也无法验证空窗，不算「确认」）。
+ * - r3-run-4：传 `signal` 时在两个扫描循环内检查并提前退出，提前退出返回
+ *   `confirmedNoGap: false`——**中断态绝不能被当成「确认无空窗」**，否则调用方
+ *   会把游标写到 count，下一轮判定短路成「已确认」，剩下的空窗永远补不上。
+ *   已 insert 的行随事务提交留下且不可覆盖（幂等），下轮接着补。
  */
 export async function backfillBaselineCheckpoints(
   entryRepo: VfsEntryRepository,
   messageRepo: MessageRepository,
   checkpointRepo: MessageCheckpointRepository,
   projectId: string,
-  sessionId: string
+  sessionId: string,
+  signal?: AbortSignal
 ): Promise<BackfillBaselineResult> {
   const files = await listSessionFileHeads(entryRepo, projectId, sessionId);
   if (files.length === 0) {
     return { confirmedNoGap: false };
   }
 
-  const messages = await messageRepo.listBySession(sessionId);
+  // 头投影（id/seq/role/hidden，不解压 content）：本函数只需要消息 id 与
+  // 顺序，而 `listBySession` 会把**含 hidden** 的全会话正文逐条解压——它在
+  // 每轮发送前都跑一次（run-agent-turn 的 backfill 阶段），大会话上正是
+  // 「用户消息落库要等几秒」的主源（2026-09-30 实锤）。
+  const messages = await messageRepo.listMessageHeadersBySession(sessionId);
   if (messages.length === 0) {
     // 空会话恒无空窗。
     return { confirmedNoGap: true };
@@ -154,6 +163,12 @@ export async function backfillBaselineCheckpoints(
   // 如果没有任何 checkpoint，整个列表都是空窗（从头补）。
   let firstGapIndex = 0;
   for (let i = messages.length - 1; i >= 0; i--) {
+    // 弃权点（r3-run-4）：这段倒扫每轮都跑整段消息数（大会话数百上千次
+    // hasCheckpoint 单行读），是 backfill 阶段最长的无 IO 关闭窗口。停了
+    // 就别再往下扫——中断态返回 confirmedNoGap=false，游标不前移。
+    if (signal?.aborted === true) {
+      return { confirmedNoGap: false };
+    }
     const has = await checkpointRepo.hasCheckpoint(sessionId, messages[i]!.id);
     if (has) {
       firstGapIndex = i + 1;
@@ -174,6 +189,11 @@ export async function backfillBaselineCheckpoints(
   }));
 
   for (let i = firstGapIndex; i < messages.length; i++) {
+    // 弃权点（r3-run-4）：同款，提前退出。**中途退出提交已写部分是有意的**——
+    // backfill 幂等（insertCheckpoint 不覆盖已有行），下轮补齐剩余空窗即可。
+    if (signal?.aborted === true) {
+      return { confirmedNoGap: false };
+    }
     await checkpointRepo.insertCheckpoint({
       sessionId,
       messageId: messages[i]!.id,
@@ -224,7 +244,9 @@ export function createBaselineCheckpointBackfillOperation(args: {
       if (decision.kind === "short-circuit") {
         return { needsRepair: false };
       }
-      const messages = await messageRepo.listBySession(sessionId);
+      // 回退全量分支同样只要 id 与顺序：用头投影，避免为了「找最后一个有
+      // checkpoint 的消息」把全会话正文解压一遍（见 backfillBaselineCheckpoints 注释）。
+      const messages = await messageRepo.listMessageHeadersBySession(sessionId);
       if (messages.length === 0) {
         return { needsRepair: false };
       }

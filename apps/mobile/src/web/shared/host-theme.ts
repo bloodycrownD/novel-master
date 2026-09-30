@@ -13,6 +13,13 @@ export type HostTheme = {
   text?: string;
   textSecondary?: string;
   primary?: string;
+  /**
+   * primary 的低透明派生（胶囊底色 --primary-muted）。
+   * 口径：宿主算色、web 不做颜色计算（capsule/C-orch-1）——原先 code-editor 在
+   * web 侧自拼 `primary + '22'`，与 composer-input 的宿主下发口径相反。
+   * 可选：chat-transcript / rich-document 不消费，缺省不写入，由 CSS 兜底。
+   */
+  primaryMuted?: string;
   danger?: string;
   surface?: string;
   borderLight?: string;
@@ -24,6 +31,7 @@ const THEME_VARS: Array<{key: keyof HostTheme; cssVar: string}> = [
   {key: 'text', cssVar: '--text'},
   {key: 'textSecondary', cssVar: '--text-secondary'},
   {key: 'primary', cssVar: '--primary'},
+  {key: 'primaryMuted', cssVar: '--primary-muted'},
   {key: 'danger', cssVar: '--danger'},
   {key: 'surface', cssVar: '--surface'},
   {key: 'borderLight', cssVar: '--border'},

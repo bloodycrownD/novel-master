@@ -108,9 +108,8 @@ function ChatSessionListPanelInner({
   }, [manager]);
 
   // ===== 中断徽标数据源（Step 9）：同 activeRunIds 的订阅模式 =====
-  // 中断态会话集合（水合回填的 interrupted 单元）：徽标三态判定
-  // running > interrupted > isCurrent 的中间一环；变更同样经
-  // manager.subscribe 通知驱动刷新。
+  // 中断态会话集合（水合回填的 interrupted 单元）：「已中断」徽标的唯一
+  // 判据；变更同样经 manager.subscribe 通知驱动刷新。
   const [interruptedRunIds, setInterruptedRunIds] = useState<
     ReadonlySet<string>
   >(() => new Set(manager.interruptedSessionIds()));
@@ -216,15 +215,21 @@ function ChatSessionListPanelInner({
             }
             renderItem={({item}) => {
               const isCurrent = item.id === sessionId;
-              // 徽标三态判定（Step 9），优先级 running > interrupted > isCurrent：
-              // running（活跃 run）→「生成中」；interrupted（无论是否当前会话）→
-              // 「已中断」——会话中断后重启 app 且当前停留在该会话时，必须落
-              // 「已中断」而非被「活跃中」吞掉（GWT-6 原样复现场景）；仅当前
-              // 会话且非上述两态才保留「活跃中」。
+              // 徽标两态判定：running（该会话真有 run 在跑）→「生成中」徽标；
+              // interrupted（无论是否当前会话，水合回填的中断现场）→「已中断」
+              // 徽标；「当前」位置徽标与运行态正交，照常按 isCurrent 出。
               const isRunning = activeRunIds.has(item.id);
-              const isInterrupted =
-                !isRunning && interruptedRunIds.has(item.id);
-              const showsActiveMeta = isCurrent && !isRunning && !isInterrupted;
+              const isInterrupted = !isRunning && interruptedRunIds.has(item.id);
+              // 「 · 活跃中」meta 的唯一判据是 isRunning——即 manager 的真实
+              // 判活（starting|running 单元集合），**不是** isCurrent。
+              //
+              // 挂在 isCurrent 上时它退化成「当前会话」标记，与运行态彻底解耦
+              // （2026-09-30 真机实录 GWT-7）：run 于 11:38:48 收尾、单元 settle
+              // 出 active 集后 4 分钟仍显示；app 重启后 session_run_state 只有
+              // settled 行、既无 active 也无 interrupted 可水合，照样显示——
+              // 用户把「27 分钟前 · 活跃中」读成 run 卡死。挂在 isRunning 上，
+              // 收尾即隐、重启不凭空出现、真在跑照常显示。
+              const showsActiveMeta = isRunning;
               return (
                 <Pressable
                   style={[

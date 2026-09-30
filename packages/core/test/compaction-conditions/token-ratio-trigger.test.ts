@@ -187,13 +187,18 @@ describe("TokenRatioConditionTrigger", () => {
 
   it("heuristic 估算走保守阈值，比 api 精确档更早触发压缩", async () => {
     const session = new InMemoryAgentSession();
-    // 可控 heuristic 计数的 registry：估算优先路径的读数完全来自它。
-    let heuristicCount = 0;
-    const registry = {
-      heuristic: { countText: (text: string) => heuristicCount },
-    } as unknown as ReturnType<typeof createDefaultTokenCounterRegistry>;
+    const registry = createDefaultTokenCounterRegistry(emptyRegistryDeps());
     const sessionKkv = createMemorySessionKkv();
-    const evaluation = systemOnlyEvaluation("sys", "sess-heuristic-factor", sessionKkv);
+    // 注入通道 = 正文本身（2026-09-30 起估算读数改「单趟 CJK 感知字符折算」，
+    // 不再经 registry.heuristic.countText —— 往计数器里塞数已无效）。45_122 个
+    // 汉字 × 1.64 ≈ 74_000 token，稳落「保守阈值 68_000 之上、精确阈值 80_000
+    // 之下」的区间（区间宽 12_000，取值不贴边）。
+    const bandText = "中".repeat(45_122);
+    const evaluation = systemOnlyEvaluation(
+      bandText,
+      "sess-heuristic-factor",
+      sessionKkv
+    );
 
     // contextWindow=100000、tokenRatio=0.8：精确阈值=80000，heuristic 默认阈值=68000。
     const makeTrigger = (heuristicSafetyFactor?: number) =>
@@ -207,8 +212,6 @@ describe("TokenRatioConditionTrigger", () => {
         registry,
       );
 
-    // 75000 落在「保守阈值之上、精确阈值之下」区间。
-    heuristicCount = 75_000;
     assert.equal(
       await makeTrigger().shouldTrigger(session, evaluation),
       true,

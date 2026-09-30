@@ -10,6 +10,7 @@ import {
   fileCacheKey,
 } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
 import { parseFileCachePayload } from "../../src/domain/workplace/logic/rule-snapshot-codec.js";
+import { settlePendingFileCacheBackfills } from "../../src/domain/workplace/logic/load-or-fill-file-cache.js";
 import { createVfsTools } from "../../src/domain/tool/builtin/vfs-tools.js";
 import type { AgentPromptLayout } from "../../src/domain/prompt/model/agent-prompt-layout.js";
 import {
@@ -108,6 +109,10 @@ describe("assembleWorkplaceDisplay", () => {
       (await sk.get(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY)) !=
         null,
     );
+    // file_cache 回填是 fire-and-forget（2026-09-30 冷路径优化：压缩+落库
+    // 推迟到宏任务，不挡 assemble 返回），所以「最终被回填」要在 settle
+    // 闸门之后断言，而不是 assemble 返回那一刻。
+    await settlePendingFileCacheBackfills();
     assert.ok(
       (await sk.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, fileCacheKey("full", "/note.md"))) !=
         null,
@@ -191,11 +196,65 @@ describe("assembleWorkplaceDisplay", () => {
       projectId: project.id,
       sessionId: session.id,
     };
+    // 第一次 assemble：冷 miss，读 VFS + 后台回填。
     await assembleWorkplaceDisplay(scope, deps);
     const firstReads = read.mock.callCount();
     assert.ok(firstReads >= 1);
+    // 等回填落定再跑第二次：后台写是 fire-and-forget（推迟一个宏任务），
+    // 不等的话第二次仍会 miss 而多读一次 VFS——那是「后台写还在跑时又
+    // miss」的已知边界（与现状 miss 行为一致，非回归），不是本用例的考点。
+    // 本用例考点是：缓存落定后，命中路径不再读 VFS。
+    await settlePendingFileCacheBackfills();
     await assembleWorkplaceDisplay(scope, deps);
     assert.equal(read.mock.callCount(), firstReads);
+  });
+
+  // 已知边界的显式记录（2026-09-30 冷路径优化引入）：后台写还没落定时，
+  // 紧接着的第二次 assemble 仍会 miss 并重读一次 VFS。这不是回归——
+  // 优化前是「先写回再返回」，优化后是「先返回再写回」，两者在「第二次
+  // 组装紧跟第一次」的窗口里读次数相同。钉在这里是为了让未来有人看到
+  // 读次数变化时知道该往哪看，而不是误判成缓存坏了。
+  it("T-WP3b 已知边界：后台回填未落定时的紧邻第二次 assemble 仍会重读 VFS", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const sk = createSessionKkvService(ctx.conn);
+    const baseVfs = ctx.sessionVfs(project.id, session.id);
+    await baseVfs.write("/race.md", "body");
+    await createWorkplaceService(ctx.conn, {
+      kind: "session",
+      projectId: project.id,
+      sessionId: session.id,
+    }).setFileRule({ logicalPath: "/race.md", inclusionMode: "show" });
+
+    const read = mock.fn(async (path: string) => baseVfs.read(path));
+    const vfs = new Proxy(baseVfs, {
+      get(target, prop, receiver) {
+        if (prop === "read") {
+          return read;
+        }
+        return Reflect.get(target, prop, receiver);
+      },
+    });
+    const wt = createWorkplaceService(ctx.conn, {
+      kind: "session",
+      projectId: project.id,
+      sessionId: session.id,
+    });
+    const scope = {
+      kind: "session" as const,
+      projectId: project.id,
+      sessionId: session.id,
+    };
+    const deps = { sessionKkv: sk, workplace: wt, vfs: vfs as typeof baseVfs, layout: layoutWithWorkplace() };
+
+    await assembleWorkplaceDisplay(scope, deps);
+    const firstReads = read.mock.callCount();
+    // 不 settle：后台写还在宏任务队列里，缓存必然 miss
+    const out = await assembleWorkplaceDisplay(scope, deps);
+    assert.match(out.workplaceDisplay, /body/, "重读也要出正文，不能空");
+    assert.equal(read.mock.callCount(), firstReads + 1, "miss 时重读一次 VFS");
+    await settlePendingFileCacheBackfills();
   });
 
   it("T-FC1: write 工具成功 upsert full:{path}", async () => {
@@ -418,7 +477,9 @@ describe("assembleWorkplaceDisplay", () => {
       null,
     );
     // 正常文件不受降级影响：正文照常进 display 并写 cache
+    // （回填是 fire-and-forget，落定后再断言缓存）
     assert.equal(out.workplaceDisplay.includes("hello-world"), true);
+    await settlePendingFileCacheBackfills();
     assert.notEqual(
       await sk.get(
         session.id,

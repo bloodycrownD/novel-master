@@ -172,6 +172,12 @@ jest.mock('@/components/vfs/CodeEditorWebView', () => {
   };
 });
 
+// PromptEditorScreen 的 @/$ tag 候选源走 useNovelMaster（composer 变体专用；
+// 本文件只测 form 变体，stub 成「runtime 未就绪」即可——typeahead 静默降级）。
+jest.mock('@/runtime/novel-master-context', () => ({
+  useNovelMaster: () => ({status: 'loading', runtime: null}),
+}));
+
 // R5：PromptEditorScreen 预览态依赖（内部 RichDocumentWebView/core 依赖重，stub 掉）。
 jest.mock('@/components/vfs/FileMarkdownPreview', () => ({
   FileMarkdownPreview: () => null,

@@ -1,0 +1,113 @@
+/*
+ * composer-input：透明 textarea（absolute 上层）+ 高亮层（流内下层）单引擎 overlay。
+ * 桌面蓝本 apps/desktop/renderer/styles/shell.css 的 chat-composer 段手法逐项照搬，
+ * 尺寸/字色由 metrics、theme 经 JS 写内联样式或 CSS 变量驱动。
+ */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  /* 背景不上色：底层 dock/表单外壳底色由 RN 容器负责，避免两层底色错位 */
+  background: transparent;
+  color: var(--text, #111);
+  font-family: -apple-system, 'Helvetica Neue', 'Segoe UI', Roboto, sans-serif;
+  overflow: hidden;
+  /* 全高链路（供 .composer-input--unbounded 撑满 WebView 视口用；限高模式不受影响） */
+  height: 100%;
+}
+
+#root {
+  position: relative;
+  height: 100%;
+}
+
+.composer-input {
+  position: relative;
+  /* 字号/行高由 JS 按 metrics 覆盖（此处为 init 前的兜底；16 是 iOS 聚焦不缩放的下限） */
+  font-size: 16px;
+  line-height: 22px;
+}
+
+/* 不限高模式（metrics.maxHeight=null）：当前无生产消费方（chat 全屏已改走
+   PromptEditor/CodeEditorWebView），保留为协议能力，勿当死代码删。
+   铺满 WebView 视口，触摸区全屏；高亮层也必须限到视口高（见下）。 */
+.composer-input--unbounded {
+  height: 100%;
+}
+
+/* 不限高模式下高亮层与 textarea 同为视口高、同一滚动体——不设 100% 时高亮层
+   是流内内容高（被 body overflow:hidden 裁掉且自身不滚），长文滚动即两层错位。 */
+.composer-input--unbounded .composer-input__highlight {
+  height: 100%;
+}
+
+.composer-input--disabled {
+  opacity: 0.55;
+}
+
+/* 高亮层：流内定尺寸（文档高度真源），透明 textarea 叠在其上 */
+.composer-input__highlight {
+  width: 100%;
+  padding: 6px 4px;
+  min-height: 56px;
+  max-height: 160px;
+  overflow: auto;
+  color: var(--text, #111);
+  white-space: pre-wrap;
+  word-break: break-word;
+  /* 点击/选择穿透到上层 textarea */
+  pointer-events: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* 胶囊 token：muted 底 + primary 字；负 margin 抵消 padding，避免光标与文字错位 */
+.composer-input__token {
+  color: var(--primary, #007aff);
+  background: var(--primary-muted, rgba(0, 122, 255, 0.13));
+  border-radius: 4px;
+  padding: 1px 4px;
+  margin: 0 -4px;
+  /* 跨行时两端各自完整（旧内核降级为断口，纯视觉） */
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+
+/* 透明 textarea：上层覆盖，文字不可见、插入符显式着色 */
+.composer-input__input {
+  position: absolute;
+  inset: 0;
+  /* longhand 兜底：inset 需 Chromium 87+，老厂商内核不识别时 absolute 缺
+     top/left 会整体塌位（不是视觉降级） */
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  /* padding 与高亮层一致由 JS 按 metrics 同步写入；换行口径也必须与高亮层一致 */
+  padding: 6px 4px;
+  border: none;
+  outline: none;
+  font: inherit;
+  color: transparent;
+  caret-color: var(--text, #111);
+  background: transparent;
+  resize: none;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  -webkit-overflow-scrolling: touch;
+}
+
+.composer-input__input::placeholder {
+  color: var(--text-secondary, #8e8e93);
+}
+
+.composer-input__input::selection {
+  /* 文字透明，选区只剩底色（--selection 缺省回落到胶囊底色） */
+  background: var(--selection, var(--primary-muted, rgba(0, 122, 255, 0.25)));
+}

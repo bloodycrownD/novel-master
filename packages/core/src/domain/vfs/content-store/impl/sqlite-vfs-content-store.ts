@@ -27,6 +27,10 @@ import {
   tightBytes,
   VFS_CONTENT_ENCODING_ZLIB,
 } from "../logic/zlib-codec.js";
+import {
+  lookupDecodedContentBody,
+  rememberDecodedContentBody,
+} from "@/infra/content-cache/logic/decoded-content-cache.js";
 import type { VfsContentStore } from "../vfs-content-store.port.js";
 
 /**
@@ -108,6 +112,14 @@ export class SqliteVfsContentStore implements VfsContentStore {
   }
 
   async get(contentHash: string): Promise<string> {
+    // 进程内解压产物层（infra/content-cache）：内容是内容寻址的，同 hash
+    // 必同正文，命中即免掉「读压缩字节 + inflate」两笔钱。本层的键与
+    // session-kkv file_cache 的 content_hash 同一个算法（hashContent(明文)），
+    // 两套存储共享同一份内存条目。
+    const cached = lookupDecodedContentBody(contentHash);
+    if (cached != null) {
+      return cached;
+    }
     const rows = await queryTemplate<{
       encoding: string;
       bytes: SqlValue;
@@ -127,7 +139,9 @@ export class SqliteVfsContentStore implements VfsContentStore {
         "vfs_content_blob.bytes"
       );
       const plainUtf8 = decompressZlib(compressed);
-      return new TextDecoder().decode(plainUtf8);
+      const plain = new TextDecoder().decode(plainUtf8);
+      rememberDecodedContentBody(contentHash, plain);
+      return plain;
     }
 
     // blob 未命中 → 查 member（JOIN pack 取 format + bytes）按 format 分派解码。
@@ -154,7 +168,11 @@ export class SqliteVfsContentStore implements VfsContentStore {
     const plainUtf8 = decodePackMemberPlaintexts(String(member.format), packBytes, [
       { offset: Number(member.offset), length: Number(member.length) },
     ])[0]!;
-    return new TextDecoder().decode(plainUtf8);
+    const plain = new TextDecoder().decode(plainUtf8);
+    // member 的 content_hash 与 blob 同一个键空间（hashContent(明文)），
+    // 解码产物同样进进程内缓存层。
+    rememberDecodedContentBody(contentHash, plain);
+    return plain;
   }
 
   async getMany(hashes: readonly string[]): Promise<Map<string, string>> {
@@ -162,12 +180,27 @@ export class SqliteVfsContentStore implements VfsContentStore {
     if (hashes.length === 0) {
       return result;
     }
+    // 先走内存层，只把 miss 的 hash 投进 SQL（见 get 的说明）。去重是
+    // 顺手的：IN 查询对重复值本来就无害，但 miss 列表去重后分片更干净。
+    const toLoad: string[] = [];
+    const seen = new Set<string>();
+    for (const hash of hashes) {
+      const cached = lookupDecodedContentBody(hash);
+      if (cached != null) {
+        result.set(hash, cached);
+        continue;
+      }
+      if (!seen.has(hash)) {
+        seen.add(hash);
+        toLoad.push(hash);
+      }
+    }
     for (
       let offset = 0;
-      offset < hashes.length;
+      offset < toLoad.length;
       offset += CONTENT_GETMANY_CHUNK_SIZE
     ) {
-      const chunk = hashes.slice(offset, offset + CONTENT_GETMANY_CHUNK_SIZE);
+      const chunk = toLoad.slice(offset, offset + CONTENT_GETMANY_CHUNK_SIZE);
       const placeholders = chunk.map(() => `?`).join(`,`);
       const rows = await this.conn.query<{
         content_hash: string;
@@ -185,10 +218,10 @@ export class SqliteVfsContentStore implements VfsContentStore {
           "vfs_content_blob.bytes"
         );
         const plainUtf8 = decompressZlib(compressed);
-        result.set(
-          String(row.content_hash),
-          new TextDecoder().decode(plainUtf8)
-        );
+        const plain = new TextDecoder().decode(plainUtf8);
+        const contentHash = String(row.content_hash);
+        rememberDecodedContentBody(contentHash, plain);
+        result.set(contentHash, plain);
       }
       // blob 未命中的 hash 落 member 侧批量解析；全部命中时零额外查询。
       const missing = chunk.filter((hash) => !result.has(hash));
@@ -275,7 +308,9 @@ export class SqliteVfsContentStore implements VfsContentStore {
         members.map((member) => member.span)
       );
       members.forEach((member, index) => {
-        result.set(member.contentHash, decoder.decode(plains[index]!));
+        const plain = decoder.decode(plains[index]!);
+        rememberDecodedContentBody(member.contentHash, plain);
+        result.set(member.contentHash, plain);
       });
     }
   }

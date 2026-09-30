@@ -244,24 +244,56 @@ async function readCursor(sessionId: string): Promise<string | null> {
   );
 }
 
-/** 在 prototype 上包一层计数 spy（透传原实现），返回调用计数与还原函数。 */
-function spyListBySession(): {
+/**
+ * 在 prototype 上包一层计数 spy（透传原实现），统计「全量列表读」的两种形态：
+ *
+ * - `callCount()`：头投影全量读（`listMessageHeadersBySession`）——**全量扫描
+ *   本体**的观测面（2026-09-30 起 backfill 的扫描改走头投影）。
+ * - `contentCallCount()`：正文全量读（`listBySession`）——会逐条解压正文，
+ *   大会话上秒级；backfill 路径上必须**恒为 0**，否则「每轮发送前都要等几秒」
+ *   立刻回归（这正是本轮修的性能病灶）。
+ */
+function spyFullSessionReads(): {
   readonly callCount: () => number;
+  readonly contentCallCount: () => number;
   readonly restore: () => void;
 } {
   const holder = SqliteMessageRepository.prototype as unknown as {
-    listBySession: (this: unknown, sessionId: string) => Promise<ChatMessage[]>;
+    listBySession: (
+      this: unknown,
+      sessionId: string,
+      options?: { includeHidden?: boolean }
+    ) => Promise<ChatMessage[]>;
+    listMessageHeadersBySession: (
+      this: unknown,
+      sessionId: string
+    ) => Promise<unknown>;
   };
-  const original = holder.listBySession;
-  let calls = 0;
-  holder.listBySession = function (this: unknown, sessionId: string) {
-    calls += 1;
-    return original.call(this, sessionId);
+  const originalContent = holder.listBySession;
+  const originalHeaders = holder.listMessageHeadersBySession;
+  let headersCalls = 0;
+  let contentCalls = 0;
+  holder.listBySession = function (
+    this: unknown,
+    sessionId: string,
+    options?: { includeHidden?: boolean }
+  ) {
+    contentCalls += 1;
+    return originalContent.call(this, sessionId, options);
+  };
+  holder.listMessageHeadersBySession = function (
+    this: unknown,
+    sessionId: string
+  ) {
+    headersCalls += 1;
+    return originalHeaders.call(this, sessionId);
   };
   return {
-    callCount: () => calls,
+    callCount: () => headersCalls,
+    contentCallCount: () => contentCalls,
     restore: () => {
-      holder.listBySession = original;
+      holder.listBySession = originalContent;
+      holder.listMessageHeadersBySession = originalHeaders;
     },
   };
 }
@@ -295,7 +327,7 @@ describe("backfillMissingBaselines 游标短路（T-B1/B2/B3/B5/B6）", () => {
     assert.equal(await readCursor(session.id), "2");
 
     // 第二轮（= 下一轮 run 开头）：count == 游标 → 短路，不发全量扫描。
-    const spy = spyListBySession();
+    const spy = spyFullSessionReads();
     try {
       await ctx.messageCheckpoint.backfillMissingBaselines(
         session.id,
@@ -304,7 +336,8 @@ describe("backfillMissingBaselines 游标短路（T-B1/B2/B3/B5/B6）", () => {
     } finally {
       spy.restore();
     }
-    assert.equal(spy.callCount(), 0, "游标短路不得发全量 listBySession");
+    assert.equal(spy.callCount(), 0, "游标短路不得发全量扫描");
+    assert.equal(spy.contentCallCount(), 0, "短路路径不得读正文");
     assert.equal(await readCursor(session.id), "2");
   });
 
@@ -321,7 +354,7 @@ describe("backfillMissingBaselines 游标短路（T-B1/B2/B3/B5/B6）", () => {
     });
 
     assert.equal(await readCursor(session.id), null, "未扫过时无游标");
-    const spy = spyListBySession();
+    const spy = spyFullSessionReads();
     try {
       await ctx.messageCheckpoint.backfillMissingBaselines(
         session.id,
@@ -331,6 +364,9 @@ describe("backfillMissingBaselines 游标短路（T-B1/B2/B3/B5/B6）", () => {
       spy.restore();
     }
     assert.equal(spy.callCount(), 1, "游标缺失必须回退全量扫描");
+    // 全量扫描只读头投影：正文全量读（逐条解压）在 backfill 路径上必须为 0，
+    // 否则大会话每轮发送前又要等几秒（本轮性能病灶的回归锁）。
+    assert.equal(spy.contentCallCount(), 0, "全量扫描不得读正文");
     assert.ok(await hasCheckpoint(session.id, m1.id));
     assert.ok(await hasCheckpoint(session.id, m2.id));
     assert.equal(await readCursor(session.id), "2", "全量跑完后补写游标");
@@ -407,7 +443,7 @@ describe("backfillMissingBaselines 游标短路（T-B1/B2/B3/B5/B6）", () => {
 
     // 第二次 run 开头 backfill：count=4 > 游标=2 → 圈段 [m3, m4] 覆盖比对通过
     // → 短路 no-op、不回退全量、游标前移至 4。
-    const spy = spyListBySession();
+    const spy = spyFullSessionReads();
     try {
       await ctx.messageCheckpoint.backfillMissingBaselines(
         session.id,
@@ -417,6 +453,7 @@ describe("backfillMissingBaselines 游标短路（T-B1/B2/B3/B5/B6）", () => {
       spy.restore();
     }
     assert.equal(spy.callCount(), 0, "两段式短路不得回退全量扫描");
+    assert.equal(spy.contentCallCount(), 0, "短路路径不得读正文");
     assert.equal(await readCursor(session.id), "4", "游标前移至新 count");
   });
 
@@ -449,7 +486,7 @@ describe("backfillMissingBaselines 游标短路（T-B1/B2/B3/B5/B6）", () => {
       "前置：尾部 assistant 尚无 checkpoint"
     );
 
-    const spy = spyListBySession();
+    const spy = spyFullSessionReads();
     try {
       await ctx.messageCheckpoint.backfillMissingBaselines(
         session.id,
@@ -459,6 +496,7 @@ describe("backfillMissingBaselines 游标短路（T-B1/B2/B3/B5/B6）", () => {
       spy.restore();
     }
     assert.equal(spy.callCount(), 1, "覆盖比对失败必须回退全量扫描");
+    assert.equal(spy.contentCallCount(), 0, "全量扫描不得读正文");
     assert.ok(
       await hasCheckpoint(session.id, m3.id),
       "真实空窗必须被补建"
