@@ -297,6 +297,24 @@ export async function resolveCurrentPromptTokens(
   //   true：读口的本地分支本身就是用户可见的真实刷新，不存在预热路径）。
   const sessionKkv = options?.sessionKkv ?? null;
 
+  /**
+   * 两分支共用的记忆键构造（r4-core-5：原先两处参数逐字重复）。键含
+   * `模型|指纹|消息尾戳|tools|layout 摘要`——layout 段是 r4-core-1 补的，
+   * agent 定义被编辑后键跟着变，不再命中旧读数。
+   *
+   * **只在调用处求值**：函数体里的消息尾戳会对 `messages` 做一次
+   * JSON.stringify，估算分支的调用点必须留在 `bail()`（检查点①）之后——
+   * 定义成函数（而非早求值的常量）正是为此，调用位置与提取前逐字相同。
+   */
+  const resolveMemoKey = (): string | null =>
+    buildChatTokenEstimateMemoKey({
+      savedModelId: params.savedModelId,
+      workplaceFingerprint: params.ctx?.workplaceFingerprint,
+      messages: params.ctx?.messages,
+      tools: params.tools,
+      layout: params.layout,
+    });
+
   // 估算优先：无统计可用时不做真分词器计数——但**先查 L1 整串缓存**
   // （cr-fix-spec-r2 s2/G-1，2026-09-29）：L1 命中是零成本现成精确值，
   // 拒读它会让「后台暖机写的 L1 永远没人消费」、chip 在 api miss 期间锁死
@@ -314,15 +332,10 @@ export async function resolveCurrentPromptTokens(
     // 会话就是秒级），检查点放在序列化之后等于「观察点在重活后面」。
     bail();
     // 估算读数记忆（2026-09-30 切会话重算治本）：同「workplace 指纹 + 消息
-    // 尾戳 + tools + 模型」⇒ 序列化产物必然同值，serialize/hash/count 三趟
-    // 整串线性扫（真机 ~2s）全免。条目也可能来自精确分支的回写（升级语义：
+    // 尾戳 + tools + 模型 + layout」⇒ 序列化产物同值，serialize/hash/count
+    // 三趟整串线性扫（真机 ~2s）全免。条目也可能来自精确分支的回写（升级语义：
     // 命中即精确档，与下方 L1 预查同精神，不给「锁死估算档」留口）。
-    const memoKey = buildChatTokenEstimateMemoKey({
-      savedModelId: params.savedModelId,
-      workplaceFingerprint: params.ctx?.workplaceFingerprint,
-      messages: params.ctx?.messages,
-      tools: params.tools,
-    });
+    const memoKey = resolveMemoKey();
     if (memoKey != null) {
       const memoHit = lookupChatTokenEstimateMemo(sessionId, memoKey);
       if (memoHit != null) {
@@ -431,12 +444,7 @@ export async function resolveCurrentPromptTokens(
   // 跑**，即便 L1 已有整串条目也要付 serialize+hash（真机 ~1.3s）。同键记忆
   // 里已有精确读数（上一轮升级/完整口径回写）时直接复用，重复进入的成本归
   // 零。命中但只有估读时照旧走真计数——升级本来就是来补精确值的。
-  const preciseMemoKey = buildChatTokenEstimateMemoKey({
-    savedModelId: params.savedModelId,
-    workplaceFingerprint: params.ctx?.workplaceFingerprint,
-    messages: params.ctx?.messages,
-    tools: params.tools,
-  });
+  const preciseMemoKey = resolveMemoKey();
   if (preciseMemoKey != null) {
     const preciseMemoHit = lookupChatTokenEstimateMemo(sessionId, preciseMemoKey);
     if (preciseMemoHit != null && preciseMemoHit.estimated === false) {
