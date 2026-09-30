@@ -104,6 +104,9 @@ import { IntegrityRepairRegistry } from "@/service/integrity-repair.js";
  * 走慢路径由 ALIGN 补列；两列全 NULL = legacy 明文行合法形态。存量明文
  * 不在 bootstrap 里搬运（空占位 migration 禁令），该迭代的后台谓词驱动
  * 任务已于 message-plaintext 迭代整文件删除。
+ * 明文化决策（2026-09-30 拍板）：明文为正形态，写侧直写 content_json、
+ * 两列恒 NULL；存量压缩行由反向任务 runMessageContentDecompress 过渡期
+ * 搬回明文（读路径双形态保留至 V1'）。
  * 注：该迭代在分支内原编号 v16，与 main 的 v16（stream-metrics-tokens）
  * 撞号；并入集成分支时以现值 16 + 1 顺延为 v17（bump 纪律是「DDL/ALIGN
  * 变更必须 +1」本身而非具体号——与并行迭代撞号时以主干现值为准递增顺延，
@@ -369,6 +372,33 @@ export async function bootstrapNovelMaster(
     await seedBuiltinSmartSortRules(tx);
     await writeSchemaBootVersion(tx, SCHEMA_BOOT_VERSION);
   });
+
+  // 消息正文解压搬运（migration 层反向任务）入口自愈探测的部分索引：
+  // 谓词 `content_blob IS NOT NULL` 无索引时，入口探测（每次进程启动都付的
+  // 固定成本）与谓词 COUNT 都是全表扫——稳态「全部搬完、零命中」恰是必须
+  // 读完整棵 b-tree 的形态。部分索引只收压缩行，稳态索引空。
+  // 落点说明：idx_chat_session_parent 的先例在事务内慢路径（该 return 之后），
+  // 真实用户库（user_version ≥ SCHEMA_BOOT_VERSION）走快路径提前 return、
+  // 永远到不了，故本条落在**事务外的无条件段**（快/慢两分支共用同一出口），
+  // 手法与先例同为 `CREATE INDEX IF NOT EXISTS` 幂等建、位置不可照抄。
+  // **失败语义与同层 seedBuiltinSkills / 发号器安全网有意不同**：那两处是
+  // 「可选内容，失败仅记日志不阻断启动」，本条 fail loud、不包 try/catch——
+  // 静默吞掉建索引失败会让入口探测永久退回全表扫且无任何痕迹。
+  // 唯一的前置判定是「列在不在」：`content_blob` 自 v17 起由 ALIGN 补列，
+  // 走到这里慢路径库必然已补上；但「版本号与实际列不符」的库（T-C10 负面
+  // 教材演示的形态）不该让 bootstrap 当场炸掉——那种库上探测退回全表扫只是
+  // 慢，不是不可用。**建索引本身失败仍然 fail loud。**
+  // 不 bump SCHEMA_BOOT_VERSION、不注册 schema migration：纯 DDL 幂等建、
+  // 非数据搬运（与「空占位 migration 禁令」不冲突）。V1' 退役消息正文解压
+  // 任务时，连同下面这几行一并删除。
+  const pendingBlobColumn = await conn.query<{ name: string }>(
+    "SELECT name FROM pragma_table_info('chat_message') WHERE name = 'content_blob'"
+  );
+  if (pendingBlobColumn.length > 0) {
+    await conn.execute(
+      "CREATE INDEX IF NOT EXISTS idx_chat_message_pending_blob ON chat_message(id) WHERE content_blob IS NOT NULL"
+    );
+  }
 
   // D1：内置技能 seed 挂事务之后的公共路径（快/慢两分支共用本出口；放事务内
   // 会与 createSkillsService 内部基于外层 conn 的 VfsService 装配嵌套冲突）。

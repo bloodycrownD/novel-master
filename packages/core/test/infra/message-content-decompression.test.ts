@@ -1,12 +1,17 @@
 /**
  * 消息正文解压搬运（反向任务）用例：T-MP2（round-trip + 收尾不变量 +
  * 标记自愈）、T-MP2b（断点续跑）、T-MP3（坏行隔离）、T-MP-P1（用时护栏）、
- * T-MP-P2（搬完零重扫）、T-MP5（旧 pending 欠账清偿）。
+ * T-MP-P2（搬完零重扫）、T-MP5（旧 pending 欠账清偿），外加四组骨架承重
+ * 覆盖：入口自愈探针排除坏行（failedIds 清单）、搬运内容合法性闸门、
+ * 零进展护栏 / 批内抛错 / shouldPause / 游标单调、解压炸弹 ISIZE 闸门。
  *
  * 幂等与可重入口径照 spec Part 2：谓词 `content_blob IS NOT NULL`，批 ≤100
  * 行短事务，完成置两段式 KKV 标记（`nm-message-decompress` /
  * `decompressDone`）。共享库上每个用例自管标记状态（开头清标记，含正向
  * 任务遗留的 `nm-message-content/startupMaintenancePending`）。
+ *
+ * **谓词是全库的**：用例自清（`dropAllPendingRows`）——残留压缩行会污染后续
+ * 用例的 `pendingCount()` 前置断言，行数不能依赖执行顺序。
  *
  * **夹具口径**：压缩行**不经生产写路径**——`encodeMessageContent`
  * 已随 Step 3 删除、`batchInsert` 已写明文，已无生产 API 能造压缩行；用
@@ -35,6 +40,7 @@ import {
   runMessageContentDecompress,
 } from "../../src/infra/db-maintenance/index.js";
 import { compressZlib } from "../../src/domain/vfs/content-store/logic/zlib-codec.js";
+import { decodeMessageContent } from "../../src/domain/chat/logic/message-content-codec.js";
 import type { TdbcConnection } from "../../src/infra/tdbc/ports/connection.port.js";
 import type { Row } from "../../src/infra/tdbc/types.js";
 import {
@@ -70,6 +76,16 @@ async function pendingCount(): Promise<number> {
     "SELECT COUNT(*) AS n FROM chat_message WHERE content_blob IS NOT NULL"
   );
   return Number(rows[0]?.n ?? 0);
+}
+
+/**
+ * 清空所有压缩形态行。
+ *
+ * @remarks 本文件共享一个库，谓词是**全库**的：残留的压缩行会污染后续用例的
+ * `pendingCount()` 前置断言。用例自清，不让行数依赖执行顺序。
+ */
+async function dropAllPendingRows(): Promise<void> {
+  await conn().execute("DELETE FROM chat_message WHERE content_blob IS NOT NULL");
 }
 
 async function doneMarkerCount(): Promise<number> {
@@ -162,9 +178,14 @@ async function insertCorruptRow(args: {
   seq: number;
 }): Promise<{ id: string; blob: Uint8Array }> {
   const id = randomUUID();
-  // 合法 zlib 头（0x78 0x9c）后跟垃圾数据：inflate 必抛，绝不会被误解成
-  // 另一段明文（那才是「读出错内容」的事故）。
-  const blob = new Uint8Array([0x78, 0x9c, 0xff, 0xfe, 0x00, 0x7f, 0x42, 0x99]);
+  // 合法 zlib 头（0x78 0x9c）后跟垃圾 deflate 数据：inflate 必抛，绝不会
+  // 被误解成另一段明文（那才是「读出错内容」的事故）。
+  // 末尾 8 字节补齐为「adler32 + ISIZE」且 ISIZE 写 0：解码器的解压炸弹
+  // 闸门（读 ISIZE 判体量）要放行过去，**本夹具必须落在 inflate 直接抛
+  // 那条分支上**——另有一条夹具（insertTamperedIsizeRow）专门钉闸门。
+  const blob = new Uint8Array([
+    0x78, 0x9c, 0xff, 0xfe, 0x00, 0x7f, 0x42, 0x99, 0x00, 0x00, 0x00, 0x00,
+  ]);
   await conn().execute(
     `INSERT INTO chat_message (
        id, session_id, seq, role, content_json, content_encoding, content_blob,
@@ -173,6 +194,92 @@ async function insertCorruptRow(args: {
     [id, args.sessionId, args.seq, blob, Date.now() + args.seq]
   );
   return { id, blob };
+}
+
+/**
+ * 裸 INSERT 造一条**可 inflate 但内容非法**的行（cr-s1 的承重夹具）。
+ *
+ * 与 {@link insertCorruptRow} 的区别在故障层：解压**成功**、吐出的却是垃圾
+ * 文本（fflate 不校验 adler32，bit 翻转的 blob 正是这个形态）。若搬运侧
+ * 没有内容合法性闸门，这行会被写回 `content_json`、压缩两列置 NULL——把
+ * 唯一压缩副本销毁成永久不可读的行（不可逆数据丢失）。
+ */
+async function insertInflatableGarbageRow(args: {
+  sessionId: string;
+  seq: number;
+}): Promise<{ id: string; blob: Uint8Array }> {
+  const id = randomUUID();
+  const blob = compressZlib(new TextEncoder().encode("not json at all"));
+  await conn().execute(
+    `INSERT INTO chat_message (
+       id, session_id, seq, role, content_json, content_encoding, content_blob,
+       created_at_ms, hidden
+     ) VALUES (?, ?, ?, 'user', '', 'zlib', ?, ?, 0)`,
+    [id, args.sessionId, args.seq, blob, Date.now() + args.seq]
+  );
+  return { id, blob };
+}
+
+/**
+ * 裸 INSERT 造一条**解压炸弹**行（cr-f6 的承重夹具）。
+ *
+ * 做法：用 70MB 零字节（> 64MB 上限）走真 `compressZlib`——压缩后只有几十
+ * KB，膨胀比 ~1000:1，正是「几百 KB blob 膨胀到数百 MB」那类形态。
+ *
+ * @remarks 曾经把 ISIZE 尾字段改成 128MB 来造这行，行不通：本仓唯一的 zlib
+ * 生产者 fflate 的 `zlibSync` **只写 4 字节 adler32、不写 ISIZE**（实测），
+ * 那个位置压根没有可篡改的声明值。闸门改成 inflate 途中的产出上限判据。
+ */
+async function insertIsizeBombRow(args: {
+  sessionId: string;
+  seq: number;
+}): Promise<{ id: string; blob: Uint8Array }> {
+  const id = randomUUID();
+  const blob = compressZlib(new Uint8Array(70 * 1024 * 1024));
+  await conn().execute(
+    `INSERT INTO chat_message (
+       id, session_id, seq, role, content_json, content_encoding, content_blob,
+       created_at_ms, hidden
+     ) VALUES (?, ?, ?, 'user', '', 'zlib', ?, ?, 0)`,
+    [id, args.sessionId, args.seq, blob, Date.now() + args.seq]
+  );
+  return { id, blob };
+}
+
+/** 读完成标记的 JSON 值（无标记返回 null）。 */
+async function readDoneMarkerValue(): Promise<{
+  at: string;
+  failedCount: number;
+  failedIds?: unknown;
+} | null> {
+  const rows = await conn().query<{ value: string }>(
+    "SELECT value FROM kkv_entry WHERE module = ? AND key = ?",
+    [MESSAGE_DECOMPRESS_KKV_MODULE, MESSAGE_DECOMPRESS_KKV_KEY]
+  );
+  if (rows.length === 0) {
+    return null;
+  }
+  return JSON.parse(rows[0]!.value) as {
+    at: string;
+    failedCount: number;
+    failedIds?: unknown;
+  };
+}
+
+/** 跑一段 fn 并收集 console.warn（坏行/自愈告警断言用）。 */
+async function captureWarnings<T>(
+  fn: () => Promise<T>
+): Promise<{ result: T; warnings: string[] }> {
+  const warnings: string[] = [];
+  const originalWarn = console.warn;
+  console.warn = (...args: unknown[]) => {
+    warnings.push(args.map((a) => String(a)).join(" "));
+  };
+  try {
+    return { result: await fn(), warnings };
+  } finally {
+    console.warn = originalWarn;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -282,6 +389,77 @@ function wrapConnChatUpdateNoEffect(stuckIds: ReadonlySet<string> | "all"): {
     close: () => realTx.close(),
   });
   return { wrapped: wrapTx(real), shortCircuitedCount: () => shortCircuited };
+}
+
+/**
+ * 让**批内第 nth 个** chat_message UPDATE 直接抛错的连接替身——复刻 e2e
+ * 实撞的 `database is locked` 形态（同步预算截断是**批边界**干净的形态，
+ * 盖不到「批内炸」这条：前 N-1 行已各自提交、标记未置、重启后续跑收敛）。
+ *
+ * @remarks 抛错发生在 `conn.transaction` 内部，驱动侧 ROLLBACK 当前行事务
+ * 后把异常外传——实现必须不吞（吞了就等于把残留行永久锁在压缩态）。
+ */
+function wrapConnChatUpdateThrowAt(nth: number): {
+  readonly wrapped: TdbcConnection;
+  readonly hitCount: () => number;
+} {
+  const real = conn();
+  let seen = 0;
+  let hit = 0;
+  const wrapTx = (realTx: TdbcConnection): TdbcConnection => ({
+    execute: (sql, parameters) => {
+      if (isChatMessageUpdate(sql)) {
+        seen += 1;
+        if (seen === nth) {
+          hit += 1;
+          return Promise.reject(new Error("database is locked"));
+        }
+      }
+      return realTx.execute(sql, parameters);
+    },
+    query: <R extends Row>(sql: string, parameters?: readonly unknown[]) =>
+      realTx.query<R>(sql, parameters),
+    batch: (sql, parametersList) => realTx.batch(sql, parametersList),
+    transaction: <T>(fn: (tx: TdbcConnection) => Promise<T>) =>
+      realTx.transaction<T>((nested) => fn(wrapTx(nested))),
+    close: () => realTx.close(),
+  });
+  return { wrapped: wrapTx(real), hitCount: () => hit };
+}
+
+/** 一次批查询的观测：游标 + 本批选中的行 id。 */
+interface BatchSelectObservation {
+  readonly cursor: number;
+  readonly ids: readonly string[];
+}
+
+/**
+ * 批查询观测探针：记录每批 keyset 游标与该批选中的行 id。
+ *
+ * @remarks 比 `withSqlProbe` 多记一层「选中哪些行」——游标严格单调只能证明
+ * 推进无回退，「每行恰被选中一次」要靠 id 集合的并集规模与无重复来钉。
+ */
+async function withBatchSelectProbe<T>(
+  fn: () => Promise<T>
+): Promise<{ result: T; batches: BatchSelectObservation[] }> {
+  const c = conn();
+  const batches: BatchSelectObservation[] = [];
+  const originalQuery = c.query;
+  c.query = (async (sql: string, parameters?: readonly unknown[]) => {
+    const rows = await originalQuery.call(c, sql, parameters);
+    if (isBatchSelect(sql) && rows.length > 0) {
+      batches.push({
+        cursor: Number(parameters?.[0] ?? 0),
+        ids: rows.map((row) => String(row.id)),
+      });
+    }
+    return rows;
+  }) as TdbcConnection["query"];
+  try {
+    return { result: await fn(), batches };
+  } finally {
+    c.query = originalQuery;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -602,23 +780,33 @@ describe("搬完零重扫（T-MP-P2）", () => {
 describe("反向搬运用时护栏（T-MP-P1）", () => {
   /**
    * 绝对预算上限：任一侧超过它就失败，不参与倍数比较（兜「基线侧被环境噪声
-   * 拖到极慢导致倍数假绿」）。100 条 × 8KB 的空载实测在百毫秒量级，
-   * 20000ms 是两三个数量级的余量。
+   * 拖到极慢导致倍数假绿」）。**双侧兜底都保留**——环境噪声既可能打在解压侧
+   * 也可能打在基线侧，它是倍数不可比时唯一的逃生口。100 条 × 8KB 的空载
+   * 实测在百毫秒量级，2000ms 是 1~2 个数量级的余量（原 20000ms 是 200 倍
+   * 余量、实质永不触发，等于没兜）。
    */
-  const ABSOLUTE_BUDGET_MS = 20_000;
+  const ABSOLUTE_BUDGET_MS = 2_000;
+
+  /**
+   * 单批（100 行 = BATCH_SIZE 整一批）搬运的绝对上限。
+   *
+   * @remarks 直接钉住「60s 同步预算 ÷ 批 100」这条推进能力：默认预算是
+   * 60s，若单批就要好几秒，一轮冷启动根本搬不完，迁移期会无限拉长。
+   */
+  const SINGLE_BATCH_BUDGET_MS = 2_000;
 
   /**
    * 允许倍数（数量级回归线，照 RULE「性能护栏取数量级回归线」：卡数量级，
    * 不卡小数点）。解压搬运 = inflate + 写回明文 + 单行短事务，比「同构明文
-   * 全量读」贵一个数量级是预期内的；25 是防「搬一趟比读一趟慢两个数量级」
-   * 那类事故的回归线。
+   * 全量读」贵一个数量级是预期内的；实测 8.5×，取 **15** 留 1.76× 抖动余量
+   * （原 25 允许再退化 3 倍才红，太松）。
    */
-  const MAX_RATIO = 25;
+  const MAX_RATIO = 15;
 
   /** 倍数比较的毫秒下限（吸收 `Date.now()` 精度地板）。 */
   const RATIO_FLOOR_MS = 10;
 
-  it("100 行压缩→明文解压写回耗时不超同构明文全量读基线的 25 倍", async () => {
+  it("100 行压缩→明文解压写回耗时不超同构明文全量读基线的 15 倍", async () => {
     await clearMarkers();
     const ctx = getNovelMasterTestContext();
     const ROWS = 100;
@@ -678,6 +866,13 @@ describe("反向搬运用时护栏（T-MP-P1）", () => {
     assert.equal(
       JSON.stringify(tail.map((m) => m.content)),
       JSON.stringify(messages.map((m) => m.content))
+    );
+
+    // 单批推进能力：ROWS = BATCH_SIZE = 100，本轮恰是「单批」——直接钉住
+    // 60s 默认预算 ÷ 批 100 的推进能力，别让单批耗时悄悄涨到秒级。
+    assert.ok(
+      decompressMs <= SINGLE_BATCH_BUDGET_MS,
+      `单批（${ROWS} 行）搬运耗时 ${decompressMs}ms 超单批预算 ${SINGLE_BATCH_BUDGET_MS}ms`
     );
 
     // 绝对预算先行：任一侧被打扰到极慢时倍数不可比，先钉死各自量级。
@@ -804,5 +999,479 @@ describe("坏行隔离（T-MP3）", () => {
     assert.equal(second.done, true, "坏行存在不阻断完成态");
     assert.equal(second.decompressedCount, 0, "第二次零搬运（好行已搬）");
     assert.equal(second.failedCount, 1, "坏行再次计入（口径稳定）");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 入口自愈探针排除已知坏行（cr-d1）：坏行永留谓词，探针恒命中会让每次冷启动
+// 白扫两遍全表且永不收敛。
+// ---------------------------------------------------------------------------
+
+describe("入口自愈探针排除已知坏行（cr-d1）", () => {
+  it("永久坏行 + 完成标记：连续两轮冷启动标记不被清、不重复 warn、零搬运", async () => {
+    await clearMarkers();
+    await dropAllPendingRows();
+    const sessionId = await newSession();
+    const bad = await insertCorruptRow({ sessionId, seq: 1 });
+
+    // 第一轮：真搬（坏行解码失败被隔离）→ 谓词「空」在坏行口径下达成 → 置标记。
+    const first = await runMessageContentDecompress(conn());
+    assert.equal(first.done, true, "坏行不阻断完成标记");
+    assert.equal(first.failedCount, 1);
+    assert.equal(await doneMarkerCount(), 1);
+    const firstMarker = await readDoneMarkerValue();
+    assert.deepEqual(
+      firstMarker!.failedIds,
+      [bad.id],
+      "标记持久化本轮坏行 id 清单（运维可据此定位坏行）"
+    );
+
+    // 连续两轮「冷启动」：探针排除坏行 → 不命中 → 标记保留短路。这正是
+    // cr-d1 修掉的「永不收敛」形态：清标记 + 全表重扫不该再发生。
+    for (const round of [1, 2]) {
+      const { result, warnings } = await captureWarnings(() =>
+        runMessageContentDecompress(conn())
+      );
+      assert.equal(result.done, true, `第 ${round} 轮：只剩清单内坏行仍判完成`);
+      assert.equal(result.decompressedCount, 0, `第 ${round} 轮：零搬运`);
+      assert.equal(
+        result.failedCount,
+        1,
+        `第 ${round} 轮：failedCount 沿用标记快照（未重扫）`
+      );
+      assert.deepEqual(
+        warnings.filter((line) => line.includes("仍有压缩行")),
+        [],
+        `第 ${round} 轮：不得重复 warn「标记与数据形态脱节」`
+      );
+      assert.deepEqual(
+        warnings.filter((line) => line.includes("解码失败")),
+        [],
+        `第 ${round} 轮：不得重扫坏行（不得重复 warn「解码失败」）`
+      );
+      assert.equal(
+        await doneMarkerCount(),
+        1,
+        `第 ${round} 轮：完成标记保留（未被清）`
+      );
+      const marker = await readDoneMarkerValue();
+      assert.deepEqual(
+        marker!.failedIds,
+        [bad.id],
+        `第 ${round} 轮：标记值稳定（failedIds 不被改写）`
+      );
+      assert.equal(
+        marker!.failedCount,
+        1,
+        `第 ${round} 轮：failedCount 快照沿用标记值（口径稳定）`
+      );
+    }
+  });
+
+  it("带 failedIds 的标记 + 库里另有真压缩行：探针仍命中 → 清标记续搬（自愈不被坏行清单掩盖）", async () => {
+    await clearMarkers();
+    await dropAllPendingRows();
+    const sessionId = await newSession();
+    const content = mixedContent(31);
+    const realId = await insertCompressedRow({ sessionId, seq: 2, content });
+
+    // 标记里的 failedIds 与本库无关（外来标记 / 快照回灌形态）：NOT IN
+    // 不得影响扫描结果，真待搬行照常命中——否则就成了「坏行清单掩盖自愈」。
+    await conn().execute(
+      "INSERT INTO kkv_entry (module, key, value) VALUES (?, ?, ?)",
+      [
+        MESSAGE_DECOMPRESS_KKV_MODULE,
+        MESSAGE_DECOMPRESS_KKV_KEY,
+        JSON.stringify({
+          at: "2026-01-01T00:00:00.000Z",
+          failedCount: 1,
+          failedIds: [randomUUID()],
+        }),
+      ]
+    );
+
+    const { result, warnings } = await captureWarnings(() =>
+      runMessageContentDecompress(conn())
+    );
+    assert.equal(result.done, true);
+    assert.equal(result.decompressedCount, 1, "真压缩行照常命中并搬走");
+    assert.ok(
+      warnings.some((line) => line.includes("仍有压缩行")),
+      "标记与数据形态脱节的告警照发（自愈闭环未被坏行清单屏蔽）"
+    );
+    assert.equal(await pendingCount(), 0, "真压缩行已解完");
+    const marker = await readDoneMarkerValue();
+    assert.deepEqual(
+      marker!.failedIds,
+      [],
+      "搬完重置标记：本库已无坏行，清单归零"
+    );
+    const list = await new SqliteMessageRepository(conn()).listBySession(sessionId);
+    assert.equal(list.length, 1);
+    assert.equal(list[0]!.id, realId);
+    assert.equal(JSON.stringify(list[0]!.content), JSON.stringify(content));
+  });
+
+  it("failedIds 长度 0 / 1 / 2 三档：只剩清单内坏行时探针均不命中（占位符个数全覆盖）", async () => {
+    for (const len of [0, 1, 2] as const) {
+      await clearMarkers();
+      await dropAllPendingRows();
+      const sessionId = await newSession();
+      const badIds: string[] = [];
+      for (let i = 0; i < len; i++) {
+        badIds.push((await insertCorruptRow({ sessionId, seq: i + 1 })).id);
+      }
+      await conn().execute(
+        "INSERT INTO kkv_entry (module, key, value) VALUES (?, ?, ?)",
+        [
+          MESSAGE_DECOMPRESS_KKV_MODULE,
+          MESSAGE_DECOMPRESS_KKV_KEY,
+          JSON.stringify({
+            at: "2026-01-01T00:00:00.000Z",
+            failedCount: len,
+            failedIds: badIds,
+          }),
+        ]
+      );
+
+      const { result, warnings } = await captureWarnings(() =>
+        runMessageContentDecompress(conn())
+      );
+      assert.equal(result.done, true, `len=${len}：仍判完成`);
+      assert.equal(result.decompressedCount, 0, `len=${len}：零搬运`);
+      assert.deepEqual(
+        warnings.filter((line) => line.includes("仍有压缩行")),
+        [],
+        `len=${len}：探针不命中（len=0 走原谓词分支，len=1 是单占位符形态）`
+      );
+      assert.equal(await doneMarkerCount(), 1, `len=${len}：标记未被清`);
+    }
+  });
+
+  it("旧标记（无 failedIds 字段）读回视空数组：真压缩行照常自愈、坏行照常隔离", async () => {
+    await clearMarkers();
+    await dropAllPendingRows();
+    const sessionId = await newSession();
+    const bad = await insertCorruptRow({ sessionId, seq: 1 });
+    const content = mixedContent(41);
+    await insertCompressedRow({ sessionId, seq: 2, content });
+
+    // 已发布的两字段形态（云同步带回的旧快照就是它）：兼容层必须读得回。
+    await conn().execute(
+      "INSERT INTO kkv_entry (module, key, value) VALUES (?, ?, ?)",
+      [
+        MESSAGE_DECOMPRESS_KKV_MODULE,
+        MESSAGE_DECOMPRESS_KKV_KEY,
+        JSON.stringify({ at: "2026-01-01T00:00:00.000Z", failedCount: 0 }),
+      ]
+    );
+
+    const result = await runMessageContentDecompress(conn());
+    assert.equal(result.done, true, "旧标记不得让整份标记失效");
+    assert.equal(
+      result.decompressedCount,
+      1,
+      "failedIds 缺失视空数组 → 探针走原谓词，真压缩行照常自愈"
+    );
+    assert.equal(result.failedCount, 1, "坏行照常隔离");
+    assert.equal(await pendingCount(), 1, "只剩坏行");
+    const marker = await readDoneMarkerValue();
+    assert.deepEqual(
+      marker!.failedIds,
+      [bad.id],
+      "搬完重置标记时按新形状补齐 failedIds"
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 搬运内容合法性闸门（cr-s1）：decode 成功 ≠ 内容合法。
+// ---------------------------------------------------------------------------
+
+describe("搬运内容合法性闸门（cr-s1）", () => {
+  it("可 inflate 但内容非法的行：blob 原样保留、content_json 仍空串、failedCount 透传", async () => {
+    await clearMarkers();
+    await dropAllPendingRows();
+    const sessionId = await newSession();
+    // 可解压但吐垃圾的行（fflate 不校验 adler32，bit 翻转即此形态）。
+    const garbage = await insertInflatableGarbageRow({ sessionId, seq: 1 });
+    const ROWS = 3;
+    const originals = new Map<number, MessageContent>();
+    for (let i = 2; i <= ROWS + 1; i++) {
+      const content = mixedContent(i);
+      await insertCompressedRow({ sessionId, seq: i, content });
+      originals.set(i, content);
+    }
+
+    const { result, warnings } = await captureWarnings(() =>
+      runMessageContentDecompress(conn())
+    );
+    assert.equal(result.done, true, "内容非法不阻断完成标记");
+    assert.equal(result.decompressedCount, ROWS, "好行照常搬完");
+    assert.equal(result.failedCount, 1, "内容非法行计入 failedCount");
+    assert.equal(result.stalled, false);
+    assert.ok(
+      warnings.some(
+        (line) => line.includes(garbage.id) && line.includes("解码失败")
+      ),
+      "非法行应逐行 warn 隔离（告警带 id 定位）"
+    );
+
+    // 承重断言：唯一压缩副本必须原样保留。没有内容闸门时这行会被写回垃圾
+    // 明文、压缩两列置 NULL——不可逆数据丢失。
+    const row = await conn().query<{
+      content_json: string;
+      content_encoding: string | null;
+      content_blob: Uint8Array;
+    }>(
+      `SELECT content_json, content_encoding, content_blob
+       FROM chat_message WHERE id = ?`,
+      [garbage.id]
+    );
+    assert.equal(row.length, 1);
+    assert.equal(row[0]!.content_json, "", "明文列未被写入垃圾内容");
+    assert.equal(row[0]!.content_encoding, "zlib", "encoding 保留");
+    assert.deepEqual(
+      Array.from(row[0]!.content_blob),
+      Array.from(garbage.blob),
+      "压缩字节原样保留（唯一副本未被销毁）"
+    );
+
+    // 标记里的坏行清单也含它（否则下一轮冷启动的探针会为它白扫全表）。
+    assert.deepEqual((await readDoneMarkerValue())!.failedIds, [garbage.id]);
+
+    // 好行读回全等（闸门不得误伤合法正文）。
+    const goodTail = await new SqliteMessageRepository(conn()).listBySessionTail(
+      sessionId,
+      ROWS
+    );
+    assert.equal(goodTail.length, ROWS);
+    for (const message of goodTail) {
+      assert.equal(
+        JSON.stringify(message.content),
+        JSON.stringify(originals.get(message.seq)),
+        `seq=${message.seq} 搬完后读回全等`
+      );
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 骨架承重分支（cr-g1）：护栏 / 批内炸 / shouldPause / 游标单调。
+// ---------------------------------------------------------------------------
+
+describe("骨架承重分支（cr-g1）", () => {
+  it("零进展护栏：连续 3 批 UPDATE 全部 changes=0 → stalled=true、不置标记、零搬运", async () => {
+    await clearMarkers();
+    await dropAllPendingRows();
+    const sessionId = await newSession();
+    // ≥300 行 = 3 个满批：护栏恰好在第 3 批末触发（不打空转的提前 return）。
+    const ROWS = 300;
+    for (let i = 1; i <= ROWS; i++) {
+      await insertCompressedRow({ sessionId, seq: i, content: mixedContent(i) });
+    }
+    assert.equal(await pendingCount(), ROWS, "前置：300 条压缩行");
+
+    // 模拟「驱动写回静默不生效」：每条 UPDATE 都 changes=0。
+    const { wrapped, shortCircuitedCount } = wrapConnChatUpdateNoEffect("all");
+    const result = await runMessageContentDecompress(wrapped);
+    assert.equal(result.done, false, "零进展不得报完成");
+    assert.equal(result.stalled, true, "零进展护栏拦停并透传 stalled");
+    assert.equal(result.decompressedCount, 0, "一行都没真落库");
+    assert.equal(result.failedCount, 0, "无解码失败（不是坏行路径）");
+    assert.equal(
+      shortCircuitedCount(),
+      ROWS,
+      "恰好 3 批 × 100 行后护栏收手（不白跑第 4 批）"
+    );
+    assert.equal(await doneMarkerCount(), 0, "零进展不得置完成标记");
+    assert.equal(
+      await pendingCount(),
+      ROWS,
+      "全部行保持压缩形态（残留由下个冷启动重试）"
+    );
+  });
+
+  it("批内第 N 行 UPDATE 抛 database is locked：异常外传、前 N-1 行已落库、标记未置；重启后收敛全等", async () => {
+    await clearMarkers();
+    await dropAllPendingRows();
+    const sessionId = await newSession();
+    const ROWS = 10;
+    const originals: MessageContent[] = [];
+    for (let i = 1; i <= ROWS; i++) {
+      const content = mixedContent(i);
+      await insertCompressedRow({ sessionId, seq: i, content });
+      originals.push(content);
+    }
+    assert.equal(await pendingCount(), ROWS, "前置：全部是压缩行");
+
+    // 批内第 3 行炸：前 2 行的短事务已各自提交（行级粒度可续跑的地基）。
+    const THROW_AT = 3;
+    const { wrapped, hitCount } = wrapConnChatUpdateThrowAt(THROW_AT);
+    await assert.rejects(
+      () => runMessageContentDecompress(wrapped),
+      (error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error);
+        return message.includes("locked");
+      },
+      "批内异常必须外传（吞掉等于把残留行永久锁死在压缩态）"
+    );
+    assert.equal(hitCount(), 1, "替身恰好在第 3 行触发一次");
+    assert.equal(
+      await pendingCount(),
+      ROWS - (THROW_AT - 1),
+      "前 N-1 行已落库（各行独立短事务）"
+    );
+    assert.equal(
+      await doneMarkerCount(),
+      0,
+      "中断不得置完成标记（否则残留行被永久跳过）"
+    );
+
+    // 重启续跑：谓词重扫收敛，终态逐条全等。
+    const resumed = await runMessageContentDecompress(conn());
+    assert.equal(resumed.done, true);
+    assert.equal(resumed.decompressedCount, ROWS - (THROW_AT - 1));
+    assert.equal(await pendingCount(), 0);
+    assert.equal(await doneMarkerCount(), 1, "收敛后才置标记");
+    const list = await new SqliteMessageRepository(conn()).listBySession(sessionId);
+    assert.equal(list.length, ROWS, "一条不少");
+    for (const message of list) {
+      assert.equal(
+        JSON.stringify(message.content),
+        JSON.stringify(originals[message.seq - 1]!),
+        `seq=${message.seq} 续跑后逐字节一致`
+      );
+    }
+  });
+
+  it("shouldPause 恒 true：批前收手，零 UPDATE、零搬运、不置标记、非 stalled", async () => {
+    await clearMarkers();
+    await dropAllPendingRows();
+    const sessionId = await newSession();
+    const ROWS = 5;
+    for (let i = 1; i <= ROWS; i++) {
+      await insertCompressedRow({ sessionId, seq: i, content: mixedContent(i) });
+    }
+
+    const probe = await withSqlProbe(() =>
+      runMessageContentDecompress(conn(), { shouldPause: () => true })
+    );
+    assert.equal(probe.result.done, false, "守卫暂停即未完成");
+    assert.equal(probe.result.decompressedCount, 0, "零搬运");
+    assert.equal(probe.result.failedCount, 0);
+    assert.equal(
+      probe.result.stalled,
+      false,
+      "守卫暂停是普通未完成态，不是异常打转（调用方不该停止重试）"
+    );
+    assert.deepEqual(
+      probe.records.filter((r) => isChatMessageUpdate(r.sql)),
+      [],
+      "零 UPDATE（连搬运源列都不该碰）"
+    );
+    assert.deepEqual(
+      probe.records.filter((r) => isBatchSelect(r.sql)),
+      [],
+      "零批查询（守卫在批前生效）"
+    );
+    assert.equal(await doneMarkerCount(), 0, "暂停不得置完成标记");
+    assert.equal(await pendingCount(), ROWS, "一行未动");
+  });
+
+  it("250 行：keyset 游标严格单调、每行 id 恰被选中一次", async () => {
+    await clearMarkers();
+    await dropAllPendingRows();
+    const sessionId = await newSession();
+    const ROWS = 250;
+    for (let i = 1; i <= ROWS; i++) {
+      await insertCompressedRow({ sessionId, seq: i, content: mixedContent(i) });
+    }
+
+    const probe = await withBatchSelectProbe(() =>
+      runMessageContentDecompress(conn())
+    );
+    assert.equal(probe.result.done, true);
+    assert.equal(probe.result.decompressedCount, ROWS);
+    assert.equal(
+      probe.batches.length,
+      3,
+      "250 行 = 100 + 100 + 50 三批（末批不满）"
+    );
+
+    const cursors = probe.batches.map((b) => b.cursor);
+    assert.equal(cursors[0], 0, "首批游标从 0 起扫（rowid 恒正）");
+    for (let i = 1; i < cursors.length; i++) {
+      assert.ok(
+        cursors[i]! > cursors[i - 1]!,
+        `游标必须严格单调推进：${cursors.join(" → ")}`
+      );
+    }
+    for (const batch of probe.batches) {
+      assert.ok(batch.ids.length <= 100, "每批 ≤ BATCH_SIZE（100）");
+    }
+
+    const allIds = probe.batches.flatMap((b) => b.ids);
+    assert.equal(allIds.length, ROWS, "全部行都被扫到，无遗漏");
+    assert.equal(
+      new Set(allIds).size,
+      ROWS,
+      "每行 id 恰被选中一次（无重复扫描、无漏行）"
+    );
+    assert.equal(await pendingCount(), 0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 解压炸弹闸门（cr-f6）：ISIZE 尾字段前置判体量。
+// ---------------------------------------------------------------------------
+
+describe("解压炸弹闸门（cr-f6）", () => {
+  it("解压产物体量超 64MB 的压缩行：decode 抛类型化错、坏行隔离保留原字节", async () => {
+    await clearMarkers();
+    await dropAllPendingRows();
+    const sessionId = await newSession();
+    const bomb = await insertIsizeBombRow({ sessionId, seq: 1 });
+    const ROWS = 2;
+    for (let i = 2; i <= ROWS + 1; i++) {
+      await insertCompressedRow({ sessionId, seq: i, content: mixedContent(i) });
+    }
+
+    // 纯函数侧：抛的是类型化 ChatError，文案带上限语义。断言的是「膨胀到
+    // 超上限被拒」而不是「解压失败」——正常消息必须照常解出（曾经按 ISIZE
+    // 判上限的那版会把**每一行**都误判成炸弹，见 insertIsizeBombRow 注释）。
+    // 回调写成 async：decode 是同步函数，同步抛错会绕过 assert.rejects 的
+    // 校验器直接冒泡（实测）。
+    await assert.rejects(
+      async () => {
+        decodeMessageContent("zlib", bomb.blob, bomb.id);
+      },
+      (error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error);
+        return message.includes(bomb.id) && message.includes("上限");
+      },
+      "解压炸弹必须在 inflate 途中被拒（不得先分配完 70MB 再判）"
+    );
+
+    // 搬运侧：走既有坏行隔离，其余行照常收敛，原字节保留。
+    const { result } = await captureWarnings(() =>
+      runMessageContentDecompress(conn())
+    );
+    assert.equal(result.done, true, "炸弹行不阻断完成标记");
+    assert.equal(result.decompressedCount, ROWS, "其余行照常搬完");
+    assert.equal(result.failedCount, 1, "炸弹行计入 failedCount");
+    const row = await conn().query<{
+      content_json: string;
+      content_blob: Uint8Array;
+    }>(
+      "SELECT content_json, content_blob FROM chat_message WHERE id = ?",
+      [bomb.id]
+    );
+    assert.equal(row[0]!.content_json, "", "明文列未被写入");
+    assert.deepEqual(
+      Array.from(row[0]!.content_blob),
+      Array.from(bomb.blob),
+      "压缩字节原样保留"
+    );
   });
 });

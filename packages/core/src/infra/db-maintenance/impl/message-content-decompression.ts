@@ -21,10 +21,16 @@
  *   启动白烧预算。读路径对压缩行本就双形态自愈（读到的是旧压缩内容，
  *   语义正确：该行从未被成功改写）。
  * - **入口自愈（防标记闩锁）**：完成标记已置位时先跑一次
- *   `SELECT 1 ... WHERE content_blob IS NOT NULL LIMIT 1`，命中（整库快照
- *   回灌等场景让标记与数据形态脱节）即清标记继续搬。标记随整库快照 travels
- *   且写死不校验时，pull 回灌的旧快照会让本库永久停在压缩态、用户拿不到
- *   本迭代的核心收益；一次索引级探测永久消除整类问题。
+ *   `SELECT 1 ... WHERE content_blob IS NOT NULL LIMIT 1`（并排除标记里已知
+ *   的坏行 id，见下条），命中（整库快照回灌等场景让标记与数据形态脱节）即
+ *   清标记继续搬。标记随整库快照 travels 且写死不校验时，pull 回灌的旧
+ *   快照会让本库永久停在压缩态、用户拿不到本迭代的核心收益；一次**部分索引
+ *   上的存在性探测**永久消除整类问题（索引由 bootstrap 事务外的无条件段幂等
+ *   建，见 novel-master-bootstrap.ts）。
+ * - **探针排除已知坏行**：坏行按设计永留谓词（否则每次冷启动都要白扫两遍
+ *   全表：标记命中 → 探针必命中 → 清标记 → rowid 0 全表重扫 → 再撞同一坏行
+ *   → 永不收敛）。故标记里持久化本轮坏行 id 清单（`failedIds`），探针带
+ *   `id NOT IN (...)` 排除；清单为空走原谓词。
  * - **旧 pending 消费**：入口先读正向任务遗留的
  *   `nm-message-content/startupMaintenancePending`，置位则补跑一次
  *   `runStartupMaintenanceOnce`（**去重版**，勿用手动
@@ -58,6 +64,7 @@ import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import type { SqlValue } from "@/infra/tdbc/types.js";
 import { SqliteKkvRepository } from "@/domain/kkv/repositories/impl/sqlite-kkv.repository.js";
 import { decodeMessageContent } from "@/domain/chat/logic/message-content-codec.js";
+import { parseMessageContent } from "@/domain/chat/content/parse-message-content.js";
 import { runPendingStartupMaintenance } from "./db-maintenance.service.js";
 
 /** 本任务的日志标签（告警溯源前缀）。 */
@@ -110,7 +117,7 @@ const STATUS_SAMPLING_THROTTLE_MS = 3000;
 
 /** 搬运状态（双端存储页状态行数据源）。 */
 export interface MessageDecompressStatus {
-  /** 已完成：KKV 标记已置且入口自愈探测未命中剩余压缩行。 */
+  /** 已完成：KKV 标记已置位，或谓词计数为 0；本采样不做入口自愈探测（自愈只在搬运入口）。 */
   readonly done: boolean;
   /** 剩余压缩行计数（进行中态的「剩余 N 条」）。 */
   readonly pendingCount: number;
@@ -172,6 +179,14 @@ interface MessageDecompressDoneMarker {
   readonly at: string;
   /** 置标记时累计跳过的坏行数（需人工关注的行）。 */
   readonly failedCount: number;
+  /**
+   * 置标记时本轮确认跳过的坏行主键清单（运维可据此直接定位坏行）。
+   *
+   * @remarks 入口自愈探针要靠它排除坏行：坏行永留谓词，不排除的话每次冷启动
+   * 都会「标记命中 → 探针必命中 → 清标记 → 全表重扫 → 再撞同一坏行」永不
+   * 收敛。坏行本就少量，不设上限。
+   */
+  readonly failedIds: readonly string[];
 }
 
 /** 谓词 COUNT（与批查询、UPDATE WHERE 同条件）。 */
@@ -205,7 +220,10 @@ export function __resetStatusSamplingThrottleForTests(): void {
  * 读 KKV 完成标记（两段式 module/key）。
  *
  * 标记值向后兼容：非 JSON / 旧版纯 ISO 时间戳字符串一律按
- * `{ failedCount: 0 }` 处理——不抛、不刷屏（口径照搬正向任务）。
+ * `{ failedCount: 0, failedIds: [] }` 处理——不抛、不刷屏（口径照搬正向
+ * 任务）。`failedIds` 缺失或非数组同样视空数组：已发布的
+ * `{at, failedCount}` 两字段形态（云同步带回的旧快照就是这一形态）必须
+ * 读得回，不能因为字段升级就整份标记失效。
  */
 async function readDoneMarker(
   conn: TdbcConnection
@@ -227,20 +245,47 @@ async function readDoneMarker(
         Number.isFinite(parsed.failedCount)
           ? parsed.failedCount
           : 0,
+      failedIds: Array.isArray(parsed.failedIds)
+        ? parsed.failedIds.filter((id): id is string => typeof id === "string")
+        : [],
     };
   } catch {
-    return { at: entry.value, failedCount: 0 };
+    return { at: entry.value, failedCount: 0, failedIds: [] };
   }
 }
 
 /**
- * 入口自愈探测：库里还有没有压缩行。
+ * 入口自愈探测：库里还有没有**可搬的**压缩行。
  *
- * @remarks 单独成函数而不是复用 `countPendingRows`：这是**每次启动都要
- * 付的固定成本**，必须是索引级的 `LIMIT 1` 存在性查询（谓词列无索引，
- * COUNT 会全表扫），量级与零成本短路同档。
+ * @param failedIds 标记里已知的坏行主键——坏行永留谓词，不排除会让探针恒命中、
+ * 每次冷启动白扫两遍全表且永不收敛（见文件头「探针排除已知坏行」）。为空
+ * 时走原谓词。
+ *
+ * @remarks 单独成函数而不是复用 `countPendingRows`：这是**每次启动都要付的固定
+ * 成本**，必须是部分索引（`idx_chat_message_pending_blob`，bootstrap 幂等建）
+ * 上的 `LIMIT 1` 存在性查询——稳态索引空，量级与零成本短路同档；COUNT 会
+ * 遍历整棵索引、谓词无索引时更是全表扫。
+ *
+ * @remarks 占位符走 raw-SQL 拼接而**不是** `id NOT IN (#{...})`：本仓
+ * sql-template 的 `renderBind` 对 hash 节点恒返回单值 `parameters:[value]`、
+ * 数组不展开（placeholder.ts），better-sqlite3 侧数组绑定 >1 元素抛
+ * `RangeError`、0 元素 `NOT IN ()` 语法错。id 来自 KKV 标记（本进程写入的
+ * JSON 数组），值仍走 `?` 绑定，不做字符串内插。
  */
-async function hasPendingRows(conn: TdbcConnection): Promise<boolean> {
+async function hasPendingRows(
+  conn: TdbcConnection,
+  failedIds: readonly string[]
+): Promise<boolean> {
+  if (failedIds.length > 0) {
+    const placeholders = failedIds.map(() => "?").join(",");
+    const rows = await conn.query<{ present: number }>(
+      `SELECT 1 AS present FROM chat_message
+       WHERE content_blob IS NOT NULL AND id NOT IN (${placeholders})
+       LIMIT 1`,
+      failedIds
+    );
+    return rows.length > 0;
+  }
   const rows = await conn.query<{ present: number }>(
     "SELECT 1 AS present FROM chat_message WHERE content_blob IS NOT NULL LIMIT 1"
   );
@@ -308,10 +353,12 @@ export async function runMessageContentDecompress(
   // 启动先查标记，**但先付一次自愈探测**（防标记闩锁）：标记随整库快照
   // travels 且写死不校验时，pull 回灌的旧快照会把「已解完」标记带到一个
   // 仍是压缩形态的库上——不清标记则该库永久停在压缩态、本迭代核心收益
-  // 拿不到。探测命中即清标记续搬（正常稳态是零行命中的索引级查询）。
+  // 拿不到。探测命中即清标记续搬（正常稳态是零行命中的部分索引查询）。
+  // 探针排除标记里的坏行 id：只剩坏行时不算命中、标记保留短路（否则每次
+  // 冷启动都要白扫两遍全表、永不收敛）。
   const marker = await readDoneMarker(conn);
   if (marker != null) {
-    if (!(await hasPendingRows(conn))) {
+    if (!(await hasPendingRows(conn, marker.failedIds))) {
       return {
         done: true,
         decompressedCount: 0,
@@ -384,6 +431,13 @@ export async function runMessageContentDecompress(
           row.content_blob,
           row.id
         );
+        // 反向任务的源是**不可信的库内字节**：inflate 成功 ≠ 内容合法——fflate
+        // 不校验 adler32，bit 翻转的 blob 会「解码成功」吐垃圾。不校验就写回
+        // = 把该行唯一压缩副本销毁成永久不可读的行（迁移前读路径 fail-fast
+        // 但字节可恢复，迁移后不可逆），故 UPDATE 前过内容合法性闸门，非法
+        // 一律归入上方同一个坏行隔离分支（failedKeys/failedCount/warn）。
+        // 正向压缩任务没有这道不对称：它的源是应用自己写出的合法 JSON。
+        parseMessageContent(plaintext);
       } catch (error) {
         // 坏行隔离：解码抛错只跳过本行——抛出去会中断整轮、坏行永远留在
         // 谓词里，完成标记永远置不上、每次启动白烧预算。行原样保留压缩
@@ -471,11 +525,16 @@ export async function runMessageContentDecompress(
 
   // 谓词空（或仅剩坏行）→ 两段式置 KKV 完成标记。坏行不阻断标记：否则每次
   // 启动都要重扫同一批坏行再抛一遍，任务永远收敛不了。标记值存 JSON（含
-  // failedCount 快照，读取端解析兜底见 readDoneMarker）。
+  // failedCount 快照 + **本轮坏行 id 清单**——入口自愈探针靠它排除坏行，
+  // 读取端解析兜底见 readDoneMarker）。
   await new SqliteKkvRepository(conn).set(
     MESSAGE_DECOMPRESS_KKV_MODULE,
     MESSAGE_DECOMPRESS_KKV_KEY,
-    JSON.stringify({ at: new Date().toISOString(), failedCount })
+    JSON.stringify({
+      at: new Date().toISOString(),
+      failedCount,
+      failedIds: Array.from(failedKeys),
+    })
   );
 
   // **到此为止，不挂收尾维护链路**（无 VACUUM / checkpoint / 缓存 GC）——
