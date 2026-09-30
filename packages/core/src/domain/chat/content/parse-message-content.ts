@@ -186,6 +186,13 @@ function parseReadResultRef(
   const lastLineTruncated =
     value.lastLineTruncated === true ? true : undefined;
   const nextOffset = optionalNonNegativeInt(value, "nextOffset", refLabel);
+  // **有意的不对称：不回构 `kind`**。`kind` 只由 skill 侧产出（判别字段，
+  // skill 引用必带），read 侧恒缺省——存量 content_json 与本分支之前的 read
+  // 引用块都没有该键，「缺省即 read」就是全链窄化口径（见
+  // {@link ReadResultRef.kind}）。这里若按 `kind === "read"` 回构出一个
+  // `kind: "read"`，落库 JSON 会凭空多一个键、round-trip 不再逐键稳定，
+  // 还会让「哪些块带 kind」这条判别规则退化成「read 也可能带」。显式带
+  // `kind: "read"` 的输入同样不回构（键被白名单消化，语义仍归 read）。
   return {
     path,
     entryId,

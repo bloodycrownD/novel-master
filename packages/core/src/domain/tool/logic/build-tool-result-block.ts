@@ -144,6 +144,15 @@ function resolveSkillResultRefFromOutcome(
   if (action !== "load" && action !== "read") {
     return undefined;
   }
+  // alreadyReferenced 形态**永不产 ref**：load 时若技能全文已在本请求提示词
+  // 中，工具侧已提前 return 出常量 tip——既不 +1 也没有正文可引（下面三件套
+  // 校验本就必然把它挡下，这里显式短路只为把这条隐式耦合写明）。
+  // hydrate 侧无法重放 tip 语义：`formatSkillLoadOutput` 对
+  // alreadyReferenced 直返 content 常量，ref 里既没有「本请求已注入」的
+  // 状态位也没有 files/正文，产了就等于给 LLM 发一段查无出处的提示，破 wire。
+  if (action === "load" && output.alreadyReferenced === true) {
+    return undefined;
+  }
   if (
     (domain !== "global" && domain !== "project") ||
     typeof name !== "string" ||
@@ -175,8 +184,17 @@ function resolveSkillResultRefFromOutcome(
       version,
       contentHash,
       totalBytes,
-      // load 无分页参数：常量占位，让 hydrate 侧两条 action 共用一套字段
-      // 校验与 parse 白名单（wire 重放不读这三个数）。
+      // load 无分页参数：offset/returnedLines/totalLines 恒为 `1/0/0` 占位
+      // **假值**（load 输出本就不带这三个数，真实值只在执行时被截断推导算出、
+      // 从不落 ref），只为让 hydrate 侧两条 action 共用一套字段校验与 parse
+      // 白名单——wire 重放不读这三个数（`formatSkillLoadOutput` 只吃
+      // path/content/truncated/files）。
+      // 「让 deriveSkillLoadTruncation 回真值」这条路被有意否掉：load 输出会
+      // 多带 totalLines，而 `formatSkillLoadOutput` 内部委托 `formatReadOutput`
+      // ——truncated 时它会把 `Total lines: N.` 拼进 wire，hydrate 侧重放记录
+      // 不带该字段就会与之失配；改 wire 就得给冻结 formatter 版本化。
+      // 契约钉在 {@link SkillResultRef} 的字段注释上：消费方按 action 分派，
+      // 禁止读 load 侧这三个假值。
       offset: 1,
       returnedLines: 0,
       totalLines: 0,

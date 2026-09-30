@@ -489,9 +489,10 @@ action 说明：
         const offset = input.offset ?? 1;
         const limit = input.limit ?? TOOL_OUTPUT_MAX_LINES;
         // 分页截断推导单源（与 hydrate 重放共用，见
-        // `domain/tool/logic/skill-read-truncation.ts`）。先推导后校验：
-        // totalLines 是推导产物，省一次 split（越界 offset 的报错文案仍用
-        // 同一 totalLines，与推导前判定逐字一致）。
+        // `domain/tool/logic/skill-read-truncation.ts`）。越界 offset 由
+        // 推导函数内部短路（跳过整套截断推导、只回 totalLines 供报错文案），
+        // 故这里直接在推导后判越界——判定收在单源函数内，调用方不重复推导，
+        // 报错文案与「推导前先判定」逐字一致。
         const {
           content,
           returnedLines,

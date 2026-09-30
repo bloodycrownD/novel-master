@@ -6,7 +6,9 @@
  *   contentRef 且 content 为空串）最坏渲染空摘要、不炸。断言按
  *   summarizeToolInput 链（勿按 result.summary 断言——spec 明示会踩空）。
  * - bodyText 引用态占位：messages IPC handler 的 bodyText 组装对引用块输出
- *   `[read ref: path]` 占位标记；legacy 块（无 contentRef）逐字节不变。
+ *   `[read ref: path]` 占位标记；skill 引用块走窄化文案
+ *   `[skill ref: domain/name]`（不得误标成 read ref）；legacy 块（无
+ *   contentRef）逐字节不变。
  */
 import assert from 'node:assert/strict';
 import { after, before, describe, it, test } from 'node:test';
@@ -210,7 +212,8 @@ describe('read 引用态 bodyText 占位（messages IPC handler）', () => {
       `INSERT INTO chat_message (id, session_id, seq, role, content_json, provider, raw_json, created_at_ms, hidden)
        VALUES
        ('msg-ref', ?, 1, 'user', ?, NULL, NULL, ?, 0),
-       ('msg-legacy', ?, 2, 'user', ?, NULL, NULL, ?, 0)`,
+       ('msg-legacy', ?, 2, 'user', ?, NULL, NULL, ?, 0),
+       ('msg-skill-ref', ?, 3, 'user', ?, NULL, NULL, ?, 0)`,
       [
         sessionId,
         JSON.stringify({
@@ -249,6 +252,35 @@ describe('read 引用态 bodyText 占位（messages IPC handler）', () => {
           ],
         }),
         now + 1,
+        sessionId,
+        JSON.stringify({
+          blocks: [
+            {
+              type: 'tool_result',
+              toolUseId: 'tu-skill-body',
+              content: '',
+              ok: true,
+              summary: 'project:x-skill',
+              contentRef: {
+                kind: 'skill',
+                action: 'load',
+                domain: 'project',
+                name: 'x-skill',
+                path: 'SKILL.md',
+                entryId: 930001,
+                version: 1,
+                contentHash: 'd'.repeat(64),
+                totalBytes: 64,
+                offset: 1,
+                returnedLines: 0,
+                totalLines: 0,
+                truncated: false,
+                files: ['refs/helper.md'],
+              },
+            },
+          ],
+        }),
+        now + 2,
       ],
     );
   });
@@ -275,5 +307,27 @@ describe('read 引用态 bodyText 占位（messages IPC handler）', () => {
     // legacy：无占位标记，正文原样
     assert.ok(!legacyMsg.bodyText.includes('[read ref:'));
     assert.ok(legacyMsg.bodyText.includes('     1|legacy 全文'));
+  });
+
+  test('skill 引用块 bodyText 输出 [skill ref: domain/name]，不得误标 [read ref: …]', async () => {
+    const result = await handleMessagesList({ sessionId });
+    assert.equal(result.ok, true);
+    if (!result.ok) {
+      return;
+    }
+    const skillMsg = result.data.find((m) => m.id === 'msg-skill-ref');
+    assert.ok(skillMsg != null);
+
+    // skill ref 的 path 是技能目录内相对路径（此处 SKILL.md），脱离
+    // domain/name 单独投影既无信息量又会误导——必须走窄化后的 skill 文案。
+    assert.match(skillMsg.bodyText, /\[tool_result id=tu-skill-body\]/);
+    assert.ok(
+      skillMsg.bodyText.includes('[skill ref: project/x-skill]'),
+      `skill 引用块 bodyText 应含 [skill ref: project/x-skill]，实际：${skillMsg.bodyText}`,
+    );
+    assert.ok(
+      !skillMsg.bodyText.includes('[read ref:'),
+      'skill 引用块不得被误标成 read ref',
+    );
   });
 });

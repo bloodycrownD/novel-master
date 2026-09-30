@@ -43,6 +43,10 @@ export interface SkillReadTruncation {
  * 的 truncated / nextOffset 三分支。**改动此处必须同步改 wire 冻结函数
  * `formatReadOutput` 的版本语义**（引用块一旦落库，重放要与之逐字节一致）。
  *
+ * `offset > totalLines`（越界）在内部短路：不跑截断推导，返回空正文 /
+ * returnedLines=0 但**照常给出 totalLines**——调用方据此抛越界错误，文案与
+ * 「推导前先判定」逐字一致（引用块不可能带越界 offset：落库前就被拒了）。
+ *
  * @param plain 该 revision 的完整明文（hydrate 由 revision blob 解出）
  * @param offset 1-based 起始行号（与工具输入同参）
  * @param limit 最多返回行数（与工具输入同参）
@@ -54,6 +58,14 @@ export function deriveSkillReadTruncation(
 ): SkillReadTruncation {
   const lines = plain.split("\n");
   const totalLines = lines.length;
+  // 越界 offset（offset > totalLines）：**内部短路**，跳过切行 / truncateLine /
+  // capUtf8Bytes 全套推导——这条路径的唯一出路是被调用方拒绝（skill-tool read
+  // 分支据此抛 INVALID_ARGUMENT），跑完推导的结果必被丢弃，白跑一次。
+  // 「越界即错」因此收进本单源函数，调用方不必再各自重复判定。
+  // 返回的 totalLines 仍照常给出：报错文案要用它（与推导前判定逐字一致）。
+  if (offset > totalLines) {
+    return { content: "", returnedLines: 0, totalLines, truncated: false };
+  }
   const { slice, nextOffset: lineNextOffset } = sliceLinesFromOffset(
     lines,
     offset,

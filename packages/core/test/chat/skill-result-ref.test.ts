@@ -11,6 +11,9 @@
  *   全字段、+1 已发生（ref_count 断言）、wire 逐字节等值（hydrate 重放 vs
  *   formatToolOutputForLlm 原文）；**outputSchema 牙齿**——输出经
  *   ToolRunner.call（safeParse strip 路径）后三件套仍在。
+ * - T-SR1b：跨域同名（global / project 两域各建同名技能、内容不同）——
+ *   缺省域命中 project 副本、显式 global 命中另一 entry，两次 hydrate
+ *   各自等值。
  * - T-SR2：计数对账——read 后 edit 中间版本 sweep 保活；消息删除挂点 −1；
  *   同 turn 重复读偏差（登记为已知偏差：只增不减）。
  * - T-SR3：分页重放——offset/limit 多变体 wire 等值（skill 截断管线与 vfs
@@ -22,6 +25,9 @@
  *   不依赖具体实现形态（hydrate 只查 vfs_revision、不回读 vfs_entry）。
  * - T-SR6：技能删除后引用保活（sweepRevisionsUnderScope 路径）。
  * - T-SR7：技能改名（renamePrefix）后旧 ref 仍按 (entryId, version) hydrate。
+ * - T-SR8：损坏引用的fail-fast——revision 行被裸删（悬空）抛
+ *   READ_REF_REVISION_MISSING、contentHash 篡改成另一版本真实 hash 抛
+ *   READ_REF_HASH_MISMATCH（断的是坏引用，好块仍须 hydrate 等值）。
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -33,7 +39,10 @@ import type {
   ToolResultBlock,
 } from "../../src/domain/chat/model/content-block.js";
 import { parseMessageContent } from "../../src/domain/chat/content/parse-message-content.js";
-import { hydrateToolResultsForPrompt } from "../../src/domain/chat/logic/hydrate-tool-results-for-prompt.js";
+import {
+  hydrateToolResultsForPrompt,
+  ReadResultHydrateError,
+} from "../../src/domain/chat/logic/hydrate-tool-results-for-prompt.js";
 import { buildToolResultBlock } from "../../src/domain/tool/logic/build-tool-result-block.js";
 import { formatToolOutputForLlm } from "../../src/domain/tool/logic/format-tool-output.js";
 import { ToolRegistry } from "../../src/domain/tool/logic/tool-registry.js";
@@ -301,6 +310,54 @@ describe("skill-result-ref: T-SR1 skill read 引用化 round-trip", () => {
     );
     assert.equal(block.contentRef, undefined);
     assert.ok(block.content.includes("1|a"));
+  });
+});
+
+describe("skill-result-ref: T-SR1b 跨域同名（global / project 各一份）", () => {
+  it("缺省域 read 命中 project 副本；显式 global 命中另一 entry，两次 hydrate 各自等值", async () => {
+    const fx = makeSkillFixture();
+    // 两域同名、内容不同（spec「两域夹具」的实现侧补齐）：缺省域必须按
+    // 生效副本解析到 project 副本，显式 domain 则打另一条版本链。
+    await fx.service.writeSkillFile(
+      "global",
+      "sr1b-dup",
+      undefined,
+      "global-第一行\nglobal-第二行"
+    );
+    await fx.service.writeSkillFile(
+      "project",
+      "sr1b-dup",
+      undefined,
+      "project-第一行\nproject-第二行",
+      fx.projectId
+    );
+
+    const byDefault = await callSkill(fx, { action: "read", name: "sr1b-dup" });
+    assert.equal(byDefault.domain, "project", "缺省域按生效副本解析（项目副本优先）");
+    const defaultBlock = buildSkillBlock("tu-sr1b-project", byDefault);
+    const defaultRef = defaultBlock.contentRef as SkillResultRef;
+    assert.equal(defaultRef.domain, "project");
+
+    const byGlobal = await callSkill(fx, {
+      action: "read",
+      name: "sr1b-dup",
+      domain: "global",
+    });
+    assert.equal(byGlobal.domain, "global", "显式域必须打 global 本体");
+    const globalBlock = buildSkillBlock("tu-sr1b-global", byGlobal);
+    const globalRef = globalBlock.contentRef as SkillResultRef;
+    assert.equal(globalRef.domain, "global");
+    assert.equal(globalRef.name, defaultRef.name, "同名：name 相同不构成同一引用");
+
+    // 两域同名 = 两条独立 entry（引用键是 (entryId, version)，不是 name）。
+    assert.notEqual(defaultRef.entryId, globalRef.entryId, "跨域同名必须落到不同 entry");
+    // 两条 wire 各自带自己那份正文，不串味。
+    const projectWire = formatToolOutputForLlm(byDefault);
+    const globalWire = formatToolOutputForLlm(byGlobal);
+    assert.match(projectWire, /project-第一行/);
+    assert.match(globalWire, /global-第一行/);
+    assert.equal(await hydrateContent(defaultBlock, fx.revisionRepo), projectWire);
+    assert.equal(await hydrateContent(globalBlock, fx.revisionRepo), globalWire);
   });
 });
 
@@ -767,5 +824,94 @@ describe("skill-result-ref: 截断删尾挂点对 skill ref 生效", () => {
 
     // −1 先于 sweep：删掉的引用不再保活（本例 live head 仍持有 → 剩 1）。
     assert.equal(await refCountOf(entryId, version), 1);
+  });
+});
+
+describe("skill-result-ref: T-SR8 悬空 / 篡改 fail-fast", () => {
+  it("revision 行被裸删（绕过保活链）：hydrate 抛 READ_REF_REVISION_MISSING", async () => {
+    const fx = makeSkillFixture();
+    await seedProjectSkill(fx, "sr8-dangling", "悬空正文\n第二行");
+    const output = await callSkill(fx, { action: "read", name: "sr8-dangling" });
+    const block = buildSkillBlock("tu-sr8-dangling", output);
+    assert.equal(await refCountOf(output.entryId!, output.version), 2);
+
+    // 裸 DELETE（绕过 ref_count）：模拟保活链被破坏——引用块仍在消息里，
+    // 目标 revision 却不复存在。这正是引用化最危险的一种损坏：静默放行等于
+    // 给 LLM 发一个空 tool_result。
+    const { conn } = getNovelMasterTestContext();
+    await conn.execute(
+      `DELETE FROM vfs_revision WHERE entry_id = ? AND version = ?`,
+      [output.entryId!, output.version]
+    );
+    assert.equal(await refCountOf(output.entryId!, output.version), null);
+
+    await assert.rejects(
+      () => hydrateToolResultsForPrompt([refMessage(block)], fx.revisionRepo),
+      (err: unknown) => {
+        assert.ok(
+          err instanceof ReadResultHydrateError,
+          `期望 ReadResultHydrateError，实际 ${String(err)}`
+        );
+        assert.equal(err.code, "READ_REF_REVISION_MISSING");
+        // 断言只锁「这是一条 skill read 引用」这层语义，**不锁 locKey 字面量**
+        //（open question ⑨ 若改 locKey 格式，当前形如 `read:SKILL.md`，本用例
+        // 不连带改）。
+        assert.match(err.message, /skill read 引用/);
+        return true;
+      }
+    );
+  });
+
+  it("contentRef.contentHash 被改成另一版本的真实 hash：抛 READ_REF_HASH_MISMATCH", async () => {
+    const fx = makeSkillFixture();
+    await seedProjectSkill(fx, "sr8-tampered", "v1-原正文");
+    const output = await callSkill(fx, { action: "read", name: "sr8-tampered" });
+    const entryId = output.entryId!;
+    const version = output.version;
+    const block = buildSkillBlock("tu-sr8-tampered", output);
+
+    // 篡改值取**另一版本的真实 hash**（不是随手编的假串）：这才是现实中会
+    // 发生的形态（引用错键 / 版本错位——行上的 content_hash 指向另一版明文）。
+    await fx.service.editSkillFile(
+      "project",
+      "sr8-tampered",
+      undefined,
+      { oldString: "v1-原正文", newString: "v2-另一版正文" },
+      fx.projectId
+    );
+    const { conn } = getNovelMasterTestContext();
+    const otherRows = await conn.query<{ content_hash: string }>(
+      `SELECT content_hash FROM vfs_revision WHERE entry_id = ? AND version = ?`,
+      [entryId, version + 1]
+    );
+    assert.equal(otherRows.length, 1, "第二版必须存在（edit 走同entry 版本链）");
+    const otherHash = otherRows[0]!.content_hash;
+    assert.notEqual(otherHash, output.contentHash, "两版 hash 必须不同，否则本用例空转");
+
+    const tampered: ToolResultBlock = {
+      ...block,
+      contentRef: {
+        ...(block.contentRef as SkillResultRef),
+        contentHash: otherHash,
+      },
+    };
+    await assert.rejects(
+      () => hydrateToolResultsForPrompt([refMessage(tampered)], fx.revisionRepo),
+      (err: unknown) => {
+        assert.ok(
+          err instanceof ReadResultHydrateError,
+          `期望 ReadResultHydrateError，实际 ${String(err)}`
+        );
+        assert.equal(err.code, "READ_REF_HASH_MISMATCH");
+        assert.match(err.message, /skill read 引用/);
+        return true;
+      }
+    );
+    // 反向确认：篡改只影响那条坏引用，好块仍 hydrate 等值（本用例没把库/装配
+    // 弄成全局坏掉）。
+    assert.equal(
+      await hydrateContent(block, fx.revisionRepo),
+      formatToolOutputForLlm(output)
+    );
   });
 });

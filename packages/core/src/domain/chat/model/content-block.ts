@@ -159,11 +159,27 @@ export interface SkillResultRef {
   readonly contentHash: string;
   /** 明文总字节（UTF-8）。 */
   readonly totalBytes: number;
-  /** read 输入参数（1 起始行号）；load 恒 1。 */
+  /**
+   * read 输入参数（1 起始行号）；load 恒 1。
+   *
+   * **load 侧是占位假值、消费方禁读**：load 输出没有分页入参（无 offset/limit），
+   * 这三个数对 load 恒为 `1 / 0 / 0`，既不是真实行数也不参与 wire 重放
+   * （`formatSkillLoadOutput` 只吃 path/content/truncated/files）。它们只为让
+   * 两条 action 共用一套字段校验与 parse 白名单而存在。
+   */
   readonly offset: number;
   /** read 输入参数；load 缺省（load 无分页参数）。 */
   readonly limit?: number;
+  /**
+   * read 侧是真实推导值；**load 侧恒 0（占位假值、消费方禁读）**，理由同
+   * {@link SkillResultRef.offset}。
+   */
   readonly returnedLines: number;
+  /**
+   * read 侧是真实推导值；**load 侧恒 0（占位假值、消费方禁读）**，理由同
+   * {@link SkillResultRef.offset}。任何按 `ref.totalLines` 渲染的消费方
+   * （如「共 N 行」徽标）必须先按 `action` 分派，load 侧读到的 0 是假值。
+   */
   readonly totalLines: number;
   readonly truncated: boolean;
   readonly nextOffset?: number;
