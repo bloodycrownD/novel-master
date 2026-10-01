@@ -153,4 +153,28 @@ describe('StorageConfigScreen 存量数据迁移卡片 — 指标卡形态（用
     // cleanup 返回函数里
     expect(source).toMatch(/return \(\) => clearInterval\(interval\)/);
   });
+
+  it('T-VP22: 第四行「历史版本打包」排在文件缓存去 base64 之后（相对顺序钉住）', () => {
+    const fileCacheIdx = source.indexOf(`label: '文件缓存去 base64'`);
+    const vfsPackIdx = source.indexOf(`label: '历史版本打包'`);
+    expect(fileCacheIdx).toBeGreaterThanOrEqual(0);
+    expect(vfsPackIdx).toBeGreaterThan(fileCacheIdx);
+  });
+
+  it('T-VP22: 第四行取值走 vfsPackValue 纯函数、数据源经 vfsPack state 接线', () => {
+    expect(source).toMatch(/vfsPackValue\(vfsPack\)/);
+    expect(source).toMatch(/setVfsPack\(stats\.vfsPack\)/);
+    expect(source).toMatch(/from '\.\/storage-config-migration-values'/);
+  });
+
+  it('T-VP22: 第四行同样只读展示（不以 ProfileMenuItem 菜单项渲染）', () => {
+    expect(source).not.toMatch(/label="历史版本打包"/);
+  });
+
+  it('T-VP22: 第三态分支在纯函数模块（failedGroups > 0 与「组需人工处理」字样）', () => {
+    // 分支行为（夹具直测）由 storage-config-migration-values.test.ts 的
+    // vfsPackValue describe 承担；此处钉住模块内第三态分支字样
+    expect(migrationValuesSource).toMatch(/failedGroups > 0/);
+    expect(migrationValuesSource).toMatch(/组需人工处理/);
+  });
 });

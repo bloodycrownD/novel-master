@@ -18,6 +18,7 @@ import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { VFS_SCHEMA_STATEMENTS } from "./vfs/vfs-schema.js";
 import { VFS_REVISION_SCHEMA_STATEMENTS } from "./vfs/vfs-revision-schema.js";
 import { VFS_CONTENT_BLOB_SCHEMA_STATEMENTS } from "./vfs/vfs-content-blob-schema.js";
+import { VFS_CONTENT_PACK_SCHEMA_STATEMENTS } from "./vfs/vfs-content-pack-schema.js";
 import { MESSAGE_CHECKPOINT_SCHEMA_STATEMENTS } from "./message-checkpoint/message-checkpoint-schema.js";
 import { KKV_SCHEMA_STATEMENTS } from "./kkv/kkv-schema.js";
 import { SESSION_KKV_SCHEMA_STATEMENTS } from "./session-kkv/session-kkv-schema.js";
@@ -116,14 +117,29 @@ import { IntegrityRepairRegistry } from "@/service/integrity-repair.js";
  * + 实时算兜底」并移除累计输入输出——DDL/ALIGN 全撤、版本回到 17。该列
  * 只在 feature 分支的测试机库上残留（user_version 已升 18、列与回填标记
  * 为无害孤儿，无任何读写方），正式库从未有过此形态，无需清理动作。
+ * v18（本迭代启用）：新增 vfs_content_pack / vfs_content_pack_member 两表与
+ * idx_vfs_content_pack_member_pack 索引（binary-blob-and-vfs-pack Part B：
+ * VFS 非 head 历史版本混合打包——小组 zlib-concat-v1 / 大组 fossil-chain-v1，
+ * member 按 content_hash 寻址进包）。老库（v17）靠本轮 bump 走慢路径由
+ * DDL 建出两表与索引；全新库直接建表；无存量回填（历史 blob 行由后台
+ * 打包任务跨启动续跑搬运）。**已因上一轮撤回 v18 落到 user_version = 18 的
+ * 测试机库走快路径时，两张表由事务外无条件段幂等补建**（pbm-7 方案 A，
+ * 荣耀真机实锤该形态后落地——详见 bootstrapNovelMaster 内该段注释）。占号说明：main 侧曾占 v18 后当日撤回（上段，
+ * 未发布），故本迭代直接取 v18、无需再顺延；合并顺序上以主干现值为准，
+ * 若 main 后续再占 18 则本迭代顺延。
+ * v18 同轮追加：`idx_vfs_entry_content_hash`（打包候选谓词的 head 引用
+ * 反查用；真库形态谓词 126–141ms → 67–76ms）。它也在 v18 canonical DDL 里，
+ * **不单独 bump**——本迭代尚未发布，存量 v17 库走 17→18 慢路径随语句集
+ * 一并建出；分支内测试机已落 v18 的库不会补建（无发布面，可接受）。
  */
-export const SCHEMA_BOOT_VERSION = 17;
+export const SCHEMA_BOOT_VERSION = 18;
 
 /** 各模块 DDL 语句，按依赖安全顺序排列。 */
 export const NOVEL_MASTER_SCHEMA_STATEMENTS: readonly string[] = [
   ...VFS_SCHEMA_STATEMENTS,
   ...VFS_REVISION_SCHEMA_STATEMENTS,
   ...VFS_CONTENT_BLOB_SCHEMA_STATEMENTS,
+  ...VFS_CONTENT_PACK_SCHEMA_STATEMENTS,
   ...MESSAGE_CHECKPOINT_SCHEMA_STATEMENTS,
   ...KKV_SCHEMA_STATEMENTS,
   ...SESSION_KKV_SCHEMA_STATEMENTS,
@@ -233,6 +249,29 @@ async function hasLegacyVfsEntryShape(tx: TdbcConnection): Promise<boolean> {
 }
 
 /**
+ * `vfs_entry` 存在但缺 `content_hash` 列
+ * → vfs-entry-id-redesign-v1 之前的老库形态。
+ *
+ * 与 {@link hasBaseline} 是否命中无关：`saved-model-identity-v1` 自 v1.3.10 起
+ * 就登记，v1.3.10~v1.4.06 这段库的 `BASELINE_MIGRATION_IDS.some()` 必命中并
+ * 提前 return，若只依赖它来判老库形态，这类库会一路走到慢路径 DDL 的
+ * `CREATE INDEX idx_vfs_entry_content_hash ON vfs_entry(content_hash)` 裸炸
+ * `no such column`，把本应给出的升级提示顶掉。故单列此探测。
+ */
+async function hasVfsEntryWithoutContentHash(tx: TdbcConnection): Promise<boolean> {
+  const tables = await tx.query<{ name: string }>(
+    `SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'vfs_entry'`
+  );
+  if (tables.length === 0) {
+    return false;
+  }
+  const cols = await tx.query<{ name: string }>(
+    `SELECT name FROM pragma_table_info('vfs_entry')`
+  );
+  return !cols.some((c) => c.name === "content_hash");
+}
+
+/**
  * `chat_session` 存在但缺 `agent_config_json` 列
  * → 未走 session-agent-config-v2（该迁移/DDL 在 v1.4.21 前后引入此列）。
  */
@@ -313,10 +352,19 @@ async function detectLegacyShape(tx: TdbcConnection): Promise<boolean> {
  * 判断逻辑：`schema_migrations` 表里必须至少有一条 baseline id 被登记；
  * 一条都没登记、且探测到 legacy 形态时，判定为跨大版本升级，报错拦下。
  * 全新空库（无 legacy 表征）不触发——首次安装是新装路径。
+ *
+ * **vfs_entry 缺 content_hash 列的形态单列前置判定**（不在 `hasBaseline`
+ * 短路之内）：见 {@link hasVfsEntryWithoutContentHash} 的注释——v1.3.10~
+ * v1.4.06 库已被 baseline 登记命中提前 return，漏判就会拿裸
+ * `no such column` 顶掉升级提示。`some()` 语义不动。
  */
 export async function assertMinimumBaseline(tx: TdbcConnection): Promise<void> {
   await ensureSchemaMigrationsTable(tx);
   const applied = await listAppliedSchemaMigrationIds(tx);
+
+  if (await hasVfsEntryWithoutContentHash(tx)) {
+    throw new Error(BASELINE_TOO_OLD_MESSAGE);
+  }
 
   const hasBaseline = BASELINE_MIGRATION_IDS.some((id) => applied.has(id));
   if (hasBaseline) {
@@ -357,10 +405,14 @@ export async function bootstrapNovelMaster(
       return;
     }
 
+    // 基线检查先于 DDL：低版本老库的表形态可能与 canonical DDL 不兼容
+    //（如 legacy vfs_entry（path 主键）没有 content_hash 列，索引 DDL 会以
+    //「no such column」炸掉、顶掉本应给出的升级提示）。事务内抛错整体回滚，
+    // 先后顺序对非 legacy 库无持久影响。
+    await assertMinimumBaseline(tx);
     for (const sql of NOVEL_MASTER_SCHEMA_STATEMENTS) {
       await tx.execute(sql);
     }
-    await assertMinimumBaseline(tx);
     await runPendingSchemaMigrations(tx);
     await alignSchemaColumns(tx);
     // parent_session_id 索引不能放在 DDL 里——老库升级路径下 DDL 阶段该列还没被
@@ -398,6 +450,20 @@ export async function bootstrapNovelMaster(
     await conn.execute(
       "CREATE INDEX IF NOT EXISTS idx_chat_message_pending_blob ON chat_message(id) WHERE content_blob IS NOT NULL"
     );
+  }
+
+  // pbm-7 方案 A：pack 两表 + member 索引在**事务外无条件幂等补建**（快/慢两
+  // 分支共用本出口）。理由：`user_version=18` 的库若来自「曾占 18 后撤回」的形态
+  //（tool_use_count 撤回版的测试机残留），`SCHEMA_BOOT_VERSION=18` 的快路径
+  //（18 >= 18）不会重跑 DDL——pack 两表永不建出，打包任务每轮以
+  // `no such table: vfs_content_pack` 报错（荣耀真机 2026-10-01 实锤）。慢路径
+  // 库由事务内语句集建出后此处为幂等 no-op；放进语句集对快路径无效果（快路径
+  // 不执行 DDL 循环）。全部语句带 IF NOT EXISTS、不 bump、不挂 migration——与
+  // 上方 `idx_chat_message_pending_blob` 先例同款落点纪律。**失败语义 fail
+  // loud**：静默吞掉建表失败会让任务持续报 no such table 且无任何痕迹。V1'
+  // 退役 Part B 时随迭代一并评估删除。
+  for (const sql of VFS_CONTENT_PACK_SCHEMA_STATEMENTS) {
+    await conn.execute(sql);
   }
 
   // D1：内置技能 seed 挂事务之后的公共路径（快/慢两分支共用本出口；放事务内

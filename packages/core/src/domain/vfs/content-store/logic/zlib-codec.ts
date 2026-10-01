@@ -2,10 +2,14 @@
  * zlib 编解码与 blob 字节收整（三方共用：vfs content-store、session-kkv
  * file_cache、RN 平台存量口径；与 ZIP 的 deflate/inflate 模块边界分离）。
  *
+ * 压缩/解压经 `zlib-accelerator` 的宿主注册加速器分派（Node 注册
+ * `node:zlib` 提速；未注册恒走 fflate，现行为零变化）。
+ *
  * @module domain/vfs/content-store/logic/zlib-codec
  */
 
 import { unzlibSync, Unzlib, zlibSync } from "fflate";
+import { tryZlibDeflate, tryZlibInflate } from "./zlib-accelerator.js";
 import {
   base64ToBytes,
   VFS_CONTENT_ENCODING_ZLIB_B64,
@@ -23,18 +27,22 @@ export const VFS_CONTENT_ENCODING_ZLIB = "zlib" as const;
  * zlib 压缩明文 UTF-8 字节。
  *
  * @remarks ContentStore 与 file_cache blob 共用；禁止 ZIP 路径调用本封装。
+ * 宿主注册了 zlib 加速器（Node `node:zlib`）时优先走加速器，未注册/加速器
+ * 失败回落 fflate（行为与历史一致）。
  */
 export function compressZlib(plainUtf8: Uint8Array): Uint8Array {
-  return zlibSync(plainUtf8);
+  return tryZlibDeflate(plainUtf8) ?? zlibSync(plainUtf8);
 }
 
 /**
  * zlib 解压为 UTF-8 字节。
  *
  * @remarks ContentStore 与 file_cache blob 共用；禁止 ZIP 路径调用本封装。
+ * 宿主注册了 zlib 加速器（Node `node:zlib`）时优先走加速器，未注册/加速器
+ * 失败回落 fflate（行为与历史一致）。
  */
 export function decompressZlib(compressed: Uint8Array): Uint8Array {
-  return unzlibSync(compressed);
+  return tryZlibInflate(compressed) ?? unzlibSync(compressed);
 }
 
 /** 有上限解压时喂给流式 inflate 的输入切片字节数。 */

@@ -6,8 +6,9 @@
 
 import { mkdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
+import { deflateSync, inflateSync } from "node:zlib";
 import { registerTokenizerNodeDriver } from "@novel-master/tokenizer-driver-node";
-import { bootstrapNovelMaster, createPersistentPreferences, createPersistentState, open, runBlobBinaryNormalization, runMessageContentDecompress, type PersistentPreferences, type PersistentState, type TdbcConnection } from "@novel-master/core";
+import { bootstrapNovelMaster, createPersistentPreferences, createPersistentState, open, registerZlibCodecAccelerator, runBlobBinaryNormalization, runMessageContentDecompress, runVfsContentPacking, type PersistentPreferences, type PersistentState, type TdbcConnection } from "@novel-master/core";
 import { refreshUserVfsUnifiedToolTurnSnapshot } from "@novel-master/core/feature-flags";
 
 import { createAgentRegistryService, createAgentStreamRegistry } from "@novel-master/core/agent";
@@ -181,6 +182,15 @@ export async function createNovelMasterRuntime(
   registerBetterSqlite3Driver();
   const skspName = registerPlatformSkspDriver();
   registerTokenizerNodeDriver();
+  // Node 侧原生 zlib 加速器（P1-4）：core 禁止静态 import node: 模块，
+  // 由 CLI 运行时注册。未注册（RN）时 core 全走 fflate，行为不变。
+  // 注意：compressZlib 目前恒不传 level，下面三元里的 level 分支是给
+  // 将来 level 透传预留的；保持它是因为加速器契约里 level 是可选形参。
+  registerZlibCodecAccelerator({
+    deflate: (data, level) =>
+      level === undefined ? deflateSync(data) : deflateSync(data, { level }),
+    inflate: (data) => inflateSync(data),
+  });
   const dbPath = resolve(resolveDbPath(argv));
   await mkdir(dirname(dbPath), { recursive: true });
 
@@ -188,17 +198,23 @@ export async function createNovelMasterRuntime(
     driver: "better-sqlite3",
   });
   await bootstrapNovelMaster(conn);
-  // 双任务预算：解压 5s + 归一 60s、最坏合计约 65s。解压只给 5s 是因为
-  // CLI 是三端唯一把搬运 await 进命令关键路径的（desktop/mobile 皆
-  // fire-and-forget），交互式进程不该被一次搬运独占一分钟；超预算残余由
-  // 下次命令或双端启动续跑。顺序无功能依赖——解压谓词（content_blob IS
+  // 三任务串行最坏 5+60+30≈95s（命令进程短命，超预算残余由下次命令或
+  // 双端启动续跑）。解压只给 5s 是因为 CLI 是三端唯一把搬运 await 进
+  // 命令关键路径的（desktop/mobile 皆 fire-and-forget），交互式进程不该
+  // 被一次搬运独占一分钟。顺序无功能依赖——解压谓词（content_blob IS
   // NOT NULL）与归一谓词（blob 形态）可交叠但收敛顺序无关：任一先跑，
-  // 另一谓词重扫后自然收敛。
+  // 另一谓词重扫后自然收敛；打包谓词（hash 仍是 blob 行的非 head 历史
+  // 版本）读明文经 content store 三形态兼容，与归一/解压交错安全。
   await runMessageContentDecompress(conn, { syncBudgetMs: 5_000 });
   // 存量 blob 形态归一（zlib-b64 文本 → 二进制 BLOB）：幂等可重入；收尾
   // 维护仅在本轮确有推进（成功改写 ≥1 行）且全部表完成时触发一次（稳态
   // 零成本短路），上一轮维护失败由持久化标记 startupMaintenancePending 补跑。
   await runBlobBinaryNormalization(conn);
+  // VFS 非 head 历史版本混合打包（小组 zlib-concat / 大组 fossil 链）：
+  // 同样幂等可重入（已落库的 pack 永不重写）；无终态——预算 30s 内收敛
+  // 即收工，新版本攒的新组由下次命令 / 双端启动收敛；收尾维护仅在本轮
+  // 确有打包或读到 pending 兜底标记时触发一次。
+  await runVfsContentPacking(conn);
 
   const state = createPersistentState(conn);
   const smartSortRule = createSmartSortRuleService(conn);

@@ -1,8 +1,9 @@
 import type { DbStatsResult } from "@shared/ipc-types";
 
 /**
- * 存量数据迁移卡片的三行进度（用户拍板 2026-09-28）：消息正文解压回
- * 明文 + 两张 blob 表去 base64，只读状态行（非菜单项）。消息正文「去
+ * 存量数据迁移卡片的四行进度（前三行用户拍板 2026-09-28；第四行随
+ * vfs-content-pack 迭代新增）：消息正文解压回明文 + 两张 blob 表去
+ * base64 + VFS 历史版本打包，只读状态行（非菜单项）。消息正文「去
  * base64」不设状态行——发版形态下解压搬运直接写明文，不存在用户可见的
  * 中间态，仅开发机历史形态由归一任务静默收敛。
  *
@@ -15,6 +16,7 @@ export const MIGRATION_ROWS = [
   { kind: "messageDecompress", label: "消息正文明文化" },
   { kind: "vfsContent", label: "版本内容去 base64" },
   { kind: "fileCache", label: "文件缓存去 base64" },
+  { kind: "vfsPack", label: "历史版本打包" },
 ] as const;
 
 /**
@@ -29,7 +31,14 @@ export type MigrationRowValue = {
 
 /**
  * 单行迁移状态文案（cr-06 三态 + ic-04 未取到）：
- * 已完成 / 已完成（N 条需人工处理）/ 进行中（剩余 N 条）/ 未取到 '—'。
+ * 已完成 / 已完成（N 条需人工处理）/ 进行中（剩余 N 条）/ 未取到 '—'；
+ * vfsPack 行两态口径不同（无终态）：剩余 N 组 / 无需处理 + 坏组第三态
+ * 「已完成（N 组需人工处理）」。
+ *
+ * **第三态口径**：「已完成（N 组需人工处理）」里的 N 是**上次收敛轮**写下的
+ * failedGroups 快照——「已完成」只限定为「当前候选已收敛」这一轮（pendingGroups
+ * 为 0），不代表此后再无候选：新版本攒出新组后状态行会重新回到「剩余 N 组」。
+ * 文案本身是 spec 拍板口径，此处只补边界说明。
  */
 export function migrationRowValue(
   dbStats: DbStatsResult | null,
@@ -43,6 +52,22 @@ export function migrationRowValue(
     return status.done
       ? { text: "已完成", tone: "success" }
       : { text: `进行中（剩余 ${status.pendingCount} 条）`, tone: "default" };
+  }
+  if (row.kind === "vfsPack") {
+    const pack = dbStats?.vfsPack;
+    if (pack == null) {
+      return { text: "—", tone: "default" };
+    }
+    if (pack.pendingGroups > 0) {
+      return { text: `剩余 ${pack.pendingGroups} 组`, tone: "default" };
+    }
+    if (pack.failedGroups > 0) {
+      return {
+        text: `已完成（${pack.failedGroups} 组需人工处理）`,
+        tone: "warning",
+      };
+    }
+    return { text: "无需处理", tone: "success" };
   }
   const status = dbStats?.blobBinary.tables.find(
     (item) => item.table === row.kind,

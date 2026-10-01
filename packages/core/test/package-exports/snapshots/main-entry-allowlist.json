@@ -7,6 +7,7 @@
   "DEFAULT_BLOB_BINARY_SYNC_BUDGET_MS",
   "DEFAULT_DECOMPRESS_SYNC_BUDGET_MS",
   "DEFAULT_LEASE_SECONDS",
+  "DEFAULT_VFS_PACK_SYNC_BUDGET_MS",
   "EMPTY_CLOUD_SYNC_STATUS",
   "ENGINE_IDS",
   "FILE_OPEN_TOOL_NAMES",
@@ -41,6 +42,7 @@
   "ToolError",
   "ToolRegistry",
   "ToolRunner",
+  "VFS_PACK_KKV_MODULE",
   "WORKSPACE_STATE_MODULE",
   "anyToolUseMutatesWorkspace",
   "bindExpressionToContext",
@@ -61,6 +63,7 @@
   "getBlobBinaryStatus",
   "getDriver",
   "getMessageDecompressStatus",
+  "getVfsContentPackStatus",
   "isCloudSyncError",
   "isEffectiveLock",
   "isKkvError",
@@ -81,6 +84,7 @@
   "registerBuiltinTools",
   "registerDriver",
   "registerVfsTools",
+  "registerZlibCodecAccelerator",
   "renewLease",
   "resolveDriver",
   "resolveEngineChain",
@@ -90,6 +94,7 @@
   "runDeferredFileCacheGc",
   "runMessageContentDecompress",
   "runStartupMaintenanceOnce",
+  "runVfsContentPacking",
   "scrubProviderTables",
   "scrubProviderTablesInDatabase",
   "searchApiKeyRef",
@@ -97,5 +102,7 @@
   "statusKey",
   "stringifyText",
   "toolUseMutatesWorkspace",
-  "validateProviderTableSnapshot"
+  "unpackVfsContent",
+  "validateProviderTableSnapshot",
+  "verifyVfsContentPacks"
 ]

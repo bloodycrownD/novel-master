@@ -4,7 +4,7 @@
  * - T-DMM1：Agent 运行中两入口均 reject 中文错误且不触 stat/core；
  *   正常路径 getDatabaseMaintenanceStats 返回文件体积 + 可回收量 + blob
  *   归一状态（blobBinary 透传 core getBlobBinaryStatus 的 tables 数组）
- *   + 消息压缩状态、runDatabaseMaintenance 按序 stat → core 维护 → stat
+ *   + 消息解压状态、runDatabaseMaintenance 按序 stat → core 维护 → stat
  *   返回前后体积。
  * - T-DMM2：core runDatabaseMaintenance 抛错时以 reject 语义上抛
  *   （可被调用方捕获），不吞错、错误后不再采后置体积。
@@ -26,6 +26,7 @@ const mockRunMaintenance = jest.fn();
 const mockCreateService = jest.fn();
 const mockGetBlobBinaryStatus = jest.fn();
 const mockGetDecompressStatus = jest.fn();
+const mockGetVfsPackStatus = jest.fn();
 
 const liveConn = {tag: 'live'};
 
@@ -35,6 +36,8 @@ jest.mock('@novel-master/core', () => ({
   getBlobBinaryStatus: (...args: unknown[]) => mockGetBlobBinaryStatus(...args),
   getMessageDecompressStatus: (...args: unknown[]) =>
     mockGetDecompressStatus(...args),
+  getVfsContentPackStatus: (...args: unknown[]) =>
+    mockGetVfsPackStatus(...args),
 }));
 
 jest.mock('@/db/db-file-path', () => ({
@@ -81,6 +84,14 @@ const BLOB_BINARY_STATUS = {
   ],
 };
 
+/** core 打包任务状态（T-VP22 第四行数据源；pendingGroups>0 的进行中态）。 */
+const VFS_PACK_STATUS = {
+  pendingGroups: 5,
+  memberCount: 40,
+  streamBytes: 655_360,
+  failedGroups: 0,
+};
+
 describe('db-maintenance.service', () => {
   const runtime = {conn: liveConn} as never;
 
@@ -94,6 +105,7 @@ describe('db-maintenance.service', () => {
     mockGetDecompressStatus
       .mockReset()
       .mockResolvedValue({done: true, pendingCount: 0});
+    mockGetVfsPackStatus.mockReset().mockResolvedValue(VFS_PACK_STATUS);
     mockCreateService.mockReset().mockReturnValue({
       getStorageStats: (...args: unknown[]) => mockGetStorageStats(...args),
       runDatabaseMaintenance: (...args: unknown[]) =>
@@ -143,6 +155,7 @@ describe('db-maintenance.service', () => {
         {table: 'fileCache', done: true, pendingCount: 0, failedCount: 0},
       ],
       messageDecompress: {done: false, pendingCount: 7},
+      vfsPack: VFS_PACK_STATUS,
     });
   });
 
@@ -200,6 +213,24 @@ describe('db-maintenance.service', () => {
       {table: 'vfsContent', done: false, pendingCount: 1100, failedCount: 0},
       {table: 'fileCache', done: true, pendingCount: 0, failedCount: 0},
     ]);
+  });
+
+  it('T-VP22: getVfsContentPackStatus 抛错时整体不 reject，vfsPack 降级为 null 且其余指标有值', async () => {
+    // 与 cr-04/ic-03 对称：打包状态采样（第五个失败源）独立兜底，不传染
+    mockGetVfsPackStatus.mockRejectedValue(
+      new Error('vfs pack status boom'),
+    );
+
+    const stats = await getDatabaseMaintenanceStats(runtime);
+
+    expect(stats.fileBytes).toEqual(1024);
+    expect(stats.reclaimableBytes).toEqual(40960);
+    expect(stats.vfsPack).toBeNull();
+    expect(stats.blobBinary).toEqual([
+      {table: 'vfsContent', done: false, pendingCount: 1100, failedCount: 0},
+      {table: 'fileCache', done: true, pendingCount: 0, failedCount: 0},
+    ]);
+    expect(stats.messageDecompress).toEqual({done: true, pendingCount: 0});
   });
 
   it('T-DMM1: runDatabaseMaintenance 正常路径 stat 前后各一次并返回前后体积', async () => {

@@ -12,10 +12,15 @@ module.exports = {
   // dom-serializer/domelementtype/entities 全家同为 ESM，须一并纳入 babel transform；
   // 嵌套路径 node_modules/sanitize-html/node_modules/htmlparser2 的每层 node_modules
   // 都要能命中白名单，否则该层仍会被忽略并按 CJS require 报错。
+  // fossil-delta@2 纯 ESM（type: module，无 exports map）：core pack-codec 依赖它，
+  // 而经 moduleNameMapper 直连 dist/public/vfs.js 的 vfs 服务链路
+  // （createVfsService → content store → pack-codec）会拉到 fossil-delta，
+  // 在 Jest 里炸 ESM 语法，须纳入 babel transform（vfs-content-pack Step 11
+  // 接线时补；主入口 core-shim 不经此链路，别按 shim 口径排查）。
   transformIgnorePatterns: [
     // @react-navigation 系列发布 ESM（module 字段）；RichDocumentWebView
     // 自注册 BackHandler 引入 useFocusEffect 后须纳入 babel transform
-    'node_modules/(?!((jest-)?react-native|@react-native(-community|-documents)?|@react-navigation|@noble/hashes|sanitize-html|htmlparser2|domhandler|domutils|dom-serializer|domelementtype|entities|react-native-blob-util|@op-engineering)/)',
+    'node_modules/(?!((jest-)?react-native|@react-native(-community|-documents)?|@react-navigation|@noble/hashes|sanitize-html|htmlparser2|domhandler|domutils|dom-serializer|domelementtype|entities|react-native-blob-util|@op-engineering|fossil-delta)/)',
   ],
   // __tests__/helpers 下是测试辅助函数（如 read-webview-dist），不是测试套件，
   // 别让 Jest 当测试跑而报 "must contain at least one test"。不带 <rootDir>/

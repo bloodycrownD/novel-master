@@ -50,6 +50,7 @@ import {showAppToast} from '@/services/app-toast';
 import {setKeepAliveResidentEnabled} from '@/services/agent-finished-notification';
 import {scheduleMobileBlobBinaryNormalization} from '@/services/blob-binary-normalization.service';
 import {scheduleMobileMessageContentDecompress} from '@/services/message-content-decompression.service';
+import {scheduleMobileVfsContentPacking} from '@/services/vfs-content-packing.service';
 import {readMessageNotificationEnabled} from '@/storage/message-notification-pref';
 import {tokensForMode} from '../theme/tokens';
 
@@ -257,6 +258,10 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
     // 幂等挂载（同一 runtime 重复调用不叠加循环）；retry 换新 runtime 时
     // 本 effect 重跑，对新连接重挂一次。
     scheduleMobileBlobBinaryNormalization(runtime);
+    // VFS 非 head 历史版本混合打包：同样 fire-and-forget，幂等挂载；无终态
+    // （本轮收敛即收工，新版本攒的新组由下次启动收敛），Agent 活跃/维护
+    // busy 自动让路（守卫口径与归一循环同源）。
+    scheduleMobileVfsContentPacking(runtime);
   }, [runtime]);
 
   const refreshScope = useCallback(async () => {
