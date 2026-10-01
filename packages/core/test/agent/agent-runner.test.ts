@@ -291,7 +291,7 @@ describe("AgentRunner", () => {
     assert.deepEqual(tailTexts, ["（本次生成无内容输出）"]);
   });
 
-  it("T-ARP-C1: abort + text/thinking blocks ��� partial assistant���� tool_results", async () => {
+  it("T-ARP-C1: abort + text/thinking blocks 落库 partial assistant，无 tool_results", async () => {
     const session = new InMemoryAgentSession();
     await session.append("user", textBlocks("go"));
 
@@ -348,7 +348,7 @@ describe("AgentRunner", () => {
     assert.deepEqual(phases, ["assistant"]);
   });
 
-  it("T-ARP-C2: abort + tool_use blocks ��� assistant������ runParallel���� tool_results", async () => {
+  it("T-ARP-C2: abort + tool_use blocks 落库 assistant，不跑 runParallel，无 tool_results", async () => {
     const session = new InMemoryAgentSession();
     await session.append("user", textBlocks("go"));
 
@@ -414,7 +414,7 @@ describe("AgentRunner", () => {
     assert.ok(!msgs.some((m) => m.content.blocks.some((b) => b.type === "tool_result")));
   });
 
-  it("T-ARP-C3: abort ���޵ڶ��� model request��stepsExecuted===0", async () => {
+  it("T-ARP-C3: abort 后无第二次 model request，stepsExecuted===0", async () => {
     const session = new InMemoryAgentSession();
     await session.append("user", textBlocks("go"));
 
@@ -457,7 +457,7 @@ describe("AgentRunner", () => {
     assert.equal(result.stepsExecuted, 1);
   });
 
-  it("T-ARP-C4: abort �� tool ִ����ɺ� append ǰ���� tool_results", async () => {
+  it("T-ARP-C4: abort 在 tool 执行完成后 append 前仍无 tool_results", async () => {
     const session = new InMemoryAgentSession();
     await session.append("user", textBlocks("go"));
 
@@ -517,7 +517,7 @@ describe("AgentRunner", () => {
     assert.ok(!msgs.some((m) => m.content.blocks.some((b) => b.type === "tool_result")));
   });
 
-  it("��������??stream �¼�Я��һ??runId", async () => {
+  it("生命周期与 stream 事件携带一致 runId", async () => {
     const session = new InMemoryAgentSession();
     await session.append("user", textBlocks("hi"));
     const bus = new SimpleEventBus();
@@ -786,7 +786,7 @@ describe("AgentRunner", () => {
     assert.deepEqual(phases, ["assistant", "tool_results", "assistant"]);
   });
 
-  it("tool_results ??run_finished Я�� vfsMutated", async () => {
+  it("tool_results 与 run_finished 携带 vfsMutated", async () => {
     const session = new InMemoryAgentSession();
     await session.append("user", textBlocks("go"));
     const bus = new SimpleEventBus();
@@ -1130,7 +1130,7 @@ describe("AgentRunner", () => {
     assert.notEqual(resultBlock.content, "Error: Tool failed: read");
   });
 
-  /** �ӻỰ��Ϣ����ȡ�׸� tool_result block??*/
+  /** 从会话消息中提取首个 tool_result block。 */
   async function firstToolResultBlock(sessionId: string) {
     const ctx = getNovelMasterTestContext();
     const messages = await ctx.messages.listBySession(sessionId);
@@ -1471,7 +1471,7 @@ describe("AgentRunner", () => {
     );
   });
 
-  it("T-ITA-03: degraded tool args �� no RUN_FAILED, tool_result ok:false, run continues", async () => {
+  it("T-ITA-03: degraded tool args → no RUN_FAILED, tool_result ok:false, run continues", async () => {
     const session = new InMemoryAgentSession();
     await session.append("user", textBlocks("go"));
     const bus = new SimpleEventBus();

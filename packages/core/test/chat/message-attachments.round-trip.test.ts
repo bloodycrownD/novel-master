@@ -126,4 +126,52 @@ describe("message attachments round-trip (Step 5)", () => {
     );
     assert.deepEqual(updated.attachments, attachments);
   });
+
+  it("MA-4: 含单条非法附件的消息读回后仍带合法附件（核心端到端断言）", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+
+    // 先用严格写侧落一条合法附件的消息
+    const legal: MessageAttachment[] = [
+      {
+        name: "/keep.md",
+        source: "attach",
+        type: "text",
+        content: null,
+        path: "/keep.md",
+      },
+    ];
+    const msg = await ctx.messages.append(
+      session.id,
+      "user",
+      textBlocks("正文"),
+      { attachments: legal },
+    );
+
+    // 直接把 attachments_json 改成「一条合法 + 一条含未知键的非法」，
+    // 模拟历史行里今天不再接受的附件形态（append-only，不可重写）
+    await ctx.conn.execute(
+      `UPDATE chat_message
+       SET attachments_json = ?
+       WHERE id = ?`,
+      [
+        JSON.stringify([
+          legal[0],
+          { ...legal[0], name: "/bad.md", path: "/bad.md", extra: 1 },
+        ]),
+        msg.id,
+      ],
+    );
+
+    const listed = await ctx.messages.listBySession(session.id);
+    const reloaded = listed.find((m) => m.id === msg.id);
+    assert.ok(reloaded, "消息应能读回");
+    // 这才是「用户仍看得到 chip、agent 仍看得到 attach 正文」的真正观测面：
+    // 整数组判废会让 attachments 字段整体缺席（undefined），进而让
+    // prepare-user-messages-for-prompt 跳过 <action name="userAttach"> 水合。
+    assert.ok(reloaded.attachments != null, "消息不应丢光附件字段");
+    assert.equal(reloaded.attachments.length, 1, "一条非法不应牵连合法那条");
+    assert.equal(reloaded.attachments[0]?.path, "/keep.md");
+  });
 });

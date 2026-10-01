@@ -415,6 +415,10 @@ export class DefaultAgentRunner implements AgentRunner {
         // 就是每 step 的第二次全会话读。条数在此处定死并透传，触发器零读取（RT-02）。
         // 必须在下方 prepare 覆盖 visible 之前取：那份数组已不是 message 列表。
         const visibleMessageCount = visible.length;
+        // RT-01：另存 prepare 之前的可见集引用，供下方 gemini tool_use 查找源复用。
+        // 必须另存而不能复用同名 `visible`——下方 prepareUserMessagesForPrompt
+        // 会把 `visible` 覆写成处理后的数组。
+        const visibleBeforePrepare = visible;
         if (signal?.aborted) {
           await handleAbort("after_session_list");
           break;
@@ -608,9 +612,17 @@ export class DefaultAgentRunner implements AgentRunner {
         // 解析力，等价断言钉在 gemini-content-mapper 测试），gemini lookup
         // 用可见集即完备。
         // 懒求值：放在这里而不是 step 开头，是为了纳入本 step 的压缩产物。
+        // RT-01：本 step 未触发压缩 ⇒ 直接复用上方 session.list() 已拿到的可见集
+        // （零额外读）；只有 runCompaction 触发过才重读一次，因为只有压缩会把新的
+        // 可见集产物（隐藏行）带进来。两次读是同一张表 / 同 sessionId / 同 filter /
+        // 同 ORDER BY seq 的全量可见集，判定所需的全部信息就是 stepCompactionEmitted
+        // 这个布尔量，不需要 memo、不需要「后缀扩展」启发式（快照时点错位会丢掉本轮
+        // 追加的 tool_use id，出站 wire 与今天不同）。
         let toolUseLookupMessages: readonly ChatMessage[] | undefined;
         if (protocol === "gemini" && this.deps.listVisibleSessionMessages != null) {
-          toolUseLookupMessages = await this.deps.listVisibleSessionMessages();
+          toolUseLookupMessages = stepCompactionEmitted
+            ? await this.deps.listVisibleSessionMessages()
+            : visibleBeforePrepare;
         }
 
         // 计时采集（spec 指标口径）：requestStartedAtMs 为请求发起时刻；

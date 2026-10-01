@@ -38,7 +38,17 @@ export type LoadOrFillFileCacheDeps = {
   readonly status: WorkplaceDisplayStatus;
 };
 
-/** filename 不读盘；缺失用 `(missing)` 占位并仍写入 cache。 */
+/**
+ * filename 不读盘；缺失用 `(missing)` 占位。
+ *
+ * ⚠️ 占位 payload **不写 file_cache**（降级来源一律不落库，见 {@link FillResult.degraded}）：
+ * `file_cache` 命中无条件返回、**无 mtime 校验**，改写它的只有改规则 / 压缩 / 置位 /
+ * 会话删除 ⇒ 一次偶发读失败就会让该 path 在本会话余下所有轮次都渲染成 `(missing)`，
+ * 且再也不会自愈。这与同域「超大文件占位符不写 cache」的既有决策自相矛盾。
+ *
+ * filename 档会做一次轻量 meta 探测（`vfs.findContentSize`，不读正文）拿真实
+ * `mtimeMs`，避免组装时把 `1970-01-01` 假时间戳写进常驻提示词。
+ */
 export async function loadOrFillFileCache(
   deps: LoadOrFillFileCacheDeps
 ): Promise<FileCachePayload> {
@@ -127,6 +137,21 @@ function scheduleBackfill(write: () => Promise<void>): void {
 }
 
 /**
+ * 本模块私有的回填结果。
+ *
+ * ⚠️ `degraded` **不得**加宽共享的 `FileCachePayload`：后者在 `rule-snapshot-codec.ts`
+ * 里被组装与序列化/解析共用，一旦加进去 `degraded` 就会进入
+ * `serializeFileCachePayload` 的写入面、留下持久类型污染。它只在
+ * {@link fillFileCacheFromVfs} 内部用于判降级；**返回给调用方的仍是
+ * `FileCachePayload`**（不外泄 `degraded`）。
+ */
+type FillResult = {
+  readonly payload: FileCachePayload;
+  /** true = 该 payload 来自降级兜底（`(missing)` / 探测失败），**不得**写入 file_cache。 */
+  readonly degraded?: boolean;
+};
+
+/**
  * 缓存 miss 后的回填半段（loadOrFill 与 assemble 批量预取共用）：
  * 超限探测 → VFS 读取 → 写回 file_cache。
  *
@@ -139,85 +164,109 @@ export async function fillFileCacheFromVfs(
 ): Promise<FileCachePayload> {
   const key = fileCacheKey(deps.status, deps.path);
 
-  if (deps.status !== "filename") {
-    const placeholder = await probeOversizePlaceholder(deps.vfs, deps.path);
-    if (placeholder != null) {
-      // 超大文件降级：不读全文、不写 file_cache（避免把占位符粘进缓存）；
-      // 每次组装重新轻量探测，代价只是一条长度 SQL；mtime 用探测带回的
-      // 真实值，避免占位块渲染出 1970 假时间戳随提示词送给模型
-      return placeholder;
-    }
+  // 轻量 meta 探测提到 status 判断之外：filename 档也需要它拿真实 mtimeMs
+  // （否则组装时渲染出 1970 假时间戳）。探测失败 / null 一律保守放行原路径。
+  const probe = await probeFileMeta(deps.vfs, deps.path);
+
+  // ⚠️ 超限占位分支**只对非 filename 档生效**（既有语义不变）：filename 档渲染的是
+  // 文件名本身、payload.body 恒为空串，占位正文对它没有意义。
+  if (deps.status !== "filename" && probe.placeholder != null) {
+    // 超大文件降级：不读全文、不写 file_cache（避免把占位符粘进缓存）；
+    // 每次组装重新轻量探测，代价只是一条长度 SQL；mtime 用探测带回的
+    // 真实值，避免占位块渲染出 1970 假时间戳随提示词送给模型
+    return probe.placeholder;
   }
 
-  const filled = await readWorkplaceFileBody(deps.path, deps.status, deps.vfs);
+  const filled = await readWorkplaceFileBody(
+    deps.path,
+    deps.status,
+    deps.vfs,
+    probe.mtimeMs
+  );
+  // 降级来源不落 cache（判据用显式标记，**不是**正文匹配——`(missing)`
+  // 三个字可能真出现在文件正文里）。
+  if (filled.degraded === true) {
+    return filled.payload;
+  }
   const writeBack = (): Promise<void> =>
     deps.sessionKkv.set(
       deps.sessionId,
       SESSION_KKV_DOMAIN_FILE_CACHE,
       key,
-      serializeFileCachePayload(filled)
+      serializeFileCachePayload(filled.payload)
     );
   if (options?.deferBackfillWrite === true) {
     scheduleBackfill(writeBack);
   } else {
     await writeBack();
   }
-  return filled;
+  return filled.payload;
 }
 
 /**
- * 轻量探测文件大小，超限返回占位文本；否则返回 null 走原读取路径。
+ * 轻量探测文件大小（不读正文）。
  *
- * - 内联行：字符数直接对比单文件上限（近似闸门，字符数 ≥ 字节数场景已足够）
- * - content store 行：只有压缩侧长度（明文下界），按 4× 压缩比折算到压缩闸门，
- *   方向保守——宁可多占位（应用存活）也不放行会在解压/渲染链上 OOM 的文件
- * - 查询失败 / 不支持 / 无法探测（null）→ 保守回退原 vfs.read 行为
+ * - `placeholder != null`：超限占位（连同探测带回的真实 `mtimeMs`），调用方直接返回
+ * - `placeholder == null`：未超限，`mtimeMs` 是可直接采用的真实值（探测不可用时为 `undefined`）
  */
-async function probeOversizePlaceholder(
+type FileMetaProbe = {
+  readonly placeholder: FileCachePayload | null;
+  readonly mtimeMs: number | undefined;
+};
+
+async function probeFileMeta(
   vfs: VfsService,
   path: string
-): Promise<FileCachePayload | null> {
+): Promise<FileMetaProbe> {
   let size;
   try {
     size = await vfs.findContentSize(path);
   } catch {
     // 查询失败按可读处理：走原路径（不阻断组装）
-    return null;
+    return { placeholder: null, mtimeMs: undefined };
   }
   if (size == null) {
-    return null;
+    return { placeholder: null, mtimeMs: undefined };
   }
   if (size.kind === "inlineChars") {
     if (size.size > CHARACTER_CARD_MAX_SINGLE_FILE_BYTES) {
       return {
-        body: `（文件过大，已跳过，约 ${size.size} 字符）`,
+        placeholder: {
+          body: `（文件过大，已跳过，约 ${size.size} 字符）`,
+          mtimeMs: size.mtimeMs,
+        },
         mtimeMs: size.mtimeMs,
       };
     }
-    return null;
+    return { placeholder: null, mtimeMs: size.mtimeMs };
   }
   if (size.size > CHARACTER_CARD_BLOB_COMPRESSED_GATE_BYTES) {
     // 压缩侧长度按 4× 折算为明文字符数的估计值（标注「约」）
     return {
-      body: `（文件过大，已跳过，约 ${size.size * 4} 字符）`,
+      placeholder: {
+        body: `（文件过大，已跳过，约 ${size.size * 4} 字符）`,
+        mtimeMs: size.mtimeMs,
+      },
       mtimeMs: size.mtimeMs,
     };
   }
-  return null;
+  return { placeholder: null, mtimeMs: size.mtimeMs };
 }
 
 async function readWorkplaceFileBody(
   path: string,
   status: WorkplaceDisplayStatus,
-  vfs: VfsService
-): Promise<FileCachePayload> {
+  vfs: VfsService,
+  probedMtimeMs: number | undefined
+): Promise<FillResult> {
   if (status === "filename") {
-    return { body: "", mtimeMs: 0 };
+    // filename 档不读正文，但仍用探测带回的真实 mtime（探测不可用时退回 0）。
+    return { payload: { body: "", mtimeMs: probedMtimeMs ?? 0 } };
   }
   try {
     const result = await vfs.read(path);
-    return { body: result.content, mtimeMs: result.mtimeMs };
+    return { payload: { body: result.content, mtimeMs: result.mtimeMs } };
   } catch {
-    return { body: "(missing)", mtimeMs: 0 };
+    return { payload: { body: "(missing)", mtimeMs: 0 }, degraded: true };
   }
 }

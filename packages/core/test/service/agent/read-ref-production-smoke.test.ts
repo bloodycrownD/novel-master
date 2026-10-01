@@ -23,6 +23,8 @@ import { resolveReadRefCountChannel } from "../../../src/service/agent/logic/run
 import type { AgentTurnRuntimePort } from "../../../src/service/agent/logic/run-agent-turn.js";
 import { createMessageTranscriptEffectsService } from "../../../src/service/chat/create-message-transcript-effects.js";
 import { createWorkplaceService } from "../../../src/service/workplace/create-workplace-service.js";
+import { normalizeOrphanToolResultsForLlm } from "../../../src/service/prompt/normalize-orphan-tool-results-for-llm.js";
+import { chatMessagesToGeminiContents } from "../../../src/infra/llm-protocol/logic/gemini-content-mapper.js";
 import { registerBuiltinTools } from "../../../src/domain/tool/builtin/register-builtin-tools.js";
 import { ToolRegistry } from "../../../src/domain/tool/logic/tool-registry.js";
 import type { BuiltinToolContext } from "../../../src/domain/tool/builtin/builtin-tool-context.js";
@@ -292,5 +294,294 @@ describe("read-tool-result-ref Step 6: 生产链路 smoke（runner 全链）", (
       lookupToolUseIds.includes("tu-rrsmoke"),
       "可见-only 查找源仍覆盖本轮 tool_use（functionResponse.name 解析不受影响）"
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// RT-01：gemini 每 step 全可见正文拉回、无复用。
+// 修法（§8.1 终裁）：本 step 未触发压缩 ⇒ 复用 step 开头 session.list() 已拿到的
+// 可见集（零额外读）；只有 runCompaction 触发过才重读一次。
+// 观测面纪律：计数打在**依赖注入点** `deps.listVisibleSessionMessages` 的调用计数上，
+// 不打在 listBySession 的 SQL 探针上——两条读共用同一个仓储方法，SQL 探针分不开。
+// ---------------------------------------------------------------------------
+
+describe("RT-01: gemini tool_use 查找源按 stepCompactionEmitted 复用 visible", () => {
+  /** savedModelId → anthropic（内置 UUID 不匹配且无 providers ⇒ 回落 anthropic）。 */
+  function anthropicSavedModelRepository(): SavedModelRepository {
+    const fake = {
+      id: "rt01/anthropic",
+      providerId: "00000000-0000-4000-8000-000000000000",
+      settings: { generation: { thinkingLevel: "off" } },
+    } as unknown as SavedModel;
+    return {
+      listByProvider: async () => [],
+      findById: async (id: string) =>
+        id.trim() === "rt01/anthropic" ? fake : null,
+      insert: async () => undefined,
+      updateById: async () => undefined,
+      deleteById: async () => false,
+      deleteByProvider: async () => undefined,
+    };
+  }
+
+  /**
+   * 跑一个多 step 的 gemini（或 anthropic）run，收集查找源与注入点调用计数。
+   *
+   * @param toolRounds 前 N 次模型请求返回 tool_use（每次产生一个 step）
+   * @param compactOnStep >=0 时，该 step 的压缩评估返回 true
+   */
+  async function runAndCollect(opts: {
+    readonly toolRounds: number;
+    readonly savedModelId: string;
+    readonly savedModelRepo: SavedModelRepository;
+    readonly compactOnStep?: number;
+  }): Promise<{
+    readonly lookups: Array<readonly ChatMessage[]>;
+    readonly shadowRereads: Array<readonly ChatMessage[]>;
+    readonly lookupReadCount: number;
+    readonly hiddenCount: number;
+  }> {
+    const ctx = getNovelMasterTestContext();
+    const suffix = testIsolationSuffix();
+    const project = await ctx.projects.create(`pj-rt01-${suffix}`);
+    const session = await ctx.sessions.create(project.id);
+    const projectId = project.id;
+    const sessionId = session.id;
+    const vfs = ctx.sessionVfs(projectId, sessionId);
+    await vfs.write("/a.md", "rt01 line one\nrt01 line two");
+    await vfs.write("/b.md", "rt01 b one\nrt01 b two");
+
+    const revisionRepo = new SqliteVfsRevisionRepository(ctx.conn);
+    const scope = { kind: "session" as const, projectId, sessionId };
+    const readRefCountChannel = resolveReadRefCountChannel({ revisionRepo });
+    const registry = new ToolRegistry<BuiltinToolContext>();
+    registerBuiltinTools(registry);
+    const toolCtx: BuiltinToolContext = {
+      vfs,
+      projectId,
+      sessionId,
+      listSessionMessages: () => ctx.messages.listBySession(sessionId),
+      sessionKkv: ctx.sessionKkv,
+      ...(readRefCountChannel != null
+        ? { adjustRevisionRefCount: readRefCountChannel }
+        : {}),
+      workplace: createWorkplaceService(ctx.conn, scope),
+    };
+
+    const lookups: Array<readonly ChatMessage[]> = [];
+    // 「同一时刻的全量重读」基线：模型请求发生在查找源定夺之后、本 step 的
+    // assistant 落库之前，两者之间的可见集完全相同，可直接当 wire 等价基线。
+    const shadowRereads: Array<readonly ChatMessage[]> = [];
+    const paths = ["/a.md", "/b.md", "/a.md", "/b.md"];
+    let modelCall = 0;
+    const model: ModelRequestService = {
+      request: async (_savedModelId, _userContent, options) => {
+        lookups.push(options?.toolUseLookupMessages ?? []);
+        shadowRereads.push(
+          await ctx.messages.listBySession(sessionId, { includeHidden: false }),
+        );
+        const turn = modelCall;
+        modelCall += 1;
+        if (turn < opts.toolRounds) {
+          return {
+            assistantText: "",
+            blocks: [
+              {
+                type: "tool_use",
+                id: `tu-rt01-${turn}`,
+                name: "read",
+                input: { path: paths[turn % paths.length] },
+              },
+            ],
+            raw: {},
+          };
+        }
+        return {
+          assistantText: "done",
+          blocks: [{ type: "text", text: "done" }],
+          raw: {},
+        };
+      },
+    };
+
+    const withCompaction = opts.compactOnStep != null;
+    const agentSession = new ChatAgentSession(ctx.messages, sessionId);
+    await agentSession.append("user", textBlocks("请读取 rt01 的文件"));
+    // 多 seed 三条 user 消息：hide range 的锚定要求 slice 内能找到一条
+    // 「严格更旧于 slice 最老消息」的真用户输入，会话里可见消息不足 4 条时
+    // slice 会命中 0 条 / toSeq < minSeq，压缩形同没跑。
+    if (withCompaction) {
+      await agentSession.append("user", textBlocks("第一轮历史"));
+      await agentSession.append("user", textBlocks("第二轮历史"));
+      await agentSession.append("user", textBlocks("第三轮历史"));
+    }
+    let compactionEvalCall = 0;
+    const base = assembleAgentRunnerDeps({
+      session: agentSession,
+      runtime: {
+        messages: ctx.messages,
+        messageTranscriptEffects:
+          createMessageTranscriptEffectsService(ctx.conn),
+        modelRequests: model,
+        messageCheckpoint: ctx.messageCheckpoint,
+        eventBus: new SimpleEventBus(),
+        sessionKkv: ctx.sessionKkv,
+        revisionRepo,
+        workplace: (wtScope) => createWorkplaceService(ctx.conn, wtScope),
+        savedModelRepo: opts.savedModelRepo,
+        ...(withCompaction
+          ? {
+              compactionConditionEvaluator: {
+                shouldRequestCompaction: async () => {
+                  const hit = compactionEvalCall === opts.compactOnStep;
+                  compactionEvalCall += 1;
+                  return hit;
+                },
+                getHideStartDepth: async () => 2,
+              },
+            }
+          : {}),
+      } as Pick<
+        AgentTurnRuntimePort,
+        | "messages"
+        | "messageTranscriptEffects"
+        | "modelRequests"
+        | "messageCheckpoint"
+        | "eventBus"
+        | "sessionKkv"
+        | "revisionRepo"
+      > & {
+        workplace: AgentTurnRuntimePort["workplace"];
+        savedModelRepo: SavedModelRepository;
+        compactionConditionEvaluator?: unknown;
+      },
+      registry,
+      toolCtx,
+      includeCompactionOrchestrator: withCompaction,
+    });
+
+    // 注入点计数器（不改生产装配，只在测试里包一层）
+    let lookupReadCount = 0;
+    const inner = base.listVisibleSessionMessages;
+    assert.ok(inner != null, "装配应注入 listVisibleSessionMessages");
+    const counted = async (): Promise<readonly ChatMessage[]> => {
+      lookupReadCount += 1;
+      return inner();
+    };
+
+    const runner = createAgentRunner({ ...base, listVisibleSessionMessages: counted });
+    const result = await runner.run({
+      maxSteps: opts.toolRounds + 2,
+      definition: minimalDefinition(),
+      projectId,
+      sessionId,
+      savedModelId: opts.savedModelId,
+      workspaceModelId: opts.savedModelId,
+    });
+    assert.notEqual(result.stopReason, "error");
+
+    const persisted = await ctx.messages.listBySession(sessionId);
+    return {
+      lookups,
+      shadowRereads,
+      lookupReadCount,
+      hiddenCount: persisted.filter((m) => m.hidden).length,
+    };
+  }
+
+  it("RT-1A: 纯追加多 step run 不产生额外可见集读（计数为 0）", async () => {
+    const { lookupReadCount, lookups } = await runAndCollect({
+      toolRounds: 2,
+      savedModelId: "smoke/model",
+      savedModelRepo: geminiSavedModelRepository(),
+    });
+    assert.equal(lookups.length, 3, "前置条件：三步请求都应完成");
+    assert.equal(
+      lookupReadCount,
+      0,
+      "本 step 未触发压缩 ⇒ 复用 step 开头的 visible，注入点读取次数应为 0",
+    );
+  });
+
+  it("RT-1C: 每一步的查找源均含本轮及此前各轮追加的 tool_use id", async () => {
+    const { lookups } = await runAndCollect({
+      toolRounds: 2,
+      savedModelId: "smoke/model",
+      savedModelRepo: geminiSavedModelRepository(),
+    });
+    assert.ok(lookups.length >= 3, "前置条件：至少三步请求");
+    const idsOf = (msgs: readonly ChatMessage[]): string[] =>
+      msgs.flatMap((m) =>
+        m.content.blocks.filter((b) => b.type === "tool_use").map((b) => b.id),
+      );
+    // 第 2 步的查找源必须含第 1 轮追加的 tool_use id
+    assert.ok(
+      idsOf(lookups[1]!).includes("tu-rt01-0"),
+      "第 2 步查找源必须含第 1 轮的 tool_use id",
+    );
+    // 第 3 步必须含前两轮
+    const third = idsOf(lookups[2]!);
+    assert.ok(
+      third.includes("tu-rt01-0") && third.includes("tu-rt01-1"),
+      "第 3 步查找源必须含第 1、2 轮的 tool_use id",
+    );
+  });
+
+  it("RT-1B: 压缩触发后按新可见集重读（注入点计数 >= 1 且确有 hidden 行）", async () => {
+    const { lookupReadCount, hiddenCount } = await runAndCollect({
+      toolRounds: 1,
+      savedModelId: "smoke/model",
+      savedModelRepo: geminiSavedModelRepository(),
+      compactOnStep: 0,
+    });
+    assert.ok(
+      hiddenCount > 0,
+      "前置条件：压缩确实隐藏了行（否则本用例的『重读』无意义）",
+    );
+    assert.ok(
+      lookupReadCount >= 1,
+      "触发压缩的 step 必须重读可见集（只有压缩会把新的可见集产物带进来）",
+    );
+  });
+
+  it("RT-1D: 非 gemini 协议零读", async () => {
+    const { lookupReadCount } = await runAndCollect({
+      toolRounds: 1,
+      savedModelId: "rt01/anthropic",
+      savedModelRepo: anthropicSavedModelRepository(),
+      compactOnStep: 0,
+    });
+    assert.equal(
+      lookupReadCount,
+      0,
+      "openai / anthropic 适配器不消费查找源，注入点读取次数恒为 0",
+    );
+  });
+
+  it("RT-1E: 复用分支与全量重读对 contents[] 输出逐字段全等", async () => {
+    const { lookups, shadowRereads } = await runAndCollect({
+      toolRounds: 2,
+      savedModelId: "smoke/model",
+      savedModelRepo: geminiSavedModelRepository(),
+    });
+    assert.ok(lookups.length >= 2, "前置条件：至少两步请求");
+    for (const [i, lookup] of lookups.entries()) {
+      // 非恒真前提：查找源非空（否则「逐字段全等」是空集比较）
+      assert.ok(lookup.length > 0, `第 ${i + 1} 步查找源非空`);
+      assert.deepEqual(
+        lookup,
+        shadowRereads[i],
+        `第 ${i + 1} 步复用分支的产物应与同一时刻的全量重读逐字段全等`,
+      );
+      // wire 侧：两条查找源跑 chatMessagesToGeminiContents 输出逐字段全等
+      const outbound = normalizeOrphanToolResultsForLlm(lookup);
+      assert.deepEqual(
+        chatMessagesToGeminiContents(outbound, { toolLookupMessages: lookup }),
+        chatMessagesToGeminiContents(outbound, {
+          toolLookupMessages: shadowRereads[i],
+        }),
+        `第 ${i + 1} 步两条路径的 gemini contents 输出应逐字段全等`,
+      );
+    }
   });
 });

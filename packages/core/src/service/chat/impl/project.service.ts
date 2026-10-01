@@ -23,6 +23,7 @@ import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vf
 import {
   copyVfsTree,
   deleteVfsPrefix,
+  sweepRevisionsUnderScope,
 } from "@/domain/vfs/logic/vfs-tree-copy.js";
 import { seedLiveHeadRevisionsUnderPrefix } from "@/domain/vfs/logic/seed-live-head-revisions.js";
 import { chatInvalidArgument, chatNotFound } from "@/errors/chat-errors.js";
@@ -184,6 +185,10 @@ export class DefaultProjectService implements ProjectService {
         await deleteSessionFsData(tx, session.id, id);
         await sessionKkv.clearSession(session.id);
         // entry_id 化后会话独立 scope：session:{pid}:{sid}，前缀为"/"
+        // 【勿换成 sweepRevisionsUnderScope】：该 scope 的 live ref 已由上面的
+        // deleteSessionFsData 释放（decrementLiveRefsUnderScope），此行时 entry 仍在，
+        // 再跑一次 decrement 会对同一批 live head 二次 −1，撞 vfs_revision 的
+        // CHECK (ref_count >= 0) 抛 SQLITE_CONSTRAINT_CHECK → 整个 delete 事务回滚。
         await deleteVfsPrefix(r.vfs, `session:${id}:${session.id}`, "/");
       }
       // run_state 表带 project_id 列，一条 DELETE 等价于逐会话清理
@@ -196,10 +201,20 @@ export class DefaultProjectService implements ProjectService {
       await new SqliteSkillDisabledRuleRepository(tx).removeScope(
         `project:${id}`
       );
-      await deleteVfsPrefix(r.vfs, `project:${id}`, "/");
-      // 技能已重定位到独立 meta 域：deleteVfsPrefix 按 scope_key 精确匹配，
-      // 不补这条会留下 project:{pid}:meta 的孤儿 entry 行
-      await deleteVfsPrefix(r.vfs, `project:${id}:meta`, "/");
+      // 项目 scope：copy/模板推送会在此 scope 下种下 ref_count=1 的 live-head
+      // revision（seedLiveHeadRevisionsUnderPrefix），裸 deleteVfsPrefix 只删 entry、
+      // 既不释放 live ref 也不 GC revision ⇒ 每「种下一次再删项目」就永久泄漏一批
+      // revision 行 + 其 blob（两条 GC 路径都选不中，deleteGlobalOrphans 只清
+      // ref_count <= 0 的 JOIN 孤儿）。改走 sweep：decrement → GC → 删 entry。
+      await sweepRevisionsUnderScope(r.vfs, r.revisions, `project:${id}`, "/");
+      // 技能已重定位到独立 meta 域：scope_key 精确匹配，不补这条会留下
+      // project:{pid}:meta 的孤儿 entry 行（同样要 sweep，见上一条注释）
+      await sweepRevisionsUnderScope(
+        r.vfs,
+        r.revisions,
+        `project:${id}:meta`,
+        "/"
+      );
       const deleted = await r.projects.delete(id);
       if (!deleted) {
         throw chatNotFound("project", id);

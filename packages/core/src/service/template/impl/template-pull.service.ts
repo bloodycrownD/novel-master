@@ -13,6 +13,8 @@ import { chatNotFound } from "@/errors/chat-errors.js";
 import { runDeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
 import { initializeSessionWorkspace } from "@/service/template/logic/initialize-session-workspace.js";
 import { pushSessionWorkspace } from "@/service/template/logic/push-session-workspace.js";
+import { clearSessionPromptCaches } from "@/service/vfs/logic/clear-session-prompt-caches.js";
+import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
 import type { TemplatePullService } from "../template-pull.port.js";
 
 /**
@@ -33,6 +35,14 @@ export class DefaultTemplatePullService implements TemplatePullService {
       });
     });
     await runDeferredBlobGc(this.conn);
+    // 模板拉取是 session scope 的整树覆盖（文件正文/路径树/规则快照全变），
+    // 与角色卡 / ZIP 导入同族，必须对齐 prompt 缓存：rule_snapshot + file_cache
+    // 两域清空 + 失效 prompt token cache + toolUseCount 哨兵。
+    // 不清的话 file_cache 读口命中即无条件返回、不校验 mtime，agent 的
+    // <workplace> 前缀会继续注入已被替换掉的旧正文。
+    // sessionTemplatePush 不加：push 是会话 → 项目方向，会话侧文件树不变，
+    // 自己的 file_cache 依然有效，清了只会让下一 step 无谓重算。
+    await clearSessionPromptCaches(sessionId, createSessionKkvService(this.conn));
   }
 
   async sessionTemplatePush(sessionId: string): Promise<void> {

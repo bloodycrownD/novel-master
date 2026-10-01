@@ -489,4 +489,45 @@ describe("assembleWorkplaceDisplay", () => {
       null,
     );
   });
+
+  it("filename 档不得渲染 1970 假时间戳", async () => {
+    // filename 档此前直接返回 `{ body: "", mtimeMs: 0 }`，组装层 `formatLocalMtime(0)`
+    // ⇒ 提示词里出现 createdAt="1970-01-01 08:00:00"。断言写成「不含 1970」而不是
+    // 「等于某个具体时间」——后者会锁死夹具 mtime，脆且无额外价值。
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const sk = createSessionKkvService(ctx.conn);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    await vfs.write("/卷/第一章.md", "正文一");
+    await vfs.write("/卷/第二章.md", "正文二");
+    await vfs.write("/卷/第三章.md", "正文三");
+
+    const wt = createWorkplaceService(ctx.conn, {
+      kind: "session",
+      projectId: project.id,
+      sessionId: session.id,
+    });
+    // head/tail 归零 + fillPolicy=filename ⇒ 非优先文件一律走 filename 档
+    await wt.setDirRule({
+      logicalPath: "/卷",
+      ruleEnabled: true,
+      headCount: 0,
+      tailCount: 0,
+      fillPolicy: "filename",
+    });
+
+    const out = await assembleWorkplaceDisplay(
+      { kind: "session", projectId: project.id, sessionId: session.id },
+      { sessionKkv: sk, workplace: wt, vfs, layout: layoutWithWorkplace() },
+    );
+
+    assert.match(out.workplaceDisplay, /<file path="\/卷\//, "应有 filename 档文件块");
+    assert.equal(
+      out.workplaceDisplay.includes('createdAt="1970'),
+      false,
+      `filename 档不得渲染 1970 假时间戳：${out.workplaceDisplay}`,
+    );
+    assert.equal(out.workplaceDisplay.includes("正文一"), false, "filename 档不渲正文");
+  });
 });

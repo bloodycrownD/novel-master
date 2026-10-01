@@ -381,11 +381,18 @@ export async function replaceVfsSubtree(
 }
 
 /**
- * 泛化 sweep：释放 scope+前缀下 live head 引用 → 删 entry → GC 无引用 revision。
+ * 泛化 sweep：释放 scope+前缀下 live head 引用 → GC 无引用 revision → 删 entry。
  *
  * 三 scope（project/session/template）通用。`excludePrefixes` 非空时，
  * 排除前缀下的 entry 不删、live ref 不减、revision 不 GC（隔离豁免，
  * 如 project 域 `meta/skills/` 已有技能不随模板替换被清掉）。
+ *
+ * @remarks 顺序不可调换：scoped GC（`deleteUnreferencedUnderScope`）靠
+ * `JOIN vfs_entry` 圈定范围，必须在 entry 还在时跑；放到 `deleteVfsPrefix`
+ * 之后会恒命中 0 行、成为死语句（本顺序与 `revision-gc.ts` 的 session 侧同源）。
+ * 换序后「GC 删掉 revision 触发器连带回收 blob」与「删 entry」之间存在一个
+ * 「entry 仍指向已回收 blob」的中间窗口——因此这三步**必须留在同一事务内**
+ * （全部调用方都以 tx 构造 revision 仓储，改成拆事务会开出这个窗口）。
  */
 export async function sweepRevisionsUnderScope(
   repo: VfsEntryRepository,
@@ -401,17 +408,17 @@ export async function sweepRevisionsUnderScope(
     pathPrefix,
     excludePrefixes
   );
-  await deleteVfsPrefix(repo, scopeKey, pathPrefix, excludePrefixes);
   await deleteUnreferencedUnderScope(
     revisionRepo,
     scopeKey,
     pathPrefix,
     excludePrefixes
   );
+  await deleteVfsPrefix(repo, scopeKey, pathPrefix, excludePrefixes);
 }
 
 /**
- * 释放 scope+前缀下 live head 引用 → 删 entry → GC 无引用 revision。
+ * 释放 scope+前缀下 live head 引用 → GC 无引用 revision → 删 entry。
  *
  * @deprecated 使用 {@link sweepRevisionsUnderScope} 替代，语义相同。
  */

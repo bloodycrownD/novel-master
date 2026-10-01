@@ -105,6 +105,13 @@ export type MessageAttachments = z.infer<typeof messageAttachmentsSchema>;
 
 /**
  * 解析 `attachments_json`；NULL/空/非法 → `undefined`。
+ *
+ * 口径（逐条降级，与 `parseComposerDraftJson` 对齐）：**一条不合规不牵连其余**；
+ * 只在整段不是合法 JSON 数组时整体降级为 `undefined`，数组内逐条 `safeParse`、
+ * 只保留成功项（全部失败时返回 `[]` 而非 `undefined`——两者在消费侧 `?? []`
+ * 等价，但返回 `[]` 让「本来就没附件」与「全被丢弃」在下游表现一致）。
+ * 理由：消息是 append-only 的历史数据、附件形态跨版本演进，宁可少附件也不可让
+ * 整条消息的附件静默蒸发——那会造成落库历史与送给 LLM 的提示词不一致。
  */
 export function parseAttachmentsJson(
   raw: string | null | undefined
@@ -118,11 +125,18 @@ export function parseAttachmentsJson(
   } catch {
     return undefined;
   }
-  const result = messageAttachmentsSchema.safeParse(parsed);
-  if (!result.success) {
+  // 非数组（含标量、对象、JSON null）→ 无粒度可 salv，整体降级
+  if (!Array.isArray(parsed)) {
     return undefined;
   }
-  return result.data;
+  const kept: MessageAttachment[] = [];
+  for (const item of parsed) {
+    const result = messageAttachmentSchema.safeParse(item);
+    if (result.success) {
+      kept.push(result.data);
+    }
+  }
+  return kept;
 }
 
 /**

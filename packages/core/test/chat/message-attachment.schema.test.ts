@@ -187,4 +187,65 @@ describe("messageAttachmentSchema", () => {
     assert.equal(parseAttachmentsJson(null), undefined);
     assert.equal(parseAttachmentsJson("not-json"), undefined);
   });
+
+  // ---- 逐条降级：一条不合规不牵连其余（append-only 历史数据的宽容读法）----
+
+  /** 一条合法 attach 附件。 */
+  const legalA = {
+    name: "/a.md",
+    source: "attach" as const,
+    type: "text" as const,
+    content: null,
+    path: "/a.md",
+  };
+  /** 一条合法 skillAttach 附件。 */
+  const legalB = {
+    name: "demo",
+    source: "attach" as const,
+    type: "text" as const,
+    content: null,
+    skillName: "demo",
+    action: "skillAttach" as const,
+  };
+
+  it("MA-1: 单条非法附件不牵连其余（保序）", () => {
+    const parsed = parseAttachmentsJson(
+      JSON.stringify([
+        legalA,
+        // 未知键（.strict() 拒）
+        { ...legalA, name: "/bad.md", path: "/bad.md", extra: 1 },
+        legalB,
+      ]),
+    );
+    assert.ok(parsed != null);
+    assert.equal(parsed.length, 2, "一条非法不应牵连其余");
+    assert.deepEqual(parsed[0], legalA, "第 0 位应是第一条合法附件（保序）");
+    assert.deepEqual(parsed[1], legalB, "第 1 位应是第二条合法附件（保序）");
+  });
+
+  it("MA-2: 全部非法 ⇒ 空数组（不是 undefined、不是 null）", () => {
+    const parsed = parseAttachmentsJson(
+      JSON.stringify([{ source: "attach", type: "text", extra: 1 }]),
+    );
+    assert.deepEqual(
+      parsed,
+      [],
+      "全被逐条丢弃时返回 []，让「本来就没附件」与「全被丢弃」下游表现一致",
+    );
+  });
+
+  it("MA-3: 非 JSON / 非数组 ⇒ 仍返回 undefined（既有行为回归锁）", () => {
+    assert.equal(parseAttachmentsJson(null), undefined);
+    assert.equal(parseAttachmentsJson(""), undefined);
+    assert.equal(parseAttachmentsJson("not-json"), undefined);
+    // 非数组（无粒度可 salv，整体降级）
+    assert.equal(parseAttachmentsJson('{"a":1}'), undefined);
+    assert.equal(parseAttachmentsJson("null"), undefined);
+    assert.equal(parseAttachmentsJson("123"), undefined);
+  });
+
+  it("MA-D2: 标量元素数组 ⇒ []（元素不是对象，逐条全丢）", () => {
+    assert.deepEqual(parseAttachmentsJson("[1,2]"), []);
+    assert.deepEqual(parseAttachmentsJson("[null]"), []);
+  });
 });
