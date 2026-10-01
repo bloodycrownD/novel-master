@@ -1,5 +1,5 @@
 /**
- * VFS IPC handlers �?list/read/write/mkdir/delete/rename for global/project/session scopes.
+ * VFS IPC handlers — list/read/write/mkdir/delete/rename for global/project/session scopes.
  *
  * @module ipc/handlers/vfs
  */
@@ -78,7 +78,7 @@ function focusedWindow(): BrowserWindow | undefined {
   return BrowserWindow.getFocusedWindow() ?? undefined;
 }
 
-/** VFS 变更成功后通知 renderer 刷新 Explorer（消费方 ①）�?*/
+/** VFS 变更成功后通知 renderer 刷新 Explorer（消费方 ①）。 */
 function pushWorkspaceMutated(req: VfsScopeRequest): void {
   notifyWorkspaceMutatedToRenderer(workspaceMutatedPayloadFromRequest(req));
 }

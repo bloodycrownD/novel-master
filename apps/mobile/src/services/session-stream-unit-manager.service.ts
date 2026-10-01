@@ -150,12 +150,25 @@ import {
   sessionViewCacheKey,
   setSessionViewCache,
 } from '@/services/chat-session-view-cache';
+import {createLruMap, type LruMap} from '@/services/scope-key-cache';
 import {prependOlderMessages} from '@/services/message-paging';
 import {createQuantumYield} from '@/services/yield-quantum';
 import {AppState} from 'react-native';
 
 /** settled 单元并存的 LRU 上限（含宽限中的与水合常驻的；活跃单元不占槽）。 */
 export const SESSION_STREAM_MAX_SETTLED_UNITS = 8;
+
+/**
+ * 两张「按 sessionId 键、无项目维度」的常驻表（settled 投影 / 无单元消息面）的
+ * LRU 上限。与 `chat-session-view-cache` 的 500 同口径（会话视图缓存的既有上限），
+ * 不另造数字：这两张表存的是消息全文/投影，长期使用会单调增长，必须有上界。
+ *
+ * 风险面：超过上限后「很久没打开过的会话」的消息面可能被淘汰，重进时走
+ * `loadSessionTailMessages` / `hydrateSessionMessages` 重新填充；活跃/刚结束的
+ * run 一定在 `units` 里（有独立的 SESSION_STREAM_MAX_SETTLED_UNITS 保护），
+ * 不受此上限影响。
+ */
+export const SESSION_STREAM_MAX_MESSAGE_VIEWS = 500;
 
 /**
  * 无单元会话的消息面视图（Step 7 消息面收口：非运行态会话的消息兜底，
@@ -349,13 +362,13 @@ export class SessionStreamUnitManager {
   private readonly writethroughs = new Map<string, RunStateWritethrough>();
   /** 水合逐行循环的量子化让步（Step 2 分片；缺省 16ms 量子）。 */
   private readonly yieldQuantum: () => Promise<void>;
-  /** settled 投影常驻 map（独立于单元生命周期，见接口注释）。 */
-  private readonly settledProjections = new Map<
-    string,
-    SessionStreamSettledProjection
-  >();
-  /** 无单元会话的消息面（Step 7 收口：idle 会话 tail/分页的落点）。 */
-  private readonly idleMessageViews = new Map<string, IdleMessageView>();
+  /** settled 投影常驻 map（独立于单元生命周期，见接口注释）。挂 500 LRU 防无界增长。 */
+  private readonly settledProjections: LruMap<SessionStreamSettledProjection> =
+    createLruMap(SESSION_STREAM_MAX_MESSAGE_VIEWS);
+  /** 无单元会话的消息面（Step 7 收口：idle 会话 tail/分页的落点）。同样挂 500 LRU。 */
+  private readonly idleMessageViews: LruMap<IdleMessageView> = createLruMap(
+    SESSION_STREAM_MAX_MESSAGE_VIEWS,
+  );
   /** 水合流程的单飞 promise（构造 kick 一次；hydrate 幂等复用）。 */
   private hydratePromise: Promise<void> | null = null;
   /** 实时 token 估算器工厂（②；未注入 = 单元走启发式兜底）。 */
@@ -1972,5 +1985,18 @@ export class SessionStreamUnitManager {
     this.notifyChanged();
     this.listeners.clear();
     void stopAgentKeepAliveService().catch(() => undefined);
+  }
+
+  /**
+   * test-only 尺寸探针（形态对齐 `chat-session-view-cache` 的 `*CacheSize()` 先例）：
+   * 两张表是 private 且无注入口，LRU 封顶只能靠外部灌数 + 读 size 观测。
+   * 生产代码零调用；随这两张表的实现一起回滚。
+   */
+  idleMessageViewsSize(): number {
+    return this.idleMessageViews.size;
+  }
+
+  settledProjectionsSize(): number {
+    return this.settledProjections.size;
   }
 }

@@ -285,6 +285,12 @@ export function useAgentEditorFormState(
           toolsMode: toolsWire.mode,
           toolsSelected: [...toolsWire.selected],
           ...promptForm,
+          // 基线侧必须显式带 mode（对齐 formStateFromDefinition 的口径）：
+          // core 的 formSnapshotJson 已把 mode 无条件纳入输出，此处不传 ⇒
+          // 基线 JSON 缺 mode 键、实时快照有 mode ⇒ 打开即显示「未保存」。
+          // ⚠️ 必须放在 `...promptForm` **之后**：`definitionToForm` 已经带了
+          // `mode: def.mode ?? "all"`，写在前面会被展开覆盖（TS2783）。
+          mode: def.mode ?? 'all',
           persist: [...promptForm.persist],
         }),
       );

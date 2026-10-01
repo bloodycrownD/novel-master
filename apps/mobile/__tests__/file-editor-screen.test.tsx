@@ -2,6 +2,7 @@ import React from 'react';
 import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
 import {FileEditorScreen} from '@/screens/stack/FileEditorScreen';
+import {setFileEditorOnSessionVfsSaved} from '@/components/agent/file-editor-saved-callback';
 
 const mockDismiss = jest.fn();
 const mockShowToast = jest.fn();
@@ -70,6 +71,13 @@ jest.mock('@/components/chrome/ToastHost', () => ({
 jest.mock('@/errors/toast-message', () => ({
   toastMessage: (_title: string, err: unknown) =>
     err instanceof Error ? err.message : String(err),
+}));
+
+// session 域保存那一支的两个开关。jest.mock 工厂被提升到 import 之前，
+// 不能引用后面声明的 const（TDZ）——所以只导出 jest.fn()，
+// 由用例在运行时通过 requireMock 改实现。
+jest.mock('@novel-master/core/feature-flags', () => ({
+  isUserVfsUnifiedToolTurnEnabled: jest.fn(() => false),
 }));
 
 jest.mock('@/services/vfs-operations.service', () => ({
@@ -437,5 +445,44 @@ describe('FileEditorScreen', () => {
     expect(
       findOptionalByTestId(tree.root, 'file-editor-input'),
     ).toBeUndefined();
+  });
+
+  it('T-FEPar-2: 重渲染之后 session 域保存成功，回调仍被调用一次', async () => {
+    // session 域 + 统一工具回合开关打开（否则走 vfs.write 另一支，不触发回调）。
+    mockRouteParams.path = '/sessions/s1/notes/a.md';
+    mockRouteParams.scopeKind = 'session';
+    (mockRouteParams as Record<string, unknown>).projectId = 'p1';
+    (mockRouteParams as Record<string, unknown>).sessionId = 's1';
+    const featureFlags = jest.requireMock(
+      '@novel-master/core/feature-flags',
+    ) as {isUserVfsUnifiedToolTurnEnabled: jest.Mock};
+    const vfsOps = jest.requireMock('@/services/vfs-operations.service') as {
+      sessionSaveVfsFile: jest.Mock;
+    };
+    featureFlags.isUserVfsUnifiedToolTurnEnabled.mockReturnValue(true);
+    vfsOps.sessionSaveVfsFile.mockResolvedValue(undefined);
+
+    // 挂载前写入回调（模拟 openFileEditor 在 navigate 前 setter）
+    const spy = jest.fn();
+    setFileEditorOnSessionVfsSaved(spy);
+
+    const tree = await renderLoadedScreen();
+    await switchToEditMode(tree);
+
+    // ⚠️ 关键：挂载（take 走）之后、触发保存之前，**必须先制造一次重渲染**。
+    // 少了这一步，把 useRef 惰性初始化改回渲染期裸调 take 也照样绿
+    // ——首次挂载那一次保存仍能工作，照不出「回调已被重取成 null」这个洞。
+    await act(async () => {
+      tree.root
+        .findByProps({testID: 'file-editor-input'})
+        .props.onChange('# Hello\n\nworld\n\n改一行');
+    });
+
+    await act(async () => {
+      tree.root.findByProps({testID: 'file-editor-save'}).props.onPress();
+    });
+
+    expect(vfsOps.sessionSaveVfsFile).toHaveBeenCalledTimes(1);
+    expect(spy).toHaveBeenCalledTimes(1);
   });
 });

@@ -394,7 +394,11 @@ export function SessionDetailScreen() {
       {/* 查看提示词：跳转到 RealPromptScreen，预览当前会话实际发送的提示词。 */}
       <Pressable
         testID="real-prompt-row"
-        onPress={() => navigation.navigate('RealPrompt')}
+        onPress={() =>
+          // AM-3：scope 走路由参数。不传的话屏内回落读全局 scope，后台通知栈外改过
+          // scope 时就会显示别的会话的提示词（同页「聊天记录」入口一直传了）。
+          navigation.navigate('RealPrompt', {projectId, sessionId})
+        }
         accessibilityLabel="查看提示词"
         style={[
           styles.card,

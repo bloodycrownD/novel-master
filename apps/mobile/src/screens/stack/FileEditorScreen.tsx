@@ -19,6 +19,7 @@ import {toastMessage} from '../../errors/toast-message';
 import {useTheme} from '../../theme/ThemeProvider';
 import {useToast} from '../../components/chrome/ToastHost';
 import {sessionSaveVfsFile} from '../../services/vfs-operations.service';
+import {takeFileEditorOnSessionVfsSaved} from '../../components/agent/file-editor-saved-callback';
 import {isUserVfsUnifiedToolTurnEnabled} from '@novel-master/core/feature-flags';
 import {
   FileMarkdownPreview,
@@ -57,8 +58,16 @@ export function FileEditorScreen() {
   const {showToast} = useToast();
   const runtime = useRuntime();
   const route = useRoute<FileEditorRoute>();
-  const {path, scopeKind, projectId, sessionId, skillRef, onSessionVfsSaved} =
-    route.params;
+  const {path, scopeKind, projectId, sessionId, skillRef} = route.params;
+
+  // 「session 域保存成功后刷新工作区列表」的回调走模块级单例（不可序列化，
+  // 不能进路由 params）。⚠️ 必须 useRef 惰性初始化：**不能**把 take 裸写在
+  // 渲染体里——本屏挂载后加载完成必然触发一次 setContent，那之后的任何一次
+  // 重渲染都会再 take 一次、拿到 null 覆盖局部变量 ⇒ 回调事实上永不生效，
+  // 正好复现原病灶。范式见 PromptEditorScreen。
+  const onSessionVfsSavedRef = useRef<(() => void) | null>(
+    takeFileEditorOnSessionVfsSaved(),
+  );
 
   const [content, setContent] = useState('');
   const [savedContent, setSavedContent] = useState('');
@@ -187,7 +196,7 @@ export function FileEditorScreen() {
         setSavedContent(content);
         const refreshed = await vfs.read(path);
         setMtimeMs(refreshed.mtimeMs);
-        onSessionVfsSaved?.();
+        onSessionVfsSavedRef.current?.();
         showToast('已保存');
         return;
       }

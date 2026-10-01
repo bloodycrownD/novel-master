@@ -104,7 +104,12 @@ export function useChatTabController() {
   }, [ctx]);
 
   const onNavigateRealPrompt = useCallback(() => {
-    ctx.navigation.navigate('RealPrompt');
+    // AM-3：scope 走路由参数。两值皆空时等价于无参调用（屏内回落全局 scope），
+    // 不引入新分支。
+    ctx.navigation.navigate('RealPrompt', {
+      projectId: ctx.projectId ?? undefined,
+      sessionId: ctx.sessionId ?? undefined,
+    });
   }, [ctx]);
 
   const onWebMenuOpenChange = useCallback(

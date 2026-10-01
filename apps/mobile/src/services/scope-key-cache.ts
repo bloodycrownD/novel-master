@@ -63,3 +63,56 @@ export function createScopeKeyCache<T>(
     },
   };
 }
+
+/**
+ * 扁平键的 LRU Map（`createScopeKeyCache` 的同款淘汰语义，去掉 key/clearByProjectPrefix）。
+ *
+ * 成员名与原生 `Map` 对齐（`get` / `set` / `delete` / `clear` / `size`），
+ * 便于把既有 `new Map()` 平直替换成本工厂、调用点零改动。
+ *
+ * 为什么不复用 createScopeKeyCache：它的返回类型把 `key(projectId, sessionId)`
+ * 与 `clearByProjectPrefix` 列为必需成员，而以裸 sessionId 为键的表用不上这两条
+ * —— 复用会产生两个从未被调用的死成员。
+ */
+export type LruMap<T> = {
+  /** 当前条目数（测试/诊断用）。 */
+  readonly size: number;
+  get(k: string): T | undefined;
+  set(k: string, value: T): void;
+  delete(k: string): void;
+  clear(): void;
+};
+
+export function createLruMap<T>(maxEntries: number): LruMap<T> {
+  const entries = new Map<string, T>();
+  return {
+    get size() {
+      return entries.size;
+    },
+    get(k) {
+      const hit = entries.get(k);
+      if (hit !== undefined) {
+        // LRU：命中即刷新新鲜度。
+        entries.delete(k);
+        entries.set(k, hit);
+      }
+      return hit;
+    },
+    set(k, value) {
+      entries.delete(k);
+      entries.set(k, value);
+      if (entries.size > maxEntries) {
+        const oldest = entries.keys().next().value;
+        if (oldest !== undefined) {
+          entries.delete(oldest);
+        }
+      }
+    },
+    delete(k) {
+      entries.delete(k);
+    },
+    clear() {
+      entries.clear();
+    },
+  };
+}

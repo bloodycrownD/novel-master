@@ -36,6 +36,7 @@ const agentWorkplaceBlockCardPath = path.join(
   "settings",
   "AgentWorkplaceBlockCard.tsx",
 );
+const appPath = path.join(__dirname, "..", "renderer", "App.tsx");
 
 describe("AgentsSettingsView 双 tab（agent-config-tabs T-D3）", () => {
   it("tab 化：SegmentedControl 置顶 + agentModeMatchesTab 前端过滤 + 新建随 tab 落库", () => {
@@ -113,5 +114,38 @@ describe("CR 修复防回归（cr-fix-spec f1/B-001 + f1/A-003 desktop 半）", 
     assert.match(source, /通用助手 · 不可编辑/);
     // 详情页完整描述走 AgentEditorView 的 applyDefinition，本文件不应再引用 description
     assert.doesNotMatch(source, /DEFAULT_SUBAGENT_DEFINITION\.description/);
+  });
+});
+
+// ── S-D-04 接线兜底（**弱观测**，只锁接线不锁行为；主验收是
+//    agent-editor-dirty-guard.test.tsx 的 T-SD04-1/2 行为断言）────────────
+describe("S-D-04 dirty 上报与 ⚙ 关闭接线（弱观测兜底）", () => {
+  it("AgentEditorView 上报 dirtyViews.add('agentEditor') 并带卸载清理", () => {
+    const source = readFileSync(agentEditorPath, "utf8");
+    assert.match(source, /nav\.dirtyViews\.add\("agentEditor"\)/);
+    assert.match(source, /nav\.dirtyViews\.delete\("agentEditor"\)/);
+    // 卸载清理：effect 必须 return 一个 cleanup
+    assert.match(
+      source,
+      /return \(\) => \{\s*nav\.dirtyViews\.delete\("agentEditor"\);/,
+    );
+  });
+
+  it("App.tsx 的 ⚙ 不再直接 toggle settingsOpen（改走 Overlay 的 requestClose）", () => {
+    const source = readFileSync(appPath, "utf8");
+    assert.doesNotMatch(
+      source,
+      /onToggleSettings=\{\(\) => setSettingsOpen\(open => !open\)\}/,
+    );
+    // 关闭收归 Overlay 内的 handleClose（守卫 + onClose 副作用单点）
+    assert.match(source, /settingsOverlayRef\.current\?\.requestClose\(\)/);
+    assert.match(source, /<SettingsOverlay\s+ref=\{settingsOverlayRef\}/);
+  });
+
+  it("AgentEditorView 不再出现「找不到模型就传 null」的表达式（E 形态守卫）", () => {
+    const source = readFileSync(agentEditorPath, "utf8");
+    assert.doesNotMatch(source, /pinned != null\s*\?\s*\{providerId/);
+    // 新的第三形态必须真的存在于代码里（否则这条守卫是恒真的废断言）
+    assert.match(source, /unresolved: true as const, rawId: def\.model/);
   });
 });

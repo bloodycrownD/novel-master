@@ -35,6 +35,7 @@ import {
 } from '@/services/chat-session-view-cache';
 import {clearScrollSnapshotsByProject} from '@/services/chat-list-scroll-cache';
 import {clearTranscriptScrollSnapshotsByProject} from '@/services/chat-transcript-scroll-cache';
+import {setFileEditorOnSessionVfsSaved} from '@/components/agent/file-editor-saved-callback';
 import {nextDefaultSessionTitle} from '@/utils/session-default-title';
 import {
   resolveChatLinkIntent,
@@ -522,6 +523,9 @@ export function useChatTabScope({
     async (targetSessionId: string) => {
       try {
         await runtime.sessions.delete(targetSessionId);
+        // 会话已从库里消失：同步遗忘 manager 里该会话的四张常驻表与活跃 refcount
+        // （纯内存同步方法、不抛错，放 try 内 delete 成功之后不影响 catch 语义）。
+        runtime.sessionStreamUnitManager.forgetSession(targetSessionId);
         if (projectId != null) {
           clearSessionViewCache(
             sessionViewCacheKey(projectId, targetSessionId),
@@ -568,6 +572,9 @@ export function useChatTabScope({
       try {
         for (const id of ids) {
           await runtime.sessions.delete(id);
+          // 部分成功语义：每个 delete 成功就立刻 forget 一次，不能攒到最后统一做
+          // （中途失败时后面那些根本没删，遗忘它们等于误清活跃会话的状态）。
+          runtime.sessionStreamUnitManager.forgetSession(id);
           if (projectId != null) {
             clearSessionViewCache(sessionViewCacheKey(projectId, id));
           }
@@ -593,7 +600,18 @@ export function useChatTabScope({
       // 部分成功语义：逐个删除，先删成功的保持已删、不回滚；中途失败即停止并提示剩余未删。
       try {
         for (const id of ids) {
+          // 必须在 delete 之前取会话清单：项目删除是级联的，删完就再也读不到归属关系。
+          // TODO(AM-1 已知缺口)：`listByProject` 的 SQL 硬编码 `parent_session_id IS NULL`
+          //   ⇒ 只返回顶层会话，子 agent 会话不在结果里，而 manager 恰恰为子会话写过
+          //   settledProjections ⇒ 项目删除后子会话条目仍会残留。
+          //   兜底：manager 两张常驻表已挂 500 LRU（SESSION_STREAM_MAX_MESSAGE_VIEWS），
+          //   残留条目最多存活到被淘汰，不会永久泄漏。
+          //   待办：core 侧补 BFS 读口（listByParentSession）后，把这里的展开补上并回收该缺口。
+          const doomedSessions = await runtime.sessions.listByProject(id);
           await runtime.projects.delete(id);
+          for (const s of doomedSessions) {
+            runtime.sessionStreamUnitManager.forgetSession(s.id);
+          }
           // 项目删除后按前缀清掉其会话级缓存，避免消息 tail / 滚动快照残留。
           clearSessionViewCachesByProject(id);
           clearScrollSnapshotsByProject(id);
@@ -622,6 +640,9 @@ export function useChatTabScope({
         if (sessionId == null) {
           return;
         }
+        // 「保存成功后刷新工作区列表」的回调必须在 navigate **之前**写入：
+        // 回调不可序列化，不能进路由 params（见 file-editor-saved-callback）。
+        setFileEditorOnSessionVfsSaved(bumpWorktreeUiToken);
         navigation.navigate('FileEditor', {
           path,
           scopeKind: 'session',
@@ -636,7 +657,7 @@ export function useChatTabScope({
         });
       }
     },
-    [navigation, projectId, sessionId],
+    [navigation, projectId, sessionId, bumpWorktreeUiToken],
   );
 
   const openSessionFilePreview = useCallback(

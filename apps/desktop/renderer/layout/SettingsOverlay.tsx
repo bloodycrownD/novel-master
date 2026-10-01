@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type { SkillRefDto } from "@shared/ipc-types";
 import {
   getSettingsNavHighlightId,
@@ -40,6 +48,17 @@ interface SettingsOverlayProps {
   onClose: () => void;
 }
 
+/**
+ * 对外句柄：把「关闭设置」收归 Overlay 内部的 handleClose 单一入口。
+ * App 顶栏的 ⚙ 按钮原先直接 `setSettingsOpen(open => !open)` 绕过了
+ * handleClose —— 守卫（脏表单确认弹窗）与 onClose 副作用（notifyAgentConfigChanged，
+ * 聊天侧/我的页的智能体列表刷新）两样都落空，且与右上角 × 的语义不一致。
+ * 打开路径不过守卫（打开不卸载任何 view），所以只暴露关闭这一半。
+ */
+export interface SettingsOverlayHandle {
+  requestClose: () => void;
+}
+
 function getSettingsMainTitle(
   viewId: SettingsViewId,
   navState: SettingsNavState,
@@ -66,7 +85,8 @@ function getSettingsMainTitle(
   return SETTINGS_TOP_LEVEL[viewId] ?? "设置";
 }
 
-export function SettingsOverlay({ open, onClose }: SettingsOverlayProps) {
+export const SettingsOverlay = forwardRef<SettingsOverlayHandle, SettingsOverlayProps>(
+  function SettingsOverlay({ open, onClose }, ref) {
   const [viewId, setViewId] = useState<SettingsViewId>("workspace");
   const [pageStack, setPageStack] = useState<SettingsViewId[]>([]);
   const [agentEditorTitle, setAgentEditorTitle] = useState<string | undefined>();
@@ -233,7 +253,7 @@ export function SettingsOverlay({ open, onClose }: SettingsOverlayProps) {
     }
   };
 
-  const handleClose = () => {
+  const handleClose = useCallback(() => {
     // 关闭会重置回 workspace：dirty 的子页（如 skillDetail）被卸载，须过守卫；
     // 停在 workspace 时 nextViewId 相同、无卸载，纯函数放行直接关。
     guardedNav({ nextViewId: "workspace" }, () => {
@@ -244,7 +264,10 @@ export function SettingsOverlay({ open, onClose }: SettingsOverlayProps) {
       navStateRef.current = {};
       onClose();
     });
-  };
+  }, [guardedNav, onClose]);
+
+  // ⚙ 按钮与 × 按钮共用这一条关闭路径（守卫单点仍在 Overlay 内）。
+  useImperativeHandle(ref, () => ({ requestClose: handleClose }), [handleClose]);
 
   return (
     <div
@@ -331,4 +354,5 @@ export function SettingsOverlay({ open, onClose }: SettingsOverlayProps) {
       />
     </div>
   );
-}
+  },
+);

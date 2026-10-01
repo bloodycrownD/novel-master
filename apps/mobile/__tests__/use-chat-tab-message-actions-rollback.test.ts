@@ -6,6 +6,7 @@ import React from 'react';
 import TestRenderer, {act} from 'react-test-renderer';
 import {
   buildAnnotateAttachmentFromDraft,
+  parseAttachmentsJson,
   type ChatMessage,
   type MessageAttachment,
 } from '@novel-master/core/chat';
@@ -504,6 +505,68 @@ describe('useChatTabMessageActions rollback', () => {
       draftAttachments.some(
         a => a.source === 'user_ops' && a.action !== 'annotate',
       ),
+    ).toBe(false);
+  });
+
+  it('B1-8-MA5: undo_send 历史非法附件行 → 部分保留；批注仍可反投影', async () => {
+    // 消费链 #2 的观测面：历史消息的 attachments_json 混了一条非法附件
+    // （未知键 → .strict() 拒绝）。旧口径整数组判废 ⇒ ChatMessage.attachments
+    // 字段整体缺席 ⇒ useChatTabMessageActions 的 `target.attachments ?? []`
+    // 拿到 [] ⇒ 批注恢复不回来。新口径逐条丢弃非法项，合法那条照常在。
+    const annotateAtt = buildAnnotateAttachmentFromDraft({
+      id: 'sent-b18',
+      path: '/chapter/a.md',
+      originalText: '选中原文',
+      userAnnotation: '请改短',
+    });
+    const raw = JSON.stringify([
+      annotateAtt,
+      {
+        name: '/legacy.md',
+        source: 'user_ops',
+        type: 'text',
+        content: null,
+        path: '/legacy.md',
+        legacyUnknownKey: 'x',
+      },
+    ]);
+    const parsedAttachments = parseAttachmentsJson(raw);
+    // 逐条降级：合法那条保序存活，非法那条被丢弃。
+    expect(parsedAttachments).toHaveLength(1);
+    expect(parsedAttachments?.[0]).toMatchObject({
+      action: 'annotate',
+      path: '/chapter/a.md',
+    });
+
+    const anchor = plainUserMessage('请看历史批注', parsedAttachments);
+    const api = mountActions([anchor]);
+
+    await act(async () => {
+      api.handleMessageMenuAction(anchor, 'rollback');
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(mockRollbackToMessage).toHaveBeenCalled();
+    expect(readChatComposerDraftState('s1').text).toBe('请看历史批注');
+    // 批注草稿确实从存活的那条附件反投影回来了（旧口径下这里是 []）。
+    const restored = listChatAnnotateDrafts('s1').find(
+      d => d.path === '/chapter/a.md',
+    );
+    expect(restored).toMatchObject({
+      path: '/chapter/a.md',
+      originalText: '选中原文',
+      userAnnotation: '请改短',
+    });
+    expect(
+      chipsFromAnnotateStore('s1').some(
+        c => c.path === '/chapter/a.md' && c.action === 'annotate',
+      ),
+    ).toBe(true);
+    const draftAttachments = readChatComposerDraftState('s1').attachments ?? [];
+    expect(
+      draftAttachments.some(a => a.path === '/legacy.md'),
     ).toBe(false);
   });
 });

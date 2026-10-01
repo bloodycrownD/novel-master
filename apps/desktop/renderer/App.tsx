@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { validateVfsEntryName } from '@novel-master/core/vfs';
 import { useColumnSplitters } from './hooks/useColumnSplitters';
 import { SessionDetailDrawer } from './features/chat/SessionDetailDrawer';
@@ -22,7 +22,7 @@ import {
 import type { WorkspaceContextTarget } from './features/workspace/WorkspaceTree';
 import { AppChrome } from './layout/AppChrome';
 import { MainShell } from './layout/MainShell';
-import { SettingsOverlay } from './layout/SettingsOverlay';
+import { SettingsOverlay, type SettingsOverlayHandle } from './layout/SettingsOverlay';
 import { NovelMasterProvider } from './providers/NovelMasterProvider';
 import { ShellNavProvider, useShellNav } from './providers/ShellNavProvider';
 import { ToastHost } from './components/ui/ToastHost';
@@ -57,6 +57,9 @@ type WorkspaceConfirmState =
 
 function DesktopOverlays() {
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // 关闭设置走 Overlay 内部的 handleClose（守卫 + onClose 副作用单点）。
+  // 直接 setSettingsOpen(!open) 会绕过脏表单确认与 notifyAgentConfigChanged。
+  const settingsOverlayRef = useRef<SettingsOverlayHandle | null>(null);
   const columnLayout = useColumnSplitters();
   const {
     projectId,
@@ -341,7 +344,14 @@ function DesktopOverlays() {
         <AppChrome
           columnLayout={columnLayout}
           settingsOpen={settingsOpen}
-          onToggleSettings={() => setSettingsOpen(open => !open)}
+          onToggleSettings={() => {
+            if (settingsOpen) {
+              settingsOverlayRef.current?.requestClose();
+              return;
+            }
+            // 打开路径不过守卫：打开不卸载任何 view。
+            setSettingsOpen(true);
+          }}
         />
         <div
           id="main-shell"
@@ -357,6 +367,7 @@ function DesktopOverlays() {
           />
         </div>
         <SettingsOverlay
+          ref={settingsOverlayRef}
           open={settingsOpen}
           onClose={() => {
             setSettingsOpen(false);

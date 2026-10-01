@@ -559,6 +559,26 @@ describe('T-MO1 SessionDetailScreen 聊天记录查询入口', () => {
       sessionId: 's1',
     });
   });
+
+  // ── T-AM3-3 提示词入口必须带 scope（AM-3）────────────────────────────────
+  it('渲染「查看提示词」入口卡片，点击 navigate 到 RealPrompt 且带 scope', async () => {
+    let tree!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(<SessionDetailScreen />);
+      await flushPromises();
+    });
+    const json = JSON.stringify(tree.toJSON());
+    expect(json).toContain('查看提示词');
+    await act(async () => {
+      tree.root.findByProps({testID: 'real-prompt-row'}).props.onPress();
+    });
+    // 不传 scope 的话屏内回落读全局 scope，后台通知栈外改过 scope 时
+    // 就会显示别的会话的提示词（同页 ChatHistorySearch 入口一直传了）。
+    expect(mockNavigate).toHaveBeenCalledWith('RealPrompt', {
+      projectId: 'p1',
+      sessionId: 's1',
+    });
+  });
 });
 
 // ── T-KB4 Android 键盘避让（范式 A：marginBottom 裁切窗口） ────────────────

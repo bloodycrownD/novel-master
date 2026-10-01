@@ -73,6 +73,13 @@ const mockRuntime: any = {
   sessionVfs: jest.fn(() => ({})),
   workplace: jest.fn(() => ({})),
   projectVfs: jest.fn(() => ({})),
+  // AM-1：删除链路现在会补调 forgetSession 同步 manager 的常驻表。
+  // 缺这个字段 ⇒ `runtime.sessionStreamUnitManager.forgetSession(...)` 抛 TypeError，
+  // 被 deleteSelectedSessions / handleDeleteProjects 的 catch 吞成 toast ⇒ 本文件
+  // 「未删成功不弹 toast」与「中途 reject 只弹一次」两条必红。只改夹具、不碰生产代码。
+  sessionStreamUnitManager: {
+    forgetSession: jest.fn(),
+  },
 };
 
 const mockShowToast = jest.fn();

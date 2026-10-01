@@ -10,17 +10,30 @@ import {
   View,
 } from 'react-native';
 import type {PromptPreviewSegment} from '@novel-master/core/prompt';
+import {useRoute, type RouteProp} from '@react-navigation/native';
 import {PromptPreviewSegmentCard} from '@/components/prompt/PromptPreviewSegmentCard';
 import {useMobileScope} from '@/hooks/useMobileScope';
 import {useRuntime} from '@/hooks/useRuntime';
 import {buildRealPromptPreviewSegments} from '@/services/prompt-preview.service';
 import {AgentRunError} from '@/services/agent-run.service';
 import {useTheme} from '@/theme/ThemeProvider';
+import type {RootStackParamList} from '@/navigation/types';
 
 export function RealPromptScreen() {
   const {tokens} = useTheme();
   const runtime = useRuntime();
-  const {projectId, sessionId} = useMobileScope();
+  // scope 优先取路由参数、缺省回落到全局 scope（AM-3）：
+  // 只读 useMobileScope() 会在「后台通知栈外改 scope、栈顶却还停在别的会话详情页」
+  // 时展示**别的会话**的提示词，而屏上不出现任何会话名、用户无从察觉。
+  // 回落分支是防御性的：无参进栈的存量路径行为与修复前逐字一致。
+  const route = useRoute<RouteProp<RootStackParamList, 'RealPrompt'>>();
+  const params = route.params ?? {};
+  const {
+    projectId: scopeProjectId,
+    sessionId: scopeSessionId,
+  } = useMobileScope();
+  const projectId = params.projectId ?? scopeProjectId;
+  const sessionId = params.sessionId ?? scopeSessionId;
   const [segments, setSegments] = useState<readonly PromptPreviewSegment[]>([]);
   const [error, setError] = useState<string | undefined>();
   const [loading, setLoading] = useState(true);
