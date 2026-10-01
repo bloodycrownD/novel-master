@@ -16,7 +16,8 @@
  */
 import type {AtPathRef, MessageAttachment} from '@novel-master/core/chat';
 import type {EffectiveSkill} from '@novel-master/core/skills';
-import type {HostTheme} from '@web/shared/host-theme';
+// 键集真源在 shared/host-theme（值 import：键集不再在本文件手抄一份）
+import {HOST_THEME_KEYS, type HostTheme} from '@web/shared/host-theme';
 import type {ComposerMetrics} from '@web/composer-input/webview/runtime/model';
 // 运行时值 import（能力清单真源在 chat-transcript 包内，刻意不搬，避免双份漂移）
 import {TRANSCRIPT_CAPABILITIES} from '@web/chat-transcript/transcript-capabilities';
@@ -46,18 +47,15 @@ export const CONVERSATION_CAPABILITY_COMPOSER_DOCK = 'composer-dock';
  */
 export type ConversationTheme = HostTheme;
 
-/** 主题键数（9）：T-CU2 的「9 键超集」口径——改 shared/host-theme 时同此增减。 */
-export const CONVERSATION_THEME_KEYS: readonly (keyof ConversationTheme)[] = [
-  'background',
-  'text',
-  'textSecondary',
-  'primary',
-  'primaryMuted',
-  'selection',
-  'danger',
-  'surface',
-  'borderLight',
-];
+/**
+ * 主题键数（9）：T-CU2 的「9 键超集」口径。
+ *
+ * **不手抄**：键集直接取 `@web/shared/host-theme` 的 `HOST_THEME_KEYS`（从
+ * `THEME_VARS` 派生）——宿主在 shared 加/删一个 token 时本清单与 RN 侧
+ * `ChatConversationBridge` 的同名常量同时跟随，零漂移面。
+ */
+export const CONVERSATION_THEME_KEYS: readonly (keyof ConversationTheme)[] =
+  HOST_THEME_KEYS;
 
 /**
  * 单 ready 上报的**全集**能力：转录域共享常量 ∪ 本包自有 `composer-dock` 位。
@@ -170,7 +168,14 @@ export type ConversationInitPayload = {
   readonly composer: ConversationInitComposer;
 };
 
-/** 走 transcript runtime 的下行 type（重打包为 v1 信封喂 `handleHostMessage`）。 */
+/**
+ * 走 transcript runtime 的下行 type（重打包为 v1 信封喂 `handleHostMessage`）。
+ *
+ * `stickIfNearBottom` 已移除：**BASE 起即无生产方**（唯一潜在发送方
+ * `keyboardLiftNonce` 恒为 0，现网也从未真发过），本轮清掉这条死协议面。
+ * 旧 chat-transcript 包仍认这条（其 bridge case 不动——旧包仍出产物，
+ * 动它有 dist 契约测风险），只是合成包不再路由它。
+ */
 export const CONVERSATION_TRANSCRIPT_TYPES: readonly string[] = [
   'sessionSnapshot',
   'prependPage',
@@ -184,7 +189,6 @@ export const CONVERSATION_TRANSCRIPT_TYPES: readonly string[] = [
   'flagsUpdate',
   'closeMenu',
   'closeMermaidViewer',
-  'stickIfNearBottom',
 ];
 
 /** 走 composer runtime 的下行 type。 */
@@ -216,5 +220,10 @@ export type ConversationHostToWebType =
   | (typeof CONVERSATION_COMPOSER_TYPES)[number]
   | (typeof CONVERSATION_DOCK_TYPES)[number];
 
-/** Web → Host（v:2 的只有新包自有的两条；其余由两 runtime 的 v:1 单例上行）。 */
-export type ConversationWebToHostType = 'ready' | 'dockAction';
+/**
+ * Web → Host（**v:2 的只有新包自有的两条**；其余上行由两 runtime 的 v:1 单例负责）。
+ *
+ * 命名带 `V2` 是因为它只描述 v:2 那一小段——叫 `ConversationWebToHostType` 会
+ * 被误读成「web→host 全量上行 type 清单」，而全量里还混着两 runtime 的 v:1 单例。
+ */
+export type ConversationWebToHostV2Type = 'ready' | 'dockAction';

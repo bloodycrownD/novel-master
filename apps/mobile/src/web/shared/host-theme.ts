@@ -45,6 +45,22 @@ const THEME_VARS: Array<{key: keyof HostTheme; cssVar: string}> = [
   {key: 'borderLight', cssVar: '--border'},
 ];
 
+/**
+ * 主题 token 键集（**由 `THEME_VARS` 派生，全仓唯一真源**）。
+ *
+ * 合成包 chat-conversation 的两处「9 键超集」清单——web 侧
+ * `chat-conversation/webview/model.ts` 的 `CONVERSATION_THEME_KEYS` 与 RN 侧
+ * `components/chat/ChatConversationBridge.ts` 的同名常量——都直接 import 本导出，
+ * 不再各抄一份。原先三份手抄之间零约束，宿主加第 10 个 token 时三处全不红、
+ * 只在某天 `::selection` 那样漏写才由 UI 变色暴露；现在改 `THEME_VARS` 一处即全跟随。
+ *
+ * 顺序即 `THEME_VARS` 的写入顺序（条件式写入按此表顺序，见 `applyHostTheme`），
+ * 两个消费端的双端同序断言依赖这一点。
+ */
+export const HOST_THEME_KEYS: readonly (keyof HostTheme)[] = THEME_VARS.map(
+  entry => entry.key,
+);
+
 export type ApplyHostThemeOptions = {
   /** 字段存在时额外同步写入的派生变量（如 code-editor 的 --editor-*）。 */
   extraVars?: Partial<Record<keyof HostTheme, string[]>>;

@@ -18,6 +18,7 @@ import {
   decodeConversationUpstream,
   parseConversationScrollSnapshot,
   readReadyCapabilities,
+  type ConversationHostMessage,
 } from '@/components/chat/ChatConversationBridge';
 // web 侧协议真源（同一份声明的另一半）
 import {
@@ -26,9 +27,46 @@ import {
   CONVERSATION_COMPOSER_METRICS as WEB_CONVERSATION_COMPOSER_METRICS,
   CONVERSATION_DOCK_ACTIONS as WEB_CONVERSATION_DOCK_ACTIONS,
   CONVERSATION_THEME_KEYS as WEB_CONVERSATION_THEME_KEYS,
+  CONVERSATION_COMPOSER_TYPES as WEB_CONVERSATION_COMPOSER_TYPES,
+  CONVERSATION_DOCK_TYPES as WEB_CONVERSATION_DOCK_TYPES,
+  CONVERSATION_TRANSCRIPT_TYPES as WEB_CONVERSATION_TRANSCRIPT_TYPES,
   conversationCapabilities as webConversationCapabilities,
 } from '@/web/chat-conversation/webview/model';
+// 主题键集的唯一真源（web 侧 shared/host-theme；RN 与 web 两侧清单都从它派生）
+import {HOST_THEME_KEYS} from '@/web/shared/host-theme';
 import {CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION} from '@/services/chat-transcript-scroll-cache';
+
+/**
+ * RN 侧 `ConversationHostMessage` 的全量 type 名（运行时投影）。
+ *
+ * 键类型写成 `Record<ConversationHostMessage['type'], true>` 而不是裸对象字面量：
+ * RN 联合类型增删一条 type 时这里是**编译错误**（缺键 / 多键都红），
+ * 逼着同步本清单——否则「RN 加了下行 type 而 web 侧不跟随」就又变成无声漂移。
+ * 类型擦除拿不到联合成员，所以这里必须落一份运行时名单；关键是让它被类型锁住。
+ */
+const RN_HOST_MESSAGE_TYPES: Record<ConversationHostMessage['type'], true> = {
+  init: true,
+  themeUpdate: true,
+  sessionSnapshot: true,
+  prependPage: true,
+  appendTailRows: true,
+  streamDelta: true,
+  streamBatch: true,
+  streamBlockCommit: true,
+  streamReset: true,
+  streamCommit: true,
+  streamToolInvoking: true,
+  flagsUpdate: true,
+  closeMenu: true,
+  closeMermaidViewer: true,
+  setText: true,
+  setSelection: true,
+  setDisabled: true,
+  blur: true,
+  composerState: true,
+  composerPaste: true,
+  selectAll: true,
+};
 
 describe('chat-conversation 桥协议 v2 · 双端一致性', () => {
   it('T-CU3: CONVERSATION_BRIDGE_V 双端同为 2', () => {
@@ -37,9 +75,38 @@ describe('chat-conversation 桥协议 v2 · 双端一致性', () => {
     expect(CONVERSATION_BRIDGE_V).toBe(WEB_CONVERSATION_BRIDGE_V);
   });
 
-  it('主题 9 键超集双端同序同集', () => {
+  it('主题 9 键超集双端同序同集，且三处同源于 HOST_THEME_KEYS', () => {
     expect(CONVERSATION_THEME_KEYS).toHaveLength(9);
+    expect(CONVERSATION_THEME_KEYS).toContain('selection');
     expect([...CONVERSATION_THEME_KEYS]).toEqual([...WEB_CONVERSATION_THEME_KEYS]);
+    // 排序对照（顺序之外的集合相等，防止两侧把同九个键排成两种顺序）
+    expect([...CONVERSATION_THEME_KEYS].sort()).toEqual(
+      [...WEB_CONVERSATION_THEME_KEYS].sort(),
+    );
+    expect([...CONVERSATION_THEME_KEYS].sort()).toEqual(
+      [...HOST_THEME_KEYS].sort(),
+    );
+    // 三份键集不是各抄一份，而是同一个数组的三次引用——宿主改 THEME_VARS 一处即全跟随
+    expect(CONVERSATION_THEME_KEYS).toBe(HOST_THEME_KEYS);
+    expect(WEB_CONVERSATION_THEME_KEYS).toBe(HOST_THEME_KEYS);
+  });
+
+  it('下行 type 全集：RN ConversationHostMessage 与 web 三清单扁平化相等', () => {
+    const webDownstreamTypes = [
+      'init',
+      'themeUpdate',
+      ...WEB_CONVERSATION_TRANSCRIPT_TYPES,
+      ...WEB_CONVERSATION_COMPOSER_TYPES,
+      ...WEB_CONVERSATION_DOCK_TYPES,
+    ];
+    const rnDownstreamTypes = Object.keys(RN_HOST_MESSAGE_TYPES);
+    // web 侧三清单内部不得有重复项（否则扁平化会引入伪计数）
+    expect(new Set(webDownstreamTypes).size).toBe(webDownstreamTypes.length);
+    // 双向相等：任一侧多一条/少一条都红（RN 侧的增删另由上面的 Record 类型锁住）
+    expect([...webDownstreamTypes].sort()).toEqual([...rnDownstreamTypes].sort());
+    // stickIfNearBottom 已在 web 清单移除（BASE 起无生产方），双端都不该再有
+    expect(webDownstreamTypes).not.toContain('stickIfNearBottom');
+    expect(rnDownstreamTypes).not.toContain('stickIfNearBottom');
   });
 
   it('metrics 六值双端一致（漏 minHeight/fontSize 都违反 UI 一致）', () => {

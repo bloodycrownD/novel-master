@@ -51,6 +51,14 @@ import type {
   TranscriptRow,
   TranscriptScrollIntent,
 } from './ChatTranscriptBridge';
+// 主题键集的唯一真源在 web 侧 shared/host-theme——本文件与 web 侧 model 都从这里取，
+// 不再各抄一份（原先两份手抄零约束，宿主加 token 时都不红）。
+//
+// **为什么用 `@/web/...` 而不是 `@web/...`**：`@web/*` 只在 web 侧 tsconfig 与 jest 的
+// moduleNameMapper 里有映射，Metro 的 resolveRequest **没有**这个别名（只有 `@/` 与
+// `@novel-master/core`），走 `@web/` 的话 RN 生产包会在模块解析阶段直接失败。
+// `@/` 前缀 tsc / jest / Metro 三处都能解析。
+import {HOST_THEME_KEYS} from '@/web/shared/host-theme';
 
 /**
  * 下行信封桥版本（**与旧包 `BRIDGE_V = 1` 刻意不同名**，避免重载歧义）。
@@ -67,7 +75,6 @@ export const CONVERSATION_CAPABILITY_COMPOSER_DOCK = 'composer-dock';
 /**
  * 主题 token 9 键超集（transcript 7 ∪ composer 6 去重）。
  * 一次 `themeUpdate` 下发全文档生效（dispatcher fan-out 三方）。
- * 与 web 侧 `CONVERSATION_THEME_KEYS` 同序同集，改 shared/host-theme 时同此增减。
  */
 export type ConversationTheme = {
   readonly background: string;
@@ -81,17 +88,15 @@ export type ConversationTheme = {
   readonly borderLight: string;
 };
 
-export const CONVERSATION_THEME_KEYS: readonly (keyof ConversationTheme)[] = [
-  'background',
-  'text',
-  'textSecondary',
-  'primary',
-  'primaryMuted',
-  'selection',
-  'danger',
-  'surface',
-  'borderLight',
-];
+/**
+ * 键集常量（与 web 侧 `CONVERSATION_THEME_KEYS` **同一个数组引用**，同序同集）。
+ *
+ * 下面这行赋值同时是一道**编译期**守卫：`HOST_THEME_KEYS` 的元素类型是
+ * `keyof HostTheme`，若宿主加了第 10 个 token 而上面的 `ConversationTheme`
+ * 没跟着补字段，这里立刻类型不匹配——RN 侧漏键在 build 阶段就红，不必等 UI 变色。
+ */
+export const CONVERSATION_THEME_KEYS: readonly (keyof ConversationTheme)[] =
+  HOST_THEME_KEYS;
 
 /** dock 域 `input` 尺寸口径（随 `ComposerAtPathInput.tsx` 删除整体迁入；5 行封顶 = 12 + 22×5）。 */
 export const CONVERSATION_COMPOSER_METRICS: ComposerInputMetrics = {
@@ -232,33 +237,16 @@ export type ConversationEnvelope<T extends string, P> = {
 };
 
 /**
- * Host → Web 全量下行 type 清单（未知 type 静默丢弃）。
- * 与 web 侧 `ConversationHostToWebType` 同集。
+ * Host → Web 全量下行消息（**穷举**，载荷逐 type 收窄）。
+ *
+ * 原先这里还有一份同名的「22 项手写 type 清单」`ConversationHostToWebType`，
+ * 与本联合类型同集、零消费方——加下行 type 时它不会跟随，纯粹是漂移面，本轮删除。
+ * 需要「全量 type 名」的场合直接取 `ConversationHostMessage['type']`。
+ *
+ * `stickIfNearBottom` 已不在本联合内：合成包侧 BASE 起无生产方（唯一潜在发送方
+ * `keyboardLiftNonce` 恒为 0），web 侧清单已删除该条，双端集相等由
+ * `__tests__/chat-conversation-bridge.test.ts` 断言锁死。
  */
-export type ConversationHostToWebType =
-  | 'init'
-  | 'themeUpdate'
-  | 'sessionSnapshot'
-  | 'prependPage'
-  | 'appendTailRows'
-  | 'streamDelta'
-  | 'streamBatch'
-  | 'streamBlockCommit'
-  | 'streamReset'
-  | 'streamCommit'
-  | 'streamToolInvoking'
-  | 'flagsUpdate'
-  | 'closeMenu'
-  | 'closeMermaidViewer'
-  | 'stickIfNearBottom'
-  | 'setText'
-  | 'setSelection'
-  | 'setDisabled'
-  | 'blur'
-  | 'composerState'
-  | 'composerPaste'
-  | 'selectAll';
-
 export type ConversationHostMessage =
   | ConversationEnvelope<'init', ConversationInitPayload>
   | ConversationEnvelope<'themeUpdate', {theme: ConversationTheme}>
@@ -299,7 +287,6 @@ export type ConversationHostMessage =
   | ConversationEnvelope<'streamToolInvoking', {active: boolean}>
   | ConversationEnvelope<'closeMenu', Record<string, never>>
   | ConversationEnvelope<'closeMermaidViewer', Record<string, never>>
-  | ConversationEnvelope<'stickIfNearBottom', Record<string, never>>
   | ConversationEnvelope<
       'setText',
       {text: string; selectionStart?: number; selectionEnd?: number}

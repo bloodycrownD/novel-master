@@ -22,10 +22,15 @@ import {
   CONVERSATION_BRIDGE_V,
   CONVERSATION_CAPABILITY_COMPOSER_DOCK,
   CONVERSATION_DOCK_ACTIONS,
+  CONVERSATION_DOCK_TYPES,
   CONVERSATION_READY_VERSION,
   CONVERSATION_THEME_KEYS,
   conversationCapabilities,
 } from '@web/chat-conversation/webview/model';
+// 两个旧 runtime 各自的 BRIDGE_V——dispatcher 重打包用的 v 号直接取自这两处，
+// 不再写死 1（见 dispatcher.ts 顶部的一致性守卫）。
+import {BRIDGE_V as TRANSCRIPT_BRIDGE_V} from '@web/chat-transcript/webview/runtime/state/state';
+import {BRIDGE_V as COMPOSER_BRIDGE_V} from '@web/composer-input/webview/runtime/model';
 
 /** 9 键超集：transcript 7 ∪ composer 6 去重（selection 是合成包补进 HostTheme 的那一键）。 */
 const THEME = {
@@ -56,8 +61,22 @@ const v2 = (type: string, payload: Record<string, unknown> = {}) => ({
 });
 
 describe('协议常量（T-CU3：双端一致的前提）', () => {
-  it('T-CDV-01：CONVERSATION_BRIDGE_V = 2，与旧包 BRIDGE_V = 1 刻意不同名', () => {
+  it('T-CDV-01：CONVERSATION_BRIDGE_V = 2，与旧包 BRIDGE_V 刻意不同名', () => {
     expect(CONVERSATION_BRIDGE_V).toBe(2);
+  });
+
+  it('T-CDV-01b：重打包用的 v 号恒等于两包各自的 BRIDGE_V（三处恒等）', () => {
+    // dispatcher 的 v1() 取 transcript 包的 BRIDGE_V，composer 包的 BRIDGE_V
+    // 由模块级一致性守卫保证相等——三处必须指向同一个值，不能各写各的。
+    expect(TRANSCRIPT_BRIDGE_V).toBe(1);
+    expect(COMPOSER_BRIDGE_V).toBe(1);
+    expect(TRANSCRIPT_BRIDGE_V).toBe(COMPOSER_BRIDGE_V);
+    // 实际重打包产物上的 v 就是这个常量（而非独立的字面量 1）
+    const route = routeHostMessage(v2('setDisabled', {disabled: true}));
+    expect(route?.composer?.v).toBe(TRANSCRIPT_BRIDGE_V);
+    expect(route?.composer?.v).toBe(COMPOSER_BRIDGE_V);
+    // 合成包自身仍是 v:2，与旧包 v:1 区分开
+    expect(CONVERSATION_BRIDGE_V).not.toBe(TRANSCRIPT_BRIDGE_V);
   });
 
   it('T-CDV-02：ready 版本标识 u1；theme 超集 9 键且含 selection', () => {
@@ -160,7 +179,9 @@ describe('themeUpdate fan-out 三方（契约第 2 条）', () => {
 });
 
 describe('三域路由各自命中且不串', () => {
-  it('T-CDV-09：transcript 域八类 type 全部重打包为 v1 且只投 transcript', () => {
+  it('T-CDV-09：transcript 域全部 type 重打包为 v1 且只投 transcript', () => {
+    // 清单 = CONVERSATION_TRANSCRIPT_TYPES 的字面量展开（不含 stickIfNearBottom：
+    // BASE 起无生产方，已从 web 侧清单移除，见 model.ts 注释）
     for (const type of [
       'sessionSnapshot',
       'prependPage',
@@ -174,7 +195,6 @@ describe('三域路由各自命中且不串', () => {
       'flagsUpdate',
       'closeMenu',
       'closeMermaidViewer',
-      'stickIfNearBottom',
     ]) {
       const route = routeHostMessage(v2(type, {marker: type}));
       expect(route?.transcript).toEqual({v: 1, type, payload: {marker: type}});
@@ -208,6 +228,44 @@ describe('三域路由各自命中且不串', () => {
     expect(selectAll?.transcript).toBeNull();
     expect(selectAll?.composer).toBeNull();
     expect(selectAll?.dock).toEqual({kind: 'selectAll'});
+  });
+
+  it('T-CDV-11b：dock 域不再有兜底 selectAll 的默认分支', () => {
+    // 旧写法是「落在 CONVERSATION_DOCK_TYPES 里但没写分支 → 兜底 selectAll」，
+    // 那是**带副作用**的默认分支：新加一条 type 忘了写 handler，宿主发来的新意图
+    // 会被执行成「全选输入框」。这里钉死：两类未知都必须空路由。
+    const emptyRoute = {transcript: null, composer: null, dock: null, theme: null};
+
+    // ① 清单外的 type：本来就走末尾的 EMPTY_ROUTE，兜底分支够不着它——
+    //    但仍钉一遍，防止有人把 `contains` 那层判断删掉后重新裸奔。
+    expect(routeHostMessage(v2('__futureDockType', {text: 'x'}))).toEqual(
+      emptyRoute,
+    );
+
+    // ② **清单内但无 handler**——这才是旧兜底分支真正会吃掉的路径。
+    //    往清单里临时塞一条合成 type（不进生产代码），跑完立刻摘掉。
+    (CONVERSATION_DOCK_TYPES as string[]).push('__registeredButUnhandled');
+    try {
+      expect(routeHostMessage(v2('__registeredButUnhandled', {}))).toEqual(
+        emptyRoute,
+      );
+    } finally {
+      (CONVERSATION_DOCK_TYPES as string[]).pop();
+    }
+    // 摘干净：清单长度复原
+    expect(CONVERSATION_DOCK_TYPES).not.toContain('__registeredButUnhandled');
+  });
+
+  it('T-CDV-11c：stickIfNearBottom 不再路由（死协议面已从清单移除）', () => {
+    // 该 type 只被旧 chat-transcript 包认（其 bridge case 不动）；合成包侧
+    // BASE 起无生产方，走到这里必须是空路由，不得回落到 selectAll。
+    const route = routeHostMessage(v2('stickIfNearBottom', {}));
+    expect(route).toEqual({
+      transcript: null,
+      composer: null,
+      dock: null,
+      theme: null,
+    });
   });
 });
 

@@ -4,8 +4,9 @@
  * 职责（spec §合成 dispatcher 契约五条之 2/5）：
  * 1. 解析 v2 信封，按 §下行消息路由表分流；
  * 2. transcript / composer 两域**重打包为 v1 信封**再喂各自 runtime 的既有
- *    `handleHostMessage(raw)`——两个 runtime 内部零改动（其 `BRIDGE_V = 1`
- *    硬编码不动，重打包成本极低：composer 域仅程序化写入时才有下行）；
+ *    `handleHostMessage(raw)`——两个 runtime 内部零改动（其 `BRIDGE_V` 硬编码
+ *    不动，重打包用的 v 号由本文件 import 两包常量并加一致性守卫；
+ *    重打包成本极低：composer 域仅程序化写入时才有下行）；
  * 3. `themeUpdate`（9 键超集）**fan-out 三方**——transcript + composer + dock 自有
  *    `applyHostTheme`，三者写的都是 documentElement、键集互为超集不漏键；
  * 4. 聚合 `init` 拆包：transcript 喂 `{theme, flags}`、composer 喂
@@ -18,6 +19,10 @@
  * es2018 纪律：禁 ES2021+ 运行时 API 与 lookbehind 正则。
  */
 import {matchHostMessage} from '@web/shared/host-message-channel';
+// 重打包用的 v 号**不写死 1**：直接取两个旧 runtime 各自导出的 BRIDGE_V
+// （别名区分，免得与本包的 CONVERSATION_BRIDGE_V 混淆）。
+import {BRIDGE_V as TRANSCRIPT_BRIDGE_V} from '@web/chat-transcript/webview/runtime/state/state';
+import {BRIDGE_V as COMPOSER_BRIDGE_V} from '@web/composer-input/webview/runtime/model';
 import {
   CONVERSATION_BRIDGE_V,
   CONVERSATION_COMPOSER_MODE,
@@ -31,12 +36,32 @@ import {
   type ConversationTypeaheadSource,
 } from './model';
 
-/** 复用的 v1 信封形状（两个 runtime 的 `matchHostMessage(raw, 1)` 口径）。 */
+/**
+ * 复用的 v1 信封形状（两个 runtime 的 `matchHostMessage(raw, BRIDGE_V)` 口径）。
+ * `v` 取 transcript 包的字面量类型——两包 BRIDGE_V 恒等由下方守卫在装配期锁死。
+ */
 type V1Envelope = {
-  readonly v: 1;
+  readonly v: typeof TRANSCRIPT_BRIDGE_V;
   readonly type: string;
   readonly payload: Record<string, unknown>;
 };
+
+/**
+ * 一致性守卫：两个旧 runtime 的 BRIDGE_V 必须恒等。
+ *
+ * 为什么要炸而不是各写各的：重打包出的信封由两侧各自的
+ * `matchHostMessage(raw, BRIDGE_V)` 判 v 号，一旦某侧单独把 v 改了而另一侧没改，
+ * 那一域的整段下行会被**静默丢弃**（无报错、无日志，只表现为「消息下不来」），
+ * 真机排查成本极高。所以在模块装配期就 throw，把问题钉在构建/启动这一步。
+ */
+if (TRANSCRIPT_BRIDGE_V !== COMPOSER_BRIDGE_V) {
+  throw new Error(
+    '[chat-conversation] 旧 runtime BRIDGE_V 不一致：transcript=' +
+      TRANSCRIPT_BRIDGE_V +
+      ' / composer=' +
+      COMPOSER_BRIDGE_V,
+  );
+}
 
 /** dock 域要处理的下行意图（不经旧 runtime，合成包自有 handler 消费）。 */
 export type ConversationDockRoute =
@@ -75,7 +100,7 @@ function contains(list: readonly string[], target: string): boolean {
 }
 
 function v1(type: string, payload: Record<string, unknown>): V1Envelope {
-  return {v: 1, type, payload};
+  return {v: TRANSCRIPT_BRIDGE_V, type, payload};
 }
 
 function num(value: unknown, fallback: number): number {
@@ -168,6 +193,10 @@ export function routeHostMessage(raw: unknown): ConversationRoute | null {
   }
 
   if (contains(CONVERSATION_DOCK_TYPES, type)) {
+    // 显式分支逐条列举，清单外的 type 一律落到末尾的 EMPTY_ROUTE。
+    // 旧写法是「非 composerState / 非 composerPaste 就兜底 selectAll」——那是**带副作用**
+    // 的默认分支：以后往 CONVERSATION_DOCK_TYPES 里加一条新 type 而忘了写分支，
+    // 宿主发来的新意图会被当成「全选输入框」执行，用户可见的行为完全跑偏。
     if (type === 'composerState') {
       return {
         ...EMPTY_ROUTE,
@@ -180,9 +209,14 @@ export function routeHostMessage(raw: unknown): ConversationRoute | null {
     if (type === 'composerPaste') {
       return {...EMPTY_ROUTE, dock: {kind: 'composerPaste', text: str(payload.text, '')}};
     }
-    return {...EMPTY_ROUTE, dock: {kind: 'selectAll'}};
+    if (type === 'selectAll') {
+      return {...EMPTY_ROUTE, dock: {kind: 'selectAll'}};
+    }
+    // 清单内但无对应 handler（例如只登记了 type、handler 还没落地）：空路由，不猜。
+    return EMPTY_ROUTE;
   }
 
+  // 未知 type：静默丢弃（与两个 runtime 的 matchHostMessage 同口径）。
   return EMPTY_ROUTE;
 }
 
