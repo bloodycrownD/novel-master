@@ -24,12 +24,15 @@
 
 import assert from "node:assert/strict";
 import { before, describe, it } from "node:test";
+import { clearDecodedContentCaches } from "../../src/infra/content-cache/logic/decoded-content-cache.js";
 import { SqliteKkvRepository } from "../../src/domain/kkv/repositories/impl/sqlite-kkv.repository.js";
 import { SqliteVfsContentStore } from "../../src/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
 import { hashContent } from "../../src/domain/vfs/content-store/logic/hash-content.js";
 import {
   __getVfsPackDecodeCountersForTests,
   __resetVfsPackDecodeCountersForTests,
+  encodeZlibConcatPack,
+  VFS_PACK_FORMAT_ZLIB_CONCAT_V1,
 } from "../../src/domain/vfs/content-store/logic/pack-codec.js";
 import { compressZlib } from "../../src/domain/vfs/content-store/logic/zlib-codec.js";
 import type { TdbcConnection } from "../../src/infra/tdbc/ports/connection.port.js";
@@ -176,6 +179,59 @@ function similarPair(aboutBytes: number, tag: string): [string, string] {
 async function countOf(sql: string, params?: readonly unknown[]): Promise<number> {
   const rows = await conn().query<{ n: number }>(sql, params);
   return Number(rows[0]?.n ?? 0);
+}
+
+/**
+ * 直插一条 pack 行 + N 条 member 行（zlib-concat-v1），**不建/不删 blob 行**——
+ * 构造「member-only hash」形态（权威副本只在 pack 容器内），由调用方负责引用面。
+ */
+async function insertPackMembers(
+  entryId: number,
+  plains: ReadonlyArray<string>
+): Promise<string[]> {
+  const c = conn();
+  const utf8s = plains.map((plain) => new TextEncoder().encode(plain));
+  const encoded = encodeZlibConcatPack(utf8s);
+  const inserted = await c.execute(
+    `INSERT INTO vfs_content_pack (entry_id, format, bytes, byte_len, member_count, created_at_ms)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [
+      entryId,
+      VFS_PACK_FORMAT_ZLIB_CONCAT_V1,
+      encoded.bytes,
+      encoded.bytes.byteLength,
+      utf8s.length,
+      Date.now(),
+    ]
+  );
+  const packId = Number(inserted.lastInsertRowid);
+  const hashes: string[] = [];
+  for (let index = 0; index < utf8s.length; index++) {
+    const contentHash = hashContent(plains[index]!);
+    const span = encoded.spans[index]!;
+    await c.execute(
+      `INSERT INTO vfs_content_pack_member (content_hash, pack_id, offset, length, compressed_byte_len)
+       VALUES (?, ?, ?, ?, ?)`,
+      [
+        contentHash,
+        packId,
+        span.offset,
+        span.length,
+        compressZlib(utf8s[index]!).byteLength,
+      ]
+    );
+    hashes.push(contentHash);
+  }
+  return hashes;
+}
+
+/** blob 行的 ref_count（行不存在时返回 -1，便于断言「已被触发器回收」）。 */
+async function blobRefCount(contentHash: string): Promise<number> {
+  const rows = await conn().query<{ ref_count: number }>(
+    `SELECT ref_count FROM vfs_content_blob WHERE content_hash = ?`,
+    [contentHash]
+  );
+  return rows.length === 0 ? -1 : Number(rows[0]!.ref_count);
 }
 
 async function blobRowCount(contentHash: string): Promise<number> {
@@ -831,6 +887,135 @@ describe("VFS 历史版本打包任务（T-VP3/8/10/12/13/16/18/19/20/21）", ()
     assert.equal(await blobRowCount(entry1.hashes[1]!), 0);
   });
 
+  it("T-VP16b：put 抽回 blob 行现场重算 ref_count——member-only hash 被 2 条 revision 引用时抽回落 ref_count=2，删引用逐级递减、归零回收", async () => {
+    await resetPackState();
+    const c = conn();
+    const suffix = testIsolationSuffix();
+    const store = new SqliteVfsContentStore(c);
+    // 目标明文 H：member-only 形态（权威副本只在 pack 容器内，无 blob 行）。
+    const plainH = textOf(6 * 1024, `vpk-recov-h-${suffix}`);
+    const hashH = hashContent(plainH);
+    const headHash = await store.put(textOf(2 * 1024, `vpk-recov-head-${suffix}`));
+    const inserted = await c.execute(
+      `INSERT INTO vfs_entry (scope_key, path, content_hash, head_version, mtime_ms, entry_kind)
+       VALUES (?, ?, ?, 3, 0, 'file')`,
+      [`${SCOPE_PREFIX}recov-${suffix}`, `/recov-${suffix}.md`, headHash]
+    );
+    const entryId = Number(inserted.lastInsertRowid);
+    // 直插 pack + member（不建 blob 行）→ H 是 member-only hash。
+    assert.deepEqual(await insertPackMembers(entryId, [plainH]), [hashH]);
+    assert.equal(await blobRowCount(hashH), 0, "前置：H 起始无 blob 行");
+    // 两条 active revision 引用 H：INSERT 触发器对无 blob 行的 hash 静默命中 0 行
+    // （ref_count 无人维护——这正是抽回落 0 的根因）。
+    await insertRevision(entryId, 1, hashH);
+    await insertRevision(entryId, 2, hashH);
+    await insertRevision(entryId, 3, headHash);
+
+    // 抽回：put 幂等保活把 H 物化回独立 blob 行。
+    assert.equal(await store.put(plainH), hashH);
+    assert.equal(await blobRowCount(hashH), 1, "抽回后应有独立 blob 行");
+    assert.equal(
+      await countOf("SELECT COUNT(*) AS n FROM vfs_content_pack_member WHERE content_hash = ?", [hashH]),
+      0,
+      "抽回后 member 行应被删除（INV3）"
+    );
+    // 核心判据：新落 blob 行绕过触发器，ref_count 必须现场重算为真实引用数。
+    assert.equal(await blobRefCount(hashH), 2, "抽回落 ref_count 应 == revision 引用数 2");
+    assert.equal(await store.get(hashH), plainH, "抽回后读回等值");
+
+    // 删 1 条引用：不抛（ref_count 若为 0，这步就撞 CHECK）且减到 1、行保留。
+    await c.execute(`DELETE FROM vfs_revision WHERE entry_id = ? AND version = 1`, [
+      entryId,
+    ]);
+    assert.equal(await blobRefCount(hashH), 1, "删一条引用后 ref_count 减 1、行不误删");
+
+    // 删最后 1 条：归零 → 触发器按语义回收 blob 行。
+    await c.execute(`DELETE FROM vfs_revision WHERE entry_id = ? AND version = 2`, [
+      entryId,
+    ]);
+    assert.equal(await blobRowCount(hashH), 0, "引用归零后触发器回收 blob 行");
+
+    // 反例自检（牙齿）：先插引用它的 revision（无 blob 行 → 触发器命中 0 行），
+    // 再直插一条 ref_count=0 的 blob 行；删该引用必须撞 CHECK(ref_count >= 0)
+    // ——证明上面「删引用不抛」不是恒真断言。
+    const badHash = `${SCOPE_PREFIX}recov-bad-${suffix}`;
+    await insertRevision(entryId, 4, badHash);
+    const badBytes = compressZlib(new TextEncoder().encode("bad"));
+    await c.execute(
+      `INSERT INTO vfs_content_blob (content_hash, encoding, bytes, byte_len, ref_count)
+       VALUES (?, 'zlib', ?, ?, 0)`,
+      [badHash, badBytes, badBytes.byteLength]
+    );
+    await assert.rejects(
+      () =>
+        c.execute(`DELETE FROM vfs_revision WHERE entry_id = ? AND version = 4`, [
+          entryId,
+        ]),
+      /CHECK constraint failed: ref_count >= 0/,
+      "ref_count=0 的残行删引用必须撞 CHECK（反例自检）"
+    );
+    // 收尾：先把残行 blob 删掉，再删 revision——顺序反了会再次撞 CHECK
+    // （DELETE 触发器对已删行的 ref_count-1 照样触发），并把 CHECK 失败留给
+    // 后续用例的 resetPackState（它也删 revision），整片变红。
+    await c.execute(`DELETE FROM vfs_content_blob WHERE content_hash = ?`, [
+      badHash,
+    ]);
+    await c.execute(`DELETE FROM vfs_revision WHERE entry_id = ? AND version = 4`, [
+      entryId,
+    ]);
+  });
+
+  it("T-VP16c：unpack 幂等修复 ref_count——既有 ref_count=0 残行（INSERT OR IGNORE 命中跳过）也被重算，后续删引用不抛", async () => {
+    await resetPackState();
+    const c = conn();
+    const suffix = testIsolationSuffix();
+    const store = new SqliteVfsContentStore(c);
+    const plainH = textOf(6 * 1024, `vpk-ures-h-${suffix}`);
+    const hashH = hashContent(plainH);
+    const headHash = await store.put(textOf(2 * 1024, `vpk-ures-head-${suffix}`));
+    const inserted = await c.execute(
+      `INSERT INTO vfs_entry (scope_key, path, content_hash, head_version, mtime_ms, entry_kind)
+       VALUES (?, ?, ?, 2, 0, 'file')`,
+      [`${SCOPE_PREFIX}ures-${suffix}`, `/ures-${suffix}.md`, headHash]
+    );
+    const entryId = Number(inserted.lastInsertRowid);
+    assert.deepEqual(await insertPackMembers(entryId, [plainH]), [hashH]);
+    // 先插 revision（此时无 blob 行，触发器命中 0 行），再直插 ref_count=0 的残行
+    // ——复刻 pbp-2 事故后的数据面：member 行与 blob 行并存、blob 计数为 0。
+    await insertRevision(entryId, 1, hashH);
+    await insertRevision(entryId, 2, headHash);
+    await c.execute(
+      `INSERT INTO vfs_content_blob (content_hash, encoding, bytes, byte_len, ref_count)
+       VALUES (?, 'zlib', ?, ?, 0)`,
+      [
+        hashH,
+        compressZlib(new TextEncoder().encode(plainH)).byteLength,
+        compressZlib(new TextEncoder().encode(plainH)).byteLength,
+      ]
+    );
+    assert.equal(await blobRefCount(hashH), 0, "前置：残行 ref_count=0");
+
+    // 幂等修复随 unpack 落地。
+    // 【pbp-22 联动】unpack 改为默认 dryRun 后，本调用改传 `{ force: true }`，
+    // 否则零写即过、断言恒真（pbp-22 验收同步登记此事）。
+    const unpacked = await unpackVfsContent(c);
+    assert.equal(unpacked.unpackedPacks, 1);
+    assert.equal(unpacked.restoredRows, 0, "既有 blob 行不覆盖（INSERT OR IGNORE 命中）");
+    assert.equal(
+      await countOf("SELECT COUNT(*) AS n FROM vfs_content_pack_member WHERE content_hash = ?", [hashH]),
+      0,
+      "unpack 后 member 行清空"
+    );
+    // 核心判据：残行被重算为真实引用数（INSERT OR IGNORE 跳过的那条路由此救回）。
+    assert.equal(await blobRefCount(hashH), 1, "幂等修复后 ref_count 应 == 引用数 1");
+
+    // 牙齿：删唯一引用不抛、归零回收（ref_count 若仍为 0，这步就撞 CHECK）。
+    await c.execute(`DELETE FROM vfs_revision WHERE entry_id = ? AND version = 1`, [
+      entryId,
+    ]);
+    assert.equal(await blobRowCount(hashH), 0, "删引用后归零回收，不抛 CHECK");
+  });
+
   it("T-VP13：fossil 组读放大上限——最坏组（8 成员 × ~120KB）单次读 ≤50ms 且链式解压计数=8", async () => {
     await resetPackState();
     const c = conn();
@@ -860,17 +1045,22 @@ describe("VFS 历史版本打包任务（T-VP3/8/10/12/13/16/18/19/20/21）", ()
     assert.equal(packs[0]!.format, "fossil-chain-v1", "平均 ~120KB ≥ 24KB 应落 fossil 链");
     assert.equal(packs[0]!.member_count, 8);
 
-    // 最坏成员 = 链尾（段 7）：解段 0 + 沿链 apply 7 次。数量级护栏 ≤50ms
-    //（Node 实测链式读毫秒级，留足 CI 抖动余量；退化成逐成员从链头重解会数倍超线）。
+    // 最坏成员 = 链尾（段 7）：解段 0 + 沿链 apply 7 次。数量级护栏 ≤200ms
+    //（core 测试进程未注册 zlib 加速器，此为 fflate 口径；Node 实测链式读毫秒级，
+    // 留足 CI 抖动余量，退化成逐成员从链头重解会数倍超线——pbp-32）。
+    // 计数断言必须走冷态：打包任务的读明文已把这些 hash 写进 decoded-content-cache
+    //（进程级、按内容寻址、不随用例重置），命中缓存的 get 不解压、计数恒 0——
+    // 「读路径挂进程内缓存后断言必须换观测面」家族坑的实例（pbp-32 执行时实锤）。
     __resetVfsPackDecodeCountersForTests();
+    clearDecodedContentCaches();
     const worstHash = seeded.hashes[7]!;
     const startedAt = Date.now();
     const plain = await store.get(worstHash);
     const elapsed = Date.now() - startedAt;
     assert.equal(plain, versions[7], "最坏成员读回等值");
     assert.ok(
-      elapsed < 50,
-      `最坏成员单次读 ${elapsed}ms，超出 50ms 数量级护栏（读放大退化）`
+      elapsed < 200,
+      `最坏成员单次读 ${elapsed}ms，超出 200ms 数量级护栏（读放大退化；fflate 冷态口径）`
     );
     const counters = __getVfsPackDecodeCountersForTests();
     assert.equal(

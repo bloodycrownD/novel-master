@@ -100,7 +100,14 @@ export const FOSSIL_GROUP_PLAIN_THRESHOLD_BYTES = 24 * 1024;
 /** 每组成员数上限（spec 拍板 ≤8）。 */
 const GROUP_MEMBER_LIMIT = 8;
 
-/** 每组明文累积上限（spec 拍板 ≤1MB；单成员超限容错单独成组）。 */
+/**
+ * 每组明文累积上限（spec 拍板 ≤1MB；单成员超限容错单独成组）。
+ *
+ * 交叉引用（读侧闸门）：`pack-codec` 的 `FOSSIL_SEGMENT_TARGET_SIZE_LIMIT_BYTES`
+ * 正是本常量——「超限单成员必独占一组 → 只落段 0、永不经 applyDelta」是不变量，
+ * 故读侧可对 delta 声明的输出规模用同一阈值把死。**若这里放开单成员超限与他人
+ * 同组，读侧常量必须同步放宽**，否则正常打包的 pack 会在读路径被误伤。
+ */
 const GROUP_PLAIN_BYTES_LIMIT = 1024 * 1024;
 
 /** 单轮同步预算默认值（CLI 三任务串行最坏 60+60+30=150s；真库 Node 实测搬运全程 1.85s）。 */
@@ -1028,7 +1035,8 @@ export async function verifyVfsContentPacks(
  * blob 行形态统一重写为 `zlib` + 二进制 + 重算 `byte_len`（压缩字节物理
  * 长度；member.compressed_byte_len 是原行快照，重压缩可能差几个字节，
  * byte_len 恒以本行 bytes 的物理长度为准）。已存在的 blob 行（put 抽回等）
- * 不覆盖：内容寻址等值，ref_count 由触发器口径维护着。
+ * 不覆盖：内容寻址等值，ref_count 由事务末的幂等重算 UPDATE 统一校正
+ * （`INSERT OR IGNORE` 命中既有行时不写 ref_count，那条路单靠触发器口径救不回来）。
  */
 export async function unpackVfsContent(
   conn: TdbcConnection
@@ -1090,6 +1098,22 @@ export async function unpackVfsContent(
         `DELETE FROM vfs_content_pack_member WHERE pack_id = ?`,
         [packId]
       );
+      // 幂等 ref_count 修复：上一步的 INSERT OR IGNORE 只对本函数**自己新建**的
+      // blob 行算过 ref_count；命中既有行（put 抽回残留、或历史 bug 落下的
+      // ref_count=0 残行）时静默跳过，那些行的计数仍是错的——后续删引用会撞
+      // CHECK(ref_count >= 0)，无 CHECK 时会误删仍被引用的 blob 行。对本 pack 的
+      // 全部成员 hash 统一重算一遍，天然幂等（值已对时写入同值）。
+      if (memberRows.length > 0) {
+        const placeholders = memberRows.map(() => `?`).join(`,`);
+        await tx.execute(
+          `UPDATE vfs_content_blob SET ref_count = (
+             SELECT COUNT(*) FROM vfs_revision r
+             WHERE r.content_hash = vfs_content_blob.content_hash
+           )
+           WHERE content_hash IN (${placeholders})`,
+          memberRows.map((row) => String(row.content_hash))
+        );
+      }
       await tx.execute(`DELETE FROM vfs_content_pack WHERE pack_id = ?`, [
         packId,
       ]);

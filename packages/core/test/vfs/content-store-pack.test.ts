@@ -161,6 +161,80 @@ function plainChunk(tag: string, suffix: string, repeat: number): string {
 }
 
 // ---------------------------------------------------------------------------
+// 坏 delta 段构造（pbp-1 防御夹具）
+// ---------------------------------------------------------------------------
+
+/** fossil-delta 的 z-base64 数字表（`putInt` 编码 delta 头/指令里的无符号整数）。 */
+const Z_DIGITS =
+  "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz~";
+
+/**
+ * 编码一个 fossil delta 无符号整数（与 fossil-delta 的 `Writer.putInt` 同款：
+ * z-base64、大端先出）。
+ */
+function putDeltaInt(value: number): number[] {
+  if (value === 0) {
+    return [Z_DIGITS.charCodeAt(0)];
+  }
+  const reversed: number[] = [];
+  for (let rest = value; rest > 0; rest = Math.floor(rest / 64)) {
+    reversed.push(Z_DIGITS.charCodeAt(rest % 64));
+  }
+  return reversed.reverse();
+}
+
+/**
+ * 手工伪造一条 fossil delta：头部自述 `limit`（输出规模）为超大值，正文全是
+ * 高度重复的 copy 指令（`cnt @ ofst ,`），zlib 压缩比 ~1000:1 —— 压缩后只有
+ * 几百字节的坏段，`applyDelta` 却会照着自述 limit 分配出数十 MB 输出。
+ *
+ * 尾部 checksum 故意填 0：真实 applyDelta 会在分配完之后抛 `bad checksum`——但
+ * 那时堆已经吃掉了（catch 不掉的堆耗尽才是 P0 本体）。读侧闸门应在 apply 之前
+ * 就拦下。
+ */
+function forgedOversizeDelta(
+  declaredLimit: number,
+  sourceLength: number,
+  copyCount: number
+): Uint8Array {
+  const parts: number[] = [...putDeltaInt(declaredLimit), 0x0a];
+  for (let i = 0; i < copyCount; i++) {
+    parts.push(...putDeltaInt(sourceLength), 0x40, ...putDeltaInt(0), 0x2c);
+  }
+  parts.push(...putDeltaInt(0), 0x3b);
+  return Uint8Array.from(parts);
+}
+
+/**
+ * 手工拼一条两段 fossil pack 流（段 0 = zlib(正常 base 明文)，段 1 = zlib(伪造
+ * 超限 delta)），返回流字节 + 段 1 的区间（供 `decodeFossilChainSpans` 作 span）。
+ */
+function buildTwoSegmentFossilPack(
+  basePlain: Uint8Array,
+  segment1Plain: Uint8Array
+): { bytes: Uint8Array; segment1Span: { offset: number; length: number } } {
+  const segment0 = compressZlib(basePlain);
+  const segment1 = compressZlib(segment1Plain);
+  const header = new Uint8Array(4 + 4 * 2);
+  const headerView = new DataView(header.buffer);
+  headerView.setUint32(0, 2, true);
+  headerView.setUint32(4, segment0.byteLength, true);
+  headerView.setUint32(8, segment1.byteLength, true);
+  const total = header.byteLength + segment0.byteLength + segment1.byteLength;
+  const bytes = new Uint8Array(total);
+  bytes.set(header, 0);
+  bytes.set(segment0, header.byteLength);
+  bytes.set(segment1, header.byteLength + segment0.byteLength);
+  return {
+    bytes,
+    segment1Span: {
+      offset: header.byteLength + segment0.byteLength,
+      length: segment1.byteLength,
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
 // T-VP11：fossil 链编解码回环（纯 logic 层，构造语料固化）
 // ---------------------------------------------------------------------------
 
@@ -263,6 +337,38 @@ describe("pack-codec: T-VP11 fossil 链编解码回环", () => {
       decodeZlibConcatSpans(concat.bytes, [
         { offset: 0, length: totalPlain + 1 },
       ]),
+    );
+  });
+
+  it("T-VP11a 防御：delta 自述输出规模超上限的坏段在 apply 前被拦（堆增量 <50MB）", () => {
+    // 坏段：段 0 正常（64KB 同值字节，压缩后极小），段 1 是手工伪造的 delta——
+    // 头声明 limit=4_000_000_000，正文 400 条重复 copy 指令（若放行即 26MB 输出、
+    // 数百 MB 堆），zlib 压缩后整段只有几百字节。
+    const sourceLength = 64 * 1024;
+    const basePlain = new Uint8Array(sourceLength).fill(0x41);
+    const forged = forgedOversizeDelta(4_000_000_000, sourceLength, 400);
+    const { bytes, segment1Span } = buildTwoSegmentFossilPack(basePlain, forged);
+
+    // 夹具自检：坏段确实小到「几百字节」量级（放大比靠指令重复而非体积）。
+    assert.ok(
+      segment1Span.length < 2048,
+      `伪造坏段压缩后应仅数百字节，实际 ${segment1Span.length}`,
+    );
+
+    const heapBefore = process.memoryUsage().heapUsed;
+    assert.throws(
+      () => decodeFossilChainSpans(bytes, [segment1Span]),
+      (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.match(error.message, /超过上限/);
+        assert.match(error.message, /段 1/);
+        return true;
+      },
+    );
+    const heapDeltaBytes = process.memoryUsage().heapUsed - heapBefore;
+    assert.ok(
+      heapDeltaBytes < 50 * 1024 * 1024,
+      `闸门应在 apply 之前拦下，堆增量应 <50MB，实际 ${(heapDeltaBytes / 1024 / 1024).toFixed(1)}MB`,
     );
   });
 });

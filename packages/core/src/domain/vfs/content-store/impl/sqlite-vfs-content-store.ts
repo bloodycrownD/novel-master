@@ -89,25 +89,45 @@ export class SqliteVfsContentStore implements VfsContentStore {
       return contentHash;
     }
 
+    // 回滚抽回语义：resetHeadToVersion / revive-deleted-entry 的 put 幂等保活把
+    // 已打包历史版本抽回独立 blob 行当 head，故先删同 hash 的 member 行再落
+    // blob 行（pack 流内该段成死区，等整组无成员随空 pack GC，流字节永不改写）。
+    // 先删后插的中间崩溃窗口是「无权威副本」，可接受：put 幂等，重放一次即自愈
+    // （member 已删则按全新内容插回，ref_count 由本分支的重算子查询兜住）。
+    // 抽回信号（member 行存在）同时决定 ref_count 初值口径：绕过 revision 触发
+    // 器新建的 blob 行必须现场重算，否则该 hash 早已被若干 revision 引用、初值 0
+    // 会让后续删引用撞 CHECK(ref_count >= 0)、无 CHECK 时误删仍被引用的行。
+    // 全新内容（member 未命中）沿用 DEFAULT 0 原语句——vfs_revision 无
+    // content_hash 索引，COUNT 子查询是全表扫，不得无条件挂进 put 热路径。
+    const wasPacked = await this.deleteMemberRow(contentHash);
+
     const utf8 = new TextEncoder().encode(plain);
     const compressed = compressZlib(utf8);
     const bytes = tightBytes(compressed);
-    await executeTemplate(
-      this.conn,
-      this.parser,
-      `INSERT INTO vfs_content_blob (content_hash, encoding, bytes, byte_len)
-       VALUES (#{contentHash}, #{encoding}, #{bytes}, #{byteLen})`,
-      {
-        contentHash,
-        encoding: VFS_CONTENT_ENCODING_ZLIB,
-        bytes,
-        byteLen: bytes.byteLength,
-      }
-    );
-    // 回滚抽回语义：resetHeadToVersion / revive-deleted-entry 的 put 幂等保活把
-    // 已打包历史版本抽回独立 blob 行当 head，此刻删除同 hash 的 member 行；
-    // pack 流内该段成死区，等整组无成员随空 pack GC（流字节永不改写）。
-    await this.deleteMemberRow(contentHash);
+    const params = {
+      contentHash,
+      encoding: VFS_CONTENT_ENCODING_ZLIB,
+      bytes,
+      byteLen: bytes.byteLength,
+    };
+    if (wasPacked) {
+      await executeTemplate(
+        this.conn,
+        this.parser,
+        `INSERT INTO vfs_content_blob (content_hash, encoding, bytes, byte_len, ref_count)
+         VALUES (#{contentHash}, #{encoding}, #{bytes}, #{byteLen},
+           (SELECT COUNT(*) FROM vfs_revision WHERE content_hash = #{contentHash}))`,
+        params
+      );
+    } else {
+      await executeTemplate(
+        this.conn,
+        this.parser,
+        `INSERT INTO vfs_content_blob (content_hash, encoding, bytes, byte_len)
+         VALUES (#{contentHash}, #{encoding}, #{bytes}, #{byteLen})`,
+        params
+      );
+    }
     return contentHash;
   }
 
@@ -406,13 +426,19 @@ export class SqliteVfsContentStore implements VfsContentStore {
     );
   }
 
-  /** 删除同 hash 的 member 行（put 抽回；无行时是一次点查零成本）。 */
-  private async deleteMemberRow(contentHash: string): Promise<void> {
-    await executeTemplate(
+  /**
+   * 删除同 hash 的 member 行（put 抽回；无行时是一次点查零成本）。
+   *
+   * @returns 是否真的删掉了 member 行——即「本次 put 走的是回滚抽回」信号，
+   *   调用方据此决定新落 blob 行的 ref_count 初值是否需要现场重算。
+   */
+  private async deleteMemberRow(contentHash: string): Promise<boolean> {
+    const result = await executeTemplate(
       this.conn,
       this.parser,
       `DELETE FROM vfs_content_pack_member WHERE content_hash = #{contentHash}`,
       { contentHash }
     );
+    return result.changes > 0;
   }
 }

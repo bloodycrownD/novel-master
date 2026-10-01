@@ -17,7 +17,7 @@
  * @module domain/vfs/content-store/logic/pack-codec
  */
 
-import { applyDelta, createDelta } from "fossil-delta";
+import { applyDelta, createDelta, getDeltaTargetSize } from "fossil-delta";
 import { compressZlib, decompressZlib } from "./zlib-codec.js";
 
 /** 小组 format：明文拼接、单流 zlib。 */
@@ -204,6 +204,26 @@ export function parseFossilSegmentTable(
 }
 
 /**
+ * fossil delta 段的输出规模闸门（apply 前校验 delta 头自述的 targetSize）。
+ *
+ * 闸门依据不是「单成员必 < 1MB」——写侧对单成员超限有容错（`chunkCandidateGroups`
+ * 的 `current.length > 0` 前置让首个成员再大也收进组）。真正成立的不变量是
+ * 「**超限单成员必独占一组 → 只落段 0、永远不经 applyDelta**」，故任何进入
+ * `applyDelta` 的段其 targetSize 必 < 写侧 `GROUP_PLAIN_BYTES_LIMIT`。
+ *
+ * 方向性提醒：**写侧若允许超限成员与他人同组，必须同步放宽本常量**（否则正常
+ * 打包出的 pack 会在读侧被本闸门误伤）。两处常量互为交叉引用，耦合是隐式的
+ * （不起共享常量模块）——改任一侧都必须同时看另一侧。
+ *
+ * 为什么需要它：fossil-delta 的 `applyDelta` 只信 delta 头自述的 `limit`（上界
+ * 2^32-1），输出规模与 delta 字节数、source 长度无任何比例约束。几百字节的坏
+ * 段（高度重复的 copy 指令流 + zlib 压缩比 ~1000:1）即可放大到数十 MB 输出、
+ * 数百 MB 堆，一次 `contentStore.get()` 就能打死宿主进程（堆耗尽 catch 不掉）；
+ * pack 永不重写 → 一次坏数据永久毒化每次读。
+ */
+const FOSSIL_SEGMENT_TARGET_SIZE_LIMIT_BYTES = 1024 * 1024;
+
+/**
  * 解码 fossil 链组的若干成员：解段表 → 解段 0 得 v0 → 沿链 applyDelta 到所需最大
  * 段号，中间明文全组共享（一次链遍历喂所有成员，而非逐成员从段 0 重解）。
  *
@@ -245,10 +265,18 @@ export function decodeFossilChainSpans(
   chain[0] = current;
   const maxIndex = Math.max(...memberIndices);
   for (let index = 1; index <= maxIndex; index++) {
-    current = applyDelta(
-      current,
-      inflateFossilSegment(packBytes, table.segments[index]!)
-    );
+    const delta = inflateFossilSegment(packBytes, table.segments[index]!);
+    // applyDelta 输出规模闸门：坏段可自述 4GB 的 targetSize（几百字节 delta 放大
+    // 数十 MB 输出、打死宿主堆），必须在 apply 之前拦（详见常量注释）。
+    const targetSize = getDeltaTargetSize(delta);
+    if (targetSize > FOSSIL_SEGMENT_TARGET_SIZE_LIMIT_BYTES) {
+      throw new Error(
+        `fossil-chain-v1 段 ${index} delta 声明的输出规模 ${targetSize} 字节超过上限 ${
+          FOSSIL_SEGMENT_TARGET_SIZE_LIMIT_BYTES
+        } 字节（坏段防御，拒绝 apply）`
+      );
+    }
+    current = applyDelta(current, delta);
     chain[index] = current;
   }
   return memberIndices.map((index) => chain[index]!);
