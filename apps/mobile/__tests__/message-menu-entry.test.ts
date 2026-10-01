@@ -1,10 +1,13 @@
 /**
  * T-MN1 / T-MN2：消息菜单项集合 + 右上角 ⋯ 入口接线。
  *
- * 分级（tests/G-3）：前两段断的是 webview 侧脚本文本（menu.ts / MessageRow /
- * bind-shell-events），与 boot-script/annotate-* 同类，保留源码契约；
- * 第三段 legacy MessageList（RN 组件）因依赖消息列表全链渲染，行为化代价高，
- * 源码契约测豁免，保留源码断言。
+ * 全部是 webview 侧脚本文本契约（menu.ts / MessageRow / bind-shell-events），
+ * 与 boot-script/annotate-* 同类，保留源码契约。
+ *
+ * Step 8：原第三段「legacy MessageList 同步 ⋯ 入口」（读 `MessageList.tsx` 源码
+ * 断 `MessageMenuRow` / `onLongPress` 缺席）随 legacy RN 转录引擎退役删除——
+ * 被测文件本身已不存在。RN 侧锚定消息菜单（`MessageActionMenu.tsx`）同期退场，
+ * 消息菜单只剩 web 文档内这一张。
  */
 import {readFileSync} from 'node:fs';
 import {join} from 'node:path';
@@ -53,13 +56,5 @@ describe('message menu entry (T-MN1 / T-MN2)', () => {
     expect(bindShell).not.toContain('onMessagePointerDown');
     expect(bindShell).not.toContain('touchstart');
     expect(bindShell).toContain('onRowsClick');
-  });
-
-  it('T-MN2: legacy MessageList 同步 ⋯ 入口', () => {
-    const list = readSrc('src/components/chat/MessageList.tsx');
-    expect(list).toContain('MessageMenuRow');
-    expect(list).toContain('消息操作');
-    expect(list).toContain('⋯');
-    expect(list).not.toContain('onLongPress');
   });
 });

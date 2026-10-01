@@ -34,12 +34,50 @@ const mockOlderMessage = {
 };
 const mockLoadTail = jest.fn(async () => [mockTailMessage]);
 const mockLoadPage = jest.fn(async () => [mockOlderMessage]);
-let mockLatestMessageListProps: any;
 let mockLatestBottomSheetProps: any;
-// transcript 引擎按用例切换：默认 legacy-rn（既有用例，legacy 分支挂 MessageList +
-// 旧 ChatComposer）；webview 用例（T-R3 顺序断言）切到 'webview'，挂真统一宿主
-// ChatConversationWebView（单实例承载转录 + dock）。
-let mockTranscriptEngine: 'legacy-rn' | 'webview' = 'legacy-rn';
+
+/**
+ * 对话面的消息面观察点（Step 8 迁居）。
+ *
+ * 原来这里挂一个 mock `MessageList` 捕获它的 props，用 `streamingText` /
+ * `messages` 两个字段当观察口。legacy 转录引擎退役后 `MessageList` 没了，
+ * 观察口改挂在**真**统一宿主 `ChatConversationWebView` 上——它本来就是这屏
+ * 转录 + dock 的唯一宿主，props 直接就是 Provider 交出来的消息面，读它比读
+ * 一个被 mock 出来的中间组件更贴近真实链路。
+ */
+function conversationMessages(
+  root: TestRenderer.ReactTestInstance,
+): readonly unknown[] {
+  return root.findByType(
+    require('../src/components/chat/ChatConversationWebView')
+      .ChatConversationWebView as React.ComponentType<{messages: unknown[]}>,
+  ).props.messages;
+}
+
+/**
+ * 「加载更早消息」入口（Step 8 迁居）。
+ *
+ * 原来是一个 RN `Pressable`（legacy `MessageList` 的 `listHeaderComponent`）。
+ * 统一宿主里这个入口在转录文档顶部，web 侧点它派一条 `loadOlder` 上行
+ * （v:1 信封），宿主转交 `onLoadOlder` —— 落点还是同一个 Provider 回调，
+ * 断的仍是被调到了没有，变的只是从「按 RN 按钮」变成「按 web 上行」。
+ */
+async function requestLoadOlder(
+  root: TestRenderer.ReactTestInstance,
+): Promise<void> {
+  const webView = root.findByType(
+    require('react-native-webview').default as React.ComponentType<{
+      onMessage?: (event: {nativeEvent: {data: string}}) => void;
+    }>,
+  );
+  await act(async () => {
+    webView.props.onMessage?.({
+      nativeEvent: {
+        data: JSON.stringify({v: 1, type: 'loadOlder', payload: {}}),
+      },
+    });
+  });
+}
 
 const mockRunAgentTurn = jest.fn(
   () => new Promise(() => undefined) as Promise<unknown>,
@@ -230,9 +268,6 @@ jest.mock('../src/components/chrome/AppHeader', () => ({
 jest.mock('../src/components/chat/ChatMetaBar', () => ({
   ChatMetaBar: () => null,
 }));
-jest.mock('../src/components/chat/MessageActionMenu', () => ({
-  MessageActionMenu: () => null,
-}));
 jest.mock('../src/components/sheet/BottomSheetMenu', () => ({
   BottomSheetMenu: (props: any) => {
     mockLatestBottomSheetProps = props;
@@ -264,65 +299,12 @@ jest.mock('../src/components/ui/TextPromptModal', () => ({
   TextPromptModal: () => null,
 }));
 
-jest.mock('../src/storage/chat-transcript-engine', () => ({
-  defaultChatTranscriptEngine: () => mockTranscriptEngine,
-  readChatTranscriptEngine: jest.fn(async () => mockTranscriptEngine),
+jest.mock('../src/components/chat/MessageEditModal', () => ({
+  MessageEditModal: () => null,
 }));
-
-// 注意：webview 分支挂的是**真**统一宿主 ChatConversationWebView（用例要经
-// webview mock 读下行消息），故此处不 mock 它。它的 ready 认 v:2 且 dock 域需
-// 能力位 composer-dock——缺任一项，宿主会走 8s 兜底错误态 / 输入区降级、下行全丢，
-// 用例会变成「什么都没发生」的假绿。
-jest.mock('../src/components/chat/MessageList', () => {
-  const ReactNative = require('react-native');
-  return {
-    MessageList: (props: any) => {
-      mockLatestMessageListProps = props;
-      return props.listHeaderComponent ?? null;
-    },
-  };
-});
-
-jest.mock('../src/components/chat/ChatComposer', () => {
-  const ReactNative = require('react-native');
-  const {
-    EVENT_AGENT_RUN_STARTED,
-    EVENT_AGENT_STREAM_TEXT_DELTA,
-  } = require('@novel-master/core/events');
-  return {
-    ChatComposer: (props: any) => (
-      <ReactNative.View>
-        <ReactNative.Pressable
-          accessibilityLabel="emit-bursty-stream"
-          onPress={() => {
-            const bus = mockRuntime.eventBus;
-            mockHarnessManager?.startRun('s1', 'p1', 'hi');
-            bus.publish(EVENT_AGENT_RUN_STARTED, {
-              sessionId: 's1',
-              projectId: 'p1',
-              runId: 'r1',
-            });
-            bus.publish(EVENT_AGENT_STREAM_TEXT_DELTA, {
-              sessionId: 's1',
-              runId: 'r1',
-              text: 'A',
-            });
-            bus.publish(EVENT_AGENT_STREAM_TEXT_DELTA, {
-              sessionId: 's1',
-              runId: 'r1',
-              text: 'B',
-            });
-            bus.publish(EVENT_AGENT_STREAM_TEXT_DELTA, {
-              sessionId: 's1',
-              runId: 'r1',
-              text: 'C',
-            });
-          }}
-        />
-      </ReactNative.View>
-    ),
-  };
-});
+jest.mock('../src/components/agent/AgentPickerModal', () => ({
+  AgentPickerModal: () => null,
+}));
 
 import {ChatTabScreen} from '../src/screens/tabs/ChatTabScreen';
 
@@ -374,7 +356,6 @@ describe('ChatTabScreen integration', () => {
   beforeEach(() => {
     jest.useFakeTimers();
     mockFocusInvoked = false;
-    mockLatestMessageListProps = undefined;
     mockLatestBottomSheetProps = undefined;
     mockLoadTail.mockClear();
     mockLoadPage.mockClear();
@@ -393,8 +374,6 @@ describe('ChatTabScreen integration', () => {
     mockRuntime.sessionStreamUnitManager = mockHarnessManager;
     // 视图缓存是模块级单例，跨用例残留会干扰「回源 vs 缓存命中」断言。
     clearAllSessionViewCaches();
-    // 重进恢复相关 mock 复位（个别用例会覆盖实现）
-    mockTranscriptEngine = 'legacy-rn';
     clearMockWebViewPostMessages();
     mockRuntime.abortRegistry.has.mockImplementation(() => false);
     mockRuntime.streamRegistry.get.mockImplementation(() => undefined);
@@ -442,10 +421,7 @@ describe('ChatTabScreen integration', () => {
     });
     expect(mockRuntime.messages.listBySession).not.toHaveBeenCalled();
 
-    const loadMore = findPressableByText(tree!.root, '加载更早消息');
-    await act(async () => {
-      loadMore.props.onPress();
-    });
+    await requestLoadOlder(tree!.root);
 
     expect(mockRuntime.messages.listBySessionPage).toHaveBeenCalledWith('s1', {
       limit: 40,
@@ -487,10 +463,7 @@ describe('ChatTabScreen integration', () => {
     });
     expect(mockLoadTail).not.toHaveBeenCalled();
 
-    const loadMore = findPressableByText(tree!.root, '加载更早消息');
-    await act(async () => {
-      loadMore.props.onPress();
-    });
+    await requestLoadOlder(tree!.root);
 
     expect(mockRuntime.messages.listBySessionPage).toHaveBeenCalledWith(
       's1',
@@ -506,34 +479,45 @@ describe('ChatTabScreen integration', () => {
     });
     await enterConversation(tree!);
 
-    const emit = tree!.root.find(
-      node => node.props?.accessibilityLabel === 'emit-bursty-stream',
-    );
+    // 起 run + 连发三段 delta（Step 8 迁居：原先这段是 mock `ChatComposer`
+    // 里一个 `emit-bursty-stream` 按钮的 onPress，组件删了改由用例直接发事件，
+    // 断的仍是「单元 ingress 合并窗 → apply 节拍 → 投影 partial」这条节拍链）。
     await act(async () => {
-      emit.props.onPress();
+      const bus = mockRuntime.eventBus;
+      mockHarnessManager!.startRun('s1', 'p1', 'hi');
+      bus.publish(EVENT_AGENT_RUN_STARTED, {
+        sessionId: 's1',
+        projectId: 'p1',
+        runId: 'r1',
+      });
+      for (const text of ['A', 'B', 'C']) {
+        bus.publish(EVENT_AGENT_STREAM_TEXT_DELTA, {
+          sessionId: 's1',
+          runId: 'r1',
+          text,
+        });
+      }
     });
     // 单元 ingress 32ms 合并窗口：delta 不会同步进 apply 缓冲，投影不动。
-    expect(mockLatestMessageListProps.streamingText).toBe('');
+    expect(mockHarnessManager!.snapshot('s1')?.partialText).toBe('');
 
     await act(async () => {
       jest.advanceTimersByTime(32);
     });
     // 合并后一块 text chunk 进 apply 缓冲（64ms 节拍未到），投影仍不动。
-    expect(mockLatestMessageListProps.streamingText).toBe('');
+    expect(mockHarnessManager!.snapshot('s1')?.partialText).toBe('');
 
     await act(async () => {
       jest.advanceTimersByTime(64);
     });
-    // apply 节拍到：partial 进投影，legacy MessageList 的 streamingText
-    // props 从投影读取。
-    expect(mockLatestMessageListProps.streamingText).toBe('ABC');
+    // apply 节拍到：partial 进投影（统一宿主的流式面从这条投影读）。
+    expect(mockHarnessManager!.snapshot('s1')?.partialText).toBe('ABC');
   });
 
   it('T-R3 顺序：重进注入的 streamDelta 晚于 sessionSnapshot（先 snapshot 后 inject）', async () => {
-    // 重进恢复现场：s1 的 run 进行中且单元已有 partial；webview 引擎下挂真
-    // ChatConversationWebView，sessionSnapshot 与注入 delta 都经桥的
-    // postToWeb（webview mock 落盘）按序记录。
-    mockTranscriptEngine = 'webview';
+    // 重进恢复现场：s1 的 run 进行中且单元已有 partial；统一宿主是这屏唯一
+    // 转录面，sessionSnapshot 与注入 delta 都经桥的 postToWeb（webview mock
+    // 落盘）按序记录。
     mockHarnessManager!.startRun('s1', 'p1', 'hi');
     mockRuntime.eventBus.publish(EVENT_AGENT_RUN_STARTED, {
       sessionId: 's1',
@@ -688,7 +672,7 @@ describe('ChatTabScreen integration', () => {
     await enterConversation(tree!);
 
     // 无单元基线：hook 路径加载旧 tail（[mockTailMessage]）并写视图缓存。
-    expect(mockLatestMessageListProps.messages).toEqual([mockTailMessage]);
+    expect(conversationMessages(tree!.root)).toEqual([mockTailMessage]);
 
     // 发起 run 并回填 runId：hasUnit=true，消息面切到单元投影。
     await act(async () => {
@@ -717,7 +701,7 @@ describe('ChatTabScreen integration', () => {
         await Promise.resolve();
       }
     });
-    expect(mockLatestMessageListProps.messages).toEqual([
+    expect(conversationMessages(tree!.root)).toEqual([
       finalUserMessage,
       finalAssistantMessage,
     ]);
@@ -731,7 +715,7 @@ describe('ChatTabScreen integration', () => {
       }
     });
     expect(mockHarnessManager!.snapshot('s1')).toBe(null);
-    expect(mockLatestMessageListProps.messages).toEqual([
+    expect(conversationMessages(tree!.root)).toEqual([
       finalUserMessage,
       finalAssistantMessage,
     ]);

@@ -90,7 +90,7 @@ function ChatTabScreenContent({
       sessionListPanel: ctx.scope.sessionListPanel,
       sessionDrawerOpen: ctx.sessionDrawerOpen,
       mermaidViewerOpen: ctx.mermaidViewerOpen,
-      messageMenuOpen: ctx.messageMenuTarget != null || ctx.webMenuOpen,
+      messageMenuOpen: ctx.webMenuOpen,
       messageEditOpen: ctx.messageEditPrompt != null,
       modelPickerOpen: ctx.modelPickerOpen,
       agentPickerOpen: ctx.agentPickerOpen,

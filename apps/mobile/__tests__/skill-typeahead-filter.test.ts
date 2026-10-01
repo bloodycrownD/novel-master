@@ -6,7 +6,8 @@
  * 过滤（spec「typeahead 自治」· r2-P1-1 前置抽取）。抽出后必须锁住三件事：
  * 过滤口径（跳过 invalid / 名称与描述双路匹配）、顺序（按入参序，不重排）、
  * 截断（limit 封顶 + 默认 5）；另断言 tsx 侧 re-export 是同一个函数引用，
- * 保证既有消费方（ChatComposer / PromptEditorScreen）import 路径不变。
+ * 保证既有消费方（PromptEditorScreen；chat 链的 composer controller 亦同引）
+ * import 路径不变。
  */
 import {describe, expect, it} from '@jest/globals';
 import type {EffectiveSkill} from '@novel-master/core/skills';

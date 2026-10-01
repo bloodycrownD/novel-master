@@ -100,10 +100,58 @@ describe('mermaid 全屏查看器两管线接线 (T-MF3)', () => {
     expect(main).toMatch(
       /renderMermaidBlocks\(docRoot\)[\s\S]*refreshAnnotateAfterDocument/,
     );
-    // 全屏挂接在 registerSetDocumentView 回调之外（模块刈处一行调用）
-    expect(main).toMatch(
-      /\}\);\n\nbindAnnotateUi[\s\S]*mountMermaidViewerPortal/,
-    );
+    // 全屏挂接在 registerSetDocumentView 回调之外（模块刈处一行调用）。
+    // 断言意图 = 「`registerSetDocumentView(...)` 的闭合大括号之后才是
+    // bindAnnotateUi / mountMermaidViewerPortal」——即挂接不在回调体内。
+    // 换行用 `[\s\S]+` 而不是字面 `\n\n`：仓库里两种换行都有（git 检出在
+    // Windows 上是 CRLF，Linux CI 上是 LF），字面量断言会随平台红。
+    expect(main).toMatch(/\}\);[\s\S]+bindAnnotateUi[\s\S]*mountMermaidViewerPortal/);
+  });
+});
+
+/**
+ * Step 8 补强：chat 侧薄入口化后的装配链完整性。
+ *
+ * 旧 `chat-transcript/webview/main.ts` 是「有顶层装配副作用的 esbuild 入口」，
+ * Step 1 工厂化后它退化为「import 工厂 + 一行调用 + re-export」；于是
+ * 「main.ts 含 `mountMermaidViewerPortal` / `attachMermaidViewerDelegation`」
+ * 这条字面量断言**仅靠 re-export 行就能满足**——装配真源搬到了
+ * `runtime/factory.ts`，断言却没跟过去，变成了一个永远为真的空断言。
+ *
+ * 这里把意图（装配链完整存在）按新结构钉死：薄入口调工厂 + 工厂内五个装配动作
+ * 齐全 + mermaid 两个挂接在工厂体里真的被调用（不是只 import 进来）。
+ */
+describe('chat-transcript 薄入口 + 工厂装配链（Step 1 工厂化 / Step 8 补强）', () => {
+  it('薄入口只做「import 工厂 + 一行调用 + re-export」', () => {
+    const main = webSrc('chat-transcript/webview/main.ts');
+    expect(main).toContain("from './runtime/factory'");
+    expect(main).toContain('createTranscriptRuntime()');
+    // 装配副作用不得回流到入口（否则合成包 import 它会双 boot/双 ready）
+    expect(main).not.toContain('startTranscriptBoot(');
+    expect(main).not.toContain('registerRenderContextMenu(');
+    expect(main).not.toContain('registerRenderRows(');
+    // re-export 行（契约测按字面量检索的名字出口仍在）
+    expect(main).toContain('mountMermaidViewerPortal');
+    expect(main).toContain('attachMermaidViewerDelegation');
+  });
+
+  it('工厂体内五个装配动作齐全，mermaid 两挂接真被调用', () => {
+    const factory = webSrc('chat-transcript/webview/runtime/factory.ts');
+    for (const symbol of [
+      'registerRenderContextMenu',
+      'registerRenderRows',
+      'measureRowWindow',
+      'mountMermaidViewerPortal(',
+      'attachMermaidViewerDelegation(',
+      'startTranscriptBoot(',
+    ]) {
+      expect(factory).toContain(symbol);
+    }
+    // 挂接目标 portal 仍是包内那个（与 index.html 的
+    // #mermaid-viewer-portal 对应）
+    expect(factory).toContain("'mermaid-viewer-portal'");
+    // boot 收尾：两个可选参数按位透传（bindChannel / emitReady）
+    expect(factory).toContain('startTranscriptBoot({bindChannel, emitReady})');
   });
 });
 

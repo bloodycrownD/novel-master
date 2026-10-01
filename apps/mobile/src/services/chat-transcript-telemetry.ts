@@ -24,12 +24,9 @@ export type ChatTranscriptTelemetryEvent =
     }
   | {
       readonly name: 'menu_open';
-    }
-  | {
-      readonly name: 'legacy_cache_discarded';
-      readonly reason: 'wrong_version';
-      readonly seenVersion?: number;
     };
+// Step 8：`legacy_cache_discarded`（读到 v1 快照时上报）随 legacy 转录引擎退役删除——
+// 读侧已无 v1 回落源，这条事件永不触发，留着只会让人以为还有双引擎在跑。
 
 export function emitChatTranscriptTelemetry(
   event: ChatTranscriptTelemetryEvent,

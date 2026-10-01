@@ -6,6 +6,7 @@ import {Platform} from 'react-native';
 import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
 import {ChatTranscriptWebView} from '@/components/chat/ChatTranscriptWebView';
+import {ChatConversationWebView} from '@/components/chat/ChatConversationWebView';
 import {RichDocumentWebView} from '@/components/vfs/RichDocumentWebView';
 import {CodeEditorWebView} from '@/components/vfs/CodeEditorWebView';
 import {
@@ -159,6 +160,31 @@ describe('WebView URI load (T-BB-04)', () => {
         'file:///android_asset/webview/chat-transcript/',
       );
       expect(webView.props.javaScriptEnabled).toBe(true);
+    });
+
+    it('ChatConversationWebView：source.uri + 双端必配 props（Step 6 补）', () => {
+      let root: TestRenderer.ReactTestRenderer;
+      act(() => {
+        root = TestRenderer.create(
+          <ChatConversationWebView sessionKey="p1:s1" messages={[]} />,
+        );
+      });
+      const webView = root!.root.findByType(
+        require('react-native-webview').default as React.ComponentType,
+      );
+      expect(webView.props.source).toEqual({
+        uri: 'file:///android_asset/webview/chat-conversation/index.html',
+      });
+      expect(webView.props.allowFileAccess).toBe(true);
+      expect(webView.props.allowFileAccessFromFileURLs).toBe(true);
+      expect(webView.props.allowingReadAccessToURL).toBe(
+        'file:///android_asset/webview/chat-conversation/',
+      );
+      expect(webView.props.javaScriptEnabled).toBe(true);
+      // 合成包额外两项：sec/D-1 收紧到 file://（包内放行、外跳/拒绝在守卫里），
+      // 以及转录滚动归文档所有 → 原生滚动关掉。
+      expect(webView.props.originWhitelist).toEqual(['file://']);
+      expect(webView.props.scrollEnabled).toBe(false);
     });
 
     it('RichDocumentWebView：source.uri + 双端必配 props', () => {

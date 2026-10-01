@@ -5,10 +5,15 @@
  * 换为单元投影派生（status 为 starting|running）；resetStreamingDisplay
  * （原 useSessionStream 的 state 清空）换为 manager 的 reset-stream 控制消息
  * 广播（webview 侧 resetStream，单元 partial 由 core step 边界清零）。
+ *
+ * Step 8（legacy 转录引擎退役）：消息菜单只剩 web 一条路径——`onWebMenuOpenChange`
+ * / `onWebMessageMenuAction`（webview 内菜单 → RN 处置）。原先的
+ * `handleMessageLongPress`（RN 长按 → `MessageActionMenu`）与
+ * `onMessageMenuSelect` / `messageMenuItems`（驱动那张 RN 弹层）随
+ * `MessageActionMenu.tsx` 一并删除；RN 侧不再有任何消息菜单浮层。
  */
 import {useCallback, useRef} from 'react';
 import {Alert} from 'react-native';
-import {buildMessageActionItems} from '@/components/chat/message-edit';
 import {clearSessionWorkplaceKkv} from '@/services/workplace-block.service';
 import {createSnapshotCompleteSignal} from '@/services/snapshot-complete-signal';
 import {useChatTabContext} from './ChatTabProvider';
@@ -30,9 +35,8 @@ export function useChatTabController() {
   const sessionRunActive =
     ctx.unitView?.status === 'starting' || ctx.unitView?.status === 'running';
 
-  // 流式显示清理的单元等效：请求单元向全句柄广播 reset-stream（legacy
-  // MessageList 的 partial props 随投影清空由消费方自理——rollback/fork 后
-  // 消息面以落库行为准）。
+  // 流式显示清理的单元等效：请求单元向全句柄广播 reset-stream（消息面
+  // partial 随投影清空——rollback/fork 后消息面以落库行为准）。
   const resetStreamingDisplay = useCallback(() => {
     if (ctx.sessionId != null) {
       ctx.runtime.sessionStreamUnitManager.requestStreamReset(ctx.sessionId);
@@ -72,20 +76,6 @@ export function useChatTabController() {
     setMessageEditPrompt: ctx.setMessageEditPrompt,
   });
 
-  const handleMessageLongPress = useCallback(
-    (
-      msg: import('@novel-master/core/chat').ChatMessage,
-      anchor: import('@/components/chat/MessageActionMenu').MessageMenuAnchor,
-    ) => {
-      if (sessionRunActive) {
-        return;
-      }
-      ctx.setMessageMenuTarget(msg);
-      ctx.setMessageMenuAnchor(anchor);
-    },
-    [ctx, sessionRunActive],
-  );
-
   const handleCapturePromptFileBlock = useCallback(() => {
     if (ctx.projectId == null || ctx.sessionId == null) {
       return;
@@ -110,10 +100,6 @@ export function useChatTabController() {
   const onWebMenuOpenChange = useCallback(
     (open: boolean) => {
       ctx.setWebMenuOpen(open);
-      if (!open) {
-        ctx.setMessageMenuTarget(undefined);
-        ctx.setMessageMenuAnchor(undefined);
-      }
     },
     [ctx],
   );
@@ -128,23 +114,6 @@ export function useChatTabController() {
     },
     [ctx, messageActions],
   );
-
-  const onMessageMenuSelect = useCallback(
-    (action: string) => {
-      const target = ctx.messageMenuTarget;
-      ctx.closeMessageMenu();
-      if (target == null) {
-        return;
-      }
-      messageActions.handleMessageMenuAction(target, action);
-    },
-    [ctx, messageActions],
-  );
-
-  const messageMenuItems =
-    ctx.messageMenuTarget != null
-      ? buildMessageActionItems(ctx.messageMenuTarget)
-      : [];
 
   const confirmBatchDeleteSessions = useCallback(
     (count: number, onConfirm: () => void) => {
@@ -161,13 +130,10 @@ export function useChatTabController() {
 
   return {
     ...messageActions,
-    handleMessageLongPress,
     handleCapturePromptFileBlock,
     onNavigateRealPrompt,
     onWebMenuOpenChange,
     onWebMessageMenuAction,
-    onMessageMenuSelect,
-    messageMenuItems,
     confirmBatchDeleteSessions,
     closeMessageMenu: ctx.closeMessageMenu,
     notifySnapshotComplete,

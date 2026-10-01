@@ -7,6 +7,7 @@
 import {readFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {readWebViewDistFile} from './helpers/read-webview-dist';
+import {composerToolBtnStyle} from '../src/web/chat-conversation/styles/dock-style-reference';
 
 function bootScript(): string {
   return readWebViewDistFile('chat-conversation', 'app.js');
@@ -18,6 +19,11 @@ function indexHtml(): string {
 
 function appCss(): string {
   return readWebViewDistFile('chat-conversation', 'app.css');
+}
+
+/** 合成包 web 源文件（相对 src/web）。 */
+function webSrc(rel: string): string {
+  return readFileSync(join(__dirname, '../src/web', rel), 'utf8');
 }
 
 type ShellNode = {tag: string; id: string | null; parent: string | null};
@@ -286,8 +292,50 @@ describe('chat-conversation dock 样式数值清单（Step 4 · T-CU10 样式相
     expect(source).toMatch(/html,\s*body\s*\{[^}]*background:\s*var\(--bg/);
   });
 
-  it('T-CC-CSS-11: dist 含转录段关键 selector（基底补全的回归防线）', () => {
-    const rules = cssRules(appCss());
+  /**
+   * T-FS1 迁居点（Step 8）：⛶ / @ / $ 同排三钮「同款圆钮」的样式相等断言。
+   *
+   * 原来这条断言长在 `composer-fullscreen.test.tsx` 里，量的是 RN 侧
+   * `ChatComposer` 工具栏三个 Pressable 的展平 style。Step 8 legacy 转录引擎
+   * 退役后 `ChatComposer.tsx` 整个删掉，⛶ 已经是 web 文档里的
+   * `<button class="toolbar__btn toolbar__fullscreen">`，RN 侧没有这个元素了。
+   *
+   * 断言没有跟着消失，而是换了参照面：RN 侧的真源被 Step 6 提前手抄进了
+   * `dock-style-reference.ts`（`ChatComposer.tsx` 一删，数值出处就没了），
+   * 于是「相等」由 **web CSS 规则 ⇄ RN 参照常量** 逐项对。
+   * 描边宽度按 hairline 量纲断言（0 < w ≤ 1）：RN 的 `StyleSheet.hairlineWidth`
+   * 在 iOS 是 0.33、Android 是 0.5，锁死某个平台的值会让这条断言在另一个
+   * 平台红掉，而 hairline 的语义就是「设备上一根物理像素」这一量级。
+   */
+  it('T-FS1 迁居：⛶ / @ / $ 三钮同款 36 圆钮 + hairline 描边，与 RN 参照常量相等', () => {
+    const toolBtn = rule(appCss(), '.toolbar__btn');
+    expect(toolBtn).toMatch(/width:\s*36px/);
+    expect(toolBtn).toMatch(/height:\s*36px/);
+    expect(toolBtn).toMatch(/border-radius:\s*18px/);
+    // 与 RN 参照常量 composerToolBtnStyle 的 36/36/18 逐项相等
+    expect(composerToolBtnStyle.width).toBe(36);
+    expect(composerToolBtnStyle.height).toBe(36);
+    expect(composerToolBtnStyle.borderRadius).toBe(18);
+    const borderWidth = Number(
+      /border:\s*([\d.]+)px/.exec(toolBtn)?.[1] ?? Number.NaN,
+    );
+    expect(Number.isFinite(borderWidth)).toBe(true);
+    expect(borderWidth).toBeGreaterThan(0);
+    expect(borderWidth).toBeLessThanOrEqual(1);
+
+    // 三个引用钮只加各自的修饰类（⛶ 另设字号），圆钮本体是同一条规则——
+    // 「同排同款」在 CSS 层的落点就是它们共用 `.toolbar__btn`。
+    const dock = webSrc('chat-conversation/webview/dock.ts');
+    for (const modifier of [
+      'toolbar__btn toolbar__fullscreen',
+      'toolbar__btn toolbar__at',
+      'toolbar__btn toolbar__skill',
+    ]) {
+      expect(dock).toContain(modifier);
+    }
+  });
+
+  it('T-CC-CSS-11: dist 含转录段关键 selector（基底补全的回归防线）', () => {    const rules = cssRules(appCss());
     // 这批 selector 只可能来自 transcript.css 基底——dock 段没有同名物。
     // 缺任意一条 = 基底被截断（合成包会退化成「只有壳 + dock」的空白转录区）。
     for (const selector of [

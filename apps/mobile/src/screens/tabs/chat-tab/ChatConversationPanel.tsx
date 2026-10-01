@@ -1,24 +1,22 @@
 /**
  * Chat tab conversation subview: transcript, composer, session workspace.
  *
- * 布局形态（chat-webview-unify Step 7）：
- * - `useWebviewTranscript === true`（webview 分支）——裁切容器内**只有一个**
- *   `<ChatConversationWebView>`：转录 + 输入框 dock 合并在同一个文档里 flex 布局，
- *   Android 与 iOS 同构（iOS 不套裁切容器）。两个 RN Modal 选择器仍挂本面板
- *   （选文件 / 选技能后经 M7 命令式通道回填正文）。
- * - `useWebviewTranscript === false`（`legacy-rn` 分支）——`MessageList` + 旧
- *   `ChatComposer`，**本轮原样保留**（Q1 未拍板退役，Step 8 处理）。
+ * 布局形态（chat-webview-unify Step 7 起，Step 8 收敛为唯一路径）：
+ * 裁切容器内**只有一个** `<ChatConversationWebView>`——转录 + 输入框 dock 合并在
+ * 同一个文档里 flex 布局，Android 与 iOS 同构（iOS 不套裁切容器）。两个 RN
+ * Modal 选择器仍挂本面板（选文件 / 选技能后经 M7 命令式通道回填正文）。
  *
- * 为什么 webview 分支要抽成独立子组件：controller 是 hook，不能在条件分支里调；
- * 若直接写在本组件里，legacy 分支下 controller 与旧 `ChatComposer` 会同时挂载
- * ——两套草稿订阅 + 两套水化 effect 打同一份 store。子组件把这条生命周期钉死在
- * 「webview 分支才存在」。
+ * Step 8：legacy-rn 分支（`MessageList` + 旧 `ChatComposer`）随引擎开关退役
+ * 一并删除，chatBody 不再有条件分支。`ChatConversationWebSurface` 这个子组件
+ * 边界保留下来——它存在的理由不再是「把 controller 的生命周期钉在 webview
+ * 分支」，而是**把 controller 与它的一堆派生收敛在一个稳定的子树上**：
+ * `useChatTabController` / `useChatComposerController` 都只在这里调，面板本体
+ * 只管 header、workspace 面板与各类 RN Modal 开关。
  */
 import React, {useCallback, useEffect, useMemo} from 'react';
-import {Platform, Pressable, StyleSheet, Text, View} from 'react-native';
+import {Platform, StyleSheet, Text, View} from 'react-native';
 import {type VfsScope} from '@novel-master/core/vfs';
 import {AgentPickerModal} from '@/components/agent/AgentPickerModal';
-import {ChatComposer} from '@/components/chat/ChatComposer';
 import {ChatConversationWebView} from '@/components/chat/ChatConversationWebView';
 import {FileReferencePicker} from '@/components/chat/FileReferencePicker';
 import {SkillPicker} from '@/components/skills/SkillPicker';
@@ -28,9 +26,7 @@ import {
 } from '@/components/chat/useChatComposerController';
 import {ChatMetaBar} from '@/components/chat/ChatMetaBar';
 import {ChatStreamMetricsBarLive} from '@/components/chat/ChatStreamMetricsBarLive';
-import {MessageActionMenu} from '@/components/chat/MessageActionMenu';
 import {MessageEditModal} from '@/components/chat/MessageEditModal';
-import {MessageList} from '@/components/chat/MessageList';
 import {ModelPickerModal} from '@/components/provider/ModelPickerModal';
 import {BottomSheetMenu} from '@/components/sheet/BottomSheetMenu';
 import {VfsFileManager} from '@/components/vfs/VfsFileManager';
@@ -53,16 +49,14 @@ export type ChatConversationPanelProps = {
   tokens: ThemeTokens;
   visible: boolean;
   /**
-   * ⛶ 全屏编辑入口：父层（ChatTabScreen）注入，转交 composer controller
-   * （webview 分支）或旧 ChatComposer（legacy 分支）。
+   * ⛶ 全屏编辑入口：父层（ChatTabScreen）注入，转交 composer controller。
    * 本面板不做导航（chat-tab 目录零导航依赖），只当通道。
    */
   onOpenComposerFullscreen?: (payload: ComposerFullscreenPayload) => void;
 };
 
 /**
- * webview 分支的对话面：单 `<ChatConversationWebView>` + controller 接线
- * + 两个 RN Modal 选择器。
+ * 对话面：单 `<ChatConversationWebView>` + controller 接线 + 两个 RN Modal 选择器。
  *
  * `projectId` / `sessionId` 由调用方在已判非空的分支里传入——controller 的 scope
  * 两者皆必填，**不**在本组件里做二次判空（判空就得放 hook 之前 early return，
@@ -238,21 +232,6 @@ export function ChatConversationPanel({
     sessionId,
     agentMeta,
     unitView,
-    useWebviewTranscript,
-    chatScrollKey,
-    chatMessages,
-    hasMoreMessages,
-    chatRichTextEnabled,
-    pendingSubagentSessions,
-    richRenderEpoch,
-    defaultChatScrollToBottom,
-    cachedChatScroll,
-    loadingMoreMessages,
-    hasWorkspaceModel,
-    canResumeWithoutInput,
-    lastMessageIsPlainUserText,
-    draftRestoreToken,
-    vfsRefreshKey,
     sessionVfs,
     sessionWorktree,
     sessionDrawerOpen,
@@ -261,22 +240,16 @@ export function ChatConversationPanel({
     setModelPickerOpen,
     agentPickerOpen,
     setAgentPickerOpen,
-    messageMenuTarget,
-    messageMenuAnchor,
     messageEditPrompt,
     setMessageEditPrompt,
-    onMessagesChanged,
-    onNeedModel,
+    vfsRefreshKey,
     bumpWorktreeUiToken,
     onOpenFileEditor,
-    onChatScrollSnapshot,
-    onLoadOlderMessages,
     onRefreshChatMeta,
     workspaceVfsRef,
-    scope,
   } = ctx;
 
-  // 当前会话 run 是否活跃（legacy 分支的 streamingText / agentRunning 取值）。
+  // 当前会话 run 是否活跃（单元投影派生：starting|running）。
   const unitActive =
     unitView?.status === 'starting' || unitView?.status === 'running';
 
@@ -364,63 +337,13 @@ export function ChatConversationPanel({
 
   const chatBody =
     projectId != null && sessionId != null ? (
-      useWebviewTranscript ? (
-        // 单 WebView：转录 + dock 合并在同一文档内 flex 布局，高度变化文档内消化，
-        // 跨桥 heightChange 链彻底消失。
-        <ChatConversationWebSurface
-          projectId={projectId}
-          sessionId={sessionId}
-          onOpenComposerFullscreen={onOpenComposerFullscreen}
-        />
-      ) : (
-        <>
-          <MessageList
-            key={chatScrollKey ?? 'no-session-scroll'}
-            messages={chatMessages}
-            streamingText={unitView?.partialText ?? ''}
-            streamingThinking={unitView?.partialThinking ?? ''}
-            toolInvoking={unitActive}
-            agentRunning={unitActive}
-            chatRichTextEnabled={chatRichTextEnabled}
-            richRenderEpoch={richRenderEpoch}
-            initialScroll={cachedChatScroll ?? null}
-            defaultScrollToBottom={defaultChatScrollToBottom}
-            onScrollSnapshot={onChatScrollSnapshot}
-            onMessageLongPress={controller.handleMessageLongPress}
-            onOpenToolFile={scope.openSessionFilePreview}
-            onOpenSubagentSession={scope.openSubagentSession}
-            onOpenSkillDetail={scope.openSkillDetail}
-            pendingSubagentSessions={pendingSubagentSessions}
-            listHeaderComponent={
-              hasMoreMessages ? (
-                <Pressable
-                  style={styles.loadMoreBtn}
-                  onPress={onLoadOlderMessages}>
-                  <Text style={{color: tokens.primary}}>
-                    {loadingMoreMessages ? '加载中…' : '加载更早消息'}
-                  </Text>
-                </Pressable>
-              ) : null
-            }
-          />
-          <ChatComposer
-            scope={{projectId, sessionId}}
-            hasModel={
-              hasWorkspaceModel || (agentMeta?.hasDedicatedModel ?? false)
-            }
-            running={unitActive}
-            onMessagesChanged={onMessagesChanged}
-            onNeedModel={onNeedModel}
-            canResumeWithoutInput={canResumeWithoutInput}
-            lastMessageIsPlainUserText={lastMessageIsPlainUserText}
-            draftRestoreToken={draftRestoreToken}
-            onOpenComposerFullscreen={onOpenComposerFullscreen}
-            // 「更多」按钮已在 ChatComposer 内注释隐藏，这里不再传 onOpenMore，
-            // 避免传了却没人响应造成误解。压缩/切换等入口改由会话详情页抽屉承担。
-            // onOpenMore={() => setSessionDrawerOpen(true)}
-          />
-        </>
-      )
+      // 单 WebView：转录 + dock 合并在同一文档内 flex 布局，高度变化文档内消化，
+      // 跨桥 heightChange 链彻底消失。
+      <ChatConversationWebSurface
+        projectId={projectId}
+        sessionId={sessionId}
+        onOpenComposerFullscreen={onOpenComposerFullscreen}
+      />
     ) : null;
 
   return (
@@ -520,13 +443,6 @@ export function ChatConversationPanel({
           }
         }}
       />
-      <MessageActionMenu
-        visible={!useWebviewTranscript && messageMenuTarget != null}
-        anchor={messageMenuAnchor}
-        items={controller.messageMenuItems}
-        onClose={controller.closeMessageMenu}
-        onSelect={controller.onMessageMenuSelect}
-      />
       <MessageEditModal
         visible={messageEditPrompt != null}
         title="编辑消息"
@@ -572,10 +488,4 @@ const styles = StyleSheet.create({
   transcriptHost: {flex: 1, minHeight: 0},
   flexFill: {flex: 1},
   placeholder: {flex: 1, justifyContent: 'center', alignItems: 'center'},
-  loadMoreBtn: {
-    alignSelf: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    marginBottom: 4,
-  },
 });

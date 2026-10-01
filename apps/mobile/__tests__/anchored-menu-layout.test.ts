@@ -1,9 +1,15 @@
 import {describe, expect, it} from '@jest/globals';
+/**
+ * Step 8：断言口径从 RN 端口 `components/chat/anchored-menu-layout`（re-export）
+ * 改指真源 `webview-host/chat-transcript/anchored-menu-layout`。RN 端口与其唯一
+ * 消费者 `MessageActionMenu.tsx` 一并退役（legacy 转录引擎删除后消息菜单只剩
+ * web 文档内那一张），布局算法本身一字未动，只是没有第二个端口了。
+ */
 import {
   anchoredMenuContentHeight,
   computeAnchoredMenuWidth,
   layoutAnchoredMenu,
-} from '@/components/chat/anchored-menu-layout';
+} from '@/webview-host/chat-transcript/anchored-menu-layout';
 
 describe('layoutAnchoredMenu', () => {
   const anchor = {x: 40, y: 520, width: 200, height: 48};

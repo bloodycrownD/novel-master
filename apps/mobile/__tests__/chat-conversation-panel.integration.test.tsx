@@ -20,10 +20,6 @@ jest.mock('../src/components/vfs/VfsFileManager', () => {
   };
 });
 
-// legacy-rn 分支仍挂旧 ChatComposer（Q1 未拍板退役，Step 8 才删）。
-jest.mock('../src/components/chat/ChatComposer', () => ({
-  ChatComposer: () => null,
-}));
 // ChatMetaBar 的可交互骨架（au/B-1 / au/G-4 用例的断言面）：把 onPressAgent
 // 暴露为可按压节点，测试经 testID 触发；meta 仅供透传，不消费。
 jest.mock('../src/components/chat/ChatMetaBar', () => {
@@ -80,12 +76,6 @@ jest.mock('../src/components/chat/FileReferencePicker', () => ({
 }));
 jest.mock('../src/components/skills/SkillPicker', () => ({
   SkillPicker: () => null,
-}));
-jest.mock('../src/components/chat/MessageList', () => ({
-  MessageList: () => null,
-}));
-jest.mock('../src/components/chat/MessageActionMenu', () => ({
-  MessageActionMenu: () => null,
 }));
 jest.mock('../src/components/chat/MessageEditModal', () => ({
   MessageEditModal: () => null,
@@ -224,7 +214,6 @@ function makeMockContext(
     hasWorkspaceModel: false,
     bumpWorktreeUiToken: jest.fn(),
     chatScrollKey: 'p1:s1',
-    cachedChatScroll: undefined,
     restoredTranscriptScroll: undefined,
     defaultChatScrollToBottom: true,
     onChatScrollSnapshot: jest.fn(),
@@ -234,13 +223,8 @@ function makeMockContext(
     setModelPickerOpen: jest.fn(),
     agentPickerOpen: false,
     setAgentPickerOpen: mockSetAgentPickerOpen,
-    messageMenuTarget: undefined,
-    messageMenuAnchor: undefined,
-    setMessageMenuTarget: jest.fn(),
-    setMessageMenuAnchor: jest.fn(),
     messageEditPrompt: undefined,
     setMessageEditPrompt: jest.fn(),
-    useWebviewTranscript: false,
     chatRichTextEnabled: false,
     richRenderEpoch: 0,
     webMenuCloseSignal: 0,
@@ -276,9 +260,8 @@ jest.mock('../src/screens/tabs/chat-tab/ChatTabProvider', () => ({
 
 jest.mock('../src/screens/tabs/chat-tab/useChatTabController', () => ({
   useChatTabController: () => ({
-    handleMessageLongPress: jest.fn(),
-    handleMessageMenuSelect: jest.fn(),
-    handleWebMessageMenuAction: jest.fn(),
+    onWebMenuOpenChange: jest.fn(),
+    onWebMessageMenuAction: jest.fn(),
     handleSaveMessageEdit: jest.fn(async () => undefined),
     confirmBatchDeleteSessions: jest.fn(),
     handleCompactSession: jest.fn(),

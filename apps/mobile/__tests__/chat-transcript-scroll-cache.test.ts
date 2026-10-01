@@ -16,7 +16,7 @@ describe('chat-transcript-scroll-cache', () => {
 
   it('rejects legacy v1 snapshots without schemaVersion', () => {
     const legacy = {offsetY: 40, nearBottom: false};
-    expect(normalizeScrollSnapshot(legacy)).toEqual({discardedLegacy: true});
+    expect(normalizeScrollSnapshot(legacy)).toBeUndefined();
     expect(getTranscriptScrollSnapshot('p:s')).toBeUndefined();
   });
 
@@ -26,8 +26,7 @@ describe('chat-transcript-scroll-cache', () => {
       offsetY: 12,
       nearBottom: true,
     };
-    const normalized = normalizeScrollSnapshot(snap);
-    expect(normalized).toEqual({snapshot: snap, discardedLegacy: false});
+    expect(normalizeScrollSnapshot(snap)).toEqual(snap);
     setTranscriptScrollSnapshot('p1:s1', snap);
     expect(getTranscriptScrollSnapshot('p1:s1')).toEqual(snap);
   });

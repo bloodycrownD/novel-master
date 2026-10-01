@@ -12,6 +12,11 @@
  *   manager 的 idle 消息路径，Provider 不再持有消息 state；
  * - 非运行态（draftRestoreToken / DeviceEventEmitter 监听）继续由
  *   useChatTabMessages 承担（数据管线已退役）。
+ *
+ * Step 8：legacy-rn 转录引擎开关随本迭代退役（Q1，2026-10-01 拍板）——
+ * 本文件原有的 7 处 `useWebviewTranscript` 门控（引擎派生、滚动缓存分流、
+ * webview 句柄 attach 的前置条件等）全部消失，转录面只剩统一宿主一条路径。
+ * 引擎 KKV 键仍被读一次（值丢弃），口径见 `storage/chat-transcript-engine.ts`。
  */
 import React, {
   createContext,
@@ -38,9 +43,7 @@ import type {WorkplaceService} from '@novel-master/core/workplace';
  * `import type` 会被擦除，不会把宿主组件拖进 Provider 的运行时依赖。
  */
 import type {ChatConversationWebViewHandle} from '@/components/chat/ChatConversationWebView';
-import type {MessageMenuAnchor} from '@/components/chat/MessageActionMenu';
 import type {VfsFileManagerHandle} from '@/components/vfs/VfsFileManager';
-import type {ChatListScrollSnapshot} from '@/services/chat-list-scroll-cache';
 import type {ChatTranscriptScrollSnapshot} from '@/components/chat/ChatTranscriptBridge';
 import type {ChatAgentMeta} from '@/services/chat-agent-meta';
 import type {SessionStreamUnitView} from '@/services/session-stream-unit';
@@ -57,11 +60,7 @@ import {
   subscribeMobileAgentActivity,
 } from '@/runtime/agent-activity';
 import type {RootStackParamList} from '@/navigation/types';
-import {
-  defaultChatTranscriptEngine,
-  readChatTranscriptEngine,
-  type ChatTranscriptEngine,
-} from '@/storage/chat-transcript-engine';
+import {readChatTranscriptEngine} from '@/storage/chat-transcript-engine';
 import {readChatRichTextEnabled} from '@/storage/chat-rich-text-pref';
 import {useChatTabMessages} from './useChatTabMessages';
 import {
@@ -107,34 +106,22 @@ export type ChatTabContextValue = {
   readonly hasWorkspaceModel: boolean;
   readonly bumpWorktreeUiToken: () => void;
   readonly chatScrollKey: string | null;
-  readonly cachedChatScroll:
-    | ChatListScrollSnapshot
-    | ChatTranscriptScrollSnapshot
-    | undefined;
+  /** v2 滚动快照（唯一读源；Step 8 起无 legacy v1 回落）。 */
   readonly restoredTranscriptScroll: ChatTranscriptScrollSnapshot | undefined;
   readonly defaultChatScrollToBottom: boolean;
-  readonly onChatScrollSnapshot: (
-    snap: ChatListScrollSnapshot | ChatTranscriptScrollSnapshot,
-  ) => void;
+  readonly onChatScrollSnapshot: (snap: ChatTranscriptScrollSnapshot) => void;
   readonly sessionDrawerOpen: boolean;
   readonly setSessionDrawerOpen: (open: boolean) => void;
   readonly modelPickerOpen: boolean;
   readonly setModelPickerOpen: (open: boolean) => void;
   readonly agentPickerOpen: boolean;
   readonly setAgentPickerOpen: (open: boolean) => void;
-  readonly messageMenuTarget: ChatMessage | undefined;
-  readonly messageMenuAnchor: MessageMenuAnchor | undefined;
-  readonly setMessageMenuTarget: (msg: ChatMessage | undefined) => void;
-  readonly setMessageMenuAnchor: (
-    anchor: MessageMenuAnchor | undefined,
-  ) => void;
   readonly messageEditPrompt:
     | {messageId: string; initialText: string}
     | undefined;
   readonly setMessageEditPrompt: (
     prompt: {messageId: string; initialText: string} | undefined,
   ) => void;
-  readonly useWebviewTranscript: boolean;
   readonly chatRichTextEnabled: boolean;
   /**
    * pending task 工具的子会话映射（title → childSessionId）。
@@ -232,12 +219,6 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
   const transcriptWebRef = useRef<ChatConversationWebViewHandle>(null);
   const workspaceVfsRef = useRef<VfsFileManagerHandle>(null);
   const [chatRichTextEnabled, setChatRichTextEnabled] = useState(false);
-  const [messageMenuTarget, setMessageMenuTarget] = useState<
-    ChatMessage | undefined
-  >();
-  const [messageMenuAnchor, setMessageMenuAnchor] = useState<
-    MessageMenuAnchor | undefined
-  >();
   const [webMenuOpen, setWebMenuOpen] = useState(false);
   const [webMenuCloseSignal, setWebMenuCloseSignal] = useState(0);
   const [mermaidViewerOpen, setMermaidViewerOpen] = useState(false);
@@ -245,16 +226,8 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
   const [messageEditPrompt, setMessageEditPrompt] = useState<
     {messageId: string; initialText: string} | undefined
   >();
-  const [chatTranscriptEngine, setChatTranscriptEngine] =
-    useState<ChatTranscriptEngine>(defaultChatTranscriptEngine);
 
-  const useWebviewTranscript = chatTranscriptEngine === 'webview';
-
-  const scroll = useChatTabScrollCache({
-    projectId,
-    sessionId,
-    useWebviewTranscript,
-  });
+  const scroll = useChatTabScrollCache({projectId, sessionId});
 
   // ===== 单元投影 + 消息面订阅（subscribe + useEffect + sync 模式） =====
   // 当前会话的运行态唯一事实源：水合未完成 / 无单元为 null。事件同步总线
@@ -306,7 +279,6 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
   useEffect(() => {
     if (
       sessionId == null ||
-      !useWebviewTranscript ||
       scope.chatSubview !== 'conversation' ||
       transcriptReadyEpoch === 0
     ) {
@@ -330,7 +302,6 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
   }, [
     manager,
     sessionId,
-    useWebviewTranscript,
     scope.chatSubview,
     transcriptReadyEpoch,
     hasUnit,
@@ -404,8 +375,6 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
   } = scope;
 
   const closeMessageMenu = useCallback(() => {
-    setMessageMenuTarget(undefined);
-    setMessageMenuAnchor(undefined);
     setWebMenuOpen(false);
     setWebMenuCloseSignal(signal => signal + 1);
   }, []);
@@ -443,8 +412,13 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
     setChatRichTextEnabled(await readChatRichTextEnabled(appUi));
   }, [appUi]);
 
+  /**
+   * 引擎键的读取入口（Step 8 后**只读不判**）：值恒为 `webview`，legacy-rn
+   * 转录引擎已随本迭代退役，键保留读取只是为了让这个历史 KKV 键有个显式
+   * 消费点（口径见 `storage/chat-transcript-engine.ts` 文件头）。
+   */
   const refreshChatTranscriptEngine = useCallback(async () => {
-    setChatTranscriptEngine(await readChatTranscriptEngine(appUi));
+    await readChatTranscriptEngine(appUi);
   }, [appUi]);
 
   useFocusEffect(
@@ -484,7 +458,6 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
       hasWorkspaceModel: scope.hasWorkspaceModel,
       bumpWorktreeUiToken: scope.bumpWorktreeUiToken,
       chatScrollKey: scroll.chatScrollKey,
-      cachedChatScroll: scroll.cachedChatScroll,
       restoredTranscriptScroll: scroll.restoredTranscriptScroll,
       defaultChatScrollToBottom: scroll.defaultChatScrollToBottom,
       onChatScrollSnapshot: scroll.handleChatScrollSnapshot,
@@ -494,13 +467,8 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
       setModelPickerOpen,
       agentPickerOpen,
       setAgentPickerOpen,
-      messageMenuTarget,
-      messageMenuAnchor,
-      setMessageMenuTarget,
-      setMessageMenuAnchor,
       messageEditPrompt,
       setMessageEditPrompt,
-      useWebviewTranscript,
       chatRichTextEnabled,
       pendingSubagentSessions:
         unitView?.pendingChildrenByTitle ?? EMPTY_PENDING_SUBAGENT_SESSIONS,
@@ -543,10 +511,7 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
       scroll,
       modelPickerOpen,
       agentPickerOpen,
-      messageMenuTarget,
-      messageMenuAnchor,
       messageEditPrompt,
-      useWebviewTranscript,
       chatRichTextEnabled,
       richRenderEpoch,
       webMenuCloseSignal,
