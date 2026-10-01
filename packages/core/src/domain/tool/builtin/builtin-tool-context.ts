@@ -221,24 +221,6 @@ export type BuiltinToolContext = {
    */
   readonly agents?: BuiltinToolAgentsContext;
   /**
-   * 可选：仅 `read` 工具读取（read-tool-result-ref）——read 引用是
-   * revision.ref_count 的第三类持有者（既有两类：checkpoint 指针 + live
-   * head），工具内在返回前**同步 +1**（先于任何消息落库，堵住「read 返回
-   * → 消息落库」之间的 sweep 窗口——历史 revision 被 GC 后内容不可再生）。
-   *
-   * 底层绑定 revision repo 的 `batchAdjustRefCountWithDelta`（delta>0 缺行
-   * 抛 NOT_FOUND 的守护语义正好当存在性校验）。未注入时 read 输出不含
-   * entryId、不 +1、不产 contentRef 块——legacy 全文形态（feature-flag
-   * 式回落；三端 runtime 装配随 hydrate（Step 4/6）就绪后打开）。
-   */
-  readonly adjustRevisionRefCount?: (
-    pointers: ReadonlyArray<{
-      readonly entryId: number;
-      readonly version: number;
-    }>,
-    delta: number
-  ) => Promise<void>;
-  /**
    * 可选：仅 `write`（新建文件时）/ `fs(mkdir)` 读取——新建路径时为各层
    * 祖先目录补默认目录规则（无 `workplace_dir_rule` 行的目录会被判
    * rule_off，新目录默认应启用规则）；编辑已有文件不补，不融存量状态。

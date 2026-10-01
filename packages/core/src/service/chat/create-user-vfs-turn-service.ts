@@ -66,11 +66,6 @@ export function createUserVfsTurnServiceBundle(
     sessionId,
     listSessionMessages: () => messageRepo.listBySession(sessionId),
     sessionKkv,
-    // read 引用化（read-tool-result-ref Step 6）：U-A-U-A 链路的 read 同步
-    // +1 通道——绑定上方已构造的 revisionRepo（delta>0 缺行抛 NOT_FOUND 的
-    // 守护语义即 read 引用的存在性校验）。
-    adjustRevisionRefCount: (pointers, delta) =>
-      revisionRepo.batchAdjustRefCountWithDelta(pointers, delta),
     // 目录规则默认启用：与 agent 链路（runAgentTurn）同款注入 session scope
     // workplace，保证 write / mkdir 的补规则行为在两条链路一致。
     workplace: createWorkplaceService(conn, {

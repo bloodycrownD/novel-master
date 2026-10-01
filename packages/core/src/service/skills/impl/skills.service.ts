@@ -332,16 +332,6 @@ export class SkillsService implements SkillService {
           path: rel,
           content: result.content,
           version: result.version,
-          // skill-result-ref：技能文件与普通文件同表同版本链，把 vfs.read
-          // 已返回的 head 定位三件套原样透传给 skill 工具（数据在手，只差
-          // 挑选）。缺省透出（旧实现/mock）时工具回落 legacy 全文形态。
-          ...(result.entryId != null ? { entryId: result.entryId } : {}),
-          ...("contentHash" in result
-            ? { contentHash: result.contentHash }
-            : {}),
-          ...(result.totalBytes != null
-            ? { totalBytes: result.totalBytes }
-            : {}),
         };
       } catch (error) {
         if (isVfsError(error, "NOT_FOUND")) {

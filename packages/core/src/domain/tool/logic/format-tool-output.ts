@@ -1,6 +1,13 @@
 /**
  * Human-readable tool output for LLM history and prompt preview.
  *
+ * @remarks
+ * `formatReadOutput` / `formatSkillLoadOutput` 自 v1.5.30 起**不再是冻结契约**。
+ * v1.5.29 曾把它们标为「冻结、演进需版本化」，原因是读/skill tool_result
+ * 改存引用块、wire 需按冻结 formatter 逐字节重放还原；unref 回迁后写侧恒存
+ * 这些函数的产物本身（全文直出），仓内不再有任何重放方，wire 就是这份输
+ * 出本身。因此可随需求自由调整格式，无需版本化。
+ *
  * @module domain/tool/logic/format-tool-output
  */
 

@@ -84,11 +84,11 @@ export interface PrepareUserMessagesForPromptRuntime {
   /** skillAttach 存在性判定与生效副本读取的解析上下文。 */
   readonly projectId?: string;
   /**
-   * read 引用块 hydrate（read-tool-result-ref）所需的 revision 仓库。
+   * 存量 contentRef 块的**极简兜底** hydrate 所需的 revision 仓库。
    *
-   * 消息含 `contentRef` 块而本依赖未注入时 hydrate 会 fail-fast 抛
-   * `ReadResultHydrateError`（装配缺口不静默降级——空 tool_result 发给
-   * LLM 正是引用化要杜绝的错文形态）。runtime 装配见 Step 6。
+   * v1.5.30 unref 回迁后写侧不再产 `contentRef`；本依赖只为 v1.5.29 装机
+   * 窗口写入的存量行取明文回填（按 `(entryId, version)`）。未注入时兜底
+   * 路径不抛错，改填错误占位 JSON 并 `console.warn`（装配缺口信号保留）。
    */
   readonly revisionRepo?: VfsRevisionRepository;
 }
@@ -630,11 +630,13 @@ export async function prepareUserMessagesForPrompt(
       )
     );
   }
-  // read-tool-result-ref Step 4：tool_result 透传分支产出的消息在此统一
-  // hydrate——引用块（contentRef）按 (entryId, version) 查 revision 重放
-  // `formatReadOutput` 还原 wire 全文（内存态，不写回 content_json）。
-  // 必须发生在 normalizeOrphanToolResultsForLlm 之前：孤儿拍平吃
-  // messageBodyText，未 hydrate 的空 content 会被拍成占位文本、wire 全文
-  // 丢失；主链（LLM 装配）与 parity 链（token/压缩口径）共用本函数，同受益。
+  // v1.5.30 unref 回迁：存量 contentRef 块的极简兜底 hydrate 在此统一发生
+  // ——按 (entryId, version) 查 revision 明文，回填 `{path, content}` 的
+  // JSON 字符串（内存态，不写回 content_json）。
+  //
+  // **顺序红线**：必须发生在 normalizeOrphanToolResultsForLlm 之前：孤儿拍平
+  // 吃 messageBodyText，未 hydrate 的空 content 会被拍成 `[tool_result id=…]`
+  // 占位文本、正文再也补不回来；主链（LLM 装配）与 parity 链（token/压缩口径）
+  // 共用本函数，同受益。
   return hydrateToolResultsForPrompt(out, runtime.revisionRepo);
 }
