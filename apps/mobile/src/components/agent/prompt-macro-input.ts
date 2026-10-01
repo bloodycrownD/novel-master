@@ -1,4 +1,15 @@
-import {ALLOWED_DYNAMIC_ROOT_MACROS} from '@novel-master/core/prompt';
+/**
+ * dynamic 区可插入的 `$` 根宏白名单。
+ *
+ * ⚠️ 本数组**刻意内联**，不得改回从 `@novel-master/core/prompt` 导入：
+ * 本模块被 WebView 产物 `webview-dist/composer-input/app.js` 引用
+ * （`src/web/composer-input/webview/runtime/editor.ts`），而 core 的 public barrel
+ * 会把 provider 整表拖进 IIFE，其顶层 `Object.fromEntries` 在 minSdk 26（Chromium 58）
+ * 的 WebView 上直接抛 `TypeError` ⇒ 编辑器不挂载、`ready` 不上报（N-P0-01）。
+ * 与 core 单源的一致性由 `apps/mobile/__tests__/prompt-macro-input.test.ts`
+ * 的等价断言兜住（RN 侧不产 WebView 产物，引用 core 免费）。
+ */
+const ALLOWED_DYNAMIC_ROOT_MACROS = ['time', 'week_cn', 'filetree'] as const;
 
 export type PromptInsertableMacro = {
   readonly label: string;
