@@ -23,6 +23,8 @@
 
 > 执行纪律：本 fix-spec 由 code-dev-loop 执行时，`pbp-*` 在本分支（f-vfs-pack）修；`pbm-*` 只在合并回 main 的那一轮执行（分支上不做）；`pbs-*` 改本分支上的业务 spec.md；门禁组不阻塞 dev-ready。子代理一律不 git 写；**`docs/apm/` 的写入由主代理执行**——pbp-26（RULE.md VFS 打包条目口径对齐）虽属分支波条目，但落盘动作必须由主代理做，子代理只产出改后文案交主代理写盘（`docs/apm/` 纪律见 RULE「子代理不得写 docs/apm/」）。`pbs-*`（业务 spec.md）与 `pbm-*` 不受此限。
 
+> **执行记录（2026-10-01，code-dev-loop dev-ready）**：执行范围 pbp-1~33 + pbs-1~7 + pbp-26 全部落地，提交链 00fb0a1e → 80243a6f → c5c93e10 → 326c9277 → 77692d03 → f8f71244 → 728d4218 → db67d179（wave-0~6 + desktop cr-05 竞态修复）；pbm 组与门禁组未越界实施。实现期偏差（均已记录于 cache/dev-w*.md）：pbp-4 空组处置选「事务内显式 DELETE pack 行」而非哨兵错（packOneGroup 无组级 catch，哨兵会抛穿整轮、违反「不中断」硬约束）；pbp-23 落 limit 分批+换 entry 早退、入口保持全量单批（完整 Map 喂收尾归因的语义不动）；pbp-31 的 T-VP2b 落在 content-store-pack.test.ts（避免与并行节点同文件）；T-VP13 红灯根因 = 任务读明文写入 decoded-content-cache 致断言热态命中（RULE「缓存后换观测面」家族坑实例，pbp-32 顺带冷态化+计时放宽 200ms fflate 口径）。verify：core 3115/3117（唯二红=usage-stats 时区既有基线）、desktop 631/631 全绿（cr-05 竞态确定性修复=补丁安装提前到删标记/插行之前，时序敏感实测）、mobile 1747/1750（3 红=worktree CRLF 行尾环境红，主仓同件绿、被测面分支 diff 零）、tsc 四处绿（renderer 422 为既有债族，对 main 基线 411 净增 1 条 TS6307=新测试 import main 服务同族形态）、core dist 已重建（中途一次漏 --noEmit 的 tsc 在 mobile src 吐 1288 个产物已按「untracked+同名源」判据清零）。cr-func 终检 func-ready: yes（矩阵 33/33+7/7+1/1、5 条牙齿抽查、独立复跑 tsc/eslint 绿）；minor D4=spec L340 措辞按 pbs 指示顺带改述（L77 常量名留分支形态正确，pbm-11 合并轮补齐）。**待用户**：integrity-repair 二选一 / pbm-7 方案 A/B / 合并轮（pbm 组）/ 门禁组（Hermes 探针回记、真机验收、不可降级确认）。
+
 ---
 
 ## Must-fix · 代码缺陷组（pbp-，在本分支修）
