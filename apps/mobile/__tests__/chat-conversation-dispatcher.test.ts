@@ -10,19 +10,24 @@
  */
 import {
   coerceComposerState,
+  coerceSessionListPayload,
   coerceTypeaheadSource,
+  coerceView,
   createConversationDispatcher,
   dispatchRoute,
   routeHostMessage,
   splitInitPayload,
   type ConversationDockRoute,
   type ConversationDispatcherDeps,
+  type ConversationListRoute,
 } from '@web/chat-conversation/webview/dispatcher';
 import {
   CONVERSATION_BRIDGE_V,
   CONVERSATION_CAPABILITY_COMPOSER_DOCK,
   CONVERSATION_DOCK_ACTIONS,
   CONVERSATION_DOCK_TYPES,
+  CONVERSATION_LIST_ACTIONS,
+  CONVERSATION_LIST_TYPES,
   CONVERSATION_READY_VERSION,
   CONVERSATION_THEME_KEYS,
   conversationCapabilities,
@@ -59,6 +64,15 @@ const v2 = (type: string, payload: Record<string, unknown> = {}) => ({
   type,
   payload,
 });
+
+/** 四域全空的路由（空路由的唯一写法——新增域时这里同步长一条）。 */
+const EMPTY = {
+  transcript: null,
+  composer: null,
+  dock: null,
+  list: null,
+  theme: null,
+};
 
 describe('协议常量（T-CU3：双端一致的前提）', () => {
   it('T-CDV-01：CONVERSATION_BRIDGE_V = 2，与旧包 BRIDGE_V 刻意不同名', () => {
@@ -234,12 +248,11 @@ describe('三域路由各自命中且不串', () => {
     // 旧写法是「落在 CONVERSATION_DOCK_TYPES 里但没写分支 → 兜底 selectAll」，
     // 那是**带副作用**的默认分支：新加一条 type 忘了写 handler，宿主发来的新意图
     // 会被执行成「全选输入框」。这里钉死：两类未知都必须空路由。
-    const emptyRoute = {transcript: null, composer: null, dock: null, theme: null};
 
     // ① 清单外的 type：本来就走末尾的 EMPTY_ROUTE，兜底分支够不着它——
     //    但仍钉一遍，防止有人把 `contains` 那层判断删掉后重新裸奔。
     expect(routeHostMessage(v2('__futureDockType', {text: 'x'}))).toEqual(
-      emptyRoute,
+      EMPTY,
     );
 
     // ② **清单内但无 handler**——这才是旧兜底分支真正会吃掉的路径。
@@ -247,7 +260,7 @@ describe('三域路由各自命中且不串', () => {
     (CONVERSATION_DOCK_TYPES as string[]).push('__registeredButUnhandled');
     try {
       expect(routeHostMessage(v2('__registeredButUnhandled', {}))).toEqual(
-        emptyRoute,
+        EMPTY,
       );
     } finally {
       (CONVERSATION_DOCK_TYPES as string[]).pop();
@@ -260,11 +273,141 @@ describe('三域路由各自命中且不串', () => {
     // 该 type 只被旧 chat-transcript 包认（其 bridge case 不动）；合成包侧
     // BASE 起无生产方，走到这里必须是空路由，不得回落到 selectAll。
     const route = routeHostMessage(v2('stickIfNearBottom', {}));
-    expect(route).toEqual({
-      transcript: null,
-      composer: null,
-      dock: null,
-      theme: null,
+    expect(route).toEqual(EMPTY);
+  });
+});
+
+/* ------------------------------------------------------------------ *
+ * 列表域（第四域 · 第二阶段 wave-1）
+ * ------------------------------------------------------------------ */
+
+describe('列表域路由（T-CSL-D）', () => {
+  it('T-CSL-D-01：清单两条 = sessionList / viewState，且与前三表零交集', () => {
+    expect([...CONVERSATION_LIST_TYPES]).toEqual(['sessionList', 'viewState']);
+    for (const type of [
+      ...CONVERSATION_DOCK_TYPES,
+      'sessionSnapshot',
+      'setText',
+      'init',
+      'themeUpdate',
+    ]) {
+      expect(CONVERSATION_LIST_TYPES).not.toContain(type);
+    }
+  });
+
+  it('T-CSL-D-02：sessionList 只投 list 域，三条老域全部为 null', () => {
+    const sessions = [
+      {
+        id: 's1',
+        title: '写代码',
+        updatedAtMs: 5,
+        active: true,
+        interrupted: false,
+        current: true,
+      },
+    ];
+    const route = routeHostMessage(v2('sessionList', {sessions}));
+    expect(route?.list).toEqual({kind: 'sessionList', payload: {sessions}});
+    expect(route?.transcript).toBeNull();
+    expect(route?.composer).toBeNull();
+    expect(route?.dock).toBeNull();
+    expect(route?.theme).toBeNull();
+  });
+
+  it('T-CSL-D-03：viewState 只投 list 域（带 view 值）', () => {
+    const route = routeHostMessage(v2('viewState', {view: 'list'}));
+    expect(route?.list).toEqual({kind: 'viewState', view: 'list'});
+    expect(route?.transcript).toBeNull();
+    expect(route?.composer).toBeNull();
+    expect(route?.dock).toBeNull();
+  });
+
+  it('T-CSL-D-04：前三域新下行走原路径，list 域零命中（加域不许串域）', () => {
+    expect(routeHostMessage(v2('composerState', {hasModel: false}))?.list).toBeNull();
+    expect(routeHostMessage(v2('setText', {text: 'x'}))?.list).toBeNull();
+    expect(routeHostMessage(v2('sessionSnapshot', {generation: 1}))?.list).toBeNull();
+    expect(routeHostMessage(v2('init', {}))?.list).toBeNull();
+    expect(routeHostMessage(v2('themeUpdate', {theme: THEME}))?.list).toBeNull();
+  });
+
+  it('T-CSL-D-05：清单内但无 handler → 空路由，**不得**回落成 viewState', () => {
+    // 这是 list 域的红线：若写成「不是 sessionList 就是 viewState」的兜底，
+    // 将来新增的 `sessionDetail` 类下行会被当成「切到列表视图」——
+    // 用户正写着的对话当场被换成一张列表，正文与草稿一起看不见。
+    (CONVERSATION_LIST_TYPES as string[]).push('__listRegisteredButUnhandled');
+    try {
+      expect(routeHostMessage(v2('__listRegisteredButUnhandled', {}))).toEqual(
+        EMPTY,
+      );
+      // 兜底若复活，这条必然红：它会被解析成 viewState（缺 view → conversation）
+      expect(
+        routeHostMessage(v2('__listRegisteredButUnhandled', {}))?.list,
+      ).toBeNull();
+    } finally {
+      (CONVERSATION_LIST_TYPES as string[]).pop();
+    }
+    expect(CONVERSATION_LIST_TYPES).not.toContain('__listRegisteredButUnhandled');
+  });
+
+  it('T-CSL-D-06：listAction 枚举十一项齐备（上行白名单口径）', () => {
+    expect([...CONVERSATION_LIST_ACTIONS]).toEqual([
+      'open',
+      'create',
+      'menuOpen',
+      'rename',
+      'copy',
+      'delete',
+      'stopRun',
+      'longPress',
+      'batchToggle',
+      // wave-3：批量头两项（作用于整个勾选集合，不带 sessionId）
+      'batchDelete',
+      'batchExit',
+    ]);
+  });
+
+  it('T-CSL-D-07：coerceView 只认两个合法值，未知回落 conversation', () => {
+    expect(coerceView({view: 'list'})).toBe('list');
+    expect(coerceView({view: 'conversation'})).toBe('conversation');
+    // 未知值不得落 list：落 list 等于把「宿主发了条 web 不认的消息」升级成
+    // 「用户正在写的对话连同草稿一起消失」，比不切换坏一个量级
+    for (const bad of [{}, {view: 'LIST'}, {view: 1}, {view: null}]) {
+      expect(coerceView(bad as Record<string, unknown>)).toBe('conversation');
+    }
+  });
+
+  it('T-CSL-D-08：coerceSessionListPayload 宽松取值 + batchSelect 可选语义', () => {
+    // 缺 sessions → 空列表，不抛
+    expect(coerceSessionListPayload({})).toEqual({sessions: []});
+    expect(coerceSessionListPayload({sessions: 'oops'})).toEqual({sessions: []});
+
+    // batchSelect 缺省 = 不在批量态（字段整个不出现在返回值里）
+    const plain = coerceSessionListPayload({
+      sessions: [{id: 's1', updatedAtMs: 3}],
+    });
+    expect('batchSelect' in plain).toBe(false);
+    // 给了空数组 = 在批量态、暂未勾选（两者不可混同）
+    expect(coerceSessionListPayload({sessions: [], batchSelect: []})).toEqual({
+      sessions: [],
+      batchSelect: [],
+    });
+    // 非字符串 id 被过滤
+    expect(
+      coerceSessionListPayload({sessions: [], batchSelect: ['s1', 7, null]}),
+    ).toEqual({sessions: [], batchSelect: ['s1']});
+
+    // 行字段逐项兜底：title 缺省不出键、布尔一律判 === true
+    expect(
+      coerceSessionListPayload({
+        sessions: [{id: 's1', title: '', active: 'yes', updatedAtMs: 'x'}],
+      }).sessions[0],
+    ).toEqual({
+      id: 's1',
+      title: '',
+      updatedAtMs: 0,
+      active: false,
+      interrupted: false,
+      current: false,
     });
   });
 });
@@ -279,7 +422,7 @@ describe('宽容口径（坏输入静默丢弃）', () => {
 
   it('T-CDV-13：未知 type 路由为空（不串进任何域）', () => {
     const route = routeHostMessage(v2('someLegacyMessage', {a: 1}));
-    expect(route).toEqual({transcript: null, composer: null, dock: null, theme: null});
+    expect(route).toEqual(EMPTY);
   });
 });
 
@@ -340,12 +483,14 @@ describe('副作用投递（dispatchRoute / createConversationDispatcher）', ()
       transcript: unknown[];
       composer: unknown[];
       dockRoutes: ConversationDockRoute[];
+      listRoutes: ConversationListRoute[];
       themes: unknown[];
     } = {
       calls,
       transcript: [],
       composer: [],
       dockRoutes: [],
+      listRoutes: [],
       themes: [],
       handleTranscript: raw => {
         calls.push('transcript');
@@ -362,6 +507,10 @@ describe('副作用投递（dispatchRoute / createConversationDispatcher）', ()
       applyDockTheme: theme => {
         calls.push('theme');
         deps.themes.push(theme);
+      },
+      applyListRoute: route => {
+        calls.push('list');
+        deps.listRoutes.push(route);
       },
     };
     return deps;
@@ -390,5 +539,24 @@ describe('副作用投递（dispatchRoute / createConversationDispatcher）', ()
       type: 'setDisabled',
       payload: {disabled: true},
     });
+  });
+
+  it('T-CDV-20：列表域只投 applyListRoute 一条，零惊动前三域', () => {
+    const deps = makeDeps();
+    const dispatcher = createConversationDispatcher(deps);
+    dispatcher(JSON.stringify(v2('sessionList', {sessions: []})));
+    expect(deps.calls).toEqual(['list']);
+    expect(deps.listRoutes).toEqual([
+      {kind: 'sessionList', payload: {sessions: []}},
+    ]);
+
+    dispatcher(JSON.stringify(v2('viewState', {view: 'list'})));
+    expect(deps.calls).toEqual(['list', 'list']);
+    expect(deps.listRoutes[1]).toEqual({kind: 'viewState', view: 'list'});
+    // 前三域与主题全程零命中：切列表视图不该惊动转录 / 输入框 / 主题
+    expect(deps.transcript).toEqual([]);
+    expect(deps.composer).toEqual([]);
+    expect(deps.dockRoutes).toEqual([]);
+    expect(deps.themes).toEqual([]);
   });
 });

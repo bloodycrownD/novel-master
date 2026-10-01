@@ -28,8 +28,8 @@
  *    `ChatConversationWebView.tsx` 的 composerState 下发 effect（typeahead 单列依赖）。
  *
  * 上行 v 号（spec §合成 dispatcher 契约第 1 条）：两旧 runtime 的上行恒为 v:1
- * （模块级 `post` 单例不可替换），新包自有的 `ready` / `dockAction` 才是 v:2。
- * 因此**解码必须宽松**：先宽松 parse 取 `type`，`ready` 判 `v === 2`，
+ * （模块级 `post` 单例不可替换），新包自有的 `ready` / `dockAction` / `listAction`
+ * 才是 v:2。因此**解码必须宽松**：先宽松 parse 取 `type`，`ready` 判 `v === 2`，
  * 其余 type 一律不校验 `v`（否则 transcript / composer 域的上行会被整段丢弃）。
  *
  * **禁止复用 `decodeTranscriptToHost`**：它对 `v !== 1` 直接 throw，会被宿主
@@ -197,6 +197,122 @@ export function conversationDockActionIncludes(
 }
 
 /* ------------------------------------------------------------------ *
+ * 列表域（下行 sessionList / viewState · 上行 listAction）
+ * ------------------------------------------------------------------ */
+
+/**
+ * 会话列表行（与 web 侧 `model.ts` 的 `SessionListItem` 同形）。
+ *
+ * 三个布尔是**RN 侧算好的判据**、web 侧一律不推导：`active` 取 manager 的真实判活
+ * （starting|running 单元集合）而非「当前会话」——挂在 current 上时收尾后仍显示，
+ * 用户会把「27 分钟前 · 活跃中」读成 run 卡死（2026-09-30 真机实录 GWT-7）。
+ */
+export type SessionListItem = {
+  readonly id: string;
+  /** 缺省回落 `id`（现网 `item.title ?? item.id` 同款）。 */
+  readonly title?: string;
+  readonly updatedAtMs: number;
+  readonly active: boolean;
+  readonly interrupted: boolean;
+  readonly current: boolean;
+};
+
+/**
+ * 下行 `sessionList` 载荷。
+ *
+ * `batchSelect` 可选即批量态开关：字段缺省 = 不在批量态；给了（哪怕空数组）=
+ * 在批量态、暂未勾选任何一行。合成一个字段是因为「勾选集合」本来就要传。
+ */
+export type ConversationSessionListPayload = {
+  readonly sessions: readonly SessionListItem[];
+  readonly batchSelect?: readonly string[];
+};
+
+/** 当前显示哪个视图（宿主把 `chatSubview` 映射下发；web 侧只切 `data-view` 属性）。 */
+export type ConversationView = 'list' | 'conversation';
+
+export type ConversationViewStatePayload = {
+  readonly view: ConversationView;
+};
+
+/**
+ * listAction 动作枚举（上行 · web → RN）。
+ *
+ * 业务**全留 RN**：open 走 openConversation 状态机、delete 弹原生确认、rename 走既有
+ * prompt、stopRun 走 manager 单元 abort；web 侧只做手势识别与命中判定。
+ * `menuOpen` 只上报「点了 ⋮」，菜单本身由 RN 的 BottomSheetMenu 渲染。
+ *
+ * `batchDelete` / `batchExit` 是**批量头专有的两项**（wave-3）：批量 UI 归 web，
+ * 确认链（原生 Alert）与批量态真源（`useBatchSelection`）留宿主。二者同 `create`
+ * 一样不带 sessionId——作用于整个勾选集合。
+ */
+export type ConversationListAction =
+  | 'open'
+  | 'create'
+  | 'menuOpen'
+  | 'rename'
+  | 'copy'
+  | 'delete'
+  | 'stopRun'
+  | 'longPress'
+  | 'batchToggle'
+  | 'batchDelete'
+  | 'batchExit';
+
+export const CONVERSATION_LIST_ACTIONS: readonly ConversationListAction[] = [
+  'open',
+  'create',
+  'menuOpen',
+  'rename',
+  'copy',
+  'delete',
+  'stopRun',
+  'longPress',
+  'batchToggle',
+  'batchDelete',
+  'batchExit',
+];
+
+/** 显式循环判定（与 `conversationDockActionIncludes` 同款，不碰 `includes`）。 */
+export function conversationListActionIncludes(
+  value: unknown,
+): value is ConversationListAction {
+  if (typeof value !== 'string') {
+    return false;
+  }
+  for (let i = 0; i < CONVERSATION_LIST_ACTIONS.length; i += 1) {
+    if (CONVERSATION_LIST_ACTIONS[i] === value) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * 上行 `listAction` 解码（宽松口径，与 dockAction 的处理同款）。
+ *
+ * 口径：`kind` 不在白名单内一律 null（宿主静默丢弃）——白名单是**行为**闸门，
+ * 枚举将来加了新 kind 而宿主忘了接线时，宁可这条动作空转也不能让它掉进某个
+ * 既有分支（比如把未知 kind 当成 open，用户点一下就跳进别的会话）。
+ * `sessionId` 只在字符串且非空时带上；`create` / `batchDelete` / `batchExit`
+ * 本就没有行可指，缺省即正确形状。
+ */
+export function parseConversationListAction(
+  message: ConversationUpstreamEnvelope,
+): {readonly kind: ConversationListAction; readonly sessionId?: string} | null {
+  if (message.type !== 'listAction') {
+    return null;
+  }
+  const {kind, sessionId} = message.payload;
+  if (!conversationListActionIncludes(kind)) {
+    return null;
+  }
+  return typeof sessionId === 'string' && sessionId !== ''
+    ? {kind, sessionId}
+    : {kind};
+}
+
+/* ------------------------------------------------------------------ *
  * 下行消息清单（v2 信封）
  * ------------------------------------------------------------------ */
 
@@ -296,7 +412,12 @@ export type ConversationHostMessage =
   | ConversationEnvelope<'blur', Record<string, never>>
   | ConversationEnvelope<'composerState', ConversationComposerState>
   | ConversationEnvelope<'composerPaste', {text: string}>
-  | ConversationEnvelope<'selectAll', Record<string, never>>;
+  | ConversationEnvelope<'selectAll', Record<string, never>>
+  // 列表域（第四域，第二阶段 wave-1）：会话行快照 + 视图切换。**只加协议声明**，
+  // 宿主接线（sessionList 下行 / listAction 上行 / viewState 映射 chatSubview）
+  // 是 wave-2 的活；在此之前这两条无人发送，web 侧的 handler 也只在收到时才有动作。
+  | ConversationEnvelope<'sessionList', ConversationSessionListPayload>
+  | ConversationEnvelope<'viewState', ConversationViewStatePayload>;
 
 export function encodeHostToConversation(
   message: ConversationHostMessage,

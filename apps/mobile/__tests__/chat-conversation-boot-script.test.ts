@@ -178,6 +178,48 @@ describe('chat-conversation WebView boot (dist)', () => {
     expect(nodes.get('mermaid-viewer-portal')?.parent).not.toBe('app');
   });
 
+  /**
+   * 第二阶段 wave-1：列表视图容器与对话视图**平级**挂在 #app 下。
+   *
+   * 平级是治本的形状条件：#session-list 若被塞进 #scroller 或 #composer-dock 的
+   * 子树，切列表视图就不得不连带隐藏/重建对话侧的某一块，WebView 保活的前提
+   * （两块 DOM 从头到尾都在）就没了。
+   */
+  it('T-CC-LIST-ASM-01: #session-list 与 #scroller / #composer-dock 平级（parent 都是 app）', () => {
+    const nodes = parseShell(indexHtml());
+    for (const id of ['session-list', 'session-list-rows', 'session-list-empty']) {
+      expect(nodes.get(id)).toBeDefined();
+    }
+    expect(nodes.get('session-list')?.parent).toBe('app');
+    // 内部骨架：header(标题 + 新建) → rows → empty
+    expect(nodes.get('session-list-header')?.parent).toBe('session-list');
+    expect(nodes.get('session-list-title')?.parent).toBe('session-list-header');
+    expect(nodes.get('session-list-create')?.parent).toBe('session-list-header');
+    expect(nodes.get('session-list-rows')?.parent).toBe('session-list');
+    expect(nodes.get('session-list-empty')?.parent).toBe('session-list');
+    // 反面：不得卷进对话域任一子树
+    expect(nodes.get('session-list')?.parent).not.toBe('composer-dock');
+    expect(nodes.get('session-list')?.parent).not.toBe('scroller');
+  });
+
+  it('T-CC-LIST-ASM-02: #app 挂 data-view（初值 conversation），列表壳带 web 化 testID', () => {
+    const html = indexHtml();
+    // 初值 conversation：viewState 到达前不至于开屏就一张空列表
+    expect(html).toMatch(/<div id="app" data-view="conversation">/);
+    for (const testId of [
+      'session-list',
+      'session-list-header',
+      'session-list-create',
+      'session-list-rows',
+      'session-list-empty',
+    ]) {
+      expect(html).toContain(`data-testid="${testId}"`);
+    }
+    expect(html).toContain('新建会话');
+    // 反面：data-view 不得在 CSS 里被硬编码成某个视图（显隐只能由 JS 驱动）
+    expect(appCss()).not.toMatch(/#app\[data-view='conversation'\]/);
+  });
+
   it('T-CC-CSS-01: #app 四属性齐全（缺一则 dock 不贴底）', () => {
     const css = appCss();
     const appRule = /#app\s*\{([^}]*)\}/.exec(css);
@@ -688,5 +730,197 @@ describe('chat-conversation 协议装配（Step 5 · T-CU1 / T-CU3 契约）', (
     expect(script).toMatch(/heightReport:\s*false/);
     // ready 版本标识是字符串字面量 "u1"（不是旧包的数字 1 / 'm4'）
     expect(script).toContain('"u1"');
+  });
+});
+
+/* ================================================================== *
+ * 第二阶段 wave-1：列表视图（双视图显隐 + 数值清单 + 协议 + 装配序）
+ * ================================================================== */
+
+describe('chat-conversation 列表视图（第二阶段 wave-1 · T-CL-DIST）', () => {
+  /** 取某选择器的第一条规则体（与上文样式段同一 helper）。 */
+  function rule(css: string, selector: string): string {
+    const re = new RegExp(
+      `(^|[},])\\s*${selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\{([^}]*)\\}`,
+      'm',
+    );
+    const match = re.exec(css);
+    if (match == null) {
+      throw new Error(`app.css 缺少规则 ${selector}`);
+    }
+    return match[2];
+  }
+
+  it('T-CL-DIST-01: 双视图显隐由 #app[data-view] 驱动（list 态藏对话两块）', () => {
+    const css = appCss();
+    // 对话两块在 list 态 display:none（不是 hidden 属性——#scroller 的 flex:1 与
+    // #composer-dock 的 flex:0 0 auto 是布局声明，必须整块脱离流）。
+    // 两条选择器跨行，rule() 的单 selector 匹配吃不下逗号组，这里直接查声明面。
+    const hideRule =
+      /#app\[data-view='list'\]\s+#scroller,\s*#app\[data-view='list'\]\s+#composer-dock\s*\{([^}]*)\}/.exec(
+        css,
+      );
+    expect(hideRule).not.toBeNull();
+    expect(hideRule ? hideRule[1] : '').toMatch(/display:\s*none/);
+    expect(rule(css, "#app[data-view='list'] #session-list")).toMatch(
+      /display:\s*flex/,
+    );
+    // 列表默认隐藏（conversation 态）
+    expect(rule(css, '#session-list')).toMatch(/display:\s*none/);
+    // 反面：不得出现 conversation 态的反向覆写——覆写会与基底段 + dock 段的
+    // flex 值打架（这里覆写出来的 display:none 会让对话永远出不来）
+    expect(css).not.toMatch(/#app\[data-view='conversation'\]\s+#scroller/);
+    expect(css).not.toMatch(/#app\[data-view='conversation'\]\s+#session-list/);
+  });
+
+  it('T-CL-DIST-02: sessionCard 数值清单（pad16/radius16/marginH5·B12/hairline/gap8/阴影）', () => {
+    const row = rule(appCss(), '.session-row');
+    expect(row).toMatch(/padding:\s*16px/);
+    expect(row).toMatch(/border-radius:\s*16px/);
+    expect(row).toMatch(/margin:\s*0 5px 12px/);
+    expect(row).toMatch(/gap:\s*8px/);
+    // hairline 量纲（0 < w ≤ 1）：锁死某个平台的值会让这条在另一个平台红掉
+    const borderWidth = Number(
+      /border:\s*([\d.]+)px/.exec(row)?.[1] ?? Number.NaN,
+    );
+    expect(Number.isFinite(borderWidth)).toBe(true);
+    expect(borderWidth).toBeGreaterThan(0);
+    expect(borderWidth).toBeLessThanOrEqual(1);
+    // RN 的 shadowOffset/opacity/radius → 等价 box-shadow
+    expect(row).toMatch(/box-shadow:\s*0 1px 3px rgba\(0, 0, 0, 0\.08\)/);
+    // 底色走 --surface（见 CSS 段头「RN→CSS 口径差」第 1 条：surfaceElevated 不在 9 键超集）
+    expect(row).toMatch(/background:\s*var\(--surface/);
+  });
+
+  it('T-CL-DIST-03: 标题 16/600/单行省略三件套 + info 的 min-width:0', () => {
+    const css = appCss();
+    // numberOfLines={1} 的 CSS 等价三件套：少任一条就是横向溢出而非省略号收尾
+    const title = rule(css, '.session-row__title');
+    expect(title).toMatch(/font-size:\s*16px/);
+    expect(title).toMatch(/font-weight:\s*600/);
+    expect(title).toMatch(/margin-bottom:\s*4px/);
+    expect(title).toMatch(/overflow:\s*hidden/);
+    expect(title).toMatch(/text-overflow:\s*ellipsis/);
+    expect(title).toMatch(/white-space:\s*nowrap/);
+    // styles.sessionInfo 的 minWidth:0 是标题省略的前提
+    expect(rule(css, '.session-row__info')).toMatch(/min-width:\s*0/);
+    // meta 13
+    expect(rule(css, '.session-row__meta')).toMatch(/font-size:\s*13px/);
+  });
+
+  it('T-CL-DIST-04: 三徽标 px8/py4/radius12/mr4 + 白字 12/600，三色各一', () => {
+    const css = appCss();
+    const badge = rule(css, '.session-row__badge');
+    expect(badge).toMatch(/padding:\s*4px 8px/);
+    expect(badge).toMatch(/border-radius:\s*12px/);
+    expect(badge).toMatch(/margin-right:\s*4px/);
+    expect(badge).toMatch(/color:\s*#fff/);
+    expect(badge).toMatch(/font-size:\s*12px/);
+    expect(badge).toMatch(/font-weight:\s*600/);
+    // 三色：生成中=primary、已中断=textSecondary、当前=primary
+    expect(rule(css, '.session-row__badge--generating')).toMatch(
+      /var\(--primary/,
+    );
+    expect(rule(css, '.session-row__badge--interrupted')).toMatch(
+      /var\(--text-secondary/,
+    );
+    expect(rule(css, '.session-row__badge--current')).toMatch(/var\(--primary/);
+  });
+
+  it('T-CL-DIST-05: ⋮ 18 号 + 命中区 padding 8·4、› 22/300、勾选框 18/r4/1.5', () => {
+    const css = appCss();
+    // 现网 hitSlop 8 → web 侧靠 padding 把命中区撑开（18 号 ⋮ 视觉不变）
+    expect(rule(css, '.session-row__menu')).toMatch(/font-size:\s*18px/);
+    expect(rule(css, '.session-row__menu')).toMatch(/padding:\s*8px 4px/);
+    expect(rule(css, '.session-row__chevron')).toMatch(/font-size:\s*22px/);
+    expect(rule(css, '.session-row__chevron')).toMatch(/font-weight:\s*300/);
+    // BatchCheckbox：18 见方 / radius 4 / 1.5 描边，勾上时 primary 底
+    const check = rule(css, '.session-row__check');
+    expect(check).toMatch(/width:\s*18px/);
+    expect(check).toMatch(/height:\s*18px/);
+    expect(check).toMatch(/border-radius:\s*4px/);
+    expect(check).toMatch(/border:\s*1\.5px solid/);
+    expect(rule(css, '.session-row__check--on')).toMatch(/var\(--primary/);
+    // 批量勾选态描边加粗主色（现网 borderColor:primary + borderWidth:2）
+    expect(rule(css, '.session-row--selected')).toMatch(
+      /border:\s*2px solid var\(--primary/,
+    );
+  });
+
+  it('T-CL-DIST-06: 列表头 ManageHeader（px5/py12/下边框/title 18·600）+ 新建按钮 14·8·8', () => {
+    const css = appCss();
+    expect(rule(css, '.session-list__header')).toMatch(/padding:\s*12px 5px/);
+    expect(rule(css, '.session-list__header')).toMatch(
+      /border-bottom:\s*0\.5px solid var\(--border/,
+    );
+    const title = rule(css, '.session-list__title');
+    expect(title).toMatch(/font-size:\s*18px/);
+    expect(title).toMatch(/font-weight:\s*600/);
+    // PrimaryButton：px14 / py8 / radius8 / primary 底 / 白字 14·600
+    const create = rule(css, '.session-list__create');
+    expect(create).toMatch(/padding:\s*8px 14px/);
+    expect(create).toMatch(/border-radius:\s*8px/);
+    expect(create).toMatch(/background:\s*var\(--primary/);
+    expect(create).toMatch(/color:\s*#fff/);
+    expect(create).toMatch(/font-size:\s*14px/);
+    expect(create).toMatch(/font-weight:\s*600/);
+    // 反面：现网注释明确警告过——加 align-items:center 会让 Android 命中区收成文字大小
+    expect(create).not.toMatch(/align-items:\s*center/);
+  });
+
+  it('T-CL-DIST-07: 协议与装配进 dist（列表工厂 / 第四域 / listAction 五项）', () => {
+    const script = bootScript();
+    // 与 dock 同款命名分层：工厂 createConversationSessionList + 实例方法 .mount()
+    expect(script).toContain('createConversationSessionList');
+    expect(script).toContain('sessionList.mount()');
+    // 第四域两条下行 type
+    expect(script).toContain('sessionList');
+    expect(script).toContain('viewState');
+    // listAction 上行出口
+    expect(script).toContain('listAction');
+    // **web 只发五项**：rename / copy / delete / stopRun 四个是 RN 原生菜单里的
+    // 选项（BottomSheetMenu 弹层留原生，见 spec §范围「不做」），web 侧既不发也
+    // 不引用——所以它们被 tree-shake 出产物是**正确**表现。九项白名单的完整性由
+    // dispatcher.test（T-CSL-D-06）与 bridge.test（双端相等）承担，那里读的是源码
+    // 侧常量数组，不会被 tree-shake 影响。
+    for (const action of ['open', 'create', 'menuOpen', 'longPress', 'batchToggle']) {
+      expect(script).toContain(action);
+    }
+    for (const menuOnly of ['stopRun']) {
+      expect(script).not.toContain(menuOnly);
+    }
+    // 显隐由 data-view 驱动：applyRoute 的 viewState 分支必须真写这个属性
+    expect(script).toMatch(/setAttribute\("data-view", view\)/);
+    // 长按常量（350ms / 10px）进产物
+    expect(script).toMatch(/SESSION_LIST_LONG_PRESS_MS\s*=\s*350/);
+    expect(script).toMatch(/SESSION_LIST_LONG_PRESS_MOVE_PX\s*=\s*10/);
+  });
+
+  it('T-CL-DIST-08: 装配序 = 通道 → 两 runtime → dock.mount() → sessionList.mount() → ready', () => {
+    const script = bootScript();
+    const entryAt = script.indexOf('src/web/chat-conversation/webview/main.ts');
+    expect(entryAt).toBeGreaterThan(-1);
+    const entry = script.slice(entryAt, entryAt + 2000);
+    const at = (needle: string) => entry.indexOf(needle);
+    expect(at('bindHostMessageChannel(dispatcher)')).toBeGreaterThan(-1);
+    expect(at('createTranscriptRuntime(')).toBeGreaterThan(
+      at('bindHostMessageChannel(dispatcher)'),
+    );
+    expect(at('createComposerRuntime(')).toBeGreaterThan(
+      at('createTranscriptRuntime('),
+    );
+    expect(at('dock.mount()')).toBeGreaterThan(at('createComposerRuntime('));
+    // 列表在 dock 之后：dock 的诊断要先于列表落地，两条错误不许互相夹带
+    expect(at('sessionList.mount()')).toBeGreaterThan(at('dock.mount()'));    // 列表失败只诊断、不进 ready 闸门（闸门仍只看 composerMounted + dockMounted）
+    const gate = /shouldEmitConversationReady\(\{\s*composerMounted:\s*composerRuntime\.mounted,\s*dockMounted\s*\}\)/;
+    expect(entry).toMatch(gate);
+    expect(entry).not.toMatch(/shouldEmitConversationReady\(\{[^}]*sessionListMounted/);
+    // 列表诊断的中文串在产物里被 esbuild 转成 \uXXXX（大写十六进制）——直接查
+    // 中文字面量恒不命中，得按同一套转义规则拼出来。
+    expect(script).toContain(
+      [...'列表视图未装配']
+        .map(ch => '\\u' + ch.charCodeAt(0).toString(16).toUpperCase().padStart(4, '0'))
+        .join(''),
+    );
   });
 });

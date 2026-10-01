@@ -9,10 +9,17 @@
  *   2. `createTranscriptRuntime({bindChannel:false, emitReady:false})`
  *   3. `createComposerRuntime('#composer-input', {heightReport:false, bindChannel:false, emitReady:false})`
  *   4. `dock.mount()`
- *   5. 两 runtime 均 boot 完成后由入口自建 `createBoundPost(2)` 发**单条** ready
+ *   5. `sessionList.mount()`（第二阶段 wave-1；对话视图之外新增的列表视图）
+ *   6. 两 runtime 均 boot 完成后由入口自建 `createBoundPost(2)` 发**单条** ready
  *
- * 第 5 步带一道装配闸：`composerRuntime.mounted` 与 `dock.mount()` 的返回值任一为假
+ * 第 6 步带一道装配闸：`composerRuntime.mounted` 与 `dock.mount()` 的返回值任一为假
  * （壳 id 漂移）就**不发** ready，由宿主 8s 超时兜底落错误态（详见 emitConversationReady）。
+ * **闸门刻意不含列表视图**（`sessionList.mount()` 失败只打 console.error）：对话页是
+ * 宿主下行走主链的那半边，列表是它下行的投影；列表壳漂移不该把一个能正常对话的页面
+ * 判成死页——用户会看到「列表打不开」而不是「8s 白屏 + 错误态」，前者可绕、后者不可绕。
+ * 代价是列表漂移不触发任何宿主侧信号，只有 console 里那一行；这是接受的取舍
+ * （真要更响，把 listMounted 汇进 `shouldEmitConversationReady` 即可，但会把
+ * 「列表坏了」升级成「整个对话页不可用」）。
  *
  * 第 1 步为何必须最先：`bindHostMessageChannel` 是 document + window 双注册且**无幂等
  * 守卫**，晚于两工厂则两 runtime 各自又绑一次（`bindChannel:false` 已关掉它们那两次），
@@ -21,8 +28,8 @@
  *
  * 上行 v 号（spec §合成 dispatcher 契约第 1 条）：两旧 runtime 的 `BRIDGE_V = 1`
  * 硬编码不动、其 `post` 是被 6+ 兄弟模块直接 import 的模块级单例——「注入替换 post
- * 让上行带 v:2」已否决。本入口自持的 `createBoundPost(2)` **只**供 ready 与 dockAction
- * 使用；宿主只认 `v === 2` 的 ready，其余上行宽容解析（不校验 v）。
+ * 让上行带 v:2」已否决。本入口自持的 `createBoundPost(2)` **只**供 ready、dockAction
+ * 与 listAction 使用；宿主只认 `v === 2` 的 ready，其余上行宽容解析（不校验 v）。
  *
  * es2018 纪律：web 代码禁 ES2021+ 运行时 API 与 lookbehind 正则（esbuild target es2018）。
  */
@@ -34,23 +41,26 @@ import {createTranscriptRuntime} from '@web/chat-transcript/webview/runtime/fact
 import {createComposerRuntime} from '@web/composer-input/webview/runtime/factory';
 import {createConversationDispatcher} from './dispatcher';
 import {createConversationDock, shouldEmitConversationReady} from './dock';
+import {createConversationSessionList} from './session-list';
 import {
   CONVERSATION_BRIDGE_V,
   CONVERSATION_READY_VERSION,
   conversationCapabilities,
 } from './model';
 
-// 新包自有上行出口（v:2）：仅 ready 与 dockAction。
+// 新包自有上行出口（v:2）：ready / dockAction / listAction。
 const post = createBoundPost(CONVERSATION_BRIDGE_V);
 
 const dock = createConversationDock(post);
+const sessionList = createConversationSessionList(post);
 
-// 合成 dispatcher：v2 信封 → 分域重打包 v1 → 两 runtime + dock 自有 handler。
+// 合成 dispatcher：v2 信封 → 分域重打包 v1 → 两 runtime + dock / list 自有 handler。
 const dispatcher = createConversationDispatcher({
   handleTranscript: handleTranscriptHostMessage,
   handleComposer: handleComposerHostMessage,
   applyDockRoute: route => dock.applyRoute(route),
   applyDockTheme: theme => dock.applyTheme(theme),
+  applyListRoute: route => sessionList.applyRoute(route),
 });
 
 /* ---- 1. 单次通道注册（红线：先于两工厂） ---- */
@@ -72,7 +82,12 @@ const composerRuntime = createComposerRuntime('#composer-input', {
 /* ---- 4. dock handler 挂载（textarea 由上一步的 composer runtime 挂出，事件源已就位） ---- */
 const dockMounted = dock.mount();
 
-/* ---- 5. 单 ready：两 runtime 均 boot 完成后发，且**只发一条** ----
+/* ---- 5. 列表视图挂载（第二阶段 wave-1）：与 dock 无依赖关系，壳齐即可装配。
+   排在 dock.mount() 之后是为了让「对话两块的装配诊断」先于列表落地——列表失败
+   不参与 ready 闸门（见文件头），它的 console.error 不该混进对话装配失败的诊断里。 ---- */
+const sessionListMounted = sessionList.mount();
+
+/* ---- 6. 单 ready：两 runtime 均 boot 完成后发，且**只发一条** ----
    boot 完成检测用入口自己的 DOMContentLoaded 回调：它的注册序在
    `createTranscriptRuntime` 之后（后者经 startTranscriptBoot 先注册自己的
    bootTranscript 回调），故同一次 DOMContentLoaded 里 transcript 的 boot 一定
@@ -95,6 +110,16 @@ function emitConversationReady(): void {
         '壳元素未命中（#composer-input / #composer-dock），交由宿主 8s 超时兜底落错误态。',
     );
     return;
+  }
+  // 列表视图装配失败**只诊断、不挡 ready**（理由见文件头「闸门刻意不含列表视图」）。
+  // 位置在闸口之后：对话装配已经失败时那条诊断已经 return 掉了，这里不会再多打一行，
+  // 免得同一个根因（壳 id 漂移）刷出两条互相干扰的错误。
+  if (!sessionListMounted) {
+    console.error(
+      '[chat-conversation] 列表视图未装配（不影响对话）：' +
+        '壳元素未命中（#session-list / #session-list-rows / #session-list-empty / ' +
+        '#session-list-create），列表入口不可用；已按定案照常发 ready。',
+    );
   }
   post('ready', {
     version: CONVERSATION_READY_VERSION,

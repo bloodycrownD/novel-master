@@ -12,10 +12,14 @@ import {describe, expect, it} from '@jest/globals';
 import {
   CONVERSATION_BRIDGE_V,
   CONVERSATION_DOCK_ACTIONS,
+  CONVERSATION_LIST_ACTIONS,
   CONVERSATION_THEME_KEYS,
   conversationCapabilitiesInclude,
   conversationDockActionIncludes,
+  conversationListActionIncludes,
   decodeConversationUpstream,
+  encodeHostToConversation,
+  parseConversationListAction,
   parseConversationScrollSnapshot,
   readReadyCapabilities,
   type ConversationHostMessage,
@@ -26,6 +30,8 @@ import {
   CONVERSATION_READY_VERSION as WEB_CONVERSATION_READY_VERSION,
   CONVERSATION_COMPOSER_METRICS as WEB_CONVERSATION_COMPOSER_METRICS,
   CONVERSATION_DOCK_ACTIONS as WEB_CONVERSATION_DOCK_ACTIONS,
+  CONVERSATION_LIST_ACTIONS as WEB_CONVERSATION_LIST_ACTIONS,
+  CONVERSATION_LIST_TYPES as WEB_CONVERSATION_LIST_TYPES,
   CONVERSATION_THEME_KEYS as WEB_CONVERSATION_THEME_KEYS,
   CONVERSATION_COMPOSER_TYPES as WEB_CONVERSATION_COMPOSER_TYPES,
   CONVERSATION_DOCK_TYPES as WEB_CONVERSATION_DOCK_TYPES,
@@ -66,6 +72,9 @@ const RN_HOST_MESSAGE_TYPES: Record<ConversationHostMessage['type'], true> = {
   composerState: true,
   composerPaste: true,
   selectAll: true,
+  // 列表域（第四域，第二阶段 wave-1）
+  sessionList: true,
+  viewState: true,
 };
 
 describe('chat-conversation 桥协议 v2 · 双端一致性', () => {
@@ -91,16 +100,17 @@ describe('chat-conversation 桥协议 v2 · 双端一致性', () => {
     expect(WEB_CONVERSATION_THEME_KEYS).toBe(HOST_THEME_KEYS);
   });
 
-  it('下行 type 全集：RN ConversationHostMessage 与 web 三清单扁平化相等', () => {
+  it('下行 type 全集：RN ConversationHostMessage 与 web 四清单扁平化相等', () => {
     const webDownstreamTypes = [
       'init',
       'themeUpdate',
       ...WEB_CONVERSATION_TRANSCRIPT_TYPES,
       ...WEB_CONVERSATION_COMPOSER_TYPES,
       ...WEB_CONVERSATION_DOCK_TYPES,
+      ...WEB_CONVERSATION_LIST_TYPES,
     ];
     const rnDownstreamTypes = Object.keys(RN_HOST_MESSAGE_TYPES);
-    // web 侧三清单内部不得有重复项（否则扁平化会引入伪计数）
+    // web 侧四清单内部不得有重复项（否则扁平化会引入伪计数）
     expect(new Set(webDownstreamTypes).size).toBe(webDownstreamTypes.length);
     // 双向相等：任一侧多一条/少一条都红（RN 侧的增删另由上面的 Record 类型锁住）
     expect([...webDownstreamTypes].sort()).toEqual([...rnDownstreamTypes].sort());
@@ -144,6 +154,141 @@ describe('chat-conversation 桥协议 v2 · 双端一致性', () => {
     expect(conversationDockActionIncludes('rollback')).toBe(false);
     expect(conversationDockActionIncludes(42)).toBe(false);
     expect(conversationDockActionIncludes(null)).toBe(false);
+  });
+
+  it('listAction 十一项双端一致（第二阶段 wave-1 · 第四域；wave-3 加批量头两项）', () => {
+    expect([...CONVERSATION_LIST_ACTIONS]).toEqual([
+      ...WEB_CONVERSATION_LIST_ACTIONS,
+    ]);
+    expect(CONVERSATION_LIST_ACTIONS).toHaveLength(11);
+    // 判定函数与 dockAction 同款口径：枚举外一律拒
+    expect(conversationListActionIncludes('open')).toBe(true);
+    expect(conversationListActionIncludes('batchToggle')).toBe(true);
+    expect(conversationListActionIncludes('stopRun')).toBe(true);
+    // 批量头两项（wave-3）：双端都在白名单里
+    expect(conversationListActionIncludes('batchDelete')).toBe(true);
+    expect(conversationListActionIncludes('batchExit')).toBe(true);
+    expect(conversationListActionIncludes('menu')).toBe(false);
+    expect(conversationListActionIncludes(7)).toBe(false);
+  });
+});
+
+describe('上行 listAction 解码（v:2 · 第二阶段 wave-1）', () => {
+  /** 走完整的「web 发 → 宽松 decoder → 收窄」往返，断言两头都认。 */
+  function roundTrip(payload: Record<string, unknown>) {
+    const decoded = decodeConversationUpstream(
+      JSON.stringify({v: 2, type: 'listAction', payload}),
+    );
+    expect(decoded.ok).toBe(true);
+    if (!decoded.ok) {
+      throw new Error('listAction 应被宽松 decoder 收下');
+    }
+    return parseConversationListAction(decoded.message);
+  }
+
+  it('带 sessionId 的行级动作原样往返（open / menuOpen / longPress / batchToggle）', () => {
+    for (const kind of ['open', 'menuOpen', 'longPress', 'batchToggle'] as const) {
+      expect(roundTrip({kind, sessionId: 's1'})).toEqual({kind, sessionId: 's1'});
+    }
+  });
+
+  it('create 不带 sessionId（没有行可指）——缺省即正确形状', () => {
+    expect(roundTrip({kind: 'create'})).toEqual({kind: 'create'});
+    // 空串视同缺省：空 sessionId 传进 openConversation 只会让状态机查不到会话
+    expect(roundTrip({kind: 'create', sessionId: ''})).toEqual({kind: 'create'});
+    expect(roundTrip({kind: 'open', sessionId: 42})).toEqual({kind: 'open'});
+  });
+
+  it('batchDelete / batchExit 同 create：作用于整个勾选集合，不带 sessionId', () => {
+    // wave-3：批量头的两钮只报「点了删除 / 点了取消」，勾选集合由宿主自己读——
+    // web 侧传上来的 sessionId 若是脏值，宿主也应当整个忽略（判据是批量态真源）。
+    for (const kind of ['batchDelete', 'batchExit'] as const) {
+      expect(roundTrip({kind})).toEqual({kind});
+      expect(roundTrip({kind, sessionId: ''})).toEqual({kind});
+    }
+  });
+
+  it('批量头两项即便带了 sessionId 也原样收（解码器不做语义裁剪）', () => {
+    // 解码层只做「非空字符串就带上」；真正的忽略发生在宿主分发
+    // （useSessionListBridge 里 batchDelete/batchExit 分支先于取 targetId）。
+    expect(roundTrip({kind: 'batchDelete', sessionId: 's1'})).toEqual({
+      kind: 'batchDelete',
+      sessionId: 's1',
+    });
+  });
+
+  it('kind 不在白名单内一律 null（行为闸门，不许掉进既有分支）', () => {
+    for (const bad of [
+      {kind: 'menu'},
+      {kind: ''},
+      {kind: 42},
+      {kind: null},
+      {},
+    ]) {
+      expect(roundTrip(bad as Record<string, unknown>)).toBeNull();
+    }
+  });
+
+  it('非 listAction 的上行不误判（parse 只认自己的 type）', () => {
+    const decoded = decodeConversationUpstream(
+      JSON.stringify({v: 2, type: 'dockAction', payload: {action: 'send'}}),
+    );
+    expect(decoded.ok).toBe(true);
+    if (decoded.ok) {
+      expect(parseConversationListAction(decoded.message)).toBeNull();
+    }
+  });
+
+  it('v:1 的 listAction 同样收（宽松口径不校验 v，与两 runtime 上行同款）', () => {
+    // web 侧 listAction 走 createBoundPost(2) 恒为 v:2，但解码器不因 v 拒收：
+    // 与 dockAction 同一口径——校验 v 等于给「上行 v 号写错」关一扇静默门。
+    const decoded = decodeConversationUpstream(
+      JSON.stringify({v: 1, type: 'listAction', payload: {kind: 'open', sessionId: 's1'}}),
+    );
+    expect(decoded.ok).toBe(true);
+    if (decoded.ok) {
+      expect(parseConversationListAction(decoded.message)).toEqual({
+        kind: 'open',
+        sessionId: 's1',
+      });
+    }
+  });
+});
+
+describe('下行列表域载荷（宿主接线前的协议形状 · wave-2 接口）', () => {
+  it('sessionList / viewState 两信封可编码，载荷形状被类型锁住', () => {
+    // 这里只钉**协议形状**（wave-2 宿主接线按这个形状发），不断言任何宿主行为。
+    const sessionList: ConversationHostMessage = {
+      v: 2,
+      type: 'sessionList',
+      payload: {
+        sessions: [
+          {
+            id: 's1',
+            title: '写代码',
+            updatedAtMs: 1_700_000_000_000,
+            active: false,
+            interrupted: false,
+            current: true,
+          },
+        ],
+        batchSelect: ['s1'],
+      },
+    };
+    const viewState: ConversationHostMessage = {
+      v: 2,
+      type: 'viewState',
+      payload: {view: 'list'},
+    };
+    expect(encodeHostToConversation(sessionList)).toContain('"sessionList"');
+    expect(encodeHostToConversation(viewState)).toContain('"viewState"');
+    // batchSelect 可选：不在批量态时字段整个缺省
+    const plain: ConversationHostMessage = {
+      v: 2,
+      type: 'sessionList',
+      payload: {sessions: []},
+    };
+    expect(encodeHostToConversation(plain)).not.toContain('batchSelect');
   });
 });
 

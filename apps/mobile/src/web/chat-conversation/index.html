@@ -16,8 +16,15 @@
         #scroller(flex:1) / #composer-dock(styles.dock) → hintRow / error / box(chips +
         typeahead 浮层 + #composer-input + toolbar)
       双 portal 刻意留在 body 直接子级——fixed 定位包含块语境与旧包一致。
+
+      **双视图（第二阶段）**：#app 挂 data-view（'conversation' | 'list'），CSS 按该属性
+      切显隐。列表视图 #session-list 与 #scroller / #composer-dock 平级挂在 #app 下——
+      视图切换是**文档内属性切换**，不销毁任何节点，WebView 文档从头到尾只挂载一次
+      （这正是本阶段治的病：进出会话卡的主体是 WebView 销毁重建）。
+      data-view 只能由 JS 改（viewState 下行），不写进 CSS 默认值：
+      壳里的初值是 conversation，缺 viewState 时不至于开屏就一张空列表。
     -->
-    <div id="app">
+    <div id="app" data-view="conversation">
       <div id="scroller"><div id="rows"></div></div>
       <div id="composer-dock">
         <!-- !hasModel 时的可点提示行（dockAction.needModel；判据是 hasModel 不是 inputDisabled） -->
@@ -47,6 +54,74 @@
             <!-- toolbar：spacer + ⛶ + @ + $ + 发送/终止（由 dock handler 装配） -->
             <div id="composer-toolbar" class="toolbar" data-testid="composer-toolbar"></div>
           </div>
+        </div>
+      </div>
+      <!-- 列表视图：与对话视图（#scroller + #composer-dock）平级。DOM 骨架写死在壳里
+           （行内容由 session-list.ts 渲进 #session-list-rows），理由同 dock：壳 id 漂移
+           要能被 mount() 如实报 false，而不是让 handler 各自去猜节点。 -->
+      <div id="session-list" class="session-list" data-testid="session-list">
+        <!-- 列表头：ManageHeader「会话」标题 + 新建按钮（现网 PrimaryButton）。
+             批量态（wave-3）下整行切批量头：取消 | 已选 N 项 | 删除——结构与数值
+             逐条抄现网 ManageHeader 的 styles.batchRow / batchCenter / batchActions，
+             哪一段负责什么见 session-list.ts 的 applyBatchHeader。 -->
+        <div id="session-list-header" class="session-list__header" data-testid="session-list-header">
+          <!-- 普通态两段 -->
+          <div id="session-list-title" class="session-list__title">会话</div>
+          <button
+            id="session-list-create"
+            class="session-list__create"
+            type="button"
+            aria-label="新建会话"
+            data-testid="session-list-create"
+          >
+            新建会话
+          </button>
+          <!-- 批量态三段（默认 hidden；由 session-list.ts 按 batchSelect 切） -->
+          <div
+            id="session-list-batch-bar"
+            class="session-list__batch-bar"
+            data-testid="session-list-batch-bar"
+            hidden
+          >
+            <button
+              id="session-list-batch-cancel"
+              class="session-list__batch-cancel"
+              type="button"
+              data-testid="session-list-batch-cancel"
+            >
+              取消
+            </button>
+            <div
+              id="session-list-batch-count"
+              class="session-list__batch-count"
+              data-testid="session-list-batch-count"
+            >
+              已选 0 项
+            </div>
+            <button
+              id="session-list-batch-delete"
+              class="session-list__batch-delete"
+              type="button"
+              data-testid="session-list-batch-delete"
+            >
+              删除
+            </button>
+          </div>
+        </div>
+        <!-- 行容器（FlatList 的等价物；首轮全量渲染，不做窗口化） -->
+        <div
+          id="session-list-rows"
+          class="session-list__rows"
+          data-testid="session-list-rows"
+        ></div>
+        <!-- 空态（ListEmptyComponent「暂无会话」），由 JS 切 hidden -->
+        <div
+          id="session-list-empty"
+          class="session-list__empty"
+          data-testid="session-list-empty"
+          hidden
+        >
+          暂无会话
         </div>
       </div>
     </div>
