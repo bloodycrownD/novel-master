@@ -5,6 +5,8 @@
  * - T-R1：register / abort / unregister / has 基本语义 + unregister 所有权比对
  *   （不同 controller 实例不删）；
  * - T-R3：隔离性——register 父 + 子两个 sessionId，abort 子不影响父 controller。
+ * - T-TS4：tryRegister claim 语义——已注册时返回 false 且**不覆盖**既有
+ *   controller（并发硬互斥地基，见 spec D5）。
  *
  * @module test/service/agent/agent-abort-registry.test
  */
@@ -89,6 +91,63 @@ describe("AgentAbortRegistry", () => {
       assert.equal(childController.signal.aborted, true);
       assert.equal(registry.has("parent-session"), true);
       assert.equal(registry.has("child-session"), true);
+    });
+  });
+
+  describe("T-TS4 tryRegister claim（已注册不覆盖）", () => {
+    it("首次 claim 返回 true；同 id 二次 claim 返回 false 且原 controller 仍在", () => {
+      const registry = createAgentAbortRegistry();
+      const winner = new AbortController();
+      const loser = new AbortController();
+
+      assert.equal(registry.tryRegister("sess-1", winner), true);
+      assert.equal(registry.has("sess-1"), true);
+
+      // 二次 claim 必须失败，且不得覆盖 winner。
+      assert.equal(registry.tryRegister("sess-1", loser), false);
+
+      // 关键牙齿：abort 命中的仍是 winner——loser 既没被登记、也未被登记成唯一真源。
+      registry.abort("sess-1");
+      assert.equal(winner.signal.aborted, true);
+      assert.equal(loser.signal.aborted, false);
+    });
+
+    it("败方 finally 的 unregister 不误删赢家记录（所有权比对）", () => {
+      const registry = createAgentAbortRegistry();
+      const winner = new AbortController();
+      const loser = new AbortController();
+
+      registry.tryRegister("sess-1", winner);
+      const claimed = registry.tryRegister("sess-1", loser);
+      assert.equal(claimed, false);
+
+      // 败方照常走 finally 反注册：所有权不匹配，记录必须原样保留。
+      registry.unregister("sess-1", loser);
+      assert.equal(registry.has("sess-1"), true);
+
+      // 赢家反注册才真正释放；释放后可再次 claim。
+      registry.unregister("sess-1", winner);
+      assert.equal(registry.has("sess-1"), false);
+      assert.equal(registry.tryRegister("sess-1", loser), true);
+    });
+
+    it("tryRegister 不影响既有 register 覆盖语义（两套语义并行）", () => {
+      const registry = createAgentAbortRegistry();
+      const first = new AbortController();
+      const second = new AbortController();
+
+      registry.register("sess-1", first);
+      // register 是无条件覆盖：换成 second。
+      registry.register("sess-1", second);
+
+      // 此时 tryRegister 依然判为「已占用」，不覆盖 second。
+      const third = new AbortController();
+      assert.equal(registry.tryRegister("sess-1", third), false);
+
+      registry.abort("sess-1");
+      assert.equal(second.signal.aborted, true);
+      assert.equal(first.signal.aborted, false);
+      assert.equal(third.signal.aborted, false);
     });
   });
 });

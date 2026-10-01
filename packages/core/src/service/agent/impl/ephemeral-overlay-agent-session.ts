@@ -12,6 +12,7 @@ import type {
   MessageContent,
 } from "@/domain/chat/model/message.js";
 import type { MessageUsage } from "@/domain/chat/model/message-usage.js";
+import type { MessageAttachment } from "@/domain/chat/model/message-attachment.schema.js";
 
 /**
  * {@link AgentSession} that lists base + overlay messages; {@link append} never hits SQLite.
@@ -48,6 +49,12 @@ export class EphemeralOverlayAgentSession implements AgentSession {
       modelName?: string | null;
       raw?: Record<string, unknown> | null;
       usage?: MessageUsage;
+      /**
+       * 结构化附件：overlay 虽然不落 SQLite，但附件必须带上——
+       * event 触发的 agent run 若挂附件，静默丢弃会让提示词链路少掉整份
+       * 文件正文（hydrate 读的就是 message.attachments）。
+       */
+      attachments?: readonly MessageAttachment[];
     }
   ): Promise<ChatMessage> {
     const seq = this.nextSeq++;
@@ -63,6 +70,9 @@ export class EphemeralOverlayAgentSession implements AgentSession {
       createdAtMs: Date.now(),
       hidden: false,
       ...(options?.usage != null ? { usage: options.usage } : {}),
+      ...(options?.attachments != null && options.attachments.length > 0
+        ? { attachments: options.attachments }
+        : {}),
     };
     this.overlay.push(message);
     return message;

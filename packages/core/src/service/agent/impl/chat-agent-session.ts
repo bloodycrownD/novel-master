@@ -8,6 +8,7 @@ import type { MessageContent } from "@/domain/chat/model/message.js";
 import type { ChatMessage } from "@/domain/chat/model/message.js";
 import type { MessageUsage } from "@/domain/chat/model/message-usage.js";
 import type { MessageService } from "@/service/chat/message.port.js";
+import type { MessageAttachment } from "@/domain/chat/model/message-attachment.schema.js";
 import type { AgentSession } from "@/domain/agent/session/agent-session.port.js";
 
 /**
@@ -46,6 +47,8 @@ export class ChatAgentSession implements AgentSession {
       modelName?: string | null;
       raw?: Record<string, unknown> | null;
       usage?: MessageUsage;
+      /** 结构化附件：透传给 `MessageService.append`（写 `attachments_json`）。 */
+      attachments?: readonly MessageAttachment[];
     }
   ): Promise<ChatMessage> {
     return this.messages.append(this.sessionId, role, content, options);

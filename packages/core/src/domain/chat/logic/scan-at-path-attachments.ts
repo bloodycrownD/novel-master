@@ -4,10 +4,16 @@
  * 落库 path 与提示词 seen key / 短提示 XML 同形：补前导 `/`；目录先按尾 `/` 判 type，
  * 计入去重时去尾（seen key 无尾斜杠），落库目录可保留尾 `/`。
  *
+ * 另对外提供 {@link attachmentsFromPaths}：把「显式路径列表」（task 工具
+ * `fileAttachment`）物化成同一链路的合规新写入附件。
+ *
  * @module domain/chat/logic/scan-at-path-attachments
  */
 
-import type { MessageAttachment } from "../model/message-attachment.schema.js";
+import {
+  attachmentStorageName,
+  type MessageAttachment,
+} from "../model/message-attachment.schema.js";
 import {
   isBinaryAttachPath,
   isImageAttachPath,
@@ -81,6 +87,56 @@ export function mergeAttachmentsByPath(
     out.push(item);
   }
   return out;
+}
+
+/** 空串 / 纯空白路径元素：参数非法，调用方（如 task 工具）转 ToolError 回给模型。 */
+export class AttachmentPathArgumentError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "AttachmentPathArgumentError";
+  }
+}
+
+/**
+ * 显式路径列表 → `source:"attach"` 合规新写入附件（task 工具 `fileAttachment` 用）。
+ *
+ * 与 {@link scanAtPathAttachments} 的 `@path` 扫描共用同一条物化路径——逐条走
+ * {@link attachFromPath} 的规范化（`isPromptDirTokenPath` / `normalizePromptStorePath`
+ * / `tryNormalizePromptSeenPath` / image·binary 启发式 / type 分派），落库 path 形态
+ * 与正文扫描完全一致（补前导 `/`，目录保留尾 `/`）；随后经
+ * {@link mergeAttachmentsByPath} 按 seen key 去重（先物化、后去重，与正文扫描同序）。
+ *
+ * 两处与 {@link attachFromPath} 的差异（**合规新写入形态**，spec D9/D10）：
+ * 1. `name` 一律覆写为 {@link attachmentStorageName}（= 落库 path）——带 `action` 的
+ *    zod refine 硬要求 `name === attachmentStorageName(path)`，照抄 basename 会直接抛错
+ *    （`messages.append` 走 `parse` 而非 `safeParse`，子会话首条 user 消息会落库炸掉）；
+ * 2. 显式补 `action: "userAttach"`——hydrate 阶段不需要再补，落库形态即新写入口径。
+ *
+ * `content` 保持 `null`（首次全文由 `prepareUserMessagesForPrompt` 的 hydrate 按
+ * seen 判定注入）；`type` 保留启发式分派结果（text / image / dir）。
+ *
+ * @param paths 原始路径列表（允许相对写法与目录尾 `/`，均按 attachFromPath 口径规范化）
+ * @throws {AttachmentPathArgumentError} 元素为空串或纯空白
+ */
+export function attachmentsFromPaths(
+  paths: readonly string[]
+): MessageAttachment[] {
+  const materialized: MessageAttachment[] = [];
+  for (const raw of paths) {
+    if (typeof raw !== "string" || raw.trim() === "") {
+      throw new AttachmentPathArgumentError(
+        "附件路径不能为空串或纯空白",
+      );
+    }
+    const base = attachFromPath(raw);
+    materialized.push({
+      ...base,
+      name: attachmentStorageName(base.path),
+      action: "userAttach",
+    });
+  }
+  // 去重键取的是落库 path 的规范化 seen key，与正文扫描共用一套去重口径。
+  return mergeAttachmentsByPath([], materialized);
 }
 
 function attachmentDedupeKey(a: MessageAttachment): string | null {
