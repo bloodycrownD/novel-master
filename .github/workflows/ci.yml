@@ -60,12 +60,70 @@ jobs:
       - name: Format
         run: npm run format:check
 
+      # 编码门禁（wave-e H1 钩子①）：UTF-8 BOM / U+FFFD（源码被写坏）/ 非 UTF-8 字节，
+      # 三类分开报（后两类的修法不同，见 scripts/check-encoding.mjs 文件头）。
+      # 上线时点必须在清账之后：本仓 2026-10-01 已清零（bom/fffd/bad-utf8 = 0/0/0），故可直接 blocking。
+      - name: Encoding
+        run: npm run check:encoding
+
       - name: Lint
         continue-on-error: true
         run: npm run lint --workspaces --if-present
+
+      # X1：desktop / core / 驱动包 / apps/cli 的 lint 转 blocking。
+      # 与上面那条全 workspace Lint 并存：那条还带着 mobile 的 27 条存量 error，
+      # 在 mobile 清账前保留 continue-on-error；这里的 workspace 名写全、不带
+      # --if-present，任一包红即本步红。删这条前请先确认 mobile 已收口。
+      - name: "Lint (blocking: desktop/core/drivers)"
+        run: >-
+          npm run lint
+          -w @novel-master/desktop
+          -w @novel-master/core
+          -w @novel-master/cli
+          -w @novel-master/llm-sse-native
+          -w @novel-master/sksp-android
+          -w @novel-master/sksp-linux
+          -w @novel-master/sksp-mac
+          -w @novel-master/sksp-windows
+          -w @novel-master/cloud-sync-driver-s3
+          -w @novel-master/tdbc-driver-better-sqlite3
+          -w @novel-master/tdbc-driver-op-sqlite
+          -w @novel-master/tdbc-driver-rn
+          -w @novel-master/tokenizer-driver-node
+          -w @novel-master/tokenizer-driver-rn
+          -w @novel-master/tdbc-conformance
 
       - name: Typecheck
         run: npm run typecheck --workspaces --if-present
 
       - name: Test
         run: npm run test --workspaces --if-present
+
+  # 零收集守卫（wave-e H6 钩子⑥）：「glob 展开失败 → 收集 0 条 → 退出码 0」的假绿
+  # （N-P0-02）**只在 Windows 出现**——单引号 + shell:true 在 Linux 绿、Windows 静默空跑。
+  # 所以这道门禁必须在两种 shell 上各跑一遍；`runs-on` 是 **job 级**键，
+  # 写在 step 上会被 GitHub Actions 忽略（那样就退化成只跑 ubuntu，等于没测），
+  # 因此只能走独立 job + matrix。
+  # 只跑收集断言（不起全量测试），成本是秒级。
+  zero-collect-guard:
+    name: Zero-collect guard (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Zero-collect guard
+        run: npm run test:collect-guard --workspaces --if-present

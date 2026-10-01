@@ -1,0 +1,208 @@
+#!/usr/bin/env node
+/**
+ * check-encoding · 钩子①（wave-e H1）
+ *
+ * 扫描面（实测口径，落地于 2026-10-01）：
+ *   - 只看 git 跟踪文件（`git ls-files -z`），拿不到清单时回落全量遍历并 warn；
+ *   - 后缀白名单：.ts .tsx .js .mjs .json .md .yml .yaml .kt .java .gradle
+ *   - 排除目录：node_modules/ dist/ webview-dist/ coverage/ .git/ android/
+ *     ⚠️ `android/` 必须整段排除，而不只是 `android/app/build/`：只有尾随斜杠的目录
+ *     模式匹配不到 `apps/mobile/android/app/build.gradle` 这个**文件**路径，
+ *     而它有 20 处 U+FFFD 且 TextDecoder(fatal) 判非合法 UTF-8（GBK 混编，
+ *     RULE:113 已单列为另一条修复线 / wave-a），本门禁不接管。
+ *   - ⚠️ **显式排除面**：`docs/Iterations/`（迭代过程文档面）。实测该目录下另有 3 个 BOM +
+ *     1 个含 U+FFFD 的文件（其中 1 个同时是非法 UTF-8），它们属迭代留痕文档、不算源码错误；
+ *     但必须**显式声明**在这里，否则读者会以为门禁覆盖了全仓所有文本。
+ *     其余 `docs/`（如 `docs/apm/`、包级 `packages/xxx/docs/`）**仍在扫描面内**。
+ *
+ * 两类命中，必须分开报：
+ *   - `bom`  ：前三字节 EF BB BF（合法 UTF-8 前的 BOM，工具链会当首行内容处理）；
+ *   - `fffd` ：UTF-8 **合法**但内容里真含 U+FFFD 码点 ⇒ 源码被写坏过，本条要治的正是它；
+ *   - `bad-utf8`：字节层就不是合法 UTF-8（解码产 replacement char，但文件里根本没有
+ *     U+FFFD 这个码点）⇒ 坏的是**原始字节**，不能逐字符替换，须从父提交整体还原
+ *     （wave-e H1.3 Step 4 的 B 类，MF-9）。这一类与 `fffd` 分开报，避免误用 A 类修法。
+ *
+ * 用法：
+ *   node scripts/check-encoding.mjs            # 全量扫描
+ *   node scripts/check-encoding.mjs --staged   # 只扫 git 暂存区（pre-commit 用）
+ *   node scripts/check-encoding.mjs --baseline # 打印各 workspace 的命中计数（建基线用）
+ *
+ * 退出码：命中即 1（门禁语义）。`--baseline` 恒 0。
+ */
+import { execFileSync } from "node:child_process";
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import path from "node:path";
+
+const repoRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1")), "..");
+
+const SCAN_EXTENSIONS = new Set([
+  ".ts", ".tsx", ".js", ".mjs", ".json", ".md", ".yml", ".yaml", ".kt", ".java", ".gradle",
+]);
+const SKIP_DIRECTORIES = new Set([
+  "node_modules", "dist", "webview-dist", "coverage", ".git", "android", "build",
+]);
+/** 显式排除面（路径前缀，仓根相对、正斜杠）：见文件头「显式排除面」声明。 */
+const SKIP_PATH_PREFIXES = ["docs/Iterations/"];
+const BOM = Buffer.from([0xef, 0xbb, 0xbf]);
+const FFFD = "\uFFFD";
+
+const args = process.argv.slice(2);
+const onlyStaged = args.includes("--staged");
+const baselineMode = args.includes("--baseline");
+
+/** @type {{ bom: string[], fffd: string[], badUtf8: string[] }} */
+const findings = { bom: [], fffd: [], badUtf8: [] };
+
+const files = onlyStaged ? listStagedFiles() : listTrackedFiles();
+
+for (const file of files) {
+  const rel = path.relative(repoRoot, file).split(path.sep).join("/");
+  if (!SCAN_EXTENSIONS.has(path.extname(rel))) continue;
+  if (SKIP_PATH_PREFIXES.some((prefix) => rel.startsWith(prefix))) continue;
+  if (rel.split("/").some((segment) => SKIP_DIRECTORIES.has(segment))) continue;
+
+  let buffer;
+  try {
+    buffer = readFileSync(file);
+  } catch {
+    continue;
+  }
+  if (buffer.length === 0) continue;
+
+  if (buffer.length >= 3 && buffer[0] === BOM[0] && buffer[1] === BOM[1] && buffer[2] === BOM[2]) {
+    findings.bom.push(rel);
+  }
+
+  const decoded = new TextDecoder("utf-8", { fatal: false }).decode(buffer);
+  const replacementCount = countOccurrences(decoded, FFFD);
+  if (replacementCount > 0) findings.fffd.push(`${rel} (${replacementCount})`);
+
+  if (isValidUtf8(buffer)) continue;
+  // 非法 UTF-8：文件里没有 U+FFFD 码点，坏的是字节。上面若同时报了 fffd，
+  // 说明解码产生的 replacement 与真码点混在一起了 —— 仍按 bad-utf8 归类。
+  findings.badUtf8.push(rel);
+}
+
+if (baselineMode) {
+  printBaseline();
+  process.exit(0);
+}
+
+printFindings();
+process.exit(
+  findings.bom.length + findings.fffd.length + findings.badUtf8.length > 0 ? 1 : 0,
+);
+
+function listTrackedFiles() {
+  const listed = tryGit(["ls-files", "-z"]);
+  if (listed !== null) {
+    return listed.split("\0").filter(Boolean).map((rel) => path.join(repoRoot, rel));
+  }
+  console.warn("[check-encoding] `git ls-files` 不可用，回落全量遍历（会包含未跟踪文件）。");
+  return walk(repoRoot);
+}
+
+function listStagedFiles() {
+  const listed = tryGit(["diff", "--cached", "--name-only", "-z", "--diff-filter=ACM"]);
+  if (listed === null) {
+    console.error("[check-encoding] `git diff --cached` 不可用，无法扫描暂存区。");
+    process.exit(1);
+  }
+  return listed.split("\0").filter(Boolean).map((rel) => path.join(repoRoot, rel));
+}
+
+function tryGit(gitArgs) {
+  try {
+    return execFileSync("git", gitArgs, {
+      cwd: repoRoot,
+      encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
+    });
+  } catch {
+    return null;
+  }
+}
+
+function walk(dir) {
+  const out = [];
+  for (const name of readdirSafe(dir)) {
+    const full = path.join(dir, name);
+    if (SKIP_DIRECTORIES.has(name)) continue;
+    let stats;
+    try {
+      stats = statSync(full);
+    } catch {
+      continue;
+    }
+    if (stats.isDirectory()) out.push(...walk(full));
+    else if (stats.isFile()) out.push(full);
+  }
+  return out;
+}
+
+function readdirSafe(dir) {
+  try {
+    return readdirSync(dir);
+  } catch {
+    return [];
+  }
+}
+
+function isValidUtf8(buffer) {
+  try {
+    new TextDecoder("utf-8", { fatal: true }).decode(buffer);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function countOccurrences(haystack, needle) {
+  let count = 0;
+  let index = haystack.indexOf(needle);
+  while (index !== -1) {
+    count += 1;
+    index = haystack.indexOf(needle, index + needle.length);
+  }
+  return count;
+}
+
+function printFindings() {
+  const total = findings.bom.length + findings.fffd.length + findings.badUtf8.length;
+  if (total === 0) {
+    console.log(`[check-encoding] OK：扫描 ${files.length} 个跟踪文件，0 命中。`);
+    return;
+  }
+  console.error(`[check-encoding] 命中 ${total} 处（扫描面：git 跟踪文件，排除 node_modules/dist/webview-dist/android/docs-Iterations）`);
+  printGroup("BOM（UTF-8 BOM 前缀，合法编码，仅工具链风险）", findings.bom);
+  printGroup("U+FFFD（合法 UTF-8 内嵌真替换字符 ⇒ 源码被写坏；须逐字符替换）", findings.fffd);
+  printGroup(
+    "非 UTF-8（字节层非法，文件里没有 U+FFFD 码点 ⇒ 坏的是字节；须从父提交整体还原）",
+    findings.badUtf8,
+  );
+  console.error("[check-encoding] 口径见 wave-e H1.3 Step 4：A 类（fffd）走字节级安全替换，B 类（bad-utf8）走 `git checkout <父提交> -- <路径>`。");
+}
+
+function printGroup(title, items) {
+  if (items.length === 0) return;
+  console.error(`\n  · ${title} —— ${items.length}`);
+  for (const item of items) console.error(`      ${item}`);
+}
+
+function printBaseline() {
+  const buckets = new Map();
+  const bump = (kind, rel) => {
+    const key = kind === "bom" ? "BOM" : kind === "fffd" ? "U+FFFD" : "非 UTF-8";
+    const scope = rel.split("/").slice(0, 2).join("/");
+    const bucketKey = `${scope} | ${key}`;
+    buckets.set(bucketKey, (buckets.get(bucketKey) ?? 0) + 1);
+  };
+  for (const rel of findings.bom) bump("bom", rel);
+  for (const entry of findings.fffd) bump("fffd", entry.split(" (")[0]);
+  for (const rel of findings.badUtf8) bump("badUtf8", rel);
+  console.log(`[check-encoding] baseline：扫描 ${files.length} 个文件`);
+  for (const [key, count] of [...buckets].sort()) console.log(`  ${key} = ${count}`);
+  console.log(
+    `[check-encoding] 合计 bom=${findings.bom.length} fffd=${findings.fffd.length} badUtf8=${findings.badUtf8.length}`,
+  );
+}
