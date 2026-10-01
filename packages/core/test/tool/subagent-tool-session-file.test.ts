@@ -588,6 +588,9 @@ describe("task fileAttachment 物化与预算（T-TA*）", () => {
         // image / dir 即便 findContentSize 给出巨大体积也不计字节
         "/pic.png": { kind: "inline", size: 99_000_000 },
         "/dir/": null,
+        // binary 被 attachmentsFromPaths 分派成 type:"text"，但 hydrate 侧只给文件名，
+        // 同样不该吃字符预算（否则白占并把后续文本附件挤出预算）。
+        "/data.bin": { kind: "blob", size: 99_000_000 },
       },
     });
     await subagentTool.run(
@@ -595,11 +598,42 @@ describe("task fileAttachment 物化与预算（T-TA*）", () => {
         description: "d",
         prompt: "正文",
         subagentName: "general",
-        fileAttachment: ["pic.png", "dir/"],
+        fileAttachment: ["pic.png", "dir/", "data.bin"],
       },
       toolCtx(ctx)
     );
-    assert.equal(capturedOpts[0]!.attachments!.length, 2, "image/dir 只占名额不计字节");
+    const atts = capturedOpts[0]!.attachments!;
+    assert.equal(atts.length, 3, "image/dir/binary 只占名额不计字节");
+    // 牙齿：binary 的分派形态确实是 text（不是 image），所以「不计字节」只能靠
+    // 路径启发式兜住——若把启发式删掉，这里仍是 text 且会被计入预算。
+    assert.equal(atts[2]!.type, "text");
+    assert.equal(atts[2]!.path, "/data.bin");
+    assert.equal(capturedOpts[0]!.prompt, "正文", "不超预算 → 不加尾注");
+  });
+
+  it("T-TA3d2: binary 巨大体积不得挤掉后续文本附件（D11：binary 不计字节，只占名额）", async () => {
+    const { ctx, capturedOpts } = makeSubagent({
+      sizes: {
+        // 单这一条就远超字符预算（若被计入，预算立刻耗尽）
+        "/data.bin": { kind: "inline", size: TASK_FILE_ATTACHMENT_CHAR_BUDGET * 2 },
+        "/notes/a.md": { kind: "inline", size: 128 },
+      },
+    });
+    await subagentTool.run(
+      {
+        description: "d",
+        prompt: "正文",
+        subagentName: "general",
+        fileAttachment: ["data.bin", "notes/a.md"],
+      },
+      toolCtx(ctx)
+    );
+    const atts = capturedOpts[0]!.attachments!;
+    assert.deepEqual(
+      atts.map((a) => a.path),
+      ["/data.bin", "/notes/a.md"],
+      "binary 不吃预算 → 其后的文本附件仍进预算"
+    );
     assert.equal(capturedOpts[0]!.prompt, "正文", "不超预算 → 不加尾注");
   });
 

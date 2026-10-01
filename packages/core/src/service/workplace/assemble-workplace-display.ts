@@ -133,7 +133,8 @@ export interface AssembleWorkplaceDisplayOptions {
 /**
  * 拼装常驻工作区前缀文本（替代进程内 capture），并收集前缀 path 集合 S0。
  *
- * 1. 无 workplace 块 → `{ workplaceDisplay: "", prefixPaths: [] }`，不触 kkv
+ * 1. 无 workplace 块 → `{ workplaceDisplay: "", prefixPaths: [], visiblePaths: [] }`，
+ *    不触 kkv
  * 2. 读 `rule_snapshot`/`canon`（按 `options.kkvSessionId` 路由）；空 → 规则引擎（按
  *    scope 评估）→ 写快照（写回 kkvSessionId）
  * 3. 按 path/status 读 `file_cache`（kkvSessionId）；miss → VFS（scope 视图）→ 内容直接

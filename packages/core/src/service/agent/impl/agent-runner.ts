@@ -125,7 +125,9 @@ export interface DefaultAgentRunnerDeps {
   /**
    * read 引用块 hydrate（read-tool-result-ref Step 6 生产装配）所需的
    * revision 仓库：每步 `prepareUserMessagesForPrompt` 透传。未注入且可见
-   * 消息含 `contentRef` 块时 prepare fail-fast（不静默降级发空 tool_result）。
+   * 消息含 `contentRef` 块时**不抛错**（task-attach-unref Step 3）：prepare
+   * 填错误占位 JSON 并 `console.warn`——写侧已不再产 contentRef，此路只
+   * 为存量行兜底，装配缺口靠 warn 信号暴露而不是打断整回合。
    */
   readonly revisionRepo?: VfsRevisionRepository;
 }
@@ -464,7 +466,8 @@ export class DefaultAgentRunner implements AgentRunner {
           skills: this.deps.skills?.(),
           projectId,
           // read 引用块 hydrate（read-tool-result-ref Step 6）：deps 未注入
-          // 且消息含 contentRef 时 prepare fail-fast（装配缺口不静默放行）。
+          // 且消息含 contentRef 时不抛错，prepare 填错误占位 + warn
+          // （task-attach-unref Step 3；装配缺口由 warn 暴露，不打断整回合）。
           ...(this.deps.revisionRepo != null
             ? { revisionRepo: this.deps.revisionRepo }
             : {}),

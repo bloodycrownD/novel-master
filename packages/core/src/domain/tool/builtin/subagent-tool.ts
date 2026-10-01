@@ -29,6 +29,7 @@ import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
 import type { ChatMessage } from "@/domain/chat/model/message.js";
 import type { TextBlock } from "@/domain/chat/model/content-block.js";
 import type { MessageAttachment } from "@/domain/chat/model/message-attachment.schema.js";
+import { isBinaryAttachPath } from "@/domain/chat/logic/attach-binary-heuristic.js";
 import {
   AttachmentPathArgumentError,
   attachmentsFromPaths,
@@ -220,6 +221,9 @@ async function resolveResumeSessionId(
  * 单条附件的**明文当量字符**估算（spec D11 计量口径）。
  *
  * - image / dir 附件**不计字节**（只占条数名额）；
+ * - **binary（含图片）扩展名同样不计字节**——`attachmentsFromPaths` 把 binary 分派成
+ *   `type: "text"`，但 hydrate 侧 `resolveAttachFileStatus` 对其只给文件名、不注入明文，
+ *   故不该吃字符预算；判定复用 `isBinaryAttachPath`（与 `attachFromPath` 同源启发式）；
  * - 其余按 `getContentSize` 探测：inline 直接计字符数、blob 按压缩字节 ×4 折算；
  * - `null`（目录 / 不存在 / 未注入闭包）按 0 计。
  */
@@ -232,6 +236,10 @@ async function estimateAttachmentChars(
   }
   const path = attachment.path;
   if (path == null || path === "" || getContentSize == null) {
+    return 0;
+  }
+  // D11：binary（BINARY_EXTENSIONS 已含图片扩展名）不计字节，但条数名额照占。
+  if (isBinaryAttachPath(path)) {
     return 0;
   }
   const size = await getContentSize(path);
