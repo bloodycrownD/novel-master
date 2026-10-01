@@ -105,8 +105,8 @@ export interface DesktopNovelMasterRuntime {
    */
   readonly searchConfig: SearchConfigStore;
   /**
-   * read 引用化（read-tool-result-ref Step 6）的 revision 仓库：
-   * runAgentTurn 装配点用它推导 read +1 通道并透传 prepare hydrate；
+   * 存量 contentRef 行的兜底 hydrate 取数用（回迁完成前保留，
+   * 回迁后无生产消费方）。
    * session-prompt-input parity 链同样读取本字段。
    */
   readonly revisionRepo: VfsRevisionRepository;

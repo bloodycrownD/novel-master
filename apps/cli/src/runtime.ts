@@ -159,8 +159,8 @@ export interface NovelMasterRuntime {
   /** 会话级规则快照 / file_cache；Agent write upsert 与常驻工作区共用。 */
   readonly sessionKkv: SessionKkvService;
   /**
-   * read 引用化（read-tool-result-ref Step 6）的 revision 仓库：
-   * runAgentTurn 装配点用它推导 read +1 通道并透传 prepare hydrate。
+   * 存量 contentRef 行的兜底 hydrate 取数用（回迁完成前保留，
+   * 回迁后无生产消费方）。
    */
   readonly revisionRepo: VfsRevisionRepository;
   /** 智能排序规则管理（sort-rule 命令组与 workplace smart 排序共用）。 */
@@ -249,8 +249,7 @@ export async function createNovelMasterRuntime(
   const messages = createMessageService(conn);
   const messageTranscriptEffects = createMessageTranscriptEffectsService(conn);
   const sessionKkv = createSessionKkvService(conn);
-  // read 引用化（read-tool-result-ref Step 6）：同 conn 单实例——runAgentTurn
-  // 装配点由它推导 read +1 通道，prepare 链用它 hydrate 引用块。
+  // 存量 contentRef 行的兜底 hydrate 取数用（同 conn 单实例；回迁完成前保留，回迁后无生产消费方）。
   const revisionRepo = new SqliteVfsRevisionRepository(conn);
   const { userVfsTurn } = createUserVfsTurnServiceBundle(conn);
 

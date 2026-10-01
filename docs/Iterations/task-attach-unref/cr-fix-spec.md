@@ -206,7 +206,7 @@
 - 维度：G
 - 文件：packages/core/test/chat/hydrate-tool-results.test.ts:384-417（对照 hydrate 实现 catch 分支、sqlite-vfs-content-store.ts:97-99）
 - 问题：T-UA4c 标题「blob 缺失」实际测的是「元数据命中但 find 返 null」分支；真实「blob 被清理」走 contentStore.get 抛错 → hydrate catch → 占位文案「读取 revision 失败：vfs_content_blob 缺失」——这条真路径无测试；`revision.content == null` 在生产仓储下不可达（防御分支）。
-- 改法：T-UA4c 改名对齐实际分支并注明「防御分支：生产仓储下不可达，防未来仓储变更」；新增真路径用例：真写文件 → `DELETE FROM vfs_content_blob WHERE content_hash=?` + clearDecodedContentCaches() → 断言占位 error 匹配 /读取 revision 失败/ 且 warn 留痕不抛错。
+- 改法：T-UA4c 改名对齐实际分支并注明「防御分支：生产仓储下不可达，防未来仓储变更」；新增真路径用例：真写文件 → `DELETE FROM vfs_content_blob WHERE content_hash=?` + clearDecodedContentCaches() → 断言**占位自包含**（匹配 /取不回/ 与 /本次装配中不可用/——占位文案按 G-4 终稿，成因不进占位）且 **warn 留痕**（/读取 revision 失败/ + /vfs_content_blob/）、hydrate 不抛错（impl-B 落地订正：实现里 reason 只进 warn，占位走通用文案——与 G-4 钦定文案一致，原「占位 error 匹配 /读取 revision 失败/」口径不可达）。
 - 验收/测试：本条即测试。
 - 来源：review-e-tests round1
 

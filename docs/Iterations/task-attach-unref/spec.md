@@ -64,7 +64,7 @@ date: 2026-10-01
 | D10 | 路径列表出口 | 新增公共 `attachmentsFromPaths(paths)`：复用 `attachFromPath` 的**路径规范化部分**（`isPromptDirTokenPath` / `normalizePromptStorePath` / `tryNormalizePromptSeenPath` / image·binary 启发式 / type 分派）+ `mergeAttachmentsByPath` 去重；**name 一律覆写为 `attachmentStorageName(storePath)`、显式补 `action:"userAttach"`**；不导出私有函数本体 | E3 5.3 + R1 P0-2 |
 | D11 | fileAttachment 预算制软闸 | **超限不报错、优雅降级**（2026-10-01 用户三轮改口）：条数 ≤ **20** 且 text 形态累计 ≤ **10 万 token 当量**——预算单位 = **明文当量字符，默认 100_000**（中文语料 1 字 ≈ 1 token ⇒ ≈ 10 万 token ≈ 300KB UTF-8 明文；英文按 ÷3.35 字符/token 约 3 万 token，CJK 优先的保守取向。常量可调；确认轮改值须同步 Step 11、T-TA3 与 Context Bundle）——**分配顺序 = `mergeAttachmentsByPath` 去重后的顺序**（重复声明不重复占名额），预算内文件正常挂附件全量加载；任一预算耗尽后的剩余路径**不挂附件**，由 task 层在传给子会话的 prompt 尾部拼「超预算路径清单 + 提示可用 read 与 offset/limit 分段读取」，子代理自行决定读取。**计量口径**：统一折算明文当量字符——inline 档 `size`（字符数）直接计入、blob 档 `size`（压缩字节数）×4 折算（4× 压缩比先例 `character-card-limits.ts`）；保守近似，允许实际注入量略超预算（精确计数需 O(全文) 读盘，与本迭代「省子会话 read」初衷相悖不取）；**image/binary 与目录不计字节——须按附件 type 显式跳过（image/binary 的 `findContentSize` 并非 null）；返回 null（目录 / 不存在）按 0 计，两者都仍占条数名额**。硬错误仅保留元素非法（空串） | 用户拍板（20 条 + 10 万 token 当量 + 降级不报错） |
 | D12 | 回迁谓词 | `'"contentRef"'`（带引号键形态，JSON.stringify 转义论证过不会误命中正文）**+** 解析后无引用块的行归 `failedIds`（warn + 单独计数），双保险保收敛 | E4 5.1 |
-| D13 | 部分索引 | **不建**（省「每条消息写一次全串 LIKE/instr 求值」；回迁一次性、存量行预计≈0，分批全扫可接受；取舍显式登记） | E4 5.5 |
+| D13 | 部分索引 | **不建**（省「每条消息写一次全串 LIKE/instr 求值」；回迁一次性、存量行预计≈0，分批全扫可接受；**完成态入口探针同为全表谓词扫描——与解压任务同款先例、已知成本，快照短路留清理轮评估**；取舍显式登记） | E4 5.5 |
 | D14 | 存储页状态行 | **静默迁移**（无 UI 状态行，省 7 文件；存量行预计≈0、用户无感知；CHANGELOG 披露即可） | E4 4.4 |
 | D15 | −1 与写回事务 | 单行「写回 content_json + ref_count −1」同一 `conn.transaction`，`tx` 句柄喂 repository（防 AsyncMutex 不可重入）；`delta<0` 命不中 no-op 时记 warn 区分坏行 | E4 5.3 |
 | D16 | T-RR10 parity 口径 | 「逐字节 parity」断言**撤除**（兜底形态本就不逐字节等值）；改为「新写行 wire=全文直出、存量行=JSON 包」两态断言 | E1 风险4、E4 5.2 |
@@ -108,7 +108,7 @@ apps/cli/src/runtime.ts                             # B：内联 await
 
 ### A 线（unref 写侧回退 + 极简兜底）
 
-按 E1 三分法的「① 本版」执行：`build-tool-result-block.ts`（删 L66-110 / L135-235 及 L456-458 调用，成功分支恒 `{ content: formatToolOutputForLlm(outcome.output) }`）、`vfs-tools.ts`（删 L229-247 refAnchored + L259-267 三件套 + outputSchema 三字段）、`skill-tool.ts`（删 SkillRefAnchor/anchorSkillResultRef L235-280 + 两分支调用 + 输出 spread）、`builtin-tool-context.ts` adjustRevisionRefCount、`run-agent-turn.ts` `resolveReadRefCountChannel` L201-223 + toolCtx 注入 L900/L915-920/L1274（**保留 runtime.revisionRepo**——兜底 hydrate 用）、`assemble-agent-runner-deps.ts`/`agent-runner.ts`/`create-agent-runner.ts` 通道摘除、`hydrate-tool-results-for-prompt.ts` 大改（删三个 replay + memo + hash 比对；`hydrateReadResultBlock` 改 JSON 兜底；`ReadResultHydrateError` 降级普通 Error）、`format-tool-output.ts` 解冻、`content-block.ts` 注释改「存量兼容 + 过渡期」。
+按 E1 三分法的「① 本版」执行：`build-tool-result-block.ts`（删 L66-110 / L135-235 及 L456-458 调用，成功分支恒 `{ content: formatToolOutputForLlm(outcome.output) }`）、`vfs-tools.ts`（删 L229-247 refAnchored + L259-267 三件套 + outputSchema 三字段）、`skill-tool.ts`（删 SkillRefAnchor/anchorSkillResultRef L235-280 + 两分支调用 + 输出 spread）、`builtin-tool-context.ts` adjustRevisionRefCount、`run-agent-turn.ts` `resolveReadRefCountChannel` L201-223 + toolCtx 注入 L900/L915-920/L1274（**保留 runtime.revisionRepo**——兜底 hydrate 用）、`assemble-agent-runner-deps.ts`/`agent-runner.ts`/`create-agent-runner.ts` 通道摘除、`hydrate-tool-results-for-prompt.ts` 大改（删三个 replay + wire 重放侧 memo + hash 比对（明文侧 memo 保留）；`hydrateReadResultBlock` 改 JSON 兜底；`ReadResultHydrateError` 降级普通 Error）、`format-tool-output.ts` 解冻、`content-block.ts` 注释改「存量兼容 + 过渡期」。
 
 **② 本版保留**（回迁完成前读路径必需，清理版再删）：`content-block.ts` 三类型、`parse-message-content.ts` 白名单（L113-277）、兜底 hydrate 骨架、`findByEntryAndVersion`/`findMetaByEntryAndVersion`、`revision-ref-count.ts` 全套口径函数、repair 三类期望值、五路径 −1 + fork/copy +1 挂点、desktop `ipc-types` contentRef + `messageBodyTextWithReadRefPlaceholder`、mobile `message-blocks-read-ref.test.ts`。
 
@@ -126,8 +126,8 @@ apps/cli/src/runtime.ts                             # B：内联 await
 
 - Step 1 — phase-unref-writeback — blocking: yes — qa: auto：A 线写侧回退（build-tool-result-block / vfs-tools / skill-tool 的产块与 +1 同批摘除 + outputSchema 三字段删，D1）
 - Step 2 — phase-unref-writeback — blocking: yes — qa: auto：adjustRevisionRefCount 通道全链摘除（builtin-tool-context / run-agent-turn resolveReadRefCountChannel / 装配三件套；保留 revisionRepo）
-- Step 3 — phase-unref-hydrate — blocking: yes — qa: auto：hydrate-tool-results 重写为极简兜底（JSON 包 + 错误占位 + warn，D17；保留「hydrate 早于孤儿拍平」顺序注释）
-- Step 4 — phase-unref-hydrate — blocking: yes — qa: auto：unref 测试改写（**按文件列名不按编号**——`read-tool-result-ref` / `hydrate-tool-results` / `read-ref-count` / `read-ref-safety` / `read-ref-prompt-parity`（T-RR1~13 编号干净可沿用）+ `skill-result-ref.test.ts`（**T-SR 编号与 smart-sort 等特性撞号，禁止按编号检索**）；删逐字节 parity（D16）/ hash fail-fast / memo 用例，新增兜底形态用例；**含 `read-ref-production-smoke.test.ts` 改写**——通道断言随 Step 2 删、contentRef 落库断言改「全文直出无 contentRef」、parity 断言撤除）
+- Step 3 — phase-unref-hydrate — blocking: yes — qa: auto：hydrate-tool-results 重写为极简兜底（JSON 包 + 错误占位 + warn，D17；保留「hydrate 早于孤儿拍平」顺序注释；**明文侧调用内 memo 保留**——省同批重复解码）
+- Step 4 — phase-unref-hydrate — blocking: yes — qa: auto：unref 测试改写（**按文件列名不按编号**——`read-tool-result-ref` / `hydrate-tool-results` / `read-ref-count` / `read-ref-safety` / `read-ref-prompt-parity`（T-RR1~13 编号干净可沿用）+ `skill-result-ref.test.ts`（**T-SR 编号与 smart-sort 等特性撞号，禁止按编号检索**）；删逐字节 parity（D16）/ hash fail-fast / wire 重放侧 memo 用例（**明文侧 memo 用例保留**，见 cr-fix-spec e-tests/G-4），新增兜底形态用例；**含 `read-ref-production-smoke.test.ts` 改写**——通道断言随 Step 2 删、contentRef 落库断言改「全文直出无 contentRef」、parity 断言撤除）
 - Step 5 — phase-migration — blocking: yes — qa: auto：回迁任务本体 `message-ref-unref.ts`（骨架 + 谓词 D12 + D19（`content_blob IS NULL` + 收尾否决仅「解压 KKV 标记未置」单条件）+ 同事务 D15 + KKV D18 + 探针 + failedIds 收敛；`MessageRefUnrefRunResult` 显式含 `deferred: boolean`（与 `stalled` 并列，停手语义进类型））
 - Step 6 — phase-migration — blocking: yes — qa: auto：三端调度接线（desktop service + main.ts / mobile service + context / cli runtime，含 CLI 补注入 abortRegistry 的 D6 顺带核实）；**deferred 与 stalled 同款停手**——warn 后 return 等下个冷启动，禁 `sleep(0)` 续轮
 - Step 7 — phase-migration — blocking: yes — qa: auto：回迁测试组（round-trip / ref_count 对账 / 同事务中断重跑 / 假阳性收敛 / 断点续跑 / 坏行占位 / 探针排除）
@@ -163,7 +163,7 @@ apps/cli/src/runtime.ts                             # B：内联 await
 - T-UM4 — blocking: yes — Step5：假阳性收敛——正文含 `contentRef` 字面量行归 failedIds、任务收敛置标记、不 −1
 - T-UM5 — blocking: yes — Step5：断点续跑（syncBudgetMs:0）/ 标记自愈（快照回灌）/ 入口探针 failedIds 排除（0/1/2 档）
 - T-UM6 — blocking: yes — Step5：坏行**三**判别（revision 缺失 / blob 缺失 / status=deleted）→ 错误占位 + failedIds 排除；**hash 不匹配不算坏行**——按 B 线口径照常回填 + warn、不进 failedIds（与 D17/G2 的兜底收敛同口径，废除的 hydrate fail-fast 四码不复活）
-- T-UM7 — blocking: yes — Step5：压缩行交叠——`content_blob IS NOT NULL` 且明文含 contentRef 的行不被本任务触碰；解压标记未置时任务**返回 `deferred=true` 且不置完成标记**（调度层据此停手，不 sleep(0) 续轮）；模拟解压完成（行解回明文 + KKV 标记）后该行被回迁、标记置位
+- T-UM7 — blocking: yes — Step5：压缩行交叠——`content_blob IS NOT NULL` 且明文含 contentRef 的行不被本任务触碰；解压标记未置时任务**返回 `deferred=true` 且不置完成标记**（调度层据此停手，不 sleep(0) 续轮）；模拟解压完成（行解回明文 + KKV 标记）后该行被回迁、标记置位（**mobile 侧观测限定为服务层白盒断言 deferred/stalled 分支收手**——mobile 测试为 jest.mock 全替换版式、结构性无从查 KKV；**KKV 标记观测只在 core 侧真库用例**）
 
 **task-sessionId 线**
 

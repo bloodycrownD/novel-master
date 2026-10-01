@@ -116,8 +116,8 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileRuntimeCor
 
   const messageTranscriptEffects = createMessageTranscriptEffectsService(conn);
   const sessionKkv = createSessionKkvService(conn);
-  // read 引用化（read-tool-result-ref Step 6）：同 conn 单实例——runAgentTurn
-  // 装配点由它推导 read +1 通道，prepare/parity 链用它 hydrate 引用块。
+  // 存量 contentRef 行的兜底 hydrate 取数用（同 conn 单实例）：
+  // 存量 contentRef 行的兜底 hydrate 取数用（回迁完成前保留，回迁后无生产消费方）。
   const revisionRepo = new SqliteVfsRevisionRepository(conn);
   const {userVfsTurn} = createUserVfsTurnServiceBundle(conn);
 
