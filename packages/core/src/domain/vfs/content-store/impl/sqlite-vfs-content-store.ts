@@ -12,13 +12,7 @@ import {
   queryTemplate,
 } from "@/infra/tdbc/logic/template-helper.js";
 import { hashContent } from "../logic/hash-content.js";
-import {
-  decodeFossilChainSpans,
-  decodeZlibConcatSpans,
-  VFS_PACK_FORMAT_FOSSIL_CHAIN_V1,
-  VFS_PACK_FORMAT_ZLIB_CONCAT_V1,
-  type VfsPackSpan,
-} from "../logic/pack-codec.js";
+import { decodePackMembers, type VfsPackSpan } from "../logic/pack-codec.js";
 import {
   asUint8Array,
   compressZlib,
@@ -38,21 +32,6 @@ import type { VfsContentStore } from "../vfs-content-store.port.js";
  * 又避免单条 SQL 绑参过多带来的额外开销。提至模块级，便于全局调整。
  */
 const CONTENT_GETMANY_CHUNK_SIZE = 500;
-
-/** 按 pack format 分派成员解码（单成员与组批量共用；未知 format 防御性抛错）。 */
-function decodePackMemberPlaintexts(
-  format: string,
-  packBytes: Uint8Array,
-  spans: ReadonlyArray<VfsPackSpan>
-): Uint8Array[] {
-  if (format === VFS_PACK_FORMAT_ZLIB_CONCAT_V1) {
-    return decodeZlibConcatSpans(packBytes, spans);
-  }
-  if (format === VFS_PACK_FORMAT_FOSSIL_CHAIN_V1) {
-    return decodeFossilChainSpans(packBytes, spans);
-  }
-  throw new Error(`不支持的 vfs_content_pack.format: ${format}`);
-}
 
 /**
  * TDBC 后端的内容寻址存储。
@@ -185,7 +164,7 @@ export class SqliteVfsContentStore implements VfsContentStore {
     }
     const member = memberRows[0]!;
     const packBytes = asUint8Array(member.bytes, "vfs_content_pack.bytes");
-    const plainUtf8 = decodePackMemberPlaintexts(String(member.format), packBytes, [
+    const plainUtf8 = decodePackMembers(String(member.format), packBytes, [
       { offset: Number(member.offset), length: Number(member.length) },
     ])[0]!;
     const plain = new TextDecoder().decode(plainUtf8);
@@ -322,7 +301,7 @@ export class SqliteVfsContentStore implements VfsContentStore {
         );
       }
       const packBytes = asUint8Array(pack.bytes, "vfs_content_pack.bytes");
-      const plains = decodePackMemberPlaintexts(
+      const plains = decodePackMembers(
         pack.format,
         packBytes,
         members.map((member) => member.span)

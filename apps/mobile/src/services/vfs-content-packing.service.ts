@@ -27,6 +27,10 @@
  *   停手、下个冷启动按谓词重扫（`sleep(0)` 续跑只会把空转放大成无界
  *   热循环）；预算耗尽 / 守卫暂停照旧零延迟续跑。
  *
+ * 调度登记键：只在循环存活期间去重（同 runtime 重挂不叠加循环），循环
+ * 收手后释放——同一 runtime 再调度会重挂一条新循环（打包循环常态就是
+ * done=true 收工，若收手不释放键，后续任何再调度会被静默 no-op 吞掉）。
+ *
  * @module services/vfs-content-packing.service
  */
 import {runVfsContentPacking, type VfsContentPackRunResult} from '@novel-master/core';
@@ -39,7 +43,13 @@ const WARMUP_DELAY_MS = 3000;
 /** 守卫命中后的重试间隔（不算进 core 的单轮同步预算，纯等待）。 */
 const GUARD_RETRY_DELAY_MS = 5000;
 
-/** 已挂载的 runtime（按连接身份去重，保证重复调用不叠加循环）。 */
+/**
+ * 已挂载的 runtime（按连接身份去重，保证重复调用不叠加循环）。
+ *
+ * 登记键**只在循环存活期间**去重：循环收手（含 done 收工 / stalled 停手 /
+ * 抛错收手）后 finally 条件复位释放，同一 runtime 再调度是合法重挂——去重
+ * 挡的是「运行中」的重复挂载，不是「曾经跑过」。
+ */
 let scheduledRuntime: MobileNovelMasterRuntime | undefined;
 
 function sleep(ms: number): Promise<void> {
@@ -97,7 +107,8 @@ async function runPackingLoop(
 }
 
 /**
- * 挂载打包循环（幂等）：同一 runtime 重复调用不叠加第二条循环。
+ * 挂载打包循环（幂等）：同一 runtime 在**循环存活期间**重复调用不叠加第二
+ * 条循环；循环收手后 finally 释放登记键，同一 runtime 再调度会重挂。
  *
  * 调用点：runtime 就绪后的既有 effect（`novel-master-context.tsx`）。
  * 注意 **retry 换新 runtime 时需对新连接重挂一次**——挂载表按 runtime
@@ -111,5 +122,11 @@ export function scheduleMobileVfsContentPacking(
     return;
   }
   scheduledRuntime = runtime;
-  void runPackingLoop(runtime);
+  void runPackingLoop(runtime).finally(() => {
+    // 循环收手后释放登记键（条件复位：期间若已换新 runtime 重挂，键属新
+    // runtime，不得抹掉）。
+    if (scheduledRuntime === runtime) {
+      scheduledRuntime = undefined;
+    }
+  });
 }

@@ -283,6 +283,50 @@ export function decodeFossilChainSpans(
 }
 
 // ---------------------------------------------------------------------------
+// format 分派（读路径 / 校验 / 展开共用的唯一入口）
+// ---------------------------------------------------------------------------
+
+/**
+ * 判定字符串是否落在 {@link VfsPackFormat} 值域内（窄化用）。
+ *
+ * @remarks 值域判定与 DDL 的 `format` CHECK 一致：新增第三种 format 时必须
+ *   同步在这里登记，否则 {@link decodePackMembers} 会对自家写出的 pack 抛错。
+ */
+export function isKnownVfsPackFormat(format: string): format is VfsPackFormat {
+  return (
+    format === VFS_PACK_FORMAT_ZLIB_CONCAT_V1 ||
+    format === VFS_PACK_FORMAT_FOSSIL_CHAIN_V1
+  );
+}
+
+/**
+ * 按 pack 的 `format` 分派解码组成员：**读路径（content store get/getMany）、
+ * 完整性校验（verifyVfsContentPacks）、反向展开（unpackVfsContent）共用的唯一
+ * 入口**。
+ *
+ * @remarks 此前这三个消费方各写一份逐字近似（两 if + 未知值抛错）的分派，
+ *   新增 format 时漏改一处就会变成「写侧认得、读侧不认」的静默分叉，故收口于此。
+ *   形参取 `string` 而非 {@link VfsPackFormat}：库里的 `format` 列在 DDL CHECK
+ *   之外仍可能读到脏值，未知值必须响亮失败而不是被类型断言掩过去。
+ * @param packBytes pack 行的 bytes（fossil 为含段表的整段流）
+ * @param spans 各成员区间（语义空间由 format 决定）
+ * @returns 与 spans 同序的成员明文 UTF-8 字节
+ * @throws format 不在值域内时抛「不支持的 vfs_content_pack.format」
+ */
+export function decodePackMembers(
+  format: string,
+  packBytes: Uint8Array,
+  spans: ReadonlyArray<VfsPackSpan>
+): Uint8Array[] {
+  if (!isKnownVfsPackFormat(format)) {
+    throw new Error(`不支持的 vfs_content_pack.format: ${format}`);
+  }
+  return format === VFS_PACK_FORMAT_ZLIB_CONCAT_V1
+    ? decodeZlibConcatSpans(packBytes, spans)
+    : decodeFossilChainSpans(packBytes, spans);
+}
+
+// ---------------------------------------------------------------------------
 // 内部工具
 // ---------------------------------------------------------------------------
 

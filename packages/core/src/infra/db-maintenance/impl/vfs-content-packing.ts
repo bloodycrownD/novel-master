@@ -50,17 +50,16 @@
 
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import type { SqlValue } from "@/infra/tdbc/types.js";
+import { errorText } from "@/common/error-text.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
 import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
 import {
+  decodePackMembers,
   encodeFossilChainPack,
   encodeZlibConcatPack,
-  decodeFossilChainSpans,
-  decodeZlibConcatSpans,
   VFS_PACK_FORMAT_FOSSIL_CHAIN_V1,
   VFS_PACK_FORMAT_ZLIB_CONCAT_V1,
-  type VfsPackSpan,
 } from "@/domain/vfs/content-store/logic/pack-codec.js";
 import {
   asUint8Array,
@@ -217,11 +216,6 @@ export interface VfsContentUnpackResult {
   readonly unpackedPacks: number;
   /** 本次物化回独立 blob 行的 member 数（INSERT OR IGNORE 跳过的不计）。 */
   readonly restoredRows: number;
-}
-
-/** 告警文案的错误摘要（Error 取 message，其余 String 化）。 */
-function errorText(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 /** 批间让步：setTimeout(0) 交还事件循环（desktop main / RN JS 线程）。 */
@@ -1095,21 +1089,6 @@ export async function getVfsContentPackStatus(
 // 完整性校验（应急回滚前的自检）
 // ---------------------------------------------------------------------------
 
-/** 按 pack format 分派成员解码（verify 与 unpack 共用；未知 format 抛错）。 */
-function decodePackMembersByFormat(
-  format: string,
-  packBytes: Uint8Array,
-  spans: ReadonlyArray<VfsPackSpan>
-): Uint8Array[] {
-  if (format === VFS_PACK_FORMAT_ZLIB_CONCAT_V1) {
-    return decodeZlibConcatSpans(packBytes, spans);
-  }
-  if (format === VFS_PACK_FORMAT_FOSSIL_CHAIN_V1) {
-    return decodeFossilChainSpans(packBytes, spans);
-  }
-  throw new Error(`不支持的 vfs_content_pack.format: ${format}`);
-}
-
 /**
  * 逐 member 校验 pack 自包含性：pack 组切片明文 hash == content_hash；
  * fossil 组沿链 apply 后 hash == content_hash。
@@ -1144,7 +1123,7 @@ export async function verifyVfsContentPacks(
     }
     let plains: Uint8Array[];
     try {
-      plains = decodePackMembersByFormat(String(pack.format), asUint8Array(pack.bytes, "vfs_content_pack.bytes"), memberRows.map((row) => ({
+      plains = decodePackMembers(String(pack.format), asUint8Array(pack.bytes, "vfs_content_pack.bytes"), memberRows.map((row) => ({
         offset: Number(row.offset),
         length: Number(row.length),
       })));
@@ -1215,7 +1194,7 @@ export async function unpackVfsContent(
     // 进事务清理，无 member 可物化。
     let plains: Uint8Array[] = [];
     if (memberRows.length > 0) {
-      plains = decodePackMembersByFormat(
+      plains = decodePackMembers(
         String(pack.format),
         asUint8Array(pack.bytes, "vfs_content_pack.bytes"),
         memberRows.map((row) => ({

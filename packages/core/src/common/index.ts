@@ -6,6 +6,7 @@
  * renderer、mobile）共享。
  */
 export { compareAppVersions } from "./compare-app-versions.js";
+export { errorText } from "./error-text.js";
 export {
   excerptReleaseNotes,
   type ReleaseNotesFocus,

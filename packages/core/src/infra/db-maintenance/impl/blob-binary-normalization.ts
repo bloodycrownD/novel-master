@@ -49,6 +49,7 @@ import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import type { SqlValue } from "@/infra/tdbc/types.js";
 import { SqliteKkvRepository } from "@/domain/kkv/repositories/impl/sqlite-kkv.repository.js";
 import { base64ToBytes } from "@/domain/vfs/content-store/logic/blob-bytes-codec.js";
+import { errorText } from "@/common/error-text.js";
 import {
   asBase64Text,
   VFS_CONTENT_ENCODING_ZLIB,
@@ -370,11 +371,6 @@ let statusSamplingThrottleCache = new WeakMap<
  */
 export function __resetStatusSamplingThrottleForTests(): void {
   statusSamplingThrottleCache = new WeakMap();
-}
-
-/** 告警文案的错误摘要（Error 取 message，其余 String 化）。 */
-function errorText(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 /**

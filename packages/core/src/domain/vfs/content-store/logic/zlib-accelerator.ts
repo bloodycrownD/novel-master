@@ -13,6 +13,8 @@
  * @module domain/vfs/content-store/logic/zlib-accelerator
  */
 
+import { errorText } from "../../../../common/error-text.js";
+
 /**
  * 加速器契约：两个同步方法，入出均为 `Uint8Array`（实现可返回 Buffer——
  * 它是 Uint8Array 子类）。
@@ -32,11 +34,6 @@ let activeAccelerator: ZlibCodecAccelerator | null = null;
 
 /** 加速器回落告警是否已打过（每个方向只打一次，防热路径刷屏）。 */
 const warned = { deflate: false, inflate: false };
-
-/** 错误文案（回调/加速器抛任意值时取 message）。 */
-function errorText(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
 
 /**
  * 收整加速器产物为**普通 `Uint8Array`**：`node:zlib` 同步接口返回 `Buffer`
