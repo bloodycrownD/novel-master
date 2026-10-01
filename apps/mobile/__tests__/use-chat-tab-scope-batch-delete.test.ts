@@ -16,12 +16,6 @@ import {
   setSessionViewCache,
 } from '../src/services/chat-session-view-cache';
 import {
-  clearAllScrollSnapshots,
-  getScrollSnapshot,
-  scrollCacheKey,
-  setScrollSnapshot,
-} from '../src/services/chat-list-scroll-cache';
-import {
   clearAllTranscriptScrollSnapshots,
   getTranscriptScrollSnapshot,
   scrollCacheKey as transcriptScrollCacheKey,
@@ -106,7 +100,6 @@ describe('useChatTabScope 批量删除中途失败', () => {
     deletedSessionIds.length = 0;
     deletedProjectIds.length = 0;
     clearAllSessionViewCaches();
-    clearAllScrollSnapshots();
     clearAllTranscriptScrollSnapshots();
     mockRuntime.sessions.delete.mockImplementation(async (id: string) => {
       deletedSessionIds.push(id);
@@ -205,17 +198,19 @@ describe('useChatTabScope 批量删除中途失败', () => {
   describe('handleDeleteProjects 缓存清理（b2/B-6）', () => {
     it('删除成功后按项目前缀清掉会话级缓存，未删项目不受影响', async () => {
       const p1ViewKey = sessionViewCacheKey('p1', 's1');
-      const p1ScrollKey = scrollCacheKey('p1', 's1');
       const p1TranscriptKey = transcriptScrollCacheKey('p1', 's1');
-      const otherScrollKey = scrollCacheKey('p2', 's9');
+      const otherTranscriptKey = transcriptScrollCacheKey('p2', 's9');
       setSessionViewCache(p1ViewKey, {messages: [], hasMoreMessages: false});
-      setScrollSnapshot(p1ScrollKey, {offsetY: 10, nearBottom: false});
       setTranscriptScrollSnapshot(p1TranscriptKey, {
         schemaVersion: CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION,
         offsetY: 10,
         nearBottom: false,
       });
-      setScrollSnapshot(otherScrollKey, {offsetY: 1, nearBottom: false});
+      setTranscriptScrollSnapshot(otherTranscriptKey, {
+        schemaVersion: CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION,
+        offsetY: 1,
+        nearBottom: false,
+      });
       const api = mountScope();
 
       await act(async () => {
@@ -223,9 +218,9 @@ describe('useChatTabScope 批量删除中途失败', () => {
       });
 
       expect(getSessionViewCache(p1ViewKey)).toBeUndefined();
-      expect(getScrollSnapshot(p1ScrollKey)).toBeUndefined();
       expect(getTranscriptScrollSnapshot(p1TranscriptKey)).toBeUndefined();
-      expect(getScrollSnapshot(otherScrollKey)).toEqual({
+      expect(getTranscriptScrollSnapshot(otherTranscriptKey)).toEqual({
+        schemaVersion: CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION,
         offsetY: 1,
         nearBottom: false,
       });
