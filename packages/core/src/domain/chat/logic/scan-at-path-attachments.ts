@@ -10,6 +10,7 @@
  * @module domain/chat/logic/scan-at-path-attachments
  */
 
+import { isVfsError } from "@/errors/vfs-errors.js";
 import {
   attachmentStorageName,
   type MessageAttachment,
@@ -116,7 +117,7 @@ export class AttachmentPathArgumentError extends Error {
  * seen 判定注入）；`type` 保留启发式分派结果（text / image / dir）。
  *
  * @param paths 原始路径列表（允许相对写法与目录尾 `/`，均按 attachFromPath 口径规范化）
- * @throws {AttachmentPathArgumentError} 元素为空串或纯空白
+ * @throws {AttachmentPathArgumentError} 元素为空串或纯空白，或路径无法被 VFS 规范化
  */
 export function attachmentsFromPaths(
   paths: readonly string[]
@@ -128,7 +129,20 @@ export function attachmentsFromPaths(
         "附件路径不能为空串或纯空白",
       );
     }
-    const base = attachFromPath(raw);
+    let base: MessageAttachment;
+    try {
+      base = attachFromPath(raw);
+    } catch (error) {
+      // 路径穿越等非法写法（`/../evil`）会在 attachFromPath 的规范化里抛 VfsError
+      // （同 `normalizePromptSeenPath` → `resolveLogicalPath`）。但本函数的对外契约是
+      // 「入参非法一律 AttachmentPathArgumentError」——调用方（task 工具）只认这一种
+      // 错误类型来转成带 `fileAttachment` 引导的 ToolError；若让裸 VfsError 逃逸，
+      // 模型拿到的是一句没有字段名的路径报错，只能盲猜改参数。message 保留原文。
+      if (isVfsError(error)) {
+        throw new AttachmentPathArgumentError(error.message);
+      }
+      throw error;
+    }
     materialized.push({
       ...base,
       name: attachmentStorageName(base.path),

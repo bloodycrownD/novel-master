@@ -17,7 +17,8 @@
  *   `normalizeOrphanToolResultsForLlm`，否则空 content 被拍成
  *   `[tool_result id=…]` 占位，正文永久丢失（对照组证明）。
  *
- * 废除的旧口径：wire 逐字节等值重放、hash fail-fast、调用内 memo 去重。
+ * 废除的旧口径：wire 逐字节等值重放、hash fail-fast、wire 重放侧调用内 memo
+ * （wireByReplayKey）；明文侧去重（plainByRefKey）本版保留。
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -32,6 +33,7 @@ import { prepareUserMessagesForPrompt } from "../../src/domain/chat/logic/prepar
 import { messageBodyTextFromBlocks } from "../../src/domain/chat/content/message-body-text.js";
 import { SqliteVfsRevisionRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import type { VfsRevisionRepository } from "../../src/domain/vfs/repositories/vfs-revision.port.js";
+import { clearDecodedContentCaches } from "../../src/infra/content-cache/logic/decoded-content-cache.js";
 import { createSessionKkvService } from "../../src/service/session-kkv/create-session-kkv-service.js";
 import { normalizeOrphanToolResultsForLlm } from "../../src/service/prompt/normalize-orphan-tool-results-for-llm.js";
 import {
@@ -381,7 +383,7 @@ describe("hydrate-tool-results: T-UA4 取不到明文 → 错误占位 + warn（
     );
   });
 
-  it("blob 缺失（明文不可取）→ 占位 JSON + warn", async () => {
+  it("元数据命中但行已不在（并发删/GC 兜底；防御分支，生产仓储下不可达）→ 占位 JSON + warn", async () => {
     const ctx = getNovelMasterTestContext();
     const suffix = testIsolationSuffix();
     const project = await ctx.projects.create(`pj-ua4c-${suffix}`);
@@ -392,7 +394,9 @@ describe("hydrate-tool-results: T-UA4 取不到明文 → 错误占位 + warn（
       "/ua4c.md",
       "tu-ua4c"
     );
-    // 元数据命中、但行上取不出明文（blob 被清理）——实现给不出明文的兜底形态。
+    // 命中的是「meta 有行、findByEntryAndVersion 返 null」这一档（实现里是
+    // 元数据查询之后行被并发删除或 GC 的兜底），不是「blob 缺失」——真实
+    // blob 被清理走 contentStore.get 抛错，见下一条用例。
     const emptyRepo = {
       findMetaByEntryAndVersion: async () => ({
         status: "active",
@@ -411,8 +415,71 @@ describe("hydrate-tool-results: T-UA4 取不到明文 → 错误占位 + warn（
     });
     assert.match((JSON.parse(content) as { error: string }).error, /取不回/);
     assert.ok(
-      warns.some((w) => /明文不可取|revision 行缺失/.test(w)),
-      `warn 应点明明文不可取，实际：${warns.join(" | ")}`
+      warns.some((w) => /revision 行缺失/.test(w)),
+      `warn 应点明行缺失，实际：${warns.join(" | ")}`
+    );
+  });
+
+  it("blob 被清理（真路径：contentStore.get 抛错）→ 占位 + warn 留痕（读取 revision 失败），不抛错", async () => {
+    const ctx = getNovelMasterTestContext();
+    const suffix = testIsolationSuffix();
+    const project = await ctx.projects.create(`pj-ua4c2-${suffix}`);
+    const session = await ctx.sessions.create(project.id);
+    const block = await legacyReadRefBlock(
+      project.id,
+      session.id,
+      "/ua4c2.md",
+      "tu-ua4c2"
+    );
+    const ref = block.contentRef as ReadResultRef;
+    const revisionRepo = new SqliteVfsRevisionRepository(ctx.conn);
+
+    // 牙齿：删 blob 之前同一块 hydrate 正常（不是恒真的失败路径）。
+    const okContent = (
+      await hydrateToolResultsForPrompt(
+        [toolResultMessage(block)],
+        revisionRepo
+      )
+    )[0]!.content.blocks[0] as ToolResultBlock;
+    assert.match(okContent.content, /line-1/);
+
+    // 真实坏行形态：revision 行仍在（meta 命中、status=active），但它的
+    // content_hash 指向的 blob 已被清理 → contentStore.get 抛错 →
+    // hydrate 的 catch 分支降级为占位 + warn，永不抛错。
+    await ctx.conn.execute(
+      `DELETE FROM vfs_content_blob WHERE content_hash = ?`,
+      [ref.contentHash]
+    );
+    // 必须清掉进程内解压产物层：否则 blob 行已删也还能从内存命中
+    // （口径前提，见 infra/content-cache 模块头）。
+    clearDecodedContentCaches();
+
+    let content = "";
+    const warns = await captureWarnings(async () => {
+      const hydrated = await hydrateToolResultsForPrompt(
+        [toolResultMessage(block)],
+        revisionRepo
+      );
+      content = (hydrated[0]!.content.blocks[0] as ToolResultBlock).content;
+    });
+    const parsed = JSON.parse(content) as { path: string; error: string };
+    assert.equal(parsed.path, "/ua4c2.md", "占位仍带 path 定位线索");
+    // 占位文案是自包含的通用说明（e-tests/G-4 定的口径：成因只走 warn，
+    // 不塞进占位——memo 命中 null 的第二个块根本拿不到本块的成因）。
+    assert.match(parsed.error, /取不回/);
+    assert.match(
+      parsed.error,
+      /本次装配中不可用/,
+      "占位文案自包含，不引用「上方 warn」"
+    );
+    // 成因（读取 revision 失败 / vfs_content_blob 缺失）走 warn 留痕。
+    assert.ok(
+      warns.some((w) => /读取 revision 失败/.test(w)),
+      `真路径必须留 warn 线索，实际：${warns.join(" | ")}`
+    );
+    assert.ok(
+      warns.some((w) => /vfs_content_blob/.test(w)),
+      `warn 应带出底层成因，实际：${warns.join(" | ")}`
     );
   });
 
@@ -514,6 +581,66 @@ describe("hydrate-tool-results: T-UA4 取不到明文 → 错误占位 + warn（
       warns.some((w) => /contentHash/.test(w)),
       `指纹漂移留 warn 线索但不阻断，实际：${warns.join(" | ")}`
     );
+  });
+
+  it("同 (entryId,version) 的两个引用块 → 明文只取一次（调用内 memo 去重）", async () => {
+    const ctx = getNovelMasterTestContext();
+    const suffix = testIsolationSuffix();
+    const project = await ctx.projects.create(`pj-ua4g-${suffix}`);
+    const session = await ctx.sessions.create(project.id);
+    const block = await legacyReadRefBlock(
+      project.id,
+      session.id,
+      "/ua4g.md",
+      "tu-ua4g"
+    );
+    // 同一 (entryId, version) 的两块（长文件分段 read 是常态）。
+    const twin: ToolResultBlock = { ...block, toolUseId: "tu-ua4g-2" };
+    const message: ChatMessage = {
+      ...toolResultMessage(block),
+      content: { blocks: [block, twin] },
+    };
+
+    // 计数仓储：只在真仓储外面套一层计数器，不改行为。
+    const inner = new SqliteVfsRevisionRepository(ctx.conn);
+    let metaCalls = 0;
+    let plainCalls = 0;
+    const countingRepo = {
+      findMetaByEntryAndVersion: (entryId: number, version: number) => {
+        metaCalls += 1;
+        return inner.findMetaByEntryAndVersion(entryId, version);
+      },
+      findByEntryAndVersion: (entryId: number, version: number) => {
+        plainCalls += 1;
+        return inner.findByEntryAndVersion(entryId, version);
+      },
+    } as unknown as VfsRevisionRepository;
+
+    const warns = await captureWarnings(async () => {
+      const hydrated = await hydrateToolResultsForPrompt(
+        [message],
+        countingRepo
+      );
+      const blocks = hydrated[0]!.content.blocks as ToolResultBlock[];
+      assert.equal(blocks.length, 2);
+      assert.deepEqual(JSON.parse(blocks[0]!.content), {
+        path: "/ua4g.md",
+        content: "line-1\nline-2\nline-3",
+      });
+      assert.equal(
+        blocks[1]!.content,
+        blocks[0]!.content,
+        "memo 命中的第二块拿到同一份回填正文"
+      );
+    });
+    assert.deepEqual(warns, [], "取得到明文不该 warn");
+    assert.equal(metaCalls, 1, `元数据只应查一次，实际 ${metaCalls} 次`);
+    assert.equal(plainCalls, 1, `明文只应取一次，实际 ${plainCalls} 次`);
+
+    // 对照：缓存范围严格限定在「一次装配内」——另起一次调用会重新取。
+    await hydrateToolResultsForPrompt([message], countingRepo);
+    assert.equal(metaCalls, 2, "跨调用不得复用缓存（不跨调用持久化）");
+    assert.equal(plainCalls, 2, "跨调用不得复用缓存（不跨调用持久化）");
   });
 });
 

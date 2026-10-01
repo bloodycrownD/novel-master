@@ -167,13 +167,32 @@ function resumeGuide(): string {
 }
 
 /**
+ * 鸭子判别「会话不存在」——只认 `ChatError` 的 `NOT_FOUND` 语义，不看具体类。
+ *
+ * 用鸭子读而非 `instanceof`：`src` 与 `dist` 双份模块实例下 `instanceof` 会失效
+ * （同 `isVfsError` 的理由），而 `SessionService.get` 的契约只有 code 可依赖。
+ */
+function isSessionNotFound(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    (error as { readonly code?: unknown }).code === "NOT_FOUND"
+  );
+}
+
+/**
  * 续用目标子会话的四态前置校验（spec D2 / D7 / D8）。
  *
  * 顺序刻意如此——先判存在性（get 抛错即不存在），再判归属（直接父口径），
  * 再判活跃，最后判历史条数软闸。每态文案都引导「去掉 sessionId 新开」。
  *
+ * 存在性只吞 `NOT_FOUND`（子会话真被删了）；DB 抖动等其它故障原样上抛——把它
+ * 伪装成「找不到子会话」会让模型误以为该 sessionId 失效，转而去新建一个重复
+ * 的子会话，把一次瞬时故障放大成历史污染。
+ *
  * @returns 校验通过的子会话 id（= 请求的 id 原样）。
  * @throws {ToolError} FAILED：不存在 / 非本会话子会话 / 活跃中 / 历史超限
+ * @throws 非 `NOT_FOUND` 的 `sessions.get` 原样上抛
  */
 async function resolveResumeSessionId(
   sessionId: string,
@@ -182,7 +201,10 @@ async function resolveResumeSessionId(
   let session;
   try {
     session = await subagent.sessions.get(sessionId);
-  } catch {
+  } catch (error) {
+    if (!isSessionNotFound(error)) {
+      throw error;
+    }
     throw new ToolError(
       "FAILED",
       `找不到子会话 "${sessionId}"（可能已被删除）。${resumeGuide()}`,
@@ -242,11 +264,30 @@ async function estimateAttachmentChars(
   if (isBinaryAttachPath(path)) {
     return 0;
   }
-  const size = await getContentSize(path);
+  const size = await probeContentSize(getContentSize, path);
   if (size == null) {
     return 0;
   }
   return size.kind === "inline" ? size.size : size.size * 4;
+}
+
+/**
+ * 尺寸探测的 try/catch 包络：探测失败按「不计字节」处理（返回 null → 0 字符）。
+ *
+ * `getContentSize` 底层走 `vfs.findContentSize`，`/template/...` 一类旧前缀会在
+ * 路径解析阶段抛 `vfsInvalidPath`——预算计量只是**软闸**（超了降级为路径清单），
+ * 让它掀翻整次派发不成比例。先例：`load-or-fill-file-cache.ts` 的
+ * `probeOversizePlaceholder` 同样是「查询失败按可读处理」，不阻断组装。
+ */
+async function probeContentSize(
+  getContentSize: NonNullable<GetContentSize>,
+  path: string
+): Promise<Awaited<ReturnType<NonNullable<GetContentSize>>>> {
+  try {
+    return await getContentSize(path);
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -412,17 +453,14 @@ ${formatCallableList(callable)}
     const title =
       trimmedDesc.length > 0 ? trimmedDesc : input.prompt.trim().slice(0, 40);
 
-    // 续用 vs 新建（spec G4）：sessionId 非空（trim 后）走四态校验后续用同一子会话，
-    // 不新建；留空/纯空白一律新开（模型显式传空串等价于不传）。
-    const requestedSessionId = input.sessionId?.trim() ?? "";
-    const childSessionId =
-      requestedSessionId.length > 0
-        ? await resolveResumeSessionId(requestedSessionId, subagent)
-        : await subagent.createChildSession(title);
-
     // fileAttachment：先物化（attachmentsFromPaths 内部已按规范化 seen key 去重），
     // 再按去重后顺序分配「条数 + 明文当量字符」双预算（spec D11）。超预算不报错，
     // 降级为 prompt 尾注的路径清单。
+    //
+    // **整段必须排在下面 createChildSession 之前**：空串元素是 fileAttachment 唯一的
+    // 硬错误，留在建会话之后抛的话，子会话已经落库且零消息——模型拿不到
+    // subagentSessionId，无法清理这个孤儿子会话，重试还会再堆一个。预算计量只依赖
+    // `subagent.getContentSize`（绑定父工作区 vfs），与 childSessionId 无关，前移无副作用。
     let attachments: MessageAttachment[] | undefined;
     let prompt = input.prompt;
     const filePaths = input.fileAttachment;
@@ -451,6 +489,14 @@ ${formatCallableList(callable)}
         prompt = `${prompt}${buildOverflowPromptNote(overflowPaths)}`;
       }
     }
+
+    // 续用 vs 新建（spec G4）：sessionId 非空（trim 后）走四态校验后续用同一子会话，
+    // 不新建；留空/纯空白一律新开（模型显式传空串等价于不传）。
+    const requestedSessionId = input.sessionId?.trim() ?? "";
+    const childSessionId =
+      requestedSessionId.length > 0
+        ? await resolveResumeSessionId(requestedSessionId, subagent)
+        : await subagent.createChildSession(title);
 
     const { savedModelId, workspaceModelId } =
       subagent.resolveChildModelId(def);

@@ -34,6 +34,7 @@ import { SqliteVfsRevisionRepository } from "../../src/domain/vfs/repositories/i
 import { SqliteVfsEntryRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteMessageCheckpointRepository } from "../../src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import {
+  adjustReadRefCount,
   aggregateReadRefsFromAllMessages,
   repairRefCounts,
 } from "../../src/domain/vfs/logic/revision-ref-count.js";
@@ -493,6 +494,71 @@ describe("read-ref-count: 挂点附带对账（fork/copy +1、updateContent、tr
     // 清空（anchor = null）：msg1 也删 → tr-a −1。
     await ctx.messages.truncateAfter(session.id, null);
     assert.equal(await refCountOf(readA.entryId, readA.version), 1);
+  });
+});
+
+describe("read-ref-count: delta<0 下限夹逼（ref_count 不得被减成负数）", () => {
+  /** 造一条 ref_count 恰为 target 的 revision（走真写路径，live head = 1）。 */
+  async function seedRevisionWithRefCount(
+    tag: string,
+    target: number
+  ): Promise<{ entryId: number; version: number }> {
+    const ctx = getNovelMasterTestContext();
+    const suffix = testIsolationSuffix();
+    const project = await ctx.projects.create(`P-${tag}-${suffix}`);
+    const session = await ctx.sessions.create(project.id);
+    const { version } = await ctx
+      .sessionVfs(project.id, session.id)
+      .write(`/${tag}.txt`, "clamp");
+    const entryRows = await ctx.conn.query<{ entry_id: number }>(
+      "SELECT entry_id FROM vfs_entry WHERE path = ?",
+      [`/${tag}.txt`]
+    );
+    const entryId = entryRows[0]!.entry_id;
+    await ctx.conn.execute(
+      "UPDATE vfs_revision SET ref_count = ? WHERE entry_id = ? AND version = ?",
+      [target, entryId, version]
+    );
+    return { entryId, version };
+  }
+
+  it("ref_count=0 时 −1：保持 0，不写成 −1", async () => {
+    const seed = await seedRevisionWithRefCount("rr-clamp0", 0);
+    assert.equal(await refCountOf(seed.entryId, seed.version), 0);
+
+    // 走删除路径同款调用（adjustReadRefCount 按 delta × count 分桶发批量）。
+    await adjustReadRefCount(
+      new SqliteVfsRevisionRepository(getNovelMasterTestContext().conn),
+      [{ ...seed }],
+      -1
+    );
+
+    assert.equal(
+      await refCountOf(seed.entryId, seed.version),
+      0,
+      "下限夹逼：ref_count=0 时 −1 命不中，计数保持 0（负数会被 GC 当无持有者删掉活 revision）"
+    );
+  });
+
+  it("ref_count=1、delta=−2：保持 1（夹逼按 |delta| 量级，非 >0）", async () => {
+    const seed = await seedRevisionWithRefCount("rr-clamp2", 1);
+
+    await adjustReadRefCount(
+      new SqliteVfsRevisionRepository(getNovelMasterTestContext().conn),
+      // count=2 → 单 pair 的实际 delta = −2（两条消息持有同一 pair 的聚合口径）
+      [{ ...seed, count: 2 }],
+      -1
+    );
+
+    assert.equal(
+      await refCountOf(seed.entryId, seed.version),
+      1,
+      "夹逼必须按 |delta|=2：`ref_count > 0` 的写法在 1−2 下会写出 −1"
+    );
+    assert.ok(
+      (await refCountOf(seed.entryId, seed.version))! >= 0,
+      "任何档位都不得减成负数"
+    );
   });
 });
 

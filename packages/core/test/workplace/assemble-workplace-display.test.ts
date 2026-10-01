@@ -13,6 +13,9 @@ import { parseFileCachePayload } from "../../src/domain/workplace/logic/rule-sna
 import { serializeRuleSnapshot } from "../../src/domain/workplace/logic/rule-snapshot-codec.js";
 import { settlePendingFileCacheBackfills } from "../../src/domain/workplace/logic/load-or-fill-file-cache.js";
 import { createVfsTools } from "../../src/domain/tool/builtin/vfs-tools.js";
+import { textBlocks } from "../../src/domain/chat/content/text-blocks.js";
+import { messageBodyText } from "../../src/domain/chat/content/message-body-text.js";
+import { prepareUserMessagesForPrompt } from "../../src/domain/chat/logic/prepare-user-messages-for-prompt.js";
 import type { AgentPromptLayout } from "../../src/domain/prompt/model/agent-prompt-layout.js";
 import {
   getNovelMasterTestContext,
@@ -500,7 +503,11 @@ describe("assembleWorkplaceDisplay", () => {
  * 且文件落在 fill 分支时才会分家——那正是「没加载全量却被 S0 吞附件」的真缺口。
  */
 describe("assembleWorkplaceDisplay S0 双读（prefixPaths / visiblePaths）", () => {
-  it("T-WP-VP1: 两处早退字面量都补齐 visiblePaths: []", async () => {
+  // 早退②（有块但快照为空）在本文件里**没有**单测覆盖：`loadOrCreateRuleSnapshot`
+  // 把空数组视为未就绪，`sk.set(..., "[]")` 之后照样回落到真 evaluateRuleView，
+  // 走的是正常装配而不是早退分支。那里 `visiblePaths` 漏补会被全仓 typecheck
+  // （返回类型必填字段）拦下，单测冗余，故此用例只钉早退①。
+  it("T-WP-VP1: 早退①：无 workplace 块时补齐 visiblePaths: []", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
@@ -518,7 +525,6 @@ describe("assembleWorkplaceDisplay S0 双读（prefixPaths / visiblePaths）", (
       sessionId: session.id,
     };
 
-    // 早退①：无 workplace 块。
     const noLayout = await assembleWorkplaceDisplay(scope, {
       sessionKkv: sk,
       workplace: wt,
@@ -527,31 +533,6 @@ describe("assembleWorkplaceDisplay S0 双读（prefixPaths / visiblePaths）", (
     });
     assert.deepEqual(noLayout.prefixPaths, []);
     assert.deepEqual(noLayout.visiblePaths, []);
-
-    // 早退②：有块但快照为空（清空 canon 让 evaluate 出空行集）。
-    await sk.set(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY, "[]");
-    await sk.clearSession(session.id);
-    const emptyScope = {
-      ...scope,
-      sessionId: session.id,
-    };
-    const withLayout = await assembleWorkplaceDisplay(emptyScope, {
-      sessionKkv: sk,
-      workplace: createWorkplaceService(ctx.conn, {
-        kind: "session",
-        projectId: project.id,
-        sessionId: session.id,
-      }),
-      vfs,
-      layout: layoutWithWorkplace(),
-    });
-    // 无任何规则 → 快照非空（会话工作区默认规则带出文件）；这里只断言两字段同形，
-    // 保证「早退字面量漏补 visiblePaths」这类编译期之外的疏漏被抓住。
-    assert.deepEqual(
-      withLayout.prefixPaths.length,
-      withLayout.visiblePaths.length,
-      "无规则时两集合同长（默认规则下全是 full 档）",
-    );
   });
 
   it("T-WP-VP2: full 档进 prefixPaths 与 visiblePaths；header 档只进 visiblePaths", async () => {
@@ -592,5 +573,105 @@ describe("assembleWorkplaceDisplay S0 双读（prefixPaths / visiblePaths）", (
     assert.deepEqual(out.prefixPaths, ["/full.md"], "prefixPaths = 仅 full 档");
     // 默认配置语义不变：两档都在 display 里按各自 status 渲染。
     assert.match(out.workplaceDisplay, /full-body/);
+  });
+
+  /**
+   * T-S01-E2E（e-tests/G-1）：S0 收窄的**唯一真实触发链**端到端覆盖，
+   * 三段串在一条用例里——规则引擎 → assemble → prepare。
+   *
+   * 为什么必须这么长：T-WP-VP2 手写快照绕开规则引擎、T-S01 手喂
+   * seenPaths 绕开 assemble，两段之间的接线（谁产出什么、怎么往下传）
+   * 零覆盖——把 `evaluateFileDisplay` 的 header 判定或 assemble 的 full
+   * 条件改坏，两份用例都照绿。这里从 `setDirRule` 真配目录起手，不预置
+   * 任何快照，让 assemble 真跑 `evaluateRuleView`；尾部把 assemble 的
+   * 产物按真实接线喂 `prepareUserMessagesForPrompt`。
+   */
+  it("T-S01-E2E: 显式 header 目录 → 规则引擎出 header 档 → 只进 visiblePaths → attach 拿全文", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const sk = createSessionKkvService(ctx.conn);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    await vfs.write("/hdr.md", "HEADER-BODY");
+
+    const wt = createWorkplaceService(ctx.conn, {
+      kind: "session",
+      projectId: project.id,
+      sessionId: session.id,
+    });
+    // 显式 header 目录：head/tail 都收 0 ⇒ 优先集为空，没有文件走 full；
+    // fill=header ⇒ 落在 fill 分支的 .md 得 header 档（非 .md 直接 hidden）。
+    // 这套组合是 prefixPaths 与 visiblePaths 唯一会分家的配置。
+    await wt.setDirRule({
+      logicalPath: "/",
+      fillPolicy: "header",
+      headCount: 0,
+      tailCount: 0,
+    });
+
+    // 段②：不预置快照，让 assemble 走真 evaluateRuleView（规则引擎段①
+    // 的产物就是这里的输入）。
+    const out = await assembleWorkplaceDisplay(
+      { kind: "session", projectId: project.id, sessionId: session.id },
+      { sessionKkv: sk, workplace: wt, vfs, layout: layoutWithWorkplace() },
+    );
+
+    // 牙齿：header 档进 visiblePaths、不进 prefixPaths。
+    assert.equal(
+      out.visiblePaths.includes("/hdr.md"),
+      true,
+      `规则引擎应把 /hdr.md 判成 header 档并进 visiblePaths，实际 visiblePaths=${JSON.stringify(out.visiblePaths)}`,
+    );
+    assert.equal(
+      out.prefixPaths.includes("/hdr.md"),
+      false,
+      "header 档没加载全量正文，不得进 prefixPaths（否则会吞掉后续 attach）",
+    );
+
+    // 段③：按真实接线（prefixPaths→seenPaths、visiblePaths→workplaceSeenPaths）
+    // 喂 prepare，断言同路径 attach 拿到全文而不是 alreadyReferenced 短提示。
+    const prepared = await prepareUserMessagesForPrompt(
+      [
+        {
+          id: "e2e-attach",
+          sessionId: session.id,
+          seq: 1,
+          role: "user",
+          content: textBlocks("看设定"),
+          provider: null,
+          raw: null,
+          createdAtMs: 0,
+          hidden: false,
+          attachments: [
+            {
+              name: "/hdr.md",
+              source: "attach",
+              type: "text",
+              content: null,
+              path: "/hdr.md",
+            },
+          ],
+        },
+      ],
+      {
+        sessionId: session.id,
+        sessionKkv: sk,
+        vfs,
+        seenPaths: out.prefixPaths,
+        workplaceSeenPaths: out.visiblePaths,
+      },
+    );
+    const body = messageBodyText(prepared[0]!);
+    assert.match(body, /<action name="userAttach">/);
+    assert.match(body, /"display": "full"/);
+    assert.match(body, /1\|HEADER-BODY/, "header 档路径的 attach 必须拿到全文");
+    assert.equal(
+      body.includes("alreadyReferenced"),
+      false,
+      "header 档不在 prefixPaths 里，不该被 S0 判成已引用",
+    );
+    // 组装侧的后台回填是 fire-and-forget，落定后再出本用例，别把在途宏
+    // 任务带进后面的用例。
+    await settlePendingFileCacheBackfills();
   });
 });

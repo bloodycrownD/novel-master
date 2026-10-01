@@ -116,8 +116,9 @@ function optionalNonNegativeInt(
  * **先按 `kind` 分派**：skill 引用带 `kind: "skill"`，read 引用**缺省即
  * read**（存量 content_json 与本分支之前的 read 引用块都没有 `kind` 键，
  * 零迁移兼容）。分派必须在各自白名单之前——否则 read 白名单会静默吞掉
- * skill ref 的 `action/domain/name/files`，hydrate 随之拿不到 files 而重放
- * 不出「附属文件」尾注（wire 逐字节失真）。
+ * skill ref 的 `action/domain/name/files`；过渡期兜底 hydrate 只按
+ * `(entryId, version)` 取明文、不消费这些派生字段，但字段被吞会让白名单
+ * 语义失真、清理轮无从复原。
  *
  * 与 `meta.skillRef` 同一口径：缺省/未携带时返回 undefined；存在但字段
  * 不合法时抛错——引用字段被静默丢弃会让 hydrate 悬空（wire 缺全文），
@@ -143,7 +144,7 @@ function parseContentRef(
  * 解析 read 引用（read-tool-result-ref）。
  *
  * `kind` 缺省或 `"read"` 均走本分支（`kind` 若为其它字符串则 fail-fast——
- * 未知 kind 不能静默当 read 处理，那会按 read 白名单重放 skill ref）。
+ * 未知 kind 不能静默当 read 处理，那会按 read 白名单解析 skill ref）。
  */
 function parseReadResultRef(
   value: Record<string, unknown>,

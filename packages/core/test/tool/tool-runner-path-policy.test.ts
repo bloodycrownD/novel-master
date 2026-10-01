@@ -68,6 +68,24 @@ describe("A-14 tool path policy", () => {
       );
     });
 
+    it("fileAttachment 数组逐元素展开参与校验（task 附件面不得成唯一旁路）", () => {
+      assert.deepEqual(
+        extractInputPaths({
+          description: "d",
+          prompt: "p",
+          subagentName: "general",
+          fileAttachment: ["notes/a.md", "", "设定/b.md"],
+        }),
+        ["notes/a.md", "设定/b.md"],
+      );
+      // 非数组 / 非字符串元素跳过，不炸
+      assert.deepEqual(extractInputPaths({ fileAttachment: "notes/a.md" }), []);
+      assert.deepEqual(extractInputPaths({ fileAttachment: [1, null, "ok.md"] }), [
+        "ok.md",
+      ]);
+      assert.deepEqual(extractInputPaths({ fileAttachment: undefined }), []);
+    });
+
     it("非对象 input 返回空数组", () => {
       assert.deepEqual(extractInputPaths(null), []);
       assert.deepEqual(extractInputPaths(undefined), []);
@@ -253,6 +271,47 @@ describe("ToolRunner path policy (T-SC9)", () => {
       },
     );
     assert.equal(ran.ok, false);
+  });
+
+  it("task 的 fileAttachment 越界同样被拒（数组展开后参与 allowedPaths 校验）", async () => {
+    const ran = { ok: false };
+    const registry = new ToolRegistry();
+    registry.register({
+      name: "task",
+      description: "stub task",
+      inputSchema: z.object({
+        description: z.string().min(1),
+        prompt: z.string().min(1),
+        subagentName: z.string().min(1),
+        fileAttachment: z.array(z.string().min(1)).optional(),
+      }),
+      async run() {
+        ran.ok = true;
+        return { ok: true as const };
+      },
+    } as never);
+    const runner = new ToolRunner(registry);
+
+    await assert.rejects(
+      () =>
+        runner.call(
+          "task",
+          {
+            description: "d",
+            prompt: "p",
+            subagentName: "general",
+            fileAttachment: ["src/ok.md", "secrets/leak.md"],
+          },
+          { allowedPaths: ["src"] },
+        ),
+      (e: unknown) => {
+        assert.ok(e instanceof ToolError);
+        assert.equal(e.code, "FORBIDDEN");
+        assert.equal((e as ToolError).details && (e as ToolError).details.path, "secrets/leak.md");
+        return true;
+      },
+    );
+    assert.equal(ran.ok, false, "被拒时 run() 绝不执行");
   });
 
   it("schema 校验失败时仍走 INVALID_ARGUMENT（policy 在 schema 之后）", async () => {

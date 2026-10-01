@@ -1,8 +1,8 @@
 /**
  * task 工具两个新参数的单测（task-attach-unref Step 9 + Step 11）。
  *
- * - T-TS1/TS2/TS5：`sessionId` 续用——不新建 / 三态文案 / 历史软闸；
- * - T-TA1/TA2/TA3：`fileAttachment`——合规物化形态 / 提示词全文 / 预算制降级。
+ * - T-TS1/TS2/TS5：`sessionId` 续用——不新建 / 三态文案 / 历史软闸 / 非 NOT_FOUND 故障原样上抛；
+ * - T-TA1/TA2/TA3：`fileAttachment`——合规物化形态 / 提示词全文 / 预算制降级 / 三处边界。
  *
  * 这里的 `runChildAgent` 是 mock（只观测收到的 opts），并发硬互斥（D5）与
  * 子会话落库的真实链路由 `test/service/agent/subagent-task-session-attach.test.ts`
@@ -62,6 +62,13 @@ interface MockOpts {
   readonly parentSessionId?: string;
   /** 内容尺寸表；给了才注入 `getContentSize` 闭包。 */
   readonly sizes?: SizeTable;
+  /**
+   * `sessions.get` 抛的**非 NOT_FOUND** 错误（DB 故障模拟）。
+   * 给了之后 `get` 一律抛它——用来钉「非 not-found 故障原样上抛」（B-3）。
+   */
+  readonly getThrows?: Error;
+  /** `getContentSize` 一律抛错（探测不可用 / 旧前缀路径模拟）。 */
+  readonly sizeProbeThrows?: boolean;
 }
 
 interface MockResult {
@@ -110,6 +117,7 @@ function makeSubagent(opts: MockOpts = {}): MockResult {
 
   const sessions: SessionService = {
     get: async (id: string) => {
+      if (opts.getThrows != null) throw opts.getThrows;
       const s = known.get(id);
       if (s == null) throw chatErrorNotFound();
       return s;
@@ -148,14 +156,22 @@ function makeSubagent(opts: MockOpts = {}): MockResult {
     },
     parentSessionId: opts.parentSessionId ?? PARENT_ID,
     isSessionRunActive: (id: string) => active.has(id),
-    ...(opts.sizes != null
+    ...(opts.sizeProbeThrows === true
       ? {
-          getContentSize: async (path: string) => {
-            const hit = opts.sizes![path];
-            return hit === undefined ? null : hit;
+          getContentSize: async (_path: string): Promise<never> => {
+            // 模拟 vfs 路径解析失败（`/template/...` 旧前缀 → vfsInvalidPath）：
+            // 预算是软闸，探测抛错不得掀翻整次派发。
+            throw new Error("Invalid path /template/a.md");
           },
         }
-      : {}),
+      : opts.sizes != null
+        ? {
+            getContentSize: async (path: string) => {
+              const hit = opts.sizes![path];
+              return hit === undefined ? null : hit;
+            },
+          }
+        : {}),
     resolveChildModelId: (def) => ({
       savedModelId: def.model ?? "parent-saved",
       workspaceModelId: "ws-model",
@@ -264,6 +280,35 @@ describe("task sessionId 续用（T-TS*）", () => {
       }
     );
     assert.equal(createdSessions.length, 0);
+  });
+
+  it("T-TS2a2: sessions.get 抛非 NOT_FOUND 故障 → 原样上抛，且不新建子会话", async () => {
+    // 瞬时 DB 抖动若被吞成「找不到子会话」，模型会误判 sessionId 失效 → 新建重复子会话。
+    const dbFault = Object.assign(new Error("database is locked"), {
+      code: "SQLITE_BUSY",
+    });
+    const { ctx, createdSessions, capturedSessionIds } = makeSubagent({
+      sessions: [childSession("kid-1")],
+      getThrows: dbFault,
+    });
+    await assert.rejects(
+      () =>
+        subagentTool.run(
+          {
+            description: "d",
+            prompt: "p",
+            subagentName: "general",
+            sessionId: "kid-1",
+          },
+          toolCtx(ctx)
+        ),
+      (e: unknown) => {
+        assert.equal(e, dbFault, "必须原样上抛，不能被改写成 ToolError");
+        return true;
+      }
+    );
+    assert.equal(createdSessions.length, 0, "故障时不得降级新建");
+    assert.equal(capturedSessionIds.length, 0, "故障时不得进 runChildAgent");
   });
 
   it("T-TS2b: 存在但不是当前会话的子会话（parentSessionId 不符）→ 拒绝", async () => {
@@ -525,6 +570,32 @@ describe("task fileAttachment 物化与预算（T-TA*）", () => {
     }
   });
 
+  it("T-TA3a2: 恰好 20 条——全挂载且 prompt 无尾注（边界档，`<` 与 `<=` 的分水岭）", async () => {
+    const paths = Array.from(
+      { length: TASK_FILE_ATTACHMENT_MAX_COUNT },
+      (_, i) => `f${i}.md`
+    );
+    const sizes: SizeTable = {};
+    for (const p of paths) {
+      sizes[`/${p}`] = { kind: "inline", size: 10 };
+    }
+    const { ctx, capturedOpts } = makeSubagent({ sizes });
+    await subagentTool.run(
+      { description: "d", prompt: "正文", subagentName: "general", fileAttachment: paths },
+      toolCtx(ctx)
+    );
+    assert.equal(
+      capturedOpts[0]!.attachments!.length,
+      TASK_FILE_ATTACHMENT_MAX_COUNT,
+      "恰好等于条数上限应全挂"
+    );
+    assert.equal(
+      capturedOpts[0]!.prompt,
+      "正文",
+      "一条都没超预算 → 不得出现尾注（`<` 误写成 `<=` 这条会红）"
+    );
+  });
+
   it("T-TA3b: 字符预算超限（inline 明文字符数直接计）——降级不报错", async () => {
     const { ctx, capturedOpts } = makeSubagent({
       sizes: {
@@ -582,6 +653,47 @@ describe("task fileAttachment 物化与预算（T-TA*）", () => {
     assert.equal(ok.capturedOpts[0]!.prompt, "正文");
   });
 
+  it("T-TA3c2: blob 档恰等预算（25_000 ×4 = 100_000）→ 仍挂附件（`usedChars+chars<=BUDGET` 的等号档）", async () => {
+    const { ctx, capturedOpts } = makeSubagent({
+      sizes: { "/blob.md": { kind: "blob", size: 25_000 } },
+    });
+    await subagentTool.run(
+      {
+        description: "d",
+        prompt: "正文",
+        subagentName: "general",
+        fileAttachment: ["blob.md"],
+      },
+      toolCtx(ctx)
+    );
+    assert.equal(
+      capturedOpts[0]!.attachments!.length,
+      1,
+      "折算后恰等预算 → 进（写成 `<` 会红）"
+    );
+    assert.equal(capturedOpts[0]!.prompt, "正文", "不超预算 → 不加尾注");
+  });
+
+  it("T-TA3h: getContentSize 抛错（如 `/template/...` 旧前缀）→ 按 0 字节计，附件照常挂载", async () => {
+    // 预算是软闸：探测失败不得掀翻整次派发（先例 probeOversizePlaceholder 同款包络）。
+    const { ctx, capturedOpts, capturedSessionIds } = makeSubagent({
+      sizeProbeThrows: true,
+    });
+    const out = await subagentTool.run(
+      {
+        description: "d",
+        prompt: "正文",
+        subagentName: "general",
+        fileAttachment: ["a.md", "b.md"],
+      },
+      toolCtx(ctx)
+    );
+    assert.equal(capturedSessionIds.length, 1, "探测抛错不得中断派发");
+    assert.equal(capturedOpts[0]!.attachments!.length, 2, "按 0 计 → 都进预算");
+    assert.equal(capturedOpts[0]!.prompt, "正文", "无尾注");
+    assert.equal(out.subagentSessionId, "child-1");
+  });
+
   it("T-TA3d: image / dir 不计字节（但仍占条数名额），null 按 0 计", async () => {
     const { ctx, capturedOpts } = makeSubagent({
       sizes: {
@@ -637,9 +749,9 @@ describe("task fileAttachment 物化与预算（T-TA*）", () => {
     assert.equal(capturedOpts[0]!.prompt, "正文", "不超预算 → 不加尾注");
   });
 
-  it("T-TA3e: 空串 / 纯空白路径元素 → ToolError FAILED（不静默丢）", async () => {
+  it("T-TA3e: 空串 / 纯空白路径元素 → ToolError FAILED（不静默丢），且不得留下孤儿子会话", async () => {
     for (const bad of ["", "   "]) {
-      const { ctx } = makeSubagent({ sizes: {} });
+      const { ctx, createdSessions } = makeSubagent({ sizes: {} });
       await assert.rejects(
         () =>
           subagentTool.run(
@@ -658,7 +770,39 @@ describe("task fileAttachment 物化与预算（T-TA*）", () => {
           return true;
         }
       );
+      // 牙齿：物化排在 createChildSession 之前。若留在之后，模型拿不到
+      // subagentSessionId、子会话零消息又删不掉，重试还会再堆一个。
+      assert.equal(
+        createdSessions.length,
+        0,
+        `路径 ${JSON.stringify(bad)} 非法时不得新建子会话`
+      );
     }
+  });
+
+  it("T-TA3e2: 路径穿越写法 `/../evil` → ToolError 文案带 fileAttachment 引导（不漏裸 VfsError）", async () => {
+    const { ctx, createdSessions } = makeSubagent({ sizes: {} });
+    await assert.rejects(
+      () =>
+        subagentTool.run(
+          {
+            description: "d",
+            prompt: "p",
+            subagentName: "general",
+            fileAttachment: ["/../evil"],
+          },
+          toolCtx(ctx)
+        ),
+      (e: unknown) => {
+        assert.ok(e instanceof ToolError, "路径非法必须是 ToolError，不是裸 VfsError");
+        assert.equal(e.code, "FAILED");
+        assert.match(e.message, /fileAttachment 路径非法/);
+        // 原 message 保留（VfsError 的中文/英文 reason 仍在文案里）
+        assert.match(e.message, /Invalid path/);
+        return true;
+      }
+    );
+    assert.equal(createdSessions.length, 0, "同样不得新建子会话");
   });
 
   it("T-TA3f: 未注入 getContentSize 闭包时按「不计字节」处理（仍受条数预算约束）", async () => {

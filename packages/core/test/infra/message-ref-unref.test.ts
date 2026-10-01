@@ -246,6 +246,49 @@ function toolResultContents(json: string): string[] {
     .map((b) => (b as { content: string }).content);
 }
 
+/** −1 之前前值告警的文案特征（B-01 第三子句，只有它该命中）。 */
+const REF_DECREMENT_WARN = /−1 之前/;
+
+/** 捕获 `console.warn`（实现是直接调用，替换属性即可；finally 真恢复）。 */
+async function captureWarnings<T>(
+  fn: () => Promise<T>
+): Promise<{ result: T; warnings: string[] }> {
+  const warnings: string[] = [];
+  const original = console.warn;
+  console.warn = (...args: unknown[]): void => {
+    warnings.push(args.map((a) => String(a)).join(" "));
+  };
+  try {
+    const result = await fn();
+    return { result, warnings };
+  } finally {
+    console.warn = original;
+  }
+}
+
+/**
+ * Proxy 转发 + 覆写若干方法。
+ *
+ * **类实例不能对象展开**（`{...tx}` 会丢原型方法，见 subagent-task-session-attach
+ * 先例的 RULE）：被测代码在 tx 上做 `query`（−1 之前的前值查证），展开版会以
+ * `tx.query is not a function` 崩掉，而不是给出可读的断言失败。方法一律绑到
+ * target——绑到 proxy 会让实例内部 `this.query(...)` 再绕回 get 钩子。
+ */
+function proxyConn(
+  target: TdbcConnection,
+  overrides: Readonly<Record<string, unknown>>
+): TdbcConnection {
+  return new Proxy(target, {
+    get(t, prop) {
+      if (prop in overrides) {
+        return overrides[prop as string];
+      }
+      const value = Reflect.get(t, prop, t);
+      return typeof value === "function" ? value.bind(t) : value;
+    },
+  }) as TdbcConnection;
+}
+
 describe("message-ref-unref: T-UM1 round-trip", () => {
   it("回填 {path, content} 明文包并移除 contentRef；谓词归零 + 完成标记置位", async () => {
     await clearMarkers();
@@ -456,47 +499,33 @@ describe("message-ref-unref: T-UM2 ref_count 精确对账", () => {
 });
 
 describe("message-ref-unref: T-UM3 同事务性", () => {
-  /** 让 tx 句柄上的 vfs_revision 批改抛错（模拟 −1 失败）。 */
-  function connWithFailingRefDelta(): {
-    wrapped: TdbcConnection;
-    restore: () => void;
-  } {
+  /** 让 tx 句柄上的 vfs_revision 批改抛错（模拟 −1 失败）。Proxy 转发其余方法。 */
+  function connWithFailingRefDelta(): TdbcConnection {
     const base = conn();
     const originalTransaction = base.transaction.bind(base);
     let injected = 0;
-    const wrapped = {
-      ...base,
-      query: (sql: string, params?: readonly unknown[]) => base.query(sql, params),
-      execute: (sql: string, params?: readonly unknown[]) =>
-        base.execute(sql, params),
-      batch: (sql: string, paramsList: readonly (readonly unknown[])[]) =>
-        base.batch(sql, paramsList),
-      close: () => base.close(),
+    return proxyConn(base, {
       transaction: <T>(fn: (tx: TdbcConnection) => Promise<T>): Promise<T> =>
-        originalTransaction(async (tx) => {
-          const txExecute = tx.execute.bind(tx);
-          return fn({
-            ...tx,
-            execute: (sql: string, params?: readonly unknown[]) => {
-              if (
-                injected < 1 &&
-                typeof sql === "string" &&
-                sql.includes("UPDATE vfs_revision")
-              ) {
-                injected += 1;
-                return Promise.reject(
-                  new Error("注入：ref_count 批改失败（模拟库被锁）")
-                );
-              }
-              return txExecute(sql, params);
-            },
-          });
-        }),
-    } as TdbcConnection;
-    return {
-      wrapped,
-      restore: () => undefined,
-    };
+        originalTransaction(async (tx) =>
+          fn(
+            proxyConn(tx, {
+              execute: (sql: string, params?: readonly unknown[]) => {
+                if (
+                  injected < 1 &&
+                  typeof sql === "string" &&
+                  sql.includes("UPDATE vfs_revision")
+                ) {
+                  injected += 1;
+                  return Promise.reject(
+                    new Error("注入：ref_count 批改失败（模拟库被锁）")
+                  );
+                }
+                return tx.execute(sql, params);
+              },
+            })
+          )
+        ),
+    });
   }
 
   it("−1 失败时写回同事务回滚（不产生半迁移行）", async () => {
@@ -524,7 +553,7 @@ describe("message-ref-unref: T-UM3 同事务性", () => {
       ],
     });
 
-    const { wrapped } = connWithFailingRefDelta();
+    const wrapped = connWithFailingRefDelta();
     await assert.rejects(
       () => runMessageRefUnref(wrapped, { syncBudgetMs: 5_000 }),
       /注入/,
@@ -714,7 +743,7 @@ describe("message-ref-unref: T-UM5 断点续跑 / 标记自愈 / 探针排除", 
     assert.equal(await refCountOf(rev.entryId, rev.version), 1);
   });
 
-  it("探针 failedIds 排除三档：0 条 / 1 条 / 2 条", async () => {
+  it("探针 failedIds 排除：0 条档（无排除）与 2 条档", async () => {
     await clearMarkers();
     await dropAllRefRows();
     await markDecompressDone();
@@ -794,6 +823,122 @@ describe("message-ref-unref: T-UM5 断点续跑 / 标记自愈 / 探针排除", 
       1,
       "自愈续搬同样精确 −1"
     );
+  });
+
+  it("探针 failedIds 排除 1 条档：谓词候选只剩该条假阳性行 → 探针 false（短路保留标记）", async () => {
+    await clearMarkers();
+    await dropAllRefRows();
+    await markDecompressDone();
+    const { sessionId } = await newSession("um5d");
+
+    // 只落 1 条假阳性行：第一轮全表扫把它判无需回迁 → 进标记 failedIds。
+    const fpJson =
+      '{"blocks":[{"type":"text","text":"单条假阳性","note":{"contentRef":"历史字段"}}]}';
+    const fp = await insertRefRow({ sessionId, blocks: [], rawJson: fpJson });
+    const r0 = await runMessageRefUnref(conn(), { syncBudgetMs: 5_000 });
+    assert.equal(r0.done, true);
+    assert.equal(r0.noRefBlockCount, 1);
+    assert.deepEqual(
+      JSON.parse((await doneMarkerValue()) ?? "{}").failedIds,
+      [fp]
+    );
+
+    // 第二轮：标记已置 + 谓词候选仅剩这 1 条（且在 failedIds 里）→ 排除集合
+    // 完整生效，探针返 false → 零成本短路：不清标记、不重写（含 at 时间戳）。
+    const markerBefore = await doneMarkerValue();
+    const r1 = await runMessageRefUnref(conn(), { syncBudgetMs: 5_000 });
+    assert.equal(r1.done, true);
+    assert.equal(r1.unrefedCount, 0, "1 条档被完整排除 → 不得重搬");
+    assert.equal(r1.noRefBlockCount, 1, "短路路径回放标记快照");
+    assert.equal(
+      await doneMarkerValue(),
+      markerBefore,
+      "探针 false → 标记原样保留"
+    );
+    assert.equal(await pendingCount(), 1, "假阳性行按设计永留谓词");
+  });
+
+  it("探针跨页排除：假阳性行满 501 条（超过一页 BATCH_SIZE=100）→ 探针仍返 false", async () => {
+    await clearMarkers();
+    await dropAllRefRows();
+    await markDecompressDone();
+    const { projectId, sessionId } = await newSession("um5e");
+
+    // 501 条假阳性行 → 分页取候选要扫 6 页（100×5 + 1）。若排除集合被按批
+    // 切分（每 500 条切一次 NOT IN），落在第 2 页的那条在第 1 页查询里不被
+    // 排除 → 探针恒命中 → 清标记 → 全表重扫 → 再撞同一批，永不收敛。
+    const ids: string[] = [];
+    const paramsList: unknown[][] = [];
+    for (let i = 0; i < 501; i++) {
+      const id = randomUUID();
+      ids.push(id);
+      paramsList.push([
+        id,
+        sessionId,
+        900_000 + i,
+        JSON.stringify({
+          blocks: [
+            { type: "text", text: `批量假阳性 ${i}` },
+            { type: "tool_result", toolUseId: `tu-b${i}`, content: "输出", note: { contentRef: "历史字段" } },
+          ],
+        }),
+        Date.now(),
+      ]);
+    }
+    await conn().batch(
+      `INSERT INTO chat_message (id, session_id, seq, role, content_json, created_at_ms, hidden)
+       VALUES (?, ?, ?, 'assistant', ?, ?, 0)`,
+      paramsList
+    );
+    assert.equal(await pendingCount(), 501);
+
+    // 第一轮：无标记 → 全表扫完，501 行全部判假阳性进标记。
+    const r0 = await runMessageRefUnref(conn(), { syncBudgetMs: 30_000 });
+    assert.equal(r0.done, true);
+    assert.equal(r0.noRefBlockCount, 501);
+    const marker0 = JSON.parse((await doneMarkerValue()) ?? "{}");
+    assert.equal((marker0.failedIds as string[]).length, 501);
+
+    // 第二轮：标记已置 → 探针分页 + JS Set 排除，全部页都排除光 → false。
+    const markerBefore = await doneMarkerValue();
+    const r1 = await runMessageRefUnref(conn(), { syncBudgetMs: 30_000 });
+    assert.equal(r1.done, true);
+    assert.equal(r1.unrefedCount, 0, "501 条假阳性全在排除集合里 → 探针 false");
+    assert.equal(r1.noRefBlockCount, 501, "短路路径回放标记快照");
+    assert.equal(
+      await doneMarkerValue(),
+      markerBefore,
+      "探针 false → 标记原样保留（不得清标记重扫）"
+    );
+
+    // 对照（返 true）：再落一条真引用行 → 排除后仍有候选 → 探针命中、自愈续搬。
+    const rev = await seedRevision(
+      projectId,
+      sessionId,
+      "跨页探针存活验证的明文"
+    );
+    await setRefCount(rev.entryId, rev.version, 2);
+    await insertRefRow({
+      sessionId,
+      blocks: [
+        {
+          type: "tool_result",
+          toolUseId: "tu-probe-501",
+          content: "",
+          contentRef: readRef({
+            path: rev.path,
+            entryId: rev.entryId,
+            version: rev.version,
+            contentHash: rev.contentHash,
+          }),
+        },
+      ],
+    });
+    const r2 = await runMessageRefUnref(conn(), { syncBudgetMs: 30_000 });
+    assert.equal(r2.done, true);
+    assert.equal(r2.unrefedCount, 1, "合法待迁行存在 → 探针 true（自愈续搬）");
+    assert.equal(await refCountOf(rev.entryId, rev.version), 1);
+    assert.equal(await pendingCount(), 501, "真引用行已退出谓词");
   });
 });
 
@@ -930,6 +1075,218 @@ describe("message-ref-unref: T-UM6 坏行三判别 + hash 不匹配", () => {
   });
 });
 
+describe("message-ref-unref: D-01 写回只 patch raw 块（销毁面收敛）", () => {
+  it("空 text 块 / 白名单外字段原样保留；text 块恰好带 contentRef 字段不被误改", async () => {
+    await clearMarkers();
+    await dropAllRefRows();
+    await markDecompressDone();
+    const { projectId, sessionId } = await newSession("d01");
+    const plain = "raw patch 的明文";
+    const rev = await seedRevision(projectId, sessionId, plain);
+    await setRefCount(rev.entryId, rev.version, 2);
+
+    const ref = readRef({
+      path: rev.path,
+      entryId: rev.entryId,
+      version: rev.version,
+      contentHash: rev.contentHash,
+    });
+    // 夹具①（真引用行）：三种「parse 会归一化掉、raw patch 必须原样留下」的
+    // 形态——空 text 块（parseBlocksArray 直接丢弃）、text 块上的白名单外
+    // 字段、tool_result 块上的白名单外字段。
+    const id = await insertRefRow({
+      sessionId,
+      blocks: [],
+      rawJson: JSON.stringify({
+        blocks: [
+          { type: "text", text: "" },
+          { type: "text", text: "正文", unknownField: "保留我" },
+          {
+            type: "tool_result",
+            toolUseId: "tu-raw",
+            content: "",
+            ok: true,
+            note: { 附加: 1 },
+            contentRef: ref,
+          },
+        ],
+      }),
+    });
+
+    // 夹具②（误改防护）：text 块恰好带 contentRef 字段——正文里自己写的同名字段，
+    // 不得被当引用块改掉。改不了的行按设计永留谓词（回迁后即谓词假阳性）。
+    const fpId = await insertRefRow({
+      sessionId,
+      blocks: [],
+      rawJson: JSON.stringify({
+        blocks: [{ type: "text", text: "正文里自带的 contentRef", contentRef: ref }],
+      }),
+    });
+    const fpJson = await contentJsonOf(fpId);
+
+    const result = await runMessageRefUnref(conn(), { syncBudgetMs: 5_000 });
+    assert.equal(result.done, true, "真引用行搬走、误改防护行归假阳性 → 本轮收敛");
+    assert.equal(result.unrefedCount, 1);
+    assert.equal(result.failedCount, 0, "不得把 text 块的 contentRef 当坏行");
+    assert.equal(result.noRefBlockCount, 1, "text 块的同名字段不构成引用块");
+
+    // 逐键全等（字符串断言顺带钉住键序：`content` 留在原键位、contentRef 被删）。
+    assert.equal(
+      await contentJsonOf(id),
+      JSON.stringify({
+        blocks: [
+          { type: "text", text: "" },
+          { type: "text", text: "正文", unknownField: "保留我" },
+          {
+            type: "tool_result",
+            toolUseId: "tu-raw",
+            content: JSON.stringify({ path: rev.path, content: plain }),
+            ok: true,
+            note: { 附加: 1 },
+          },
+        ],
+      }),
+      "只有带 contentRef 的 tool_result 块该被改，其余块原样保留"
+    );
+    assert.equal(
+      await contentJsonOf(fpId),
+      fpJson,
+      "text 块自带的 contentRef 字段一字未改"
+    );
+    assert.equal(
+      await refCountOf(rev.entryId, rev.version),
+      1,
+      "只有真引用行产生 −1"
+    );
+  });
+});
+
+describe("message-ref-unref: B-01 −1 之前前值 warn（区分坏行）", () => {
+  it("档 1：前值充足（ref_count=2、delta=−1）→ 无 warn，计数正常 −1", async () => {
+    await clearMarkers();
+    await dropAllRefRows();
+    await markDecompressDone();
+    const { projectId, sessionId } = await newSession("b01a");
+    const rev = await seedRevision(projectId, sessionId, "前值充足");
+    await setRefCount(rev.entryId, rev.version, 2);
+    const id = await insertRefRow({
+      sessionId,
+      blocks: [
+        {
+          type: "tool_result",
+          toolUseId: "tu-ok",
+          content: "",
+          contentRef: readRef({
+            path: rev.path,
+            entryId: rev.entryId,
+            version: rev.version,
+            contentHash: rev.contentHash,
+          }),
+        },
+      ],
+    });
+
+    const { result, warnings } = await captureWarnings(() =>
+      runMessageRefUnref(conn(), { syncBudgetMs: 5_000 })
+    );
+    assert.equal(result.done, true);
+    assert.deepEqual(
+      warnings.filter((w) => REF_DECREMENT_WARN.test(w)),
+      [],
+      "前值充足不得 warn（正常 −1 不是坏行）"
+    );
+    assert.equal(await refCountOf(rev.entryId, rev.version), 1);
+    assert.deepEqual(toolResultContents(await contentJsonOf(id)), [
+      JSON.stringify({ path: rev.path, content: "前值充足" }),
+    ]);
+  });
+
+  it("档 2：前值 < |delta|（ref_count=0、delta=−1）→ warn + 行照常写回 + 不判失败", async () => {
+    await clearMarkers();
+    await dropAllRefRows();
+    await markDecompressDone();
+    const { projectId, sessionId } = await newSession("b01b");
+    const rev = await seedRevision(projectId, sessionId, "前值不足");
+    // 前值 0：夹逼 `ref_count >= |delta|` 会让 UPDATE 命不中（计数保持 0、
+    // **不得**写成 −1），同时按 D15 第三子句记 warn 区分坏行。
+    await setRefCount(rev.entryId, rev.version, 0);
+    const id = await insertRefRow({
+      sessionId,
+      blocks: [
+        {
+          type: "tool_result",
+          toolUseId: "tu-low",
+          content: "",
+          contentRef: readRef({
+            path: rev.path,
+            entryId: rev.entryId,
+            version: rev.version,
+            contentHash: rev.contentHash,
+          }),
+        },
+      ],
+    });
+
+    const { result, warnings } = await captureWarnings(() =>
+      runMessageRefUnref(conn(), { syncBudgetMs: 5_000 })
+    );
+    assert.equal(result.done, true, "计数没减成不等于坏行：不得判失败");
+    assert.equal(result.unrefedCount, 1, "写回照常落库");
+    assert.equal(result.failedCount, 0);
+    const refWarns = warnings.filter((w) => REF_DECREMENT_WARN.test(w));
+    assert.equal(refWarns.length, 1, "前值不足必须恰好一条 warn");
+    assert.match(refWarns[0]!, /ref_count 不足/);
+    assert.match(refWarns[0]!, /前值=0/);
+    assert.match(refWarns[0]!, new RegExp(`id=${id}`));
+    assert.equal(
+      await refCountOf(rev.entryId, rev.version),
+      0,
+      "夹逼拦下 → 计数保持原值（且不得为负）"
+    );
+    assert.deepEqual(toolResultContents(await contentJsonOf(id)), [
+      JSON.stringify({ path: rev.path, content: "前值不足" }),
+    ]);
+  });
+
+  it("档 3：badBlockCount>0 的行不重复 warn（成因已由块级 warn 记过）", async () => {
+    await clearMarkers();
+    await dropAllRefRows();
+    await markDecompressDone();
+    const { sessionId } = await newSession("b01c");
+    // 悬空 pair：块级「revision 行缺失」warn 已记成因 → 不得再叠加前值 warn。
+    await insertRefRow({
+      sessionId,
+      blocks: [
+        {
+          type: "tool_result",
+          toolUseId: "tu-bad",
+          content: "",
+          contentRef: readRef({
+            path: "/ghost.txt",
+            entryId: 987654,
+            version: 3,
+            contentHash: "deadbeef",
+          }),
+        },
+      ],
+    });
+
+    const { result, warnings } = await captureWarnings(() =>
+      runMessageRefUnref(conn(), { syncBudgetMs: 5_000 })
+    );
+    assert.equal(result.failedCount, 1);
+    assert.equal(
+      warnings.filter((w) => REF_DECREMENT_WARN.test(w)).length,
+      0,
+      "坏块行不重复告警"
+    );
+    assert.ok(
+      warnings.some((w) => /revision 行缺失/.test(w)),
+      "块级成因 warn 仍在"
+    );
+  });
+});
+
 describe("message-ref-unref: T-UM7 压缩行交叠", () => {
   it("压缩行不被触碰；解压标记未置 → deferred=true 且不置标记；解压完成后回迁收敛", async () => {
     await clearMarkers();
@@ -1005,5 +1362,70 @@ describe("message-ref-unref: T-UM7 压缩行交叠", () => {
     ]);
     assert.equal(await refCountOf(rev.entryId, rev.version), 1);
     assert.notEqual(await doneMarkerValue(), null);
+  });
+
+  it("解压标记未置 + 收尾有残留 → deferred 让位前置于残留下沉校验（不判 stalled）", async () => {
+    await clearMarkers();
+    await dropAllRefRows();
+    // 刻意**不置**解压标记（D19 的让位判据）。
+    const { projectId, sessionId } = await newSession("um7b");
+    const rev = await seedRevision(projectId, sessionId, "残留夹具的明文");
+    await setRefCount(rev.entryId, rev.version, 2);
+    await insertRefRow({
+      sessionId,
+      blocks: [
+        {
+          type: "tool_result",
+          toolUseId: "tu-residual",
+          content: "",
+          contentRef: readRef({
+            path: rev.path,
+            entryId: rev.entryId,
+            version: rev.version,
+            contentHash: rev.contentHash,
+          }),
+        },
+      ],
+    });
+
+    // 造「收尾有残留」：驱动写回静默不生效（changes=0），行仍留在谓词里——
+    // 与「解压把压缩行解回明文、该行在游标扫过之后才进谓词」在收尾判定上
+    // 完全同形（leftover > residualKeys.size）。
+    const base = conn();
+    const baseTransaction = base.transaction.bind(base);
+    const noWriteBack = proxyConn(base, {
+      transaction: <T>(fn: (tx: TdbcConnection) => Promise<T>): Promise<T> =>
+        baseTransaction((tx) =>
+          fn(
+            proxyConn(tx, {
+              execute: (sql: string, params?: readonly unknown[]) =>
+                typeof sql === "string" &&
+                sql.includes("UPDATE chat_message") &&
+                sql.includes("content_json")
+                  ? Promise.resolve({ changes: 0, lastInsertRowid: 0 })
+                  : tx.execute(sql, params),
+            })
+          )
+        ),
+    });
+
+    // 解压未完成 → deferred 让位优先，不谎报 stalled。
+    const deferred = await runMessageRefUnref(noWriteBack, { syncBudgetMs: 5_000 });
+    assert.equal(deferred.done, false);
+    assert.equal(deferred.deferred, true, "解压未完成 → deferred");
+    assert.equal(
+      deferred.stalled,
+      false,
+      "解压未完成时不得判 stalled（压缩行解回明文造成的残留是正常交叠态）"
+    );
+    assert.equal(await doneMarkerValue(), null, "两条路径都不置标记");
+
+    // 对照：解压已完成 → 同一份残留才判 stalled。
+    await markDecompressDone();
+    const stalled = await runMessageRefUnref(noWriteBack, { syncBudgetMs: 5_000 });
+    assert.equal(stalled.done, false);
+    assert.equal(stalled.stalled, true, "解压已完成 → 残留判 stalled");
+    assert.equal(stalled.deferred, false);
+    assert.equal(await doneMarkerValue(), null, "stalled 不得置完成标记");
   });
 });

@@ -166,11 +166,13 @@ async function hydrateReadResultBlock(
   }
 
   if (plain == null) {
+    // 占位文案自包含：memo 命中 null 时本块不会走到上面的 warn（warn 可能
+    // 属同批另一消息/另一 path 的首次探测），故不引用「上方 warn」。
     return {
       ...block,
       content: errorPlaceholderJson(
         refPath,
-        `(entryId=${ref.entryId}, version=${ref.version}) 的明文取不回，见上方 warn`
+        `(entryId=${ref.entryId}, version=${ref.version}) 的明文取不回：该 revision 的正文在本次装配中不可用`
       ),
     };
   }

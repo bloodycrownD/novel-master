@@ -1234,8 +1234,15 @@ async function runChildAgent(args: {
     // task 工具的 prompt 作为子 session 的第一条 user 消息落库，
     // 使子 agent 对话历史完整：LLM 能看到任务描述，UI 浏览页也能展示。
     // 续用（spec G4）时同一条 append 追加到已有子会话末尾，历史不断链。
-    if (opts.prompt && opts.prompt.trim().length > 0) {
-      await session.append("user", textBlocks(opts.prompt), {
+    //
+    // 守卫是「prompt 非空白 **或** 附件非空」：schema 的 `z.string().min(1)` 放行
+    // 纯空白串（" "），若只按 prompt 判空，这条 user 消息连同已物化的 fileAttachment
+    // 会一起不落库——task 却照常「正常」返回，附件静默蒸发、模型毫不知情。
+    if (
+      (opts.prompt != null && opts.prompt.trim().length > 0) ||
+      (opts.attachments != null && opts.attachments.length > 0)
+    ) {
+      await session.append("user", textBlocks(opts.prompt ?? ""), {
         // fileAttachment 预算内物化的附件（spec G5）：与主会话附件同链路——
         // `content:null` 落库、view-time hydrate、alreadyReferenced 去重都复用既有
         // prepare 链，子代理开箱即得全文，省掉自己 read 一遍。
@@ -1277,14 +1284,14 @@ async function runChildAgent(args: {
             parentProjectId,
             title
           );
-runtime.eventBus.publish(EVENT_SUBAGENT_CHILD_SESSION_CREATED, {
-          parentSessionId: childSessionId,
-          projectId: parentProjectId,
-          childSessionId: grandchild.id,
-          title,
-        });
-        return grandchild.id;
-      },
+          runtime.eventBus.publish(EVENT_SUBAGENT_CHILD_SESSION_CREATED, {
+            parentSessionId: childSessionId,
+            projectId: parentProjectId,
+            childSessionId: grandchild.id,
+            title,
+          });
+          return grandchild.id;
+        },
         // 续用归属校验（spec D2 直接父口径）：子装配点里孙会话的直接父就是本
         // 子会话（注意**不是**根父 parentSessionId——工作区归属才是根父口径）。
         parentSessionId: childSessionId,

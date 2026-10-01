@@ -25,6 +25,9 @@
  *   逐块按 `(entryId, version)` `findByEntryAndVersion` 取明文（内部
  *   `contentStore.get(contentHash)`）→ 组装 `{path, content}` JSON 写回该块
  *   `content` 并**移除 `contentRef` 字段** → 整行 `content_json` 写回。
+ *   **写回只 patch raw 原始 blocks**（`JSON.parse(contentJson)` 原地改），
+ *   不拿 parse 结果重排：整行归一化会吞掉空 text 块与白名单外字段，把「搬
+ *   contentRef」放大成「整行所有块不可逆重写」。
  *   - **hash 不匹配不算坏行**：能取到明文就照常回填并 warn。内容寻址 hash
  *     在本仓其余读路径上都不当强校验用（见 hydrate 兜底模块的同款取舍），
  *     废除的 hydrate fail-fast 四码不复活。
@@ -45,14 +48,16 @@
  *   层 AsyncMutex 不可重入，回调里误用外层 `conn` 会死锁。UPDATE WHERE 带
  *   谓词，重复搬运 `changes = 0` 自然跳过。
  *   −1 口径走 `aggregateReadRefs`（消息内 pair 去重、消息间累加），与 fork/copy
- *   的 +1、删除路径的 −1 严格对账。
+ *   的 +1、删除路径的 −1 严格对账。**−1 之前先查前值**：行缺失或
+ *   `前值 < |delta|` 的 pair 记 warn 区分坏行（repository 侧 UPDATE 同时带
+ *   `ref_count >= |delta|` 下限夹逼——误减活 revision 是不可恢复方向）。
  * - **入口自愈（防标记闩锁）**：完成标记已置位时先跑一次
  *   `SELECT 1 ... <谓词> LIMIT 1`（并排除标记里已知的 `failedIds`），命中
  *   （整库快照回灌等让标记与数据形态脱节）即清标记续搬。
  * - **探针排除 `failedIds`**：假阳性行按设计**永留谓词**（不能改用户正文）。
  *   不排除的话每次冷启动都要走「标记命中 → 探针必命中 → 清标记 → 全表重扫
  *   → 再撞同一批假阳性行」的永不收敛循环。
- * - **收尾否决仅一条（D19）**：解压兄弟任务的 KKV 标记
+ * - **收尾让位仅一条（D19）**：解压兄弟任务的 KKV 标记
  *   （`nm-message-decompress` / `decompressDone`）未置 → 返回
  *   `deferred = true` 且**不置本任务标记**。压缩行仍残留只 warn 记
  *   deferred 计数、**不作否决**——解压任务自身的判据允许坏行残留稳态
@@ -62,13 +67,18 @@
  *   下个冷启动按 KKV 重试；**不可把它当「预算耗尽」零延迟续轮**（先例
  *   调度循环只有 done/stalled 两个停手出口，deferred 落在「永不 done 也不
  *   stalled」象限会变成永不退出的忙循环）。该语义已进类型（`deferred` 字段）。
+ * - **收尾判定顺序：deferred 让位前置于残留下沉校验**。压缩行被解压任务解回
+ *   明文时会**在游标扫过之后**才进入谓词，先判 leftover 会把这种正常交叠态
+ *   谎报成 stalled。两条判定同为**不置标记的显式失败路径**（谁先判都不置
+ *   标记、都不让本进程零延迟续轮），不违反下面的收尾不变量。
  * - **收尾不变量（承重约束）**：`leftover > residualKeys.size → stalled = true`
  *   + 不置标记。`residualKeys` 只装**仍留在谓词里**的行（假阳性行、parse
  *   不过的坏行）；已落错误占位的坏块行**已退出谓词**，故不拿它放宽校验
  *   （否则等于给「写回静默不生效」白送额度）。驱动静默写回不生效时游标会
  *   扫完但谓词仍有行、residualKeys 为空；没有这道校验任务会谎报完成并把残留行
  *   **永久锁死在引用态**。**收尾前不得引入任何「看着扫完了」的提前退出**
- *   ——护栏/预算/守卫的提前 return 是显式失败路径（不置标记），不在此列。
+ *   ——护栏/预算/守卫/deferred 让位判定的提前 return 都是显式失败路径
+ *   （不置标记），不在此列。
  * - **KKV 完成标记两段式**（D18）：module `nm-message-ref-unref`、key
  *   `unrefDone`（camelCase 惯例）。不复用解压任务的 module——两代语义不同，
  *   混用会让标记互相冒充。
@@ -100,11 +110,9 @@ import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { SqliteKkvRepository } from "@/domain/kkv/repositories/impl/sqlite-kkv.repository.js";
 import { parseMessageContent } from "@/domain/chat/content/parse-message-content.js";
 import type {
-  ContentBlock,
   MessageContent,
   ReadResultRef,
   SkillResultRef,
-  ToolResultBlock,
 } from "@/domain/chat/model/content-block.js";
 import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revision.port.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
@@ -350,32 +358,51 @@ async function readDoneMarker(
  *
  * @param failedIds 标记里已知的「留在谓词里、无需再试」主键——假阳性行永留
  * 谓词，不排除会让探针恒命中、每次冷启动白扫两遍全表且永不收敛。为空时走
- * 原谓词。
+ * 原谓词快路径。
  *
- * @remarks 占位符走 raw-SQL 拼接而**不是** `id NOT IN (#{...})`：本仓
- * sql-template 的 `renderBind` 对 hash 节点恒返回单值、数组不展开
- * （placeholder.ts），better-sqlite3 侧数组绑定 >1 元素抛 `RangeError`、
- * 0 元素 `NOT IN ()` 语法错。id 来自 KKV 标记（本进程写入的 JSON 数组），
- * 值仍走 `?` 绑定，不做字符串内插。
+ * @remarks **排除集合在 JS 侧按 Set 判定**（不得展开成 SQL 的 `id NOT IN
+ * (?,?,…)`）：
+ *
+ * - 展开成绑定参数会撞 `SQLITE_MAX_VARIABLE_NUMBER`（默认 32766）——大库的
+ *   假阳性行足够多时异常发生在入口最前方，每次冷启动硬失败、迁移永不推进。
+ * - **更不能按批切分排除集合**（比如每 500 条切一次 `NOT IN`）：落在第 2 批
+ *   及以后的假阳性行在第 1 批查询里不被排除 → 探针恒命中 → 清标记 → 全表重扫
+ *   → 再撞同一批，正是本函数与文件头点名要避免的「永不收敛」循环。
+ *
+ * 故改为分页取候选 id（`rowid > ?` keyset + `LIMIT BATCH_SIZE`，复用搬运主循环
+ * 的分页参数），在 JS 侧按 Set 排除：命中任一**不在** failedIds 里的 id 即
+ * true，全部分页都排除光才 false。
  */
 async function hasPendingRows(
   conn: TdbcConnection,
   failedIds: readonly string[]
 ): Promise<boolean> {
-  if (failedIds.length > 0) {
-    const placeholders = failedIds.map(() => "?").join(",");
+  if (failedIds.length === 0) {
     const rows = await conn.query<{ present: number }>(
-      `SELECT 1 AS present FROM chat_message
-       WHERE ${PREDICATE_SQL} AND id NOT IN (${placeholders})
-       LIMIT 1`,
-      failedIds
+      `SELECT 1 AS present FROM chat_message WHERE ${PREDICATE_SQL} LIMIT 1`
     );
     return rows.length > 0;
   }
-  const rows = await conn.query<{ present: number }>(
-    `SELECT 1 AS present FROM chat_message WHERE ${PREDICATE_SQL} LIMIT 1`
-  );
-  return rows.length > 0;
+  const excluded = new Set(failedIds);
+  let cursor = 0;
+  for (;;) {
+    const rows = await conn.query<{ rowid: number; id: string }>(
+      `SELECT rowid, id FROM chat_message
+       WHERE ${PREDICATE_SQL} AND rowid > ?
+       ORDER BY rowid
+       LIMIT ${BATCH_SIZE}`,
+      [cursor]
+    );
+    if (rows.length === 0) {
+      return false;
+    }
+    for (const row of rows) {
+      if (!excluded.has(String(row.id))) {
+        return true;
+      }
+    }
+    cursor = Number(rows[rows.length - 1]!.rowid);
+  }
 }
 
 /**
@@ -503,21 +530,26 @@ async function resolveBlockPlain(
   }
 }
 
-/** 回填后的块：填新 `content`、**移除 `contentRef` 字段**（解构丢弃）。 */
-function withoutRef(
-  block: ToolResultBlock,
-  content: string
-): ToolResultBlock {
-  const { contentRef: _droppedRef, ...rest } = block;
-  return { ...rest, content };
-}
-
 /**
  * 规划单行回迁：解析引用块 → 逐块取明文 → 组装整行新 JSON + 应 −1 的
  * read 引用（`aggregateReadRefs` 口径：消息内 pair 去重）。
  *
  * @param memo 同一次调用内的 `(entryId, version) → 明文` 去重缓存：同一条
  * 消息里多个块引用同一 pair 是常态（长文件分段 read），只查一次。
+ *
+ * @remarks **refs 计算口径走 `parseMessageContent`（不动）**：对账口径必须与
+ * +1 侧逐字一致，不能因为写回改了就换口径。
+ *
+ * @remarks **写回对 raw 原始 blocks 原地 patch**（D-01 的销毁面收敛）：若拿
+ * parse 的结果 `stringify` 写回，一行回迁 = 整行所有块被不可逆归一化——
+ * `parseBlocksArray` 会丢弃空 text 块、块上的白名单外字段（`meta` 只保
+ * `subagentSessionId`/`skillRef`）一并被吞掉。原地 patch 只动带 `contentRef`
+ * 的块：换 `content`、`delete contentRef`，其余块原样保留。
+ *
+ * 两侧**不得按下标对应**（raw 与 parsed 的块数在含空 text 块的行上整体错位）：
+ * 引用块在 raw 上就地按自身 `raw.contentRef` 判定，明文按 `(entryId, version)`
+ * 从 memo 取。前置条件即 `raw.type === "tool_result" && raw.contentRef != null`
+ * ——正文里恰好带 `contentRef` 字段的 text 块不得误改（与 D12 假阳性同款风险）。
  */
 async function planRow(
   id: string,
@@ -535,22 +567,28 @@ async function planRow(
     };
   }
 
-  const refBlocks = content.blocks.filter(
-    (b): b is ToolResultBlock & { contentRef: ReadResultRef | SkillResultRef } =>
-      b.type === "tool_result" && b.contentRef != null
-  );
-  if (refBlocks.length === 0) {
+  const refs = aggregateReadRefs([content]);
+  if (refs.length === 0) {
     return { kind: "noRefBlocks" };
   }
 
-  const blocks: ContentBlock[] = [];
+  // raw 侧与 parsed 侧各自独立：refs 由 parsed 算（口径不动），写回只 patch raw。
+  // parse 已通过 → 原文必然是合法 JSON 对象且带 blocks 数组，JSON.parse 不再抛。
+  const raw = JSON.parse(contentJson) as { blocks: unknown[] };
   let badBlockCount = 0;
-  for (const block of content.blocks) {
-    if (block.type !== "tool_result" || block.contentRef == null) {
-      blocks.push(block);
+  for (const rawBlock of raw.blocks) {
+    if (
+      typeof rawBlock !== "object" ||
+      rawBlock === null ||
+      Array.isArray(rawBlock)
+    ) {
       continue;
     }
-    const ref = block.contentRef;
+    const block = rawBlock as Record<string, unknown>;
+    if (block.type !== "tool_result" || block.contentRef == null) {
+      continue;
+    }
+    const ref = block.contentRef as ReadResultRef | SkillResultRef;
     const label = describeRef(ref);
     const key = `${ref.entryId}:${ref.version}`;
     let resolved = memo.get(key);
@@ -559,34 +597,98 @@ async function planRow(
       memo.set(key, resolved);
     }
     if (resolved.ok) {
-      blocks.push(
-        withoutRef(block, JSON.stringify({ path: ref.path, content: resolved.plain }))
-      );
+      // 原地赋值：`content` 已是原块的键，赋值不改键序（既有全等断言依赖）。
+      block.content = JSON.stringify({
+        path: ref.path,
+        content: resolved.plain,
+      });
     } else {
       badBlockCount += 1;
       console.warn(`[${LOG_TAG}] chat_message.id=${id} ${label} ${resolved.reason}`);
-      blocks.push(
-        withoutRef(
-          block,
-          JSON.stringify({
-            path: ref.path,
-            error: `${resolved.reason}；回迁已落错误占位，正文不可恢复`,
-          })
-        )
-      );
+      block.content = JSON.stringify({
+        path: ref.path,
+        error: `${resolved.reason}；回迁已落错误占位，正文不可恢复`,
+      });
     }
+    delete block.contentRef;
   }
 
   // −1 口径与 +1 侧逐字对齐：对**回迁前**的正文聚合，一 pair 一次 −1
   // （同消息多块同 pair 不多减）。坏块的 pair 也计入——消息同样不再持有
-  // 该引用；命不中的 pair 由 `batchAdjustRefCountWithDelta`（delta<0）
-  // no-op 吞掉，行级 warn 已在上方记下成因。
+  // 该引用；命不中的 pair（行缺失 / 前值不足夹逼未命中）由单行事务里的
+  // 「−1 之前前值」warn 记下成因。
   return {
     kind: "write",
-    json: JSON.stringify({ blocks } satisfies MessageContent),
-    refs: aggregateReadRefs([content]),
+    json: JSON.stringify(raw),
+    refs,
     badBlockCount,
   };
+}
+
+/**
+ * −1 之前的坏行预警（D15 第三子句）：在**减之前**把 `plan.refs` 的前值查回来，
+ * 行缺失或前值不足 `ABS(delta)` 的 pair 逐条 `console.warn`。
+ *
+ * @param refs `aggregateReadRefs` 口径的聚合结果，`count` 即该 pair 本行的
+ * 实际减量（`adjustReadRefCount` 按 `delta × count` 分桶发出，聚合后单 pair 的
+ * delta 可为 −2/−3）。
+ *
+ * @remarks 判据锚在「−1 之前的前值不足」或「行缺失」，**不是**「减完等于 0」：
+ * v1.5.29 的 read +1 会叠加在 live head +1 之上，「读过 N 次后又被编辑」的旧
+ * revision 迁移前 ref_count=N、逐条 −1 归零是**正确终态**——按减完判 0 会在
+ * 存量库上打出与存量行同量级的 warn 风暴。
+ *
+ * @remarks 坏块行（`badBlockCount > 0`）**跳过**：成因已由 planRow 的块级 warn
+ * 记过，不重复告警。
+ */
+async function warnInsufficientRefBeforeDecrement(
+  tx: TdbcConnection,
+  messageId: string,
+  refs: readonly (ReadRefPointer & { readonly count?: number })[],
+  badBlockCount: number
+): Promise<void> {
+  if (badBlockCount > 0 || refs.length === 0) {
+    return;
+  }
+  // 复用 500 分块（与 repository 侧同量级），避免单条 SQL 绑定过多变量。
+  const CHUNK_SIZE = 500;
+  for (let offset = 0; offset < refs.length; offset += CHUNK_SIZE) {
+    const chunk = refs.slice(offset, offset + CHUNK_SIZE);
+    const placeholders = chunk.map(() => `(?,?)`).join(",");
+    const params: unknown[] = [];
+    for (const ref of chunk) {
+      params.push(ref.entryId, ref.version);
+    }
+    const rows = await tx.query<{
+      entry_id: number;
+      version: number;
+      ref_count: number;
+    }>(
+      `SELECT entry_id, version, ref_count FROM vfs_revision
+       WHERE (entry_id, version) IN (${placeholders})`,
+      params
+    );
+    const current = new Map<string, number>();
+    for (const row of rows) {
+      current.set(
+        `${Number(row.entry_id)}:${Number(row.version)}`,
+        Number(row.ref_count)
+      );
+    }
+    for (const ref of chunk) {
+      const delta = ref.count ?? 1;
+      const prev = current.get(`${ref.entryId}:${ref.version}`);
+      if (prev === undefined) {
+        console.warn(
+          `[${LOG_TAG}] chat_message.id=${messageId} −1 之前 revision 行缺失（entryId=${ref.entryId}, version=${ref.version}, delta=-${delta}）：ref_count 未减，记坏行`
+        );
+      } else if (prev < delta) {
+        console.warn(
+          `[${LOG_TAG}] chat_message.id=${messageId} −1 之前 ref_count 不足（entryId=${ref.entryId}, version=${ref.version}，前值=${prev} < |delta|=${delta}）：UPDATE 被下限夹逼拦下、计数未减，记坏行`
+        );
+      }
+    }
+  }
 }
 
 /**
@@ -730,6 +832,15 @@ export async function runMessageRefUnref(
           [plan.json, row.id]
         );
         if (updated.changes > 0) {
+          // −1 之前先查前值：行缺失 / 前值 < |delta| 的 pair 记 warn（D15 第三
+          // 子句的「区分坏行」）。必须与 repository 侧的下限夹逼同批落地——
+          // 两者是同一判据的两端（夹逼决定 UPDATE 命不中，这里解释为什么不中）。
+          await warnInsufficientRefBeforeDecrement(
+            tx,
+            row.id,
+            plan.refs,
+            plan.badBlockCount
+          );
           await adjustReadRefCount(
             new SqliteVfsRevisionRepository(tx),
             plan.refs,
@@ -794,32 +905,12 @@ export async function runMessageRefUnref(
     await yieldToEventLoop();
   }
 
-// 收尾谓词校验：游标扫完（rows.length === 0）后谓词必须已空或只剩本轮
-  // 判为「无需回迁」的行。**不变量：leftover ⊆ residualKeys**——收尾校验只在
-  // 游标扫完后可达（正常行被搬走或并发端搬走都已离开谓词；留下的只可能是
-  // 本轮的假阳性行与 parse 不过的坏行），故 leftover > residualKeys.size 即异常
-  // 残留（如驱动写回静默不生效）。**收尾前不得引入任何提前 break**——任何
-  // 「看着扫完了」的提前退出都会让残留行被永久锁死在引用态；护栏/预算/守卫的
-  // 提前 return 是显式失败路径（不置标记），不在此列。
-  const leftover = await countPendingRows(conn);
-  if (leftover > residualKeys.size) {
-    console.warn(
-      `[${LOG_TAG}] 游标已扫完但谓词仍剩 ${leftover} 行（本轮已判无需回迁、留在谓词里的 ${residualKeys.size} 行），疑似异常残留，不置完成标记`
-    );
-    return {
-      done: false,
-      unrefedCount,
-      failedCount,
-      noRefBlockCount,
-      stalled: true,
-      deferred: false,
-    };
-  }
-
-  // 收尾否决仅一条（D19）：解压兄弟任务的完成标记未置时不置本任务标记，
-  // 报 deferred 让调度层**本进程收手**（与 stalled 同款停手），下个冷启动
-  // 按 KKV 重试。压缩行残留只 warn 记数、不作否决——解压任务自身的判据允许
-  // 坏行残留稳态，拿行数当判据会永久锁死 unrefDone。
+// 收尾让位判定（deferred）**前置于**残留下沉校验（D19）：解压兄弟任务未完成
+  // 时，压缩行可能被它解回明文、那些行是在本轮游标扫过之后才进入谓词的——
+  // 先判残留会把「正常交叠态」谎报成 stalled、warn 说谎且三端本进程 return
+  // 不再重试。解压未完成一律先让位（deferred），解压已完成才允许用 leftover
+  // 判 stalled。**两者同为不置标记的显式失败路径**，谁先判都不违反收尾前
+  // 不得提前 break 的红线（见文件头「收尾不变量」）。
   if (!(await isDecompressTaskDone(conn))) {
     const compressedLeft = await countCompressedRows(conn);
     console.warn(
@@ -832,6 +923,28 @@ export async function runMessageRefUnref(
       noRefBlockCount,
       stalled: false,
       deferred: true,
+    };
+  }
+
+  // 收尾谓词校验：游标扫完（rows.length === 0）后谓词必须已空或只剩本轮
+  // 判为「无需回迁」的行。**不变量：leftover ⊆ residualKeys**——收尾校验只在
+  // 游标扫完后可达（正常行被搬走或并发端搬走都已离开谓词；留下的只可能是
+  // 本轮的假阳性行与 parse 不过的坏行），故 leftover > residualKeys.size 即异常
+  // 残留（如驱动写回静默不生效）。**收尾前不得引入任何提前 break**——任何
+  // 「看着扫完了」的提前退出都会让残留行被永久锁死在引用态；护栏/预算/守卫/
+  // 上方 deferred 让位判定的提前 return 是显式失败路径（不置标记），不在此列。
+  const leftover = await countPendingRows(conn);
+  if (leftover > residualKeys.size) {
+    console.warn(
+      `[${LOG_TAG}] 游标已扫完但谓词仍剩 ${leftover} 行（本轮已判无需回迁、留在谓词里的 ${residualKeys.size} 行），疑似异常残留，不置完成标记`
+    );
+    return {
+      done: false,
+      unrefedCount,
+      failedCount,
+      noRefBlockCount,
+      stalled: true,
+      deferred: false,
     };
   }
 
