@@ -1,4 +1,4 @@
-﻿import assert from "node:assert/strict";
+import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import * as compaction from "@novel-master/core/compaction";
 import * as cfShared from "@novel-master/core/config-forms/shared";

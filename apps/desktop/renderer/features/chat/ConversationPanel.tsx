@@ -15,7 +15,7 @@ import type {
   AgentRunFinishedPayload,
   AgentRunStartedPayload,
   AgentStepCommittedPayload,
-} from '@novel-master/core/events';
+} from "@shared/logic/events";
 import { useAgentStream, type UseAgentStreamCallbacks } from '@/hooks/useAgentStream';
 import { useAgentRunLifecycle, shouldApplyTranscriptReload } from '@/hooks/useAgentRunLifecycle';
 import { useChatMessagesScrollFollow } from '@/hooks/useChatMessagesScrollFollow';

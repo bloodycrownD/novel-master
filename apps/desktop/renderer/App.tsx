@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { validateVfsEntryName } from '@novel-master/core/vfs';
+import { validateVfsEntryName } from "@shared/logic/vfs";
 import { useColumnSplitters } from './hooks/useColumnSplitters';
 import { SessionDetailDrawer } from './features/chat/SessionDetailDrawer';
 import { ConfirmModal } from './components/ui/ConfirmModal';

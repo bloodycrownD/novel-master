@@ -136,7 +136,7 @@ describe("T-RG6 Desktop MD Recogito；plain 禁用批注", () => {
     assert.match(pane, /\.destroy\(\)/);
     // mouseup 只更新 pending / floating，禁止 setAddOpen(true)
     const mouseUpBody = pane.match(
-      /const onMouseUp = \(\) => \{[\s\S]*?\n    \};/,
+      /const onMouseUp = \(\) => \{[\s\S]*?\n {4}\};/,
     );
     assert.ok(mouseUpBody, "须存在 onMouseUp");
     assert.doesNotMatch(mouseUpBody![0], /setAddOpen\(true\)/);

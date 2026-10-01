@@ -1,4 +1,4 @@
-﻿/**
+/**
  * AgentRunner message checkpoint 同步 capture 行为。
  */
 

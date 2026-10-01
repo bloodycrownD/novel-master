@@ -271,7 +271,7 @@ describe("skill-result-ref: T-SR1 skill read 引用化 round-trip", () => {
 
     // wire 逐字节等值：基准 = 工具执行时的 formatToolOutputForLlm 原文。
     const baseline = formatToolOutputForLlm(output);
-    assert.match(baseline, /     1\|行一/);
+    assert.match(baseline, / {5}1\|行一/);
     assert.equal(await hydrateContent(block, fx.revisionRepo), baseline);
   });
 

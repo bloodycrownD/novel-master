@@ -1,4 +1,4 @@
-﻿# @novel-master/core 公开 API 说明
+# @novel-master/core 公开 API 说明
 
 本文描述 `@novel-master/core` 的 **export 边界**：主入口、`public/*` 子入口与辅助子路径的职责划分。契约由 `test/package-exports/` 下的 allowlist 快照与架构守卫测试固化；任意有意变更公开符号须同步更新快照并在 PR 中说明。
 

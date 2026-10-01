@@ -3,7 +3,7 @@
  */
 import { resolveSkillToolRefFromInput, resolveVfsToolFilePath } from "@shared/logic/chat";
 import { resolveToolResultOk } from "@shared/logic/root";
-import { summarizeToolInput } from "@novel-master/core/chat";
+import { summarizeToolInput } from "@shared/logic/chat";
 import type { ChatMessageDto, ContentBlockDto } from "@shared/ipc-types";
 
 export type ToolCallStatus = "success" | "error" | "pending" | "interrupted";
@@ -177,7 +177,7 @@ export function toolCallViewFromUse(
 }
 
 /**
- * 工具入参摘要：单源在 core（`@novel-master/core/chat` 的 `summarizeToolInput`）。
+ * 工具入参摘要：单源在 core（经 `@shared/logic/chat` 再导出的 `summarizeToolInput`）。
  * 本文件此前持有一份带 `skill` 特判的副本，与 mobile 两面（WebView / RN）行为不一致，
  * 现已全部改为引用 core；新增特判分支请改 core 的 `domain/chat/logic/tool-summary.ts`。
  */

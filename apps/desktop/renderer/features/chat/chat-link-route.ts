@@ -16,7 +16,7 @@
  * @module renderer/features/chat/chat-link-route
  */
 
-import { isHttpUrl, resolveChatLinkTarget } from "@novel-master/core/chat";
+import { isHttpUrl, resolveChatLinkTarget } from "@shared/logic/chat";
 import type {
   IpcResult,
   VfsReadRequest,

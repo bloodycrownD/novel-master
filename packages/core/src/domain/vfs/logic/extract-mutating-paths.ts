@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 从 tool 调用提取突变路径（与 ToolRunner 同源逻辑，不修改 ToolRunner）。
  *
  * @module domain/vfs/logic/extract-mutating-paths

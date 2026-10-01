@@ -118,6 +118,7 @@ async function runInTransactionOrConn<T>(
  * 注意 `%` / `_` 是 LIKE 通配符但**不在**此列：通配只会造成过宽（多 parse 几行，
  * 内存精筛再滤掉），不违反「召回不得小于全量精筛」的红线，不拦。
  */
+// eslint-disable-next-line no-control-regex -- 故意按控制字符内容匹配：用于判定 keyword 能否安全走 LIKE 粗筛
 const LIKE_PREFILTER_UNSAFE_RE = /["\\\x00-\x1f]|[^\x00-\x7f]/;
 
 /** keyword 是否可安全用作 SQL LIKE 粗筛（false = 退回全量精筛）。 */

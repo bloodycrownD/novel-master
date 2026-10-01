@@ -4,6 +4,10 @@
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import {
+  assertNonZeroCollected,
+  parseCollectedCount,
+} from "../../../scripts/lib/zero-collect-guard.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const desktopRoot = path.join(__dirname, "..");
@@ -33,8 +37,8 @@ const testTargets =
 // ⚠️ maxBuffer 必须显式放大：spawnSync 的默认上限是 1 MiB，stdout 一旦超出就会
 //    **静默截断**并返回 status=null —— 被截掉的正是末尾那段 `# tests N`，
 //    守卫于是把「跑过了」误判成「收集 0 条」，报出一句完全误导的错误信息。
-//    （实测当前 628 条用例的 stdout = 204,614 字节，距 1 MiB 还有 5× 余量；
-//      写大不是嫌小，是不给套件增长留悬崖。）
+//    （实测当时 628 条用例的 stdout = 204,614 字节，距 1 MiB 还有 5× 余量；
+//      那是 H6 落地当时的快照数字，套件后来又长了，写大不是嫌小，是不给增长留悬崖。）
 const result = spawnSync(
   `npx tsx --tsconfig tsconfig.renderer.json --test ${testTargets}`,
   {
@@ -51,17 +55,18 @@ if (result.status !== 0) {
   process.exit(result.status ?? 1);
 }
 // 零收集守卫：node --test 收集 0 条时退出码是 0（N-P0-02 的假绿）。
-// 这里显式解析 `# tests N`，N 为 0 或缺失即视为「什么都没跑」⇒ 失败。
-const collected = /^\s*# tests (\d+)$/m.exec(result.stdout ?? "")?.[1];
-if (collected === undefined || Number(collected) === 0) {
-  console.error(
-    `[run-tests] 收集到 0 条用例（# tests 行缺失或为 0）。` +
-      `当前 shell=${process.platform}；testTargets=${testTargets}。` +
-      `spawnSync error=${result.error?.code ?? "none"}。` +
-      `这是 N-P0-02 的假绿形态 —— 请检查 glob 与 shell 引号语义。`,
-  );
-  process.exit(1);
-}
+// 守卫本体在仓内 scripts/lib/zero-collect-guard.mjs，与 apps/cli 共用同一份，
+// 本脚本只负责把自己的诊断信息（平台 / glob / 子进程错误码）喂进去。
+assertNonZeroCollected({
+  collected: parseCollectedCount(result.stdout),
+  where: "apps/desktop run-tests.mjs",
+  details: [
+    `shell=${process.platform}`,
+    `testTargets=${testTargets}`,
+    `spawnSync error=${result.error?.code ?? "none"}`,
+    "N-P0-02 的假绿形态 —— 请检查 glob 与 shell 引号语义。",
+  ],
+});
 
 function mergeNodeOptions(existing, extra) {
   return existing ? `${existing} ${extra}` : extra;

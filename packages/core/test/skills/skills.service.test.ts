@@ -569,7 +569,7 @@ describe("SkillService（T-SK5）", () => {
           error instanceof SkillError && error.code === "NOT_FOUND",
       );
       const after = await skills.readSkillFile("global", newName);
-      assert.match(after.content, /name: "ren-new-[^\"]*"/);
+      assert.match(after.content, /name: "ren-new-[^"]*"/);
       // T-S3：同 entry 的 version 连续（renamePrefix 不重置，front matter
       // 重写 bump 一次）
       assert.ok(

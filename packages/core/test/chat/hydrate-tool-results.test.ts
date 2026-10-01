@@ -112,7 +112,7 @@ describe("read-tool-result-ref Step 4: T-RR2 wire 逐字节等值", () => {
       "tu-rr2a"
     );
     // sanity：基准确实是带 6 位行号的 formatReadOutput 形态
-    assert.match(baseline, /     1\|alpha 首行/);
+    assert.match(baseline, / {5}1\|alpha 首行/);
 
     const message = toolResultMessage(block);
     const hydrated = await hydrateToolResultsForPrompt(
@@ -164,7 +164,7 @@ describe("read-tool-result-ref Step 4: T-RR2 wire 逐字节等值", () => {
     const outBlock = hydrated[0]!.content.blocks[0] as ToolResultBlock;
     assert.equal(outBlock.content, baseline);
     // 分页语义钉死：行号从 2 起、提示行给 nextOffset=4
-    assert.match(outBlock.content, /     2\|l2/);
+    assert.match(outBlock.content, / {5}2\|l2/);
     assert.match(outBlock.content, /Continue with offset=4/);
   });
 
@@ -636,7 +636,7 @@ describe("read-tool-result-ref Step 4: prepare 接线与孤儿拍平顺序", () 
     assert.equal(outBlock.content, baseline);
     // token / 压缩 parity 口径（messageBodyTextFromBlocks）同受益于 hydrate
     const bodyText = messageBodyTextFromBlocks(prepared[0]!.content.blocks);
-    assert.match(bodyText, /     1\|第一行/);
+    assert.match(bodyText, / {5}1\|第一行/);
     // view-time：prepare 前的内存原消息仍是空 content（不写回纪律）
     assert.equal(
       (message.content.blocks[0] as ToolResultBlock).content,

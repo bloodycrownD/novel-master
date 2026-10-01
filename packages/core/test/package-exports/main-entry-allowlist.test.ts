@@ -1,4 +1,4 @@
-﻿import assert from "node:assert/strict";
+import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import * as core from "@novel-master/core";
 import snapshot from "./snapshots/main-entry-allowlist.json" with { type: "json" };

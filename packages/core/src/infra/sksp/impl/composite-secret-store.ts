@@ -14,7 +14,7 @@ export interface EnvSecretStoreLike {
 
 /**
  * Combines env (read-only override) with a DB-backed store.
- * Read order: env hit �?DB; writes go to DB only.
+ * Read order: env hit →?DB; writes go to DB only.
  */
 export function createCompositeSecretStore(options: {
   db: SecretStore;

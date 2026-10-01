@@ -25,6 +25,8 @@ export { parseSkillFrontMatter } from "../domain/skills/logic/parse-skill-front-
 export type { ParsedSkillFrontMatter } from "../domain/skills/logic/parse-skill-front-matter.js";
 export { withSkillFrontMatterValues } from "../domain/skills/logic/with-skill-front-matter-values.js";
 export type { SkillFrontMatterValues } from "../domain/skills/logic/with-skill-front-matter-values.js";
+export { buildNewSkillDoc } from "../domain/skills/logic/build-new-skill-doc.js";
+export type { SkillDocBodyVariant } from "../domain/skills/logic/build-new-skill-doc.js";
 export { previewSkillZip } from "../domain/skills/logic/preview-skill-zip.js";
 export type { SkillZipPreview } from "../domain/skills/logic/preview-skill-zip.js";
 export type {

@@ -376,7 +376,7 @@ export function locateAnnotateOffsetRangeByQuoteContext(
 
   let haystack = sourceText;
   let starts = findAllNeedleStarts(haystack, needle);
-  let matchLen = needle.length;
+  const matchLen = needle.length;
   if (starts.length === 0) {
     const normSource = normalizeAnnotateQuoteText(sourceText);
     starts = findAllNeedleStarts(normSource, needle);

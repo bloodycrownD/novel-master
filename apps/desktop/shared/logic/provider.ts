@@ -11,6 +11,7 @@ export type {
 } from "@novel-master/core/provider";
 
 export {
+  CHARACTERS_PER_TOKEN_RATIO,
   mergeSamplingWithDefaults,
   THINKING_LEVEL_SELECT_OPTIONS,
   TOKEN_COUNTER_MODE_SELECT_OPTIONS,

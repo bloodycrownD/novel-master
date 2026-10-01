@@ -13,7 +13,7 @@ import type {
   AgentRunFailedPayload,
   AgentRunFinishedPayload,
   AgentRunStartedPayload,
-} from "@novel-master/core/events";
+} from "@shared/logic/events";
 
 export {
   PENDING_RUN_ID,

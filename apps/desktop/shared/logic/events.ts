@@ -8,8 +8,20 @@
  */
 
 export {
+  EVENT_AGENT_RUN_STARTED,
   EVENT_AGENT_RUN_FINISHED,
+  EVENT_AGENT_RUN_FAILED,
+  EVENT_AGENT_STREAM_TEXT_DELTA,
+  EVENT_AGENT_STREAM_THINKING_DELTA,
+  EVENT_AGENT_STREAM_TOOL_USE,
+  EVENT_AGENT_STREAM_USAGE,
   EVENT_AGENT_STEP_COMMITTED,
+  type AgentRunStartedPayload,
   type AgentRunFinishedPayload,
+  type AgentRunFailedPayload,
+  type AgentStreamTextDeltaPayload,
+  type AgentStreamThinkingDeltaPayload,
+  type AgentStreamToolUsePayload,
+  type AgentStreamUsagePayload,
   type AgentStepCommittedPayload,
 } from "@novel-master/core/events";
