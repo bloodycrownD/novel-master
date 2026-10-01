@@ -27,7 +27,11 @@ import {
   BETTER_SQLITE3_DRIVER_NAME,
   registerBetterSqlite3Driver,
 } from "@novel-master/tdbc-driver-better-sqlite3";
-import { BASELINE_TOO_OLD_MESSAGE } from "../../src/bootstrap/novel-master-bootstrap.js";
+import {
+  BASELINE_MIGRATION_IDS,
+  BASELINE_TOO_OLD_MESSAGE,
+} from "../../src/bootstrap/novel-master-bootstrap.js";
+import { ensureSchemaMigrationsTable } from "../../src/bootstrap/schema-migrations/schema-migrations-table.js";
 import { execLegacyVfsEntryTable } from "./helpers/legacy-db-fixtures.js";
 
 const INDEX_NAME = "idx_vfs_entry_content_hash";
@@ -165,6 +169,33 @@ describe("idx_vfs_entry_content_hash schema 升级（W1-P0）", () => {
         (error: unknown) =>
           error instanceof Error && error.message === BASELINE_TOO_OLD_MESSAGE,
         "legacy vfs_entry 应由基线检查拦下并给出升级提示"
+      );
+    } finally {
+      await conn.close();
+    }
+  });
+
+  it("legacy vfs_entry + 已登记 baseline id（v1.3.10~v1.4.06 形态）同样给升级提示", async () => {
+    // 补齐本文件此前漏掉的部分登记形态：v1.3.10 起 saved-model-identity-v1
+    // 就已登记，而 content_hash 列要 v1.4.07 才有。BASELINE_MIGRATION_IDS.some()
+    // 必然命中并提前 return，随后慢路径 DDL 的
+    // `CREATE INDEX ... ON vfs_entry(content_hash)` 裸炸「no such column」。
+    // 本用例锁定 hasVfsEntryWithoutContentHash 在 hasBaseline 短路之前判定。
+    const conn = await openInMemoryConnection();
+    try {
+      await execLegacyVfsEntryTable(conn);
+      await ensureSchemaMigrationsTable(conn);
+      const baselineId = BASELINE_MIGRATION_IDS[0]!;
+      await conn.execute(
+        `INSERT INTO schema_migrations (id, applied_at_ms) VALUES (?, ?)`,
+        [baselineId, 1]
+      );
+
+      await assert.rejects(
+        () => bootstrapNovelMaster(conn),
+        (error: unknown) =>
+          error instanceof Error && error.message === BASELINE_TOO_OLD_MESSAGE,
+        "已登记 baseline id 的 legacy vfs_entry 库也应给出升级提示（而非 no such column）"
       );
     } finally {
       await conn.close();

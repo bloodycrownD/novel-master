@@ -244,6 +244,29 @@ async function hasLegacyVfsEntryShape(tx: TdbcConnection): Promise<boolean> {
 }
 
 /**
+ * `vfs_entry` 存在但缺 `content_hash` 列
+ * → vfs-entry-id-redesign-v1 之前的老库形态。
+ *
+ * 与 {@link hasBaseline} 是否命中无关：`saved-model-identity-v1` 自 v1.3.10 起
+ * 就登记，v1.3.10~v1.4.06 这段库的 `BASELINE_MIGRATION_IDS.some()` 必命中并
+ * 提前 return，若只依赖它来判老库形态，这类库会一路走到慢路径 DDL 的
+ * `CREATE INDEX idx_vfs_entry_content_hash ON vfs_entry(content_hash)` 裸炸
+ * `no such column`，把本应给出的升级提示顶掉。故单列此探测。
+ */
+async function hasVfsEntryWithoutContentHash(tx: TdbcConnection): Promise<boolean> {
+  const tables = await tx.query<{ name: string }>(
+    `SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'vfs_entry'`
+  );
+  if (tables.length === 0) {
+    return false;
+  }
+  const cols = await tx.query<{ name: string }>(
+    `SELECT name FROM pragma_table_info('vfs_entry')`
+  );
+  return !cols.some((c) => c.name === "content_hash");
+}
+
+/**
  * `chat_session` 存在但缺 `agent_config_json` 列
  * → 未走 session-agent-config-v2（该迁移/DDL 在 v1.4.21 前后引入此列）。
  */
@@ -324,10 +347,19 @@ async function detectLegacyShape(tx: TdbcConnection): Promise<boolean> {
  * 判断逻辑：`schema_migrations` 表里必须至少有一条 baseline id 被登记；
  * 一条都没登记、且探测到 legacy 形态时，判定为跨大版本升级，报错拦下。
  * 全新空库（无 legacy 表征）不触发——首次安装是新装路径。
+ *
+ * **vfs_entry 缺 content_hash 列的形态单列前置判定**（不在 `hasBaseline`
+ * 短路之内）：见 {@link hasVfsEntryWithoutContentHash} 的注释——v1.3.10~
+ * v1.4.06 库已被 baseline 登记命中提前 return，漏判就会拿裸
+ * `no such column` 顶掉升级提示。`some()` 语义不动。
  */
 export async function assertMinimumBaseline(tx: TdbcConnection): Promise<void> {
   await ensureSchemaMigrationsTable(tx);
   const applied = await listAppliedSchemaMigrationIds(tx);
+
+  if (await hasVfsEntryWithoutContentHash(tx)) {
+    throw new Error(BASELINE_TOO_OLD_MESSAGE);
+  }
 
   const hasBaseline = BASELINE_MIGRATION_IDS.some((id) => applied.has(id));
   if (hasBaseline) {

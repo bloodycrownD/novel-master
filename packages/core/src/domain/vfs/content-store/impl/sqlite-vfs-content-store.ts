@@ -335,6 +335,14 @@ export class SqliteVfsContentStore implements VfsContentStore {
     }
   }
 
+  /**
+   * 探测哪些 hash 已有权威副本（blob 行 **或** pack member 行）。
+   *
+   * @remarks 分块（`CHUNK_SIZE = 500`）逐块查询，IN 过滤外提到 UNION 子查询外层，
+   * 故单语句只绑**一份** chunk（500 变量）——早先两个 IN 各绑一份共 1000 变量，
+   * 越过老版 SQLite 的 999 变量上限（`SQLITE_MAX_VARIABLE_NUMBER` 在 3.32 前默认
+   * 999，Android 系统 SQLite 到 API 31 仍是 3.28 一线），老 Android 机型必踩。
+   */
   async findExistingBlobHashes(
     hashes: ReadonlyArray<string>
   ): Promise<Set<string>> {
@@ -347,13 +355,26 @@ export class SqliteVfsContentStore implements VfsContentStore {
       const chunk = hashes.slice(offset, offset + CHUNK_SIZE);
       const placeholders = chunk.map(() => `?`).join(`,`);
       // UNION member 表判定「已存在」：seed / fork-copy / backfill / tree-copy 等
-      // 消费方对已打包 hash 不得误报缺失。两个 IN 子句形状相同，绑参按出现顺序
-      // 拼接（chunk 两份）；结果进 Set 天然去重，用 UNION ALL 免排序开销。
+      // 消费方对已打包 hash 不得误报缺失。
+      //
+      // 【绑参单份】IN 过滤外提到 UNION 子查询之外，只留**一个** IN 子句：早先把
+      // 两个 IN 各绑 chunk 一份，单语句变量数 = CHUNK_SIZE × 2 = 1000，越过
+      // `SQLITE_MAX_VARIABLE_NUMBER` 的 999 老默认（SQLite 3.32 前、Android 系统
+      // SQLite 到 API 31 仍是 3.28 一线，op-sqlite 走的就是系统 SQLite）——调用方
+      // 传整 scope 的 hash 列表时老 Android 机型必踩「too many SQL variables」。
+      // 外提后单语句 500 变量，压在 999 内，与仓内 checkpoint 多值块 900 /
+      // 各处 chunk 500 的既有纪律一致。
+      //
+      // 本函数走 `conn.query` 原始 `?` 位置参数（不经 SqlTemplateParser），故
+      // 占位符必须是 `${placeholders}` 字符串拼接而非 `#{}` 模板记法，绑参收敛
+      // 成单份 `[...chunk]`。结果进 Set 天然去重，用 UNION ALL 免排序开销。
       const rows = await this.conn.query<{ content_hash: string }>(
-        `SELECT content_hash FROM vfs_content_blob WHERE content_hash IN (${placeholders})
-         UNION ALL
-         SELECT content_hash FROM vfs_content_pack_member WHERE content_hash IN (${placeholders})`,
-        [...chunk, ...chunk]
+        `SELECT content_hash FROM (
+           SELECT content_hash FROM vfs_content_blob
+           UNION ALL
+           SELECT content_hash FROM vfs_content_pack_member
+         ) WHERE content_hash IN (${placeholders})`,
+        [...chunk]
       );
       for (const row of rows) {
         result.add(String(row.content_hash));

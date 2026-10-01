@@ -133,6 +133,37 @@ async function countRows(
   return Number(rows[0]!.n);
 }
 
+/**
+ * 包一层连接，探针「命中两张内容表（vfs_content_blob / vfs_content_pack_member）」
+ * 的单语句实际绑定变量数与 `?` 占位符个数——用来锁 `findExistingBlobHashes` 的
+ * 单语句变量数（老版 SQLite 的 999 上限）。
+ */
+function createBlobHashQueryProbe(conn: TdbcConnection): {
+  conn: TdbcConnection;
+  statements: Array<{ boundParams: number; placeholders: number }>;
+} {
+  const statements: Array<{ boundParams: number; placeholders: number }> = [];
+  const probe: TdbcConnection = {
+    execute: (sql, parameters) => conn.execute(sql, parameters),
+    batch: (sql, parametersList) => conn.batch(sql, parametersList),
+    transaction: (fn) => conn.transaction(fn),
+    close: () => conn.close(),
+    query: async (sql, parameters) => {
+      if (
+        sql.includes("vfs_content_blob") &&
+        sql.includes("vfs_content_pack_member")
+      ) {
+        statements.push({
+          boundParams: parameters?.length ?? 0,
+          placeholders: sql.split("?").length - 1,
+        });
+      }
+      return conn.query(sql, parameters);
+    },
+  };
+  return { conn: probe, statements };
+}
+
 function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
   if (a.byteLength !== b.byteLength) {
     return false;
@@ -664,6 +695,84 @@ describe("vfs content pack: store 读路径（T-VP1/2/4/5/6/14/15）", () => {
       () => store.ensureBlob(hMissing, null),
       /vfs_content_blob 缺失且无可回退明文/,
     );
+  });
+
+  it("T-VP5b: findExistingBlobHashes chunk 满载 500 全判已存在，单语句绑定变量 ≤500（老 Android SQLite 999 上限）", async () => {
+    const { conn } = getNovelMasterTestContext();
+    const suffix = testIsolationSuffix();
+
+    // —— 夹具：1 个 pack + 500 条 member 行（blob 行一律不建，「已存在」只能
+    // 由 member 判出）。member 的 offset/length 不参与本用例的探测路径，
+    // 直接填合法值即可。
+    const [f0] = fossilVersions(suffix);
+    const { packId } = await insertPackRows(
+      conn,
+      /* entryId 无引用语义，占位即可 */ 987654322,
+      VFS_PACK_FORMAT_FOSSIL_CHAIN_V1,
+      [f0],
+    );
+    const bulkHashes = Array.from(
+      { length: 500 },
+      (_, index) => hashContent(`tvp5b-bulk-${suffix}-${index}`),
+    );
+    await conn.batch(
+      `INSERT INTO vfs_content_pack_member (content_hash, pack_id, offset, length, compressed_byte_len)
+       VALUES (?, ?, ?, ?, ?)`,
+      bulkHashes.map((contentHash) => [contentHash, packId, 0, 1, 1]),
+    );
+    // 夹具自检：500 条 bulk member 行确实落库，且对应 blob 行不存在。
+    assert.equal(
+      await countRows(
+        conn,
+        `SELECT COUNT(*) AS n FROM vfs_content_pack_member WHERE pack_id = ?
+         AND content_hash IN (${bulkHashes.map(() => `?`).join(`,`)})`,
+        [packId, ...bulkHashes],
+      ),
+      500,
+    );
+    assert.equal(
+      await countRows(
+        conn,
+        `SELECT COUNT(*) AS n FROM vfs_content_blob WHERE content_hash IN (${bulkHashes
+          .map(() => `?`)
+          .join(`,`)})`,
+        [...bulkHashes],
+      ),
+      0,
+    );
+
+    // —— 探针：包一层 conn，只数「命中两张内容表」的单语句实际绑定变量数。
+    const probe = createBlobHashQueryProbe(conn);
+    const store = new SqliteVfsContentStore(probe.conn);
+
+    // 满载 chunk（500 个已打包 hash）——恰好一条语句。
+    const full = await store.findExistingBlobHashes(bulkHashes);
+    assert.equal(full.size, 500, "chunk 满载的 500 个已打包 hash 应全判已存在");
+    for (const contentHash of bulkHashes) {
+      assert.ok(full.has(contentHash));
+    }
+    assert.deepEqual(probe.statements, [
+      { boundParams: 500, placeholders: 500 },
+    ]);
+
+    // 再加 1 个真缺失的 hash → 逼出第二条（长度为 1 的）chunk 语句，两条都 ≤500。
+    probe.statements.length = 0;
+    const hMissing = hashContent(`tvp5b-missing-${suffix}`);
+    const mixed = await store.findExistingBlobHashes([...bulkHashes, hMissing]);
+    assert.equal(mixed.size, 500);
+    assert.ok(!mixed.has(hMissing), "真缺失的 hash 不得误报已存在（互斥）");
+
+    // 防回归牙齿：单语句绑定变量数 ≤500（老版 SQLite 的 SQLITE_MAX_VARIABLE_NUMBER
+    // 默认 999；早先两个 IN 各绑一份 chunk = 1000 变量，越线必红）。占位符个数与
+    // 绑参个数相等一并断言，防止「有人改成字面量内插」绕过这条。
+    assert.equal(probe.statements.length, 2, "501 个 hash 应切两条语句");
+    for (const statement of probe.statements) {
+      assert.ok(
+        statement.boundParams <= 500,
+        `单语句绑定变量数须 ≤500，实测 ${statement.boundParams}`,
+      );
+      assert.equal(statement.placeholders, statement.boundParams);
+    }
   });
 
   it("T-VP6: findContentSizeByPath 回退 member.compressed_byte_len（fossil 组不回退 delta 长度）", async () => {
