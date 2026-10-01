@@ -1,6 +1,6 @@
 /**
- * VFS 非 head 历史版本打包任务用例（T-VP3/8/10/12/13/16/18/19/20/21 + W1-P1-1
- * 零候选水位族 + pbp-3/4/5 三条 fix-spec 牙齿）。
+ * VFS 非 head 历史版本打包任务用例（T-VP3/7/8/10/12/13/16/18/19/20/21 +
+ * W1-P1-1 零候选水位族 + pbp-3/4/5/12/14 五条 fix-spec 牙齿）。
  *
  * 打包口径见 spec「Part B 打包任务」：候选谓词（active 非 head + 仍是 blob
  * 行 + DISTINCT hash ≥2/entry）、≤8 成员/≤1MB 明文每组、24KB 平均明文阈值
@@ -30,8 +30,15 @@ import assert from "node:assert/strict";
 import { before, describe, it } from "node:test";
 import { clearDecodedContentCaches } from "../../src/infra/content-cache/logic/decoded-content-cache.js";
 import { SqliteKkvRepository } from "../../src/domain/kkv/repositories/impl/sqlite-kkv.repository.js";
+import { SqliteMessageCheckpointRepository } from "../../src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
+import { restorePathToRevision } from "../../src/domain/message-checkpoint/logic/restore-path.js";
+import { reviveDeletedEntryForRestore } from "../../src/domain/message-checkpoint/logic/revive-deleted-entry.js";
+import { sweepSessionRevisions } from "../../src/domain/message-checkpoint/logic/revision-gc.js";
 import { SqliteVfsContentStore } from "../../src/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
 import { hashContent } from "../../src/domain/vfs/content-store/logic/hash-content.js";
+import { scopeKey } from "../../src/domain/vfs/logic/vfs-path-mapper.js";
+import { SqliteVfsEntryRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import { SqliteVfsRevisionRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import {
   __getVfsPackDecodeCountersForTests,
   __resetVfsPackDecodeCountersForTests,
@@ -474,7 +481,46 @@ async function appendVersion(
   return contentHash;
 }
 
-describe("VFS 历史版本打包任务（T-VP3/8/10/12/13/16/18/19/20/21）", () => {
+/**
+ * 清掉回滚链路用例自建的 session scope 行（T-VP7 自管清理边界）。
+ *
+ * @remarks 该用例的 scope_key 形如 `session:{pid}:{sid}`——`sweepSessionRevisions`
+ *   与 `reviveDeletedEntryForRestore` 都按真实 scope 键寻址，不能塞进
+ *   {@link resetPackState} 的 `vpk-%` 前缀边界内，否则清理不到、污染后续用例。
+ *   删除顺序：checkpoint 指针行 → revision 行（DELETE 触发器连带把引用归零的
+ *   blob 行回收）→ pack member / pack 行 → entry 行。
+ */
+async function clearSessionScopeRows(
+  scopeKeyStr: string,
+  sessionId: string
+): Promise<void> {
+  const c = conn();
+  await c.execute(`DELETE FROM message_checkpoint_file WHERE session_id = ?`, [
+    sessionId,
+  ]);
+  await c.execute(`DELETE FROM message_checkpoint WHERE session_id = ?`, [
+    sessionId,
+  ]);
+  await c.execute(
+    `DELETE FROM vfs_revision WHERE entry_id IN (
+       SELECT entry_id FROM vfs_entry WHERE scope_key = ?)`,
+    [scopeKeyStr]
+  );
+  await c.execute(
+    `DELETE FROM vfs_content_pack_member WHERE pack_id IN (
+       SELECT pack_id FROM vfs_content_pack WHERE entry_id IN (
+         SELECT entry_id FROM vfs_entry WHERE scope_key = ?))`,
+    [scopeKeyStr]
+  );
+  await c.execute(
+    `DELETE FROM vfs_content_pack WHERE entry_id IN (
+       SELECT entry_id FROM vfs_entry WHERE scope_key = ?)`,
+    [scopeKeyStr]
+  );
+  await c.execute(`DELETE FROM vfs_entry WHERE scope_key = ?`, [scopeKeyStr]);
+}
+
+describe("VFS 历史版本打包任务（T-VP3/7/8/10/12/13/16/18/19/20/21）", () => {
   /** 文档性防护：文件起始不得残留 startupMaintenancePending（会伪造「强制补跑」输入）。 */
   before(async () => {
     assert.equal(
@@ -714,14 +760,19 @@ describe("VFS 历史版本打包任务（T-VP3/8/10/12/13/16/18/19/20/21）", ()
     }
 
     const interrupted = await runVfsContentPacking(c, { syncBudgetMs: 0 });
-    // 预算检查生效的判据（两分支任一）：要么没收手（done=false），要么没做满
-    //（packedGroups < 3）——若实现根本不检查预算，此处 packedGroups=3 且
-    // done=true，两个条件同时不满足、断言红。
-    assert.ok(
-      interrupted.done === false || interrupted.packedGroups < 3,
-      "预算 0ms 下不得一轮全量完成"
-    );
-    assert.equal(interrupted.stalled, false);
+    // 【pbp-14·确定口径】预算检查放**组粒度**（packOneGroup 成功之后立刻查
+    // deadline），预算 0ms ⇒ 打完第 1 组即收手返回。此前写的是析取式判据
+    // （「done=false 或 packedGroups<3」两分支任一），实现挪到 entry 粒度、
+    // 甚至整段删掉都照样绿——预算粒度的实现自由度被放任。这里写成逐字段
+    // deepEqual 把口径锁死（牙齿：把组粒度预算检查挪到 entry 粒度或删掉，
+    // 本用例必红）。
+    assert.deepEqual(interrupted, {
+      done: false,
+      packedGroups: 1,
+      failedGroups: 0,
+      stalled: false,
+    });
+    const interruptedPackedGroups = interrupted.packedGroups;
     // 中途退出不写坏组快照。
     assert.equal(
       await new SqliteKkvRepository(c).get(VFS_PACK_KKV_MODULE, "failedGroups"),
@@ -730,12 +781,13 @@ describe("VFS 历史版本打包任务（T-VP3/8/10/12/13/16/18/19/20/21）", ()
     );
 
     const resumed = await runVfsContentPacking(c);
-    assert.deepEqual(resumed, {
-      done: true,
-      packedGroups: 3 - interrupted.packedGroups,
-      failedGroups: 0,
-      stalled: false,
-    });
+    // 守恒式（不自推上一轮实测值——两轮都打 0 组时旧写法恒成立）：
+    // 中断轮 + 续跑轮合计把 3 个 entry 全打满。
+    const resumedTotal = interruptedPackedGroups + resumed.packedGroups;
+    assert.equal(resumedTotal, 3, "两轮合计必须打满 3 组");
+    assert.equal(resumed.done, true);
+    assert.equal(resumed.failedGroups, 0);
+    assert.equal(resumed.stalled, false);
     // 全量读回：3 个 entry 的全部成员经 member 分派读回等值。
     for (const plains of plainsByEntry) {
       for (const plain of plains) {
@@ -1707,6 +1759,196 @@ describe("VFS 历史版本打包任务（T-VP3/8/10/12/13/16/18/19/20/21）", ()
       assert.equal(await blobRowCount(hash), 1, "并发写入的候选本轮不动");
     }
     assert.equal(seeded.hashes.length, 3);
+  });
+
+  // -------------------------------------------------------------------------
+  // pbp-12（T-VP7）：pack 形态下的回滚 / 复活 / checkpoint / sweep 链路
+  // -------------------------------------------------------------------------
+
+  it("T-VP7（pbp-12）：已打包 entry 的回滚/复活/checkpoint/sweep 四条链路——每次 put 抽回减 1 member，读回逐字节等值", async () => {
+    await resetPackState();
+    const c = conn();
+    const ctx = getNovelMasterTestContext();
+    const suffix = testIsolationSuffix();
+    const store = new SqliteVfsContentStore(c);
+    // 装配口径照 rollback-ref-count.test.ts：仓储 + revision-aware-vfs.service
+    // 跑 resetHeadToVersion、checkpoint 段用 SqliteMessageCheckpointRepository、
+    // sweepSessionRevisions 直接调 domain 函数——不起 message service 全链。
+    const entryRepo = new SqliteVfsEntryRepository(c);
+    const revisionRepo = new SqliteVfsRevisionRepository(c);
+    const checkpoints = new SqliteMessageCheckpointRepository(c);
+    const projectId = `vpk-p7-${suffix}`;
+    const sessionId = `vpk-s7-${suffix}`;
+    const scope = { kind: "session", projectId, sessionId } as const;
+    const scopeKeyStr = scopeKey(scope);
+    const vfs = ctx.sessionVfs(projectId, sessionId);
+    const path = `/vp7-${suffix}.md`;
+
+    // 4 个历史版本（各 ~8KB，平均 < 24KB → 一组 zlib-concat-v1）+ 独立 head。
+    const versionPlains = [1, 2, 3, 4].map((i) =>
+      textOf(8 * 1024, `vpk-vp7-v${i}-${suffix}`)
+    );
+    const seeded = await seedEntry(
+      scopeKeyStr,
+      path,
+      versionPlains,
+      `vpk-corrupt-vp7-${suffix}`,
+      textOf(2 * 1024, `vpk-vp7-head-${suffix}`)
+    );
+    const plainByHash = new Map<string, string>(
+      seeded.hashes.map((hash, index) => [hash, versionPlains[index]!])
+    );
+    const memberCountOf = async (hash: string): Promise<number> =>
+      countOf(
+        "SELECT COUNT(*) AS n FROM vfs_content_pack_member WHERE content_hash = ?",
+        [hash]
+      );
+    const totalMemberRows = async (): Promise<number> =>
+      countOf("SELECT COUNT(*) AS n FROM vfs_content_pack_member");
+    const liveHead = async (): Promise<{ contentHash: string; version: number }> => {
+      const rows = await c.query<{ content_hash: string; head_version: number }>(
+        `SELECT content_hash, head_version FROM vfs_entry
+         WHERE scope_key = ? AND path = ?`,
+        [scopeKeyStr, path]
+      );
+      assert.equal(rows.length, 1, "live head entry 行应存在");
+      return {
+        contentHash: String(rows[0]!.content_hash),
+        version: Number(rows[0]!.head_version),
+      };
+    };
+
+    try {
+      // ── 收敛：成员全进 member、blob 行已删（本条用例的立足数据面）────────
+      const packed = await runVfsContentPacking(c);
+      assert.deepEqual(packed, {
+        done: true,
+        packedGroups: 1,
+        failedGroups: 0,
+        stalled: false,
+      });
+      const packs = await packRows();
+      assert.equal(packs.length, 1);
+      assert.equal(packs[0]!.format, "zlib-concat-v1");
+      assert.equal(await totalMemberRows(), 4, "4 个历史版本应全部落 member");
+      for (const hash of seeded.hashes) {
+        assert.equal(await memberCountOf(hash), 1, `${hash} 应有 member 行`);
+        assert.equal(await blobRowCount(hash), 0, `${hash} 的 blob 行应已删`);
+        assert.equal(await store.get(hash), plainByHash.get(hash), "member 路径读回等值");
+      }
+      assert.equal(await blobRowCount(seeded.headHash), 1, "head 独立保留 blob 行");
+
+      // ── ① resetHeadToVersion：目标 hash 已是 member-only ⇒ put 抽回 ──────
+      await vfs.resetHeadToVersion(path, 1);
+      assert.deepEqual(await liveHead(), {
+        contentHash: seeded.hashes[0]!,
+        version: 1,
+      });
+      assert.equal(await memberCountOf(seeded.hashes[0]!), 0, "抽回后 member 行应被删");
+      assert.equal(await blobRowCount(seeded.hashes[0]!), 1, "抽回后应有独立 blob 行");
+      assert.equal(await totalMemberRows(), 3, "member 行数 4 → 3");
+      assert.equal(await store.get(seeded.hashes[0]!), versionPlains[0]);
+
+      // ── ② restore-path 链路：物理删 entry 后原位复活（member 形态读+抽回）─
+      await vfs.delete(path);
+      assert.equal(await countOf(
+        `SELECT COUNT(*) AS n FROM vfs_entry WHERE scope_key = ? AND path = ?`,
+        [scopeKeyStr, path]
+      ), 0, "删除后 entry 行应被物理删（墓碑落在 revision 表）");
+      assert.equal(await totalMemberRows(), 3, "删除本身不动 pack 形态");
+      // 清解码缓存：逼下面的复活走真·member 解码路径而非命中进程内缓存。
+      clearDecodedContentCaches();
+      const revived = await reviveDeletedEntryForRestore(
+        { vfs, entryRepo, revisionRepo, contentStore: store },
+        scope,
+        path,
+        seeded.entryId,
+        2
+      );
+      assert.equal(revived, "restored");
+      assert.deepEqual(await liveHead(), {
+        contentHash: seeded.hashes[1]!,
+        version: 2,
+      });
+      assert.equal(await memberCountOf(seeded.hashes[1]!), 0, "复活目标 hash 被抽回");
+      assert.equal(await totalMemberRows(), 2, "member 行数 3 → 2");
+      clearDecodedContentCaches();
+      assert.equal(await store.get(seeded.hashes[1]!), versionPlains[1]);
+
+      // ── ③ checkpoint capture → restore：指针回放到第三个历史版本 ────────
+      const messageId = `vp7-msg-${suffix}`;
+      await checkpoints.insertCheckpoint({
+        sessionId,
+        messageId,
+        createdAtMs: Date.now(),
+        files: [{ entryId: seeded.entryId, revisionVersion: 3, path }],
+      });
+      const pointerTree = await checkpoints.loadFilePointerTree(sessionId, messageId);
+      assert.ok(pointerTree, "checkpoint 文件指针树应存在");
+      assert.equal(pointerTree.get(path)?.entryId, seeded.entryId);
+      assert.equal(pointerTree.get(path)?.revisionVersion, 3);
+      clearDecodedContentCaches();
+      const restored = await restorePathToRevision(
+        vfs,
+        revisionRepo,
+        scope,
+        path,
+        3,
+        undefined,
+        entryRepo,
+        undefined,
+        undefined,
+        store
+      );
+      assert.equal(restored, "restored");
+      assert.deepEqual(await liveHead(), {
+        contentHash: seeded.hashes[2]!,
+        version: 3,
+      });
+      assert.equal(await memberCountOf(seeded.hashes[2]!), 0, "回放目标 hash 被抽回");
+      assert.equal(await totalMemberRows(), 1, "member 行数 2 → 1");
+      clearDecodedContentCaches();
+      assert.equal(await store.get(seeded.hashes[2]!), versionPlains[2]);
+
+      // ── ④ sweepSessionRevisions：ref 归零的 head 版本被回收 ─────────────
+      const beforeSweep = await countOf(
+        `SELECT COUNT(*) AS n FROM vfs_revision WHERE entry_id = ?`,
+        [seeded.entryId]
+      );
+      assert.ok(beforeSweep > 0, "前置：sweep 前 revision 行存在");
+      const swept = await sweepSessionRevisions(
+        revisionRepo,
+        entryRepo,
+        checkpoints,
+        projectId,
+        sessionId,
+        c
+      );
+      assert.equal(swept, 1, "只有 ref 归零的旧 head 版本该被清");
+      assert.equal(
+        await revisionRepo.findByEntryAndVersion(seeded.entryId, 5),
+        null,
+        "ref 归零的 head 版本应被 sweep 删除"
+      );
+      assert.equal(
+        await blobRowCount(seeded.headHash),
+        0,
+        "对应 blob 行随 revision 删除被触发器回收"
+      );
+      // 仍被引用的版本一个都不能少；唯一剩下的 member（v4）照常可读。
+      assert.equal(await totalMemberRows(), 1, "sweep 不动仍被引用的 member");
+      assert.equal((await packRows()).length, 1, "pack 容器仍在（成员仍有引用）");
+      clearDecodedContentCaches();
+      assert.equal(await store.get(seeded.hashes[3]!), versionPlains[3], "残留 member 读回等值");
+      for (const version of [1, 2, 3, 4, 6]) {
+        assert.ok(
+          await revisionRepo.findByEntryAndVersion(seeded.entryId, version),
+          `版本 ${version} 仍被引用，不得被 sweep`
+        );
+      }
+    } finally {
+      await clearSessionScopeRows(scopeKeyStr, sessionId);
+    }
   });
 });
 

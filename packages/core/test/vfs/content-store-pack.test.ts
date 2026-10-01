@@ -1,7 +1,8 @@
 /**
- * T-VP1/2/4/5/6/11/14/15：vfs_content_pack 读路径收口（content store 六方法 +
- * findContentSizeByPath 回退）。pack/member 行由测试直接 INSERT 构造——打包写入
- * 任务属 Step 10（vfs-content-packing），不在此文件。
+ * T-VP1/2a/2b/4/5/6/6b/11/14/15：vfs_content_pack 读路径收口（content store 六方法
+ * + findContentSizeByPath 回退 + 打包后 head 不变式）。pack/member 行分两种来路——
+ * T-VP1/2/4/5/6/6b/14 由测试直接 INSERT 构造；T-VP2b 真跑一轮
+ * `runVfsContentPacking` 走写侧。
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -21,7 +22,16 @@ import {
 import { hashContent } from "@/domain/vfs/content-store/logic/hash-content.js";
 import { compressZlib } from "@/domain/vfs/content-store/logic/zlib-codec.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import { runVfsContentPacking } from "@/infra/db-maintenance/impl/vfs-content-packing.js";
+import { CHARACTER_CARD_BLOB_COMPRESSED_GATE_BYTES } from "@/domain/character-card/logic/character-card-limits.js";
+import { loadOrFillFileCache } from "@/domain/workplace/logic/load-or-fill-file-cache.js";
+import {
+  fileCacheKey,
+  SESSION_KKV_DOMAIN_FILE_CACHE,
+} from "@/domain/session-kkv/model/session-kkv-domains.js";
+import { createMemorySessionKkv } from "../helpers/prompt-layout-test-helpers.js";
 import type { TdbcConnection } from "@novel-master/core";
+import type { VfsService } from "@/domain/vfs/ports/vfs-service.port.js";
 import {
   getNovelMasterTestContext,
   novelMasterTestFixture,
@@ -299,9 +309,10 @@ describe("pack-codec: T-VP11 fossil 链编解码回环", () => {
     const headerLength = 4 + 4 * corpus.length;
     let cursor = headerLength;
     for (let i = 0; i < corpus.length; i++) {
-      const expected = compressZlib(corpus[i]!);
-      // 段 0 的期望是全量压缩；段 i 是 createDelta 前驱→当前再压缩——用解码等价
-      // 校验代替重算 delta（重算即复制实现），这里先验证长度与连排位置。
+      // 各段长度只在段 0 有「独立重算」的期望值（zlib(首成员明文)），段 i 是
+      // createDelta(前驱→当前) 再压缩，拿「独立压缩长」当期望是错的——高熵目标下
+      // delta 甚至略大于单独压缩（corpus 末段即如此）。故这里只钉段区间的连排
+      // 位置，逐段长度的语义正确性由下一条「逐层 apply 明文全等」承担。
       const segment = table.segments[i]!;
       assert.equal(segment.offset, cursor, `段 ${i} offset 应连排`);
       cursor += segment.length;
@@ -345,7 +356,7 @@ describe("pack-codec: T-VP11 fossil 链编解码回环", () => {
     }
   });
 
-  it("防御分支：段表截断 / member offset 错位 / 切片越界均抛错（恒红判据支撑）", () => {
+  it("防御分支：段表截断 / 段数闸门（byteLength<4、段数 0、段数 0xFFFFFFFF、长度区不完整）/ member offset 错位 / member length 不符 / 切片越界均抛错（恒红判据支撑）", () => {
     const corpus = buildCorpus();
 
     const fossil = encodeFossilChainPack(corpus);
@@ -359,6 +370,63 @@ describe("pack-codec: T-VP11 fossil 链编解码回环", () => {
       decodeFossilChainSpans(fossil.bytes, [
         { offset: 4 + 4 * table.segmentCount - 1, length: 1 },
       ]),
+    );
+
+    // —— pbp-19：段表防御分支四条 + 「段表长度区不完整」，逐条钉错误文案 ——
+    // 判据钉文案而不是「只要抛就算过」：byteLength<4 那条若把闸门删掉，
+    // DataView.getUint32 越界同样会抛 RangeError，只断言 throws 会成恒绿。
+    // 1) 流短到连段数头都读不到。
+    assert.throws(
+      () => parseFossilSegmentTable(new Uint8Array(3)),
+      /连段数头都读不到/,
+    );
+
+    /** 复制一份可写流字节并改写段数（不污染 encode 产物本体）。 */
+    const withSegmentCount = (bytes: Uint8Array, count: number): Uint8Array => {
+      const copy = bytes.slice();
+      new DataView(copy.buffer, copy.byteOffset, copy.byteLength).setUint32(
+        0,
+        count,
+        true,
+      );
+      return copy;
+    };
+
+    // 2) 段数置 0：进段长累加前先被「段数为 0」拦。
+    assert.throws(
+      () => parseFossilSegmentTable(withSegmentCount(fossil.bytes, 0)),
+      /段表段数为 0/,
+    );
+
+    // 3) 段数置 0xFFFFFFFF：headerLength 溢出到 ~17GB，闸门必须在**按段数分配
+    //    段数组之前**拦下——同一步断言堆增量 <20MB，证明没有巨大分配。
+    const heapBefore = process.memoryUsage().heapUsed;
+    assert.throws(
+      () => parseFossilSegmentTable(withSegmentCount(fossil.bytes, 0xffffffff)),
+      /段表长度区不完整/,
+    );
+    const heapDeltaBytes = process.memoryUsage().heapUsed - heapBefore;
+    assert.ok(
+      heapDeltaBytes < 20 * 1024 * 1024,
+      `段数闸门应在分配段数组之前拦下，堆增量应 <20MB，实际 ${(heapDeltaBytes / 1024 / 1024).toFixed(1)}MB`,
+    );
+
+    // 4) offset 对、length 不符：不得被「offset 命中段表」蒙混过去。
+    assert.throws(
+      () =>
+        decodeFossilChainSpans(fossil.bytes, [
+          {
+            offset: table.segments[1]!.offset,
+            length: table.segments[1]!.length - 1,
+          },
+        ]),
+      /member length 与段表不符/,
+    );
+
+    // 5) 段表长度区不完整：段数头读得到、N×4B 段长区读不全（流只剩头 4 字节）。
+    assert.throws(
+      () => parseFossilSegmentTable(fossil.bytes.subarray(0, 4)),
+      /段表长度区不完整/,
     );
 
     const concat = encodeZlibConcatPack(corpus);
@@ -408,7 +476,7 @@ describe("pack-codec: T-VP11 fossil 链编解码回环", () => {
 // store 六方法 + findContentSizeByPath
 // ---------------------------------------------------------------------------
 
-describe("vfs content pack: store 读路径（T-VP1/2/4/5/6/14/15）", () => {
+describe("vfs content pack: store 读路径（T-VP1/2a/2b/4/5/6/6b/14/15）", () => {
   it("T-VP1: 打包后逐版本读回等值（pack 与 fossil 两 format；含同组重复 hash 共享成员）", async () => {
     const { conn } = getNovelMasterTestContext();
     const store = new SqliteVfsContentStore(conn);
@@ -500,7 +568,7 @@ describe("vfs content pack: store 读路径（T-VP1/2/4/5/6/14/15）", () => {
     assert.equal(many.get(hHeadF), pHeadF);
   });
 
-  it("T-VP2: live head 的 get 走原路径（blob 命中优先；member 垃圾 offset 互斥夹具不干扰）", async () => {
+  it("T-VP2a: blob 命中优先于 member（head 永不被 member 分派；member 垃圾 offset 互斥夹具不干扰）", async () => {
     const { conn } = getNovelMasterTestContext();
     const store = new SqliteVfsContentStore(conn);
     const entryRepo = new SqliteVfsEntryRepository(conn);
@@ -547,6 +615,112 @@ describe("vfs content pack: store 读路径（T-VP1/2/4/5/6/14/15）", () => {
 
     assert.equal(await store.get(hHead), pHead);
     assert.equal((await store.getMany([hHead])).get(hHead), pHead);
+  });
+
+  // T-VP2 的打包后全量不变式（pbp-31）：谓词排除 head → 打包只搬非 head 历史
+  // 版本 → 跑完后每个 entry 的 head 都还有权威副本。
+  //
+  // 【口径澄清】判据取 blob 全集，落 blob 的 head 是 **T-VP2 的正常形态判据**；
+  // 跨 entry 归首遇（UNION member 判已存在 → tree-copy/seed 快路径）造成的
+  // member-only head 由 spec 放宽后的宽松式 INV1 覆盖，不在本用例口径内——
+  // 本夹具的 head 一律经 store.put 落 blob 行，不含该形态（末尾的反向验证专门
+  // 造一次该形态，只为证明谓词有判别力，随后立即清掉）。
+  it("T-VP2b: 打包任务跑完后所有 entry head 均有 blob 行（正常形态判据）", async () => {
+    const { conn } = getNovelMasterTestContext();
+    const store = new SqliteVfsContentStore(conn);
+    const entryRepo = new SqliteVfsEntryRepository(conn);
+    const suffix = testIsolationSuffix();
+    const sk = `tvp2b-scope-${suffix}`;
+
+    // 夹具：head 独立 blob + 两个历史版本（各自 blob 行 + active 非 head revision）。
+    const pHead = plainChunk(`vp2b-head`, suffix, 60);
+    const hHead = await store.put(pHead);
+    const path = `/tvp2b/entry-${suffix}.md`;
+    await entryRepo.insertWithContentHash(sk, path, hHead);
+    const entryId = await entryIdOf(conn, sk, path);
+    const historyHashes: string[] = [];
+    for (let version = 1; version <= 2; version++) {
+      const contentHash = await store.put(
+        plainChunk(`vp2b-v${version}`, suffix, 40 + version),
+      );
+      await insertActiveRevision(conn, entryId, version, contentHash);
+      historyHashes.push(contentHash);
+    }
+    await conn.execute(
+      `UPDATE vfs_entry SET head_version = 3 WHERE entry_id = ?`,
+      [entryId],
+    );
+
+    const result = await runVfsContentPacking(conn);
+    assert.equal(result.done, true, "本轮应正常收敛（非打转）");
+    assert.ok(
+      result.packedGroups >= 1,
+      `两个历史版本应至少落 1 组 pack，实际 ${result.packedGroups}`,
+    );
+    // 历史版本的 blob 行已被换成 member 行（谓词排除了 head 的证据）。
+    for (const contentHash of historyHashes) {
+      assert.equal(
+        await countRows(
+          conn,
+          `SELECT COUNT(*) AS n FROM vfs_content_pack_member WHERE content_hash = ?`,
+          [contentHash],
+        ),
+        1,
+        `历史版本 ${contentHash} 应落 member 行`,
+      );
+      assert.equal(
+        await countRows(
+          conn,
+          `SELECT COUNT(*) AS n FROM vfs_content_blob WHERE content_hash = ?`,
+          [contentHash],
+        ),
+        0,
+        "已收编成员的原 blob 行应被删",
+      );
+    }
+
+    // 全库扫描：不得存在「head 有 content_hash 却没有 blob 权威副本」的 entry。
+    const headWithoutBlob = `SELECT COUNT(*) AS n FROM vfs_entry
+      WHERE content_hash IS NOT NULL
+        AND content_hash NOT IN (SELECT content_hash FROM vfs_content_blob)`;
+    assert.equal(
+      await countRows(conn, headWithoutBlob, []),
+      0,
+      "打包跑完后所有 entry head 都应有 blob 行",
+    );
+
+    // 反向验证（谓词判别力）：造一个 head 指向 member-only hash 的 entry，同一
+    // 谓词必须立刻报出 1——否则上面那句 ===0 只是「库里本来就没有脏 head」的
+    // 恒真断言。造完即清，不给后续用例留 member-only head 污染。
+    const pRogue = plainChunk(`vp2b-rogue`, suffix, 20);
+    const rogueHash = hashContent(pRogue);
+    const { packId } = await insertPackRows(
+      conn,
+      /* entryId 对 pack 行只是归属标注，这里用夹具自己的 entry */
+      entryId,
+      VFS_PACK_FORMAT_ZLIB_CONCAT_V1,
+      [pRogue],
+    );
+    const roguePath = `/tvp2b/rogue-${suffix}.md`;
+    await entryRepo.insertWithContentHash(sk, roguePath, rogueHash);
+    assert.equal(
+      await countRows(conn, headWithoutBlob, []),
+      1,
+      "member-only head 必须被谓词报出（判别力自检）",
+    );
+    await conn.execute(`DELETE FROM vfs_entry WHERE scope_key = ? AND path = ?`, [
+      sk,
+      roguePath,
+    ]);
+    await conn.execute(`DELETE FROM vfs_content_pack_member WHERE pack_id = ?`, [
+      packId,
+    ]);
+    await conn.execute(`DELETE FROM vfs_content_pack WHERE pack_id = ?`, [packId]);
+    assert.equal(
+      await countRows(conn, headWithoutBlob, []),
+      0,
+      "夹具清理后全库应回到不变式",
+    );
   });
 
   it("T-VP4: GC 语义——无引用 pack 回收 / 成员被引用整包保留 / 孤儿 member 回收 / ref_count 触发器互不干扰", async () => {
@@ -832,6 +1006,144 @@ describe("vfs content pack: store 读路径（T-VP1/2/4/5/6/14/15）", () => {
     const hGhost = hashContent(`tvp6-ghost-${suffix}`);
     await entryRepo.insertWithContentHash(sk, pathGhost, hGhost);
     assert.equal(await entryRepo.findContentSizeByPath(sk, pathGhost), null);
+  });
+
+  // T-VP6 的后半句（pbp-13）：member 回退值必须恒等于「被替换 blob 行的byte_len
+  // 复制值」。这条口径是读取侧降级闸门（超限文件走占位、不整读正文）唯一的输入
+  // ——一旦回退成段长/delta 长度，闸门按压缩侧 4× 折算的口径就失真，超大文件被
+  // 放行、正文整读打进 native OOM。blob 形态的占位已由 load-or-fill-file-cache.
+  // test.ts 与 assemble-workplace-display.test.ts 覆盖，本条只补 pack/member 形态。
+  it("T-VP6b: pack/member 形态下 compressed_byte_len 超闸门仍走占位、闸门内读真文（消费端 loadOrFillFileCache）", async () => {
+    const { conn } = getNovelMasterTestContext();
+    const store = new SqliteVfsContentStore(conn);
+    const entryRepo = new SqliteVfsEntryRepository(conn);
+    const suffix = testIsolationSuffix();
+    const sk = `tvp6b-scope-${suffix}`;
+    const gate = CHARACTER_CARD_BLOB_COMPRESSED_GATE_BYTES;
+
+    const anchorPath = `/tvp6b/anchor-${suffix}.md`;
+    await entryRepo.insertWithContentHash(
+      sk,
+      anchorPath,
+      await store.put(plainChunk(`tvp6b-anchor`, suffix, 3)),
+    );
+    const entryId = await entryIdOf(conn, sk, anchorPath);
+
+    // 一个 pack 组、两个成员（都无 blob 行 = member-only 形态）。
+    const pOver = plainChunk(`tvp6b-over`, suffix, 50);
+    const pUnder = plainChunk(`tvp6b-under`, suffix, 50);
+    const { members } = await insertPackRows(
+      conn,
+      entryId,
+      VFS_PACK_FORMAT_ZLIB_CONCAT_V1,
+      [pOver, pUnder],
+    );
+    const [memberOver, memberUnder] = members;
+    const hashOver = memberOver!.contentHash;
+    const hashUnder = memberUnder!.contentHash;
+
+    // 超限组：compressed_byte_len 抬到闸门之上。该列的真实语义就是「这份内容
+    // 作为独立 blob 行时的 byte_len」，抬到闸门之上即模拟「超大文件被打包」。
+    const overBytes = gate + 1;
+    await conn.execute(
+      `UPDATE vfs_content_pack_member SET compressed_byte_len = ? WHERE content_hash = ?`,
+      [overBytes, hashOver],
+    );
+    // 对照组互斥性自检：独立压缩长必在闸门之下。
+    assert.ok(
+      memberUnder!.compressedByteLen < gate,
+      `对照组压缩长 ${memberUnder!.compressedByteLen} 应远低于闸门 ${gate}`,
+    );
+    // 夹具互斥性自检：两个 hash 都不得有 blob 行（否则探测走 blob 早返回）。
+    assert.equal(
+      await countRows(
+        conn,
+        `SELECT COUNT(*) AS n FROM vfs_content_blob WHERE content_hash IN (?, ?)`,
+        [hashOver, hashUnder],
+      ),
+      0,
+    );
+
+    const pathOver = `/tvp6b/over-${suffix}.md`;
+    const pathUnder = `/tvp6b/under-${suffix}.md`;
+    await entryRepo.insertWithContentHash(sk, pathOver, hashOver);
+    await entryRepo.insertWithContentHash(sk, pathUnder, hashUnder);
+
+    // —— 探测层：回退值口径（承 T-VP6，这里落在超限侧）——
+    const sizeOver = await entryRepo.findContentSizeByPath(sk, pathOver);
+    assert.ok(sizeOver != null);
+    assert.equal(sizeOver!.kind, "blobCompressedBytes");
+    assert.equal(
+      sizeOver!.size,
+      overBytes,
+      "member 回退值必须是 compressed_byte_len（不是段长）",
+    );
+    assert.ok(sizeOver!.size > gate, "超限组必须真的过闸门");
+    const sizeUnder = await entryRepo.findContentSizeByPath(sk, pathUnder);
+    assert.ok(sizeUnder != null);
+    assert.equal(sizeUnder!.size, memberUnder!.compressedByteLen);
+    assert.ok(
+      sizeUnder!.size <= gate,
+      `对照组不得超闸门（实测 ${sizeUnder!.size} vs ${gate}）`,
+    );
+
+    // —— 消费端：workplace 读取侧降级 ——
+    // vfs 用仓库真身搭一个只实现 read/findContentSize 的薄壳：探测值真的来自
+    // findContentSizeByPath（含 member 回退），read 真的经 content store 解成员。
+    let readCalls = 0;
+    const vfs = {
+      async findContentSize(target: string) {
+        return entryRepo.findContentSizeByPath(sk, target);
+      },
+      async read(target: string) {
+        readCalls += 1;
+        const entry = await entryRepo.findByPath(sk, target);
+        if (entry == null) {
+          throw new Error(`vfs_not_found: ${target}`);
+        }
+        return {
+          path: target,
+          content: entry.content,
+          version: entry.version,
+          mtimeMs: entry.mtimeMs,
+        };
+      },
+    } as unknown as VfsService;
+
+    const sessionId = `tvp6b-${suffix}`;
+    const sessionKkv = createMemorySessionKkv();
+    const placeholder = await loadOrFillFileCache({
+      sessionId,
+      sessionKkv,
+      vfs,
+      path: pathOver,
+      status: "full",
+    });
+    assert.equal(
+      placeholder.body,
+      `（文件过大，已跳过，约 ${overBytes * 4} 字符）`,
+      "member 形态的超限文件必须走占位（数字取compressed_byte_len 的 4× 折算）",
+    );
+    assert.equal(readCalls, 0, "超限组不得触发全文读取");
+    assert.equal(
+      await sessionKkv.get(
+        sessionId,
+        SESSION_KKV_DOMAIN_FILE_CACHE,
+        fileCacheKey("full", pathOver),
+      ),
+      null,
+      "占位结果不得写进 file_cache",
+    );
+
+    const under = await loadOrFillFileCache({
+      sessionId,
+      sessionKkv,
+      vfs,
+      path: pathUnder,
+      status: "full",
+    });
+    assert.equal(under.body, pUnder, "闸门内的 member 文件应读到真实明文");
+    assert.equal(readCalls, 1);
   });
 
   it("get 缺失文案不变：既无 blob 行也无 member 行时维持原错误", async () => {
