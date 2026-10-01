@@ -119,6 +119,11 @@ describe("消息正文压缩存储 schema（T-C10）", () => {
       // 对齐 A12 先例——锁「加列忘 bump」bug 形态）。fixture 版本用常量
       // 表达式跟随 BOOT 演进：将来 v18 再加列时此处自动落 17。
       await bootstrapNovelMaster(conn);
+      // 上一版存量库里没有 idx_chat_message_pending_blob（它是 v17 之后
+      // bootstrap 才幂等建的），而该部分索引的谓词引用 content_blob——
+      // 不先删掉索引，SQLite 会拒绝 DROP COLUMN（error in index ...
+      // after drop column）。顺带也是「删列前先摘掉依赖它的索引」的现实注脚。
+      await conn.execute("DROP INDEX IF EXISTS idx_chat_message_pending_blob");
       await conn.execute("ALTER TABLE chat_message DROP COLUMN content_encoding");
       await conn.execute("ALTER TABLE chat_message DROP COLUMN content_blob");
       await conn.execute(`PRAGMA user_version = ${SCHEMA_BOOT_VERSION - 1}`);
@@ -217,7 +222,7 @@ describe("消息正文压缩存储 schema（T-C10）", () => {
     }
   });
 
-  it("快路径：连续 bootstrap 幂等，两列就位且第二次 bootstrap 不下发任何 DDL", async () => {
+  it("快路径：连续 bootstrap 幂等，两列就位且第二次 bootstrap 除幂等部分索引外不下发任何 DDL", async () => {
     const conn = await openInMemoryConnection();
     try {
       await bootstrapNovelMaster(conn);
@@ -237,19 +242,31 @@ describe("消息正文压缩存储 schema（T-C10）", () => {
 
       // 探针断言无 DDL：快路径只跑 pending migration / seed / PRAGMA，不得
       // 出现 ALTER TABLE / CREATE TABLE / CREATE INDEX 等任何表结构 DDL。
-      // 豁免：schema_migrations 是 migration runner 的记账表，每次
+      // 豁免一：schema_migrations 是 migration runner 的记账表，每次
       // bootstrap 都幂等 CREATE IF NOT EXISTS（ensureSchemaMigrationsTable），
       // 与业务表结构无关，不属本断言要抓的「快路径偷偷改结构」。
+      // 豁免二：idx_chat_message_pending_blob（消息正文解压探测的部分索引），
+      // 钉在**事务外的无条件段**——只有这样存量库（user_version 已达标、
+      // 走快路径）才能建出它，落在事务内慢路径等于真实用户库永远建不出。
+      // 它是纯 DDL 幂等建、不改任何表结构，故从「零 DDL」口径里单列出来，
+      // 下面按「有且仅有这一条」精确断言（比整体豁免更紧）。
       const ddlPattern = /\b(ALTER\s+TABLE|CREATE\s+(TABLE|INDEX|VIEW|TRIGGER))\b/i;
       const bookkeepingPattern =
         /CREATE\s+TABLE\s+IF\s+NOT\s+EXISTS\s+schema_migrations\b/i;
+      const partialIndexPattern =
+        /CREATE\s+INDEX\s+IF\s+NOT\s+EXISTS\s+idx_chat_message_pending_blob\b/i;
       const ddlSql = probe.executedSql.filter(
         (sql) => ddlPattern.test(sql) && !bookkeepingPattern.test(sql)
       );
+      assert.deepEqual(
+        ddlSql.filter((sql) => !partialIndexPattern.test(sql)),
+        [],
+        `快路径不应下发任何表结构 DDL，探针观测到：${JSON.stringify(ddlSql)}`
+      );
       assert.equal(
-        ddlSql.length,
-        0,
-        `快路径不应下发任何 DDL，探针观测到：${JSON.stringify(ddlSql)}`
+        ddlSql.filter((sql) => partialIndexPattern.test(sql)).length,
+        1,
+        "快路径有且仅有那一条幂等的部分索引 DDL（存量库据此建出探测索引）"
       );
     } finally {
       await conn.close();
@@ -262,9 +279,14 @@ describe("消息正文压缩存储 schema（T-C10）", () => {
     // 时版本已达标走快路径，DDL/ALIGN 全部跳过，两列永远不补。
     // 这就是 v9/v10 真机事故（no such column）的形态：若要修复此形态的库，
     // 唯一正解是 bump SCHEMA_BOOT_VERSION 让它重新走慢路径。
+    // 顺带钉住另一条：bootstrap 的无条件段会建部分索引，而该库的
+    // content_blob 列不存在——**bootstrap 不得因此炸掉**（探测退回全表扫
+    // 只是慢，不是不可用；本用例能跑完即是断言）。
     const conn = await openInMemoryConnection();
     try {
       await bootstrapNovelMaster(conn);
+      // 同上：删列前先摘掉引用该列的部分索引。
+      await conn.execute("DROP INDEX IF EXISTS idx_chat_message_pending_blob");
       await conn.execute("ALTER TABLE chat_message DROP COLUMN content_encoding");
       await conn.execute("ALTER TABLE chat_message DROP COLUMN content_blob");
       await conn.execute(`PRAGMA user_version = ${SCHEMA_BOOT_VERSION}`);

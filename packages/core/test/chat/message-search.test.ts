@@ -754,6 +754,103 @@ describe("聊天记录查询 core 基座", () => {
     });
   });
 
+  describe("T-CS21：parse 前 LIKE 粗筛的召回守卫（cr-p3）", () => {
+    it('keyword 含双引号（他说"好"）仍召回——JSON 转义方向退回全量精筛', async () => {
+      const ctx = getNovelMasterTestContext();
+      const { sessionId, repo } = await newSession();
+      await repo.insert(
+        makeMessage({
+          sessionId,
+          seq: 1,
+          role: "user",
+          createdAtMs: 1,
+          content: textBlocks('他说"好"，这事就这么定了'),
+        }),
+      );
+      await repo.insert(
+        makeMessage({
+          sessionId,
+          seq: 2,
+          role: "user",
+          createdAtMs: 2,
+          content: textBlocks("无关的普通文本"),
+        }),
+      );
+
+      // content_json 里存的是 \" 转义形态，按原字符 LIKE 必然 0 命中——
+      // 守卫生效（不加粗筛、退回全量精筛）才能召回。反例：粗筛无守卫时
+      // 此用例必红（返回空数组）。
+      const result = await ctx.messages.searchMessages(sessionId, {
+        keyword: '他说"好"',
+        limit: 50,
+      });
+      assert.deepEqual(
+        result.map((m) => m.seq),
+        [1]
+      );
+    });
+
+    it("keyword 含非 ASCII 且大小写异形（Ärger vs 库存 ÄRGER）仍召回", async () => {
+      const ctx = getNovelMasterTestContext();
+      const { sessionId, repo } = await newSession();
+      await repo.insert(
+        makeMessage({
+          sessionId,
+          seq: 1,
+          role: "user",
+          createdAtMs: 1,
+          content: textBlocks("库存告急：ÄRGER Öl 断货了"),
+        }),
+      );
+      await repo.insert(
+        makeMessage({
+          sessionId,
+          seq: 2,
+          role: "user",
+          createdAtMs: 2,
+          content: textBlocks("另一条无关记录"),
+        }),
+      );
+
+      // 内存判据 messageMatchesKeyword 是 Unicode 感知的
+      // toLowerCase().includes()，而 SQLite 内建 LIKE 只折叠 ASCII 大小写
+      // （实测 LIKE '%ärger%' 对 ÄRGER 命中 0）——守卫生效退回全量精筛才召回。
+      const result = await ctx.messages.searchMessages(sessionId, {
+        keyword: "Ärger",
+        limit: 50,
+      });
+      assert.deepEqual(
+        result.map((m) => m.seq),
+        [1]
+      );
+    });
+
+    it("纯 ASCII keyword 走 LIKE 粗筛：命中行召回、未命中行不进 parse", async () => {
+      const ctx = getNovelMasterTestContext();
+      const { sessionId, repo } = await newSession();
+      await repo.batchInsert(
+        makeSeqMessages(sessionId, 400, new Set([120, 380]), "ancient")
+      );
+
+      // ASCII keyword（含非通配字符）不加粗筛会退化成全量 parse；加了粗筛
+      // 后每段只下发命中的行。此处钉住粗筛面本身有效：结果集不变（召回
+      // 红线），且每段下发行数显著小于 scanLimit。
+      const probe = new QueryRowProbe(ctx.conn);
+      const probed = new SqliteMessageRepository(probe);
+      const result = await probed.searchMessages(sessionId, {
+        keyword: "ancient",
+        limit: 10,
+      });
+      assert.deepEqual(
+        result.map((m) => m.seq),
+        [380, 120]
+      );
+      // 一段就把两条命中取回（粗筛后 rows.length < scanLimit → 扫尽出口）。
+      assert.equal(probe.rowCounts.length, 1);
+      assert.equal(probe.rowCounts[0], 2, "粗筛后本段只下发 2 行命中行");
+    });
+  });
+
   describe("T-CS20：yieldFn 分片让步——batchInsert 构造与搜索行解析均按片让步", () => {
     it("batchInsert 500 条让步 ≥2 次；450 行多段搜索让步 ≥2 次", async () => {
       const ctx = getNovelMasterTestContext();

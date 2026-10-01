@@ -39,6 +39,7 @@ import type { SessionFsService } from "@novel-master/core/session-fs";
 import type { SmartSortRuleService } from "@novel-master/core/smart-sort-rule";
 import type {
   PhysicalVfsService,
+  VfsRevisionRepository,
   VfsScope,
   VfsService,
 } from "@novel-master/core/vfs";
@@ -103,4 +104,10 @@ export interface DesktopNovelMasterRuntime {
    * run-agent-turn 经结构化兼容读取本字段装配 search 闭包。
    */
   readonly searchConfig: SearchConfigStore;
+  /**
+   * read 引用化（read-tool-result-ref Step 6）的 revision 仓库：
+   * runAgentTurn 装配点用它推导 read +1 通道并透传 prepare hydrate；
+   * session-prompt-input parity 链同样读取本字段。
+   */
+  readonly revisionRepo: VfsRevisionRepository;
 }

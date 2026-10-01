@@ -16,34 +16,34 @@ import {
 } from "../renderer/features/settings/migration-row-value.js";
 import type { DbStatsResult } from "../shared/ipc-types.js";
 
-const messageCompactionRow = MIGRATION_ROWS.find(
-  (row) => row.kind === "messageCompaction",
+const messageDecompressRow = MIGRATION_ROWS.find(
+  (row) => row.kind === "messageDecompress",
 )!;
 const vfsContentRow = MIGRATION_ROWS.find(
   (row) => row.kind === "vfsContent",
 )!;
 
 function stats(partial: {
-  messageCompaction?: DbStatsResult["messageCompaction"];
+  messageDecompress?: DbStatsResult["messageDecompress"];
   blobBinary?: DbStatsResult["blobBinary"];
 }): DbStatsResult {
   return {
     fileBytes: 1024,
     reclaimableBytes: 0,
     blobBinary: partial.blobBinary ?? { tables: [] },
-    messageCompaction: partial.messageCompaction ?? null,
+    messageDecompress: partial.messageDecompress ?? null,
   };
 }
 
 describe("migrationRowValue 四组夹具（ic-22）", () => {
   it("null / 表行缺席 → '—'（未取到，tone=default）", () => {
-    assert.deepEqual(migrationRowValue(null, messageCompactionRow), {
+    assert.deepEqual(migrationRowValue(null, messageDecompressRow), {
       text: "—",
       tone: "default",
     });
     // blobBinary 空表（采样失败兜底）同口径：该表行缺席 → '—'。
     assert.deepEqual(
-      migrationRowValue(stats({ messageCompaction: { done: true, pendingCount: 0 } }), vfsContentRow),
+      migrationRowValue(stats({ messageDecompress: { done: true, pendingCount: 0 } }), vfsContentRow),
       { text: "—", tone: "default" },
     );
   });
@@ -51,8 +51,8 @@ describe("migrationRowValue 四组夹具（ic-22）", () => {
   it("done → 已完成（tone=success）", () => {
     assert.deepEqual(
       migrationRowValue(
-        stats({ messageCompaction: { done: true, pendingCount: 0 } }),
-        messageCompactionRow,
+        stats({ messageDecompress: { done: true, pendingCount: 0 } }),
+        messageDecompressRow,
       ),
       { text: "已完成", tone: "success" },
     );
@@ -74,8 +74,8 @@ describe("migrationRowValue 四组夹具（ic-22）", () => {
   it("!done → 进行中（剩余 N 条）（tone=default）", () => {
     assert.deepEqual(
       migrationRowValue(
-        stats({ messageCompaction: { done: false, pendingCount: 5 } }),
-        messageCompactionRow,
+        stats({ messageDecompress: { done: false, pendingCount: 5 } }),
+        messageDecompressRow,
       ),
       { text: "进行中（剩余 5 条）", tone: "default" },
     );

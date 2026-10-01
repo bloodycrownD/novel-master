@@ -9,6 +9,7 @@ import type { ToolRegistry } from "@/domain/tool/logic/tool-registry.js";
 import type { BuiltinToolContext } from "@/domain/tool/builtin/builtin-tool-context.js";
 import type { ChatMessage } from "@/domain/chat/model/message.js";
 import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
+import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revision.port.js";
 import type { ProviderRepository } from "@/domain/provider/repositories/provider.port.js";
 import type { SavedModelRepository } from "@/domain/provider/repositories/saved-model.port.js";
 import type { ModelRequestService } from "../provider/model-request.port.js";
@@ -54,7 +55,15 @@ export interface CreateAgentRunnerDeps {
   readonly messages?: MessageService;
   /** 压缩执行所需的 transcript effects；对话轨由 assembleAgentRunnerDeps 注入。 */
   readonly messageTranscriptEffects?: MessageTranscriptEffectsService;
-  readonly listAllSessionMessages?: () => Promise<readonly ChatMessage[]>;
+  /**
+   * 每步模型请求的 tool_use 查找源（Gemini `functionResponse.name` 解析 +
+   * hidden tool_use 的合成 model turn）。**可见-only**：出站历史先经
+   * `normalizeOrphanToolResultsForLlm`（按可见历史配对，hidden 的 tool_use
+   * 不算配对），残留 tool_result 的 tool_use 必在可见集内——所以可见集
+   * 解析力等价于全量，却省掉 hidden 行的逐条解压（全量读 212ms → 14ms）。
+   * 懒求值：本 step 的可见窗口落定后再取（含本 step 压缩产物）。
+   */
+  readonly listVisibleSessionMessages?: () => Promise<readonly ChatMessage[]>;
   /** 按 sessionId 累积 in-flight 流式 partial，供子会话首次进入查询。 */
   readonly streamRegistry?: AgentStreamRegistry;
   /** 思考上下文偏好窄切片（每 run 一次快照；未注入时等同默认开）。 */
@@ -62,6 +71,13 @@ export interface CreateAgentRunnerDeps {
     PersistentPreferences,
     "getThinkingContextEnabled"
   >;
+  /**
+   * read 引用块 hydrate（read-tool-result-ref Step 6 生产装配）所需的
+   * revision 仓库：透传给每步 `prepareUserMessagesForPrompt` 的 runtime。
+   * 未注入且可见消息含 `contentRef` 块时 prepare 会 fail-fast（装配缺口
+   * 不静默降级——空 tool_result 发给 LLM 正是引用化要杜绝的错文形态）。
+   */
+  readonly revisionRepo?: VfsRevisionRepository;
 }
 
 /** Creates an agent runner with injected dependencies. */

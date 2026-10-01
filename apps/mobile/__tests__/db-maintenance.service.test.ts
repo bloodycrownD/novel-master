@@ -25,7 +25,7 @@ const mockGetStorageStats = jest.fn();
 const mockRunMaintenance = jest.fn();
 const mockCreateService = jest.fn();
 const mockGetBlobBinaryStatus = jest.fn();
-const mockGetCompactionStatus = jest.fn();
+const mockGetDecompressStatus = jest.fn();
 
 const liveConn = {tag: 'live'};
 
@@ -33,8 +33,8 @@ jest.mock('@novel-master/core', () => ({
   createDbMaintenanceService: (...args: unknown[]) =>
     mockCreateService(...args),
   getBlobBinaryStatus: (...args: unknown[]) => mockGetBlobBinaryStatus(...args),
-  getMessageCompactionStatus: (...args: unknown[]) =>
-    mockGetCompactionStatus(...args),
+  getMessageDecompressStatus: (...args: unknown[]) =>
+    mockGetDecompressStatus(...args),
 }));
 
 jest.mock('@/db/db-file-path', () => ({
@@ -91,7 +91,7 @@ describe('db-maintenance.service', () => {
     mockGetStorageStats.mockReset().mockResolvedValue(STORAGE_STATS);
     mockRunMaintenance.mockReset().mockResolvedValue(MAINTENANCE_RESULT);
     mockGetBlobBinaryStatus.mockReset().mockResolvedValue(BLOB_BINARY_STATUS);
-    mockGetCompactionStatus
+    mockGetDecompressStatus
       .mockReset()
       .mockResolvedValue({done: true, pendingCount: 0});
     mockCreateService.mockReset().mockReturnValue({
@@ -125,7 +125,7 @@ describe('db-maintenance.service', () => {
 
   it('T-DMM1: getDatabaseMaintenanceStats 正常路径返回文件体积、可回收量与 blob 归一状态', async () => {
     mockStat.mockResolvedValue({size: 1048576});
-    mockGetCompactionStatus.mockResolvedValue({done: false, pendingCount: 7});
+    mockGetDecompressStatus.mockResolvedValue({done: false, pendingCount: 7});
 
     const stats = await getDatabaseMaintenanceStats(runtime);
 
@@ -134,7 +134,7 @@ describe('db-maintenance.service', () => {
     expect(mockGetStorageStats).toHaveBeenCalledTimes(1);
     expect(mockGetBlobBinaryStatus).toHaveBeenCalledTimes(1);
     expect(mockGetBlobBinaryStatus).toHaveBeenCalledWith(liveConn);
-    expect(mockGetCompactionStatus).toHaveBeenCalledWith(liveConn);
+    expect(mockGetDecompressStatus).toHaveBeenCalledWith(liveConn);
     expect(stats).toEqual({
       fileBytes: 1048576,
       reclaimableBytes: 40960,
@@ -142,7 +142,7 @@ describe('db-maintenance.service', () => {
         {table: 'vfsContent', done: false, pendingCount: 1100, failedCount: 0},
         {table: 'fileCache', done: true, pendingCount: 0, failedCount: 0},
       ],
-      messageCompaction: {done: false, pendingCount: 7},
+      messageDecompress: {done: false, pendingCount: 7},
     });
   });
 
@@ -182,20 +182,20 @@ describe('db-maintenance.service', () => {
     expect(stats.fileBytes).toEqual(1024);
     expect(stats.reclaimableBytes).toEqual(40960);
     expect(stats.blobBinary).toEqual([]);
-    expect(mockGetCompactionStatus).toHaveBeenCalledWith(liveConn);
+    expect(mockGetDecompressStatus).toHaveBeenCalledWith(liveConn);
   });
 
-  it('ic-03: getMessageCompactionStatus 抛错时整体不 reject，messageCompaction 降级为 null 且其余指标有值', async () => {
+  it('ic-03: getMessageDecompressStatus 抛错时整体不 reject，messageDecompress 降级为 null 且其余指标有值', async () => {
     // 与 cr-04 对称：压缩状态采样（第四个失败源）独立兜底，不传染
-    mockGetCompactionStatus.mockRejectedValue(
-      new Error('message compaction status boom'),
+    mockGetDecompressStatus.mockRejectedValue(
+      new Error('message decompress status boom'),
     );
 
     const stats = await getDatabaseMaintenanceStats(runtime);
 
     expect(stats.fileBytes).toEqual(1024);
     expect(stats.reclaimableBytes).toEqual(40960);
-    expect(stats.messageCompaction).toBeNull();
+    expect(stats.messageDecompress).toBeNull();
     expect(stats.blobBinary).toEqual([
       {table: 'vfsContent', done: false, pendingCount: 1100, failedCount: 0},
       {table: 'fileCache', done: true, pendingCount: 0, failedCount: 0},

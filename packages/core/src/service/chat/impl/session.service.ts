@@ -22,6 +22,11 @@ import {
   deleteVfsPrefix,
 } from "@/domain/vfs/logic/vfs-tree-copy.js";
 import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
+import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
+import {
+  aggregateReadRefs,
+  adjustReadRefCount,
+} from "@/domain/vfs/logic/revision-ref-count.js";
 import { DefaultTemplatePullService } from "@/service/template/impl/template-pull.service.js";
 import { chatInvalidArgument, chatNotFound } from "@/errors/chat-errors.js";
 import { decode } from "@/infra/serialization/decode.js";
@@ -214,6 +219,15 @@ export class DefaultSessionService implements SessionService {
     for (const child of children) {
       await this.deleteSessionTree(tx, child);
     }
+    // read 引用 −1（被删会话全部消息，消息内去重、消息间累加）：fork/copy 出的
+    // **其它**会话的引用不受影响——ref_count 不归零的 revision/blob 自动留存。
+    await adjustReadRefCount(
+      new SqliteVfsRevisionRepository(tx),
+      aggregateReadRefs(
+        (await r.messages.listBySession(session.id)).map((m) => m.content)
+      ),
+      -1
+    );
     await r.messages.deleteBySession(session.id);
     await deleteSessionFsData(tx, session.id, session.projectId);
     await createSessionKkvService(tx).clearSession(session.id);
@@ -380,6 +394,13 @@ export class DefaultSessionService implements SessionService {
         return { ...msg, id, sessionId: copy.id };
       });
       await r.messages.batchInsert(copyMessages);
+      // copy 消息浅拷贝原样保留 contentRef 的 (entryId, version)（指向源会话的
+      // revision）——按全局键对**源** revision +1，与 fork 同款换算。
+      await adjustReadRefCount(
+        new SqliteVfsRevisionRepository(tx),
+        aggregateReadRefs(messages.map((m) => m.content)),
+        +1
+      );
       await seedForkCopyParity(tx, {
         projectId: source.projectId,
         sourceSessionId: source.id,

@@ -24,16 +24,18 @@
 import { z } from "zod";
 
 import type { EffectiveSkill } from "@/domain/skills/logic/effective-skills.js";
-import type { SkillService } from "@/service/skills/skills.port.js";
+import type {
+  SkillFileContent,
+  SkillService,
+} from "@/service/skills/skills.port.js";
 import { ToolError } from "@/errors/tool-errors.js";
 import type { Tool } from "../model/tool.js";
 import type { BuiltinToolContext } from "./builtin-tool-context.js";
+import { TOOL_OUTPUT_MAX_LINES } from "../logic/tool-output-limits.js";
 import {
-  capUtf8Bytes,
-  sliceLinesFromOffset,
-  TOOL_OUTPUT_MAX_LINES,
-  truncateLine,
-} from "../logic/tool-output-limits.js";
+  deriveSkillLoadTruncation,
+  deriveSkillReadTruncation,
+} from "../logic/skill-read-truncation.js";
 
 /** 工具注册名（catalog / policy / 卡片解析四处同名字符串）。 */
 export const SKILL_TOOL_NAME = "skill";
@@ -74,6 +76,16 @@ export interface SkillToolLoadOutput {
   readonly truncated: boolean;
   /** 本请求提示词已含该技能全文（$ 引用或先前 load）→ content 为短提示。 */
   readonly alreadyReferenced?: boolean;
+  /**
+   * 以下三字段（skill-result-ref）与 {@link ReadToolOutput} 同语义：只在
+   * ctx 注入了 `adjustRevisionRefCount` 且 head 定位三件套齐全时携带
+   * ——「输出带 entryId ⟺ 同步 +1 已发生」，buildToolResultBlock 据此产
+   * contentRef 引用块。alreadyReferenced 形态是常量 tip（无正文可引），
+   * 天然不产引用块。
+   */
+  readonly entryId?: number;
+  readonly contentHash?: string;
+  readonly totalBytes?: number;
 }
 
 /** read 输出（`domain` 是生效副本解析后的实际命中域）。 */
@@ -90,6 +102,10 @@ export interface SkillToolReadOutput {
   readonly returnedLines: number;
   readonly truncated: boolean;
   readonly nextOffset?: number;
+  /** 同 {@link SkillToolLoadOutput.entryId}：head 定位三件套（引用化锚）。 */
+  readonly entryId?: number;
+  readonly contentHash?: string;
+  readonly totalBytes?: number;
 }
 
 /** write / edit / list 输出（write/edit 带定位三元组供摘要与 meta 透传）。 */
@@ -216,6 +232,53 @@ function formatEffectiveSkills(effective: readonly EffectiveSkill[]): string {
 const SKILL_LOAD_SEEN_TIP =
   "该技能 SKILL.md 全文已在本请求提示词中（$ 引用或先前 load），无需重复装载；附属文件可用 read 按需读取。";
 
+/** head 定位三件套齐全时可透传进工具输出的引用化锚（与 vfs-tools 同形态）。 */
+interface SkillRefAnchor {
+  readonly entryId: number;
+  readonly contentHash: string;
+  readonly totalBytes?: number;
+}
+
+/**
+ * skill-result-ref：read / load 引用 = revision.ref_count 的第三类持有者。
+ *
+ * 技能文件与普通文件落同一张 `vfs_revision` 版本链（meta 域），故保活
+ * 机制与 vfs read 完全同款：工具返回前同步 +1（先于任何消息落库）堵
+ * sweep 窗口，判空口径逐字照抄 `vfs-tools` read 分支——注入
+ * `adjustRevisionRefCount` 且 head 定位三件套齐全才 +1 并把三件套放进
+ * 输出，「输出带 entryId ⟺ +1 已发生」，`buildToolResultBlock` 据此产
+ * contentRef，杜绝「有引用无计数」的悬空。能力未注入时回落 legacy 全文
+ * 形态（不 +1、不带 entryId）。
+ *
+ * +1 抛 NOT_FOUND（revision 行缺失）即本次调用失败——存在性校验语义。
+ *
+ * alreadyReferenced 形态**不调本函数**（wire 是常量 tip、无正文可引，
+ * 块体极小，引用化无收益）。
+ */
+async function anchorSkillResultRef(
+  ctx: BuiltinToolContext,
+  file: SkillFileContent
+): Promise<SkillRefAnchor | undefined> {
+  const hasRefAnchor =
+    file.entryId != null &&
+    typeof file.contentHash === "string" &&
+    file.contentHash !== "";
+  const refAnchored =
+    hasRefAnchor && file.totalBytes != null && ctx.adjustRevisionRefCount != null;
+  if (!refAnchored) {
+    return undefined;
+  }
+  await ctx.adjustRevisionRefCount(
+    [{ entryId: file.entryId!, version: file.version }],
+    +1
+  );
+  return {
+    entryId: file.entryId!,
+    contentHash: file.contentHash as string,
+    totalBytes: file.totalBytes as number,
+  };
+}
+
 /**
  * 静态 `skill` 工具实例。
  *
@@ -297,6 +360,13 @@ action 说明：
       files: z.array(z.string()),
       truncated: z.boolean(),
       alreadyReferenced: z.boolean().optional(),
+      // skill-result-ref：head 定位三件套（引用化锚）。**必须在此声明**——
+      // ToolRunner 的 outputSchema safeParse 对未声明键静默 strip，不声明
+      // 则产块门拿不到 entryId → 静默回落 legacy 全文、整块收益归零且无报错
+      // （与 vfs-tools read 的 outputSchema 先例同款）。
+      entryId: z.number().int().optional(),
+      contentHash: z.string().optional(),
+      totalBytes: z.number().int().optional(),
     }),
     z.object({
       action: z.literal("read"),
@@ -311,6 +381,9 @@ action 说明：
       returnedLines: z.number().int(),
       truncated: z.boolean(),
       nextOffset: z.number().int().optional(),
+      entryId: z.number().int().optional(),
+      contentHash: z.string().optional(),
+      totalBytes: z.number().int().optional(),
     }),
     z.object({
       action: z.literal("write"),
@@ -377,12 +450,9 @@ action 说明：
           };
         }
         // 全文按输出上限截断（load 无分页参数；长文续读走 read 的 offset/limit）
-        const lines = result.content.split("\n");
-        const { slice } = sliceLinesFromOffset(lines, 1, TOOL_OUTPUT_MAX_LINES);
-        const truncatedLines = slice.map((line) => truncateLine(line).line);
-        const byteCapped = capUtf8Bytes(truncatedLines);
-        const truncated =
-          byteCapped.truncated || byteCapped.lines.length < lines.length;
+        // —— 推导单源在 `domain/tool/logic/skill-read-truncation.ts`
+        // （hydrate 重放共用同一份，wire 逐字节等值的承重约束）。
+        const { content, truncated } = deriveSkillLoadTruncation(result.content);
         // 附属文件清单（不含 SKILL.md）：按实际命中域列目录文件
         const list = await service.listSkills(
           result.domain === "global"
@@ -393,15 +463,19 @@ action 说明：
           list
             .find((entry) => entry.name === name)
             ?.files.filter((f) => f !== "SKILL.md") ?? [];
+        // +1 保活与 vfs read 同款（alreadyReferenced 分支在前面已 return，
+        // 不 +1、不产 ref——wire 是常量 tip、块体极小，无引用化收益）。
+        const refAnchor = await anchorSkillResultRef(ctx, result);
         return {
           action: "load",
           domain: result.domain,
           name,
           path: result.path,
-          content: byteCapped.lines.join("\n"),
+          content,
           version: result.version,
           files,
           truncated,
+          ...(refAnchor != null ? { ...refAnchor } : {}),
         };
       }
       case "read": {
@@ -414,8 +488,18 @@ action 说明：
         );
         const offset = input.offset ?? 1;
         const limit = input.limit ?? TOOL_OUTPUT_MAX_LINES;
-        const lines = result.content.split("\n");
-        const totalLines = lines.length;
+        // 分页截断推导单源（与 hydrate 重放共用，见
+        // `domain/tool/logic/skill-read-truncation.ts`）。越界 offset 由
+        // 推导函数内部短路（跳过整套截断推导、只回 totalLines 供报错文案），
+        // 故这里直接在推导后判越界——判定收在单源函数内，调用方不重复推导，
+        // 报错文案与「推导前先判定」逐字一致。
+        const {
+          content,
+          returnedLines,
+          totalLines,
+          truncated,
+          nextOffset,
+        } = deriveSkillReadTruncation(result.content, offset, limit);
         if (totalLines > 0 && offset > totalLines) {
           throw new ToolError(
             "INVALID_ARGUMENT",
@@ -423,27 +507,9 @@ action 说明：
             { toolName: SKILL_TOOL_NAME }
           );
         }
-        const { slice, nextOffset: lineNextOffset } = sliceLinesFromOffset(
-          lines,
-          offset,
-          limit
-        );
-        const truncatedLines = slice.map((line) => truncateLine(line).line);
-        const byteCapped = capUtf8Bytes(truncatedLines);
-        const content = byteCapped.lines.join("\n");
-        const returnedLines = byteCapped.lines.length;
-        const truncated =
-          byteCapped.truncated ||
-          returnedLines < slice.length ||
-          (lineNextOffset != null && returnedLines >= limit);
-        let nextOffset: number | undefined;
-        if (truncated) {
-          if (byteCapped.truncated && returnedLines > 0) {
-            nextOffset = offset + returnedLines;
-          } else if (lineNextOffset != null) {
-            nextOffset = lineNextOffset;
-          }
-        }
+        // +1 保活（与 vfs read 同款）：工具返回前同步占位，输出带三件套
+        // ⟺ +1 已发生，产块门据此产 contentRef 引用块。
+        const refAnchor = await anchorSkillResultRef(ctx, result);
         return {
           action: "read",
           domain: result.domain,
@@ -457,6 +523,7 @@ action 说明：
           returnedLines,
           truncated,
           ...(nextOffset != null ? { nextOffset } : {}),
+          ...(refAnchor != null ? { ...refAnchor } : {}),
         };
       }
       case "write": {

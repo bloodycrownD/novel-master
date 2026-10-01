@@ -680,6 +680,48 @@ export type ContentBlockDto =
       readonly ok?: boolean;
       readonly summary?: string;
       /**
+       * 工具结果引用：镜像 core 的 `ReadResultRef | SkillResultRef`。
+       * 存在时 content 为占位空串，wire 侧按 (entryId, version) hydrate
+       * 重放对应冻结 formatter 还原全文；legacy 行（无 contentRef）不受影响。
+       *
+       * 判别口径与 core 一致：**`kind` 缺省即 read**（存量行无 kind 键），
+       * skill 引用必带 `kind: "skill"`。渲染层分文案时按此窄化。
+       */
+      readonly contentRef?:
+        | {
+            readonly kind?: 'read';
+            readonly path: string;
+            readonly entryId: number;
+            readonly version: number;
+            readonly contentHash: string;
+            readonly totalBytes: number;
+            readonly offset: number;
+            readonly limit?: number;
+            readonly returnedLines: number;
+            readonly totalLines: number;
+            readonly truncated: boolean;
+            readonly lastLineTruncated?: boolean;
+            readonly nextOffset?: number;
+          }
+        | {
+            readonly kind: 'skill';
+            readonly action: 'load' | 'read';
+            readonly domain: 'global' | 'project';
+            readonly name: string;
+            readonly path: string;
+            readonly entryId: number;
+            readonly version: number;
+            readonly contentHash: string;
+            readonly totalBytes: number;
+            readonly offset: number;
+            readonly limit?: number;
+            readonly returnedLines: number;
+            readonly totalLines: number;
+            readonly truncated: boolean;
+            readonly nextOffset?: number;
+            readonly files: string[];
+          };
+      /**
        * UI-only 旁路字段：task 工具携带 `subagentSessionId` 供卡片跳转子会话；
        * skill 携带 `skillRef`（read 由工具输出解析透传，write/edit 由输入侧解析）。
        */
@@ -1614,14 +1656,14 @@ export type BlobBinaryStatusDto = {
 };
 
 /**
- * 消息正文压缩搬运状态：两态 + 未取到（null）三态口径——进行中剩余
- * N 条 / 已完成为两态本体；`DbStatsResult.messageCompaction` 上的 `null`
+ * 消息正文解压搬运状态：两态 + 未取到（null）三态口径——进行中剩余
+ * N 条 / 已完成为两态本体；`DbStatsResult.messageDecompress` 上的 `null`
  * = 未取到（采样失败），renderer 显示占位 '—'，与 `blobBinary` 空表同口径。
  */
-export type MessageCompactionStatusDto = {
-  /** true = 已完成（KKV 标记已置或谓词空）。 */
+export type MessageDecompressStatusDto = {
+  /** true = 已完成：KKV 标记已置位，或谓词计数为 0；本采样不做入口自愈探测（自愈只在搬运入口）。 */
   readonly done: boolean;
-  /** 未压缩行计数（进行中态的「剩余 N 条」）。 */
+  /** 剩余压缩行计数（进行中态的「剩余 N 条」）。 */
   readonly pendingCount: number;
 };
 
@@ -1632,10 +1674,11 @@ export type DbStatsResult = {
   /** 存量 blob 形态归一状态（存储页状态行数据源）。 */
   readonly blobBinary: BlobBinaryStatusDto;
   /**
-   * 消息正文压缩搬运状态：两态 + 未取到（null）三态；null = 未取到
-   * （采样失败），renderer 显示 '—'；与 blobBinary 空表同口径。
+   * 消息正文解压搬运状态（存量压缩行 → 明文）：两态 + 未取到（null）
+   * 三态；null = 未取到（采样失败），renderer 显示 '—'；与 blobBinary
+   * 空表同口径。
    */
-  readonly messageCompaction: MessageCompactionStatusDto | null;
+  readonly messageDecompress: MessageDecompressStatusDto | null;
 };
 
 /** 数据清理（GC + checkpoint + VACUUM）前后库文件体积。 */

@@ -1,9 +1,21 @@
 /**
- * 数据库维护（数据清理）服务：存储统计 + 缓存 GC/checkpoint/VACUUM 维护链路。
+ * 数据库维护（数据清理）服务：存储统计 + 缓存 GC/checkpoint/VACUUM 维护链路，
+ * 外加启动期维护欠账的 pending 补跑公共逻辑。
+ *
+ * **为什么 pending 补跑落在本模块**（message-plaintext 迭代）：它的唯一定义
+ * 原先内联在正向压缩任务 `message-content-compaction.ts` 里，而该文件已随
+ * Step 3 整文件删除——留着会留下悬空的历史库维护欠账（旧
+ * `nm-message-content/startupMaintenancePending` 再无人消费、页空间永不归还）。
+ * 故把这段逻辑提到本公共模块并参数化 module/key，两代任务共用同一实现：
+ * - blob 归一任务（`nm-blob-binary`）——
+ *   `runDatabaseMaintenance` 内直查直删，见该函数注释；
+ * - 旧/新 message 任务（`nm-message-content`）——反向搬运任务入口消费
+ *   正向任务遗留的 pending 标记。
  *
  * @module infra/db-maintenance/impl/db-maintenance.service
  */
 
+import { SqliteKkvRepository } from "@/domain/kkv/repositories/impl/sqlite-kkv.repository.js";
 import { runDeferredFileCacheGc } from "@/domain/session-kkv/logic/deferred-file-cache-gc.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import type {
@@ -139,4 +151,96 @@ export async function runStartupMaintenanceOnce(
   }
   startupMaintenanceRan = true;
   return await createDbMaintenanceService(conn).runDatabaseMaintenance();
+}
+
+/**
+ * 安全执行 app 层维护回调：回调异常只 warn，不得带崩 core 收尾链路。
+ *
+ * @param logTag 日志前缀（`[message-content-decompress]` 之类），让告警可
+ *   溯源到具体任务。
+ */
+export function callMaintenanceHook(
+  hook: (() => void) | undefined,
+  label: string,
+  logTag: string
+): void {
+  if (hook == null) {
+    return;
+  }
+  try {
+    hook();
+  } catch (error) {
+    console.warn(
+      `[${logTag}] ${label} 回调抛错，已忽略：${
+        error instanceof Error ? error.message : String(error)
+      }`
+    );
+  }
+}
+
+/** {@link runPendingStartupMaintenance} 入参（module/key 参数化，两代任务共用）。 */
+export interface PendingStartupMaintenanceArgs {
+  /** pending 标记所在的 KKV module。 */
+  readonly kkvModule: string;
+  /** pending 标记的 key（`startupMaintenancePending`）。 */
+  readonly pendingKey: string;
+  /** 任务日志标签（告警溯源用）。 */
+  readonly logTag: string;
+  /** 进入维护段前的回调（app 层置 busy 信号用）。 */
+  readonly beforeMaintenance?: () => void;
+  /** 维护段结束后的回调（finally 语义复位 busy 信号用）。 */
+  readonly afterMaintenance?: () => void;
+}
+
+/**
+ * 入口的 pending 补跑（历史库维护欠账的一次性清偿）。
+ *
+ * 库里存有 `startupMaintenancePending` 标记 = 上次收尾维护链路失败过
+ * （页空间尚未回收）。此时无视「本轮无进展」——包括完成标记已置位的
+ * 稳态短路路径——强制补跑一次维护；清标记以 {@link
+ * runStartupMaintenanceOnce} 返回非 null 为条件（本进程真跑了维护且
+ * 未抛错）。返回 null 说明本进程已跑过维护（进程级去重短路），无法
+ * 确认那次成功与否，保守保留标记待下次冷启动补跑——这是正常场景
+ * （多补一次 VACUUM 无害，漏补则页空间永不回收），warn 说明即可。
+ *
+ * 必须用去重版而非手动 `runDatabaseMaintenance`：后者不受进程级去重
+ * 约束，与 blob 归一任务叠加会跑出双 VACUUM（76MB 量级库的同步阻塞
+ * 翻倍，正是 ic-01 要收口的事故形态）。
+ */
+export async function runPendingStartupMaintenance(
+  conn: TdbcConnection,
+  args: PendingStartupMaintenanceArgs
+): Promise<void> {
+  const kkv = new SqliteKkvRepository(conn);
+  const entry = await kkv.get(args.kkvModule, args.pendingKey);
+  if (entry == null) {
+    return;
+  }
+  callMaintenanceHook(args.beforeMaintenance, "beforeMaintenance", args.logTag);
+  try {
+    const result = await runStartupMaintenanceOnce(conn);
+    if (result !== null) {
+      try {
+        await kkv.delete(args.kkvModule, args.pendingKey);
+      } catch (error) {
+        console.warn(
+          `[${args.logTag}] 清除 ${args.pendingKey} 标记失败（下次启动会多补跑一次维护，无害）：${
+            error instanceof Error ? error.message : String(error)
+          }`
+        );
+      }
+    } else {
+      console.warn(
+        `[${args.logTag}] ${args.pendingKey} 补跑被进程级去重短路（本进程已跑过维护链路），保留标记待下次冷启动补跑——正常场景`
+      );
+    }
+  } catch (error) {
+    console.warn(
+      `[${args.logTag}] ${args.pendingKey} 补跑维护链路失败，保留标记待下次启动重试：${
+        error instanceof Error ? error.message : String(error)
+      }`
+    );
+  } finally {
+    callMaintenanceHook(args.afterMaintenance, "afterMaintenance", args.logTag);
+  }
 }

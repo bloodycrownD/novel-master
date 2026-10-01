@@ -25,7 +25,7 @@ import { setUserMessageAppendedForwardTarget } from "./ipc/forward-user-message-
 import { registerIpcHandlers } from "./ipc/register-handlers.js";
 import { getDesktopRuntime } from "./runtime/desktop-runtime-singleton.js";
 import { scheduleDesktopBlobBinaryNormalization } from "./services/blob-binary-normalization.service.js";
-import { scheduleDesktopMessageContentCompaction } from "./services/message-content-compaction.service.js";
+import { scheduleDesktopMessageContentDecompress } from "./services/message-content-decompression.service.js";
 import {
   configureWindowChrome,
   installApplicationMenu,
@@ -172,9 +172,9 @@ async function bootstrapMainServices(): Promise<void> {
     runtime.eventBus,
   );
   detachAgentActivityForwarder = attachAgentActivityForwarder();
-  // 消息正文压缩搬运：main 就绪后后台预算制调度（fire-and-forget，
-  // 幂等——已完成时零成本，Agent/云同步/清理 busy 自动让路）。
-  scheduleDesktopMessageContentCompaction();
+  // 消息正文解压搬运（存量压缩行 → 明文）：main 就绪后后台预算制调度
+  //（fire-and-forget，幂等——已完成时零成本，Agent/云同步/清理 busy 自动让路）。
+  scheduleDesktopMessageContentDecompress();
   // 存量 blob 形态归一（base64 文本 → 二进制 BLOB）：后台任务自身带
   // 守卫与失败兜底，不参与启动成败判定，故 fire-and-forget 不 await。
   scheduleDesktopBlobBinaryNormalization();

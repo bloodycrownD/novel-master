@@ -2,8 +2,10 @@
  * 进程内解压产物缓存（统一层）单测：LRU 顺序、双上界逐出、超预算单条
  * 不收录、计数与清空口径。
  *
- * 与三个读链条目的分工：本文件只测池子本身的行为（纯内存，不落库）；
- * 各读链的接线与失效在 vfs / session-kkv / chat 三处的集成用例里测。
+ * 与读链条目的分工：本文件只测池子本身的行为（纯内存，不落库）；各读链的
+ * 接线在 vfs / session-kkv 两处的集成用例里测。chat_message 正文侧的
+ * 消息池已随全库明文化删除（该链的用例迁到
+ * test/chat/message-plaintext-write.test.ts）。
  *
  * @module test/infra/content-cache/decoded-content-cache
  */
@@ -14,11 +16,8 @@ import {
   DecodedContentPool,
   clearDecodedContentCaches,
   decodedContentCacheStats,
-  forgetDecodedMessageContent,
   lookupDecodedContentBody,
-  lookupDecodedMessageContent,
   rememberDecodedContentBody,
-  rememberDecodedMessageContent,
 } from "@/infra/content-cache/logic/decoded-content-cache.js";
 
 describe("DecodedContentPool", () => {
@@ -85,8 +84,9 @@ describe("DecodedContentPool", () => {
     pool.set("k", "12345");
     assert.equal(pool.get("k"), "12345");
 
-    // 同键写入超预算值：该键的旧值必须消失——消息池里「同键换了值」只可能
-    // 是 forget 漏了，此时留着旧值就是返回陈旧正文（宁可退化成一次 miss）。
+    // 同键写入超预算值：该键的旧值必须消失——同键换了值只可能是调用方
+    // 拿错了 contentHash（喂错键等于投毒），此时留着旧值就是返回陈旧正文
+    // （宁可退化成一次 miss，让调用方下次重新解压）。
     pool.set("k", "x".repeat(11));
     assert.equal(pool.get("k"), null);
     assert.equal(pool.stats().chars, 0, "旧值的 char 记账一并减掉");
@@ -131,31 +131,14 @@ describe("DecodedContentPool", () => {
 });
 
 describe("统一层单例池", () => {
-  it("内容正文池与消息正文池互不串键；forget 只作用于消息池", () => {
+  it("内容正文池：存取往返命中，清空后归零", () => {
     clearDecodedContentCaches();
     rememberDecodedContentBody("hash-1", "文件正文");
-    rememberDecodedMessageContent("msg-1", '{"blocks":[]}');
 
     assert.equal(lookupDecodedContentBody("hash-1"), "文件正文");
-    assert.equal(lookupDecodedMessageContent("msg-1"), '{"blocks":[]}');
-
-    forgetDecodedMessageContent("msg-1");
-    assert.equal(lookupDecodedMessageContent("msg-1"), null);
-    assert.equal(
-      lookupDecodedContentBody("hash-1"),
-      "文件正文",
-      "forget 消息不影响内容池"
-    );
-
-    // 同名字符串在两个池里各自独立（键空间不共享）
-    rememberDecodedContentBody("shared-key", "内容池的值");
-    rememberDecodedMessageContent("shared-key", "消息池的值");
-    assert.equal(lookupDecodedContentBody("shared-key"), "内容池的值");
-    assert.equal(lookupDecodedMessageContent("shared-key"), "消息池的值");
 
     clearDecodedContentCaches();
     assert.equal(lookupDecodedContentBody("hash-1"), null);
-    assert.equal(lookupDecodedMessageContent("shared-key"), null);
   });
 
   it("空串是合法值：存取往返仍是「命中」而不是 miss", () => {

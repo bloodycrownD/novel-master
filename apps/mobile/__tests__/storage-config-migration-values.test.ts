@@ -7,17 +7,17 @@
  * 未取到 → '—'；done → 已完成；!done → 进行中（剩余 N 条）；
  * done && failedCount > 0 → 已完成（N 条需人工处理）。
  * 第三组「需人工处理」只在 blobBinaryValue 上成立（cr-06：core
- * BlobBinaryTableStatus 携带 failedCount；MessageCompactionStatus 无此
- * 字段，压缩行无第三态）。
+ * BlobBinaryTableStatus 携带 failedCount；MessageDecompressStatus 无此
+ * 字段，迁移期坏行不改变状态行的两态形态）。
  */
 import {
   blobBinaryValue,
-  messageCompactionValue,
+  messageDecompressValue,
 } from '@/screens/stack/storage-config-migration-values';
 
-describe('messageCompactionValue 夹具', () => {
+describe('messageDecompressValue 夹具', () => {
   it('null（未取到）→ 占位 ‘—’，默认色', () => {
-    expect(messageCompactionValue(null)).toEqual({
+    expect(messageDecompressValue(null)).toEqual({
       value: '—',
       tone: 'default',
     });
@@ -25,13 +25,13 @@ describe('messageCompactionValue 夹具', () => {
 
   it('done → 已完成，success 色', () => {
     expect(
-      messageCompactionValue({done: true, pendingCount: 0}),
+      messageDecompressValue({done: true, pendingCount: 0}),
     ).toEqual({value: '已完成', tone: 'success'});
   });
 
   it('!done → 进行中（剩余 N 条），默认色', () => {
     expect(
-      messageCompactionValue({done: false, pendingCount: 7}),
+      messageDecompressValue({done: false, pendingCount: 7}),
     ).toEqual({value: '进行中（剩余 7 条）', tone: 'default'});
   });
 });

@@ -105,6 +105,7 @@ export type {
   ImageSource,
   ToolUseBlock,
   ToolResultBlock,
+  ReadResultRef,
   ThinkingBlock,
   RedactedThinkingBlock,
 } from "../domain/chat/model/content-block.js";

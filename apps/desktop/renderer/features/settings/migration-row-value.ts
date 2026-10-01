@@ -1,10 +1,10 @@
 import type { DbStatsResult } from "@shared/ipc-types";
 
 /**
- * 存量数据迁移卡片的三行进度（用户拍板 2026-09-28）：消息正文压缩 +
- * 两张 blob 表去 base64，只读状态行（非菜单项）。消息正文「去 base64」
- * 不设状态行——发版形态下压缩搬运直接写二进制，不存在用户可见的中间
- * 态，仅开发机历史形态由归一任务静默收敛。
+ * 存量数据迁移卡片的三行进度（用户拍板 2026-09-28）：消息正文解压回
+ * 明文 + 两张 blob 表去 base64，只读状态行（非菜单项）。消息正文「去
+ * base64」不设状态行——发版形态下解压搬运直接写明文，不存在用户可见的
+ * 中间态，仅开发机历史形态由归一任务静默收敛。
  *
  * 抽成同目录纯 ts 模块的原因（ic-22）：渲染取值要被测试直接 import 喂
  * 夹具断言四组分支（null→'—' / done→已完成 / 进行中 / 第三态），留在
@@ -12,7 +12,7 @@ import type { DbStatsResult } from "@shared/ipc-types";
  * 测试进程。
  */
 export const MIGRATION_ROWS = [
-  { kind: "messageCompaction", label: "消息正文压缩" },
+  { kind: "messageDecompress", label: "消息正文明文化" },
   { kind: "vfsContent", label: "版本内容去 base64" },
   { kind: "fileCache", label: "文件缓存去 base64" },
 ] as const;
@@ -35,8 +35,8 @@ export function migrationRowValue(
   dbStats: DbStatsResult | null,
   row: (typeof MIGRATION_ROWS)[number],
 ): MigrationRowValue {
-  if (row.kind === "messageCompaction") {
-    const status = dbStats?.messageCompaction;
+  if (row.kind === "messageDecompress") {
+    const status = dbStats?.messageDecompress;
     if (status == null) {
       return { text: "—", tone: "default" };
     }

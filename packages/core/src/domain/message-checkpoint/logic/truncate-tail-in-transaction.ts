@@ -14,6 +14,10 @@ import type { SessionKkvRepository } from "@/domain/session-kkv/repositories/ses
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revision.port.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
+import {
+  aggregateReadRefs,
+  adjustReadRefCount,
+} from "@/domain/vfs/logic/revision-ref-count.js";
 import { sweepSessionRevisions } from "./revision-gc.js";
 
 /** tail 截断事务参数。 */
@@ -49,7 +53,9 @@ export type TruncateTailDeps = {
 /**
  * 在已有事务内截断 tail 消息并清理 checkpoint。
  *
- * 1. 子查询列出 seq > afterSeq 的 tail → deleteCheckpointsForMessages（内含 −ref）
+ * 1. 子查询列出 seq > afterSeq 的 tail → read 引用批量 −1（**必须先于 sweep**，
+ *    漏掉会让被引用 revision 被 GC——read 引用是 ref_count 的第三类持有者）
+ *    → deleteCheckpointsForMessages（内含 −ref）
  * 2. messages.deleteAfterSeq(sessionId, afterSeq)
  * 3. 若 sweepRevisions → sweepSessionRevisions（scoped 打扫 + 全局孤儿兜底；
  *    调用方传 deferGlobalOrphanGc 时跳过全局孤儿那一半）
@@ -61,9 +67,22 @@ export async function truncateTailInTransaction(
 ): Promise<void> {
   const { projectId, sessionId, afterSeq, sweepRevisions, deferGlobalOrphanGc } = params;
 
-  const tailIds = await deps.messages.listIdsAfterSeq(sessionId, afterSeq);
+  // 拉带正文的 tail（seq > afterSeq ⟺ seq >= afterSeq + 1）：id 列表与 read
+  // 引用收集共用一次查询。
+  const tailMessages = await deps.messages.listBySessionFromSeq(
+    sessionId,
+    afterSeq + 1
+  );
+  const tailIds = tailMessages.map((m) => m.id);
 
   if (tailIds.length > 0) {
+    // read 引用 −1：位置硬约束——必须在 sweepSessionRevisions 之前，否则被引用
+    // 的 revision 会因 ref_count 未及时回落被误判为不可达而 GC（内容不可再生）。
+    await adjustReadRefCount(
+      deps.revisions,
+      aggregateReadRefs(tailMessages.map((m) => m.content)),
+      -1
+    );
     await deps.checkpoints.deleteCheckpointsForMessages(sessionId, tailIds);
   }
   await deps.messages.deleteAfterSeq(sessionId, afterSeq);

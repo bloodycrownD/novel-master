@@ -40,6 +40,11 @@ import {
   USAGE_STATS_TOOL_USE_COUNT_KEY,
 } from "@/domain/session-kkv/model/session-kkv-domains.js";
 import { countToolUseBlocks } from "@/domain/chat/logic/tool-use-count.js";
+import {
+  aggregateReadRefs,
+  adjustReadRefCount,
+  collectReadRefs,
+} from "@/domain/vfs/logic/revision-ref-count.js";
 import { chatInvalidArgument, chatNotFound } from "@/errors/chat-errors.js";
 import { invalidateSessionApiPromptTokenEntry } from "@/infra/tokenizer/logic/session-api-prompt-token-store.js";
 import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
@@ -239,6 +244,10 @@ export class DefaultMessageService implements MessageService {
       const entries = new SqliteVfsEntryRepository(tx);
       const revisions = new SqliteVfsRevisionRepository(tx);
 
+      // read 引用 −1（消息内 (entryId, version) 去重）：必须在 sweep 之前，
+      // 否则被引用 revision 会被 GC（read 引用是 ref_count 第三类持有者）。
+      await adjustReadRefCount(revisions, collectReadRefs(message.content), -1);
+
       const deleted = await messages.delete(id);
       if (!deleted) {
         throw chatNotFound("message", id);
@@ -270,11 +279,29 @@ export class DefaultMessageService implements MessageService {
     content: MessageContent
   ): Promise<ChatMessage> {
     assertMessageContent(content);
+    // 覆写换算 read 引用（旧 blocks −1、新 blocks +1）+ 正文替换收进同一事务：
+    // 引用计数与消息行要么同时生效、要么同时回滚，不产生无主计数。
     // 序列化与压缩编码都下沉到 repository（port 签名为 MessageContent 对象）。
-    const updated = await this.deps.messages.updateContent(messageId, content);
-    if (!updated) {
-      throw chatNotFound("message", messageId);
-    }
+    await this.deps.conn.transaction(async (tx) => {
+      const messages = new SqliteMessageRepository(tx);
+      const revisions = new SqliteVfsRevisionRepository(tx);
+      const existing = await messages.findById(messageId);
+      if (existing == null) {
+        throw chatNotFound("message", messageId);
+      }
+      await adjustReadRefCount(
+        revisions,
+        collectReadRefs(existing.content),
+        -1
+      );
+      const updated = await messages.updateContent(messageId, content);
+      if (!updated) {
+        throw chatNotFound("message", messageId);
+      }
+      // +1 带 NOT_FOUND 守护（batchAdjustRefCountWithDelta 语义）：新 blocks
+      // 引用的 revision 必须存在，悬空引用在落库前 fail-fast。
+      await adjustReadRefCount(revisions, collectReadRefs(content), +1);
+    });
     const message = await this.get(messageId);
     await this.invalidatePromptTokens(message.sessionId);
     await this.invalidateToolUseCount(message.sessionId);
@@ -352,6 +379,14 @@ export class DefaultMessageService implements MessageService {
         seq++;
       }
       await r.messages.batchInsert(forkedMessages);
+      // fork 消息浅拷贝原样保留 contentRef 的 (entryId, version)（指向源会话的
+      // revision）——按全局键对**源** revision +1（消息内去重、消息间累加），
+      // 源会话删除后 fork 侧引用依旧保活。
+      await adjustReadRefCount(
+        new SqliteVfsRevisionRepository(tx),
+        aggregateReadRefs(toCopy.map((m) => m.content)),
+        +1
+      );
       await seedForkCopyParity(tx, {
         projectId: source.projectId,
         sourceSessionId: source.id,
@@ -452,6 +487,12 @@ export class DefaultMessageService implements MessageService {
             sessionId,
             SESSION_KKV_DOMAIN_BACKFILL_CURSOR
           );
+          // read 引用 −1（公开 API 不留无挂点的消息删除面）：与消息删除同事务。
+          await adjustReadRefCount(
+            new SqliteVfsRevisionRepository(tx),
+            aggregateReadRefs(all.map((m) => m.content)),
+            -1
+          );
           await checkpoints.deleteCheckpointsForMessages(sessionId, ids);
         }
         await messages.deleteBySession(sessionId);
@@ -466,11 +507,13 @@ export class DefaultMessageService implements MessageService {
       throw chatNotFound("message", afterMessageId, { sessionId });
     }
 
-    const tailIds = await this.deps.messages.listIdsAfterSeq(
+    // 拉带正文的 tail（seq > anchor.seq ⟺ seq >= anchor.seq + 1）：id 列表与
+    // read 引用收集共用一次查询。
+    const tailMessages = await this.deps.messages.listBySessionFromSeq(
       sessionId,
-      anchor.seq
+      anchor.seq + 1
     );
-    if (tailIds.length === 0) {
+    if (tailMessages.length === 0) {
       // 没有 tail 需要截断，也顺手 invalidate 一下 prompt 缓存保险
       await this.invalidatePromptTokens(sessionId);
       return;
@@ -484,7 +527,16 @@ export class DefaultMessageService implements MessageService {
         sessionId,
         SESSION_KKV_DOMAIN_BACKFILL_CURSOR
       );
-      await checkpoints.deleteCheckpointsForMessages(sessionId, tailIds);
+      // read 引用 −1（公开 API 不留无挂点的消息删除面）：与消息删除同事务。
+      await adjustReadRefCount(
+        new SqliteVfsRevisionRepository(tx),
+        aggregateReadRefs(tailMessages.map((m) => m.content)),
+        -1
+      );
+      await checkpoints.deleteCheckpointsForMessages(
+        sessionId,
+        tailMessages.map((m) => m.id)
+      );
       await messages.deleteAfterSeq(sessionId, anchor.seq);
     });
     await this.invalidatePromptTokens(sessionId);

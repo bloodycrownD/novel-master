@@ -9,7 +9,10 @@ import {
   type MessageContent,
 } from '@novel-master/core/chat';
 
-import { messageBodyText } from '@novel-master/core/prompt';
+import {
+  messageBodyText,
+  messageBodyTextFromBlocks,
+} from '@novel-master/core/prompt';
 import { type ContentBlock } from '@novel-master/core/chat';
 import type {
   ChatMessageDto,
@@ -55,11 +58,57 @@ function toContentBlockDto(block: ContentBlock): ContentBlockDto | null {
         content: block.content,
         ...(block.ok !== undefined ? { ok: block.ok } : {}),
         ...(block.summary !== undefined ? { summary: block.summary } : {}),
+        // read 工具结果引用（read-tool-result-ref）：透传给渲染层（DTO 已镜像）。
+        ...(block.contentRef != null ? { contentRef: block.contentRef } : {}),
         ...(block.meta != null ? { meta: block.meta } : {}),
       };
     default:
       return null;
   }
+}
+
+/**
+ * 引用态占位（read-tool-result-ref Step 6 + skill-result-ref）：`bodyText`
+ * 是复制 fallback 的纯文本投影——引用块（含 contentRef 且 content 为空串）
+ * 没有全文可投影，直接走 core 会只剩 `[tool_result id=…]` 头。这里对这类
+ * 块的投影文本换成占位标记；legacy 块（无 contentRef）逐字节不变。变换只作用
+ * 于浅拷贝块数组，不写回消息本体（view-time 纪律）。
+ *
+ * 分文案按 `contentRef.kind` 窄化（缺省即 read——存量行无 kind 键）：
+ * skill 引用块标 `[skill ref: domain/name]` 而非误标 `[read ref: path]`
+ * ——skill ref 的 path 是**技能目录内的相对路径**（如 `SKILL.md`），脱离
+ * domain/name 单独投影既无信息量又会误导用户。
+ */
+function messageBodyTextWithReadRefPlaceholder(msg: ChatMessage): string {
+  const blocks = msg.content.blocks ?? [];
+  const hasReadRef = blocks.some(
+    (block) =>
+      block.type === 'tool_result' &&
+      block.contentRef != null &&
+      block.content === '',
+  );
+  if (!hasReadRef) {
+    return messageBodyText(msg);
+  }
+  return messageBodyTextFromBlocks(
+    blocks.map((block) => {
+      if (
+        block.type === 'tool_result' &&
+        block.contentRef != null &&
+        block.content === ''
+      ) {
+        const ref = block.contentRef;
+        return {
+          ...block,
+          content:
+            ref.kind === 'skill'
+              ? `[skill ref: ${ref.domain}/${ref.name}]`
+              : `[read ref: ${ref.path}]`,
+        };
+      }
+      return block;
+    }),
+  );
 }
 
 function toDto(msg: ChatMessage): ChatMessageDto {
@@ -72,7 +121,7 @@ function toDto(msg: ChatMessage): ChatMessageDto {
     hidden: msg.hidden,
     seq: msg.seq,
     createdAtMs: msg.createdAtMs,
-    bodyText: messageBodyText(msg),
+    bodyText: messageBodyTextWithReadRefPlaceholder(msg),
     contentBlocks: blocks
       .map(toContentBlockDto)
       .filter((b): b is ContentBlockDto => b != null),

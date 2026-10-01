@@ -23,6 +23,7 @@ import type { ChatMessage } from "../../src/domain/chat/model/message.js";
 import { SqliteMessageRepository } from "../../src/domain/chat/repositories/impl/sqlite-message.repository.js";
 import { ChatError } from "../../src/errors/chat-errors.js";
 import { createUsageStatsService } from "../../src/service/chat/create-chat-services.js";
+import { compressZlib } from "../../src/domain/vfs/content-store/logic/zlib-codec.js";
 import type { UsageStatsRange } from "../../src/service/chat/usage-stats.port.js";
 import {
   getNovelMasterTestContext,
@@ -1587,10 +1588,11 @@ describe("usage stats service 会话维度详情（T-MD1/T-MD2，metric-detail-s
     );
   });
 
-  it("坏行（损坏 content_blob）按 0 计不抛；KKV 脏值（非数字）当 miss 重算回填（cr-fix-spec-r2 s3/G-2）", async () => {
+  it("迁移期双形态读：压缩行与明文行混存照常分派，坏行（损坏 content_blob）按 0 计不抛；KKV 脏值（非数字）当 miss 重算回填（cr-fix-spec-r2 s3/G-2）", async () => {
     const { ctx, session } = await seedSession();
     const now = Date.now();
-    // 好行 1 个 tool_use + 坏行（encoding 声称 zlib、字节非法）。
+    // 明文行 1 个 tool_use + 存量压缩行（迁移期未搬完的形态，同为 1 个
+    // tool_use）+ 坏行（encoding 声称 zlib、字节非法，按 0 计不抛）。
     await seedMsg(ctx, session.id, 1, {
       createdAtMs: now - 1000,
       blocks: [{ type: "text", text: "a" }, toolUseBlock("t1")],
@@ -1600,13 +1602,31 @@ describe("usage stats service 会话维度详情（T-MD1/T-MD2，metric-detail-s
          id, session_id, seq, role, content_json, created_at_ms, hidden,
          content_encoding, content_blob
        ) VALUES (?, ?, 2, 'assistant', '', ?, 0, 'zlib', ?)`,
+      [
+        randomUUID(),
+        session.id,
+        now,
+        compressZlib(
+          new TextEncoder().encode(
+            JSON.stringify({
+              blocks: [{ type: "text", text: "存量压缩行" }, toolUseBlock("t2")],
+            })
+          )
+        ),
+      ]
+    );
+    await ctx.conn.execute(
+      `INSERT INTO chat_message (
+         id, session_id, seq, role, content_json, created_at_ms, hidden,
+         content_encoding, content_blob
+       ) VALUES (?, ?, 3, 'assistant', '', ?, 0, 'zlib', ?)`,
       [randomUUID(), session.id, now, Buffer.from([0x00, 0x01, 0xff])]
     );
 
     const svc = createUsageStatsService(ctx.conn);
     const detail = await svc.getSessionUsageDetail(session.id);
-    // 坏行按 0 计：总数 = 好行 1；不抛（弹窗不该被单条历史坏行打挂）。
-    assert.equal(detail.toolUseCount, 1);
+    // 明文行 1 + 压缩行 1 = 2；坏行按 0 计（不抛——弹窗不该被单条历史坏行打挂）。
+    assert.equal(detail.toolUseCount, 2);
 
     // 脏缓存值（非数字串）：当 miss 重算并覆盖回填。
     await ctx.conn.execute(
@@ -1615,13 +1635,13 @@ describe("usage stats service 会话维度详情（T-MD1/T-MD2，metric-detail-s
       [session.id]
     );
     const dirty = await svc.getSessionUsageDetail(session.id);
-    assert.equal(dirty.toolUseCount, 1, "脏值当 miss 重算");
+    assert.equal(dirty.toolUseCount, 2, "脏值当 miss 重算");
     const after = await ctx.conn.query<{ value: string }>(
       `SELECT value FROM session_kkv_entry
        WHERE session_id = ? AND domain = 'usage_stats' AND key = 'toolUseCount'`,
       [session.id]
     );
-    assert.equal(after[0]?.value, "1", "重算值应覆盖脏值");
+    assert.equal(after[0]?.value, "2", "重算值应覆盖脏值");
   });
 
   it("回填前复核（s3/B-1）：现算期间发生失效（哨兵）→ 放弃回填，下次读重算回填", async () => {
