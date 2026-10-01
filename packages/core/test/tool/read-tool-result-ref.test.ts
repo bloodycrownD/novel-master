@@ -1,12 +1,21 @@
 /**
- * read-tool-result-ref Step 1+2 定向测试：
+ * read 结果「全文直出」定向测试（task-attach-unref Step 4）。
  *
- * - T-RR1：contentRef 块 round-trip（全字段经 parse 后逐字段保留——
- *   parse 只回构显式列出的字段，白名单漏一项就静默丢字段，failureReason
- *   已有丢失先例）。
- * - T-RR12：legacy 兼容（无 contentRef 的存量块 parse/序列化行为不变）。
- * - T-RR3：read 工具执行同步 +1（工具返回前、先于任何消息落库，
- *   ref_count 已 +1；「输出带 entryId ⟺ +1 已发生」）。
+ * v1.5.30 起 read / skill 的引用化整体退役：写侧恒产全文
+ * （`buildToolResultBlock` 成功分支直出 `formatToolOutputForLlm`），
+ * 不再产 `contentRef`、不再 `+1` revision ref_count。本文件覆盖：
+ *
+ * - T-UA1（原 T-RR1 改写）：read 新结果 = 带 6 位行号全文；落库
+ *   `content_json` 无 `contentRef` 键；该块过 parse round-trip 全文
+ *   逐字保留、contentRef 仍缺省。**牙齿**：实现改回产引用块即红
+ *   （content 变空串 + contentRef 非空）。
+ * - T-UA2（原 T-RR3 改写）：read 执行**前后** revision `ref_count`
+ *   不变（只余 live head 的 1）；输出不含 `entryId` / `contentHash` /
+ *   `totalBytes` 三件套；即便 ctx 上仍挂着会抛的 `adjustRevisionRefCount`
+ *   残桩也绝不被调用。**牙齿**：实现改回 +1 即红（ref_count 变 2）。
+ * - T-RR12（同步口径）：存量行的 `contentRef` 解析白名单本版按纪律保留
+ *   （兜底 hydrate 依赖它），故逐字段 round-trip 断言原样保留；legacy
+ *   无 contentRef 块的 parse / 序列化行为逐字节不变。
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -14,6 +23,7 @@ import { parseMessageContent } from "../../src/domain/chat/content/parse-message
 import type {
   ContentBlock,
   ReadResultRef,
+  ToolResultBlock,
 } from "../../src/domain/chat/model/content-block.js";
 import { buildToolResultBlock } from "../../src/domain/tool/logic/build-tool-result-block.js";
 import { ToolRegistry } from "../../src/domain/tool/logic/tool-registry.js";
@@ -21,14 +31,14 @@ import { ToolRunner } from "../../src/domain/tool/logic/tool-runner.js";
 import { registerBuiltinTools } from "../../src/domain/tool/builtin/register-builtin-tools.js";
 import type { BuiltinToolContext } from "../../src/domain/tool/builtin/builtin-tool-context.js";
 import type { ReadToolOutput } from "../../src/domain/tool/builtin/vfs-tools.js";
-import { SqliteVfsRevisionRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
+import { collectReadRefs } from "../../src/domain/vfs/logic/revision-ref-count.js";
 import {
   getNovelMasterTestContext,
   novelMasterTestFixture,
   testIsolationSuffix,
 } from "../helpers/novel-master-fixture.js";
 
-/** T-RR1 用：全字段形态的 contentRef（含全部可选字段）。 */
+/** T-RR12 用：全字段形态的存量 contentRef（含全部可选字段）。 */
 function fullRef(): ReadResultRef {
   return {
     path: "/docs/a.md",
@@ -46,11 +56,210 @@ function fullRef(): ReadResultRef {
   };
 }
 
-describe("read-tool-result-ref: T-RR1 contentRef 块 round-trip", () => {
-  it("全字段形态经 parse 后逐字段保留（含可选字段）", () => {
+novelMasterTestFixture();
+
+/** 真链路 read：sessionVfs 写文件 → ToolRunner 跑 read。 */
+async function readViaTool(
+  toolCtx: BuiltinToolContext,
+  input: { path: string; offset?: number; limit?: number }
+): Promise<ReadToolOutput> {
+  const registry = new ToolRegistry<BuiltinToolContext>();
+  registerBuiltinTools(registry);
+  const runner = new ToolRunner(registry);
+  return await runner.call<ReadToolOutput>("read", input, toolCtx);
+}
+
+describe("read-tool-result-ref: T-UA1 read 新结果全文直出（原 T-RR1 改写）", () => {
+  it("真链路 read 落块 content = 带行号全文、contentRef 缺省；落库 content_json 无 contentRef 键", async () => {
+    const ctx = getNovelMasterTestContext();
+    const suffix = testIsolationSuffix();
+    const project = await ctx.projects.create(`pj-ua1-${suffix}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    await vfs.write("/ua1.md", "alpha 首行\nbeta 第二行\ngamma");
+
+    const output = await readViaTool(
+      {
+        vfs,
+        projectId: project.id,
+        sessionId: session.id,
+        listSessionMessages: async () => [],
+      },
+      { path: "/ua1.md" }
+    );
+
+    const block = buildToolResultBlock(
+      "tu-ua1",
+      { ok: true, output },
+      { toolName: "read" }
+    );
+    assert.equal(block.ok, true);
+    assert.equal(block.summary, "3 lines");
+    // 全文直出：6 位行号形态（与 v1.5.29 之前同款 wire）。
+    assert.equal(
+      block.content,
+      "     1|alpha 首行\n     2|beta 第二行\n     3|gamma"
+    );
+    // 引用化已退役：块上不得有 contentRef（content 也不再是占位空串）。
+    assert.equal(block.contentRef, undefined);
+    assert.equal(Object.hasOwn(block, "contentRef"), false);
+
+    // 落库形态：content_json 里没有 `contentRef` 键（回迁任务的谓词亦以此为准）。
+    const msg = await ctx.messages.append(session.id, "assistant", {
+      blocks: [block as ContentBlock],
+    });
+    const rows = await ctx.conn.query<{ content_json: string }>(
+      `SELECT content_json FROM chat_message WHERE id = ?`,
+      [msg.id]
+    );
+    assert.equal(rows.length, 1);
+    assert.equal(
+      rows[0]!.content_json.includes("contentRef"),
+      false,
+      "新写入的行不得含 contentRef 键"
+    );
+    // 新块不产生任何消息侧引用指针（删除路径因而零 ref 调整）。
+    assert.deepEqual(collectReadRefs({ blocks: [block] }), []);
+  });
+
+  it("全文块过 parse round-trip：content 逐字保留、contentRef 仍缺省，二次 round-trip 稳定", () => {
     const block = {
       type: "tool_result",
-      toolUseId: "tu-rr1",
+      toolUseId: "tu-ua1b",
+      content: "     1|hello\n     2|world",
+      ok: true,
+      summary: "2 lines",
+    };
+    const once = parseMessageContent(JSON.stringify({ blocks: [block] }));
+    const out = once.blocks[0]!;
+    if (out.type !== "tool_result") {
+      assert.fail("expected tool_result block");
+    }
+    assert.equal(out.contentRef, undefined);
+    assert.equal(out.content, "     1|hello\n     2|world");
+    const twice = parseMessageContent(
+      JSON.stringify({ blocks: once.blocks as ContentBlock[] })
+    );
+    assert.deepEqual(twice.blocks, once.blocks);
+  });
+});
+
+describe("read-tool-result-ref: T-UA2 read 执行前后 ref_count 不变（原 T-RR3 改写）", () => {
+  it("read 前后 ref_count 恒为 live head 的 1；输出不含定位三件套；ctx 上的 +1 残桩不被调用", async () => {
+    const { conn, sessionVfs } = getNovelMasterTestContext();
+    const suffix = testIsolationSuffix();
+    const projectId = `pj-ua2-${suffix}`;
+    const sessionId = `ss-ua2-${suffix}`;
+    const vfs = sessionVfs(projectId, sessionId);
+    await vfs.write("/ua2.txt", "line-1\nline-2\nline-3");
+
+    const entryRows = await conn.query<{ entry_id: number }>(
+      `SELECT entry_id FROM vfs_entry WHERE path = ?`,
+      ["/ua2.txt"]
+    );
+    const entryId = entryRows[0]!.entry_id;
+    const readRefCount = async (version: number): Promise<number | null> => {
+      const rows = await conn.query<{ ref_count: number }>(
+        `SELECT ref_count FROM vfs_revision WHERE entry_id = ? AND version = ?`,
+        [entryId, version]
+      );
+      return rows.length === 0 ? null : Number(rows[0]!.ref_count);
+    };
+    assert.equal(await readRefCount(1), 1, "写盘后 live head 持有 1 份");
+
+    // 牙齿：即使 ctx 上仍挂着旧版的 +1 通道残桩（运行时兼容形态），read 也
+    // 绝不能调它——一旦实现改回引用化，这里会因抛错而红。
+    let channelCalls = 0;
+    const toolCtx = {
+      vfs,
+      projectId,
+      sessionId,
+      listSessionMessages: async () => [],
+      adjustRevisionRefCount: async () => {
+        channelCalls += 1;
+        throw new Error("read 不应再触发 revision +1（unref 已回迁）");
+      },
+    } as unknown as BuiltinToolContext;
+
+    const output = await readViaTool(toolCtx, { path: "/ua2.txt" });
+
+    assert.equal(channelCalls, 0, "+1 通道残桩不得被调用");
+    assert.equal(output.version, 1);
+    assert.equal(await readRefCount(output.version), 1, "read 前后 ref_count 不变");
+
+    // 定位三件套已随引用化一并摘除（D1）。
+    assert.equal(
+      Object.hasOwn(output as unknown as Record<string, unknown>, "entryId"),
+      false,
+      "输出不再携带 entryId"
+    );
+    assert.equal(
+      Object.hasOwn(
+        output as unknown as Record<string, unknown>,
+        "contentHash"
+      ),
+      false,
+      "输出不再携带 contentHash"
+    );
+    assert.equal(
+      Object.hasOwn(
+        output as unknown as Record<string, unknown>,
+        "totalBytes"
+      ),
+      false,
+      "输出不再携带 totalBytes"
+    );
+  });
+
+  it("多段 read（分页 / 字节帽截断）同样零 ref 调整", async () => {
+    const { conn, sessionVfs } = getNovelMasterTestContext();
+    const suffix = testIsolationSuffix();
+    const projectId = `pj-ua2b-${suffix}`;
+    const sessionId = `ss-ua2b-${suffix}`;
+    const vfs = sessionVfs(projectId, sessionId);
+    const big = Array.from(
+      { length: 1000 },
+      (_, i) => `line-${String(i).padStart(5, "0")}-${"x".repeat(48)}`
+    ).join("\n");
+    await vfs.write("/ua2b.txt", big);
+
+    const entryRows = await conn.query<{ entry_id: number }>(
+      `SELECT entry_id FROM vfs_entry WHERE path = ?`,
+      ["/ua2b.txt"]
+    );
+    const entryId = entryRows[0]!.entry_id;
+    const refCount = async (): Promise<number | null> => {
+      const rows = await conn.query<{ ref_count: number }>(
+        `SELECT ref_count FROM vfs_revision WHERE entry_id = ? AND version = ?`,
+        [entryId, 1]
+      );
+      return rows.length === 0 ? null : Number(rows[0]!.ref_count);
+    };
+
+    const toolCtx: BuiltinToolContext = {
+      vfs,
+      projectId,
+      sessionId,
+      listSessionMessages: async () => [],
+    };
+    const first = await readViaTool(toolCtx, { path: "/ua2b.txt" });
+    assert.equal(first.truncated, true, "60KB 内容必命中字节帽");
+    const second = await readViaTool(toolCtx, {
+      path: "/ua2b.txt",
+      offset: 10,
+      limit: 20,
+    });
+    assert.equal(second.version, 1);
+
+    assert.equal(await refCount(), 1, "多段 read 后 ref_count 仍为 live head 的 1");
+  });
+});
+
+describe("read-tool-result-ref: T-RR12 存量行解析与 legacy 兼容", () => {
+  it("存量 contentRef 全字段经 parse 后逐字段保留（兜底 hydrate 依赖白名单）", () => {
+    const block = {
+      type: "tool_result",
+      toolUseId: "tu-rr12",
       content: "",
       ok: true,
       summary: "truncated · 200/1024 lines",
@@ -77,10 +286,10 @@ describe("read-tool-result-ref: T-RR1 contentRef 块 round-trip", () => {
     assert.equal(ref.nextOffset, 205);
   });
 
-  it("最小形态（可选字段缺省）round-trip 后仍缺省、必填字段保留", () => {
+  it("存量 contentRef 最小形态（可选字段缺省）round-trip 后仍缺省、必填字段保留", () => {
     const block = {
       type: "tool_result",
-      toolUseId: "tu-rr1b",
+      toolUseId: "tu-rr12b",
       content: "",
       ok: true,
       contentRef: {
@@ -110,10 +319,10 @@ describe("read-tool-result-ref: T-RR1 contentRef 块 round-trip", () => {
     assert.equal(ref.nextOffset, undefined);
   });
 
-  it("二次 round-trip（parse → 序列化 → 再 parse）逐字节稳定", () => {
+  it("存量 contentRef 二次 round-trip（parse → 序列化 → 再 parse）逐字节稳定", () => {
     const block = {
       type: "tool_result",
-      toolUseId: "tu-rr1c",
+      toolUseId: "tu-rr12c",
       content: "",
       ok: true,
       summary: "3 lines",
@@ -126,10 +335,10 @@ describe("read-tool-result-ref: T-RR1 contentRef 块 round-trip", () => {
     assert.deepEqual(twice.blocks, once.blocks);
   });
 
-  it("contentRef 字段类型非法时 fail-fast 抛错（不静默丢引用）", () => {
+  it("存量 contentRef 字段类型非法时 fail-fast 抛错（不静默丢引用）", () => {
     const bad = {
       type: "tool_result",
-      toolUseId: "tu-rr1d",
+      toolUseId: "tu-rr12d",
       content: "",
       contentRef: { ...fullRef(), entryId: "not-a-number" },
     };
@@ -138,13 +347,11 @@ describe("read-tool-result-ref: T-RR1 contentRef 块 round-trip", () => {
       /entryId must be a non-negative integer/
     );
   });
-});
 
-describe("read-tool-result-ref: T-RR12 legacy 兼容", () => {
   it("无 contentRef 的存量块 parse/序列化行为逐字节不变", () => {
     const legacy = {
       type: "tool_result",
-      toolUseId: "tu-rr12",
+      toolUseId: "tu-rr12e",
       content: "     1|hello\n     2|world",
       ok: true,
       summary: "2 lines",
@@ -169,9 +376,9 @@ describe("read-tool-result-ref: T-RR12 legacy 兼容", () => {
   });
 
   it("legacy 纯文本 read 块（无 ok/summary/meta）round-trip 不变", () => {
-    const legacyRead = {
+    const legacyRead: ToolResultBlock = {
       type: "tool_result",
-      toolUseId: "tu-rr12b",
+      toolUseId: "tu-rr12f",
       content: "     1|旧存量 read 全文",
     };
     const parsed = parseMessageContent(
@@ -187,9 +394,7 @@ describe("read-tool-result-ref: T-RR12 legacy 兼容", () => {
     assert.equal(out.summary, undefined);
   });
 
-  it("buildToolResultBlock 对无 entryId 的旧形态 read 输出走 legacy 全文", () => {
-    // ctx 未注入 adjustRevisionRefCount（或 vfs 未透出 entryId）时 read 输出
-    // 不带定位三件套——块不得产 contentRef，content 照旧 formatReadOutput 全文。
+  it("buildToolResultBlock 对无 entryId 的旧形态 read 输出恒走全文直出", () => {
     const legacyOutput = {
       path: "/a.txt",
       content: "l1\nl2\nl3",
@@ -202,7 +407,7 @@ describe("read-tool-result-ref: T-RR12 legacy 兼容", () => {
       truncated: false,
     };
     const block = buildToolResultBlock(
-      "tu-rr12c",
+      "tu-rr12g",
       { ok: true, output: legacyOutput },
       { toolName: "read" }
     );
@@ -210,159 +415,5 @@ describe("read-tool-result-ref: T-RR12 legacy 兼容", () => {
     assert.equal(block.ok, true);
     assert.equal(block.summary, "3 lines");
     assert.ok(block.content.includes("1|l1"));
-  });
-});
-
-describe("read-tool-result-ref: T-RR3 read 执行同步 +1", () => {
-  novelMasterTestFixture();
-
-  it("工具返回前 ref_count 已 +1，输出带定位三件套，contentRef 块随之产出", async () => {
-    const { conn, sessionVfs } = getNovelMasterTestContext();
-    const suffix = testIsolationSuffix();
-    const projectId = `pj-rr3-${suffix}`;
-    const sessionId = `ss-rr3-${suffix}`;
-    const vfs = sessionVfs(projectId, sessionId);
-    // 真链路写入：Scoped(RevisionAware(Default))，v1 revision 落库且 live head
-    // 持有 ref_count=1。
-    await vfs.write("/rr3.txt", "line-1\nline-2\nline-3");
-
-    const revisionRepo = new SqliteVfsRevisionRepository(conn);
-    const readRefCount = async (
-      entryId: number,
-      version: number
-    ): Promise<number> => {
-      const rows = await conn.query<{ ref_count: number }>(
-        `SELECT ref_count FROM vfs_revision WHERE entry_id = ? AND version = ?`,
-        [entryId, version]
-      );
-      assert.equal(rows.length, 1, "revision 行必须存在");
-      return rows[0]!.ref_count;
-    };
-
-    // +1 闭包执行时点即 read 工具 run() 内部（结构上先于工具返回、先于
-    // agent-runner 的消息 append——工具执行与落库分离）。闭包内记录前后
-    // ref_count，验证「+1 发生在返回前」。
-    const plus1Calls: Array<{
-      entryId: number;
-      version: number;
-      before: number;
-      after: number;
-    }> = [];
-    const ctx: BuiltinToolContext = {
-      vfs,
-      projectId,
-      sessionId,
-      listSessionMessages: async () => [],
-      adjustRevisionRefCount: async (pointers, delta) => {
-        assert.equal(delta, +1);
-        assert.equal(pointers.length, 1);
-        const { entryId, version } = pointers[0]!;
-        const before = await readRefCount(entryId, version);
-        await revisionRepo.batchAdjustRefCountWithDelta(pointers, delta);
-        const after = await readRefCount(entryId, version);
-        plus1Calls.push({ entryId, version, before, after });
-      },
-    };
-
-    const registry = new ToolRegistry<BuiltinToolContext>();
-    registerBuiltinTools(registry);
-    const runner = new ToolRunner(registry);
-    const result = await runner.call<ReadToolOutput>(
-      "read",
-      { path: "/rr3.txt" },
-      ctx
-    );
-
-    // 同步 +1 恰好发生一次，且在工具返回前把 ref_count 从 1（live head）抬到 2。
-    assert.equal(plus1Calls.length, 1);
-    const call = plus1Calls[0]!;
-    assert.equal(call.before, 1);
-    assert.equal(call.after, 2);
-    assert.equal(call.version, result.version);
-
-    // 「输出带 entryId ⟺ +1 已发生」：定位三件套齐全。
-    assert.equal(result.entryId, call.entryId);
-    assert.ok(typeof result.contentHash === "string" && result.contentHash !== "");
-    assert.equal(result.totalBytes, 20); // "line-1\nline-2\nline-3" 的 UTF-8 字节数（6+1+6+1+6）
-
-    // 工具已返回：+1 的效果仍在（此后任何 sweep 都不会误删 v1）。
-    assert.equal(await readRefCount(call.entryId, call.version), 2);
-
-    // read 输出喂 buildToolResultBlock：产 contentRef 块（content 空串、
-    // ok/summary 照旧、ref 与输出逐字段一致——重放 formatReadOutput 的
-    // 输入自包含）。
-    const block = buildToolResultBlock(
-      "tu-rr3",
-      { ok: true, output: result },
-      { toolName: "read" }
-    );
-    assert.equal(block.ok, true);
-    assert.equal(block.content, "");
-    assert.equal(block.summary, "3 lines");
-    const ref = block.contentRef;
-    assert.ok(ref != null);
-    assert.equal(ref.path, "/rr3.txt");
-    assert.equal(ref.entryId, result.entryId);
-    assert.equal(ref.version, result.version);
-    assert.equal(ref.contentHash, result.contentHash);
-    assert.equal(ref.totalBytes, 20);
-    assert.equal(ref.offset, 1);
-    assert.equal(ref.limit, result.limit);
-    assert.equal(ref.returnedLines, 3);
-    assert.equal(ref.totalLines, 3);
-    assert.equal(ref.truncated, false);
-    assert.equal(ref.lastLineTruncated, undefined);
-    assert.equal(ref.nextOffset, undefined);
-
-    // contentRef 块过 parse round-trip 不丢字段（与 T-RR1 串起：真链路产物
-    // 落库读回一致）。
-    const parsed = parseMessageContent(
-      JSON.stringify({ blocks: [block as ContentBlock] })
-    );
-    const roundTrip = parsed.blocks[0]!;
-    if (roundTrip.type !== "tool_result") {
-      assert.fail("expected tool_result block");
-    }
-    assert.deepEqual(roundTrip.contentRef, ref);
-  });
-
-  it("ctx 未注入 adjustRevisionRefCount 时不 +1、输出不带 entryId（legacy 回落）", async () => {
-    const { conn, sessionVfs } = getNovelMasterTestContext();
-    const suffix = testIsolationSuffix();
-    const projectId = `pj-rr3b-${suffix}`;
-    const sessionId = `ss-rr3b-${suffix}`;
-    const vfs = sessionVfs(projectId, sessionId);
-    await vfs.write("/rr3b.txt", "x\ny");
-
-    const entryRows = await conn.query<{ entry_id: number }>(
-      `SELECT entry_id FROM vfs_entry WHERE path = ?`,
-      ["/rr3b.txt"]
-    );
-    const entryId = entryRows[0]!.entry_id;
-
-    const registry = new ToolRegistry<BuiltinToolContext>();
-    registerBuiltinTools(registry);
-    const runner = new ToolRunner(registry);
-    const result = await runner.call<ReadToolOutput>(
-      "read",
-      { path: "/rr3b.txt" },
-      {
-        vfs,
-        projectId,
-        sessionId,
-        listSessionMessages: async () => [],
-        // 故意不注入 adjustRevisionRefCount
-      }
-    );
-
-    assert.equal(result.entryId, undefined);
-    assert.equal(result.contentHash, undefined);
-    assert.equal(result.totalBytes, undefined);
-    // ref_count 维持 live head 的 1，未被 read 干扰。
-    const rows = await conn.query<{ ref_count: number }>(
-      `SELECT ref_count FROM vfs_revision WHERE entry_id = ? AND version = ?`,
-      [entryId, result.version]
-    );
-    assert.equal(rows[0]!.ref_count, 1);
   });
 });
