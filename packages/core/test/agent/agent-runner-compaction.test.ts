@@ -63,6 +63,11 @@ const { createMemorySessionKkv } = await import(
 const { noopSavedModelRepository } = await import(
   "../helpers/noop-saved-model-repo.js"
 );
+// RT-02 牙齿用例必须装**真实** VisibleFloorTrigger（纯 stub 的 evaluator 从不
+// list()，第二次读根本不存在 ⇒ listCalls 恒等于 stepCount，断言无牙）。
+const { createCompactionConditionEvaluator } = await import(
+  "../../src/service/compaction-conditions/create-compaction-condition-evaluator.js"
+);
 
 const RUN_MODEL_ID = "anthropic/claude";
 const MOCK_PROJECT_ID = "test-project";
@@ -238,6 +243,199 @@ describe("AgentRunner compaction (T-AR1)", () => {
     // shouldRequestCompaction 至少被调一次（每个 persist step 前都会评估）。
     assert.ok(
       compactionConditions.shouldRequestCompaction.mock.callCount() >= 1,
+    );
+  });
+});
+
+/**
+ * RT-02 计数替身：只加一层计数，其余行为全部转发给 InMemoryAgentSession。
+ *
+ * 装在 `deps.session` 上 ⇒ runner `:413` 那次读与传给触发器的那次读走同一个
+ * 计数器（persistMessages=true 时 runner 实测用的就是 deps.session 本身）。
+ */
+class CountingAgentSession extends InMemoryAgentSession {
+  listCalls = 0;
+  override async list() {
+    this.listCalls += 1;
+    return super.list();
+  }
+}
+
+/**
+ * 装真实 VisibleFloorTrigger 的压缩评估器：只配 visibleFloor ⇒
+ * tokenCounters / providerModels 不会被触碰（triggersFromConditions 只在
+ * tokenRatio != null 时才 new TokenRatioConditionTrigger）。
+ */
+function realVisibleFloorEvaluator(visibleFloor: number) {
+  return createCompactionConditionEvaluator({
+    conditionsStore: {
+      getConditions: async () => ({
+        schemaVersion: 4,
+        enabled: true,
+        visibleFloor,
+        hideStartDepth: 6,
+      }),
+    },
+    // 只配 visibleFloor 时这两个依赖永不被调用，给空壳即可。
+    tokenCounters: {} as never,
+    providerModels: {} as never,
+  });
+}
+
+/** 三步 run 的响应序列：step1/step2 各发一次 ls 工具，step3 收尾文本。 */
+function threeStepResponses() {
+  return [
+    {
+      assistantText: "",
+      blocks: [
+        { type: "tool_use" as const, id: "tu1", name: "ls", input: { path: "/" } },
+      ],
+      raw: {},
+    },
+    {
+      assistantText: "",
+      blocks: [
+        {
+          type: "tool_use" as const,
+          id: "tu2",
+          name: "ls",
+          input: { path: "/sub" },
+        },
+      ],
+      raw: {},
+    },
+    {
+      assistantText: "done",
+      blocks: [{ type: "text" as const, text: "done" }],
+      raw: {},
+    },
+  ];
+}
+
+describe("AgentRunner RT-02 visibleMessageCount 透传", () => {
+  const messagesStub = {
+    listBySession: async () => [],
+  } as unknown as MessageService;
+  const effectsStub = {
+    hideMessagesInRange: async () => {},
+    showMessagesInRange: async () => {},
+    truncateMessagesAfter: async () => {},
+    setMessageFloorAtMessage: async () => {},
+  } as unknown as MessageTranscriptEffectsService;
+
+  it("T-RT02-a（计数）：visibleFloor 配置下每个 step 只发一次全会话读", async () => {
+    const session = new CountingAgentSession(MOCK_SESSION_ID);
+    await session.append("user", textBlocks("go"));
+
+    // visibleFloor: 999 —— 刻意不触发压缩：runCompaction 桩若真跑会改变步数、
+    // 干扰 stepCompactionEmitted 的门控语义，把「读次数」这口锅搅浑。
+    const compactionConditions = realVisibleFloorEvaluator(999);
+
+    const registry = new ToolRegistry();
+    registerBuiltinTools(registry);
+
+    const runner = createAgentRunner({
+      session,
+      modelRequests: createMockModel(threeStepResponses()),
+      savedModels: noopSavedModelRepository(),
+      registry,
+      toolCtx: mockToolCtx(mockVfs()),
+      eventBus: new SimpleEventBus(),
+      sessionKkv: createMemorySessionKkv(),
+      workplace: () =>
+        ({
+          scope: {
+            kind: "session",
+            projectId: MOCK_PROJECT_ID,
+            sessionId: MOCK_SESSION_ID,
+          },
+          renderDisplay: async () => "WT",
+          buildListRows: async () => [],
+          materializePersistBlock: async () => ({ workplaceDisplay: "WT" }),
+        }) as never,
+      compactionConditions,
+      messages: messagesStub,
+      messageTranscriptEffects: effectsStub,
+    });
+
+    const result = await runner.run({
+      maxSteps: 5,
+      definition: minimalDefinition(),
+      sessionId: MOCK_SESSION_ID,
+      projectId: MOCK_PROJECT_ID,
+      savedModelId: RUN_MODEL_ID,
+      workspaceModelId: RUN_MODEL_ID,
+    });
+
+    assert.equal(result.stopReason, "completed");
+    assert.equal(result.stepsExecuted, 3);
+
+    // 牙齿：把 agent-runner 的 visibleMessageCount 透传删掉（触发器回落自己
+    // list()），此处的 3 立刻变 6 并红。
+    assert.equal(
+      session.listCalls,
+      3,
+      `每 step 应只发一次全会话读，实测 ${session.listCalls} 次`,
+    );
+  });
+
+  it("T-RT02-b（语义）：visibleMessageCount 透传后压缩仍按 visibleFloor 命中", async () => {
+    const session = new CountingAgentSession(MOCK_SESSION_ID);
+    await session.append("user", textBlocks("go"));
+
+    // visibleFloor: 0 —— 任一可见消息即命中，防止「少读一次」被误实现成「不读」。
+    const compactionConditions = realVisibleFloorEvaluator(0);
+
+    const registry = new ToolRegistry();
+    registerBuiltinTools(registry);
+
+    const callsBefore = runCompactionCalls.length;
+
+    const runner = createAgentRunner({
+      session,
+      modelRequests: createMockModel(threeStepResponses()),
+      savedModels: noopSavedModelRepository(),
+      registry,
+      toolCtx: mockToolCtx(mockVfs()),
+      eventBus: new SimpleEventBus(),
+      sessionKkv: createMemorySessionKkv(),
+      workplace: () =>
+        ({
+          scope: {
+            kind: "session",
+            projectId: MOCK_PROJECT_ID,
+            sessionId: MOCK_SESSION_ID,
+          },
+          renderDisplay: async () => "WT",
+          buildListRows: async () => [],
+          materializePersistBlock: async () => ({ workplaceDisplay: "WT" }),
+        }) as never,
+      compactionConditions,
+      messages: messagesStub,
+      messageTranscriptEffects: effectsStub,
+    });
+
+    const result = await runner.run({
+      maxSteps: 5,
+      definition: minimalDefinition(),
+      sessionId: MOCK_SESSION_ID,
+      projectId: MOCK_PROJECT_ID,
+      savedModelId: RUN_MODEL_ID,
+      workspaceModelId: RUN_MODEL_ID,
+    });
+
+    // 步数与 stopReason 口径不变。
+    assert.equal(result.stopReason, "completed");
+    assert.equal(result.stepsExecuted, 3);
+
+    // 压缩确实按 visibleFloor 命中：stepCompactionEmitted 是**每 step 重置**的门控
+    // （runner 循环内声明），所以 visibleFloor=0 时每 step 各命中一次 =
+    // stepsExecuted 次。透传删掉后触发器回落 list() 得到同样的条数，这里不变——
+    // 即「少读一次」没有变成「不读」。
+    assert.equal(
+      runCompactionCalls.length - callsBefore,
+      result.stepsExecuted,
+      "visibleFloor=0 时压缩应每 step 命中一次",
     );
   });
 });

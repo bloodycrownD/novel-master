@@ -16,9 +16,12 @@ export class VisibleFloorTrigger implements CompactionConditionTrigger {
 
   async shouldTrigger(
     session: AgentSession,
-    _evaluation: CompactionEvaluationContext
+    evaluation: CompactionEvaluationContext
   ): Promise<boolean> {
-    const visible = await session.list();
-    return visible.length > this.visibleFloor;
+    // runner 已在本 step 开头 list() 过一次（visible.length），透传进来复用即可，
+    // 不必再发第二次全会话读（RT-02）。缺省时回落到自己 list()，保持旧行为。
+    const visibleCount =
+      evaluation.visibleMessageCount ?? (await session.list()).length;
+    return visibleCount > this.visibleFloor;
   }
 }

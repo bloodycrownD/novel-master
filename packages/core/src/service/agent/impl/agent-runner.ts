@@ -411,6 +411,10 @@ export class DefaultAgentRunner implements AgentRunner {
         let stepCompactionEmitted = false;
 
         let visible = await session.list();
+        // 压缩评估要的只是「可见条数」；VisibleFloorTrigger 自己再 list() 一次
+        // 就是每 step 的第二次全会话读。条数在此处定死并透传，触发器零读取（RT-02）。
+        // 必须在下方 prepare 覆盖 visible 之前取：那份数组已不是 message 列表。
+        const visibleMessageCount = visible.length;
         if (signal?.aborted) {
           await handleAbort("after_session_list");
           break;
@@ -531,6 +535,9 @@ export class DefaultAgentRunner implements AgentRunner {
                 // sessionKkv 让读口能命中落库的 API 值（跨重启同口径）。
                 tools,
                 sessionKkv: this.deps.sessionKkv,
+                // 本 step 开头那次 session.list() 的条数（prepare 覆盖 visible
+                // 之前取的），供 VisibleFloorTrigger 零读取复用（RT-02）。
+                visibleMessageCount,
               }
             );
           if (signal?.aborted) {
