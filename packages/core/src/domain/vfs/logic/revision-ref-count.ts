@@ -103,20 +103,45 @@ export function aggregateReadRefs(
   return [...counts.values()];
 }
 
+/**
+ * 已 collect 好的指针列表聚合：**与 {@link aggregateReadRefs} 完全同一口径**
+ * （消息内去重由 collectReadRefs 保证，消息间累加由 addPointerAggregates 保证）。
+ *
+ * 窄投影读口（`listReadRefTargetsBySession`）产出的是指针而不是 MessageContent，
+ * 但删除链的 −1 必须与 fork/copy 的 +1 严格对账 ⇒ 复用同一条累加路径，
+ * 不在 service 层手写第二份 Map 累加。
+ */
+export function aggregateReadRefPointers(
+  refsPerMessage: readonly (readonly ReadRefPointer[])[]
+): ReadRefCountAggregate[] {
+  const counts = new Map<string, ReadRefCountAggregate>();
+  for (const refs of refsPerMessage) {
+    addPointerAggregates(counts, refs);
+  }
+  return [...counts.values()];
+}
+
+function addPointerAggregates(
+  counts: Map<string, ReadRefCountAggregate>,
+  refs: readonly ReadRefPointer[]
+): void {
+  for (const ref of refs) {
+    const key = `${ref.entryId}:${ref.version}`;
+    const existing = counts.get(key);
+    if (existing == null) {
+      counts.set(key, { ...ref, count: 1 });
+    } else {
+      counts.set(key, { ...existing, count: existing.count + 1 });
+    }
+  }
+}
+
 function addAggregates(
   counts: Map<string, ReadRefCountAggregate>,
   contents: readonly MessageContent[]
 ): void {
   for (const content of contents) {
-    for (const ref of collectReadRefs(content)) {
-      const key = `${ref.entryId}:${ref.version}`;
-      const existing = counts.get(key);
-      if (existing == null) {
-        counts.set(key, { ...ref, count: 1 });
-      } else {
-        counts.set(key, { ...existing, count: existing.count + 1 });
-      }
-    }
+    addPointerAggregates(counts, collectReadRefs(content));
   }
 }
 

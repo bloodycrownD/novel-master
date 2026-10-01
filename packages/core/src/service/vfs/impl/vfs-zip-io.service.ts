@@ -32,6 +32,11 @@ import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-
 import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
 import { clearSessionPromptCaches } from "@/service/vfs/logic/clear-session-prompt-caches.js";
+import {
+  ZIP_AND_CARD_IMPORT_TXN_FILE_CHUNK,
+  chunkArray,
+  yieldToEventLoop,
+} from "@/domain/vfs/logic/vfs-import-chunk.js";
 import { ensureImportDirRules } from "@/service/vfs/logic/ensure-import-dir-rules.js";
 import type { WorkplaceRepository } from "@/domain/workplace/repositories/workplace.port.js";
 import { SqliteWorkplaceRepository } from "@/domain/workplace/repositories/impl/sqlite-workplace.repository.js";
@@ -86,6 +91,34 @@ async function ensureEmptyDirectoryRow(
   if (existing.entryKind !== "directory") {
     throw vfsNotADirectory(logical);
   }
+}
+
+/**
+ * 导入失败的错误包装：保留测试钩子直抛与 VfsZipError 原形，其余包成
+ * `IMPORT_FAILED`，并在消息里带上分片进度（已提交 N 片 / 失败在第 K 片）。
+ *
+ * 分片后**已提交片不再回滚** ⇒ 这是本条唯一的真实行为损失：旧内容在段 B0
+ * 就已删除，补偿只把半棵新树清掉、不恢复旧内容。
+ */
+function wrapImportError(
+  error: unknown,
+  committedShards?: number,
+  failedShard?: number
+): unknown {
+  if (error instanceof Error && error.message === "test import failure") {
+    return error;
+  }
+  if (error instanceof Error && error.name === "VfsZipError") {
+    return error;
+  }
+  const base =
+    error instanceof Error ? error.message : "import transaction failed";
+  const progress =
+    committedShards != null && failedShard != null
+      ? `（已提交 ${committedShards} 片 / 失败在第 ${failedShard} 片）`
+      : "";
+  const wrapped = vfsZipError("IMPORT_FAILED", `${base}${progress}`);
+  return wrapped;
 }
 
 async function assertDirectoryPathNotFile(
@@ -194,64 +227,127 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
       directoryPath
     );
     const sk = scopeKey(scope);
+    const fileEntries = [...files];
 
+    // 补偿：把半棵新树清掉，让域回到「目标前缀为空」的可重试态。
+    // 跑在**独立事务**里，整体吞错只记 warn——补偿失败不掩盖主错误。
+    // 口径写死用 `releaseAndDeleteVfsPrefix`（减 live ref + 删 entry + GC
+    // 无引用 revision），**不得**用裸 `deleteVfsPrefix`（不减 ref、也不 GC
+    // ⇒ 会留下一批 ref_count=1 的孤儿 revision 与永不回收的 blob）。
+    const compensate = async (): Promise<void> => {
+      try {
+        await this.conn.transaction(async (tx) => {
+          await releaseAndDeleteVfsPrefix(
+            new SqliteVfsEntryRepository(tx),
+            new SqliteVfsRevisionRepository(tx),
+            sk,
+            directoryPath
+          );
+        });
+      } catch (error) {
+        console.warn("[vfs-zip-io] import compensation failed", error);
+      }
+    };
+
+    // 段 B0（独立短事务）：删旧子树 + 目标目录行 + 全部显式目录行。
     try {
       await this.conn.transaction(async (tx) => {
         const repoTx = new SqliteVfsEntryRepository(tx);
         const revisionTx = new SqliteVfsRevisionRepository(tx);
         this.testHook?.onBeforeDeletePrefix?.();
         await releaseAndDeleteVfsPrefix(repoTx, revisionTx, sk, directoryPath);
-        // WHY: deleteVfsPrefix 会删掉目标目录行；即使 ZIP 为空也要保证目录仍存在
+        // WHY: 删前缀会删掉目标目录行；即使 ZIP 为空也要保证目录仍存在
         await ensureEmptyDirectoryRow(repoTx, scope, directoryPath);
         for (const logical of directories) {
           await ensureEmptyDirectoryRow(repoTx, scope, logical);
         }
-        for (const [logical, content] of files) {
-          if (this.testHook?.throwOnInsertLogical === logical) {
-            throw new Error("test import failure");
+      });
+    } catch (error) {
+      throw wrapImportError(error);
+    }
+
+    // 段 B1..Bk：每片 ≤200 个文件的独立短事务。补偿挂在**片失败的内层**
+    // ——测试钩子直抛分支位于 IMPORT_FAILED 包装之前，只挂外层 catch 会被
+    // 那条分支整个绕过，补偿永不执行。
+    let committedShards = 0;
+    let shardIndex = 0;
+    for (const shard of chunkArray(
+      fileEntries,
+      ZIP_AND_CARD_IMPORT_TXN_FILE_CHUNK
+    )) {
+      try {
+        await this.conn.transaction(async (tx) => {
+          const repoTx = new SqliteVfsEntryRepository(tx);
+          const revisionTx = new SqliteVfsRevisionRepository(tx);
+          for (const [logical, content] of shard) {
+            if (this.testHook?.throwOnInsertLogical === logical) {
+              throw new Error("test import failure");
+            }
+            await ensureParentDirectories(repoTx, sk, logical);
+            await insertFileSeedingRevision(
+              repoTx,
+              revisionTx,
+              sk,
+              logical,
+              content
+            );
           }
-          await ensureParentDirectories(repoTx, sk, logical);
-          await insertFileSeedingRevision(
-            repoTx,
-            revisionTx,
-            sk,
-            logical,
-            content
-          );
-        }
-        // 导入事务内补目录规则默认行：前缀下无行目录（含嵌套与目标自身）补
-        // 默认启用，已有行（含 rule_off）不覆盖；helper 自吞错，不阻断导入。
+        });
+        committedShards += 1;
+        shardIndex += 1;
+      } catch (error) {
+        await compensate();
+        throw wrapImportError(error, committedShards, shardIndex + 1);
+      }
+      // 让步只落在片与片之间，绝不落在事务回调内部。
+      await yieldToEventLoop();
+    }
+
+    // 段 R（独立短事务）：补目录规则默认行 —— 必须**晚于全部片提交**。
+    // 目录全集不是 plan 阶段算出来的，而是 `ensureImportDirRules` 内部在
+    // 调用时从库里现扫（`listDirectoryPathsUnderPrefix`）；独立事务看不到
+    // 未提交行 ⇒ 放进某一片会漏补后续片造出的目录。
+    try {
+      await this.conn.transaction(async (tx) => {
         await ensureImportDirRules({
-          vfsRepo: repoTx,
+          vfsRepo: new SqliteVfsEntryRepository(tx),
+          // 必须喂**段 R 这条事务**的 tx：在事务回调里用外层 this.conn 会
+          // 撞驱动层 AsyncMutex 不可重入——那是死锁不是报错。
           workplaceRepo: this.testHook?.createWorkplaceRepo
             ? this.testHook.createWorkplaceRepo(tx)
             : new SqliteWorkplaceRepository(tx),
           scope,
           directoryPath,
         });
-        // session scope 导入完成后，给没有 checkpoint 的 message 补 baseline 快照。
-        if (this.backfillBaseline && scope.kind === "session") {
-          const messageRepo = new SqliteMessageRepository(tx);
-          const checkpointRepo = new SqliteMessageCheckpointRepository(tx);
+      });
+    } catch (error) {
+      // helper 自吞错、不阻断导入的既有语义保持不变；这里只是兜住
+      // 「事务本身开不起来」这一层。
+      console.warn("[vfs-zip-io] import dir rules failed", error);
+    }
+
+    // 段 C（独立短事务，只装补写语句）：session scope 导入完成后，给没有
+    // checkpoint 的 message 补 baseline 快照。移出导入事务是为了不把
+    // 「消息数 × 文件数」的行插塞进同一条写事务。
+    if (this.backfillBaseline && scope.kind === "session") {
+      try {
+        await this.conn.transaction(async (tx) => {
           await backfillBaselineCheckpoints(
-            repoTx,
-            messageRepo,
-            checkpointRepo,
+            new SqliteVfsEntryRepository(tx),
+            new SqliteMessageRepository(tx),
+            new SqliteMessageCheckpointRepository(tx),
             scope.projectId,
             scope.sessionId
           );
-        }
-      });
-    } catch (error) {
-      if (error instanceof Error && error.message === "test import failure") {
-        throw error;
+        });
+      } catch (error) {
+        // best-effort：与紧邻的 clearSessionPromptCaches 同一口径，且不得
+        // 被包进 IMPORT_FAILED。语义等价：原实现在同一事务内读到的是
+        // 「自己刚插入、尚未提交的 head」，与现在的「导入已提交的 live
+        // head」内容相同（insertFileSeedingRevision 已把 head 与 revision
+        // 同步落库）。
+        console.warn("[vfs-zip-io] baseline checkpoint backfill failed", error);
       }
-      if (error instanceof Error && error.name === "VfsZipError") {
-        throw error;
-      }
-      const message =
-        error instanceof Error ? error.message : "import transaction failed";
-      throw vfsZipError("IMPORT_FAILED", message);
     }
 
     // 事务成功提交后再对齐提示词缓存；helper 自吞错（best-effort），不影响导入结果。

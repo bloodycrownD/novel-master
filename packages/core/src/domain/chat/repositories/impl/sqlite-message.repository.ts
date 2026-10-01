@@ -23,7 +23,11 @@ import type { ChatMessage, ChatMessageHeader } from "../../model/message.js";
 import type { MessageContent } from "../../model/content-block.js";
 import type { MessageUsage } from "../../model/message-usage.js";
 import { decodeMessageContent } from "../../logic/message-content-codec.js";
-import type { MessageRepository } from "../message.port.js";
+import { collectReadRefs } from "@/domain/vfs/logic/revision-ref-count.js";
+import type {
+  MessageReadRefTarget,
+  MessageRepository,
+} from "../message.port.js";
 
 const MESSAGE_SELECT_COLUMNS = `id, session_id, seq, role, content_json, content_encoding, content_blob, provider, provider_id, raw_json, created_at_ms, hidden, attachments_json, prompt_tokens, completion_tokens, total_tokens, cache_read_tokens, cache_creation_tokens, model_name, first_token_ms, duration_ms`;
 
@@ -298,6 +302,85 @@ export class SqliteMessageRepository implements MessageRepository {
     return this.mapRows(rows);
   }
 
+  async listBySessionUpToSeq(
+    sessionId: string,
+    maxSeq: number
+  ): Promise<ChatMessage[]> {
+    // 与 listBySessionFromSeq 对称：这边收上界。SQL 里**只**加 seq 上界，
+    // 不加 AND hidden = 0（fork 要保留 hidden 状态）。
+    // 走 mapRows 保住 yieldFn 分片让步（mobile 上大结果集退化成单次长任务）。
+    const rows = await queryTemplate(
+      this.conn,
+      this.parser,
+      `SELECT ${MESSAGE_SELECT_COLUMNS}
+       FROM chat_message
+       WHERE session_id = #{sessionId} AND seq <= #{maxSeq}
+       ORDER BY seq ASC`,
+      { sessionId, maxSeq }
+    );
+    return this.mapRows(rows);
+  }
+
+  async listBySessionTailOfRole(
+    sessionId: string,
+    role: string,
+    limit: number
+  ): Promise<ChatMessage[]> {
+    // role 在子查询里过滤：limit 只数该 role 的行，夹在中间的 tool_result
+    // （role=user）不占配额。外层再包一层 ORDER BY seq ASC 保持升序返回。
+    const clampedLimit = Math.max(1, Math.floor(limit));
+    const rows = await queryTemplate(
+      this.conn,
+      this.parser,
+      `SELECT ${MESSAGE_SELECT_COLUMNS}
+       FROM (
+         SELECT ${MESSAGE_SELECT_COLUMNS}
+         FROM chat_message
+         WHERE session_id = #{sessionId} AND role = #{role}
+         ORDER BY seq DESC
+         LIMIT #{limit}
+       )
+       ORDER BY seq ASC`,
+      { sessionId, role, limit: clampedLimit }
+    );
+    return this.mapRows(rows);
+  }
+
+  async listReadRefTargetsBySession(
+    sessionId: string
+  ): Promise<readonly MessageReadRefTarget[]> {
+    // 窄投影（21 → 4 列）：只取 id + 正文三列。**不过滤 hidden**
+    // （hidden 行也要出现在 targets 里，否则漏减 read 引用 = revision 永不 GC）。
+    const rows = await queryTemplate(
+      this.conn,
+      this.parser,
+      `SELECT id, content_json, content_encoding, content_blob
+       FROM chat_message WHERE session_id = #{sessionId} ORDER BY seq ASC`,
+      { sessionId }
+    );
+    const targets: MessageReadRefTarget[] = [];
+    for (const row of rows) {
+      try {
+        // 直接调用本文件既有的模块私有 readRowContent（双形态解码），
+        // 不新写一份解码分支。
+        targets.push({
+          id: String(row.id),
+          refs: collectReadRefs(readRowContent(row)),
+        });
+      } catch (err) {
+        // 坏行按「空 refs」处理并 warn——与 aggregateReadRefsFromAllMessages 的
+        // 坏行隔离口径一致（一条坏行不拖累其它行；这是有意的降级：旧形态
+        // listBySession 对坏行 fail-fast，会让整条清空/删除失败）。
+        console.warn(
+          "[sqlite-message] read_ref_target_row_skip：消息行解析失败，其 read 引用不参与 −1",
+          { id: String(row.id), err: err instanceof Error ? err.message : err }
+        );
+        targets.push({ id: String(row.id), refs: [] });
+      }
+    }
+    return targets;
+  }
+
   async listMessageHeadersBySession(
     sessionId: string
   ): Promise<ChatMessageHeader[]> {
@@ -335,19 +418,29 @@ export class SqliteMessageRepository implements MessageRepository {
   async listBySessionOffset(
     sessionId: string,
     offset: number
-  ): Promise<ChatMessage[]> {
+  ): Promise<ChatMessageHeader[]> {
+    // 头投影：唯一调用方（backfill 增量段判定）只消费 `id`，不取正文字节。
+    // 原先按 21 列全量取并逐条 JSON.parse——会话导入 / 复制 / 首次回填时
+    // offset 可能是 0 或很旧，一次调用就把全会话正文拉回来了。
     const clampedOffset = Math.max(0, Math.floor(offset));
     const rows = await queryTemplate(
       this.conn,
       this.parser,
-      `SELECT ${MESSAGE_SELECT_COLUMNS}
+      `SELECT id, session_id, seq, role, hidden, created_at_ms
        FROM chat_message
        WHERE session_id = #{sessionId}
        ORDER BY seq ASC
        LIMIT -1 OFFSET #{offset}`,
       { sessionId, offset: clampedOffset }
     );
-    return this.mapRows(rows);
+    return rows.map((row) => ({
+      id: String(row.id),
+      sessionId: String(row.session_id),
+      seq: Number(row.seq),
+      role: String(row.role),
+      hidden: Number(row.hidden) === 1,
+      createdAtMs: Number(row.created_at_ms),
+    }));
   }
 
   async listBySessionTail(

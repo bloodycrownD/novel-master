@@ -19,7 +19,10 @@ export function createSmartSortRuleService(
   conn: TdbcConnection
 ): SmartSortRuleService {
   return new DefaultSmartSortRuleService({
-    rules: new SqliteSmartSortRuleRepository(conn),
+    conn,
+    // 事务回调内会用 tx 句柄再调一次本工厂造仓储（多语句写入口包事务），
+    // 所以这里传的是「按连接造仓储」的函数而不是一个已绑根连接的实例。
+    createRules: (c) => new SqliteSmartSortRuleRepository(c),
     builtinSeed: BUILTIN_SMART_SORT_RULE_ROWS,
   });
 }

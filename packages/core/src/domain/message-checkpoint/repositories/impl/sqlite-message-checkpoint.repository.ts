@@ -40,6 +40,37 @@ function rowToFilePointer(row: Row): MessageCheckpointFile {
 /** 多值 INSERT 每块变量数上限（≤ 老版 SQLITE_MAX_VARIABLE_NUMBER=999，留余量）。 */
 const MULTI_VALUES_MAX_VARS = 900;
 
+/** IN 列表每块的变量数上限（≤ 老版 SQLITE_MAX_VARIABLE_NUMBER=999，留余量）。 */
+const IN_LIST_MAX_VARS = 900;
+
+/**
+ * 一块 IN 查询：`{ ids, bindings, inClause }`。
+ *
+ * `fixedVars` 是块内除 id 列表之外的固定变量数（本仓三处都是 1 个 sessionId）
+ * ⇒ 块大小 = `IN_LIST_MAX_VARS - fixedVars`，含 sessionId 共 ≤900 个变量。
+ * 块内绑定名重新从 `id0` 起编号，每块都是**同一种**模板串。
+ */
+function* chunkIdList(
+  ids: ReadonlyArray<string>,
+  fixedVars: number
+): Generator<{
+  readonly ids: ReadonlyArray<string>;
+  readonly bindings: Record<string, string>;
+  readonly inClause: string;
+}> {
+  const chunkSize = Math.max(1, IN_LIST_MAX_VARS - fixedVars);
+  for (let offset = 0; offset < ids.length; offset += chunkSize) {
+    const chunk = ids.slice(offset, offset + chunkSize);
+    const bindings: Record<string, string> = {};
+    const placeholders: string[] = [];
+    for (let i = 0; i < chunk.length; i++) {
+      bindings[`id${i}`] = chunk[i]!;
+      placeholders.push(`#{id${i}}`);
+    }
+    yield { ids: chunk, bindings, inClause: placeholders.join(", ") };
+  }
+}
+
 /**
  * 分块多值 INSERT：`INSERT INTO … VALUES (?,?,…),(?,?,…)…`。
  *
@@ -116,22 +147,23 @@ export class SqliteMessageCheckpointRepository
     if (messageIds.length === 0) {
       return 0;
     }
-    const bindings = Object.fromEntries(
-      messageIds.map((id, i) => [`id${i}`, id])
-    );
-    // 每条消息至多一行（PK + insertCheckpoint 替换语义），COUNT(*) 即有 checkpoint 的消息数。
-    const rows = await queryTemplate<{ n: number }>(
-      this.conn,
-      this.parser,
-      `SELECT COUNT(*) AS n FROM message_checkpoint
-       WHERE session_id = #{sessionId}
-         AND message_id IN (${messageIds
-           .map((_, i) => `#{id${i}}`)
-           .join(", ")})`,
-      { sessionId, ...bindings }
-    );
-    // COUNT(*) 恒返回一行；SQLite 下 COUNT 结果是 INTEGER，Number() 安全。
-    return Number(rows[0]!.n);
+    // 分块求和：每条消息至多一行（PK + insertCheckpoint 替换语义），
+    // COUNT(*) 即有 checkpoint 的消息数；id 列表来自 chat_message 主键、无重复
+    // ⇒ 各块之和 == 整段计数。
+    let total = 0;
+    for (const chunk of chunkIdList(messageIds, 1)) {
+      const rows = await queryTemplate<{ n: number }>(
+        this.conn,
+        this.parser,
+        `SELECT COUNT(*) AS n FROM message_checkpoint
+         WHERE session_id = #{sessionId}
+           AND message_id IN (${chunk.inClause})`,
+        { sessionId, ...chunk.bindings }
+      );
+      // COUNT(*) 恒返回一行；SQLite 下 COUNT 结果是 INTEGER，Number() 安全。
+      total += Number(rows[0]!.n);
+    }
+    return total;
   }
 
   async insertCheckpoint(input: MessageCheckpointInsertInput): Promise<void> {
@@ -329,6 +361,27 @@ export class SqliteMessageCheckpointRepository
     return rows.length === 0 ? null : String(rows[0]!.message_id);
   }
 
+  async findLastCheckpointedMessageId(
+    sessionId: string
+  ): Promise<string | null> {
+    // 形态照抄 findCheckpointMessageIdAtOrBefore，只是去掉 `cm.seq <= #{maxSeq}`
+    // 条件（不拿 Number.MAX_SAFE_INTEGER 顶替——那会把一个巨大数字绑进模板，
+    // 且与该方法的语义耦合）。
+    const rows = await queryTemplate<{ message_id: string }>(
+      this.conn,
+      this.parser,
+      `SELECT mc.message_id
+       FROM message_checkpoint mc
+       JOIN chat_message cm
+         ON cm.id = mc.message_id AND cm.session_id = mc.session_id
+       WHERE mc.session_id = #{sessionId}
+       ORDER BY cm.seq DESC
+       LIMIT 1`,
+      { sessionId }
+    );
+    return rows.length === 0 ? null : String(rows[0]!.message_id);
+  }
+
   async listFilePointersForSession(
     sessionId: string
   ): Promise<ReadonlyArray<MessageCheckpointFile>> {
@@ -370,21 +423,23 @@ export class SqliteMessageCheckpointRepository
     if (messageIds.length === 0) {
       return [];
     }
-    const idBindings = Object.fromEntries(
-      messageIds.map((id, i) => [`id${i}`, id])
-    );
-    const rows = await queryTemplate(
-      this.conn,
-      this.parser,
-      `SELECT session_id, message_id, entry_id, revision_version
-       FROM message_checkpoint_file
-       WHERE session_id = #{sessionId}
-         AND message_id IN (${messageIds
-           .map((_, i) => `#{id${i}}`)
-           .join(", ")})`,
-      { sessionId, ...idBindings }
-    );
-    return rows.map((row) => rowToFilePointer(row));
+    // 分块顺序 concat：块顺序 == id 顺序 ⇒ 返回行集合与顺序都与整段版一致。
+    const out: MessageCheckpointFile[] = [];
+    for (const chunk of chunkIdList(messageIds, 1)) {
+      const rows = await queryTemplate(
+        this.conn,
+        this.parser,
+        `SELECT session_id, message_id, entry_id, revision_version
+         FROM message_checkpoint_file
+         WHERE session_id = #{sessionId}
+           AND message_id IN (${chunk.inClause})`,
+        { sessionId, ...chunk.bindings }
+      );
+      for (const row of rows) {
+        out.push(rowToFilePointer(row));
+      }
+    }
+    return out;
   }
 
   async deleteCheckpointsForMessages(
@@ -395,40 +450,44 @@ export class SqliteMessageCheckpointRepository
       return;
     }
     const revisionRepo = new SqliteVfsRevisionRepository(this.conn);
-    const bindings = Object.fromEntries(
-      messageIds.map((id, i) => [`id${i}`, id])
-    );
-    const inClause = messageIds.map((_, i) => `#{id${i}}`).join(", ");
-
-    const fileRows = await queryTemplate(
-      this.conn,
-      this.parser,
-      `SELECT session_id, message_id, entry_id, revision_version
-       FROM message_checkpoint_file
-       WHERE session_id = #{sessionId} AND message_id IN (${inClause})`,
-      { sessionId, ...bindings }
-    );
-    if (fileRows.length > 0) {
-      await decrementRefsForCheckpointFiles(
-        revisionRepo,
-        fileRows.map((row) => rowToFilePointer(row))
+    // 顺序不许变：先**逐块读完** message_checkpoint_file 行并 concat，
+    // 一次性 decrementRefsForCheckpointFiles（ref −1 必须先于行删除），
+    // 再逐块执行那两条 DELETE。块内读失败会抛 ⇒ 整批不动（调用方在事务内）。
+    const fileRows: MessageCheckpointFile[] = [];
+    const chunks = [...chunkIdList(messageIds, 1)];
+    for (const chunk of chunks) {
+      const rows = await queryTemplate(
+        this.conn,
+        this.parser,
+        `SELECT session_id, message_id, entry_id, revision_version
+         FROM message_checkpoint_file
+         WHERE session_id = #{sessionId} AND message_id IN (${chunk.inClause})`,
+        { sessionId, ...chunk.bindings }
       );
+      for (const row of rows) {
+        fileRows.push(rowToFilePointer(row));
+      }
+    }
+    if (fileRows.length > 0) {
+      await decrementRefsForCheckpointFiles(revisionRepo, fileRows);
     }
 
-    await executeTemplate(
-      this.conn,
-      this.parser,
-      `DELETE FROM message_checkpoint_file
-       WHERE session_id = #{sessionId} AND message_id IN (${inClause})`,
-      { sessionId, ...bindings }
-    );
-    await executeTemplate(
-      this.conn,
-      this.parser,
-      `DELETE FROM message_checkpoint
-       WHERE session_id = #{sessionId} AND message_id IN (${inClause})`,
-      { sessionId, ...bindings }
-    );
+    for (const chunk of chunks) {
+      await executeTemplate(
+        this.conn,
+        this.parser,
+        `DELETE FROM message_checkpoint_file
+         WHERE session_id = #{sessionId} AND message_id IN (${chunk.inClause})`,
+        { sessionId, ...chunk.bindings }
+      );
+      await executeTemplate(
+        this.conn,
+        this.parser,
+        `DELETE FROM message_checkpoint
+         WHERE session_id = #{sessionId} AND message_id IN (${chunk.inClause})`,
+        { sessionId, ...chunk.bindings }
+      );
+    }
   }
 
   async deleteCheckpointsForSession(sessionId: string): Promise<void> {

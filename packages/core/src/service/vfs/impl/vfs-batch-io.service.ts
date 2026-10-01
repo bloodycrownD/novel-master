@@ -11,6 +11,7 @@ import {
   normalizeBatchRelativePath,
   relativePathUnderAnchor,
 } from "@/domain/vfs/logic/vfs-batch-path.js";
+import { writeWithRevision } from "@/domain/vfs/logic/write-with-revision.js";
 import {
   assertLogicalPathAllowed,
   resolveLogicalPath,
@@ -19,6 +20,12 @@ import {
 } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
+import {
+  ZIP_AND_CARD_IMPORT_TXN_FILE_CHUNK,
+  chunkArray,
+  yieldToEventLoop,
+} from "@/domain/vfs/logic/vfs-import-chunk.js";
 import type {
   BatchApplyOptions,
   BatchApplyReport,
@@ -82,24 +89,25 @@ async function ensureEmptyDirectoryRow(
   }
 }
 
+/** 分块写入单个文件：走共享的 revision 写路径（不再绕开 revision 层）。 */
 async function writeOrUpdateFile(
-  repo: VfsEntryRepository,
+  entryRepo: VfsEntryRepository,
+  revisionRepo: SqliteVfsRevisionRepository,
   scope: VfsScope,
   logical: string,
   content: string
 ): Promise<void> {
   const sk = scopeKey(scope);
-  await ensureParentDirectories(repo, sk, logical);
-  const existing = await repo.findByPath(sk, logical);
-  if (existing == null) {
-    await repo.insert(sk, logical, content);
-    return;
-  }
-  if (existing.entryKind === "directory") {
-    throw new Error(`cannot overwrite directory with file: ${logical}`);
-  }
-  // 无 revision 层：不写 vfs_revision 行，head + 1 不会撞唯一键，维持现状语义
-  await repo.update(sk, logical, content, existing.version + 1);
+  // WHY 外面保底父链：writeWithRevision 只在**新建**分支调 ensureParentDirectories，
+  // 而批量 ingest 允许覆盖已有路径 ⇒ 已有路径的父链不由它兜。
+  await ensureParentDirectories(entryRepo, sk, logical);
+  // skipNameValidation=true：批量 ingest 是 zip 导入的创建通道，输入是**外部
+  // 文件名**；`validate-entry-name.ts` 的 JSDoc 明确导入链路不走名校验
+  // （外部文件名可先导入再用改名纠正）。传 false 会把「以前能导入的外部文件名」
+  // 变成「导入失败」，改变一条已拍板的导入语义。
+  await writeWithRevision(entryRepo, revisionRepo, sk, logical, content, {
+    skipNameValidation: true,
+  });
 }
 
 function emptyReport(
@@ -302,35 +310,90 @@ export class DefaultVfsBatchIoService implements VfsBatchIoService {
     const target = resolveLogicalPath(_targetDir);
     const writtenLogical: string[] = [];
 
-    try {
-      await this.conn.transaction(async (tx) => {
-        const repoTx = new SqliteVfsEntryRepository(tx);
+    // 分片提交（CS-05）：段 B0 = mkdir 行独立短事务；段 B1..Bk = 每片 ≤200 个
+    // write 各一条短事务。失败片回滚、已提交片保留 ⇒ `written` 如实列出已提交
+    // 分片（分片前 `written` 恒为空，是因为整批只有一条事务）。
+    let failedPath: string | null = null;
+    let failureMessage: string | null = null;
+    let committedShards = 0;
 
-        for (const dirLogical of plan.mkdirPaths) {
-          await ensureEmptyDirectoryRow(repoTx, scope, dirLogical);
-        }
-
-        for (const write of plan.writes) {
-          const logical = joinTargetLogicalPath(target, write.relativePath);
-          if (this.testHook?.throwOnWriteLogical === logical) {
-            throw new Error("test batch ingest failure");
+    // 段 B0：mkdir 行独立一条短事务（plan.writes 为空时这就是唯一一条）。
+    if (plan.mkdirPaths.length > 0) {
+      try {
+        await this.conn.transaction(async (tx) => {
+          const repoTx = new SqliteVfsEntryRepository(tx);
+          for (const dirLogical of plan.mkdirPaths) {
+            await ensureEmptyDirectoryRow(repoTx, scope, dirLogical);
           }
-          await writeOrUpdateFile(repoTx, scope, logical, write.content);
-          writtenLogical.push(logical);
+        });
+        committedShards += 1;
+      } catch (error) {
+        failedPath = plan.mkdirPaths[0]!;
+        failureMessage =
+          error instanceof Error
+            ? error.message
+            : "batch ingest transaction failed";
+      }
+    }
+
+    // 段 B1..Bk：逐片提交。`written` 只在片**提交后**并入——回调内 push 会把
+    // 回滚片的内容也算进报告。
+    let shardIndex = 0;
+    if (failedPath == null) {
+      for (const shard of chunkArray(
+        plan.writes,
+        ZIP_AND_CARD_IMPORT_TXN_FILE_CHUNK
+      )) {
+        const shardWritten: string[] = [];
+        try {
+          await this.conn.transaction(async (tx) => {
+            const repoTx = new SqliteVfsEntryRepository(tx);
+            const revisionTx = new SqliteVfsRevisionRepository(tx);
+            for (const write of shard) {
+              const logical = joinTargetLogicalPath(
+                target,
+                write.relativePath
+              );
+              if (this.testHook?.throwOnWriteLogical === logical) {
+                throw new Error("test batch ingest failure");
+              }
+              await writeOrUpdateFile(
+                repoTx,
+                revisionTx,
+                scope,
+                logical,
+                write.content
+              );
+              shardWritten.push(logical);
+            }
+          });
+          writtenLogical.push(...shardWritten);
+          committedShards += 1;
+          shardIndex += 1;
+        } catch (error) {
+          failedPath = joinTargetLogicalPath(target, shard[0]!.relativePath);
+          failureMessage =
+            error instanceof Error
+              ? error.message
+              : "batch ingest transaction failed";
+          break;
         }
-      });
-    } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : "batch ingest transaction failed";
-      const failedPath =
-        this.testHook?.throwOnWriteLogical ??
-        (plan.writes[0]
-          ? joinTargetLogicalPath(target, plan.writes[0].relativePath)
-          : target);
-      // 非 session：整批回滚 → written 必须为空
-      return emptyReport(skippedBase, [{ path: failedPath, message }]);
+        // 让步只落在片与片之间，绝不落在事务回调内部。
+        await yieldToEventLoop();
+      }
+    }
+
+    if (failedPath != null) {
+      return {
+        written: [...writtenLogical],
+        skipped: skippedBase,
+        failed: [
+          {
+            path: failedPath,
+            message: `${failureMessage ?? "batch ingest failed"}（已提交 ${committedShards} 片，失败在第 ${shardIndex + 1} 片）`,
+          },
+        ],
+      };
     }
 
     return {

@@ -48,7 +48,6 @@ import {
   EVENT_AGENT_RUN_FINISHED,
   EVENT_SUBAGENT_CHILD_SESSION_CREATED,
 } from "@/domain/events/model/event-types.js";
-import type { ChatMessage } from "@/domain/chat/model/message.js";
 import type { SendAnnotateDraft } from "@/domain/chat/model/annotate-draft.schema.js";
 import type { MessageAttachment } from "@/domain/chat/model/message-attachment.schema.js";
 import { buildAnnotateAttachmentFromDraft } from "@/domain/chat/logic/build-attachment-action-xml.js";
@@ -909,8 +908,6 @@ async function runAgentTurnWithController(
     vfs,
     projectId: scope.projectId,
     sessionId: scope.sessionId,
-    listSessionMessages: (): Promise<readonly ChatMessage[]> =>
-      runtime.messages.listBySession(scope.sessionId),
     sessionKkv: runtime.sessionKkv,
     // read 引用计数 +1 通道（read-tool-result-ref）：显式通道优先，否则从
     // revisionRepo 推导（Step 6 生产装配）；两者都缺时 read 回落 legacy
@@ -1265,8 +1262,6 @@ async function runChildAgent(args: {
       vfs,
       projectId: parentProjectId,
       sessionId: childSessionId,
-      listSessionMessages: (): Promise<readonly ChatMessage[]> =>
-        runtime.messages.listBySession(childSessionId),
       sessionKkv: runtime.sessionKkv,
       // read 引用计数 +1 通道（read-tool-result-ref）：子 agent 与主 run 同款
       // 透传（引用是全局键，跨会话直接指向源 revision，子/主一视同仁）——

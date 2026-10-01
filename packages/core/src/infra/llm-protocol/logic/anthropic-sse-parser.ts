@@ -402,18 +402,38 @@ export function finishAnthropicSsePartial(
     )
     .map((b) => b.text)
     .join("");
+  // thinking 文本级签名：取**最后一个非空** thinkingSignature（与 gemini 的
+  // `state.thinkingSignature`「后到覆盖」语义一致）。
+  const thinkingSignature = state.blocks
+    .filter(
+      (b): b is Extract<ContentBlock, { type: "thinking" }> =>
+        b.type === "thinking"
+    )
+    .reduce<string | undefined>(
+      (acc, b) => (b.thinkingSignature != null ? b.thinkingSignature : acc),
+      undefined
+    );
   const toolUses = state.blocks
     .filter(
       (b): b is Extract<ContentBlock, { type: "tool_use" }> =>
         b.type === "tool_use"
     )
-    .map((b) => ({ id: b.id, name: b.name, input: b.input }));
+    .map((b) => ({
+      id: b.id,
+      name: b.name,
+      input: b.input,
+      // 块上本就带签名，partial 侧必须透传（不传 ⇒ 中断收尾的 tool_use 比
+      // 正常收尾少签名，回传时 400）。
+      ...(b.thinkingSignature != null
+        ? { thinkingSignature: b.thinkingSignature }
+        : {}),
+    }));
   const otherBlocks = state.blocks.filter(
     (b) => b.type !== "text" && b.type !== "thinking" && b.type !== "tool_use"
   );
 
   const blocks = buildStreamPartialBlocks(
-    { text, thinking, toolUses },
+    { text, thinking, thinkingSignature, toolUses },
     onStream
   );
   blocks.push(...otherBlocks);

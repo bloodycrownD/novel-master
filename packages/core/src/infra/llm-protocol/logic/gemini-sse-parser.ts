@@ -111,16 +111,39 @@ function tryEmitGeminiToolUseIfComplete(
   onStream?.({ type: "tool-use", id: acc.id, name: acc.name, input });
 }
 
+/**
+ * `mergeFunctionCallPart` 的归并键。
+ *
+ * `functionCall.id` 缺席时（Gemini 明确允许省略）用「函数名 + 同一 chunk 内同名出现序」
+ * 而不是裸函数名——裸名字会把**并行的两个同名调用压成一个累加器**，而
+ * `argsJson` 分支是赋值不是累加 ⇒ 第二个 chunk 的 args 整体覆盖第一个，
+ * `blocks` 最终只剩一条 `tool_use`、携带最后一次调用的参数（工具调用静默丢失 + 参数串味）。
+ *
+ * 为什么「chunk 内序号」是稳定的：SSE 的增量语义是「每个 chunk 携带当前完整的
+ * parts 快照」，一个持续增长的调用在后续 chunk 里出现在同一 part 位置、同名序号不变
+ * ⇒ key 稳定、argsJson 继续被同一条累加器更新；而并行的第二个同名调用占另一个序号。
+ *
+ * ⚠️ 已知边界（R1）：若供应商真按「只带新增 part」的增量形态发，且两个同名调用**分处两个
+ * chunk**，两者序号都是 0 ⇒ 仍会塌缩。届时需改用全局序号 + part 位置。
+ */
+function functionCallMergeKey(
+  fc: Record<string, unknown>,
+  ordinal: number
+): string {
+  return typeof fc.id === "string" && fc.id !== "" ? fc.id : `${fc.name}#${ordinal}`;
+}
+
 function mergeFunctionCallPart(
   state: GeminiSseParserState,
   part: Record<string, unknown>,
+  ordinal: number,
   onStream?: (event: LlmStreamEvent) => void
 ): void {
   const fc = part.functionCall;
   if (!isRecord(fc) || typeof fc.name !== "string") {
     return;
   }
-  const key = typeof fc.id === "string" && fc.id !== "" ? fc.id : fc.name;
+  const key = functionCallMergeKey(fc, ordinal);
   let acc = state.functionCalls.get(key);
   if (acc == null) {
     acc = {
@@ -163,6 +186,8 @@ function processGeminiResponseChunk(
     return;
   }
 
+  // 同名 functionCall 的 0 基出现序号（**逐 chunk 重置**，见 functionCallMergeKey 注释）
+  const perChunkNameSeq = new Map<string, number>();
   for (const part of content.parts) {
     if (!isRecord(part)) {
       continue;
@@ -187,7 +212,13 @@ function processGeminiResponseChunk(
       }
     }
     if (part.functionCall != null) {
-      mergeFunctionCallPart(state, part, onStream);
+      const fcName =
+        isRecord(part.functionCall) && typeof part.functionCall.name === "string"
+          ? part.functionCall.name
+          : "";
+      const ordinal = perChunkNameSeq.get(fcName) ?? 0;
+      perChunkNameSeq.set(fcName, ordinal + 1);
+      mergeFunctionCallPart(state, part, ordinal, onStream);
     }
   }
 }
@@ -393,6 +424,9 @@ export function finishGeminiSsePartial(
     {
       text: state.textParts.join(""),
       thinking: state.thinkingParts.join(""),
+      // 与正常收尾路径（finishGeminiSse）同源：同一份 state.thinkingSignature。
+      // 不传它 ⇒ 中断收尾产出的 thinking 块比正常收尾少一个签名，回传时会被 400。
+      thinkingSignature: state.thinkingSignature,
       toolUses,
     },
     onStream

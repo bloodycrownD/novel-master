@@ -4,7 +4,6 @@
  * @module domain/tool/builtin/builtin-tool-context
  */
 
-import type { ChatMessage } from "@/domain/chat/model/message.js";
 import type { VfsService } from "@/domain/vfs/ports/vfs-service.port.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
 import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
@@ -157,8 +156,6 @@ export type BuiltinToolContext = {
   readonly vfs: VfsService;
   readonly projectId: string;
   readonly sessionId: string;
-  /** 列出会话消息（含 hidden，供 chat_grep）。 */
-  readonly listSessionMessages: () => Promise<readonly ChatMessage[]>;
   /**
    * 可选：`write` 成功后 upsert `file_cache` `full:{path}`。
    * `edit` / delete / rename / move **不**读写此字段。

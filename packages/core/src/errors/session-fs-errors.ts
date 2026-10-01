@@ -17,7 +17,11 @@ export type SessionFsErrorCode =
   | "ROLLBACK_UNDO_SEND_EMPTY_TARGET"
   // A-22 乐观锁：resolveRollbackPlan 读快照与事务写入之间出现并发写入时拒绝，
   // 让上层重试或提示用户。重试上限耗尽后才向上抛这个错。
-  | "ROLLBACK_CONFLICT";
+  | "ROLLBACK_CONFLICT"
+  // CD-01 第 4 步：事务内 `seq > truncateAfterSeq` 的消息 id 集合与 plan 阶段
+  // 记录的 tailMessageIds 不一致 —— 间隙里插进了 seq 更大的新消息，它会被
+  // truncateTailInTransaction 连带截断，而用户从没回滚过它。
+  | "ROLLBACK_TAIL_DRIFT";
 
 /**
  * Unified error for session-fs rollback operations.
@@ -138,17 +142,23 @@ export function sessionFsRollbackNoCheckpoint(
 }
 
 /**
- * undo_send 的 targetTree 经过 prior + anchor 两轮兜底后仍为空，
- * 继续删除会把当前会话工作区整体清掉。这里抛错让上层走「仅截断消息」的
- * 降级路径（skipVfsReconcile），或提示用户该会话缺少 baseline 快照。
+ * targetTree 为空却仍有 live 文件时抛出，让上层走「仅截断消息」的降级路径
+ * （skipVfsReconcile），或提示用户该会话缺少 baseline 快照。
+ *
+ * @param mode 回滚模式（CD-01 第 1 步起对 rewind 同样生效），带进 detail 便于
+ *        上层区分是哪条路径触发的；错误码保持 `ROLLBACK_UNDO_SEND_EMPTY_TARGET`
+ *        不变（既有降级判定 `isRollbackVfsDegradableError` 依赖它）。
  */
 export function sessionFsRollbackUndoSendEmptyTarget(
   sessionId: string,
-  messageId: string
+  messageId: string,
+  mode?: string
 ): SessionFsError {
   return new SessionFsError(
     "ROLLBACK_UNDO_SEND_EMPTY_TARGET",
-    "undo_send 缺少可用的 baseline 快照，拒绝清空会话工作区",
+    mode === "rewind"
+      ? "rewind 缺少可用的 baseline 快照，拒绝清空会话工作区"
+      : "undo_send 缺少可用的 baseline 快照，拒绝清空会话工作区",
     { sessionId, messageId }
   );
 }
@@ -247,6 +257,26 @@ export function isRollbackConflictError(
   error: unknown
 ): error is SessionFsError {
   return isSessionFsError(error, "ROLLBACK_CONFLICT");
+}
+
+/**
+ * CD-01 第 4 步：待截断的 tail 与 plan 阶段记录的不一致。
+ *
+ * 只带 expected / actual 两个**计数**，不带 id 列表——错误信息不该泄漏消息
+ * 正文内容。上层（desktop / mobile）尚无对应文案，走既有的
+ * `formatDegradableMessage` 降级路径即可显示成「工作区无法恢复：…」。
+ */
+export function sessionFsRollbackTailDrift(
+  sessionId: string,
+  messageId: string,
+  expectedTailCount: number,
+  actualTailCount: number
+): SessionFsError {
+  return new SessionFsError(
+    "ROLLBACK_TAIL_DRIFT",
+    `回滚期间待截断的消息集合发生变化（预期 ${expectedTailCount} 条，实际 ${actualTailCount} 条），已拒绝截断以免误删新消息，请重试`,
+    { sessionId, messageId, expectedMessageCount: expectedTailCount, actualMessageCount: actualTailCount }
+  );
 }
 
 /**

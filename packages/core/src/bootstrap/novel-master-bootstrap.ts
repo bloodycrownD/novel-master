@@ -116,8 +116,14 @@ import { IntegrityRepairRegistry } from "@/service/integrity-repair.js";
  * + 实时算兜底」并移除累计输入输出——DDL/ALIGN 全撤、版本回到 17。该列
  * 只在 feature 分支的测试机库上残留（user_version 已升 18、列与回填标记
  * 为无害孤儿，无任何读写方），正式库从未有过此形态，无需清理动作。
+ * v18（CS-07 blob 归零触发器加 `vfs_entry` 守卫）：两个 blob 归零触发器改名成
+ * `..._v2` 并在 canonical DDL 里带 `DROP TRIGGER IF EXISTS <旧名>`。**必须
+ * bump**——本组语句与 `alignSchemaColumns` 同在慢路径，而 `bootVersion >=
+ * SCHEMA_BOOT_VERSION` 的存量库在快路径直接 return，不 bump 则新语句永远补不上
+ * （RULE「加 align 条目不 bump 版本则永远补不上」）。存量库因此会走一次慢路径
+ * （重放 DDL + 对齐），首次启动变慢是一次性代价。
  */
-export const SCHEMA_BOOT_VERSION = 17;
+export const SCHEMA_BOOT_VERSION = 18;
 
 /** 各模块 DDL 语句，按依赖安全顺序排列。 */
 export const NOVEL_MASTER_SCHEMA_STATEMENTS: readonly string[] = [

@@ -7,6 +7,10 @@
 import { inflateSync } from "fflate";
 import { vfsZipError, VfsZipError } from "@/errors/vfs-zip-errors.js";
 import { decodeZipEntryName } from "./vfs-zip-filename-decode.js";
+import {
+  DEFAULT_VFS_ZIP_LIMITS,
+  type VfsZipLimits,
+} from "./vfs-zip-limits.js";
 
 const LOCAL_FILE_HEADER_SIG = 0x04034b50;
 const CENTRAL_DIR_HEADER_SIG = 0x02014b50;
@@ -86,7 +90,8 @@ function decompressEntryData(
   compressed: Uint8Array,
   method: number,
   uncompressedSize: number,
-  entryLabel: string
+  entryLabel: string,
+  remainingBudget: number
 ): Uint8Array {
   if (method === ZIP_METHOD_STORE) {
     if (compressed.length !== uncompressedSize) {
@@ -96,6 +101,13 @@ function decompressEntryData(
       );
     }
     return compressed;
+  }
+  // 动手前的单条兜底：声明值本身已超剩余预算 ⇒ 不进 inflateSync。
+  if (uncompressedSize > remainingBudget) {
+    throw vfsZipError(
+      "PAYLOAD_TOO_LARGE",
+      `ZIP entry ${entryLabel} exceeds remaining size budget (${uncompressedSize} > ${remainingBudget})`
+    );
   }
   try {
     const inflated = inflateSync(compressed);
@@ -122,7 +134,8 @@ function readLocalEntryData(
     uncompressedSize: number;
     method: number;
     entryName: string;
-  }
+  },
+  remainingBudget: number
 ): Uint8Array {
   const { localHeaderOffset } = entry;
   if (readUInt32LE(bytes, localHeaderOffset) !== LOCAL_FILE_HEADER_SIG) {
@@ -153,17 +166,26 @@ function readLocalEntryData(
     compressed,
     entry.method,
     entry.uncompressedSize,
-    entry.entryName
+    entry.entryName,
+    remainingBudget
   );
 }
 
 /**
  * 解析 ZIP 中央目录，返回条目名（已解码）与解压后正文。
  *
+ * @remarks 体积/条数闸在**解压之前**就判（CS-09）：EOCD 的 `totalEntries`
+ *          先判条数上限；循环内累加**声明** `uncompressedSize`，越限立即抛
+ *          （在 `readLocalEntryData` 之前），解压后再累加**实际**长度做二次
+ *          确认。攻击者可控的 `uncompressedSize` 让几百 KB 的 zip 能让
+ *          `inflateSync` 分配 GB 级——只在解压之后判就来不及了。
+ *
+ * @throws {VfsZipError} `PAYLOAD_TOO_LARGE` 条数或解压后总体积越限
  * @throws {VfsZipError} `INVALID_ZIP` 当归档结构不受支持或无法读取
  */
 export function parseZipCentralDirectory(
-  zipBytes: Uint8Array
+  zipBytes: Uint8Array,
+  limits: VfsZipLimits = DEFAULT_VFS_ZIP_LIMITS
 ): ZipCentralDirEntry[] {
   if (zipBytes.length < 22) {
     throw vfsZipError("INVALID_ZIP", "ZIP archive too small");
@@ -182,7 +204,17 @@ export function parseZipCentralDirectory(
     throw vfsZipError("INVALID_ZIP", "invalid central directory bounds");
   }
 
+  // 条数闸：解压任何一条**之前**。
+  if (totalEntries > limits.maxEntryCount) {
+    throw vfsZipError(
+      "PAYLOAD_TOO_LARGE",
+      `ZIP entry count ${totalEntries} exceeds limit ${limits.maxEntryCount}`
+    );
+  }
+
   const entries: ZipCentralDirEntry[] = [];
+  let declaredBytes = 0;
+  let actualBytes = 0;
   let offset = centralDirOffset;
 
   for (let i = 0; i < totalEntries; i++) {
@@ -221,13 +253,34 @@ export function parseZipCentralDirectory(
     assertNotEncrypted(gpbf, entryName);
     assertSupportedCompressionMethod(method, entryName);
 
-    const data = readLocalEntryData(zipBytes, {
-      localHeaderOffset,
-      compressedSize,
-      uncompressedSize,
-      method,
-      entryName,
-    });
+    // 体积闸在**动手之前**：先按声明值累加，越限直接抛，一条都不解压。
+    declaredBytes += uncompressedSize;
+    if (declaredBytes > limits.maxUncompressedBytes) {
+      throw vfsZipError(
+        "PAYLOAD_TOO_LARGE",
+        `ZIP uncompressed size ${declaredBytes} exceeds limit ${limits.maxUncompressedBytes}`
+      );
+    }
+
+    const data = readLocalEntryData(
+      zipBytes,
+      {
+        localHeaderOffset,
+        compressedSize,
+        uncompressedSize,
+        method,
+        entryName,
+      },
+      limits.maxUncompressedBytes - declaredBytes
+    );
+    // 解压后二次确认（防「声明小、实际大」的谎报头把单条内存打穿）。
+    actualBytes += data.length;
+    if (actualBytes > limits.maxUncompressedBytes) {
+      throw vfsZipError(
+        "PAYLOAD_TOO_LARGE",
+        `ZIP uncompressed size ${actualBytes} exceeds limit ${limits.maxUncompressedBytes}`
+      );
+    }
 
     entries.push({
       entryName,

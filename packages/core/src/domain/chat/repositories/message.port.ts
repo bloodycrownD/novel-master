@@ -7,6 +7,20 @@
 import type { ChatMessage, ChatMessageHeader } from "../model/message.js";
 import type { MessageContent } from "../model/content-block.js";
 import type { MessageSearchQuery } from "../content/message-content-match.js";
+// 仅取类型（编译后擦除，运行时不成环）：ReadRefPointer 在 vfs 侧定义，
+// 这里不重新定义第二份，避免两个模块的 read 引用形状漂移。
+import type { ReadRefPointer } from "@/domain/vfs/logic/revision-ref-count.js";
+
+/**
+ * 一条消息的「删除链素材」：id + 它的 read 引用指针。
+ *
+ * 窄投影（21 → 4 列）读口的返回元素：删除链需要的就是这两样东西，
+ * 此前只能靠 21 列 `listBySession` 顺带取。
+ */
+export type MessageReadRefTarget = {
+  readonly id: string;
+  readonly refs: readonly ReadRefPointer[];
+};
 
 /** Persistence for `chat_message` rows. */
 export interface MessageRepository {
@@ -36,13 +50,19 @@ export interface MessageRepository {
   countBySession(sessionId: string): Promise<number>;
 
   /**
-   * 按 seq 升序跳过前 `offset` 行，取余下全部消息（backfill 圈「新增段」用）。
+   * 按 seq 升序跳过前 `offset` 行，取余下全部消息头（backfill 圈「新增段」用）。
    *
    * `offset` 是行偏移而非 seq 值（seq 可能因删除有洞）；SQLite 方言
    * `LIMIT -1 OFFSET ?` 表示不限条数。消息集只增不减时前 `offset` 行即
    * 上次扫描确认过的消息，返回的就是之后的新增段。
+   *
+   * @remarks **只取 id/seq 顺序，不取正文**——调用方（backfill 增量段判定）
+   *          只消费 `id`。新增第二个「要正文」的调用方时必须另起读口。
    */
-  listBySessionOffset(sessionId: string, offset: number): Promise<ChatMessage[]>;
+  listBySessionOffset(
+    sessionId: string,
+    offset: number
+  ): Promise<ChatMessageHeader[]>;
 
   /**
    * 按 seq 升序列出「seq >= fromSeq（含下界）」的消息。
@@ -56,7 +76,52 @@ export interface MessageRepository {
     fromSeq: number
   ): Promise<ChatMessage[]>;
 
+  /**
+   * 按 seq 升序列出「seq <= maxSeq（含上界）」的消息（fork 上界收窄用）。
+   *
+   * fork 消费方的全部读都在锚点及更早方向（`filter(seq <= upTo.seq)`），
+   * 锚点之后的整条尾巴是纯浪费——用户在第 3 条消息处 fork 一个 3000 条的
+   * 会话时，2997 条正文被读回、逐行 `JSON.parse`、再整条丢掉。
+   * 与 {@link listBySessionFromSeq} 对称（那边收下界、这边收上界）。
+   *
+   * @remarks **含 hidden**：本读口只加 `seq` 上界，**不得**加 `AND hidden = 0`
+   *          ——fork 明确「Preserve hidden state」，滤掉 hidden 行会让 fork
+   *          出来的会话**静默丢消息**。
+   */
+  listBySessionUpToSeq(sessionId: string, maxSeq: number): Promise<ChatMessage[]>;
+
   listBySessionTail(sessionId: string, limit: number): Promise<ChatMessage[]>;
+
+  /**
+   * tail + role 过滤：取「该 role 的最后 limit 条」（seq 升序返回）。
+   *
+   * `role` 在 SQL 子查询里过滤，`limit` 只数**该 role** 的行，所以夹在
+   * assistant 回合之间的 tool_result（role=user）**不会吃掉配额**——
+   * 这正是不能直接用 `listBySessionTail(sessionId, 1)` 的原因。
+   *
+   * 消费者：subagent 工具为拿「末条 assistant 的合并文本」。它原先拉整条子会话
+   * （21 列 + 逐行 parse）再从尾往前倒扫，每次 `task` 调用都重付。
+   */
+  listBySessionTailOfRole(
+    sessionId: string,
+    role: string,
+    limit: number
+  ): Promise<ChatMessage[]>;
+
+  /**
+   * 列出会话内每条消息的 id 与其 read 引用指针（entryId/version），不解压/不解析
+   * 正文以外的任何列。删除链（清空会话 / 删会话 / 删项目）需要「id 列表 +
+   * read 引用 −1 素材」两样东西，此前只能靠 21 列 `listBySession` 顺带取。
+   *
+   * ⚠ 不过滤 hidden：本读口产出的是「即将被 deleteBySession 全删」的消息集合，
+   * 漏掉 hidden 行 = 漏减 read 引用 = revision 永不 GC（内容不可再生的方向）。
+   *
+   * ⚠ 返回类型**仍是**逐条 parse 后的 refs（`collectReadRefs` 需要完整
+   * `MessageContent`）——本读口省的是**列数**与**事务外往返**，不是省 parse。
+   */
+  listReadRefTargetsBySession(
+    sessionId: string
+  ): Promise<readonly MessageReadRefTarget[]>;
   listBySessionPage(
     sessionId: string,
     limit: number,

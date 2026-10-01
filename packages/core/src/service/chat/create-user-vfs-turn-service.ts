@@ -64,7 +64,6 @@ export function createUserVfsTurnServiceBundle(
     }),
     projectId,
     sessionId,
-    listSessionMessages: () => messageRepo.listBySession(sessionId),
     sessionKkv,
     // read 引用化（read-tool-result-ref Step 6）：U-A-U-A 链路的 read 同步
     // +1 通道——绑定上方已构造的 revisionRepo（delta>0 缺行抛 NOT_FOUND 的

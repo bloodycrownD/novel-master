@@ -34,7 +34,7 @@ import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import {
-  aggregateReadRefs,
+  aggregateReadRefPointers,
   adjustReadRefCount,
 } from "@/domain/vfs/logic/revision-ref-count.js";
 import {
@@ -174,10 +174,14 @@ export class DefaultProjectService implements ProjectService {
         // read 引用 −1（BFS 展开的每个会话、messages.deleteBySession 之前）：
         // 该路径自有事务、不经过 deleteSessionTree——独立挂点，漏了会让被其它
         // 会话引用的 revision 永久泄漏（无自愈）。
+        // 窄投影读口（4 列）替掉 21 列全量读（与 session.service 的
+        // deleteSessionTree 同型同修法）；读仍留在事务内——它产出的就是要减的写集合。
         await adjustReadRefCount(
           r.revisions,
-          aggregateReadRefs(
-            (await r.messages.listBySession(session.id)).map((m) => m.content)
+          aggregateReadRefPointers(
+            (await r.messages.listReadRefTargetsBySession(session.id)).map(
+              (t) => t.refs
+            )
           ),
           -1
         );

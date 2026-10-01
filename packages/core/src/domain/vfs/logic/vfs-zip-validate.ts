@@ -14,9 +14,19 @@ import {
   resolveZipDirectoryPath,
 } from "./vfs-zip-path.js";
 
-export const VFS_ZIP_MAX_UNCOMPRESSED_BYTES = 32 * 1024 * 1024;
-export const VFS_ZIP_MAX_ENTRY_COUNT = 5_000;
-export const VFS_ZIP_MAX_ENTRY_PATH_LEN = 512;
+// 闸门常量搬到 vfs-zip-limits.ts（解析器也要用同一组值，独立成模块才能避免
+// 解析器 ←→ 校验器的循环依赖）。这里 import + 再导出，保持既有 import 面不变。
+import {
+  VFS_ZIP_MAX_UNCOMPRESSED_BYTES,
+  VFS_ZIP_MAX_ENTRY_COUNT,
+  VFS_ZIP_MAX_ENTRY_PATH_LEN,
+} from "./vfs-zip-limits.js";
+
+export {
+  VFS_ZIP_MAX_UNCOMPRESSED_BYTES,
+  VFS_ZIP_MAX_ENTRY_COUNT,
+  VFS_ZIP_MAX_ENTRY_PATH_LEN,
+};
 
 /** Validated ZIP payload ready for DB import. */
 export interface VfsZipValidatedPayload {

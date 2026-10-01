@@ -36,6 +36,15 @@ export interface MessageService {
     sessionId: string,
     options: { limit: number }
   ): Promise<ChatMessage[]>;
+  /**
+   * tail + role 过滤：取该 role 的最后 `limit` 条（role 在 SQL 子查询里滤，
+   * limit 只数该 role 的行 ⇒ 夹在中间的其它 role 消息不占配额）。
+   * subagent 工具取「末条 assistant 文本」专用。
+   */
+  listBySessionTailOfRole(
+    sessionId: string,
+    options: { role: string; limit: number }
+  ): Promise<ChatMessage[]>;
   listBySessionPage(
     sessionId: string,
     options: { limit: number; beforeSeq?: number }

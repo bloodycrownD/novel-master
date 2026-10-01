@@ -8,6 +8,7 @@
  * @module services/smart-sort-rule-yaml
  */
 import { parseText, stringifyText } from "@novel-master/core";
+import { isStorageFailure } from "@novel-master/core/common";
 import type { BrowserWindow } from "electron";
 import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
 import {
@@ -36,6 +37,12 @@ export async function importSmartSortRuleYamlWithDialog(
       // service.importRules 内部走 core 单源 decode（含 zod 校验）。
       await runtime.smartSortRule.importRules(parseText(yaml, "yaml"));
     } catch (error) {
+      // 存储/事务类故障原样上抛：`importRules` 现在整体包一条事务，中途失败即
+      // 回滚，带上「YAML 无效」前缀会把 DB 故障误报成用户格式错误。
+      // 其余（含 YAML 语法错 / schema 违规）照旧套前缀。
+      if (isStorageFailure(error)) {
+        throw error;
+      }
       throw normalizeYamlError(error, "智能排序规则 YAML 无效");
     }
   }, parentWindow);

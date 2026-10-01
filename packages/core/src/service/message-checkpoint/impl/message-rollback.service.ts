@@ -14,7 +14,10 @@ import {
   resolvePriorRollbackTargetTree,
   resolveRollbackTargetTree,
 } from "@/domain/message-checkpoint/logic/resolve-target-tree.js";
-import { resolveReconcilePathSets } from "@/domain/message-checkpoint/logic/resolve-reconcile-paths.js";
+import {
+  resolvePathsNeedDeleteInTransaction,
+  resolveReconcilePathSets,
+} from "@/domain/message-checkpoint/logic/resolve-reconcile-paths.js";
 import {
   restorePathToRevision,
   restorePathToRevisionWithBackfill,
@@ -40,6 +43,7 @@ import {
   sessionFsRollbackVfsRestoreFailed,
   sessionFsRollbackUndoSendEmptyTarget,
   sessionFsRollbackConflict,
+  sessionFsRollbackTailDrift,
   isSessionFsError,
 } from "@/errors/session-fs-errors.js";
 import { isVfsError } from "@/errors/vfs-errors.js";
@@ -79,7 +83,13 @@ type RollbackPlan = {
   truncateAfterSeq: number;
   tailMessageIds: string[];
   pathsNeedWrite: ReadonlySet<string>;
-  pathsNeedDelete: ReadonlySet<string>;
+  /**
+   * CD-01 第 3 步：plan 段只产出 tail 指针反解出的删候选；真正的删集合在
+   * 事务内用 live 快照重算。`hasDirectTargetTree` 是那条门（rewind 分支在
+   * targetTree 为空时拿不到任何删除）。
+   */
+  hasDirectTargetTree: boolean;
+  tailDerivedDeletePaths: ReadonlySet<string>;
   targetTree: Map<string, number>;
   /**
    * checkpoint 记录的旧 entryId（path → entryId）：entry 行已被物理删除的
@@ -94,6 +104,18 @@ type RollbackPlan = {
    * 与该快照不一致即代表间隙期间有 agent 写入，需要重试或拒。
    */
   messageCountSnapshot: number;
+  /**
+   * CD-01 第 2 步：plan 解析时 live 树的文件维度指纹。
+   *
+   * 口径 = `logicalPath` 升序 × `headVersion` 的**有序对列表**，**不 hash**
+   * （hash 会因碰撞把好回滚打成 409，内存换正确性）。事务内用 tx 面 repo
+   * 重算同一指纹逐项比对。
+   *
+   * 为什么必须锁文件面：原乐观锁只比 `chat_message` 行数，而间隙里
+   * 新增 / 删除 / 改写文件**都不改变行数** ⇒ 乐观锁照样全绿 ⇒ 按事务外
+   * 定下的旧集合删/写 ⇒ **静默丢文件**。
+   */
+  fileTreeFingerprint: ReadonlyArray<readonly [string, number]>;
 };
 
 function formatDegradableMessage(cause: unknown): string {
@@ -123,6 +145,38 @@ function assertRollbackOptionsCompatible(options?: RollbackOptions): void {
  */
 const ROLLBACK_OPTIMISTIC_RETRY_LIMIT = 3;
 
+/** 逐项比对两份文件维度指纹（有序对列表，长度不同即不等）。 */
+function sameFileTreeFingerprint(
+  a: ReadonlyArray<readonly [string, number]>,
+  b: ReadonlyArray<readonly [string, number]>
+): boolean {
+  if (a.length !== b.length) {
+    return false;
+  }
+  for (let i = 0; i < a.length; i++) {
+    if (a[i]![0] !== b[i]![0] || a[i]![1] !== b[i]![1]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/** 逐项比对两份消息 id 有序列表（长度不同即不等）。 */
+function sameIdList(
+  a: ReadonlyArray<string>,
+  b: ReadonlyArray<string>
+): boolean {
+  if (a.length !== b.length) {
+    return false;
+  }
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) {
+      return false;
+    }
+  }
+  return true;
+}
+
 /**
  * Forward-restores the workspace to an anchor checkpoint tree and truncates tail state.
  */
@@ -148,19 +202,16 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
         anchorMessageId
       );
 
-      // S-13 护栏：undo_send 解析出的 targetTree 为空意味着没有 baseline 快照可对齐，
-      // 一旦进入 reconcileVfsPaths 会把 live 树里所有路径都当「需删除」处理——
-      // 这正是纯文本 chat 路径「聊一轮再 undo_send」把整个会话工作区删光的根因。
-      // 但空 targetTree 只有在 live 树非空时才有破坏力：会话本身无文件
-      // （纯聊天 / 仅 $skill 引用等未写盘场景，capture 不写空快照）时删无可删，
-      // 正常放行，回滚表现为纯截断。仅 live 树非空时才拦，上层走降级弹窗。
-      // skipVfsReconcile 只截断消息、不碰文件，空 targetTree 不会造成破坏，
-      // 仍然放行（例如 DF-U1 的降级回滚）。
-      if (
-        !options?.skipVfsReconcile &&
-        plan.mode === "undo_send" &&
-        plan.targetTree.size === 0
-      ) {
+      // S-13 护栏（CD-01 第 1 步放宽）：targetTree 为空意味着没有 baseline 快照
+      // 可对齐，一旦进入 reconcileVfsPaths 会把 live 树里所有路径都当「需删除」
+      // 处理——这正是纯文本 chat 路径「聊一轮再 undo_send」把整个会话工作区
+      // 删光的根因。**rewind 分支同样要拦**：旧判定写死 `mode === "undo_send"`，
+      // 而 rewind 在 `hasDirectTargetTree === false` 时拿不到任何删除
+      // （漏删）；只放宽护栏而不看 `hasDirectTargetTree`，undo_send 侧会
+      // 反过来多删 ⇒ 两处门口径必须同改（见 resolve-reconcile-paths 的对称注释）。
+      // 仅 live 树非空时才有破坏力：会话本身无文件时删无可删，正常放行，
+      // 回滚表现为纯截断。skipVfsReconcile 只截断消息、不碰文件，放行。
+      if (!options?.skipVfsReconcile && plan.targetTree.size === 0) {
         const liveHeads = await listSessionFileHeads(
           this.deps.entries,
           projectId,
@@ -169,7 +220,8 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
         if (liveHeads.length > 0) {
           throw sessionFsRollbackUndoSendEmptyTarget(
             sessionId,
-            anchorMessageId
+            anchorMessageId,
+            plan.mode
           );
         }
       }
@@ -215,6 +267,22 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
             );
           }
 
+          // CD-01 第 2 步 · 文件维度指纹乐观锁：消息数不变不代表文件面没变。
+          // 必须用 **tx 面** repo 重算——事务内用外层 conn 会重入驱动 mutex 死锁。
+          const currentFingerprint = await this.computeFileTreeFingerprint(
+            tx,
+            projectId,
+            sessionId
+          );
+          if (!sameFileTreeFingerprint(currentFingerprint, plan.fileTreeFingerprint)) {
+            throw sessionFsRollbackConflict(
+              sessionId,
+              anchorMessageId,
+              plan.fileTreeFingerprint.length,
+              currentFingerprint.length
+            );
+          }
+
           if (!options?.skipVfsReconcile) {
             try {
               const reconcileStats = await this.reconcileVfsPaths(
@@ -235,6 +303,23 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
                 { sessionId, messageId: anchorMessageId }
               );
             }
+          }
+          // CD-01 第 4 步 · tailIds 断言：truncateTailInTransaction 只吃 afterSeq、
+          // 按 seq 截断却**不核对**「要删的 tail 还是不是这批 id」。间隙里插进
+          // seq 更大的新消息 ⇒ 连带截断，而用户从没回滚过它。
+          // 必须在第 2 步之后：文件面指纹挡不住「只多了消息、没动文件」的间隙。
+          // 与 skipVfsReconcile **无关**（那条只跳 VFS reconcile，消息截断照跑）。
+          const actualTailIds = await txMessages.listIdsAfterSeq(
+            sessionId,
+            plan.truncateAfterSeq
+          );
+          if (!sameIdList(actualTailIds, plan.tailMessageIds)) {
+            throw sessionFsRollbackTailDrift(
+              sessionId,
+              anchorMessageId,
+              plan.tailMessageIds.length,
+              actualTailIds.length
+            );
           }
           await truncateTailInTransaction(createTruncateTailDepsFromTx(tx), {
             projectId: plan.projectId,
@@ -422,7 +507,9 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
       checkpointEntryIdByPath
     );
 
-    const pathsNeedDelete = new Set(reconcileSets.pathsNeedDelete);
+    // CD-01 第 3 步：plan 段只产出 **tail 指针反解出的删候选**，真正的删集合
+    // 在事务内用 live 快照重算（见 reconcileVfsPaths / resolvePathsNeedDeleteInTransaction）。
+    const tailDerivedDeletePaths = new Set<string>();
     if (tailMessageIds.length > 0) {
       const tailPointers =
         await this.deps.checkpoints.listFilePointersForMessages(
@@ -443,11 +530,19 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
         for (const pointer of tailPointers) {
           const logicalPath = pathByEntryId.get(pointer.entryId);
           if (logicalPath != null && !targetTree.has(logicalPath)) {
-            pathsNeedDelete.add(logicalPath);
+            tailDerivedDeletePaths.add(logicalPath);
           }
         }
       }
     }
+
+    // CD-01 第 2 步：live 树的文件维度指纹（sorted path × headVersion）。
+    // 与下面 plan 的其余部分同批读；事务内用 tx 面 repo 重算同一指纹逐项比。
+    const fileTreeFingerprint = await this.computeFileTreeFingerprint(
+      this.deps.conn,
+      projectId,
+      sessionId
+    );
 
     return {
       mode,
@@ -455,7 +550,8 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
       anchor,
       tailMessageIds,
       pathsNeedWrite: reconcileSets.pathsNeedWrite,
-      pathsNeedDelete,
+      hasDirectTargetTree,
+      tailDerivedDeletePaths,
       targetTree,
       checkpointEntryIdByPath,
       projectId,
@@ -464,7 +560,31 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
       // A-22 快照：全量口径计数（COUNT(*)），事务内用 countBySession 重读
       // 同一口径（会话消息总行数）对比，不一致即判冲突。
       messageCountSnapshot,
+      fileTreeFingerprint,
     };
+  }
+
+  /**
+   * CD-01 第 2 步：算 live 树的文件维度指纹。
+   *
+   * 口径 = `logicalPath` 升序 × `headVersion` 的有序对列表。**刻意不 hash**：
+   * hash 会因碰撞把好回滚打成 409（内存换正确性）。
+   */
+  private async computeFileTreeFingerprint(
+    conn: TdbcConnection,
+    projectId: string,
+    sessionId: string
+  ): Promise<ReadonlyArray<readonly [string, number]>> {
+    const heads = await listSessionFileHeads(
+      new SqliteVfsEntryRepository(conn),
+      projectId,
+      sessionId
+    );
+    return heads
+      .map(
+        (head): readonly [string, number] => [head.logicalPath, head.headVersion]
+      )
+      .sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
   }
 
   private async reconcileVfsPaths(
@@ -480,11 +600,12 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
     const {
       scope,
       pathsNeedWrite,
-      pathsNeedDelete,
       targetTree,
       checkpointEntryIdByPath,
+      tailDerivedDeletePaths,
       projectId,
       sessionId,
+      hasDirectTargetTree,
     } = plan;
     const scopeKeyStr = scopeKey(scope);
     const vfs = this.scopedVfs(projectId, sessionId, tx);
@@ -495,6 +616,15 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
       projectId,
       sessionId
     );
+    // CD-01 第 3 步：删集合在**事务内**用上面这份 live 快照重算——不新增第二次
+    // live 扫描，也不复用 plan 段那次（两个 live 头来自两个不同时刻的扫描，
+    // 短路的依据可能在事务里早已不成立）。
+    const pathsNeedDelete = resolvePathsNeedDeleteInTransaction({
+      liveHeads: liveHeadRows,
+      targetTree,
+      hasDirectTargetTree,
+      extraTailDeletePaths: tailDerivedDeletePaths,
+    });
     const liveHeadByPath = new Map(
       liveHeadRows.map((head) => [head.logicalPath, head.headVersion])
     );

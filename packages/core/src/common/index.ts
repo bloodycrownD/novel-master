@@ -20,6 +20,8 @@ export {
   type TokenSourceBadge,
 } from "./format-token-count.js";
 export { normalizeYamlError } from "./normalize-yaml-error.js";
+// 存储类故障判据（YAML 导入通道的「反转让 TdbcError 绕过 normalizeYamlError」）。
+export { isStorageFailure } from "./is-storage-failure.js";
 export {
   formatDurationMs,
   formatRequestTime,
