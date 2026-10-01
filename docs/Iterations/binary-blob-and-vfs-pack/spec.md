@@ -133,24 +133,24 @@ CREATE INDEX IF NOT EXISTS idx_vfs_content_pack_member_pack
 - `get(hash)`：先查 `vfs_content_blob`（命中走原路径，**热路径零改动**）→ 未命中查 member（JOIN pack 取 format+bytes）→ 按 format 分派（pack 切片 / fossil 沿链 apply）→ 两者都无维持原错误文案 `vfs_content_blob 缺失: {hash}`（文案被测试与调用方依赖，不改）。
 - `getMany(hashes)`：维持 500 分块（`CONTENT_GETMANY_CHUNK_SIZE`）；blob 命中走原路；member 命中按 `pack_id` 聚合——pack 组整组只解压一次、fossil 组沿链 apply 时复用中间结果（同组连续成员共享前驱明文）；`resolveScanRows` 的缺失升级语义不变。
 - `ensureBlob(hash, null)` 与 `findExistingBlobHashes()`：**UNION member 表判定「已存在」**——`seed-live-head-revisions`（L70，fallback null 必抛）、`seed-fork-copy-parity`（L77）、`backfill-missing-revision`（L58）、`vfs-tree-copy`（L220 快路径判定）对已打包 hash 均不得误报缺失。
-- `put(plain)`：插入 blob 行时若同 hash 存在 member 行则删除该 member（**回滚抽回语义**：`resetHeadToVersion`/`revive-deleted-entry` 的 put 幂等保活把历史版本抽回独立 blob 行当 head；pack 流内该段成死区，等整组无成员随空 pack GC——dry-run 已验证此语义，含最难的 fossil 首成员抽回：同组剩余 7 成员仍从段链读回全等）。
+- `put(plain)`：插入 blob 行时若同 hash 存在 member 行则删除该 member（**回滚抽回语义**：`resetHeadToVersion`/`revive-deleted-entry` 的 put 幂等保活把历史版本抽回独立 blob 行当 head；pack 流内该段成死区，等整组无成员随空 pack GC——dry-run 已验证此语义，含最难的 fossil 首成员抽回：同组剩余 7 成员仍从段链读回全等）。**纪律：这条路径绕过 `vfs_revision` 的 ref_count 三触发器新建 blob 行，`ref_count` 必须现场重算**（`COUNT(vfs_revision WHERE content_hash = ?)`，与 unpack 重建 blob 行同款口径）——该 hash 早已被若干 revision 行引用，当初 INSERT 时触发器 UPDATE 静默命中 0 行，DEFAULT 0 会让后续删任一引用 revision 撞 `CHECK (ref_count >= 0)` 事务回滚，无 CHECK 时更会误删仍被引用的 blob 行致正文不可读；同款修复也须覆盖 unpack 侧「INSERT OR IGNORE 命中既有残行」的重算缺口。
 - `gc()`：原 blob 清扫后追加两步——(1) 删孤儿 member（`content_hash NOT IN (entry ∪ revision)`，复用 `gc()` 现有引用集 SQL 口径，防两套口径漂移）；(2) 删空 pack（按 member 表实际 `COUNT(*)`，不信任 `member_count` 列）。单层判定、无不动点（pack 自包含，fossil 的 base 是同组段内前驱、非跨行引用）。
 - `findContentSizeByPath`（`sqlite-vfs-entry.repository.ts` L241-253）：blob 行缺失时回退 `member.compressed_byte_len`，闸门口径与今天逐字节一致。
 
 **触发器不变量**（ref_count 三触发器安全的前提，探索报告核实成立）：
 
-- INV1 **live head 必有 blob 行**：打包谓词排除所有 entry 的 head；head 变更走 put（member 抽回）。
-- INV2 **新 revision 只引用 live head hash 或新 put 的 hash**：tree-copy / seed / backfill / fork-copy 引用的都是 head（探索报告逐点核实）；两者都必有 blob 行 → `trg_revision_insert_inc_blob_ref` 的 UPDATE 永不命中 0 行。
+- INV1 **live head 必有权威副本（blob 行或 member 行）**：打包谓词排除所有 entry 的 head、head 变更走 put（member 抽回），故正常形态下 head 都落 blob 行；但判定不写成「必有 blob 行」——`ensureBlob` / `findExistingBlobHashes` 以 **UNION member** 判「已存在」，tree-copy / seed 快路径的「hash 已存在即直接落 head」分支可能让 entry head 指向**只有 member 行**的 hash，此时仍是合法权威副本（读路径 `get` 有 member 分派），只是形态异常。
+- INV2 **新 revision 只引用 live head hash 或新 put 的 hash**：tree-copy / seed / backfill / fork-copy 引用的都是 head（探索报告逐点核实）；两者都必有权威副本（head 走 blob、跨 entry 归首遇的 member-only head 走 member） → `trg_revision_insert_inc_blob_ref` 的 UPDATE 永不命中 0 行。
 - INV3 **一 hash 至多一处权威副本**（blob 行或 member 之一）：put 抽回 + 打包删行双向保证。
-- 配套：`integrity-repair` 可选增加检测项「head hash 无 blob 行」作防御（INV1 违例即报警）。
+- 配套：`integrity-repair` 可选增加检测项「head hash 无 blob 行**、或存在 member 行**」（INV1 违例即报警）——检测项的「或存在 member 行」前置是必需的，否则 UNION member 常态下的跨 entry 归首遇形态会被全量误报。
 
 **打包任务**（core，新增 `runVfsContentPacking`，对齐 `blob-binary-normalization.ts` 骨架）：
 
 - **无终态完成标记**（版本持续增长，与骨架模板的最大分叉）：每次入口重扫候选谓词；真库候选谓词查询毫秒级（115 组），无需缓存。
 - 每组单事务：**事务外**经 content store 读组内明文（三形态兼容，与归一任务交错安全——归一只改 encoding/bytes 形态不改明文）→ 选编码 → 事务内 INSERT pack + members + DELETE blob 行（原子，中断不留半打包态）。**事务回调内不得引用外层 conn**（AsyncMutex 不可重入）。
-- 坏组（某成员明文解压失败）整组跳过、计入 `failedGroups`、收尾校验「剩余候选组 == failedGroups」否则 `stalled: true`（照骨架语义：谓词天然收敛，打转即异常）。
+- 坏组（某成员明文解压失败）整组跳过、计入 `failedGroups`；收尾重扫按 **entry 口径**判定：正常收敛下每个仍未收敛的候选 entry 必含至少一个坏组（好组落库后 blob 行已删，该 entry 若无坏组即整体退出候选），故**可归因剩余候选 entry 数 > `failedGroups`** 即 `stalled: true`（照骨架语义：谓词天然收敛，打转即异常——处理过却未收敛）；违反则本轮停手、不写 `failedGroups` 快照、不挂收尾维护。**并发豁免**：该不变量只在「本轮无新数据写入」时成立——用户保存新版本会把旧 head 的 hash 变成非 head 候选、该 entry 收尾重扫的 `maxVersion` 必然变大；故 `stalled` 判据只对「本轮开始时已存在（入口扫描见过）且期间无新版本（收尾 `maxVersion` 与入口相等）」的 entry 生效（候选谓词已 SELECT `r.version`，数据现成），把并发写入造成的剩余摘出归因集，避免一次保存就误判打转、连带跳过收尾 VACUUM（本轮删 blob 释放的页留在库里不还）。**写零候选水位的前置仍维持「收尾剩余候选 entry 数 == 0」的全库口径**，不按归因集收窄——并发写入造成的新候选下一轮仍需被发现，不能被水位短路掉。
 - KKV module `nm-vfs-pack`：`startupMaintenancePending`（收尾维护兜底，照骨架）+ `failedGroups` 快照（UI 第三态）。
-- 预算 `DEFAULT_VFS_PACK_SYNC_BUDGET_MS = 30_000`（CLI 三任务串行最坏 60+60+30=150s；真库 Node 实测搬运全程 1.85s，Hermes 放大后仍在预算内）；批间 `setTimeout(0)` 让步 + `shouldPause` 三端守卫（mobile: agent+maintenanceBusy；desktop: agent+cloudSync+maintenanceBusy；cli 无守卫）。
+- 预算 `DEFAULT_VFS_PACK_SYNC_BUDGET_MS = 30_000`（CLI 三任务串行最坏 60+60+30=150s；真库 Node 实测搬运全程 1.85s，Hermes 放大后仍在预算内）；批间 `setTimeout(0)` 让步 + `shouldPause` 三端守卫（mobile: agent+maintenanceBusy；desktop: agent+cloudSync+maintenanceBusy；cli 无守卫）。**让步粒度 = entry**（组事务本身是短事务，组内不再让步）；预算检查同为组粒度（打完一组即查 deadline），`shouldPause` 守卫在 entry 与组两级各查一次。
 - 收尾维护：仅本轮 `packedGroups > 0` 时挂 `runStartupMaintenanceOnce`（删 blob 行的页回收需要 VACUUM）；desktop 照抄 `beforeMaintenance/afterMaintenance` 回调缝包住 VACUUM 段置 busy。
 - 状态查询 `getVfsContentPackStatus(conn)`：`{ pendingGroups, memberCount, streamBytes, failedGroups }`；**自建 3s 采样节流**（照 blobBinary 私有 WeakMap 模式 + `__resetStatusSamplingThrottleForTests` 钩子；desktop 2s 轮询下合并为约一次/3s 真采样，完成判定不走缓存直调）。UI 两态「无需处理 / 剩余 N 组」+ `failedGroups > 0` 第三态。
 
@@ -205,10 +205,10 @@ apps/{mobile,desktop} 存储页                                        # A/B：�
 | 10 | `sqlite-vfs-entry.repository.ts` | `findContentSizeByPath` 在 blob 行缺失时回退 `member.compressed_byte_len` | B |
 | 11 | `infra/db-maintenance/impl/vfs-content-packing.ts`（新） | 候选谓词 / 分组打包 / 单事务落库 / 状态 / 校验 / 反向展开 | B |
 | 12 | `packages/tdbc-driver-op-sqlite/src/bindings.ts` | 更新「blob 绑参尚未真机验证」注释（已真机实测通过） | A |
-| 13 | 测试 | 见「测试策略」；`content-store.test.ts` / `file-cache-store.test.ts` / `message-content-codec-roundtrip.test.ts` 的 b64 写用例改写为存量读兼容用例 | A+B |
+| 13 | 测试 | 见「测试策略」；`content-store.test.ts` / `file-cache-store.test.ts` / `message-content-codec-roundtrip.test.ts` 的 b64 写用例改写为存量读兼容用例；**`apps/mobile/jest.config.js` 的 `transformIgnorePatterns` 追加 `\|fossil-delta`**——`fossil-delta@2` 是纯 ESM（`type: module`、无 exports map），经 moduleNameMapper 直连 `dist/public/vfs.js` 的 vfs 服务链路（createVfsService → content store → pack-codec）会拉到它，不纳入 babel transform 会在 Jest 里炸 ESM 语法（主入口 core-shim 不经此链路，别按 shim 口径排查） | A+B |
 | 14 | 文档 | CHANGELOG Unreleased；RULE.md（形态归一与打包列约定、`byte_len` 语义） | A+B |
 | 15 | KKV 新 key：`startupMaintenancePending` | 收尾维护失败时的兜底标记（module `nm-blob-binary`）：入口读到即无视 `processedAny` 强制补跑一次维护链路；**清标记以 `runStartupMaintenanceOnce` 返回非 `null` 为条件**（同进程重入时保留待下次冷启动） | A |
-| 16 | KKV 写路径总表 | 本迭代全部 KKV 写路径清点：`nm-blob-binary` ×4（`vfsContentDone` / `fileCacheDone` / `messageContentDone` / `startupMaintenancePending`）＋ `nm-message-content` ×2（`compactionDone` / `startupMaintenancePending`，消息压缩任务各自的独立 pending key，不共享单 key） | A |
+| 16 | KKV 写路径总表 | 本迭代全部 KKV 写路径清点：`nm-blob-binary` ×4（`vfsContentDone` / `fileCacheDone` / `messageContentDone` / `startupMaintenancePending`）＋ `nm-message-content` ×2（`compactionDone` / `startupMaintenancePending`，消息压缩任务各自的独立 pending key，不共享单 key）＋ `nm-vfs-pack` ×3（`startupMaintenancePending` 收尾维护兜底，照骨架语义 / `failedGroups` 坏组快照，仅收敛轮写、预算中途退出与 stalled 不写——半程计数会低估上一轮完整快照 / `zeroCandidateWatermark` 零候选水位指纹，命中即短路谓词，详见「实现期补充三」） | A+B |
 
 ## 详细实现步骤
 
@@ -244,7 +244,7 @@ apps/{mobile,desktop} 存储页                                        # A/B：�
 - T-BB7 — blocking: yes — 零丢失：混合语料归一前后逐条解压比对全等（映射 Step 3）。**口径更正**：语料是**构造语料**（伪随机长文 / 中文文本 / 工具块模拟，并非真实附件形态）
 - T-BB8 — blocking: no — perf 阈值：单批 100 行耗时 ≤30s（含维护链路）、写入路径压缩耗时与改动前同级（映射 Step 2/5）
 - T-VP1 — blocking: yes — 打包后逐版本读回等值（含同组重复 hash 共享成员；pack 与 fossil 两种 format 各至少一组）（映射 Step 9）
-- T-VP2 — blocking: yes — live head 永不被打包：打包任务跑完后，所有 `vfs_entry.content_hash` 仍是 `vfs_content_blob` 行（INV1）（映射 Step 9/10）
+- T-VP2 — blocking: yes — 打包后 head 全有权威副本：打包任务跑完后所有 `vfs_entry.content_hash` 都有权威副本——**正常形态下均为 blob 行**（回归判据仍取 blob 全集：`COUNT(*) FROM vfs_entry WHERE content_hash IS NOT NULL AND content_hash NOT IN (SELECT content_hash FROM vfs_content_blob) === 0`），跨 entry 共享 hash 归首遇导致的 member-only head 由 INV1 的宽松式（blob 行**或** member 行）覆盖（映射 Step 9/10）
 - T-VP3 — blocking: yes — pack 自包含校验：逐 member `hash(还原明文) == content_hash`（pack 切片 / fossil 链 apply 两种还原路径都校验）（映射 Step 10）
 - T-VP4 — blocking: yes — GC 语义：无引用 pack 被回收；任一成员被引用则整包保留；孤儿 member 回收；`ref_count` 触发器与 pack 删除互不干扰（映射 Step 9）
 - T-VP5 — blocking: yes — `ensureBlob(hash, null)` 与 `findExistingBlobHashes` 对已打包 hash 判定为「已存在」，tree-copy / seed / fork-copy 不误报（映射 Step 9）
@@ -262,7 +262,7 @@ apps/{mobile,desktop} 存储页                                        # A/B：�
 - T-VP17 — blocking: yes — schema 三用例：新库 DDL 建表（`user_version === SCHEMA_BOOT_VERSION` 常量断言）/ 存量库慢路径补建 / 快路径不建（照 `session-run-state-schema.test.ts` 先例）（映射 Step 8）
 - T-VP18 — blocking: yes — 坏组跳过：某成员明文解压失败的组整组保留、`failedGroups` 计数、不阻断其它组收敛（映射 Step 10）
 - T-VP19 — blocking: yes — 预算中断续跑：收紧预算让任务批间收手，重启续跑收敛（映射 Step 10）
-- T-VP20 — blocking: yes — stalled：剩余候选组 ≠ failedGroups 时 `stalled: true` 不挂收尾维护（映射 Step 10）
+- T-VP20 — blocking: yes — stalled：可归因剩余候选 **entry** 数 > `failedGroups` 时 `stalled: true` 不挂收尾维护；反例断言并发豁免——任务期间给某 entry 追加更大版本号时 `stalled===false && done===true && maintCalls===1`（映射 Step 10）
 - T-VP21 — blocking: yes — 收尾维护观测：`maintCalls` 回调计数——首轮确有打包 `maintCalls===1`、稳态零候选 `maintCalls===0`、pending 兜底路径（**独立测试文件**承载进程级标记正向路径，照 `blob-binary-normalization-maintenance.test.ts` 先例）（映射 Step 10）
 - T-VP22 — blocking: yes — 三端源码/UI 契约（照 Part A 的 cr-21/cr-06 先例）：mobile 指标卡第四行渲染两态 + 取值纯函数（`storage-config-migration-values` 直 import 测试）；desktop `MIGRATION_ROWS` 顺序与 `migrationRowValue` 分支 + DTO 字段 + handler 兜底（采样抛错时指标卡字段降级不拖垮主统计）（映射 Step 11）
 
@@ -287,6 +287,27 @@ T 编号与实际落地用例的可追溯映射（行号为集成分支 `integra
 | chat_message 适配器（A2 新增） | `blob-binary-normalization.test.ts`（「chat_message 适配器：zlib-b64 行转二进制、坏行跳过计数、legacy 明文行不动、独立完成标记」） | 列名映射（content_encoding/content_blob）、按 id 游标、`messageContentDone` 标记 |
 | cr-06 配套 | `blob-binary-normalization.test.ts`（「cr-06：旧版 ISO 字符串标记向后兼容 + 状态查询纯读无副作用」；坏行用例「解码失败的坏行不阻断收敛」） | 标记 JSON 可解析出 `failedCount`、旧 ISO 值兼容归零、状态查询前后 `kkv_entry` 不变 |
 | T-DM3 / T-DM4 | `packages/core/test/infra/db-maintenance.test.ts` | 启动维护链路去重（同进程第二次返 null）；手动「数据清理」不受启动去重标记影响 |
+| T-VP1 | `packages/core/test/vfs/content-store-pack.test.ts`（「T-VP1: 打包后逐版本读回等值（pack 与 fossil 两 format；含同组重复 hash 共享成员）」） | 两种 format 逐版本 `get` 读回逐字节全等；同组重复 hash 共享同一 member |
+| T-VP2 | 同上（「T-VP2a: blob 命中优先于 member」＋「T-VP2b: 打包任务跑完后所有 entry head 均有 blob 行（正常形态判据）」） | blob 命中优先于 member 分派（互斥夹具：head 与 member 垃圾 offset 同存）；打包后全库无「head 有 hash 却无 blob 行」 |
+| T-VP3 | `packages/core/test/infra/vfs-content-packing.test.ts`（「T-VP3: verifyVfsContentPacks 两 format 全过；篡改 member offset 报失败（牙齿）」＋「T-VP3b（pbp-24）」） | 逐 member hash 校验两 format 全过；篡改 offset 必报失败（牙齿）；verify/unpack 按 pack 逐个载入、零全量 bytes 查询 |
+| T-VP4 | `content-store-pack.test.ts`（「T-VP4: GC 语义——无引用 pack 回收 / 成员被引用整包保留 / 孤儿 member 回收 / ref_count 触发器互不干扰」） | 四项 GC 语义逐条断言；`gc()` 返回值 = blob / member / 空 pack 三表删除行数之和 |
+| T-VP5 | 同上（「T-VP5: ensureBlob(hash,null) 与 findExistingBlobHashes 对已打包 hash 判已存在」＋「T-VP5b: …chunk 满载 500…」） | UNION member 判已存在，tree-copy / seed / fork-copy 不误报；chunk 满载 500 全判已存在且单语句绑定变量 ≤500（老 Android SQLite 999 上限） |
+| T-VP6 | 同上（「T-VP6: findContentSizeByPath 回退 member.compressed_byte_len（fossil 组不回退 delta 长度）」＋「T-VP6b: pack/member 形态下 compressed_byte_len 超闸门仍走占位、闸门内读真文」） | 回退值恒等于被替换 blob 行的 `byte_len`；消费端 `loadOrFillFileCache` 探针在超限组返占位、闸门内返真实正文 |
+| T-VP7 | `vfs-content-packing.test.ts`（「T-VP7（pbp-12）：已打包 entry 的回滚/复活/checkpoint/sweep 四条链路」） | 成员全落 member 的数据面上跑 `resetHeadToVersion` / restore-path / `revive-deleted-entry` / checkpoint capture-restore / `sweepSessionRevisions`；每次 put 抽回 member −1、读回逐字节等值 |
+| T-VP8 | 同上（「T-VP8: 打包幂等/可重入——组事务中断回滚无半态；重跑不重复打包」） | 事务中断替身（member 落库前崩溃）→ 三表全回滚；重跑不重复打包已打包版本 |
+| T-VP10 | 同上（「T-VP10: 反向展开——unpack 后 pack/member 清空、blob 行齐备读回等值、可重复执行」） | 展开后两表清空、独立 blob 行齐备且读回等值；重复执行幂等 |
+| T-VP11 | `content-store-pack.test.ts`（describe「pack-codec: T-VP11 fossil 链编解码回环」＋「T-VP11a 防御: delta 自述输出规模超上限的坏段在 apply 前被拦（堆增量 <50MB）」） | 段表解析 + 逐层 apply 后明文与原件逐字节全等；伪造超大 `limit` 的坏段在 apply 前被拦、堆增量 <50MB |
+| T-VP12 | `vfs-content-packing.test.ts`（「T-VP12: 阈值分组——24KB 上下两组分别落 zlib-concat-v1 / fossil-chain-v1」） | 阈值两侧分别落两 format 的断言 |
+| T-VP13 | 同上（「T-VP13: fossil 组读放大上限——最坏组（8 成员 × ~120KB）单次读 ≤50ms 且链式解压计数=8」） | 计数断言（解压次数 = 8）为主牙齿，计时为 fflate 口径护栏 |
+| T-VP14 | `content-store-pack.test.ts`（「T-VP14: 抽回死区——put 抽回 fossil 组首成员后 blob/member 双侧读回全等、pack 流字节不变」） | 抽回后 H0 走 blob 路径、同组剩余成员仍从段链读回、pack 流字节不变 |
+| T-VP15 | 同上（「T-VP15: 混合 getMany 跨 blob/pack/fossil 三源——pack 组只解压一次、fossil 组复用链式中间结果」） | 跨三源批量读取的解码次数与中间结果复用断言 |
+| T-VP16 | `vfs-content-packing.test.ts`（「T-VP16: unpack 的 ref_count 重算」＋「T-VP16b: put 抽回 blob 行现场重算 ref_count」＋「T-VP16c: unpack 幂等修复 ref_count」） | 展开后 `ref_count == COUNT(vfs_revision 引用数)`、删引用逐级递减且不撞 CHECK；put 抽回落 ref_count=2；既有 ref_count=0 残行也被重算、后续删引用不抛 |
+| T-VP17 | `packages/core/test/bootstrap/vfs-content-pack-schema.test.ts`（describe「vfs_content_pack 两表 schema 升级（T-VP17）」，三 it） | 新库 DDL 建表与 `user_version === SCHEMA_BOOT_VERSION`；老库慢路径补建升版；已升版库快路径不重跑 |
+| T-VP18 | `vfs-content-packing.test.ts`（「T-VP18: 坏组跳过——解压失败成员所在组整组保留、failedGroups 计数、不阻断其它组」） | 坏组整组保留、计数、不阻断其它组收敛 |
+| T-VP19 | 同上（「T-VP19: 预算中断续跑——收紧预算批间收手，重启续跑收敛」） | 打断轮确定口径整对象断言（`done:false` / `packedGroups:1`）；续跑守恒式 `packedGroups` 之和 == 3 |
+| T-VP20 | 同上（「T-VP20: stalled——组落库后 blob 行未删（打转）→ stalled:true、不挂收尾维护」＋「W1-P1-5（pbp-5）」） | 真打转判 `stalled:true` 且不挂收尾维护；并发豁免——任务期间追加更大版本号 ⇒ `stalled===false && done===true && maintCalls===1` |
+| T-VP21 | 同上（「T-VP21: 收尾维护观测——首轮确有打包 maintCalls===1、稳态零候选 maintCalls 不再增加」）＋姊妹文件 `packages/core/test/infra/vfs-content-packing-maintenance.test.ts`（「第一条: 预置 startupMaintenancePending + 零候选 → maintCalls===1 且 pending 被清」／「稳态: 零候选、无 pending → maintCalls===0」） | 主文件观测首轮/稳态；独立文件承载进程级 pending 标记正向路径 |
+| T-VP22 | `apps/desktop/test/migration-row-value.test.ts`（「vfsPack 第四行夹具 + MIGRATION_ROWS 项顺序（T-VP22）」）＋ `apps/desktop/test/db-maintenance-vfs-pack-stats.test.ts`（describe「db/stats vfsPack 字段契约（T-VP22）」）＋ `apps/mobile/__tests__/storage-config-migration-values.test.ts`（describe「vfsPackValue 夹具（T-VP22 第四行，无终态两态 + 坏组第三态）」）＋ `apps/mobile/__tests__/storage-config-screen-source.test.ts`（「T-VP22: 第四行取值走 vfsPackValue 纯函数、数据源是 vfsPack state 接线」） | desktop 行序 + `migrationRowValue` 分支 + DTO 字段 + handler 兜底（采样抛错 ⇒ `vfsPack===null` 且主统计不塌）；mobile 取值纯函数三态与源码接线 |
 
 **新增用例登记（fix-spec 修复轮配套，cr-07 ~ cr-21 / cr-24 ~ cr-35 及集成分支 ic 系列；统一以实际落地用例名为准）**：
 
@@ -337,7 +358,7 @@ A1（VFS + file_cache 去 base64 + 归一任务 + 三端接线）已按本 spec 
 | `failedCount`（单行容错） | 单行 base64 解码失败不再抛穿整轮：坏行原样保留、跳过归一、计入 `failedCount` 并 warn；该表照常置完成标记——否则每次启动重扫同一批坏行、任务永不收敛。读路径对同类坏行本就是自愈的，两侧口径一致 |
 | `stalled` + 零进展护栏 | 连续 3 批「谓词非空但 UPDATE 恒 `changes = 0`」即 warn 并 `stalled = true` 收手本轮；两端调度服务见 `stalled === true` 立即停止本进程重试（否则 app 层的「立即续跑」会把它放大成热循环）。护栏**不**要求满批——谓词是实时重扫的，任何批大小的零进展都是异常信号 |
 | 收尾维护容错 | 归一完成后挂的 `runStartupMaintenanceOnce` 包 try/catch：VACUUM 失败（磁盘满 / 库被锁）只 warn 不穿透——CLI 启动链路没有 try/catch，裸奔会让每条命令失败，且进程级去重在每个新进程复位、会反复重试注定失败的 VACUUM |
-| 预算常量分叉 | 新建 `DEFAULT_BLOB_BINARY_SYNC_BUDGET_MS = 60_000`（与消息侧 `DEFAULT_COMPACTION_SYNC_BUDGET_MS` 同值不同名）：后者所在文件在未合并的 `message-content-compression` 分支上，本分支无法引用 |
+| 预算常量分叉 | 新建 `DEFAULT_BLOB_BINARY_SYNC_BUDGET_MS = 60_000`（与消息侧 `DEFAULT_COMPACTION_SYNC_BUDGET_MS` 同值不同名）：后者所在模块已随 1.5.29 落地为 message-content-decompression（分支上仍是旧的 `message-content-compaction` 文件名），故同名不同模块、无法直接引用 |
 | `messageContent` 类型预置 | `BlobBinaryTableId` 联合已含 `"messageContent"`，A2 只加适配器数据、不改类型定义。两端 UI **有意不设 `messageContent` 状态行**（发版形态下压缩搬运直接写二进制，不存在用户可见的中间态，见「实现期补充二」的范围拍板）；未注册进适配器注册表的表才由 UI 以 `—` 占位（与存储页既有占位风格一致、布局不随注册表增减跳动） |
 | 三端守卫组合 | mobile 当前仅 `isMobileAgentActive`（main 上 mobile 无维护/备份 busy 标志，注释已留扩展点）；desktop 为 agent + 云同步 + 维护 busy 三条；cli 无守卫（进程内单轮） |
 | app 层失败策略 | mobile：归一任务 error → warn 并本进程收手；desktop：error → warn 并本进程收手；cli：error → 上抛（CLI 启动链路无 try/catch 兜底，裸抛让命令显式失败） |
