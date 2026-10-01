@@ -11,8 +11,6 @@ import type {
   VfsBatchIngestFromPathsRequest,
   VfsBatchIngestFromPathsResult,
   VfsDeleteRequest,
-  VfsListEntryDto,
-  VfsListRequest,
   VfsMkdirRequest,
   VfsReadRequest,
   VfsReadResultDto,
@@ -107,26 +105,6 @@ async function readBaselineContent(
   path: string,
 ): Promise<string | null> {
   return readUserVfsSaveBaseline(vfs, path);
-}
-
-export async function handleVfsList(
-  req: VfsListRequest,
-): Promise<IpcResult<VfsListEntryDto[]>> {
-  try {
-    const rt = await getDesktopRuntime();
-    const scope = resolveVfsScopeFromRequest(req);
-    const vfs = getVfsForScope(rt, scope);
-    const entries = await vfs.list(req.path, { recursive: req.recursive });
-    return {
-      ok: true,
-      data: entries.map((e) => ({
-        path: e.path,
-        kind: e.kind === "directory" ? "directory" : "file",
-      })),
-    };
-  } catch (err) {
-    return { ok: false, error: formatIpcError(err) };
-  }
 }
 
 export async function handleVfsRead(

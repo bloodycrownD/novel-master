@@ -1,7 +1,7 @@
 /**
  * T-MF1~T-MF5：mermaid 全屏查看器契约与纯逻辑。
  * DOM 契约照 T-MV2「读源码 + dist」惯例（Jest 为 RN 环境，无 jsdom）；
- * 手势纯函数照 menu-overlay-guards 样板 Jest 直测。
+ * 手势纯函数按纯函数模块样板 Jest 直测。
  */
 import {readFileSync} from 'node:fs';
 import {join} from 'node:path';

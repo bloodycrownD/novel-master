@@ -6,7 +6,6 @@
 import type {
   IpcResult,
   WorkplaceBuildListRowsRequest,
-  WorkplaceCaptureSessionBlockRequest,
   WorkplaceGetDirRuleRequest,
   WorkplaceListRowDto,
   WorkplaceSetDirRuleRequest,
@@ -24,7 +23,6 @@ import {
 } from "../forward-workspace-mutated.js";
 import { formatIpcError } from "../format-ipc-error.js";
 import type { DesktopNovelMasterRuntime } from "../../runtime/types.js";
-import { notifyComposerStatusAfterSessionKkvCleared } from "../../services/notify-composer-status-after-kkv-clear.js";
 
 function toIpcFillPolicy(
   fillPolicy: string | undefined,
@@ -130,24 +128,6 @@ export async function handleWorkplaceSetFileRule(
     });
     notifyWorkspaceMutatedToRenderer(workspaceMutatedPayloadFromRequest(req));
     await refreshRuleSnapshotAfterRuleChange(rt, req);
-    return { ok: true, data: undefined };
-  } catch (err) {
-    return { ok: false, error: formatIpcError(err) };
-  }
-}
-
-/**
- * 已退役的「常驻工作区快照」IPC：改清空 session kkv，下次拼装重建常驻前缀。
- * UI 入口将在 Step 9 删除。
- */
-export async function handleWorkplaceCaptureSessionBlock(
-  req: WorkplaceCaptureSessionBlockRequest,
-): Promise<IpcResult<void>> {
-  try {
-    const rt = await getDesktopRuntime();
-    await rt.sessionKkv.clearSession(req.sessionId);
-    // D10：手动重置清 kkv（不必清 annotate）
-    await notifyComposerStatusAfterSessionKkvCleared(rt, req.sessionId);
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };

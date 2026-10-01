@@ -31,8 +31,6 @@ const mockOlderMessage = {
   role: 'user',
   content: {blocks: [{type: 'text', text: 'old'}]},
 };
-const mockLoadTail = jest.fn(async () => [mockTailMessage]);
-const mockLoadPage = jest.fn(async () => [mockOlderMessage]);
 let mockLatestMessageListProps: any;
 let mockLatestBottomSheetProps: any;
 // transcript 引擎按用例切换：默认 legacy-rn（既有用例），webview 用例
@@ -206,11 +204,6 @@ jest.mock('../src/storage/chat-rich-text-pref', () => ({
   readChatRichTextEnabled: jest.fn(async () => false),
 }));
 
-jest.mock('../src/services/session-messages-loader', () => ({
-  loadSessionMessagesTail: (...args: any[]) => mockLoadTail(...args),
-  loadSessionMessagesPage: (...args: any[]) => mockLoadPage(...args),
-}));
-
 jest.mock('../src/components/chrome/AppHeader', () => ({
   AppHeader: () => null,
 }));
@@ -359,8 +352,6 @@ describe('ChatTabScreen integration', () => {
     mockFocusInvoked = false;
     mockLatestMessageListProps = undefined;
     mockLatestBottomSheetProps = undefined;
-    mockLoadTail.mockClear();
-    mockLoadPage.mockClear();
     mockRunAgentTurn.mockClear();
     mockRuntime.messages.listBySession.mockClear();
     mockRuntime.messages.listBySessionTail.mockClear();
@@ -417,8 +408,7 @@ describe('ChatTabScreen integration', () => {
     await enterConversation(tree!);
 
     // 无单元（非运行态会话，Step 7 收口）：manager 的 idle 消息路径兜底
-    // ——同样走 runtime.messages 窄口（listBySessionTail），不经
-    // session-messages-loader（该 loader 的 hook 消费方已退役）。
+    // ——走 runtime.messages 窄口（listBySessionTail），不经已退役的 loader。
     // Step 2 单查询化：tail 多取一条（页大小 40 + 1）判定 hasMore。
     expect(mockRuntime.messages.listBySessionTail).toHaveBeenCalledWith('s1', {
       limit: 41,
@@ -463,12 +453,11 @@ describe('ChatTabScreen integration', () => {
     });
     await enterConversation(tree!);
 
-    // 单元消息面：listBySessionTail（单元窄口）而非 session-messages-loader。
+    // 单元消息面：listBySessionTail（单元窄口）。
     // Step 2 单查询化：tail 多取一条（页大小 40 + 1）判定 hasMore。
     expect(mockRuntime.messages.listBySessionTail).toHaveBeenCalledWith('s1', {
       limit: 41,
     });
-    expect(mockLoadTail).not.toHaveBeenCalled();
 
     const loadMore = findPressableByText(tree!.root, '加载更早消息');
     await act(async () => {
@@ -479,7 +468,6 @@ describe('ChatTabScreen integration', () => {
       's1',
       {limit: 40, beforeSeq: 2},
     );
-    expect(mockLoadPage).not.toHaveBeenCalled();
   });
 
   it('wires bursty stream deltas through unit buffers to projection partial', async () => {

@@ -1,7 +1,7 @@
 /**
  * Mermaid 全屏查看器手势纯函数（pinch/pan clamp、双击状态机）。
  * rich-document / chat-transcript 两管线经 shared/mermaid-fullscreen 共用；
- * 纯计算无 DOM 依赖，照 menu-overlay-guards 样板 Jest 直测。
+ * 纯计算无 DOM 依赖，按纯函数模块样板 Jest 直测。
  */
 
 /** pinch 最小缩放（原始 fit 尺寸）。 */

@@ -8,7 +8,6 @@ import type {
   SkillRefDto,
   SkillsAssertCreateNameRequest,
   SkillsDeleteRequest,
-  SkillsEditRequest,
   SkillsEffectiveRequest,
   SkillsListRequest,
   SkillsReadRequest,
@@ -122,28 +121,6 @@ export async function handleSkillsWrite(
       req.name,
       req.path,
       req.content,
-      req.projectId,
-    );
-    return { ok: true, data: result };
-  } catch (err) {
-    return { ok: false, error: formatIpcError(err) };
-  }
-}
-
-export async function handleSkillsEdit(
-  req: SkillsEditRequest,
-): Promise<IpcResult<{ version: number; replacements: number }>> {
-  try {
-    const rt = await getDesktopRuntime();
-    const result = await rt.skills().editSkillFile(
-      req.domain,
-      req.name,
-      req.path,
-      {
-        oldString: req.oldString,
-        newString: req.newString,
-        ...(req.replaceAll != null ? { replaceAll: req.replaceAll } : {}),
-      },
       req.projectId,
     );
     return { ok: true, data: result };

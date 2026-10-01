@@ -7,12 +7,10 @@
  */
 import type {
   IpcResult,
-  SmartSortRuleBundleDto,
   SmartSortRuleCreateRequest,
   SmartSortRuleDeleteBatchRequest,
   SmartSortRuleDto,
   SmartSortRuleIdRequest,
-  SmartSortRuleImportRulesRequest,
   SmartSortRuleMatchRequest,
   SmartSortRuleMatchResultDto,
   SmartSortRuleMoveRequest,
@@ -145,30 +143,6 @@ export async function handleSmartSortRuleReorder(
   try {
     const rt = await getDesktopRuntime();
     const rules = await rt.smartSortRule.reorderRules(req.orderedIds);
-    return { ok: true, data: rules as SmartSortRuleDto[] };
-  } catch (err) {
-    return { ok: false, error: formatIpcError(err) };
-  }
-}
-
-export async function handleSmartSortRuleExportRules(): Promise<
-  IpcResult<SmartSortRuleBundleDto>
-> {
-  try {
-    const rt = await getDesktopRuntime();
-    const bundle = await rt.smartSortRule.exportRules();
-    return { ok: true, data: bundle as SmartSortRuleBundleDto };
-  } catch (err) {
-    return { ok: false, error: formatIpcError(err) };
-  }
-}
-
-export async function handleSmartSortRuleImportRules(
-  req: SmartSortRuleImportRulesRequest,
-): Promise<IpcResult<SmartSortRuleDto[]>> {
-  try {
-    const rt = await getDesktopRuntime();
-    const rules = await rt.smartSortRule.importRules(req.bundle);
     return { ok: true, data: rules as SmartSortRuleDto[] };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };

@@ -228,11 +228,6 @@ jest.mock('@/storage/chat-transcript-engine', () => ({
   readChatTranscriptEngine: jest.fn(async () => 'legacy-rn'),
 }));
 
-jest.mock('@/services/session-messages-loader', () => ({
-  loadSessionMessagesTail: jest.fn(async () => []),
-  loadSessionMessagesPage: jest.fn(async () => []),
-}));
-
 jest.mock('@/services/project-composer-status.service', () => ({
   projectComposerStatusForSession: jest.fn(async () => []),
 }));

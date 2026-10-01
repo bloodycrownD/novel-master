@@ -2,8 +2,8 @@
  * composer-input 载荷与消息类型（runtime 模型）。
  *
  * 协议 v=1，信封 `{v:1, type, payload}` 对齐三域先例；
- * 本文件是 host↔web 双向消息的**全量**清单（死消息不留：不照抄 transcript 的
- * `log` / `messagePatch`）。RN 侧同形声明在 `components/chat/ComposerInputBridge.ts`，
+ * 本文件是 host↔web 双向消息的**全量**清单（死消息不留）。
+ * RN 侧同形声明在 `components/chat/ComposerInputBridge.ts`，
  * 两侧 BRIDGE_V 必须一致。
  */
 

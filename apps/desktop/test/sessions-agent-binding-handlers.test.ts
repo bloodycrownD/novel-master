@@ -10,7 +10,6 @@ import {
 import { handleProjectsCreate } from "../src/main/ipc/handlers/projects.js";
 import {
   handleSessionsCreate,
-  handleSessionsGetAgentBinding,
   handleSessionsSetAgentBinding,
   handleSessionsSetModelOverride,
 } from "../src/main/ipc/handlers/sessions.js";
@@ -21,7 +20,7 @@ import {
 } from "./desktop-db-test-env.js";
 
 /**
- * T-D1：SESSIONS_GET/SET_AGENT_BINDING handler 透传 rt.sessions.* 正确，
+ * T-D1：SESSIONS_SET_AGENT_BINDING handler 透传 rt.sessions.* 正确，
  *      PromptAgentMetaResponse 含 modelSource 新字段。
  * T-D2：handlePromptAgentMeta 消费 req.sessionId（session source 由 session 维度触发）。
  * T-M1 desktop：session source + modelSource 两档（agent-pin / session）。
@@ -40,7 +39,7 @@ describe("sessions agent-binding IPC handlers + prompt meta", () => {
     await teardownDesktopDbTestEnv(tempDir);
   });
 
-  it("T-D1：getAgentBinding 默认携带 workspace agent；setAgentBinding round-trip 写入 / 回退 workspace", async () => {
+  it("T-D1：setAgentBinding round-trip 写入 / 同步回 workspace 当前 agent", async () => {
     // 先触发 singleton 初始化（handler 内部调 getDesktopRuntime），再注册 agent + 设 workspace 指针。
     const project = await handleProjectsCreate({ name: "绑定测试" });
     assert.equal(project.ok, true);
@@ -70,14 +69,6 @@ describe("sessions agent-binding IPC handlers + prompt meta", () => {
     }
     const sessionId = session.data.id;
 
-    // 默认携带 workspace agent（agent_config_json 由 create 复制 workspace 指针）。
-    const initial = await handleSessionsGetAgentBinding({ sessionId });
-    assert.equal(initial.ok, true);
-    if (initial.ok) {
-      assert.equal(initial.data.agentId, "agent-x");
-      assert.equal("mode" in initial.data, false);
-    }
-
     // 写入新 agent
     await rt.agentRegistry.upsert("agent-y", {
       name: "Agent Y",
@@ -91,13 +82,6 @@ describe("sessions agent-binding IPC handlers + prompt meta", () => {
     assert.equal(bound.ok, true);
     if (bound.ok) {
       assert.equal(bound.data.agentId, "agent-y");
-    }
-
-    // 重新读回一致
-    const reread = await handleSessionsGetAgentBinding({ sessionId });
-    assert.equal(reread.ok, true);
-    if (reread.ok) {
-      assert.equal(reread.data.agentId, "agent-y");
     }
 
     // agentId=null → 同步到 workspace 当前 agent（仍是 agent-x）
@@ -309,15 +293,18 @@ describe("sessions agent-binding IPC handlers + prompt meta", () => {
  * 读回 session 绑定确认写已落盘，同时让出事件循环 tick（SQLite 写后立即读的可见性兜底）。
  * 写入与 handlePromptAgentMeta 内部的 resolve 之间隔着一次显式 read-back，
  * 既验证 SET 正确，又保证后续 meta 读取拿到最新绑定。
+ *
+ * 注：读回走 core runtime 的 `sessions.getSessionAgentConfig`（与本轮删掉的
+ * 会话绑定读侧 IPC 通道同一个数据源），断言口径不变。
  */
 async function verifyBindingCommitted(
   sessionId: string,
   expectedAgentId: string,
 ): Promise<void> {
-  const read = await handleSessionsGetAgentBinding({ sessionId });
-  assert.equal(read.ok, true);
-  if (!read.ok) {
-    return;
-  }
-  assert.equal(read.data.agentId, expectedAgentId);
+  const { getDesktopRuntime } = await import(
+    "../src/main/runtime/desktop-runtime-singleton.js"
+  );
+  const rt = await getDesktopRuntime();
+  const read = await rt.sessions.getSessionAgentConfig(sessionId);
+  assert.equal(read.agentId, expectedAgentId);
 }

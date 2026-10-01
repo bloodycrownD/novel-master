@@ -20,11 +20,6 @@ jest.mock('@react-native-clipboard/clipboard', () => ({
   default: {setString: jest.fn()},
 }));
 
-jest.mock('@/services/session-messages-loader', () => ({
-  loadSessionMessagesPage: jest.fn(),
-  loadSessionMessagesTail: jest.fn(),
-}));
-
 jest.mock('@/services/project-composer-status.service', () => ({
   refreshComposerStatusAfterFloorOrCompaction: jest.fn(async () => undefined),
   refreshComposerStatusAfterSessionKkvCleared: jest.fn(async () => undefined),

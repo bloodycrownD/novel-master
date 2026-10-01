@@ -25,8 +25,6 @@ export const IPC_CHANNELS = {
   PROJECTS_CREATE: 'nm:projects/create',
   PROJECTS_RENAME: 'nm:projects/rename',
   PROJECTS_DELETE: 'nm:projects/delete',
-  PROJECTS_GET_AGENT_CONFIG: 'nm:projects/getAgentConfig',
-  PROJECTS_UPDATE_AGENT_CONFIG: 'nm:projects/updateAgentConfig',
 
   SESSIONS_LIST_BY_PROJECT: 'nm:sessions/listByProject',
   SESSIONS_CREATE: 'nm:sessions/create',
@@ -35,8 +33,6 @@ export const IPC_CHANNELS = {
   SESSIONS_GET_COMPOSER_DRAFT: 'nm:sessions/getComposerDraft',
   SESSIONS_SET_COMPOSER_DRAFT: 'nm:sessions/setComposerDraft',
   SESSIONS_PROJECT_COMPOSER_STATUS: 'nm:sessions/projectComposerStatus',
-  /** 会话级：读取当前会话的智能体绑定（follow / bind）。 */
-  SESSIONS_GET_AGENT_BINDING: 'nm:sessions/getAgentBinding',
   /** 会话级：绑定 agent 到会话（agentId=null 解绑回 follow）。 */
   SESSIONS_SET_AGENT_BINDING: 'nm:sessions/setAgentBinding',
   /** 会话级：覆盖模型（modelId=null 清除覆盖，mode/agentId 保持现状）。 */
@@ -45,7 +41,6 @@ export const IPC_CHANNELS = {
   APP_UI_GET: 'nm:app-ui/get',
   APP_UI_SET: 'nm:app-ui/set',
 
-  VFS_LIST: 'nm:vfs/list',
   VFS_READ: 'nm:vfs/read',
   /** 只读物理树浏览（跨域拼接视图；仅 list/read，无任何写通道） */
   PHYSICAL_LIST: 'nm:physical/list',
@@ -77,7 +72,6 @@ export const IPC_CHANNELS = {
   WORKPLACE_SET_DIR_RULE: 'nm:workplace/setDirRule',
   WORKPLACE_SET_FILE_RULE: 'nm:workplace/setFileRule',
   WORKPLACE_GET_DIR_RULE: 'nm:workplace/getDirRule',
-  WORKPLACE_CAPTURE_SESSION_BLOCK: 'nm:workplace/captureSessionBlock',
 
   SESSIONS_PULL_TEMPLATE: 'nm:sessions/pullTemplate',
   SESSIONS_PUSH_TEMPLATE: 'nm:sessions/pushTemplate',
@@ -155,8 +149,6 @@ export const IPC_CHANNELS = {
   SMART_SORT_RULE_SET_ENABLED_BATCH: 'nm:sort-rule/setEnabledBatch',
   SMART_SORT_RULE_MOVE: 'nm:sort-rule/move',
   SMART_SORT_RULE_REORDER: 'nm:sort-rule/reorder',
-  SMART_SORT_RULE_IMPORT_RULES: 'nm:sort-rule/importRules',
-  SMART_SORT_RULE_EXPORT_RULES: 'nm:sort-rule/exportRules',
   SMART_SORT_RULE_RESET_DEFAULTS: 'nm:sort-rule/resetDefaults',
   SMART_SORT_RULE_MATCH: 'nm:sort-rule/match',
   /** YAML 导入导出走 main 进程系统对话框（替换式导入，D10）。 */
@@ -167,7 +159,6 @@ export const IPC_CHANNELS = {
   SKILLS_EFFECTIVE: 'nm:skills/effective',
   SKILLS_READ: 'nm:skills/read',
   SKILLS_WRITE: 'nm:skills/write',
-  SKILLS_EDIT: 'nm:skills/edit',
   SKILLS_TOGGLE: 'nm:skills/toggle',
   SKILLS_DELETE: 'nm:skills/delete',
   SKILLS_ASSERT_CREATE_NAME: 'nm:skills/assert-create-name',

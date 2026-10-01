@@ -35,11 +35,6 @@ jest.mock('@react-native-clipboard/clipboard', () => ({
   default: {setString: jest.fn()},
 }));
 
-jest.mock('../src/services/session-messages-loader', () => ({
-  loadSessionMessagesPage: jest.fn(),
-  loadSessionMessagesTail: jest.fn(),
-}));
-
 jest.mock('../src/services/message-rollback.service', () => ({
   rollbackToMessage: (...args: unknown[]) => mockRollbackToMessage(...args),
 }));
