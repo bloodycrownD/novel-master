@@ -19,6 +19,7 @@ import {
   resolveSendButtonState,
   resolveToolbarDisabled,
   resolveTypeaheadEnabled,
+  shouldEmitConversationReady,
 } from '@web/chat-conversation/webview/dock';
 import {
   computeTypeaheadView,
@@ -88,6 +89,8 @@ class FakeElement {
   readonly style = new FakeStyle();
   readonly classList = new FakeClassList(this);
   readonly attributes: Record<string, string> = {};
+  /** dataset 桩（applyHostTheme 的 `root.dataset.nmMode` 写入）。 */
+  readonly dataset: Record<string, string> = {};
   children: FakeElement[] = [];
   parentNode: FakeElement | null = null;
   listeners: Array<{type: string; fn: AnyFn}> = [];
@@ -110,6 +113,8 @@ class FakeElement {
   didFocus = false;
   didBlur = false;
   private html = '';
+  /** innerHTML 写入次数（无 MutationObserver，用写次数当「重渲了一次」的代理）。 */
+  innerHTMLWrites = 0;
 
   constructor(tagName: string) {
     this.tagName = tagName.toUpperCase();
@@ -125,6 +130,7 @@ class FakeElement {
    */
   set innerHTML(value: string) {
     this.html = value;
+    this.innerHTMLWrites += 1;
     this.children = [];
     const divRe = /<div\s+class="([^"]*)"[^>]*>/g;
     let match: RegExpExecArray | null;
@@ -172,6 +178,11 @@ class FakeElement {
       item.fn(payload);
     }
   }
+  /** DOM 标准入口（editor 的 applyText 走 document.dispatchEvent 派 CustomEvent）。 */
+  dispatchEvent(event: {type: string}): boolean {
+    this.dispatch(event.type, {target: this});
+    return true;
+  }
   countListeners(type: string): number {
     return this.listeners.filter(item => item.type === type).length;
   }
@@ -202,7 +213,8 @@ class FakeElement {
 
   matches(selector: string): boolean {
     if (selector.startsWith('#')) return this.id === selector.slice(1);
-    if (selector.startsWith('.')) return this.classList.contains(selector.slice(1));
+    if (selector.startsWith('.'))
+      return this.classList.contains(selector.slice(1));
     return this.tagName === selector.toUpperCase();
   }
 
@@ -222,7 +234,11 @@ class FakeElement {
   }
 }
 
-type PostedMessage = {v: number; type: string; payload: Record<string, unknown>};
+type PostedMessage = {
+  v: number;
+  type: string;
+  payload: Record<string, unknown>;
+};
 
 const g = globalThis as unknown as Record<string, unknown>;
 const originalWindow = g.window;
@@ -300,7 +316,9 @@ function buildShell(): void {
   fakeDocument.appendChild(app);
 
   // composer runtime 先挂载（真实顺序：两工厂 → dock handler）
-  mountComposerEditor(inputHost as unknown as HTMLElement, {heightReport: false});
+  mountComposerEditor(inputHost as unknown as HTMLElement, {
+    heightReport: false,
+  });
 }
 
 function textarea(): FakeElement {
@@ -499,6 +517,21 @@ describe('dock 纯判定（T-CD）', () => {
     expect(resolveTypeaheadEnabled(stateOf({inputDisabled: true}))).toBe(false);
     expect(resolveTypeaheadEnabled(null)).toBe(false);
   });
+
+  it('T-CD-23：ready 闸门四组合真值表——两面都装成才发 ready', () => {
+    expect(
+      shouldEmitConversationReady({composerMounted: true, dockMounted: true}),
+    ).toBe(true);
+    expect(
+      shouldEmitConversationReady({composerMounted: true, dockMounted: false}),
+    ).toBe(false);
+    expect(
+      shouldEmitConversationReady({composerMounted: false, dockMounted: true}),
+    ).toBe(false);
+    expect(
+      shouldEmitConversationReady({composerMounted: false, dockMounted: false}),
+    ).toBe(false);
+  });
 });
 
 describe('typeahead web 自治纯逻辑（T-CD）', () => {
@@ -557,7 +590,8 @@ describe('mountConversationDock（DOM 层）', () => {
     const dock = createConversationDock((type, payload) =>
       posted.push({v: 2, type, payload: payload ?? {}}),
     );
-    dock.mount();
+    // 装配成功要把 true 交回入口（ready 闸门的输入之一）
+    expect(dock.mount()).toBe(true);
 
     const toolbar = dockEl('composer-toolbar');
     expect(toolbar.querySelector('.toolbar__spacer')).not.toBeNull();
@@ -568,7 +602,7 @@ describe('mountConversationDock（DOM 层）', () => {
     expect(toolbarBtn('toolbar__fullscreen').style.fontSize).toBe('20px');
     expect(toolbarBtn('toolbar__at').style.fontSize).toBe('16px');
     // 幂等：重复 mount 不重复装配
-    dock.mount();
+    expect(dock.mount()).toBe(true);
     expect(toolbar.querySelectorAll('.toolbar__send')).toHaveLength(1);
     dock.unmount();
   });
@@ -584,8 +618,9 @@ describe('mountConversationDock（DOM 层）', () => {
       fakeDocument.querySelector(`#${id}`)?.remove();
     }
     const dock = createConversationDock(() => {});
+    // 缺壳必须**如实上报 false**（静默 void 会让入口照发 ready，宿主 8s 兜底失效）
+    expect(dock.mount()).toBe(false);
     expect(() => {
-      dock.mount();
       dock.applyRoute({kind: 'composerState', state: stateOf()});
     }).not.toThrow();
     dock.unmount();
@@ -640,6 +675,16 @@ describe('composerState 渲染分支（T-CU6）', () => {
     // inputDisabled 同时禁掉 @/$ 与 input 只读
     expect(textarea().readOnly).toBe(true);
     expect(toolbarBtn('toolbar__at').disabled).toBe(true);
+    // 禁用态不挂 `.composer-input--disabled`（整块淡出是旧 RN 链 styles 搬入的产物，
+    // 现网 chat 链的 TextInput 从无此变体；置灰语义只由 readOnly 承担）。
+    // 扫整棵输入区子树：toggle 打在 textarea 的父节点上，只查壳节点会漏。
+    const inputArea = [
+      dockEl('composer-input'),
+      ...dockEl('composer-input').descendants(),
+    ];
+    expect(
+      inputArea.some(el => (el.className ?? '').indexOf('disabled') >= 0),
+    ).toBe(false);
     dock.unmount();
   });
 
@@ -665,10 +710,16 @@ describe('composerState 渲染分支（T-CU6）', () => {
     dock.applyRoute({kind: 'init', safeAreaBottom: 34});
     expect(dockEl('composer-dock').style.paddingBottom).toBe('34px');
 
-    dock.applyRoute({kind: 'composerState', state: stateOf({keyboardUp: true})});
+    dock.applyRoute({
+      kind: 'composerState',
+      state: stateOf({keyboardUp: true}),
+    });
     expect(dockEl('composer-dock').style.paddingBottom).toBe('0px');
 
-    dock.applyRoute({kind: 'composerState', state: stateOf({keyboardUp: false})});
+    dock.applyRoute({
+      kind: 'composerState',
+      state: stateOf({keyboardUp: false}),
+    });
     expect(dockEl('composer-dock').style.paddingBottom).toBe('34px');
     dock.unmount();
   });
@@ -753,6 +804,28 @@ describe('composerPaste / selectAll（划词菜单链路）', () => {
     dock.unmount();
   });
 
+  it('T-CD-28：inputDisabled 时划词粘贴被闸门挡下（零聚焦、零写入、零 change 上行）', () => {
+    const dock = createConversationDock((type, payload) =>
+      posted.push({v: 2, type, payload: payload ?? {}}),
+    );
+    dock.mount();
+    // 运行中 / 未选模型态：宿主已把输入框置为只读，划词菜单却照样展示「粘贴」
+    dock.applyRoute({
+      kind: 'composerState',
+      state: stateOf({inputDisabled: true, running: true}),
+    });
+
+    const input = textarea();
+    input.value = '已有正文';
+    input.setSelectionRange(4, 4);
+    dock.applyRoute({kind: 'composerPaste', text: '注入'});
+
+    expect(input.value).toBe('已有正文');
+    expect(input.didFocus).toBe(false);
+    expect(posted.filter(msg => msg.type === 'change')).toEqual([]);
+    dock.unmount();
+  });
+
   it('T-CD-21：selectAll 在输入框聚焦时选 textarea，否则选整篇文档', () => {
     const dock = createConversationDock(() => {});
     dock.mount();
@@ -788,10 +861,12 @@ describe('typeahead 点选（web 自治插入，零跨桥）', () => {
     input.value = '看 @src/app.ts';
     input.setSelectionRange(15, 15);
     input.dispatch('input');
+    flushRaf(); // 五源已收敛到 rAF 合并，浮层渲染落在下一帧
     expect(dockEl('composer-typeahead').hidden).toBe(false);
     expect(dockEl('composer-typeahead').innerHTML).toContain('src/app.ts');
 
-    const rows = dockEl('composer-typeahead').querySelectorAll('.typeahead__row');
+    const rows =
+      dockEl('composer-typeahead').querySelectorAll('.typeahead__row');
     expect(rows.length).toBeGreaterThan(0);
     dockEl('composer-typeahead').dispatch('click', {target: rows[0]});
 
@@ -806,6 +881,144 @@ describe('typeahead 点选（web 自治插入，零跨桥）', () => {
       {v: 1, type: 'change', payload: {text: '看 @/src/app.ts '}},
     ]);
     expect(dockActions()).toEqual([]);
+    dock.unmount();
+  });
+});
+
+describe('typeahead 重渲收敛（r6-E-1 / cr1-P2-7）', () => {
+  it('T-CD-24：五事件源同帧合并 + 同键短路：同 query 连发只写一次 innerHTML', () => {
+    const dock = createConversationDock(() => {});
+    dock.mount();
+    dock.applyRoute({
+      kind: 'composerState',
+      state: stateOf({typeahead: SOURCE}),
+    });
+
+    const input = textarea();
+    input.value = '看 @src';
+    input.setSelectionRange(5, 5);
+    input.focus();
+    // 一次击键的典型连发：input + keyup + click + select + selectionchange
+    input.dispatch('input');
+    input.dispatch('keyup');
+    input.dispatch('click');
+    input.dispatch('select');
+    fakeDocument.dispatch('selectionchange');
+    flushRaf();
+
+    const typeahead = dockEl('composer-typeahead');
+    expect(typeahead.innerHTML).toContain('src/app.ts');
+    const writes = typeahead.innerHTMLWrites;
+    expect(writes).toBeGreaterThan(0);
+
+    // 状态没变再来一轮：renderKey 相同 -> 一次都不许碰 DOM
+    input.dispatch('input');
+    input.dispatch('keyup');
+    flushRaf();
+    expect(typeahead.innerHTMLWrites).toBe(writes);
+    dock.unmount();
+  });
+
+  it('T-CD-25：query 变化才重渲（键短路不误杀真实更新）', () => {
+    const dock = createConversationDock(() => {});
+    dock.mount();
+    dock.applyRoute({
+      kind: 'composerState',
+      state: stateOf({typeahead: SOURCE}),
+    });
+
+    const input = textarea();
+    input.value = '@s';
+    input.setSelectionRange(2, 2);
+    input.dispatch('input');
+    flushRaf();
+    const typeahead = dockEl('composer-typeahead');
+    expect(typeahead.innerHTML).toContain('app.ts');
+    const writes = typeahead.innerHTMLWrites;
+
+    // 收窄 query：候选集变了，键必变，必须真重渲
+    input.value = '@src/app';
+    input.setSelectionRange(8, 8);
+    input.dispatch('input');
+    flushRaf();
+    expect(typeahead.innerHTMLWrites).toBeGreaterThan(writes);
+    expect(typeahead.innerHTML).toContain('app.ts');
+    expect(typeahead.innerHTML).not.toContain('src/lib');
+    dock.unmount();
+  });
+
+  it('T-CD-26：宿主 setText 的程序化写值（composer:text-changed）也驱动浮层重渲', () => {
+    const dock = createConversationDock(() => {});
+    dock.mount();
+    dock.applyRoute({
+      kind: 'composerState',
+      state: stateOf({typeahead: SOURCE}),
+    });
+
+    const input = textarea();
+    const typeahead = dockEl('composer-typeahead');
+    input.value = '没有触发字符';
+    input.setSelectionRange(6, 6);
+    input.dispatch('input');
+    flushRaf();
+    expect(typeahead.hidden).toBe(true);
+
+    // 程序化写值：内核不派 input/keyup，只靠 editor 往 document 补的 CustomEvent 兜住
+    input.value = '回填 @src';
+    input.setSelectionRange(7, 7);
+    fakeDocument.dispatch('composer:text-changed');
+    flushRaf();
+    expect(typeahead.hidden).toBe(false);
+    expect(typeahead.innerHTML).toContain('src/app.ts');
+    dock.unmount();
+  });
+});
+
+describe('装配序不变式（cr1-P1-1）', () => {
+  it('T-CD-29：dock 先于 composer runtime 装配 = 输入区监听全丢（顺序是红线）', () => {
+    // 入口的「先 composer runtime 后 dock.mount()」是红线：dock 在 bindEvents 里现查
+    // textarea，编辑器还没挂出来时 input == null，五源 + composer:text-changed 一个都
+    // 绑不上，且**此后不会补绑**。这里把 beforeEach 已挂好的编辑器拆掉重来，复现顺序倒置。
+    destroyComposerEditor();
+    const dock = createConversationDock(() => {});
+    // 壳元素都在，mount 仍返回 true —— 装配失败信号只覆盖「壳没命中」，顺序倒置得靠行为断言
+    expect(dock.mount()).toBe(true);
+    mountComposerEditor(dockEl('composer-input') as unknown as HTMLElement, {
+      heightReport: false,
+    });
+
+    dock.applyRoute({
+      kind: 'composerState',
+      state: stateOf({typeahead: SOURCE}),
+    });
+    const input = textarea();
+    input.value = '看 @src';
+    input.setSelectionRange(5, 5);
+    input.focus();
+    input.dispatch('input');
+    flushRaf();
+    // 监听没绑上 -> 浮层永远不展开（正常顺序下这里是 hidden=false）
+    expect(dockEl('composer-typeahead').hidden).toBe(true);
+    dock.unmount();
+  });
+});
+
+describe('主题 fan-out（cr1-P1-6）', () => {
+  it('T-CD-27：applyTheme 走真 applyHostTheme，--selection 落到 documentElement', () => {
+    const dock = createConversationDock(() => {});
+    dock.mount();
+    dock.applyTheme({
+      background: '#ffffff',
+      text: '#111111',
+      selection: '#3366ff',
+    });
+
+    const root = fakeDocument.documentElement;
+    expect(root.style.getPropertyValue('--selection')).toBe('#3366ff');
+    // 顺带证明走的是真 applyHostTheme（键序映射表），不是手写 setProperty
+    expect(root.style.getPropertyValue('--bg')).toBe('#ffffff');
+    expect(root.style.getPropertyValue('--text')).toBe('#111111');
+    expect(root.dataset.nmMode).toBe('light');
     dock.unmount();
   });
 });
