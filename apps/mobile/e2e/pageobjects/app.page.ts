@@ -35,12 +35,18 @@ const NEW_SESSION_TITLE = '新会话1';
  * `resource-id="update-check-result-snooze"` + `content-desc="今日不再提醒"`），
  * 而 Appium 的 `~id`（accessibility id）在 Android 上优先按 content-desc 匹配——
  * 只写 testID 可能查不到，所以显式 `resourceId` 打头、文案收尾。
+ *
+ * 末位的「取消」不是版本检查弹窗的按钮，而是 noReset 残留的**会话/项目 ⋮ 菜单**
+ * 兜底（2026-10-01 全量实跑实锤：前一条 spec 自清失败会把菜单留在屏上，它同原生
+ * Modal 一样抢走整棵 a11y 树，后续所有 spec 的 before 全卡 90s）。菜单里唯一安全
+ * 的动作就是取消——排最后，只在版本检查候选全部落空时才轮到它。
  */
 const UPDATE_MODAL_DISMISS_SELECTORS = [
   'android=new UiSelector().resourceId("update-check-result-snooze")',
   '~update-check-result-snooze',
   'android=new UiSelector().text("今日不再提醒")',
   'android=new UiSelector().text("关闭")',
+  'android=new UiSelector().text("取消")',
 ] as const;
 
 /**
@@ -53,6 +59,24 @@ const UPDATE_MODAL_DISMISS_SELECTORS = [
  */
 const byTestId = (testId: string): string =>
   `android=new UiSelector().resourceId("${testId}")`;
+
+/**
+ * 抽屉全屏遮罩的热区判定与落点比例（r6-G2：原来是裸魔法数 0.8 / 0.81 / 0.09）。
+ *
+ * 背景见 {@link AppPage.closeProjectDrawerIfOpen}：全屏遮罩的中心被抽屉面板消费，
+ * elementClick 点不动，只能改点「面板右界之外、header 之下的空白」。
+ *
+ * ⚠️ **MASK_TAP_Y_RATIO 与抽屉 header 高度强耦合**：y 取的是 header 下沿之下那一小段
+ * 空白，抽屉 header 一改高（真源是 `src/components/chrome/AppHeader.tsx` 的
+ * `APP_HEADER_CONTENT_HEIGHT`，当前 58），0.09 就会落进 header / 面板内容区，
+ * 点击重新被面板吃掉，抽屉关不掉。改 header 高度时**必须同步复核 MASK_TAP_Y_RATIO**。
+ *
+ * MASK_TAP_X_RATIO 同理要留在「面板右界之外、会话行 ⋮ 菜单列（x≈0.88 屏宽起）之左」的
+ * 窄缝里——面板宽度或 ⋮ 菜单列位置变了同样要复核。
+ */
+const MASK_FULLSCREEN_RATIO = 0.8;
+const MASK_TAP_X_RATIO = 0.81;
+const MASK_TAP_Y_RATIO = 0.09;
 
 /** App shell: project/session bootstrap and tab navigation. */
 export class AppPage {
@@ -106,9 +130,7 @@ export class AppPage {
     while (Date.now() < deadline) {
       await this.dismissUpdateCheckModalOnce();
       const chatTab = await $('~对话');
-      chatVisible = await chatTab
-        .isDisplayed()
-        .catch(() => false);
+      chatVisible = await chatTab.isDisplayed().catch(() => false);
       if (chatVisible) {
         break;
       }
@@ -138,7 +160,31 @@ export class AppPage {
     for (const selector of ['~关闭项目列表', '~关闭']) {
       const close = await $(selector);
       if (await close.isExisting()) {
-        await close.click();
+        // 「关闭」收敛后挂在**全屏遮罩**上（2026-10-01 e2e 实跑实锤）：elementClick
+        // 点元素中心，而全屏遮罩的中心落在抽屉面板内容上，点击被面板消费、遮罩的
+        // onPress 不触发——抽屉永远关不掉（T-CU12 冒烟失败根因）。命中全屏元素
+        // （宽 ≥ 80% 屏宽）时改点右侧热区（见 MASK_TAP_X_RATIO / MASK_TAP_Y_RATIO）。
+        //
+        // **失败诊断路径**：热区点空了抽屉还是关不掉时，别急着调比例数——先 dump 抽屉
+        // UI（`adb shell uiautomator dump` 或 `browser.saveScreenshot`）看遮罩元素的
+        // bounds 与抽屉面板 bounds，确认 (a) 遮罩是否真的全屏、(b) 热区落点有没有被
+        // 面板 / header 盖住。两组 bounds 一比就知道该改 MASK_TAP_X_RATIO 还是
+        // MASK_TAP_Y_RATIO（或 APP_HEADER_CONTENT_HEIGHT 变了）。
+        const size = await close.getSize();
+        const win = await browser.getWindowSize();
+        if (size.width >= Math.round(win.width * MASK_FULLSCREEN_RATIO)) {
+          await browser
+            .action('pointer', {parameters: {pointerType: 'touch'}})
+            .move({
+              x: Math.round(win.width * MASK_TAP_X_RATIO),
+              y: Math.round(win.height * MASK_TAP_Y_RATIO),
+            })
+            .down()
+            .up()
+            .perform();
+        } else {
+          await close.click();
+        }
         await browser.pause(300);
         return;
       }
@@ -191,9 +237,7 @@ export class AppPage {
    */
   async openLatestSession(title = NEW_SESSION_TITLE): Promise<void> {
     await switchToNative();
-    const sessionTitle = await $(
-      `android=new UiSelector().text("${title}")`,
-    );
+    const sessionTitle = await $(`android=new UiSelector().text("${title}")`);
     if (!(await sessionTitle.isExisting())) {
       throw new Error(
         `[e2e] 会话行「${title}」不存在。` +
@@ -363,6 +407,11 @@ export class AppPage {
       await this.closeProjectDrawerIfOpen();
       return;
     }
+    // UiSelector 走 a11y 全树（屏外也命中），但下方的 XPath ⋮ 只搜**可见子树**——
+    // 项目逐轮堆积（noReset，after 失败一轮就多残留一个）后目标行常在屏外，
+    // XPath 直接跑必然 not existing（2026-10-01 e2e 全量实锤）。先把行本身滚进
+    // 可视区，XPath 才有得搜。
+    await row.scrollIntoView();
 
     // ⋮ 在项目卡片内（ProjectDrawer.tsx 的 `project-menu-${id}` testID 用的 id 是 UI
     // 内部 id，页对象拿不到，只能按项目名文本反查所在卡片）。`[last()]` 取文档序最
@@ -372,7 +421,8 @@ export class AppPage {
       `(//android.view.ViewGroup[.//android.widget.TextView[@text="${projectName}"]]` +
         `//android.widget.TextView[@text="⋮"])[last()]`,
     );
-    await more.waitForDisplayed({timeout: 10000});
+    await more.waitForExist({timeout: 10000});
+    await more.waitForDisplayed({timeout: 5000});
     await more.click();
 
     const deleteItem = await $('android=new UiSelector().text("删除")');

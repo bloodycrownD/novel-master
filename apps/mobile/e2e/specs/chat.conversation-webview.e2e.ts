@@ -51,10 +51,14 @@ describe('T-CU12 conversation webview smoke', () => {
   });
 
   it('sends from the web dock without leaving the web context', async () => {
+    // 三个 it 共享同一个 WebView 上下文、彼此不重置，发送前先记基线行数：
+    // 只断言「转录区非空」（`>= 1`）会被**初始快照行**满足，等于没验证发送——
+    // composer-send 即使 no-op 也照样绿（r6-G1）。改成「发送后比发送前多」才有牙齿，
+    // 且不依赖文案形态（没配真实模型时宿主可能走「无模型降级」，行的角色/内容不稳定，
+    // 但**行数必然 +1**）。
+    const before = await chatTranscriptPage.countMessages();
     await chatTranscriptPage.sendComposerMessage('e2e-cu12-send');
-
-    // 发送后转录区应出现消息行。不断言角色/条数：没配真实模型时宿主可能走
-    // 「无模型降级」文案，行的数量与角色不稳定——这里只锁「web 内点发送真的发出去了」。
-    expect(await chatTranscriptPage.countMessages()).toBeGreaterThanOrEqual(1);
+    const after = await chatTranscriptPage.countMessages();
+    expect(after).toBeGreaterThan(before);
   });
 });
