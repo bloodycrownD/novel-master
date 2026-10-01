@@ -119,11 +119,9 @@ import { IntegrityRepairRegistry } from "@/service/integrity-repair.js";
  * VFS 非 head 历史版本混合打包——小组 zlib-concat-v1 / 大组 fossil-chain-v1，
  * member 按 content_hash 寻址进包）。老库（v17）靠本轮 bump 走慢路径由
  * DDL 建出两表与索引；全新库直接建表；无存量回填（历史 blob 行由后台
- * 打包任务跨启动续跑搬运）。**同 idx_vfs_entry_content_hash 一段：已因
- * 上一轮撤回 v18 落到 user_version = 18 的分支内测试机库走快路径，两张表
- * 同样不补建——该形态下打包任务每次启动会以 no such table:
- * vfs_content_pack 报 warn、双端状态行退化（无发布面，可接受；正式库
- * 从未有过 v18 形态）。**占号说明：main 侧曾占 v18 后当日撤回（上段，
+ * 打包任务跨启动续跑搬运）。**已因上一轮撤回 v18 落到 user_version = 18 的
+ * 测试机库走快路径时，两张表由事务外无条件段幂等补建**（pbm-7 方案 A，
+ * 荣耀真机实锤该形态后落地——详见 bootstrapNovelMaster 内该段注释）。占号说明：main 侧曾占 v18 后当日撤回（上段，
  * 未发布），故本迭代直接取 v18、无需再顺延；合并顺序上以主干现值为准，
  * 若 main 后续再占 18 则本迭代顺延。
  * v18 同轮追加：`idx_vfs_entry_content_hash`（打包候选谓词的 head 引用
@@ -423,6 +421,20 @@ export async function bootstrapNovelMaster(
     await seedBuiltinSmartSortRules(tx);
     await writeSchemaBootVersion(tx, SCHEMA_BOOT_VERSION);
   });
+
+  // pbm-7 方案 A：pack 两表 + member 索引在**事务外无条件幂等补建**（快/慢两
+  // 分支共用本出口）。理由：`user_version=18` 的库若来自「曾占 18 后撤回」的形态
+  //（tool_use_count 撤回版的测试机残留），`SCHEMA_BOOT_VERSION=18` 的快路径
+  //（18 >= 18）不会重跑 DDL——pack 两表永不建出，打包任务每轮以
+  // `no such table: vfs_content_pack` 报错（荣耀真机 2026-10-01 实锤）。慢路径
+  // 库由事务内语句集建出后此处为幂等 no-op；放进语句集对快路径无效果（快路径
+  // 不执行 DDL 循环）。全部语句带 IF NOT EXISTS、不 bump、不挂 migration——与
+  // main 侧 `idx_chat_message_pending_blob` 先例同款落点纪律。**失败语义 fail
+  // loud**：静默吞掉建表失败会让任务持续报 no such table 且无任何痕迹。V1'
+  // 退役 Part B 时随迭代一并评估删除。
+  for (const sql of VFS_CONTENT_PACK_SCHEMA_STATEMENTS) {
+    await conn.execute(sql);
+  }
 
   // D1：内置技能 seed 挂事务之后的公共路径（快/慢两分支共用本出口；放事务内
   // 会与 createSkillsService 内部基于外层 conn 的 VfsService 装配嵌套冲突）。

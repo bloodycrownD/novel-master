@@ -154,13 +154,15 @@ describe("vfs_content_pack 两表 schema 升级（T-VP17）", () => {
     }
   });
 
-  it("已升版库再 bootstrap 走快路径，DDL 不重跑（删表后不重建）", async () => {
+  it("已升版库再 bootstrap 走快路径，DDL 不重跑——但 pack 两表由事务外无条件段兜底补建（pbm-7 方案 A）", async () => {
     const conn = await openInMemoryConnection();
     try {
       await bootstrapNovelMaster(conn);
-      // 版本保持 SCHEMA_BOOT_VERSION 不动，仅删掉两表——再 bootstrap 走
-      // 快路径跳过全部 DDL，两表不应被重建（快路径「不建」的直证；
-      // 真实库里该形态只会来自外部改动，快路径的合同就是信任 user_version）。
+      // 版本保持 SCHEMA_BOOT_VERSION 不动，仅删掉两表——模拟「曾占 v18 后撤回」
+      // 测试机残留库的形态（user_version=18 快路径、pack 表缺失，荣耀真机
+      // 2026-10-01 实锤：打包任务每轮 no such table）。方案 A 后，事务内 DDL
+      // 循环仍被快路径跳过（「不重跑 DDL」的合同不变），但事务外无条件段
+      // 会幂等补建两表与索引——任务无需等版本推进即可恢复。
       await dropPackTables(conn);
       assert.equal(await readUserVersion(conn), SCHEMA_BOOT_VERSION);
 
@@ -168,13 +170,13 @@ describe("vfs_content_pack 两表 schema 升级（T-VP17）", () => {
 
       assert.equal(
         await tableExists(conn, "vfs_content_pack"),
-        false,
-        "快路径不应重跑 DDL 建 vfs_content_pack"
+        true,
+        "快路径后事务外段应兜底补建 vfs_content_pack（pbm-7 方案 A）"
       );
       assert.equal(
         await tableExists(conn, "vfs_content_pack_member"),
-        false,
-        "快路径不应重跑 DDL 建 vfs_content_pack_member"
+        true,
+        "快路径后事务外段应兜底补建 vfs_content_pack_member（pbm-7 方案 A）"
       );
       assert.equal(await readUserVersion(conn), SCHEMA_BOOT_VERSION);
     } finally {
