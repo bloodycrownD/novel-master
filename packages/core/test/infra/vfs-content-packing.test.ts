@@ -1,5 +1,6 @@
 /**
- * VFS 非 head 历史版本打包任务用例（T-VP3/8/10/12/13/16/18/19/20/21）。
+ * VFS 非 head 历史版本打包任务用例（T-VP3/8/10/12/13/16/18/19/20/21 + W1-P1-1
+ * 零候选水位族 + pbp-3/4/5 三条 fix-spec 牙齿）。
  *
  * 打包口径见 spec「Part B 打包任务」：候选谓词（active 非 head + 仍是 blob
  * 行 + DISTINCT hash ≥2/entry）、≤8 成员/≤1MB 明文每组、24KB 平均明文阈值
@@ -17,7 +18,10 @@
  * 【牙齿自检】T-VP3 的两处篡改（offset+1 → hash 不匹配 / fossil 组解码抛），
  * T-VP8 的事务中断替身（member 落库前崩溃 → 三表回滚），T-VP16 的两步
  * revision 删除（ref_count 若重算错，第一步就 CHECK 违反抛错），T-VP20 的
- * 吞 DELETE 替身（打转 → stalled）——均为恒红/互斥判据，非恒真断言。
+ * 吞 DELETE 替身（打转 → stalled），W1-P1-1a 的谓词探针（去短路必变红），
+ * W1-P1-1d 的 head-only 变更（digest 字段），W1-P1-1e / W1-P1-5 的收尾扫描
+ * 注入探针（TOCTOU 水位 / 并发写入归因），W1-P1-4a/4b 的预置 member 行
+ * （主键冲突幂等 / 空组不留孤儿 pack 行）——均为恒红或互斥判据，非恒真断言。
  *
  * @module test/infra/vfs-content-packing
  */
@@ -370,6 +374,104 @@ function connWithCandidatePredicateProbe(): {
     close: () => real.close(),
   };
   return { conn: probe, predicateQueries: () => count };
+}
+
+/**
+ * pbp-3 探针：在**收尾指纹采样下发时**（即 `computeZeroCandidateFingerprint`
+ * 的聚合 SQL 执行之前）注入一条写入，复刻 TOCTOU 窗口——收尾候选扫描已经返回
+ * 0、但它覆盖的数据面在指纹采样完成前就已经动过。
+ *
+ * @remarks 判据锚点是 `computeZeroCandidateFingerprint` 独有的聚合 SQL（本轮
+ *   第 1 次 = 入口 `fingerprintBefore`、第 2 次 = 收尾 `fingerprintAfter`；
+ *   无水位起跑时 `matchesZeroCandidateWatermark` 不下发该 SQL，故计数从 1 起）。
+ *   注入点若落在收尾扫描**之前**，写入会被扫描看见、`remaining !== 0` 直接走
+ *   清水位分支，压根不触到前后比对——那样这条用例就成恒绿。
+ *
+ * @param inject 注入动作。只能 async——注入本身要过 await，而 `query` 的返回
+ *   值是 promise，用 `.then` 链保序。
+ */
+function connWithTailFingerprintPreWrite(inject: () => Promise<void>): {
+  readonly conn: TdbcConnection;
+  /** 实际注入次数（断言注入点真落在收尾指纹采样上，而非入口那次或从未触发）。 */
+  readonly injections: () => number;
+} {
+  const real = conn();
+  let fingerprintSamples = 0;
+  let injections = 0;
+  const probe: TdbcConnection = {
+    execute: (sql, parameters) => real.execute(sql, parameters),
+    query: <R extends Row>(
+      sql: string,
+      parameters?: readonly unknown[]
+    ): Promise<R[]> => {
+      if (/AS\s+revision_count/i.test(sql)) {
+        fingerprintSamples += 1;
+        // 第 2 次 = 收尾采样（此时收尾候选扫描已返回、before/after 即将比对）。
+        if (fingerprintSamples === 2) {
+          injections += 1;
+          return inject().then(() => real.query<R>(sql, parameters));
+        }
+      }
+      return real.query<R>(sql, parameters);
+    },
+    batch: (sql, parametersList) => real.batch(sql, parametersList),
+    transaction: <T>(fn: (tx: TdbcConnection) => Promise<T>) =>
+      real.transaction<T>((tx) => fn(tx)),
+    close: () => real.close(),
+  };
+  return { conn: probe, injections: () => injections };
+}
+
+/**
+ * pbp-5 探针：在**收尾候选扫描下发时**（扫描执行之前）注入写入，复刻「任务
+ * 期间用户保存新版本」——收尾重扫看得见这个 entry 的新候选（所以它确实还留在
+ * 剩余候选里），但它的 maxVersion 与入口扫描的基准不同。
+ *
+ * @remarks 注入点必须落在收尾扫描**之前**：落在之后的话收尾扫描看不见新增
+ * 候选、remaining=0，判据恒真、这条用例就成恒绿。
+ */
+function connWithTailScanPreWrite(inject: () => Promise<void>): {
+  readonly conn: TdbcConnection;
+  readonly injections: () => number;
+} {
+  const real = conn();
+  let predicateQueries = 0;
+  let injections = 0;
+  const probe: TdbcConnection = {
+    execute: (sql, parameters) => real.execute(sql, parameters),
+    query: <R extends Row>(
+      sql: string,
+      parameters?: readonly unknown[]
+    ): Promise<R[]> => {
+      if (/NOT EXISTS\s*\(\s*SELECT 1 FROM vfs_entry/i.test(sql)) {
+        predicateQueries += 1;
+        // 第 2 次 = 收尾重扫（入口扫描是第 1 次）。水位命中时根本不下发谓词，
+        // 故本探针的用例必须在无水位态起跑。
+        if (predicateQueries === 2) {
+          injections += 1;
+          return inject().then(() => real.query<R>(sql, parameters));
+        }
+      }
+      return real.query<R>(sql, parameters);
+    },
+    batch: (sql, parametersList) => real.batch(sql, parametersList),
+    transaction: <T>(fn: (tx: TdbcConnection) => Promise<T>) =>
+      real.transaction<T>((tx) => fn(tx)),
+    close: () => real.close(),
+  };
+  return { conn: probe, injections: () => injections };
+}
+
+/** 往某 entry 追加一个「新 blob + active revision（非 head）」的版本。 */
+async function appendVersion(
+  entryId: number,
+  version: number,
+  plain: string
+): Promise<string> {
+  const c = conn();
+  const contentHash = await new SqliteVfsContentStore(c).put(plain);
+  await insertRevision(entryId, version, contentHash);
+  return contentHash;
 }
 
 describe("VFS 历史版本打包任务（T-VP3/8/10/12/13/16/18/19/20/21）", () => {
@@ -1184,7 +1286,7 @@ describe("VFS 历史版本打包任务（T-VP3/8/10/12/13/16/18/19/20/21）", ()
     );
   });
 
-  it("W1-P1-1b：新增 revision/新 blob 令水位失效、全扫恢复打包并重写水位", async () => {
+  it("W1-P1-1b：新增 revision/新 blob 令水位失效、全扫恢复打包；打包轮清水位、空轮补写、下一轮才短路", async () => {
     await resetPackState();
     const c = conn();
     const suffix = testIsolationSuffix();
@@ -1209,6 +1311,7 @@ describe("VFS 历史版本打包任务（T-VP3/8/10/12/13/16/18/19/20/21）", ()
     await insertRevision(seeded.entryId, 3, hashB);
     await insertRevision(seeded.entryId, 4, hashC);
 
+    // 【pbp-3 轮次链】打包轮 → 补写轮 → 短路轮。
     const probe = connWithCandidatePredicateProbe();
     const packed = await runVfsContentPacking(probe.conn);
     assert.equal(packed.packedGroups, 1, "新候选应被全扫重新发现并打包");
@@ -1216,14 +1319,32 @@ describe("VFS 历史版本打包任务（T-VP3/8/10/12/13/16/18/19/20/21）", ()
       probe.predicateQueries() > 0,
       "指纹失效（revision/blob 计数变）后必须回退完整扫描"
     );
-    assert.ok(
+    // 打包轮本轮有落库写入（pack/member 增、blob 减）⇒ 入口/收尾指纹必不一致
+    // ⇒ 水位本轮不写且被清。此前「再次收敛后水位应重写」的断言在这道闸门
+    // 落地后不再成立（收尾收敛 ≠ 扫描期间数据面未动）。
+    assert.equal(
       await kkv.get(VFS_PACK_KKV_MODULE, "zeroCandidateWatermark"),
-      "再次收敛后水位应重写"
+      null,
+      "打包轮（有写入）前后指纹不一致 ⇒ 本轮不得写水位"
     );
 
+    // 补写轮：零候选、零写入（全扫 + 入口/收尾指纹一致）⇒ 水位补写上。
+    const refill = await runVfsContentPacking(c);
+    assert.deepEqual(refill, {
+      done: true,
+      packedGroups: 0,
+      failedGroups: 0,
+      stalled: false,
+    });
+    assert.ok(
+      await kkv.get(VFS_PACK_KKV_MODULE, "zeroCandidateWatermark"),
+      "空轮（全扫 + 零写入）应把水位补写回来"
+    );
+
+    // 短路轮：指纹未变 ⇒ 入口不再下发谓词（探针挂在这一轮）。
     const again = connWithCandidatePredicateProbe();
     await runVfsContentPacking(again.conn);
-    assert.equal(again.predicateQueries(), 0, "重写后的水位应继续生效");
+    assert.equal(again.predicateQueries(), 0, "补写后的水位应继续生效");
   });
 
   it("W1-P1-1c：failedGroups>0 不写水位（绝不把「有坏组」当零候选）", async () => {
@@ -1316,6 +1437,276 @@ describe("VFS 历史版本打包任务（T-VP3/8/10/12/13/16/18/19/20/21）", ()
       probe.predicateQueries() > 0,
       "head-only 变更必须令指纹失效（否则回滚后的候选变化会被短路吞掉）"
     );
+  });
+
+  // -------------------------------------------------------------------------
+  // pbp-3 / pbp-4 / pbp-5（cr-fix-spec-partb）
+  // -------------------------------------------------------------------------
+
+  it("W1-P1-1e（pbp-3）：收尾扫描与指纹采样之间落下的写入必令水位不写——下轮谓词真执行、该候选被打包", async () => {
+    await resetPackState();
+    const c = conn();
+    const suffix = testIsolationSuffix();
+    const store = new SqliteVfsContentStore(c);
+    const seeded = await seedEntry(
+      `${SCOPE_PREFIX}toctou-${suffix}`,
+      `/toctou-${suffix}.md`,
+      [textOf(4 * 1024, `vpk-toctou-v1-${suffix}`)],
+      `vpk-corrupt-toctou-${suffix}`,
+      textOf(1024, `vpk-toctou-head-${suffix}`)
+    );
+    // 无水位起跑（探针靠「指纹采样第 2 次 = 收尾采样」定位注入点；无水位时
+    // matchesZeroCandidateWatermark 不下发指纹 SQL，计数从 1 起）。
+    assert.equal(
+      await new SqliteKkvRepository(c).get(
+        VFS_PACK_KKV_MODULE,
+        "zeroCandidateWatermark"
+      ),
+      null,
+      "前置：起始无水位"
+    );
+
+    // 注入两条新版本（各带 blob 行、非 head）。注入点 = **收尾指纹采样下发时**：
+    // 收尾候选扫描已经返回 0（它确实没看见这两条），但它覆盖的数据面在指纹
+    // 采样完成前就动过了——正是水位前提被打破的 TOCTOU 窗口。
+    const injectedHashes: string[] = [];
+    const injectedPlains: string[] = [];
+    const probe = connWithTailFingerprintPreWrite(async () => {
+      for (const version of [3, 4]) {
+        const plain = textOf(4 * 1024, `vpk-toctou-v${version}-${suffix}`);
+        injectedPlains.push(plain);
+        injectedHashes.push(await appendVersion(seeded.entryId, version, plain));
+      }
+    });
+
+    const first = await runVfsContentPacking(probe.conn);
+    assert.equal(probe.injections(), 1, "注入点应落在收尾指纹采样上");
+    assert.deepEqual(first, {
+      done: true,
+      packedGroups: 0,
+      failedGroups: 0,
+      stalled: false,
+    });
+    const kkv = new SqliteKkvRepository(c);
+    assert.equal(
+      await kkv.get(VFS_PACK_KKV_MODULE, "zeroCandidateWatermark"),
+      null,
+      "扫描与采样之间数据面动过 ⇒ 入口/收尾指纹不一致 ⇒ 本轮不得写水位"
+    );
+
+    // 牙齿：若收尾仍拿「扫描之后现采的指纹」当水位（pbp-3 改法前），这里会
+    // 写下水位，下一轮入口指纹相等即短路谓词——下面的 predicateQueries 断言
+    // 与「候选被打包」断言会同时变红（候选被静默永久漏打包）。
+    const second = connWithCandidatePredicateProbe();
+    const resumed = await runVfsContentPacking(second.conn);
+    assert.ok(
+      second.predicateQueries() > 0,
+      "无水位时下一轮必须真跑候选谓词"
+    );
+    assert.equal(resumed.packedGroups, 1, "被水位漏掉的候选必须在下一轮被打包");
+    for (const hash of [...injectedHashes, seeded.hashes[0]!]) {
+      assert.equal(await blobRowCount(hash), 0, `${hash} 打包后 blob 行被删`);
+    }
+    for (const [index, hash] of injectedHashes.entries()) {
+      assert.equal(
+        await store.get(hash),
+        injectedPlains[index],
+        "member 分派读回等值"
+      );
+    }
+  });
+
+  it("W1-P1-4a（pbp-4）：member 主键冲突改幂等——预置 member 行 + blob 行不抛穿整轮，其余成员照常落库、member_count 按实收编数校正", async () => {
+    await resetPackState();
+    const c = conn();
+    const suffix = testIsolationSuffix();
+    const store = new SqliteVfsContentStore(c);
+
+    const plainA = textOf(8 * 1024, `vpk-dup-a-${suffix}`);
+    const plainX = textOf(8 * 1024, `vpk-dup-x-${suffix}`);
+    const plainB = textOf(8 * 1024, `vpk-dup-b-${suffix}`);
+    const seeded = await seedEntry(
+      `${SCOPE_PREFIX}dup-${suffix}`,
+      `/dup-${suffix}.md`,
+      [plainA, plainX, plainB],
+      `vpk-corrupt-dup-${suffix}`,
+      textOf(1024, `vpk-dup-head-${suffix}`)
+    );
+    const hashA = seeded.hashes[0]!;
+    const hashX = seeded.hashes[1]!;
+    const hashB = seeded.hashes[2]!;
+
+    // 前置：X 既是 member 行（另一个 pack 收编过）又有 blob 行（并发竞态 /
+    // put 抽回残留形态）。本轮再收编 X 就是 content_hash 主键冲突——裸 INSERT
+    // 会抛 UNIQUE 约束错、穿透整轮（CLI 命令直接失败）。
+    assert.deepEqual(await insertPackMembers(seeded.entryId, [plainX]), [hashX]);
+    assert.equal(await blobRowCount(hashX), 1, "前置：X 同时有 member 行与 blob 行");
+    const packsBefore = await packRows();
+    assert.equal(packsBefore.length, 1);
+
+    const result = await runVfsContentPacking(c);
+    assert.deepEqual(result, {
+      done: true,
+      packedGroups: 1,
+      failedGroups: 0,
+      stalled: false,
+    });
+
+    // X：ON CONFLICT 跳过 ⇒ 不产生重复 member 行，且**其 blob 行不被本组删除**
+    //（未收编成员的权威副本不归本组处置）。
+    assert.equal(
+      await countOf(
+        "SELECT COUNT(*) AS n FROM vfs_content_pack_member WHERE content_hash = ?",
+        [hashX]
+      ),
+      1,
+      "X 不得出现重复 member 行"
+    );
+    assert.equal(await blobRowCount(hashX), 1, "被跳过成员 X 的 blob 行必须仍在");
+    assert.equal(await store.get(hashX), plainX, "X 读回等值（blob 行仍是权威副本）");
+
+    // A/B 照常收编。
+    assert.equal(await blobRowCount(hashA), 0, "已收编成员 A 的 blob 行被删");
+    assert.equal(await blobRowCount(hashB), 0, "已收编成员 B 的 blob 行被删");
+    assert.equal(await store.get(hashA), plainA);
+    assert.equal(await store.get(hashB), plainB);
+
+    // pack 行 member_count 必须按 claimed.size（2）校正，而不是组内成员数（3）。
+    const packs = await packRows();
+    assert.equal(packs.length, 2, "只新增一个 pack 行（既有那个不动）");
+    const newPack = packs.find(
+      (pack) => !packsBefore.some((before) => before.pack_id === pack.pack_id)
+    )!;
+    assert.equal(newPack.member_count, 2, "member_count 必须按 claimed.size 校正");
+    assert.equal(
+      await countOf(
+        "SELECT COUNT(*) AS n FROM vfs_content_pack_member WHERE pack_id = ?",
+        [newPack.pack_id]
+      ),
+      2,
+      "pack 行 member_count 与实际 member 行数一致"
+    );
+
+    // 编码产物不重排：span 仍按原 group 下标取 ⇒ 全量 verify 仍自洽
+    // （新 pack 的字节流是 3 段、member 行只指其中 2 段，按 span 切片仍逐字节等值）。
+    const verified = await verifyVfsContentPacks(c);
+    assert.deepEqual(
+      verified.failures,
+      [],
+      "冲突跳过不得破坏 pack 自包含性（span 按原下标取、编码产物不重排）"
+    );
+  });
+
+  it("W1-P1-4b（pbp-4）：整组全部成员已被收编（claimed=0）→ 跳过该组继续、不留孤儿 pack 行、不中断整轮", async () => {
+    await resetPackState();
+    const c = conn();
+    const suffix = testIsolationSuffix();
+    const store = new SqliteVfsContentStore(c);
+    const plainP = textOf(8 * 1024, `vpk-empty-p-${suffix}`);
+    const plainQ = textOf(8 * 1024, `vpk-empty-q-${suffix}`);
+    const seeded = await seedEntry(
+      `${SCOPE_PREFIX}empty-${suffix}`,
+      `/empty-${suffix}.md`,
+      [plainP, plainQ],
+      `vpk-corrupt-empty-${suffix}`,
+      textOf(1024, `vpk-empty-head-${suffix}`)
+    );
+
+    // 前置：两个成员都已被另一个 pack 收编（member 行存在），但 blob 行仍在
+    // ——谓词仍把它们算作候选，本轮组内 INSERT 全部命中冲突 → claimed=0。
+    assert.deepEqual(
+      await insertPackMembers(seeded.entryId, [plainP, plainQ]),
+      seeded.hashes
+    );
+    for (const hash of seeded.hashes) {
+      assert.equal(await blobRowCount(hash), 1, "前置：候选成员仍有 blob 行");
+    }
+    const packsBefore = await packRows();
+    assert.equal(packsBefore.length, 1);
+
+    // 硬约束「不中断整轮」：抛哨兵错会一路穿透 runVfsContentPacking（这里没有
+    // 组级 catch），所以实现必须走「事务内显式 DELETE pack 行 + 正常提交 +
+    // 返回值传空组信号」。
+    const result = await runVfsContentPacking(c);
+    assert.deepEqual(result, {
+      done: true,
+      packedGroups: 0,
+      failedGroups: 1,
+      stalled: false,
+    });
+
+    // 不留孤儿 pack 行（裸 return 会提交一个零 member 的 pack 行）。
+    const packs = await packRows();
+    assert.deepEqual(
+      packs.map((pack) => pack.pack_id),
+      packsBefore.map((pack) => pack.pack_id),
+      "空组必须删掉刚插的 pack 行，不留孤儿"
+    );
+    assert.equal(
+      packs.filter((pack) => pack.member_count === 0).length,
+      0,
+      "不得留下 member_count=0 的 pack 行"
+    );
+    assert.equal(packs[0]!.member_count, 2, "既有 pack 行不受影响");
+
+    // 成员保持可读、blob 行仍在（权威副本没被误删），下轮入口重扫自然收敛。
+    for (const hash of seeded.hashes) {
+      assert.equal(await blobRowCount(hash), 1, "空组不得删任何 blob 行");
+    }
+    assert.equal(await store.get(seeded.hashes[0]!), plainP);
+    assert.equal(await store.get(seeded.hashes[1]!), plainQ);
+  });
+
+  it("W1-P1-5（pbp-5）：任务期间给某 entry 追加更大版本号 ⇒ 不误判 stalled、done=true、收尾维护照挂", async () => {
+    await resetPackState();
+    const c = conn();
+    const suffix = testIsolationSuffix();
+    const seeded = await seedEntry(
+      `${SCOPE_PREFIX}concur-${suffix}`,
+      `/concur-${suffix}.md`,
+      [
+        textOf(8 * 1024, `vpk-concur-1-${suffix}`),
+        textOf(8 * 1024, `vpk-concur-2-${suffix}`),
+        textOf(8 * 1024, `vpk-concur-3-${suffix}`),
+      ],
+      `vpk-corrupt-concur-${suffix}`,
+      textOf(1024, `vpk-concur-head-${suffix}`)
+    );
+
+    // 注入点 = 收尾候选扫描下发时（入口扫描已完成、3 个成员已落库）：此时给同
+    // 一个 entry 追加两个**更大版本号**。旧 head 的 hash 本轮已被收编，但注入
+    // 的两个新 hash 让该 entry 在收尾重扫里重新成为候选——这正是「用户保存新
+    // 版本」形态：数据在动，但不是「本轮处理过却没收干净」。
+    const concurrentHashes: string[] = [];
+    const probe = connWithTailScanPreWrite(async () => {
+      for (const version of [5, 6]) {
+        concurrentHashes.push(
+          await appendVersion(
+            seeded.entryId,
+            version,
+            textOf(8 * 1024, `vpk-concur-${version}-${suffix}`)
+          )
+        );
+      }
+    });
+
+    const counter = maintenanceCounter();
+    const result = await runVfsContentPacking(probe.conn, counter.hooks);
+    assert.equal(probe.injections(), 1, "注入点应落在收尾候选扫描上");
+    assert.equal(result.packedGroups, 1, "入口扫描发现的 3 个成员照常落库");
+    // 牙齿（pbp-5）：不按 maxVersion 归因时，收尾重扫的 1 个剩余候选 entry
+    // > failedGroups(0) ⇒ 误判 stalled=true、done=false、跳过收尾维护（本轮
+    // 删 blob 释放的页留在库里不还文件系统）——三条断言同时变红。
+    assert.equal(result.stalled, false, "期间有新版本的 entry 不计入可归因剩余");
+    assert.equal(result.done, true);
+    assert.equal(result.failedGroups, 0);
+    assert.equal(counter.maintCalls(), 1, "误判 stalled 会连带跳过收尾维护（本轮有打包）");
+
+    // 并发写入的那两个候选本轮不打包（下轮入口重扫自然发现），内容仍可读。
+    for (const hash of concurrentHashes) {
+      assert.equal(await blobRowCount(hash), 1, "并发写入的候选本轮不动");
+    }
+    assert.equal(seeded.hashes.length, 3);
   });
 });
 

@@ -40,9 +40,10 @@
  * 闸门（findContentSizeByPath）会完全失真。
  *
  * 坏组（某成员明文解压失败）整组跳过、计入 `failedGroups`、不阻断其它组
- * 收敛；收尾校验「剩余候选 entry > failedGroups」即 `stalled: true`（照
- * 骨架语义：谓词天然收敛，打转即异常——口径推导见 {@link runVfsContentPacking}
- * 尾部注释）。坏组 blob 行原样保留，下轮入口重扫自然重试。
+ * 收敛；收尾校验「可归因的剩余候选 entry 数 > failedGroups」即
+ * `stalled: true`（照骨架语义：谓词天然收敛，打转即异常——口径推导见
+ * {@link runVfsContentPacking} 尾部注释，并发写入的归因豁免见同处）。
+ * 坏组 blob 行原样保留，下轮入口重扫自然重试。
  *
  * @module infra/db-maintenance/impl/vfs-content-packing
  */
@@ -124,6 +125,17 @@ interface VfsPackCandidateMember {
 interface VfsPackCandidateEntry {
   readonly entryId: number;
   readonly members: ReadonlyArray<VfsPackCandidateMember>;
+  /**
+   * 本 entry **谓词行**里的最大 `r.version`（含被跨 entry 去重/同 hash 去重
+   * 剔除掉的行——「期间出现了新版本」这件事不能因为那行被去重就看不见）。
+   *
+   * @remarks 数据现成：谓词已 `SELECT r.version` 且按 version 升序。唯一用途
+   * 是收尾 stalled 判据的并发归因（见 {@link runVfsContentPacking} 尾部注释）
+   * ——「用户保存新版本」会把旧 head 的 hash 变成非 head 候选，收尾重扫里
+   * 该 entry 的 maxVersion 必然变大，据此把它从「本轮该由我们负责却没收掉」
+   * 的归因集里摘掉。
+   */
+  readonly maxVersion: number;
 }
 
 /** {@link runVfsContentPacking} 入参。 */
@@ -160,9 +172,11 @@ export interface VfsContentPackRunResult {
   /** 本次调用被整组跳过的坏组数（某成员明文解压失败）。 */
   readonly failedGroups: number;
   /**
-   * 收尾校验判定「剩余候选 entry 数 > failedGroups」（本轮本进程停手）。
+   * 收尾校验判定「可归因的剩余候选 entry 数 > failedGroups」（本轮本进程停手）。
    *
-   * @remarks 成因与骨架同源：并发端抢写 / 组事务落库后谓词仍命中（打转）。
+   * @remarks 可归因 = 「本轮开始时已存在且期间无新版本」的 entry（pbp-5 的
+   * 并发豁免：期间被用户写入新增候选的 entry 不算本轮该负责却没收掉的）。
+   * 成因与骨架同源：并发端抢写 / 组事务落库后谓词仍命中（打转）。
    * 处置一致：本进程停手、下个冷启动按谓词重扫，无正确性损失——已落库的
    * pack 不会回退。stalled 时 done=false、不写快照、不挂收尾维护。
    */
@@ -227,6 +241,9 @@ function yieldToEventLoop(): Promise<void> {
  * @remarks 发现循环、收尾校验（{@link runVfsContentPacking} 尾部）、状态采样
  * （{@link getVfsContentPackStatus}）三处共用本函数——同一口径是 stalled
  * 判据「剩余候选 ≤ failedGroups」可对账的前提。
+ *
+ * @returns 每条带 `maxVersion`（该 entry 谓词行的最大版本号），供收尾并发
+ *   归因用——见 {@link VfsPackCandidateEntry.maxVersion}。
  */
 async function collectCandidateEntries(
   conn: TdbcConnection
@@ -252,9 +269,14 @@ async function collectCandidateEntries(
   const entries: VfsPackCandidateEntry[] = [];
   let currentEntryId: number | null = null;
   let currentMembers: VfsPackCandidateMember[] = [];
+  let currentMaxVersion = -1;
   const flush = (): void => {
     if (currentEntryId != null && new Set(currentMembers.map((m) => m.contentHash)).size >= 2) {
-      entries.push({ entryId: currentEntryId, members: currentMembers });
+      entries.push({
+        entryId: currentEntryId,
+        members: currentMembers,
+        maxVersion: currentMaxVersion,
+      });
     }
   };
   for (const row of rows) {
@@ -263,6 +285,13 @@ async function collectCandidateEntries(
       flush();
       currentEntryId = entryId;
       currentMembers = [];
+      currentMaxVersion = -1;
+    }
+    // 版本水位在去重**之前**记账：被剔除的行同样代表「这个 entry 出现了这个
+    // 版本」，漏记会让收尾归因把并发写入误当成「本轮没收干净」。
+    const version = Number(row.version);
+    if (version > currentMaxVersion) {
+      currentMaxVersion = version;
     }
     const contentHash = String(row.content_hash);
     if (claimedHashes.has(contentHash)) {
@@ -433,6 +462,14 @@ async function writeFailedGroupsSnapshot(
  * 水位指纹：均取自候选相关表的廉价聚合 + entry 头部摘要。
  *
  * @remarks 不含时间戳——`at` 只是快照观测字段，比较时忽略。
+ *
+ * 【采样时序是水位正确性的前提】写水位的前提是「写下水位时观察到的数据面
+ * = 零候选扫描所覆盖的数据面」。两次扫描与两次采样之间没有事务、没有快照，
+ * 故采样必须**夹住**扫描：入口采 `fingerprintBefore`（在候选扫描**之前**）、
+ * 收尾采 `fingerprintAfter`（在收尾扫描**之后**），两次一致才允许把
+ * `fingerprintBefore` 落盘。反之（收尾扫描返回 0 之后才现采指纹）会把扫描
+ * 与采样之间落下的新版本记成「已覆盖」——下轮入口指纹相等即短路谓词，
+ * 那个候选便永远不进打包（pbp-3）。
  */
 interface ZeroCandidateFingerprint {
   /** `COUNT(vfs_revision)`（revision 只有 INSERT/DELETE 变更面）。 */
@@ -555,13 +592,21 @@ async function readZeroCandidateWatermark(
 }
 
 /**
- * 写零候选水位（**仅**在完整扫描收敛为「候选 entry=0 且 failedGroups=0」时调用）。
+ * 写零候选水位（**仅**在完整扫描收敛为「候选 entry=0 且 failedGroups=0」、
+ * 且入口/收尾两次采样的指纹一致时调用）。
+ *
+ * @param fingerprint 入口扫描**之前**采到的指纹（`fingerprintBefore`）——函数
+ *   内部不再重算。水位的前提是「写下水位时观察到的数据面 = 零候选扫描所覆盖
+ *   的数据面」，故落笔的必须是扫描前那次采样；若在扫描/收尾之后才现采，扫描
+ *   与采样之间落下的新版本会被误记成「已覆盖」（pbp-3 的 TOCTOU）。
  *
  * @remarks 写失败只 warn：最坏后果是下轮入口回退完整扫描，无正确性损失。
  */
-async function writeZeroCandidateWatermark(conn: TdbcConnection): Promise<void> {
+async function writeZeroCandidateWatermark(
+  conn: TdbcConnection,
+  fingerprint: ZeroCandidateFingerprint
+): Promise<void> {
   try {
-    const fingerprint = await computeZeroCandidateFingerprint(conn);
     await new SqliteKkvRepository(conn).set(
       VFS_PACK_KKV_MODULE,
       ZERO_CANDIDATE_WATERMARK_KEY,
@@ -595,9 +640,11 @@ async function clearZeroCandidateWatermark(conn: TdbcConnection): Promise<void> 
  * 命中零候选水位？（入口廉价查询；未命中/读失败一律回退完整谓词扫描）
  *
  * @remarks **这是自失效的负结果缓存，不是完成标记**：指纹是数据面的纯函数，
- * 一轮完整扫描收敛为「候选=0 且 failedGroups=0」后写入；任何新增候选的变更
- * 都令指纹自失效，与 spec「无终态完成标记」（入口重扫谓词）语义不冲突——
- * 谓词仍是唯一权威，水位只是「上一轮完整扫描的负结果 + 数据面未变」的短路。
+ * 一轮完整扫描收敛为「候选=0 且 failedGroups=0」后写入（写入前提还含「入口/
+ * 收尾两次采样一致」，见 {@link ZeroCandidateFingerprint} 的采样时序说明）；
+ * 任何新增候选的变更都令指纹自失效，与 spec「无终态完成标记」（入口重扫
+ * 谓词）语义不冲突——谓词仍是唯一权威，水位只是「上一轮完整扫描的负结果
+ * + 数据面未变」的短路。
  *
  * 字段集与「任何可能新增候选的变更都会改指纹」的逐项论证（候选谓词 =
  * `vfs_revision` active 非空 hash JOIN `vfs_content_blob` 仍存在 AND
@@ -643,6 +690,14 @@ async function matchesZeroCandidateWatermark(
 // 单组打包（每组单事务）
 // ---------------------------------------------------------------------------
 
+/** 单组打包结果。 */
+interface PackOneGroupResult {
+  /** false = 空组收尾（全部成员已被别处收编，pack 行已删、无任何落库推进）。 */
+  readonly packed: boolean;
+  /** 实际收编的 member 行数（= pack 行最终 member_count）。 */
+  readonly memberCount: number;
+}
+
 /**
  * 打包一组：选编码（组内平均明文 ≥ 24KB → fossil 链）→ 单事务 INSERT pack +
  * members + DELETE 被替换 blob 行。
@@ -650,13 +705,31 @@ async function matchesZeroCandidateWatermark(
  * @remarks 事务回调内只经 tx（AsyncMutex 不可重入，引用外层 conn 会死锁）。
  * 事务抛错（库锁等）整体回滚后**上抛**——由调用方按端定失败策略（mobile/
  * desktop warn 收手、cli 裸抛），与骨架单行事务的行为口径一致。
+ *
+ * **member INSERT 的幂等等价物**（pbp-4）：骨架的幂等由「谓词进 WHERE」免费
+ * 得到，打包把谓词搬到 JS 侧先读后写就丢了它——`content_hash` 是 member 主键，
+ * 裸 INSERT 撞重复即抛穿整轮。可达路径：desktop rebootstrap 换连接时旧循环
+ * continue 重取新 runtime、而调度已为新 runtime 起第二条循环，同连接两循环
+ * 并发推进会采到同批候选；手工 unpack 与打包并发同理。故 INSERT 改
+ * `ON CONFLICT(content_hash) DO NOTHING`，只有 `changes > 0`（真落库）的 hash
+ * 进 `claimed`：blob 行的删除只对 claimed 生效（未收编的成员其权威副本不归
+ * 本组处置），pack 行 `member_count` 也按 claimed.size 校正。
+ *
+ * **空组（claimed.size === 0）的处置**：显式 `DELETE FROM vfs_content_pack`
+ * 后**正常提交**，用返回值把「空组」信号传出，而不是抛哨兵错。选它的硬约束是
+ * 「不中断整轮任务」——`packOneGroup` 的事务异常在调用链上没有任何组级
+ * catch，会一路抛穿 `runVfsContentPacking` 整轮（desktop/mobile 只在轮外
+ * warn 收手、CLI 命令直接失败）；而空组不是坏数据、只是并发竞态，正确行为是
+ * 「跳过该组继续」。同时**不能裸 return**：pack 行在 member INSERT 之前已插，
+ * 裸 return 会提交一个零 member 的孤儿 pack 行（`verifyVfsContentPacks`
+ * 把它的 memberCount 计入统计，`packRows()` 的 `member_count === 0` 会露馅）。
  */
 async function packOneGroup(
   conn: TdbcConnection,
   entryId: number,
   group: ReadonlyArray<VfsPackCandidateMember>,
   plains: ReadonlyMap<string, Uint8Array>
-): Promise<void> {
+): Promise<PackOneGroupResult> {
   const utf8s = group.map((member) => plains.get(member.contentHash)!);
   const totalPlain = utf8s.reduce((sum, plain) => sum + plain.byteLength, 0);
   const useFossil = totalPlain / utf8s.length >= FOSSIL_GROUP_PLAIN_THRESHOLD_BYTES;
@@ -667,7 +740,7 @@ async function packOneGroup(
     ? VFS_PACK_FORMAT_FOSSIL_CHAIN_V1
     : VFS_PACK_FORMAT_ZLIB_CONCAT_V1;
 
-  await conn.transaction(async (tx) => {
+  return await conn.transaction<PackOneGroupResult>(async (tx) => {
     const inserted = await tx.execute(
       `INSERT INTO vfs_content_pack (entry_id, format, bytes, byte_len, member_count, created_at_ms)
        VALUES (?, ?, ?, ?, ?, ?)`,
@@ -681,12 +754,16 @@ async function packOneGroup(
       ]
     );
     const packId = Number(inserted.lastInsertRowid);
+    const claimed: string[] = [];
     for (let index = 0; index < group.length; index++) {
       const member = group[index]!;
+      // span 仍按**原 group 下标**取（编码产物不因收编结果重排）：ON CONFLICT
+      // 命中的成员不产生 member 行，但 pack 字节流里的段布局不动。
       const span = encoded.spans[index]!;
-      await tx.execute(
+      const memberInserted = await tx.execute(
         `INSERT INTO vfs_content_pack_member (content_hash, pack_id, offset, length, compressed_byte_len)
-         VALUES (?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(content_hash) DO NOTHING`,
         [
           member.contentHash,
           packId,
@@ -697,12 +774,29 @@ async function packOneGroup(
           member.byteLen,
         ]
       );
+      if (memberInserted.changes > 0) {
+        claimed.push(member.contentHash);
+      }
     }
-    const placeholders = group.map(() => `?`).join(`,`);
+      if (claimed.length === 0) {
+      // 空组收尾：显式删掉刚插的 pack 行再正常提交（不得裸 return——那会留下
+      // 零 member 的孤儿 pack 行）。信号经事务返回值传出，调用方计为跳过。
+      await tx.execute(`DELETE FROM vfs_content_pack WHERE pack_id = ?`, [packId]);
+      return { packed: false, memberCount: 0 };
+    }
+    // member_count 校正：INSERT 时按 utf8s.length 落的，ON CONFLICT 跳过的成员
+    // 不产生行，必须按实际收编数改回来（否则 pack 行自述成员数与 member 行数
+    // 对不上，verify 的 memberCount 统计与 UI 展示都失真）。
+    await tx.execute(`UPDATE vfs_content_pack SET member_count = ? WHERE pack_id = ?`, [
+      claimed.length,
+      packId,
+    ]);
+    const placeholders = claimed.map(() => `?`).join(`,`);
     await tx.execute(
       `DELETE FROM vfs_content_blob WHERE content_hash IN (${placeholders})`,
-      group.map((member) => member.contentHash)
+      claimed
     );
+    return { packed: true, memberCount: claimed.length };
   });
 }
 
@@ -717,16 +811,23 @@ async function packOneGroup(
  * 排除（谓词幂等）；预算耗尽 / 守卫暂停随时可停，重启续跑。
  *
  * P1-1：入口先查零候选水位（{@link matchesZeroCandidateWatermark}），命中
- * 即跳过谓词与收尾重扫；未命中走完整扫描，收敛为「候选=0 且坏组=0」时写
- * 水位、否则防御性清除。维护补跑兜底标记（startupMaintenancePending）在
- * 短路命中也生效。
+ * 即跳过谓词与收尾重扫；未命中走完整扫描，收敛为「候选=0 且坏组=0」时**在
+ * 入口/收尾两次指纹一致的前提下**写水位、否则防御性清除（采样顺序见
+ * {@link ZeroCandidateFingerprint} 与函数体的 pbp-3 注释）。维护补跑兜底标记
+ * （startupMaintenancePending）在短路命中也生效。
  *
  * 收尾校验（stalled 判据的口径推导）：正常收敛下，每个仍未收敛的候选
  * entry 必含至少一个坏组（好组落库后 blob 行已删、该 entry 若无坏组则整
  * 体退出候选），故**剩余候选 entry 数 ≤ failedGroups** 是不变量；违反即
- * 「处理过却未收敛」的打转信号（并发抢写 / 事务落库不生效），本轮停手、
- * 不写快照、不挂收尾维护。收尾校验直调 {@link collectCandidateEntries}
- * （不走状态采样缓存，正确性不受 3s 节流影响）。
+ * 「处理过却未收敛」的打转信号（事务落库不生效），本轮停手、不写快照、
+ * 不挂收尾维护。**并发豁免（pbp-5）**：该推导只在「本轮没有新数据写入」时
+ * 成立——用户保存新版本会把旧 head 的 hash 变成非 head 候选，收尾重扫里
+ * 该 entry 的 `maxVersion` 必然变大。故判据只对「本轮开始时已存在（入口
+ * 扫描见过）且期间无新版本（收尾 maxVersion 相等）」的 entry 生效，
+ * `stalled = attributable.length > failedGroups`——否则一次保存就误判
+ * 打转、连带跳过收尾 VACUUM（本轮删 blob 释放的页留在库里不还）。收尾
+ * 校验直调 {@link collectCandidateEntries}（不走状态采样缓存，正确性不受
+ * 3s 节流影响）。
  */
 export async function runVfsContentPacking(
   conn: TdbcConnection,
@@ -742,8 +843,21 @@ export async function runVfsContentPacking(
   // matchesZeroCandidateWatermark 的字段集论证）。维护兜底标记仍生效——
   // 命中且 pending 时走「空扫描 + 维护补跑段」，与完整扫描后的行为一致。
   const watermarkHit = await matchesZeroCandidateWatermark(conn);
+  // pbp-3：入口指纹必须采在**候选扫描之前**（固定的入口顺序 = 水位查询 →
+  // fingerprintBefore → 入口扫描）。水位的前提是「写下水位时观察到的数据面
+  // = 零候选扫描所覆盖的数据面」；若在扫描之后再采，收尾扫描返回 0 与采样
+  // 之间落下的新版本会被记成「已覆盖」，下轮入口指纹相等即短路谓词，那个候选
+  // 便永远不进打包。水位命中时本轮不写不清水位、收尾整体沿用现状，故不必
+  // 白采这一次指纹（matchesZeroCandidateWatermark 内部已经算过一次）。
+  const fingerprintBefore = watermarkHit
+    ? null
+    : await computeZeroCandidateFingerprint(conn);
 
   const entries = watermarkHit ? [] : await collectCandidateEntries(conn);
+  // 入口扫描的每 entry 版本水位（pbp-5 收尾归因的基准面）。
+  const entryMaxVersionBefore = new Map<number, number>(
+    entries.map((entry) => [entry.entryId, entry.maxVersion])
+  );
   // 事务外经 content store 读明文（三形态兼容；blob 命中热路径零改动）。
   const store = new SqliteVfsContentStore(conn);
   const encoder = new TextEncoder();
@@ -787,8 +901,18 @@ export async function runVfsContentPacking(
         failedGroups += 1;
         continue;
       }
-      await packOneGroup(conn, entry.entryId, group, plains);
-      packedGroups += 1;
+      const outcome = await packOneGroup(conn, entry.entryId, group, plains);
+      if (outcome.packed) {
+        packedGroups += 1;
+      } else {
+        // 空组（并发竞态：全组成员的 member 行已被别处收编，见 {@link
+        // packOneGroup}）：不是坏数据、不该中断整轮，记整组跳过——成员保持可
+        // 读（别处的 member 行或 blob 行都是权威副本），下轮入口重扫自然收敛。
+        failedGroups += 1;
+        console.warn(
+          `[vfs-content-packing] entry ${entry.entryId} 所在组的 ${group.length} 个成员均已被别处收编（member 行已存在），本组跳过、不留孤儿 pack 行`
+        );
+      }
       // 预算检查放组粒度（单组事务已足够短；批间让步在 entry 粒度）。
       if (Date.now() >= deadline) {
         return { done: false, packedGroups, failedGroups, stalled: false };
@@ -800,18 +924,47 @@ export async function runVfsContentPacking(
   // ── 收尾校验（stalled 判定权；见函数头注释的口径推导）──────────────
   // 水位命中时跳过收尾重扫：零候选已由指纹背书（写入前提即「完整扫描后
   // 候选=0 且 failedGroups=0」）。
-  const remaining = watermarkHit
-    ? 0
-    : (await collectCandidateEntries(conn)).length;
-  const stalled = remaining > failedGroups;
+  const tailEntries = watermarkHit ? [] : await collectCandidateEntries(conn);
+  const remaining = tailEntries.length;
+  // pbp-5 并发归因：「剩余候选 ≤ failedGroups」的不变量只在「本轮没有新数据
+  // 写入」时成立——一次保存就把旧 head 的 hash 变成非 head 候选，收尾重扫里
+  // 该 entry 会新增候选、maxVersion 变大。判据只对「本轮开始时已存在且期间
+  // 无新版本」的 entry 生效（before 有值且与收尾相等），把并发写入造成的
+  // 剩余从归因集里摘掉，避免误判 stalled、连带跳过收尾 VACUUM（本轮删 blob
+  // 释放的页就留在库里不还给文件系统）。
+  const attributable = tailEntries.filter((tail) => {
+    const before = entryMaxVersionBefore.get(tail.entryId);
+    return before != null && tail.maxVersion === before;
+  });
+  const stalled = attributable.length > failedGroups;
   const done = !stalled;
   if (done) {
     // 坏组 blob 行原样保留、下轮入口重扫自然重试；快照只记收敛轮的计数。
     if (!watermarkHit) {
       await writeFailedGroupsSnapshot(conn, failedGroups);
+      // 水位前置维持「tailEntries.length === 0」的全库口径（不按归因集收窄：
+      // 并发写入造成的新候选下一轮仍需被发现，不能被水位短路掉）。
       if (remaining === 0 && failedGroups === 0) {
-        // 完整扫描收敛为零候选：写水位（下一轮入口短路）。
-        await writeZeroCandidateWatermark(conn);
+        // 完整扫描收敛为零候选：只有入口/收尾两次指纹一致才写水位——
+        // 不一致说明零候选扫描与采样之间数据面动过（水位前提被打破），
+        // 清水位让下一轮回退完整扫描，而不是把「有候选」钉成零候选水位。
+        let fingerprintAfter: ZeroCandidateFingerprint | null = null;
+        try {
+          fingerprintAfter = await computeZeroCandidateFingerprint(conn);
+        } catch (error) {
+          console.warn(
+            `[vfs-content-packing] 收尾重采 zeroCandidateWatermark 指纹失败，本轮清水位：${errorText(error)}`
+          );
+        }
+        if (
+          fingerprintBefore != null &&
+          fingerprintAfter != null &&
+          sameZeroCandidateFingerprint(fingerprintBefore, fingerprintAfter)
+        ) {
+          await writeZeroCandidateWatermark(conn, fingerprintBefore);
+        } else {
+          await clearZeroCandidateWatermark(conn);
+        }
       } else {
         // 候选/坏组仍在：防御性清水位（水位与本次完整扫描的真相对不符时
         // 必须失效，宁保守不冒进）。
@@ -821,7 +974,7 @@ export async function runVfsContentPacking(
   } else {
     await clearZeroCandidateWatermark(conn);
     console.warn(
-      `[vfs-content-packing] 收尾校验发现 ${remaining} 个候选 entry 未收敛（本轮坏组仅 ${failedGroups}），疑似打转或并发抢写，本轮停手`
+      `[vfs-content-packing] 收尾校验发现 ${attributable.length} 个可归因候选 entry 未收敛（本轮坏组仅 ${failedGroups}，收尾重扫剩余候选共 ${remaining}），疑似打转或并发抢写，本轮停手`
     );
   }
 
