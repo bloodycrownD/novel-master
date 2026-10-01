@@ -1,4 +1,7 @@
-import {switchToNative} from '../helpers/context';
+import {
+  switchToNative,
+  switchToSessionListView,
+} from '../helpers/context';
 import {alertPage} from './alert.page';
 import {chatTranscriptPage} from './chat-transcript.page';
 
@@ -23,8 +26,10 @@ export function isolatedProjectName(base: string): string {
  *
  * `nextDefaultSessionTitle`（`utils/session-default-title.ts`）按项目内已用编号取下一个，
  * 所以**全新项目**里的第一个会话固定是「新会话1」。旧页对象用
- * `textMatches("会话.*")` 去找最新会话——那个模式连 SegmentedControl 上的「会话」
- * 标签和 ManageHeader 标题都会命中，在多会话场景下点到的未必是目标行。
+ * `textMatches("会话.*")` 去找最新会话——那个模式连原生 SegmentedControl 上的「会话」
+ * 标签和（当年的）ManageHeader 标题都会命中，在多会话场景下点到的未必是目标行。
+ * 会话列表搬进 web 之后更不能用它：`session-row__title` 是 web 文本，
+ * 原生 `UiSelector().text()` 走的是 a11y 树，根本看不见它。
  */
 const NEW_SESSION_TITLE = '新会话1';
 
@@ -222,12 +227,32 @@ export class AppPage {
     await this.createProject(name);
   }
 
+  /**
+   * 新建会话（点会话列表头的「新建会话」）。
+   *
+   * chat-webview-unify 第二阶段之后，会话列表整体搬进了合成包文档
+   * （`src/web/chat-conversation/webview/session-list.ts`），RN 侧已经没有会话行了——
+   * 旧写法「切 NATIVE 按 `text("新建会话")` 找原生按钮」在真机上必然查不到。
+   *
+   * 走 web 的两道前置：
+   * 1. {@link switchToSessionListView} 切到那个唯一 WebView **并且**等 `data-view=list`
+   *    （冷启动首帧是 conversation 视图，DOM 在但用户看不见）；
+   * 2. 点 `[data-testid="session-list-create"]`。
+   *
+   * 点击后等新行出现（会话行由 `sessionList` 下行渲染，DOM 节点逐条重建），而不是
+   * 死等固定时长。
+   */
   async createSession(): Promise<void> {
-    await switchToNative();
-    const createSession = await $('android=new UiSelector().text("新建会话")');
-    await createSession.waitForDisplayed({timeout: 10000});
-    await createSession.click();
-    await browser.pause(800);
+    await switchToSessionListView();
+    const create = await $('[data-testid="session-list-create"]');
+    await create.waitForDisplayed({timeout: 10000});
+    const before = (await $$('[data-testid="session-row"]')).length;
+    await create.click();
+    await browser.waitUntil(
+      async () => (await $$('[data-testid="session-row"]')).length > before,
+      {timeout: 10000, timeoutMsg: '新建会话后列表未多出一行'},
+    );
+    await browser.pause(400);
   }
 
   /**
@@ -236,15 +261,25 @@ export class AppPage {
    * @param title 精确标题；不传用 {@link NEW_SESSION_TITLE}（= 全新项目里的第一个会话）
    */
   async openLatestSession(title = NEW_SESSION_TITLE): Promise<void> {
-    await switchToNative();
-    const sessionTitle = await $(`android=new UiSelector().text("${title}")`);
+    await switchToSessionListView();
+    // 会话行按 data-session-id + 行内 .session-row__title 定位；web 侧没有
+    // 「按文本找行」的稳定选择器（RN 那套 UiSelector().text() 是原生 a11y 树的事）。
+    // 用 XPath 按行标题精确匹配，比 `.session-row*` 通配稳，也不会误命中
+    // SegmentedControl 上的「会话」标签（那是原生树里的东西，不在 web DOM 内）。
+    const sessionTitle = await $(
+      `//div[@data-testid="session-row"]//div[contains(@class,"session-row__title") and normalize-space(text())="${title}"]`,
+    );
     if (!(await sessionTitle.isExisting())) {
       throw new Error(
-        `[e2e] 会话行「${title}」不存在。` +
+        `[e2e] 会话行「${title}」不存在（web 列表视图里）。` +
           '确认 createSession() 已成功（需要先选中项目），且项目内没有同名旧会话。',
       );
     }
     await sessionTitle.click();
+    // 点行 → 宿主切 chatSubview='conversation' → 顶部「聊天 / 聊天工作区」条重新出现。
+    // 判据刻意用原生 testID（`tab-chat` 在两视图下语义不同，列表视图下它被
+    // display:none 收起），所以点完之后切 NATIVE 等它。
+    await switchToNative();
     const chatTab = await $(byTestId('tab-chat'));
     await chatTab.waitForDisplayed({timeout: 15000});
   }
