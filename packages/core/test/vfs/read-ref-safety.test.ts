@@ -30,6 +30,8 @@ import type { BuiltinToolContext } from "../../src/domain/tool/builtin/builtin-t
 import type { ReadToolOutput } from "../../src/domain/tool/builtin/vfs-tools.js";
 import { SqliteVfsRevisionRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import { buildVfsZip } from "../../src/domain/vfs/logic/vfs-zip-build.js";
+import { runVfsContentPacking } from "../../src/infra/db-maintenance/impl/vfs-content-packing.js";
+import { clearDecodedContentCaches } from "../../src/infra/content-cache/logic/decoded-content-cache.js";
 import {
   getNovelMasterTestContext,
   novelMasterTestFixture,
@@ -469,5 +471,74 @@ describe("read-ref-safety: T-RR9 导入错位免疫（重开 entry 后旧引用�
 
     const msgs = await ctx.messages.listBySession(session.id);
     assert.equal(await hydrateFirstToolResultContent(msgs), seed.baseline);
+  });
+});
+
+describe("read-ref-safety: read 引用 × VFS 内容打包（pbm-9 合并轮定向用例）", () => {
+  it("read v1 → edit v2 → 打包任务收走 v1 blob → 冷态 hydrate 经 member 读路径逐字节还原（wire 不变）", async () => {
+    const ctx = getNovelMasterTestContext();
+    const suffix = testIsolationSuffix();
+    const project = await ctx.projects.create(`P-rrpk-${suffix}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+
+    // 主角形态：read 引用 v1，两次 edit 落 v2/v3——分组闸要求 entry 内有
+    // ≥2 个非 head hash 才成组（单条旧版本是「孤立候选」不成组，e2e 实测
+    // 口径），故做到 v3 为 head、v1/v2 双双成为打包候选。正文带唯一标记：
+    // 本文件 fixture 库跨 describe 共享、内容又是按 hash 寻址——正文与
+    // T-RR5 撞 hash 时，v2 会被「hash 被任何 entry 引用即排除」的谓词当作
+    // 别家 entry 的 head 顶掉，entry 退化为孤立候选不成组（首轮红灯实证）。
+    const marker = `rrpk-${suffix}`;
+    await vfs.write(`/pack.md`, `第一章 ${marker}\n伏笔一枚`);
+    const seed = await seedRead(project.id, session.id, "/pack.md", "tu-rrpk");
+    await appendMessage(session.id, [seed.block]);
+    const editResult = await runEdit(project.id, session.id, {
+      path: "/pack.md",
+      oldString: "伏笔一枚",
+      newString: `伏笔两枚 ${marker}\n第二章`,
+    });
+    assert.equal(editResult.replacements, 1);
+    const editResult2 = await runEdit(project.id, session.id, {
+      path: "/pack.md",
+      oldString: "第二章",
+      newString: `第二章改 ${marker}\n第三章`,
+    });
+    assert.equal(editResult2.replacements, 1);
+
+    // 打包前基准：hydrate 走 blob 行。
+    const beforePack = await hydrateFirstToolResultContent(
+      await ctx.messages.listBySession(session.id)
+    );
+    assert.equal(beforePack, seed.baseline);
+
+    // 打包任务收走 v1：hash 落 member 行、原 blob 行删除（这正是省空间的
+    // 动作），revision 行与 read 引用计数不动。
+    await runVfsContentPacking(ctx.conn);
+    const memberRows = await ctx.conn.query<{ pack_id: number }>(
+      `SELECT pack_id FROM vfs_content_pack_member WHERE content_hash = ?`,
+      [seed.contentHash]
+    );
+    assert.equal(memberRows.length, 1, "v1 的 hash 应已被收进 pack member");
+    assert.equal(
+      await blobRefCountOf(seed.contentHash),
+      null,
+      "打包后原 blob 行应被删除（内容由 pack 承载）"
+    );
+    const row = await revisionRowOf(seed.entryId, 1);
+    assert.ok(row != null, "read 引用的 revision 行不受打包影响");
+    assert.equal(row.refCount, 1, "read 引用计数不受打包影响");
+
+    // 打包后再 hydrate：先清解压缓存冷态化（T-VP13 教训——热缓存命中会让
+    // member 读路径假绿），逼 hydrate 从 pack member 解出明文，wire 逐字节
+    // 与基准一致。
+    clearDecodedContentCaches();
+    const afterPack = await hydrateFirstToolResultContent(
+      await ctx.messages.listBySession(session.id)
+    );
+    assert.equal(
+      afterPack,
+      seed.baseline,
+      "member 读路径 hydrate 须与基准逐字节一致"
+    );
   });
 });

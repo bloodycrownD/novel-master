@@ -222,7 +222,7 @@ describe("消息正文压缩存储 schema（T-C10）", () => {
     }
   });
 
-  it("快路径：连续 bootstrap 幂等，两列就位且第二次 bootstrap 除幂等部分索引外不下发任何 DDL", async () => {
+  it("快路径：连续 bootstrap 幂等，两列就位且第二次 bootstrap 除幂等补建段（部分索引 + pack 两表一索引）外不下发任何 DDL", async () => {
     const conn = await openInMemoryConnection();
     try {
       await bootstrapNovelMaster(conn);
@@ -250,16 +250,24 @@ describe("消息正文压缩存储 schema（T-C10）", () => {
       // 走快路径）才能建出它，落在事务内慢路径等于真实用户库永远建不出。
       // 它是纯 DDL 幂等建、不改任何表结构，故从「零 DDL」口径里单列出来，
       // 下面按「有且仅有这一条」精确断言（比整体豁免更紧）。
+      // 豁免三（VFS 内容打包合并轮扩）：pack 两表 + member 索引同属事务外
+      // 无条件幂等补建段（pbm-7 方案 A——「曾占 v18 后撤回」的库走快路径
+      // 也要能建出两表，否则打包任务每轮 no such table 中止），与豁免二
+      // 同款落点纪律，同样按「有且仅有那几条」精确断言。
       const ddlPattern = /\b(ALTER\s+TABLE|CREATE\s+(TABLE|INDEX|VIEW|TRIGGER))\b/i;
       const bookkeepingPattern =
         /CREATE\s+TABLE\s+IF\s+NOT\s+EXISTS\s+schema_migrations\b/i;
       const partialIndexPattern =
         /CREATE\s+INDEX\s+IF\s+NOT\s+EXISTS\s+idx_chat_message_pending_blob\b/i;
+      const packDdlPattern =
+        /^CREATE\s+(?:TABLE|INDEX)\s+IF\s+NOT\s+EXISTS\s+(?:idx_)?vfs_content_pack\w*/i;
       const ddlSql = probe.executedSql.filter(
         (sql) => ddlPattern.test(sql) && !bookkeepingPattern.test(sql)
       );
       assert.deepEqual(
-        ddlSql.filter((sql) => !partialIndexPattern.test(sql)),
+        ddlSql.filter(
+          (sql) => !partialIndexPattern.test(sql) && !packDdlPattern.test(sql)
+        ),
         [],
         `快路径不应下发任何表结构 DDL，探针观测到：${JSON.stringify(ddlSql)}`
       );
@@ -267,6 +275,11 @@ describe("消息正文压缩存储 schema（T-C10）", () => {
         ddlSql.filter((sql) => partialIndexPattern.test(sql)).length,
         1,
         "快路径有且仅有那一条幂等的部分索引 DDL（存量库据此建出探测索引）"
+      );
+      assert.equal(
+        ddlSql.filter((sql) => packDdlPattern.test(sql)).length,
+        3,
+        "快路径有且仅有 pack 两表 + member 索引共三条幂等 DDL（pbm-7 补建段）"
       );
     } finally {
       await conn.close();
