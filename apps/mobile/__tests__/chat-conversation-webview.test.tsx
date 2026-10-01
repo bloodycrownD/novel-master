@@ -241,6 +241,18 @@ const ClipboardMock = require('@react-native-clipboard/clipboard').default as {
   getString: jest.Mock;
 };
 
+/** 遥测 mock：本文件已整体 mock 掉 chat-transcript-telemetry（见顶部 jest.mock）。 */
+const telemetryMock =
+  require('@/services/chat-transcript-telemetry')
+    .emitChatTranscriptTelemetry as jest.Mock;
+
+/** 取出全部 `composer_dock_degraded` 事件（r6-I-1 断言用）。 */
+function degradedEvents(): unknown[] {
+  return telemetryMock.mock.calls
+    .map(call => (call as [{name?: string}][])[0])
+    .filter(event => event?.name === 'composer_dock_degraded');
+}
+
 /**
  * 挂载登记册：每个用例结束后卸载。
  *
@@ -488,6 +500,29 @@ describe('ChatConversationWebView · ready 握手与兜底', () => {
     expect(sentTypes()).not.toContain('composerState');
   });
 
+  it('r6-I-1: ready 不带 composer-dock 能力位 → 上报一次 composer_dock_degraded', async () => {
+    telemetryMock.mockClear();
+    let tree: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = track(TestRenderer.create(<ChatConversationWebView {...baseProps()} />));
+    });
+
+    // 带全能力位：降级事件**一次都不许打**（变异点：去掉 !composerDockCapable 判空
+    // 条件会在这里变红）
+    simulateReadyV2(tree!.root, MODERN_CAPABILITIES);
+    await flushMicrotasks();
+    expect(degradedEvents()).toHaveLength(0);
+
+    // 只带 transcript 能力位、缺 dock：报一次，带能力位条数
+    telemetryMock.mockClear();
+    simulateReadyV2(tree!.root, ['streamBlockCommit']);
+    await flushMicrotasks();
+    const events = degradedEvents();
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({name: 'composer_dock_degraded'});
+    expect((events[0] as {capabilityCount?: number}).capabilityCount).toBe(1);
+  });
+
   it('T-CU15: onLoad 后 8s 未收到 v2 ready → 错误态 + 重载提示（假时钟）', async () => {
     jest.useFakeTimers();
     let tree: TestRenderer.ReactTestRenderer;
@@ -622,6 +657,93 @@ describe('ChatConversationWebView · 划词三项菜单', () => {
       });
     });
     expect(ClipboardMock.setString).not.toHaveBeenCalled();
+  });
+
+  it('r6-D-1: 运行中禁粘贴——连剪贴板都不读，且不下行 composerPaste', async () => {
+    const tree = await mountReady({uiRunning: true, agentRunning: true});
+    const baseline = mockWebViewPostMessages.length;
+    await act(async () => {
+      webViewOf(tree.root).props.onCustomMenuSelection?.({
+        nativeEvent: {key: 'paste', selectedText: 'ignored'},
+      });
+    });
+    // 闸门在读剪贴板之前：不读，就不会把禁用输入框的文本灌进去
+    expect(ClipboardMock.getString).not.toHaveBeenCalled();
+    expect(sentTypes(baseline)).not.toContain('composerPaste');
+  });
+
+  it('r6-I-2: 剪贴板读失败 → 打 warn 且绝不下行 composerPaste', async () => {
+    const warnSpy = jest
+      .spyOn(console, 'warn')
+      .mockImplementation(() => undefined);
+    ClipboardMock.getString.mockRejectedValueOnce(new Error('denied'));
+    const tree = await mountReady();
+    const baseline = mockWebViewPostMessages.length;
+    try {
+      await act(async () => {
+        webViewOf(tree.root).props.onCustomMenuSelection?.({
+          nativeEvent: {key: 'paste', selectedText: 'ignored'},
+        });
+      });
+      expect(warnSpy).toHaveBeenCalledWith(
+        '[chat] composerPaste clipboard read failed',
+      );
+      // 失败与「剪贴板确实是空的」用户侧表现相同，日志不打内容
+      expect(
+        warnSpy.mock.calls.some(call =>
+          String(call[0] ?? '').includes('denied'),
+        ),
+      ).toBe(false);
+      expect(sentTypes(baseline)).not.toContain('composerPaste');
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it('r6-I-2: 剪贴板空串 → 打 warn 且不下行', async () => {
+    const warnSpy = jest
+      .spyOn(console, 'warn')
+      .mockImplementation(() => undefined);
+    ClipboardMock.getString.mockResolvedValueOnce('');
+    const tree = await mountReady();
+    const baseline = mockWebViewPostMessages.length;
+    try {
+      await act(async () => {
+        webViewOf(tree.root).props.onCustomMenuSelection?.({
+          nativeEvent: {key: 'paste', selectedText: 'ignored'},
+        });
+      });
+      expect(warnSpy).toHaveBeenCalledWith(
+        '[chat] composerPaste clipboard empty',
+      );
+      expect(sentTypes(baseline)).not.toContain('composerPaste');
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it('r6-I-2: 剪贴板超 256KB → 截断下行 + 打点（不全量跨桥）', async () => {
+    const warnSpy = jest
+      .spyOn(console, 'warn')
+      .mockImplementation(() => undefined);
+    const huge = 'a'.repeat(300 * 1024);
+    ClipboardMock.getString.mockResolvedValueOnce(huge);
+    const tree = await mountReady();
+    const baseline = mockWebViewPostMessages.length;
+    try {
+      await act(async () => {
+        webViewOf(tree.root).props.onCustomMenuSelection?.({
+          nativeEvent: {key: 'paste', selectedText: 'ignored'},
+        });
+      });
+      const paste = sentMessages(baseline).find(m => m.type === 'composerPaste');
+      expect((paste?.payload.text as string).length).toBe(256 * 1024);
+      expect(warnSpy).toHaveBeenCalledWith(
+        `[chat] composerPaste truncated ${huge.length} -> ${256 * 1024}`,
+      );
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 });
 

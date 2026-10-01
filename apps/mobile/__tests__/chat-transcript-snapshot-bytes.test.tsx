@@ -24,10 +24,8 @@ import {
   CHAT_TRANSCRIPT_BRIDGE_VERSION,
   decodeHostToTranscript,
 } from '@/components/chat/ChatTranscriptBridge';
-import {
-  ChatTranscriptWebView,
-  planSnapshotChunkBounds,
-} from '@/components/chat/ChatTranscriptWebView';
+import {ChatTranscriptWebView} from '@/components/chat/ChatTranscriptWebView';
+import {planSnapshotChunkBounds} from '@/components/chat/snapshot-chunk-bounds';
 import {resetRollbackTiming} from '@/debug/run-timing';
 import {
   clearMockWebViewPostMessages,

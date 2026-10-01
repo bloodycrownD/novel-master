@@ -11,7 +11,7 @@
  *
  * ## 本组件继承的全部机制（转录侧，照 `ChatTranscriptWebView` 逐条搬）
  * 快照分片（`SNAPSHOT_CHUNK_SIZE=50` / `SNAPSHOT_CHUNK_BYTES=256KB` /
- * `planSnapshotChunkBounds` 预扫 / 代次作废）、流式三通道（delta/batch/blockCommit）
+ * `./snapshot-chunk-bounds` 的 `planSnapshotChunkBounds` 预扫 / 代次作废）、流式三通道（delta/batch/blockCommit）
  * + 能力协商、`repaintEpoch` 与 visibility 重挂、滚动缓存恢复、安全守卫
  * （`originWhitelist=['file://']` + `onShouldStartLoadWithRequest` 只放行新包目录 +
  * `messageMenuAction` 仍走宿主回调）。
@@ -90,7 +90,7 @@ import {
   messageIsToolResultsOnly,
   selectTailTranscriptRows,
 } from './message-blocks';
-import {planSnapshotChunkBounds} from './ChatTranscriptWebView';
+import {planSnapshotChunkBounds} from './snapshot-chunk-bounds';
 import {
   getChatConversationPackageDirUri,
   getChatConversationUri,
@@ -162,6 +162,16 @@ const STREAM_BLOCK_RENDER_ENABLED = true;
  */
 const READY_TIMEOUT_MS = 8000;
 
+/**
+ * 划词「粘贴」跨桥文本上限（r6-I-2）。
+ *
+ * 口径是 **UTF-16 码元**（`String.length`），不是字节——这里要卡的是
+ * `JSON.stringify` 后 postMessage 的串长度量级，码元数与之同数量级，
+ * 拿字节数算反而在 RN 侧多绕一层编码。256KB 与快照分片的字节预算同数，
+ * 两者互不相干，别互相引用。
+ */
+const COMPOSER_PASTE_MAX_CHARS = 256 * 1024;
+
 export type ChatConversationWebViewProps = {
   readonly sessionKey: string;
   readonly messages: readonly ChatMessage[];
@@ -214,7 +224,7 @@ export type ChatConversationWebViewProps = {
   readonly composerError?: string;
   readonly composerFullscreenEnabled?: boolean;
   readonly composerPlaceholder?: string;
-  readonly composerChips?: ChatConversationWebViewPropsChips;
+  readonly composerChips?: ConversationComposerState['chips'];
   readonly composerKeyboardUp?: boolean;
   /**
    * typeahead **候选源**（非过滤结果）。
@@ -230,11 +240,6 @@ export type ChatConversationWebViewProps = {
   /** dock 域上行处置（send/terminate/needModel/fullscreen/atPicker/skillPicker）。 */
   readonly onDockAction?: (action: ConversationDockAction) => void;
 };
-
-/** chips 载荷类型（与 composerState.chips 同源，单独起名只为 memo 段可读）。 */
-type ChatConversationWebViewPropsChips =
-  | ConversationComposerState['chips']
-  | undefined;
 
 function transcriptFlagsEqual(
   a: Partial<TranscriptFlags> | undefined,
@@ -1463,12 +1468,24 @@ export const ChatConversationWebView = memo(
               TRANSCRIPT_CAPABILITY_STREAM_BLOCK_COMMIT,
             );
             // 「未声明 = 不支持」：未带 composer-dock 即旧 dist，输入区降级
-            setComposerDockCapable(
-              conversationCapabilitiesInclude(
-                capabilities,
-                CONVERSATION_CAPABILITY_COMPOSER_DOCK,
-              ),
+            const dockCapable = conversationCapabilitiesInclude(
+              capabilities,
+              CONVERSATION_CAPABILITY_COMPOSER_DOCK,
             );
+            setComposerDockCapable(dockCapable);
+            if (!dockCapable) {
+              // r6-I-1：降级路径原先只渲染横幅、零打点。线上看到「输入框不见了」
+              // 分不清是旧 dist、能力位没带、还是 ready 压根没来——这里把
+              // 「ready 到了但没带 dock 能力位」这一事实显式上报（含能力位条数，
+              // 用来区分「一条没带」和「带了别的、唯独缺 dock」）。
+              emitChatTranscriptTelemetry({
+                name: 'composer_dock_degraded',
+                capabilityCount: capabilities.length,
+              });
+              bootTimingLog(
+                `composer dock degraded (capabilities=${capabilities.length})`,
+              );
+            }
             timingLog('conversation webview ready (v2 handshake done)');
             bootTimingLog('conversation webview ready (v2 handshake done)');
             onReady?.();
@@ -1634,11 +1651,33 @@ export const ChatConversationWebView = memo(
             return;
           }
           if (key === 'paste') {
+            // 运行中禁粘贴（与 copy 同口径，r6-D-1）：旧链 textarea 是 RN
+            // TextInput，editable=false 时原生粘贴根本进不来；新链走 WebView +
+            // 划词菜单，菜单三项静态展示、点击不拦，漏判就等于向被禁用的输入框
+            // 注入文本——该文本经 commitComposerText 落库成草稿、下一轮被发出去。
+            // web 侧 composerPaste 另有一道 inputDisabled 闸门，这里是宿主侧第一道。
+            if (uiRunning) {
+              return;
+            }
             // 剪贴板读取只经 RN（web 侧不读剪贴板）
             void Clipboard.getString()
-              .then(text => {
-                if (text === '') {
+              .then(raw => {
+                if (raw === '') {
+                  // r6-I-2：空串原为静默 return。线上「长按粘贴没反应」无从归因，
+                  // 打一条日志（不含剪贴板内容）比静默好排查。
+                  console.warn('[chat] composerPaste clipboard empty');
                   return;
+                }
+                // 跨桥上限：剪贴板全文无上限就是整篇 JSON.stringify 跨 postMessage
+                // （5MB 剪贴板 = 5MB 消息），在 RN 侧先截断并打点，别让 web 收超大包。
+                const text =
+                  raw.length > COMPOSER_PASTE_MAX_CHARS
+                    ? raw.slice(0, COMPOSER_PASTE_MAX_CHARS)
+                    : raw;
+                if (text !== raw) {
+                  console.warn(
+                    `[chat] composerPaste truncated ${raw.length} -> ${text.length}`,
+                  );
                 }
                 postToWeb({
                   v: CONVERSATION_BRIDGE_V,
@@ -1646,7 +1685,12 @@ export const ChatConversationWebView = memo(
                   payload: {text},
                 });
               })
-              .catch(() => undefined);
+              // r6-I-2：读失败原为 `.catch(() => undefined)` 全吞。失败与「剪贴板
+              // 确实是空的」在用户侧表现相同（都没粘上），日志只报失败这一事实，
+              // 不带任何剪贴板内容。
+              .catch(() => {
+                console.warn('[chat] composerPaste clipboard read failed');
+              });
             return;
           }
           if (uiRunning) {
