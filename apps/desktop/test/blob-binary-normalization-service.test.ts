@@ -190,18 +190,13 @@ describe("desktop blob 归一调度服务（cr-03 / cr-05）", () => {
 
   it("cr-05：轮内连接被关（not open）不永久死亡——退避后重挂并完成归一", async () => {
     const runtime = await getDesktopRuntime();
-    // 清完成标记：空表也会真发一次谓词分批 SELECT，注入点才有机会命中。
-    await runtime.conn.execute("DELETE FROM kkv_entry WHERE module = 'nm-blob-binary'");
-    // 造一条 legacy base64 行：空表的「谓词空=等价完成」会让 done 轮询
-    // 恒真（旧实现 catch 即 return 也绿）——有活干才能区分「重挂收敛」
-    // 与「永久死亡」。
-    const { deflateSync } = await import("node:zlib");
-    const b64 = deflateSync(new TextEncoder().encode("cr-05-rebind")).toString("base64");
-    await runtime.conn.execute(
-      "INSERT INTO vfs_content_blob (content_hash, encoding, bytes, byte_len, ref_count) VALUES (?, 'zlib-b64', ?, ?, 0)",
-      ["cr05-1", b64, b64.length],
-    );
-
+    // 【顺序即正确性】先装 query 补丁，再清完成标记、插 legacy 行、调度——
+    // 前序用例（cr-03）的 fire-and-forget 循环可能仍在轮询，若补丁晚于
+    // 「删标记 / 插行」安装，它的谓词查询会走 originalQuery 把行提前归一
+    // 并置标记，注入就永远等不到消费（全量并发负载下窗口被拉宽、稳定命中；
+    // 隔离跑不显现，往用例里加 console.log 即改变命中——时序敏感实测）。
+    // 补丁先行后无论哪条循环消费注入，退避重挂后终将由某条循环完成归一，
+    // 「注入被消费 + done 收敛」两个断言在任意时序下都成立。
     const conn = runtime.conn as unknown as {
       query: (sql: string, params?: unknown) => Promise<unknown>;
     };
@@ -220,6 +215,17 @@ describe("desktop blob 归一调度服务（cr-03 / cr-05）", () => {
       return originalQuery(sql, params);
     };
     try {
+      // 清完成标记：空表也会真发一次谓词分批 SELECT，注入点才有机会命中。
+      await runtime.conn.execute("DELETE FROM kkv_entry WHERE module = 'nm-blob-binary'");
+      // 造一条 legacy base64 行：空表的「谓词空=等价完成」会让 done 轮询
+      // 恒真（旧实现 catch 即 return 也绿）——有活干才能区分「重挂收敛」
+      // 与「永久死亡」。
+      const { deflateSync } = await import("node:zlib");
+      const b64 = deflateSync(new TextEncoder().encode("cr-05-rebind")).toString("base64");
+      await runtime.conn.execute(
+        "INSERT INTO vfs_content_blob (content_hash, encoding, bytes, byte_len, ref_count) VALUES (?, 'zlib-b64', ?, ?, 0)",
+        ["cr05-1", b64, b64.length],
+      );
       scheduleDesktopBlobBinaryNormalization();
       // 旧实现（catch 无分流 → return）：legacy 行永不被归一，谓词不清、
       // done 判定不成立，轮询超时变红。新实现：warn + 退避 1s → 下一轮
