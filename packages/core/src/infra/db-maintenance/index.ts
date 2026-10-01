@@ -50,3 +50,20 @@ export type {
   MessageDecompressStatus,
   RunMessageContentDecompressOptions,
 } from "./impl/message-content-decompression.js";
+/**
+ * 消息引用化回迁（v1.5.30 unref 回退的反向搬运）：存量 contentRef 行 →
+ * `{path, content}` 明文包 + 源 revision 精确 −1。KKV 常量从此出口导出
+ * （迁移期断言完成标记需要）。
+ */
+export {
+  DEFAULT_REF_UNREF_SYNC_BUDGET_MS,
+  getMessageRefUnrefStatus,
+  MESSAGE_REF_UNREF_KKV_KEY,
+  MESSAGE_REF_UNREF_KKV_MODULE,
+  runMessageRefUnref,
+} from "./impl/message-ref-unref.js";
+export type {
+  MessageRefUnrefRunResult,
+  MessageRefUnrefStatus,
+  RunMessageRefUnrefOptions,
+} from "./impl/message-ref-unref.js";

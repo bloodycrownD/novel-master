@@ -26,6 +26,7 @@ import { registerIpcHandlers } from "./ipc/register-handlers.js";
 import { getDesktopRuntime } from "./runtime/desktop-runtime-singleton.js";
 import { scheduleDesktopBlobBinaryNormalization } from "./services/blob-binary-normalization.service.js";
 import { scheduleDesktopMessageContentDecompress } from "./services/message-content-decompression.service.js";
+import { scheduleDesktopMessageRefUnref } from "./services/message-ref-unref.service.js";
 import {
   configureWindowChrome,
   installApplicationMenu,
@@ -175,6 +176,10 @@ async function bootstrapMainServices(): Promise<void> {
   // 消息正文解压搬运（存量压缩行 → 明文）：main 就绪后后台预算制调度
   //（fire-and-forget，幂等——已完成时零成本，Agent/云同步/清理 busy 自动让路）。
   scheduleDesktopMessageContentDecompress();
+  // 引用化回迁（存量 contentRef 行 → 明文包 + 源 revision 精确 −1）：main
+  // 就绪后后台预算制调度（fire-and-forget，幂等——已完成时零成本，
+  // Agent/云同步/清理 busy 自动让路；解压未完成时 deferred 停手下个冷启动再试）。
+  scheduleDesktopMessageRefUnref();
   // 存量 blob 形态归一（base64 文本 → 二进制 BLOB）：后台任务自身带
   // 守卫与失败兜底，不参与启动成败判定，故 fire-and-forget 不 await。
   scheduleDesktopBlobBinaryNormalization();

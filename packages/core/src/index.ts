@@ -87,18 +87,25 @@ export type {
  * （VACUUM 须事务外调用，事务中调用由 SQLite 原生报错兜底）；另含两个
  * 谓词驱动、幂等可重入的后台搬运任务——存量 blob 行形态归一（zlib-b64
  * 文本 → 二进制 BLOB，完成后挂一次维护链路）与存量消息正文解压回明文
- * （message-plaintext 迁移层，**不挂**维护链路：增容无 freelist 可归还；
- * 不新增 exports 子路径——`./compaction` 已被上下文裁剪域占用）。
+ * （message-plaintext 迁移层，**不挂**维护链路：增容无 freelist 可归还）、
+ * 以及引用化回迁任务（存量 contentRef 行 → 明文包 + 源 revision 精确 −1，
+ * 同样不挂维护链路；与解压任务交叠时 deferred 让位，见 runMessageRefUnref
+ * 结果类型）。不新增 exports 子路径——`./compaction` 已被上下文裁剪域占用。
  */
 export {
   BLOB_BINARY_KKV_MODULE,
   createDbMaintenanceService,
   DEFAULT_BLOB_BINARY_SYNC_BUDGET_MS,
   DEFAULT_DECOMPRESS_SYNC_BUDGET_MS,
+  DEFAULT_REF_UNREF_SYNC_BUDGET_MS,
   getBlobBinaryStatus,
   getMessageDecompressStatus,
+  getMessageRefUnrefStatus,
+  MESSAGE_REF_UNREF_KKV_KEY,
+  MESSAGE_REF_UNREF_KKV_MODULE,
   runBlobBinaryNormalization,
   runMessageContentDecompress,
+  runMessageRefUnref,
   runStartupMaintenanceOnce,
 } from "./infra/db-maintenance/index.js";
 export type {
@@ -110,8 +117,11 @@ export type {
   DbMaintenanceService,
   MessageDecompressRunResult,
   MessageDecompressStatus,
+  MessageRefUnrefRunResult,
+  MessageRefUnrefStatus,
   RunBlobBinaryNormalizationOptions,
   RunMessageContentDecompressOptions,
+  RunMessageRefUnrefOptions,
   StorageStats,
 } from "./infra/db-maintenance/index.js";
 
