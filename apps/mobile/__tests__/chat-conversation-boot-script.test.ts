@@ -4,10 +4,13 @@
  * 读 webview-dist 产物（pretest 已 build:webview），风格对照 chat-transcript-boot-script.test.ts。
  * 本节点只锁「壳结构 + 注入证据」，dock 内容与协议装配由 Step 3/4/5 的测试接手。
  */
-import {readFileSync} from 'node:fs';
+import {readdirSync, readFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {readWebViewDistFile} from './helpers/read-webview-dist';
-import {composerToolBtnStyle} from '../src/web/chat-conversation/styles/dock-style-reference';
+import {
+  attachmentDraftChipsStyles,
+  composerToolBtnStyle,
+} from '../src/web/chat-conversation/styles/dock-style-reference';
 
 function bootScript(): string {
   return readWebViewDistFile('chat-conversation', 'app.js');
@@ -62,6 +65,34 @@ function cssRules(css: string): Map<string, string> {
 /** 源文件里的注入占位注释出现次数（构建期 injectCss 依赖它们定位，各只应有一份）。 */
 function placeholderCount(css: string, placeholder: string): number {
   return css.split(placeholder).length - 1;
+}
+
+/** dock 样式参照真源模块（RN 参照面，不进 bundle）。 */
+const DOCK_STYLE_REFERENCE_SRC = join(
+  __dirname,
+  '../src/web/chat-conversation/styles/dock-style-reference.ts',
+);
+
+/** 递归收集目录下的 `.ts` / `.tsx` 文件绝对路径。 */
+function tsFilesIn(dir: string, acc: string[] = []): string[] {
+  for (const entry of readdirSync(dir, {withFileTypes: true})) {
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      tsFilesIn(full, acc);
+    } else if (/\.tsx?$/.test(entry.name)) {
+      acc.push(full);
+    }
+  }
+  return acc;
+}
+
+/**
+ * 从 `{ a, b as c }` 的一段里取**原标识符**（`b as c` → `b`）——别处的名字不重要，
+ * 「这个模块到底导出了什么、谁引了谁」只认原名。
+ */
+function originalName(raw: string): string {
+  const alias = raw.search(/\s+as\s+/);
+  return (alias === -1 ? raw : raw.slice(0, alias)).trim();
 }
 
 /**
@@ -300,8 +331,10 @@ describe('chat-conversation dock 样式数值清单（Step 4 · T-CU10 样式相
    * 退役后 `ChatComposer.tsx` 整个删掉，⛶ 已经是 web 文档里的
    * `<button class="toolbar__btn toolbar__fullscreen">`，RN 侧没有这个元素了。
    *
-   * 断言没有跟着消失，而是换了参照面：RN 侧的真源被 Step 6 提前手抄进了
-   * `dock-style-reference.ts`（`ChatComposer.tsx` 一删，数值出处就没了），
+   * 断言没有跟着消失，而是换了参照面：RN 侧真源由 `dock-style-reference.ts` 转出
+   * 共享常量 `composer-toolbar-style.ts` 的 `composerToolBtnStyle`（它本身是纯常量
+   * 文件，不随 `ChatComposer` 删除而消失，所以这里比的是**活常量**而不是手抄快照——
+   * cr1-P1-5 缩范围时，参照文件里其余 8 份手抄快照正是因此被清掉的），
    * 于是「相等」由 **web CSS 规则 ⇄ RN 参照常量** 逐项对。
    * 描边宽度按 hairline 量纲断言（0 < w ≤ 1）：RN 的 `StyleSheet.hairlineWidth`
    * 在 iOS 是 0.33、Android 是 0.5，锁死某个平台的值会让这条断言在另一个
@@ -385,15 +418,66 @@ describe('chat-conversation dock 样式数值清单（Step 4 · T-CU10 样式相
     // 故此处以全量差集为零作为契约。
   });
 
-  it('T-CC-CSS-14: toolbar 按钮无自创 :disabled 置灰（现网 RN disabled 无灰化变体）', () => {
+  it('T-CC-CSS-14: 输入框与 toolbar 按钮均无自创 :disabled / --disabled 置灰（现网 RN disabled 无灰化变体）', () => {
     const rules = cssRules(appCss());
     // 反面清单：`:disabled { opacity }` 是合成包自创的置灰，现网 RN 侧 disabled
     // 只是透传的死参数，没有视觉变体——留它会让圆钮凭空变灰。
     expect(rules.has('.toolbar__btn:disabled')).toBe(false);
+    // 输入区整块淡出（`.composer-input--disabled { opacity:.55 }`）同样是从旧 RN 链
+    // styles 逐字搬来的产物：现网 chat 链 TextInput 从无淡出变体，而 `inputDisabled`
+    // （运行中 / 未选模型）常态置位，留着等于把整片输入区灰掉。
+    // **必须查 dist 合成包**——旧包 `composer-input/styles/composer-input.css` 的同名规则
+    // 是宏链活链的既有表现、刻意保留，拿旧包来判会永远红。
+    expect(rules.has('.composer-input--disabled')).toBe(false);
     // 发送键的 disabled 视觉走底色态（tokens.border），保留
     expect(rules.get('.toolbar__send--disabled')).toMatch(/var\(--border/);
     // chips 同样不置灰（走的是「不随 inputDisabled 变灰」的既约定）
     expect(rules.get('.chip') ?? '').not.toMatch(/opacity/);
+  });
+
+  it('T-CC-CSS-15: dock-style-reference 每个导出都有消费方（RN 真源死了就不许再抄一份快照）', () => {
+    const source = readFileSync(DOCK_STYLE_REFERENCE_SRC, 'utf8');
+    const exported = new Set<string>();
+    for (const m of source.matchAll(
+      /^export\s+(?:const|function|class)\s+([A-Za-z0-9_$]+)/gm,
+    )) {
+      exported.add(m[1]);
+    }
+    for (const m of source.matchAll(/^export\s*\{([^}]*)\}/gm)) {
+      for (const part of m[1].split(',')) {
+        const name = originalName(part);
+        if (name) {
+          exported.add(name);
+        }
+      }
+    }
+    // 解析器本身也要有牙齿：全空说明上面的匹配写坏了，断言会假绿
+    expect(exported.size).toBeGreaterThan(0);
+
+    // 消费面 = 全仓 import 了本模块的文件里实际引入的标识符
+    const consumed = new Set<string>();
+    const files = [
+      ...tsFilesIn(join(__dirname, '../src')),
+      ...tsFilesIn(__dirname),
+    ];
+    for (const file of files) {
+      const text = readFileSync(file, 'utf8');
+      if (!text.includes('dock-style-reference')) {
+        continue;
+      }
+      for (const m of text.matchAll(
+        /import\s*(?:type\s*)?\{([^}]*)\}\s*from\s*'[^']*dock-style-reference'/g,
+      )) {
+        for (const part of m[1].split(',')) {
+          const name = originalName(part);
+          if (name) {
+            consumed.add(name);
+          }
+        }
+      }
+    }
+    // 零消费导出 = 又一份没人对照的数值快照；当初手抄 8 份的教训就是它们全在等文件删除。
+    expect([...exported].filter(name => !consumed.has(name))).toEqual([]);
   });
 
   it('T-CC-CSS-05: styles.box（hairline 描边 / radius 12 / paddingH 8 / padT 4 / padB 6 / surface 实底）', () => {
@@ -412,26 +496,53 @@ describe('chat-conversation dock 样式数值清单（Step 4 · T-CU10 样式相
     expect(error).toMatch(/font-size:\s*13px/);
   });
 
-  it('T-CC-CSS-07: chips 数值清单（chip padV6/padH10/radius14/hairline/maxW200；label 12/maxW160；transparentRow marginBottom4；content gap6/padR8；横向滚动）', () => {
+  it('T-CC-CSS-07: chips 数值清单 ⇄ AttachmentDraftChips RN 真源（chip padV6/padH10/radius14/maxW200；label 12/maxW160；行 maxH36/transparentRow marginBottom4；content gap6/padR8；横向滚动）', () => {
     const css = appCss();
+    // RN 真源：`AttachmentDraftChips.tsx` 的 StyleSheet（组件本体仍在生产中）。
+    // 断言从组件 import，而不是在测试里手抄一份常量——手抄的那份一旦与组件分叉，
+    // 本条就退化成「CSS vs 硬编码」，恒真且永不报警（cr1-P1-5 缩范围后的首批真源面）。
+    const chips = attachmentDraftChipsStyles;
+    // 行容器：非 transparent 变体的 maxHeight 对 transparent 变体**仍然生效**
+    // （rowTransparent 只覆盖 backgroundColor 与 marginBottom），CSS 侧必须同样落 36。
+    expect(chips.row.maxHeight).toBe(36);
+    expect(chips.rowTransparent.marginBottom).toBe(4);
+    expect(chips.content.gap).toBe(6);
+    expect(chips.content.paddingRight).toBe(8);
+
     const row = rule(css, '.chips__row');
-    // transparentRow 变体：行底色透明 + marginBottom:4（maxHeight:36/marginBottom:6 属非 transparent 变体）
+    expect(row).toMatch(/max-height:\s*36px/);
+    // transparentRow 变体：行底色透明 + marginBottom:4
     expect(row).toMatch(/margin-bottom:\s*4px/);
     expect(row).toMatch(/gap:\s*6px/);
     expect(row).toMatch(/padding-right:\s*8px/);
     expect(row).toMatch(/overflow-x:\s*auto/);
     expect(row).toMatch(/background:\s*transparent/);
-    expect(row).not.toMatch(/max-height:\s*36px/);
 
+    expect(chips.chip.maxWidth).toBe(200);
+    expect(chips.chip.paddingVertical).toBe(6);
+    expect(chips.chip.paddingLeft).toBe(10);
+    expect(chips.chip.paddingRight).toBe(10);
+    expect(chips.chip.borderRadius).toBe(14);
     const chip = rule(css, '.chip');
     expect(chip).toMatch(/max-width:\s*200px/);
     expect(chip).toMatch(/padding:\s*6px\s+10px/);
     expect(chip).toMatch(/border-radius:\s*14px/);
     expect(chip).toMatch(/border:\s*0\.5px solid/);
+    // RN chip 没有 flexShrink/background 两条（那边由 ScrollView 布局与注入底色承担），
+    // 但 CSS 侧必须有：前者防 chip 被横向滚动压扁，后者是 chips 段的实底。
+    expect(chip).toMatch(/flex-shrink:\s*0/);
+    expect(chip).toMatch(/background:\s*var\(--surface/);
 
+    expect(chips.label.fontSize).toBe(12);
+    expect(chips.label.maxWidth).toBe(160);
     const label = rule(css, '.chip__label');
     expect(label).toMatch(/font-size:\s*12px/);
     expect(label).toMatch(/max-width:\s*160px/);
+    // ellipsis 三件套（RN 侧 numberOfLines={1} 的 CSS 等价物）：少任一条，
+    // 长路径 chip 文本就会顶破 160 上限横向溢出，而不是省略号收尾。
+    expect(label).toMatch(/overflow:\s*hidden/);
+    expect(label).toMatch(/text-overflow:\s*ellipsis/);
+    expect(label).toMatch(/white-space:\s*nowrap/);
   });
 
   it('T-CC-CSS-08: typeahead 浮层（absolute 锚 input 上缘 / 与 input 等宽 left0·right0 / radius 10 / hairline / surface 底 + 行内边距 8×10）', () => {
@@ -447,11 +558,18 @@ describe('chat-conversation dock 样式数值清单（Step 4 · T-CU10 样式相
     expect(list).not.toMatch(/left:\s*8px/);
     expect(list).not.toMatch(/right:\s*8px/);
     expect(list).toMatch(/bottom:\s*100%/);
+    // 浮层层级：chips 行在 DOM 里排在上游，浮层若不抬 z-index 会被它盖住
+    expect(list).toMatch(/z-index:\s*20/);
+    // 候选封顶高度 + 纵向滚动（候选多时滚，而不是把 input 撑高）
+    expect(list).toMatch(/max-height:\s*240px/);
+    expect(list).toMatch(/overflow-y:\s*auto/);
     expect(list).toMatch(/border-radius:\s*10px/);
     expect(list).toMatch(/border:\s*0\.5px solid/);
     expect(list).toMatch(/background:\s*var\(--surface/);
     const row = rule(css, '.typeahead__row');
     expect(row).toMatch(/padding:\s*8px\s+10px/);
+    // SkillTypeahead styles.item 的 gap:8（@ 路径候选无此修饰类）
+    expect(rule(css, '.typeahead__row--skill')).toMatch(/gap:\s*8px/);
     expect(rule(css, '.typeahead__tag')).toMatch(/font-size:\s*11px/);
   });
 
@@ -483,6 +601,10 @@ describe('chat-conversation dock 样式数值清单（Step 4 · T-CU10 样式相
     expect(btn).toMatch(/height:\s*36px/);
     expect(btn).toMatch(/border-radius:\s*18px/);
     expect(btn).toMatch(/border:\s*0\.5px solid/);
+    // 引用钮字色：⛶ / @ / $ 是图标钮，字色经 currentColor 落到图标，
+    // 漏这条就可能退回浏览器默认黑而与现网 tokens.textSecondary 不一致。
+    // （36/36/18 与 RN 参照常量的相等由 T-FS1 迁居那条断言承担，此处不重复。）
+    expect(btn).toMatch(/color:\s*var\(--text-secondary/);
     const send = rule(css, '.toolbar__send');
     expect(send).toMatch(/width:\s*40px/);
     expect(send).toMatch(/height:\s*40px/);
@@ -544,6 +666,19 @@ describe('chat-conversation 协议装配（Step 5 · T-CU1 / T-CU3 契约）', (
     expect(mountAt).toBeGreaterThan(composerAt);
     // 单次注册：入口块内 bindHostMessageChannel 只出现一次
     expect(entry.split('bindHostMessageChannel(').length - 1).toBe(1);
+  });
+
+  it('T-CC-V2-04: dist 含 ready 装配闸（shouldEmitConversationReady 导出 + 入口设闸 + 失败诊断）', () => {
+    const script = bootScript();
+    // 判定函数被导出且**函数名在产物里保留**（esbuild minify:false）——
+    // 闸门被内联掉或被 tree-shake 掉，这条都归零。
+    expect(script).toContain('function shouldEmitConversationReady(');
+    // 入口真的接了两面返回值并喂给闸门（不是导出了却没人调）
+    expect(script).toMatch(
+      /shouldEmitConversationReady\(\{\s*composerMounted:\s*composerRuntime\.mounted,\s*dockMounted\s*\}\)/,
+    );
+    // 闸门不通过时的中文诊断 + 直接 return（不发 ready，把信号交回宿主 8s 兜底）
+    expect(script).toMatch(/console\.error\(\s*`\[chat-conversation\]/);
   });
 
   it('T-CC-V2-03: 零 heightChange 上行链（heightReport:false）与零 composer ready', () => {

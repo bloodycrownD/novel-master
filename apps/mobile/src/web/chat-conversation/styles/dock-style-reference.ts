@@ -1,101 +1,44 @@
 /**
- * dock 视觉参照常量（chat-webview-unify Step 6 顺手项 · RN 参照真源固化）。
+ * dock 视觉参照面（chat-webview-unify Step 6 顺手项 · cr1-P1-5 缩范围后瘦身）。
  *
- * **为什么在本轮固化**：`ChatComposer.tsx` 是本迭代 Step 7 的删除对象，其
- * `styles`（box / dock / hintRow / error / sendBtn）是合成包 CSS 里 dock 段的
- * 数值出处。文件一删，数值出处随之消失，UI 一致性硬验收（逐屏截图对比）就失去
- * 可对照的 RN 真源。故在删除前把数值**逐项手抄**到本文件，并保留出处锚点注释。
+ * **背景**：`ChatComposer.tsx` 是本迭代 Step 8 的删除对象，它的 `styles`
+ * （dock / box / hintRow / error / sendBtn）是合成包 CSS 里 dock 段的数值出处。文件一删，
+ * 数值出处随之消失，UI 一致性硬验收（逐屏截图对比）就失去可对照的 RN 真源。
  *
- * 语义分工（勿混）：
- * - 本文件 = **RN 参照真源**，供 `composer-dock-padding.test.ts` 一类 RN 侧断言
- *   与真机截图对比时对照；值本身由 `ChatComposer.tsx:713-762` 原样搬来。
- * - `src/web/chat-conversation/styles/chat-conversation.css` 的 `.composer-dock`
- *   / `.composer-dock__box` / `.hint-row` / `.error` / `.toolbar__send` 是**实际生效**
- *   的一套；两者相等由 Step 9/10 的样式相等断言锁。
- * - `composerToolBtnStyle` 直接 re-export 共享常量（36 圆钮 + hairline 描边）——
- *   它本身已是纯常量文件，不随 `ChatComposer` 删除而消失，re-export 只是让参照面
- *   聚在一处、避免日后各抄一份。
+ * **cr1-P1-5 缩范围后本文件只剩两处导出**，判据只有一条：**RN 真源今天是否还活着**。
+ * - `composerToolBtnStyle` —— 共享常量文件 `composer-toolbar-style.ts` 仍在，本身是纯常量，
+ *   re-export 只是让参照面聚在一处、避免日后各抄一份。
+ * - `attachmentDraftChipsStyles` —— chips 段唯一幸存的 RN 真源（`AttachmentDraftChips.tsx`
+ *   随 legacy 转录引擎退役后仍然在用），且它的 StyleSheet 就是 dock 段 chips 数值的出处。
  *
- * 本文件**不进 bundle**（未被任何 entry import），只是 RN/web 双侧的数值对照表。
+ * **曾经逐字手抄的 8 份快照（dock / box / hintRow / error / sendBtn / toolbar /
+ * toolbarSpacer / input metrics）已删除**：它们唯一的「真源」就是那份已经删掉的
+ * `ChatComposer.tsx`，留着就等于在断言里手抄常量——CSS 改一份、快照不动，两边分叉时
+ * 断言不但不红还会给出「已对齐」的假信号。无真源的样式项不进断言，改由合并后 QA 的
+ * Step 10 截图对比承担（见 cr-fix-spec 的 cr1-P1-5 改法第 ③ 点）。
+ *
+ * 想复查当初那份快照抄的是什么，用可追溯的取法看历史版本（不要凭注释里的行号猜，
+ * 文件已删，行号锚点无处可指）：
+ *
+ * ```sh
+ * git show dc4c903b~1:apps/mobile/src/components/chat/ChatComposer.tsx
+ * ```
+ *
+ * 其中 `styles` 定义在 713-762 行（dock 714-720 / hintRow 721-723 / error 724-727 /
+ * box 728-734 / input 735-745 / toolbar 746-751 / toolbarSpacer 752-754 / sendBtn 755-761）。
+ *
+ * **职责边界**：本文件**不进 bundle**（没有任何 web entry import 它），只是 RN/web 双侧的
+ * 数值对照表，由 `chat-conversation-boot-script.test.ts` 消费。
  */
-import {StyleSheet} from 'react-native';
 import {composerToolBtnStyle} from '@/components/chat/composer-toolbar-style';
+import {attachmentDraftChipsStyles} from '@/components/chat/AttachmentDraftChips';
 
 /** 引用类工具按钮（⛶ / @ / $）：36 见方圆钮 + hairline 描边 + 内容居中。 */
 export {composerToolBtnStyle};
 
 /**
- * dock 容器（出处 `ChatComposer.tsx:714-720` `styles.dock`）。
- *
- * `backgroundColor` 不在此声明——现网由 `tokens.background` 在渲染处注入
- * （`<Animated.View style={[styles.dock, {backgroundColor: tokens.background}]}>`），
- * web 侧同样是 `.composer-dock { background: var(--bg) }`，**实底**不可省。
+ * chips 段 RN 真源（`AttachmentDraftChips.tsx` 的 `StyleSheet`，组件本体仍在生产中）。
+ * 合成包 `.chips__row` / `.chip` / `.chip__label` 的数值全部对照它断言
+ * （cr1-P1-5 首批范围之一；另一个首批是上面的 toolbar 四值）。
  */
-export const composerDockStyle = {
-  flexShrink: 0,
-  paddingHorizontal: 12,
-  paddingTop: 4,
-  paddingBottom: 8,
-} as const;
-
-/**
- * 输入框视觉盒（出处 `ChatComposer.tsx:728-734` `styles.box`）。
- * `backgroundColor` / `borderColor` 同理由 tokens 注入（surface / border）。
- */
-export const composerBoxStyle = {
-  borderWidth: StyleSheet.hairlineWidth,
-  borderRadius: 12,
-  paddingHorizontal: 8,
-  paddingTop: 4,
-  paddingBottom: 6,
-} as const;
-
-/** 无模型提示行（出处 `ChatComposer.tsx:721-723` `styles.hintRow`）。 */
-export const composerHintRowStyle = {
-  marginBottom: 6,
-} as const;
-
-/** 报错文本行（出处 `ChatComposer.tsx:724-727` `styles.error`；文字色取 tokens.danger）。 */
-export const composerErrorStyle = {
-  marginBottom: 6,
-  fontSize: 13,
-} as const;
-
-/** 发送/终止钮（出处 `ChatComposer.tsx:755-761` `styles.sendBtn`）。 */
-export const composerSendBtnStyle = {
-  width: 40,
-  height: 40,
-  borderRadius: 20,
-  alignItems: 'center',
-  justifyContent: 'center',
-} as const;
-
-/**
- * toolbar 行（出处 `ChatComposer.tsx:746-754` `styles.toolbar` + `styles.toolbarSpacer`）。
- * `gap: 8` 与 `spacer flex: 1` 同属 toolbar 的排布口径，一并留档。
- */
-export const composerToolbarStyle = {
-  flexDirection: 'row',
-  alignItems: 'center',
-  marginTop: 4,
-  gap: 8,
-} as const;
-
-export const composerToolbarSpacerStyle = {
-  flex: 1,
-} as const;
-
-/**
- * `input` 的 metrics 口径（出处 `ChatComposer.tsx:735-745` `styles.input`）。
- * 与 `CONVERSATION_COMPOSER_METRICS`（Step 4 已迁入 web model）同值——这里留的是
- * RN 侧的**出处快照**，两处相等由 T-CU10 / T-FS1 断言锁。
- */
-export const composerInputStyleSnapshot = {
-  minHeight: 56,
-  /** 5 行封顶（12 + 22×5）；原 160 是老 RN 输入框沿用值，偏高压屏。 */
-  maxHeight: 122,
-  fontSize: 16,
-  lineHeight: 22,
-  paddingHorizontal: 4,
-  paddingVertical: 6,
-} as const;
+export {attachmentDraftChipsStyles};
