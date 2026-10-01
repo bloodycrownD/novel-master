@@ -579,6 +579,13 @@ export function createConversationDock(post: BoundPost): ConversationDock {
       buildToolbar(root);
       unbind = bindEvents(root);
       renderAll();
+      // 键盘抬起过渡的首帧豁免（配套 CSS .dock--animated）：首帧 renderAll 已把
+      // paddingBottom 定在初值，下一拍再启用 transition——避免页面加载时底部
+      // padding 从 0 滑到 safeArea 值的一次多余动画（见 chat-conversation.css）。
+      const dockEl = root.dock;
+      requestAnimationFrame(() => {
+        dockEl.classList.add('dock--animated');
+      });
       return true;
     },
 
