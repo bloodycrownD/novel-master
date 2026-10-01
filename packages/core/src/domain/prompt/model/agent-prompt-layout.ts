@@ -77,7 +77,7 @@ export function layoutHasCustomAttach(
 }
 
 /**
- * Agent Prompt 布局（替代扁平 {@link PromptBlock}[]）。
+ * Agent Prompt 布局（本域现行形态）。
  * chat 为运行时槽位，不出现在配置中。
  */
 export interface AgentPromptLayout {

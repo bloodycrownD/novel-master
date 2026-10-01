@@ -184,7 +184,6 @@ export function toLogicalPath(scope: VfsScope, physical: string): string {
 /**
  * scope 对应的 scope_key 字符串（vfs_entry.scope_key 列取值）。
  *
- * 取值与 `infer-scope-from-path.ts` 的反解规则一致：
  * global → `global`，project → `project:{pid}`，session → `session:{pid}:{sid}`。
  */
 export function scopeKey(scope: VfsScope): string {
