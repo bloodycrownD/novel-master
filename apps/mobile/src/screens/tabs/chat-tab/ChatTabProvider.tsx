@@ -28,7 +28,7 @@ import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {type ChatMessage} from '@novel-master/core/chat';
 import type {VfsService} from '@novel-master/core/vfs';
 import type {WorkplaceService} from '@novel-master/core/workplace';
-import type {ChatTranscriptWebViewHandle} from '@/components/chat/ChatTranscriptWebView';
+import type {ChatTranscriptWebViewHandle} from '@/components/chat/ChatTranscriptWebViewHandle';
 import type {MessageMenuAnchor} from '@/components/chat/MessageActionMenu';
 import type {VfsFileManagerHandle} from '@/components/vfs/VfsFileManager';
 import type {ChatListScrollSnapshot} from '@/services/chat-list-scroll-cache';

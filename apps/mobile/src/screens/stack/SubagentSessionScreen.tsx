@@ -32,7 +32,7 @@ import {
 import {ChatTranscriptWebView} from '../../components/chat/ChatTranscriptWebView';
 import {showAppToast} from '@/services/app-toast';
 import {chatLinkNotFoundMessage} from '@novel-master/core/chat';
-import type {ChatTranscriptWebViewHandle} from '../../components/chat/ChatTranscriptWebView';
+import type {ChatTranscriptWebViewHandle} from '../../components/chat/ChatTranscriptWebViewHandle';
 import {useToast} from '../../components/chrome/ToastHost';
 import {toastMessage} from '../../errors/toast-message';
 import {useRuntime} from '../../hooks/useRuntime';

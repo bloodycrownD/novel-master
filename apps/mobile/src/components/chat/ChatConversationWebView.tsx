@@ -1,5 +1,35 @@
 /**
- * RN WebView wrapper for chat transcript — postMessage both directions via bridge envelopes.
+ * 统一对话宿主（chat-webview-unify Step 6）：转录 + 输入框 dock 合并进**单个**
+ * chat-conversation WebView。
+ *
+ * ## 为什么是这一个组件
+ * 旧链是 `ChatTranscriptWebView` + `ComposerInputWebView` 两个原生实例，输入框
+ * 高度变化要「跨桥上报 heightChange → RN 80ms `withTiming` 渐变 → 容器变高」才
+ * 传导到转录区（滞后 1~2 帧 + 一段动画）。合并后 dock 在同一文档内 flex 布局，
+ * 输入框换行时转录区 `flex:1` 当帧收缩——**高度链彻底消失**，键盘动画期间每帧
+ * relayout 的原生节点也从 2 个降到 1 个。
+ *
+ * ## 本组件继承的全部机制（转录侧，照 `ChatTranscriptWebView` 逐条搬）
+ * 快照分片（`SNAPSHOT_CHUNK_SIZE=50` / `SNAPSHOT_CHUNK_BYTES=256KB` /
+ * `planSnapshotChunkBounds` 预扫 / 代次作废）、流式三通道（delta/batch/blockCommit）
+ * + 能力协商、`repaintEpoch` 与 visibility 重挂、滚动缓存恢复、安全守卫
+ * （`originWhitelist=['file://']` + `onShouldStartLoadWithRequest` 只放行新包目录 +
+ * `messageMenuAction` 仍走宿主回调）。
+ *
+ * ## 三条硬纪律（动本文件前先读）
+ *
+ * **(A) deferred 队列只装改画三通道**（`appendTailRows` / `prependPage` / `streamCommit`）。
+ * composer 域（`setText` / `composerState` / `selectAll` / `composerPaste`）与 dock 上行
+ * **一律走 `postToWeb` 直发**。理由：deferred 的唯一目的是防快照末片整体替换 rows 时
+ * 抹掉增量行，composer 域根本不碰 `state.rows`；误 defer 的代价是分片窗口（约 1.15s）
+ * 内用户打不了字，且重挂时 deferred 队列整队丢弃 → 草稿静默丢失。T-CU7 负面断言。
+ *
+ * **(B) IME 七条防线的 ref 归属**（spec §IME / 选区防线表，注释标 M 编号）：
+ * M3 在 web 侧不动；其余六条落在本组件——打字真源在 web，`change` 只上抛不回写。
+ *
+ * **(C) ready 只认 `v === 2`**。旧 dist 的 v:1 ready 被拒 → 走 8s 超时兜底错误态，
+ * **不得**因为「收到了 ready」就置位 `webReady`：置位了就会把 v2 协议消息灌进一个
+ * 根本不认得的页面（静默白屏，比报错更难查）。
  */
 import React, {
   forwardRef,
@@ -7,10 +37,11 @@ import React, {
   useCallback,
   useEffect,
   useImperativeHandle,
+  useMemo,
   useRef,
   useState,
 } from 'react';
-import {Linking, StyleSheet, View, AppState} from 'react-native';
+import {Linking, StyleSheet, Text, View} from 'react-native';
 import WebView, {type WebViewMessageEvent} from 'react-native-webview';
 // 根入口 index.d.ts 未 re-export 此类型，只能从 lib/WebViewTypes 深导入；
 // import type 会被擦除，不影响运行时打包。
@@ -22,23 +53,86 @@ import {
   timingLog,
 } from '@/debug/run-timing';
 import Clipboard from '@react-native-clipboard/clipboard';
-import {
-  encodeHostToTranscript,
-  decodeTranscriptToHost,
-  parseScrollSnapshotFromHost,
-  type ChatTranscriptScrollSnapshot,
-  type HostToTranscriptMessage,
-  type TranscriptFlags,
-  type TranscriptRestoreScroll,
-  type TranscriptRow,
-  type TranscriptScrollIntent,
-  type TranscriptSkillRef,
-  type TranscriptTheme,
+import type {
+  ChatTranscriptScrollSnapshot,
+  TranscriptFlags,
+  TranscriptRestoreScroll,
+  TranscriptRow,
+  TranscriptScrollIntent,
+  TranscriptSkillRef,
 } from './ChatTranscriptBridge';
+import {
+  CONVERSATION_BRIDGE_V,
+  CONVERSATION_CAPABILITY_COMPOSER_DOCK,
+  CONVERSATION_COMPOSER_METRICS,
+  CONVERSATION_COMPOSER_MODE,
+  EMPTY_CONVERSATION_TYPEAHEAD_SOURCE,
+  conversationCapabilitiesInclude,
+  conversationDockActionIncludes,
+  decodeConversationUpstream,
+  encodeHostToConversation,
+  parseConversationScrollSnapshot,
+  readReadyCapabilities,
+  type ConversationComposerState,
+  type ConversationDockAction,
+  type ConversationHostMessage,
+  type ConversationTheme,
+  type ConversationTypeaheadSource,
+} from './ChatConversationBridge';
+import type {ComposerInputSelection} from './ComposerInputBridge';
 import {enrichTranscriptRows} from './enrich-transcript-rows';
 import {createQuantumYield} from '@/services/yield-quantum';
+import {
+  buildTranscriptRows,
+  buildToolPairingContext,
+  buildTranscriptRowsWithContext,
+  messageHasToolUse,
+  messageIsToolResultsOnly,
+  selectTailTranscriptRows,
+} from './message-blocks';
+import {planSnapshotChunkBounds} from './ChatTranscriptWebView';
+import {
+  getChatConversationPackageDirUri,
+  getChatConversationUri,
+} from '@/webview-host/chat-conversation/uri';
+import {emitChatTranscriptTelemetry} from '@/services/chat-transcript-telemetry';
+import {CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION} from '@/services/chat-transcript-scroll-cache';
+import {useTheme} from '@/theme/ThemeProvider';
+import {prepareStreamTailHtml} from './prepare-stream-tail-html';
+import {splitStreamBlocks} from '@/web/chat-transcript/stream/block-split';
+import {
+  TRANSCRIPT_CAPABILITY_STREAM_BLOCK_COMMIT,
+  transcriptCapabilitiesInclude,
+} from '@/web/chat-transcript/transcript-capabilities';
+import type {StreamWireChunk} from '@/services/stream-wire-queue';
+import {appendWireChunk} from '@/services/stream-wire-queue';
+import {decodeLiteralHtmlEntities} from '@/components/rich-content/decode-literal-html-entities';
+import {CHAT_CONVERSATION_SELECTION_MENU_ITEMS} from './chat-transcript-selection-menu';
+import type {ChatTranscriptWebViewHandle} from './ChatTranscriptWebViewHandle';
 
-/** 会改变 WebView 画面的宿主消息类型；用于「隐藏期间脏推送」计数。 */
+export type {ChatTranscriptWebViewHandle} from './ChatTranscriptWebViewHandle';
+
+/**
+ * 统一宿主句柄 = 转录七方法（`ChatTranscriptWebViewHandle` 逐字复用，方法面不变）
+ * + **一个** composer 命令式写入。
+ *
+ * 为什么必须多这一个：IME 防线 M7（命令式 `setText` 带选区**不**作废选区基线）与
+ * M2（effect 版 `setText` **要**作废）是两条**相反**规则，只能靠两条独立通道实现——
+ * 合并成一条就必然要把其中一条改错。转录七方法本身一个都没动，故
+ * `session-stream-webview-adapter` / `ChatTabProvider` / `useInterruptedPartialCommit` /
+ * `SubagentSessionScreen` 的消费代码零改动。
+ */
+export type ChatConversationWebViewHandle = ChatTranscriptWebViewHandle & {
+  /**
+   * M7 · 命令式整段写入（Picker 路径 token 插入 / 草稿水化 / 全屏回填）：
+   * 写 web + 同步 web 文本基线 + 光标经 `setText.selection` 一次落位；
+   * **选区基线不置 null**（与 M2 相反，勿"顺手统一"）。
+   * 未就绪时静默返回：ready 后的恢复链会用最新 `composerText` 补齐全量写入。
+   */
+  setComposerText: (text: string, cursor?: number) => void;
+};
+
+/** 会改变**转录**画面的宿主消息类型；用于「隐藏期间脏推送」计数（composer 域不计）。 */
 const STATE_PAINTING_HOST_MESSAGES: ReadonlySet<string> = new Set([
   'sessionSnapshot',
   'prependPage',
@@ -51,51 +145,24 @@ const STATE_PAINTING_HOST_MESSAGES: ReadonlySet<string> = new Set([
   'streamToolInvoking',
   'flagsUpdate',
 ]);
-import {
-  buildTranscriptRows,
-  buildToolPairingContext,
-  buildTranscriptRowsWithContext,
-  messageHasToolUse,
-  messageIsToolResultsOnly,
-  selectTailTranscriptRows,
-} from './message-blocks';
-import {
-  getChatTranscriptPackageDirUri,
-  getChatTranscriptUri,
-} from '@/webview-host/chat-transcript/uri';
-import {emitChatTranscriptTelemetry} from '@/services/chat-transcript-telemetry';
-import {useTheme} from '@/theme/ThemeProvider';
-import {prepareStreamTailHtml} from './prepare-stream-tail-html';
-import {splitStreamBlocks} from '@/web/chat-transcript/stream/block-split';
-import {
-  TRANSCRIPT_CAPABILITY_STREAM_BLOCK_COMMIT,
-  transcriptCapabilitiesInclude,
-} from '@/web/chat-transcript/transcript-capabilities';
-import type {StreamWireChunk} from '@/services/stream-wire-queue';
-import {appendWireChunk} from '@/services/stream-wire-queue';
-import type {ChatTranscriptWebViewHandle} from './ChatTranscriptWebViewHandle';
-import {decodeLiteralHtmlEntities} from '@/components/rich-content/decode-literal-html-entities';
-import {CHAT_TRANSCRIPT_SELECTION_MENU_ITEMS} from './chat-transcript-selection-menu';
-
-export {CHAT_TRANSCRIPT_SELECTION_MENU_ITEMS} from './chat-transcript-selection-menu';
 
 /**
- * 渲染块级化默认开关（spec §6 风险节「渲染改造按 commit 协议独立开关」）：
- * 这是**默认值**（回滚开关），运行时以 webview ready 上报的能力清单覆盖
- * （B-2：未声明 streamBlockCommit 的旧 dist 一律按不支持处理——块提交会被
- * 静默丢弃、流中只剩尾块）。开启时 richText 流式走「完成块 markdown-it
- * 渲一次 + streamBlockCommit append」；关闭即整体退回旧全量路径
- * （streamDelta.html 为全量累积渲染、webview 整段替换），webview 侧两种
- * 模式并存、由消息形态自然区分。
+ * 渲染块级化默认开关（回滚开关，语义照搬 ChatTranscriptWebView）：
+ * 运行时以 ready 上报的 capabilities 覆盖——未声明 `streamBlockCommit` 的旧 dist
+ * 一律按不支持处理（块提交会被静默丢弃、流中只剩尾块）。
  */
 const STREAM_BLOCK_RENDER_ENABLED = true;
 
-// handle 类型定义已迁至 ChatTranscriptWebViewHandle.ts（chat-webview-unify
-// Step 6 · r1-P0-11，与统一宿主共享同一套方法面）。此处 re-export 保持旧
-// import 路径不破；四处 type-only import 已改指新文件。
-export type {ChatTranscriptWebViewHandle} from './ChatTranscriptWebViewHandle';
+/**
+ * ready 超时兜底窗口（spec T-CU15，锚 **onLoad** 而非 init）。
+ *
+ * 锚 init 是时序死锁：init 本身要等 ready 才发。白屏的成因链是「旧 dist 发不出
+ * v2 ready → webReady 永假 → 全部下行丢弃」，因此这里只做**兜底**：超时即渲染
+ * 错误态 + 提示重载，而不是依赖 ready 门控本身发现。
+ */
+const READY_TIMEOUT_MS = 8000;
 
-export type ChatTranscriptWebViewProps = {
+export type ChatConversationWebViewProps = {
   readonly sessionKey: string;
   readonly messages: readonly ChatMessage[];
   readonly streamingText?: string;
@@ -110,22 +177,13 @@ export type ChatTranscriptWebViewProps = {
   readonly uiRunning?: boolean;
   readonly toolInvoking?: boolean;
   readonly menuCloseSignal?: number;
-  /** 递增时下发 closeMermaidViewer（Android 返回键先关全屏；照 menuCloseSignal 先例）。 */
   readonly mermaidViewerCloseSignal?: number;
-  /**
-   * Bumped when Android IME lifts the composer; web stick-if-near-bottom so
-   * the last messages stay above the input after the viewport shrinks.
-   */
-  readonly keyboardLiftNonce?: number;
   readonly onScrollSnapshot?: (snap: ChatTranscriptScrollSnapshot) => void;
   readonly onReady?: () => void;
   readonly onLoadOlder?: () => void;
   readonly onOpenToolFile?: (path: string) => void;
-  /** 点击 markdown 链接（webview 发 linkClick 原始 href；识别与路由在宿主侧单源完成）。 */
   readonly onLinkClick?: (href: string) => void;
-  /** 点击 task 工具卡片跳转子会话只读浏览（webview web app 发 openSubagentSession）。 */
   readonly onOpenSubagentSession?: (sessionId: string) => void;
-  /** 点击 skill 卡片跳技能详情（webview web app 发 openSkillDetail；project 域缺 projectId 时由调用方补齐）。 */
   readonly onOpenSkillDetail?: (ref: TranscriptSkillRef) => void;
   readonly onOpenMessageMenu?: (
     messageId: string,
@@ -134,18 +192,49 @@ export type ChatTranscriptWebViewProps = {
   ) => void;
   readonly onMessageMenuAction?: (messageId: string, action: string) => void;
   readonly onWebMenuOpenChange?: (open: boolean) => void;
-  /** mermaid 全屏查看器开/关上浮（照 menuOpened→onWebMenuOpenChange 先例；RN 侧据此拦返回键）。 */
   readonly onWebMermaidViewerOpenChange?: (open: boolean) => void;
-  /** pending task 工具的子会话映射（title → childSessionId），让执行中的 task 卡片可点击。 */
   readonly pendingSubagentSessions?: ReadonlyMap<string, string>;
-  /**
-   * 快照完成信号（rollback-large-jank Step 5）：sendSessionSnapshotNow 的
-   * 末片 post 且 deferred actions 排空之后调用；被新代次顶替 / 重挂的
-   * aborted 路径不发（该次快照未生效，等下一轮代次）。回滚链据此把
-   * token 全量重算错峰到快照 post 完成之后。
-   */
   readonly onSnapshotComplete?: () => void;
+
+  /* ---------------- composer 域（全部由 controller 算好后下发） ---------------- */
+
+  /**
+   * 外部真源草稿文本。**只为识别「外部变化」**（水化 / 清空 / 回填）——打字真源
+   * 在 web 侧，宿主收到 `change` 只上抛、绝不回写（M1 / M6）。
+   */
+  readonly composerText: string;
+  readonly onComposerChangeText?: (text: string) => void;
+  /** 外部受控光标（插入 token / 水化 / 清空后）：随外部 value 变化对齐一次。 */
+  readonly composerCursor?: number;
+  readonly onComposerSelectionChange?: (selection: ComposerInputSelection) => void;
+  readonly composerInputDisabled?: boolean;
+  readonly composerHasModel?: boolean;
+  readonly composerSendDisabled?: boolean;
+  readonly composerRunning?: boolean;
+  readonly composerError?: string;
+  readonly composerFullscreenEnabled?: boolean;
+  readonly composerPlaceholder?: string;
+  readonly composerChips?: ChatConversationWebViewPropsChips;
+  readonly composerKeyboardUp?: boolean;
+  /**
+   * typeahead **候选源**（非过滤结果）。
+   *
+   * 比较口径：**引用相等**（spec 定案 ③）。候选列表是 `buildListRows()` /
+   * `effectiveSkills()` 的产物，内容不变时 controller 下发同一引用即可——memo
+   * 比较器按引用判等，引用变了就下行一次 `composerState`（不做深比较：那既 O(n)
+   * 又必然造出新引用，把这条捷径彻底废掉）。
+   */
+  readonly composerTypeahead?: ConversationTypeaheadSource;
+  /** 安全区底部高度（init.composer.safeAreaBottom 下发；键盘弹起时 dock padding 归零）。 */
+  readonly safeAreaBottom?: number;
+  /** dock 域上行处置（send/terminate/needModel/fullscreen/atPicker/skillPicker）。 */
+  readonly onDockAction?: (action: ConversationDockAction) => void;
 };
+
+/** chips 载荷类型（与 composerState.chips 同源，单独起名只为 memo 段可读）。 */
+type ChatConversationWebViewPropsChips =
+  | ConversationComposerState['chips']
+  | undefined;
 
 function transcriptFlagsEqual(
   a: Partial<TranscriptFlags> | undefined,
@@ -158,90 +247,19 @@ function transcriptFlagsEqual(
 }
 
 /**
- * 快照分片大小（init-busy-yield Step 6）：每片最多承载的消息数。行由消息
- * 一对一派生（一条消息至多产出一行，tool_results-only 与空消息被跳过），
- * 故「按消息分片」与「按行分片」同界——单片行数 ≤ 本常量。
+ * memo 比较器：转录域照旧，composer 域**逐个入列**。
+ *
+ * 为什么必须逐个入列而不是「`composerState` 一个对象引用比」：spec 记过一次踩坑史
+ * （`pendingSubagentSessions` 漏加 → 静默吞更新）。composer 域字段多（11 个），
+ * 漏一个就是「改了没生效」且无任何报错。`composerTypeahead` 按**引用**判等
+ * （见 props 注释）。
  */
-const SNAPSHOT_CHUNK_SIZE = 50;
-
-/**
- * 惰性持有的 UTF-8 编码器（RN/Hermes 无全局 Buffer，故走 TextEncoder 全局；
- * 与 packages/core 的 tool-output-limits 同款惯例）。模块求值期不构造，
- * 规避个别环境缺该全局时直接炸掉整个模块。
- */
-let snapshotChunkEncoder: TextEncoder | undefined;
-
-/** 字符串的 UTF-8 真实字节数（C-02 口径）；无 TextEncoder 全局时按 UTF-16 码元兜底。 */
-function utf8ByteLength(text: string): number {
-  if (typeof TextEncoder === 'undefined') {
-    return text.length;
-  }
-  snapshotChunkEncoder ??= new TextEncoder();
-  return snapshotChunkEncoder.encode(text).byteLength;
-}
-
-/**
- * 快照分片字节预算（rollback-large-jank Step 3）：单桶累计源 content JSON
- * 尺寸上限。大消息场景即使条数未到 {@link SNAPSHOT_CHUNK_SIZE} 也切多片，
- * 避免「40 条大消息挤单片 → 单次 rows 编码大包 → web 全量重建长任务」。
- * 度量口径（C-02）：源消息 content 的 JSON 序列化串的 **UTF-8 真实字节**
- * （`TextEncoder`，全仓字节惯例同 packages/core 的 tool-output-limits），
- * 即此处的 256KB 与线上真实字节预算同尺度。注意它与 rollback.plan.messages
- * 打点的 contentBytes **不同源**——core 侧那处是 `.length`（UTF-16 code unit）
- * 口径，中文正文下约为真字节的 1/3，两者不可直接对齐读数。
- */
-const SNAPSHOT_CHUNK_BYTES = 256 * 1024;
-
-/**
- * 按源尺寸贪心分桶（rollback-large-jank Step 3）：一遍量测一遍定桶边界
- * ——逐条累计源 content JSON 的 UTF-8 真实字节，条数到上限或累计字节超预算
- * 即封桶；单条自身超预算时独占一桶（无法再细分）。返回每桶 [start, end)
- * 边界；空列表返回单空桶（chunkTotal=1，与旧单包空快照逐字节等价）。
- */
-export function planSnapshotChunkBounds(
-  messages: readonly ChatMessage[],
-): Array<readonly [number, number]> {
-  const bounds: Array<readonly [number, number]> = [];
-  let start = 0;
-  let bytes = 0;
-  for (let i = 0; i < messages.length; i += 1) {
-    const messageBytes = utf8ByteLength(JSON.stringify(messages[i]!.content));
-    const countInBucket = i - start + 1;
-    if (
-      countInBucket > SNAPSHOT_CHUNK_SIZE ||
-      (bytes + messageBytes > SNAPSHOT_CHUNK_BYTES && countInBucket > 1)
-    ) {
-      bounds.push([start, i]);
-      start = i;
-      bytes = 0;
-    }
-    bytes += messageBytes;
-  }
-  bounds.push([start, messages.length]);
-  return bounds;
-}
-
-/**
- * 快照分片代次（模块级单调递增计数器）：每次 sendSessionSnapshotNow 开新
- * 代次，在途旧代次分片循环在每个让步点检查代次、失效即中止丢弃；web 侧
- * 以代次大小判定「未知/迟到分片」并丢弃（等重传语义=RN 侧 force 新代次）。
- */
-let snapshotGenerationCounter = 0;
-
-/**
- * 分片在途期间推迟的动作（单一队列保序，C-orch-1）：
- * - streamFlush：流式 flush 的占位（无载荷，补发时触发两个 flush 尝试）；
- * - post：appendTailRows / prependPage / streamCommit 三通道的完整消息。
- */
-type DeferredSnapshotAction =
-  | {kind: 'streamFlush'}
-  | {kind: 'post'; message: HostToTranscriptMessage};
-
-function chatTranscriptWebViewPropsEqual(
-  prev: ChatTranscriptWebViewProps,
-  next: ChatTranscriptWebViewProps,
+function chatConversationWebViewPropsEqual(
+  prev: ChatConversationWebViewProps,
+  next: ChatConversationWebViewProps,
 ): boolean {
   return (
+    // ---- 转录域（照 ChatTranscriptWebView 原样） ----
     prev.sessionKey === next.sessionKey &&
     prev.messages === next.messages &&
     prev.streamingText === next.streamingText &&
@@ -254,31 +272,73 @@ function chatTranscriptWebViewPropsEqual(
     prev.defaultScrollToBottom === next.defaultScrollToBottom &&
     prev.menuCloseSignal === next.menuCloseSignal &&
     prev.mermaidViewerCloseSignal === next.mermaidViewerCloseSignal &&
-    prev.keyboardLiftNonce === next.keyboardLiftNonce &&
     prev.initialScroll === next.initialScroll &&
     transcriptFlagsEqual(prev.flags, next.flags) &&
-    prev.pendingSubagentSessions === next.pendingSubagentSessions
+    prev.pendingSubagentSessions === next.pendingSubagentSessions &&
+    // ---- composer 域（逐个入列，漏一个就是静默吞更新） ----
+    prev.composerText === next.composerText &&
+    prev.composerCursor === next.composerCursor &&
+    prev.composerInputDisabled === next.composerInputDisabled &&
+    prev.composerHasModel === next.composerHasModel &&
+    prev.composerSendDisabled === next.composerSendDisabled &&
+    prev.composerRunning === next.composerRunning &&
+    prev.composerError === next.composerError &&
+    prev.composerFullscreenEnabled === next.composerFullscreenEnabled &&
+    prev.composerPlaceholder === next.composerPlaceholder &&
+    prev.composerChips === next.composerChips &&
+    prev.composerKeyboardUp === next.composerKeyboardUp &&
+    // 候选源按引用判等（controller 内容不变时下发同一引用）
+    prev.composerTypeahead === next.composerTypeahead &&
+    prev.safeAreaBottom === next.safeAreaBottom
   );
 }
 
-function themeFromTokens(tokens: {
+/**
+ * 主题 9 键超集：transcript 7 键 ∪ composer 6 键去重，一次 `themeUpdate` 全文档生效。
+ * `primaryMuted` 由宿主算（`${primary}22`，web 不做颜色计算）；`selection` 直接取
+ * tokens（缺了 `::selection` 会回落 `--primary-muted` 变色）。
+ */
+function conversationThemeFromTokens(tokens: {
   background: string;
   text: string;
   textSecondary: string;
   primary: string;
+  selection: string;
   danger: string;
   surface: string;
   borderLight: string;
-}): TranscriptTheme {
-  return {
+}): ConversationTheme {
+  const theme: ConversationTheme = {
     background: tokens.background,
     text: tokens.text,
     textSecondary: tokens.textSecondary,
     primary: tokens.primary,
+    primaryMuted: `${tokens.primary}22`,
+    selection: tokens.selection,
     danger: tokens.danger,
     surface: tokens.surface,
     borderLight: tokens.borderLight,
   };
+  return theme;
+}
+
+/** 光标落点归一到 [0, len]（对齐 ComposerAtPathInput 的 clamp 口径）。 */
+function clampCursor(value: number, length: number): number {
+  if (!Number.isFinite(value)) {
+    return length;
+  }
+  return Math.max(0, Math.min(Math.floor(value), length));
+}
+
+function finiteOrNull(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function sameSelection(
+  a: ComposerInputSelection | null,
+  b: ComposerInputSelection | null,
+): boolean {
+  return a != null && b != null && a.start === b.start && a.end === b.end;
 }
 
 function resolveOpenScrollIntent(
@@ -317,10 +377,7 @@ function emitScrollRestoreTelemetry(
     return;
   }
   if (intent === 'stick') {
-    emitChatTranscriptTelemetry({
-      name: 'scroll_restore',
-      mode: 'stick',
-    });
+    emitChatTranscriptTelemetry({name: 'scroll_restore', mode: 'stick'});
   }
 }
 
@@ -337,9 +394,7 @@ function shouldSkipSnapshotAfterStreamCommit(
   return addedIds.length > 0 && addedIds.every(id => committedIds.includes(id));
 }
 
-/** 跳过 snapshot 的前提是 streamCommit 同步过的行仍全部在当前列表里：
- *  回滚删尾后 tail 满页时条数不变但窗口前移，部分已 commit 的 id 已
- *  不存在——此时 web 侧仍留着被删的行，必须走全量快照刷新。 */
+/** 跳过 snapshot 的前提是 streamCommit 同步过的行仍全部在当前列表里。 */
 function committedStreamRowsStillPresent(
   messages: readonly ChatMessage[],
   committedIds: readonly string[],
@@ -348,9 +403,17 @@ function committedStreamRowsStillPresent(
   return committedIds.every(id => idSet.has(id));
 }
 
-export const ChatTranscriptWebView = memo(
-  forwardRef<ChatTranscriptWebViewHandle, ChatTranscriptWebViewProps>(
-    function ChatTranscriptWebView(
+/** 分片在途期间推迟的动作（单一队列保序）：流式 flush 占位 + 改画三通道完整消息。 */
+type DeferredSnapshotAction =
+  | {kind: 'streamFlush'}
+  | {kind: 'post'; message: ConversationHostMessage};
+
+/** 快照分片代次（模块级单调递增计数器，见 ChatTranscriptWebView 同款注释）。 */
+let snapshotGenerationCounter = 0;
+
+export const ChatConversationWebView = memo(
+  forwardRef<ChatConversationWebViewHandle, ChatConversationWebViewProps>(
+    function ChatConversationWebView(
       {
         sessionKey,
         messages,
@@ -365,7 +428,6 @@ export const ChatTranscriptWebView = memo(
         toolInvoking = false,
         menuCloseSignal = 0,
         mermaidViewerCloseSignal = 0,
-        keyboardLiftNonce = 0,
         onScrollSnapshot,
         onReady,
         onLoadOlder,
@@ -379,37 +441,65 @@ export const ChatTranscriptWebView = memo(
         onWebMermaidViewerOpenChange,
         pendingSubagentSessions,
         onSnapshotComplete,
+        composerText,
+        onComposerChangeText,
+        composerCursor,
+        onComposerSelectionChange,
+        composerInputDisabled = false,
+        composerHasModel = true,
+        composerSendDisabled = false,
+        composerRunning = false,
+        composerError,
+        composerFullscreenEnabled = false,
+        composerPlaceholder = '',
+        composerChips,
+        composerKeyboardUp = false,
+        composerTypeahead = EMPTY_CONVERSATION_TYPEAHEAD_SOURCE,
+        safeAreaBottom = 0,
+        onDockAction,
       },
       ref,
     ) {
       const uiRunning = uiRunningProp ?? agentRunning;
       const streamGenerating = uiRunning || toolInvoking;
-      // 首帧延迟打点：流式标志翻真（消息面生成态的起点，webview 注入将随之而来）
       useEffect(() => {
         if (streamGenerating) {
-          timingLog('webview streamGenerating=true (transcript live)');
+          timingLog('webview streamGenerating=true (conversation live)');
         }
       }, [streamGenerating]);
-      const transcriptListOptions = {
-        agentRunning,
-        runUiStopped: !uiRunning,
-        pendingSubagentSessions,
-      };
+
+      /**
+       * 列表构建选项：memo 到「三个输入真变」为止。
+       *
+       * 旧链每次渲染都重建这个对象——那样会让下游 `useCallback` 身份逐帧变化、
+       * 依赖数组失配；memo 之后**语义完全等价**：它本来就只由这三个输入决定，
+       * 而快照闭包「取发起那一刻的值」的口径靠 `sendSessionSnapshotNow` 自己
+       * 捕获该对象保证，与本对象是否逐帧重建无关。
+       */
+      const transcriptListOptions = useMemo(
+        () => ({
+          agentRunning,
+          runUiStopped: !uiRunning,
+          pendingSubagentSessions,
+        }),
+        [agentRunning, uiRunning, pendingSubagentSessions],
+      );
+      /** 解析后的 flags：同样 memo，避免下游 effect 被逐帧新对象惊扰。 */
+      const resolvedFlags = useMemo<TranscriptFlags>(
+        () => ({richText: flags?.richText ?? false, menuDisabled: uiRunning}),
+        [flags?.richText, uiRunning],
+      );
       const {tokens} = useTheme();
       const webRef = useRef<WebView>(null);
       const [webReady, setWebReady] = useState(false);
-      // webReady 的 ref 镜像：ready/visibility 分支同步写入（不经 effect，避免
-      // 一帧窗口期），postToWeb 的 ready 守卫与分片循环的让步点检查都读它——
-      // repaintEpoch 重挂（webReady=false）期间在途分片序列随之作废复位。
       const webReadyRef = useRef(false);
-      // Android WebView 恢复显示后可能仍渲染摘除前的旧帧（子会话压栈期间主会话
-      // 跑完、退出后【生成中】残留的根因：屏幕上的是旧帧而非当前 DOM）。
-      // 恢复可见时若隐藏期间发生过改画推送，强制重挂 WebView；ready 后
-      // webReady effect 会自动重发快照，流式部分由 resume 注入链补齐。
+      // repaintEpoch 重挂（Android WebView 恢复显示后可能仍渲染摘除前的旧帧）
       const [repaintEpoch, setRepaintEpoch] = useState(0);
-      // 可见性重挂后 WebView 是空基线：ready 后的首个快照必须直发（force 绕过
-      // uiRunning+streamActive 的 defer）。否则快照 pending 到流式结束，恢复注入
-      // 只补当前 partial，页面只剩当前 assistant 消息在流（v1.5.9 回归）。
+      /** T-CU15：ready 超时兜底错误态（onLoad 后 8s 未收到 v:2 ready）。 */
+      const [readyFailed, setReadyFailed] = useState(false);
+      /** 能力协商：未声明 `composer-dock` → 输入区降级提示（不是静默不可点）。 */
+      const [composerDockCapable, setComposerDockCapable] = useState(false);
+
       const forceSnapshotOnReadyRef = useRef(false);
       const statePushSinceResumeRef = useRef(0);
       const prevStreamTextRef = useRef('');
@@ -432,45 +522,65 @@ export const ChatTranscriptWebView = memo(
         restoreScroll?: TranscriptRestoreScroll;
       } | null>(null);
       const streamRafRef = useRef<number | null>(null);
-      /** batch-off 回滚路径：按到达序排队，RAF 内逐条 post streamDelta（禁止 text/thinking 分区重排）。 */
       const pendingStreamDeltaSegmentsRef = useRef<StreamWireChunk[]>([]);
       const pendingStreamSegmentsRef = useRef<StreamWireChunk[]>([]);
-      /**
-       * 当前活跃尾块累积（spec §6 块级化后不再全量）：块边界切分出的完成
-       * 块经 streamBlockCommit 下发后，此处重置为剩余尾块。全量口径 =
-       * streamCommittedXxxPartsRef.join('') + 此处（abort overlay 物化用）。
-       */
       const streamTextAccumRef = useRef('');
       const streamThinkingAccumRef = useRef('');
-      /** 已提交完成块源文本（块级渲染）：与活跃尾块拼接还原全量流式文本。 */
       const streamCommittedTextPartsRef = useRef<string[]>([]);
       const streamCommittedThinkingPartsRef = useRef<string[]>([]);
-      /**
-       * webview 块级渲染能力（B-2）：ready 上报 capabilities 声明
-       * streamBlockCommit 后为 true。未声明（旧 dist / ready 缺载荷）时不
-       * 发 streamBlockCommit、活跃尾块不切分（html 退回全量累积）——避免
-       * webview 静默丢弃块提交导致「流中只剩尾块」。
-       */
       const streamBlockCapableRef = useRef(false);
       const richTextRef = useRef(flags?.richText ?? false);
       const streamActiveRef = useRef(false);
-      /** streamCommit 已写入的行 id，用于 messages effect 去重 snapshot。 */
       const lastStreamCommitIdsRef = useRef<readonly string[]>([]);
-      /**
-       * 当前在途快照分片的代次（null=无分片在途）。新快照开新代次时覆盖，
-       * 旧循环在让步点检测到代次被顶替即中止；流式 RAF flush 与三通道
-       * （appendTailRows / prependPage / streamCommit）的发送入口读它决定
-       * 是否推迟（T-S3 + C-orch-1：分片序列必须完整先于后续改画消息）。
-       */
       const inFlightSnapshotGenerationRef = useRef<number | null>(null);
-      /**
-       * 快照分片在途期间被推迟的动作队列（单一容器保序，C-orch-1）：
-       * - streamFlush 占位：流式 RAF flush 尝试时分片在途（T-S3，原布尔标记）；
-       * - post：三通道已构建好的消息（末片旧闭包快照会整体替换基线，直发
-       *   会被抹掉——推迟到末片 post 之后按入队原序补发）。
-       * 重挂（webReady=false）时队列一并丢弃，恢复注入链负责重推。
-       */
       const deferredSnapshotActionsRef = useRef<DeferredSnapshotAction[]>([]);
+
+      /* ---- composer 域的基线 ref（IME 防线 M1/M2/M4/M5/M7 的落点） ---- */
+
+      /** M1 · web 侧文本基线：`change` 到达时**先推进再上抛**（详见 handleUpstream change 分支）。 */
+      const webTextRef = useRef<string | null>(null);
+      /** M4 · web 侧选区基线：web 上报或我们下发，用于回声抑制。 */
+      const lastSelectionRef = useRef<ComposerInputSelection | null>(null);
+      /**
+       * M5 · 短暂受控选区：外部写入/命令式写入给出的「光标期望」。
+       * web 上报用户选区即解除（对齐 main 版：原生已应用选区后置空）。
+       */
+      const [pendingSelection, setPendingSelection] =
+        useState<ComposerInputSelection | null>(null);
+
+      const readyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+        null,
+      );
+
+      const onComposerChangeTextRef = useRef(onComposerChangeText);
+      const onComposerSelectionChangeRef = useRef(onComposerSelectionChange);
+      const onDockActionRef = useRef(onDockAction);
+      onComposerChangeTextRef.current = onComposerChangeText;
+      onComposerSelectionChangeRef.current = onComposerSelectionChange;
+      onDockActionRef.current = onDockAction;
+
+      const clearReadyTimeout = useCallback(() => {
+        if (readyTimeoutRef.current != null) {
+          clearTimeout(readyTimeoutRef.current);
+          readyTimeoutRef.current = null;
+        }
+      }, []);
+
+      /**
+       * T-CU15：重新计时。每次 onLoad / repaintEpoch 重挂 / 切会话重挂都重置——
+       * 重挂后是新文档、新一轮握手，不能拿上一轮的计时器判超时。
+       */
+      const armReadyTimeout = useCallback(() => {
+        clearReadyTimeout();
+        readyTimeoutRef.current = setTimeout(() => {
+          readyTimeoutRef.current = null;
+          if (!webReadyRef.current) {
+            setReadyFailed(true);
+          }
+        }, READY_TIMEOUT_MS);
+      }, [clearReadyTimeout]);
+
+      useEffect(() => clearReadyTimeout, [clearReadyTimeout]);
 
       const clearLocalStreamBuffers = useCallback(() => {
         if (streamRafRef.current != null) {
@@ -499,27 +609,29 @@ export const ChatTranscriptWebView = memo(
         defaultScrollToBottomRef.current = defaultScrollToBottom;
       }, [defaultScrollToBottom]);
 
-      const postToWeb = useCallback((message: HostToTranscriptMessage) => {
-        // ready 守卫：repaintEpoch 重挂期间（webReady=false）不再向未就绪的
-        // WebView 投递——分片序列随之复位，ready 后由 force 快照重建基线。
+      /**
+       * 唯一的下行出口。
+       *
+       * 纪律 (A)：只有改画三通道的调用方才允许改走 `postOrDeferSnapshotPaint`；
+       * composer / dock 域一律直接走这里（不排队、不 defer）。
+       */
+      const postToWeb = useCallback((message: ConversationHostMessage) => {
         if (!webReadyRef.current) {
           return;
         }
         if (STATE_PAINTING_HOST_MESSAGES.has(message.type)) {
           statePushSinceResumeRef.current += 1;
         }
-        webRef.current?.postMessage(encodeHostToTranscript(message));
+        webRef.current?.postMessage(encodeHostToConversation(message));
       }, []);
 
       /**
-       * 改画基线消息的推迟发送（C-orch-1）：分片在途时 appendTailRows /
-       * prependPage / streamCommit 直发会插进分片序列中间——web 侧先按
-       * concat 渲染增量行，末片 applySnapshot 再用旧闭包快照整体替换，
-       * 增量行被抹掉且 RN 侧去重标志已推进、缺口留存。此处入 deferred
-       * 队列（与流式 flush 占位同容器保序），末片 post 后统一按原序补发。
+       * 改画基线消息的推迟发送（C-orch-1）：分片在途时三通道直发会插进分片序列
+       * 中间，末片 applySnapshot 用旧闭包整体替换会把增量行抹掉。此处入 deferred
+       * 队列，末片 post 后按入队原序补发。
        */
       const postOrDeferSnapshotPaint = useCallback(
-        (message: HostToTranscriptMessage) => {
+        (message: ConversationHostMessage) => {
           if (inFlightSnapshotGenerationRef.current != null) {
             deferredSnapshotActionsRef.current.push({kind: 'post', message});
             return;
@@ -529,10 +641,7 @@ export const ChatTranscriptWebView = memo(
         [postToWeb],
       );
 
-      /**
-       * 流式 flush 占位入队（T-S3，原布尔标记并入单队列）：队列已有占位则
-       * 不重复——flush 幂等（segments 空转），占位只承担「末片后补发一次」。
-       */
+      /** 流式 flush 占位入队（幂等，flush 本身空转安全）。 */
       const enqueueDeferredStreamFlush = useCallback(() => {
         for (const action of deferredSnapshotActionsRef.current) {
           if (action.kind === 'streamFlush') {
@@ -547,7 +656,7 @@ export const ChatTranscriptWebView = memo(
           return;
         }
         postToWeb({
-          v: 1,
+          v: CONVERSATION_BRIDGE_V,
           type: 'streamToolInvoking',
           payload: {active: streamGenerating},
         });
@@ -560,16 +669,7 @@ export const ChatTranscriptWebView = memo(
         tailText: string;
       };
 
-      /**
-       * 块感知切分（spec §6）：对活跃尾块累积跑块边界判定，推进「已提交块
-       * 游标」（尾块重置为剩余、完成块入 committed parts）并返回待发块提交。
-       * 只切分不 post——delta 先行、块提交随后（顺序约束）：webview 在块
-       * 提交的尾块重置中洗掉 delta 携带的已完成块字符，最终态无重复。
-       * 超限判定按块（T-N6）：单块超 12k 仅该块 html 降级 undefined，
-       * 已提交块与终态/历史路径的全量语义互不影响。
-       * B-2：webview 未声明 streamBlockCommit 能力时恒返回 []——累积游标不
-       * 推进，delta/batch 的 html 自然保持全量累积（旧契约语义）。
-       */
+      /** 块感知切分（照搬 ChatTranscriptWebView；未声明能力时恒返回 []）。 */
       const takeStreamBlockSplits =
         useCallback((): PendingStreamBlockSplit[] => {
           if (
@@ -616,14 +716,12 @@ export const ChatTranscriptWebView = memo(
         (splits: readonly PendingStreamBlockSplit[]) => {
           for (const split of splits) {
             const lastCommitIndex = split.commits.length - 1;
-            for (let i = 0; i < split.commits.length; i++) {
+            for (let i = 0; i <= lastCommitIndex; i += 1) {
               const commit = split.commits[i]!;
-              // C-orch-1：尾块载荷只挂在每 kind 每次切分的最后一个 commit 上
-              // ——同 split 内所有 commit 的尾块态相同，重复携带徒增逐帧载荷；
-              // webview 缺载荷时保持尾块现状（不重置）。
+              // 尾块载荷只挂每 kind 每次切分的最后一个 commit（同 split 内尾块态相同）
               const carriesTail = i === lastCommitIndex;
               postToWeb({
-                v: 1,
+                v: CONVERSATION_BRIDGE_V,
                 type: 'streamBlockCommit',
                 payload: {
                   kind: split.kind,
@@ -641,8 +739,6 @@ export const ChatTranscriptWebView = memo(
       );
 
       const flushPendingStreamDeltas = useCallback(() => {
-        // 空队列早退（B-4）：不占 RAF 坑位——否则本可同帧发出的 batch 被
-        // 空 flush 推迟一帧（分片在途补发路径 flushDelta+flushBatch 连调时尤甚）。
         if (pendingStreamDeltaSegmentsRef.current.length === 0) {
           return;
         }
@@ -651,8 +747,6 @@ export const ChatTranscriptWebView = memo(
         }
         streamRafRef.current = requestAnimationFrame(() => {
           streamRafRef.current = null;
-          // 快照分片在途：推迟流式 post（segments 留队），末片 post 后由快照
-          // 流程统一补发——保证分片序列完整先于后续 streamDelta（T-S3）。
           if (inFlightSnapshotGenerationRef.current != null) {
             enqueueDeferredStreamFlush();
             return;
@@ -662,11 +756,6 @@ export const ChatTranscriptWebView = memo(
             return;
           }
           pendingStreamDeltaSegmentsRef.current = [];
-          // WHY（中文）：
-          // - spec 要求 RN 保留 `prepareStreamTailHtml` 产物并透传 `payload.html`。
-          // - Web 侧在 richText 开启时会优先用 html 走替换路径，以保证 text/thinking 的流式 rich 行为一致。
-          // - 块级化（spec §6）：先切分推进尾块游标——html 随之只覆盖活跃尾块；
-          //   delta 先行、streamBlockCommit 随后（webview 尾块重置洗掉块字符重复）。
           const richText = richTextRef.current;
           const blockSplits = takeStreamBlockSplits();
           const textHtml = prepareStreamTailHtml(
@@ -677,10 +766,9 @@ export const ChatTranscriptWebView = memo(
             streamThinkingAccumRef.current,
             richText,
           );
-
           for (const seg of segments) {
             postToWeb({
-              v: 1,
+              v: CONVERSATION_BRIDGE_V,
               type: 'streamDelta',
               payload: {
                 kind: seg.kind,
@@ -699,7 +787,6 @@ export const ChatTranscriptWebView = memo(
       ]);
 
       const flushPendingStreamBatch = useCallback(() => {
-        // 空队列早退（B-4）：同上，不占 RAF 坑位。
         if (pendingStreamSegmentsRef.current.length === 0) {
           return;
         }
@@ -708,7 +795,6 @@ export const ChatTranscriptWebView = memo(
         }
         streamRafRef.current = requestAnimationFrame(() => {
           streamRafRef.current = null;
-          // 同 flushPendingStreamDeltas：分片在途时推迟 batch post。
           if (inFlightSnapshotGenerationRef.current != null) {
             enqueueDeferredStreamFlush();
             return;
@@ -718,8 +804,6 @@ export const ChatTranscriptWebView = memo(
             return;
           }
           pendingStreamSegmentsRef.current = [];
-          // 同 flushPendingStreamDeltas：块级化先切分推进尾块游标，
-          // batch 的 html 只覆盖尾块，块提交随后补发。
           const richText = richTextRef.current;
           const blockSplits = takeStreamBlockSplits();
           const textHtml = prepareStreamTailHtml(
@@ -731,7 +815,7 @@ export const ChatTranscriptWebView = memo(
             richText,
           );
           postToWeb({
-            v: 1,
+            v: CONVERSATION_BRIDGE_V,
             type: 'streamBatch',
             payload: {
               segments: segments.map(seg => ({
@@ -781,9 +865,6 @@ export const ChatTranscriptWebView = memo(
             if (seg.delta.length === 0) {
               continue;
             }
-            // 累积单点化（B-3）：与 queueStreamDelta 对称，入队时即累加；
-            // RAF 内只做切分与发送——否则同一 RAF 内先 batch 后 delta 时
-            // 累积顺序与线上顺序倒置，并被块提交固化。
             if (seg.kind === 'text') {
               streamTextAccumRef.current += seg.delta;
             } else {
@@ -796,29 +877,102 @@ export const ChatTranscriptWebView = memo(
         [webReady, flushPendingStreamBatch],
       );
 
+            /**
+       * `init` 是 ready 后的一次性快照：取当拍值，此后变化各有专线消息
+       * （richText/menuDisabled → `flagsUpdate`；dock 侧一切 → `composerState`）。
+       *
+       * 取「每次渲染刷新 ref、发送时读 ref」而不是把字段挂 `useCallback` 依赖：
+       * 后者会让 `sendInit` 的身份随 `inputDisabled` / `placeholder` 变，
+       * 于是 `useEffect([webReady, sendInit])` 在这些字段变化时**重发 init**——
+       * 既多一条消息，又会打乱恢复链四消息的固定顺序。
+       */
+      const initSnapshotRef = useRef({
+        theme: conversationThemeFromTokens(tokens),
+        flags: resolvedFlags,
+        composer: {
+          mode: CONVERSATION_COMPOSER_MODE,
+          disabled: composerInputDisabled,
+          metrics: CONVERSATION_COMPOSER_METRICS,
+          placeholder: composerPlaceholder,
+          safeAreaBottom,
+        },
+      });
+      initSnapshotRef.current = {
+        theme: conversationThemeFromTokens(tokens),
+        flags: resolvedFlags,
+        composer: {
+          mode: CONVERSATION_COMPOSER_MODE,
+          disabled: composerInputDisabled,
+          metrics: CONVERSATION_COMPOSER_METRICS,
+          placeholder: composerPlaceholder,
+          safeAreaBottom,
+        },
+      };
+
+      /**
+       * 恢复链第 1 步 · 聚合 `init`。
+       *
+       * **契约（CR 首评 OQ 定案 ②）**：`readOnly` / `placeholder` / `disabled` 的
+       * **唯一真源是 `composerState`**；init 只管 metrics / mode / safeAreaBottom。
+       * 这里那份 `disabled` / `placeholder` 是同一渲染拍点的初值快照（web 侧
+       * `applyInit` 需要才能摆对首帧），不是第二真源——紧随其后的第 2 步
+       * `composerState` 才是真值。改动会让首帧与真源短暂分叉。
+       */
       const sendInit = useCallback(() => {
-        const resolvedFlags: TranscriptFlags = {
-          richText: flags?.richText ?? false,
-          menuDisabled: uiRunning,
+        const snapshot = initSnapshotRef.current;
+        postToWeb({
+          v: CONVERSATION_BRIDGE_V,
+          type: 'init',
+          payload: {
+            theme: snapshot.theme,
+            flags: snapshot.flags,
+            composer: snapshot.composer,
+          },
+        });
+      }, [postToWeb]);
+
+      /** 恢复链第 2 步 · `composerState`（dock 域**直发**，纪律 A）。 */
+      const sendComposerState = useCallback(() => {
+        const state: ConversationComposerState = {
+          inputDisabled: composerInputDisabled,
+          hasModel: composerHasModel,
+          sendDisabled: composerSendDisabled,
+          running: composerRunning,
+          ...(composerError != null && composerError !== ''
+            ? {error: composerError}
+            : {}),
+          fullscreenEnabled: composerFullscreenEnabled,
+          placeholder: composerPlaceholder,
+          chips: composerChips ?? [],
+          keyboardUp: composerKeyboardUp,
+          // 必达（定案 ①）：不下 undefined，让 web 侧永远拿到可渲染的源
+          typeahead: composerTypeahead,
         };
         postToWeb({
-          v: 1,
-          type: 'init',
-          payload: {theme: themeFromTokens(tokens), flags: resolvedFlags},
+          v: CONVERSATION_BRIDGE_V,
+          type: 'composerState',
+          payload: state,
         });
-      }, [flags?.richText, postToWeb, tokens, uiRunning]);
+      }, [
+        postToWeb,
+        composerInputDisabled,
+        composerHasModel,
+        composerSendDisabled,
+        composerRunning,
+        composerError,
+        composerFullscreenEnabled,
+        composerPlaceholder,
+        composerChips,
+        composerKeyboardUp,
+        composerTypeahead,
+      ]);
 
-      // C1: sessionSnapshot must not depend on streamingText/streamingThinking — stream tail only via streamDelta.
-      // 分片化（init-busy-yield Step 6）：大快照按片构建+enrich+编码 post，
-      // 片间量子让步防长任务；每次调用开新代次，在途旧代次在让步点作废。
+      /** 快照分片化（照搬 ChatTranscriptWebView 全部语义）。 */
       const sendSessionSnapshotNow = useCallback(
         async (
           scrollIntent: TranscriptScrollIntent,
           restoreScroll?: TranscriptRestoreScroll,
         ) => {
-          // 起点固定：分片跨帧，循环全程只读本闭包捕获的这份快照——
-          // transcriptListOptions 每次渲染都重建，让步后的重渲染绝不能
-          // 改变本次快照的构建口径。
           const snapshotMessages = messages;
           const listOptions = transcriptListOptions;
           const richText = flags?.richText ?? false;
@@ -827,17 +981,10 @@ export const ChatTranscriptWebView = memo(
           const generating = uiRunning;
           const generation = ++snapshotGenerationCounter;
           inFlightSnapshotGenerationRef.current = generation;
-          // A-01：打点起点必须早于两段 O(n) 预扫（配对上下文 + 分桶量测），
-          // 否则它们形成的百 ms 级独占段在回滚轴上不可见、AC-3 无法核验。
-          // 两站 elapsed 之差 = 预扫独占耗时（内含 C-02 的 UTF-8 真字节量测）。
           rollbackTimingLog(
             `snapshot build begin (msgs=${snapshotMessages.length})`,
           );
-          // 预扫全局配对上下文（Step 5 同款 O(n) 一次扫描）：逐片行转换共享，
-          // 分片拼接结果与单次全量 buildTranscriptRows 严格全等。
           const pairingContext = buildToolPairingContext(snapshotMessages);
-          // 先量测后分桶（Step 3 字节预算）：chunkTotal 预计算 = 桶数，
-          // chunk 0 的 payload 即携带最终值（与旧「条数除法」同构）。
           const chunkBounds = planSnapshotChunkBounds(snapshotMessages);
           const chunkTotal = chunkBounds.length;
           rollbackTimingLog(
@@ -849,8 +996,6 @@ export const ChatTranscriptWebView = memo(
           );
           try {
             for (let chunkIndex = 0; chunkIndex < chunkTotal; chunkIndex += 1) {
-              // 让步点校验：代次被新快照顶替（六条 force/直发路径均收敛到
-              // 这里开新代次）或 WebView 重挂（webReady=false）即中止丢弃。
               if (
                 inFlightSnapshotGenerationRef.current !== generation ||
                 !webReadyRef.current
@@ -861,13 +1006,9 @@ export const ChatTranscriptWebView = memo(
                 return;
               }
               const [chunkStart, chunkEnd] = chunkBounds[chunkIndex]!;
-              const chunkMessages = snapshotMessages.slice(
-                chunkStart,
-                chunkEnd,
-              );
               const rows = enrichTranscriptRows(
                 buildTranscriptRowsWithContext(
-                  chunkMessages,
+                  snapshotMessages.slice(chunkStart, chunkEnd),
                   pairingContext,
                   listOptions,
                 ),
@@ -875,13 +1016,12 @@ export const ChatTranscriptWebView = memo(
               );
               const isLastChunk = chunkIndex === chunkTotal - 1;
               postToWeb({
-                v: 1,
+                v: CONVERSATION_BRIDGE_V,
                 type: 'sessionSnapshot',
                 payload: {
                   sessionKey: snapshotSessionKey,
                   rows,
                   hasMore: snapshotHasMore,
-                  // 快照级标量每片重复携带；滚动字段仅末片（T-S4 聚合口径）。
                   ...(isLastChunk ? {scrollIntent} : {}),
                   ...(generating ? {generating: true} : {}),
                   ...(isLastChunk &&
@@ -899,25 +1039,18 @@ export const ChatTranscriptWebView = memo(
                   rows.length
                 })`,
               );
-              // 回滚窗口内的快照分片也上回滚轴（窗口外 no-op）——build+post
-              // 是回滚链收尾的第三段长任务来源，修复前后对比依赖此站数据。
               rollbackTimingLog(
                 `snapshot chunk ${chunkIndex + 1}/${chunkTotal} posted (rows=${rows.length})`,
               );
               if (!isLastChunk) {
-                // 片间量子让步：防止分片构建本身又变成长任务。
                 await yieldFn();
               }
             }
-            // 分片全部发完后统一同步（末片 post 之后）：保持「工具调用条与
-            // 快照末态一致」的既有时序语义；单片快照等价旧单包行为。
             syncStreamToolInvoking();
             bootTimingLog(`snapshot all chunks done (gen=${generation})`);
             rollbackTimingLog(
               `snapshot all chunks done (gen=${generation}, chunks=${chunkTotal})`,
             );
-            // 补发分片期间被推迟的动作（单一队列按入队原序，末片 post 先于
-            // 全部补发消息）：T-S3 流式 flush + C-orch-1 三通道 post。
             const deferredActions = deferredSnapshotActionsRef.current;
             if (deferredActions.length > 0) {
               deferredSnapshotActionsRef.current = [];
@@ -930,18 +1063,13 @@ export const ChatTranscriptWebView = memo(
                 }
               }
             }
-            // 快照完成信号（rollback-large-jank Step 5）：末片 post 且
-            // deferred actions 排空之后发出——aborted 路径（代次被顶替/
-            // 重挂）在循环内 return，不会走到这里。消费端（runRollback）
-            // 据此错峰 token 全量重算。
             onSnapshotComplete?.();
           } finally {
             if (inFlightSnapshotGenerationRef.current === generation) {
               inFlightSnapshotGenerationRef.current = null;
               if (!webReadyRef.current) {
-                // 重挂作废：推迟队列（流式 flush 占位 + 三通道 post）一并
-                // 丢弃，恢复注入链负责重推（与旧协议下 post 到未就绪
-                // WebView 即丢失等价）。
+                // 重挂作废：推迟队列整队丢弃（草稿不靠它保——草稿由 composerState
+                // 之后的 setText 恢复链负责）
                 deferredSnapshotActionsRef.current = [];
               }
             }
@@ -959,7 +1087,6 @@ export const ChatTranscriptWebView = memo(
           transcriptListOptions,
           flushPendingStreamDeltas,
           flushPendingStreamBatch,
-          enqueueDeferredStreamFlush,
         ],
       );
 
@@ -982,10 +1109,6 @@ export const ChatTranscriptWebView = memo(
           force?: boolean,
         ) => {
           if (force) {
-            // D4：force 直发——消费 pending（沿用其 intent/restoreScroll）、
-            // 取消 defer timer、绕过 streamActiveRef 拦截，且不再设置新的 defer timer。
-            // needsFullSnapshot 场景下快照必须先于后续 streamDelta 到达，
-            // 否则 web 端会先渲染旧基线再被快照回跳。
             if (snapshotDeferTimerRef.current != null) {
               clearTimeout(snapshotDeferTimerRef.current);
               snapshotDeferTimerRef.current = null;
@@ -1027,10 +1150,6 @@ export const ChatTranscriptWebView = memo(
         [uiRunning, sendSessionSnapshotNow],
       );
 
-      // sendSessionSnapshot 的闭包身份随渲染变化（内部挂着每次渲染重建的
-      // transcriptListOptions 与 messages）。pendingSubagentSessions 快照重发
-      // 只应由映射本身的变化触发，否则任何无关重渲染（如 streamingText 更新）
-      // 都会多发一次全量 sessionSnapshot——用 ref 取最新实现，依赖里只留映射。
       const sendSessionSnapshotRef = useRef(sendSessionSnapshot);
       useEffect(() => {
         sendSessionSnapshotRef.current = sendSessionSnapshot;
@@ -1053,10 +1172,8 @@ export const ChatTranscriptWebView = memo(
           if (rows.length === 0) {
             return;
           }
-          // C-orch-1：分片在途时入 deferred 队列，末片 post 后补发——直发会
-          // 被 web 侧末片的旧闭包整体替换抹掉。
           postOrDeferSnapshotPaint({
-            v: 1,
+            v: CONVERSATION_BRIDGE_V,
             type: 'appendTailRows',
             payload: {rows},
           });
@@ -1064,7 +1181,6 @@ export const ChatTranscriptWebView = memo(
         [
           postOrDeferSnapshotPaint,
           flags?.richText,
-          agentRunning,
           messages,
           transcriptListOptions,
         ],
@@ -1088,12 +1204,8 @@ export const ChatTranscriptWebView = memo(
           lastStreamCommitIdsRef.current = rows
             .filter(row => row.kind === 'message')
             .map(row => row.id);
-          // C-orch-1：分片在途时 streamCommit 推迟到末片后补发。本地状态
-          // （buffer 清理 / streamActive / 去重 ids）照常同步推进——只推迟
-          // post 本身。tryCommitStreamTail / commitAbortOverlaySnapshot /
-          // commitSyntheticAssistantRow 均经此入口，第四入口天然覆盖。
           postOrDeferSnapshotPaint({
-            v: 1,
+            v: CONVERSATION_BRIDGE_V,
             type: 'streamCommit',
             payload: {rows, scrollIntent},
           });
@@ -1145,21 +1257,13 @@ export const ChatTranscriptWebView = memo(
           prevFirstMessageIdRef.current = allMessages[0]?.id;
           return true;
         },
-        [
-          webReady,
-          flags?.richText,
-          agentRunning,
-          commitStreamTail,
-          transcriptListOptions,
-        ],
+        [webReady, flags?.richText, commitStreamTail, transcriptListOptions],
       );
 
       const commitAbortOverlaySnapshot = useCallback((): boolean => {
         if (!webReady) {
           return false;
         }
-        // 块级化后本地累积是「尾块」口径：全量 = 已提交块 parts + 活跃尾块
-        //（块边界不变式 blocks.join('') + activeTail === 原文保证零丢失）。
         const text =
           streamCommittedTextPartsRef.current.join('') +
           streamTextAccumRef.current;
@@ -1190,13 +1294,6 @@ export const ChatTranscriptWebView = memo(
         return true;
       }, [webReady, flags?.richText, commitStreamTail]);
 
-      /**
-       * 轻量合成提交（Step 6 中断现场渲染）：与 commitAbortOverlaySnapshot
-       * 的差异在数据源——后者读组件本地累积（streamTextAccumRef）且以
-       * streamActiveRef 为前置（重启水合出的 interrupted 单元两者皆空，
-       * 直接调用必 false）；本方法把单元投影携带的 partial 作为参数传入，
-       * 不依赖任何本地状态，专职「中断现场的只读终态行」呈现。
-       */
       const commitSyntheticAssistantRow = useCallback(
         (text: string, thinking: string): boolean => {
           if (!webReady) {
@@ -1225,7 +1322,6 @@ export const ChatTranscriptWebView = memo(
         [webReady, flags?.richText, commitStreamTail],
       );
 
-      /** handle 的 forceSnapshot 叶子：经 ref 取最新快照实现（force 直发）。 */
       const forceSnapshotNow = useCallback(() => {
         sendSessionSnapshotRef.current('preserve', undefined, true);
       }, []);
@@ -1235,7 +1331,7 @@ export const ChatTranscriptWebView = memo(
         const wasActive = streamActiveRef.current;
         streamActiveRef.current = false;
         if (webReady && wasActive) {
-          postToWeb({v: 1, type: 'streamReset', payload: {}});
+          postToWeb({v: CONVERSATION_BRIDGE_V, type: 'streamReset', payload: {}});
           flushPendingSnapshot();
           syncStreamToolInvoking();
         }
@@ -1247,6 +1343,42 @@ export const ChatTranscriptWebView = memo(
         syncStreamToolInvoking,
       ]);
 
+      /**
+       * M7 · 命令式整段写入。
+       *
+       * 与 M2 的**相反**规则：这里**不作废**选区基线，反而把 `lastSelectionRef`
+       * 推进到目标位——程序化写入自带 selection，web 落位即期望位，保留基线能白赚
+       * 一次回声抑制（若置 null，随后的 setSelection 会多下发一条同值命令，
+       * 在 IME 组合态上就是一次多余的光标重摆）。
+       */
+      const setComposerTextNow = useCallback(
+        (text: string, cursor?: number) => {
+          if (!webReady) {
+            // 未就绪不写基线：ready 后的恢复链第 3 步会用最新 composerText 补写
+            return;
+          }
+          webTextRef.current = text;
+          const pos = clampCursor(cursor ?? text.length, text.length);
+          const next = {start: pos, end: pos};
+          lastSelectionRef.current = next;
+          setPendingSelection(next);
+          postToWeb({
+            v: CONVERSATION_BRIDGE_V,
+            type: 'setText',
+            payload: {
+              text,
+              selectionStart: pos,
+              selectionEnd: pos,
+            },
+          });
+          // 与现网 ComposerAtPathInput 同口径：程序化写入同样回调 onChangeText
+          // （controller 的 text / 草稿靠它同步）与合成选区事件。
+          onComposerChangeTextRef.current?.(text);
+          onComposerSelectionChangeRef.current?.(next);
+        },
+        [webReady, postToWeb],
+      );
+
       useImperativeHandle(
         ref,
         () => ({
@@ -1257,6 +1389,7 @@ export const ChatTranscriptWebView = memo(
           commitAbortOverlaySnapshot,
           forceSnapshot: forceSnapshotNow,
           commitSyntheticAssistantRow,
+          setComposerText: setComposerTextNow,
         }),
         [
           queueStreamDelta,
@@ -1266,21 +1399,20 @@ export const ChatTranscriptWebView = memo(
           commitAbortOverlaySnapshot,
           forceSnapshotNow,
           commitSyntheticAssistantRow,
+          setComposerTextNow,
         ],
       );
 
       const sendPrependPage = useCallback(
         (prependedCount: number) => {
           const richText = flags?.richText ?? false;
-          const olderMessages = messages.slice(0, prependedCount);
-          // C-orch-1：与 appendTailRows 同款推迟——分片在途时入队，末片后补发。
           postOrDeferSnapshotPaint({
-            v: 1,
+            v: CONVERSATION_BRIDGE_V,
             type: 'prependPage',
             payload: {
               rows: enrichTranscriptRows(
                 buildTranscriptRows(
-                  olderMessages,
+                  messages.slice(0, prependedCount),
                   undefined,
                   transcriptListOptions,
                 ),
@@ -1290,56 +1422,99 @@ export const ChatTranscriptWebView = memo(
             },
           });
         },
-        [
-          messages,
-          postOrDeferSnapshotPaint,
-          flags?.richText,
-          agentRunning,
-          transcriptListOptions,
-        ],
+        [messages, postOrDeferSnapshotPaint, flags?.richText, transcriptListOptions],
       );
 
-      const handleMessage = useCallback(
+      const handleUpstream = useCallback(
         (event: WebViewMessageEvent) => {
-          const raw = event.nativeEvent.data;
-          let message;
-          try {
-            message = decodeTranscriptToHost(raw);
-          } catch {
+          // 宽松 decoder（纪律 C）：坏 JSON 静默丢弃；ready 由 v===2 判。
+          const decoded = decodeConversationUpstream(event.nativeEvent.data);
+          if (!decoded.ok) {
+            if (decoded.reason === 'stale-ready') {
+              // 旧 dist 的 ready：不置 webReady，等 8s 兜底错误态
+              bootTimingLog('stale ready (v !== 2) ignored');
+            }
             return;
           }
+          const message = decoded.message;
+          const payload = message.payload;
+
+          /* ---- dock 域上行（v:2） ---- */
+          if (message.type === 'dockAction') {
+            if (conversationDockActionIncludes(payload.action)) {
+              onDockActionRef.current?.(payload.action);
+            }
+            return;
+          }
+
+          /* ---- ready（v:2 单条；能力协商全集） ---- */
+          if (message.type === 'ready') {
+            webReadyRef.current = true;
+            setWebReady(true);
+            setReadyFailed(false);
+            clearReadyTimeout();
+            // 新文档 = 新基线：草稿基线作废（强制恢复链重发 setText，否则草稿丢失）
+            webTextRef.current = null;
+            lastSelectionRef.current = null;
+            setPendingSelection(null);
+            const capabilities = readReadyCapabilities(payload);
+            streamBlockCapableRef.current = transcriptCapabilitiesInclude(
+              capabilities,
+              TRANSCRIPT_CAPABILITY_STREAM_BLOCK_COMMIT,
+            );
+            // 「未声明 = 不支持」：未带 composer-dock 即旧 dist，输入区降级
+            setComposerDockCapable(
+              conversationCapabilitiesInclude(
+                capabilities,
+                CONVERSATION_CAPABILITY_COMPOSER_DOCK,
+              ),
+            );
+            timingLog('conversation webview ready (v2 handshake done)');
+            bootTimingLog('conversation webview ready (v2 handshake done)');
+            onReady?.();
+            onWebMermaidViewerOpenChange?.(false);
+            return;
+          }
+
+          /* ---- composer 域上行（v:1 单例，change / selectionChange / focus / blur） ---- */
+          if (message.type === 'change') {
+            // M1 + M6：打字真源在 web——**先推进差分基线再上抛，绝不回写 setText**。
+            // 不推进的话父层把文本原样写回 composerText 时会被下面的 effect 误判成
+            // 「外部写入」，于是按上一拍 cursor 强制摆一次选区——打在正在输入
+            // （尤其 IME 组合态）的 textarea 上会把光标拽回去一两个字。
+            const text = String(payload.text ?? '');
+            webTextRef.current = text;
+            onComposerChangeTextRef.current?.(text);
+            return;
+          }
+          if (message.type === 'selectionChange') {
+            const next = {
+              start: finiteOrNull(payload.start) ?? 0,
+              end: finiteOrNull(payload.end) ?? 0,
+            };
+            // M5：用户选区到达即解除短暂受控
+            lastSelectionRef.current = next;
+            setPendingSelection(null);
+            onComposerSelectionChangeRef.current?.(next);
+            return;
+          }
+          // 键盘链路由 keyboard-controller insets 驱动，focus / blur 无消费。
+          // heightChange 不上行（heightReport: false，高度由文档内布局消化）。
+
+          /* ---- 转录域上行（v:1 单例） ---- */
           if (message.type === 'copyCode') {
-            // 代码块复制按钮：webview 收集源码文本，RN 侧原生剪贴板落盘
-            const code = String(message.payload.code ?? '');
+            const code = String(payload.code ?? '');
             if (code) {
               Clipboard.setString(code);
             }
             return;
           }
-          if (message.type === 'ready') {
-            webReadyRef.current = true;
-            setWebReady(true);
-            // 能力协商（B-2）：以 ready 上报的 capabilities 为准（缺省即不
-            // 支持），未声明 streamBlockCommit 时块级渲染整体退回全量路径。
-            streamBlockCapableRef.current = transcriptCapabilitiesInclude(
-              message.payload.capabilities,
-              TRANSCRIPT_CAPABILITY_STREAM_BLOCK_COMMIT,
-            );
-            timingLog('webview ready (bridge handshake done)');
-            bootTimingLog('webview ready (bridge handshake done)');
-            onReady?.();
-            // WebView 被系统回收重建后，webview 侧全屏层已不存在；对称复位
-            // 上浮给外层的全屏开合状态，避免外层返回键拦截态关真。
-            onWebMermaidViewerOpenChange?.(false);
-            return;
-          }
           if (message.type === 'scrollSnapshot') {
-            const snap = parseScrollSnapshotFromHost(message);
-            if (snap) {
-              // 回滚窗口内的首个 scrollSnapshot 即「web 侧渲染回执」——
-              // web 应用快照后才会 emit 滚动位置（T-S4 末片恰一次语义）。
-              // 窗口内（t0 起 ROLLBACK_TIMING_WINDOW_MS=10s 内）日常滚动同样
-              // 会打点（RN 侧回执与滚动回执不可区分，见 B-01 取舍），超窗后 no-op。
+            const snap = parseConversationScrollSnapshot(
+              message,
+              CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION,
+            );
+            if (snap != null) {
               rollbackTimingLog('web render receipt (scrollSnapshot)');
               lastScrollRef.current = {
                 nearBottom: snap.nearBottom,
@@ -1354,23 +1529,23 @@ export const ChatTranscriptWebView = memo(
             return;
           }
           if (message.type === 'openToolFile') {
-            onOpenToolFile?.(message.payload.path);
+            onOpenToolFile?.(String(payload.path ?? ''));
             return;
           }
           if (message.type === 'linkClick') {
-            onLinkClick?.(message.payload.href);
+            onLinkClick?.(String(payload.href ?? ''));
             return;
           }
           if (message.type === 'openSubagentSession') {
-            onOpenSubagentSession?.(message.payload.sessionId);
+            onOpenSubagentSession?.(String(payload.sessionId ?? ''));
             return;
           }
           if (message.type === 'openSkillDetail') {
             onOpenSkillDetail?.({
-              domain: message.payload.domain,
-              name: message.payload.name,
-              ...(message.payload.projectId != null
-                ? {projectId: message.payload.projectId}
+              domain: payload.domain as TranscriptSkillRef['domain'],
+              name: String(payload.name ?? ''),
+              ...(payload.projectId != null
+                ? {projectId: String(payload.projectId)}
                 : {}),
             });
             return;
@@ -1381,16 +1556,17 @@ export const ChatTranscriptWebView = memo(
             }
             emitChatTranscriptTelemetry({name: 'menu_open'});
             onOpenMessageMenu?.(
-              message.payload.messageId,
-              message.payload.pageX,
-              message.payload.pageY,
+              String(payload.messageId ?? ''),
+              Number(payload.pageX ?? 0),
+              Number(payload.pageY ?? 0),
             );
             return;
           }
           if (message.type === 'messageMenuAction') {
+            // 安全防线不弱化：rollback / fork / set-floor 仍在宿主回调处置
             onMessageMenuAction?.(
-              message.payload.messageId,
-              message.payload.action,
+              String(payload.messageId ?? ''),
+              String(payload.action ?? ''),
             );
             return;
           }
@@ -1410,17 +1586,14 @@ export const ChatTranscriptWebView = memo(
             onWebMermaidViewerOpenChange?.(false);
             return;
           }
-          // WebView 恢复可见：若隐藏期间有改画推送（旧帧风险），强制重挂重绘。
           if (message.type === 'visibility') {
-            if (!message.payload.hidden) {
+            if (!payload.hidden) {
               const dirty = statePushSinceResumeRef.current > 0;
               statePushSinceResumeRef.current = 0;
               if (dirty) {
                 prevStreamTextRef.current = '';
                 prevStreamThinkingRef.current = '';
                 forceSnapshotOnReadyRef.current = true;
-                // 同步置 ref：此后在途快照分片的下一个让步点即因 webReady
-                // 守卫中止（分片序列复位），重挂后由 force 快照重建基线。
                 webReadyRef.current = false;
                 setWebReady(false);
                 setRepaintEpoch(epoch => epoch + 1);
@@ -1431,7 +1604,6 @@ export const ChatTranscriptWebView = memo(
         },
         [
           onReady,
-          onScrollSnapshot,
           onLoadOlder,
           onOpenToolFile,
           onLinkClick,
@@ -1441,27 +1613,64 @@ export const ChatTranscriptWebView = memo(
           onMessageMenuAction,
           onWebMenuOpenChange,
           onWebMermaidViewerOpenChange,
+          onScrollSnapshot,
           uiRunning,
+          clearReadyTimeout,
         ],
       );
 
+      /** 划词三项菜单（spec §划词菜单）：复制 / 全选 / 粘贴。 */
       const handleCustomMenuSelection = useCallback(
         (event: {nativeEvent: {key?: string; selectedText?: string}}) => {
+          const key = String(event.nativeEvent.key ?? '');
+          if (key === 'selectAll') {
+            // dock 域直发（纪律 A）：web handler 判 activeElement 是 textarea 就
+            // select()，否则整篇文档选区
+            postToWeb({
+              v: CONVERSATION_BRIDGE_V,
+              type: 'selectAll',
+              payload: {},
+            });
+            return;
+          }
+          if (key === 'paste') {
+            // 剪贴板读取只经 RN（web 侧不读剪贴板）
+            void Clipboard.getString()
+              .then(text => {
+                if (text === '') {
+                  return;
+                }
+                postToWeb({
+                  v: CONVERSATION_BRIDGE_V,
+                  type: 'composerPaste',
+                  payload: {text},
+                });
+              })
+              .catch(() => undefined);
+            return;
+          }
           if (uiRunning) {
             return;
           }
-          const key = String(event.nativeEvent.key ?? '');
           const selectedText = String(event.nativeEvent.selectedText ?? '')
             .replace(/\u00a0/g, ' ')
             .trim();
-          // 仅复制；消息批注入口已移除
           if (key === 'copy' && selectedText) {
             Clipboard.setString(selectedText);
           }
         },
-        [uiRunning],
+        [uiRunning, postToWeb],
       );
 
+      /* ================================================================== *
+       * 恢复链（ready → 下行四消息固定顺序）
+       *   ① init → ② composerState → ③ 草稿 setText → ④ 快照直发
+       * 顺序由 effect 声明序保证（同一次 commit 内按声明序执行）。改动本段
+       * 顺序前先想清楚：composerState 晚于 setText 会让首帧 textarea 的
+       * readOnly/placeholder 与真源分叉；快照早于 setText 会先渲染空 dock。
+       * ================================================================== */
+
+      // ① init
       useEffect(() => {
         if (!webReady) {
           return;
@@ -1469,14 +1678,79 @@ export const ChatTranscriptWebView = memo(
         sendInit();
       }, [webReady, sendInit]);
 
+      // ② composerState（直发；未声明 composer-dock 时不下发——web 侧不认识它）
+      useEffect(() => {
+        if (!webReady || !composerDockCapable) {
+          return;
+        }
+        sendComposerState();
+      }, [webReady, composerDockCapable, sendComposerState]);
+
+      /**
+       * ③ 草稿 setText + ④ 光标期望 —— M1 / M2 / M5 的合并落点。
+       *
+       * **为什么合并成一个 effect**：旧链分两层（`ComposerAtPathInput` 对齐光标、
+       * `ComposerInputWebView` 下发 setText），两层的触发判据都是「外部文本相对基线
+       * 变了」。合并后判据只有一个（`composerText !== webTextRef.current`），不可能
+       * 出现「setText 发了但光标没摆」或反之；顺序也天然是「先 setText 后
+       * setSelection」（下面的 M4 effect 声明序在后）。
+       *
+       * - **M1**：web 上报的 `change` 已把 `webTextRef` 推到同一文本，所以父层把
+       *   文本原样写回 `composerText` 时本条**早退**，绝不误判成外部写入——这一条
+       *   就是「打字时光标被拽回去一两个字」的根治点（尤其 IME 组合态）。
+       * - **M2**：真外部写入时把选区基线**置 null**。web 侧 value 赋值必然把光标推到
+       *   文末，旧基线从此不成立；若随后的 setSelection 恰与旧基线同值，会被回声
+       *   抑制吞掉，光标就永久停在文末。
+       * - **M5**：光标期望 `pendingSelection` 是**短暂**受控——web 上报用户选区即解除。
+       */
       useEffect(() => {
         if (!webReady) {
           return;
         }
-        const resolvedFlags: TranscriptFlags = {
-          richText: flags?.richText ?? false,
-          menuDisabled: uiRunning,
-        };
+        if (composerText === webTextRef.current) {
+          return;
+        }
+        webTextRef.current = composerText;
+        lastSelectionRef.current = null; // M2：作废选区基线
+        postToWeb({
+          v: CONVERSATION_BRIDGE_V,
+          type: 'setText',
+          payload: {text: composerText},
+        });
+        const pos = clampCursor(
+          composerCursor ?? composerText.length,
+          composerText.length,
+        );
+        const next = {start: pos, end: pos};
+        setPendingSelection(next); // M5：短暂受控
+        onComposerSelectionChangeRef.current?.(next);
+        // 依赖刻意不含 composerCursor：光标只在**文本真变**这一次对齐，
+        // 用户自己移动光标不受控（对齐 ComposerAtPathInput 的原口径）。
+      }, [webReady, composerText, composerCursor, postToWeb]);
+
+      // M4 · setSelection 回声抑制：web 刚上报的同值 = 自身回声，跳过
+      useEffect(() => {
+        if (!webReady || pendingSelection == null) {
+          return;
+        }
+        if (sameSelection(lastSelectionRef.current, pendingSelection)) {
+          return;
+        }
+        lastSelectionRef.current = pendingSelection;
+        postToWeb({
+          v: CONVERSATION_BRIDGE_V,
+          type: 'setSelection',
+          payload: {start: pendingSelection.start, end: pendingSelection.end},
+        });
+      }, [webReady, pendingSelection, postToWeb]);
+
+      /* ---- 其余转录域 effects（照搬 ChatTranscriptWebView） ---- */
+
+      useEffect(() => {
+        if (!webReady) {
+          return;
+        }
+        // resolvedFlags 已 memo 到两个真值字段，依赖直接引它即可
         const prev = prevSentFlagsRef.current;
         if (
           prev != null &&
@@ -1487,20 +1761,22 @@ export const ChatTranscriptWebView = memo(
         }
         prevSentFlagsRef.current = resolvedFlags;
         postToWeb({
-          v: 1,
+          v: CONVERSATION_BRIDGE_V,
           type: 'flagsUpdate',
           payload: {flags: resolvedFlags},
         });
-      }, [webReady, flags?.richText, uiRunning, postToWeb]);
+      }, [webReady, resolvedFlags, postToWeb]);
 
+      // themeUpdate：9 键超集一次下发全文档（init 已带同值时本条会重复一次，
+      // 与旧宿主同款——首帧顺序上 themeUpdate 落在恢复链四消息之后，无副作用）
       useEffect(() => {
         if (!webReady) {
           return;
         }
         postToWeb({
-          v: 1,
+          v: CONVERSATION_BRIDGE_V,
           type: 'themeUpdate',
-          payload: {theme: themeFromTokens(tokens)},
+          payload: {theme: conversationThemeFromTokens(tokens)},
         });
       }, [webReady, tokens, postToWeb]);
 
@@ -1508,22 +1784,19 @@ export const ChatTranscriptWebView = memo(
         if (!webReady || menuCloseSignal === 0) {
           return;
         }
-        postToWeb({v: 1, type: 'closeMenu', payload: {}});
+        postToWeb({v: CONVERSATION_BRIDGE_V, type: 'closeMenu', payload: {}});
       }, [webReady, menuCloseSignal, postToWeb]);
 
       useEffect(() => {
         if (!webReady || mermaidViewerCloseSignal === 0) {
           return;
         }
-        postToWeb({v: 1, type: 'closeMermaidViewer', payload: {}});
+        postToWeb({
+          v: CONVERSATION_BRIDGE_V,
+          type: 'closeMermaidViewer',
+          payload: {},
+        });
       }, [webReady, mermaidViewerCloseSignal, postToWeb]);
-
-      useEffect(() => {
-        if (!webReady || keyboardLiftNonce === 0) {
-          return;
-        }
-        postToWeb({v: 1, type: 'stickIfNearBottom', payload: {}});
-      }, [webReady, keyboardLiftNonce, postToWeb]);
 
       useEffect(() => {
         syncStreamToolInvoking();
@@ -1541,18 +1814,11 @@ export const ChatTranscriptWebView = memo(
         sendSessionSnapshot('preserve');
       }, [webReady, flags?.richText, sendSessionSnapshot]);
 
-      // pendingSubagentSessions 变化时（task 工具创建子会话事件到达），
-      // 重发 snapshot 让 pending task 卡片立即获得 subagentSessionId 可点击。
-      // 注意经 ref 调用：不能把 sendSessionSnapshot 放进依赖（闭包身份不稳定，
-      // 会退化成每次重渲染都发全量快照）。
-      // 必须 force：子会话创建时父 run 必然 uiRunning 且常 streamActive，
-      // 普通 snapshot 会走 defer（挂起到流结束）——子代理长任务期间任务卡
-      // 永远进不了基线，表现为「调用 subagent 时消息不显示，终止后才渲染」。
+      // pendingSubagentSessions 变化时 force 重发快照（照搬，注释见旧组件）
       useEffect(() => {
         if (!webReady) {
           return;
         }
-        // 重挂路径的 ready：空基线快照直发，绕过 defer（见 forceSnapshotOnReadyRef）。
         const forceAfterRepaint = forceSnapshotOnReadyRef.current;
         forceSnapshotOnReadyRef.current = false;
         sendSessionSnapshotRef.current(
@@ -1562,6 +1828,7 @@ export const ChatTranscriptWebView = memo(
         );
       }, [webReady, pendingSubagentSessions]);
 
+      // ④ 快照（恢复链最后一步）
       useEffect(() => {
         if (!webReady) {
           return;
@@ -1584,9 +1851,6 @@ export const ChatTranscriptWebView = memo(
             initialScrollRef.current,
             defaultScrollToBottomRef.current,
           );
-          // needsOpenSnapshot 建立 WebView rows 基线，必须立即送达——
-          // 不能走 sendSessionSnapshot 的 deferred 路径（uiRunning+streamActive
-          // 时会 pending 到流式结束，导致子会话进入时 user 消息不可见）。
           void sendSessionSnapshotNow(intent, restoreScroll);
           emitScrollRestoreTelemetry(intent, restoreScroll);
           emitChatTranscriptTelemetry({
@@ -1616,10 +1880,6 @@ export const ChatTranscriptWebView = memo(
           firstId != null &&
           firstId !== prevFirstId;
 
-        // 压缩/置位后消息数量和首条 ID 不变，但 hidden 字段变了。
-        // 前面的分支（grew/streamCommit/uiRunning）都不命中，会走到 else sendSessionSnapshot，
-        // 但 L976 的 streamCommit 分支可能在 lastStreamCommitIdsRef 非空时提前拦截。
-        // 这里在分流前检测 hidden 变化，确保走 sendSessionSnapshot 而不是被拦截。
         if (
           !grew &&
           prevFirstId === firstId &&
@@ -1629,7 +1889,7 @@ export const ChatTranscriptWebView = memo(
           const prevMsgs = prevMessagesRef.current;
           if (prevMsgs != null && prevMsgs.length === messages.length) {
             let hiddenChanged = false;
-            for (let i = 0; i < messages.length; i++) {
+            for (let i = 0; i < messages.length; i += 1) {
               if (prevMsgs[i]!.hidden !== messages[i]!.hidden) {
                 hiddenChanged = true;
                 break;
@@ -1669,7 +1929,6 @@ export const ChatTranscriptWebView = memo(
           prevMessageCountRef.current = messages.length;
         } else if (uiRunning && grew) {
           const added = messages.slice(prevCount);
-          // WHY: appendTail 无法刷新既有行的 toolPhase；含 tool_use / tool_result 落库需全量 snapshot。
           const needsFullSnapshot =
             added.some(messageIsToolResultsOnly) ||
             added.some(
@@ -1677,8 +1936,6 @@ export const ChatTranscriptWebView = memo(
                 message.role === 'assistant' && messageHasToolUse(message),
             );
           if (needsFullSnapshot) {
-            // force：流式 tail 可能仍在追加（streamActiveRef 为 true），
-            // 但含 tool_use/tool_result 的落库行必须立即进快照基线，不能 pending。
             sendSessionSnapshot('preserve', undefined, true);
           } else {
             sendAppendTailRows(added);
@@ -1695,7 +1952,6 @@ export const ChatTranscriptWebView = memo(
           prevFirstMessageIdRef.current = firstId;
           prevMessageCountRef.current = messages.length;
         } else {
-          // WHY: 回滚后 tail 仍满页（length 不变但 firstId 变）时 preserve 会保留中间读位；须 stick。
           const shrink = messages.length < prevCount;
           const tailWindowReplaced =
             !grew &&
@@ -1720,7 +1976,6 @@ export const ChatTranscriptWebView = memo(
         sendAppendTailRows,
       ]);
 
-      // Legacy MessageList path: stream via props. WebView path uses imperative ref (no parent re-render).
       useEffect(() => {
         if (!webReady) {
           return;
@@ -1753,19 +2008,16 @@ export const ChatTranscriptWebView = memo(
       ]);
 
       /**
-       * 导航守卫（sec/D-1）：只放行包目录内的 file:// 加载（初始 index.html 与同包相对资源）；
-       * http/https 外跳系统浏览器并拒绝页内导航，其余 scheme 一律拒绝。
-       * 外部页面无法在 WebView 内落地后，其 postMessage 伪造桥消息
-       * （messageMenuAction 触发 rollback/fork/set-floor、copyCode 写攻击者剪贴板）即无从成立。
+       * 导航守卫（sec/D-1）：只放行 **新包目录**内的 file:// 加载；http/https 外跳
+       * 系统浏览器并拒绝页内导航，其余 scheme 一律拒绝。外部页面无法在 WebView 内
+       * 落地，其 postMessage 伪造桥消息即无从成立。
        */
       const shouldStartLoadWithRequest = useCallback(
         (req: {url: string}): boolean => {
-          if (req.url.startsWith(getChatTranscriptPackageDirUri())) {
+          if (req.url.startsWith(getChatConversationPackageDirUri())) {
             return true;
           }
           if (/^https?:\/\//i.test(req.url)) {
-            // 外跳失败（无浏览器可处理等）静默兜底：绝不回退到 WebView 页内导航。
-            // 防御性保留：库自身在 originWhitelist 拦截失败时也会外跳，此处兜住回调直达的场景。
             void Linking.openURL(req.url).catch(() => undefined);
           }
           return false;
@@ -1773,49 +2025,91 @@ export const ChatTranscriptWebView = memo(
         [],
       );
 
-      /**
-       * iOS window.open / target="_blank" 新开窗口兜底：拒绝 WebView 内打开，外跳系统浏览器。
-       */
+      /** iOS window.open / target="_blank" 兜底：拒绝 WebView 内打开，外跳系统浏览器。 */
       const handleOpenWindow = useCallback((event: WebViewOpenWindowEvent) => {
         event.preventDefault();
-        // WebViewOpenWindow 的字段是 targetUrl（新窗口目标地址），无 url 字段。
-        void Linking.openURL(event.nativeEvent.targetUrl).catch(
-          () => undefined,
-        );
+        void Linking.openURL(event.nativeEvent.targetUrl).catch(() => undefined);
       }, []);
+
+      /** T-CU15：onLoad 锚点。每次 onLoad 重新计时。 */
+      const handleLoad = useCallback(() => {
+        armReadyTimeout();
+      }, [armReadyTimeout]);
+
+      // 切会话 / repaintEpoch 重挂后重新计时（重挂是新文档、新一轮握手）
+      useEffect(() => {
+        armReadyTimeout();
+      }, [armReadyTimeout, repaintEpoch, sessionKey]);
+
+      const handleReload = useCallback(() => {
+        setReadyFailed(false);
+        webReadyRef.current = false;
+        setWebReady(false);
+        setRepaintEpoch(epoch => epoch + 1);
+        armReadyTimeout();
+      }, [armReadyTimeout]);
+
+      if (readyFailed) {
+        return (
+          <View style={styles.fill} testID="chat-conversation-ready-error">
+            <Text style={{color: tokens.text}}>对话页加载失败</Text>
+            <Text style={[styles.hint, {color: tokens.textSecondary}]}>
+              输入组件版本可能过低，请重启应用
+            </Text>
+            <Text
+              style={[styles.retry, {color: tokens.primary}]}
+              onPress={handleReload}
+              testID="chat-conversation-ready-retry">
+              重载
+            </Text>
+          </View>
+        );
+      }
 
       return (
         <View style={styles.fill}>
           <WebView
-            key={`transcript-repaint-${repaintEpoch}`}
+            key={`conversation-repaint-${repaintEpoch}`}
             ref={webRef}
             style={styles.fill}
-            /* sec/D-1：收紧为包内 file://（库会自动附带 about:blank）；初始加载与同包相对资源
-               均命中此前缀，已验证收紧不影响首载。白名单外的导航由库自行外跳系统浏览器。 */
+            /* sec/D-1：收紧为包内 file:// */
             originWhitelist={['file://']}
-            source={{uri: getChatTranscriptUri()}}
+            source={{uri: getChatConversationUri()}}
             allowFileAccess
             allowFileAccessFromFileURLs
-            allowingReadAccessToURL={getChatTranscriptPackageDirUri()}
+            allowingReadAccessToURL={getChatConversationPackageDirUri()}
             onShouldStartLoadWithRequest={shouldStartLoadWithRequest}
             onOpenWindow={handleOpenWindow}
-            onMessage={handleMessage}
+            onMessage={handleUpstream}
+            onLoad={handleLoad}
             javaScriptEnabled
             domStorageEnabled
             scrollEnabled={false}
             showsVerticalScrollIndicator={false}
             keyboardDisplayRequiresUserAction={false}
-            /* 划词：仅「复制」（勿改 RICH_DOCUMENT_ANNOTATE_MENU_ITEMS）。 */
-            menuItems={[...CHAT_TRANSCRIPT_SELECTION_MENU_ITEMS]}
+            /* 划词三项：复制（现行 nbsp 清洗链）/ 全选（下行 selectAll）/ 粘贴（下行 composerPaste） */
+            menuItems={[...CHAT_CONVERSATION_SELECTION_MENU_ITEMS]}
             onCustomMenuSelection={handleCustomMenuSelection}
           />
+          {webReady && !composerDockCapable ? (
+            <View
+              style={[styles.degrade, {backgroundColor: tokens.background}]}
+              testID="chat-conversation-dock-degraded">
+              <Text style={{color: tokens.textSecondary}}>
+                输入组件版本过低，请重启应用
+              </Text>
+            </View>
+          ) : null}
         </View>
       );
     },
   ),
-  chatTranscriptWebViewPropsEqual,
+  chatConversationWebViewPropsEqual,
 );
 
 const styles = StyleSheet.create({
   fill: {flex: 1, minHeight: 0, overflow: 'hidden'},
+  hint: {marginTop: 8, fontSize: 13},
+  retry: {marginTop: 16, fontSize: 15},
+  degrade: {paddingVertical: 12, alignItems: 'center'},
 });

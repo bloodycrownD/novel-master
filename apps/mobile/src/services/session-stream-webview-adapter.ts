@@ -11,7 +11,7 @@
  * SessionStreamWebviewHandle 的回调参数为 unknown（线上形状由单元模块
  * 定义），本适配器负责收窄——屏幕侧不再各自手写映射。
  */
-import type {ChatTranscriptWebViewHandle} from '@/components/chat/ChatTranscriptWebView';
+import type {ChatTranscriptWebViewHandle} from '@/components/chat/ChatTranscriptWebViewHandle';
 import type {
   SessionStreamUnitControlMessage,
   SessionStreamUnitStreamPayload,
