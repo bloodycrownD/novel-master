@@ -107,9 +107,13 @@ export function computeTypeaheadView(
   }
   const at = findActiveAtQuery(text, cursor, '@');
   if (at != null) {
-    const items = filterAtPathTypeaheadCandidates(source.files, at.query, TYPEAHEAD_LIMIT)
-      .slice(0, TYPEAHEAD_LIMIT)
-      .map(atTypeaheadItem);
+    // 封顶只做一次：`filterAtPathTypeaheadCandidates` 内部 `out.length >= limit`
+    // 早停，返回值本就不超过 limit，外层再 slice 恒等（已由 cr1-P2-4 删掉）。
+    const items = filterAtPathTypeaheadCandidates(
+      source.files,
+      at.query,
+      TYPEAHEAD_LIMIT,
+    ).map(atTypeaheadItem);
     return items.length > 0
       ? {trigger: '@', query: at.query, start: at.start, items}
       : null;
@@ -120,9 +124,7 @@ export function computeTypeaheadView(
       source.skills,
       skill.query,
       TYPEAHEAD_LIMIT,
-    )
-      .slice(0, TYPEAHEAD_LIMIT)
-      .map(skillTypeaheadItem);
+    ).map(skillTypeaheadItem);
     return items.length > 0
       ? {trigger: '$', query: skill.query, start: skill.start, items}
       : null;
