@@ -680,7 +680,7 @@ async function warnInsufficientRefBeforeDecrement(
       const prev = current.get(`${ref.entryId}:${ref.version}`);
       if (prev === undefined) {
         // 防御分支：resolve 成功后、本 SELECT 之前 revision 行被并发删除的竞态窗
-        // （同事务正向不可构造）；可构造面（前值不足 / badBlock 跳过）由测试覆盖。
+        // （resolve 走事务外仓储、warn SELECT 在事务内，单测难以构造该跨事务窗口）；可构造面（前值不足 / badBlock 跳过）由测试覆盖。
         console.warn(
           `[${LOG_TAG}] chat_message.id=${messageId} −1 之前 revision 行缺失（entryId=${ref.entryId}, version=${ref.version}, delta=-${delta}）：ref_count 未减，记坏行`
         );

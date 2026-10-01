@@ -116,7 +116,7 @@ function collectVNodes(node: unknown, out: VNode[] = []): VNode[] {
  *
  * preact 未挂载，直接以函数调用形态逐层求值 vnode（与 `collapsible-section-classes`
  * 既有测试同款）：先调 `AttachGroup` 拿到 `<CollapsibleSection>{chips}</CollapsibleSection>`，
- * 再调 `CollapsibleSection` 拿到展开体容器，最后读 chip 的 `tool-name` 文本。
+ * 再调 `CollapsibleSection` 拿到展开体容器，最后递归收集每枚 chip 的全部文本（不按下标穿透 chip 内部结构）。
  */
 function renderChipLabels(
   attachments: AttachmentChip[],

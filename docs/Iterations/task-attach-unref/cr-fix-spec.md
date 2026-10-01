@@ -336,7 +336,7 @@
 ## K 节建议（下游执行时闭合）
 - f-doc/K-1（console.log 二选一）、f-doc/K-2（status 导出拍板）、A-4（发版随附主仓 RULE.md 提交）。
 - 全量 format/lint 一轮（core 无 prettier 门禁，mobile format:check 覆盖 core 之外的面）。
-- **U+FFFD 字符损坏立账（cr-func 发现，登记不修）**：`packages/core/test/chat/read-ref-parity.test.ts` 含 732 处 U+FFFD（ac0a3269 Step4 引入，base 为 0）——需按语义恢复中文注释；`apps/mobile/src/services/session-prompt-input.service.ts` 含 178 处（fe79b781 base 即有、主仓同款，非本迭代引入）。清理轮参照 fc6c49b0 修 .gitignore 历史乱码的先例处理。
+- **U+FFFD 字符损坏立账（cr-func 发现，登记不修）**：`packages/core/test/chat/read-ref-prompt-parity.test.ts` 含 732 处 U+FFFD（ac0a3269 Step4 引入，base 为 0）——需按语义恢复中文注释；`apps/mobile/src/services/session-prompt-input.service.ts` 含 178 处（fe79b781 base 即有、主仓同款，非本迭代引入）。清理轮参照 fc6c49b0 修 .gitignore 历史乱码的先例处理。
 
 ## Fix-Spec Closure
 | 项 | 状态 |
