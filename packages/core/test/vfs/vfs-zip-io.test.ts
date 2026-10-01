@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { unzipSync, zipSync } from "fflate";
 import { createVfsZipIoService, VfsZipError } from "@novel-master/core/vfs";
+import { isVfsError } from "../../src/errors/vfs-errors.js";
 import {
   createCharacterCardImportService,
   parseCharacterCardToMdTree,
@@ -122,7 +123,10 @@ describe("VfsZipIoService", () => {
     assert.equal(still.content, "keep");
   });
 
-  it("Z5: transaction failure rolls back domain", async () => {
+  // CS-05 分片提交后语义变更：失败片回滚 + **补偿删除半棵新树**，但**不恢复旧
+  // 内容**（旧内容早在段 B0 就被删）。用例名里的「整事务回滚」按新口径改写，
+  // 否则后来者会按名字误判语义。
+  it("Z5: 片失败 → 原始 Error 抛出、半棵新树被补偿删除、旧内容不恢复", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
@@ -139,6 +143,7 @@ describe("VfsZipIoService", () => {
       ]),
     );
 
+    // 测试钩子直抛分支绕过了 IMPORT_FAILED 包装 ⇒ 抛出的是原始 Error。
     await assert.rejects(
       () =>
         zipSvc.import(
@@ -146,11 +151,15 @@ describe("VfsZipIoService", () => {
           zipBytes,
           { confirmed: true },
         ),
+      (e: unknown) => e instanceof Error && e.message === "test import failure",
     );
 
-    const read = await vfs.read("/before.md");
-    assert.equal(read.content, "before");
     await assert.rejects(() => vfs.read("/new.md"));
+    // 补偿把目标前缀清空（releaseAndDeleteVfsPrefix）⇒ 旧内容不再存在。
+    await assert.rejects(
+      () => vfs.read("/before.md"),
+      (e: unknown) => isVfsError(e, "NOT_FOUND"),
+    );
   });
 
   it("Z6: import without confirmed does not change domain", async () => {

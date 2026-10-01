@@ -67,7 +67,6 @@ async function readViaTool(
     vfs,
     projectId,
     sessionId,
-    listSessionMessages: async () => [],
     adjustRevisionRefCount: async (pointers, delta) => {
       await revisionRepo.batchAdjustRefCountWithDelta(pointers, delta);
     },

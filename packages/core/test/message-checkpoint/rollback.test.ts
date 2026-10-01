@@ -451,7 +451,10 @@ describe("MessageRollbackService (revision model)", () => {
     assert.equal(messages[0]!.id, assistant.id);
   });
 
-  it("assistant anchor before first checkpoint uses empty tree when session has later checkpoints", async () => {
+  // CD-01 第 1 步：rewind 分支同样受「空 targetTree 护栏」保护。
+  // 旧语义（护栏条件写死 mode === "undo_send"）下这条会**删光**会话工作区
+  // 并静默截断消息——用户从没要求删 /created.md。
+  it("rewind anchor before first checkpoint: empty target is blocked instead of wiping the workspace", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
@@ -468,12 +471,36 @@ describe("MessageRollbackService (revision model)", () => {
     await svfs.write("/created.md", "new file", { versionCheck: false });
     await ctx.messageCheckpoint.capture(session.id, project.id, assistant2.id);
 
-    await ctx.sessionFs.rollbackToMessage(session.id, project.id, assistant1.id);
+    const filesBefore = (await svfs.list("/", { recursive: true })).length;
+    const messageCountBefore = (
+      await ctx.messages.listBySession(session.id)
+    ).length;
 
-    await assert.rejects(() => svfs.read("/created.md"));
-    const messages = await ctx.messages.listBySession(session.id);
-    assert.equal(messages.length, 1);
-    assert.equal(messages[0]!.id, assistant1.id);
+    await assert.rejects(
+      () =>
+        ctx.sessionFs.rollbackToMessage(session.id, project.id, assistant1.id),
+      (error: unknown) =>
+        (error as { code?: string }).code ===
+        "ROLLBACK_UNDO_SEND_EMPTY_TARGET",
+      "空 targetTree + live 树非空必须被拦下（rewind 同样适用）"
+    );
+
+    assert.equal(
+      (await svfs.list("/", { recursive: true })).length,
+      filesBefore,
+      "被拦下的回滚不得删掉任何文件"
+    );
+    assert.equal(
+      (await svfs.read("/created.md")).content,
+      "new file",
+      "被拦下的回滚不得动 live 树"
+    );
+    assert.equal(
+      (await ctx.messages.listBySession(session.id)).length,
+      messageCountBefore,
+      "被拦下的回滚不得截断消息"
+    );
+    void assistant1.id;
   });
 
   it("tool turn: rollback on assistant anchor keeps assistant and tool_result", async () => {

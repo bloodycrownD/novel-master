@@ -60,7 +60,6 @@ async function seedRead(
     vfs: sessionVfs(projectId, sessionId),
     projectId,
     sessionId,
-    listSessionMessages: async () => [],
     adjustRevisionRefCount: (pointers, delta) =>
       revisionRepo.batchAdjustRefCountWithDelta(pointers, delta),
   };
@@ -95,7 +94,6 @@ async function runEdit(
     vfs: sessionVfs(projectId, sessionId),
     projectId,
     sessionId,
-    listSessionMessages: async () => [],
   };
   const registry = new ToolRegistry<BuiltinToolContext>();
   registerBuiltinTools(registry);

@@ -6,6 +6,7 @@ import {
   parseCharacterCardToMdTree,
   type VfsService,
 } from "@novel-master/core/vfs";
+import { isVfsError } from "../../src/errors/vfs-errors.js";
 import { createWorkplaceService } from "@novel-master/core/workplace";
 import {
   getNovelMasterTestContext,
@@ -108,7 +109,10 @@ describe("CharacterCardImportService", () => {
     assert.equal((await vfs.read("/角色/stay.md")).content, "stay");
   });
 
-  it("G-1/Z5: Phase B insert 失败整事务回滚", async () => {
+  // CS-05 分片提交后的新语义（对齐 ZIP Z5）：失败片回滚 + 补偿把半棵新树清掉，
+  // 但**不恢复旧内容**——旧内容在段 B0 就已删除。用例名按新口径改写，否则
+  // 后来者会按「整事务回滚」的名字误判语义。
+  it("G-1/Z5: Phase B insert 失败 → 原始 Error 抛出、半棵新树被补偿删除、旧内容不恢复", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-g1-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
@@ -118,22 +122,29 @@ describe("CharacterCardImportService", () => {
       projectId: project.id,
       sessionId: session.id,
     };
-    // 对齐 ZIP Z5：目标子树先写旧文件，insert 钩子失败后应整事务回滚
+    // 对齐 ZIP Z5：目标子树先写旧文件，insert 钩子失败后应被补偿清掉
     await vfs.write("/角色/旧文件.md", "old");
 
     const svc = createCharacterCardImportService(ctx.conn, {
       testHook: { throwOnInsertLogical: "/角色/角色描述.md" },
     });
     const tree = parseCharacterCardToMdTree(JSON.stringify(SAMPLE_V2));
-    await assert.rejects(() =>
-      svc.import(scope, tree, {
-        confirmed: true,
-        directoryPath: "/角色",
-      }),
+    // 测试钩子直抛分支绕过 IMPORT_FAILED 包装 ⇒ 抛出的是原始 Error。
+    await assert.rejects(
+      () =>
+        svc.import(scope, tree, {
+          confirmed: true,
+          directoryPath: "/角色",
+        }),
+      (e: unknown) => e instanceof Error && e.message === "test import failure"
     );
 
-    assert.equal((await vfs.read("/角色/旧文件.md")).content, "old");
     await assert.rejects(() => vfs.read("/角色/角色描述.md"));
+    // 补偿把目标前缀清空（releaseAndDeleteVfsPrefix）⇒ 旧内容不再存在。
+    await assert.rejects(
+      () => vfs.read("/角色/旧文件.md"),
+      (e: unknown) => isVfsError(e, "NOT_FOUND")
+    );
   });
 
   it("T-C9: importFromBytes 解析失败 → 子树不变", async () => {

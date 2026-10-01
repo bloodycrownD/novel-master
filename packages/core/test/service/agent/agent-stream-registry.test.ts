@@ -208,7 +208,6 @@ function mockToolCtx(
     vfs,
     projectId: PROJECT_ID,
     sessionId: SESSION_ID,
-    listSessionMessages: async () => [],
     sessionKkv,
   };
 }

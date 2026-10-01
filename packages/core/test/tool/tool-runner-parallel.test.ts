@@ -19,7 +19,6 @@ function makeToolContext(
     vfs,
     projectId,
     sessionId,
-    listSessionMessages: async () => [],
   };
 }
 

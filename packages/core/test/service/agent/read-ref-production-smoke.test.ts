@@ -138,7 +138,6 @@ describe("read-tool-result-ref Step 6: 生产链路 smoke（runner 全链）", (
       vfs,
       projectId,
       sessionId,
-      listSessionMessages: () => ctx.messages.listBySession(sessionId),
       sessionKkv: ctx.sessionKkv,
       ...(readRefCountChannel != null
         ? { adjustRevisionRefCount: readRefCountChannel }
@@ -360,7 +359,6 @@ describe("RT-01: gemini tool_use 查找源按 stepCompactionEmitted 复用 visib
       vfs,
       projectId,
       sessionId,
-      listSessionMessages: () => ctx.messages.listBySession(sessionId),
       sessionKkv: ctx.sessionKkv,
       ...(readRefCountChannel != null
         ? { adjustRevisionRefCount: readRefCountChannel }

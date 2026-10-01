@@ -63,7 +63,6 @@ async function runRead(
     vfs: sessionVfs(projectId, sessionId),
     projectId,
     sessionId,
-    listSessionMessages: async () => [],
     adjustRevisionRefCount: (pointers, delta) =>
       revisionRepo.batchAdjustRefCountWithDelta(pointers, delta),
   };

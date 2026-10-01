@@ -77,7 +77,6 @@ function mockToolCtx(
     vfs,
     projectId: MOCK_PROJECT_ID,
     sessionId: MOCK_SESSION_ID,
-    listSessionMessages: async () => [],
     sessionKkv,
   };
 }

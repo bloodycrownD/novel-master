@@ -109,7 +109,6 @@ function skillToolCtx(
     vfs: {} as never,
     projectId: "proj-1",
     sessionId: "sess-1",
-    listSessionMessages: async () => [],
     skills: { service, projectId: "proj-1", effective, ...(referencedNames != null ? { referencedNames } : {}) },
   };
 }
@@ -451,7 +450,6 @@ describe("skill 工具", () => {
             vfs: {} as never,
             projectId: "p",
             sessionId: "s",
-            listSessionMessages: async () => [],
           },
         ),
       (e: unknown) => e instanceof ToolError && e.code === "FAILED",
@@ -491,7 +489,6 @@ describe("skill 工具", () => {
       vfs: {} as never,
       projectId: "p",
       sessionId: "s",
-      listSessionMessages: async () => [],
     });
     assert.match(desc, /（暂无可用技能）/);
   });

@@ -252,7 +252,6 @@ describe("read-tool-result-ref: T-RR3 read 执行同步 +1", () => {
       vfs,
       projectId,
       sessionId,
-      listSessionMessages: async () => [],
       adjustRevisionRefCount: async (pointers, delta) => {
         assert.equal(delta, +1);
         assert.equal(pointers.length, 1);
@@ -350,7 +349,6 @@ describe("read-tool-result-ref: T-RR3 read 执行同步 +1", () => {
         vfs,
         projectId,
         sessionId,
-        listSessionMessages: async () => [],
         // 故意不注入 adjustRevisionRefCount
       }
     );

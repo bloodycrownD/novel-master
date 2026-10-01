@@ -94,7 +94,6 @@ function mockToolCtx(vfs: VfsService): BuiltinToolContext {
     vfs,
     projectId: MOCK_PROJECT_ID,
     sessionId: MOCK_SESSION_ID,
-    listSessionMessages: async () => [],
   };
 }
 
@@ -954,7 +953,6 @@ describe("AgentRunner", () => {
           vfs,
           projectId: project.id,
           sessionId: session.id,
-          listSessionMessages: () => ctx.messages.listBySession(session.id),
         },
         messageCheckpoint: ctx.messageCheckpoint,
       }),
@@ -1030,7 +1028,6 @@ describe("AgentRunner", () => {
           vfs,
           projectId: project.id,
           sessionId: session.id,
-          listSessionMessages: () => ctx.messages.listBySession(session.id),
         },
         messageCheckpoint: ctx.messageCheckpoint,
       }),
@@ -1096,7 +1093,6 @@ describe("AgentRunner", () => {
           vfs,
           projectId: project.id,
           sessionId: session.id,
-          listSessionMessages: () => ctx.messages.listBySession(session.id),
         },
       }),
     );
@@ -1196,7 +1192,6 @@ describe("AgentRunner", () => {
           vfs,
           projectId: project.id,
           sessionId: session.id,
-          listSessionMessages: () => ctx.messages.listBySession(session.id),
         },
       }),
     );
@@ -1264,7 +1259,6 @@ describe("AgentRunner", () => {
           vfs,
           projectId: project.id,
           sessionId: session.id,
-          listSessionMessages: () => ctx.messages.listBySession(session.id),
         },
       }),
     );
@@ -1336,7 +1330,6 @@ describe("AgentRunner", () => {
           vfs,
           projectId: project.id,
           sessionId: session.id,
-          listSessionMessages: () => ctx.messages.listBySession(session.id),
         },
       }),
     );
@@ -1405,7 +1398,6 @@ describe("AgentRunner", () => {
           vfs,
           projectId: project.id,
           sessionId: session.id,
-          listSessionMessages: () => ctx.messages.listBySession(session.id),
         },
       }),
     );

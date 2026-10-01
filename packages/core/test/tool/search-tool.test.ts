@@ -71,7 +71,6 @@ function makeCtx(
     vfs: extra.vfs ?? ({} as never),
     projectId: "proj-1",
     sessionId: "sess-1",
-    listSessionMessages: async () => [],
     ...(extra.search != null ? { search: extra.search } : {}),
     ...(extra.fetchFn != null ? { fetchFn: extra.fetchFn } : {}),
   };

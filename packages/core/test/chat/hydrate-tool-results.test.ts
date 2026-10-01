@@ -106,7 +106,7 @@ describe("read-tool-result-ref Step 4: T-RR2 wire 逐字节等值", () => {
     await vfs.write("/rr2a.md", "alpha 首行\nbeta 第二行\ngamma");
 
     const { block, baseline, revisionRepo } = await readViaTool(
-      { vfs, projectId, sessionId, listSessionMessages: async () => [] },
+      { vfs, projectId, sessionId },
       conn,
       { path: "/rr2a.md" },
       "tu-rr2a"
@@ -149,7 +149,7 @@ describe("read-tool-result-ref Step 4: T-RR2 wire 逐字节等值", () => {
     await vfs.write("/rr2b.md", "l1\nl2\nl3\nl4\nl5");
 
     const { output, block, baseline, revisionRepo } = await readViaTool(
-      { vfs, projectId, sessionId, listSessionMessages: async () => [] },
+      { vfs, projectId, sessionId },
       conn,
       { path: "/rr2b.md", offset: 2, limit: 2 },
       "tu-rr2b"
@@ -182,7 +182,7 @@ describe("read-tool-result-ref Step 4: T-RR2 wire 逐字节等值", () => {
     await vfs.write("/rr2c.txt", big);
 
     const { output, block, baseline, revisionRepo } = await readViaTool(
-      { vfs, projectId, sessionId, listSessionMessages: async () => [] },
+      { vfs, projectId, sessionId },
       conn,
       { path: "/rr2c.txt" },
       "tu-rr2c"
@@ -208,7 +208,7 @@ describe("read-tool-result-ref Step 4: T-RR2 wire 逐字节等值", () => {
     await vfs.write("/rr2d.json", "z".repeat(60 * 1024));
 
     const { output, block, baseline, revisionRepo } = await readViaTool(
-      { vfs, projectId, sessionId, listSessionMessages: async () => [] },
+      { vfs, projectId, sessionId },
       conn,
       { path: "/rr2d.json" },
       "tu-rr2d"
@@ -257,7 +257,7 @@ describe("read-tool-result-ref Step 4: T-RR11 contentHash 校验 fail-fast", () 
     await vfs.write("/rr11a-b.md", "content-of-B-different");
 
     const { block, revisionRepo } = await readViaTool(
-      { vfs, projectId, sessionId, listSessionMessages: async () => [] },
+      { vfs, projectId, sessionId },
       conn,
       { path: "/rr11a-a.md" },
       "tu-rr11a"
@@ -304,7 +304,7 @@ describe("read-tool-result-ref Step 4: T-RR11 contentHash 校验 fail-fast", () 
     await vfs.write("/rr11b-b.md", "BBB-other-content");
 
     const { block, revisionRepo } = await readViaTool(
-      { vfs, projectId, sessionId, listSessionMessages: async () => [] },
+      { vfs, projectId, sessionId },
       conn,
       { path: "/rr11b-a.md" },
       "tu-rr11b"
@@ -344,7 +344,7 @@ describe("read-tool-result-ref Step 4: T-RR11 contentHash 校验 fail-fast", () 
     await vfs.write("/rr11c.md", "x\ny");
 
     const { block, revisionRepo } = await readViaTool(
-      { vfs, projectId, sessionId, listSessionMessages: async () => [] },
+      { vfs, projectId, sessionId },
       conn,
       { path: "/rr11c.md" },
       "tu-rr11c"
@@ -377,7 +377,7 @@ describe("read-tool-result-ref Step 4: T-RR11 contentHash 校验 fail-fast", () 
     await vfs.write("/rr11d.md", "a\nb\nc");
 
     const { block } = await readViaTool(
-      { vfs, projectId, sessionId, listSessionMessages: async () => [] },
+      { vfs, projectId, sessionId },
       conn,
       { path: "/rr11d.md" },
       "tu-rr11d"
@@ -404,7 +404,7 @@ describe("read-tool-result-ref: W2 元数据校验降本与调用内去重", () 
     await vfs.write("/dedup.md", "d1\nd2\nd3\nd4");
 
     const { block, baseline } = await readViaTool(
-      { vfs, projectId, sessionId, listSessionMessages: async () => [] },
+      { vfs, projectId, sessionId },
       conn,
       { path: "/dedup.md" },
       "tu-dedup"
@@ -469,7 +469,7 @@ describe("read-tool-result-ref: W2 元数据校验降本与调用内去重", () 
     const baselines = [];
     for (const [i, p] of parts.entries()) {
       const { block, baseline } = await readViaTool(
-        { vfs, projectId, sessionId, listSessionMessages: async () => [] },
+        { vfs, projectId, sessionId },
         conn,
         { path: "/dedup2.md", ...p },
         `tu-dedup2-${i}`
@@ -501,7 +501,7 @@ describe("read-tool-result-ref: W2 元数据校验降本与调用内去重", () 
     await vfs.write("/meta.md", "m1\nm2");
 
     const { block, revisionRepo } = await readViaTool(
-      { vfs, projectId, sessionId, listSessionMessages: async () => [] },
+      { vfs, projectId, sessionId },
       conn,
       { path: "/meta.md" },
       "tu-meta"
@@ -543,7 +543,7 @@ describe("read-tool-result-ref: W2 元数据校验降本与调用内去重", () 
     await vfs.write("/deleted.md", "will-be-deleted");
 
     const { block, revisionRepo } = await readViaTool(
-      { vfs, projectId, sessionId, listSessionMessages: async () => [] },
+      { vfs, projectId, sessionId },
       conn,
       { path: "/deleted.md" },
       "tu-deleted"
@@ -581,7 +581,7 @@ describe("read-tool-result-ref: W2 元数据校验降本与调用内去重", () 
     await vfs.write("/nohash.md", "n1\nn2\nn3");
 
     const { block, baseline, revisionRepo } = await readViaTool(
-      { vfs, projectId, sessionId, listSessionMessages: async () => [] },
+      { vfs, projectId, sessionId },
       conn,
       { path: "/nohash.md" },
       "tu-nohash"
@@ -619,7 +619,7 @@ describe("read-tool-result-ref Step 4: prepare 接线与孤儿拍平顺序", () 
     await vfs.write("/hywire.md", "第一行\n第二行\n第三行");
 
     const { block, baseline, revisionRepo } = await readViaTool(
-      { vfs, projectId: project.id, sessionId: session.id, listSessionMessages: async () => [] },
+      { vfs, projectId: project.id, sessionId: session.id },
       ctx.conn,
       { path: "/hywire.md" },
       "tu-hywire"
@@ -653,7 +653,7 @@ describe("read-tool-result-ref Step 4: prepare 接线与孤儿拍平顺序", () 
     await vfs.write("/orphan.md", "o1\no2\no3");
 
     const { block, baseline, revisionRepo } = await readViaTool(
-      { vfs, projectId: project.id, sessionId: session.id, listSessionMessages: async () => [] },
+      { vfs, projectId: project.id, sessionId: session.id },
       ctx.conn,
       { path: "/orphan.md" },
       "tu-orphan"

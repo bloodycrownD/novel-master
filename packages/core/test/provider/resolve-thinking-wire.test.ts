@@ -7,7 +7,8 @@ import {
 
 describe("resolve-thinking-wire", () => {
   it("resolveEffectiveMaxTokens 在无采样时使用协议默认", () => {
-    assert.equal(resolveEffectiveMaxTokens({ enabled: false }, "anthropic"), 4096);
+    // 修复前是硬写的 4096（与 UI 采样默认值 16000 各写一份、互不知情）。
+    assert.equal(resolveEffectiveMaxTokens({ enabled: false }, "anthropic"), 16000);
   });
 
   it("off 档位返回 undefined", () => {

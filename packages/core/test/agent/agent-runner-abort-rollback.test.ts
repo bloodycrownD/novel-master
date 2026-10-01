@@ -99,7 +99,6 @@ function mockToolCtx(): BuiltinToolContext {
     vfs: mockVfs(),
     projectId: MOCK_PROJECT_ID,
     sessionId: MOCK_SESSION_ID,
-    listSessionMessages: async () => [],
   };
 }
 

@@ -271,7 +271,6 @@ describe("assembleWorkplaceDisplay", () => {
         vfs,
         projectId: project.id,
         sessionId: session.id,
-        listSessionMessages: async () => [],
         sessionKkv: sk,
       },
     );
@@ -307,7 +306,6 @@ describe("assembleWorkplaceDisplay", () => {
         vfs,
         projectId: project.id,
         sessionId: session.id,
-        listSessionMessages: async () => [],
         sessionKkv: sk,
       },
     );
@@ -391,7 +389,6 @@ describe("assembleWorkplaceDisplay", () => {
       vfs,
       projectId: project.id,
       sessionId: session.id,
-      listSessionMessages: async () => [],
       sessionKkv: sk,
     };
     await fsTool!.run({ action: "rm", path: "/del.md" }, toolCtx);

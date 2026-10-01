@@ -252,6 +252,13 @@ async function readCursor(sessionId: string): Promise<string | null> {
  * - `contentCallCount()`：正文全量读（`listBySession`）——会逐条解压正文，
  *   大会话上秒级；backfill 路径上必须**恒为 0**，否则「每轮发送前都要等几秒」
  *   立刻回归（这正是本轮修的性能病灶）。
+ *
+ * ⚠️ **覆盖范围只含上面这两个方法**：wave-c1 新增的窄读口
+ * （`listBySessionUpToSeq` / `listBySessionTailOfRole` /
+ * `listReadRefTargetsBySession`）**不在本 spy 覆盖内**——它们不是
+ * `listBySession`，对它们的断言必须**直接 spy 新方法名**（见
+ * `test/chat/message-fork-upper-bound.test.ts` 与
+ * `test/chat/truncate-after-readref-targets.test.ts`）。
  */
 function spyFullSessionReads(): {
   readonly callCount: () => number;

@@ -147,7 +147,6 @@ function mockToolCtx(vfs: VfsService): BuiltinToolContext {
     vfs,
     projectId: PROJECT_ID,
     sessionId: SESSION_ID,
-    listSessionMessages: async () => [],
   };
 }
 

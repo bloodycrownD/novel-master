@@ -107,7 +107,6 @@ function makeToolCtx(
     vfs: sessionVfs(projectId, sessionId),
     projectId,
     sessionId,
-    listSessionMessages: async () => [],
     // +1 通道：与生产装配同款（agent-runner 注入同一 revisionRepo 方法）。
     adjustRevisionRefCount: (pointers, delta) =>
       revisionRepo.batchAdjustRefCountWithDelta(pointers, delta),

@@ -22,7 +22,6 @@ const mockToolCtx: BuiltinToolContext = {
   vfs: {} as never,
   projectId: "proj",
   sessionId: "sess",
-  listSessionMessages: async () => [],
   subagent: {
     agentRegistry: {} as never,
     messages: {} as never,
