@@ -121,6 +121,10 @@ class FakeElement {
       item.fn(event);
     }
   }
+  /** 对齐真 DOM：applyText 用它广播 `composer:text-changed`（同文档内 dock 监听方）。 */
+  dispatchEvent(event: {type: string; detail?: unknown}): void {
+    this.dispatch(event.type, event);
+  }
   countListeners(type: string): number {
     return this.listeners.filter(item => item.type === type).length;
   }
@@ -134,12 +138,40 @@ class FakeElement {
 
 type PostedMessage = {v: number; type: string; payload: Record<string, unknown>};
 
+/**
+ * 最小 CustomEvent 桩：applyText 用 `new CustomEvent('composer:text-changed')` 广播
+ * 文本变化，RN 的 Jest 环境（无 jsdom）没有这个全局构造。
+ */
+class FakeCustomEvent {
+  readonly type: string;
+  readonly detail: unknown;
+  constructor(type: string, init?: {detail?: unknown}) {
+    this.type = type;
+    this.detail = init?.detail;
+  }
+}
+
+/** ResizeObserver 桩：只记 observe / disconnect 次数，用于断言「装没装测高链」。 */
+class FakeResizeObserver {
+  observed = 0;
+  disconnected = 0;
+  observe(): void {
+    this.observed += 1;
+  }
+  unobserve(): void {}
+  disconnect(): void {
+    this.disconnected += 1;
+  }
+}
+
 const g = globalThis as unknown as Record<string, unknown>;
 
 const originalWindow = g.window;
 const originalDocument = g.document;
 const originalRaf = g.requestAnimationFrame;
 const originalCancelRaf = g.cancelAnimationFrame;
+const originalCustomEvent = g.CustomEvent;
+const originalResizeObserver = g.ResizeObserver;
 
 let fakeDocument: FakeElement & {
   documentElement: FakeStyle;
@@ -151,6 +183,10 @@ let fakeDocument: FakeElement & {
 let fakeWindow: FakeElement;
 let posted: PostedMessage[];
 let rafQueue: Array<() => void>;
+/** requestAnimationFrame 被请求过的总次数（测高链有没有空转就看它）。 */
+let rafScheduled: number;
+/** 本轮挂载期间构造出的 ResizeObserver 实例（按构造顺序）。 */
+let resizeObservers: FakeResizeObserver[];
 
 const METRICS = {
   fontSize: 16,
@@ -220,11 +256,21 @@ function sendHostMessage(message: unknown): void {
 beforeEach(() => {
   posted = [];
   rafQueue = [];
+  rafScheduled = 0;
+  resizeObservers = [];
   g.requestAnimationFrame = (cb: () => void) => {
+    rafScheduled += 1;
     rafQueue.push(cb);
     return rafQueue.length;
   };
   g.cancelAnimationFrame = () => {};
+  g.CustomEvent = FakeCustomEvent;
+  g.ResizeObserver = class extends FakeResizeObserver {
+    constructor() {
+      super();
+      resizeObservers.push(this as unknown as FakeResizeObserver);
+    }
+  };
 
   const doc = new FakeElement('#document') as unknown as typeof fakeDocument;
   doc.documentElement = new FakeStyle() as unknown as FakeStyle;
@@ -256,6 +302,8 @@ afterEach(() => {
   g.document = originalDocument;
   g.requestAnimationFrame = originalRaf;
   g.cancelAnimationFrame = originalCancelRaf;
+  g.CustomEvent = originalCustomEvent;
+  g.ResizeObserver = originalResizeObserver;
 });
 
 /** 让 #root 可被 getElementById / querySelector 命中。 */
@@ -371,6 +419,82 @@ describe('createComposerRuntime heightReport:false（合成包：高度文档内
       {v: 1, type: 'change', payload: {text: '打字了'}},
     ]);
     expect(postsOfType('heightChange')).toEqual([]);
+  });
+});
+
+/**
+ * 测高链闸门（r6-E-2）：heightReport:false 必须关掉的是**整条链**（rAF 不排、
+ * ResizeObserver 不注册），不是只关掉最后一发消息；默认参数侧是对照组。
+ */
+describe('测高链闸门（r6-E-2）', () => {
+  it('T-CF13：heightReport:false 时连续输入 N 次不产生 rAF 回调、RO 未 observe', () => {
+    registerRoot();
+    createComposerRuntime('#root', {heightReport: false});
+
+    // 装配收尾（applyMetrics 会调 scheduleMeasure）就已经零 rAF
+    expect(rafScheduled).toBe(0);
+    expect(resizeObservers.length).toBe(0);
+
+    const {input, highlight} = mountedEditor();
+    applyInit({
+      mode: 'composer-token',
+      disabled: false,
+      metrics: METRICS,
+      placeholder: '',
+    });
+    flushRaf();
+    expect(rafScheduled).toBe(0);
+
+    for (let i = 1; i <= 5; i++) {
+      input.value = `第${i}键`;
+      highlight.scrollHeight = 60 + i;
+      input.dispatch('input');
+      flushRaf();
+    }
+
+    // 闸门在 scheduleMeasure 一层：逐键调用直接早退，一帧都没排
+    expect(rafScheduled).toBe(0);
+    // RO 压根没被构造/observe
+    expect(resizeObservers.length).toBe(0);
+    expect(postsOfType('heightChange')).toEqual([]);
+    // 闸门只关测高：change 上行照跑，否则就成了「内核瘫了」而非「关测高链」
+    expect(postsOfType('change').length).toBe(5);
+  });
+
+  it('T-CF14：默认参数对照组——RO 已 observe 高亮层且测高确实排 rAF', () => {
+    registerRoot();
+    createComposerRuntime('#root');
+
+    expect(resizeObservers.length).toBe(1);
+    expect(resizeObservers[0].observed).toBe(1);
+    expect(rafScheduled).toBeGreaterThan(0);
+  });
+});
+
+describe('applyText 广播 composer:text-changed（cr1-P2-7 editor 半边）', () => {
+  it('T-CF15：内容变化分支派发事件，内容相同短路时不派发', () => {
+    registerRoot();
+    createComposerRuntime('#root');
+
+    const seen: Array<{text: string; detail: unknown}> = [];
+    fakeDocument.addEventListener('composer:text-changed', event => {
+      seen.push({
+        text: (event as {type: string}).type,
+        detail: (event as {detail?: unknown}).detail,
+      });
+    });
+
+    sendHostMessage({v: 1, type: 'setText', payload: {text: '宿主写入'}});
+    expect(seen).toEqual([
+      {text: 'composer:text-changed', detail: '宿主写入'},
+    ]);
+
+    // 同值 setText 不进变化分支 → 不派发（防浮层被无意义抖动）
+    sendHostMessage({v: 1, type: 'setText', payload: {text: '宿主写入'}});
+    expect(seen.length).toBe(1);
+
+    // 旧包无监听方时是纯空发：事件只在 document 内派发，绝不跨桥（无对应 postMessage）
+    expect(typesOfPost()).toEqual(['ready']);
   });
 });
 

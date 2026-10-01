@@ -224,7 +224,7 @@ type ComposerEditorState = {
   measureScheduled: boolean;
   /** init 到齐后才测高上报：init 前是兜底口径，报出去只会多一次抖动。 */
   initialized: boolean;
-  /** 高度上报闸门（工厂参数 heightReport）：false 时 measure 照跑、只是不发消息。 */
+  /** 高度上报闸门（工厂参数 heightReport）：false 时整条测高链在 scheduleMeasure 一层就关掉。 */
   heightReport: boolean;
 };
 
@@ -232,8 +232,9 @@ type ComposerEditorState = {
 export type MountComposerEditorOptions = {
   /**
    * 是否上报 heightChange（缺省 true = 旧包行为）。
-   * 关闭后 `measureByClamp` 与 ResizeObserver 链路保持原样（clamp / lastHeight 去重
-   * 照算），仅在发消息前早退——用于高度改由文档内布局消化的宿主（合成包 dock）。
+   * 关闭后闸门在 `scheduleMeasure` 一层就关掉整条测高链：input / keyup / applyText
+   * 的每键调用直接早退（连 rAF 都不排），ResizeObserver 也不注册——用于高度改由
+   * 文档内布局消化的宿主（合成包 dock）。
    */
   readonly heightReport?: boolean;
 };
@@ -287,8 +288,10 @@ function syncScroll(state: ComposerEditorState): void {
 }
 
 function measureByClamp(state: ComposerEditorState): void {
-  // 上报闸门先于一切测量口径：heightReport:false 时本函数整体早退（measure /
-  // ResizeObserver / rAF 合并链路照跑，只是没有 heightChange 上行）。
+  // 上报闸门的第一道（与 scheduleMeasure 的早退同口径，保留是为了让本函数被
+  // bindViewportCaretGuard 直接调用时也不误上报）：heightReport:false 时本函数
+  // 整体早退。真正的空转大头在上一层的 scheduleMeasure——那里已经把 rAF 与
+  // ResizeObserver 一并关掉了。
   if (!state.heightReport) {
     return;
   }
@@ -314,6 +317,13 @@ function measureByClamp(state: ComposerEditorState): void {
 
 /** rAF 合并测高：一帧内多次内容变化只测量一次。 */
 function scheduleMeasure(state: ComposerEditorState): void {
+  // 测高闸门就在这一层：heightReport:false 时 input / keyup / applyText /
+  // applyMetrics 的逐次调用直接早退，连 rAF 都不排（否则每键一次空回调）。
+  // ResizeObserver 在 bindEditorEvents 里按同一开关条件注册，两处合起来才是
+  // 「整条测高链关掉」，不是「只关掉最后那发消息」。
+  if (!state.heightReport) {
+    return;
+  }
   if (state.measureScheduled) {
     return;
   }
@@ -465,6 +475,12 @@ export function applyText(
     state.lastText = next;
     renderHighlight(state);
     scheduleMeasure(state);
+    // 外部写入后广播文本变化：同文档内的合成包 dock 靠它重渲 typeahead 浮层
+    // （否则 setText 之后浮层停在旧候选上）。纯本地 CustomEvent，不走 postMessage
+    // 跨桥；旧包内没有监听方，空发无害。
+    document.dispatchEvent(
+      new CustomEvent('composer:text-changed', {detail: next}),
+    );
   }
   if (selectionStart != null) {
     applySelection(selectionStart, selectionEnd ?? selectionStart);
@@ -562,7 +578,9 @@ function bindEditorEvents(state: ComposerEditorState): Array<() => void> {
     }),
   );
 
-  if (typeof ResizeObserver !== 'undefined') {
+  // 测高闸门（scheduleMeasure 那层）之外的第二处：heightReport:false 时干脆不注册
+  // RO——否则每次布局变化都产出一条只会立刻早退的空回调，Android WebView 上是纯开销。
+  if (state.heightReport && typeof ResizeObserver !== 'undefined') {
     const observer = new ResizeObserver(() => scheduleMeasure(state));
     observer.observe(highlight);
     unbind.push(() => observer.disconnect());

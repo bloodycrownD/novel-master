@@ -21,9 +21,9 @@ import {BRIDGE_V} from './model';
 export type ComposerRuntimeOptions = {
   /**
    * 高度上报开关（默认 true = 旧包行为）。
-   * false 时 `post('heightChange')` 上报链关闭——measureByClamp / ResizeObserver
-   * 逻辑照跑（clamp 与 lastHeight 去重不变），只是不发消息；用于高度改由文档内布局
-   * 消化的场景（合成包 dock 与转录同文档，不需要跨桥高度链）。
+   * false 时闸门在 editor 的 `scheduleMeasure` 一层就关掉整条测高链：逐键调用
+   * 直接早退（不排 rAF）、ResizeObserver 不注册、`heightChange` 零上行；用于高度
+   * 改由文档内布局消化的场景（合成包 dock 与转录同文档，不需要跨桥高度链）。
    */
   readonly heightReport?: boolean;
   /** 是否绑定 host→web 消息通道（默认 true）。false 时由合成入口统一注册单次通道。 */
@@ -43,8 +43,13 @@ export type ComposerRuntimeHandle = {
   readonly emitReady: boolean;
 };
 
-/** 挂载点解析：元素直通；选择器字符串走 querySelector（合成包挂 `#composer-input`）。 */
-export function resolveComposerHost(
+/**
+ * 挂载点解析：元素直通；选择器字符串走 querySelector（合成包挂 `#composer-input`）。
+ *
+ * 模块内私有：全仓只有本工厂自用（cr1-P1-1 收回导出——外部零消费方的 export 是
+ * 死面，留着只会让人以为它是一条可依赖的公开契约）。
+ */
+function resolveComposerHost(
   host: HTMLElement | string,
 ): HTMLElement | null {
   if (typeof host === 'string') {
