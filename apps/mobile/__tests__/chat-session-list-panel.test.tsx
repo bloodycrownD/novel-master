@@ -1,42 +1,65 @@
 /**
- * ChatSessionListPanel 徽标判定测试（Step 9 / GWT-6；2026-09-30 GWT-7 回归）。
+ * 会话列表面板的**壳**（chat-webview-unify 第二阶段 wave-2 之后）。
  *
- * 状态判定两态：running（activeRunIds 含该会话）→「生成中」徽标；
- * interrupted（interruptedRunIds 含该会话，无论是否当前会话）→「已中断」
- * 徽标；「当前」位置徽标与运行态正交、照常按 isCurrent 出。
+ * ## 这个文件为什么还在、测什么
  *
- * 「 · 活跃中」meta 的唯一判据是 isRunning（manager 的真实判活），**不是**
- * isCurrent：挂在 isCurrent 上时它退化成「当前会话」标记，run 收尾后与 app
- * 重启后都不消失（GWT-7 原样复现，见下）。
+ * 会话列表本体（ManageHeader / FlatList 会话行 / 三徽标 / 「活跃中」meta / 长按进
+ * 批量）整体搬进了 `chat-conversation` 文档，判定逻辑的测试跟着搬到 web 侧
+ * （`__tests__/chat-conversation-session-list.test.ts` 覆盖徽标与相对时间），
+ * 所以原先那组 GWT-6/GWT-7 徽标用例随组件一起退役。
+ *
+ * 但**壳本身还有真逻辑，不能跟着删**：
+ * 1. `ChatSessionListPanel`（切换条）在列表视图独占一行、会话视图整行收起——
+ *    收起判据错了，切换条会压在 WebView 列表视图上面，用户点不到列表。
+ * 2. `ChatSessionListProjectsPanel`（项目工作区）要盖在常驻 WebView **之上**且
+ *    绝对定位铺满内容区；它还得把「可回上级目录」注册进 `WorkspaceBackCtx`，
+ *    且**面板不可见时必须注销**——否则 Android 返回键会去操作一个看不见的文件
+ *    管理器（聊天工作区那边同名注册会被它顶掉，两处一起坏）。
+ *
+ * 这两条正是退役后唯一还可能坏的地方，故本文件从「徽标判定」改测「壳的显隐与
+ * 返回键注册」，不删文件。
  */
 import React from 'react';
 import {describe, expect, it, jest, beforeEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
 import type {ReactTestInstance} from 'react-test-renderer';
-import {Text} from 'react-native';
-import type {ChatSession} from '@novel-master/core/chat';
+import {Text, View} from 'react-native';
 
 import type {ThemeTokens} from '@/theme/tokens';
-import {ChatSessionListPanel} from '@/screens/tabs/chat-tab/ChatSessionListPanel';
+import {
+  ChatSessionListPanel,
+  ChatSessionListProjectsPanel,
+} from '@/screens/tabs/chat-tab/ChatSessionListPanel';
 
-// manager 订阅捕获：手动驱动 listener 验证 subscribe 刷新接线
-const mockListeners: Array<() => void> = [];
-const mockManager = {
-  activeSessionIds: jest.fn((): readonly string[] => []),
-  interruptedSessionIds: jest.fn((): ReadonlySet<string> => new Set()),
-  subscribe: jest.fn((listener: () => void) => {
-    mockListeners.push(listener);
-    return () => undefined;
-  }),
-  stopRun: jest.fn(() => true),
+// ── WorkspaceBackCtx 注册捕获（两个组件都经它注册/注销）────────────────
+const mockRegisterBackState = jest.fn();
+const mockVfsHandle = {
+  canGoUp: jest.fn(() => false),
+  goUp: jest.fn(),
+  reload: jest.fn(async () => undefined),
 };
 
-jest.mock('@/hooks/useRuntime', () => ({
-  useRuntime: () => ({sessionStreamUnitManager: mockManager}),
+/** 项目工作区分支装出来的 VfsFileManager 挂了几个（0 = 未渲染/未激活）。 */
+let mockVfsRenderCount = 0;
+jest.mock('@/components/vfs/VfsFileManager', () => {
+  const mockReact = require('react');
+  return {
+    VfsFileManager: mockReact.forwardRef(
+      (_props: unknown, ref: React.Ref<unknown>) => {
+        mockVfsRenderCount += 1;
+        mockReact.useImperativeHandle(ref, () => mockVfsHandle);
+        return null;
+      },
+    ),
+  };
+});
+
+jest.mock('@/screens/tabs/chat-tab/ChatTabNavigationProvider', () => ({
+  useChatTabWorkspaceBackState: () => mockRegisterBackState,
 }));
 
-// ManageHeader/BatchCheckbox 内部经 useTheme 取主题：测试环境无
-// ThemeProvider 挂载，照 vfs-file-manager 测试先例 mock 上下文值。
+// SegmentedControl 内部经 useTheme 取主题：测试环境无 ThemeProvider 挂载，
+// 照 vfs-file-manager 测试先例 mock 上下文值。
 jest.mock('@/theme/ThemeProvider', () => ({
   useTheme: () => ({
     tokens: {
@@ -54,18 +77,6 @@ jest.mock('@/theme/ThemeProvider', () => ({
   }),
 }));
 
-jest.mock('@/screens/tabs/chat-tab/ChatTabNavigationProvider', () => ({
-  useChatTabWorkspaceBackState: () => null,
-}));
-
-jest.mock('@/components/sheet/BottomSheetMenu', () => ({
-  BottomSheetMenu: () => null,
-}));
-
-jest.mock('@/components/vfs/VfsFileManager', () => ({
-  VfsFileManager: () => null,
-}));
-
 const tokens = {
   surfaceElevated: '#111',
   borderLight: '#222',
@@ -75,195 +86,158 @@ const tokens = {
   textTertiary: '#777',
 } as unknown as ThemeTokens;
 
-function makeSession(id: string): ChatSession {
-  return {
-    id,
-    projectId: 'p',
-    title: `会话-${id}`,
-    parentSessionId: null,
-    createdAtMs: 1_000,
-    updatedAtMs: Date.now(),
-  };
-}
+const projectVfs = {} as never;
+const projectWorktree = {} as never;
 
-/** 全树 Text 的拼接文本（meta 行是 [相对时间, 状态后缀] 数组，拼起来再匹配）。 */
-function textContents(root: ReactTestInstance): string[] {
-  return root.findAllByType(Text).map(node =>
-    React.Children.toArray(node.props.children)
-      .map(child => (typeof child === 'string' ? child : ''))
-      .join(''),
-  );
-}
-
-function countContaining(contents: string[], needle: string): number {
-  return contents.filter(content => content.includes(needle)).length;
-}
-
-async function renderPanel(
-  sessionId: string | undefined,
-  sessions: ChatSession[],
-): Promise<TestRenderer.ReactTestRenderer> {
-  let renderer!: TestRenderer.ReactTestRenderer;
-  await act(async () => {
-    renderer = TestRenderer.create(
+function renderControl(
+  overrides: Partial<React.ComponentProps<typeof ChatSessionListPanel>> = {},
+): TestRenderer.ReactTestRenderer {
+  let tree!: TestRenderer.ReactTestRenderer;
+  act(() => {
+    tree = TestRenderer.create(
       <ChatSessionListPanel
         tokens={tokens}
-        visible={true}
+        visible
         sessionListPanel="sessions"
         onSessionListPanelChange={jest.fn()}
-        projectId="p"
-        sessionId={sessionId}
-        sessions={sessions}
-        vfsRefreshKey={0}
-        projectVfs={null}
-        projectWorktree={null}
-        sessionBatchActive={false}
-        sessionBatchSelectedCount={0}
-        onEnterSessionBatch={jest.fn()}
-        onExitSessionBatch={jest.fn()}
-        onConfirmBatchDelete={jest.fn()}
-        onCreateSession={jest.fn()}
-        onOpenConversation={jest.fn()}
-        onToggleSessionSelect={jest.fn()}
-        isSessionSelected={() => false}
-        menuSessionId={undefined}
-        onMenuSessionIdChange={jest.fn()}
-        onOpenSessionRename={jest.fn()}
-        onCopySession={jest.fn()}
-        onConfirmDeleteSession={jest.fn()}
-        onOpenFileEditor={jest.fn()}
+        {...overrides}
       />,
     );
   });
-  return renderer;
+  return tree;
 }
 
-async function unmountPanel(
-  renderer: TestRenderer.ReactTestRenderer,
-): Promise<void> {
-  await act(async () => {
-    renderer.unmount();
+function renderProjects(
+  overrides: Partial<React.ComponentProps<typeof ChatSessionListProjectsPanel>> =
+    {},
+): TestRenderer.ReactTestRenderer {
+  let tree!: TestRenderer.ReactTestRenderer;
+  act(() => {
+    tree = TestRenderer.create(
+      <ChatSessionListProjectsPanel
+        tokens={tokens}
+        visible
+        sessionListPanel="projects"
+        projectId="p1"
+        vfsRefreshKey={0}
+        projectVfs={projectVfs}
+        projectWorktree={projectWorktree}
+        onOpenFileEditor={jest.fn()}
+        {...overrides}
+      />,
+    );
   });
+  return tree;
 }
 
-describe('ChatSessionListPanel 徽标（running / interrupted）与「活跃中」meta 判活', () => {
+/** RN 样式里 `display:'none'` 的判定（壳的显隐语义全靠它）。 */
+function styleOf(node: ReactTestInstance): Record<string, unknown> {
+  const flat = (Array.isArray(node.props.style) ? node.props.style : [node.props.style])
+    .filter(Boolean)
+    .flatMap((item: Record<string, unknown>) =>
+      typeof item === 'object' ? Object.keys(item) : [],
+    );
+  return {display: flat.includes('display') ? 'none' : undefined};
+}
+
+describe('ChatSessionListPanel 壳 · 切换条显隐', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockListeners.length = 0;
-    mockManager.activeSessionIds.mockReturnValue([]);
-    mockManager.interruptedSessionIds.mockReturnValue(new Set());
   });
 
-  it('running→生成中；interrupted（无论是否当前会话）→已中断', async () => {
-    // 当前会话 c 恰为中断态：GWT-6 原样复现场景
-    mockManager.activeSessionIds.mockReturnValue(['a']);
-    mockManager.interruptedSessionIds.mockReturnValue(new Set(['b', 'c']));
-    const renderer = await renderPanel('c', [
-      makeSession('a'),
-      makeSession('b'),
-      makeSession('c'),
-    ]);
-    const contents = textContents(renderer.root);
-
-    // a（running，非当前）：生成中 + 唯一那一份「 · 活跃中」meta
-    expect(countContaining(contents, '生成中')).toBe(1);
-    expect(countContaining(contents, ' · 活跃中')).toBe(1);
-    // b（interrupted 非当前）+ c（interrupted 当前）：各一枚已中断徽标
-    expect(countContaining(contents, '已中断')).toBe(2);
-    // 「当前」位置徽标与状态正交，c 照常保留
-    expect(contents.filter(content => content === '当前')).toHaveLength(1);
-    await unmountPanel(renderer);
-  });
-
-  it('interrupted 会话（当前与非当前）都不是运行态：一律不出「活跃中」meta', async () => {
-    // 与上面那条对照，把 a 从活跃集里摘掉：此时三枚徽标里只剩「已中断」，
-    // 「 · 活跃中」必须归零——它是判活 meta，不许退化回 isCurrent 标记。
-    mockManager.activeSessionIds.mockReturnValue([]);
-    mockManager.interruptedSessionIds.mockReturnValue(new Set(['b', 'c']));
-    const renderer = await renderPanel('c', [
-      makeSession('b'),
-      makeSession('c'),
-    ]);
-    const contents = textContents(renderer.root);
-
-    expect(countContaining(contents, '已中断')).toBe(2);
-    expect(countContaining(contents, ' · 活跃中')).toBe(0);
-    expect(countContaining(contents, '生成中')).toBe(0);
-    expect(contents.filter(content => content === '当前')).toHaveLength(1);
-    await unmountPanel(renderer);
-  });
-
-  it('GWT-7: 空闲当前会话（run 已收尾、无 run）不再显示「活跃中」', async () => {
-    // 真机实录原样复现：新会话4 的一轮 run 已正常收尾（active 集清空），
-    // 期间无新 run——旧的 isCurrent 判定会让「 · 活跃中」永久挂着。
-    const renderer = await renderPanel('d', [
-      makeSession('a'),
-      makeSession('d'),
-    ]);
-    const contents = textContents(renderer.root);
-
-    expect(countContaining(contents, ' · 活跃中')).toBe(0);
-    // 「当前」位置徽标与 meta 行正交，照常保留（当前会话身份没有丢）
-    expect(contents.filter(content => content === '当前')).toHaveLength(1);
-    expect(countContaining(contents, '生成中')).toBe(0);
-    expect(countContaining(contents, '已中断')).toBe(0);
-    // meta 行只剩相对时间，不残留任何「活跃」字样
-    expect(countContaining(contents, '活跃')).toBe(0);
-    await unmountPanel(renderer);
-  });
-
-  it('GWT-7: 真在运行的会话（当前与非当前）照常显示「 · 活跃中」meta + 生成中徽标', async () => {
-    mockManager.activeSessionIds.mockReturnValue(['a', 'c']);
-    const renderer = await renderPanel('c', [
-      makeSession('a'),
-      makeSession('c'),
-    ]);
-    const contents = textContents(renderer.root);
-
-    // 两个活跃会话各一份 meta + 徽标；当前会话 c 另有「当前」位置徽标
-    expect(countContaining(contents, ' · 活跃中')).toBe(2);
-    expect(countContaining(contents, '生成中')).toBe(2);
-    expect(contents.filter(content => content === '当前')).toHaveLength(1);
-    await unmountPanel(renderer);
-  });
-
-  it('GWT-7: run 收尾经 manager.subscribe 驱动刷新——活跃中 meta 与生成中徽标同时消失', async () => {
-    mockManager.activeSessionIds.mockReturnValue(['a']);
-    const renderer = await renderPanel('a', [makeSession('a')]);
-    expect(countContaining(textContents(renderer.root), ' · 活跃中')).toBe(1);
-    expect(countContaining(textContents(renderer.root), '生成中')).toBe(1);
-
-    // RUN_FINISHED → 单元 settle 出 active 集 → notifyChanged → UI 刷新：
-    // 收尾后徽标必须即时消失，不能留着当「还在跑」。
-    mockManager.activeSessionIds.mockReturnValue([]);
-    await act(async () => {
-      for (const listener of [...mockListeners]) {
-        listener();
-      }
+  it('列表视图（visible）下切换条渲染且不隐藏——它是 WebView 列表视图的表头', () => {
+    const tree = renderControl();
+    const texts = tree.root
+      .findAllByType(Text)
+      .map(node => String(node.props.children ?? ''));
+    expect(texts).toContain('会话');
+    expect(texts).toContain('项目工作区');
+    expect(styleOf(tree.root.findByType(View))).not.toMatchObject({
+      display: 'none',
     });
-    const contents = textContents(renderer.root);
-    expect(countContaining(contents, ' · 活跃中')).toBe(0);
-    expect(countContaining(contents, '生成中')).toBe(0);
-    expect(contents.filter(content => content === '当前')).toHaveLength(1);
-    await unmountPanel(renderer);
+    act(() => {
+      tree.unmount();
+    });
   });
 
-  it('状态迁移经 manager.subscribe 驱动刷新：running 收尾→interrupted 水合→徽标切换', async () => {
-    mockManager.activeSessionIds.mockReturnValue(['a']);
-    const renderer = await renderPanel(undefined, [makeSession('a')]);
-    expect(countContaining(textContents(renderer.root), '生成中')).toBe(1);
-
-    // run 收尾 + 重启水合回 interrupted：两个数据源同沿 notifyChanged 通知
-    mockManager.activeSessionIds.mockReturnValue([]);
-    mockManager.interruptedSessionIds.mockReturnValue(new Set(['a']));
-    await act(async () => {
-      for (const listener of [...mockListeners]) {
-        listener();
-      }
+  it('会话视图（visible=false）下整行收起——否则切换条会盖住对话视图', () => {
+    const tree = renderControl({visible: false});
+    expect(styleOf(tree.root.findByType(View))).toMatchObject({display: 'none'});
+    act(() => {
+      tree.unmount();
     });
-    const contents = textContents(renderer.root);
-    expect(countContaining(contents, '已中断')).toBe(1);
-    expect(countContaining(contents, '生成中')).toBe(0);
-    await unmountPanel(renderer);
+  });
+
+  it('**不再**渲染任何会话行内容（列表已搬进 WebView 文档）', () => {
+    // 回归点：退役不彻底时最容易留下的痕迹——RN 侧还挂着一份旧 FlatList，
+    // 于是同一个列表出现两遍（web 一份 + RN 一份），且两份数据会打架。
+    const tree = renderControl();
+    const texts = tree.root
+      .findAllByType(Text)
+      .map(node => String(node.props.children ?? ''));
+    expect(texts).not.toContain('新建会话');
+    act(() => {
+      tree.unmount();
+    });
+  });
+});
+
+describe('ChatSessionListProjectsPanel · 覆盖层与返回键注册', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockVfsRenderCount = 0;
+    mockVfsHandle.canGoUp.mockReturnValue(false);
+  });
+
+  it('projects 态：渲染 VfsFileManager 并注册 WorkspaceBackCtx', () => {
+    const tree = renderProjects();
+    expect(mockVfsRenderCount).toBeGreaterThan(0);
+    expect(mockRegisterBackState).toHaveBeenCalledWith(
+      expect.objectContaining({canGoUp: false}),
+    );
+    act(() => {
+      tree.unmount();
+    });
+  });
+
+  it('sessions 态（切回会话列表）：覆盖层隐藏、文件管理器卸载', () => {
+    const tree = renderProjects({sessionListPanel: 'sessions'});
+    expect(mockVfsRenderCount).toBe(0);
+    act(() => {
+      tree.unmount();
+    });
+  });
+
+  it('不可见时**注销**返回键态（否则返回键去操作看不见的目录树）', () => {
+    renderProjects({visible: false});
+    expect(mockRegisterBackState).toHaveBeenCalledWith(null);
+  });
+
+  it('可回上级时注册 canGoUp=true + goUp 动作', () => {
+    mockVfsHandle.canGoUp.mockReturnValue(true);
+    const tree = renderProjects();
+    const registered = mockRegisterBackState.mock.calls.at(-1)?.[0] as {
+      canGoUp: boolean;
+      goUp: () => void;
+    };
+    expect(registered.canGoUp).toBe(true);
+    act(() => {
+      registered.goUp();
+    });
+    expect(mockVfsHandle.goUp).toHaveBeenCalled();
+    act(() => {
+      tree.unmount();
+    });
+  });
+
+  it('无可用工作区时给占位文案（而不是空白）', () => {
+    const tree = renderProjects({projectVfs: null, projectWorktree: null});
+    const texts = tree.root
+      .findAllByType(Text)
+      .map(node => String(node.props.children ?? ''));
+    expect(texts).toContain('请先选择项目');
+    act(() => {
+      tree.unmount();
+    });
   });
 });

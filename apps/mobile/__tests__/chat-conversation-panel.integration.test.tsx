@@ -39,15 +39,21 @@ jest.mock('../src/components/chat/ChatStreamMetricsBarLive', () => ({
 // 统一宿主 mock（chat-webview-unify Step 7：webview 分支改挂 ChatConversationWebView，
 // 单实例承载转录 + dock）。经 ref 暴露可记录的 commitSyntheticAssistantRow
 // （ui/B-1 中断现场用例的断言面）；组件本体渲染 null，其余 props 不消费。
+//
+// 第二阶段起这层 mock 还多担一件事：**抓 props**——`viewState` 就是宿主从
+// `chatSubview` 映射出来的 `view` prop（面板 → WebView → 下行消息），
+// viewState 断言面的第一环就落在这里。
 const mockCommitSyntheticAssistantRow = jest.fn(() => true);
+const mockWebViewPropsList: Array<Record<string, unknown>> = [];
 jest.mock('../src/components/chat/ChatConversationWebView', () => {
   const mockReact = require('react');
   return {
     ChatConversationWebView: mockReact.forwardRef(
       (
-        _props: unknown,
+        props: unknown,
         ref: React.Ref<{commitSyntheticAssistantRow: unknown}>,
       ) => {
+        mockWebViewPropsList.push(props as Record<string, unknown>);
         mockReact.useImperativeHandle(ref, () => ({
           commitSyntheticAssistantRow: mockCommitSyntheticAssistantRow,
         }));
@@ -131,6 +137,35 @@ function installMockRuntime(): void {
     },
   });
 }
+
+/**
+ * 列表域（第二阶段）的 manager 判活桩：挂在 **ctx.runtime** 上（面板侧的
+ * `useSessionListBridge` 从 ctx.runtime 取，不是 `useRuntime()`——同一个对象，
+ * 但测试里 ctx.runtime 是独立字段，得单独喂）。
+ */
+const mockListManager = {
+  activeSessionIds: jest.fn((): readonly string[] => []),
+  interruptedSessionIds: jest.fn((): ReadonlySet<string> => new Set()),
+  subscribe: jest.fn((listener: () => void) => {
+    mockListListeners.push(listener);
+    return () => undefined;
+  }),
+  stopRun: jest.fn(),
+};
+
+/** manager 订阅捕获：手动驱动 listener 验证判活刷新接线。 */
+const mockListListeners: Array<() => void> = [];
+
+/** 批量选择态桩（真源在 ChatTabScreen，这里只做注入）。 */
+const mockSessionBatch = {
+  active: false,
+  selectedIds: new Set<string>(),
+  enter: jest.fn(),
+  exit: jest.fn(),
+  toggle: jest.fn(),
+};
+
+const mockOpenConversation = jest.fn();
 
 const tokens = {
   background: '#000',
@@ -243,12 +278,20 @@ function makeMockContext(
       setSessionRenamePrompt: jest.fn(),
       refreshChatTokenLabel: jest.fn(),
       reloadLists: jest.fn(async () => undefined),
+      // ---- 列表域（第二阶段） ----
+      sessions: [],
+      menuSessionId: undefined,
+      setMenuSessionId: jest.fn(),
+      openSessionRenamePrompt: jest.fn(),
+      handleCopySession: jest.fn(async () => undefined),
+      confirmDeleteSession: jest.fn(),
+      handleCreateSession: jest.fn(async () => undefined),
     },
     messages: {hydrateFromSessionCache: jest.fn()},
     resetStreamingDisplay: jest.fn(),
     navigation: {} as any,
     showToast: jest.fn(),
-    runtime: {} as any,
+    runtime: {sessionStreamUnitManager: mockListManager} as any,
     setCurrentSession: jest.fn(async () => undefined),
     closeMessageMenu: jest.fn(),
   };
@@ -287,14 +330,42 @@ function flushPromises(): Promise<void> {
 beforeEach(() => {
   installMockRuntime();
   clearChatComposerDraft('s1');
+  mockWebViewPropsList.length = 0;
+  mockListListeners.length = 0;
+  mockListManager.activeSessionIds.mockReturnValue([]);
+  mockListManager.interruptedSessionIds.mockReturnValue(new Set());
+  mockListManager.stopRun.mockClear();
+  mockOpenConversation.mockClear();
+  mockSessionBatch.active = false;
+  mockSessionBatch.selectedIds = new Set();
+  mockSessionBatch.enter.mockClear();
+  mockSessionBatch.exit.mockClear();
+  mockSessionBatch.toggle.mockClear();
 });
+
+/** 取最近一次渲染时统一宿主收到的 props（viewState 断言面）。 */
+function lastWebViewProps(): Record<string, unknown> {
+  const last = mockWebViewPropsList[mockWebViewPropsList.length - 1];
+  if (last == null) {
+    throw new Error('ChatConversationWebView 未渲染');
+  }
+  return last;
+}
 
 function TestHost() {
   const workspaceVfsRef = useRef<VfsFileManagerHandle>(null);
   mockUseChatTabContext.mockReturnValue(
     makeMockContext(workspaceVfsRef) as ReturnType<typeof useChatTabContext>,
   );
-  return <ChatConversationPanel tokens={tokens} visible />;
+  return (
+    <ChatConversationPanel
+      tokens={tokens}
+      visible
+      chatSubview="conversation"
+      sessionBatch={mockSessionBatch}
+      onOpenConversation={mockOpenConversation}
+    />
+  );
 }
 
 describe('ChatConversationPanel workspace reload', () => {
@@ -391,7 +462,15 @@ describe('ChatConversationPanel 中断现场合成行提交（ui/B-1）', () => 
     ctx.transcriptReadyEpoch = mockReadyEpoch;
     ctx.useWebviewTranscript = true;
     mockUseChatTabContext.mockReturnValue(ctx);
-    return <ChatConversationPanel tokens={tokens} visible />;
+    return (
+      <ChatConversationPanel
+        tokens={tokens}
+        visible
+        chatSubview="conversation"
+        sessionBatch={mockSessionBatch}
+        onOpenConversation={mockOpenConversation}
+      />
+    );
   }
 
   let tree: TestRenderer.ReactTestRenderer | undefined;
@@ -537,5 +616,169 @@ describe('ChatConversationPanel 顶栏 agent 卡分流（au/B-1 / au/G-4）', ()
       '智能体已被删除，请重新选择',
     );
     expect(mockSetAgentPickerOpen).not.toHaveBeenCalled();
+  });
+});
+
+// ── viewState 下发（第二阶段 wave-2）────────────────────────────────────────
+//
+// `chatSubview` → 统一宿主的 `view` prop（宿主再经 postToWeb 下发
+// `{type:'viewState', payload:{view}}`，web 据此切 `data-view`）。
+// 断言面落在**这层映射**：映射错了 web 就一直停在首帧的 conversation 视图
+// ——冷启动直接进列表的用户看到的是一张空白的对话页，且没有任何报错。
+
+describe('ChatConversationPanel · viewState 映射（chatSubview → view）', () => {
+  /** 子视图由用例驱动（面板真源就是它，props 进来）。 */
+  let mockChatSubview: 'sessions' | 'conversation';
+  let tree: TestRenderer.ReactTestRenderer | undefined;
+
+  function SubviewTestHost() {
+    const workspaceVfsRef = useRef<VfsFileManagerHandle>(null);
+    mockUseChatTabContext.mockReturnValue(
+      makeMockContext(workspaceVfsRef) as ReturnType<typeof useChatTabContext>,
+    );
+    return (
+      <ChatConversationPanel
+        tokens={tokens}
+        visible
+        chatSubview={mockChatSubview}
+        sessionBatch={mockSessionBatch}
+        onOpenConversation={mockOpenConversation}
+      />
+    );
+  }
+
+  beforeEach(() => {
+    mockChatSubview = 'sessions';
+  });
+
+  afterEach(() => {
+    if (tree != null) {
+      act(() => {
+        tree!.unmount();
+      });
+    }
+    tree = undefined;
+  });
+
+  it("chatSubview='sessions' → view=list（冷启动列表视图）", async () => {
+    await act(async () => {
+      tree = TestRenderer.create(<SubviewTestHost />);
+      await flushPromises();
+    });
+    expect(lastWebViewProps().view).toBe('list');
+  });
+
+  it("chatSubview='conversation' → view=conversation（且切回 list 会再变一次）", async () => {
+    mockChatSubview = 'conversation';
+    await act(async () => {
+      tree = TestRenderer.create(<SubviewTestHost />);
+      await flushPromises();
+    });
+    expect(lastWebViewProps().view).toBe('conversation');
+
+    // 返回键回到列表：view 必须跟着变（漏了这个就是「返回键点了没反应」）
+    mockChatSubview = 'sessions';
+    await act(async () => {
+      tree!.update(<SubviewTestHost />);
+      await flushPromises();
+    });
+    expect(lastWebViewProps().view).toBe('list');
+  });
+
+  it('列表视图下即便没选中会话也挂载宿主（列表本体就在这个 WebView 里）', async () => {
+    // 「一个会话都没选中」时 ctx.sessionId 为空——若此时不挂 WebView，
+    // 冷启动（默认就停在列表视图）用户看到的就是一片空白。
+    mockChatSubview = 'sessions';
+    function NoSessionTestHost() {
+      const workspaceVfsRef = useRef<VfsFileManagerHandle>(null);
+      const ctx = makeMockContext(workspaceVfsRef) as ReturnType<
+        typeof useChatTabContext
+      >;
+      (ctx as {sessionId: string | undefined}).sessionId = undefined;
+      // chatScrollKey 是 useChatTabScrollCache 由 projectId+sessionId 派生的，
+      // 面板拿不到那两个 null 就拿不到它——这里照真实链路一并置空。
+      (ctx as {chatScrollKey: string | null}).chatScrollKey = null;
+      mockUseChatTabContext.mockReturnValue(ctx);
+      return (
+        <ChatConversationPanel
+          tokens={tokens}
+          visible
+          chatSubview="sessions"
+          sessionBatch={mockSessionBatch}
+          onOpenConversation={mockOpenConversation}
+        />
+      );
+    }
+    await act(async () => {
+      tree = TestRenderer.create(<NoSessionTestHost />);
+      await flushPromises();
+    });
+    expect(lastWebViewProps().view).toBe('list');
+    expect(lastWebViewProps().sessionKey).toBe('no-session');
+  });
+
+  it('列表快照：列表视图下发载荷，对话视图传 null（攒着不跨桥）', async () => {
+    // 载荷真源的判据在 useSessionListBridge（独立 hook 有自己的单测面）；
+    // 这里钉住面板这侧的契约：对话视图必须传 null，否则对话期间列表数据每变
+    // 一次就跨一次桥（也正是「仅 list 态推」的实现点）。
+    mockChatSubview = 'conversation';
+    await act(async () => {
+      tree = TestRenderer.create(<SubviewTestHost />);
+      await flushPromises();
+    });
+    expect(lastWebViewProps().sessionList).toBeNull();
+
+    mockChatSubview = 'sessions';
+    await act(async () => {
+      tree!.update(<SubviewTestHost />);
+      await flushPromises();
+    });
+    // 本用例的 scope.sessions 是空数组：非 null 即为「已在推列表视图载荷」
+    expect(lastWebViewProps().sessionList).toEqual({sessions: []});
+  });
+
+  it('「工作区面板开着 + 切回列表视图」时 WebView 容器不得被收起', async () => {
+    // 这条路真实存在：删掉当前会话时 `handleDeleteSession` 会
+    // `setChatSubview('sessions')`，而 `conversationPanel` 还停在 'workspace'。
+    // 若对话面容器按 conversationPanel 一刀切 display:none，WebView（= 列表的
+    // 载体）就被藏起来了，用户看到的是一片空白列表。
+    mockChatSubview = 'sessions';
+    mockConversationPanel = 'workspace';
+    function WorkspaceThenListTestHost() {
+      const workspaceVfsRef = useRef<VfsFileManagerHandle>(null);
+      mockUseChatTabContext.mockReturnValue(
+        makeMockContext(workspaceVfsRef) as ReturnType<typeof useChatTabContext>,
+      );
+      return (
+        <ChatConversationPanel
+          tokens={tokens}
+          visible
+          chatSubview="sessions"
+          sessionBatch={mockSessionBatch}
+          onOpenConversation={mockOpenConversation}
+        />
+      );
+    }
+    await act(async () => {
+      tree = TestRenderer.create(<WorkspaceThenListTestHost />);
+      await flushPromises();
+    });
+    // chatPanel 容器有唯一指纹 backgroundColor:'transparent'
+    const chatPanels = tree!.root.findAll(node => {
+      const style = node.props?.style;
+      return (
+        Array.isArray(style) &&
+        style.some(
+          (item: Record<string, unknown>) =>
+            item != null && item.backgroundColor === 'transparent',
+        )
+      );
+    });
+    expect(chatPanels.length).toBeGreaterThan(0);
+    for (const panel of chatPanels) {
+      expect(panel.props.style).not.toContainEqual(
+        expect.objectContaining({display: 'none'}),
+      );
+    }
   });
 });

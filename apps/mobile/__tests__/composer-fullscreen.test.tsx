@@ -359,31 +359,28 @@ async function flush(): Promise<void> {
   });
 }
 
-function findPressableByText(
-  root: TestRenderer.ReactTestInstance,
-  text: string,
-): TestRenderer.ReactTestInstance {
-  const node = root
-    .findAll(n => typeof n.props?.onPress === 'function')
-    .find(n => {
-      const selfText =
-        typeof n.props?.children === 'string' &&
-        n.props.children.includes(text);
-      if (selfText) {
-        return true;
-      }
-      return (
-        n.findAll(
-          d =>
-            typeof d.props?.children === 'string' &&
-            d.props.children.includes(text),
-        ).length > 0
-      );
+/**
+ * 进会话（第二阶段：列表已搬进 WebView 文档，RN 侧没有会话行了）。
+ *
+ * 断的还是同一条链——web 列表行点击 → `listAction/open` → 宿主 openConversation
+ * 状态机 → 切到对话子视图；变的只是入口从「按 RN 会话卡」换成「往桥派一条上行」。
+ */
+async function enterConversation(
+  tree: TestRenderer.ReactTestRenderer,
+): Promise<void> {
+  const webView = findMockWebViewByDomain(tree.root, CONVERSATION_DOMAIN);
+  await act(async () => {
+    webView.props.onMessage?.({
+      nativeEvent: {
+        data: JSON.stringify({
+          v: CONVERSATION_BRIDGE_V,
+          type: 'listAction',
+          payload: {kind: 'open', sessionId: 's1'},
+        }),
+      },
     });
-  if (!node) {
-    throw new Error(`pressable not found: ${text}`);
-  }
-  return node;
+  });
+  await flush();
 }
 
 /** 同排工具按钮（@ / $ / ⛶）的展平样式，用于断言「风格一致」。 */
@@ -401,11 +398,7 @@ describe('T-FS2/T-FS3 全屏编辑链（ChatTabScreen → 面板 → 统一宿�
       tree = TestRenderer.create(<ChatTabScreen />);
     });
     mountedTrees.push(tree);
-    const sessionCard = findPressableByText(tree.root, 'S1');
-    await act(async () => {
-      sessionCard.props.onPress();
-    });
-    await flush();
+    await enterConversation(tree);
     return tree;
   }
 

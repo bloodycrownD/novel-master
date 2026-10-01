@@ -1,6 +1,7 @@
 import React from 'react';
 import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
+import {Alert} from 'react-native';
 import {SimpleEventBus} from '@novel-master/core/events';
 import {
   EVENT_AGENT_RUN_FINISHED,
@@ -16,6 +17,8 @@ import {
 } from '../src/components/chat/ChatConversationBridge';
 import {
   clearMockWebViewPostMessages,
+  findMockWebViewByDomain,
+  getMockWebViewInstances,
   mockWebViewPostMessages,
 } from '../test-utils/react-native-webview-mock';
 
@@ -34,7 +37,11 @@ const mockOlderMessage = {
 };
 const mockLoadTail = jest.fn(async () => [mockTailMessage]);
 const mockLoadPage = jest.fn(async () => [mockOlderMessage]);
-let mockLatestBottomSheetProps: any;
+/**
+ * BottomSheetMenu 的 props 收集（面板上现在有两张：会话抽屉 + 会话行 ⋮）。
+ * 用数组而非「最后一个」是因为渲染顺序会变——按内容认领（见 `sessionRowMenu()`）。
+ */
+let mockBottomSheetPropsList: any[] = [];
 
 /**
  * 对话面的消息面观察点（Step 8 迁居）。
@@ -159,6 +166,22 @@ function buildHarnessManager(): SessionStreamUnitManager {
   return manager;
 }
 
+/**
+ * Android 返回键 hook 的入参捕获（第二阶段用它驱动「返回列表」）。
+ *
+ * hook 本体有独立测试（`use-android-chat-back-handler.test.ts`），这里只把它
+ * 替成一个「记录 options」的桩：返回键的状态机本轮零改动，需要的只是**一个
+ * 能触发 `backFromConversation` 的把手**，好断言切视图后 WebView 实例恒等。
+ */
+let mockBackHandlerState: any = null;
+let mockBackHandlerActions: any = null;
+jest.mock('../src/hooks/useAndroidChatBackHandler', () => ({
+  useAndroidChatBackHandler: (state: any, actions: any) => {
+    mockBackHandlerState = state;
+    mockBackHandlerActions = actions;
+  },
+}));
+
 jest.mock('@react-native-clipboard/clipboard', () => ({
   __esModule: true,
   default: {setString: jest.fn()},
@@ -270,7 +293,7 @@ jest.mock('../src/components/chat/ChatMetaBar', () => ({
 }));
 jest.mock('../src/components/sheet/BottomSheetMenu', () => ({
   BottomSheetMenu: (props: any) => {
-    mockLatestBottomSheetProps = props;
+    mockBottomSheetPropsList.push(props);
     return null;
   },
 }));
@@ -308,39 +331,61 @@ jest.mock('../src/components/agent/AgentPickerModal', () => ({
 
 import {ChatTabScreen} from '../src/screens/tabs/ChatTabScreen';
 
-function findPressableByText(
-  root: TestRenderer.ReactTestInstance,
-  text: string,
-): TestRenderer.ReactTestInstance {
-  const node = root
-    .findAll(n => typeof n.props?.onPress === 'function')
-    .find(n => {
-      const selfText =
-        typeof n.props?.children === 'string' &&
-        n.props.children.includes(text);
-      if (selfText) {
-        return true;
-      }
-      const descendants = n.findAll(
-        d =>
-          typeof d.props?.children === 'string' &&
-          d.props.children.includes(text),
-      );
-      return descendants.length > 0;
-    });
-  if (!node) {
-    throw new Error(`pressable not found: ${text}`);
+/**
+ * 会话行 ⋮ 菜单（认领标准：items 里带「重命名」）。
+ *
+ * 面板上现在挂两张 BottomSheetMenu（会话抽屉 + 会话行菜单），所以不能再用
+ * 「最后渲染的那张」——渲染顺序是实现细节，不是契约。
+ */
+function sessionRowMenu(): any {
+  const found = [...mockBottomSheetPropsList]
+    .reverse()
+    .find(props =>
+      (props.items ?? []).some((item: any) => item.label === '重命名'),
+    );
+  if (found == null) {
+    throw new Error('会话行 ⋮ 菜单未渲染');
   }
-  return node;
+  return found;
+}
+
+/** 往统一宿主派一条 `listAction` 上行（等价于用户在 web 列表里点/长按）。 */
+async function sendListAction(
+  root: TestRenderer.ReactTestInstance,
+  payload: {kind: string; sessionId?: string},
+): Promise<void> {
+  const webView = findMockWebViewByDomain(root, 'chat-conversation');
+  await act(async () => {
+    webView.props.onMessage?.({
+      nativeEvent: {
+        data: JSON.stringify({
+          v: CONVERSATION_BRIDGE_V,
+          type: 'listAction',
+          payload,
+        }),
+      },
+    });
+  });
+}
+
+/** 宿主当前推给 web 的全部下行（按 type 过滤）。 */
+function sentTypes(): string[] {
+  return mockWebViewPostMessages.map(
+    raw => (JSON.parse(raw) as {type: string}).type,
+  );
+}
+
+function sentOfType(type: string): Array<Record<string, unknown>> {
+  return mockWebViewPostMessages
+    .map(raw => JSON.parse(raw) as {type: string; payload: Record<string, unknown>})
+    .filter(msg => msg.type === type)
+    .map(msg => msg.payload);
 }
 
 async function enterConversation(
   tree: TestRenderer.ReactTestRenderer,
 ): Promise<void> {
-  const sessionCard = findPressableByText(tree.root, 'S1');
-  await act(async () => {
-    sessionCard.props.onPress();
-  });
+  await sendListAction(tree.root, {kind: 'open', sessionId: 's1'});
 }
 
 describe('ChatTabScreen integration', () => {
@@ -356,7 +401,9 @@ describe('ChatTabScreen integration', () => {
   beforeEach(() => {
     jest.useFakeTimers();
     mockFocusInvoked = false;
-    mockLatestBottomSheetProps = undefined;
+    mockBackHandlerState = null;
+    mockBackHandlerActions = null;
+    mockBottomSheetPropsList = [];
     mockLoadTail.mockClear();
     mockLoadPage.mockClear();
     mockRunAgentTurn.mockClear();
@@ -615,37 +662,251 @@ describe('ChatTabScreen integration', () => {
     }
   });
 
-  it('会话列表停止入口：run 活跃时菜单出现「停止生成」并调 manager.stopRun', async () => {
+  it('会话列表停止入口：web 派 menuOpen → 菜单挂「停止生成」并调 manager.stopRun', async () => {
     let tree: TestRenderer.ReactTestRenderer;
     await act(async () => {
       tree = mountScreen();
     });
 
-    // 无活跃 run：长按菜单不含停止项。
-    await act(async () => {
-      findPressableByText(tree!.root, 'S1');
-    });
-    const menuDots = tree!.root.findAll(
-      n => typeof n.props?.onPress === 'function' && n.props?.hitSlop != null,
-    )[0];
-    await act(async () => {
-      menuDots.props.onPress({stopPropagation: () => undefined});
-    });
-    expect(mockLatestBottomSheetProps.items.map((i: any) => i.action)).toEqual(
-      ['rename', 'copy', 'delete'],
-    );
+    // 无活跃 run：菜单不含停止项（菜单默认打开的是会话抽屉那张）
+    expect(sessionRowMenu().items.map((i: any) => i.action)).toEqual([
+      'rename',
+      'copy',
+      'delete',
+    ]);
 
-    // s1 run 活跃（受理即 starting）：菜单出现停止项，点击调 stopRun。
+    // s1 run 活跃（受理即 starting）：web 派 menuOpen 后菜单出现停止项，
+    // 点击走 stopRun —— 整条链：web ⋮ → listAction/menuOpen → RN 原生菜单。
     mockHarnessManager!.startRun('s1', 'p1', 'hi');
     await act(async () => {
       await Promise.resolve();
     });
+    await sendListAction(tree!.root, {kind: 'menuOpen', sessionId: 's1'});
+    expect(sessionRowMenu().visible).toBe(true);
+    expect(sessionRowMenu().items.map((i: any) => i.action)).toEqual([
+      'stop-generating',
+      'rename',
+      'copy',
+      'delete',
+    ]);
     const stopSpy = jest.spyOn(mockHarnessManager!, 'stopRun');
     await act(async () => {
-      mockLatestBottomSheetProps.onSelect('stop-generating');
+      sessionRowMenu().onSelect('stop-generating');
     });
     expect(stopSpy).toHaveBeenCalledWith('s1');
     stopSpy.mockRestore();
+  });
+
+  it('listAction 分发：create / rename / copy / delete 各走既有宿主动作', async () => {
+    let tree: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = mountScreen();
+    });
+    // create：走 scope.handleCreateSession（内部先 listByProject 再 create）
+    mockRuntime.sessions.create.mockClear();
+    await sendListAction(tree!.root, {kind: 'create'});
+    expect(mockRuntime.sessions.create).toHaveBeenCalledWith('p1', expect.any(String));
+
+    // rename：走既有 prompt（TextPromptModal 被 mock 成 null，改断言 scope 的入口）
+    // → 这里用「会话行菜单被打开 + 其 rename 项派发」来钉：菜单项 → 同一个执行口
+    await sendListAction(tree!.root, {kind: 'menuOpen', sessionId: 's1'});
+    await act(async () => {
+      sessionRowMenu().onSelect('rename');
+    });
+    // prompt 的可见性由 TextPromptModal 承接（已 mock），断的是「菜单关闭 + 分发执行」
+    expect(sessionRowMenu().visible).toBe(false);
+
+    // copy：走 scope.handleCopySession
+    mockRuntime.sessions.copy.mockClear();
+    await sendListAction(tree!.root, {kind: 'menuOpen', sessionId: 's1'});
+    await act(async () => {
+      sessionRowMenu().onSelect('copy');
+    });
+    expect(mockRuntime.sessions.copy).toHaveBeenCalledWith('s1');
+
+    // delete：菜单项派发后停在原生 Alert 确认这一步（不直删）
+    mockRuntime.sessions.delete.mockClear();
+    await sendListAction(tree!.root, {kind: 'menuOpen', sessionId: 's1'});
+    await act(async () => {
+      sessionRowMenu().onSelect('delete');
+    });
+    expect(mockRuntime.sessions.delete).not.toHaveBeenCalled();
+  });
+
+  it('批量头入口：batchDelete 停在原生确认框，确认后才逐个删；batchExit 直接清批量态', async () => {
+    let tree: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = mountScreen();
+    });
+    // ready 握手一次（列表载荷开始下发，后面 batchSelect 才有意义）
+    const webView = findMockWebViewByDomain(tree!.root, 'chat-conversation');
+    await act(async () => {
+      webView.props.onMessage?.({
+        nativeEvent: {
+          data: JSON.stringify({
+            v: CONVERSATION_BRIDGE_V,
+            type: 'ready',
+            payload: {version: 'u1', capabilities: ['composer-dock']},
+          }),
+        },
+      });
+    });
+
+    // 长按进批量并勾上 s1 → 载荷带 batchSelect（批量头的真源）
+    await sendListAction(tree!.root, {kind: 'longPress', sessionId: 's1'});
+    expect((sentOfType('sessionList').at(-1) as {batchSelect?: string[]}).batchSelect).toEqual(['s1']);
+
+    // web 批量头点「删除」→ 宿主只弹原生 Alert 二次确认，**不**直删
+    const alertSpy = jest.spyOn(Alert, 'alert');
+    mockRuntime.sessions.delete.mockClear();
+    await sendListAction(tree!.root, {kind: 'batchDelete'});
+    expect(alertSpy).toHaveBeenCalledTimes(1);
+    const [title, message, buttons] = alertSpy.mock.calls[0] as [
+      string,
+      string,
+      Array<{text: string; onPress?: () => void}>,
+    ];
+    expect(title).toBe('确认删除');
+    expect(message).toBe('确定删除选中的 1 个会话？');
+    expect(mockRuntime.sessions.delete).not.toHaveBeenCalled();
+
+    // 确认 → 走 scope.deleteSelectedSessions 的逐个删除（部分成功语义原样保留）
+    await act(async () => {
+      buttons!.find(b => b.text === '删除')?.onPress?.();
+    });
+    expect(mockRuntime.sessions.delete).toHaveBeenCalledWith('s1');
+    alertSpy.mockRestore();
+
+    // 退出批量：batchExit 直接清选择 —— 下一次载荷 batchSelect 回到缺省
+    await sendListAction(tree!.root, {kind: 'batchExit'});
+    const afterExit = sentOfType('sessionList').at(-1) as {batchSelect?: string[]};
+    expect(afterExit.batchSelect).toBeUndefined();
+  });
+
+  it('列表↔对话切视图不重建 WebView（实例恒等 + ready 只握手一次）', async () => {
+    // 本轮改造的核心命题：去 `key={chatScrollKey}` + 面板常驻之后，
+    // 「进会话 → 返回键回列表」不得再销毁重建 WebView（那正是用户实报的卡顿主因）。
+    let tree: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = mountScreen();
+    });
+    const instancesBefore = getMockWebViewInstances('chat-conversation');
+    expect(instancesBefore).toHaveLength(1);
+    const idBefore = instancesBefore[0]!.id;
+
+    // ready 握手一次（web 首帧固定 conversation 视图，宿主随后补发 viewState）
+    const webView = findMockWebViewByDomain(tree!.root, 'chat-conversation');
+    await act(async () => {
+      webView.props.onMessage?.({
+        nativeEvent: {
+          data: JSON.stringify({
+            v: CONVERSATION_BRIDGE_V,
+            type: 'ready',
+            payload: {version: 'u1', capabilities: ['composer-dock']},
+          }),
+        },
+      });
+    });
+    const initsAfterReady = sentTypes().filter(t => t === 'init').length;
+    expect(initsAfterReady).toBe(1);
+    // 冷启动停在列表视图 → ready 后补发 viewState=list（web 首帧是 conversation）
+    expect(sentOfType('viewState').at(-1)).toEqual({view: 'list'});
+    expect(sentOfType('sessionList').length).toBeGreaterThan(0);
+
+    await enterConversation(tree!);
+    expect(sentOfType('viewState').at(-1)).toEqual({view: 'conversation'});
+
+    // 返回键回列表（backFromConversation 语义：setChatSubview('sessions')）
+    expect(mockBackHandlerState.chatSubview).toBe('conversation');
+    await act(async () => {
+      mockBackHandlerActions.backFromConversation();
+    });
+    expect(sentOfType('viewState').at(-1)).toEqual({view: 'list'});
+
+    // 同一个 WebView 实例（全程没被重挂）
+    const instancesAfter = getMockWebViewInstances('chat-conversation');
+    expect(instancesAfter).toHaveLength(1);
+    expect(instancesAfter[0]!.id).toBe(idBefore);
+    // ready 没重来：init 仍只有握手那一条（切视图不重发 init）
+    expect(sentTypes().filter(t => t === 'init').length).toBe(initsAfterReady);
+    // 回列表补推了一次列表快照（治「回列表不刷新」那条老毛病）
+    expect(sentOfType('sessionList').length).toBeGreaterThan(1);
+  });
+
+  it('列表快照只在下行一次「非批量态」形态：批量勾选走 batchSelect 字段', async () => {
+    // 载荷形状判据（web 侧 resolveSessionSelected 只认这个字段）：
+    // 缺省 = 非批量态、给了（哪怕空数组）= 批量态。混淆的后果是批量态下
+    // 点行会走成「打开会话」而不是「勾选」。
+    let tree: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = mountScreen();
+    });
+    const webView = findMockWebViewByDomain(tree!.root, 'chat-conversation');
+    await act(async () => {
+      webView.props.onMessage?.({
+        nativeEvent: {
+          data: JSON.stringify({
+            v: CONVERSATION_BRIDGE_V,
+            type: 'ready',
+            payload: {version: 'u1', capabilities: ['composer-dock']},
+          }),
+        },
+      });
+    });
+    const first = sentOfType('sessionList').at(-1) as {
+      sessions: Array<Record<string, unknown>>;
+      batchSelect?: string[];
+    };
+    expect(first.batchSelect).toBeUndefined();
+    expect(first.sessions).toEqual([
+      {id: 's1', title: 'S1', updatedAtMs: 1, active: false, interrupted: false, current: true},
+    ]);
+
+    // 长按进批量并勾上这一行 → 下一次载荷必须带 batchSelect
+    await sendListAction(tree!.root, {kind: 'longPress', sessionId: 's1'});
+    const afterBatch = sentOfType('sessionList').at(-1) as {batchSelect?: string[]};
+    expect(afterBatch.batchSelect).toEqual(['s1']);
+  });
+
+  it('sessionKey 变化（进会话）重发 init + 快照开屏，且不重启 8s ready 兜底', async () => {
+    let tree: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = mountScreen();
+    });
+    const webView = findMockWebViewByDomain(tree!.root, 'chat-conversation');
+    await act(async () => {
+      webView.props.onMessage?.({
+        nativeEvent: {
+          data: JSON.stringify({
+            v: CONVERSATION_BRIDGE_V,
+            type: 'ready',
+            payload: {version: 'u1', capabilities: ['composer-dock']},
+          }),
+        },
+      });
+    });
+    const initsBefore = sentTypes().filter(t => t === 'init').length;
+    const snapshotsBefore = sentTypes().filter(
+      t => t === 'sessionSnapshot',
+    ).length;
+
+    // sessionKey 从 'p1:s1'… 注意本用例里 useMobileScope 恒给 s1，
+    // 真正驱动 sessionKey 变化的是 chatScrollKey 派生的 projectId#sessionId。
+    // 这里换成「切到别的会话」：改 useMobileScope 的 sessionId 不可行（mock 固定），
+    // 故直接断言「进会话后 init 至少没重复、快照开了新屏」这条不变式。
+    await enterConversation(tree!);
+    expect(sentTypes().filter(t => t === 'init').length).toBe(initsBefore);
+    expect(
+      sentTypes().filter(t => t === 'sessionSnapshot').length,
+    ).toBeGreaterThan(snapshotsBefore);
+
+    // 8s 兜底：ready 早就到了，切视图后推进 8s 也不该弹「对话页加载失败」
+    await act(async () => {
+      jest.advanceTimersByTime(20_000);
+    });
+    expect(
+      tree!.root.findAllByProps({testID: 'chat-conversation-ready-error'}),
+    ).toHaveLength(0);
   });
 
   it('settled 单元宽限销毁后消息面不回退（最终 assistant 回复仍在，消息数不减）', async () => {

@@ -142,6 +142,13 @@ function firstIndexOfType(type: string, since = 0): number {
   return sentMessages(since).findIndex(m => m.type === type);
 }
 
+/** 某一 type 的全部下行载荷（列表域断言面：viewState / sessionList / setText）。 */
+function sentOfType(type: string, since = 0): Array<Record<string, unknown>> {
+  return sentMessages(since)
+    .filter(m => m.type === type)
+    .map(m => m.payload);
+}
+
 function webViewOf(root: TestRenderer.ReactTestInstance) {
   return root.findByType(
     require('react-native-webview').default as React.ComponentType<{
@@ -931,5 +938,401 @@ describe('ChatConversationWebView · IME 防线', () => {
     expect(webViewOf(tree.root).props.source).toEqual({
       uri: 'file:///android_asset/webview/chat-conversation/index.html',
     });
+  });
+});
+
+/* ================================================================== *
+ * 列表域（第二阶段 wave-2）
+ * ================================================================== */
+
+describe('ChatConversationWebView · 列表域下行', () => {
+  beforeEach(() => {
+    clearMockWebViewPostMessages();
+  });
+
+  afterEach(async () => {
+    jest.useRealTimers();
+    await unmountAll();
+    clearMockWebViewPostMessages();
+  });
+
+  async function mountReady(overrides: Record<string, unknown> = {}) {
+    let tree: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = track(TestRenderer.create(
+        <ChatConversationWebView {...baseProps(overrides)} />,
+      ));
+    });
+    simulateLoad(tree!.root);
+    simulateReadyV2(tree!.root);
+    await flushMicrotasks();
+    return tree!;
+  }
+
+  it('view 变化即下发 viewState（web 据此切 data-view）', async () => {
+    let tree: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = track(TestRenderer.create(
+        <ChatConversationWebView {...baseProps({view: 'list'})} />,
+      ));
+    });
+    simulateReadyV2(tree.root);
+    await flushMicrotasks();
+    expect(sentOfType('viewState').at(-1)).toEqual({view: 'list'});
+
+    await act(async () => {
+      tree.update(
+        <ChatConversationWebView {...baseProps({view: 'conversation'})} />,
+      );
+    });
+    expect(sentOfType('viewState').at(-1)).toEqual({view: 'conversation'});
+  });
+
+  it('sessionList=null 时绝不下发（对话态攒着，不跨桥）', async () => {
+    await mountReady({view: 'conversation', sessionList: null});
+    expect(sentTypes()).not.toContain('sessionList');
+  });
+
+  it('只改 sessionList（视图不动）也必须推——memo 漏字段的回归点', async () => {
+    // 踩坑史：`pendingSubagentSessions` 漏进 memo 比较器过一次，症状是
+    // 「改了没生效」且零报错。这里只改载荷、不改 view：漏 `sessionList` 字段
+    // 时整个子树会被 memo 吞掉，本条立刻红。
+    const first = {sessions: []};
+    const second = {
+      sessions: [
+        {
+          id: 's9',
+          updatedAtMs: 9,
+          active: false,
+          interrupted: false,
+          current: false,
+        },
+      ],
+    };
+    let tree: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = track(TestRenderer.create(
+        <ChatConversationWebView
+          {...baseProps({view: 'list', sessionList: first})}
+        />,
+      ));
+    });
+    simulateReadyV2(tree.root);
+    await flushMicrotasks();
+    expect(sentOfType('sessionList')).toHaveLength(1);
+
+    await act(async () => {
+      tree.update(
+        <ChatConversationWebView
+          {...baseProps({view: 'list', sessionList: second})}
+        />,
+      );
+    });
+    expect(sentOfType('sessionList')).toHaveLength(2);
+    expect(sentOfType('sessionList').at(-1)).toEqual(second);
+  });
+
+  it('sessionList 载荷下发；切回列表（null→对象）补推一次最新快照', async () => {
+    const first = {
+      sessions: [
+        {
+          id: 's1',
+          title: 'S1',
+          updatedAtMs: 1,
+          active: false,
+          interrupted: false,
+          current: true,
+        },
+      ],
+    };
+    const second = {...first, sessions: [...first.sessions, {
+      id: 's2',
+      updatedAtMs: 2,
+      active: false,
+      interrupted: false,
+      current: false,
+    }]};
+    let tree: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = track(TestRenderer.create(
+        <ChatConversationWebView {...baseProps({view: 'list', sessionList: first})} />,
+      ));
+    });
+    simulateReadyV2(tree.root);
+    await flushMicrotasks();
+    expect(sentOfType('sessionList').at(-1)).toEqual(first);
+
+    // 进对话：宿主把载荷置 null（这就是「对话期间不跨桥」的实现点）→ 不再推
+    await act(async () => {
+      tree.update(
+        <ChatConversationWebView
+          {...baseProps({view: 'conversation', sessionList: null})}
+        />,
+      );
+    });
+    expect(sentOfType('sessionList')).toHaveLength(1);
+
+    // 回列表：null → 对象 ⇒ 一次性补推**最新**快照（顺带治「回列表不刷新」）
+    await act(async () => {
+      tree.update(
+        <ChatConversationWebView {...baseProps({view: 'list', sessionList: second})} />,
+      );
+    });
+    expect(sentOfType('sessionList')).toHaveLength(2);
+    expect(sentOfType('sessionList').at(-1)).toEqual(second);
+  });
+});
+
+describe('ChatConversationWebView · listAction 上行', () => {
+  beforeEach(() => {
+    clearMockWebViewPostMessages();
+  });
+
+  afterEach(async () => {
+    await unmountAll();
+    clearMockWebViewPostMessages();
+  });
+
+  it('九项枚举白名单逐项透传；枚举外静默丢弃（不掉进任何既有分支）', async () => {
+    const onListAction = jest.fn();
+    let tree: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = track(TestRenderer.create(
+        <ChatConversationWebView {...baseProps({onListAction})} />,
+      ));
+    });
+    const kinds = [
+      'open',
+      'create',
+      'menuOpen',
+      'rename',
+      'copy',
+      'delete',
+      'stopRun',
+      'longPress',
+      'batchToggle',
+    ];
+    for (const kind of kinds) {
+      simulateUpstream(
+        tree!.root,
+        'listAction',
+        {kind, sessionId: 's1'},
+        CONVERSATION_BRIDGE_V,
+      );
+    }
+    expect(onListAction.mock.calls.map(call => call[0].kind)).toEqual(kinds);
+
+    // 白名单外：静默丢弃（若写成「未知 kind 当 open」，用户点一下就跳进别的会话）
+    simulateUpstream(
+      tree!.root,
+      'listAction',
+      {kind: '__evil__', sessionId: 's1'},
+      CONVERSATION_BRIDGE_V,
+    );
+    expect(onListAction).toHaveBeenCalledTimes(kinds.length);
+  });
+
+  it('create 不带 sessionId；其余项缺 sessionId 时只带 kind（宿主侧判空丢弃）', async () => {
+    const onListAction = jest.fn();
+    let tree: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = track(TestRenderer.create(
+        <ChatConversationWebView {...baseProps({onListAction})} />,
+      ));
+    });
+    simulateUpstream(
+      tree!.root,
+      'listAction',
+      {kind: 'create'},
+      CONVERSATION_BRIDGE_V,
+    );
+    expect(onListAction).toHaveBeenCalledWith({kind: 'create'});
+    simulateUpstream(
+      tree!.root,
+      'listAction',
+      {kind: 'open'},
+      CONVERSATION_BRIDGE_V,
+    );
+    expect(onListAction).toHaveBeenLastCalledWith({kind: 'open'});
+  });
+});
+
+/* ================================================================== *
+ * 会话切换重置链（第二阶段：去 `key={sessionKey}` 之后由 sessionKey 驱动）
+ *
+ * 去 key 之前，切会话 = 组件重挂 = 全部 ref 归零 + 走一遍 ready 握手；
+ * 去 key 之后文档不换、ready 不重来，于是「换文档式的清场」必须显式改成
+ * `[sessionKey]` effect 驱动。这组用例逐条钉住那几段。
+ * ================================================================== */
+
+describe('ChatConversationWebView · sessionKey 变化重置链', () => {
+  beforeEach(() => {
+    clearMockWebViewPostMessages();
+  });
+
+  afterEach(async () => {
+    jest.useRealTimers();
+    await unmountAll();
+    clearMockWebViewPostMessages();
+  });
+
+  /** 切到另一个会话：只换 sessionKey，文档/ready 都不动。 */
+  async function switchSession(
+    tree: TestRenderer.ReactTestRenderer,
+    overrides: Record<string, unknown> = {},
+  ): Promise<void> {
+    await act(async () => {
+      tree.update(
+        <ChatConversationWebView
+          {...baseProps({
+            sessionKey: 'p1:s2',
+            messages: [sampleMessage('m2', 1)],
+            ...overrides,
+          })}
+        />,
+      );
+    });
+    await flushMicrotasks();
+    await flushSnapshotChunks();
+  }
+
+  it('切会话重发 init（幂等）并按新 sessionKey 开屏', async () => {
+    const tree = await (async () => {
+      let t!: TestRenderer.ReactTestRenderer;
+      await act(async () => {
+        t = track(TestRenderer.create(
+          <ChatConversationWebView {...baseProps({composerText: ''})} />,
+        ));
+      });
+      simulateLoad(t.root);
+      simulateReadyV2(t.root);
+      await flushMicrotasks();
+      return t;
+    })();
+    expect(sentTypes().filter(t => t === 'init')).toHaveLength(1);
+
+    await switchSession(tree);
+    // init 重发：切会话后 web 侧的 flags/theme/metrics 要重新对齐（幂等，值可同）
+    expect(sentTypes().filter(t => t === 'init')).toHaveLength(2);
+    // 快照开屏：新 sessionKey 整替换 rows
+    const snapshots = sentMessages().filter(m => m.type === 'sessionSnapshot');
+    expect(snapshots.length).toBeGreaterThan(0);
+    expect(snapshots.at(-1)!.payload.sessionKey).toBe('p1:s2');
+  });
+
+  it('切会话必重发一次 setText（草稿重新落位，判据不是「文本变没变」）', async () => {
+    // web 文档没换 → 切会话后 textarea 里还留着上个会话的草稿。恢复的判据
+    // **不能**是 M1 的「composerText !== webTextRef」：两个会话草稿恰好相同（或
+    // controller 尚未水化、prop 暂还是旧值）时，那条判据会整条早退，草稿就留在
+    // 旧会话的份上。所以 `[sessionKey]` 清场把基线打成 null，让 ③ 必然走真外部
+    // 写入分支，重新落位一次（值同也无妨——幂等）。
+    let tree: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = track(TestRenderer.create(
+        <ChatConversationWebView {...baseProps({composerText: '同一个草稿'})} />,
+      ));
+    });
+    simulateLoad(tree.root);
+    simulateReadyV2(tree.root);
+    await flushMicrotasks();
+    const before = sentOfType('setText').length;
+    expect(before).toBeGreaterThan(0);
+
+    // 切会话；composerText 文本**不变**（模拟两个会话草稿相同 / 水化未回）
+    await switchSession(tree, {composerText: '同一个草稿'});
+    const after = sentOfType('setText');
+    expect(after.length).toBe(before + 1);
+    expect(after.at(-1)).toMatchObject({text: '同一个草稿'});
+  });
+
+  it('切会话到空草稿：下发 setText(空) 清掉上个会话的草稿', async () => {
+    let tree: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = track(TestRenderer.create(
+        <ChatConversationWebView {...baseProps({composerText: '上个会话的草稿'})} />,
+      ));
+    });
+    simulateLoad(tree.root);
+    simulateReadyV2(tree.root);
+    await flushMicrotasks();
+    expect(sentOfType('setText').at(-1)).toMatchObject({text: '上个会话的草稿'});
+
+    // 新会话没有草稿：文本真变，③ 靠自身依赖即可覆盖（这一条是回归护栏，
+    // 「两遍草稿」类问题会在这里现形）
+    await switchSession(tree, {composerText: ''});
+    expect(sentOfType('setText').at(-1)).toMatchObject({text: ''});
+  });
+
+  it('切会话不重启 8s ready 兜底（web 不重挂，ready 不重来）', async () => {
+    // 8s 窗口量的是「这一份文档的握手耗时」，锚点固定在 onLoad。切会话既没有
+    // 换文档、也没有让 ready 重来，就不该给这个窗口续命——否则用户每切一次会话
+    // 都能把「加载失败」的判定往后推 8 秒。
+    jest.useFakeTimers();
+    let tree: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = track(TestRenderer.create(<ChatConversationWebView {...baseProps()} />));
+    });
+    simulateLoad(tree.root);
+
+    // ready 之前切会话（冷启动立刻点一行是常态）：兜底窗口不得被续命
+    await act(async () => {
+      jest.advanceTimersByTime(7500);
+    });
+    await act(async () => {
+      tree.update(
+        <ChatConversationWebView
+          {...baseProps({sessionKey: 'p1:s2', messages: [sampleMessage('m2', 1)]})}
+        />,
+      );
+    });
+    await act(async () => {
+      jest.advanceTimersByTime(1000);
+    });
+    expect(
+      tree!.root.findAllByProps({testID: 'chat-conversation-ready-error'}).length,
+    ).toBeGreaterThan(0);
+  });
+
+  it('切会话（已 ready）不弹 8s 错误态：ready 早已到达，计时器判超时的前提不成立', async () => {
+    jest.useFakeTimers();
+    let tree: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = track(TestRenderer.create(<ChatConversationWebView {...baseProps()} />));
+    });
+    simulateLoad(tree.root);
+    simulateReadyV2(tree.root);
+    await flushMicrotasks();
+
+    await act(async () => {
+      tree.update(
+        <ChatConversationWebView
+          {...baseProps({sessionKey: 'p1:s2', messages: [sampleMessage('m2', 1)]})}
+        />,
+      );
+    });
+    // 推进远超 8s：切会话不是「新文档」，不该有任何 ready 超时错误态
+    await act(async () => {
+      jest.advanceTimersByTime(60_000);
+    });
+    expect(
+      tree!.root.findAllByProps({testID: 'chat-conversation-ready-error'}),
+    ).toHaveLength(0);
+  });
+
+  it('切会话不重发 ready（onReady 只调一次，句柄只 attach 一次）', async () => {
+    const onReady = jest.fn();
+    let tree: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = track(TestRenderer.create(
+        <ChatConversationWebView {...baseProps({onReady})} />,
+      ));
+    });
+    simulateLoad(tree.root);
+    simulateReadyV2(tree.root);
+    await flushMicrotasks();
+    expect(onReady).toHaveBeenCalledTimes(1);
+
+    await switchSession(tree);
+    expect(onReady).toHaveBeenCalledTimes(1);
   });
 });
