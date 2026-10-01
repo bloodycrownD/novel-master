@@ -1,5 +1,6 @@
 import { describe, it, mock } from "node:test";
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { createProviderServices } from "../../src/service/provider/create-provider-services.js";
 import { DefaultProviderService } from "../../src/service/provider/impl/provider.service.js";
 import { createKkvService } from "../../src/service/kkv/create-kkv-service.js";
@@ -147,6 +148,40 @@ describe("ProviderService", () => {
     assert.equal(await secrets.has(`provider/${created.id}/apiKey`), false);
   });
 
+  it("delete provider 时其下被会话引用的 saved model 拒绝删除（不静默清空）", async () => {
+    // 牙齿：这条走 `savedModels.deleteByProvider` 批量抹除路径，删前**零 in-use 校验**。
+    // 守卫补全后必须抛 SAVED_MODEL_IN_USE，且**模型仍在**（证明没有「抛错但已删」的半套）。
+    const ctx = getNovelMasterTestContext();
+    const secrets = memorySecretStore();
+    const bundle = createProviderServices(ctx.conn, secrets);
+    const created = await bundle.providers.create({
+      protocol: "openai",
+      baseUrl: "https://example.com/v1",
+      displayName: "guardgw" + testIsolationSuffix(),
+      apiKey: "guard-secret",
+    });
+    const saved = await bundle.providerModels.create(created.id, "guard-model");
+    const project = await ctx.projects.create(`proj-guard-${Date.now()}`);
+    const session = await ctx.sessions.create(project.id);
+    await ctx.sessions.updateSessionAgentConfig(session.id, {
+      agentId: `agent-guard-${randomUUID()}`,
+      modelId: saved.id,
+    });
+
+    await assert.rejects(
+      () => bundle.providers.delete(created.id),
+      (e) => e instanceof ProviderError && e.code === "SAVED_MODEL_IN_USE",
+    );
+    // 半套防护：模型必须仍在（服务层只有 savedList，没有 listByProvider）
+    const still = await bundle.providerModels.savedList(created.id);
+    assert.equal(
+      still.some((m) => m.id === saved.id),
+      true,
+      "拒绝后模型不得被清空",
+    );
+    assert.equal(await secrets.has(`provider/${created.id}/apiKey`), true);
+  });
+
   it("delete removes secret at default ref when secretRef is null", async () => {
     const ctx = getNovelMasterTestContext();
     const secrets = memorySecretStore();
@@ -213,6 +248,7 @@ describe("ProviderService", () => {
       suggestions: new KkvModelSuggestionRepository(kkv),
       savedModels: new SqliteSavedModelRepository(ctx.conn),
       secretStore: secrets,
+      conn: ctx.conn,
     });
 
     await assert.rejects(

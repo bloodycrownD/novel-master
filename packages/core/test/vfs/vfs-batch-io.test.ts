@@ -114,6 +114,65 @@ describe("VfsBatchIoService", () => {
     assert.deepEqual(rels, ["a.md", "sub/b.md"]);
   });
 
+  it("T-B10: 多选两个同名文件（不同父目录）都要进 plan", async () => {
+    // 牙齿：把锚点改回 `basenameOf(logical)` 这条立刻红（files.length === 1，
+    // 第二条被 seenFileRels 静默丢弃 ⇒ ZIP 少一个文件且 UI 零提示）。
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const vfs = ctx.projectVfs(project.id);
+    await vfs.write("/卷一/第一章.md", "A");
+    await vfs.write("/卷二/第一章.md", "B");
+
+    const batch = createVfsBatchIoService(ctx.conn);
+    const plan = await batch.planBatchExport(
+      { kind: "project", projectId: project.id },
+      ["/卷一/第一章.md", "/卷二/第一章.md"],
+    );
+    const rels = plan.files.map((f) => f.relativePath);
+    assert.equal(plan.files.length, 2);
+    assert.equal(new Set(rels).size, 2, "两个 relativePath 必须互不相同");
+    assert.deepEqual([...rels].sort(), ["卷一/第一章.md", "卷二/第一章.md"]);
+  });
+
+  it("T-B11: 单选一个文件仍导出该文件（防锚点取父目录改错）", async () => {
+    // 陷阱专测：`relativePathUnderAnchor(p, p)` 按定义返回空串 ⇒ 任何「锚点用自身」
+    // 的错修都会让单选文件被 `rel.length === 0` 整条丢掉。
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const vfs = ctx.projectVfs(project.id);
+    await vfs.write("/卷一/第一章.md", "A");
+
+    const batch = createVfsBatchIoService(ctx.conn);
+    const plan = await batch.planBatchExport(
+      { kind: "project", projectId: project.id },
+      ["/卷一/第一章.md"],
+    );
+    assert.equal(plan.files.length, 1);
+    assert.equal(plan.files[0]!.relativePath, "第一章.md");
+  });
+
+  it("T-B12: 同名冲突进入 skipped 通道", async () => {
+    // 「文件 + 同名目录同选」仍会撞 rel（文件分支得 `卷一/a.md`、目录分支也得
+    // `卷一/a.md`）——skipped 是**必需通道**、不是死字段。
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const vfs = ctx.projectVfs(project.id);
+    await vfs.write("/卷一/a.md", "单文件");
+    await vfs.write("/卷一/子/b.md", "目录里的");
+
+    const batch = createVfsBatchIoService(ctx.conn);
+    const plan = await batch.planBatchExport(
+      { kind: "project", projectId: project.id },
+      // 单文件在前 ⇒ 它先占住 `卷一/a.md`；随后目录分支再产出同 rel ⇒ 撞名
+      ["/卷一/a.md", "/卷一"],
+    );
+    const rels = plan.files.map((f) => f.relativePath);
+    assert.equal(new Set(rels).size, rels.length, "plan.files 不得含重复项");
+    assert.equal((plan.skipped ?? []).length, 1, "被去重的那条必须进 skipped");
+    assert.equal(plan.skipped![0]!.logicalPath, "/卷一/a.md");
+    assert.equal(plan.skipped![0]!.reason, "DUPLICATE_RELATIVE_PATH");
+  });
+
   it("T-B6: mid-apply failure rolls back entire non-session batch", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);

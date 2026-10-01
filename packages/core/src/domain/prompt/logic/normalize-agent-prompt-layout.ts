@@ -50,6 +50,17 @@ export function stripLegacyWorktreeBlocksFromPersistMap(
 
 /**
  * 域 layout 归一化：persist 仅 text；保留非空 `workplace` string（勿压成 boolean）；丢弃旧 worktree 块。
+ *
+ * ⚠️ 本函数的返回对象由**显式白名单逐字段重建**，因此白名单必须覆盖
+ * {@link AgentPromptLayout} 的全部可选标量字段（`persist` / `dynamic` 两个必填数组除外）。
+ * 新增字段时必须同步：① 本白名单；② `test/prompt/normalize-agent-prompt-layout.test.ts`
+ * 的「全字段白名单往返」用例夹具；③ 「新增字段必红」的编译期穷举守卫由 wave-e H2 的
+ * 类型层 `satisfies Record<Exclude<keyof AgentPromptLayout, "persist" | "dynamic">, null>`
+ * 承担（本文件不重复产出，见 wave-e.md H2 Step 1）。
+ * ⚠️ 各字段的省略语义**不统一**，勿照抄邻居：
+ * `persistEnabled` / `dynamicEnabled` 用 `=== true`（缺省 = 关），
+ * 而 `skillsEnabled` 用 `=== false`（缺省 = 开，仅显式 false 表示关闭，
+ * 见 `agent-definition.schema.ts`）——写成 `=== true` 会把用户已关闭的技能能力过滤掉。
  */
 export function normalizeAgentPromptLayoutDomain(
   layout: AgentPromptLayout
@@ -68,6 +79,14 @@ export function normalizeAgentPromptLayoutDomain(
     ...(layoutHasCustomAttach(layout)
       ? { customAttach: layout.customAttach }
       : {}),
+    // 与 validateAgentPromptLayoutFromMaps 逐字对齐：`skillsEnabled` 是「缺省 = 开」。
+    ...(layout.skillsEnabled === false ? { skillsEnabled: false } : {}),
+    ...(() => {
+      const prefixRaw = layout.skillsPrefix;
+      return typeof prefixRaw === "string" && prefixRaw.trim().length > 0
+        ? { skillsPrefix: prefixRaw }
+        : {};
+    })(),
     persist,
     dynamic: [...layout.dynamic],
   };

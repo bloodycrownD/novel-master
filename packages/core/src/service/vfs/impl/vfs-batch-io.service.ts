@@ -24,6 +24,7 @@ import type {
   BatchApplyReport,
   BatchConflict,
   BatchExportPlan,
+  BatchExportSkip,
   BatchIngestPlan,
   BatchIngestPlanEntry,
   BatchIngestRawEntry,
@@ -156,6 +157,20 @@ function basenameOf(logical: string): string {
     return "";
   }
   return path.slice(path.lastIndexOf("/") + 1);
+}
+
+/**
+ * 逻辑路径的父目录（根下文件返回 `/`）。
+ *
+ * 只给「选中项本身是文件」的导出分支当锚点用——多选时带一层父目录名，
+ * 才能让 `/卷一/第一章.md` 与 `/卷二/第一章.md` 不撞名。
+ * ⚠️ **锚点绝不能用 `logical` 自身**：`relativePathUnderAnchor(p, p)` 按定义返回空串，
+ * 调用方会 `continue` 掉，单选一个文件会被整个丢掉。
+ */
+function parentLogicalOf(logical: string): string {
+  const path = resolveLogicalPath(logical);
+  const i = path.lastIndexOf("/");
+  return i <= 0 ? "/" : path.slice(0, i);
 }
 
 /**
@@ -386,6 +401,7 @@ export class DefaultVfsBatchIoService implements VfsBatchIoService {
   ): Promise<BatchExportPlan> {
     const files: Array<{ relativePath: string; content: string }> = [];
     const mkdirPaths: string[] = [];
+    const skipped: BatchExportSkip[] = [];
     const seenFileRels = new Set<string>();
     const seenDirRels = new Set<string>();
     const selectionCount = logicalPaths.length;
@@ -397,10 +413,22 @@ export class DefaultVfsBatchIoService implements VfsBatchIoService {
       const existing = await this.repo.findByPath(sk, logical);
 
       if (existing != null && existing.entryKind === "file") {
-        const fileRel = basenameOf(logical);
+        // 锚点取**父目录**：多选时带一层父目录名，避免同名文件（中文工程常见
+        // 「同名卷章」）被 `seenFileRels` 静默丢弃。单选时与旧的 basename 形态一致。
+        const fileRel = exportRelativePath(
+          logical,
+          parentLogicalOf(logical),
+          selectionCount
+        );
         if (fileRel.length > 0 && !seenFileRels.has(fileRel)) {
           seenFileRels.add(fileRel);
           files.push({ relativePath: fileRel, content: existing.content });
+        } else if (fileRel.length > 0) {
+          // 撞名：报告而不是静默丢（锚点改父目录消不掉「文件与目录同选」那一类碰撞）
+          skipped.push({
+            logicalPath: logical,
+            reason: "DUPLICATE_RELATIVE_PATH",
+          });
         }
         continue;
       }
@@ -410,7 +438,14 @@ export class DefaultVfsBatchIoService implements VfsBatchIoService {
       for (const row of rows) {
         const childLogical = row.path;
         const rel = exportRelativePath(childLogical, logical, selectionCount);
-        if (rel.length === 0 || seenFileRels.has(rel)) {
+        if (rel.length === 0) {
+          continue;
+        }
+        if (seenFileRels.has(rel)) {
+          skipped.push({
+            logicalPath: childLogical,
+            reason: "DUPLICATE_RELATIVE_PATH",
+          });
           continue;
         }
         seenFileRels.add(rel);
@@ -441,6 +476,6 @@ export class DefaultVfsBatchIoService implements VfsBatchIoService {
       })
       .sort();
 
-    return { files, mkdirPaths: filteredMkdirs };
+    return { files, mkdirPaths: filteredMkdirs, skipped };
   }
 }

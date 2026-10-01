@@ -10,6 +10,40 @@ import {
 import { parseAnthropicUsage } from "../../../src/infra/llm-protocol/logic/usage-parser.js";
 
 describe("anthropic-sse-parser", () => {
+  it("SSE-DATA-NS-01: `data:` 无空格形态不再被整流静默丢弃", () => {
+    // 牙齿：把 parseSseDataLine 改回 `startsWith("data: ")` 形态，这条必红
+    // （blocks 长度为 0，且 malformedLineCount 仍为 0 ⇒ 不抛错）。
+    const state = createAnthropicSseParserState();
+    const deltas: string[] = [];
+    const onStream = (ev: { type: string; text?: string }) => {
+      if (ev.type === "text-delta" && ev.text != null) {
+        deltas.push(ev.text);
+      }
+    };
+
+    feedAnthropicSseChunk(
+      state,
+      'data:{"type":"content_block_delta","delta":{"type":"text_delta","text":"Hi"}}\n\n',
+      onStream,
+    );
+    const { blocks } = finishAnthropicSse(state, onStream);
+    assert.equal(blocks.length, 1);
+    assert.equal((blocks[0] as { text: string }).text, "Hi");
+    assert.deepEqual(deltas, ["Hi"]);
+    assert.equal(state.malformedLineCount, 0);
+  });
+
+  it("SSE-DATA-NS-02: 有空格形态不回归", () => {
+    const state = createAnthropicSseParserState();
+    feedAnthropicSseChunk(
+      state,
+      'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"Hi"}}\n\n',
+    );
+    const { blocks } = finishAnthropicSse(state);
+    assert.equal(blocks.length, 1);
+    assert.equal((blocks[0] as { text: string }).text, "Hi");
+  });
+
   it("T3: incremental text, thinking, and tool_use", () => {
     const state = createAnthropicSseParserState();
     const deltas: string[] = [];

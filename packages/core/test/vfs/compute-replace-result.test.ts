@@ -182,4 +182,28 @@ describe("computeReplaceResult replaceAll 路径（归一化定位 + 原文切�
       },
     );
   });
+
+  it("T-CS02-01: oldString 为空串：单次路径抛 REPLACE_NOT_FOUND（不得假成功）", () => {
+    // 牙齿：删掉函数体开头的空串守卫，这条立刻红——`indexOf("")` 恒 0，
+    // 旧实现会在文件开头「命中」并报 replacements: 1 的假成功。
+    assert.throws(
+      () => computeReplaceResult("/a.md", "abc", "", "X"),
+      (err: unknown) => {
+        const e = err as { code?: string };
+        return e.code === "REPLACE_NOT_FOUND";
+      },
+    );
+  });
+
+  it("T-CS02-02: oldString 为空串 + replaceAll：抛错且不死循环", () => {
+    // ⚠️ 这条**必须带超时保护**：死循环实现会让本用例**超时失败**（而不是断言失败），
+    // 这正是我们要的牙齿——旧实现的 `searchFrom = idx + 0` 恒定，positions 无限膨胀。
+    assert.throws(
+      () => computeReplaceResult("/a.md", "abc", "", "X", { replaceAll: true }),
+      (err: unknown) => {
+        const e = err as { code?: string };
+        return e.code === "REPLACE_NOT_FOUND";
+      },
+    );
+  });
 });

@@ -654,3 +654,18 @@ describe("skill 工具同路径串行化（runParallel）", () => {
     assert.equal(events[1], "start:project2");
   });
 });
+
+describe("T-CS02-04: skill 工具 schema 拒绝空串 oldString", () => {
+  const schema = skillTool.inputSchema as unknown as {
+    safeParse: (v: unknown) => { success: boolean };
+  };
+
+  it("给了 oldString 就不得为空串", () => {
+    assert.equal(schema.safeParse({ action: "list", oldString: "" }).success, false);
+    assert.equal(schema.safeParse({ action: "list", oldString: "a" }).success, true);
+  });
+
+  it("非 edit 动作不传 oldString 仍然通过（optional 语义保持）", () => {
+    assert.equal(schema.safeParse({ action: "list" }).success, true);
+  });
+});

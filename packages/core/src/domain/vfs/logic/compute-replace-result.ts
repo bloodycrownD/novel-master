@@ -39,6 +39,15 @@ export function computeReplaceResult(
   newString: string,
   options?: ComputeReplaceResultOptions
 ): ComputeReplaceResult {
+  // ⚠️ 空串守卫（真源层，三条调用路径都受益）：`indexOf("")` 恒返回 0 ⇒
+  // 单次路径会「命中」文件开头、报 replacements:1 的假成功；replaceAll 路径更糟——
+  // `indexOf("", searchFrom)` 恒等于 searchFrom 且 `searchFrom` 永不前进 ⇒
+  // while(true) 死循环 + positions 无限膨胀。空串归一后仍是空串，所以放在归一化前后皆可，
+  // 这里放在归一化之后、任何分支判断之前。
+  if (oldString.length === 0) {
+    // 复用既有的 vfsReplaceNotFound 口径，**不新造错误码**。
+    throw buildReplaceNotFoundError(path, currentContent, oldString);
+  }
   // 归一化只用于 indexOf 定位；切片和拼接全部走原文 currentContent，
   // 保证未替换段的引号形态原样保留（落盘不被归一化改写）。
   // v1 归一化是严格 1:1 映射（引号族 + 全角空格），归一化前后 UTF-16 码元

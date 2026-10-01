@@ -3,6 +3,7 @@
  */
 import { resolveSkillToolRefFromInput, resolveVfsToolFilePath } from "@shared/logic/chat";
 import { resolveToolResultOk } from "@shared/logic/root";
+import { summarizeToolInput } from "@novel-master/core/chat";
 import type { ChatMessageDto, ContentBlockDto } from "@shared/ipc-types";
 
 export type ToolCallStatus = "success" | "error" | "pending" | "interrupted";
@@ -175,37 +176,11 @@ export function toolCallViewFromUse(
   };
 }
 
-function summarizeToolInput(
-  name: string,
-  input: Record<string, unknown>,
-): string {
-  // skill 摘要：`action domain:name`；read 缺省域时只展示 action + name
-  if (name === "skill") {
-    const action = typeof input.action === "string" ? input.action : "";
-    const skillName = typeof input.name === "string" ? input.name : "";
-    const domain =
-      input.domain === "global" || input.domain === "project"
-        ? input.domain
-        : undefined;
-    return domain != null
-      ? `${action} ${domain}:${skillName}`
-      : `${action} ${skillName}`.trim();
-  }
-  const path = input.path ?? input.dir ?? input.from;
-  if (typeof path === "string") {
-    return path;
-  }
-  const keys = Object.keys(input);
-  if (keys.length === 0) {
-    return "";
-  }
-  try {
-    const raw = JSON.stringify(input);
-    return raw.length > 120 ? `${raw.slice(0, 117)}…` : raw;
-  } catch {
-    return keys.join(", ");
-  }
-}
+/**
+ * 工具入参摘要：单源在 core（`@novel-master/core/chat` 的 `summarizeToolInput`）。
+ * 本文件此前持有一份带 `skill` 特判的副本，与 mobile 两面（WebView / RN）行为不一致，
+ * 现已全部改为引用 core；新增特判分支请改 core 的 `domain/chat/logic/tool-summary.ts`。
+ */
 
 /** 解析工具卡片对应的 VFS 文件路径；不可打开时返回 undefined。 */
 export function vfsToolFilePath(tool: ToolCallView): string | undefined {

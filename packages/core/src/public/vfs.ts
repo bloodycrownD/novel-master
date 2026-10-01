@@ -51,6 +51,7 @@ export type {
   BatchApplyOptions,
   BatchExportPlan,
   BatchExportFileEntry,
+  BatchExportSkip,
   BatchIngestWriter,
 } from "../domain/vfs/ports/vfs-batch-io.port.js";
 export {

@@ -1,4 +1,4 @@
-[
+﻿[
   "ANNOTATE_ANCHOR_CLASS",
   "ANNOTATE_SOFT_RANGE_CHAR_PADDING",
   "ANNOTATE_SOFT_RANGE_LINE_PADDING",
@@ -149,6 +149,7 @@
   "splitMarkdownUnderlineRuns",
   "splitSourceLines",
   "subscribeChatAnnotateDraft",
+  "summarizeToolInput",
   "tailBatchDeleteAfterSeq",
   "textBlocks",
   "transcriptSelectableRole",

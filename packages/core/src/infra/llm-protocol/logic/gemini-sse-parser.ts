@@ -13,6 +13,7 @@ import { geminiPartsToBlocks } from "./gemini-content-mapper.js";
 import { emitDirectTextDelta } from "./inline-thinking-parser.js";
 import { buildStreamPartialBlocks } from "./stream-partial-blocks.js";
 import { feedSseLines } from "./sse-line-buffer.js";
+import { parseSseDataLine } from "./sse-data-line.js";
 import {
   assertSseParseSucceededOrThrow,
   recordMalformedSseLine,
@@ -196,11 +197,11 @@ function processGeminiSseLine(
   line: string,
   onStream?: (event: LlmStreamEvent) => void
 ): void {
-  if (!line.startsWith("data: ")) {
+  const payload = parseSseDataLine(line);
+  if (payload == null) {
     return;
   }
-  const payload = line.slice(6).trim();
-  if (payload === "" || payload === "[DONE]") {
+  if (payload === "[DONE]") {
     return;
   }
   let event: Record<string, unknown>;

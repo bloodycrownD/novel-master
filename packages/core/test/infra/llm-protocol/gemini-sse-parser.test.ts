@@ -9,6 +9,40 @@ import {
 } from "../../../src/infra/llm-protocol/logic/gemini-sse-parser.js";
 
 describe("gemini-sse-parser", () => {
+  it("SSE-DATA-NS-01: `data:` 无空格形态不再被整流静默丢弃", () => {
+    // 牙齿：把 parseSseDataLine 改回 `startsWith("data: ")` 形态，这条必红
+    // （blocks 长度为 0，且 malformedLineCount 仍为 0 ⇒ 不抛错）。
+    const state = createGeminiSseParserState();
+    const deltas: string[] = [];
+    const onStream = (ev: { type: string; text?: string }) => {
+      if (ev.type === "text-delta" && ev.text != null) {
+        deltas.push(ev.text);
+      }
+    };
+
+    feedGeminiSseChunk(
+      state,
+      'data:{"candidates":[{"content":{"parts":[{"text":"Hi"}]}}]}\n\n',
+      onStream,
+    );
+    const { blocks } = finishGeminiSse(state, onStream);
+    assert.equal(blocks.length, 1);
+    assert.equal((blocks[0] as { text: string }).text, "Hi");
+    assert.deepEqual(deltas, ["Hi"]);
+    assert.equal(state.malformedLineCount, 0);
+  });
+
+  it("SSE-DATA-NS-02: 有空格形态不回归", () => {
+    const state = createGeminiSseParserState();
+    feedGeminiSseChunk(
+      state,
+      'data: {"candidates":[{"content":{"parts":[{"text":"Hi"}]}}]}\n\n',
+    );
+    const { blocks } = finishGeminiSse(state);
+    assert.equal(blocks.length, 1);
+    assert.equal((blocks[0] as { text: string }).text, "Hi");
+  });
+
   it("T6: parses incremental text SSE and done", () => {
     const state = createGeminiSseParserState();
     const deltas: string[] = [];

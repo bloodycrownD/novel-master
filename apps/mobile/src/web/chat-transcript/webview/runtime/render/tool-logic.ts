@@ -1,3 +1,4 @@
+import {summarizeToolInput} from '@novel-master/core/chat';
 import type {ToolCallRow} from '../state/state';
 
 /**
@@ -5,35 +6,12 @@ import type {ToolCallRow} from '../state/state';
  * 工具组 UI 由 ui/render/ToolGroup 渲染；本文件仅供其复用的纯逻辑。
  */
 
-export function summarizeToolInput(
-  name: string,
-  input: Record<string, unknown> | null | undefined,
-): string {
-  if (!input) return '';
-
-  // task 工具：展示 @agent · description，比裸 JSON 可读。
-  if (name === 'task') {
-    const desc =
-      typeof input.description === 'string' ? input.description.trim() : '';
-    const agent =
-      typeof input.subagentName === 'string' ? input.subagentName : '';
-    const parts: string[] = [];
-    if (agent) parts.push(`@${agent}`);
-    if (desc) parts.push(desc);
-    return parts.join(' · ');
-  }
-
-  const path = input.path || input.dir || input.from;
-  if (typeof path === 'string') return path;
-  const keys = Object.keys(input);
-  if (keys.length === 0) return '';
-  try {
-    const raw = JSON.stringify(input);
-    return raw.length > 120 ? raw.slice(0, 117) + '…' : raw;
-  } catch {
-    return keys.join(', ');
-  }
-}
+// 摘要单源已收敛到 core（`domain/chat/logic/tool-summary.ts`）。
+// ⚠️ 这里必须写成「import + export」两步，**不能**写成纯 re-export
+// `export { summarizeToolInput } from '@novel-master/core/chat';`——
+// 纯 re-export 不把该符号引入本模块作用域，而下方 `toolCallSummary` 正在本地调用它。
+// 该 `export` 的唯一作用是保住本地引用（`ToolGroup.tsx` 并不 import 它），不是对外新增 API。
+export {summarizeToolInput};
 
 export function toolCallSummary(row: ToolCallRow): string {
   if (row.status === 'error' && row.summary) {

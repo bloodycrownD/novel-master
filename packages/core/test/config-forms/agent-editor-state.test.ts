@@ -468,6 +468,54 @@ test("T-CA2c: formSnapshotJson 将 customAttach 两字段纳入 dirty 比对", (
   assert.equal(parsed.customAttachText, "附加笔记");
 });
 
+test("T-CA2e: formSnapshotJson 将 mode 纳入 dirty 比对", () => {
+  const base = createDefaultAgentEditorPrompts();
+  const a = formSnapshotJson({
+    name: "agent",
+    mode: "primary",
+    maxSteps: "20",
+    modelEnabled: false,
+    providerId: "p",
+    savedModelId: "m",
+    toolsMode: "default",
+    toolsSelected: [],
+    ...base,
+  });
+  const b = formSnapshotJson({
+    name: "agent",
+    mode: "subagent",
+    maxSteps: "20",
+    modelEnabled: false,
+    providerId: "p",
+    savedModelId: "m",
+    toolsMode: "default",
+    toolsSelected: [],
+    ...base,
+  });
+  // 牙齿：`mode` 不进输出时两者逐字节相等，用例立刻红。
+  assert.notEqual(a, b, "改「作用域」必须产生 dirty");
+});
+
+test("T-CA2f: formSnapshotJson 的 mode 缺省显式为 all（不得被 JSON.stringify 丢键）", () => {
+  // 这条直接锁住「基线侧一旦漏传 mode」的失败形态：undefined 会被 stringify 丢掉，
+  // 于是基线 JSON 缺 `mode` 键、实时快照有 `mode:"all"` ⇒ 两个 JSON 永不相等 ⇒
+  // 打开任意智能体即显示「· 未保存」。
+  const base = createDefaultAgentEditorPrompts();
+  const json = formSnapshotJson({
+    name: "agent",
+    mode: undefined as never,
+    maxSteps: "20",
+    modelEnabled: false,
+    providerId: "p",
+    savedModelId: "m",
+    toolsMode: "default",
+    toolsSelected: [],
+    ...base,
+  });
+  const parsed = JSON.parse(json) as Record<string, unknown>;
+  assert.equal(parsed.mode, "all");
+});
+
 test("T-CA2d: 只开 customAttachEnabled 不影响 hasAnyPromptRegionEnabled 门闩", () => {
   const base = createDefaultAgentEditorPrompts();
   // 三区全关，仅 customAttach 开 → 门闩仍为 false（customAttach 不是区域）

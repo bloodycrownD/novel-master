@@ -1,5 +1,5 @@
 /**
- * Tool registry �?LLM tool definitions.
+ * Tool registry — LLM tool definitions.
  *
  * @module infra/llm-protocol/logic/tool-definitions
  */

@@ -46,6 +46,7 @@ export function createProviderServices(
     suggestions: suggestionRepo,
     savedModels: savedRepo,
     secretStore,
+    conn,
   });
 
   const retryPolicies = createModelRetryPolicyService(conn);

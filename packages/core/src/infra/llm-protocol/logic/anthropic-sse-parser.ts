@@ -14,6 +14,7 @@ import type {
 import type { AnthropicToolNameWire } from "./anthropic-tool-names.js";
 import { buildStreamPartialBlocks } from "./stream-partial-blocks.js";
 import { feedSseLines } from "./sse-line-buffer.js";
+import { parseSseDataLine } from "./sse-data-line.js";
 import {
   assertSseParseSucceededOrThrow,
   recordMalformedSseLine,
@@ -203,11 +204,11 @@ function processAnthropicSseLine(
   onStream?: (event: LlmStreamEvent) => void,
   toolNames?: AnthropicToolNameWire
 ): void {
-  if (!line.startsWith("data: ")) {
+  const payload = parseSseDataLine(line);
+  if (payload == null) {
     return;
   }
-  const payload = line.slice(6).trim();
-  if (payload === "" || payload === "[DONE]") {
+  if (payload === "[DONE]") {
     return;
   }
   let event: Record<string, unknown>;

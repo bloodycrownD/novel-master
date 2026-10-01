@@ -10,7 +10,7 @@ import {
 import { applyThinkingContextForLlm } from "../../../src/service/prompt/apply-thinking-context-for-llm.js";
 
 describe("openai-content-mapper", () => {
-  it("O1: text + tool_use �?assistant message with tool_calls", () => {
+  it("O1: text + tool_use → assistant message with tool_calls", () => {
     const messages: ChatMessage[] = [
       {
         id: "a1",
@@ -53,7 +53,7 @@ describe("openai-content-mapper", () => {
     });
   });
 
-  it("O2: OpenAI tool_calls response �?tool_use blocks", () => {
+  it("O2: OpenAI tool_calls response → tool_use blocks", () => {
     const blocks = openAiChoiceToBlocks({
       role: "assistant",
       content: null,
@@ -79,7 +79,7 @@ describe("openai-content-mapper", () => {
     assert.deepEqual(blocks[0].input, { path: "/out.txt", content: "hi" });
   });
 
-  it("O3: tool_result �?role tool messages with tool_call_id", () => {
+  it("O3: tool_result → role tool messages with tool_call_id", () => {
     const messages: ChatMessage[] = [
       {
         id: "u1",
@@ -143,7 +143,7 @@ describe("openai-content-mapper", () => {
     assert.equal((out[0] as Record<string, unknown>).summary, undefined);
   });
 
-  it("O6: image url block �?vision image_url part", () => {
+  it("O6: image url block → vision image_url part", () => {
     const content = blocksToOpenAiMessageContent([
       { type: "text", text: "describe this" },
       {
