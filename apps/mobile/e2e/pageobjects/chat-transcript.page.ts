@@ -46,7 +46,10 @@ export class ChatTranscriptPage {
   async getMessageIds(): Promise<string[]> {
     await this.openWebView();
     return browser.execute(() => {
-      return Array.from(document.querySelectorAll('.row.message'))
+      // 只数 user 行：宿主发送链路在无真模型环境下每条用户消息可能伴生一条
+      // 降级/错误回复入流（模拟器实测「发 3 得 5-6」）——rollback 场景锚定的
+      // 就是用户消息，按角色过滤后断言才与环境解耦（2026-10-01 e2e 实跑）。
+      return Array.from(document.querySelectorAll('.row.message.user'))
         .map(el => el.getAttribute('data-id'))
         .filter((id): id is string => id != null && id !== '');
     });

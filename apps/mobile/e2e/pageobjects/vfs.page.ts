@@ -83,16 +83,28 @@ export class VfsPage {
     await switchToNative();
     const toast = await $(byTestId('toast-message'));
     await toast.waitForDisplayed({timeout: 10000});
-    // waitForDisplayed 之后立即取——拖久了会被驻留期结束/被下一条 toast 顶掉。
-    const text = (await toast.getText()).trim();
-    if (text === '') {
-      throw new Error(
-        '[e2e] toast 读空：toast-message 已 displayed 但正文为空。' +
-          '多半是 ToastHost 挂载与填字之间的空窗（读早了），' +
-          '其次才是宿主确实没弹提示——两种情况报错指向完全不同，别混。',
-      );
+    // ToastHost 挂载到填字之间有空窗；且 waitForDisplayed 命中的可能是**上一条
+    // 残留 toast**（noReset 下前动作的 toast 尾巴），轮询中途它到期卸载、新的
+    // 还没挂上——两种情况都会让 getText 抛 element-not-found/stale（2026-10-01
+    // 全量实跑实锤）。轮询内吞掉这两类异常继续等下一条非空正文，3s 上限。
+    const deadline = Date.now() + 3000;
+    let text = '';
+    while (Date.now() < deadline) {
+      try {
+        text = ((await toast.getText()) ?? '').trim();
+      } catch {
+        text = ''; // 元素被顶掉/未挂上——继续等
+      }
+      if (text !== '') {
+        return text;
+      }
+      await browser.pause(150);
     }
-    return text;
+    throw new Error(
+      '[e2e] toast 读空：toast-message 已 displayed 但 3s 内正文始终为空。' +
+        '若刚做过会弹 toast 的动作，多半是 ToastHost 挂载/填字链路异常或 toast 已被顶掉；' +
+        '若没做过，则是宿主确实没弹提示——两种情况报错指向不同，别混。',
+    );
   }
 }
 
