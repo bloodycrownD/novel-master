@@ -1,4 +1,32 @@
 import {switchToNative} from '../helpers/context';
+import {alertPage} from './alert.page';
+import {chatTranscriptPage} from './chat-transcript.page';
+
+/**
+ * 单次 e2e 进程的隔离后缀。
+ *
+ * noReset 之后（协作红线：任何设备都禁止卸载/清数据，应用数据跨 spec 残留），
+ * 「每条 spec 重装清数据」这条老隔离手段没了——改由 spec **自建自清**。
+ * 自建的项目名必须每轮唯一，否则第二次跑会命中上一轮遗留的同名项目，数据越滚越脏。
+ */
+const RUN_SUFFIX = `${Date.now().toString(36).slice(-5)}${Math.floor(
+  Math.random() * 36,
+).toString(36)}`;
+
+/** 给 spec 的项目基名加本轮唯一后缀。 */
+export function isolatedProjectName(base: string): string {
+  return `${base}-${RUN_SUFFIX}`;
+}
+
+/**
+ * 新建项目后自动生成的会话标题。
+ *
+ * `nextDefaultSessionTitle`（`utils/session-default-title.ts`）按项目内已用编号取下一个，
+ * 所以**全新项目**里的第一个会话固定是「新会话1」。旧页对象用
+ * `textMatches("会话.*")` 去找最新会话——那个模式连 SegmentedControl 上的「会话」
+ * 标签和 ManageHeader 标题都会命中，在多会话场景下点到的未必是目标行。
+ */
+const NEW_SESSION_TITLE = '新会话1';
 
 /**
  * 首屏「版本检查」弹窗的关闭候选（「今日不再提醒」优先，避免误触「去下载」）。
@@ -156,12 +184,22 @@ export class AppPage {
     await browser.pause(800);
   }
 
-  async openLatestSession(): Promise<void> {
+  /**
+   * 打开新建出来的那个会话（标题固定「新会话1」）。
+   *
+   * @param title 精确标题；不传用 {@link NEW_SESSION_TITLE}（= 全新项目里的第一个会话）
+   */
+  async openLatestSession(title = NEW_SESSION_TITLE): Promise<void> {
     await switchToNative();
     const sessionTitle = await $(
-      'android=new UiSelector().textMatches("会话.*")',
+      `android=new UiSelector().text("${title}")`,
     );
-    await sessionTitle.waitForDisplayed({timeout: 10000});
+    if (!(await sessionTitle.isExisting())) {
+      throw new Error(
+        `[e2e] 会话行「${title}」不存在。` +
+          '确认 createSession() 已成功（需要先选中项目），且项目内没有同名旧会话。',
+      );
+    }
     await sessionTitle.click();
     const chatTab = await $(byTestId('tab-chat'));
     await chatTab.waitForDisplayed({timeout: 15000});
@@ -208,31 +246,23 @@ export class AppPage {
 
   /**
    * Ensure a workspace model is selected so the composer dock's hasModel is true.
-   * Opens the in-chat or profile model picker and selects the first saved model.
+   *
+   * 两条探测现在都在 **web DOM** 里（chat-webview-unify 之后输入区整体进了合成包）：
+   * - 「请先选择工作区模型」提示行 = dock 的 `#composer-hint-row`（RN 文本树里已不存在）；
+   * - composer 输入 = 合成包里的 `textarea[data-testid="composer-input"]`
+   *   （RN 容器上那个 `chat-composer-input` testID 随 `ChatComposer` 退役一起删了）。
    */
   async ensureWorkspaceModel(): Promise<void> {
-    await switchToNative();
     await this.switchToChatPanel();
 
-    const needModelHint = await $(
-      'android=new UiSelector().text("请先选择工作区模型")',
-    );
-    if (await needModelHint.isExisting()) {
-      await needModelHint.click();
+    if (await chatTranscriptPage.isDockHintRowVisible()) {
+      // 点提示行 → dockAction.needModel → 宿主打开工作区模型选择器（RN Modal）。
+      await chatTranscriptPage.clickDockHintRow();
       await this.selectFirstWorkspaceModel();
       return;
     }
 
-    // composer 输入探测：testID 现在落在 WebView 容器 View 上（更早先是原生
-    // TextInput，壳一环接一环：ComposerAtPathInput → ComposerInputWebView）。
-    // RN testID 仍落 resource-id，容器照样可探。
-    //
-    // 注记（变更 14）：探测语义退化为「存在性」——View 没有 disabled 概念，
-    // isEnabled() 恒 true。若后续要判「可用态」（inputDisabled：无模型 / running /
-    // 末条纯文本），需切到 WEBVIEW context 断言 textarea 的 readOnly，别在本探测上
-    // 加回 enabled 分支。现状该探测仅作存在性用，不扩面。
-    const input = await $(byTestId('chat-composer-input'));
-    if (await input.isExisting()) {
+    if (await chatTranscriptPage.composerInputExists()) {
       return;
     }
 
@@ -248,7 +278,7 @@ export class AppPage {
     await chatMainTab.waitForDisplayed({timeout: 10000});
     await chatMainTab.click();
 
-    const tabChat = await $('~tab-chat');
+    const tabChat = await $(byTestId('tab-chat'));
     if (!(await tabChat.isExisting())) {
       await this.openLatestSession();
     }
@@ -298,13 +328,60 @@ export class AppPage {
     );
   }
 
-  /** Full UI seed: project → session → conversation chat panel. */
-  async launchFresh(projectName = 'E2E Project'): Promise<void> {
+  /**
+   * Full UI seed: 全新项目 → 会话 → 对话页 → 工作区模型。
+   *
+   * 项目名自动加本轮唯一后缀（见 {@link isolatedProjectName}），返回值就是实际项目名——
+   * spec 靠它在自己的 `after` 里调 {@link deleteProjectViaDrawer} 自清。
+   */
+  async launchFresh(projectBaseName = 'E2E'): Promise<string> {
+    const projectName = isolatedProjectName(projectBaseName);
     await this.ensureProject(projectName);
     await this.createSession();
     await this.openLatestSession();
     await this.switchToChatPanel();
     await this.ensureWorkspaceModel();
+    return projectName;
+  }
+
+  /**
+   * 自清：UI 内删除本 spec 建的项目（其下会话与文件一并删除）。
+   *
+   * noReset 之后每条 spec 的隔离靠「自建自清」，这里就是清的那一半：
+   * 抽屉 → 项目行 ⋮ 菜单 → 删除 → 确认框**先读正文里的项目名**再点删除
+   * （红线：不可逆操作禁止盲点确认框）。
+   *
+   * 项目不存在时静默返回——清理是幂等的，spec 挂在 before 里时不该把 after 也带崩。
+   */
+  async deleteProjectViaDrawer(projectName: string): Promise<void> {
+    await switchToNative();
+    await this.leaveConversationIfNeeded().catch(() => undefined);
+    await this.openProjectDrawer();
+
+    const row = await $(`android=new UiSelector().text("${projectName}")`);
+    if (!(await row.isExisting())) {
+      await this.closeProjectDrawerIfOpen();
+      return;
+    }
+
+    // ⋮ 在项目卡片内（ProjectDrawer.tsx 的 `project-menu-${id}` testID 用的 id 是 UI
+    // 内部 id，页对象拿不到，只能按项目名文本反查所在卡片）。`[last()]` 取文档序最
+    // 后一个 ⋮——即名字所在的最内层卡片里的那个，外层祖先 ViewGroup 也会被同一 XPath
+    // 命中，不加限定会点到别的行。
+    const more = await $(
+      `(//android.view.ViewGroup[.//android.widget.TextView[@text="${projectName}"]]` +
+        `//android.widget.TextView[@text="⋮"])[last()]`,
+    );
+    await more.waitForDisplayed({timeout: 10000});
+    await more.click();
+
+    const deleteItem = await $('android=new UiSelector().text("删除")');
+    await deleteItem.waitForDisplayed({timeout: 5000});
+    await deleteItem.click();
+
+    // 确认框正文形如「确定删除项目「E2E X-abc12」？将同时移除其下所有会话。」
+    await alertPage.acceptDestructive(`「${projectName}」`, '删除');
+    await this.closeProjectDrawerIfOpen();
   }
 }
 

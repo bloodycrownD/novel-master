@@ -5,6 +5,8 @@ import {
 } from '../fixtures/session-ids';
 import {
   allowFixtureSkip,
+  fixtureSpecsDisabledReason,
+  fixtureSpecsEnabled,
   isFixtureSessionAvailable,
   openFixtureSession,
 } from '../helpers/fixture-session';
@@ -22,10 +24,12 @@ const FIXTURE_ANCHOR_USER_TEXT = 'read file';
 
 describe('E2 chat rollback', () => {
   describe('T-E1 plain user undo_send', () => {
+    let projectName = '';
     let anchorMessageId: string;
 
     before(async () => {
-      await appPage.launchFresh('E2E Rollback Undo');
+      // 隔离：UI 自建本轮唯一项目（会话 + 3 条自己发的消息），after 里 UI 删掉该项目。
+      projectName = await appPage.launchFresh('E2E Rollback Undo');
       await chatTranscriptPage.sendComposerMessage('anchor-one');
       await chatTranscriptPage.sendComposerMessage('tail-two');
       await chatTranscriptPage.sendComposerMessage('tail-three');
@@ -36,11 +40,18 @@ describe('E2 chat rollback', () => {
       await chatTranscriptPage.scrollTranscriptUp(500);
     });
 
+    after(async () => {
+      if (projectName === '') {
+        return;
+      }
+      await appPage.deleteProjectViaDrawer(projectName);
+    });
+
     it('删除 plain user 锚点并恢复 Composer 原文', async () => {
       const before = await sampleScrollAnchor(anchorMessageId);
       expect(before.anchorVisible).toBe(true);
 
-      await chatTranscriptPage.longPressMessage(anchorMessageId);
+      await chatTranscriptPage.openMessageMenu(anchorMessageId);
       await chatTranscriptPage.tapMenuAction('rollback');
       await alertPage.acceptRollback();
 
@@ -65,7 +76,7 @@ describe('E2 chat rollback', () => {
 
       await assertBottomAfterRollback();
 
-      await chatTranscriptPage.longPressMessage(rollbackTargetId);
+      await chatTranscriptPage.openMessageMenu(rollbackTargetId);
       await chatTranscriptPage.tapMenuAction('rollback');
       await alertPage.acceptRollback();
 
@@ -80,6 +91,16 @@ describe('E2 chat rollback', () => {
   });
 
   describe('T-E2 assistant rewind', () => {
+    // 结构性跑不动：fixture 靠注入应用沙箱 SQLite 造 assistant 轮次，UI 建不出
+    // thinking/tool_use/tool_result 三段结构。没显式开 fixture 就整段跳过（如实标注，
+    // 不硬改成假路径）。理由见 fixtureSpecsDisabledReason()。
+    before(function () {
+      if (!fixtureSpecsEnabled()) {
+        console.warn(fixtureSpecsDisabledReason());
+        this.skip();
+      }
+    });
+
     it('keeps assistant anchor when rolling back on assistant with tool_use', async function () {
       if (!(await isFixtureSessionAvailable())) {
         if (allowFixtureSkip()) {
@@ -105,7 +126,7 @@ describe('E2 chat rollback', () => {
       expect(idsBefore).toContain(tailUserId);
       expect(idsBefore).toContain(tailAssistantId);
 
-      await chatTranscriptPage.longPressMessage(assistantId);
+      await chatTranscriptPage.openMessageMenu(assistantId);
       await chatTranscriptPage.tapMenuAction('rollback');
       await alertPage.acceptRollback();
 
@@ -125,6 +146,14 @@ describe('E2 chat rollback', () => {
   });
 
   describe('T-E3 composer draft overwrite', () => {
+    // 同 T-E2：结构性依赖 fixture 注入，UI 造不出被回滚的 tool_result 轮次锚点。
+    before(function () {
+      if (!fixtureSpecsEnabled()) {
+        console.warn(fixtureSpecsDisabledReason());
+        this.skip();
+      }
+    });
+
     it('回滚 plain user 时 Composer 覆盖旧草稿', async function () {
       if (!(await isFixtureSessionAvailable())) {
         if (allowFixtureSkip()) {
@@ -142,7 +171,7 @@ describe('E2 chat rollback', () => {
 
       await chatTranscriptPage.setComposerText('old draft before rollback');
 
-      await chatTranscriptPage.longPressMessage(FIXTURE_ANCHOR_USER_ID);
+      await chatTranscriptPage.openMessageMenu(FIXTURE_ANCHOR_USER_ID);
       await chatTranscriptPage.tapMenuAction('rollback');
       await alertPage.acceptRollback();
 

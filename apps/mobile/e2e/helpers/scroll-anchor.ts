@@ -1,4 +1,4 @@
-import {switchToWebView} from './context';
+import {switchToConversationWebView} from './context';
 
 /** Sample scrollTop and element Y for rollback jump detection. */
 export type ScrollAnchorSample = {
@@ -13,7 +13,7 @@ export type ScrollAnchorSample = {
 export async function sampleScrollAnchor(
   messageId: string,
 ): Promise<ScrollAnchorSample> {
-  await switchToWebView();
+  await switchToConversationWebView();
   const row = await $(`.row.message[data-id="${messageId}"]`);
   await row.waitForExist({timeout: 15000});
 
@@ -46,7 +46,7 @@ const NEAR_BOTTOM_THRESHOLD_PX = 80;
 export async function assertBottomAfterRollback(
   maxOffsetFromBottom = NEAR_BOTTOM_THRESHOLD_PX,
 ): Promise<void> {
-  await switchToWebView();
+  await switchToConversationWebView();
   const offset = await browser.execute(() => {
     const scroller = document.getElementById('scroller');
     if (scroller == null) {

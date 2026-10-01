@@ -6,6 +6,31 @@ import {
 import {appPage} from '../pageobjects/app.page';
 
 const FIXTURE_SKIP_ENV = 'E2E_ALLOW_FIXTURE_SKIP';
+const FIXTURE_RUN_ENV = 'E2E_RUN_FIXTURE_SPECS';
+
+/**
+ * 依赖 DB 注入 fixture 的 spec 默认**跳过**，除非显式 `E2E_RUN_FIXTURE_SPECS=1`。
+ *
+ * 为什么默认跳过（别把它当省事，这是两条硬约束撞在一起）：
+ * 1. fixture 靠 `e2e/scripts/inject-tool-turn-fixture.mjs` 拉/改/推应用沙箱里的
+ *    SQLite——而「真机/模拟器验收一律从 UI 操作，库只读」是红线；
+ * 2. noReset 之后应用数据跨 spec 残留，注入脚本自己会 `am force-stop` 应用，
+ *    Appium 一旦已经接管就会把会话搅乱。
+ *
+ * 所以默认跳过并打警告；确要跑就先把 fixture 注入脚本跑一遍，再带上这个环境变量。
+ */
+export function fixtureSpecsEnabled(): boolean {
+  return process.env[FIXTURE_RUN_ENV] === '1';
+}
+
+/** fixture spec 未显式开启时的统一提示（spec 里 `this.skip()` 前打一条，别静默）。 */
+export function fixtureSpecsDisabledReason(): string {
+  return (
+    `[e2e] fixture spec 默认跳过（未设 ${FIXTURE_RUN_ENV}=1）：` +
+    '该用例依赖应用沙箱 SQLite 注入，与「库只读」红线 + noReset 隔离冲突。' +
+    '确需运行：先 npm run mobile:e2e:fixture，再以 E2E_RUN_FIXTURE_SPECS=1 重跑本轮。'
+  );
+}
 
 /** Whether fixture specs may skip when the pre-seeded session is absent. */
 export function allowFixtureSkip(): boolean {
