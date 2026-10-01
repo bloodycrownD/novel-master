@@ -62,11 +62,6 @@ type Props = {
    * New session with no cache: mark near-bottom for stream follow only (no initial scrollToEnd).
    */
   defaultScrollToBottom?: boolean;
-  /**
-   * Bumped when Android IME lifts the composer; scroll to end if near bottom
-   * so the last messages stay above the input after the viewport shrinks.
-   */
-  keyboardLiftNonce?: number;
 };
 
 /** Within this distance from the bottom we treat the user as "following" the tail. */
@@ -135,7 +130,6 @@ export function MessageList({
   initialScroll = null,
   onScrollSnapshot,
   defaultScrollToBottom = false,
-  keyboardLiftNonce = 0,
 }: Props) {
   const {tokens} = useTheme();
   const listRef = useRef<FlatList<ChatListItem | {kind: 'stream'}>>(null);
@@ -279,20 +273,6 @@ export function MessageList({
       applyPendingScrollRestore();
     });
   }, [initialScroll, defaultScrollToBottom, applyPendingScrollRestore]);
-
-  useEffect(() => {
-    if (keyboardLiftNonce === 0) {
-      return;
-    }
-    if (!nearBottomRef.current) {
-      return;
-    }
-    requestAnimationFrame(() => {
-      if (nearBottomRef.current) {
-        listRef.current?.scrollToEnd({animated: false});
-      }
-    });
-  }, [keyboardLiftNonce]);
 
   useEffect(() => {
     const firstId = messages[0]?.id;

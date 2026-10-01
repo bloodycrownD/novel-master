@@ -1,5 +1,6 @@
 import React from 'react';
 import {View} from 'react-native';
+import {subscribeAnimatedValues} from './animated-value-registry';
 
 const Animated = {
   View,
@@ -13,7 +14,7 @@ export function useAnimatedStyle(factory: () => object) {
 }
 
 /**
- * shared value 桩：**只在首次渲染写一次初值，之后永不回写**。
+ * 共享值桩：**只在首次渲染写一次初值，之后永不回写**。
  *
  * 与真 reanimated 的 `useSharedValue` 同语义——它返回的是同一个跨渲染存活的对象，
  * 值的推进只能靠 `.value = ...` 显式赋值。若这里每次 render 返回新 `{value}`，
@@ -24,6 +25,55 @@ export function useAnimatedStyle(factory: () => object) {
 export function useSharedValue<T>(value: T) {
   const ref = React.useRef({value});
   return ref.current;
+}
+
+/**
+ * UI 线程 reaction 桩（真 reanimated 的 `useAnimatedReaction` 同形）。
+ *
+ * 驱动方式有两条：
+ * 1. 每次 commit 后在 effect 里求值一次（覆盖「重渲染带来的值变化」）；
+ * 2. 订阅 `animated-value-registry` 的变更通知（覆盖「值变了但组件没重渲染」——
+ *    这正是键盘 SharedValue 每帧推进、而我们**刻意不**让它驱动重渲染的场景；
+ *    没有这条，`useChatComposerController` 的 keyboardUp 用例就只能靠
+ *    「手动 re-render」这种真机上不存在的动作来翻转）。
+ *
+ * 首帧只记录基线不回调（对齐真 reanimated：首帧 previous 为 null，reaction 收到
+ * null 后由业务自己决定要不要上报——controller 正是这么判的）。
+ */
+export function useAnimatedReaction<T>(
+  prepare: () => T,
+  react: (current: T, previous: T | null) => void,
+  _deps?: readonly unknown[],
+): void {
+  const prevRef = React.useRef<{value: T; seeded: boolean} | null>(null);
+  const reactRef = React.useRef(react);
+  reactRef.current = react;
+
+  const evaluate = React.useCallback(() => {
+    const next = prepare();
+    const prev = prevRef.current;
+    if (prev == null) {
+      prevRef.current = {value: next, seeded: true};
+      return;
+    }
+    if (prev.seeded && Object.is(prev.value, next)) {
+      return;
+    }
+    const previous = prev.seeded ? prev.value : null;
+    prevRef.current = {value: next, seeded: true};
+    reactRef.current(next, previous);
+  }, [prepare]);
+
+  React.useEffect(() => {
+    evaluate();
+  });
+
+  React.useEffect(() => subscribeAnimatedValues(evaluate), [evaluate]);
+}
+
+/** UI 线程 → JS 线程过桥桩：jest 里没有真正的线程边界，直接透传。 */
+export function runOnJS<T extends (...args: never[]) => unknown>(fn: T): T {
+  return fn;
 }
 
 export function useAnimatedProps(factory: () => object) {

@@ -20,6 +20,7 @@ jest.mock('../src/components/vfs/VfsFileManager', () => {
   };
 });
 
+// legacy-rn 分支仍挂旧 ChatComposer（Q1 未拍板退役，Step 8 才删）。
 jest.mock('../src/components/chat/ChatComposer', () => ({
   ChatComposer: () => null,
 }));
@@ -39,13 +40,14 @@ jest.mock('../src/components/chat/ChatStreamMetricsBarLive', () => ({
   ChatStreamMetricsBarLive: () => null,
 }));
 
-// webview mock：经 ref 暴露可记录的 commitSyntheticAssistantRow（ui/B-1
-// 中断现场用例的断言面）；组件本体渲染 null，其余 props 不消费。
+// 统一宿主 mock（chat-webview-unify Step 7：webview 分支改挂 ChatConversationWebView，
+// 单实例承载转录 + dock）。经 ref 暴露可记录的 commitSyntheticAssistantRow
+// （ui/B-1 中断现场用例的断言面）；组件本体渲染 null，其余 props 不消费。
 const mockCommitSyntheticAssistantRow = jest.fn(() => true);
-jest.mock('../src/components/chat/ChatTranscriptWebView', () => {
+jest.mock('../src/components/chat/ChatConversationWebView', () => {
   const mockReact = require('react');
   return {
-    ChatTranscriptWebView: mockReact.forwardRef(
+    ChatConversationWebView: mockReact.forwardRef(
       (
         _props: unknown,
         ref: React.Ref<{commitSyntheticAssistantRow: unknown}>,
@@ -58,6 +60,27 @@ jest.mock('../src/components/chat/ChatTranscriptWebView', () => {
     ),
   };
 });
+
+// composer controller 的运行时依赖（webview 分支会真挂 controller）。
+// 面板测试关心的是布局/接线/中断现场，controller 内部行为由
+// use-chat-composer-controller.test.tsx 单独覆盖，这里只把外部依赖喂到不抛。
+const mockRuntime: Record<string, any> = {};
+jest.mock('../src/hooks/useRuntime', () => ({
+  useRuntime: () => mockRuntime,
+}));
+jest.mock('../src/services/project-composer-status.service', () => ({
+  projectComposerStatusForSession: jest.fn(async () => []),
+}));
+jest.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({top: 0, bottom: 0, left: 0, right: 0}),
+}));
+// 两个 RN Modal 选择器（面板直挂）：只挡掉真实 Modal 依赖。
+jest.mock('../src/components/chat/FileReferencePicker', () => ({
+  FileReferencePicker: () => null,
+}));
+jest.mock('../src/components/skills/SkillPicker', () => ({
+  SkillPicker: () => null,
+}));
 jest.mock('../src/components/chat/MessageList', () => ({
   MessageList: () => null,
 }));
@@ -90,6 +113,34 @@ jest.mock('../src/components/chrome/ToastHost', () => ({
 import {ChatConversationPanel} from '../src/screens/tabs/chat-tab/ChatConversationPanel';
 import type {VfsFileManagerHandle} from '../src/components/vfs/VfsFileManager';
 import type {SessionStreamUnitView} from '../src/services/session-stream-unit';
+import {clearChatComposerDraft} from '../src/storage/chat-composer-draft';
+
+/**
+ * 灌一个够 controller 跑起来的 mock runtime（草稿水化 + 两路候选源拉取 + 发送决策）。
+ * 本文件不覆盖 controller 语义（那是 use-chat-composer-controller.test.tsx 的职责），
+ * 只保证它挂上去不抛、且草稿 store 不跨用例残留。
+ */
+function installMockRuntime(): void {
+  Object.assign(mockRuntime, {
+    preferences: {getLlmStreamEnabled: jest.fn(async () => true)},
+    sessions: {
+      get: jest.fn(async () => ({id: 's1', projectId: 'p1'})),
+      getComposerDraftJson: jest.fn(async () => null),
+      setComposerDraftJson: jest.fn(async () => true),
+    },
+    workplace: jest.fn(() => ({
+      buildListRows: jest.fn(async () => [
+        {path: '/', kind: 'dir'},
+        {path: '/a.md', kind: 'file'},
+      ]),
+    })),
+    skills: jest.fn(() => ({effectiveSkills: jest.fn(async () => [])})),
+    sessionStreamUnitManager: {
+      startRun: jest.fn(async () => ({ok: true})),
+      stopRun: jest.fn(),
+    },
+  });
+}
 
 const tokens = {
   background: '#000',
@@ -249,6 +300,11 @@ const mockUseChatTabContext = useChatTabContext as jest.MockedFunction<
 function flushPromises(): Promise<void> {
   return new Promise(resolve => setImmediate(resolve));
 }
+
+beforeEach(() => {
+  installMockRuntime();
+  clearChatComposerDraft('s1');
+});
 
 function TestHost() {
   const workspaceVfsRef = useRef<VfsFileManagerHandle>(null);

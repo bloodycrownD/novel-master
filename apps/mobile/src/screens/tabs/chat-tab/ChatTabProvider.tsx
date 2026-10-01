@@ -28,7 +28,16 @@ import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {type ChatMessage} from '@novel-master/core/chat';
 import type {VfsService} from '@novel-master/core/vfs';
 import type {WorkplaceService} from '@novel-master/core/workplace';
-import type {ChatTranscriptWebViewHandle} from '@/components/chat/ChatTranscriptWebViewHandle';
+/**
+ * 主会话 webview 句柄类型（chat-webview-unify Step 7 起为**统一宿主**的句柄：
+ * 转录七方法一字未改，外加一个 M7 命令式 `setComposerText`）。
+ *
+ * 这里必须用扩展后的类型而不能继续用 `ChatTranscriptWebViewHandle`：面板侧要把同一个
+ * ref 同时交给「单元流式 attach」（只要七方法）与「composer controller 的命令式写入
+ * 通道」（要 `setComposerText`）。扩展类型是七方法的子类型，attach 那侧零改动。
+ * `import type` 会被擦除，不会把宿主组件拖进 Provider 的运行时依赖。
+ */
+import type {ChatConversationWebViewHandle} from '@/components/chat/ChatConversationWebView';
 import type {MessageMenuAnchor} from '@/components/chat/MessageActionMenu';
 import type {VfsFileManagerHandle} from '@/components/vfs/VfsFileManager';
 import type {ChatListScrollSnapshot} from '@/services/chat-list-scroll-cache';
@@ -157,7 +166,7 @@ export type ChatTabContextValue = {
   ) => void;
   readonly onNeedModel: () => void;
   readonly onRefreshChatMeta: () => void;
-  readonly transcriptWebRef: React.RefObject<ChatTranscriptWebViewHandle | null>;
+  readonly transcriptWebRef: React.RefObject<ChatConversationWebViewHandle | null>;
   readonly workspaceVfsRef: React.RefObject<VfsFileManagerHandle | null>;
   readonly scope: ReturnType<typeof useChatTabScope>;
   readonly messages: ReturnType<typeof useChatTabMessages>;
@@ -220,7 +229,7 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
 
   const [modelPickerOpen, setModelPickerOpen] = useState(false);
   const [agentPickerOpen, setAgentPickerOpen] = useState(false);
-  const transcriptWebRef = useRef<ChatTranscriptWebViewHandle>(null);
+  const transcriptWebRef = useRef<ChatConversationWebViewHandle>(null);
   const workspaceVfsRef = useRef<VfsFileManagerHandle>(null);
   const [chatRichTextEnabled, setChatRichTextEnabled] = useState(false);
   const [messageMenuTarget, setMessageMenuTarget] = useState<

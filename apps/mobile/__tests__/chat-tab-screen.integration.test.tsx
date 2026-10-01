@@ -10,9 +10,10 @@ import {
 import {SessionStreamUnitManager} from '../src/services/session-stream-unit-manager.service';
 import {clearAllSessionViewCaches} from '../src/services/chat-session-view-cache';
 import {
-  CHAT_TRANSCRIPT_BRIDGE_VERSION,
-  decodeHostToTranscript,
-} from '../src/components/chat/ChatTranscriptBridge';
+  CONVERSATION_BRIDGE_V,
+  CONVERSATION_CAPABILITY_COMPOSER_DOCK,
+  decodeConversationUpstream,
+} from '../src/components/chat/ChatConversationBridge';
 import {
   clearMockWebViewPostMessages,
   mockWebViewPostMessages,
@@ -35,8 +36,9 @@ const mockLoadTail = jest.fn(async () => [mockTailMessage]);
 const mockLoadPage = jest.fn(async () => [mockOlderMessage]);
 let mockLatestMessageListProps: any;
 let mockLatestBottomSheetProps: any;
-// transcript 引擎按用例切换：默认 legacy-rn（既有用例），webview 用例
-// （T-R3 顺序断言）切到 'webview' 挂真 ChatTranscriptWebView。
+// transcript 引擎按用例切换：默认 legacy-rn（既有用例，legacy 分支挂 MessageList +
+// 旧 ChatComposer）；webview 用例（T-R3 顺序断言）切到 'webview'，挂真统一宿主
+// ChatConversationWebView（单实例承载转录 + dock）。
 let mockTranscriptEngine: 'legacy-rn' | 'webview' = 'legacy-rn';
 
 const mockRunAgentTurn = jest.fn(
@@ -59,6 +61,10 @@ const mockRuntime: any = {
     rename: jest.fn(),
     copy: jest.fn(),
     delete: jest.fn(),
+    // composer controller 的草稿水化 / 落库窄口（webview 分支会真挂 controller）。
+    get: jest.fn(async () => ({id: 's1', projectId: 'p1'})),
+    getComposerDraftJson: jest.fn(async () => null),
+    setComposerDraftJson: jest.fn(async () => true),
   },
   messages: {
     listBySession: jest.fn(async () => [{id: 'legacy', seq: 999}]),
@@ -89,7 +95,14 @@ const mockRuntime: any = {
     has: jest.fn(() => false),
     unregister: jest.fn(),
   },
-  workplace: jest.fn(() => ({})),
+  workplace: jest.fn(() => ({
+    buildListRows: jest.fn(async () => [
+      {path: '/', kind: 'dir'},
+      {path: '/a.md', kind: 'file'},
+    ]),
+  })),
+  // composer controller 的 `$` 技能候选源窄口。
+  skills: jest.fn(() => ({effectiveSkills: jest.fn(async () => [])})),
   sessionVfs: jest.fn(() => ({})),
   projectVfs: jest.fn(() => ({})),
 };
@@ -256,6 +269,10 @@ jest.mock('../src/storage/chat-transcript-engine', () => ({
   readChatTranscriptEngine: jest.fn(async () => mockTranscriptEngine),
 }));
 
+// 注意：webview 分支挂的是**真**统一宿主 ChatConversationWebView（用例要经
+// webview mock 读下行消息），故此处不 mock 它。它的 ready 认 v:2 且 dock 域需
+// 能力位 composer-dock——缺任一项，宿主会走 8s 兜底错误态 / 输入区降级、下行全丢，
+// 用例会变成「什么都没发生」的假绿。
 jest.mock('../src/components/chat/MessageList', () => {
   const ReactNative = require('react-native');
   return {
@@ -514,7 +531,7 @@ describe('ChatTabScreen integration', () => {
 
   it('T-R3 顺序：重进注入的 streamDelta 晚于 sessionSnapshot（先 snapshot 后 inject）', async () => {
     // 重进恢复现场：s1 的 run 进行中且单元已有 partial；webview 引擎下挂真
-    // ChatTranscriptWebView，sessionSnapshot 与注入 delta 都经 bridge 的
+    // ChatConversationWebView，sessionSnapshot 与注入 delta 都经桥的
     // postToWeb（webview mock 落盘）按序记录。
     mockTranscriptEngine = 'webview';
     mockHarnessManager!.startRun('s1', 'p1', 'hi');
@@ -551,6 +568,8 @@ describe('ChatTabScreen integration', () => {
     // web 侧 ready：webReady=true 后子组件 messages effect 直发
     // sessionSnapshot（needsOpenSnapshot 路径）；Provider 的 attach effect
     // 随 onReady 触发，单元注入（stream-delta 载荷）经 RAF 到达。
+    // 统一宿主的 ready 必须带 v:2 与 composer-dock 能力位（纪律 C：v:1 的旧
+    // dist ready 被拒 → 走 8s 兜底，下行全丢）。
     const WebViewMock = require('react-native-webview')
       .default as React.ComponentType<{
       onMessage?: (event: {nativeEvent: {data: string}}) => void;
@@ -558,14 +577,22 @@ describe('ChatTabScreen integration', () => {
     const webViews = root
       .findAllByType(WebViewMock)
       .filter(n => typeof n.props.onMessage === 'function');
+    // 单 WebView：转录 + 输入框 dock 合流到一个实例（合并前这里是 2 个）。
     expect(webViews).toHaveLength(1);
     await act(async () => {
       webViews[0]!.props.onMessage?.({
         nativeEvent: {
           data: JSON.stringify({
-            v: CHAT_TRANSCRIPT_BRIDGE_VERSION,
+            v: CONVERSATION_BRIDGE_V,
             type: 'ready',
-            payload: {version: 'test'},
+            payload: {
+              version: 'u1',
+              readyState: 'complete',
+              capabilities: [
+                'streamBlockCommit',
+                CONVERSATION_CAPABILITY_COMPOSER_DOCK,
+              ],
+            },
           }),
         },
       });
@@ -578,10 +605,14 @@ describe('ChatTabScreen integration', () => {
       await Promise.resolve();
     });
 
+    // 统一宿主的下行信封是 v:2——用它的宽松 decoder 取 type/payload
+    // （旧的 decodeHostToTranscript 对 v !== 1 直接 throw，会把断言变成误判）。
     const sentMessages = mockWebViewPostMessages.map(raw =>
-      decodeHostToTranscript(raw),
+      decodeConversationUpstream(raw),
     );
-    const types = sentMessages.map(m => m.type);
+    const types = sentMessages
+      .filter(r => r.ok)
+      .map(r => (r as {ok: true; message: {type: string}}).message.type);
     const snapshotIdx = types.indexOf('sessionSnapshot');
     const deltaIdx = types.indexOf('streamDelta');
     expect(snapshotIdx).toBeGreaterThanOrEqual(0);
@@ -591,7 +622,10 @@ describe('ChatTabScreen integration', () => {
     expect(snapshotIdx).toBeLessThan(deltaIdx);
     // 本用例的流式 delta 已在挂屏前进投影（attach 前已 apply），streamDelta
     // 只可能来自重进注入，内容即单元 partial。
-    const delta = sentMessages.find(m => m.type === 'streamDelta');
+    const delta = sentMessages
+      .filter(r => r.ok)
+      .map(r => (r as {ok: true; message: {type: string; payload: Record<string, unknown>}}).message)
+      .find(m => m.type === 'streamDelta');
     if (delta?.type === 'streamDelta') {
       expect(delta.payload.delta).toBe('重进恢复的 partial 正文');
     }

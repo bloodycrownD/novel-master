@@ -112,11 +112,6 @@ export type ChatTranscriptWebViewProps = {
   readonly menuCloseSignal?: number;
   /** 递增时下发 closeMermaidViewer（Android 返回键先关全屏；照 menuCloseSignal 先例）。 */
   readonly mermaidViewerCloseSignal?: number;
-  /**
-   * Bumped when Android IME lifts the composer; web stick-if-near-bottom so
-   * the last messages stay above the input after the viewport shrinks.
-   */
-  readonly keyboardLiftNonce?: number;
   readonly onScrollSnapshot?: (snap: ChatTranscriptScrollSnapshot) => void;
   readonly onReady?: () => void;
   readonly onLoadOlder?: () => void;
@@ -254,7 +249,6 @@ function chatTranscriptWebViewPropsEqual(
     prev.defaultScrollToBottom === next.defaultScrollToBottom &&
     prev.menuCloseSignal === next.menuCloseSignal &&
     prev.mermaidViewerCloseSignal === next.mermaidViewerCloseSignal &&
-    prev.keyboardLiftNonce === next.keyboardLiftNonce &&
     prev.initialScroll === next.initialScroll &&
     transcriptFlagsEqual(prev.flags, next.flags) &&
     prev.pendingSubagentSessions === next.pendingSubagentSessions
@@ -365,7 +359,6 @@ export const ChatTranscriptWebView = memo(
         toolInvoking = false,
         menuCloseSignal = 0,
         mermaidViewerCloseSignal = 0,
-        keyboardLiftNonce = 0,
         onScrollSnapshot,
         onReady,
         onLoadOlder,
@@ -1517,13 +1510,6 @@ export const ChatTranscriptWebView = memo(
         }
         postToWeb({v: 1, type: 'closeMermaidViewer', payload: {}});
       }, [webReady, mermaidViewerCloseSignal, postToWeb]);
-
-      useEffect(() => {
-        if (!webReady || keyboardLiftNonce === 0) {
-          return;
-        }
-        postToWeb({v: 1, type: 'stickIfNearBottom', payload: {}});
-      }, [webReady, keyboardLiftNonce, postToWeb]);
 
       useEffect(() => {
         syncStreamToolInvoking();

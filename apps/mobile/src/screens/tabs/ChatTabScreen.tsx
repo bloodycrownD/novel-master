@@ -149,9 +149,15 @@ function ChatTabScreenContent({
   // 变体——同一组件同一条键盘链，纯编辑态：预览/档位切换与保存按钮都不渲染，
   // 编辑器退出即回填，没有显式保存动作）。初始文本走路由参数；退出回填写进
   // 模块级存取（回调不可序列化，不走路由参数）。
-  // 本回调自身对 scope 缺 projectId/sessionId 时静默 return，面板侧另按
-  // scopeReady 决定要不要注入（见 ChatConversationPanel 的 scopeReady 注释），
-  // 让 ⛶ 走既有 disabled 通路而不是变成点了没反应的死按钮。
+  //
+  // 回填链（chat-webview-unify Step 7 已验证闭合，两段都换了落点但语义不变）：
+  //   `onExit(text)` → `writeChatComposerDraft` → `setDraftRestoreToken(bump)` →
+  //   controller 的草稿水化 effect（依赖含 `draftRestoreToken`）重读 store →
+  //   controller `text` state 变 → 传给宿主的 `composerText` prop 变 →
+  //   宿主 M2 effect（外部写入判据 `composerText !== webTextRef`）下行 `setText`。
+  // 本回调自身对 scope 缺 projectId/sessionId 时静默 return；面板侧另有
+  // scopeReady 判据决定要不要注入，让 ⛶ 走既有 disabled 通路而不是变成点了
+  // 没反应的死按钮。
   const setDraftRestoreToken = ctx.messages.setDraftRestoreToken;
   const runtime = ctx.runtime;
   const onOpenComposerFullscreen = useCallback(
@@ -162,7 +168,7 @@ function ChatTabScreenContent({
       }
       // composer 变体没有保存按钮：编辑器卸载（返回/手势）即回填——写入会话草稿
       // （内联输入 onChangeText 落的是同一条 store），再 bump 草稿恢复令牌触发
-      // ChatComposer 从草稿重读（undo_send 同款回填链路）。
+      // 下游从草稿重读（undo_send 同款回填链路）。
       setPromptEditorOnSaved(text => {
         writeChatComposerDraft(targetSessionId, text, runtime.sessions);
         setDraftRestoreToken(token => token + 1);
