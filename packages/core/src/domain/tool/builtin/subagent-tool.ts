@@ -5,6 +5,9 @@
  *   1. `agentRegistry.list()` → `find(name === subagentName)` → `AgentDefinition`
  *      （校验 `mode !== "primary"`，排除主 agent 自身防自递归）
  *   2. `createChildSession(title = input.description ?? input.prompt.slice(0, 40))`
+ *      （`input.sessionId` 非空时改为**续用**该子会话：四态校验后直接复用，见下）
+ *   2.5 `input.fileAttachment` → `attachmentsFromPaths` 物化 → 双预算分配（spec D11）：
+ *      预算内挂 `attachments` 随子会话首条 user 消息落库，超预算路径拼 prompt 尾注
  *   3. `resolveChildModelId(def)` → savedModelId（子 pin → 父 savedModelId → 报错）
  *   4. `runChildAgent(def, childSessionId, opts)`（内部派生 AbortController）
  *   5. `messages.listBySession(childSessionId)` 取末条 assistant text
@@ -25,9 +28,46 @@ import { z } from "zod";
 import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
 import type { ChatMessage } from "@/domain/chat/model/message.js";
 import type { TextBlock } from "@/domain/chat/model/content-block.js";
+import type { MessageAttachment } from "@/domain/chat/model/message-attachment.schema.js";
+import {
+  AttachmentPathArgumentError,
+  attachmentsFromPaths,
+} from "@/domain/chat/logic/scan-at-path-attachments.js";
 import { ToolError } from "@/errors/tool-errors.js";
 import type { Tool } from "../model/tool.js";
-import type { BuiltinToolContext } from "./builtin-tool-context.js";
+import type {
+  BuiltinToolContext,
+  BuiltinToolSubagentContext,
+} from "./builtin-tool-context.js";
+
+/** 内容尺寸探测闭包（与 `BuiltinToolSubagentContext.getContentSize` 同形）。 */
+type GetContentSize = BuiltinToolSubagentContext["getContentSize"];
+
+/**
+ * `fileAttachment` 预算制软闸的**条数**上限（spec D11）。
+ *
+ * 预算内路径照常挂附件、子代理开箱即得全文；超出的路径不挂附件、改在 prompt
+ * 尾部给路径清单，由子代理自行决定是否用 `read` 分段读。
+ */
+export const TASK_FILE_ATTACHMENT_MAX_COUNT = 20;
+
+/**
+ * `fileAttachment` 预算制软闸的**明文当量字符**上限（spec D11）。
+ *
+ * 计量口径：inline 档 `size`（字符数）直接计；blob 档 `size`（压缩字节）×4 折算
+ * （4× 压缩比先例 `character-card-limits.ts`）；`null`（目录 / 不存在）按 0 计；
+ * image / binary 与目录**不计字节但仍占条数名额**。中文语料 1 字 ≈ 1 token，
+ * 故 10 万 ≈ 10 万 CJK token ≈ 300KB UTF-8 明文——保守取向，常量可调。
+ */
+export const TASK_FILE_ATTACHMENT_CHAR_BUDGET = 100_000;
+
+/**
+ * 续用子会话的历史软闸（spec D7）：目标子会话消息数 > 该阈值即拒绝续用。
+ *
+ * 子会话**永不压缩**，历史线性增长；不设闸的话续用会把一个已经跑飞轮的历史
+ * 无限拉长。超限引导「去掉 sessionId 新开」。
+ */
+export const TASK_SESSION_RESUME_MAX_MESSAGES = 300;
 
 /** `task` 工具输入。 */
 export interface TaskToolInput {
@@ -37,6 +77,20 @@ export interface TaskToolInput {
   readonly prompt: string;
   /** 目标 subagent 的 name（非 UUID id）；指向 registry 中 `mode !== "primary"` 的 agent。 */
   readonly subagentName: string;
+  /**
+   * 续用已有子会话 id（非空则不新建，直接往该子会话追加 user 消息并继续跑）。
+   *
+   * 留空（缺省 / 空串 / 纯空白）= 新建子会话。归属校验为**直接父**口径：
+   * 目标子会话的 `parentSessionId` 必须等于当前父会话，否则拒绝。
+   */
+  readonly sessionId?: string;
+  /**
+   * 显式交付给子代理的文件路径列表（与主会话附件同链路挂 `<action name="userAttach">`）。
+   *
+   * 预算内路径挂附件全量加载；超预算路径不挂、在 prompt 尾部给路径清单
+   * （见 {@link TASK_FILE_ATTACHMENT_MAX_COUNT} / {@link TASK_FILE_ATTACHMENT_CHAR_BUDGET}）。
+   */
+  readonly fileAttachment?: readonly string[];
 }
 
 /**
@@ -106,6 +160,139 @@ function extractLastAssistantText(
   return undefined;
 }
 
+/** 三态续用错误统一引导：去掉 sessionId 新开。 */
+function resumeGuide(): string {
+  return "去掉 sessionId 重新调用即可新开一个子会话。";
+}
+
+/**
+ * 续用目标子会话的四态前置校验（spec D2 / D7 / D8）。
+ *
+ * 顺序刻意如此——先判存在性（get 抛错即不存在），再判归属（直接父口径），
+ * 再判活跃，最后判历史条数软闸。每态文案都引导「去掉 sessionId 新开」。
+ *
+ * @returns 校验通过的子会话 id（= 请求的 id 原样）。
+ * @throws {ToolError} FAILED：不存在 / 非本会话子会话 / 活跃中 / 历史超限
+ */
+async function resolveResumeSessionId(
+  sessionId: string,
+  subagent: BuiltinToolSubagentContext
+): Promise<string> {
+  let session;
+  try {
+    session = await subagent.sessions.get(sessionId);
+  } catch {
+    throw new ToolError(
+      "FAILED",
+      `找不到子会话 "${sessionId}"（可能已被删除）。${resumeGuide()}`,
+      { toolName: "task" }
+    );
+  }
+  // 归属：直接父口径。跨 project 的会话同样因父 id 不同被拒（一条判定覆盖两种）。
+  if (session.parentSessionId !== subagent.parentSessionId) {
+    throw new ToolError(
+      "FAILED",
+      `子会话 "${sessionId}" 不是当前会话派生的子会话，不能跨会话续用。${resumeGuide()}`,
+      { toolName: "task" }
+    );
+  }
+  // 活跃中：软闸（给模型可读引导）。真正的硬互斥在 runChildAgent 的 tryRegister claim。
+  if (subagent.isSessionRunActive(sessionId)) {
+    throw new ToolError(
+      "FAILED",
+      `子会话 "${sessionId}" 正在运行中，不能同时续用。${resumeGuide()}`,
+      { toolName: "task" }
+    );
+  }
+  // 历史软闸：子会话永不压缩，消息数线性增长，超限引导新开（spec D7）。
+  const existing = await subagent.messages.listBySession(sessionId);
+  if (existing.length > TASK_SESSION_RESUME_MAX_MESSAGES) {
+    throw new ToolError(
+      "FAILED",
+      `子会话 "${sessionId}" 已有 ${existing.length} 条消息（上限 ${TASK_SESSION_RESUME_MAX_MESSAGES}），续用会持续拉长历史。${resumeGuide()}`,
+      { toolName: "task" }
+    );
+  }
+  return sessionId;
+}
+
+/**
+ * 单条附件的**明文当量字符**估算（spec D11 计量口径）。
+ *
+ * - image / dir 附件**不计字节**（只占条数名额）；
+ * - 其余按 `getContentSize` 探测：inline 直接计字符数、blob 按压缩字节 ×4 折算；
+ * - `null`（目录 / 不存在 / 未注入闭包）按 0 计。
+ */
+async function estimateAttachmentChars(
+  attachment: MessageAttachment,
+  getContentSize: GetContentSize
+): Promise<number> {
+  if (attachment.type === "image" || attachment.type === "dir") {
+    return 0;
+  }
+  const path = attachment.path;
+  if (path == null || path === "" || getContentSize == null) {
+    return 0;
+  }
+  const size = await getContentSize(path);
+  if (size == null) {
+    return 0;
+  }
+  return size.kind === "inline" ? size.size : size.size * 4;
+}
+
+/**
+ * 预算制软闸的分配结果：预算内挂附件的条目 + 超预算需在 prompt 尾部提示的路径。
+ */
+interface AttachmentBudgetSplit {
+  readonly withinBudget: MessageAttachment[];
+  readonly overflowPaths: string[];
+}
+
+/**
+ * `fileAttachment` 预算制分配（spec D11）。
+ *
+ * 输入已是 `attachmentsFromPaths` 的物化+去重结果，按其顺序依次分配「条数 ≤
+ * {@link TASK_FILE_ATTACHMENT_MAX_COUNT} + 明文当量字符 ≤
+ * {@link TASK_FILE_ATTACHMENT_CHAR_BUDGET}」双预算；任一预算耗尽后剩余路径
+ * **不挂附件**（降级不报错），交由调用方拼 prompt 尾注。
+ */
+async function splitAttachmentsByBudget(
+  attachments: readonly MessageAttachment[],
+  getContentSize: GetContentSize
+): Promise<AttachmentBudgetSplit> {
+  const withinBudget: MessageAttachment[] = [];
+  const overflowPaths: string[] = [];
+  let usedChars = 0;
+  let exhausted = false;
+  for (const attachment of attachments) {
+    if (exhausted) {
+      overflowPaths.push(attachment.path ?? attachment.name);
+      continue;
+    }
+    const chars = await estimateAttachmentChars(attachment, getContentSize);
+    const countOk = withinBudget.length < TASK_FILE_ATTACHMENT_MAX_COUNT;
+    const charOk = usedChars + chars <= TASK_FILE_ATTACHMENT_CHAR_BUDGET;
+    if (countOk && charOk) {
+      withinBudget.push(attachment);
+      usedChars += chars;
+    } else {
+      exhausted = true;
+      overflowPaths.push(attachment.path ?? attachment.name);
+    }
+  }
+  return { withinBudget, overflowPaths };
+}
+
+/** 超预算路径的 prompt 尾注（中文，引导子代理用 read + offset/limit 分段读）。 */
+function buildOverflowPromptNote(paths: readonly string[]): string {
+  return [
+    "",
+    "以下文件超出附件预算，仅提供路径，需要时可用 read 工具配合 offset/limit 分段读取：",
+    ...paths.map((p) => `- ${p}`),
+  ].join("\n");
+}
+
 /**
  * 静态 `task` 工具实例。
  *
@@ -129,15 +316,17 @@ ${formatCallableList(callable)}
 ）
 - description：3-5 词任务描述（用作子会话标题）
 - prompt：任务正文，写清要子代理完成什么
+- sessionId（可选）：续用某个已有子会话（传上次回流结果里的 subagentSessionId）。留空则新开。续用时该子会话的历史会被保留、子代理接着上一轮继续干，适合分多步推进同一件事；注意它只属于当前会话，不能拿去续用别的会话的子代理，同一个子会话也不能并发跑。subagentName 仍需填写（决定模型与工具策略），但子代理的实际身份以子会话历史为准。
+- fileAttachment（可选）：要交给子代理的文件路径列表，会像主会话附件一样把全文直接送进子会话，省得子代理再自己 read 一遍。超量部分只会给路径清单。
 
 结果格式：本工具回流的是一个 JSON 对象，结构为 { text, subagentSessionId, stopped?, failureReason? }。
 - text：子代理的末条回复正文；若子代理被中断且还未输出文本，text 为占位文案「[用户停止，无已生成文本]」。
 - stopped：为 true 表示子代理被用户中断（部分成功），此时 failureReason 字段给出原因（如「用户停止」）。text 可能是中断前的半成品，需结合 stopped 判断：stopped=true 时不要把 text 当作完整答案。
-- subagentSessionId：子会话 id（UI 跳转用）。
+- subagentSessionId：子会话 id（UI 跳转用，也是下次 sessionId 续用的入参）。
 
-并行：本工具非突变工具，单条 assistant 消息里可同时发起多个 task tool_use，会并发执行各自独立子会话。
+并行：本工具非突变工具，单条 assistant 消息里可同时发起多个 task tool_use，会并发执行各自独立子会话（但同一个 sessionId 不能被并发续用）。
 
-注意：子代理只能访问当前会话工作区文件（与父会话同一 VFS 视图）；它不会看到主对话的历史，仅看到你在 prompt 中提供的上下文。`;
+注意：子代理只能访问当前会话工作区文件（与父会话同一 VFS 视图）；它不会看到主对话的历史，仅看到你在 prompt 中提供的上下文与所附文件。`;
   },
   inputSchema: z.object({
     description: z.string().min(1).describe("3-5 词任务描述（用作子会话标题）"),
@@ -146,6 +335,18 @@ ${formatCallableList(callable)}
       .string()
       .min(1)
       .describe("目标子代理 name（非 id），需为 mode 非 primary 的 agent"),
+    sessionId: z
+      .string()
+      .optional()
+      .describe(
+        "续用已有子会话 id（上次回流的 subagentSessionId）；留空则新开。仅限当前会话派生的子会话，且不可并发续用同一个",
+      ),
+    fileAttachment: z
+      .array(z.string().min(1))
+      .optional()
+      .describe(
+        "要交付给子代理的文件路径列表（正文全文随附件送达）；超预算部分只给路径清单",
+      ),
   }),
   outputSchema: z.object({
     text: z
@@ -202,7 +403,46 @@ ${formatCallableList(callable)}
     const trimmedDesc = input.description.trim();
     const title =
       trimmedDesc.length > 0 ? trimmedDesc : input.prompt.trim().slice(0, 40);
-    const childSessionId = await subagent.createChildSession(title);
+
+    // 续用 vs 新建（spec G4）：sessionId 非空（trim 后）走四态校验后续用同一子会话，
+    // 不新建；留空/纯空白一律新开（模型显式传空串等价于不传）。
+    const requestedSessionId = input.sessionId?.trim() ?? "";
+    const childSessionId =
+      requestedSessionId.length > 0
+        ? await resolveResumeSessionId(requestedSessionId, subagent)
+        : await subagent.createChildSession(title);
+
+    // fileAttachment：先物化（attachmentsFromPaths 内部已按规范化 seen key 去重），
+    // 再按去重后顺序分配「条数 + 明文当量字符」双预算（spec D11）。超预算不报错，
+    // 降级为 prompt 尾注的路径清单。
+    let attachments: MessageAttachment[] | undefined;
+    let prompt = input.prompt;
+    const filePaths = input.fileAttachment;
+    if (filePaths != null && filePaths.length > 0) {
+      let materialized: MessageAttachment[];
+      try {
+        materialized = attachmentsFromPaths(filePaths);
+      } catch (error) {
+        if (error instanceof AttachmentPathArgumentError) {
+          throw new ToolError(
+            "FAILED",
+            `fileAttachment 路径非法：${error.message}`,
+            { toolName: "task" }
+          );
+        }
+        throw error;
+      }
+      const { withinBudget, overflowPaths } = await splitAttachmentsByBudget(
+        materialized,
+        subagent.getContentSize
+      );
+      if (withinBudget.length > 0) {
+        attachments = withinBudget;
+      }
+      if (overflowPaths.length > 0) {
+        prompt = `${prompt}${buildOverflowPromptNote(overflowPaths)}`;
+      }
+    }
 
     const { savedModelId, workspaceModelId } =
       subagent.resolveChildModelId(def);
@@ -212,7 +452,8 @@ ${formatCallableList(callable)}
       workspaceModelId,
       signal: subagent.parentSignal,
       maxSteps: def.runtime?.maxSteps,
-      prompt: input.prompt,
+      prompt,
+      ...(attachments != null ? { attachments } : {}),
     });
 
     // AgentRunResult 不带文本，必须自己 listBySession 拿末条 assistant text。

@@ -10,6 +10,7 @@ import {
   fileCacheKey,
 } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
 import { parseFileCachePayload } from "../../src/domain/workplace/logic/rule-snapshot-codec.js";
+import { serializeRuleSnapshot } from "../../src/domain/workplace/logic/rule-snapshot-codec.js";
 import { settlePendingFileCacheBackfills } from "../../src/domain/workplace/logic/load-or-fill-file-cache.js";
 import { createVfsTools } from "../../src/domain/tool/builtin/vfs-tools.js";
 import type { AgentPromptLayout } from "../../src/domain/prompt/model/agent-prompt-layout.js";
@@ -488,5 +489,108 @@ describe("assembleWorkplaceDisplay", () => {
       ),
       null,
     );
+  });
+});
+
+/**
+ * S0 双读（task-attach-unref Step 12）：`prefixPaths` 收窄为**仅 full 档**，
+ * `visiblePaths` 保持全量可见语义（= v1.5.29 旧 prefixPaths）。
+ *
+ * 默认配置（tail 集合覆盖全部文件）下两者恒等；只有显式 `fillPolicy:"header"`
+ * 且文件落在 fill 分支时才会分家——那正是「没加载全量却被 S0 吞附件」的真缺口。
+ */
+describe("assembleWorkplaceDisplay S0 双读（prefixPaths / visiblePaths）", () => {
+  it("T-WP-VP1: 两处早退字面量都补齐 visiblePaths: []", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const sk = createSessionKkvService(ctx.conn);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    await vfs.write("/a.md", "hello");
+    const wt = createWorkplaceService(ctx.conn, {
+      kind: "session",
+      projectId: project.id,
+      sessionId: session.id,
+    });
+    const scope = {
+      kind: "session" as const,
+      projectId: project.id,
+      sessionId: session.id,
+    };
+
+    // 早退①：无 workplace 块。
+    const noLayout = await assembleWorkplaceDisplay(scope, {
+      sessionKkv: sk,
+      workplace: wt,
+      vfs,
+      layout: layoutWithoutWorkplace(),
+    });
+    assert.deepEqual(noLayout.prefixPaths, []);
+    assert.deepEqual(noLayout.visiblePaths, []);
+
+    // 早退②：有块但快照为空（清空 canon 让 evaluate 出空行集）。
+    await sk.set(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY, "[]");
+    await sk.clearSession(session.id);
+    const emptyScope = {
+      ...scope,
+      sessionId: session.id,
+    };
+    const withLayout = await assembleWorkplaceDisplay(emptyScope, {
+      sessionKkv: sk,
+      workplace: createWorkplaceService(ctx.conn, {
+        kind: "session",
+        projectId: project.id,
+        sessionId: session.id,
+      }),
+      vfs,
+      layout: layoutWithWorkplace(),
+    });
+    // 无任何规则 → 快照非空（会话工作区默认规则带出文件）；这里只断言两字段同形，
+    // 保证「早退字面量漏补 visiblePaths」这类编译期之外的疏漏被抓住。
+    assert.deepEqual(
+      withLayout.prefixPaths.length,
+      withLayout.visiblePaths.length,
+      "无规则时两集合同长（默认规则下全是 full 档）",
+    );
+  });
+
+  it("T-WP-VP2: full 档进 prefixPaths 与 visiblePaths；header 档只进 visiblePaths", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const sk = createSessionKkvService(ctx.conn);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    await vfs.write("/full.md", "full-body");
+    await vfs.write("/hdr.md", "header-body");
+
+    // 直接预置快照（绕开规则评估的 head/tail 计算，精确控制 status 档位）。
+    await sk.set(
+      session.id,
+      SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
+      RULE_SNAPSHOT_CANON_KEY,
+      serializeRuleSnapshot([
+        { path: "/full.md", status: "full" },
+        { path: "/hdr.md", status: "header" },
+      ]),
+    );
+
+    const out = await assembleWorkplaceDisplay(
+      { kind: "session", projectId: project.id, sessionId: session.id },
+      {
+        sessionKkv: sk,
+        workplace: createWorkplaceService(ctx.conn, {
+          kind: "session",
+          projectId: project.id,
+          sessionId: session.id,
+        }),
+        vfs,
+        layout: layoutWithWorkplace(),
+      },
+    );
+
+    assert.deepEqual(out.visiblePaths, ["/full.md", "/hdr.md"], "visiblePaths = 全量可见集");
+    assert.deepEqual(out.prefixPaths, ["/full.md"], "prefixPaths = 仅 full 档");
+    // 默认配置语义不变：两档都在 display 里按各自 status 渲染。
+    assert.match(out.workplaceDisplay, /full-body/);
   });
 });

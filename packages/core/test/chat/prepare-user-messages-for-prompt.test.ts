@@ -1024,6 +1024,222 @@ describe("prepareUserMessagesForPrompt path degrade (T-PD*)", () => {
   });
 });
 
+/**
+ * S0 双读（task-attach-unref Step 12，spec G6）。
+ *
+ * 语义：`seenPaths`（= assemble 的 `prefixPaths`）只吃 full 档，用于抑制 attach 的
+ * 全文；`workplaceSeenPaths`（= `visiblePaths`，含 header / filename）用于
+ * workplace 附件的省略判定，且**不写入共享 seen**。缺省回落 `seenPaths`。
+ */
+describe("prepareUserMessagesForPrompt S0 双读（T-S0*）", () => {
+  it("T-S01: header 档目录的文件 attach 得全文——prefixPaths 不含它（不再被 S0 吞）", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    await vfs.write("/hdr.md", "HEADER-BODY");
+    const sk = createSessionKkvService(ctx.conn);
+
+    const prepared = await prepareUserMessagesForPrompt(
+      [
+        userMsg("看设定", {
+          sessionId: session.id,
+          attachments: [
+            {
+              name: "/hdr.md",
+              source: "attach",
+              type: "text",
+              content: null,
+              path: "/hdr.md",
+            },
+          ],
+        }),
+      ],
+      {
+        sessionId: session.id,
+        sessionKkv: sk,
+        vfs,
+        // 显式 header 配置目录：assemble 侧只把它推进 visiblePaths，不进 prefixPaths。
+        seenPaths: [],
+        workplaceSeenPaths: ["/hdr.md"],
+      },
+    );
+    const body = messageBodyText(prepared[0]!);
+    assert.match(body, /<action name="userAttach">/);
+    assert.match(body, /"display": "full"/);
+    assert.match(body, /1\|HEADER-BODY/, "header 档路径的 attach 必须拿到全文");
+    assert.equal(body.includes("alreadyReferenced"), false);
+  });
+
+  it("T-S02: full 档路径（进 prefixPaths）attach 仍 alreadyReferenced——默认配置行为不变", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    await vfs.write("/full.md", "FULL-BODY");
+    const sk = createSessionKkvService(ctx.conn);
+
+    const prepared = await prepareUserMessagesForPrompt(
+      [
+        userMsg("看设定", {
+          sessionId: session.id,
+          attachments: [
+            {
+              name: "/full.md",
+              source: "attach",
+              type: "text",
+              content: null,
+              path: "/full.md",
+            },
+          ],
+        }),
+      ],
+      {
+        sessionId: session.id,
+        sessionKkv: sk,
+        vfs,
+        seenPaths: ["/full.md"],
+        workplaceSeenPaths: ["/full.md"],
+      },
+    );
+    const body = messageBodyText(prepared[0]!);
+    assert.match(body, /"alreadyReferenced": true/);
+    assert.equal(body.includes("FULL-BODY"), false);
+  });
+
+  it("T-S03: workplaceSeenPaths 缺省时回落 seenPaths（旧调用方零变化）", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    await vfs.write("/gone.md", "GONE-BODY");
+    const sk = createSessionKkvService(ctx.conn);
+
+    const prepared = await prepareUserMessagesForPrompt(
+      [
+        userMsg("历史附件", {
+          sessionId: session.id,
+          attachments: [
+            {
+              name: "/gone.md",
+              source: "workplace",
+              type: "text",
+              content: null,
+              path: "/gone.md",
+            },
+          ],
+        }),
+      ],
+      {
+        sessionId: session.id,
+        sessionKkv: sk,
+        vfs,
+        // 只给 seenPaths，不给 workplaceSeenPaths ⇒ 回落同一集合。
+        seenPaths: ["/gone.md"],
+      },
+    );
+    assert.equal(
+      prepared[0]!.attachments?.find((a) => a.source === "workplace")?.content,
+      "",
+      "缺省回落：workplace 附件仍按 seenPaths 省略"
+    );
+  });
+
+  it("T-S04: 显式 header 目录的**历史 workplace 附件** prepare 后仍 content===\"\"（省略语义不被 S0 改法破坏）", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    await vfs.write("/hdr.md", "HEADER-BODY");
+    const sk = createSessionKkvService(ctx.conn);
+
+    const prepared = await prepareUserMessagesForPrompt(
+      [
+        userMsg("历史 workplace", {
+          sessionId: session.id,
+          attachments: [
+            {
+              name: "/hdr.md",
+              source: "workplace",
+              type: "text",
+              content: null,
+              path: "/hdr.md",
+            },
+          ],
+        }),
+      ],
+      {
+        sessionId: session.id,
+        sessionKkv: sk,
+        vfs,
+        // header 档：只在 visiblePaths、不在 prefixPaths。workplace 侧仍须省略——
+        // 这正是「双读」的意义：workplace 判定不吃收窄后的 attach 集合。
+        seenPaths: [],
+        workplaceSeenPaths: ["/hdr.md"],
+      },
+    );
+    assert.equal(
+      prepared[0]!.attachments?.find((a) => a.source === "workplace")?.content,
+      "",
+      "workplace 附件在 workplaceSeen 命中时应省略，不重复注入 header"
+    );
+  });
+
+  it("T-S05: 双读互不串味——workplaceSeen 命中的路径不写共享 seen，后续 attach 仍得全文", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    await vfs.write("/hdr.md", "HEADER-BODY");
+    const sk = createSessionKkvService(ctx.conn);
+
+    const prepared = await prepareUserMessagesForPrompt(
+      [
+        userMsg("m1", {
+          id: "w1",
+          sessionId: session.id,
+          attachments: [
+            {
+              name: "/hdr.md",
+              source: "workplace",
+              type: "text",
+              content: null,
+              path: "/hdr.md",
+            },
+          ],
+        }),
+        userMsg("m2", {
+          id: "a1",
+          sessionId: session.id,
+          attachments: [
+            {
+              name: "/hdr.md",
+              source: "attach",
+              type: "text",
+              content: null,
+              path: "/hdr.md",
+            },
+          ],
+        }),
+      ],
+      {
+        sessionId: session.id,
+        sessionKkv: sk,
+        vfs,
+        seenPaths: [],
+        workplaceSeenPaths: ["/hdr.md"],
+      },
+    );
+    // workplaceSeen 只在 workplace 判定里被读——绝不能写进共享 seen，
+    // 否则第二条 attach 会被误判 alreadyReferenced（这正是本用例的牙齿）。
+    assert.match(messageBodyText(prepared[1]!), /1\|HEADER-BODY/);
+    assert.equal(
+      messageBodyText(prepared[1]!).includes("alreadyReferenced"),
+      false
+    );
+  });
+});
+
 describe("prepareUserMessagesForPrompt tool_result 透传 (T-S1)", () => {
   it("T-S1a: 含 tool_result 的 user 消息在 extraInfo 非空时仍透传、block 类型保住", async () => {
     const ctx = getNovelMasterTestContext();

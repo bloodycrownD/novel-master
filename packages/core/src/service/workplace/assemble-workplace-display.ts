@@ -46,10 +46,23 @@ export interface AssembleWorkplaceDisplayResult {
   /** 常驻前缀展示文本（给模型看的 workplace 块）。 */
   readonly workplaceDisplay: string;
   /**
-   * S0：规则快照全部可见 path（filename/header/full），已规范化为 seen key。
-   * 无 workplace 块或快照为空时为 `[]`。
+   * S0（attach 去重 seen 初值）：**仅 `status === "full"`** 的规则可见 path，
+   * 已规范化为 seen key。无 workplace 块或快照为空时为 `[]`。
+   *
+   * 收窄自 v1.5.29 的全量语义：`header` / `filename` 档并未加载全量正文，
+   * 拿它们去吞 attach 会造成「文件其实没进上下文、附件却被判已引用」。故只有
+   * 真正全文注入的条目才允许抑制后续 attach 的全文。
    */
   readonly prefixPaths: string[];
+  /**
+   * 规则快照**全部**可见 path（`full` / `header` / `filename`，规范化 seen key），
+   * 即 v1.5.29 旧 `prefixPaths` 的语义。无 workplace 块或快照为空时为 `[]`。
+   *
+   * 喂 `prepareUserMessagesForPrompt` 的 `workplaceSeenPaths`：判定「本次历史里的
+   * workplace 附件是否该省略」时，工作区前缀确实已经展示过这些路径（无论哪一档），
+   * 所以这一侧保持全量语义，与 attach 侧的收窄互补而非二选一。
+   */
+  readonly visiblePaths: string[];
   /**
    * 本次组装内容的**廉价指纹**（`path|status|mtimeMs|bodyLength` 列表 join，
    * 2026-09-30）：组装是最贵的读链（冷 5~16s、暖几百 ms 全在 inflate/读盘），
@@ -125,7 +138,9 @@ export interface AssembleWorkplaceDisplayOptions {
  *    scope 评估）→ 写快照（写回 kkvSessionId）
  * 3. 按 path/status 读 `file_cache`（kkvSessionId）；miss → VFS（scope 视图）→ 内容直接
  *    用于组装，压缩+落库后台 fire-and-forget（不挡读者，见 load-or-fill-file-cache）
- * 4. `renderFileBlock` + `joinFileBlocks`；返回前包 `<workplace>`；`prefixPaths` = 快照全部可见 path（规范化）
+ * 4. `renderFileBlock` + `joinFileBlocks`；返回前包 `<workplace>`；
+ *    `visiblePaths` = 快照全部可见 path（规范化，全量语义）；
+ *    `prefixPaths` = 其中 `status === "full"` 的子集（attach 去重 S0 入集口径）
  */
 export async function assembleWorkplaceDisplay(
   scope: Extract<VfsScope, { kind: "session" }>,
@@ -133,13 +148,23 @@ export async function assembleWorkplaceDisplay(
   options?: AssembleWorkplaceDisplayOptions
 ): Promise<AssembleWorkplaceDisplayResult> {
   if (!layoutHasWorkplace(deps.layout)) {
-    return { workplaceDisplay: "", prefixPaths: [], fingerprint: "" };
+    return {
+      workplaceDisplay: "",
+      prefixPaths: [],
+      visiblePaths: [],
+      fingerprint: "",
+    };
   }
 
   const kkvSessionId = options?.kkvSessionId ?? scope.sessionId;
   const entries = await loadOrCreateRuleSnapshot(kkvSessionId, deps);
   if (entries.length === 0) {
-    return { workplaceDisplay: "", prefixPaths: [], fingerprint: "" };
+    return {
+      workplaceDisplay: "",
+      prefixPaths: [],
+      visiblePaths: [],
+      fingerprint: "",
+    };
   }
   // 快照加载是组装的第一段 IO（可能触发规则评估），加载完先看一眼再进
   // 文件循环——批量预取那条 IN 查询之后全是逐文件重活。
@@ -158,6 +183,7 @@ export async function assembleWorkplaceDisplay(
   );
 
   const prefixPaths: string[] = [];
+  const visiblePaths: string[] = [];
   const blocks: string[] = [];
   const fingerprintParts: string[] = [];
   for (const entry of entries) {
@@ -167,7 +193,14 @@ export async function assembleWorkplaceDisplay(
     if (options?.shouldStop?.() === true) {
       throw new WorkplaceAssemblyAbortedError();
     }
-    prefixPaths.push(normalizePromptSeenPath(entry.path));
+    const normalized = normalizePromptSeenPath(entry.path);
+    // 全量可见集（workplace 省略判定用，= 旧 prefixPaths 语义）。
+    visiblePaths.push(normalized);
+    // S0 入集（attach 去重用）：只有 full 档真正把全文注入了提示词，
+    // 才允许它抑制后续 attach 的全文；header / filename 没这资格。
+    if (entry.status === "full") {
+      prefixPaths.push(normalized);
+    }
     const raw = prefetched.get(fileCacheKey(entry.status, entry.path));
     const cached = raw != null ? parseFileCachePayload(raw) : null;
     const payload =
@@ -203,6 +236,7 @@ export async function assembleWorkplaceDisplay(
   return {
     workplaceDisplay: wrapWorkplaceDisplay(joinFileBlocks(blocks)),
     prefixPaths,
+    visiblePaths,
     // 指纹在循环里逐文件拼：entry 顺序即快照序（稳定），mtimeMs / 正文长度
     // 来自缓存/回填载荷。指纹串长度 ≈ path 数 × 几十字节，远小于哈希正文串
     // 本身。

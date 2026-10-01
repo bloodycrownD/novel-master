@@ -427,7 +427,7 @@ export class DefaultAgentRunner implements AgentRunner {
         // 分解；丢掉则 run 侧全程无指纹（既不命中记忆也不分解，①②批收益在
         // 评估链归零）。与 desktop build 的 ctx 同款透传（见
         // session-prompt-input.service.ts 的 `workplaceFingerprint: fingerprint`）。
-        const { workplaceDisplay, prefixPaths, fingerprint } =
+        const { workplaceDisplay, prefixPaths, visiblePaths, fingerprint } =
           await assembleWorkplaceDisplay(
             wtScope,
             {
@@ -450,7 +450,10 @@ export class DefaultAgentRunner implements AgentRunner {
           sessionId,
           sessionKkv: this.deps.sessionKkv,
           vfs: this.deps.toolCtx.vfs,
+          // seenPaths 只吃 full 档（attach 去重 S0）；workplaceSeenPaths 吃全量可见档
+          // （workplace 省略判定）——两者分家是 v1.5.30 S0 对齐的关键。
           seenPaths: prefixPaths,
+          workplaceSeenPaths: visiblePaths,
           extraInfo: options.definition.prompts.customAttach,
           now: turnNow,
           workplace: wt,

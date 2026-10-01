@@ -5,6 +5,7 @@
  */
 
 import type { ChatMessage } from "@/domain/chat/model/message.js";
+import type { MessageAttachment } from "@/domain/chat/model/message-attachment.schema.js";
 import type { VfsService } from "@/domain/vfs/ports/vfs-service.port.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
 import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
@@ -37,6 +38,12 @@ export interface RunChildAgentOptions {
    * 使子 agent 对话历史完整（UI 浏览可见、LLM 能看到任务描述）。
    */
   readonly prompt?: string;
+  /**
+   * task 工具入参 `fileAttachment` 预算内物化出的附件（已按
+   * `attachmentsFromPaths` 合规形态 + 预算筛选），随子 session 首条 user
+   * 消息落库——与主会话 `@path` 附件同链路（`content:null` 落库、view-time hydrate）。
+   */
+  readonly attachments?: readonly MessageAttachment[];
 }
 
 /** `task` 工具读取的子代理装配闭包；仅 depth=0/1 注入（孙 agent 无 task 工具）。 */
@@ -46,6 +53,34 @@ export interface BuiltinToolSubagentContext {
   readonly sessions: SessionService;
   /** 创建子 session（title 由调用方决定）；返回新 sessionId。 */
   readonly createChildSession: (title: string) => Promise<string>;
+  /**
+   * 直接父会话 id（**直接父**口径，spec D2）：主装配点填 `scope.sessionId`、
+   * 子装配点填 `childSessionId`。`task` 的 `sessionId` 续用参数据此校验归属
+   * ——目标子会话的 `parentSessionId` 必须等于本值（跨 project 的会话同样
+   * 因父 id 不同而被拒）。
+   */
+  readonly parentSessionId: string;
+  /**
+   * 目标子会话当前是否有 in-flight run（软闸，给出可读引导文案）。
+   *
+   * 装配点绑 `runtime.abortRegistry?.has(id) ?? true`——**缺 registry 保守拒绝**，
+   * 不放行续用（真正的并发硬互斥在 `runChildAgent` 内的 `tryRegister` claim）。
+   */
+  readonly isSessionRunActive: (sessionId: string) => boolean;
+  /**
+   * 按路径探测内容大小（`fileAttachment` 预算制软闸用，spec D11）。
+   *
+   * 装配点绑 `runtime.sessionVfs(projectId, parentSessionId).findContentSize`：
+   * `inline` = 明文字符数直接计；`blob` = 压缩字节 ×4 折算明文当量；
+   * `null`（目录 / 不存在）按 0 计。未注入时按「不计字节」处理（仍占条数名额）。
+   */
+  readonly getContentSize?: (
+    path: string
+  ) => Promise<
+    | { readonly kind: "inline"; readonly size: number }
+    | { readonly kind: "blob"; readonly size: number }
+    | null
+  >;
   /**
    * 派生 `AbortController`（监听父 signal 一次）并装配子 agent runner 跑完。
    *

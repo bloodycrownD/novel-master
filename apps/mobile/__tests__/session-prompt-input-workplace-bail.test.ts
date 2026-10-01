@@ -96,6 +96,7 @@ describe('workplace 段内中止的接线与转换（2026-09-30 治本）', () =
     mockAssemble.mockResolvedValue({
       workplaceDisplay: 'x',
       prefixPaths: [],
+      visiblePaths: [],
       fingerprint: 'fp-1',
     });
     let stopRequested = false;
@@ -118,6 +119,7 @@ describe('workplace 段内中止的接线与转换（2026-09-30 治本）', () =
     mockAssemble.mockResolvedValue({
       workplaceDisplay: '前缀',
       prefixPaths: [],
+      visiblePaths: [],
       fingerprint: 'fp-abc',
     });
     const bundle = await buildSessionPromptInput(
