@@ -55,6 +55,13 @@ import {tokensForMode} from '../theme/tokens';
 
 export type RuntimeStatus = 'loading' | 'ready' | 'error';
 
+/**
+ * {@link NovelMasterContextValue.retryAndWait} 的悬空兜底超时。
+ * 远大于正常重建耗时——只兜「effect 没能兑现 promise」这种异常路径，
+ * 目的是让调用方永不永挂（永挂会让云同步 pull 的 busy 令牌永不 release）。
+ */
+const REBOOT_WAIT_TIMEOUT_MS = 60_000;
+
 export interface NovelMasterContextValue {
   status: RuntimeStatus;
   runtime: MobileNovelMasterRuntime | undefined;
@@ -63,6 +70,15 @@ export interface NovelMasterContextValue {
   richRenderEpoch: number;
   error: string | undefined;
   retry: () => void;
+  /**
+   * 可等待的重建：resolve 出重建完成后的**新 runtime**。
+   *
+   * 与 {@link retry} 的区别：retry 只是 `setBootToken(t => t + 1)`，真正的
+   * runtime 重建发生在随后的 useEffect 里，调用方在 `retry()` 之后**同步拿不到
+   * 新 runtime**。云同步 pull 换库之后必须用新 runtime 记账（旧的已关连接），
+   * 所以给它这个可等待形态。
+   */
+  retryAndWait: () => Promise<MobileNovelMasterRuntime>;
   scope: MobileScopeSnapshot;
   setCurrentProject: (projectId: string) => Promise<void>;
   setCurrentSession: (sessionId: string) => Promise<void>;
@@ -154,10 +170,60 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
     setBootToken(t => t + 1);
   }, []);
 
+  // 可等待重建的挂起槽：retryAndWait 把 {resolve, reject} 存这里，由下面的
+  // boot effect 在 setRuntime 之后兑现。cancelled 分支也必须 reject——
+  // 漏掉会让调用方永挂在 await 上，外层 busy 令牌永不 release
+  // ⇒ 消息正文解压 / blob 归一两个后台循环全进程停摆。
+  const rebootWaiterRef = useRef<{
+    resolve: (rt: MobileNovelMasterRuntime) => void;
+    reject: (err: unknown) => void;
+  } | null>(null);
+
+  const retryAndWait = useCallback((): Promise<MobileNovelMasterRuntime> => {
+    setBootToken(t => t + 1);
+    return new Promise<MobileNovelMasterRuntime>((resolve, reject) => {
+      rebootWaiterRef.current = {resolve, reject};
+    });
+  }, []);
+
+  // 超时兜底：effect 若因为任何原因没兑现（理论上 cancelled 分支已 reject），
+  // 调用方不能永挂。留 60s 远大于正常重建耗时，只兜「promise 悬空」。
+  const settleRebootWaiter = useCallback((): void => {
+    const waiter = rebootWaiterRef.current;
+    if (waiter == null) {
+      return;
+    }
+    rebootWaiterRef.current = null;
+    waiter.reject(new Error('重建 runtime 超时，请重试'));
+  }, []);
+
+  useEffect(() => {
+    const rebootTimer =
+      rebootWaiterRef.current != null
+        ? setTimeout(settleRebootWaiter, REBOOT_WAIT_TIMEOUT_MS)
+        : undefined;
+    return () => {
+      if (rebootTimer != null) {
+        clearTimeout(rebootTimer);
+      }
+    };
+  }, [bootToken, settleRebootWaiter]);
+
   useEffect(() => {
     let cancelled = false;
     setStatus('loading');
     setError(undefined);
+
+    const resolveRebootWaiter = (rt: MobileNovelMasterRuntime): void => {
+      const waiter = rebootWaiterRef.current;
+      rebootWaiterRef.current = null;
+      waiter?.resolve(rt);
+    };
+    const rejectRebootWaiter = (err: unknown): void => {
+      const waiter = rebootWaiterRef.current;
+      rebootWaiterRef.current = null;
+      waiter?.reject(err);
+    };
 
     (async () => {
       if (bootToken > 0) {
@@ -197,6 +263,9 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
         // 写通尽力落盘），再销毁数据库连接。
         runtime.sessionStreamUnitManager.dispose();
         await closeMobileConnection();
+        // 同样必须 reject：调用方（云同步 pull）不能永挂在 await 上，
+        // 否则它持有的 busy 令牌永不 release。
+        rejectRebootWaiter(new Error('重建 runtime 已取消，请重试'));
         return;
       }
       setRuntime(runtime);
@@ -204,6 +273,7 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
       setRichRenderEpoch(epoch);
       setScope(loaded);
       setStatus('ready');
+      resolveRebootWaiter(runtime);
     })().catch(err => {
       if (!cancelled) {
         setRuntime(undefined);
@@ -211,6 +281,7 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
         setError(formatBootstrapError(err));
         setStatus('error');
       }
+      rejectRebootWaiter(err);
     });
 
     return () => {
@@ -307,6 +378,7 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
       richRenderEpoch,
       error,
       retry,
+      retryAndWait,
       scope,
       setCurrentProject,
       setCurrentSession,
@@ -319,6 +391,7 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
       richRenderEpoch,
       error,
       retry,
+      retryAndWait,
       scope,
       setCurrentProject,
       setCurrentSession,

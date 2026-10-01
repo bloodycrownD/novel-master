@@ -181,23 +181,30 @@ describe("createS3ObjectStorage", () => {
   });
 
   it("putFile：从本地文件读取并上传", async () => {
-    const { readFile, writeFile, unlink } = await import("node:fs/promises");
+    const { writeFile, unlink } = await import("node:fs/promises");
     const { join } = await import("node:path");
     const { tmpdir } = await import("node:os");
     const filePath = join(tmpdir(), `s3-put-file-${Date.now()}.bin`);
     const payload = new Uint8Array([4, 5, 6]);
     await writeFile(filePath, payload);
+    // 哨兵实例：readFile 返回它，断言上传的 Body **就是同一个对象**。
+    // `new Uint8Array(raw)` 是逐元素复制，会让这条断言红；把它删掉或反过来
+    // 「总是拷贝」也都红 ⇒ 有牙。内容断言（deepEqual）同时保留，两条一起在
+    // 才同时证明「字节内容没变」与「没有额外分配」。
+    const sentinel = new Uint8Array([4, 5, 6]);
 
     try {
       const storage = createS3ObjectStorage(testConfig, {
         client: createMockClient(async (command) => {
           assert.ok(command instanceof PutObjectCommand);
           assert.deepEqual(command.input.Body, payload);
+          // 引用相等（===），不是 deepEqual：钉住 putFile 去掉的那层多余整拷。
+          assert.equal(command.input.Body, sentinel);
           return { ETag: '"file-etag"' };
         }),
         // Node 端注入基于 node:fs/promises 的 FileSystemPort（A-26）。
         fileSystem: {
-          readFile: (path) => readFile(path),
+          readFile: () => Promise.resolve(sentinel),
           writeFile: (path, bytes) => writeFile(path, bytes),
         },
       });

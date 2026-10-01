@@ -10,6 +10,12 @@
  * 锁是进程内的、session 维度——不解决多设备争用（那是云端 lease 的事），
  * 只协调「同一进程内 push 和 agent 不能并行」。
  *
+ * ⚠️ 事实态（注释诚实化）：目前**只有 cloud-sync 侧接线**——`pull()` 与
+ * `push()` 共用同一把锁（sync ↔ sync 已互斥）。「sync ↔ agent」这一段
+ * **尚未接线**：`getDefaultPushAgentMutex` 未从 `infra/cloud-sync/index.ts`
+ * 导出，apps 侧零 acquire，agent 启动入口拿不到这把锁，仍靠
+ * `dbSync.isAgentActive()` 的入口/续租点复检兜底。见 M-25。
+ *
  * @module infra/cloud-sync/logic/push-agent-mutex
  */
 

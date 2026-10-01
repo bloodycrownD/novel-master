@@ -15,6 +15,7 @@ import {
   normalizePrefix,
   parseCloudSyncStatus,
   statusKey,
+  type ObjectStoragePort,
 } from "@novel-master/core";
 import { createS3ObjectStorage } from "@novel-master/cloud-sync-driver-s3";
 import type { S3StorageConfig } from "@novel-master/cloud-sync-driver-s3";
@@ -153,11 +154,22 @@ async function buildS3StorageConfigFromStore(
   };
 }
 export class DesktopCloudSyncService {
+  /**
+   * 构造时传入的 runtime 对象本身。
+   *
+   * 单例按 runtime 身份换代：rebootstrap 产生的是**新 runtime 对象**
+   * （desktop-runtime-singleton 每次重建都 new 出来），身份比较天然成立，
+   * 无需任何调用点配合——本地备份导入（handlers/backup.ts）那条 rebootstrap
+   * 路径因此也被自动覆盖。service 整体按代重建后 `this.runtime` 恒为当代
+   * runtime，故不另设 `currentRuntime()` 访问器（避免「读哪一份」二义）。
+   */
+  private readonly runtimeIdentity: object;
   private readonly runtime: DesktopNovelMasterRuntime;
   private readonly configStore: CloudSyncConfigStore;
 
   constructor(runtime: DesktopNovelMasterRuntime) {
     this.runtime = runtime;
+    this.runtimeIdentity = runtime;
     this.configStore = createCloudSyncConfigStore(
       runtime.kkv,
       runtime.secretStore
@@ -166,6 +178,11 @@ export class DesktopCloudSyncService {
 
   async getConfig(): Promise<CloudSyncConfigDto> {
     return this.configStore.getConfig();
+  }
+
+  /** 本实例是否属于该 runtime 那一代（单例按身份换代用）。 */
+  isForRuntime(runtime: DesktopNovelMasterRuntime): boolean {
+    return this.runtimeIdentity === runtime;
   }
 
   async setConfig(input: CloudSyncSetConfigInput): Promise<void> {
@@ -234,7 +251,21 @@ export class DesktopCloudSyncService {
     };
   }
 
-  async pull(): Promise<{ rev: number }> {
+  /**
+   * 拉取并导入远端快照。
+   *
+   * 契约顺序：**换库 → 重建 runtime → 用新 runtime 记账 → 再放互斥令牌**。
+   * 本方法只做「换库」并回报 `databaseReplaced`；**换代成功时不在此处记账**
+   * ——此刻 `this.configStore` 背后的连接刚被 `importDatabaseBackupFrom*` 关掉，
+   * 记账会抛 `CONNECTION_CLOSED`（且抛错发生在 recordPull 之前，把已完成的
+   * 拉取记成失败，rev 永不推进）。记账改由 handler 在
+   * `rebootstrapDesktopRuntime()` 之后调 {@link recordPullSuccess} 完成。
+   *
+   * `ALREADY_UP_TO_DATE` 早返回分支与失败分支仍在本处记账：**库没换、连接没关**，
+   * 此时旧 runtime 仍是活的，记账句柄有效。该早返回对象的
+   * `databaseReplaced` 恒为 `false`。
+   */
+  async pull(): Promise<{ rev: number; databaseReplaced: boolean }> {
     if (syncBusy) {
       throw new Error("云同步进行中，请稍后再试");
     }
@@ -246,20 +277,18 @@ export class DesktopCloudSyncService {
       // getLocalMeta 的读取必须在 try 内（对齐 push() 写法）：若留在
       // try 外，抛错时 syncBusy 永不复位，数据清理守卫会被连带锁死。
       meta = await this.configStore.getLocalMeta();
-      const built = await this.buildCoordinator();
+      const built = await this.buildCoordinator(storageOverrideForTest);
       exportTempPath = built.exportTempPath;
       importTempPath = built.importTempPath;
       const result = await built.coordinator.pull({
         lastSyncedRev: meta.lastSyncedRev,
       });
-      await this.configStore.setLastSyncedRev(result.rev);
-      await this.configStore.recordPull(true, `已同步至 rev ${result.rev}`);
       return result;
     } catch (error) {
       if (isCloudSyncError(error) && error.code === "ALREADY_UP_TO_DATE") {
         // 该错误只可能由 coordinator.pull 抛出，此时 meta 必已赋值。
         await this.configStore.recordPull(true, "已是最新");
-        return { rev: meta?.lastSyncedRev ?? 0 };
+        return { rev: meta?.lastSyncedRev ?? 0, databaseReplaced: false };
       }
       const detail = error instanceof Error ? error.message : String(error);
       await this.configStore.recordPull(false, detail).catch(() => undefined);
@@ -273,6 +302,24 @@ export class DesktopCloudSyncService {
         await unlink(importTempPath).catch(() => undefined);
       }
     }
+  }
+
+  /**
+   * 换代之后记账 pull 成功：每次现取 runtime 现场构造 config store。
+   *
+   * 必须现取：handler 在 `rebootstrapDesktopRuntime()` **之前**捕获的 service
+   * 仍是旧代实例，其 `configStore` 绑的是已被关掉的连接——按身份重建救不了
+   * 旧实例上的方法调用。`getDesktopRuntime()` 在 `closeLiveDbForBackupImport`
+   * 之后会懒建出一个**新对象**，这里的 store 因此必然绑在活连接上。
+   */
+  async recordPullSuccess(rev: number): Promise<void> {
+    const { getDesktopRuntime } = await import(
+      "../runtime/desktop-runtime-singleton.js"
+    );
+    const rt = await getDesktopRuntime();
+    const store = createCloudSyncConfigStore(rt.kkv, rt.secretStore);
+    await store.setLastSyncedRev(rev);
+    await store.recordPull(true, `已同步至 rev ${rev}`);
   }
 
   async push(options?: {
@@ -339,7 +386,14 @@ export class DesktopCloudSyncService {
     });
   }
 
-  private async buildCoordinator(): Promise<{
+  /**
+   * 组装 coordinator。
+   *
+   * @param storageOverride 仅测试用：注入内存版 storage。desktop 测试基座是
+   *   node:test 零 mock 设施，没有可注入的 S3 客户端缝，不加这个参数就做不出
+   *   「真库 + 内存远端」的端到端断言。
+   */
+  private async buildCoordinator(storageOverride?: ObjectStoragePort): Promise<{
     coordinator: CloudSyncCoordinator;
     exportTempPath: string;
     importTempPath: string;
@@ -363,17 +417,19 @@ export class DesktopCloudSyncService {
       readFile: (path: string) => readFile(path),
       writeFile: (path: string, bytes: Uint8Array) => writeFile(path, bytes),
     };
-    const storage = createS3ObjectStorage(
-      {
-        endpoint: publicConfig.endpoint,
-        region: publicConfig.region,
-        bucket: publicConfig.bucket,
-        accessKeyId: publicConfig.accessKeyId,
-        secretAccessKey: secret,
-        forcePathStyle: publicConfig.forcePathStyle,
-      },
-      { fileSystem: nodeFileSystem }
-    );
+    const storage =
+      storageOverride ??
+      createS3ObjectStorage(
+        {
+          endpoint: publicConfig.endpoint,
+          region: publicConfig.region,
+          bucket: publicConfig.bucket,
+          accessKeyId: publicConfig.accessKeyId,
+          secretAccessKey: secret,
+          forcePathStyle: publicConfig.forcePathStyle,
+        },
+        { fileSystem: nodeFileSystem }
+      );
 
     const runtime = this.runtime;
     const stamp = Date.now();
@@ -398,13 +454,15 @@ export class DesktopCloudSyncService {
         const { importDatabaseBackupFromBytes } = await import(
           "./db-backup.service.js"
         );
-        await importDatabaseBackupFromBytes(bytes);
+        // 必须 return：不 return 完全合法、零类型错误，但运行时
+        // databaseReplaced === undefined ⇒ handler 永不 rebootstrap ⇒ P0 原样复发。
+        return importDatabaseBackupFromBytes(bytes);
       },
       importSnapshotFromPath: async (path: string) => {
         const { importDatabaseBackupFromPath } = await import(
           "./db-backup.service.js"
         );
-        await importDatabaseBackupFromPath(path);
+        return importDatabaseBackupFromPath(path);
       },
     };
 
@@ -429,6 +487,31 @@ export class DesktopCloudSyncService {
     };
   }
 }
+/**
+ * 测试用：让 pull 走注入的 storage（内存版远端）。
+ *
+ * desktop 测试基座是 node:test 零 mock 设施，而 S3 客户端是在
+ * `buildCoordinator` 内部现场构造的，没有可 patch 的缝 ⇒ 端到端断言
+ * （真库 + 内存远端）只能靠这个注入点。传 null 恢复生产路径。
+ */
+let storageOverrideForTest: ObjectStoragePort | undefined;
+
+export function __setDesktopCloudSyncStorageOverrideForTest(
+  storage: ObjectStoragePort | null,
+): void {
+  storageOverrideForTest = storage ?? undefined;
+}
+
+/**
+ * 云同步单例——**与 runtime 同寿命；runtime 换代时必须重建**。
+ *
+ * 旧实现只在首次构造时用 runtime，此后每次调用虽然都 `await getDesktopRuntime()`
+ * 却不更新，于是 rebootstrap 之后拿到的是「新 runtime 外面套着旧 service」：
+ * 旧 service 的 configStore 绑旧 kkv、buildCoordinator 里的 dbSync 用的也是
+ * 旧 runtime ⇒ 面板全线 `CONNECTION_CLOSED` 直到重启应用。
+ * 现在按 runtime 对象身份比较换代，两条 rebootstrap 生产路径（pull 之后、
+ * 本地备份导入之后）都被自动覆盖。
+ */
 let service: DesktopCloudSyncService | undefined;
 
 export async function getDesktopCloudSyncService(): Promise<DesktopCloudSyncService> {
@@ -436,16 +519,29 @@ export async function getDesktopCloudSyncService(): Promise<DesktopCloudSyncServ
     "../runtime/desktop-runtime-singleton.js"
   );
   const runtime = await getDesktopRuntime();
-  if (!service) {
+  if (service == null || !service.isForRuntime(runtime)) {
     service = new DesktopCloudSyncService(runtime);
   }
   return service;
+}
+
+/**
+ * 生产版清位入口：手动让下次 `getDesktopCloudSyncService()` 重建。
+ *
+ * 刻意**不**挂到 `rebootstrapDesktopRuntime()` 上——那会形成
+ * `runtime-singleton → cloud-sync.service` 的静态环（service 已经动态
+ * import runtime-singleton），静态环会破坏 db-backup-busy 的导入顺序。
+ * 身份比较已经自愈，本函数只留给将来手动降级用。
+ */
+export function invalidateDesktopCloudSyncService(): void {
+  service = undefined;
 }
 
 /** 测试用：重置单例与忙碌状态 */
 export function resetDesktopCloudSyncServiceForTest(): void {
   service = undefined;
   syncBusy = false;
+  storageOverrideForTest = undefined;
 }
 
 /** 测试用：直接置位云同步忙碌状态（模拟 pull/push 执行窗口）。 */

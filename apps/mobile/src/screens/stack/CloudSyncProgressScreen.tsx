@@ -33,7 +33,7 @@ export function CloudSyncProgressScreen() {
   const {tokens} = useTheme();
   const {showToast} = useToast();
   const runtime = useRuntime();
-  const {retry} = useNovelMaster();
+  const {retryAndWait} = useNovelMaster();
   const navigation = useNavigation<Nav>();
   const route = useRoute<Route>();
   // 屏级 override：自动带 ownerRouteKey，转场期间不泄漏到相邻屏 header。
@@ -104,7 +104,10 @@ export function CloudSyncProgressScreen() {
     const run = async (): Promise<void> => {
       try {
         if (op === 'pull') {
-          const result = await pullCloudSync(runtime, retry, {
+          // retryAndWait：拉取换库后必须用**重建出来的新 runtime** 记账，
+          // 旧 runtime 背后的连接已被换库关掉。retry（只 setBootToken）
+          // 拿不到新 runtime。
+          const result = await pullCloudSync(runtime, retryAndWait, {
             onProgress: state => {
               if (active) {
                 setProgress(state);
@@ -163,7 +166,7 @@ export function CloudSyncProgressScreen() {
     op,
     forceOverwriteRemote,
     runtime,
-    retry,
+    retryAndWait,
     navigation,
     showToast,
     handleNeedPullFirst,
