@@ -679,6 +679,8 @@ async function warnInsufficientRefBeforeDecrement(
       const delta = ref.count ?? 1;
       const prev = current.get(`${ref.entryId}:${ref.version}`);
       if (prev === undefined) {
+        // 防御分支：resolve 成功后、本 SELECT 之前 revision 行被并发删除的竞态窗
+        // （同事务正向不可构造）；可构造面（前值不足 / badBlock 跳过）由测试覆盖。
         console.warn(
           `[${LOG_TAG}] chat_message.id=${messageId} −1 之前 revision 行缺失（entryId=${ref.entryId}, version=${ref.version}, delta=-${delta}）：ref_count 未减，记坏行`
         );
@@ -905,7 +907,7 @@ export async function runMessageRefUnref(
     await yieldToEventLoop();
   }
 
-// 收尾让位判定（deferred）**前置于**残留下沉校验（D19）：解压兄弟任务未完成
+  // 收尾让位判定（deferred）**前置于**残留下沉校验（D19）：解压兄弟任务未完成
   // 时，压缩行可能被它解回明文、那些行是在本轮游标扫过之后才进入谓词的——
   // 先判残留会把「正常交叠态」谎报成 stalled、warn 说谎且三端本进程 return
   // 不再重试。解压未完成一律先让位（deferred），解压已完成才允许用 leftover

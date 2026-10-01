@@ -457,7 +457,7 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
       }
     }
 
-// 按 500 分块发 UPDATE，复用 findExistingEntryVersionKeys 的 (entry_id, version) IN (...) 写法
+    // 按 500 分块发 UPDATE，复用 findExistingEntryVersionKeys 的 (entry_id, version) IN (...) 写法
     const CHUNK_SIZE = 500;
     const deltaLiteral = delta > 0 ? `+ ${delta}` : `${delta}`;
     // delta < 0 的下限夹逼（D15）：`ref_count` 误减会把计数打到负数，而负数与

@@ -327,9 +327,16 @@
 - 真机升级路径实测：v1.5.29 库 → 本版，回迁一轮跑完、复制/搜索恢复正常（Step 15 原有项）。
 - 存储膨胀对比与子会话 read 次数下降的体感观察。
 
+## 执行补记（dev-fix wave，2026-10-02）
+- **e-tests/G-7 已补执行**（cr-func 抓出 wave-0 漏派）：renderChipLabels 改 collectText 递归收集（消 chip 内 `children[0]` 下标穿透）、断言改 toContain 集合语义（chip 全文含徽标 `@path文件`）、CollapsibleSection `[1]` 下标与 pickAttachGroup 函数名匹配各加耦合点注释；4/4 绿。
+- **B-01「行缺失」档注记**：`prev === undefined` 分支为 resolve 成功后、同 tx SELECT 前行被并发删除的**竞态窗防御**（resolve 与 warn SELECT 同查 vfs_revision，正向构造互斥不可达）——实现处已补防御注释登记；可构造面（前值不足 / badBlock 跳过 / 前值充足）三档测试覆盖在案。
+- **cr-func nit 四处已修**：repository.ts 与 message-ref-unref.ts 两处顶格注释缩进、create-desktop/mobile-runtime 注释首句重复。
+- **verify-apps 范围外发现（登记不修）**：`apps/desktop/scripts/run-tests.mjs` 的单引号 glob 在 Windows cmd 下不展开 → `npm test` 静默跑 0 条假绿（exit 0、tests 0）——Windows 上验 desktop 须用双引号等价跑法；建议单独立项修复。
+
 ## K 节建议（下游执行时闭合）
 - f-doc/K-1（console.log 二选一）、f-doc/K-2（status 导出拍板）、A-4（发版随附主仓 RULE.md 提交）。
 - 全量 format/lint 一轮（core 无 prettier 门禁，mobile format:check 覆盖 core 之外的面）。
+- **U+FFFD 字符损坏立账（cr-func 发现，登记不修）**：`packages/core/test/chat/read-ref-parity.test.ts` 含 732 处 U+FFFD（ac0a3269 Step4 引入，base 为 0）——需按语义恢复中文注释；`apps/mobile/src/services/session-prompt-input.service.ts` 含 178 处（fe79b781 base 即有、主仓同款，非本迭代引入）。清理轮参照 fc6c49b0 修 .gitignore 历史乱码的先例处理。
 
 ## Fix-Spec Closure
 | 项 | 状态 |

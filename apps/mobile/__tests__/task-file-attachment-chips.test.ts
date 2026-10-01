@@ -75,7 +75,12 @@ function collectText(node: unknown, out: string[] = []): string[] {
   return out;
 }
 
-/** 从 user 行的 vnode 树里摘出 AttachGroup 元素（渲染 chip 的那段）。 */
+/**
+ * 从 user 行的 vnode 树里摘出 AttachGroup 元素（渲染 chip 的那段）。
+ *
+ * 已知耦合点：按 vnode type 的函数名 === 'AttachGroup' 匹配——生产构建若做压缩/匿名化
+ * 或组件改名，此处会以「user 行未挂上 AttachGroup」红掉（不假绿）；重构 AttachGroup 时须同步本选择器。
+ */
 function pickAttachGroup(vnode: VNode): VNode {
   const found = collectVNodes(vnode).find(
     n =>
@@ -124,18 +129,15 @@ function renderChipLabels(
     showDividerAbove: true,
   }) as VNode;
   const section = (sectionEl.type as (props: unknown) => VNode)(sectionEl.props);
-  // CollapsibleSection 展开体在 props.children 的第二项（tool-group-items）；
-  // 折叠态下为 null → 不渲染任何 chip。
+  // 已知耦合点：CollapsibleSection 展开体固定在 props.children 的第二项（tool-group-items），
+  // 折叠态下为 null → 不渲染任何 chip；CollapsibleSection 的 children 形状变化时须同步此行。
   const items = (section.props.children as (VNode | null)[])[1];
   if (items == null) {
     return [];
   }
   const chips = items.props.children as VNode[];
-  return chips.map(chip => {
-    const header = chip.props.children as VNode;
-    const toolName = (header.props.children as (VNode | null)[])[0]!;
-    return String(toolName.props.children);
-  });
+  // chip 文案用递归收集（不按 children 下标穿透——chip 内部结构变化不致误红）。
+  return chips.map(chip => collectText(chip).join(''));
 }
 
 describe('T-TA4 子会话附件 chip 行渲染（task fileAttachment）', () => {
@@ -163,7 +165,8 @@ describe('T-TA4 子会话附件 chip 行渲染（task fileAttachment）', () => 
       attachments: AttachmentChip[];
     };
     expect(attachProps.attachments).toHaveLength(1);
-    expect(renderChipLabels(attachProps.attachments)).toEqual([`@${path}`]);
+    // 集合语义：chip 递归文本可能含徽标等附加文案，断言包含即可（消除下标精确匹配的白盒耦合）。
+    expect(renderChipLabels(attachProps.attachments)[0]).toContain(`@${path}`);
     // 折叠态：展开体不渲染 → 无 chip 文案（展开/折叠两态都有牙）。
     expect(renderChipLabels(attachProps.attachments, false)).toEqual([]);
   });
@@ -174,8 +177,7 @@ describe('T-TA4 子会话附件 chip 行渲染（task fileAttachment）', () => 
     // 所以 @path 只可能来自 row-logic 的 `a.source === 'attach'` 分支。
     const chips: AttachmentChip[] = [userAttachAttachment(path)];
     const label = renderChipLabels(chips)[0]!;
-    expect(label).toBe(`@${path}`);
-    expect(label.startsWith('@')).toBe(true);
+    expect(label).toContain(`@${path}`);
     expect(label).not.toBe('');
   });
 
@@ -191,7 +193,7 @@ describe('T-TA4 子会话附件 chip 行渲染（task fileAttachment）', () => 
         action: 'workplaceChange',
       },
     ];
-    expect(renderChipLabels(workplace)).toEqual([`规则:${path}`]);
+    expect(renderChipLabels(workplace)[0]).toContain(`规则:${path}`);
   });
 
   it('二进制附件同样出 `@path` chip（子会话屏按路径渲染，不区分类型）', () => {
