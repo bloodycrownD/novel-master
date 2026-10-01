@@ -991,7 +991,6 @@ async function runAgentTurnWithController(
     // A-14 path policy：三端共用走 runAgentTurn，这里统一不限制（undefined）；
     // 后续若要按 platform / project 收紧，改成 resolveAllowedPaths(...) 即可。
     allowedPaths: undefined,
-    resourceQuota: undefined,
   };
   const runner = createAgentRunner(
     assembleAgentRunnerDeps({
@@ -1349,7 +1348,6 @@ async function runChildAgent(args: {
       },
       // A-14：子 agent 同样不限制路径。
       allowedPaths: undefined,
-      resourceQuota: undefined,
     };
 
     const runner = createAgentRunner(

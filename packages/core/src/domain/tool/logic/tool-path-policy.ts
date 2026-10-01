@@ -8,7 +8,14 @@
  *
  * 语义：从 tool input 顶层抽取约定好的路径字段，逐一检查是否落在
  * `allowedPaths` 任一前缀下；只要有一条越界就拒绝。`allowedPaths === undefined`
- * 表示不限制（向后兼容，三端目前都走这个语义）。
+ * 表示不限制（向后兼容）。
+ *
+ * ⚠️ 现状：三个装配点（`run-agent-turn.ts:993` / `:1351`、
+ * `create-user-vfs-turn-service.ts:83`）**全部硬写 `undefined`**，故本模块在
+ * 生产中恒放行、运行时成本为零。这是有意分期占位（A-14），不是缺陷；
+ * **接线前必须先修三处已知缺口**（前缀比对不解 `..` / `PATH_FIELDS` 漏
+ * `glob.options.cwd` 与 `grep.options.pathPrefix` / `filePath` 无工具声明它），
+ * 详见 `BuiltinToolContext.allowedPaths` 的字段注释。
  *
  * @module domain/tool/logic/tool-path-policy
  */

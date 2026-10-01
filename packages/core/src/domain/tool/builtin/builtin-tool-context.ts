@@ -152,19 +152,6 @@ export interface BuiltinToolSearchContext {
   ) => Promise<ResolvedEngineConfig[]>;
 }
 
-/**
- * 资源配额占位（A-14）。
- *
- * @remarks
- * 目前只定义语义、不做强制；后续在 `ToolRunner` / 内置工具里挂上真正的扣减逻辑。
- * `maxWriteBytes` 限制单个 turn 内 write/edit 的累计写入字节；
- * `maxCalls` 限制单个 turn 内 tool 调用总数。
- */
-export interface ToolResourceQuota {
-  readonly maxWriteBytes?: number;
-  readonly maxCalls?: number;
-}
-
 /** 注入到内置工具 `run()` 的运行时上下文。 */
 export type BuiltinToolContext = {
   readonly vfs: VfsService;
@@ -178,7 +165,6 @@ export type BuiltinToolContext = {
    */
   readonly sessionKkv?: SessionKkvService;
   /**
-  /**
    * 可选：VFS 内允许访问的路径前缀白名单（A-14 path policy）。
    *
    * @remarks
@@ -187,14 +173,22 @@ export type BuiltinToolContext = {
    * tool 之前会做一次二次校验：从 input 里取出 `path` / `filePath` /
    * `from` / `to` 字段，只要任一路径不在任一前缀下就拒绝（抛 FORBIDDEN）。
    *
-   * `undefined` 表示不限制（向后兼容）——目前三端 runtime 都按这个语义走，
-   * 后续可以在 cli / desktop / mobile 各自的装配点收紧到具体白名单。
+   * `undefined` 表示不限制（向后兼容）——**当前三端 runtime 全部硬写 `undefined`**
+   * （`run-agent-turn.ts:993` / `:1351`、`create-user-vfs-turn-service.ts:83`），
+   * 故这道闸门在生产中恒放行、运行时成本为零。
+   * ⚠️ 这是**有意分期占位**（A-14，出处 `docs/Iterations/cr-fix-spec/spec.md:172`），
+   * 不是缺陷。**接线前必须先修三处已知缺口**，否则闸门形同虚设甚至误杀：
+   * ① `pathStartsWithPrefix` 是纯字符串前缀比对、不解 `..`（`src/../../x` 可逃逸）
+   *   （`tool-path-policy.ts:43`）；
+   * ② `PATH_FIELDS` 漏 `glob.options.cwd`（`vfs-tools.ts:459`）与
+   *   `grep.options.pathPrefix`（`vfs-tools.ts:519`）；
+   * ③ `filePath` 在 `PATH_FIELDS` 里但**无任何内置工具的 `inputSchema` 声明它**
+   *   （`git grep filePath -- packages/core/src` 的命中全是 VFS 逻辑的局部变量 /
+   *   形参，如 `ensure-parent-dirs.ts` / `workplace-rule-engine.ts`，**不是工具入参**）；
+   *   且 `skill` 工具的 `path` 是技能目录相对路径（真实落点在 `/meta/skills/...`），
+   *   开了会被整片误杀。
    */
   readonly allowedPaths?: readonly string[];
-  /**
-   * 可选：资源配额占位（A-14）。当前仅占位，`ToolRunner` 还未真正强制。
-   */
-  readonly resourceQuota?: ToolResourceQuota;
   /**
    * 可选：仅 `task` 工具读取。vfs-tools 完全不感知。
    *
