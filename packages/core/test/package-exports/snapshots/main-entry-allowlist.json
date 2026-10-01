@@ -50,7 +50,6 @@
   "buildLease",
   "buildToolResultBlock",
   "canAcquireLock",
-  "clearZlibCodecAccelerator",
   "createDbMaintenanceService",
   "createPersistentPreferences",
   "createPersistentState",

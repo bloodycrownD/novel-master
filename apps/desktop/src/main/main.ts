@@ -179,9 +179,10 @@ async function bootstrapMainServices(): Promise<void> {
   // 存量 blob 形态归一（base64 文本 → 二进制 BLOB）：后台任务自身带
   // 守卫与失败兜底，不参与启动成败判定，故 fire-and-forget 不 await。
   scheduleDesktopBlobBinaryNormalization();
-  // VFS 非 head 历史版本混合打包：同款 fire-and-forget（守卫 + busy 回调缝
-  // + rebootstrap 重挂全在服务内），无终态——本轮收敛即收工，新版本攒的
-  // 新组由下次冷启动收敛。
+  // VFS 非 head 历史版本混合打包：同款 fire-and-forget（守卫 + busy 回调缝；
+  // 重挂边界 = 轮内自愈——连接被换掉时退避重挂新 runtime，循环已收手则等
+  // 下次冷启动重新收敛，与 blob 归一/消息压缩同款），无终态——本轮收敛即
+  // 收工，新版本攒的新组由下次冷启动收敛。
   scheduleDesktopVfsContentPacking();
 }
 

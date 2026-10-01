@@ -135,6 +135,27 @@ describe("zlib 加速器（W1-P1-4）", () => {
     // 注册后读 fflate 产物（跨实现读兼容）。
     assert.deepEqual(new Uint8Array(decompressZlib(fflateCompressed)), TEXT_PLAIN);
 
+    // level 透传面（pbp-17）：compressZlib 目前恒不传 level，但契约上的
+    // level 一旦被透传，宿主适配器的三元分支必须能安全交给 node:zlib。
+    // 有加速器时直接断言产物可被 fflate 解回等值明文。
+    const levelNine = tryZlibDeflate(TEXT_PLAIN, 9);
+    assert.ok(levelNine != null, "注册后带 level 调用应走加速器");
+    assert.deepEqual(
+      unzlibSync(levelNine),
+      TEXT_PLAIN,
+      "level=9 产物 fflate unzlibSync 应解出逐字节等值明文"
+    );
+
+    // 无加速器时同一调用回落（返回 null），调用方按 fflate 走，同样不炸。
+    clearZlibCodecAccelerator();
+    assert.equal(tryZlibDeflate(TEXT_PLAIN, 9), null);
+    assert.deepEqual(
+      new Uint8Array(compressZlib(TEXT_PLAIN)),
+      new Uint8Array(zlibSync(TEXT_PLAIN)),
+      "注销后带 level 的调用回落 fflate，产物应与 fflate 逐字节一致"
+    );
+    registerZlibCodecAccelerator(spy.accel);
+
     const counts = spy.counts();
     assert.ok(counts.deflates >= roundTrips.length, "compressZlib 应调加速器 deflate");
     assert.ok(counts.inflates >= roundTrips.length + 1, "decompressZlib 应调加速器 inflate");
@@ -165,6 +186,51 @@ describe("zlib 加速器（W1-P1-4）", () => {
     // 两 format 编码：concat 1 段 + fossil 3 段 = 4 次 deflate；解码：concat 1 + fossil 3 = 4 次 inflate。
     assert.ok(counts.deflates >= 4, `pack 编码应走加速器 deflate（实际 ${counts.deflates}）`);
     assert.ok(counts.inflates >= 4, `pack 解码应走加速器 inflate（实际 ${counts.inflates}）`);
+  });
+
+  it("注销即复位告警闩锁：再次注册后同一方向的抛错仍会告警（pbp-18）", () => {
+    const throwing = (tag: string): ZlibCodecAccelerator => ({
+      deflate: () => {
+        throw new Error(`deflate boom ${tag}`);
+      },
+      inflate: () => {
+        throw new Error(`inflate boom ${tag}`);
+      },
+    });
+
+    // 第一段：注册抛错加速器，触发一次 deflate / inflate 抛错把闩锁打上。
+    const first = captureWarnings(() => {
+      registerZlibCodecAccelerator(throwing("#1"));
+      compressZlib(TEXT_PLAIN);
+      decompressZlib(zlibSync(TEXT_PLAIN));
+    });
+    assert.ok(
+      first.warnings.some((line) => line.includes("deflate 加速器抛错")),
+      "首次抛错应告警"
+    );
+    assert.ok(
+      first.warnings.some((line) => line.includes("inflate 加速器抛错")),
+      "首次抛错应告警"
+    );
+
+    // 注销：闩锁按注册期计，应随之复位（回到从未注册的状态）。
+    clearZlibCodecAccelerator();
+
+    // 第二段：同形态抛错再来一次，告警必须再次出现——若闩锁没随注销复位，
+    // 这里会被静默吞掉（后续注册的加速器再也报不出错，生产上无从发现）。
+    const second = captureWarnings(() => {
+      registerZlibCodecAccelerator(throwing("#2"));
+      compressZlib(TEXT_PLAIN);
+      decompressZlib(zlibSync(TEXT_PLAIN));
+    });
+    assert.ok(
+      second.warnings.some((line) => line.includes("deflate 加速器抛错")),
+      "注销后重新注册，deflate 抛错应再次告警（闩锁须随注销复位）"
+    );
+    assert.ok(
+      second.warnings.some((line) => line.includes("inflate 加速器抛错")),
+      "注销后重新注册，inflate 抛错应再次告警（闩锁须随注销复位）"
+    );
   });
 
   it("加速器抛错 / 返回 null 一律回落 fflate（产物与 fflate 逐字节一致）", () => {

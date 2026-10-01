@@ -20,7 +20,10 @@ import { errorText } from "../../../../common/error-text.js";
  * 它是 Uint8Array 子类）。
  *
  * @remarks `deflate` 的 `level` 缺省应与 fflate 默认 6 对齐；返回 null 表示
- * 「本调用不走加速器」，由调用方回落 fflate。
+ * 「本调用不走加速器」，由调用方回落 fflate。当前 `compressZlib` 恒不传
+ * level（全链路未使用），`level` 形参与宿主适配器里的
+ * `level === undefined ? ... : ...` 三元分支都是为将来 level 透传预留的，
+ * 不是死代码——断言面见 `test/vfs/zlib-accelerator.test.ts` 的 level 用例。
  */
 export interface ZlibCodecAccelerator {
   /** zlib deflate（wrapped zlib 格式，与 fflate zlibSync 同容器）。 */
@@ -60,9 +63,15 @@ export function registerZlibCodecAccelerator(
 /**
  * 注销加速器（测试与宿主卸载用）。注销后全部热路径回落 fflate，行为与
  * 从未注册一致。
+ *
+ * @remarks 告警闩锁按注册期计，注销即复位（回到从未注册的状态；生产不反复
+ * 注册不受影响——闩锁的用途只是防热路径刷屏，跨注册期保留反而会让后来
+ * 换上的加速器抛错时静默无声）。
  */
 export function clearZlibCodecAccelerator(): void {
   activeAccelerator = null;
+  warned.deflate = false;
+  warned.inflate = false;
 }
 
 /**

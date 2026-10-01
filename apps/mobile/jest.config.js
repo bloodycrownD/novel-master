@@ -13,8 +13,10 @@ module.exports = {
   // 嵌套路径 node_modules/sanitize-html/node_modules/htmlparser2 的每层 node_modules
   // 都要能命中白名单，否则该层仍会被忽略并按 CJS require 报错。
   // fossil-delta@2 纯 ESM（type: module，无 exports map）：core pack-codec 依赖它，
-  // 经 core-shim（src 直连）的 VFS store 链路会在 Jest 里炸 ESM 语法，须纳入
-  // babel transform（vfs-content-pack Step 11 接线时补）。
+  // 而经 moduleNameMapper 直连 dist/public/vfs.js 的 vfs 服务链路
+  // （createVfsService → content store → pack-codec）会拉到 fossil-delta，
+  // 在 Jest 里炸 ESM 语法，须纳入 babel transform（vfs-content-pack Step 11
+  // 接线时补；主入口 core-shim 不经此链路，别按 shim 口径排查）。
   transformIgnorePatterns: [
     // @react-navigation 系列发布 ESM（module 字段）；RichDocumentWebView
     // 自注册 BackHandler 引入 useFocusEffect 后须纳入 babel transform

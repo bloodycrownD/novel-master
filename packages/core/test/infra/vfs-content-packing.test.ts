@@ -271,6 +271,71 @@ async function packRows(): Promise<
   }));
 }
 
+/** pack 表当前字节流总量（dryRun/真跑统计口径的独立复核面）。 */
+async function packStreamBytes(): Promise<number> {
+  return countOf(
+    "SELECT COALESCE(SUM(LENGTH(bytes)), 0) AS n FROM vfs_content_pack"
+  );
+}
+
+/**
+ * pbp-24 探针：数 verify/unpack 打给 pack 表的查询形态。
+ *
+ * - `fullBytesQueries`：旧实现的 `SELECT pack_id, format, bytes FROM
+ *   vfs_content_pack ORDER BY`（无 WHERE）——一次把全库 pack 流物化进内存。
+ *   断言它为 0 即「无全量 bytes 查询」的牙齿。
+ * - `packIdListQueries`：`SELECT pack_id FROM vfs_content_pack ORDER BY`（新形态
+ *   的第一步，不带 bytes）。
+ * - `packRowQueries`：带 `WHERE pack_id = ?` 的取字节行数（新形态的第二步）。
+ * - `memberQueries`：`FROM vfs_content_pack_member WHERE pack_id = ?` 行数。
+ *
+ * @remarks `FROM vfs_content_pack_member` 也含子串 `FROM vfs_content_pack`，
+ *   故 member 分支先判（`pack_member` 紧跟其后），避免被误计进 pack 表计数。
+ */
+function connWithPackLoadProbe(): {
+  readonly conn: TdbcConnection;
+  readonly fullBytesQueries: () => number;
+  readonly packIdListQueries: () => number;
+  readonly packRowQueries: () => number;
+  readonly memberQueries: () => number;
+} {
+  const real = conn();
+  let fullBytes = 0;
+  let idList = 0;
+  let packRows = 0;
+  let members = 0;
+  const probe: TdbcConnection = {
+    execute: (sql, parameters) => real.execute(sql, parameters),
+    query: <R extends Row>(sql: string, parameters?: readonly unknown[]) => {
+      if (/FROM\s+vfs_content_pack_member\b/i.test(sql)) {
+        if (/WHERE\s+pack_id\s*=/i.test(sql)) {
+          members += 1;
+        }
+      } else if (/FROM\s+vfs_content_pack\b/i.test(sql)) {
+        if (/WHERE\s+pack_id\s*=/i.test(sql)) {
+          packRows += 1;
+        } else if (/\bbytes\b/i.test(sql)) {
+          fullBytes += 1;
+        } else {
+          idList += 1;
+        }
+      }
+      return real.query<R>(sql, parameters);
+    },
+    batch: (sql, parametersList) => real.batch(sql, parametersList),
+    transaction: <T>(fn: (tx: TdbcConnection) => Promise<T>) =>
+      real.transaction<T>((tx) => fn(tx)),
+    close: () => real.close(),
+  };
+  return {
+    conn: probe,
+    fullBytesQueries: () => fullBytes,
+    packIdListQueries: () => idList,
+    packRowQueries: () => packRows,
+    memberQueries: () => members,
+  };
+}
+
 /** 维护段观测计数器（口径照 blob-binary 先例：进入收尾维护段的次数，含被进程级去重短路的调用）。 */
 function maintenanceCounter(): {
   readonly maintCalls: () => number;
@@ -692,6 +757,83 @@ describe("VFS 历史版本打包任务（T-VP3/7/8/10/12/13/16/18/19/20/21）", 
     );
   });
 
+  it("T-VP3b（pbp-24）：verify/unpack 按 pack 逐个载入字节——零「全量 bytes 查询」、每 pack 恰好 2 条查询", async () => {
+    await resetPackState();
+    const c = conn();
+    const suffix = testIsolationSuffix();
+    const [big1, big2] = similarPair(30 * 1024, `vpk-ld-big-${suffix}`);
+    await seedEntry(
+      `${SCOPE_PREFIX}ld-b-${suffix}`,
+      `/ld-big-${suffix}.md`,
+      [big1, big2],
+      `vpk-corrupt-ld-b-${suffix}`,
+      textOf(2 * 1024, `vpk-ld-head-b-${suffix}`)
+    );
+    await seedEntry(
+      `${SCOPE_PREFIX}ld-s-${suffix}`,
+      `/ld-small-${suffix}.md`,
+      [textOf(8 * 1024, `vpk-ld-s1-${suffix}`), textOf(8 * 1024, `vpk-ld-s2-${suffix}`)],
+      `vpk-corrupt-ld-s-${suffix}`,
+      textOf(2 * 1024, `vpk-ld-head-s-${suffix}`)
+    );
+    const packed = await runVfsContentPacking(c);
+    assert.equal(packed.packedGroups, 2);
+    const packs = await packRows();
+    assert.equal(packs.length, 2);
+
+    // 探针：拦所有「pack 表取字节」的 SQL 形态。旧实现那条
+    // `SELECT pack_id, format, bytes FROM vfs_content_pack ORDER BY` 一次把
+    // 全库 pack 流物化进内存（真库 = 整个历史版本流），峰值内存不可接受；
+    // 新的必须是 `SELECT pack_id` 列表 + 逐 `WHERE pack_id = ?`。
+    const probe = connWithPackLoadProbe();
+    const verified = await verifyVfsContentPacks(probe.conn);
+    assert.deepEqual(verified.failures, [], "逐 pack 载入不得改变校验结论");
+    assert.equal(verified.packCount, 2);
+    assert.equal(verified.memberCount, 4);
+    assert.equal(
+      probe.fullBytesQueries(),
+      0,
+      "不得出现全量 bytes 查询（旧实现恒 1，本断言是牙齿）"
+    );
+    assert.ok(
+      probe.packRowQueries() >= 2,
+      "必须按 pack_id 逐行取字节"
+    );
+    assert.ok(
+      probe.memberQueries() >= 2,
+      "member 行逐 pack 查（每 pack 一次，无 N+1 放大到组数以上）"
+    );
+
+    // 精确口径：verify 的 pack 表查询 = 1（id 列表）+ 组数（逐 pack 取字节），
+    // member 查询 = 组数。旧实现是 1（全量 bytes）+ 组数。
+    const probe2 = connWithPackLoadProbe();
+    await verifyVfsContentPacks(probe2.conn);
+    assert.equal(
+      probe2.packIdListQueries(),
+      1,
+      "只查一次 pack_id 列表（不带 bytes）"
+    );
+    assert.equal(
+      probe2.packRowQueries(),
+      packs.length,
+      "每 pack 一次按 id 取字节"
+    );
+    assert.equal(
+      probe2.memberQueries(),
+      packs.length,
+      "verify = 每 pack 1 次 member 查询"
+    );
+    assert.equal(probe2.fullBytesQueries(), 0);
+
+    // unpack 侧同口径（dryRun 也走完整的取字节 + 解码链路，只是不写库）。
+    const probe3 = connWithPackLoadProbe();
+    await unpackVfsContent(probe3.conn);
+    assert.equal(probe3.fullBytesQueries(), 0, "unpack 不得出现全量 bytes 查询");
+    assert.equal(probe3.packIdListQueries(), 1);
+    assert.equal(probe3.packRowQueries(), packs.length);
+    assert.equal(probe3.memberQueries(), packs.length);
+  });
+
   it("T-VP8：打包幂等/可重入——组事务中断回滚无半态；重跑不重复打包", async () => {
     await resetPackState();
     const c = conn();
@@ -928,9 +1070,33 @@ describe("VFS 历史版本打包任务（T-VP3/7/8/10/12/13/16/18/19/20/21）", 
     );
     await runVfsContentPacking(c);
 
-    const unpacked = await unpackVfsContent(c);
+    // 【pbp-22 防呆】不传 force 即 dryRun：零写、只统计（统计口径与真跑一致）。
+    const dryRun = await unpackVfsContent(c);
+    assert.equal(dryRun.dryRun, true);
+    assert.deepEqual(
+      { packCount: dryRun.packCount, memberCount: dryRun.memberCount, streamBytes: dryRun.streamBytes },
+      { packCount: 2, memberCount: 4, streamBytes: (await packStreamBytes()) },
+      "dryRun 统计与真跑同口径"
+    );
+    assert.equal(dryRun.unpackedPacks, 0, "dryRun 不写库 ⇒ 展开计数为 0");
+    assert.equal(dryRun.restoredRows, 0);
+    assert.deepEqual(dryRun.failedPacks, [], "干净数据面无失败 pack");
+    // 零写断言：pack/member/blob 行数逐张表不变。
+    assert.equal(await countOf("SELECT COUNT(*) AS n FROM vfs_content_pack"), 2);
+    assert.equal(await countOf("SELECT COUNT(*) AS n FROM vfs_content_pack_member"), 4);
+    for (const hash of [...small.hashes, ...big.hashes]) {
+      assert.equal(await blobRowCount(hash), 0, `dryRun 不得物化 blob 行 ${hash}`);
+    }
+
+    const unpacked = await unpackVfsContent(c, { force: true });
+    assert.equal(unpacked.dryRun, false);
     assert.equal(unpacked.unpackedPacks, 2);
     assert.equal(unpacked.restoredRows, 4);
+    assert.deepEqual(
+      { packCount: unpacked.packCount, memberCount: unpacked.memberCount, streamBytes: unpacked.streamBytes },
+      { packCount: dryRun.packCount, memberCount: dryRun.memberCount, streamBytes: dryRun.streamBytes },
+      "真跑统计必须与 dryRun 完全一致（同一批 pack/member/字节）"
+    );
 
     // pack/member 清空。
     assert.equal(await countOf("SELECT COUNT(*) AS n FROM vfs_content_pack"), 0);
@@ -956,8 +1122,16 @@ describe("VFS 历史版本打包任务（T-VP3/7/8/10/12/13/16/18/19/20/21）", 
     assert.equal(await store.get(big.hashes[1]!), big2);
 
     // 可重复执行：第二遍零 pack 可解、数据不变。
-    const again = await unpackVfsContent(c);
-    assert.deepEqual(again, { unpackedPacks: 0, restoredRows: 0 });
+    const again = await unpackVfsContent(c, { force: true });
+    assert.deepEqual(again, {
+      dryRun: false,
+      packCount: 0,
+      memberCount: 0,
+      streamBytes: 0,
+      unpackedPacks: 0,
+      restoredRows: 0,
+      failedPacks: [],
+    });
     for (const hash of [...small.hashes, ...big.hashes]) {
       assert.equal(await blobRowCount(hash), 1);
     }
@@ -1002,7 +1176,7 @@ describe("VFS 历史版本打包任务（T-VP3/7/8/10/12/13/16/18/19/20/21）", 
       assert.equal(await blobRowCount(hash), 0, "打包后被替换 blob 行删除");
     }
 
-    const unpacked = await unpackVfsContent(c);
+    const unpacked = await unpackVfsContent(c, { force: true });
     assert.equal(unpacked.restoredRows, 3);
 
     // ref_count 现场重算：hashA 被两条 revision 引用 → 2；hashB/hashC 各 1。
@@ -1150,9 +1324,10 @@ describe("VFS 历史版本打包任务（T-VP3/7/8/10/12/13/16/18/19/20/21）", 
     assert.equal(await blobRefCount(hashH), 0, "前置：残行 ref_count=0");
 
     // 幂等修复随 unpack 落地。
-    // 【pbp-22 联动】unpack 改为默认 dryRun 后，本调用改传 `{ force: true }`，
-    // 否则零写即过、断言恒真（pbp-22 验收同步登记此事）。
-    const unpacked = await unpackVfsContent(c);
+    // 【pbp-22 防呆】无参调用是 dryRun（零写）——本用例必须显式 `{force: true}`，
+    // 否则 member 行不清、ref_count 不被重算，断言会因「零写即过」而恒真/恒红
+    // 失真（pbp-22 验收同步登记此事）。
+    const unpacked = await unpackVfsContent(c, { force: true });
     assert.equal(unpacked.unpackedPacks, 1);
     assert.equal(unpacked.restoredRows, 0, "既有 blob 行不覆盖（INSERT OR IGNORE 命中）");
     assert.equal(
@@ -1949,6 +2124,196 @@ describe("VFS 历史版本打包任务（T-VP3/7/8/10/12/13/16/18/19/20/21）", 
     } finally {
       await clearSessionScopeRows(scopeKeyStr, sessionId);
     }
+  });
+
+  // -------------------------------------------------------------------------
+  // pbp-22 / pbp-23（cr-fix-spec-partb）
+  // -------------------------------------------------------------------------
+
+  it("pbp-22：坏 pack 展开失败被逐 pack try/catch 隔离——跳过并回报明细、不中断整轮、重复执行续跑", async () => {
+    await resetPackState();
+    const c = conn();
+    const suffix = testIsolationSuffix();
+    const store = new SqliteVfsContentStore(c);
+    const memberPlains = [
+      textOf(8 * 1024, `vpk-fail-1-${suffix}`),
+      textOf(8 * 1024, `vpk-fail-2-${suffix}`),
+    ];
+    const seeded = await seedEntry(
+      `${SCOPE_PREFIX}fail-${suffix}`,
+      `/fail-${suffix}.md`,
+      memberPlains,
+      `vpk-corrupt-fail-${suffix}`,
+      textOf(2 * 1024, `vpk-fail-head-${suffix}`)
+    );
+    assert.equal((await runVfsContentPacking(c)).packedGroups, 1);
+    const goodPackId = (await packRows())[0]!.pack_id;
+
+    // 制造一个坏 pack：直插 pack 行，bytes 塞垃圾 → decodePackMembers 必抛
+    // （member 行 offset/length 指向不存在的段表）。
+    const badPack = await c.execute(
+      `INSERT INTO vfs_content_pack (entry_id, format, bytes, byte_len, member_count, created_at_ms)
+       VALUES (?, ?, ?, ?, 0, ?)`,
+      [seeded.entryId, VFS_PACK_FORMAT_ZLIB_CONCAT_V1, new Uint8Array([1, 2, 3, 4]), 4, Date.now()]
+    );
+    const badPackId = Number(badPack.lastInsertRowid);
+    await c.execute(
+      `INSERT INTO vfs_content_pack_member (content_hash, pack_id, offset, length, compressed_byte_len)
+       VALUES (?, ?, 0, 2, 2)`,
+      [`${SCOPE_PREFIX}badmember-${suffix}`, badPackId]
+    );
+
+    // dryRun：坏 pack 也只在 failedPacks 里出现，零写（好 pack 仍在）。
+    const dry = await unpackVfsContent(c);
+    assert.equal(dry.dryRun, true);
+    assert.equal(dry.packCount, 2);
+    assert.deepEqual(
+      dry.failedPacks.map((failure) => failure.packId),
+      [badPackId],
+      "dryRun 也应把坏 pack 记进明细（口径与真跑一致）"
+    );
+    assert.equal(dry.unpackedPacks, 0);
+    assert.equal(await countOf("SELECT COUNT(*) AS n FROM vfs_content_pack"), 2, "dryRun 零写");
+
+    // 真跑：坏 pack 跳过（留在库里，可续跑），好 pack 照常展开。
+    const { result, warnings } = await captureWarnings(() =>
+      unpackVfsContent(c, { force: true })
+    );
+    assert.equal(result.dryRun, false);
+    assert.equal(result.unpackedPacks, 1, "只有好 pack 被展开");
+    assert.equal(result.restoredRows, 2);
+    assert.deepEqual(
+      result.failedPacks.map((failure) => failure.packId),
+      [badPackId],
+      "坏 pack 进明细"
+    );
+    assert.ok(
+      result.failedPacks[0]!.reason.length > 0,
+      "明细须带失败原因"
+    );
+    assert.ok(
+      warnings.some((line) => line.includes(String(badPackId))),
+      "坏 pack 应有告警"
+    );
+    // 好 pack 的成员已物化、读回等值；坏 pack 原样留存（续跑语义）。
+    assert.equal(await countOf("SELECT COUNT(*) AS n FROM vfs_content_pack"), 1);
+    assert.equal(
+      await countOf(
+        "SELECT COUNT(*) AS n FROM vfs_content_pack_member WHERE pack_id = ?",
+        [goodPackId]
+      ),
+      0,
+      "好 pack 的 member 行已随展开删除"
+    );
+    assert.equal(
+      (await packRows())[0]!.pack_id,
+      badPackId,
+      "留下的必须是坏 pack（好 pack 已被展开删除）"
+    );
+    assert.equal(
+      await countOf(
+        "SELECT COUNT(*) AS n FROM vfs_content_pack_member WHERE pack_id = ?",
+        [badPackId]
+      ),
+      1,
+      "坏 pack 的 member 行原样留存（重复执行可续跑）"
+    );
+    for (const [index, hash] of seeded.hashes.entries()) {
+      assert.equal(await store.get(hash), memberPlains[index], `成员 ${hash} 读回等值`);
+      assert.equal(await blobRowCount(hash), 1, `成员 ${hash} 已物化为独立 blob 行`);
+    }
+  });
+
+  it("pbp-23：收尾早退与分页不改变判定口径——stopAfter 命中数 = failedGroups+1，候选跨批结果与不分页逐条一致", async () => {
+    await resetPackState();
+    const c = conn();
+    const suffix = testIsolationSuffix();
+    // 5 个 entry × 3 版本（各 DISTINCT hash=3 ≥ 2，全部成候选）+ 一个跨 entry
+    // 共享 hash 的形态（首遇 entry 占有），凑出足够大的候选面。
+    const sharedPlain = textOf(8 * 1024, `vpk-pg-shared-${suffix}`);
+    const entryIds: number[] = [];
+    const allHashes: string[] = [];
+    for (let i = 1; i <= 5; i++) {
+      const seeded = await seedEntry(
+        `${SCOPE_PREFIX}pg-${i}-${suffix}`,
+        `/pg-${i}-${suffix}.md`,
+        [
+          sharedPlain,
+          textOf(8 * 1024, `vpk-pg-${i}-a-${suffix}`),
+          textOf(8 * 1024, `vpk-pg-${i}-b-${suffix}`),
+        ],
+        `vpk-corrupt-pg-${i}-${suffix}`,
+        textOf(2 * 1024, `vpk-pg-head-${i}-${suffix}`)
+      );
+      entryIds.push(seeded.entryId);
+      allHashes.push(...seeded.hashes);
+    }
+
+    // 状态采样 = 候选 entry 数（不分页的基线口径）。
+    __resetVfsPackStatusSamplingThrottleForTests();
+    const baseline = await getVfsContentPackStatus(c);
+    assert.equal(baseline.pendingGroups, 5, "5 个 entry 全部成候选（共享 hash 归首遇不影响 entry 数）");
+
+    // 共享 hash 归首遇语义（pbp-23 明确不得下推到 SQL 侧 COUNT/HAVING 的原因）：
+    // sharedPlain 只应被 entry_id 最小的那个 entry 收编一次。
+    const sharedHash = hashContent(sharedPlain);
+    const packed = await runVfsContentPacking(c);
+    assert.equal(packed.packedGroups, 5, "每 entry 一组");
+    assert.deepEqual(packed, {
+      done: true,
+      packedGroups: 5,
+      failedGroups: 0,
+      stalled: false,
+    });
+    const sharedMembers = await countOf(
+      "SELECT COUNT(*) AS n FROM vfs_content_pack_member WHERE content_hash = ?",
+      [sharedHash]
+    );
+    assert.equal(sharedMembers, 1, "跨 entry 共享 hash 归首遇 entry（member 主键一 hash 一行）");
+    // 首遇者 = entry_id 最小者。
+    const sharedPackEntry = await c.query<{ entry_id: number }>(
+      `SELECT p.entry_id FROM vfs_content_pack p
+       JOIN vfs_content_pack_member m ON m.pack_id = p.pack_id
+       WHERE m.content_hash = ?`,
+      [sharedHash]
+    );
+    assert.equal(
+      Number(sharedPackEntry[0]!.entry_id),
+      Math.min(...entryIds),
+      "共享 hash 归 entry_id 升序首遇者"
+    );
+
+    // 收尾早退口径：打转替身（吞 DELETE）下 failedGroups=0 ⇒ stopAfter=1，
+    // 扫到第 1 条候选即返回，stalled 判定与全量扫描一致。
+    await resetPackState();
+    for (let i = 1; i <= 5; i++) {
+      await seedEntry(
+        `${SCOPE_PREFIX}pgs-${i}-${suffix}`,
+        `/pgs-${i}-${suffix}.md`,
+        [
+          textOf(8 * 1024, `vpk-pgs-${i}-a-${suffix}`),
+          textOf(8 * 1024, `vpk-pgs-${i}-b-${suffix}`),
+        ],
+        `vpk-corrupt-pgs-${i}-${suffix}`,
+        textOf(2 * 1024, `vpk-pgs-head-${i}-${suffix}`)
+      );
+    }
+    const { result: early, warnings } = await captureWarnings(() =>
+      runVfsContentPacking(connWithSwallowedBlobDelete())
+    );
+    assert.equal(early.stalled, true, "早退口径下仍判 stalled（与全量一致）");
+    assert.equal(early.done, false);
+    // 早退确实发生了（否则这条用例只是「stopAfter 传了但没生效」的恒绿）：
+    // stalled 告警里的「收尾重扫剩余候选共 N」= 早退交出的条数。真库此时还剩
+    // 5 个候选 entry（打转替身让 blob 行删不掉），早退只交出 stopAfter =
+    // failedGroups+1 = 1 条 —— 断言 N===1 即「早退真在生效」的牙齿。
+    const stalledWarn = warnings.find((line) => line.includes("未收敛"));
+    assert.ok(stalledWarn, "stalled 必有告警");
+    assert.match(
+      stalledWarn!,
+      /收尾重扫剩余候选共 1/,
+      "收尾扫描应早退到 stopAfter(=failedGroups+1) 条，而非全量 5 条"
+    );
   });
 });
 

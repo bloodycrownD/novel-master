@@ -61,10 +61,13 @@ export {
 /**
  * 宿主注册的 zlib 加速器（Node 侧 `node:zlib`）：desktop main / CLI 启动
  * 装配期注册；未注册（RN / 测试默认）时全部热路径走 fflate，现行为零变化。
+ *
+ * 注：`clearZlibCodecAccelerator` 不进主入口——注销是测试与宿主卸载用的
+ * 生命周期动作，导出它等于给应用侧一条生产可达的「关掉加速器」入口。
+ * 需要它的测试直接经源文件相对路径导入（`test/vfs/zlib-accelerator.test.ts`）。
  */
 export {
   registerZlibCodecAccelerator,
-  clearZlibCodecAccelerator,
 } from "./domain/vfs/content-store/logic/zlib-accelerator.js";
 export type { ZlibCodecAccelerator } from "./domain/vfs/content-store/logic/zlib-accelerator.js";
 

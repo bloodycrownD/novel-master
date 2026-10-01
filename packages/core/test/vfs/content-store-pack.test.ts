@@ -439,6 +439,62 @@ describe("pack-codec: T-VP11 fossil 链编解码回环", () => {
     );
   });
 
+  it("空 spans 短路：zlib-concat 空 spans 返回 [] 且不计 zlibConcatInflates（pbp-15）", () => {
+    const corpus = buildCorpus();
+    const concat = encodeZlibConcatPack(corpus);
+
+    __resetVfsPackDecodeCountersForTests();
+    const decoded = decodeZlibConcatSpans(concat.bytes, []);
+    assert.deepEqual(decoded, [], "空 spans 应直接返回空数组");
+    // 恒红判据：空 spans 还要整组解压就是白做，且污染「整组只解压一次」这条断言
+    // （T-VP15 钉的 zlibConcatInflates===1 会因此失真）。删掉短路本句必红。
+    assert.equal(
+      __getVfsPackDecodeCountersForTests().zlibConcatInflates,
+      0,
+      "空 spans 不应触发任何整组解压",
+    );
+    // 非空 spans 仍照旧计一次（顺带证明上面的 0 不是探针坏了）。
+    assert.equal(
+      decodeZlibConcatSpans(concat.bytes, [concat.spans[0]!]).length,
+      1,
+    );
+    assert.equal(__getVfsPackDecodeCountersForTests().zlibConcatInflates, 1);
+  });
+
+  it("段级错误包装：段 2 的 deflate 数据体中段翻 1 字节 → 报错同时含「段 2」与「inflate 失败」（pbp-16）", () => {
+    const corpus = buildCorpus();
+    const { bytes, spans } = encodeFossilChainPack(corpus);
+    const segment2 = spans[2]!;
+
+    // 必须翻 deflate 数据体的中段、**避开流尾 4 字节 adler32**：fflate 不校验
+    // adler32，翻尾部会静默返回「正确」的明文而不抛，断言就成了恒绿假牙。
+    const corrupt = bytes.slice();
+    const flipAt = segment2.offset + Math.floor(segment2.length / 2);
+    corrupt[flipAt] = corrupt[flipAt]! ^ 0xff;
+
+    // 夹具自检：翻的位置确实落在段 2 数据体内（不在段表、不在流尾 adler32）。
+    assert.ok(
+      flipAt > segment2.offset && flipAt < segment2.offset + segment2.length - 4,
+      `翻转位置应落在段 2 deflate 数据体中段，实际 ${flipAt}（段区间 ${segment2.offset}..${segment2.offset + segment2.length}）`,
+    );
+
+    assert.throws(
+      () => decodeFossilChainSpans(corrupt, [segment2]),
+      (error: unknown) => {
+        assert.ok(error instanceof Error);
+        // 两层上下文缺一不可：段号（哪一段）+ 阶段（解不开 vs apply 炸）。
+        assert.match(error.message, /段 2/);
+        assert.match(error.message, /inflate 失败/);
+        // 底层原因随文案带出（不再只有裸 `invalid zlib data`）。
+        assert.ok(
+          (error.cause as unknown) != null,
+          "原始底层错误应以 cause 挂住",
+        );
+        return true;
+      },
+    );
+  });
+
   it("T-VP11a 防御：delta 自述输出规模超上限的坏段在 apply 前被拦（堆增量 <50MB）", () => {
     // 坏段：段 0 正常（64KB 同值字节，压缩后极小），段 1 是手工伪造的 delta——
     // 头声明 limit=4_000_000_000，正文 400 条重复 copy 指令（若放行即 26MB 输出、
@@ -766,7 +822,36 @@ describe("vfs content pack: store 读路径（T-VP1/2a/2b/4/5/6/6b/14/15）", ()
     const [zKept, zOrphan] = packZ.members;
     await insertActiveRevision(conn, entryId, 200, zKept.contentHash);
 
-    await store.gc();
+    // gc() 返回值 = 三张内容表删除行数之和（blob / pack_member / pack）。
+    // 用「跑前总行数 - 跑后总行数」逐表对账，而不是钉死一个魔数：本库是共享的，
+    // 前面用例遗留的无引用垃圾（各自 scope 隔离、这里一并被扫掉）不该让本断言变红。
+    const tableRowCounts = async () => ({
+      blob: await countRows(conn, `SELECT COUNT(*) AS n FROM vfs_content_blob`, []),
+      member: await countRows(
+        conn,
+        `SELECT COUNT(*) AS n FROM vfs_content_pack_member`,
+        [],
+      ),
+      pack: await countRows(conn, `SELECT COUNT(*) AS n FROM vfs_content_pack`, []),
+    });
+
+    const beforeGc = await tableRowCounts();
+    const reclaimed = await store.gc();
+    const afterGc = await tableRowCounts();
+    assert.equal(
+      reclaimed,
+      beforeGc.blob -
+        afterGc.blob +
+        (beforeGc.member - afterGc.member) +
+        (beforeGc.pack - afterGc.pack),
+      "gc() 返回值必须是三表删除行数之和（不是字节数、也不是仅 blob 行数）",
+    );
+    // 非恒绿：本轮确有回收发生（packX 的 3 条 member + packZ 的 1 条孤儿 member +
+    // packX 这 1 行空 pack，共 ≥5 行）。
+    assert.ok(
+      reclaimed >= 5,
+      `本轮至少应回收 5 行（packX 3 member + packZ 1 孤儿 member + 1 空 pack），实际 ${reclaimed}`,
+    );
 
     const memberCount = (packId: number, hash?: string) =>
       countRows(

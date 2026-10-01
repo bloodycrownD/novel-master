@@ -68,6 +68,11 @@ export function blobBinaryValue(
  * 「收敛」判定取 `pendingGroups === 0`——此时尚有坏组（failedGroups
  * 快照非零）则显示第三态，完全干净则显示「无需处理」（新库从未打包 /
  * 存量已全部打包收敛，从用户视角均无可等待的迁移进度）。
+ *
+ * **第三态口径**：「已完成（N 组需人工处理）」里的 N 是**上次收敛轮**写下的
+ * failedGroups 快照——「已完成」只限定为「当前候选已收敛」这一轮
+ * （pendingGroups 为 0），不代表此后再无候选：新版本攒出新组后状态行会
+ * 重新回到「剩余 N 组」。文案本身是 spec 拍板口径，此处只补边界说明。
  */
 export function vfsPackValue(
   status: VfsContentPackStatus | null,

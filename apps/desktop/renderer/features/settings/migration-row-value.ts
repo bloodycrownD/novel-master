@@ -34,6 +34,11 @@ export type MigrationRowValue = {
  * 已完成 / 已完成（N 条需人工处理）/ 进行中（剩余 N 条）/ 未取到 '—'；
  * vfsPack 行两态口径不同（无终态）：剩余 N 组 / 无需处理 + 坏组第三态
  * 「已完成（N 组需人工处理）」。
+ *
+ * **第三态口径**：「已完成（N 组需人工处理）」里的 N 是**上次收敛轮**写下的
+ * failedGroups 快照——「已完成」只限定为「当前候选已收敛」这一轮（pendingGroups
+ * 为 0），不代表此后再无候选：新版本攒出新组后状态行会重新回到「剩余 N 组」。
+ * 文案本身是 spec 拍板口径，此处只补边界说明。
  */
 export function migrationRowValue(
   dbStats: DbStatsResult | null,

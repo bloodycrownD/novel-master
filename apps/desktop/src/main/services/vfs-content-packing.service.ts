@@ -24,13 +24,15 @@
  *   热循环），下个冷启动按谓词重扫再试；`done === true`（本轮收敛）→
  *   收工返回。**与 blob 归一的分叉**：打包无终态完成标记，新写入的历史
  *   版本会持续攒出新候选组——本进程照旧收工（常驻轮询重扫候选谓词的
- *   收益不抵 IO），新组由下次冷启动 / rebootstrap 重挂的循环收敛。
+ *   收益不抵 IO），新组由下次冷启动（进程内重新调度时）再起循环收敛。
  * - **失败不上抛**：后台任务不参与启动成败判定，只 `console.warn`。打包
  *   任务本身可重入（谓词驱动，重启续跑；已落库的 pack 永不重写）。
- *   **连接被 rebootstrap（备份导入 / 云同步 pull）换掉时本任务视为可重挂**
- *   （cr-05 方案 A）：去重键 = runtime 连接身份，且「connection is not
- *   open」类错误不算失败收手——warn 后下一轮重取 runtime 拿新连接，远端
- *   库回灌后重新整理。
+ *   **重挂边界 = 轮内自愈**：连接被换掉（备份导入 / 云同步 pull 的
+ *   rebootstrap）时，若本条循环**还在跑**，「connection is not open」类
+ *   错误不算失败收手——warn 后退避一拍、下一轮重取 runtime 拿新连接继续
+ *   整理远端回灌的库。**循环已收手（done / stalled / 真失败）则不再
+ *   主动重挂**，等下次冷启动重新收敛——与 blob 归一 / 消息压缩同款边界
+ *   （本模块不订阅 rebootstrap 事件，rebootstrap 本身不触发重挂）。
  *
  * @module services/vfs-content-packing
  */
@@ -142,11 +144,12 @@ let scheduledRuntime: DesktopNovelMasterRuntime | null = null;
 /**
  * 启动后挂载 VFS 历史版本打包（fire-and-forget，不阻塞启动）。
  *
- * 幂等：同一 runtime 重复调度不叠加循环；**连接被 rebootstrap 换掉时本
- * 任务视为可重挂**（去重键 = runtime 连接身份）——备份导入 / 云同步 pull
- * 回灌的远端库里若有未打包存量版本，rebootstrap 完成后再次调度（或轮内
- * 自愈重挂）会重新整理（读路径按 pack format 分派，未打包的 blob 行照常
- * 读，无正确性影响；存储页状态行会如实显示「剩余 N 组」）。
+ * 幂等：同一 runtime 重复调度不叠加循环（去重键 = runtime 连接身份，循环
+ * 退出即 finally 释放）。**重挂边界**：rebootstrap 换掉连接时，**仅当这条
+ * 循环还在跑**才会靠轮内自愈退避重挂新 runtime（见模块头「重挂边界」条）；
+ * 本函数不订阅 rebootstrap 事件——循环已收手后没有「再挂一次」，回灌库里
+ * 的未打包存量版本等下次冷启动重新收敛（读路径按 pack format 分派，未打包
+ * 的 blob 行照常读，无正确性影响；存储页状态行会如实显示「剩余 N 组」）。
  */
 export function scheduleDesktopVfsContentPacking(): void {
   void (async () => {

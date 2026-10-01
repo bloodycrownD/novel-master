@@ -255,4 +255,38 @@ describe("数据库维护（infra/db-maintenance）", () => {
     );
     assert.equal(freelistAfter, 0, "PRAGMA 直读复核：VACUUM 真跑了");
   });
+
+  it("T-DM5（pbp-25）：手动「数据清理」顺带清 nm-vfs-pack 的 startupMaintenancePending（blob-binary 侧不回归）", async () => {
+    // 预置两个模块的兜底标记：手动链路同样回收了 freelist 页，标记留着只会让
+    // 下次冷启动多跑一次全库 VACUUM（纯浪费、无正确性损失）。
+    for (const module of ["nm-blob-binary", "nm-vfs-pack"]) {
+      await conn.execute(
+        "INSERT INTO kkv_entry (module, key, value) VALUES (?, 'startupMaintenancePending', '1')",
+        [module]
+      );
+    }
+    const pendingOf = async (module: string): Promise<number> => {
+      const rows = await conn.query<{ n: number }>(
+        "SELECT COUNT(*) AS n FROM kkv_entry WHERE module = ? AND key = ?",
+        [module, "startupMaintenancePending"]
+      );
+      return Number(rows[0]?.n ?? 0);
+    };
+    assert.equal(await pendingOf("nm-blob-binary"), 1, "前置：blob-binary 标记已预置");
+    assert.equal(await pendingOf("nm-vfs-pack"), 1, "前置：vfs-pack 标记已预置");
+
+    await maintenance.runDatabaseMaintenance();
+
+    // 两个模块的标记都必须被清（pbp-25 就是漏了 nm-vfs-pack 这一侧）。
+    assert.equal(
+      await pendingOf("nm-vfs-pack"),
+      0,
+      "手动清理必须清 nm-vfs-pack 的 startupMaintenancePending"
+    );
+    assert.equal(
+      await pendingOf("nm-blob-binary"),
+      0,
+      "blob-binary 侧既有用例不得回归"
+    );
+  });
 });

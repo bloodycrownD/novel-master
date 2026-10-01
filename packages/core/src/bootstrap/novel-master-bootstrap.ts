@@ -119,7 +119,11 @@ import { IntegrityRepairRegistry } from "@/service/integrity-repair.js";
  * VFS 非 head 历史版本混合打包——小组 zlib-concat-v1 / 大组 fossil-chain-v1，
  * member 按 content_hash 寻址进包）。老库（v17）靠本轮 bump 走慢路径由
  * DDL 建出两表与索引；全新库直接建表；无存量回填（历史 blob 行由后台
- * 打包任务跨启动续跑搬运）。占号说明：main 侧曾占 v18 后当日撤回（上段，
+ * 打包任务跨启动续跑搬运）。**同 idx_vfs_entry_content_hash 一段：已因
+ * 上一轮撤回 v18 落到 user_version = 18 的分支内测试机库走快路径，两张表
+ * 同样不补建——该形态下打包任务每次启动会以 no such table:
+ * vfs_content_pack 报 warn、双端状态行退化（无发布面，可接受；正式库
+ * 从未有过 v18 形态）。**占号说明：main 侧曾占 v18 后当日撤回（上段，
  * 未发布），故本迭代直接取 v18、无需再顺延；合并顺序上以主干现值为准，
  * 若 main 后续再占 18 则本迭代顺延。
  * v18 同轮追加：`idx_vfs_entry_content_hash`（打包候选谓词的 head 引用

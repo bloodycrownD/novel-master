@@ -83,12 +83,18 @@ export function createDbMaintenanceService(
       // freelist 页，标记留着只会让下次冷启动多跑一次全库 VACUUM（纯浪费、
       // 无正确性损失）。key 用字面量而不 import
       // blob-binary-normalization 的常量——那边已经 import 了本模块的
-      // runStartupMaintenanceOnce，反向引用会形成循环依赖。清失败只
+      // runStartupMaintenanceOnce，反向引用会形成循环依赖；nm-vfs-pack
+      // 同理（vfs-content-packing.ts 也 import 本模块）。清失败只
       // warn：最坏后果就是那一次多余的 VACUUM，不得让手动清理报错。
       try {
         await conn.execute(
-          "DELETE FROM kkv_entry WHERE module = ? AND key = ?",
-          ["nm-blob-binary", "startupMaintenancePending"]
+          "DELETE FROM kkv_entry WHERE (module = ? AND key = ?) OR (module = ? AND key = ?)",
+          [
+            "nm-blob-binary",
+            "startupMaintenancePending",
+            "nm-vfs-pack",
+            "startupMaintenancePending",
+          ]
         );
       } catch (error) {
         console.warn(

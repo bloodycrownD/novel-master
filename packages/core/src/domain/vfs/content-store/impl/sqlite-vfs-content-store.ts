@@ -386,6 +386,14 @@ export class SqliteVfsContentStore implements VfsContentStore {
     return this.put(fallbackPlain);
   }
 
+  /**
+   * 全库内容回收：一次清扫掉无引用 blob 行、无引用 pack member 行、以及清扫后
+   * 已空的 pack 行（引用集口径统一为 entry ∪ revision）。
+   *
+   * @returns 回收的无引用 blob / pack member / 空 pack 行数合计（三张表删除行数
+   *   之和，非字节数、也不含被引用而保留的行）——调用方只能把它当「回收计数」用，
+   *   想看省了多少空间得另查 byte_len。
+   */
   async gc(): Promise<number> {
     // 一条 NOT IN 子查询清扫孤立 blob：子查询里显式过滤 NULL content_hash，
     // 避免 NOT IN 遇 NULL 的语义陷阱（NULL 会让整个 NOT IN 结果为空）。

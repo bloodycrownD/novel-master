@@ -210,12 +210,44 @@ export interface VfsContentPackVerifyResult {
   readonly failures: ReadonlyArray<VfsPackVerifyFailure>;
 }
 
+/** 单个 pack 展开失败的明细（{@link unpackVfsContent} 逐 pack try/catch 的回报）。 */
+export interface VfsPackUnpackFailure {
+  /** 展开失败的 pack_id。 */
+  readonly packId: number;
+  /** 失败原因文本（已含底层错误链的 `errorText`）。 */
+  readonly reason: string;
+}
+
+/** {@link unpackVfsContent} 入参（默认防呆：**dryRun**）。 */
+export interface UnpackVfsContentOptions {
+  /**
+   * 只统计不写库（默认 `true`）。true 时逐 pack 走完「取字节 → 取 member →
+   * 解码」的全链路以填 {@link VfsContentUnpackResult} 的统计字段，但**不开
+   * 事务、不发任何写语句**。
+   */
+  readonly dryRun?: boolean;
+  /**
+   * 显式真跑（覆盖 `dryRun`）。`{force: true}` 是本函数唯一的破坏性入口。
+   */
+  readonly force?: boolean;
+}
+
 /** {@link unpackVfsContent} 结果。 */
 export interface VfsContentUnpackResult {
-  /** 本次展开的 pack 组数（含空 pack 的清理；重复执行的第二遍为 0）。 */
+  /** 本次是否只统计未写库（`force:true` 时恒 false）。 */
+  readonly dryRun: boolean;
+  /** 参与展开的 pack 组数（dryRun 与真跑同口径：库里现存的 pack 行数）。 */
+  readonly packCount: number;
+  /** 参与展开的 member 行数（dryRun 与真跑同口径）。 */
+  readonly memberCount: number;
+  /** pack 字节流总量（真跑前即存在的字节量，dryRun 与真跑同口径）。 */
+  readonly streamBytes: number;
+  /** 本次展开的 pack 组数（**dryRun 下恒 0**；重复真跑的第二遍也是 0）。 */
   readonly unpackedPacks: number;
-  /** 本次物化回独立 blob 行的 member 数（INSERT OR IGNORE 跳过的不计）。 */
+  /** 本次物化回独立 blob 行的 member 数（INSERT OR IGNORE 跳过的不计；dryRun 下恒 0）。 */
   readonly restoredRows: number;
+  /** 展开失败的 pack 明细（坏 pack 跳过、不中断整轮；空数组 = 全部成功）。 */
+  readonly failedPacks: ReadonlyArray<VfsPackUnpackFailure>;
 }
 
 /** 批间让步：setTimeout(0) 交还事件循环（desktop main / RN JS 线程）。 */
@@ -228,9 +260,64 @@ function yieldToEventLoop(): Promise<void> {
 // ---------------------------------------------------------------------------
 
 /**
+ * {@link collectCandidateEntries} 的可选扫描控制。
+ *
+ * @remarks 两者都只影响**下发多少行 / 何时早退**，不改变分组口径——「跨 entry
+ *   共享 hash 归首遇」的 Set 去重仍在 JS 侧按全序遍历完成，语义与不分页完全
+ *   逐条一致（pbp-23）。**不得**把分组下推到 SQL 侧 COUNT/HAVING：那会丢掉
+ *   「跨 entry 共享归首遇」语义，stalled 判据会反向误报。
+ */
+interface CollectCandidateEntriesOptions {
+  /**
+   * keyset 分页的单批行数（`LIMIT`）。省略 = 单批全量物化（入口扫描与状态采样
+   * 保持该默认口径：真库谓词毫秒级，分批反而多几次往返）。
+   */
+  readonly limit?: number;
+  /**
+   * 收满这么多候选 entry 后提前返回（不再续查后续批次）。
+   *
+   * @remarks 收尾校验只需「可归因剩余 > failedGroups」这一个布尔，拿到
+   *   `failedGroups + 1` 条即够判 stalled（见 {@link tailScanOptions}）。**早退
+   *   时返回条数是下界而非全量计数**（后面可能还有候选），调用方只许拿它做
+   *   `> failedGroups` 的比较与「非零 ⇒ 水位不写」的判断——两者在早退与全量
+   *   下结论相同，故口径安全。早退只交出**已完整扫描过**的 entry，批边界上
+   *   那个未收尾的 entry 不入列（否则它的 maxVersion 只是批内部分行的水位，
+   *   拿去参与并发归因会误判）。
+   */
+  readonly stopAfter?: number;
+}
+
+/**
+ * 收尾重扫的分页行数（keyset 分批下发的批大小）。
+ *
+ * @remarks **必须有它，stopAfter 才是真的省力**：不分页时一次查询就把全部谓词
+ *   行物化进内存，JS 侧的早退只能在「行都已经在手上」之后生效——省不下 IO 与
+ *   物化，只白留一个提前 return。分批下发后，收尾通常在**第一批**内就攒够
+ *   `failedGroups + 1` 条并早退，后面几批压根不下发。
+ */
+const TAIL_SCAN_PAGE_ROWS = 500;
+
+/**
+ * 收尾重扫的扫描参数：早退阈值 = `failedGroups + 1`（多一条即可判 stalled），
+ * 并按 {@link TAIL_SCAN_PAGE_ROWS} 分批下发。
+ *
+ * @param failedGroups 本轮已计的坏组数。
+ * @remarks 分批 + 早退**不改变判定口径**：攒够 `failedGroups + 1` 条即足以判
+ *   stalled（不变量是「可归因剩余 ≤ failedGroups」）；而若某批扫完还没攒够，
+ *   游标续查下一批直到数据尾——所以「早退」与「全量」两种路径给出的 stalled
+ *   结论逐条相同。`remaining` 在早退时是下界，调用点只拿它做 `> failedGroups`
+ *   与 `=== 0` 两个判断，两者在早退/全量下一致（见 {@link runVfsContentPacking}）。
+ */
+function tailScanOptions(failedGroups: number): CollectCandidateEntriesOptions {
+  return { limit: TAIL_SCAN_PAGE_ROWS, stopAfter: failedGroups + 1 };
+}
+
+/**
  * 重扫候选 entry：active 非 head 历史版本、hash 仍是 blob 行、按 entry 分桶
  * 去重（版本序；跨 entry 共享 hash 归 entry_id 升序首遇者），DISTINCT hash
  * ≥ 2 才入选。
+ *
+ * @param options 分页/早退控制（见 {@link CollectCandidateEntriesOptions}）。
  *
  * @remarks 发现循环、收尾校验（{@link runVfsContentPacking} 尾部）、状态采样
  * （{@link getVfsContentPackStatus}）三处共用本函数——同一口径是 stalled
@@ -240,69 +327,120 @@ function yieldToEventLoop(): Promise<void> {
  *   归因用——见 {@link VfsPackCandidateEntry.maxVersion}。
  */
 async function collectCandidateEntries(
-  conn: TdbcConnection
+  conn: TdbcConnection,
+  options: CollectCandidateEntriesOptions = {}
 ): Promise<VfsPackCandidateEntry[]> {
-  const rows = await conn.query<{
-    entry_id: number;
-    version: number;
-    content_hash: string;
-    byte_len: number;
-  }>(
-    `SELECT r.entry_id, r.version, r.content_hash, b.byte_len
-     FROM vfs_revision r
-     JOIN vfs_content_blob b ON b.content_hash = r.content_hash
-     WHERE r.status = 'active'
-       AND r.content_hash IS NOT NULL
-       AND NOT EXISTS (SELECT 1 FROM vfs_entry e WHERE e.content_hash = r.content_hash)
-     ORDER BY r.entry_id, r.version`
-  );
-  // 跨 entry 去重：entry_id 升序遍历（ORDER BY 保证），全局 Set 记已占有
-  // hash，后遇 entry 的同 hash 剔除——member 主键一 hash 一行，共享 hash
-  // 归首遇 entry 的组。
+  const stopAfter = options.stopAfter;
+  const limit = options.limit;
   const claimedHashes = new Set<string>();
   const entries: VfsPackCandidateEntry[] = [];
   let currentEntryId: number | null = null;
   let currentMembers: VfsPackCandidateMember[] = [];
   let currentMaxVersion = -1;
-  const flush = (): void => {
-    if (currentEntryId != null && new Set(currentMembers.map((m) => m.contentHash)).size >= 2) {
-      entries.push({
-        entryId: currentEntryId,
-        members: currentMembers,
-        maxVersion: currentMaxVersion,
+  // 分页游标：行值比较 `(entry_id, version) > (?, ?)`（SQLite ≥3.15 支持），
+  // 与 ORDER BY 同序，跨批次不重不漏。分页下的 maxVersion 语义是「批内聚合、
+  // 跨批合并」——收尾归因用的是入口全量 Map，收尾分批只喂判定不入 Map，故
+  // 不受影响。
+  let cursorEntryId: number | null = null;
+  let cursorVersion: number | null = null;
+  do {
+    const params: unknown[] = [];
+    if (cursorEntryId != null && cursorVersion != null) {
+      params.push(cursorEntryId, cursorVersion);
+    }
+    const where: string =
+      cursorEntryId != null && cursorVersion != null
+        ? " AND (r.entry_id, r.version) > (?, ?)"
+        : "";
+    const limitClause: string = limit != null ? " LIMIT ?" : "";
+    if (limit != null) {
+      params.push(limit);
+    }
+    const rows: Array<{
+      entry_id: number;
+      version: number;
+      content_hash: string;
+      byte_len: number;
+    }> = await conn.query<{
+      entry_id: number;
+      version: number;
+      content_hash: string;
+      byte_len: number;
+    }>(
+      `SELECT r.entry_id, r.version, r.content_hash, b.byte_len
+     FROM vfs_revision r
+     JOIN vfs_content_blob b ON b.content_hash = r.content_hash
+     WHERE r.status = 'active'
+       AND r.content_hash IS NOT NULL
+       AND NOT EXISTS (SELECT 1 FROM vfs_entry e WHERE e.content_hash = r.content_hash)${where}
+     ORDER BY r.entry_id, r.version${limitClause}`,
+      params
+    );
+    if (rows.length === 0) {
+      break;
+    }
+    for (const row of rows) {
+      const entryId = Number(row.entry_id);
+      if (entryId !== currentEntryId) {
+        flushCandidateEntry(
+          entries,
+          currentEntryId,
+          currentMembers,
+          currentMaxVersion
+        );
+        currentEntryId = entryId;
+        currentMembers = [];
+        currentMaxVersion = -1;
+        // 早退点放在**换 entry 的那一刻**（上一个 entry 刚被完整收尾、可以安全
+        // 交出），而不是等整批行遍历完——否则一页内即使早已攒够 stopAfter 条，
+        // 也要白把本页剩下的行全部分桶一遍，早退形同虚设。
+        if (stopAfter != null && entries.length >= stopAfter) {
+          return entries;
+        }
+      }
+      // 版本水位在去重**之前**记账：被剔除的行同样代表「这个 entry 出现了这个
+      // 版本」，漏记会让收尾归因把并发写入误当成「本轮没收干净」。
+      const version = Number(row.version);
+      if (version > currentMaxVersion) {
+        currentMaxVersion = version;
+      }
+      const contentHash = String(row.content_hash);
+      if (claimedHashes.has(contentHash)) {
+        continue;
+      }
+      // entry 内同 hash 多版本（首现位置生效，后续版本共享同一 member 行）。
+      if (currentMembers.some((m) => m.contentHash === contentHash)) {
+        continue;
+      }
+      claimedHashes.add(contentHash);
+      currentMembers.push({
+        contentHash,
+        byteLen: Number(row.byte_len),
       });
     }
-  };
-  for (const row of rows) {
-    const entryId = Number(row.entry_id);
-    if (entryId !== currentEntryId) {
-      flush();
-      currentEntryId = entryId;
-      currentMembers = [];
-      currentMaxVersion = -1;
+    // 换 entry 处的早退没命中（比如本页只覆盖同一个 entry，或攒的条数还不够），
+    // 走分页续查；本页不满 ⇒ 已到数据尾。
+    if (limit == null || rows.length < limit) {
+      break;
     }
-    // 版本水位在去重**之前**记账：被剔除的行同样代表「这个 entry 出现了这个
-    // 版本」，漏记会让收尾归因把并发写入误当成「本轮没收干净」。
-    const version = Number(row.version);
-    if (version > currentMaxVersion) {
-      currentMaxVersion = version;
-    }
-    const contentHash = String(row.content_hash);
-    if (claimedHashes.has(contentHash)) {
-      continue;
-    }
-    // entry 内同 hash 多版本（首现位置生效，后续版本共享同一 member 行）。
-    if (currentMembers.some((m) => m.contentHash === contentHash)) {
-      continue;
-    }
-    claimedHashes.add(contentHash);
-    currentMembers.push({
-      contentHash,
-      byteLen: Number(row.byte_len),
-    });
-  }
-  flush();
+    const lastRow = rows[rows.length - 1]!;
+    cursorEntryId = Number(lastRow.entry_id);
+    cursorVersion = Number(lastRow.version);
+  } while (limit != null);
+  flushCandidateEntry(entries, currentEntryId, currentMembers, currentMaxVersion);
   return entries;
+}
+
+/** 收尾一个 entry 的累积桶：DISTINCT hash ≥ 2 才入选候选（跨批时同一桶可续攒）。 */
+function flushCandidateEntry(
+  entries: VfsPackCandidateEntry[],
+  entryId: number | null,
+  members: ReadonlyArray<VfsPackCandidateMember>,
+  maxVersion: number
+): void {
+  if (entryId != null && new Set(members.map((m) => m.contentHash)).size >= 2) {
+    entries.push({ entryId, members, maxVersion });
+  }
 }
 
 /**
@@ -918,7 +1056,14 @@ export async function runVfsContentPacking(
   // ── 收尾校验（stalled 判定权；见函数头注释的口径推导）──────────────
   // 水位命中时跳过收尾重扫：零候选已由指纹背书（写入前提即「完整扫描后
   // 候选=0 且 failedGroups=0」）。
-  const tailEntries = watermarkHit ? [] : await collectCandidateEntries(conn);
+  const tailEntries = watermarkHit
+    ? []
+    : await collectCandidateEntries(conn, tailScanOptions(failedGroups));
+  // pbp-23：收尾只做「可归因剩余 > failedGroups」这一个布尔判定，扫到
+  // `failedGroups + 1` 条即够。早退时 remaining 是**下界**（后面可能还有），
+  // 但两个用它的地方（stalled 判据 >、水位前置 `remaining === 0`）在早退与
+  // 全量下结论完全一致：早退只可能发生在 remaining ≥ failedGroups+1 ≥ 1 时，
+  // 既不误判 stalled 也不会误写零候选水位。
   const remaining = tailEntries.length;
   // pbp-5 并发归因：「剩余候选 ≤ failedGroups」的不变量只在「本轮没有新数据
   // 写入」时成立——一次保存就把旧 head 的 hash 变成非 head 候选，收尾重扫里
@@ -1089,66 +1234,132 @@ export async function getVfsContentPackStatus(
 // 完整性校验（应急回滚前的自检）
 // ---------------------------------------------------------------------------
 
+/** pack 行最小列集（逐 pack 取字节时用；`bytes` 为 BLOB SqlValue）。 */
+interface PackRowById {
+  readonly pack_id: number;
+  readonly format: string;
+  readonly bytes: SqlValue;
+}
+
+/**
+ * 逐 pack 载入 pack 字节：先只取 `pack_id` 列表，再按 id 取该行（pbp-24）。
+ *
+ * @remarks 旧形态是 `SELECT pack_id, format, bytes FROM vfs_content_pack ORDER BY
+ *   pack_id` 一次把**全部** pack 字节物化进内存（真库整个历史版本流）。改成
+ *   两步后峰值内存 = 单个 pack 的字节量，member 查询随字节同批下发（旧的
+ *   「N+1」也顺带消掉：member 行本来就已经是逐 pack 查，字节改成同批后每 pack
+ *   恰好 2 条查询）。
+ */
+async function queryPackIds(conn: TdbcConnection): Promise<number[]> {
+  const rows = await conn.query<{ pack_id: number }>(
+    `SELECT pack_id FROM vfs_content_pack ORDER BY pack_id`
+  );
+  return rows.map((row) => Number(row.pack_id));
+}
+
+/** 按 pack_id 取单行 pack（含字节）。行不存在（并发删除）返回 null。 */
+async function queryPackById(
+  conn: TdbcConnection,
+  packId: number
+): Promise<PackRowById | null> {
+  const rows = await conn.query<{
+    pack_id: number;
+    format: string;
+    bytes: SqlValue;
+  }>(`SELECT pack_id, format, bytes FROM vfs_content_pack WHERE pack_id = ?`, [
+    packId,
+  ]);
+  const row = rows[0];
+  return row == null
+    ? null
+    : { pack_id: Number(row.pack_id), format: String(row.format), bytes: row.bytes };
+}
+
+/** 某 pack 的 member 切片表（按 hash 排序，与解码顺序一致）。 */
+interface PackMemberSlice {
+  readonly contentHash: string;
+  readonly offset: number;
+  readonly length: number;
+}
+
+/** 取某 pack 的 member 行并转成解码入参（一次查询，无 N+1 放大）。 */
+async function queryPackMemberSlices(
+  conn: TdbcConnection,
+  packId: number
+): Promise<{ rows: PackMemberSlice[]; rawHashes: string[] }> {
+  const rows = await conn.query<{
+    content_hash: string;
+    offset: number;
+    length: number;
+  }>(
+    `SELECT content_hash, offset, length FROM vfs_content_pack_member
+       WHERE pack_id = ? ORDER BY content_hash`,
+    [packId]
+  );
+  return {
+    rows: rows.map((row) => ({
+      contentHash: String(row.content_hash),
+      offset: Number(row.offset),
+      length: Number(row.length),
+    })),
+    rawHashes: rows.map((row) => String(row.content_hash)),
+  };
+}
+
 /**
  * 逐 member 校验 pack 自包含性：pack 组切片明文 hash == content_hash；
  * fossil 组沿链 apply 后 hash == content_hash。
  *
  * @remarks 不写库、可随时跑；组级解码失败（段表损坏/区间越界）把该组全部
  * member 记入 failures 而不是抛穿——调用方（应急回滚前的自检）需要完整
- * 明细而不是第一个错。
+ * 明细而不是第一个错。**按 pack 逐个载入**（pbp-24）：pack 字节不整表物化，
+ * 每组解码完即随循环迭代释放 plains。
  */
 export async function verifyVfsContentPacks(
   conn: TdbcConnection
 ): Promise<VfsContentPackVerifyResult> {
-  const packRows = await conn.query<{
-    pack_id: number;
-    format: string;
-    bytes: SqlValue;
-  }>(`SELECT pack_id, format, bytes FROM vfs_content_pack ORDER BY pack_id`);
+  const packIds = await queryPackIds(conn);
   const failures: VfsPackVerifyFailure[] = [];
   let memberCount = 0;
-  for (const pack of packRows) {
-    const memberRows = await conn.query<{
-      content_hash: string;
-      offset: number;
-      length: number;
-    }>(
-      `SELECT content_hash, offset, length FROM vfs_content_pack_member
-       WHERE pack_id = ? ORDER BY content_hash`,
-      [pack.pack_id]
-    );
-    memberCount += memberRows.length;
-    if (memberRows.length === 0) {
+  for (const packId of packIds) {
+    const pack = await queryPackById(conn, packId);
+    if (pack == null) {
+      continue;
+    }
+    const { rows: slices, rawHashes } = await queryPackMemberSlices(conn, packId);
+    memberCount += slices.length;
+    if (slices.length === 0) {
       continue;
     }
     let plains: Uint8Array[];
     try {
-      plains = decodePackMembers(String(pack.format), asUint8Array(pack.bytes, "vfs_content_pack.bytes"), memberRows.map((row) => ({
-        offset: Number(row.offset),
-        length: Number(row.length),
-      })));
+      plains = decodePackMembers(
+        pack.format,
+        asUint8Array(pack.bytes, "vfs_content_pack.bytes"),
+        slices
+      );
     } catch (error) {
-      for (const row of memberRows) {
+      for (const contentHash of rawHashes) {
         failures.push({
-          contentHash: String(row.content_hash),
+          contentHash,
           reason: `组解码失败: ${errorText(error)}`,
         });
       }
       continue;
     }
-    memberRows.forEach((row, index) => {
+    slices.forEach((slice, index) => {
       // hash 对还原明文字节直算（与 hashContent(string) 等价：其内部即
       // TextEncoder 编码后 sha256），不依赖字符串往返。
       const actual = bytesToHex(sha256(plains[index]!));
-      if (actual !== String(row.content_hash)) {
+      if (actual !== slice.contentHash) {
         failures.push({
-          contentHash: String(row.content_hash),
+          contentHash: slice.contentHash,
           reason: `还原明文 hash ${actual} != member.content_hash`,
         });
       }
     });
   }
-  return { packCount: packRows.length, memberCount, failures };
+  return { packCount: packIds.length, memberCount, failures };
 }
 
 // ---------------------------------------------------------------------------
@@ -1169,88 +1380,142 @@ export async function verifyVfsContentPacks(
  * byte_len 恒以本行 bytes 的物理长度为准）。已存在的 blob 行（put 抽回等）
  * 不覆盖：内容寻址等值，ref_count 由事务末的幂等重算 UPDATE 统一校正
  * （`INSERT OR IGNORE` 命中既有行时不写 ref_count，那条路单靠触发器口径救不回来）。
+ *
+ * **默认 dryRun（pbp-22 的防呆）**：这是**破坏性**应急工具（整库 pack 全量
+ * 物化回 blob 行），无参调用只统计 `packCount`/`memberCount`/`streamBytes`
+ * 并不写一行；真跑必须显式 `{force: true}`。`{dryRun, force}` 同传时 **force
+ * 优先**（见函数体的裁决注释）。
+ *
+ * **中途失败的续跑语义**：每个 pack 是独立事务，前面的 pack 已提交展开、后面
+ * 的原样未动。整体中断（进程被杀/库被锁抛穿）后**重复执行即可续跑**——已展开
+ * 的 pack 行已删，不会二次物化；未展开的照旧处理。逐 pack 内部的失败（字节
+ * 损坏/段表不可解码/事务抛错）被 try/catch 吃掉、记入
+ * {@link VfsContentUnpackResult.failedPacks} 并继续下一个 pack，不中断整轮。
+ *
+ * **按 pack 逐个载入字节**（pbp-24）：先只取 pack_id 列表，再按 id 取该行
+ * 字节 + 一次 member 查询，每组处理完即释放 plains——不整表物化全库 pack 流。
  */
 export async function unpackVfsContent(
-  conn: TdbcConnection
+  conn: TdbcConnection,
+  options: UnpackVfsContentOptions = {}
 ): Promise<VfsContentUnpackResult> {
-  const packRows = await conn.query<{
-    pack_id: number;
-    format: string;
-    bytes: SqlValue;
-  }>(`SELECT pack_id, format, bytes FROM vfs_content_pack ORDER BY pack_id`);
+  const dryRun = options.dryRun ?? true;
+  const force = options.force ?? false;
+  // 同传时的裁决：**force 优先**（显式破坏意图 > 默认防呆）。选它不选「报错」
+  // 的理由：报错能防手滑，但会让「脚本里统一带 force、按环境变量切 dryRun」的
+  // 两种写法在传值层打架；force 是唯一能表达「我真的要写」的开关，让它赢即可，
+  // 而默认值（dryRun=true）已经把最危险的无参调用保住了。
+  const effectiveDryRun = force ? false : dryRun;
+  // pack 字节按 pack_id 逐个取（pbp-24）：不整表物化，每组处理完即释放。
+  const packIds = await queryPackIds(conn);
+  const failures: VfsPackUnpackFailure[] = [];
   let unpackedPacks = 0;
   let restoredRows = 0;
-  for (const pack of packRows) {
-    const memberRows = await conn.query<{
-      content_hash: string;
-      offset: number;
-      length: number;
-    }>(
-      `SELECT content_hash, offset, length FROM vfs_content_pack_member
-       WHERE pack_id = ? ORDER BY content_hash`,
-      [pack.pack_id]
-    );
-    // 解码在事务外（纯计算，不经 conn）；空 pack（put 抽回后的死区）直接
-    // 进事务清理，无 member 可物化。
-    let plains: Uint8Array[] = [];
-    if (memberRows.length > 0) {
-      plains = decodePackMembers(
-        String(pack.format),
-        asUint8Array(pack.bytes, "vfs_content_pack.bytes"),
-        memberRows.map((row) => ({
-          offset: Number(row.offset),
-          length: Number(row.length),
-        }))
-      );
-    }
-    const packId = Number(pack.pack_id);
-    await conn.transaction(async (tx) => {
-      for (let index = 0; index < memberRows.length; index++) {
-        const contentHash = String(memberRows[index]!.content_hash);
-        const compressed = tightBytes(compressZlib(plains[index]!));
-        const inserted = await tx.execute(
-          `INSERT OR IGNORE INTO vfs_content_blob (content_hash, encoding, bytes, byte_len, ref_count)
+  let memberCount = 0;
+  let streamBytes = 0;
+  for (const packId of packIds) {
+    // 逐 pack try/catch（pbp-22）：坏 pack（字节损坏/段表不可解码/事务抛错）
+    // 跳过并在 `failedPacks` 回报，**不中断整轮**——与 {@link packOneGroup} 对
+    // 坏组的处置同款（跳过 + 计数 + 继续），应急工具在最需要时不该第一个坏包
+    // 就整轮失败、把人堵在门外。
+    try {
+      const pack = await queryPackById(conn, packId);
+      if (pack == null) {
+        // 并发删除（另一轮 unpack 抢先）——不是失败，真跑口径下按已展开计。
+        if (!effectiveDryRun) {
+          unpackedPacks += 1;
+        }
+        continue;
+      }
+      const { rows: slices, rawHashes } = await queryPackMemberSlices(conn, packId);
+      memberCount += slices.length;
+      streamBytes += asUint8Array(pack.bytes, "vfs_content_pack.bytes").byteLength;
+      // 解码在事务外（纯计算，不经 conn）；空 pack（put 抽回后的死区）直接
+      // 进事务清理，无 member 可物化。
+      let plains: Uint8Array[] = [];
+      if (slices.length > 0) {
+        plains = decodePackMembers(
+          pack.format,
+          asUint8Array(pack.bytes, "vfs_content_pack.bytes"),
+          slices
+        );
+      }
+      // dryRun：统计到这就够，不开事务、不写任何一行。展开计数**不前进**——
+      // 「unpackedPacks = 本次真的展开的组数」是写库口径的判据，dryRun 下恒 0，
+      // 待展开的组数由 `packCount` 表达（两者在真跑后对账：packCount 是展开前
+      // 的库内组数）。
+      if (!effectiveDryRun) {
+        await conn.transaction(async (tx) => {
+          for (let index = 0; index < slices.length; index++) {
+            const contentHash = slices[index]!.contentHash;
+            const compressed = tightBytes(compressZlib(plains[index]!));
+            const inserted = await tx.execute(
+              `INSERT OR IGNORE INTO vfs_content_blob (content_hash, encoding, bytes, byte_len, ref_count)
            VALUES (?, ?, ?, ?,
              (SELECT COUNT(*) FROM vfs_revision WHERE content_hash = ?))`,
-          [
-            contentHash,
-            VFS_CONTENT_ENCODING_ZLIB,
-            compressed,
-            compressed.byteLength,
-            contentHash,
-          ]
-        );
-        if (inserted.changes > 0) {
-          restoredRows += 1;
-        }
-      }
-      // 先写后删的收尾：member 先删（member 引用 pack），pack 最后删——
-      // 同一事务内原子，中断（回滚）即回到展开前形态，可重复执行。
-      await tx.execute(
-        `DELETE FROM vfs_content_pack_member WHERE pack_id = ?`,
-        [packId]
-      );
-      // 幂等 ref_count 修复：上一步的 INSERT OR IGNORE 只对本函数**自己新建**的
-      // blob 行算过 ref_count；命中既有行（put 抽回残留、或历史 bug 落下的
-      // ref_count=0 残行）时静默跳过，那些行的计数仍是错的——后续删引用会撞
-      // CHECK(ref_count >= 0)，无 CHECK 时会误删仍被引用的 blob 行。对本 pack 的
-      // 全部成员 hash 统一重算一遍，天然幂等（值已对时写入同值）。
-      if (memberRows.length > 0) {
-        const placeholders = memberRows.map(() => `?`).join(`,`);
-        await tx.execute(
-          `UPDATE vfs_content_blob SET ref_count = (
+              [
+                contentHash,
+                VFS_CONTENT_ENCODING_ZLIB,
+                compressed,
+                compressed.byteLength,
+                contentHash,
+              ]
+            );
+            if (inserted.changes > 0) {
+              restoredRows += 1;
+            }
+          }
+          // 先写后删的收尾：member 先删（member 引用 pack），pack 最后删——
+          // 同一事务内原子，中断（回滚）即回到展开前形态，可重复执行。
+          await tx.execute(
+            `DELETE FROM vfs_content_pack_member WHERE pack_id = ?`,
+            [packId]
+          );
+          // 幂等 ref_count 修复：上一步的 INSERT OR IGNORE 只对本函数**自己新建**的
+          // blob 行算过 ref_count；命中既有行（put 抽回残留、或历史 bug 落下的
+          // ref_count=0 残行）时静默跳过，那些行的计数仍是错的——后续删引用会撞
+          // CHECK(ref_count >= 0)，无 CHECK 时会误删仍被引用的 blob 行。对本 pack 的
+          // 全部成员 hash 统一重算一遍，天然幂等（值已对时写入同值）。
+          if (slices.length > 0) {
+            const placeholders = slices.map(() => `?`).join(`,`);
+            await tx.execute(
+              `UPDATE vfs_content_blob SET ref_count = (
              SELECT COUNT(*) FROM vfs_revision r
              WHERE r.content_hash = vfs_content_blob.content_hash
            )
            WHERE content_hash IN (${placeholders})`,
-          memberRows.map((row) => String(row.content_hash))
-        );
+              rawHashes
+            );
+          }
+          await tx.execute(`DELETE FROM vfs_content_pack WHERE pack_id = ?`, [
+            packId,
+          ]);
+        });
       }
-      await tx.execute(`DELETE FROM vfs_content_pack WHERE pack_id = ?`, [
-        packId,
-      ]);
-    });
-    unpackedPacks += 1;
+      if (!effectiveDryRun) {
+        unpackedPacks += 1;
+      }
+    } catch (error) {
+      failures.push({ packId, reason: errorText(error) });
+      console.warn(
+        `[vfs-content-packing] 展开 pack ${packId} 失败，跳过该 pack 继续后续：${errorText(error)}`
+      );
+    }
   }
-  return { unpackedPacks, restoredRows };
+  if (failures.length > 0) {
+    console.warn(
+      `[vfs-content-packing] 展开完成但有 ${failures.length} 个 pack 失败（已跳过、可重复执行续跑）：${failures
+        .map((failure) => `#${failure.packId}(${failure.reason})`)
+        .join(", ")}`
+    );
+  }
+  return {
+    dryRun: effectiveDryRun,
+    packCount: packIds.length,
+    memberCount,
+    streamBytes,
+    unpackedPacks,
+    restoredRows,
+    failedPacks: failures,
+  };
 }
