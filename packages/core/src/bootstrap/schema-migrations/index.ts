@@ -64,11 +64,11 @@ export async function runPendingSchemaMigrations(
       continue;
     }
 
-    console.log(`[nm-boot] migration run: ${migration.id}`);
+    console.error(`[nm-boot] migration run: ${migration.id}`);
     await migration.up(tx);
     await markSchemaMigrationApplied(tx, migration.id, Date.now());
     applied.add(migration.id);
-    console.log(`[nm-boot] migration applied: ${migration.id}`);
+    console.error(`[nm-boot] migration applied: ${migration.id}`);
   }
 }
 

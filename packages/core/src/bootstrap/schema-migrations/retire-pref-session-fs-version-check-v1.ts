@@ -37,7 +37,7 @@ async function up(tx: TdbcConnection): Promise<void> {
   );
   const deleted = Number(result.changes);
   if (deleted > 0) {
-    console.log(
+    console.error(
       `[nm-boot] ${RETIRE_PREF_SESSION_FS_VERSION_CHECK_V1_ID}: 清理死键 ${PREFERENCES_MODULE}/${RETIRED_PREF_KEY}（${deleted} 行）`
     );
   }

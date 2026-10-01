@@ -113,6 +113,7 @@ export async function runAgent(
   switch (subcommand) {
     case "list":
     case "show":
+    case "create":
     case "import":
     case "export":
     case "migrate":
@@ -234,7 +235,7 @@ export async function runAgent(
     }
     default:
       throw new Error(
-        "Usage: nm agent <run|continue|list|show|import|export|migrate|delete> [--content <text>] [--agent-config <file>] [--agent-id <id>] [--save] [--prompt-path <file>] [--no-stream] [--session] [--project]",
+        "Usage: nm agent <run|continue|list|show|create|import|export|migrate|delete> [--content <text>] [--agent-config <file>] [--agent-id <id>] [--save] [--prompt-path <file>] [--no-stream] [--session] [--project]",
       );
   }
 }

@@ -45,6 +45,9 @@ export function stripBootLogs(text: string): string {
     .trim();
 }
 
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /** Spawns the CLI entry via tsx (same as other e2e tests). */
 export function runNm(
   args: string[],
@@ -129,6 +132,25 @@ export function parseCreatedProviderId(stderr: string): string {
     .at(-1);
   if (id == null || id === "") {
     throw new Error(`provider create did not print uuid on stderr: ${stderr}`);
+  }
+  return id;
+}
+
+/**
+ * 解析 `nm agent create` 打印到 stdout 的 UUID。
+ * 口径与 {@link parseCreatedProviderId} 一致：取 stdout 尾行并校验 UUID。
+ */
+export function parseAgentId(stdout: string): string {
+  const id = stripBootLogs(stdout)
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .at(-1);
+  if (id == null || id === "") {
+    throw new Error(`agent create did not print uuid on stdout: ${stdout}`);
+  }
+  if (!UUID_PATTERN.test(id)) {
+    throw new Error(`agent create did not print a uuid: ${id}`);
   }
   return id;
 }

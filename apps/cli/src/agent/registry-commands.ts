@@ -1,14 +1,19 @@
 /**
- * `nm agent list|show|import|export|migrate|delete` commands.
+ * `nm agent list|show|create|import|export|migrate|delete` commands.
  *
  * @module agent/registry-commands
  */
 
+import { randomUUID } from "node:crypto";
 import { access } from "node:fs/promises";
 import { join } from "node:path";
 import { encode, registerBuiltinTools, ToolRegistry } from "@novel-master/core";
 
-import { agentDefinitionSchema, type AgentRegistryService } from "@novel-master/core/agent";
+import {
+  agentDefinitionSchema,
+  type AgentDefinition,
+  type AgentRegistryService,
+} from "@novel-master/core/agent";
 
 import { assertSavedModelUuid } from "@novel-master/core/provider";
 import type { NovelMasterRuntime } from "../runtime.js";
@@ -40,10 +45,37 @@ export async function runAgentRegistryCommand(
   const registry = rt.agentRegistry;
 
   switch (subcommand) {
+    case "create": {
+      // 全新机器上开第一个会话的必要入口：registry 空 ⇒ session create 直接失败
+      // （resolveWorkspaceAgentForNewSession 回落到 listAgentIds()[0]，而
+      //  虚拟 general 没有 id、不可能出现在 listAgentIds 里）⇒ N-P0-03。
+      const name = flagString(flags, "name") ?? args[0];
+      if (name == null || name.trim() === "") {
+        throw new Error("Usage: nm agent create --name <name> [--system <prompt>]");
+      }
+      const system = flagString(flags, "system") ?? "你是一个写作助手。";
+      const agentId = randomUUID();
+      await registry.upsert(
+        agentId,
+        {
+          name: name.trim(),
+          description: flagString(flags, "description") ?? "",
+          prompts: { system, persist: [], dynamic: [] },
+        } satisfies AgentDefinition,
+        createRegistryValidateOptions(rt),
+      );
+      // 顺带把 workspace 当前 agent 指过去：session create 优先读 state，
+      // 这样即使 registry 里有别的 agent，用户新建的会话也用自己刚建的。
+      await rt.state.setCurrentAgentId(agentId);
+      console.log(agentId); // 与 `nm session create` 同口径：stdout 只出 id
+      return;
+    }
     case "list": {
       const defs = await registry.list();
       if (defs.length === 0) {
-        console.log("No agents in registry. Run: nm agent import <path>");
+        console.log(
+          "No agents in registry. Run: nm agent import <path>, or: nm agent create --name <name>",
+        );
         return;
       }
       for (const def of defs) {
@@ -115,7 +147,7 @@ export async function runAgentRegistryCommand(
     }
     default:
       throw new Error(
-        "Usage: nm agent <list|show|import|export|migrate|delete> ...",
+        "Usage: nm agent <list|show|create|import|export|migrate|delete> ...",
       );
   }
 }
