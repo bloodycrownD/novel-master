@@ -7,7 +7,8 @@
  * 所以这里用 `mock.module` 把 `compressFileCacheBodyForBlob` 换成计数
  * spy，直接钉死调用次数。
  *
- * 独立成文件的必要性（照 message-content-compaction-bad-row.test.ts 范式）：
+ * 独立成文件的必要性（module mock 需先于被测模块注册，同
+ * message-content-decompression.test.ts 的坏行桩范式）：
  * `mock.module` 必须在被测模块被 import 之前注册，静态 import 会被提升到
  * mock 之前拿到的就不是桩。
  *

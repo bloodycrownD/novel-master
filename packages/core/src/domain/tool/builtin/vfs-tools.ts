@@ -90,6 +90,16 @@ export type ReadToolOutput = {
   /** 末行被截到 50KB 字节预算点（该行不完整，尾部不可续读）。 */
   readonly lastLineTruncated?: boolean;
   readonly nextOffset?: number;
+  /**
+   * 以下三字段（read-tool-result-ref）只在 ctx 注入了 `adjustRevisionRefCount`
+   * 且 head 定位三件套齐全时携带——「输出带 entryId ⟺ 同步 +1 已发生」，
+   * buildToolResultBlock 据此产 contentRef 引用块（先保活、后引用）。
+   * 未注入（旧测试 mock / hydrate 未上线的中间态）时三字段缺省，
+   * 走 legacy 全文形态。
+   */
+  readonly entryId?: number;
+  readonly contentHash?: string;
+  readonly totalBytes?: number;
 };
 
 export type GrepToolOutput = {
@@ -158,6 +168,9 @@ export function createVfsTools(): readonly Tool<
       truncated: z.boolean(),
       lastLineTruncated: z.boolean().optional(),
       nextOffset: z.number().int().optional(),
+      entryId: z.number().int().optional(),
+      contentHash: z.string().optional(),
+      totalBytes: z.number().int().optional(),
     }),
     async run(input, ctx) {
       const offset = input.offset ?? 1;
@@ -213,6 +226,26 @@ export function createVfsTools(): readonly Tool<
         }
       }
 
+      // read-tool-result-ref：read 引用 = revision.ref_count 的第三类持有者。
+      // 在工具返回前同步 +1（先于任何消息落库）堵 sweep 窗口——历史 revision
+      // 被 GC 后内容不可再生，必须先占位（方向取舍：宁多不少，read 后 append
+      // 前崩溃留下的 +1 泄漏由 repair 检测兜底）。注入了 adjustRevisionRefCount
+      // 且 head 定位三件套齐全才 +1 并在输出携带 entryId——「输出带 entryId
+      // ⟺ +1 已发生」，buildToolResultBlock 据此产 contentRef，杜绝「有引用
+      // 无计数」的悬空。能力未注入时回落 legacy 全文形态（不 +1、不带 entryId）。
+      // +1 抛 NOT_FOUND（revision 行缺失）则本 read 失败——存在性校验语义。
+      const hasRefAnchor =
+        raw.entryId != null &&
+        typeof raw.contentHash === "string" &&
+        raw.contentHash !== "";
+      const refAnchored = hasRefAnchor && ctx.adjustRevisionRefCount != null;
+      if (refAnchored) {
+        await ctx.adjustRevisionRefCount(
+          [{ entryId: raw.entryId!, version: raw.version }],
+          +1
+        );
+      }
+
       return {
         path: raw.path,
         content,
@@ -223,6 +256,15 @@ export function createVfsTools(): readonly Tool<
         totalLines,
         returnedLines,
         truncated,
+        ...(refAnchored
+          ? {
+              entryId: raw.entryId!,
+              contentHash: raw.contentHash!,
+              ...(raw.totalBytes != null
+                ? { totalBytes: raw.totalBytes }
+                : {}),
+            }
+          : {}),
         ...(byteCapped.lastLinePartial ? { lastLineTruncated: true } : {}),
         ...(nextOffset != null ? { nextOffset } : {}),
       };

@@ -1,10 +1,10 @@
 /**
  * 数据库维护（数据清理）：存储统计、VACUUM 维护链路与三个谓词驱动的
- * 后台搬运任务（存量 blob 形态归一、消息正文压缩搬运、VFS 非 head
+ * 后台搬运任务（存量 blob 形态归一、存量消息正文解压回明文、VFS 非 head
  * 历史版本混合打包）。
  *
  * 适配器注册表覆盖三张表（vfs_content_blob / session_file_cache_blob /
- * chat_message）；压缩任务、blob 归一与 VFS 打包（含应急校验/反向展开
+ * chat_message）；解压任务、blob 归一与 VFS 打包（含应急校验/反向展开
  * 工具）均从此出口导出。本目录任务并入主入口 index.ts 是既定出口设计
  * （`./compaction` 子路径名已归属历史上下文裁剪域，不新增子路径）。
  *
@@ -33,18 +33,24 @@ export type {
   DbMaintenanceService,
   StorageStats,
 } from "./db-maintenance.port.js";
+/**
+ * 消息正文解压搬运（反向任务，message-plaintext 迁移层）：存量压缩行
+ * → 明文。KKV 常量从此出口导出（迁移期断言完成标记需要）。
+ */
 export {
-  DEFAULT_COMPACTION_SYNC_BUDGET_MS,
-  MESSAGE_COMPACTION_KKV_KEY,
-  MESSAGE_COMPACTION_KKV_MODULE,
-  getMessageCompactionStatus,
-  runMessageContentCompaction,
-} from "./impl/message-content-compaction.js";
+  DEFAULT_DECOMPRESS_SYNC_BUDGET_MS,
+  getMessageDecompressStatus,
+  LEGACY_MAINTENANCE_PENDING_KKV_KEY,
+  LEGACY_MESSAGE_CONTENT_KKV_MODULE,
+  MESSAGE_DECOMPRESS_KKV_KEY,
+  MESSAGE_DECOMPRESS_KKV_MODULE,
+  runMessageContentDecompress,
+} from "./impl/message-content-decompression.js";
 export type {
-  MessageCompactionRunResult,
-  MessageCompactionStatus,
-  RunMessageContentCompactionOptions,
-} from "./impl/message-content-compaction.js";
+  MessageDecompressRunResult,
+  MessageDecompressStatus,
+  RunMessageContentDecompressOptions,
+} from "./impl/message-content-decompression.js";
 export {
   DEFAULT_VFS_PACK_SYNC_BUDGET_MS,
   getVfsContentPackStatus,

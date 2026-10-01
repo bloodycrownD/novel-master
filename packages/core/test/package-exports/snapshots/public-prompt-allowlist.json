@@ -12,6 +12,7 @@
   "formatPromptLlmInputForCliFromLayout",
   "layoutHasWorkplace",
   "messageBodyText",
+  "messageBodyTextFromBlocks",
   "normalizeForLlmExport",
   "resolvePreviewThinkingContext",
   "resolveWorkplaceFromWire",

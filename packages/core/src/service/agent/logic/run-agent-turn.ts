@@ -66,6 +66,7 @@ import type { LlmStreamEvent } from "@/infra/llm-protocol/ports/adapter.port.js"
 import type { ProviderRepository } from "@/domain/provider/repositories/provider.port.js";
 import type { SavedModelRepository } from "@/domain/provider/repositories/saved-model.port.js";
 import type { VfsService } from "@/service/vfs/vfs.port.js";
+import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revision.port.js";
 import type { WorkplaceService } from "@/service/workplace/workplace.port.js";
 import type { ProjectService } from "@/service/chat/project.port.js";
 import type { UserVfsTurnService } from "@/service/chat/user-vfs-turn.port.js";
@@ -162,6 +163,63 @@ export interface AgentTurnRuntimePort extends AgentRunRuntimePort {
    * limitation，后续迭代 CLI 接入 kkv 后补一行装配即可启用）。
    */
   readonly searchConfig?: SearchConfigStore;
+  /**
+   * 可选：read 工具的 revision 引用计数 +1 通道（read-tool-result-ref）。
+   *
+   * 注入了才会透传到 toolCtx（主/子两个装配点同款）：read 在返回前同步
+   * +1 保活、输出携带 entryId 产 contentRef 引用块。未注入时 read 走
+   * legacy 全文形态（不 +1、不产引用块）——三端 runtime 装配随 hydrate
+   * （Step 4/6）就绪后打开，避免「产引用块但 wire 还原未接线」的中间态。
+   * 底层绑定 revision repo 的 `batchAdjustRefCountWithDelta`。
+   */
+  readonly adjustRevisionRefCount?: (
+    pointers: ReadonlyArray<{
+      readonly entryId: number;
+      readonly version: number;
+    }>,
+    delta: number
+  ) => Promise<void>;
+  /**
+   * read 引用化（read-tool-result-ref）的 revision 仓库（Step 6 生产装配）。
+   *
+   * 双职责单点收口：① 未显式注入 `adjustRevisionRefCount` 时，装配点从本
+   * 字段绑定 `batchAdjustRefCountWithDelta` 推导出 +1 通道；② 经
+   * `assembleAgentRunnerDeps` 透传给 agent-runner，作为 prepare 的
+   * `revisionRepo`（tool_result 引用块 hydrate 主链）。三端 runtime 构造
+   * 处各注入一份（同 conn 的 `SqliteVfsRevisionRepository`）。
+   */
+  readonly revisionRepo?: VfsRevisionRepository;
+}
+
+/**
+ * 解析 read 引用计数 +1 通道（主 / 子两个装配点共用，Step 6 生产装配）。
+ *
+ * 显式 `runtime.adjustRevisionRefCount` 优先（测试注入探针的口子）；否则从
+ * `runtime.revisionRepo` 绑定 `batchAdjustRefCountWithDelta`——两者都缺时
+ * 返回 undefined，read 回落 legacy 全文形态（不 +1、不产引用块）。
+ */
+export function resolveReadRefCountChannel(
+  runtime: Pick<
+    AgentTurnRuntimePort,
+    "adjustRevisionRefCount" | "revisionRepo"
+  >
+):
+  | ((
+      pointers: ReadonlyArray<{
+        readonly entryId: number;
+        readonly version: number;
+      }>,
+      delta: number
+    ) => Promise<void>)
+  | undefined {
+  if (runtime.adjustRevisionRefCount != null) {
+    return runtime.adjustRevisionRefCount;
+  }
+  const repo = runtime.revisionRepo;
+  if (repo == null) {
+    return undefined;
+  }
+  return (pointers, delta) => repo.batchAdjustRefCountWithDelta(pointers, delta);
 }
 
 export class AgentTurnError extends Error {
@@ -839,6 +897,9 @@ async function runAgentTurnWithController(
     registry
   );
   const session = new ChatAgentSession(runtime.messages, scope.sessionId);
+  // read 引用计数通道（显式注入优先，否则从 revisionRepo 推导）——
+  // 主 / 子两个 toolCtx 装配点共用同一个解析结果。
+  const readRefCountChannel = resolveReadRefCountChannel(runtime);
   // internalController 由入口 {@link runAgentTurn} 建好并**已注册**（见其注释：
   // 前奏期间的停止不能被丢掉）。这里只取它的 signal：runner.run 用它，
   // 同时作为 task 工具内子 agent run 的 parentSignal，让
@@ -851,6 +912,12 @@ async function runAgentTurnWithController(
     listSessionMessages: (): Promise<readonly ChatMessage[]> =>
       runtime.messages.listBySession(scope.sessionId),
     sessionKkv: runtime.sessionKkv,
+    // read 引用计数 +1 通道（read-tool-result-ref）：显式通道优先，否则从
+    // revisionRepo 推导（Step 6 生产装配）；两者都缺时 read 回落 legacy
+    // 全文形态（vfs-tools read 分支判空跳过）。
+    ...(readRefCountChannel != null
+      ? { adjustRevisionRefCount: readRefCountChannel }
+      : {}),
     // 目录规则默认启用：write / mkdir 新路径时按本会话工作区补默认 workplace_dir_rule 行。
     workplace: runtime.workplace({
       kind: "session",
@@ -1187,6 +1254,8 @@ async function runChildAgent(args: {
       childSessionId,
       parentSessionId
     );
+    // 子 agent 的 read 引用计数通道与主 run 同源（见上）。
+    const readRefCountChannel = resolveReadRefCountChannel(runtime);
 
     // task 工具的 prompt 作为子 session 的第一条 user 消息落库，
     // 使子 agent 对话历史完整：LLM 能看到任务描述，UI 浏览页也能展示。
@@ -1200,6 +1269,12 @@ async function runChildAgent(args: {
       listSessionMessages: (): Promise<readonly ChatMessage[]> =>
         runtime.messages.listBySession(childSessionId),
       sessionKkv: runtime.sessionKkv,
+      // read 引用计数 +1 通道（read-tool-result-ref）：子 agent 与主 run 同款
+      // 透传（引用是全局键，跨会话直接指向源 revision，子/主一视同仁）——
+      // 显式通道优先，否则从 revisionRepo 推导（Step 6 生产装配）。
+      ...(readRefCountChannel != null
+        ? { adjustRevisionRefCount: readRefCountChannel }
+        : {}),
       // 目录规则默认启用：子 agent 与父共享同一工作区（上面 vfs 同归属根父会话），
       // 补规则也写父工作区的 workplace_dir_rule。
       workplace: runtime.workplace({

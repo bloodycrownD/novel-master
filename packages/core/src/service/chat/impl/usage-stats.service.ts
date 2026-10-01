@@ -518,6 +518,7 @@ export class DefaultUsageStatsService implements UsageStatsService {
       { sessionId }
     );
     let toolUseCount = 0;
+    // 无 keyword 语义，无粗筛面：全量 parse 为固有成本
     for (const row of assistantRows) {
       try {
         const raw =

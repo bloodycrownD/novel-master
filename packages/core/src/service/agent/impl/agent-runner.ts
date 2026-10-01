@@ -61,6 +61,7 @@ import type { WorkplaceService } from "@/service/workplace/workplace.port.js";
 import type { AgentPromptLayout } from "@/domain/prompt/model/agent-prompt-layout.js";
 import type { PromptSkillIndexEntry } from "@/domain/prompt/model/prompt-render-context.js";
 import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
+import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revision.port.js";
 import type { CompactionConditionEvaluator } from "@/service/compaction-conditions/create-compaction-condition-evaluator.js";
 import { runCompaction } from "@/service/compaction-conditions/run-compaction.js";
 import type { MessageService } from "@/service/chat/message.port.js";
@@ -114,12 +115,19 @@ export interface DefaultAgentRunnerDeps {
   readonly messageTranscriptEffects?: MessageTranscriptEffectsService;
   /** 按 sessionId 累积 in-flight 流式 partial，供子会话首次进入查询。 */
   readonly streamRegistry?: AgentStreamRegistry;
-  readonly listAllSessionMessages?: () => Promise<readonly ChatMessage[]>;
+  /** 每步 tool_use 查找源（可见-only；见 {@link CreateAgentRunnerDeps} 同名字段）。 */
+  readonly listVisibleSessionMessages?: () => Promise<readonly ChatMessage[]>;
   /** 思考上下文偏好窄切片（每 run 一次快照；未注入时等同默认开）。 */
   readonly preferences?: Pick<
     PersistentPreferences,
     "getThinkingContextEnabled"
   >;
+  /**
+   * read 引用块 hydrate（read-tool-result-ref Step 6 生产装配）所需的
+   * revision 仓库：每步 `prepareUserMessagesForPrompt` 透传。未注入且可见
+   * 消息含 `contentRef` 块时 prepare fail-fast（不静默降级发空 tool_result）。
+   */
+  readonly revisionRepo?: VfsRevisionRepository;
 }
 
 /**
@@ -452,6 +460,11 @@ export class DefaultAgentRunner implements AgentRunner {
           // deny（D4）时置空，而显式引用不受工具禁用影响。
           skills: this.deps.skills?.(),
           projectId,
+          // read 引用块 hydrate（read-tool-result-ref Step 6）：deps 未注入
+          // 且消息含 contentRef 时 prepare fail-fast（装配缺口不静默放行）。
+          ...(this.deps.revisionRepo != null
+            ? { revisionRepo: this.deps.revisionRepo }
+            : {}),
         });
         if (signal?.aborted) {
           await handleAbort("after_prepare_user_messages");
@@ -579,13 +592,18 @@ export class DefaultAgentRunner implements AgentRunner {
         });
         const llmMessages = normalizeOrphanToolResultsForLlm(strippedMessages);
 
-        // Gemini 的 function-call 名字回查要**含 hidden 的全量历史**（被压缩
-        // 掉的早期 tool 往返仍可能被引用），所以这份全量读只在该协议下取：
-        // openai / anthropic 适配器不消费它（仅 gemini.adapter 透传），别为
-        // 它们每 step 白读一遍全会话正文（大会话上是秒级）。
+        // tool_use 查找源：解析出站 tool_result 的函数名（Gemini
+        // functionResponse 必须有合法 name）。两个收窄正交叠加：
+        // ① 仅 gemini 协议才读——openai / anthropic 适配器不消费它（仅
+        // gemini.adapter 透传），别为它们每 step 白读一遍会话正文；
+        // ② 可见-only——上面的 normalizeOrphanToolResultsForLlm 按可见历史
+        // 配对，出站残留 tool_result 的 tool_use 必在可见集内（hidden 行零
+        // 解析力，等价断言钉在 gemini-content-mapper 测试），gemini lookup
+        // 用可见集即完备。
+        // 懒求值：放在这里而不是 step 开头，是为了纳入本 step 的压缩产物。
         let toolUseLookupMessages: readonly ChatMessage[] | undefined;
-        if (protocol === "gemini" && this.deps.listAllSessionMessages != null) {
-          toolUseLookupMessages = await this.deps.listAllSessionMessages();
+        if (protocol === "gemini" && this.deps.listVisibleSessionMessages != null) {
+          toolUseLookupMessages = await this.deps.listVisibleSessionMessages();
         }
 
         // 计时采集（spec 指标口径）：requestStartedAtMs 为请求发起时刻；

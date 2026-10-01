@@ -49,7 +49,7 @@ import {
 import {showAppToast} from '@/services/app-toast';
 import {setKeepAliveResidentEnabled} from '@/services/agent-finished-notification';
 import {scheduleMobileBlobBinaryNormalization} from '@/services/blob-binary-normalization.service';
-import {scheduleMobileMessageContentCompaction} from '@/services/message-content-compaction.service';
+import {scheduleMobileMessageContentDecompress} from '@/services/message-content-decompression.service';
 import {scheduleMobileVfsContentPacking} from '@/services/vfs-content-packing.service';
 import {readMessageNotificationEnabled} from '@/storage/message-notification-pref';
 import {tokensForMode} from '../theme/tokens';
@@ -227,11 +227,11 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
       return;
     }
     const manager = runtime.sessionStreamUnitManager;
-    // 消息正文压缩搬运：runtime 就绪后低优先后台调度（fire-and-forget，
-    // 幂等——已完成时零成本；Agent 活跃/数据清理 busy 自动让路）。
+    // 消息正文解压搬运（存量压缩行 → 明文）：runtime 就绪后低优先后台调度
+    //（fire-and-forget，幂等——已完成时零成本；Agent 活跃/数据清理 busy 自动让路）。
     // 同一 runtime 重复调度不叠加循环（runtime 身份去重）；retry 换新
     // runtime 时对新连接重挂一次，旧循环随旧连接失效自然终止。
-    scheduleMobileMessageContentCompaction(runtime);
+    scheduleMobileMessageContentDecompress(runtime);
     manager.setUiBridge({onError: message => showAppToast(message)});
     // 消息通知总开关：完成通知与常驻保活一体启停；appUi 未就绪的降级
     // 口径取「关」（与开关默认关对齐），appUi 就绪后按存储真值。

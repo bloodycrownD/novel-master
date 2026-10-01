@@ -83,7 +83,7 @@ describe("desktop blob 归一调度服务（cr-03 / cr-05）", () => {
       if (sql.includes("VACUUM")) {
         busyAtVacuum = isDesktopDbMaintenanceBusy();
         // 构造 VACUUM 抛错（磁盘满/库被锁的真实失败形态，照姊妹文件
-        // message-content-compaction-service.test.ts 的注入范式）：证
+        // message-content-decompression-service.test.ts 的注入范式）：证
         // afterMaintenance 的 finally 语义——抛错也必须复位 busy。
         throw new Error("注入：VACUUM 失败（模拟磁盘满）");
       }

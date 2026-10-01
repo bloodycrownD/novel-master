@@ -8,7 +8,7 @@
  * @module domain/vfs/content-store/logic/zlib-codec
  */
 
-import { unzlibSync, zlibSync } from "fflate";
+import { unzlibSync, Unzlib, zlibSync } from "fflate";
 import { tryZlibDeflate, tryZlibInflate } from "./zlib-accelerator.js";
 import {
   base64ToBytes,
@@ -43,6 +43,80 @@ export function compressZlib(plainUtf8: Uint8Array): Uint8Array {
  */
 export function decompressZlib(compressed: Uint8Array): Uint8Array {
   return tryZlibInflate(compressed) ?? unzlibSync(compressed);
+}
+
+/** 有上限解压时喂给流式 inflate 的输入切片字节数。 */
+const BOUNDED_INFLATE_SLICE_BYTES = 4096;
+
+/**
+ * 有解压产物体量上限的 zlib 解压（解压炸弹闸门）。
+ *
+ * @remarks **为什么不用 zlib 的 ISIZE 尾字段判上限**（先按 RFC 1950 实现过、
+ * 实测不可行）：ISIZE 在 `[len-4, len)`，但本仓唯一的 zlib 生产者 fflate 的
+ * `zlibSync` **只追加 4 字节 adler32、根本不写 ISIZE**（实测产物末 4 字节恒
+ * 等于 adler32，Node zlib 同样只有 4 字节 trailer）。照 ISIZE 判会把**每一行**
+ * 存量压缩行都误判成炸弹——实测跑一遍全库即全体行解码失败。
+ *
+ * 也不能靠给 fflate 传小 `out` 缓冲兜：①那是「按上限预分配」（迁移期逐行走
+ * 一次，64MB/次不可接受）；②越界时抛的是 fflate 内部通用错误
+ * `offset is out of bounds`，语义不可依赖。
+ *
+ * 做法：把输入切片喂给流式 {@link Unzlib}，边产出边判两道闸——①累计产出超
+ * 上限；②按已观测膨胀比投影「剩余输入的潜在产出」，超上限即提前收手（炸弹
+ * 在头一片就收手，不必先分配完）。切片取 4KB 是为单片的理论最大膨胀封顶：
+ * deflate stored block 的最坏比约 65535/5 ≈ 13107:1，故单片最坏 ~52MB。
+ * 正常消息（一段即读完）零额外开销：单切片、单 chunk 直接返回。
+ *
+ * @param compressed zlib 压缩字节。
+ * @param maxOutputBytes 解压产物体量上限（字节）；超限抛错，调用方据此走
+ *   坏行隔离。
+ */
+export function decompressZlibBounded(
+  compressed: Uint8Array,
+  maxOutputBytes: number
+): Uint8Array {
+  const chunks: Uint8Array[] = [];
+  let produced = 0;
+  let consumed = 0;
+  const inflate = new Unzlib((chunk) => {
+    produced += chunk.length;
+    chunks.push(chunk);
+    if (produced > maxOutputBytes) {
+      throw new Error(
+        `zlib 解压产物体量超上限：已产出 ${produced}B > 上限 ${maxOutputBytes}B`
+      );
+    }
+    if (consumed > 0) {
+      const projected =
+        (produced / consumed) * (compressed.length - consumed);
+      if (projected > maxOutputBytes) {
+        throw new Error(
+          `zlib 解压炸弹嫌疑：按已观测膨胀比投影产出 ${Math.round(projected)}B > 上限 ${maxOutputBytes}B（已产出 ${produced}B）`
+        );
+      }
+    }
+  });
+  // 至少推一次（空输入也要走 fflate 的头校验并照其语义抛错）。
+  for (let at = 0; ; at += BOUNDED_INFLATE_SLICE_BYTES) {
+    const end = Math.min(at + BOUNDED_INFLATE_SLICE_BYTES, compressed.length);
+    consumed = end;
+    const isFinal = end >= compressed.length;
+    inflate.push(compressed.subarray(at, end), isFinal);
+    if (isFinal) {
+      break;
+    }
+  }
+  const only = chunks.length === 1 ? chunks[0] : undefined;
+  if (only != null) {
+    return only;
+  }
+  const out = new Uint8Array(produced);
+  let offset = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return out;
 }
 
 /**

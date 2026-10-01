@@ -33,6 +33,10 @@ import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import {
+  aggregateReadRefs,
+  adjustReadRefCount,
+} from "@/domain/vfs/logic/revision-ref-count.js";
+import {
   deleteSessionFsData,
   runDeferredBlobGc,
 } from "@/service/session-fs/create-session-fs-service.js";
@@ -166,6 +170,16 @@ export class DefaultProjectService implements ProjectService {
         queue.push(...children);
       }
       for (const session of allSessions) {
+        // read 引用 −1（BFS 展开的每个会话、messages.deleteBySession 之前）：
+        // 该路径自有事务、不经过 deleteSessionTree——独立挂点，漏了会让被其它
+        // 会话引用的 revision 永久泄漏（无自愈）。
+        await adjustReadRefCount(
+          r.revisions,
+          aggregateReadRefs(
+            (await r.messages.listBySession(session.id)).map((m) => m.content)
+          ),
+          -1
+        );
         await r.messages.deleteBySession(session.id);
         await deleteSessionFsData(tx, session.id, id);
         await sessionKkv.clearSession(session.id);

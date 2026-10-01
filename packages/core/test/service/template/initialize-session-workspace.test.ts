@@ -61,14 +61,24 @@ describe("session create / workspace initialize (core 层)", () => {
       asPaths(await pvfs.list("/", { recursive: true })),
       "session scope 应镜像 project template 整树",
     );
+    // read 结果的 entryId 是 scope 专属定位键（read-tool-result-ref Step 2 起
+    // VfsReadResult 透出）：template 与 session 是不同 scope 的不同 entry，
+    // 内容一致断言剔除该键（本测试意图是内容/版本/hash 一致）。
+    const stripEntryId = (
+      r: Awaited<ReturnType<typeof pvfs.read>>,
+    ): Record<string, unknown> => {
+      const rest: Record<string, unknown> = { ...r };
+      delete rest.entryId;
+      return rest;
+    };
     assert.deepEqual(
-      await svfs.read("/a.md"),
-      await pvfs.read("/a.md"),
+      stripEntryId(await svfs.read("/a.md")),
+      stripEntryId(await pvfs.read("/a.md")),
       "会话 /a.md 内容与 template 一致",
     );
     assert.deepEqual(
-      await svfs.read("/sub/b.md"),
-      await pvfs.read("/sub/b.md"),
+      stripEntryId(await svfs.read("/sub/b.md")),
+      stripEntryId(await pvfs.read("/sub/b.md")),
       "会话 /sub/b.md 内容与 template 一致",
     );
 

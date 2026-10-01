@@ -19,7 +19,10 @@ export {
   layoutHasWorkplace,
 } from "../domain/prompt/model/agent-prompt-layout.js";
 export { shouldIncludeDynamicBlock } from "../domain/prompt/logic/should-include-dynamic-block.js";
-export { messageBodyText } from "../domain/prompt/logic/message-body.js";
+export {
+  messageBodyText,
+  messageBodyTextFromBlocks,
+} from "../domain/prompt/logic/message-body.js";
 export {
   validateAgentPromptLayoutFromMaps,
   validateAgentPromptLayout,

@@ -587,7 +587,7 @@ export function DataManagementView() {
       />
       <SettingsActionSection
         title="存量数据迁移"
-        desc="后台自动整理存量数据（压缩与二进制化），期间可正常使用，Agent 运行时自动让路。"
+        desc="后台自动整理存量数据（消息正文解回明文、二进制化），期间可正常使用，Agent 运行时自动让路。"
         action={
           <div className="settings-rows">
             {MIGRATION_ROWS.map((row) => {

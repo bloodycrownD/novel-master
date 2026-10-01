@@ -10,7 +10,9 @@ import type {
   ImageBlock,
   ImageSource,
   MessageContent,
+  ReadResultRef,
   RedactedThinkingBlock,
+  SkillResultRef,
   SkillToolRef,
   TextBlock,
   ThinkingBlock,
@@ -79,6 +81,199 @@ function requireString(
     throw chatInvalidArgument(`${label}: ${key} must be a non-empty string`);
   }
   return v;
+}
+
+/** 必填非负整数（contentRef 数值字段共用口径）。 */
+function requireNonNegativeInt(
+  obj: Record<string, unknown>,
+  key: string,
+  label: string
+): number {
+  const v = obj[key];
+  if (typeof v !== "number" || !Number.isInteger(v) || v < 0) {
+    throw chatInvalidArgument(
+      `${label}: ${key} must be a non-negative integer`
+    );
+  }
+  return v;
+}
+
+/** 可选非负整数：字段不存在时返回 undefined；存在但类型非法时抛错。 */
+function optionalNonNegativeInt(
+  obj: Record<string, unknown>,
+  key: string,
+  label: string
+): number | undefined {
+  if (!(key in obj)) {
+    return undefined;
+  }
+  return requireNonNegativeInt(obj, key, label);
+}
+
+/**
+ * 解析 `contentRef`（工具结果引用：read / skill）。
+ *
+ * **先按 `kind` 分派**：skill 引用带 `kind: "skill"`，read 引用**缺省即
+ * read**（存量 content_json 与本分支之前的 read 引用块都没有 `kind` 键，
+ * 零迁移兼容）。分派必须在各自白名单之前——否则 read 白名单会静默吞掉
+ * skill ref 的 `action/domain/name/files`，hydrate 随之拿不到 files 而重放
+ * 不出「附属文件」尾注（wire 逐字节失真）。
+ *
+ * 与 `meta.skillRef` 同一口径：缺省/未携带时返回 undefined；存在但字段
+ * 不合法时抛错——引用字段被静默丢弃会让 hydrate 悬空（wire 缺全文），
+ * 宁可拒收（fail-fast）也不丢字段。
+ */
+function parseContentRef(
+  value: unknown,
+  label: string
+): ReadResultRef | SkillResultRef | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (!isRecord(value)) {
+    throw chatInvalidArgument(`${label}: contentRef must be an object`);
+  }
+  if (value.kind === "skill") {
+    return parseSkillResultRef(value, label);
+  }
+  return parseReadResultRef(value, label);
+}
+
+/**
+ * 解析 read 引用（read-tool-result-ref）。
+ *
+ * `kind` 缺省或 `"read"` 均走本分支（`kind` 若为其它字符串则 fail-fast——
+ * 未知 kind 不能静默当 read 处理，那会按 read 白名单重放 skill ref）。
+ */
+function parseReadResultRef(
+  value: Record<string, unknown>,
+  label: string
+): ReadResultRef {
+  const refLabel = `${label} contentRef`;
+  const kind = value.kind;
+  if (kind !== undefined && kind !== "read") {
+    throw chatInvalidArgument(
+      `${refLabel}: kind must be "read" or "skill"`
+    );
+  }
+  const path = requireString(value, "path", refLabel);
+  const entryId = requireNonNegativeInt(value, "entryId", refLabel);
+  const version = requireNonNegativeInt(value, "version", refLabel);
+  const contentHash = requireString(value, "contentHash", refLabel);
+  const totalBytes = requireNonNegativeInt(value, "totalBytes", refLabel);
+  const offset = requireNonNegativeInt(value, "offset", refLabel);
+  const limit = optionalNonNegativeInt(value, "limit", refLabel);
+  const returnedLines = requireNonNegativeInt(
+    value,
+    "returnedLines",
+    refLabel
+  );
+  const totalLines = requireNonNegativeInt(value, "totalLines", refLabel);
+  if (typeof value.truncated !== "boolean") {
+    throw chatInvalidArgument(
+      `${refLabel}: truncated must be a boolean`
+    );
+  }
+  const truncated = value.truncated;
+  if (
+    "lastLineTruncated" in value &&
+    typeof value.lastLineTruncated !== "boolean"
+  ) {
+    throw chatInvalidArgument(
+      `${refLabel}: lastLineTruncated must be a boolean`
+    );
+  }
+  const lastLineTruncated =
+    value.lastLineTruncated === true ? true : undefined;
+  const nextOffset = optionalNonNegativeInt(value, "nextOffset", refLabel);
+  // **有意的不对称：不回构 `kind`**。`kind` 只由 skill 侧产出（判别字段，
+  // skill 引用必带），read 侧恒缺省——存量 content_json 与本分支之前的 read
+  // 引用块都没有该键，「缺省即 read」就是全链窄化口径（见
+  // {@link ReadResultRef.kind}）。这里若按 `kind === "read"` 回构出一个
+  // `kind: "read"`，落库 JSON 会凭空多一个键、round-trip 不再逐键稳定，
+  // 还会让「哪些块带 kind」这条判别规则退化成「read 也可能带」。显式带
+  // `kind: "read"` 的输入同样不回构（键被白名单消化，语义仍归 read）。
+  return {
+    path,
+    entryId,
+    version,
+    contentHash,
+    totalBytes,
+    offset,
+    ...(limit != null ? { limit } : {}),
+    returnedLines,
+    totalLines,
+    truncated,
+    ...(lastLineTruncated != null ? { lastLineTruncated } : {}),
+    ...(nextOffset != null ? { nextOffset } : {}),
+  };
+}
+
+/**
+ * 解析 skill 引用（skill-result-ref）：逐字段 fail-fast，口径与
+ * {@link parseReadResultRef} 一致。`action` / `domain` / `files` 三字段是
+ * read 白名单没有的，必须在此显式回构——漏一项就静默丢字段。
+ */
+function parseSkillResultRef(
+  value: Record<string, unknown>,
+  label: string
+): SkillResultRef {
+  const refLabel = `${label} contentRef`;
+  const action = value.action;
+  if (action !== "load" && action !== "read") {
+    throw chatInvalidArgument(
+      `${refLabel}: action must be "load" or "read"`
+    );
+  }
+  const domain = value.domain;
+  if (domain !== "global" && domain !== "project") {
+    throw chatInvalidArgument(
+      `${refLabel}: domain must be "global" or "project"`
+    );
+  }
+  const name = requireString(value, "name", refLabel);
+  const path = requireString(value, "path", refLabel);
+  const entryId = requireNonNegativeInt(value, "entryId", refLabel);
+  const version = requireNonNegativeInt(value, "version", refLabel);
+  const contentHash = requireString(value, "contentHash", refLabel);
+  const totalBytes = requireNonNegativeInt(value, "totalBytes", refLabel);
+  const offset = requireNonNegativeInt(value, "offset", refLabel);
+  const limit = optionalNonNegativeInt(value, "limit", refLabel);
+  const returnedLines = requireNonNegativeInt(
+    value,
+    "returnedLines",
+    refLabel
+  );
+  const totalLines = requireNonNegativeInt(value, "totalLines", refLabel);
+  if (typeof value.truncated !== "boolean") {
+    throw chatInvalidArgument(`${refLabel}: truncated must be a boolean`);
+  }
+  const truncated = value.truncated;
+  const nextOffset = optionalNonNegativeInt(value, "nextOffset", refLabel);
+  const files = value.files;
+  if (!Array.isArray(files) || files.some((f) => typeof f !== "string")) {
+    throw chatInvalidArgument(
+      `${refLabel}: files must be an array of strings`
+    );
+  }
+  return {
+    kind: "skill",
+    action,
+    domain,
+    name,
+    path,
+    entryId,
+    version,
+    contentHash,
+    totalBytes,
+    offset,
+    ...(limit != null ? { limit } : {}),
+    returnedLines,
+    totalLines,
+    truncated,
+    ...(nextOffset != null ? { nextOffset } : {}),
+    files: files as string[],
+  };
 }
 
 function parseImageSource(value: unknown): ImageSource {
@@ -200,6 +395,11 @@ function parseBlock(value: unknown, index: number): ContentBlock {
       }
       const ok = optionalBoolean(value.ok);
       const summary = optionalString(value.summary);
+      // contentRef（工具结果引用，read-tool-result-ref / skill-result-ref）：
+      // 回构白名单必须补上——parse 只回构显式列出的字段，静默丢弃会让
+      // round-trip 丢引用（failureReason 已有丢失先例）。缺省时 undefined
+      // （legacy 兼容）。
+      const contentRef = parseContentRef(value.contentRef, label);
       return {
         type: "tool_result",
         toolUseId,
@@ -207,6 +407,7 @@ function parseBlock(value: unknown, index: number): ContentBlock {
         ...(ok !== undefined ? { ok } : {}),
         ...(summary !== undefined ? { summary } : {}),
         ...(meta !== undefined ? { meta } : {}),
+        ...(contentRef !== undefined ? { contentRef } : {}),
       } satisfies ToolResultBlock;
     }
     case "thinking": {

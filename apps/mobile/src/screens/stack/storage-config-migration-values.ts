@@ -7,7 +7,7 @@
  */
 import type {
   BlobBinaryTableStatus,
-  MessageCompactionStatus,
+  MessageDecompressStatus,
   VfsContentPackStatus,
 } from '@/services/db-maintenance.service';
 
@@ -18,11 +18,11 @@ export interface MigrationValue {
 }
 
 /**
- * 消息正文压缩（content json → zlib 压缩存储）状态行取值。
+ * 消息正文明文化（存量压缩行 → 明文）状态行取值。
  * 未取到状态（如采样失败、Agent 运行中被守卫拒绝）显示占位 '—'。
  */
-export function messageCompactionValue(
-  status: MessageCompactionStatus | null,
+export function messageDecompressValue(
+  status: MessageDecompressStatus | null,
 ): MigrationValue {
   if (status == null) {
     return {value: '—', tone: 'default'};

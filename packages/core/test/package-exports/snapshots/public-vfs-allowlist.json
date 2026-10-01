@@ -4,6 +4,7 @@
   "CHARACTER_CARD_MAX_SINGLE_FILE_BYTES",
   "CHARACTER_CARD_MAX_TOTAL_CONTENT_BYTES",
   "CharacterCardError",
+  "SqliteVfsRevisionRepository",
   "VfsError",
   "VfsZipError",
   "actionXmlToToolUses",

@@ -35,6 +35,7 @@ import {createSessionFsService} from '@novel-master/core/session-fs';
 import {
   createPhysicalVfsService,
   createScopedVfsService,
+  SqliteVfsRevisionRepository,
   type VfsScope,
 } from '@novel-master/core/vfs';
 import {createWorkplaceService} from '@novel-master/core/workplace';
@@ -115,6 +116,9 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileRuntimeCor
 
   const messageTranscriptEffects = createMessageTranscriptEffectsService(conn);
   const sessionKkv = createSessionKkvService(conn);
+  // read 引用化（read-tool-result-ref Step 6）：同 conn 单实例——runAgentTurn
+  // 装配点由它推导 read +1 通道，prepare/parity 链用它 hydrate 引用块。
+  const revisionRepo = new SqliteVfsRevisionRepository(conn);
   const {userVfsTurn} = createUserVfsTurnServiceBundle(conn);
 
   let compactionConditionEvaluator:
@@ -195,5 +199,6 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileRuntimeCor
     modelRequests: providerBundle.modelRequests,
     smartSortRule,
     userVfsTurn,
+    revisionRepo,
   };
 }

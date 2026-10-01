@@ -13,8 +13,8 @@
  * 写成三态混杂的历史形态，验证归一后一律重算为物理字节长度。
  *
  * 每个用例开头 {@link resetNormalizationState} 清三表谓词命中行 + 完成
- * 标记：共享库上用例自管状态（口径照 message-content-compaction.test.ts
- * 的 clearDoneMarker），用例之间互不污染计数。
+ * 标记：共享库上用例自管状态（口径照 message-content-decompression.test.ts
+ * 的 clearMarkers），用例之间互不污染计数。
  *
  * 【ic-06① 节流串值】getBlobBinaryStatus 的谓词 COUNT 路径带 3s 模块级
  * 节流（按连接实例缓存未完成态采样值），共享连接的用例之间会串值——
@@ -1043,8 +1043,8 @@ describe("存量 blob 形态归一任务（T-BB4 ~ T-BB7）", () => {
        VALUES (?, ?, 2, 'assistant', '', 'zlib-b64', ?, 2, 0)`,
       [badId, sessionId, "not-base64!!"]
     );
-    // 一条 legacy 明文行（content_encoding IS NULL）——不在本任务谓词内，
-    // 由 message-content-compaction 任务负责，本任务不得触碰。
+    // 一条 legacy 明文行（content_encoding IS NULL）——明文是 chat_message 的
+    // 正形态，不在本任务谓词内（也不在反向解压任务谓词内），本任务不得触碰。
     const legacyId = `bb-msg-legacy-${Date.now()}`;
     const legacyJson = JSON.stringify({ blocks: [{ type: "text", text: "legacy 明文" }] });
     await conn().execute(

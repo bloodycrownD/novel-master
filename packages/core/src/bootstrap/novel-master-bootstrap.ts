@@ -103,8 +103,11 @@ import { IntegrityRepairRegistry } from "@/service/integrity-repair.js";
  * v17：chat_message 新增 content_encoding / content_blob 两列（消息正文
  * zlib 压缩存储，message-content-compression）。老库（v16）靠本轮 bump
  * 走慢路径由 ALIGN 补列；两列全 NULL = legacy 明文行合法形态。存量明文
- * 不在 bootstrap 里搬运（空占位 migration 禁令），由后台谓词驱动的
- * runMessageContentCompaction 任务跨启动续跑（见 infra/db-maintenance）。
+ * 不在 bootstrap 里搬运（空占位 migration 禁令），该迭代的后台谓词驱动
+ * 任务已于 message-plaintext 迭代整文件删除。
+ * 明文化决策（2026-09-30 拍板）：明文为正形态，写侧直写 content_json、
+ * 两列恒 NULL；存量压缩行由反向任务 runMessageContentDecompress 过渡期
+ * 搬回明文（读路径双形态保留至 V1'）。
  * 注：该迭代在分支内原编号 v16，与 main 的 v16（stream-metrics-tokens）
  * 撞号；并入集成分支时以现值 16 + 1 顺延为 v17（bump 纪律是「DDL/ALIGN
  * 变更必须 +1」本身而非具体号——与并行迭代撞号时以主干现值为准递增顺延，
@@ -422,6 +425,33 @@ export async function bootstrapNovelMaster(
     await writeSchemaBootVersion(tx, SCHEMA_BOOT_VERSION);
   });
 
+  // 消息正文解压搬运（migration 层反向任务）入口自愈探测的部分索引：
+  // 谓词 `content_blob IS NOT NULL` 无索引时，入口探测（每次进程启动都付的
+  // 固定成本）与谓词 COUNT 都是全表扫——稳态「全部搬完、零命中」恰是必须
+  // 读完整棵 b-tree 的形态。部分索引只收压缩行，稳态索引空。
+  // 落点说明：idx_chat_session_parent 的先例在事务内慢路径（该 return 之后），
+  // 真实用户库（user_version ≥ SCHEMA_BOOT_VERSION）走快路径提前 return、
+  // 永远到不了，故本条落在**事务外的无条件段**（快/慢两分支共用同一出口），
+  // 手法与先例同为 `CREATE INDEX IF NOT EXISTS` 幂等建、位置不可照抄。
+  // **失败语义与同层 seedBuiltinSkills / 发号器安全网有意不同**：那两处是
+  // 「可选内容，失败仅记日志不阻断启动」，本条 fail loud、不包 try/catch——
+  // 静默吞掉建索引失败会让入口探测永久退回全表扫且无任何痕迹。
+  // 唯一的前置判定是「列在不在」：`content_blob` 自 v17 起由 ALIGN 补列，
+  // 走到这里慢路径库必然已补上；但「版本号与实际列不符」的库（T-C10 负面
+  // 教材演示的形态）不该让 bootstrap 当场炸掉——那种库上探测退回全表扫只是
+  // 慢，不是不可用。**建索引本身失败仍然 fail loud。**
+  // 不 bump SCHEMA_BOOT_VERSION、不注册 schema migration：纯 DDL 幂等建、
+  // 非数据搬运（与「空占位 migration 禁令」不冲突）。V1' 退役消息正文解压
+  // 任务时，连同下面这几行一并删除。
+  const pendingBlobColumn = await conn.query<{ name: string }>(
+    "SELECT name FROM pragma_table_info('chat_message') WHERE name = 'content_blob'"
+  );
+  if (pendingBlobColumn.length > 0) {
+    await conn.execute(
+      "CREATE INDEX IF NOT EXISTS idx_chat_message_pending_blob ON chat_message(id) WHERE content_blob IS NOT NULL"
+    );
+  }
+
   // pbm-7 方案 A：pack 两表 + member 索引在**事务外无条件幂等补建**（快/慢两
   // 分支共用本出口）。理由：`user_version=18` 的库若来自「曾占 18 后撤回」的形态
   //（tool_use_count 撤回版的测试机残留），`SCHEMA_BOOT_VERSION=18` 的快路径
@@ -429,7 +459,7 @@ export async function bootstrapNovelMaster(
   // `no such table: vfs_content_pack` 报错（荣耀真机 2026-10-01 实锤）。慢路径
   // 库由事务内语句集建出后此处为幂等 no-op；放进语句集对快路径无效果（快路径
   // 不执行 DDL 循环）。全部语句带 IF NOT EXISTS、不 bump、不挂 migration——与
-  // main 侧 `idx_chat_message_pending_blob` 先例同款落点纪律。**失败语义 fail
+  // 上方 `idx_chat_message_pending_blob` 先例同款落点纪律。**失败语义 fail
   // loud**：静默吞掉建表失败会让任务持续报 no such table 且无任何痕迹。V1'
   // 退役 Part B 时随迭代一并评估删除。
   for (const sql of VFS_CONTENT_PACK_SCHEMA_STATEMENTS) {

@@ -1,16 +1,16 @@
 /**
  * 状态采样 COUNT 路径节流验收（ic-06①）。
  *
- * getMessageCompactionStatus / getBlobBinaryStatus 的谓词 COUNT 路径带
+ * getMessageDecompressStatus / getBlobBinaryStatus 的谓词 COUNT 路径带
  * 3s 模块级节流（按连接实例隔离的 WeakMap 缓存）：窗口内重复调用回放
  * 上次采样值。只有真触 COUNT 的未完成态采样才写缓存——标记已置的免
- * COUNT 快路径不进节流域（既有文件 T-C7 / 标记短路面用例已覆盖，此处
+ * COUNT 快路径不进节流域（既有文件标记短路面用例已覆盖，此处
  * 不重复）。**2s 轮询 + 全表扫 = 迁移期 IO 风暴，节流窗口取 3s**。
  *
  * 时序口径：10 次调用为同步连调（无人为 sleep），天然在 3s 窗口内完成
  * ——断言 COUNT 下发 ≤2 次；reset 钩子（__resetStatusSamplingThrottle
  * ForTests）清缓存后首次调用重新下发。独立新文件承载（node test runner
- * 每文件一进程），避免与 message-content-compaction.test.ts /
+ * 每文件一进程），避免与 message-content-decompression.test.ts /
  * blob-binary-normalization.test.ts 的进程级顺序约束互相牵连。
  *
  * @module test/infra/status-sampling-throttle
@@ -19,19 +19,17 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { describe, it } from "node:test";
-import { textBlocks } from "@novel-master/core/chat";
 import { compressZlib } from "../../src/domain/vfs/content-store/logic/zlib-codec.js";
 import {
   BLOB_BINARY_KKV_MODULE,
-  MESSAGE_COMPACTION_KKV_KEY,
-  MESSAGE_COMPACTION_KKV_MODULE,
+  LEGACY_MAINTENANCE_PENDING_KKV_KEY,
+  LEGACY_MESSAGE_CONTENT_KKV_MODULE,
+  MESSAGE_DECOMPRESS_KKV_KEY,
+  MESSAGE_DECOMPRESS_KKV_MODULE,
   getBlobBinaryStatus,
-  getMessageCompactionStatus,
+  getMessageDecompressStatus,
 } from "../../src/infra/db-maintenance/index.js";
-import {
-  MESSAGE_COMPACTION_MAINTENANCE_PENDING_KKV_KEY,
-  __resetStatusSamplingThrottleForTests as resetCompactionThrottle,
-} from "../../src/infra/db-maintenance/impl/message-content-compaction.js";
+import { __resetStatusSamplingThrottleForTests as resetDecompressThrottle } from "../../src/infra/db-maintenance/impl/message-content-decompression.js";
 import { __resetStatusSamplingThrottleForTests as resetBlobThrottle } from "../../src/infra/db-maintenance/impl/blob-binary-normalization.js";
 import type { TdbcConnection } from "../../src/infra/tdbc/ports/connection.port.js";
 import {
@@ -97,46 +95,44 @@ async function withSqlProbe<T>(
   }
 }
 
-describe("getMessageCompactionStatus 的谓词 COUNT 节流（ic-06①）", () => {
-  it("标记未置 + 有待压缩行：3s 窗口内连调 10 次，COUNT 下发 ≤2；reset 后首次调用重新下发", async () => {
-    resetCompactionThrottle();
+describe("getMessageDecompressStatus 的谓词 COUNT 节流（ic-06①）", () => {
+  it("标记未置 + 有待解压行：3s 窗口内连调 10 次，COUNT 下发 ≤2；reset 后首次调用重新下发", async () => {
+    resetDecompressThrottle();
     resetBlobThrottle();
     const c = conn();
 
-    // 夹具：清 compaction 完成标记 + pending 兜底标记 + 全表明文行，
-    // 再插 1 条明文行（pendingCount 精确为 1）。
-    await c.execute(
-      "DELETE FROM kkv_entry WHERE module = ? AND key IN (?, ?)",
-      [
-        MESSAGE_COMPACTION_KKV_MODULE,
-        MESSAGE_COMPACTION_KKV_KEY,
-        MESSAGE_COMPACTION_MAINTENANCE_PENDING_KKV_KEY,
-      ]
-    );
-    await c.execute("DELETE FROM chat_message WHERE content_json != ''");
+    // 夹具：清解压完成标记 + 正向遗留 pending 标记 + 全表压缩行，
+    // 再插 1 条压缩行（pendingCount 精确为 1）。
+    await c.execute("DELETE FROM kkv_entry WHERE module IN (?, ?)", [
+      MESSAGE_DECOMPRESS_KKV_MODULE,
+      LEGACY_MESSAGE_CONTENT_KKV_MODULE,
+    ]);
+    await c.execute("DELETE FROM chat_message WHERE content_blob IS NOT NULL");
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(
       project.id,
       `S-${testIsolationSuffix()}`
     );
+    const blob = compressZlib(
+      new TextEncoder().encode(
+        JSON.stringify({ blocks: [{ type: "text", text: "节流验证压缩行" }] })
+      )
+    );
     await c.execute(
       `INSERT INTO chat_message (
-         id, session_id, seq, role, content_json, created_at_ms, hidden
-       ) VALUES (?, ?, 1, 'user', ?, ?, 0)`,
-      [
-        randomUUID(),
-        session.id,
-        JSON.stringify(textBlocks("节流验证明文行")),
-        Date.now(),
-      ]
+         id, session_id, seq, role, content_json, content_encoding, content_blob,
+         created_at_ms, hidden
+       ) VALUES (?, ?, 1, 'user', '', 'zlib', ?, ?, 0)`,
+      [randomUUID(), session.id, blob, Date.now()]
     );
 
     // 同步连调 10 次（无人为 sleep，天然在 3s 窗口内完成，不跨窗）。
-    const statuses: Awaited<ReturnType<typeof getMessageCompactionStatus>>[] = [];
+    const statuses: Awaited<ReturnType<typeof getMessageDecompressStatus>>[] =
+      [];
     const { seen } = await withSqlProbe(async () => {
       for (let i = 0; i < 10; i++) {
-        statuses.push(await getMessageCompactionStatus(c));
+        statuses.push(await getMessageDecompressStatus(c));
       }
     });
 
@@ -158,19 +154,30 @@ describe("getMessageCompactionStatus 的谓词 COUNT 节流（ic-06①）", () =
     }
 
     // reset 钩子清缓存后：首次调用重新下发 COUNT（拿到的是新采样值）。
-    resetCompactionThrottle();
-    const afterReset = await withSqlProbe(() => getMessageCompactionStatus(c));
+    resetDecompressThrottle();
+    const afterReset = await withSqlProbe(() =>
+      getMessageDecompressStatus(c)
+    );
     assert.deepEqual(afterReset.result, { done: false, pendingCount: 1 });
     assert.ok(
       afterReset.seen.some(isCountStar),
       "reset 后首次调用应重新下发 COUNT"
+    );
+    // 收尾清夹具：本文件自造压缩行，别留给同进程后续用例的谓词计数。
+    await c.execute("DELETE FROM chat_message WHERE content_blob IS NOT NULL");
+    await c.execute(
+      "DELETE FROM kkv_entry WHERE module = ? AND key = ?",
+      [
+        LEGACY_MESSAGE_CONTENT_KKV_MODULE,
+        LEGACY_MAINTENANCE_PENDING_KKV_KEY,
+      ]
     );
   });
 });
 
 describe("getBlobBinaryStatus 的谓词 COUNT 节流（ic-06①）", () => {
   it("标记未置 + 有待归一行：3s 窗口内连调 10 次，每表 COUNT 下发 ≤2；reset 后首次调用重新下发", async () => {
-    resetCompactionThrottle();
+    resetDecompressThrottle();
     resetBlobThrottle();
     const c = conn();
 

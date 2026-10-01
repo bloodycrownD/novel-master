@@ -99,22 +99,24 @@ export type {
  * 数据库维护（数据清理）：存储统计 + 缓存 GC/checkpoint/VACUUM 维护链路
  * （VACUUM 须事务外调用，事务中调用由 SQLite 原生报错兜底）；另含三个
  * 谓词驱动、幂等可重入的后台搬运任务——存量 blob 行形态归一（zlib-b64
- * 文本 → 二进制 BLOB）、消息正文压缩搬运与 VFS 非 head 历史版本混合打包
- * （完成后各挂一次维护链路；不新增 exports 子路径——`./compaction` 已被
- * 上下文裁剪域占用）。VFS 打包另附应急工具：verifyVfsContentPacks
- * （pack 自包含校验）与 unpackVfsContent（反向展开回独立 blob 行）。
+ * 文本 → 二进制 BLOB，完成后挂一次维护链路）、存量消息正文解压回明文
+ * （message-plaintext 迁移层，**不挂**维护链路：增容无 freelist 可归还）
+ * 与 VFS 非 head 历史版本混合打包（完成后挂一次维护链路）。不新增
+ * exports 子路径——`./compaction` 已被上下文裁剪域占用。VFS 打包另附
+ * 应急工具：verifyVfsContentPacks（pack 自包含校验）与 unpackVfsContent
+ * （反向展开回独立 blob 行）。
  */
 export {
   BLOB_BINARY_KKV_MODULE,
   createDbMaintenanceService,
   DEFAULT_BLOB_BINARY_SYNC_BUDGET_MS,
-  DEFAULT_COMPACTION_SYNC_BUDGET_MS,
+  DEFAULT_DECOMPRESS_SYNC_BUDGET_MS,
   DEFAULT_VFS_PACK_SYNC_BUDGET_MS,
   getBlobBinaryStatus,
-  getMessageCompactionStatus,
+  getMessageDecompressStatus,
   getVfsContentPackStatus,
   runBlobBinaryNormalization,
-  runMessageContentCompaction,
+  runMessageContentDecompress,
   runStartupMaintenanceOnce,
   runVfsContentPacking,
   unpackVfsContent,
@@ -128,10 +130,10 @@ export type {
   BlobBinaryTableStatus,
   DatabaseMaintenanceResult,
   DbMaintenanceService,
-  MessageCompactionRunResult,
-  MessageCompactionStatus,
+  MessageDecompressRunResult,
+  MessageDecompressStatus,
   RunBlobBinaryNormalizationOptions,
-  RunMessageContentCompactionOptions,
+  RunMessageContentDecompressOptions,
   RunVfsContentPackingOptions,
   StorageStats,
   VfsContentPackRunResult,

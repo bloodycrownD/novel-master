@@ -21,8 +21,8 @@ DerivedData/
 # React Native
 *.jsbundle
 
-# Android ¹¹½¨²úÎï£ºRN ´ò°ü bundle Óë autolink ×Ô¶¯¿½±´½ø res µÄµÚÈı·½×ÊÔ´
-# £¨index.android.bundle / node_modules Í¼±ê¿½±´ / keep.xml ¾ùÎª¹¹½¨Éú³É£¬ÎğÈë¿â£©
+# Android æ„å»ºäº§ç‰©ï¼šRN æ‰“åŒ… bundle ä¸ autolink è‡ªåŠ¨æ‹·è´è¿› res çš„ç¬¬ä¸‰æ–¹èµ„æº
+# å†…åµŒ bundle å‡ºåŒ…è½ç‚¹ä¸ e2e è¿è¡Œäº§ç‰©ï¼ˆappium æœ¬åœ°é©±åŠ¨ç­‰ï¼‰
 apps/mobile/android/app/src/main/assets/index.android.bundle
 apps/mobile/android/app/src/main/res/drawable-mdpi/
 apps/mobile/android/app/src/main/res/drawable-xhdpi/
@@ -55,19 +55,25 @@ tmp/
 # Cursor IDE local files (debug logs, etc.)
 .cursor/
 
-# ZCode ¿Í»§¶Ë±¾µØÎÄ¼ş£¨ºöÂÔÇåµ¥Í¬²½²úÎï£¬²»Èë¿â£©
+# ZCode å®¢æˆ·ç«¯æœ¬åœ°æ–‡ä»¶ï¼ˆå¿½ç•¥æ¸…å•åŒæ­¥äº§ç‰©ï¼Œä¸å…¥åº“ï¼‰
 .zcodeignore
 
-# ±¾µØ worktree£¨agent ¹¤×÷Çø£©
+# æœ¬åœ° worktreeï¼ˆagent å·¥ä½œåŒºï¼‰
 .worktree/
 
 # Git worktrees for parallel feature development
 .woktree/
 
-# ²Î¿¼ÏîÄ¿£¨½ö±¾µØ²éÔÄ£¬²»Èë¿â£©
+# å‚è€ƒé¡¹ç›®ï¼ˆä»…æœ¬åœ°æŸ¥é˜…ï¼Œä¸å…¥åº“ï¼‰
 .reference/
 
-# ±¾µØµ÷ÊÔ/²âÊÔÁÙÊ±²úÎï£¨mock ·şÎñÆ÷ÈÕÖ¾¡¢²âÊÔ»ùÏßÈÕÖ¾¡¢ÁÙÊ± jest ÅäÖÃ¸±±¾£©
+# æœ¬åœ°è°ƒè¯•/æµ‹è¯•ä¸´æ—¶äº§ç‰©ï¼ˆmock æœåŠ¡å™¨æ—¥å¿— / ä¸´æ—¶ jest é…ç½®ï¼‰
 mock*.log
 .*.log
 .jc-*.js
+
+
+# æœ¬åœ°è°ƒè¯•/æµ‹è¯•ä¸´æ—¶äº§ç‰©
+.nm-regr-tmp/
+tmp-*.log
+docs/Iterations/*/cache/

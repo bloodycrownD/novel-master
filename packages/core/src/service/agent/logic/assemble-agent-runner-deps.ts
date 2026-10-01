@@ -28,6 +28,7 @@ export interface AssembleAgentRunnerDepsInput {
     | "streamRegistry"
     | "skills"
     | "preferences"
+    | "revisionRepo"
   > & {
     readonly workplace: AgentTurnRuntimePort["workplace"];
     readonly savedModelRepo?: SavedModelRepository;
@@ -43,7 +44,7 @@ export interface AssembleAgentRunnerDepsInput {
   readonly includeCompactionOrchestrator: boolean;
 }
 
-/** 装配 createAgentRunner 依赖；listAllSessionMessages 由 toolCtx.sessionId + runtime.messages 推导。 */
+/** 装配 createAgentRunner 依赖；listVisibleSessionMessages 由 toolCtx.sessionId + runtime.messages 推导。 */
 export function assembleAgentRunnerDeps(
   input: AssembleAgentRunnerDepsInput
 ): CreateAgentRunnerDeps {
@@ -64,10 +65,21 @@ export function assembleAgentRunnerDeps(
     sessionKkv: input.runtime.sessionKkv,
     streamRegistry: input.runtime.streamRegistry,
     workplace: input.runtime.workplace,
-    listAllSessionMessages: () =>
-      input.runtime.messages.listBySession(input.toolCtx.sessionId),
+    // tool_use 查找源（Gemini functionResponse 的函数名解析）收窄为可见-only：
+    // 出站历史经 normalizeOrphanToolResultsForLlm（按可见历史配对）后，残留
+    // tool_result 的 tool_use 必在可见集内——hidden 行给不出任何解析力，却要
+    // 逐条解压（全量读 212ms vs 可见读 14ms，每步一发）。详见 agent-runner
+    // 该依赖的使用点注释。
+    listVisibleSessionMessages: () =>
+      input.runtime.messages.listBySession(input.toolCtx.sessionId, {
+        includeHidden: false,
+      }),
     // 思考上下文偏好窄切片透传（可选；未注入时 runner 等同默认开）。
     preferences: input.runtime.preferences,
+    // read 引用块 hydrate 的 revision 仓库（read-tool-result-ref Step 6）：
+    // 从 runtime 单点透传给 runner 的 prepare 调用（可选；装配缺口时
+    // 含 contentRef 的消息会 fail-fast，不静默降级）。
+    revisionRepo: input.runtime.revisionRepo,
   };
 
   if (!input.includeCompactionOrchestrator) {
