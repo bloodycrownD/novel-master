@@ -74,7 +74,7 @@ Part A 已随 v1.5.25 发布（真机升级链全绿，64.76MB 收敛态）。Pa
 
 - 谓词（三表同形）：`encoding = 'zlib-b64' OR (encoding = 'zlib' AND TYPEOF(bytes) = 'text')`；消息侧列名映射为 `content_encoding` / `content_blob`。
 - 每批 ≤100 行，`SELECT` 只取主键 + `encoding` + `bytes`；每行短事务：base64 解码 → 二进制 → `UPDATE ... SET bytes=?, encoding='zlib', byte_len=?`（谓词进 `WHERE` 保证并发幂等）。
-- 批间 `setTimeout(0)` 让步 + 单轮同步预算 60s（沿用既有 `DEFAULT_COMPACTION_SYNC_BUDGET_MS` 口径）；中断随时可重启，重启按谓词续扫。
+- 批间 `setTimeout(0)` 让步 + 单轮同步预算 60s（沿用既有 `DEFAULT_DECOMPRESS_SYNC_BUDGET_MS` 的预算口径——原消息侧常量已随 1.5.29 明文化迭代更名，见实现期口径分叉表）；中断随时可重启，重启按谓词续扫。
 - 完成标记：KKV module `nm-blob-binary`，key 按表 `messageContentDone` / `vfsContentDone` / `fileCacheDone`（三表各自短路，互不牵连）。
 - 收尾维护：**仅在本轮确有推进（成功改写 ≥1 行）且全部表完成时**跑一次收尾维护链路（GC → checkpoint → VACUUM，经会话级去重入口 `runStartupMaintenanceOnce` 挂载）——稳态（标记已置、谓词空）零成本短路；上一轮维护失败由持久化标记 `startupMaintenancePending` 补跑。**手动路径 `runDatabaseMaintenance` 刻意不受该去重约束**（用户手动点「数据清理」必须每次真跑）。
 - 状态查询 `getBlobBinaryStatus(conn)` 返回**已注册适配器**对应各表的 `{ done, pendingCount, failedCount }` 供存储页显示；**`done && failedCount > 0` 时状态行显示「已完成（N 条需人工处理）」**（第三态文案）。`failedCount` 的含义是「本轮跳过、解码失败的坏行，行原样保留、读路径按 miss 自愈」，不是「数据损坏待修」。未注册进适配器注册表的表不由 core 回报，UI 以 `—` 占位（与存储页既有占位风格一致）。
@@ -224,6 +224,7 @@ apps/{mobile,desktop} 存储页                                        # A/B：�
 **Part B（2026-09-28 重写为混合方案定稿；前置：Part A 已随 v1.5.25 发布，分支 `feat/vfs-content-pack` 基 `main@71527442`）**
 
 - Step 7 — phase-vfs-pack-deps — blocking: yes — qa: auto（依赖引入 + Node 侧回环）；Hermes 探针部分 qa: manual_user（真机 + Metro 热更，探针脚本落库断言）：`packages/core` 引入 `fossil-delta@^2.0.0`（dependencies，照 fflate 同位；ESM-only 无坑——npm 元数据实测 `type: module` + 有 `main` 无 exports map，三端全链 ESM/Metro 可解析）；**Hermes 真机探针验证**（探针挂 Metro 热更，不用重打包；结果落库 + adb 拉库断言，沿用 tmp 探针先例）：createDelta/applyDelta 回环正确性 + 1MB 语料编码耗时（Node 实测 1.85s 全量 / 单组毫秒级，Hermes 放大 5-10× 预算内）。**若 Hermes 不通：降级为纯 pack（阈值分支移除，format 只留 zlib-concat-v1），本步骤是 fossil 线的硬门禁。**
+  - **探针结论回记（2026-09-28 真机执行，门禁 PASS）**：探针脚本 `apps/mobile/src/services/__fossil-probe.ts` 已按临时探针纪律删除（执行后回捞结果即删，不留生产源码树）；结果落库于 `tmp/probe-db.gz` 的 `__fossil_probe_results` 表（5 行全 pass：`probe_start hermes=yes`；A 小语料 4KB encode 21ms / decode 4ms；**B 1MB 语料 encode 12605ms / decode 429ms / roundtrip_equal=true**；C 7 段链 create 合计 317ms / apply 合计 71ms）。Hermes 1MB 编码 12.6s ≈ Node 1.85s 的 6.8×，落在预估 5-10× 区间；单组 1MB 编码占 30s 轮预算约 42%。DDL 与 5 行结果已导出为本目录 `hermes-probe-results.md`（防 tmp 清理后证据消失）。
 - Step 8 — phase-vfs-pack-schema — blocking: yes — qa: auto：两表 DDL（`vfs-content-pack-schema.ts` 新文件，注册进 `NOVEL_MASTER_SCHEMA_STATEMENTS` 排 blob 表之后）+ `SCHEMA_BOOT_VERSION` 17→18（撞号顺延注释）+ schema 三用例（新库建表 / 存量库慢路径 / 快路径不建）；T-VP17。
 - Step 9 — phase-vfs-pack-store — blocking: yes — qa: auto：content store 六方法改造（`get`/`getMany` 按 format 分派、`ensureBlob`/`findExistingBlobHashes` UNION member、`put` 抽回删 member、`gc` 追加两步）+ `findContentSizeByPath` 回退 `member.compressed_byte_len`；T-VP1/2/4/5/6/11/14/15。
 - Step 10 — phase-vfs-pack-task — blocking: yes — qa: auto：`runVfsContentPacking`（谓词/分组/选型阈值/单事务/预算/坏组/stalled/收尾维护回调缝）+ `getVfsContentPackStatus`（3s 采样节流）+ `verifyVfsContentPacks` + `unpackVfsContent`（ref_count 重算）；T-VP3/8/10/12/13/16/18~21。
@@ -346,7 +347,7 @@ T 编号与实际落地用例的可追溯映射（行号为集成分支 `integra
 - 风险（按严重度）：① 跨「`hash` ⇒ blob 行」契约的收口改造（`get`/`getMany`/`ensureBlob`/`findExistingBlobHashes`/`put`/`gc`/`findContentSizeByPath` + seed/fork/tree-copy/backfill 消费方），漏一处即读失败或双份存储——探索报告已给全部落点，T-VP 系列逐点覆盖；② GC 误删导致明文丢失——「pack 自包含 + 单层引用判定 + T-VP3 校验」三重兜底，回滚前可先 `verifyVfsContentPacks`；③ 读放大：pack 组整组解压（≤1MB 明文）/ fossil 组 ≤7 次链 apply，Node 实测最坏 7.1ms、Hermes 预估 ×5-10（Step 7 真机探针实测定案）；④ 回滚卡顿敏感路径（`rollback-large-jank` 刚修）新增解压成本，Step 12 用既有回滚用例回归；⑤ **不可降级**：旧版本 app 读不到已打包 hash（member 概念不存在）——发布后回退 APK 将无法读历史版本，回退路径 = 装新版跑 `unpackVfsContent`（**发版前须用户知情确认**）；⑥ fossil-delta 供应链：npm 单包、零运行时依赖、BSD，锁 `^2.0.0`；Hermes 兼容性 Step 7 实测，不通则降级纯 pack（阈值分支移除，方案退化为已验证的 zlib-concat 单格式）；⑦ 触发器 0 行 UPDATE 的静默性——INV1/INV2 不变量保证不触发，`integrity-repair` 增加检测项作防御。
 - 回滚：`unpackVfsContent` 反向展开（ref_count 重算，可重复执行）→ 删两张表 → `SCHEMA_BOOT_VERSION` 不回退（只升不降）。
 - 实证基线（新库 dry-run，`tmp/poc-hybrid.mjs`）：155 组（150 pack + 5 fossil）、740 成员读回 740/740 全等、head 228/228 零影响、幂等谓词剩 144（= 不可成组孤立 hash）、GC 0/0、抽回事务 7.7ms + 死区语义全绿、库 61.78→57.22MB（−7.4%，对照实验排除 VACUUM 虚胖）。
-- **与 `read-tool-result-ref` 迭代的集成备注（2026-09-29 审查轮确认正交）**：两者在 `contentStore.get` 汇合（read-ref 的 hydrate → `findByEntryAndVersion` → `contentStore.get`；本方案恰改造 `get` 加 member 分派且签名不变），任一先上线链路均闭合；但两者 Step 12 / Step 7 均点名回滚/fork 套件——**两者都落地后需合跑一次回滚 + fork + checkpoint 套件回归**（记入合并后 QA）。
+- **与 `read-tool-result-ref` 迭代的集成备注（2026-09-29 审查轮确认正交）**：两者在 `contentStore.get` 汇合（read-ref 的 hydrate → `findByEntryAndVersion` → `contentStore.get`；本方案恰改造 `get` 加 member 分派且签名不变），任一先上线链路均闭合；但两者 Step 12 / Step 7 均点名回滚/fork 套件——**两者都落地后需合跑一次回滚 + fork + checkpoint 套件回归**（记入合并后 QA，2026-10-01 合并轮已执行：pbm-9 点名套件 48/48 + 54/54，定向用例「read 引用 → pack 打包 → 再 hydrate」wire 逐字节一致）。另注：**消息明文化迭代（v1.5.29）已同批落地**——压缩搬运任务退役、改名解压任务（`runMessageContentDecompress`），与本方案的三端调度/指标卡接线在合并轮按「压缩域取 main 命名、pack 域追加 vfsPack」并集收口（fix-spec pbm-2/3/4）。
 
 ## 实现期补充（A1 落地记录，2026-09-28）
 
@@ -358,7 +359,7 @@ A1（VFS + file_cache 去 base64 + 归一任务 + 三端接线）已按本 spec 
 | `failedCount`（单行容错） | 单行 base64 解码失败不再抛穿整轮：坏行原样保留、跳过归一、计入 `failedCount` 并 warn；该表照常置完成标记——否则每次启动重扫同一批坏行、任务永不收敛。读路径对同类坏行本就是自愈的，两侧口径一致 |
 | `stalled` + 零进展护栏 | 连续 3 批「谓词非空但 UPDATE 恒 `changes = 0`」即 warn 并 `stalled = true` 收手本轮；两端调度服务见 `stalled === true` 立即停止本进程重试（否则 app 层的「立即续跑」会把它放大成热循环）。护栏**不**要求满批——谓词是实时重扫的，任何批大小的零进展都是异常信号 |
 | 收尾维护容错 | 归一完成后挂的 `runStartupMaintenanceOnce` 包 try/catch：VACUUM 失败（磁盘满 / 库被锁）只 warn 不穿透——CLI 启动链路没有 try/catch，裸奔会让每条命令失败，且进程级去重在每个新进程复位、会反复重试注定失败的 VACUUM |
-| 预算常量分叉 | 新建 `DEFAULT_BLOB_BINARY_SYNC_BUDGET_MS = 60_000`（与消息侧 `DEFAULT_COMPACTION_SYNC_BUDGET_MS` 同值不同名）：后者所在模块已随 1.5.29 落地为 message-content-decompression（分支上仍是旧的 `message-content-compaction` 文件名），故同名不同模块、无法直接引用 |
+| 预算常量分叉 | 新建 `DEFAULT_BLOB_BINARY_SYNC_BUDGET_MS = 60_000`（与消息侧预算常量同值不同名）：后者所在模块已随 1.5.29 落地为 `message-content-decompression`、常量名现为 `DEFAULT_DECOMPRESS_SYNC_BUDGET_MS`（CLI 侧另显式传 5s 收窄预算），同名不同模块、语义已分叉，不直接引用 |
 | `messageContent` 类型预置 | `BlobBinaryTableId` 联合已含 `"messageContent"`，A2 只加适配器数据、不改类型定义。两端 UI **有意不设 `messageContent` 状态行**（发版形态下压缩搬运直接写二进制，不存在用户可见的中间态，见「实现期补充二」的范围拍板）；未注册进适配器注册表的表才由 UI 以 `—` 占位（与存储页既有占位风格一致、布局不随注册表增减跳动） |
 | 三端守卫组合 | mobile 当前仅 `isMobileAgentActive`（main 上 mobile 无维护/备份 busy 标志，注释已留扩展点）；desktop 为 agent + 云同步 + 维护 busy 三条；cli 无守卫（进程内单轮） |
 | app 层失败策略 | mobile：归一任务 error → warn 并本进程收手；desktop：error → warn 并本进程收手；cli：error → 上抛（CLI 启动链路无 try/catch 兜底，裸抛让命令显式失败） |
