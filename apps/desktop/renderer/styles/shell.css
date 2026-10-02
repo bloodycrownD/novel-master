@@ -3862,6 +3862,48 @@ html[data-theme="dark"] .conversation-tab.is-active {
   display: block;
 }
 
+/* prompt-rounds：轮容器（user 轮多段时包一层，单段轮不加壳）。 */
+.prompt-turn {
+  display: flex;
+  flex-direction: column;
+}
+
+.prompt-turn > .prompt-segment:last-child {
+  margin-bottom: 10px;
+}
+
+/* prompt-rounds：assistant 轮摘要卡（形态派生自 .prompt-segment，只读摘要 + 详情入口）。 */
+.prompt-turn-card {
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border-light);
+  border-left: 3px solid var(--primary);
+  background: var(--surface);
+}
+
+.prompt-turn-card:hover {
+  background: var(--background);
+}
+
+.prompt-turn-card .prompt-segment__role {
+  color: var(--text-secondary);
+}
+
+.prompt-turn-card .prompt-segment__preview {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  word-break: break-word;
+}
+
+.prompt-turn-card .prompt-segment__chevron {
+  align-self: center;
+  padding-top: 0;
+}
+
 .chat-messages {
   flex: 1;
   overflow-y: auto;

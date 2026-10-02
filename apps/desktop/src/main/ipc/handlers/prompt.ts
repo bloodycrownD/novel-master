@@ -1,5 +1,5 @@
 /**
- * Prompt IPC handlers — real prompt preview segments, chat token label, agent meta.
+ * Prompt IPC handlers — real prompt preview turns, chat token label, agent meta.
  */
 import {
   AgentRunResolveError,
@@ -11,27 +11,39 @@ import type {
   IpcResult,
   PromptAgentMetaResponse,
   PromptChatTokenStatsResponse,
-  PromptPreviewSegmentDto,
+  PromptPreviewTurnDto,
   PromptScopeRequest,
 } from "../../../../shared/ipc-types.js";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
 import { loadChatPromptTokenStatsResilient } from "../../services/chat-prompt-tokens.service.js";
-import { buildRealPromptPreviewSegments } from "../../services/prompt-preview.service.js";
+import { buildRealPromptPreviewTurns } from "../../services/prompt-preview.service.js";
 import { formatIpcError } from "../format-ipc-error.js";
 
 export async function handlePromptRealPreview(
   req: PromptScopeRequest,
-): Promise<IpcResult<PromptPreviewSegmentDto[]>> {
+): Promise<IpcResult<PromptPreviewTurnDto[]>> {
   try {
     const rt = await getDesktopRuntime();
-    const segments = await buildRealPromptPreviewSegments(rt, req);
+    const turns = await buildRealPromptPreviewTurns(rt, req);
     return {
       ok: true,
-      data: segments.map((s) => ({
-        id: s.id,
-        role: s.role,
-        title: s.title,
-        body: s.body,
+      data: turns.map((turn) => ({
+        id: turn.id,
+        kind: turn.kind,
+        summary: turn.summary,
+        body: turn.body,
+        // assistant 轮只发 summary + body：正文已在 body 一份字符串里，
+        // 再带 items 会让长会话 payload 近似翻倍（见 ipc-types 注释）。
+        ...(turn.kind === "assistant"
+          ? {}
+          : {
+              items: turn.items.map((item) => ({
+                id: item.id,
+                role: item.role,
+                title: item.title,
+                body: item.body,
+              })),
+            }),
       })),
     };
   } catch (err) {

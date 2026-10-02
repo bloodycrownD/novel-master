@@ -906,6 +906,23 @@ export type PromptPreviewSegmentDto = {
   readonly body: string;
 };
 
+/**
+ * 提示词预览「轮」（prompt-rounds）：模板段各占一轮、真用户输入开新轮、
+ * 其余消息段归入当前 assistant 轮。
+ *
+ * `items` 的下发策略（payload 体积口径）：template / user 轮下发段列表（卡片
+ * 按段渲染需要）；**assistant 轮只下发 `summary` + `body`，不下发 `items`**——
+ * 轮正文已在 `body` 一份字符串里，items 重复携带会让长会话 IPC payload
+ * 近似翻倍（body 可达数百 KB）。
+ */
+export type PromptPreviewTurnDto = {
+  readonly id: string;
+  readonly kind: 'template' | 'user' | 'assistant';
+  readonly summary: string;
+  readonly body: string;
+  readonly items?: readonly PromptPreviewSegmentDto[];
+};
+
 export type PromptAgentMetaResponse = {
   readonly source: 'session' | 'none';
   readonly agentId?: string;
