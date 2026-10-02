@@ -25,7 +25,7 @@
  *   `visiblePaths`（全量档），prepare 段照常 hydrate 附件。
  */
 import {describe, expect, it, jest} from '@jest/globals';
-import {textBlocks} from '@novel-master/core/chat';
+import {textBlocks, ATTACH_PROMPT_CHAR_BUDGET} from '@novel-master/core/chat';
 import {buildDefaultAgentDefinitionPreservingName} from '@novel-master/core/config-forms/stored-config-validity';
 
 import {
@@ -325,12 +325,10 @@ describe('buildSessionPromptInput 附件预算降级 parity（T-A8）', () => {
   /**
    * 超预算正文长度 = 预算 + 1。
    *
-   * 预算来源：core `ATTACH_PROMPT_CHAR_BUDGET`（packages/core/src/domain/chat/
-   * logic/attach-budget.ts = 100_000）。该常量目前**未**从 `@novel-master/core`
-   * 的 public 子路径导出（只有 domain 内部入口），按约定不改 core 导出面，
-   * 测试内用字面量并在此标注来源。
+   * 预算来源：core `ATTACH_PROMPT_CHAR_BUDGET`（public 子路径已导出），
+   * 直接引用常量——预算值若调整，这里自动跟随，不会以「不降级」红脸告警。
    */
-  const OVER_BUDGET_BODY = 'H'.repeat(100_001);
+  const OVER_BUDGET_BODY = 'H'.repeat(ATTACH_PROMPT_CHAR_BUDGET + 1);
 
   it('超预算文本附件在预览路径降级为 filename 档引导文案（与实发链同口径）', async () => {
     const runtime = makeStubRuntime({

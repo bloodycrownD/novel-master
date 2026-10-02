@@ -182,6 +182,14 @@ function fileRefAction(
   opts?: FileRefActionOpts
 ): string {
   const action = source === "workplace" ? ("workplaceChange" as const) : ("userAttach" as const);
+  // ⚠️ 下面两个分支**互斥且顺序敏感**：`noteText` 先于 `oversized` 命中。
+  // 互斥依据（改任一侧判据前先读这段）：
+  // `noteText` 只在 attach 源的 `filename` 档出现，而 `filename` 档由
+  // {@link resolveAttachFileStatus} 对 image / binary / 图片启发式路径派发——
+  // 这类附件的 `isOversizedAttach` 在计字符前就 return false（没有可注明正文），
+  // 故 `oversized` **恒为 false**，与 `noteText` 永不同时成立。
+  // 推论：binary 永不超预算，所以 `noteText` 优先是安全的；若日后给 binary
+  // 也计量，`noteText` 提前返回会**静默吃掉降级**，那时必须改成先算再互斥组装。
   if (opts?.noteText != null) {
     return buildFileRefActionXml({
       action,
@@ -215,14 +223,15 @@ function fileRefAction(
 }
 
 /**
- * attach 侧「是否超预算」的统一判据。
+ * attach 侧「是否超预算」判据（返回 `true` 即**超限**，走降级出口）。
  *
  * 红线豁免：`attachment.source === "workplace"` 一律不接累加器——workplace 的
  * full 档附件由工作区目录规则支配，若一并计入，用户一条目录规则就能把全部
- * 附件预算吃掉。
+ * 附件预算吃掉。（这条判据是 workplace 豁免的**真正落点**：预算由
+ * `hydrateWorkplaceWithSeen` 照常透传进来，由这里显式拦住。）
  * 二进制 / 图片（`isBinaryOrImageAttach`）没有可注明正文，不计字符。
  */
-function consumeAttachBudget(
+function isOversizedAttach(
   attachment: MessageAttachment,
   plainLength: number,
   budget: AttachBudget | undefined
@@ -263,7 +272,12 @@ async function hydrateFileFull(
     const wasLegacyFile =
       trimmed.startsWith("<file ") && trimmed.endsWith("</file>");
     const fileBody = stripLegacyFileWrap(attachment.content, logicalPath);
-    const oversized = consumeAttachBudget(attachment, fileBody.length, budget);
+    // 计量口径与读盘分支对齐：**按原始明文 length**（忽略行号前缀开销）。
+    // 旧 `<file>` 外壳内层已是 `renderFileBlockBody` 的行号正文（`1|xxx`），
+    // 直接用 `fileBody.length` 会把 `N|` 前缀也计进去，系统性偏高——
+    // 同一个文件走存量分支和走读盘分支会得到不同的降级结论。
+    const plainLength = wasLegacyFile ? plainLengthOfLineBody(fileBody) : fileBody.length;
+    const oversized = isOversizedAttach(attachment, plainLength, budget);
     // 旧块内层已是展示正文（含行号），勿再 contentLines；裸正文走 fileRefAction
     const content = fileRefAction(
       attachment.source === "workplace" ? "workplace" : "attach",
@@ -308,7 +322,7 @@ async function hydrateFileFull(
       status,
       cached.body,
       {
-        oversized: consumeAttachBudget(attachment, cached.body.length, budget),
+        oversized: isOversizedAttach(attachment, cached.body.length, budget),
         noteText: attachBinaryNote(attachment, status),
       }
     ),
@@ -378,6 +392,20 @@ function stripLegacyDirWrap(content: string, logicalPath: string): string {
   }
   void open;
   return trimmed;
+}
+
+/**
+ * 行号正文（`renderFileBlockBody` 的产物，形如 `1|foo\n2|bar`）的**明文当量长度**。
+ *
+ * 逐行剥掉 `/^\d+\|` 前缀后求和——降级判据要跟读盘分支（纯明文）同口径，
+ * 不能让「存量 `<file>` 外壳」与「读盘全文」对同一份文件给出不同结论。
+ */
+function plainLengthOfLineBody(lineBody: string): number {
+  let total = 0;
+  for (const line of lineBody.split("\n")) {
+    total += line.replace(/^\d+\|/, "").length;
+  }
+  return total;
 }
 
 /** 剥旧增量外壳 `<file …>…</file>`，取内层正文；非外壳则原样返回。 */
@@ -558,7 +586,8 @@ async function hydrateWorkplaceWithSeen(
   attachment: MessageAttachment,
   runtime: PrepareUserMessagesForPromptRuntime,
   seen: Set<string>,
-  workplaceSeen: Set<string>
+  workplaceSeen: Set<string>,
+  budget: AttachBudget | undefined
 ): Promise<MessageAttachment> {
   const rawPath = attachment.path;
   if (rawPath == null || rawPath === "") {
@@ -578,12 +607,14 @@ async function hydrateWorkplaceWithSeen(
     };
   }
   seen.add(logicalPath);
-  // workplace 红线豁免：预算不接 workplace（目录规则语义不受影响）
+  // 预算照常透传给 hydrateFileFull：workplace 豁免 = 其内部 {@link isOversizedAttach}
+  // 里那条显式 source 判据（透传后生效）。豁免因此落在「判据」而非「不传参」——
+  // 传参缺失会让该判据退化成死代码，日后有人删掉它也毫无症状。
   return hydrateFileFull(
     { ...attachment, path: logicalPath },
     logicalPath,
     runtime,
-    undefined
+    budget
   );
 }
 
@@ -629,7 +660,7 @@ async function prepareOneUserMessage(
   for (const att of workplaceList) {
     hydratedBySource.set(
       att,
-      await hydrateWorkplaceWithSeen(att, runtime, seen, workplaceSeen)
+      await hydrateWorkplaceWithSeen(att, runtime, seen, workplaceSeen, budget)
     );
   }
   for (const att of userOpsList) {

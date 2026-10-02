@@ -38,9 +38,11 @@ export interface RunChildAgentOptions {
    */
   readonly prompt?: string;
   /**
-   * task 工具入参 `fileAttachment` 预算内物化出的附件（已按
-   * `attachmentsFromPaths` 合规形态 + 预算筛选），随子 session 首条 user
-   * 消息落库——与主会话 `@path` 附件同链路（`content:null` 落库、view-time hydrate）。
+   * task 工具入参 `fileAttachment` 全量物化出的附件（`attachmentsFromPaths`
+   * 合规形态），随子 session 首条 user 消息落库——与主会话 `@path` 附件同链路
+   * （`content:null` 落库、view-time hydrate）。
+   *
+   * 体积预算与降级由**子会话自己的 prepare 链**负责：派发侧不再自带预算软闸。
    */
   readonly attachments?: readonly MessageAttachment[];
 }

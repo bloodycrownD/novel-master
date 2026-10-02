@@ -9,6 +9,20 @@
  * 计量口径：**原始明文 length**（不含行号前缀等渲染开销）——降级判据要稳定可解释，
  * 不受展示档位影响；image / binary / dir 不计字符（没有可注明的正文）。
  *
+ * **超限项不占用预算**：`tryConsume` 超限时不动 `used` 并返回 false，调用方据此
+ * 降级（不注入正文、只给 filename 档引导文案）。这与已退役的子会话派发链
+ * exhausted-sticky 语义（一旦超限，后续全部连带拒绝）**相反，是有意设计**——
+ * 粘住会让一个超长附件把其后所有附件一并打成降级态。
+ *
+ * 边界：**workplace 常驻前缀的 full 档不计预算**——它走 assemble 链
+ * `loadOrFillFileCache` 直连、根本不经过本累加器，这是 spec Step 4 拍板的设计：
+ * 一条目录规则就能把用户挂的附件预算吃光，是不可接受的行为。prepare 链里另有
+ * 一层同向豁免（workplace 源附件由 `isOversizedAttach` 显式放行），两者合起来
+ * 才是完整语义。
+ *
+ * 边界：CLI `nm prompt render` 不走 prepare，附件不 hydrate，**本预算不覆盖它**——
+ * 预算只覆盖实发 / 预览 / token 三链。
+ *
  * @module domain/chat/logic/attach-budget
  */
 
@@ -24,8 +38,6 @@ export const BINARY_ATTACH_NOTE = "二进制文件，不提供正文";
 
 /** 预算累加器（单次拼装一份，与 `seen` 同级作用域）。 */
 export interface AttachBudget {
-  /** 已计入的明文字符数。 */
-  readonly used: number;
   /**
    * 尝试计入 `chars`：计入后**恰好等于**预算仍算通过（边界不降级）；
    * 超预算则不改动并返回 false，调用方据此走降级出口。
@@ -34,17 +46,12 @@ export interface AttachBudget {
 }
 
 /** 新建一份预算累加器（上限 {@link ATTACH_PROMPT_CHAR_BUDGET}）。 */
-export function createAttachBudget(
-  limit: number = ATTACH_PROMPT_CHAR_BUDGET
-): AttachBudget {
+export function createAttachBudget(): AttachBudget {
   let used = 0;
   return {
-    get used(): number {
-      return used;
-    },
     tryConsume(chars: number): boolean {
       const next = used + Math.max(0, chars);
-      if (next > limit) {
+      if (next > ATTACH_PROMPT_CHAR_BUDGET) {
         return false;
       }
       used = next;
