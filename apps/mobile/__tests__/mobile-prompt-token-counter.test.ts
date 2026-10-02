@@ -224,6 +224,50 @@ describe('tokenizer-driver-rn countPromptLlmInputRn', () => {
     expect(second.estimated).toBe(false);
   });
 
+  it('gpt 档原生失败（非取消 reject）→ 落 js 档读数不变（cr2-B-08①）', async () => {
+    // 真实桥对非取消错误 catch→null（cr 评审确认：countGptViaNative 的 catch
+    // 非取消分支是不可达防御），本用例钉住「桥失败→三层回退链落 js 档」的
+    // 端到端行为——读数与纯 js 档逐字节一致。
+    mockCountPrompt.mockRejectedValue(new Error('TOKENIZER_COUNT_FAILED'));
+    const {__test__} = require('@novel-master/tokenizer-driver-rn');
+
+    const result = await __test__.countSerialized(
+      'tiktoken',
+      'system prompt for gpt',
+      'openai/gpt-4o',
+    );
+    expect(result).toEqual({
+      count: 12,
+      counterKind: 'tiktoken',
+      estimated: false,
+    });
+    expect(mockCountPrompt).toHaveBeenCalledTimes(1);
+  });
+
+  it('gpt 档 JS 编码表建不起来 → 放弃原生路线落字符折算（cr2-B-08④/B-10）', async () => {
+    // overhead 公式需要真表（公式单源在 TS）——表建不起来时即便原生词表在
+    // 包里也进不去精确档：原生→null，countTiktoken 同样建不起表→折算。
+    const rnDriver = require('@novel-master/tokenizer-driver-rn');
+    rnDriver.__setRnEncodingFactoryForTests(() => null);
+    try {
+      const result = await rnDriver.__test__.countSerialized(
+        'tiktoken',
+        ZH_TEXT,
+        'openai/gpt-4o',
+      );
+      expect(result).toEqual({
+        count: Math.ceil(ZH_TEXT.length / 3.35),
+        counterKind: 'heuristic',
+        estimated: true,
+      });
+      // 原生路线确实被放弃（桥零调用）。
+      expect(mockCountPrompt).not.toHaveBeenCalled();
+      expect(mockCountPromptCancelable).not.toHaveBeenCalled();
+    } finally {
+      rnDriver.__setRnEncodingFactoryForTests(null);
+    }
+  });
+
   it('p50k / gpt2 家族出界：走 cl100k 兜底报 heuristic（边界声明，不冒充精确）', async () => {
     const {__test__} = require('@novel-master/tokenizer-driver-rn');
 
@@ -246,6 +290,10 @@ describe('tokenizer-driver-rn countPromptLlmInputRn', () => {
     // gpt2 家族同样路由进 countTiktoken：编码名 gpt2 不在两表域 → 兜底。
     const gpt2 = await __test__.countSerialized('gpt2', ZH_TEXT, 'gpt2');
     expect(gpt2).toEqual(p50k);
+    // 出界模型根本不发起过桥（cr2-B-08③）：一旦有人把 resolveRnEncodingName
+    // 的 null 判定挪到过桥之后，读数仍可能对、这里必红。
+    expect(mockCountPrompt).not.toHaveBeenCalled();
+    expect(mockCountPromptCancelable).not.toHaveBeenCalled();
   });
 
   it('表源注入钩子：setEncodingSourceForTests 可控 countTiktoken 的表源分支', async () => {
@@ -732,6 +780,84 @@ describe('取消链路（tokenizer-native-cancel / rn 驱动面）', () => {
     expect(args[3]).toMatch(/^s-9:\d+$/);
     // 取消不得落 js 档重算（否则比不取消更贵）。
     expect(mockCountPrompt).not.toHaveBeenCalled();
+  });
+
+  it('heuristic 原生轮可取消（cr2-B-08②）：取消上抛不落 JS 兜底', async () => {
+    // Part C 的 countHeuristicViaNative 是独立于 gpt 档的另一份 catch——
+    // 取消吞成回退的话，兜底家族的侧滑取消会白付一次 JS 全量重算。
+    mockCountPromptCancelable.mockRejectedValue({
+      code: 'TOKENIZER_COUNT_CANCELLED',
+      message: 'cancelled',
+    });
+    const {
+      __test__,
+      PromptCountCancelledError,
+    } = require('@novel-master/tokenizer-driver-rn');
+
+    await expect(
+      __test__.countSerialized('heuristic', ZH_TEXT, 'local/any', undefined, 's-10'),
+    ).rejects.toBeInstanceOf(PromptCountCancelledError);
+
+    expect(mockCountPromptCancelable).toHaveBeenCalledTimes(1);
+    const args = mockCountPromptCancelable.mock.calls[0] as string[];
+    // heuristic 档过桥借用 tiktoken 家族 + cl100k_base 编码名（Part C）。
+    expect(args.slice(0, 3)).toEqual([ZH_TEXT, 'tiktoken', 'cl100k_base']);
+    expect(args[3]).toMatch(/^s-10:\d+$/);
+    expect(mockCountPrompt).not.toHaveBeenCalled();
+  });
+
+  it('探针并发隔离（cr2-B-01）：同会话双轮在途交错，收尾日志各报各的 route', async () => {
+    // R6 已知形态：chip 精确轮 + 压缩预热轮同会话并发。A 轮（gpt，过桥在途）
+    // 期间 B 轮（claude）跑完——旧模块级探针下 A 收尾会打出 B 的 route=native；
+    // 局部对象化后 A 必须仍报 native-gpt。
+    let resolveA!: (value: {tokenCount: number; counterKind: string; estimated: boolean}) => void;
+    mockCountPromptCancelable.mockImplementationOnce(
+      () =>
+        new Promise(resolve => {
+          resolveA = resolve;
+        }),
+    );
+    mockCountPromptCancelable.mockImplementationOnce(async () => ({
+      tokenCount: 7,
+      counterKind: 'claude',
+      estimated: false,
+    }));
+    const {__test__} = require('@novel-master/tokenizer-driver-rn');
+
+    const infoSpy = jest.spyOn(console, 'info').mockImplementation(() => {});
+    try {
+      const roundA = __test__.countSerialized(
+        'tiktoken',
+        ZH_TEXT,
+        'openai/gpt-4o',
+        undefined,
+        's-x',
+      );
+      // 让 A 停在过桥在途，B 完整跑完并打出收尾日志。
+      await Promise.resolve();
+      const roundB = __test__.countSerialized(
+        'claude',
+        'body b',
+        'anthropic/claude-3-5-sonnet',
+        undefined,
+        's-x',
+      );
+      await roundB;
+      resolveA({tokenCount: 5, counterKind: 'tiktoken', estimated: false});
+      const resultA = await roundA;
+
+      expect(resultA).toEqual({count: 12, counterKind: 'tiktoken', estimated: false});
+      const lines = infoSpy.mock.calls.map(call => String(call[0]));
+      const lineA = lines.find(l => l.includes('family=tiktoken'));
+      const lineB = lines.find(l => l.includes('family=claude'));
+      expect(lineB).toBeDefined();
+      expect(lineB).toContain('route=native kind=claude');
+      // 关键断言：A 的收尾报自己的 native-gpt，而不是被 B 覆写的 native。
+      expect(lineA).toBeDefined();
+      expect(lineA).toContain('route=native-gpt');
+    } finally {
+      infoSpy.mockRestore();
+    }
   });
 
   it('取消轮不写 L1：同输入下一轮重新过桥（取消不污染缓存）', async () => {

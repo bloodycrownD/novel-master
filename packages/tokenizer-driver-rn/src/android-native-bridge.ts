@@ -11,6 +11,13 @@ import { NativeModules, Platform } from "react-native";
 export type NativeCountRequest = {
   serialized: string;
   family: string;
+  /**
+   * `vendorModelId` 槽**双语义**（token-count-perf-r2）：WEB/SP 家族传真实
+   * vendor id（仅诊断信息）；`family === "tiktoken"` 时承载 JS 侧已解析的
+   * **编码名**（`cl100k_base` / `o200k_base`），Kotlin
+   * `TokenizerModule.encodingNameFor` 据此选词表——传其它值会让 Engine 抛
+   * 异常、桥 catch 后落回 js 档。
+   */
   vendorModelId: string;
   /**
    * 会话归属（由驱动层从 core params 透传）。与 `requestId` 同时在场时，

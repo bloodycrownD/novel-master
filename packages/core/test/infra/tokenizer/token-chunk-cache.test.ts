@@ -818,5 +818,9 @@ describe("T-H: chunkHash16 轻量哈希（token-count-perf-r2）", () => {
     // 大输入冒烟（整串 L1 键用同一函数，百 KB 级必须能跑且形态不变）
     const big = "长文本。".repeat(20_000); // 100K 字符
     assert.match(chunkHash16(big), /^[0-9a-f]{16}$/, "大输入输出形态不变");
+    // spec 原定的「N 块恰 N 次哈希调用」计数护栏未落（ESM 纯函数无法 spy，
+    // 行为式断言测不出内部 memoization——若 memoize 键=输入串，行为完全不变，
+    // 危害只有内存无界）。该风险由代码评审约束：fastHash16 禁止加记忆化，
+    // 见 cr-fix-spec cr2-B-09。
   });
 });

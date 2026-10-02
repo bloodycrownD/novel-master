@@ -51,10 +51,12 @@ internal class TokenizerEngine(private val context: Context) {
   // （cl100k/o200k）常驻共 10 条目，容量 4 时切模型会频繁 LRU 互踢、每踢一次
   // 重付秒级词表加载。+2 槽内存代价数十 MB/家族（与 2026-09-29「4 种模型合理」
   // 拍板同族的量级权衡）。词表 JSON 解析后内存可达数十 MB/家族（glm 词表 15 万
-  // 词 + 31.8 万合并），LRU 淘汰后下次使用再懒加载一次即可。SP 词表（.model
-  // protobuf）同理。
+  // 词 + 31.8 万合并），LRU 淘汰后下次使用再懒加载一次即可。
   private val webCache = LruCache<String, HuggingFaceTokenizer>(6)
-  private val spCache = LruCache<String, SpTokenizer>(6)
+
+  // SP 家族本轮零新增（仍 5 个），维持容量 4——cr2-B-06：无需求无收益的扩容
+  // 只是白付内存账；若将来 SP 家族新增再同批上调。
+  private val spCache = LruCache<String, SpTokenizer>(4)
 
   /**
    * @param shouldCancel 取消检查回调，命中即抛 [TokenizerCountCancelledException]。

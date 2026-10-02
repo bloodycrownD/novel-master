@@ -40,6 +40,9 @@ date: 2026-10-03
 | parity 负例 | `gpt-4o` 换 `gpt2` | `TokenizerEngineTest.kt:79`、`TokenizerParityTest.kt:53` 现拿 gpt-4o 当「无资产家族」反例，gpt 有资产后必红；gpt2 语义贴合（真实家族、原生无资产） |
 | node/desktop 侧 | **不加词表**（死重量 +5.7MB） | desktop gpt 走 WASM tiktoken 不读 assets；README 声明两处资产目录有意分叉 |
 | webCache 容量 | 4→6 | WEB 家族 8+tiktoken 2=10 条目抢 4 槽必抖动；+2 槽内存代价数十 MB×2，与既有「LRU 淘汰后懒加载」口径一致 |
+| heuristic 家族是否上原生（Part C 补） | 上，标签/口径不变 | 用户实测盲区：自定义 vendor 名落 heuristic 的会话才是「兜底 gpt 慢」主力；cl100k 词表已在包内，换的只是算力不是口径（仍 heuristic/est:true、不加 overhead、0.85 系数照吃） |
+| 首刷错峰窗口是否保留（Part D 补） | 撤回，1200→300 | 保护对象（重活堵交互）已被取消链路+原生线程+计数提速逐个拆掉，只剩 JS 装配 200-400ms 需错开动画；精确升级延迟同步 2500→800 |
+| gpt 原生路线是否与 JS 表解耦 | 不解耦 | overhead 公式单源在 TS（countOpenAiStyleMessages 空串口径）；表建不起来时即便原生词表在包里也落 heuristic（已知耦合，cr2-B-10 注释+注入用例钉住；解耦=overhead 闭式，留后续） |
 
 ## 最终项目结构
 
@@ -79,6 +82,12 @@ packages/core/test/infra/tokenizer/
 10. parity 基建修复：`generate-tokenizer-parity-goldens.mjs` 修 API 漂移（`serializePromptLlmInput(layout, ctx)` / `CountPromptLlmInputParams{layout,ctx,savedModelId}`）、cases 加 `openai/gpt-4o`（o200k）与 `openai/gpt-4`（cl100k）、金标条目增 `rawTextTokenCount`（node 侧裸 encode 整串，不含 overhead——与 Kotlin 直编码同口径）；`TokenizerParityTest.kt` 的 `newInstance` 补 `truncation:false`、gpt case 对 `rawTextTokenCount` 断言容差 ≤0.5%、负例 `gpt-4o`→`gpt2`。
 11. mobile 测试：`mobile-prompt-token-counter.test.ts` gpt 家族用例从「不过桥」改「桥可用→过桥（vendorModelId=编码名）+补 overhead / 桥不可用→js 档（现状数值）」；取消链路 describe 增 gpt 原生轮用例；**复跑 mock 宿主 7+1 套件**（spec 7 清单 + `compaction-warm-orchestration.test.ts`，后者 mock encoding 子路径不在旧清单）。
 12. 注释顺手修（不改行为）：`chunk-splitter.ts:8-13` 过时的「无生产消费方」声明。
+
+**Part C 追加（heuristic 原生优先，用户实测反馈后补）**：`countSerializedImpl` heuristic 分支前置 `countHeuristicViaNative`——cl100k 词表直编码（borrow tiktoken family + `cl100k_base` 编码名过桥）、不加 overhead（兜底=裸文本近似口径）、标签保持 heuristic/estimated:true、取消异常上抛、失败落回 JS `fallbackCount`；probe route=native-heuristic。
+
+**Part D 追加（延迟窗口回收，用户实测「一直这么慢」定案后补）**：`CHAT_TOKEN_LABEL_FIRST_DEBOUNCE_MS` 1200→300（恒等三元收敛为单常量引用）、`PRECISE_UPGRADE_START_DELAY_MS` 2500→800；两处测试硬编码毫秒（2499/1000）改引常量。弃权判据（视图切走/run 在途/换会话收口）三层兜底不变。
+
+**探针（37da31e08，评审补记）**：nm-tok 拆 copyMs/jniMs；`[nm-tok-js]` 探针壳（L1 miss 轮收尾单条：family/chars/ms/route/kind/est/l2Hit）；cr2-B-01 后探针为**每轮局部 ProbeStats 对象**沿调用链下传（并发双轮互不污染），并发隔离护栏含变异验证。
 
 ## 详细实现步骤
 
@@ -120,7 +129,9 @@ packages/core/test/infra/tokenizer/
 | 旧 JS × 新 APK | tiktoken 走 JS 档，Kotlin 新分支不触发 |
 | 升级安装（旧 KKV 行） | payload v1 整体按版本不符丢弃（一次性全量 miss 后收敛），不崩、不占三代槽 |
 | L1 scope | 原生与 JS 读数同 scope 共存（差 ≤0.5%，本 spec 显式接受） |
-| desktop | Part A 中性（V8 上 sha256 本就噪声级）；Part B 零改动 |
+| desktop | Part A 中性（V8 上 sha256 本就噪声级）；Part B/C 零改动 |
+| 升级安装（heuristic 档，Part C） | 首触重算一次（换哈希致 L1/L2/KKV 一次性失效，设计内）后由原生承担；读数来源从 JS 分块和变为原生整串，差 ≤0.35%，标签不变 |
+| 延迟窗口 800ms（Part D） | 「切会话立刻退出」仍由三层兜住：shouldBail（run 在途/视图切走）+ 换会话 cancelPreciseUpgradeDelay(stale) 收口挂起计时 + 在途轮 cancelPreciseUpgrade 原生取消 |
 
 ## 风险与回滚方案
 
@@ -131,12 +142,15 @@ packages/core/test/infra/tokenizer/
 5. **存量红基线**（batch-delete/forget-session/chat-tab-screen.integration 等 mega-CR 遗留）→ 验证轮先还原 HEAD 对照归因，不算本轮头上。
 6. 回滚单元：Part A、Part B 各自独立成提交序列，可单独 revert；探针（37da31e08）与两者正交。
 
-## 执行终态注记（2026-10-03 回填）
+## 执行终态注记（2026-10-03 回填，CR 修复轮后更新）
 
 - **流程裁剪（用户拍板）**：免 code-dev-loop，主代理直改 + 每步门禁照跑。
 - **Part A 已提交**：4 文件 +160/-29。门禁：core tokenizer 226/226（含 T-H1~4）、core 全量 879/886 中 7 红 stash 对照实证为分支既有红（read-ref-production-smoke 6 + delete-session-readref-targets 1，mega-CR 遗留）、node 驱动 30/30、core typecheck 干净、dist 重建。
 - **Part B 已提交**：14 文件。对拍门一次通过（ParityTest 3/3，DJL cl100k/o200k 直编码 vs js-tiktoken 裸 encode 同值域）；Kotlin JVM 21/21；mobile-prompt-token-counter 26/26（新增 T-G3/T-G7、T-G6）；mock 宿主复跑 6/7 绿；mobile 全量 10 红经 stash 对照全部实证为 main HEAD 既有红（batch-delete 5 / forget-session / chat-tab-screen.integration / webview-asset-guard 包清单顺序 / session-detail-screen / message-actions×3——后五者为本轮新增发现的 main 既有红，建议独立小迭代清偿）；mobile tsc 干净。
-- **执行勘误**：parity 生成器 API 漂移修复时 fixture 从 blocks 改为 layout+ctx 形态（`{system, persist:[], dynamic:[], skillsEnabled:false}`），claude/gemma 金标值随新 fixture 重生成（209/160）；金标 JSON version 1→2。
+- **Part C 已提交（heuristic 原生优先，2 文件 +64）**：mobile-prompt-token-counter 28 用例 + chat-prompt-tokens/token-debounce/compaction-warm 84/84 绿。
+- **Part D 已提交（延迟窗口回收，3 文件 +20/-15）**：chat-prompt-tokens/token-debounce/parallel-queries 50/50 绿。**真机验收（用户）**：Part D 后「快了不少」——数字出现时间从 4s 级降到 1s 级（此前被 1200ms 首刷窗+2500ms 精确延迟人为拖后）。
+- **CR 修复轮（diff 模式单轮审查 → fix-spec 11 条 → 全部修复）**：cr2-B-01 探针局部对象化（含并发隔离护栏+变异验证：摘 native-gpt 赋值必红）；cr2-B-11 spec 补 C/D/探针/体积/兼容矩阵（本轮）；B-02~B-07/B-09/B-10 注释与护栏（JSDoc 归位/桥契约双语义/chunk-splitter 声明/恒等三元收敛/spCache 回 4/词表钉 commit `1d9f1f1b`/`7956d98f`/T-H4 口径注释/耦合注释）；B-08 四条护栏（gpt 非取消回退/表建不起来放奔原生/出界零过桥/heuristic 取消上抛）。修复后 mobile-prompt-token-counter+chat-prompt-tokens+token-debounce 75/75 绿。
+- **执行勘误**：parity 生成器 API 漂移修复时 fixture 从 blocks 改为 layout+ctx 形态（`{system, persist:[], dynamic:[], skillsEnabled:false}`），claude/gemma 金标值随新 fixture 重生成（209/160）；金标 JSON version 1→2。词表实际体积 cl100k 2.5MB / o200k 5.2MB（紧凑化后）。T-H2 以 10 万合成 CJK 短串替代真实语料抽样（更强）；T-H4 落地为确定性+幂等（计数式护栏 ESM 无法 spy，memoization 风险由评审约束，见 cr-fix-spec cr2-B-09）。
 - **已知低效（刻意保留）**：gpt 原生回退轮 overhead 预计算重复一次（过桥前预算 + 桥 null 后 countTiktoken 内再算，各 1 次单 token 串 encode）。
-- **CHANGELOG 延后**：与 tokenizer-native-cancel 迭代合并时统一补（分支惯例，spec Step 11 的 CHANGELOG 项延至 merge 准备期）。
-- **待办**：Step 3/Step 10 真机两轮验收（manual_user，APK 已出待装机）。
+- **CHANGELOG 延后**：与 tokenizer-native-cancel 迭代合并时统一补（分支惯例）。
+- **open（merge 前拍板）**：[nm-tok-js] 探针门控三选一（保留/`__DEV__` 门/开关化），先真机 release 验 console 是否真出再定。

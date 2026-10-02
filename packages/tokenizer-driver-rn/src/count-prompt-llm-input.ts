@@ -77,36 +77,43 @@ function heuristicCount(text: string): number {
 const DRIVER_NAME = "rn";
 
 /**
+ * [nm-tok-js] 探针的每轮统计载体（token-count-perf-r2，cr2-B-01 局部对象化）：
+ * 由 countSerialized 每轮新建、沿调用链**作为末位可选参数**下传——同会话双轮
+ * 并发（chip 精确轮 + 压缩预热轮）互不污染，收尾日志的 route/l2Hit 恒属本轮。
+ * 与 Kotlin 侧 `Log.i("nm-tok", ...)` 同族：只记量（路径/L2 命中率），不落任何
+ * 提示词内容；输出发生在计数完成之后，不污染被测时段。
+ */
+interface ProbeStats {
+  chunkTotal: number;
+  chunkMisses: number;
+  route: string;
+}
+
+/**
  * 块级 L2 计数（与 node 驱动同构，spec 计数流程第 3 步）：
  * `splitTextIntoChunks(整串)` → 逐块查 L2 → miss 块经
  * `countTextWithIncrementalTokenizer` 现算写回 → 求和。
  */
-/**
- * [nm-tok-js] 探针累计（2026-10-02 成本拆解实验）：由 countChunksWithL2 累加、
- * countSerialized 收尾输出后自然失效。与 Kotlin 侧 `Log.i("nm-tok", ...)` 同族——
- * 只记量（家族/字符数/耗时/路径/L2 命中率），不落任何提示词内容；输出发生在
- * 计数完成之后，不污染被测时段。
- */
-let probeChunkTotal = 0;
-let probeChunkMisses = 0;
-/** [nm-tok-js] 探针路由标注：native（WEB/SP）/ native-gpt / js / fallback。 */
-let probeRoute = "js";
-
 function countChunksWithL2(
   text: string,
   scope: string,
   encodeText: (text: string) => number,
+  probe?: ProbeStats,
 ): number {
   let total = 0;
   for (const chunk of splitTextIntoChunks(text)) {
     const hash = chunkHash16(chunk);
-    probeChunkTotal += 1;
+    if (probe != null) {
+      probe.chunkTotal += 1;
+    }
     const hit = tokenChunkCache.lookup(hash, scope);
     if (hit !== undefined) {
       total += hit;
       continue;
     }
-    probeChunkMisses += 1;
+    if (probe != null) {
+      probe.chunkMisses += 1;
+    }
     const count = countTextWithIncrementalTokenizer(encodeText, chunk);
     tokenChunkCache.record(hash, scope, count);
     total += count;
@@ -132,13 +139,15 @@ function countChunksWithL2(
  * `heuristic`，调用方（尤其压缩阈值）不会误以为这是家族级的真分词器读数。
  * 该档不进 L2——没有真分词器就没有可缓存的稳定读数。
  */
-function fallbackCount(text: string, scope: string): number {
-  probeRoute = "fallback";
+function fallbackCount(text: string, scope: string, probe?: ProbeStats): number {
+  if (probe != null) {
+    probe.route = "fallback";
+  }
   const encoding = getDefaultRnEncoding();
   if (encoding == null) {
     return heuristicCount(text);
   }
-  return countChunksWithL2(text, scope, (chunk) => encoding.encode(chunk).length);
+  return countChunksWithL2(text, scope, (chunk) => encoding.encode(chunk).length, probe);
 }
 
 interface SerializedCountResult {
@@ -225,6 +234,7 @@ async function countTiktoken(
   serialized: string,
   vendorModelId: string,
   scope: string,
+  probe?: ProbeStats,
 ): Promise<SerializedCountResult> {
   const tiktokenModel = mapVendorModelIdToTiktokenModel(vendorModelId);
   const encName = resolveRnEncodingName(vendorModelId, tiktokenModel);
@@ -236,7 +246,7 @@ async function countTiktoken(
     // heuristic：cl100k 对这些模型只是近似，冒充精确会让压缩阈值跳过
     // 0.85 安全系数。
     return {
-      count: fallbackCount(serialized, scope),
+      count: fallbackCount(serialized, scope, probe),
       counterKind: "heuristic",
       estimated: true,
     };
@@ -255,19 +265,29 @@ async function countTiktoken(
     );
     const count =
       overhead +
-      countChunksWithL2(serialized, scope, (text) => encoding.encode(text).length);
+      countChunksWithL2(
+        serialized,
+        scope,
+        (text) => encoding.encode(text).length,
+        probe,
+      );
     return { count, counterKind: "tiktoken", estimated: false };
   } catch {
     return {
-      count: fallbackCount(serialized, scope),
+      count: fallbackCount(serialized, scope, probe),
       counterKind: "heuristic",
       estimated: true,
     };
   }
 }
 
-function mapNativeResult(nativeResult: NativeCountResponse): SerializedCountResult {
-  probeRoute = "native";
+function mapNativeResult(
+  nativeResult: NativeCountResponse,
+  probe?: ProbeStats,
+): SerializedCountResult {
+  if (probe != null) {
+    probe.route = "native";
+  }
   return {
     count: nativeResult.tokenCount,
     counterKind: nativeResult.counterKind as TokenCounterKind,
@@ -291,6 +311,7 @@ async function countGptViaNative(
   serialized: string,
   vendorModelId: string,
   sessionId: string | undefined,
+  probe?: ProbeStats,
 ): Promise<SerializedCountResult | null> {
   if (!isNativeTokenizerAvailable()) {
     return null;
@@ -304,6 +325,12 @@ async function countGptViaNative(
   if (encoding == null) {
     // js 表建不起来时 overhead 公式也算不了——整个精确档都进不去，交给
     // countTiktoken 自己的兜底链（现状行为）。
+    //
+    // **已知耦合（cr2-B-10）**：overhead 走「公式单源在 TS」意味着原生路线
+    // 与 JS 编码表可用性强耦合——表建不起来时**即便原生词表就在包里**也会落
+    // heuristic（原生 → countTiktoken 同样建不起表 → 字符折算）。排查「gpt
+    // 为何掉 heuristic」时先查这里。解耦方案（overhead 闭式：perMessage +
+    // encode('system')=1 + tail，两条 parity 断言锁死）留作后续迭代。
     return null;
   }
   const overhead = countOpenAiStyleMessages(
@@ -320,7 +347,9 @@ async function countGptViaNative(
     if (nativeResult == null) {
       return null;
     }
-    probeRoute = "native-gpt";
+    if (probe != null) {
+      probe.route = "native-gpt";
+    }
     return {
       count: nativeResult.tokenCount + overhead,
       counterKind: "tiktoken",
@@ -392,9 +421,9 @@ async function countSerialized(
   chunkScope?: string,
   sessionId?: string,
 ): Promise<SerializedCountResult> {
-  probeChunkTotal = 0;
-  probeChunkMisses = 0;
-  probeRoute = "js";
+  // 每轮一份局部探针（cr2-B-01）：同会话双轮并发（chip 精确轮 + 压缩预热轮）
+  // 各自持有互不污染——模块级可变状态会让 A 轮收尾打出 B 轮的 route/l2Hit。
+  const probe: ProbeStats = {chunkTotal: 0, chunkMisses: 0, route: "js"};
   const probeT0 = Date.now();
   try {
     const result = await countSerializedImpl(
@@ -403,17 +432,18 @@ async function countSerialized(
       vendorModelId,
       chunkScope,
       sessionId,
+      probe,
     );
     console.info(
       `[nm-tok-js] family=${family} chars=${serialized.length} ms=${Date.now() - probeT0}` +
-        ` route=${probeRoute} kind=${result.counterKind} est=${result.estimated}` +
-        ` l2Hit=${probeChunkTotal - probeChunkMisses}/${probeChunkTotal}`,
+        ` route=${probe.route} kind=${result.counterKind} est=${result.estimated}` +
+        ` l2Hit=${probe.chunkTotal - probe.chunkMisses}/${probe.chunkTotal}`,
     );
     return result;
   } catch (error) {
     console.info(
       `[nm-tok-js] family=${family} chars=${serialized.length} ms=${Date.now() - probeT0}` +
-        ` route=${probeRoute} thrown=${error instanceof Error ? error.name : "unknown"}`,
+        ` route=${probe.route} thrown=${error instanceof Error ? error.name : "unknown"}`,
     );
     throw error;
   }
@@ -425,6 +455,7 @@ async function countSerializedImpl(
   vendorModelId: string,
   chunkScope?: string,
   sessionId?: string,
+  probe?: ProbeStats,
 ): Promise<SerializedCountResult> {
   // L2 计数器身份：入口（countPromptLlmInputRn）会传入含 override 的完整
   // scope；直接调用（测试钩子）缺省时按 (模型, 家族, rn 驱动) 拼——两套键
@@ -442,12 +473,12 @@ async function countSerializedImpl(
     // 分块重算在 Hermes 上秒级，而原生 cl100k 词表已在包内（暖轮 ~250ms/87K）。
     // 口径与标签**不变**：仍报 heuristic/estimated（对未知家族这依然是近似读数，
     // 压缩阈值 0.85 系数照吃），只是把「算」的动作挪进原生。取消异常原样上抛。
-    const nativeHeuristic = await countHeuristicViaNative(serialized, sessionId);
+    const nativeHeuristic = await countHeuristicViaNative(serialized, sessionId, probe);
     if (nativeHeuristic != null) {
       return nativeHeuristic;
     }
     return {
-      count: fallbackCount(serialized, scope),
+      count: fallbackCount(serialized, scope, probe),
       counterKind: "heuristic",
       estimated: true,
     };
@@ -458,12 +489,12 @@ async function countSerializedImpl(
   if (family === "tiktoken" || family === "gpt2") {
     const nativeResult =
       family === "tiktoken"
-        ? await countGptViaNative(serialized, vendorModelId, sessionId)
+        ? await countGptViaNative(serialized, vendorModelId, sessionId, probe)
         : null;
     if (nativeResult != null) {
       return nativeResult;
     }
-    return countTiktoken(serialized, vendorModelId, scope);
+    return countTiktoken(serialized, vendorModelId, scope, probe);
   }
   if (WEB_FAMILIES.has(family) || SP_FAMILIES.has(family)) {
     if (isNativeTokenizerAvailable()) {
@@ -480,11 +511,11 @@ async function countSerializedImpl(
         buildNativeCountRequest(serialized, family, vendorModelId, sessionId),
       );
       if (nativeResult != null) {
-        return mapNativeResult(nativeResult);
+        return mapNativeResult(nativeResult, probe);
       }
     }
     return {
-      count: fallbackCount(serialized, scope),
+      count: fallbackCount(serialized, scope, probe),
       // 原生分词器不可用（iOS / 未链接模块）时**必须**报 `heuristic` 而不是家族名：
       // 这里跑的是 cl100k 近似，不是该家族的真 tokenizer。报家族名会让压缩阈值
       // 把它当成「家族级精确读数」而不乘 0.85 安全系数，等于拿一个近似值卡精确
@@ -494,7 +525,7 @@ async function countSerializedImpl(
     };
   }
   return {
-    count: fallbackCount(serialized, scope),
+    count: fallbackCount(serialized, scope, probe),
     counterKind: "heuristic",
     estimated: true,
   };
@@ -509,6 +540,7 @@ async function countSerializedImpl(
 async function countHeuristicViaNative(
   serialized: string,
   sessionId: string | undefined,
+  probe?: ProbeStats,
 ): Promise<SerializedCountResult | null> {
   if (!isNativeTokenizerAvailable()) {
     return null;
@@ -520,7 +552,9 @@ async function countHeuristicViaNative(
     if (nativeResult == null) {
       return null;
     }
-    probeRoute = "native-heuristic";
+    if (probe != null) {
+      probe.route = "native-heuristic";
+    }
     return {
       count: nativeResult.tokenCount,
       counterKind: "heuristic",

@@ -303,11 +303,10 @@ export function useChatTabScope({
         clearTimeout(slot.timer);
       }
       const timerKey = key;
-      // 首刷长窗错峰（见 CHAT_TOKEN_LABEL_FIRST_DEBOUNCE_MS 注释）：窗口按
-      // 「本会话是否已刷出过标签」选档，新会话首刷让路、后续刷新保持响应。
-      const win = slot.hasLabel
-        ? CHAT_TOKEN_LABEL_DEBOUNCE_MS
-        : CHAT_TOKEN_LABEL_FIRST_DEBOUNCE_MS;
+      // 首刷错峰窗口已于 token-count-perf-r2 Part D 撤回（1200→300，与常规
+      // 刷新同档，多触发源合并语义不变）。若日后要恢复首刷差异化窗口，必须
+      // 同时回看 PRECISE_UPGRADE_START_DELAY_MS 与取消链路是否还兜得住。
+      const win = CHAT_TOKEN_LABEL_DEBOUNCE_MS;
       // 与本轮 timer 同生命周期记下会话身份：换会话/卸载时按它收口升级延迟。
       slot.sessionId = sessionId ?? null;
       slot.timer = setTimeout(() => {

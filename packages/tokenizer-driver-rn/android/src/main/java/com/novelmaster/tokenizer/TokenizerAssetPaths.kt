@@ -1,6 +1,6 @@
 package com.novelmaster.tokenizer
 
-/** Asset paths under `assets/tokenizers/` — mirrors core `tokenizerAssetPaths`. */
+/** Asset paths under `assets/tokenizers/` — WEB/SP 段与 core `tokenizerAssetPaths` 镜像；tiktoken 两表（cl100k/o200k）为本目录独有（见 README 分叉声明）。 */
 internal data class AssetPathSpec(
   val primary: String,
   val fallback: String? = null,
