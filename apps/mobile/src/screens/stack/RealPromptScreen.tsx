@@ -1,6 +1,9 @@
 /**
- * Full-screen real prompt preview: turns (轮) — template/user 轮渲染折叠段卡片，
- * assistant 轮渲染 PromptTurnCard（摘要 + 进详情）。
+ * Full-screen real prompt preview: 三层结构（轮摘要卡 → 就地展开卡片流 → 全屏富文本）。
+ *
+ * 展开态**屏级受控**（`openTurnIds` / `openGroupIds` 两个 Set）：轮卡展开区在
+ * FlatList 里，`removeClippedSubviews` 会卸载滚出窗口的 item，组件内 state 随之
+ * 丢失，用户滚回来会发现展开态被重置。屏级 state 只随数据重载清空。
  *
  * 导航红线：顶层**只** import `useRoute`，`useNavigation` 留在 PromptTurnCard
  * 内部（既有 scope 用例对 @react-navigation/native 整模块 mock 只有 useRoute）。
@@ -15,8 +18,9 @@ import {
 } from 'react-native';
 import type {PromptPreviewTurn} from '@novel-master/core/prompt';
 import {useRoute, type RouteProp} from '@react-navigation/native';
-import {PromptPreviewSegmentCard} from '@/components/prompt/PromptPreviewSegmentCard';
 import {PromptTurnCard} from '@/components/prompt/PromptTurnCard';
+import {PromptToolGroupCard} from '@/components/prompt/PromptToolGroupCard';
+import {PromptTurnLeafCard} from '@/components/prompt/PromptTurnLeafCard';
 import {useMobileScope} from '@/hooks/useMobileScope';
 import {useRuntime} from '@/hooks/useRuntime';
 import {buildRealPromptPreviewTurns} from '@/services/prompt-preview.service';
@@ -42,6 +46,41 @@ export function RealPromptScreen() {
   const [turns, setTurns] = useState<readonly PromptPreviewTurn[]>([]);
   const [error, setError] = useState<string | undefined>();
   const [loading, setLoading] = useState(true);
+  /** 展开中的轮 id（屏级受控，见文件头注释）。 */
+  const [openTurnIds, setOpenTurnIds] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  /** 展开中的工具组卡 id（同上）。 */
+  const [openGroupIds, setOpenGroupIds] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+
+  const toggleId = useCallback(
+    (
+      setter: React.Dispatch<React.SetStateAction<ReadonlySet<string>>>,
+      id: string,
+    ) => {
+      setter(prev => {
+        const next = new Set(prev);
+        if (next.has(id)) {
+          next.delete(id);
+        } else {
+          next.add(id);
+        }
+        return next;
+      });
+    },
+    [],
+  );
+
+  const toggleTurn = useCallback(
+    (turnId: string) => toggleId(setOpenTurnIds, turnId),
+    [toggleId],
+  );
+  const toggleGroup = useCallback(
+    (groupId: string) => toggleId(setOpenGroupIds, groupId),
+    [toggleId],
+  );
 
   const load = useCallback(async () => {
     if (projectId == null || sessionId == null) {
@@ -52,6 +91,12 @@ export function RealPromptScreen() {
     }
     setLoading(true);
     setError(undefined);
+    // 换了会话，旧会话的展开态没有意义：跟随数据一起清。
+    // ⚠️ 已经空的时候**返回原引用**：屏级 runtime 若不是稳定引用，load 会随每次
+    // 重渲染换新的 useCallback → useEffect 重跑；这里若无条件塞新 Set，
+    // setState 永远「有变化」→ 重渲染 → 再跑 effect，死循环到 Maximum update depth。
+    setOpenTurnIds(prev => (prev.size === 0 ? prev : new Set()));
+    setOpenGroupIds(prev => (prev.size === 0 ? prev : new Set()));
     try {
       const list = await buildRealPromptPreviewTurns(runtime, {
         projectId,
@@ -97,31 +142,55 @@ export function RealPromptScreen() {
           }
           ListFooterComponent={
             <Text style={[styles.hint, {color: tokens.textSecondary}]}>
-              在聊天工作区调整纳入规则可改变预览内容。默认折叠以减轻长文本渲染压力。
+              在聊天工作区调整纳入规则可改变预览内容。点轮卡头部就地展开，点 ⤢ 或卡片进入全屏阅读。
             </Text>
           }
-          renderItem={({item}) => <PromptTurnRow turn={item} />}
+          renderItem={({item}) => (
+            <PromptTurnRow
+              turn={item}
+              openTurnIds={openTurnIds}
+              openGroupIds={openGroupIds}
+              onToggleTurn={toggleTurn}
+              onToggleGroup={toggleGroup}
+            />
+          )}
         />
       )}
     </View>
   );
 }
 
-/**
- * 一轮的渲染：assistant 轮走整轮卡片（点进详情读全文），
- * template/user 轮把该轮各段按序铺成现有折叠段卡片（user 轮可能多段）。
- */
-function PromptTurnRow({turn}: {turn: PromptPreviewTurn}) {
-  if (turn.kind === 'assistant') {
-    return <PromptTurnCard turn={turn} />;
-  }
+/** 一轮的渲染：统一轮卡 + 展开区的有序卡片流（工具组卡 / 叶子卡）。 */
+function PromptTurnRow({
+  turn,
+  openTurnIds,
+  openGroupIds,
+  onToggleTurn,
+  onToggleGroup,
+}: {
+  turn: PromptPreviewTurn;
+  openTurnIds: ReadonlySet<string>;
+  openGroupIds: ReadonlySet<string>;
+  onToggleTurn: (turnId: string) => void;
+  onToggleGroup: (groupId: string) => void;
+}) {
   return (
-    // key 归 FlatList 的 keyExtractor，两分支统一不加。
-    <React.Fragment>
-      {turn.items.map(segment => (
-        <PromptPreviewSegmentCard key={segment.id} segment={segment} />
-      ))}
-    </React.Fragment>
+    // key 归 FlatList 的 keyExtractor，这里不加。
+    <PromptTurnCard turn={turn} expanded={openTurnIds.has(turn.id)} onToggle={onToggleTurn}>
+      {turn.cards.map(card =>
+        card.type === 'toolGroup' ? (
+          <PromptToolGroupCard
+            key={card.id}
+            card={card}
+            turnId={turn.id}
+            expanded={openGroupIds.has(card.id)}
+            onToggle={onToggleGroup}
+          />
+        ) : (
+          <PromptTurnLeafCard key={card.id} card={card} turnId={turn.id} />
+        ),
+      )}
+    </PromptTurnCard>
   );
 }
 

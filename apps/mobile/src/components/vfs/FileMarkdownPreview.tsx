@@ -45,7 +45,16 @@ export function isMarkdownPreviewPath(path: string): boolean {
   return MARKDOWN_PATH.test(path);
 }
 
-export type PreviewRenderKind = 'markdown' | 'txt';
+/**
+ * 渲染档位：
+ * - `markdown`：文档档，走 front-matter 拆分 + markdown 管线；
+ * - `txt`：文本档（也是非 md 文件的兜底），纯文本铺开可长按复制；
+ * - `rich`：富文本直读档（提示词轮/叶子全屏用）。**跳过 front-matter 拆分与
+ *   扩展名判定**，直接进 WebView 富文本管线——刻意不做「伪 .md 路径」那条路：
+ *   `splitMarkdownFrontMatter` 会把 `---` 开头的正文误当 YAML，
+ *   markdown-it 的 linkify 又会把 `[段名]` 渲染成坏链。
+ */
+export type PreviewRenderKind = 'markdown' | 'txt' | 'rich';
 
 interface FileMarkdownPreviewProps {
   path: string;
@@ -414,6 +423,40 @@ export function FileMarkdownPreview({
       <Text style={[styles.empty, {color: tokens.textSecondary}]}>
         （空文件）
       </Text>
+    );
+  }
+
+  // rich 档：跳过 front-matter 拆分与扩展名判定，整段进 WebView 富文本管线。
+  // 分支必须**插在下面的 plain 兜底判定之前**——`turn-1` 这类伪 path 不是 md
+  // 路径，落到 `!isMdPath` 就被吃掉退化成纯文本了。
+  // 200k 超限降级与 rn 引擎回退沿用既有语义（与 md 档同一套阈值/引擎开关）。
+  if (renderKind === 'rich') {
+    const richOverLimit = isWebViewDocumentOverLimit(content);
+    if (previewEngine === 'webview') {
+      let richHtml: string | undefined;
+      if (!richOverLimit) {
+        try {
+          richHtml = prepareTranscriptRichHtml(content);
+        } catch {
+          richHtml = undefined;
+        }
+      }
+      return (
+        <View style={[styles.root, previewFill && styles.fillRoot]}>
+          <RichDocumentWebView
+            key={path}
+            html={richHtml}
+            plain={content}
+            overLimit={richOverLimit}
+            style={previewFill ? styles.webBody : undefined}
+          />
+        </View>
+      );
+    }
+    return (
+      <PreviewScrollWrap previewFill={previewFill}>
+        <RichContentBody content={content} tokens={tokens} />
+      </PreviewScrollWrap>
     );
   }
 

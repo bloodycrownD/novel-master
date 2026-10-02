@@ -398,6 +398,101 @@ title: x
     expect(combined).toContain('  - a');
   });
 
+  it('renderKind rich sends markdown html to RichDocumentWebView (T-MP7-1)', async () => {
+    // 非 md 伪路径（提示词轮/叶子全屏口径）：必须走富文本管线而不是被
+    // `!isMdPath` 兜底吃掉退化成纯文本。
+    const content = '[assistant]\n\n```ts\nconst a = 1;\n```';
+    let tree: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(
+        <FileMarkdownPreview
+          path="turn-turn-12"
+          content={content}
+          tokens={tokens}
+          previewFill
+          renderKind="rich"
+        />,
+      );
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(
+      tree!.root.findByProps({testID: 'rich-document-webview'}),
+    ).toBeTruthy();
+    const lastCall = mockRichDocumentWebView.mock.calls.at(-1)?.[0];
+    expect(typeof lastCall?.html).toBe('string');
+    expect(lastCall?.html.length).toBeGreaterThan(0);
+    expect(lastCall?.overLimit).toBe(false);
+    // rich 档不做 front-matter 拆分（没有 fm-card）。
+    expect(lastCall?.frontMatterHtml).toBeUndefined();
+  });
+
+  it('renderKind rich over webview cap falls back to plain (T-MP7-2)', async () => {
+    const huge = 'x'.repeat(RICH_DOCUMENT_WEBVIEW_MAX_CHARS + 1);
+    await act(async () => {
+      TestRenderer.create(
+        <FileMarkdownPreview
+          path="turn-turn-12"
+          content={huge}
+          tokens={tokens}
+          renderKind="rich"
+        />,
+      );
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    const lastCall = mockRichDocumentWebView.mock.calls.at(-1)?.[0];
+    expect(lastCall).toMatchObject({
+      plain: huge,
+      overLimit: true,
+      html: undefined,
+    });
+  });
+
+  it('renderKind rich falls back to RichContentBody on rn engine (T-MP7-3)', async () => {
+    mockReadEngine.mockResolvedValue('rn');
+    let tree: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(
+        <FileMarkdownPreview
+          path="turn-turn-12"
+          content={'[assistant]\n正文'}
+          tokens={tokens}
+          renderKind="rich"
+        />,
+      );
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    // 引擎是异步读回来的，首帧仍按 webview 档渲染；读到 rn 后回退 RichContentBody
+    // （跟随既有引擎开关语义，与 md 档 rn 用例同款时序）。
+    expect(tree!.root.findByProps({testID: 'rich-content-body'})).toBeTruthy();
+  });
+
+  it('renderKind rich keeps `---` body intact, no front-matter split (T-MP7-4)', async () => {
+    const content = '---\ntitle: 正文开头的分隔线\n---\n\n# 正文';
+    await act(async () => {
+      TestRenderer.create(
+        <FileMarkdownPreview
+          path="turn-turn-12"
+          content={content}
+          tokens={tokens}
+          renderKind="rich"
+        />,
+      );
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    const lastCall = mockRichDocumentWebView.mock.calls.at(-1)?.[0];
+    // 整段进管线（plain 是全文，不被 front-matter 拆走）。
+    expect(lastCall?.plain).toContain('title: 正文开头的分隔线');
+    expect(lastCall?.frontMatterHtml).toBeUndefined();
+  });
+
   it('non-md txt tab does not mount RichDocumentWebView (T3)', async () => {
     const content = '# Not rendered as markdown';
     let tree: TestRenderer.ReactTestRenderer;

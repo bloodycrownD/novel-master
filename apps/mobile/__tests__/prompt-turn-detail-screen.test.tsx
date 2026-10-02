@@ -1,9 +1,10 @@
 /**
- * T-R7（mobile 侧之二）：轮详情屏经模块级 callback 取数渲染正文。
+ * T-R7 / T-MP5（mobile 侧之二）：轮详情屏经模块级 callback 取数渲染正文。
  *
  * 观测面：FileMarkdownPreview 桩收到的 props——纯预览态壳（无 editor 内容、
- * 无保存/切换按钮）、渲染档位固定 txt（plain 分支即 Text selectable monospace，
- * 满足可复制），正文即 callback 里的 turn.body 单串。
+ * 无保存/切换按钮）、渲染档位固定 rich（跳过 front-matter 与扩展名判定，
+ * 直接进 WebView 富文本管线；不做「伪 .md 路径」那条路），path 是
+ * `turn-<turnId>` / `turn-<turnId>-leaf-<leafId>` 稳定伪 key（WebView 靠它重挂载）。
  */
 import React from 'react';
 import {describe, expect, it, jest, beforeEach} from '@jest/globals';
@@ -22,8 +23,13 @@ const mockPreviewProps: {
   previewFill?: boolean;
 }[] = [];
 
+const mockRouteParams: {title?: string; turnId?: string} = {
+  title: '好的，我来看看。',
+  turnId: 'turn-12',
+};
+
 jest.mock('@react-navigation/native', () => ({
-  useRoute: () => ({params: {title: '好的，我来看看。'}}),
+  useRoute: () => ({params: mockRouteParams}),
 }));
 
 jest.mock('@/navigation/HeaderContext', () => ({
@@ -90,22 +96,40 @@ describe('PromptTurnDetailScreen（T-R7 mobile）', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockPreviewProps.length = 0;
+    mockRouteParams.title = '好的，我来看看。';
+    mockRouteParams.turnId = 'turn-12';
     // 模块级单例复位。
     takePromptTurnDetail();
   });
 
-  it('T-R7-5 经 callback 取数渲染 body（纯预览态 / txt 档 / 铺满）', () => {
+  it('T-R7-5 经 callback 取数渲染 body（纯预览态 / rich 档 / 铺满）', () => {
     setPromptTurnDetail({title: '好的，我来看看。', body: BODY});
     const tree = renderScreen();
     expect(mockPreviewProps[0]).toMatchObject({
-      path: 'prompt.txt',
+      path: 'turn-turn-12',
       content: BODY,
-      renderKind: 'txt',
+      renderKind: 'rich',
       previewFill: true,
     });
     // 纯预览态：壳内不渲染编辑区，也不渲染保存/切换 toolbar。
     expect(tree.root.findAllByType('FileMarkdownPreview' as never).length).toBe(1);
     expect(tree.root.findAllByType('CodeEditorWebView' as never).length).toBe(0);
+  });
+
+  it('T-MP5 叶子级全屏：path 带 leafId 后缀（WebView 靠 key 重挂载）', () => {
+    setPromptTurnDetail({title: 'assistant', body: BODY, leafId: 'card-m2-0'});
+    renderScreen();
+    expect(mockPreviewProps[0]).toMatchObject({
+      path: 'turn-turn-12-leaf-card-m2-0',
+      renderKind: 'rich',
+    });
+  });
+
+  it('T-MP5 轮 id 缺失时回落占位 key（不抛）', () => {
+    mockRouteParams.turnId = undefined;
+    setPromptTurnDetail({title: 'A', body: BODY});
+    renderScreen();
+    expect(mockPreviewProps[0]?.path).toBe('turn-unknown');
   });
 
   it('T-R7-6 挂载即消费（读后即清，不残留给下一次进屏）', () => {
