@@ -352,6 +352,58 @@ describe("AgentEditorView 模型绑定保留 (E)", () => {
     }
   });
 
+  it("T-E-6 unresolved 态改选有效模型 → 下拉显示新模型、提示消失、保存载荷为新模型", async () => {
+    const mounted = await mountEditor({
+      // 原绑定 m-legacy 不在 savedModels 列表里 ⇒ 进 unresolved 分支。
+      agentModel: "m-legacy",
+      providersOk: true,
+      savedModelsOk: true,
+      hasSavedModel: true,
+    });
+    try {
+      // 前置：unresolved 态——提示宣称「保存将保留原绑定」。
+      const before = textsOf(mounted.renderer.toJSON()).join("");
+      assert.ok(
+        before.includes("原绑定模型当前不可用"),
+        `unresolved 态应渲染提示，实际：${before.slice(0, 400)}`,
+      );
+
+      const select = findModelSelect(mounted.renderer.root);
+      await act(async () => {
+        (select as unknown as {props: {onChange: (e: unknown) => void}}).props.onChange(
+          {target: {value: "m-pinned"}},
+        );
+      });
+      await act(async () => {});
+      // 重新取：findAll 拿的是旧实例，重新解析当前渲染树。
+      const after = findModelSelect(mounted.renderer.root);
+
+      // 牙齿①：value 三段式的第一段（unresolvedModelId != null）不再抢优先级，
+      // 下拉真的落在新选中的模型上；不补那行 setUnresolvedModelId(null) 时此处是哨兵值。
+      assert.equal(
+        (after as unknown as {props: {value: string}}).props.value,
+        "m-pinned",
+        "改选有效模型后下拉必须显示新模型，而不是被 unresolved 哨兵项拉回去",
+      );
+      // 牙齿②：提示随之消失——它宣称的是「保存将保留原绑定」，改绑后这话已经不真了。
+      const hint = textsOf(mounted.renderer.toJSON()).join("");
+      assert.ok(
+        !hint.includes("原绑定模型当前不可用"),
+        "改选有效模型后 unresolved 提示必须消失",
+      );
+
+      await clickSave(mounted.renderer.root);
+      assert.equal(mounted.upserts.length, 1);
+      assert.equal(
+        mounted.upserts[0]!.definition.model,
+        "m-pinned",
+        "保存载荷必须是用户主动选的新模型",
+      );
+    } finally {
+      mounted.restore();
+    }
+  });
+
   it("T-E-5 成功路径：不渲染提示、载荷带原绑定、加载后未改动时 dirty=false", async () => {
     const mounted = await mountEditor({
       agentModel: "m-pinned",

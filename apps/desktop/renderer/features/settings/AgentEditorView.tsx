@@ -715,6 +715,11 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
     }
     setModelEnabled(true);
     setSavedModelId(id);
+    // 改绑成功即清 unresolved：unresolved 态下选一个真实模型，语义与
+    // 「选回默认(跟随)」一样是「我主动改绑了」，留着会让三段式 value 的第一段
+    // 把下拉重新拉回哨兵项、提示继续宣称「保存将保留原绑定」——而实际落库的是新模型，
+    // 用户在 UI 上看不见自己改绑了（CR-F08 / OQ5 默认案：清掉，不拆双 state）。
+    setUnresolvedModelId(null);
     const selected = savedModels.find((m) => m.id === id);
     setProviderId(selected?.providerId ?? "");
   };
