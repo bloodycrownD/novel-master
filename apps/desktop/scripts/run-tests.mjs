@@ -39,6 +39,7 @@ const testTargets =
 //    守卫于是把「跑过了」误判成「收集 0 条」，报出一句完全误导的错误信息。
 //    （实测当时 628 条用例的 stdout = 204,614 字节，距 1 MiB 还有 5× 余量；
 //      那是 H6 落地当时的快照数字，套件后来又长了，写大不是嫌小，是不给增长留悬崖。）
+const MAX_BUFFER = 64 * 1024 * 1024;
 const result = spawnSync(
   `npx tsx --tsconfig tsconfig.renderer.json --test ${testTargets}`,
   {
@@ -47,10 +48,22 @@ const result = spawnSync(
     env,
     shell: true,
     encoding: "utf8",
-    maxBuffer: 64 * 1024 * 1024,
+    maxBuffer: MAX_BUFFER,
   },
 );
 process.stdout.write(result.stdout ?? "");
+// ⚠️ 顺序是硬要求（CR-F11）：`result.error` 判定必须排在 `status` 判定**之前**。
+// spawnSync 超 maxBuffer 时返回 {status: null, error: ENOBUFS, stdout: 被截断}，
+// `null !== 0` 为真 ⇒ 旧顺序下脚本在这一行就 exit 了，下面那行诊断永远不打印：
+// 真实原因（内存上限）与被截掉的 tap 汇总**双失**，只留一句无解释的 exit 1。
+if (result.error != null) {
+  console.error(
+    `[run-tests] 子进程异常：${result.error.code ?? result.error.message}；` +
+      `stdout 已截断（上限 ${MAX_BUFFER} 字节），以上输出不完整。` +
+      `shell=${process.platform}；testTargets=${testTargets}。`,
+  );
+  process.exit(1);
+}
 if (result.status !== 0) {
   process.exit(result.status ?? 1);
 }
@@ -63,7 +76,7 @@ assertNonZeroCollected({
   details: [
     `shell=${process.platform}`,
     `testTargets=${testTargets}`,
-    `spawnSync error=${result.error?.code ?? "none"}`,
+    `spawnSync status=${result.status}（error/ENOBUFS 已在其前单独判定，此处必为空）`,
     "N-P0-02 的假绿形态 —— 请检查 glob 与 shell 引号语义。",
   ],
 });

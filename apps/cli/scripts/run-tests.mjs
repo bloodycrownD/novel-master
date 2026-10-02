@@ -57,10 +57,11 @@ if (files.length === 0) {
 //    进程去跑 tsx 的 CLI 入口，全程不经 shell。
 const tsxCli = path.join(cliRoot, "..", "..", "node_modules", "tsx", "dist", "cli.mjs");
 const BATCH_SIZE = 60;
+// ⚠️ maxBuffer 必须显式放大：spawnSync 默认上限 1 MiB，stdout 超出即**静默截断**
+//    并返回 status=null，被截掉的正是末尾那段 `# tests N`，守卫会误判成「收集 0 条」。
+const MAX_BUFFER = 64 * 1024 * 1024;
 for (let i = 0; i < files.length; i += BATCH_SIZE) {
   const batch = files.slice(i, i + BATCH_SIZE);
-  // ⚠️ maxBuffer 必须显式放大：spawnSync 默认上限 1 MiB，stdout 超出即**静默截断**
-  //    并返回 status=null，被截掉的正是末尾那段 `# tests N`，守卫会误判成「收集 0 条」。
   const result = spawnSync(
     process.execPath,
     [tsxCli, "--test", ...batch],
@@ -68,11 +69,23 @@ for (let i = 0; i < files.length; i += BATCH_SIZE) {
       cwd: cliRoot,
       stdio: ["inherit", "pipe", "inherit"],
       encoding: "utf8",
-      maxBuffer: 64 * 1024 * 1024,
+      maxBuffer: MAX_BUFFER,
     },
   );
   const stdout = result.stdout ?? "";
   process.stdout.write(stdout);
+  // ⚠️ 顺序是硬要求（CR-F11，与 apps/desktop/scripts/run-tests.mjs 同款）：`result.error`
+  // 判定必须排在 `status` 判定**之前**。截断时 spawnSync 返回 {status: null, error: ENOBUFS}，
+  // `null !== 0` 为真 ⇒ 旧顺序下此处就 exit 了，诊断永远打不出来，真实原因与被截掉的
+  // tap 汇总双失，只留一句无解释的 exit 1。
+  if (result.error != null) {
+    console.error(
+      `[run-tests] 子进程异常：${result.error.code ?? result.error.message}；` +
+        `stdout 已截断（上限 ${MAX_BUFFER} 字节），以上输出不完整。` +
+        `cwd=${cliRoot}；本批文件数 ${batch.length}。`,
+    );
+    process.exit(1);
+  }
   if (result.status !== 0) {
     process.exit(result.status ?? 1);
   }
@@ -80,6 +93,10 @@ for (let i = 0; i < files.length; i += BATCH_SIZE) {
   assertNonZeroCollected({
     collected,
     where: "apps/cli run-tests.mjs",
-    details: [`本批文件数 ${batch.length}`, `cwd=${cliRoot}`, `子进程 status=${result.status}`],
+    details: [
+      `本批文件数 ${batch.length}`,
+      `cwd=${cliRoot}`,
+      `子进程 status=${result.status}（error/ENOBUFS 已在其前单独判定，此处必为空）`,
+    ],
   });
 }
