@@ -55,6 +55,22 @@ export class ChatTranscriptPage {
     });
   }
 
+  /**
+   * 不过滤角色的全量消息 id（含 assistant）。
+   *
+   * T-E2（assistant rewind）的锚点与断言对象是 assistant 消息——走 user
+   * 过滤入口必拿不到，须用本入口；其余「锚定用户消息」的用例继续用
+   * getMessageIds（cr2-D-1）。
+   */
+  async getAllMessageIds(): Promise<string[]> {
+    await this.openWebView();
+    return browser.execute(() => {
+      return Array.from(document.querySelectorAll('.row.message'))
+        .map(el => el.getAttribute('data-id'))
+        .filter((id): id is string => id != null && id !== '');
+    });
+  }
+
   async scrollTranscriptUp(pixels = 400): Promise<void> {
     await this.openWebView();
     await browser.execute((dy: number) => {

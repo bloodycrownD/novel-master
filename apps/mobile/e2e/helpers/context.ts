@@ -141,8 +141,12 @@ export async function isSessionListView(): Promise<boolean> {
  * 「element not interactable」甚至静默点空），所以这一层等待是必须的。
  */
 export async function switchToSessionListView(timeoutMs = 20000): Promise<void> {
-  await switchToConversationWebView(timeoutMs);
-  const deadline = Date.now() + timeoutMs;
+  // 总预算 = timeoutMs：前半给 WebView context 切换、余下给 data-view 轮询——
+  // 原先两段各吃满 timeoutMs（实际 2×），失败排障要等双倍时间（cr2-G-2）。
+  const startedAt = Date.now();
+  await switchToConversationWebView(Math.ceil(timeoutMs / 2));
+  const contextMs = Date.now() - startedAt;
+  const deadline = startedAt + timeoutMs;
   while (Date.now() < deadline) {
     if (await isSessionListView()) {
       return;
@@ -150,7 +154,8 @@ export async function switchToSessionListView(timeoutMs = 20000): Promise<void> 
     await browser.pause(400);
   }
   throw new Error(
-    '[e2e] 未切到会话列表视图：#app[data-view] 一直是 ' +
+    '[e2e] 未切到会话列表视图（context 切换已耗时 ' +
+      `${contextMs}ms / data-view 轮询 ${Date.now() - startedAt - contextMs}ms）：#app[data-view] 一直是 ` +
       `${JSON.stringify(
         await browser
           .execute(() => document.getElementById('app')?.getAttribute('data-view') ?? null)

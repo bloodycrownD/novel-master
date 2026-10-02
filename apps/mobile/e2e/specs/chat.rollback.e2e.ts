@@ -120,7 +120,9 @@ describe('E2 chat rollback', () => {
       const tailAssistantId = E2E_FIXTURE_TAIL_ASSISTANT_MESSAGE_ID;
 
       await chatTranscriptPage.waitForMessage(assistantId);
-      const idsBefore = await chatTranscriptPage.getMessageIds();
+      // assistant rewind 的锚点与断言对象是 assistant 消息：走不过滤的全量入口
+      // （cr2-D-1），user 过滤入口拿不到 assistant 行。
+      const idsBefore = await chatTranscriptPage.getAllMessageIds();
       expect(idsBefore.length).toBeGreaterThanOrEqual(4);
       expect(idsBefore).toContain(assistantId);
       expect(idsBefore).toContain(tailUserId);
@@ -133,7 +135,7 @@ describe('E2 chat rollback', () => {
       const toast = await vfsPage.readToastMessage();
       expect(toast).toContain('回滚成功');
 
-      const idsAfter = await chatTranscriptPage.getMessageIds();
+      const idsAfter = await chatTranscriptPage.getAllMessageIds();
       expect(idsAfter.length).toBe(2);
       expect(idsAfter[0]).toBe(idsBefore[0]);
       expect(idsAfter[1]).toBe(assistantId);
