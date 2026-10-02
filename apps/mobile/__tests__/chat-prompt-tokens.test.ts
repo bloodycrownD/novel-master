@@ -468,7 +468,9 @@ describe('chat-prompt-tokens.service', () => {
       expect(first).toBe('gpt ≈ 30k / 128k (23%)');
       // 延迟窗口内：精确档 resolve 一次都没跑（只有首帧估算那一次）——
       // 「进会话立刻交互」的黄金窗口不与秒级整串计数竞争。
-      await jest.advanceTimersByTimeAsync(2499);
+      // （token-count-perf-r2 Part D 起窗口=800ms，边界值一律引用常量——
+      // 2026-10-01 版本硬编码 2499/1 曾在调窗时静默变错值。）
+      await jest.advanceTimersByTimeAsync(PRECISE_UPGRADE_START_DELAY_MS - 1);
       expect(mockResolvePromptTokensWithBackfill).toHaveBeenCalledTimes(1);
       // 越窗启动：完整口径跑完回调升级（fake timers 下微任务由 advance 一并 flush）
       await jest.advanceTimersByTimeAsync(1);
@@ -620,7 +622,8 @@ describe('chat-prompt-tokens.service', () => {
       );
       expect(first).toBe('gpt ≈ 30k / 128k (23%)');
       // 延迟窗口内：升级还挂着（只有首帧那一次 resolve）。
-      await jest.advanceTimersByTimeAsync(1000);
+      // （Part D 起窗口=800ms，1000 会越窗——改引常量半窗。）
+      await jest.advanceTimersByTimeAsync(Math.floor(PRECISE_UPGRADE_START_DELAY_MS / 2));
       expect(mockResolvePromptTokensWithBackfill).toHaveBeenCalledTimes(1);
 
       // 收口（换会话 / 卸载时 service 的正式出口）。

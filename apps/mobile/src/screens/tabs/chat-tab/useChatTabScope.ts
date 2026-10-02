@@ -112,12 +112,12 @@ export function useChatTabScope({
   // 与 desktop service 层同款语义：窗口内触发重置计时共享同一次执行；
   // 在途时新触发复用在途并安排追赶轮（最后一次触发必产生一次计算）。
   const CHAT_TOKEN_LABEL_DEBOUNCE_MS = 300;
-  // 进会话首刷的长窗口（2026-10-01 切会话后卡顿复现）：首帧轮的整串装配
-  // +读口 build/resolve 实测 0.2~1.2s（冷缓存更糟），300ms 就开跑恰好盖住
-  // 「切会话立刻交互/立刻退出」的窗口。新会话首刷（hasLabel=false）错峰到
-  // 本窗口再跑——chip 晚约 1s 亮，换进会话交互不被重活堵；会话内后续刷新
-  // （已有标签）保持 300ms 响应不受影响。
-  const CHAT_TOKEN_LABEL_FIRST_DEBOUNCE_MS = 1200;
+  // 进会话首刷窗口（token-count-perf-r2 Part D 由 1200→300）：2026-10-01 设
+  // 1200 错峰的理由是「首帧轮整串装配+读口 0.2~1.2s 重活会堵切会话交互」——
+  // 如今侧滑取消已落地（tnc）、精确计数挪进 Kotlin 原生线程、JS 侧只剩
+  // ~200-400ms 装配，错峰保护的收益没了、代价（chip 晚 1s 亮）却全在用户
+  // 脸上。首刷回落与常规刷新同档 300ms，多触发源合并语义不变。
+  const CHAT_TOKEN_LABEL_FIRST_DEBOUNCE_MS = 300;
 
   // 升级回调的会话身份闸（cr-fix-spec-r2 s2/B-1 场景①）：记录最近一次
   // 刷新所属会话，升级回调写回前比对——跨会话切换后，旧会话在途升级的

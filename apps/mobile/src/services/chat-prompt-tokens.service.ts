@@ -262,17 +262,19 @@ async function loadChatTokenLabelWithFlag(
 const preciseUpgradeInflight = new Set<string>();
 
 /**
- * 精确升级的启动延迟（2026-10-01 真机实锤「进大会话立刻侧滑退出被堵 2.2s」）：
- * 升级轮的整串装配 + 家族真分词器计数是秒级重活，与 JS 线程、原生模块队列、
- * 单条 SQLite 连接全部共享——首帧完成后立刻启动，恰好盖住「进会话就开始交互」
- * 的窗口（立刻浏览/立刻退出都被它堵）。延后启动把首屏黄金窗口让给交互；延迟
- * 到期时先查弃权判据（视图已切走/run 在途即不跑），停留超过本窗口的用户才
- * 真正触发这轮计数。
+ * 精确升级的启动延迟（2026-10-01 设 2500：升级轮是秒级重活且不可中断，首帧后
+ * 立刻启动会堵「进会话就开始交互」的窗口）。
+ *
+ * **token-count-perf-r2 Part D 收窄至 800**：当初要躲的三样重活已被逐个拆雷——
+ * 家族计数挪进 Kotlin 原生线程（不占 JS/单 SQLite 争用只剩装配）、轮次可取消
+ * （侧滑即杀）、计数本体实测 200~500ms。剩余风险只有 JS 侧 ~200-400ms 的整串
+ * 装配，800ms 窗口足够让它错开切会话动画；再长的延迟就是把「数字晚亮」的代价
+ * 白送给用户。延迟到期时的弃权判据（视图已切走/run 在途即不跑）保持不变。
  *
  * 导出：测试的「还原默认值 / 推进假计时器」一律引用本常量——生产延迟一调，
  * 测试里的字面量会静默变成错值（cr2-B-2）。
  */
-export const PRECISE_UPGRADE_START_DELAY_MS = 2500;
+export const PRECISE_UPGRADE_START_DELAY_MS = 800;
 let preciseUpgradeStartDelayMs = PRECISE_UPGRADE_START_DELAY_MS;
 
 /**
