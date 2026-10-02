@@ -39,7 +39,7 @@ const fullLayout: AgentPromptLayout = {
   persist: [{ name: "persona", type: "text", role: "user", content: "人设" }],
   dynamicEnabled: true,
   dynamic: [
-    { name: "state", type: "text", role: "user", content: "dyn", lifecycle: "once" },
+    { name: "state", type: "text", role: "user", content: "dyn" },
   ],
 };
 

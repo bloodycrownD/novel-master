@@ -73,7 +73,6 @@
 | agent 编辑器块操作 | `@novel-master/core/config-forms/agent` | `@novel-master/core/prompt` |
 | front matter 解析 | `@novel-master/core/workplace` | `@novel-master/core/front-matter`（已删除 export） |
 | message checkpoint | `@novel-master/core/message-checkpoint` | `@novel-master/core/session-fs` |
-| 遗留 PromptBlockLifecycle 类型 | 内部 `domain/prompt/model/prompt-block.js` | —（从未从 public 面转出） |
 
 重复 export **必须** 指向同一实现（见 `duplicate-export-consistency.test.ts`）。
 

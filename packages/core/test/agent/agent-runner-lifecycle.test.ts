@@ -78,8 +78,8 @@ function runnerDeps(
   };
 }
 
-describe("AgentRunner prompt block lifecycle", () => {
-  it("R1: once dynamic block only on step 0 history", async () => {
+describe("AgentRunner dynamic 区 once 语义", () => {
+  it("R1: dynamic block only on step 0 history", async () => {
     const session = new InMemoryAgentSession();
     await session.append("user", textBlocks("go"));
 
@@ -89,7 +89,7 @@ describe("AgentRunner prompt block lifecycle", () => {
         persist: [],
         dynamicEnabled: true,
         dynamic: [
-          { name: "kick", type: "text", role: "user", content: "继续", lifecycle: "once" },
+          { name: "kick", type: "text", role: "user", content: "继续" },
         ],
       },
     };
@@ -148,25 +148,23 @@ describe("AgentRunner prompt block lifecycle", () => {
     assert.equal(step1Kick, undefined);
   });
 
-  it("R2: always dynamic block on every step", async () => {
-    const session = new InMemoryAgentSession();
-    await session.append("user", textBlocks("go"));
-
+  it("R2: 跨轮新 run 的 step 0 重新注入 dynamic 块", async () => {
     const definition: AgentDefinition = {
-      name: "always-agent",
+      name: "again-agent",
       prompts: {
         persist: [],
+        dynamicEnabled: true,
         dynamic: [
           { name: "ctx", type: "text", role: "user", content: "prefix" },
         ],
       },
     };
 
-    let steps = 0;
+    const captured: ModelRequestOptions[] = [];
     const model: ModelRequestService = {
-      async request() {
-        steps += 1;
-        if (steps === 1) {
+      async request(_id, _prompt, options) {
+        captured.push(options);
+        if (captured.length % 2 === 1) {
           return {
             assistantText: "",
             blocks: [
@@ -190,16 +188,20 @@ describe("AgentRunner prompt block lifecycle", () => {
 
     const registry = new ToolRegistry();
     registerBuiltinTools(registry);
-    const runner = createAgentRunner(
-      runnerDeps({
-        session,
-        modelRequests: model,
-        registry,
-        toolCtx: mockToolCtx(mockVfs()),
-      }),
-    );
+    const makeRunner = (session: InMemoryAgentSession) =>
+      createAgentRunner(
+        runnerDeps({
+          session,
+          modelRequests: model,
+          registry,
+          toolCtx: mockToolCtx(mockVfs()),
+        }),
+      );
 
-    await runner.run({
+    // 第一轮 run：step0 注入、step1 跳过
+    const session1 = new InMemoryAgentSession();
+    await session1.append("user", textBlocks("go"));
+    await makeRunner(session1).run({
       definition,
       sessionId: SESSION_ID,
       projectId: PROJECT_ID,
@@ -207,8 +209,30 @@ describe("AgentRunner prompt block lifecycle", () => {
       workspaceModelId: RUN_MODEL_ID,
       maxSteps: 3,
     });
+    assert.ok(captured[0]!.history.some((m) => m.id === "prompt:ctx"));
+    assert.ok(
+      !captured[1]!.history.some((m) => m.id === "prompt:ctx"),
+      "step1 不应重复注入 dynamic 块"
+    );
 
-    assert.ok(steps >= 2);
+    // 第二轮新 run（同一 session 续接）：step0 重新注入
+    await session1.append("user", textBlocks("go again"));
+    await makeRunner(session1).run({
+      definition,
+      sessionId: SESSION_ID,
+      projectId: PROJECT_ID,
+      savedModelId: RUN_MODEL_ID,
+      workspaceModelId: RUN_MODEL_ID,
+      maxSteps: 3,
+    });
+    assert.ok(
+      captured[2]!.history.some((m) => m.id === "prompt:ctx"),
+      "新 run 的 step0 应重新注入 dynamic 块"
+    );
+    assert.ok(
+      !captured[3]!.history.some((m) => m.id === "prompt:ctx"),
+      "新 run 的 step1 仍不应注入"
+    );
   });
 
   it("R3: system 来自 layout.system 字段", async () => {

@@ -16,7 +16,6 @@
   "normalizeForLlmExport",
   "resolvePreviewThinkingContext",
   "resolveWorkplaceFromWire",
-  "shouldIncludeDynamicBlock",
   "validateAgentPromptLayout",
   "validateAgentPromptLayoutFromMaps",
   "validateDynamicMacros"

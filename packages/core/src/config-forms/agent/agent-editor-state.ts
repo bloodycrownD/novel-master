@@ -168,7 +168,6 @@ export const PROMPT_REGION_LABELS = {
   skillsReadonlyHint: "运行时注入生效技能索引。",
   skillsDisabledHint:
     "关闭后不注入索引且不注册 skill 工具；手动引用 skill 不受影响。",
-  dynamicLifecycleOnceHint: "仅首轮请求带入。",
 } as const;
 
 export function blockTypeLabel(
@@ -244,25 +243,6 @@ export function deletePersistTextBlock(
 ): PersistTextPromptBlock[] {
   const { textBlocks } = splitPersistBlocksForEditor(persist);
   return textBlocks.filter((_, index) => index !== textIndex);
-}
-
-type DynamicTextBlock = DynamicPromptBlock;
-
-/** dynamic 文本块是否在每轮 agent step 带入（lifecycle always）。 */
-export function isDynamicBlockPersistent(block: DynamicTextBlock): boolean {
-  return (block.lifecycle ?? "always") === "always";
-}
-
-/** 将 UI「常驻」开关映射为 lifecycle（常驻时省略字段）。 */
-export function withDynamicBlockPersistence(
-  block: DynamicTextBlock,
-  persistent: boolean
-): DynamicTextBlock {
-  if (persistent) {
-    const { lifecycle: _removed, ...rest } = block;
-    return rest;
-  }
-  return { ...block, lifecycle: "once" };
 }
 
 /**

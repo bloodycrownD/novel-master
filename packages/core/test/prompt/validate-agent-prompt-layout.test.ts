@@ -18,24 +18,35 @@ describe("validateAgentPromptLayoutFromMaps", () => {
     );
   });
 
-  it("拒绝 persist lifecycle", () => {
-    assert.throws(
-      () =>
-        validateAgentPromptLayoutFromMaps(
-          {
-            bad: {
-              type: "text",
-              role: "user",
-              content: "x",
-              lifecycle: "once",
-            },
-          },
-          {}
-        ),
-      (e: unknown) =>
-        e instanceof PromptError &&
-        e.message.includes("持久区文本块不得包含 lifecycle")
+  it("persist lifecycle 静默剥键后正常解析（与 zod 层同款 strip 语义）", () => {
+    const layout = validateAgentPromptLayoutFromMaps(
+      {
+        ok: {
+          type: "text",
+          role: "user",
+          content: "x",
+          lifecycle: "once",
+        },
+      },
+      {}
     );
+    assert.deepEqual(layout.persist, [
+      { name: "ok", type: "text", role: "user", content: "x" },
+    ]);
+  });
+
+  it("dynamic lifecycle（once / always / 非法值 / null）静默剥键", () => {
+    for (const lifecycle of ["once", "always", "foo", null]) {
+      const layout = validateAgentPromptLayoutFromMaps(
+        {},
+        {
+          d: { type: "text", role: "user", content: "x", lifecycle },
+        }
+      );
+      assert.deepEqual(layout.dynamic, [
+        { name: "d", type: "text", role: "user", content: "x" },
+      ]);
+    }
   });
 
   it("拒绝 persist system role", () => {

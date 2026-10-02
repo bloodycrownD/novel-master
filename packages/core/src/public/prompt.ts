@@ -18,7 +18,6 @@ export {
   WORKPLACE_TRUE_COMPAT_ASSISTANT_TEXT,
   layoutHasWorkplace,
 } from "../domain/prompt/model/agent-prompt-layout.js";
-export { shouldIncludeDynamicBlock } from "../domain/prompt/logic/should-include-dynamic-block.js";
 export {
   messageBodyText,
   messageBodyTextFromBlocks,
