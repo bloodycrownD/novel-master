@@ -328,12 +328,15 @@ describe("RT-01: gemini tool_use 查找源按 stepCompactionEmitted 复用 visib
    *
    * @param toolRounds 前 N 次模型请求返回 tool_use（每次产生一个 step）
    * @param compactOnStep >=0 时，该 step 的压缩评估返回 true
+   * @param ephemeral true 时以 persistMessages:false 跑（agent-runner 自装
+   *   EphemeralOverlayAgentSession：list() = 底库可见集 ++ 本 run 的 RAM overlay）
    */
   async function runAndCollect(opts: {
     readonly toolRounds: number;
     readonly savedModelId: string;
     readonly savedModelRepo: SavedModelRepository;
     readonly compactOnStep?: number;
+    readonly ephemeral?: boolean;
   }): Promise<{
     readonly lookups: Array<readonly ChatMessage[]>;
     readonly shadowRereads: Array<readonly ChatMessage[]>;
@@ -475,6 +478,7 @@ describe("RT-01: gemini tool_use 查找源按 stepCompactionEmitted 复用 visib
       sessionId,
       savedModelId: opts.savedModelId,
       workspaceModelId: opts.savedModelId,
+      ...(opts.ephemeral === true ? { persistMessages: false } : {}),
     });
     assert.notEqual(result.stopReason, "error");
 
@@ -554,6 +558,39 @@ describe("RT-01: gemini tool_use 查找源按 stepCompactionEmitted 复用 visib
       0,
       "openai / anthropic 适配器不消费查找源，注入点读取次数恒为 0",
     );
+  });
+
+  it("RT-1F: ephemeral 路径恒走旧读法（查找源为纯 DB 集，注入点计数 >= 1）", async () => {
+    const { lookupReadCount, lookups } = await runAndCollect({
+      toolRounds: 2,
+      savedModelId: "smoke/model",
+      savedModelRepo: geminiSavedModelRepository(),
+      ephemeral: true,
+    });
+    assert.ok(
+      lookupReadCount >= 1,
+      "ephemeral 路径的 step 开头 session.list() 含本 run 的 RAM overlay，而 listVisibleSessionMessages 是纯 DB 读——两者不是同一集合，复用分支的门禁必须把它挡回旧读法（CR-F17 甲案）",
+    );
+    // 计数来源唯一：ephemeral 路径的压缩块被 `if (persistMessages &&
+    // compactionConditions != null)` 挡在门外，stepCompactionEmitted 恒为 false，
+    // 所以这里的每一次读都来自 ephemeral 门禁本身（而非压缩重读）。
+    assert.equal(
+      lookupReadCount,
+      lookups.length,
+      "ephemeral 路径每一步都应走旧读法（读次数 = 模型请求次数）",
+    );
+    // wire 侧：旧读法下查找源是纯 DB 集，本 run 在 overlay 里追加的 tool_use id
+    // 一条都解析不到——出站 wire 与 RT-01 改动前一致（甲案刻意不引入的变化）。
+    const idsOf = (msgs: readonly ChatMessage[]): string[] =>
+      msgs.flatMap((m) =>
+        m.content.blocks.filter((b) => b.type === "tool_use").map((b) => b.id),
+      );
+    for (const [i, lookup] of lookups.entries()) {
+      assert.ok(
+        !idsOf(lookup).some((id) => id.startsWith("tu-rt01-")),
+        `第 ${i + 1} 步的查找源不得含本 run overlay 的 tool_use id（旧读法口径）`,
+      );
+    }
   });
 
   it("RT-1E: 复用分支与全量重读对 contents[] 输出逐字段全等", async () => {
