@@ -128,6 +128,38 @@ export function toSessionListItem(
   };
 }
 
+/**
+ * 两个字符串集合的**内容级**判等（size 相同 && 双向 `has` 全中）。
+ *
+ * 为什么需要它：两个徽标集合合挂在同一个 `subscribe` 通知上（受理 / 收尾 /
+ * 替换 / 水合都会触发），而 manager 一次通知里**两个集合常常都没变**。原先
+ * `sync()` 无条件 `setState(new Set(...))`——引用必变，于是链条一路放行：
+ * `sessionListPayload` 的 `useMemo` 依赖变了 → 重算出新对象 → 宿主的下发
+ * 比较器是引用比较、判定「变了」→ 列表态**全量重推**一次。内容一模一样，
+ * web 侧却要整批重建 DOM，白烧一次序列化 + 一次渲染。
+ *
+ * 判等后内容未变就**不换引用**：依赖不变 → memo 不重算 → 载荷引用不变 →
+ * 宿主不下发。模块级纯函数导出，这条判路单测直接调它即可，不必挂整棵树。
+ */
+export function sameStringSet(
+  a: ReadonlySet<string>,
+  b: ReadonlySet<string>,
+): boolean {
+  if (a === b) {
+    return true;
+  }
+  if (a.size !== b.size) {
+    return false;
+  }
+  // size 已相等，单向 `has` 全中即等价（集合无重复项，漏判不存在）。
+  for (const id of a) {
+    if (!b.has(id)) {
+      return false;
+    }
+  }
+  return true;
+}
+
 export function useSessionListBridge({
   chatSubview,
   batch,
@@ -162,8 +194,18 @@ export function useSessionListBridge({
   >(() => new Set(manager.interruptedSessionIds()));
   useEffect(() => {
     const sync = () => {
-      setActiveRunIds(new Set(manager.activeSessionIds()));
-      setInterruptedRunIds(new Set(manager.interruptedSessionIds()));
+      // 先取快照、再判等：updater 必须是纯函数（StrictMode 会重放），
+      // 所以 manager 的取数放在闭包外，闭包里只做「同内容交回同一引用」。
+      const nextActive = new Set(manager.activeSessionIds());
+      const nextInterrupted = new Set(manager.interruptedSessionIds());
+      // 同内容 → 交回 `prev`（同引用不重渲，payload memo 依赖不变 → 不下发）。
+      // 内容真变了 → 换新引用，徽标照常刷新。
+      setActiveRunIds(prev =>
+        sameStringSet(prev, nextActive) ? prev : nextActive,
+      );
+      setInterruptedRunIds(prev =>
+        sameStringSet(prev, nextInterrupted) ? prev : nextInterrupted,
+      );
     };
     sync();
     return manager.subscribe(sync);

@@ -318,6 +318,7 @@ jest.mock('../src/screens/tabs/chat-tab/ChatTabNavigationProvider', () => ({
 }));
 
 import {useChatTabContext} from '../src/screens/tabs/chat-tab/ChatTabProvider';
+import {sameStringSet} from '../src/screens/tabs/chat-tab/useSessionListBridge';
 
 const mockUseChatTabContext = useChatTabContext as jest.MockedFunction<
   typeof useChatTabContext
@@ -780,5 +781,169 @@ describe('ChatConversationPanel · viewState 映射（chatSubview → view）', 
         expect.objectContaining({display: 'none'}),
       );
     }
+  });
+});
+
+// ── manager 通知的无效全量重推去重（cr2-fix-spec cr2-E-3）──────────────────
+//
+// 两个徽标集合合挂在同一个 `subscribe` 通知上（受理 / 收尾 / 替换 / 水合都
+// 触发），而一次通知里两个集合**常常都没变**。sync() 原先无条件
+// `setState(new Set(...))`——引用必变，链条一路放行：`sessionListPayload`
+// 的 useMemo 依赖变了 → 重算出新对象 → 宿主比较器是引用比较、判「变了」→
+// 列表态全量重推一次。内容一模一样，web 侧却要整批重建 DOM。
+//
+// 观测面是 `sessionList` **prop 的引用**（本文件的 ChatConversationWebView 是
+// jest.mock 哑组件，只抓 props 不消费），不是 postToWeb 计数——真要数下发
+// 得去 chat-conversation-webview.test.tsx，那边已被别的节点占了。
+describe('ChatConversationPanel · manager 通知去重（cr2-E-3）', () => {
+  let tree: TestRenderer.ReactTestRenderer | undefined;
+
+  /** 列表态宿主；scope 带一条会话，好让 `active` 徽标有观测面。 */
+  function ListSubviewTestHost() {
+    const workspaceVfsRef = useRef<VfsFileManagerHandle>(null);
+    const ctx = makeMockContext(workspaceVfsRef) as ReturnType<
+      typeof useChatTabContext
+    >;
+    ctx.scope.sessions = [
+      {id: 's1', title: 'S1', updatedAtMs: 1},
+    ] as typeof ctx.scope.sessions;
+    mockUseChatTabContext.mockReturnValue(ctx);
+    return (
+      <ChatConversationPanel
+        tokens={tokens}
+        visible
+        chatSubview="sessions"
+        sessionBatch={mockSessionBatch}
+        onOpenConversation={mockOpenConversation}
+      />
+    );
+  }
+
+  /**
+   * `sessionList` prop 的**引用变化次数**（相邻两次渲染比对）。
+   *
+   * 刻意数「引用变了」而不是「渲染了几次」：面板还有 controller 等一堆异步态，
+   * 无关重渲会让渲染计数虚高；引用没变就等于宿主那次下发被挡住了，这才是
+   * 这条判路要保的东西。
+   */
+  function sessionListRefChangeCount(): number {
+    let changes = 0;
+    for (let i = 1; i < mockWebViewPropsList.length; i += 1) {
+      if (
+        mockWebViewPropsList[i].sessionList !==
+        mockWebViewPropsList[i - 1].sessionList
+      ) {
+        changes += 1;
+      }
+    }
+    return changes;
+  }
+
+  /** 手动发一次 manager 通知（全部已捕获的 listener 都叫一遍）。 */
+  async function notifyManager(): Promise<void> {
+    await act(async () => {
+      for (const listener of mockListListeners) {
+        listener();
+      }
+      await flushPromises();
+    });
+  }
+
+  afterEach(() => {
+    if (tree != null) {
+      act(() => {
+        tree!.unmount();
+      });
+    }
+    tree = undefined;
+  });
+
+  it('列表态连续两次同内容 manager 通知 → sessionList 引用只变化一次', async () => {
+    await act(async () => {
+      tree = TestRenderer.create(<ListSubviewTestHost />);
+      await flushPromises();
+    });
+    // 订阅确实挂上了，否则下面的通知是空转、断言会假绿
+    expect(mockListListeners.length).toBeGreaterThan(0);
+    const baseline = sessionListRefChangeCount();
+    // 初始无活跃 run：徽标应为 false（此时载荷引用已在 baseline 里定型）
+    expect(lastWebViewProps().sessionList).toEqual({
+      sessions: [
+        {
+          id: 's1',
+          title: 'S1',
+          updatedAtMs: 1,
+          active: false,
+          interrupted: false,
+          current: true,
+        },
+      ],
+    });
+
+    // 第一次通知：内容真变了（无活跃 → s1 在跑），徽标该刷新、载荷该换引用
+    mockListManager.activeSessionIds.mockReturnValue(['s1']);
+    await notifyManager();
+    expect(lastWebViewProps().sessionList).toEqual({
+      sessions: [
+        {
+          id: 's1',
+          title: 'S1',
+          updatedAtMs: 1,
+          active: true,
+          interrupted: false,
+          current: true,
+        },
+      ],
+    });
+    const afterFirst = lastWebViewProps().sessionList;
+    expect(sessionListRefChangeCount() - baseline).toBe(1);
+
+    // 第二次通知：**同内容**。同步判等后不得再换引用，否则就是一次白推的全量重推
+    await notifyManager();
+    // 验收口径（cr2-E-3）：两次同内容通知合起来只准让载荷引用变化 **+1** 次
+    expect(sessionListRefChangeCount() - baseline).toBe(1);
+    expect(lastWebViewProps().sessionList).toBe(afterFirst);
+  });
+
+  it('内容真变的通知照样放行（去重不能把徽标刷新一起挡掉）', async () => {
+    await act(async () => {
+      tree = TestRenderer.create(<ListSubviewTestHost />);
+      await flushPromises();
+    });
+    const baseline = sessionListRefChangeCount();
+
+    // ① 活跃：0 → 1 条
+    mockListManager.activeSessionIds.mockReturnValue(['s1']);
+    await notifyManager();
+    // ② 中断：新出现的另一条集合内容
+    mockListManager.interruptedSessionIds.mockReturnValue(new Set(['s1']));
+    await notifyManager();
+    // ③ 再撤掉活跃（收尾）
+    mockListManager.activeSessionIds.mockReturnValue([]);
+    await notifyManager();
+
+    // 三次都是真变化 → 三次都该重算载荷
+    expect(sessionListRefChangeCount() - baseline).toBe(3);
+    const list = lastWebViewProps().sessionList as {sessions: Array<Record<string, unknown>>};
+    expect(list.sessions[0]).toMatchObject({active: false, interrupted: true});
+  });
+});
+
+// ── sameStringSet 纯函数（cr2-E-3 的判路本体）──────────────────────────────
+describe('sameStringSet（内容级判等）', () => {
+  it('同内容不同引用判等；size 或成员有别即判不等', () => {
+    expect(sameStringSet(new Set(['a']), new Set(['a']))).toBe(true);
+    expect(sameStringSet(new Set(), new Set())).toBe(true);
+    // 内容相同但顺序不同 → 仍是等（集合无序，不能按迭代顺序比）
+    expect(sameStringSet(new Set(['a', 'b']), new Set(['b', 'a']))).toBe(true);
+    // size 相同但成员不同
+    expect(sameStringSet(new Set(['a']), new Set(['b']))).toBe(false);
+    // size 不同
+    expect(sameStringSet(new Set(['a']), new Set(['a', 'b']))).toBe(false);
+  });
+
+  it('同一引用短路返回 true', () => {
+    const s = new Set(['a']);
+    expect(sameStringSet(s, s)).toBe(true);
   });
 });
