@@ -147,6 +147,7 @@ import {
 } from '@/services/run-finish-calibration-probe';
 import {
   getSessionViewCache,
+  hydrateWindowFromCache,
   sessionViewCacheKey,
   setSessionViewCache,
 } from '@/services/chat-session-view-cache';
@@ -920,9 +921,10 @@ export class SessionStreamUnitManager {
       sessionViewCacheKey(projectId, sessionId),
     );
     if (cached != null) {
+      const windowed = hydrateWindowFromCache(cached);
       this.idleMessageViews.set(sessionId, {
-        messages: [...cached.messages],
-        hasMoreMessages: cached.hasMoreMessages,
+        messages: [...windowed.messages],
+        hasMoreMessages: windowed.hasMoreMessages,
         loadingMoreMessages: false,
       });
     } else {
@@ -936,8 +938,8 @@ export class SessionStreamUnitManager {
   }
 
   /**
-   * idle 路径 tail 加载：缓存命中采纳 → 回源单查询（多取一条判定
-   * hasMore）→ 写缓存。
+   * idle 路径 tail 加载：缓存命中采纳（**仅面空时窗口化**）→ 回源单查询
+   * （多取一条判定 hasMore）→ 写缓存。
    *
    * Step 2 单查询化：tail 一次取 `页大小 + 1`，返回超过页大小即
    * hasMore=true 并裁去多取的最旧一行；hasMore 探针的第二次往返消除
@@ -956,8 +958,20 @@ export class SessionStreamUnitManager {
         sessionViewCacheKey(projectId, sessionId),
       );
       if (cached != null) {
-        this.applyIdleMessages(sessionId, cached.messages, cached.hasMoreMessages);
-        return [...cached.messages];
+        // 与单元路径同款守卫：只有冷启动水合才裁窗口。idle 视图已有消息面
+        // 时（重进 / idle 分页翻出来的浏览史），整面采纳——截回去等于当着
+        // 用户的面把转录塌掉。当前唯一调用方 loadSessionTailMessages 在
+        // 重进场景确实会带着非空面进来，守卫不是空转。
+        const adopted =
+          (this.idleMessageViews.get(sessionId)?.messages.length ?? 0) === 0
+            ? hydrateWindowFromCache(cached)
+            : cached;
+        this.applyIdleMessages(
+          sessionId,
+          adopted.messages,
+          adopted.hasMoreMessages,
+        );
+        return [...adopted.messages];
       }
     }
     const fetched = await this.runtime.messages.listBySessionTail(sessionId, {

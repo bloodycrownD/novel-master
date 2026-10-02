@@ -23,7 +23,10 @@
  *   引用比较，消息面真实变化时必须换新引用；
  * - T-H4（init-busy-yield Step 2）：idle tail 单查询多取——tail 一次取
  *   `页大小 + 1` 判定 hasMore（超页裁去最旧一行即升序首行）、不足一页
- *   原样、引用稳定保持。
+ *   原样、引用稳定保持；
+ * - cr2-E-1：缓存水合的窗口化只发生在冷启动（消息面空）——翻到 N 页的
+ *   转录被翻页写回缓存后，非 force 重进/切会话的水合必须整面收下，不得
+ *   塌回一屏；idle 路径同款守卫。
  */
 import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
 import {
@@ -48,6 +51,7 @@ import type {SessionStreamWebviewHandle} from '@/services/session-stream-unit';
 import {
   clearAllSessionViewCaches,
   getSessionViewCache,
+  SESSION_VIEW_HYDRATE_WINDOW,
   sessionViewCacheKey,
   setSessionViewCache,
 } from '@/services/chat-session-view-cache';
@@ -529,6 +533,72 @@ describe('回归: 消息面引用稳定（无关会话事件不打穿 webview me
     expect(h.manager.readMessagesSnapshot('sess-a')?.messages).toBe(
       refAfterGrowth,
     );
+  });
+});
+
+describe('cr2-E-1: 缓存水合的窗口化只限冷启动', () => {
+  it('先翻页把面撑到 >40 再非 force 水合：消息面不减少、hasMore 保持真', async () => {
+    const h = createHarness();
+    // 3 页 = 120 行：tail 取 40 + hasMore 探针后向上翻两页能到 100 条（>40）
+    const total = SESSION_VIEW_HYDRATE_WINDOW * 3;
+    h.db.set(
+      'sess-a',
+      Array.from({length: total}, (_, i) => makeMessage('sess-a', i + 1)),
+    );
+    startRunningRun(h, 'sess-a', 'ra', 'p1');
+
+    // 冷启动：force 回源拿一屏 + hasMore
+    await h.manager.loadSessionTailMessages('sess-a', {force: true});
+    let snap = h.manager.snapshot('sess-a');
+    expect(snap?.messages).toHaveLength(SESSION_STREAM_MESSAGES_PAGE_SIZE);
+    expect(snap?.hasMoreMessages).toBe(true);
+
+    // 用户向上翻页：每翻一页都 prepend 并把整面写回 view cache
+    await h.manager.loadOlderSessionMessages('sess-a');
+    await h.manager.loadOlderSessionMessages('sess-a');
+    snap = h.manager.snapshot('sess-a');
+    const grown = snap?.messages.length ?? 0;
+    expect(grown).toBeGreaterThan(SESSION_STREAM_MESSAGES_PAGE_SIZE);
+    expect(snap?.messages[0].seq).toBe(total - grown + 1);
+    expect(snap?.hasMoreMessages).toBe(true);
+    expect(getSessionViewCache(sessionViewCacheKey('p1', 'sess-a'))?.messages)
+      .toHaveLength(grown);
+
+    // 非 force 重进/切会话：缓存命中水合——面已非空，必须整面收下
+    const rows = await h.manager.loadSessionTailMessages('sess-a', {
+      projectId: 'p1',
+    });
+    expect(rows).toHaveLength(grown);
+    snap = h.manager.snapshot('sess-a');
+    expect(snap?.messages).toHaveLength(grown); // 没被截回 40
+    expect(snap?.messages[0].seq).toBe(total - grown + 1);
+    expect(snap?.hasMoreMessages).toBe(true);
+  });
+
+  it('idle 路径同款守卫：idle 分页撑开的面，非 force 水合不截回一屏', async () => {
+    const h = createHarness();
+    const total = SESSION_STREAM_MESSAGES_PAGE_SIZE * 3;
+    h.db.set(
+      'sess-a',
+      Array.from({length: total}, (_, i) => makeMessage('sess-a', i + 1)),
+    );
+    // 不 startRun → 无单元，全程走 idle 路径
+    await h.manager.loadSessionTailMessages('sess-a', {
+      force: true,
+      projectId: 'p1',
+    });
+    await h.manager.loadOlderSessionMessages('sess-a', 'p1');
+    const grown = h.manager.readMessagesSnapshot('sess-a')?.messages.length ?? 0;
+    expect(grown).toBeGreaterThan(SESSION_STREAM_MESSAGES_PAGE_SIZE);
+
+    // 非 force + 带 projectId：命中缓存水合，idle 面非空 → 整面收下
+    const rows = await h.manager.loadSessionTailMessages('sess-a', {
+      projectId: 'p1',
+    });
+    expect(rows).toHaveLength(grown);
+    const view = h.manager.readMessagesSnapshot('sess-a');
+    expect(view?.messages).toHaveLength(grown);
+    expect(view?.hasMoreMessages).toBe(true);
   });
 });
 

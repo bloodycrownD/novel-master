@@ -60,6 +60,7 @@ import {createStreamApplyBuffer} from './stream-apply-buffer';
 import type {StreamApplyBuffer} from './stream-apply-buffer';
 import {
   getSessionViewCache,
+  hydrateWindowFromCache,
   sessionViewCacheKey,
   setSessionViewCache,
 } from './chat-session-view-cache';
@@ -1024,8 +1025,9 @@ export class SessionStreamUnit {
   }
 
   /**
-   * tail reload 本体：缓存命中采纳（非 force）→ 回源单查询（多取一条
-   * 判定 hasMore，init-busy-yield Step 2）→ 无条件写缓存 → 采纳进消息面。
+   * tail reload 本体：缓存命中采纳（非 force，**仅冷启动面空时窗口化**）→
+   * 回源单查询（多取一条判定 hasMore，init-busy-yield Step 2）→ 无条件写
+   * 缓存 → 采纳进消息面。
    *
    * 单查询化：tail 一次取 `页大小 + 1`，返回超过页大小即 hasMore=true 并
    * 裁去多取的最旧一行（listBySessionTail 返回 seq 升序、最旧在前，多取
@@ -1042,8 +1044,14 @@ export class SessionStreamUnit {
     if (!force) {
       const cached = getSessionViewCache(cacheKey);
       if (cached != null) {
-        this.applyMessages(cached.messages, cached.hasMoreMessages);
-        return [...cached.messages];
+        // 只有冷启动水合才裁窗口：已有消息面是用户自己翻出来的（loadOlder
+        // 会把整面写回缓存），截回去等于当着用户的面把转录塌掉。
+        const adopted =
+          this.messagesValue.length === 0
+            ? hydrateWindowFromCache(cached)
+            : cached;
+        this.applyMessages(adopted.messages, adopted.hasMoreMessages);
+        return [...adopted.messages];
       }
     }
     if (this.messageStore == null) {
