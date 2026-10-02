@@ -52,8 +52,12 @@ export const PROMPT_WHOLE_CACHE_LRU_PER_SESSION = 32;
 /** 每会话持久化条数上限（回滚/编辑的少数内容版本窗口）。 */
 const PERSIST_MAX_ITEMS = 16;
 
-/** 持久化 JSON 版本号（`v` 不符的旧行整体按 miss 丢弃，无迁移）。 */
-const PERSIST_PAYLOAD_VERSION = 1;
+/**
+ * 持久化 JSON 版本号（`v` 不符的旧行整体按 miss 丢弃，无迁移）。
+ * v2 = 轻量哈希键（token-count-perf-r2）：与 L2 的 TOKEN_CHUNKS_PAYLOAD_VERSION
+ * 同步 bump——contentHash 由 chunkHash16 生成，键域随哈希实现整体切换。
+ */
+const PERSIST_PAYLOAD_VERSION = 2;
 
 /** 持久化条目五元组：`[hash16, scope, count, kind, est]`。 */
 type PersistItem = readonly [

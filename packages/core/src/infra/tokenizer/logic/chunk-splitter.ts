@@ -5,12 +5,11 @@
  * 内容寻址缓存正确性的前提（切分点漂移 = 缓存永远 miss）。规则变更会使
  * 全部旧块 hash 失活，属预期行为（缓存自然重算，无需迁移）；golden 测试
  * 锁定版本行为。
- * ⚠️ 当前 `splitTextIntoChunks` **无生产消费方**：`infra/tokenizer/index.ts` 与
- *    `public/provider.ts` 只是 barrel 转发；消费它的只有测试
- *    （`token-chunk-cache.test.ts` 的 `countRound` 逐块算 `chunkHash16` 等）。
- *    而 `token-chunk-cache.ts` 自己 `import { hashContent }`，**并不调用**本函数。
- *    ⇒ 「切分点漂移 = 缓存永远 miss」这条因果链今天没有任何生产代码承受（测试面承受）。
- *    TODO：若 `token-chunk-cache` 真接上本函数，须在同一 PR 里补上贪吃段的二次切分。
+ * 生产消费方 = node / rn 两驱动的 `countChunksWithL2`（逐块查写 L2 平面
+ * 缓存）——「切分点漂移 = 缓存永远 miss」这条因果链由 L2 块键实时承受；
+ * 键值域已随 token-count-perf-r2 的 KKV payload v2 一次性切换。
+ * 贪吃段的二次切分（硬上限）未实现——现网无病理样本触发（「。".repeat(200)`
+ * 级输入），若出现碎块/超长块投诉再看。
  *
  * 切分规则（优先级从高到低）：
  * ① 句末符号收尾成块，并**贪吃**紧随其后的连续句末符号（避免空块/碎块）；

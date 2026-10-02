@@ -25,6 +25,12 @@ import {
   serializePromptLlmInput,
 } from '@novel-master/core/provider';
 import {countTextWithDefaultEncoding} from '@novel-master/tokenizer-driver-rn/encoding';
+// 取消链路（tokenizer-native-cancel）：从桥的**子路径**导入（r3-P1-1）——包根
+// 会把整个驱动 + js-tiktoken 拖进模块图，炸掉本套件的 core/provider 符号 mock。
+import {
+  cancelSessionNativeCounts,
+  PromptCountCancelledError,
+} from '@novel-master/tokenizer-driver-rn/android-native-bridge';
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
 // badge/label 走 common 入口取真身实现（token-source-label 单源；本套件的
 // jest 会整体 mock `@novel-master/core/provider`，经 common 直取可让 T-TL4
@@ -102,6 +108,23 @@ function isChipBailError(error: unknown): boolean {
     error instanceof ChatPromptBuildBailedError ||
     error instanceof PromptTokenResolveBailedError
   );
+}
+
+/**
+ * 取消判定（tokenizer-native-cancel）：原生计数被 {@link cancelPreciseUpgrade}
+ * 撤掉时，桥层把 cancel reject 翻译成 `PromptCountCancelledError` 上抛。
+ *
+ * 收口口径与 bail **同款**（返回空串哨兵、无 warn），但语义不同：bail 是「用户
+ * 已切走，这轮没人要」，取消是「这轮被主动作废」。两者都必须由 resolve 段的
+ * catch 收口——漏出去的话 `runPreciseUpgrade` 的 catch 会打
+ * `[chat] prompt token precise upgrade failed` 留痕（取消不是失败），空串哨兵
+ * 同样让 hook 侧不写 meta。
+ *
+ * 只认 resolve 段：取消异常只可能从 resolve 链抛出（build 段不经过原生计数），
+ * 故 build 段的 catch 一行不动。
+ */
+function isChipCancelError(error: unknown): boolean {
+  return error instanceof PromptCountCancelledError;
 }
 
 /**
@@ -206,6 +229,15 @@ async function loadChatTokenLabelWithFlag(
       },
     );
   } catch (error) {
+    if (isChipCancelError(error)) {
+      // 取消收口（tokenizer-native-cancel）：在途原生计数被 cancelPreciseUpgrade
+      // 撤掉。与 bail 同款收成空串哨兵——不重试、不回落 fallback（重算一遍等于
+      // 取消白做），也不打 warn（取消不是失败）。
+      if (__DEV__) {
+        console.log('[nm-chip] cancelled during resolve');
+      }
+      return {label: '', upgradeWorthy: false};
+    }
     if (isChipBailError(error)) {
       if (__DEV__) {
         console.log('[nm-chip] bailed during resolve (run in flight)');
@@ -230,17 +262,19 @@ async function loadChatTokenLabelWithFlag(
 const preciseUpgradeInflight = new Set<string>();
 
 /**
- * 精确升级的启动延迟（2026-10-01 真机实锤「进大会话立刻侧滑退出被堵 2.2s」）：
- * 升级轮的整串装配 + 家族真分词器计数是秒级重活，与 JS 线程、原生模块队列、
- * 单条 SQLite 连接全部共享——首帧完成后立刻启动，恰好盖住「进会话就开始交互」
- * 的窗口（立刻浏览/立刻退出都被它堵）。延后启动把首屏黄金窗口让给交互；延迟
- * 到期时先查弃权判据（视图已切走/run 在途即不跑），停留超过本窗口的用户才
- * 真正触发这轮计数。
+ * 精确升级的启动延迟（2026-10-01 设 2500：升级轮是秒级重活且不可中断，首帧后
+ * 立刻启动会堵「进会话就开始交互」的窗口）。
+ *
+ * **token-count-perf-r2 Part D 收窄至 800**：当初要躲的三样重活已被逐个拆雷——
+ * 家族计数挪进 Kotlin 原生线程（不占 JS/单 SQLite 争用只剩装配）、轮次可取消
+ * （侧滑即杀）、计数本体实测 200~500ms。剩余风险只有 JS 侧 ~200-400ms 的整串
+ * 装配，800ms 窗口足够让它错开切会话动画；再长的延迟就是把「数字晚亮」的代价
+ * 白送给用户。延迟到期时的弃权判据（视图已切走/run 在途即不跑）保持不变。
  *
  * 导出：测试的「还原默认值 / 推进假计时器」一律引用本常量——生产延迟一调，
  * 测试里的字面量会静默变成错值（cr2-B-2）。
  */
-export const PRECISE_UPGRADE_START_DELAY_MS = 2500;
+export const PRECISE_UPGRADE_START_DELAY_MS = 800;
 let preciseUpgradeStartDelayMs = PRECISE_UPGRADE_START_DELAY_MS;
 
 /**
@@ -283,6 +317,36 @@ export function cancelPreciseUpgradeDelay(
   preciseUpgradeDelayTimers.delete(sessionId);
   preciseUpgradeInflight.delete(sessionId);
   preciseUpgradeQueued.delete(sessionId);
+}
+
+/**
+ * 收口某会话**在途**的原生精确计数（换会话 / hook 卸载时与
+ * {@link cancelPreciseUpgradeDelay} 并调，tokenizer-native-cancel）。
+ *
+ * 与 delay 收口的分工：delay 收口的是「还没起跑的延迟窗口」，本函数收口的是
+ * 「已经过了桥、正在 Kotlin 队列里跑的整串计数」——那一轮秒级，R8 实锤侧滑退出
+ * 会被它堵住。两者触发条件逐条等价，所以 hook 两处都并调。
+ *
+ * ⚠ 与 cr2-E-2 同族的另一条硬约束：本函数**只发指令、不碰生命周期**。在途轮的
+ * inflight/补跑槽仍由 `runPreciseUpgrade` 的 finally 唯一清理——外部代摘会踩掉
+ * 那轮自己的 finally，会话楔死估算档比不取消更糟。取消后该轮会带着
+ * `PromptCountCancelledError` 收场（resolve 段 catch 收成空串哨兵），finally
+ * 照常跑，补跑槽照常排空。
+ *
+ * 无在途轮 / 无会话 id / 原生未提供 cancelCount 时均为 no-op（桥内处理）。
+ */
+export function cancelPreciseUpgrade(
+  sessionId: string | null | undefined,
+): void {
+  if (sessionId == null) {
+    return;
+  }
+  if (__DEV__) {
+    // R8 送达延迟观测的第一时间戳：cancel dispatch 与 native reject 落定之间
+    // 的间距，就是取消链路的送达延迟（logcat 过滤 [nm-chip]）。
+    console.log('[nm-chip] cancel dispatch ' + sessionId);
+  }
+  cancelSessionNativeCounts(sessionId);
 }
 
 /** 一次后台精确升级请求：轮次起步时所需的全部上下文。 */

@@ -276,6 +276,7 @@ jest.mock('../src/services/chat-prompt-tokens.service', () => ({
   isChatTokenPreciseWarmInflight: jest.fn(() => false),
   // cr2-E-2 新导出（手写 mock 需随导出面同步，缺它会炸 meta 加载链）。
   cancelPreciseUpgradeDelay: jest.fn(),
+  cancelPreciseUpgrade: jest.fn(),
 }));
 
 jest.mock('../src/storage/chat-rich-text-pref', () => ({

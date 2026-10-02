@@ -406,12 +406,13 @@ describe("resolveCurrentPromptTokens 统计优先（api 基线+增量，本地�
   });
 
   it("本地 miss → 透传模型家族计数器（glm 不再强制估算档，真机复验拍板）", async () => {
-    const captured: { override?: unknown } = {};
+    const captured: { override?: unknown; sessionId?: unknown } = {};
     clearTokenizerDrivers();
     registerTokenizerDriver({
       name: "mock-stats-first",
       countPromptLlmInput: async (params) => {
         captured.override = params.tokenizerOverride;
+        captured.sessionId = params.sessionId;
         return {
           tokenCount: 1_234,
           counterKind: "glm",
@@ -433,17 +434,26 @@ describe("resolveCurrentPromptTokens 统计优先（api 基线+增量，本地�
       undefined,
       "读口不得改写调用方 override——WEB 家族回落自身家族计数器（强制 cl100k 估算档已撤回）"
     );
+    // 透传保护断言（r2-P2-4）：RN 驱动靠 params.sessionId 生成 requestId 做
+    // 取消归属，把读口这行透传改回去**所有测试仍然全绿**，而真机取消会静默
+    // 失效（最难查的一类回归）。所以显式钉住「读到的是读口的 sessionId 实参」。
+    assert.equal(
+      captured.sessionId,
+      SESSION_ID,
+      "读口必须把 sessionId 透传进驱动 params——取消链路的 requestId 归属信息源"
+    );
     assert.equal(resolved.counterKind, "glm");
     assert.equal(resolved.estimated, false, "驱动结果原样透传");
   });
 
   it("本地 miss + 调用方显式 override → 原样透传（heuristic 不被改写）", async () => {
-    const captured: { override?: unknown } = {};
+    const captured: { override?: unknown; sessionId?: unknown } = {};
     clearTokenizerDrivers();
     registerTokenizerDriver({
       name: "mock-stats-first-2",
       countPromptLlmInput: async (params) => {
         captured.override = params.tokenizerOverride;
+        captured.sessionId = params.sessionId;
         return {
           tokenCount: 10,
           counterKind: "tiktoken",
@@ -461,6 +471,9 @@ describe("resolveCurrentPromptTokens 统计优先（api 基线+增量，本地�
       paramsWithMessages([], RUN_MODEL_ID)
     );
     assert.equal(captured.override, undefined);
+    // 同一桩再钉一次 sessionId 透传（本用例走的是 tiktoken/JS 档调用路径，
+    // 与上一条 glm/native 档路径相互独立，两条都断才是真的断了）。
+    assert.equal(captured.sessionId, SESSION_ID);
 
     // 调用方显式 heuristic：透传不改写
     await resolveCurrentPromptTokens(SESSION_ID, {

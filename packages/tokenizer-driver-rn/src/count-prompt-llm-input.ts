@@ -2,8 +2,10 @@
  * React Native prompt token counter (NMTP RN driver).
  *
  * Hermes cannot run @agnai/web-tokenizers or @agnai/sentencepiece-js (Node fs/url/WASM).
- * GPT families count in JS via the shared js-tiktoken encoding tables from
- * {@link ./impl/encoding-cache} (same-process singleton, never freed). WEB/SP delegate
+ * GPT families count **native-first on Android** (token-count-perf-r2：DJL cl100k/
+ * o200k 词表直编码 + JS 补 overhead，js-tiktoken 降为回退档、iOS 恒回退), with
+ * cl100k JS fallback via shared tables from {@link ./impl/encoding-cache}
+ * (same-process singleton, never freed). WEB/SP delegate
  * to Android NovelMasterTokenizer when available; otherwise heuristic + estimated.
  *
  * message-token-cache Step 3（分层挂接，主代理定稿）：入口挂 L1 整串缓存；
@@ -32,9 +34,11 @@ import {
   type TokenizerFamily,
 } from "@novel-master/core/provider";
 import {
+  PromptCountCancelledError,
   countPromptViaNative,
   isNativeTokenizerAvailable,
   type NativeCountResponse,
+  type NativeCountRequest,
 } from "./android-native-bridge.js";
 import {
   getDefaultRnEncoding,
@@ -73,6 +77,19 @@ function heuristicCount(text: string): number {
 const DRIVER_NAME = "rn";
 
 /**
+ * [nm-tok-js] 探针的每轮统计载体（token-count-perf-r2，cr2-B-01 局部对象化）：
+ * 由 countSerialized 每轮新建、沿调用链**作为末位可选参数**下传——同会话双轮
+ * 并发（chip 精确轮 + 压缩预热轮）互不污染，收尾日志的 route/l2Hit 恒属本轮。
+ * 与 Kotlin 侧 `Log.i("nm-tok", ...)` 同族：只记量（路径/L2 命中率），不落任何
+ * 提示词内容；输出发生在计数完成之后，不污染被测时段。
+ */
+interface ProbeStats {
+  chunkTotal: number;
+  chunkMisses: number;
+  route: string;
+}
+
+/**
  * 块级 L2 计数（与 node 驱动同构，spec 计数流程第 3 步）：
  * `splitTextIntoChunks(整串)` → 逐块查 L2 → miss 块经
  * `countTextWithIncrementalTokenizer` 现算写回 → 求和。
@@ -81,14 +98,21 @@ function countChunksWithL2(
   text: string,
   scope: string,
   encodeText: (text: string) => number,
+  probe?: ProbeStats,
 ): number {
   let total = 0;
   for (const chunk of splitTextIntoChunks(text)) {
     const hash = chunkHash16(chunk);
+    if (probe != null) {
+      probe.chunkTotal += 1;
+    }
     const hit = tokenChunkCache.lookup(hash, scope);
     if (hit !== undefined) {
       total += hit;
       continue;
+    }
+    if (probe != null) {
+      probe.chunkMisses += 1;
     }
     const count = countTextWithIncrementalTokenizer(encodeText, chunk);
     tokenChunkCache.record(hash, scope, count);
@@ -115,12 +139,15 @@ function countChunksWithL2(
  * `heuristic`，调用方（尤其压缩阈值）不会误以为这是家族级的真分词器读数。
  * 该档不进 L2——没有真分词器就没有可缓存的稳定读数。
  */
-function fallbackCount(text: string, scope: string): number {
+function fallbackCount(text: string, scope: string, probe?: ProbeStats): number {
+  if (probe != null) {
+    probe.route = "fallback";
+  }
   const encoding = getDefaultRnEncoding();
   if (encoding == null) {
     return heuristicCount(text);
   }
-  return countChunksWithL2(text, scope, (chunk) => encoding.encode(chunk).length);
+  return countChunksWithL2(text, scope, (chunk) => encoding.encode(chunk).length, probe);
 }
 
 interface SerializedCountResult {
@@ -207,6 +234,7 @@ async function countTiktoken(
   serialized: string,
   vendorModelId: string,
   scope: string,
+  probe?: ProbeStats,
 ): Promise<SerializedCountResult> {
   const tiktokenModel = mapVendorModelIdToTiktokenModel(vendorModelId);
   const encName = resolveRnEncodingName(vendorModelId, tiktokenModel);
@@ -218,7 +246,7 @@ async function countTiktoken(
     // heuristic：cl100k 对这些模型只是近似，冒充精确会让压缩阈值跳过
     // 0.85 安全系数。
     return {
-      count: fallbackCount(serialized, scope),
+      count: fallbackCount(serialized, scope, probe),
       counterKind: "heuristic",
       estimated: true,
     };
@@ -237,18 +265,29 @@ async function countTiktoken(
     );
     const count =
       overhead +
-      countChunksWithL2(serialized, scope, (text) => encoding.encode(text).length);
+      countChunksWithL2(
+        serialized,
+        scope,
+        (text) => encoding.encode(text).length,
+        probe,
+      );
     return { count, counterKind: "tiktoken", estimated: false };
   } catch {
     return {
-      count: fallbackCount(serialized, scope),
+      count: fallbackCount(serialized, scope, probe),
       counterKind: "heuristic",
       estimated: true,
     };
   }
 }
 
-function mapNativeResult(nativeResult: NativeCountResponse): SerializedCountResult {
+function mapNativeResult(
+  nativeResult: NativeCountResponse,
+  probe?: ProbeStats,
+): SerializedCountResult {
+  if (probe != null) {
+    probe.route = "native";
+  }
   return {
     count: nativeResult.tokenCount,
     counterKind: nativeResult.counterKind as TokenCounterKind,
@@ -256,11 +295,167 @@ function mapNativeResult(nativeResult: NativeCountResponse): SerializedCountResu
   };
 }
 
+/**
+ * gpt 家族的原生优先路径（token-count-perf-r2）：Android 侧 DJL 词表直编码
+ * 整串（对拍门 T-G2 已验证与 js-tiktoken 裸 encode 同值域），JS 侧用 core 公式
+ * 补 per-message overhead（~7 token 常数，公式单源保持在 TS，Kotlin 不复刻）。
+ *
+ * 三层回退链：编码名出界（p50k/gpt2 家族 → `resolveRnEncodingName` null）或
+ * js 编码表建不起来 → 返回 null（落 js 档）；原生不可用 / 无资产 reject（非
+ * 取消）→ 返回 null（落 js 档 = 现状行为）；**取消异常原样上抛**——与 WEB/SP
+ * 分支同一条不变量（见 countSerializedImpl 中「取消例外」注释）。
+ *
+ * 返回 null 一律表示「这一轮不归原生管」，由调用方落回 [countTiktoken]。
+ */
+async function countGptViaNative(
+  serialized: string,
+  vendorModelId: string,
+  sessionId: string | undefined,
+  probe?: ProbeStats,
+): Promise<SerializedCountResult | null> {
+  if (!isNativeTokenizerAvailable()) {
+    return null;
+  }
+  const tiktokenModel = mapVendorModelIdToTiktokenModel(vendorModelId);
+  const encName = resolveRnEncodingName(vendorModelId, tiktokenModel);
+  if (encName == null) {
+    return null;
+  }
+  const encoding = resolveEncoding(encName);
+  if (encoding == null) {
+    // js 表建不起来时 overhead 公式也算不了——整个精确档都进不去，交给
+    // countTiktoken 自己的兜底链（现状行为）。
+    //
+    // **已知耦合（cr2-B-10）**：overhead 走「公式单源在 TS」意味着原生路线
+    // 与 JS 编码表可用性强耦合——表建不起来时**即便原生词表就在包里**也会落
+    // heuristic（原生 → countTiktoken 同样建不起表 → 字符折算）。排查「gpt
+    // 为何掉 heuristic」时先查这里。解耦方案（overhead 闭式：perMessage +
+    // encode('system')=1 + tail，两条 parity 断言锁死）留作后续迭代。
+    return null;
+  }
+  const overhead = countOpenAiStyleMessages(
+    encoding,
+    [wrapSerializedPromptAsSystemMessage("")],
+    tiktokenModel,
+  );
+  try {
+    const nativeResult = await countPromptViaNative(
+      // vendorModelId 槽在 gpt 档承载编码名（Kotlin 侧 family=="tiktoken" 时
+      // 解释为编码名选词表，见 TokenizerModule.encodingNameFor）。
+      buildNativeCountRequest(serialized, "tiktoken", encName, sessionId),
+    );
+    if (nativeResult == null) {
+      return null;
+    }
+    if (probe != null) {
+      probe.route = "native-gpt";
+    }
+    return {
+      count: nativeResult.tokenCount + overhead,
+      counterKind: "tiktoken",
+      estimated: false,
+    };
+  } catch (error) {
+    if (error instanceof PromptCountCancelledError) {
+      throw error;
+    }
+    return null;
+  }
+}
+
+/**
+ * 取消 requestId 的自增序号（模块级）。requestId 形态 `${sessionId}:${seq}`——
+ * sessionId 段给归属信息源，seq 段保证同会话并发多轮各自唯一（chip 精确轮 +
+ * 压缩预热轮同会话在途是 R6 已知形态，两轮的 requestId 不能撞）。
+ *
+ * **只在 `sessionId` 在场时消费**：requestId 非空是硬约束（bridgeless 桥对
+ * String 参数传 null/undefined 硬抛，见 spec r2-P0），所以缺 sessionId 的轮
+ * 连序号都不递增，保持「不可取消轮 = 现状三参」这条二分口径干净。
+ */
+let nativeRequestSeq = 0;
+
+/**
+ * 生成取消用 requestId；`sessionId` 缺失时返回 `undefined`
+ * （桥内判据 `requestId != null` 会让这一轮走旧三参 = 现状）。
+ */
+function buildNativeRequestId(sessionId: string | undefined): string | undefined {
+  if (sessionId == null) {
+    return undefined;
+  }
+  nativeRequestSeq += 1;
+  return `${sessionId}:${nativeRequestSeq}`;
+}
+
+/**
+ * native 档过桥请求：sessionId 与 requestId 同时在场才可能被桥判为可取消轮。
+ * `vendorModelId` 槽**双语义**（token-count-perf-r2）：WEB/SP 家族传真实
+ * vendor id（仅诊断）；gpt 档传 JS 已解析的编码名（cl100k_base / o200k_base），
+ * Kotlin 侧 family=="tiktoken" 时据此选词表（TokenizerModule.encodingNameFor）。
+ */
+function buildNativeCountRequest(
+  serialized: string,
+  family: TokenizerFamily,
+  vendorModelId: string,
+  sessionId: string | undefined,
+): NativeCountRequest {
+  const requestId = buildNativeRequestId(sessionId);
+  if (sessionId == null) {
+    return { serialized, family, vendorModelId };
+  }
+  return { serialized, family, vendorModelId, sessionId, requestId };
+}
+
+/**
+ * 计数主体。`sessionId`（第 5 位可选参）是取消链路的归属信息源：
+ * 在场时驱动生成 requestId 塞进过桥请求，桥内会走可取消的新方法并登记
+ * in-flight；缺失时行为与本次迭代之前逐字节一致（旧三参、不可取消）。
+ *
+ * 外层是 [nm-tok-js] 探针壳：只在 L1 miss 的真实计数轮输出（L1 命中在入口
+ * 早退、不经过这里），把「native / tiktoken / 兜底」哪条路、耗时、L2 命中率
+ * 一次记全——真机 gpt 兜底「切会话 1s / 精确轮 4.2s」的体感归因靠它落账。
+ */
 async function countSerialized(
   family: TokenizerFamily,
   serialized: string,
   vendorModelId: string,
   chunkScope?: string,
+  sessionId?: string,
+): Promise<SerializedCountResult> {
+  // 每轮一份局部探针（cr2-B-01）：同会话双轮并发（chip 精确轮 + 压缩预热轮）
+  // 各自持有互不污染——模块级可变状态会让 A 轮收尾打出 B 轮的 route/l2Hit。
+  const probe: ProbeStats = {chunkTotal: 0, chunkMisses: 0, route: "js"};
+  const probeT0 = Date.now();
+  try {
+    const result = await countSerializedImpl(
+      family,
+      serialized,
+      vendorModelId,
+      chunkScope,
+      sessionId,
+      probe,
+    );
+    console.info(
+      `[nm-tok-js] family=${family} chars=${serialized.length} ms=${Date.now() - probeT0}` +
+        ` route=${probe.route} kind=${result.counterKind} est=${result.estimated}` +
+        ` l2Hit=${probe.chunkTotal - probe.chunkMisses}/${probe.chunkTotal}`,
+    );
+    return result;
+  } catch (error) {
+    console.info(
+      `[nm-tok-js] family=${family} chars=${serialized.length} ms=${Date.now() - probeT0}` +
+        ` route=${probe.route} thrown=${error instanceof Error ? error.name : "unknown"}`,
+    );
+    throw error;
+  }
+}
+
+async function countSerializedImpl(
+  family: TokenizerFamily,
+  serialized: string,
+  vendorModelId: string,
+  chunkScope?: string,
+  sessionId?: string,
+  probe?: ProbeStats,
 ): Promise<SerializedCountResult> {
   // L2 计数器身份：入口（countPromptLlmInputRn）会传入含 override 的完整
   // scope；直接调用（测试钩子）缺省时按 (模型, 家族, rn 驱动) 拼——两套键
@@ -273,31 +468,54 @@ async function countSerialized(
       driverName: DRIVER_NAME,
     });
   if (family === "heuristic") {
+    // 兜底家族原生优先（token-count-perf-r2 Part C）：用户自定义 vendor 名解析
+    // 落 heuristic 的会话正是「兜底 gpt」体感慢的主力——165K 字符的 JS cl100k
+    // 分块重算在 Hermes 上秒级，而原生 cl100k 词表已在包内（暖轮 ~250ms/87K）。
+    // 口径与标签**不变**：仍报 heuristic/estimated（对未知家族这依然是近似读数，
+    // 压缩阈值 0.85 系数照吃），只是把「算」的动作挪进原生。取消异常原样上抛。
+    const nativeHeuristic = await countHeuristicViaNative(serialized, sessionId, probe);
+    if (nativeHeuristic != null) {
+      return nativeHeuristic;
+    }
     return {
-      count: fallbackCount(serialized, scope),
+      count: fallbackCount(serialized, scope, probe),
       counterKind: "heuristic",
       estimated: true,
     };
   }
-  // GPT path stays in JS — js-tiktoken is exact and Metro-safe (M0/M1).
+  // GPT 家族（token-count-perf-r2 起三层路由：原生优先 → js-tiktoken → 其内部
+  // 自带 cl100k heuristic 兜底）。gpt2 / 出界（p50k）模型不经原生——
+  // resolveRnEncodingName 返回 null 时根本不发起过桥。
   if (family === "tiktoken" || family === "gpt2") {
-    return countTiktoken(serialized, vendorModelId, scope);
+    const nativeResult =
+      family === "tiktoken"
+        ? await countGptViaNative(serialized, vendorModelId, sessionId, probe)
+        : null;
+    if (nativeResult != null) {
+      return nativeResult;
+    }
+    return countTiktoken(serialized, vendorModelId, scope, probe);
   }
   if (WEB_FAMILIES.has(family) || SP_FAMILIES.has(family)) {
     if (isNativeTokenizerAvailable()) {
       // native 档（WEB/SP 过桥）：Android 侧整串计数，**不切块**（spec：
       // native 档仅 L1——L1 命中的拦截在驱动入口，这里只负责真实计数）。
-      const nativeResult = await countPromptViaNative({
-        serialized,
-        family,
-        vendorModelId,
-      });
+      //
+      // **取消例外（tokenizer-native-cancel）**：桥识别到 Kotlin 的
+      // TOKENIZER_COUNT_CANCELLED reject 时抛 `PromptCountCancelledError`，
+      // 本函数**不得**把它当成「原生返回 null」而落进下面的兜底重算——
+      // 那等于先占原生队列再烧一次 JS 线程，比不取消更贵。所以这里刻意
+      // **没有 try/catch**：异常在 `nativeResult != null` 判定与兜底分支之前
+      // 原样穿透（调用链上任何 catch 想拦取消都会踩这条不变量）。
+      const nativeResult = await countPromptViaNative(
+        buildNativeCountRequest(serialized, family, vendorModelId, sessionId),
+      );
       if (nativeResult != null) {
-        return mapNativeResult(nativeResult);
+        return mapNativeResult(nativeResult, probe);
       }
     }
     return {
-      count: fallbackCount(serialized, scope),
+      count: fallbackCount(serialized, scope, probe),
       // 原生分词器不可用（iOS / 未链接模块）时**必须**报 `heuristic` 而不是家族名：
       // 这里跑的是 cl100k 近似，不是该家族的真 tokenizer。报家族名会让压缩阈值
       // 把它当成「家族级精确读数」而不乘 0.85 安全系数，等于拿一个近似值卡精确
@@ -307,10 +525,47 @@ async function countSerialized(
     };
   }
   return {
-    count: fallbackCount(serialized, scope),
+    count: fallbackCount(serialized, scope, probe),
     counterKind: "heuristic",
     estimated: true,
   };
+}
+
+/**
+ * 兜底（heuristic）家族的原生路径（token-count-perf-r2 Part C）：cl100k 词表
+ * 直编码整串。与 gpt 档不同——**不加 overhead**（兜底口径本就是裸文本近似，
+ * 非 OpenAI 消息包装）、**标签保持 heuristic/estimated:true**（换的只是算力，
+ * 不是口径）。原生不可用 / 失败（非取消）→ null 落回 JS [fallbackCount]。
+ */
+async function countHeuristicViaNative(
+  serialized: string,
+  sessionId: string | undefined,
+  probe?: ProbeStats,
+): Promise<SerializedCountResult | null> {
+  if (!isNativeTokenizerAvailable()) {
+    return null;
+  }
+  try {
+    const nativeResult = await countPromptViaNative(
+      buildNativeCountRequest(serialized, "tiktoken", "cl100k_base", sessionId),
+    );
+    if (nativeResult == null) {
+      return null;
+    }
+    if (probe != null) {
+      probe.route = "native-heuristic";
+    }
+    return {
+      count: nativeResult.tokenCount,
+      counterKind: "heuristic",
+      estimated: true,
+    };
+  } catch (error) {
+    if (error instanceof PromptCountCancelledError) {
+      throw error;
+    }
+    return null;
+  }
 }
 
 async function resolveVendorModelId(
@@ -344,6 +599,8 @@ export async function countPromptLlmInputRn(
   // × 计数器身份。native 档的 L1 拦截就在这里：命中直接返回、不过桥。
   // 驱动内部查 L1 传**空 sessionId**（键含内容指纹，跨会话共享安全）；
   // sessionId 段的会话语义由读口层决定，驱动不越层。
+  // （取消链路的 sessionId 是**另一条通路**：它不进缓存键，只随过桥请求
+  // 下发给桥做 in-flight 登记与取消归属，见 countSerialized 第 5 位。）
   const scope = buildCounterScope({
     vendorModelId,
     tokenizerOverride: override,
@@ -371,9 +628,12 @@ export async function countPromptLlmInputRn(
     serialized,
     vendorModelId,
     scope,
+    params.sessionId,
   );
 
   // miss 后写 L1（JS 档与 native 档都写：native 档靠它挡「无变更重复过桥」）。
+  // **取消轮写不到这里**——上一行 await 会抛 `PromptCountCancelledError`，
+  // 异常穿透到调用方，取消结果零污染（L1 里不留半截读数，重进会话正常重算）。
   promptWholeCache.record("", scope, contentHash, {
     tokenCount: count,
     counterKind,

@@ -248,7 +248,7 @@ describe("token-chunk-cache KKV 持久化（T-TC3）", () => {
     );
     assert.ok(raw != null, "token_chunks/chunkCache 行已落库");
     const parsed = JSON.parse(raw) as { v: number; items: unknown[][] };
-    assert.equal(parsed.v, 1);
+    assert.equal(parsed.v, 2);
     // 只写推进前的当前代（record 顺序），三元组 [hash16, scope, count]
     assert.deepEqual(parsed.items, [
       [chunkHash16("甲句正文。"), SCOPE, 5],
@@ -318,7 +318,7 @@ describe("token-chunk-cache KKV 持久化（T-TC3）", () => {
       SESSION_KKV_DOMAIN_TOKEN_CHUNKS,
       TOKEN_CHUNKS_CACHE_KEY,
       JSON.stringify({
-        v: 1,
+        v: 2,
         items: [[chunkHash16("种子句。"), SCOPE, 4]],
       })
     );
@@ -335,23 +335,27 @@ describe("token-chunk-cache KKV 持久化（T-TC3）", () => {
     const kkv = createMemorySessionKkv();
     const badPayloads = [
       "{broken",
-      JSON.stringify({ v: 2, items: [] }), // 版本号不符
-      JSON.stringify({ v: 1 }), // 缺 items
-      JSON.stringify({ v: 1, items: {} }), // items 非数组
-      JSON.stringify({ v: 1, items: [["zz", SCOPE, 3]] }), // hash 非 16 hex
+      JSON.stringify({ v: 3, items: [] }), // 版本号不符（v2 为当前，v3 表未来版本）
+      JSON.stringify({ v: 2 }), // 缺 items
+      JSON.stringify({ v: 2, items: {} }), // items 非数组
+      JSON.stringify({ v: 2, items: [["zz", SCOPE, 3]] }), // hash 非 16 hex
       JSON.stringify({
-        v: 1,
+        v: 2,
         items: [["a".repeat(15), SCOPE, 3]], // hash 长度不足
       }),
-      JSON.stringify({ v: 1, items: [["a".repeat(16), "", 3]] }), // scope 空
-      JSON.stringify({ v: 1, items: [["a".repeat(16), SCOPE, -1]] }), // count 负
+      JSON.stringify({ v: 2, items: [["a".repeat(16), "", 3]] }), // scope 空
+      JSON.stringify({ v: 2, items: [["a".repeat(16), SCOPE, -1]] }), // count 负
       JSON.stringify({
-        v: 1,
+        v: 2,
         items: [["a".repeat(16), SCOPE, "3"]], // count 非数
       }),
       JSON.stringify({
-        v: 1,
+        v: 2,
         items: [["a".repeat(16), SCOPE]], // 条目缺字段
+      }),
+      JSON.stringify({
+        v: 1,
+        items: [["a".repeat(16), SCOPE, 3]], // v1 = sha256 键域旧行（token-count-perf-r2 前），整体丢弃
       }),
     ];
     for (const payload of badPayloads) {
@@ -377,7 +381,7 @@ describe("token-chunk-cache KKV 持久化（T-TC3）", () => {
     assert.equal(parseTokenChunkCachePayload(""), null);
     const items = parseTokenChunkCachePayload(
       JSON.stringify({
-        v: 1,
+        v: 2,
         items: [[chunkHash16("块一。"), SCOPE, 3]],
         someFutureKey: true, // 未知键忽略（未来加字段不破老解析）
       })
@@ -480,7 +484,7 @@ describe("token-chunk-cache 整表链节流（2026-09-30 12.5s 止血）", () =>
       sessionId,
       SESSION_KKV_DOMAIN_TOKEN_CHUNKS,
       TOKEN_CHUNKS_CACHE_KEY,
-      JSON.stringify({ v: 1, items })
+      JSON.stringify({ v: 2, items })
     );
   }
 
@@ -727,5 +731,96 @@ describe("token-chunk-cache 整表链节流（2026-09-30 12.5s 止血）", () =>
     );
     assert.equal(gets, 2, "坏行不得把会话永久登记成已 seed（r3-l2-1）");
     assert.equal(tokenChunkCache.lookup(chunkHash16("修好后块。"), SCOPE), 8);
+  });
+});
+
+/**
+ * T-H1~T-H4（token-count-perf-r2）：轻量块哈希（双 32 位 FNV-1a 拼 16 hex）
+ * 的正确性 / 分布 / 旧格式兼容护栏。背景：真机 Hermes 无 JIT 下 sha256 每块
+ * 固定开销把「L2 全命中轮」推到 4s（计数工作量为零），换 FNV 后该轮应进
+ * 亚百 ms——真机 A/B 由 spec Step 3（manual_user）把关，这里的单测锁算法
+ * 行为不被无声改坏。
+ */
+describe("T-H: chunkHash16 轻量哈希（token-count-perf-r2）", () => {
+  beforeEach(() => {
+    tokenChunkCache.clearForTests();
+  });
+
+  it("T-H1 golden：固定输入钉死输出，锁 FNV 常量/遍历序/拼接序", () => {
+    // 期望值由实现首版生成（2026-10-03）；改动任何一个常量或遍历方向都会红，
+    // 那是刻意的——键域变化必须连带 bump KKV payload 版本（见 spec 决策表）。
+    const golden: ReadonlyArray<readonly [string, string]> = [
+      ["", "811c9dc59dc5811c"],
+      ["a", "e40c292cdaead7c7"],
+      ["hello world", "d58b3fa7e0ba3b68"],
+      ["你好世界，这是一段中文测试文本。", "3d37b94e428ecd29"],
+      ["第一块和第一块", "78f0436348b78928"],
+      ["第一块和第二块", "487adc678d903214"],
+      ["emoji 🎉 mixed 中英 123", "0f076be72cbe9204"],
+    ];
+    for (const [input, expected] of golden) {
+      const actual = chunkHash16(input);
+      assert.match(actual, /^[0-9a-f]{16}$/, "输出形态恒 16 位小写 hex（public 契约）");
+      assert.equal(actual, expected, `输入 ${JSON.stringify(input)} 的哈希被改变`);
+    }
+    // 尾部差异必须传播到前向遍历（h1）——防两遍退化成同向同参数。
+    assert.notEqual(chunkHash16("块A。") , chunkHash16("块B。"));
+    assert.notEqual(chunkHash16("同一前缀很长很长很长很长很长很长X"), chunkHash16("同一前缀很长很长很长很长很长很长Y"));
+  });
+
+  it("T-H2 分布与碰撞：10 万条 CJK 伪随机短串零坍缩（Set 尺寸=条数）", () => {
+    // 确定性 LCG——测试可复现；64bit 键域在 100K 量级下理论碰撞概率 ~2.7e-9，
+    // 出碰撞即实现缺陷（如两遍相关性退化），不是统计噪声。
+    let state = 123456789;
+    const next = () => {
+      state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+      return state;
+    };
+    const seen = new Set<string>();
+    const total = 100_000;
+    for (let i = 0; i < total; i++) {
+      const len = 3 + (next() % 48);
+      let text = "";
+      for (let j = 0; j < len; j++) {
+        text += String.fromCharCode(0x4e00 + (next() % 20000));
+      }
+      seen.add(chunkHash16(text));
+    }
+    assert.equal(seen.size, total, "10 万短串哈希不得坍缩（出现碰撞即分布缺陷）");
+  });
+
+  it("T-H3 旧格式 KKV 行（v1 sha256 键域）静默丢弃不崩", async () => {
+    const kkv = createMemorySessionKkv();
+    // v1 行：形状合法（16 hex、字段齐），但属于旧 sha256 键域——版本不符整体按
+    // miss 丢弃；升级设备上的真实旧行即此形态（键值由旧 sha256 生成，这里用
+    // 任意 16 hex 占位，键域不同天然永不命中）。
+    await kkv.set(
+      SESSION_ID,
+      SESSION_KKV_DOMAIN_TOKEN_CHUNKS,
+      TOKEN_CHUNKS_CACHE_KEY,
+      JSON.stringify({
+        v: 1,
+        items: [["0123456789abcdef", SCOPE, 3]],
+      })
+    );
+    assert.equal(await tokenChunkCache.seedFromKkv(kkv, SESSION_ID), 0, "v1 行按版本不符丢弃");
+    assert.equal(tokenChunkCache.stats().total, 0, "不得载入任何旧键域条目");
+    // 同键在新哈希域下的正常读写不受影响
+    const h = chunkHash16("新域块。");
+    tokenChunkCache.record(h, SCOPE, 5);
+    assert.equal(tokenChunkCache.lookup(h, SCOPE), 5);
+  });
+
+  it("T-H4 确定性与幂等：同输入恒同值，进程内重复调用无状态", () => {
+    const a = chunkHash16("重复输入。重复输入。");
+    const b = chunkHash16("重复输入。重复输入。");
+    assert.equal(a, b, "纯函数确定性");
+    // 大输入冒烟（整串 L1 键用同一函数，百 KB 级必须能跑且形态不变）
+    const big = "长文本。".repeat(20_000); // 100K 字符
+    assert.match(chunkHash16(big), /^[0-9a-f]{16}$/, "大输入输出形态不变");
+    // spec 原定的「N 块恰 N 次哈希调用」计数护栏未落（ESM 纯函数无法 spy，
+    // 行为式断言测不出内部 memoization——若 memoize 键=输入串，行为完全不变，
+    // 危害只有内存无界）。该风险由代码评审约束：fastHash16 禁止加记忆化，
+    // 见 cr-fix-spec cr2-B-09。
   });
 });

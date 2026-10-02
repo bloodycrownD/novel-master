@@ -32,6 +32,7 @@ import {
   type ChatAgentMeta,
 } from '../src/services/chat-agent-meta';
 import {
+  cancelPreciseUpgrade,
   cancelPreciseUpgradeDelay,
   isChatTokenPreciseWarmInflight,
   loadChatPromptTokenLabelResilient,
@@ -51,12 +52,15 @@ jest.mock('../src/services/chat-prompt-tokens.service', () => ({
   isChatTokenPreciseWarmInflight: jest.fn(() => false),
   // hook 侧换会话/卸载时的精确升级延迟计时收口出口（cr2-E-2）
   cancelPreciseUpgradeDelay: jest.fn(),
+  // 在途原生精确计数的取消下发出口（tokenizer-native-cancel，与上者同点并调）
+  cancelPreciseUpgrade: jest.fn(),
 }));
 
 const loadChatAgentMetaMock = loadChatAgentMeta as jest.Mock;
 const loadLabelMock = loadChatPromptTokenLabelResilient as jest.Mock;
 const warmInflightMock = isChatTokenPreciseWarmInflight as jest.Mock;
 const cancelDelayMock = cancelPreciseUpgradeDelay as jest.Mock;
+const cancelMock = cancelPreciseUpgrade as jest.Mock;
 
 function createDeferred<T>() {
   let resolve!: (value: T) => void;
@@ -446,6 +450,9 @@ describe('useChatTabScope 精确升级的会话身份弃权与延迟收口（cr2
       await flushMicrotasks();
     });
     expect(cancelDelayMock).toHaveBeenCalledWith('s1');
+    // T-TC6：在途原生计数的取消与延迟收口**同点并调、同参**（都是发起那一轮
+    // 的会话身份，不是当前会话）。
+    expect(cancelMock).toHaveBeenCalledWith('s1');
 
     // s1 那轮若仍被启动（越窗时刻）：判据已改判 true → 升级重活一行不跑。
     expect(bailBySession.get('s1')?.()).toBe(true);
@@ -461,11 +468,14 @@ describe('useChatTabScope 精确升级的会话身份弃权与延迟收口（cr2
       await flushMicrotasks();
     });
     cancelDelayMock.mockClear();
+    cancelMock.mockClear();
 
     // 计时还挂着（没推进窗口）就卸载：cleanup 经 ref 读到 's1' 收口。
     harness!.unmount();
     harness = undefined;
     expect(cancelDelayMock).toHaveBeenCalledWith('s1');
+    // T-TC6：卸载同样下发在途取消（同点并调、同参）。
+    expect(cancelMock).toHaveBeenCalledWith('s1');
   });
 });
 

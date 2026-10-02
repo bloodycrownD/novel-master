@@ -35,6 +35,18 @@ export interface CountPromptLlmInputParams {
    * （agent-runner 有现成 tools）；UI 读口路径拿不到 tools，缺省即不数。
    */
   readonly tools?: readonly LlmToolDefinition[];
+  /**
+   * 会话标识（可选，仅驱动取消链路消费）。
+   *
+   * 读口 `resolveCurrentPromptTokens` 从自己的 `sessionId` 实参透传进来；
+   * RN 驱动据此生成 `${sessionId}:${seq}` 形式的 requestId 并登记 in-flight，
+   * 用户侧滑切走会话时才能精确取消在途的原生整串计数。
+   *
+   * **不进缓存语义**：L1/L2 的会话语义由读口层单独处理（驱动内部查缓存一律
+   * 传空 sessionId），本字段只为取消归属存在。缺省即「不可取消轮」——
+   * node 驱动忽略它，其余读口不传时行为与既有逐字节一致。
+   */
+  readonly sessionId?: string;
 }
 
 export interface PromptTokenCountResult {

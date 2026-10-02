@@ -4,6 +4,7 @@ import {
 } from '@novel-master/core/common';
 import {
   __setPreciseUpgradeDelayForTests,
+  cancelPreciseUpgrade,
   cancelPreciseUpgradeDelay,
   isChatTokenPreciseWarmInflight,
   loadChatPromptTokenLabel,
@@ -15,6 +16,7 @@ import {
 // 测试里 throw 的实例同源（中途弃权用例的观测前提）。
 import {ChatPromptBuildBailedError} from '@/services/session-prompt-input.service';
 import {PromptTokenResolveBailedError} from '@novel-master/core/provider';
+import {PromptCountCancelledError} from '@novel-master/tokenizer-driver-rn/android-native-bridge';
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
 
 const mockResolvePromptTokensWithBackfill = jest.fn();
@@ -30,11 +32,38 @@ const mockSerializePromptLlmInput = jest.fn((..._args: unknown[]) => 'serialized
 // 驱动的 encoding 子模块要从那里取 core 的计数 helper，因此这里连驱动一起 mock
 // 成可控值：既能钉住「确实没再走折算」，又不至于把整个 js-tiktoken 拉进单测。
 const mockCountTextWithDefaultEncoding = jest.fn((text: string) => 2345);
+const mockCancelSessionNativeCounts = jest.fn();
 
 jest.mock('@novel-master/tokenizer-driver-rn/encoding', () => ({
   countTextWithDefaultEncoding: (text: string) =>
     mockCountTextWithDefaultEncoding(text),
 }));
+
+// 取消链路（tokenizer-native-cancel）：被测 service 从这个子路径导入
+// `cancelSessionNativeCounts` 与 `PromptCountCancelledError`。真身保留
+// （requireActual，其余符号行为不变），只把「下发取消」换成可控桩——测试要
+// 观测它被调用，而真身的下发依赖 NativeModules。
+jest.mock('@novel-master/tokenizer-driver-rn/android-native-bridge', () => {
+  // 与桥真身同构的取消错误类：被测服务按 instanceof 识别「在途原生计数被取消」，
+  // mock 工厂必须给同一个类（真身类在 jest.mock 下不可达）——做法逐字照抄
+  // 上面 core/provider 的 PromptTokenResolveBailedError 先例。
+  class PromptCountCancelledError extends Error {
+    constructor() {
+      super('native tokenizer count cancelled');
+      this.name = 'PromptCountCancelledError';
+    }
+  }
+  return {
+    ...jest.requireActual<Record<string, unknown>>(
+      '@novel-master/tokenizer-driver-rn/android-native-bridge',
+    ),
+    PromptCountCancelledError,
+    // 用箭头转发而非直接给桩：jest.mock 工厂被提升到 import 之前，直接引用
+    // 顶层 const 会踩 TDZ。
+    cancelSessionNativeCounts: (...args: unknown[]) =>
+      mockCancelSessionNativeCounts(...args),
+  };
+});
 
 // badge/label 走 `@novel-master/core/common` 取 core 真实现（不被本 mock 覆盖），
 // 因此本套件断言的标签字符串与 desktop 测试同源对拍（token-source-label T-TL4）。
@@ -132,6 +161,7 @@ describe('chat-prompt-tokens.service', () => {
     mockResolveSavedModelId.mockReset();
     mockSerializePromptLlmInput.mockClear();
     mockCountTextWithDefaultEncoding.mockClear();
+    mockCancelSessionNativeCounts.mockReset();
     // 存量两阶段用例在微任务节奏下断言升级轮：置 0 = 立即启动（旧行为）。
     // 「延迟启动/视图弃权」的专项用例在自己体内还原默认值再调回。
     __setPreciseUpgradeDelayForTests(0);
@@ -438,7 +468,9 @@ describe('chat-prompt-tokens.service', () => {
       expect(first).toBe('gpt ≈ 30k / 128k (23%)');
       // 延迟窗口内：精确档 resolve 一次都没跑（只有首帧估算那一次）——
       // 「进会话立刻交互」的黄金窗口不与秒级整串计数竞争。
-      await jest.advanceTimersByTimeAsync(2499);
+      // （token-count-perf-r2 Part D 起窗口=800ms，边界值一律引用常量——
+      // 2026-10-01 版本硬编码 2499/1 曾在调窗时静默变错值。）
+      await jest.advanceTimersByTimeAsync(PRECISE_UPGRADE_START_DELAY_MS - 1);
       expect(mockResolvePromptTokensWithBackfill).toHaveBeenCalledTimes(1);
       // 越窗启动：完整口径跑完回调升级（fake timers 下微任务由 advance 一并 flush）
       await jest.advanceTimersByTimeAsync(1);
@@ -590,7 +622,8 @@ describe('chat-prompt-tokens.service', () => {
       );
       expect(first).toBe('gpt ≈ 30k / 128k (23%)');
       // 延迟窗口内：升级还挂着（只有首帧那一次 resolve）。
-      await jest.advanceTimersByTimeAsync(1000);
+      // （Part D 起窗口=800ms，1000 会越窗——改引常量半窗。）
+      await jest.advanceTimersByTimeAsync(Math.floor(PRECISE_UPGRADE_START_DELAY_MS / 2));
       expect(mockResolvePromptTokensWithBackfill).toHaveBeenCalledTimes(1);
 
       // 收口（换会话 / 卸载时 service 的正式出口）。
@@ -611,6 +644,140 @@ describe('chat-prompt-tokens.service', () => {
     } finally {
       jest.useRealTimers();
       __setPreciseUpgradeDelayForTests(0);
+    }
+  });
+
+  it('T-TC4 在途轮取消：撤掉的那轮收口空串、不回调，inflight 清干净后同会话新一轮仍真升级', async () => {
+    // 与上面 L568 那条**并存且语义相反**：那条锁「延迟窗口里收口 → 下一轮仍能
+    // 升级」，本条锁「已经过了桥、在途中被原生 cancel 撤掉 → 不回调、不楔死」。
+    // 收口的另一半铁律：cancelPreciseUpgrade 只发指令、**不碰生命周期**——
+    // 那轮自己的 finally 仍是 inflight/补跑槽的唯一清理点。若外部代摘 inflight，
+    // 本条末段的新一轮升级永远进不了 runPreciseUpgrade（必红）。
+    __setPreciseUpgradeDelayForTests(0);
+    mockBuildSessionPromptInput.mockResolvedValue({
+      definition: {model: 'zai/glm-4.6'},
+      layout: {persist: [], dynamic: []},
+      ctx: {workplaceDisplay: '', messages: []},
+    });
+    mockResolveSavedModelId.mockReturnValue('zai/glm-4.6');
+    mockResolveTokenCounterModeForModel.mockResolvedValue('glm');
+    // 精确轮（无 preferEstimate 的那次）挂起，直到取消落地才以取消错收场——
+    // 复刻真链路：cancelCount 下发 → Kotlin 检查点命中 → reject → 桥翻成
+    // PromptCountCancelledError 上抛。
+    let cancelled = false;
+    let rejectInFlight: ((reason?: unknown) => void) | null = null;
+    mockResolvePromptTokensWithBackfill.mockImplementation(
+      (_sid: string, _raw: unknown, _params: unknown, options?: unknown) => {
+        const preferEstimate = (
+          options as {preferEstimate?: boolean} | undefined
+        )?.preferEstimate;
+        if (preferEstimate === true) {
+          return Promise.resolve({
+            tokenCount: 30_000,
+            estimated: true,
+            counterKind: 'heuristic',
+            source: 'local',
+          });
+        }
+        if (cancelled) {
+          return Promise.resolve({
+            tokenCount: 99_300,
+            estimated: false,
+            counterKind: 'glm',
+            source: 'local',
+          });
+        }
+        return new Promise((_res, rej) => {
+          rejectInFlight = rej;
+        });
+      },
+    );
+
+    const runtime = stubRuntime({contextWindow: 128_000});
+    const upgrades: string[] = [];
+    const scope = {projectId: 'p', sessionId: 's-cancel-inflight'};
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const first = await loadChatPromptTokenLabelResilient(
+        runtime,
+        scope,
+        l => upgrades.push(l),
+      );
+      expect(first).toBe('gpt ≈ 30k / 128k (23%)');
+      // 精确轮已起跑并挂在整串计数上（在途）。
+      await new Promise(resolve => setImmediate(resolve));
+      expect(mockResolvePromptTokensWithBackfill).toHaveBeenCalledTimes(2);
+
+      // hook 侧正式出口（换会话 / 卸载）：向桥下发取消。
+      cancelPreciseUpgrade(scope.sessionId);
+      expect(mockCancelSessionNativeCounts).toHaveBeenCalledWith(
+        's-cancel-inflight',
+      );
+
+      // 原生取消落地：该轮以 PromptCountCancelledError 收场。
+      rejectInFlight!(new PromptCountCancelledError());
+      await new Promise(resolve => setImmediate(resolve));
+      await new Promise(resolve => setImmediate(resolve));
+      // 不回调、不留痕：取消不是失败（无 [chat] prompt token … failed warn）。
+      expect(upgrades).toEqual([]);
+      expect(warnSpy).not.toHaveBeenCalled();
+
+      // 关键：会话没被楔死。取消后再刷新一轮，精确升级照常跑起来并回调。
+      cancelled = true;
+      const second = await loadChatPromptTokenLabelResilient(
+        runtime,
+        scope,
+        l => upgrades.push(l),
+      );
+      expect(second).toBe('gpt ≈ 30k / 128k (23%)');
+      await new Promise(resolve => setImmediate(resolve));
+      await new Promise(resolve => setImmediate(resolve));
+      expect(upgrades).toEqual(['glm = 99.3k / 128k (78%)']);
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it('T-TC5 取消收口：resolve 段抛取消错时走 bail 同款收口（空串、无 [chat] prompt token warn）', async () => {
+    mockBuildSessionPromptInput.mockResolvedValue({
+      definition: {model: 'zai/glm-4.6'},
+      layout: {persist: [], dynamic: []},
+      ctx: {workplaceDisplay: '', messages: []},
+    });
+    mockResolveSavedModelId.mockReturnValue('zai/glm-4.6');
+    mockResolveTokenCounterModeForModel.mockResolvedValue('glm');
+
+    const runtime = stubRuntime({contextWindow: 128_000});
+    const upgrades: string[] = [];
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      // 单发读数轮：resolve 段直接抛取消错 → 收成空串哨兵，不回落 fallback。
+      mockResolvePromptTokensWithBackfill.mockRejectedValue(
+        new PromptCountCancelledError(),
+      );
+      const label = await loadChatPromptTokenLabel(runtime, {
+        projectId: 'p',
+        sessionId: 's-cancel-label',
+      });
+      expect(label).toBe('');
+      // 没有回落重算（重算一遍恰是取消白做的原因）。
+      expect(mockCountTextWithDefaultEncoding).not.toHaveBeenCalled();
+
+      // 两阶段轮：升级轮的取消同样被 resolve 段 catch 收口 —— 不回调，且
+      // runPreciseUpgrade 的 catch（:386）一行都没碰，故无失败 warn。
+      mockTwoPhaseResolve(() => Promise.reject(new PromptCountCancelledError()));
+      const first = await loadChatPromptTokenLabelResilient(
+        runtime,
+        {projectId: 'p', sessionId: 's-cancel-upgrade'},
+        l => upgrades.push(l),
+      );
+      expect(first).toBe('gpt ≈ 30k / 128k (23%)');
+      await new Promise(resolve => setImmediate(resolve));
+      await new Promise(resolve => setImmediate(resolve));
+      expect(upgrades).toEqual([]);
+      expect(warnSpy).not.toHaveBeenCalled();
+    } finally {
+      warnSpy.mockRestore();
     }
   });
 

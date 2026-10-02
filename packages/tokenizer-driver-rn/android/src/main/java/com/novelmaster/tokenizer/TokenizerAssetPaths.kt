@@ -1,6 +1,6 @@
 package com.novelmaster.tokenizer
 
-/** Asset paths under `assets/tokenizers/` — mirrors core `tokenizerAssetPaths`. */
+/** Asset paths under `assets/tokenizers/` — WEB/SP 段与 core `tokenizerAssetPaths` 镜像；tiktoken 两表（cl100k/o200k）为本目录独有（见 README 分叉声明）。 */
 internal data class AssetPathSpec(
   val primary: String,
   val fallback: String? = null,
@@ -23,6 +23,21 @@ internal object TokenizerAssetPaths {
       "nemo" -> AssetPathSpec("web/nemo.json", "llama3.json", "json")
       "deepseek" -> AssetPathSpec("web/deepseek.json", "llama3.json", "json")
       "glm" -> AssetPathSpec("web/glm.json", "llama3.json", "json")
+      else -> null
+    }
+  }
+
+  /**
+   * gpt 家族（family == "tiktoken"）按**编码名**选词表（token-count-perf-r2）。
+   * 编码名由 JS 侧 `resolveRnEncodingName` 解析后经 `vendorModelId` 槽下发；
+   * 两表均为 HF tokenizer.json 转换版（来源 manifest 见 assets/tokenizers/README.md），
+   * 无 post_processor / normalizer——直编码不注入特殊 token，与 tiktoken 裸
+   * encode 行为对齐。未知编码名返回 null（Engine 抛异常 → JS 回退 js-tiktoken）。
+   */
+  fun forTiktokenEncoding(encodingName: String): AssetPathSpec? {
+    return when (encodingName) {
+      "cl100k_base" -> AssetPathSpec("cl100k.json", kind = "json")
+      "o200k_base" -> AssetPathSpec("o200k.json", kind = "json")
       else -> null
     }
   }
