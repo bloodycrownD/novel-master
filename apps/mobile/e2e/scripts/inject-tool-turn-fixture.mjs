@@ -17,7 +17,10 @@ import {fileURLToPath} from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PKG = 'com.novelmaster';
-const DB_REL = 'files/default/novel_master_vfs';
+// 库的真实落点是 databases/（op-sqlite 惯例，2026-10-02 装机实探）；此前写
+// files/default/ 从未命中——pull 到的是 run-as 的报错文本（63 字节），
+// 之前轮次 fixture 段全被 skip 掩盖了这条路径错。
+const DB_REL = 'databases/novel_master_vfs';
 const DB_DEVICE = `/data/data/${PKG}/${DB_REL}`;
 const SQL_PATH = path.join(
   __dirname,
@@ -75,8 +78,17 @@ function main() {
     console.log('[e2e] Applying fixture SQL on host...');
     const sql = fs.readFileSync(SQL_PATH, 'utf8');
     const db = new DatabaseSync(localDb);
-    db.exec(sql);
-    db.close();
+    // fixture 只铺被测面数据、不铺全部被引用行（如 llm_provider）——注入连接
+    // 关 FK 强制，避免 FOREIGN KEY constraint failed 挡住注入；app 侧连接
+    // 自带 FK 策略，不受此处影响。
+    db.exec('PRAGMA foreign_keys = OFF');
+    // Windows：exec 抛错时若不显式 close，句柄会卡住 finally 的 rmSync
+    // （EBUSY），把真实错误顶掉——先关句柄再让异常上抛。
+    try {
+      db.exec(sql);
+    } finally {
+      db.close();
+    }
 
     console.log('[e2e] Pushing database back to device...');
     adb('push', localDb, remoteTmp);

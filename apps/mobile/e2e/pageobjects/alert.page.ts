@@ -14,10 +14,16 @@ export class AlertPage {
     await switchToNative();
     try {
       await browser.acceptAlert();
+      // 分支证据：acceptAlert 既能接「回滚确认」，也可能误接**恰好挂着的别的
+      // 原生 alert**（如版本检查弹窗）——回滚确认根本没弹时流程会静默走偏
+      // （2026-10-02 实跑：T-E2 报空 toast、库里消息原样=回滚没执行）。留日志
+      // 定位用，读到「已 accept 但消息没滚」时先查这里。
+      console.log('[e2e] acceptRollback: accepted via W3C acceptAlert');
       return;
     } catch {
       /* fall through to UiAutomator */
     }
+    console.log('[e2e] acceptRollback: no W3C alert, waiting native message');
     // 回滚确认框正文是 `resolveRollbackConfirmMessage(mode, 'primary')`：
     // undo_send → 「将删除此消息及之后的对话」，rewind → 「将删除此消息之后的对话」。
     await this.acceptDestructive('将删除此消息', '回滚');

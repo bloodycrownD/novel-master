@@ -3,6 +3,7 @@ import {
   E2E_FIXTURE_PROJECT_NAME,
   E2E_FIXTURE_SESSION_TITLE,
 } from '../fixtures/session-ids';
+import {switchToNative} from './context';
 import {appPage} from '../pageobjects/app.page';
 
 const FIXTURE_SKIP_ENV = 'E2E_ALLOW_FIXTURE_SKIP';
@@ -44,10 +45,31 @@ export function fixtureSessionSelector(
   return `android=new UiSelector().textContains("${title}")`;
 }
 
-/** True when the injected fixture session title appears in the native session list. */
+/**
+ * True when the injected fixture session title appears in the native session list.
+ *
+ * 判定必须落在「fixture 项目的会话列表」上：会话行是 WebView 里的 web DOM，
+ * 原生 textContains 只有在该列表**可见**（data-view=list、项目已选中）时才
+ * 暴露文本——app 停在 conversation 视图或别的项目上时直接查会误判 missing
+ * （2026-10-02 实跑实锤：注入明明是好的，判 false 连锁带崩 T-E2/T-E3）。
+ */
 export async function isFixtureSessionAvailable(
+  projectName = E2E_FIXTURE_PROJECT_NAME,
   title = E2E_FIXTURE_SESSION_TITLE,
 ): Promise<boolean> {
+  await appPage.dismissUpdateCheckModalOnce();
+  await appPage.dismissLogboxIfPresent();
+  await appPage.closeProjectDrawerIfOpen();
+  try {
+    await appPage.ensureProject(projectName);
+  } catch {
+    // 连 fixture 项目都切不进去（抽屉里没有/环境异常）——如实判不可用。
+    return false;
+  }
+  // 切完项目再关一次抽屉：conversation 态点项目行后抽屉不一定自动关，
+  // 盖着列表时会话行文本（WebView 暴露）查不到。
+  await appPage.closeProjectDrawerIfOpen();
+  await switchToNative();
   const sessionTitle = await $(fixtureSessionSelector(title));
   return sessionTitle.isExisting();
 }

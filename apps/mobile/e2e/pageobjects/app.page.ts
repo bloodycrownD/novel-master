@@ -134,6 +134,7 @@ export class AppPage {
     let chatVisible = false;
     while (Date.now() < deadline) {
       await this.dismissUpdateCheckModalOnce();
+      await this.dismissLogboxIfPresent();
       const chatTab = await $('~对话');
       chatVisible = await chatTab.isDisplayed().catch(() => false);
       if (chatVisible) {
@@ -217,6 +218,15 @@ export class AppPage {
   async ensureProject(name = 'E2E Project'): Promise<void> {
     await this.waitForLaunch();
     await this.openProjectDrawer();
+    // 等抽屉列表渲染稳定再查 existing：isExisting 是一次性查询，抽屉刚开时
+    // 列表异步加载没完成会误判「项目不存在」→ 走 createProject 建出**同名
+    // 新项目**（2026-10-02 实跑实锤：竞态窗口建出两个假「E2E Tool Turn」
+    // 排在真身前面，后续轮全切到空项目、fixture 判定永远 missing）。
+    // 以「任一项目的 ⋮ 菜单（project-menu-*）出现」为列表就绪判据。
+    const anyMenu = await $(
+      'android=new UiSelector().resourceIdMatches("project-menu-.*")',
+    );
+    await anyMenu.waitForDisplayed({timeout: 10000});
     const existing = await $(`android=new UiSelector().text("${name}")`);
     if (await existing.isExisting()) {
       await existing.click();
@@ -225,6 +235,32 @@ export class AppPage {
     }
     await this.closeProjectDrawerIfOpen();
     await this.createProject(name);
+  }
+
+  /**
+   * dev 下 console.error 会弹 LogBox 错误横幅（无模型环境 run 失败的
+   * `[session-stream-unit-manager] run failed` 就是必弹源），**长挂不自动
+   * 消失**且是原生 Modal 层——盖住整棵 a11y 树，tab-chat/会话行全部查不到
+   * （2026-10-02 实跑实锤：waitForConversationEntered 等 tab-chat 假超时）。
+   * 点横幅展开 LogBox 后 dismiss（找不到按钮就用 BACK 兜底）。
+   */
+  async dismissLogboxIfPresent(): Promise<void> {
+    await switchToNative();
+    const bar = await $(
+      'android=new UiSelector().descriptionContains("Open debugger to view warnings")',
+    );
+    if (!(await bar.isExisting())) {
+      return;
+    }
+    await bar.click();
+    await browser.pause(800);
+    const dismiss = await $('android=new UiSelector().textContains("ismiss")');
+    if (await dismiss.isExisting()) {
+      await dismiss.click();
+    } else {
+      await driver.back();
+    }
+    await browser.pause(500);
   }
 
   /**
@@ -243,15 +279,22 @@ export class AppPage {
    * 死等固定时长。
    */
   async createSession(): Promise<void> {
-    await switchToSessionListView();
+    // 冷启动后 WebView 挂载晚于原生首屏（dev bundle 20MB+ 每次启动重拉），
+    // context 出现的时间波动大——预算放宽到 40s（一半给 context、一半给
+    // data-view），20s 在模拟器负载上来后实测会假超时。
+    await switchToSessionListView(40000);
     const create = await $('[data-testid="session-list-create"]');
     await create.waitForDisplayed({timeout: 10000});
-    const before = (await $$('[data-testid="session-row"]')).length;
+    // 不断言「行数比点击前多」：项目切换（launchFresh）的列表重推是异步的，
+    // 点击前的任何基线读数都可能取到中间态（fixture 场景两轮实锤——before
+    // 数到旧项目残留行，点击后新项目 1 行，`1 > before` 误判失败）。本方法的
+    // 唯一调用方是 launchFresh（全新空项目），改为断言**新会话行出现**：
+    // 新项目的第一个会话固定叫「新会话1」，标题存在性不依赖基线计数。
     await create.click();
-    await browser.waitUntil(
-      async () => (await $$('[data-testid="session-row"]')).length > before,
-      {timeout: 10000, timeoutMsg: '新建会话后列表未多出一行'},
+    const newRow = await $(
+      `//div[@data-testid="session-row"]//div[contains(@class,"session-row__title") and normalize-space(text())="${NEW_SESSION_TITLE}"]`,
     );
+    await newRow.waitForExist({timeout: 10000, timeoutMsg: '新建会话后未见「新会话1」行出现'});
     await browser.pause(400);
   }
 
@@ -269,19 +312,53 @@ export class AppPage {
     const sessionTitle = await $(
       `//div[@data-testid="session-row"]//div[contains(@class,"session-row__title") and normalize-space(text())="${title}"]`,
     );
-    if (!(await sessionTitle.isExisting())) {
+    // 行短暂消失要重试而不是立刻判死：reloadLists 会整段重渲染 #session-list-rows，
+    // 「waitForExist 刚过、这里 isExisting 又 false」的重渲染窗口实测存在
+    // （2026-10-02 连发轮一轮过一轮挂的根源之一）。
+    let rowExists = false;
+    for (let attempt = 0; attempt < 8 && !(rowExists = await sessionTitle.isExisting()); attempt++) {
+      await browser.pause(500);
+    }
+    if (!rowExists) {
       throw new Error(
-        `[e2e] 会话行「${title}」不存在（web 列表视图里）。` +
+        `[e2e] 会话行「${title}」不存在（web 列表视图里，重试 4s 后仍无）。` +
           '确认 createSession() 已成功（需要先选中项目），且项目内没有同名旧会话。',
       );
     }
     await sessionTitle.click();
-    // 点行 → 宿主切 chatSubview='conversation' → 顶部「聊天 / 聊天工作区」条重新出现。
-    // 判据刻意用原生 testID（`tab-chat` 在两视图下语义不同，列表视图下它被
-    // display:none 收起），所以点完之后切 NATIVE 等它。
+    await this.waitForConversationEntered();
+  }
+
+  /**
+   * 等「已进入会话」（原生 tab-chat 可见）。
+   *
+   * 等待期间可能被**后到的 Modal** 盖住 a11y 树（2026-10-02 实跑实锤）：
+   * 「版本检查」弹窗在 forceAppLaunch 后数十秒才弹（模拟器无外网，网络超时
+   * 晚于主界面就绪），项目抽屉也可能从更早的步骤残留——两者都是原生 Modal，
+   * 开着时整棵树只剩 Modal 内容、tab-chat 永远查不到（与 waitForLaunch 的
+   * 弹窗互为同因）。所以这里做互查循环（waitForLaunch 同款模式）：每轮先
+   * 点掉弹窗、再关抽屉、后查 tab-chat，两种 Modal 都能自愈——单纯
+   * waitForDisplayed 会在「弹窗晚到」时死等 15s 假失败。
+   */
+  private async waitForConversationEntered(timeoutMs = 20000): Promise<void> {
     await switchToNative();
-    const chatTab = await $(byTestId('tab-chat'));
-    await chatTab.waitForDisplayed({timeout: 15000});
+    const deadline = Date.now() + timeoutMs;
+    let tabVisible = false;
+    while (Date.now() < deadline) {
+      await this.dismissUpdateCheckModalOnce();
+      await this.dismissLogboxIfPresent();
+      await this.closeProjectDrawerIfOpen();
+      const chatTab = await $(byTestId('tab-chat'));
+      tabVisible = await chatTab.isDisplayed().catch(() => false);
+      if (tabVisible) {
+        return;
+      }
+      await browser.pause(1000);
+    }
+    throw new Error(
+      '[e2e] 进入会话后 tab-chat 20s 内未显示：已每秒尝试关闭「版本检查」弹窗与' +
+        '项目抽屉仍未恢复——检查 app 是否卡在别的 Modal 或启动失败。',
+    );
   }
 
   async switchToChatPanel(): Promise<void> {
@@ -333,6 +410,19 @@ export class AppPage {
    */
   async ensureWorkspaceModel(): Promise<void> {
     await this.switchToChatPanel();
+
+    // 合成包加载窗口（屏上「正在加载输入区…」）：textarea 与 hint-row 都还没
+    // 挂出来，直接探测会把「还在加载」误判成「两者皆无」、走「回列表 → 我的」
+    // 的旧兜底路径（2026-10-02 实跑实锤）。先等二者居一再分流。
+    await browser.waitUntil(
+      async () =>
+        (await chatTranscriptPage.isDockHintRowVisible()) ||
+        (await chatTranscriptPage.composerInputExists()),
+      {
+        timeout: 20000,
+        timeoutMsg: 'composer 区 20s 未就绪（hint-row 与 textarea 都没出现）',
+      },
+    );
 
     if (await chatTranscriptPage.isDockHintRowVisible()) {
       // 点提示行 → dockAction.needModel → 宿主打开工作区模型选择器（RN Modal）。
@@ -417,6 +507,10 @@ export class AppPage {
     const projectName = isolatedProjectName(projectBaseName);
     await this.ensureProject(projectName);
     await this.createSession();
+    // 「新建会话」只**创建+刷列表**，app 停在列表视图（useChatTabScope.
+    // handleCreateSession 不切视图不选会话）；而 tab-chat 在列表视图被
+    // display:none 整行收起（ChatConversationPanel）——等 tab-chat 等不出来，
+    // 正路就是点列表行进会话（openLatestSession），进去后 tab-chat 才显示。
     await this.openLatestSession();
     await this.switchToChatPanel();
     await this.ensureWorkspaceModel();

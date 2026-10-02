@@ -39,6 +39,10 @@ function androidCapabilities(): Record<string, unknown> {
   // 实际数据），而 forceAppLaunch 是 terminateApp + activateApp —— 只把进程杀掉再冷启，
   // 碰的是内存里的进程状态，不动沙盒里的任何文件/数据库。所以两者可以同时开。
   base['appium:noReset'] = true;
+  // dev bundle 冷启动（force-stop 后 23MB bundle 重拉 + Hermes 编译 40 万行）在
+  // 模拟器负载上来后实测会超 am start 的默认 20s adb 执行窗——把 adbExecTimeout
+  // 放宽到 60s，避免 session 建立阶段假超时（2026-10-02 实跑实锤）。
+  base['appium:adbExecTimeout'] = 60000;
   // 2026-10-01 e2e 实跑实锤：app 进程跨 spec 存活时，UI 操作会间歇性「集体失效」
   // （Appium findElement 对一切新元素超时；渲染/输入本身正常——像素对比证实点击
   // 生效、a11y dump 偶尔回旧树；force-stop 冷启动后恢复）。失效不跟某条 spec 走，

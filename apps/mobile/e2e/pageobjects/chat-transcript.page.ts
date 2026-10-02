@@ -118,7 +118,46 @@ export class ChatTranscriptPage {
    */
   async sendComposerMessage(text: string): Promise<void> {
     await this.setComposerText(text);
+    const countBefore = await this.countMessages();
     await this.clickDockSendButton();
+    // 等**本条消息入流**（转录区 .row.message 总数 +1），不再依赖固定 pause：
+    // 发送点击到宿主入流渲染隔着桥 round-trip，死等 1200ms 在慢环境会漏。
+    await browser.waitUntil(
+      async () => (await this.countMessages()) > countBefore,
+      {timeout: 15000, timeoutMsg: `发送「${text}」后消息未入流（转录区行数未增长）`},
+    );
+    // 再等 **run 落定**才能安全发下一条：发送/终止是同一个钮（dock.ts：
+    // `view.running ? '终止' : '发送'`），无真模型环境 run 失败要走完 provider
+    // 超时（实测 ~7s），期间点击=终止 run——立刻连发会把第 2/3 条的「发送」
+    // 变成「终止」，消息根本不落库（2026-10-02 实跑实锤：3 连发只落 1 条、
+    // 库证一致）。
+    //
+    // 判据用**转录区行数稳定**而不是 aria-label：run 快速失败（如发送前置
+    // 校验直接抛 ProviderError）时 label 可能从未切到「终止」，label 判据
+    // 会在错误的时机放行（下一轮实锤：label 全程「发送」但 run 在途，第 2
+    // 条发送被吞）。行数稳定（连续 3 次读数相同）对「run 秒败」「run 慢败
+    // 后错误回复入流」两种形态都收敛。
+    await this.waitForTranscriptSettled();
+  }
+
+  /**
+   * 等转录区行数稳定：入流/错误回复追加会让行数增长，run 结束后行数不再变。
+   * 连续 3 次相同读数视为稳定；上限 30s（provider 超时量级）。
+   */
+  private async waitForTranscriptSettled(timeoutMs = 30000): Promise<void> {
+    const deadline = Date.now() + timeoutMs;
+    let stableCount = 0;
+    let prev = -1;
+    while (Date.now() < deadline && stableCount < 3) {
+      const n = await this.countMessages();
+      if (n === prev) {
+        stableCount++;
+      } else {
+        stableCount = 0;
+        prev = n;
+      }
+      await browser.pause(700);
+    }
   }
 
   /** 点 dock toolbar 的发送钮（运行态下同一个钮是「终止」，aria-label 随之切换）。 */
