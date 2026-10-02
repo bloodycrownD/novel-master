@@ -193,8 +193,11 @@ export async function exportDatabaseBackupToPath(
  *   最终库文件已是远端快照而本地改动无声消失。
  * - 回滚只覆盖「覆盖动作本身失败」这一段；覆盖已成功后（databaseReplaced）
  *   抛 {@link DatabaseReplacedError}，**不回滚**——库已经是新快照。
- * - 回滚失败必须并入错误信息并保留 bak 副本（用户要能手工救回）；
- *   回滚成功时 bak 冗余，finally 删掉；unlink 本身仍可吞但留 console.error 痕迹。
+ * - 三条终态各自对 bak 的处置：**①回滚失败** ⇒ 保留（用户要能手工救回）；
+ *   **②覆盖失败且回滚成功** ⇒ 冗余，finally 删掉；**③覆盖成功但三表恢复失败**
+ *   ⇒ 同样保留（CR-F01：此时 bak 是磁盘上唯一一份含未同步本地改动的旧库，
+ *   删掉即无声丢数据），并把路径写进错误文案。
+ *   unlink 本身仍可吞但留 console.error 痕迹。
  *
  * @param replace 覆盖动作：FromPath 走 copyFile，FromBytes 走 writeFile。
  * @param providerSnapshot 覆盖前 dump 的本机服务商三表。
@@ -209,6 +212,10 @@ async function replaceLiveDatabase(
   let bakCreated = false;
   let rollbackFailed = false;
   let databaseReplaced = false;
+  // 第三终态：覆盖已成功、只是三表恢复失败。此时库已是新快照（不能回滚），
+  // 而 bak 正是「导入前的完整旧库」——含未同步的本地改动，是用户仅存的救回凭据。
+  // 置位后 finally 不删它，并把路径写进错误文案（与 mobile 侧 finally 从不删 bak 一致）。
+  let keepBackupForManualRecovery = false;
 
   try {
     if (await fileExists(dbPath)) {
@@ -227,9 +234,15 @@ async function replaceLiveDatabase(
     }
   } catch (error) {
     if (databaseReplaced) {
-      // 库已是新快照：不回滚，只把「已换代 + 三表未恢复」如实报上去。
+      // 终态③：库已是新快照，不回滚，只把「已换代 + 三表未恢复」如实报上去。
+      // 但覆盖前的旧库副本是用户导入前那份完整旧库（含未同步本地改动）——
+      // 此刻它是磁盘上唯一的一份，删掉等于让用户无声丢失本地数据。
+      keepBackupForManualRecovery = true;
       throw new DatabaseReplacedError(
-        `数据库已导入，但本机服务商配置恢复失败：${errorDetail(error)}`,
+        `数据库已导入，但本机服务商配置恢复失败：${errorDetail(error)}` +
+          (bakCreated
+            ? `导入前的旧库副本已保留在 ${bakPath}（未回滚，需要时可手工替换回来）。`
+            : "导入前没有可备份的活动库文件，无旧库副本可保留。"),
         false,
       );
     }
@@ -252,7 +265,7 @@ async function replaceLiveDatabase(
     }
     throw error;
   } finally {
-    if (bakCreated && !rollbackFailed) {
+    if (bakCreated && !rollbackFailed && !keepBackupForManualRecovery) {
       await fsOps.unlink(bakPath).catch((unlinkError: unknown) => {
         console.error(
           `[db-backup] 清理回滚副本失败（不影响数据正确性）: ${bakPath}`,

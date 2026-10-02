@@ -185,6 +185,11 @@ describe("db-backup 导入吞错治理 (S-CS-07) + 换代信号 (S-CS-01)", () =
           assert.equal(error.databaseReplaced, true);
           assert.equal(error.providerTablesRestored, false);
           assert.match(error.message, /服务商配置恢复失败/);
+          // 文案必须告诉用户副本在哪——保留了却不报路径，等于把救回机会藏起来。
+          assert.ok(
+            error.message.includes(bakPath),
+            `错误信息必须写出保留副本的路径: ${error.message}`,
+          );
           return true;
         },
       );
@@ -197,6 +202,14 @@ describe("db-backup 导入吞错治理 (S-CS-07) + 换代信号 (S-CS-01)", () =
       current.equals(await readFile(notADb)),
       true,
       "覆盖已成功后不得回滚（回滚会把用户拉回来的数据丢掉）",
+    );
+    // 牙齿（CR-F01）：不改这一段时 finally 照常 unlink(bakPath)，
+    // 删掉的正是「导入前的完整旧库」——用户未同步的本地改动在磁盘上就此消失，
+    // 而错误文案只字未提。本断言与终态③的不可回滚性互为前提。
+    assert.equal(
+      existsSync(bakPath),
+      true,
+      "终态③必须保留导入前的旧库副本（唯一一份含未同步本地改动的文件）",
     );
 
     // 把库恢复成可用状态——本用例故意留下一份垃圾库文件，
