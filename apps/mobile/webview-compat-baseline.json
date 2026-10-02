@@ -29,6 +29,13 @@
       "Object.hasOwn": 0,
       "structuredClone": 0,
       "Array.at": 0
+    },
+    "chat-conversation": {
+      "Object.fromEntries": 6,
+      "String.replaceAll": 37,
+      "Object.hasOwn": 12,
+      "structuredClone": 11,
+      "Array.at": 18
     }
   }
 }
