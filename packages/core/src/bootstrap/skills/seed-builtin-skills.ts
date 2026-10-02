@@ -75,7 +75,7 @@ prompts 承载 agent 的全部提示词配置：
 
   陷阱：persist 只收 type 为 "text" 的块。旧编辑器的过渡态 worktree 块（type 为 "worktree"）读入时会被剥成文本，但 definition 写出时必须 omit——不要带 worktree 块。
 - persistEnabled（可选，boolean，缺省 false）：持久区开关；false 时 persist 数组保留但不参与组装。
-- dynamic（可选，数组，缺省空数组）：动态区文本块，形态同 persist 但允许 lifecycle 字段（"always" / "once"，缺省 always——once 表示只在首次组装注入）。需要按上下文动态注入的内容放这里。
+- dynamic（可选，数组，缺省空数组）：动态区文本块，形态同 persist。需要按上下文动态注入的内容放这里。
 - dynamicEnabled（可选，boolean，缺省 false）：动态区开关。
 - workplace（可选，string）：常驻工作区的助手确认语。陷阱：这是非空字符串，不是布尔——旧格式的 true 会被兼容读成「【done】」，但写出必须是字符串（开 = 非空字符串；关 = 整个字段省略）。开启后 agent 会话带常驻工作区，助手看到工作区内容后回一句确认语。
 - customAttach（可选，string）：自定义附加信息，运行时以纯文本注入；开 = trim 后非空，关 = 省略。
@@ -115,7 +115,7 @@ prompts 承载 agent 的全部提示词配置：
         "persist": [],
         "dynamicEnabled": true,
         "dynamic": [
-          { "name": "focus", "type": "text", "role": "user", "content": "本轮只处理当前章节。", "lifecycle": "once" }
+          { "name": "focus", "type": "text", "role": "user", "content": "本轮只处理当前章节。" }
         ],
         "workplace": "我看到工作区了",
         "customAttach": "修改稿统一放 work/ 目录。",

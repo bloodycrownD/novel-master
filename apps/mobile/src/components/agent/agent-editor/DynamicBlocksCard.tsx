@@ -1,22 +1,16 @@
 /**
  * 「动态区」卡（comp-rest/C-3 自 AgentEditorForm 拆出）：
- * 区头开关 + 添加入口、块列表（名称/角色/常驻开关/宏内容）、空态与禁用态提示。
+ * 区头开关 + 添加入口、块列表（名称/角色/宏内容）、空态与禁用态提示。
  */
 import React from 'react';
 import {Text, View} from 'react-native';
 
 import type {DynamicPromptBlock} from '@novel-master/core/prompt';
-import {
-  PROMPT_REGION_LABELS,
-  ROLE_OPTIONS,
-  isDynamicBlockPersistent,
-  withDynamicBlockPersistence,
-} from '@novel-master/core/config-forms/agent';
+import {PROMPT_REGION_LABELS, ROLE_OPTIONS} from '@novel-master/core/config-forms/agent';
 
 import {ExpandablePromptInput} from '../ExpandablePromptInput';
 import {FormField} from '../../form/FormField';
 import {FormSelectField} from '../../form/FormSelectField';
-import {FormSwitchRow} from '../../form/FormSwitchRow';
 import {FormTextInput} from '../../form/FormTextInput';
 import {PromptMacroTextInput} from '../PromptMacroTextInput';
 import {PromptBlockActions} from './PromptBlockActions';
@@ -142,28 +136,6 @@ export function DynamicBlocksCard({
                     disabled={readOnly}
                   />
                 </FormField>
-                <FormSwitchRow
-                  label="常驻"
-                  tokens={tokens}
-                  value={isDynamicBlockPersistent(block)}
-                  disabled={readOnly}
-                  onValueChange={persistent =>
-                    setDynamic(prev =>
-                      prev.map((b, i) =>
-                        i === index
-                          ? withDynamicBlockPersistence(b, persistent)
-                          : b,
-                      ),
-                    )
-                  }
-                />
-                {!isDynamicBlockPersistent(block) ? (
-                  <Text
-                    style={[styles.fieldHint, {color: tokens.textSecondary}]}
-                  >
-                    {PROMPT_REGION_LABELS.dynamicLifecycleOnceHint}
-                  </Text>
-                ) : null}
                 {(() => {
                   const updateDynamicContent = (v: string) =>
                     setDynamic(prev =>

@@ -35,8 +35,6 @@ import {
   mapPersistTextBlocks,
   movePersistTextBlock,
   toolsSelectionFromDefinition,
-  isDynamicBlockPersistent,
-  withDynamicBlockPersistence,
   withWorkplaceToggle,
   type AgentMode,
   type ToolsMode,
@@ -1340,33 +1338,6 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                               ))}
                             </select>
                           </SettingsField>
-                          <div className="config-block-card__switch-row">
-                            <span className="config-block-card__switch-label">
-                              常驻
-                            </span>
-                            <Switch
-                              checked={isDynamicBlockPersistent(block)}
-                              onChange={(persistent) =>
-                                setDynamic((prev) =>
-                                  prev.map((b, i) =>
-                                    i === index
-                                      ? withDynamicBlockPersistence(
-                                          b,
-                                          persistent
-                                        )
-                                      : b
-                                  )
-                                )
-                              }
-                              disabled={isBuiltin}
-                              aria-label="常驻"
-                            />
-                          </div>
-                          {!isDynamicBlockPersistent(block) ? (
-                            <p className="config-block-card__hint config-block-card__hint--subtle config-block-card__switch-hint">
-                              {PROMPT_REGION_LABELS.dynamicLifecycleOnceHint}
-                            </p>
-                          ) : null}
                           <SettingsField label="内容">
                             <PromptCollapsibleField
                               value={block.content}
