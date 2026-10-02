@@ -526,10 +526,36 @@ export type VfsBatchExportStageRequest = VfsScopeRequest & {
   readonly logicalPaths: readonly string[];
 };
 
+/**
+ * 一条被跳过的批量导出项（不丢数据、只报告）。
+ *
+ * 形状与 core 的 `BatchExportSkip`（`@novel-master/core/vfs`）逐字段一致。
+ * 这里**刻意不 import core 的类型**：本文件是「零 import 的可序列化 DTO 面」，
+ * 跨包 import 会把 DTO 面绑进 core 的编译面。本地复刻形状的代价是 core 改字段时
+ * 要手工同步一次，故 JSDoc 显式点名两处必须一起看。
+ */
+export type VfsBatchExportSkippedDto = {
+  /** 被跳过的逻辑路径（含 leading `/`） */
+  readonly logicalPath: string;
+  /** 跳过原因（当前仅 `DUPLICATE_RELATIVE_PATH`） */
+  readonly reason: string;
+};
+
 export type VfsBatchExportStageResult = {
   readonly stagingRoot: string;
   /** 供 startDrag 的顶层绝对路径（文件或目录） */
   readonly filePaths: readonly string[];
+  /**
+   * 相对路径碰撞而被去重跳过的选中项（CS-08）。
+   *
+   * ⚠️ **可选字段**：`data` 走的是变量不是字面量，多余属性检查不触发；标成必填会
+   *   让任何手写字面量（测试夹具等）报 TS2741，所以必须是可选。
+   * ⚠️ **本期 renderer 不消费**（UI 呈现是 spec §12.5 第 3 条列出的债务池）。
+   *   但它必须在这个类型面上存在：字段会随 IPC 悄悄过去，两端类型都看不见的话，
+   *   将来接 UI 提示时必然漏改 `ipc-types.ts`——它在 `shared/` 下、离改动最远、
+   *   最容易被忘。⚠️ 别看到「没人读」就当死字段删掉。
+   */
+  readonly skipped?: readonly VfsBatchExportSkippedDto[];
 };
 
 export type VfsBatchClearStagingRequest = {
@@ -1725,6 +1751,17 @@ export type CloudSyncLocalStatusDto = {
 
 export type CloudSyncPullResult = {
   readonly rev: number;
+  /**
+   * 本次拉取是否**换了本机数据库文件**（S-CS-01 换代路径）。
+   *
+   * ⚠️ 必填而非可选：`coordinator.pull()` 的返回类型里它就是必填
+   *    （`CloudSyncPullOutcome.databaseReplaced`），`ALREADY_UP_TO_DATE` 的早退
+   *    分支也显式补了 `false`。此前本类型只有 `rev` 一个字段，于是
+   *    `apps/desktop/test/cloud-sync-pull-accounting.test.ts` 里三处读
+   *    `data.databaseReplaced` 全靠运行时巧合通过、类型面零兜底（CR cloudsync
+   *    P2-4）——有人哪天「修正」成本类型里的这个字段，测试照样绿。
+   */
+  readonly databaseReplaced: boolean;
 };
 
 export type CloudSyncPushRequest = {

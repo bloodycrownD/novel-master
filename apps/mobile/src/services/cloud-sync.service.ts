@@ -409,10 +409,16 @@ export async function pullCloudSync(
     return {rev: result.rev, alreadyUpToDate: false};
   } catch (error) {
     if (isCloudSyncError(error) && error.code === 'ALREADY_UP_TO_DATE') {
+      // ⚠️ `.catch(() => undefined)` 是**有意补的对称**（CR cloudsync P2-3）：
+      // 本行在 catch 块内部，记账一旦抛错会**从 catch 里再抛**出去 ⇒ 直接跳过
+      // 下面的 `progress?.fail` 与 `mapSdkError`，把「已是最新」这个正常语义
+      // 换成一个裸错误往上冒。该分支确实不换代（runtime 是活的），但
+      // 「抛错概率低」不等于「不抛」——账本写盘撞上库忙/锁冲突一样会失败。
+      // 记账是旁路，让它失败，不要拿它污染主语义。
       await patchCloudSyncLocalStatus(runtime, {
         lastPullAt: now,
         lastPullResult: 'already_up_to_date',
-      });
+      }).catch(() => undefined);
       progress?.done({rev: local.lastSyncedRev, alreadyUpToDate: true});
       return {rev: local.lastSyncedRev, alreadyUpToDate: true};
     }

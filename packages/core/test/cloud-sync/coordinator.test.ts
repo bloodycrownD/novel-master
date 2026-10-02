@@ -596,11 +596,24 @@ describe("S-CS-09 final status 重读判定", () => {
    * 模拟设备 B 的**无条件**写：`storage.put` 不传 ifMatch 就是无 If-Match 写，
    * 正是另一台设备在锁过期后做的事。测试基座零改动。
    */
-  function simulateOtherDevice(
+  /**
+   * 模拟「另一台设备把远端 status 改成了这样」。
+   *
+   * ⚠️ **必须 await**（CR cloudsync P2-5）：原先写的是
+   * `void storage.put(...)`，正确性依赖「`createStorage` 的 status 分支体内
+   * 永远没有 await」这条**没写下来的不变量**——三个赋值
+   * （`currentStatus` / `statusWrites` / `currentEtag`）在函数被调用的那一刻
+   * 同步完成，所以当时不竞态。将来往 `put` 里加任何一处 `await`，这三条用例会
+   * 静默退化成「设备 B 的写没赶上 → 守卫不触发 → push 成功」；断言仍会红，
+   * 但**红的原因变成了别的问题**，排查成本极高。
+   *
+   * 钩子（`exportSnapshotToPath`）本身是 async，await 得起。
+   */
+  async function simulateOtherDevice(
     storage: ReturnType<typeof createStorage>,
     status: CloudSyncStatus,
-  ): void {
-    void storage.put(statusKey(PREFIX), encodeStatus(status));
+  ): Promise<void> {
+    await storage.put(statusKey(PREFIX), encodeStatus(status));
   }
 
   it("远端 rev 已被他人推进时不覆盖并抛 NEED_PULL_FIRST", async () => {
@@ -612,7 +625,7 @@ describe("S-CS-09 final status 重读判定", () => {
     const dbSync = createMockDbSync({
       async exportSnapshotToPath() {
         // 设备 B 在我们上传期间把 rev 推到了 3。
-        simulateOtherDevice(storage, {
+        await simulateOtherDevice(storage, {
           schemaVersion: 1,
           rev: 3,
           lock: null,
@@ -651,7 +664,7 @@ describe("S-CS-09 final status 重读判定", () => {
     });
     const dbSync = createMockDbSync({
       async exportSnapshotToPath() {
-        simulateOtherDevice(storage, {
+        await simulateOtherDevice(storage, {
           schemaVersion: 1,
           rev: 2,
           lock: buildLease("other-device", 900),
@@ -688,7 +701,7 @@ describe("S-CS-09 final status 重读判定", () => {
     const dbSync = createMockDbSync({
       async exportSnapshotToPath() {
         // 过期租约 ⇒ canAcquireLock 为 true；rev 未推进 ⇒ latest.rev(2) < nextRev(3)。
-        simulateOtherDevice(storage, {
+        await simulateOtherDevice(storage, {
           schemaVersion: 1,
           rev: 2,
           lock: buildLease("other-device", -900),

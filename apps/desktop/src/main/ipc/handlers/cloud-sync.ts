@@ -106,13 +106,19 @@ export async function handleCloudSyncPull(): Promise<
     // 比「记账失败」更糟（后续请求继续绑在已关连接上）。
     if (err instanceof DatabaseReplacedError) {
       await rebootstrapDesktopRuntime();
+      // ⚠️ 这段文案是**给用户看的 toast**（CR cloudsync P2-2）：不要把
+      // `providerTablesRestored` 这类 TypeScript 字段名拼进去——它对用户零信息量，
+      // 只会让人对着一个内部布尔名发懵。要判断成没成，看这里的中文措辞即可；
+      // 字段值本身只进日志。
+      console.warn(
+        "[cloud-sync] 库已换代但服务商配置表未完全恢复",
+        { providerTablesRestored: err.providerTablesRestored },
+      );
       return {
         ok: false,
         error: formatIpcError(
           new Error(
-            `${err.message}（服务商配置未恢复：providerTablesRestored=${String(
-              err.providerTablesRestored
-            )}）`,
+            `${err.message}（服务商配置未能恢复，请检查模型服务商设置）`,
           ),
         ),
       };

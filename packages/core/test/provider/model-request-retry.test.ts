@@ -417,7 +417,7 @@ describe("DefaultModelRequestService retry", () => {
       chat: async (req) => {
         calls += 1;
         req.onStream?.({ type: "text-delta", text: "半句" });
-        throw new LlmStreamTimeoutError("idle");
+        throw new LlmStreamTimeoutError("idle", 90_000);
       },
     };
     const svc = new DefaultModelRequestService({
@@ -456,9 +456,16 @@ describe("DefaultModelRequestService retry", () => {
         if (calls === 1) {
           req.onStream?.({
             type: "usage",
-            usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+            usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
           });
-          req.onStream?.({ type: "done" });
+          req.onStream?.({
+            type: "done",
+            result: {
+              assistantText: "",
+              blocks: [],
+              raw: {},
+            },
+          });
           throw new Error("ECONNRESET");
         }
         return { assistantText: "ok", blocks: [{ type: "text", text: "ok" }], raw: {} };

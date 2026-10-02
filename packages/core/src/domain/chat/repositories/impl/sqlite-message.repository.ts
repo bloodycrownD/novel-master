@@ -359,6 +359,16 @@ export class SqliteMessageRepository implements MessageRepository {
        FROM chat_message WHERE session_id = #{sessionId} ORDER BY seq ASC`,
       { sessionId }
     );
+    // ⚠️ **本方法刻意不走 `mapRows`**（下面这个裸 for 循环）：它是在**写事务内**
+    // 被调用的（`message.service.ts:truncateAfter` 的空锚分支 / `session.service.ts`
+    // 的 deleteSessionTree / `project.service.ts` 的删项目链）。`mapRows` 的分片
+    // `yieldFn` 只在「让出事件循环」时有用——对锁持有期**零帮助**，反倒会在事务
+    // 中间插入 await，把本该是一段的临界区切成若干段，让等锁的写方有机会插队。
+    // 这里的收益是**列数**（21 → 4）与**消除事务外的一次全量往返**，不是并发度。
+    // ⚠️ 因此本方法的 `JSON.parse` 成本是落在写事务持有期内的，这是 C1-2 换窄读口
+    //    时已知的代价（不是本轮新增）。要真正缩短这个窗口得重划「产出写集合的读」
+    //    与「写」之间的边界，那与 c2 域「产出写集合的读必须留在事务内」的判据
+    //    直接冲突，已登记为债务（CR cr1-c1 P2-1 修法 b），本波不做。
     const targets: MessageReadRefTarget[] = [];
     for (const row of rows) {
       try {

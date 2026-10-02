@@ -149,13 +149,19 @@ export const VFS_BLOB_GC_TRIGGER_LEGACY_NAMES = [
  * 另一条不可省的配套动作是 **bump `SCHEMA_BOOT_VERSION`**：本组语句与
  * `alignSchemaColumns` 同在慢路径，而 `bootVersion >= SCHEMA_BOOT_VERSION`
  * 的存量库会在快路径直接 return ⇒ 不 bump 的话这组语句永远补不上。
+ *
+ * ⚠️ 这四条**不带尾分号**（CR c2 P2-2 收口）：`NOVEL_MASTER_SCHEMA_STATEMENTS`
+ * 是逐条 `tx.execute` 的单语句数组，全仓 40+ 条 canonical DDL 一律无尾分号，
+ * 只有这里两条 `.map()` 出来的 DROP 带。desktop 侧的 bootstrap 用例已经跑通，
+ * 但 mobile 的 op-sqlite `execute` 对尾分号的容忍度**零用例覆盖** ⇒ 按全仓
+ * 惯例去掉，零行为变化。
  */
 export const VFS_BLOB_GC_TRIGGER_DROP_STATEMENTS: readonly string[] = [
   ...VFS_BLOB_GC_TRIGGER_LEGACY_NAMES.map(
-    (name) => `DROP TRIGGER IF EXISTS ${name};`
+    (name) => `DROP TRIGGER IF EXISTS ${name}`
   ),
   ...VFS_BLOB_GC_TRIGGER_NAMES_V2.map(
-    (name) => `DROP TRIGGER IF EXISTS ${name};`
+    (name) => `DROP TRIGGER IF EXISTS ${name}`
   ),
 ];
 

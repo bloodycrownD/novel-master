@@ -26,7 +26,7 @@ import {
   renameVfsEntry,
   renameVfsDirectory,
 } from "@/domain/vfs/logic/vfs-rename-primitive.js";
-// WHY 反向 import：writeWithRevision / nextVersionFor / resolveMaxRevision 已下沉到
+// WHY 反向 import：writeWithRevision / nextVersionFor 已下沉到
 // domain 层（批量 ingest 复用同一条写路径，见 domain/vfs/logic/write-with-revision.ts），
 // 本文件的删除路径（appendDeletedRevision → nextVersionFor）必须跟着引用共享实现。
 import {

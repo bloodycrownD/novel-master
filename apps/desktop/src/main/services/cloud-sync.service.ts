@@ -90,6 +90,19 @@ function isConfigured(
   );
 }
 
+/**
+ * 判断一个错误是不是「本机数据库已换代」（`DatabaseReplacedError`）。
+ *
+ * **刻意用动态 import**，与本文件下面 dbSync 三个端口处理 `db-backup.service.js`
+ * 的写法同款：`db-backup.service.ts` 静态 import 了 `desktop-runtime-singleton.js`
+ * 与 electron，本服务已经动态 import 前者，静态边会把这条链的初始化顺序搅乱
+ * （见 `invalidateDesktopCloudSyncService` 的 JSDoc 里对静态环的说明）。
+ */
+async function isDatabaseReplacedError(error: unknown): Promise<boolean> {
+  const { DatabaseReplacedError } = await import("./db-backup.service.js");
+  return error instanceof DatabaseReplacedError;
+}
+
 function mapStorageError(error: unknown): CloudSyncError {
   if (isCloudSyncError(error)) {
     return error;
@@ -291,7 +304,17 @@ export class DesktopCloudSyncService {
         return { rev: meta?.lastSyncedRev ?? 0, databaseReplaced: false };
       }
       const detail = error instanceof Error ? error.message : String(error);
-      await this.configStore.recordPull(false, detail).catch(() => undefined);
+      // ⚠️ `DatabaseReplacedError` 这一支**不做 recordPull**（CR cloudsync P2-1）。
+      // 此刻 `closeLiveDbForBackupImport()` 已经把 `this.configStore` 背后的连接
+      // 关掉了 ⇒ `recordPull` 必抛 `CONNECTION_CLOSED` ⇒ 被下面的 `.catch` 吃掉
+      // ⇒ 面板上「上次拉取结果」永远停在旧值，与实际发生的「换代成功但三表未恢复」
+      // 永久不一致。**一次注定失败的写还不如不写**：它既不产生任何信息，还制造
+      // 一次「以为自己记过了」的错觉。
+      // 换代路径的记账由 handler 在 `rebootstrapDesktopRuntime()` 之后走
+      // `recordPullSuccess()` 现场造 store 来做（见该方法 JSDoc），不依赖本支。
+      if (!(await isDatabaseReplacedError(error))) {
+        await this.configStore.recordPull(false, detail).catch(() => undefined);
+      }
       throw error;
     } finally {
       syncBusy = false;

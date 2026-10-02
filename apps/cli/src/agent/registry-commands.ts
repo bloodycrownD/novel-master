@@ -41,7 +41,14 @@ export async function runAgentRegistryCommand(
   subcommand: string,
   args: readonly string[],
 ): Promise<void> {
-  const { flags } = parseCliArgs(args);
+  // ⚠️ 位置参数一律取 `positional`，**不许直接取 `args[0]`**（CR WA-P2-05）：
+  // `args` 里 flag 本身也在第一层，`nm agent create --description "写手" smoke`
+  // 会把 agent 命名成 `--description` 并静默成功（随后 `session create` 照样能
+  // 开 ⇒ 不报错，只是名字离谱）。`parseCliArgs` 已经把 flag 剔干净了，直接用它的
+  // 产出即可。`create` / `show` / `import` / `export` / `delete` 五个 case 已同批
+  // 收口，避免只改新增的那一个造成行为不一致。
+  // 📌 坐标一律用 case 名、不用行号（同 CR WA-P2-02 的教训：行号必然再次腐烂）。
+  const { positional, flags } = parseCliArgs(args);
   const registry = rt.agentRegistry;
 
   switch (subcommand) {
@@ -49,7 +56,7 @@ export async function runAgentRegistryCommand(
       // 全新机器上开第一个会话的必要入口：registry 空 ⇒ session create 直接失败
       // （resolveWorkspaceAgentForNewSession 回落到 listAgentIds()[0]，而
       //  虚拟 general 没有 id、不可能出现在 listAgentIds 里）⇒ N-P0-03。
-      const name = flagString(flags, "name") ?? args[0];
+      const name = flagString(flags, "name") ?? positional[0];
       if (name == null || name.trim() === "") {
         throw new Error("Usage: nm agent create --name <name> [--system <prompt>]");
       }
@@ -84,7 +91,7 @@ export async function runAgentRegistryCommand(
       return;
     }
     case "show": {
-      const agentId = flagString(flags, "id") ?? args[0];
+      const agentId = flagString(flags, "id") ?? positional[0];
       if (agentId == null || agentId === "") {
         throw new Error("Usage: nm agent show <agent-id>");
       }
@@ -93,7 +100,7 @@ export async function runAgentRegistryCommand(
       return;
     }
     case "import": {
-      const path = flagString(flags, "file") ?? args[0];
+      const path = flagString(flags, "file") ?? positional[0];
       if (path == null || path === "") {
         throw new Error("Usage: nm agent import <path>");
       }
@@ -106,7 +113,7 @@ export async function runAgentRegistryCommand(
       return;
     }
     case "export": {
-      const path = flagString(flags, "file") ?? args[0];
+      const path = flagString(flags, "file") ?? positional[0];
       if (path == null || path === "") {
         throw new Error("Usage: nm agent export <path>");
       }
@@ -137,7 +144,7 @@ export async function runAgentRegistryCommand(
       return;
     }
     case "delete": {
-      const agentId = flagString(flags, "id") ?? args[0];
+      const agentId = flagString(flags, "id") ?? positional[0];
       if (agentId == null || agentId === "") {
         throw new Error("Usage: nm agent delete <agent-id>");
       }

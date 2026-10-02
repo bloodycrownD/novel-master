@@ -10,12 +10,14 @@
  * `allowedPaths` 任一前缀下；只要有一条越界就拒绝。`allowedPaths === undefined`
  * 表示不限制（向后兼容）。
  *
- * ⚠️ 现状：三个装配点（`run-agent-turn.ts:993` / `:1351`、
- * `create-user-vfs-turn-service.ts:83`）**全部硬写 `undefined`**，故本模块在
- * 生产中恒放行、运行时成本为零。这是有意分期占位（A-14），不是缺陷；
- * **接线前必须先修三处已知缺口**（前缀比对不解 `..` / `PATH_FIELDS` 漏
- * `glob.options.cwd` 与 `grep.options.pathPrefix` / `filePath` 无工具声明它），
- * 详见 `BuiltinToolContext.allowedPaths` 的字段注释。
+ * ⚠️ 现状：三个装配点（`run-agent-turn.ts` 的两处、`create-user-vfs-turn-service.ts`
+ * 的一处）**全部硬写 `allowedPaths: undefined`**，故本模块在生产中恒放行、
+ * 运行时成本为零。这是有意分期占位（A-14），不是缺陷。
+ *
+ * **接线前必须先修的三处已知缺口，清单只写在 `BuiltinToolContext.allowedPaths`
+ * 的字段注释里，本模块不重复抄**（CR WA-P2-03：两处并排抄的后果是「改一处
+ * 忘一处」，而 WA-P2-02 正好演示了行号会各自腐烂）。改本模块的缺口时，
+ * 记得同步看一眼那份唯一清单。
  *
  * @module domain/tool/logic/tool-path-policy
  */

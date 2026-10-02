@@ -137,6 +137,13 @@ async function seedRevision(
 
 describe("truncateAfter(空锚) 窄投影读口", () => {
   it("T-TRUNC-RT1 清空整会话：零次 listBySession、查询只取 4 列", async () => {
+    // ⚠️ 本路径**不做让步是有意的**：窄投影读口 `listReadRefTargetsBySession`
+    //    走裸 for 循环、不进 `mapRows`，因为它在**写事务内**被调用——`yieldFn`
+    //    的分片让步对锁持有期零帮助，只会在事务中间插 await 把临界区切碎。
+    //    别按 wave-c1 分片注记 N-7 第 4 条（「行解析仍走 mapRows」）来「修正」
+    //    本实现：N-7#4 与 C1-2 修法 2 在 spec 内自相矛盾，已由 CR cr1-c1 P2-1
+    //    记为口径订正（OQ8 默认案 a = 只改文案、不改代码）。代价是逐行
+    //    `JSON.parse` 落在写事务持有期内，属已登记的债务。
     const project = await ctx.projects.create(`P-tr1-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     for (let i = 0; i < 30; i++) {

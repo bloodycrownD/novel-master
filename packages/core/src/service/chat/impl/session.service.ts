@@ -209,6 +209,17 @@ export class DefaultSessionService implements SessionService {
    * 必须在事务内调：先 `listByParentSession` 取直接子，递归调本函数删子，
    * 再删自己。子 session delete 时 `deleteVfsPrefix(session:{pid}:{childId})`
    * 是无害空操作（子 session 根本没建过 VFS scope），不需 special-case 跳过。
+   *
+   * @remarks **修法 3（`yieldFn` 透传）本波未做 ⇒ 这里的窄投影读仍是同步 parse。**
+   *          C1-5 修法 3 是可选项（`SessionServiceDeps` 增 `messageRowYieldFn` +
+   *          `reposFor(tx, yieldFn)` 透传），落地后这条递归链上的逐行
+   *          `JSON.parse` 才会分片让出事件循环。当前形态下 `deleteSessionTree`
+   *          整段（含 N 层递归）都同步 parse 完才进下一步；会话消息量级大时，
+   *          这一段的锁持有期 = 全部子会话的 `JSON.parse` 之和。
+   *          ⚠️ 补这条之前先想清楚：让出事件循环等于把一次临界区切成若干段，
+   *          与「产出写集合的读必须留在事务内」（wave-c2 判据）并不冲突
+   *          （读仍**在**事务内），但会让等锁的写方有机会插队——所以它是
+   *          **可选**而非必做，spec 的验收 I6 也写明「仅当修法 3 做了才立」。
    */
   private async deleteSessionTree(
     tx: TdbcConnection,

@@ -65,20 +65,16 @@ export async function writeWithRevision(
       assertValidVfsEntryName(normalized);
     }
     await ensureParentDirectories(entryRepo, scopeKey, normalized);
-    const maxRevision = await resolveMaxRevision(
-      entryRepo,
-      revisionRepo,
-      scopeKey,
-      normalized
-    );
-    if (maxRevision != null) {
-      // Boundary: vfs_entry removed but revision history retained (e.g. batch rollback restore).
-      version = maxRevision + 1;
-      await entryRepo.insertAtVersion(scopeKey, normalized, content, version);
-    } else {
-      const inserted = await entryRepo.insert(scopeKey, normalized, content);
-      version = inserted.version;
-    }
+    // ⚠️ 本分支只在 entry 尚不存在时进入 ⇒ 版本号只能是 1。
+    // 曾经的「entry 已删但 revision 历史保留 ⇒ 接着历史最大号往下写」那条边界
+    // 在本函数内**不可达**：它依赖的判据是同一个 `findByPath` 查询，而上面刚判过
+    // `existing == null`。CR raw/cr1-core1.md C-3 已核实并删除该死分支与随附的
+    // `resolveMaxRevision`（它的第一步就是这个 `findByPath`，entry 不存在时恒返回 null）。
+    // 另注：core1 修好 sweep 之后，项目删除链三步同事务清干净，「entry 删了而同
+    // scope 的 revision 历史还在」这个状态本身也不再产生。存量历史版本的续号
+    // 语义由 update 路径的 `nextVersionFor`（`max(head, MAX(version)) + 1`）保证。
+    const inserted = await entryRepo.insert(scopeKey, normalized, content);
+    version = inserted.version;
     const entry = await entryRepo.findByPath(scopeKey, normalized);
     const entryId = entry!.entryId;
     await revisionRepo.append({
@@ -140,24 +136,4 @@ export async function nextVersionFor(
 ): Promise<number> {
   const maxStored = await revisionRepo.findMaxVersionForEntry(entryId);
   return Math.max(headVersion, maxStored ?? 0) + 1;
-}
-
-/**
- * entry_id 通道下，max revision 通过 entry_id 寻址。
- *
- * 先取 entryId（entry 不存在时返回 null），然后按 entry_id 查 max version。
- * 这覆盖了「entry 已删但 revision 仍在」的边界场景：此时 entry 不存在，
- * resolveMaxRevision 返回 null，writeWithRevision 走 insert v1。
- */
-export async function resolveMaxRevision(
-  entryRepo: VfsEntryRepository,
-  revisionRepo: VfsRevisionRepository,
-  scopeKey: string,
-  path: string
-): Promise<number | null> {
-  const entry = await entryRepo.findByPath(scopeKey, path);
-  if (entry == null) {
-    return null;
-  }
-  return revisionRepo.findMaxVersionForEntry(entry.entryId);
 }

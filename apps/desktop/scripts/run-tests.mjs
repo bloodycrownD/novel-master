@@ -40,6 +40,18 @@ const testTargets =
 //    （实测当时 628 条用例的 stdout = 204,614 字节，距 1 MiB 还有 5× 余量；
 //      那是 H6 落地当时的快照数字，套件后来又长了，写大不是嫌小，是不给增长留悬崖。）
 const MAX_BUFFER = 64 * 1024 * 1024;
+// ⚠️ 缓冲的代价必须让用户看见（CR WA-P2-06）：stdout 收进内存是零收集守卫的
+// 必要代价（不缓冲就读不到末尾那段 `# tests N`），改不回去；但代价是**跑套件的
+// 全过程终端一个字都不出**——实测全量约 37 秒 / 200 KB 量级。开发者会以为卡死。
+// 所以在起进程前先打一行，别让人对着静默的终端猜。
+// 📌 顺带把 reporter 变化也说明白：改之前子进程继承 TTY（node --test 选 `spec`
+//    reporter，人读的表格），改之后 stdout 是管道（选 `tap` reporter，机器读的
+//    `ok 1 - 名称`）。这是**永久性**的输出格式变化，不是本脚本的临时行为。
+console.log(
+  "[run-tests] 跑测试套件中……输出将在**结束后一次性回放**（TAP 格式，形如 'ok N - 名称'）。\n" +
+    "[run-tests] 这是零收集守卫的必要代价（要读末尾的 '# tests N'），期间无实时输出属预期。\n" +
+    `[run-tests] testTargets=${testTargets}`,
+);
 const result = spawnSync(
   `npx tsx --tsconfig tsconfig.renderer.json --test ${testTargets}`,
   {

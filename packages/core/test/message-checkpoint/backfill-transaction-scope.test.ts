@@ -146,7 +146,7 @@ describe("CS-05b backfill 事务边界", () => {
     assert.ok(Number(rows[0]!.n) >= 2);
   });
 
-  it("B2: 段 R 故障（createWorkplaceRepo 抛）不阻断导入，新内容完整、规则表无脏行", async () => {
+  it("B2: 段 R 补规则行故障（upsertDirRule 第二条抛）不阻断导入，新内容完整、规则表无脏行", async () => {
     const seeded = await seedSession(ctx, conn, "b2r", 2);
     const scope = {
       kind: "session" as const,

@@ -123,13 +123,24 @@ export function parseProviderList(stdout: string): ProviderListRow[] {
     });
 }
 
-/** 解析 `nm provider create` 打印到 stderr 的 UUID。 */
-export function parseCreatedProviderId(stderr: string): string {
-  const id = stripBootLogs(stderr)
+/**
+ * 取一段输出里最后一个非空行（已 trim），没有则 `undefined`。
+ *
+ * 抽出是因为 {@link parseCreatedProviderId} 与 {@link parseAgentId} 的
+ * 「split → trim → 丢空行 → 取尾行」这 5 行逐字相同（CR WA-P2-04）。
+ * ⚠️ 只抽**共有的机械部分**；两者随后的校验口径**有意不同**，别顺手统一。
+ */
+function lastNonEmptyLine(text: string): string | undefined {
+  return stripBootLogs(text)
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter((line) => line.length > 0)
     .at(-1);
+}
+
+/** 解析 `nm provider create` 打印到 stderr 的 UUID。 */
+export function parseCreatedProviderId(stderr: string): string {
+  const id = lastNonEmptyLine(stderr);
   if (id == null || id === "") {
     throw new Error(`provider create did not print uuid on stderr: ${stderr}`);
   }
@@ -137,15 +148,16 @@ export function parseCreatedProviderId(stderr: string): string {
 }
 
 /**
- * 解析 `nm agent create` 打印到 stdout 的 UUID。
- * 口径与 {@link parseCreatedProviderId} 一致：取 stdout 尾行并校验 UUID。
+ * 解析 `nm agent create` 打印到 stdout 的 UUID：取尾行并校验 UUID 形态。
+ *
+ * ⚠️ **与 {@link parseCreatedProviderId} 有意不同**（旧 JSDoc 写「口径一致」是错的）：
+ * ① 本函数读 **stdout**，provider 那个读 **stderr**；
+ * ② 本函数**校验 UUID 形态**，provider 那个只判空。
+ * 形态校验是 A4 加进来的（CLI 冒出的 usage 提示曾被当成 id 读走），
+ * provider 那条是更早的老口径，本次不追平。
  */
 export function parseAgentId(stdout: string): string {
-  const id = stripBootLogs(stdout)
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0)
-    .at(-1);
+  const id = lastNonEmptyLine(stdout);
   if (id == null || id === "") {
     throw new Error(`agent create did not print uuid on stdout: ${stdout}`);
   }

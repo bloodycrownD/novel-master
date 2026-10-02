@@ -7,6 +7,7 @@
  */
 import type {
   VfsBatchApplyReportDto,
+  VfsBatchExportSkippedDto,
   VfsScopeRequest,
 } from "@shared/ipc-types";
 import {
@@ -33,6 +34,16 @@ export type StagedExport = {
   readonly logicalPaths: readonly string[];
   readonly stagingRoot: string;
   readonly filePaths: readonly string[];
+  /**
+   * 相对路径碰撞而被去重跳过的选中项，随 `ipc-types.ts` 的
+   * `VfsBatchExportStageResult` 一起补齐（core2 B-2）。
+   *
+   * ⚠️ **债务**：UI 呈现是 spec §12.5 第 3 条列出的债务池，本模块**只存不读**。
+   *   留着它的理由是「ZIP 里少了文件」这件事总得有地方落地提示；不要因为当前
+   *   没人读就当死字段删掉。将来消费时并进 `prefetchStagedExport` 已有的
+   *   `showToast` 分支即可。
+   */
+  readonly skipped?: readonly VfsBatchExportSkippedDto[];
 };
 
 let activeNativeDrag: ActiveNativeDrag | null = null;
@@ -192,6 +203,8 @@ export async function prefetchExportStage(options: {
       logicalPaths: [options.logicalPath],
       stagingRoot: result.data.stagingRoot,
       filePaths: result.data.filePaths,
+      // 只存不读：UI 呈现是 spec §12.5 第 3 条的债务池，见 StagedExport.skipped 注释。
+      skipped: result.data.skipped,
     });
   } catch (err) {
     stagedByPath.delete(options.logicalPath);
