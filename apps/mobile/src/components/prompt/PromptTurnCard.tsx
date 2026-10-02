@@ -20,7 +20,10 @@ import React, {useCallback} from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
 import {useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
-import type {PromptPreviewTurn} from '@novel-master/core/prompt';
+import type {
+  PromptPreviewTurn,
+  PromptTurnCardData,
+} from '@novel-master/core/prompt';
 import type {RootStackParamList} from '@/navigation/types';
 import {setPromptTurnDetail} from './prompt-turn-callback';
 import {useTheme} from '@/theme/ThemeProvider';
@@ -29,6 +32,33 @@ type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 /** 详情页 header 标题上限：卡片摘要照原样展示，进详情只截首段避免顶栏塞满。 */
 const DETAIL_TITLE_LIMIT = 24;
+
+/**
+ * 悬挂 use 的占位文案（result 为 null，槽位保留不隐藏）。
+ *
+ * 常量定义留在本模块（叶子模块）并导出：组卡占位格与整轮全屏的组卡 result 段
+ * 共用同一份文案，而 PromptToolGroupCard 本就依赖本模块（取 `useOpenPromptDetail`），
+ * 反向再引一次不成环。
+ */
+export const LOST_RESULT_TEXT = '未返回结果';
+
+/**
+ * 整轮全屏正文 = cards 逐卡正文，组卡拆两格（对齐 desktop cardBodies/toolGroupLeaves 口径）。
+ *
+ * 不读 `turn.body`：那是 CLI parity 冻结面的「`[段名]` 前缀平铺串」，工具段还是旧粒度
+ * （一条消息多个 result 合并），正是本次重设计要消灭的形态。mobile 顺序拼接后整段渲染，
+ * 与 desktop 的按块逐段渲染是同一份内容序列。
+ */
+function fullscreenBodies(cards: ReadonlyArray<PromptTurnCardData>): string {
+  return cards
+    .flatMap(c =>
+      c.type === 'toolGroup'
+        ? [c.inputJson, c.result?.body ?? LOST_RESULT_TEXT]
+        : [c.body],
+    )
+    .filter(t => t !== '')
+    .join('\n\n');
+}
 
 /**
  * 轮层 role 徽标（不是消息角色，是「轮」这一层）：三类轮的徽标文案与配色
@@ -47,8 +77,8 @@ const TURN_ROLE_COLOR: Record<PromptPreviewTurn['kind'], string> = {
   template: '#9ca3af',
 };
 
-/** 导出给组卡/叶子卡复用的标题截断口径（详情页 header 与卡片标题同一上限）。 */
-export function promptDetailTitle(summary: string): string {
+/** 标题截断口径（详情页 header 与卡片标题同一上限）。 */
+function promptDetailTitle(summary: string): string {
   return summary.length > DETAIL_TITLE_LIMIT
     ? `${summary.slice(0, DETAIL_TITLE_LIMIT - 1)}…`
     : summary;
@@ -89,8 +119,11 @@ type Props = {
 export function PromptTurnCard({turn, expanded, onToggle, children}: Props) {
   const {tokens} = useTheme();
   const openDetail = useOpenPromptDetail();
-  const roleLabel = TURN_ROLE_LABEL[turn.kind] ?? turn.kind;
-  const roleColor = TURN_ROLE_COLOR[turn.kind] ?? TURN_ROLE_COLOR.template;
+  const roleLabel = TURN_ROLE_LABEL[turn.kind];
+  const roleColor = TURN_ROLE_COLOR[turn.kind];
+  // 无障碍标签不能只有动作名：多轮多卡时读屏全念同一个词，靠摘要尾巴才区分得开。
+  const summaryTail = turn.summaryText.slice(0, 20);
+  const headLabel = `${expanded ? '收起' : '展开'}${roleLabel}轮，${summaryTail}`;
 
   const handleToggle = useCallback(() => {
     onToggle(turn.id);
@@ -100,9 +133,13 @@ export function PromptTurnCard({turn, expanded, onToggle, children}: Props) {
     (event?: {stopPropagation?: () => void}) => {
       // 嵌套 Pressable：阻止冒泡到头部，否则「点 ⤢ 进全屏」会同时把轮展开。
       event?.stopPropagation?.();
-      openDetail({title: turn.summaryText, body: turn.body, turnId: turn.id});
+      openDetail({
+        title: turn.summaryText,
+        body: fullscreenBodies(turn.cards),
+        turnId: turn.id,
+      });
     },
-    [openDetail, turn.id, turn.summaryText, turn.body],
+    [openDetail, turn.id, turn.summaryText, turn.cards],
   );
 
   return (
@@ -119,7 +156,8 @@ export function PromptTurnCard({turn, expanded, onToggle, children}: Props) {
       <Pressable
         testID="prompt-turn-head"
         accessibilityRole="button"
-        accessibilityLabel={expanded ? '收起轮详情' : '展开轮详情'}
+        accessibilityLabel={headLabel}
+        accessibilityState={{expanded}}
         onPress={handleToggle}
         style={styles.header}
       >
@@ -144,7 +182,7 @@ export function PromptTurnCard({turn, expanded, onToggle, children}: Props) {
         <Pressable
           testID="prompt-turn-fullscreen"
           accessibilityRole="button"
-          accessibilityLabel="整轮全屏"
+          accessibilityLabel={`整轮全屏，${roleLabel} ${summaryTail}`}
           hitSlop={6}
           onPress={handleFullscreen}
           style={styles.iconBtn}>

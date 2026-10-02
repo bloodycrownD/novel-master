@@ -11,7 +11,7 @@ import {useOpenPromptDetail} from './PromptTurnCard';
 import {useTheme} from '@/theme/ThemeProvider';
 
 /** kind 徽标文案：thinking 卡单独叫「thinking」，其余读 core 给的 role 展示标签。 */
-export function promptLeafKindLabel(card: PromptTextCardData): string {
+function promptLeafKindLabel(card: PromptTextCardData): string {
   if (card.type === 'thinking') {
     return 'thinking';
   }
@@ -40,7 +40,7 @@ export function PromptTurnLeafCard({card, turnId}: Props) {
     <Pressable
       testID="prompt-turn-leaf-card"
       accessibilityRole="button"
-      accessibilityLabel="查看卡片全文"
+      accessibilityLabel={`${promptLeafKindLabel(card)}，${card.body.slice(0, 20)}`}
       onPress={handlePress}
       style={[
         styles.card,

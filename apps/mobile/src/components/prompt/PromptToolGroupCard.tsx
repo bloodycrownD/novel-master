@@ -11,11 +11,8 @@
 import React, {useCallback} from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
 import type {PromptToolGroupCardData} from '@novel-master/core/prompt';
-import {useOpenPromptDetail} from './PromptTurnCard';
+import {useOpenPromptDetail, LOST_RESULT_TEXT} from './PromptTurnCard';
 import {useTheme} from '@/theme/ThemeProvider';
-
-/** 悬挂 use 的占位文案（result 为 null，槽位保留不隐藏）。 */
-const LOST_RESULT_TEXT = '未返回结果';
 
 const STATUS_COLOR: Record<PromptToolGroupCardData['status'], string> = {
   ok: '#34c759',
@@ -73,7 +70,8 @@ export function PromptToolGroupCard({card, turnId, expanded, onToggle}: Props) {
       <Pressable
         testID="prompt-tool-group-head"
         accessibilityRole="button"
-        accessibilityLabel={expanded ? '收起工具调用' : '展开工具调用'}
+        accessibilityLabel={`${expanded ? '收起' : '展开'}工具调用 ${card.toolName}`}
+        accessibilityState={{expanded}}
         onPress={handleToggle}
         style={styles.head}>
         <View testID="prompt-tool-group-status" style={styles.headLeft}>
@@ -88,13 +86,21 @@ export function PromptToolGroupCard({card, turnId, expanded, onToggle}: Props) {
             {card.toolName}
           </Text>
           {card.parallel ? (
-            <Text testID="prompt-tool-group-parallel" style={styles.parallel}>
+            <Text
+              testID="prompt-tool-group-parallel"
+              // 对齐 desktop 的中性色虚线徽标（role 徽标与状态三色是唯一的语义色留白）。
+              style={[
+                styles.parallel,
+                {color: tokens.textTertiary, borderColor: tokens.borderLight},
+              ]}>
               并行
             </Text>
           ) : null}
+          {/* 状态文案用主题正文色：语义色浅底对比 1.86~2.54:1 低于 3:1 门槛，
+              仅用于装饰性状态点（上面的 dot）；tokens 化另开迭代。 */}
           <Text
             testID="prompt-tool-group-status-label"
-            style={[styles.statusLabel, {color: STATUS_COLOR[card.status]}]}
+            style={[styles.statusLabel, {color: tokens.text}]}
             numberOfLines={1}>
             {STATUS_LABEL[card.status]}
           </Text>
@@ -110,7 +116,7 @@ export function PromptToolGroupCard({card, turnId, expanded, onToggle}: Props) {
           <Pressable
             testID="prompt-tool-group-use"
             accessibilityRole="button"
-            accessibilityLabel="查看工具入参"
+            accessibilityLabel={`查看工具入参，${card.toolName}`}
             onPress={openUse}
             style={[styles.cell, {borderColor: tokens.borderLight}]}>
             <Text
@@ -128,8 +134,9 @@ export function PromptToolGroupCard({card, turnId, expanded, onToggle}: Props) {
           <Pressable
             testID="prompt-tool-group-result"
             accessibilityRole="button"
-            accessibilityLabel="查看工具结果"
-            onPress={openResult}
+            accessibilityLabel={`查看工具结果，${card.toolName}`}
+            // 悬挂 use 的占位格不挂 onPress：否则点进去是一份空正文（假入口）。
+            onPress={card.result == null ? undefined : openResult}
             style={[styles.cell, {borderColor: tokens.borderLight}]}>
             <Text
               style={[styles.cellLabel, {color: tokens.textTertiary}]}
@@ -165,9 +172,8 @@ const styles = StyleSheet.create({
   name: {fontSize: 13, fontWeight: '600', flexShrink: 1},
   parallel: {
     fontSize: 10,
-    color: '#a78bfa',
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#a78bfa',
+    borderStyle: 'dashed',
     borderRadius: 4,
     paddingHorizontal: 4,
   },

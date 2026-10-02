@@ -76,10 +76,46 @@ const TURN = {
     {id: 'seg-12', role: 'assistant', title: 'assistant', body: '好的，我来看看。'},
   ],
   summary: '好的，我来看看。 · 工具调用 0 次 · 6 字',
-  body: '[assistant]\n好的，我来看看。',
+  // main/A-2 后 UI 不再读 body，字段仅为满足 core 类型（`body` 是必填）。
+  body: '',
   summaryText: '好的，我来看看。',
   metaText: '#12 · 工具调用 0 次 · 6 字',
-  cards: [],
+  cards: [
+    {type: 'text' as const, id: 'card-12-0', role: 'assistant', body: '好的，我来看看。'},
+  ],
+};
+
+/** 组卡夹具：一次 tool_use + 已回结果，整轮全屏应拆成 use/result 两段。 */
+const TURN_WITH_GROUP = {
+  ...TURN,
+  cards: [
+    {type: 'text' as const, id: 'card-12-0', role: 'assistant', body: '好的，我来看看。'},
+    {
+      type: 'toolGroup' as const,
+      id: 'group-tu-1',
+      toolName: 'read',
+      inputJson: '{"path":"a.md"}',
+      result: {toolUseId: 'tu-1', ok: true, body: '文件内容'},
+      status: 'ok' as const,
+      parallel: false,
+    },
+  ],
+};
+
+/** 悬挂 use 的组卡：result 段走占位文案，不吃空串。 */
+const TURN_WITH_LOST_GROUP = {
+  ...TURN,
+  cards: [
+    {
+      type: 'toolGroup' as const,
+      id: 'group-tu-9',
+      toolName: 'read',
+      inputJson: '{"path":"b.md"}',
+      result: null,
+      status: 'lost' as const,
+      parallel: false,
+    },
+  ],
 };
 
 function renderCard(
@@ -176,10 +212,51 @@ describe('PromptTurnCard（T-MP1/T-MP4 mobile）', () => {
       title: TURN.summaryText,
       turnId: TURN.id,
     });
+    // 正文是 cards 逐卡拼接（默认夹具一张 text 卡），不是 CLI parity 的 turn.body 平铺串。
     expect(takePromptTurnDetail()).toEqual({
       title: TURN.summaryText,
-      body: TURN.body,
+      body: '好的，我来看看。',
     });
+  });
+
+  it('T-MP4-6 整轮全屏：组卡拆 use/result 两段（配对结构不丢）', () => {
+    pressByTestID(renderCard(TURN_WITH_GROUP), 'prompt-turn-fullscreen');
+    const detail = takePromptTurnDetail();
+    expect(detail?.body).toBe(
+      '好的，我来看看。\n\n{"path":"a.md"}\n\n文件内容',
+    );
+    expect(detail?.body).toContain('{"path":"a.md"}');
+    expect(detail?.body).toContain('文件内容');
+  });
+
+  it('T-MP4-7 整轮全屏：悬挂 use 走占位文案、空正文被滤掉', () => {
+    pressByTestID(renderCard(TURN_WITH_LOST_GROUP), 'prompt-turn-fullscreen');
+    expect(takePromptTurnDetail()?.body).toBe(
+      '{"path":"b.md"}\n\n未返回结果',
+    );
+    // 丢了整轮 body 的退化路径：cards 为空时正文是空串，不能变成 undefined。
+    pressByTestID(renderCard({cards: []}), 'prompt-turn-fullscreen');
+    expect(takePromptTurnDetail()?.body).toBe('');
+  });
+
+  it('T-J1-1 轮头/⤢ 无障碍标签带角色与摘要、头部带 expanded 态', () => {
+    const tree = renderCard({}, false);
+    expect(
+      tree.root.findByProps({testID: 'prompt-turn-head'}).props
+        .accessibilityLabel,
+    ).toBe('展开assistant轮，好的，我来看看。');
+    expect(
+      tree.root.findByProps({testID: 'prompt-turn-head'}).props
+        .accessibilityState,
+    ).toEqual({expanded: false});
+    expect(
+      tree.root.findByProps({testID: 'prompt-turn-fullscreen'}).props
+        .accessibilityLabel,
+    ).toBe('整轮全屏，assistant 好的，我来看看。');
+    expect(
+      renderCard({}, true).root.findByProps({testID: 'prompt-turn-head'}).props
+        .accessibilityLabel,
+    ).toBe('收起assistant轮，好的，我来看看。');
   });
 
   it('T-MP4-2 callback take 读后即清（防串台）', () => {

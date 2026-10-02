@@ -103,6 +103,14 @@ function press(tree: TestRenderer.ReactTestRenderer, testID: string): void {
   });
 }
 
+/** 展平 StyleSheet 数组样式（RN mock 的 StyleSheet.create 是恒等函数）。 */
+function flattenStyle(style: unknown): Record<string, unknown> {
+  if (Array.isArray(style)) {
+    return Object.assign({}, ...style.map(flattenStyle));
+  }
+  return (style ?? {}) as Record<string, unknown>;
+}
+
 describe('PromptToolGroupCard（T-MP2）', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -193,6 +201,81 @@ describe('PromptToolGroupCard（T-MP2）', () => {
       leafId: 'group-tu-1-result',
     });
   });
+
+  it('T-MP2-7 悬挂 use 的 result 格不挂 onPress（假入口）', () => {
+    const tree = renderGroup(LOST_CARD, true);
+    // 占位格仍渲染（槽位保留），但按下去进不去——onPress 为 undefined。
+    // 注意用 props 检查而不是 press()：press 直接调 props.onPress() 会 TypeError。
+    expect(
+      tree.root.findByProps({testID: 'prompt-tool-group-result'}).props.onPress,
+    ).toBeUndefined();
+    // 有结果的卡仍可点。
+    expect(
+      renderGroup(OK_CARD, true).root.findByProps({
+        testID: 'prompt-tool-group-result',
+      }).props.onPress,
+    ).toBeInstanceOf(Function);
+  });
+
+  it('T-J1-2 两格无障碍标签都带工具名（多组卡才分得清）、组头带 expanded 态', () => {
+    const tree = renderGroup(OK_CARD, true);
+    expect(
+      tree.root.findByProps({testID: 'prompt-tool-group-use'}).props
+        .accessibilityLabel,
+    ).toBe('查看工具入参，read');
+    expect(
+      tree.root.findByProps({testID: 'prompt-tool-group-result'}).props
+        .accessibilityLabel,
+    ).toBe('查看工具结果，read');
+    expect(
+      renderGroup(OK_CARD, true).root.findByProps({
+        testID: 'prompt-tool-group-head',
+      }).props.accessibilityLabel,
+    ).toBe('收起工具调用 read');
+    expect(
+      renderGroup(OK_CARD, true).root.findByProps({
+        testID: 'prompt-tool-group-head',
+      }).props.accessibilityState,
+    ).toEqual({expanded: true});
+    expect(
+      renderGroup(OK_CARD, false).root.findByProps({
+        testID: 'prompt-tool-group-head',
+      }).props.accessibilityLabel,
+    ).toBe('展开工具调用 read');
+    expect(
+      renderGroup(OK_CARD, false).root.findByProps({
+        testID: 'prompt-tool-group-head',
+      }).props.accessibilityState,
+    ).toEqual({expanded: false});
+  });
+
+  it('T-J2-1 并行徽标取中性 token（对齐 desktop），状态文案取正文色', () => {
+    const parallel = flattenStyle(
+      renderGroup(LOST_CARD, true).root.findByProps({
+        testID: 'prompt-tool-group-parallel',
+      }).props.style,
+    );
+    // mock token：textTertiary=#999、borderLight=#ddd。
+    expect(parallel.color).toBe('#999');
+    expect(parallel.borderColor).toBe('#ddd');
+    expect(parallel.borderStyle).toBe('dashed');
+
+    const statusLabel = flattenStyle(
+      renderGroup(OK_CARD, true).root.findByProps({
+        testID: 'prompt-tool-group-status-label',
+      }).props.style,
+    );
+    // 状态文案走主题正文色（mock token text=#111），语义色不再染到承载语义的词上。
+    expect(statusLabel.color).toBe('#111');
+    // 状态点仍是语义色（装饰性）。
+    expect(
+      flattenStyle(
+        renderGroup(OK_CARD, true).root.findByProps({
+          testID: 'prompt-tool-group-dot-ok',
+        }).props.style,
+      ).backgroundColor,
+    ).toBe('#34c759');
+  });
 });
 
 const LEAF_CARD: PromptTextCardData = {
@@ -228,6 +311,10 @@ describe('PromptTurnLeafCard（T-MP2/T-MP4）', () => {
     const preview = tree.root.findByProps({
       testID: 'prompt-turn-leaf-preview',
     });
+    expect(
+      tree.root.findByProps({testID: 'prompt-turn-leaf-card'}).props
+        .accessibilityLabel,
+    ).toBe(`assistant，${LEAF_CARD.body.slice(0, 20)}`);
     expect(preview.props.numberOfLines).toBe(2);
 
     let thinkingTree!: TestRenderer.ReactTestRenderer;
