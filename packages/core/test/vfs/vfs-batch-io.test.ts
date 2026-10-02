@@ -349,7 +349,7 @@ describe("VfsBatchIoService 分片事务计数", () => {
     await ctx.conn.close();
   });
 
-  it("T-B6c: 401 个文件 ⇒ 恰好 3 条分片事务（段 B0 + ceil(401/200)=3 片）", async () => {
+  it("T-B6c: 401 个文件（无显式目录）⇒ 恰好 3 条文件分片事务，段 B0 不跑", async () => {
     const project = await ctx.projects.create(`P-batchio-${testIsolationSuffix()}`);
     const scope = { kind: "project" as const, projectId: project.id };
     const total = 401;

@@ -5,8 +5,8 @@
  * Map），解析期全程无闸 ⇒ 攻击者可控的 `uncompressedSize` 让几百 KB 的 zip
  * 能让 `inflateSync` 分配 GB 级。
  *
- * 观测面：抛出的 `VfsZipError.code`、以及「有没有真解压」（堆增量上界）。
- * RULE 明禁拿墙钟卡线，所以不计时。
+ * 观测面：抛出的 `VfsZipError.code`（+ 按消息收窄的错误形态）。RULE 明禁拿墙钟卡线，
+ * 所以不计时；堆增量口径已随 H2 一起删（cr1-ctests P2-2：恒真断言，见 H2 注释）。
  *
  * 本文件用到的两个「中央目录改写」手法（都只改字段、不重新压缩）：
  * ① 改中央目录条目的 **method** 字段 → fflate 回退会抛
@@ -201,7 +201,7 @@ describe("CS-09 ZIP 解析期闸门", () => {
     expectZipCode(() => parseVfsZip(zip), "PAYLOAD_TOO_LARGE");
   });
 
-  it("H2: 声明 33MB 的单条 entry 在解压之前抛 PAYLOAD_TOO_LARGE（堆增量不随之暴涨）", () => {
+  it("H2: 声明 33MB 的单条 entry 在解压之前抛 PAYLOAD_TOO_LARGE", () => {
     const zip = zipSync({ "big.md": new Uint8Array([1, 2, 3, 4]) }, { level: 0 });
     const eocd = findEocd(zip);
     // 中央目录首条目 uncompressedSize 字段（条目起点 + 24）谎报 33MB。
@@ -211,18 +211,16 @@ describe("CS-09 ZIP 解析期闸门", () => {
       VFS_ZIP_MAX_UNCOMPRESSED_BYTES + 1024 * 1024
     );
 
-    // 先跑一次别的解析把 JIT/常量池预热，再测堆增量（避免首跑噪声）。
-    parseVfsZip(zipSync({ "warm.md": new Uint8Array([1, 2, 3]) }, { level: 0 }));
-    if (global.gc != null) {
-      global.gc();
-    }
-    const before = process.memoryUsage().heapUsed;
+    // 本条**只钉「闸门存在且读的是声明值」**：错误码 + 消息形态都对，才说明解析期
+    // 拿中央目录里的 uncompressedSize 判了限（真实正文仍是 4 字节，闸门挪到解压
+    // 之后也会抛同一个码，所以本条分不出这两种实现）。
+    //
+    // 原先这里的「堆增量 < 8MB」已删（cr1-ctests P2-2：恒真断言）——夹具真身只有
+    // 4 字节，无论闸门在解压前还是退回旧形态，堆增量都在几十 KB 量级，该断言在
+    // 任何实现下都成立，信息量为零。「未真解压」这一维度改由 H7-H10 间接覆盖：
+    // 那四条是真的把 20MiB / 10×3MiB 的正文喂进去逐字节比对，只有「解压后才判」
+    // 的实现才会在它们身上露出体量/耗时形态。
     expectZipCode(() => parseVfsZip(zip), "PAYLOAD_TOO_LARGE");
-    const deltaMb = (process.memoryUsage().heapUsed - before) / (1024 * 1024);
-    assert.ok(
-      deltaMb < 8,
-      `堆增量 ${deltaMb.toFixed(2)}MB 过大：闸门没有真正挡在解压之前`
-    );
   });
 
   it("H3: 技能预检走同一个解析器 ⇒ 同款 PAYLOAD_TOO_LARGE", () => {

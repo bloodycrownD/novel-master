@@ -206,7 +206,12 @@ describe("删会话 / 删项目：窄投影读口 + read 引用对账", () => {
     assert.equal(spy.listReadRefTargetsBySession(), 3);
   });
 
-  it("T-DEL-RT5 500 条会话下窄投影查询只取 4 列", async () => {
+  it("T-DEL-RT5 120 条消息下窄投影查询只取 4 列", async () => {
+    // 夹具实数：120 条消息（不是用例名以前写的 500 条）。
+    //
+    // ⚠ 本条**只钉列数收窄**，不钉让步点：C1-5 修法 3（`yieldFn` 透传 /
+    // `reposFor(tx, yieldFn)`）本波未做 ⇒ `deleteSessionTree` 仍是同步 parse，
+    // 没有让步点可数。spec 的 I6 也写明「仅当修法 3 做了才立」。
     const project = await ctx.projects.create(`P-del5-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     for (let i = 0; i < 120; i++) {

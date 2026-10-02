@@ -33,6 +33,13 @@ interface Harness {
   readonly txCalls: () => number;
   /** 记录每个建出的仓储拿的是哪个连接（用于连接身份断言）。 */
   readonly repoConns: () => unknown[];
+  /**
+   * 最近一次 `transaction` 回调收到的 tx 句柄（I4 连接身份断言的真源）。
+   *
+   * ⚠ 不能拿根连接当比较对象：service 的根连接是 `countingConn` 包装对象，
+   * `countingConn !== ctx.conn` 恒成立 ⇒ 拿它当基准的断言是恒真牙（cr1-c1 P2-4）。
+   */
+  readonly seenTx: () => TdbcConnection | null;
   /** 下一个 insert/delete/update 的第几次调用抛错（0 = 不抛）。 */
   failOn: (op: "insert" | "delete" | "update", nth: number) => void;
 }
@@ -42,6 +49,7 @@ function makeHarness(): Harness {
   const repoConns: unknown[] = [];
   const failAt = new Map<string, number>();
   let txCalls = 0;
+  let lastTx: TdbcConnection | null = null;
   const counters = new Map<string, number>();
 
   const origTx = ctx.conn.transaction.bind(ctx.conn);
@@ -51,7 +59,11 @@ function makeHarness(): Harness {
     batch: (sql, pl) => ctx.conn.batch(sql, pl),
     transaction: (fn) => {
       txCalls += 1;
-      return origTx(fn);
+      // 包一层把回调收到的句柄记下来，供 I4 的对象同一性断言用。
+      return origTx((tx) => {
+        lastTx = tx;
+        return fn(tx);
+      });
     },
     close: () => ctx.conn.close(),
   };
@@ -90,6 +102,7 @@ function makeHarness(): Harness {
     service,
     txCalls: () => txCalls,
     repoConns: () => repoConns,
+    seenTx: () => lastTx,
     failOn: (op, nth) => {
       counters.delete(op);
       failAt.set(op, nth);
@@ -197,14 +210,15 @@ describe("smart-sort 多语句写入口的事务化（C1-6 / C1-7）", () => {
   });
 
   it("T-SRTX5 resetDefaults 中途失败 → 全表不变", async () => {
-    const before = await h.service.listRules();
     await h.service.createRule({
       name: "用户规则",
       pattern: "第([0-9]+)话",
       description: null,
     });
     const beforeReset = await h.service.listRules();
-    // 重灌 seed 的第 3 条 insert 抛错。
+    // `failOn` 计的是**全局**第 N 次 insert：上面 createRule 已经吃掉 1 次，
+    // 所以这里 failOn("insert", 3) 炸的是 resetDefaults 里 seed 的**第 2** 条
+    // （seed 共 7 条，够用，不影响结果）。别把它读成「seed 的第 3 条」。
     h.failOn("insert", 3);
     await assert.rejects(() => h.service.resetDefaults());
     assert.deepEqual(
@@ -212,7 +226,6 @@ describe("smart-sort 多语句写入口的事务化（C1-6 / C1-7）", () => {
       beforeReset,
       "resetDefaults 三段必须同生共死",
     );
-    assert.ok(before.length > 0);
   });
 
   it("T-SRTX6 deleteBatch / setEnabledBatch 中途失败 → 零半删", async () => {
@@ -266,10 +279,20 @@ describe("smart-sort 多语句写入口的事务化（C1-6 / C1-7）", () => {
       false,
     );
     const newConns = h.repoConns().slice(connsBefore);
-    // 事务内建的仓储拿的必须是 tx 句柄，不能是根连接。
-    const ctx = getNovelMasterTestContext();
+    // 事务内建的仓储拿的必须是 `transaction` 回调收到的那个 tx 句柄。
+    //
+    // ⚠ 旧断言比的是 `!== ctx.conn`，而 service 的**根连接是 countingConn**
+    // （一个包装对象），不是 `ctx.conn` ⇒ 「事务内经根连接造仓储」这一回归
+    // 记录到的也是 countingConn，`countingConn !== ctx.conn` 照样成立 ⇒ 恒真。
+    // cr1-c1 P2-4：改成与回调传入句柄的**对象同一性**（spec C1-7 I4 原文口径）。
+    const seenTx = h.seenTx();
+    assert.ok(seenTx != null, "本轮必须真的开过一次事务");
     for (const c of newConns) {
-      assert.notEqual(c, ctx.conn, "事务内不得经根连接造仓储（AsyncMutex 不可重入）");
+      assert.equal(
+        c,
+        seenTx,
+        "事务内不得经根连接造仓储（AsyncMutex 不可重入）",
+      );
     }
     assert.ok(newConns.length >= 1);
   });

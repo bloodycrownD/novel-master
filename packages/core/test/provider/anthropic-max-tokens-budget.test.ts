@@ -89,7 +89,8 @@ describe("anthropic max_tokens / thinking budget", () => {
     assert.equal(params?.protocol, "anthropic");
     if (params?.protocol !== "anthropic") throw new Error("unreachable");
     assert.equal(params.anthropic.budget_tokens, 1);
-    assert.ok(params.anthropic.budget_tokens < 1 + 1);
+    // （原这里还有一条 `assert.ok(budget_tokens < 1 + 1)`，是上一条的子集且刻意
+    //   写成 `1 + 1` 绕开字面量——cr1-ctests P2-4b 已清，纯冗余。）
   });
 
   it("T-AMT4 常量与 ANTHROPIC_SAMPLING_DEFAULTS 同源", () => {

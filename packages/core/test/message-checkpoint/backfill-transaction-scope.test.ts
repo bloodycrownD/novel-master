@@ -101,10 +101,26 @@ describe("CS-05b backfill 事务边界", () => {
     // 段 B0 ×1 + 文件片 ×3 + 段 R ×1 + backfill ×1 = 6。
     assert.equal(probe.transactionCount, 6);
 
-    const backfillTx = probe.transactionCount - 1;
-    const inBackfill = probe.statementsInTransaction(backfillTx);
+    // ⚠ 不能用 `probe.transactionCount - 1`（cr1-ctests P2-4b）：那把「backfill
+    // 段必是最后一条事务」这个**段序前提**写进了断言。当前段序（B0 → 文件片 →
+    // R → backfill）下成立，将来若把段 R 挪到 backfill 之后就会假红，而且报错
+    // 信息会指向完全错误的业务语义。改为按内容定位。
+    const backfillTxIndexes = Array.from(
+      { length: probe.transactionCount },
+      (_, i) => i
+    ).filter((i) =>
+      probe
+        .statementsInTransaction(i)
+        .some((s) => s.sql.includes("message_checkpoint"))
+    );
+    assert.equal(
+      backfillTxIndexes.length,
+      1,
+      "backfill 段必须是且只能是单独一条事务（按内容定位，不依赖段序）"
+    );
+    const inBackfill = probe.statementsInTransaction(backfillTxIndexes[0]!);
     assert.ok(
-      inBackfill.some((s) => s.sql.includes("message_checkpoint")),
+      inBackfill.some((s) => /INSERT INTO\s+message_checkpoint/i.test(s.sql)),
       "backfill 段必须真的在补 checkpoint 行"
     );
     // ⚠️ 断言口径是「零 vfs_entry **写**」：导入侧段 C 按 spec 的形态就是

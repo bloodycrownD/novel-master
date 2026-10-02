@@ -141,8 +141,7 @@ describe("C2-11 大输入降级与结果等价", () => {
       ["aaaaab", "baaaaa"],
       ["abababab", "babababa"],
       ["重复重复重复", "重复重复别别别"],
-      ["\n\t缩进不同", "  缩进不同\n"],
-      ["a".repeat(1200), "a".repeat(1200)], // 同字符长串（并列最长）
+["\n\t缩进不同", "  缩进不同\n"],
       ["z" + "a".repeat(800) + "z", "a".repeat(1500) + "q"],
       ["中文中文中文", "中文中文英文"],
       ["prefix-unique-suffix", "other-unique-prefix"],
@@ -164,5 +163,28 @@ describe("C2-11 大输入降级与结果等价", () => {
         `substring 不一致：a=${JSON.stringify(a.slice(0, 20))} b=${JSON.stringify(b.slice(0, 20))}`
       );
     }
+  });
+
+  /**
+   * 重样本单独成条（cr1-ctests P2-4b）。
+   *
+   * `1200 × 1200` 的同字符长串在 oracle（`referenceLongestCommonSubstring`，全表
+   * `number[][]`）上要分配约 144 万格 × 行数组。它**必须**留在对拍组里——并列最长
+   * + 退化路径这两个性质只有这个体量才压得出来；但混在 20 组样本里，一旦它在低
+   * 内存机器上触发 GC 噪声/超时，报错会指向整个 T-LCS-EQUIV 而不是这一条。
+   * 拆成独立 `it` 后失败可归因，且不影响其余 19 组。
+   *
+   * @remarks 若 CI worker 内存仍然吃紧，可把两侧降到 `600 × 600`——并列最长的
+   *       性质不变，只是少压一档规模。
+   */
+  it("T-LCS-EQUIV-HEAVY: 1200 × 1200 同字符长串与全表 DP oracle 逐字相等", () => {
+    const a = "a".repeat(1200);
+    const b = "a".repeat(1200);
+    const actual = longestCommonSubstring(a, b);
+    const expected = referenceLongestCommonSubstring(a, b);
+    assert.equal(actual.length, expected.length);
+    assert.equal(actual.substring, expected.substring);
+    // 并列最长的判定口径：同一长串的最长公共子串就是全长。
+    assert.equal(actual.length, 1200);
   });
 });

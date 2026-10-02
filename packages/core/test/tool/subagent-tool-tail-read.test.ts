@@ -138,7 +138,8 @@ async function runTask(
 describe("subagent 末条 assistant text：tail+role 读口", () => {
   it("T-SUB-TAIL1 零次全量读、取 tail(assistant,8)", async () => {
     const messages: ChatMessage[] = [];
-    // 50 条子会话夹具（含 tool_result 夹层）。
+    // 41 条子会话夹具：20 轮 × (assistant tool_use + tool_result) = 40，再加
+    // 末条 assistant text。（不是以前注释里写的 50 条——按循环实数就是 41。）
     for (let i = 0; i < 20; i++) {
       messages.push(assistantToolUseOnly(`tu-${i}`));
       messages.push(toolResult(`tu-${i}`));

@@ -176,6 +176,75 @@ describe("Message visibility", () => {
     );
   });
 
+  it("listBySessionTailOfRole：role 过滤在子查询内、limit 只数该 role、外层升序", async () => {
+    // cr1-c1 P2-3：这条读口的真实 SQL 此前从未被任何用例打到（测试里全是桩）。
+    // 观测面照本文件既有的 recordingConnection 形态——按「实际发出的 SELECT
+    // 文本 + 真库返回行」两向钉，避免改 SQL 时悄悄改坏结构。
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id, "S");
+    // seq1 user / seq2 assistant / seq3-5 user / seq6-8 assistant
+    await ctx.messages.append(session.id, "user", textBlocks("u1"));
+    await ctx.messages.append(session.id, "assistant", textBlocks("a1"));
+    for (let i = 0; i < 3; i++) {
+      await ctx.messages.append(session.id, "user", textBlocks(`u${i + 2}`));
+    }
+    for (let i = 0; i < 3; i++) {
+      await ctx.messages.append(session.id, "assistant", textBlocks(`a${i + 2}`));
+    }
+
+    const { conn, sqls } = recordingConnection(ctx.conn);
+    const repo = new SqliteMessageRepository(conn);
+
+    // ① limit 只数该 role：assistant 共 4 条，limit 2 只取最近 2 条（seq 7、8）。
+    const assistantTail = await repo.listBySessionTailOfRole(session.id, "assistant", 2);
+    assert.deepEqual(
+      assistantTail.map((m) => m.seq),
+      [7, 8],
+      "limit 只数 assistant：夹在中间的 user 不占配额"
+    );
+
+    // ② 外层升序：返回顺序是 seq ASC，不是子查询里的 seq DESC。
+    const sql = sqls[0]!;
+    assert.ok(/ORDER BY seq ASC/i.test(sql), "外层必须 ORDER BY seq ASC");
+    assert.ok(/ORDER BY seq DESC/i.test(sql), "内层必须 ORDER BY seq DESC 取尾");
+    // role 过滤在**子查询内**：谓词与 LIMIT 同处内层，外层只有 ORDER BY。
+    const innerRole = sql.indexOf("role =");
+    const innerLimit = sql.indexOf("LIMIT");
+    const outerOrder = sql.lastIndexOf("ORDER BY seq ASC");
+    assert.ok(innerRole > 0, "SQL 里必须有 role 谓词");
+    assert.ok(innerLimit > innerRole, "role 谓词必须排在 LIMIT 之前（即在内层）");
+    assert.ok(
+      sql.slice(0, innerLimit).includes("session_id ="),
+      "session_id 谓词同样在子查询内"
+    );
+    assert.ok(outerOrder > innerLimit, "外层升序排在子查询之后");
+    assert.equal(
+      sql.slice(outerOrder).replace(/ORDER BY seq ASC/i, "").trim(),
+      "",
+      "外层除 ORDER BY 外不得再有别的条件"
+    );
+
+    // ③ user 侧同样只数 user；另一会话一条都不混进来（session_id 谓词在内层）。
+    const userTail = await repo.listBySessionTailOfRole(session.id, "user", 3);
+    assert.deepEqual(
+      userTail.map((m) => m.seq),
+      [3, 4, 5],
+      "user tail 取最近 3 条"
+    );
+    const other = await ctx.sessions.create(project.id, "S2");
+    await ctx.messages.append(other.id, "assistant", textBlocks("other"));
+    const leaked = await repo.listBySessionTailOfRole(session.id, "assistant", 10);
+    assert.equal(
+      leaked.some((m) => m.sessionId === other.id),
+      false,
+      "session_id 谓词在子查询内 ⇒ 不得混入别的会话"
+    );
+
+    // ④ 仍是全列读口（下游 extractLastAssistantText 要正文）。
+    assert.ok(Object.keys(assistantTail[0]!).includes("content"), "返回整条消息");
+  });
+
   it("shows a range of messages by seq", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);

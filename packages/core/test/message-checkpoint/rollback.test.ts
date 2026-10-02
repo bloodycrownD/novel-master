@@ -500,7 +500,6 @@ describe("MessageRollbackService (revision model)", () => {
       messageCountBefore,
       "被拦下的回滚不得截断消息"
     );
-    void assistant1.id;
   });
 
   it("tool turn: rollback on assistant anchor keeps assistant and tool_result", async () => {

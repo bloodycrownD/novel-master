@@ -448,6 +448,14 @@ describe("CS-07: blob 归零触发器的 vfs_entry 守卫", () => {
         String(found!.sql).includes(VFS_BLOB_GC_ENTRY_GUARD_SQL_FRAGMENT),
         `${name} 必须带 vfs_entry 守卫`,
       );
+      // 字面量锁（cr1-ctests P2-4b）：上面那条是「用同一真源断言同一真源」——
+      // 守卫常量一旦被清空/改名但触发器 SQL 未动，`includes("")` 照样成立，
+      // 断言会跟着空转。这里不引用任何常量，直接钉 SQL 里必须字面出现
+      // `vfs_entry`（守卫子查询的表名）。
+      assert.ok(
+        /vfs_entry/i.test(String(found!.sql)),
+        `${name} 的触发器 SQL 必须字面提到 vfs_entry（不依赖导出常量）`,
+      );
     }
 
     // ⚠️ 这条才是拦住 P0 的牙齿：「建了新名」不等于「旧名失效」——
@@ -461,6 +469,25 @@ describe("CS-07: blob 归零触发器的 vfs_entry 守卫", () => {
       legacy.map((t) => t.name),
       [],
       "旧名触发器必须已被 DROP——它们在 SQLite 里不会因代码不再引用而消失",
+    );
+  });
+
+  /**
+   * 守卫常量自身的字面量锁（cr1-ctests P2-4b）。
+   *
+   * 三处 `String(found!.sql).includes(VFS_BLOB_GC_ENTRY_GUARD_SQL_FRAGMENT)`
+   * 都是「用同一真源断言同一真源」：常量被清空（`""`）或改名时，`includes` 立刻
+   * 变成恒真，断言跟着空转，而触发器 SQL 其实一点没变。这条独立钉住「常量非空
+   * 且字面提到 `vfs_entry`」，让守卫常量被清空/改名时也能红。
+   */
+  it("T-GC-GUARD-CONST: 守卫常量非空且字面包含 vfs_entry（防 includes(常量) 空转）", () => {
+    assert.ok(
+      VFS_BLOB_GC_ENTRY_GUARD_SQL_FRAGMENT.length > 0,
+      "守卫常量不得被清空——清空后 `sql.includes(常量)` 会恒真，三处断言集体空转",
+    );
+    assert.ok(
+      /vfs_entry/i.test(VFS_BLOB_GC_ENTRY_GUARD_SQL_FRAGMENT),
+      "守卫常量必须字面提到 vfs_entry（守卫子查询的表名）",
     );
   });
 
