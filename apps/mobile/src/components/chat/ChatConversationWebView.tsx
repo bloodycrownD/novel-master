@@ -120,7 +120,10 @@ import {
 import type {StreamWireChunk} from '@/services/stream-wire-queue';
 import {appendWireChunk} from '@/services/stream-wire-queue';
 import {decodeLiteralHtmlEntities} from '@/components/rich-content/decode-literal-html-entities';
-import {CHAT_CONVERSATION_SELECTION_MENU_ITEMS} from './chat-transcript-selection-menu';
+import {
+  CHAT_CONVERSATION_SELECTION_MENU_ITEMS,
+  CHAT_TRANSCRIPT_SELECTION_MENU_ITEMS,
+} from './chat-transcript-selection-menu';
 import type {ChatTranscriptWebViewHandle} from './ChatTranscriptWebViewHandle';
 
 export type {ChatTranscriptWebViewHandle} from './ChatTranscriptWebViewHandle';
@@ -225,7 +228,8 @@ export type ChatConversationWebViewProps = {
    * 外部真源草稿文本。**只为识别「外部变化」**（水化 / 清空 / 回填）——打字真源
    * 在 web 侧，宿主收到 `change` 只上抛、绝不回写（M1 / M6）。
    */
-  readonly composerText: string;
+  /** 可选仅因 transcriptOnly 变体（子会话屏）省传；主链恒传。 */
+  readonly composerText?: string;
   readonly onComposerChangeText?: (text: string) => void;
   /** 外部受控光标（插入 token / 水化 / 清空后）：随外部 value 变化对齐一次。 */
   readonly composerCursor?: number;
@@ -276,6 +280,15 @@ export type ChatConversationWebViewProps = {
     readonly kind: ConversationListAction;
     readonly sessionId?: string;
   }) => void;
+
+  /**
+   * 转录 only 变体（transcript-converge，子会话屏）：只要转录、不要输入
+   * dock 与列表视图的降级形态。init 下发该字段，web 侧给 #app 挂类隐藏
+   * dock；该变体下 composer-dock 能力位缺失也不渲染降级横幅（本就没有
+   * dock，横幅的「输入组件版本过低」语义不成立）。视图恒 conversation
+   * （调用方不传 view 即默认值）。
+   */
+  readonly transcriptOnly?: boolean;
 };
 
 function transcriptFlagsEqual(
@@ -338,7 +351,9 @@ function chatConversationWebViewPropsEqual(
     // 漏 `view` 则是「返回键回到列表还是对话视图」，漏 `sessionList` 则是
     // 「新建/删除会话后列表不刷新」，两者都无声无息。
     prev.view === next.view &&
-    prev.sessionList === next.sessionList
+    prev.sessionList === next.sessionList &&
+    // ---- 变体（transcript-converge）：漏比会吞掉子会话屏的降级形态 ----
+    prev.transcriptOnly === next.transcriptOnly
   );
 }
 
@@ -490,7 +505,9 @@ export const ChatConversationWebView = memo(
         onWebMermaidViewerOpenChange,
         pendingSubagentSessions,
         onSnapshotComplete,
-        composerText,
+        // transcriptOnly 变体（子会话屏）不需要 composer 域输入——默认空串，
+        // 使该 prop 在降级形态下可省（消息无 dock 消费者，值不产生副作用）。
+        composerText = '',
         onComposerChangeText,
         composerCursor,
         onComposerSelectionChange,
@@ -509,6 +526,7 @@ export const ChatConversationWebView = memo(
         view = 'conversation',
         sessionList = null,
         onListAction,
+        transcriptOnly = false,
       },
       ref,
     ) {
@@ -566,6 +584,9 @@ export const ChatConversationWebView = memo(
       const initialScrollRef = useRef(initialScroll);
       const defaultScrollToBottomRef = useRef(defaultScrollToBottom);
       const needsOpenSnapshotRef = useRef(true);
+      // 视图切离对话时若快照分片在途被中止，半截转录留在 web 侧 DOM 里；
+      // 重进该会话必须全量补铺一次，否则露出半截（见 viewState 旁的中止 effect）。
+      const needsResumeSnapshotRef = useRef(false);
       const snapshotDeferTimerRef = useRef<ReturnType<
         typeof setTimeout
       > | null>(null);
@@ -1006,9 +1027,11 @@ export const ChatConversationWebView = memo(
             theme: snapshot.theme,
             flags: snapshot.flags,
             composer: snapshot.composer,
+            // 转录 only 变体（transcript-converge）：web 据此隐藏 dock。
+            ...(transcriptOnly ? {transcriptOnly: true} : {}),
           },
         });
-      }, [postToWeb]);
+      }, [postToWeb, transcriptOnly]);
 
       /** 恢复链第 2 步 · `composerState`（dock 域**直发**，纪律 A）。 */
       const sendComposerState = useCallback(() => {
@@ -1142,6 +1165,12 @@ export const ChatConversationWebView = memo(
                 }
               }
             }
+            // 「末片 post 完 + deferred 已 flush」= DOM 完整时刻，此刻清补铺标记：
+            // 无论这份完整快照是在对话视图发的，还是中止后在列表视图里因
+            // richText / pendingSubagentSessions / messages 变化跑成的，
+            // web 侧 DOM 都已经完整，下次重进不必再全量补铺一次。
+            // 中止路径走上面的 `return`，不经过这里，语义不冲突。
+            needsResumeSnapshotRef.current = false;
             onSnapshotComplete?.();
           } finally {
             if (inFlightSnapshotGenerationRef.current === generation) {
@@ -1980,6 +2009,41 @@ export const ChatConversationWebView = memo(
       }, [webReady, view, postToWeb]);
 
       /**
+       * 视图切离对话时**中止在途快照分片**。
+       *
+       * 大会话的开屏快照是逐片 yield 发送的，进入会话后的几秒里分片流持续
+       * 占着 RN 的 JS 线程与 WebView 的消息管道；此时侧滑退出，`viewState`
+       * 要排在剩余分片后面，用户看到的就是「滑了要等一会才切回列表」。
+       * （对照实验实锤：进大会话停 10 秒等分片流发完再滑，退出瞬时。）
+       *
+       * 中止手法：把在途代次顶掉——`sendSessionSnapshotNow` 的分片循环每片
+       * 发送前自检代次，发现被顶替即退出，剩余分片不再构建也不再过桥。
+       * 半截转录会留在 web 侧 DOM（列表视图下不可见），因此同时记
+       * `needsResumeSnapshotRef`，重进时全量补铺自愈；被中止快照压着的
+       * deferred 动作（含 streamFlush）由补铺完成时统一 flush。
+       *
+       * 「已挂起未起跑」的快照档同样要无条件清（不挂在 inFlight 判据下）：
+       * `uiRunning` 期间的非 force 快照先落进 `pendingSnapshotRef` + 0ms 定时器
+       * 等流式间歇，切视图时那一次宏任务照样会 fire，把整份浏览史分片灌进
+       * 列表视图下的 WebView——正是要消除的堵塞（此时窗口最窄）。
+       * 注意清理顺序与 flushPendingSnapshot 同款：先掐定时器再丢档。
+       */
+      useEffect(() => {
+        if (view === 'conversation') {
+          return;
+        }
+        if (inFlightSnapshotGenerationRef.current != null) {
+          inFlightSnapshotGenerationRef.current = null;
+          needsResumeSnapshotRef.current = true;
+        }
+        if (snapshotDeferTimerRef.current != null) {
+          clearTimeout(snapshotDeferTimerRef.current);
+          snapshotDeferTimerRef.current = null;
+        }
+        pendingSnapshotRef.current = null;
+      }, [view]);
+
+      /**
        * `sessionList`（会话行快照）。
        *
        * `sessionList == null` 早退 = 「本拍不推」：宿主在对话视图里把它置 null，
@@ -2028,6 +2092,44 @@ export const ChatConversationWebView = memo(
           forceAfterRepaint || (pendingSubagentSessions?.size ?? 0) > 0,
         );
       }, [webReady, pendingSubagentSessions]);
+
+      /**
+       * 重进对话视图时补铺被中止的快照（对照上一段中止 effect）。
+       *
+       * 只有「切离时有分片在途被中止」才会走到这里；快照本来就没在途的
+       * 正常进出，web 侧 DOM 完整保留，重进零成本——这正是 SPA 化的卖点，
+       * 不能为了修中止而把它退化为每次进出都全量重发。
+       *
+       * force=true 立即发送：uiRunning 时非 force 会挂 pending 等 stream
+       * 间歇，补铺不能等——用户正盯着重进的会话看。
+       *
+       * 三重守卫（两条早退都在**清标记之前**，否则标记被消费却没补上，
+       * 下一次重进就再也补不回来了）：
+       * ① `messages.length === 0`：空面补铺等于发一份空快照把转录清掉，
+       *    真消息随后到位再全量 → 3 轮快照抖动。留标记等真面。
+       * ② `sessionKeyRef.current !== sessionKey`：同一次 commit 里换了会话，
+       *    补铺这一轮让给 ④ 的开屏轮（两者互斥，否则双发分片流）。本 effect
+       *    声明在 ④ 之前，读到的 sessionKeyRef 还是上一拍的值，判据成立。
+       *    让位后标记不清——④ 的完整快照收尾会清（见 sendSessionSnapshotNow）。
+       * ③ messages 显式入依赖：①② 的判据都读它，隐式挂在
+       *    sendSessionSnapshot 的间接依赖上不直观。
+       */
+      useEffect(() => {
+        if (view !== 'conversation' || !webReady) {
+          return;
+        }
+        if (!needsResumeSnapshotRef.current) {
+          return;
+        }
+        if (messages.length === 0) {
+          return;
+        }
+        if (sessionKeyRef.current !== sessionKey) {
+          return;
+        }
+        needsResumeSnapshotRef.current = false;
+        sendSessionSnapshot('preserve', undefined, true);
+      }, [view, webReady, sendSessionSnapshot, messages, sessionKey]);
 
       // ④ 快照（恢复链最后一步）
       useEffect(() => {
@@ -2278,7 +2380,11 @@ export const ChatConversationWebView = memo(
           <WebView
             key={`conversation-repaint-${repaintEpoch}`}
             ref={webRef}
-            style={styles.fill}
+            /* 白屏防线（2026-10-01 切 tab 白屏一闪）：Android WebView 的画面层
+               在隐藏/重新可见的窗口里露的是控件自己的原生底色（默认白）。
+               背景色设成主题背景后，即使有重建空窗，露的也是主题色、与周围
+               融合。走 style：native 控件底色不在 WebView props 白名单里。 */
+            style={[styles.fill, {backgroundColor: tokens.background}]}
             /* sec/D-1：收紧为包内 file:// */
             originWhitelist={['file://']}
             source={{uri: getChatConversationUri()}}
@@ -2294,11 +2400,19 @@ export const ChatConversationWebView = memo(
             scrollEnabled={false}
             showsVerticalScrollIndicator={false}
             keyboardDisplayRequiresUserAction={false}
-            /* 划词三项：复制（现行 nbsp 清洗链）/ 全选（下行 selectAll）/ 粘贴（下行 composerPaste） */
-            menuItems={[...CHAT_CONVERSATION_SELECTION_MENU_ITEMS]}
+            /* 划词三项：复制（现行 nbsp 清洗链）/ 全选（下行 selectAll）/ 粘贴（下行 composerPaste）。
+               transcriptOnly 变体退回旧口径（仅复制）：无 dock 时全选/粘贴的跨桥
+               动作没有落点，三项反而制造死按钮（transcript-converge）。 */
+            menuItems={
+              transcriptOnly
+                ? [...CHAT_TRANSCRIPT_SELECTION_MENU_ITEMS]
+                : [...CHAT_CONVERSATION_SELECTION_MENU_ITEMS]
+            }
             onCustomMenuSelection={handleCustomMenuSelection}
           />
-          {webReady && !composerDockCapable ? (
+          {/* transcriptOnly 不判降级横幅：该变体本就无 dock，能力位缺失是
+              预期形态而非「输入组件版本过低」。 */}
+          {!transcriptOnly && webReady && !composerDockCapable ? (
             <View
               style={[styles.degrade, {backgroundColor: tokens.background}]}
               testID="chat-conversation-dock-degraded">
