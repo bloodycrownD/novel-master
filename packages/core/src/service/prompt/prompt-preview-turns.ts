@@ -171,22 +171,42 @@ function formatToolUseInputJson(block: ToolUseBlock): string {
     : inputJson;
 }
 
-/** 工具组卡状态：无 result → `lost`；`ok=false` → `error`；否则 `ok`。 */
-function toolGroupStatus(
+/** 工具组卡的结果格 + 状态：一次判定同时产出两格，`ok` 不再判两遍。 */
+function buildToolResultCell(
   block: ToolResultBlock | undefined
-): PromptToolGroupStatus {
+): {
+  readonly result: PromptToolGroupResultData | null;
+  readonly status: PromptToolGroupStatus;
+} {
+  // 无 result → 悬挂 use：`result` 留 null 占位，状态 `lost`。
   if (block === undefined) {
-    return "lost";
+    return { result: null, status: "lost" };
   }
-  return resolveToolResultOk(block) ? "ok" : "error";
+  const ok = resolveToolResultOk(block);
+  return {
+    result: {
+      toolUseId: block.toolUseId,
+      ok,
+      body: formatToolResultContentForDisplay(block.content),
+    },
+    status: ok ? "ok" : "error",
+  };
 }
 
-/** `toolUseId` → `tool_result` 块：一次全量扫描，hidden 消息里的结果同样参与配对（同 `buildToolResultByUseId` 先例）。 */
+/**
+ * `toolUseId` → `tool_result` 块：一次全量扫描。
+ *
+ * @remarks hidden 消息整条跳过（与段产出侧 `continue` 同一口径）：hidden 不进提示词，
+ * 它的 tool_result 不该把 use 的组卡从「lost」救成「ok」，否则会出现「段里没有、卡里有」。
+ */
 function buildToolResultByUseId(
   messages: readonly ChatMessage[]
 ): Map<string, ToolResultBlock> {
   const map = new Map<string, ToolResultBlock>();
   for (const message of messages) {
+    if (message.hidden) {
+      continue;
+    }
     for (const block of message.content.blocks) {
       if (block.type === "tool_result") {
         map.set(block.toolUseId, block);
@@ -228,21 +248,14 @@ function buildMessageCards(
     }
     if (block.type === "tool_use") {
       flushText();
-      const resultBlock = results.get(block.id);
+      const cell = buildToolResultCell(results.get(block.id));
       cards.push({
         type: "toolGroup",
         id: `group-${block.id}`,
         toolName: block.name,
         inputJson: formatToolUseInputJson(block),
-        result:
-          resultBlock === undefined
-            ? null
-            : {
-                toolUseId: resultBlock.toolUseId,
-                ok: resolveToolResultOk(resultBlock),
-                body: formatToolResultContentForDisplay(resultBlock.content),
-              },
-        status: toolGroupStatus(resultBlock),
+        result: cell.result,
+        status: cell.status,
         parallel,
       });
       return;
@@ -307,10 +320,16 @@ function cardCharCount(card: PromptTurnCardData): number {
   return card.inputJson.length + (card.result?.body.length ?? 0);
 }
 
-/** assistant 轮真摘要：首条 assistant 文本卡的首行；纯工具/纯思考轮用卡片数占位。 */
+/** 一轮全部卡片的字数之和（三类轮的 metaText 共用同一口径）。 */
+function cardCharsOf(cards: readonly PromptTurnCardData[]): number {
+  return cards.reduce((sum, card) => sum + cardCharCount(card), 0);
+}
+
+/** assistant 轮真摘要：首条 **assistant** 文本卡的首行；纯工具/纯思考轮用卡片数占位。 */
 function buildAssistantSummaryText(cards: readonly PromptTurnCardData[]): string {
   const firstText = cards.find(
-    (card): card is PromptTextCardData => card.type === "text"
+    (card): card is PromptTextCardData =>
+      card.type === "text" && card.role === "assistant"
   );
   const textPart = firstText == null ? "" : summarizeFirstLine(firstText.body);
   return textPart === "" ? `${cards.length} 段` : textPart;
@@ -332,7 +351,7 @@ function buildAssistantMetaText(
   seq: number | undefined,
   cards: readonly PromptTurnCardData[]
 ): string {
-  const charCount = cards.reduce((sum, card) => sum + cardCharCount(card), 0);
+  const charCount = cardCharsOf(cards);
   const toolGroups = cards.filter(
     (card): card is PromptToolGroupCardData => card.type === "toolGroup"
   );
@@ -509,10 +528,7 @@ export async function buildPromptPreviewTurnsFromLayout(
     }
     if (group.kind === "user") {
       const firstCard = group.cards[0];
-      const charCount = group.cards.reduce(
-        (sum, card) => sum + cardCharCount(card),
-        0
-      );
+      const charCount = cardCharsOf(group.cards);
       return {
         ...base,
         summaryText:
@@ -522,10 +538,7 @@ export async function buildPromptPreviewTurnsFromLayout(
         metaText: buildUserMetaText(group.seq, charCount, group.attachmentCount),
       };
     }
-    const charCount = group.cards.reduce(
-      (sum, card) => sum + cardCharCount(card),
-      0
-    );
+    const charCount = cardCharsOf(group.cards);
     return {
       ...base,
       summaryText: group.items[0]!.title,

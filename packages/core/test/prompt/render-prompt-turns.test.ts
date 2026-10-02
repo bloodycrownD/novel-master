@@ -53,6 +53,18 @@ function itemIds(turns: Awaited<ReturnType<typeof buildPromptPreviewTurnsFromLay
   return turns.map((turn) => turn.items.map((item) => item.id));
 }
 
+/** 卡片字数口径：文本/thinking 取 body，组卡取 inputJson + result 正文。 */
+function cardChars(turn: { cards: ReadonlyArray<PromptTurnCardData> }): number {
+  return turn.cards.reduce(
+    (sum, card) =>
+      sum +
+      (card.type === "toolGroup"
+        ? card.inputJson.length + (card.result?.body.length ?? 0)
+        : card.body.length),
+    0
+  );
+}
+
 describe("T-R1 切轮正确性", () => {
   const layout: AgentPromptLayout = {
     system: "sys",
@@ -260,16 +272,11 @@ describe("T-R4 assistant 轮摘要", () => {
     );
     // 新口径：summaryText 只放真摘要（单行截断），计数全在 metaText
     assert.equal(turn.summaryText, `${"长".repeat(69)}…`);
-    const cardChars = turn.cards.reduce(
-      (sum, card) =>
-        sum +
-        (card.type === "toolGroup"
-          ? card.inputJson.length + (card.result?.body.length ?? 0)
-          : card.body.length),
-      0
-    );
     // 该轮 tool_use 无 result（悬挂）→ metaText 追加丢失计数位
-    assert.equal(turn.metaText, `#2 · 工具调用 1 次 · ${cardChars} 字 · 1 丢失`);
+    assert.equal(
+      turn.metaText,
+      `#2 · 工具调用 1 次 · ${cardChars(turn)} 字 · 1 丢失`
+    );
     // 正文按序拼接且带角色前缀行
     assert.match(turn.body, /^\[#2 · tool_call\]\n\[tool_use name=read id=t1\]/);
     assert.match(turn.body, /\n\n\[#2 · assistant\]\n/);
@@ -302,6 +309,27 @@ describe("T-R4 assistant 轮摘要", () => {
     assert.equal(turn.summaryText, "1 段");
   });
 
+  it("摘要只取 assistant 文本卡：tool_result 回传里的 user 文本不参与", async () => {
+    const messages: ChatMessage[] = [
+      message("user", "跑", 1),
+      blocksMessage("assistant", [
+        { type: "tool_use", id: "t1", name: "read", input: { path: "a.md" } },
+      ], 2),
+      // 工具结果回传消息自带 text 块，role 是 user：不能拿它当 assistant 轮摘要
+      blocksMessage("user", [
+        { type: "tool_result", toolUseId: "t1", content: "读完 a.md", ok: true },
+        { type: "text", text: "继续" },
+      ], 3),
+      message("assistant", "收尾", 4),
+    ];
+    const turns = await buildPromptPreviewTurnsFromLayout(chatOnlyLayout, ctxOf(messages, ""));
+    const turn = turns[1]!;
+    assert.equal(turn.kind, "assistant");
+    assert.deepEqual(cardTypes(turn), ["toolGroup", "text", "text"]);
+    // 摘要取首条 **assistant** 文本卡（「收尾」），不是排在它前面的 user 文本卡（「继续」）
+    assert.equal(turn.summaryText, "收尾");
+  });
+
   it("thinking 开 / 关两态：cards 与 metaText 随实际产出变化", async () => {
     const messages = [
       message("user", "hi", 1),
@@ -318,15 +346,6 @@ describe("T-R4 assistant 轮摘要", () => {
     });
     const offTurn = off[1]!;
     const onTurn = on[1]!;
-    const charCountOf = (turn: { cards: ReadonlyArray<PromptTurnCardData> }): number =>
-      turn.cards.reduce(
-        (sum, card) =>
-          sum +
-          (card.type === "toolGroup"
-            ? card.inputJson.length + (card.result?.body.length ?? 0)
-            : card.body.length),
-        0
-      );
     assert.equal(offTurn.items.length, 2);
     assert.equal(onTurn.items.length, 3);
     // thinking 关：thinking 块不产卡；开：产一张 thinking 卡
@@ -343,11 +362,11 @@ describe("T-R4 assistant 轮摘要", () => {
     assert.equal(onTurn.summaryText, "回答");
     assert.equal(
       offTurn.metaText,
-      `#2 · 工具调用 1 次 · ${charCountOf(offTurn)} 字 · 1 丢失`
+      `#2 · 工具调用 1 次 · ${cardChars(offTurn)} 字 · 1 丢失`
     );
     assert.equal(
       onTurn.metaText,
-      `#2 · 工具调用 1 次 · ${charCountOf(onTurn)} 字 · 1 丢失`
+      `#2 · 工具调用 1 次 · ${cardChars(onTurn)} 字 · 1 丢失`
     );
     assert.notEqual(offTurn.metaText, onTurn.metaText);
   });
@@ -402,18 +421,6 @@ function groupCards(turn: Turn): PromptToolGroupCardData[] {
 /** 卡片类型序列（断言顺序用）。 */
 function cardTypes(turn: Turn): string[] {
   return turn.cards.map((card) => card.type);
-}
-
-/** 卡片字数口径：文本/thinking 取 body，组卡取 input + result 正文。 */
-function cardChars(turn: Turn): number {
-  return turn.cards.reduce(
-    (sum, card) =>
-      sum +
-      (card.type === "toolGroup"
-        ? card.inputJson.length + (card.result?.body.length ?? 0)
-        : card.body.length),
-    0
-  );
 }
 
 /** 带 attachments 的 user 消息（wrap 场景用）。 */
@@ -474,6 +481,27 @@ describe("T-PT1 工具调用跨消息配对", () => {
       groupCards(turns[1]!)[0]!.inputJson,
       "[tool_use name=list id=t1]"
     );
+  });
+
+  it("hidden 消息里的 tool_result 不参与配对 → 对应组卡落 lost", async () => {
+    const messages: ChatMessage[] = [
+      message("user", "跑", 1),
+      blocksMessage("assistant", [
+        { type: "tool_use", id: "t1", name: "read", input: { path: "a.md" } },
+      ], 2),
+      // hidden 不进提示词，其 tool_result 不该把 use 从 lost 救成 ok
+      {
+        ...blocksMessage("user", [
+          { type: "tool_result", toolUseId: "t1", content: "读完 a.md", ok: true },
+        ], 3),
+        hidden: true,
+      },
+    ];
+    const turns = await buildPromptPreviewTurnsFromLayout(chatOnlyLayout, ctxOf(messages, ""));
+    const [group] = groupCards(turns[1]!);
+    assert.equal(group!.result, null);
+    assert.equal(group!.status, "lost");
+    assert.match(turns[1]!.metaText, /1 丢失$/);
   });
 });
 
@@ -714,10 +742,13 @@ describe("T-PT7 assistant 轮摘要与计数拆分", () => {
     const turns = await buildPromptPreviewTurnsFromLayout(chatOnlyLayout, ctxOf(messages, ""));
     const turn = turns[1]!;
     assert.equal(turn.summaryText, "收工");
+    // 字数硬编码 74 = 三个 inputJson 各 20（`{\n  "path": "…"\n}`）+ 结果 3 + 9 + 文本 2，
+    // 不用自派生 helper 算期望值（同漂不发现）
     assert.equal(
       turn.metaText,
-      `#2 · 工具调用 3 次 · ${cardChars(turn)} 字 · 1 失败 · 1 丢失`
+      `#2 · 工具调用 3 次 · 74 字 · 1 失败 · 1 丢失`
     );
+    assert.equal(cardChars(turn), 74);
     // 字数单独算：不切旧 summary 拼串
     assert.ok(!turn.metaText.includes("收工"));
   });
