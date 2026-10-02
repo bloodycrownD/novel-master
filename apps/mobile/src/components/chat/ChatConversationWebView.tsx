@@ -137,6 +137,10 @@ export type {ChatTranscriptWebViewHandle} from './ChatTranscriptWebViewHandle';
  * 合并成一条就必然要把其中一条改错。转录七方法本身一个都没动，故
  * `session-stream-webview-adapter` / `ChatTabProvider` / `useInterruptedPartialCommit` /
  * `SubagentSessionScreen` 的消费代码零改动。
+ *
+ * `transcriptOnly` 变体（子会话屏）的行为面断言在同文件 transcriptOnly describe，
+ * web 侧（CSS 隐藏 dock + `init.transcriptOnly` 消费）断言在
+ * `__tests__/chat-conversation-boot-script.test.ts` 的产物面。
  */
 export type ChatConversationWebViewHandle = ChatTranscriptWebViewHandle & {
   /**
@@ -2051,6 +2055,13 @@ export const ChatConversationWebView = memo(
        * 本 effect 重跑，一次性补推**最新**快照。顺带治掉了现网那条
        * 「从对话返回列表不刷新」的老毛病（RN FlatList 靠 `reloadLists` 的
        * `useState` 引用变化，漏跑一次就一直显示旧数组）。
+       *
+       * ⚠️ **声明序依赖，勿与上面的 viewState effect 对调**：切回列表时两条
+       * effect 落在同一次 commit，顺序只由声明序决定——必须先切视图、再推列表，
+       * 用户才先看到列表框后看到行（中间那一瞬的空列表按行数现算，不闪）。对调后
+       * 两者仍都发得出、零报错，只是那一瞬变成「有行的列表框 + 空列表」闪一下。
+       * 护栏：`chat-conversation-webview.test.tsx` 的「G-3: 切回列表同 commit 内
+       * viewState 必须先于首条 sessionList」按下标关系断，调换声明序即红。
        */
       useEffect(() => {
         if (!webReady || sessionList == null) {

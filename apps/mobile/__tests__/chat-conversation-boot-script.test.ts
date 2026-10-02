@@ -956,3 +956,32 @@ describe('chat-conversation 列表视图（第二阶段 wave-1 · T-CL-DIST）',
     );
   });
 });
+
+/* ================================================================== *
+ * transcriptOnly 变体的 web 侧消费面（transcript-converge · cr2-A-3 OQ3）
+ *
+ * 断言面刻意落**构建产物**而不是源文件：这条链的真源跨三个文件
+ * （chat-conversation.css 的类名 ↔ dock.applyRoute 的 classList.toggle ↔
+ * init 载荷键名），任一侧改了对不上就是「子会话屏留一条空白 dock」这种
+ * 屏上看得见、源码里对不出来的问题。源文件差集断言已按 deviation 4 让位于此。
+ * ================================================================== */
+
+describe('chat-conversation transcriptOnly 变体（dist 消费面 · T-CT-DIST）', () => {
+  it('T-CT-DIST-01: app.css 含 transcript-only 隐藏 dock 规则（空白不敏感）', () => {
+    const css = appCss();
+    // 产物实际是多行带空格形态（构建期 join + 保留缩进），照抄单行字符串会假红，
+    // 故用空白不敏感正则断。少这条规则 = 子会话屏底下留一条空白 dock。
+    expect(css).toMatch(
+      /#app\.transcript-only\s+#composer-dock\s*\{\s*display:\s*none;?\s*\}/,
+    );
+  });
+
+  it('T-CT-DIST-02: app.js 的 init 分支按 transcriptOnly 给 #app 挂类', () => {
+    const script = bootScript();
+    expect(script).toContain('transcript-only');
+    // 类名必须与 CSS 侧选择器同名，且挂在 #app（隐藏 dock 的祖先）上。
+    expect(script).toMatch(
+      /getElementById\("app"\)[^;]*classList\.toggle\(\s*"transcript-only"/,
+    );
+  });
+});

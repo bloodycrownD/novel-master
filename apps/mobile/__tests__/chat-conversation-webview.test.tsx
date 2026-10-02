@@ -24,6 +24,7 @@ import {
   clearMockWebViewPostMessages,
   mockWebViewPostMessages,
 } from '../test-utils/react-native-webview-mock';
+import {CHAT_TRANSCRIPT_SELECTION_MENU_ITEMS} from '@/components/chat/chat-transcript-selection-menu';
 
 jest.mock('@/theme/ThemeProvider', () => ({
   useTheme: () => ({
@@ -1080,6 +1081,150 @@ describe('ChatConversationWebView · 列表域下行', () => {
     });
     expect(sentOfType('sessionList')).toHaveLength(2);
     expect(sentOfType('sessionList').at(-1)).toEqual(second);
+  });
+
+  it('G-3: 切回列表同 commit 内 viewState 必须先于首条 sessionList（声明序护栏）', async () => {
+    // 隐含依赖：两条 effect 在同一次 commit 里先后跑，顺序只由**声明序**决定。
+    // 先切视图再推列表 → 用户先看到列表框、后看到行（中间空态按行数现算，不闪）。
+    // 把两个 useEffect 的声明序对调，本条立刻红——故别用「都发了」这种弱断言。
+    const list = {
+      sessions: [
+        {
+          id: 's2',
+          title: 'S2',
+          updatedAtMs: 2,
+          active: false,
+          interrupted: false,
+          current: false,
+        },
+      ],
+    };
+    let tree: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = track(TestRenderer.create(
+        <ChatConversationWebView {...baseProps({view: 'conversation', sessionList: null})} />,
+      ));
+    });
+    simulateReadyV2(tree!.root);
+    await flushMicrotasks();
+    expect(sentTypes()).not.toContain('sessionList');
+
+    // 切回列表：view 与 sessionList 同一拍变，两个 effect 一起跑
+    await act(async () => {
+      tree!.update(
+        <ChatConversationWebView {...baseProps({view: 'list', sessionList: list})} />,
+      );
+    });
+    const sent = sentMessages();
+    const viewIdx = sent.findIndex(
+      m => m.type === 'viewState' && m.payload.view === 'list',
+    );
+    const listIdx = sent.findIndex(m => m.type === 'sessionList');
+    expect(viewIdx).toBeGreaterThanOrEqual(0);
+    expect(listIdx).toBeGreaterThanOrEqual(0);
+    expect(viewIdx).toBeLessThan(listIdx);
+  });
+});
+
+/* ================================================================== *
+ * transcriptOnly 变体（子会话屏，transcript-converge）
+ *
+ * 变体面此前五处零断言（init 载荷 / memo 比较器 / menuItems / 降级横幅豁免 /
+ * 宿主是否真传）。memo 漏字段是本文件**已发生过**的静默 bug（:349-352 自认），
+ * 而 transcriptOnly 恰好加在比较器末尾——漏比就是「子会话屏静默退化成主对话形态」。
+ * ================================================================== */
+
+describe('ChatConversationWebView · transcriptOnly 变体（子会话屏）', () => {
+  beforeEach(() => {
+    clearMockWebViewPostMessages();
+  });
+
+  afterEach(async () => {
+    await unmountAll();
+    clearMockWebViewPostMessages();
+  });
+
+  async function mountReady(
+    overrides: Record<string, unknown> = {},
+    capabilities: readonly string[] = MODERN_CAPABILITIES,
+  ) {
+    let tree: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = track(TestRenderer.create(
+        <ChatConversationWebView {...baseProps(overrides)} />,
+      ));
+    });
+    simulateReadyV2(tree!.root, capabilities);
+    await flushMicrotasks();
+    return tree!;
+  }
+
+  it('init 载荷带 transcriptOnly===true；缺省时连键都不发', async () => {
+    await mountReady({transcriptOnly: true});
+    expect(sentOfType('init')[0]!.transcriptOnly).toBe(true);
+
+    clearMockWebViewPostMessages();
+    await mountReady();
+    // 条件展开语义：缺省不是「发个 false」，而是**根本不带这个键**——
+    // web 侧按 `'transcriptOnly' in route` 之外的形态判也会分叉，故钉死。
+    expect(sentOfType('init')[0]).not.toHaveProperty('transcriptOnly');
+  });
+
+  it('memo 比较器：只翻转 transcriptOnly 也必须重渲并重发 init', async () => {
+    // 回归点：比较器末尾漏掉 `transcriptOnly` 时，整个子树连同恢复链一起被吞，
+    // 症状是「子会话屏切主对话形态后 init 不重发、dock 类摘不掉」，零报错。
+    // 写法照 :996 的 sessionList 回归点：只改一个字段，其余 props 引用全等。
+    const messages = [sampleMessage('m1', 1)];
+    let tree: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = track(TestRenderer.create(
+        <ChatConversationWebView
+          {...baseProps({messages, transcriptOnly: true})}
+        />,
+      ));
+    });
+    simulateReadyV2(tree!.root);
+    await flushMicrotasks();
+    expect(sentOfType('init')).toHaveLength(1);
+    expect(sentOfType('init')[0]!.transcriptOnly).toBe(true);
+
+    // 同一份 messages 引用（避免「顺带被 messages 变更放行」掩盖 memo 漏比）
+    await act(async () => {
+      tree!.update(
+        <ChatConversationWebView
+          {...baseProps({messages, transcriptOnly: false})}
+        />,
+      );
+    });
+    expect(sentOfType('init')).toHaveLength(2);
+    expect(sentOfType('init').at(-1)).not.toHaveProperty('transcriptOnly');
+  });
+
+  it('menuItems 退回仅复制（1 项）；完整形态仍是 3 项', async () => {
+    const variant = await mountReady({transcriptOnly: true});
+    const variantItems = webViewOf(variant.root).props.menuItems;
+    expect(variantItems).toHaveLength(1);
+    expect(variantItems).toEqual([...CHAT_TRANSCRIPT_SELECTION_MENU_ITEMS]);
+
+    clearMockWebViewPostMessages();
+    const full = await mountReady();
+    expect(webViewOf(full.root).props.menuItems).toHaveLength(3);
+  });
+
+  it('降级横幅豁免：变体永不判降级（本就无 dock）；缺省形态照旧判', async () => {
+    // 走「ready 不带 composer-dock 能力位」路径（同 r6-I-1 用例的 mock 手法）：
+    // 该变体本就无 dock，能力位缺失是预期形态，不该报「输入组件版本过低」。
+    const noDock: readonly string[] = ['streamBlockCommit'];
+    const variant = await mountReady({transcriptOnly: true}, noDock);
+    expect(
+      variant.root.findAllByProps({testID: 'chat-conversation-dock-degraded'}),
+    ).toHaveLength(0);
+
+    clearMockWebViewPostMessages();
+    const full = await mountReady({}, noDock);
+    expect(
+      full.root.findAllByProps({testID: 'chat-conversation-dock-degraded'}).length,
+    ).toBeGreaterThan(0);
   });
 });
 
