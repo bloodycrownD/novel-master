@@ -70,6 +70,7 @@ interface PromptPreviewTurn {
 - `apps/mobile/src/components/prompt/PromptTurnLeafCard.tsx`
 - `apps/desktop/renderer/features/chat/PromptToolGroupCard.tsx`
 - `apps/desktop/renderer/features/chat/PromptLeafCard.tsx`
+- `apps/desktop/test/prompt-turn-mermaid-hook.mjs`（+ 配套 `prompt-turn-mermaid-stub.mjs`：props 记 `globalThis.__promptTurnMermaidProps`、渲染 `data-mermaid-stub` 占位，见 Step 6 测试基建）
 
 删除文件：
 - `apps/mobile/src/components/prompt/PromptPreviewSegmentCard.tsx`（轮卡接管后零消费点，死代码删除；连同其测试内引用）
