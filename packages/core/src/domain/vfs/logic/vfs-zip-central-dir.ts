@@ -86,12 +86,22 @@ function assertNoZip64Marker(value: number, field: string): void {
   }
 }
 
+/**
+ * 解压单条正文。
+ *
+ * ⚠️ 这里**没有**「本条声明值 > 剩余预算」的兜底闸（CR-F05 已删）：调用方
+ * `parseZipCentralDirectory` 的总量闸用**已含本条**的 `declaredBytes` 判，而那个
+ * 实参是「上限减已含本条的累计值」⇒ 本条会被算两遍，等价的误杀条件是
+ * `前缀累计 + 2 × 本条 > 上限`。实测 20 MiB 单条 DEFLATE、10 × 3 MiB DEFLATE
+ * （总额 30 MiB < 32 MiB 上限）全被误判 `PAYLOAD_TOO_LARGE`，同内容 STORE 却
+ * 通过（STORE 分支提前 return）——同一份内容结论随压缩方式变化。总量闸已在本条
+ * **动手之前**判过声明值，这里的分支恒不触发，只是重复犯错。
+ */
 function decompressEntryData(
   compressed: Uint8Array,
   method: number,
   uncompressedSize: number,
-  entryLabel: string,
-  remainingBudget: number
+  entryLabel: string
 ): Uint8Array {
   if (method === ZIP_METHOD_STORE) {
     if (compressed.length !== uncompressedSize) {
@@ -101,13 +111,6 @@ function decompressEntryData(
       );
     }
     return compressed;
-  }
-  // 动手前的单条兜底：声明值本身已超剩余预算 ⇒ 不进 inflateSync。
-  if (uncompressedSize > remainingBudget) {
-    throw vfsZipError(
-      "PAYLOAD_TOO_LARGE",
-      `ZIP entry ${entryLabel} exceeds remaining size budget (${uncompressedSize} > ${remainingBudget})`
-    );
   }
   try {
     const inflated = inflateSync(compressed);
@@ -134,8 +137,7 @@ function readLocalEntryData(
     uncompressedSize: number;
     method: number;
     entryName: string;
-  },
-  remainingBudget: number
+  }
 ): Uint8Array {
   const { localHeaderOffset } = entry;
   if (readUInt32LE(bytes, localHeaderOffset) !== LOCAL_FILE_HEADER_SIG) {
@@ -166,8 +168,7 @@ function readLocalEntryData(
     compressed,
     entry.method,
     entry.uncompressedSize,
-    entry.entryName,
-    remainingBudget
+    entry.entryName
   );
 }
 
@@ -179,6 +180,10 @@ function readLocalEntryData(
  *          （在 `readLocalEntryData` 之前），解压后再累加**实际**长度做二次
  *          确认。攻击者可控的 `uncompressedSize` 让几百 KB 的 zip 能让
  *          `inflateSync` 分配 GB 级——只在解压之后判就来不及了。
+ *
+ * ⚠️ 这里只有**一处**体积闸。曾经还有一道「本条声明值 vs 剩余预算」的单条兜底，
+ *          它被算两遍（`remainingBudget` 传的是已含本条的余额）⇒ 合法包被误杀，
+ *          已随 CR-F05 删除；新增单条闸前先确认它不是同款重复计数。
  *
  * @throws {VfsZipError} `PAYLOAD_TOO_LARGE` 条数或解压后总体积越限
  * @throws {VfsZipError} `INVALID_ZIP` 当归档结构不受支持或无法读取
@@ -262,17 +267,13 @@ export function parseZipCentralDirectory(
       );
     }
 
-    const data = readLocalEntryData(
-      zipBytes,
-      {
-        localHeaderOffset,
-        compressedSize,
-        uncompressedSize,
-        method,
-        entryName,
-      },
-      limits.maxUncompressedBytes - declaredBytes
-    );
+    const data = readLocalEntryData(zipBytes, {
+      localHeaderOffset,
+      compressedSize,
+      uncompressedSize,
+      method,
+      entryName,
+    });
     // 解压后二次确认（防「声明小、实际大」的谎报头把单条内存打穿）。
     actualBytes += data.length;
     if (actualBytes > limits.maxUncompressedBytes) {

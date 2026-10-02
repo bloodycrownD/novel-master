@@ -15,6 +15,16 @@
  *    而 fflate 的 `unzipSync` **完全不使用这个字段**（实测 `zh()` 连
  *    `0x02014b50` 签名都不校验）⇒ 必然落到回退分支。
  *
+ * CR-F05 追加的 4 条正向用例（H7..H10）：CS-09 这组用例原本**全在测「该抛的抛」**，
+ * 没有一条测「不该抛的不抛」，于是 `decompressEntryData` 里那道把本条算两遍的
+ * `remainingBudget` 兜底闸一路绿灯放行——实测 20 MiB 单条 DEFLATE、10 × 3 MiB
+ * DEFLATE（总额 30 MiB < 32 MiB 上限）全被误判 `PAYLOAD_TOO_LARGE`，同内容 STORE
+ * 却通过（STORE 分支提前 return，压根走不到那道闸）。四条正向用例各配一条 STORE
+ * 对照，钉住「压缩方式不影响总量判定」这个本应成立的不变量。
+ * 错误码断言同时按**消息**收窄：越限一律是 `exceeds limit`，而误拒类的
+ * `exceeds remaining size budget` 随该闸删除后不再可能出现在任何报错里
+ * （`expectZipCode` 对每条抛错用例都做这层反向断言）。
+ *
  * @module test/vfs/vfs-zip-parse-limits
  */
 
@@ -82,15 +92,87 @@ function manyEmptyEntries(count: number): Uint8Array {
   return zipSync(payload, { level: 0 });
 }
 
-function expectZipCode(fn: () => unknown, code: string): void {
+/**
+ * 误杀消息（CR-F05 已删的那道闸的专属文案）。
+ *
+ * 它是**双计**的唯一可观测痕迹：合法包被误拒时报错一定是这句，而真正的越限永远
+ * 是 `exceeds limit`。留成常量供断言「抛错时不得出现它」——文案改了就红，是刻意的。
+ */
+const MISJUDGED_REJECTION_MESSAGE = "exceeds remaining size budget";
+
+/** 真·越限消息（条数闸 / 声明值总量闸 / 解压后总量闸 共用这个形态）。 */
+const LIMIT_EXCEEDED_MESSAGE = "exceeds limit";
+
+function expectZipCode(
+  fn: () => unknown,
+  code: string,
+  messageFragment: string = LIMIT_EXCEEDED_MESSAGE
+): void {
   assert.throws(fn, (e: unknown) => {
     assert.ok(
       e instanceof VfsZipError,
       `应抛 VfsZipError，实际：${String(e)}`
     );
     assert.equal(e.code, code, `错误码应为 ${code}，实际 ${e.code}：${e.message}`);
+    // 按消息收窄：越限走 `exceeds limit`，错误码对了但消息不对同样算坏。
+    assert.ok(
+      e.message.includes(messageFragment),
+      `消息应含 ${JSON.stringify(messageFragment)}，实际：${e.message}`
+    );
+    assert.ok(
+      !e.message.includes(MISJUDGED_REJECTION_MESSAGE),
+      `不该出现误杀文案 ${JSON.stringify(MISJUDGED_REJECTION_MESSAGE)}（CR-F05 已删该闸）：${e.message}`
+    );
     return true;
   });
+}
+
+/** 可压缩的确定性填充（周期 251，DEFLATE 能压到极小，STORE 原样）。 */
+function fillPattern(size: number, seed: number): Uint8Array {
+  const bytes = new Uint8Array(size);
+  for (let i = 0; i < size; i++) {
+    bytes[i] = (i * 7 + seed * 13) % 251;
+  }
+  return bytes;
+}
+
+/** count 条、每条 bodySize 字节的确定性可压正文（供 H8/H10 复用）。 */
+function manyFillEntries(
+  count: number,
+  bodySize: number
+): {
+  payload: Record<string, Uint8Array>;
+  contents: Map<string, Uint8Array>;
+} {
+  const payload: Record<string, Uint8Array> = {};
+  const contents = new Map<string, Uint8Array>();
+  for (let i = 0; i < count; i++) {
+    const name = `c${String(i).padStart(2, "0")}.bin`;
+    const body = fillPattern(bodySize, i);
+    payload[name] = body;
+    contents.set(name, body);
+  }
+  return { payload, contents };
+}
+
+/** 逐字节相等（分块 Buffer.compare；20 MiB 量级下全量 assert.deepEqual 太慢）。 */
+function assertBytesEqual(
+  actual: Uint8Array,
+  expected: Uint8Array,
+  label: string
+): void {
+  assert.equal(actual.length, expected.length, `${label}: 长度应相等`);
+  const chunk = 1024 * 1024;
+  for (let off = 0; off < expected.length; off += chunk) {
+    const len = Math.min(chunk, expected.length - off);
+    assert.equal(
+      Buffer.from(actual.buffer, actual.byteOffset + off, len).compare(
+        Buffer.from(expected.buffer, expected.byteOffset + off, len)
+      ),
+      0,
+      `${label}: 第 ${off} 起的 ${len} 字节不一致`
+    );
+  }
 }
 
 describe("CS-09 ZIP 解析期闸门", () => {
@@ -193,5 +275,61 @@ describe("CS-09 ZIP 解析期闸门", () => {
     const parsed = parseVfsZip(zip);
     assert.equal(parsed.size, 2);
     assert.deepEqual(Array.from(parsed.get("a.txt")!), [1, 2, 3]);
+  });
+});
+
+/**
+ * CR-F05 正面牙齿：**不该抛的不能抛**。
+ *
+ * 被删掉的那道 `remainingBudget` 兜底闸用「已含本条」的累计值当余额，再拿本条
+ * 声明值去比 ⇒ 本条被算两遍，等价的误杀条件是 `前缀累计 + 2 × 本条 > 32 MiB`。
+ * 下面的输入全部**远低于** 32 MiB 上限，旧代码必红（实测 H7/H8 两条 not ok，
+ * 两条 STORE 对照恒绿）——这正是病症的形状：同一份内容，压不压缩结论不同。
+ */
+describe("CR-F05: 合法大体积归档不被误杀", () => {
+  const MIB = 1024 * 1024;
+
+  it("H7: 单条 20MiB DEFLATE 解析成功且内容逐字节相等", () => {
+    const content = fillPattern(20 * MIB, 1);
+    const zip = zipSync({ "big.md": content }, { level: 6 });
+    // 自证确实走了 DEFLATE（否则本用例会悄悄退化成 STORE 对照，形同虚设）。
+    assert.ok(zip.length < MIB, `20MiB 可压内容不该产出 ${zip.length} 字节归档`);
+
+    const parsed = parseVfsZip(zip);
+    assert.equal(parsed.size, 1);
+    assertBytesEqual(parsed.get("big.md")!, content, "20MiB DEFLATE");
+  });
+
+  it("H8: 10 × 3MiB DEFLATE（总额 30MiB < 32MiB 上限）解析成功", () => {
+    const { payload, contents } = manyFillEntries(10, 3 * MIB);
+    const zip = zipSync(payload, { level: 6 });
+    assert.ok(zip.length < 10 * MIB, "10 × 3MiB 可压内容不该近原样");
+
+    const parsed = parseVfsZip(zip);
+    assert.equal(parsed.size, 10);
+    for (const [name, body] of contents) {
+      assertBytesEqual(parsed.get(name)!, body, `DEFLATE ${name}`);
+    }
+  });
+
+  it("H9: 对照——同内容 STORE 单条 20MiB 同样解析成功（压缩方式不影响总量判定）", () => {
+    const content = fillPattern(20 * MIB, 1);
+    const zip = zipSync({ "big.md": content }, { level: 0 });
+    assert.ok(zip.length >= 20 * MIB, "STORE 对照应当几乎不压缩");
+
+    const parsed = parseVfsZip(zip);
+    assert.equal(parsed.size, 1);
+    assertBytesEqual(parsed.get("big.md")!, content, "20MiB STORE");
+  });
+
+  it("H10: 对照——同内容 STORE 10 × 3MiB 同样解析成功（压缩方式不影响总量判定）", () => {
+    const { payload, contents } = manyFillEntries(10, 3 * MIB);
+    const zip = zipSync(payload, { level: 0 });
+
+    const parsed = parseVfsZip(zip);
+    assert.equal(parsed.size, 10);
+    for (const [name, body] of contents) {
+      assertBytesEqual(parsed.get(name)!, body, `STORE ${name}`);
+    }
   });
 });
