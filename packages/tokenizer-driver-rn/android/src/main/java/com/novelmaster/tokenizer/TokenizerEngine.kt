@@ -41,6 +41,10 @@ internal class TokenizerEngine(private val context: Context) {
     var vocabLoadMs: Long = -1
     var encodeMs: Long = -1
     var totalMs: Long = -1
+    /** 词表加载拆细（2026-10-02 成本拆解实验）：assets→cacheDir 拷贝段。无加载（LRU 命中）为 -1。 */
+    var copyMs: Long = -1
+    /** 词表加载拆细：DJL newInstance（含 .so 首载/解析/建表）段。无加载为 -1。 */
+    var jniMs: Long = -1
   }
 
   // 缓存容量 4（2026-09-29 二次拍板 2→4）：WEB json 解析后内存可达数十 MB/
@@ -87,7 +91,7 @@ internal class TokenizerEngine(private val context: Context) {
   ): CountResult {
     val loadStartNs = System.nanoTime()
     val tokenizer =
-      loadWebTokenizer(family, spec)
+      loadWebTokenizer(family, spec, timings)
         ?: throw IllegalStateException("家族 $family 的 WEB 分词器资产缺失或加载失败")
     timings?.vocabLoadMs = elapsedMs(loadStartNs)
     // 检查点：词表已就绪、encode 还没开始——这是取消收益最大的一处
@@ -116,14 +120,22 @@ internal class TokenizerEngine(private val context: Context) {
     return encoding.ids.size
   }
 
-  private fun loadWebTokenizer(family: String, spec: AssetPathSpec): HuggingFaceTokenizer? {
+  private fun loadWebTokenizer(
+    family: String,
+    spec: AssetPathSpec,
+    timings: CountTimings? = null,
+  ): HuggingFaceTokenizer? {
     webCache.get(family)?.let { return it }
+    val copyStartNs = System.nanoTime()
     val primaryPath = copyAssetToCache("tokenizers/${spec.primary}") ?: return null
+    timings?.copyMs = elapsedMs(copyStartNs)
+    val jniStartNs = System.nanoTime()
     val loaded =
       tryLoadWebTokenizer(primaryPath)
         ?: spec.fallback?.let { fallback ->
           copyAssetToCache("tokenizers/$fallback")?.let { tryLoadWebTokenizer(it) }
         }
+    timings?.jniMs = elapsedMs(jniStartNs)
     if (loaded != null) {
       webCache.put(family, loaded)
     }
@@ -152,7 +164,7 @@ internal class TokenizerEngine(private val context: Context) {
   ): CountResult {
     val loadStartNs = System.nanoTime()
     val tokenizer =
-      loadSpTokenizer(family, spec)
+      loadSpTokenizer(family, spec, timings)
         ?: throw IllegalStateException("家族 $family 的 SP 分词器资产缺失或加载失败")
     timings?.vocabLoadMs = elapsedMs(loadStartNs)
     // 检查点：与 WEB 家族同款，词表就绪后、encode 前。
@@ -170,13 +182,22 @@ internal class TokenizerEngine(private val context: Context) {
     }
   }
 
-  private fun loadSpTokenizer(family: String, spec: AssetPathSpec): SpTokenizer? {
+  private fun loadSpTokenizer(
+    family: String,
+    spec: AssetPathSpec,
+    timings: CountTimings? = null,
+  ): SpTokenizer? {
     spCache.get(family)?.let { return it }
+    val copyStartNs = System.nanoTime()
     val path = copyAssetToCache("tokenizers/${spec.primary}") ?: return null
+    timings?.copyMs = elapsedMs(copyStartNs)
+    val jniStartNs = System.nanoTime()
     return try {
       SpTokenizer(Paths.get(path)).also { spCache.put(family, it) }
     } catch (_: Throwable) {
       null
+    } finally {
+      timings?.jniMs = elapsedMs(jniStartNs)
     }
   }
 
@@ -216,8 +237,8 @@ internal class TokenizerEngine(private val context: Context) {
       Log.i(
         LOG_TAG,
         "family=${timings.family} chars=${timings.chars} " +
-          "vocabLoadMs=${timings.vocabLoadMs} encodeMs=${timings.encodeMs} " +
-          "totalMs=${timings.totalMs}",
+          "vocabLoadMs=${timings.vocabLoadMs} copyMs=${timings.copyMs} jniMs=${timings.jniMs} " +
+          "encodeMs=${timings.encodeMs} totalMs=${timings.totalMs}",
       )
     } catch (_: Throwable) {
       // 忽略：探针失败不影响计数结果。

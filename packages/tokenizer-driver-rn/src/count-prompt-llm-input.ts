@@ -78,6 +78,15 @@ const DRIVER_NAME = "rn";
  * `splitTextIntoChunks(整串)` → 逐块查 L2 → miss 块经
  * `countTextWithIncrementalTokenizer` 现算写回 → 求和。
  */
+/**
+ * [nm-tok-js] 探针累计（2026-10-02 成本拆解实验）：由 countChunksWithL2 累加、
+ * countSerialized 收尾输出后自然失效。与 Kotlin 侧 `Log.i("nm-tok", ...)` 同族——
+ * 只记量（家族/字符数/耗时/路径/L2 命中率），不落任何提示词内容；输出发生在
+ * 计数完成之后，不污染被测时段。
+ */
+let probeChunkTotal = 0;
+let probeChunkMisses = 0;
+
 function countChunksWithL2(
   text: string,
   scope: string,
@@ -86,11 +95,13 @@ function countChunksWithL2(
   let total = 0;
   for (const chunk of splitTextIntoChunks(text)) {
     const hash = chunkHash16(chunk);
+    probeChunkTotal += 1;
     const hit = tokenChunkCache.lookup(hash, scope);
     if (hit !== undefined) {
       total += hit;
       continue;
     }
+    probeChunkMisses += 1;
     const count = countTextWithIncrementalTokenizer(encodeText, chunk);
     tokenChunkCache.record(hash, scope, count);
     total += count;
@@ -298,8 +309,45 @@ function buildNativeCountRequest(
  * 计数主体。`sessionId`（第 5 位可选参）是取消链路的归属信息源：
  * 在场时驱动生成 requestId 塞进过桥请求，桥内会走可取消的新方法并登记
  * in-flight；缺失时行为与本次迭代之前逐字节一致（旧三参、不可取消）。
+ *
+ * 外层是 [nm-tok-js] 探针壳：只在 L1 miss 的真实计数轮输出（L1 命中在入口
+ * 早退、不经过这里），把「native / tiktoken / 兜底」哪条路、耗时、L2 命中率
+ * 一次记全——真机 gpt 兜底「切会话 1s / 精确轮 4.2s」的体感归因靠它落账。
  */
 async function countSerialized(
+  family: TokenizerFamily,
+  serialized: string,
+  vendorModelId: string,
+  chunkScope?: string,
+  sessionId?: string,
+): Promise<SerializedCountResult> {
+  probeChunkTotal = 0;
+  probeChunkMisses = 0;
+  const probeT0 = Date.now();
+  try {
+    const result = await countSerializedImpl(
+      family,
+      serialized,
+      vendorModelId,
+      chunkScope,
+      sessionId,
+    );
+    console.info(
+      `[nm-tok-js] family=${family} chars=${serialized.length} ms=${Date.now() - probeT0}` +
+        ` kind=${result.counterKind} est=${result.estimated}` +
+        ` l2Hit=${probeChunkTotal - probeChunkMisses}/${probeChunkTotal}`,
+    );
+    return result;
+  } catch (error) {
+    console.info(
+      `[nm-tok-js] family=${family} chars=${serialized.length} ms=${Date.now() - probeT0}` +
+        ` thrown=${error instanceof Error ? error.name : "unknown"}`,
+    );
+    throw error;
+  }
+}
+
+async function countSerializedImpl(
   family: TokenizerFamily,
   serialized: string,
   vendorModelId: string,

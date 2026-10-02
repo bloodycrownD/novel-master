@@ -164,6 +164,16 @@ class TokenizerModule(reactContext: ReactApplicationContext) :
   private companion object {
     const val CODE_COUNT_FAILED = "TOKENIZER_COUNT_FAILED"
     const val CODE_COUNT_CANCELLED = "TOKENIZER_COUNT_CANCELLED"
+
+    init {
+      // DJL `HuggingFaceTokenizer.newInstance` 的首跳会同步跑 `Ec2Utils.callHome`：
+      // 连 `http://169.254.169.254`（EC2 元数据，手机上永不可达）取 token+元数据，
+      // connectTimeout 1s×两次尝试——慢网络下可阻塞 2~4s，且计时全部落在
+      // vocabLoadMs 里、每进程首家族付一次。官方退出开关提前置上（须在任何
+      // DJL 类首次触碰前——本 companion 在模块类加载期执行，早于一切计数），
+      // 遥测整条短路（2026-10-02 词表加载成本拆解实验轮）。
+      System.setProperty("OPT_OUT_TRACKING", "true")
+    }
   }
 }
 
