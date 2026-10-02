@@ -1,15 +1,19 @@
 import {describe, expect, it} from '@jest/globals';
 /**
- * web/C-orch-4 双端口径一致性：
- * - RN 端口 `components/chat/anchored-menu-layout` 是 re-export，必须与真源同函数；
- * - WebView 端口 `runtime/menu/menu.ts` 只做 DOM 取值后委托同一真源，
- *   下方黄金值来自重构前 WebView 内联公式（menu.ts L58-135）的手算结果，
- *   锁死两端口共享后的输出不回归。
+ * web/C-orch-4 布局口径的黄金值锁（Step 8 迁居）。
+ *
+ * 原本这里还断「RN 端口 `components/chat/anchored-menu-layout` 是 re-export，
+ * 必须与真源同函数」——那是「双端口」纪律。Step 8 legacy 转录引擎退役后
+ * RN 端口连同唯一消费者 `MessageActionMenu.tsx` 一起删了，消息菜单只剩 web
+ * 文档内那一张，双端口不复存在，这条断言随之移除。
+ *
+ * 剩下的黄金值继续锁真源本身：WebView 端口 `runtime/menu/menu.ts` 只做 DOM
+ * 取值后委托同一真源，下方黄金值来自重构前 WebView 内联公式（menu.ts L58-135）
+ * 的手算结果，锁死共享后的输出不回归。
  */
 import * as shared from '../src/webview-host/chat-transcript/anchored-menu-layout';
-import * as rnReexport from '../src/components/chat/anchored-menu-layout';
 
-describe('anchored-menu-layout dual-port parity', () => {
+describe('anchored-menu-layout 黄金值（单端口：web 真源）', () => {
   const items = [
     {label: '编辑'},
     {label: '复制'},
@@ -18,14 +22,10 @@ describe('anchored-menu-layout dual-port parity', () => {
     {label: '回滚'},
   ];
 
-  it('RN re-export resolves to the same shared functions', () => {
-    expect(rnReexport.layoutAnchoredMenu).toBe(shared.layoutAnchoredMenu);
-    expect(rnReexport.layoutAnchoredMenuForHeight).toBe(
-      shared.layoutAnchoredMenuForHeight,
-    );
-    expect(rnReexport.computeAnchoredMenuWidth).toBe(
-      shared.computeAnchoredMenuWidth,
-    );
+  it('exports the layout math the web menu wrapper delegates to', () => {
+    expect(typeof shared.layoutAnchoredMenu).toBe('function');
+    expect(typeof shared.layoutAnchoredMenuForHeight).toBe('function');
+    expect(typeof shared.computeAnchoredMenuWidth).toBe('function');
   });
 
   it('width matches the pre-refactor WebView formula (min width floor wins)', () => {

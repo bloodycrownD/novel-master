@@ -1,5 +1,7 @@
 /**
- * Helpers for in-app message edit (text-only content) and message action menu items.
+ * Helpers for in-app message edit (text-only content)。
+ * 消息操作菜单的条目构建已随 MessageActionMenu 退役（chat-webview-unify Step 8，
+ * 2026-10-01）——web 侧 menu.ts 的 buildMenuItems 是唯一真源。
  */
 import {
   type ChatMessage,
@@ -11,12 +13,6 @@ import {
 /** Re-export Core 规则。 */
 export function editableTextFromMessage(message: ChatMessage): string | null {
   return extractEditableTextFromMessage(message);
-}
-
-export interface MessageActionMenuItem {
-  readonly label: string;
-  readonly action: string;
-  readonly danger?: boolean;
 }
 
 /**
@@ -42,26 +38,4 @@ export function applyTextEditToMessage(
   }
 
   return {blocks: result};
-}
-
-/** 仅 user 消息行可置位（展示形态由调用方过滤）。 */
-export function isSetFloorEligibleMessage(message: ChatMessage): boolean {
-  return message.role === 'user';
-}
-
-/** 消息操作菜单：编辑、复制、置位、分叉、回滚（无 hide/delete；隐藏消息同样可回滚，回滚不改变可见性）。 */
-export function buildMessageActionItems(
-  message: ChatMessage,
-): MessageActionMenuItem[] {
-  const items: MessageActionMenuItem[] = [];
-  if (editableTextFromMessage(message) != null) {
-    items.push({label: '编辑', action: 'edit'});
-  }
-  items.push({label: '复制', action: 'copy'});
-  if (isSetFloorEligibleMessage(message)) {
-    items.push({label: '置位', action: 'set-floor'});
-  }
-  items.push({label: '分叉', action: 'fork'});
-  items.push({label: '回滚', action: 'rollback', danger: true});
-  return items;
 }

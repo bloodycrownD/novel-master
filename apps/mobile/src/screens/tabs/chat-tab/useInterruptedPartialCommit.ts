@@ -16,7 +16,7 @@
  * 落库消息会经快照链重推、合成行不在落库消息里，须在新世代重新提交。
  */
 import {useEffect, useRef} from 'react';
-import type {ChatTranscriptWebViewHandle} from '@/components/chat/ChatTranscriptWebView';
+import type {ChatTranscriptWebViewHandle} from '@/components/chat/ChatTranscriptWebViewHandle';
 import type {SessionStreamUnitView} from '@/services/session-stream-unit';
 
 export interface UseInterruptedPartialCommitOptions {

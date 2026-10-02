@@ -22,11 +22,13 @@ import type {MainTabParamList, RootStackParamList} from '@/navigation/types';
 import {setPromptEditorOnSaved} from '@/components/agent/prompt-editor-callback';
 import {writeChatComposerDraft} from '@/storage/chat-composer-draft';
 import {ChatConversationPanel} from './chat-tab/ChatConversationPanel';
-import {ChatSessionListPanel} from './chat-tab/ChatSessionListPanel';
+import {
+  ChatSessionListPanel,
+  ChatSessionListProjectsPanel,
+} from './chat-tab/ChatSessionListPanel';
 import {ChatTabProvider, useChatTabContext} from './chat-tab/ChatTabProvider';
 import {ChatTabNavigationProvider} from './chat-tab/ChatTabNavigationProvider';
 import {useChatTabNavigation} from '@/navigation/ChatTabNavContext';
-import {useChatTabController} from './chat-tab/useChatTabController';
 
 type Nav = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, 'Chat'>,
@@ -66,7 +68,6 @@ function ChatTabScreenContent({
   const {tokens} = useTheme();
   const insets = useSafeAreaInsets();
   const ctx = useChatTabContext();
-  const controller = useChatTabController();
   const nav = useChatTabNavigation();
   const {setCurrentProject, setCurrentSession} = useMobileScope();
   const navigation = useNavigation<Nav>();
@@ -90,7 +91,7 @@ function ChatTabScreenContent({
       sessionListPanel: ctx.scope.sessionListPanel,
       sessionDrawerOpen: ctx.sessionDrawerOpen,
       mermaidViewerOpen: ctx.mermaidViewerOpen,
-      messageMenuOpen: ctx.messageMenuTarget != null || ctx.webMenuOpen,
+      messageMenuOpen: ctx.webMenuOpen,
       messageEditOpen: ctx.messageEditPrompt != null,
       modelPickerOpen: ctx.modelPickerOpen,
       agentPickerOpen: ctx.agentPickerOpen,
@@ -134,24 +135,20 @@ function ChatTabScreenContent({
     [ctx, setCurrentSession],
   );
 
-  const confirmBatchDelete = useCallback(() => {
-    controller.confirmBatchDeleteSessions(sessionBatch.selectedCount, () =>
-      // 删除错误已在 deleteSelectedSessions 内部处理并 toast，
-      // 这里只兜底避免意外的 Promise 拒绝变成未处理告警。
-      ctx.scope
-        .deleteSelectedSessions(sessionBatch.selectedIds, sessionBatch.exit)
-        .catch(() => undefined),
-    );
-  }, [controller, sessionBatch, ctx.scope]);
-
   // ⛶ 全屏编辑（照 onOpenSessionDetail 先例：chat-tab 目录零导航依赖，惯例是
   // 父层注入回调）：跳的就是智能体配置那套全屏编辑页（PromptEditor 的 composer
   // 变体——同一组件同一条键盘链，纯编辑态：预览/档位切换与保存按钮都不渲染，
   // 编辑器退出即回填，没有显式保存动作）。初始文本走路由参数；退出回填写进
   // 模块级存取（回调不可序列化，不走路由参数）。
-  // 本回调自身对 scope 缺 projectId/sessionId 时静默 return，面板侧另按
-  // scopeReady 决定要不要注入（见 ChatConversationPanel 的 scopeReady 注释），
-  // 让 ⛶ 走既有 disabled 通路而不是变成点了没反应的死按钮。
+  //
+  // 回填链（chat-webview-unify Step 7 已验证闭合，两段都换了落点但语义不变）：
+  //   `onExit(text)` → `writeChatComposerDraft` → `setDraftRestoreToken(bump)` →
+  //   controller 的草稿水化 effect（依赖含 `draftRestoreToken`）重读 store →
+  //   controller `text` state 变 → 传给宿主的 `composerText` prop 变 →
+  //   宿主 M2 effect（外部写入判据 `composerText !== webTextRef`）下行 `setText`。
+  // 本回调自身对 scope 缺 projectId/sessionId 时静默 return；面板侧另有
+  // scopeReady 判据决定要不要注入，让 ⛶ 走既有 disabled 通路而不是变成点了
+  // 没反应的死按钮。
   const setDraftRestoreToken = ctx.messages.setDraftRestoreToken;
   const runtime = ctx.runtime;
   const onOpenComposerFullscreen = useCallback(
@@ -162,7 +159,7 @@ function ChatTabScreenContent({
       }
       // composer 变体没有保存按钮：编辑器卸载（返回/手势）即回填——写入会话草稿
       // （内联输入 onChangeText 落的是同一条 store），再 bump 草稿恢复令牌触发
-      // ChatComposer 从草稿重读（undo_send 同款回填链路）。
+      // 下游从草稿重读（undo_send 同款回填链路）。
       setPromptEditorOnSaved(text => {
         writeChatComposerDraft(targetSessionId, text, runtime.sessions);
         setDraftRestoreToken(token => token + 1);
@@ -201,44 +198,43 @@ function ChatTabScreenContent({
   return (
     <View style={[styles.root, {backgroundColor: tokens.background}]}>
       <AppHeader pageKey="chat" />
-      {ctx.chatSubview === 'conversation' ? (
+      {/* 列表视图的切换条（「会话 / 项目工作区」）独占一行，位于内容区之上。
+          会话视图下整行收起，WebView 顶到 AppHeader 下方透出对话视图。 */}
+      {ctx.chatSubview === 'sessions' ? (
+        <ChatSessionListPanel
+          tokens={tokens}
+          visible
+          sessionListPanel={ctx.scope.sessionListPanel}
+          onSessionListPanelChange={ctx.scope.setSessionListPanel}
+        />
+      ) : null}
+      {/*
+        内容区：对话面**常驻**（第二阶段起不再随 chatSubview 条件渲染）——
+        列表与对话是同一个 WebView 文档里的两个视图，切视图 = 零销毁零握手。
+        项目工作区盖在它上面（绝对定位铺满），故这层要 `position: relative`。
+      */}
+      <View style={styles.contentArea}>
         <ChatConversationPanel
           tokens={tokens}
           visible
+          chatSubview={ctx.chatSubview}
+          sessionBatch={sessionBatch}
+          onOpenConversation={sid => openConversation(sid).catch(() => undefined)}
           onOpenComposerFullscreen={onOpenComposerFullscreen}
         />
-      ) : null}
-      <ChatSessionListPanel
-        tokens={tokens}
-        visible={ctx.chatSubview === 'sessions'}
-        sessionListPanel={ctx.scope.sessionListPanel}
-        onSessionListPanelChange={ctx.scope.setSessionListPanel}
-        projectId={ctx.projectId}
-        sessionId={ctx.sessionId}
-        sessions={ctx.scope.sessions}
-        vfsRefreshKey={ctx.vfsRefreshKey}
-        projectVfs={ctx.scope.projectVfs}
-        projectWorktree={ctx.scope.projectWorktree}
-        sessionBatchActive={sessionBatch.active}
-        sessionBatchSelectedCount={sessionBatch.selectedCount}
-        onEnterSessionBatch={sessionBatch.enter}
-        onExitSessionBatch={sessionBatch.exit}
-        onConfirmBatchDelete={confirmBatchDelete}
-        onCreateSession={() =>
-          ctx.scope.handleCreateSession().catch(() => undefined)
-        }
-        onOpenConversation={sid => openConversation(sid).catch(() => undefined)}
-        onToggleSessionSelect={sessionBatch.toggle}
-        isSessionSelected={sessionBatch.isSelected}
-        menuSessionId={ctx.scope.menuSessionId}
-        onMenuSessionIdChange={ctx.scope.setMenuSessionId}
-        onOpenSessionRename={ctx.scope.openSessionRenamePrompt}
-        onCopySession={sid =>
-          ctx.scope.handleCopySession(sid).catch(() => undefined)
-        }
-        onConfirmDeleteSession={ctx.scope.confirmDeleteSession}
-        onOpenFileEditor={ctx.onOpenFileEditor}
-      />
+        {ctx.chatSubview === 'sessions' ? (
+          <ChatSessionListProjectsPanel
+            tokens={tokens}
+            visible
+            sessionListPanel={ctx.scope.sessionListPanel}
+            projectId={ctx.projectId}
+            vfsRefreshKey={ctx.vfsRefreshKey}
+            projectVfs={ctx.scope.projectVfs}
+            projectWorktree={ctx.scope.projectWorktree}
+            onOpenFileEditor={ctx.onOpenFileEditor}
+          />
+        ) : null}
+      </View>
       {sessionRenameModal}
       <ProjectDrawer
         visible={ctx.scope.projectDrawerOpen}
@@ -267,4 +263,13 @@ export function ChatTabScreen() {
 
 const styles = StyleSheet.create({
   root: {flex: 1},
+  /**
+   * 内容区（AppHeader 之下、底部 MainTabs 之上）。
+   *
+   * `position: relative` 是给项目工作区那个**绝对定位覆盖层**当参照的：它必须
+   * 盖在常驻的 WebView 之上（两个 flex:1 的兄弟会各分一半，WebView 会被挤成半屏
+   * 且露出底色），而覆盖层又不能 `position: absolute` 到屏幕根——那会连 AppHeader
+   * 一起盖掉。
+   */
+  contentArea: {flex: 1, minHeight: 0, position: 'relative'},
 });

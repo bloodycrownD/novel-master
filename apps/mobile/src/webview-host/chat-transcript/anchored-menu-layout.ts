@@ -1,8 +1,12 @@
 /**
- * Shared placement math for anchored action menus (RN modal + WebView context menu).
+ * Shared placement math for anchored action menus (WebView context menu).
  * 数值常量真源：`src/web/shared/constants.ts`。
- * 双端口径：RN `components/chat/anchored-menu-layout.ts` re-export 本文件；
- * WebView `runtime/menu/menu.ts` 仅保留 DOM 取值 wrapper，布局计算统一走这里。
+ * 消费面：WebView `runtime/menu/menu.ts` 仅保留 DOM 取值 wrapper，布局计算统一走这里。
+ *
+ * Step 8：RN 侧的 re-export（`components/chat/anchored-menu-layout.ts`）与其唯一
+ * 消费者 `MessageActionMenu.tsx` 一并退役——legacy RN 转录引擎删除后，消息菜单
+ * 只剩 web 文档内这一张锚定菜单，RN 侧不再有任何锚定弹层。本文件是布局算法真源，
+ * 保留不动。
  */
 export {
   ANCHORED_MENU_GAP,

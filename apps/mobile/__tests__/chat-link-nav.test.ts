@@ -162,10 +162,13 @@ describe('openChatLink 接线源码契约 (T-L5)', () => {
     expect(src).toContain('openChatLink');
   });
 
-  it('ChatConversationPanel：webview 路接 onLinkClick（legacy 纯文本路不接）', () => {
+  it('ChatConversationPanel：接 onLinkClick（唯一一处接线）', () => {
     const src = rnSrc('screens/tabs/chat-tab/ChatConversationPanel.tsx');
-    expect(src).toContain('onLinkClick={scope.openChatLink}');
-    // 仅一处接线（webview 路）；legacy MessageList 无 <a> 可拦，不接线
+    // Step 8：原断言写的是 `onLinkClick={scope.openChatLink}`，而面板里这行一直
+    // 是 `ctx.scope.…`（子组件走 ctx 直取），字面量对不上——一条一直红着的陈旧
+    // 断言。同时「legacy 纯文本路不接」这半句随 legacy 转录引擎退役作废：转录面
+    // 只剩统一宿主一条路径，「仅一处接线」本身就是全量口径。
+    expect(src).toContain('onLinkClick={ctx.scope.openChatLink}');
     expect(src.match(/onLinkClick=/g)?.length).toBe(1);
   });
 

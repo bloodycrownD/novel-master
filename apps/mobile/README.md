@@ -140,7 +140,7 @@ nm vfs list / -r
 
 ## Rich text (chat + `.md` preview)
 
-- **我的 → 配置 → 聊天配置** (`chatRichText` KKV, default **off**): rich rendering lives in the WebView transcript (`ChatTranscriptWebView`); the legacy RN path (`MessageList`, engine `legacy-rn`) falls back to plain text via `RichContentBody`, and the **streaming tail** stays plain `Text`.
+- **我的 → 配置 → 聊天配置** (`chatRichText` KKV, default **off**): rich rendering lives in the chat page's WebView transcript (对话页 = 单个 `chat-conversation` WebView，宿主 `ChatConversationWebView`；开关关闭时正文按纯文本渲染)。**旧的 `legacy-rn` 转录引擎已退役**——`MessageList` RN 渲染路径与 `ChatComposer` 已随 Q1 删除，`chatTranscriptEngine` KKV 仅为历史值兼容而保留读取，不再有引擎切换。
 - **工作区 `.md` / `.markdown` 预览** (`FileMarkdownPreview`): body renders in `RichDocumentWebView` when `vfsMarkdownPreviewEngine` is `webview` (default); Front Matter card HTML is injected into the same WebView. In preview mode, a **Markdown / 文本** segmented control toggles rendered preview vs full raw source (monospace, includes Front Matter).
 - Manual check (Android/iOS): toggle off → assistant HTML shows raw characters; toggle on → re-enter chat → styled; open `.md` preview → WebView body with shared rich CSS.
 
@@ -167,7 +167,7 @@ Spec: `.apm/kb/docs/Iterations/mobile-vfs-markdown-webview/spec.md`
 
 ## WebView 资源（最短开发路径）
 
-三包 WebView：`chat-transcript`（聊天 Transcript）、`rich-document`（富文档预览）、`code-editor`（VFS 代码编辑）。Web 真源在 `src/web/{chat-transcript,rich-document,code-editor}/webview/`；RN 宿主胶水（URI / 包根纯函数）在 `src/webview-host/`。经 esbuild **IIFE + classic `<script src>` + `minify: false`** 产出到 `webview-dist/`（gitignore），再拷入原生落点后真机才可见。
+四包 WebView：`chat-conversation`（**对话页合成包——转录 + 输入区 dock + 会话列表同文档**，唯一宿主文档）、`composer-input`（输入框 runtime，宏内联链活依赖）、`rich-document`（富文档预览）、`code-editor`（VFS 代码编辑）。`src/web/chat-transcript/` 现为**纯 runtime 库**（样式基底 `styles/transcript.css` 由构建期 join 进 chat-conversation 的 app.css），不再是独立包。Web 真源在 `src/web/{chat-conversation,composer-input,rich-document,code-editor}/webview/`；RN 宿主胶水（URI / 包根纯函数）在 `src/webview-host/`。经 esbuild **IIFE + classic `<script src>` + `minify: false`** 产出到 `webview-dist/`（gitignore），再拷入原生落点后真机才可见。资产管线注册点共六处（`build-webview.mjs` PACKAGES / `webview-asset-uri.ts` 包 id（**有断言守护**）/ `src/web/tsconfig.json` include / `copyDistToNativeSinks` 原生落点 / iOS `project.pbxproj` 的 `-f` 清单 / Android `checkWebViewAssets` 守卫包清单）——**新增包必须六处齐改，漏 Android/iOS 任一处都会出「本地跑得起来、干净 clone 出包白屏」的包**。
 
 ### Preact + TSX 与目录分层
 
@@ -234,16 +234,13 @@ npm test -w @novel-master/mobile -- --testPathPattern="boot-script|webview-uri|c
 
 Bundler / 产物路径 Spec: `.apm/kb/docs/Iterations/mobile-webview-boot-bundler/spec.md`
 
-## Chat transcript (WebView engine)
+## Chat conversation (single WebView)
 
-Conversation messages render in a single `react-native-webview` (`ChatTranscriptWebView`) when `chatTranscriptEngine` is `webview`. Composer, runtime, paging, modals, and navigation stay in RN; scroll + rich bubbles live in the embedded Web bundle (`src/web/chat-transcript/webview/`).
+The chat tab renders the conversation in **one** `react-native-webview` — `ChatConversationWebView`, loading the `chat-conversation` bundle (`src/web/chat-conversation/webview/`). Transcript scroller, composer dock (chips / input / toolbar / typeahead overlay) **and** the session-list view live in the **same document** (SPA-style `#app[data-view]` switching, zero teardown between list ↔ conversation), so input height changes are absorbed inside the document with no height cross-bridge hop. Composer logic (draft persistence, picker modals, send/terminate decisions), paging, and navigation stay in RN (`useChatComposerController`); scroll + rich bubbles + the whole dock UI + session rows live in the Web bundle. The subagent-session screen uses the same unified host via its `transcriptOnly` variant (no composer dock, no list view) — the old transcript host component and the `chat-transcript` package are retired.
 
-| Setting                    | Default                                 | Notes                                               |
-| -------------------------- | --------------------------------------- | --------------------------------------------------- |
-| `chatTranscriptEngine` KKV | **`webview`**                           | Release and Debug                                   |
-| Override                   | App UI prefs key `chatTranscriptEngine` | Set to `legacy-rn` to roll back to RN `MessageList` |
+**Engine switch (retired):** the `legacy-rn` engine was retired on 2026-10-01 — `MessageList` and the RN composer are gone, and the `chatTranscriptEngine` KKV is now read only for legacy-value compatibility (`app-ui-keys.ts` keeps the union type for old stored values). It no longer switches anything.
 
-**Rollback:** set `chatTranscriptEngine` to `legacy-rn` to restore the RN FlatList transcript without inverted-list experiments.
+**Rollback:** revert the iteration branch — there is no runtime flag, so a shipped build rolls back with the release, not a setting.
 
 **Scroll cache:** WebView uses schema v2 snapshots (`chat-transcript-scroll-cache.ts`). Legacy v1 inverted-list snapshots are discarded on read; telemetry emits `legacy_cache_discarded`.
 

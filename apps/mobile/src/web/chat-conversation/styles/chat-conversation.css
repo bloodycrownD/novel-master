@@ -1,0 +1,671 @@
+/*
+ * chat-conversation 合成包样式（chat-webview-unify Step 2/3/4 · transcript-converge 重构）。
+ *
+ * 【结构】**构建期 join**（build-webview.mjs，cssRel 数组）：
+ *   transcript.css（转录基底全文，含 __RICH_CSS__ / __MERMAID_FULLSCREEN_CSS__
+ *   两个注入占位）在前 → 本文件在后。转录视觉改动**只改 transcript.css**
+ *   （transcript-converge ②：替代旧「全文手抄基底段」——11KB 抄两遍的漂移
+ *   风险根治，selector 覆盖由 chat-conversation-boot-script.test 兜底）。
+ *
+ * 本文件的段落：
+ *   ① 基底覆盖段（紧跟本注释）：合成包对基底的**全部**差异，共三条——
+ *      html/body 的 overflow:hidden、#scroller 的 flex 化（height:auto 压掉
+ *      基底 100%）、#app 的 flex 列容器定义。层叠在后即覆盖，勿并入基底。
+ *   ② dock 段：从 `composer-input.css` + RN 组件的 StyleSheet 数值单源迁入
+ *      （hintRow / error / box / chips / typeahead / toolbar / input 六值 metrics），
+ *      叠加键盘态 dock 底 padding（键盘弹起归零，否则 max(8, safeAreaBottom)）——
+ *      **纯样式应用**，键盘态经 `composerState.keyboardUp` 由 RN 侧下发，web 不自判
+ *      （visualViewport 自判方案已废弃，理由见 spec §键盘与 dock padding 归属）。
+ *   ③ 列表段（第二阶段 wave-1）：会话列表视图样式，数值抄自
+ *      `ChatSessionListPanel.tsx` 的 StyleSheet；双视图显隐由 `#app[data-view]` 驱动。
+ *
+ * 【同步纪律】dock 段与 `composer-input.css` 的 dock 相关规则（::selection /
+ *   token 胶囊 / 输入区）是两份冻结拷贝（宏链活依赖旧包，行为冻结，不互相回灌）。
+ *   反面清单：`composer-input.css` 的 `html,body{background:transparent}` **不搬**——
+ *   与基底的 `background: var(--bg, #fff)` 直接冲突。
+ *
+ * 【来源锚点】dock 段的每条规则都标注了现网 RN 出处，改数值时照着锚点改。
+ */
+
+
+/* ================================================================== *
+ * 基底覆盖段（transcript-converge ②：构建期 join transcript.css 在前，
+ * 本文件在后——以下三条是合成包对基底的**全部**差异（原文见 Step 2 文件头
+ * 「与基底的三处差异」），层叠在后即覆盖。转录视觉改动只改 transcript.css。
+ * ================================================================== */
+
+/* 差异 1：文档级禁止溢出，滚动全部收归 #scroller。
+   键盘态：Android 侧 AndroidKeyboardClipBody 以 marginBottom 裁切单 WebView 容器，
+   与 dock 的 padding 职责互补（clip 管视口收缩、padding 管 dock 底部余量）。 */
+html,
+body {
+  overflow: hidden;
+}
+
+/* 差异 2：基底 height:100% 改 flex:1 + height:auto（dock 高度在文档内 flex
+   布局消化，否则转录区把 dock 顶出视口；height:auto 显式压掉基底的 100%）。 */
+#scroller {
+  flex: 1;
+  height: auto;
+  min-height: 0;
+}
+
+/* 差异 3：#app 文档级 flex 列容器（基底没有——#scroller 与 #composer-dock
+   的父容器，四属性缺一则 dock 不贴底，见 spec §文档布局）。 */
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+
+/* ================================================================== *
+ * dock 段（来源：ChatComposer.tsx styles.dock / styles.box / styles.hintRow /
+ * styles.error、AttachmentDraftChips.tsx、TypeaheadList.tsx、
+ * AtPathTypeahead.tsx、SkillTypeahead.tsx、composer-toolbar-style.ts）
+ * ================================================================== */
+
+/* styles.dock：flexShrink:0 / paddingHorizontal:12 / paddingTop:4 / paddingBottom:8，
+   实底 tokens.background。paddingBottom 由 composerState.keyboardUp 在
+   max(8, safeAreaBottom) ↔ 0 间切换（初始 8 = base，init 到达后由 JS 改写）。 */
+#composer-dock {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  padding: 4px 12px 8px;
+  background: var(--bg, #fff);
+}
+
+/* 键盘抬起残影修（2026-10-01 真机实测）：外层 AndroidKeyboardClipBody 用键盘
+   高度做逐帧裁切动画，而 keyboardUp 是布尔——paddingBottom 一帧瞬跳，两层节奏
+   错位形成「底部空一块→突然吸掉」的残影。给 padding-bottom 补一条与键盘动画
+   时长同量级的过渡把两层对齐。**首帧豁免**：初始 paddingBottom 从 CSS 默认 0
+   改写为 safeArea 值时不能带动画（页面加载会滑一下），所以过渡只挂在
+   dock--animated 类上，由 dock.ts 在首帧设置完成后下一拍再挂（见 mount()）。 */
+#composer-dock.dock--animated {
+  transition: padding-bottom 200ms ease-out;
+}
+
+/* styles.hintRow：marginBottom:6。显隐由 hasModel 判据驱动（JS hidden 属性）。 */
+.dock__hint-row {
+  margin-bottom: 6px;
+  color: var(--primary, #007aff);
+  font-size: 14px;
+}
+.dock__hint-row[hidden] {
+  display: none;
+}
+
+/* styles.error：marginBottom:6 / fontSize:13，字色 tokens.danger。 */
+.dock__error {
+  margin-bottom: 6px;
+  color: var(--danger, #d93025);
+  font-size: 13px;
+}
+.dock__error[hidden] {
+  display: none;
+}
+
+/* styles.box：hairline 描边 + borderRadius:12 + paddingHorizontal:8 /
+   paddingTop:4 / paddingBottom:6，底色 tokens.surface。单一视觉容器，
+   中间不能被横切的 WebView 接缝切开。 */
+.dock__box {
+  position: relative;
+  border: 0.5px solid var(--border, #e5e5ea);
+  border-radius: 12px;
+  padding: 4px 8px 6px;
+  background: var(--surface, #fff);
+}
+
+/* --- chips 行（AttachmentDraftChips + transparentRow 变体）---
+   数值真源 = `src/components/chat/AttachmentDraftChips.tsx` 的 `styles`（`row` /
+   `rowTransparent` / `content` / `chip` / `label`）。
+   chat 链走 transparentRow：它只把 `backgroundColor` 覆盖成 transparent、把
+   `marginBottom` 从 6 覆盖成 4——**`maxHeight:36` 出自同一个 `styles.row`，仍然生效**
+   （早年这里写着「maxHeight:36 不适用」是把两种变体读成互斥了，已按真源更正）。
+   横向滚动对应 RN 的 ScrollView horizontal。 */
+.chips__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-height: 36px;
+  margin-bottom: 4px;
+  padding-right: 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  background: transparent;
+}
+.chips__row::-webkit-scrollbar {
+  display: none;
+}
+.chips__row[hidden] {
+  display: none;
+}
+.chip {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  max-width: 200px;
+  padding: 6px 10px;
+  border: 0.5px solid var(--border, #e5e5ea);
+  border-radius: 14px;
+  background: var(--surface, #fff);
+  /* 不随 inputDisabled 置灰：现网 disabled 是透传后未使用的死参数（spec 风险表） */
+}
+.chip__label {
+  flex-shrink: 1;
+  max-width: 160px;
+  font-size: 12px;
+  color: var(--text, #111);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* --- typeahead 浮层（TypeaheadList + AtPathTypeahead / SkillTypeahead）---
+   absolute 锚定 dock 内 input 上缘：浮层是 #composer-input-area（定位上下文）
+   的 absolute 子节点 + `bottom:100%`，因此贴着 input 区顶边向上展开、**不推挤
+   布局**（chips 行被覆盖是 absolute 浮层的正常语义，RN 侧则是把 input 往下推）。 */
+.dock__input-area {
+  position: relative;
+}
+.typeahead {
+  position: absolute;
+  /* 与 input 等宽：现网 typeahead 是 box 的直接子 View，left/right 各贴边不内缩 */
+  left: 0;
+  right: 0;
+  bottom: 100%;
+  z-index: 20;
+  max-height: 240px;
+  margin-bottom: 4px;
+  border: 0.5px solid var(--border, #e5e5ea);
+  border-radius: 10px;
+  background: var(--surface, #fff);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.typeahead[hidden] {
+  display: none;
+}
+/* typeaheadItemStyle：paddingHorizontal:10 / paddingVertical:8 */
+.typeahead__row {
+  display: flex;
+  align-items: center;
+  padding: 8px 10px;
+  color: var(--text, #111);
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* SkillTypeahead styles.item：flexDirection:row / alignItems:center / gap:8 */
+.typeahead__row--skill {
+  gap: 8px;
+}
+.typeahead__label {
+  flex-shrink: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* styles.tag：fontSize:11 */
+.typeahead__tag {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--text-secondary, #8e8e93);
+}
+
+/* --- input（composer-input 段移植 + metrics 六值由 JS 按 init 写内联样式）---
+   反面清单：composer-input.css 的 `html,body{background:transparent}` 不搬。
+   兜底数值取 CONVERSATION_COMPOSER_METRICS 六值（fontSize:16 / lineHeight:22 /
+   paddingH:4 / paddingV:6 / minHeight:56 / maxHeight:122），init 到达后由
+   editor.applyMetrics 覆盖同一批 CSS 属性。 */
+#composer-input {
+  position: relative;
+}
+.composer-input {
+  position: relative;
+  font-size: 16px;
+  line-height: 22px;
+}
+.composer-input--unbounded {
+  height: 100%;
+}
+.composer-input--unbounded .composer-input__highlight {
+  height: 100%;
+}
+/* 反面清单：`.composer-input--disabled { opacity:.55 }` 已删（cr1-P1-3）。
+   它是从旧 RN 链 styles 逐字搬进来的产物，而现网 chat 链的 TextInput 从无淡出变体；
+   `inputDisabled`（运行中 / 未选模型）常态置位，留着等于把整片输入区灰掉。禁用语义
+   收回 readOnly 本身（dock.renderInput 只落 readOnly + placeholder）。
+   注意：旧包 `composer-input/styles/composer-input.css:48` 的同名规则**刻意保留**——
+   那是宏链活链的既有表现，不在本条作用域内。 */
+.composer-input__highlight {
+  width: 100%;
+  padding: 6px 4px;
+  min-height: 56px;
+  max-height: 122px;
+  overflow: auto;
+  color: var(--text, #111);
+  white-space: pre-wrap;
+  word-break: break-word;
+  pointer-events: none;
+  -webkit-overflow-scrolling: touch;
+}
+/* 胶囊 token：muted 底 + primary 字；负 margin 抵消 padding，避免光标与文字错位 */
+.composer-input__token {
+  color: var(--primary, #007aff);
+  background: var(--primary-muted, rgba(0, 122, 255, 0.13));
+  border-radius: 4px;
+  padding: 1px 4px;
+  margin: 0 -4px;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+.composer-input__input {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  /* longhand 兜底：inset 需 Chromium 87+，老厂商内核不识别时 absolute 缺
+     top/left 会整体塌位（不是视觉降级） */
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 6px 4px;
+  border: none;
+  outline: none;
+  font: inherit;
+  color: transparent;
+  caret-color: var(--text, #111);
+  background: transparent;
+  resize: none;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  -webkit-overflow-scrolling: touch;
+}
+.composer-input__input::placeholder {
+  color: var(--text-secondary, #8e8e93);
+}
+.composer-input__input::selection {
+  /* 文字透明，选区只剩底色（--selection 缺省回落到胶囊底色） */
+  background: var(--selection, var(--primary-muted, rgba(0, 122, 255, 0.25)));
+}
+
+/* --- toolbar（styles.toolbar + composerToolBtnStyle + styles.sendBtn）---
+   flexDirection:row / alignItems:center / marginTop:4 / gap:8 */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+.toolbar__spacer {
+  flex: 1;
+}
+/* composerToolBtnStyle：36 见方圆钮 + hairline 描边 + 内容居中 */
+.toolbar__btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 0.5px solid var(--border, #e5e5ea);
+  border-radius: 18px;
+  background: transparent;
+  color: var(--text-secondary, #8e8e93);
+  padding: 0;
+  line-height: 1;
+  -webkit-appearance: none;
+  appearance: none;
+}
+/* 反面：无 :disabled 置灰。现网 RN 的 disabled 只是透传的死参数，没有灰化变体；
+   发送键的 disabled 视觉由 .toolbar__send--disabled（底色走 tokens.border）承担。 */
+/* styles.sendBtn：40 见方 + borderRadius:20 */
+.toolbar__send {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: 20px;
+  padding: 0;
+  -webkit-appearance: none;
+  appearance: none;
+}
+/* 发送态配色：sendDisabled → tokens.border；running → tokens.danger；否则 primary */
+.toolbar__send--primary {
+  background: var(--primary, #007aff);
+}
+.toolbar__send--danger {
+  background: var(--danger, #d93025);
+}
+.toolbar__send--disabled {
+  background: var(--border, #e5e5ea);
+}
+
+/* ================================================================== *
+ * 列表段（chat-webview-unify 第二阶段 wave-1）
+ *
+ * 【验收口径】视觉以「与现网一致」为准，数值逐条从 RN
+ * `src/screens/tabs/chat-tab/ChatSessionListPanel.tsx` 的 StyleSheet 抄：
+ *   sessionCard(pad16/radius16/marginH5/marginB12/gap8/hairline/阴影) /
+ *   sessionInfo(flex:1,minWidth:0) / sessionTitle(16/600/mb4,numberOfLines=1) /
+ *   sessionMeta(13) / 三徽标(px8/py4/radius12/mr4，文字 12/600/#fff) /
+ *   menuDots(18/px4) / chevron(22/300) / empty(center,mt32) /
+ *   ManageHeader(wrap px5/py12/下边框、title 18/600) / PrimaryButton(px14/py8/r8) /
+ *   BatchCheckbox(18 圆角 4 / 1.5 描边 / ✓ 11/700)
+ *
+ * 【RN→CSS 的两处口径差，改数值前先读】
+ * 1. `tokens.surfaceElevated` / `tokens.textTertiary` **不在**主题 9 键超集里
+ *    （见 model.ts 的 HOST_THEME_KEYS 派生链），故分别回落 `--surface` 与
+ *    `--text-secondary`。这是有意的：宁可与现网差一档底色，也不为列表单独扩键
+ *    ——扩键会让 9 键断言（bridge 侧双端比对）与 applyHostTheme 的写入表一起动，
+ *    收益只是一层几乎看不出差别的底色。深色模式下 surface 与 surfaceElevated 的
+ *    差值比这个落差更小，不构成可见回退。
+ * 2. RN 的 shadow* + elevation 是 Android 真实阴影；web 侧用等价的
+ *    `box-shadow`（同 offset/opacity/radius），iOS 上比 RN 原生更贴近。
+ * ================================================================== */
+
+/* --- 双视图路由：#app[data-view] 决定谁可见 ---
+   两块显隐都写 `display:none`（不是 hidden 属性）：#scroller 的 flex:1 与
+   #composer-dock 的 flex:0 0 auto 是布局声明，切视图时必须让整块脱离流，
+   否则 display:none 之前会有一帧「列表和对话叠在一起」。CSS 隐藏零渲染成本，
+   conversation 态下列表节点不重建（切回来是原样，滚动位置也还在）。 */
+#session-list {
+  display: none;
+}
+#app[data-view='list'] #scroller,
+#app[data-view='list'] #composer-dock {
+  display: none;
+}
+#app[data-view='list'] #session-list {
+  display: flex;
+}
+/* conversation 态：#scroller / #composer-dock 用各自原有声明，不在此覆写
+   （覆写会与基底段 + dock 段的 flex 值打架）。 */
+
+/* 转录 only 变体（transcript-converge，子会话屏）：无输入 dock 的降级形态，
+   init.transcriptOnly 时由 dock.applyRoute 给 #app 挂类。 */
+#app.transcript-only #composer-dock {
+  display: none;
+}
+
+/* --- 双视图转场：渐入渐出（2026-10-01 定稿，用户拍板去位移改纯淡入）---
+   进入方向的丝滑：进入侧纯淡入（对话 200ms / 列表 150ms）；退出侧瞬时
+   隐藏，由对侧的淡入承担「渐出」观感——两侧底色同为 --bg，交叉瞬间露
+   的是同色背景，无闪白，整体读作交叉淡化。对话侧稍长：内容链（init /
+   composerState / setText / 快照）在 viewState 之后陆续过桥，200ms 恰好
+   盖住这串到达，动画结束一切就位（「组件逐个冒出」的治理）。
+   **动画只挂 #scroller，不挂 #composer-dock**（2026-10-01 键盘升起体感
+   回退定位）：dock 上有键盘态 padding-bottom 的 200ms transition（残影
+   修复），再叠 opacity animation 会让 dock 升合成层，两条动画同容器在
+   键盘逐帧抬起时竞争——摘掉后 dock 瞬时出现无感，转场观感不受影响。
+   纯 opacity 不参与布局，#scroller 滚动位置不受影响。 */
+@keyframes view-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+#app[data-view='conversation'] #scroller {
+  animation: view-fade-in 200ms ease-out;
+}
+#app[data-view='list'] #session-list {
+  animation: view-fade-in 150ms ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  #app[data-view='conversation'] #scroller,
+  #app[data-view='list'] #session-list {
+    animation: none;
+  }
+}
+
+/* ManageHeader styles.wrap：paddingHorizontal 5 / paddingVertical 12 /
+   gap 8 / borderBottomWidth hairline。flex:1 让列表行吃掉剩余高度。 */
+.session-list {
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+  background: var(--bg, #fff);
+}
+.session-list__header {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 5px;
+  border-bottom: 0.5px solid var(--border, #e5e5ea);
+}
+/* ManageHeader styles.title：18 / 600 */
+.session-list__title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text, #111);
+}
+/* PrimaryButton styles.primary：paddingHorizontal 14 / paddingVertical 8 /
+   radius 8 / 实底 primary + 白字 14/600。
+   **不加 align-items:center**：现网注释明确警告过，Android 上会把命中区收成文字大小
+   （只有点文字才响应）——这条坑原样带过来。 */
+.session-list__create {
+  padding: 8px 14px;
+  border: none;
+  border-radius: 8px;
+  background: var(--primary, #007aff);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.session-list__create:active {
+  opacity: 0.85;
+}
+
+/* --- 批量头（wave-3 · 抄现网 ManageHeader 的 batchRow 分支） ---
+   布局：flex row / space-between（左右各一段、中间「已选 N 项」居中）；
+   取消在左、删除在右。批量头与普通态的标题/新建钮互斥显示，由 JS 切 hidden。
+   注意 hidden 元素若带 display:flex 会被 display 覆盖掉，故这里统一
+   `.session-list__batch-bar[hidden]{display:none}` 显式压一条。 */
+.session-list__batch-bar {
+  display: flex;
+  flex: 1;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.session-list__batch-bar[hidden] {
+  display: none;
+}
+/* 两个按钮都是纯文字按钮（ManageHeader 里就是 Pressable + Text，无底色无边框）。
+   命中区靠 padding 撑到 34 高（hitSlop 8 的 web 等价，见 .session-row__check 同款）。 */
+.session-list__batch-cancel,
+.session-list__batch-delete {
+  margin: 0;
+  padding: 8px 4px;
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: 15px;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.session-list__batch-cancel {
+  color: var(--text, #111);
+}
+/* 删除是 danger 色（ManageHeader primaryActionTone='danger' 走 tokens.danger）；
+   disabled 时落 textTertiary——该 token 不在 9 键超集，回落 --text-secondary。 */
+.session-list__batch-delete {
+  color: var(--danger, #d9342b);
+  font-weight: 500;
+}
+.session-list__batch-delete:disabled {
+  color: var(--text-secondary, #8e8e93);
+}
+/* 中段「已选 N 项」：textSecondary（ManageHeader batchCenter 的 Text 同色） */
+.session-list__batch-count {
+  flex-shrink: 1;
+  color: var(--text-secondary, #8e8e93);
+  font-size: 15px;
+}
+
+/* FlatList contentContainerStyle：paddingBottom 16。行容器自己吃掉剩余高度并滚动。 */
+.session-list__rows {
+  flex: 1;
+  min-height: 0;
+  padding: 12px 0 16px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overflow-anchor: none;
+}
+
+/* styles.sessionCard：row / center / marginH5 / marginB12 / pad16 / radius16 /
+   hairline 描边 / gap8。阴影三条合成一条 box-shadow（RN 侧是同组参数）。 */
+.session-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  margin: 0 5px 12px;
+  padding: 16px;
+  border: 0.5px solid var(--border, #e5e5ea);
+  border-radius: 16px;
+  background: var(--surface, #fff);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+  cursor: pointer;
+}
+/* 批量勾选态：RN 是 borderColor:primary + borderWidth:2（描边加粗 + 主色） */
+.session-row--selected {
+  border: 2px solid var(--primary, #007aff);
+}
+/* styles.sessionInfo：flex 1 + minWidth 0（后者是标题单行省略的前提，
+   缺了它 flex 子项的 min-width:auto 会让长标题把整行撑开）。 */
+.session-row__info {
+  flex: 1;
+  min-width: 0;
+}
+/* styles.sessionTitle：16 / 600 / marginBottom 4 + numberOfLines={1} 的
+   CSS 等价三件套（少任一条就是横向溢出而非省略号收尾）。 */
+.session-row__title {
+  margin-bottom: 4px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text, #111);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* styles.sessionMeta：13，无 marginBottom（title 侧的 mb4 就是行间距） */
+.session-row__meta {
+  font-size: 13px;
+  color: var(--text-secondary, #8e8e93);
+}
+
+/* 三徽标（styles.generatingBadge / interruptedBadge / currentBadge）：
+   px8 / py4 / radius12 / mr4，字 12/600/#fff。生成中=primary、已中断=secondary、
+   当前=primary（现网口径：与 generating 同色但文案不同，二者不会同时出现）。 */
+.session-row__badge {
+  flex-shrink: 0;
+  margin-right: 4px;
+  padding: 4px 8px;
+  border-radius: 12px;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+}
+.session-row__badge--generating {
+  background: var(--primary, #007aff);
+}
+.session-row__badge--interrupted {
+  background: var(--text-secondary, #8e8e93);
+}
+.session-row__badge--current {
+  background: var(--primary, #007aff);
+}
+
+/* BatchCheckbox styles.box：18 见方 / radius4 / 1.5 描边 / mr8，勾上时底色=primary、
+   边框同色；未勾选时描边走 --border、底透明。现网 hitSlop 8 → web 侧 padding 撑到
+   34 见方（18+8×2），让手指不必精确点中那个 18px 小方块。 */
+.session-row__check {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  margin-right: 8px;
+  padding: 8px;
+  box-sizing: content-box;
+  border: 1.5px solid var(--border, #e5e5ea);
+  border-radius: 4px;
+  background: transparent;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+}
+.session-row__check--on {
+  border-color: var(--primary, #007aff);
+  background: var(--primary, #007aff);
+}
+
+/* styles.menuDots：18 号 ⋮ + paddingHorizontal 4。
+   hitSlop 8 同上：给 34×34 的命中区（RN 侧 ⋮ 视觉是 18 号字，web 侧用
+   同尺寸的文本节点 + padding 撑开，两侧手感一致）。
+   显隐（批量态隐藏）与批量勾选框一样由 JS 切 hidden。 */
+.session-row__menu {
+  flex-shrink: 0;
+  margin: 0;
+  padding: 8px 4px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary, #8e8e93);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.session-row__menu[hidden],
+.session-row__check[hidden],
+.session-row__badge[hidden] {
+  display: none;
+}
+/* styles.chevron：22 / 300。textTertiary 不在 9 键超集 → 回落 --text-secondary
+   （比现网浅一档，见文件头「RN→CSS 口径差」第 1 条）。 */
+.session-row__chevron {
+  flex-shrink: 0;
+  color: var(--text-secondary, #8e8e93);
+  font-size: 22px;
+  font-weight: 300;
+  line-height: 1;
+}
+
+/* styles.empty：textAlign center / marginTop 32，字色 textSecondary */
+.session-list__empty {
+  margin-top: 32px;
+  color: var(--text-secondary, #8e8e93);
+  font-size: 14px;
+  text-align: center;
+}
+.session-list__empty[hidden] {
+  display: none;
+}
+

@@ -33,6 +33,8 @@ let mockManager: SessionStreamUnitManager | undefined;
 let mockRuntime: unknown;
 /** metric-detail-sheet 用例的 usageStats 自取 stub（子会话统计断言）。 */
 const mockGetSessionUsageDetail = jest.fn();
+/** ChatConversationWebView 哑组件收到的 props 流水（变体装配断言面）。 */
+const mockChatWebViewProps: Array<Record<string, unknown>> = [];
 
 jest.mock('../src/hooks/useRuntime', () => ({
   useRuntime: () => mockRuntime,
@@ -92,9 +94,23 @@ jest.mock('../src/runtime/novel-master-context', () => ({
 // 指标条链路之外的哑元：webview 引擎与中断注入 hook 不属本套件覆盖面。
 // 工厂内 require（jest.mock 提升到 import 之前，工厂引用模块级绑定会报
 // "Invalid variable access"）。
-jest.mock('../src/components/chat/ChatTranscriptWebView', () => {
+// transcript-converge 后子会话屏改用统一宿主 ChatConversationWebView
+// （transcriptOnly 变体），旧的 ChatTranscriptWebView 已退役。
+// 哑组件**记录 props**：`transcriptOnly` 变体本身零断言时，宿主哪天真忘了传这个
+// 位（退回主对话形态：无 dock 时多出全选/粘贴死按钮、还判降级横幅）不会有任何
+// 红灯。渲染仍返 null，与旧哑元同形态，不干扰本套件的指标条断言。
+jest.mock('../src/components/chat/ChatConversationWebView', () => {
   const ReactModule = require('react');
-  return {ChatTranscriptWebView: ReactModule.forwardRef(() => null)};
+  return {
+    // 两个形参（props / ref）都给上：forwardRef 的 render 函数少一个形参时
+    // React 会打一条 console.error 警告，噪音掩盖真失败。
+    ChatConversationWebView: ReactModule.forwardRef(
+      (props: Record<string, unknown>, _ref: unknown) => {
+        mockChatWebViewProps.push(props);
+        return null;
+      },
+    ),
+  };
 });
 
 jest.mock('../src/screens/tabs/chat-tab/useInterruptedPartialCommit', () => ({
@@ -195,8 +211,30 @@ describe('SubagentSessionScreen 指标条渲染（G-2）', () => {
     mockManager = undefined;
     mockRuntime = undefined;
     mockGetSessionUsageDetail.mockClear();
+    mockChatWebViewProps.length = 0;
     jest.useRealTimers();
     setMobileAgentActive(false);
+  });
+
+  it('transcript-converge: 子会话屏以统一宿主的 transcriptOnly 变体装配', async () => {
+    const h = buildHarness();
+    mockManager = h.manager;
+    mockRuntime = {sessionStreamUnitManager: h.manager, usageStats: {getSessionUsageDetail: mockGetSessionUsageDetail}};
+    driveConsumptiveRun(h.eventBus, 3);
+
+    const {unmount} = await renderScreen();
+    // 真传了变体位：子会话屏无 dock，漏传就退化成主对话形态（多两项死按钮 +
+    // 误判降级横幅），而这种退化在屏上**看不出来**——所以必须在这里钉住。
+    expect(mockChatWebViewProps.length).toBeGreaterThan(0);
+    for (const props of mockChatWebViewProps) {
+      expect(props.transcriptOnly).toBe(true);
+    }
+    // 变体位与主对话形态的关键分野：宿主不收 composer 域 props（子会话屏没有
+    // 输入框，全套 composer* 传下去也只是把 dock 判成「该变体没有」）。
+    expect(
+      mockChatWebViewProps.some(props => props.composerHasModel !== undefined),
+    ).toBe(false);
+    unmount();
   });
 
   it('活跃：消费型 run 运行中显示「生成中 · 输出 N tok」', async () => {

@@ -1,33 +1,42 @@
 /**
- * T-FS1..3：chat 全屏编辑链（⛶ 入口 / 接线 / 退出回填）。
+ * T-FS2/T-FS3：chat 全屏编辑链的 **RN 侧**（⛶ 入口的宿主处置 / 退出回填）。
  *
- * 断言面（真实 ChatTabScreen → ChatConversationPanel → ChatComposer 全链，照
- * `chat-tab-screen.integration.test.tsx` 的 mock 底座；输入驱动照
- * `composer-input-webview.test.tsx` 的 mock WebView 协议范式）：
- * - T-FS1 ⛶ 存在、带 testID，且**与同排 @ / $ 同款圆钮**（尺寸/圆角/描边一致）；
- * - T-FS2 点 ⛶ 跳智能体配置那套全屏编辑页（PromptEditor 的 composer 变体），
- *   路由参数只带纯数据（初始文本 + title + variant）；
- * - T-FS3 退出回填：回写会话草稿文本 + bump 令牌，ChatComposer 经 setText 桥
- *   消息把文本落回输入框。
+ * ## Step 8 迁居说明
+ *
+ * 本文件原先还有 T-FS1（⛶ 与同排 @/$ 同款圆钮，量的是 RN `ChatComposer` 工具栏
+ * 三个 Pressable 的展平 style）。legacy 转录引擎退役后 `ChatComposer.tsx` 整个
+ * 删除、⛶ 变成 web 文档里的 `<button class="toolbar__btn toolbar__fullscreen">`，
+ * RN 树里已经没有这个元素——T-FS1 因此迁到 `chat-conversation-boot-script.test.ts`
+ * 的 T-CU10 段（改比「web CSS 规则 ⇄ RN 参照常量 `composerToolBtnStyle`」，
+ * 参照真源是 Step 6 手抄进 `dock-style-reference.ts` 的那份）。
+ *
+ * 留下的 T-FS2/T-FS3 断的仍是 RN 链，入口改从 web 上行走：
+ * ⛶ 点击在 web 侧派 `dockAction: 'fullscreen'`（v:2 信封）→ 宿主转交
+ * composer controller → `onOpenComposerFullscreen` → 路由到 PromptEditor。
+ * 输入驱动同样从 web 侧模拟：统一宿主的 ready 必须带 `v:2` + `composer-dock`
+ * 能力位（缺任一项就走 8s 兜底错误态 / 输入区降级，用例会变成假绿）。
  *
  * 退出即回填（无保存按钮、无未保存拦截）与编辑器本体（markdown 预览/编辑互切）
  * 的屏内断言在 `prompt-editor-screen.test.tsx` 的 composer 变体用例里。
  */
 import React from 'react';
 import {afterEach, beforeEach, describe, expect, it, jest} from '@jest/globals';
-import {StyleSheet, type ViewStyle} from 'react-native';
 import TestRenderer, {act} from 'react-test-renderer';
 import {SimpleEventBus} from '@novel-master/core/events';
 import {SessionStreamUnitManager} from '../src/services/session-stream-unit-manager.service';
 import {
-  COMPOSER_INPUT_BRIDGE_VERSION,
-  decodeHostToComposerInput,
-  type HostToComposerInputMessage,
-} from '@/components/chat/ComposerInputBridge';
+  CONVERSATION_BRIDGE_V,
+  CONVERSATION_CAPABILITY_COMPOSER_DOCK,
+} from '@/components/chat/ChatConversationBridge';
 import {
   clearMockWebViewPostMessages,
-  mockWebViewPostMessages,
+  findMockWebViewByDomain,
+  getMockWebViewPosts,
+  type MockWebViewDomain,
 } from '../test-utils/react-native-webview-mock';
+
+/** 统一宿主所在的合成包域（`source.uri` 里的包名）。 */
+const CONVERSATION_DOMAIN: MockWebViewDomain = 'chat-conversation';
 
 // —— mock 前缀变量（jest.mock 工厂只能引用 mock* 前缀标识符）——
 
@@ -217,6 +226,8 @@ jest.mock('@/services/chat-agent-meta', () => {
 
 jest.mock('@/services/chat-prompt-tokens.service', () => ({
   loadChatPromptTokenLabelResilient: jest.fn(async () => ''),
+  // cr2-E-2 新导出（手写 mock 需随导出面同步，缺它会炸 meta 加载链）。
+  cancelPreciseUpgradeDelay: jest.fn(),
 }));
 
 jest.mock('@/storage/chat-rich-text-pref', () => ({
@@ -224,8 +235,8 @@ jest.mock('@/storage/chat-rich-text-pref', () => ({
 }));
 
 jest.mock('@/storage/chat-transcript-engine', () => ({
-  defaultChatTranscriptEngine: () => 'legacy-rn',
-  readChatTranscriptEngine: jest.fn(async () => 'legacy-rn'),
+  defaultChatTranscriptEngine: () => 'webview',
+  readChatTranscriptEngine: jest.fn(async () => 'webview'),
 }));
 
 jest.mock('@/services/session-messages-loader', () => ({
@@ -243,9 +254,6 @@ jest.mock('@/errors/format-error', () => ({
 
 jest.mock('@/components/chrome/AppHeader', () => ({AppHeader: () => null}));
 jest.mock('@/components/chat/ChatMetaBar', () => ({ChatMetaBar: () => null}));
-jest.mock('@/components/chat/MessageActionMenu', () => ({
-  MessageActionMenu: () => null,
-}));
 jest.mock('@/components/sheet/BottomSheetMenu', () => ({
   BottomSheetMenu: () => null,
 }));
@@ -271,16 +279,6 @@ jest.mock('@/components/ui/Buttons', () => ({PrimaryButton: () => null}));
 jest.mock('@/components/ui/TextPromptModal', () => ({
   TextPromptModal: () => null,
 }));
-jest.mock('@/components/chat/MessageList', () => {
-  const actual = jest.requireActual(
-    '@/components/chat/MessageList',
-  ) as Record<string, unknown>;
-  return {...actual, MessageList: () => null};
-});
-jest.mock('@/components/chat/AttachmentDraftChips', () => ({
-  AttachmentDraftChips: () => null,
-  ComposerStatusChips: () => null,
-}));
 jest.mock('@/components/chat/FileReferencePicker', () => ({
   FileReferencePicker: () => null,
 }));
@@ -297,42 +295,61 @@ import {
 } from '@/storage/chat-composer-draft';
 import {takePromptEditorOnSaved} from '@/components/agent/prompt-editor-callback';
 
-/** mock WebView 的 onMessage 入口（composer 宿主实例）。 */
+/**
+ * 合成包宿主 WebView 的 onMessage 入口（按域取，不靠位置）。
+ *
+ * 纪律：ready 必须带 `v:2` 与 `composer-dock` 能力位——旧 dist 的 v:1 ready 被
+ * 拒、缺能力位则输入区走降级提示，两种情况下行全丢，用例会静默变成假绿。
+ */
 function findComposerWebView(
   root: TestRenderer.ReactTestInstance,
 ): TestRenderer.ReactTestInstance {
-  const WebViewMock = require('react-native-webview')
-    .default as React.ComponentType<unknown>;
-  const nodes = root.findAllByType(WebViewMock);
-  if (nodes.length === 0) {
-    throw new Error('composer WebView 未挂载');
-  }
-  return nodes[0]!;
+  return findMockWebViewByDomain(root, CONVERSATION_DOMAIN);
 }
 
-/** 模拟 web → host 上报（信封 v 取本包 BRIDGE_V）。 */
+/** 模拟 web → host 上报（v 号由调用方给：ready / dockAction 走 2，其余 1）。 */
 function simulateWebMessage(
   webView: TestRenderer.ReactTestInstance,
   type: string,
   payload: Record<string, unknown> = {},
+  v = 1,
 ): void {
   act(() => {
     webView.props.onMessage?.({
-      nativeEvent: {
-        data: JSON.stringify({v: COMPOSER_INPUT_BRIDGE_VERSION, type, payload}),
-      },
+      nativeEvent: {data: JSON.stringify({v, type, payload})},
     });
   });
 }
 
-function hostMessages(): HostToComposerInputMessage[] {
-  return mockWebViewPostMessages.map(raw => decodeHostToComposerInput(raw));
+/** 合成包 ready 握手（v:2 + composer-dock 能力位）。 */
+function simulateConversationReady(
+  root: TestRenderer.ReactTestInstance,
+): void {
+  simulateWebMessage(
+    findComposerWebView(root),
+    'ready',
+    {
+      version: 'u1',
+      readyState: 'complete',
+      capabilities: [CONVERSATION_CAPABILITY_COMPOSER_DOCK],
+    },
+    CONVERSATION_BRIDGE_V,
+  );
 }
 
-function hostPayloadsOfType(type: string): unknown[] {
-  return hostMessages()
-    .filter(message => message.type === type)
-    .map(message => message.payload);
+/** ⛶ 点击：web 侧派 dockAction.fullscreen（v:2 通道）。 */
+function pressFullscreen(root: TestRenderer.ReactTestInstance): void {
+  simulateWebMessage(
+    findComposerWebView(root),
+    'dockAction',
+    {action: 'fullscreen'},
+    CONVERSATION_BRIDGE_V,
+  );
+}
+
+/** 只看合成包域的下行（域分流：新 mock 的按域取面）。 */
+function conversationPosts(): unknown[] {
+  return getMockWebViewPosts(CONVERSATION_DOMAIN).map(raw => JSON.parse(raw));
 }
 
 /** 冲净 effect 与异步批（real timers）。 */
@@ -344,44 +361,28 @@ async function flush(): Promise<void> {
   });
 }
 
-function findPressableByTestId(
-  root: TestRenderer.ReactTestInstance,
-  testID: string,
-): TestRenderer.ReactTestInstance {
-  const node = root
-    .findAllByProps({testID})
-    .find(n => typeof n.props.onPress === 'function');
-  if (!node) {
-    throw new Error(`pressable not found: ${testID}`);
-  }
-  return node;
-}
-
-function findPressableByText(
-  root: TestRenderer.ReactTestInstance,
-  text: string,
-): TestRenderer.ReactTestInstance {
-  const node = root
-    .findAll(n => typeof n.props?.onPress === 'function')
-    .find(n => {
-      const selfText =
-        typeof n.props?.children === 'string' &&
-        n.props.children.includes(text);
-      if (selfText) {
-        return true;
-      }
-      return (
-        n.findAll(
-          d =>
-            typeof d.props?.children === 'string' &&
-            d.props.children.includes(text),
-        ).length > 0
-      );
+/**
+ * 进会话（第二阶段：列表已搬进 WebView 文档，RN 侧没有会话行了）。
+ *
+ * 断的还是同一条链——web 列表行点击 → `listAction/open` → 宿主 openConversation
+ * 状态机 → 切到对话子视图；变的只是入口从「按 RN 会话卡」换成「往桥派一条上行」。
+ */
+async function enterConversation(
+  tree: TestRenderer.ReactTestRenderer,
+): Promise<void> {
+  const webView = findMockWebViewByDomain(tree.root, CONVERSATION_DOMAIN);
+  await act(async () => {
+    webView.props.onMessage?.({
+      nativeEvent: {
+        data: JSON.stringify({
+          v: CONVERSATION_BRIDGE_V,
+          type: 'listAction',
+          payload: {kind: 'open', sessionId: 's1'},
+        }),
+      },
     });
-  if (!node) {
-    throw new Error(`pressable not found: ${text}`);
-  }
-  return node;
+  });
+  await flush();
 }
 
 /** 同排工具按钮（@ / $ / ⛶）的展平样式，用于断言「风格一致」。 */
@@ -389,21 +390,17 @@ function flattenedStyle(node: TestRenderer.ReactTestInstance): ViewStyle {
   return StyleSheet.flatten(node.props.style) as ViewStyle;
 }
 
-describe('T-FS1/T-FS2/T-FS3 入口与接线（ChatTabScreen → 面板 → ChatComposer）', () => {
+describe('T-FS2/T-FS3 全屏编辑链（ChatTabScreen → 面板 → 统一宿主）', () => {
   const mountedTrees: TestRenderer.ReactTestRenderer[] = [];
 
-  /** 挂载 ChatTabScreen 并进入会话子视图（真实面板 + 真实 ChatComposer）。 */
+  /** 挂载 ChatTabScreen 并进入会话子视图（真实面板 + 真实统一宿主）。 */
   async function mountConversation(): Promise<TestRenderer.ReactTestRenderer> {
     let tree!: TestRenderer.ReactTestRenderer;
     await act(async () => {
       tree = TestRenderer.create(<ChatTabScreen />);
     });
     mountedTrees.push(tree);
-    const sessionCard = findPressableByText(tree.root, 'S1');
-    await act(async () => {
-      sessionCard.props.onPress();
-    });
-    await flush();
+    await enterConversation(tree);
     return tree;
   }
 
@@ -433,45 +430,17 @@ describe('T-FS1/T-FS2/T-FS3 入口与接线（ChatTabScreen → 面板 → ChatC
     mockHarnessManager = undefined;
   });
 
-  it('T-FS1: ⛶ 与同排 @/$ 同款圆钮（同尺寸/圆角/描边，可按压）', async () => {
-    const tree = await mountConversation();
-
-    const matches = tree.root.findAllByProps({
-      testID: 'chat-composer-fullscreen',
-    });
-    expect(matches.length).toBeGreaterThan(0);
-    const button = findPressableByTestId(tree.root, 'chat-composer-fullscreen');
-    expect(button.props.accessibilityLabel).toBe('全屏编辑');
-    expect(button.props.disabled).toBe(false);
-
-    // 同排风格一致（用户反馈：⛶ 曾是 28 无边框小触达，与 36 圆钮的 @/$ 不齐）。
-    const atButton = tree.root
-      .findAll(n => typeof n.props?.onPress === 'function')
-      .find(n => n.props?.accessibilityLabel === '引用文件')!;
-    const glyph = flattenedStyle(button);
-    const at = flattenedStyle(atButton);
-    expect(glyph.width).toBe(at.width);
-    expect(glyph.height).toBe(at.height);
-    expect(glyph.borderRadius).toBe(at.borderRadius);
-    expect(glyph.borderWidth).toBe(at.borderWidth);
-  });
-
-  it('T-FS2: 点 ⛶ 带当前文本跳智能体配置那套全屏编辑页（composer 变体）', async () => {
+  it('T-FS2: ⛶ 派 dockAction.fullscreen 后带当前文本跳全屏编辑页（composer 变体）', async () => {
     const tree = await mountConversation();
     const webView = findComposerWebView(tree.root);
-    simulateWebMessage(webView, 'ready');
+    simulateConversationReady(tree.root);
     await flush();
 
-    // web 自持真源：打字经 change 上报进 ChatComposer 文本态。
+    // web 自持真源：打字经 change 上报进 composer controller 文本态。
     simulateWebMessage(webView, 'change', {text: '当前的草稿文本'});
     await flush();
 
-    act(() => {
-      findPressableByTestId(
-        tree.root,
-        'chat-composer-fullscreen',
-      ).props.onPress();
-    });
+    pressFullscreen(tree.root);
 
     // 复用 PromptEditor（与智能体配置同一屏同一组件），变体决定「无保存、退出回填」。
     // projectId/sessionId 是 @/$ tag typeahead/选择器的 scope（纯数据，可序列化）。
@@ -486,20 +455,16 @@ describe('T-FS1/T-FS2/T-FS3 入口与接线（ChatTabScreen → 面板 → ChatC
     expect(typeof takePromptEditorOnSaved()).toBe('function');
   });
 
-  it('T-FS3: 退出即回填 —— 写会话草稿并 bump 令牌，ChatComposer 重读后经 setText 回填', async () => {
+  it('T-FS3: 退出即回填 —— 写会话草稿并 bump 令牌，宿主重读后经 setText 回填', async () => {
     const tree = await mountConversation();
     const webView = findComposerWebView(tree.root);
-    simulateWebMessage(webView, 'ready');
+    simulateConversationReady(tree.root);
     await flush();
     simulateWebMessage(webView, 'change', {text: '全屏前文本'});
     await flush();
 
-    act(() => {
-      findPressableByTestId(
-        tree.root,
-        'chat-composer-fullscreen',
-      ).props.onPress();
-    });
+    const beforeFullscreen = conversationPosts().length;
+    pressFullscreen(tree.root);
     const onExit = takePromptEditorOnSaved();
     expect(onExit).not.toBeNull();
 
@@ -510,9 +475,15 @@ describe('T-FS1/T-FS2/T-FS3 入口与接线（ChatTabScreen → 面板 → ChatC
     await flush();
 
     expect(readChatComposerDraftState('s1').text).toBe('全屏改完的文本');
-    // ChatComposer 从草稿重读 → 外部 value 变化 → 宿主下发 setText（回填落地）。
-    expect(hostPayloadsOfType('setText')).toContainEqual({
-      text: '全屏改完的文本',
-    });
+    // controller 从草稿重读 → 外部文本真变 → 宿主下发 setText（回填落地）。
+    // 只看进全屏之后的下行，免得把 ready 恢复链里的草稿 setText 算进来。
+    const after = conversationPosts().slice(beforeFullscreen);
+    const setTexts = after.filter(
+      (m): m is {type: string; payload: {text: string}} =>
+        typeof m === 'object' &&
+        m != null &&
+        (m as {type?: string}).type === 'setText',
+    );
+    expect(setTexts.map(m => m.payload.text)).toContain('全屏改完的文本');
   });
 });

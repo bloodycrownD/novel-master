@@ -1,19 +1,10 @@
 /**
- * composer-input WebView 打包入口（esbuild → IIFE app.js）。
+ * composer-input WebView 打包入口（esbuild → IIFE app.js）——薄入口。
  *
- * 装配顺序：先建 DOM 与事件（后续 init 直接应用），再挂 host 消息通道，
- * 最后发 ready——宿主一切下行以 ready 为门控。
+ * 装配（挂载编辑器 / 绑 host 消息通道 / 发 ready）全部收在 `./runtime/factory`：
+ * 本文件既被当作旧包构建入口，又被新合成包 import，ESM import 即执行，所以顶层只能留
+ * 「import 工厂 + 一行默认参数调用」——默认参数即旧包现行为（宏链活依赖本包）。
  */
-import {bindHostMessageChannel} from '@web/shared/host-message-channel';
-import {handleHostMessage, post} from './runtime/bridge';
-import {mountComposerEditor} from './runtime/editor';
-import {BRIDGE_V} from './runtime/model';
+import {createComposerRuntime} from './runtime/factory';
 
-const root = document.getElementById('root');
-if (root != null) {
-  mountComposerEditor(root);
-}
-
-bindHostMessageChannel(handleHostMessage);
-
-post('ready', {version: BRIDGE_V});
+createComposerRuntime('#root');

@@ -1,35 +1,34 @@
-import {switchToNative, switchToWebView} from '../helpers/context';
+import {switchToConversationWebView} from '../helpers/context';
 import {withRetry} from '../helpers/retry';
 
-/** composer WebView 内的 textarea（composer-input 包自带 data-testid）。 */
+/**
+ * composer 输入框：合成包 `#composer-input` 挂点下 runtime 装的 textarea
+ * （`web/composer-input/webview/runtime/editor.ts` 自带 `data-testid="composer-input"`）。
+ */
 const COMPOSER_TEXTAREA = 'textarea[data-testid="composer-input"]';
 
 /**
- * 切到 composer 宿主 WebView 的 context。
+ * dock toolbar 的发送/终止钮：dock 侧 `buildToolbar()` 装配
+ * （`web/chat-conversation/webview/dock.ts`），点击上行 `dockAction`。
  *
- * 聊天页现在有两个 WebView（transcript + composer），而 `switchToWebView()` 只取
- * 「第一个」WEBVIEW context——可能落到 transcript 上（那里没有 textarea）。所以先
- * 按现成 helper 切一次，探测不到 composer textarea 时再逐个 context 找。
+ * chat-webview-unify 之前发送键是 RN 原生工具栏按钮（`~发送`），现在进了 web，
+ * 点它必须待在对话页 WEBVIEW context 里——**不要**切 NATIVE。
  */
-async function switchToComposerWebView(): Promise<void> {
-  await switchToWebView();
-  if (await $(COMPOSER_TEXTAREA).isExisting()) {
-    return;
-  }
-  const contexts = await browser.getContexts();
-  for (const context of contexts.filter(c => String(c).includes('WEBVIEW'))) {
-    await browser.switchContext(String(context));
-    if (await $(COMPOSER_TEXTAREA).isExisting()) {
-      return;
-    }
-  }
-  throw new Error(`[e2e] composer WebView 未就绪：${COMPOSER_TEXTAREA}`);
-}
+const DOCK_SEND_BUTTON = '[data-testid="composer-send"]';
 
-/** WebView chat transcript: messages, context menu, rollback. */
+/** dock 的「请先选择工作区模型」提示行（`#composer-hint-row`，显隐判据是 `!hasModel`）。 */
+const DOCK_HINT_ROW = '[data-testid="composer-hint-row"]';
+
+/** WebView chat transcript: messages, context menu, rollback, composer dock. */
 export class ChatTranscriptPage {
+  /**
+   * 切到对话页 WebView。
+   *
+   * 转录区与 composer dock 已在合成包里合流成同一个文档，所以「切到转录」和
+   * 「切到输入框」是同一件事；判据（`#composer-dock` 等）在 helper 里做。
+   */
   async openWebView(): Promise<void> {
-    await switchToWebView();
+    await switchToConversationWebView();
   }
 
   async waitForMessage(messageId: string): Promise<void> {
@@ -45,6 +44,25 @@ export class ChatTranscriptPage {
   }
 
   async getMessageIds(): Promise<string[]> {
+    await this.openWebView();
+    return browser.execute(() => {
+      // 只数 user 行：宿主发送链路在无真模型环境下每条用户消息可能伴生一条
+      // 降级/错误回复入流（模拟器实测「发 3 得 5-6」）——rollback 场景锚定的
+      // 就是用户消息，按角色过滤后断言才与环境解耦（2026-10-01 e2e 实跑）。
+      return Array.from(document.querySelectorAll('.row.message.user'))
+        .map(el => el.getAttribute('data-id'))
+        .filter((id): id is string => id != null && id !== '');
+    });
+  }
+
+  /**
+   * 不过滤角色的全量消息 id（含 assistant）。
+   *
+   * T-E2（assistant rewind）的锚点与断言对象是 assistant 消息——走 user
+   * 过滤入口必拿不到，须用本入口；其余「锚定用户消息」的用例继续用
+   * getMessageIds（cr2-D-1）。
+   */
+  async getAllMessageIds(): Promise<string[]> {
     await this.openWebView();
     return browser.execute(() => {
       return Array.from(document.querySelectorAll('.row.message'))
@@ -92,18 +110,78 @@ export class ChatTranscriptPage {
     await btn.click();
   }
 
+  /**
+   * 写文本 + 点发送（发送键在 web 的 dock toolbar 里，全程待在对话页 context）。
+   *
+   * 旧实现是「先切 NATIVE 点 `~发送`」——那个原生按钮随 `ChatComposer` 一起退役了，
+   * 现在必须在 web 里点 dock 的 `composer-send`。
+   */
   async sendComposerMessage(text: string): Promise<void> {
     await this.setComposerText(text);
-    // 发送按钮仍在 RN 原生工具栏（WEBVIEW 里没有它）：切回 NATIVE 再点。
-    await switchToNative();
-    const send = await $('~发送');
-    await send.waitForDisplayed({timeout: 10000});
-    await send.click();
+    const countBefore = await this.countMessages();
+    await this.clickDockSendButton();
+    // 等**本条消息入流**（转录区 .row.message 总数 +1），不再依赖固定 pause：
+    // 发送点击到宿主入流渲染隔着桥 round-trip，死等 1200ms 在慢环境会漏。
+    await browser.waitUntil(
+      async () => (await this.countMessages()) > countBefore,
+      {timeout: 15000, timeoutMsg: `发送「${text}」后消息未入流（转录区行数未增长）`},
+    );
+    // 再等 **run 落定**才能安全发下一条：发送/终止是同一个钮（dock.ts：
+    // `view.running ? '终止' : '发送'`），无真模型环境 run 失败要走完 provider
+    // 超时（实测 ~7s），期间点击=终止 run——立刻连发会把第 2/3 条的「发送」
+    // 变成「终止」，消息根本不落库（2026-10-02 实跑实锤：3 连发只落 1 条、
+    // 库证一致）。
+    //
+    // 判据用**转录区行数稳定**而不是 aria-label：run 快速失败（如发送前置
+    // 校验直接抛 ProviderError）时 label 可能从未切到「终止」，label 判据
+    // 会在错误的时机放行（下一轮实锤：label 全程「发送」但 run 在途，第 2
+    // 条发送被吞）。行数稳定（连续 3 次读数相同）对「run 秒败」「run 慢败
+    // 后错误回复入流」两种形态都收敛。
+    await this.waitForTranscriptSettled();
+  }
+
+  /**
+   * 等转录区行数稳定：入流/错误回复追加会让行数增长，run 结束后行数不再变。
+   * 连续 3 次相同读数视为稳定；上限 30s（provider 超时量级）。
+   */
+  private async waitForTranscriptSettled(timeoutMs = 30000): Promise<void> {
+    const deadline = Date.now() + timeoutMs;
+    let stableCount = 0;
+    let prev = -1;
+    while (Date.now() < deadline && stableCount < 3) {
+      const n = await this.countMessages();
+      if (n === prev) {
+        stableCount++;
+      } else {
+        stableCount = 0;
+        prev = n;
+      }
+      await browser.pause(700);
+    }
+  }
+
+  /** 点 dock toolbar 的发送钮（运行态下同一个钮是「终止」，aria-label 随之切换）。 */
+  async clickDockSendButton(): Promise<void> {
+    await withRetry(
+      async () => {
+        await this.openWebView();
+        const send = await $(DOCK_SEND_BUTTON);
+        await send.waitForDisplayed({timeout: 10000});
+        const disabled = await send.getAttribute('disabled');
+        if (disabled !== null) {
+          throw new Error(
+            `[e2e] 发送钮处于禁用态（sendDisabled=${disabled}）：多半是没选工作区模型或草稿为空`,
+          );
+        }
+        await send.click();
+      },
+      {attempts: 3, delayMs: 700, label: 'clickDockSendButton'},
+    );
     await browser.pause(1200);
   }
 
   async setComposerText(text: string): Promise<void> {
-    await switchToComposerWebView();
+    await this.openWebView();
     const input = await $(COMPOSER_TEXTAREA);
     await input.waitForDisplayed({timeout: 10000});
     // 受控 textarea 坑：直接 `el.value = v` 不会触发 web 侧的 input 监听，
@@ -134,7 +212,7 @@ export class ChatTranscriptPage {
   }
 
   async getComposerText(): Promise<string> {
-    await switchToComposerWebView();
+    await this.openWebView();
     const input = await $(COMPOSER_TEXTAREA);
     await input.waitForDisplayed({timeout: 10000});
     const value = await browser.execute((selector: string) => {
@@ -225,6 +303,51 @@ export class ChatTranscriptPage {
     await this.openWebView();
     const pending = await $$('.tool-status.pending, .tool-pending-spinner');
     expect(pending.length).toBe(0);
+  }
+
+  /**
+   * dock 的「请先选择工作区模型」提示行当前是否可见（web DOM 判据，RN 树里已不存在）。
+   *
+   * dock 用 `hidden` 属性控制显隐，`isExisting()` 分不出显示/隐藏，所以查
+   * `hidden` 属性——这是它与普通 web 元素探测最大的差别。
+   */
+  async isDockHintRowVisible(): Promise<boolean> {
+    try {
+      await this.openWebView();
+      const visible = await browser.execute((selector: string) => {
+        const el = document.querySelector(selector);
+        if (el == null) {
+          return false;
+        }
+        return !el.hasAttribute('hidden');
+      }, DOCK_HINT_ROW);
+      return visible === true;
+    } catch {
+      // 对话页 WebView 还没起来（刚进会话的冷启动窗口）→ 当「没看到提示行」，
+      // 让 `ensureWorkspaceModel` 继续走后面的探测分支，而不是把整个 spec 掀翻。
+      return false;
+    }
+  }
+
+  /** 点 dock 的「请先选择工作区模型」提示行 → 上行 `dockAction.needModel`，宿主开工作区模型选择器。 */
+  async clickDockHintRow(): Promise<void> {
+    await this.openWebView();
+    const hint = await $(DOCK_HINT_ROW);
+    await hint.waitForDisplayed({timeout: 10000});
+    await hint.click();
+    await browser.pause(400);
+  }
+
+  /** composer 输入框是否在 web 文档里（RN 容器上的 `chat-composer-input` testID 已退役）。 */
+  async composerInputExists(): Promise<boolean> {
+    try {
+      await this.openWebView();
+    } catch {
+      // 还没进对话页（或对话页没挂载）→ 不算「存在」。
+      return false;
+    }
+    const input = await $(COMPOSER_TEXTAREA);
+    return input.isExisting();
   }
 }
 

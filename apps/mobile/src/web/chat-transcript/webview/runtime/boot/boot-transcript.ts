@@ -14,27 +14,48 @@ export function bindHostMessageEvents(): void {
 }
 
 /**
+ * boot 可选动作开关（Step 1 / chat-webview-unify 工厂化）。
+ * 缺省 = 拆分前 main.ts 行为（旧包行为零变化）。
+ */
+export type TranscriptBootOptions = {
+  /** 是否自绑宿主 message 通道；false 时由合成入口单次注册统一通道。 */
+  bindChannel?: boolean;
+  /** 是否由本 runtime 上抛 ready；false 时由合成入口发单条 v2 ready。 */
+  emitReady?: boolean;
+};
+
+/**
  * DOM 就绪后：壳委托 + 向宿主声明 ready（含能力清单，B-2）。
  * 符号名保留供契约测检索。
+ *
+ * emitReady 经入参/闭包透传（禁模块级可变 flag：同一文档内两 runtime
+ * 可能以不同参数 boot，模块级 flag 会互相污染）。
  */
-export function bootTranscript(): void {
+export function bootTranscript(options: TranscriptBootOptions = {}): void {
   bindShellEvents();
   // RN WebView html source 上 DOMContentLoaded 可能已错过；readyState 兜底。
   // capabilities 是能力协商真源（RN 据此启用块级渲染）；version 仅作辅助。
-  post('ready', {
-    version: 'm4',
-    capabilities: TRANSCRIPT_CAPABILITIES,
-    readyState: document.readyState,
-  });
+  if (options.emitReady !== false) {
+    post('ready', {
+      version: 'm4',
+      capabilities: TRANSCRIPT_CAPABILITIES,
+      readyState: document.readyState,
+    });
+  }
   state.ready = true;
 }
 
 /** 按 document.readyState 调度 bootTranscript。 */
-export function startTranscriptBoot(): void {
-  bindHostMessageEvents();
+export function startTranscriptBoot(options: TranscriptBootOptions = {}): void {
+  if (options.bindChannel !== false) {
+    bindHostMessageEvents();
+  }
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', bootTranscript);
+    // 闭包捕获本次 options：不同实例的 bindChannel/emitReady 互不影响
+    document.addEventListener('DOMContentLoaded', () =>
+      bootTranscript(options),
+    );
   } else {
-    bootTranscript();
+    bootTranscript(options);
   }
 }

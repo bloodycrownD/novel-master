@@ -25,15 +25,15 @@ import {
   type ComposerInputSelection,
   type HostToComposerInputMessage,
 } from '@/components/chat/ComposerInputBridge';
-import {ComposerInputWebView} from '@/components/chat/ComposerInputWebView';
+import {
+  ComposerInputWebView,
+  toNativeSelectionEvent,
+  type ComposerInputWebViewHandle,
+} from '@/components/chat/ComposerInputWebView';
 import {
   getComposerInputPackageDirUri,
   getComposerInputUri,
 } from '@/webview-host/composer-input/uri';
-import {
-  ComposerAtPathInput,
-  type ComposerAtPathInputHandle,
-} from '@/components/chat/ComposerAtPathInput';
 import {
   clearMockWebViewPostMessages,
   mockWebViewPostMessages,
@@ -59,7 +59,7 @@ Object.defineProperty(Platform, 'OS', {
   get: () => 'android',
 });
 
-/** chat 壳（ComposerAtPathInput）的默认 metrics 组装口径（5 行封顶：12 + 22×5）。 */
+/** chat 侧使用的 metrics 组装口径（5 行封顶：12 + 22×5；随壳删除后由调用方显式传）。 */
 const CHAT_METRICS: ComposerInputMetrics = {
   fontSize: 16,
   lineHeight: 22,
@@ -142,7 +142,7 @@ async function render(
   return tree;
 }
 
-describe('ComposerInputWebView / ComposerAtPathInput（T-HOST1..6）', () => {
+describe('ComposerInputWebView 通用宿主契约（T-HOST1..13）', () => {
   beforeEach(() => {
     clearMockWebViewPostMessages();
   });
@@ -151,12 +151,27 @@ describe('ComposerInputWebView / ComposerAtPathInput（T-HOST1..6）', () => {
     clearMockWebViewPostMessages();
   });
 
-  it('T-HOST1: web 上报 selectionChange → 壳合成 RN 事件形状（nativeEvent.selection.start）', async () => {
+  /**
+   * Step 8：本文件原先有一层「chat 壳」`ComposerAtPathInput` 套在
+   * `ComposerInputWebView` 外面（拼 metrics / palette / 受控选区 / 容器高度，
+   * 并把命令式 `replaceCommittedText` 转成宿主的 `setText`）。壳随 legacy 转录
+   * 引擎退役删除后，用例直接挂 `ComposerInputWebView` 并显式传那几组 props——
+   * 断言面（桥消息 + RN 事件形状）一字未改，变的只是「谁在拼 props」。
+   * 壳独有、随壳一起消失的行为（省略光标时默认落文末、程序化写入回调
+   * onChangeText、value 水化后自动补一次 setSelection）不再在本文件断言：
+   * 前两条的现落点是 `ChatConversationWebView` 的 M7（见
+   * `chat-conversation-webview.test.tsx`），第三条是 T-HOST9（下例，宿主直挂的
+   * 更强版本：外部 value 写入作废选区基线后 setSelection 必放行一次）。
+   */
+
+  it('T-HOST1: web 上报 selectionChange → 宿主回调纯 selection 对象（RN 事件形状由 toNativeSelectionEvent 合成）', async () => {
     const onSelectionChange = jest.fn();
     const tree = await render(
-      <ComposerAtPathInput
+      <ComposerInputWebView
+        mode="composer-token"
         value=""
         onChangeText={() => {}}
+        metrics={CHAT_METRICS}
         onSelectionChange={onSelectionChange}
       />,
     );
@@ -168,19 +183,23 @@ describe('ComposerInputWebView / ComposerAtPathInput（T-HOST1..6）', () => {
     simulateWebMessage(tree.root, 'selectionChange', {start: 3, end: 5});
 
     expect(onSelectionChange).toHaveBeenCalledTimes(1);
-    const event = onSelectionChange.mock.calls[0][0];
-    expect(event.nativeEvent.selection.start).toBe(3);
-    expect(event.nativeEvent.selection.end).toBe(5);
+    // 宿主回调的是纯 `{start, end}`；包成 RN `nativeEvent` 事件形状的是壳层
+    // （宏链 PromptMacroTextInput 仍在做这一步，故 helper 不是死码）。
+    expect(onSelectionChange).toHaveBeenCalledWith({start: 3, end: 5});
+    const nativeEvent = toNativeSelectionEvent({start: 3, end: 5});
+    expect(nativeEvent.nativeEvent.selection.start).toBe(3);
+    expect(nativeEvent.nativeEvent.selection.end).toBe(5);
   });
 
-  it('T-HOST2: replaceCommittedText → setText{text, selection} 下发（省略光标落末位）', async () => {
-    const onChangeText = jest.fn();
-    const handleRef = React.createRef<ComposerAtPathInputHandle>();
+  it('T-HOST2: 命令式 setText → setText{text, selection} 下发（无选区时只带 text）', async () => {
+    const handleRef = React.createRef<ComposerInputWebViewHandle>();
     const tree = await render(
-      <ComposerAtPathInput
+      <ComposerInputWebView
         ref={handleRef}
+        mode="composer-token"
         value=""
-        onChangeText={onChangeText}
+        onChangeText={() => {}}
+        metrics={CHAT_METRICS}
       />,
     );
 
@@ -189,7 +208,7 @@ describe('ComposerInputWebView / ComposerAtPathInput（T-HOST1..6）', () => {
 
     const baseline = mockWebViewPostMessages.length;
     act(() => {
-      handleRef.current?.replaceCommittedText('见 @/a.md ', 9);
+      handleRef.current?.setText('见 @/a.md ', {start: 9, end: 9});
     });
     await flush();
 
@@ -198,26 +217,30 @@ describe('ComposerInputWebView / ComposerAtPathInput（T-HOST1..6）', () => {
       selectionStart: 9,
       selectionEnd: 9,
     });
-    // main 版同口径：程序化写入回调 onChangeText（ChatComposer 状态同步）
-    expect(onChangeText).toHaveBeenCalledWith('见 @/a.md ');
+    // 命令式写入同时推进 web 文本基线 → 随后的 value 差分 effect 不再补发
+    expect(typesSince(baseline).filter(type => type === 'setText')).toEqual([
+      'setText',
+    ]);
 
+    // 不带选区：宿主只发 text，光标交由 web 侧自行处理（不猜、不代填文末）
     const noCursorBaseline = mockWebViewPostMessages.length;
     act(() => {
-      handleRef.current?.replaceCommittedText('整段');
+      handleRef.current?.setText('整段');
     });
     await flush();
-    expect(payloadOfType(noCursorBaseline, 'setText')).toEqual({
-      text: '整段',
-      selectionStart: 2,
-      selectionEnd: 2,
-    });
+    expect(payloadOfType(noCursorBaseline, 'setText')).toEqual({text: '整段'});
   });
 
-  it('T-HOST3: 外部 value 差分 → setText（水化 / 清空），光标期望随受控 selection 对齐', async () => {
-    const renderShell = (value: string) => (
-      <ComposerAtPathInput value={value} onChangeText={() => {}} />
+  it('T-HOST3: 外部 value 差分 → setText（水化 / 清空）', async () => {
+    const renderHost = (value: string) => (
+      <ComposerInputWebView
+        mode="composer-token"
+        value={value}
+        onChangeText={() => {}}
+        metrics={CHAT_METRICS}
+      />
     );
-    const tree = await render(renderShell(''));
+    const tree = await render(renderHost(''));
 
     simulateWebReady(tree.root);
     await flush();
@@ -225,18 +248,17 @@ describe('ComposerInputWebView / ComposerAtPathInput（T-HOST1..6）', () => {
     // 水化：value 从 '' 变非空 → setText 全量写入
     const hydrateBaseline = mockWebViewPostMessages.length;
     await act(async () => {
-      tree.update(renderShell('水化文本'));
+      tree.update(renderHost('水化文本'));
     });
     await flush();
     expect(payloadOfType(hydrateBaseline, 'setText')).toEqual({
       text: '水化文本',
     });
-    expect(typesSince(hydrateBaseline)).toContain('setSelection');
 
     // 清空：value 主动变化 → 再次 setText
     const clearBaseline = mockWebViewPostMessages.length;
     await act(async () => {
-      tree.update(renderShell(''));
+      tree.update(renderHost(''));
     });
     await flush();
     expect(payloadOfType(clearBaseline, 'setText')).toEqual({text: ''});
@@ -244,10 +266,12 @@ describe('ComposerInputWebView / ComposerAtPathInput（T-HOST1..6）', () => {
 
   it('T-HOST4: testID 落容器 View（WebView 为其子节点）', async () => {
     const tree = await render(
-      <ComposerAtPathInput
+      <ComposerInputWebView
+        mode="composer-token"
         testID="chat-composer-input"
         value=""
         onChangeText={() => {}}
+        metrics={CHAT_METRICS}
       />,
     );
 
@@ -308,15 +332,17 @@ describe('ComposerInputWebView / ComposerAtPathInput（T-HOST1..6）', () => {
     ).toEqual([]);
   });
 
-  it('T-HOST6: editable/disabled 变化 → init.disabled（初始只读）+ setDisabled（运行态切换）', async () => {
-    const renderShell = (editable: boolean) => (
-      <ComposerAtPathInput
+  it('T-HOST6: disabled 变化 → init.disabled（初始只读）+ setDisabled（运行态切换）', async () => {
+    const renderHost = (disabled: boolean) => (
+      <ComposerInputWebView
+        mode="composer-token"
         value=""
         onChangeText={() => {}}
-        editable={editable}
+        metrics={CHAT_METRICS}
+        disabled={disabled}
       />
     );
-    const tree = await render(renderShell(false));
+    const tree = await render(renderHost(true));
 
     simulateWebReady(tree.root);
     await flush();
@@ -330,7 +356,7 @@ describe('ComposerInputWebView / ComposerAtPathInput（T-HOST1..6）', () => {
     // 只读解除（running 结束 / 末条恢复可编辑）→ setDisabled，不重发 init
     const enableBaseline = mockWebViewPostMessages.length;
     await act(async () => {
-      tree.update(renderShell(true));
+      tree.update(renderHost(false));
     });
     await flush();
     expect(payloadOfType(enableBaseline, 'setDisabled')).toEqual({
@@ -340,7 +366,7 @@ describe('ComposerInputWebView / ComposerAtPathInput（T-HOST1..6）', () => {
 
     const disableBaseline = mockWebViewPostMessages.length;
     await act(async () => {
-      tree.update(renderShell(false));
+      tree.update(renderHost(true));
     });
     await flush();
     expect(payloadOfType(disableBaseline, 'setDisabled')).toEqual({
@@ -518,15 +544,17 @@ describe('ComposerInputWebView / ComposerAtPathInput（T-HOST1..6）', () => {
     });
   });
 
-  it('T-HOST12（G-2c）: editable 同值重渲 → 零 setDisabled', async () => {
-    const renderShell = (editable: boolean) => (
-      <ComposerAtPathInput
+  it('T-HOST12（G-2c）: disabled 同值重渲 → 零 setDisabled', async () => {
+    const renderHost = (disabled: boolean) => (
+      <ComposerInputWebView
+        mode="composer-token"
         value=""
         onChangeText={() => {}}
-        editable={editable}
+        metrics={CHAT_METRICS}
+        disabled={disabled}
       />
     );
-    const tree = await render(renderShell(false));
+    const tree = await render(renderHost(true));
 
     simulateWebReady(tree.root);
     await flush();
@@ -536,7 +564,7 @@ describe('ComposerInputWebView / ComposerAtPathInput（T-HOST1..6）', () => {
     // 同值重渲 → 一条都不许发
     const sameBaseline = mockWebViewPostMessages.length;
     await act(async () => {
-      tree.update(renderShell(false));
+      tree.update(renderHost(true));
     });
     await flush();
     expect(typesSince(sameBaseline)).not.toContain('setDisabled');

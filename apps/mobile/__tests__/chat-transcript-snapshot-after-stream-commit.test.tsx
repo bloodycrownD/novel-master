@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 回滚刷新不丢失（用户实测症状 B 的 P1 病灶回归）：
  * streamCommit 已发生（中断现场的合成行/流式提交）后，messages 更新若
  * 是「tail 满页窗口前移」（条数不变、首条 id 变——回滚删尾后 tail 重新
@@ -6,6 +6,9 @@
  * 回滚前的行，须重进会话才见效果。
  *
  * 照 chat-transcript-snapshot-complete-signal.test.tsx 的 mock 基建。
+ *
+ * transcript-converge：宿主迁到统一宿主 `ChatConversationWebView`（判据逻辑
+ * 「lastStreamCommitIdsRef + 首条 id 变化」一字未动），ready 握手改走 v2。
  */
 import React from 'react';
 import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
@@ -13,11 +16,13 @@ import TestRenderer, {act} from 'react-test-renderer';
 import {Platform} from 'react-native';
 import {type ChatMessage} from '@novel-master/core/chat';
 import {
-  CHAT_TRANSCRIPT_BRIDGE_VERSION,
-  decodeHostToTranscript,
-} from '@/components/chat/ChatTranscriptBridge';
-import {ChatTranscriptWebView} from '@/components/chat/ChatTranscriptWebView';
-import type {ChatTranscriptWebViewHandle} from '@/components/chat/ChatTranscriptWebView';
+  CONVERSATION_BRIDGE_V,
+  decodeConversationUpstream,
+} from '@/components/chat/ChatConversationBridge';
+import {
+  ChatConversationWebView,
+  type ChatConversationWebViewHandle,
+} from '@/components/chat/ChatConversationWebView';
 import {
   clearMockWebViewPostMessages,
   mockWebViewPostMessages,
@@ -32,13 +37,14 @@ jest.mock('@/theme/ThemeProvider', () => ({
       textSecondary: '#ccc',
       primary: '#08f',
       text: '#fff',
+      selection: '#08f55',
     },
   }),
 }));
 
 jest.mock('@react-native-clipboard/clipboard', () => ({
   __esModule: true,
-  default: {setString: jest.fn()},
+  default: {setString: jest.fn(), getString: jest.fn(async () => '')},
 }));
 
 jest.mock('sanitize-html', () => {
@@ -107,6 +113,16 @@ function assistantTextMessage(id: string, seq: number): ChatMessage {
   };
 }
 
+/** 统一宿主的最小 props 面（composer 域缺省空串）。 */
+function baseProps(overrides: Record<string, unknown> = {}) {
+  return {
+    sessionKey: 'p1:s1',
+    streamingText: '',
+    streamingThinking: '',
+    ...overrides,
+  };
+}
+
 describe('streamCommit 残留不吞回滚快照（P1 回归）', () => {
   beforeEach(() => {
     clearMockWebViewPostMessages();
@@ -140,28 +156,43 @@ describe('streamCommit 残留不吞回滚快照（P1 回归）', () => {
       webView.props.onMessage?.({
         nativeEvent: {
           data: JSON.stringify({
-            v: CHAT_TRANSCRIPT_BRIDGE_VERSION,
+            v: CONVERSATION_BRIDGE_V,
             type: 'ready',
-            payload: {version: 'test'},
+            payload: {
+              version: 'test',
+              capabilities: ['streamBlockCommit'],
+              readyState: 'complete',
+            },
           }),
         },
       });
     });
   }
 
+  /** 全部 sessionSnapshot 载荷（v:2 信封走宽松 decoder，字段名未变）。 */
+  function snapshotPayloads(): Array<Record<string, number | string>> {
+    return mockWebViewPostMessages.flatMap(raw => {
+      const decoded = decodeConversationUpstream(raw);
+      if (!decoded.ok || decoded.message.type !== 'sessionSnapshot') {
+        return [];
+      }
+      return [decoded.message.payload as Record<string, number | string>];
+    });
+  }
+
   function completeSnapshotGenerations(): number {
-    const snapshots = mockWebViewPostMessages
-      .map(raw => decodeHostToTranscript(raw))
-      .flatMap(msg => (msg.type === 'sessionSnapshot' ? [msg.payload] : []));
+    const snapshots = snapshotPayloads();
     const byGeneration = new Map<number, number[]>();
     for (const payload of snapshots) {
-      const list = byGeneration.get(payload.generation) ?? [];
-      list.push(payload.chunkIndex);
-      byGeneration.set(payload.generation, list);
+      const generation = payload.generation as number;
+      const list = byGeneration.get(generation) ?? [];
+      list.push(payload.chunkIndex as number);
+      byGeneration.set(generation, list);
     }
     let complete = 0;
     for (const [generation, chunkIndexes] of byGeneration) {
-      const total = snapshots.find(p => p.generation === generation)!.chunkTotal;
+      const total = snapshots.find(p => p.generation === generation)!
+        .chunkTotal as number;
       if (chunkIndexes.includes(total - 1)) {
         complete += 1;
       }
@@ -181,10 +212,10 @@ describe('streamCommit 残留不吞回滚快照（P1 回归）', () => {
     ];
 
     let tree!: TestRenderer.ReactTestRenderer;
-    const ref = React.createRef<ChatTranscriptWebViewHandle>();
+    const ref = React.createRef<ChatConversationWebViewHandle>();
     await act(async () => {
       tree = TestRenderer.create(
-        <ChatTranscriptWebView ref={ref} sessionKey="p1:s1" messages={before} />,
+        <ChatConversationWebView ref={ref} {...baseProps({messages: before})} />,
       );
     });
     simulateWebReady(tree.root);
@@ -202,7 +233,7 @@ describe('streamCommit 残留不吞回滚快照（P1 回归）', () => {
     // 回滚：messages 换成满页前移的新窗口（条数不变、首条 id 变）。
     await act(async () => {
       tree.update(
-        <ChatTranscriptWebView ref={ref} sessionKey="p1:s1" messages={after} />,
+        <ChatConversationWebView ref={ref} {...baseProps({messages: after})} />,
       );
     });
     await flushSnapshotChunks();
@@ -217,10 +248,10 @@ describe('streamCommit 残留不吞回滚快照（P1 回归）', () => {
       sampleMessage(`m-${i + 1}`, i + 1),
     );
     let tree!: TestRenderer.ReactTestRenderer;
-    const ref = React.createRef<ChatTranscriptWebViewHandle>();
+    const ref = React.createRef<ChatConversationWebViewHandle>();
     await act(async () => {
       tree = TestRenderer.create(
-        <ChatTranscriptWebView ref={ref} sessionKey="p1:s1" messages={messages} />,
+        <ChatConversationWebView ref={ref} {...baseProps({messages})} />,
       );
     });
     simulateWebReady(tree.root);
@@ -246,10 +277,10 @@ describe('streamCommit 残留不吞回滚快照（P1 回归）', () => {
     const assistant = assistantTextMessage('a1', 2);
 
     let tree!: TestRenderer.ReactTestRenderer;
-    const ref = React.createRef<ChatTranscriptWebViewHandle>();
+    const ref = React.createRef<ChatConversationWebViewHandle>();
     await act(async () => {
       tree = TestRenderer.create(
-        <ChatTranscriptWebView ref={ref} sessionKey="p1:s1" messages={before} />,
+        <ChatConversationWebView ref={ref} {...baseProps({messages: before})} />,
       );
     });
     simulateWebReady(tree.root);
@@ -271,10 +302,9 @@ describe('streamCommit 残留不吞回滚快照（P1 回归）', () => {
     // 新数组引用、条数不变（2）、首条 id 不变（u1）、hidden 未变。
     await act(async () => {
       tree.update(
-        <ChatTranscriptWebView
+        <ChatConversationWebView
           ref={ref}
-          sessionKey="p1:s1"
-          messages={[...before, assistant]}
+          {...baseProps({messages: [...before, assistant]})}
         />,
       );
     });

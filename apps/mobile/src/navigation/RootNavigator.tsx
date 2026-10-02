@@ -62,6 +62,12 @@ function MainTabs() {
   return (
     <Tab.Navigator
       initialRouteName="Chat"
+      /* 切 tab 白屏防线（2026-10-01）：默认在 Android 上 detach 非活跃页
+         （react-native-screens 把非活跃 tab 的 view 从窗口移除），聊天页的
+         WebView 画面层随之销毁，切回来那拍就是白屏一闪。关掉 detach 后非活跃
+         页由容器本来的 absoluteFill + zIndex 压底 + pointerEvents 隔离（web
+         端即此方案），WebView 常驻可见树，切 tab 零重建。 */
+      detachInactiveScreens={false}
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: tokens.tabBarActive,

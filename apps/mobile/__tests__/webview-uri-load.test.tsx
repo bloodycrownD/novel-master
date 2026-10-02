@@ -1,17 +1,17 @@
 /**
- * T-BB-04：URI helper + WebView 必配 props 矩阵（静态断言；三包 CT/RD/code-editor）。
+ * T-BB-04：URI helper + WebView 必配 props 矩阵（静态断言）。
+ *
+ * transcript-converge 后 chat-transcript 不再是独立包（旧文档壳与
+ * `webview-host/chat-transcript/uri.ts` 一并退役，转录并入 chat-conversation），
+ * 故本套件只覆盖余下四包。
  */
 import React from 'react';
 import {Platform} from 'react-native';
 import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
-import {ChatTranscriptWebView} from '@/components/chat/ChatTranscriptWebView';
+import {ChatConversationWebView} from '@/components/chat/ChatConversationWebView';
 import {RichDocumentWebView} from '@/components/vfs/RichDocumentWebView';
 import {CodeEditorWebView} from '@/components/vfs/CodeEditorWebView';
-import {
-  getChatTranscriptPackageDirUri,
-  getChatTranscriptUri,
-} from '@/webview-host/chat-transcript/uri';
 import {
   getRichDocumentPackageDirUri,
   getRichDocumentUri,
@@ -20,6 +20,10 @@ import {
   getCodeEditorPackageDirUri,
   getCodeEditorUri,
 } from '@/webview-host/code-editor/uri';
+import {
+  getChatConversationPackageDirUri,
+  getChatConversationUri,
+} from '@/webview-host/chat-conversation/uri';
 
 jest.mock('@/theme/ThemeProvider', () => ({
   useTheme: () => ({
@@ -70,23 +74,23 @@ describe('WebView URI load (T-BB-04)', () => {
         configurable: true,
         get: () => 'android',
       });
-      expect(getChatTranscriptUri()).toBe(
-        'file:///android_asset/webview/chat-transcript/index.html',
-      );
       expect(getRichDocumentUri()).toBe(
         'file:///android_asset/webview/rich-document/index.html',
       );
       expect(getCodeEditorUri()).toBe(
         'file:///android_asset/webview/code-editor/index.html',
       );
-      expect(getChatTranscriptPackageDirUri()).toBe(
-        'file:///android_asset/webview/chat-transcript/',
-      );
       expect(getRichDocumentPackageDirUri()).toBe(
         'file:///android_asset/webview/rich-document/',
       );
       expect(getCodeEditorPackageDirUri()).toBe(
         'file:///android_asset/webview/code-editor/',
+      );
+      expect(getChatConversationUri()).toBe(
+        'file:///android_asset/webview/chat-conversation/index.html',
+      );
+      expect(getChatConversationPackageDirUri()).toBe(
+        'file:///android_asset/webview/chat-conversation/',
       );
     });
 
@@ -95,23 +99,23 @@ describe('WebView URI load (T-BB-04)', () => {
         configurable: true,
         get: () => 'ios',
       });
-      expect(getChatTranscriptUri()).toBe(
-        'file:///App/NovelMaster.app/WebViewDist/chat-transcript/index.html',
-      );
       expect(getRichDocumentUri()).toBe(
         'file:///App/NovelMaster.app/WebViewDist/rich-document/index.html',
       );
       expect(getCodeEditorUri()).toBe(
         'file:///App/NovelMaster.app/WebViewDist/code-editor/index.html',
       );
-      expect(getChatTranscriptPackageDirUri()).toBe(
-        'file:///App/NovelMaster.app/WebViewDist/chat-transcript/',
-      );
       expect(getRichDocumentPackageDirUri()).toBe(
         'file:///App/NovelMaster.app/WebViewDist/rich-document/',
       );
       expect(getCodeEditorPackageDirUri()).toBe(
         'file:///App/NovelMaster.app/WebViewDist/code-editor/',
+      );
+      expect(getChatConversationUri()).toBe(
+        'file:///App/NovelMaster.app/WebViewDist/chat-conversation/index.html',
+      );
+      expect(getChatConversationPackageDirUri()).toBe(
+        'file:///App/NovelMaster.app/WebViewDist/chat-conversation/',
       );
     });
   });
@@ -124,25 +128,29 @@ describe('WebView URI load (T-BB-04)', () => {
       });
     });
 
-    it('ChatTranscriptWebView：source.uri + 双端必配 props', () => {
+    it('ChatConversationWebView：source.uri + 双端必配 props', () => {
       let root: TestRenderer.ReactTestRenderer;
       act(() => {
         root = TestRenderer.create(
-          <ChatTranscriptWebView sessionKey="s1" messages={[]} />,
+          <ChatConversationWebView sessionKey="p1:s1" messages={[]} />,
         );
       });
       const webView = root!.root.findByType(
         require('react-native-webview').default as React.ComponentType,
       );
       expect(webView.props.source).toEqual({
-        uri: 'file:///android_asset/webview/chat-transcript/index.html',
+        uri: 'file:///android_asset/webview/chat-conversation/index.html',
       });
       expect(webView.props.allowFileAccess).toBe(true);
       expect(webView.props.allowFileAccessFromFileURLs).toBe(true);
       expect(webView.props.allowingReadAccessToURL).toBe(
-        'file:///android_asset/webview/chat-transcript/',
+        'file:///android_asset/webview/chat-conversation/',
       );
       expect(webView.props.javaScriptEnabled).toBe(true);
+      // 合成包额外两项：sec/D-1 收紧到 file://（包内放行、外跳/拒绝在守卫里），
+      // 以及转录滚动归文档所有 → 原生滚动关掉。
+      expect(webView.props.originWhitelist).toEqual(['file://']);
+      expect(webView.props.scrollEnabled).toBe(false);
     });
 
     it('RichDocumentWebView：source.uri + 双端必配 props', () => {

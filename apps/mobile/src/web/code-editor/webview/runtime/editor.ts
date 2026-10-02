@@ -13,6 +13,52 @@ let view: EditorView | null = null;
 let currentPath = '';
 let suppressChange = false;
 
+/**
+ * change 上行的 rAF 合帧（长按连删卡顿修，transcript-converge 后续轮）：
+ * 长按删除键的 key repeat 约 25~30 次/秒，每键全文 toString + stringify
+ * 跨桥会把 web/RN 两侧都刷爆。合帧后每渲染帧至多一条全文快照——last-wins
+ * 天然无序可乱；IME 组合期 CM 不派发 docChanged，组合提交是一次正常 change，
+ * 延后一帧无损。**不做定时 debounce**：定时延迟会让 RN 侧镜像欠账。
+ *
+ * 收口（flush）只有两处，都是同步的：
+ * ① web 侧 blur handler（`EditorView.domEventHandlers` 的 blur）——失焦即
+ *    flushPendingChange + post('blur')，RN 侧镜像不欠账；
+ * ② RN 侧保存前主动 `codeEditorRef.current?.blur()`（FileEditorScreen
+ *    handleSave / dismissEditor）——它跨桥落到同一个 blur handler，
+ *    于是「工具栏按压」与「contenteditable 失焦」无论谁先到，
+ *    vfs.write 读到的都是已收口的最新全文。
+ * 另有两条作废路径：setDocument（丢弃挂起快照）与 destroyEditor（作废）。
+ * 上述四条语义由 `__tests__/code-editor-webview-runtime.test.ts` 钉住。
+ */
+let changePendingThisFrame = false;
+let changeRafId = 0;
+
+function flushPendingChange(): void {
+  if (!changePendingThisFrame) {
+    return;
+  }
+  changePendingThisFrame = false;
+  if (changeRafId !== 0) {
+    cancelAnimationFrame(changeRafId);
+    changeRafId = 0;
+  }
+  if (view == null) {
+    return;
+  }
+  post('change', {text: view.state.doc.toString()});
+}
+
+function scheduleChangePost(): void {
+  changePendingThisFrame = true;
+  if (changeRafId !== 0) {
+    return;
+  }
+  changeRafId = requestAnimationFrame(() => {
+    changeRafId = 0;
+    flushPendingChange();
+  });
+}
+
 const languageCompartment = new Compartment();
 /** composer-token 胶囊扩展按 path 启停（与语言同拍 reconfigure）。 */
 const tokenCompartment = new Compartment();
@@ -40,7 +86,8 @@ function buildExtensions(path: string): Extension[] {
         post('selectionChange', {start: sel.from, end: sel.to});
       }
       if (suppressChange || !update.docChanged) return;
-      post('change', {text: update.state.doc.toString()});
+      // 合帧上行（见 scheduleChangePost 注释）：同帧多次按键合并为一条全文快照。
+      scheduleChangePost();
     }),
     EditorView.domEventHandlers({
       focus: () => {
@@ -51,6 +98,8 @@ function buildExtensions(path: string): Extension[] {
         return false;
       },
       blur: () => {
+        // 失焦即收口：挂起的合帧同步发出，RN 侧镜像不欠账。
+        flushPendingChange();
         post('blur', {});
         return false;
       },
@@ -155,6 +204,12 @@ export function mountEditor(
 }
 
 export function destroyEditor(): void {
+  // 挂起的合帧作废：view 即将销毁，旧快照发出去只会污染 RN 镜像。
+  changePendingThisFrame = false;
+  if (changeRafId !== 0) {
+    cancelAnimationFrame(changeRafId);
+    changeRafId = 0;
+  }
   if (unbindCaretReveal != null) {
     unbindCaretReveal();
     unbindCaretReveal = null;
@@ -172,6 +227,14 @@ export function setDocument(
   selection?: EditorSelectionRange,
 ): void {
   if (!view) return;
+
+  // 外部替换前丢掉挂起的上行快照：它描述的是被替换前的旧文档，
+  // 若放行会在替换后迟到、经 RN 镜像回环把旧内容吃回来。
+  changePendingThisFrame = false;
+  if (changeRafId !== 0) {
+    cancelAnimationFrame(changeRafId);
+    changeRafId = 0;
+  }
 
   const current = view.state.doc.toString();
   const pathChanged = currentPath !== path;

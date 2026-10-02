@@ -2,8 +2,10 @@
  * 子代理会话只读浏览页（mobile）。
  *
  * 主会话里点击 `task` 工具卡片跳转到此页，展示子 agent 的完整消息历史。
- * 复用主会话的 {@link ChatTranscriptWebView}（WebView 引擎），与主会话共享
- * 富文本渲染、工具卡片展示、消息宽度、流式输出等所有视觉行为。
+ * 复用统一宿主 {@link ChatConversationWebView} 的 transcriptOnly 变体
+ * （transcript-converge 起从旧 ChatTranscriptWebView 切换——与主会话共享
+ * 同一份 WebView 引擎、富文本渲染、工具卡片、消息宽度、流式输出），与
+ * 主会话共享富文本渲染、工具卡片展示、消息宽度、流式输出等所有视觉行为。
  *
  * Step 6 起删除第二套装配（原 useSessionStream + useSessionAbort +
  * useSessionBatch + useRunResumeProbe + 内联注入），改为订阅同一
@@ -29,10 +31,10 @@ import {
   ChatStreamMetricsBarLive,
   hasVisibleSettledMetrics,
 } from '../../components/chat/ChatStreamMetricsBarLive';
-import {ChatTranscriptWebView} from '../../components/chat/ChatTranscriptWebView';
+import {ChatConversationWebView} from '../../components/chat/ChatConversationWebView';
 import {showAppToast} from '@/services/app-toast';
 import {chatLinkNotFoundMessage} from '@novel-master/core/chat';
-import type {ChatTranscriptWebViewHandle} from '../../components/chat/ChatTranscriptWebView';
+import type {ChatConversationWebViewHandle} from '../../components/chat/ChatConversationWebView';
 import {useToast} from '../../components/chrome/ToastHost';
 import {toastMessage} from '../../errors/toast-message';
 import {useRuntime} from '../../hooks/useRuntime';
@@ -63,7 +65,7 @@ export function SubagentSessionScreen() {
   const [messages, setMessages] = useState<readonly ChatMessage[]>([]);
   const [initialLoading, setInitialLoading] = useState(true);
   const [richTextEnabled, setRichTextEnabled] = useState(false);
-  const transcriptWebRef = useRef<ChatTranscriptWebViewHandle>(null);
+  const transcriptWebRef = useRef<ChatConversationWebViewHandle>(null);
 
   // ===== 单元投影订阅（与 ChatTabProvider 同构：subscribe + sync） =====
   const [unitView, setUnitView] = useState<SessionStreamUnitView | null>(() =>
@@ -294,8 +296,9 @@ export function SubagentSessionScreen() {
           <Text style={{color: tokens.textSecondary}}>子会话暂无消息</Text>
         </View>
       ) : (
-        <ChatTranscriptWebView
+        <ChatConversationWebView
           ref={transcriptWebRef}
+          transcriptOnly
           sessionKey={sessionKey}
           messages={displayMessages}
           flags={flags}

@@ -109,3 +109,13 @@ const styles = StyleSheet.create({
   },
   label: {fontSize: 12, flexShrink: 1, maxWidth: 160},
 });
+
+/**
+ * 样式表对外只读出口（web 侧样式相等断言的真源入口）。
+ *
+ * chips 段 CSS（`src/web/chat-conversation/styles/chat-conversation.css` 的
+ * `.chips__row` / `.chip` / `.chip__label`）的数值全部来自本表；断言从 web 侧的
+ * `dock-style-reference.ts` 转出这里取，避免在测试里手抄一份常量——手抄的那份一旦
+ * 与组件分叉，样式相等断言就退化成「CSS vs 硬编码」，恒真且永不报警。
+ */
+export const attachmentDraftChipsStyles = styles;

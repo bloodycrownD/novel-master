@@ -23,6 +23,7 @@ import {
   type ChatAgentMeta,
 } from '@/services/chat-agent-meta';
 import {
+  cancelPreciseUpgradeDelay,
   isChatTokenPreciseWarmInflight,
   loadChatPromptTokenLabelResilient,
 } from '@/services/chat-prompt-tokens.service';
@@ -76,6 +77,16 @@ export function useChatTabScope({
   const [sessionListPanel, setSessionListPanel] =
     useState<SessionListPanel>('sessions');
   const [chatSubview, setChatSubview] = useState<ChatSubview>('sessions');
+  // chatSubview 的同步镜像：chip 精确升级轮的弃权判据要在异步链里同步读
+  // 「视图是否还在对话」——state 本身闭包老化，ref 永远最新。
+  // 赋值放 useLayoutEffect 而非 render body（cr2-B-1）：并发根下被丢弃的
+  // 渲染同样会执行 render body 的赋值，ref 可能停在从未提交过的值上；误判
+  // 方向对称，其中「误判在 conversation」恰好让 2.2s 计数照跑。同文件
+  // tokenLabelSessionRef 是同一口径的先例。
+  const chatSubviewRef = useRef<ChatSubview>(chatSubview);
+  useLayoutEffect(() => {
+    chatSubviewRef.current = chatSubview;
+  }, [chatSubview]);
   const [conversationPanel, setConversationPanel] =
     useState<ConversationPanel>('chat');
   const [projectDrawerOpen, setProjectDrawerOpen] = useState(false);
@@ -99,6 +110,12 @@ export function useChatTabScope({
   // 与 desktop service 层同款语义：窗口内触发重置计时共享同一次执行；
   // 在途时新触发复用在途并安排追赶轮（最后一次触发必产生一次计算）。
   const CHAT_TOKEN_LABEL_DEBOUNCE_MS = 300;
+  // 进会话首刷的长窗口（2026-10-01 切会话后卡顿复现）：首帧轮的整串装配
+  // +读口 build/resolve 实测 0.2~1.2s（冷缓存更糟），300ms 就开跑恰好盖住
+  // 「切会话立刻交互/立刻退出」的窗口。新会话首刷（hasLabel=false）错峰到
+  // 本窗口再跑——chip 晚约 1s 亮，换进会话交互不被重活堵；会话内后续刷新
+  // （已有标签）保持 300ms 响应不受影响。
+  const CHAT_TOKEN_LABEL_FIRST_DEBOUNCE_MS = 1200;
 
   // 升级回调的会话身份闸（cr-fix-spec-r2 s2/B-1 场景①）：记录最近一次
   // 刷新所属会话，升级回调写回前比对——跨会话切换后，旧会话在途升级的
@@ -131,17 +148,28 @@ export function useChatTabScope({
   // - deferred：trailing 计时挂起中，窗口内所有 caller 共享「这一次执行」；
   // - running：在途执行链（到期执行若上一轮仍在途则挂其后串行，绝不并发）；
   // - hasLabel：本会话是否已刷出过非空标签——run 在途冻结的「有东西可看」
-  //   判据（声明在 runChatTokenLabelRefresh 之前，供其在执行时读写）。
+  //   判据（声明在 runChatTokenLabelRefresh 之前，供其在执行时读写）；
+  // - sessionId：挂起计时器**那一轮**的会话身份（scheduleTrailing 里与 timer
+  //   同处写入）——换会话/卸载时按它收口精确升级的延迟计时，cancel 打的是
+  //   发起轮而非当前轮。其余消费点不读它。
   const chatTokenLabelDebounceRef = useRef<{
     key: string;
     hasLabel: boolean;
+    sessionId: string | null;
     timer: ReturnType<typeof setTimeout> | null;
     deferred: {
       promise: Promise<void>;
       resolve: (value: Promise<void>) => void;
     } | null;
     running: Promise<void> | null;
-  }>({key: '', hasLabel: false, timer: null, deferred: null, running: null});
+  }>({
+    key: '',
+    hasLabel: false,
+    sessionId: null,
+    timer: null,
+    deferred: null,
+    running: null,
+  });
 
   const runChatTokenLabelRefresh = useCallback(async () => {
     // meta 未加载（undefined）时保持未加载态：partial 更新不能凭空造出
@@ -194,8 +222,24 @@ export function useChatTabScope({
           // 返回空串，把 JS 线程与 SQLite 让给发送链（曾把 POST 从 +1.2s 拖到
           // +19.6s）。只在已有标签可保时弃权：切进运行中会话的首帧照算。
           shouldBail: () =>
-            chatTokenLabelDebounceRef.current.hasLabel &&
-            runtime.abortRegistry.has(sessionId),
+            // 视图已切走（2026-10-01 切会话后卡顿）：这轮刷新没有观众——
+            // 弃权空串保旧标签，重进会话时触发链会重新算。不受 hasLabel
+            // 限制：新会话首刷撞上退出同样该弃（chip 空白到下次进入，可接受）。
+            chatSubviewRef.current !== 'conversation' ||
+            (chatTokenLabelDebounceRef.current.hasLabel &&
+              runtime.abortRegistry.has(sessionId)),
+          // 精确升级轮的追加弃权（2026-10-01 侧滑退出被堵 2.2s 实锤）：升级是
+          // 秒级后台重活，视图已切走（退出/切会话）就别再跑了——它占着 JS
+          // 线程与原生模块队列，正是堵返回键的那只手。
+          //
+          // 双条件（cr2-E-2）：只看视图不够——会话 A→B 切换时 chatSubview 仍是
+          // conversation，A 的挂起升级会越窗照跑（build 0.7~1.2s + 整串计数，
+          // 合计 2.2s 堵 JS），恰好落在本轮要消灭的「切会话后卡」窗口；快速
+          // 进出同一会话同理。这里闭包里的 sessionId 是**发起这一轮**的身份，
+          // 与 tokenLabelSessionRef（当前展示身份）不等即说明已经切走。
+          shouldBailPrecise: () =>
+            chatSubviewRef.current !== 'conversation' ||
+            tokenLabelSessionRef.current !== sessionId,
         },
       );
       // 空串 = 中途弃权：保留旧标签，不写 meta、不置 hasLabel。
@@ -230,6 +274,13 @@ export function useChatTabScope({
     const slot = chatTokenLabelDebounceRef.current;
     if (slot.key !== key) {
       // 换会话：旧 key 的计时作废（在途一轮让它自然落定，不再挂新 caller）。
+      //
+      // 顺带收口旧会话挂起的**精确升级延迟计时**（cr2-E-2）：那一轮已经没人
+      // 看得上了，越窗后跑起来正是堵返回键的那只手。cancel 的目标必须是
+      // 「发起那一轮」的会话身份，所以在 slot.key 赋值之前读 slot.sessionId
+      // ——写在赋值之后读到的是新会话，cancel 会打偏。
+      const stale = slot.sessionId;
+      cancelPreciseUpgradeDelay(stale);
       if (slot.timer != null) {
         clearTimeout(slot.timer);
         slot.timer = null;
@@ -237,6 +288,7 @@ export function useChatTabScope({
       slot.key = key;
       // 换会话即换「有东西可看」判据：新会话还没刷出过标签，冻结不生效。
       slot.hasLabel = false;
+      slot.sessionId = null;
       slot.deferred = null;
       slot.running = null;
     }
@@ -245,6 +297,13 @@ export function useChatTabScope({
         clearTimeout(slot.timer);
       }
       const timerKey = key;
+      // 首刷长窗错峰（见 CHAT_TOKEN_LABEL_FIRST_DEBOUNCE_MS 注释）：窗口按
+      // 「本会话是否已刷出过标签」选档，新会话首刷让路、后续刷新保持响应。
+      const win = slot.hasLabel
+        ? CHAT_TOKEN_LABEL_DEBOUNCE_MS
+        : CHAT_TOKEN_LABEL_FIRST_DEBOUNCE_MS;
+      // 与本轮 timer 同生命周期记下会话身份：换会话/卸载时按它收口升级延迟。
+      slot.sessionId = sessionId ?? null;
       slot.timer = setTimeout(() => {
         slot.timer = null;
         // 计时期间又切了会话（无新触发清理）：本轮按旧 key 作废。
@@ -270,7 +329,7 @@ export function useChatTabScope({
         if (deferred != null) {
           deferred.resolve(run);
         }
-      }, CHAT_TOKEN_LABEL_DEBOUNCE_MS);
+      }, win);
     };
     if (slot.running != null) {
       // 在途复用：并发触发直接挂正在跑的一轮；追赶轮保证新触发最终被计算。
@@ -288,7 +347,9 @@ export function useChatTabScope({
     return slot.deferred.promise;
   }, [projectId, sessionId, runChatTokenLabelRefresh]);
 
-  // 卸载清理：别让挂起的防抖计时在组件卸载后再触发 setState。
+  // 卸载清理：别让挂起的防抖计时在组件卸载后再触发 setState；同时收口它那一轮
+  // 已挂起的精确升级延迟计时（组件已死，没人消费升级标签，秒级重活纯浪费）。
+  // 保持 [] 依赖 + 经 ref 读：ref 永远是最新一轮的会话身份，天然正确。
   useEffect(
     () => () => {
       const slot = chatTokenLabelDebounceRef.current;
@@ -296,6 +357,7 @@ export function useChatTabScope({
         clearTimeout(slot.timer);
         slot.timer = null;
       }
+      cancelPreciseUpgradeDelay(slot.sessionId);
     },
     [],
   );
@@ -436,10 +498,9 @@ export function useChatTabScope({
 
   const currentSession = sessions.find(s => s.id === sessionId);
 
-  const backFromConversation = useCallback(
-    () => setChatSubview('sessions'),
-    [],
-  );
+  const backFromConversation = useCallback(() => {
+    setChatSubview('sessions');
+  }, []);
 
   const handleCreateProject = useCallback(
     async (name: string) => {

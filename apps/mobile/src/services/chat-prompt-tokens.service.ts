@@ -229,6 +229,62 @@ async function loadChatTokenLabelWithFlag(
 /** 后台精确升级在途标记（按 sessionId）：避免事件风暴下堆叠重复整串计数。 */
 const preciseUpgradeInflight = new Set<string>();
 
+/**
+ * 精确升级的启动延迟（2026-10-01 真机实锤「进大会话立刻侧滑退出被堵 2.2s」）：
+ * 升级轮的整串装配 + 家族真分词器计数是秒级重活，与 JS 线程、原生模块队列、
+ * 单条 SQLite 连接全部共享——首帧完成后立刻启动，恰好盖住「进会话就开始交互」
+ * 的窗口（立刻浏览/立刻退出都被它堵）。延后启动把首屏黄金窗口让给交互；延迟
+ * 到期时先查弃权判据（视图已切走/run 在途即不跑），停留超过本窗口的用户才
+ * 真正触发这轮计数。
+ *
+ * 导出：测试的「还原默认值 / 推进假计时器」一律引用本常量——生产延迟一调，
+ * 测试里的字面量会静默变成错值（cr2-B-2）。
+ */
+export const PRECISE_UPGRADE_START_DELAY_MS = 2500;
+let preciseUpgradeStartDelayMs = PRECISE_UPGRADE_START_DELAY_MS;
+
+/**
+ * 测试口：置 0 = 立即启动（不经 setTimeout，微任务节奏即可断言升级轮，
+ * 与延迟引入前的旧实现时序一致）——存量两阶段用例靠它保持零改动；
+ * 新增「延迟启动」用例还原默认值后用假计时器推进。
+ */
+export function __setPreciseUpgradeDelayForTests(ms: number): void {
+  preciseUpgradeStartDelayMs = ms;
+}
+
+/** 升级轮启动延迟计时器（按 sessionId）：由 {@link cancelPreciseUpgradeDelay} 收口。 */
+const preciseUpgradeDelayTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+/**
+ * 收口某会话**仍挂起**的精确升级延迟计时（换会话 / hook 卸载时调用）。
+ *
+ * ⚠ 语义硬约束（cr2-E-2）：只清 timer 是不够的，**必须连 inflight 与补跑槽一起
+ * 清**。`runPreciseUpgrade` 的 finally 是 `preciseUpgradeInflight` /
+ * `preciseUpgradeQueued` 的唯一清理点；延迟计时一旦被清，那轮 run 永不执行、
+ * finally 永不跑，于是该会话的精确升级被**永久楔死在估算档**（后续所有升级请求
+ * 只往补跑槽里排队、无人排空）——比原 bug 更隐蔽的回归。
+ *
+ * 「仅当计时器仍挂起才收口」：timer == null 说明这一轮已经起跑（延迟已到期、
+ * 回调已把 timer 摘掉），此时动 inflight 会踩掉在途轮自己的 finally，交给它。
+ * 会话 id 传 null/undefined 同理无事可做（该会话没有挂起计时）。
+ */
+export function cancelPreciseUpgradeDelay(
+  sessionId: string | null | undefined,
+): void {
+  if (sessionId == null) {
+    return;
+  }
+  const timer = preciseUpgradeDelayTimers.get(sessionId);
+  if (timer == null) {
+    // 已起跑：在途/补跑槽的生命周期归 runPreciseUpgrade 的 finally 管。
+    return;
+  }
+  clearTimeout(timer);
+  preciseUpgradeDelayTimers.delete(sessionId);
+  preciseUpgradeInflight.delete(sessionId);
+  preciseUpgradeQueued.delete(sessionId);
+}
+
 /** 一次后台精确升级请求：轮次起步时所需的全部上下文。 */
 type PreciseUpgradeRequest = {
   readonly runtime: MobileNovelMasterRuntime;
@@ -270,40 +326,77 @@ function startPreciseUpgrade(
   sessionId: string,
   request: PreciseUpgradeRequest,
 ): void {
+  // 在途标记在延迟窗口起就算数：延迟期间再来的升级请求必须走补跑槽，
+  // 否则去重失效、同会话两轮整串计数并发。
+  //
+  // 入口先收口上一轮的挂起计时（cr2-E-2）：本轮把它顶替了，旧 timer 的回调
+  // 不会再跑，于是它的 finally 也不会来摘 inflight——不在这儿代摘，该会话的
+  // inflight 标记会一直挂着，后续请求全部被挡进补跑槽、无人排空（楔死在估算
+  // 档）。旧代码在这里读 `prev` 却写在 setTimeout 之后，清的是刚建好的本轮
+  // 计时器（死代码，且真把本轮升级自己掐了）。
+  const prevTimer = preciseUpgradeDelayTimers.get(sessionId);
+  if (prevTimer != null) {
+    clearTimeout(prevTimer);
+    preciseUpgradeDelayTimers.delete(sessionId);
+    preciseUpgradeInflight.delete(sessionId);
+  }
   preciseUpgradeInflight.add(sessionId);
-  void (async () => {
-    // 代数在轮次起步时取（同步段）：首帧轮取到发起它的那一代，补跑轮取到最新一代。
-    const gen = sessionRefreshGen.get(sessionId) ?? 0;
-    try {
-      const precise = await loadChatTokenLabelWithFlag(
-        request.runtime,
-        request.scope,
-        false,
-        request.shouldBail,
-      );
-      if (
-        // 空串 = 中途弃权（run 已起步）：没有新读数可回调，也不能当失败留痕。
-        precise.label !== '' &&
-        sessionRefreshGen.get(sessionId) === gen &&
-        precise.label !== request.baselineLabel
-      ) {
-        request.onPreciseUpgrade(precise.label);
-      }
-    } catch (error) {
-      // 升级失败保持首帧估算标签；下次刷新/api 真值自愈。开发期留痕
-      // （cr-fix-spec-r2 full/I-1）：静默失败会让 chip 永停估算档且无从排查。
+  if (preciseUpgradeStartDelayMs <= 0) {
+    void runPreciseUpgrade(sessionId, request);
+    return;
+  }
+  const timer = setTimeout(() => {
+    preciseUpgradeDelayTimers.delete(sessionId);
+    void runPreciseUpgrade(sessionId, request);
+  }, preciseUpgradeStartDelayMs);
+  preciseUpgradeDelayTimers.set(sessionId, timer);
+}
+
+/**
+ * 升级轮本体（延迟到期后跑）：起步先查弃权（延迟窗口里视图已切走/run 已
+ * 起步的话，这轮重活一行都不跑），其余语义与原实现一致（新鲜度闸 + 补跑槽）。
+ */
+async function runPreciseUpgrade(
+  sessionId: string,
+  request: PreciseUpgradeRequest,
+): Promise<void> {
+  // 代数在轮次起步时取（同步段）：首帧轮取到发起它的那一代，补跑轮取到最新一代。
+  const gen = sessionRefreshGen.get(sessionId) ?? 0;
+  try {
+    if (request.shouldBail?.() === true) {
       if (__DEV__) {
-        console.warn('[chat] prompt token precise upgrade failed', error);
+        console.log('[nm-chip] precise upgrade bailed before start');
       }
-    } finally {
-      preciseUpgradeInflight.delete(sessionId);
-      const queued = preciseUpgradeQueued.get(sessionId);
-      if (queued != null) {
-        preciseUpgradeQueued.delete(sessionId);
-        startPreciseUpgrade(sessionId, queued);
-      }
+      return;
     }
-  })();
+    const precise = await loadChatTokenLabelWithFlag(
+      request.runtime,
+      request.scope,
+      false,
+      request.shouldBail,
+    );
+    if (
+      // 空串 = 中途弃权（run 已起步）：没有新读数可回调，也不能当失败留痕。
+      precise.label !== '' &&
+      sessionRefreshGen.get(sessionId) === gen &&
+      precise.label !== request.baselineLabel
+    ) {
+      request.onPreciseUpgrade(precise.label);
+    }
+  } catch (error) {
+    // 升级失败保持首帧估算标签；下次刷新/api 真值自愈。开发期留痕
+    // （cr-fix-spec-r2 full/I-1）：静默失败会让 chip 永停估算档且无从排查。
+    if (__DEV__) {
+      console.warn('[chat] prompt token precise upgrade failed', error);
+    }
+  } finally {
+    preciseUpgradeInflight.delete(sessionId);
+    const queued = preciseUpgradeQueued.get(sessionId);
+    if (queued != null) {
+      preciseUpgradeQueued.delete(sessionId);
+      startPreciseUpgrade(sessionId, queued);
+    }
+  }
 }
 
 /**
@@ -319,7 +412,16 @@ export async function loadChatPromptTokenLabelResilient(
   runtime: MobileNovelMasterRuntime,
   scope: SessionPromptScope,
   onPreciseUpgrade?: (label: string) => void,
-  options?: {readonly shouldBail?: () => boolean},
+  options?: {
+    readonly shouldBail?: () => boolean;
+    /**
+     * 精确升级轮的追加弃权判据（2026-10-01 侧滑退出被堵实锤）：升级是秒级
+     * 后台重活，视图已切走（退出会话/切到别的会话）时继续跑纯属浪费，且它
+     * 占着 JS 线程与原生模块队列，正是堵返回键的那只手。首帧轮不受此判据
+     * 影响——首帧是 chip 显示的必要首拍且轻（估算档）。
+     */
+    readonly shouldBailPrecise?: () => boolean;
+  },
 ): Promise<string> {
   let first: {label: string; upgradeWorthy: boolean};
   try {
@@ -358,9 +460,12 @@ export async function loadChatPromptTokenLabelResilient(
       scope,
       baselineLabel: first.label,
       onPreciseUpgrade,
-      // 升级轮中途弃权只判 run 在途（不判 hasLabel——那是 hook 的展示层判据，
-      // 升级无论有没有旧标签都不该与发送链竞争）。
-      shouldBail: () => runtime.abortRegistry.has(scope.sessionId),
+      // 升级轮中途弃权判 run 在途（不判 hasLabel——那是 hook 的展示层判据，
+      // 升级无论有没有旧标签都不该与发送链竞争），叠加调用方的追加判据
+      // （视图切走：升级不该与退出竞争，见 options.shouldBailPrecise 注释）。
+      shouldBail: () =>
+        runtime.abortRegistry.has(scope.sessionId) ||
+        options?.shouldBailPrecise?.() === true,
     };
     if (preciseUpgradeInflight.has(sessionId)) {
       // 在途轮的去重语义不变（不并发堆叠整串计数）：本次首帧的升级请求排队，

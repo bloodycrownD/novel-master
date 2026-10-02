@@ -7,7 +7,7 @@
  */
 import {inferThemeModeFromBg} from './theme-mode';
 
-/** 宿主下发的主题 token 超集（chat 域含 danger；其余域未消费亦容忍）。 */
+/** 宿主下发的主题 token 超集（chat 域含 danger/selection；其余域未消费亦容忍）。 */
 export type HostTheme = {
   background?: string;
   text?: string;
@@ -20,6 +20,13 @@ export type HostTheme = {
    * 可选：chat-transcript / rich-document 不消费，缺省不写入，由 CSS 兜底。
    */
   primaryMuted?: string;
+  /**
+   * 文本选区底色（`::selection`）。chat-conversation 合成包把它并入本超集
+   * （9 键超集 = transcript 7 ∪ composer 6 去重），否则 `::selection` 会
+   * 回落 `--primary-muted` 变色。composer-input 旧包的 `applyTheme` 仍直写
+   * 并行分支（旧链不动）。
+   */
+  selection?: string;
   danger?: string;
   surface?: string;
   borderLight?: string;
@@ -32,10 +39,27 @@ const THEME_VARS: Array<{key: keyof HostTheme; cssVar: string}> = [
   {key: 'textSecondary', cssVar: '--text-secondary'},
   {key: 'primary', cssVar: '--primary'},
   {key: 'primaryMuted', cssVar: '--primary-muted'},
+  {key: 'selection', cssVar: '--selection'},
   {key: 'danger', cssVar: '--danger'},
   {key: 'surface', cssVar: '--surface'},
   {key: 'borderLight', cssVar: '--border'},
 ];
+
+/**
+ * 主题 token 键集（**由 `THEME_VARS` 派生，全仓唯一真源**）。
+ *
+ * 合成包 chat-conversation 的两处「9 键超集」清单——web 侧
+ * `chat-conversation/webview/model.ts` 的 `CONVERSATION_THEME_KEYS` 与 RN 侧
+ * `components/chat/ChatConversationBridge.ts` 的同名常量——都直接 import 本导出，
+ * 不再各抄一份。原先三份手抄之间零约束，宿主加第 10 个 token 时三处全不红、
+ * 只在某天 `::selection` 那样漏写才由 UI 变色暴露；现在改 `THEME_VARS` 一处即全跟随。
+ *
+ * 顺序即 `THEME_VARS` 的写入顺序（条件式写入按此表顺序，见 `applyHostTheme`），
+ * 两个消费端的双端同序断言依赖这一点。
+ */
+export const HOST_THEME_KEYS: readonly (keyof HostTheme)[] = THEME_VARS.map(
+  entry => entry.key,
+);
 
 export type ApplyHostThemeOptions = {
   /** 字段存在时额外同步写入的派生变量（如 code-editor 的 --editor-*）。 */

@@ -7,7 +7,11 @@ import path from 'node:path';
 const distRoot = path.join(__dirname, '../../webview-dist');
 
 export function readWebViewDistFile(
-  pkg: 'chat-transcript' | 'rich-document',
+  pkg:
+    | 'rich-document'
+    | 'code-editor'
+    | 'composer-input'
+    | 'chat-conversation',
   file: 'index.html' | 'app.js' | 'app.css',
 ): string {
   const abs = path.join(distRoot, pkg, file);

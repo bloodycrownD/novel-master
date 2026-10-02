@@ -1,4 +1,37 @@
-import {switchToNative} from '../helpers/context';
+import {
+  switchToNative,
+  switchToSessionListView,
+} from '../helpers/context';
+import {alertPage} from './alert.page';
+import {chatTranscriptPage} from './chat-transcript.page';
+
+/**
+ * 单次 e2e 进程的隔离后缀。
+ *
+ * noReset 之后（协作红线：任何设备都禁止卸载/清数据，应用数据跨 spec 残留），
+ * 「每条 spec 重装清数据」这条老隔离手段没了——改由 spec **自建自清**。
+ * 自建的项目名必须每轮唯一，否则第二次跑会命中上一轮遗留的同名项目，数据越滚越脏。
+ */
+const RUN_SUFFIX = `${Date.now().toString(36).slice(-5)}${Math.floor(
+  Math.random() * 36,
+).toString(36)}`;
+
+/** 给 spec 的项目基名加本轮唯一后缀。 */
+export function isolatedProjectName(base: string): string {
+  return `${base}-${RUN_SUFFIX}`;
+}
+
+/**
+ * 新建项目后自动生成的会话标题。
+ *
+ * `nextDefaultSessionTitle`（`utils/session-default-title.ts`）按项目内已用编号取下一个，
+ * 所以**全新项目**里的第一个会话固定是「新会话1」。旧页对象用
+ * `textMatches("会话.*")` 去找最新会话——那个模式连原生 SegmentedControl 上的「会话」
+ * 标签和（当年的）ManageHeader 标题都会命中，在多会话场景下点到的未必是目标行。
+ * 会话列表搬进 web 之后更不能用它：`session-row__title` 是 web 文本，
+ * 原生 `UiSelector().text()` 走的是 a11y 树，根本看不见它。
+ */
+const NEW_SESSION_TITLE = '新会话1';
 
 /**
  * 首屏「版本检查」弹窗的关闭候选（「今日不再提醒」优先，避免误触「去下载」）。
@@ -7,12 +40,18 @@ import {switchToNative} from '../helpers/context';
  * `resource-id="update-check-result-snooze"` + `content-desc="今日不再提醒"`），
  * 而 Appium 的 `~id`（accessibility id）在 Android 上优先按 content-desc 匹配——
  * 只写 testID 可能查不到，所以显式 `resourceId` 打头、文案收尾。
+ *
+ * 末位的「取消」不是版本检查弹窗的按钮，而是 noReset 残留的**会话/项目 ⋮ 菜单**
+ * 兜底（2026-10-01 全量实跑实锤：前一条 spec 自清失败会把菜单留在屏上，它同原生
+ * Modal 一样抢走整棵 a11y 树，后续所有 spec 的 before 全卡 90s）。菜单里唯一安全
+ * 的动作就是取消——排最后，只在版本检查候选全部落空时才轮到它。
  */
 const UPDATE_MODAL_DISMISS_SELECTORS = [
   'android=new UiSelector().resourceId("update-check-result-snooze")',
   '~update-check-result-snooze',
   'android=new UiSelector().text("今日不再提醒")',
   'android=new UiSelector().text("关闭")',
+  'android=new UiSelector().text("取消")',
 ] as const;
 
 /**
@@ -25,6 +64,24 @@ const UPDATE_MODAL_DISMISS_SELECTORS = [
  */
 const byTestId = (testId: string): string =>
   `android=new UiSelector().resourceId("${testId}")`;
+
+/**
+ * 抽屉全屏遮罩的热区判定与落点比例（r6-G2：原来是裸魔法数 0.8 / 0.81 / 0.09）。
+ *
+ * 背景见 {@link AppPage.closeProjectDrawerIfOpen}：全屏遮罩的中心被抽屉面板消费，
+ * elementClick 点不动，只能改点「面板右界之外、header 之下的空白」。
+ *
+ * ⚠️ **MASK_TAP_Y_RATIO 与抽屉 header 高度强耦合**：y 取的是 header 下沿之下那一小段
+ * 空白，抽屉 header 一改高（真源是 `src/components/chrome/AppHeader.tsx` 的
+ * `APP_HEADER_CONTENT_HEIGHT`，当前 58），0.09 就会落进 header / 面板内容区，
+ * 点击重新被面板吃掉，抽屉关不掉。改 header 高度时**必须同步复核 MASK_TAP_Y_RATIO**。
+ *
+ * MASK_TAP_X_RATIO 同理要留在「面板右界之外、会话行 ⋮ 菜单列（x≈0.88 屏宽起）之左」的
+ * 窄缝里——面板宽度或 ⋮ 菜单列位置变了同样要复核。
+ */
+const MASK_FULLSCREEN_RATIO = 0.8;
+const MASK_TAP_X_RATIO = 0.81;
+const MASK_TAP_Y_RATIO = 0.09;
 
 /** App shell: project/session bootstrap and tab navigation. */
 export class AppPage {
@@ -77,10 +134,9 @@ export class AppPage {
     let chatVisible = false;
     while (Date.now() < deadline) {
       await this.dismissUpdateCheckModalOnce();
+      await this.dismissLogboxIfPresent();
       const chatTab = await $('~对话');
-      chatVisible = await chatTab
-        .isDisplayed()
-        .catch(() => false);
+      chatVisible = await chatTab.isDisplayed().catch(() => false);
       if (chatVisible) {
         break;
       }
@@ -110,7 +166,31 @@ export class AppPage {
     for (const selector of ['~关闭项目列表', '~关闭']) {
       const close = await $(selector);
       if (await close.isExisting()) {
-        await close.click();
+        // 「关闭」收敛后挂在**全屏遮罩**上（2026-10-01 e2e 实跑实锤）：elementClick
+        // 点元素中心，而全屏遮罩的中心落在抽屉面板内容上，点击被面板消费、遮罩的
+        // onPress 不触发——抽屉永远关不掉（T-CU12 冒烟失败根因）。命中全屏元素
+        // （宽 ≥ 80% 屏宽）时改点右侧热区（见 MASK_TAP_X_RATIO / MASK_TAP_Y_RATIO）。
+        //
+        // **失败诊断路径**：热区点空了抽屉还是关不掉时，别急着调比例数——先 dump 抽屉
+        // UI（`adb shell uiautomator dump` 或 `browser.saveScreenshot`）看遮罩元素的
+        // bounds 与抽屉面板 bounds，确认 (a) 遮罩是否真的全屏、(b) 热区落点有没有被
+        // 面板 / header 盖住。两组 bounds 一比就知道该改 MASK_TAP_X_RATIO 还是
+        // MASK_TAP_Y_RATIO（或 APP_HEADER_CONTENT_HEIGHT 变了）。
+        const size = await close.getSize();
+        const win = await browser.getWindowSize();
+        if (size.width >= Math.round(win.width * MASK_FULLSCREEN_RATIO)) {
+          await browser
+            .action('pointer', {parameters: {pointerType: 'touch'}})
+            .move({
+              x: Math.round(win.width * MASK_TAP_X_RATIO),
+              y: Math.round(win.height * MASK_TAP_Y_RATIO),
+            })
+            .down()
+            .up()
+            .perform();
+        } else {
+          await close.click();
+        }
         await browser.pause(300);
         return;
       }
@@ -138,6 +218,15 @@ export class AppPage {
   async ensureProject(name = 'E2E Project'): Promise<void> {
     await this.waitForLaunch();
     await this.openProjectDrawer();
+    // 等抽屉列表渲染稳定再查 existing：isExisting 是一次性查询，抽屉刚开时
+    // 列表异步加载没完成会误判「项目不存在」→ 走 createProject 建出**同名
+    // 新项目**（2026-10-02 实跑实锤：竞态窗口建出两个假「E2E Tool Turn」
+    // 排在真身前面，后续轮全切到空项目、fixture 判定永远 missing）。
+    // 以「任一项目的 ⋮ 菜单（project-menu-*）出现」为列表就绪判据。
+    const anyMenu = await $(
+      'android=new UiSelector().resourceIdMatches("project-menu-.*")',
+    );
+    await anyMenu.waitForDisplayed({timeout: 10000});
     const existing = await $(`android=new UiSelector().text("${name}")`);
     if (await existing.isExisting()) {
       await existing.click();
@@ -148,23 +237,128 @@ export class AppPage {
     await this.createProject(name);
   }
 
-  async createSession(): Promise<void> {
+  /**
+   * dev 下 console.error 会弹 LogBox 错误横幅（无模型环境 run 失败的
+   * `[session-stream-unit-manager] run failed` 就是必弹源），**长挂不自动
+   * 消失**且是原生 Modal 层——盖住整棵 a11y 树，tab-chat/会话行全部查不到
+   * （2026-10-02 实跑实锤：waitForConversationEntered 等 tab-chat 假超时）。
+   * 点横幅展开 LogBox 后 dismiss（找不到按钮就用 BACK 兜底）。
+   */
+  async dismissLogboxIfPresent(): Promise<void> {
     await switchToNative();
-    const createSession = await $('android=new UiSelector().text("新建会话")');
-    await createSession.waitForDisplayed({timeout: 10000});
-    await createSession.click();
+    const bar = await $(
+      'android=new UiSelector().descriptionContains("Open debugger to view warnings")',
+    );
+    if (!(await bar.isExisting())) {
+      return;
+    }
+    await bar.click();
     await browser.pause(800);
+    const dismiss = await $('android=new UiSelector().textContains("ismiss")');
+    if (await dismiss.isExisting()) {
+      await dismiss.click();
+    } else {
+      await driver.back();
+    }
+    await browser.pause(500);
   }
 
-  async openLatestSession(): Promise<void> {
-    await switchToNative();
-    const sessionTitle = await $(
-      'android=new UiSelector().textMatches("会话.*")',
+  /**
+   * 新建会话（点会话列表头的「新建会话」）。
+   *
+   * chat-webview-unify 第二阶段之后，会话列表整体搬进了合成包文档
+   * （`src/web/chat-conversation/webview/session-list.ts`），RN 侧已经没有会话行了——
+   * 旧写法「切 NATIVE 按 `text("新建会话")` 找原生按钮」在真机上必然查不到。
+   *
+   * 走 web 的两道前置：
+   * 1. {@link switchToSessionListView} 切到那个唯一 WebView **并且**等 `data-view=list`
+   *    （冷启动首帧是 conversation 视图，DOM 在但用户看不见）；
+   * 2. 点 `[data-testid="session-list-create"]`。
+   *
+   * 点击后等新行出现（会话行由 `sessionList` 下行渲染，DOM 节点逐条重建），而不是
+   * 死等固定时长。
+   */
+  async createSession(): Promise<void> {
+    // 冷启动后 WebView 挂载晚于原生首屏（dev bundle 20MB+ 每次启动重拉），
+    // context 出现的时间波动大——预算放宽到 40s（一半给 context、一半给
+    // data-view），20s 在模拟器负载上来后实测会假超时。
+    await switchToSessionListView(40000);
+    const create = await $('[data-testid="session-list-create"]');
+    await create.waitForDisplayed({timeout: 10000});
+    // 不断言「行数比点击前多」：项目切换（launchFresh）的列表重推是异步的，
+    // 点击前的任何基线读数都可能取到中间态（fixture 场景两轮实锤——before
+    // 数到旧项目残留行，点击后新项目 1 行，`1 > before` 误判失败）。本方法的
+    // 唯一调用方是 launchFresh（全新空项目），改为断言**新会话行出现**：
+    // 新项目的第一个会话固定叫「新会话1」，标题存在性不依赖基线计数。
+    await create.click();
+    const newRow = await $(
+      `//div[@data-testid="session-row"]//div[contains(@class,"session-row__title") and normalize-space(text())="${NEW_SESSION_TITLE}"]`,
     );
-    await sessionTitle.waitForDisplayed({timeout: 10000});
+    await newRow.waitForExist({timeout: 10000, timeoutMsg: '新建会话后未见「新会话1」行出现'});
+    await browser.pause(400);
+  }
+
+  /**
+   * 打开新建出来的那个会话（标题固定「新会话1」）。
+   *
+   * @param title 精确标题；不传用 {@link NEW_SESSION_TITLE}（= 全新项目里的第一个会话）
+   */
+  async openLatestSession(title = NEW_SESSION_TITLE): Promise<void> {
+    await switchToSessionListView();
+    // 会话行按 data-session-id + 行内 .session-row__title 定位；web 侧没有
+    // 「按文本找行」的稳定选择器（RN 那套 UiSelector().text() 是原生 a11y 树的事）。
+    // 用 XPath 按行标题精确匹配，比 `.session-row*` 通配稳，也不会误命中
+    // SegmentedControl 上的「会话」标签（那是原生树里的东西，不在 web DOM 内）。
+    const sessionTitle = await $(
+      `//div[@data-testid="session-row"]//div[contains(@class,"session-row__title") and normalize-space(text())="${title}"]`,
+    );
+    // 行短暂消失要重试而不是立刻判死：reloadLists 会整段重渲染 #session-list-rows，
+    // 「waitForExist 刚过、这里 isExisting 又 false」的重渲染窗口实测存在
+    // （2026-10-02 连发轮一轮过一轮挂的根源之一）。
+    let rowExists = false;
+    for (let attempt = 0; attempt < 8 && !(rowExists = await sessionTitle.isExisting()); attempt++) {
+      await browser.pause(500);
+    }
+    if (!rowExists) {
+      throw new Error(
+        `[e2e] 会话行「${title}」不存在（web 列表视图里，重试 4s 后仍无）。` +
+          '确认 createSession() 已成功（需要先选中项目），且项目内没有同名旧会话。',
+      );
+    }
     await sessionTitle.click();
-    const chatTab = await $(byTestId('tab-chat'));
-    await chatTab.waitForDisplayed({timeout: 15000});
+    await this.waitForConversationEntered();
+  }
+
+  /**
+   * 等「已进入会话」（原生 tab-chat 可见）。
+   *
+   * 等待期间可能被**后到的 Modal** 盖住 a11y 树（2026-10-02 实跑实锤）：
+   * 「版本检查」弹窗在 forceAppLaunch 后数十秒才弹（模拟器无外网，网络超时
+   * 晚于主界面就绪），项目抽屉也可能从更早的步骤残留——两者都是原生 Modal，
+   * 开着时整棵树只剩 Modal 内容、tab-chat 永远查不到（与 waitForLaunch 的
+   * 弹窗互为同因）。所以这里做互查循环（waitForLaunch 同款模式）：每轮先
+   * 点掉弹窗、再关抽屉、后查 tab-chat，两种 Modal 都能自愈——单纯
+   * waitForDisplayed 会在「弹窗晚到」时死等 15s 假失败。
+   */
+  private async waitForConversationEntered(timeoutMs = 20000): Promise<void> {
+    await switchToNative();
+    const deadline = Date.now() + timeoutMs;
+    let tabVisible = false;
+    while (Date.now() < deadline) {
+      await this.dismissUpdateCheckModalOnce();
+      await this.dismissLogboxIfPresent();
+      await this.closeProjectDrawerIfOpen();
+      const chatTab = await $(byTestId('tab-chat'));
+      tabVisible = await chatTab.isDisplayed().catch(() => false);
+      if (tabVisible) {
+        return;
+      }
+      await browser.pause(1000);
+    }
+    throw new Error(
+      '[e2e] 进入会话后 tab-chat 20s 内未显示：已每秒尝试关闭「版本检查」弹窗与' +
+        '项目抽屉仍未恢复——检查 app 是否卡在别的 Modal 或启动失败。',
+    );
   }
 
   async switchToChatPanel(): Promise<void> {
@@ -207,32 +401,37 @@ export class AppPage {
   }
 
   /**
-   * Ensure a workspace model is selected so ChatComposer hasModel is true.
-   * Opens the in-chat or profile model picker and selects the first saved model.
+   * Ensure a workspace model is selected so the composer dock's hasModel is true.
+   *
+   * 两条探测现在都在 **web DOM** 里（chat-webview-unify 之后输入区整体进了合成包）：
+   * - 「请先选择工作区模型」提示行 = dock 的 `#composer-hint-row`（RN 文本树里已不存在）；
+   * - composer 输入 = 合成包里的 `textarea[data-testid="composer-input"]`
+   *   （RN 容器上那个 `chat-composer-input` testID 随 `ChatComposer` 退役一起删了）。
    */
   async ensureWorkspaceModel(): Promise<void> {
-    await switchToNative();
     await this.switchToChatPanel();
 
-    const needModelHint = await $(
-      'android=new UiSelector().text("请先选择工作区模型")',
+    // 合成包加载窗口（屏上「正在加载输入区…」）：textarea 与 hint-row 都还没
+    // 挂出来，直接探测会把「还在加载」误判成「两者皆无」、走「回列表 → 我的」
+    // 的旧兜底路径（2026-10-02 实跑实锤）。先等二者居一再分流。
+    await browser.waitUntil(
+      async () =>
+        (await chatTranscriptPage.isDockHintRowVisible()) ||
+        (await chatTranscriptPage.composerInputExists()),
+      {
+        timeout: 20000,
+        timeoutMsg: 'composer 区 20s 未就绪（hint-row 与 textarea 都没出现）',
+      },
     );
-    if (await needModelHint.isExisting()) {
-      await needModelHint.click();
+
+    if (await chatTranscriptPage.isDockHintRowVisible()) {
+      // 点提示行 → dockAction.needModel → 宿主打开工作区模型选择器（RN Modal）。
+      await chatTranscriptPage.clickDockHintRow();
       await this.selectFirstWorkspaceModel();
       return;
     }
 
-    // composer 输入探测：testID 现在落在 WebView 容器 View 上（之前是原生 TextInput，
-    // 见 ComposerAtPathInput → ComposerInputWebView）。RN testID 仍落 resource-id，
-    // 容器照样可探。
-    //
-    // 注记（变更 14）：探测语义退化为「存在性」——View 没有 disabled 概念，
-    // isEnabled() 恒 true。若后续要判「可用态」（inputDisabled：无模型 / running /
-    // 末条纯文本），需切到 WEBVIEW context 断言 textarea 的 readOnly，别在本探测上
-    // 加回 enabled 分支。现状该探测仅作存在性用，不扩面。
-    const input = await $(byTestId('chat-composer-input'));
-    if (await input.isExisting()) {
+    if (await chatTranscriptPage.composerInputExists()) {
       return;
     }
 
@@ -248,7 +447,7 @@ export class AppPage {
     await chatMainTab.waitForDisplayed({timeout: 10000});
     await chatMainTab.click();
 
-    const tabChat = await $('~tab-chat');
+    const tabChat = await $(byTestId('tab-chat'));
     if (!(await tabChat.isExisting())) {
       await this.openLatestSession();
     }
@@ -298,13 +497,70 @@ export class AppPage {
     );
   }
 
-  /** Full UI seed: project → session → conversation chat panel. */
-  async launchFresh(projectName = 'E2E Project'): Promise<void> {
+  /**
+   * Full UI seed: 全新项目 → 会话 → 对话页 → 工作区模型。
+   *
+   * 项目名自动加本轮唯一后缀（见 {@link isolatedProjectName}），返回值就是实际项目名——
+   * spec 靠它在自己的 `after` 里调 {@link deleteProjectViaDrawer} 自清。
+   */
+  async launchFresh(projectBaseName = 'E2E'): Promise<string> {
+    const projectName = isolatedProjectName(projectBaseName);
     await this.ensureProject(projectName);
     await this.createSession();
+    // 「新建会话」只**创建+刷列表**，app 停在列表视图（useChatTabScope.
+    // handleCreateSession 不切视图不选会话）；而 tab-chat 在列表视图被
+    // display:none 整行收起（ChatConversationPanel）——等 tab-chat 等不出来，
+    // 正路就是点列表行进会话（openLatestSession），进去后 tab-chat 才显示。
     await this.openLatestSession();
     await this.switchToChatPanel();
     await this.ensureWorkspaceModel();
+    return projectName;
+  }
+
+  /**
+   * 自清：UI 内删除本 spec 建的项目（其下会话与文件一并删除）。
+   *
+   * noReset 之后每条 spec 的隔离靠「自建自清」，这里就是清的那一半：
+   * 抽屉 → 项目行 ⋮ 菜单 → 删除 → 确认框**先读正文里的项目名**再点删除
+   * （红线：不可逆操作禁止盲点确认框）。
+   *
+   * 项目不存在时静默返回——清理是幂等的，spec 挂在 before 里时不该把 after 也带崩。
+   */
+  async deleteProjectViaDrawer(projectName: string): Promise<void> {
+    await switchToNative();
+    await this.leaveConversationIfNeeded().catch(() => undefined);
+    await this.openProjectDrawer();
+
+    const row = await $(`android=new UiSelector().text("${projectName}")`);
+    if (!(await row.isExisting())) {
+      await this.closeProjectDrawerIfOpen();
+      return;
+    }
+    // UiSelector 走 a11y 全树（屏外也命中），但下方的 XPath ⋮ 只搜**可见子树**——
+    // 项目逐轮堆积（noReset，after 失败一轮就多残留一个）后目标行常在屏外，
+    // XPath 直接跑必然 not existing（2026-10-01 e2e 全量实锤）。先把行本身滚进
+    // 可视区，XPath 才有得搜。
+    await row.scrollIntoView();
+
+    // ⋮ 在项目卡片内（ProjectDrawer.tsx 的 `project-menu-${id}` testID 用的 id 是 UI
+    // 内部 id，页对象拿不到，只能按项目名文本反查所在卡片）。`[last()]` 取文档序最
+    // 后一个 ⋮——即名字所在的最内层卡片里的那个，外层祖先 ViewGroup 也会被同一 XPath
+    // 命中，不加限定会点到别的行。
+    const more = await $(
+      `(//android.view.ViewGroup[.//android.widget.TextView[@text="${projectName}"]]` +
+        `//android.widget.TextView[@text="⋮"])[last()]`,
+    );
+    await more.waitForExist({timeout: 10000});
+    await more.waitForDisplayed({timeout: 5000});
+    await more.click();
+
+    const deleteItem = await $('android=new UiSelector().text("删除")');
+    await deleteItem.waitForDisplayed({timeout: 5000});
+    await deleteItem.click();
+
+    // 确认框正文形如「确定删除项目「E2E X-abc12」？将同时移除其下所有会话。」
+    await alertPage.acceptDestructive(`「${projectName}」`, '删除');
+    await this.closeProjectDrawerIfOpen();
   }
 }
 
