@@ -459,7 +459,13 @@ export async function resolveCurrentPromptTokens(
   // 本地分支回落模型自身家族的计数器（fa 路由语义；强制 cl100k 估算档曾于
   // 2026-09-29 试行、真机复验后撤回——见模块头「统计优先」说明）。估读的
   // estimated / counterKind 透传驱动结果（fallback 档如实报 heuristic）。
-  const local = await countPromptLlmInput(params);
+  //
+  // sessionId 一行透传（tokenizer-native-cancel 唯一 core 触点）：读口自带
+  // 会话实参、驱动 params 此前却没有归属信息源，RN 驱动拿不到就生成不出
+  // requestId，取消会静默失效。不新建对象语义——展开原 params 后覆盖
+  // sessionId 一项，调用方显式传的值本就以本读口实参为准（读口签名必带
+  // sessionId，两者冲突时以读口为准才是正确归属）。
+  const local = await countPromptLlmInput({ ...params, sessionId });
   tokenChunkCache.advanceGeneration(sessionId, {
     persist: { sessionKkv },
     realRefresh: true,

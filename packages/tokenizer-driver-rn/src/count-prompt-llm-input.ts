@@ -35,6 +35,7 @@ import {
   countPromptViaNative,
   isNativeTokenizerAvailable,
   type NativeCountResponse,
+  type NativeCountRequest,
 } from "./android-native-bridge.js";
 import {
   getDefaultRnEncoding,
@@ -256,11 +257,54 @@ function mapNativeResult(nativeResult: NativeCountResponse): SerializedCountResu
   };
 }
 
+/**
+ * 取消 requestId 的自增序号（模块级）。requestId 形态 `${sessionId}:${seq}`——
+ * sessionId 段给归属信息源，seq 段保证同会话并发多轮各自唯一（chip 精确轮 +
+ * 压缩预热轮同会话在途是 R6 已知形态，两轮的 requestId 不能撞）。
+ *
+ * **只在 `sessionId` 在场时消费**：requestId 非空是硬约束（bridgeless 桥对
+ * String 参数传 null/undefined 硬抛，见 spec r2-P0），所以缺 sessionId 的轮
+ * 连序号都不递增，保持「不可取消轮 = 现状三参」这条二分口径干净。
+ */
+let nativeRequestSeq = 0;
+
+/**
+ * 生成取消用 requestId；`sessionId` 缺失时返回 `undefined`
+ * （桥内判据 `requestId != null` 会让这一轮走旧三参 = 现状）。
+ */
+function buildNativeRequestId(sessionId: string | undefined): string | undefined {
+  if (sessionId == null) {
+    return undefined;
+  }
+  nativeRequestSeq += 1;
+  return `${sessionId}:${nativeRequestSeq}`;
+}
+
+/** native 档过桥请求：sessionId 与 requestId 同时在场才可能被桥判为可取消轮。 */
+function buildNativeCountRequest(
+  serialized: string,
+  family: TokenizerFamily,
+  vendorModelId: string,
+  sessionId: string | undefined,
+): NativeCountRequest {
+  const requestId = buildNativeRequestId(sessionId);
+  if (sessionId == null) {
+    return { serialized, family, vendorModelId };
+  }
+  return { serialized, family, vendorModelId, sessionId, requestId };
+}
+
+/**
+ * 计数主体。`sessionId`（第 5 位可选参）是取消链路的归属信息源：
+ * 在场时驱动生成 requestId 塞进过桥请求，桥内会走可取消的新方法并登记
+ * in-flight；缺失时行为与本次迭代之前逐字节一致（旧三参、不可取消）。
+ */
 async function countSerialized(
   family: TokenizerFamily,
   serialized: string,
   vendorModelId: string,
   chunkScope?: string,
+  sessionId?: string,
 ): Promise<SerializedCountResult> {
   // L2 计数器身份：入口（countPromptLlmInputRn）会传入含 override 的完整
   // scope；直接调用（测试钩子）缺省时按 (模型, 家族, rn 驱动) 拼——两套键
@@ -287,11 +331,16 @@ async function countSerialized(
     if (isNativeTokenizerAvailable()) {
       // native 档（WEB/SP 过桥）：Android 侧整串计数，**不切块**（spec：
       // native 档仅 L1——L1 命中的拦截在驱动入口，这里只负责真实计数）。
-      const nativeResult = await countPromptViaNative({
-        serialized,
-        family,
-        vendorModelId,
-      });
+      //
+      // **取消例外（tokenizer-native-cancel）**：桥识别到 Kotlin 的
+      // TOKENIZER_COUNT_CANCELLED reject 时抛 `PromptCountCancelledError`，
+      // 本函数**不得**把它当成「原生返回 null」而落进下面的兜底重算——
+      // 那等于先占原生队列再烧一次 JS 线程，比不取消更贵。所以这里刻意
+      // **没有 try/catch**：异常在 `nativeResult != null` 判定与兜底分支之前
+      // 原样穿透（调用链上任何 catch 想拦取消都会踩这条不变量）。
+      const nativeResult = await countPromptViaNative(
+        buildNativeCountRequest(serialized, family, vendorModelId, sessionId),
+      );
       if (nativeResult != null) {
         return mapNativeResult(nativeResult);
       }
@@ -344,6 +393,8 @@ export async function countPromptLlmInputRn(
   // × 计数器身份。native 档的 L1 拦截就在这里：命中直接返回、不过桥。
   // 驱动内部查 L1 传**空 sessionId**（键含内容指纹，跨会话共享安全）；
   // sessionId 段的会话语义由读口层决定，驱动不越层。
+  // （取消链路的 sessionId 是**另一条通路**：它不进缓存键，只随过桥请求
+  // 下发给桥做 in-flight 登记与取消归属，见 countSerialized 第 5 位。）
   const scope = buildCounterScope({
     vendorModelId,
     tokenizerOverride: override,
@@ -371,9 +422,12 @@ export async function countPromptLlmInputRn(
     serialized,
     vendorModelId,
     scope,
+    params.sessionId,
   );
 
   // miss 后写 L1（JS 档与 native 档都写：native 档靠它挡「无变更重复过桥」）。
+  // **取消轮写不到这里**——上一行 await 会抛 `PromptCountCancelledError`，
+  // 异常穿透到调用方，取消结果零污染（L1 里不留半截读数，重进会话正常重算）。
   promptWholeCache.record("", scope, contentHash, {
     tokenCount: count,
     counterKind,

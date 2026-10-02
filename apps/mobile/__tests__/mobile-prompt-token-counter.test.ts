@@ -1,4 +1,6 @@
 const mockCountPrompt = jest.fn();
+const mockCountPromptCancelable = jest.fn();
+const mockCancelCount = jest.fn();
 
 const nativeBridgeState = {
   available: true,
@@ -11,6 +13,11 @@ jest.mock('react-native', () => ({
   NativeModules: {
     NovelMasterTokenizer: {
       countPrompt: (...args: unknown[]) => mockCountPrompt(...args),
+      // 取消链路（tokenizer-native-cancel）新方法：四参可取消计数 + 无 Promise
+      // 的取消指令下发。既有 countPrompt 一行不动（RN 0.85 双路径 arity 硬校验）。
+      countPromptCancelable: (...args: unknown[]) =>
+        mockCountPromptCancelable(...args),
+      cancelCount: (...args: unknown[]) => mockCancelCount(...args),
     },
   },
 }));
@@ -55,6 +62,8 @@ const ZH_TEXT =
 describe('tokenizer-driver-rn countPromptLlmInputRn', () => {
   beforeEach(() => {
     mockCountPrompt.mockReset();
+    mockCountPromptCancelable.mockReset();
+    mockCancelCount.mockReset();
     nativeBridgeState.available = true;
     mockResolveFamily = 'claude';
   });
@@ -92,6 +101,10 @@ describe('tokenizer-driver-rn countPromptLlmInputRn', () => {
       'claude',
       'anthropic/claude-3-5-sonnet',
     );
+    // 缺 sessionId 的轮走**旧三参**（二分口径，spec r2-P0）：既有的
+    // toHaveBeenCalledWith 三参形态本身就是「恰好三个实参」的强断言，
+    // 这里再补一条「新方法零调用」，把「现状行为不变」钉死。
+    expect(mockCountPromptCancelable).not.toHaveBeenCalled();
     expect(result).toEqual({
       count: 42,
       counterKind: 'claude',
@@ -119,6 +132,7 @@ describe('tokenizer-driver-rn countPromptLlmInputRn', () => {
       'gemma',
       'gemini-2.0-flash',
     );
+    expect(mockCountPromptCancelable).not.toHaveBeenCalled();
     expect(result.estimated).toBe(false);
     expect(result.count).toBeGreaterThan(0);
   });
@@ -514,5 +528,147 @@ describe('T-TC5 驱动缓存（message-token-cache Step 3 / rn）', () => {
     expect(changedChunks).toBe(1);
     // +1 = overhead 路径对 role "system" 的 encode（无边界恒 1 段）。
     expect(encodeCalls - callsAfterFirst).toBe(changedChunks + 1);
+  });
+});
+
+/**
+ * 取消链路（tokenizer-native-cancel）rn 驱动面：T-TC1/T-TC2/T-TC8②。
+ *
+ * 本套件的 bridge 是 `{...actual}`——`countPromptViaNative` 用**真实现**
+ * （只在 `isNativeTokenizerAvailable` 上开缝），所以「驱动生成 requestId →
+ * 桥内二分口径选新方法 → in-flight 登记/注销 → 取消 code 识别」整条缝是通的，
+ * 底层四个方法才落到 react-native mock 上。
+ */
+describe('取消链路（tokenizer-native-cancel / rn 驱动面）', () => {
+  beforeEach(() => {
+    mockCountPrompt.mockReset();
+    mockCountPromptCancelable.mockReset();
+    mockCancelCount.mockReset();
+    nativeBridgeState.available = true;
+    mockResolveFamily = 'claude';
+    // L1/L2 是进程级单例：跨用例清空，取消用例的「未写缓存」断言才成立。
+    const {promptWholeCache, tokenChunkCache} = require('@novel-master/core/provider');
+    promptWholeCache.clearForTests();
+    tokenChunkCache.clearForTests();
+  });
+
+  it('sessionId 在场 → 走 countPromptCancelable 四参，旧三参 countPrompt 不被调', async () => {
+    mockCountPromptCancelable.mockResolvedValue({
+      tokenCount: 42,
+      counterKind: 'claude',
+      estimated: false,
+    });
+    const {__test__} = require('@novel-master/tokenizer-driver-rn');
+
+    const result = await __test__.countSerialized(
+      'claude',
+      'system prompt body',
+      'anthropic/claude-3-5-sonnet',
+      undefined,
+      's-1',
+    );
+
+    // 四参同序（serialized, family, vendorModelId, requestId），
+    // requestId 形态 `${sessionId}:${seq}`——seq 是驱动层模块自增，
+    // 断言只钉形态（前缀 + 单段自增数字），不钉具体数值（跨用例不保证从 1 起）。
+    expect(mockCountPromptCancelable).toHaveBeenCalledTimes(1);
+    const args = mockCountPromptCancelable.mock.calls[0] as string[];
+    expect(args.slice(0, 3)).toEqual([
+      'system prompt body',
+      'claude',
+      'anthropic/claude-3-5-sonnet',
+    ]);
+    expect(args[3]).toMatch(/^s-1:\d+$/);
+    expect(mockCountPrompt).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      count: 42,
+      counterKind: 'claude',
+      estimated: false,
+    });
+  });
+
+  it('同会话多轮各自拿到不同 requestId（不会互相覆盖取消归属）', async () => {
+    mockCountPromptCancelable.mockResolvedValue({
+      tokenCount: 1,
+      counterKind: 'claude',
+      estimated: false,
+    });
+    const {__test__} = require('@novel-master/tokenizer-driver-rn');
+
+    for (let i = 0; i < 2; i += 1) {
+      await __test__.countSerialized(
+        'claude',
+        'body',
+        'anthropic/claude-3-5-sonnet',
+        undefined,
+        's-1',
+      );
+    }
+
+    const ids = mockCountPromptCancelable.mock.calls.map(
+      (call: string[]) => call[3],
+    );
+    expect(new Set(ids).size).toBe(2);
+    ids.forEach((id: string) => expect(id).toMatch(/^s-1:\d+$/));
+  });
+
+  it('取消 reject（TOKENIZER_COUNT_CANCELLED）：上抛 PromptCountCancelledError，不落兜底', async () => {
+    // 取消载荷形态 = Kotlin `promise.reject(code, message)` 在 JS 侧的投影：
+    // 带 `code` 字段的 Error 形态（原生 reject 载荷，非 Error 实例）。
+    mockCountPromptCancelable.mockRejectedValue({
+      code: 'TOKENIZER_COUNT_CANCELLED',
+      message: 'cancelled',
+    });
+    const {
+      __test__,
+      PromptCountCancelledError,
+    } = require('@novel-master/tokenizer-driver-rn');
+
+    // 不 resolve 成 heuristic 兜底读数——取消落兜底等于先占原生队列再烧
+    // JS 线程，比不取消更贵。这是 T-TC1 的驱动面断言（bridge 侧识别由真
+    // countPromptViaNative 完成，缝在本套件是通的）。
+    await expect(
+      __test__.countSerialized(
+        'claude',
+        ZH_TEXT,
+        'anthropic/claude-3-5-sonnet',
+        undefined,
+        's-1',
+      ),
+    ).rejects.toBeInstanceOf(PromptCountCancelledError);
+    expect(mockCountPrompt).not.toHaveBeenCalled();
+  });
+
+  it('取消轮不写 L1：同输入下一轮重新过桥（取消不污染缓存）', async () => {
+    const {countPromptLlmInputRn} = require('@novel-master/tokenizer-driver-rn');
+    const params = {
+      layout: {persist: [], dynamic: []},
+      ctx: {workplaceDisplay: '', messages: []},
+      savedModelId: 'anthropic/claude-3-5-sonnet',
+      registry: {
+        heuristic: {countText: (text: string) => Math.ceil(text.length / 3.35)},
+      },
+      sessionId: 's-1',
+    };
+
+    mockCountPromptCancelable.mockRejectedValueOnce({
+      code: 'TOKENIZER_COUNT_CANCELLED',
+      message: 'cancelled',
+    });
+    await expect(countPromptLlmInputRn(params)).rejects.toMatchObject({
+      name: 'PromptCountCancelledError',
+    });
+
+    // 第二轮原生正常返回：必须**再过一次桥**——若取消轮把结果写进了 L1，
+    // 这里会零桥调用直接返回，那正是「取消污染缓存」回归。
+    mockCountPromptCancelable.mockResolvedValue({
+      tokenCount: 7,
+      counterKind: 'claude',
+      estimated: false,
+    });
+    const second = await countPromptLlmInputRn(params);
+    expect(mockCountPromptCancelable).toHaveBeenCalledTimes(2);
+    expect(second.tokenCount).toBe(7);
+    expect(second.counterKind).toBe('claude');
   });
 });
