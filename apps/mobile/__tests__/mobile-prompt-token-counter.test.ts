@@ -313,6 +313,7 @@ describe('tokenizer-driver-rn countPromptLlmInputRn', () => {
   it('family=heuristic 与未知家族也走 cl100k 真计数（无折算落点）', async () => {
     const {__test__} = require('@novel-master/tokenizer-driver-rn');
 
+    // 原生优先（Part C）：mock 未设返回值 = 桥 null → 落 JS 分块兜底（既有口径）。
     const heuristicFamily = await __test__.countSerialized(
       'heuristic',
       ZH_TEXT,
@@ -330,6 +331,26 @@ describe('tokenizer-driver-rn countPromptLlmInputRn', () => {
       estimated: true,
     });
     expect(unknownFamily).toEqual(heuristicFamily);
+    // 试过原生（cl100k_base 槽），失败才落的 JS。
+    expect(mockCountPrompt).toHaveBeenCalledWith(ZH_TEXT, 'tiktoken', 'cl100k_base');
+  });
+
+  it('heuristic 原生成功（Part C）：count=原生直编码、标签保持 heuristic/estimated（换算力不换口径）', async () => {
+    mockCountPrompt.mockResolvedValue({
+      tokenCount: 123,
+      counterKind: 'tiktoken',
+      estimated: false,
+    });
+    const {__test__} = require('@novel-master/tokenizer-driver-rn');
+
+    const result = await __test__.countSerialized('heuristic', ZH_TEXT, 'local/any');
+    // 不加 overhead（兜底口径是裸文本近似，非 OpenAI 消息包装）；estimated
+    // 保持 true——对未知家族这依然是近似读数，压缩阈值 0.85 系数照吃。
+    expect(result).toEqual({
+      count: 123,
+      counterKind: 'heuristic',
+      estimated: true,
+    });
   });
 
   it('编码表建不起来时降级到字符折算，且失败不重试（缓存 null）', async () => {

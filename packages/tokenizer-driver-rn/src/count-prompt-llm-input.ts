@@ -437,6 +437,15 @@ async function countSerializedImpl(
       driverName: DRIVER_NAME,
     });
   if (family === "heuristic") {
+    // 兜底家族原生优先（token-count-perf-r2 Part C）：用户自定义 vendor 名解析
+    // 落 heuristic 的会话正是「兜底 gpt」体感慢的主力——165K 字符的 JS cl100k
+    // 分块重算在 Hermes 上秒级，而原生 cl100k 词表已在包内（暖轮 ~250ms/87K）。
+    // 口径与标签**不变**：仍报 heuristic/estimated（对未知家族这依然是近似读数，
+    // 压缩阈值 0.85 系数照吃），只是把「算」的动作挪进原生。取消异常原样上抛。
+    const nativeHeuristic = await countHeuristicViaNative(serialized, sessionId);
+    if (nativeHeuristic != null) {
+      return nativeHeuristic;
+    }
     return {
       count: fallbackCount(serialized, scope),
       counterKind: "heuristic",
@@ -489,6 +498,40 @@ async function countSerializedImpl(
     counterKind: "heuristic",
     estimated: true,
   };
+}
+
+/**
+ * 兜底（heuristic）家族的原生路径（token-count-perf-r2 Part C）：cl100k 词表
+ * 直编码整串。与 gpt 档不同——**不加 overhead**（兜底口径本就是裸文本近似，
+ * 非 OpenAI 消息包装）、**标签保持 heuristic/estimated:true**（换的只是算力，
+ * 不是口径）。原生不可用 / 失败（非取消）→ null 落回 JS [fallbackCount]。
+ */
+async function countHeuristicViaNative(
+  serialized: string,
+  sessionId: string | undefined,
+): Promise<SerializedCountResult | null> {
+  if (!isNativeTokenizerAvailable()) {
+    return null;
+  }
+  try {
+    const nativeResult = await countPromptViaNative(
+      buildNativeCountRequest(serialized, "tiktoken", "cl100k_base", sessionId),
+    );
+    if (nativeResult == null) {
+      return null;
+    }
+    probeRoute = "native-heuristic";
+    return {
+      count: nativeResult.tokenCount,
+      counterKind: "heuristic",
+      estimated: true,
+    };
+  } catch (error) {
+    if (error instanceof PromptCountCancelledError) {
+      throw error;
+    }
+    return null;
+  }
 }
 
 async function resolveVendorModelId(
