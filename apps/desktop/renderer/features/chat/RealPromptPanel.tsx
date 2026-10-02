@@ -154,7 +154,7 @@ export function RealPromptPanel({
           return (
             <div
               key={turn.id}
-              className="prompt-turn-card"
+              className="prompt-segment prompt-turn-card"
               data-turn-id={turn.id}
             >
               <button
@@ -208,7 +208,7 @@ export function RealPromptPanel({
           >
             <CodeEditor
               readOnly
-              value={detailTurn.body}
+              value={detailTurn.body ?? ""}
               languagePath="prompt.txt"
               aria-label={`${ASSISTANT_TURN_LABEL}详情`}
             />

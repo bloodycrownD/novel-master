@@ -31,7 +31,9 @@ export async function handlePromptRealPreview(
         id: turn.id,
         kind: turn.kind,
         summary: turn.summary,
-        body: turn.body,
+        // body 只对 assistant 轮下发：非 assistant 轮的 body 是同轮 items 的
+        // 前缀行拼接版（renderer 该分支只消费 items），下发即重复一份。
+        ...(turn.kind === "assistant" ? { body: turn.body } : {}),
         // assistant 轮只发 summary + body：正文已在 body 一份字符串里，
         // 再带 items 会让长会话 payload 近似翻倍（见 ipc-types 注释）。
         ...(turn.kind === "assistant"

@@ -3792,6 +3792,11 @@ html[data-theme="dark"] .conversation-tab.is-active {
   background: var(--surface);
 }
 
+/* 折叠卡的 hover 基线（assistant 轮摘要卡复用本规则，不另立 hover）。 */
+.prompt-segment:hover {
+  background: var(--background);
+}
+
 .prompt-segment__header {
   display: flex;
   align-items: flex-start;
@@ -3872,18 +3877,9 @@ html[data-theme="dark"] .conversation-tab.is-active {
   margin-bottom: 10px;
 }
 
-/* prompt-rounds：assistant 轮摘要卡（形态派生自 .prompt-segment，只读摘要 + 详情入口）。 */
+/* prompt-rounds：assistant 轮摘要卡（挂 .prompt-segment 基类，只叠自身差异）。 */
 .prompt-turn-card {
-  margin-bottom: 10px;
-  padding: 10px 12px;
-  border-radius: 12px;
-  border: 1px solid var(--border-light);
   border-left: 3px solid var(--primary);
-  background: var(--surface);
-}
-
-.prompt-turn-card:hover {
-  background: var(--background);
 }
 
 .prompt-turn-card .prompt-segment__role {

@@ -911,15 +911,19 @@ export type PromptPreviewSegmentDto = {
  * 其余消息段归入当前 assistant 轮。
  *
  * `items` 的下发策略（payload 体积口径）：template / user 轮下发段列表（卡片
- * 按段渲染需要）；**assistant 轮只下发 `summary` + `body`，不下发 `items`**——
- * 轮正文已在 `body` 一份字符串里，items 重复携带会让长会话 IPC payload
- * 近似翻倍（body 可达数百 KB）。
+ * 按段渲染需要），**不带 `body`**（非 assistant 轮的 body 只是同轮 items 的
+ * 前缀行拼接版，renderer 该分支只消费 items）；**assistant 轮带 `summary` +
+ * `body`、不带 `items`**——轮正文已在 `body` 一份字符串里，items 重复携带会
+ * 让长会话 IPC payload 近似翻倍（body 可达数百 KB）。
+ *
+ * `body` 因此是可选字段：只对 `kind === "assistant"` 的轮下发，消费方须自己
+ * 兜底（renderer 详情 Modal 用 `?? ""` 收口）。
  */
 export type PromptPreviewTurnDto = {
   readonly id: string;
   readonly kind: 'template' | 'user' | 'assistant';
   readonly summary: string;
-  readonly body: string;
+  readonly body?: string;
   readonly items?: readonly PromptPreviewSegmentDto[];
 };
 

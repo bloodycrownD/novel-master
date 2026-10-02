@@ -9,21 +9,34 @@ import {
 } from "./codemirror-theme";
 import { languageExtensionForPath } from "./language-for-path";
 
+/**
+ * 可编辑/只读两态用**判别联合**收口：漏传 `onChange` 又漏传 `readOnly` 时
+ * tsc 直接报错，不会静默得到一个不可编辑的编辑器。
+ */
 type CodeEditorProps = {
   id?: string;
   value: string;
   languagePath: string;
-  onChange?: (value: string) => void;
-  onSave?: () => void;
   "aria-label"?: string;
-  /**
-   * 只读预览态（prompt-rounds 的 assistant 轮详情用）。
-   *
-   * 语义：内容不可编辑（`EditorState.readOnly` + `EditorView.editable`）、
-   * 历史/自动补括号等写入型能力关掉，但**保留 selection 供复制**。
-   */
-  readOnly?: boolean;
-};
+} & (
+  | {
+      /**
+       * 只读预览态（prompt-rounds 的 assistant 轮详情用）。
+       *
+       * 语义：内容不可编辑（`EditorState.readOnly` + `EditorView.editable`）、
+       * 历史/自动补括号等写入型能力关掉，但**保留 selection 供复制**。
+       * 只读态不挂 `onChange`/`onSave`（内容永不回写，也就没有保存动作）。
+       */
+      readOnly: true;
+      onChange?: never;
+      onSave?: never;
+    }
+  | {
+      readOnly?: false;
+      onChange: (value: string) => void;
+      onSave?: () => void;
+    }
+);
 
 export function CodeEditor({
   id,
