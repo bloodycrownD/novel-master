@@ -8,7 +8,7 @@
  * 这时点「查看提示词」就会显示另一个会话的提示词，屏上不出现会话名、
  * 用户无从察觉（错数据 + 零逃生路线）。
  *
- * 观测面是 `buildRealPromptPreviewSegments` 收到的实参（注入缝，与实现同源）。
+ * 观测面是 `buildRealPromptPreviewTurns` 收到的实参（注入缝，与实现同源）。
  */
 import {describe, expect, it, jest, beforeEach} from '@jest/globals';
 import React from 'react';
@@ -30,7 +30,7 @@ jest.mock('@/hooks/useRuntime', () => ({
 }));
 
 jest.mock('@/services/prompt-preview.service', () => ({
-  buildRealPromptPreviewSegments: (...args: unknown[]) =>
+  buildRealPromptPreviewTurns: (...args: unknown[]) =>
     mockBuildSegments(...(args as [])),
 }));
 

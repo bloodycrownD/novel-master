@@ -1,5 +1,5 @@
 /**
- * Real prompt preview: agent prompts + structured segments.
+ * Real prompt preview: agent prompts + structured turns.
  */
 import {registerBuiltinTools, ToolRegistry} from '@novel-master/core';
 import {
@@ -58,7 +58,7 @@ async function budgetSkillsIndex(
  * 其余 assistant 文本/thinking/工具段归入同一 assistant 轮。轮摘要口径在
  * core 侧钉死，本地不再二次加工。
  */
-export async function buildRealPromptPreviewSegments(
+export async function buildRealPromptPreviewTurns(
   runtime: MobileNovelMasterRuntime,
   scope: PromptPreviewScope,
 ): Promise<readonly PromptPreviewTurn[]> {

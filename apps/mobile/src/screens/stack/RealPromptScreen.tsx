@@ -19,7 +19,7 @@ import {PromptPreviewSegmentCard} from '@/components/prompt/PromptPreviewSegment
 import {PromptTurnCard} from '@/components/prompt/PromptTurnCard';
 import {useMobileScope} from '@/hooks/useMobileScope';
 import {useRuntime} from '@/hooks/useRuntime';
-import {buildRealPromptPreviewSegments} from '@/services/prompt-preview.service';
+import {buildRealPromptPreviewTurns} from '@/services/prompt-preview.service';
 import {AgentRunError} from '@/services/agent-run.service';
 import {useTheme} from '@/theme/ThemeProvider';
 import type {RootStackParamList} from '@/navigation/types';
@@ -53,7 +53,7 @@ export function RealPromptScreen() {
     setLoading(true);
     setError(undefined);
     try {
-      const list = await buildRealPromptPreviewSegments(runtime, {
+      const list = await buildRealPromptPreviewTurns(runtime, {
         projectId,
         sessionId,
       });
@@ -116,7 +116,8 @@ function PromptTurnRow({turn}: {turn: PromptPreviewTurn}) {
     return <PromptTurnCard turn={turn} />;
   }
   return (
-    <React.Fragment key={turn.id}>
+    // key 归 FlatList 的 keyExtractor，两分支统一不加。
+    <React.Fragment>
       {turn.items.map(segment => (
         <PromptPreviewSegmentCard key={segment.id} segment={segment} />
       ))}

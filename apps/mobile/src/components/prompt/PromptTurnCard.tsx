@@ -24,6 +24,12 @@ type Nav = NativeStackNavigationProp<RootStackParamList>;
 /** 详情页 header 标题上限：卡片摘要照原样展示，进详情只截首段避免顶栏塞满。 */
 const DETAIL_TITLE_LIMIT = 24;
 
+/**
+ * assistant 轮的 role 标签（不是消息角色，是「轮」这一层）。
+ * 文案与 desktop `RealPromptPanel` 的 ASSISTANT_TURN_LABEL 保持一致。
+ */
+const ASSISTANT_TURN_LABEL = 'assistant 轮';
+
 type Props = {
   turn: PromptPreviewTurn;
 };
@@ -37,11 +43,13 @@ function detailTitle(summary: string): string {
 export function PromptTurnCard({turn}: Props) {
   const {tokens} = useTheme();
   const navigation = useNavigation<Nav>();
+  // 摘要标题要同时喂 callback 与路由参数，算一次复用。
+  const title = detailTitle(turn.summary);
 
   const openDetail = useCallback(() => {
-    setPromptTurnDetail({title: detailTitle(turn.summary), body: turn.body});
-    navigation.navigate('PromptTurnDetail', {title: detailTitle(turn.summary)});
-  }, [navigation, turn.summary, turn.body]);
+    setPromptTurnDetail({title, body: turn.body});
+    navigation.navigate('PromptTurnDetail', {title});
+  }, [navigation, title, turn.body]);
 
   return (
     <Pressable
@@ -59,12 +67,12 @@ export function PromptTurnCard({turn}: Props) {
     >
       <View style={styles.header}>
         <Text style={[styles.role, {color: tokens.primary}]} numberOfLines={1}>
-          助手轮
+          {ASSISTANT_TURN_LABEL}
         </Text>
         <Text style={[styles.chevron, {color: tokens.textTertiary}]}>›</Text>
       </View>
       <Text style={[styles.summary, {color: tokens.text}]} numberOfLines={2}>
-        {turn.summary || '（空轮）'}
+        {turn.summary}
       </Text>
     </Pressable>
   );

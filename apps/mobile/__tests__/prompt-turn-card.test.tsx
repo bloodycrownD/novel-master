@@ -101,7 +101,7 @@ describe('PromptTurnCard（T-R7 mobile）', () => {
 
   it('T-R7-1 渲染 role 标与轮摘要', () => {
     const texts = textsOf(renderCard().toJSON());
-    expect(texts).toContain('助手轮');
+    expect(texts).toContain('assistant 轮');
     expect(texts).toContain(TURN.summary);
   });
 
