@@ -11,6 +11,12 @@
 //
 //   maxErrors 只作二级上限，仅用于日志与人工 sanity check，不参与判红。
 //
+//   ⚠️ 身份**不含行列**（CR-F13）：身份 = file + code + message；行列只随 value 存一份供打印定位。
+//     含坐标时，在 79 条错误的那个文件顶部插一行注释就会让其中 78 条集体换身份 ⇒ 78 条幻影红
+//     （总数一条没多没少仍判红），而 `--update` 是无条件的 ⇒ 一次「插注释 → 幻影红 → 顺手
+//     --update」会把真实新增错误一并洗白。去掉坐标后，行位移不再铸出新身份。
+//     代价：同文件内 code 与 message 完全相同的两条错误按 Set 计一条（口径写在基线 $comment）。
+//
 // 用法：
 //   node scripts/check-renderer-typecheck.mjs           # 门禁：新增错误身份 ⇒ exit 1
 //   node scripts/check-renderer-typecheck.mjs --update  # 按当前实跑重写基线（需在 PR 里说明理由）
@@ -20,6 +26,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const DESKTOP_DIR = resolve(import.meta.dirname, "..");
 const BASELINE_PATH = join(DESKTOP_DIR, "typecheck-renderer-baseline.json");
@@ -55,15 +62,20 @@ function runTsc() {
   }
 }
 
-/** 把 tsc 输出解析成错误身份集合：{ file, line, column, code, message }。 */
-function parseIdentities(output) {
+/**
+ * 把 tsc 输出解析成错误身份集合：Map<身份, { file, line, column, code, message }>。
+ *
+ * 身份 = `file: code: message`，**不含行列**（CR-F13）——行列只随 value 存一份供打印定位。
+ * 同身份重复出现时 Map 的 value 被后一次覆盖，所以打印出的行列是「该身份最后一次出现的位置」。
+ */
+export function parseIdentities(output) {
   const identities = new Map();
   for (const raw of output.split(/\r?\n/)) {
     // 续行（overload 展开、属性明细）都是缩进行，不匹配首行形态，天然被跳过。
     const match = IDENTITY_RE.exec(raw);
     if (!match) continue;
     const [, file, line, column, code, message] = match;
-    const id = `${file.trim()}(${line},${column}): ${code}: ${message.trim()}`;
+    const id = `${file.trim()}: ${code}: ${message.trim()}`;
     identities.set(id, { file: file.trim(), line: Number(line), column: Number(column), code, message: message.trim() });
   }
   return identities;
@@ -79,8 +91,11 @@ function writeBaseline(ids, { previous }) {
   const body = {
     $comment: [
       "Renderer typecheck ratchet baseline (RULE: count/identity numbers are always measured, never copied from spec).",
-      "`known` is the set of tsc error identities (first line of each diagnostic).",
-      "The gate turns red on NEW identities (now \\ known) only; `maxErrors` is log/sanity only and never judges.",
+      "`known` is the set of tsc error identities; an identity is `file: code: message` and deliberately carries NO line/column (CR-F13).",
+      "Line/column are kept only for printing; a moved line must not mint a new identity (coordinate identities produced 78 phantom reds on a 79-error file).",
+      "`maxErrors` and the GREEN count are DEDUPLICATED identity counts, not tsc's raw diagnostic count: same file + same code + same message count once (Set).",
+      "When a red entry is printed, the line/column shown is the LAST occurrence of that identity (the parse Map overwrites on duplicate keys).",
+      "The gate turns red on NEW identities (now \\ known) only; `maxErrors` is a real ceiling but never judges on its own.",
       "Lowering the baseline = paying down debt. Raising it = must be justified in the PR.",
     ].join(" "),
     tscConfig: TSCONFIG,
@@ -91,52 +106,60 @@ function writeBaseline(ids, { previous }) {
   writeFileSync(BASELINE_PATH, `${JSON.stringify(body, null, 2)}\n`, "utf8");
 }
 
-const output = runTsc();
-const current = parseIdentities(output);
-const ids = new Set(current.keys());
-const baseline = loadBaseline();
-const known = new Set(baseline.known);
-const added = [...ids].filter((id) => !known.has(id));
-const resolved = [...known].filter((id) => !ids.has(id));
+function main() {
+  const output = runTsc();
+  const current = parseIdentities(output);
+  const ids = new Set(current.keys());
+  const baseline = loadBaseline();
+  const known = new Set(baseline.known);
+  const added = [...ids].filter((id) => !known.has(id));
+  const resolved = [...known].filter((id) => !ids.has(id));
 
-// NOTE: gate output is deliberately ASCII-only. The Windows console runs GBK, and a UTF-8
-// Chinese message renders as mojibake there -- a gate nobody can read is half a gate.
-if (process.argv.includes("--update")) {
-  writeBaseline(ids, { previous: baseline.maxErrors });
-  console.log(`[renderer-ratchet] baseline rewritten: ${ids.size} entries (added ${added.length}, resolved ${resolved.length}, was ${baseline.maxErrors})`);
+  // NOTE: gate output is deliberately ASCII-only. The Windows console runs GBK, and a UTF-8
+  // Chinese message renders as mojibake there -- a gate nobody can read is half a gate.
+  if (process.argv.includes("--update")) {
+    writeBaseline(ids, { previous: baseline.maxErrors });
+    console.log(`[renderer-ratchet] baseline rewritten: ${ids.size} entries (added ${added.length}, resolved ${resolved.length}, was ${baseline.maxErrors})`);
+    process.exit(0);
+  }
+
+  if (added.length > 0) {
+    const byFile = new Map();
+    for (const id of added) {
+      const entry = current.get(id);
+      const bucket = byFile.get(entry.file) ?? [];
+      bucket.push(entry);
+      byFile.set(entry.file, bucket);
+    }
+    console.error(`[renderer-ratchet] RED: ${added.length} new error identities (now ${ids.size} / baseline ${known.size})\n`);
+    for (const [file, entries] of [...byFile].sort()) {
+      console.error(`  ${file}`);
+      for (const entry of entries.sort((a, b) => a.line - b.line || a.column - b.column)) {
+        console.error(`    (${entry.line},${entry.column}) ${entry.code}: ${entry.message}`);
+      }
+    }
+    console.error("\nFix the errors above, then run `node scripts/check-renderer-typecheck.mjs --update` to lower the baseline.");
+    console.error("Raising the baseline to go green is forbidden.");
+    process.exit(1);
+  }
+
+  // maxErrors 是一道真天花板：把基线往下调到低于实跑数（哪怕只改 maxErrors、known 数组不动）必红。
+  // 身份集合负责抓「新增的是哪几条」，maxErrors 负责抓「基线被下调/被做小」——两者缺一不可。
+  if (ids.size > baseline.maxErrors) {
+    console.error(`[renderer-ratchet] RED: maxErrors ceiling is below the measured count (now ${ids.size} > maxErrors ${baseline.maxErrors}).`);
+    console.error("The ratchet only ratchets DOWN. Fix errors, then run --update to rewrite the baseline.");
+    process.exit(1);
+  }
+
+  console.log(`[renderer-ratchet] GREEN: ${ids.size} / ${known.size} (maxErrors=${baseline.maxErrors}, ceiling enforced, deduplicated identities)`);
+  if (resolved.length > 0) {
+    console.log(`[renderer-ratchet] hint: ${resolved.length} baseline entries no longer occur; run --update to tighten.`);
+  }
   process.exit(0);
 }
 
-if (added.length > 0) {
-  const byFile = new Map();
-  for (const id of added) {
-    const entry = current.get(id);
-    const bucket = byFile.get(entry.file) ?? [];
-    bucket.push(entry);
-    byFile.set(entry.file, bucket);
-  }
-  console.error(`[renderer-ratchet] RED: ${added.length} new error identities (now ${ids.size} / baseline ${known.size})\n`);
-  for (const [file, entries] of [...byFile].sort()) {
-    console.error(`  ${file}`);
-    for (const entry of entries.sort((a, b) => a.line - b.line || a.column - b.column)) {
-      console.error(`    (${entry.line},${entry.column}) ${entry.code}: ${entry.message}`);
-    }
-  }
-  console.error("\nFix the errors above, then run `node scripts/check-renderer-typecheck.mjs --update` to lower the baseline.");
-  console.error("Raising the baseline to go green is forbidden.");
-  process.exit(1);
+// 入口守卫：只有被直接执行时才跑 tsc 与判红。用例 test/renderer-typecheck-ratchet-identity.test.ts
+// import 本模块只为拿到 parseIdentities，不该顺带触发一次全量 typecheck。
+if (process.argv[1] !== undefined && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main();
 }
-
-// maxErrors 是一道真天花板：把基线往下调到低于实跑数（哪怕只改 maxErrors、known 数组不动）必红。
-// 身份集合负责抓「新增的是哪几条」，maxErrors 负责抓「基线被下调/被做小」——两者缺一不可。
-if (ids.size > baseline.maxErrors) {
-  console.error(`[renderer-ratchet] RED: maxErrors ceiling is below the measured count (now ${ids.size} > maxErrors ${baseline.maxErrors}).`);
-  console.error("The ratchet only ratchets DOWN. Fix errors, then run --update to rewrite the baseline.");
-  process.exit(1);
-}
-
-console.log(`[renderer-ratchet] GREEN: ${ids.size} / ${known.size} (maxErrors=${baseline.maxErrors}, ceiling enforced)`);
-if (resolved.length > 0) {
-  console.log(`[renderer-ratchet] hint: ${resolved.length} baseline entries no longer occur; run --update to tighten.`);
-}
-process.exit(0);
