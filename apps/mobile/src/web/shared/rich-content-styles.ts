@@ -45,6 +45,13 @@ export function buildRichContentCssRules(selectors: readonly string[]): string {
   const streamTailFirstParagraph = selectors
     .map(s => `${s} > .stream-active-tail:not(:first-child) > p:first-child`)
     .join(', ');
+  // 尾块内段落零段距：plain 态（pre-wrap 裸文本）无段间距，350ms 轻量升级
+  // 成 <p> 段落后若保留 0.35em 段距，升级瞬间整块行距跳变——流式期间
+  // 「一闪一闪」的主源之一（2026-10-02 真机实测反馈）。段间距留给块提交后
+  // 的正式渲染（宿主下发 html 整体替换，一次性过渡可接受）。
+  const streamTailParagraph = selectors
+    .map(s => `${s} .stream-active-tail > p`)
+    .join(', ');
   // 块级代码：pre 内 code 重置行内形态（透明背景/零 padding/无圆角）
   const preCode = selectors.map(s => `${s} pre code`).join(', ');
   const preLangLabel = selectors
@@ -85,6 +92,8 @@ export function buildRichContentCssRules(selectors: readonly string[]): string {
     ${child('p')}:last-child { margin-bottom: 0; }
     /* 流式尾块纯文本降级：转义文本需要 pre-wrap 保换行/缩进（B-1） */
     ${streamTailPlain} { white-space: pre-wrap; overflow-wrap: anywhere; }
+    /* 尾块内段落零段距（对齐 plain 态行距，见上方 streamTailParagraph 注释） */
+    ${streamTailParagraph} { margin: 0; }
     /* 尾块跟在已提交块之后：首段补块间距（块边界不塌陷，C-1） */
     ${streamTailFirstParagraph} { margin-top: 0.35em; }
     /* Global reset strips list padding; indent so outside markers stay inside the content area. */

@@ -72,7 +72,14 @@ export function renderStreamingMarkdown(text: unknown): string {
       html += inList === 'ul' ? '</ul>' : '</ol>';
       inList = false;
     }
-    if (line.trim() === '') continue;
+    // 空行保留为等高占位段：plain 态（pre-wrap）里空行占一行高，轻量渲染
+    // 若直接丢弃，350ms 升级瞬间行数突变、整块高度跳一下——流式期间的
+    // 「一闪一闪」主源之一（2026-10-02 真机实测反馈）。<br> 撑起一行高且
+    // 不产生文本内容（选择/拷贝零偏移）。
+    if (line.trim() === '') {
+      html += '<p class="stream-blank"><br></p>';
+      continue;
+    }
     html += '<p>' + renderStreamingInline(line) + '</p>';
   }
   if (inList) html += inList === 'ul' ? '</ul>' : '</ol>';
