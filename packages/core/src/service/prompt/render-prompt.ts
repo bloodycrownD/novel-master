@@ -36,6 +36,10 @@ export interface PromptAssemblySegment {
   readonly title: string;
   readonly body: string;
   readonly source: "template" | "message" | "system";
+  /** 来源 ChatMessage id（仅 `source === "message"` 有值）；轮聚合按它分组。 */
+  readonly messageId?: string;
+  /** 来源 ChatMessage 的会话内序号（仅 `source === "message"` 有值）。 */
+  readonly seq?: number;
 }
 
 /** One collapsible preview card in CLI / mobile real-prompt UI. */
@@ -312,6 +316,8 @@ export async function buildPromptAssemblyFromLayout(
         title: `#${message.seq} · ${segment.role}`,
         body: segment.body,
         source: "message",
+        messageId: message.id,
+        seq: message.seq,
       });
       segmentIndex += 1;
     }

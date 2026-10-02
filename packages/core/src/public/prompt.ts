@@ -56,6 +56,8 @@ export type {
   PromptAssemblyOptions,
   PromptPreviewSegment,
 } from "../service/prompt/render-prompt.js";
+export { buildPromptPreviewTurnsFromLayout } from "../service/prompt/prompt-preview-turns.js";
+export type { PromptPreviewTurn } from "../service/prompt/prompt-preview-turns.js";
 export type {
   PromptRenderContext,
   PromptSkillIndexEntry,
