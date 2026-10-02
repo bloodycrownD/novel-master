@@ -1,6 +1,6 @@
 # @novel-master/tokenizer-driver-rn
 
-React Native NMTP driver — js-tiktoken (GPT) + Android native bridge (WEB/SP) + heuristic fallback.
+React Native NMTP driver — Android native bridge first (WEB/SP/tiktoken; token-count-perf-r2 起 gpt 家族原生优先：DJL 词表直编码 + JS 补 overhead) + js-tiktoken 回退（iOS 恒回退）+ heuristic fallback.
 
 ## Entry points
 

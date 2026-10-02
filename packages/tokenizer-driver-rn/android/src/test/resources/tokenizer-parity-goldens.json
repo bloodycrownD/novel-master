@@ -1,25 +1,49 @@
 {
-  "version": 1,
+  "version": 2,
   "cases": [
     {
       "id": "claude-openai-sonnet",
       "family": "claude",
-      "applicationModelId": "openai/claude-3-5-sonnet",
+      "savedModelId": "openai/claude-3-5-sonnet",
       "vendorModelId": "claude-3-5-sonnet",
-      "serialized": "You are helpful.\n\nuser: Hello",
-      "cliTokenCount": 13,
+      "serialized": "system: You are helpful.\nuser: 你好，这是一段用于分词器对拍的中文正文。它包含标点、数字 12345、英文 mixed words、路径 /a/b/c.md、代码 const x = 1; 以及换行。\n第二段稍微长一点，用来把 token 数推到百级以上，让 0.5% 的相对容差有牙齿：The quick brown fox jumps over the lazy dog. 包装误差与转换误差在这种规模下才可分辨。无空白长中文串病态样本：一二三四五六七八九十百千万亿兆京垓秭穰沟涧正载极恒河沙阿僧祇那由他不可思议无量大数。",
+      "cliTokenCount": 209,
       "cliEstimated": false,
       "cliCounterKind": "claude"
     },
     {
       "id": "gemma-gemini-flash",
       "family": "gemma",
-      "applicationModelId": "google/gemini-2.0-flash",
+      "savedModelId": "google/gemini-2.0-flash",
       "vendorModelId": "gemini-2.0-flash",
-      "serialized": "You are helpful.\n\nuser: Hello",
-      "cliTokenCount": 8,
+      "serialized": "system: You are helpful.\nuser: 你好，这是一段用于分词器对拍的中文正文。它包含标点、数字 12345、英文 mixed words、路径 /a/b/c.md、代码 const x = 1; 以及换行。\n第二段稍微长一点，用来把 token 数推到百级以上，让 0.5% 的相对容差有牙齿：The quick brown fox jumps over the lazy dog. 包装误差与转换误差在这种规模下才可分辨。无空白长中文串病态样本：一二三四五六七八九十百千万亿兆京垓秭穰沟涧正载极恒河沙阿僧祇那由他不可思议无量大数。",
+      "cliTokenCount": 160,
       "cliEstimated": false,
       "cliCounterKind": "gemma"
+    },
+    {
+      "id": "gpt-cl100k",
+      "family": "tiktoken",
+      "encodingName": "cl100k_base",
+      "savedModelId": "openai/gpt-4",
+      "vendorModelId": "gpt-4",
+      "serialized": "system: You are helpful.\nuser: 你好，这是一段用于分词器对拍的中文正文。它包含标点、数字 12345、英文 mixed words、路径 /a/b/c.md、代码 const x = 1; 以及换行。\n第二段稍微长一点，用来把 token 数推到百级以上，让 0.5% 的相对容差有牙齿：The quick brown fox jumps over the lazy dog. 包装误差与转换误差在这种规模下才可分辨。无空白长中文串病态样本：一二三四五六七八九十百千万亿兆京垓秭穰沟涧正载极恒河沙阿僧祇那由他不可思议无量大数。",
+      "cliTokenCount": 234,
+      "cliEstimated": false,
+      "cliCounterKind": "tiktoken",
+      "rawTextTokenCount": 223
+    },
+    {
+      "id": "gpt-o200k",
+      "family": "tiktoken",
+      "encodingName": "o200k_base",
+      "savedModelId": "openai/gpt-4o",
+      "vendorModelId": "gpt-4o",
+      "serialized": "system: You are helpful.\nuser: 你好，这是一段用于分词器对拍的中文正文。它包含标点、数字 12345、英文 mixed words、路径 /a/b/c.md、代码 const x = 1; 以及换行。\n第二段稍微长一点，用来把 token 数推到百级以上，让 0.5% 的相对容差有牙齿：The quick brown fox jumps over the lazy dog. 包装误差与转换误差在这种规模下才可分辨。无空白长中文串病态样本：一二三四五六七八九十百千万亿兆京垓秭穰沟涧正载极恒河沙阿僧祇那由他不可思议无量大数。",
+      "cliTokenCount": 183,
+      "cliEstimated": false,
+      "cliCounterKind": "tiktoken",
+      "rawTextTokenCount": 172
     }
   ]
 }

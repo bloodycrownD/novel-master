@@ -47,30 +47,42 @@ internal class TokenizerEngine(private val context: Context) {
     var jniMs: Long = -1
   }
 
-  // 缓存容量 4（2026-09-29 二次拍板 2→4）：WEB json 解析后内存可达数十 MB/
-  // 家族（glm 词表 15 万词 + 31.8 万合并），常态用户一两个家族、多模型用户
-  // 四个家族（glm/gpt/claude/qwen 级别）同时驻留也够用；LRU 淘汰后下次使用
-  // 再懒加载一次即可。SP 词表（.model protobuf）同理。
-  private val webCache = LruCache<String, HuggingFaceTokenizer>(4)
-  private val spCache = LruCache<String, SpTokenizer>(4)
+  // 缓存容量 6（token-count-perf-r2 由 4→6）：WEB 家族 8 个 + tiktoken 两表
+  // （cl100k/o200k）常驻共 10 条目，容量 4 时切模型会频繁 LRU 互踢、每踢一次
+  // 重付秒级词表加载。+2 槽内存代价数十 MB/家族（与 2026-09-29「4 种模型合理」
+  // 拍板同族的量级权衡）。词表 JSON 解析后内存可达数十 MB/家族（glm 词表 15 万
+  // 词 + 31.8 万合并），LRU 淘汰后下次使用再懒加载一次即可。SP 词表（.model
+  // protobuf）同理。
+  private val webCache = LruCache<String, HuggingFaceTokenizer>(6)
+  private val spCache = LruCache<String, SpTokenizer>(6)
 
   /**
    * @param shouldCancel 取消检查回调，命中即抛 [TokenizerCountCancelledException]。
    *   缺省 `{ false }` 是为了保持既有调用方（[TokenizerModule.countPrompt] 等）
    *   逐字兼容——可取消的轮才显式传入。
+   * @param encodingName gpt 家族（family == "tiktoken"）的编码名
+   *   （`cl100k_base` / `o200k_base`），经 Module 的 vendorModelId 槽下发
+   *   （token-count-perf-r2）；其余家族忽略。gpt 家族缺编码名即抛。
    */
   fun count(
     serialized: String,
     family: String,
+    encodingName: String? = null,
     shouldCancel: () -> Boolean = { false },
   ): CountResult {
     val timings = CountTimings(family, serialized.length)
     val startNs = System.nanoTime()
-    val spec = resolveAssetSpecFor(family)
+    val spec =
+      if (family == "tiktoken") {
+        resolveTiktokenAssetSpec(encodingName)
+      } else {
+        resolveAssetSpecFor(family)
+      }
     return try {
-      when (spec.kind) {
-        "json" -> countWebFamily(serialized, family, spec, shouldCancel, timings)
-        "model" -> countSpFamily(serialized, family, spec, shouldCancel, timings)
+      when {
+        family == "tiktoken" -> countGptFamily(serialized, family, spec, shouldCancel, timings)
+        spec.kind == "json" -> countWebFamily(serialized, family, spec, shouldCancel, timings)
+        spec.kind == "model" -> countSpFamily(serialized, family, spec, shouldCancel, timings)
         // resolveAssetSpecFor 已校验 kind，此分支仅为防御性兜底。
         else -> throw IllegalStateException("家族 $family 的资产类型未知: ${spec.kind}")
       }
@@ -79,6 +91,40 @@ internal class TokenizerEngine(private val context: Context) {
       // Step 9 的观测量之一），且 totalMs 必须覆盖到抛出的那一刻。
       timings.totalMs = elapsedMs(startNs)
       logTimings(timings)
+    }
+  }
+
+  /**
+   * gpt 家族计数（token-count-perf-r2）：**直编码整串、不包装**——与 WEB 家族
+   * 的 system 包装（+ "\n\nAssistant:" 后缀）不同，tiktoken 裸 encode 口径与
+   * js-tiktoken 的 `encoding.encode(text)` 对齐；per-message overhead（~7 token
+   * 常数）由 JS 侧用 core 公式补加，公式单源保持在 TS。词表走 webCache（键=
+   * 资产路径，cl100k/o200k 各占一槽不互踢）。
+   */
+  private fun countGptFamily(
+    serialized: String,
+    family: String,
+    spec: AssetPathSpec,
+    shouldCancel: () -> Boolean,
+    timings: CountTimings,
+  ): CountResult {
+    val loadStartNs = System.nanoTime()
+    val tokenizer =
+      loadWebTokenizer(spec, timings)
+        ?: throw IllegalStateException("gpt 编码词表资产缺失或加载失败: ${spec.primary}")
+    timings.vocabLoadMs = elapsedMs(loadStartNs)
+    // 检查点：词表已就绪、encode 还没开始（与 WEB/SP 家族同构）。
+    if (shouldCancel()) throw TokenizerCountCancelledException("家族 $family 的计数在 encode 前被取消")
+    val encodeStartNs = System.nanoTime()
+    return try {
+      val count = tokenizer.encode(serialized, false, false).ids.size
+      CountResult(count, family, estimated = false)
+    } catch (e: TokenizerCountCancelledException) {
+      throw e
+    } catch (e: Throwable) {
+      throw IllegalStateException("家族 $family 的 gpt 编码失败: ${e.message}", e)
+    } finally {
+      timings.encodeMs = elapsedMs(encodeStartNs)
     }
   }
 
@@ -91,7 +137,7 @@ internal class TokenizerEngine(private val context: Context) {
   ): CountResult {
     val loadStartNs = System.nanoTime()
     val tokenizer =
-      loadWebTokenizer(family, spec, timings)
+      loadWebTokenizer(spec, timings)
         ?: throw IllegalStateException("家族 $family 的 WEB 分词器资产缺失或加载失败")
     timings?.vocabLoadMs = elapsedMs(loadStartNs)
     // 检查点：词表已就绪、encode 还没开始——这是取消收益最大的一处
@@ -121,11 +167,12 @@ internal class TokenizerEngine(private val context: Context) {
   }
 
   private fun loadWebTokenizer(
-    family: String,
     spec: AssetPathSpec,
     timings: CountTimings? = null,
   ): HuggingFaceTokenizer? {
-    webCache.get(family)?.let { return it }
+    // 缓存键 = 资产路径（token-count-perf-r2 起）：此前用 family，gpt 家族的
+    // cl100k/o200k 两张表会共用 "tiktoken" 一槽互相踢（每踢一次重付秒级加载）。
+    webCache.get(spec.primary)?.let { return it }
     val copyStartNs = System.nanoTime()
     val primaryPath = copyAssetToCache("tokenizers/${spec.primary}") ?: return null
     timings?.copyMs = elapsedMs(copyStartNs)
@@ -137,7 +184,7 @@ internal class TokenizerEngine(private val context: Context) {
         }
     timings?.jniMs = elapsedMs(jniStartNs)
     if (loaded != null) {
-      webCache.put(family, loaded)
+      webCache.put(spec.primary, loaded)
     }
     return loaded
   }
@@ -260,6 +307,21 @@ internal class TokenizerEngine(private val context: Context) {
         throw IllegalStateException("家族 $family 的资产类型未知: ${spec.kind}")
       }
       return spec
+    }
+
+    /**
+     * gpt 家族（family == "tiktoken"）按编码名解析资产 spec（token-count-perf-r2）。
+     * 缺编码名 / 编码名不在两表域（cl100k_base / o200k_base）即抛——JS 侧对
+     * 出界模型（p50k/gpt2 家族）本就不发起原生调用，走到这里的抛错是防御线，
+     * JS 桥 catch 后回退 js-tiktoken 档。
+     */
+    fun resolveTiktokenAssetSpec(encodingName: String?): AssetPathSpec {
+      val name = encodingName?.trim().orEmpty()
+      if (name.isEmpty()) {
+        throw IllegalStateException("gpt 家族计数缺少编码名（vendorModelId 槽为空）")
+      }
+      return TokenizerAssetPaths.forTiktokenEncoding(name)
+        ?: throw IllegalStateException("gpt 编码名 $name 无原生词表资产（两表域外）")
     }
   }
 }

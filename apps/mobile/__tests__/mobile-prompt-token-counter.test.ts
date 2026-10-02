@@ -137,16 +137,25 @@ describe('tokenizer-driver-rn countPromptLlmInputRn', () => {
     expect(result.count).toBeGreaterThan(0);
   });
 
-  it('GPT 家族 o200k 表域：真值 tiktoken/estimated=false，数值与 node 精确档同口径', async () => {
+  it('GPT 家族 o200k 表域：原生优先过桥（vendorModelId 槽=编码名），桥回 null 落 js 档同口径真值', async () => {
     const {__test__} = require('@novel-master/tokenizer-driver-rn');
 
+    // 原生优先（token-count-perf-r2）：tiktoken 家族先过桥，第三参（vendorModelId
+    // 槽）承载 JS 已解析的**编码名**——Kotlin 侧 family=="tiktoken" 时据此选词表。
+    // mock 未设返回值 = 桥 resolve undefined → 驱动按「原生无结果」落回 js 档
+    // （三层回退链：原生 → js-tiktoken → 其内部 cl100k 兜底）。
     // vendor 前缀形态（openai/gpt-4o）：直查不认识 → 走 core 映射第二跳 → o200k。
     const en = await __test__.countSerialized(
       'tiktoken',
       'system prompt for gpt',
       'openai/gpt-4o',
     );
-    expect(mockCountPrompt).not.toHaveBeenCalled();
+    expect(mockCountPrompt).toHaveBeenCalledTimes(1);
+    expect(mockCountPrompt).toHaveBeenCalledWith(
+      'system prompt for gpt',
+      'tiktoken',
+      'o200k_base',
+    );
     expect(en).toEqual({
       count: 12,
       counterKind: 'tiktoken',
@@ -162,6 +171,35 @@ describe('tokenizer-driver-rn countPromptLlmInputRn', () => {
       counterKind: 'tiktoken',
       estimated: false,
     });
+  });
+
+  it('GPT 原生成功：count = 原生直编码 + JS 补 overhead（T-G3/T-G7）', async () => {
+    mockCountPrompt.mockResolvedValue({
+      // Kotlin 直编码整串的裸计数（对拍门 T-G2 已证与 js 裸 encode 同值域）。
+      tokenCount: 99,
+      counterKind: 'tiktoken',
+      estimated: false,
+    });
+    const {__test__} = require('@novel-master/tokenizer-driver-rn');
+
+    const result = await __test__.countSerialized(
+      'tiktoken',
+      'system prompt for gpt',
+      'openai/gpt-4o',
+    );
+    // overhead（非 0301 公式）= 3 (perMessage) + encode('system') + 3 (尾部)：
+    // 与 js 档 countTiktoken 同一 core countOpenAiStyleMessages 空串口径——公式
+    // 单源保持在 TS，Kotlin 不复刻（真表 encode('system')=1，故 7）。
+    expect(result).toEqual({
+      count: 99 + 7,
+      counterKind: 'tiktoken',
+      estimated: false,
+    });
+    expect(mockCountPrompt).toHaveBeenCalledWith(
+      'system prompt for gpt',
+      'tiktoken',
+      'o200k_base',
+    );
   });
 
   it('GPT 家族 cl100k 表域（裸模型名直查命中）：同口径真值；连续两次计数第二次不炸（无 free）', async () => {
@@ -476,7 +514,10 @@ describe('T-TC5 驱动缓存（message-token-cache Step 3 / rn）', () => {
 
     const second = await countPromptLlmInputRn(params);
     expect(second.tokenCount).toBe(first.tokenCount);
-    expect(mockCountPrompt).not.toHaveBeenCalled();
+    // 原生优先（token-count-perf-r2）：第一轮 tiktoken 先过桥一次（mock 未设
+    // 返回值 = 桥 null → 落 js 档完成计数）；第二轮 L1 命中在驱动入口早退，
+    // 桥与 encode 都零新增。
+    expect(mockCountPrompt).toHaveBeenCalledTimes(1);
     expect(encodeCalls).toBe(
       callsAfterFirst,
       'L1 命中：同输入第二次不得再调编码表 encode',
@@ -526,8 +567,11 @@ describe('T-TC5 驱动缓存（message-token-cache Step 3 / rn）', () => {
       }
     }
     expect(changedChunks).toBe(1);
-    // +1 = overhead 路径对 role "system" 的 encode（无边界恒 1 段）。
-    expect(encodeCalls - callsAfterFirst).toBe(changedChunks + 1);
+    // +2 次 overhead encode（token-count-perf-r2 原生优先路径的已知低效）：
+    // countGptViaNative 过桥前预算一次 + 桥 null 回退后 countTiktoken 内再算
+    // 一次（role "system" 恒 1 段），外加变化块 1 次——回退轮的重复 overhead
+    // 只是单 token 串的一次 encode，刻意不为此加参数传递复杂度。
+    expect(encodeCalls - callsAfterFirst).toBe(changedChunks + 2);
   });
 });
 
@@ -636,6 +680,36 @@ describe('取消链路（tokenizer-native-cancel / rn 驱动面）', () => {
         's-1',
       ),
     ).rejects.toBeInstanceOf(PromptCountCancelledError);
+    expect(mockCountPrompt).not.toHaveBeenCalled();
+  });
+
+  it('gpt 原生轮可取消（T-G6）：四参且槽收编码名；取消上抛不落 js 档', async () => {
+    mockCountPromptCancelable.mockRejectedValue({
+      code: 'TOKENIZER_COUNT_CANCELLED',
+      message: 'cancelled',
+    });
+    const {
+      __test__,
+      PromptCountCancelledError,
+    } = require('@novel-master/tokenizer-driver-rn');
+
+    // gpt 家族（token-count-perf-r2）首次获得可取消能力：sessionId 在场 →
+    // 走四参可取消方法，第三参（vendorModelId 槽）= 编码名。
+    await expect(
+      __test__.countSerialized(
+        'tiktoken',
+        ZH_TEXT,
+        'openai/gpt-4o',
+        undefined,
+        's-9',
+      ),
+    ).rejects.toBeInstanceOf(PromptCountCancelledError);
+
+    expect(mockCountPromptCancelable).toHaveBeenCalledTimes(1);
+    const args = mockCountPromptCancelable.mock.calls[0] as string[];
+    expect(args.slice(0, 3)).toEqual([ZH_TEXT, 'tiktoken', 'o200k_base']);
+    expect(args[3]).toMatch(/^s-9:\d+$/);
+    // 取消不得落 js 档重算（否则比不取消更贵）。
     expect(mockCountPrompt).not.toHaveBeenCalled();
   });
 

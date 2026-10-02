@@ -75,13 +75,16 @@ class TokenizerEngineTest {
   @Test
   fun resolveAssetSpecForFamilyWithoutAssetsThrowsInsteadOfHeuristic() {
     // 新契约：无资产家族不再折算 heuristic，直接抛异常（T-FA5）。
+    // 负例家族用 gpt2（token-count-perf-r2）：真实家族、原生刻意不配资产
+    // （r50k/gpt2 出界域由 JS 侧拦下不走原生）——此前用 gpt-4o 当负例，
+    // gpt 家族上原生词表后该断言必红。
     try {
-      TokenizerEngine.resolveAssetSpecFor("gpt-4o")
+      TokenizerEngine.resolveAssetSpecFor("gpt2")
       fail("无资产家族必须抛 IllegalStateException，不允许返回折算值")
     } catch (expected: IllegalStateException) {
       assertTrue(
         "异常消息应包含家族名，实际: ${expected.message}",
-        expected.message?.contains("gpt-4o") == true,
+        expected.message?.contains("gpt2") == true,
       )
     }
   }
@@ -99,6 +102,54 @@ class TokenizerEngineTest {
     val qwen2 = TokenizerEngine.resolveAssetSpecFor("qwen2")
     assertEquals("web/qwen2.json", qwen2.primary)
     assertEquals("llama3.json", qwen2.fallback)
+  }
+
+  // ------------------------------------------------------------------
+  // gpt 家族（token-count-perf-r2）
+  // ------------------------------------------------------------------
+
+  @Test
+  fun resolveTiktokenAssetSpecMapsBothEncodingsAndThrowsOutOfDomain() {
+    val cl = TokenizerEngine.resolveTiktokenAssetSpec("cl100k_base")
+    assertEquals("cl100k.json", cl.primary)
+    assertEquals("json", cl.kind)
+
+    val o2 = TokenizerEngine.resolveTiktokenAssetSpec("o200k_base")
+    assertEquals("o200k.json", o2.primary)
+    assertEquals("json", o2.kind)
+
+    // 两表域外（p50k 等）与空缺编码名都必须抛：JS 侧出界模型本就不发起原生
+    // 调用，这里是防御线。
+    try {
+      TokenizerEngine.resolveTiktokenAssetSpec("p50k_base")
+      fail("两表域外编码名必须抛")
+    } catch (expected: IllegalStateException) {
+      assertTrue(expected.message?.contains("p50k_base") == true)
+    }
+    try {
+      TokenizerEngine.resolveTiktokenAssetSpec(null)
+      fail("缺编码名必须抛")
+    } catch (expected: IllegalStateException) {
+      // 防御线：消息说明缺编码名即可
+    }
+  }
+
+  @Test
+  fun gptEncodingsLoadAndCountFixedStringAboveZero() {
+    // gpt 冒烟（T-G1 伴生）：两张表都能被 DJL 加载并对固定串直编码出正数。
+    // 注意 addSpecialTokens=false——与 tiktoken 裸 encode 口径对齐（HF 转换件
+    // 虽无 post_processor，仍显式关闭防未来资产形态变化）。
+    for (assetName in listOf("cl100k.json", "o200k.json")) {
+      val asset = resolveAsset("tokenizers/$assetName")
+      assumeTrue("$assetName asset missing", asset != null)
+      val tokenizer =
+        HuggingFaceTokenizer.newInstance(
+          Paths.get(asset!!.absolutePath),
+          mapOf("truncation" to "false", "addSpecialTokens" to "false"),
+        )
+      val count = tokenizer.encode(fixedSerialized, false, false).ids.size
+      assertTrue("$assetName 直编码应得正数，实际 $count", count > 0)
+    }
   }
 
   private fun resolveAsset(relative: String): File? {

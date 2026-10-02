@@ -51,16 +51,23 @@ class TokenizerModule(reactContext: ReactApplicationContext) :
 
   override fun getName(): String = "NovelMasterTokenizer"
 
+  /**
+   * [vendorModelId] 双语义（token-count-perf-r2）：WEB/SP 家族下沿用原状
+   * （仅诊断信息，不参与路由）；`family == "tiktoken"` 时承载 JS 侧已解析的
+   * **编码名**（`cl100k_base` / `o200k_base`），Engine 据此选词表。复用既有
+   * 第三参是刻意的——RN 桥两条路径都做 arity 硬校验，加参/新方法都有兼容矩阵
+   * 代价，而该参数此前一直是 `@Suppress(UNUSED_PARAMETER)` 空槽。
+   */
   @ReactMethod
   fun countPrompt(
     serialized: String,
     family: String,
-    @Suppress("UNUSED_PARAMETER") vendorModelId: String,
+    vendorModelId: String,
     promise: Promise,
   ) {
     executor.execute {
       try {
-        val result = engine.count(serialized, family)
+        val result = engine.count(serialized, family, encodingNameFor(family, vendorModelId))
         val map = WritableNativeMap()
         map.putInt("tokenCount", result.tokenCount)
         map.putString("counterKind", result.counterKind)
@@ -94,7 +101,7 @@ class TokenizerModule(reactContext: ReactApplicationContext) :
   fun countPromptCancelable(
     serialized: String,
     family: String,
-    @Suppress("UNUSED_PARAMETER") vendorModelId: String,
+    vendorModelId: String,
     requestId: String,
     promise: Promise,
   ) {
@@ -108,7 +115,12 @@ class TokenizerModule(reactContext: ReactApplicationContext) :
           throwIfCancelled(requestId)
           false
         }
-        val result = engine.count(serialized, family, shouldCancel)
+        val result = engine.count(
+          serialized,
+          family,
+          encodingNameFor(family, vendorModelId),
+          shouldCancel,
+        )
         val map = WritableNativeMap()
         map.putInt("tokenCount", result.tokenCount)
         map.putString("counterKind", result.counterKind)
@@ -165,6 +177,9 @@ class TokenizerModule(reactContext: ReactApplicationContext) :
     const val CODE_COUNT_FAILED = "TOKENIZER_COUNT_FAILED"
     const val CODE_COUNT_CANCELLED = "TOKENIZER_COUNT_CANCELLED"
 
+    /** gpt 家族的 family 名（与 core `TokenizerFamily` 联合的 tiktoken 值一致）。 */
+    const val TIKTOKEN_FAMILY = "tiktoken"
+
     init {
       // DJL `HuggingFaceTokenizer.newInstance` 的首跳会同步跑 `Ec2Utils.callHome`：
       // 连 `http://169.254.169.254`（EC2 元数据，手机上永不可达）取 token+元数据，
@@ -175,6 +190,13 @@ class TokenizerModule(reactContext: ReactApplicationContext) :
       System.setProperty("OPT_OUT_TRACKING", "true")
     }
   }
+
+  /**
+   * [vendorModelId] 在 gpt 家族下承载编码名（见 [countPrompt] 参数说明），
+   * 其余家族返回 null（Engine 忽略该维度）。
+   */
+  private fun encodingNameFor(family: String, vendorModelId: String): String? =
+    if (family == TIKTOKEN_FAMILY) vendorModelId else null
 }
 
 /**

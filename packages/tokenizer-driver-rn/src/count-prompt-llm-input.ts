@@ -2,8 +2,10 @@
  * React Native prompt token counter (NMTP RN driver).
  *
  * Hermes cannot run @agnai/web-tokenizers or @agnai/sentencepiece-js (Node fs/url/WASM).
- * GPT families count in JS via the shared js-tiktoken encoding tables from
- * {@link ./impl/encoding-cache} (same-process singleton, never freed). WEB/SP delegate
+ * GPT families count **native-first on Android** (token-count-perf-r2：DJL cl100k/
+ * o200k 词表直编码 + JS 补 overhead，js-tiktoken 降为回退档、iOS 恒回退), with
+ * cl100k JS fallback via shared tables from {@link ./impl/encoding-cache}
+ * (same-process singleton, never freed). WEB/SP delegate
  * to Android NovelMasterTokenizer when available; otherwise heuristic + estimated.
  *
  * message-token-cache Step 3（分层挂接，主代理定稿）：入口挂 L1 整串缓存；
@@ -32,6 +34,7 @@ import {
   type TokenizerFamily,
 } from "@novel-master/core/provider";
 import {
+  PromptCountCancelledError,
   countPromptViaNative,
   isNativeTokenizerAvailable,
   type NativeCountResponse,
@@ -86,6 +89,8 @@ const DRIVER_NAME = "rn";
  */
 let probeChunkTotal = 0;
 let probeChunkMisses = 0;
+/** [nm-tok-js] 探针路由标注：native（WEB/SP）/ native-gpt / js / fallback。 */
+let probeRoute = "js";
 
 function countChunksWithL2(
   text: string,
@@ -128,6 +133,7 @@ function countChunksWithL2(
  * 该档不进 L2——没有真分词器就没有可缓存的稳定读数。
  */
 function fallbackCount(text: string, scope: string): number {
+  probeRoute = "fallback";
   const encoding = getDefaultRnEncoding();
   if (encoding == null) {
     return heuristicCount(text);
@@ -261,11 +267,71 @@ async function countTiktoken(
 }
 
 function mapNativeResult(nativeResult: NativeCountResponse): SerializedCountResult {
+  probeRoute = "native";
   return {
     count: nativeResult.tokenCount,
     counterKind: nativeResult.counterKind as TokenCounterKind,
     estimated: nativeResult.estimated,
   };
+}
+
+/**
+ * gpt 家族的原生优先路径（token-count-perf-r2）：Android 侧 DJL 词表直编码
+ * 整串（对拍门 T-G2 已验证与 js-tiktoken 裸 encode 同值域），JS 侧用 core 公式
+ * 补 per-message overhead（~7 token 常数，公式单源保持在 TS，Kotlin 不复刻）。
+ *
+ * 三层回退链：编码名出界（p50k/gpt2 家族 → `resolveRnEncodingName` null）或
+ * js 编码表建不起来 → 返回 null（落 js 档）；原生不可用 / 无资产 reject（非
+ * 取消）→ 返回 null（落 js 档 = 现状行为）；**取消异常原样上抛**——与 WEB/SP
+ * 分支同一条不变量（见 countSerializedImpl 中「取消例外」注释）。
+ *
+ * 返回 null 一律表示「这一轮不归原生管」，由调用方落回 [countTiktoken]。
+ */
+async function countGptViaNative(
+  serialized: string,
+  vendorModelId: string,
+  sessionId: string | undefined,
+): Promise<SerializedCountResult | null> {
+  if (!isNativeTokenizerAvailable()) {
+    return null;
+  }
+  const tiktokenModel = mapVendorModelIdToTiktokenModel(vendorModelId);
+  const encName = resolveRnEncodingName(vendorModelId, tiktokenModel);
+  if (encName == null) {
+    return null;
+  }
+  const encoding = resolveEncoding(encName);
+  if (encoding == null) {
+    // js 表建不起来时 overhead 公式也算不了——整个精确档都进不去，交给
+    // countTiktoken 自己的兜底链（现状行为）。
+    return null;
+  }
+  const overhead = countOpenAiStyleMessages(
+    encoding,
+    [wrapSerializedPromptAsSystemMessage("")],
+    tiktokenModel,
+  );
+  try {
+    const nativeResult = await countPromptViaNative(
+      // vendorModelId 槽在 gpt 档承载编码名（Kotlin 侧 family=="tiktoken" 时
+      // 解释为编码名选词表，见 TokenizerModule.encodingNameFor）。
+      buildNativeCountRequest(serialized, "tiktoken", encName, sessionId),
+    );
+    if (nativeResult == null) {
+      return null;
+    }
+    probeRoute = "native-gpt";
+    return {
+      count: nativeResult.tokenCount + overhead,
+      counterKind: "tiktoken",
+      estimated: false,
+    };
+  } catch (error) {
+    if (error instanceof PromptCountCancelledError) {
+      throw error;
+    }
+    return null;
+  }
 }
 
 /**
@@ -291,7 +357,12 @@ function buildNativeRequestId(sessionId: string | undefined): string | undefined
   return `${sessionId}:${nativeRequestSeq}`;
 }
 
-/** native 档过桥请求：sessionId 与 requestId 同时在场才可能被桥判为可取消轮。 */
+/**
+ * native 档过桥请求：sessionId 与 requestId 同时在场才可能被桥判为可取消轮。
+ * `vendorModelId` 槽**双语义**（token-count-perf-r2）：WEB/SP 家族传真实
+ * vendor id（仅诊断）；gpt 档传 JS 已解析的编码名（cl100k_base / o200k_base），
+ * Kotlin 侧 family=="tiktoken" 时据此选词表（TokenizerModule.encodingNameFor）。
+ */
 function buildNativeCountRequest(
   serialized: string,
   family: TokenizerFamily,
@@ -323,6 +394,7 @@ async function countSerialized(
 ): Promise<SerializedCountResult> {
   probeChunkTotal = 0;
   probeChunkMisses = 0;
+  probeRoute = "js";
   const probeT0 = Date.now();
   try {
     const result = await countSerializedImpl(
@@ -334,14 +406,14 @@ async function countSerialized(
     );
     console.info(
       `[nm-tok-js] family=${family} chars=${serialized.length} ms=${Date.now() - probeT0}` +
-        ` kind=${result.counterKind} est=${result.estimated}` +
+        ` route=${probeRoute} kind=${result.counterKind} est=${result.estimated}` +
         ` l2Hit=${probeChunkTotal - probeChunkMisses}/${probeChunkTotal}`,
     );
     return result;
   } catch (error) {
     console.info(
       `[nm-tok-js] family=${family} chars=${serialized.length} ms=${Date.now() - probeT0}` +
-        ` thrown=${error instanceof Error ? error.name : "unknown"}`,
+        ` route=${probeRoute} thrown=${error instanceof Error ? error.name : "unknown"}`,
     );
     throw error;
   }
@@ -371,8 +443,17 @@ async function countSerializedImpl(
       estimated: true,
     };
   }
-  // GPT path stays in JS — js-tiktoken is exact and Metro-safe (M0/M1).
+  // GPT 家族（token-count-perf-r2 起三层路由：原生优先 → js-tiktoken → 其内部
+  // 自带 cl100k heuristic 兜底）。gpt2 / 出界（p50k）模型不经原生——
+  // resolveRnEncodingName 返回 null 时根本不发起过桥。
   if (family === "tiktoken" || family === "gpt2") {
+    const nativeResult =
+      family === "tiktoken"
+        ? await countGptViaNative(serialized, vendorModelId, sessionId)
+        : null;
+    if (nativeResult != null) {
+      return nativeResult;
+    }
     return countTiktoken(serialized, vendorModelId, scope);
   }
   if (WEB_FAMILIES.has(family) || SP_FAMILIES.has(family)) {

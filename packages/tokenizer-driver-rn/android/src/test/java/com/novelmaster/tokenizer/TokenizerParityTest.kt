@@ -16,6 +16,15 @@ import kotlin.math.max
 
 /**
  * M1-I1: native JVM counts vs CLI goldens (countPromptLlmInputNode) within tolerance.
+ *
+ * token-count-perf-r2 两处口径修正：
+ * - WEB/SP 的 `HuggingFaceTokenizer.newInstance` 显式关 truncation——DJL 默认
+ *   truncation=true + maxLength=512，超过 512 token 的金标串会被静默截断给出
+ *   偏小假读数（生产路径 `TokenizerEngine.tryLoadWebTokenizer` 一直带
+ *   `truncation=false`，测试路径此前没对齐）。
+ * - gpt 家族（family=tiktoken）走直编码分支，对拍字段 `rawTextTokenCount`
+ *   （js-tiktoken 对序列化串的裸 encode，与 Kotlin 直编码同口径）；`cliTokenCount`
+ *   是「overhead+分块和」口径，仅打印参考不参与 gpt 断言。
  */
 class TokenizerParityTest {
   @Test
@@ -33,6 +42,24 @@ class TokenizerParityTest {
       val cli = c.getInt("cliTokenCount")
       assumeTrue("CLI golden must be exact for $family", c.getBoolean("cliEstimated") == false)
 
+      if (family == "tiktoken") {
+        // gpt 对拍门（T-G2/T-G8）：DJL 直编码 vs js-tiktoken 裸 encode，
+        // 容差 max(3, ceil(0.5%))——同算法同表理论上应逐 token 等值，留半百分比
+        // 给 HF 转换件在特殊 token 边界上的极小形态差。
+        val raw = c.getInt("rawTextTokenCount")
+        val encodingName = c.getString("encodingName")
+        val native = countGptNative(serialized, encodingName)
+        assertFalse("${c.getString("id")}: gpt native must not be estimated", native.estimated)
+        val tol = gptParityTolerance(raw)
+        val delta = abs(native.tokenCount - raw)
+        assertTrue(
+          "${c.getString("id")}: |native(${native.tokenCount}) - raw($raw)| = $delta > tol($tol)" +
+            "（cli 参考值 $cli 为 overhead+分块口径，不参与本断言）",
+          delta <= tol,
+        )
+        continue
+      }
+
       val native = countNative(serialized, family)
       assertFalse("${c.getString("id")}: native must not be estimated", native.estimated)
       assertTrue("${c.getString("id")}: native count > 0", native.tokenCount > 0)
@@ -49,9 +76,22 @@ class TokenizerParityTest {
   @Test
   fun unknownFamilyPropagatesExceptionInsteadOfHeuristicFallback() {
     // 新契约：无资产家族不再折算 heuristic，异常必须从计数路径直接传播（T-FA5）。
+    // 负例家族 gpt2（token-count-perf-r2）：真实家族、原生刻意不配资产——此前用
+    // gpt-4o 当负例，gpt 家族上原生词表后该断言必红。
     try {
-      countNative("You are helpful.\n\nuser: Hello", "gpt-4o")
+      countNative("You are helpful.\n\nuser: Hello", "gpt2")
       fail("无资产家族应抛 IllegalStateException 而非返回折算值")
+    } catch (_: IllegalStateException) {
+      // 预期：异常传播
+    }
+  }
+
+  @Test
+  fun tiktokenOutOfDomainEncodingThrowsInsteadOfHeuristicFallback() {
+    // gpt 家族的防御线（T-G1 伴生）：两表域外编码名必须抛，不允许折算。
+    try {
+      TokenizerEngine.resolveTiktokenAssetSpec("p50k_base")
+      fail("两表域外编码名应抛 IllegalStateException")
     } catch (_: IllegalStateException) {
       // 预期：异常传播
     }
@@ -69,6 +109,24 @@ class TokenizerParityTest {
     }
   }
 
+  private fun countGptNative(serialized: String, encodingName: String): NativeCount {
+    val spec = TokenizerEngine.resolveTiktokenAssetSpec(encodingName)
+    val asset =
+      resolveAssetFile("tokenizers/${spec.primary}")
+        ?: throw IllegalStateException("gpt 编码 $encodingName 的词表资产缺失")
+    val tokenizer =
+      try {
+        HuggingFaceTokenizer.newInstance(
+          Paths.get(asset.absolutePath),
+          mapOf("truncation" to "false", "addSpecialTokens" to "false"),
+        )
+      } catch (e: Throwable) {
+        throw IllegalStateException("gpt 编码 $encodingName 词表加载失败: ${e.message}", e)
+      }
+    // 与生产 countGptFamily 同口径：直编码整串、不包装、不加特殊 token。
+    return NativeCount(tokenizer.encode(serialized, false, false).ids.size, estimated = false)
+  }
+
   private fun countWebNative(
     serialized: String,
     family: String,
@@ -79,7 +137,10 @@ class TokenizerParityTest {
         ?: throw IllegalStateException("家族 $family 的 WEB 分词器资产缺失")
     val tokenizer =
       try {
-        HuggingFaceTokenizer.newInstance(Paths.get(asset.absolutePath))
+        HuggingFaceTokenizer.newInstance(
+          Paths.get(asset.absolutePath),
+          mapOf("truncation" to "false"),
+        )
       } catch (e: Throwable) {
         throw IllegalStateException("家族 $family 的 WEB 分词器加载失败: ${e.message}", e)
       }
@@ -121,5 +182,9 @@ class TokenizerParityTest {
     /** M1 tolerance: max(3, ceil(cli * 0.01)). */
     fun parityTolerance(cliTokenCount: Int): Int =
       max(3, ceil(cliTokenCount * 0.01).toInt())
+
+    /** gpt 对拍容差（T-G2）：同算法同表，留 0.5% 给 HF 转换件边界形态差。 */
+    fun gptParityTolerance(rawTokenCount: Int): Int =
+      max(3, ceil(rawTokenCount * 0.005).toInt())
   }
 }
