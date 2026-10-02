@@ -5,6 +5,15 @@
  */
 
 import { isUserInputMessage } from "@/domain/chat/logic/message-content-helpers.js";
+import type { ChatMessage } from "@/domain/chat/model/message.js";
+import type {
+  ContentBlock,
+  ToolResultBlock,
+  ToolUseBlock,
+} from "@/domain/chat/model/content-block.js";
+import { messageBodyTextFromBlocks } from "@/domain/chat/content/message-body-text.js";
+import { resolveToolResultOk } from "@/domain/tool/logic/build-tool-result-block.js";
+import { formatToolResultContentForDisplay } from "@/domain/tool/logic/format-tool-output.js";
 import type { AgentPromptLayout } from "@/domain/prompt/model/agent-prompt-layout.js";
 import type { PromptRenderContext } from "@/domain/prompt/model/prompt-render-context.js";
 import {
@@ -14,12 +23,53 @@ import {
   type PromptPreviewSegment,
 } from "./render-prompt.js";
 
+/** 工具组卡状态：`ok` 成功 / `error` 失败（显式 `ok:false` 或 legacy `Error:` 前缀）/ `lost` 悬挂未回结果。 */
+export type PromptToolGroupStatus = "ok" | "error" | "lost";
+
+/** 工具组卡的结果格数据；`null` 表示悬挂 use（丢失占位，槽位保留）。 */
+export interface PromptToolGroupResultData {
+  readonly toolUseId: string;
+  /** `resolveToolResultOk` 产出（显式 `ok` 优先，legacy 回落 `Error:` 前缀）。 */
+  readonly ok: boolean;
+  readonly body: string;
+}
+
+/** 工具调用组卡：一次 `tool_use` 一张，跨消息按 `toolUseId` 与 `tool_result` 配对。 */
+export interface PromptToolGroupCardData {
+  readonly type: "toolGroup";
+  readonly id: string;
+  readonly toolName: string;
+  /** `JSON.stringify(input, null, 2)`；`input` 为 `{}` 时退化为 `[tool_use name=… id=…]` 单行（与 CLI 形态一致）。 */
+  readonly inputJson: string;
+  readonly result: PromptToolGroupResultData | null;
+  readonly status: PromptToolGroupStatus;
+  /** 同一消息内多个 `tool_use`（并行调用徽标）。 */
+  readonly parallel: boolean;
+}
+
+/** 文本 / thinking 卡：正文即「发给模型（或预览开关打开时的思考块）」的形态。 */
+export interface PromptTextCardData {
+  readonly type: "text" | "thinking";
+  /** 独立命名空间 `card-${message.id}-${blockIndex}`（template 轮卡用段 id）；仅要求轮内唯一。 */
+  readonly id: string;
+  /** 展示标签用：user / assistant / template 段名。 */
+  readonly role: string;
+  readonly body: string;
+}
+
+/** 轮内有序卡片流。 */
+export type PromptTurnCardData = PromptTextCardData | PromptToolGroupCardData;
+
 /**
  * 一轮提示词：模板段各占一轮，真用户输入开新轮，其余消息段归入当前 assistant 轮。
  *
  * - `template` 轮：system / skills 索引 / workplace 双段 / persist-* / dynamic-*，每轮一段；
  * - `user` 轮：一条真用户输入消息的全部段（至少一段，无空轮）；
  * - `assistant` 轮：紧跟其后的 assistant 文本 / thinking / tool_call / tool 段，正文在 `body` 一份字符串里。
+ *
+ * `items` / `summary` / `body` 是 CLI parity 冻结面（**段集合、段序、正文一字不动**）；
+ * `cards` / `summaryText` / `metaText` 是渲染层旁路：由 `ctx.messages` 的 content blocks
+ * 重建出结构化卡片流（工具调用一对一组卡），承载新 UI 的就地展开与全屏。
  */
 export interface PromptPreviewTurn {
   readonly id: string;
@@ -27,6 +77,12 @@ export interface PromptPreviewTurn {
   readonly items: PromptPreviewSegment[];
   readonly summary: string;
   readonly body: string;
+  /** 有序卡片流（就地展开与全屏的渲染源），顺序=消息块序重建的因果序，与 `items` 段序无关。 */
+  readonly cards: ReadonlyArray<PromptTurnCardData>;
+  /** 真摘要：单行语义（>70 字截断，三类轮统一）。 */
+  readonly summaryText: string;
+  /** 计数行（字数 / 工具调用次数 / 失败丢失计数 / 附件计数）。 */
+  readonly metaText: string;
 }
 
 /** 轮摘要文本位上限：首行**超** 70 字才截断（恰好 70 字原样保留）。 */
@@ -60,6 +116,8 @@ function summarizeFirstLine(text: string): string {
 /**
  * assistant 轮摘要（core 侧钉死口径，双端不二次加工）：
  * 首条 assistant 文本首行 + 工具调用计数 + 总字符数。
+ *
+ * @remarks 旧 `summary` 字段专用；新 UI 读 `summaryText` / `metaText`（见下方构建）。
  */
 function buildAssistantTurnSummary(items: readonly PromptPreviewSegment[]): string {
   const firstText = items.find((item) => item.role === "assistant");
@@ -71,7 +129,246 @@ function buildAssistantTurnSummary(items: readonly PromptPreviewSegment[]): stri
   return textPart === "" ? `${items.length} 段 · ${counts}` : `${textPart} · ${counts}`;
 }
 
-/** 分组中间形态：先按切轮规则归组，最后一步才补 summary / body。 */
+/** 空摘要兜底文案（user 轮内层解析为空串时用）。 */
+const EMPTY_SUMMARY_TEXT = "（无文本）";
+
+/** `<user-input>` / `</user-input>` 标签（wrap 形态由 `wrapUserMessageForLlm` 产出）。 */
+const USER_INPUT_OPEN = "<user-input>";
+const USER_INPUT_CLOSE = "</user-input>";
+
+/**
+ * 取 `<user-input>…</user-input>` 内层原文；无该标签（未 wrap 的裸输入）时返回 null。
+ *
+ * @remarks wrap 形态实锤：`<attachment>…</attachment>\n<user-input>\n{plainText}\n</user-input>`，
+ * 首尾各带一个换行，故调用方拿到内层后**先 trim 再取首行**。
+ */
+function extractUserInputInner(text: string): string | null {
+  const start = text.indexOf(USER_INPUT_OPEN);
+  if (start < 0) {
+    return null;
+  }
+  const end = text.lastIndexOf(USER_INPUT_CLOSE);
+  if (end < 0) {
+    return null;
+  }
+  return text.slice(start + USER_INPUT_OPEN.length, end);
+}
+
+/** 单块的纯文本（复用 `messageBodyTextFromBlocks` 的清洗口径：剥离孤立闭合思考标签）。 */
+function blockTextForCard(block: ContentBlock): string | null {
+  if (block.type !== "text" && block.type !== "image") {
+    return null;
+  }
+  const text = messageBodyTextFromBlocks([block]);
+  return text === "" ? null : text;
+}
+
+/** `tool_use` 的 input 展示文本：美化 JSON；空对象退化为 CLI 同款单行头。 */
+function formatToolUseInputJson(block: ToolUseBlock): string {
+  const inputJson = JSON.stringify(block.input, null, 2);
+  return inputJson === "{}"
+    ? `[tool_use name=${block.name} id=${block.id}]`
+    : inputJson;
+}
+
+/** 工具组卡状态：无 result → `lost`；`ok=false` → `error`；否则 `ok`。 */
+function toolGroupStatus(
+  block: ToolResultBlock | undefined
+): PromptToolGroupStatus {
+  if (block === undefined) {
+    return "lost";
+  }
+  return resolveToolResultOk(block) ? "ok" : "error";
+}
+
+/** `toolUseId` → `tool_result` 块：一次全量扫描，hidden 消息里的结果同样参与配对（同 `buildToolResultByUseId` 先例）。 */
+function buildToolResultByUseId(
+  messages: readonly ChatMessage[]
+): Map<string, ToolResultBlock> {
+  const map = new Map<string, ToolResultBlock>();
+  for (const message of messages) {
+    for (const block of message.content.blocks) {
+      if (block.type === "tool_result") {
+        map.set(block.toolUseId, block);
+      }
+    }
+  }
+  return map;
+}
+
+/** 一张消息的卡片：文本缓冲卡（`\n\n` 连接）/ thinking 卡 / 工具组卡，顺序=块序（因果序）。 */
+function buildMessageCards(
+  message: ChatMessage,
+  results: ReadonlyMap<string, ToolResultBlock>,
+  includeThinking: boolean
+): PromptTurnCardData[] {
+  const blocks = message.content.blocks;
+  const parallel = blocks.filter((block) => block.type === "tool_use").length > 1;
+  const cards: PromptTurnCardData[] = [];
+  let textBuffer: Array<{ index: number; text: string }> = [];
+
+  const flushText = () => {
+    if (textBuffer.length === 0) {
+      return;
+    }
+    const first = textBuffer[0]!;
+    cards.push({
+      type: "text",
+      id: cardId(message.id, first.index),
+      role: message.role,
+      body: textBuffer.map((part) => part.text).join("\n\n"),
+    });
+    textBuffer = [];
+  };
+
+  blocks.forEach((block, index) => {
+    if (block.type === "tool_result") {
+      // 结果不单独成卡：按 toolUseId 收进对应工具组卡的 result 格。
+      return;
+    }
+    if (block.type === "tool_use") {
+      flushText();
+      const resultBlock = results.get(block.id);
+      cards.push({
+        type: "toolGroup",
+        id: `group-${block.id}`,
+        toolName: block.name,
+        inputJson: formatToolUseInputJson(block),
+        result:
+          resultBlock === undefined
+            ? null
+            : {
+                toolUseId: resultBlock.toolUseId,
+                ok: resolveToolResultOk(resultBlock),
+                body: formatToolResultContentForDisplay(resultBlock.content),
+              },
+        status: toolGroupStatus(resultBlock),
+        parallel,
+      });
+      return;
+    }
+    if (block.type === "thinking" || block.type === "redacted_thinking") {
+      if (!includeThinking) {
+        return;
+      }
+      flushText();
+      cards.push({
+        type: "thinking",
+        id: cardId(message.id, index),
+        role: message.role,
+        body: block.type === "thinking" ? block.text : "[redacted thinking]",
+      });
+      return;
+    }
+    const text = blockTextForCard(block);
+    if (text != null) {
+      textBuffer.push({ index, text });
+    }
+  });
+  flushText();
+
+  return cards;
+}
+
+/** user 轮卡片：wrap 后的整条文本（发给模型的形态）直转一张 text 卡。 */
+function buildUserTurnCards(message: ChatMessage): PromptTurnCardData[] {
+  const blocks = message.content.blocks;
+  const parts: Array<{ index: number; text: string }> = [];
+  blocks.forEach((block, index) => {
+    const text = blockTextForCard(block);
+    if (text != null) {
+      parts.push({ index, text });
+    }
+  });
+  if (parts.length === 0) {
+    return [];
+  }
+  const first = parts[0]!;
+  return [
+    {
+      type: "text",
+      id: cardId(message.id, first.index),
+      role: message.role,
+      body: parts.map((part) => part.text).join("\n\n"),
+    },
+  ];
+}
+
+/** 卡片 id 独立命名空间（与段 id `chat-<mid>-<全局K>` 无对应关系，仅要求轮内唯一）。 */
+function cardId(messageId: string, blockIndex: number): string {
+  return `card-${messageId}-${blockIndex}`;
+}
+
+/** 卡片计数字数：文本/thinking 取 `body`；工具组卡取 use 输入 + result 正文。 */
+function cardCharCount(card: PromptTurnCardData): number {
+  if (card.type !== "toolGroup") {
+    return card.body.length;
+  }
+  return card.inputJson.length + (card.result?.body.length ?? 0);
+}
+
+/** assistant 轮真摘要：首条 assistant 文本卡的首行；纯工具/纯思考轮用卡片数占位。 */
+function buildAssistantSummaryText(cards: readonly PromptTurnCardData[]): string {
+  const firstText = cards.find(
+    (card): card is PromptTextCardData => card.type === "text"
+  );
+  const textPart = firstText == null ? "" : summarizeFirstLine(firstText.body);
+  return textPart === "" ? `${cards.length} 段` : textPart;
+}
+
+/** user 轮真摘要：`<user-input>` 内层首行（无标签时取正文首行）；空串兜底 `（无文本）`。 */
+function buildUserSummaryText(card: PromptTextCardData): string {
+  const inner = extractUserInputInner(card.body);
+  const source = (inner === null ? card.body : inner).trim();
+  if (source === "") {
+    return EMPTY_SUMMARY_TEXT;
+  }
+  const firstLine = summarizeFirstLine(source);
+  return firstLine === "" ? EMPTY_SUMMARY_TEXT : firstLine;
+}
+
+/** 计数行：字数 + 工具调用次数 + 失败/丢失计数（**分别计算**，不切旧 summary 拼串）。 */
+function buildAssistantMetaText(
+  seq: number | undefined,
+  cards: readonly PromptTurnCardData[]
+): string {
+  const charCount = cards.reduce((sum, card) => sum + cardCharCount(card), 0);
+  const toolGroups = cards.filter(
+    (card): card is PromptToolGroupCardData => card.type === "toolGroup"
+  );
+  const parts = [
+    ...(seq === undefined ? [] : [`#${seq}`]),
+    `工具调用 ${toolGroups.length} 次`,
+    `${charCount} 字`,
+  ];
+  const failed = toolGroups.filter((card) => card.status === "error").length;
+  const lost = toolGroups.filter((card) => card.status === "lost").length;
+  if (failed > 0) {
+    parts.push(`${failed} 失败`);
+  }
+  if (lost > 0) {
+    parts.push(`${lost} 丢失`);
+  }
+  return parts.join(" · ");
+}
+
+/** user 轮计数行：`#N · M 字`（有附件追加 ` · 附件 K`）。 */
+function buildUserMetaText(
+  seq: number | undefined,
+  charCount: number,
+  attachmentCount: number
+): string {
+  const parts = [
+    ...(seq === undefined ? [] : [`#${seq}`]),
+    `${charCount} 字`,
+  ];
+  if (attachmentCount > 0) {
+    parts.push(`附件 ${attachmentCount}`);
+  }
+  return parts.join(" · ");
+}
+
+/** 分组中间形态：先按切轮规则归组，最后一步才补 summary / body / cards / 新摘要字段。 */
 interface TurnGroup {
   readonly kind: PromptPreviewTurn["kind"];
   /** 来源 ChatMessage id（user 组用于判断是否同一条消息的多段）。 */
@@ -79,6 +376,12 @@ interface TurnGroup {
   /** 来源 ChatMessage seq：message 段入组时取首段的 seq，template 轮无此值。 */
   readonly seq?: number;
   readonly items: PromptPreviewSegment[];
+  /** 结构化卡片流（从 ctx.messages 的 blocks 重建，与 items 段序无关）。 */
+  cards: PromptTurnCardData[];
+  /** 已并入 cards 的消息 id：同一条消息的多个段只贡献一次卡片。 */
+  readonly consumedMessageIds: Set<string>;
+  /** user 轮附件计数（含 workplace 源附件）。 */
+  attachmentCount: number;
 }
 
 /**
@@ -99,6 +402,13 @@ export async function buildPromptPreviewTurnsFromLayout(
   const userInputMessageIds = new Set(
     ctx.messages.filter(isUserInputMessage).map((message) => message.id)
   );
+  // cards 旁路的两个预扫：消息 id → 消息本体（段侧 messageId 回查），以及全量 toolUseId→result 配对表。
+  const messageById = new Map<string, ChatMessage>();
+  for (const message of ctx.messages) {
+    messageById.set(message.id, message);
+  }
+  const toolResults = buildToolResultByUseId(ctx.messages);
+  const includeThinking = options?.includeThinkingBlocks === true;
 
   const groups: TurnGroup[] = [];
   let current: TurnGroup | null = null;
@@ -108,7 +418,15 @@ export async function buildPromptPreviewTurnsFromLayout(
     messageId: string | undefined = undefined,
     seq: number | undefined = undefined
   ): TurnGroup => {
-    const group: TurnGroup = { kind, messageId, seq, items: [] };
+    const group: TurnGroup = {
+      kind,
+      messageId,
+      seq,
+      items: [],
+      cards: [],
+      consumedMessageIds: new Set<string>(),
+      attachmentCount: 0,
+    };
     groups.push(group);
     return group;
   };
@@ -116,7 +434,15 @@ export async function buildPromptPreviewTurnsFromLayout(
   for (const segment of segments) {
     const item = toPreviewSegment(segment);
     if (segment.source !== "message") {
-      groups.push({ kind: "template", messageId: undefined, items: [item] });
+      // template 轮：合成段不在 ctx.messages 里，由该轮唯一段的 items 直转一张 text 卡。
+      const group = pushGroup("template");
+      group.items.push(item);
+      group.cards.push({
+        type: "text",
+        id: item.id,
+        role: item.title,
+        body: item.body,
+      });
       // 模板段自成一轮，不并入前后 chat 轮：复位 current，断掉「模板段只出现在 chat 前后」的隐式假设。
       current = null;
       continue;
@@ -141,17 +467,69 @@ export async function buildPromptPreviewTurnsFromLayout(
     }
     current = target;
     target.items.push(item);
+    // 卡片按消息挂载：同一条消息的多个段只贡献一次卡片流（段侧 tool_result 合并段不重复产卡）。
+    const messageId = segment.messageId;
+    if (messageId != null && !target.consumedMessageIds.has(messageId)) {
+      target.consumedMessageIds.add(messageId);
+      const message = messageById.get(messageId);
+      if (message !== undefined) {
+        target.cards.push(
+          ...(isUserInput
+            ? buildUserTurnCards(message)
+            : buildMessageCards(message, toolResults, includeThinking))
+        );
+        if (isUserInput) {
+          target.attachmentCount += message.attachments?.length ?? 0;
+        }
+      }
+    }
   }
 
-  return groups.map((group) => ({
-    // message 轮用 `turn-${seq}`（跨段稳定、与段 id 解耦）；template 轮无 seq，沿用段 id。
-    id: group.seq != null ? `turn-${group.seq}` : group.items[0]!.id,
-    kind: group.kind,
-    items: group.items,
-    summary:
+  return groups.map((group) => {
+    const summary =
       group.kind === "assistant"
         ? buildAssistantTurnSummary(group.items)
-        : group.items[0]!.title,
-    body: joinTurnBody(group.items),
-  }));
+        : group.items[0]!.title;
+    // message 轮用 `turn-${seq}`（跨段稳定、与段 id 解耦）；template 轮无 seq，沿用段 id。
+    const id = group.seq != null ? `turn-${group.seq}` : group.items[0]!.id;
+    const base = {
+      id,
+      kind: group.kind,
+      items: group.items,
+      summary,
+      body: joinTurnBody(group.items),
+      cards: group.cards,
+    };
+    if (group.kind === "assistant") {
+      return {
+        ...base,
+        summaryText: buildAssistantSummaryText(group.cards),
+        metaText: buildAssistantMetaText(group.seq, group.cards),
+      };
+    }
+    if (group.kind === "user") {
+      const firstCard = group.cards[0];
+      const charCount = group.cards.reduce(
+        (sum, card) => sum + cardCharCount(card),
+        0
+      );
+      return {
+        ...base,
+        summaryText:
+          firstCard != null && firstCard.type === "text"
+            ? buildUserSummaryText(firstCard)
+            : EMPTY_SUMMARY_TEXT,
+        metaText: buildUserMetaText(group.seq, charCount, group.attachmentCount),
+      };
+    }
+    const charCount = group.cards.reduce(
+      (sum, card) => sum + cardCharCount(card),
+      0
+    );
+    return {
+      ...base,
+      summaryText: group.items[0]!.title,
+      metaText: `${charCount} 字`,
+    };
+  });
 }
