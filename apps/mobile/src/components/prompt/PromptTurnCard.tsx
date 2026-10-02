@@ -35,9 +35,9 @@ const DETAIL_TITLE_LIMIT = 24;
  * 与设计基准 demo 的 turn-head 一致（user 青 / assistant 紫 / template 灰）。
  */
 const TURN_ROLE_LABEL: Record<PromptPreviewTurn['kind'], string> = {
-  user: 'user 轮',
-  assistant: 'assistant 轮',
-  template: 'template 轮',
+  user: 'user',
+  assistant: 'assistant',
+  template: 'template',
 };
 
 /** 徽标配色：user 青、assistant 紫、template 中性灰（不随主题变，语义色）。 */

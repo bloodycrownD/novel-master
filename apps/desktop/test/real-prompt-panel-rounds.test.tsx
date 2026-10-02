@@ -419,7 +419,7 @@ describe("RealPromptPanel 三层结构轮卡列表 + 全屏富文本 Modal (T-R6
     const roles = classListNodes(root, "prompt-turn-card__role");
     assert.deepEqual(
       roles.map((node) => textOf(node)),
-      ["template 轮", "user 轮", "assistant 轮"],
+      ["template", "user", "assistant"],
     );
     assert.deepEqual(
       roles.map((node) => (node.props as { style: { color: string } }).style.color),
@@ -602,7 +602,7 @@ describe("RealPromptPanel 三层结构轮卡列表 + 全屏富文本 Modal (T-R6
     assert.equal(overlays.length, 1);
     const modal = root.findAll((node) => node.props?.role === "dialog")[0]!;
     assert.equal(modal.props["aria-modal"], "true");
-    assert.match(String(modal.props["aria-label"]), /assistant 轮 · 全屏流夹具详情/);
+    assert.match(String(modal.props["aria-label"]), /assistant · 全屏流夹具详情/);
     // 壳复用：.text-prompt-overlay / .prompt-editor-modal / footer 全在
     assert.equal(
       modal.findAll(

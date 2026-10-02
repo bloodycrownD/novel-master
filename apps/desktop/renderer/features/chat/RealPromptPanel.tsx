@@ -40,9 +40,9 @@ interface RealPromptPanelProps {
 
 /** 轮层 role 徽标文案（不是消息角色，是「轮」这一层）。 */
 const TURN_ROLE_LABELS: Record<PromptPreviewTurnDto["kind"], string> = {
-  user: "user 轮",
-  assistant: "assistant 轮",
-  template: "template 轮",
+  user: "user",
+  assistant: "assistant",
+  template: "template",
 };
 
 /**

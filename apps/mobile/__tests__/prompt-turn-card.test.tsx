@@ -117,11 +117,11 @@ describe('PromptTurnCard（T-MP1/T-MP4 mobile）', () => {
     takePromptTurnDetail();
   });
 
-  it('T-MP1-1 三态 role 徽标渲染（user/assistant/template）', () => {
-    expect(textsOf(renderCard().toJSON())).toContain('assistant 轮');
-    expect(textsOf(renderCard({kind: 'user'}).toJSON())).toContain('user 轮');
+  it('T-MP1-1 三态 role 徽标渲染（user/assistant/template，无「轮」字后缀）', () => {
+    expect(textsOf(renderCard().toJSON())).toContain('assistant');
+    expect(textsOf(renderCard({kind: 'user'}).toJSON())).toContain('user');
     expect(textsOf(renderCard({kind: 'template'}).toJSON())).toContain(
-      'template 轮',
+      'template',
     );
   });
 
