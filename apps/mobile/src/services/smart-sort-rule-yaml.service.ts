@@ -5,10 +5,10 @@
  * 编排（yaml-shared）与文本 (de)serialization，模式与 agent-yaml.service 一致。
  */
 import {parseText, stringifyText} from '@novel-master/core';
-import {isStorageFailure} from '@novel-master/core/common';
+import {normalizeSmartSortImportError} from '@novel-master/core/common';
 
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
-import {exportYamlFile, importYamlFile, normalizeYamlError} from './yaml-shared';
+import {exportYamlFile, importYamlFile} from './yaml-shared';
 
 export async function exportSmartSortRuleYaml(
   runtime: MobileNovelMasterRuntime,
@@ -21,7 +21,9 @@ export async function exportSmartSortRuleYaml(
 /**
  * 替换式导入（spec D10）：调用方需先完成「将替换全部规则」的确认。
  *
- * 存储/事务类故障原样上抛（`isStorageFailure`），其余照旧套「YAML 无效」前缀。
+ * 存储/事务类故障原样上抛、其余照旧套「YAML 无效」前缀——判据与前缀都在 core
+ * 的 `normalizeSmartSortImportError` 里（desktop 侧调同一个函数）。
+ * 别在这里把三元抄回本地：两份字面量必然漂一份，而旧测试只重演不断接线。
  *
  * @returns 导入成功后的规则条数（取消选择时返回 null）。
  */
@@ -35,10 +37,7 @@ export async function importSmartSortRuleYaml(
             const rules = await runtime.smartSortRule.importRules(raw);
             count = rules.length;
         } catch (error) {
-            if (isStorageFailure(error)) {
-                throw error;
-            }
-            throw normalizeYamlError(error, '智能排序规则 YAML 无效');
+            throw normalizeSmartSortImportError(error);
         }
     });
     return count;

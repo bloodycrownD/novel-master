@@ -245,6 +245,19 @@ export async function scanBackfillGap(args: {
  * 消息**永久**进不了空窗段（RULE r3-run-4 关心的那一类永久缺口）。
  * ⇒ 这里从 gap 头开始逐条 `hasCheckpoint` 复核，**只在连续命中**时跳过，
  * 一旦遇到未命中就停下、之后全部照写 ⇒ 结构性免疫，且代价是 O(gap) 次读。
+ *
+ * **已知失败面（OQ4 拍板=i 案：现状接受）**：段 1（事务外扫描）读到的
+ * head 指针，**在段 2 落笔之前**可能被并发回滚 / 删除 GC 掉——那几条
+ * message 行随之消失，`insertCheckpoint` 撞引用完整性就抛
+ * `NOT_FOUND: Revision not found`。
+ *
+ * 这个失败面是**窄且响亮**的：窄在它只在「扫描与补写之间恰好有并发回滚/删除」
+ * 这一条窗口里发生（同一会话的并发 GC），响亮在它**立即抛错**、整轮 backfill
+ * 中止，而不是静默写出一批指向幽灵消息的 baseline 快照——后者会造成 RULE
+ * r3-run-4 那种**永久缺口**，那才是真正不可接受的。所以按 i 案保留响亮失败，
+ * 不加 best-effort 吞错、不加存在性预检（预检只是把同一个窗口从「写时」挪到
+ * 「查时」，并不真正消除它）。调用方按普通失败重试即可：backfill 幂等，
+ * 下轮重新扫描拿到的是收敛后的空窗段。
  */
 export async function writeBackfillGap(args: {
   readonly checkpointRepo: MessageCheckpointRepository;

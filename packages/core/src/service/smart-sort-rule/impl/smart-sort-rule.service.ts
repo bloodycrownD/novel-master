@@ -71,6 +71,22 @@ export interface SmartSortRuleServiceDeps {
 
 /** Smart sort rule service backed by the smart_sort_rule table. */
 export class DefaultSmartSortRuleService implements SmartSortRuleService {
+  /**
+   * 绑**根连接**的仓储记忆化单例（c1 P2-5）。
+   *
+   * `createRules` 每次调用都 new 一个 `SqliteSmartSortRuleRepository`，而后者
+   * 持有一份自己的 `SqlTemplateParser`（`SqliteSmartSortRuleRepository` 内的
+   * `private readonly parser`）——parser 的 `astCache`
+   * （`infra/sql-template/parser.ts`）是**实例级**的，每次 new 就是一份空缓存，
+   * `listOrdered` / `find` / `insert` / `update` 各自重新词法扫一遍模板。
+   * 改前 `deps.rules` 是**一个**绑根连接的长寿命仓储，缓存跨调用复用；改后
+   * `this.rules()` 每次都 new，把既有缓存抵消掉了。
+   *
+   * 根连接是长寿命的（service 整个生命周期不变），所以根连接上记忆化**零行为
+   * 变化**：仓储无 per-call 可变状态，纯委托给 conn。
+   */
+  private rootRules: SmartSortRuleRepository | null = null;
+
   constructor(private readonly deps: SmartSortRuleServiceDeps) {}
 
   /**
@@ -79,9 +95,19 @@ export class DefaultSmartSortRuleService implements SmartSortRuleService {
    * 跨 ≥2 次 repo 写调用的逻辑动作必须包一条 `conn.transaction`，且事务回调内
    * 一律 `this.rules(tx)`——绝不裸调 `this.rules()`（那拿的是根连接，会死锁）。
    * 单语句入口不开事务。
+   *
+   * ⚠️ **事务内必须现造、绝不记忆化**：`tx` 句柄每条事务都是新的，记忆化它
+   * 会让下一条事务拿到上一条已提交的 `tx`（事务内经它写会撞驱动的
+   * `AsyncMutex` 不可重入，故障形态是**永久挂起**而不是变红）。所以记忆化只
+   * 对「默认参数 = 根连接」这一条分支生效。
    */
   private rules(conn: TdbcConnection = this.deps.conn): SmartSortRuleRepository {
-    return this.deps.createRules(conn);
+    if (conn !== this.deps.conn) {
+      // 事务句柄：现造，用完即弃（见上方 ⚠️）。
+      return this.deps.createRules(conn);
+    }
+    this.rootRules ??= this.deps.createRules(conn);
+    return this.rootRules;
   }
 
   async listRules(): Promise<SmartSortRule[]> {

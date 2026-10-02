@@ -390,9 +390,31 @@ export async function replaceVfsSubtree(
  * @remarks 顺序不可调换：scoped GC（`deleteUnreferencedUnderScope`）靠
  * `JOIN vfs_entry` 圈定范围，必须在 entry 还在时跑；放到 `deleteVfsPrefix`
  * 之后会恒命中 0 行、成为死语句（本顺序与 `revision-gc.ts` 的 session 侧同源）。
- * 换序后「GC 删掉 revision 触发器连带回收 blob」与「删 entry」之间存在一个
- * 「entry 仍指向已回收 blob」的中间窗口——因此这三步**必须留在同一事务内**
- * （全部调用方都以 tx 构造 revision 仓储，改成拆事务会开出这个窗口）。
+ *
+ * **为什么必须留在同一事务内**（HEAD 真实机理，别再按旧版本注释理解）：
+ * Wave C 的 `c667be0f`（CS-06/CS-07）把 `vfs_content_blob` 的 DELETE 触发器换成了
+ * 带守卫的 v2（`bootstrap/vfs/vfs-revision-schema.ts`）：
+ *
+ * ```sql
+ * DELETE FROM vfs_content_blob
+ *  WHERE content_hash = OLD.content_hash AND ref_count <= 0
+ *    AND NOT EXISTS (SELECT 1 FROM vfs_entry WHERE content_hash = OLD.content_hash);
+ * ```
+ *
+ * 所以 GC 删 revision 时 entry 还在 ⇒ **blob 行不会被回收**，旧注释描述的
+ * 「entry 指向已回收 blob」数据丢失窗口已被该 DDL 关闭（这是好事）。留下的是
+ * 另一面：那条 `UPDATE … ref_count = ref_count - 1` 照跑（无守卫），计数落到 0、
+ * 行留着；紧接着的 `deleteVfsPrefix` 删 entry **没有配套触发器**
+ * （`vfs_entry` 上零触发器）⇒ 本函数跑完后会留下一批 `ref_count = 0` 的
+ * `vfs_content_blob` 行待 gc。
+ *
+ * 三步同事务这条约束**继续有效**：守卫只挡 DELETE、不挡 −1，那个 ref_count=0 的
+ * 中间态仍然存在，必须不外泄到事务外让别的读看到「有 ref 却没有 revision」的
+ * scope。所有调用方都以 tx 构造 revision 仓储，拆事务会开出这个窗口。
+ *
+ * ⚠️ 残留的 blob 行只能靠 `runDeferredBlobGc` 收（全库算 entry ∪ revision 引用集）。
+ * zip 导入 / 角色卡导入 / 技能整目录删除这三条链**从不调它**，见
+ * `vfs-gc-trigger.test.ts` 里对应三条链的 blob 口径用例。
  */
 export async function sweepRevisionsUnderScope(
   repo: VfsEntryRepository,

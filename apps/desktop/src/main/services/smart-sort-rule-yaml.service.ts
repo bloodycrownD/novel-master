@@ -8,14 +8,10 @@
  * @module services/smart-sort-rule-yaml
  */
 import { parseText, stringifyText } from "@novel-master/core";
-import { isStorageFailure } from "@novel-master/core/common";
+import { normalizeSmartSortImportError } from "@novel-master/core/common";
 import type { BrowserWindow } from "electron";
 import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
-import {
-  exportYamlWithDialog,
-  importYamlWithDialog,
-  normalizeYamlError,
-} from "./yaml-shared.js";
+import { exportYamlWithDialog, importYamlWithDialog } from "./yaml-shared.js";
 
 const EXPORT_FILE_NAME = "smart-sort-rules.yaml";
 
@@ -37,13 +33,10 @@ export async function importSmartSortRuleYamlWithDialog(
       // service.importRules 内部走 core 单源 decode（含 zod 校验）。
       await runtime.smartSortRule.importRules(parseText(yaml, "yaml"));
     } catch (error) {
-      // 存储/事务类故障原样上抛：`importRules` 现在整体包一条事务，中途失败即
-      // 回滚，带上「YAML 无效」前缀会把 DB 故障误报成用户格式错误。
-      // 其余（含 YAML 语法错 / schema 违规）照旧套前缀。
-      if (isStorageFailure(error)) {
-        throw error;
-      }
-      throw normalizeYamlError(error, "智能排序规则 YAML 无效");
+      // 存储/事务类故障原样上抛、其余套「YAML 无效」前缀——判据与前缀都在
+      // core 的 normalizeSmartSortImportError 里（mobile 侧调同一个函数）。
+      // 别在这里把三元抄回本地：两份字面量必然漂一份，而旧测试只重演不断接线。
+      throw normalizeSmartSortImportError(error);
     }
   }, parentWindow);
 }

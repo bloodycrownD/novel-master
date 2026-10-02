@@ -158,7 +158,7 @@ export class DefaultMessageService implements MessageService {
     return this.deps.messages.listBySessionTail(sessionId, options.limit);
   }
 
-listBySessionTailOfRole(
+  listBySessionTailOfRole(
     sessionId: string,
     options: { role: string; limit: number }
   ): Promise<ChatMessage[]> {

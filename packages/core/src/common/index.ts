@@ -22,6 +22,12 @@ export {
 export { normalizeYamlError } from "./normalize-yaml-error.js";
 // 存储类故障判据（YAML 导入通道的「反转让 TdbcError 绕过 normalizeYamlError」）。
 export { isStorageFailure } from "./is-storage-failure.js";
+// 智能排序规则 YAML 导入通道的错误标签单源（把 desktop + mobile 两份字面量三元
+// 收敛成一处，测试直接测它 ⇒ 顺带把「测试只重演、不守接线」的缺口闭上）。
+export {
+  normalizeSmartSortImportError,
+  SMART_SORT_IMPORT_YAML_INVALID_LABEL,
+} from "./normalize-smart-sort-import-error.js";
 export {
   formatDurationMs,
   formatRequestTime,
