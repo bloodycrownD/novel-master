@@ -29,6 +29,22 @@ export interface AgentAbortRegistry {
   register(sessionId: string, controller: AbortController): void;
 
   /**
+   * 原子 claim：仅在该 sessionId **尚未注册**时登记 controller 并返回 `true`；
+   * 已注册则**不覆盖**既有 controller、直接返回 `false`。
+   *
+   * 与 {@link register} 是并行的两套语义，不要混用：
+   * - `register` = 无条件覆盖（见上），适合「自己就是当前 run 的权威方」；
+   * - `tryRegister` = 抢占式占用，适合「多个并发 run 竞争同一 sessionId、
+   *   只能有一个赢家」的场景（如 task 工具续用子会话时的并发硬互斥）。
+   *
+   * 判重与写入在同一个同步段内完成（无 await），因此同 step 内并发的两个
+   * claim 一定一成一败；败方不得留下任何副作用（典型：不要在 claim 之前
+   * 往子会话 append user 消息）。赢家用 finally 的 {@link unregister}
+   * 释放（所有权比对保证不误删他人 controller）。
+   */
+  tryRegister(sessionId: string, controller: AbortController): boolean;
+
+  /**
    * 中断指定 sessionId 的当前 run。
    *
    * 拿到 controller 调 `.abort()` 后**不删**记录——删除由 finally 的

@@ -5,6 +5,7 @@
  */
 
 import type { ChatMessage } from "@/domain/chat/model/message.js";
+import type { MessageAttachment } from "@/domain/chat/model/message-attachment.schema.js";
 import type { VfsService } from "@/domain/vfs/ports/vfs-service.port.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
 import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
@@ -37,6 +38,12 @@ export interface RunChildAgentOptions {
    * 使子 agent 对话历史完整（UI 浏览可见、LLM 能看到任务描述）。
    */
   readonly prompt?: string;
+  /**
+   * task 工具入参 `fileAttachment` 预算内物化出的附件（已按
+   * `attachmentsFromPaths` 合规形态 + 预算筛选），随子 session 首条 user
+   * 消息落库——与主会话 `@path` 附件同链路（`content:null` 落库、view-time hydrate）。
+   */
+  readonly attachments?: readonly MessageAttachment[];
 }
 
 /** `task` 工具读取的子代理装配闭包；仅 depth=0/1 注入（孙 agent 无 task 工具）。 */
@@ -46,6 +53,34 @@ export interface BuiltinToolSubagentContext {
   readonly sessions: SessionService;
   /** 创建子 session（title 由调用方决定）；返回新 sessionId。 */
   readonly createChildSession: (title: string) => Promise<string>;
+  /**
+   * 直接父会话 id（**直接父**口径，spec D2）：主装配点填 `scope.sessionId`、
+   * 子装配点填 `childSessionId`。`task` 的 `sessionId` 续用参数据此校验归属
+   * ——目标子会话的 `parentSessionId` 必须等于本值（跨 project 的会话同样
+   * 因父 id 不同而被拒）。
+   */
+  readonly parentSessionId: string;
+  /**
+   * 目标子会话当前是否有 in-flight run（软闸，给出可读引导文案）。
+   *
+   * 装配点绑 `runtime.abortRegistry?.has(id) ?? true`——**缺 registry 保守拒绝**，
+   * 不放行续用（真正的并发硬互斥在 `runChildAgent` 内的 `tryRegister` claim）。
+   */
+  readonly isSessionRunActive: (sessionId: string) => boolean;
+  /**
+   * 按路径探测内容大小（`fileAttachment` 预算制软闸用，spec D11）。
+   *
+   * 装配点绑 `runtime.sessionVfs(projectId, parentSessionId).findContentSize`：
+   * `inline` = 明文字符数直接计；`blob` = 压缩字节 ×4 折算明文当量；
+   * `null`（目录 / 不存在）按 0 计。未注入时按「不计字节」处理（仍占条数名额）。
+   */
+  readonly getContentSize?: (
+    path: string
+  ) => Promise<
+    | { readonly kind: "inline"; readonly size: number }
+    | { readonly kind: "blob"; readonly size: number }
+    | null
+  >;
   /**
    * 派生 `AbortController`（监听父 signal 一次）并装配子 agent runner 跑完。
    *
@@ -220,24 +255,6 @@ export type BuiltinToolContext = {
    * 闭包不注入，run 抛 ToolError（FAILED）。
    */
   readonly agents?: BuiltinToolAgentsContext;
-  /**
-   * 可选：仅 `read` 工具读取（read-tool-result-ref）——read 引用是
-   * revision.ref_count 的第三类持有者（既有两类：checkpoint 指针 + live
-   * head），工具内在返回前**同步 +1**（先于任何消息落库，堵住「read 返回
-   * → 消息落库」之间的 sweep 窗口——历史 revision 被 GC 后内容不可再生）。
-   *
-   * 底层绑定 revision repo 的 `batchAdjustRefCountWithDelta`（delta>0 缺行
-   * 抛 NOT_FOUND 的守护语义正好当存在性校验）。未注入时 read 输出不含
-   * entryId、不 +1、不产 contentRef 块——legacy 全文形态（feature-flag
-   * 式回落；三端 runtime 装配随 hydrate（Step 4/6）就绪后打开）。
-   */
-  readonly adjustRevisionRefCount?: (
-    pointers: ReadonlyArray<{
-      readonly entryId: number;
-      readonly version: number;
-    }>,
-    delta: number
-  ) => Promise<void>;
   /**
    * 可选：仅 `write`（新建文件时）/ `fs(mkdir)` 读取——新建路径时为各层
    * 祖先目录补默认目录规则（无 `workplace_dir_rule` 行的目录会被判

@@ -9,6 +9,7 @@ import type {
   MessageContent,
 } from "@/domain/chat/model/message.js";
 import type { MessageUsage } from "@/domain/chat/model/message-usage.js";
+import type { MessageAttachment } from "@/domain/chat/model/message-attachment.schema.js";
 
 /**
  * Session abstraction for agent context (in-memory or chat-backed).
@@ -45,6 +46,14 @@ export interface AgentSession {
       modelName?: string | null;
       raw?: Record<string, unknown> | null;
       usage?: MessageUsage;
+      /**
+       * 结构化附件（写入 `attachments_json`，不写 `content_json`）。
+       *
+       * task 工具 `fileAttachment` 借这条通道把显式路径物化成 `source:"attach"`
+       * 附件挂到子会话首条 user 消息上——与主会话同链路（view-time hydrate +
+       * alreadyReferenced 去重）。可选参数，老调用方零变化。
+       */
+      attachments?: readonly MessageAttachment[];
     }
   ): Promise<ChatMessage>;
 

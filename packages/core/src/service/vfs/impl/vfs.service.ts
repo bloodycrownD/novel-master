@@ -27,14 +27,6 @@ import {
 } from "@/errors/vfs-errors.js";
 import { normalizePath } from "@/domain/vfs/repositories/impl/normalize-path.js";
 import { matchGlob } from "../glob-match.js";
-
-/** UTF-8 编码器（read-tool-result-ref 的 totalBytes 口径共用）。 */
-const utf8Encoder = new TextEncoder();
-
-/** UTF-8 明文字节数。 */
-function utf8ByteLength(text: string): number {
-  return utf8Encoder.encode(text).byteLength;
-}
 import type {
   VfsGrepMatch,
   VfsGrepOptions,
@@ -101,18 +93,11 @@ export class DefaultVfsService implements InternalVfsService {
     if (entry.entryKind === "directory") {
       throw vfsIsDirectory(path);
     }
-    // read-tool-result-ref：透出 head 定位三件套（entryId / contentHash /
-    // totalBytes）。hash 走点查不解正文（content 已在手），totalBytes 按
-    // UTF-8 明文字节口径现算。port 层旧消费者不读这三个可选字段，零影响。
-    const contentHash = await this.repo.findContentHash(scopeKey, path);
     return {
       path: entry.path,
       content: entry.content,
       version: entry.version,
       mtimeMs: entry.mtimeMs,
-      entryId: entry.entryId,
-      contentHash,
-      totalBytes: utf8ByteLength(entry.content),
     };
   }
 

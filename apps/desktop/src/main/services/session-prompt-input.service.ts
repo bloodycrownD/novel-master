@@ -113,13 +113,15 @@ export async function buildSessionPromptInput(
     }
     throw error;
   }
-  const { workplaceDisplay, prefixPaths, fingerprint } = assembled;
+  const { workplaceDisplay, prefixPaths, visiblePaths, fingerprint } = assembled;
   bail();
   const messages = await prepareUserMessagesForPrompt(visibleMessages, {
     sessionId: scope.sessionId,
     sessionKkv: runtime.sessionKkv,
     vfs,
     seenPaths: prefixPaths,
+    // S0 双读（v1.5.30）：attach 去重只吃 full 档，workplace 省略判定吃全量可见档。
+    workplaceSeenPaths: visiblePaths,
     extraInfo: resolved.prompts.customAttach,
     now: new Date(),
     workplace: wt,

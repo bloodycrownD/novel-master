@@ -93,6 +93,9 @@ function makeMockSubagent(args: {
       const s = await sessions.createSubSession("p", "proj", title);
       return s.id;
     },
+    // 续用校验用（spec G4）：本 mock 的「当前父会话」= p，与 createSubSession 一致。
+    parentSessionId: "p",
+    isSessionRunActive: () => false,
     resolveChildModelId: (def) => ({
       savedModelId: def.model ?? "parent-saved-model",
       workspaceModelId: "workspace-model",

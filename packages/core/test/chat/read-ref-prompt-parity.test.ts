@@ -1,21 +1,30 @@
 /**
- * read-tool-result-ref Step 6ï¼šT-RR10 å‹ç¼© / token å£å¾„ parityã€‚
+ * read ½á¹û½øÌáÊ¾´ÊµÄÁ½Ì¬¶ÏÑÔ£¨task-attach-unref Step 4£¬T-RR10£©¡£
  *
- * parity é“¾ï¼ˆ`serializePromptLlmInput` â†’ `formatPromptLlmInputForCliFromLayout`
- * â†’ å†…éƒ¨ messageBodyTextFromBlocksï¼‰ä¸ LLM ä¸»é“¾å…±ç”¨ prepareâ€”â€”å¼•ç”¨å—ç»
- * hydrate è¿˜åŸå…¨æ–‡åï¼Œ**åŒä¸€å†…å®¹çš„å¼•ç”¨å½¢æ€ä¸ legacy å…¨æ–‡å½¢æ€äº§å‡ºçš„åºåˆ—åŒ–
- * å­—ç¬¦ä¸²é€å­—èŠ‚ä¸€è‡´**ï¼štoken ä¼°ç®— / å‹ç¼©æ¡ä»¶è¯„ä¼°ï¼ˆå­—ç¬¦é˜ˆå€¼åˆ¤å®šï¼‰ä¸å—å¼•ç”¨åŒ–
- * å½±å“ã€‚å¯¹ç…§ç»„ï¼ˆè·³è¿‡ prepare ç›´æ¥åºåˆ—åŒ–å¼•ç”¨å—ï¼‰è¯æ˜ hydrate æ˜¯ parity çš„
- * å‰æâ€”â€”ä¸ hydrate çš„å¼•ç”¨å—ä¼šæŠŠå…¨æ–‡æ‚„æ‚„ç¼©æ°´æˆå ä½ç©ºä¸²ï¼Œé˜ˆå€¼åˆ¤å®šå¤±çœŸã€‚
+ * v1.5.29 Ê±´Ë´¦ÑéµÄÊÇ¡¸ÒıÓÃĞÎÌ¬Óë legacy È«ÎÄĞÎÌ¬Öğ×Ö½Ú parity¡¹¡£v1.5.30
+ * unref »ØÇ¨ºó¸Ã¿Ú¾¶°´ spec D16 **³·³ı**¡ª¡ª¶µµ× hydrate ÌîµÄÊÇ revision
+ * Ã÷ÎÄ JSON °ü£¬Óë legacy wire£¨ĞĞºÅÇ°×º / ½Ø¶ÏÌáÊ¾ / ·ÖÒ³ÇĞÆ¬£©±¾¾Í
+ * ²»µÈÖµ£¬Ç¿ĞĞ¶ÔÆë²ÅÊÇ bug¡£¸ÄÎªÁ½Ì¬¶ÏÑÔ£º
+ *
+ * - **ĞÂĞ´ĞĞ**£ºwire = È«ÎÄÖ±³ö£¨`formatToolOutputForLlm` µÄ´øĞĞºÅÈ«ÎÄ£©£¬
+ *   È«³Ì²»¾­ hydrate£¨¿éÉÏ¸ù±¾Ã»ÓĞ contentRef£©¡£
+ * - **´æÁ¿ĞĞ**£º¹¹Ôì v1.5.29 ÒıÓÃ¿é ¡ú prepare ¶µµ× hydrate ¡ú ÌáÊ¾´ÊÀïÊÇ
+ *   `{path, content}` JSON °üĞÎÌ¬¡£
+ *
+ * Á½Ì¬¶¼¹ıÍ¬Ò»Ìõ parity ³ö¿Ú£¨`serializePromptLlmInput` ¡ú ÄÚ²¿
+ * `messageBodyTextFromBlocks`£©Óë LLM Ö÷Á´¹²ÓÃ prepare£¬¹Ê token ¹ÀËã /
+ * Ñ¹ËõãĞÖµÅĞ¶¨£¨×Ö·û¿Ú¾¶£©ÔÚÁ½Ì¬ÏÂ¶¼Ğ¯´øÕæÊµÕıÎÄ£¬²»±»Õ¼Î»¿Õ´®ÎÛÈ¾¡£
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { ChatMessage } from "../../src/domain/chat/model/message.js";
-import type { ToolResultBlock } from "../../src/domain/chat/model/content-block.js";
+import type {
+  ReadResultRef,
+  ToolResultBlock,
+} from "../../src/domain/chat/model/content-block.js";
 import { prepareUserMessagesForPrompt } from "../../src/domain/chat/logic/prepare-user-messages-for-prompt.js";
 import { messageBodyTextFromBlocks } from "../../src/domain/chat/content/message-body-text.js";
 import { buildToolResultBlock } from "../../src/domain/tool/logic/build-tool-result-block.js";
-import { formatToolOutputForLlm } from "../../src/domain/tool/logic/format-tool-output.js";
 import { serializePromptLlmInput } from "../../src/infra/tokenizer/logic/serialize-prompt-input.js";
 import { ToolRegistry } from "../../src/domain/tool/logic/tool-registry.js";
 import { ToolRunner } from "../../src/domain/tool/logic/tool-runner.js";
@@ -33,8 +42,11 @@ import {
 
 novelMasterTestFixture();
 
-/** role=user çš„ tool_result å›ä¼ æ¶ˆæ¯ã€‚ */
-function toolResultMessage(block: ToolResultBlock, sessionId: string): ChatMessage {
+/** role=user µÄ tool_result »Ø´«ÏûÏ¢¡£ */
+function toolResultMessage(
+  block: ToolResultBlock,
+  sessionId: string
+): ChatMessage {
   return {
     id: "tr-rr10",
     sessionId,
@@ -50,17 +62,13 @@ function toolResultMessage(block: ToolResultBlock, sessionId: string): ChatMessa
 
 const EMPTY_LAYOUT: AgentPromptLayout = { persist: [], dynamic: [] };
 
-/**
- * çœŸé“¾è·¯ readï¼ˆ+1 é€šé“èµ° revisionRepoï¼‰ï¼šè¿”å›å¼•ç”¨æ€å—ä¸åŸå§‹è¾“å‡ºâ€”â€”
- * legacy å¯¹ç…§å—ç”±åŒä¸€è¾“å‡ºé‡æ”¾ formatToolOutputForLlmï¼ˆä¸æ—§å½¢æ€è½å—åŒæºï¼‰ã€‚
- */
+/** ÕæÁ´Â· read£¨Ğ´²àÈ«ÎÄÖ±³ö£¬¿éÉÏÎŞ contentRef£©¡£ */
 async function readViaTool(
   ctx: ReturnType<typeof getNovelMasterTestContext>,
   projectId: string,
   sessionId: string,
   path: string,
-  toolUseId: string,
-  revisionRepo: SqliteVfsRevisionRepository
+  toolUseId: string
 ): Promise<{ block: ToolResultBlock; output: ReadToolOutput }> {
   const vfs = ctx.sessionVfs(projectId, sessionId);
   const toolCtx: BuiltinToolContext = {
@@ -68,116 +76,184 @@ async function readViaTool(
     projectId,
     sessionId,
     listSessionMessages: async () => [],
-    adjustRevisionRefCount: async (pointers, delta) => {
-      await revisionRepo.batchAdjustRefCountWithDelta(pointers, delta);
-    },
   };
   const registry = new ToolRegistry<BuiltinToolContext>();
   registerBuiltinTools(registry);
   const runner = new ToolRunner(registry);
   const output = await runner.call<ReadToolOutput>("read", { path }, toolCtx);
-  assert.ok(output.entryId != null, "çœŸé“¾è·¯ read è¾“å‡ºå¿…é¡»å¸¦ entryId");
   const block = buildToolResultBlock(
     toolUseId,
     { ok: true, output },
     { toolName: "read" }
   );
-  assert.ok(block.contentRef != null);
+  assert.equal(block.contentRef, undefined, "ĞÂĞ´ĞĞ²»µÃ²ú contentRef");
   return { block, output };
 }
 
-describe("read-tool-result-ref Step 6: T-RR10 å‹ç¼©/token å£å¾„ parity", () => {
-  it("å¼•ç”¨å½¢æ€ä¸ legacy å…¨æ–‡å½¢æ€ï¼šprepare å parity ä¸²é€å­—èŠ‚ä¸€è‡´ï¼ˆé˜ˆå€¼åˆ¤å®šä¸å—å½±å“ï¼‰", async () => {
+/** ¹¹Ôì v1.5.29 ´æÁ¿ÒıÓÃ¿é£¨content ¿Õ´® + contentRef È«×Ö¶Î£©¡£ */
+async function legacyRefBlock(
+  ctx: ReturnType<typeof getNovelMasterTestContext>,
+  projectId: string,
+  sessionId: string,
+  path: string,
+  toolUseId: string
+): Promise<ToolResultBlock> {
+  await ctx.sessionVfs(projectId, sessionId).write(
+    path,
+    "legacy-µÚÒ»ĞĞ\nlegacy-µÚ¶şĞĞ"
+  );
+  const entryRows = await ctx.conn.query<{ entry_id: number }>(
+    `SELECT entry_id FROM vfs_entry WHERE path = ?`,
+    [path]
+  );
+  const entryId = entryRows[0]!.entry_id;
+  const revRows = await ctx.conn.query<{ content_hash: string }>(
+    `SELECT content_hash FROM vfs_revision WHERE entry_id = ? AND version = 1`,
+    [entryId]
+  );
+  const ref: ReadResultRef = {
+    path,
+    entryId,
+    version: 1,
+    contentHash: revRows[0]!.content_hash,
+    totalBytes: 30,
+    offset: 1,
+    limit: 2000,
+    returnedLines: 2,
+    totalLines: 2,
+    truncated: false,
+  };
+  return {
+    type: "tool_result",
+    toolUseId,
+    content: "",
+    ok: true,
+    summary: "2 lines",
+    contentRef: ref,
+  };
+}
+
+describe("read-ref-prompt-parity: T-RR10 ÌáÊ¾´ÊÁ½Ì¬£¨D16 ³·³ıÖğ×Ö½Ú parity£©", () => {
+  it("ĞÂĞ´ĞĞ£ºwire = ´øĞĞºÅÈ«ÎÄÖ±³ö£¬È«³Ì²»¾­ hydrate", async () => {
     const ctx = getNovelMasterTestContext();
     const suffix = testIsolationSuffix();
     const project = await ctx.projects.create(`pj-rr10-${suffix}`);
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
-    // è¶³å¤Ÿé•¿çš„å†…å®¹ï¼šè®©ã€Œå…¨æ–‡ vs ç©ºä¸²ã€çš„å­—ç¬¦æ•°å·®å¼‚è¶³ä»¥ç¿»è½¬ä»»æ„ç´§é˜ˆå€¼ã€‚
+    // ×ã¹»³¤µÄÄÚÈİ£ºÈÃ¡¸È«ÎÄ vs ¿Õ´®¡¹µÄ×Ö·ûÊı²îÒì×ãÒÔ·­×ªÈÎÒâ½ôãĞÖµ¡£
     const lines = Array.from(
       { length: 120 },
       (_, i) => `parity-line-${String(i).padStart(3, "0")}`
     );
     await vfs.write("/parity.md", lines.join("\n"));
 
-    const revisionRepo = new SqliteVfsRevisionRepository(ctx.conn);
-    const { block: refBlock, output } = await readViaTool(
+    const { block } = await readViaTool(
       ctx,
       project.id,
       session.id,
       "/parity.md",
-      "tu-rr10",
-      revisionRepo
+      "tu-rr10"
     );
+    // Ì¬Ò»£º¿éµÄÕıÎÄ±¾Éí¾ÍÊÇ wire£¨ÎŞÒıÓÃ¡¢ÎŞÕ¼Î»£©¡£
+    assert.equal(block.contentRef, undefined);
+    assert.ok(block.content.includes("     1|parity-line-000"));
+    assert.ok(block.content.length > 1000, "È«ÎÄÖ±³ö»ùÏß×ã¹»³¤");
 
-    // legacy å…¨æ–‡å½¢æ€å¯¹ç…§å—ï¼šåŒä¸€æ¬¡ read çš„è¾“å‡ºç›´å­˜å…¨æ–‡ï¼ˆæ—§å½¢æ€â€”â€”æ— 
-    // contentRefï¼Œcontent ä¸º formatReadOutput å…¨æ–‡ï¼Œä¸è½å—æ—¶åŒæºæ ¼å¼åŒ–ï¼‰ã€‚
-    const legacyBlock: ToolResultBlock = {
-      ...refBlock,
-      contentRef: undefined,
-      content: formatToolOutputForLlm(output),
-    };
-    assert.ok(legacyBlock.content.length > 1000, "legacy å…¨æ–‡å½¢æ€åŸºçº¿å……åˆ†é•¿");
-
+    const revisionRepo = new SqliteVfsRevisionRepository(ctx.conn);
     const sk = createSessionKkvService(ctx.conn);
-    /** å•ä¸€ parity å£ï¼šprepareï¼ˆhydrateï¼‰â†’ serializePromptLlmInputã€‚ */
-    const paritySerial = async (block: ToolResultBlock): Promise<string> => {
-      const prepared = await prepareUserMessagesForPrompt(
-        [toolResultMessage(block, session.id)],
-        { sessionId: session.id, sessionKkv: sk, vfs, revisionRepo }
-      );
-      return serializePromptLlmInput(EMPTY_LAYOUT, {
-        workplaceDisplay: "",
-        messages: prepared,
-      });
-    };
-
-    const legacySerial = await paritySerial(legacyBlock);
-    const refSerial = await paritySerial(refBlock);
-
-    assert.equal(refSerial, legacySerial, "å¼•ç”¨å½¢æ€ä¸å…¨æ–‡å½¢æ€ parity ä¸²å…¨ç­‰");
-    assert.ok(
-      legacySerial.includes("     1|parity-line-000"),
-      "parity ä¸²å¿…é¡»å« wire å…¨æ–‡ï¼ˆè¡Œå·æ ¼å¼ï¼‰"
+    const prepared = await prepareUserMessagesForPrompt(
+      [toolResultMessage(block, session.id)],
+      { sessionId: session.id, sessionKkv: sk, vfs, revisionRepo }
     );
+    // prepare ²»¸Ä¶¯ÎŞÒıÓÃ¿é£¨hydrate Áã´¦Àí£©¡£
+    const outBlock = prepared[0]!.content.blocks[0] as ToolResultBlock;
+    assert.equal(outBlock.content, block.content);
+    assert.equal(outBlock.contentRef, undefined);
 
-    // å­—ç¬¦å£å¾„ï¼ˆmessageBodyTextFromBlocksï¼‰ä¸€è‡´ â†’ å­—ç¬¦é˜ˆå€¼åˆ¤å®šï¼ˆå‹ç¼©æ¡ä»¶ï¼‰
-    // ä¸å—å½±å“ï¼›hydrate åçš„å¼•ç”¨å½¢æ€æºå¸¦å…¨æ–‡è€Œéå ä½ç©ºä¸²ã€‚
-    const bodyTextOf = async (block: ToolResultBlock): Promise<string> => {
-      const prepared = await prepareUserMessagesForPrompt(
-        [toolResultMessage(block, session.id)],
-        { sessionId: session.id, sessionKkv: sk, vfs, revisionRepo }
-      );
-      return messageBodyTextFromBlocks(prepared[0]!.content.blocks);
-    };
-    const legacyText = await bodyTextOf(legacyBlock);
-    const refText = await bodyTextOf(refBlock);
-    assert.equal(refText, legacyText);
-    assert.ok(refText.length > 1000, "hydrate å bodyText æºå¸¦å…¨æ–‡");
+    const serial = await serializePromptLlmInput(EMPTY_LAYOUT, {
+      workplaceDisplay: "",
+      messages: prepared,
+    });
+    assert.ok(
+      serial.includes("     1|parity-line-000"),
+      "ÌáÊ¾´Ê´®º¬´øĞĞºÅÈ«ÎÄ£¨ĞĞºÅ¸ñÊ½²»±»¶µµ× JSON °üÌæ»»£©"
+    );
+    assert.equal(
+      serial.includes('"path"'),
+      false,
+      "ĞÂĞ´ĞĞ²»µÃ±» hydrate ³É JSON °üĞÎÌ¬"
+    );
+    const bodyText = messageBodyTextFromBlocks(prepared[0]!.content.blocks);
+    assert.ok(bodyText.length > 1000, "×Ö·û¿Ú¾¶Ğ¯´øÈ«ÎÄ£¨ãĞÖµÅĞ¶¨²»Ê§Õæ£©");
   });
 
-  it("å¯¹ç…§ç»„ï¼šè·³è¿‡ prepareï¼ˆä¸ hydrateï¼‰çš„å¼•ç”¨å— bodyText ç¼ºå¤±å…¨æ–‡â€”â€”è¯æ˜ hydrate æ˜¯ parity å‰æ", async () => {
+  it("´æÁ¿ĞĞ£ºprepare ¶µµ× hydrate ºó = {path, content} JSON °üĞÎÌ¬", async () => {
+    const ctx = getNovelMasterTestContext();
+    const suffix = testIsolationSuffix();
+    const project = await ctx.projects.create(`pj-rr10b-${suffix}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    const block = await legacyRefBlock(
+      ctx,
+      project.id,
+      session.id,
+      "/parity-b.md",
+      "tu-rr10b"
+    );
+
+    const revisionRepo = new SqliteVfsRevisionRepository(ctx.conn);
+    const sk = createSessionKkvService(ctx.conn);
+    const prepared = await prepareUserMessagesForPrompt(
+      [toolResultMessage(block, session.id)],
+      { sessionId: session.id, sessionKkv: sk, vfs, revisionRepo }
+    );
+    const outBlock = prepared[0]!.content.blocks[0] as ToolResultBlock;
+    // Ì¬¶ş£ºJSON °ü£¨º¬ revision Ã÷ÎÄ£©£¬²»ÊÇ legacy wire¡£
+    assert.deepEqual(JSON.parse(outBlock.content), {
+      path: "/parity-b.md",
+      content: "legacy-µÚÒ»ĞĞ\nlegacy-µÚ¶şĞĞ",
+    });
+    assert.equal(
+      outBlock.content.includes("     1|legacy-µÚÒ»ĞĞ"),
+      false,
+      "¶µµ×°ü²»´øĞĞºÅÇ°×º£¨Óë legacy wire ²»Öğ×Ö½ÚµÈÖµÊÇÔ¤ÆÚ£¬D16£©"
+    );
+
+    const serial = await serializePromptLlmInput(EMPTY_LAYOUT, {
+      workplaceDisplay: "",
+      messages: prepared,
+    });
+    assert.ok(serial.includes("/parity-b.md"), "ÌáÊ¾´Ê´®Ğ¯´ø¶¨Î»Â·¾¶");
+    assert.ok(serial.includes("legacy-µÚÒ»ĞĞ"), "ÌáÊ¾´Ê´®Ğ¯´øÕæÊµÕıÎÄ");
+    assert.ok(
+      messageBodyTextFromBlocks(prepared[0]!.content.blocks).includes(
+        "legacy-µÚ¶şĞĞ"
+      ),
+      "×Ö·û¿Ú¾¶Ğ¯´øÕıÎÄ"
+    );
+  });
+
+  it("¶ÔÕÕ×é£ºÎ´ hydrate µÄ´æÁ¿ÒıÓÃ¿éÖ»Ê£ [tool_result id=¡­] Í·¡ª¡ªÖ¤Ã÷ hydrate ÊÇÁ½Ì¬¹²Í¬µÄÇ°Ìá", async () => {
     const ctx = getNovelMasterTestContext();
     const suffix = testIsolationSuffix();
     const project = await ctx.projects.create(`pj-rr10c-${suffix}`);
     const session = await ctx.sessions.create(project.id);
-    const vfs = ctx.sessionVfs(project.id, session.id);
-    await vfs.write("/parity-c.md", "c1\nc2\nc3");
-
-    const revisionRepo = new SqliteVfsRevisionRepository(ctx.conn);
-    const { block: refBlock } = await readViaTool(
+    const block = await legacyRefBlock(
       ctx,
       project.id,
       session.id,
       "/parity-c.md",
-      "tu-rr10c",
-      revisionRepo
+      "tu-rr10c"
     );
 
-    // ä¸ç» prepare ç›´æ¥å– bodyTextï¼ˆæ¨¡æ‹Ÿã€Œè£…é…ç¼ºå£ / è·³è¿‡ hydrateã€çš„é”™é“¾ï¼‰ï¼š
-    // å¼•ç”¨å—åªå‰© [tool_result id=â€¦] å¤´â€”â€”å…¨æ–‡ä¸¢å¤±ï¼Œé˜ˆå€¼åˆ¤å®šä¼šå¤±çœŸã€‚
-    const raw = messageBodyTextFromBlocks([refBlock]);
-    assert.ok(!raw.includes("c1|"), "æœª hydrate çš„å¼•ç”¨å—ä¸å«å…¨æ–‡");
+    // ²»¾­ prepare Ö±½ÓÈ¡ bodyText£¨Ä£Äâ¡¸×°ÅäÈ±¿Ú / Ìø¹ı hydrate¡¹µÄ´íÁ´£©£º
+    // ÒıÓÃ¿éÖ»Ê£Í·¡ª¡ªÕıÎÄ¶ªÊ§£¬ãĞÖµÅĞ¶¨»áÊ§Õæ¡£
+    const raw = messageBodyTextFromBlocks([block]);
+    assert.equal(
+      raw.includes("legacy-µÚÒ»ĞĞ"),
+      false,
+      "Î´ hydrate µÄÒıÓÃ¿é²»º¬ÕıÎÄ"
+    );
     assert.match(raw, /\[tool_result id=tu-rr10c\]/);
   });
 });

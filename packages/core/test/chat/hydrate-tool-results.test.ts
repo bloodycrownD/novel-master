@@ -1,38 +1,41 @@
 /**
- * read-tool-result-ref Step 4 定向测试：hydrate（wire 字节还原）。
+ * 提示词链路的**极简兜底 hydrate** 定向测试（task-attach-unref Step 4）。
  *
- * - T-RR2：hydrate 重放结果与 read 执行时的 `formatReadOutput` 输出
- *   **逐字节全等**（基准取真链路 read 输出过 `formatToolOutputForLlm`，
- *   即 buildToolResultBlock 落块时走的同一条格式化路径），四形态：
- *   整读 / offset 分页 / 字节帽截断（50KB 帽）/ lastLineTruncated。
- * - T-RR11：contentHash 校验 fail-fast——篡改 revision 内容（或换成错
- *   hash）后 hydrate 抛 `ReadResultHydrateError`（类型化错误，非泛 Error）。
- * - prepare 接线：透传分支后 hydrate 生效；孤儿拍平
- *   （normalizeOrphanToolResultsForLlm）拿到的是 hydrate 之后的全文——
- *   顺序错了拍平只会得到 `[tool_result id=…]` 占位（对照组证明）。
+ * v1.5.29 写入的存量引用行（`content === ""` + `contentRef`）仍在库里，
+ * 写侧已回退为全文直出，故提示词链路上只剩兜底一件事：按
+ * `(entryId, version)` 取 revision 明文填一份 `{path, content}` 的 JSON
+ * 字符串回**内存态**，取不到就落错误占位 JSON 并 `console.warn`。
+ *
+ * 覆盖矩阵：
+ * - T-UA3（原 T-RR2 / T-RR11 改写）：存量 read ref 行 → JSON 包含 revision
+ *   明文；`kind: "skill"` 同款（`files` 等派生字段弃置）；入参消息不被变异、
+ *   `contentRef` 原样保留、落库 `content_json` 不写回。legacy 块零处理。
+ * - T-UA4（原 T-RR11 fail-fast 改写）：revision 行缺失 / `status=deleted` /
+ *   明文不可取 / 仓库未注入（装配缺口）/ 仓库抛错 → 一律错误占位 JSON +
+ *   warn，**永不抛错**；hash 不匹配**不算坏行**（照常回填 + warn）。
+ * - T-UA6：prepare 接线与「孤儿拍平顺序」红线——hydrate 必须早于
+ *   `normalizeOrphanToolResultsForLlm`，否则空 content 被拍成
+ *   `[tool_result id=…]` 占位，正文永久丢失（对照组证明）。
+ *
+ * 废除的旧口径：wire 逐字节等值重放、hash fail-fast、wire 重放侧调用内 memo
+ * （wireByReplayKey）；明文侧去重（plainByRefKey）本版保留。
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { ChatMessage } from "../../src/domain/chat/model/message.js";
-import type { ToolResultBlock } from "../../src/domain/chat/model/content-block.js";
-import {
-  hydrateToolResultsForPrompt,
-  ReadResultHydrateError,
-} from "../../src/domain/chat/logic/hydrate-tool-results-for-prompt.js";
+import type {
+  ReadResultRef,
+  SkillResultRef,
+  ToolResultBlock,
+} from "../../src/domain/chat/model/content-block.js";
+import { hydrateToolResultsForPrompt } from "../../src/domain/chat/logic/hydrate-tool-results-for-prompt.js";
 import { prepareUserMessagesForPrompt } from "../../src/domain/chat/logic/prepare-user-messages-for-prompt.js";
 import { messageBodyTextFromBlocks } from "../../src/domain/chat/content/message-body-text.js";
-import { buildToolResultBlock } from "../../src/domain/tool/logic/build-tool-result-block.js";
-import { formatToolOutputForLlm } from "../../src/domain/tool/logic/format-tool-output.js";
-import { ToolRegistry } from "../../src/domain/tool/logic/tool-registry.js";
-import { ToolRunner } from "../../src/domain/tool/logic/tool-runner.js";
-import { registerBuiltinTools } from "../../src/domain/tool/builtin/register-builtin-tools.js";
-import type { BuiltinToolContext } from "../../src/domain/tool/builtin/builtin-tool-context.js";
-import type { ReadToolOutput } from "../../src/domain/tool/builtin/vfs-tools.js";
 import { SqliteVfsRevisionRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import type { VfsRevisionRepository } from "../../src/domain/vfs/repositories/vfs-revision.port.js";
+import { clearDecodedContentCaches } from "../../src/infra/content-cache/logic/decoded-content-cache.js";
 import { createSessionKkvService } from "../../src/service/session-kkv/create-session-kkv-service.js";
 import { normalizeOrphanToolResultsForLlm } from "../../src/service/prompt/normalize-orphan-tool-results-for-llm.js";
-import type { TdbcConnection } from "../../src/infra/tdbc/ports/connection.port.js";
 import {
   getNovelMasterTestContext,
   novelMasterTestFixture,
@@ -57,175 +60,226 @@ function toolResultMessage(block: ToolResultBlock, id = "tr-msg"): ChatMessage {
 }
 
 /**
- * 真链路 read：sessionVfs 写文件 → ToolRunner 跑 read（ctx 注入
- * adjustRevisionRefCount，输出带定位三件套）→ buildToolResultBlock 产
- * contentRef 块；基准 wire 取 `formatToolOutputForLlm(output)`——与 read
- * 执行时落块走的是同一条格式化路径。
+ * 造一条 v1.5.29 存量引用块：`content === ""` + contentRef 全字段。
+ *
+ * entryId 从库里点查（write 后 `vfs_entry` 行），contentHash 取 revision
+ * 行的真实指纹——这正是存量行的形态（引用记的是当时那一版的指纹）。
  */
-async function readViaTool(
-  ctx: BuiltinToolContext,
-  conn: TdbcConnection,
-  input: { path: string; offset?: number; limit?: number },
-  toolUseId: string
-): Promise<{
-  output: ReadToolOutput;
-  block: ToolResultBlock;
-  baseline: string;
-  revisionRepo: SqliteVfsRevisionRepository;
-}> {
-  const revisionRepo = new SqliteVfsRevisionRepository(conn);
-  const toolCtx: BuiltinToolContext = {
-    ...ctx,
-    adjustRevisionRefCount: async (pointers, delta) => {
-      await revisionRepo.batchAdjustRefCountWithDelta(pointers, delta);
-    },
-  };
-  const registry = new ToolRegistry<BuiltinToolContext>();
-  registerBuiltinTools(registry);
-  const runner = new ToolRunner(registry);
-  const output = await runner.call<ReadToolOutput>("read", input, toolCtx);
-  assert.ok(output.entryId != null, "真链路 read 输出必须带 entryId（锚定）");
-  const block = buildToolResultBlock(
-    toolUseId,
-    { ok: true, output },
-    { toolName: "read" }
+async function legacyReadRefBlock(
+  projectId: string,
+  sessionId: string,
+  path: string,
+  toolUseId: string,
+  overrides: Partial<ReadResultRef> = {}
+): Promise<ToolResultBlock> {
+  const { conn, sessionVfs } = getNovelMasterTestContext();
+  const vfs = sessionVfs(projectId, sessionId);
+  await vfs.write(path, "line-1\nline-2\nline-3");
+  const entryRows = await conn.query<{ entry_id: number }>(
+    `SELECT entry_id FROM vfs_entry WHERE path = ?`,
+    [path]
   );
-  assert.ok(block.contentRef != null, "真链路 read 必产 contentRef 块");
-  assert.equal(block.content, "", "引用态块 content 必须是占位空串");
-  const baseline = formatToolOutputForLlm(output);
-  return { output, block, baseline, revisionRepo };
+  assert.equal(entryRows.length, 1, "写入后应有唯一 entry 行");
+  const entryId = entryRows[0]!.entry_id;
+  const revRows = await conn.query<{ content_hash: string }>(
+    `SELECT content_hash FROM vfs_revision WHERE entry_id = ? AND version = 1`,
+    [entryId]
+  );
+  assert.equal(revRows.length, 1, "写入后应有 v1 revision 行");
+  const ref: ReadResultRef = {
+    path,
+    entryId,
+    version: 1,
+    contentHash: revRows[0]!.content_hash,
+    totalBytes: 20,
+    offset: 1,
+    limit: 2000,
+    returnedLines: 3,
+    totalLines: 3,
+    truncated: false,
+    ...overrides,
+  };
+  return {
+    type: "tool_result",
+    toolUseId,
+    content: "",
+    ok: true,
+    summary: "3 lines",
+    contentRef: ref,
+  };
 }
 
-describe("read-tool-result-ref Step 4: T-RR2 wire 逐字节等值", () => {
-  it("整读形态：hydrate 重放与 read 执行输出逐字节全等（含中文行）", async () => {
-    const { conn, sessionVfs } = getNovelMasterTestContext();
+/** skill 域的存量引用块（`kind: "skill"`，`files` 为派生字段）。 */
+function legacySkillRefBlock(
+  ref: SkillResultRef,
+  toolUseId: string
+): ToolResultBlock {
+  return {
+    type: "tool_result",
+    toolUseId,
+    content: "",
+    ok: true,
+    summary: "3 lines",
+    contentRef: ref,
+  };
+}
+
+/** 捕获 console.warn（兜底路径唯一的可观测面），返回文本数组。 */
+async function captureWarnings(
+  run: () => Promise<void>
+): Promise<string[]> {
+  const original = console.warn;
+  const warns: string[] = [];
+  console.warn = (...args: unknown[]) => {
+    warns.push(args.map((a) => String(a)).join(" "));
+  };
+  try {
+    await run();
+  } finally {
+    console.warn = original;
+  }
+  return warns;
+}
+
+/** 把落库行读回内存态（走 parse 白名单），hydrate 后再查库验「不写回」。 */
+async function hydrateAndCheckNoWriteback(
+  messageId: string,
+  block: ToolResultBlock,
+  revisionRepo: SqliteVfsRevisionRepository
+): Promise<string> {
+  const { conn } = getNovelMasterTestContext();
+  const hydrated = await hydrateToolResultsForPrompt(
+    [toolResultMessage(block)],
+    revisionRepo
+  );
+  const out = hydrated[0]!.content.blocks[0]!;
+  if (out.type !== "tool_result") throw new Error("expected tool_result");
+  const rows = await conn.query<{ content_json: string }>(
+    `SELECT content_json FROM chat_message WHERE id = ?`,
+    [messageId]
+  );
+  assert.equal(rows.length, 1);
+  assert.equal(
+    rows[0]!.content_json.includes("contentRef"),
+    true,
+    "content_json 必须仍保有存量 contentRef（hydrate 只改内存态）"
+  );
+  assert.ok(
+    !rows[0]!.content_json.includes("PLAIN"),
+    "回填的 JSON 包不得被写回 content_json"
+  );
+  return out.content;
+}
+
+describe("hydrate-tool-results: T-UA3 兜底 hydrate 形态", () => {
+  it("存量 read ref 行 → {path, content} JSON 包（含 revision 明文）；入参不变、contentRef 保留", async () => {
+    const ctx = getNovelMasterTestContext();
     const suffix = testIsolationSuffix();
-    const projectId = `pj-rr2a-${suffix}`;
-    const sessionId = `ss-rr2a-${suffix}`;
-    const vfs = sessionVfs(projectId, sessionId);
-    await vfs.write("/rr2a.md", "alpha 首行\nbeta 第二行\ngamma");
-
-    const { block, baseline, revisionRepo } = await readViaTool(
-      { vfs, projectId, sessionId, listSessionMessages: async () => [] },
-      conn,
-      { path: "/rr2a.md" },
-      "tu-rr2a"
+    const project = await ctx.projects.create(`pj-ua3-${suffix}`);
+    const session = await ctx.sessions.create(project.id);
+    const block = await legacyReadRefBlock(
+      project.id,
+      session.id,
+      "/ua3.md",
+      "tu-ua3"
     );
-    // sanity：基准确实是带 6 位行号的 formatReadOutput 形态
-    assert.match(baseline, /     1\|alpha 首行/);
-
     const message = toolResultMessage(block);
-    const hydrated = await hydrateToolResultsForPrompt(
-      [message],
-      revisionRepo
-    );
-    const outBlock = hydrated[0]!.content.blocks[0]!;
-    assert.equal(outBlock.type, "tool_result");
-    if (outBlock.type !== "tool_result") return;
-    assert.equal(outBlock.content, baseline);
-    // view-time 纪律：入参原消息不被变异（content 仍是空串，不写回）
+    const revisionRepo = new SqliteVfsRevisionRepository(ctx.conn);
+
+    const hydrated = await hydrateToolResultsForPrompt([message], revisionRepo);
+    const out = hydrated[0]!.content.blocks[0]!;
+    if (out.type !== "tool_result") throw new Error("expected tool_result");
+
+    // 形态 = JSON.stringify({ path, content })——path 取 ref 上的展示路径，
+    // content 取 revision 明文（原样，无行号前缀、无分页切片）。
+    assert.deepEqual(JSON.parse(out.content), {
+      path: "/ua3.md",
+      content: "line-1\nline-2\nline-3",
+    });
     assert.equal(
-      (message.content.blocks[0] as ToolResultBlock).content,
-      ""
+      out.content,
+      JSON.stringify({ path: "/ua3.md", content: "line-1\nline-2\nline-3" }),
+      "落块文本就是确定性 JSON 包（形态断言，不与 legacy wire 比字节）"
     );
-    // contentRef 原样保留（块身份不变），hydrate 幂等（重放两遍等值）
-    assert.deepEqual(outBlock.contentRef, block.contentRef);
+    // view-time 纪律：入参消息与块不被变异；contentRef 原样保留。
+    assert.equal((message.content.blocks[0] as ToolResultBlock).content, "");
+    assert.deepEqual(out.contentRef, block.contentRef);
+    // 幂等：对已回填的块再 hydrate 一次，结果同形（内容已是明文，非引用态）。
     const twice = await hydrateToolResultsForPrompt(
-      [toolResultMessage(outBlock)],
+      [toolResultMessage(out)],
       revisionRepo
     );
-    assert.equal(
-      (twice[0]!.content.blocks[0] as ToolResultBlock).content,
-      baseline
-    );
+    assert.equal((twice[0]!.content.blocks[0] as ToolResultBlock).content, out.content);
   });
 
-  it("offset 分页形态：offset=2 limit=2 的重放逐字节全等（truncated + nextOffset）", async () => {
-    const { conn, sessionVfs } = getNovelMasterTestContext();
+  it("落库存量行 hydrate 后 content_json 不被写回", async () => {
+    const ctx = getNovelMasterTestContext();
     const suffix = testIsolationSuffix();
-    const projectId = `pj-rr2b-${suffix}`;
-    const sessionId = `ss-rr2b-${suffix}`;
-    const vfs = sessionVfs(projectId, sessionId);
-    await vfs.write("/rr2b.md", "l1\nl2\nl3\nl4\nl5");
-
-    const { output, block, baseline, revisionRepo } = await readViaTool(
-      { vfs, projectId, sessionId, listSessionMessages: async () => [] },
-      conn,
-      { path: "/rr2b.md", offset: 2, limit: 2 },
-      "tu-rr2b"
+    const project = await ctx.projects.create(`pj-ua3b-${suffix}`);
+    const session = await ctx.sessions.create(project.id);
+    const block = await legacyReadRefBlock(
+      project.id,
+      session.id,
+      "/ua3b.md",
+      "tu-ua3b"
     );
-    assert.equal(output.truncated, true);
-    assert.equal(output.nextOffset, 4);
-
-    const hydrated = await hydrateToolResultsForPrompt(
-      [toolResultMessage(block)],
-      revisionRepo
-    );
-    const outBlock = hydrated[0]!.content.blocks[0] as ToolResultBlock;
-    assert.equal(outBlock.content, baseline);
-    // 分页语义钉死：行号从 2 起、提示行给 nextOffset=4
-    assert.match(outBlock.content, /     2\|l2/);
-    assert.match(outBlock.content, /Continue with offset=4/);
+    const msg = await ctx.messages.append(session.id, "assistant", {
+      blocks: [block],
+    });
+    const revisionRepo = new SqliteVfsRevisionRepository(ctx.conn);
+    const hydrated = await hydrateAndCheckNoWriteback(msg.id, block, revisionRepo);
+    assert.deepEqual(JSON.parse(hydrated), {
+      path: "/ua3b.md",
+      content: "line-1\nline-2\nline-3",
+    });
   });
 
-  it("字节帽截断形态（50KB 帽）：多行大文件重放逐字节全等", async () => {
-    const { conn, sessionVfs } = getNovelMasterTestContext();
+  it("kind:\"skill\" 存量行同款 JSON 包（files 等派生字段弃置）", async () => {
+    const ctx = getNovelMasterTestContext();
     const suffix = testIsolationSuffix();
-    const projectId = `pj-rr2c-${suffix}`;
-    const sessionId = `ss-rr2c-${suffix}`;
-    const vfs = sessionVfs(projectId, sessionId);
-    // 1000 行 × 60B ≈ 60KB > 50KB 预算 → 字节帽截断（truncated=true）
-    const big = Array.from(
-      { length: 1000 },
-      (_, i) => `line-${String(i).padStart(5, "0")}-${"x".repeat(48)}`
-    ).join("\n");
-    await vfs.write("/rr2c.txt", big);
-
-    const { output, block, baseline, revisionRepo } = await readViaTool(
-      { vfs, projectId, sessionId, listSessionMessages: async () => [] },
-      conn,
-      { path: "/rr2c.txt" },
-      "tu-rr2c"
+    const project = await ctx.projects.create(`pj-ua3c-${suffix}`);
+    const session = await ctx.sessions.create(project.id);
+    const readBlock = await legacyReadRefBlock(
+      project.id,
+      session.id,
+      "/ua3c.md",
+      "tu-ua3c-src"
     );
-    assert.equal(output.truncated, true, "60KB 内容必命中字节帽");
+    const base = readBlock.contentRef as ReadResultRef;
+    const ref: SkillResultRef = {
+      kind: "skill",
+      action: "load",
+      domain: "project",
+      name: "ua3c-skill",
+      path: "SKILL.md",
+      entryId: base.entryId,
+      version: base.version,
+      contentHash: base.contentHash,
+      totalBytes: base.totalBytes,
+      offset: 1,
+      returnedLines: 0,
+      totalLines: 0,
+      truncated: false,
+      files: ["refs/helper.md"],
+    };
+    const block = legacySkillRefBlock(ref, "tu-ua3c");
+    const revisionRepo = new SqliteVfsRevisionRepository(ctx.conn);
 
-    const hydrated = await hydrateToolResultsForPrompt(
-      [toolResultMessage(block)],
-      revisionRepo
-    );
-    const outBlock = hydrated[0]!.content.blocks[0] as ToolResultBlock;
-    assert.equal(outBlock.content, baseline);
-    assert.ok(outBlock.content.length > 40 * 1024, "wire 保留预算内全文");
-  });
-
-  it("lastLineTruncated 形态：单行超 50KB，末行截到预算点的重放逐字节全等", async () => {
-    const { conn, sessionVfs } = getNovelMasterTestContext();
-    const suffix = testIsolationSuffix();
-    const projectId = `pj-rr2d-${suffix}`;
-    const sessionId = `ss-rr2d-${suffix}`;
-    const vfs = sessionVfs(projectId, sessionId);
-    // 单行 60KB（minified 形态）：capUtf8BytesFill 截前 50KB → lastLineTruncated
-    await vfs.write("/rr2d.json", "z".repeat(60 * 1024));
-
-    const { output, block, baseline, revisionRepo } = await readViaTool(
-      { vfs, projectId, sessionId, listSessionMessages: async () => [] },
-      conn,
-      { path: "/rr2d.json" },
-      "tu-rr2d"
-    );
-    assert.equal(output.lastLineTruncated, true);
-    assert.equal(output.nextOffset, undefined, "唯一行被截后无续读点");
-
-    const hydrated = await hydrateToolResultsForPrompt(
-      [toolResultMessage(block)],
-      revisionRepo
-    );
-    const outBlock = hydrated[0]!.content.blocks[0] as ToolResultBlock;
-    assert.equal(outBlock.content, baseline);
-    assert.match(
-      outBlock.content,
-      /Last line was cut at the 50KB byte budget/
-    );
+    const warns = await captureWarnings(async () => {
+      const hydrated = await hydrateToolResultsForPrompt(
+        [toolResultMessage(block)],
+        revisionRepo
+      );
+      const out = hydrated[0]!.content.blocks[0] as ToolResultBlock;
+      assert.deepEqual(JSON.parse(out.content), {
+        path: "SKILL.md",
+        content: "line-1\nline-2\nline-3",
+      });
+      assert.deepEqual(out.contentRef, ref);
+      // files 不进 JSON 包（兜底无消费方）。
+      assert.equal(out.content.includes("helper.md"), false);
+    });
+    assert.deepEqual(warns, [], "取得到明文不该 warn");
   });
 
   it("legacy 块（无 contentRef）零处理：content 原样、消息原引用返回", async () => {
@@ -246,454 +300,429 @@ describe("read-tool-result-ref Step 4: T-RR2 wire 逐字节等值", () => {
   });
 });
 
-describe("read-tool-result-ref Step 4: T-RR11 contentHash 校验 fail-fast", () => {
-  it("换成错 hash（指向另一 blob 的真实 hash）→ 类型化错误 READ_REF_HASH_MISMATCH", async () => {
-    const { conn, sessionVfs } = getNovelMasterTestContext();
+describe("hydrate-tool-results: T-UA4 取不到明文 → 错误占位 + warn（永不抛错）", () => {
+  it("revision 行缺失（裸删绕过保活链）→ 占位 JSON + warn", async () => {
+    const ctx = getNovelMasterTestContext();
     const suffix = testIsolationSuffix();
-    const projectId = `pj-rr11a-${suffix}`;
-    const sessionId = `ss-rr11a-${suffix}`;
-    const vfs = sessionVfs(projectId, sessionId);
-    await vfs.write("/rr11a-a.md", "content-of-A");
-    await vfs.write("/rr11a-b.md", "content-of-B-different");
-
-    const { block, revisionRepo } = await readViaTool(
-      { vfs, projectId, sessionId, listSessionMessages: async () => [] },
-      conn,
-      { path: "/rr11a-a.md" },
-      "tu-rr11a"
+    const project = await ctx.projects.create(`pj-ua4a-${suffix}`);
+    const session = await ctx.sessions.create(project.id);
+    const block = await legacyReadRefBlock(
+      project.id,
+      session.id,
+      "/ua4a.md",
+      "tu-ua4a"
     );
-    // 拿 B 的真实 blob hash 当「错 hash」（模拟版本错位：记录了别的文件的指纹）
-    const bRows = await conn.query<{ content_hash: string }>(
-      `SELECT r.content_hash FROM vfs_revision r
-       JOIN vfs_entry e ON e.entry_id = r.entry_id
-       WHERE e.path = ? AND r.version = 1`,
-      ["/rr11a-b.md"]
+    const ref = block.contentRef as ReadResultRef;
+    await ctx.conn.execute(
+      `DELETE FROM vfs_revision WHERE entry_id = ? AND version = ?`,
+      [ref.entryId, ref.version]
     );
-    assert.equal(bRows.length, 1);
-    const tampered: ToolResultBlock = {
-      ...block,
-      contentRef: {
-        ...block.contentRef!,
-        contentHash: bRows[0]!.content_hash,
-      },
-    };
+    const revisionRepo = new SqliteVfsRevisionRepository(ctx.conn);
 
-    await assert.rejects(
-      hydrateToolResultsForPrompt([toolResultMessage(tampered)], revisionRepo),
-      (error: unknown) => {
-        assert.ok(
-          error instanceof ReadResultHydrateError,
-          `必须是 ReadResultHydrateError，实际 ${String(error)}`
-        );
-        assert.equal(error.name, "ReadResultHydrateError");
-        assert.equal(error.code, "READ_REF_HASH_MISMATCH");
-        assert.match(error.message, /内容漂移/);
-        assert.match(error.message, /rr11a-a\.md/);
-        return true;
-      }
-    );
-  });
-
-  it("人为篡改 revision 行（content_hash 换指 B 的 blob）→ 同样 fail-fast", async () => {
-    const { conn, sessionVfs } = getNovelMasterTestContext();
-    const suffix = testIsolationSuffix();
-    const projectId = `pj-rr11b-${suffix}`;
-    const sessionId = `ss-rr11b-${suffix}`;
-    const vfs = sessionVfs(projectId, sessionId);
-    await vfs.write("/rr11b-a.md", "AAA-original-content");
-    await vfs.write("/rr11b-b.md", "BBB-other-content");
-
-    const { block, revisionRepo } = await readViaTool(
-      { vfs, projectId, sessionId, listSessionMessages: async () => [] },
-      conn,
-      { path: "/rr11b-a.md" },
-      "tu-rr11b"
-    );
-    const ref = block.contentRef!;
-    // 直接篡改 DB：A 的 revision 行 content_hash 指到 B 的 blob。
-    // 新语义（W2 元数据比对）下这一改在元数据阶段就暴露：行上的
-    // content_hash ≠ ref 记录的 A 指纹 → 仍报 HASH_MISMATCH，且比旧实现
-    // （解出 B 明文再重算比对）更早失败。
-    const bRows = await conn.query<{ content_hash: string }>(
-      `SELECT r.content_hash FROM vfs_revision r
-       JOIN vfs_entry e ON e.entry_id = r.entry_id
-       WHERE e.path = ? AND r.version = 1`,
-      ["/rr11b-b.md"]
-    );
-    await conn.execute(
-      `UPDATE vfs_revision SET content_hash = ? WHERE entry_id = ? AND version = ?`,
-      [bRows[0]!.content_hash, ref.entryId, ref.version]
-    );
-
-    await assert.rejects(
-      hydrateToolResultsForPrompt([toolResultMessage(block)], revisionRepo),
-      (error: unknown) => {
-        assert.ok(error instanceof ReadResultHydrateError);
-        assert.equal(error.code, "READ_REF_HASH_MISMATCH");
-        return true;
-      }
-    );
-  });
-
-  it("引用悬空（revision 行不存在）→ READ_REF_REVISION_MISSING", async () => {
-    const { conn, sessionVfs } = getNovelMasterTestContext();
-    const suffix = testIsolationSuffix();
-    const projectId = `pj-rr11c-${suffix}`;
-    const sessionId = `ss-rr11c-${suffix}`;
-    const vfs = sessionVfs(projectId, sessionId);
-    await vfs.write("/rr11c.md", "x\ny");
-
-    const { block, revisionRepo } = await readViaTool(
-      { vfs, projectId, sessionId, listSessionMessages: async () => [] },
-      conn,
-      { path: "/rr11c.md" },
-      "tu-rr11c"
-    );
-    const dangling: ToolResultBlock = {
-      ...block,
-      contentRef: {
-        ...block.contentRef!,
-        entryId: block.contentRef!.entryId + 999,
-      },
-    };
-
-    await assert.rejects(
-      hydrateToolResultsForPrompt([toolResultMessage(dangling)], revisionRepo),
-      (error: unknown) => {
-        assert.ok(error instanceof ReadResultHydrateError);
-        assert.equal(error.code, "READ_REF_REVISION_MISSING");
-        assert.match(error.message, /引用悬空/);
-        return true;
-      }
-    );
-  });
-
-  it("存在引用块但 revisionRepo 未注入（装配缺口）→ READ_REF_REPO_MISSING，不静默放行", async () => {
-    const { conn, sessionVfs } = getNovelMasterTestContext();
-    const suffix = testIsolationSuffix();
-    const projectId = `pj-rr11d-${suffix}`;
-    const sessionId = `ss-rr11d-${suffix}`;
-    const vfs = sessionVfs(projectId, sessionId);
-    await vfs.write("/rr11d.md", "a\nb\nc");
-
-    const { block } = await readViaTool(
-      { vfs, projectId, sessionId, listSessionMessages: async () => [] },
-      conn,
-      { path: "/rr11d.md" },
-      "tu-rr11d"
-    );
-
-    await assert.rejects(
-      hydrateToolResultsForPrompt([toolResultMessage(block)], undefined),
-      (error: unknown) => {
-        assert.ok(error instanceof ReadResultHydrateError);
-        assert.equal(error.code, "READ_REF_REPO_MISSING");
-        return true;
-      }
-    );
-  });
-});
-
-describe("read-tool-result-ref: W2 元数据校验降本与调用内去重", () => {
-  it("同一次 hydrate 内重复引用同一 ref：只查一次元数据、只解一次明文，wire 全等", async () => {
-    const { conn, sessionVfs } = getNovelMasterTestContext();
-    const suffix = testIsolationSuffix();
-    const projectId = `pj-dedup-${suffix}`;
-    const sessionId = `ss-dedup-${suffix}`;
-    const vfs = sessionVfs(projectId, sessionId);
-    await vfs.write("/dedup.md", "d1\nd2\nd3\nd4");
-
-    const { block, baseline } = await readViaTool(
-      { vfs, projectId, sessionId, listSessionMessages: async () => [] },
-      conn,
-      { path: "/dedup.md" },
-      "tu-dedup"
-    );
-    const ref = block.contentRef!;
-    const revisionRepo = new SqliteVfsRevisionRepository(conn);
-    const calls = { meta: 0, find: 0 };
-    const countingRepo = {
-      findMetaByEntryAndVersion: async (entryId: number, version: number) => {
-        calls.meta += 1;
-        return revisionRepo.findMetaByEntryAndVersion(entryId, version);
-      },
-      findByEntryAndVersion: async (entryId: number, version: number) => {
-        calls.find += 1;
-        return revisionRepo.findByEntryAndVersion(entryId, version);
-      },
-    } as unknown as VfsRevisionRepository;
-    assert.ok(ref.contentHash !== "");
-
-    // 3 条消息引用同一 ref（真实形态：同一步里多段引用同一版本文件）
-    const messages = [0, 1, 2].map((i) =>
-      toolResultMessage(block, `tr-dedup-${i}`)
-    );
-    const hydrated = await hydrateToolResultsForPrompt(messages, countingRepo);
-
-    assert.equal(calls.meta, 1, "同一 ref 三次引用只发一次元数据查询");
-    assert.equal(calls.find, 1, "同一 ref 三次引用只解一次 blob 明文");
-    for (const msg of hydrated) {
-      const outBlock = msg.content.blocks[0] as ToolResultBlock;
-      assert.equal(outBlock.content, baseline, "去重不改变 wire 文本");
-      assert.deepEqual(outBlock.contentRef, block.contentRef);
-    }
-  });
-
-  it("同 revision 不同 offset/limit：明文只解一次，wire 各自重放（不与旧实现等价即红）", async () => {
-    const { conn, sessionVfs } = getNovelMasterTestContext();
-    const suffix = testIsolationSuffix();
-    const projectId = `pj-dedup2-${suffix}`;
-    const sessionId = `ss-dedup2-${suffix}`;
-    const vfs = sessionVfs(projectId, sessionId);
-    await vfs.write("/dedup2.md", "l1\nl2\nl3\nl4\nl5\nl6");
-
-    const revisionRepo = new SqliteVfsRevisionRepository(conn);
-    const calls = { meta: 0, find: 0 };
-    const countingRepo = {
-      findMetaByEntryAndVersion: async (entryId: number, version: number) => {
-        calls.meta += 1;
-        return revisionRepo.findMetaByEntryAndVersion(entryId, version);
-      },
-      findByEntryAndVersion: async (entryId: number, version: number) => {
-        calls.find += 1;
-        return revisionRepo.findByEntryAndVersion(entryId, version);
-      },
-    } as unknown as VfsRevisionRepository;
-
-    const parts = [
-      { offset: 1, limit: 2 },
-      { offset: 3, limit: 2 },
-      { offset: 5, limit: 2 },
-    ];
-    const messages = [];
-    const baselines = [];
-    for (const [i, p] of parts.entries()) {
-      const { block, baseline } = await readViaTool(
-        { vfs, projectId, sessionId, listSessionMessages: async () => [] },
-        conn,
-        { path: "/dedup2.md", ...p },
-        `tu-dedup2-${i}`
+    let content = "";
+    const warns = await captureWarnings(async () => {
+      const hydrated = await hydrateToolResultsForPrompt(
+        [toolResultMessage(block)],
+        revisionRepo
       );
-      messages.push(toolResultMessage(block, `tr-dedup2-${i}`));
-      baselines.push(baseline);
-    }
-
-    const hydrated = await hydrateToolResultsForPrompt(messages, countingRepo);
-    assert.equal(calls.meta, 1, "同一 (entryId, version) 三个分页段只查一次元数据");
-    assert.equal(calls.find, 1, "同一 (entryId, version) 三个分页段只解一次明文");
-    for (const [i, msg] of hydrated.entries()) {
-      assert.equal(
-        (msg.content.blocks[0] as ToolResultBlock).content,
-        baselines[i],
-        `第 ${i} 段的 wire 必须与 read 当时逐字节全等（缓存键含 offset/limit）`
-      );
-    }
-    // 三段 wire 互不相同 → 证明上面的「全等」不是恒真断言
-    assert.equal(new Set(baselines).size, 3);
+      content = (hydrated[0]!.content.blocks[0] as ToolResultBlock).content;
+    });
+    const parsed = JSON.parse(content) as { path: string; error: string };
+    assert.equal(parsed.path, "/ua4a.md", "占位仍带 path 定位线索");
+    assert.match(parsed.error, /取不回/, "占位说明「本该有正文但取不到」");
+    assert.ok(
+      warns.some((w) => /hydrate-tool-results-for-prompt/.test(w)),
+      "缺 revision 必须有 warn 可观测"
+    );
+    assert.ok(
+      warns.some((w) => /revision 行缺失/.test(w)),
+      `warn 应点明原因，实际：${warns.join(" | ")}`
+    );
   });
 
-  it("篡改 ref.contentHash（未命中明文缓存）→ 元数据阶段 fail-fast，解码路径不被触到", async () => {
-    const { conn, sessionVfs } = getNovelMasterTestContext();
+  it("revision status=deleted → 占位 JSON + warn（明文不可再生）", async () => {
+    const ctx = getNovelMasterTestContext();
     const suffix = testIsolationSuffix();
-    const projectId = `pj-meta-${suffix}`;
-    const sessionId = `ss-meta-${suffix}`;
-    const vfs = sessionVfs(projectId, sessionId);
-    await vfs.write("/meta.md", "m1\nm2");
-
-    const { block, revisionRepo } = await readViaTool(
-      { vfs, projectId, sessionId, listSessionMessages: async () => [] },
-      conn,
-      { path: "/meta.md" },
-      "tu-meta"
+    const project = await ctx.projects.create(`pj-ua4b-${suffix}`);
+    const session = await ctx.sessions.create(project.id);
+    const block = await legacyReadRefBlock(
+      project.id,
+      session.id,
+      "/ua4b.md",
+      "tu-ua4b"
     );
-    const tampered: ToolResultBlock = {
-      ...block,
-      contentRef: {
-        ...block.contentRef!,
-        contentHash: "0".repeat(64),
-      },
-    };
-    let decodeCalls = 0;
-    const noDecodeRepo = {
-      findMetaByEntryAndVersion: (entryId: number, version: number) =>
-        revisionRepo.findMetaByEntryAndVersion(entryId, version),
-      findByEntryAndVersion: async () => {
-        decodeCalls += 1;
-        throw new Error("元数据不匹配时不该走到解码");
-      },
-    } as unknown as VfsRevisionRepository;
+    const ref = block.contentRef as ReadResultRef;
+    const revisionRepo = new SqliteVfsRevisionRepository(ctx.conn);
 
-    await assert.rejects(
-      hydrateToolResultsForPrompt([toolResultMessage(tampered)], noDecodeRepo),
-      (error: unknown) => {
-        assert.ok(error instanceof ReadResultHydrateError);
-        assert.equal(error.code, "READ_REF_HASH_MISMATCH");
-        return true;
-      }
-    );
-    assert.equal(decodeCalls, 0, "校验必须在解 blob 之前完成（零解码 fail-fast）");
-  });
+    // 牙齿：置 deleted 前同一块 hydrate 正常（不是恒真的失败路径）。
+    const okContent = (
+      await hydrateToolResultsForPrompt(
+        [toolResultMessage(block)],
+        revisionRepo
+      )
+    )[0]!.content.blocks[0] as ToolResultBlock;
+    assert.match(okContent.content, /line-1/);
 
-  it("revision 行 status=deleted → READ_REF_CONTENT_DELETED（四种 fail-fast 语义之一保留）", async () => {
-    const { conn, sessionVfs } = getNovelMasterTestContext();
-    const suffix = testIsolationSuffix();
-    const projectId = `pj-deleted-${suffix}`;
-    const sessionId = `ss-deleted-${suffix}`;
-    const vfs = sessionVfs(projectId, sessionId);
-    await vfs.write("/deleted.md", "will-be-deleted");
-
-    const { block, revisionRepo } = await readViaTool(
-      { vfs, projectId, sessionId, listSessionMessages: async () => [] },
-      conn,
-      { path: "/deleted.md" },
-      "tu-deleted"
-    );
-    // 牙齿：标记 deleted 前同一块 hydrate 正常（不是恒真的失败）
-    const ok = await hydrateToolResultsForPrompt(
-      [toolResultMessage(block)],
-      revisionRepo
-    );
-    assert.match((ok[0]!.content.blocks[0] as ToolResultBlock).content, /1\|will-be-deleted/);
-
-    const ref = block.contentRef!;
-    await conn.execute(
+    await ctx.conn.execute(
       `UPDATE vfs_revision SET status = 'deleted' WHERE entry_id = ? AND version = ?`,
       [ref.entryId, ref.version]
     );
-    await assert.rejects(
-      hydrateToolResultsForPrompt([toolResultMessage(block)], revisionRepo),
-      (error: unknown) => {
-        assert.ok(error instanceof ReadResultHydrateError);
-        assert.equal(error.code, "READ_REF_CONTENT_DELETED");
-        assert.match(error.message, /明文不可再生/);
-        assert.match(error.message, /deleted/);
-        return true;
-      }
+    let content = "";
+    const warns = await captureWarnings(async () => {
+      const hydrated = await hydrateToolResultsForPrompt(
+        [toolResultMessage(block)],
+        revisionRepo
+      );
+      content = (hydrated[0]!.content.blocks[0] as ToolResultBlock).content;
+    });
+    const parsed = JSON.parse(content) as { path: string; error: string };
+    assert.match(parsed.error, /取不回/);
+    assert.ok(
+      warns.some((w) => /已删除|deleted/.test(w)),
+      `warn 应点明 deleted，实际：${warns.join(" | ")}`
     );
   });
 
-  it("active 行 content_hash 非空是 schema 约束（元数据比对不会误判成「缺指纹」）", async () => {
-    const { conn, sessionVfs } = getNovelMasterTestContext();
+  it("元数据命中但行已不在（并发删/GC 兜底；防御分支，生产仓储下不可达）→ 占位 JSON + warn", async () => {
+    const ctx = getNovelMasterTestContext();
     const suffix = testIsolationSuffix();
-    const projectId = `pj-nohash-${suffix}`;
-    const sessionId = `ss-nohash-${suffix}`;
-    const vfs = sessionVfs(projectId, sessionId);
-    await vfs.write("/nohash.md", "n1\nn2\nn3");
+    const project = await ctx.projects.create(`pj-ua4c-${suffix}`);
+    const session = await ctx.sessions.create(project.id);
+    const block = await legacyReadRefBlock(
+      project.id,
+      session.id,
+      "/ua4c.md",
+      "tu-ua4c"
+    );
+    // 命中的是「meta 有行、findByEntryAndVersion 返 null」这一档（实现里是
+    // 元数据查询之后行被并发删除或 GC 的兜底），不是「blob 缺失」——真实
+    // blob 被清理走 contentStore.get 抛错，见下一条用例。
+    const emptyRepo = {
+      findMetaByEntryAndVersion: async () => ({
+        status: "active",
+        contentHash: "whatever",
+      }),
+      findByEntryAndVersion: async () => null,
+    } as unknown as VfsRevisionRepository;
 
-    const { block, baseline, revisionRepo } = await readViaTool(
-      { vfs, projectId, sessionId, listSessionMessages: async () => [] },
-      conn,
-      { path: "/nohash.md" },
-      "tu-nohash"
+    let content = "";
+    const warns = await captureWarnings(async () => {
+      const hydrated = await hydrateToolResultsForPrompt(
+        [toolResultMessage(block)],
+        emptyRepo
+      );
+      content = (hydrated[0]!.content.blocks[0] as ToolResultBlock).content;
+    });
+    assert.match((JSON.parse(content) as { error: string }).error, /取不回/);
+    assert.ok(
+      warns.some((w) => /revision 行缺失/.test(w)),
+      `warn 应点明行缺失，实际：${warns.join(" | ")}`
     );
-    const ref = block.contentRef!;
-    // 新语义的可行性前提：active 行不可能没有 content_hash（schema CHECK 挡着），
-    // 所以 meta.contentHash 与 ref.contentHash 是「两枚真实指纹」的比对，不会
-    // 因为行上缺指纹而把正常引用误判成漂移。CHECK 若被移除，本断言转红。
-    await assert.rejects(
-      conn.execute(
-        `UPDATE vfs_revision SET content_hash = NULL WHERE entry_id = ? AND version = ?`,
-        [ref.entryId, ref.version]
-      ),
-      /CHECK constraint failed/
+  });
+
+  it("blob 被清理（真路径：contentStore.get 抛错）→ 占位 + warn 留痕（读取 revision 失败），不抛错", async () => {
+    const ctx = getNovelMasterTestContext();
+    const suffix = testIsolationSuffix();
+    const project = await ctx.projects.create(`pj-ua4c2-${suffix}`);
+    const session = await ctx.sessions.create(project.id);
+    const block = await legacyReadRefBlock(
+      project.id,
+      session.id,
+      "/ua4c2.md",
+      "tu-ua4c2"
     );
-    // 前提成立 → 同一块照常 hydrate（不是「fail-fast 恒真」）
-    const hydrated = await hydrateToolResultsForPrompt(
-      [toolResultMessage(block)],
-      revisionRepo
+    const ref = block.contentRef as ReadResultRef;
+    const revisionRepo = new SqliteVfsRevisionRepository(ctx.conn);
+
+    // 牙齿：删 blob 之前同一块 hydrate 正常（不是恒真的失败路径）。
+    const okContent = (
+      await hydrateToolResultsForPrompt(
+        [toolResultMessage(block)],
+        revisionRepo
+      )
+    )[0]!.content.blocks[0] as ToolResultBlock;
+    assert.match(okContent.content, /line-1/);
+
+    // 真实坏行形态：revision 行仍在（meta 命中、status=active），但它的
+    // content_hash 指向的 blob 已被清理 → contentStore.get 抛错 →
+    // hydrate 的 catch 分支降级为占位 + warn，永不抛错。
+    await ctx.conn.execute(
+      `DELETE FROM vfs_content_blob WHERE content_hash = ?`,
+      [ref.contentHash]
     );
-    assert.equal(
-      (hydrated[0]!.content.blocks[0] as ToolResultBlock).content,
-      baseline
+    // 必须清掉进程内解压产物层：否则 blob 行已删也还能从内存命中
+    // （口径前提，见 infra/content-cache 模块头）。
+    clearDecodedContentCaches();
+
+    let content = "";
+    const warns = await captureWarnings(async () => {
+      const hydrated = await hydrateToolResultsForPrompt(
+        [toolResultMessage(block)],
+        revisionRepo
+      );
+      content = (hydrated[0]!.content.blocks[0] as ToolResultBlock).content;
+    });
+    const parsed = JSON.parse(content) as { path: string; error: string };
+    assert.equal(parsed.path, "/ua4c2.md", "占位仍带 path 定位线索");
+    // 占位文案是自包含的通用说明（e-tests/G-4 定的口径：成因只走 warn，
+    // 不塞进占位——memo 命中 null 的第二个块根本拿不到本块的成因）。
+    assert.match(parsed.error, /取不回/);
+    assert.match(
+      parsed.error,
+      /本次装配中不可用/,
+      "占位文案自包含，不引用「上方 warn」"
     );
+    // 成因（读取 revision 失败 / vfs_content_blob 缺失）走 warn 留痕。
+    assert.ok(
+      warns.some((w) => /读取 revision 失败/.test(w)),
+      `真路径必须留 warn 线索，实际：${warns.join(" | ")}`
+    );
+    assert.ok(
+      warns.some((w) => /vfs_content_blob/.test(w)),
+      `warn 应带出底层成因，实际：${warns.join(" | ")}`
+    );
+  });
+
+  it("revisionRepo 未注入（装配缺口）→ 占位 JSON + warn 点名「装配缺口」", async () => {
+    const ctx = getNovelMasterTestContext();
+    const suffix = testIsolationSuffix();
+    const project = await ctx.projects.create(`pj-ua4d-${suffix}`);
+    const session = await ctx.sessions.create(project.id);
+    const block = await legacyReadRefBlock(
+      project.id,
+      session.id,
+      "/ua4d.md",
+      "tu-ua4d"
+    );
+
+    let content = "";
+    const warns = await captureWarnings(async () => {
+      const hydrated = await hydrateToolResultsForPrompt(
+        [toolResultMessage(block)],
+        undefined
+      );
+      content = (hydrated[0]!.content.blocks[0] as ToolResultBlock).content;
+    });
+    const parsed = JSON.parse(content) as { path: string; error: string };
+    assert.equal(parsed.path, "/ua4d.md");
+    assert.match(parsed.error, /装配缺口/, "占位文案点明装配缺口");
+    assert.ok(
+      warns.some((w) => /装配缺口/.test(w)),
+      `REPO_MISSING 信号保留在 warn，实际：${warns.join(" | ")}`
+    );
+  });
+
+  it("仓库读取抛错（DB 故障）→ 降级为占位 + warn，不中断装配", async () => {
+    const ctx = getNovelMasterTestContext();
+    const suffix = testIsolationSuffix();
+    const project = await ctx.projects.create(`pj-ua4e-${suffix}`);
+    const session = await ctx.sessions.create(project.id);
+    const block = await legacyReadRefBlock(
+      project.id,
+      session.id,
+      "/ua4e.md",
+      "tu-ua4e"
+    );
+    const brokenRepo = {
+      findMetaByEntryAndVersion: async () => {
+        throw new Error("模拟 DB 故障");
+      },
+      findByEntryAndVersion: async () => null,
+    } as unknown as VfsRevisionRepository;
+
+    let content = "";
+    const warns = await captureWarnings(async () => {
+      const hydrated = await hydrateToolResultsForPrompt(
+        [toolResultMessage(block)],
+        brokenRepo
+      );
+      content = (hydrated[0]!.content.blocks[0] as ToolResultBlock).content;
+    });
+    assert.match((JSON.parse(content) as { error: string }).error, /取不回/);
+    assert.ok(
+      warns.some((w) => /读取 revision 失败/.test(w)),
+      `warn 应点明读取失败，实际：${warns.join(" | ")}`
+    );
+  });
+
+  it("contentHash 与 revision 行不一致 → 照常回填明文 + warn（不算坏行、不占位）", async () => {
+    const ctx = getNovelMasterTestContext();
+    const suffix = testIsolationSuffix();
+    const project = await ctx.projects.create(`pj-ua4f-${suffix}`);
+    const session = await ctx.sessions.create(project.id);
+    const block = await legacyReadRefBlock(
+      project.id,
+      session.id,
+      "/ua4f.md",
+      "tu-ua4f"
+    );
+    const tampered: ToolResultBlock = {
+      ...block,
+      contentRef: {
+        ...(block.contentRef as ReadResultRef),
+        contentHash: "0".repeat(64),
+      },
+    };
+    const revisionRepo = new SqliteVfsRevisionRepository(ctx.conn);
+
+    let content = "";
+    const warns = await captureWarnings(async () => {
+      const hydrated = await hydrateToolResultsForPrompt(
+        [toolResultMessage(tampered)],
+        revisionRepo
+      );
+      content = (hydrated[0]!.content.blocks[0] as ToolResultBlock).content;
+    });
+    assert.deepEqual(JSON.parse(content), {
+      path: "/ua4f.md",
+      content: "line-1\nline-2\nline-3",
+    });
+    assert.ok(
+      warns.some((w) => /contentHash/.test(w)),
+      `指纹漂移留 warn 线索但不阻断，实际：${warns.join(" | ")}`
+    );
+  });
+
+  it("同 (entryId,version) 的两个引用块 → 明文只取一次（调用内 memo 去重）", async () => {
+    const ctx = getNovelMasterTestContext();
+    const suffix = testIsolationSuffix();
+    const project = await ctx.projects.create(`pj-ua4g-${suffix}`);
+    const session = await ctx.sessions.create(project.id);
+    const block = await legacyReadRefBlock(
+      project.id,
+      session.id,
+      "/ua4g.md",
+      "tu-ua4g"
+    );
+    // 同一 (entryId, version) 的两块（长文件分段 read 是常态）。
+    const twin: ToolResultBlock = { ...block, toolUseId: "tu-ua4g-2" };
+    const message: ChatMessage = {
+      ...toolResultMessage(block),
+      content: { blocks: [block, twin] },
+    };
+
+    // 计数仓储：只在真仓储外面套一层计数器，不改行为。
+    const inner = new SqliteVfsRevisionRepository(ctx.conn);
+    let metaCalls = 0;
+    let plainCalls = 0;
+    const countingRepo = {
+      findMetaByEntryAndVersion: (entryId: number, version: number) => {
+        metaCalls += 1;
+        return inner.findMetaByEntryAndVersion(entryId, version);
+      },
+      findByEntryAndVersion: (entryId: number, version: number) => {
+        plainCalls += 1;
+        return inner.findByEntryAndVersion(entryId, version);
+      },
+    } as unknown as VfsRevisionRepository;
+
+    const warns = await captureWarnings(async () => {
+      const hydrated = await hydrateToolResultsForPrompt(
+        [message],
+        countingRepo
+      );
+      const blocks = hydrated[0]!.content.blocks as ToolResultBlock[];
+      assert.equal(blocks.length, 2);
+      assert.deepEqual(JSON.parse(blocks[0]!.content), {
+        path: "/ua4g.md",
+        content: "line-1\nline-2\nline-3",
+      });
+      assert.equal(
+        blocks[1]!.content,
+        blocks[0]!.content,
+        "memo 命中的第二块拿到同一份回填正文"
+      );
+    });
+    assert.deepEqual(warns, [], "取得到明文不该 warn");
+    assert.equal(metaCalls, 1, `元数据只应查一次，实际 ${metaCalls} 次`);
+    assert.equal(plainCalls, 1, `明文只应取一次，实际 ${plainCalls} 次`);
+
+    // 对照：缓存范围严格限定在「一次装配内」——另起一次调用会重新取。
+    await hydrateToolResultsForPrompt([message], countingRepo);
+    assert.equal(metaCalls, 2, "跨调用不得复用缓存（不跨调用持久化）");
+    assert.equal(plainCalls, 2, "跨调用不得复用缓存（不跨调用持久化）");
   });
 });
 
-describe("read-tool-result-ref Step 4: prepare 接线与孤儿拍平顺序", () => {
-  it("prepareUserMessagesForPrompt 对透传的 tool_result 消息 hydrate（content 还原 wire 全文）", async () => {
+describe("hydrate-tool-results: T-UA6 prepare 接线与孤儿拍平顺序", () => {
+  it("prepareUserMessagesForPrompt 对存量 ref 行 hydrate（token / 压缩口径同受益）", async () => {
     const ctx = getNovelMasterTestContext();
     const suffix = testIsolationSuffix();
-    const project = await ctx.projects.create(`pj-hywire-${suffix}`);
+    const project = await ctx.projects.create(`pj-ua6-${suffix}`);
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
-    await vfs.write("/hywire.md", "第一行\n第二行\n第三行");
-
-    const { block, baseline, revisionRepo } = await readViaTool(
-      { vfs, projectId: project.id, sessionId: session.id, listSessionMessages: async () => [] },
-      ctx.conn,
-      { path: "/hywire.md" },
-      "tu-hywire"
+    const block = await legacyReadRefBlock(
+      project.id,
+      session.id,
+      "/ua6.md",
+      "tu-ua6"
     );
-    const sk = createSessionKkvService(ctx.conn);
+    const revisionRepo = new SqliteVfsRevisionRepository(ctx.conn);
     const message = toolResultMessage(block);
     const prepared = await prepareUserMessagesForPrompt([message], {
       sessionId: session.id,
-      sessionKkv: sk,
+      sessionKkv: createSessionKkvService(ctx.conn),
       vfs,
       revisionRepo,
     });
     const outBlock = prepared[0]!.content.blocks[0] as ToolResultBlock;
-    assert.equal(outBlock.content, baseline);
-    // token / 压缩 parity 口径（messageBodyTextFromBlocks）同受益于 hydrate
+    assert.deepEqual(JSON.parse(outBlock.content), {
+      path: "/ua6.md",
+      content: "line-1\nline-2\nline-3",
+    });
     const bodyText = messageBodyTextFromBlocks(prepared[0]!.content.blocks);
-    assert.match(bodyText, /     1\|第一行/);
+    assert.match(bodyText, /line-1/, "字符口径携带全文（阈值判定不失真）");
     // view-time：prepare 前的内存原消息仍是空 content（不写回纪律）
-    assert.equal(
-      (message.content.blocks[0] as ToolResultBlock).content,
-      ""
-    );
+    assert.equal((message.content.blocks[0] as ToolResultBlock).content, "");
   });
 
-  it("孤儿拍平发生在 hydrate 之后：拍平文本含 wire 全文，未 hydrate 的对照只剩占位", async () => {
+  it("孤儿拍平发生在 hydrate 之后：拍平文本含 JSON 包全文；未 hydrate 的对照只剩占位", async () => {
     const ctx = getNovelMasterTestContext();
     const suffix = testIsolationSuffix();
-    const project = await ctx.projects.create(`pj-orphan-${suffix}`);
+    const project = await ctx.projects.create(`pj-ua6b-${suffix}`);
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
-    await vfs.write("/orphan.md", "o1\no2\no3");
-
-    const { block, baseline, revisionRepo } = await readViaTool(
-      { vfs, projectId: project.id, sessionId: session.id, listSessionMessages: async () => [] },
-      ctx.conn,
-      { path: "/orphan.md" },
-      "tu-orphan"
+    const block = await legacyReadRefBlock(
+      project.id,
+      session.id,
+      "/ua6b.md",
+      "tu-ua6b"
     );
-    const sk = createSessionKkvService(ctx.conn);
+    const revisionRepo = new SqliteVfsRevisionRepository(ctx.conn);
+    const message = toolResultMessage(block);
     // 消息数组里没有配对的 assistant tool_use → tool_result 是「孤儿」，
     // 发送前会被 normalizeOrphanToolResultsForLlm 拍平成 text。
-    const message = toolResultMessage(block);
     const prepared = await prepareUserMessagesForPrompt([message], {
       sessionId: session.id,
-      sessionKkv: sk,
+      sessionKkv: createSessionKkvService(ctx.conn),
       vfs,
       revisionRepo,
     });
     const flattened = normalizeOrphanToolResultsForLlm(prepared);
     const flatBlock = flattened[0]!.content.blocks[0]!;
     assert.equal(flatBlock.type, "text");
-    // 拍平文本携带 hydrate 还原的 wire 全文（messageBodyText 的
-    // tool_result 形态 = id 头 + 空行 + 正文，而非空占位）
-    assert.equal(
-      (flatBlock as { text: string }).text,
-      `[tool_result id=tu-orphan]\n\n${baseline}`
-    );
+    const flatText = (flatBlock as { text: string }).text;
+    assert.match(flatText, /^\[tool_result id=tu-ua6b\]\n\n/);
+    // 拍平链路会把 tool_result 的 JSON 正文重新美化打印，故按内容而非逐字节断言：
+    assert.match(flatText, /"path": "\/ua6b\.md"/);
+    assert.match(flatText, /line-1\\nline-2\\nline-3/);
 
     // 对照组：跳过 prepare/hydrate 直接拍平原始引用块 → 只剩占位文本，
-    // wire 全文丢失——证明「hydrate 必须先于孤儿拍平」（删掉 hydrate 接线
-    // 上面的断言即红）。
+    // 正文丢失——证明「hydrate 必须先于孤儿拍平」（删掉 prepare 的 hydrate
+    // 接线，上面的断言即红）。
     const flatRaw = normalizeOrphanToolResultsForLlm([message]);
     const rawBlock = flatRaw[0]!.content.blocks[0]!;
     assert.equal(rawBlock.type, "text");
     assert.equal(
       (rawBlock as { text: string }).text,
-      "[tool_result id=tu-orphan]"
+      "[tool_result id=tu-ua6b]"
     );
   });
 
   it("prepare 对无 revisionRepo 的 legacy 消息（无引用块）行为不变", async () => {
     const ctx = getNovelMasterTestContext();
     const suffix = testIsolationSuffix();
-    const project = await ctx.projects.create(`pj-legacy-${suffix}`);
+    const project = await ctx.projects.create(`pj-ua6c-${suffix}`);
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
     const legacy: ToolResultBlock = {

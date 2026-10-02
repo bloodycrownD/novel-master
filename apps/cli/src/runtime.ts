@@ -8,10 +8,10 @@ import { mkdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { deflateSync, inflateSync } from "node:zlib";
 import { registerTokenizerNodeDriver } from "@novel-master/tokenizer-driver-node";
-import { bootstrapNovelMaster, createPersistentPreferences, createPersistentState, open, registerZlibCodecAccelerator, runBlobBinaryNormalization, runMessageContentDecompress, runVfsContentPacking, type PersistentPreferences, type PersistentState, type TdbcConnection } from "@novel-master/core";
+import { bootstrapNovelMaster, createPersistentPreferences, createPersistentState, open, registerZlibCodecAccelerator, runBlobBinaryNormalization, runMessageContentDecompress, runMessageRefUnref, runVfsContentPacking, type PersistentPreferences, type PersistentState, type TdbcConnection } from "@novel-master/core"; } from "@novel-master/core";
 import { refreshUserVfsUnifiedToolTurnSnapshot } from "@novel-master/core/feature-flags";
 
-import { createAgentRegistryService, createAgentStreamRegistry } from "@novel-master/core/agent";
+import { createAgentRegistryService, createAgentStreamRegistry, createAgentAbortRegistry } from "@novel-master/core/agent";
 import {
   createCompactionConditionEvaluator,
   createCompactionConditionsStore,
@@ -68,7 +68,7 @@ import {
   type SessionKkvService,
 } from "@novel-master/core/session-kkv";
 import { createSkillsService, type SkillService } from "@novel-master/core/skills";
-import type { AgentRegistryService, AgentStreamRegistry } from "@novel-master/core/agent";
+import type { AgentAbortRegistry, AgentRegistryService, AgentStreamRegistry } from "@novel-master/core/agent";
 import { registerBetterSqlite3Driver } from "@novel-master/tdbc-driver-better-sqlite3";
 import {
   createCompositeSecretStore,
@@ -160,13 +160,23 @@ export interface NovelMasterRuntime {
   /** 会话级规则快照 / file_cache；Agent write upsert 与常驻工作区共用。 */
   readonly sessionKkv: SessionKkvService;
   /**
-   * read 引用化（read-tool-result-ref Step 6）的 revision 仓库：
-   * runAgentTurn 装配点用它推导 read +1 通道并透传 prepare hydrate。
+   * 存量 contentRef 行的兜底 hydrate 取数用（回迁完成前保留，
+   * 回迁后无生产消费方）。
    */
   readonly revisionRepo: VfsRevisionRepository;
   /** 智能排序规则管理（sort-rule 命令组与 workplace smart 排序共用）。 */
   readonly smartSortRule: SmartSortRuleService;
   readonly agentRegistry: AgentRegistryService;
+  /**
+   * Agent abort registry：按 sessionId 索引在途 run 的 controller。
+   *
+   * D6（CLI 补注入）：此前 CLI 不注入、`runAgentTurn` 走
+   * `abortRegistry?.register(...)` 空安全分支——后果是 task `sessionId`
+   * 续用子会话的并发硬互斥闭包 `runtime.abortRegistry?.has(id) ?? true`
+   * 永远走保守拒绝分支（在途判据恒真、续用能力形同虚设）。补注入后三端
+   * 判据同源，生产路径不再命中那个缺 registry 的降级分支。
+   */
+  readonly abortRegistry: AgentAbortRegistry;
   /** 按 sessionId 索引 in-flight run 的流句柄，供订阅 / 取消订阅。 */
   readonly streamRegistry: AgentStreamRegistry;
   readonly tokenCounters: TokenCounterRegistry;
@@ -206,6 +216,13 @@ export async function createNovelMasterRuntime(
   // 另一谓词重扫后自然收敛；打包谓词（hash 仍是 blob 行的非 head 历史
   // 版本）读明文经 content store 三形态兼容，与归一/解压交错安全。
   await runMessageContentDecompress(conn, { syncBudgetMs: 5_000 });
+  // 引用化回迁（存量 contentRef 行 → 明文包 + 源 revision 精确 −1）：同样
+  // 内联 await 进 CLI 启动、同样 5s 预算（交互式进程不该被一次搬运独占）。
+  // 与解压/归一谓词可交叠、收敛顺序无关：解压谓词是 content_blob IS NOT
+  // NULL、回迁谓词在其补集上（content_blob IS NULL），两者互不覆盖；回迁
+  // 收尾若发现解压标记未置会返回 deferred，本次不置标记，等解压置标记后由
+  // 下次命令续跑（幂等）。
+  await runMessageRefUnref(conn, { syncBudgetMs: 5_000 });
   // 存量 blob 形态归一（zlib-b64 文本 → 二进制 BLOB）：幂等可重入；收尾
   // 维护仅在本轮确有推进（成功改写 ≥1 行）且全部表完成时触发一次（稳态
   // 零成本短路），上一轮维护失败由持久化标记 startupMaintenancePending 补跑。
@@ -248,8 +265,7 @@ export async function createNovelMasterRuntime(
   const messages = createMessageService(conn);
   const messageTranscriptEffects = createMessageTranscriptEffectsService(conn);
   const sessionKkv = createSessionKkvService(conn);
-  // read 引用化（read-tool-result-ref Step 6）：同 conn 单实例——runAgentTurn
-  // 装配点由它推导 read +1 通道，prepare 链用它 hydrate 引用块。
+  // 存量 contentRef 行的兜底 hydrate 取数用（同 conn 单实例；回迁完成前保留，回迁后无生产消费方）。
   const revisionRepo = new SqliteVfsRevisionRepository(conn);
   const { userVfsTurn } = createUserVfsTurnServiceBundle(conn);
 
@@ -261,6 +277,8 @@ export async function createNovelMasterRuntime(
 
   const agentRegistry = createAgentRegistryService(conn, state);
   const streamRegistry = createAgentStreamRegistry();
+  // D6：进程内单例（Map 薄封装），runAgentTurn 入口即注册 controller。
+  const abortRegistry = createAgentAbortRegistry();
 
   return {
     conn,
@@ -272,6 +290,7 @@ export async function createNovelMasterRuntime(
     compactionConditionEvaluator,
     agentRegistry,
     streamRegistry,
+    abortRegistry,
     tokenCounters,
     projects: createProjectService(conn),
     sessions: createSessionService(conn, { state, agentRegistry }),

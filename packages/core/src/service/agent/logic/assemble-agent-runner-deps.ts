@@ -78,7 +78,7 @@ export function assembleAgentRunnerDeps(
     preferences: input.runtime.preferences,
     // read 引用块 hydrate 的 revision 仓库（read-tool-result-ref Step 6）：
     // 从 runtime 单点透传给 runner 的 prepare 调用（可选；装配缺口时
-    // 含 contentRef 的消息会 fail-fast，不静默降级）。
+    // 含 contentRef 的消息不抛错，改填错误占位 + warn）。
     revisionRepo: input.runtime.revisionRepo,
   };
 

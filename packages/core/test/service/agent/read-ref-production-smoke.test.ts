@@ -1,16 +1,16 @@
 /**
- * read-tool-result-ref Step 6 生产装配 smoke（phase-read-ref-apps）。
+ * read 结果全文直出的生产装配 smoke（task-attach-unref Step 4）。
  *
- * 三端 runtime 打开生产开关后的真实形态：只注入 `revisionRepo`（不带显式
- * `adjustRevisionRefCount`）。链路断言：
+ * 三端 runtime 的真实形态：只注入 `revisionRepo`（无任何 ref_count 通道）。
+ * v1.5.30 起引用化退役，故本文件不再有「通道推导」这一层（`resolveReadRefCountChannel`
+ * 随 Step 2 删除），链路断言改为：
  *
- * ① `resolveReadRefCountChannel`：从 revisionRepo 推导出 +1 通道；显式
- *    通道优先；两者都缺时 undefined（legacy 全文回落）。
- * ② agent-runner 走 `assembleAgentRunnerDeps` 装配（revisionRepo 透传到
- *    prepare），read 工具执行时经通道同步 +1，落库的 tool_result 块带
- *    contentRef 且 content=""（占位空串）。
- * ③ 下一轮模型请求的 history 经 prepare hydrate 后携带 wire 全文
- *    （formatReadOutput 重放），与 read 执行时的输出逐字节一致。
+ * ① agent-runner 走 `assembleAgentRunnerDeps` 装配，落库的 tool_result 块
+ *    **全文直出**（带 6 位行号）、`contentRef` 缺省。
+ * ② read 执行前后 revision `ref_count` 不变（无 `+1`）。
+ * ③ 下一轮模型请求的 history 里同一条 tool_result 携带同一份全文——不经
+ *    hydrate（新块上根本没有引用键）。
+ * ④ 每步 tool_use 查找源仍是可见-only（与引用化无关的既有收窄，防回归）。
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -19,7 +19,6 @@ import { textBlocks } from "@novel-master/core/chat";
 import { assembleAgentRunnerDeps } from "../../../src/service/agent/logic/assemble-agent-runner-deps.js";
 import { createAgentRunner } from "../../../src/service/agent/create-agent-runner.js";
 import { ChatAgentSession } from "../../../src/service/agent/impl/chat-agent-session.js";
-import { resolveReadRefCountChannel } from "../../../src/service/agent/logic/run-agent-turn.js";
 import type { AgentTurnRuntimePort } from "../../../src/service/agent/logic/run-agent-turn.js";
 import { createMessageTranscriptEffectsService } from "../../../src/service/chat/create-message-transcript-effects.js";
 import { createWorkplaceService } from "../../../src/service/workplace/create-workplace-service.js";
@@ -71,49 +70,8 @@ function minimalDefinition(): AgentDefinition {
   };
 }
 
-describe("read-tool-result-ref Step 6: resolveReadRefCountChannel 装配推导", () => {
-  it("只注入 revisionRepo（三端生产形态）→ 通道非空且调用打到 batchAdjustRefCountWithDelta", async () => {
-    const calls: Array<{ pointers: unknown; delta: number }> = [];
-    const revisionRepo = {
-      batchAdjustRefCountWithDelta: async (pointers: unknown, delta: number) => {
-        calls.push({ pointers, delta });
-      },
-    } as unknown as SqliteVfsRevisionRepository;
-
-    const channel = resolveReadRefCountChannel({ revisionRepo });
-    assert.ok(channel != null, "生产形态（仅 revisionRepo）必须推导出通道");
-    await channel([{ entryId: 1, version: 3 }], +1);
-    assert.equal(calls.length, 1);
-    assert.deepEqual(calls[0]!.pointers, [{ entryId: 1, version: 3 }]);
-    assert.equal(calls[0]!.delta, +1);
-  });
-
-  it("显式 adjustRevisionRefCount 优先（测试探针口子不被 repo 覆盖）", async () => {
-    const explicitCalls: number[] = [];
-    const repoCalls: number[] = [];
-    const channel = resolveReadRefCountChannel({
-      adjustRevisionRefCount: async () => {
-        explicitCalls.push(1);
-      },
-      revisionRepo: {
-        batchAdjustRefCountWithDelta: async () => {
-          repoCalls.push(1);
-        },
-      } as unknown as SqliteVfsRevisionRepository,
-    });
-    assert.ok(channel != null);
-    await channel([{ entryId: 1, version: 1 }], +1);
-    assert.equal(explicitCalls.length, 1);
-    assert.equal(repoCalls.length, 0);
-  });
-
-  it("两者都缺 → undefined（legacy 全文回落，不 +1 不产引用块）", () => {
-    assert.equal(resolveReadRefCountChannel({}), undefined);
-  });
-});
-
-describe("read-tool-result-ref Step 6: 生产链路 smoke（runner 全链）", () => {
-  it("revisionRepo 注入 → read +1 产 contentRef 落库 → 下轮请求 history 含 hydrate 全文", async () => {
+describe("read 结果全文直出: 生产链路 smoke（runner 全链）", () => {
+  it("read 全文直出落库（无 contentRef、无 +1）→ 下轮请求 history 携带同一份全文", async () => {
     const ctx = getNovelMasterTestContext();
     const suffix = testIsolationSuffix();
     const project = await ctx.projects.create(`pj-rrsmoke-${suffix}`);
@@ -127,9 +85,7 @@ describe("read-tool-result-ref Step 6: 生产链路 smoke（runner 全链）", (
     const revisionRepo = new SqliteVfsRevisionRepository(ctx.conn);
     const scope = { kind: "session" as const, projectId, sessionId };
 
-    // run-agent-turn 主装配点同款：通道推导 → toolCtx。
-    const readRefCountChannel = resolveReadRefCountChannel({ revisionRepo });
-    assert.ok(readRefCountChannel != null);
+    // run-agent-turn 主装配点同款：生产 runtime 只有 revisionRepo，无 ref 通道。
     const registry = new ToolRegistry<BuiltinToolContext>();
     registerBuiltinTools(registry);
     const toolCtx: BuiltinToolContext = {
@@ -138,9 +94,6 @@ describe("read-tool-result-ref Step 6: 生产链路 smoke（runner 全链）", (
       sessionId,
       listSessionMessages: () => ctx.messages.listBySession(sessionId),
       sessionKkv: ctx.sessionKkv,
-      ...(readRefCountChannel != null
-        ? { adjustRevisionRefCount: readRefCountChannel }
-        : {}),
       workplace: createWorkplaceService(ctx.conn, scope),
     };
 
@@ -228,8 +181,8 @@ describe("read-tool-result-ref Step 6: 生产链路 smoke（runner 全链）", (
     assert.equal(modelCall, 2, "两步：read 工具轮 + 文本收尾轮");
     assert.notEqual(result.stopReason, "error");
 
-    // ① 落库形态：assistant 带 tool_use；user 的 tool_result 块带
-    // contentRef 且 content=""（引用态占位空串，DB 里不存全文）。
+    // ① 落库形态：assistant 带 tool_use；user 的 tool_result 块是**全文
+    // 直出**（6 位行号 wire），块上没有 contentRef。
     const persisted = await ctx.messages.listBySession(sessionId);
     const toolResultMsg = persisted.find((m) =>
       m.content.blocks.some((b) => b.type === "tool_result")
@@ -240,25 +193,28 @@ describe("read-tool-result-ref Step 6: 生产链路 smoke（runner 全链）", (
     );
     assert.ok(block != null);
     assert.equal(block.toolUseId, "tu-rrsmoke");
-    assert.equal(block.content, "", "落库引用态块 content 必须是占位空串");
-    const ref = block.contentRef;
-    assert.ok(ref != null, "落库块必须带 contentRef");
-    assert.equal(ref.path, "/smoke.md");
-    assert.equal(ref.version, 1);
-    assert.equal(ref.returnedLines, 2);
-    assert.equal(ref.totalLines, 2);
-    assert.equal(ref.truncated, false);
-    assert.ok(ref.entryId > 0);
-
-    // ② 保活：read 同步 +1 已发生（live head 1 + read 引用 1 = 2）。
-    const rows = await ctx.conn.query<{ ref_count: number }>(
-      `SELECT ref_count FROM vfs_revision WHERE entry_id = ? AND version = ?`,
-      [ref.entryId, ref.version]
+    const wire = "     1|smoke line one\n     2|smoke line two";
+    assert.equal(block.content, wire, "落库即全文直出（DB 里就存着 wire）");
+    assert.equal(block.contentRef, undefined, "落库块不得带 contentRef");
+    assert.equal(
+      Object.hasOwn(block, "contentRef"),
+      false,
+      "contentRef 键本身都不该出现"
     );
-    assert.equal(rows[0]!.ref_count, 2);
 
-    // ③ wire：下一轮请求的 history 经 prepare hydrate 后含全文——
-    // 引用块在请求历史里不再是空串（formatReadOutput 逐字节重放）。
+    // ② 无 +1：read 执行前后 ref_count 恒为 live head 的 1。
+    const entryRows = await ctx.conn.query<{ entry_id: number }>(
+      `SELECT entry_id FROM vfs_entry WHERE scope_key = ? AND path = ?`,
+      [`session:${projectId}:${sessionId}`, "/smoke.md"]
+    );
+    assert.equal(entryRows.length, 1);
+    const revRows = await ctx.conn.query<{ ref_count: number }>(
+      `SELECT ref_count FROM vfs_revision WHERE entry_id = ? AND version = 1`,
+      [entryRows[0]!.entry_id]
+    );
+    assert.equal(revRows[0]!.ref_count, 1, "read 不再 +1（只剩 live head 持有）");
+
+    // ③ 请求历史：第二轮拿到的 tool_result 就是同一份全文（不经 hydrate）。
     const secondHistory = histories[1]!;
     const wireBlock = secondHistory
       .flatMap((m) => m.content.blocks as readonly ToolResultBlock[])
@@ -266,11 +222,10 @@ describe("read-tool-result-ref Step 6: 生产链路 smoke（runner 全链）", (
     assert.ok(wireBlock != null, "第二轮请求历史必须包含 read 的 tool_result");
     assert.equal(
       wireBlock.content,
-      "     1|smoke line one\n     2|smoke line two",
-      "hydrate 重放的 wire 文本（6 位行号格式）"
+      wire,
+      "历史里携带的仍是带行号全文（无引用键，hydrate 零处理）"
     );
-    // contentRef 原样保留（块身份不变）
-    assert.deepEqual(wireBlock.contentRef, ref);
+    assert.equal(wireBlock.contentRef, undefined);
 
     // ④ 每步 tool_use 查找源收窄为可见-only（P1-3）：hidden 行不进；
     //    但仍然覆盖本轮 tool_result 的 tool_use id（解析力不降级）。

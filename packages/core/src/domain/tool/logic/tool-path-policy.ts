@@ -16,7 +16,16 @@
 /** 约定：tool input 顶层这些字段出现时一律视为路径参与校验。 */
 const PATH_FIELDS = ["path", "filePath", "from", "to"] as const;
 
-/** 从 tool input 顶层提取所有路径字段（约定字段名见 {@link PATH_FIELDS}）。 */
+/**
+ * 约定：这些字段是**路径数组**（逐元素展开参与校验）。
+ *
+ * `fileAttachment` 是 task 工具的显式交付路径列表（`string[]`）——它同样是「模型
+ * 指定的文件路径」，漏抽就等于开了个只设防一次的旁路：`allowedPaths` 一旦打开，
+ * 附件面就成了唯一不校验的入口。
+ */
+const PATH_ARRAY_FIELDS = ["fileAttachment"] as const;
+
+/** 从 tool input 顶层提取所有路径字段（约定字段名见 {@link PATH_FIELDS} / {@link PATH_ARRAY_FIELDS}）。 */
 export function extractInputPaths(input: unknown): readonly string[] {
   if (typeof input !== "object" || input === null) {
     return [];
@@ -27,6 +36,17 @@ export function extractInputPaths(input: unknown): readonly string[] {
     const v = rec[key];
     if (typeof v === "string" && v.length > 0) {
       paths.push(v);
+    }
+  }
+  for (const key of PATH_ARRAY_FIELDS) {
+    const v = rec[key];
+    if (!Array.isArray(v)) {
+      continue;
+    }
+    for (const item of v) {
+      if (typeof item === "string" && item.length > 0) {
+        paths.push(item);
+      }
     }
   }
   return paths;

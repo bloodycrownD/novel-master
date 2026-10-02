@@ -10,6 +10,7 @@ import type {
   MessageContent,
 } from "@/domain/chat/model/message.js";
 import type { MessageUsage } from "@/domain/chat/model/message-usage.js";
+import type { MessageAttachment } from "@/domain/chat/model/message-attachment.schema.js";
 import type { AgentSession } from "../agent-session.port.js";
 
 /**
@@ -37,6 +38,8 @@ export class InMemoryAgentSession implements AgentSession {
       modelName?: string | null;
       raw?: Record<string, unknown> | null;
       usage?: MessageUsage;
+      /** 结构化附件：随内存消息一起保留，供测试断言落库形态。 */
+      attachments?: readonly MessageAttachment[];
     }
   ): Promise<ChatMessage> {
     this.seq += 1;
@@ -52,6 +55,9 @@ export class InMemoryAgentSession implements AgentSession {
       createdAtMs: Date.now(),
       hidden: false,
       ...(options?.usage != null ? { usage: options.usage } : {}),
+      ...(options?.attachments != null && options.attachments.length > 0
+        ? { attachments: options.attachments }
+        : {}),
     };
     this.messages.push(message);
     return message;

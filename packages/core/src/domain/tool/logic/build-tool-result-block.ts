@@ -9,8 +9,6 @@
  */
 
 import type {
-  ReadResultRef,
-  SkillResultRef,
   SkillToolRef,
   ToolResultBlock,
 } from "@/domain/chat/model/content-block.js";
@@ -50,188 +48,8 @@ export function resolveToolResultOk(block: ToolResultBlock): boolean {
   return !block.content.trimStart().startsWith("Error:");
 }
 
-/**
- * 从 read 成功输出解析 `contentRef`（read-tool-result-ref）。
- *
- * 仅 `toolName === "read"` 且输出携带 head 定位三件套
- * （entryId/version/contentHash + totalBytes）时生效——vfs-tools 只在
- * ctx 注入 adjustRevisionRefCount 并同步 +1 之后才把这些字段放进输出，
- * 「有 entryId ⟺ revision 已保活」，这里产的引用块不会悬空。其余工具 /
- * 旧形态输出（含 mock ctx 的测试）返回 undefined，走 legacy 全文 content。
- *
- * 派生参数（offset/limit/returnedLines/totalLines/truncated/
- * lastLineTruncated/nextOffset）全部取自 read 截断管线的结果输出——
- * `formatReadOutput` 重放要用的输入必须自包含在 ref 里。
- */
-function resolveReadResultRefFromOutcome(
-  toolName: string | undefined,
-  output: unknown
-): ReadResultRef | undefined {
-  if (toolName !== "read" || !isRecord(output)) {
-    return undefined;
-  }
-  const { entryId, version, contentHash, totalBytes } = output;
-  if (
-    typeof entryId !== "number" ||
-    typeof version !== "number" ||
-    typeof contentHash !== "string" ||
-    contentHash === "" ||
-    typeof totalBytes !== "number"
-  ) {
-    return undefined;
-  }
-  const { path, offset, returnedLines, totalLines, truncated } = output;
-  if (
-    typeof path !== "string" ||
-    typeof offset !== "number" ||
-    typeof returnedLines !== "number" ||
-    typeof totalLines !== "number" ||
-    typeof truncated !== "boolean"
-  ) {
-    return undefined;
-  }
-  const limit = output.limit;
-  const lastLineTruncated = output.lastLineTruncated;
-  const nextOffset = output.nextOffset;
-  return {
-    path,
-    entryId,
-    version,
-    contentHash,
-    totalBytes,
-    offset,
-    ...(typeof limit === "number" ? { limit } : {}),
-    returnedLines,
-    totalLines,
-    truncated,
-    ...(lastLineTruncated === true ? { lastLineTruncated: true } : {}),
-    ...(typeof nextOffset === "number" ? { nextOffset } : {}),
-  };
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-/**
- * 从 skill 成功输出解析 `contentRef`（skill-result-ref）。
- *
- * 仅 `toolName === "skill"` 且 `action ∈ {load, read}`、输出携带 head 定位
- * 三件套时生效——skill-tool 只在 ctx 注入 adjustRevisionRefCount 并同步 +1
- * 之后才把这些字段放进输出，「有 entryId ⟺ revision 已保活」，这里产的
- * 引用块不会悬空。其余 action（write/edit/list）与旧形态输出（含 mock ctx
- * 的测试）返回 undefined，走 legacy 全文 content。
- *
- * **字段校验按 action 拆两套**（wire 冻结函数的入参面不同）：
- * - read：wire 走 `formatReadOutput`，全量校验分页派生参数（offset /
- *   limit / returnedLines / totalLines / truncated / nextOffset）；
- * - load：wire 走 `formatSkillLoadOutput`，只吃 path/content/truncated/
- *   files，load 输出本无分页字段（恒记 offset=1 / returnedLines=0 /
- *   totalLines=0 作占位）——故只校验 version/truncated/files/三件套。
- *
- * alreadyReferenced 形态不带三件套（工具不 +1、不产 ref），自然落回
- * legacy 全文。
- */
-function resolveSkillResultRefFromOutcome(
-  toolName: string | undefined,
-  output: unknown
-): SkillResultRef | undefined {
-  if (toolName !== "skill" || !isRecord(output)) {
-    return undefined;
-  }
-  const { action, domain, name, path, entryId, version, contentHash, totalBytes } =
-    output;
-  if (action !== "load" && action !== "read") {
-    return undefined;
-  }
-  // alreadyReferenced 形态**永不产 ref**：load 时若技能全文已在本请求提示词
-  // 中，工具侧已提前 return 出常量 tip——既不 +1 也没有正文可引（下面三件套
-  // 校验本就必然把它挡下，这里显式短路只为把这条隐式耦合写明）。
-  // hydrate 侧无法重放 tip 语义：`formatSkillLoadOutput` 对
-  // alreadyReferenced 直返 content 常量，ref 里既没有「本请求已注入」的
-  // 状态位也没有 files/正文，产了就等于给 LLM 发一段查无出处的提示，破 wire。
-  if (action === "load" && output.alreadyReferenced === true) {
-    return undefined;
-  }
-  if (
-    (domain !== "global" && domain !== "project") ||
-    typeof name !== "string" ||
-    typeof path !== "string" ||
-    typeof entryId !== "number" ||
-    typeof version !== "number" ||
-    typeof contentHash !== "string" ||
-    contentHash === "" ||
-    typeof totalBytes !== "number"
-  ) {
-    return undefined;
-  }
-  const truncated = output.truncated;
-  if (typeof truncated !== "boolean") {
-    return undefined;
-  }
-  if (action === "load") {
-    const files = output.files;
-    if (!Array.isArray(files) || files.some((f) => typeof f !== "string")) {
-      return undefined;
-    }
-    return {
-      kind: "skill",
-      action: "load",
-      domain,
-      name,
-      path,
-      entryId,
-      version,
-      contentHash,
-      totalBytes,
-      // load 无分页参数：offset/returnedLines/totalLines 恒为 `1/0/0` 占位
-      // **假值**（load 输出本就不带这三个数，真实值只在执行时被截断推导算出、
-      // 从不落 ref），只为让 hydrate 侧两条 action 共用一套字段校验与 parse
-      // 白名单——wire 重放不读这三个数（`formatSkillLoadOutput` 只吃
-      // path/content/truncated/files）。
-      // 「让 deriveSkillLoadTruncation 回真值」这条路被有意否掉：load 输出会
-      // 多带 totalLines，而 `formatSkillLoadOutput` 内部委托 `formatReadOutput`
-      // ——truncated 时它会把 `Total lines: N.` 拼进 wire，hydrate 侧重放记录
-      // 不带该字段就会与之失配；改 wire 就得给冻结 formatter 版本化。
-      // 契约钉在 {@link SkillResultRef} 的字段注释上：消费方按 action 分派，
-      // 禁止读 load 侧这三个假值。
-      offset: 1,
-      returnedLines: 0,
-      totalLines: 0,
-      truncated,
-      files: files as string[],
-    };
-  }
-  const { offset, returnedLines, totalLines } = output;
-  const limit = output.limit;
-  const nextOffset = output.nextOffset;
-  if (
-    typeof offset !== "number" ||
-    typeof returnedLines !== "number" ||
-    typeof totalLines !== "number"
-  ) {
-    return undefined;
-  }
-  return {
-    kind: "skill",
-    action: "read",
-    domain,
-    name,
-    path,
-    entryId,
-    version,
-    contentHash,
-    totalBytes,
-    offset,
-    ...(typeof limit === "number" ? { limit } : {}),
-    returnedLines,
-    totalLines,
-    truncated,
-    ...(typeof nextOffset === "number" ? { nextOffset } : {}),
-    // load 专属字段（read 不产出）：空清单占位，使 parse 白名单与 hydrate
-    // 侧无需按 action 二次分派。
-    files: [],
-  };
 }
 
 /** 字节数格式化：1024 进位（B/KB/MB）、保留 1 位小数（整数位不带 .0）。 */
@@ -448,14 +266,14 @@ export function buildToolResultBlock(
       meta?.skillProjectId
     );
 
-    // 引用块（read-tool-result-ref / skill-result-ref）：read / skill read /
-    // skill load 成功输出携带 head 定位三件套（工具已同步 +1 保活）时产
-    // contentRef——content 置占位空串，wire 侧 hydrate 按 (entryId, version)
-    // 重放对应冻结 formatter 还原全文；summary 照旧生成（UI 卡片零改动）。
-    // 二者互斥（工具名不同），先 read 后 skill。
-    const contentRef =
-      resolveReadResultRefFromOutcome(meta?.toolName, outcome.output) ??
-      resolveSkillResultRefFromOutcome(meta?.toolName, outcome.output);
+    // 引用块（contentRef）已随 v1.5.30 的 unref 回迁整体退役：成功分支恒走
+    // 全文形态（`formatToolOutputForLlm` 直出），read / skill load / skill
+    // read 都不再产 contentRef，也不再触发 revision +1（先保活、后引用是
+    // v1.5.29 的引用化约束，本版整体摘除）。
+    //
+    // 存量引用块（v1.5.29 装机窗口写入的 `content === ""` + contentRef 行）
+    // 仍由 `hydrateToolResultsForPrompt` 的极简兜底 hydrate 按
+    // `(entryId, version)` 回填 JSON 明文，详见该模块文件头。
 
     // 中断回流（phase-1-abort-reflow）：outcome.ok=true 但 output.stopped=true 表示
     // 子 agent 被用户中断。tool-result 要标 ok=false（主 agent 区分「用户停止」与「崩溃」），
@@ -485,10 +303,8 @@ export function buildToolResultBlock(
       type: "tool_result",
       toolUseId,
       ok: true,
-      // 引用态 content 置空串（hydrate 重放还原 wire 字节）；legacy 态照旧全文。
-      ...(contentRef != null
-        ? { content: "", contentRef }
-        : { content }),
+      // 成功分支恒全文直出（不再有引用态的 `content: ""` 分支）。
+      content,
       ...(summary != null ? { summary } : {}),
       ...(subagentSessionId != null || skillRef != null
         ? {

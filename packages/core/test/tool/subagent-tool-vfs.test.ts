@@ -75,6 +75,9 @@ describe("子代理 VFS 可见性（T-T9 / P0-4）", () => {
         const s = await sessions.createSubSession("parent-sess", "proj-x", title);
         return s.id;
       },
+      // 续用校验用（spec G4）：与 createSubSession 的父 id 保持一致。
+      parentSessionId: "parent-sess",
+      isSessionRunActive: () => false,
       resolveChildModelId: (def) => ({
         savedModelId: def.model ?? "parent-model",
         workspaceModelId: "ws-model",

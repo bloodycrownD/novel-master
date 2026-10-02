@@ -435,7 +435,8 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
     }
 
     // delta > 0 要先校验所有 pair 都存在，守护 T-RB-REF-MISSING 不变量；
-    // delta < 0 命不中即跳过，不需要前置查存在性。
+    // delta < 0 命不中即跳过，不需要前置查存在性（但 UPDATE 侧带下限夹逼，
+    // 见下方 clamp）。
     if (delta > 0) {
       const existing = await this.findExistingEntryVersionKeys(pointers);
       const missing: Array<{ entryId: number; version: number }> = [];
@@ -459,15 +460,23 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
     // 按 500 分块发 UPDATE，复用 findExistingEntryVersionKeys 的 (entry_id, version) IN (...) 写法
     const CHUNK_SIZE = 500;
     const deltaLiteral = delta > 0 ? `+ ${delta}` : `${delta}`;
+    // delta < 0 的下限夹逼（D15）：`ref_count` 误减会把计数打到负数，而负数与
+    // 0 在 `deleteUnreferencedUnderScope`（`ref_count <= 0` 判删）眼里一样是
+    // 「无持有者」——误减活 revision 是不可恢复方向。夹逼**必须按 |delta| 量级**，
+    // 不能用 `> 0`：五条删除路径的 −1 经 `aggregateReadRefs` 聚合后单 pair 的
+    // delta 可为 −2/−3（多条消息持有同一 pair），`ref_count = 1, delta = −2`
+    // 在 `> 0` 夹逼下照样写出 −1。前值不足时 UPDATE 命不中 → 计数保持原样
+    // （坏行由回迁侧「−1 之前前值」warn 记线索，见 message-ref-unref）。
+    const clamp = delta < 0 ? ` AND ref_count >= ${Math.abs(delta)}` : "";
     for (let offset = 0; offset < pointers.length; offset += CHUNK_SIZE) {
       const chunk = pointers.slice(offset, offset + CHUNK_SIZE);
-      const placeholders = chunk.map(() => `(?,?)`).join(`,`);
+      const placeholders = chunk.map(() => `(?,?)`).join(",");
       const params: unknown[] = [];
       for (const pair of chunk) {
         params.push(pair.entryId, pair.version);
       }
       await this.conn.execute(
-        `UPDATE vfs_revision SET ref_count = ref_count ${deltaLiteral} WHERE (entry_id, version) IN (${placeholders})`,
+        `UPDATE vfs_revision SET ref_count = ref_count ${deltaLiteral} WHERE (entry_id, version) IN (${placeholders})${clamp}`,
         params
       );
     }

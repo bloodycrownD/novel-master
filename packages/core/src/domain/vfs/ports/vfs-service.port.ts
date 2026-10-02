@@ -21,17 +21,6 @@ export interface VfsReadResult {
   readonly content: string;
   readonly version: number;
   readonly mtimeMs: number;
-  /**
-   * read 时点 head 的全局定位键（read-tool-result-ref）：read 工具据此对
-   * revision 做「同步 +1 保活」并在输出携带 entryId 产 contentRef 引用块。
-   * 可选字段——旧实现/mock 未透出时 read 工具回落 legacy 全文形态
-   * （不 +1、不产引用块）。
-   */
-  readonly entryId?: number;
-  /** read 时点 head 的内容寻址 hash（hydrate 冗余校验用；文件行无 hash 时为 null）。 */
-  readonly contentHash?: string | null;
-  /** 明文总字节（UTF-8）。 */
-  readonly totalBytes?: number;
 }
 
 /** A single grep match with line/column position. */

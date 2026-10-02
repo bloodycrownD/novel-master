@@ -42,6 +42,7 @@ import { ToolRegistry } from "@/domain/tool/logic/tool-registry.js";
 import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { SimpleEventBus } from "@/infra/events/simple-event-bus.js";
 import { PreferencesError } from "@/errors/preferences-errors.js";
+import { ToolError } from "@/errors/tool-errors.js";
 import { textBlocks } from "@/domain/chat/content/text-blocks.js";
 import {
   EVENT_AGENT_RUN_FAILED,
@@ -164,62 +165,15 @@ export interface AgentTurnRuntimePort extends AgentRunRuntimePort {
    */
   readonly searchConfig?: SearchConfigStore;
   /**
-   * 可选：read 工具的 revision 引用计数 +1 通道（read-tool-result-ref）。
+   * revision 仓库（v1.5.30 unref 回迁后只剩**兜底 hydrate** 一个消费点）。
    *
-   * 注入了才会透传到 toolCtx（主/子两个装配点同款）：read 在返回前同步
-   * +1 保活、输出携带 entryId 产 contentRef 引用块。未注入时 read 走
-   * legacy 全文形态（不 +1、不产引用块）——三端 runtime 装配随 hydrate
-   * （Step 4/6）就绪后打开，避免「产引用块但 wire 还原未接线」的中间态。
-   * 底层绑定 revision repo 的 `batchAdjustRefCountWithDelta`。
-   */
-  readonly adjustRevisionRefCount?: (
-    pointers: ReadonlyArray<{
-      readonly entryId: number;
-      readonly version: number;
-    }>,
-    delta: number
-  ) => Promise<void>;
-  /**
-   * read 引用化（read-tool-result-ref）的 revision 仓库（Step 6 生产装配）。
-   *
-   * 双职责单点收口：① 未显式注入 `adjustRevisionRefCount` 时，装配点从本
-   * 字段绑定 `batchAdjustRefCountWithDelta` 推导出 +1 通道；② 经
-   * `assembleAgentRunnerDeps` 透传给 agent-runner，作为 prepare 的
-   * `revisionRepo`（tool_result 引用块 hydrate 主链）。三端 runtime 构造
-   * 处各注入一份（同 conn 的 `SqliteVfsRevisionRepository`）。
+   * 经 `assembleAgentRunnerDeps` 透传给 agent-runner，作为 prepare 的
+   * `revisionRepo`：v1.5.29 装机窗口写入的存量 `contentRef` 行内容为空串，
+   * 拼提示词前要按 `(entryId, version)` 取明文回填（见
+   * `domain/chat/logic/hydrate-tool-results-for-prompt.ts`）。三端 runtime
+   * 构造处各注入一份（同 conn 的 `SqliteVfsRevisionRepository`）。
    */
   readonly revisionRepo?: VfsRevisionRepository;
-}
-
-/**
- * 解析 read 引用计数 +1 通道（主 / 子两个装配点共用，Step 6 生产装配）。
- *
- * 显式 `runtime.adjustRevisionRefCount` 优先（测试注入探针的口子）；否则从
- * `runtime.revisionRepo` 绑定 `batchAdjustRefCountWithDelta`——两者都缺时
- * 返回 undefined，read 回落 legacy 全文形态（不 +1、不产引用块）。
- */
-export function resolveReadRefCountChannel(
-  runtime: Pick<
-    AgentTurnRuntimePort,
-    "adjustRevisionRefCount" | "revisionRepo"
-  >
-):
-  | ((
-      pointers: ReadonlyArray<{
-        readonly entryId: number;
-        readonly version: number;
-      }>,
-      delta: number
-    ) => Promise<void>)
-  | undefined {
-  if (runtime.adjustRevisionRefCount != null) {
-    return runtime.adjustRevisionRefCount;
-  }
-  const repo = runtime.revisionRepo;
-  if (repo == null) {
-    return undefined;
-  }
-  return (pointers, delta) => repo.batchAdjustRefCountWithDelta(pointers, delta);
 }
 
 export class AgentTurnError extends Error {
@@ -897,9 +851,6 @@ async function runAgentTurnWithController(
     registry
   );
   const session = new ChatAgentSession(runtime.messages, scope.sessionId);
-  // read 引用计数通道（显式注入优先，否则从 revisionRepo 推导）——
-  // 主 / 子两个 toolCtx 装配点共用同一个解析结果。
-  const readRefCountChannel = resolveReadRefCountChannel(runtime);
   // internalController 由入口 {@link runAgentTurn} 建好并**已注册**（见其注释：
   // 前奏期间的停止不能被丢掉）。这里只取它的 signal：runner.run 用它，
   // 同时作为 task 工具内子 agent run 的 parentSignal，让
@@ -912,12 +863,6 @@ async function runAgentTurnWithController(
     listSessionMessages: (): Promise<readonly ChatMessage[]> =>
       runtime.messages.listBySession(scope.sessionId),
     sessionKkv: runtime.sessionKkv,
-    // read 引用计数 +1 通道（read-tool-result-ref）：显式通道优先，否则从
-    // revisionRepo 推导（Step 6 生产装配）；两者都缺时 read 回落 legacy
-    // 全文形态（vfs-tools read 分支判空跳过）。
-    ...(readRefCountChannel != null
-      ? { adjustRevisionRefCount: readRefCountChannel }
-      : {}),
     // 目录规则默认启用：write / mkdir 新路径时按本会话工作区补默认 workplace_dir_rule 行。
     workplace: runtime.workplace({
       kind: "session",
@@ -951,6 +896,23 @@ async function runAgentTurnWithController(
           title,
         });
         return child.id;
+      },
+      // 续用归属校验（spec D2 直接父口径）：主装配点的父就是本 run 的 scope.sessionId。
+      parentSessionId: scope.sessionId,
+      // 并发软闸（spec D6）：绑 abortRegistry.has；**缺 registry 保守拒绝续用**
+      // （?? true）——宁可让模型新开，也不要在无并发信息时赌一把。
+      // 真正的硬互斥在 runChildAgent 内的 tryRegister claim（spec D5）。
+      isSessionRunActive: (id: string): boolean =>
+        runtime.abortRegistry?.has(id) ?? true,
+      // fileAttachment 预算计量（spec D11）：主装配点的 vfs 就是本 run 的会话视图。
+      getContentSize: async (path: string) => {
+        const size = await vfs.findContentSize(path);
+        if (size == null) {
+          return null;
+        }
+        return size.kind === "inlineChars"
+          ? ({ kind: "inline", size: size.size } as const)
+          : ({ kind: "blob", size: size.size } as const);
       },
       resolveChildModelId: (
         def: AgentDefinition
@@ -1184,7 +1146,21 @@ async function runChildAgent(args: {
   // streamHandle 在 try 外声明（同 childController），保证 finally 能读到。
   let streamHandle: string | undefined;
   try {
-    runtime.abortRegistry?.register(childSessionId, childController);
+    // 并发硬互斥的 claim 落点（spec D5）：由无条件覆盖的 `register` 换成
+    // 抢占式 `tryRegister`。这一行排在下面的 `session.append(prompt)` **之前**，
+    // 所以 claim 失败抛错时子会话里连 task prompt 都还没写——不留孤儿 user 消息。
+    //
+    // 判别：`false` = 同一 childSessionId 上已有 in-flight run（典型是同一步里两个
+    // task 并发续用同一个子会话），一律一成一败；败方 finally 的 `unregister` 因
+    // 所有权比对不会误删赢家的 controller。缺 abortRegistry 时放行（无法判定，
+    // 按旧行为；CLI 已补注入，见 D6）。
+    if (runtime.abortRegistry?.tryRegister(childSessionId, childController) === false) {
+      throw new ToolError(
+        "FAILED",
+        `子会话 ${childSessionId} 已有另一个子代理在运行，不能并发续用同一个子会话；去掉 sessionId 新开一个子会话即可。`,
+        { toolName: "task" }
+      );
+    }
 
     // 子检查点①（r3-run-3）：register 之后、`agentRegistry.list()` 之前。
     //
@@ -1254,13 +1230,26 @@ async function runChildAgent(args: {
       childSessionId,
       parentSessionId
     );
-    // 子 agent 的 read 引用计数通道与主 run 同源（见上）。
-    const readRefCountChannel = resolveReadRefCountChannel(runtime);
 
     // task 工具的 prompt 作为子 session 的第一条 user 消息落库，
     // 使子 agent 对话历史完整：LLM 能看到任务描述，UI 浏览页也能展示。
-    if (opts.prompt && opts.prompt.trim().length > 0) {
-      await session.append("user", textBlocks(opts.prompt));
+    // 续用（spec G4）时同一条 append 追加到已有子会话末尾，历史不断链。
+    //
+    // 守卫是「prompt 非空白 **或** 附件非空」：schema 的 `z.string().min(1)` 放行
+    // 纯空白串（" "），若只按 prompt 判空，这条 user 消息连同已物化的 fileAttachment
+    // 会一起不落库——task 却照常「正常」返回，附件静默蒸发、模型毫不知情。
+    if (
+      (opts.prompt != null && opts.prompt.trim().length > 0) ||
+      (opts.attachments != null && opts.attachments.length > 0)
+    ) {
+      await session.append("user", textBlocks(opts.prompt ?? ""), {
+        // fileAttachment 预算内物化的附件（spec G5）：与主会话附件同链路——
+        // `content:null` 落库、view-time hydrate、alreadyReferenced 去重都复用既有
+        // prepare 链，子代理开箱即得全文，省掉自己 read 一遍。
+        ...(opts.attachments != null && opts.attachments.length > 0
+          ? { attachments: opts.attachments }
+          : {}),
+      });
     }
     const toolCtx: BuiltinToolContext = {
       vfs,
@@ -1269,12 +1258,6 @@ async function runChildAgent(args: {
       listSessionMessages: (): Promise<readonly ChatMessage[]> =>
         runtime.messages.listBySession(childSessionId),
       sessionKkv: runtime.sessionKkv,
-      // read 引用计数 +1 通道（read-tool-result-ref）：子 agent 与主 run 同款
-      // 透传（引用是全局键，跨会话直接指向源 revision，子/主一视同仁）——
-      // 显式通道优先，否则从 revisionRepo 推导（Step 6 生产装配）。
-      ...(readRefCountChannel != null
-        ? { adjustRevisionRefCount: readRefCountChannel }
-        : {}),
       // 目录规则默认启用：子 agent 与父共享同一工作区（上面 vfs 同归属根父会话），
       // 补规则也写父工作区的 workplace_dir_rule。
       workplace: runtime.workplace({
@@ -1308,6 +1291,22 @@ async function runChildAgent(args: {
             title,
           });
           return grandchild.id;
+        },
+        // 续用归属校验（spec D2 直接父口径）：子装配点里孙会话的直接父就是本
+        // 子会话（注意**不是**根父 parentSessionId——工作区归属才是根父口径）。
+        parentSessionId: childSessionId,
+        // 并发软闸与主装配点同款（缺 registry 保守拒绝）。
+        isSessionRunActive: (id: string): boolean =>
+          runtime.abortRegistry?.has(id) ?? true,
+        // 预算计量绑定本层 vfs（= 父会话工作区视图，孙会话同样只在父工作区取文件）。
+        getContentSize: async (path: string) => {
+          const size = await vfs.findContentSize(path);
+          if (size == null) {
+            return null;
+          }
+          return size.kind === "inlineChars"
+            ? ({ kind: "inline", size: size.size } as const)
+            : ({ kind: "blob", size: size.size } as const);
         },
         resolveChildModelId: (
           grandchildDef: AgentDefinition

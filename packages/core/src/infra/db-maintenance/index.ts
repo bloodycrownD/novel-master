@@ -1,7 +1,7 @@
 /**
  * 数据库维护（数据清理）：存储统计、VACUUM 维护链路与三个谓词驱动的
  * 后台搬运任务（存量 blob 形态归一、存量消息正文解压回明文、VFS 非 head
- * 历史版本混合打包）。
+ * 历史版本混合打包、消息引用化存量回迁）。
  *
  * 适配器注册表覆盖三张表（vfs_content_blob / session_file_cache_blob /
  * chat_message）；解压任务、blob 归一与 VFS 打包（含应急校验/反向展开
@@ -67,3 +67,20 @@ export type {
   VfsContentUnpackResult,
   VfsPackVerifyFailure,
 } from "./impl/vfs-content-packing.js";
+/**
+ * 消息引用化回迁（v1.5.30 unref 回退的反向搬运）：存量 contentRef 行 →
+ * `{path, content}` 明文包 + 源 revision 精确 −1。KKV 常量从此出口导出
+ * （迁移期断言完成标记需要）。
+ */
+export {
+  DEFAULT_REF_UNREF_SYNC_BUDGET_MS,
+  getMessageRefUnrefStatus,
+  MESSAGE_REF_UNREF_KKV_KEY,
+  MESSAGE_REF_UNREF_KKV_MODULE,
+  runMessageRefUnref,
+} from "./impl/message-ref-unref.js";
+export type {
+  MessageRefUnrefRunResult,
+  MessageRefUnrefStatus,
+  RunMessageRefUnrefOptions,
+} from "./impl/message-ref-unref.js";

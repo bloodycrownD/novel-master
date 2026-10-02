@@ -3,6 +3,11 @@
  *
  * 按可见序共享「已出现路径」：常驻前缀 S0 → attach → workplace（历史只读兼容）；user_ops 不参与。
  * 文件 attach 非首次 → alreadyReferenced 短提示；workplace 非首次 → content 空；目录每次拼树仍计 seen。
+ *
+ * S0 是**两个**集合（spec G6 双读）：`seenPaths` 只收 full 档（attach 去重初值），
+ * `workplaceSeenPaths` 收全量可见档（workplace 省略判定，缺省回落 `seenPaths`）。
+ * 后者只在 workplace 判定里被读、从不写共享 `seen`，故 attach 抢先与跨消息抑制
+ * 的运行期语义分毫未动。
  * skillAttach（`$技能名`）走 `skill:{name}` 命名空间 seen：首次读生效副本 SKILL.md 全文
  * （跨域读不经 session file_cache，直接 SkillService）；不存在 → 一行提示且不写 seen（自愈）；
  * 常驻索引不计入「已出现」，被压缩/置位重置随可见窗口自动继承。
@@ -63,8 +68,20 @@ export interface PrepareUserMessagesForPromptRuntime {
   /**
    * 常驻前缀 path 集合 S0（已或未规范化均可）；prepare 内再规范化后写入 seen。
    * 通常来自 `assembleWorkplaceDisplay().prefixPaths`。
+   *
+   * v1.5.30 起**只收 `status === "full"` 的条目**（assemble 侧已收窄）——只有真正
+   * 全文注入提示词的路径才有资格抑制 attach 的全文。
    */
   readonly seenPaths?: readonly string[];
+  /**
+   * 工作区「已展示」path 集合（通常来自 `assembleWorkplaceDisplay().visiblePaths`，
+   * 含 full / header / filename 三档）。
+   *
+   * 只喂 `hydrateWorkplaceWithSeen` 的**省略判定**，且**不写入共享 `seen`**——
+   * 共享 seen 的运行期语义（attach 抢先、跨消息抑制）完全不动。缺省回落
+   * {@link seenPaths}（旧调用方零变化）。
+   */
+  readonly workplaceSeenPaths?: readonly string[];
   /**
    * 自定义附加信息（agent 配置 customAttach，**未展开宏的原文本**）；
    * trim 非空时在 prepare 入口经 {@link expandDynamicMacros} 展开宏后，由 wrap 阶段注入 `<extra-info>` 块。
@@ -84,11 +101,11 @@ export interface PrepareUserMessagesForPromptRuntime {
   /** skillAttach 存在性判定与生效副本读取的解析上下文。 */
   readonly projectId?: string;
   /**
-   * read 引用块 hydrate（read-tool-result-ref）所需的 revision 仓库。
+   * 存量 contentRef 块的**极简兜底** hydrate 所需的 revision 仓库。
    *
-   * 消息含 `contentRef` 块而本依赖未注入时 hydrate 会 fail-fast 抛
-   * `ReadResultHydrateError`（装配缺口不静默降级——空 tool_result 发给
-   * LLM 正是引用化要杜绝的错文形态）。runtime 装配见 Step 6。
+   * v1.5.30 unref 回迁后写侧不再产 `contentRef`；本依赖只为 v1.5.29 装机
+   * 窗口写入的存量行取明文回填（按 `(entryId, version)`）。未注入时兜底
+   * 路径不抛错，改填错误占位 JSON 并 `console.warn`（装配缺口信号保留）。
    */
   readonly revisionRepo?: VfsRevisionRepository;
 }
@@ -439,11 +456,16 @@ async function hydrateAttachWithSeen(
 
 /**
  * workplace 源：首次全文；非首次 content 空（wrap 省略）。
+ *
+ * 省略判定读**两个**集合（spec G6 双读）：共享 `seen`（attach 抢先 / 跨消息抑制
+ * 的运行期语义不动，判据后仍照旧 `seen.add`）+ `workplaceSeen`（工作区已展示集，
+ * 初值 = assemble 的 `visiblePaths`，缺省回落 `seenPaths`；**不写回 seen**）。
  */
 async function hydrateWorkplaceWithSeen(
   attachment: MessageAttachment,
   runtime: PrepareUserMessagesForPromptRuntime,
-  seen: Set<string>
+  seen: Set<string>,
+  workplaceSeen: Set<string>
 ): Promise<MessageAttachment> {
   const rawPath = attachment.path;
   if (rawPath == null || rawPath === "") {
@@ -454,7 +476,7 @@ async function hydrateWorkplaceWithSeen(
     return attachment;
   }
 
-  if (seen.has(logicalPath)) {
+  if (seen.has(logicalPath) || workplaceSeen.has(logicalPath)) {
     return {
       ...attachment,
       path: logicalPath,
@@ -474,6 +496,7 @@ async function prepareOneUserMessage(
   message: ChatMessage,
   runtime: PrepareUserMessagesForPromptRuntime,
   seen: Set<string>,
+  workplaceSeen: Set<string>,
   isLatestUser: boolean,
   resolveSkillNames: () => Promise<Set<string>>
 ): Promise<ChatMessage> {
@@ -510,7 +533,7 @@ async function prepareOneUserMessage(
   for (const att of workplaceList) {
     hydratedBySource.set(
       att,
-      await hydrateWorkplaceWithSeen(att, runtime, seen)
+      await hydrateWorkplaceWithSeen(att, runtime, seen, workplaceSeen)
     );
   }
   for (const att of userOpsList) {
@@ -551,6 +574,15 @@ export async function prepareUserMessagesForPrompt(
   runtime: PrepareUserMessagesForPromptRuntime
 ): Promise<ChatMessage[]> {
   const seen = createPromptPathSeenSet(runtime.seenPaths);
+  // workplace 省略判定的第二读集合（spec G6 双读）：初值取 assemble 的
+  // `visiblePaths`（full + header + filename 全量可见集），**未注入时回落
+  // `seenPaths`**——旧调用方与既有语义（T-PD3 / T-PD4 / T-PD8 / T-SR6）零变化。
+  //
+  // 注意它只在 `hydrateWorkplaceWithSeen` 里被**读**，从不写入共享 `seen`：
+  // attach 抢先 seen、跨消息抑制这些运行期语义完全不动。
+  const workplaceSeen = createPromptPathSeenSet(
+    runtime.workplaceSeenPaths ?? runtime.seenPaths
+  );
   // seen 共享（方向 B）：可见历史里 assistant 已通过 skill 工具 load 过的
   // 技能预填进 seen——load 的全文以 tool_result 形式留在可见历史，后续
   // `$` 引用走 alreadyReferenced 短提示，防止同一正文注入两遍。压缩隐藏
@@ -625,16 +657,19 @@ export async function prepareUserMessagesForPrompt(
         message,
         resolvedRuntime,
         seen,
+        workplaceSeen,
         i === latestUserInputIndex,
         resolveSkillNames
       )
     );
   }
-  // read-tool-result-ref Step 4：tool_result 透传分支产出的消息在此统一
-  // hydrate——引用块（contentRef）按 (entryId, version) 查 revision 重放
-  // `formatReadOutput` 还原 wire 全文（内存态，不写回 content_json）。
-  // 必须发生在 normalizeOrphanToolResultsForLlm 之前：孤儿拍平吃
-  // messageBodyText，未 hydrate 的空 content 会被拍成占位文本、wire 全文
-  // 丢失；主链（LLM 装配）与 parity 链（token/压缩口径）共用本函数，同受益。
+  // v1.5.30 unref 回迁：存量 contentRef 块的极简兜底 hydrate 在此统一发生
+  // ——按 (entryId, version) 查 revision 明文，回填 `{path, content}` 的
+  // JSON 字符串（内存态，不写回 content_json）。
+  //
+  // **顺序红线**：必须发生在 normalizeOrphanToolResultsForLlm 之前：孤儿拍平
+  // 吃 messageBodyText，未 hydrate 的空 content 会被拍成 `[tool_result id=…]`
+  // 占位文本、正文再也补不回来；主链（LLM 装配）与 parity 链（token/压缩口径）
+  // 共用本函数，同受益。
   return hydrateToolResultsForPrompt(out, runtime.revisionRepo);
 }

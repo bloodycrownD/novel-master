@@ -71,6 +71,9 @@ function setupParallel(opts: SetupOpts = {}): {
       const s = await sessions.createSubSession("p", "proj", title);
       return s.id;
     },
+    // 续用校验用（spec G4）：与 createSubSession 的父 id 保持一致。
+    parentSessionId: "p",
+    isSessionRunActive: () => false,
     resolveChildModelId: (def) => ({
       savedModelId: def.model ?? "parent-saved",
       workspaceModelId: "ws-model",

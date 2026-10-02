@@ -1,308 +1,188 @@
 /**
- * 工具结果引用块的 view-time hydrate（read-tool-result-ref Step 4 +
- * skill-result-ref 延伸）。
+ * 工具结果引用块的 view-time **极简兜底** hydrate（v1.5.30 unref 回迁版）。
  *
- * 含 `contentRef` 的 tool_result 块在发送提示词前按全局键
- * `(entryId, version)` 查 revision 元数据（`findMetaByEntryAndVersion`
- * 只取 status / content_hash 两列，**零解码**）与 `ref.contentHash` 比对
- * 冗余校验（不匹配 = 版本错位 / 错键，fail-fast 抛
- * {@link ReadResultHydrateError}——绝不静默把空 content 或错文发给 LLM），
- * 元数据通过后才解 blob 明文，再以 ref 自包含参数重放对应工具的截断管线
- * 经冻结 formatter（vfs read → `formatReadOutput`；skill read → skill 自己
- * 的 truncateLine+capUtf8Bytes 管线后 `formatReadOutput`；skill load →
- * `formatSkillLoadOutput`）还原 wire 文本，填回块 `content`——**内存态，
- * 不写回 content_json**（prepare 的 attach hydrate 同款纪律）。legacy 块
- * （无 contentRef）零处理。
+ * 背景：v1.5.29 曾把 read / skill 的 tool_result 改写成引用形态——
+ * `content` 置占位空串、正文改存 `contentRef`（`(entryId, version)` +
+ * contentHash + 分页派生参数），拼提示词前再按引用重放冻结 formatter 还原
+ * wire 全文。本迭代把整个引用化机制**回迁**掉：写侧恒产全文
+ * （`buildToolResultBlock` 成功分支直出 `formatToolOutputForLlm`），
+ * 新消息不再有任何 `contentRef`。
  *
- * 三类引用共用同一条校验链（同一四码 fail-fast 体系与同一 memo）：窄化只判
- * `contentRef.kind === "skill"`（read 引用缺省即 read——存量行无 kind 键，
- * 向后兼容零迁移）。
+ * 但 v1.5.29 装机窗口写入的**存量行**还在库里：它们的 `content` 是空串，
+ * 引用块的白名单解析（`parse-message-content.ts`）本版按纪律保留，于是这些行
+ * 仍会被 parse 出来走到这里。若不管，prepare 后就是一批空 `tool_result`
+ * 直接发给 LLM——这正是引用化当初要杜绝的事故。故本模块退化为**兜底**：
+ * 按 `(entryId, version)` 取到明文，就地填一份 `{path, content}` 的 JSON 字符串
+ * 回内存态 `content`；取不到就填错误占位 JSON（含 path 与原因）并
+ * `console.warn`。**全程只改内存态，不写回 `content_json`**——落库回填是 B 线
+ * 回迁任务（`message-ref-unref`）的职责，不在本模块。
  *
- * 单次调用内按 ref 键去重（同一批消息重复引用同一 revision / 同一
- * 重放参数只解码一次），**不跨调用持久缓存**——取舍见 {@link HydrateMemo}。
+ * 与 v1.5.29 实现的取舍差异（有意为之，不是退化）：
+ * - **不做 wire 重放**。旧实现复刻三个纯函数（read / skill read / skill load
+ *   的截断管线）逐字节还原 wire；现在填的是 revision 明文 JSON 包，**与
+ *   legacy wire 不等值**（无行号前缀、无 `Output truncated.` 提示、分页切片
+ *   信息丢失）。这是可接受的——LLM 见到格式偏差会自行换算或重试，仓内也没有
+ *   任何消费方在解析 wire 的行号格式（搜索只匹配 text 块、UI 卡片读 summary、
+ *   token 计数只要全文）。
+ * - **不再 fail-fast**。旧实现的四码（REPO_MISSING / REVISION_MISSING /
+ *   CONTENT_DELETED / HASH_MISMATCH）会抛 `ReadResultHydrateError` 中断整个
+ *   装配；现在一律降级为占位 JSON + warn。唯一保留的信号是 warn——其中
+ *   **REPO_MISSING（revision 仓库未注入）刻意保留 warn**：那不是数据问题而是
+ *   **装配缺口**（三端 runtime 忘了注入 `revisionRepo`），必须可观测。
+ * - **hash 不匹配不算坏行**。`ref.contentHash` 与 revision 行的 `content_hash`
+ *   不一致时，只要能取到明文就照常回填并 warn：内容寻址 hash 在本仓其余读
+ *   路径上都不当强校验用，兜底路径更不该因它把整批装配打断。
+ * - `files` 等派生字段（skill load 附属文件清单）、分页派生字段全部弃置：
+ *   存量 ref 里虽然解析得出来，兜底路径没有消费方。
  *
- * 完整性校验降本（2026-09-29 性能修复）：旧实现把解出的明文整段重算
- * SHA-256 再与 `ref.contentHash` 比对（34KB/块 ≈ 0.27ms，100 块 ≈ 27ms，
- * 占单次 hydrate 约 1/4）。现在改为直接比对 revision 行的 `content_hash`
- * 元数据列（`findMetaByEntryAndVersion`，与取明文的键同源）：
+ * 窄化口径统一为 `contentRef.kind === "skill"`，其余一律按 read 走——存量行
+ * 无 `kind` 键，零迁移。legacy 块（无 contentRef）零处理。
  *
- * 1. 抗传输 / 落盘损坏由 zlib 解码器自带的 adler32 兜底
- *    （`decompressZlib`：校验和不符即抛错），位翻转不会变成「悄悄发错文」；
- * 2. 元数据比对挡的是版本错位 / 错键——行上的 `content_hash` 与 ref 记录的
- *    不一致时，`contentStore.get` 取出的根本是另一版 blob，这正是 fail-fast
- *    要防的事故；比对发生在解码之前，比旧实现更早失败；
- * 3. 「有人刻意同时改写 blob 明文字节与其 hash 字段」这种双改，等价于一条
- *    合法的另一版数据（引用键 `(entryId, version)` 也已指向该版），不再另行
- *    报错：这类双改同样能骗过旧实现的重算（重算只认明文，不认 blob 绑定），
- *    故语义等价——这也是 vfs 其余明文读路径（entry / revision 解析）一直
- *    采用的纪律，hydrate 不再是唯一重算方。
+ * **顺序红线**：本函数必须早于 `normalizeOrphanToolResultsForLlm` 调用——
+ * 未 hydrate 的空 content 会被孤儿拍平拍成 `[tool_result id=…]` 占位文本，
+ * 那就再也补不回来了。接线点在
+ * `prepare-user-messages-for-prompt.ts` 尾部（不要动那个顺序注释）。
  *
- * 四种 fail-fast 语义（REPO_MISSING / REVISION_MISSING / CONTENT_DELETED /
- * HASH_MISMATCH）与判别码保持不变。
+ * 退役计划：v1.5.29 存量行被 B 线回迁完成后，本文件连同 `contentRef` 三类型、
+ * parse 白名单、desktop 占位分支一起删（见 spec「后续清理轮」）。
  *
  * @module domain/chat/logic/hydrate-tool-results-for-prompt
  */
 
-import type {
-  ContentBlock,
-  ReadResultRef,
-  SkillResultRef,
-  ToolResultBlock,
-} from "../model/content-block.js";
+import type { ContentBlock, ToolResultBlock } from "../model/content-block.js";
 import type { ChatMessage } from "../model/message.js";
-import {
-  formatReadOutput,
-  formatSkillLoadOutput,
-} from "@/domain/tool/logic/format-tool-output.js";
-import {
-  deriveSkillLoadTruncation,
-  deriveSkillReadTruncation,
-} from "@/domain/tool/logic/skill-read-truncation.js";
-import {
-  capUtf8BytesFill,
-  sliceLinesFromOffset,
-  TOOL_OUTPUT_MAX_LINES,
-} from "@/domain/tool/logic/tool-output-limits.js";
 import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revision.port.js";
 
-/** {@link ReadResultHydrateError} 的判别码。 */
-export type ReadResultHydrateErrorCode =
-  /** 消息含引用块但 revision 仓库未注入（装配缺口，拒绝静默降级）。 */
-  | "READ_REF_REPO_MISSING"
-  /** `(entryId, version)` 无 revision 行（引用悬空，保活链被破坏）。 */
-  | "READ_REF_REVISION_MISSING"
-  /** revision 行 status=deleted（明文不可再生）。 */
-  | "READ_REF_CONTENT_DELETED"
-  /** 元数据 hash 比对失败（版本错位 / 错键）。 */
-  | "READ_REF_HASH_MISMATCH";
+/** 兜底 hydrate 后缀：给 `[hydrate-tool-results-for-prompt]` warn 用。 */
+const LOG_PREFIX = "[hydrate-tool-results-for-prompt]";
 
 /**
- * read 引用块 hydrate 的类型化错误（fail-fast）。
+ * 单次 {@link hydrateToolResultsForPrompt} 调用的明文去重缓存（调用内 Map）。
  *
- * 引用块的 `content` 是占位空串：hydrate 任一环节失败时若静默放行，
- * LLM 会收到空 tool_result——这正是引用化要杜绝的「静默发错文」，
- * 所以这里统一抛本类型中断装配，由调用方暴露数据 / 装配问题。
- */
-export class ReadResultHydrateError extends Error {
-  readonly code: ReadResultHydrateErrorCode;
-
-  constructor(code: ReadResultHydrateErrorCode, message: string) {
-    super(message);
-    this.name = "ReadResultHydrateError";
-    this.code = code;
-  }
-}
-
-/**
- * 单次 {@link hydrateToolResultsForPrompt} 调用的去重缓存（调用内 Map）。
+ * 键 `${entryId}:${version}` → 已取到的 revision 明文。同一次装配里多个块
+ * 引用同一 `(entryId, version)`（长文件分段 read 多次引用同一版是常态）时只
+ * 查一次、只解一次 blob。
  *
- * - `plainByRefKey`：键 `${entryId}:${version}:${ref.contentHash}` → 已通过
- *   元数据校验的 revision 明文；同一次装配里多个块引用同一 `(entryId, version)`
- *   时只查一次、只解一次 blob（长文件分段 read、同文件多轮 read 的重复引用是
- *   常态）。期望 hash 拼进键，篡改 ref 不会借缓存绕过校验。
- * - `wireByReplayKey`：键在上述基础上再加 `kind:action:offset:limit:path` →
- *   重放后的 wire 文本；`replayReadWireText` / `replaySkillReadWireText` /
- *   `replaySkillLoadWireText` 只依赖这五个量（ref 里的 returnedLines 等派生
- *   字段都是重放重算的），同参重复引用直接复用字符串。**action 必须进键**
- *   ——skill read 与 skill load 的 ref 共享 `(entryId, version)`（load 后
- *   再 read 同一 SKILL.md 是常态），不加 action 会拿 read 的 wire 去当 load
- *   的 wire 发给 LLM。
- *
- * 刻意**不做跨调用持久缓存**：dangling / 已删除的 fail-fast 是保活链断裂的
- * 安全网——revision 被 GC 或 mark-deleted 后，同一内存消息下一次 hydrate 必须
- * 继续报 MISSING / DELETED。持久缓存会把已消失的 revision 明文继续发出去，
- * 把 fail-fast 悄悄盖住。缓存范围严格限定在「一次 prepare 装配内」，只省
- * 同一批消息的重复解码，不改变下一次调用的可观测行为。
+ * 刻意**不做跨调用持久缓存**：缓存范围严格限定在「一次 prepare 装配内」，
+ * 只省同批消息的重复解码。跨调用持久化会让已被 GC / mark-deleted 的 revision
+ * 明文继续被发出去，掩盖真实状态。
  */
 interface HydrateMemo {
-  readonly plainByRefKey: Map<string, string>;
-  readonly wireByReplayKey: Map<string, string>;
+  readonly plainByRefKey: Map<string, string | null>;
+}
+
+/** 存量引用块的定位标签（错误占位与 warn 文案用，兼作人工排查线索）。 */
+function describeRef(block: ToolResultBlock): string {
+  const ref = block.contentRef!;
+  return ref.kind === "skill"
+    ? `skill ${ref.action} 引用 ${ref.path} (entryId=${ref.entryId}, version=${ref.version})`
+    : `read 引用 ${ref.path} (entryId=${ref.entryId}, version=${ref.version})`;
 }
 
 /**
- * 以 ref 自包含参数重放 read 截断管线并经 `formatReadOutput` 得 wire 文本。
- *
- * 与 vfs-tools read 分支逐字节同参：同样的 `split("\n")`、同样的
- * `sliceLinesFromOffset(lines, offset, limit ?? TOOL_OUTPUT_MAX_LINES)`、
- * 同样的 `capUtf8BytesFill`（50KB 预算）与同样的 nextOffset 推导——
- * 元数据 hash 校验已保证取到的明文就是 read 执行时的那一版，纯函数
- * 确定性重放即逐字节等值。
+ * 错误占位 JSON：让 LLM 拿到的是「这里本该有正文但取不到 + 为什么」的结构化
+ * 说明，而不是空串或一段凭空捏的提示。`content` 仍是合法 JSON 字符串。
  */
-function replayReadWireText(ref: ReadResultRef, plain: string): string {
-  const lines = plain.split("\n");
-  const { slice, nextOffset: lineNextOffset } = sliceLinesFromOffset(
-    lines,
-    ref.offset,
-    ref.limit ?? TOOL_OUTPUT_MAX_LINES
-  );
-  const byteCapped = capUtf8BytesFill(slice);
-  const returnedLines = byteCapped.lines.length;
-  const truncated = byteCapped.truncated || lineNextOffset != null;
-
-  let nextOffset: number | undefined;
-  if (truncated) {
-    if (byteCapped.truncated) {
-      // 末行被截到预算点：nextOffset 跳过被截行；被截行是文件末行时
-      // 跳过后无剩余内容，不给 nextOffset（与 read 分支同推论）。
-      const candidate = ref.offset + returnedLines;
-      if (candidate <= lines.length) {
-        nextOffset = candidate;
-      }
-    } else {
-      nextOffset = lineNextOffset;
-    }
-  }
-
-  return formatReadOutput({
-    path: ref.path,
-    content: byteCapped.lines.join("\n"),
-    offset: ref.offset,
-    totalLines: lines.length,
-    returnedLines,
-    truncated,
-    ...(byteCapped.lastLinePartial ? { lastLineTruncated: true } : {}),
-    ...(nextOffset != null ? { nextOffset } : {}),
-  });
+function errorPlaceholderJson(
+  path: string,
+  reason: string
+): string {
+  return JSON.stringify({ path, error: reason });
 }
 
-/**
- * skill read 引用块的重放（skill-result-ref）。
- *
- * wire 走 `formatReadOutput`（skill read 输出字段全齐，`isReadOutput` 命中，
- * 与 vfs read 同一冻结 formatter），但**截断管线不同**：skill 走
- * `truncateLine` + `capUtf8Bytes`（不是 read 的 `capUtf8BytesFill`）。
- * 推导调 `deriveSkillReadTruncation` —— 与 skill-tool 执行时**同一个纯
- * 函数**（单源，不是复刻两份），元数据 hash 校验已保证明文就是读时那一版，
- * 纯函数确定性重放即逐字节等值。
- */
-function replaySkillReadWireText(ref: SkillResultRef, plain: string): string {
-  const { content, returnedLines, totalLines, truncated, nextOffset } =
-    deriveSkillReadTruncation(
-      plain,
-      ref.offset,
-      ref.limit ?? TOOL_OUTPUT_MAX_LINES
-    );
-  return formatReadOutput({
-    path: ref.path,
-    content,
-    offset: ref.offset,
-    totalLines,
-    returnedLines,
-    truncated,
-    ...(nextOffset != null ? { nextOffset } : {}),
-  });
-}
-
-/**
- * skill load 引用块的重放（skill-result-ref）。
- *
- * wire 走 `formatSkillLoadOutput`（正文行号段 + 附属文件清单尾注）。load
- * 输出**本就没有** totalLines / returnedLines（工具侧只记 offset/limit/… 的
- * read 侧字段），故这里也不补——`formatReadOutput` 的 truncated 提示分支
- * 对 `totalLines !== number` 本就跳过，补 0 会凭空多出「Total lines: 0.」
- * 一句，逐字节等值就破了。files 来自 ref（清单不存则重放不出尾注）。
- */
-function replaySkillLoadWireText(ref: SkillResultRef, plain: string): string {
-  const { content, truncated } = deriveSkillLoadTruncation(plain);
-  return formatSkillLoadOutput({
-    path: ref.path,
-    content,
-    truncated,
-    files: ref.files,
-  });
-}
-
-/** 单个引用块的 hydrate：查 revision 元数据 → 校验 → 解明文 → 重放 → 填回 content。 */
+/** 单个引用块的兜底 hydrate：查 revision 明文 → 填 `{path, content}` JSON 包。 */
 async function hydrateReadResultBlock(
   block: ToolResultBlock,
   revisionRepo: VfsRevisionRepository | undefined,
   memo: HydrateMemo
 ): Promise<ToolResultBlock> {
   const ref = block.contentRef!;
-  const isSkill = ref.kind === "skill";
-  // fail-fast 文案用工具名 + path 定位，两类引用共用同一四码体系。
-  const refLabel = isSkill
-    ? `skill ${ref.action} 引用`
-    : "read 引用";
-  const locKey = `${isSkill ? `${ref.action}:` : ""}${ref.path}`;
+  const label = describeRef(block);
+  const refPath = ref.path;
+
   if (revisionRepo == null) {
-    throw new ReadResultHydrateError(
-      "READ_REF_REPO_MISSING",
-      `${refLabel}块缺少 revision 仓库：${locKey} (entryId=${ref.entryId}, version=${ref.version})——hydrate 未装配时引用块 content 为空串，静默放行会把空 tool_result 发给 LLM`
-    );
+    // 装配缺口（不是数据问题）：三端 runtime 应注入 revisionRepo。占位 +
+    // warn，让问题在日志里显形而不是静默发占位正文。
+    const reason =
+      "runtime 未注入 revisionRepo（装配缺口）：v1.5.29 存量 contentRef 行无法取回明文";
+    console.warn(`${LOG_PREFIX} ${label} ${reason}`);
+    return { ...block, content: errorPlaceholderJson(refPath, reason) };
   }
-  // 明文缓存键含期望 hash：把它拼进键，篡改过的 ref（同 revision 但
-  // contentHash 指别的 blob）不会命中缓存，校验一步都省不掉。
-  // 明文本身与 kind/action 无关（同一 revision 的同一版正文），故不把
-  // kind 进 plainKey——load 与 read 共用一份解码结果。
-  const plainKey = `${ref.entryId}:${ref.version}:${ref.contentHash}`;
+
+  // 明文缓存键用 `(entryId, version)`：明文由 revision 行自己解
+  // （行上的 content_hash → contentStore.get），与 ref 里记的 contentHash
+  // 无关，故不进键。null 表示「查过但取不到」，同样缓存以免同批重复探测。
+  const plainKey = `${ref.entryId}:${ref.version}`;
   let plain = memo.plainByRefKey.get(plainKey);
+  if (plain === undefined) {
+    // 元数据先行：status=deleted / 行缺失都靠它判，不解 blob。hash 只用来
+    // warn（能取到就照常回填），不当强校验。
+    let reason: string | null = null;
+    try {
+      const meta = await revisionRepo.findMetaByEntryAndVersion(
+        ref.entryId,
+        ref.version
+      );
+      if (meta == null) {
+        reason = `revision 行缺失（entryId=${ref.entryId}, version=${ref.version}）：引用悬空，ref_count 保活链已被破坏或引用键被篡改`;
+      } else if (meta.status === "deleted") {
+        reason = `revision 已删除（entryId=${ref.entryId}, version=${ref.version}, status=deleted）：明文不可再生`;
+      } else {
+        const revision = await revisionRepo.findByEntryAndVersion(
+          ref.entryId,
+          ref.version
+        );
+        if (revision == null) {
+          // 元数据命中后行被并发删 / GC 的兜底（与「revision 行缺失」同语义）。
+          reason = `revision 行缺失（entryId=${ref.entryId}, version=${ref.version}）：元数据命中后行被并发删除或 GC`;
+        } else if (revision.content == null) {
+          // port 层兜底：实现若在 active 行上给不出明文（blob 缺失）同样归此。
+          reason = `revision 明文不可取（entryId=${ref.entryId}, version=${ref.version}, status=${revision.status}）：blob 缺失或已清理`;
+        } else {
+          plain = revision.content;
+          if (
+            typeof ref.contentHash === "string" &&
+            ref.contentHash !== "" &&
+            meta.contentHash != null &&
+            meta.contentHash !== ref.contentHash
+          ) {
+            // hash 不匹配不算坏行：能取到明文就回填，只留一条 warn 线索
+            // （版本错位 / 引用键错配的可观测信号，不阻断装配）。
+            console.warn(
+              `${LOG_PREFIX} ${label} contentHash 与 revision 行不一致（期望=${ref.contentHash}，实际=${meta.contentHash}）：已按取到的明文回填`
+            );
+          }
+        }
+      }
+    } catch (error) {
+      // 仓库读取本身出错（DB 故障等）同样降级为占位 + warn：兜底路径的
+      // 契约是「永不中断装配」。
+      reason = `读取 revision 失败：${error instanceof Error ? error.message : String(error)}`;
+    }
+    if (reason != null) {
+      console.warn(`${LOG_PREFIX} ${label} ${reason}`);
+    }
+    memo.plainByRefKey.set(plainKey, plain ?? null);
+  }
+
   if (plain == null) {
-    // 元数据比对先行（不解 blob）：status / content_hash 就是明文解出的
-    // 依据（见文件头「完整性校验降本」），不一致时连解码都不必做。
-    const meta = await revisionRepo.findMetaByEntryAndVersion(
-      ref.entryId,
-      ref.version
-    );
-    if (meta == null) {
-      throw new ReadResultHydrateError(
-        "READ_REF_REVISION_MISSING",
-        `${refLabel}悬空：${locKey} 的 (entryId=${ref.entryId}, version=${ref.version}) 无 revision 行（ref_count 保活链被破坏或引用键被篡改）`
-      );
-    }
-    if (meta.status === "deleted") {
-      throw new ReadResultHydrateError(
-        "READ_REF_CONTENT_DELETED",
-        `${refLabel}指向已删除 revision：${locKey} (entryId=${ref.entryId}, version=${ref.version}) status=${meta.status}，明文不可再生`
-      );
-    }
-    if (meta.contentHash !== ref.contentHash) {
-      throw new ReadResultHydrateError(
-        "READ_REF_HASH_MISMATCH",
-        `${refLabel}内容漂移：${locKey} (entryId=${ref.entryId}, version=${ref.version}) 期望 contentHash=${ref.contentHash}，实际=${meta.contentHash}（版本错位或引用键错配：行上的 content_hash 指向了另一版明文）`
-      );
-    }
-    const revision = await revisionRepo.findByEntryAndVersion(
-      ref.entryId,
-      ref.version
-    );
-    if (revision == null) {
-      // 元数据命中后行被并发删/GC 的兜底（同 REVISION_MISSING 语义）。
-      throw new ReadResultHydrateError(
-        "READ_REF_REVISION_MISSING",
-        `${refLabel}悬空：${locKey} 的 (entryId=${ref.entryId}, version=${ref.version}) 无 revision 行（ref_count 保活链被破坏或引用键被篡改）`
-      );
-    }
-    if (revision.content == null) {
-      // port 层兜底：实现若在 active 行上给不出明文（blob 缺失），
-      // 同样按「明文不可再生」fail-fast，不放空串过去。
-      throw new ReadResultHydrateError(
-        "READ_REF_CONTENT_DELETED",
-        `${refLabel}指向已删除 revision：${locKey} (entryId=${ref.entryId}, version=${ref.version}) status=${revision.status}，明文不可再生`
-      );
-    }
-    plain = revision.content;
-    memo.plainByRefKey.set(plainKey, plain);
+    // 占位文案自包含：memo 命中 null 时本块不会走到上面的 warn（warn 可能
+    // 属同批另一消息/另一 path 的首次探测），故不引用「上方 warn」。
+    return {
+      ...block,
+      content: errorPlaceholderJson(
+        refPath,
+        `(entryId=${ref.entryId}, version=${ref.version}) 的明文取不回：该 revision 的正文在本次装配中不可用`
+      ),
+    };
   }
-  // wire 文本是 (明文, kind/action, path, offset, limit) 的确定性函数
-  // （重放纯函数），同参重复引用直接复用，不再跑一遍切行 / 字节帽 /
-  // 格式化。**kind/action 必须进键**：skill load 与 skill read 引用同一
-  // `(entryId, version)`（load 后再 read 同一 SKILL.md 是常态）但 wire
-  // 不同（formatSkillLoadOutput vs formatReadOutput）。
-  const actionKey = isSkill ? `skill:${ref.action}` : "read";
-  const wireKey = `${plainKey}:${actionKey}:${ref.offset}:${ref.limit ?? ""}:${ref.path}`;
-  let wire = memo.wireByReplayKey.get(wireKey);
-  if (wire == null) {
-    wire = isSkill
-      ? ref.action === "load"
-        ? replaySkillLoadWireText(ref, plain)
-        : replaySkillReadWireText(ref, plain)
-      : replayReadWireText(ref, plain);
-    memo.wireByReplayKey.set(wireKey, wire);
-  }
+
   // view-time：只填回内存态 content，contentRef 原样保留（块身份不变，
-  // 不写回 content_json）。
-  return { ...block, content: wire };
+  // 不写回 content_json）。`kind: "skill"` 同款形态——files 等派生字段弃置。
+  return {
+    ...block,
+    content: JSON.stringify({ path: refPath, content: plain }),
+  };
 }
 
 function messageHasReadResultRef(message: ChatMessage): boolean {
@@ -312,13 +192,15 @@ function messageHasReadResultRef(message: ChatMessage): boolean {
 }
 
 /**
- * 对消息数组里的 read 引用块（tool_result + contentRef）做 view-time
- * hydrate：还原 wire 文本填回块 content（内存新对象，不变异入参、
- * 不写回 content_json）。
+ * 对消息数组里的存量引用块（tool_result + contentRef）做 view-time 兜底
+ * hydrate：按 `(entryId, version)` 取 revision 明文，填回 `{path, content}`
+ * 的 JSON 字符串（内存新对象，不变异入参、不写回 content_json）。
  *
- * 无引用块的消息原引用返回（legacy 零处理）；存在引用块但
- * `revisionRepo` 未注入（装配缺口）或校验失败时抛
- * {@link ReadResultHydrateError} fail-fast。
+ * 无引用块的消息原引用返回（legacy 零处理）；存在引用块但 `revisionRepo`
+ * 未注入（装配缺口）或明文取不到时，填错误占位 JSON 并 `console.warn`——
+ * 本函数**永不抛错**（v1.5.29 的 `ReadResultHydrateError` fail-fast 已退役）。
+ *
+ * 调用方必须在本函数返回后再做孤儿 tool_result 拍平，见文件头「顺序红线」。
  */
 export async function hydrateToolResultsForPrompt(
   messages: readonly ChatMessage[],
@@ -327,10 +209,7 @@ export async function hydrateToolResultsForPrompt(
   if (!messages.some(messageHasReadResultRef)) {
     return [...messages];
   }
-  const memo: HydrateMemo = {
-    plainByRefKey: new Map(),
-    wireByReplayKey: new Map(),
-  };
+  const memo: HydrateMemo = { plainByRefKey: new Map() };
   const out: ChatMessage[] = [];
   for (const message of messages) {
     if (!messageHasReadResultRef(message)) {
