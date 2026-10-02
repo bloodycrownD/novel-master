@@ -144,7 +144,7 @@ export const PROMPT_REGION_LABELS = {
   systemPromptTitle: "系统提示词",
   persistBlocks: "持久区",
   dynamicBlocks: "动态区",
-  persistRegionHint: "持久区禁止宏与生命周期。",
+  persistRegionHint: "持久区禁止使用宏。",
   layoutOrder: "系统 → 技能索引 → 常驻工作区 → 持久区 → 会话历史 → 动态区",
   layoutOrderPrefix: "纵向顺序与模型组装一致：",
   layoutOrderPrefixShort: "纵向顺序：",

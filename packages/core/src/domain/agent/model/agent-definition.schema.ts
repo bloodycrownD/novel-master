@@ -37,7 +37,13 @@ function stripLifecycleKey(raw: unknown): unknown {
   return rest;
 }
 
-const persistTextBlockValueSchema = z.preprocess(
+/**
+ * 文本块 wire 值 schema：剥 lifecycle 键后 strict 解析。
+ *
+ * @remarks persist 与 dynamic 两区文本块形态一致（type/role/content），共用本常量；
+ * 下方三个具名别名只为保持既有引用面。
+ */
+const textBlockValueSchema = z.preprocess(
   stripLifecycleKey,
   z
     .object({
@@ -48,18 +54,9 @@ const persistTextBlockValueSchema = z.preprocess(
     .strict()
 );
 
-const persistBlockValueSchema = persistTextBlockValueSchema;
+const persistBlockValueSchema = textBlockValueSchema;
 
-const dynamicTextBlockValueSchema = z.preprocess(
-  stripLifecycleKey,
-  z
-    .object({
-      type: z.literal("text"),
-      role: z.enum(["user", "assistant"]),
-      content: z.string(),
-    })
-    .strict()
-);
+const dynamicTextBlockValueSchema = textBlockValueSchema;
 
 function rejectLegacyPromptKeys(raw: unknown): unknown {
   if (raw == null || typeof raw !== "object" || Array.isArray(raw)) {

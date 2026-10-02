@@ -64,7 +64,7 @@ test("PROMPT_REGION_LABELS 三区主文案为中文且无 wire 英文主标签",
   );
   assert.equal(
     PROMPT_REGION_LABELS.persistRegionHint,
-    "持久区禁止宏与生命周期。"
+    "持久区禁止使用宏。"
   );
   // lifecycle 常驻开关已下线：文案表不再有 dynamicLifecycleOnceHint。
   assert.equal(

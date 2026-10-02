@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { buildPromptLlmInputFromLayout, type AgentPromptLayout } from "@novel-master/core/prompt";
+import {
+  buildPromptAssemblyFromLayout,
+  buildPromptLlmInputFromLayout,
+  computeLlmExportZonesFromLayout,
+  type AgentPromptLayout,
+} from "@novel-master/core/prompt";
 
 const ctx = {
   workplaceDisplay: "",
@@ -73,5 +78,68 @@ describe("buildPromptLlmInputFromLayout lifecycle（dynamic 一律 once 语义�
       agentStepIndex: 0,
     });
     assert.equal(step0.messages.length, 0);
+  });
+});
+
+// r1r3/G-1：zones 与 assembly 两处 lifecycle 判定的 step≥1 负向覆盖。
+// 这两处判定若被改成恒真，以下两条用例必须同时变红（normalizeForLlmExport
+// 每 step 依赖 zones.dynamicCount 切导出切片，回归即静默错切）。
+describe("computeLlmExportZonesFromLayout lifecycle（dynamic 一律 once 语义）", () => {
+  const zonesLayout: AgentPromptLayout = {
+    dynamicEnabled: true,
+    persist: [],
+    dynamic: [
+      { name: "kick", type: "text", role: "user", content: "go" },
+      { name: "tail", type: "text", role: "assistant", content: "bye" },
+    ],
+  };
+
+  it("dynamicCount 仅在 step 0 非零，step≥1 归零", () => {
+    assert.equal(
+      computeLlmExportZonesFromLayout(zonesLayout, { agentStepIndex: 0 }).dynamicCount,
+      2
+    );
+    for (const step of [1, 2]) {
+      assert.equal(
+        computeLlmExportZonesFromLayout(zonesLayout, { agentStepIndex: step })
+          .dynamicCount,
+        0
+      );
+    }
+  });
+});
+
+describe("buildPromptAssemblyFromLayout lifecycle（dynamic 一律 once 语义）", () => {
+  const assemblyLayout: AgentPromptLayout = {
+    dynamicEnabled: true,
+    persist: [],
+    dynamic: [
+      { name: "kick", type: "text", role: "user", content: "go" },
+      { name: "tail", type: "text", role: "assistant", content: "bye" },
+    ],
+  };
+
+  it("step 0 产出 dynamic-* 段，step≥1 不产出任何 dynamic- 段", async () => {
+    const step0 = await buildPromptAssemblyFromLayout(assemblyLayout, ctx, {
+      agentStepIndex: 0,
+    });
+    assert.deepEqual(
+      step0
+        .filter((segment) => segment.id.startsWith("dynamic-"))
+        .map((segment) => segment.id),
+      ["dynamic-kick", "dynamic-tail"]
+    );
+
+    for (const step of [1, 2]) {
+      const segments = await buildPromptAssemblyFromLayout(assemblyLayout, ctx, {
+        agentStepIndex: step,
+      });
+      assert.deepEqual(
+        segments.filter((segment) => segment.id.startsWith("dynamic-")).map(
+          (segment) => segment.id
+        ),
+        []
+      );
+    }
   });
 });
