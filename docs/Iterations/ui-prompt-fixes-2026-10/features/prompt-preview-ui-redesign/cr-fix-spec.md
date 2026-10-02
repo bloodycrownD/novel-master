@@ -4,16 +4,18 @@
 - repo：D:\Dev\nm-worktree\upfx（分支 feat/ui-prompt-fixes-2026-10）
 - base_sha / head_sha：b616732fe / cf40d4d32
 - prd_path / spec_path：docs/Iterations/ui-prompt-fixes-2026-10/features/prompt-preview-ui-redesign/{prd,spec}.md
-- review_round / dag_version：3 / 4
-- 状态：fix-spec-ready（review-full round 2 判定「6 处小改后即 ready、无需第三轮」，主代理已全部落实）
+- review_round / dag_version：5 / 6
+- 状态：execute-ready（spec-check 两轮：round1 No-Go 修复 2P0+3P1+9P2；round2 Go——两个 P0 实跑 tsc 实证闭合，剩余 1P1+6P2 已按审查建议原文全量落实，主代理等效认定 Go）
+- SHA 口径：head_sha cf40d4d32 为代码面；行号快照 HEAD 124a79905（其间仅隔 docs commit，代码文件一致）
+- supersede：迭代根 cr-fix-spec 的 r4/B-9、r4/G-1 已被本 feature 面板重写作废（见「执行顺序与行号口径」节）
 
 ## Must-fix（P0=0，P1×1，P2×20，合计 21）
 
 ### main/A-2 [P1] mobile 整轮全屏喂 turn.body 退回 PRD 明令消灭的平铺形态且组卡配对结构丢失
 - 维度：A/C-orch
 - 文件：`apps/mobile/src/components/prompt/PromptTurnCard.tsx:103`
-- 问题：mobile ⤢ 整轮全屏用 `turn.body`（`[段名]` 前缀拼接串，tool 段是旧粒度「一条消息多个 result 合并」），正是 PRD 背景痛点「assistant 详情是一坨平铺文本」与痛点 5（配对结构丢失）；PRD 验收 6 写死双端同构，desktop 已是 cards 逐块流。不崩不丢数据故不给 P0。
-- 改法（照抄不翻车；注意 `PromptToolGroupCardData` **没有 `body` 字段**，core:38-48）：
+- 问题：mobile ⤢ 整轮全屏用 `turn.body`（`[段名]` 前缀拼接串，tool 段是旧粒度「一条消息多个 result 合并」），正是 PRD 背景痛点「assistant 详情是一坨平铺文本」与痛点 5（配对结构丢失）；PRD 验收 2 的整轮全屏入口与「双端同构」总则（prd 第 23 行）被破，desktop 已是 cards 逐块流。不崩不丢数据故不给 P0。
+- 改法（照抄不翻车；四个注意点：`PromptToolGroupCardData` **没有 `body` 字段**（core:38-48）；**`PromptTurnCard.tsx` 现只 import `PromptPreviewTurn`，需补 `PromptTurnCardData` 类型 import**；**`PromptToolGroupCard.tsx:17-18` 的本地 `LOST_RESULT_TEXT` 常量要删除**改从 `./PromptTurnCard` import（避免同名重复声明）；`handleFullscreen` 的 `useCallback` deps 把 `turn.body` 换 `turn.cards`）：
   ```ts
   // 整轮全屏正文 = cards 逐卡正文，组卡拆两格（对齐 desktop cardBodies/toolGroupLeaves 口径）
   const fullscreenBodies = (cards: ReadonlyArray<PromptTurnCardData>): string =>
@@ -25,7 +27,7 @@
       .join("\n\n");
   ```
   放在 `PromptTurnCard.tsx` 内；`LOST_RESULT_TEXT` **常量定义留在 `PromptTurnCard.tsx`（叶子模块）并 export，`PromptToolGroupCard.tsx` 反向 import**（该依赖方向本已存在 PromptToolGroupCard→PromptTurnCard，不得反向新增边造成环）；`handleFullscreen` 改用 `fullscreenBodies(turn.cards)`，**其 `useCallback` 依赖数组（现 :105 `[openDetail, turn.id, turn.summaryText, turn.body]`）把 `turn.body` 换成 `turn.cards`**；`turn.body` 依赖彻底退役。
-- 验收/测试：`prompt-turn-card.test.tsx:179-181`（现断言 `body: TURN.body`）改为断言拼接结果；**新增组卡用例**：夹具含一张组卡时断言 use（inputJson）与 result 两段都在正文；变异验证——拼接退回 `turn.body` 必红。
+- 验收/测试：`prompt-turn-card.test.tsx:179-181`（现断言 `body: TURN.body`）改为断言拼接结果——**注意默认夹具 `TURN.cards` 现为 `[]`（:82），改完后 T-MP4-1 的正文断言会退化成空串，默认夹具须至少补一张 text 卡**；**新增组卡用例**：夹具含一张组卡时断言 use（inputJson）与 result 两段都在正文；变异验证——拼接退回 `turn.body` 必红。
 - 来源：主代理汇总认定 → review-full round 1 升 P1 重写 → round 2 补常量归属与 deps
 
 ### main/A-3 [P2] PromptTurnDetailScreen 四处注释与实现不符（本轮 diff 引入）
@@ -54,7 +56,7 @@
 - 文件：`packages/core/src/service/prompt/prompt-preview-turns.ts:185-197`（buildToolResultByUseId）
 - 问题：注释称 hidden 参与配对，段产出侧对 hidden 是 continue；当前靠双端 service `includeHidden:false` 兜底，上游改全量拉取即出现「items 无、cards 有」。
 - 改法：`if (message.hidden) continue;`（`ChatMessage.hidden` 是必填 boolean，message.ts:37，直接可编译）；注释同步删 hidden 表述。
-- 验收/测试：新增 hidden 用例——hidden user 消息里的 tool_result 不参与配对 → 对应组卡落 lost。
+- 验收/测试：新增 hidden 用例——hidden user 消息里的 tool_result 不参与配对 → 对应组卡落 lost。夹具：现成 `blocksMessage` helper（test:23-39）硬编码 `hidden:false`，需写变体 `{...blocksMessage(...), hidden: true}` 包一条 hidden 的 tool_result 回传消息。
 - 来源：review-scope-core round 1
 
 ### core/C-1 [P2] 三处重复 reduce 与双次 ok 判定
@@ -83,19 +85,19 @@
 
 ### desktop/C-1 [P2] `.prompt-segment` 基类族死 CSS（主代理拍板：选项 B，删）
 - 维度：C
-- 文件：`apps/desktop/renderer/styles/shell.css:3787-3793,3795-3798,3800-3835,3844-3846,3855-3868,3876-3878`（约 60 行）；`apps/desktop/test/real-prompt-panel-rounds.test.tsx:947-949`
-- 问题：面板重写后基类族（除 `__preview`/`__chevron`）全仓零消费；T-DP5 的 `assert.match(css, /\.prompt-segment:hover \{/)` 钉住死规则自证。
-- 改法（选项 B，随 spec 修正 6 一步到位）：删上述死 CSS 行；测试 947-949 删 `.prompt-segment:hover` 断言；spec 约束收窄为「保留 `.prompt-turn-card` / `.prompt-turn` / `.prompt-turn-card .prompt-segment__preview` 三个真消费类名」（`__preview`/`__chevron` 保留）。
-- 验收/测试：desktop 全量绿；`git grep "prompt-segment" apps/desktop/renderer` 仅余 `__preview`/`__chevron`。
-- 来源：review-scope-desktop round 1 选项 A → review-full 建议选项 B → 主代理拍板 B
+- 文件：`apps/desktop/renderer/styles/shell.css:3787-3793,3795-3798,3800-3835,3844-3846,3855-3868,3876-3878`（共 67 行，删除后合并残留空行）；`apps/desktop/test/real-prompt-panel-rounds.test.tsx:948-949`
+- 问题：面板重写后基类族（除 `__preview`/`__chevron`）全仓零消费；`:949` 的 `assert.match(css, /\.prompt-segment:hover \{/)` 钉住死规则自证。
+- 改法（选项 B，随 spec 修正 6 一步到位）：删上述死 CSS 区间（保留 `__preview`(3837-3842)、`__chevron`(3848-3853)、`.prompt-turn-card .prompt-segment__preview`(3982)——**均在删除区间外**）；测试删 **948（注释）与 949（`.prompt-segment:hover` 断言）两行**——**947 的 `__preview` 契约断言保留不动**；945-950 段注释改写为新口径（原 948 注释「hover 基线补在 .prompt-segment 上」删后悬空）；**顺带清三处悬空引用**：`shell.css:3935` 注释、测试 `:977` 注释、spec Step 6 的「沿用 `:3826-3835` 先例」引用（**直接删该句**）；spec 约束收窄为**四项**：`.prompt-turn-card` / `.prompt-turn` / `.prompt-turn-card .prompt-segment__preview` / `.prompt-segment__chevron`。
+- 验收/测试：desktop 全量绿；`git grep "prompt-segment" apps/desktop/renderer` 仅余 `__preview`/`__chevron` 两族。
+- 来源：review-scope-desktop round 1 选项 A → review-full 建议选项 B → 主代理拍板 B → spec-check round 1 修正测试区间（947 是保留断言）与四项清单
 
 ### desktop/C-2 [P2] 组卡两格派生双写
 - 维度：C/DRY
 - 文件：`apps/desktop/renderer/features/chat/RealPromptPanel.tsx:70-79`
 - 问题：父组件 `groupCardBody`/`cardBodies` 与 `PromptToolGroupCard.toolGroupLeaves` 各算一遍。
-- 改法：删父组件两个本地 helper，`cardBodies` 改 `toolGroupLeaves(card).map(leaf => leaf.body)`（已导出）。
-- 验收/测试：desktop 全量绿；整轮全屏与组卡格内容一致（既有断言覆盖）。
-- 来源：review-scope-desktop round 1
+- 改法：删 `groupCardBody` 一个 helper（`cardBodies` **保留但瘦身**为组卡分支改 `toolGroupLeaves(card).map((leaf) => leaf.body)`——:115 的 `turn.cards.flatMap(cardBodies)` 仍消费它，不能删）；**import 行（:29-33）同步换成 `{ PromptToolGroupCard, toolGroupLeaves, type ToolGroupLeaf }` 并删掉 `LOST_RESULT_PLACEHOLDER` 导入**（它是被删 helper 的唯一消费点，悬空会撞 `noUnusedLocals` 产出 renderer typecheck 新红身份——baseline 无 RealPromptPanel 条目）。
+- 验收/测试：desktop 全量绿 + renderer typecheck delta=0；整轮全屏与组卡格内容一致（既有断言覆盖）。
+- 来源：review-scope-desktop round 1；spec-check round 1 补 import 指令
 
 ### desktop/G-1 [P2] 两个 mermaid 基建文件缺尾换行
 - 维度：G/K
@@ -134,14 +136,14 @@
 - 文件：`apps/mobile/src/components/prompt/PromptToolGroupCard.tsx:57-64,128-148`
 - 问题：result 为 null 时 `openResult` 传 `body: ''`，点「未返回结果」进全屏显示「（空文件）」——假入口。
 - 改法：result 为 null 时该格不挂 onPress。
-- 验收/测试：**新增**用例（现无 LOST_CARD 点按用例）：press LOST_CARD 的 result 格 → `expect(mockNavigate).not.toHaveBeenCalled()`。
+- 验收/测试：**新增**用例：断言 LOST_CARD 的 result 格 `findByProps({testID: 'prompt-tool-group-result'}).props.onPress` 为 `undefined`（注意现有 `press()` helper 直接调 `props.onPress()`，不挂后会 TypeError，所以断言形态用 props 检查而非 press）。
 - 来源：review-scope-mobile round 1；review-full 校正验收措辞
 
 ### mobile/J-1 [P2] 无障碍标签全是无内容动作名
 - 维度：J
 - 文件：`PromptToolGroupCard.tsx:75-76,112-113,130-131`、`PromptTurnLeafCard.tsx:42-43`、`PromptTurnCard.tsx:121-122,146-147`
 - 问题：多卡无法区分；组头无 expanded 状态。范式：ChatMetaBar.tsx:42。
-- 改法：叶子卡 `` `${kindLabel}，${card.body.slice(0,20)}` ``；组卡格 `查看工具入参，${toolName}`；组头 `accessibilityState={{expanded}}`。
+- 改法：叶子卡 `` `${kindLabel}，${card.body.slice(0,20)}` ``；组卡**两格都改**——use 格 `查看工具入参，${toolName}`、result 格 `查看工具结果，${toolName}`（与 desktop/J-1 对偶，只改 use 格多组卡依旧分不清）；组头 `accessibilityState={{expanded}}`。
 - 验收/测试：两个组件测试各补 accessibilityLabel 断言一条。
 - 来源：review-scope-mobile round 1
 
@@ -173,11 +175,11 @@
 - 维度：C-orch/G
 - 文件：`apps/desktop/src/main/ipc/handlers/prompt.ts`
 - 问题：mobile 直吃 core 类型（改签名先红）；desktop 手写 DTO+逐字段 map 对「core 加字段」无感——漂移不对称。
-- 改法（可照抄形态；**注意 core 根入口不导出 prompt 类型，必须走子路径 `@novel-master/core/prompt`**（public/prompt.ts:64）；**tsconfig.base.json `noUnusedLocals:true`，下划线不豁免局部声明，断言必须 export**）：
+- 改法（可照抄形态；四个注意点：**core 根入口不导出 prompt 类型必须走子路径 `@novel-master/core/prompt`**（public/prompt.ts:64）；**`noUnusedLocals:true` 下划线不豁免局部声明**；**类型别名仅声明永不报错——必须构造一次才构成断言**（tsc 实测：`Record<'x', never>` 别名差集非空时 COMPILE_OK，构造 `{}` 才 TS2741）；**import 需补 `PromptToolGroupDto`/`PromptTextCardDto`**（现 import 列表 :10-16 没有它们））：
   ```ts
   // handler 内组卡/文本卡两处 map 的返回值各加 satisfies PromptTurnCardDto；
   // 文件底部（main 侧，tsconfig.json 覆盖、不碰 renderer ratchet）：
-  // core 侧加字段而 DTO 未跟时，下列导出类型编译红（key 差集必须为空）
+  // core 侧加字段而 DTO 未跟时，下列导出 const 构造 {} 编译红（TS2741：差集键 missing）
   export type CoreGroupParityCheck = Record<
     Exclude<keyof import("@novel-master/core/prompt").PromptToolGroupCardData, keyof PromptToolGroupDto>,
     never
@@ -186,26 +188,34 @@
     Exclude<keyof import("@novel-master/core/prompt").PromptTextCardData, keyof PromptTextCardDto>,
     never
   >;
+  export const CORE_GROUP_PARITY_CHECK: CoreGroupParityCheck = {};
+  export const CORE_TEXT_PARITY_CHECK: CoreTextParityCheck = {};
   ```
-  （导出不触发 TS6133；两条类型各自「字段差集→never」的 Record 在差集非空时构造不出而报错。）
-- 验收/测试：`npx tsc --noEmit -p tsconfig.json` 零错——**先在无改动状态跑一次确认基线零错**，再上断言，再变异（core 组卡加假字段 → main tsc 红，验完还原）。
-- 来源：review-scope-mobile round 1 + review-full round 1 具体化 + round 2 修导入路径与 TS6133
+  （导出不触发 TS6133；**被构造的 const 是牙齿本体**——差集非空时 `{}` 缺键报 TS2741。）
+- 验收/测试：`npx tsc --noEmit -p tsconfig.json` 零错——**先在无改动状态跑一次确认基线零错**，再上断言，再变异。**变异前必须先 `npm run build -w @novel-master/core`**：desktop main 消费的类型来自 `packages/core/dist/**/*.d.ts`（exports["./prompt"].types 指 dist），只改 core src 不重建则 main tsc 读旧声明恒绿——会误判锚是空壳（实测两态：src-only 变异零错；重建后变异报 `TS2741: Property 'zzFakeField' is missing`）。验完还原 core src 并重建复原 dist。
+- 来源：review-scope-mobile round 1 + review-full round 1 具体化 + round 2 修导入/TS6133 + spec-check round 1 补构造（类型别名是空壳）
 
 ### mobile/G-1 [P2] T-MP3 受控「函数式更新」性质无断言钉死
 - 维度：G
 - 文件：`apps/mobile/__tests__/prompt-turn-expand-control.test.tsx:150-173`
 - 问题：闭包值构造写法在现节奏下照样全绿。
-- 改法：加 T-MP3-3——同一 `act()` 内连续 `onPress` 两个不同轮头，断言两条 `prompt-turn-body` 同时在。
+- 改法：加 T-MP3-3——**夹具先补第二条轮**（现仅一条 `TURN`，:104-123），同一 `act()` 内连续 `onPress` 两个不同轮头，断言两条 `prompt-turn-body` 同时在；**`press()` helper（:138-142，`findByProps` 多命中会抛）改用 `findAllByProps(...)[0]/[1]`** 取两轮头。
 - 验收/测试：新断言绿；变异（换闭包写法）该条红。
 - 来源：review-scope-mobile round 1
 
 ### mobile/G-2 [P2] 卡片流分派顺序与「裁剪复挂载态保留」无锚
 - 维度：G
-- 文件：`apps/mobile/__tests__/prompt-turn-expand-control.test.tsx:104-123`、`prompt-tool-group-card.test.tsx`
+- 文件：`apps/mobile/__tests__/prompt-turn-expand-control.test.tsx:104-123`、`prompt-tool-group-card.test.tsx`、`apps/mobile/__tests__/prompt-turn-card.test.tsx:79`
 - 问题：①夹具单组卡，type 分支/key/turnId 透传零观测；②「防 removeClippedSubviews 丢态」无测（桩不裁剪）。
-- 改法：①夹具改 `[text, group, thinking]` 三卡断言顺序与 turnId 透传（`TURN.body` 是 core 必填字段**不能删**——保留但置 `''` 并加注释『main/A-2 后 UI 不再读 body，字段仅为满足 core 类型』，`prompt-turn-card.test.tsx:79` 夹具同理）；②加可变 data 桩：切 data 引用让某轮消失再回来，断言 `prompt-turn-body` 仍在。
+- 改法：①夹具改 `[text, group, thinking]` 三卡断言顺序与 turnId 透传（`TURN.body` 是 core 必填字段**不能删**——保留但置 `''` 并加注释『main/A-2 后 UI 不再读 body，字段仅为满足 core 类型』，`prompt-turn-card.test.tsx:79` 夹具同理）；②**组件级锚替代屏级 data 桩**（屏级桩不可行：`RealPromptScreen` 的 `data` 只有 `load()` 能换、而 load 每次清空两个 Set 且三个桩常量引用使 effect 不会重跑）——**直接 import 已导出的 `PromptTurnCard` 做受测组件**（`PromptTurnRow` 在 RealPromptScreen.tsx:164 是模块内非导出、不可 import），测试内自持 `openTurnIds` state 渲染宿主包住轮卡，先展开 → 卸载再重挂同一 row（模拟 `removeClippedSubviews` 裁剪复挂载）→ 断言重挂后 `prompt-turn-body` 仍在（受控态在宿主、未丢）。
 - 验收/测试：新断言绿。
 - 来源：review-scope-mobile round 1
+
+## 执行顺序与行号口径（执行者必读）
+- 全部行号是 HEAD 124a79905 的快照。**同文件多条目按下列顺序执行；执行中后续条目以符号锚（函数名/类名/断言文本）定位为准，行号仅作初始参考**——先做的改动会推走后面条目的行号（如 desktop/C-1 删 67 行 CSS 后 desktop/B-1 的 3904-3912 漂到 ~3837；main/A-2 插入函数后 mobile/J-1 的 121/146 下移）。
+- 建议顺序（每条内从先到后）：**core**：C-1（纯重构收敛）→ A-1 → A-2（后两者会加用例，G-1 的测试行号 321/408 以 describe 名定位）；**desktop**：B-1（css 低位）→ J-1（tsx 标签）→ H-1（load 归一化）→ C-2（删 helper+改 import）→ C-1（删 CSS 最后做，避免行号漂干扰其他 css 条目）；**mobile**：main/A-2（含常量归属与 deps）→ B-1 → J-1 → C-1 → G-1 → G-2（两条同改夹具区，G-1 的第二轮与 G-2 的三卡改造合并落笔）；**cross**：C-orch-1（handler 底部追加，无行号冲突）→ C-orch-2 / J-2（独立色值改动）。
+- spec 文本修正 6 处与 desktop/C-1、main/A-2 联动，随对应代码条目同轮落盘。
+- **supersede 提示**：迭代根 `docs/Iterations/ui-prompt-fixes-2026-10/cr-fix-spec.md`（上一轮 R1-R4 主体的 CR 产物）的 **r4/B-9 与 r4/G-1 已被本 feature Step 6 面板重写作废**（其「补 `.prompt-segment:hover` 基线」「`.prompt-segment` 计数不变」「JSX 同挂两类」的前提已不存在）——勿按根文档执行这两条的 JSX 合并/计数基线部分。
 
 ## Spec 文本修正（随修复一并执行，闭合 spec_deviations）
 1. 「摘要与计数产出」节：`M = 该轮全部卡片 body 长度之和` → `M = 该轮全部卡片正文长度之和（组卡 = inputJson + result.body；丢失组卡仅 inputJson）`；删除「assistant 与旧 items 求和口径对齐」括号。
@@ -240,7 +250,7 @@
 
 ## Fix-Spec Closure
 | 项 | 状态 |
-| fix-spec-ready | yes（review-full round 2 前置判定：6 处小改闭合后即可 ready，round 2 后主代理已全部落实） |
+| fix-spec-ready / execute-ready | yes（spec-check round2 Go + 主代理落实全部残留项后等效认定） |
 | P0 / P1 / P2（已写入） | 0 / 1 / 20（合计 21） |
 | 未写入的开放 must-fix | 0 |
 | spec_deviations | open×6（文本修正已列，全部自洽） |
