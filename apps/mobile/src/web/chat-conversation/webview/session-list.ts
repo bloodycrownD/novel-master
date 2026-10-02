@@ -269,6 +269,10 @@ export function createConversationSessionList(
    * RN 的 `onPress` 与 `onLongPress` 是互斥的：长按成立后抬手**不再**触发 onPress。
    * web 上 pointerup 之后浏览器照样补一条 click，于是「长按进批量」会连带把这一行
    * 打开（长按已经把它勾上了，click 再 open = 直接跳进对话，批量态当场失效）。
+   *
+   * 抑制只活一个手势：由 pointerdown 复位（见 bindEvents 里的同名赋值）。长按触发后
+   * 用户改成**拖动滚动**时浏览器不会派 click，这里存的 true 就没人消费，带着残留
+   * 跨到下一次真实点击上——把那一行的 open 吞掉一次（cr2-B-5）。
    */
   let suppressClick = false;
 
@@ -490,6 +494,9 @@ export function createConversationSessionList(
         return;
       }
       cancelLongPress();
+      // 新手势即新意图：旧手势的长按抑制不跨手势存活。长按触发后若用户改拖动滚动，
+      // 浏览器不会派 click 来消费它，残留的 true 会把下一次真实点击吞掉（cr2-B-5）。
+      suppressClick = false;
       const point = event as {clientX?: number; clientY?: number};
       longPressPointer = {
         x: typeof point.clientX === 'number' ? point.clientX : 0,

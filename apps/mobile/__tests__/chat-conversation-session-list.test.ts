@@ -749,6 +749,53 @@ describe('listAction 上行（v:2 · T-CSL）', () => {
     }
   });
 
+  it('T-CSL-21：长按触发后拖动滚动（无 click）不残留抑制，下一次真实点击照样 open', () => {
+    jest.useFakeTimers();
+    try {
+      const list = newList();
+      list.mount();
+      list.applyRoute({
+        kind: 'sessionList',
+        payload: payload([session({id: 's1'}), session({id: 's2'})]),
+      });
+
+      // 第一手势：长按 350ms 到期成立
+      el('session-list-rows').dispatch('pointerdown', {
+        target: rowByIndex(0),
+        clientX: 10,
+        clientY: 20,
+      });
+      jest.advanceTimersByTime(SESSION_LIST_LONG_PRESS_MS);
+      expect(actions()).toEqual([{kind: 'longPress', sessionId: 's1'}]);
+
+      // 然后改成拖动滚动：位移 >10px + 抬手。浏览器在拖动手势里**不派 click**，
+      // 于是长按设下的 suppressClick=true 没人消费——朴素实现会让它跨手势存活。
+      el('session-list-rows').dispatch('pointermove', {
+        clientX: 10,
+        clientY: 20 + SESSION_LIST_LONG_PRESS_MOVE_PX + 1,
+      });
+      el('session-list-rows').dispatch('pointerup', {});
+      expect(actions()).toEqual([{kind: 'longPress', sessionId: 's1'}]);
+
+      // 第二手势：一次正常点击（pointerdown + click）必须真的上行 open
+      el('session-list-rows').dispatch('pointerdown', {
+        target: rowByIndex(1),
+        clientX: 10,
+        clientY: 20,
+      });
+      el('session-list-rows').dispatch('click', {
+        target: rowByIndex(1).querySelector('.session-row__title'),
+      });
+      expect(actions()).toEqual([
+        {kind: 'longPress', sessionId: 's1'},
+        {kind: 'open', sessionId: 's2'},
+      ]);
+      list.unmount();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('T-CSL-17：抬手 / pointercancel 取消长按；unmount 后不再触发（无幽灵长按）', () => {
     jest.useFakeTimers();
     try {

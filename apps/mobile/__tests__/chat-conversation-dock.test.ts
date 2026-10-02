@@ -45,8 +45,28 @@ type AnyFn = (event?: unknown) => void;
 class FakeStyle {
   readonly props: Record<string, string> = {};
   /** 直接赋值型内联样式（dock 的 paddingBottom / 按钮 fontSize 走这条）。 */
-  paddingBottom = '';
   fontSize = '';
+  /**
+   * paddingBottom **每次写入时** owner 身上是否带着 `dock--animated`。
+   *
+   * 这是首帧豁免（cr2-B-4）的唯一可观测面：本桩没有 CSS 引擎，「这次写入会不会带
+   * 200ms 过渡」等价于「写入那一刻过渡类在不在」。记逐次快照而非末态，才能断言
+   * 「重挂的**首次**写入不带过渡」而不是「后来某一帧不带」。
+   */
+  readonly paddingTransitionLog: boolean[] = [];
+  private pad = '';
+
+  constructor(private readonly owner: FakeElement) {}
+
+  get paddingBottom(): string {
+    return this.pad;
+  }
+  set paddingBottom(value: string) {
+    this.pad = value;
+    this.paddingTransitionLog.push(
+      this.owner.classList.contains('dock--animated'),
+    );
+  }
   setProperty(name: string, value: string): void {
     this.props[name] = value;
   }
@@ -86,7 +106,7 @@ class FakeElement {
   tagName: string;
   id = '';
   className = '';
-  readonly style = new FakeStyle();
+  readonly style: FakeStyle;
   readonly classList = new FakeClassList(this);
   readonly attributes: Record<string, string> = {};
   /** dataset 桩（applyHostTheme 的 `root.dataset.nmMode` 写入）。 */
@@ -118,6 +138,9 @@ class FakeElement {
 
   constructor(tagName: string) {
     this.tagName = tagName.toUpperCase();
+    // FakeStyle 回指 owner（要读 classList 记 padding 写入是否带过渡类），必须在
+    // classList 之后建：classList 是字段初始化器，先于构造函数体跑。
+    this.style = new FakeStyle(this);
   }
 
   get innerHTML(): string {
@@ -1019,6 +1042,66 @@ describe('主题 fan-out（cr1-P1-6）', () => {
     expect(root.style.getPropertyValue('--bg')).toBe('#ffffff');
     expect(root.style.getPropertyValue('--text')).toBe('#111111');
     expect(root.dataset.nmMode).toBe('light');
+    dock.unmount();
+  });
+});
+
+describe('首帧豁免 dock--animated（cr2-B-4）', () => {
+  it('T-CD-30：unmount→mount 重挂后，首帧 padding 写入不带 transition', () => {
+    const dock = createConversationDock(() => {});
+    const dockNode = dockEl('composer-dock');
+    expect(dock.mount()).toBe(true);
+    // 首拍：renderAll 已把 padding 定在初值，下一拍才启用 transition
+    expect(dockNode.classList.contains('dock--animated')).toBe(false);
+    flushRaf();
+    expect(dockNode.classList.contains('dock--animated')).toBe(true);
+
+    // unmount 不换 DOM（#composer-dock 是 index.html 常驻节点，unmount 只把 els 置空），
+    // 所以过渡类会**原样留在节点上**——这正是重挂首帧带 200ms 过渡的成因。
+    dock.unmount();
+    expect(dockNode.classList.contains('dock--animated')).toBe(true);
+
+    // 重挂：摘类必须在 renderAll 之前，否则这次首帧写 padding 就带着过渡（底部滑一下）
+    const before = dockNode.style.paddingTransitionLog.length;
+    expect(dock.mount()).toBe(true);
+    const log = dockNode.style.paddingTransitionLog;
+    expect(log.length).toBeGreaterThan(before);
+    expect(log.slice(before)).toEqual([false]);
+    // 豁免仍只活一拍：下一拍照常挂回过渡类（键盘抬起的补间不能被一并废掉）
+    flushRaf();
+    expect(dockNode.classList.contains('dock--animated')).toBe(true);
+    dock.unmount();
+  });
+
+  it('T-CD-31：transcript-only 变体（#app.transcript-only 隐藏 dock）同链路豁免', () => {
+    const app = fakeDocument.getElementById('app');
+    if (app == null) throw new Error('壳缺少 #app');
+    // 转录 only 变体：CSS 侧 #app.transcript-only 把 dock 整块隐藏（mount-and-hide，
+    // 不是 skip mount——所以隐藏态下 renderAll 照样写 padding，豁免与可见性无关）
+    app.classList.add('transcript-only');
+    const dock = createConversationDock(() => {});
+    const dockNode = dockEl('composer-dock');
+
+    expect(dock.mount()).toBe(true);
+    expect(dockNode.style.paddingTransitionLog).toEqual([false]);
+    flushRaf();
+    expect(dockNode.classList.contains('dock--animated')).toBe(true);
+
+    // 隐藏 → 显示：变体切回普通形态，init 带 transcriptOnly:false 摘掉 #app 的类。
+    // 跨隐藏态的这次补间此前零断言覆盖。
+    dock.applyRoute({kind: 'init', safeAreaBottom: 34, transcriptOnly: true});
+    expect(app.classList.contains('transcript-only')).toBe(true);
+    dock.applyRoute({kind: 'init', safeAreaBottom: 34, transcriptOnly: false});
+    expect(app.classList.contains('transcript-only')).toBe(false);
+    expect(dockNode.style.paddingBottom).toBe('34px');
+
+    // 变体路径同样会重挂：摘类在 renderAll 之前，隐藏与否都改不了这条
+    dock.unmount();
+    const before = dockNode.style.paddingTransitionLog.length;
+    expect(dock.mount()).toBe(true);
+    expect(dockNode.style.paddingTransitionLog.slice(before)).toEqual([false]);
+    flushRaf();
+    expect(dockNode.classList.contains('dock--animated')).toBe(true);
     dock.unmount();
   });
 });

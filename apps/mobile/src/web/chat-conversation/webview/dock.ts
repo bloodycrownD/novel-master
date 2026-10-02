@@ -578,6 +578,12 @@ export function createConversationDock(post: BoundPost): ConversationDock {
       els = root;
       buildToolbar(root);
       unbind = bindEvents(root);
+      // 首帧豁免的**入口**必须摘掉过渡类，不能只靠 rAF 里挂：#composer-dock 是 index.html
+      // 的常驻节点，unmount 只把 els 置空、不换 DOM，所以上一次 mount 挂上的
+      // `dock--animated` 会**跨重挂存活**——重挂后首次写 paddingBottom 就带 200ms
+      // transition（cr2-B-4：底部滑一下的残影复发点）。摘在 renderAll() 之前，
+      // 重挂与首挂才真正走同一条路。
+      root.dock.classList.remove('dock--animated');
       renderAll();
       // 键盘抬起过渡的首帧豁免（配套 CSS .dock--animated）：首帧 renderAll 已把
       // paddingBottom 定在初值，下一拍再启用 transition——避免页面加载时底部
@@ -592,6 +598,11 @@ export function createConversationDock(post: BoundPost): ConversationDock {
     applyRoute(route: ConversationDockRoute): void {
       if (route.kind === 'init') {
         safeAreaBottom = route.safeAreaBottom;
+        // 转录 only 变体（transcript-converge，子会话屏）：#app 挂类隐藏 dock。
+        // 类挂在 #app（文档级形态），CSS 侧 #app.transcript-only 选择器消费。
+        document
+          .getElementById('app')
+          ?.classList.toggle('transcript-only', route.transcriptOnly);
         renderPadding();
         return;
       }
