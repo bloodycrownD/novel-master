@@ -168,6 +168,11 @@ export function FileEditorScreen() {
     if (isReadOnly) {
       return;
     }
+    // 保存前先收口 web 侧合帧：change 上行是 rAF 合帧的，工具栏按压与
+    // contenteditable blur 的先后无保证——不同步 flush 的话，下面读到的
+    // `content` 可能还是滞后一帧的镜像（web/C-orch 收口点）。
+    // blur 触发的是 web 侧 blur handler 里的同步 flush，与 dismissEditor 同款。
+    codeEditorRef.current?.blur();
     setSaving(true);
     try {
       const vfs = resolveWritableVfs();

@@ -158,15 +158,24 @@ jest.mock('react-native', () => {
   };
 });
 
+/**
+ * 本文件用字符串宿主名（'Text' / 'Pressable' / 'View'）做测试树匹配——它们来自
+ * 上面 jest.mock('react-native') 造的哑组件，不是真实 RN 组件类型。React 19 的
+ * `ElementType` 不再容纳任意字符串字面量，直接比较会报 TS2367，故统一走这里。
+ */
+function isHostType(node: {type: unknown}, type: string): boolean {
+  return (node.type as string) === type;
+}
+
 function findToolbarPressableByLabel(
   root: TestRenderer.ReactTestInstance,
   label: string,
 ): TestRenderer.ReactTestInstance {
   const textNode = root.find(
-    node => node.type === 'Text' && node.props.children === label,
+    node => isHostType(node, 'Text') && node.props.children === label,
   );
   let current: TestRenderer.ReactTestInstance | null = textNode;
-  while (current && current.type !== 'Pressable') {
+  while (current && !isHostType(current, 'Pressable')) {
     current = current.parent;
   }
   if (!current) {
@@ -239,7 +248,7 @@ function findToolbarPathText(
   label: string,
 ): TestRenderer.ReactTestInstance {
   return root.find(
-    node => node.type === 'Text' && node.props.children === label,
+    node => isHostType(node, 'Text') && node.props.children === label,
   );
 }
 
@@ -401,6 +410,40 @@ describe('FileEditorScreen', () => {
     expect(styleHasTextAlignCenter(dirtyPath.props.style)).toBe(true);
   });
 
+  it('T-F7: 输入末字后保存——保存前先 blur 收口，写盘内容含该字', async () => {
+    const tree = await renderLoadedScreen();
+    await switchToEditMode(tree);
+    await focusEditor(tree);
+
+    // 末字的 change 已落到 RN 镜像（web 侧 rAF 那一帧已跑完）。
+    const typed = '# Hello\n\nworld!';
+    const editor = tree.root.findByProps({testID: 'file-editor-input'});
+    await act(async () => {
+      editor.props.onChange?.(typed);
+    });
+    mockWrite.mockClear();
+    mockCodeEditorBlur.mockClear();
+
+    const saveBtn = tree.root.findByProps({testID: 'file-editor-save'});
+    expect(saveBtn.props.disabled).toBe(false);
+
+    await act(async () => {
+      saveBtn.props.onPress();
+      await Promise.resolve();
+    });
+
+    // 关键顺序：保存路径必须先 blur（web 侧 change 合帧的同步收口点，
+    // 与 dismissEditor 同款），再动 vfs.write——否则按压与 contenteditable
+    // 失焦的先后无保证。
+    expect(mockCodeEditorBlur).toHaveBeenCalled();
+    expect(
+      mockCodeEditorBlur.mock.invocationCallOrder[0],
+    ).toBeLessThan(mockWrite.mock.invocationCallOrder[0]);
+    // 写盘内容是含末字的完整全文（不是滞后一帧的镜像）。
+    expect(mockWrite).toHaveBeenCalledWith('/notes/readme.md', typed);
+    expect(mockShowToast).toHaveBeenCalledWith('已保存');
+  });
+
   it('T-PB3: physical 只读分支——经 physicalVfs().read 读取，保存禁用且无编辑切换', async () => {
     mockRouteParams.path = '/projects/p1/template/note.md';
     mockRouteParams.scopeKind = 'physical';
@@ -416,7 +459,7 @@ describe('FileEditorScreen', () => {
 
     // 不提供编辑切换（纯只读预览）。
     const editBtn = tree.root.findAll(
-      node => node.type === 'Text' && node.props.children === '编辑',
+      node => isHostType(node, 'Text') && node.props.children === '编辑',
     );
     expect(editBtn).toHaveLength(0);
 
