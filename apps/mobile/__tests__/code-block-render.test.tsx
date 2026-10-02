@@ -98,13 +98,15 @@ const UNIFIED_SAMPLE = [
   '```',
 ].join('\n');
 
-/** T-CB13 契约（与 desktop 相同；钉死双端类名体系一致）。 */
+/** T-CB13 契约（与 desktop 相同；钉死双端类名体系一致）。
+ *  含 plain：统一样例里的 mjs / 无语言 fence / rust 三块按 MF-1 修订统一出 plain 标。 */
 const UNIFIED_DATA_LANGS = [
   'bash',
   'css',
   'html',
   'json',
   'markdown',
+  'plain',
   'python',
   'sql',
   'typescript',
@@ -171,15 +173,31 @@ describe('code block render (mobile)', () => {
     expect(html).not.toContain('data-lang');
   });
 
-  it('T-CB11: 无语言 / 未知语言 → 默认 escape 纯文本块级（无 data-lang、无 hljs 类）', () => {
+  it('T-L1/T-L2: 无语言 / 未知语言 → pre[data-lang="plain"]（默认 escape 块级，无 hljs 类）', () => {
     const html = prepareTranscriptRichHtml(
       '```\nno language fence\n```\n\n```rust\nfn main() {}\n```',
     );
-    expect(html).not.toContain('data-lang');
+    // MF-1 修订：表外语言不再「故意无标签」，统一 plain 标
+    expect(html.match(/<pre data-lang="plain">/g)).toHaveLength(2);
+    expect(html).not.toMatch(/<pre data-lang="(?:rust|ts)"/);
     expect(html).not.toContain('hljs');
     expect(html).toContain('no language fence');
     // rust fence 走默认 renderer：language-rust 类原样、无 hljs 附加
     expect(html).toContain('language-rust');
+  });
+
+  it('T-L3: 4 空格缩进块 → pre[data-lang="plain"] + 复制按钮 span.code-copy', () => {
+    const html = prepareTranscriptRichHtml('正文\n\n    indented line one\n    indented line two');
+    // 默认 renderer 只出裸 <pre><code>，缩进块无 info 串、不走 normalizeFenceLang
+    expect(html).toContain('<pre data-lang="plain">');
+    expect(html).toContain('<span class="code-copy"></span><code>indented line one');
+    expect(html).toContain('indented line two');
+    expect(html).not.toContain('language-');
+    // 缩进块与 fence 未高亮分支的转义同源：< / > 不反射成标签
+    // （& 经出口 decode 回解为 &，lt/gt 存活——与 fence 未高亮分支同一条 decode 出口）
+    const escaped = prepareTranscriptRichHtml('    a < b && c > d');
+    expect(escaped).toContain('a &lt; b && c &gt; d');
+    expect(escaped).not.toContain('a < b');
   });
 
   it('T-CB9: CSS 含 pre 块级 / pre code 重置 / data-lang::before / 两套 .hljs-*', () => {
@@ -277,7 +295,7 @@ describe('code block render (mobile)', () => {
     expect(html).toContain('language-mermaid');
   });
 
-  it('T-CB13: 表外内置别名 mjs/cjs → 高亮但无 data-lang（MF-1 双端一致，与 desktop 同一判定）', () => {
+  it('T-L2/T-CB13: 表外内置别名 mjs/cjs → 高亮但语言标回落 plain（MF-1 修订，双端一致，与 desktop 同一判定）', () => {
     const html = prepareTranscriptRichHtml(
       '```mjs\nimport { readFile } from "node:fs/promises";\n```\n\n```cjs\nconst { readFile } = require("node:fs");\n```',
     );
@@ -286,8 +304,10 @@ describe('code block render (mobile)', () => {
     expect(html).toContain('language-cjs');
     expect(html).toMatch(/<span class="hljs-keyword">/);
     expect(html).toMatch(/<span class="hljs-string">/);
-    // 表外语言不出语言标签（data-lang 仅归一化表内语言输出）
-    expect(html).not.toContain('data-lang');
+    // 归一化表未命中 → 不出表内语言标签，但按契约回落 plain 标（高亮行为不变）
+    expect(html).not.toContain('data-lang="mjs"');
+    expect(html).not.toContain('data-lang="cjs"');
+    expect(html.match(/<pre data-lang="plain">/g)).toHaveLength(2);
   });
 
   it('MF-2: 表 key 含特殊字符时 rawLang 经 escapeHtml 拼接，无标签注入向量', () => {

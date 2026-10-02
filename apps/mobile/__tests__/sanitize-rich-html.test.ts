@@ -94,6 +94,14 @@ describe('sanitizeRichHtml', () => {
     expect(out).toContain('class="language-ts hljs"');
     expect(out).toContain('hljs-keyword');
   });
+  it('T-L6: data-lang="plain" 值形态经消毒保留（缩进块/表外语言统一 plain 标）', () => {
+    mockSanitizeHtml.mockImplementation((html: string) => html);
+    const out = sanitizeRichHtml(
+      '<pre data-lang="plain"><span class="code-copy"></span><code>plain body</code></pre>',
+    );
+    expect(out).toContain('data-lang="plain"');
+    expect(out).toContain('<span class="code-copy"></span>');
+  });
   it('代码块复制按钮 span.code-copy 经消毒保留（span+class 白名单内）', () => {
     const out = sanitizeRichHtml(
       '<pre data-lang="ts"><span class="code-copy"></span><code class="language-ts hljs">hi</code></pre>',

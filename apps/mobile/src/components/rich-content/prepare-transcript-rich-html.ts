@@ -60,8 +60,10 @@ markdown.linkify.match = (text: string) =>
 
 // 代码块唯一高亮出口：覆盖 renderer.rules.fence（不挂 markdown-it highlight 选项，
 // fence 被覆盖后该选项不再被 fence 路径消费，双轨冗余）。
-// 清单内语言出 pre[data-lang] + hljs 类；无语言/不支持（含 mermaid）等价默认 fence
-// escape（转义同源），不出 data-lang、不出 hljs 类，mermaid-core 扫描 language-mermaid 不回归。
+// 清单内语言出 pre[data-lang=<规范名>] + hljs 类；其余（无语言、表外语言含 mjs/cjs 等
+// 被 hljs 内置别名高亮但归一化为 null 的）统一出 pre[data-lang="plain"]——MF-1 契约已由
+// 「表外语言故意无标签」修订为「统一 plain 标」，高亮行为不受影响。
+// mermaid 除外：维持裸 pre（无 data-lang、无复制按钮），mermaid-core 扫描 language-mermaid 不回归。
 // 普通代码块前插复制按钮：空 span.code-copy，label 走 CSS 伪元素，零 DOM 文本
 // （批注文本流零偏移）；点击由 webview runtime 事件委托处理（@web/shared/code-copy）。
 // mermaid fence 除外：mermaid 不是普通代码块（走图表链路），不插按钮，
@@ -71,21 +73,35 @@ markdown.renderer.rules.fence = (tokens, idx) => {
   const rawLang = token.info.trim().split(/\s+/)[0] || '';
   const normalized = normalizeFenceLang(rawLang);
   // 高亮判定在 resolveHighlight 内统一（归一化表 + hljs 注册表内置别名，与 desktop 同一逻辑）；
-  // data-lang 仅归一化表内语言输出——表外内置别名（mjs/cjs 等）高亮但不出语言标签（MF-1 双端一致）。
+  // 语言标分流按 normalizeFenceLang 返回值走，与高亮与否解耦（MF-1 修订）。
   const highlighted = resolveHighlight(token.content, rawLang);
   // mermaid 不插复制按钮：与 desktop MermaidBlock（图表渲染、无按钮）口径对齐（MF-11）
-  const copyBtn =
-    rawLang === 'mermaid' ? '' : '<span class="code-copy"></span>';
+  const isMermaid = rawLang === 'mermaid';
+  const copyBtn = isMermaid ? '' : '<span class="code-copy"></span>';
   // rawLang 来自 fence info 首词，未经归一化表约束：拼接前必须转义，
   // 避免未来表 key 引入特殊字符时打开属性注入面（MF-2）
   const langClass = markdown.utils.escapeHtml(rawLang);
   if (highlighted) {
-    const label = normalized ? ` data-lang="${normalized}"` : '';
+    const label = normalized ? ` data-lang="${normalized}"` : ' data-lang="plain"';
     return `<pre${label}>${copyBtn}<code class="language-${langClass} hljs">${highlighted}</code></pre>\n`;
   }
   // 等价 markdown-it 默认 fence 输出（escapeHtml 同源）+ 复制按钮
   const cls = rawLang ? ` class="language-${langClass}"` : '';
-  return `<pre>${copyBtn}<code${cls}>${markdown.utils.escapeHtml(
+  const escaped = markdown.utils.escapeHtml(token.content);
+  // mermaid 走图表链路：裸 pre、无语言标、无复制按钮（desktop 同口径）
+  if (isMermaid) {
+    return `<pre><code${cls}>${escaped}</code></pre>\n`;
+  }
+  // 未命中归一化表（无语言 / 表外语言）统一 plain 标
+  return `<pre data-lang="plain">${copyBtn}<code${cls}>${escaped}</code></pre>\n`;
+};
+
+// 缩进代码块（4 空格 / tab）出口：token 无 info 串，不走 normalizeFenceLang，
+// 与「无语言 fence」同归 plain 标；同时补上复制按钮（默认 renderer 只出裸 pre>code，
+// 双端缩进块形态由此对齐）。
+markdown.renderer.rules.code_block = (tokens, idx) => {
+  const token = tokens[idx]!;
+  return `<pre data-lang="plain"><span class="code-copy"></span><code>${markdown.utils.escapeHtml(
     token.content,
   )}</code></pre>\n`;
 };
