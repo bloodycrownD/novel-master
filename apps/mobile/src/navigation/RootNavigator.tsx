@@ -19,6 +19,7 @@ import {ProfileTabScreen} from '../screens/tabs/ProfileTabScreen';
 import {AgentsSettingsScreen} from '../screens/stack/AgentsSettingsScreen';
 import {AgentEditorScreen} from '../screens/stack/AgentEditorScreen';
 import {RealPromptScreen} from '../screens/stack/RealPromptScreen';
+import {PromptTurnDetailScreen} from '../screens/stack/PromptTurnDetailScreen';
 import {ProvidersScreen} from '../screens/stack/ProvidersScreen';
 import {ProviderCreateScreen} from '../screens/stack/ProviderCreateScreen';
 import {ProviderDetailScreen} from '../screens/stack/ProviderDetailScreen';
@@ -119,6 +120,10 @@ const AgentEditorStackScreen = withStackLayout(
   AgentEditorScreen,
 );
 const RealPromptStackScreen = withStackLayout('RealPrompt', RealPromptScreen);
+const PromptTurnDetailStackScreen = withStackLayout(
+  'PromptTurnDetail',
+  PromptTurnDetailScreen,
+);
 const ProvidersStackScreen = withStackLayout('Providers', ProvidersScreen);
 const ProviderCreateStackScreen = withStackLayout(
   'ProviderCreate',
@@ -229,6 +234,10 @@ export function RootNavigator() {
               name="RealPrompt"
               component={RealPromptStackScreen}
               options={{animation: 'none'}}
+            />
+            <Stack.Screen
+              name="PromptTurnDetail"
+              component={PromptTurnDetailStackScreen}
             />
             <Stack.Screen name="Providers" component={ProvidersStackScreen} />
             <Stack.Screen

@@ -10,6 +10,8 @@ const ROLE_LABEL: Record<string, string> = {
   system: '系统',
   user: '用户',
   assistant: '助手',
+  thinking: '思考',
+  tool_call: '工具调用',
   tool: '工具',
 };
 

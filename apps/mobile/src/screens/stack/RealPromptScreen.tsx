@@ -1,5 +1,9 @@
 /**
- * Full-screen real prompt preview: collapsible segment cards (default folded).
+ * Full-screen real prompt preview: turns (轮) — template/user 轮渲染折叠段卡片，
+ * assistant 轮渲染 PromptTurnCard（摘要 + 进详情）。
+ *
+ * 导航红线：顶层**只** import `useRoute`，`useNavigation` 留在 PromptTurnCard
+ * 内部（既有 scope 用例对 @react-navigation/native 整模块 mock 只有 useRoute）。
  */
 import React, {useCallback, useEffect, useState} from 'react';
 import {
@@ -9,9 +13,10 @@ import {
   Text,
   View,
 } from 'react-native';
-import type {PromptPreviewSegment} from '@novel-master/core/prompt';
+import type {PromptPreviewTurn} from '@novel-master/core/prompt';
 import {useRoute, type RouteProp} from '@react-navigation/native';
 import {PromptPreviewSegmentCard} from '@/components/prompt/PromptPreviewSegmentCard';
+import {PromptTurnCard} from '@/components/prompt/PromptTurnCard';
 import {useMobileScope} from '@/hooks/useMobileScope';
 import {useRuntime} from '@/hooks/useRuntime';
 import {buildRealPromptPreviewSegments} from '@/services/prompt-preview.service';
@@ -34,14 +39,14 @@ export function RealPromptScreen() {
   } = useMobileScope();
   const projectId = params.projectId ?? scopeProjectId;
   const sessionId = params.sessionId ?? scopeSessionId;
-  const [segments, setSegments] = useState<readonly PromptPreviewSegment[]>([]);
+  const [turns, setTurns] = useState<readonly PromptPreviewTurn[]>([]);
   const [error, setError] = useState<string | undefined>();
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
     if (projectId == null || sessionId == null) {
       setError('请先选择项目与会话');
-      setSegments([]);
+      setTurns([]);
       setLoading(false);
       return;
     }
@@ -52,7 +57,7 @@ export function RealPromptScreen() {
         projectId,
         sessionId,
       });
-      setSegments(list);
+      setTurns(list);
     } catch (err) {
       const message =
         err instanceof AgentRunError
@@ -61,7 +66,7 @@ export function RealPromptScreen() {
           ? err.message
           : String(err);
       setError(message);
-      setSegments([]);
+      setTurns([]);
     } finally {
       setLoading(false);
     }
@@ -79,7 +84,7 @@ export function RealPromptScreen() {
         <Text style={[styles.error, {color: tokens.danger}]}>{error}</Text>
       ) : (
         <FlatList
-          data={segments}
+          data={turns}
           keyExtractor={item => item.id}
           style={styles.list}
           contentContainerStyle={styles.content}
@@ -95,10 +100,27 @@ export function RealPromptScreen() {
               在聊天工作区调整纳入规则可改变预览内容。默认折叠以减轻长文本渲染压力。
             </Text>
           }
-          renderItem={({item}) => <PromptPreviewSegmentCard segment={item} />}
+          renderItem={({item}) => <PromptTurnRow turn={item} />}
         />
       )}
     </View>
+  );
+}
+
+/**
+ * 一轮的渲染：assistant 轮走整轮卡片（点进详情读全文），
+ * template/user 轮把该轮各段按序铺成现有折叠段卡片（user 轮可能多段）。
+ */
+function PromptTurnRow({turn}: {turn: PromptPreviewTurn}) {
+  if (turn.kind === 'assistant') {
+    return <PromptTurnCard turn={turn} />;
+  }
+  return (
+    <React.Fragment key={turn.id}>
+      {turn.items.map(segment => (
+        <PromptPreviewSegmentCard key={segment.id} segment={segment} />
+      ))}
+    </React.Fragment>
   );
 }
 
