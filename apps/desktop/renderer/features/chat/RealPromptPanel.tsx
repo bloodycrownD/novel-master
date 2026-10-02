@@ -19,7 +19,6 @@ import { useCallback, useEffect, useState } from "react";
 import type {
   PromptPreviewTurnDto,
   PromptTextCardDto,
-  PromptToolGroupDto,
   PromptTurnCardDto,
 } from "@shared/ipc-types";
 import { ipcPromptRealPreview } from "@/ipc/client";
@@ -27,8 +26,8 @@ import { Button } from "@/components/ui/Button";
 import { MermaidMarkdown } from "@/components/MermaidMarkdown";
 import { PromptLeafCard, promptLeafKindLabel } from "./PromptLeafCard";
 import {
-  LOST_RESULT_PLACEHOLDER,
   PromptToolGroupCard,
+  toolGroupLeaves,
   type ToolGroupLeaf,
 } from "./PromptToolGroupCard";
 
@@ -66,15 +65,10 @@ interface FullscreenTarget {
   blocks: readonly string[];
 }
 
-/** 工具组卡 → 某一格正文（use 入参 / result 正文或丢失占位）。 */
-function groupCardBody(card: PromptToolGroupDto, which: "use" | "result"): string {
-  return which === "use" ? card.inputJson : (card.result?.body ?? LOST_RESULT_PLACEHOLDER);
-}
-
 /** 轮内一张卡的正文（组卡两格都进正文流，忠实还原发给模型的内容）。 */
 function cardBodies(card: PromptTurnCardDto): string[] {
   return card.type === "toolGroup"
-    ? [groupCardBody(card, "use"), groupCardBody(card, "result")]
+    ? toolGroupLeaves(card).map((leaf) => leaf.body)
     : [card.body];
 }
 
@@ -92,7 +86,10 @@ export function RealPromptPanel({
   const load = useCallback(async () => {
     const result = await ipcPromptRealPreview({ projectId, sessionId });
     if (result.ok) {
-      setTurns(result.data);
+      // 归一化 `cards` 兜底：Electron dev 下 renderer 会 HMR 而 main 进程不重启，
+      // 旧 main 下发的 payload 没有 `cards` 字段，裸读会在展开轮卡 / ⤢ 时抛
+      // undefined（renderer 全仓无 ErrorBoundary，整页会卸载）。这里单点兜空数组。
+      setTurns(result.data.map((turn) => ({ ...turn, cards: turn.cards ?? [] })));
     }
   }, [projectId, sessionId]);
 
@@ -101,6 +98,13 @@ export function RealPromptPanel({
       void load();
     }
   }, [visible, load]);
+
+  // 换会话清展开态与全屏：core 的轮 id 是会话内相对的 `turn-${seq}`，切会话后
+  // 上一会话的展开态会被新会话同 id 的轮「继承」（口径对齐 mobile 的 load 清空）。
+  useEffect(() => {
+    setExpanded({});
+    setFullscreen(null);
+  }, [projectId, sessionId]);
 
   const closeFullscreen = useCallback(() => setFullscreen(null), []);
 
@@ -181,7 +185,7 @@ export function RealPromptPanel({
                 type="button"
                 className="prompt-turn-card__toggle"
                 aria-expanded={open}
-                aria-label={`${open ? "收起" : "展开"}${roleLabel}`}
+                aria-label={`${open ? "收起" : "展开"}${roleLabel}轮，${turn.summaryText.slice(0, 20)}`}
                 onClick={() => toggleExpanded(turn.id)}
               >
                 <span
@@ -201,7 +205,7 @@ export function RealPromptPanel({
               <button
                 type="button"
                 className="prompt-turn-card__fullscreen"
-                aria-label="整轮全屏"
+                aria-label={`整轮全屏，${roleLabel} ${turn.summaryText.slice(0, 20)}`}
                 data-action="turn-fullscreen"
                 onClick={() => openTurnFullscreen(turn)}
               >

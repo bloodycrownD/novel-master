@@ -13,6 +13,9 @@ import type {
   PromptChatTokenStatsResponse,
   PromptPreviewTurnDto,
   PromptScopeRequest,
+  PromptTextCardDto,
+  PromptToolGroupDto,
+  PromptTurnCardDto,
 } from "../../../../shared/ipc-types.js";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
 import { loadChatPromptTokenStatsResilient } from "../../services/chat-prompt-tokens.service.js";
@@ -37,7 +40,7 @@ export async function handlePromptRealPreview(
         // 详见 shared/ipc-types.ts 的体积策略注释）。
         cards: turn.cards.map((card) =>
           card.type === "toolGroup"
-            ? {
+            ? ({
                 type: card.type,
                 id: card.id,
                 toolName: card.toolName,
@@ -45,13 +48,13 @@ export async function handlePromptRealPreview(
                 result: card.result,
                 status: card.status,
                 parallel: card.parallel,
-              }
-            : {
+              } satisfies PromptTurnCardDto)
+            : ({
                 type: card.type,
                 id: card.id,
                 role: card.role,
                 body: card.body,
-              },
+              } satisfies PromptTurnCardDto),
         ),
       })),
     };
@@ -147,3 +150,21 @@ export async function handlePromptAgentMeta(
     return { ok: false, error: formatIpcError(err) };
   }
 }
+
+// core 侧加字段而 DTO 未跟时，下列导出 const 构造 {} 编译红（TS2741：差集键 missing）
+export type CoreGroupParityCheck = Record<
+  Exclude<
+    keyof import("@novel-master/core/prompt").PromptToolGroupCardData,
+    keyof PromptToolGroupDto
+  >,
+  never
+>;
+export type CoreTextParityCheck = Record<
+  Exclude<
+    keyof import("@novel-master/core/prompt").PromptTextCardData,
+    keyof PromptTextCardDto
+  >,
+  never
+>;
+export const CORE_GROUP_PARITY_CHECK: CoreGroupParityCheck = {};
+export const CORE_TEXT_PARITY_CHECK: CoreTextParityCheck = {};

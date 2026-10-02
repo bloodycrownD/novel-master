@@ -3784,65 +3784,11 @@ html[data-theme="dark"] .conversation-tab.is-active {
   flex-shrink: 0;
 }
 
-.prompt-segment {
-  margin-bottom: 10px;
-  padding: 10px 12px;
-  border-radius: 12px;
-  border: 1px solid var(--border-light);
-  background: var(--surface);
-}
-
-/* 折叠卡的 hover 基线（assistant 轮摘要卡复用本规则，不另立 hover）。 */
-.prompt-segment:hover {
-  background: var(--background);
-}
-
-.prompt-segment__header {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  width: 100%;
-  padding: 0;
-  border: none;
-  background: transparent;
-  text-align: left;
-  cursor: pointer;
-  font: inherit;
-}
-
-.prompt-segment__text {
-  flex: 1;
-  min-width: 0;
-}
-
-.prompt-segment__role {
-  display: block;
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--primary);
-  margin-bottom: 2px;
-}
-
-.prompt-segment__title {
-  display: block;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text);
-  margin-bottom: 4px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .prompt-segment__preview {
   display: block;
   font-size: 12px;
   line-height: 1.4;
   color: var(--text-secondary);
-}
-
-.prompt-segment.is-expanded .prompt-segment__preview {
-  display: none;
 }
 
 .prompt-segment__chevron {
@@ -3852,29 +3798,10 @@ html[data-theme="dark"] .conversation-tab.is-active {
   padding-top: 4px;
 }
 
-.prompt-segment__body {
-  display: none;
-  margin-top: 10px;
-  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
-  font-size: 12px;
-  line-height: 1.5;
-  white-space: pre-wrap;
-  color: var(--text);
-  word-break: break-word;
-}
-
-.prompt-segment.is-expanded .prompt-segment__body {
-  display: block;
-}
-
 /* prompt-rounds：轮容器（每轮一张摘要卡 + 就地展开的卡片流）。 */
 .prompt-turn {
   display: flex;
   flex-direction: column;
-}
-
-.prompt-turn > .prompt-segment:last-child {
-  margin-bottom: 10px;
 }
 
 /* prompt-rounds：轮摘要卡（三类轮统一形态）。
@@ -3900,15 +3827,25 @@ html[data-theme="dark"] .conversation-tab.is-active {
   border-left-color: #9ca3af;
 }
 
-/* 轮卡头部行：可点的展开区 + ⤢ 全屏 + chevron（flex 排布，等宽摘要区吃掉中间余量）。 */
+/* 轮卡头部行：可点的展开区 + ⤢ 全屏 + chevron（flex 排布，等宽摘要区吃掉中间余量）。
+   内衬用「padding + 等量负 margin」——hover 底色因此是 10px 圆角的内衬块，
+   不会在 12px 圆角卡里画出直角矩形，且内容仍与卡内 padding 对齐。 */
 .prompt-turn-card__head {
   display: flex;
   align-items: center;
   gap: 8px;
+  margin: -4px -6px;
+  padding: 4px 6px;
+  border-radius: 10px;
 }
 
 .prompt-turn-card__head:hover {
   background: var(--background);
+}
+
+/* 键盘可达性：头内的 toggle / ⤢ 聚焦时给整个头部一圈焦点环（只描边不位移）。 */
+.prompt-turn-card__head:focus-within {
+  outline: 1px solid var(--primary);
 }
 
 .prompt-turn-card__toggle {
@@ -3932,7 +3869,7 @@ html[data-theme="dark"] .conversation-tab.is-active {
   font-weight: 700;
 }
 
-/* 摘要单行截断：沿用 .prompt-segment__title（:3826-3835）的 nowrap+ellipsis 先例。 */
+/* 摘要单行截断：nowrap + ellipsis + overflow hidden。 */
 .prompt-turn-card__summary {
   display: block;
   max-width: 100%;
@@ -4101,6 +4038,9 @@ html[data-theme="dark"] .conversation-tab.is-active {
   flex: none;
   font-size: 11px;
   line-height: 1.4;
+  /* 状态文案承载语义（成功/失败/丢失），必须用主题正文色保证可读：
+     语义三色在浅色主题底上对比仅 1.86~2.54:1，低于 3:1 门槛，只留给状态点做装饰。 */
+  color: var(--text);
 }
 
 .prompt-tool-group__chevron {

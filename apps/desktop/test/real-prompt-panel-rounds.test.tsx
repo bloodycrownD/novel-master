@@ -175,6 +175,20 @@ const TURNS_WITH_LEGACY_FIELDS = TURNS.map((turn) => ({
   } as Record<string, unknown>),
 })) as PromptPreviewTurnDto[];
 
+/**
+ * 「老 main payload」夹具：轮对象**完全没有 `cards` 字段**。
+ *
+ * 仅 Electron dev 可达——renderer 走 HMR 而 main 进程不重启，旧 main 下发的轮还是
+ * 重写前的形态（无 `cards`）。这里逐字段照抄 id/kind/summaryText/metaText，只丢掉
+ * `cards`，模拟那份 payload。
+ */
+const TURNS_WITHOUT_CARDS = TURNS.map((turn) => ({
+  id: turn.id,
+  kind: turn.kind,
+  summaryText: turn.summaryText,
+  metaText: turn.metaText,
+})) as unknown as PromptPreviewTurnDto[];
+
 /** 最小 document 桩：只提供 keydown 监听注册/移除，够 Modal 的 Esc 链路用。 */
 type KeydownListener = (e: { key: string; defaultPrevented: boolean }) => void;
 
@@ -361,6 +375,16 @@ function turnToggle(
   return turn.findAll(
     (n) => n.props?.className === "prompt-turn-card__toggle",
   )[0]!;
+}
+
+/**
+ * 取节点的 aria-label。
+ *
+ * 与 `click()` 同一口径的理由：react-test-renderer 的 props 在本仓 tsconfig 下是
+ * 宽松的 `unknown`，直接下标会撞 TS2571，这里统一走一次窄化。
+ */
+function ariaLabelOf(node: { props: unknown }): string {
+  return String((node.props as { "aria-label"?: unknown } | null)?.["aria-label"]);
 }
 
 /** 点开某轮（toggle 展开），返回该轮的轮卡节点。 */
@@ -829,6 +853,119 @@ describe("RealPromptPanel 三层结构轮卡列表 + 全屏富文本 Modal (T-R6
     assert.doesNotMatch(renderer.toJSON() ? JSON.stringify(renderer.toJSON()) : "", /偷跑段/);
     assert.doesNotMatch(renderer.toJSON() ? JSON.stringify(renderer.toJSON()) : "", /退役正文/);
   });
+
+  it("防御：payload 的轮没有 cards 字段（旧 main）→ 轮卡照常渲染，展开区为空且不崩", async () => {
+    const renderer = await mountPanelWith(TURNS_WITHOUT_CARDS);
+    const root = renderer.root;
+
+    // 三张轮卡照常出（摘要/meta 行不依赖 cards）
+    assert.equal(classListNodes(root, "prompt-turn-card").length, 3);
+    assert.deepEqual(
+      classListNodes(root, "prompt-turn-card__summary").map((node) => textOf(node)),
+      ["system", "帮我写第一章", "好的，我先列提纲"],
+    );
+
+    // 展开轮卡：展开区挂载了，但一张卡都没有（cards 被归一化成空数组）
+    await expandTurn(root, "turn-7");
+    assert.equal(classListNodes(root, "prompt-turn-card__body").length, 1);
+    assert.equal(classListNodes(root, "prompt-leaf-card").length, 0);
+    assert.equal(classListNodes(root, "prompt-tool-group").length, 0);
+
+    // ⤢ 整轮全屏同样不炸（另一处裸读 cards 的地方），正文走空占位
+    await act(async () => {
+      click(
+        classListNodes(root, "prompt-turn-card")[0]!.findAll(
+          (n) => n.props?.className === "prompt-turn-card__fullscreen",
+        )[0]!,
+      );
+    });
+    assert.equal(classNodes(root, "text-prompt-overlay").length, 1);
+    assert.equal(
+      classListNodes(root, "prompt-fullscreen__empty").length,
+      1,
+    );
+    assert.equal(mermaidProps().length, 0);
+  });
+
+  it("切会话（sessionId 变）→ 展开态与整轮全屏一并清空，不带到下一会话", async () => {
+    const renderer = await mountPanel();
+    const root = renderer.root;
+
+    // 先把 user 轮展开 + 打开 ⤢ 全屏，两个临时态都挂上
+    await expandTurn(root, "turn-5");
+    await act(async () => {
+      click(
+        classListNodes(root, "prompt-turn-card")[0]!.findAll(
+          (n) => n.props?.className === "prompt-turn-card__fullscreen",
+        )[0]!,
+      );
+    });
+    assert.equal(classNodes(root, "text-prompt-overlay").length, 1);
+    assert.equal(classListNodes(root, "is-expanded").length, 1);
+
+    // 切到同项目下的另一个会话（轮 id 是会话内相对序号，新旧 id 会撞）
+    await act(async () => {
+      renderer.update(
+        <RealPromptPanel projectId="p1" sessionId="s2" visible />,
+      );
+    });
+    assert.equal(classNodes(root, "text-prompt-overlay").length, 0);
+    assert.equal(classListNodes(root, "is-expanded").length, 0);
+    assert.equal(classListNodes(root, "prompt-turn-card__body").length, 0);
+  });
+
+  it("J-1：读屏标签带内容——叶子卡带 kind+正文，轮卡 toggle / ⤢ 带 role+摘要", async () => {
+    const renderer = await mountPanel();
+    const root = renderer.root;
+    await expandTurn(root, "turn-5");
+
+    // 叶子卡：同 kind 多张并排时，靠正文前 20 字才念得出区别
+    assert.deepEqual(
+      classListNodes(root, "prompt-leaf-card").map(ariaLabelOf),
+      ["user，帮我写第一章", "user，三千字左右"],
+    );
+
+    // 轮卡 toggle：带 role 与摘要，收起/展开两种文案都翻
+    assert.equal(
+      ariaLabelOf(turnToggle(root, "turn-5")),
+      "收起user轮，帮我写第一章",
+    );
+    await act(async () => {
+      click(turnToggle(root, "turn-5"));
+    });
+    assert.equal(
+      ariaLabelOf(turnToggle(root, "turn-5")),
+      "展开user轮，帮我写第一章",
+    );
+
+    // ⤢ 整轮全屏：带 role 与摘要（不再三个轮卡都只念「整轮全屏」）
+    assert.deepEqual(
+      classListNodes(root, "prompt-turn-card__fullscreen").map(ariaLabelOf),
+      [
+        "整轮全屏，template system",
+        "整轮全屏，user 帮我写第一章",
+        "整轮全屏，assistant 好的，我先列提纲",
+      ],
+    );
+  });
+
+  it("J-1：组卡两格的读屏标签带工具名（同名工具的两格也分得开）", async () => {
+    const renderer = await mountPanelWith(TURNS_GROUP_STATES);
+    const root = renderer.root;
+    await expandTurn(root, "turn-11");
+    await act(async () => {
+      click(
+        classListNodes(root, "prompt-tool-group")[0]!.findAll(
+          (n) => n.props?.className === "prompt-tool-group__head",
+        )[0]!,
+      );
+    });
+
+    assert.deepEqual(
+      classListNodes(root, "prompt-group-cell").map(ariaLabelOf),
+      ["查看tool use，list_chapters", "查看tool result，list_chapters"],
+    );
+  });
 });
 
 describe("T-R6 契约层：payload 策略 / CodeEditor readOnly / 样式", () => {
@@ -941,13 +1078,23 @@ describe("T-R6 契约层：payload 策略 / CodeEditor readOnly / 样式", () =>
 
   it("T-DP5：shell.css 保留旧契约类名 + 新增三层结构样式类", () => {
     const css = readFileSync(join(rendererRoot, "styles", "shell.css"), "utf8");
-    // 旧契约类名必须保留（历史消费者 / 既有测试钉死）
+    // 契约类名收窄为四项：轮卡壳 + 轮壳 + 两处仍在消费的 __preview / __chevron。
+    // `.prompt-segment` 基类族随面板重写整族删除（desktop/C-1），唯二真消费子类是
+    // __preview / __chevron，hover 基线挂 `.prompt-turn-card__head` 而非轮卡壳。
     assert.match(css, /\.prompt-turn-card \{/);
     assert.match(css, /\.prompt-turn \{/);
     assert.match(css, /\.prompt-turn-card \.prompt-segment__preview \{/);
-    // r4/B-9：hover 基线补在 .prompt-segment 上，.prompt-turn-card 不再自带 box/hover
-    assert.match(css, /\.prompt-segment:hover \{/);
+    assert.match(css, /\.prompt-segment__chevron \{/);
+    assert.doesNotMatch(css, /\.prompt-segment \{/);
     assert.doesNotMatch(css, /\.prompt-turn-card:hover \{/);
+    // 轮卡头：10px 圆角内衬块（hover 底色不再画直角矩形）+ 键盘焦点环
+    const head = css.slice(
+      css.indexOf(".prompt-turn-card__head {"),
+      css.indexOf("}", css.indexOf(".prompt-turn-card__head {")),
+    );
+    assert.match(head, /border-radius: 10px;/);
+    assert.match(css, /\.prompt-turn-card__head:focus-within \{/);
+    assert.match(css, /outline: 1px solid var\(--primary\);/);
     // 新增：轮卡头 / 摘要单行截断 / 展开区
     assert.match(css, /\.prompt-turn-card__head \{/);
     assert.match(css, /\.prompt-turn-card__summary \{/);
@@ -974,7 +1121,13 @@ describe("T-R6 契约层：payload 策略 / CodeEditor readOnly / 样式", () =>
     assert.match(css, /\.prompt-group-cell:hover \{/);
     assert.match(css, /\.prompt-turn-card__fullscreen:hover \{/);
     assert.match(css, /\.prompt-tool-group__head:hover \{/);
-    // 摘要单行截断：nowrap + ellipsis（沿用 .prompt-segment__title 先例）
+    // 组卡状态文案用主题正文色（语义三色浅底对比仅 1.86~2.54:1，只留给状态点装饰）
+    const groupStatus = css.slice(
+      css.indexOf(".prompt-tool-group__status {"),
+      css.indexOf("}", css.indexOf(".prompt-tool-group__status {")),
+    );
+    assert.match(groupStatus, /color: var\(--text\);/);
+    // 摘要单行截断：nowrap + ellipsis
     const summary = css.slice(
       css.indexOf(".prompt-turn-card__summary {"),
       css.indexOf("}", css.indexOf(".prompt-turn-card__summary {")),

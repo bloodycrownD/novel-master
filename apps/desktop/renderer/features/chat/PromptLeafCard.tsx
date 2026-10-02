@@ -33,7 +33,7 @@ export function PromptLeafCard({ card, onOpen }: PromptLeafCardProps) {
       className={`prompt-leaf-card${card.type === "thinking" ? " prompt-leaf-card--thinking" : ""}`}
       data-card-id={card.id}
       data-card-kind={card.type}
-      aria-label={`查看 ${label} 卡片全文`}
+      aria-label={`${label}，${card.body.slice(0, 20)}`}
       onClick={() => onOpen(card)}
     >
       <span className="prompt-leaf-card__head">

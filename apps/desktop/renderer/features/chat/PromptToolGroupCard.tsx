@@ -18,7 +18,14 @@ import type {
 /** 悬挂 tool_use（`result === null`）的占位文案，槽位保留不隐藏。 */
 export const LOST_RESULT_PLACEHOLDER = "未返回结果";
 
-/** 状态点 / 状态文案配色：ok 绿 / error 红 / lost 灰。 */
+/**
+ * 状态点配色：ok 绿 / error 红 / lost 灰。
+ *
+ * ⚠️ 语义色**仅供装饰性状态点使用**：#34c759 / #f87171 / #9ca3af 在浅色主题（双端
+ * 默认）底上对比度只有 1.86~2.54:1，低于非文本元素的 3:1 门槛，承载不了语义。
+ * 状态文案因此改用主题正文色（`.prompt-tool-group__status` 的 `var(--text)`），
+ * 状态点保留语义色只做辅助区分。tokens 化另开迭代。
+ */
 export const TOOL_GROUP_STATUS_COLORS: Record<
   PromptToolGroupStatusDto,
   string
@@ -113,7 +120,6 @@ export function PromptToolGroupCard({
         ) : null}
         <span
           className="prompt-tool-group__status"
-          style={{ color }}
           data-status={card.status}
         >
           {statusLabel}
@@ -130,7 +136,7 @@ export function PromptToolGroupCard({
               type="button"
               className={`prompt-group-cell${leaf.lost ? " is-lost" : ""}`}
               data-leaf-id={leaf.id}
-              aria-label={`查看 ${leaf.label} 全文`}
+              aria-label={`查看${leaf.label}，${card.toolName}`}
               onClick={() => onOpenLeaf(card.id, leaf)}
             >
               <span className="prompt-group-cell__head">
