@@ -309,6 +309,74 @@ describe('buildSessionPromptInput 分段弃权检查点（r3-test-1 ④）', () 
  * `listBySession` 返回带附件的历史消息，看 prepare 后的附件正文。
  * 删掉任一接线字段，断言①/② 之一必红。
  */
+/**
+ * T-A8（mobile 侧）：附件预算降级 parity —— 预览链与实发链同一口径。
+ *
+ * 预算降级此前只在 core 的 prepare 单测里钉过，双端 service 侧零断言，实现方
+ * 以「一致性由 prepare 单源结构性保证」判过。本用例把结构性保证**落成一条会红
+ * 的断言**：超大文本附件经 buildSessionPromptInput（预览路径）产出后，attach
+ * XML 必须是 filename 档 + 「文件过长，可用 read 配合 offset/limit 分段读取」
+ * 引导文案，且不得残留正文——真发链（agent-runner）走同一个 prepare，出现分歧
+ * 时这条会红。
+ */
+describe('buildSessionPromptInput 附件预算降级 parity（T-A8）', () => {
+  /** 预览路径要 hydrate 的超大附件路径。 */
+  const HUGE_PATH = '/huge.md';
+  /**
+   * 超预算正文长度 = 预算 + 1。
+   *
+   * 预算来源：core `ATTACH_PROMPT_CHAR_BUDGET`（packages/core/src/domain/chat/
+   * logic/attach-budget.ts = 100_000）。该常量目前**未**从 `@novel-master/core`
+   * 的 public 子路径导出（只有 domain 内部入口），按约定不改 core 导出面，
+   * 测试内用字面量并在此标注来源。
+   */
+  const OVER_BUDGET_BODY = 'H'.repeat(100_001);
+
+  it('超预算文本附件在预览路径降级为 filename 档引导文案（与实发链同口径）', async () => {
+    const runtime = makeStubRuntime({
+      messages: [
+        {
+          id: 'm1',
+          sessionId: 's1',
+          role: 'user',
+          content: textBlocks('帮我看看这个附件'),
+          hidden: false,
+          // content: null ⇒ prepare 走 file_cache miss → 读 vfs 的首次全文路径。
+          attachments: [
+            {
+              name: HUGE_PATH,
+              source: 'attach',
+              type: 'text',
+              content: null,
+              path: HUGE_PATH,
+            },
+          ],
+        },
+      ],
+      vfsBodies: {[HUGE_PATH]: OVER_BUDGET_BODY},
+    });
+    const definition = buildDefaultAgentDefinitionPreservingName('budget-agent');
+
+    const bundle = await buildSessionPromptInput(
+      runtime,
+      {projectId: 'p1', sessionId: 's1'},
+      definition,
+    );
+
+    const attachXml = bundle.ctx.messages[0]?.attachments?.[0]?.content ?? '';
+    // ① 降级文案：与实发链同一份 OVERSIZED_ATTACH_NOTE。
+    expect(attachXml).toMatch(/文件过长，可用 read 配合 offset\/limit 分段读取/);
+    // ② display 强制 filename 档（action JSON 里的 display 字段）。
+    expect(attachXml).toMatch(/"display": "filename"/);
+    // ③ 正文确实没进 XML（否则「降级」只是加了一句提示，白烧 token）。
+    expect(attachXml).not.toContain('HHH');
+    // ④ 包裹后的消息体里同样能看到降级文案（预览渲染消费的就是它）。
+    expect(bodyText(bundle.ctx.messages[0]?.content)).toMatch(
+      /文件过长，可用 read 配合 offset\/limit 分段读取/,
+    );
+  });
+});
+
 describe('buildSessionPromptInput S0 双读接线（d-s0/G-1）', () => {
   /** 复用既有 harness 的路径常量：一个 full 档、一个 header 档。 */
   const FULL_PATH = WORKPLACE_FILES[0];
