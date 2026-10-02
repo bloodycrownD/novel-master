@@ -2,10 +2,11 @@
  * T-R6：desktop 提示词查看「轮聚合」渲染 + assistant 轮详情 Modal（prompt-rounds Step 10）。
  *
  * 覆盖：
- * - template / user 轮渲染原 `.prompt-segment` 卡片（user 轮多段顺序展示）；
- * - assistant 轮渲染摘要卡（role 标「assistant 轮」+ core 钉死的 summary + chevron）；
- * - 点摘要卡打开详情 Modal：内挂**只读** CodeEditor、value 即 turn.body、**不挂 onChange**；
- * - Esc 关闭 Modal（defaultPrevented 的 Esc 不拦截）；footer 关闭按钮同样关闭。
+ * - template / user 轮渲染 `cards` 驱动的 `.prompt-segment` 折叠卡片（多卡轮包一层轮壳）；
+ * - assistant 轮渲染摘要卡（role 标「assistant 轮」+ core 钉死的 summaryText + chevron）；
+ * - 点摘要卡打开详情 Modal：内挂**只读** CodeEditor、value 由 `cards` 逐卡拼出、**不挂 onChange**；
+ * - Esc 关闭 Modal（defaultPrevented 的 Esc 不拦截）；footer 关闭按钮同样关闭；
+ * - 退役字段（`body` / `items`）即便残留在 payload 里也不参与渲染。
  *
  * 范式对齐 fetch-models-modal.test.tsx / chat-search-race-guard.test.tsx：
  * react-alias-hook.mjs 统一根 react 副本，react-test-renderer 真渲面板；
@@ -36,91 +37,96 @@ register(new URL("./prompt-turn-code-editor-hook.mjs", import.meta.url));
 const { act } = await import("react");
 const { RealPromptPanel } = await import("@/features/chat/RealPromptPanel");
 
-/** 与 core `buildPromptPreviewTurnsFromLayout` 的产出形状对齐的轮数据。 */
+/**
+ * 与 core `buildPromptPreviewTurnsFromLayout` 的新 payload 形态对齐：
+ * `cards` 是唯一正文载体，`body` / `items` / `summary` 均已从 DTO 退役。
+ *
+ * ⚠️ user 轮给两张卡是**合成夹具**：core 的 user 轮实为「wrap 后整条文本直转单卡」，
+ * 这里造第二张卡只为继续覆盖面板的 `.prompt-turn` 轮壳分支（core 侧覆盖见 T-PT5）。
+ */
 const TURNS: PromptPreviewTurnDto[] = [
   {
     id: "seg-sys",
     kind: "template",
-    summary: "system",
-    body: "你是写作助手。",
-    items: [
+    summaryText: "system",
+    metaText: "6 字",
+    cards: [
+      // template 轮的卡片 id 沿用段 id（core 侧同口径）。
+      { type: "text", id: "seg-sys", role: "system", body: "你是写作助手。" },
+    ],
+  },
+  {
+    id: "turn-5",
+    kind: "user",
+    summaryText: "帮我写第一章",
+    metaText: "#5 · 15 字",
+    cards: [
+      { type: "text", id: "card-u1", role: "user", body: "帮我写第一章" },
+      { type: "text", id: "card-u2", role: "user", body: "三千字左右" },
+    ],
+  },
+  {
+    id: "turn-7",
+    kind: "assistant",
+    summaryText: "好的，我先列提纲",
+    metaText: "#7 · 工具调用 1 次 · 128 字",
+    cards: [
+      { type: "text", id: "card-a1", role: "assistant", body: "好的，我先列提纲" },
       {
-        id: "seg-sys",
-        role: "system",
-        title: "system",
-        body: "你是写作助手。",
+        type: "toolGroup",
+        id: "group-call-1",
+        toolName: "list_chapters",
+        inputJson: '{\n  "limit": 10\n}',
+        result: { toolUseId: "call-1", ok: true, body: "第一章 …" },
+        status: "ok",
+        parallel: false,
       },
     ],
-  },
-  {
-    id: "seg-u1",
-    kind: "user",
-    summary: "user",
-    body: "[#5 · user]\n帮我写第一章\n\n[#6 · user]\n三千字左右",
-    items: [
-      { id: "seg-u1", role: "user", title: "user", body: "帮我写第一章" },
-      { id: "seg-u2", role: "user", title: "user", body: "三千字左右" },
-    ],
-  },
-  {
-    id: "seg-a1",
-    kind: "assistant",
-    summary: "好的，我先列提纲 · 工具调用 1 次 · 128 字",
-    body: "[#7 · assistant]\n好的，我先列提纲\n\n[#8 · tool_call]\nlist_chapters",
-    // payload 策略：assistant 轮 IPC 不带 items（此处刻意省略，验证消费方不依赖）。
-  },
-];
-
-/** r4/B-1：非 assistant 轮 payload 不带 body（handler 只对 assistant 轮下发）。 */
-const TURNS_NO_BODY: PromptPreviewTurnDto[] = [
-  {
-    id: "seg-sys",
-    kind: "template",
-    summary: "system",
-    // 刻意不带 body：非 assistant 轮的 body 是 items 的前缀行拼接版，不下发。
-    items: [
-      {
-        id: "seg-sys",
-        role: "system",
-        title: "system",
-        body: "你是写作助手。",
-      },
-    ],
-  },
-  {
-    id: "seg-u1",
-    kind: "user",
-    summary: "user",
-    items: [
-      { id: "seg-u1", role: "user", title: "user", body: "帮我写第一章" },
-      { id: "seg-u2", role: "user", title: "user", body: "三千字左右" },
-    ],
-  },
-  {
-    id: "seg-a1",
-    kind: "assistant",
-    summary: "好的，我先列提纲 · 工具调用 1 次 · 128 字",
-    body: "[#7 · assistant]\n好的，我先列提纲",
   },
 ];
 
 /**
- * r4/G-1：assistant 轮**即使收到 items 也不消费**。
- *
- * handler 侧不下发，但契约要双侧锁定——handler 日后放宽、renderer 未同步时
- * 本用例必须响。
+ * cards 驱动的详情正文夹具：assistant 轮带 thinking 卡 + 文本卡，
+ * 用来验证详情 Modal 的 value 由 `cards` 逐卡拼出（旧的 `turn.body` 已退役）。
  */
-const TURNS_ASSISTANT_WITH_ITEMS: PromptPreviewTurnDto[] = TURNS.map((turn) =>
-  turn.kind === "assistant"
-    ? {
-        ...turn,
-        items: [
-          { id: "evil-1", role: "assistant", title: "assistant", body: "偷跑段一" },
-          { id: "evil-2", role: "tool_call", title: "tool_call", body: "偷跑段二" },
-        ],
-      }
-    : turn,
-);
+const TURNS_CARDS_ONLY: PromptPreviewTurnDto[] = [
+  {
+    id: "turn-9",
+    kind: "assistant",
+    summaryText: "先列提纲",
+    metaText: "#9 · 20 字",
+    cards: [
+      { type: "thinking", id: "card-t1", role: "assistant", body: "（思考正文）" },
+      { type: "text", id: "card-a2", role: "assistant", body: "先列提纲" },
+      {
+        type: "toolGroup",
+        id: "group-call-2",
+        toolName: "read_chapter",
+        inputJson: "[tool_use name=read_chapter id=call-2]",
+        result: null,
+        status: "lost",
+        parallel: false,
+      },
+    ],
+  },
+];
+
+/**
+ * 退役字段残留夹具：payload 里**额外**塞回旧形态的 `body` / `items`。
+ *
+ * 契约要双侧锁定——handler 侧不再下发（见文末源码正则），renderer 侧也不消费。
+ * 字段已从 `PromptPreviewTurnDto` 删除，这里用 cast 模拟「老 main 进程发来的 payload」。
+ */
+const TURNS_WITH_LEGACY_FIELDS = TURNS.map((turn) => ({
+  ...turn,
+  ...({
+    body: "退役正文不应渲染",
+    items: [
+      { id: "evil-1", role: "assistant", title: "assistant", body: "偷跑段一" },
+      { id: "evil-2", role: "tool_call", title: "tool_call", body: "偷跑段二" },
+    ],
+  } as Record<string, unknown>),
+})) as PromptPreviewTurnDto[];
 
 /** 最小 document 桩：只提供 keydown 监听注册/移除，够 Modal 的 Esc 链路用。 */
 type KeydownListener = (e: { key: string; defaultPrevented: boolean }) => void;
@@ -302,46 +308,47 @@ describe("RealPromptPanel 轮渲染 + assistant 轮详情 Modal (T-R6)", () => {
     restore();
   });
 
-  it("template/user 轮渲染段卡片（user 轮两段顺序展示），assistant 轮渲染摘要卡", async () => {
+  it("template/user 轮渲染 cards 卡片（多卡轮包轮壳），assistant 轮渲染摘要卡", async () => {
     const renderer = await mountPanel();
     const root = renderer.root;
 
-    // template 单段轮 + user 两段轮 → 3 张段卡片
+    // template 单卡轮 + user 两卡轮 → 3 张卡片，data-card-id 即 core 的卡片 id
     const segments = classNodes(root, "prompt-segment");
     assert.equal(segments.length, 3);
     assert.deepEqual(
-      segments.map((node) => node.props["data-segment-id"]),
-      ["seg-sys", "seg-u1", "seg-u2"],
+      segments.map((node) => node.props["data-card-id"]),
+      ["seg-sys", "card-u1", "card-u2"],
     );
 
-    // user 多段轮包一层轮壳，模板单段轮不加壳（形态与原卡片一致）
+    // 多卡轮包一层轮壳，单卡轮不加壳（形态与单张卡片一致）
     const turnGroups = root.findAll((node) => hasClass(node, "prompt-turn"));
     assert.equal(turnGroups.length, 1);
-    assert.equal(turnGroups[0]!.props["data-turn-id"], "seg-u1");
+    assert.equal(turnGroups[0]!.props["data-turn-id"], "turn-5");
     assert.ok(
       turnGroups[0]!.findAll((node) => hasClass(node, "prompt-segment")).length ===
         2,
-      "user 轮应包含两段",
+      "user 轮应包含两张卡片",
     );
 
-    // 段卡片 role 标签含新补的 thinking 映射所需的表（role=system 走 PROMPT_REGION_LABELS）
+    // 卡片 role 标签走 ROLE_LABELS 映射表（system 走 PROMPT_REGION_LABELS）
     assert.match(textOf(segments[0]!), /你是写作助手/);
 
-    // assistant 轮：摘要卡 + core 钉死的 summary + chevron
+    // assistant 轮：摘要卡 + core 钉死的 summaryText + chevron
     const cards = classListNodes(root, "prompt-turn-card");
     assert.equal(cards.length, 1);
-    // r4/B-9：摘要卡与段卡片共用 .prompt-segment 基类，hasClass 口径下共 4 张
+    // 摘要卡与卡片共用 .prompt-segment 基类，hasClass 口径下共 4 张
     assert.equal(classListNodes(root, "prompt-segment").length, 4);
-    assert.equal(cards[0]!.props["data-turn-id"], "seg-a1");
+    assert.equal(cards[0]!.props["data-turn-id"], "turn-7");
     const cardText = textOf(cards[0]!);
     assert.match(cardText, /assistant 轮/);
-    assert.match(cardText, /好的，我先列提纲 · 工具调用 1 次 · 128 字/);
+    assert.match(cardText, /好的，我先列提纲/);
+    assert.doesNotMatch(cardText, /工具调用 1 次/);
     assert.match(textOf(cards[0]!), /▶/);
     // 未点开前没有详情 Modal
     assert.equal(classNodes(root, "text-prompt-overlay").length, 0);
   });
 
-  it("点 assistant 轮摘要卡 → 详情 Modal 挂只读 CodeEditor（value 即 turn.body、无 onChange）", async () => {
+  it("点 assistant 轮摘要卡 → 详情 Modal 挂只读 CodeEditor（value 由 cards 逐卡拼出、无 onChange）", async () => {
     const renderer = await mountPanel();
     const root = renderer.root;
     const card = classListNodes(root, "prompt-turn-card")[0]!;
@@ -360,8 +367,17 @@ describe("RealPromptPanel 轮渲染 + assistant 轮详情 Modal (T-R6)", () => {
     const props = editorProps();
     assert.equal(props.length, 1);
     assert.equal(props[0]!["readOnly"], true);
-    assert.equal(props[0]!["value"], TURNS[2]!.body);
     assert.equal(props[0]!["languagePath"], "prompt.txt");
+    // 正文载体只有 cards：每张卡的正文（工具组卡取 use 输入 + result）都要进详情
+    const value = String(props[0]!["value"]);
+    for (const card of TURNS[2]!.cards) {
+      if (card.type === "toolGroup") {
+        assert.ok(value.includes(card.inputJson), "详情应含工具输入");
+        assert.ok(value.includes(card.result?.body ?? ""), "详情应含工具结果");
+      } else {
+        assert.ok(value.includes(card.body), "详情应含卡片正文");
+      }
+    }
     assert.equal(
       props[0]!["onChange"],
       undefined,
@@ -442,57 +458,57 @@ describe("RealPromptPanel 轮渲染 + assistant 轮详情 Modal (T-R6)", () => {
     assert.equal(renderer!.toJSON(), null);
   });
 
-  it("非 assistant 轮 payload 不带 body 仍正常渲染（r4/B-1）", async () => {
-    const renderer = await mountPanelWith(TURNS_NO_BODY);
+  it("payload 无 body 时详情正文仍由 cards 拼出（thinking / 文本 / 丢失工具组三态）", async () => {
+    const renderer = await mountPanelWith(TURNS_CARDS_ONLY);
     const root = renderer.root;
 
-    // template 单段 + user 两段 → 3 张段卡片，折叠摘要照常出内容
-    const segments = classNodes(root, "prompt-segment");
-    assert.equal(segments.length, 3);
-    assert.deepEqual(
-      segments.map((node) => node.props["data-segment-id"]),
-      ["seg-sys", "seg-u1", "seg-u2"],
-    );
-    assert.match(textOf(segments[0]!), /你是写作助手/);
-    assert.match(textOf(segments[1]!), /帮我写第一章/);
-
-    // assistant 轮摘要卡照常，且详情 Modal 仍能打开（body 来自 assistant 轮）
+    // assistant 轮：只有一张摘要卡，卡片流不在轮列表里平铺
     const cards = classListNodes(root, "prompt-turn-card");
     assert.equal(cards.length, 1);
-    assert.match(textOf(cards[0]!), /好的，我先列提纲/);
+    assert.equal(classListNodes(root, "prompt-segment").length, 1);
+    assert.match(textOf(cards[0]!), /先列提纲/);
 
     await act(async () => {
       click(firstNativeButton(cards[0]!));
     });
+
     const props = editorProps();
     assert.equal(props.length, 1);
     assert.equal(props[0]!["readOnly"], true);
-    assert.equal(props[0]!["value"], TURNS_NO_BODY[2]!.body);
+    const value = String(props[0]!["value"]);
+    // thinking 卡正文进详情
+    assert.match(value, /（思考正文）/);
+    // 文本卡正文进详情
+    assert.match(value, /先列提纲/);
+    // 悬挂工具组卡：use 输入进详情，result 为 null 时出占位文案
+    assert.match(value, /\[tool_use name=read_chapter id=call-2\]/);
+    assert.match(value, /（未返回结果）/);
   });
 
-  it("assistant 轮即使收到 items 也不展开（r4/G-1）", async () => {
-    const renderer = await mountPanelWith(TURNS_ASSISTANT_WITH_ITEMS);
+  it("退役字段 body / items 即使残留在 payload 里也不参与渲染（双侧锁定）", async () => {
+    const renderer = await mountPanelWith(TURNS_WITH_LEGACY_FIELDS);
     const root = renderer.root;
 
     // 仍只出 1 张摘要卡
     assert.equal(classListNodes(root, "prompt-turn-card").length, 1);
-    // .prompt-segment 计数与基线一致（3 段卡片 + 1 摘要卡），未被 items 撑大
+    // .prompt-segment 计数与基线一致（3 张卡片 + 1 摘要卡），未被 items 撑大
     assert.equal(classListNodes(root, "prompt-segment").length, 4);
     // 偷跑的段一条都没渲染出来
     assert.equal(
-      root.findAll((node) => node.props?.["data-segment-id"] === "evil-1").length,
+      root.findAll((node) => node.props?.["data-card-id"] === "evil-1").length,
       0,
     );
     assert.equal(
-      root.findAll((node) => node.props?.["data-segment-id"] === "evil-2").length,
+      root.findAll((node) => node.props?.["data-card-id"] === "evil-2").length,
       0,
     );
     assert.doesNotMatch(renderer.toJSON() ? JSON.stringify(renderer.toJSON()) : "", /偷跑段/);
+    assert.doesNotMatch(renderer.toJSON() ? JSON.stringify(renderer.toJSON()) : "", /退役正文/);
   });
 });
 
 describe("T-R6 契约层：payload 策略 / CodeEditor readOnly / 样式", () => {
-  it("handler map：assistant 轮不下发 items（长会话 payload 不翻倍）", () => {
+  it("T-DP4：handler map 全轮统一下发 cards，body / items 不再下发（payload 策略已反转）", () => {
     const src = readFileSync(
       join(desktopRoot, "src", "main", "ipc", "handlers", "prompt.ts"),
       "utf8",
@@ -500,17 +516,39 @@ describe("T-R6 契约层：payload 策略 / CodeEditor readOnly / 样式", () =>
     // 轮 DTO 返回类型
     assert.match(src, /IpcResult<PromptPreviewTurnDto\[\]>/);
     assert.match(src, /buildRealPromptPreviewTurns/);
-    // assistant 轮走空扩展分支（不带 items），其余轮带 items
-    assert.match(
-      src,
-      /turn\.kind === "assistant"\s*\?\s*\{\}\s*:\s*\{\s*items:/,
-    );
-    // r4/B-1：body 只对 assistant 轮下发（独立展开叠加，不并进上面那个三元）
-    assert.match(
-      src,
-      /turn\.kind === "assistant" \? \{ body: turn\.body \} : \{\}/,
-    );
-    assert.doesNotMatch(src, /^\s*body: turn\.body,$/m);
+    // 正向：三类轮统一形态——摘要与计数分列，cards 是唯一正文载体
+    assert.match(src, /summaryText: turn\.summaryText/);
+    assert.match(src, /metaText: turn\.metaText/);
+    assert.match(src, /cards: turn\.cards\.map\(/);
+    // 反向：不再有 assistant / 非 assistant 三元分叉
+    assert.doesNotMatch(src, /turn\.kind === "assistant"/);
+    assert.doesNotMatch(src, /turn\.body/);
+    assert.doesNotMatch(src, /turn\.items/);
+    assert.doesNotMatch(src, /\bitems:/);
+  });
+
+  it("T-DP4：ipc-types 的轮 DTO 只剩 {id, kind, summaryText, metaText, cards}，段 DTO 已删除", () => {
+    const src = readFileSync(join(desktopRoot, "shared", "ipc-types.ts"), "utf8");
+    assert.match(src, /export type PromptPreviewTurnDto = \{/);
+    assert.match(src, /readonly cards: readonly PromptTurnCardDto\[\];/);
+    // 组卡 / 文本卡 DTO 与 core 判别联合对齐（discriminator = type）
+    assert.match(src, /export type PromptToolGroupDto = \{/);
+    assert.match(src, /readonly type: 'toolGroup';/);
+    assert.match(src, /export type PromptTextCardDto = \{/);
+    assert.match(src, /readonly type: 'text' \| 'thinking';/);
+    assert.match(src, /export type PromptTurnCardDto = PromptTextCardDto \| PromptToolGroupDto;/);
+    // 反向：旧形态的段 DTO 与可选字段全部退役
+    assert.doesNotMatch(src, /PromptPreviewSegmentDto/);
+    // 只截 PromptPreviewTurnDto 的类型体比对，并剥掉行内注释，免得注释里解释
+    // 「为何退役」的 body / items 字样把断言误伤。
+    const turnDtoStart = src.indexOf("export type PromptPreviewTurnDto = {");
+    const turnDtoBody = src
+      .slice(turnDtoStart, src.indexOf("\n};", turnDtoStart))
+      .replace(/\/\*[\s\S]*?\*\//g, "");
+    assert.ok(turnDtoStart > 0, "ipc-types 里应有 PromptPreviewTurnDto");
+    assert.doesNotMatch(turnDtoBody, /\bbody\b/);
+    assert.doesNotMatch(turnDtoBody, /\bitems\b/);
+    assert.doesNotMatch(turnDtoBody, /\bsummary\b/);
   });
 
   it("CodeEditor：readOnly 加 readOnly 扩展、关 history/closeBrackets、onChange 可选且只读不挂", () => {
@@ -545,8 +583,10 @@ describe("T-R6 契约层：payload 策略 / CodeEditor readOnly / 样式", () =>
     assert.match(src, /className="prompt-editor-modal"/);
     assert.match(src, /className="prompt-editor-modal__footer"/);
     assert.match(src, /languagePath="prompt\.txt"/);
-    // 段级截断只服务 template/user 轮卡片；assistant 轮摘要直用 core 口径（不二次加工）
-    assert.match(src, /turn\.summary/);
+    // 摘要读 core 钉死的 summaryText（旧 summary 拼串已退役），不再二次加工
+    assert.match(src, /turn\.summaryText/);
+    // 详情正文由 cards 逐卡拼出（body 已退役）
+    assert.match(src, /cardsToDetailText\(detailTurn\.cards\)/);
   });
 
   it("shell.css：新增 assistant 轮卡片与轮壳样式", () => {

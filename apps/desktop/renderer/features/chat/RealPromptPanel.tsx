@@ -4,17 +4,20 @@
  * 数据是「轮」数组（core `buildPromptPreviewTurnsFromLayout`）：模板段各占一轮、
  * 真用户输入开新轮、其余消息段归入当前 assistant 轮。
  *
- * - template / user 轮：按段渲染原 `.prompt-segment` 折叠卡片（user 轮可多段顺序展示）；
- * - assistant 轮：渲染摘要卡（role 标「assistant 轮」+ core 侧钉死的 summary +
- *   chevron），点击开**详情 Modal**（详情数据即 `turn.body`，只读 CodeEditor）。
+ * - template / user 轮：按 `cards` 渲染原 `.prompt-segment` 折叠卡片；
+ * - assistant 轮：渲染摘要卡（role 标「assistant 轮」+ core 侧钉死的 summaryText +
+ *   chevron），点击开**详情 Modal**（只读 CodeEditor，正文由 `cards` 逐卡拼出）。
  *
- * payload 口径：assistant 轮的 `items` 不走 IPC（见 shared/ipc-types 注释），
- * 所以这里对 assistant 轮不做段展开。
+ * payload 口径：`cards` 是唯一正文载体，`body` / `items` 已从 DTO 退役
+ * （见 shared/ipc-types.ts 体积策略注释）。
+ *
+ * ⚠️ 本文件目前只是「按新 DTO 编译通过」的最小适配：卡片流的三态展开、组卡/叶子卡、
+ * 全屏富文本（`MermaidMarkdown`）等 UI 重设计由 prompt-preview-ui-redesign Step 6 落地。
  */
 import { useCallback, useEffect, useState } from "react";
 import type {
-  PromptPreviewSegmentDto,
   PromptPreviewTurnDto,
+  PromptTurnCardDto,
 } from "@shared/ipc-types";
 import { PROMPT_REGION_LABELS } from "@shared/logic/config-forms-agent";
 import { ipcPromptRealPreview } from "@/ipc/client";
@@ -67,6 +70,28 @@ function collapsedHint(body: string): string {
   return `${hint}${countSuffix}`;
 }
 
+/** 悬挂 tool_use（无 result）的详情占位文案。 */
+const LOST_RESULT_PLACEHOLDER = "（未返回结果）";
+
+/**
+ * 卡片 → 详情正文（CodeEditor 的 `value`）。
+ *
+ * cards 是唯一正文载体，Modal 直接逐卡拼出可读全文；Step 6 会换成
+ * `MermaidMarkdown` 富文本流，这里先保住「只读、无 onChange」的既有语义。
+ */
+function cardsToDetailText(cards: readonly PromptTurnCardDto[]): string {
+  return cards
+    .map((card) =>
+      card.type === "toolGroup"
+        ? [card.inputJson, card.result?.body ?? LOST_RESULT_PLACEHOLDER].join(
+            "\n\n",
+          )
+        : card.body,
+    )
+    .filter((text) => text !== "")
+    .join("\n\n");
+}
+
 export function RealPromptPanel({
   projectId,
   sessionId,
@@ -112,37 +137,44 @@ export function RealPromptPanel({
     return null;
   }
 
-  const renderSegmentCard = (segment: PromptPreviewSegmentDto) => {
-    const open = expanded[segment.id] ?? false;
-    const roleLabel = ROLE_LABELS[segment.role] ?? segment.role;
+  const renderCard = (card: PromptTurnCardDto) => {
+    const open = expanded[card.id] ?? false;
+    // toolGroup 卡在 template / user 轮不会出现（core 只在 assistant 轮产出），
+    // 这里仍按联合类型收窄取展示标签与正文，避免 `any` 逃逸。
+    const label =
+      card.type === "toolGroup" ? card.toolName : (ROLE_LABELS[card.role] ?? card.role);
+    const title =
+      card.type === "toolGroup" ? card.toolName : segmentTitleLabel(card.role);
+    const body =
+      card.type === "toolGroup"
+        ? cardsToDetailText([card])
+        : card.body;
     return (
       <div
-        key={segment.id}
+        key={card.id}
         className={`prompt-segment${open ? " is-expanded" : ""}`}
-        data-segment-id={segment.id}
+        data-card-id={card.id}
       >
         <button
           type="button"
           className="prompt-segment__header"
           aria-expanded={open}
           onClick={() =>
-            setExpanded((prev) => ({ ...prev, [segment.id]: !open }))
+            setExpanded((prev) => ({ ...prev, [card.id]: !open }))
           }
         >
           <span className="prompt-segment__text">
-            <span className="prompt-segment__role">{roleLabel}</span>
-            <span className="prompt-segment__title">
-              {segmentTitleLabel(segment.title)}
-            </span>
+            <span className="prompt-segment__role">{label}</span>
+            <span className="prompt-segment__title">{title}</span>
             <span className="prompt-segment__preview">
-              {collapsedHint(segment.body)}
+              {collapsedHint(body)}
             </span>
           </span>
           <span className="prompt-segment__chevron" aria-hidden="true">
             {open ? "▼" : "▶"}
           </span>
         </button>
-        <pre className="prompt-segment__body">{segment.body || "（空）"}</pre>
+        <pre className="prompt-segment__body">{body || "（空）"}</pre>
       </div>
     );
   };
@@ -168,7 +200,7 @@ export function RealPromptPanel({
                     {ASSISTANT_TURN_LABEL}
                   </span>
                   <span className="prompt-segment__preview">
-                    {turn.summary}
+                    {turn.summaryText}
                   </span>
                 </span>
                 <span className="prompt-segment__chevron" aria-hidden="true">
@@ -178,11 +210,10 @@ export function RealPromptPanel({
             </div>
           );
         }
-        // template / user 轮按段顺序展示；单段轮（template 恒为单段）不加轮壳，
-        // 视觉与原 segment 卡片完全一致。
-        const items = turn.items ?? [];
-        if (items.length <= 1) {
-          return items.map(renderSegmentCard);
+        // template / user 轮按卡片顺序展示；单卡轮不加轮壳，视觉与单张卡片一致。
+        const cards = turn.cards;
+        if (cards.length <= 1) {
+          return cards.map(renderCard);
         }
         return (
           <div
@@ -190,7 +221,7 @@ export function RealPromptPanel({
             className={`prompt-turn prompt-turn--${turn.kind}`}
             data-turn-id={turn.id}
           >
-            {items.map(renderSegmentCard)}
+            {cards.map(renderCard)}
           </div>
         );
       })}
@@ -208,7 +239,7 @@ export function RealPromptPanel({
           >
             <CodeEditor
               readOnly
-              value={detailTurn.body ?? ""}
+              value={cardsToDetailText(detailTurn.cards)}
               languagePath="prompt.txt"
               aria-label={`${ASSISTANT_TURN_LABEL}详情`}
             />

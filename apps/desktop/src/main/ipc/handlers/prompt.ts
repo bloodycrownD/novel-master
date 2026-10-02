@@ -30,22 +30,29 @@ export async function handlePromptRealPreview(
       data: turns.map((turn) => ({
         id: turn.id,
         kind: turn.kind,
-        summary: turn.summary,
-        // body 只对 assistant 轮下发：非 assistant 轮的 body 是同轮 items 的
-        // 前缀行拼接版（renderer 该分支只消费 items），下发即重复一份。
-        ...(turn.kind === "assistant" ? { body: turn.body } : {}),
-        // assistant 轮只发 summary + body：正文已在 body 一份字符串里，
-        // 再带 items 会让长会话 payload 近似翻倍（见 ipc-types 注释）。
-        ...(turn.kind === "assistant"
-          ? {}
-          : {
-              items: turn.items.map((item) => ({
-                id: item.id,
-                role: item.role,
-                title: item.title,
-                body: item.body,
-              })),
-            }),
+        summaryText: turn.summaryText,
+        metaText: turn.metaText,
+        // cards 是唯一正文载体：三类轮统一下发，body / items 已从 DTO 退役
+        // （它们是同一份正文的两种粒度，各下发一次才需要按 kind 分叉压体积；
+        // 详见 shared/ipc-types.ts 的体积策略注释）。
+        cards: turn.cards.map((card) =>
+          card.type === "toolGroup"
+            ? {
+                type: card.type,
+                id: card.id,
+                toolName: card.toolName,
+                inputJson: card.inputJson,
+                result: card.result,
+                status: card.status,
+                parallel: card.parallel,
+              }
+            : {
+                type: card.type,
+                id: card.id,
+                role: card.role,
+                body: card.body,
+              },
+        ),
       })),
     };
   } catch (err) {
