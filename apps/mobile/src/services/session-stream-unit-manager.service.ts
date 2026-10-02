@@ -171,13 +171,32 @@ export const SESSION_STREAM_MAX_SETTLED_UNITS = 8;
 export const SESSION_STREAM_MAX_MESSAGE_VIEWS = 500;
 
 /**
- * 无单元会话的消息面视图（Step 7 消息面收口：非运行态会话的消息兜底，
- * 原 useChatTabMessages 数据管线的等价语义迁入 manager）。
+ * 无单元会话消息面在 LRU 表内的**存储形态**：只存消息面本身。
+ *
+ * in-flight（`loadingMoreMessages`）刻意不入表——LRU 是有界淘汰的，而
+ * `loadIdleOlderMessages` 的读-改-写跨一个 `await`：标记若留在表里，别的
+ * 路径灌进 CAP+1 个 sessionId 就能把本会话连标记带数据一起淘汰，await 落地
+ * 时读到 null ⇒ 本次「上翻更早消息」被静默丢弃（页面永远翻不动）。
+ * 标记与兜底基线都在 `idleLoadingMore`（不参与淘汰）。
  */
-interface IdleMessageView {
+interface IdleMessageViewEntry {
   readonly messages: readonly ChatMessage[];
   readonly hasMoreMessages: boolean;
+}
+
+/** 读口形态 = 存储形态 + 从 `idleLoadingMore` 合成的 in-flight 标记。 */
+interface IdleMessageView extends IdleMessageViewEntry {
   readonly loadingMoreMessages: boolean;
+}
+
+/**
+ * idle 上翻的在途态。**不参与 LRU 淘汰**（与 `units` 的
+ * `SESSION_STREAM_MAX_SETTLED_UNITS` 同款保护）：条目只在一次
+ * `loadOlderSessionMessages` 的 await 窗口内存活，天然受并发上翻数约束。
+ */
+interface IdleOlderLoadInFlight {
+  /** 发起时的视图基线：await 期间本会话条目若被 LRU 淘汰，用它兜底合并。 */
+  readonly base: IdleMessageViewEntry;
 }
 
 /** Manager 实际依赖的 runtime 子集（测试可传 mock）。messages 为 Step 4 消息管线所需。 */
@@ -366,9 +385,20 @@ export class SessionStreamUnitManager {
   private readonly settledProjections: LruMap<SessionStreamSettledProjection> =
     createLruMap(SESSION_STREAM_MAX_MESSAGE_VIEWS);
   /** 无单元会话的消息面（Step 7 收口：idle 会话 tail/分页的落点）。同样挂 500 LRU。 */
-  private readonly idleMessageViews: LruMap<IdleMessageView> = createLruMap(
-    SESSION_STREAM_MAX_MESSAGE_VIEWS,
-  );
+  private readonly idleMessageViews: LruMap<IdleMessageViewEntry> =
+    createLruMap(SESSION_STREAM_MAX_MESSAGE_VIEWS);
+  /**
+   * idle 上翻的 in-flight 表（**不参与 LRU 淘汰**）：sessionId → 在途态。
+   *
+   * 为什么不放 LRU 里（CR L1-5）：`loadIdleOlderMessages` 的
+   * 「读 LRU → 置 loadingMoreMessages → await 回源 → 读 LRU 合并写回」是
+   * 跨 await 的读-改-写。标记若在 LRU 表内，窗口期内别的路径灌进
+   * `SESSION_STREAM_MAX_MESSAGE_VIEWS + 1` 个 sessionId 就会把本会话条目
+   * 一起淘汰 ⇒ await 落地读到 null ⇒ 本次上翻被静默丢弃、页面再也翻不动。
+   * 挪出后：标记不会被淘汰，await 落地时即便条目已被淘汰也用 `base` 兜底
+   * 合并并重新 set 回 LRU。
+   */
+  private readonly idleLoadingMore = new Map<string, IdleOlderLoadInFlight>();
   /** 水合流程的单飞 promise（构造 kick 一次；hydrate 幂等复用）。 */
   private hydratePromise: Promise<void> | null = null;
   /** 实时 token 估算器工厂（②；未注入 = 单元走启发式兜底）。 */
@@ -750,6 +780,9 @@ export class SessionStreamUnitManager {
     }
     this.settledProjections.delete(sessionId);
     this.idleMessageViews.delete(sessionId);
+    // 在途上翻一并作废：会话已被删除，窗口期落地时不得把它写回（否则
+    // forgetSession 之后又凭空长出一条消息面）。
+    this.idleLoadingMore.delete(sessionId);
     this.notifyChanged();
   }
 
@@ -894,6 +927,9 @@ export class SessionStreamUnitManager {
    *   单元消息面为空且 idle 有值时回落 idle（新 run 替换沿 starting 单元
    *   尚未加载，回落防历史消息闪空）；
    * - 无单元：idle 视图（从未加载过为 null，消费方按空处理）。
+   *
+   * `loadingMoreMessages` 在 idle 分支从 `idleLoadingMore` 合成（不在 LRU
+   * 表内，见该字段注释）；有单元分支仍取单元投影自带的同名标记。
    */
   readMessagesSnapshot(sessionId: string): IdleMessageView | null {
     const unit = this.units.get(sessionId);
@@ -908,7 +944,10 @@ export class SessionStreamUnitManager {
       }
       const idle = this.idleMessageViews.get(sessionId);
       if (idle != null) {
-        return {...idle};
+        return {
+          ...idle,
+          loadingMoreMessages: this.idleLoadingMore.has(sessionId),
+        };
       }
       return {
         messages: snap.messages,
@@ -917,7 +956,9 @@ export class SessionStreamUnitManager {
       };
     }
     const idle = this.idleMessageViews.get(sessionId);
-    return idle != null ? {...idle} : null;
+    return idle != null
+      ? {...idle, loadingMoreMessages: this.idleLoadingMore.has(sessionId)}
+      : null;
   }
 
   /**
@@ -936,13 +977,11 @@ export class SessionStreamUnitManager {
       this.idleMessageViews.set(sessionId, {
         messages: [...cached.messages],
         hasMoreMessages: cached.hasMoreMessages,
-        loadingMoreMessages: false,
       });
     } else {
       this.idleMessageViews.set(sessionId, {
         messages: [],
         hasMoreMessages: false,
-        loadingMoreMessages: false,
       });
     }
     this.notifyChanged();
@@ -988,35 +1027,49 @@ export class SessionStreamUnitManager {
     return [...list];
   }
 
-  /** idle 路径分页：以 idle 视图首行 seq 为锚向上翻页，prepend 后写缓存。 */
+  /**
+   * idle 路径分页：以 idle 视图首行 seq 为锚向上翻页，prepend 后写缓存。
+   *
+   * in-flight 标记与兜底基线都存在 `idleLoadingMore`（不参与 LRU 淘汰），
+   * 不再写进 LRU 表内：读-改-写跨一个 `await`，标记若在表内，窗口期内的
+   * 淘汰会连标记带数据一起抹掉，本次上翻被静默丢弃（CR L1-5）。
+   */
   private async loadIdleOlderMessages(
     sessionId: string,
     projectId?: string,
   ): Promise<void> {
     const idle = this.idleMessageViews.get(sessionId);
-    if (idle == null || idle.loadingMoreMessages || idle.messages.length === 0) {
+    if (idle == null || this.idleLoadingMore.has(sessionId)) {
+      return;
+    }
+    if (idle.messages.length === 0) {
       return;
     }
     const beforeSeq = idle.messages[0]?.seq;
     if (beforeSeq == null) {
       return;
     }
-    this.idleMessageViews.set(sessionId, {...idle, loadingMoreMessages: true});
+    this.idleLoadingMore.set(sessionId, {base: idle});
     this.notifyChanged();
     try {
       const older = await this.runtime.messages.listBySessionPage(sessionId, {
         limit: SESSION_STREAM_MESSAGES_PAGE_SIZE,
         beforeSeq,
       });
-      const current = this.idleMessageViews.get(sessionId);
-      if (current == null) {
+      const inFlight = this.idleLoadingMore.get(sessionId);
+      if (inFlight == null) {
+        // 窗口期内会话被遗忘（forgetSession）或 manager 已 dispose：本次结果
+        // 不再落地（与 in-flight 标记仍在 LRU 表内的旧行为同语义）。
         return;
       }
+      // 窗口期内本会话条目若被 LRU 淘汰（别的路径灌进 CAP+1 个 sessionId），
+      // 用发起时的基线兜底合并——本次上翻的数据仍会 set 回 LRU，页面照常翻。
+      const current = this.idleMessageViews.get(sessionId) ?? inFlight.base;
       if (older.length === 0) {
+        this.idleLoadingMore.delete(sessionId);
         this.idleMessageViews.set(sessionId, {
           ...current,
           hasMoreMessages: false,
-          loadingMoreMessages: false,
         });
         this.notifyChanged();
         return;
@@ -1029,19 +1082,15 @@ export class SessionStreamUnitManager {
           hasMoreMessages: hasMore,
         });
       }
+      this.idleLoadingMore.delete(sessionId);
       this.idleMessageViews.set(sessionId, {
         messages: next,
         hasMoreMessages: hasMore,
-        loadingMoreMessages: false,
       });
       this.notifyChanged();
     } finally {
-      const current = this.idleMessageViews.get(sessionId);
-      if (current?.loadingMoreMessages) {
-        this.idleMessageViews.set(sessionId, {
-          ...current,
-          loadingMoreMessages: false,
-        });
+      // 异常/早退路径的标记复位（成功路径已提前 delete，这里是幂等兜底）。
+      if (this.idleLoadingMore.delete(sessionId)) {
         this.notifyChanged();
       }
     }
@@ -1056,7 +1105,6 @@ export class SessionStreamUnitManager {
     this.idleMessageViews.set(sessionId, {
       messages: [...messages],
       hasMoreMessages: hasMore,
-      loadingMoreMessages: false,
     });
     this.notifyChanged();
   }
@@ -1637,7 +1685,6 @@ export class SessionStreamUnitManager {
       this.idleMessageViews.set(sessionId, {
         messages: [...handover.messages],
         hasMoreMessages: handover.hasMoreMessages,
-        loadingMoreMessages: false,
       });
     }
     this.units.delete(sessionId);
@@ -1982,6 +2029,7 @@ export class SessionStreamUnitManager {
     }
     this.settledProjections.clear();
     this.idleMessageViews.clear();
+    this.idleLoadingMore.clear();
     this.notifyChanged();
     this.listeners.clear();
     void stopAgentKeepAliveService().catch(() => undefined);

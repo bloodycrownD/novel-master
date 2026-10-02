@@ -91,10 +91,12 @@ export function createLruMap<T>(maxEntries: number): LruMap<T> {
     },
     get(k) {
       const hit = entries.get(k);
-      if (hit !== undefined) {
+      // 命中判据用 has 而非 `hit !== undefined`：T 允许 undefined 值时，
+      // 后者会让那条永不刷新新鲜度 ⇒ 被优先淘汰（症状与病因相距甚远）。
+      if (entries.has(k)) {
         // LRU：命中即刷新新鲜度。
         entries.delete(k);
-        entries.set(k, hit);
+        entries.set(k, hit as T);
       }
       return hit;
     },

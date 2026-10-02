@@ -437,4 +437,111 @@ describe("AgentRunner RT-02 visibleMessageCount 透传", () => {
       "visibleFloor=0 时压缩应每 step 命中一次",
     );
   });
+
+  /**
+   * T-RT02-c（口径，CR WA-P2-01）：把 visibleFloor 钉在**条数本身**的边界上。
+   *
+   * T-RT02-a/b 的 visibleFloor 分别是 999 与 0，都落在阈值的极端外侧 ⇒
+   * 只要 visibleMessageCount 是任意正数，两条断言都成立，「误取 prepare 之后
+   * 的 visible.length」「误取 prompt 渲染后的条数」这类语义漂移测不出来。
+   *
+   * 这里把 N 定为夹具的可见条数本身，用 floor=N（`count > floor` 为假 ⇒ 不触发）
+   * 与 floor=N-1（触发）夹住阈值：条数 ±1 的漂移必让其中一条红。
+   *
+   * 夹具再刻意让 promptInput.messages.length = N + 1 ≠ N（一个 persist 合成块），
+   * 这样「取渲染后条数」的改法也会被 floor=N 那条当场打红。
+   */
+  it("T-RT02-c（口径）：visibleMessageCount 等于可见条数本身（floor=N 不触发 / floor=N-1 触发）", async () => {
+    // 单步 run：一条纯文本响应，可见条数在整轮里恒定，条数口径可被精确钉住。
+    const singleStepResponses = [
+      {
+        assistantText: "done",
+        blocks: [{ type: "text" as const, text: "done" }],
+        raw: {},
+      },
+    ];
+    // 一个 persist 合成块 ⇒ promptInput.messages 比可见条数多一条。
+    const definition: AgentDefinition = {
+      name: "test",
+      prompts: {
+        persistEnabled: true,
+        persist: [
+          { name: "prefix", type: "text", role: "user", content: "常驻前缀" },
+        ],
+        dynamic: [],
+      },
+    };
+
+    async function runOnce(visibleFloor: number, visibleCount: number) {
+      const session = new CountingAgentSession(MOCK_SESSION_ID);
+      for (let i = 0; i < visibleCount; i++) {
+        await session.append("user", textBlocks(`go-${i}`));
+      }
+      // N = 装配后 session 里的可见条数本身（与 runner 取值点同口径）
+      const n = (await session.list()).length;
+
+      const registry = new ToolRegistry();
+      registerBuiltinTools(registry);
+
+      const callsBefore = runCompactionCalls.length;
+      const runner = createAgentRunner({
+        session,
+        modelRequests: createMockModel(singleStepResponses),
+        savedModels: noopSavedModelRepository(),
+        registry,
+        toolCtx: mockToolCtx(mockVfs()),
+        eventBus: new SimpleEventBus(),
+        sessionKkv: createMemorySessionKkv(),
+        workplace: () =>
+          ({
+            scope: {
+              kind: "session",
+              projectId: MOCK_PROJECT_ID,
+              sessionId: MOCK_SESSION_ID,
+            },
+            renderDisplay: async () => "WT",
+            buildListRows: async () => [],
+            materializePersistBlock: async () => ({ workplaceDisplay: "WT" }),
+          }) as never,
+        compactionConditions: realVisibleFloorEvaluator(visibleFloor),
+        messages: messagesStub,
+        messageTranscriptEffects: effectsStub,
+      });
+
+      const result = await runner.run({
+        maxSteps: 1,
+        definition,
+        sessionId: MOCK_SESSION_ID,
+        projectId: MOCK_PROJECT_ID,
+        savedModelId: RUN_MODEL_ID,
+        workspaceModelId: RUN_MODEL_ID,
+      });
+      return {
+        n,
+        result,
+        compactionCalls: runCompactionCalls.length - callsBefore,
+      };
+    }
+
+    const VISIBLE = 3;
+
+    // 边界上沿：count === floor ⇒ `count > floor` 为假 ⇒ 不该触发。
+    // 条数被多算一条（取了渲染后条数 N+1）时这里立刻红。
+    const atFloor = await runOnce(VISIBLE, VISIBLE);
+    assert.equal(atFloor.n, VISIBLE, "夹具 N 应等于预置的可见条数");
+    assert.equal(atFloor.result.stepsExecuted, 1);
+    assert.equal(
+      atFloor.compactionCalls,
+      0,
+      `visibleFloor=N(${atFloor.n}) 时不应触发（count > floor 为假）`,
+    );
+
+    // 边界下沿：count === floor + 1 ⇒ 触发。条数被少算一条时这里立刻红。
+    const belowFloor = await runOnce(VISIBLE - 1, VISIBLE);
+    assert.equal(
+      belowFloor.compactionCalls,
+      1,
+      `visibleFloor=N-1(${belowFloor.n - 1}) 时应触发一次`,
+    );
+  });
 });

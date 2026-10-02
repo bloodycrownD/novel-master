@@ -606,7 +606,13 @@ export function useChatTabScope({
           //   settledProjections ⇒ 项目删除后子会话条目仍会残留。
           //   兜底：manager 两张常驻表已挂 500 LRU（SESSION_STREAM_MAX_MESSAGE_VIEWS），
           //   残留条目最多存活到被淘汰，不会永久泄漏。
-          //   待办：core 侧补 BFS 读口（listByParentSession）后，把这里的展开补上并回收该缺口。
+          //   补法（**不必等 core 大改，这个缺口今天就能收**）：`listByParentSession`
+          //   在 core 里已经存在——仓储 port（domain/chat/repositories/session.port.ts）
+          //   与实现（impl/sqlite-session.repository.ts）都有，BFS 队列展开的成例也现成
+          //   （service/chat/impl/project.service.ts 的 delete、service/vfs/impl/
+          //   physical-vfs.service.ts 两处）。真正缺的只是**服务层没导出**：
+          //   service/chat/session.port.ts 只有 `listByProject`。补一行转发 +
+          //   这里照 project.service 的 BFS 模板把子会话展开出来即可回收本缺口。
           const doomedSessions = await runtime.sessions.listByProject(id);
           await runtime.projects.delete(id);
           for (const s of doomedSessions) {

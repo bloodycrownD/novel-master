@@ -7,7 +7,7 @@ import {
   VfsError,
   VfsZipError,
 } from '@novel-master/core/vfs';
-import {formatError} from '@/errors/format-error';
+import {formatError, formatVfsError} from '@/errors/format-error';
 
 describe('formatError (T4)', () => {
   it('formats VfsError message', () => {
@@ -81,5 +81,44 @@ describe('formatError (T4)', () => {
 
   it('formats non-Error values', () => {
     expect(formatError(42)).toBe('42');
+  });
+});
+
+/**
+ * `formatVfsError` 的兼容层断言（CR L1-7 / dead P2-2）。
+ *
+ * 背景：Wave D 删 `src/vfs/errors.ts` 这层 shim 时把它唯一的测试
+ * `__tests__/errors.test.ts` 一并删掉，`formatVfsError` 本体却留在
+ * `format-error.ts` 里成了零消费孤儿，还挂着「kept for VFS call sites」
+ * 这条已经不成立的注释。这 5 条测的是**纯函数行为**（不是那层 4 行
+ * shim），所以整段恢复、import 改指 `@/errors/format-error`，一条断言不丢。
+ */
+describe('formatVfsError (兼容层)', () => {
+  it('formats VfsError message', () => {
+    const err = new VfsError('NOT_FOUND', 'Path not found: /x', {path: '/x'});
+    // 用户可见层按 code 映射中文（走 core 的 formatVfsErrorForUser）
+    expect(formatVfsError(err)).toBe('文件不存在或已被删除。');
+  });
+
+  it('formats TdbcError message', () => {
+    const err = new TdbcError('INVALID_URL', 'Expected tdbc:sqlite:<path>');
+    expect(formatVfsError(err)).toBe('Expected tdbc:sqlite:<path>');
+  });
+
+  it('formats TdbcError with cause', () => {
+    const err = new TdbcError('SQLITE_ERROR', 'Failed to open database', {
+      cause: new Error('JSI not available'),
+    });
+    expect(formatVfsError(err)).toBe(
+      'Failed to open database\nJSI not available',
+    );
+  });
+
+  it('formats generic Error', () => {
+    expect(formatVfsError(new Error('boom'))).toBe('boom');
+  });
+
+  it('formats non-Error values', () => {
+    expect(formatVfsError(42)).toBe('42');
   });
 });

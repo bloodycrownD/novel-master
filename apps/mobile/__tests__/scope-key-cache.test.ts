@@ -3,8 +3,9 @@
  * - key 拼接与 get/set/clear/clearAll 基本语义
  * - LRU 有界（插入超限后 size 封顶、最旧淘汰、读取刷新新鲜度）
  * - clearByProjectPrefix 前缀清理不误删同前缀其它项目
+ * - createLruMap：T 含 undefined 值时命中仍刷新新鲜度（CR apps P2-2）
  */
-import {createScopeKeyCache} from '@/services/scope-key-cache';
+import {createLruMap, createScopeKeyCache} from '@/services/scope-key-cache';
 
 describe('createScopeKeyCache', () => {
   it('builds scope keys as projectId:sessionId', () => {
@@ -57,5 +58,21 @@ describe('createScopeKeyCache', () => {
     expect(cache.size).toBe(2);
     expect(cache.get(cache.key('p10', 's1'))).toBe(3);
     expect(cache.get(cache.key('p2', 's1'))).toBe(4);
+  });
+});
+
+describe('createLruMap', () => {
+  it('CR apps P2-2：T 含 undefined 值时，命中仍刷新新鲜度（不被优先淘汰）', () => {
+    const map = createLruMap<number | undefined>(2);
+    map.set('a', undefined);
+    map.set('b', 1);
+    // 读 a：命中（值为 undefined，但键在表内）⇒ 必须刷新新鲜度
+    expect(map.get('a')).toBeUndefined();
+    map.set('c', 2);
+    expect(map.size).toBe(2);
+    // 刷新生效 ⇒ 被淘汰的是「最久未读」的 b，而不是刚读过的 a。
+    // （判据写成 `hit !== undefined` 时 a 永不刷新，这一行会读到 1 而红。）
+    expect(map.get('b')).toBeUndefined();
+    expect(map.get('c')).toBe(2);
   });
 });
