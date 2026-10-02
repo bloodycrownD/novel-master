@@ -6,8 +6,9 @@
  *      （校验 `mode !== "primary"`，排除主 agent 自身防自递归）
  *   2. `createChildSession(title = input.description ?? input.prompt.slice(0, 40))`
  *      （`input.sessionId` 非空时改为**续用**该子会话：四态校验后直接复用，见下）
- *   2.5 `input.fileAttachment` → `attachmentsFromPaths` 物化 → 双预算分配（spec D11）：
- *      预算内挂 `attachments` 随子会话首条 user 消息落库，超预算路径拼 prompt 尾注
+ *   2.5 `input.fileAttachment` → `attachmentsFromPaths` 物化（按规范化 seen key 去重）
+ *      → **全量挂载**随子会话首条 user 消息落库；体积预算与降级由子会话自己的
+ *      prepare 链（core 单源）负责，不再在此处筛选
  *   3. `resolveChildModelId(def)` → savedModelId（子 pin → 父 savedModelId → 报错）
  *   4. `runChildAgent(def, childSessionId, opts)`（内部派生 AbortController）
  *   5. `messages.listBySession(childSessionId)` 取末条 assistant text
@@ -29,7 +30,6 @@ import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
 import type { ChatMessage } from "@/domain/chat/model/message.js";
 import type { TextBlock } from "@/domain/chat/model/content-block.js";
 import type { MessageAttachment } from "@/domain/chat/model/message-attachment.schema.js";
-import { isBinaryAttachPath } from "@/domain/chat/logic/attach-binary-heuristic.js";
 import {
   AttachmentPathArgumentError,
   attachmentsFromPaths,
@@ -40,27 +40,6 @@ import type {
   BuiltinToolContext,
   BuiltinToolSubagentContext,
 } from "./builtin-tool-context.js";
-
-/** 内容尺寸探测闭包（与 `BuiltinToolSubagentContext.getContentSize` 同形）。 */
-type GetContentSize = BuiltinToolSubagentContext["getContentSize"];
-
-/**
- * `fileAttachment` 预算制软闸的**条数**上限（spec D11）。
- *
- * 预算内路径照常挂附件、子代理开箱即得全文；超出的路径不挂附件、改在 prompt
- * 尾部给路径清单，由子代理自行决定是否用 `read` 分段读。
- */
-export const TASK_FILE_ATTACHMENT_MAX_COUNT = 20;
-
-/**
- * `fileAttachment` 预算制软闸的**明文当量字符**上限（spec D11）。
- *
- * 计量口径：inline 档 `size`（字符数）直接计；blob 档 `size`（压缩字节）×4 折算
- * （4× 压缩比先例 `character-card-limits.ts`）；`null`（目录 / 不存在）按 0 计；
- * image / binary 与目录**不计字节但仍占条数名额**。中文语料 1 字 ≈ 1 token，
- * 故 10 万 ≈ 10 万 CJK token ≈ 300KB UTF-8 明文——保守取向，常量可调。
- */
-export const TASK_FILE_ATTACHMENT_CHAR_BUDGET = 100_000;
 
 /**
  * 续用子会话的历史软闸（spec D7）：目标子会话消息数 > 该阈值即拒绝续用。
@@ -88,8 +67,8 @@ export interface TaskToolInput {
   /**
    * 显式交付给子代理的文件路径列表（与主会话附件同链路挂 `<action name="userAttach">`）。
    *
-   * 预算内路径挂附件全量加载；超预算路径不挂、在 prompt 尾部给路径清单
-   * （见 {@link TASK_FILE_ATTACHMENT_MAX_COUNT} / {@link TASK_FILE_ATTACHMENT_CHAR_BUDGET}）。
+   * 全量挂载：子会话 prepare 链（`prepareUserMessagesForPrompt`，core 单源）按
+   * `ATTACH_PROMPT_CHAR_BUDGET` 计量，超限项自动降级为 filename 档引导文案。
    */
   readonly fileAttachment?: readonly string[];
 }
@@ -240,109 +219,6 @@ async function resolveResumeSessionId(
 }
 
 /**
- * 单条附件的**明文当量字符**估算（spec D11 计量口径）。
- *
- * - image / dir 附件**不计字节**（只占条数名额）；
- * - **binary（含图片）扩展名同样不计字节**——`attachmentsFromPaths` 把 binary 分派成
- *   `type: "text"`，但 hydrate 侧 `resolveAttachFileStatus` 对其只给文件名、不注入明文，
- *   故不该吃字符预算；判定复用 `isBinaryAttachPath`（与 `attachFromPath` 同源启发式）；
- * - 其余按 `getContentSize` 探测：inline 直接计字符数、blob 按压缩字节 ×4 折算；
- * - `null`（目录 / 不存在 / 未注入闭包）按 0 计。
- */
-async function estimateAttachmentChars(
-  attachment: MessageAttachment,
-  getContentSize: GetContentSize
-): Promise<number> {
-  if (attachment.type === "image" || attachment.type === "dir") {
-    return 0;
-  }
-  const path = attachment.path;
-  if (path == null || path === "" || getContentSize == null) {
-    return 0;
-  }
-  // D11：binary（BINARY_EXTENSIONS 已含图片扩展名）不计字节，但条数名额照占。
-  if (isBinaryAttachPath(path)) {
-    return 0;
-  }
-  const size = await probeContentSize(getContentSize, path);
-  if (size == null) {
-    return 0;
-  }
-  return size.kind === "inline" ? size.size : size.size * 4;
-}
-
-/**
- * 尺寸探测的 try/catch 包络：探测失败按「不计字节」处理（返回 null → 0 字符）。
- *
- * `getContentSize` 底层走 `vfs.findContentSize`，`/template/...` 一类旧前缀会在
- * 路径解析阶段抛 `vfsInvalidPath`——预算计量只是**软闸**（超了降级为路径清单），
- * 让它掀翻整次派发不成比例。先例：`load-or-fill-file-cache.ts` 的
- * `probeOversizePlaceholder` 同样是「查询失败按可读处理」，不阻断组装。
- */
-async function probeContentSize(
-  getContentSize: NonNullable<GetContentSize>,
-  path: string
-): Promise<Awaited<ReturnType<NonNullable<GetContentSize>>>> {
-  try {
-    return await getContentSize(path);
-  } catch {
-    return null;
-  }
-}
-
-/**
- * 预算制软闸的分配结果：预算内挂附件的条目 + 超预算需在 prompt 尾部提示的路径。
- */
-interface AttachmentBudgetSplit {
-  readonly withinBudget: MessageAttachment[];
-  readonly overflowPaths: string[];
-}
-
-/**
- * `fileAttachment` 预算制分配（spec D11）。
- *
- * 输入已是 `attachmentsFromPaths` 的物化+去重结果，按其顺序依次分配「条数 ≤
- * {@link TASK_FILE_ATTACHMENT_MAX_COUNT} + 明文当量字符 ≤
- * {@link TASK_FILE_ATTACHMENT_CHAR_BUDGET}」双预算；任一预算耗尽后剩余路径
- * **不挂附件**（降级不报错），交由调用方拼 prompt 尾注。
- */
-async function splitAttachmentsByBudget(
-  attachments: readonly MessageAttachment[],
-  getContentSize: GetContentSize
-): Promise<AttachmentBudgetSplit> {
-  const withinBudget: MessageAttachment[] = [];
-  const overflowPaths: string[] = [];
-  let usedChars = 0;
-  let exhausted = false;
-  for (const attachment of attachments) {
-    if (exhausted) {
-      overflowPaths.push(attachment.path ?? attachment.name);
-      continue;
-    }
-    const chars = await estimateAttachmentChars(attachment, getContentSize);
-    const countOk = withinBudget.length < TASK_FILE_ATTACHMENT_MAX_COUNT;
-    const charOk = usedChars + chars <= TASK_FILE_ATTACHMENT_CHAR_BUDGET;
-    if (countOk && charOk) {
-      withinBudget.push(attachment);
-      usedChars += chars;
-    } else {
-      exhausted = true;
-      overflowPaths.push(attachment.path ?? attachment.name);
-    }
-  }
-  return { withinBudget, overflowPaths };
-}
-
-/** 超预算路径的 prompt 尾注（中文，引导子代理用 read + offset/limit 分段读）。 */
-function buildOverflowPromptNote(paths: readonly string[]): string {
-  return [
-    "",
-    "以下文件超出附件预算，仅提供路径，需要时可用 read 工具配合 offset/limit 分段读取：",
-    ...paths.map((p) => `- ${p}`),
-  ].join("\n");
-}
-
-/**
  * 静态 `task` 工具实例。
  *
  * description 是 lambda：从 `ctx.subagent?.callableAgents` 读装配期预算好的
@@ -366,7 +242,7 @@ ${formatCallableList(callable)}
 - description：3-5 词任务描述（用作子会话标题）
 - prompt：任务正文，写清要子代理完成什么
 - sessionId（可选）：续用某个已有子会话（传上次回流结果里的 subagentSessionId）。留空则新开。续用时该子会话的历史会被保留、子代理接着上一轮继续干，适合分多步推进同一件事；注意它只属于当前会话，不能拿去续用别的会话的子代理，同一个子会话也不能并发跑。subagentName 仍需填写（决定模型与工具策略），但子代理的实际身份以子会话历史为准。
-- fileAttachment（可选）：要交给子代理的文件路径列表，会像主会话附件一样把全文直接送进子会话，省得子代理再自己 read 一遍。超量部分只会给路径清单。
+- fileAttachment（可选）：要交给子代理的文件路径列表，会像主会话附件一样把全文直接送进子会话，省得子代理再自己 read 一遍。总量过大时超出预算的文件只给文件名与分段读取引导。
 
 结果格式：本工具回流的是一个 JSON 对象，结构为 { text, subagentSessionId, stopped?, failureReason? }。
 - text：子代理的末条回复正文；若子代理被中断且还未输出文本，text 为占位文案「[用户停止，无已生成文本]」。
@@ -394,7 +270,7 @@ ${formatCallableList(callable)}
       .array(z.string().min(1))
       .optional()
       .describe(
-        "要交付给子代理的文件路径列表（正文全文随附件送达）；超预算部分只给路径清单",
+        "要交付给子代理的文件路径列表（正文全文随附件送达）；超出体积预算的部分只给文件名与分段读取引导",
       ),
   }),
   outputSchema: z.object({
@@ -453,16 +329,14 @@ ${formatCallableList(callable)}
     const title =
       trimmedDesc.length > 0 ? trimmedDesc : input.prompt.trim().slice(0, 40);
 
-    // fileAttachment：先物化（attachmentsFromPaths 内部已按规范化 seen key 去重），
-    // 再按去重后顺序分配「条数 + 明文当量字符」双预算（spec D11）。超预算不报错，
-    // 降级为 prompt 尾注的路径清单。
+    // fileAttachment：只物化（attachmentsFromPaths 内部已按规范化 seen key 去重），
+    // **全量挂载**——体积预算与降级收敛到 prepare 链（core 单源），子会话每 step
+    // 跑同一个 prepareUserMessagesForPrompt，超限项自动降级为 filename 档引导文案。
     //
     // **整段必须排在下面 createChildSession 之前**：空串元素是 fileAttachment 唯一的
     // 硬错误，留在建会话之后抛的话，子会话已经落库且零消息——模型拿不到
-    // subagentSessionId，无法清理这个孤儿子会话，重试还会再堆一个。预算计量只依赖
-    // `subagent.getContentSize`（绑定父工作区 vfs），与 childSessionId 无关，前移无副作用。
+    // subagentSessionId，无法清理这个孤儿子会话，重试还会再堆一个。
     let attachments: MessageAttachment[] | undefined;
-    let prompt = input.prompt;
     const filePaths = input.fileAttachment;
     if (filePaths != null && filePaths.length > 0) {
       let materialized: MessageAttachment[];
@@ -478,16 +352,7 @@ ${formatCallableList(callable)}
         }
         throw error;
       }
-      const { withinBudget, overflowPaths } = await splitAttachmentsByBudget(
-        materialized,
-        subagent.getContentSize
-      );
-      if (withinBudget.length > 0) {
-        attachments = withinBudget;
-      }
-      if (overflowPaths.length > 0) {
-        prompt = `${prompt}${buildOverflowPromptNote(overflowPaths)}`;
-      }
+      attachments = materialized;
     }
 
     // 续用 vs 新建（spec G4）：sessionId 非空（trim 后）走四态校验后续用同一子会话，
@@ -506,7 +371,7 @@ ${formatCallableList(callable)}
       workspaceModelId,
       signal: subagent.parentSignal,
       maxSteps: def.runtime?.maxSteps,
-      prompt,
+      prompt: input.prompt,
       ...(attachments != null ? { attachments } : {}),
     });
 

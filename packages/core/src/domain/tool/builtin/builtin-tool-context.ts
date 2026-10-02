@@ -67,20 +67,6 @@ export interface BuiltinToolSubagentContext {
    */
   readonly isSessionRunActive: (sessionId: string) => boolean;
   /**
-   * 按路径探测内容大小（`fileAttachment` 预算制软闸用，spec D11）。
-   *
-   * 装配点绑 `runtime.sessionVfs(projectId, parentSessionId).findContentSize`：
-   * `inline` = 明文字符数直接计；`blob` = 压缩字节 ×4 折算明文当量；
-   * `null`（目录 / 不存在）按 0 计。未注入时按「不计字节」处理（仍占条数名额）。
-   */
-  readonly getContentSize?: (
-    path: string
-  ) => Promise<
-    | { readonly kind: "inline"; readonly size: number }
-    | { readonly kind: "blob"; readonly size: number }
-    | null
-  >;
-  /**
    * 派生 `AbortController`（监听父 signal 一次）并装配子 agent runner 跑完。
    *
    * 返回值 {@link AgentRunResult} 不带文本——`task` 工具跑完后自己

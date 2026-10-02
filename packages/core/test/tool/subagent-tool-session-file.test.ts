@@ -1,8 +1,11 @@
 /**
- * task 工具两个新参数的单测（task-attach-unref Step 9 + Step 11）。
+ * task 工具两个新参数的单测（task-attach-unref Step 9 + Step 11 + ui-prompt-fixes R2）。
  *
  * - T-TS1/TS2/TS5：`sessionId` 续用——不新建 / 三态文案 / 历史软闸 / 非 NOT_FOUND 故障原样上抛；
- * - T-TA1/TA2/TA3：`fileAttachment`——合规物化形态 / 提示词全文 / 预算制降级 / 三处边界。
+ * - T-TA1/TA2/TA3：`fileAttachment`——合规物化形态 / 提示词全文 / 全量挂载 / 路径校验。
+ *
+ * 预算与降级已收敛到 prepare 链（core 单源），派发侧不再有任何条数 / 字符闸：
+ * 超限附件照挂（附件落库事实不变 → chip 可见），降级只发生在提示词产物侧（T-A6）。
  *
  * 这里的 `runChildAgent` 是 mock（只观测收到的 opts），并发硬互斥（D5）与
  * 子会话落库的真实链路由 `test/service/agent/subagent-task-session-attach.test.ts`
@@ -22,8 +25,6 @@ import {
 } from "@/domain/chat/model/message-attachment.schema.js";
 import {
   subagentTool,
-  TASK_FILE_ATTACHMENT_CHAR_BUDGET,
-  TASK_FILE_ATTACHMENT_MAX_COUNT,
   TASK_SESSION_RESUME_MAX_MESSAGES,
 } from "@/domain/tool/builtin/subagent-tool.js";
 import type {
@@ -36,6 +37,18 @@ import type { AgentRegistryService } from "@/service/agent/agent-registry.port.j
 import type { MessageService } from "@/service/chat/message.port.js";
 import type { SessionService } from "@/service/chat/session.port.js";
 import type { ChatSession } from "@/domain/chat/model/session.js";
+import { textBlocks } from "@novel-master/core/chat";
+import { messageBodyText } from "@/domain/chat/content/message-body-text.js";
+import { ATTACH_PROMPT_CHAR_BUDGET } from "@/domain/chat/logic/attach-budget.js";
+import { prepareUserMessagesForPrompt } from "@/domain/chat/logic/prepare-user-messages-for-prompt.js";
+import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
+import {
+  getNovelMasterTestContext,
+  novelMasterTestFixture,
+  testIsolationSuffix,
+} from "../helpers/novel-master-fixture.js";
+
+novelMasterTestFixture();
 
 const generalDef: AgentDefinition = {
   name: "general",
@@ -44,12 +57,6 @@ const generalDef: AgentDefinition = {
 
 const PARENT_ID = "parent-1";
 const PROJECT_ID = "proj-1";
-
-/** 内容尺寸探测桩：`{ [path]: size }`，缺省一律 null（= 不计字节）。 */
-type SizeTable = Record<
-  string,
-  { readonly kind: "inline" | "blob"; readonly size: number } | null
->;
 
 interface MockOpts {
   /** 已知子会话（id → 会话对象）。`sessions.get` 命中它，未命中抛 NOT_FOUND。 */
@@ -60,15 +67,11 @@ interface MockOpts {
   readonly activeSessions?: readonly string[];
   /** 直接父会话 id（默认 PARENT_ID）。 */
   readonly parentSessionId?: string;
-  /** 内容尺寸表；给了才注入 `getContentSize` 闭包。 */
-  readonly sizes?: SizeTable;
   /**
    * `sessions.get` 抛的**非 NOT_FOUND** 错误（DB 故障模拟）。
    * 给了之后 `get` 一律抛它——用来钉「非 not-found 故障原样上抛」（B-3）。
    */
   readonly getThrows?: Error;
-  /** `getContentSize` 一律抛错（探测不可用 / 旧前缀路径模拟）。 */
-  readonly sizeProbeThrows?: boolean;
 }
 
 interface MockResult {
@@ -169,22 +172,6 @@ function makeSubagent(opts: MockOpts = {}): MockResult {
     },
     parentSessionId: opts.parentSessionId ?? PARENT_ID,
     isSessionRunActive: (id: string) => active.has(id),
-    ...(opts.sizeProbeThrows === true
-      ? {
-          getContentSize: async (_path: string): Promise<never> => {
-            // 模拟 vfs 路径解析失败（`/template/...` 旧前缀 → vfsInvalidPath）：
-            // 预算是软闸，探测抛错不得掀翻整次派发。
-            throw new Error("Invalid path /template/a.md");
-          },
-        }
-      : opts.sizes != null
-        ? {
-            getContentSize: async (path: string) => {
-              const hit = opts.sizes![path];
-              return hit === undefined ? null : hit;
-            },
-          }
-        : {}),
     resolveChildModelId: (def) => ({
       savedModelId: def.model ?? "parent-saved",
       workspaceModelId: "ws-model",
@@ -481,7 +468,7 @@ describe("task sessionId 续用（T-TS*）", () => {
 
 describe("task fileAttachment 物化与预算（T-TA*）", () => {
   it("T-TA1: 预算内路径物化为合规新写入附件（name=storageName / userAttach / content:null / attach），且过落库硬 parse", async () => {
-    const { ctx, capturedOpts } = makeSubagent({ sizes: {} });
+    const { ctx, capturedOpts } = makeSubagent({});
     await subagentTool.run(
       {
         description: "读设定",
@@ -512,7 +499,7 @@ describe("task fileAttachment 物化与预算（T-TA*）", () => {
   });
 
   it("T-TA1b: 重复路径去重（相对写法与带前导 / 同形），去重发生在分配名额之前", async () => {
-    const { ctx, capturedOpts } = makeSubagent({ sizes: {} });
+    const { ctx, capturedOpts } = makeSubagent({});
     await subagentTool.run(
       {
         description: "读设定",
@@ -534,10 +521,8 @@ describe("task fileAttachment 物化与预算（T-TA*）", () => {
     assert.equal(capturedOpts[0]!.attachments, undefined);
   });
 
-  it("T-TA2: 预算内路径挂附件、prompt 原文不加尾注（提示词全文由 prepare 侧 hydrate，见 T-S0x）", async () => {
-    const { ctx, capturedOpts } = makeSubagent({
-      sizes: { "/notes/a.md": { kind: "inline", size: 12 } },
-    });
+  it("T-TA2: 附件全量挂载、prompt 原文不加尾注（体积预算由子会话 prepare 链负责，见 T-A 组）", async () => {
+    const { ctx, capturedOpts } = makeSubagent({});
     await subagentTool.run(
       {
         description: "d",
@@ -547,224 +532,31 @@ describe("task fileAttachment 物化与预算（T-TA*）", () => {
       },
       toolCtx(ctx)
     );
-    assert.equal(capturedOpts[0]!.prompt, "原始正文", "预算内不加尾注");
+    assert.equal(capturedOpts[0]!.prompt, "原始正文", "派发侧不再拼尾注");
     assert.equal(capturedOpts[0]!.attachments!.length, 1);
   });
 
-  it("T-TA3a: 条数超预算——前 20 条挂附件、其余不挂且进 prompt 尾注", async () => {
-    const paths = Array.from(
-      { length: TASK_FILE_ATTACHMENT_MAX_COUNT + 3 },
-      (_, i) => `f${i}.md`
-    );
-    const sizes: SizeTable = {};
-    for (const p of paths) {
-      sizes[`/${p}`] = { kind: "inline", size: 10 };
-    }
-    const { ctx, capturedOpts } = makeSubagent({ sizes });
-    await subagentTool.run(
-      { description: "d", prompt: "正文", subagentName: "general", fileAttachment: paths },
-      toolCtx(ctx)
-    );
-    const atts = capturedOpts[0]!.attachments!;
-    assert.equal(atts.length, TASK_FILE_ATTACHMENT_MAX_COUNT);
-    const prompt = capturedOpts[0]!.prompt!;
-    assert.match(prompt, /超出附件预算/);
-    assert.match(prompt, /read 工具配合 offset\/limit 分段读取/);
-    for (const overflow of paths.slice(TASK_FILE_ATTACHMENT_MAX_COUNT)) {
-      assert.ok(
-        prompt.includes(`- /${overflow}`),
-        `尾注须列出超预算路径 ${overflow}`
-      );
-      assert.equal(
-        atts.some((a) => a.path === `/${overflow}`),
-        false,
-        `${overflow} 超预算不得挂附件`
-      );
-    }
-  });
-
-  it("T-TA3a2: 恰好 20 条——全挂载且 prompt 无尾注（边界档，`<` 与 `<=` 的分水岭）", async () => {
-    const paths = Array.from(
-      { length: TASK_FILE_ATTACHMENT_MAX_COUNT },
-      (_, i) => `f${i}.md`
-    );
-    const sizes: SizeTable = {};
-    for (const p of paths) {
-      sizes[`/${p}`] = { kind: "inline", size: 10 };
-    }
-    const { ctx, capturedOpts } = makeSubagent({ sizes });
-    await subagentTool.run(
-      { description: "d", prompt: "正文", subagentName: "general", fileAttachment: paths },
-      toolCtx(ctx)
-    );
-    assert.equal(
-      capturedOpts[0]!.attachments!.length,
-      TASK_FILE_ATTACHMENT_MAX_COUNT,
-      "恰好等于条数上限应全挂"
-    );
-    assert.equal(
-      capturedOpts[0]!.prompt,
-      "正文",
-      "一条都没超预算 → 不得出现尾注（`<` 误写成 `<=` 这条会红）"
-    );
-  });
-
-  it("T-TA3b: 字符预算超限（inline 明文字符数直接计）——降级不报错", async () => {
-    const { ctx, capturedOpts } = makeSubagent({
-      sizes: {
-        "/big.md": { kind: "inline", size: TASK_FILE_ATTACHMENT_CHAR_BUDGET },
-        "/small.md": { kind: "inline", size: 10 },
-      },
-    });
-    await subagentTool.run(
-      {
-        description: "d",
-        prompt: "正文",
-        subagentName: "general",
-        fileAttachment: ["big.md", "small.md"],
-      },
-      toolCtx(ctx)
-    );
-    // big 恰好吃满字符预算 → 进；small 随后超预算 → 出（顺序分配，预算耗尽即止）。
-    assert.deepEqual(
-      capturedOpts[0]!.attachments!.map((a) => a.path),
-      ["/big.md"]
-    );
-    assert.match(capturedOpts[0]!.prompt!, /- \/small\.md/);
-  });
-
-  it("T-TA3c: blob 档按压缩字节 ×4 折算（30000 压缩字节 = 12 万当量字符，超预算）", async () => {
-    const { ctx, capturedOpts } = makeSubagent({
-      sizes: { "/blob.md": { kind: "blob", size: 30_000 } },
-    });
-    await subagentTool.run(
-      {
-        description: "d",
-        prompt: "正文",
-        subagentName: "general",
-        fileAttachment: ["blob.md"],
-      },
-      toolCtx(ctx)
-    );
-    assert.equal(capturedOpts[0]!.attachments, undefined, "折算后超预算 → 不挂附件");
-    assert.match(capturedOpts[0]!.prompt!, /- \/blob\.md/);
-
-    // 对照：blob 档 20_000 字节 → 8 万当量，在预算内 → 挂附件。
-    const ok = makeSubagent({
-      sizes: { "/blob.md": { kind: "blob", size: 20_000 } },
-    });
-    await subagentTool.run(
-      {
-        description: "d",
-        prompt: "正文",
-        subagentName: "general",
-        fileAttachment: ["blob.md"],
-      },
-      toolCtx(ok.ctx)
-    );
-    assert.equal(ok.capturedOpts[0]!.attachments!.length, 1);
-    assert.equal(ok.capturedOpts[0]!.prompt, "正文");
-  });
-
-  it("T-TA3c2: blob 档恰等预算（25_000 ×4 = 100_000）→ 仍挂附件（`usedChars+chars<=BUDGET` 的等号档）", async () => {
-    const { ctx, capturedOpts } = makeSubagent({
-      sizes: { "/blob.md": { kind: "blob", size: 25_000 } },
-    });
-    await subagentTool.run(
-      {
-        description: "d",
-        prompt: "正文",
-        subagentName: "general",
-        fileAttachment: ["blob.md"],
-      },
-      toolCtx(ctx)
-    );
-    assert.equal(
-      capturedOpts[0]!.attachments!.length,
-      1,
-      "折算后恰等预算 → 进（写成 `<` 会红）"
-    );
-    assert.equal(capturedOpts[0]!.prompt, "正文", "不超预算 → 不加尾注");
-  });
-
-  it("T-TA3h: getContentSize 抛错（如 `/template/...` 旧前缀）→ 按 0 字节计，附件照常挂载", async () => {
-    // 预算是软闸：探测失败不得掀翻整次派发（先例 probeOversizePlaceholder 同款包络）。
+  it("T-TA3g: 续用 + fileAttachment 同时给：附件挂到同一条续用消息上", async () => {
     const { ctx, capturedOpts, capturedSessionIds } = makeSubagent({
-      sizeProbeThrows: true,
-    });
-    const out = await subagentTool.run(
-      {
-        description: "d",
-        prompt: "正文",
-        subagentName: "general",
-        fileAttachment: ["a.md", "b.md"],
-      },
-      toolCtx(ctx)
-    );
-    assert.equal(capturedSessionIds.length, 1, "探测抛错不得中断派发");
-    assert.equal(capturedOpts[0]!.attachments!.length, 2, "按 0 计 → 都进预算");
-    assert.equal(capturedOpts[0]!.prompt, "正文", "无尾注");
-    assert.equal(out.subagentSessionId, "child-1");
-  });
-
-  it("T-TA3d: image / dir 不计字节（但仍占条数名额），null 按 0 计", async () => {
-    const { ctx, capturedOpts } = makeSubagent({
-      sizes: {
-        // image / dir 即便 findContentSize 给出巨大体积也不计字节
-        "/pic.png": { kind: "inline", size: 99_000_000 },
-        "/dir/": null,
-        // binary 被 attachmentsFromPaths 分派成 type:"text"，但 hydrate 侧只给文件名，
-        // 同样不该吃字符预算（否则白占并把后续文本附件挤出预算）。
-        "/data.bin": { kind: "blob", size: 99_000_000 },
-      },
+      sessions: [childSession("kid-1")],
     });
     await subagentTool.run(
       {
         description: "d",
         prompt: "正文",
         subagentName: "general",
-        fileAttachment: ["pic.png", "dir/", "data.bin"],
+        sessionId: "kid-1",
+        fileAttachment: ["a.md"],
       },
       toolCtx(ctx)
     );
-    const atts = capturedOpts[0]!.attachments!;
-    assert.equal(atts.length, 3, "image/dir/binary 只占名额不计字节");
-    // 牙齿：binary 的分派形态确实是 text（不是 image），所以「不计字节」只能靠
-    // 路径启发式兜住——若把启发式删掉，这里仍是 text 且会被计入预算。
-    assert.equal(atts[2]!.type, "text");
-    assert.equal(atts[2]!.path, "/data.bin");
-    assert.equal(capturedOpts[0]!.prompt, "正文", "不超预算 → 不加尾注");
-  });
-
-  it("T-TA3d2: binary 巨大体积不得挤掉后续文本附件（D11：binary 不计字节，只占名额）", async () => {
-    const { ctx, capturedOpts } = makeSubagent({
-      sizes: {
-        // 单这一条就远超字符预算（若被计入，预算立刻耗尽）
-        "/data.bin": { kind: "inline", size: TASK_FILE_ATTACHMENT_CHAR_BUDGET * 2 },
-        "/notes/a.md": { kind: "inline", size: 128 },
-      },
-    });
-    await subagentTool.run(
-      {
-        description: "d",
-        prompt: "正文",
-        subagentName: "general",
-        fileAttachment: ["data.bin", "notes/a.md"],
-      },
-      toolCtx(ctx)
-    );
-    const atts = capturedOpts[0]!.attachments!;
-    assert.deepEqual(
-      atts.map((a) => a.path),
-      ["/data.bin", "/notes/a.md"],
-      "binary 不吃预算 → 其后的文本附件仍进预算"
-    );
-    assert.equal(capturedOpts[0]!.prompt, "正文", "不超预算 → 不加尾注");
+    assert.deepEqual(capturedSessionIds, ["kid-1"]);
+    assert.equal(capturedOpts[0]!.attachments!.length, 1);
   });
 
   it("T-TA3e: 空串 / 纯空白路径元素 → ToolError FAILED（不静默丢），且不得留下孤儿子会话", async () => {
     for (const bad of ["", "   "]) {
-      const { ctx, createdSessions } = makeSubagent({ sizes: {} });
+      const { ctx, createdSessions } = makeSubagent({});
       await assert.rejects(
         () =>
           subagentTool.run(
@@ -794,7 +586,7 @@ describe("task fileAttachment 物化与预算（T-TA*）", () => {
   });
 
   it("T-TA3e2: 路径穿越写法 `/../evil` → ToolError 文案带 fileAttachment 引导（不漏裸 VfsError）", async () => {
-    const { ctx, createdSessions } = makeSubagent({ sizes: {} });
+    const { ctx, createdSessions } = makeSubagent({});
     await assert.rejects(
       () =>
         subagentTool.run(
@@ -818,33 +610,79 @@ describe("task fileAttachment 物化与预算（T-TA*）", () => {
     assert.equal(createdSessions.length, 0, "同样不得新建子会话");
   });
 
-  it("T-TA3f: 未注入 getContentSize 闭包时按「不计字节」处理（仍受条数预算约束）", async () => {
-    const paths = Array.from({ length: 5 }, (_, i) => `f${i}.md`);
+  it("T-TA3i: 20+ 条附件全量挂载（条数上限退役）且 prompt 无尾注", async () => {
+    const paths = Array.from({ length: 25 }, (_, i) => `f${i}.md`);
     const { ctx, capturedOpts } = makeSubagent({});
-    await subagentTool.run(
-      { description: "d", prompt: "正文", subagentName: "general", fileAttachment: paths },
-      toolCtx(ctx)
-    );
-    assert.equal(capturedOpts[0]!.attachments!.length, 5);
-    assert.equal(capturedOpts[0]!.prompt, "正文");
-  });
-
-  it("T-TA3g: 续用 + fileAttachment 同时给：附件挂到同一条续用消息上", async () => {
-    const { ctx, capturedOpts, capturedSessionIds } = makeSubagent({
-      sessions: [childSession("kid-1")],
-      sizes: { "/a.md": { kind: "inline", size: 5 } },
-    });
     await subagentTool.run(
       {
         description: "d",
         prompt: "正文",
         subagentName: "general",
-        sessionId: "kid-1",
-        fileAttachment: ["a.md"],
+        fileAttachment: paths,
       },
       toolCtx(ctx)
     );
-    assert.deepEqual(capturedSessionIds, ["kid-1"]);
-    assert.equal(capturedOpts[0]!.attachments!.length, 1);
+    assert.equal(
+      capturedOpts[0]!.attachments!.length,
+      25,
+      "派发侧不再有条数上限——预算统一由 prepare 链做"
+    );
+    assert.equal(capturedOpts[0]!.prompt, "正文", "派发侧不再拼尾注");
+  });
+
+  it("T-A6: 超限附件照挂（落库事实不变 → chip 可见），降级只发生在子会话 prepare 侧", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    await vfs.write("/huge.md", "H".repeat(ATTACH_PROMPT_CHAR_BUDGET + 1));
+
+    // 派发侧：照挂，不筛、不加尾注
+    const { ctx: subCtx, capturedOpts } = makeSubagent({});
+    await subagentTool.run(
+      {
+        description: "d",
+        prompt: "正文",
+        subagentName: "general",
+        fileAttachment: ["huge.md"],
+      },
+      toolCtx(subCtx)
+    );
+    const attached = capturedOpts[0]!.attachments!;
+    assert.equal(attached.length, 1, "超预算附件也照挂");
+    assert.equal(attached[0]!.path, "/huge.md");
+    assert.equal(capturedOpts[0]!.prompt, "正文", "派发侧无尾注");
+
+    // 子会话侧：prepare 降级（同一份附件形态），但 attachments 数组里那条仍在
+    // ——附件落库事实不因提示词降级而消失，UI 附件组（chip）照常渲染。
+    const childMsg: ChatMessage = {
+      id: "c1",
+      sessionId: session.id,
+      seq: 1,
+      role: "user",
+      content: textBlocks("正文"),
+      provider: null,
+      raw: null,
+      createdAtMs: 0,
+      hidden: false,
+      attachments: attached,
+    };
+    const prepared = await prepareUserMessagesForPrompt(
+      [childMsg],
+      {
+        sessionId: session.id,
+        sessionKkv: createSessionKkvService(ctx.conn),
+        vfs,
+      },
+    );
+    const body = messageBodyText(prepared[0]!);
+    assert.match(body, /文件过长，可用 read 配合 offset\/limit 分段读取/);
+    assert.match(body, /"display": "filename"/);
+    assert.equal(body.includes("1|HHHH"), false);
+    // 落库侧附件仍在（chip 可见）：降级只改 content，不改附件条目
+    const hydrated = prepared[0]!.attachments!;
+    assert.equal(hydrated.length, 1);
+    assert.equal(hydrated[0]!.path, "/huge.md");
+    assert.match(hydrated[0]!.content ?? "", /文件过长/);
   });
 });
