@@ -163,9 +163,29 @@ describe('聚合 init 拆包（T-CU2 / 契约第 5 条）', () => {
     });
     expect(route?.composer?.v).toBe(1);
     expect(route?.composer?.type).toBe('init');
-    expect(route?.dock).toEqual({kind: 'init', safeAreaBottom: 0});
+    // transcriptOnly 必填（transcript-converge）：缺省 false，即主链形态。
+    expect(route?.dock).toEqual({kind: 'init', safeAreaBottom: 0, transcriptOnly: false});
     // 主题不重复投 dock（init 的 theme 由两份 runtime 各自消费；dock 只吃 safeAreaBottom）
     expect(route?.theme).toBeNull();
+  });
+
+  it('transcriptOnly：payload 带 true → dock 路由透传 true（子会话屏隐藏 dock）', () => {
+    const route = routeHostMessage(
+      v2('init', {
+        theme: THEME,
+        flags: {richText: false, menuDisabled: true},
+        transcriptOnly: true,
+        composer: {disabled: false, metrics: METRICS, placeholder: '', safeAreaBottom: 12},
+      }),
+    );
+    expect(route?.dock).toEqual({kind: 'init', safeAreaBottom: 12, transcriptOnly: true});
+    // transcriptOnly 只归 dock 消费：两份 runtime 的 init 载荷不被污染
+    expect(route?.transcript).toEqual({
+      v: 1,
+      type: 'init',
+      payload: {theme: THEME, flags: {richText: false, menuDisabled: true}},
+    });
+    expect(Object.keys(route?.composer?.payload ?? {})).not.toContain('transcriptOnly');
   });
 });
 

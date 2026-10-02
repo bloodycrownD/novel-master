@@ -92,9 +92,11 @@ jest.mock('../src/runtime/novel-master-context', () => ({
 // 指标条链路之外的哑元：webview 引擎与中断注入 hook 不属本套件覆盖面。
 // 工厂内 require（jest.mock 提升到 import 之前，工厂引用模块级绑定会报
 // "Invalid variable access"）。
-jest.mock('../src/components/chat/ChatTranscriptWebView', () => {
+// transcript-converge 后子会话屏改用统一宿主 ChatConversationWebView
+// （transcriptOnly 变体），旧的 ChatTranscriptWebView 已退役。
+jest.mock('../src/components/chat/ChatConversationWebView', () => {
   const ReactModule = require('react');
-  return {ChatTranscriptWebView: ReactModule.forwardRef(() => null)};
+  return {ChatConversationWebView: ReactModule.forwardRef(() => null)};
 });
 
 jest.mock('../src/screens/tabs/chat-tab/useInterruptedPartialCommit', () => ({

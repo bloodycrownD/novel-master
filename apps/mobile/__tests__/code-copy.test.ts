@@ -49,8 +49,10 @@ describe('copyCode 共享委托模块源码契约 (T-CB19)', () => {
 });
 
 describe('copyCode dist 产物契约 (T-CB21)', () => {
-  it('两包 app.js 均含 code-copy 委托标记（模块确实进了 bundle）', () => {
-    for (const pkg of ['chat-transcript', 'rich-document'] as const) {
+  it('chat-conversation 与 rich-document 两包 app.js 均含 code-copy 委托标记（模块确实进了 bundle）', () => {
+    // transcript-converge：转录并入 chat-conversation 合成包，旧 chat-transcript
+    // 包不再产出 dist，故 chat 侧的产物断言改指合成包。
+    for (const pkg of ['chat-conversation', 'rich-document'] as const) {
       const appJs = readWebViewDistFile(pkg, 'app.js');
       expect(appJs).toContain('.code-copy');
       expect(appJs).toContain('copyCode');
@@ -60,12 +62,17 @@ describe('copyCode dist 产物契约 (T-CB21)', () => {
 
 describe('copyCode 双宿主 RN 源码契约 (T-CB22)', () => {
   it('两宿主 handleMessage 含 copyCode 分支且落 Clipboard.setString；两 bridge 含消息类型', () => {
-    const chat = rnSrc('components/chat/ChatTranscriptWebView.tsx');
+    // chat 侧宿主换成统一组件 ChatConversationWebView（transcript-converge）。
+    const chat = rnSrc('components/chat/ChatConversationWebView.tsx');
     const rich = rnSrc('components/vfs/RichDocumentWebView.tsx');
     // handleMessage 分支：decode 后判 copyCode，非空 code 落原生剪贴板
     for (const host of [chat, rich]) {
       expect(host).toContain("message.type === 'copyCode'");
-      expect(host).toContain("String(message.payload.code ?? '')");
+      // 载荷取值口径容许两种写法：统一宿主先解构出 `payload`，rich-document
+      // 直接读 `message.payload`（两处都是同一个 String(... ?? '') 兜底）。
+      expect(host).toMatch(
+        /String\((?:message\.payload|payload)\.code \?\? ''\)/,
+      );
       expect(host).toContain('if (code) {');
       expect(host).toContain('Clipboard.setString(code)');
       expect(host).toContain("from '@react-native-clipboard/clipboard'");

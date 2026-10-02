@@ -135,8 +135,10 @@ describe('mermaid rich-document 预览管线 (T-MV1 / T-MV2)', () => {
     expect(dist).toContain('mermaid.initialize');
     expect(dist).toContain('data-mermaid-error');
 
-    // dist 两管线均含错误属性（JS）与 attr 展示（CSS）
-    for (const pkg of ['chat-transcript', 'rich-document'] as const) {
+    // dist 两管线均含错误属性（JS）与 attr 展示（CSS）。
+    // chat 侧读 chat-conversation：transcript-converge 后旧 chat-transcript 包
+    // 不再产出 dist（转录并入合成包，样式由构建期 join 带进来）。
+    for (const pkg of ['chat-conversation', 'rich-document'] as const) {
       expect(readWebViewDistFile(pkg, 'app.js')).toContain(
         'data-mermaid-error',
       );
@@ -158,7 +160,7 @@ describe('mermaid 消毒管线 (T-MV3)', () => {
   });
 });
 
-describe('mermaid chat-transcript 聊天管线 (T-MT1 / T-MT2)', () => {
+describe('mermaid chat 转录管线 (T-MT1 / T-MT2)', () => {
   const snapshot = () =>
     webSrc('chat-transcript/webview/runtime/render/snapshot.ts');
   const bridge = () => webSrc('chat-transcript/webview/runtime/bridge.ts');
@@ -171,7 +173,9 @@ describe('mermaid chat-transcript 聊天管线 (T-MT1 / T-MT2)', () => {
     expect(src.match(/scheduleMermaidScan\(\)/g)).toHaveLength(5);
     expect(src).toContain("from '../mermaid'");
 
-    const dist = readWebViewDistFile('chat-transcript', 'app.js');
+    // 源码真源仍在 chat-transcript/webview/runtime 下（合成包复用），
+    // dist 侧读 chat-conversation（转录并入合成包）。
+    const dist = readWebViewDistFile('chat-conversation', 'app.js');
     expect(dist).toContain('scheduleMermaidScan');
     expect(dist).toContain('language-mermaid');
   });

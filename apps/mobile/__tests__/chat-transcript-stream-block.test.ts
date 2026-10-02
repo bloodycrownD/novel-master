@@ -117,9 +117,12 @@ describe('T-N7 webview 块提交 append-only 契约', () => {
       "TRANSCRIPT_CAPABILITY_STREAM_BLOCK_COMMIT = 'streamBlockCommit'",
     );
     expect(caps).toContain('TRANSCRIPT_CAPABILITIES');
-    // RN 侧消费：ready 载荷 → 能力 ref → 切分入口恒返回 []
-    const rn = rnSrc('ChatTranscriptWebView.tsx');
-    expect(rn).toContain('message.payload.capabilities');
+    // RN 侧消费：ready 载荷 → 能力 ref → 切分入口恒返回 []。
+    // transcript-converge 后 RN 宿主是统一组件 ChatConversationWebView
+    // （旧 ChatTranscriptWebView 已退役）；ready 载荷经 readReadyCapabilities
+    // 取 capabilities（等价旧的 `message.payload.capabilities` 直读）。
+    const rn = rnSrc('ChatConversationWebView.tsx');
+    expect(rn).toContain('readReadyCapabilities(payload)');
     expect(rn).toContain('transcriptCapabilitiesInclude(');
     expect(rn).toContain('!streamBlockCapableRef.current');
     // bridge 类型声明 capabilities 可选（旧 dist 缺字段按不支持处理）
@@ -198,7 +201,8 @@ describe('T-N7 webview 块提交 append-only 契约', () => {
   });
 
   it('RN 侧 feature flag：块级渲染默认开 + ready 能力协商运行时覆盖', () => {
-    const rn = rnSrc('ChatTranscriptWebView.tsx');
+    // 宿主换统一组件（transcript-converge）：行为面不变，载体随之迁移。
+    const rn = rnSrc('ChatConversationWebView.tsx');
     expect(rn).toContain('STREAM_BLOCK_RENDER_ENABLED = true');
     expect(rn).toContain('takeStreamBlockSplits');
     expect(rn).toContain('postStreamBlockSplits');

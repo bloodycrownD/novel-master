@@ -216,8 +216,16 @@ describe('chat-conversation WebView boot (dist)', () => {
       expect(html).toContain(`data-testid="${testId}"`);
     }
     expect(html).toContain('新建会话');
-    // 反面：data-view 不得在 CSS 里被硬编码成某个视图（显隐只能由 JS 驱动）
-    expect(appCss()).not.toMatch(/#app\[data-view='conversation'\]/);
+    // 反面：display 不得在 CSS 里被硬编码成某个视图（显隐只能由 JS 驱动）。
+    // 注意：conversation 态**允许**出现 #app[data-view='conversation'] 选择器——
+    // 双视图转场的淡入动画（view-fade-in）挂在其上（纯 opacity，不参与布局）。
+    // 真正要禁的是用 display 覆写 conversation 态的可见性，故按声明面判。
+    const conversationRules = cssRules(appCss());
+    for (const [selector, body] of conversationRules) {
+      if (selector.includes("data-view='conversation'")) {
+        expect(body).not.toMatch(/display\s*:/);
+      }
+    }
   });
 
   it('T-CC-CSS-01: #app 四属性齐全（缺一则 dock 不贴底）', () => {
@@ -229,11 +237,20 @@ describe('chat-conversation WebView boot (dist)', () => {
     expect(body).toMatch(/flex-direction:\s*column/);
     expect(body).toMatch(/height:\s*100%/);
     expect(body).toMatch(/min-height:\s*0/);
-    // #scroller 由旧包 height:100% 改 flex:1（高度在文档内消化）
-    const scrollerRule = /#scroller\s*\{([^}]*)\}/.exec(css);
-    expect(scrollerRule).not.toBeNull();
-    expect(scrollerRule ? scrollerRule[1] : '').toMatch(/flex:\s*1/);
-    expect(scrollerRule ? scrollerRule[1] : '').toMatch(/min-height:\s*0/);
+    // #scroller 由旧包 height:100% 改 flex:1（高度在文档内消化）。
+    // 构建期 join 后 app.css 里有**两条** #scroller 规则（基底 height:100% 在前、
+    // 覆盖段 flex:1 在后），单条正则只会命中基底那条——故按「存在一条同时含
+    // flex:1 与 min-height:0 的 #scroller 规则」判，而不是「第一条 #scroller」。
+    const scrollerRules = [...css.matchAll(/#scroller\s*\{([^}]*)\}/g)].map(
+      m => m[1] ?? '',
+    );
+    expect(scrollerRules.length).toBeGreaterThanOrEqual(2);
+    const flexed = scrollerRules.filter(bodyText =>
+      /flex:\s*1/.test(bodyText) && /min-height:\s*0/.test(bodyText),
+    );
+    expect(flexed).toHaveLength(1);
+    // 基底那条仍保留 100%（覆盖段靠 height:auto 压掉它）
+    expect(scrollerRules[0]).toMatch(/height:\s*100%/);
   });
 
   it('T-CC-CSS-02: 两个占位注释均被真 CSS 替换（注入未 throw 且已落内容）', () => {
@@ -265,17 +282,20 @@ describe('chat-conversation WebView boot (dist)', () => {
     expect(script).toContain('mountComposerEditor');
   });
 
-  it('T-CC-BUILD-01: PACKAGES 增第五包，cssRel 保持单值（spec CSS 定案）', () => {
+  it('T-CC-BUILD-01: PACKAGES 四包齐全；chat-conversation 的 cssRel 为 join 数组（transcript-converge）', () => {
     const buildScript = readFileSync(
       join(__dirname, '../scripts/build-webview.mjs'),
       'utf8',
     );
     expect(buildScript).toContain("id: 'chat-conversation'");
-    expect(buildScript).toContain("cssRel: 'chat-conversation/styles/chat-conversation.css'");
     expect(buildScript).toContain("htmlRel: 'chat-conversation/index.html'");
-    // 五包齐全
+    // cssRel 数组 = 构建期 join：transcript.css（转录基底，含两个注入占位）
+    // 在前、chat-conversation.css（增量段）在后，顺序即层叠序。
+    expect(buildScript).toMatch(
+      /id: 'chat-conversation',[\s\S]*?cssRel:\s*\[\s*'chat-transcript\/styles\/transcript\.css',\s*'chat-conversation\/styles\/chat-conversation\.css',\s*\]/,
+    );
+    // 四包齐全（chat-transcript 不再是独立包）
     for (const id of [
-      'chat-transcript',
       'rich-document',
       'code-editor',
       'composer-input',
@@ -283,6 +303,8 @@ describe('chat-conversation WebView boot (dist)', () => {
     ]) {
       expect(buildScript).toContain(`id: '${id}'`);
     }
+    // 反面：旧 chat-transcript 包条目不得回流（转录已并入合成包）
+    expect(buildScript).not.toMatch(/id: 'chat-transcript'/);
   });
 });
 
@@ -348,21 +370,24 @@ describe('chat-conversation dock 样式数值清单（Step 4 · T-CU10 样式相
     expect(dock).toMatch(/padding:\s*4px\s+12px\s+8px/);
     expect(dock).toMatch(/background:\s*var\(--bg/);
     // 反面清单（源级）：合成包自持 CSS 不搬 composer-input.css 的
-    // `html,body{background:transparent}`——与本文件的 `--bg` 实底直接冲突。
-    // （注入段 CHAT_TRANSCRIPT_RICH_CSS 自带的规则不在本断言面内，故读源文件；
-    //   源文件的说明注释里恰好引用了这条反面清单，先剥注释再判。）
-    const source = readFileSync(
-      join(
-        __dirname,
-        '../src/web/chat-conversation/styles/chat-conversation.css',
-      ),
-      'utf8',
-    ).replace(/\/\*[\s\S]*?\*\//g, '');
+    // `html,body{background:transparent}`——与基底的 `background: var(--bg, #fff)`
+    // 直接冲突。transcript-converge 后 html,body 的底色由**基底真源**
+    // transcript.css 承担，合成包只做 overflow 覆盖，故两条都按各自真源判。
+    const source = readFileSync(CONVERSATION_CSS_SRC, 'utf8').replace(
+      /\/\*[\s\S]*?\*\//g,
+      '',
+    );
     expect(source).not.toMatch(
       /html,\s*body\s*\{[^}]*background:\s*transparent/,
     );
-    // 源文件的 html,body 底色必须是 --bg 实底
-    expect(source).toMatch(/html,\s*body\s*\{[^}]*background:\s*var\(--bg/);
+    // 合成包不得对 html,body 另起一份底色（唯一真源在 transcript.css）
+    expect(source).not.toMatch(/html,\s*body\s*\{[^}]*background\s*:/);
+    // 基底真源的 html,body 底色必须是 --bg 实底
+    const base = readFileSync(TRANSCRIPT_CSS_SRC, 'utf8').replace(
+      /\/\*[\s\S]*?\*\//g,
+      '',
+    );
+    expect(base).toMatch(/html,\s*body\s*\{[^}]*background:\s*var\(--bg/);
   });
 
   /**
@@ -439,25 +464,27 @@ describe('chat-conversation dock 样式数值清单（Step 4 · T-CU10 样式相
     }
   });
 
-  it('T-CC-CSS-12: 源文件保留且只保留一份注入占位注释；dist 里两个占位均已消失', () => {
-    const source = readFileSync(CONVERSATION_CSS_SRC, 'utf8');
-    expect(placeholderCount(source, '/* __RICH_CSS__ */')).toBe(1);
-    expect(
-      placeholderCount(source, '/* __MERMAID_FULLSCREEN_CSS__ */'),
-    ).toBe(1);
+  it('T-CC-CSS-12: 基底源保留且只保留一份注入占位注释；dist 里两个占位均已消失', () => {
+    // transcript-converge：两个注入占位随基底真源一起搬进 transcript.css
+    // （构建期 join 的前一半），故判据落在基底源上。
+    const base = readFileSync(TRANSCRIPT_CSS_SRC, 'utf8');
+    expect(placeholderCount(base, '/* __RICH_CSS__ */')).toBe(1);
+    expect(placeholderCount(base, '/* __MERMAID_FULLSCREEN_CSS__ */')).toBe(1);
     // 占位在 dist 消失 = injectCss 命中（漏一个就会原样留在产物里）
     const css = appCss();
     expect(css).not.toContain('/* __RICH_CSS__ */');
     expect(css).not.toContain('/* __MERMAID_FULLSCREEN_CSS__ */');
   });
 
-  it('T-CC-CSS-13: 合成包源覆盖 transcript.css 全部顶层 selector（基底 = 全文）', () => {
+  it('T-CC-CSS-13: 合成包产物含 transcript.css 全部顶层 selector（基底 = 全文）', () => {
+    // transcript-converge：基底不再手抄进 chat-conversation.css，改由构建期
+    // join 保证「产物 = 基底全文 + 增量段」。故断言面从**源文件差集**移到
+    // **构建产物**：transcript.css 的每条顶层 selector 都必须出现在 app.css 里。
+    // 少任何一条 = join 断了（合成包会退化成「只有壳 + dock」的空白转录区）。
     const transcript = cssRules(readFileSync(TRANSCRIPT_CSS_SRC, 'utf8'));
-    const conversation = cssRules(readFileSync(CONVERSATION_CSS_SRC, 'utf8'));
-    const missing = [...transcript.keys()].filter(s => !conversation.has(s));
+    const built = cssRules(appCss());
+    const missing = [...transcript.keys()].filter(s => !built.has(s));
     expect(missing).toEqual([]);
-    // 反面：只挑几条关键 selector 抄一遍不算基底补全（漂移会静默复发），
-    // 故此处以全量差集为零作为契约。
   });
 
   it('T-CC-CSS-14: 输入框与 toolbar 按钮均无自创 :disabled / --disabled 置灰（现网 RN disabled 无灰化变体）', () => {
@@ -767,10 +794,15 @@ describe('chat-conversation 列表视图（第二阶段 wave-1 · T-CL-DIST）',
     );
     // 列表默认隐藏（conversation 态）
     expect(rule(css, '#session-list')).toMatch(/display:\s*none/);
-    // 反面：不得出现 conversation 态的反向覆写——覆写会与基底段 + dock 段的
-    // flex 值打架（这里覆写出来的 display:none 会让对话永远出不来）
-    expect(css).not.toMatch(/#app\[data-view='conversation'\]\s+#scroller/);
-    expect(css).not.toMatch(/#app\[data-view='conversation'\]\s+#session-list/);
+    // 反面：不得出现 conversation 态的**display 覆写**——那会与基底段 + dock 段的
+    // flex 值打架（这里覆写出来的 display:none 会让对话永远出不来）。
+    // 注意：转场淡入动画（view-fade-in）合法地挂在 conversation 态选择器上，
+    // 那是纯 opacity 声明、不参与布局，故按声明面判 display 而非按选择器判。
+    for (const [selector, decl] of cssRules(css)) {
+      if (selector.includes("data-view='conversation'")) {
+        expect(decl).not.toMatch(/display\s*:/);
+      }
+    }
   });
 
   it('T-CL-DIST-02: sessionCard 数值清单（pad16/radius16/marginH5·B12/hairline/gap8/阴影）', () => {

@@ -1,6 +1,12 @@
-/**
+﻿/**
  * T-BB-06：chat-transcript 契约测迁移矩阵 — 读 webview-dist 产物（pretest 已 build:webview）。
  * 三列矩阵见 mobile-webview-preact-htm SPEC（必须保留 / 可改为 token / 允许删除）。
+ *
+ * transcript-converge 后转录不再有独立的 chat-transcript 文档包（转录并入
+ * chat-conversation 合成包，旧 index.html / main.ts 退役），故本套件的 dist 读取
+ * 一律改指合成包产物——转录 runtime（renderRows / 菜单 / 流式 / 快照）由合成包
+ * 以 `bindChannel:false, emitReady:false` 装配后打进同一份 app.js，契约面不变。
+ * 合成包壳自身的结构断言由 chat-conversation-boot-script.test.ts 承担。
  */
 import {readFileSync} from 'node:fs';
 import {join} from 'node:path';
@@ -21,15 +27,15 @@ import {
 import {readWebViewDistFile} from './helpers/read-webview-dist';
 
 function bootScript(): string {
-  return readWebViewDistFile('chat-transcript', 'app.js');
+  return readWebViewDistFile('chat-conversation', 'app.js');
 }
 
 function indexHtml(): string {
-  return readWebViewDistFile('chat-transcript', 'index.html');
+  return readWebViewDistFile('chat-conversation', 'index.html');
 }
 
 function appCss(): string {
-  return readWebViewDistFile('chat-transcript', 'app.css');
+  return readWebViewDistFile('chat-conversation', 'app.css');
 }
 
 describe('chat-transcript WebView boot (T-BB-06 / dist)', () => {
@@ -64,7 +70,10 @@ describe('chat-transcript WebView boot (T-BB-06 / dist)', () => {
 
   it('T-BR-ASM-04: ready post and bootTranscript present', () => {
     const script = bootScript();
-    expect(script).toContain('post("ready"');
+    // transcript-converge：转录 runtime 在合成包里以 `emitReady:false` 装配，
+    // ready 由合成包入口自持的 `post('ready', …)`（createBoundPost(2)）发**单条**。
+    // esbuild 会把同名绑定去重改名（post / post2 / post3…），故只锚调用形态。
+    expect(script).toMatch(/\bpost\d*\(['"]ready['"]/);
     expect(script).toContain('bootTranscript');
   });
 

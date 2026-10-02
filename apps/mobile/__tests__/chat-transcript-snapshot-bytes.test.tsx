@@ -10,10 +10,14 @@
  * - 纯函数直测 planSnapshotChunkBounds：贪心分桶边界、单桶预算上限、
  *   条数上限并存、小包单桶（chunkTotal=1 与旧条数除法逐字节等价）、
  *   单条超预算独占桶、空列表单空桶；
- * - 组件级（对齐 chat-transcript-webview.test.tsx 的 T-S 断言形态）：
+ * - 组件级（对齐 chat-conversation-webview.test.tsx 的 T-CU 断言形态）：
  *   40 条 × ~10KB 大消息渲染 → postToWeb 收到多片 sessionSnapshot，
  *   chunkIndex 连续、chunkTotal 恒定、各片行拼接完整覆盖 40 条、
  *   末片携带 scrollIntent；小消息 40 条仍单包。
+ *
+ * transcript-converge：组件级那半的宿主从已退役的 `ChatTranscriptWebView`
+ * 迁到统一宿主 `ChatConversationWebView`（分片/代次逻辑一字未动，props 同名），
+ * ready 握手改走 v2（`CONVERSATION_BRIDGE_V`）。
  */
 import React from 'react';
 import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
@@ -21,10 +25,10 @@ import TestRenderer, {act} from 'react-test-renderer';
 import {Platform} from 'react-native';
 import {type ChatMessage} from '@novel-master/core/chat';
 import {
-  CHAT_TRANSCRIPT_BRIDGE_VERSION,
-  decodeHostToTranscript,
-} from '@/components/chat/ChatTranscriptBridge';
-import {ChatTranscriptWebView} from '@/components/chat/ChatTranscriptWebView';
+  CONVERSATION_BRIDGE_V,
+  decodeConversationUpstream,
+} from '@/components/chat/ChatConversationBridge';
+import {ChatConversationWebView} from '@/components/chat/ChatConversationWebView';
 import {planSnapshotChunkBounds} from '@/components/chat/snapshot-chunk-bounds';
 import {resetRollbackTiming} from '@/debug/run-timing';
 import {
@@ -41,13 +45,14 @@ jest.mock('@/theme/ThemeProvider', () => ({
       textSecondary: '#ccc',
       primary: '#08f',
       text: '#fff',
+      selection: '#08f55',
     },
   }),
 }));
 
 jest.mock('@react-native-clipboard/clipboard', () => ({
   __esModule: true,
-  default: {setString: jest.fn()},
+  default: {setString: jest.fn(), getString: jest.fn(async () => '')},
 }));
 
 jest.mock('sanitize-html', () => {
@@ -65,7 +70,7 @@ jest.mock('@/services/chat-transcript-telemetry', () => ({
   emitChatTranscriptTelemetry: jest.fn(),
 }));
 
-// 与 chat-transcript-webview.test.tsx 同款：让步真实排队 setTimeout(0)，
+// 与 chat-conversation-webview.test.tsx 同款：让步真实排队 setTimeout(0)，
 // 测试可控观察到多片在途窗口。
 jest.mock('@/services/yield-quantum', () => ({
   createQuantumYield: () => () =>
@@ -235,33 +240,42 @@ describe('快照分片字节预算（T-R3 组件半）', () => {
     }
   }
 
+  /** 全部 sessionSnapshot 载荷（v:2 信封走宽松 decoder，字段名未变）。 */
   function snapshotChunks() {
-    return mockWebViewPostMessages
-      .map(raw => decodeHostToTranscript(raw))
-      .flatMap(msg =>
-        msg.type === 'sessionSnapshot'
-          ? [
-              {
-                generation: msg.payload.generation,
-                chunkIndex: msg.payload.chunkIndex,
-                chunkTotal: msg.payload.chunkTotal,
-                scrollIntent: msg.payload.scrollIntent,
-                rowIds: msg.payload.rows
-                  .filter(r => r.kind === 'message')
-                  .map(r => (r.kind === 'message' ? r.id : '')),
-              },
-            ]
-          : [],
-      );
+    return mockWebViewPostMessages.flatMap(raw => {
+      const decoded = decodeConversationUpstream(raw);
+      if (!decoded.ok || decoded.message.type !== 'sessionSnapshot') {
+        return [];
+      }
+      const p = decoded.message.payload as Record<string, unknown>;
+      return [
+        {
+          generation: p.generation as number,
+          chunkIndex: p.chunkIndex as number,
+          chunkTotal: p.chunkTotal as number,
+          scrollIntent: p.scrollIntent as string | undefined,
+          rowIds: (p.rows as Array<{kind: string; id: string}>)
+            .filter(r => r.kind === 'message')
+            .map(r => r.id),
+        },
+      ];
+    });
+  }
+
+  /** 统一宿主的最小 props 面（composer 域缺省空串）。 */
+  function baseProps(overrides: Record<string, unknown> = {}) {
+    return {
+      sessionKey: 'p1:s1',
+      streamingText: '',
+      streamingThinking: '',
+      ...overrides,
+    };
   }
 
   function renderWithMessages(messages: ChatMessage[]) {
     return TestRenderer.create(
-      <ChatTranscriptWebView
-        sessionKey="p1:s1"
-        messages={messages}
-        hasMore={false}
-        defaultScrollToBottom
+      <ChatConversationWebView
+        {...baseProps({messages, defaultScrollToBottom: true})}
       />,
     );
   }
@@ -276,9 +290,13 @@ describe('快照分片字节预算（T-R3 组件半）', () => {
       webView.props.onMessage?.({
         nativeEvent: {
           data: JSON.stringify({
-            v: CHAT_TRANSCRIPT_BRIDGE_VERSION,
+            v: CONVERSATION_BRIDGE_V,
             type: 'ready',
-            payload: {version: 'test'},
+            payload: {
+              version: 'test',
+              capabilities: ['streamBlockCommit'],
+              readyState: 'complete',
+            },
           }),
         },
       });
