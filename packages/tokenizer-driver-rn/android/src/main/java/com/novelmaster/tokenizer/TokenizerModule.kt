@@ -26,8 +26,10 @@ import java.util.concurrent.Executors
  * **可取消（tokenizer-native-cancel，2026-10-02）**：真机实报切换项目后 chip 上下文
  * 精确升级轮 resolve 耗时 14.2s（logcat `[nm-chip] resolve done +14234ms`），期间
  * 侧滑返回事件排队、UI「突然卡住」——根因是原生计数中段不可中断。修法是 JS 侧
- * 下发取消指令、Kotlin 侧在检查点短路弃置，共三处：任务出队时、词表加载后
- * （Engine 回调内）、encode 前（Engine 回调内）。取消与真失败用**不同的 reject
+ * 下发取消指令、Kotlin 侧在检查点短路弃置。三个语义检查点由**两处调用点**覆盖：
+ * Module 的任务出队检查（①），与 Engine 内「词表加载后、encode 调用前」的同一次
+ * shouldCancel 回调（②③——两者之间无可切分语句，合并为一次检查）。注意 WEB 家族
+ * encode 内部不再有检查点（单次 JNI 不可中断）。取消与真失败用**不同的 reject
  * code** 区分（`TOKENIZER_COUNT_CANCELLED` vs 既有的 `TOKENIZER_COUNT_FAILED`），
  * JS 侧据此把取消收成「无回调」，而不是掉进兜底全量重算。
  */

@@ -671,4 +671,120 @@ describe('取消链路（tokenizer-native-cancel / rn 驱动面）', () => {
     expect(second.tokenCount).toBe(7);
     expect(second.counterKind).toBe('claude');
   });
+
+  it('T-TC3：在途轮 cancel → cancelCount 收到该轮 requestId（驱动→桥→Kotlin 接力）', async () => {
+    const {
+      __test__,
+      cancelSessionNativeCounts,
+    } = require('@novel-master/tokenizer-driver-rn');
+    // 挂起轮：原生 promise 不 resolve，模拟「计数在途」窗口。
+    let resolveCount!: (v: {
+      tokenCount: number;
+      counterKind: string;
+      estimated: boolean;
+    }) => void;
+    mockCountPromptCancelable.mockImplementation(
+      () =>
+        new Promise(resolve => {
+          resolveCount = resolve;
+        }),
+    );
+    const pending = __test__.countSerialized(
+      'claude',
+      'body',
+      'anthropic/claude-3-5-sonnet',
+      undefined,
+      's-1',
+    );
+    // 过桥同步段（登记 in-flight）在首拍内完成。
+    await Promise.resolve();
+
+    cancelSessionNativeCounts('s-1');
+    expect(mockCancelCount).toHaveBeenCalledTimes(1);
+    expect(mockCancelCount.mock.calls[0][0]).toMatch(/^s-1:\d+$/);
+
+    resolveCount({tokenCount: 7, counterKind: 'claude', estimated: false});
+    await expect(pending).resolves.toEqual({
+      count: 7,
+      counterKind: 'claude',
+      estimated: false,
+    });
+    // finally 注销后同会话再 cancel：无在途记录，零指令。
+    mockCancelCount.mockClear();
+    cancelSessionNativeCounts('s-1');
+    expect(mockCancelCount).not.toHaveBeenCalled();
+  });
+
+  it('T-TC3：无在途记录（含 null/undefined）→ cancelSessionNativeCounts no-op 不抛', async () => {
+    const {cancelSessionNativeCounts} = require('@novel-master/tokenizer-driver-rn');
+    expect(() => cancelSessionNativeCounts('s-none')).not.toThrow();
+    expect(() => cancelSessionNativeCounts(null)).not.toThrow();
+    expect(() => cancelSessionNativeCounts(undefined)).not.toThrow();
+    expect(mockCancelCount).not.toHaveBeenCalled();
+  });
+
+  it('T-TC8①：旧壳缺 countPromptCancelable → 带 sessionId 仍走旧三参（现状行为不变）', async () => {
+    const {NativeModules} = require('react-native');
+    const token = NativeModules.NovelMasterTokenizer;
+    const cancelable = token.countPromptCancelable;
+    delete token.countPromptCancelable;
+    try {
+      mockCountPrompt.mockResolvedValue({
+        tokenCount: 42,
+        counterKind: 'claude',
+        estimated: false,
+      });
+      const {__test__} = require('@novel-master/tokenizer-driver-rn');
+      const result = await __test__.countSerialized(
+        'claude',
+        'body',
+        'anthropic/claude-3-5-sonnet',
+        undefined,
+        's-1',
+      );
+      expect(mockCountPrompt).toHaveBeenCalledTimes(1);
+      expect(mockCountPromptCancelable).not.toHaveBeenCalled();
+      expect(result.count).toBe(42);
+    } finally {
+      token.countPromptCancelable = cancelable;
+    }
+  });
+
+  it('T-TC8①：旧壳缺 cancelCount → cancelSessionNativeCounts 静默 no-op（有在途也发不出指令）', async () => {
+    const {NativeModules} = require('react-native');
+    const token = NativeModules.NovelMasterTokenizer;
+    const cancel = token.cancelCount;
+    delete token.cancelCount;
+    try {
+      const {
+        __test__,
+        cancelSessionNativeCounts,
+      } = require('@novel-master/tokenizer-driver-rn');
+      let resolveCount!: (v: {
+        tokenCount: number;
+        counterKind: string;
+        estimated: boolean;
+      }) => void;
+      mockCountPromptCancelable.mockImplementation(
+        () =>
+          new Promise(resolve => {
+            resolveCount = resolve;
+          }),
+      );
+      const pending = __test__.countSerialized(
+        'claude',
+        'body',
+        'anthropic/claude-3-5-sonnet',
+        undefined,
+        's-1',
+      );
+      await Promise.resolve();
+      // cancelCountAvailable() 为假：只发不出的指令必须静默吞掉，不炸取消链路。
+      expect(() => cancelSessionNativeCounts('s-1')).not.toThrow();
+      resolveCount({tokenCount: 1, counterKind: 'claude', estimated: false});
+      await expect(pending).resolves.toMatchObject({count: 1});
+    } finally {
+      token.cancelCount = cancel;
+    }
+  });
 });
