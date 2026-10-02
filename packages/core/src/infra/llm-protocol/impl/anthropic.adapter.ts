@@ -7,6 +7,7 @@
  */
 
 import { messageBodyTextFromContent } from "@/domain/chat/content/message-body-text.js";
+import { ANTHROPIC_SAMPLING_DEFAULTS } from "@/domain/provider/model/protocol-sampling-defaults.js";
 import { textBlocks } from "@/domain/chat/content/text-blocks.js";
 import type {
   FetchFn,
@@ -131,7 +132,12 @@ export class AnthropicProtocolAdapter implements LlmProtocolAdapter {
   ): Record<string, unknown> {
     const body: Record<string, unknown> = {
       model: req.vendorModelId,
-      max_tokens: 4096,
+      // 与 UI 采样默认值同源（`ANTHROPIC_SAMPLING_DEFAULTS.max_tokens`）。
+      // 旧形态硬写 4096，而 thinking budget 又按 `effectiveMax - 1` 钳制 ⇒
+      // 默认配置下 thinking 占 4095、可见正文只剩 1 token，三档 thinkingLevel 无差别。
+      // 刻意**不经** `resolve-thinking-wire.ts` 中转：它与 `thinking-level-presets.ts`
+      // 已构成一对既存循环依赖，为一个数字把整对循环拖进 adapter 启动链不划算。
+      max_tokens: ANTHROPIC_SAMPLING_DEFAULTS.max_tokens,
       messages: this.buildMessages(req, toolNames),
       stream,
     };

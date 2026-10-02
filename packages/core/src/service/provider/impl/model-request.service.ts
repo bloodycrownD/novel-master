@@ -18,6 +18,7 @@ import type {
   LlmChatResult,
   LlmProtocolAdapter,
   LlmProtocolKind,
+  LlmStreamEvent,
 } from "@/infra/llm-protocol/ports/adapter.port.js";
 import type { SecretStore } from "@/infra/sksp/ports/secret-store.port.js";
 import type {
@@ -65,6 +66,21 @@ function parseHttpStatusFromProviderError(
   }
   return Number(m[1]);
 }
+
+/**
+ * 「本 attempt 已产出可见内容」的可判据事件族。
+ *
+ * 与 `agent-runner.ts` 记 `firstContentAtMs` 用的 `text-delta || thinking-delta`
+ * 同族，另加 `tool-use`（工具调用同样已对用户可见）。
+ * ⚠️ `usage` / `done` **不置闩**：它们不承载可见输出。若把它们也算「已产出」，
+ * 「只收到一个 usage 就断流」的黑洞会被误判成已产出而彻底不重试——
+ * 那是把重试闩锁修成反向 bug。
+ */
+const PRODUCED_EVENT_TYPES = new Set<LlmStreamEvent["type"]>([
+  "text-delta",
+  "thinking-delta",
+  "tool-use",
+]);
 
 function isRetryableError(error: unknown): boolean {
   if (isAbortLikeError(error)) {
@@ -208,8 +224,28 @@ export class DefaultModelRequestService implements ModelRequestService {
       this.deps.retryPolicy ??
       DEFAULT_RETRY_POLICY;
     let attempt = 0;
+    // 「本 attempt 是否已产出」闩锁：只看错误形态的重试判定会让「已流式吐了半段
+    // 文本、随后传输层断掉」的请求再发一次 attempt ⇒ 同一段文本在屏幕上出现两遍、
+    // 服务商按两次完整生成计费、run 级 usage 基线被重复累加。
+    let attemptEmitted = false;
     while (true) {
       attempt += 1;
+      // ⚠️ **逐 attempt 复位**（不是为了语义，而是为了让闩锁的正确性不依赖
+      // 「重试只发生在未产出时」这条当前恰好成立的不变量——将来若引入任何
+      // 「已产出后续传」类策略，逐 attempt 复位是它能成立的前提）。
+      attemptEmitted = false;
+      // 非流式请求直接传 undefined、**不要造闭包**（不该凭空多一层）。
+      const onStream =
+        options?.onStream == null
+          ? undefined
+          : (ev: LlmStreamEvent): void => {
+              // ⚠️ **先置闩、再转发**：顺序反了的话，一旦下游 onStream 自身抛错，
+              // 闩锁会来不及置位 ⇒ 变成静默可重试。
+              if (PRODUCED_EVENT_TYPES.has(ev.type)) {
+                attemptEmitted = true;
+              }
+              options.onStream!(ev);
+            };
       try {
         return await adapter.chat({
           baseUrl: provider.baseUrl,
@@ -223,14 +259,16 @@ export class DefaultModelRequestService implements ModelRequestService {
           system: options?.system,
           tools: options?.tools,
           stream: options?.stream,
-          onStream: options?.onStream,
+          onStream,
           sampling,
           thinking,
           signal: options?.signal,
         });
       } catch (error) {
         const canRetry =
-          attempt <= policy.maxRetries && isRetryableError(error);
+          attempt <= policy.maxRetries &&
+          !attemptEmitted &&
+          isRetryableError(error);
         // WHY: cancel must short-circuit retries so terminate actions feel immediate.
         if (!canRetry || isAbortLikeError(error)) {
           throw error;

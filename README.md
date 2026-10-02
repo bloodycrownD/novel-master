@@ -124,6 +124,7 @@
 | CLI | `npm run link:cli` → `nm --help` |
 | 移动端 | `npm run mobile:android` |
 | 测试 | `npm test` |
+| Git 钩子 | `npm install` 会自动把 `core.hooksPath` 指向 `.githooks`（提交前跑编码扫描）；手动配置：`git config core.hooksPath .githooks`；手动跑门禁：`npm run check:encoding` |
 | 内部文档 | [`docs/monorepo.md`](docs/monorepo.md) |
 
 本软件按「原样」提供，详见 [LICENSE](./LICENSE)。

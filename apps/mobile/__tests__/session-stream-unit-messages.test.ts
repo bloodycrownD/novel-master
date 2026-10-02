@@ -41,7 +41,10 @@ import {
   isMobileAgentActive,
   setMobileAgentActive,
 } from '@/runtime/agent-activity';
-import {SessionStreamUnitManager} from '@/services/session-stream-unit-manager.service';
+import {
+  SessionStreamUnitManager,
+  SESSION_STREAM_MAX_MESSAGE_VIEWS,
+} from '@/services/session-stream-unit-manager.service';
 import {
   SESSION_STREAM_APPLY_INTERVAL_MS,
   SESSION_STREAM_INGRESS_COALESCE_MS,
@@ -690,5 +693,148 @@ describe('T-H4: idle tail 单查询多取（init-busy-yield Step 2）', () => {
     // 无关会话受理触发全局通知：sess-a 的 idle 视图未被重写，引用保持
     startRunningRun(h, 'sess-b', 'rb', 'p2');
     expect(h.manager.readMessagesSnapshot('sess-a')?.messages).toBe(refBefore);
+  });
+});
+
+/**
+ * CR L1-5：idle 上翻的 in-flight 态不参与 LRU 淘汰。
+ *
+ * 病灶（apps/P2-1）：`loadIdleOlderMessages` 的「读 LRU → 置
+ * `loadingMoreMessages` → await 回源 → 读 LRU 合并写回」是跨 await 的
+ * 读-改-写。标记与数据同在 500 LRU 表内时，await 窗口期只要别的路径灌进
+ * `SESSION_STREAM_MAX_MESSAGE_VIEWS + 1` 个 sessionId，本会话条目即被淘汰，
+ * await 落地读到 null ⇒ 本次「上翻更早消息」被静默丢弃（不崩溃、不报错，
+ * 用户往上翻就是空，而且再也翻不出来）。
+ *
+ * 修法：in-flight 标记与兜底基线挪进不参与淘汰的 `idleLoadingMore`；
+ * await 落地时即便条目已被淘汰，也用基线合并并把结果 set 回 LRU。
+ *
+ * 观测面是「注入真实淘汰后的最终消息面 + 回源次数 + in-flight 标记」，
+ * 不是「map 里有没有这个 key」这种能被实现换形态绕开的弱观测。
+ */
+describe('CR L1-5: idle 上翻 in-flight 不受 LRU 淘汰影响', () => {
+  const CAP = SESSION_STREAM_MAX_MESSAGE_VIEWS;
+
+  /** 页面大小 40 + 10：tail 取 seq 11..50，上翻一页补 seq 1..10。 */
+  function seedPagedSession(
+    h: ReturnType<typeof createHarness>,
+    sessionId = 'sess-a',
+  ): void {
+    h.db.set(
+      sessionId,
+      Array.from({length: 50}, (_, i) => makeMessage(sessionId, i + 1)),
+    );
+  }
+
+  /** 灌别的会话的消息面（公开入口 hydrateSessionMessages，无单元即写入 LRU）。 */
+  function floodIdleViews(
+    h: ReturnType<typeof createHarness>,
+    count: number,
+  ): void {
+    for (let i = 0; i < count; i++) {
+      h.manager.hydrateSessionMessages('p1', `flood-${i}`);
+    }
+  }
+
+  it('L1-5-a 淘汰注入：await 窗口期本会话被淘汰，本页数据仍落地', async () => {
+    const h = createHarness();
+    seedPagedSession(h);
+    await h.manager.loadSessionTailMessages('sess-a', {
+      force: true,
+      projectId: 'p1',
+    });
+    expect(h.manager.readMessagesSnapshot('sess-a')?.messages).toHaveLength(40);
+
+    // 把 listBySessionPage 悬挂在可控 promise 上：淘汰注入发生在它的 await
+    // 窗口内（真实复现「别的路径在窗口期把 LRU 灌满」）。
+    let releasePage: () => void = () => undefined;
+    const inFlightFlagDuringWindow: Array<boolean | undefined> = [];
+    let entriesSizeDuringWindow = 0;
+    h.messages.listBySessionPage.mockImplementation(
+      (sid: string, options: {limit: number; beforeSeq?: number}) => {
+        // 窗口内先记一次 in-flight 标记（此时 sess-a 还是表里唯一一条，
+        // 读口刷新新鲜度不影响它「最旧」的位置）
+        inFlightFlagDuringWindow.push(
+          h.manager.readMessagesSnapshot('sess-a')?.loadingMoreMessages,
+        );
+        // 注入淘汰：CAP+1 个别的会话把 sess-a 挤出 LRU
+        floodIdleViews(h, CAP + 1);
+        entriesSizeDuringWindow = h.manager.idleMessageViewsSize();
+        const rows = [...(h.db.get(sid) ?? [])].sort((a, b) => a.seq - b.seq);
+        const filtered =
+          options.beforeSeq == null
+            ? rows
+            : rows.filter(r => r.seq < options.beforeSeq);
+        return new Promise<ChatMessage[]>(resolve => {
+          releasePage = () => resolve(filtered.slice(-options.limit));
+        });
+      },
+    );
+
+    const pending = h.manager.loadOlderSessionMessages('sess-a', 'p1');
+    // 窗口期内 in-flight 标记为 true
+    expect(inFlightFlagDuringWindow).toEqual([true]);
+    // 注入确实生效：LRU 封顶且 sess-a 已被淘汰
+    expect(entriesSizeDuringWindow).toBe(CAP);
+    expect(h.manager.readMessagesSnapshot('sess-a')).toBeNull();
+
+    // 放行 await：回源结果在「条目已被淘汰」的状态下落地
+    releasePage();
+    await pending;
+
+    // 关键断言：被淘汰不等于丢数据——本页仍落地（seq 1..50 齐、缓存同步）
+    const view = h.manager.readMessagesSnapshot('sess-a');
+    expect(view?.messages).toHaveLength(50);
+    expect(view?.messages[0].seq).toBe(1);
+    expect(view?.messages[49].seq).toBe(50);
+    expect(view?.hasMoreMessages).toBe(false);
+    expect(view?.loadingMoreMessages).toBe(false); // 标记已复位
+    expect(
+      getSessionViewCache(sessionViewCacheKey('p1', 'sess-a'))?.messages,
+    ).toHaveLength(50);
+  });
+
+  it('L1-5-b 淘汰注入 + 并发上翻：条目被重建后重入仍被 in-flight 拦住', async () => {
+    const h = createHarness();
+    seedPagedSession(h);
+    await h.manager.loadSessionTailMessages('sess-a', {
+      force: true,
+      projectId: 'p1',
+    });
+
+    let releasePage: (() => void) | null = null;
+    h.messages.listBySessionPage.mockImplementation(
+      () =>
+        new Promise<ChatMessage[]>(resolve => {
+          releasePage = () => resolve([]);
+        }),
+    );
+
+    const pending = h.manager.loadOlderSessionMessages('sess-a', 'p1');
+    expect(
+      h.manager.readMessagesSnapshot('sess-a')?.loadingMoreMessages,
+    ).toBe(true);
+
+    // 窗口期：把 LRU 灌满淘汰掉 sess-a，再用 tail 加载把它的条目重建出来
+    // （重建出来的条目若带着「不在表内」的标记语义，重入守卫就会失效）。
+    floodIdleViews(h, CAP + 1);
+    expect(h.manager.readMessagesSnapshot('sess-a')).toBeNull();
+    await h.manager.loadSessionTailMessages('sess-a', {
+      force: true,
+      projectId: 'p1',
+    });
+    expect(h.manager.readMessagesSnapshot('sess-a')).not.toBeNull();
+
+    // 并发上翻：必须被 in-flight 守卫拦下，不发第二次回源
+    // （不 await：若守卫失效，第二次会挂在 mock 的空 promise 上，断言照样红）
+    void h.manager.loadOlderSessionMessages('sess-a', 'p1');
+    await Promise.resolve();
+    expect(h.messages.listBySessionPage).toHaveBeenCalledTimes(1);
+
+    releasePage?.();
+    await pending;
+    expect(
+      h.manager.readMessagesSnapshot('sess-a')?.loadingMoreMessages,
+    ).toBe(false);
   });
 });

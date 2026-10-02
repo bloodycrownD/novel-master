@@ -36,13 +36,13 @@ CREATE INDEX IF NOT EXISTS idx_vfs_entry_scope_path
  * 全表扫在谓词每行上重复发生，是主耗时项）；合成 2 万 revision / 5 千 entry
  * 规模从 8.9s → 0.37s。写放大可忽略（entry 行数远小于 revision）。
  *
- * v18 canonical DDL 的一部分，**BOOT 不因它单独 bump**：本迭代 v18 未发布，
- * 存量 v17 库走 17→18 慢路径时随本语句集一并建出；已在分支内测试机落 v18
- * 的库不会补建（无发布面，接受）。
+ * **索引语句不在本文件**：`idx_vfs_entry_content_hash` 的 canonical DDL 单源于
+ * `vfs-revision-schema.ts` 的同名导出——repo-mega-cr 合并时统一为**部分索引**
+ * 形态（`WHERE content_hash IS NOT NULL`，目录条目恒 NULL 不入索引），是
+ * blob 归零触发器守卫的 EXPLAIN 断言（vfs-gc-trigger.test.ts）钉死的形态；
+ * 打包候选谓词的反查同样走它。v1.5.30 已发布的库若已建成裸（非部分）索引，
+ * `IF NOT EXISTS` 幂等跳过、保留裸索引——功能上是超集，兼容不改。
  */
-export const VFS_ENTRY_CONTENT_HASH_INDEX_DDL = `
-CREATE INDEX IF NOT EXISTS idx_vfs_entry_content_hash
-  ON vfs_entry(content_hash)`.trim();
 
 /** All bootstrap statements in execution order.
  *
@@ -52,5 +52,4 @@ CREATE INDEX IF NOT EXISTS idx_vfs_entry_content_hash
  * migration 已随第二轮退役删除）；content_hash 索引是打包谓词实测定案的例外。 */
 export const VFS_SCHEMA_STATEMENTS: readonly string[] = [
   VFS_ENTRY_TABLE_DDL,
-  VFS_ENTRY_CONTENT_HASH_INDEX_DDL,
 ];

@@ -413,6 +413,16 @@ export class DefaultAgentRunner implements AgentRunner {
         let stepCompactionEmitted = false;
 
         let visible = await session.list();
+        // 压缩评估要的只是「可见条数」；VisibleFloorTrigger 自己再 list() 一次
+        // 就是每 step 的第二次全会话读。条数在此处定死并透传，触发器零读取（RT-02）。
+        // 必须在下方 prepare 覆盖 visible 之前取：那份数组已不是 message 列表。
+        const visibleMessageCount = visible.length;
+        // RT-01：另存 prepare 之前的可见集引用，供下方 gemini tool_use 查找源复用。
+        // 必须另存而不能复用同名 `visible`——下方 prepareUserMessagesForPrompt
+        // 会把 `visible` 覆写成处理后的数组。
+        // 只有落库路径会消费它（ephemeral 路径的查找源恒走 listVisibleSessionMessages，
+        // 因为这份引用含 overlay 而旧读法不含——见下方查找源处的分路径说明）。
+        const visibleBeforePrepare = visible;
         if (signal?.aborted) {
           await handleAbort("after_session_list");
           break;
@@ -537,6 +547,9 @@ export class DefaultAgentRunner implements AgentRunner {
                 // sessionKkv 让读口能命中落库的 API 值（跨重启同口径）。
                 tools,
                 sessionKkv: this.deps.sessionKkv,
+                // 本 step 开头那次 session.list() 的条数（prepare 覆盖 visible
+                // 之前取的），供 VisibleFloorTrigger 零读取复用（RT-02）。
+                visibleMessageCount,
               }
             );
           if (signal?.aborted) {
@@ -607,9 +620,33 @@ export class DefaultAgentRunner implements AgentRunner {
         // 解析力，等价断言钉在 gemini-content-mapper 测试），gemini lookup
         // 用可见集即完备。
         // 懒求值：放在这里而不是 step 开头，是为了纳入本 step 的压缩产物。
+        //
+        // RT-01 的复用分支**只在落库路径成立**，ephemeral 路径必须走旧读法，
+        // 两个路径的依据不同，分开表述（CR-F17）：
+        //
+        // ① 落库路径（persistMessages===true，session === deps.session）：本 step
+        //    未触发压缩 ⇒ 复用上方 session.list() 已拿到的可见集（零额外读）。
+        //    等价性依据：两次读是同一张表 / 同 sessionId / 同 filter / 同 ORDER BY
+        //    seq 的全量可见集，而会把新产物（隐藏行）带进可见集的动作只有
+        //    runCompaction，已被 stepCompactionEmitted 这个布尔量完全覆盖——
+        //    不需要 memo、不需要「后缀扩展」启发式。
+        //
+        // ② ephemeral 路径（persistMessages===false，session ===
+        //    EphemeralOverlayAgentSession）：上面那次 session.list() 读的是
+        //    「底库可见集 ++ 本 run 在 RAM overlay 的追加」，而
+        //    listVisibleSessionMessages 是纯 DB 读、**恒不含 overlay**——两者不是
+        //    同一集合，①的等价性论证在此路径为假。且压缩块被
+        //    `if (persistMessages && compactionConditions != null)` 门禁挡在门外，
+        //    stepCompactionEmitted 恒为 false，光靠它分不出这条路径。故此路径固定
+        //    走旧读法：查找源保持「纯 DB 集」，本 run 追加的 tool_use id 依旧解析不
+        //    到名字，出站 wire 与 RT-01 改动前一致（不引入 spec 未承认的 wire 变化）。
+        //    代价是 ephemeral run 每 step 一次全列读——已知取舍，甲案保守。
         let toolUseLookupMessages: readonly ChatMessage[] | undefined;
         if (protocol === "gemini" && this.deps.listVisibleSessionMessages != null) {
-          toolUseLookupMessages = await this.deps.listVisibleSessionMessages();
+          toolUseLookupMessages =
+            stepCompactionEmitted || !persistMessages
+              ? await this.deps.listVisibleSessionMessages()
+              : visibleBeforePrepare;
         }
 
         // 计时采集（spec 指标口径）：requestStartedAtMs 为请求发起时刻；

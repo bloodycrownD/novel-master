@@ -95,7 +95,6 @@ function makeCtx(
     vfs: {} as never,
     projectId: "proj-1",
     sessionId: "sess-1",
-    listSessionMessages: async () => [],
     agents: {
       registry,
       agents: agents.map((a) => ({
@@ -136,7 +135,6 @@ describe("agent 管理工具", () => {
       vfs: {} as never,
       projectId: "p",
       sessionId: "s",
-      listSessionMessages: async () => [],
     };
     const withoutAgents = agentTool.description(bare) as string;
     assert.match(withoutAgents, /（暂无）|当前可管理 agent 名单/);
@@ -147,7 +145,6 @@ describe("agent 管理工具", () => {
       vfs: {} as never,
       projectId: "p",
       sessionId: "s",
-      listSessionMessages: async () => [],
     };
     const desc = agentTool.description(bare) as string;
     // 指路句（空名单场景下也必须携带——字段细节已全部迁入内置技能）
@@ -210,7 +207,6 @@ describe("agent 管理工具", () => {
       vfs: {} as never,
       projectId: "p",
       sessionId: "s",
-      listSessionMessages: async () => [],
     };
     await assert.rejects(
       () => runner.call("agent", { action: "list" }, bare),

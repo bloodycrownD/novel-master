@@ -1,5 +1,5 @@
 /**
- * VFS IPC handlers �?list/read/write/mkdir/delete/rename for global/project/session scopes.
+ * VFS IPC handlers — list/read/write/mkdir/delete/rename for global/project/session scopes.
  *
  * @module ipc/handlers/vfs
  */
@@ -11,8 +11,6 @@ import type {
   VfsBatchIngestFromPathsRequest,
   VfsBatchIngestFromPathsResult,
   VfsDeleteRequest,
-  VfsListEntryDto,
-  VfsListRequest,
   VfsMkdirRequest,
   VfsReadRequest,
   VfsReadResultDto,
@@ -78,7 +76,7 @@ function focusedWindow(): BrowserWindow | undefined {
   return BrowserWindow.getFocusedWindow() ?? undefined;
 }
 
-/** VFS 变更成功后通知 renderer 刷新 Explorer（消费方 ①）�?*/
+/** VFS 变更成功后通知 renderer 刷新 Explorer（消费方 ①）。 */
 function pushWorkspaceMutated(req: VfsScopeRequest): void {
   notifyWorkspaceMutatedToRenderer(workspaceMutatedPayloadFromRequest(req));
 }
@@ -107,26 +105,6 @@ async function readBaselineContent(
   path: string,
 ): Promise<string | null> {
   return readUserVfsSaveBaseline(vfs, path);
-}
-
-export async function handleVfsList(
-  req: VfsListRequest,
-): Promise<IpcResult<VfsListEntryDto[]>> {
-  try {
-    const rt = await getDesktopRuntime();
-    const scope = resolveVfsScopeFromRequest(req);
-    const vfs = getVfsForScope(rt, scope);
-    const entries = await vfs.list(req.path, { recursive: req.recursive });
-    return {
-      ok: true,
-      data: entries.map((e) => ({
-        path: e.path,
-        kind: e.kind === "directory" ? "directory" : "file",
-      })),
-    };
-  } catch (err) {
-    return { ok: false, error: formatIpcError(err) };
-  }
 }
 
 export async function handleVfsRead(

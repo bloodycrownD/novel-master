@@ -1,4 +1,4 @@
-﻿import assert from "node:assert/strict";
+import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { ProviderError } from "../../../src/errors/provider-errors.js";
 import {
@@ -9,6 +9,41 @@ import {
 } from "../../../src/infra/llm-protocol/logic/openai-sse-parser.js";
 
 describe("openai-sse-parser", () => {
+  it("SSE-DATA-NS-01: `data:` 无空格形态不再被整流静默丢弃", () => {
+    // 牙齿：把 parseSseDataLine 改回 `startsWith("data: ")` 形态，这条必红
+    // （blocks 长度为 0，且 malformedLineCount 仍为 0 ⇒ 不抛错，症状是「秒回空消息」）。
+    const state = createOpenAiSseParserState();
+    const deltas: string[] = [];
+    const onStream = (ev: { type: string; text?: string }) => {
+      if (ev.type === "text-delta" && ev.text != null) {
+        deltas.push(ev.text);
+      }
+    };
+
+    feedOpenAiSseChunk(
+      state,
+      'data:{"choices":[{"delta":{"content":"Hi"}}]}\n\n',
+      onStream,
+    );
+    const { blocks } = finishOpenAiSse(state, onStream);
+    assert.equal(blocks.length, 1);
+    assert.equal((blocks[0] as { text: string }).text, "Hi");
+    assert.deepEqual(deltas, ["Hi"]);
+    assert.equal(state.malformedLineCount, 0);
+  });
+
+  it("SSE-DATA-NS-02: 有空格形态不回归", () => {
+    // 防「改成只认无空格」这种反向错修。
+    const state = createOpenAiSseParserState();
+    feedOpenAiSseChunk(
+      state,
+      'data: {"choices":[{"delta":{"content":"Hi"}}]}\n\n',
+    );
+    const { blocks } = finishOpenAiSse(state);
+    assert.equal(blocks.length, 1);
+    assert.equal((blocks[0] as { text: string }).text, "Hi");
+  });
+
   it("SSE-01: incremental text deltas", () => {
     const state = createOpenAiSseParserState();
     const deltas: string[] = [];

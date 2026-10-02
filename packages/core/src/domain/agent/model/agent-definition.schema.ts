@@ -10,7 +10,10 @@ import {
   dynamicBlockToWire,
   persistBlockToWire,
 } from "@/domain/prompt/logic/agent-prompt-layout-wire.js";
-import { validateAgentPromptLayoutFromMaps } from "@/domain/prompt/logic/validate-agent-prompt-layout.js";
+import {
+  validateAgentPromptLayout,
+  validateAgentPromptLayoutFromMaps,
+} from "@/domain/prompt/logic/validate-agent-prompt-layout.js";
 import { stripLegacyWorktreeBlocksFromPersistMap } from "@/domain/prompt/logic/normalize-agent-prompt-layout.js";
 import type { AgentDefinition, AgentToolPolicy } from "./agent-definition.js";
 
@@ -219,6 +222,13 @@ function documentToDefinition(doc: AgentDefinitionDocument): AgentDefinition {
 }
 
 function definitionToDocument(def: AgentDefinition): AgentDefinitionDocument {
+  // 块名唯一性门禁（RT-04）：wire 形态是「块名 → 块」的对象映射，同名块在这里
+  // 会被后写静默覆盖（正文永久丢失、零报错）。读侧 validateAgentPromptLayoutFromMaps
+  // 天然唯一、写侧此前是裸的 ⇒ 只补写侧这一处。
+  // 落点选这里而不是 configToWire：toWire 的三个调用点（validateAgentDefinition /
+  // ProjectAgentConfig.updateAgentConfig / 注册表持久化）唯一收敛在 definitionToDocument，
+  // 一处改动全覆盖，同一条规则插两遍将来必漏改一处。
+  validateAgentPromptLayout(def.prompts);
   const persist: AgentDefinitionDocument["prompts"]["persist"] = {};
   for (const block of def.prompts.persist) {
     persist[block.name] = persistBlockToWire(block);

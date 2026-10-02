@@ -93,6 +93,12 @@ const inactiveDynamicTextareaRef: RefObject<HTMLTextAreaElement | null> = {
 /** 内置 general 合成行 sentinel（与列表页同口径，不经库表读取）。 */
 const GENERAL_AGENT_ID = "general";
 
+/**
+ * 「原绑定模型当前不可用」置顶项的 option value。
+ * 用哨兵串而非真实 modelId：它只在列表加载不全时出现，不与任何 savedModel 撞值。
+ */
+const UNRESOLVED_MODEL_OPTION_VALUE = "__unresolved_original_model__";
+
 type Nav = SettingsNavHandle;
 
 /** 从 wire 尽力读取显示名称。 */
@@ -118,6 +124,13 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
   const [modelEnabled, setModelEnabled] = useState(false);
   const [providerId, setProviderId] = useState("");
   const [savedModelId, setSavedModelId] = useState("");
+  /**
+   * def.model 有值、但当前模型列表里找不到它时的原串（服务商被删 / 列表加载失败）。
+   * 非 null 时下拉停在置顶的「不可用」项，保存按「未被动过则保留原绑定」处理。
+   */
+  const [unresolvedModelId, setUnresolvedModelId] = useState<string | null>(null);
+  /** 用户是否显式动过「专属模型」下拉（动过之后保存不再自动保留 unresolved 原值）。 */
+  const [modelTouchedByUser, setModelTouchedByUser] = useState(false);
   const [systemEnabled, setSystemEnabled] = useState(false);
   const [systemContent, setSystemContent] = useState("");
   const [persistEnabled, setPersistEnabled] = useState(false);
@@ -216,46 +229,72 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
     ]
   );
 
-  // 扁平化：一次性加载全服务商 savedModels，供「专属模型」下拉直接选。
-  // 替代旧的「服务商二级联动」UI——模型 label 已含服务商前缀，无需单独选服务商。
+  /**
+   * 扁平化：一次性加载全服务商 savedModels，供「专属模型」下拉直接选。
+   * 替代旧的「服务商二级联动」UI——模型 label 已含服务商前缀，无需单独选服务商。
+   *
+   * ⚠️ 失败不吞：单个服务商失败时它的模型整体缺席，若照旧返回空数组，
+   * 调用方会把「列表没加载出来」误判成「本来就没绑定专属模型」，
+   * 用户随手改个名字点保存就把原绑定从库里删掉。失败信息随返回值上抛。
+   */
   const loadAllSavedModels = useCallback(
     async (
       providerRows: Array<{ id: string; label: string }>,
-    ): Promise<
-      Array<{
+    ): Promise<{
+      models: Array<{
         id: string;
         vendorModelId: string;
         displayName: string;
         providerId: string;
-      }>
-    > => {
-      const results = await Promise.all(
-        providerRows.map((p) =>
-          ipcProviderModelsSavedList({ providerId: p.id }).then((res) =>
-            res.ok
-              ? res.data.map((m) => ({
-                  id: m.id,
-                  vendorModelId: m.vendorModelId,
-                  displayName: m.displayName?.trim() || m.vendorModelId,
-                  providerId: p.id,
-                }))
-              : [],
-          ),
-        ),
+      }>;
+      failedProviderIds: string[];
+    }> => {
+      const settled = await Promise.all(
+        providerRows.map(async (p) => {
+          const res = await ipcProviderModelsSavedList({ providerId: p.id });
+          if (!res.ok) {
+            return { providerId: p.id, models: [], failed: true as const };
+          }
+          return {
+            providerId: p.id,
+            failed: false as const,
+            models: res.data.map((m) => ({
+              id: m.id,
+              vendorModelId: m.vendorModelId,
+              displayName: m.displayName?.trim() || m.vendorModelId,
+              providerId: p.id,
+            })),
+          };
+        }),
       );
-      const flat = results.flat();
-      setSavedModels(flat);
-      return flat;
+      const models = settled.flatMap((r) => r.models);
+      const failedProviderIds = settled
+        .filter((r) => r.failed)
+        .map((r) => r.providerId);
+      setSavedModels(models);
+      return { models, failedProviderIds };
     },
     [],
   );
 
+  /**
+   * applyDefinition 的第二参（模型绑定形态）——刻意不加第三个位置参数：
+   * 既有静态守卫逐字匹配 `applyDefinition(DEFAULT_SUBAGENT_DEFINITION, null)`。
+   * - null：出厂/显式无绑定（general 出厂态、def.model 缺省）。
+   * - { providerId, modelId }：解析到具体模型。
+   * - { unresolved: true, rawId }：def.model 有值但当前模型列表里找不到
+   *   （服务商被删 / 列表加载失败）——按「保留原绑定」处理，不得当成无绑定。
+   */
+  type ModelPin =
+    | null
+    | { providerId: string; modelId: string }
+    | { unresolved: true; rawId: string };
 
   /** 把 def 填入全部表单 state 并落 dirty 基线（普通加载与内置 general 共用）。 */
   const applyDefinition = useCallback(
     (
       def: AgentDefinition,
-      pinned: { providerId: string; modelId: string } | null,
+      pinned: ModelPin,
     ) => {
       const promptForm = definitionToForm(def);
       setName(def.name ?? "");
@@ -283,22 +322,40 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       setToolsSelected([...toolsWire.selected]);
 
       // 无 model pin（含 general 出厂态）：下拉停在「默认(跟随)」，不预填具体模型。
+      // unresolved（def.model 有值但列表里找不到）：保持「专属模型已开启」，
+      // 下拉停在置顶的不可用项，保存时按未被动过则原样保留 def.model。
+      const unresolvedRawId =
+        pinned != null && "unresolved" in pinned ? pinned.rawId : null;
       const modelOn = pinned != null;
+      setUnresolvedModelId(unresolvedRawId);
+      setModelTouchedByUser(false);
       setModelEnabled(modelOn);
-      setProviderId(pinned?.providerId ?? "");
-      setSavedModelId(pinned?.modelId ?? "");
+      setProviderId(
+        pinned != null && "providerId" in pinned ? pinned.providerId : "",
+      );
+      setSavedModelId(
+        pinned != null && "modelId" in pinned ? pinned.modelId : "",
+      );
 
       setSavedBaseline(
         formSnapshotJson({
           name: def.name ?? "",
           maxSteps: String(def.runtime?.maxSteps ?? 20),
           modelEnabled: modelOn,
-          providerId: pinned?.providerId ?? "",
-          savedModelId: pinned?.modelId ?? "",
+          providerId:
+            pinned != null && "providerId" in pinned ? pinned.providerId : "",
+          savedModelId:
+            pinned != null && "modelId" in pinned ? pinned.modelId : "",
           toolsMode: toolsWire.mode,
           toolsSelected: [...toolsWire.selected],
           ...promptForm,
           persist: [...promptForm.persist],
+          // 基线侧必须显式带 mode（core2 §9 B 的三处联动之一）：
+          // core 的 formSnapshotJson 已把 mode 无条件纳入输出，此处不传 ⇒
+          // 基线 JSON 缺 mode 键、实时快照有 mode ⇒ 打开任意智能体即显示「未保存」。
+          // 放在 ...promptForm 之后：promptForm.mode 的口径与本行一致，
+          // 显式写出是为了让这条联动在本文件里看得见、不会被后续重构悄悄删掉。
+          mode: def.mode ?? "all",
         })
       );
     },
@@ -343,17 +400,18 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       setProviders(providerRows);
 
       // 扁平化：全量加载 savedModels，下拉直接选模型。
-      const allModels = await loadAllSavedModels(providerRows);
-      const pinned =
-        def.model != null
-          ? allModels.find((m) => m.id === def.model)
-          : undefined;
-      applyDefinition(
-        def,
-        pinned != null
-          ? { providerId: pinned.providerId, modelId: pinned.id }
-          : null,
-      );
+      const { models: allModels } = await loadAllSavedModels(providerRows);
+      // 三分支：无绑定 / 解析到 / 解析不到但 def.model 有值（保留原绑定，不当无绑定）。
+      const pin: ModelPin =
+        def.model == null
+          ? null
+          : (() => {
+              const found = allModels.find((m) => m.id === def.model);
+              return found != null
+                ? { providerId: found.providerId, modelId: found.id }
+                : { unresolved: true as const, rawId: def.model };
+            })();
+      applyDefinition(def, pin);
     } finally {
       setLoading(false);
     }
@@ -385,6 +443,28 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       nav.setAgentEditorTitle?.(DEFAULT_SUBAGENT_DEFINITION.name);
     }
   }, [agentId, nav]);
+
+  // dirty 上报（通用通道 nav.dirtyViews，与 SkillDetailView 同形）：
+  // 挂载首跑即写入当前值（自愈异常卸载残留）、dirty 变化持续同步、
+  // 卸载时清掉自己的标记。SettingsOverlay 的导航守卫读同一集合。
+  //
+  // ⚠️ 落点必须在下面三个早返回（!agentId / invalidHealth / loadError）之前，
+  // 否则违反 hooks 规则。三种早返回态本就不该上报 dirty：那时页面上没有可编辑
+  // 表单，标脏只会让「无内容可丢」的页面弹无谓的确认框。
+  useEffect(() => {
+    if (!agentId || invalidHealth != null || loadError != null) {
+      return;
+    }
+    const isDirty = savedBaseline != null && snapshot !== savedBaseline;
+    if (isDirty) {
+      nav.dirtyViews.add("agentEditor");
+    } else {
+      nav.dirtyViews.delete("agentEditor");
+    }
+    return () => {
+      nav.dirtyViews.delete("agentEditor");
+    };
+  }, [agentId, invalidHealth, loadError, savedBaseline, snapshot, nav]);
 
   if (!agentId) {
     return <p className="settings-hint">缺少 agentId</p>;
@@ -514,7 +594,11 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       return;
     }
     const definition: AgentDefinition = { ...built.definition };
-    if (modelEnabled && savedModelId) {
+    if (unresolvedModelId != null && !modelTouchedByUser) {
+      // 原绑定在当前列表里不可用（服务商被删 / 列表加载失败），且用户没动过下拉
+      // ⇒ 保留原值，不得因为「下拉显示默认(跟随)」就把绑定从库里删掉。
+      definition.model = unresolvedModelId;
+    } else if (modelEnabled && savedModelId) {
       definition.model = savedModelId;
     } else {
       delete definition.model;
@@ -616,13 +700,26 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
   // 空串代表默认(跟随)——与 def.model 缺省语义对齐（buildAgentDefinitionFromForm
   // 只看 modelEnabled + savedModelId，core 零改动）。
   const handleModelSelect = (id: string) => {
+    setModelTouchedByUser(true);
     if (id === "") {
       setModelEnabled(false);
       setSavedModelId("");
+      // 用户显式选回「默认(跟随)」= 显式解除绑定，unresolved 提示随之消失。
+      setUnresolvedModelId(null);
+      return;
+    }
+    if (id === UNRESOLVED_MODEL_OPTION_VALUE) {
+      // 停在「原绑定不可用」这一项：不清 unresolved，保存继续保留原值。
+      setModelEnabled(true);
       return;
     }
     setModelEnabled(true);
     setSavedModelId(id);
+    // 改绑成功即清 unresolved：unresolved 态下选一个真实模型，语义与
+    // 「选回默认(跟随)」一样是「我主动改绑了」，留着会让三段式 value 的第一段
+    // 把下拉重新拉回哨兵项、提示继续宣称「保存将保留原绑定」——而实际落库的是新模型，
+    // 用户在 UI 上看不见自己改绑了（CR-F08 / OQ5 默认案：清掉，不拆双 state）。
+    setUnresolvedModelId(null);
     const selected = savedModels.find((m) => m.id === id);
     setProviderId(selected?.providerId ?? "");
   };
@@ -762,11 +859,22 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
             hint="默认(跟随) 表示使用会话操作抽屉 / 我的里设置的当前模型。"
           >
             <select
-              value={modelEnabled ? savedModelId : ""}
+              value={
+                unresolvedModelId != null
+                  ? UNRESOLVED_MODEL_OPTION_VALUE
+                  : modelEnabled
+                    ? savedModelId
+                    : ""
+              }
               disabled={isBuiltin}
               onChange={(e) => handleModelSelect(e.target.value)}
             >
               <option value="">默认(跟随)</option>
+              {unresolvedModelId != null ? (
+                <option value={UNRESOLVED_MODEL_OPTION_VALUE}>
+                  ⚠ 原绑定模型当前不可用（{unresolvedModelId}）
+                </option>
+              ) : null}
               {savedModels.map((m) => {
                 const providerLabel =
                   providers.find((p) => p.id === m.providerId)?.label ??
@@ -779,6 +887,11 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
               })}
             </select>
           </SettingsField>
+          {unresolvedModelId != null ? (
+            <p className="settings-hint settings-hint--compact">
+              原绑定模型当前不可用（服务商可能已删除或模型列表加载失败），保存将保留原绑定；选择「默认(跟随)」可解除。
+            </p>
+          ) : null}
         </SettingsSection>
 
         <SettingsSection title="运行时">

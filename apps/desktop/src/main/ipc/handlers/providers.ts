@@ -92,17 +92,25 @@ export async function handleProvidersDelete(
 ): Promise<IpcResult<void>> {
   try {
     const rt = await getDesktopRuntime();
+    // ⚠️ 归属判定必须发生在 providers.delete 之前：delete 会级联抹掉该 provider 名下
+    // 的全部 saved model 行，delete 之后再 getSavedById 恒为 null，reset 永不执行 ⇒
+    // currentModelId 悬空固化进新会话 agent_config_json，发消息才抛 INVALID_SAVED_MODEL_ID。
+    // 该顺序是 core `DefaultProviderService.delete` 里「currentModelId 是软指针、
+    // 不参与 SAVED_MODEL_IN_USE 前置拒绝」这条契约的另一半，三调用方
+    // （cli/desktop/mobile）必须保持一致，改动任一方须同步复核另外两方。
+    const currentModelId = await rt.state.getCurrentModelId();
+    let clearCurrentModel = false;
+    if (currentModelId != null && currentModelId !== "") {
+      const saved = await rt.providerModels.getSavedById(currentModelId);
+      clearCurrentModel = saved?.providerId === req.providerId;
+    }
     await rt.providers.delete(req.providerId);
     const currentProviderId = await rt.state.getCurrentProviderId();
     if (currentProviderId === req.providerId) {
       await rt.state.resetCurrentProviderId();
     }
-    const currentModelId = await rt.state.getCurrentModelId();
-    if (currentModelId != null && currentModelId !== "") {
-      const saved = await rt.providerModels.getSavedById(currentModelId);
-      if (saved?.providerId === req.providerId) {
-        await rt.state.resetCurrentModelId();
-      }
+    if (clearCurrentModel) {
+      await rt.state.resetCurrentModelId();
     }
     return { ok: true, data: undefined };
   } catch (err) {

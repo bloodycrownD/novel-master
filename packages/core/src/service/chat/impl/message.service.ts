@@ -41,6 +41,7 @@ import {
 } from "@/domain/session-kkv/model/session-kkv-domains.js";
 import { countToolUseBlocks } from "@/domain/chat/logic/tool-use-count.js";
 import {
+  aggregateReadRefPointers,
   aggregateReadRefs,
   adjustReadRefCount,
   collectReadRefs,
@@ -155,6 +156,17 @@ export class DefaultMessageService implements MessageService {
     options: { limit: number }
   ): Promise<ChatMessage[]> {
     return this.deps.messages.listBySessionTail(sessionId, options.limit);
+  }
+
+  listBySessionTailOfRole(
+    sessionId: string,
+    options: { role: string; limit: number }
+  ): Promise<ChatMessage[]> {
+    return this.deps.messages.listBySessionTailOfRole(
+      sessionId,
+      options.role,
+      options.limit
+    );
   }
 
   listBySessionPage(
@@ -317,7 +329,18 @@ export class DefaultMessageService implements MessageService {
     if (upTo == null || upTo.sessionId !== sessionId) {
       throw chatNotFound("message", upToMessageId, { sessionId });
     }
-    const all = await this.deps.messages.listBySession(sessionId);
+    // 上界收窄读口：fork 的全部消费都落在「锚点及更早」方向（下方
+    // aggregateReadRefs / seedForkCopyParity 都吃同一份 toCopy），锚点之后的
+    // 整条尾巴是纯浪费。旧形态是 listBySession 全量读 + 事务内 filter 丢弃。
+    const all = await this.deps.messages.listBySessionUpToSeq(
+      sessionId,
+      upTo.seq
+    );
+    if (all.length === 0) {
+      // 空集合守卫**必须在开事务之前**：上界读口在事务外，锚点之前的消息一条都
+      // 没有时直接抛，不为一个必然回滚的动作开事务。
+      throw chatInvalidArgument("No messages to fork up to the given id");
+    }
     const projectSessions = await this.deps.sessions.listByProject(
       source.projectId
     );
@@ -327,10 +350,9 @@ export class DefaultMessageService implements MessageService {
     );
     return this.deps.conn.transaction(async (tx) => {
       const r = reposFor(tx);
-      const toCopy = all.filter((m) => m.seq <= upTo.seq);
-      if (toCopy.length === 0) {
-        throw chatInvalidArgument("No messages to fork up to the given id");
-      }
+      // 上界读口的返回集合与旧的 all.filter(m => m.seq <= upTo.seq) 逐条等价，
+      // 零新增过滤语义（含 hidden 行——fork 要 Preserve hidden state）。
+      const toCopy = all;
       const now = Date.now();
       const forked: ChatSession = {
         id: randomUUID(),
@@ -475,13 +497,16 @@ export class DefaultMessageService implements MessageService {
     }
 
     if (afterMessageId == null) {
-      // anchor 为 null → 清空整 session：先把所有 message id 找出来拿去删 checkpoint 指针
-      const all = await this.deps.messages.listBySession(sessionId);
-      const ids = all.map((m) => m.id);
+      // anchor 为 null → 清空整 session：产出「要删的消息 id + 它们的 read 引用」
+      // 这两样删除链素材。窄投影读口（4 列）替掉原来的 21 列全量读，
+      // 且**移进写事务**——旧形态读在事务外，读到 id 集合之后新 append 的消息
+      // 会被 deleteBySession 删掉、但它的 checkpoint 不在 ids 里 ⇒ 孤儿 checkpoint。
+      // 产出的 ids/refs 就是要删的写集合，按「产出写集合的读必须留在事务内」处理。
       await this.deps.conn.transaction(async (tx) => {
         const messages = new SqliteMessageRepository(tx);
         const checkpoints = new SqliteMessageCheckpointRepository(tx);
-        if (ids.length > 0) {
+        const targets = await messages.listReadRefTargetsBySession(sessionId);
+        if (targets.length > 0) {
           // 发生删除即清 backfill 游标（清空重聊场景 seq 全量复用，防线同 delete）。
           await new SqliteSessionKkvRepository(tx).clearDomain(
             sessionId,
@@ -490,10 +515,13 @@ export class DefaultMessageService implements MessageService {
           // read 引用 −1（公开 API 不留无挂点的消息删除面）：与消息删除同事务。
           await adjustReadRefCount(
             new SqliteVfsRevisionRepository(tx),
-            aggregateReadRefs(all.map((m) => m.content)),
+            aggregateReadRefPointers(targets.map((t) => t.refs)),
             -1
           );
-          await checkpoints.deleteCheckpointsForMessages(sessionId, ids);
+          await checkpoints.deleteCheckpointsForMessages(
+            sessionId,
+            targets.map((t) => t.id)
+          );
         }
         await messages.deleteBySession(sessionId);
       });

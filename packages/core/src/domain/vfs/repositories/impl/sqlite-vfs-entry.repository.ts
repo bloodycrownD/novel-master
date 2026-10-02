@@ -944,13 +944,16 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     const oldBase = normalizePrefix(oldPrefix);
     const newBase = normalizePrefix(newPrefix);
     const parser = this.parser;
-    // 目录前缀重命名：把 `oldBase/...` 整体替换成 `newBase/...`；含 oldBase 自身。
-    // 用 `REPLACE(path, oldBase||'/', newBase||'/')` 处理子项，再单独 UPDATE 前缀根。
+// 目录前缀重命名：把 `oldBase/...` 整体替换成 `newBase/...`；含 oldBase 自身。
+    // 必须用「剥定长前缀 + 拼新前缀」的定点写法（substr），**不能用 REPLACE**：
+    // REPLACE 替换整串中出现的所有匹配，子树内部再出现一次同名目录时深层那一段
+    // 会被二次替换（/a → /a_新 且子树含 a/sub/a/notes.md ⇒ 错成 a_新/sub/a_新/notes.md），
+    // 文件被静默搬到磁盘上不存在的路径，用户再也点不到。
     const result = await executeTemplate(
       tx,
       parser,
       `UPDATE vfs_entry
-       SET path = REPLACE(path, #{oldWithSlash}, #{newWithSlash})
+       SET path = #{newWithSlash} || substr(path, length(#{oldWithSlash}) + 1)
        WHERE scope_key = #{scopeKey}
          AND path LIKE #{pattern} ESCAPE '\\'`,
       {

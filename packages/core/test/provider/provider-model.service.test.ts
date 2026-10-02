@@ -322,4 +322,38 @@ describe("ProviderModelService deleteSaved（T-SM8）", () => {
       (e) => e instanceof ProviderError && e.code === "SAVED_MODEL_IN_USE",
     );
   });
+
+  it("chat_session.agent_config_json.modelId 引用时拒绝删除", async () => {
+    // 照抄上面 chat_project 那条的形状。会话级覆盖**只**存在 chat_session
+    // （该表没有 model_id 列），形态是顶层 `{agentId, modelId}`。
+    const ctx = getNovelMasterTestContext();
+    const bundle = createProviderServices(ctx.conn, memorySecretStore());
+    const saved = await bundle.providerModels.create(BUILTIN_PROVIDER_UUID_OPENAI, "gpt-4o");
+    const project = await ctx.projects.create(`proj-sess-${Date.now()}`);
+    const session = await ctx.sessions.create(project.id);
+    await ctx.sessions.updateSessionAgentConfig(session.id, {
+      agentId: `agent-sess-${randomUUID()}`,
+      modelId: saved.id,
+    });
+    await assert.rejects(
+      () => bundle.providerModels.deleteSaved(saved.id),
+      (e) => e instanceof ProviderError && e.code === "SAVED_MODEL_IN_USE",
+    );
+  });
+
+  it("chat_session.agent_config_json 为脏 JSON 时守卫不整体失败（仍能删无引用模型）", async () => {
+    // 脏行必须被跳过而不是让整个守卫抛错——抛错等于守卫失效，比不扫更糟。
+    const ctx = getNovelMasterTestContext();
+    const bundle = createProviderServices(ctx.conn, memorySecretStore());
+    const saved = await bundle.providerModels.create(BUILTIN_PROVIDER_UUID_OPENAI, "gpt-4o");
+    const project = await ctx.projects.create(`proj-dirty-${Date.now()}`);
+    const session = await ctx.sessions.create(project.id);
+    await ctx.conn.execute(`UPDATE chat_session SET agent_config_json = ? WHERE id = ?`, [
+      "{坏 JSON",
+      session.id,
+    ]);
+
+    await bundle.providerModels.deleteSaved(saved.id);
+    assert.equal(await bundle.providerModels.getSavedById(saved.id), null);
+  });
 });

@@ -55,6 +55,11 @@ describe("子代理 VFS 可见性（T-T9 / P0-4）", () => {
       listBySession: async () => [
         { role: "assistant", content: { blocks: [{ type: "text", text: "ok" }] } } as ChatMessage,
       ],
+      // tail+role 读口（subagent-tool 现在的消费方）：先按 role 过滤再取末 limit 条。
+      listBySessionTailOfRole: async (_sid, options) =>
+        [{ role: "assistant", content: { blocks: [{ type: "text", text: "ok" }] } } as ChatMessage]
+          .filter((m) => m.role === options.role)
+          .slice(-Math.max(1, Math.floor(options.limit))),
     } as unknown as MessageService;
     const sessions: SessionService = {
       createSubSession: async (parent, project) => {
@@ -93,7 +98,6 @@ describe("子代理 VFS 可见性（T-T9 / P0-4）", () => {
       vfs: parentVfs,
       projectId: "proj-x",
       sessionId: "parent-sess",
-      listSessionMessages: async () => [],
       subagent,
     };
 

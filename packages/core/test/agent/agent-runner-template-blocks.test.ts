@@ -1,4 +1,4 @@
-﻿import assert from "node:assert/strict";
+import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
 import {
   createAgentRunner,
@@ -70,7 +70,6 @@ function mockToolCtx(vfs: VfsService): BuiltinToolContext {
     vfs,
     projectId: PROJECT_ID,
     sessionId: SESSION_ID,
-    listSessionMessages: async () => [],
   };
 }
 

@@ -17,7 +17,8 @@
     "dev": "tsc -p tsconfig.json --watch",
     "clean": "node --input-type=module --eval \"import { rmSync } from 'node:fs'; rmSync('dist', { recursive: true, force: true })\"",
     "lint": "eslint src test",
-    "test": "tsx --test test/**/*.test.ts"
+    "test": "tsx --test test/**/*.test.ts",
+    "test:collect-guard": "node ../../scripts/collect-check.mjs --dir test"
   },
   "dependencies": {
     "@primno/dpapi": "^2.0.1"

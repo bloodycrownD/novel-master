@@ -113,6 +113,19 @@ function makeSubagent(opts: MockOpts = {}): MockResult {
         content: { blocks: [{ type: "text", text: `m${i}` }] },
       })) as unknown as ChatMessage[];
     },
+    // repo-mega-cr Wave C 的 subagent 窄读消费口（src 端已切换，mock 缺方法
+    // 会 TypeError——「加方法先扫手写假实现」同族坑；实现抄
+    // subagent-tool-parallel.test.ts 的范本：role 过滤 + 末 limit 条）。
+    listBySessionTailOfRole: async (sessionId: string, options: {role: string; limit: number}) => {
+      const n = counts[sessionId] ?? 0;
+      const all = Array.from({ length: n }, (_, i) => ({
+        role: "user",
+        content: { blocks: [{ type: "text", text: `m${i}` }] },
+      })) as unknown as ChatMessage[];
+      return all
+        .filter((m) => m.role === options.role)
+        .slice(-Math.max(1, Math.floor(options.limit)));
+    },
   } as unknown as MessageService;
 
   const sessions: SessionService = {

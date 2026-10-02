@@ -274,7 +274,11 @@ action 说明：
       .optional()
       .describe("相对技能目录的路径，缺省 SKILL.md，不得包含 .."),
     content: z.string().optional().describe("write 动作的整文件内容"),
-    oldString: z.string().optional().describe("edit 动作的匹配串"),
+    oldString: z
+      .string()
+      .min(1)
+      .optional()
+      .describe("edit 动作的匹配串；给了就不得为空串（空串会假命中或死循环）"),
     newString: z.string().optional().describe("edit 动作的替换串"),
     replaceAll: z.boolean().optional().describe("edit 动作是否替换全部匹配"),
     offset: z

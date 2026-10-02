@@ -1,0 +1,6 @@
+#!/bin/sh
+# pre-commit hook: encoding gate (wave-e H1).
+# ASCII-only on purpose: Windows may parse hook files as ANSI/GBK (see RULE).
+# Enable once per clone:  git config core.hooksPath .githooks
+# `npm install` does it automatically via scripts/link-hooks.mjs (prepare).
+exec node scripts/check-encoding.mjs --staged

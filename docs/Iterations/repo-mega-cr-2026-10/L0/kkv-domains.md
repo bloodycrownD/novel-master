@@ -1,0 +1,22 @@
+# L0 KKV module 普查（nm-* 命名空间 → 引用文件）
+
+- `nm-agent-finished-` × 1：apps/mobile/src/services/agent-finished-notification.ts
+- `nm-agent-keepalive` × 1：apps/mobile/src/services/agent-finished-notification.ts
+- `nm-annotate` × 1：apps/desktop/renderer/layout/preview-annotate.ts
+- `nm-annotate-anchor` × 1：packages/core/src/domain/chat/logic/annotate-source-anchor.ts
+- `nm-blob-binary` × 3：packages/core/src/infra/db-maintenance/impl/blob-binary-normalization.ts、packages/core/src/infra/db-maintenance/impl/db-maintenance.service.ts、packages/core/src/infra/db-maintenance/impl/message-content-compaction.ts
+- `nm-cloud-sync` × 3：packages/core/src/domain/tool/builtin/search/search-config.ts、apps/desktop/src/main/services/cloud-sync-config.store.ts、apps/mobile/src/services/cloud-sync-config.store.ts
+- `nm-cloud-sync-export-` × 1：apps/desktop/src/main/services/cloud-sync.service.ts
+- `nm-cloud-sync-import-` × 1：apps/desktop/src/main/services/cloud-sync.service.ts
+- `nm-compaction-conditions` × 3：packages/core/src/infra/db-maintenance/impl/blob-binary-normalization.ts、packages/core/src/infra/db-maintenance/impl/message-content-compaction.ts、packages/core/src/service/compaction-conditions/impl/compaction-conditions-store.service.ts
+- `nm-desktop-ui` × 3：apps/desktop/renderer/providers/ThemeProvider.tsx、apps/desktop/src/main/ipc/handlers/app-ui.ts、apps/desktop/src/main/storage/app-ui-prefs.ts
+- `nm-mermaid-` × 1：apps/desktop/renderer/components/MermaidMarkdown.tsx
+- `nm-message-content` × 2：packages/core/src/infra/db-maintenance/impl/blob-binary-normalization.ts、packages/core/src/infra/db-maintenance/impl/message-content-compaction.ts
+- `nm-mmd-` × 1：apps/mobile/src/web/shared/mermaid-core.ts
+- `nm-mobile-ui` × 3：apps/mobile/src/storage/app-ui-keys.ts、apps/mobile/src/storage/app-ui-prefs.ts、apps/mobile/src/storage/message-notification-pref.ts
+- `nm-model-retry` × 2：packages/core/src/service/provider/create-model-retry-policy-service.ts、packages/core/src/service/provider/impl/model-retry-policy.service.ts
+- `nm-model-suggestions` × 2：packages/core/src/domain/provider/model/model-suggestion-cache.ts、packages/core/src/domain/provider/repositories/impl/kkv-model-suggestion.repository.ts
+- `nm-preferences` × 6：packages/core/src/bootstrap/schema-migrations/retire-pref-session-fs-version-check-v1.ts、packages/core/src/infra/kkv-value-codec.ts、packages/core/src/infra/tokenizer/logic/read-token-counter-mode-pref.ts、packages/core/src/service/persistent-preferences/create-persistent-preferences.ts …
+- `nm-search` × 4：packages/core/src/domain/tool/builtin/search/search-config.ts、packages/core/src/index.ts、packages/core/src/infra/db-maintenance/impl/message-content-compaction.ts、apps/desktop/src/main/runtime/create-desktop-runtime.ts
+- `nm-seeds` × 1：packages/core/src/bootstrap/skills/seed-builtin-skills.ts
+- `nm-workspace-state` × 4：packages/core/src/service/persistent-state/create-persistent-state.ts、packages/core/src/service/persistent-state/impl/persistent-state.service.ts、packages/core/src/service/persistent-state/impl/workspace-state-keys.ts、packages/core/src/service/persistent-state/persistent-state.port.ts

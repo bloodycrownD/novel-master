@@ -42,11 +42,15 @@ export type CloudSyncCoordinatorDeps = {
   importTempPath?: string;
   leaseSeconds?: number;
   /**
-   * 进程内 push/agent 互斥锁（session 维度）。
+   * 进程内 sync/agent 互斥锁（session 维度）。
    *
    * 不传时使用模块级单例——coordinator 实例可能每次 build 都新建，
-   * 但 push 之间、push 与 agent 之间需要共享同一把锁，所以默认走单例。
-   * apps runtime 在 agent 启动入口应拿到同一实例（通过 {@link getDefaultPushAgentMutex}）。
+   * 但 sync 之间（pull ↔ push）需要共享同一把锁，所以默认走单例。
+   *
+   * ⚠️ 事实态（注释诚实化）：**「sync ↔ agent」这一段目前是空的**——
+   * `getDefaultPushAgentMutex` 未从 `infra/cloud-sync/index.ts` 导出，
+   * apps 侧（desktop / mobile）也零 acquire；agent 启动入口尚未接线，
+   * 靠 `dbSync.isAgentActive()` 的入口复检兜底。见 M-25。
    */
   pushMutex?: PushAgentMutex;
   /** push 入口等待互斥锁的最长时间（毫秒）；超时降级拒绝。 */
@@ -75,6 +79,13 @@ export type PullOptions = {
 
 export type PullResult = {
   rev: number;
+  /**
+   * 本次拉取是否真的替换了活动库文件。
+   *
+   * 调用方据此决定是否重建 runtime；`false` ⇒ 库文件没换、连接没关，
+   * 调用方持有的 runtime 仍然有效。
+   */
+  databaseReplaced: boolean;
 };
 
 export type PushOptions = {
@@ -139,7 +150,18 @@ export class CloudSyncCoordinator {
     );
   }
 
-  /** 拉取云端快照并导入本机数据库 */
+  /**
+   * 拉取云端快照并导入本机数据库（进程内互斥 → agent 复检 → 下载校验 → 导入）。
+   *
+   * 契约顺序：**换库 → 重建 runtime → 用新 runtime 记账 → 再放互斥令牌**。
+   * 本方法只负责到「换库」并回报 `databaseReplaced`；重建与记账在调用方
+   * （service / handler 层），且必须排在 coordinator 返回之后。
+   *
+   * 守卫位置：agent 复检放在 `ALREADY_UP_TO_DATE` / `SNAPSHOT_MISSING` 两个
+   * 早返回**之后**、开始搬运快照之前——一次「什么都不会发生」的 no-op pull
+   * 不应该因为 agent 正在跑而被拒。真正覆盖活动库文件之前再复检一次
+   * （下载期间 agent 可能启动），两条 import 分支紧邻调用处各一次。
+   */
   async pull(options: PullOptions): Promise<PullResult> {
     this.assertConfigured();
 
@@ -153,32 +175,54 @@ export class CloudSyncCoordinator {
       throw new CloudSyncError("SNAPSHOT_MISSING", "云端快照缺失");
     }
 
-    const snapKey = remote.snapshotKey!;
+    // 进程内互斥锁：pull 会整库替换活动库文件，必须与 push（以及将来的 agent
+    // 启动入口）串行；超时降级拒绝（拒绝优于脏快照）。
+    const lockHandle = await this.acquireSyncLock("pull");
+    try {
+      this.assertAgentIdleForPull();
 
-    if (this.canUseFilePathPull()) {
-      const tempPath = this.importTempPath!;
-      await this.storage.getToPath!(snapKey, tempPath);
-      const localHash = await this.hashSnapshotFile!(tempPath);
-      if (
-        remote.snapshotSha256 != null &&
-        localHash !== remote.snapshotSha256
-      ) {
-        throw new CloudSyncError("CHECKSUM_MISMATCH", "下载快照校验失败");
+      const snapKey = remote.snapshotKey!;
+      let databaseReplaced = false;
+
+      if (this.canUseFilePathPull()) {
+        const tempPath = this.importTempPath!;
+        await this.storage.getToPath!(snapKey, tempPath);
+        const localHash = await this.hashSnapshotFile!(tempPath);
+        if (
+          remote.snapshotSha256 != null &&
+          localHash !== remote.snapshotSha256
+        ) {
+          throw new CloudSyncError("CHECKSUM_MISMATCH", "下载快照校验失败");
+        }
+        // 覆盖活动库前二次复检：下载期间 agent 可能已经启动。
+        this.assertAgentIdleForPull();
+        const outcome = await this.dbSync.importSnapshotFromPath!(tempPath);
+        databaseReplaced = outcome?.databaseReplaced === true;
+      } else {
+        const { body } = await this.storage.get(snapKey);
+        const localHash = this.computeSha256Hex(body);
+        if (
+          remote.snapshotSha256 != null &&
+          localHash !== remote.snapshotSha256
+        ) {
+          throw new CloudSyncError("CHECKSUM_MISMATCH", "下载快照校验失败");
+        }
+        this.assertAgentIdleForPull();
+        const outcome = await this.dbSync.importSnapshot(body);
+        databaseReplaced = outcome?.databaseReplaced === true;
       }
-      await this.dbSync.importSnapshotFromPath!(tempPath);
-    } else {
-      const { body } = await this.storage.get(snapKey);
-      const localHash = this.computeSha256Hex(body);
-      if (
-        remote.snapshotSha256 != null &&
-        localHash !== remote.snapshotSha256
-      ) {
-        throw new CloudSyncError("CHECKSUM_MISMATCH", "下载快照校验失败");
-      }
-      await this.dbSync.importSnapshot(body);
+
+      return { rev: remote.rev, databaseReplaced };
+    } finally {
+      this.pushMutex.release(lockHandle);
     }
+  }
 
-    return { rev: remote.rev };
+  /** pull 侧 agent 复检：覆盖活动库文件会吃掉 agent 的在途写入或让它落进已废弃的 inode。 */
+  private assertAgentIdleForPull(): void {
+    if (this.dbSync.isAgentActive()) {
+      throw new CloudSyncError("AGENT_ACTIVE", "Agent 运行中，请稍后再拉取");
+    }
   }
 
   /** 导出本机快照并推送到云端（进程内互斥 → 抢云端锁 → 上传 → 清锁） */
@@ -186,7 +230,7 @@ export class CloudSyncCoordinator {
     this.assertConfigured();
 
     // 进程内互斥锁：push 持锁期间 agent 启动入口排队；超时降级拒绝
-    const lockHandle = await this.acquirePushLock();
+    const lockHandle = await this.acquireSyncLock("push");
     try {
       return await this.runPush(options);
     } finally {
@@ -194,8 +238,13 @@ export class CloudSyncCoordinator {
     }
   }
 
-  /** 申请 push 互斥锁；超时转成 PUSH_MUTEX_TIMEOUT（调用方据此降级拒绝）。 */
-  private async acquirePushLock(): Promise<PushAgentLockHandle> {
+  /**
+   * 申请 sync 互斥锁（pull 与 push 共用同一把进程内锁）；超时转成
+   * PUSH_MUTEX_TIMEOUT（错误码不扩面，调用方据此降级拒绝）。
+   */
+  private async acquireSyncLock(
+    operation: "pull" | "push" = "push"
+  ): Promise<PushAgentLockHandle> {
     try {
       return await this.pushMutex.acquire({
         timeoutMs: this.pushAcquireTimeoutMs,
@@ -204,7 +253,9 @@ export class CloudSyncCoordinator {
       if (error instanceof PushAgentMutexAcquireError) {
         throw new CloudSyncError(
           "PUSH_MUTEX_TIMEOUT",
-          "推送繁忙，等待互斥锁超时，请稍后再试",
+          operation === "pull"
+            ? "拉取繁忙，等待互斥锁超时，请稍后再试"
+            : "推送繁忙，等待互斥锁超时，请稍后再试",
           { cause: error }
         );
       }
@@ -212,7 +263,20 @@ export class CloudSyncCoordinator {
     }
   }
 
-  /** push 主体；调用方负责持有进程内互斥锁。 */
+  /**
+   * @deprecated 旧名保留（core 内部测试以外的引用不因此断裂）；新代码用
+   * {@link CloudSyncCoordinator.acquireSyncLock}。
+   */
+  protected acquirePushLock(): Promise<PushAgentLockHandle> {
+    return this.acquireSyncLock("push");
+  }
+
+  /**
+   * push 主体；调用方负责持有进程内互斥锁。
+   *
+   * 收尾契约：**final status 条件写失败时，重读远端必须重新判定租约与 rev，
+   * 禁止只取 etag 就覆盖**（否则远端 rev 回退 + 抹掉他人租约 ⇒ 跨设备静默错位）。
+   */
   private async runPush(options: PushOptions): Promise<PushResult> {
     // 入口仍保留 isAgentActive 检查：兼容 apps runtime 尚未接入互斥锁的旧路径
     // （旧 agent handler 不抢锁，只能靠这里拒绝）
@@ -280,6 +344,14 @@ export class CloudSyncCoordinator {
         );
         if (renewedEtag != null) {
           statusEtag = renewedEtag;
+        } else {
+          // 续租条件写失败：statusEtag 保持旧值，下面的 final 写必然走重读判定分支。
+          // 这里只留痕不抛错——重读分支已经能正确收尾，抛错会把「续租失败但收尾
+          // 安全」误判成整次 push 失败（快照已上传、计数已上去）。
+          // 目的是让下一个维护者不把「续租一定成功」当成不变量。
+          console.warn(
+            "[cloud-sync] 续租失败，final status 将走重读判定分支"
+          );
         }
       }
 
@@ -296,7 +368,27 @@ export class CloudSyncCoordinator {
 
       let finalEtag = await this.conditionalPutStatus(finalStatus, statusEtag);
       if (finalEtag == null) {
-        const { etag: rereadEtag } = await this.readRemoteStatus();
+        // If-Match 失败 = 远端在我们上传期间被别人改过。重读远端后必须**重新判定**
+        // 租约与 rev，禁止只取 etag 就把 finalStatus 覆盖上去：
+        // finalStatus.rev 是最初 remote.rev + 1 算出的常量、lock 是 null，
+        // 无条件覆盖会把远端 rev 写回更小的值并抹掉第三方的有效租约
+        // ⇒ 跨设备静默数据错位，且两端都把自己记成成功。
+        const { status: latest, etag: rereadEtag } = await this.readRemoteStatus();
+        // 两条判定必须并存：canAcquireLock 在「他人租约已过期」时返回 true，
+        // 只判它仍会把已被别人推进的 rev 盖掉；latest.rev >= nextRev 才是
+        // 「rev 是否被别人推进过」的唯一判据。
+        if (!canAcquireLock(latest.lock, this.deviceId)) {
+          throw new CloudSyncError(
+            "LOCK_HELD_BY_OTHER",
+            "另一台设备正在同步，请稍后再推送"
+          );
+        }
+        if (latest.rev >= nextRev) {
+          throw new CloudSyncError(
+            "NEED_PULL_FIRST",
+            "云端已被其他设备推进，请先拉取"
+          );
+        }
         finalEtag = await this.conditionalPutStatus(finalStatus, rereadEtag);
         if (finalEtag == null) {
           throw new CloudSyncError("LOCK_CONTENTION", "同步冲突，请重试");

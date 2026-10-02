@@ -1079,28 +1079,30 @@ describe("abort 注册前移：前奏期间的停止不丢（2026-09-30 用户�
     await ctx.state.setCurrentAgentId("test-default-agent");
     await ctx.state.setCurrentModelId(TEST_SAVED_MODEL_ID);
 
-    // 在倒扫循环的第 3 次迭代上触发「用户按停止」——刻意放在**backfill 内部**，
-    // 这样信号只能靠 backfill 自己的扫描循环兑现（检查点⓪在 backfill 之前，
-    // 检查点①在 append 之后，都接不住这个时刻）。
+    // 在「定位首个空窗」那次单查询之后触发「用户按停止」——刻意放在 **backfill
+    // 内部**，这样信号只能靠 backfill 自己的扫描/补写弃权点兑现（检查点⓪在
+    // backfill 之前，检查点①在 append 之后，都接不住这个时刻）。
+    //
+    // ⚠️ 观测面已随 CS-06 换掉：倒扫循环消失，定位空窗恒为**一次**单查询
+    // （`findLastCheckpointedMessageId`），空窗段只做 O(gap) 次连续前缀复核。
     const holder = SqliteMessageCheckpointRepository.prototype as unknown as {
-      hasCheckpoint: (
+      findLastCheckpointedMessageId: (
         this: unknown,
-        sessionId: string,
-        messageId: string
-      ) => Promise<boolean>;
+        sessionId: string
+      ) => Promise<string | null>;
     };
-    const originalHasCheckpoint = holder.hasCheckpoint;
-    let hasCalls = 0;
-    holder.hasCheckpoint = function (
-      this: unknown,
-      sessionId: string,
-      messageId: string
-    ) {
-      hasCalls += 1;
-      if (hasCalls === 3) {
+    const originalLookup = holder.findLastCheckpointedMessageId;
+    let lookupCalls = 0;
+    let writeAborted = false;
+    holder.findLastCheckpointedMessageId = function (this: unknown) {
+      lookupCalls += 1;
+      const out = originalLookup.call(this);
+      // 信号在定位完成、补写开始之前翻真
+      if (lookupCalls === 1) {
         abortRegistry.abort(session.id);
+        writeAborted = true;
       }
-      return originalHasCheckpoint.call(this, sessionId, messageId);
+      return out;
     };
 
     let result: Awaited<ReturnType<typeof runAgentTurn>>;
@@ -1112,16 +1114,17 @@ describe("abort 注册前移：前奏期间的停止不丢（2026-09-30 用户�
         { stream: false }
       );
     } finally {
-      holder.hasCheckpoint = originalHasCheckpoint;
+      holder.findLastCheckpointedMessageId = originalLookup;
     }
 
     assert.ok(
-      hasCalls <= 4,
-      `backfill 倒扫循环必须有限步退出（信号在第 3 步翻真，MSG_COUNT=${MSG_COUNT}）：实际查了 ${hasCalls} 次`
+      writeAborted,
+      "本用例必须在 backfill 内部真的翻真——否则后面的 cancelled 断言是假绿"
     );
-    assert.ok(
-      hasCalls < MSG_COUNT,
-      "不给信号时这个循环会跑满消息条数；断言它没跑满即证明弃权点生效",
+    assert.equal(
+      lookupCalls,
+      1,
+      `定位空窗必须只跑一次单查询（MSG_COUNT=${MSG_COUNT}）；实际 ${lookupCalls} 次`
     );
     assert.equal(
       result.stopReason,

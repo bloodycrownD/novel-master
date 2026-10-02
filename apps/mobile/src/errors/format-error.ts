@@ -80,7 +80,13 @@ export function formatError(error: unknown): string {
   return String(error);
 }
 
-/** @deprecated Prefer {@link formatError}; kept for VFS call sites. */
+/**
+ * 暂留兼容，VFS 文案已改走 core 的 `formatVfsErrorForUser`（见
+ * `formatError` 内 VfsError 分支）——mobile 侧已无 VFS 调用点用它，
+ * 保留只为旧 import 路径不炸。等调用点清零后随本文件一起删。
+ *
+ * @deprecated 请改用 {@link formatError}。
+ */
 export function formatVfsError(error: unknown): string {
   return formatError(error);
 }

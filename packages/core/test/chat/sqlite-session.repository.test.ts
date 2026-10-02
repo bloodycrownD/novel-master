@@ -201,4 +201,39 @@ describe("SqliteSessionRepository legacy 库 bootstrap", () => {
 
     await conn.close();
   });
+
+  it("CD-4: 含非法附件的草稿经读-改-写往返后正文不丢", async () => {
+    const ctx = getNovelMasterTestContext();
+    const repo = new SqliteSessionRepository(ctx.conn);
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id, "draft-cd4");
+
+    // 直接写原始列（绕过严格写侧），模拟历史存量行里今天不合法的附件形态
+    const poisoned = JSON.stringify({
+      text: "我写了一半的正文",
+      attachments: [
+        {
+          name: "/bad.md",
+          source: "attach",
+          type: "text",
+          content: null,
+          path: "/bad.md",
+          extra: 1,
+        },
+      ],
+    });
+    assert.equal(await repo.setComposerDraftJson(session.id, poisoned), true);
+
+    // 读 → 解析 → 序列化 往返（两端水合 + 后续持久化都走这条路）
+    const readBack = parseComposerDraftJson(
+      await repo.getComposerDraftJson(session.id),
+    );
+    assert.equal(readBack.text, "我写了一半的正文", "读侧不应因坏附件丢正文");
+
+    const rewritten = serializeComposerDraftJson(readBack);
+    assert.ok(rewritten != null);
+    const again = parseComposerDraftJson(rewritten);
+    assert.equal(again.text, "我写了一半的正文", "写回后正文仍在");
+    assert.equal(again.attachments.length, 0, "坏附件在写回时被净化掉");
+  });
 });

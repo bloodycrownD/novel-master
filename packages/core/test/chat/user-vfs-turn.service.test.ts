@@ -64,7 +64,6 @@ function makeToolCtx(
     }),
     projectId,
     sessionId,
-    listSessionMessages: () => messageRepo.listBySession(sessionId),
     sessionKkv: createSessionKkvService(conn),
   };
 }
@@ -323,8 +322,6 @@ describe("UserVfsTurnService", () => {
           vfs: failingVfs,
           projectId: project.id,
           sessionId: session.id,
-          listSessionMessages: () =>
-            new SqliteMessageRepository(ctx.conn).listBySession(session.id),
           sessionKkv: createSessionKkvService(ctx.conn),
         }),
       }),

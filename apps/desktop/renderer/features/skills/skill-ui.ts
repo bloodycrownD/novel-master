@@ -18,21 +18,9 @@ export function skillDomainLabel(
 }
 
 /** 新建技能的 SKILL.md 模板：front matter（name/description）+ 辅助文件引导。 */
-export function buildNewSkillDoc(name: string, description: string): string {
-  return [
-    "---",
-    `name: ${name}`,
-    `description: ${description}`,
-    "---",
-    "",
-    `# ${name}`,
-    "",
-    description,
-    "",
-    "<!-- 在这里编写技能说明。可添加辅助文件（如 references/x.md），模型会经 skill 工具按需读取。 -->",
-    "",
-  ].join("\n");
-}
+// 新建模板与 front matter 重写都已回收为 core 单源（见 buildNewSkillDoc 的模块注释：
+// 裸插值会让 description 里的半角 `": "` 把 YAML 解析成嵌套 map ⇒ 技能一建出来就是「无效技能」）。
+export { buildNewSkillDoc } from "@shared/logic/skills";
 
 // front matter 重写（withSkillFrontMatterValues）已回收为 core 单源，
 // 经 @shared/logic/skills 再导出，本文件不再持有私有实现。

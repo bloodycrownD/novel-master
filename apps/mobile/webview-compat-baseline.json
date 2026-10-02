@@ -1,0 +1,34 @@
+{
+  "$comment": "X3 门 C 基线：webview-dist/*/app.js 里 5 个老浏览器禁用构造的【调用点】计数（不是子串计数）。规则是『任何计数上升即 fail』，下降是预期（清账）。改法：修掉新增构造；确实拦不住（上游库升级带进来的）才跑 `node scripts/build-webview.mjs --update-compat` 抬基线，并在 PR 里写明理由。⚠️ 定位声明（CR-F16）：门 C 只对『我方源码原样进产物』有效；产物是 esbuild target=es2018 的降级输出，第三方库（mermaid/zod/Recogito/CodeMirror）的降级与压缩形态数不到，计算属性形态（Object['fromEntries']）也不进产物面——后者由门 A 在源码面兜住。5 条正则自 CR-F16 起容忍分隔符形态（空白 + 注释），Array.at 保持紧贴形态（可选链 arr?.at( 不在门 C 覆盖内）。",
+  "minSdkChromium": "58 (minSdkVersion 26)",
+  "packages": {
+    "chat-transcript": {
+      "Object.fromEntries": 6,
+      "String.replaceAll": 37,
+      "Object.hasOwn": 12,
+      "structuredClone": 11,
+      "Array.at": 18
+    },
+    "rich-document": {
+      "Object.fromEntries": 4,
+      "String.replaceAll": 37,
+      "Object.hasOwn": 12,
+      "structuredClone": 11,
+      "Array.at": 18
+    },
+    "code-editor": {
+      "Object.fromEntries": 0,
+      "String.replaceAll": 0,
+      "Object.hasOwn": 0,
+      "structuredClone": 0,
+      "Array.at": 0
+    },
+    "composer-input": {
+      "Object.fromEntries": 0,
+      "String.replaceAll": 0,
+      "Object.hasOwn": 0,
+      "structuredClone": 0,
+      "Array.at": 0
+    }
+  }
+}

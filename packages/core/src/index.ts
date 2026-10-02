@@ -256,7 +256,6 @@ export type { FileToolName } from "./domain/tool/builtin/vfs-tools.js";
 export type {
   BuiltinToolContext,
   VfsToolContext,
-  ToolResourceQuota,
 } from "./domain/tool/builtin/builtin-tool-context.js";
 /**
  * `search` 工具与搜索引擎配置（SKSP ref + KKV `nm-search` 模块）。

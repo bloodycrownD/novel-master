@@ -149,6 +149,7 @@
   "splitMarkdownUnderlineRuns",
   "splitSourceLines",
   "subscribeChatAnnotateDraft",
+  "summarizeToolInput",
   "tailBatchDeleteAfterSeq",
   "textBlocks",
   "transcriptSelectableRole",

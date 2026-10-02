@@ -1,4 +1,4 @@
-﻿import assert from "node:assert/strict";
+import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import * as coreMain from "@novel-master/core";
 import { createKkvService, KkvError } from "@novel-master/core/kkv";

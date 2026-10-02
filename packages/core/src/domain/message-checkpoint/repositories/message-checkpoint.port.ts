@@ -48,11 +48,11 @@ export interface MessageCheckpointRepository {
   hasAnyCheckpointForSession(sessionId: string): Promise<boolean>;
 
   /**
-   * 统计给定消息里有 checkpoint 的条数（一条 `message_id IN (...)` 计数查询）。
+   * 统计给定消息里有 checkpoint 的条数（按 ≤900 变量分块的 `IN (...)` 计数）。
    *
    * 等价性依赖 `message_checkpoint` 每 (session_id, message_id) 至多一行
    * （PK + {@link MessageCheckpointRepository.insertCheckpoint} 的替换语义），
-   * 所以 `COUNT(*)` 恰等于「有 checkpoint 的消息数」——backfill 圈段比对用。
+   * 所以 `COUNT(*)` 之和恰等于「有 checkpoint 的消息数」——backfill 圈段比对用。
    */
   countCheckpointsForMessages(
     sessionId: string,
@@ -122,6 +122,16 @@ export interface MessageCheckpointRepository {
     sessionId: string,
     maxSeq: number
   ): Promise<string | null>;
+
+  /**
+   * 找出会话内**最后一个**有 checkpoint 的消息 id（按 `chat_message.seq` 最大）。
+   *
+   * 「定位首个空窗」的单查询原语——替代原先从消息尾部逐条 `hasCheckpoint`
+   * 倒扫（最坏 M 次 SQL 往返，而这段每轮发送都跑）。
+   *
+   * @returns `null` when the session has no checkpoint rows at all.
+   */
+  findLastCheckpointedMessageId(sessionId: string): Promise<string | null>;
 
   /** Lists all file pointers for a session (used by revision GC). */
   listFilePointersForSession(

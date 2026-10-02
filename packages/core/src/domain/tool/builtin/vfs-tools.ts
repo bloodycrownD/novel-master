@@ -301,8 +301,9 @@ export function createVfsTools(): readonly Tool<
       path: z.string().min(1).describe("要修改的文件路径"),
       oldString: z
         .string()
+        .min(1)
         .describe(
-          "要被替换的原文；须在文件中唯一定位（replaceAll 时除外）。尾追时取文件末尾唯一锚点"
+          "要被替换的原文；须在文件中唯一定位（replaceAll 时除外）。不得为空串——空串会在文件开头「假命中」，或让 replaceAll 死循环。尾追时取文件末尾唯一锚点"
         ),
       newString: z
         .string()

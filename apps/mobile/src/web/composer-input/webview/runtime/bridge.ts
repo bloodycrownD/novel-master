@@ -64,7 +64,7 @@ export function handleHostMessage(raw: unknown): void {
       blurComposerInput();
       return;
     default:
-      // 未知 type：协议内不存在的消息（含 transcript 的 log/messagePatch 类死消息）丢弃
+      // 未知 type：协议内不存在的消息（含其它管线遗留的死消息）丢弃
       return;
   }
 }

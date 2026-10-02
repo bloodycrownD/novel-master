@@ -1,0 +1,73 @@
+/**
+ * 工具调用入参摘要（**三端唯一单源**）。
+ *
+ * @module domain/chat/logic/tool-summary
+ *
+ * 历史背景：本函数此前在三个地方各有一份副本（desktop renderer / mobile WebView /
+ * mobile RN），三份各带不同的特判分支——同一条 `skill` 调用在 desktop 显示
+ * `read global:my-skill`、在 mobile 两面显示裸 JSON；同一条 `task` 调用反过来。
+ * 现已收敛到本文件，三处改为引用 core 公共面导出（`@novel-master/core/chat`）。
+ *
+ * ⚠️ **公共尾巴的取值语义定死为 `??`（不是 `||`）**：`input.path ?? input.dir ?? input.from`
+ * 只在 `null`/`undefined` 时回落，空串算「明确给出的值」直接返回空串。
+ * WebView 旧副本用的是 `||`（空串会回落 `dir`），那是历史偶然；单源取 `??`，
+ * 差异由 `test/chat/tool-summary.test.ts` 的「空串 path 回落语义」用例钉住。
+ */
+
+/** 摘要入参（取三份旧签名的并集：WebView 侧允许 null/undefined）。 */
+type ToolInput = Record<string, unknown> | null | undefined;
+
+/**
+ * 生成工具调用入参的一行摘要。
+ *
+ * 分支顺序：`!input` → `""`；`skill` → skill 摘要；`task` → `@agent · desc`；
+ * 其余走公共尾巴（path/dir/from → 120 字符截断的 JSON → 键名列表）。
+ *
+ * @param name 工具名
+ * @param input 工具入参原始对象（可为 null/undefined）
+ */
+export function summarizeToolInput(
+  name: string,
+  input: ToolInput
+): string {
+  if (!input) {
+    return "";
+  }
+  // skill 摘要：`action domain:name`；缺省域时只展示 action + name。
+  if (name === "skill") {
+    const action = typeof input.action === "string" ? input.action : "";
+    const skillName = typeof input.name === "string" ? input.name : "";
+    const domain =
+      input.domain === "global" || input.domain === "project"
+        ? input.domain
+        : undefined;
+    return domain != null
+      ? `${action} ${domain}:${skillName}`
+      : `${action} ${skillName}`.trim();
+  }
+  // task 摘要：`@agent · description`，比裸 JSON 可读。
+  if (name === "task") {
+    const desc =
+      typeof input.description === "string" ? input.description.trim() : "";
+    const agent =
+      typeof input.subagentName === "string" ? input.subagentName : "";
+    const parts: string[] = [];
+    if (agent) parts.push(`@${agent}`);
+    if (desc) parts.push(desc);
+    return parts.join(" · ");
+  }
+  const path = input.path ?? input.dir ?? input.from;
+  if (typeof path === "string") {
+    return path;
+  }
+  const keys = Object.keys(input);
+  if (keys.length === 0) {
+    return "";
+  }
+  try {
+    const raw = JSON.stringify(input);
+    return raw.length > 120 ? `${raw.slice(0, 117)}…` : raw;
+  } catch {
+    return keys.join(", ");
+  }
+}

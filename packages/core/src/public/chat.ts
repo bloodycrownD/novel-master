@@ -352,3 +352,4 @@ export type {
   SetMessageFloorResult,
 } from "../service/chat/message-transcript-effects.port.js";
 export { createMessageTranscriptEffectsService } from "../service/chat/create-message-transcript-effects.js";
+export { summarizeToolInput } from "../domain/chat/logic/tool-summary.js";

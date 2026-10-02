@@ -205,6 +205,10 @@ export const searchTool: Tool<
     const candidates: readonly ResolvedEngineConfig[] =
       input.engine != null ? chain.slice(0, 1) : chain;
     const fetchFn = ctx.fetchFn ?? globalThis.fetch;
+    // ⚠️ 生产恒不带 domainFilter / recencyFilter：inputSchema（上方）未开放这两项，
+    // 五个引擎适配器里的过滤分支因此永远命中 `types.ts:177-179` 的早退。
+    // 有意保留实现与测试（web-search-tool spec 的 T-A5 / T-A6 锁着它们），勿当死码删。
+    // 同理，description 不得新增这两个入参。
     const options = { maxResults: normalizeMaxResults(input.maxResults) };
     const startedAt = Date.now();
     // 每引擎一行聚合摘要（全链失败 / 预算耗尽时随错误返回）。

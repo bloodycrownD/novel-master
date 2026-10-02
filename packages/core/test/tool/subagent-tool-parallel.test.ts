@@ -47,6 +47,11 @@ function setupParallel(opts: SetupOpts = {}): {
   };
   const messages: MessageService = {
     listBySession: async (sid) => childMsgs.get(sid) ?? [],
+    // tail+role 读口（subagent-tool 现在的消费方）：先按 role 过滤再取末 limit 条。
+    listBySessionTailOfRole: async (sid, options) =>
+      (childMsgs.get(sid) ?? [])
+        .filter((m) => m.role === options.role)
+        .slice(-Math.max(1, Math.floor(options.limit))),
   } as unknown as MessageService;
   const sessions: SessionService = {
     createSubSession: async (_parent, _proj, title) => {
@@ -95,7 +100,6 @@ function setupParallel(opts: SetupOpts = {}): {
     vfs: {} as never,
     projectId: "proj",
     sessionId: "parent",
-    listSessionMessages: async () => [],
     subagent,
   };
   return { ctx, subagent, runChildAgentCalls, createdSessions };

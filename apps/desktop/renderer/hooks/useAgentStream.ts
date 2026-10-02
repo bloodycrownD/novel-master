@@ -40,7 +40,7 @@ import {
   type AgentStreamThinkingDeltaPayload,
   type AgentStreamToolUsePayload,
   type AgentStreamUsagePayload,
-} from "@novel-master/core/events";
+} from "@shared/logic/events";
 import { onAgentStream } from "../ipc/client";
 import { useConversationBatch } from "@/features/chat/conversation-batch";
 

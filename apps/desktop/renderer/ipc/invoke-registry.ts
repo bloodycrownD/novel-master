@@ -40,11 +40,8 @@ import {
   type ModelSetCurrentRequest,
   type ProjectCreateRequest,
   type ProjectDeleteRequest,
-  type ProjectAgentConfigDto,
   type ProjectDto,
-  type ProjectGetAgentConfigRequest,
   type ProjectRenameRequest,
-  type ProjectUpdateAgentConfigRequest,
   type PromptAgentMetaResponse,
   type PromptPreviewSegmentDto,
   type PromptChatTokenStatsResponse,
@@ -52,12 +49,10 @@ import {
   type ScopeSetProjectRequest,
   type ScopeSetSessionRequest,
   type ScopeSnapshotDto,
-  type SmartSortRuleBundleDto,
   type SmartSortRuleCreateRequest,
   type SmartSortRuleDeleteBatchRequest,
   type SmartSortRuleDto,
   type SmartSortRuleIdRequest,
-  type SmartSortRuleImportRulesRequest,
   type SmartSortRuleMatchRequest,
   type SmartSortRuleMatchResultDto,
   type SmartSortRuleMoveRequest,
@@ -72,7 +67,6 @@ import {
   type SessionDto,
   type SessionFsRollbackRequest,
   type SessionGetComposerDraftRequest,
-  type SessionGetAgentBindingRequest,
   type SessionListByProjectRequest,
   type SessionProjectComposerStatusRequest,
   type SessionPullTemplateRequest,
@@ -107,7 +101,6 @@ import {
   type PhysicalReadRequest,
   type WorkplaceBuildListRowsRequest,
   type WorkplaceGetDirRuleRequest,
-  type WorkplaceCaptureSessionBlockRequest,
   type WorkplaceListRowDto,
   type WorkplaceSetDirRuleRequest,
   type WorkplaceSetFileRuleRequest,
@@ -115,7 +108,6 @@ import {
   type SkillListItemDto,
   type SkillsDeleteRequest,
   type SkillsAssertCreateNameRequest,
-  type SkillsEditRequest,
   type SkillsEffectiveRequest,
   type SkillsListRequest,
   type SkillsReadRequest,
@@ -201,14 +193,6 @@ export function createInvokeClient(invoke: InvokeFn) {
       invoke,
       IPC_CHANNELS.PROJECTS_DELETE,
     ),
-    ipcProjectsGetAgentConfig: withReq<
-      ProjectGetAgentConfigRequest,
-      IpcResult<ProjectAgentConfigDto>
-    >(invoke, IPC_CHANNELS.PROJECTS_GET_AGENT_CONFIG),
-    ipcProjectsUpdateAgentConfig: withReq<
-      ProjectUpdateAgentConfigRequest,
-      IpcResult<ProjectAgentConfigDto>
-    >(invoke, IPC_CHANNELS.PROJECTS_UPDATE_AGENT_CONFIG),
     ipcSessionsListByProject: withReq<
       SessionListByProjectRequest,
       IpcResult<SessionDto[]>
@@ -237,10 +221,6 @@ export function createInvokeClient(invoke: InvokeFn) {
       SessionProjectComposerStatusRequest,
       IpcResult<MessageAttachmentDto[]>
     >(invoke, IPC_CHANNELS.SESSIONS_PROJECT_COMPOSER_STATUS),
-    ipcSessionsGetAgentBinding: withReq<
-      SessionGetAgentBindingRequest,
-      IpcResult<SessionAgentConfigDto>
-    >(invoke, IPC_CHANNELS.SESSIONS_GET_AGENT_BINDING),
     ipcSessionsSetAgentBinding: withReq<
       SessionSetAgentBindingRequest,
       IpcResult<SessionAgentConfigDto>
@@ -269,10 +249,6 @@ export function createInvokeClient(invoke: InvokeFn) {
       WorkplaceGetDirRuleRequest,
       IpcResult<WorkplaceSetDirRuleRequest | null>
     >(invoke, IPC_CHANNELS.WORKPLACE_GET_DIR_RULE),
-    ipcWorkplaceCaptureSessionBlock: withReq<
-      WorkplaceCaptureSessionBlockRequest,
-      IpcResult<void>
-    >(invoke, IPC_CHANNELS.WORKPLACE_CAPTURE_SESSION_BLOCK),
     ipcVfsRead: withReq<VfsReadRequest, IpcResult<VfsReadResultDto>>(
       invoke,
       IPC_CHANNELS.VFS_READ,
@@ -586,14 +562,6 @@ export function createInvokeClient(invoke: InvokeFn) {
       SmartSortRuleReorderRequest,
       IpcResult<SmartSortRuleDto[]>
     >(invoke, IPC_CHANNELS.SMART_SORT_RULE_REORDER),
-    ipcSmartSortRuleExportRules: noArg<IpcResult<SmartSortRuleBundleDto>>(
-      invoke,
-      IPC_CHANNELS.SMART_SORT_RULE_EXPORT_RULES,
-    ),
-    ipcSmartSortRuleImportRules: withReq<
-      SmartSortRuleImportRulesRequest,
-      IpcResult<SmartSortRuleDto[]>
-    >(invoke, IPC_CHANNELS.SMART_SORT_RULE_IMPORT_RULES),
     ipcSmartSortRuleResetDefaults: noArg<IpcResult<void>>(
       invoke,
       IPC_CHANNELS.SMART_SORT_RULE_RESET_DEFAULTS,
@@ -626,10 +594,6 @@ export function createInvokeClient(invoke: InvokeFn) {
       SkillsWriteRequest,
       IpcResult<{ version: number }>
     >(invoke, IPC_CHANNELS.SKILLS_WRITE),
-    ipcSkillsEdit: withReq<
-      SkillsEditRequest,
-      IpcResult<{ version: number; replacements: number }>
-    >(invoke, IPC_CHANNELS.SKILLS_EDIT),
     ipcSkillsToggle: withReq<SkillsToggleRequest, IpcResult<void>>(
       invoke,
       IPC_CHANNELS.SKILLS_TOGGLE,

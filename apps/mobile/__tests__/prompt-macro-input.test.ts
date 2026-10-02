@@ -1,9 +1,19 @@
 import {
+  PROMPT_INSERTABLE_MACROS,
   findWhitelistMacroRanges,
   insertTextAtSelection,
   splitPromptMacroSegments,
   tryAtomicMacroDelete,
 } from '@/components/agent/prompt-macro-input';
+import {ALLOWED_DYNAMIC_ROOT_MACROS} from '@novel-master/core/prompt';
+
+describe('PROMPT_INSERTABLE_MACROS', () => {
+  it('白名单与 core 单源一致（防 N-P0-01 再犯）', () => {
+    expect(PROMPT_INSERTABLE_MACROS.map(m => m.token)).toEqual(
+      ALLOWED_DYNAMIC_ROOT_MACROS.map(k => `{{$${k}}}`),
+    );
+  });
+});
 
 describe('splitPromptMacroSegments', () => {
   it('芯片形态：白名单宏分段为 macro', () => {

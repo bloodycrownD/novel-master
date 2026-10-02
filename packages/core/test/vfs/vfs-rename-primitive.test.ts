@@ -156,6 +156,8 @@ describe("vfs rename primitive", () => {
     assert.equal((await svfs.read(`${newDir}/a.md`)).content, "a");
   });
 
+  // 本例不含子树同名目录（子项路径里没有第二段 `a_b%c-<suffix>`），
+  // 「子树内同名段被二次替换」那条由 T-V6 钉。
   it("T-V5: 目录名含 %/_ 时 renamePrefix 根行与子项均迁移、旧路径无残留", async () => {
     const ctx = getNovelMasterTestContext();
     const suffix = testIsolationSuffix();
@@ -197,5 +199,56 @@ describe("vfs rename primitive", () => {
       "rename 后旧子项行不应存在",
     );
     assert.equal((await svfs.read(`${newDir}/x.md`)).content, "x");
+  });
+
+  // CS-01：SET 表达式曾用 REPLACE(path, oldWithSlash, newWithSlash)，
+  // 它替换的是**整串中出现的所有匹配**而不是「仅前缀那一处」。子树内部再出现
+  // 一次同名目录时，深层那一段也被替换 ⇒ 文件被静默搬到磁盘上不存在的路径
+  // （正文仍在、用户再也点不到）。
+  it("T-V6: 子树内含同名目录时 renamePrefix 只改前缀（深层同名段不被二次替换）", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create("P-V6-same-name-in-subtree");
+    const session = await ctx.sessions.create(project.id);
+    const svfs = ctx.sessionVfs(project.id, session.id);
+    const entryRepo = new SqliteVfsEntryRepository(ctx.conn);
+
+    // scope_key 已按 project/session 唯一，固定路径即可隔离（同 T-V5 先例）
+    const scopeKey = `session:${project.id}:${session.id}`;
+
+    await svfs.write("/a/sub/a/notes.md", "同款正文", { versionCheck: false });
+
+    await svfs.renamePrefix("/a", "/a_新");
+
+    // 期望路径存在
+    const expected = await entryRepo.findByPath(
+      scopeKey,
+      "/a_新/sub/a/notes.md",
+    );
+    assert.notEqual(expected, null, "深层同名段不该被替换，期望路径应存在");
+
+    // 二次替换产生的错位路径必须不存在（这是 REPLACE 实现的产物）
+    assert.equal(
+      await entryRepo.findByPath(scopeKey, "/a_新/sub/a_新/notes.md"),
+      null,
+      "深层同名段被二次替换，产出磁盘上不存在的错位路径",
+    );
+    // 旧深层路径无残留
+    assert.equal(
+      await entryRepo.findByPath(scopeKey, "/a/sub/a/notes.md"),
+      null,
+      "旧深层路径不应有残留",
+    );
+    // 旧根已迁走
+    assert.equal(
+      await entryRepo.findByPath(scopeKey, "/a"),
+      null,
+      "旧目录根不应有残留",
+    );
+    // 正文未丢、可读
+    assert.equal(
+      (await svfs.read("/a_新/sub/a/notes.md")).content,
+      "同款正文",
+      "迁移后正文应保持不变",
+    );
   });
 });

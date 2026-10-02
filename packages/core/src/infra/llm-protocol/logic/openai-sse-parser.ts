@@ -16,6 +16,7 @@ import {
   openAiStreamDeltaToEvents,
 } from "./openai-content-mapper.js";
 import { feedSseLines } from "./sse-line-buffer.js";
+import { parseSseDataLine } from "./sse-data-line.js";
 import {
   assertSseParseSucceededOrThrow,
   recordMalformedSseLine,
@@ -67,11 +68,11 @@ export function feedOpenAiSseChunk(
   onStream?: (event: LlmStreamEvent) => void
 ): void {
   feedSseLines(state, chunk, (line) => {
-    if (!line.startsWith("data: ")) {
+    const payload = parseSseDataLine(line);
+    if (payload == null) {
       return;
     }
-    const payload = line.slice(6).trim();
-    if (payload === "" || payload === "[DONE]") {
+    if (payload === "[DONE]") {
       return;
     }
     let event: Record<string, unknown>;

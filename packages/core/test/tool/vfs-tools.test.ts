@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import { ToolRegistry } from "../../src/domain/tool/logic/tool-registry.js";
 import { ToolRunner } from "../../src/domain/tool/logic/tool-runner.js";
 import {
+  createVfsTools,
   isMutatingFileToolName,
   MUTATING_FILE_TOOL_NAMES,
 } from "../../src/domain/tool/builtin/vfs-tools.js";
@@ -30,7 +31,6 @@ function toolCtx(
     vfs,
     projectId,
     sessionId,
-    listSessionMessages: async () => [],
   };
 }
 
@@ -1004,5 +1004,26 @@ describe("Builtin file tools V2 (integration)", () => {
 
     // 规则存储全程不可用：不应有残留规则行写入
     assert.deepEqual(await realWorkplace.listDirRules(), []);
+  });
+});
+
+describe("T-CS02-03: edit 工具 schema 拒绝空串 oldString", () => {
+  const editTool = createVfsTools().find((t) => t.name === "edit");
+  const schema = editTool?.inputSchema as
+    | { safeParse: (v: unknown) => { success: boolean } }
+    | undefined;
+
+  it("oldString 为空串 → zod 校验失败（不再把空串透给纯函数层）", () => {
+    assert.ok(schema, "edit 工具应暴露 inputSchema");
+    assert.equal(
+      schema.safeParse({ path: "/a.md", oldString: "", newString: "x" }).success,
+      false,
+      "空串 oldString 必须被 schema 拦下",
+    );
+    assert.equal(
+      schema.safeParse({ path: "/a.md", oldString: "a", newString: "x" }).success,
+      true,
+      "非空 oldString 不得被误伤",
+    );
   });
 });

@@ -37,6 +37,10 @@ export type {
 export {
   addChatAnnotateDraft,
   ANNOTATE_ANCHOR_CLASS,
+  chatLinkNotFoundMessage,
+  isHttpUrl,
+  resolveChatLinkTarget,
+  summarizeToolInput,
   ANNOTATE_SOFT_RANGE_CHAR_PADDING,
   ANNOTATE_SOFT_RANGE_LINE_PADDING,
   applySoftRangeLinePadding,

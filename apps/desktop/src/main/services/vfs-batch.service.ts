@@ -12,13 +12,14 @@ import {
   type BatchApplyReport,
   type BatchIngestRawEntry,
   type BatchIngestWriter,
+  type BatchExportSkip,
   type VfsScope,
 } from "@novel-master/core/vfs";
 import { isUserVfsUnifiedToolTurnEnabled } from "@novel-master/core/feature-flags";
 import { app, nativeImage, type WebContents } from "electron";
 import { randomUUID } from "node:crypto";
 import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
-import { basename, dirname, join, relative, sep } from "node:path";
+import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { resolveAppIconPath } from "../runtime/resolve-app-icon.js";
 import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
 import {
@@ -235,6 +236,12 @@ export async function ingestVfsFromHostPaths(
 export type ExportStageResult = {
   readonly stagingRoot: string;
   readonly filePaths: readonly string[];
+  /**
+   * CS-08：因相对路径碰撞被跳过、**没有**物化进 staging 的选中项。
+   * 可选字段，仅在有跳过时才出现（不出现即无跳过）。
+   * ⚠️ UI 呈现面尚未做（列为债务池），但信息已到达 main 进程。
+   */
+  readonly skipped?: readonly BatchExportSkip[];
 };
 
 /** 未显式清理时 main 侧兜底回收 staging 目录。 */
@@ -256,12 +263,31 @@ function scheduleStagingTtl(stagingRoot: string): void {
   );
 }
 
+/**
+ * staging 根目录的权威基准（`userData/vfs-batch-export`）。
+ *
+ * 抽成单一函数是给 `clearVfsBatchExportStaging` 的包含断言与 stagingRoot 构造共用，
+ * 消除「两处各写一遍基准」的漂移（S-D-02）。
+ */
+function vfsBatchStagingBase(): string {
+  return join(app.getPath("userData"), "vfs-batch-export");
+}
+
 /** 删除 export staging 临时目录；dragEnd / 取消 / 失败 / TTL 到期时调用。 */
 export async function clearVfsBatchExportStaging(
   stagingRoot: string,
 ): Promise<void> {
   if (stagingRoot.trim() === "") {
     return;
+  }
+  // S-D-02 路径包含断言：IPC 通道把 renderer 传来的 stagingRoot 原样交给
+  // `rm(recursive: true, force: true)`，若通道本身不校验，传 `C:\Users\<用户>` 或 `/`
+  // 都会被递归删除。基准只接受 staging 根自身或其下的子目录。
+  // ⚠️ 必须带分隔符再拼：`base + "-evil"` 这类前缀撞车要一并拒掉。
+  const resolved = resolve(stagingRoot);
+  const base = resolve(vfsBatchStagingBase());
+  if (resolved !== base && !resolved.startsWith(base + sep)) {
+    throw new Error(`拒绝清理非 staging 路径: ${stagingRoot}`);
   }
   const timer = stagingTtlTimers.get(stagingRoot);
   if (timer != null) {
@@ -292,11 +318,7 @@ export async function stageVfsBatchExport(
     throw new Error("导出内容为空");
   }
 
-  const stagingRoot = join(
-    app.getPath("userData"),
-    "vfs-batch-export",
-    randomUUID(),
-  );
+  const stagingRoot = join(vfsBatchStagingBase(), randomUUID());
   await mkdir(stagingRoot, { recursive: true });
 
   try {
@@ -329,7 +351,21 @@ export async function stageVfsBatchExport(
     }
 
     scheduleStagingTtl(stagingRoot);
-    return { stagingRoot, filePaths };
+    // CS-08：`skipped` 是**必需通道**，不是死字段——相对路径碰撞（文件与目录
+    // 同选）无法靠改锚点消除，必须让信息到达 main 进程，否则 ZIP 里会静默少文件。
+    // UI 如何呈现列为债务池；此处至少留日志与计数。
+    const skipped = plan.skipped ?? [];
+    if (skipped.length > 0) {
+      console.warn(
+        `[vfs-batch] 导出跳过 ${skipped.length} 项（相对路径碰撞）：`,
+        skipped.map((s) => s.logicalPath),
+      );
+    }
+    return {
+      stagingRoot,
+      filePaths,
+      ...(skipped.length > 0 ? { skipped } : {}),
+    };
   } catch (err) {
     await rm(stagingRoot, { recursive: true, force: true }).catch(() => undefined);
     throw err;

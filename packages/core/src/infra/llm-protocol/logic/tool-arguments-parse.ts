@@ -1,4 +1,4 @@
-﻿/**
+/**
  * tool call 参数字符串的 JSON 解析（finish 路径严格校验）。
  *
  * @module infra/llm-protocol/logic/tool-arguments-parse

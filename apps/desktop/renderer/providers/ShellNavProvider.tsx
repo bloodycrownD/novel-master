@@ -37,7 +37,7 @@ import {
   EVENT_AGENT_STEP_COMMITTED,
   type AgentRunFinishedPayload,
   type AgentStepCommittedPayload,
-} from "@novel-master/core/events";
+} from "@shared/logic/events";
 import { previewTabKey } from "../layout/preview-tab-utils";
 
 import {
@@ -57,7 +57,7 @@ import {
 } from "../ipc/client";
 
 import { resolveChatLinkAction } from "../features/chat/chat-link-route";
-import { chatLinkNotFoundMessage } from "@novel-master/core/chat";
+import { chatLinkNotFoundMessage } from "@shared/logic/chat";
 import { showToast } from "@/components/ui/show-toast";
 
 import {

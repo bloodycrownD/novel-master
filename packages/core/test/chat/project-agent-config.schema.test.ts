@@ -5,6 +5,8 @@ import {
   projectAgentConfigSchema,
   projectAgentModeSchema,
 } from "@novel-master/core/chat";
+import { agentDefinitionSchema } from "@novel-master/core/agent";
+import { PromptError } from "@novel-master/core/prompt";
 import { ConfigDecodeError } from "../../src/errors/config-decode-errors.js";
 
 function minimalDefinitionWire() {
@@ -51,6 +53,47 @@ describe("projectAgentConfigSchema", () => {
     assert.throws(
       () => decode({ mode: "registry" }, projectAgentModeSchema),
       ConfigDecodeError,
+    );
+  });
+
+  it("configToWire 对重名块 definition 抛错（第二份同款循环已被收敛点覆盖）", () => {
+    // configToWire 转调 agentDefinitionSchema.toWire，两条塌缩循环的收敛点
+    // 就是 definitionToDocument；这条钉住「即便绕过 validateAgentDefinition
+    // 直接走 projectAgentConfigSchema.toWire，收敛点仍能兜住」。
+    const base = decode(
+      minimalDefinitionWire(),
+      agentDefinitionSchema,
+    );
+    const dup = {
+      ...base,
+      prompts: {
+        ...base.prompts,
+        persist: [
+          {
+            name: "persona",
+            type: "text" as const,
+            role: "user" as const,
+            content: "人设甲",
+          },
+          {
+            name: "persona",
+            type: "text" as const,
+            role: "user" as const,
+            content: "人设乙",
+          },
+        ],
+      },
+    };
+    assert.throws(
+      () =>
+        projectAgentConfigSchema.toWire({
+          mode: "custom",
+          definition: dup,
+        }),
+      (e: unknown) =>
+        e instanceof PromptError &&
+        e.code === "INVALID_BLOCK" &&
+        /重复的块名/.test(e.message),
     );
   });
 });

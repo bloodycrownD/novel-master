@@ -5,6 +5,13 @@
  * 扫描（已带 entryId）解析，缺时退化为 entryRepo.findByPath。targetTree 仍是
  * `Map<logicalPath, version>`，reconcile 输出仍是逻辑路径集（vfs 操作吃逻辑路径）。
  *
+ * ⚠️ **本函数只被调用 plan 半段**（CD-01 第 3 步）：`pathsNeedWrite` 依赖
+ * checkpoint 侧的不可变快照 + revision meta，stale 最多多一次 restore 短路，
+ * 而 {@link resolveReconcilePathSets} 的 `pathsNeedDelete` 那一半**已经搬进
+ * 事务内**——删集合就是写集合，移出事务即 TOCTOU（间隙里新增/改名的文件会被
+ * 按旧集合误删）。见 `reconcileVfsPaths` 与
+ * {@link resolvePathsNeedDeleteInTransaction}。
+ *
  * @module domain/message-checkpoint/logic/resolve-reconcile-paths
  */
 
@@ -13,6 +20,7 @@ import { revisionPairKey } from "@/domain/vfs/logic/revision-pair-key.js";
 import { scopeKey, type VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revision.port.js";
+import type { SessionFileHead } from "../model/message-checkpoint.js";
 
 /** reconcile 需处理的路径集合。 */
 export type ReconcilePathSets = {
@@ -21,7 +29,46 @@ export type ReconcilePathSets = {
 };
 
 /**
- * 从 target 树与 live 状态筛出真正需写盘/删除的逻辑路径。
+ * 「需删除路径」半段的**事务内**实现（CD-01 第 3 步）。
+ *
+ * 消费的是调用方**事务内**已经取到的 live head 快照（`reconcileVfsPaths` 的
+ * `liveHeadRows`），**不新增第二次 live 扫描**。
+ *
+ * @param extraTailDeletePaths plan 段由 tail 指针反解出的、落在 targetTree 外
+ *        的路径；它们同样要过事务内 live 判定——间隙里已被删掉的文件没有「物」
+ *        可删，跳过即可（`deletePathIfExists` 本来也吞 NOT_FOUND）。
+ */
+export function resolvePathsNeedDeleteInTransaction(args: {
+  readonly liveHeads: ReadonlyArray<SessionFileHead>;
+  readonly targetTree: ReadonlyMap<string, number>;
+  readonly hasDirectTargetTree: boolean;
+  readonly extraTailDeletePaths: ReadonlySet<string>;
+}): ReadonlySet<string> {
+  const { liveHeads, targetTree, hasDirectTargetTree, extraTailDeletePaths } =
+    args;
+  const pathsNeedDelete = new Set<string>();
+  // 与 {@link resolveReconcilePathSets} 的 hasDirectTargetTree 门同口径：
+  // rewind 分支在 targetTree 为空时拿不到任何删除（这一路是漏删而非误删，
+  // 误删由空树护栏兜住）——**两处门口径必须同改**，只放宽护栏会让 undo_send
+  // 侧反过来多删。
+  if (!hasDirectTargetTree) {
+    return pathsNeedDelete;
+  }
+  for (const { logicalPath } of liveHeads) {
+    if (!targetTree.has(logicalPath)) {
+      pathsNeedDelete.add(logicalPath);
+    }
+  }
+  for (const logicalPath of extraTailDeletePaths) {
+    if (!targetTree.has(logicalPath)) {
+      pathsNeedDelete.add(logicalPath);
+    }
+  }
+  return pathsNeedDelete;
+}
+
+/**
+ * 从 target 树与 live 状态筛出真正需写盘的逻辑路径（plan 半段）。
  *
  * 同 version 或同 content_hash 不进 pathsNeedWrite（对齐 restore 短路语义）。
  *
@@ -34,7 +81,7 @@ export async function resolveReconcilePathSets(
   revisionRepo: VfsRevisionRepository,
   scope: Extract<VfsScope, { kind: "session" }>,
   targetTree: ReadonlyMap<string, number>,
-  hasDirectTargetTree: boolean,
+  _hasDirectTargetTree: boolean,
   checkpointEntryIdByPath?: ReadonlyMap<string, number>
 ): Promise<ReconcilePathSets> {
   const { projectId, sessionId } = scope;
@@ -120,14 +167,7 @@ export async function resolveReconcilePathSets(
     pathsNeedWrite.add(pair.logicalPath);
   }
 
-  const pathsNeedDelete = new Set<string>();
-  if (hasDirectTargetTree) {
-    for (const { logicalPath } of liveHeads) {
-      if (!targetTree.has(logicalPath)) {
-        pathsNeedDelete.add(logicalPath);
-      }
-    }
-  }
-
-  return { pathsNeedWrite, pathsNeedDelete };
+  // 删集合半段已搬进事务内（CD-01 第 3 步）；这里恒为空集合，调用方拿它只当
+  // 「plan 半段」的占位。返回值保留是为了不破坏既有调用面。
+  return { pathsNeedWrite, pathsNeedDelete: new Set<string>() };
 }

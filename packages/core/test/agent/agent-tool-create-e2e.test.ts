@@ -39,7 +39,6 @@ function makeRealCtx(): BuiltinToolContext {
     vfs: {} as never,
     projectId: "proj-1",
     sessionId: "sess-1",
-    listSessionMessages: async () => [],
     agents: {
       registry,
       agents: [{ name: "general", description: "内置通用 agent", mode: "all" }],

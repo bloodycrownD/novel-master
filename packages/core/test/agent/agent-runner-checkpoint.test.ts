@@ -1,4 +1,4 @@
-﻿/**
+/**
  * AgentRunner message checkpoint 同步 capture 行为。
  */
 
@@ -120,7 +120,6 @@ describe("AgentRunner message checkpoint", () => {
           vfs: mockVfs(),
           projectId: MOCK_PROJECT_ID,
           sessionId: MOCK_SESSION_ID,
-          listSessionMessages: async () => session.list(),
         },
         messageCheckpoint,
       }),
@@ -167,7 +166,6 @@ describe("AgentRunner message checkpoint", () => {
           vfs: mockVfs(),
           projectId: MOCK_PROJECT_ID,
           sessionId: MOCK_SESSION_ID,
-          listSessionMessages: async () => session.list(),
         },
         messageCheckpoint,
       }),

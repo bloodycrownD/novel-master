@@ -9,6 +9,8 @@
     "prebuild": "npm run build -w @novel-master/core && npm run build -w @novel-master/cloud-sync-driver-s3 && npm run build -w @novel-master/tdbc-driver-better-sqlite3 && npm run build -w @novel-master/tokenizer-driver-node && npm run build -w @novel-master/sksp-windows && npm run build -w @novel-master/sksp-mac && npm run build -w @novel-master/sksp-linux",
     "build": "npm run build:icons && vite build && npm run build:main && npm run build:preload",
     "typecheck": "tsc --noEmit -p tsconfig.json",
+    "typecheck:renderer": "tsc --noEmit -p tsconfig.renderer.json",
+    "typecheck:renderer:ratchet": "node scripts/check-renderer-typecheck.mjs",
     "build:icons": "node scripts/generate-icons.mjs",
     "build:main": "tsc -p tsconfig.json",
     "build:preload": "esbuild src/preload/preload.ts --bundle --platform=node --format=cjs --outfile=dist/src/preload/preload.cjs --external:electron",
@@ -21,7 +23,8 @@
     "start": "node scripts/start-electron.mjs",
     "clean": "node --input-type=module --eval \"import { rmSync } from 'node:fs'; rmSync('dist', { recursive: true, force: true })\"",
     "pretest": "node scripts/ensure-test-native.mjs",
-    "test": "node scripts/run-tests.mjs"
+    "test": "node scripts/run-tests.mjs",
+    "test:collect-guard": "node scripts/collect-check.mjs"
   },
   "dependencies": {
     "@codemirror/commands": "^6.10.3",

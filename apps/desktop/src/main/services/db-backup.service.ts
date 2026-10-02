@@ -1,9 +1,14 @@
 /**
  * 全量 SQLite 数据库导出/导入（文件级拷贝 + 服务商表隔离）。
  *
+ * 调用链契约（两端一致）：**换库 → 重建 runtime → 用新 runtime 记账 → 再放互斥令牌**。
+ * 导入函数只负责前两步的库面动作，并如实回报「库文件是否已被替换」
+ * （{@link DbImportOutcome.databaseReplaced}）；调用方据此决定是否重建 runtime，
+ * 记账必须排在重建之后，互斥令牌必须排在记账之后。
+ *
  * @module services/db-backup
  */
-import { copyFile, readFile, unlink, writeFile } from "node:fs/promises";
+import { access, copyFile, open as openFileHandle, unlink, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { dialog, type BrowserWindow } from "electron";
 import {
@@ -11,6 +16,7 @@ import {
   open,
   restoreProviderTableSnapshot,
   scrubProviderTablesInDatabase,
+  type ProviderTableSnapshot,
   type TdbcConnection,
 } from "@novel-master/core";
 import { registerBetterSqlite3Driver } from "@novel-master/tdbc-driver-better-sqlite3";
@@ -35,7 +41,65 @@ async function closeLiveDbForBackupImport(): Promise<void> {
 }
 
 const SQLITE_MAGIC = "SQLite format 3";
+const SQLITE_HEADER_BYTES = 16;
 const EXPORT_ATTACH_ALIAS = "export_db";
+
+/**
+ * 导入结果：如实回报「活动库文件是否已被替换」与「服务商三表是否已在本机恢复」。
+ *
+ * 成功路径走返回值；抛错路径（覆盖已成功、收尾失败）走 {@link DatabaseReplacedError}
+ * ——函数抛错时返回值送不到调用方，「已换代」信号必须由异常类型承载。
+ */
+export type DbImportOutcome = {
+  /** 活动库文件是否已被替换（true ⇒ 调用方持有的 runtime/conn 一律作废，必须先重建再用）。 */
+  databaseReplaced: boolean;
+  /** 服务商三表是否已在本机恢复成功（false ⇒ 数据库已换但三表丢失，需 UI 提示）。 */
+  providerTablesRestored: boolean;
+};
+
+/**
+ * 库文件已换代、其后收尾步骤失败：信号随异常送达（成功路径走 {@link DbImportOutcome} 返回值）。
+ *
+ * 此时**不得回滚**——库已经是新快照，回滚会把用户拉回来的数据丢掉。
+ */
+export class DatabaseReplacedError extends Error {
+  readonly databaseReplaced = true as const;
+
+  constructor(
+    message: string,
+    readonly providerTablesRestored: boolean,
+  ) {
+    super(message);
+    this.name = "DatabaseReplacedError";
+  }
+}
+
+/**
+ * fs 操作的可注入缝。
+ *
+ * desktop 测试基座是 node:test 零 mock 设施（`mock.module`/`jest.mock`/`vi.mock`
+ * 对 apps/desktop/test 全零命中，唯一既有缝是改对象属性），ESM 具名导入无法
+ * monkey-patch ⇒ 需要观测 copyFile/unlink/open 行为时走这个缝，
+ * 测试在 finally 里恢复原实现。
+ */
+const fsOps: {
+  copyFile: typeof copyFile;
+  unlink: typeof unlink;
+  open: typeof openFileHandle;
+} = {
+  copyFile,
+  unlink,
+  open: openFileHandle,
+};
+
+/** 测试缝：替换 fs 操作实现。测试负责在 finally 恢复原实现。 */
+export function __setDbBackupFsOpsForTest(
+  ops: Partial<typeof fsOps> | null,
+): void {
+  fsOps.copyFile = ops?.copyFile ?? copyFile;
+  fsOps.unlink = ops?.unlink ?? unlink;
+  fsOps.open = ops?.open ?? openFileHandle;
+}
 
 function backupFileName(): string {
   return "nmbackup.db";
@@ -49,6 +113,38 @@ function assertSqliteFile(bytes: Uint8Array): void {
   if (!header.startsWith(SQLITE_MAGIC)) {
     throw new Error("不是有效的 SQLite 数据库备份");
   }
+}
+
+/**
+ * 路径级校验：只读前 16 字节确认 SQLite 魔数。
+ *
+ * 禁止 `readFile(path, enc, 16)`（第三参会被忽略，整包读入 ⇒ 大备份撑爆 Node 堆），
+ * 也禁止裸 `readFile` 整包进内存。手机端同款防呆注释见 apps/mobile 的
+ * `assertSqliteBackupAtPath`。
+ */
+async function assertSqliteFileAtPath(srcPath: string): Promise<void> {
+  const handle = await fsOps.open(srcPath, "r");
+  try {
+    const buf = Buffer.alloc(SQLITE_HEADER_BYTES);
+    const { bytesRead } = await handle.read(buf, 0, SQLITE_HEADER_BYTES, 0);
+    assertSqliteFile(new Uint8Array(buf.subarray(0, bytesRead)));
+  } finally {
+    await handle.close();
+  }
+}
+
+/** 目标库是否已存在（全新安装首次导入时不存在 ⇒ 无可备份、无可回滚）。 */
+async function fileExists(path: string): Promise<boolean> {
+  try {
+    await access(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function errorDetail(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 /**
@@ -89,8 +185,100 @@ export async function exportDatabaseBackupToPath(
 }
 
 /**
- * 从本地快照文件导入数据库（dump → close → cp 替换 → restore），无对话框与 rebootstrap。
- * 调用方须在成功后执行 rebootstrap。
+ * 「备份 → 关连接 → 覆盖 → 恢复三表」的危险动作链，两条导入路径共用。
+ *
+ * 错误处理口径（备份三处吞错治理）：
+ * - 备份步裸 await，失败即抛，**绝不 .catch 吞掉**：吞掉之后覆盖照跑，
+ *   「备份失败 → 覆盖成功 → 回滚失败」这条链路上没有任何一处会中断，
+ *   最终库文件已是远端快照而本地改动无声消失。
+ * - 回滚只覆盖「覆盖动作本身失败」这一段；覆盖已成功后（databaseReplaced）
+ *   抛 {@link DatabaseReplacedError}，**不回滚**——库已经是新快照。
+ * - 三条终态各自对 bak 的处置：**①回滚失败** ⇒ 保留（用户要能手工救回）；
+ *   **②覆盖失败且回滚成功** ⇒ 冗余，finally 删掉；**③覆盖成功但三表恢复失败**
+ *   ⇒ 同样保留（CR-F01：此时 bak 是磁盘上唯一一份含未同步本地改动的旧库，
+ *   删掉即无声丢数据），并把路径写进错误文案。
+ *   unlink 本身仍可吞但留 console.error 痕迹。
+ *
+ * @param replace 覆盖动作：FromPath 走 copyFile，FromBytes 走 writeFile。
+ * @param providerSnapshot 覆盖前 dump 的本机服务商三表。
+ */
+async function replaceLiveDatabase(
+  replace: (dbPath: string) => Promise<void>,
+  providerSnapshot: ProviderTableSnapshot,
+): Promise<void> {
+  const dbPath = resolveDbPath();
+  const bakPath = `${dbPath}.nmbackup.bak`;
+
+  let bakCreated = false;
+  let rollbackFailed = false;
+  let databaseReplaced = false;
+  // 第三终态：覆盖已成功、只是三表恢复失败。此时库已是新快照（不能回滚），
+  // 而 bak 正是「导入前的完整旧库」——含未同步的本地改动，是用户仅存的救回凭据。
+  // 置位后 finally 不删它，并把路径写进错误文案（与 mobile 侧 finally 从不删 bak 一致）。
+  let keepBackupForManualRecovery = false;
+
+  try {
+    if (await fileExists(dbPath)) {
+      await fsOps.copyFile(dbPath, bakPath);
+      bakCreated = true;
+    }
+    await closeLiveDbForBackupImport();
+    await replace(dbPath);
+    databaseReplaced = true;
+
+    const restoreConn = await openDbForProviderRestore();
+    try {
+      await restoreProviderTableSnapshot(restoreConn, providerSnapshot);
+    } finally {
+      await restoreConn.close();
+    }
+  } catch (error) {
+    if (databaseReplaced) {
+      // 终态③：库已是新快照，不回滚，只把「已换代 + 三表未恢复」如实报上去。
+      // 但覆盖前的旧库副本是用户导入前那份完整旧库（含未同步本地改动）——
+      // 此刻它是磁盘上唯一的一份，删掉等于让用户无声丢失本地数据。
+      keepBackupForManualRecovery = true;
+      throw new DatabaseReplacedError(
+        `数据库已导入，但本机服务商配置恢复失败：${errorDetail(error)}` +
+          (bakCreated
+            ? `导入前的旧库副本已保留在 ${bakPath}（未回滚，需要时可手工替换回来）。`
+            : "导入前没有可备份的活动库文件，无旧库副本可保留。"),
+        false,
+      );
+    }
+
+    // 覆盖动作本身失败：库仍是旧库（或根本没换），回滚到备份。
+    let rollbackError: unknown;
+    if (bakCreated) {
+      try {
+        await fsOps.copyFile(bakPath, dbPath);
+      } catch (e) {
+        rollbackError = e;
+      }
+    }
+    if (rollbackError != null) {
+      rollbackFailed = true;
+      throw new Error(
+        `数据库导入失败且回滚失败，回滚副本保留在 ${bakPath}：${errorDetail(rollbackError)}`,
+        { cause: [error, rollbackError] },
+      );
+    }
+    throw error;
+  } finally {
+    if (bakCreated && !rollbackFailed && !keepBackupForManualRecovery) {
+      await fsOps.unlink(bakPath).catch((unlinkError: unknown) => {
+        console.error(
+          `[db-backup] 清理回滚副本失败（不影响数据正确性）: ${bakPath}`,
+          unlinkError,
+        );
+      });
+    }
+  }
+}
+
+/**
+ * 从本地快照文件导入数据库（路径级校验 → close → cp 替换 → restore），无对话框与 rebootstrap。
+ * 调用方须在 `databaseReplaced === true` 时执行 rebootstrap，再记账、最后放互斥令牌。
  *
  * ic-20：busy 为计数/令牌配对——底层 acquire/release 自平衡，覆盖「关连接
  * + 覆盖库文件」窗口；最外层流程在 rebootstrap 完成之后 release（见
@@ -98,79 +286,50 @@ export async function exportDatabaseBackupToPath(
  */
 export async function importDatabaseBackupFromPath(
   srcPath: string,
-): Promise<void> {
+): Promise<DbImportOutcome> {
   acquireDesktopDbMaintenanceBusy();
   try {
-    const header = await readFile(srcPath, { encoding: null });
-    assertSqliteFile(new Uint8Array(header.subarray(0, 16)));
-
-    const dbPath = resolveDbPath();
-    const bakPath = `${dbPath}.nmbackup.bak`;
+    // 路径级校验：只读 16 字节魔数，不整包读入。
+    await assertSqliteFileAtPath(srcPath);
 
     const liveConn = await getDesktopConnection();
     const providerSnapshot = await dumpProviderTableSnapshot(liveConn);
 
-    try {
-      await copyFile(dbPath, bakPath).catch(() => undefined);
-      await closeLiveDbForBackupImport();
-      await copyFile(srcPath, dbPath);
-
-      const restoreConn = await openDbForProviderRestore();
-      try {
-        await restoreProviderTableSnapshot(restoreConn, providerSnapshot);
-      } finally {
-        await restoreConn.close();
-      }
-    } catch (error) {
-      await copyFile(bakPath, dbPath).catch(() => undefined);
-      throw error;
-    } finally {
-      await unlink(bakPath).catch(() => undefined);
-    }
+    await replaceLiveDatabase(
+      (dbPath) => fsOps.copyFile(srcPath, dbPath),
+      providerSnapshot,
+    );
   } finally {
     releaseDesktopDbMaintenanceBusy();
   }
+  return { databaseReplaced: true, providerTablesRestored: true };
 }
 
 /**
  * 从内存中的备份字节导入数据库（dump → close → replace → restore），无对话框与 rebootstrap。
- * 调用方须在成功后执行 rebootstrap。
+ * 调用方须在 `databaseReplaced === true` 时执行 rebootstrap，再记账、最后放互斥令牌。
  *
  * ic-20：busy 为计数/令牌配对——同 {@link importDatabaseBackupFromPath}。
  */
 export async function importDatabaseBackupFromBytes(
   bytes: Uint8Array,
-): Promise<void> {
+): Promise<DbImportOutcome> {
   acquireDesktopDbMaintenanceBusy();
   try {
+    // 内存态校验：bytes 已在堆上，不涉及整包读盘。
     assertSqliteFile(bytes);
-
-    const dbPath = resolveDbPath();
-    const bakPath = `${dbPath}.nmbackup.bak`;
 
     const liveConn = await getDesktopConnection();
     const providerSnapshot = await dumpProviderTableSnapshot(liveConn);
 
-    try {
-      await copyFile(dbPath, bakPath).catch(() => undefined);
-      await closeLiveDbForBackupImport();
-      await writeFile(dbPath, bytes);
-
-      const restoreConn = await openDbForProviderRestore();
-      try {
-        await restoreProviderTableSnapshot(restoreConn, providerSnapshot);
-      } finally {
-        await restoreConn.close();
-      }
-    } catch (error) {
-      await copyFile(bakPath, dbPath).catch(() => undefined);
-      throw error;
-    } finally {
-      await unlink(bakPath).catch(() => undefined);
-    }
+    await replaceLiveDatabase(
+      (dbPath) => writeFile(dbPath, bytes),
+      providerSnapshot,
+    );
   } finally {
     releaseDesktopDbMaintenanceBusy();
   }
+  return { databaseReplaced: true, providerTablesRestored: true };
 }
 
 export async function exportDatabaseBackup(
@@ -231,7 +390,9 @@ export async function importDatabaseBackup(
   }
 
   const pickedPath = result.filePaths[0]!;
-  const bytes = await readFile(pickedPath);
-  await importDatabaseBackupFromBytes(bytes);
+  // 走路径级导入：整包 readFile 会把 200MB 级备份拉进 Node 堆，
+  // 且与 mobile（pick 到本地路径 → FromPath）的形态不一致。
+  // 返回类型不变（"imported" | "cancelled"），调用方 handlers/backup.ts 零改动。
+  await importDatabaseBackupFromPath(pickedPath);
   return "imported";
 }

@@ -126,6 +126,44 @@ export class SqliteSmartSortRuleRepository implements SmartSortRuleRepository {
     );
   }
 
+  /**
+   * 每片至多 200 对（对齐 `SqliteMessageRepository.BATCH_PARAM_BUILD_CHUNK`）：
+   * 老版本 SQLite 有 999 变量上限，一对占 2 个变量 ⇒ 单片 200 对 = 400 变量，
+   * 留足余量。600 对的 reorder 会分 3 片下发。
+   */
+  private static readonly SORT_ORDER_CHUNK = 200;
+
+  async updateSortOrders(
+    pairs: readonly { readonly ruleId: string; readonly sortOrder: number }[]
+  ): Promise<void> {
+    // 空数组直接返回，不发 SQL（照 batchInsert 的空数组约定）。
+    if (pairs.length === 0) {
+      return;
+    }
+    const chunkSize = SqliteSmartSortRuleRepository.SORT_ORDER_CHUNK;
+    for (let start = 0; start < pairs.length; start += chunkSize) {
+      const chunk = pairs.slice(start, start + chunkSize);
+      const cases: string[] = [];
+      const idNames: string[] = [];
+      const params: Record<string, unknown> = {};
+      chunk.forEach((pair, i) => {
+        const idName = `rid${i}`;
+        const orderName = `ord${i}`;
+        cases.push(`WHEN #{${idName}} THEN #{${orderName}}`);
+        idNames.push(idName);
+        params[idName] = pair.ruleId;
+        params[orderName] = pair.sortOrder;
+      });
+      const sql =
+        `UPDATE smart_sort_rule SET sort_order = CASE rule_id ` +
+        `${cases.join(" ")} ELSE sort_order END ` +
+        `WHERE rule_id IN (${idNames.map((n) => `#{${n}}`).join(", ")})`;
+      // 参数按占位符名传：evaluator 按占位符**出现顺序**逐个绑定，同名占位符
+      // 出现两次就绑两次 ⇒ CASE 里先绑 rid/ord，WHERE 的 IN 再绑一遍 rid。
+      await executeTemplate(this.conn, this.parser, sql, params);
+    }
+  }
+
   async delete(ruleId: string): Promise<void> {
     await executeTemplate(
       this.conn,

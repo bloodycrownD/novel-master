@@ -5,6 +5,10 @@ import {
   sha256Hex,
   testCloudSyncConnection,
 } from '@/services/cloud-sync.service';
+import {
+  isMobileDbMaintenanceBusy,
+  releaseMobileDbMaintenanceBusy,
+} from '@/services/db-maintenance-busy';
 
 const mockGetConfig = jest.fn();
 const mockGetLocalStatus = jest.fn();
@@ -13,6 +17,7 @@ const mockBuildS3Config = jest.fn();
 const mockCreateS3Storage = jest.fn();
 const mockExportToPath = jest.fn();
 const mockImportFromBytes = jest.fn();
+const mockImportFromPath = jest.fn();
 const mockAgentActive = jest.fn();
 const mockCoordinatorPull = jest.fn();
 const mockCoordinatorPush = jest.fn();
@@ -70,6 +75,20 @@ jest.mock('@/services/db-backup.service', () => ({
   exportDatabaseBackupToPath: (...args: unknown[]) => mockExportToPath(...args),
   importDatabaseBackupFromBytes: (...args: unknown[]) =>
     mockImportFromBytes(...args),
+  importDatabaseBackupFromPath: (...args: unknown[]) =>
+    mockImportFromPath(...args),
+  DatabaseReplacedError: class DatabaseReplacedError extends Error {
+    // 刻意不用 TS 参数属性写法：jest.mock 的模块工厂不允许引用任何 out-of-scope
+    // 变量，babel 的静态检查会把参数名当成自由变量而报错。
+    databaseReplaced: boolean;
+    providerTablesRestored: boolean;
+    constructor(message: string, providerTablesRestored: boolean) {
+      super(message);
+      this.name = 'DatabaseReplacedError';
+      this.databaseReplaced = true;
+      this.providerTablesRestored = providerTablesRestored;
+    }
+  },
 }));
 
 jest.mock('@/runtime/agent-activity', () => ({
@@ -132,6 +151,9 @@ beforeEach(() => {
     forcePathStyle: true,
   });
   mockCreateS3Storage.mockReturnValue(storage);
+  // clearAllMocks 只清调用记录、**不清实现**；pullCloudSync 里那条「拿旧 runtime
+  // 记账就抛 CONNECTION_CLOSED」的探针必须在这里复位，否则会漏给后续用例。
+  mockPatchLocalStatus.mockResolvedValue(undefined);
   mockUnlink.mockResolvedValue(undefined);
   mockReadFile.mockResolvedValue('AA==');
   mockStat.mockResolvedValue({size: 2});
@@ -169,30 +191,77 @@ describe('testCloudSyncConnection', () => {
 });
 
 describe('pullCloudSync', () => {
-  it('拉取成功时更新 lastSyncedRev 并触发 rebootstrap', async () => {
-    mockCoordinatorPull.mockResolvedValue({rev: 3});
-    const rebootstrap = jest.fn();
+  // 「换成重建出来的新 runtime」的可观测替身：pull 换库后必须调它，
+  // 且记账必须落在它返回的那个 runtime 上。
+  const freshRuntime = {kkv: {id: 'fresh'}} as never;
+
+  afterEach(() => {
+    // 兜底清位：maintenanceBusyCount 是进程级模块变量，任何用例泄漏都会
+    // 连带把同文件后续用例（乃至同进程其它套件）全判红。
+    while (isMobileDbMaintenanceBusy()) {
+      releaseMobileDbMaintenanceBusy();
+    }
+  });
+
+  it('拉取换代成功时先 onRebootstrap 再用新 runtime 记账', async () => {
+    mockCoordinatorPull.mockResolvedValue({rev: 3, databaseReplaced: true});
+    const order: string[] = [];
+    const rebootstrap = jest.fn(async () => {
+      order.push('rebootstrap');
+      return freshRuntime;
+    });
+    // 「旧 runtime 背后的连接已被换库关掉」的探针：拿它记账必抛
+    // CONNECTION_CLOSED（这正是 S-CS-01 的 P0 正身）。写成实现而不是
+    // 只比对实参身份，回退到旧 runtime 会直接让本条 reject，而不是假绿。
+    mockPatchLocalStatus.mockImplementation((rt: unknown) => {
+      if (rt === runtime) {
+        return Promise.reject(new Error('CONNECTION_CLOSED'));
+      }
+      order.push('patch');
+      return Promise.resolve();
+    });
 
     const result = await pullCloudSync(runtime, rebootstrap);
 
     expect(result).toEqual({rev: 3, alreadyUpToDate: false});
     expect(mockCoordinatorPull).toHaveBeenCalledWith({lastSyncedRev: 1});
+    expect(rebootstrap).toHaveBeenCalledTimes(1);
+    expect(order).toEqual(['rebootstrap', 'patch']);
+    // 记账必须落在新 runtime 上。
     expect(mockPatchLocalStatus).toHaveBeenCalledWith(
-      runtime,
+      freshRuntime,
       expect.objectContaining({
         lastSyncedRev: 3,
         lastPullResult: 'success',
       }),
     );
-    expect(rebootstrap).toHaveBeenCalled();
+    expect(mockPatchLocalStatus).not.toHaveBeenCalledWith(
+      runtime,
+      expect.anything(),
+    );
     expect(mockImportFromBytes).not.toHaveBeenCalled();
   });
 
-  it('ALREADY_UP_TO_DATE 时不触发 rebootstrap', async () => {
+  it('databaseReplaced=false 时不调用 onRebootstrap 且记账走旧 runtime', async () => {
+    // S-CS-16：这条分支不换代（库没换、连接没关），所以记账可以用旧 runtime。
+    mockCoordinatorPull.mockResolvedValue({rev: 3, databaseReplaced: false});
+    const rebootstrap = jest.fn(async () => freshRuntime);
+
+    const result = await pullCloudSync(runtime, rebootstrap);
+
+    expect(result).toEqual({rev: 3, alreadyUpToDate: false});
+    expect(rebootstrap).not.toHaveBeenCalled();
+    expect(mockPatchLocalStatus).toHaveBeenCalledWith(
+      runtime,
+      expect.objectContaining({lastPullResult: 'already_up_to_date'}),
+    );
+  });
+
+  it('ALREADY_UP_TO_DATE 时不调用 onRebootstrap 且记账走旧 runtime', async () => {
     mockCoordinatorPull.mockRejectedValue(
       new CloudSyncError('ALREADY_UP_TO_DATE', '本地已是最新，无需拉取'),
     );
-    const rebootstrap = jest.fn();
+    const rebootstrap = jest.fn(async () => freshRuntime);
 
     const result = await pullCloudSync(runtime, rebootstrap);
 
@@ -204,6 +273,26 @@ describe('pullCloudSync', () => {
     );
   });
 
+  it('catch 分支在 pull 已换代时先重建再用新 runtime 记账', async () => {
+    const {DatabaseReplacedError} = jest.requireMock<
+      typeof import('@/services/db-backup.service')
+    >('@/services/db-backup.service');
+    mockCoordinatorPull.mockRejectedValue(
+      new DatabaseReplacedError('数据库已导入，但本机服务商配置恢复失败', false),
+    );
+    const rebootstrap = jest.fn(async () => freshRuntime);
+
+    await expect(pullCloudSync(runtime, rebootstrap)).rejects.toBeDefined();
+
+    // mobile 的 runtime 是 React state、没有懒建自愈 ⇒ 不补这条，一次失败 pull
+    // 之后整个 App 会带着已关 runtime 跑到用户手动重启。
+    expect(rebootstrap).toHaveBeenCalledTimes(1);
+    expect(mockPatchLocalStatus).toHaveBeenCalledWith(
+      freshRuntime,
+      expect.objectContaining({lastPullResult: 'error'}),
+    );
+  });
+
   it('未配置时抛 NOT_CONFIGURED', async () => {
     mockGetLocalStatus.mockResolvedValue({
       configured: false,
@@ -211,9 +300,53 @@ describe('pullCloudSync', () => {
       lastSyncedRev: 0,
     });
 
-    await expect(pullCloudSync(runtime, jest.fn())).rejects.toMatchObject({
+    await expect(
+      pullCloudSync(runtime, jest.fn(async () => freshRuntime)),
+    ).rejects.toMatchObject({
       code: 'NOT_CONFIGURED',
     });
+  });
+
+  it('createCoordinator 抛错时 reject 且 isMobileDbMaintenanceBusy() 回到 false', async () => {
+    // S-CS-04 主断言（必红→必绿）：acquire 令牌之后到 try 之间原本有一段
+    // 可抛代码（createCoordinator），它一抛 finally 就不执行 ⇒
+    // maintenanceBusyCount 永久 +1 ⇒ 消息解压 / blob 归一两个后台循环在本进程
+    // 剩余生命周期内全部停摆，而用户侧零报错。
+    // 反向断言：调用前先确认计数是干净的——否则本条的 `=== false` 会恒红，
+    // 而上一条若把它配平了，本条的「泄漏」就观测不到。
+    expect(isMobileDbMaintenanceBusy()).toBe(false);
+    mockBuildS3Config.mockRejectedValue(new Error('请先完成云存储配置'));
+
+    await expect(
+      pullCloudSync(runtime, jest.fn(async () => freshRuntime)),
+    ).rejects.toBeDefined();
+
+    expect(isMobileDbMaintenanceBusy()).toBe(false);
+    // `!= null` 守卫的唯一钉点：createCoordinator 抛错时两个临时路径都还是
+    // undefined，unlink 绝不能以 undefined 被调用（同步抛 TypeError 会用
+    // 一个新错盖掉原始错，把「配置不全」报成「临时文件清理失败」）。
+    expect(mockUnlink).not.toHaveBeenCalledWith(undefined);
+    // 弱断言：错因是配置没填全，与网络毫无关系；兜底分支会把它误报成
+    // 「请检查网络」这种误导引导。
+    await pullCloudSync(runtime, jest.fn(async () => freshRuntime)).catch(
+      (error: Error) => {
+        expect(error.message).not.toMatch(/网络/);
+      },
+    );
+  });
+
+  it('coordinator.pull 失败时两个临时文件都被清理且参数为完整路径', async () => {
+    mockCoordinatorPull.mockRejectedValue(new Error('快照校验失败'));
+    const rebootstrap = jest.fn(async () => freshRuntime);
+
+    await expect(pullCloudSync(runtime, rebootstrap)).rejects.toBeDefined();
+
+    expect(mockUnlink).toHaveBeenCalledTimes(2);
+    const unlinkedArgs = mockUnlink.mock.calls.map(call => call[0]);
+    for (const arg of unlinkedArgs) {
+      expect(typeof arg).toBe('string');
+      expect(String(arg)).toContain('/cache/cloud-sync-');
+    }
   });
 });
 

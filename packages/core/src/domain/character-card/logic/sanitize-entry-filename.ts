@@ -4,6 +4,7 @@
  * @module domain/character-card/logic/sanitize-entry-filename
  */
 
+// eslint-disable-next-line no-control-regex -- 故意剔除控制字符（文件名非法字符表的核心部分）
 const ILLEGAL_CHARS = /[/\\:*?"<>|\x00-\x1f]/g;
 
 /**

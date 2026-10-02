@@ -117,22 +117,27 @@ import { IntegrityRepairRegistry } from "@/service/integrity-repair.js";
  * + 实时算兜底」并移除累计输入输出——DDL/ALIGN 全撤、版本回到 17。该列
  * 只在 feature 分支的测试机库上残留（user_version 已升 18、列与回填标记
  * 为无害孤儿，无任何读写方），正式库从未有过此形态，无需清理动作。
- * v18（本迭代启用）：新增 vfs_content_pack / vfs_content_pack_member 两表与
- * idx_vfs_content_pack_member_pack 索引（binary-blob-and-vfs-pack Part B：
- * VFS 非 head 历史版本混合打包——小组 zlib-concat-v1 / 大组 fossil-chain-v1，
- * member 按 content_hash 寻址进包）。老库（v17）靠本轮 bump 走慢路径由
- * DDL 建出两表与索引；全新库直接建表；无存量回填（历史 blob 行由后台
- * 打包任务跨启动续跑搬运）。**已因上一轮撤回 v18 落到 user_version = 18 的
- * 测试机库走快路径时，两张表由事务外无条件段幂等补建**（pbm-7 方案 A，
- * 荣耀真机实锤该形态后落地——详见 bootstrapNovelMaster 内该段注释）。占号说明：main 侧曾占 v18 后当日撤回（上段，
- * 未发布），故本迭代直接取 v18、无需再顺延；合并顺序上以主干现值为准，
- * 若 main 后续再占 18 则本迭代顺延。
+ * v18（vfs-content-pack 迭代启用，已随 v1.5.30 发布）：新增 vfs_content_pack /
+ * vfs_content_pack_member 两表与 idx_vfs_content_pack_member_pack 索引
+ * （binary-blob-and-vfs-pack Part B：VFS 非 head 历史版本混合打包——小组
+ * zlib-concat-v1 / 大组 fossil-chain-v1，member 按 content_hash 寻址进包）。
+ * 老库（v17）靠 bump 走慢路径由 DDL 建出两表与索引；全新库直接建表；无存量
+ * 回填（历史 blob 行由后台打包任务跨启动续跑搬运）。**已因上一轮撤回 v18 落到
+ * user_version = 18 的测试机库走快路径时，两张表由事务外无条件段幂等补建**
+ * （pbm-7 方案 A，荣耀真机实锤该形态后落地）。
  * v18 同轮追加：`idx_vfs_entry_content_hash`（打包候选谓词的 head 引用
- * 反查用；真库形态谓词 126–141ms → 67–76ms）。它也在 v18 canonical DDL 里，
- * **不单独 bump**——本迭代尚未发布，存量 v17 库走 17→18 慢路径随语句集
- * 一并建出；分支内测试机已落 v18 的库不会补建（无发布面，可接受）。
+ * 反查用；真库形态谓词 126–141ms → 67–76ms）。
+ * v19（repo-mega-cr CS-07/CR-F06，分支内原编号 v18——与主干 vfs-pack v18
+ * 撞号，按「并行迭代以主干现值为准顺延」纪律取 19）：blob 归零触发器改名
+ * `..._v2` 并在守卫子查询里校验 hash 无其他引用，canonical DDL 同步
+ * `DROP TRIGGER IF EXISTS <旧名>`——删共享 hash 的 revision 不再把别的
+ * entry 的 blob 删掉（触发器缺守卫的 P0 修复）；守卫子查询复用 v18 的
+ * idx_vfs_entry_content_hash 部分索引（免每删一条 revision 全表扫
+ * vfs_entry）。bump 19 同时救回「曾被撤回 v18 写到 user_version = 18 的
+ * 开发库」——这批库在 18 >= 18 快路径下旧名无守卫触发器永远不会被 DROP，
+ * bump 后重新落慢路径一并收口。
  */
-export const SCHEMA_BOOT_VERSION = 18;
+export const SCHEMA_BOOT_VERSION = 19;
 
 /** 各模块 DDL 语句，按依赖安全顺序排列。 */
 export const NOVEL_MASTER_SCHEMA_STATEMENTS: readonly string[] = [

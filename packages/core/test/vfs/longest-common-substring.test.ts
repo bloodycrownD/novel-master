@@ -47,3 +47,144 @@ describe("longestCommonSubstring 中文引号场景", () => {
     assert.ok(result.substring.includes("你好"));
   });
 });
+
+/**
+ * 参考实现（oracle）：改动前的**全表 DP** 原样抄一份。
+ *
+ * ⚠️ 这是本文件唯一允许的重复代码——它存在的唯一目的是把「滚动两行 Int32Array
+ * 重写没改语义」这件事钉成一条逐字可比的断言。随 C2-11 一起删。
+ */
+function referenceLongestCommonSubstring(
+  a: string,
+  b: string
+): { substring: string; length: number } {
+  if (a.length === 0 || b.length === 0) {
+    return { substring: "", length: 0 };
+  }
+  const rows = a.length + 1;
+  const cols = b.length + 1;
+  let maxLen = 0;
+  const endsInB: number[] = [];
+  const dp: number[][] = Array.from({ length: rows }, () =>
+    Array<number>(cols).fill(0)
+  );
+  for (let i = 1; i < rows; i++) {
+    for (let j = 1; j < cols; j++) {
+      if (a[i - 1] === b[j - 1]) {
+        dp[i]![j] = dp[i - 1]![j - 1]! + 1;
+        const len = dp[i]![j]!;
+        if (len > maxLen) {
+          maxLen = len;
+          endsInB.length = 0;
+          endsInB.push(j);
+        } else if (len === maxLen && len > 0) {
+          endsInB.push(j);
+        }
+      }
+    }
+  }
+  if (maxLen === 0) {
+    return { substring: "", length: 0 };
+  }
+  const endInB = Math.min(...endsInB);
+  return { substring: b.slice(endInB - maxLen, endInB), length: maxLen };
+}
+
+describe("C2-11 大输入降级与结果等价", () => {
+  it("T-LCS-DEGRADE-1: 两侧各 5 万字符（2.5 亿格）走降级路径，不崩且结果仍正确", () => {
+    // 旧实现按全表 DP 分配 (a+1)×(b+1) 个 JS number，约 689MB ⇒ 会 OOM /
+    // RangeError；新实现按比例裁剪到 2e6 格以内。
+    const a = "ab".repeat(25_000);
+    const b = "ab".repeat(25_000);
+    if (global.gc != null) {
+      global.gc();
+    }
+    const before = process.memoryUsage().heapUsed;
+    const result = longestCommonSubstring(a, b);
+    const deltaMb = (process.memoryUsage().heapUsed - before) / (1024 * 1024);
+
+    assert.ok(result.length > 0, "降级后仍应给出可用的诊断片段");
+    assert.ok(b.includes(result.substring));
+    // 两侧都被按同一比例裁剪 ⇒ 裁剪后的 b 长度即结果长度上界。
+    assert.equal(result.length, result.substring.length);
+    assert.ok(deltaMb < 200, `堆增量 ${deltaMb.toFixed(1)}MB 过大：降级没生效`);
+  });
+
+  it("T-LCS-DEGRADE-2: 裁到没意义时直接放弃 LCS（length=0，错误码与流程不变）", () => {
+    // 一侧极长、一侧极短（3e6 格 > 2e6 上限）⇒ 按比例裁剪后短侧低于
+    // LCS_DEGRADED_MIN_CHARS ⇒ 放弃诊断。降级若失效，本例会算出 LCS = "x"。
+    const result = longestCommonSubstring("x".repeat(1_000_000), "xyz");
+    assert.equal(result.length, 0);
+    assert.equal(result.substring, "");
+  });
+
+  it("T-LCS-SPREAD: a=b 的超长同字符串不再撞 Math.min(...arr) 的展开上限", () => {
+    // endsInB 在同字符串上会堆到 O(min(a,b)) 条；旧实现的 spread 会抛
+    // RangeError: Maximum call stack size exceeded。
+    const same = "x".repeat(300_000);
+    const result = longestCommonSubstring(same, same);
+    assert.ok(result.length > 0, "不得抛 RangeError");
+    assert.equal(result.substring, "x".repeat(result.length));
+  });
+
+  it("T-LCS-EQUIV: 20 组样本与全表 DP oracle 逐字相等（含并列最长）", () => {
+    const samples: Array<[string, string]> = [
+      ["abc", "abc"],
+      ["abc", "xyz"],
+      ["", "abc"],
+      ["abc", ""],
+      ["aab", "baa"], // 并列最长
+      ["aaaa", "baaa"], // 并列最长 + 不同前缀
+      ["function hello() {    return 1; }", "function hello() { return 1; }"],
+      [`他说“你好”`, `他说"你好"`],
+      ["行1\n行2\n行3", "行2\n行3\n行4"],
+      ["aaaaab", "baaaaa"],
+      ["abababab", "babababa"],
+      ["重复重复重复", "重复重复别别别"],
+["\n\t缩进不同", "  缩进不同\n"],
+      ["z" + "a".repeat(800) + "z", "a".repeat(1500) + "q"],
+      ["中文中文中文", "中文中文英文"],
+      ["prefix-unique-suffix", "other-unique-prefix"],
+      ["abcabcabc", "xyzabcabc"],
+      ["0123456789".repeat(120), "6789012345".repeat(120)],
+      ["tail-only", "head-only"],
+    ];
+    for (const [a, b] of samples) {
+      const actual = longestCommonSubstring(a, b);
+      const expected = referenceLongestCommonSubstring(a, b);
+      assert.equal(
+        actual.length,
+        expected.length,
+        `length 不一致：a=${JSON.stringify(a.slice(0, 20))} b=${JSON.stringify(b.slice(0, 20))}`
+      );
+      assert.equal(
+        actual.substring,
+        expected.substring,
+        `substring 不一致：a=${JSON.stringify(a.slice(0, 20))} b=${JSON.stringify(b.slice(0, 20))}`
+      );
+    }
+  });
+
+  /**
+   * 重样本单独成条（cr1-ctests P2-4b）。
+   *
+   * `1200 × 1200` 的同字符长串在 oracle（`referenceLongestCommonSubstring`，全表
+   * `number[][]`）上要分配约 144 万格 × 行数组。它**必须**留在对拍组里——并列最长
+   * + 退化路径这两个性质只有这个体量才压得出来；但混在 20 组样本里，一旦它在低
+   * 内存机器上触发 GC 噪声/超时，报错会指向整个 T-LCS-EQUIV 而不是这一条。
+   * 拆成独立 `it` 后失败可归因，且不影响其余 19 组。
+   *
+   * @remarks 若 CI worker 内存仍然吃紧，可把两侧降到 `600 × 600`——并列最长的
+   *       性质不变，只是少压一档规模。
+   */
+  it("T-LCS-EQUIV-HEAVY: 1200 × 1200 同字符长串与全表 DP oracle 逐字相等", () => {
+    const a = "a".repeat(1200);
+    const b = "a".repeat(1200);
+    const actual = longestCommonSubstring(a, b);
+    const expected = referenceLongestCommonSubstring(a, b);
+    assert.equal(actual.length, expected.length);
+    assert.equal(actual.substring, expected.substring);
+    // 并列最长的判定口径：同一长串的最长公共子串就是全长。
+    assert.equal(actual.length, 1200);
+  });
+});

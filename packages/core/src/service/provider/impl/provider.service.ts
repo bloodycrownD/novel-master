@@ -14,6 +14,8 @@ import {
   resolveProviderApiKeySecretRef,
 } from "@/domain/provider/model/provider.js";
 import type { ProviderRepository } from "@/domain/provider/repositories/provider.port.js";
+import { findSavedModelReferences } from "@/domain/provider/logic/find-saved-model-references.js";
+import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import type { ModelSuggestionRepository } from "@/domain/provider/repositories/model-suggestion.port.js";
 import type { SavedModelRepository } from "@/domain/provider/repositories/saved-model.port.js";
 import { providerApiKeyIsConfigured } from "@/domain/provider/logic/resolve-provider-api-key.js";
@@ -30,6 +32,13 @@ export interface DefaultProviderServiceDeps {
   readonly suggestions: ModelSuggestionRepository;
   readonly savedModels: SavedModelRepository;
   readonly secretStore: SecretStore;
+  /**
+   * 仅供 `delete` 的 in-use 拒绝用（`findSavedModelReferences` 的首参）。
+   *
+   * ⚠️ **不得**改走 `providerModels` 反向注入来拿：`ProviderModelService` 已持有
+   * `providers`，反向注入会成循环 import。`conn` 由工厂直接传，链路现成。
+   */
+  readonly conn: TdbcConnection;
 }
 
 function requireNonEmptyDisplayName(raw: string, providerId?: string): string {
@@ -224,6 +233,45 @@ export class DefaultProviderService implements ProviderService {
     const suggestions = await this.deps.suggestions.listByProvider(id);
     const savedModels = await this.deps.savedModels.listByProvider(id);
     const secretValue = await this.deps.secretStore.get(ref);
+
+    // S-D 前置拒绝（**在 CoordinatedWrite 之外**）：本路径走
+    // `savedModels.deleteByProvider(id)` **批量抹掉**该 provider 的全部已保存模型，
+    // 完全不经过 `ProviderModelService.deleteSaved` 的 in-use 守卫 ⇒ 即便那条守卫
+    // 补全了，这条路依然能静默清空被引用的模型。拒绝发生在任何删除动作之前，
+    // 因此不破坏既有五步 CoordinatedWrite 的 rollback 配对。
+    for (const m of savedModels) {
+      const refs = await findSavedModelReferences(this.deps.conn, m.id);
+      // ⚠️ `currentModelId` 是**软指针**，不是内容引用。真实契约分两半，缺一不可：
+      //   ① 【本处】把它从 blockingRefs 里滤掉——把它当硬引用会把这层既有契约打死，
+      //      provider 只要是当前模型就永远删不掉。真正必须前置拒绝的内容引用只有
+      //      agent_definition / chat_project / chat_session 三类。
+      //   ② 【调用方】三个调用方都在 **delete 之前**读一次 currentModelId 并按
+      //      `saved.providerId === id` 算好 clearCurrentModel，**delete 成功返回之后**
+      //      才 resetCurrentModelId（currentProviderId 同理）：
+      //        - apps/cli/src/provider/commands.ts `delete` 分支
+      //        - apps/desktop/src/main/ipc/handlers/providers.ts `handleProvidersDelete`
+      //        - apps/mobile/src/screens/stack/ProvidersScreen.tsx `deleteProviderOne`
+      //      顺序不可换：delete 会级联抹掉本 provider 名下的 saved model 行，
+      //      之后再 getSavedById 恒为 null ⇒ reset 永不执行 ⇒ currentModelId 悬空
+      //      固化进新会话的 agent_config_json，发消息才抛 INVALID_SAVED_MODEL_ID。
+      //
+      // ⚠️⚠️ 本过滤**依赖三个调用方的 delete 前置判定顺序**——服务层自己不清理这条软
+      // 指针，全靠调用方兜。改动任一调用方（新增第四个端、或调整上述顺序）**必须**
+      // 同步复核另外两端，否则软指针悬空会静默复发。
+      const blockingRefs = refs.filter((r) => r !== "currentModelId");
+      if (blockingRefs.length > 0) {
+        // 写死复用 SAVED_MODEL_IN_USE、**不新造 PROVIDER_IN_USE**：
+        // provider-errors.ts 的码表里没有后者（写了会编译不过）；
+        // `formatIpcError` 按 instanceof 类分派后原样透传 err.code，
+        // 前端零 SAVED_MODEL_IN_USE 命中 ⇒ 没有需要同步的映射表，
+        // 新造码只会让前端拿不到已处理的文案。
+        throw new ProviderError(
+          "SAVED_MODEL_IN_USE",
+          `无法删除服务商：其下模型「${m.modelName}」仍被引用（${blockingRefs.join("、")}）`,
+          { providerId: id }
+        );
+      }
+    }
 
     const write = new CoordinatedWrite();
     write.register({

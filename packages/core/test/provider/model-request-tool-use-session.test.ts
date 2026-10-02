@@ -1,4 +1,4 @@
-﻿import { BUILTIN_PROVIDER_UUID_ANTHROPIC } from "../../src/domain/provider/logic/builtin-providers.js";
+import { BUILTIN_PROVIDER_UUID_ANTHROPIC } from "../../src/domain/provider/logic/builtin-providers.js";
 import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";

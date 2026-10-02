@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { CloudSyncCoordinator } from "../../src/infra/cloud-sync/impl/cloud-sync-coordinator.js";
 import { CloudSyncError } from "../../src/infra/cloud-sync/errors/cloud-sync-errors.js";
 import { statusKey, snapshotKey } from "../../src/infra/cloud-sync/logic/paths.js";
+import { buildLease } from "../../src/infra/cloud-sync/logic/lock.js";
 import {
   PushAgentMutex,
   PushAgentMutexAcquireError,
@@ -117,11 +118,15 @@ function createMockDbSync(overrides?: Partial<DbSyncPort>): DbSyncPort & {
     importedPaths,
     isAgentActive: () => false,
     async exportSnapshotToPath(_destPath: string) {},
+    // 显式回报「已换代」：不回报就走 port 的 `void` 兼容分支、
+    // databaseReplaced 落 false，pull 的换代信号这条测试会假绿。
     async importSnapshot(bytes: Uint8Array) {
       imported.push(bytes);
+      return { databaseReplaced: true };
     },
     async importSnapshotFromPath(path: string) {
       importedPaths.push(path);
+      return { databaseReplaced: true };
     },
     ...overrides,
   };
@@ -185,6 +190,7 @@ describe("CloudSyncCoordinator.pull", () => {
 
     const result = await coordinator.pull({ lastSyncedRev: 1 });
     assert.equal(result.rev, 2);
+    assert.equal(result.databaseReplaced, true);
     assert.equal(dbSync.imported.length, 1);
     assert.deepEqual(dbSync.imported[0], snapBytes);
     assert.equal(dbSync.importedPaths.length, 0);
@@ -221,6 +227,7 @@ describe("CloudSyncCoordinator.pull", () => {
 
     const result = await coordinator.pull({ lastSyncedRev: 1 });
     assert.equal(result.rev, 2);
+    assert.equal(result.databaseReplaced, true);
     assert.equal(dbSync.imported.length, 0);
     assert.equal(dbSync.importedPaths.length, 1);
     assert.equal(dbSync.importedPaths[0], importPath);
@@ -242,6 +249,171 @@ describe("CloudSyncCoordinator.pull", () => {
         return true;
       },
     );
+  });
+});
+
+// S-CS-03：pull 的 agent 复检与进程内互斥。
+// 病症：pull 全程不查 isAgentActive、也不参与 pushMutex ⇒ agent 流式写入中途被
+// 整库覆盖（在途写入丢失），且 pull ↔ push 在 mobile 交错时会把本机刚拉回来的
+// 内容用旧快照盖回云端。
+describe("CloudSyncCoordinator.pull 守卫 (S-CS-03)", () => {
+  function remoteAtRev2(snapBytes: Uint8Array) {
+    const snapKey = snapshotKey(PREFIX, 2);
+    return {
+      snapKey,
+      storage: createStorage({
+        status: {
+          schemaVersion: 1,
+          rev: 2,
+          snapshotKey: snapKey,
+          snapshotSha256: "deadbeef",
+          snapshotBytes: snapBytes.length,
+          lock: null,
+        },
+        snapshots: { [snapKey]: snapBytes },
+      }),
+    };
+  }
+
+  it("pull 入口 agent 活跃时抛 AGENT_ACTIVE 且不调用 import", async () => {
+    const { storage } = remoteAtRev2(new Uint8Array([10, 20, 30]));
+    const dbSync = createMockDbSync({ isAgentActive: () => true });
+    const coordinator = createCoordinator(storage, dbSync);
+
+    await assert.rejects(
+      () => coordinator.pull({ lastSyncedRev: 1 }),
+      (error: unknown) => {
+        assert.ok(error instanceof CloudSyncError);
+        assert.equal(error.code, "AGENT_ACTIVE");
+        return true;
+      },
+    );
+    assert.equal(dbSync.imported.length, 0, "拒绝时绝不能触碰活动库文件");
+    assert.equal(dbSync.importedPaths.length, 0);
+  });
+
+  it("import 之前复检到 agent 活跃时抛 AGENT_ACTIVE", async () => {
+    // 钩子挂在 hashSnapshotFile 上：它在 getToPath 之后、importSnapshotFromPath
+    // 之前——正是「下载已完成、覆盖还没开始」那个窗口。
+    const { storage } = remoteAtRev2(new Uint8Array([10, 20, 30]));
+    let agentActive = false;
+    const dbSync = createMockDbSync({ isAgentActive: () => agentActive });
+    const importPath = join(tmpdir(), `nm-coord-guard-${Date.now()}.nmbackup`);
+    const coordinator = new CloudSyncCoordinator({
+      storage,
+      dbSync,
+      pathPrefix: PREFIX,
+      deviceId: DEVICE_ID,
+      exportTempPath: EXPORT_PATH,
+      importTempPath: importPath,
+      computeSha256Hex: () => "unused",
+      hashSnapshotFile: async () => {
+        agentActive = true;
+        return "deadbeef";
+      },
+      readSnapshotBytes: async () => new Uint8Array(),
+      getSnapshotBytes: async () => 0,
+      pushMutex: new PushAgentMutex(),
+    });
+
+    await assert.rejects(
+      () => coordinator.pull({ lastSyncedRev: 1 }),
+      (error: unknown) => {
+        assert.ok(error instanceof CloudSyncError);
+        assert.equal(error.code, "AGENT_ACTIVE");
+        return true;
+      },
+    );
+    assert.equal(dbSync.importedPaths.length, 0, "二次复检必须发生在覆盖之前");
+  });
+
+  it("pull 持锁期间并发 push 排队（exportSnapshotToPath 在 pull 之后）", async () => {
+    const snapBytes = new Uint8Array([10, 20, 30]);
+    const { storage } = remoteAtRev2(snapBytes);
+    const mutex = new PushAgentMutex();
+    let releaseDownload: () => void = () => {};
+    const downloadGate = new Promise<void>(resolve => {
+      releaseDownload = resolve;
+    });
+    // 包装 getToPath：让 pull 卡在「下载快照」这一步，全程持锁。
+    const gatedStorage: ObjectStoragePort = {
+      ...storage,
+      async getToPath(key, destPath) {
+        await downloadGate;
+        return storage.getToPath!(key, destPath);
+      },
+    };
+
+    let pushExported = false;
+    const dbSync = createMockDbSync({
+      async exportSnapshotToPath() {
+        pushExported = true;
+      },
+    });
+    const importPath = join(tmpdir(), `nm-coord-mutex-${Date.now()}.nmbackup`);
+    const exportPath = join(tmpdir(), `nm-coord-mutex-exp-${Date.now()}.nmbackup`);
+    await writeFile(exportPath, new Uint8Array([1, 2, 3, 4]));
+    const coordinator = new CloudSyncCoordinator({
+      storage: gatedStorage,
+      dbSync,
+      pathPrefix: PREFIX,
+      deviceId: DEVICE_ID,
+      exportTempPath: exportPath,
+      importTempPath: importPath,
+      computeSha256Hex: () => "unused",
+      hashSnapshotFile: async () => "deadbeef",
+      readSnapshotBytes: async () => new Uint8Array([1, 2, 3, 4]),
+      getSnapshotBytes: async () => 4,
+      pushMutex: mutex,
+    });
+
+    const pullPromise = coordinator.pull({ lastSyncedRev: 1 });
+    await new Promise(r => setTimeout(r, 10));
+    assert.equal(mutex.isHeld(), true, "pull 应持锁");
+
+    const pushPromise = coordinator
+      .push({ lastSyncedRev: 2 })
+      .then(r => r)
+      .catch(() => undefined);
+    await new Promise(r => setTimeout(r, 20));
+    assert.equal(pushExported, false, "pull 持锁期间 push 不得开始导出");
+    assert.equal(mutex.waiterCount(), 1, "push 应在锁上排队");
+
+    releaseDownload();
+    const pullResult = await pullPromise;
+    assert.equal(pullResult.rev, 2);
+    assert.equal(mutex.isHeld(), true, "pull 放锁后 push 拿到锁");
+    await pushPromise;
+    assert.equal(pushExported, true);
+    assert.equal(mutex.isHeld(), false);
+  });
+
+  it("ALREADY_UP_TO_DATE 时不抢锁不查 agent", async () => {
+    const storage = createStorage({
+      status: { schemaVersion: 1, rev: 1, lock: null },
+    });
+    const mutex = new PushAgentMutex();
+    let agentChecked = false;
+    const dbSync = createMockDbSync({
+      isAgentActive: () => {
+        agentChecked = true;
+        return true;
+      },
+    });
+    const coordinator = createCoordinator(storage, dbSync, { pushMutex: mutex });
+
+    await assert.rejects(
+      () => coordinator.pull({ lastSyncedRev: 1 }),
+      (error: unknown) => {
+        assert.ok(error instanceof CloudSyncError);
+        // 一次「什么都不会发生」的 no-op pull 不该因为 agent 在跑而被拒。
+        assert.equal(error.code, "ALREADY_UP_TO_DATE");
+        return true;
+      },
+    );
+    assert.equal(agentChecked, false, "早返回之前不得查 agent");
+    assert.equal(mutex.isHeld(), false, "早返回之前不得抢锁");
+    assert.equal(mutex.waiterCount(), 0);
   });
 });
 
@@ -412,6 +584,139 @@ describe("CloudSyncCoordinator.push", () => {
       forceOverwriteRemote: true,
     });
     assert.equal(result.rev, 6);
+  });
+});
+
+// S-CS-09：push 收尾的条件写失败分支。
+// 病症：If-Match 失败后只重读 etag 就无条件覆盖 finalStatus，而 finalStatus.rev
+// 是最初 remote.rev+1 的常量、lock 是 null ⇒ 远端 rev 被写回更小的值 +
+// 第三方租约被抹，两端都把自己记成成功（跨设备静默数据错位）。
+describe("S-CS-09 final status 重读判定", () => {
+  /**
+   * 模拟设备 B 的**无条件**写：`storage.put` 不传 ifMatch 就是无 If-Match 写，
+   * 正是另一台设备在锁过期后做的事。测试基座零改动。
+   */
+  /**
+   * 模拟「另一台设备把远端 status 改成了这样」。
+   *
+   * ⚠️ **必须 await**（CR cloudsync P2-5）：原先写的是
+   * `void storage.put(...)`，正确性依赖「`createStorage` 的 status 分支体内
+   * 永远没有 await」这条**没写下来的不变量**——三个赋值
+   * （`currentStatus` / `statusWrites` / `currentEtag`）在函数被调用的那一刻
+   * 同步完成，所以当时不竞态。将来往 `put` 里加任何一处 `await`，这三条用例会
+   * 静默退化成「设备 B 的写没赶上 → 守卫不触发 → push 成功」；断言仍会红，
+   * 但**红的原因变成了别的问题**，排查成本极高。
+   *
+   * 钩子（`exportSnapshotToPath`）本身是 async，await 得起。
+   */
+  async function simulateOtherDevice(
+    storage: ReturnType<typeof createStorage>,
+    status: CloudSyncStatus,
+  ): Promise<void> {
+    await storage.put(statusKey(PREFIX), encodeStatus(status));
+  }
+
+  it("远端 rev 已被他人推进时不覆盖并抛 NEED_PULL_FIRST", async () => {
+    // 初始 status 绝不能带他人有效租约：那样 runPush 在 canAcquireLock 就提前
+    // 抛 LOCK_HELD_BY_OTHER，永远进不了重读分支 ⇒ 修前修后皆绿（恒绿无牙断言）。
+    const storage = createStorage({
+      status: { schemaVersion: 1, rev: 2, lock: null },
+    });
+    const dbSync = createMockDbSync({
+      async exportSnapshotToPath() {
+        // 设备 B 在我们上传期间把 rev 推到了 3。
+        await simulateOtherDevice(storage, {
+          schemaVersion: 1,
+          rev: 3,
+          lock: null,
+        });
+      },
+    });
+    const coordinator = createCoordinator(storage, dbSync);
+
+    await assert.rejects(
+      () => coordinator.push({ lastSyncedRev: 2 }),
+      (error: unknown) => {
+        assert.ok(error instanceof CloudSyncError);
+        assert.equal(error.code, "NEED_PULL_FIRST");
+        return true;
+      },
+    );
+
+    const writes = storage.getStatusWrites();
+    assert.ok(writes.length > 0);
+    // 没有写出回退的 rev（我们的 nextRev 是 3，但那条写不能存在——
+//    它只能是 rev>=3 的设备 B 的写）。
+    assert.equal(
+      writes.some(w => w.rev === 3 && w.lock === null && w.snapshotKey != null),
+      false,
+      "不得把自己的 final status 写出去",
+    );
+    assert.ok(
+      (writes[writes.length - 1]?.rev ?? 0) >= 3,
+      "最后一条 status 写不得是回退的 rev",
+    );
+  });
+
+  it("远端有他人有效租约时抛 LOCK_HELD_BY_OTHER 且不清他人租约", async () => {
+    const storage = createStorage({
+      status: { schemaVersion: 1, rev: 2, lock: null },
+    });
+    const dbSync = createMockDbSync({
+      async exportSnapshotToPath() {
+        await simulateOtherDevice(storage, {
+          schemaVersion: 1,
+          rev: 2,
+          lock: buildLease("other-device", 900),
+        });
+      },
+    });
+    const coordinator = createCoordinator(storage, dbSync);
+
+    await assert.rejects(
+      () => coordinator.push({ lastSyncedRev: 2 }),
+      (error: unknown) => {
+        assert.ok(error instanceof CloudSyncError);
+        assert.equal(error.code, "LOCK_HELD_BY_OTHER");
+        return true;
+      },
+    );
+
+    // 回滚面：抛错走 finally 的 tryClearLock，但它有三重守卫
+    // （lock==null / 租约过期 / holderDeviceId !== 本机），不得误清他人租约。
+    const writes = storage.getStatusWrites();
+    const last = writes[writes.length - 1]!;
+    assert.equal(
+      last.lock?.holderDeviceId,
+      "other-device",
+      "第三方的有效租约必须仍在",
+    );
+  });
+
+  it("远端租约已过期但 rev 未推进时仍成功提交 final status（反向断言）", async () => {
+    // 没有这条，把守卫写成「一律拒绝」的错修法也会全绿。
+    const storage = createStorage({
+      status: { schemaVersion: 1, rev: 2, lock: null },
+    });
+    const dbSync = createMockDbSync({
+      async exportSnapshotToPath() {
+        // 过期租约 ⇒ canAcquireLock 为 true；rev 未推进 ⇒ latest.rev(2) < nextRev(3)。
+        await simulateOtherDevice(storage, {
+          schemaVersion: 1,
+          rev: 2,
+          lock: buildLease("other-device", -900),
+        });
+      },
+    });
+    const coordinator = createCoordinator(storage, dbSync);
+
+    const result = await coordinator.push({ lastSyncedRev: 2 });
+    assert.equal(result.rev, 3);
+
+    const writes = storage.getStatusWrites();
+    const last = writes[writes.length - 1]!;
+    assert.equal(last.rev, 3);
+    assert.equal(last.lock, null);
   });
 });
 

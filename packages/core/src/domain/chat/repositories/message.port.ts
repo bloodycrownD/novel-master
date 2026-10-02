@@ -7,6 +7,20 @@
 import type { ChatMessage, ChatMessageHeader } from "../model/message.js";
 import type { MessageContent } from "../model/content-block.js";
 import type { MessageSearchQuery } from "../content/message-content-match.js";
+// 仅取类型（编译后擦除，运行时不成环）：ReadRefPointer 在 vfs 侧定义，
+// 这里不重新定义第二份，避免两个模块的 read 引用形状漂移。
+import type { ReadRefPointer } from "@/domain/vfs/logic/revision-ref-count.js";
+
+/**
+ * 一条消息的「删除链素材」：id + 它的 read 引用指针。
+ *
+ * 窄投影（21 → 4 列）读口的返回元素：删除链需要的就是这两样东西，
+ * 此前只能靠 21 列 `listBySession` 顺带取。
+ */
+export type MessageReadRefTarget = {
+  readonly id: string;
+  readonly refs: readonly ReadRefPointer[];
+};
 
 /** Persistence for `chat_message` rows. */
 export interface MessageRepository {
@@ -35,14 +49,93 @@ export interface MessageRepository {
    */
   countBySession(sessionId: string): Promise<number>;
 
+  // ============================================================
+  // 窄读口区 · Wave C「全量读收窄系列」四条
+  //
+  // 这四条是同一个动作的四次落地：把「本来只需要一小块」的读取从 21 列
+  // `listBySession` 上拆下来。**它们相邻排布是有意的护栏**（CR c1 K10）——
+  // 下一个人想加第五个全列读口时，会先看见这四条并被提醒「该加窄口，不该加
+  // 全列口」。每条都写明了「谁在用、为什么不能用别的」，因为「能不能用现成
+  // 的某个口」正是最容易拍错的地方。
+  //
+  // 新增读口时照这四条的两条纪律来：① 能收窄就别全量；② 收窄的口只服务一个
+  // 消费者，出现第二个消费者时**另起一条**，不要把上一条放宽。
+  // ============================================================
+
   /**
-   * 按 seq 升序跳过前 `offset` 行，取余下全部消息（backfill 圈「新增段」用）。
+   * 按 seq 升序跳过前 `offset` 行，取余下全部消息头（backfill 圈「新增段」用）。
    *
    * `offset` 是行偏移而非 seq 值（seq 可能因删除有洞）；SQLite 方言
    * `LIMIT -1 OFFSET ?` 表示不限条数。消息集只增不减时前 `offset` 行即
    * 上次扫描确认过的消息，返回的就是之后的新增段。
+   *
+   * @remarks **谁在用**：`backfill-baseline-checkpoints.ts:132`（增量段判定，
+   *          只消费 `id`）。
+   * @remarks **为什么不能用别的**：不能用 `listMessageHeadersBySession` + 内存
+   *          `slice` —— 那会把 offset 之前的消息头也读回来，offset 越大浪费越多；
+   *          更不能用 `listBySession` —— 21 列 + 逐行 `JSON.parse` 换一批
+   *          根本不需要的 id。21 列 → 6 列、零 parse。
+   * @remarks 新增第二个「要正文」的调用方时必须**另起读口**，不要放宽本口。
    */
-  listBySessionOffset(sessionId: string, offset: number): Promise<ChatMessage[]>;
+  listBySessionOffset(
+    sessionId: string,
+    offset: number
+  ): Promise<ChatMessageHeader[]>;
+
+  /**
+   * 按 seq 升序列出「seq <= maxSeq（含上界）」的消息（fork 上界收窄用）。
+   *
+   * fork 消费方的全部读都在锚点及更早方向（`filter(seq <= upTo.seq)`），
+   * 锚点之后的整条尾巴是纯浪费——用户在第 3 条消息处 fork 一个 3000 条的
+   * 会话时，2997 条正文被读回、逐行 `JSON.parse`、再整条丢掉。
+   * 与 {@link listBySessionFromSeq} 对称（那边收下界、这边收上界）。
+   *
+   * @remarks **谁在用**：`message.service.ts:335`（`fork` 的上界收窄）。
+   * @remarks **为什么不能用别的**：不能用 `listBySession` + 内存 `filter`
+   *          ——过滤发生在读回**之后**，省不下任何一行；也不能用
+   *          `listMessageHeadersBySession`，fork 要的是完整 `ChatMessage`
+   *          （含正文内容块）来重建目标会话。
+   * @remarks **含 hidden**：本读口只加 `seq` 上界，**不得**加 `AND hidden = 0`
+   *          ——fork 明确「Preserve hidden state」，滤掉 hidden 行会让 fork
+   *          出来的会话**静默丢消息**。
+   */
+  listBySessionUpToSeq(sessionId: string, maxSeq: number): Promise<ChatMessage[]>;
+
+  /**
+   * tail + role 过滤：取「该 role 的最后 limit 条」（seq 升序返回）。
+   *
+   * @remarks **谁在用**：`subagent-tool.ts:230`（拿「末条 assistant 的合并文本」）。
+   * @remarks **为什么不能用别的**：不能用 `listBySessionTail(sessionId, limit)`
+   *          ——它的 `limit` 数的是**所有 role 的行**，夹在 assistant 回合之间的
+   *          tool_result（role=user）会吃掉配额；也不能用
+   *          `listBySessionTail(sessionId, 1)` 再过滤，assistant 之前最近的那条
+   *          多半是 tool_result，直接落空。`role` 必须在 SQL 子查询里过滤、
+   *          `limit` 只数该 role，子会话 41 条时也不再整条倒扫。
+   */
+  listBySessionTailOfRole(
+    sessionId: string,
+    role: string,
+    limit: number
+  ): Promise<ChatMessage[]>;
+
+  /**
+   * 列出会话内每条消息的 id 与其 read 引用指针（entryId/version），不解压/不解析
+   * 正文以外的任何列。删除链（清空会话 / 删会话 / 删项目）需要「id 列表 +
+   * read 引用 −1 素材」两样东西，此前只能靠 21 列 `listBySession` 顺带取。
+   *
+   * @remarks **谁在用**：`message.service.ts:508`（`truncateAfter` 空锚分支）、
+   *          `session.service.ts:231`（`deleteSessionTree`）、
+   *          `project.service.ts:182`（删项目连带删会话）。
+   * @remarks **为什么不能用别的**：不能用 `listBySession` + 内存
+   *          `collectReadRefs` ——省不下任何一列，21 列的正文全部读回再丢掉。
+   * @remarks ⚠ 不过滤 hidden：本读口产出的是「即将被 deleteBySession 全删」的消息集合，
+   *          漏掉 hidden 行 = 漏减 read 引用 = revision 永不 GC（内容不可再生的方向）。
+   * @remarks ⚠ 返回类型**仍是**逐条 parse 后的 refs（`collectReadRefs` 需要完整
+   *          `MessageContent`）——本读口省的是**列数**与**事务外往返**，不是省 parse。
+   */
+  listReadRefTargetsBySession(
+    sessionId: string
+  ): Promise<readonly MessageReadRefTarget[]>;
 
   /**
    * 按 seq 升序列出「seq >= fromSeq（含下界）」的消息。
@@ -57,6 +150,7 @@ export interface MessageRepository {
   ): Promise<ChatMessage[]>;
 
   listBySessionTail(sessionId: string, limit: number): Promise<ChatMessage[]>;
+
   listBySessionPage(
     sessionId: string,
     limit: number,

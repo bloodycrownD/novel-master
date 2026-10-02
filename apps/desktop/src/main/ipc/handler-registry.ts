@@ -93,8 +93,6 @@ import {
   handleSmartSortRuleCreate,
   handleSmartSortRuleDelete,
   handleSmartSortRuleDeleteBatch,
-  handleSmartSortRuleExportRules,
-  handleSmartSortRuleImportRules,
   handleSmartSortRuleList,
   handleSmartSortRuleMove,
   handleSmartSortRuleMatch,
@@ -110,7 +108,6 @@ import {
   handleSkillsAssertCreateName,
   handleSkillsUpdateInfo,
   handleSkillsDelete,
-  handleSkillsEdit,
   handleSkillsEffective,
   handleSkillsList,
   handleSkillsRead,
@@ -141,10 +138,8 @@ import { handleUsageStatsQuery } from './handlers/usage-stats.js';
 import {
   handleProjectsCreate,
   handleProjectsDelete,
-  handleProjectsGetAgentConfig,
   handleProjectsList,
   handleProjectsRename,
-  handleProjectsUpdateAgentConfig,
 } from './handlers/projects.js';
 import {
   handleScopeGet,
@@ -155,7 +150,6 @@ import {
 import {
   handleSessionsCreate,
   handleSessionsDelete,
-  handleSessionsGetAgentBinding,
   handleSessionsGetComposerDraft,
   handleSessionsListByProject,
   handleSessionsProjectComposerStatus,
@@ -175,7 +169,6 @@ import {
   handleVfsBatchExportStage,
   handleVfsBatchIngestFromPaths,
   handleVfsDelete,
-  handleVfsList,
   handleVfsMkdir,
   handleVfsRead,
   handleVfsRename,
@@ -190,7 +183,6 @@ import {
 import type { VfsStartDragRequest } from '../../../shared/ipc-types.js';
 import {
   handleWorkplaceBuildListRows,
-  handleWorkplaceCaptureSessionBlock,
   handleWorkplaceGetDirRule,
   handleWorkplaceSetDirRule,
   handleWorkplaceSetFileRule,
@@ -232,11 +224,6 @@ export function registerHandlersFromRegistry(): void {
   bindReq(IPC_CHANNELS.PROJECTS_CREATE, handleProjectsCreate);
   bindReq(IPC_CHANNELS.PROJECTS_RENAME, handleProjectsRename);
   bindReq(IPC_CHANNELS.PROJECTS_DELETE, handleProjectsDelete);
-  bindReq(IPC_CHANNELS.PROJECTS_GET_AGENT_CONFIG, handleProjectsGetAgentConfig);
-  bindReq(
-    IPC_CHANNELS.PROJECTS_UPDATE_AGENT_CONFIG,
-    handleProjectsUpdateAgentConfig,
-  );
 
   bindReq(IPC_CHANNELS.SESSIONS_LIST_BY_PROJECT, handleSessionsListByProject);
   bindReq(IPC_CHANNELS.SESSIONS_CREATE, handleSessionsCreate);
@@ -250,7 +237,6 @@ export function registerHandlersFromRegistry(): void {
     IPC_CHANNELS.SESSIONS_PROJECT_COMPOSER_STATUS,
     handleSessionsProjectComposerStatus,
   );
-  bindReq(IPC_CHANNELS.SESSIONS_GET_AGENT_BINDING, handleSessionsGetAgentBinding);
   bindReq(IPC_CHANNELS.SESSIONS_SET_AGENT_BINDING, handleSessionsSetAgentBinding);
   bindReq(
     IPC_CHANNELS.SESSIONS_SET_MODEL_OVERRIDE,
@@ -260,7 +246,6 @@ export function registerHandlersFromRegistry(): void {
   bindReq(IPC_CHANNELS.APP_UI_GET, handleAppUiGet);
   bindReq(IPC_CHANNELS.APP_UI_SET, handleAppUiSet);
 
-  bindReq(IPC_CHANNELS.VFS_LIST, handleVfsList);
   bindReq(IPC_CHANNELS.VFS_READ, handleVfsRead);
   // 只读物理树浏览（跨域拼接视图；仅 list/read，无任何写通道）
   bindReq(IPC_CHANNELS.PHYSICAL_LIST, handlePhysicalList);
@@ -289,10 +274,6 @@ export function registerHandlersFromRegistry(): void {
   bindReq(IPC_CHANNELS.WORKPLACE_SET_DIR_RULE, handleWorkplaceSetDirRule);
   bindReq(IPC_CHANNELS.WORKPLACE_SET_FILE_RULE, handleWorkplaceSetFileRule);
   bindReq(IPC_CHANNELS.WORKPLACE_GET_DIR_RULE, handleWorkplaceGetDirRule);
-  bindReq(
-    IPC_CHANNELS.WORKPLACE_CAPTURE_SESSION_BLOCK,
-    handleWorkplaceCaptureSessionBlock,
-  );
 
   bindReq(IPC_CHANNELS.MESSAGES_LIST, handleMessagesList);
   bindReq(IPC_CHANNELS.MESSAGES_SEARCH, handleMessagesSearch);
@@ -412,8 +393,6 @@ export function registerHandlersFromRegistry(): void {
   );
   bindReq(IPC_CHANNELS.SMART_SORT_RULE_MOVE, handleSmartSortRuleMove);
   bindReq(IPC_CHANNELS.SMART_SORT_RULE_REORDER, handleSmartSortRuleReorder);
-  bindNoArg(IPC_CHANNELS.SMART_SORT_RULE_EXPORT_RULES, handleSmartSortRuleExportRules);
-  bindReq(IPC_CHANNELS.SMART_SORT_RULE_IMPORT_RULES, handleSmartSortRuleImportRules);
   bindNoArg(
     IPC_CHANNELS.SMART_SORT_RULE_RESET_DEFAULTS,
     handleSmartSortRuleResetDefaults,
@@ -426,7 +405,6 @@ export function registerHandlersFromRegistry(): void {
   bindReq(IPC_CHANNELS.SKILLS_EFFECTIVE, handleSkillsEffective);
   bindReq(IPC_CHANNELS.SKILLS_READ, handleSkillsRead);
   bindReq(IPC_CHANNELS.SKILLS_WRITE, handleSkillsWrite);
-  bindReq(IPC_CHANNELS.SKILLS_EDIT, handleSkillsEdit);
   bindReq(IPC_CHANNELS.SKILLS_TOGGLE, handleSkillsToggle);
   bindReq(IPC_CHANNELS.SKILLS_DELETE, handleSkillsDelete);
   bindReq(IPC_CHANNELS.SKILLS_ASSERT_CREATE_NAME, handleSkillsAssertCreateName);

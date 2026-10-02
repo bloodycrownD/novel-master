@@ -48,17 +48,26 @@ describe("thinkingLevelToModelThinkingParams", () => {
     }
   });
 
-  it("Anthropic 档位 budget 受 effective max_tokens 钳制", () => {
-    const params = thinkingLevelToModelThinkingParams(
-      "high",
-      "anthropic",
-      "claude-3-5-sonnet",
-      samplingOff,
-    );
-    assert.equal(params?.protocol, "anthropic");
-    if (params?.protocol === "anthropic") {
-      assert.equal(params.anthropic.budget_tokens, 4095);
-    }
+  it("Anthropic 档位 budget 受 effective max_tokens 按 0.8 比例钳制，三档可区分", () => {
+    // 修复前：预算公式是 `effectiveMax - 1`，默认 max=4096 ⇒ 三档全被钳成
+    // 4095（可见正文只剩 1 token，三档无差别）。修复后 max=16000、比例 0.8 ⇒
+    // 上限 12800，三档 4096 / 8192 / 12800 各自可区分，且都留 3200 给可见正文。
+    const budgetOf = (level: "low" | "medium" | "high"): number => {
+      const params = thinkingLevelToModelThinkingParams(
+        level,
+        "anthropic",
+        "claude-3-5-sonnet",
+        samplingOff,
+      );
+      assert.equal(params?.protocol, "anthropic");
+      if (params?.protocol !== "anthropic") {
+        throw new Error("expected anthropic params");
+      }
+      return params.anthropic.budget_tokens;
+    };
+    assert.equal(budgetOf("low"), 4096);
+    assert.equal(budgetOf("medium"), 8192);
+    assert.equal(budgetOf("high"), 12800);
   });
 
   it("Gemini 2.5 使用 thinkingBudget preset", () => {

@@ -395,7 +395,7 @@ describe("Preview annotate UI wiring (source)", () => {
     assert.doesNotMatch(pane, /buildAnnotatedSource/);
     // mouseup 禁止直开 AddModal；由 FloatingBar onAdd 显式打开
     const mouseUpBody = pane.match(
-      /const onMouseUp = \(\) => \{[\s\S]*?\n    \};/,
+      /const onMouseUp = \(\) => \{[\s\S]*?\n {4}\};/,
     );
     assert.ok(mouseUpBody, "须存在 onMouseUp");
     assert.doesNotMatch(mouseUpBody![0], /setAddOpen\(true\)/);

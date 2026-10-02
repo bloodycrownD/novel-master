@@ -158,10 +158,12 @@ describe("loadOrFillFileCache 读取侧降级", () => {
     assert.equal(vfs.readCalls(), 0);
   });
 
-  it("filename 档：不探测（原行为，缺失占位空串仍写 cache）", async () => {
+  it("filename 档：探测拿真实 mtimeMs 写入 cache（不再返回 1970）", async () => {
+    // 原用例锁的是「filename 档完全不探测、mtimeMs 恒 0」，那正是本条要改的行为：
+    // 组装侧会把它渲染成 createdAt="1970-01-01 …" 送进常驻提示词。
     const sessionKkv = createMemorySessionKkv();
     const vfs = fakeVfs({
-      contentSize: { kind: "inlineChars", size: CHARACTER_CARD_MAX_SINGLE_FILE_BYTES + 1 },
+      contentSize: { kind: "inlineChars", size: 1024, mtimeMs: 1751718000000 },
     });
 
     const result = await loadOrFillFileCache({
@@ -172,7 +174,8 @@ describe("loadOrFillFileCache 读取侧降级", () => {
     });
 
     assert.equal(result.body, "");
-    assert.equal(vfs.readCalls(), 0);
+    assert.equal(result.mtimeMs, 1751718000000, "filename 档必须带回真实 mtime");
+    assert.equal(vfs.readCalls(), 0, "仍然不得读正文");
     assert.notEqual(
       await sessionKkv.get(
         "s1",
@@ -180,6 +183,77 @@ describe("loadOrFillFileCache 读取侧降级", () => {
         fileCacheKey("filename", "/note.md")
       ),
       null
+    );
+  });
+
+  it("探测失败时 filename 档仍返回 body \"\"（不阻断组装）", async () => {
+    // 探测抛错 / 返回 null 两种形态都退 0，但组装必须继续走下去。
+    const forThrow = createMemorySessionKkv();
+    const vfsThrow = fakeVfs({ contentSize: "throw" });
+    const r1 = await loadOrFillFileCache({
+      ...BASE,
+      sessionKkv: forThrow,
+      vfs: vfsThrow,
+      status: "filename",
+    });
+    assert.equal(r1.body, "");
+    assert.equal(r1.mtimeMs, 0);
+    assert.equal(vfsThrow.readCalls(), 0);
+
+    const forNull = createMemorySessionKkv();
+    const vfsNull = fakeVfs({ contentSize: null });
+    const r2 = await loadOrFillFileCache({
+      ...BASE,
+      sessionKkv: forNull,
+      vfs: vfsNull,
+      status: "filename",
+    });
+    assert.equal(r2.body, "");
+    assert.equal(r2.mtimeMs, 0);
+    assert.equal(vfsNull.readCalls(), 0);
+  });
+
+  it("read 抛错降级：返回 (missing) 但不写 file_cache", async () => {
+    // file_cache 命中无条件返回、无 mtime 校验 ⇒ 把 `(missing)` 粘进缓存会让该 path
+    // 在本会话余下所有轮次都渲染成 missing 且永不自愈。
+    const sessionKkv = createMemorySessionKkv();
+    const vfs = fakeVfs({ contentSize: { kind: "inlineChars", size: 10, mtimeMs: 5 } });
+    (vfs as unknown as { read: () => Promise<unknown> }).read = async () => {
+      throw new Error("EIO");
+    };
+
+    const result = await loadOrFillFileCache({ ...BASE, sessionKkv, vfs });
+
+    assert.equal(result.body, "(missing)");
+    assert.equal(
+      await sessionKkv.get(
+        "s1",
+        SESSION_KKV_DOMAIN_FILE_CACHE,
+        fileCacheKey("full", "/note.md")
+      ),
+      null,
+      "降级来源的 payload 不得写入 file_cache"
+    );
+  });
+
+  it("降级判据是显式标记而非正文匹配：正文真含 (missing) 仍照常落 cache", async () => {
+    const sessionKkv = createMemorySessionKkv();
+    const vfs = fakeVfs({
+      contentSize: { kind: "inlineChars", size: 10, mtimeMs: 5 },
+      content: "上一轮提示词里写着 (missing) 占位符",
+    });
+
+    const result = await loadOrFillFileCache({ ...BASE, sessionKkv, vfs });
+
+    assert.equal(result.body, "上一轮提示词里写着 (missing) 占位符");
+    assert.notEqual(
+      await sessionKkv.get(
+        "s1",
+        SESSION_KKV_DOMAIN_FILE_CACHE,
+        fileCacheKey("full", "/note.md")
+      ),
+      null,
+      "正常读取的正文即便含 (missing) 也必须落 cache"
     );
   });
 });

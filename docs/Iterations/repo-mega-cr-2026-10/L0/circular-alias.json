@@ -1,0 +1,499 @@
+{
+  "generated_by": "tmp/l0census/circular-alias.mjs",
+  "groups": {
+    "core": {
+      "label": "packages/core（@/* → src/*）",
+      "nodes": 1082,
+      "cycles_runtime": [
+        [
+          "packages/core/src/bootstrap/skills/seed-builtin-skills.ts",
+          "packages/core/src/service/skills/create-skills-service.ts",
+          "packages/core/src/service/skills/impl/skills.service.ts"
+        ],
+        [
+          "packages/core/src/domain/tool/logic/fs-command-classify.ts",
+          "packages/core/src/domain/tool/logic/fs-command.ts"
+        ],
+        [
+          "packages/core/src/domain/chat/logic/rollback-confirm-copy.ts",
+          "packages/core/src/errors/session-fs-errors.ts"
+        ],
+        [
+          "packages/core/src/domain/provider/logic/resolve-thinking-wire.ts",
+          "packages/core/src/domain/provider/logic/thinking-level-presets.ts"
+        ],
+        [
+          "packages/core/src/service/agent/agent-registry.port.ts",
+          "packages/core/src/service/persistent-state/persistent-state.port.ts"
+        ]
+      ],
+      "cycles": [
+        {
+          "id": "CYC-001",
+          "verdict": "runtime-safe",
+          "files": [
+            "packages/core/src/domain/provider/model/model-sampling-params.ts",
+            "packages/core/src/domain/provider/model/model-thinking-params.ts",
+            "packages/core/src/infra/llm-protocol/ports/adapter.port.ts"
+          ],
+          "edges": [
+            {
+              "from": "packages/core/src/domain/provider/model/model-thinking-params.ts",
+              "to": "packages/core/src/infra/llm-protocol/ports/adapter.port.ts",
+              "typeOnly": true
+            },
+            {
+              "from": "packages/core/src/domain/provider/model/model-sampling-params.ts",
+              "to": "packages/core/src/infra/llm-protocol/ports/adapter.port.ts",
+              "typeOnly": true
+            },
+            {
+              "from": "packages/core/src/infra/llm-protocol/ports/adapter.port.ts",
+              "to": "packages/core/src/domain/provider/model/model-sampling-params.ts",
+              "typeOnly": true
+            },
+            {
+              "from": "packages/core/src/infra/llm-protocol/ports/adapter.port.ts",
+              "to": "packages/core/src/domain/provider/model/model-thinking-params.ts",
+              "typeOnly": true
+            }
+          ]
+        },
+        {
+          "id": "CYC-002",
+          "verdict": "runtime-safe",
+          "files": [
+            "packages/core/src/domain/vfs/logic/vfs-grep.ts",
+            "packages/core/src/domain/vfs/ports/vfs-service.port.ts"
+          ],
+          "edges": [
+            {
+              "from": "packages/core/src/domain/vfs/logic/vfs-grep.ts",
+              "to": "packages/core/src/domain/vfs/ports/vfs-service.port.ts",
+              "typeOnly": true
+            },
+            {
+              "from": "packages/core/src/domain/vfs/ports/vfs-service.port.ts",
+              "to": "packages/core/src/domain/vfs/logic/vfs-grep.ts",
+              "typeOnly": true
+            }
+          ]
+        },
+        {
+          "id": "CYC-003",
+          "verdict": "runtime-safe",
+          "files": [
+            "packages/core/src/bootstrap/skills/seed-builtin-skills.ts",
+            "packages/core/src/service/skills/create-skills-service.ts",
+            "packages/core/src/service/skills/impl/skills.service.ts"
+          ],
+          "edges": [
+            {
+              "from": "packages/core/src/service/skills/impl/skills.service.ts",
+              "to": "packages/core/src/bootstrap/skills/seed-builtin-skills.ts",
+              "typeOnly": false
+            },
+            {
+              "from": "packages/core/src/service/skills/create-skills-service.ts",
+              "to": "packages/core/src/service/skills/impl/skills.service.ts",
+              "typeOnly": false
+            },
+            {
+              "from": "packages/core/src/bootstrap/skills/seed-builtin-skills.ts",
+              "to": "packages/core/src/service/skills/create-skills-service.ts",
+              "typeOnly": false
+            }
+          ]
+        },
+        {
+          "id": "CYC-004",
+          "verdict": "runtime-safe",
+          "files": [
+            "packages/core/src/config-forms/agent/agent-editor-state.ts",
+            "packages/core/src/config-forms/agent/agent-tool-catalog.ts"
+          ],
+          "edges": [
+            {
+              "from": "packages/core/src/config-forms/agent/agent-tool-catalog.ts",
+              "to": "packages/core/src/config-forms/agent/agent-editor-state.ts",
+              "typeOnly": true
+            },
+            {
+              "from": "packages/core/src/config-forms/agent/agent-editor-state.ts",
+              "to": "packages/core/src/config-forms/agent/agent-tool-catalog.ts",
+              "typeOnly": false
+            }
+          ]
+        },
+        {
+          "id": "CYC-005",
+          "verdict": "runtime-safe",
+          "files": [
+            "packages/core/src/domain/agent/logic/validate-agent-definition.ts",
+            "packages/core/src/domain/agent/logic/validate-agent-tool-policy.ts",
+            "packages/core/src/domain/tool/builtin/builtin-tool-context.ts",
+            "packages/core/src/domain/tool/builtin/skill-tool.ts",
+            "packages/core/src/domain/tool/builtin/vfs-tools.ts",
+            "packages/core/src/domain/tool/logic/fs-command-classify.ts",
+            "packages/core/src/domain/tool/logic/fs-command.ts",
+            "packages/core/src/service/agent/agent-registry.port.ts",
+            "packages/core/src/service/persistent-state/persistent-state.port.ts"
+          ],
+          "edges": [
+            {
+              "from": "packages/core/src/domain/tool/builtin/skill-tool.ts",
+              "to": "packages/core/src/domain/tool/builtin/builtin-tool-context.ts",
+              "typeOnly": true
+            },
+            {
+              "from": "packages/core/src/domain/tool/logic/fs-command-classify.ts",
+              "to": "packages/core/src/domain/tool/builtin/skill-tool.ts",
+              "typeOnly": false
+            },
+            {
+              "from": "packages/core/src/domain/tool/logic/fs-command-classify.ts",
+              "to": "packages/core/src/domain/tool/logic/fs-command.ts",
+              "typeOnly": false
+            },
+            {
+              "from": "packages/core/src/domain/tool/logic/fs-command.ts",
+              "to": "packages/core/src/domain/tool/logic/fs-command-classify.ts",
+              "typeOnly": false
+            },
+            {
+              "from": "packages/core/src/service/persistent-state/persistent-state.port.ts",
+              "to": "packages/core/src/service/agent/agent-registry.port.ts",
+              "typeOnly": false
+            },
+            {
+              "from": "packages/core/src/domain/agent/logic/validate-agent-tool-policy.ts",
+              "to": "packages/core/src/domain/tool/builtin/vfs-tools.ts",
+              "typeOnly": false
+            },
+            {
+              "from": "packages/core/src/domain/agent/logic/validate-agent-definition.ts",
+              "to": "packages/core/src/domain/agent/logic/validate-agent-tool-policy.ts",
+              "typeOnly": false
+            },
+            {
+              "from": "packages/core/src/service/agent/agent-registry.port.ts",
+              "to": "packages/core/src/domain/agent/logic/validate-agent-definition.ts",
+              "typeOnly": true
+            },
+            {
+              "from": "packages/core/src/service/agent/agent-registry.port.ts",
+              "to": "packages/core/src/service/persistent-state/persistent-state.port.ts",
+              "typeOnly": false
+            },
+            {
+              "from": "packages/core/src/domain/tool/builtin/builtin-tool-context.ts",
+              "to": "packages/core/src/service/agent/agent-registry.port.ts",
+              "typeOnly": true
+            },
+            {
+              "from": "packages/core/src/domain/tool/builtin/vfs-tools.ts",
+              "to": "packages/core/src/domain/tool/builtin/builtin-tool-context.ts",
+              "typeOnly": true
+            },
+            {
+              "from": "packages/core/src/domain/tool/builtin/vfs-tools.ts",
+              "to": "packages/core/src/domain/tool/logic/fs-command.ts",
+              "typeOnly": false
+            }
+          ]
+        },
+        {
+          "id": "CYC-006",
+          "verdict": "runtime-safe",
+          "files": [
+            "packages/core/src/domain/chat/logic/rollback-confirm-copy.ts",
+            "packages/core/src/errors/session-fs-errors.ts"
+          ],
+          "edges": [
+            {
+              "from": "packages/core/src/errors/session-fs-errors.ts",
+              "to": "packages/core/src/domain/chat/logic/rollback-confirm-copy.ts",
+              "typeOnly": false
+            },
+            {
+              "from": "packages/core/src/domain/chat/logic/rollback-confirm-copy.ts",
+              "to": "packages/core/src/errors/session-fs-errors.ts",
+              "typeOnly": false
+            }
+          ]
+        },
+        {
+          "id": "CYC-007",
+          "verdict": "runtime-safe",
+          "files": [
+            "packages/core/src/infra/nmtp/logic/registry.ts",
+            "packages/core/src/infra/nmtp/ports/tokenizer-driver.port.ts",
+            "packages/core/src/infra/tokenizer/logic/count-prompt-llm-input.ts"
+          ],
+          "edges": [
+            {
+              "from": "packages/core/src/infra/nmtp/ports/tokenizer-driver.port.ts",
+              "to": "packages/core/src/infra/tokenizer/logic/count-prompt-llm-input.ts",
+              "typeOnly": true
+            },
+            {
+              "from": "packages/core/src/infra/nmtp/logic/registry.ts",
+              "to": "packages/core/src/infra/nmtp/ports/tokenizer-driver.port.ts",
+              "typeOnly": true
+            },
+            {
+              "from": "packages/core/src/infra/tokenizer/logic/count-prompt-llm-input.ts",
+              "to": "packages/core/src/infra/nmtp/logic/registry.ts",
+              "typeOnly": false
+            }
+          ]
+        },
+        {
+          "id": "CYC-008",
+          "verdict": "runtime-safe",
+          "files": [
+            "packages/core/src/domain/provider/logic/resolve-thinking-wire.ts",
+            "packages/core/src/domain/provider/logic/thinking-level-presets.ts"
+          ],
+          "edges": [
+            {
+              "from": "packages/core/src/domain/provider/logic/thinking-level-presets.ts",
+              "to": "packages/core/src/domain/provider/logic/resolve-thinking-wire.ts",
+              "typeOnly": false
+            },
+            {
+              "from": "packages/core/src/domain/provider/logic/resolve-thinking-wire.ts",
+              "to": "packages/core/src/domain/provider/logic/thinking-level-presets.ts",
+              "typeOnly": false
+            }
+          ]
+        },
+        {
+          "id": "CYC-009",
+          "verdict": "runtime-safe",
+          "files": [
+            "packages/core/src/service/agent/logic/assemble-agent-runner-deps.ts",
+            "packages/core/src/service/agent/logic/run-agent-turn.ts"
+          ],
+          "edges": [
+            {
+              "from": "packages/core/src/service/agent/logic/assemble-agent-runner-deps.ts",
+              "to": "packages/core/src/service/agent/logic/run-agent-turn.ts",
+              "typeOnly": true
+            },
+            {
+              "from": "packages/core/src/service/agent/logic/run-agent-turn.ts",
+              "to": "packages/core/src/service/agent/logic/assemble-agent-runner-deps.ts",
+              "typeOnly": false
+            }
+          ]
+        }
+      ],
+      "selfLoops": []
+    },
+    "mobile": {
+      "label": "apps/mobile（@/* → src/*、@web/* → src/web/*）",
+      "nodes": 655,
+      "cycles_runtime": [
+        [
+          "apps/mobile/src/web/chat-transcript/webview/runtime/bridge.ts",
+          "apps/mobile/src/web/chat-transcript/webview/runtime/menu/menu.ts",
+          "apps/mobile/src/web/chat-transcript/webview/runtime/render/snapshot.ts",
+          "apps/mobile/src/web/chat-transcript/webview/runtime/scroll/scroll.ts",
+          "apps/mobile/src/web/chat-transcript/webview/runtime/stream/stream-markdown.ts",
+          "apps/mobile/src/web/chat-transcript/webview/runtime/stream/stream.ts"
+        ],
+        [
+          "apps/mobile/src/web/composer-input/webview/runtime/bridge.ts",
+          "apps/mobile/src/web/composer-input/webview/runtime/editor.ts"
+        ]
+      ],
+      "cycles": [
+        {
+          "id": "CYC-001",
+          "verdict": "runtime-safe",
+          "files": [
+            "apps/mobile/src/runtime/types.ts",
+            "apps/mobile/src/services/agent-run.service.ts",
+            "apps/mobile/src/services/session-stream-unit-manager.service.ts"
+          ],
+          "edges": [
+            {
+              "from": "apps/mobile/src/services/agent-run.service.ts",
+              "to": "apps/mobile/src/runtime/types.ts",
+              "typeOnly": true
+            },
+            {
+              "from": "apps/mobile/src/services/session-stream-unit-manager.service.ts",
+              "to": "apps/mobile/src/services/agent-run.service.ts",
+              "typeOnly": false
+            },
+            {
+              "from": "apps/mobile/src/services/session-stream-unit-manager.service.ts",
+              "to": "apps/mobile/src/runtime/types.ts",
+              "typeOnly": true
+            },
+            {
+              "from": "apps/mobile/src/runtime/types.ts",
+              "to": "apps/mobile/src/services/session-stream-unit-manager.service.ts",
+              "typeOnly": true
+            }
+          ]
+        },
+        {
+          "id": "CYC-002",
+          "verdict": "runtime-safe",
+          "files": [
+            "apps/mobile/src/web/chat-transcript/webview/runtime/bridge.ts",
+            "apps/mobile/src/web/chat-transcript/webview/runtime/menu/menu.ts",
+            "apps/mobile/src/web/chat-transcript/webview/runtime/render/snapshot.ts",
+            "apps/mobile/src/web/chat-transcript/webview/runtime/scroll/scroll.ts",
+            "apps/mobile/src/web/chat-transcript/webview/runtime/stream/stream-markdown.ts",
+            "apps/mobile/src/web/chat-transcript/webview/runtime/stream/stream.ts"
+          ],
+          "edges": [
+            {
+              "from": "apps/mobile/src/web/chat-transcript/webview/runtime/menu/menu.ts",
+              "to": "apps/mobile/src/web/chat-transcript/webview/runtime/bridge.ts",
+              "typeOnly": false
+            },
+            {
+              "from": "apps/mobile/src/web/chat-transcript/webview/runtime/stream/stream-markdown.ts",
+              "to": "apps/mobile/src/web/chat-transcript/webview/runtime/scroll/scroll.ts",
+              "typeOnly": false
+            },
+            {
+              "from": "apps/mobile/src/web/chat-transcript/webview/runtime/stream/stream-markdown.ts",
+              "to": "apps/mobile/src/web/chat-transcript/webview/runtime/stream/stream.ts",
+              "typeOnly": false
+            },
+            {
+              "from": "apps/mobile/src/web/chat-transcript/webview/runtime/stream/stream.ts",
+              "to": "apps/mobile/src/web/chat-transcript/webview/runtime/scroll/scroll.ts",
+              "typeOnly": false
+            },
+            {
+              "from": "apps/mobile/src/web/chat-transcript/webview/runtime/stream/stream.ts",
+              "to": "apps/mobile/src/web/chat-transcript/webview/runtime/stream/stream-markdown.ts",
+              "typeOnly": false
+            },
+            {
+              "from": "apps/mobile/src/web/chat-transcript/webview/runtime/bridge.ts",
+              "to": "apps/mobile/src/web/chat-transcript/webview/runtime/render/snapshot.ts",
+              "typeOnly": false
+            },
+            {
+              "from": "apps/mobile/src/web/chat-transcript/webview/runtime/bridge.ts",
+              "to": "apps/mobile/src/web/chat-transcript/webview/runtime/stream/stream.ts",
+              "typeOnly": false
+            },
+            {
+              "from": "apps/mobile/src/web/chat-transcript/webview/runtime/bridge.ts",
+              "to": "apps/mobile/src/web/chat-transcript/webview/runtime/stream/stream-markdown.ts",
+              "typeOnly": false
+            },
+            {
+              "from": "apps/mobile/src/web/chat-transcript/webview/runtime/bridge.ts",
+              "to": "apps/mobile/src/web/chat-transcript/webview/runtime/menu/menu.ts",
+              "typeOnly": false
+            },
+            {
+              "from": "apps/mobile/src/web/chat-transcript/webview/runtime/bridge.ts",
+              "to": "apps/mobile/src/web/chat-transcript/webview/runtime/scroll/scroll.ts",
+              "typeOnly": false
+            },
+            {
+              "from": "apps/mobile/src/web/chat-transcript/webview/runtime/scroll/scroll.ts",
+              "to": "apps/mobile/src/web/chat-transcript/webview/runtime/bridge.ts",
+              "typeOnly": false
+            },
+            {
+              "from": "apps/mobile/src/web/chat-transcript/webview/runtime/render/snapshot.ts",
+              "to": "apps/mobile/src/web/chat-transcript/webview/runtime/scroll/scroll.ts",
+              "typeOnly": false
+            },
+            {
+              "from": "apps/mobile/src/web/chat-transcript/webview/runtime/render/snapshot.ts",
+              "to": "apps/mobile/src/web/chat-transcript/webview/runtime/menu/menu.ts",
+              "typeOnly": false
+            },
+            {
+              "from": "apps/mobile/src/web/chat-transcript/webview/runtime/render/snapshot.ts",
+              "to": "apps/mobile/src/web/chat-transcript/webview/runtime/stream/stream.ts",
+              "typeOnly": false
+            }
+          ]
+        },
+        {
+          "id": "CYC-003",
+          "verdict": "runtime-safe",
+          "files": [
+            "apps/mobile/src/services/cloud-sync-progress-log.ts",
+            "apps/mobile/src/services/cloud-sync-progress-ui.ts"
+          ],
+          "edges": [
+            {
+              "from": "apps/mobile/src/services/cloud-sync-progress-ui.ts",
+              "to": "apps/mobile/src/services/cloud-sync-progress-log.ts",
+              "typeOnly": true
+            },
+            {
+              "from": "apps/mobile/src/services/cloud-sync-progress-log.ts",
+              "to": "apps/mobile/src/services/cloud-sync-progress-ui.ts",
+              "typeOnly": false
+            }
+          ]
+        },
+        {
+          "id": "CYC-004",
+          "verdict": "runtime-safe",
+          "files": [
+            "apps/mobile/src/web/composer-input/webview/runtime/bridge.ts",
+            "apps/mobile/src/web/composer-input/webview/runtime/editor.ts"
+          ],
+          "edges": [
+            {
+              "from": "apps/mobile/src/web/composer-input/webview/runtime/bridge.ts",
+              "to": "apps/mobile/src/web/composer-input/webview/runtime/editor.ts",
+              "typeOnly": false
+            },
+            {
+              "from": "apps/mobile/src/web/composer-input/webview/runtime/editor.ts",
+              "to": "apps/mobile/src/web/composer-input/webview/runtime/bridge.ts",
+              "typeOnly": false
+            }
+          ]
+        }
+      ],
+      "selfLoops": []
+    },
+    "desktop-main": {
+      "label": "apps/desktop main + shared（无 paths，相对路径）",
+      "nodes": 100,
+      "cycles_runtime": [],
+      "cycles": [],
+      "selfLoops": []
+    },
+    "desktop-renderer": {
+      "label": "apps/desktop renderer（@/* → renderer/*、@shared/* → shared/*）",
+      "nodes": 162,
+      "cycles_runtime": [],
+      "cycles": [],
+      "selfLoops": []
+    },
+    "cli": {
+      "label": "apps/cli（无 paths）",
+      "nodes": 72,
+      "cycles_runtime": [],
+      "cycles": [],
+      "selfLoops": []
+    },
+    "other-packages": {
+      "label": "其余 packages/*（驱动包）",
+      "nodes": 124,
+      "cycles_runtime": [],
+      "cycles": [],
+      "selfLoops": []
+    }
+  }
+}

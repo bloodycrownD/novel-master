@@ -2,6 +2,7 @@ import {describe, expect, it, jest} from '@jest/globals';
 import {
   applyComposerStatusAttachmentsReplace,
   clearChatComposerDraft,
+  hydrateChatComposerDraftFromDb,
   readChatComposerDraftState,
   writeChatComposerDraft,
   writeChatComposerDraftState,
@@ -117,6 +118,39 @@ describe('chat-composer-draft', () => {
       1,
     );
     resetChatAnnotateDraftStoreForTests();
+  });
+
+  it('CD-5: hydrateChatComposerDraftFromDb 遇非法附件不清空正文', async () => {
+    // 历史行：草稿正文写到一半，attachments 数组里混了一条今天不合法的
+    // 附件（未知键 → .strict() 拒绝）。旧口径整对象一次 safeParse 会连带
+    // 正文一起判废；新口径逐条丢弃非法项，正文逐字保留。
+    const raw = JSON.stringify({
+      text: '我写了一半',
+      attachments: [
+        {
+          name: '/ref.md',
+          source: 'attach',
+          type: 'text',
+          content: null,
+          path: '/ref.md',
+          legacyUnknownKey: 'x',
+        },
+      ],
+    });
+    const sessions = {
+      getComposerDraftJson: jest.fn(async () => raw),
+      setComposerDraftJson: jest.fn(async () => true),
+    };
+
+    const hydrated = await hydrateChatComposerDraftFromDb('s-cd5', sessions);
+
+    // 断言写成「等于具体那个非空字符串」：写「非空」在返回空串时恒红、
+    // 在返回 undefined 时恒绿，两种退化都测不出牙齿。
+    expect(hydrated.text).toBe('我写了一半');
+    expect(readChatComposerDraftState('s-cd5').text).toBe('我写了一半');
+    // 非法附件被逐条丢弃；且草稿 attach chip 本就不映回（只保留状态条）。
+    expect(hydrated.attachments).toEqual([]);
+    expect(sessions.getComposerDraftJson).toHaveBeenCalledWith('s-cd5');
   });
 });
 

@@ -136,17 +136,21 @@ export function WorkspaceSettingsView() {
     setPicker(kind);
   };
 
+  /**
+   * 保存压缩条件。
+   * ⚠️ 本函数**必须只读入参，禁止读任何 state**：
+   * 防抖定时器捕获的是击键那一帧的闭包，读 state 只会拿到「本次击键之前」的值，
+   * 导致最后一次输入永远丢失。草稿值统一由 compactionDraftRef 提供。
+   */
   const saveCompaction = useCallback(
-    async (nextEnabled = compactionEnabled) => {
+    async (nextEnabled: boolean, tokenRatio: string, hideStartDepth: string) => {
       const res = await ipcCompactionConditionsSet({
         conditions: {
           schemaVersion: 4,
           enabled: nextEnabled,
-          ...(compactionTokenRatio.trim()
-            ? { tokenRatio: Number(compactionTokenRatio) }
-            : {}),
-          ...(compactionHideStartDepth.trim()
-            ? { hideStartDepth: Number(compactionHideStartDepth) }
+          ...(tokenRatio.trim() ? { tokenRatio: Number(tokenRatio) } : {}),
+          ...(hideStartDepth.trim()
+            ? { hideStartDepth: Number(hideStartDepth) }
             : {}),
         },
       });
@@ -156,8 +160,23 @@ export function WorkspaceSettingsView() {
         toastSettingsError(res.error.message);
       }
     },
-    [compactionEnabled, compactionTokenRatio, compactionHideStartDepth],
+    [],
   );
+
+  // 压缩条件的最新草稿，供防抖定时器读取（避免闭包捕获上一帧值）。
+  // 600ms 窗口远大于 effect 时延，时序上没有窗口；若将来把防抖窗口缩到 0ms，必须重评此处。
+  const compactionDraftRef = useRef({
+    enabled: compactionEnabled,
+    tokenRatio: compactionTokenRatio,
+    hideStartDepth: compactionHideStartDepth,
+  });
+  useEffect(() => {
+    compactionDraftRef.current = {
+      enabled: compactionEnabled,
+      tokenRatio: compactionTokenRatio,
+      hideStartDepth: compactionHideStartDepth,
+    };
+  }, [compactionEnabled, compactionTokenRatio, compactionHideStartDepth]);
 
   // 防抖保存：hideStartDepth / tokenRatio 改动后 600ms 自动保存
   const compactionSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -166,7 +185,8 @@ export function WorkspaceSettingsView() {
       clearTimeout(compactionSaveTimer.current);
     }
     compactionSaveTimer.current = setTimeout(() => {
-      void saveCompaction();
+      const draft = compactionDraftRef.current;
+      void saveCompaction(draft.enabled, draft.tokenRatio, draft.hideStartDepth);
     }, 600);
   }, [saveCompaction]);
 
@@ -258,7 +278,11 @@ export function WorkspaceSettingsView() {
               checked={compactionEnabled}
               onChange={(next) => {
                 setCompactionEnabled(next);
-                void saveCompaction(next);
+                void saveCompaction(
+                  next,
+                  compactionTokenRatio,
+                  compactionHideStartDepth,
+                );
               }}
             />
           </SettingsField>

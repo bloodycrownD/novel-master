@@ -25,6 +25,7 @@ import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vf
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import {
   aggregateReadRefs,
+  aggregateReadRefPointers,
   adjustReadRefCount,
 } from "@/domain/vfs/logic/revision-ref-count.js";
 import { DefaultTemplatePullService } from "@/service/template/impl/template-pull.service.js";
@@ -208,6 +209,17 @@ export class DefaultSessionService implements SessionService {
    * 必须在事务内调：先 `listByParentSession` 取直接子，递归调本函数删子，
    * 再删自己。子 session delete 时 `deleteVfsPrefix(session:{pid}:{childId})`
    * 是无害空操作（子 session 根本没建过 VFS scope），不需 special-case 跳过。
+   *
+   * @remarks **修法 3（`yieldFn` 透传）本波未做 ⇒ 这里的窄投影读仍是同步 parse。**
+   *          C1-5 修法 3 是可选项（`SessionServiceDeps` 增 `messageRowYieldFn` +
+   *          `reposFor(tx, yieldFn)` 透传），落地后这条递归链上的逐行
+   *          `JSON.parse` 才会分片让出事件循环。当前形态下 `deleteSessionTree`
+   *          整段（含 N 层递归）都同步 parse 完才进下一步；会话消息量级大时，
+   *          这一段的锁持有期 = 全部子会话的 `JSON.parse` 之和。
+   *          ⚠️ 补这条之前先想清楚：让出事件循环等于把一次临界区切成若干段，
+   *          与「产出写集合的读必须留在事务内」（wave-c2 判据）并不冲突
+   *          （读仍**在**事务内），但会让等锁的写方有机会插队——所以它是
+   *          **可选**而非必做，spec 的验收 I6 也写明「仅当修法 3 做了才立」。
    */
   private async deleteSessionTree(
     tx: TdbcConnection,
@@ -221,10 +233,15 @@ export class DefaultSessionService implements SessionService {
     }
     // read 引用 −1（被删会话全部消息，消息内去重、消息间累加）：fork/copy 出的
     // **其它**会话的引用不受影响——ref_count 不归零的 revision/blob 自动留存。
+    // 窄投影读口（4 列）替掉 21 列全量读：删除链要的只是 id + read 引用指针。
+    // ⚠️ 读**留在事务内**——它产出的正是要减的那批写集合（按 wave-c2 的判据
+    // 「产出写集合的读必须留在事务内」）。本条只降列数，不动事务边界。
     await adjustReadRefCount(
       new SqliteVfsRevisionRepository(tx),
-      aggregateReadRefs(
-        (await r.messages.listBySession(session.id)).map((m) => m.content)
+      aggregateReadRefPointers(
+        (await r.messages.listReadRefTargetsBySession(session.id)).map(
+          (t) => t.refs
+        )
       ),
       -1
     );
@@ -346,21 +363,42 @@ export class DefaultSessionService implements SessionService {
    * @remarks **不**复制 `session_kkv_entry`；新会话侧 kkv 为空，首次拼装重建。
    * agent_config_json 直接复制源会话原始 JSON（不再默认 follow）。
    * composer_draft_json 维持现状不复制。
+   *
+   * 消息的**全量读**在事务之外（与 `fork` 同款形状）：旧形态在写事务里对源会话
+   * 做 21 列全量读 + N 次 `JSON.parse`，全程独占连接写锁。头投影救不了这一侧——
+   * 下面 `aggregateReadRefs` 要从 blocks 统计 contentRef 并对**源** revision +1，
+   * 必须拿到正文；收益全部来自「不再在写事务里做 N 次 parse」。
+   * ⚠️ 引入的 TOCTOU 窗口后果是「复制到一个稍旧快照」——copy 的语义本就是快照，
+   * 可接受；这里刻意不引入新锁（引入就退化成今天的全事务形态）。
    */
   async copy(id: string): Promise<ChatSession> {
     const source = await this.get(id);
+    // 事务外读：repo 绑 `this.deps.conn`（不是 tx）——在事务回调里用外层 conn
+    // 会撞驱动层 AsyncMutex 不可重入，那是死锁不是报错。
+    const messages = await reposFor(this.deps.conn).messages.listBySession(
+      source.id
+    );
+    const now = Date.now();
+    const copy: ChatSession = {
+      id: randomUUID(),
+      projectId: source.projectId,
+      title: source.title == null ? null : `${source.title} (copy)`,
+      // P2-13：fork/copy 出的是独立主会话，不继承源会话的 parent 关系。
+      parentSessionId: null,
+      createdAtMs: now,
+      updatedAtMs: now,
+    };
+    const newMessages: { id: string }[] = [];
+    // 逐条 INSERT 改成先构造数组再一次 batchInsert，把 M 次 round-trip 收敛成 1 次。
+    const copyMessages = messages.map((msg) => {
+      const newId = randomUUID();
+      newMessages.push({ id: newId });
+      return { ...msg, id: newId, sessionId: copy.id };
+    });
+
     return this.deps.conn.transaction(async (tx) => {
+      // 事务回调里出现的每一个 repo 都必须来自 tx。
       const r = reposFor(tx);
-      const now = Date.now();
-      const copy: ChatSession = {
-        id: randomUUID(),
-        projectId: source.projectId,
-        title: source.title == null ? null : `${source.title} (copy)`,
-        // P2-13：fork/copy 出的是独立主会话，不继承源会话的 parent 关系。
-        parentSessionId: null,
-        createdAtMs: now,
-        updatedAtMs: now,
-      };
       await r.sessions.insert(copy);
       // 刻意不复制 session_kkv（SPEC：fork/copy 不复制 kkv）
       // 刻意不复制 composer_draft_json（维持现状）
@@ -385,14 +423,6 @@ export class DefaultSessionService implements SessionService {
         "/",
         { contentStore: new SqliteVfsContentStore(tx) }
       );
-      const messages = await r.messages.listBySession(source.id);
-      const newMessages: { id: string }[] = [];
-      // 逐条 INSERT 改成先构造数组再一次 batchInsert，把 M 次 round-trip 收敛成 1 次。
-      const copyMessages = messages.map((msg) => {
-        const id = randomUUID();
-        newMessages.push({ id });
-        return { ...msg, id, sessionId: copy.id };
-      });
       await r.messages.batchInsert(copyMessages);
       // copy 消息浅拷贝原样保留 contentRef 的 (entryId, version)（指向源会话的
       // revision）——按全局键对**源** revision +1，与 fork 同款换算。

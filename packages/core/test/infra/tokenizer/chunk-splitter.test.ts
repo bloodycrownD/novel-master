@@ -10,10 +10,13 @@ import {
 /**
  * T-TC1：切分器 golden 快照 + 核心不变量。
  * golden 用例锁定版本行为（切分规则变更会改变期望输出，须显式改此文件）；
- * 不变量断言（join 还原 / ≤64 / 确定性）对任意输入恒成立。
+ * 不变量断言（join 还原 / ≤64 / 确定性）。
+ * ⚠️ `assertInvariants` 的 ≤64 只对**它喂进去的语料**成立：它不覆盖规则①的
+ *    贪吃段（句末符连续输入会产出超限长块，那是设计而非缺陷）。
+ *    那条形态由「chunk-splitter 边界」分组的 T-TC1-E1/E2 以现状断言覆盖。
  */
 
-/** 不变量三连：join 还原原文、全块 ≤ 上限、同输入双调用一致。 */
+/** 不变量三连：join 还原原文、全块 ≤ 上限、同输入双调用一致（贪吃段除外，见上）。 */
 function assertInvariants(text: string): string[] {
   const first = splitTextIntoChunks(text);
   const second = splitTextIntoChunks(text);
@@ -102,6 +105,45 @@ describe("chunk-splitter golden（T-TC1）", () => {
   it("边界与空输入：空串返回空数组；单字符句末成块", () => {
     assert.deepEqual(splitTextIntoChunks(""), []);
     assert.deepEqual(splitTextIntoChunks("。"), ["。"]);
+  });
+});
+
+describe("chunk-splitter 边界：句末符密集输入（wave-e H4 · 现状固化）", () => {
+  // 以下两条断言的是**当前真实行为**，不是「应该有的行为」。
+  // 规则①的贪吃段不受 MAX_CHUNK_CHARS 约束（被 golden 用例
+  // 「连续句末贪吃：...。。。！！！ 是**一个**块」锁定），所以这里能产出超限长块；
+  // 本组用例的价值是把这条语义固化成回归——它被误当成漏洞去「修」时，这两条会红。
+
+  it("T-TC1-E1: 句末符密集输入下贪吃段突破 64 上限（既有设计，注释承诺已订正）", () => {
+    const text = "。".repeat(200);
+    const chunks = splitTextIntoChunks(text);
+    assert.equal(chunks.length, 1);
+    assert.equal(chunks[0]!.length, 200);
+    // 划分性不变量在超限形态下**依然成立**——这才是真正该守的不变量
+    assert.equal(chunks.join(""), text);
+    assert.equal(splitTextIntoChunks(text).length, chunks.length, "确定性");
+  });
+
+  it("T-TC1-E2: 句末符 + 换行交替的密集输入同样贪吃成单块", () => {
+    const text = "。\n".repeat(200);
+    const chunks = splitTextIntoChunks(text);
+    assert.equal(chunks.length, 1);
+    assert.equal(chunks[0]!.length, 400);
+    assert.equal(chunks.join(""), text);
+  });
+
+  it("T-TC1-E3: 只有贪吃段超限，其余块仍受 ≤ 上限约束", () => {
+    // 前缀无句末符（走规则③硬切），尾部接 100 个句号（走规则①贪吃）
+    const prefix = "汉".repeat(130);
+    const greedy = "。".repeat(100);
+    const chunks = splitTextIntoChunks(`${prefix}${greedy}`);
+    const last = chunks[chunks.length - 1]!;
+    assert.ok(last.endsWith(greedy), "末块应以贪吃段收尾");
+    assert.ok(last.length > MAX_CHUNK_CHARS, `贪吃段应突破上限，实际 ${last.length}`);
+    for (const chunk of chunks.slice(0, -1)) {
+      assert.ok(chunk.length <= MAX_CHUNK_CHARS, `非贪吃块超上限(${chunk.length})`);
+    }
+    assert.equal(chunks.join(""), `${prefix}${greedy}`);
   });
 });
 

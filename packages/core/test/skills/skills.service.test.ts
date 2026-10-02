@@ -11,6 +11,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { createSkillsService } from "@novel-master/core/skills";
+import { SqliteVfsContentStore } from "../../src/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
 import { SkillError } from "@novel-master/core/skills";
 import { isVfsError } from "@novel-master/core/vfs";
 import {
@@ -339,6 +340,43 @@ describe("SkillService（T-SK5）", () => {
     );
   });
 
+  /**
+   * L1-1 / core1-C-2（OQ3 乙案）blob 口径牙齿：技能整目录删除跑完后，
+   * **被删掉的独有内容**不得留下 `ref_count <= 0` 的 blob 行。
+   *
+   * 机理同 zip/角色卡两条链（见 `vfs-tree-copy.ts` `sweepRevisionsUnderScope` 的
+   * @remarks）：CS-06/CS-07 的守卫触发器让 sweep 后旧 blob 计数落 0、行留着，
+   * `vfs_entry` 零触发器补不了这一步 ⇒ 残留只能靠 `runDeferredBlobGc` 收，而
+   * 本链（`skills.service.ts` deleteSkill）**从不调**它。**红了就是该升方案甲**。
+   *
+   * description 带 isolation suffix ⇒ SKILL.md 正文本次唯一，不被别处共享，
+   * 残留若有必是本链自己留下的。
+   */
+  it("deleteSkill 后无 ref_count<=0 的 blob 残留行", async () => {
+    const ctx = getNovelMasterTestContext();
+    const skills = createSkillsService(ctx.conn);
+    const suffix = testIsolationSuffix();
+    const p = await ctx.projects.create(`P-delgc-${suffix}`);
+    const name = `del-gc-skill`;
+
+    const skillMd = entry(name, `待删-gc-${suffix}`);
+    await skills.writeSkillFile("project", name, undefined, skillMd, p.id);
+    const skillHash = await new SqliteVfsContentStore(ctx.conn).put(skillMd);
+
+    await skills.deleteSkill({ domain: "project", projectId: p.id, name });
+
+    const residue = await ctx.conn.query<{ n: number }>(
+      `SELECT COUNT(*) AS n FROM vfs_content_blob
+       WHERE content_hash = ? AND ref_count <= 0`,
+      [skillHash],
+    );
+    assert.equal(
+      Number(residue[0]!.n),
+      0,
+      "deleteSkill 后不应残留 ref_count<=0 的 blob 行（本链不调 runDeferredBlobGc）",
+    );
+  });
+
   it("deleteSkill global 域：清所有项目的同名负清单行", async () => {
     const ctx = getNovelMasterTestContext();
     const skills = createSkillsService(ctx.conn);
@@ -569,7 +607,7 @@ describe("SkillService（T-SK5）", () => {
           error instanceof SkillError && error.code === "NOT_FOUND",
       );
       const after = await skills.readSkillFile("global", newName);
-      assert.match(after.content, /name: "ren-new-[^\"]*"/);
+      assert.match(after.content, /name: "ren-new-[^"]*"/);
       // T-S3：同 entry 的 version 连续（renamePrefix 不重置，front matter
       // 重写 bump 一次）
       assert.ok(

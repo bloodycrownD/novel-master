@@ -25,6 +25,31 @@ interface ChatProjectRow extends Row {
   agent_config_json: string | null;
 }
 
+interface ChatSessionRow extends Row {
+  id: string;
+  agent_config_json: string | null;
+}
+
+/**
+ * 安全解析一行 JSON；解析失败（存量脏数据）返回 null。
+ *
+ * ⚠️ 守卫因一条脏数据整体抛错 = 守卫失效（比不扫更糟），所以每个扫描段都必须包住。
+ */
+function safeParseRecord(raw: string | null): Record<string, unknown> | null {
+  if (raw == null) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(String(raw)) as unknown;
+    if (parsed == null || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return null;
+    }
+    return parsed as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Returns human-readable reference locations for {@link savedModelId}.
  * Empty when safe to delete.
@@ -53,11 +78,13 @@ export async function findSavedModelReferences(
     {}
   );
   for (const row of agentRows) {
-    const wire = JSON.parse(String(row.prompts_json)) as Record<
-      string,
-      unknown
-    >;
-    const model = wire.model;
+    let wire: Record<string, unknown> | null;
+    try {
+      wire = JSON.parse(String(row.prompts_json)) as Record<string, unknown>;
+    } catch {
+      continue; // 脏数据不炸整个守卫
+    }
+    const model = wire?.model;
     if (typeof model === "string" && model.trim() === savedModelId) {
       refs.push(`agent_definition:${String(row.agent_id)}`);
     }
@@ -70,11 +97,11 @@ export async function findSavedModelReferences(
     {}
   );
   for (const row of projectRows) {
-    const raw = row.agent_config_json;
-    if (raw == null) {
+    const config = safeParseRecord(row.agent_config_json);
+    if (config == null) {
       continue;
     }
-    const config = JSON.parse(String(raw)) as Record<string, unknown>;
+    // ⚠️ chat_project 存的是 `{mode, definition:{model}}`——要在 definition 里再挖一层。
     const definition = config.definition;
     if (
       definition == null ||
@@ -86,6 +113,26 @@ export async function findSavedModelReferences(
     const model = (definition as Record<string, unknown>).model;
     if (typeof model === "string" && model.trim() === savedModelId) {
       refs.push(`chat_project:${String(row.id)}`);
+    }
+  }
+
+  // 会话级 modelId 覆盖**只**存在这里：`chat_session` 表**没有** `model_id` 列，
+  // 形态是顶层 `{agentId, modelId?}`（`SessionAgentConfig`）——
+  // ⚠️ 与 chat_project 的嵌套形态不同，照抄它的取值路径会写成永远命不中的代码。
+  const sessionRows = await queryTemplate<ChatSessionRow>(
+    conn,
+    parser,
+    `SELECT id, agent_config_json FROM chat_session`,
+    {}
+  );
+  for (const row of sessionRows) {
+    const config = safeParseRecord(row.agent_config_json);
+    if (config == null) {
+      continue;
+    }
+    const model = config.modelId;
+    if (typeof model === "string" && model.trim() === savedModelId) {
+      refs.push(`chat_session:${String(row.id)}`);
     }
   }
 

@@ -118,11 +118,12 @@
     "rebuild": "npm run clean && npm run build",
     "dev": "tsc -p tsconfig.json --watch",
     "clean": "node --input-type=module --eval \"import { rmSync } from 'node:fs'; rmSync('dist', { recursive: true, force: true })\"",
-    "test": "bash -O extglob -O globstar -c 'tsx --experimental-test-module-mocks --tsconfig tsconfig.test.json --test test/**/!(performance).test.ts'",
-    "test:fast": "tsx --experimental-test-module-mocks --tsconfig tsconfig.test.json --test",
-    "test:msg": "npm run test:fast -- test/message-checkpoint/!(performance).test.ts",
-    "test:vfs": "npm run test:fast -- test/vfs/*.test.ts",
-    "test:perf": "npm run test:fast -- test/message-checkpoint/performance.test.ts"
+    "test": "node scripts/run-tests.mjs",
+    "test:fast": "node scripts/run-tests.mjs",
+    "test:msg": "node scripts/run-tests.mjs --dir test/message-checkpoint --exclude performance.test.ts",
+    "test:vfs": "node scripts/run-tests.mjs --dir test/vfs",
+    "test:perf": "node scripts/run-tests.mjs test/message-checkpoint/performance.test.ts",
+    "test:collect-guard": "node scripts/collect-check.mjs"
   },
   "dependencies": {
     "@noble/hashes": "^2.2.0",

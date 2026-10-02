@@ -26,11 +26,17 @@ import {
   renameVfsEntry,
   renameVfsDirectory,
 } from "@/domain/vfs/logic/vfs-rename-primitive.js";
+// WHY 反向 import：writeWithRevision / nextVersionFor 已下沉到
+// domain 层（批量 ingest 复用同一条写路径，见 domain/vfs/logic/write-with-revision.ts），
+// 本文件的删除路径（appendDeletedRevision → nextVersionFor）必须跟着引用共享实现。
+import {
+  nextVersionFor,
+  writeWithRevision,
+} from "@/domain/vfs/logic/write-with-revision.js";
 import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
 import {
   VfsError,
   vfsInvalidPath,
-  vfsIsDirectory,
   vfsNotFound,
 } from "@/errors/vfs-errors.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
@@ -312,123 +318,6 @@ async function runInTransactionOrConn<T>(
     }
     throw error;
   }
-}
-
-async function writeWithRevision(
-  entryRepo: VfsEntryRepository,
-  revisionRepo: VfsRevisionRepository,
-  scopeKey: string,
-  path: string,
-  content: string
-): Promise<{ version: number }> {
-  const normalized = normalizePath(path);
-  const existing = await entryRepo.findByPath(scopeKey, normalized);
-  if (existing?.entryKind === "directory") {
-    throw vfsIsDirectory(normalized);
-  }
-
-  const mtimeMs = Date.now();
-  let version: number;
-
-  if (existing == null) {
-    // 只拦「创建」：存量条目（含 zip 导入的历史名）内容更新不重新审判名字
-    assertValidVfsEntryName(normalized);
-    await ensureParentDirectories(entryRepo, scopeKey, normalized);
-    const maxRevision = await resolveMaxRevision(
-      entryRepo,
-      revisionRepo,
-      scopeKey,
-      normalized
-    );
-    if (maxRevision != null) {
-      // Boundary: vfs_entry removed but revision history retained (e.g. batch rollback restore).
-      version = maxRevision + 1;
-      await entryRepo.insertAtVersion(scopeKey, normalized, content, version);
-    } else {
-      const inserted = await entryRepo.insert(scopeKey, normalized, content);
-      version = inserted.version;
-    }
-    const entry = await entryRepo.findByPath(scopeKey, normalized);
-    const entryId = entry!.entryId;
-    await revisionRepo.append({
-      entryId,
-      version,
-      content,
-      status: "active",
-      mtimeMs,
-    });
-    await adjustRef(revisionRepo, entryId, version, +1);
-    return { version };
-  }
-
-  // 同文短路：相对 live 明文全等 → 不 bump、不 append
-  if (existing.content === content) {
-    return { version: existing.version };
-  }
-
-  // 统一分配器：max(head, MAX(version)) + 1，避开 head 回拨后历史占号段
-  const nextVersion = await nextVersionFor(
-    revisionRepo,
-    existing.entryId,
-    existing.version
-  );
-  const updated = await entryRepo.update(
-    scopeKey,
-    normalized,
-    content,
-    nextVersion
-  );
-  version = updated.version;
-  await revisionRepo.append({
-    entryId: existing.entryId,
-    version,
-    content,
-    status: "active",
-    mtimeMs,
-  });
-  await transferLiveRef(
-    revisionRepo,
-    existing.entryId,
-    existing.version,
-    version
-  );
-  return { version };
-}
-
-/**
- * 统一版本分配器：`max(headVersion, MAX(vfs_revision.version)) + 1`。
- *
- * head 回拨（resetHead 后高版本被 checkpoint 钉住）时 `head_version < MAX(version)`
- * 是合法状态，新号必须越过 MAX 才能避开历史占号段；防御性的 `max(headVersion, …)`
- * 在健康库上与 head + 1 等价。
- */
-async function nextVersionFor(
-  revisionRepo: VfsRevisionRepository,
-  entryId: number,
-  headVersion: number
-): Promise<number> {
-  const maxStored = await revisionRepo.findMaxVersionForEntry(entryId);
-  return Math.max(headVersion, maxStored ?? 0) + 1;
-}
-
-/**
- * entry_id 通道下，max revision 通过 entry_id 寻址。
- *
- * 先取 entryId（entry 不存在时返回 null），然后按 entry_id 查 max version。
- * 这覆盖了「entry 已删但 revision 仍在」的边界场景：此时 entry 不存在，
- * resolveMaxRevision 返回 null，writeWithRevision 走 insert v1。
- */
-async function resolveMaxRevision(
-  entryRepo: VfsEntryRepository,
-  revisionRepo: VfsRevisionRepository,
-  scopeKey: string,
-  path: string
-): Promise<number | null> {
-  const entry = await entryRepo.findByPath(scopeKey, path);
-  if (entry == null) {
-    return null;
-  }
-  return revisionRepo.findMaxVersionForEntry(entry.entryId);
 }
 
 /**

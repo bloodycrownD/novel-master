@@ -4,7 +4,6 @@
  * @module domain/tool/builtin/builtin-tool-context
  */
 
-import type { ChatMessage } from "@/domain/chat/model/message.js";
 import type { MessageAttachment } from "@/domain/chat/model/message-attachment.schema.js";
 import type { VfsService } from "@/domain/vfs/ports/vfs-service.port.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
@@ -187,32 +186,16 @@ export interface BuiltinToolSearchContext {
   ) => Promise<ResolvedEngineConfig[]>;
 }
 
-/**
- * 资源配额占位（A-14）。
- *
- * @remarks
- * 目前只定义语义、不做强制；后续在 `ToolRunner` / 内置工具里挂上真正的扣减逻辑。
- * `maxWriteBytes` 限制单个 turn 内 write/edit 的累计写入字节；
- * `maxCalls` 限制单个 turn 内 tool 调用总数。
- */
-export interface ToolResourceQuota {
-  readonly maxWriteBytes?: number;
-  readonly maxCalls?: number;
-}
-
 /** 注入到内置工具 `run()` 的运行时上下文。 */
 export type BuiltinToolContext = {
   readonly vfs: VfsService;
   readonly projectId: string;
   readonly sessionId: string;
-  /** 列出会话消息（含 hidden，供 chat_grep）。 */
-  readonly listSessionMessages: () => Promise<readonly ChatMessage[]>;
   /**
    * 可选：`write` 成功后 upsert `file_cache` `full:{path}`。
    * `edit` / delete / rename / move **不**读写此字段。
    */
   readonly sessionKkv?: SessionKkvService;
-  /**
   /**
    * 可选：VFS 内允许访问的路径前缀白名单（A-14 path policy）。
    *
@@ -222,14 +205,29 @@ export type BuiltinToolContext = {
    * tool 之前会做一次二次校验：从 input 里取出 `path` / `filePath` /
    * `from` / `to` 字段，只要任一路径不在任一前缀下就拒绝（抛 FORBIDDEN）。
    *
-   * `undefined` 表示不限制（向后兼容）——目前三端 runtime 都按这个语义走，
-   * 后续可以在 cli / desktop / mobile 各自的装配点收紧到具体白名单。
+   * `undefined` 表示不限制（向后兼容）——**当前三端 runtime 全部硬写 `undefined`**
+   * （`run-agent-turn.ts` 的两处装配 `allowedPaths: undefined` 与
+   * `create-user-vfs-turn-service.ts` 的一处），故这道闸门在生产中恒放行、
+   * 运行时成本为零。
+   * ⚠️ 这是**有意分期占位**（A-14，出处 `docs/Iterations/cr-fix-spec/spec.md:172`），
+   * 不是缺陷。**接线前必须先修三处已知缺口**，否则闸门形同虚设甚至误杀：
+   * ① `pathStartsWithPrefix()` 是纯字符串前缀比对、不解 `..`（`src/../../x` 可逃逸）；
+   * ② `PATH_FIELDS` 漏 `glob` 的 `options.cwd` 与 `grep` 的 `options.pathPrefix`
+   *   （两者都是 `vfs-tools.ts` 里对应工具 zod schema 的字段）；
+   * ③ `filePath` 在 `PATH_FIELDS` 里但**无任何内置工具的 `inputSchema` 声明它**
+   *   （`git grep filePath -- packages/core/src` 的命中全是 VFS 逻辑的局部变量 /
+   *   形参，如 `ensure-parent-dirs.ts` / `workplace-rule-engine.ts`，**不是工具入参**）；
+   *   且 `skill` 工具的 `path` 是技能目录相对路径（真实落点在 `/meta/skills/...`），
+   *   开了会被整片误杀。
+   *
+   * 📌 **本清单只此一份**（CR WA-P2-03）：`tool-path-policy.ts` 的模块头只留
+   *    一句指路，不再抄一遍——两处并排抄的后果是「改一处忘一处」，而
+   *    WA-P2-02 正好演示了行号会各自腐烂。
+   * 📌 **坐标一律用符号名、不用行号**（CR WA-P2-02）：行号在本仓高频改动下必然
+   *    再次腐烂，这几行注释正是 A-14 收尾时唯一会被人读的施工清单，指向错行会
+   *    让人去改错地方。
    */
   readonly allowedPaths?: readonly string[];
-  /**
-   * 可选：资源配额占位（A-14）。当前仅占位，`ToolRunner` 还未真正强制。
-   */
-  readonly resourceQuota?: ToolResourceQuota;
   /**
    * 可选：仅 `task` 工具读取。vfs-tools 完全不感知。
    *

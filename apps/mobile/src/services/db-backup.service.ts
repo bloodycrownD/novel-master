@@ -3,6 +3,11 @@
  *
  * 大备份（数十～上百 MB）禁止整包读入 JS / base64 往返，导入统一走路径级 cp。
  *
+ * 调用链契约（两端一致）：**换库 → 重建 runtime → 用新 runtime 记账 → 再放互斥令牌**。
+ * 导入函数只负责库面动作，并如实回报「库文件是否已被替换」
+ * （{@link DbImportOutcome.databaseReplaced}）；调用方据此决定是否重建 runtime，
+ * 记账必须排在重建之后，互斥令牌必须排在记账之后。
+ *
  * @module services/db-backup.service
  */
 import {Platform} from 'react-native';
@@ -49,6 +54,41 @@ function assertSqliteFile(bytes: Uint8Array): void {
   if (!header.startsWith(SQLITE_MAGIC)) {
     throw new Error('不是有效的 SQLite 数据库备份');
   }
+}
+
+/**
+ * 导入结果：如实回报「活动库文件是否已被替换」与「服务商三表是否已在本机恢复」。
+ *
+ * 成功路径走返回值；抛错路径（覆盖已成功、收尾失败）走
+ * {@link DatabaseReplacedError}——函数抛错时返回值送不到调用方，
+ * 「已换代」信号必须由异常类型承载。
+ */
+export type DbImportOutcome = {
+  /** 活动库文件是否已被替换（true ⇒ 调用方持有的 runtime/conn 一律作废，必须先重建再用）。 */
+  databaseReplaced: boolean;
+  /** 服务商三表是否已在本机恢复成功（false ⇒ 数据库已换但三表丢失，需 UI 提示）。 */
+  providerTablesRestored: boolean;
+};
+
+/**
+ * 库文件已换代、其后收尾步骤失败：信号随异常送达（成功路径走
+ * {@link DbImportOutcome} 返回值）。此时**不得回滚**——库已经是新快照，
+ * 回滚会把用户拉回来的数据丢掉。
+ */
+export class DatabaseReplacedError extends Error {
+  readonly databaseReplaced = true as const;
+
+  constructor(
+    message: string,
+    readonly providerTablesRestored: boolean,
+  ) {
+    super(message);
+    this.name = 'DatabaseReplacedError';
+  }
+}
+
+function errorDetail(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 /**
@@ -122,14 +162,21 @@ export async function exportDatabaseBackupToPath(
 
 /**
  * 从本地快照文件导入数据库（dump → close → cp 替换 → restore），无选择器与 rebootstrap。
- * 调用方须在成功后执行 rebootstrap。
+ * 调用方须在 `databaseReplaced === true` 时先重建 runtime，再记账、最后放互斥令牌。
  *
  * busy 互斥在此底层置位（计数/令牌配对）：「关连接 + 覆盖库文件」的
  * 最危险窗口与恢复三表全程覆盖，云同步直调路径同样被保护。
+ *
+ * 错误处理口径（与 desktop 同款）：
+ * - 备份步裸 await，失败即抛（全新安装 dbPath 不存在时跳过，此时无可回滚）。
+ * - 回滚只覆盖「覆盖动作本身失败」这一段；覆盖已成功后抛
+ *   {@link DatabaseReplacedError}，**不回滚**。
+ * - 回滚失败**不得静默**：与原错误合并成一条可读信息，并保留 bak 副本
+ *   （mobile 从不删 bak，用户还能手工救回）。
  */
 export async function importDatabaseBackupFromPath(
   srcPath: string,
-): Promise<void> {
+): Promise<DbImportOutcome> {
   acquireMobileDbMaintenanceBusy();
   try {
     await assertSqliteBackupAtPath(srcPath);
@@ -142,13 +189,17 @@ export async function importDatabaseBackupFromPath(
 
     const fs = blobFs();
     const dbExists = await fs.exists(dbPath);
+    let bakCreated = false;
+    let databaseReplaced = false;
     if (dbExists) {
       await fs.cp(dbPath, bakPath);
+      bakCreated = true;
     }
 
     try {
       await closeMobileConnection();
       await fs.cp(srcPath, dbPath);
+      databaseReplaced = true;
 
       const restoreConn = await openDbForProviderRestore();
       try {
@@ -157,34 +208,58 @@ export async function importDatabaseBackupFromPath(
         await restoreConn.close();
       }
     } catch (error) {
-      const bakExists = await fs.exists(bakPath);
-      if (bakExists) {
-        await fs.cp(bakPath, dbPath).catch(() => undefined);
+      if (databaseReplaced) {
+        // 库已是新快照：不回滚，只把「已换代 + 三表未恢复」如实报上去。
+        throw new DatabaseReplacedError(
+          `数据库已导入，但本机服务商配置恢复失败：${errorDetail(error)}`,
+          false,
+        );
+      }
+
+      // 覆盖动作本身失败：库仍是旧库（或根本没换），回滚到备份。
+      let rollbackError: unknown;
+      if (bakCreated && (await fs.exists(bakPath))) {
+        try {
+          await fs.cp(bakPath, dbPath);
+        } catch (e) {
+          rollbackError = e;
+        }
+      }
+      if (rollbackError != null) {
+        throw new Error(
+          `数据库导入失败且回滚失败，回滚副本保留在 ${bakPath}：${errorDetail(
+            rollbackError,
+          )}（原始错误：${errorDetail(error)}）`,
+          {cause: [error, rollbackError]},
+        );
       }
       throw error;
     }
   } finally {
     releaseMobileDbMaintenanceBusy();
   }
+  return {databaseReplaced: true, providerTablesRestored: true};
 }
 
 /**
  * 从内存中的备份字节导入：先分块落盘再走路径级 cp（禁止整包 base64 writeFile）。
- * 调用方须在成功后执行 rebootstrap。
+ * 调用方须在 `databaseReplaced === true` 时先重建 runtime，再记账、最后放互斥令牌。
  *
  * busy 互斥由内部 `importDatabaseBackupFromPath` 的底层 acquire/release
  * 覆盖（含落盘窗口），本函数无需再叠加。
  */
 export async function importDatabaseBackupFromBytes(
   bytes: Uint8Array,
-): Promise<void> {
+): Promise<DbImportOutcome> {
   assertSqliteFile(bytes);
 
   const fs = blobFs();
   const tmpPath = `${fs.dirs.CacheDir}/import-bytes-${Date.now()}${BACKUP_EXT}`;
   try {
     await writeBytesToFileChunked(tmpPath, bytes);
-    await importDatabaseBackupFromPath(tmpPath);
+    // 委托 FromPath：DbImportOutcome 必须原样透传（含 DatabaseReplacedError 的
+    // 类型），漏了这一层委托就拿不到「已换代」信号。
+    return await importDatabaseBackupFromPath(tmpPath);
   } finally {
     await fs.unlink(tmpPath).catch(() => undefined);
   }

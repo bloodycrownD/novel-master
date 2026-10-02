@@ -1,4 +1,4 @@
-﻿import { describe, it, mock } from "node:test";
+import { describe, it, mock } from "node:test";
 import assert from "node:assert/strict";
 import { AnthropicProtocolAdapter } from "../../src/infra/llm-protocol/impl/anthropic.adapter.js";
 

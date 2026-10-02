@@ -1,5 +1,7 @@
 package com.novelmaster.llmsse
 
+import android.content.pm.ApplicationInfo
+import android.util.Log
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
@@ -62,6 +64,9 @@ class LlmSseModule(reactContext: ReactApplicationContext) :
     private const val READ_CHUNK_BYTES = 16 * 1024L
 
     private val JSON_MEDIA_TYPE = "application/json".toMediaType()
+
+    /** debugLog 的 logcat tag。 */
+    const val TAG = "nm-llm-sse"
   }
 
   /**
@@ -95,10 +100,41 @@ class LlmSseModule(reactContext: ReactApplicationContext) :
   /** requestId → 流状态（事件闸门：移除后不再向 JS 发该请求的事件）。 */
   private val streams = ConcurrentHashMap<String, StreamState>()
 
+  /**
+   * requestId → 「本次失败是用户主动 abort 造成的」一次性标记。
+   *
+   * 旧形态用 `call.isCanceled()` 当 abort 判据，但 OkHttp 自己的 callTimeout
+   * 到点时 `AsyncTimeout.timedOut()` 会调 `RealCall.cancel()` ⇒ `isCanceled()`
+   * 为 true。而 [sseAbort] 的顺序是「先 streams.remove 再 cancel」，用户 abort
+   * 在 `handleStreamFailure` 读到 state 已是 null、早早 return，**根本走不到**
+   * 那个闸门 ⇒ 它实际拦掉的恰恰是唯一不该拦的那一类（超时），而它声称要拦的
+   * 那一类早在三行之前就被拦掉了。
+   *
+   * 结果是 callTimeout 到点后 JS 侧既收不到 Done 也收不到 Error ⇒
+   * `llm-sse-transport` 的 `post()` Promise 永不 settle ⇒ run 挂到用户手动停止。
+   *
+   * 「谁取消的」只有本模块知道，所以用显式标记而不是读 OkHttp 的状态。
+   * 一次性消费（`remove`，不是 `containsKey`）——见 [handleStreamFailure] 开头
+   * 的顺序说明。标记的三处生命周期：`sseAbort` 写入、`handleStreamFailure`
+   * 与 `finishStream` 消费、`shutdown` 清空。
+   */
+  private val userAborted = ConcurrentHashMap<String, Boolean>()
+
   /** 每请求的合批缓冲与定时句柄；读循环线程与 flush 线程并发访问，靠自身锁串行。 */
-  private class StreamState(val requestId: String) {
+  private class StreamState(
+    val requestId: String,
+    /** 建流时刻（System.nanoTime，单调钟；跨墙钟跳变安全）。 */
+    val startedAtNanos: Long,
+    /** 本请求生效的整调用预算（ms），口径与 clientWithCallTimeout 一致。 */
+    val effectiveCallTimeoutMs: Long,
+  ) {
     val pending = StringBuilder()
     var flushTask: ScheduledFuture<*>? = null
+  }
+
+  /** 仅 debuggable 构建输出计数日志，供真机 logcat 核对 abort/timeout/残留。 */
+  private val debugLoggable: Boolean by lazy {
+    (reactApplicationContext.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
   }
 
   override fun getName(): String = "LlmSseNative"
@@ -144,7 +180,11 @@ class LlmSseModule(reactContext: ReactApplicationContext) :
       emitError(requestId, "network", "duplicate requestId: $requestId")
       return
     }
-    val state = StreamState(requestId)
+    val state = StreamState(
+      requestId,
+      System.nanoTime(),
+      effectiveCallTimeoutMs(callTimeoutMs),
+    )
     streams[requestId] = state
     executor.execute {
       try {
@@ -170,9 +210,12 @@ class LlmSseModule(reactContext: ReactApplicationContext) :
     }
   }
 
-  /** 主动中止：关事件闸门 + cancel（读循环随后抛 IOException，被闸门拦住静默收尾）。 */
+  /** 主动中止：写显式标记 + 关事件闸门 + cancel（读循环随后抛 IOException，按标记静默收尾）。 */
   @ReactMethod
   fun sseAbort(requestId: String) {
+    // 标记必须**先于** streams.remove 写入：handleStreamFailure 的一次性消费
+    // 在读 state 之前发生（否则 state==null 提前 return 会让标记永远泄漏）。
+    userAborted[requestId] = true
     streams.remove(requestId)
     val call = calls.remove(requestId)
     try {
@@ -180,6 +223,7 @@ class LlmSseModule(reactContext: ReactApplicationContext) :
     } catch (_: Throwable) {
       // cancel 失败无需处理：callTimeout 兜底
     }
+    debugLog("sse_abort requestId=$requestId userAbortedPending=${userAborted.size}")
   }
 
   // ------------------------------------------------------------------
@@ -220,7 +264,16 @@ class LlmSseModule(reactContext: ReactApplicationContext) :
         }
       } catch (t: Throwable) {
         // 非流式走 baseClient：读超时已恒禁用（此处传默认数值仅供防御性文案）。
-        val (kind, message) = classifyError(t, DEFAULT_READ_TIMEOUT_MS)
+        // 非流式的 callTimeout 会正常抛 InterruptedIOException("timeout")
+        // （messageDone 路径可达），已能归 timeout —— 只需补上新参数。
+        val (kind, message) = classifyError(
+          t,
+          DEFAULT_READ_TIMEOUT_MS,
+          call = null,
+          userAbortedHit = false,
+          startedAtNanos = 0L,
+          effectiveCallTimeoutMs = DEFAULT_CALL_TIMEOUT_MS,
+        )
         promise.reject(kind, message, t)
       }
     }
@@ -251,6 +304,7 @@ class LlmSseModule(reactContext: ReactApplicationContext) :
     }
     calls.clear()
     streams.clear()
+    userAborted.clear()
     flushScheduler.shutdownNow()
     executor.shutdownNow()
   }
@@ -272,6 +326,17 @@ class LlmSseModule(reactContext: ReactApplicationContext) :
       .callTimeout(callTimeoutMs.toLong(), TimeUnit.MILLISECONDS)
       .build()
   }
+
+  /**
+   * 本请求生效的整调用预算（ms），供 callTimeout 归类判定使用。
+   *
+   * ⚠️ 与 [clientWithCallTimeout] 的分支口径**必须一致，改一处要改两处**：
+   * `callTimeoutMs <= 0` 时 client 走 `baseClient`（预算 600s），若这里直接存
+   * `callTimeoutMs` 本身（可能是 -1），`elapsed >= effectiveCallTimeoutMs`
+   * 会恒真、保险条件失效。
+   */
+  private fun effectiveCallTimeoutMs(callTimeoutMs: Int): Long =
+    if (callTimeoutMs > 0) callTimeoutMs.toLong() else DEFAULT_CALL_TIMEOUT_MS
 
   private fun buildRequest(
     method: String,
@@ -399,6 +464,14 @@ class LlmSseModule(reactContext: ReactApplicationContext) :
    */
   private fun finishStream(requestId: String, state: StreamState) {
     synchronized(state) {
+      // 一次性消费必须**早于** streams 闸门（与 [handleStreamFailure] 同一口径）：
+      // 流读完后 call.execute().use 尚未退出时用户点「停止」，sseAbort 会先写标记 +
+      // streams.remove；读循环随后进本方法命中下面的闸门早退——若把 remove 放在
+      // `!streams.containsKey(requestId)` 的 return 之后，这条标记就永远不会被消费
+      // （每点一次「停止」往 map 里永久留一条，userAbortedPending 归不了零），
+      // 且因无异常发生、handleStreamFailure 也不会来兜底。注释宣称覆盖的竞态
+      // 恰被自己的代码位置挡住。
+      userAborted.remove(requestId)
       if (!streams.containsKey(requestId)) {
         return
       }
@@ -420,30 +493,81 @@ class LlmSseModule(reactContext: ReactApplicationContext) :
     t: Throwable,
     effectiveReadTimeoutMs: Long,
   ) {
+    // 一次性消费必须**早于** streams 闸门：用户主动 abort 时 sseAbort 已先
+    // streams.remove，这里读到的 state 会是 null，若把 remove 放在
+    // `state == null` 的 return 之后，标记就永远不会被消费掉（每点一次「停止」
+    // 往 map 里永久留一条）。
+    val userAbortedHit = userAborted.remove(requestId) == true
     val state = streams[requestId]
-    if (state == null) {
-      return // 闸门已关（abort 或正常收尾）：不再发终结事件
+    if (state == null || userAbortedHit) {
+      debugLog(
+        "stream_failure_silent requestId=$requestId userAborted=$userAbortedHit " +
+          "statePresent=${state != null} userAbortedPending=${userAborted.size}"
+      )
+      return // 闸门已关（abort 或正常收尾）/ 用户主动中止：不再发终结事件
     }
-    val (kind, message) = classifyError(t, effectiveReadTimeoutMs)
     synchronized(state) {
       if (!streams.containsKey(requestId)) {
         return
       }
       streams.remove(requestId)
-      if (call.isCanceled()) {
-        return // 主动 abort：JS 侧已自行收尾，静默
-      }
+      // 分类与发事件同在 state 锁内；但**不要**据此认为 userAborted 的读写已同锁闭合：
+      // 传进来的 userAbortedHit 是上面 `userAborted.remove(requestId)` 在**锁外**取出的
+      // 一次性消费结果，classifyError 锁内**不再读 map** ⇒ spec 风险 R2 登记的
+      // 「消费 vs 写入」错位窗口（abort 打在分类之后）并未被本锁消除，此处只是已知的
+      // 残余窗口，不是「已闭合」的证明。
+      // userAbortedHit 到这里可证恒为 false（上面的 userAbortedHit 早退已滤掉 true），
+      // 故 classifyError 里的 `&& !userAbortedHit` 是恒真的死条件；参数按签名保留，
+      // 供将来非流式路径复用，不作删减。
+      val (kind, message) = classifyError(
+        t,
+        effectiveReadTimeoutMs,
+        call,
+        userAbortedHit,
+        state.startedAtNanos,
+        state.effectiveCallTimeoutMs,
+      )
+      debugLog(
+        "stream_failure requestId=$requestId kind=$kind elapsedMs=" +
+          "${(System.nanoTime() - state.startedAtNanos) / 1_000_000} " +
+          "userAbortedPending=${userAborted.size}"
+      )
       emitError(requestId, kind, message)
     }
   }
 
   /**
-   * 错误分类：callTimeout（InterruptedIOException "timeout"）归 timeout。
+   * 错误分类：callTimeout 归 timeout，其余按异常类型归类。
+   *
+   * 新增的 callTimeout 分支：`call.isCanceled() && 非用户 abort` 时读循环抛的
+   * 是 IOException，而「本模块里谁会 cancel 一个 call」只有三处——`sseAbort`
+   * （用户，已被 userAborted 标记排除）、`shutdown()`（走 streams.clear()，
+   * state==null 已在闸门处拦掉）、OkHttp 自己的 callTimeout。所以这个组合的
+   * 唯一可能来源就是 callTimeout，elapsed 判定只是把「万一是别的原因」排除掉
+   * 的保险。
+   *
+   * ⚠️ **本条不改预算**（600s 仍是 connect + 首字 + 流体全周期的整调用兜底，
+   * 流式不设固定空闲超时那条产品口径不变）：只把「到点形态」从**静默**
+   * （一个事件都不发 ⇒ JS Promise 永不 settle）改成发 `kind:"timeout"` 事件。
+   *
    * SocketTimeoutException 分支为防御性保留——client 级读超时恒禁用、流中
    * 无空闲界，正常不可达；真触发时 message 携带数值供 JS 侧文案透传来源。
    */
-  private fun classifyError(t: Throwable, effectiveReadTimeoutMs: Long): Pair<String, String> =
-    when (t) {
+  private fun classifyError(
+    t: Throwable,
+    effectiveReadTimeoutMs: Long,
+    call: Call?,
+    userAbortedHit: Boolean,
+    startedAtNanos: Long,
+    effectiveCallTimeoutMs: Long,
+  ): Pair<String, String> {
+    if (call?.isCanceled() == true && !userAbortedHit) {
+      val elapsedMs = (System.nanoTime() - startedAtNanos) / 1_000_000
+      if (elapsedMs >= effectiveCallTimeoutMs) {
+        return "timeout" to "call timeout after ${effectiveCallTimeoutMs}ms"
+      }
+    }
+    return when (t) {
       is SocketTimeoutException ->
         "timeout" to "read timeout after ${effectiveReadTimeoutMs}ms"
       is InterruptedIOException ->
@@ -455,10 +579,32 @@ class LlmSseModule(reactContext: ReactApplicationContext) :
       is IOException -> "network" to (t.message ?: t.javaClass.simpleName)
       else -> "network" to (t.message ?: t.javaClass.simpleName)
     }
+  }
 
   // ------------------------------------------------------------------
   // 事件发射
   // ------------------------------------------------------------------
+
+  /**
+   * 仅 debuggable 构建输出的一行计数日志（abort 次数 / timeout 次数 / 标记残留数）。
+   *
+   * 本包**没有** JVM 测试基建（仓内只有 `tokenizer-driver-rn` 有 android/src/test），
+   * 为这两个方法新建 Robolectric 基建不划算 ⇒ 「不建基建」不等于「不加日志」：
+   * 真机 logcat 核对是本条验收（用户 abort 仍静默、callTimeout 必须发 Error、
+   * userAborted 三种路径各一次后不残留）的唯一可观测面。
+   *
+   * 用 ApplicationInfo.FLAG_DEBUGGABLE 而非 BuildConfig.DEBUG：本 Android library
+   * 模块未开 `buildConfig` feature，引用模块 BuildConfig 需要额外的 gradle 改动。
+   */
+  private fun debugLog(message: String) {
+    if (!debugLoggable) {
+      return
+    }
+    try {
+      Log.d(TAG, message)
+    } catch (_: Throwable) {
+    }
+  }
 
   private fun emitEvent(name: String, build: (WritableMap) -> Unit) {
     try {

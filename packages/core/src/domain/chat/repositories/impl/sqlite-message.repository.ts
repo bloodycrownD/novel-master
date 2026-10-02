@@ -23,7 +23,11 @@ import type { ChatMessage, ChatMessageHeader } from "../../model/message.js";
 import type { MessageContent } from "../../model/content-block.js";
 import type { MessageUsage } from "../../model/message-usage.js";
 import { decodeMessageContent } from "../../logic/message-content-codec.js";
-import type { MessageRepository } from "../message.port.js";
+import { collectReadRefs } from "@/domain/vfs/logic/revision-ref-count.js";
+import type {
+  MessageReadRefTarget,
+  MessageRepository,
+} from "../message.port.js";
 
 const MESSAGE_SELECT_COLUMNS = `id, session_id, seq, role, content_json, content_encoding, content_blob, provider, provider_id, raw_json, created_at_ms, hidden, attachments_json, prompt_tokens, completion_tokens, total_tokens, cache_read_tokens, cache_creation_tokens, model_name, first_token_ms, duration_ms`;
 
@@ -114,6 +118,7 @@ async function runInTransactionOrConn<T>(
  * 注意 `%` / `_` 是 LIKE 通配符但**不在**此列：通配只会造成过宽（多 parse 几行，
  * 内存精筛再滤掉），不违反「召回不得小于全量精筛」的红线，不拦。
  */
+// eslint-disable-next-line no-control-regex -- 故意按控制字符内容匹配：用于判定 keyword 能否安全走 LIKE 粗筛
 const LIKE_PREFILTER_UNSAFE_RE = /["\\\x00-\x1f]|[^\x00-\x7f]/;
 
 /** keyword 是否可安全用作 SQL LIKE 粗筛（false = 退回全量精筛）。 */
@@ -298,6 +303,95 @@ export class SqliteMessageRepository implements MessageRepository {
     return this.mapRows(rows);
   }
 
+  async listBySessionUpToSeq(
+    sessionId: string,
+    maxSeq: number
+  ): Promise<ChatMessage[]> {
+    // 与 listBySessionFromSeq 对称：这边收上界。SQL 里**只**加 seq 上界，
+    // 不加 AND hidden = 0（fork 要保留 hidden 状态）。
+    // 走 mapRows 保住 yieldFn 分片让步（mobile 上大结果集退化成单次长任务）。
+    const rows = await queryTemplate(
+      this.conn,
+      this.parser,
+      `SELECT ${MESSAGE_SELECT_COLUMNS}
+       FROM chat_message
+       WHERE session_id = #{sessionId} AND seq <= #{maxSeq}
+       ORDER BY seq ASC`,
+      { sessionId, maxSeq }
+    );
+    return this.mapRows(rows);
+  }
+
+  async listBySessionTailOfRole(
+    sessionId: string,
+    role: string,
+    limit: number
+  ): Promise<ChatMessage[]> {
+    // role 在子查询里过滤：limit 只数该 role 的行，夹在中间的 tool_result
+    // （role=user）不占配额。外层再包一层 ORDER BY seq ASC 保持升序返回。
+    const clampedLimit = Math.max(1, Math.floor(limit));
+    const rows = await queryTemplate(
+      this.conn,
+      this.parser,
+      `SELECT ${MESSAGE_SELECT_COLUMNS}
+       FROM (
+         SELECT ${MESSAGE_SELECT_COLUMNS}
+         FROM chat_message
+         WHERE session_id = #{sessionId} AND role = #{role}
+         ORDER BY seq DESC
+         LIMIT #{limit}
+       )
+       ORDER BY seq ASC`,
+      { sessionId, role, limit: clampedLimit }
+    );
+    return this.mapRows(rows);
+  }
+
+  async listReadRefTargetsBySession(
+    sessionId: string
+  ): Promise<readonly MessageReadRefTarget[]> {
+    // 窄投影（21 → 4 列）：只取 id + 正文三列。**不过滤 hidden**
+    // （hidden 行也要出现在 targets 里，否则漏减 read 引用 = revision 永不 GC）。
+    const rows = await queryTemplate(
+      this.conn,
+      this.parser,
+      `SELECT id, content_json, content_encoding, content_blob
+       FROM chat_message WHERE session_id = #{sessionId} ORDER BY seq ASC`,
+      { sessionId }
+    );
+    // ⚠️ **本方法刻意不走 `mapRows`**（下面这个裸 for 循环）：它是在**写事务内**
+    // 被调用的（`message.service.ts:truncateAfter` 的空锚分支 / `session.service.ts`
+    // 的 deleteSessionTree / `project.service.ts` 的删项目链）。`mapRows` 的分片
+    // `yieldFn` 只在「让出事件循环」时有用——对锁持有期**零帮助**，反倒会在事务
+    // 中间插入 await，把本该是一段的临界区切成若干段，让等锁的写方有机会插队。
+    // 这里的收益是**列数**（21 → 4）与**消除事务外的一次全量往返**，不是并发度。
+    // ⚠️ 因此本方法的 `JSON.parse` 成本是落在写事务持有期内的，这是 C1-2 换窄读口
+    //    时已知的代价（不是本轮新增）。要真正缩短这个窗口得重划「产出写集合的读」
+    //    与「写」之间的边界，那与 c2 域「产出写集合的读必须留在事务内」的判据
+    //    直接冲突，已登记为债务（CR cr1-c1 P2-1 修法 b），本波不做。
+    const targets: MessageReadRefTarget[] = [];
+    for (const row of rows) {
+      try {
+        // 直接调用本文件既有的模块私有 readRowContent（双形态解码），
+        // 不新写一份解码分支。
+        targets.push({
+          id: String(row.id),
+          refs: collectReadRefs(readRowContent(row)),
+        });
+      } catch (err) {
+        // 坏行按「空 refs」处理并 warn——与 aggregateReadRefsFromAllMessages 的
+        // 坏行隔离口径一致（一条坏行不拖累其它行；这是有意的降级：旧形态
+        // listBySession 对坏行 fail-fast，会让整条清空/删除失败）。
+        console.warn(
+          "[sqlite-message] read_ref_target_row_skip：消息行解析失败，其 read 引用不参与 −1",
+          { id: String(row.id), err: err instanceof Error ? err.message : err }
+        );
+        targets.push({ id: String(row.id), refs: [] });
+      }
+    }
+    return targets;
+  }
+
   async listMessageHeadersBySession(
     sessionId: string
   ): Promise<ChatMessageHeader[]> {
@@ -335,19 +429,29 @@ export class SqliteMessageRepository implements MessageRepository {
   async listBySessionOffset(
     sessionId: string,
     offset: number
-  ): Promise<ChatMessage[]> {
+  ): Promise<ChatMessageHeader[]> {
+    // 头投影：唯一调用方（backfill 增量段判定）只消费 `id`，不取正文字节。
+    // 原先按 21 列全量取并逐条 JSON.parse——会话导入 / 复制 / 首次回填时
+    // offset 可能是 0 或很旧，一次调用就把全会话正文拉回来了。
     const clampedOffset = Math.max(0, Math.floor(offset));
     const rows = await queryTemplate(
       this.conn,
       this.parser,
-      `SELECT ${MESSAGE_SELECT_COLUMNS}
+      `SELECT id, session_id, seq, role, hidden, created_at_ms
        FROM chat_message
        WHERE session_id = #{sessionId}
        ORDER BY seq ASC
        LIMIT -1 OFFSET #{offset}`,
       { sessionId, offset: clampedOffset }
     );
-    return this.mapRows(rows);
+    return rows.map((row) => ({
+      id: String(row.id),
+      sessionId: String(row.session_id),
+      seq: Number(row.seq),
+      role: String(row.role),
+      hidden: Number(row.hidden) === 1,
+      createdAtMs: Number(row.created_at_ms),
+    }));
   }
 
   async listBySessionTail(

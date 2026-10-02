@@ -8,7 +8,6 @@ import type {
   SessionCreateRequest,
   SessionDeleteRequest,
   SessionDto,
-  SessionGetAgentBindingRequest,
   SessionGetComposerDraftRequest,
   SessionListByProjectRequest,
   SessionProjectComposerStatusRequest,
@@ -165,19 +164,6 @@ export async function handleSessionsProjectComposerStatus(
       req.sessionId,
     );
     return { ok: true, data: attachments };
-  } catch (err) {
-    return { ok: false, error: formatIpcError(err) };
-  }
-}
-
-/** 读取会话级智能体绑定（透传 core sessions service）。 */
-export async function handleSessionsGetAgentBinding(
-  req: SessionGetAgentBindingRequest,
-): Promise<IpcResult<SessionAgentConfigDto>> {
-  try {
-    const rt = await getDesktopRuntime();
-    const config = await rt.sessions.getSessionAgentConfig(req.sessionId);
-    return { ok: true, data: config };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }

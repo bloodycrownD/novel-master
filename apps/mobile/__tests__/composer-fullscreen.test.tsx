@@ -239,11 +239,6 @@ jest.mock('@/storage/chat-transcript-engine', () => ({
   readChatTranscriptEngine: jest.fn(async () => 'webview'),
 }));
 
-jest.mock('@/services/session-messages-loader', () => ({
-  loadSessionMessagesTail: jest.fn(async () => []),
-  loadSessionMessagesPage: jest.fn(async () => []),
-}));
-
 jest.mock('@/services/project-composer-status.service', () => ({
   projectComposerStatusForSession: jest.fn(async () => []),
 }));

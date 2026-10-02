@@ -88,6 +88,14 @@ describe("cloud-sync ipc handlers", () => {
     }
   });
 
+  it("同一 runtime 连续两次 getDesktopCloudSyncService 返回同一实例", async () => {
+    // 守住「不每次都重建」这条回归（S-CS-02）：换代判据是 runtime 对象身份，
+    // 不是调用次数 —— 否则每次 IPC 都会丢掉 syncBusy 计数与 configStore 缓存。
+    const s1 = await getDesktopCloudSyncService();
+    const s2 = await getDesktopCloudSyncService();
+    assert.equal(s1, s2, "同一代 runtime 不得反复重建 service");
+  });
+
   it("pull 前置 getLocalMeta 抛错后 syncBusy 复位 false", async () => {
     // MF-4（desktop/B-3）回归：getLocalMeta 移入 try 后，任何抛错路径都
     // 必须经 finally 复位 syncBusy——否则数据清理守卫会被永久锁死。

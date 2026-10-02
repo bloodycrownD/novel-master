@@ -38,6 +38,14 @@ export interface CompactionEvaluationContext {
    * 缺省时读口退化为纯进程内读（测试/非 runner 调用方）。
    */
   readonly sessionKkv?: SessionKkvService;
+  /**
+   * runner 本 step 已从 `AgentSession.list()` 拿到的可见消息条数。
+   *
+   * 有了它 {@link VisibleFloorTrigger} 直接复用，不再发第二次全会话读（RT-02）；
+   * 缺省（非 runner 调用方 / 既有测试）回落到触发器自己 `session.list()`，
+   * 因此这条对所有既有调用方与测试**零行为变化**。
+   */
+  readonly visibleMessageCount?: number;
 }
 
 /** Returns true when this trigger slice is satisfied. */

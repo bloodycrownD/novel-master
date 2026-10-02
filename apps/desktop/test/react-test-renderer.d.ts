@@ -8,14 +8,26 @@
  */
 declare module "react-test-renderer" {
   export type TestInstance = {
+    /** host 元素的标签名（"input" / "select" …）；组件节点为 undefined/null。 */
+    readonly type: string | null;
+    readonly children: Array<TestInstance | string> | null;
     props: Record<string, unknown>;
-    findAll(predicate: (node: TestInstance) => boolean): TestInstance[];
+    findAll(
+      predicate: (node: TestInstance) => boolean,
+      options?: { deep: boolean },
+    ): TestInstance[];
   };
   export type ReactTestRendererRoot = TestInstance & {
     findByProps(props: Record<string, unknown>): TestInstance;
+    findAllByProps(
+      props: Record<string, unknown>,
+      options?: { deep: boolean },
+    ): TestInstance[];
   };
   export type ReactTestRenderer = {
     root: ReactTestRendererRoot;
+    /** 渲染树快照（host 节点树，children 为字符串或嵌套节点）。 */
+    toJSON(): unknown;
     /** 用新元素重渲染（props 变化驱动重渲染，读 effect 后的最新值）。 */
     update(element: import("react").ReactElement): void;
     unmount(): void;

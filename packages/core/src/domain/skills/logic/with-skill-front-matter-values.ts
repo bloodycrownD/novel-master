@@ -17,15 +17,12 @@
  * @module domain/skills/logic/with-skill-front-matter-values
  */
 
+import { yamlScalar } from "./yaml-scalar.js";
+
 /** front matter 重写值：只提交要改的字段，未提交字段不动。 */
 export interface SkillFrontMatterValues {
   readonly name?: string;
   readonly description?: string;
-}
-
-/** YAML 双引号标量：JSON 字符串本身即合法 YAML double-quoted scalar。 */
-function yamlScalar(value: string): string {
-  return JSON.stringify(value);
 }
 
 /**

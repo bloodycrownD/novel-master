@@ -1,4 +1,4 @@
-﻿# @novel-master/core 公开 API 说明
+# @novel-master/core 公开 API 说明
 
 本文描述 `@novel-master/core` 的 **export 边界**：主入口、`public/*` 子入口与辅助子路径的职责划分。契约由 `test/package-exports/` 下的 allowlist 快照与架构守卫测试固化；任意有意变更公开符号须同步更新快照并在 PR 中说明。
 
@@ -73,7 +73,7 @@
 | agent 编辑器块操作 | `@novel-master/core/config-forms/agent` | `@novel-master/core/prompt` |
 | front matter 解析 | `@novel-master/core/workplace` | `@novel-master/core/front-matter`（已删除 export） |
 | message checkpoint | `@novel-master/core/message-checkpoint` | `@novel-master/core/session-fs` |
-| 遗留 PromptBlock 类型 | 内部 `domain/prompt/model/prompt-block.js` | `@novel-master/core/prompt` |
+| 遗留 PromptBlockLifecycle 类型 | 内部 `domain/prompt/model/prompt-block.js` | —（从未从 public 面转出） |
 
 重复 export **必须** 指向同一实现（见 `duplicate-export-consistency.test.ts`）。
 

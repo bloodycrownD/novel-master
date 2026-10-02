@@ -12,6 +12,7 @@ import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import type { VfsService } from "@/domain/vfs/ports/vfs-service.port.js";
 import type { VfsListEntry } from "@/domain/vfs/model/vfs-list-entry.js";
 import { sweepRevisionsUnderScope } from "@/domain/vfs/logic/vfs-tree-copy.js";
+import { runDeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 
@@ -459,6 +460,12 @@ export class SkillsService implements SkillService {
         await ruleRepo.removeAllScopesByName(location.name);
       }
     });
+
+    // 事务提交后收被删技能整目录的 blob 残留：sweep 只把旧 blob 的 ref_count
+    // 递减到 0 就停手（CS-06/CS-07 的守卫触发器要求「无 entry 引用」才删行），
+    // vfs_entry 上零触发器补不了这一步 ⇒ 残留只能靠全库 gc。口径对齐另外 5 处
+    // 删除链的既有约定：事务提交后调一次。
+    await runDeferredBlobGc(this.deps.conn);
   }
 
   /**

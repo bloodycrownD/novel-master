@@ -542,6 +542,12 @@ export function layoutFromFormInput(
 export function formSnapshotJson(input: AgentEditorFormInput): string {
   return JSON.stringify({
     name: input.name,
+    // ⚠️ `mode` 必须**无条件**进快照且必须给显式缺省值（"all"）：
+    // ① 漏掉它 ⇒ 用户改「作用域」不产生 dirty，改动被静默丢弃；
+    // ② 写成 `mode: input.mode` 而两端基线调用点没传 ⇒ JSON.stringify 丢弃
+    //    undefined 键，基线 JSON 缺 `mode`、实时快照有 `mode:"all"` ⇒
+    //    两个 JSON 永不相等 ⇒ 打开任意智能体即显示「· 未保存」，比原缺陷更糟。
+    mode: input.mode ?? "all",
     maxSteps: input.maxSteps,
     modelEnabled: input.modelEnabled,
     toolsMode: input.toolsMode,

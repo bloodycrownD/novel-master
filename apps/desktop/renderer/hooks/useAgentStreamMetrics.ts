@@ -27,7 +27,7 @@ import {
   type StreamTokenSource,
   type TokenRateSampler,
 } from "@shared/logic/format";
-import { CHARACTERS_PER_TOKEN_RATIO } from "@novel-master/core/provider";
+import { CHARACTERS_PER_TOKEN_RATIO } from "@shared/logic/provider";
 
 /**
  * token 计数来源：usage=基线来自事件真值（run 级累计）；heuristic=尚无真值，

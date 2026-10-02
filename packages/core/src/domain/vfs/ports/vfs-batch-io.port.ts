@@ -72,11 +72,29 @@ export interface BatchExportFileEntry {
   readonly content: string;
 }
 
+/** planBatchExport 的一条跳过记录（不丢数据、只报告）。 */
+export interface BatchExportSkip {
+  /** 被跳过的逻辑路径（含 leading `/`） */
+  readonly logicalPath: string;
+  /** 跳过原因（当前仅 `DUPLICATE_RELATIVE_PATH`） */
+  readonly reason: "DUPLICATE_RELATIVE_PATH" | string;
+}
+
 /** planBatchExport 结果。 */
 export interface BatchExportPlan {
   readonly files: readonly BatchExportFileEntry[];
   /** 相对导出根的空目录（无 leading `/`，无 trailing `/`） */
   readonly mkdirPaths: readonly string[];
+  /**
+   * 被去重跳过、**没有进 `files`** 的选中项。
+   *
+   * ⚠️ **可选字段**：`BatchExportPlan` 经 `public/vfs.ts` 对外导出，加必填字段会让
+   * 任何手写对象字面量（含 apps 侧测试夹具）报 TS2741。
+   * ⚠️ 这**不是死字段**：锚点改父目录只消掉了「纯多选文件」这一类碰撞，
+   * 文件与目录同选时的相对路径碰撞依然存在，必须有地方把它报出来——
+   * 否则 ZIP 里会静默少文件而 UI 零提示。
+   */
+  readonly skipped?: readonly BatchExportSkip[];
 }
 
 export interface BatchApplyOptions {

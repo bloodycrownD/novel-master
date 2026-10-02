@@ -510,8 +510,22 @@ ${formatCallableList(callable)}
       ...(attachments != null ? { attachments } : {}),
     });
 
-    // AgentRunResult 不带文本，必须自己 listBySession 拿末条 assistant text。
-    const childMessages = await subagent.messages.listBySession(childSessionId);
+    // AgentRunResult 不带文本，必须自己取末条 assistant text。
+    // tail+role 过滤读口（limit 只数 assistant 行）：旧形态 listBySession 读整条
+    // 子会话（21 列 + 逐行 parse），maxSteps 大的子代理跑几百步后每次 task 调用
+    // 都重付这笔全量读。
+    // ⚠️ 不能用 listBySessionTail(sid, 1)：末条 assistant 之后常压着若干条
+    // tool_result 的 user 消息，会把配额吃掉。
+    // limit=8 的依据：一次 assistant 回合里「无 text block 的 assistant」只出现在
+    // 「该 step 只发 tool_use、没发正文」的情形，而相邻两个这样的 step 之间必夹
+    // 一条 tool_result 的 user 消息（role 过滤后不占配额）⇒ 8 给了约 4 倍余量。
+    // 已知差异：子代理连续 8 个 step 只发 tool_use 且更早处有正文时，改后取不到
+    // 文本（走 [子代理未完成任务: …] 兜底），已由 subagent-tool-tail-read.test.ts
+    // 的 T-SUB-TAIL3 钉成期望。
+    const childMessages = await subagent.messages.listBySessionTailOfRole(
+      childSessionId,
+      { role: "assistant", limit: 8 }
+    );
     const lastText = extractLastAssistantText(childMessages);
 
     // 中断回流（phase-1-abort-reflow）：cancelled 单独走「用户停止」分支，

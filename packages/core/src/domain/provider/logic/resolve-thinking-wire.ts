@@ -6,6 +6,7 @@
 
 import type { LlmProtocolKind } from "@/infra/llm-protocol/ports/adapter.port.js";
 import {
+  ANTHROPIC_SAMPLING_DEFAULTS,
   GEMINI_SAMPLING_DEFAULTS,
   OPENAI_SAMPLING_DEFAULTS,
 } from "@/domain/provider/model/protocol-sampling-defaults.js";
@@ -14,8 +15,16 @@ import type { ThinkingLevel } from "@/domain/provider/model/saved-model-settings
 import type { ModelThinkingParams } from "@/domain/provider/model/model-thinking-params.js";
 import { thinkingLevelToModelThinkingParams } from "./thinking-level-presets.js";
 
-/** Anthropic adapter 未指定 sampling max_tokens 时的 body 默认值。 */
-const ANTHROPIC_BODY_DEFAULT_MAX_TOKENS = 4096;
+/**
+ * Anthropic adapter 未指定 sampling max_tokens 时的 body 默认值。
+ *
+ * ⚠️ 必须与 `ANTHROPIC_SAMPLING_DEFAULTS.max_tokens`（UI 采样默认值）**同源**：
+ * 旧形态这里硬写 4096、那边写 16000，两个常量各写一份又互相不知道，
+ * 再叠加 budget 钳制公式用 `max - 1`，三档 thinkingLevel 全部被钳成同一个值、
+ * 可见正文只剩 1 token。
+ */
+export const ANTHROPIC_BODY_DEFAULT_MAX_TOKENS =
+  ANTHROPIC_SAMPLING_DEFAULTS.max_tokens;
 
 /**
  * 根据采样设置推断有效 max_tokens（用于 Anthropic budget 上限计算）。

@@ -30,6 +30,7 @@ import type {S3StorageConfig} from '@novel-master/cloud-sync-driver-s3';
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
 import {isMobileAgentActive} from '@/runtime/agent-activity';
 import {
+  DatabaseReplacedError,
   exportDatabaseBackupToPath,
   importDatabaseBackupFromBytes,
   importDatabaseBackupFromPath,
@@ -222,14 +223,19 @@ async function createCoordinator(
       importSnapshot: async bytes => {
         progress?.step('db_import_start', {bytes: bytes.byteLength});
         const importStart = Date.now();
-        await importDatabaseBackupFromBytes(bytes);
+        // 必须 return：不 return 完全合法、零类型错误，但运行时
+        // databaseReplaced === undefined ⇒ pullCloudSync 永不重建 runtime ⇒
+        // 后续所有记账/读写绑在已关连接上。
+        const outcome = await importDatabaseBackupFromBytes(bytes);
         progress?.step('db_import_done', {ms: Date.now() - importStart});
+        return outcome;
       },
       importSnapshotFromPath: async path => {
         progress?.step('db_import_start', {fromPath: true});
         const importStart = Date.now();
-        await importDatabaseBackupFromPath(path);
+        const outcome = await importDatabaseBackupFromPath(path);
         progress?.step('db_import_done', {ms: Date.now() - importStart});
+        return outcome;
       },
     },
   });
@@ -298,10 +304,36 @@ export async function testCloudSyncConnection(
   }
 }
 
-/** 从云端拉取快照并导入；成功后须调用 onRebootstrap。 */
+/**
+ * 云同步互斥（pull ↔ push）。
+ *
+ * mobile 侧没有 desktop 那样的模块级 `syncBusy` 守卫：pull 与 push 是两个
+ * 各自独立的导出函数，除 maintenanceBusy 计数外无任何互斥。交错后果是
+ * 「push 在 t0 拷完库 → pull 在 t1 整库替换 → push 在 t2 上传 t0 的旧快照
+ * 并把 rev 推到 t1+1」⇒ pull 拉回来的内容被云端回滚，且本机 lastSyncedRev
+ * 被推到更高值，之后再也不会重新拉。
+ *
+ * desktop 侧的 `syncBusy` 是「检查与置位之间无 await、单线程下原子」的自愈形态，
+ * mobile 对齐同一口径。检查与置位必须落在 `acquireMobileDbMaintenanceBusy()`
+ * 之前或已建立的 `try` 内——落在两者之间（try 之外）会原样复现令牌泄漏形态。
+ */
+let syncBusy = false;
+
+/**
+ * 从云端拉取快照并导入。
+ *
+ * 契约顺序：**换库 → 重建 runtime → 用新 runtime 记账 → 再放互斥令牌**。
+ * 换库由 `coordinator.pull()` 内的导入函数完成，它会关掉 `runtime` 背后的连接
+ * ⇒ 换代成功时**绝不能用旧 runtime 记账**（会抛 `CONNECTION_CLOSED`，
+ * 且抛错发生在记录成功之前，把已完成的拉取记成失败，rev 永不推进）。
+ *
+ * 令牌纪律：**令牌在 acquire 之后的第一个 `await` 之前，必须已被 `try` 覆盖**
+ * ——acquire 与 try 之间不允许出现任何可抛表达式。对照 desktop
+ * `cloud-sync.service.ts` 的 getLocalMeta 搬移注释，这正是它当初被写下来的原因。
+ */
 export async function pullCloudSync(
   runtime: MobileNovelMasterRuntime,
-  onRebootstrap: () => void,
+  onRebootstrap: () => Promise<MobileNovelMasterRuntime>,
   options?: CloudSyncPullOptions,
 ): Promise<CloudSyncPullOutcome> {
   const local = await getCloudSyncLocalStatus(runtime);
@@ -309,9 +341,14 @@ export async function pullCloudSync(
     throw new CloudSyncError('NOT_CONFIGURED', '请先配置云存储');
   }
 
+  if (syncBusy) {
+    throw new Error('云同步进行中，请稍后再试');
+  }
+  syncBusy = true;
+
   // 外层 acquire（计数/令牌配对）：底层导入函数的 acquire/release 只
   // 覆盖到它自己返回，「库文件已替换、连接仍处重建窗口」的尾段由这层
-  // 兜住——release 必须发生在 onRebootstrap() 完成之后（含重建窗口的
+  // 兜住——release 必须发生在重建 + 记账完成之后（含重建窗口的
   // 完整互斥），其余出口（错误 / already-up-to-date）由 finally 兜底，
   // 令牌标记保证幂等不重复 release。
   acquireMobileDbMaintenanceBusy();
@@ -323,50 +360,98 @@ export async function pullCloudSync(
     }
   };
 
-  const progress = createCloudSyncProgress('pull', {
-    onUiProgress: options?.onProgress,
-  });
-  progress.step('start', {lastSyncedRev: local.lastSyncedRev});
-
+  // progress / coordinator / 临时路径都先声明再赋值：createCloudSyncProgress
+  // 与 createCoordinator 都在 try 内，但 catch 里要引用 progress（需 ?.），
+  // finally 里要引用临时路径（需 != null 守卫）——不提升就会 TDZ，
+  // 或让 `unlink(undefined)` 用一个新错盖掉原始错。
+  let progress: ReturnType<typeof createCloudSyncProgress> | undefined;
+  let coordinator: CloudSyncCoordinator;
+  let exportTempPath: string | undefined;
+  let importTempPath: string | undefined;
+  // catch 分支要用它记账，必须声明在 try 之外。
   const now = new Date().toISOString();
-  const {coordinator, exportTempPath, importTempPath} = await createCoordinator(
-    runtime,
-    undefined,
-    progress,
-  );
+  // 记账用的 runtime：pull 未换代时是传入的 runtime，换代成功后换成重建出来的新
+  // runtime。catch 分支同样只能用它，绝不写回已作废的那一代。
+  let accountingRuntime: MobileNovelMasterRuntime = runtime;
 
   try {
-    progress.step('coordinator_pull_start', {});
-    const result = await coordinator.pull({lastSyncedRev: local.lastSyncedRev});
-    await patchCloudSyncLocalStatus(runtime, {
-      lastSyncedRev: result.rev,
-      lastPullAt: now,
-      lastPullResult: 'success',
+    progress = createCloudSyncProgress('pull', {
+      onUiProgress: options?.onProgress,
     });
-    onRebootstrap();
-    // rebootstrap 已完成，重建窗口结束，此处释放外层互斥。
+    progress.step('start', {lastSyncedRev: local.lastSyncedRev});
+    const created = await createCoordinator(runtime, undefined, progress);
+    coordinator = created.coordinator;
+    exportTempPath = created.exportTempPath;
+    importTempPath = created.importTempPath;
+
+    progress.step('coordinator_pull_start', {});
+    const result = await coordinator.pull({
+      lastSyncedRev: local.lastSyncedRev,
+    });
+    if (result.databaseReplaced) {
+      // 先重建，再用新 runtime 记账。
+      accountingRuntime = await onRebootstrap();
+      await patchCloudSyncLocalStatus(accountingRuntime, {
+        lastSyncedRev: result.rev,
+        lastPullAt: now,
+        lastPullResult: 'success',
+      });
+    } else {
+      // 这条分支不换代（库没换、连接没关），所以记账可以用旧 runtime。
+      await patchCloudSyncLocalStatus(runtime, {
+        lastPullAt: now,
+        lastPullResult: 'already_up_to_date',
+      });
+    }
+    // 重建 + 记账已完成，重建窗口结束，此处释放外层互斥（finally 兜底幂等）。
     releasePullBusy();
     progress.done({rev: result.rev});
     return {rev: result.rev, alreadyUpToDate: false};
   } catch (error) {
     if (isCloudSyncError(error) && error.code === 'ALREADY_UP_TO_DATE') {
+      // ⚠️ `.catch(() => undefined)` 是**有意补的对称**（CR cloudsync P2-3）：
+      // 本行在 catch 块内部，记账一旦抛错会**从 catch 里再抛**出去 ⇒ 直接跳过
+      // 下面的 `progress?.fail` 与 `mapSdkError`，把「已是最新」这个正常语义
+      // 换成一个裸错误往上冒。该分支确实不换代（runtime 是活的），但
+      // 「抛错概率低」不等于「不抛」——账本写盘撞上库忙/锁冲突一样会失败。
+      // 记账是旁路，让它失败，不要拿它污染主语义。
       await patchCloudSyncLocalStatus(runtime, {
         lastPullAt: now,
         lastPullResult: 'already_up_to_date',
-      });
-      progress.done({rev: local.lastSyncedRev, alreadyUpToDate: true});
+      }).catch(() => undefined);
+      progress?.done({rev: local.lastSyncedRev, alreadyUpToDate: true});
       return {rev: local.lastSyncedRev, alreadyUpToDate: true};
     }
-    await patchCloudSyncLocalStatus(runtime, {
+    if (error instanceof DatabaseReplacedError) {
+      // 库已换代但后续步骤抛错：runtime 换代优先于报错。mobile 的 runtime 是
+      // React state、没有 desktop `getDesktopRuntime()` 的懒建自愈 ⇒ 不补这条，
+      // 一次失败 pull 之后整个 App 带着已关 runtime 跑到用户手动重启。
+      try {
+        accountingRuntime = await onRebootstrap();
+      } catch {
+        // 重建失败不掩盖原始错误：下面的记账仍会用（可能已关的）旧 runtime，
+        // 但它挂了 .catch，不会二次抛出。
+      }
+    }
+    await patchCloudSyncLocalStatus(accountingRuntime, {
       lastPullAt: now,
       lastPullResult: 'error',
-    });
-    progress.fail(error);
+    }).catch(() => undefined);
+    progress?.fail(error);
     throw mapSdkError(error);
   } finally {
+    syncBusy = false;
     releasePullBusy();
-    await ReactNativeBlobUtil.fs.unlink(exportTempPath).catch(() => undefined);
-    await ReactNativeBlobUtil.fs.unlink(importTempPath).catch(() => undefined);
+    if (exportTempPath != null) {
+      await ReactNativeBlobUtil.fs
+        .unlink(exportTempPath)
+        .catch(() => undefined);
+    }
+    if (importTempPath != null) {
+      await ReactNativeBlobUtil.fs
+        .unlink(importTempPath)
+        .catch(() => undefined);
+    }
   }
 }
 
@@ -380,6 +465,11 @@ export async function pushCloudSync(
     throw new CloudSyncError('NOT_CONFIGURED', '请先配置云存储');
   }
 
+  if (syncBusy) {
+    throw new Error('云同步进行中，请稍后再试');
+  }
+  syncBusy = true;
+
   const progress = createCloudSyncProgress('push', {
     onUiProgress: options?.onProgress,
   });
@@ -389,34 +479,42 @@ export async function pushCloudSync(
   });
 
   const now = new Date().toISOString();
-  const {coordinator, exportTempPath} = await createCoordinator(
-    runtime,
-    undefined,
-    progress,
-  );
-
   try {
-    progress.step('coordinator_push_start', {});
-    const result = await coordinator.push({
-      lastSyncedRev: local.lastSyncedRev,
-      forceOverwriteRemote: options?.forceOverwriteRemote,
-    });
-    await patchCloudSyncLocalStatus(runtime, {
-      lastSyncedRev: result.rev,
-      lastPushAt: now,
-      lastPushResult: 'success',
-    });
-    progress.done({rev: result.rev});
-    return result;
-  } catch (error) {
-    await patchCloudSyncLocalStatus(runtime, {
-      lastPushAt: now,
-      lastPushResult: 'error',
-    });
-    progress.fail(error);
-    throw mapSdkError(error);
+    const {coordinator, exportTempPath} = await createCoordinator(
+      runtime,
+      undefined,
+      progress,
+    );
+
+    try {
+      progress.step('coordinator_push_start', {});
+      const result = await coordinator.push({
+        lastSyncedRev: local.lastSyncedRev,
+        forceOverwriteRemote: options?.forceOverwriteRemote,
+      });
+      await patchCloudSyncLocalStatus(runtime, {
+        lastSyncedRev: result.rev,
+        lastPushAt: now,
+        lastPushResult: 'success',
+      });
+      progress.done({rev: result.rev});
+      return result;
+    } catch (error) {
+      await patchCloudSyncLocalStatus(runtime, {
+        lastPushAt: now,
+        lastPushResult: 'error',
+      });
+      progress.fail(error);
+      throw mapSdkError(error);
+    } finally {
+      if (exportTempPath != null) {
+        await ReactNativeBlobUtil.fs
+          .unlink(exportTempPath)
+          .catch(() => undefined);
+      }
+    }
   } finally {
-    await ReactNativeBlobUtil.fs.unlink(exportTempPath).catch(() => undefined);
+    syncBusy = false;
   }
 }
 

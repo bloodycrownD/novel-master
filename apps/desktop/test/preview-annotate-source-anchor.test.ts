@@ -3,15 +3,12 @@
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { parseHTML } from "linkedom";
 import path from "node:path";
 import { afterEach, describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import {
-  ANNOTATE_ANCHOR_CLASS,
   ANNOTATE_SOFT_RANGE_CHAR_PADDING,
   ANNOTATE_SOFT_RANGE_LINE_PADDING,
-  buildAnnotatedSource,
   estimateSoftOffsetRangeFromPlainOffsets,
   locateAnnotateOffsetRangeByQuoteContext,
 } from "@shared/logic/chat";
@@ -19,11 +16,8 @@ import {
   collectAnnotateRangeForPreviewSelection,
   getSelectionOffsetsInElement,
   isPreviewAnnotateDomSearchFallbackEnabled,
-  PREVIEW_ANNOTATE_ID_ATTR,
-  resolveAnnotateIdsFromClick,
   setPreviewAnnotateDomSearchFallbackForTests,
 } from "@/layout/preview-annotate";
-import { sanitizeAnnotatePreviewHtml } from "@/layout/sanitize-annotate-preview-html";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const previewPanePath = path.join(
@@ -40,113 +34,18 @@ const previewAnnotatePath = path.join(
   "layout",
   "preview-annotate.ts",
 );
-const sanitizePath = path.join(
-  __dirname,
-  "..",
-  "renderer",
-  "layout",
-  "sanitize-annotate-preview-html.ts",
-);
-
-function makeRoot(html: string): HTMLElement {
-  const { document } = parseHTML(
-    `<!DOCTYPE html><html><body><div id="root">${html}</div></body></html>`,
-  );
-  return document.getElementById("root") as HTMLElement;
-}
 
 afterEach(() => {
   setPreviewAnnotateDomSearchFallbackForTests(false);
 });
 
 describe("T-SA6 Desktop 认锚渲染 / 点击 / 消毒", () => {
-  it("plain：消毒后仍保留 data-annotate-id；剥掉 script", () => {
-    const raw =
-      `<span class="${ANNOTATE_ANCHOR_CLASS}" data-annotate-id="d1">hello</span>` +
-      `<script>alert(1)</script>`;
-    const out = sanitizeAnnotatePreviewHtml(raw);
-    assert.match(out, /data-annotate-id="d1"/);
-    assert.match(out, new RegExp(`class="${ANNOTATE_ANCHOR_CLASS}"`));
-    assert.match(out, /hello/);
-    assert.doesNotMatch(out, /<script/i);
-  });
-
-  it("plain：注入后 DOM closest 可命中 id；用户不可见裸标签字符串", () => {
-    const sourceText = "aaa hello bbb";
-    const { annotatedSource } = buildAnnotatedSource({
-      sourceText,
-      drafts: [
-        {
-          id: "d1",
-          path: "/a.txt",
-          originalText: "hello",
-          userAnnotation: "n",
-          startOffset: 4,
-          endOffset: 9,
-        },
-      ],
-      mode: "text",
-    });
-    const sanitized = sanitizeAnnotatePreviewHtml(annotatedSource);
-    assert.doesNotMatch(
-      sanitized.replace(/<[^>]+>/g, ""),
-      /nm-annotate-anchor|data-annotate-id/,
-      "剥掉标签后正文不应残留裸锚字符串",
-    );
-    const root = makeRoot(`<pre class="preview-text">${sanitized}</pre>`);
-    const anchor = root.querySelector(
-      `[${PREVIEW_ANNOTATE_ID_ATTR}]`,
-    ) as HTMLElement;
-    assert.ok(anchor != null);
-    assert.equal(anchor.getAttribute(PREVIEW_ANNOTATE_ID_ATTR), "d1");
-    assert.equal(anchor.textContent, "hello");
-    const ids = resolveAnnotateIdsFromClick(root, {
-      clientX: 0,
-      clientY: 0,
-      target: anchor,
-    });
-    assert.deepEqual(ids, ["d1"]);
-  });
-
   it("Desktop MD 已退役插锚：PreviewPane 不再含 buildAnnotatedSource / rehype-raw", () => {
     const pane = readFileSync(previewPanePath, "utf8");
     assert.doesNotMatch(pane, /buildAnnotatedSource/);
     assert.doesNotMatch(pane, /sanitizeAnnotatePreviewHtml/);
     assert.doesNotMatch(pane, /rehypeRaw|rehype-raw/);
     assert.match(pane, /createTextAnnotator/);
-  });
-
-  it("MD 派生串消毒后仍可 closest data-annotate-id（宿主 DOM 合同）", () => {
-    const sourceText = "hel**lo**";
-    const { annotatedSource, skippedDraftIds } = buildAnnotatedSource({
-      sourceText,
-      drafts: [
-        {
-          id: "md1",
-          path: "/a.md",
-          originalText: "hel**lo**",
-          userAnnotation: "n",
-          startOffset: 0,
-          endOffset: sourceText.length,
-        },
-      ],
-      mode: "markdown",
-    });
-    assert.deepEqual(skippedDraftIds, []);
-    const sanitized = sanitizeAnnotatePreviewHtml(annotatedSource);
-    assert.match(sanitized, /data-annotate-id="md1"/);
-    // 模拟 rehype-raw 将锚 span 挂进 DOM（多壳同 id）
-    const root = makeRoot(`<div class="preview-markdown">${sanitized}</div>`);
-    const anchors = [
-      ...root.querySelectorAll(`[${PREVIEW_ANNOTATE_ID_ATTR}="md1"]`),
-    ];
-    assert.ok(anchors.length >= 2, "Markdown 多壳同 id");
-    const ids = resolveAnnotateIdsFromClick(root, {
-      clientX: 0,
-      clientY: 0,
-      target: anchors[0]!,
-    });
-    assert.deepEqual(ids, ["md1"]);
   });
 });
 

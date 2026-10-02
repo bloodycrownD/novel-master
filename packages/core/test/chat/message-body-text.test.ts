@@ -19,7 +19,7 @@ function chatMessage(blocks: ChatMessage["content"]["blocks"]): ChatMessage {
 }
 
 describe("messageBodyText", () => {
-  it("text only â†?hello", () => {
+  it("text only â†’ hello", () => {
     assert.equal(
       messageBodyTextFromContent({ blocks: [{ type: "text", text: "hello" }] }),
       "hello",
@@ -41,7 +41,7 @@ describe("messageBodyText", () => {
     assert.ok(!body.startsWith("{"));
   });
 
-  it("thinking only â†?empty", () => {
+  it("thinking only â†’ empty", () => {
     assert.equal(
       messageBodyTextFromContent({
         blocks: [{ type: "thinking", text: "secret" }],
@@ -50,7 +50,7 @@ describe("messageBodyText", () => {
     );
   });
 
-  it("image â†?[image]", () => {
+  it("image â†’ [image]", () => {
     assert.equal(
       messageBodyTextFromContent({
         blocks: [

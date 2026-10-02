@@ -1,5 +1,6 @@
 import { describe, it, mock } from "node:test";
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { createProviderServices } from "../../src/service/provider/create-provider-services.js";
 import { DefaultProviderService } from "../../src/service/provider/impl/provider.service.js";
 import { createKkvService } from "../../src/service/kkv/create-kkv-service.js";
@@ -147,6 +148,79 @@ describe("ProviderService", () => {
     assert.equal(await secrets.has(`provider/${created.id}/apiKey`), false);
   });
 
+  it("delete provider 时其下被会话引用的 saved model 拒绝删除（不静默清空）", async () => {
+    // 牙齿：这条走 `savedModels.deleteByProvider` 批量抹除路径，删前**零 in-use 校验**。
+    // 守卫补全后必须抛 SAVED_MODEL_IN_USE，且**模型仍在**（证明没有「抛错但已删」的半套）。
+    const ctx = getNovelMasterTestContext();
+    const secrets = memorySecretStore();
+    const bundle = createProviderServices(ctx.conn, secrets);
+    const created = await bundle.providers.create({
+      protocol: "openai",
+      baseUrl: "https://example.com/v1",
+      displayName: "guardgw" + testIsolationSuffix(),
+      apiKey: "guard-secret",
+    });
+    const saved = await bundle.providerModels.create(created.id, "guard-model");
+    const project = await ctx.projects.create(`proj-guard-${Date.now()}`);
+    const session = await ctx.sessions.create(project.id);
+    await ctx.sessions.updateSessionAgentConfig(session.id, {
+      agentId: `agent-guard-${randomUUID()}`,
+      modelId: saved.id,
+    });
+
+    await assert.rejects(
+      () => bundle.providers.delete(created.id),
+      (e) => e instanceof ProviderError && e.code === "SAVED_MODEL_IN_USE",
+    );
+    // 半套防护：模型必须仍在（服务层只有 savedList，没有 listByProvider）
+    const still = await bundle.providerModels.savedList(created.id);
+    assert.equal(
+      still.some((m) => m.id === saved.id),
+      true,
+      "拒绝后模型不得被清空",
+    );
+    assert.equal(await secrets.has(`provider/${created.id}/apiKey`), true);
+  });
+
+  it("delete provider 仅被 currentModelId 引用时成功（软指针不阻断，CR-F04）", async () => {
+    // 牙齿：这是 SAVED_MODEL_IN_USE 过滤的另一半（正向）。上一条覆盖「会话硬引用 ⇒ 拒绝」，
+    // 这里覆盖「只有 currentModelId 软引用 ⇒ 放行」——把 currentModelId 误当硬引用会让
+    // 当前模型所属的 provider 永远删不掉。
+    // ⚠️ 契约另一半在调用方：cli / desktop / mobile 都在 delete **之前**判归属、
+    // delete 成功**之后**才 resetCurrentModelId。服务层自己不清这条软指针。
+    const ctx = getNovelMasterTestContext();
+    const secrets = memorySecretStore();
+    const bundle = createProviderServices(ctx.conn, secrets);
+    const created = await bundle.providers.create({
+      protocol: "openai",
+      baseUrl: "https://example.com/v1",
+      displayName: "softgw" + testIsolationSuffix(),
+      apiKey: "soft-secret",
+    });
+    const saved = await bundle.providerModels.create(created.id, "soft-model");
+    await ctx.state.setCurrentModelId(saved.id);
+
+    // 不抛 SAVED_MODEL_IN_USE —— 只有 currentModelId 引用
+    await bundle.providers.delete(created.id);
+
+    const still = await new SqliteSavedModelRepository(
+      ctx.conn
+    ).findById(saved.id);
+    assert.equal(
+      still,
+      null,
+      "放行后模型应被级联抹掉",
+    );
+    assert.equal(await secrets.has(`provider/${created.id}/apiKey`), false);
+    // 服务层刻意不动软指针（清它的是三个调用方，见文件头契约注记）
+    assert.equal(
+      await ctx.state.getCurrentModelId(),
+      saved.id,
+      "DefaultProviderService 不负责清 currentModelId 软指针",
+    );
+    await ctx.state.resetCurrentModelId();
+  });
+
   it("delete removes secret at default ref when secretRef is null", async () => {
     const ctx = getNovelMasterTestContext();
     const secrets = memorySecretStore();
@@ -213,6 +287,7 @@ describe("ProviderService", () => {
       suggestions: new KkvModelSuggestionRepository(kkv),
       savedModels: new SqliteSavedModelRepository(ctx.conn),
       secretStore: secrets,
+      conn: ctx.conn,
     });
 
     await assert.rejects(

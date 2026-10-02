@@ -103,7 +103,9 @@ export function ChatHistorySearchPanel({
           return;
         }
         if (!result.ok) {
-          setError(result.error ?? '查询失败');
+          // result.error 是 IpcErrorPayload 对象，直接塞进 string state 会在下方
+          // {error} 渲染处抛 "Objects are not valid as a React child" ⇒ 整个 renderer root 崩溃白屏。
+          setError(result.error.message);
           if (!append) {
             setHasSearched(true);
           }

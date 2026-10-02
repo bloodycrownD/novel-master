@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 畸形 SSE 行诊断（计数、调试告警、finish 断言）。
  *
  * @module infra/llm-protocol/logic/sse-parse-errors

@@ -26,13 +26,5 @@ export function resolveSubagentSessionId(
   return typeof sid === "string" && sid.length > 0 ? sid : undefined;
 }
 
-/**
- * 判定某个 tool_use 是否为 `task` 工具调用（用于在 UI transcript 行映射阶段
- * 给对应 view 标记可跳转子会话）。
- */
-export function isTaskToolUse(toolName: string): boolean {
-  return toolName === "task";
-}
-
 // 这里显式 reexport 上面用到的类型，供 caller 类型推导顺手。
 export type { ToolResultBlock, ToolUseBlock };

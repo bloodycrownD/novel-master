@@ -84,10 +84,6 @@ export type HostToRichDocumentMessage =
 /** Document WebView → host */
 export type RichDocumentToHostMessage =
   | BridgeEnvelope<'ready', {version: number}>
-  | BridgeEnvelope<
-      'log',
-      {level: string; message: string; fields?: Record<string, unknown>}
-    >
   /** @deprecated 不再作为主通道；保留解码兼容。 */
   | BridgeEnvelope<'selectionAnnotate', {text: string}>
   /**

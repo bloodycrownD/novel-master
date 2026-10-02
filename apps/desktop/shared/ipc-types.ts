@@ -25,8 +25,6 @@ export const IPC_CHANNELS = {
   PROJECTS_CREATE: 'nm:projects/create',
   PROJECTS_RENAME: 'nm:projects/rename',
   PROJECTS_DELETE: 'nm:projects/delete',
-  PROJECTS_GET_AGENT_CONFIG: 'nm:projects/getAgentConfig',
-  PROJECTS_UPDATE_AGENT_CONFIG: 'nm:projects/updateAgentConfig',
 
   SESSIONS_LIST_BY_PROJECT: 'nm:sessions/listByProject',
   SESSIONS_CREATE: 'nm:sessions/create',
@@ -35,8 +33,6 @@ export const IPC_CHANNELS = {
   SESSIONS_GET_COMPOSER_DRAFT: 'nm:sessions/getComposerDraft',
   SESSIONS_SET_COMPOSER_DRAFT: 'nm:sessions/setComposerDraft',
   SESSIONS_PROJECT_COMPOSER_STATUS: 'nm:sessions/projectComposerStatus',
-  /** 会话级：读取当前会话的智能体绑定（follow / bind）。 */
-  SESSIONS_GET_AGENT_BINDING: 'nm:sessions/getAgentBinding',
   /** 会话级：绑定 agent 到会话（agentId=null 解绑回 follow）。 */
   SESSIONS_SET_AGENT_BINDING: 'nm:sessions/setAgentBinding',
   /** 会话级：覆盖模型（modelId=null 清除覆盖，mode/agentId 保持现状）。 */
@@ -45,7 +41,6 @@ export const IPC_CHANNELS = {
   APP_UI_GET: 'nm:app-ui/get',
   APP_UI_SET: 'nm:app-ui/set',
 
-  VFS_LIST: 'nm:vfs/list',
   VFS_READ: 'nm:vfs/read',
   /** 只读物理树浏览（跨域拼接视图；仅 list/read，无任何写通道） */
   PHYSICAL_LIST: 'nm:physical/list',
@@ -77,7 +72,6 @@ export const IPC_CHANNELS = {
   WORKPLACE_SET_DIR_RULE: 'nm:workplace/setDirRule',
   WORKPLACE_SET_FILE_RULE: 'nm:workplace/setFileRule',
   WORKPLACE_GET_DIR_RULE: 'nm:workplace/getDirRule',
-  WORKPLACE_CAPTURE_SESSION_BLOCK: 'nm:workplace/captureSessionBlock',
 
   SESSIONS_PULL_TEMPLATE: 'nm:sessions/pullTemplate',
   SESSIONS_PUSH_TEMPLATE: 'nm:sessions/pushTemplate',
@@ -155,8 +149,6 @@ export const IPC_CHANNELS = {
   SMART_SORT_RULE_SET_ENABLED_BATCH: 'nm:sort-rule/setEnabledBatch',
   SMART_SORT_RULE_MOVE: 'nm:sort-rule/move',
   SMART_SORT_RULE_REORDER: 'nm:sort-rule/reorder',
-  SMART_SORT_RULE_IMPORT_RULES: 'nm:sort-rule/importRules',
-  SMART_SORT_RULE_EXPORT_RULES: 'nm:sort-rule/exportRules',
   SMART_SORT_RULE_RESET_DEFAULTS: 'nm:sort-rule/resetDefaults',
   SMART_SORT_RULE_MATCH: 'nm:sort-rule/match',
   /** YAML 导入导出走 main 进程系统对话框（替换式导入，D10）。 */
@@ -167,7 +159,6 @@ export const IPC_CHANNELS = {
   SKILLS_EFFECTIVE: 'nm:skills/effective',
   SKILLS_READ: 'nm:skills/read',
   SKILLS_WRITE: 'nm:skills/write',
-  SKILLS_EDIT: 'nm:skills/edit',
   SKILLS_TOGGLE: 'nm:skills/toggle',
   SKILLS_DELETE: 'nm:skills/delete',
   SKILLS_ASSERT_CREATE_NAME: 'nm:skills/assert-create-name',
@@ -535,10 +526,36 @@ export type VfsBatchExportStageRequest = VfsScopeRequest & {
   readonly logicalPaths: readonly string[];
 };
 
+/**
+ * 一条被跳过的批量导出项（不丢数据、只报告）。
+ *
+ * 形状与 core 的 `BatchExportSkip`（`@novel-master/core/vfs`）逐字段一致。
+ * 这里**刻意不 import core 的类型**：本文件是「零 import 的可序列化 DTO 面」，
+ * 跨包 import 会把 DTO 面绑进 core 的编译面。本地复刻形状的代价是 core 改字段时
+ * 要手工同步一次，故 JSDoc 显式点名两处必须一起看。
+ */
+export type VfsBatchExportSkippedDto = {
+  /** 被跳过的逻辑路径（含 leading `/`） */
+  readonly logicalPath: string;
+  /** 跳过原因（当前仅 `DUPLICATE_RELATIVE_PATH`） */
+  readonly reason: string;
+};
+
 export type VfsBatchExportStageResult = {
   readonly stagingRoot: string;
   /** 供 startDrag 的顶层绝对路径（文件或目录） */
   readonly filePaths: readonly string[];
+  /**
+   * 相对路径碰撞而被去重跳过的选中项（CS-08）。
+   *
+   * ⚠️ **可选字段**：`data` 走的是变量不是字面量，多余属性检查不触发；标成必填会
+   *   让任何手写字面量（测试夹具等）报 TS2741，所以必须是可选。
+   * ⚠️ **本期 renderer 不消费**（UI 呈现是 spec §12.5 第 3 条列出的债务池）。
+   *   但它必须在这个类型面上存在：字段会随 IPC 悄悄过去，两端类型都看不见的话，
+   *   将来接 UI 提示时必然漏改 `ipc-types.ts`——它在 `shared/` 下、离改动最远、
+   *   最容易被忘。⚠️ 别看到「没人读」就当死字段删掉。
+   */
+  readonly skipped?: readonly VfsBatchExportSkippedDto[];
 };
 
 export type VfsBatchClearStagingRequest = {
@@ -1756,6 +1773,17 @@ export type CloudSyncLocalStatusDto = {
 
 export type CloudSyncPullResult = {
   readonly rev: number;
+  /**
+   * 本次拉取是否**换了本机数据库文件**（S-CS-01 换代路径）。
+   *
+   * ⚠️ 必填而非可选：`coordinator.pull()` 的返回类型里它就是必填
+   *    （`CloudSyncPullOutcome.databaseReplaced`），`ALREADY_UP_TO_DATE` 的早退
+   *    分支也显式补了 `false`。此前本类型只有 `rev` 一个字段，于是
+   *    `apps/desktop/test/cloud-sync-pull-accounting.test.ts` 里三处读
+   *    `data.databaseReplaced` 全靠运行时巧合通过、类型面零兜底（CR cloudsync
+   *    P2-4）——有人哪天「修正」成本类型里的这个字段，测试照样绿。
+   */
+  readonly databaseReplaced: boolean;
 };
 
 export type CloudSyncPushRequest = {

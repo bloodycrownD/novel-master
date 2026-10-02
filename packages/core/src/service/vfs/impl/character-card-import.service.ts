@@ -6,6 +6,7 @@
 
 import { insertFileSeedingRevision } from "@/domain/vfs/logic/seed-live-head-revisions.js";
 import { releaseAndDeleteVfsPrefix } from "@/domain/vfs/logic/vfs-tree-copy.js";
+import { runDeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
@@ -31,6 +32,11 @@ import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-
 import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
 import { clearSessionPromptCaches } from "@/service/vfs/logic/clear-session-prompt-caches.js";
+import {
+  ZIP_AND_CARD_IMPORT_TXN_FILE_CHUNK,
+  chunkArray,
+  yieldToEventLoop,
+} from "@/domain/vfs/logic/vfs-import-chunk.js";
 import { ensureImportDirRules } from "@/service/vfs/logic/ensure-import-dir-rules.js";
 import type { WorkplaceRepository } from "@/domain/workplace/repositories/workplace.port.js";
 import { SqliteWorkplaceRepository } from "@/domain/workplace/repositories/impl/sqlite-workplace.repository.js";
@@ -67,6 +73,33 @@ async function ensureEmptyDirectoryRow(
       `character card target path is a file, not a directory: ${logical}`
     );
   }
+}
+
+/**
+ * 导入失败的错误包装：保留测试钩子直抛与 CharacterCardError 原形，其余包成
+ * `IMPORT_FAILED`，并在消息里带上分片进度。
+ *
+ * 分片后**已提交片不再回滚** ⇒ 本条唯一的真实行为损失：旧内容在段 B0 就已
+ * 删除，补偿只把半棵新树清掉、不恢复旧内容。
+ */
+function wrapCardImportError(
+  error: unknown,
+  committedShards?: number,
+  failedShard?: number
+): unknown {
+  if (error instanceof Error && error.message === "test import failure") {
+    return error;
+  }
+  if (error instanceof CharacterCardError) {
+    return error;
+  }
+  const base =
+    error instanceof Error ? error.message : "import transaction failed";
+  const progress =
+    committedShards != null && failedShard != null
+      ? `（已提交 ${committedShards} 片 / 失败在第 ${failedShard} 片）`
+      : "";
+  return characterCardError("IMPORT_FAILED", `${base}${progress}`);
 }
 
 async function assertDirectoryPathNotFile(
@@ -135,7 +168,27 @@ export class DefaultCharacterCardImportService
     // 体积/条目闸门 — 事务之前，超限零写库（防巨型卡片落库后形成重启崩溃循环）
     validateMdTreeLimits(files);
     const sk = scopeKey(scope);
+    const fileEntries = [...files];
 
+    // 补偿：把半棵新树清掉，让域回到「目标前缀为空」的可重试态。口径与 ZIP
+    // 侧统一用 `releaseAndDeleteVfsPrefix`（减 live ref + 删 entry + GC 无引用
+    // revision）；裸 `deleteVfsPrefix` 会留下永不回收的孤儿 revision 与 blob。
+    const compensate = async (): Promise<void> => {
+      try {
+        await this.conn.transaction(async (tx) => {
+          await releaseAndDeleteVfsPrefix(
+            new SqliteVfsEntryRepository(tx),
+            new SqliteVfsRevisionRepository(tx),
+            sk,
+            directoryPath
+          );
+        });
+      } catch (error) {
+        console.warn("[character-card] import compensation failed", error);
+      }
+    };
+
+    // 段 B0（独立短事务）：删旧子树 + 目标目录行。
     try {
       await this.conn.transaction(async (tx) => {
         const repoTx = new SqliteVfsEntryRepository(tx);
@@ -143,53 +196,92 @@ export class DefaultCharacterCardImportService
         this.testHook?.onBeforeDeletePrefix?.();
         await releaseAndDeleteVfsPrefix(repoTx, revisionTx, sk, directoryPath);
         await ensureEmptyDirectoryRow(repoTx, scope, directoryPath);
-        for (const [logical, content] of files) {
-          if (this.testHook?.throwOnInsertLogical === logical) {
-            throw new Error("test import failure");
+      });
+    } catch (error) {
+      throw wrapCardImportError(error);
+    }
+
+    // 段 B0 提交后收被替换掉的旧内容：sweep 只把旧 blob 的 ref_count 递减到 0
+    // 就停手（CS-06/CS-07 的守卫触发器要求「无 entry 引用」才删行），vfs_entry
+    // 上零触发器补不了这一步 ⇒ 残留只能靠全库 gc。口径对齐 ZIP 导入链与另外
+    // 5 处删除链的既有约定：事务提交后调一次。
+    await runDeferredBlobGc(this.conn);
+
+    // 段 B1..Bk：每片 ≤200 个文件的独立短事务；补偿挂在**片失败的内层**
+    // （测试钩子直抛分支位于 IMPORT_FAILED 包装之前，只挂外层 catch 会被绕过）。
+    let committedShards = 0;
+    let shardIndex = 0;
+    for (const shard of chunkArray(
+      fileEntries,
+      ZIP_AND_CARD_IMPORT_TXN_FILE_CHUNK
+    )) {
+      try {
+        await this.conn.transaction(async (tx) => {
+          const repoTx = new SqliteVfsEntryRepository(tx);
+          const revisionTx = new SqliteVfsRevisionRepository(tx);
+          for (const [logical, content] of shard) {
+            if (this.testHook?.throwOnInsertLogical === logical) {
+              throw new Error("test import failure");
+            }
+            await ensureParentDirectories(repoTx, sk, logical);
+            await insertFileSeedingRevision(
+              repoTx,
+              revisionTx,
+              sk,
+              logical,
+              content
+            );
           }
-          await ensureParentDirectories(repoTx, sk, logical);
-          await insertFileSeedingRevision(
-            repoTx,
-            revisionTx,
-            sk,
-            logical,
-            content
-          );
-        }
-        // 导入事务内补目录规则默认行：前缀下无行目录（含嵌套与目标自身）补
-        // 默认启用，已有行（含 rule_off）不覆盖；helper 自吞错，不阻断导入。
+        });
+        committedShards += 1;
+        shardIndex += 1;
+      } catch (error) {
+        await compensate();
+        throw wrapCardImportError(error, committedShards, shardIndex + 1);
+      }
+      // 让步只落在片与片之间，绝不落在事务回调内部。
+      await yieldToEventLoop();
+    }
+
+    // 段 R（独立短事务）：补目录规则默认行 —— 必须**晚于全部片提交**
+    // （目录全集靠 `listDirectoryPathsUnderPrefix` 在调用时现扫）。
+    try {
+      await this.conn.transaction(async (tx) => {
         await ensureImportDirRules({
-          vfsRepo: repoTx,
+          vfsRepo: new SqliteVfsEntryRepository(tx),
+          // 必须喂**段 R 这条事务**的 tx：在事务回调里用外层 this.conn 会撞
+          // 驱动层 AsyncMutex 不可重入——那是死锁不是报错。
           workplaceRepo: this.testHook?.createWorkplaceRepo
             ? this.testHook.createWorkplaceRepo(tx)
             : new SqliteWorkplaceRepository(tx),
           scope,
           directoryPath,
         });
-        // session scope 导入完成后，给没有 checkpoint 的 message 补 baseline 快照，
-        // 让回滚有正确的基线可对齐，不会因空基线误删导入的文件。
-        if (this.backfillBaseline && scope.kind === "session") {
-          const messageRepo = new SqliteMessageRepository(tx);
-          const checkpointRepo = new SqliteMessageCheckpointRepository(tx);
+      });
+    } catch (error) {
+      console.warn("[character-card] import dir rules failed", error);
+    }
+
+    // 段 C（独立短事务，只装补写语句）：session scope 导入完成后，给没有
+    // checkpoint 的 message 补 baseline 快照，让回滚有正确的基线可对齐。
+    if (this.backfillBaseline && scope.kind === "session") {
+      try {
+        await this.conn.transaction(async (tx) => {
           await backfillBaselineCheckpoints(
-            repoTx,
-            messageRepo,
-            checkpointRepo,
+            new SqliteVfsEntryRepository(tx),
+            new SqliteMessageRepository(tx),
+            new SqliteMessageCheckpointRepository(tx),
             scope.projectId,
             scope.sessionId
           );
-        }
-      });
-    } catch (error) {
-      if (error instanceof Error && error.message === "test import failure") {
-        throw error;
+        });
+      } catch (error) {
+        // best-effort：与紧邻的 clearSessionPromptCaches 同一口径，不包进 IMPORT_FAILED。
+        console.warn(
+          "[character-card] baseline checkpoint backfill failed",
+          error
+        );
       }
-      if (error instanceof CharacterCardError) {
-        throw error;
-      }
-      const message =
-        error instanceof Error ? error.message : "import transaction failed";
-      throw characterCardError("IMPORT_FAILED", message);
     }
 
     // 事务成功提交后再对齐提示词缓存；helper 自吞错（best-effort），不影响导入结果。

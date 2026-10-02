@@ -186,7 +186,6 @@ export type HostToTranscriptMessage =
     >
   | BridgeEnvelope<'streamReset', Record<string, never>>
   | BridgeEnvelope<'streamToolInvoking', {active: boolean}>
-  | BridgeEnvelope<'messagePatch', {messageId: string; patch: unknown}>
   | BridgeEnvelope<'themeUpdate', {theme: TranscriptTheme}>
   | BridgeEnvelope<'flagsUpdate', {flags: TranscriptFlags}>
   | BridgeEnvelope<'closeMenu', Record<string, never>>
@@ -250,10 +249,6 @@ export type TranscriptToHostMessage =
   | BridgeEnvelope<'mermaidViewerClosed', Record<string, never>>
   /** 代码块复制按钮：webview 收集的源码文本，RN 侧原生 Clipboard 落盘。 */
   | BridgeEnvelope<'copyCode', {code: string}>
-  | BridgeEnvelope<
-      'log',
-      {level: string; message: string; fields?: Record<string, unknown>}
-    >
   /** 可见性上报：WebView document visibilitychange；RN 侧据此判定是否需要强制重绘。 */
   | BridgeEnvelope<'visibility', {hidden: boolean}>;
 

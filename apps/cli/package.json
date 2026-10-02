@@ -14,7 +14,8 @@
     "dev": "tsx src/index.ts",
     "start": "node dist/index.js",
     "clean": "node --input-type=module --eval \"import { rmSync } from 'node:fs'; rmSync('dist', { recursive: true, force: true })\"",
-    "test": "tsx --test test/**/*.test.ts"
+    "test": "node scripts/run-tests.mjs",
+    "test:collect-guard": "node scripts/collect-check.mjs"
   },
   "dependencies": {
     "@novel-master/core": "*",

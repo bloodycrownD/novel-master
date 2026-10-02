@@ -224,7 +224,16 @@ export function createS3ObjectStorage(
 
     async putFile(key, filePath, options) {
       const raw = await readLocalFile(filePath);
-      const body = new Uint8Array(raw);
+      // `readFile` 的返回类型本身就是 Uint8Array，`new Uint8Array(raw)` 是
+      // 逐元素复制（不是视图化、不是零拷贝）⇒ 对已经是 Uint8Array 的输入
+      // 白拷一份，峰值 = 1 份 + 1 份（mobile 侧还要再加 base64 的放大）。
+      // 保留 instanceof 兜底是为了容忍注入了返回 ArrayBuffer / 非 TypedArray
+      // 的 FileSystemPort 这类越界实现（类型上多余，但零成本、不改对外行为）。
+      //
+      // 刻意**不**改成 `new Uint8Array(raw.buffer, raw.byteOffset, raw.byteLength)`：
+      // 那会把 Buffer 的底层 ArrayBuffer 交给 SDK，若 SDK 任何一处再做一次
+      // 拷贝就白忙，且共享底层意味着「谁改谁遭殃」。直接透传引用最省。
+      const body = raw instanceof Uint8Array ? raw : new Uint8Array(raw);
       return storage.put(key, body, options);
     },
 

@@ -14,6 +14,9 @@
     ]
   },
   "scripts": {
+    "prepare": "node scripts/link-hooks.mjs",
+    "check:encoding": "node scripts/check-encoding.mjs",
+    "check:ci-gates": "node scripts/check-ci-gates.mjs",
     "build": "npm run build --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",

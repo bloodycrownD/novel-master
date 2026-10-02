@@ -13,7 +13,12 @@ export type RootStackParamList = {
   MainTabs: NavigatorScreenParams<MainTabParamList>;
   AgentsSettings: undefined;
   AgentEditor: {agentId?: string} | undefined;
-  RealPrompt: undefined;
+  /**
+   * 真实提示词预览屏。scope 走路由参数（可选 + 屏内回落全局 scope）：
+   * 只读 `useMobileScope()` 会在「后台通知栈外改 scope」时展示**别的会话**的提示词，
+   * 而页面上没有任何会话名提示、用户无从察觉（AM-3）。
+   */
+  RealPrompt: {projectId?: string; sessionId?: string} | undefined;
   Providers: undefined;
   ProviderCreate: undefined;
   ProviderDetail: {providerId?: string} | undefined;
@@ -48,8 +53,9 @@ export type RootStackParamList = {
       name: string;
       projectId?: string;
     };
-    /** Called after a successful session-scope save (refreshes workspace list). */
-    onSessionVfsSaved?: () => void;
+    // 「session 域保存成功后刷新工作区列表」的回调**不走路由参数**
+    // （不可序列化），由 file-editor-saved-callback 模块级存取。同一份文件里
+    // PromptEditor 的注释即是这条范式的出处。
   };
   /** 会话技能面板：当前项目合并视图 + 启停开关（写项目负清单）。 */
   SkillPanel: {projectId: string};

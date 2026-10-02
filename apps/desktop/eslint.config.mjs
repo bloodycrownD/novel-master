@@ -69,6 +69,11 @@ export default tseslint.config(
     rules: sharedTsRules,
   },
   // X1 gate: ban literal @novel-master/core* in renderer only (main/shared/test remain allowed).
+  //
+  // ⚠️ 本规则只覆盖静态 import/export（no-restricted-imports 不管动态 import() 与 require()
+  // 是 ESLint 核心规则的已知边界）；动态 import() 与 require() 由
+  // test/shared-logic-x1.test.ts 的字样级用例兜住，勿删该测试。
+  // 净拦截能力 = 本规则（窄）+ 结构快照测试（宽）= 合格。
   {
     files: ["renderer/**/*.{ts,tsx}"],
     rules: {

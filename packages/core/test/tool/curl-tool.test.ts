@@ -104,7 +104,6 @@ function makeCtx(
     vfs: extra?.vfs ?? ({} as never),
     projectId: "proj-1",
     sessionId: "sess-1",
-    listSessionMessages: async () => [],
     fetchFn,
     ...(extra?.allowedPaths != null
       ? { allowedPaths: extra.allowedPaths }

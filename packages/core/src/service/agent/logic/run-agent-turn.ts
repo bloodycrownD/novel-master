@@ -49,7 +49,6 @@ import {
   EVENT_AGENT_RUN_FINISHED,
   EVENT_SUBAGENT_CHILD_SESSION_CREATED,
 } from "@/domain/events/model/event-types.js";
-import type { ChatMessage } from "@/domain/chat/model/message.js";
 import type { SendAnnotateDraft } from "@/domain/chat/model/annotate-draft.schema.js";
 import type { MessageAttachment } from "@/domain/chat/model/message-attachment.schema.js";
 import { buildAnnotateAttachmentFromDraft } from "@/domain/chat/logic/build-attachment-action-xml.js";
@@ -860,8 +859,6 @@ async function runAgentTurnWithController(
     vfs,
     projectId: scope.projectId,
     sessionId: scope.sessionId,
-    listSessionMessages: (): Promise<readonly ChatMessage[]> =>
-      runtime.messages.listBySession(scope.sessionId),
     sessionKkv: runtime.sessionKkv,
     // 目录规则默认启用：write / mkdir 新路径时按本会话工作区补默认 workplace_dir_rule 行。
     workplace: runtime.workplace({
@@ -953,7 +950,6 @@ async function runAgentTurnWithController(
     // A-14 path policy：三端共用走 runAgentTurn，这里统一不限制（undefined）；
     // 后续若要按 platform / project 收紧，改成 resolveAllowedPaths(...) 即可。
     allowedPaths: undefined,
-    resourceQuota: undefined,
   };
   const runner = createAgentRunner(
     assembleAgentRunnerDeps({
@@ -1255,8 +1251,6 @@ async function runChildAgent(args: {
       vfs,
       projectId: parentProjectId,
       sessionId: childSessionId,
-      listSessionMessages: (): Promise<readonly ChatMessage[]> =>
-        runtime.messages.listBySession(childSessionId),
       sessionKkv: runtime.sessionKkv,
       // 目录规则默认启用：子 agent 与父共享同一工作区（上面 vfs 同归属根父会话），
       // 补规则也写父工作区的 workplace_dir_rule。
@@ -1348,7 +1342,6 @@ async function runChildAgent(args: {
       },
       // A-14：子 agent 同样不限制路径。
       allowedPaths: undefined,
-      resourceQuota: undefined,
     };
 
     const runner = createAgentRunner(

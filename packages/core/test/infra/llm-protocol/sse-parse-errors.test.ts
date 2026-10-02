@@ -1,4 +1,4 @@
-﻿import assert from "node:assert/strict";
+import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
 import { ProviderError } from "../../../src/errors/provider-errors.js";
 import {

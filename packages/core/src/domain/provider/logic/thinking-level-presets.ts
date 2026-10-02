@@ -17,6 +17,16 @@ const ANTHROPIC_PRESET_BUDGET: Record<Exclude<ThinkingLevel, "off">, number> = {
   high: 16384,
 };
 
+/**
+ * thinking budget 占 `max_tokens` 的上限比例。
+ *
+ * Anthropic 的 `max_tokens` **含 thinking 占用** ⇒ budget 必须是它的一个真子集，
+ * 留 20% 给可见正文。旧形态用 `effectiveMax - 1`：在 max=4096 时三档 preset
+ * （4096/8192/16384）全被钳成 4095 ⇒ 可见正文只剩 1 token 且三档无差别。
+ * 改比例后 max=16000 时三档分别是 4096 / 8192 / 12800。
+ */
+const ANTHROPIC_THINKING_BUDGET_RATIO = 0.8;
+
 /** Gemini 2.5 各档位 thinkingBudget 常数。 */
 const GEMINI_25_PRESET_BUDGET: Record<Exclude<ThinkingLevel, "off">, number> = {
   low: 4096,
@@ -58,7 +68,7 @@ export function thinkingLevelToModelThinkingParams(
       const effectiveMax = resolveEffectiveMaxTokens(sampling, "anthropic");
       const budget = Math.min(
         ANTHROPIC_PRESET_BUDGET[level],
-        Math.max(1, effectiveMax - 1)
+        Math.max(1, Math.floor(effectiveMax * ANTHROPIC_THINKING_BUDGET_RATIO))
       );
       return {
         protocol: "anthropic",

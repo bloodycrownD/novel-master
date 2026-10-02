@@ -41,6 +41,7 @@ import {useRuntime} from '../../hooks/useRuntime';
 import {useNovelMaster} from '../../runtime/novel-master-context';
 import {readChatRichTextEnabled} from '../../storage/chat-rich-text-pref';
 import {resolveChatLinkIntent} from '@/screens/tabs/chat-tab/chat-link-nav';
+import {setFileEditorOnSessionVfsSaved} from '@/components/agent/file-editor-saved-callback';
 import {useInterruptedPartialCommit} from '@/screens/tabs/chat-tab/useInterruptedPartialCommit';
 import {useTheme} from '../../theme/ThemeProvider';
 import type {RootStackParamList} from '../../navigation/types';
@@ -184,6 +185,10 @@ export function SubagentSessionScreen() {
   // 否则 FileEditor 按子 session VFS 查不到文件会报「文件不存在或已删除」。
   const onOpenToolFile = useCallback(
     (path: string) => {
+      // 子会话屏没有工作区列表（state 只有 messages / unitView 等），
+      // 显式写 no-op：保存后的刷新对象是主会话的工作区，由主会话侧重进时补齐。
+      // 刻意不为该屏新建列表 state（那是产品级口径，不在本条范围）。
+      setFileEditorOnSessionVfsSaved(() => {});
       navigation.navigate('FileEditor', {
         path,
         scopeKind: 'session',
@@ -214,6 +219,8 @@ export function SubagentSessionScreen() {
           }
           if (intent.kind === 'file') {
             if (intent.scope === 'session') {
+              // 同 onOpenToolFile：子会话屏无工作区列表，回调写 no-op。
+              setFileEditorOnSessionVfsSaved(() => {});
               navigation.navigate('FileEditor', {
                 path: intent.path,
                 scopeKind: 'session',
