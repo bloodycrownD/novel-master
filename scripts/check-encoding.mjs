@@ -17,7 +17,7 @@
  *     但必须**显式声明**在这里，否则读者会以为门禁覆盖了全仓所有文本。
  *     该目录实测 779 个文件、占扫描面 22%；那里的编码损坏是**记录**而不是**病症**。
  *     其余 `docs/`（如 `docs/apm/`、包级 `packages/xxx/docs/`）**仍在扫描面内**。
- *     ② `apps/mobile/android/app/build.gradle`：GBK 混编，20 处 U+FFFD 且 TextDecoder(fatal)
+ *     ② `apps/mobile/android/app/build.gradle`：曾为 GBK 混编（20 处 U+FFFD，已于 2026-10-02 CR-W5-B 按截断实体真修，现为纯 UTF-8、0 命中；排除项暂保留，移除属扫描面变更留门禁域评估）——原文备档：20 处 U+FFFD 且 TextDecoder(fatal)，20 处 U+FFFD 且 TextDecoder(fatal)
  *     判非合法 UTF-8，RULE:113 已单列为 Wave A 的另一条修复线，本门禁不接管。
  *     ⚠️ 收窄成文件级之前必须实跑确认 android 树下命中真的只有它一个——实测（2026-10-02 复核）：
  *     android 树里后缀命中白名单的文件共 **32** 个，其中 31 个进扫描面（apps/mobile 4 /

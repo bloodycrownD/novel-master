@@ -66,6 +66,13 @@ jobs:
       - name: Encoding
         run: npm run check:encoding
 
+      # CI 门禁形状守卫（OQ20）：校验本文件里每一步的 continue-on-error 状态
+      # 与 scripts/check-ci-gates.mjs 的预期表一致，且没有漏登记的门禁步。
+      # ⚠️ 这道门禁检视的是**本文件自己**，改 ci.yml 的人最容易顺手把某个步的
+      #   continue-on-error 摘掉/加上而没人复核——它守的就是这件事。
+      - name: "CI gates (shape)"
+        run: npm run check:ci-gates
+
       - name: Lint
         continue-on-error: true
         run: npm run lint --workspaces --if-present
@@ -95,6 +102,23 @@ jobs:
 
       - name: Typecheck
         run: npm run typecheck --workspaces --if-present
+
+      # 测试代码的类型门禁（CR-F21 之外的 core2 B-1）。
+      # 背景：`npm run typecheck --workspaces` 走各包 tsconfig.json，其 include 只有
+      # `src/**/*` ⇒ **测试代码此前零类型检查**。而 packages/core/tsconfig.test.json
+      # 继承了 tsconfig.json 的 `rootDir: "./src"`，配上自己的 `include: test/**/*`
+      # 直接产出 454 条 TS6059（每个测试文件一条「not under rootDir」）⇒ 该配置
+      # 此前**根本不可用**，谁也跑不了它。2026-10-02 已把 rootDir 覆盖为 "." 修好配置。
+      # ⚠️ 修好之后暴露出的是真实欠账，不是配置噪音：约 840 条 error / 160 余个文件。
+      #    （评审报告 cr1-core2 B-1 当时写「454 条全是配置错、0 条语义错」，那个结论
+      #    只在 rootDir 报错把语义错全遮住时成立，实际跑出来不是这样——见本波
+      #    CR-W5-A 报告的偏离登记。）所以本步先就位、允许失败，与上面 Lint 步同款。
+      #    处置顺序同 Lint：先把 约 840 条按文件分批清零，再摘掉 continue-on-error。
+      #    清账期间新增的错误不会立刻红 CI，所以**新写的测试代码仍须自觉过一遍**
+      #    `cd packages/core && npx tsc --noEmit -p tsconfig.test.json` 看自己那个文件。
+      - name: "Typecheck (tests: core)"
+        continue-on-error: true
+        run: npx tsc --noEmit -p packages/core/tsconfig.test.json
 
       - name: Test
         run: npm run test --workspaces --if-present
