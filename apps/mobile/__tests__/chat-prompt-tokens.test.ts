@@ -3,9 +3,12 @@ import {
   formatTokenSourceBadge,
 } from '@novel-master/core/common';
 import {
+  __setPreciseUpgradeDelayForTests,
+  cancelPreciseUpgradeDelay,
   isChatTokenPreciseWarmInflight,
   loadChatPromptTokenLabel,
   loadChatPromptTokenLabelResilient,
+  PRECISE_UPGRADE_START_DELAY_MS,
   warmChatTokenLabelAfterCompaction,
 } from '@/services/chat-prompt-tokens.service';
 // jest.mock 拦截后这里拿到的是工厂里的同构类——被测服务的 instanceof 与
@@ -18,7 +21,10 @@ const mockResolvePromptTokensWithBackfill = jest.fn();
 const mockResolveTokenCounterModeForModel = jest.fn();
 const mockBuildSessionPromptInput = jest.fn();
 const mockResolveSavedModelId = jest.fn();
-const mockSerializePromptLlmInput = jest.fn(() => 'serialized');
+// 形参写成 rest（而非零参实现）：mock 工厂里要把 unknown[] 原样转发进来，
+// 零参签名会让 tsc 报 TS2556（spread 必须有 tuple/ rest 目标）——既有的类型
+// 欠账，本轮顺手清掉，免得本文件的 typecheck 信号被这一条常年占着。
+const mockSerializePromptLlmInput = jest.fn((..._args: unknown[]) => 'serialized');
 // 兜底路径（无模型早退 / build 失败）改走 RN 驱动的 cl100k 真分词器，不再走
 // `tokenCounters.heuristic.countText`。本套件整体 mock 掉了 `@novel-master/core/provider`，
 // 驱动的 encoding 子模块要从那里取 core 的计数 helper，因此这里连驱动一起 mock
@@ -126,6 +132,16 @@ describe('chat-prompt-tokens.service', () => {
     mockResolveSavedModelId.mockReset();
     mockSerializePromptLlmInput.mockClear();
     mockCountTextWithDefaultEncoding.mockClear();
+    // 存量两阶段用例在微任务节奏下断言升级轮：置 0 = 立即启动（旧行为）。
+    // 「延迟启动/视图弃权」的专项用例在自己体内还原默认值再调回。
+    __setPreciseUpgradeDelayForTests(0);
+  });
+
+  afterEach(() => {
+    // 兜底还原：新用例若因超时被 jest 强杀，try/finally 不保证执行，
+    // 假计时器残留会让后续所有用例的 setImmediate 等待挂死（连环超时）。
+    jest.useRealTimers();
+    __setPreciseUpgradeDelayForTests(PRECISE_UPGRADE_START_DELAY_MS);
   });
 
   it('T-TL4 对拍：service 输出与 core 单源（badge + label）重算一致（家族精确档）', () => {
@@ -377,6 +393,225 @@ describe('chat-prompt-tokens.service', () => {
     await new Promise(resolve => setImmediate(resolve));
     expect(upgrades).toEqual(['glm = 99.3k / 128k (78%)']);
     expect(mockResolvePromptTokensWithBackfill).toHaveBeenCalledTimes(2);
+  });
+
+  it('升级延迟启动（2026-10-01 侧滑被堵病灶）：首帧后不立刻跑精确计数，越窗才启动', async () => {
+    __setPreciseUpgradeDelayForTests(PRECISE_UPGRADE_START_DELAY_MS);
+    jest.useFakeTimers();
+    try {
+      mockBuildSessionPromptInput.mockResolvedValue({
+        definition: {model: 'zai/glm-4.6'},
+        layout: {persist: [], dynamic: []},
+        ctx: {workplaceDisplay: '', messages: []},
+      });
+      mockResolveSavedModelId.mockReturnValue('zai/glm-4.6');
+      mockResolveTokenCounterModeForModel.mockResolvedValue('glm');
+      mockResolvePromptTokensWithBackfill.mockImplementation(
+        (_sid: string, _raw: unknown, _params: unknown, options?: unknown) => {
+          const preferEstimate = (options as {preferEstimate?: boolean} | undefined)
+            ?.preferEstimate;
+          if (preferEstimate === true) {
+            return Promise.resolve({
+              tokenCount: 30_000,
+              estimated: true,
+              counterKind: 'heuristic',
+              source: 'local',
+            });
+          }
+          return Promise.resolve({
+            tokenCount: 99_300,
+            estimated: false,
+            counterKind: 'glm',
+            source: 'local',
+          });
+        },
+      );
+      const runtime = stubRuntime({contextWindow: 128_000});
+      const upgrades: string[] = [];
+      const first = await loadChatPromptTokenLabelResilient(
+        runtime,
+        {projectId: 'p', sessionId: 's-delay'},
+        label => {
+          upgrades.push(label);
+        },
+      );
+      expect(first).toBe('gpt ≈ 30k / 128k (23%)');
+      // 延迟窗口内：精确档 resolve 一次都没跑（只有首帧估算那一次）——
+      // 「进会话立刻交互」的黄金窗口不与秒级整串计数竞争。
+      await jest.advanceTimersByTimeAsync(2499);
+      expect(mockResolvePromptTokensWithBackfill).toHaveBeenCalledTimes(1);
+      // 越窗启动：完整口径跑完回调升级（fake timers 下微任务由 advance 一并 flush）
+      await jest.advanceTimersByTimeAsync(1);
+      expect(upgrades).toEqual(['glm = 99.3k / 128k (78%)']);
+      expect(mockResolvePromptTokensWithBackfill).toHaveBeenCalledTimes(2);
+    } finally {
+      jest.useRealTimers();
+      __setPreciseUpgradeDelayForTests(0);
+    }
+  });
+
+  it('延迟到期时视图已切走：shouldBailPrecise 命中，升级重活一行不跑', async () => {
+    __setPreciseUpgradeDelayForTests(PRECISE_UPGRADE_START_DELAY_MS);
+    jest.useFakeTimers();
+    try {
+      mockBuildSessionPromptInput.mockResolvedValue({
+        definition: {model: 'zai/glm-4.6'},
+        layout: {persist: [], dynamic: []},
+        ctx: {workplaceDisplay: '', messages: []},
+      });
+      mockResolveSavedModelId.mockReturnValue('zai/glm-4.6');
+      mockResolveTokenCounterModeForModel.mockResolvedValue('glm');
+      mockResolvePromptTokensWithBackfill.mockImplementation(
+        (_sid: string, _raw: unknown, _params: unknown, options?: unknown) => {
+          const preferEstimate = (options as {preferEstimate?: boolean} | undefined)
+            ?.preferEstimate;
+          if (preferEstimate === true) {
+            return Promise.resolve({
+              tokenCount: 30_000,
+              estimated: true,
+              counterKind: 'heuristic',
+              source: 'local',
+            });
+          }
+          return Promise.resolve({
+            tokenCount: 99_300,
+            estimated: false,
+            counterKind: 'glm',
+            source: 'local',
+          });
+        },
+      );
+      // 首帧跑的时候用户还在会话里；升级启动时（越窗后）早已退出——侧滑场景
+      const runtime = stubRuntime({contextWindow: 128_000});
+      const upgrades: string[] = [];
+      let viewOnConversation = true;
+      const first = await loadChatPromptTokenLabelResilient(
+        runtime,
+        {projectId: 'p', sessionId: 's-bail'},
+        label => {
+          upgrades.push(label);
+        },
+        {shouldBailPrecise: () => !viewOnConversation},
+      );
+      expect(first).toBe('gpt ≈ 30k / 128k (23%)');
+      viewOnConversation = false;
+      await jest.advanceTimersByTimeAsync(PRECISE_UPGRADE_START_DELAY_MS);
+      // bail 命中：精确档 resolve 没跑（仍只有首帧估算一次），无升级回调
+      expect(mockResolvePromptTokensWithBackfill).toHaveBeenCalledTimes(1);
+      expect(upgrades).toEqual([]);
+    } finally {
+      jest.useRealTimers();
+      __setPreciseUpgradeDelayForTests(0);
+    }
+  });
+
+  it('延迟窗口内会话身份已换（cr2-E-2）：shouldBailPrecise 在窗口中改判，越窗后升级不发生', async () => {
+    // 与上一条「视图已切走」互为对照：这里**视图仍在 conversation**，唯一变的是
+    // 会话身份（hook 侧 tokenLabelSessionRef 已指到别的会话）。hook 判据升级成
+    // 双条件就是为了覆盖这条——只看视图的话旧会话的 2.2s 计数照跑。
+    __setPreciseUpgradeDelayForTests(PRECISE_UPGRADE_START_DELAY_MS);
+    jest.useFakeTimers();
+    try {
+      mockBuildSessionPromptInput.mockResolvedValue({
+        definition: {model: 'zai/glm-4.6'},
+        layout: {persist: [], dynamic: []},
+        ctx: {workplaceDisplay: '', messages: []},
+      });
+      mockResolveSavedModelId.mockReturnValue('zai/glm-4.6');
+      mockResolveTokenCounterModeForModel.mockResolvedValue('glm');
+      mockResolvePromptTokensWithBackfill.mockImplementation(
+        (_sid: string, _raw: unknown, _params: unknown, options?: unknown) => {
+          const preferEstimate = (options as {preferEstimate?: boolean} | undefined)
+            ?.preferEstimate;
+          if (preferEstimate === true) {
+            return Promise.resolve({
+              tokenCount: 30_000,
+              estimated: true,
+              counterKind: 'heuristic',
+              source: 'local',
+            });
+          }
+          return Promise.resolve({
+            tokenCount: 99_300,
+            estimated: false,
+            counterKind: 'glm',
+            source: 'local',
+          });
+        },
+      );
+      const runtime = stubRuntime({contextWindow: 128_000});
+      const upgrades: string[] = [];
+      const inConversation = true;
+      let shownSessionId = 's-identity';
+      const first = await loadChatPromptTokenLabelResilient(
+        runtime,
+        {projectId: 'p', sessionId: 's-identity'},
+        label => {
+          upgrades.push(label);
+        },
+        // hook 侧 `chatSubviewRef.current !== 'conversation' ||
+        //            tokenLabelSessionRef.current !== sessionId` 的等价物
+        {shouldBailPrecise: () => !inConversation || shownSessionId !== 's-identity'},
+      );
+      expect(first).toBe('gpt ≈ 30k / 128k (23%)');
+      // 首帧窗口内用户切到了别的会话（视图没切，仍在 conversation）
+      shownSessionId = 's-other';
+      await jest.advanceTimersByTimeAsync(PRECISE_UPGRADE_START_DELAY_MS);
+      expect(mockResolvePromptTokensWithBackfill).toHaveBeenCalledTimes(1);
+      expect(upgrades).toEqual([]);
+    } finally {
+      jest.useRealTimers();
+      __setPreciseUpgradeDelayForTests(0);
+    }
+  });
+
+  it('cancel 收口回归（cr2-E-2 硬约束）：取消挂起的延迟升级后，同会话下一轮刷新仍真升级', async () => {
+    // 收口语义的牙齿：只清 timer 不清 inflight/queued 的朴素实现，会让该会话
+    // 的精确升级**永久楔死在估算档**——timer 被清 ⇒ runPreciseUpgrade 永不
+    // 执行 ⇒ finally（inflight/queued 的唯一清理点）永不跑 ⇒ 后续升级请求
+    // 全被挡进补跑槽、无人排空。本用例的末条断言在那种实现下必红。
+    __setPreciseUpgradeDelayForTests(PRECISE_UPGRADE_START_DELAY_MS);
+    jest.useFakeTimers();
+    try {
+      mockTwoPhaseResolve(() =>
+        Promise.resolve({
+          tokenCount: 99_300,
+          estimated: false,
+          counterKind: 'glm',
+          source: 'local',
+        }),
+      );
+      const runtime = stubRuntime({contextWindow: 128_000});
+      const upgrades: string[] = [];
+      const first = await loadChatPromptTokenLabelResilient(
+        runtime,
+        {projectId: 'p', sessionId: 's-cancel'},
+        l => upgrades.push(l),
+      );
+      expect(first).toBe('gpt ≈ 30k / 128k (23%)');
+      // 延迟窗口内：升级还挂着（只有首帧那一次 resolve）。
+      await jest.advanceTimersByTimeAsync(1000);
+      expect(mockResolvePromptTokensWithBackfill).toHaveBeenCalledTimes(1);
+
+      // 收口（换会话 / 卸载时 service 的正式出口）。
+      cancelPreciseUpgradeDelay('s-cancel');
+
+      // 同会话再次刷新并越窗：第二轮升级确实发生——计数从 2 次（两次首帧）
+      // 走到 3 次（+ 一轮精确），回调拿到精确标签。
+      const second = await loadChatPromptTokenLabelResilient(
+        runtime,
+        {projectId: 'p', sessionId: 's-cancel'},
+        l => upgrades.push(l),
+      );
+      expect(second).toBe('gpt ≈ 30k / 128k (23%)');
+      expect(mockResolvePromptTokensWithBackfill).toHaveBeenCalledTimes(2);
+      await jest.advanceTimersByTimeAsync(PRECISE_UPGRADE_START_DELAY_MS);
+      expect(upgrades).toEqual(['glm = 99.3k / 128k (78%)']);
+      expect(mockResolvePromptTokensWithBackfill).toHaveBeenCalledTimes(3);
+    } finally {
+      jest.useRealTimers();
+      __setPreciseUpgradeDelayForTests(0);
+    }
   });
 
   it('run 在途抑制：abortRegistry.has 为真时跳过精确升级，run 结束后的刷新补上（2026-09-30 停止失灵病灶）', async () => {
