@@ -1,12 +1,17 @@
 /**
  * WebView 本地资产 URI（Android android_asset / iOS MainBundle WebViewDist）。
  * 同步返回；不做磁盘 exists 探测。禁止引入 react-native-fs。
+ *
+ * ⚠️ 本联合类型是 `scripts/build-webview.mjs` 里 PACKAGES 的**类型镜像**：
+ * 增删包必须两处同步（build-webview.mjs 是真源，本文件是消费侧）。
+ * 漏改的代价是不对称的——类型侧多一个成员只会放行一个指向永不存在目录的
+ * URI（运行时白屏），故 `__tests__/webview-asset-guard.test.ts` 有双向断言
+ * 把「六处齐改」钉成断言（chat-webview-unify cr2-C-1）。
  */
 import {Platform} from 'react-native';
 import ReactNativeBlobUtil from 'react-native-blob-util';
 
 export type WebViewAssetPackageId =
-  | 'chat-transcript'
   | 'rich-document'
   | 'code-editor'
   | 'composer-input'

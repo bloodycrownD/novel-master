@@ -12,7 +12,14 @@
  *   npm run build:webview:native
  */
 import * as esbuild from 'esbuild';
-import {cpSync, mkdirSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
+import {
+  cpSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import {createRequire} from 'node:module';
 import {dirname, join, relative} from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -25,16 +32,8 @@ const webRoot = join(mobileRoot, 'src', 'web');
 const distRoot = join(mobileRoot, 'webview-dist');
 const copyNative = process.argv.includes('--copy-native');
 
-/** @type {{ id: string, entryRel: string, cssRel: string, htmlRel: string, richCssKey?: 'CHAT_TRANSCRIPT_RICH_CSS' | 'RICH_DOCUMENT_RICH_CSS', mermaidFullscreenCss?: boolean }[]} */
+/** @type {{ id: string, entryRel: string, cssRel: string | string[], htmlRel: string, richCssKey?: 'CHAT_TRANSCRIPT_RICH_CSS' | 'RICH_DOCUMENT_RICH_CSS', mermaidFullscreenCss?: boolean }[]} */
 const PACKAGES = [
-  {
-    id: 'chat-transcript',
-    entryRel: 'chat-transcript/webview/main.ts',
-    cssRel: 'chat-transcript/styles/transcript.css',
-    htmlRel: 'chat-transcript/index.html',
-    richCssKey: 'CHAT_TRANSCRIPT_RICH_CSS',
-    mermaidFullscreenCss: true,
-  },
   {
     id: 'rich-document',
     entryRel: 'rich-document/webview/main.ts',
@@ -56,17 +55,27 @@ const PACKAGES = [
     htmlRel: 'composer-input/index.html',
   },
   {
-    // chat-conversation（chat-webview-unify Step 2）：转录 + 输入框 dock 合成包。
-    // cssRel 保持单值——自持一份 chat-conversation.css（transcript 基底 + dock 移植段），
-    // 不做数组 join（spec §CSS 定案：两份 CSS 各自演化的漂移风险已记入风险表）。
+    // chat-conversation（chat-webview-unify Step 2 / transcript-converge 收官）：
+    // 转录 + 输入框 dock + 会话列表合成包，唯一宿主文档。cssRel 数组 =
+    // 构建期 join：transcript.css（转录基底，源自已退役的旧文档包、现作纯
+    // 样式库保留）在前，chat-conversation.css（增量：dock/列表/转场/变体）
+    // 在后——层叠序与「基底手抄在前」的旧形态一致。推翻 Step 2 的
+    // 「不做数组 join」决策（transcript-converge ②：根治 11KB 基底手抄的
+    // 漂移风险，selector 覆盖断言由 chat-conversation-boot-script.test 兜）。
     id: 'chat-conversation',
     entryRel: 'chat-conversation/webview/main.ts',
-    cssRel: 'chat-conversation/styles/chat-conversation.css',
+    cssRel: [
+      'chat-transcript/styles/transcript.css',
+      'chat-conversation/styles/chat-conversation.css',
+    ],
     htmlRel: 'chat-conversation/index.html',
     richCssKey: 'CHAT_TRANSCRIPT_RICH_CSS',
     mermaidFullscreenCss: true,
   },
 ];
+
+/** 存活包 id 清单（pruneDist 的 keep 口径；与 PACKAGES 同源，勿另抄）。 */
+const PACKAGE_IDS = PACKAGES.map(p => p.id);
 
 function readWeb(rel) {
   return readFileSync(join(webRoot, rel), 'utf8');
@@ -145,7 +154,39 @@ function replaceCopyDir(src, dest) {
   cpSync(src, dest, {recursive: true});
 }
 
+/**
+ * 退役包产物清理（cr2-K-2）：删掉根目录下所有「不在 keepIds 里的目录」。
+ *
+ * 为什么必须清：包从 PACKAGES 退役后，旧工作区里已构建的
+ * `webview-dist/{retired}/` 与两端原生落点的同名目录不会被覆盖、也不会被覆盖
+ * 地删掉——Android assets 与 iOS `cp -R "$SRC/"` 整目录递归都会把它们原样
+ * 打进 APK/IPA。读侧「URL 拼不出来」只能挡住调用方，挡不住产物面。
+ *
+ * 口径：只删目录；`.gitkeep` 之类文件不动；根目录不存在直接返回（首次构建）。
+ *
+ * @param {string} rootDir
+ * @param {string[]} keepIds 存活包 id（通常即 PACKAGES.map(p => p.id)）
+ */
+function pruneDist(rootDir, keepIds) {
+  let entries;
+  try {
+    entries = readdirSync(rootDir, {withFileTypes: true});
+  } catch {
+    return; // 根目录还没建：无需清理
+  }
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    if (keepIds.includes(entry.name)) continue;
+    const stale = join(rootDir, entry.name);
+    rmSync(stale, {recursive: true, force: true});
+    console.log(`已清理退役包产物 ${relative(mobileRoot, stale).replace(/\\/g, '/')}`);
+  }
+}
+
 function copyDistToNativeSinks() {
+  // 两端原生落点根目录同样可能有退役包残留（iOS `cp -R` 整目录递归，会原样进包）
+  pruneDist(join(mobileRoot, 'android/app/src/main/assets/webview'), PACKAGE_IDS);
+  pruneDist(join(mobileRoot, 'ios/NovelMaster/WebViewDist'), PACKAGE_IDS);
   for (const pkg of PACKAGES) {
     const src = join(distRoot, pkg.id);
     const androidDest = join(
@@ -172,7 +213,9 @@ function copyDistToNativeSinks() {
  */
 async function buildPackage(pkg, richStyles, mermaidFullscreenCss) {
   const entryAbs = join(webRoot, pkg.entryRel);
-  let css = readWeb(pkg.cssRel);
+  // cssRel 数组 = 构建期 join（顺序即层叠序，见 PACKAGES 注释）；单值保持原样。
+  const cssSources = Array.isArray(pkg.cssRel) ? pkg.cssRel : [pkg.cssRel];
+  let css = cssSources.map(rel => readWeb(rel)).join('\n');
   if (pkg.richCssKey) {
     const richCss = richStyles[pkg.richCssKey];
     if (typeof richCss !== 'string' || !richCss) {
@@ -225,6 +268,8 @@ async function main() {
     throw new Error('缺少 mermaid 全屏 CSS：MERMAID_FULLSCREEN_CSS');
   }
   mkdirSync(distRoot, {recursive: true});
+  // 退役包产物清理：先剪枝再构建，避免旧工作区残留混进 distRoot（cr2-K-2）
+  pruneDist(distRoot, PACKAGE_IDS);
   for (const pkg of PACKAGES) {
     await buildPackage(pkg, richStyles, mermaidFullscreenCss);
   }

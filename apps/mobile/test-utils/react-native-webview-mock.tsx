@@ -9,7 +9,7 @@
  * 「恰好只挂一台」来定位——CR 在 chat-webview-unify 里点名的混流问题就是这个。
  *
  * 现在每个 mock 实例自带一条 `posts` 缓冲，并按**域**（从 `source.uri` 解析出的
- * 包名：`chat-conversation` / `chat-transcript` / `composer-input` /
+ * 包名：`chat-conversation` / `composer-input` /
  * `rich-document` / `code-editor`，无 uri 的内联 html 记作 `inline`）分组暴露：
  * - `getMockWebViewInstances(domain?)` / `getMockWebViewPosts(domain?)` 取实例或消息；
  * - `findMockWebViewByDomain(root, domain)` 在测试树里定位某个域的那台实例
