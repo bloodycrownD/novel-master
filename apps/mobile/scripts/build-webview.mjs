@@ -141,14 +141,34 @@ const WEBVIEW_CORE_ALLOWLIST = {
  * `vfs-tools.js` 的 `{oldString, newString, replaceAll: input.replaceAll}`），
  * 没有一处是 `String.prototype.replaceAll` 调用。按子串计数的话，上游改个字段名
  * 棘轮就红。
+ *
+ * ⚠️ **定位声明（CR-F16）**：门 C 只对「我方源码原样进产物」有效。产物是 esbuild
+ * target=es2018 的降级输出 + 上游第三方库（mermaid / zod / Recogito / CodeMirror），
+ * 第三方库的降级/压缩形态数不到——它不承诺覆盖产物里的每一个受限构造。
+ * 计算属性形态（`Object['fromEntries']`）也不进产物面：产物里极少出现，真出现了说明有人
+ * 在手写绕过；这类形态由门 A 在**源码面**兜住（apps/mobile/eslint.config.mjs）。
+ *
+ * ⚠️ 分隔符形态为什么要容忍（CR-F16）：紧贴正则只认 `Object.fromEntries(`。实测「点号后插
+ * 一段块注释再跟左括号」与「点号后换行」这两种换形全部漏检，而「注释 + 换行」恰是压缩/降级
+ * 输出的常态。5 条正则统一用 SEP 拼接（空白 + 注释都算分隔符）；
+ * `Array.at` 保持原样（它的正则是「标识符链 + 点号 + at(」，放宽会误伤同名标识符）。
+ *
+ * ⚠️⚠️ SEP 里的**块注释分支必须带上界**（CR-F16 补，前一版写 `[^]*?` 是真的坑）：
+ * `String.replaceAll` 那条以字面 `.` 起头，等于「文件里每个点号都是起点」；再叠一个无界的
+ * 惰性块注释 `[^]*?`，在 minify:false 的 8.8 MiB 未压缩产物上会病态回溯——实测单这一个构造
+ * 在 webview-dist/chat-transcript/app.js 上跑 **>45 s 仍未结束**，把 `node scripts/build-webview.mjs`
+ * 整条构建卡死在门 C（构建日志停在 chat-transcript 的三行「已生成」，后面三个包一个都没出）。
+ * 有界化（`[^]{0,512}?`）后同一文件同一构造 **9 ms**、命中数 37 不变。
+ * 行注释分支实测无此问题（8 ms），保持无界——真实代码里的行注释天然被换行截断，扫不远。
  */
+const SEP = '(?:\\s|/\\*[^]{0,512}?\\*/|//[^\\n]*\\n)*';
 const WEBVIEW_COMPAT_CONSTRUCTS = {
-  'Object.fromEntries': /Object\.fromEntries\(/g,
-  'String.replaceAll': /\.replaceAll\(/g,
+  'Object.fromEntries': new RegExp(`Object${SEP}\\.${SEP}fromEntries${SEP}\\(`, 'g'),
+  'String.replaceAll': new RegExp(`\\.${SEP}replaceAll${SEP}\\(`, 'g'),
   // 负向断言是必须的：`Object.hasOwnProperty` 是 ES5 全兼容的合法写法（CodeMirror 的
   // jsonParse 就在用），裸子串 `Object.hasOwn` 会把它误伤。
-  'Object.hasOwn': /Object\.hasOwn(?!Property)\(/g,
-  'structuredClone': /\bstructuredClone\(/g,
+  'Object.hasOwn': new RegExp(`Object${SEP}\\.${SEP}hasOwn(?!Property)${SEP}\\(`, 'g'),
+  'structuredClone': new RegExp(`\\bstructuredClone${SEP}\\(`, 'g'),
   'Array.at': /(?<![\w$])[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*\.at\(/g,
 };
 
