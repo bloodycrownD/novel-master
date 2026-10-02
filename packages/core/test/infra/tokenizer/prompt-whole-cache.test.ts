@@ -221,7 +221,7 @@ describe("prompt-whole-cache（L1 整串缓存）", () => {
       "token_chunks",
       "promptWholeCache",
       JSON.stringify({
-        v: 1,
+        v: 2,
         items: [["0123456789abcdef", SCOPE, 10, "glm", true]],
       })
     );
@@ -300,7 +300,7 @@ describe("prompt-whole-cache L1 种子节流（r3-cache-2）", () => {
       sessionId,
       SESSION_KKV_DOMAIN_TOKEN_CHUNKS,
       PROMPT_WHOLE_CACHE_KEY,
-      JSON.stringify({ v: 1, items })
+      JSON.stringify({ v: 2, items })
     );
   }
 
@@ -346,7 +346,7 @@ describe("prompt-whole-cache L1 种子节流（r3-cache-2）", () => {
       WHOLE_ROW_SESSION,
       SESSION_KKV_DOMAIN_TOKEN_CHUNKS,
       TOKEN_CHUNKS_CACHE_KEY,
-      JSON.stringify({ v: 1, items: [] })
+      JSON.stringify({ v: 2, items: [] })
     );
     assert.equal(
       await probe.kkv.get(
@@ -354,7 +354,7 @@ describe("prompt-whole-cache L1 种子节流（r3-cache-2）", () => {
         SESSION_KKV_DOMAIN_TOKEN_CHUNKS,
         TOKEN_CHUNKS_CACHE_KEY
       ),
-      JSON.stringify({ v: 1, items: [] })
+      JSON.stringify({ v: 2, items: [] })
     );
     assert.equal(probe.gets(), 0, "L2 键的读不计入 L1 计数（按 key 过滤）");
 

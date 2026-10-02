@@ -1,9 +1,10 @@
 /**
  * L2 块 token 平面缓存（message-token-cache 第二层，进程内跨会话单例）。
  *
- * 条目 `块hash16 × 计数器身份 → 块 token 数`：块文本经 `hashContent` 取前
- * 16 hex 作内容寻址键段（缓存层新增截断，非 hashContent 自带）；计数器身
- * 份（scope）由 {@link buildCounterScope} 从 vendorModelId / override /
+ * 条目 `块hash16 × 计数器身份 → 块 token 数`：块文本经双 FNV-1a 轻量哈希
+ * （{@link chunkHash16}，16 hex 内容寻址键段——2026-10-03 前为 sha256 截断，
+ * Hermes 每块固定开销过大而更换，键域随 KKV payload v2 一次性切换）；计数器
+ * 身份（scope）由 {@link buildCounterScope} 从 vendorModelId / override /
  * family / driver 拼成——同文本不同词表计数不同，换模型/换端自动 miss。
  * 跨会话共享是刻意的：实测全库唯一块中 34.7% 重复，不同会话复用同一份
  * 块计数。
@@ -43,19 +44,22 @@ import {
   SESSION_KKV_DOMAIN_TOKEN_CHUNKS,
   TOKEN_CHUNKS_CACHE_KEY,
 } from "@/domain/session-kkv/model/session-kkv-domains.js";
-import { hashContent } from "@/domain/vfs/content-store/logic/hash-content.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
 import type { TokenizerFamily } from "../ports/token-counter.port.js";
 import type { TokenizerOverride } from "./resolve-tokenizer-family.js";
 
-/** 块 hash 键段长度：hashContent（完整 64-hex sha256）截取前 16 hex。 */
+/** 块 hash 键段长度（16 hex = 64 bit；形态契约，见 {@link chunkHash16}）。 */
 const CHUNK_HASH_HEX_LENGTH = 16;
 
 /** 三代总量条数上限（≈10MB 上限：100K × (16 hex 键 + number)）。 */
 export const CHUNK_CACHE_MAX_TOTAL_ENTRIES = 100_000;
 
-/** 持久化 JSON 版本号（`v` 不符的旧行整体按 miss 丢弃，无迁移）。 */
-const TOKEN_CHUNKS_PAYLOAD_VERSION = 1;
+/**
+ * 持久化 JSON 版本号（`v` 不符的旧行整体按 miss 丢弃，无迁移）。
+ * v2 = 轻量哈希键（token-count-perf-r2）：v1 的 sha256 截断键与 FNV 键值域
+ * 不同，bump 让旧设备上的 v1 行一次性干净丢弃（不进三代环形占死槽）。
+ */
+const TOKEN_CHUNKS_PAYLOAD_VERSION = 2;
 
 /**
  * 计数器身份入参：决定「同一份块文本用哪套词表计数」的全部维度。
@@ -86,14 +90,46 @@ export function buildCounterScope(input: CounterScopeInput): string {
 }
 
 /**
- * 块内容寻址键段：`hashContent(块文本)`（sha256 完整 64-hex）取前 16 hex。
+ * 轻量块哈希（token-count-perf-r2）：双 32 位 FNV-1a 拼接 16 hex 小写。
+ *
+ * 为什么弃用 hashContent（noble sha256）：块级缓存每块一次哈希，真机 Hermes
+ * 无 JIT 下 6,798 块的**全命中**轮实测 4,034ms——计数工作量为零，时间全是
+ * sha256 的每块固定开销（TextEncoder 转字节 + 64 轮压缩 + hex）。FNV-1a 是
+ * 纯 Uint32 乘加（Math.imul 原生路径），零转码零堆分配零 BigInt。碰撞质量：
+ * 前向 + 反向两遍独立 FNV-1a（不同 offset）拼 64 bit，对短中文句的分布与
+ * 碰撞抽样由 T-H1/T-H2 护栏锁定；碰撞后果与旧 sha256 截断同款——读错一个
+ * 块的计数（误差个位数 token），属既有可接受风险。
+ *
+ * ⚠ 输出形态是 public 契约：恒 16 位小写 hex——L1/L2 键拼接、KKV payload
+ * 两处解析校验、splitEntryKey 定长切片都硬依赖。换哈希实现必须保持该形态；
+ * 键值域变化须 bump TOKEN_CHUNKS_PAYLOAD_VERSION / PERSIST_PAYLOAD_VERSION。
+ */
+const FNV_OFFSET_A = 0x811c9dc5;
+const FNV_OFFSET_B = 0x9dc5811c;
+const FNV_PRIME = 0x01000193;
+
+function fastHash16(text: string): string {
+  let h1 = FNV_OFFSET_A;
+  for (let i = 0; i < text.length; i++) {
+    h1 = Math.imul(h1 ^ text.charCodeAt(i), FNV_PRIME) >>> 0;
+  }
+  let h2 = FNV_OFFSET_B;
+  for (let i = text.length - 1; i >= 0; i--) {
+    h2 = Math.imul(h2 ^ text.charCodeAt(i), FNV_PRIME) >>> 0;
+  }
+  return h1.toString(16).padStart(8, "0") + h2.toString(16).padStart(8, "0");
+}
+
+/**
+ * 块内容寻址键段：双 FNV-1a 输出 16 hex（实现与碰撞论证见 {@link fastHash16}）。
  *
  * 16 hex = 64 bit：100K 量级条目下碰撞概率可忽略（生日界 ~2^32 条才显著），
  * 且即便碰撞也只是读错一个块的计数（误差个位数 token），属可接受的缓存
- * 风险。
+ * 风险。L1 整串键与 L2 块键共用本函数——整串（百 KB 级）单次哈希的收益
+ * 与块级（数千次小哈希）同源。
  */
 export function chunkHash16(chunk: string): string {
-  return hashContent(chunk).slice(0, CHUNK_HASH_HEX_LENGTH);
+  return fastHash16(chunk);
 }
 
 /** 完整条目键：`l2:${hash16}:${scope}`（hash16 恒 16 字符，可无损拆回）。 */
