@@ -30,6 +30,7 @@ jest.mock('../src/services/chat-prompt-tokens.service', () => ({
   // cr2-E-2 新导出：useChatTabScope 换会话/卸载时会调；手写 mock 缺它会让
   // 整条 meta 加载链炸在 "is not a function"（2026-10-02 全量门实锤）。
   cancelPreciseUpgradeDelay: jest.fn(),
+  cancelPreciseUpgrade: jest.fn(),
 }));
 
 const loadChatAgentMetaMock = loadChatAgentMeta as jest.Mock;

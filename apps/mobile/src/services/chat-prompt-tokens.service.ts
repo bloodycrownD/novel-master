@@ -25,6 +25,12 @@ import {
   serializePromptLlmInput,
 } from '@novel-master/core/provider';
 import {countTextWithDefaultEncoding} from '@novel-master/tokenizer-driver-rn/encoding';
+// 取消链路（tokenizer-native-cancel）：从桥的**子路径**导入（r3-P1-1）——包根
+// 会把整个驱动 + js-tiktoken 拖进模块图，炸掉本套件的 core/provider 符号 mock。
+import {
+  cancelSessionNativeCounts,
+  PromptCountCancelledError,
+} from '@novel-master/tokenizer-driver-rn/android-native-bridge';
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
 // badge/label 走 common 入口取真身实现（token-source-label 单源；本套件的
 // jest 会整体 mock `@novel-master/core/provider`，经 common 直取可让 T-TL4
@@ -102,6 +108,23 @@ function isChipBailError(error: unknown): boolean {
     error instanceof ChatPromptBuildBailedError ||
     error instanceof PromptTokenResolveBailedError
   );
+}
+
+/**
+ * 取消判定（tokenizer-native-cancel）：原生计数被 {@link cancelPreciseUpgrade}
+ * 撤掉时，桥层把 cancel reject 翻译成 `PromptCountCancelledError` 上抛。
+ *
+ * 收口口径与 bail **同款**（返回空串哨兵、无 warn），但语义不同：bail 是「用户
+ * 已切走，这轮没人要」，取消是「这轮被主动作废」。两者都必须由 resolve 段的
+ * catch 收口——漏出去的话 `runPreciseUpgrade` 的 catch 会打
+ * `[chat] prompt token precise upgrade failed` 留痕（取消不是失败），空串哨兵
+ * 同样让 hook 侧不写 meta。
+ *
+ * 只认 resolve 段：取消异常只可能从 resolve 链抛出（build 段不经过原生计数），
+ * 故 build 段的 catch 一行不动。
+ */
+function isChipCancelError(error: unknown): boolean {
+  return error instanceof PromptCountCancelledError;
 }
 
 /**
@@ -206,6 +229,15 @@ async function loadChatTokenLabelWithFlag(
       },
     );
   } catch (error) {
+    if (isChipCancelError(error)) {
+      // 取消收口（tokenizer-native-cancel）：在途原生计数被 cancelPreciseUpgrade
+      // 撤掉。与 bail 同款收成空串哨兵——不重试、不回落 fallback（重算一遍等于
+      // 取消白做），也不打 warn（取消不是失败）。
+      if (__DEV__) {
+        console.log('[nm-chip] cancelled during resolve');
+      }
+      return {label: '', upgradeWorthy: false};
+    }
     if (isChipBailError(error)) {
       if (__DEV__) {
         console.log('[nm-chip] bailed during resolve (run in flight)');
@@ -283,6 +315,36 @@ export function cancelPreciseUpgradeDelay(
   preciseUpgradeDelayTimers.delete(sessionId);
   preciseUpgradeInflight.delete(sessionId);
   preciseUpgradeQueued.delete(sessionId);
+}
+
+/**
+ * 收口某会话**在途**的原生精确计数（换会话 / hook 卸载时与
+ * {@link cancelPreciseUpgradeDelay} 并调，tokenizer-native-cancel）。
+ *
+ * 与 delay 收口的分工：delay 收口的是「还没起跑的延迟窗口」，本函数收口的是
+ * 「已经过了桥、正在 Kotlin 队列里跑的整串计数」——那一轮秒级，R8 实锤侧滑退出
+ * 会被它堵住。两者触发条件逐条等价，所以 hook 两处都并调。
+ *
+ * ⚠ 与 cr2-E-2 同族的另一条硬约束：本函数**只发指令、不碰生命周期**。在途轮的
+ * inflight/补跑槽仍由 `runPreciseUpgrade` 的 finally 唯一清理——外部代摘会踩掉
+ * 那轮自己的 finally，会话楔死估算档比不取消更糟。取消后该轮会带着
+ * `PromptCountCancelledError` 收场（resolve 段 catch 收成空串哨兵），finally
+ * 照常跑，补跑槽照常排空。
+ *
+ * 无在途轮 / 无会话 id / 原生未提供 cancelCount 时均为 no-op（桥内处理）。
+ */
+export function cancelPreciseUpgrade(
+  sessionId: string | null | undefined,
+): void {
+  if (sessionId == null) {
+    return;
+  }
+  if (__DEV__) {
+    // R8 送达延迟观测的第一时间戳：cancel dispatch 与 native reject 落定之间
+    // 的间距，就是取消链路的送达延迟（logcat 过滤 [nm-chip]）。
+    console.log('[nm-chip] cancel dispatch ' + sessionId);
+  }
+  cancelSessionNativeCounts(sessionId);
 }
 
 /** 一次后台精确升级请求：轮次起步时所需的全部上下文。 */

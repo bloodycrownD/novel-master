@@ -23,6 +23,7 @@ import {
   type ChatAgentMeta,
 } from '@/services/chat-agent-meta';
 import {
+  cancelPreciseUpgrade,
   cancelPreciseUpgradeDelay,
   isChatTokenPreciseWarmInflight,
   loadChatPromptTokenLabelResilient,
@@ -282,6 +283,10 @@ export function useChatTabScope({
       // ——写在赋值之后读到的是新会话，cancel 会打偏。
       const stale = slot.sessionId;
       cancelPreciseUpgradeDelay(stale);
+      // 在途原生计数一并撤掉（tokenizer-native-cancel）：延迟收口只管得到
+      // 「还没过桥」的那些，已起跑的那轮是秒级重活，正是堵返回键的元凶。
+      // 同用 stale——身份必须取自 slot.key 赋值之前。
+      cancelPreciseUpgrade(stale);
       if (slot.timer != null) {
         clearTimeout(slot.timer);
         slot.timer = null;
@@ -359,6 +364,9 @@ export function useChatTabScope({
         slot.timer = null;
       }
       cancelPreciseUpgradeDelay(slot.sessionId);
+      // 在途原生计数一并撤掉（tokenizer-native-cancel）：组件已死，没人消费
+      // 升级标签，已过桥的那轮秒级重活纯浪费。
+      cancelPreciseUpgrade(slot.sessionId);
     },
     [],
   );
