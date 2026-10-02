@@ -76,6 +76,8 @@ interface TurnGroup {
   readonly kind: PromptPreviewTurn["kind"];
   /** 来源 ChatMessage id（user 组用于判断是否同一条消息的多段）。 */
   readonly messageId: string | undefined;
+  /** 来源 ChatMessage seq：message 段入组时取首段的 seq，template 轮无此值。 */
+  readonly seq?: number;
   readonly items: PromptPreviewSegment[];
 }
 
@@ -103,9 +105,10 @@ export async function buildPromptPreviewTurnsFromLayout(
 
   const pushGroup = (
     kind: TurnGroup["kind"],
-    messageId: string | undefined = undefined
+    messageId: string | undefined = undefined,
+    seq: number | undefined = undefined
   ): TurnGroup => {
-    const group: TurnGroup = { kind, messageId, items: [] };
+    const group: TurnGroup = { kind, messageId, seq, items: [] };
     groups.push(group);
     return group;
   };
@@ -114,6 +117,8 @@ export async function buildPromptPreviewTurnsFromLayout(
     const item = toPreviewSegment(segment);
     if (segment.source !== "message") {
       groups.push({ kind: "template", messageId: undefined, items: [item] });
+      // 模板段自成一轮，不并入前后 chat 轮：复位 current，断掉「模板段只出现在 chat 前后」的隐式假设。
+      current = null;
       continue;
     }
     const isUserInput =
@@ -126,26 +131,27 @@ export async function buildPromptPreviewTurnsFromLayout(
         current.kind === "user" &&
         current.messageId === segment.messageId
           ? current
-          : pushGroup("user", segment.messageId);
+          : pushGroup("user", segment.messageId, segment.seq);
     } else {
       // 会话开头无 user 前缀时，assistant 段自成首个 assistant 轮。
       target =
         current !== null && current.kind === "assistant"
           ? current
-          : pushGroup("assistant");
+          : pushGroup("assistant", undefined, segment.seq);
     }
     current = target;
     target.items.push(item);
   }
 
   return groups.map((group) => ({
-    id: group.items[0]?.id ?? "",
+    // message 轮用 `turn-${seq}`（跨段稳定、与段 id 解耦）；template 轮无 seq，沿用段 id。
+    id: group.seq != null ? `turn-${group.seq}` : group.items[0]!.id,
     kind: group.kind,
     items: group.items,
     summary:
       group.kind === "assistant"
         ? buildAssistantTurnSummary(group.items)
-        : group.items[0]?.title ?? "",
+        : group.items[0]!.title,
     body: joinTurnBody(group.items),
   }));
 }

@@ -121,6 +121,26 @@ describe("T-R1 切轮正确性", () => {
       segments.filter((s) => s.source !== "message").every((s) => s.messageId === undefined)
     );
   });
+
+  it("段上的 seq 真参与轮 id：message 轮 id 为 turn-${seq}，template 轮不含", async () => {
+    const turns = await buildPromptPreviewTurnsFromLayout(layout, ctxOf(messages));
+    // m1(user) / m2(assistant 首段起算) / m5(user) / m6(assistant)
+    assert.deepEqual(
+      turns.filter((turn) => turn.kind !== "template").map((turn) => turn.id),
+      ["turn-1", "turn-2", "turn-5", "turn-6"]
+    );
+    // template 轮保留段 id 拼法，不带 turn- 前缀
+    assert.deepEqual(
+      turns.filter((turn) => turn.kind === "template").map((turn) => turn.id),
+      ["system", "prompt-workplace", "prompt-workplace-done", "persist-persona"]
+    );
+    // assistant 轮内跨了 m2/m3/m4，id 只取首段 seq，轮内段 id 仍是 chat-mN-K
+    const assistantTurn = turns.find((turn) => turn.id === "turn-2")!;
+    assert.deepEqual(
+      assistantTurn.items.map((item) => item.id),
+      ["chat-m2-1", "chat-m2-2", "chat-m3-3", "chat-m4-4"]
+    );
+  });
 });
 
 describe("T-R2 首轮与空轮守卫", () => {
@@ -174,9 +194,10 @@ describe("T-R3 模板段各自独立", () => {
     };
     const messages = [message("user", "hi", 1), message("assistant", "yo", 2)];
     const turns = await buildPromptPreviewTurnsFromLayout(layout, ctxOf(messages, ""));
+    // message 轮 id 由 seq 生成（turn-1 / turn-2）；template 轮无 seq，沿用段 id。
     assert.deepEqual(
       turns.map((turn) => turn.id),
-      ["system", "persist-persona", "persist-tail", "chat-m1-0", "chat-m2-1", "dynamic-state"]
+      ["system", "persist-persona", "persist-tail", "turn-1", "turn-2", "dynamic-state"]
     );
     assert.deepEqual(
       turns.map((turn) => turn.kind),
