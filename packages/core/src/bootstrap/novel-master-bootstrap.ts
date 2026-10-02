@@ -122,8 +122,18 @@ import { IntegrityRepairRegistry } from "@/service/integrity-repair.js";
  * SCHEMA_BOOT_VERSION` 的存量库在快路径直接 return，不 bump 则新语句永远补不上
  * （RULE「加 align 条目不 bump 版本则永远补不上」）。存量库因此会走一次慢路径
  * （重放 DDL + 对齐），首次启动变慢是一次性代价。
+ * v19（**救回被撤回的 v18** + 守卫索引）：① 上面那段 v18 注记把这批库判为「无害
+ * 孤儿」——那是对**列**的判断，对**触发器**不成立。被撤回的 v18 已经把部分 feature
+ * 分支测试机 / 装过开发版的库 `user_version` 写成 18，而新代码下 `18 >= 18` 走
+ * **快路径直接 return**，legacy 无守卫触发器永远不会被 DROP、v2 永远建不出来 ⇒
+ * 触发器缺守卫就是 P0 现场（删一条共享 hash 的 revision 就把别的 entry 的 blob
+ * 删掉，文件永久不可读）。bump 到 19 正是为了让这批库重新落进慢路径。
+ * ② 同批补 `idx_vfs_entry_content_hash` 部分索引（blob 归零触发器的守卫子查询
+ * 此前无索引，每删一条 revision 全表扫 vfs_entry）。两条同 commit 一次动土：
+ * bump 19 把「v18 留下的旧名触发器」与「新索引」一起收口——索引若只随下一次 bump
+ * 生效，等于没修。
  */
-export const SCHEMA_BOOT_VERSION = 18;
+export const SCHEMA_BOOT_VERSION = 19;
 
 /** 各模块 DDL 语句，按依赖安全顺序排列。 */
 export const NOVEL_MASTER_SCHEMA_STATEMENTS: readonly string[] = [

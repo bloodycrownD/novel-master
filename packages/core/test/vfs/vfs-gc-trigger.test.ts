@@ -7,12 +7,19 @@
  * replaceVfsSubtree 盯通用 sweep/GC 语义（原「隔离豁免」断言依赖的
  * excludePrefixes:"meta/skills" 语义已随技能重定位消失）。
  *
+ * CR-F06 / CR-F20（并入同一条，本文件补两支牙齿）：
+ * ① `T-GC-GUARD-INDEX`：守卫子查询必须走 `idx_vfs_entry_content_hash` 而非
+ *    `SCAN vfs_entry`——性能牙齿，光断言「触发器带守卫」不覆盖无索引形态；
+ * ② `T-GC-UPGRADE-18-RECLAIM`：第三条升级路径（被撤回的 v18 已把部分库推到
+ *    `user_version = 18`，18 >= 18 走快路径 ⇒ 旧名无守卫触发器永远救不回来），
+ *    同形于下面的 17 用例，但起点是 18。
+ *
  * @module test/vfs/vfs-gc-trigger
  */
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { bootstrapNovelMaster } from "@novel-master/core";
+import { bootstrapNovelMaster, SCHEMA_BOOT_VERSION } from "@novel-master/core";
 import { createTemplatePullService } from "@novel-master/core/workplace";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
@@ -23,6 +30,7 @@ import {
   VFS_BLOB_GC_ENTRY_GUARD_SQL_FRAGMENT,
   VFS_BLOB_GC_TRIGGER_LEGACY_NAMES,
   VFS_BLOB_GC_TRIGGER_NAMES_V2,
+  VFS_ENTRY_CONTENT_HASH_INDEX_NAME,
 } from "../../src/bootstrap/vfs/vfs-revision-schema.js";
 import {
   getNovelMasterTestContext,
@@ -455,10 +463,62 @@ describe("CS-07: blob 归零触发器的 vfs_entry 守卫", () => {
       "旧名触发器必须已被 DROP——它们在 SQLite 里不会因代码不再引用而消失",
     );
   });
+
+  /**
+   * T-GC-GUARD-INDEX：守卫子查询走 `idx_vfs_entry_content_hash`，不全表扫。
+   *
+   * 这条是**性能牙齿**：光断言「触发器带守卫」不覆盖 `vfs_entry.content_hash`
+   * 上无索引的形态，而守卫落在热路径 `sweepRevisionsUnderScope`（会话删除 /
+   * 回滚 / releaseAndDeleteVfsPrefix 补偿）——一次删 N 条 revision 就 N 次全表扫
+   * `vfs_entry`。守卫子查询在触发体里是字面 SQL，拿不到参数，所以这里照抄触发器
+   * 那段 DELETE 逐字 EXPLAIN：SQLite 的查询规划与真实执行同源，plan 变了就该红。
+   */
+  it("T-GC-GUARD-INDEX: DELETE 触发器的守卫子查询走 idx_vfs_entry_content_hash 而非 SCAN vfs_entry", async () => {
+    const ctx = getNovelMasterTestContext();
+
+    // 前置：索引真的建出来了，且形态是部分索引（只收 content_hash 非 NULL 的行）。
+    const indexes = await ctx.conn.query<{ name: string; sql: string | null }>(
+      `SELECT name, sql FROM sqlite_master WHERE type = 'index' AND tbl_name = 'vfs_entry'`
+    );
+    const idx = indexes.find((i) => i.name === VFS_ENTRY_CONTENT_HASH_INDEX_NAME);
+    assert.ok(
+      idx != null,
+      `bootstrap 后 ${VFS_ENTRY_CONTENT_HASH_INDEX_NAME} 应存在（缺了守卫就退化成全表扫）`
+    );
+    assert.match(
+      String(idx!.sql),
+      /WHERE\s+content_hash\s+IS\s+NOT\s+NULL/i,
+      "守卫索引必须是部分索引：content_hash 可空，目录条目恒 NULL"
+    );
+
+    // 照抄 VFS_REVISION_DELETE_TRIGGER_DDL 里的那段 DELETE（hash 换成字面量）。
+    const probeHash = "0123456789abcdef0123456789abcdef";
+    const plan = await ctx.conn.query<{
+      id: number;
+      parent: number;
+      detail: string;
+    }>(
+      `EXPLAIN QUERY PLAN
+       DELETE FROM vfs_content_blob
+       WHERE content_hash = '${probeHash}' AND ref_count <= 0
+         AND NOT EXISTS (SELECT 1 FROM vfs_entry WHERE content_hash = '${probeHash}')`
+    );
+    const detail = plan.map((row) => String(row.detail)).join(" | ");
+    assert.match(
+      detail,
+      new RegExp(VFS_ENTRY_CONTENT_HASH_INDEX_NAME),
+      `守卫子查询必须走 ${VFS_ENTRY_CONTENT_HASH_INDEX_NAME}，实际 plan：${detail}`
+    );
+    assert.doesNotMatch(
+      detail,
+      /SCAN\s+vfs_entry\b/i,
+      `守卫子查询不得全表扫 vfs_entry，实际 plan：${detail}`
+    );
+  });
 });
 
 /**
- * 存量库升级路径：user_version 17 → 18。
+ * 存量库升级路径：user_version 17 → 当前 SCHEMA_BOOT_VERSION。
  *
  * 只断言「bootstrap 后触发器带守卫」是不够的——**快路径**在 bootVersion ≥
  * SCHEMA_BOOT_VERSION 时直接 return，真正决定「老用户能不能被救回来」的是
@@ -467,7 +527,7 @@ describe("CS-07: blob 归零触发器的 vfs_entry 守卫", () => {
  * ① v2 存在且带守卫；② 旧名已从 sqlite_master 消失；③ 守卫生效**与**回收两向
  * 都对（既要「不误删」，也要「不漏删」）。
  */
-describe("CS-07 存量库升级路径（user_version 17 → 18）", () => {
+describe("CS-07 存量库升级路径（user_version 17 → SCHEMA_BOOT_VERSION）", () => {
   it("T-GC-UPGRADE-17-18: 旧名无守卫触发器 + v17 库 → bootstrap 后 v2 生效、旧名已 DROP", async () => {
     const ctx = await openNovelMasterTestConnection();
     try {
@@ -543,7 +603,11 @@ describe("CS-07 存量库升级路径（user_version 17 → 18）", () => {
       const version = await ctx.conn.query<{ user_version: number }>(
         `PRAGMA user_version`
       );
-      assert.equal(Number(version[0]!.user_version), 18, "user_version 应被 bump 到 18");
+      assert.equal(
+        Number(version[0]!.user_version),
+        SCHEMA_BOOT_VERSION,
+        `user_version 应被 bump 到 ${SCHEMA_BOOT_VERSION}`
+      );
 
       // ── ③ 守卫生效方向：entry 仍引用该 hash ⇒ 删 revision 不得回收 blob ──
       const guardedHash = await new SqliteVfsContentStore(ctx.conn).put(
@@ -614,6 +678,147 @@ describe("CS-07 存量库升级路径（user_version 17 → 18）", () => {
         Number(dropped[0]!.n),
         0,
         "升级后回收方向仍要生效：无 entry 引用时 blob 必须被回收"
+      );
+    } finally {
+      await ctx.conn.close();
+    }
+  });
+});
+
+/**
+ * 第三条升级路径：**被撤回的 v18 已经把部分库推到 `user_version = 18`**。
+ *
+ * v18（用量详情弹窗的 `chat_message.tool_use_count`）当日撤回、DDL 全撤，但跑过
+ * 它的 feature 分支测试机 / 装过开发版的库 `user_version` 已经是 18。若
+ * `SCHEMA_BOOT_VERSION` 停在 18，这批库 `18 >= 18` 走**快路径直接 return**——
+ * legacy 无守卫触发器永远不会被 DROP、v2 永远建不出来。文件里那段 v18 注记把它
+ * 判成「无害孤儿」，那是对**列**的判断，对**触发器**不成立：触发器缺守卫就是
+ * P0 现场（删一条共享 hash 的 revision 就把别的 entry 的 blob 删掉，文件永久不可读）。
+ *
+ * 前置自证（`SCHEMA_BOOT_VERSION > 18`）是硬门：版本若被改回 18，本用例的前置
+ * 根本构造不出来，会退化成 17 用例的同形复制、静默失守。
+ */
+describe("CS-07 第三条升级路径：被撤回 v18 留下的 user_version = 18 库", () => {
+  it("T-GC-UPGRADE-18-RECLAIM: 旧名无守卫触发器 + v18 库 → bootstrap 后 v2 生效、旧名已 DROP", async () => {
+    assert.ok(
+      SCHEMA_BOOT_VERSION > 18,
+      `SCHEMA_BOOT_VERSION 必须 > 18（当前 ${SCHEMA_BOOT_VERSION}）：否则 v18 库走快路径，前置构造不出来`
+    );
+
+    const ctx = await openNovelMasterTestConnection();
+    try {
+      // ── 造「user_version = 18 的存量库」形态 ────────────────────────────
+      // 只造**旧名**（v2 名一并 DROP），且旧名**没有** vfs_entry 守卫——这就是 P0 现场。
+      for (const name of VFS_BLOB_GC_TRIGGER_NAMES_V2) {
+        await ctx.conn.execute(`DROP TRIGGER IF EXISTS ${name}`);
+      }
+      await ctx.conn.execute(
+        `CREATE TRIGGER trg_revision_delete_dec_blob_ref
+         AFTER DELETE ON vfs_revision
+         WHEN OLD.content_hash IS NOT NULL
+         BEGIN
+           UPDATE vfs_content_blob SET ref_count = ref_count - 1
+           WHERE content_hash = OLD.content_hash;
+           DELETE FROM vfs_content_blob
+           WHERE content_hash = OLD.content_hash AND ref_count <= 0;
+         END`
+      );
+      // 索引也一并拆掉：v18 形态里它不存在，升级后必须由 canonical DDL 补出来。
+      await ctx.conn.execute(
+        `DROP INDEX IF EXISTS ${VFS_ENTRY_CONTENT_HASH_INDEX_NAME}`
+      );
+      await ctx.conn.execute(`PRAGMA user_version = 18`);
+
+      const before = await ctx.conn.query<{
+        name: string;
+        sql: string | null;
+      }>(`SELECT name, sql FROM sqlite_master WHERE type = 'trigger'`);
+      assert.ok(
+        before.some((t) => t.name === "trg_revision_delete_dec_blob_ref"),
+        "前置：旧名触发器必须先造出来"
+      );
+      assert.equal(
+        before.find((t) => t.name === "trg_revision_delete_dec_blob_ref")!.sql!.includes(
+          VFS_BLOB_GC_ENTRY_GUARD_SQL_FRAGMENT
+        ),
+        false,
+        "前置：旧名触发器必须**没有**守卫（否则本用例测不到升级）"
+      );
+
+      // ── 升级 ──────────────────────────────────────────────────────────
+      await bootstrapNovelMaster(ctx.conn);
+
+      // ── ① v2 存在且带守卫 / ② 旧名已 DROP / user_version 已 bump ───────
+      const after = await ctx.conn.query<{ name: string; sql: string | null }>(
+        `SELECT name, sql FROM sqlite_master WHERE type = 'trigger'`
+      );
+      for (const name of VFS_BLOB_GC_TRIGGER_NAMES_V2) {
+        const found = after.find((t) => t.name === name);
+        assert.ok(found != null, `升级后新名触发器应存在：${name}`);
+        assert.ok(
+          String(found!.sql).includes(VFS_BLOB_GC_ENTRY_GUARD_SQL_FRAGMENT),
+          `${name} 升级后必须带 vfs_entry 守卫`
+        );
+      }
+      for (const name of VFS_BLOB_GC_TRIGGER_LEGACY_NAMES) {
+        assert.ok(
+          !after.some((t) => t.name === name),
+          `升级后旧名触发器必须已 DROP：${name}`
+        );
+      }
+      const version = await ctx.conn.query<{ user_version: number }>(
+        `PRAGMA user_version`
+      );
+      assert.equal(
+        Number(version[0]!.user_version),
+        SCHEMA_BOOT_VERSION,
+        `user_version 应被 bump 到 ${SCHEMA_BOOT_VERSION}`
+      );
+
+      // ── ③ 守卫生效方向：entry 仍引用该 hash ⇒ 删 revision 不得回收 blob ──
+      const guardedHash = await new SqliteVfsContentStore(ctx.conn).put(
+        `reclaim-guard-${Date.now()}`
+      );
+      const scope = `project:reclaim-${Date.now()}`;
+      await ctx.conn.execute(
+        `INSERT INTO vfs_entry (scope_key, path, entry_kind, head_version, content_hash, mtime_ms)
+         VALUES (?, '/dangling.md', 'file', 1, ?, 0)`,
+        [scope, guardedHash]
+      );
+      await ctx.conn.execute(
+        `INSERT INTO vfs_entry (scope_key, path, entry_kind, head_version, content_hash, mtime_ms)
+         VALUES (?, '/holder.md', 'file', 1, ?, 0)`,
+        [scope, guardedHash]
+      );
+      const holder = await new SqliteVfsEntryRepository(ctx.conn).findByPath(
+        scope,
+        "/holder.md"
+      );
+      await ctx.conn.execute(
+        `INSERT INTO vfs_revision (entry_id, version, status, mtime_ms, content_hash, ref_count)
+         VALUES (?, 1, 'active', 0, ?, 1)`,
+        [holder!.entryId, guardedHash]
+      );
+      await ctx.conn.execute(`DELETE FROM vfs_revision WHERE entry_id = ?`, [
+        holder!.entryId,
+      ]);
+      const kept = await ctx.conn.query<{ n: number }>(
+        `SELECT COUNT(*) AS n FROM vfs_content_blob WHERE content_hash = ?`,
+        [guardedHash]
+      );
+      assert.equal(
+        Number(kept[0]!.n),
+        1,
+        "升级后守卫必须生效：entry 仍引用该 hash 时 blob 不得被回收"
+      );
+
+      // ── ④ 守卫索引必须同批补出（v18 形态里没有，靠慢路径 canonical DDL）──
+      const indexes = await ctx.conn.query<{ name: string }>(
+        `SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'vfs_entry'`
+      );
+      assert.ok(
+        indexes.some((i) => i.name === VFS_ENTRY_CONTENT_HASH_INDEX_NAME),
+        `升级后 ${VFS_ENTRY_CONTENT_HASH_INDEX_NAME} 必须存在（守卫子查询否则全表扫）`
       );
     } finally {
       await ctx.conn.close();

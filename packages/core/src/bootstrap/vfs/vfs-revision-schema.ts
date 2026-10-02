@@ -4,7 +4,8 @@
  * entry_id 化后 revision 改用 `(entry_id, version)` 复合主键寻址，旧的 `path`
  * / `content`（明文，已迁 blob）/ `storage_kind`（恒 inline）三列退役。同时挂上
  * 3 个触发器在 revision INSERT/DELETE/UPDATE 时维护 `vfs_content_blob.ref_count`，
- * 用于 blob 存储回收（归零自动删 blob 行）。
+ * 用于 blob 存储回收（归零自动删 blob 行）。归零判定带 `vfs_entry` 守卫，守卫子查询
+ * 走本文件末尾的 `idx_vfs_entry_content_hash` 部分索引。
  *
  * @module bootstrap/vfs/vfs-revision-schema
  */
@@ -92,6 +93,31 @@ END`.trim();
 export const VFS_BLOB_GC_ENTRY_GUARD_SQL_FRAGMENT =
   "NOT EXISTS (SELECT 1 FROM vfs_entry";
 
+/**
+ * `vfs_entry(content_hash)` **部分索引**——守卫子查询的落地索引（CR-F06 同批）。
+ *
+ * 为什么放在本文件而不是 `vfs-schema.ts`：它服务的正是上面两个 blob 归零触发器里
+ * 的 `NOT EXISTS (SELECT 1 FROM vfs_entry WHERE content_hash = …)`。守卫子查询在
+ * `vfs_entry` 上**无索引**时是全表扫，而落点正是热路径 `sweepRevisionsUnderScope`
+ * （会话删除 / 回滚 / releaseAndDeleteVfsPrefix 补偿）——一次删 N 条 revision ⇒
+ * N 次全表扫，`O(删条数 × vfs_entry 行数)`。
+ *
+ * 部分索引（`WHERE content_hash IS NOT NULL`）：该列可空，目录条目恒 NULL，
+ * 稳态索引只收真正有 hash 的文件行；触发器里的等值比较 `content_hash = ?`
+ * 本身也隐含「非 NULL」，谓词可证可用（实测 plan 走
+ * `SEARCH vfs_entry USING COVERING INDEX idx_vfs_entry_content_hash`）。
+ *
+ * ⚠️ 交付路径随 `SCHEMA_BOOT_VERSION` 18 → 19（见 novel-master-bootstrap.ts 的
+ * v19 注记）：canonical DDL 只在**慢路径**重放，而 `bootVersion >= 18` 的库在
+ * 快路径直接 return —— 不 bump 的话存量库永远补不上这个索引。
+ */
+export const VFS_ENTRY_CONTENT_HASH_INDEX_DDL = `
+CREATE INDEX IF NOT EXISTS idx_vfs_entry_content_hash
+  ON vfs_entry(content_hash) WHERE content_hash IS NOT NULL`.trim();
+
+/** 上述索引的名字（测试用它做 EXPLAIN QUERY PLAN 断言）。 */
+export const VFS_ENTRY_CONTENT_HASH_INDEX_NAME = "idx_vfs_entry_content_hash";
+
 /** 两个 blob 归零触发器的**新名**（含版本后缀）。 */
 export const VFS_BLOB_GC_TRIGGER_NAMES_V2 = [
   "trg_revision_delete_dec_blob_ref_v2",
@@ -152,4 +178,9 @@ export const VFS_REVISION_SCHEMA_STATEMENTS: readonly string[] = [
   ...VFS_BLOB_GC_TRIGGER_DROP_STATEMENTS,
   VFS_REVISION_DELETE_TRIGGER_DDL,
   VFS_REVISION_UPDATE_TRIGGER_DDL,
+  // 守卫子查询的索引：放在触发器**之后**建（CREATE INDEX 不依赖触发器存在，
+  // 但同批交付时让「触发器 ⇒ 索引」的阅读顺序与依赖方向一致）。
+  // 依赖 `vfs_entry` 表已存在——NOVEL_MASTER_SCHEMA_STATEMENTS 里 VFS_SCHEMA_STATEMENTS
+  // 排在本组之前，全新库/存量库都满足。
+  VFS_ENTRY_CONTENT_HASH_INDEX_DDL,
 ];
