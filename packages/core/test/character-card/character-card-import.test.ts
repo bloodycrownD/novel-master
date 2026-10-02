@@ -24,6 +24,7 @@ import {
 } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
 import { sessionApiPromptTokenCache } from "../../src/infra/tokenizer/logic/session-api-prompt-token-cache.js";
 import { SqliteVfsEntryRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import { SqliteVfsContentStore } from "../../src/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
 import { SqliteWorkplaceRepository } from "../../src/domain/workplace/repositories/impl/sqlite-workplace.repository.js";
 import type { WorkplaceDirRule } from "../../src/domain/workplace/model/workplace-types.js";
 import type { WorkplaceRepository } from "../../src/domain/workplace/repositories/workplace.port.js";
@@ -81,6 +82,47 @@ describe("CharacterCardImportService", () => {
     );
     await assert.rejects(() => vfs.read("/角色/旧文件.md"));
     assert.equal((await vfs.read("/大纲/保留.md")).content, "outline");
+  });
+
+  /**
+   * L1-1 / core1-C-2（OQ3 乙案）blob 口径牙齿：角色卡导入替换链跑完后，
+   * **被替换掉的独有内容**不得留下 `ref_count <= 0` 的 blob 行。
+   *
+   * 机理同 zip 链（见 `vfs-tree-copy.ts` `sweepRevisionsUnderScope` 的
+   * @remarks）：CS-06/CS-07 的守卫触发器让 sweep 后旧 blob 计数落 0、行留着，
+   * 而 `vfs_entry` 零触发器 ⇒ 残留只能靠 `runDeferredBlobGc` 收，本链**从不调**
+   * 它。**红了就是该升方案甲（补 gc）**。
+   */
+  it("T-CARD-GC-RESIDUE: 卡片导入替换后无 ref_count<=0 的 blob 残留行", async () => {
+    const ctx = getNovelMasterTestContext();
+    const suffix = testIsolationSuffix();
+    const project = await ctx.projects.create(`P-cardgc-${suffix}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    const scope = {
+      kind: "session" as const,
+      projectId: project.id,
+      sessionId: session.id,
+    };
+    const oldBody = `card-gc-residue-old-${suffix}`;
+    await vfs.write("/角色/独有旧文件.md", oldBody);
+    const oldHash = await new SqliteVfsContentStore(ctx.conn).put(oldBody);
+
+    const svc = createCharacterCardImportService(ctx.conn);
+    const tree = parseCharacterCardToMdTree(JSON.stringify(SAMPLE_V2));
+    await svc.import(scope, tree, { confirmed: true, directoryPath: "/角色" });
+
+    await assert.rejects(() => vfs.read("/角色/独有旧文件.md"));
+    const residue = await ctx.conn.query<{ n: number }>(
+      `SELECT COUNT(*) AS n FROM vfs_content_blob
+       WHERE content_hash = ? AND ref_count <= 0`,
+      [oldHash],
+    );
+    assert.equal(
+      Number(residue[0]!.n),
+      0,
+      "角色卡导入替换后不应残留 ref_count<=0 的 blob 行（本链不调 runDeferredBlobGc）",
+    );
   });
 
   it("T-C8: confirmed:false → NOT_CONFIRMED，子树不变", async () => {
@@ -306,7 +348,7 @@ describe("CharacterCardImportService", () => {
     );
   });
 
-  it("T-I5: 补规则行语句真失败时不毒化导入事务，导入仍成功且文件完整", async () => {
+  it("T-I5: 补规则行语句真失败时不影响导入整体成功，导入仍成功且文件完整", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-ti5-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);

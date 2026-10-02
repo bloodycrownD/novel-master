@@ -9,6 +9,7 @@ import {
   type VfsService,
 } from "@novel-master/core/vfs";
 import { buildVfsZip } from "../../src/domain/vfs/logic/vfs-zip-build.js";
+import { SqliteVfsContentStore } from "../../src/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
 import { createWorkplaceService } from "@novel-master/core/workplace";
 import { SqliteWorkplaceRepository } from "../../src/domain/workplace/repositories/impl/sqlite-workplace.repository.js";
 import type { WorkplaceDirRule } from "../../src/domain/workplace/model/workplace-types.js";
@@ -89,6 +90,52 @@ describe("VfsZipIoService", () => {
     await assert.rejects(() => vfs.read("/old.md"));
     const read = await vfs.read("/new.md");
     assert.equal(read.content, "new");
+  });
+
+  /**
+   * L1-1 / core1-C-2（OQ3 乙案）blob 口径牙齿：导入替换链跑完后，**被替换掉的
+   * 独有内容**不得留下 `ref_count <= 0` 的 `vfs_content_blob` 行。
+   *
+   * 机理（见 `vfs-tree-copy.ts` `sweepRevisionsUnderScope` 的 @remarks）：
+   * Wave C 的 CS-06/CS-07 把 blob DELETE 触发器换成带 `vfs_entry` 守卫的 v2，
+   * 所以 sweep 三步跑完时旧 blob 计数落到 0、**行留着**；而 `vfs_entry` 上零
+   * 触发器，紧随的 `deleteVfsPrefix` 不会回头收它。收残留只能靠
+   * `runDeferredBlobGc` —— 本链（zip 导入）**从不调**它（另 5 处调用点里没有
+   * `vfs-zip-io.service.ts`）。本用例钉住这个口径：**红了就是该升方案甲（补 gc）**。
+   *
+   * 内容取「本次唯一」（带 isolation suffix）⇒ 不会被别的 entry/revision 共享，
+   * 所以残留若有必然是这条链自己留下的，不会被别处的引用掩盖。
+   */
+  it("T-ZIP-GC-RESIDUE: 导入替换后无 ref_count<=0 的 blob 残留行", async () => {
+    const ctx = getNovelMasterTestContext();
+    const suffix = testIsolationSuffix();
+    const project = await ctx.projects.create(`P-${suffix}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+
+    // 独有内容：只被这一个文件引用，删掉它不会有别处引用兜底
+    const oldBody = `zip-gc-residue-old-${suffix}`;
+    await vfs.write("/old.md", oldBody);
+    // put 幂等（已有行直接返回 hash），不产生副作用
+    const oldHash = await new SqliteVfsContentStore(ctx.conn).put(oldBody);
+
+    const zipSvc = createVfsZipIoService(ctx.conn);
+    await zipSvc.import(
+      { kind: "session", projectId: project.id, sessionId: session.id },
+      buildVfsZip(new Map([["new.md", `zip-gc-residue-new-${suffix}`]])),
+      { confirmed: true },
+    );
+
+    const residue = await ctx.conn.query<{ n: number }>(
+      `SELECT COUNT(*) AS n FROM vfs_content_blob
+       WHERE content_hash = ? AND ref_count <= 0`,
+      [oldHash],
+    );
+    assert.equal(
+      Number(residue[0]!.n),
+      0,
+      "zip 导入替换后不应残留 ref_count<=0 的 blob 行（本链不调 runDeferredBlobGc）",
+    );
   });
 
   it("markdown front matter passes UTF-8 zip validation", () => {
@@ -1057,7 +1104,7 @@ describe("VfsZipIoService", () => {
     assert.equal(await wt.getDirRule("/角色/世界书"), undefined);
   });
 
-  it("T-Z10: 补规则行语句真失败时不毒化导入事务，ZIP 导入仍成功且文件完整", async () => {
+  it("T-Z10: 补规则行语句真失败时不影响导入整体成功，ZIP 导入仍成功且文件完整", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(
       `P-tz10-${testIsolationSuffix()}`,
