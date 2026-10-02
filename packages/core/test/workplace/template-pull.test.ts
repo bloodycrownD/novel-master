@@ -6,6 +6,16 @@ import { createTemplatePullService, createWorkplaceService } from "@novel-master
 import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import { assembleWorkplaceDisplay } from "@/service/workplace/assemble-workplace-display.js";
 import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
+// CR-F03：本文件原先用「让出 5 次 setImmediate」等 assemble 的 fire-and-forget
+// file_cache 回填。回填写入经 load-or-fill-file-cache 的 scheduleBackfill 推迟到
+// `setTimeout(0)` **宏任务**，而 setImmediate 跑在 check 队列——同一轮里连让 5 次
+// check 也不跨过那个 0ms timer，于是「前置条件：file_cache 域应有行」间歇性红
+// （6 文件并行冷跑首轮即复现）。settlePendingFileCacheBackfills 直接等在途集合
+// 落定，是确定性闸门，不依赖调度顺序。
+//
+// ⚠️ 该 pending 集合是**按进程共享**的：settle 会连带等掉本进程其它用例的在途
+// 回填。这在本文件无害（多等而已），但别把它当「只等本次组装」。
+import { settlePendingFileCacheBackfills } from "@/domain/workplace/logic/load-or-fill-file-cache.js";
 import {
   SESSION_KKV_DOMAIN_FILE_CACHE,
   SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
@@ -40,13 +50,6 @@ async function assembleWorkplace(
       }
     )
   ).workplaceDisplay;
-}
-
-/** 让出若干宏任务，等 assemble 的 fire-and-forget file_cache 回填落库。 */
-async function flushDeferredBackfill(): Promise<void> {
-  for (let i = 0; i < 5; i++) {
-    await new Promise<void>((resolve) => setImmediate(resolve));
-  }
 }
 
 /** 让 session 工作区的 /a.md 以 full 档进入规则快照。 */
@@ -181,7 +184,7 @@ describe("template pull", () => {
     // 先组装一次，让 rule_snapshot + file_cache 两域都有真实行
     const before = await assembleWorkplace(project.id, session.id);
     assert.ok(before.includes("A-"), "前置条件：组装应命中 /a.md 的正文");
-    await flushDeferredBackfill();
+    await settlePendingFileCacheBackfills();
     const kkv = createSessionKkvService(ctx.conn);
     assert.ok(
       (await kkv.listKeys(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT)).length > 0,
@@ -249,7 +252,7 @@ describe("template pull", () => {
     );
     // 关键前置条件：file_cache 必须真的落了行，否则第二次组装是走 miss 回填、
     // 本用例就成了一条测不到「陈旧缓存续命」的废断言。
-    await flushDeferredBackfill();
+    await settlePendingFileCacheBackfills();
     assert.ok(
       (
         await createSessionKkvService(ctx.conn).listKeys(

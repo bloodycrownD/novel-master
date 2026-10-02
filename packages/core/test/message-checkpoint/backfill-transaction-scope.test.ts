@@ -137,25 +137,64 @@ describe("CS-05b backfill 事务边界", () => {
       projectId: seeded.projectId,
       sessionId: seeded.sessionId,
     };
+    // 夹具必须带**子目录**：ensure-import-dir-rules 的内核第一句就是
+    // `if (logicalPath === "/") continue`（根自身不补规则行），全根目录的
+    // 夹具会让 upsertDirRule 零调用、注入的抛错一次都没执行，本条用例退化成
+    // 「导入成功 + 规则表空」——把整个 ensureImportDirRules 调用删掉也照样绿。
+    // 两个子目录是为了让「第一条成功写、第二条抛」这条形态可构造（单子目录
+    // 只能触发一次调用，造不出 N-1 已落库 + 末条失败的半截场景）。
     const expected = filesMap(20);
+    expected.set("sub/x.md", "body-sub-x");
+    expected.set("sub2/y.md", "body-sub2-y");
 
-    const zipSvc = createVfsZipIoService(conn, {
-      testHook: {
-        createWorkplaceRepo: (tx) =>
-          ({
-            listDirRules: (scopeKey: string) =>
-              new SqliteWorkplaceRepository(tx).listDirRules(scopeKey),
-            upsertDirRule: async (_rule: WorkplaceDirRule) => {
-              await tx.execute(
-                "INSERT INTO no_such_table_boom (id) VALUES (1)"
-              );
-            },
-          }) as unknown as WorkplaceRepository,
-      },
-    });
+    let upsertCalls = 0;
+    const warns: unknown[][] = [];
+    const originalWarn = console.warn;
+    console.warn = (...args: unknown[]) => {
+      warns.push(args);
+    };
+    try {
+      const zipSvc = createVfsZipIoService(conn, {
+        testHook: {
+          createWorkplaceRepo: (tx) => {
+            const real = new SqliteWorkplaceRepository(tx);
+            return {
+              listDirRules: (scopeKey: string) => real.listDirRules(scopeKey),
+              // 形态：第一条真写（走真实 upsert，落一条完整行），第二条才抛。
+              // 「一调就抛」造不出 spec 要验的东西——那样「无脏行」是 mock 自己
+              // 什么都没写的保证，不是被测代码「失败不留半截行」的性质。
+              upsertDirRule: async (rule: WorkplaceDirRule) => {
+                upsertCalls += 1;
+                if (upsertCalls === 1) {
+                  await real.upsertDirRule(rule);
+                  return;
+                }
+                await tx.execute(
+                  "INSERT INTO no_such_table_boom (id) VALUES (1)"
+                );
+              },
+            } as unknown as WorkplaceRepository;
+          },
+        },
+      });
 
-    await assert.doesNotReject(() =>
-      zipSvc.import(scope, buildVfsZip(expected), { confirmed: true })
+      await assert.doesNotReject(() =>
+        zipSvc.import(scope, buildVfsZip(expected), { confirmed: true })
+      );
+    } finally {
+      console.warn = originalWarn;
+    }
+
+    // 牙齿判据①：注入必须真的被触发，否则本条全部断言恒真。
+    assert.equal(
+      upsertCalls,
+      2,
+      "夹具带子目录 ⇒ upsertDirRule 应被调用两次（一条成功 + 一条抛）"
+    );
+    // 牙齿判据②：best-effort 失败必须留痕（spec B2 验收项「日志含 warn」）。
+    assert.ok(
+      warns.some((w) => String(w[0]).includes("ensureImportDirRules")),
+      "补规则行失败必须被吞掉并记 warn（含 ensureImportDirRules 前缀）"
     );
 
     const vfs = createScopedVfsService(conn, scope);
@@ -169,13 +208,28 @@ describe("CS-05b backfill 事务边界", () => {
     );
     assert.equal(rows.length, expected.size);
 
-    // 补行一条都没成功 ⇒ workplace_dir_rule 不应有本 scope 的残留脏行。
-    const dirty = await ctx.conn.query<{ n: number }>(
-      `SELECT COUNT(*) AS n FROM workplace_dir_rule
-       WHERE scope_key = ?`,
+    // ⚠️ `WHERE scope_key = session:<sid>` 是 **workplace 键空间**
+    // （workplaceScopeKey），与 vfs 侧的 `session:<pid>:<sid>` 是两套键空间
+    // （见 ensure-import-dir-rules.ts:87-89）——这里不要「顺手统一」成 vfs 键，
+    // 那样查的是另一张表的另一批行，断言会静默失效。
+    const rules = await ctx.conn.query<{ logical_path: string }>(
+      `SELECT logical_path FROM workplace_dir_rule
+       WHERE scope_key = ?
+       ORDER BY logical_path`,
       [`session:${seeded.sessionId}`]
     );
-    assert.equal(Number(dirty[0]!.n), 0);
+    assert.equal(
+      rules.length,
+      1,
+      `规则表只应留下第一条成功写入的行，失败的第二条不得留残行（实际 ${JSON.stringify(
+        rules.map((r) => r.logical_path),
+      )}）`
+    );
+    assert.notEqual(
+      rules[0]!.logical_path,
+      "/",
+      "根自身由内核跳过、不补规则行，留下的必须是子目录行"
+    );
   });
 
   it("B2: backfill 段自身抛错也不阻断导入（best-effort + warn）", async () => {
