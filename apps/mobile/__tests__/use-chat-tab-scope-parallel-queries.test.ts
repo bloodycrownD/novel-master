@@ -156,7 +156,7 @@ describe('useChatTabScope 查询并行化（T-C1）', () => {
   // 等过窗口再收尾。
   afterEach(async () => {
     await act(async () => {
-      await new Promise(resolve => setTimeout(resolve, 350));
+      await new Promise(resolve => setTimeout(resolve, 1300));
       await flushMicrotasks();
     });
   });
@@ -281,7 +281,7 @@ describe('useChatTabScope 查询并行化（T-C1）', () => {
       // 仍是占位 '…'，trailing 窗口过后（mock 立即返回真标签）标签才落位。
       expect(api.agentMeta?.tokenLabel).toBe('…');
       await act(async () => {
-        await new Promise(resolve => setTimeout(resolve, 350));
+        await new Promise(resolve => setTimeout(resolve, 1300));
         await flushMicrotasks();
       });
       expect(scope.api().agentMeta?.tokenLabel).toBe('1K tokens · 预估');
