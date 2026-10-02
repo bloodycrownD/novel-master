@@ -53,41 +53,41 @@ const updateCompat = process.argv.includes('--update-compat');
  * 被误报成 1 条 core 依赖）。同族的还有 `Object.hasOwn` 必须配
  * `Object\.hasOwn(?!Property)` 负向断言，否则 `Object.hasOwnProperty` 误伤。
  *
- * 白名单纪律：每条都要能回答「删了会怎样」。chat-transcript 那 60 条是 vfs-tools /
- * search-tool / agent-tool / sqlite-vfs-revision 等工具实现的传递闭包，
- * 收敛它是独立议题（与性能波合并评估），本条只把它原样写成基线。
+ * 白名单纪律：每条都要能回答「删了会怎样」（spec §X3.7 承诺的 review 摩擦）。
+ * 60 条按**来源族**分块，每块给该族的存在理由；组内按字母序。要往里加条目时，
+ * 先找到它所属的族并回答「这一族删了会怎样」，而不是随手 append 到数组末尾。
+ * ⚠️ 白名单是**构建时**从 metafile 读的（每次 `bundleAppJs` 都传 `metafile: true`，
+ * `assertCoreAllowlist` 紧跟其后同步执行），所以不存在「陈旧基线放行新直连」的面。
+ * 收敛 chat-transcript 的传递闭包是独立议题（与性能波合并评估），本条只把它原样记成基线。
  */
 const WEBVIEW_CORE_ALLOWLIST = {
   'chat-transcript': [
+    // ── 族 1 · schema 与内建规则常量（纯数据、零顶层副作用）─────────────
+    // 这一档只导出 zod schema、内置规则与 domain 名单，不 import 数据库层、不在顶层做重活，
+    // 是「引用它不会把病根拖进产物」里最安全的一档。
+    // 删了会怎样：入参校验直接消失，或要在 React 侧重抄一份常量——重抄就是两处漂移的起点。
     'bootstrap/skills/skills-schema.js',
     'bootstrap/smart-sort-rule/builtin-smart-sort-rules.js',
     'bootstrap/smart-sort-rule/smart-sort-rule-schema.js',
     'bootstrap/workplace/workplace-schema.js',
-    'domain/agent/logic/merge-agent-definition-patch.js',
     'domain/agent/model/agent-definition.schema.js',
-    'domain/character-card/logic/character-card-limits.js',
-    'domain/chat/logic/message-content-codec.js',
-    'domain/chat/logic/render-dir-attach-tree.js',
-    'domain/chat/logic/status-chip-label.js',
-    'domain/chat/logic/tool-summary.js',
-    'domain/chat/logic/user-vfs-turn-view.js',
     'domain/chat/model/annotate-draft.schema.js',
     'domain/chat/model/composer-draft.schema.js',
     'domain/chat/model/message-attachment.schema.js',
     'domain/chat/model/project-agent-config.schema.js',
     'domain/chat/model/session-agent-config.schema.js',
     'domain/chat/model/user-vfs-pending.schema.js',
-    'domain/message-checkpoint/logic/restore-path.js',
-    'domain/prompt/logic/agent-prompt-layout-wire.js',
-    'domain/prompt/logic/normalize-agent-prompt-layout.js',
-    'domain/prompt/logic/validate-agent-prompt-layout.js',
-    'domain/prompt/logic/validate-dynamic-macros.js',
-    'domain/prompt/model/agent-prompt-layout.js',
     'domain/session-kkv/model/session-kkv-domains.js',
-    'domain/skills/model/skill-name.js',
     'domain/smart-sort-rule/model/smart-sort-rule-io.js',
     'domain/smart-sort-rule/model/smart-sort-rule.js',
     'domain/smart-sort-rule/model/smart-sort-rule.schema.js',
+    'infra/sql-template/index.js',
+
+    // ── 族 2 · 会话工具实现传递闭包（domain/tool/**）─────────────────────
+    // webview 内联输入框要能跑 vfs 读写 / 搜索 / 技能 / 子代理 / curl 这一整套工具；
+    // 工具实现之间互相 import，只能按「叶子逐个 deep-import」记基线。
+    // 删了会怎样：@file/@path 引用与工具调用在 webview 侧直接失效。
+    // ⚠️ 收敛它（把工具实现拆成不依赖 core 的独立包）是独立议题，本门禁内不做。
     'domain/tool/builtin/agent-tool.js',
     'domain/tool/builtin/curl-tool.js',
     'domain/tool/builtin/overflow-sink.js',
@@ -104,21 +104,51 @@ const WEBVIEW_CORE_ALLOWLIST = {
     'domain/tool/builtin/vfs-tools.js',
     'domain/tool/logic/skill-read-truncation.js',
     'domain/tool/logic/tool-output-limits.js',
+
+    // ── 族 3 · 持久化、编解码与正文缓存族 ────────────────────────────────
+    // 「先把内容取回来再渲染」的前置链：规则读写、工作区快照编解码、正文解码缓存、VFS 仓储。
+    // 删了会怎样：webview 侧只剩壳，数据要么不显示要么整份重解码。
+    // ⚠️ `infra/tdbc/index.js` 是 N-P0-01 病灶所在的数据库抽象层，被 core barrel 传递带进来；
+    // 白名单显式记账是为了「让它看得见」，不是「认可它」——真要摘掉得先让读写不经这层。
     'domain/vfs/repositories/impl/normalize-path.js',
     'domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js',
     'domain/workplace/logic/rule-snapshot-codec.js',
+    'infra/content-cache/logic/decoded-content-cache.js',
+    'infra/tdbc/index.js',
+    'service/vfs/impl/vfs.service.js',
+    'service/vfs/logic/ensure-import-dir-rules.js',
+
+    // ── 族 4 · 会话渲染与提示词组装族 ────────────────────────────────────
+    // 把消息、prompt 布局、附件树、技能清单渲染出来；`public/chat.js` 是这条链的聚合入口。
+    // 删了会怎样：chat-transcript 页面能挂载但内容全空。
+    // ⚠️ 病根 `domain/provider/logic/builtin-providers.js`
+    //    （`BUILTIN_DEFAULT_API_KEY_BY_KEY = Object.fromEntries(...)`，顶层执行）
+    //    **刻意不在**本白名单里——它一旦被 barrel 拖进来就是老 WebView 白屏，门 B 会直接打红。
+    'domain/agent/logic/merge-agent-definition-patch.js',
+    'domain/character-card/logic/character-card-limits.js',
+    'domain/chat/logic/message-content-codec.js',
+    'domain/chat/logic/render-dir-attach-tree.js',
+    'domain/chat/logic/status-chip-label.js',
+    'domain/chat/logic/tool-summary.js',
+    'domain/chat/logic/user-vfs-turn-view.js',
+    'domain/message-checkpoint/logic/restore-path.js',
+    'domain/prompt/logic/agent-prompt-layout-wire.js',
+    'domain/prompt/logic/normalize-agent-prompt-layout.js',
+    'domain/prompt/logic/validate-agent-prompt-layout.js',
+    'domain/prompt/logic/validate-dynamic-macros.js',
+    'domain/prompt/model/agent-prompt-layout.js',
+    'domain/skills/model/skill-name.js',
+    'infra/prompt-template/macro-scan.js',
+    'public/chat.js',
+    'service/chat/impl/usage-stats.service.js',
+
+    // ── 族 5 · 错误文案族 ────────────────────────────────────────────────
+    // 工具与 vfs/prompt 的用户可见报错措辞。
+    // 删了会怎样：报错退化成原始 key 或空串，用户看不懂。
     'errors/agent-config-errors.js',
     'errors/prompt-errors.js',
     'errors/tool-errors.js',
     'errors/vfs-errors.js',
-    'infra/content-cache/logic/decoded-content-cache.js',
-    'infra/prompt-template/macro-scan.js',
-    'infra/sql-template/index.js',
-    'infra/tdbc/index.js',
-    'public/chat.js',
-    'service/chat/impl/usage-stats.service.js',
-    'service/vfs/impl/vfs.service.js',
-    'service/vfs/logic/ensure-import-dir-rules.js',
   ],
   // 实测 0 个 core 模块（annotorious 是 node_modules，不算）。
   'rich-document': [],

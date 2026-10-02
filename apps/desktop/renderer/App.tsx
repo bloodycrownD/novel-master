@@ -106,6 +106,15 @@ function DesktopOverlays() {
     setWorkspaceMenu(null);
   }, []);
 
+  // 内联箭头会让 onClose 每次提交都换身份 ⇒ SettingsOverlay 的 handleClose
+  // （deps [guardedNav, onClose]）跟着换 ⇒ useImperativeHandle 每次都重写 ref，
+  // 「这个 ref 稳不稳」从此只能靠推理、不成立。提成 useCallback 让身份随渲染稳定；
+  // 行为零变化（拿到的仍是最新闭包，useCallback + useImperativeHandle 本就如此）。
+  const handleSettingsOverlayClose = useCallback(() => {
+    setSettingsOpen(false);
+    notifyAgentConfigChanged();
+  }, [notifyAgentConfigChanged]);
+
   useEffect(() => {
     registerEnsurePreviewVisible(() => {
       if (!columnLayout.columnVisibility.preview) {
@@ -369,10 +378,7 @@ function DesktopOverlays() {
         <SettingsOverlay
           ref={settingsOverlayRef}
           open={settingsOpen}
-          onClose={() => {
-            setSettingsOpen(false);
-            notifyAgentConfigChanged();
-          }}
+          onClose={handleSettingsOverlayClose}
         />
       </div>
 

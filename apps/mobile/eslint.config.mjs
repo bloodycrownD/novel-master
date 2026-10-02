@@ -32,8 +32,14 @@ import {sharedTsRules} from '../../eslint.config.base.mjs';
  * 为什么规则分「内置三条 + 自定义一条」：
  *   内置 no-restricted-properties / no-restricted-syntax 覆盖绝大多数直白写法，
  *   自定义规则只补它们表达不了的形态——计算属性（`Object['fromEntries']`）、
- *   可选调用（`x?.at?.()`）、解构取引用（`const {at} = arr`）、以及裸标识符
- *   `structuredClone(...)`。两套规则的覆盖面是互补的，不重复报同一条。
+ *   可选调用（`x?.at?.()`）、以及裸标识符 `structuredClone(...)`。
+ *   两套规则的覆盖面是互补的，不重复报同一条。
+ *
+ * ⚠️ **刻意不覆盖解构形态**（`const {at} = arr` / `const {at} = Array.prototype`）：
+ *   局部遮蔽是合法的 polyfill 写法（如 `const { structuredClone } = require('./shim')`），
+ *   自定义规则的 `shadowed` 集合正是为放行它而存在；一刀切拦解构会误伤合法降级。
+ *   代价是 `const {at} = arr; at(-1)` 这类写法两道门（门 A / 门 C）都数不到——
+ *   这是已知边界，不是漏项；要真拦须先给 `eslint-disable-next-line` 留出口。
  *
  * ⚠️ 门 A 只作用在**一方源码面**，三处它看不见（这是它的边界，不是缺陷）：
  *   ① `packages/core/dist`（N-P0-01 病灶 builtin-providers.js 就在那儿）→ 门 B 对住；
@@ -55,7 +61,7 @@ const WEBVIEW_RESTRICTED_MEMBERS = {
   replaceAll: 'String.prototype.replaceAll（ES2021）',
 };
 
-/** 解构 / 裸引用形态要拦的全局名。 */
+/** 裸引用形态要拦的全局名（解构/参数/import 等本地绑定会进 shadowed 而放行，见文件头注记）。 */
 const WEBVIEW_RESTRICTED_GLOBALS = new Set([
   'structuredClone',
   'queueMicrotask',
@@ -66,7 +72,7 @@ const noEs2020BuiltinRule = {
     type: 'problem',
     docs: {
       description:
-        'WebView 老浏览器守卫：禁止 ES2019+ 的运行时构造（含计算属性/可选调用/解构/裸引用形态）',
+        'WebView 老浏览器守卫：禁止 ES2019+ 的运行时构造（含计算属性/可选调用/裸引用形态；解构遮蔽形态刻意放行）',
     },
     schema: [],
     messages: {

@@ -1,5 +1,7 @@
 package com.novelmaster.llmsse
 
+import android.content.pm.ApplicationInfo
+import android.util.Log
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
@@ -17,8 +19,6 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import okio.Buffer
 import okio.BufferedSource
-import android.content.pm.ApplicationInfo
-import android.util.Log
 import java.io.IOException
 import java.io.InterruptedIOException
 import java.net.SocketTimeoutException
@@ -511,8 +511,14 @@ class LlmSseModule(reactContext: ReactApplicationContext) :
         return
       }
       streams.remove(requestId)
-      // 分类与发事件同在 state 锁内：classifyError 要读的 userAborted 判定与
-      // 修法 1 那次消费是同一个标志，两处都不在锁内会留下额外窗口。
+      // 分类与发事件同在 state 锁内；但**不要**据此认为 userAborted 的读写已同锁闭合：
+      // 传进来的 userAbortedHit 是上面 `userAborted.remove(requestId)` 在**锁外**取出的
+      // 一次性消费结果，classifyError 锁内**不再读 map** ⇒ spec 风险 R2 登记的
+      // 「消费 vs 写入」错位窗口（abort 打在分类之后）并未被本锁消除，此处只是已知的
+      // 残余窗口，不是「已闭合」的证明。
+      // userAbortedHit 到这里可证恒为 false（上面的 userAbortedHit 早退已滤掉 true），
+      // 故 classifyError 里的 `&& !userAbortedHit` 是恒真的死条件；参数按签名保留，
+      // 供将来非流式路径复用，不作删减。
       val (kind, message) = classifyError(
         t,
         effectiveReadTimeoutMs,

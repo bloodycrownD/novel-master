@@ -5,7 +5,7 @@
  * 只 mock runtime 与 meta/token 服务；被测 hook、toast-message、
  * session view cache 均用真实实现。
  */
-import {beforeEach, describe, expect, it, jest} from '@jest/globals';
+import {afterEach, beforeEach, describe, expect, it, jest} from '@jest/globals';
 import React from 'react';
 import TestRenderer, {act} from 'react-test-renderer';
 import {useChatTabScope} from '../src/screens/tabs/chat-tab/useChatTabScope';
@@ -83,10 +83,23 @@ const mockRuntime: any = {
 };
 
 const mockShowToast = jest.fn();
+
+/** 本文件挂过的 renderer；统一在 afterEach 里于 act 内卸载。 */
+const mounted: TestRenderer.ReactTestRenderer[] = [];
 const mockRefreshScope = jest.fn(async () => undefined);
 const mockExitSessionBatch = jest.fn();
 
-function mountScope() {
+/**
+ * 挂载并**在 act 内排空**挂载即发起的异步读。
+ *
+ * ⚠️ useChatTabScope 挂载即发起 refreshChatMeta / chat token label 两路异步读，
+ * 它们的 setState 若落在 act 之外 ⇒ jest 收尾时刷
+ * 「An update to Harness inside a test was not wrapped in act(...)」/
+ * 「Cannot log after tests are done」。act 未生效时 React 的批处理与 effect 时序
+ * 与真实渲染不同源，正是 spec §1 反复强调的偏差源，所以这里排空而不是忽略。
+ * ⚠️ 渲染器另存在 `mounted` 里，由 afterEach 统一于 act 内卸载（原来从不卸载）。
+ */
+async function mountScope() {
   let api: ReturnType<typeof useChatTabScope> | undefined;
   function Harness() {
     api = useChatTabScope({
@@ -101,11 +114,23 @@ function mountScope() {
     });
     return null;
   }
-  act(() => {
-    TestRenderer.create(React.createElement(Harness));
+  await act(async () => {
+    mounted.push(TestRenderer.create(React.createElement(Harness)));
   });
   return api!;
 }
+
+beforeEach(() => {
+  mounted.length = 0;
+});
+
+afterEach(async () => {
+  await act(async () => {
+    for (const r of mounted.splice(0)) {
+      r.unmount();
+    }
+  });
+});
 
 describe('useChatTabScope 批量删除中途失败', () => {
   beforeEach(() => {
@@ -127,7 +152,7 @@ describe('useChatTabScope 批量删除中途失败', () => {
     it('全部成功：逐个 delete、退出批选、刷新执行', async () => {
       const s1Key = sessionViewCacheKey('p1', 's1');
       setSessionViewCache(s1Key, {messages: [], hasMoreMessages: false});
-      const api = mountScope();
+      const api = await mountScope();
       const listCallsBefore = mockRuntime.projects.list.mock.calls.length;
 
       await act(async () => {
@@ -159,7 +184,7 @@ describe('useChatTabScope 批量删除中途失败', () => {
         }
         deletedSessionIds.push(id);
       });
-      const api = mountScope();
+      const api = await mountScope();
 
       await act(async () => {
         await api.deleteSelectedSessions(
@@ -189,7 +214,7 @@ describe('useChatTabScope 批量删除中途失败', () => {
         }
         deletedProjectIds.push(id);
       });
-      const api = mountScope();
+      const api = await mountScope();
       const listCallsBefore = mockRuntime.projects.list.mock.calls.length;
 
       await act(async () => {
@@ -223,7 +248,7 @@ describe('useChatTabScope 批量删除中途失败', () => {
         nearBottom: false,
       });
       setScrollSnapshot(otherScrollKey, {offsetY: 1, nearBottom: false});
-      const api = mountScope();
+      const api = await mountScope();
 
       await act(async () => {
         await api.handleDeleteProjects(['p1']);
@@ -249,7 +274,7 @@ describe('useChatTabScope 批量删除中途失败', () => {
       const p2Key = sessionViewCacheKey('p2', 's2');
       setSessionViewCache(p1Key, {messages: [], hasMoreMessages: false});
       setSessionViewCache(p2Key, {messages: [], hasMoreMessages: false});
-      const api = mountScope();
+      const api = await mountScope();
 
       await act(async () => {
         await api.handleDeleteProjects(['p1', 'p2']);

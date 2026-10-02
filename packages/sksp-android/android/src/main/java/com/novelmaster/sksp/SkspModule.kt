@@ -121,7 +121,14 @@ class SkspModule(reactContext: ReactApplicationContext) :
         map.putString("ciphertext", Base64.encodeToString(ciphertext, Base64.NO_WRAP))
         map.putString("iv", Base64.encodeToString(iv, Base64.NO_WRAP))
         promise.resolve(map)
-      } catch (e: Exception) {
+      } catch (e: Throwable) {
+        // catch 范围对齐 TokenizerModule:51：executor 是 ThreadPoolExecutor，runWorker
+        // 只会 catch (Throwable) 并交给默认 UncaughtExceptionHandler 然后换线程继续跑。
+        // 若这里是 catch (e: Exception)，抛 Error 的任务体（UnsatisfiedLinkError /
+        // NoClassDefFoundError / OutOfMemoryError 等）就会**绕过** RN 的
+        // NativeModuleCallExceptionHandler ⇒ promise.reject 不执行 ⇒ Promise 静默悬死
+        // （改前内联在 RN 队列线程时至少弹 redbox，故这是改成后台线程引入的可见性回归）。
+        // reject 的 code 与 message 逐字不动；e.message 可能为 null 属另条 P3，不在本处。
         promise.reject("ENCRYPT_FAILED", e.message, e)
       }
     }
@@ -143,7 +150,8 @@ class SkspModule(reactContext: ReactApplicationContext) :
         cipher.init(Cipher.DECRYPT_MODE, key, spec)
         val plainBytes = cipher.doFinal(Base64.decode(ciphertextB64, Base64.NO_WRAP))
         promise.resolve(String(plainBytes, Charsets.UTF_8))
-      } catch (e: Exception) {
+      } catch (e: Throwable) {
+        // 同 encrypt：catch 范围对齐 TokenizerModule，理由见上。
         promise.reject("DECRYPT_FAILED", e.message, e)
       }
     }

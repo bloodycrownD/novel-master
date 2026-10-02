@@ -14,10 +14,13 @@
  * 观测面是 `forgetSession` 的**调用参数序列**（注入缝，与实现同源且可注入），
  * 不是「map 里没有这个 key」这种可被实现换形态绕开的弱观测。
  */
-import {beforeEach, describe, expect, it, jest} from '@jest/globals';
+import {afterEach, beforeEach, describe, expect, it, jest} from '@jest/globals';
 import React from 'react';
 import TestRenderer, {act} from 'react-test-renderer';
 import {useChatTabScope} from '../src/screens/tabs/chat-tab/useChatTabScope';
+
+/** 本文件挂过的 renderer；统一在 afterEach 里于 act 内卸载。 */
+const mounted: TestRenderer.ReactTestRenderer[] = [];
 
 jest.mock('../src/services/chat-agent-meta', () => ({
   loadChatAgentMeta: jest.fn(async () => ({
@@ -86,7 +89,17 @@ const mockShowToast = jest.fn();
 const mockRefreshScope = jest.fn(async () => undefined);
 const mockExitSessionBatch = jest.fn();
 
-function mountScope() {
+/**
+ * 挂载并**在 act 内排空**挂载即发起的异步读。
+ *
+ * ⚠️ useChatTabScope 挂载即发起 refreshChatMeta / chat token label 两路异步读，
+ * 它们的 setState 若落在 act 之外 ⇒ jest 收尾时刷
+ * 「An update to Harness inside a test was not wrapped in act(...)」/
+ * 「Cannot log after tests are done」。act 未生效时 React 的批处理与 effect 时序
+ * 与真实渲染不同源，正是 spec §1 反复强调的偏差源，所以这里排空而不是忽略。
+ * ⚠️ 渲染器另存在 `mounted` 里，由 afterEach 统一于 act 内卸载（原来从不卸载）。
+ */
+async function mountScope() {
   let api: ReturnType<typeof useChatTabScope> | undefined;
   function Harness() {
     api = useChatTabScope({
@@ -101,11 +114,23 @@ function mountScope() {
     });
     return null;
   }
-  act(() => {
-    TestRenderer.create(React.createElement(Harness));
+  await act(async () => {
+    mounted.push(TestRenderer.create(React.createElement(Harness)));
   });
   return api!;
 }
+
+beforeEach(() => {
+  mounted.length = 0;
+});
+
+afterEach(async () => {
+  await act(async () => {
+    for (const r of mounted.splice(0)) {
+      r.unmount();
+    }
+  });
+});
 
 function forgottenIds(): string[] {
   return mockRuntime.sessionStreamUnitManager.forgetSession.mock.calls.map(
@@ -130,7 +155,7 @@ describe('AM-1 删除链路补调 forgetSession', () => {
   });
 
   it('T-AM1-1 单个删除成功 → forgetSession(id) 恰一次；删除失败 → 零次', async () => {
-    const api = mountScope();
+    const api = await mountScope();
     await act(async () => {
       await api.handleDeleteSession('s9');
     });
@@ -159,7 +184,7 @@ describe('AM-1 删除链路补调 forgetSession', () => {
       }
       deletedSessionIds.push(id);
     });
-    const api = mountScope();
+    const api = await mountScope();
     await act(async () => {
       await api.deleteSelectedSessions(
         new Set(['s1', 's2', 's3']),
@@ -172,7 +197,7 @@ describe('AM-1 删除链路补调 forgetSession', () => {
   });
 
   it('T-AM1-3 项目删除成功 → 该项目顶层会话被 forget；失败 → 零次；子 agent 会话不被 forget（已知缺口）', async () => {
-    const api = mountScope();
+    const api = await mountScope();
     await act(async () => {
       await api.handleDeleteProjects(['p1']);
     });
