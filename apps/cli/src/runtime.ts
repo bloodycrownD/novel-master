@@ -8,7 +8,7 @@ import { mkdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { deflateSync, inflateSync } from "node:zlib";
 import { registerTokenizerNodeDriver } from "@novel-master/tokenizer-driver-node";
-import { bootstrapNovelMaster, createPersistentPreferences, createPersistentState, open, registerZlibCodecAccelerator, runBlobBinaryNormalization, runMessageContentDecompress, runMessageRefUnref, runVfsContentPacking, type PersistentPreferences, type PersistentState, type TdbcConnection } from "@novel-master/core"; } from "@novel-master/core";
+import { bootstrapNovelMaster, createPersistentPreferences, createPersistentState, open, registerZlibCodecAccelerator, runBlobBinaryNormalization, runMessageContentDecompress, runMessageRefUnref, runVfsContentPacking, type PersistentPreferences, type PersistentState, type TdbcConnection } from "@novel-master/core";
 import { refreshUserVfsUnifiedToolTurnSnapshot } from "@novel-master/core/feature-flags";
 
 import { createAgentRegistryService, createAgentStreamRegistry, createAgentAbortRegistry } from "@novel-master/core/agent";
@@ -208,7 +208,7 @@ export async function createNovelMasterRuntime(
     driver: "better-sqlite3",
   });
   await bootstrapNovelMaster(conn);
-  // 三任务串行最坏 5+60+30≈95s（命令进程短命，超预算残余由下次命令或
+  // 四任务串行最坏 5+5+60+30≈100s（命令进程短命，超预算残余由下次命令或
   // 双端启动续跑）。解压只给 5s 是因为 CLI 是三端唯一把搬运 await 进
   // 命令关键路径的（desktop/mobile 皆 fire-and-forget），交互式进程不该
   // 被一次搬运独占一分钟。顺序无功能依赖——解压谓词（content_blob IS

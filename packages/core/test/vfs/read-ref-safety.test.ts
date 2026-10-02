@@ -669,11 +669,16 @@ describe("read-ref-safety: read 引用 × VFS 内容打包（pbm-9 合并轮定�
     });
     assert.equal(editResult2.replacements, 1);
 
-    // 打包前基准：hydrate 走 blob 行。
+    // 打包前基准：hydrate 走 blob 行（legacy read 行的兜底形态 = {path, content} 明文包）。
+    // v1 是用例开头的自定义正文（seedRead 未传 content 时会再 write 一次落 v2；ref 指向 v1）。
+    const expectedPlain = JSON.stringify({
+      path: "/pack.md",
+      content: `第一章 ${marker}\n伏笔一枚`,
+    });
     const beforePack = await hydrateFirstToolResultContent(
       await ctx.messages.listBySession(session.id)
     );
-    assert.equal(beforePack, seed.baseline);
+    assert.equal(beforePack, expectedPlain);
 
     // 打包任务收走 v1：hash 落 member 行、原 blob 行删除（这正是省空间的
     // 动作），revision 行与 read 引用计数不动。
@@ -701,8 +706,8 @@ describe("read-ref-safety: read 引用 × VFS 内容打包（pbm-9 合并轮定�
     );
     assert.equal(
       afterPack,
-      seed.baseline,
-      "member 读路径 hydrate 须与基准逐字节一致"
+      expectedPlain,
+      "member 读路径 hydrate 须与基准（明文包）逐字节一致"
     );
   });
 });
