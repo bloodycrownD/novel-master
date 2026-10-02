@@ -3867,7 +3867,7 @@ html[data-theme="dark"] .conversation-tab.is-active {
   display: block;
 }
 
-/* prompt-rounds：轮容器（user 轮多段时包一层，单段轮不加壳）。 */
+/* prompt-rounds：轮容器（每轮一张摘要卡 + 就地展开的卡片流）。 */
 .prompt-turn {
   display: flex;
   flex-direction: column;
@@ -3877,13 +3877,106 @@ html[data-theme="dark"] .conversation-tab.is-active {
   margin-bottom: 10px;
 }
 
-/* prompt-rounds：assistant 轮摘要卡（挂 .prompt-segment 基类，只叠自身差异）。 */
+/* prompt-rounds：轮摘要卡（三类轮统一形态）。
+   左侧色条按轮 kind 分色：user 青 / assistant 紫 / template 中性灰（语义色，不随主题变）。 */
 .prompt-turn-card {
-  border-left: 3px solid var(--primary);
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border-light);
+  border-left-width: 3px;
+  background: var(--surface);
 }
 
-.prompt-turn-card .prompt-segment__role {
-  color: var(--text-secondary);
+.prompt-turn--user {
+  border-left-color: #2dd4bf;
+}
+
+.prompt-turn--assistant {
+  border-left-color: #a78bfa;
+}
+
+.prompt-turn--template {
+  border-left-color: #9ca3af;
+}
+
+/* 轮卡头部行：可点的展开区 + ⤢ 全屏 + chevron（flex 排布，等宽摘要区吃掉中间余量）。 */
+.prompt-turn-card__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.prompt-turn-card__head:hover {
+  background: var(--background);
+}
+
+.prompt-turn-card__toggle {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+
+.prompt-turn-card__role {
+  flex: none;
+  align-self: flex-start;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* 摘要单行截断：沿用 .prompt-segment__title（:3826-3835）的 nowrap+ellipsis 先例。 */
+.prompt-turn-card__summary {
+  display: block;
+  max-width: 100%;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.prompt-turn-card__meta {
+  display: block;
+  max-width: 100%;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.prompt-turn-card__fullscreen {
+  flex: none;
+  padding: 0 4px;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.prompt-turn-card__fullscreen:hover {
+  color: var(--text);
+}
+
+/* 轮卡展开区：挂载 turn.cards 的有序卡片流。 */
+.prompt-turn-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
 }
 
 .prompt-turn-card .prompt-segment__preview {
@@ -3896,8 +3989,190 @@ html[data-theme="dark"] .conversation-tab.is-active {
 }
 
 .prompt-turn-card .prompt-segment__chevron {
-  align-self: center;
-  padding-top: 0;
+  flex: none;
+  font-size: 10px;
+  color: var(--text-tertiary);
+  line-height: 1;
+}
+
+/* ---------- 提示词预览三层结构：叶子卡（text / thinking） ---------- */
+
+.prompt-leaf-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  padding: 8px 11px;
+  text-align: left;
+  font: inherit;
+  border-radius: 10px;
+  border: 1px solid var(--border-light);
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.prompt-leaf-card:hover {
+  border-color: var(--text-tertiary);
+}
+
+.prompt-leaf-card__kind {
+  align-self: flex-start;
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--border-light);
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--text-tertiary);
+}
+
+/* thinking 卡：kind 徽标染琥珀色，与文本卡区分。 */
+.prompt-leaf-card--thinking .prompt-leaf-card__kind {
+  color: #d29922;
+  border-color: rgba(210, 153, 34, 0.35);
+}
+
+.prompt-leaf-card__preview {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  word-break: break-word;
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+/* ---------- 提示词预览三层结构：工具组卡（一次 tool_use 一张） ---------- */
+
+.prompt-tool-group {
+  border-radius: 10px;
+  border: 1px solid var(--border-light);
+  background: var(--surface);
+}
+
+.prompt-tool-group__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 9px 11px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+
+.prompt-tool-group__head:hover {
+  background: var(--background);
+}
+
+.prompt-tool-group__dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.prompt-tool-group__name {
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.prompt-tool-group__parallel {
+  flex: none;
+  padding: 1px 5px;
+  border-radius: 4px;
+  border: 1px dashed var(--border-light);
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--text-tertiary);
+}
+
+.prompt-tool-group__status {
+  flex: none;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.prompt-tool-group__chevron {
+  flex: none;
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--text-tertiary);
+}
+
+.prompt-tool-group__cells {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 10px 10px;
+}
+
+/* 组卡内的两格：上 tool use（等宽）/ 下 tool result；每格可点开全屏。 */
+.prompt-group-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  padding: 6px 9px 8px;
+  text-align: left;
+  font: inherit;
+  border-radius: 8px;
+  border: 1px solid var(--border-light);
+  background: var(--background);
+  cursor: pointer;
+}
+
+.prompt-group-cell:hover {
+  border-color: var(--text-tertiary);
+}
+
+.prompt-group-cell__tag {
+  align-self: flex-start;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(167, 139, 250, 0.13);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+
+.prompt-group-cell__body {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+  word-break: break-word;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+/* tool use 格是 JSON，等宽呈现。 */
+.prompt-group-cell__body.is-code {
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 11.5px;
+}
+
+/* 悬挂 tool_use（result 为 null）：占位文案灰化斜体，槽位保留不隐藏。 */
+.prompt-group-cell.is-lost .prompt-group-cell__tag {
+  background: rgba(156, 163, 175, 0.13);
+}
+
+.prompt-group-cell.is-lost .prompt-group-cell__body {
+  font-style: italic;
+  color: var(--text-tertiary);
 }
 
 .chat-messages {
@@ -5459,6 +5734,43 @@ html[data-theme="dark"] .chat-batch-bar {
   gap: 10px;
   flex-shrink: 0;
   padding-top: 12px;
+}
+
+/* 提示词预览全屏只读：标题 + 富文本正文（MermaidMarkdown）+ 底部关闭条，
+   壳复用 .text-prompt-overlay / .prompt-editor-modal，正文容器自己吃掉剩余高度并滚动。 */
+.prompt-fullscreen__title {
+  flex: none;
+  padding-bottom: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.prompt-fullscreen__body {
+  flex: 1;
+  overflow-y: auto;
+  font-size: 14px;
+  line-height: 1.85;
+  color: var(--text);
+}
+
+/* 逐卡富文本之间的视觉分隔（不加 `[段名]` 前缀，靠留白与分隔线断段）。 */
+.prompt-fullscreen__block + .prompt-fullscreen__block {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px dashed var(--border-light);
+}
+
+.prompt-fullscreen__block pre {
+  overflow-x: auto;
+}
+
+.prompt-fullscreen__empty {
+  margin: 0;
+  color: var(--text-tertiary);
 }
 
 .project-agent-config-modal {

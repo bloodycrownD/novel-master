@@ -1,19 +1,22 @@
 /**
- * T-R6：desktop 提示词查看「轮聚合」渲染 + assistant 轮详情 Modal（prompt-rounds Step 10）。
+ * T-R6 / T-DP1~T-DP5：desktop 提示词查看「三层结构」UI（prompt-preview-ui-redesign Step6）。
  *
  * 覆盖：
- * - template / user 轮渲染 `cards` 驱动的 `.prompt-segment` 折叠卡片（多卡轮包一层轮壳）；
- * - assistant 轮渲染摘要卡（role 标「assistant 轮」+ core 钉死的 summaryText + chevron）；
- * - 点摘要卡打开详情 Modal：内挂**只读** CodeEditor、value 由 `cards` 逐卡拼出、**不挂 onChange**；
- * - Esc 关闭 Modal（defaultPrevented 的 Esc 不拦截）；footer 关闭按钮同样关闭；
+ * - 轮卡列表：三类轮统一形态（role 徽标 + summaryText 单行截断 + metaText 行 + ⤢ 整轮全屏），
+ *   点头部就地展开/收起（展开区渲染 `turn.cards`）；
+ * - 展开区的叶子卡（text / thinking，kind 标签 + 限 2 行预览）与工具组卡
+ *   （组头状态点三态 + 可选「并行」徽标 + use/result 两格，悬挂时「未返回结果」占位）；
+ * - 全屏 Modal：正文容器 `.prompt-fullscreen__body` 内跑 **MermaidMarkdown**（只读、
+ *   不接 onLinkClick）；Esc（defaultPrevented 不拦截）/ 遮罩 / footer 三条关闭路径；
  * - 退役字段（`body` / `items`）即便残留在 payload 里也不参与渲染。
  *
  * 范式对齐 fetch-models-modal.test.tsx / chat-search-race-guard.test.tsx：
  * react-alias-hook.mjs 统一根 react 副本，react-test-renderer 真渲面板；
  * IPC 拦在 window.novelMasterDesktop.invoke（ipc client 底层出口）。
  * 两处替身说明：
- * - CodeEditor 经 prompt-turn-code-editor-hook.mjs 重定向到 stub（真组件需要 DOM），
- *   只读语义断言落在 props 形状上，CodeEditor 自身实现由文末源码级断言兜底；
+ * - MermaidMarkdown 经 prompt-turn-mermaid-hook.mjs 重定向到 stub（真组件依赖
+ *   documentElement / MutationObserver，node 环境下跑不动），content 断言落在 props 形状上，
+ *   MermaidMarkdown 自身行为由 mermaid-markdown.test.tsx 覆盖；
  * - node 环境无 document，Modal 的 Esc 监听用最小 document 桩驱动。
  */
 import assert from "node:assert/strict";
@@ -33,16 +36,16 @@ const rendererRoot = join(__dirname, "..", "renderer");
 const desktopRoot = join(__dirname, "..");
 
 register(new URL("./react-alias-hook.mjs", import.meta.url));
-register(new URL("./prompt-turn-code-editor-hook.mjs", import.meta.url));
+register(new URL("./prompt-turn-mermaid-hook.mjs", import.meta.url));
 const { act } = await import("react");
 const { RealPromptPanel } = await import("@/features/chat/RealPromptPanel");
 
 /**
- * 与 core `buildPromptPreviewTurnsFromLayout` 的新 payload 形态对齐：
- * `cards` 是唯一正文载体，`body` / `items` / `summary` 均已从 DTO 退役。
+ * 三类轮各一条 + 一个组卡（ok 态），与 core `buildPromptPreviewTurnsFromLayout`
+ * 的 payload 形态对齐：`cards` 是唯一正文载体，`body` / `items` / `summary` 均已退役。
  *
- * ⚠️ user 轮给两张卡是**合成夹具**：core 的 user 轮实为「wrap 后整条文本直转单卡」，
- * 这里造第二张卡只为继续覆盖面板的 `.prompt-turn` 轮壳分支（core 侧覆盖见 T-PT5）。
+ * 轮卡默认**收起**，所以 cards 里的正文默认不出现在 DOM 里——这正是 T-DP1 要钉的
+ * 「摘要单行 + 就地展开」行为基线。
  */
 const TURNS: PromptPreviewTurnDto[] = [
   {
@@ -61,6 +64,8 @@ const TURNS: PromptPreviewTurnDto[] = [
     summaryText: "帮我写第一章",
     metaText: "#5 · 15 字",
     cards: [
+      // ⚠️ user 轮两张卡是**合成夹具**：core 实为「wrap 后整条文本直转单卡」，
+      // 这里造第二张卡只为覆盖叶子卡多张时展开区的连续渲染。
       { type: "text", id: "card-u1", role: "user", body: "帮我写第一章" },
       { type: "text", id: "card-u2", role: "user", body: "三千字左右" },
     ],
@@ -86,23 +91,65 @@ const TURNS: PromptPreviewTurnDto[] = [
 ];
 
 /**
- * cards 驱动的详情正文夹具：assistant 轮带 thinking 卡 + 文本卡，
- * 用来验证详情 Modal 的 value 由 `cards` 逐卡拼出（旧的 `turn.body` 已退役）。
+ * 组卡三态夹具（ok / error / lost）+ thinking 卡 + 并行徽标，一次把 T-DP2 的
+ * 状态点颜色、可读文案、丢失占位都覆盖掉。
  */
-const TURNS_CARDS_ONLY: PromptPreviewTurnDto[] = [
+const TURNS_GROUP_STATES: PromptPreviewTurnDto[] = [
   {
-    id: "turn-9",
+    id: "turn-11",
     kind: "assistant",
-    summaryText: "先列提纲",
-    metaText: "#9 · 20 字",
+    summaryText: "工具调用三态",
+    metaText: "#11 · 工具调用 3 次 · 3 失败 · 1 丢失",
     cards: [
       { type: "thinking", id: "card-t1", role: "assistant", body: "（思考正文）" },
-      { type: "text", id: "card-a2", role: "assistant", body: "先列提纲" },
+      {
+        type: "toolGroup",
+        id: "group-ok",
+        toolName: "list_chapters",
+        inputJson: '{ "limit": 3 }',
+        result: { toolUseId: "call-ok", ok: true, body: "目录已返回" },
+        status: "ok",
+        parallel: true,
+      },
+      {
+        type: "toolGroup",
+        id: "group-error",
+        toolName: "read_chapter",
+        inputJson: '[tool_use name=read_chapter id=call-err]',
+        result: { toolUseId: "call-err", ok: false, body: "Error: 章不存在" },
+        status: "error",
+        parallel: false,
+      },
+      {
+        type: "toolGroup",
+        id: "group-lost",
+        toolName: "write_chapter",
+        inputJson: '[tool_use name=write_chapter id=call-lost]',
+        result: null,
+        status: "lost",
+        parallel: false,
+      },
+    ],
+  },
+];
+
+/**
+ * 「整轮全屏」夹具：叶子卡 + 组卡混排，验证全屏是 cards 逐卡富文本流，
+ * 且组卡两格（use 入参 / result 正文）都进流、不带 `[段名]` 前缀。
+ */
+const TURNS_FULLSCREEN: PromptPreviewTurnDto[] = [
+  {
+    id: "turn-13",
+    kind: "assistant",
+    summaryText: "全屏流夹具",
+    metaText: "#13 · 工具调用 1 次 · 8 字",
+    cards: [
+      { type: "text", id: "card-a3", role: "assistant", body: "先列提纲" },
       {
         type: "toolGroup",
         id: "group-call-2",
         toolName: "read_chapter",
-        inputJson: "[tool_use name=read_chapter id=call-2]",
+        inputJson: '[tool_use name=read_chapter id=call-2]',
         result: null,
         status: "lost",
         parallel: false,
@@ -175,12 +222,12 @@ function installGlobals(turns: PromptPreviewTurnDto[]): {
     window?: unknown;
     document?: unknown;
     IS_REACT_ACT_ENVIRONMENT?: boolean;
-    __promptTurnCodeEditorProps?: Record<string, unknown>[];
+    __promptTurnMermaidProps?: Record<string, unknown>[];
   };
   const prevWindow = g.window;
   const prevDocument = g.document;
   const prevActEnv = g.IS_REACT_ACT_ENVIRONMENT;
-  const prevEditorProps = g.__promptTurnCodeEditorProps;
+  const prevMermaidProps = g.__promptTurnMermaidProps;
   const doc = makeDocumentStub();
   g.window = {
     novelMasterDesktop: {
@@ -194,23 +241,30 @@ function installGlobals(turns: PromptPreviewTurnDto[]): {
   };
   g.document = doc;
   g.IS_REACT_ACT_ENVIRONMENT = true;
-  g.__promptTurnCodeEditorProps = [];
+  g.__promptTurnMermaidProps = [];
   return {
     doc,
     restore: () => {
       g.window = prevWindow;
       g.document = prevDocument;
       g.IS_REACT_ACT_ENVIRONMENT = prevActEnv;
-      g.__promptTurnCodeEditorProps = prevEditorProps;
+      g.__promptTurnMermaidProps = prevMermaidProps;
     },
   };
 }
 
-function editorProps(): Record<string, unknown>[] {
+/** stub 记下的 MermaidMarkdown props 序列（每次渲染 push 一份）。 */
+function mermaidProps(): Record<string, unknown>[] {
   return (
-    (globalThis as unknown as { __promptTurnCodeEditorProps?: Record<string, unknown>[] })
-      .__promptTurnCodeEditorProps ?? []
+    (globalThis as unknown as { __promptTurnMermaidProps?: Record<string, unknown>[] })
+      .__promptTurnMermaidProps ?? []
   );
+}
+
+/** 清空记录序列，用于「第二次全屏」的断言起点（stub 只 push 不重置）。 */
+function resetMermaidProps(): void {
+  (globalThis as unknown as { __promptTurnMermaidProps?: Record<string, unknown>[] })
+    .__promptTurnMermaidProps = [];
 }
 
 /** 挂载面板并等 load 落地。 */
@@ -248,8 +302,8 @@ function classNodes(root: ReactTestRendererRoot, className: string) {
 /**
  * hasClass 口径的节点收集（类名合并后 className 不再全等匹配）。
  *
- * r4/B-9 起 assistant 轮摘要卡同时挂 `prompt-segment prompt-turn-card` 两类，
- * 断言这两类都得走本helper，全等口径会把 assistant 卡漏掉。
+ * 三层结构里轮卡是 `prompt-turn prompt-turn-card prompt-turn--<kind>` 多类合并，
+ * 组卡 / 叶子卡也带条件类（`is-expanded` / `is-lost`），断言这些类都得走本 helper。
  */
 function classListNodes(root: ReactTestRendererRoot, className: string) {
   return root.findAll(
@@ -287,14 +341,44 @@ function click(node: { props: unknown }, arg?: unknown): void {
   handler!(arg);
 }
 
-/** 取节点子树里第一个原生 button（摘要卡 / footer 按钮都是原生 button）。 */
+/** 取节点子树里第一个原生 button（轮卡头部 / footer 按钮都是原生 button）。 */
 function firstNativeButton(node: {
   findAll: (p: (n: { type: unknown }) => boolean) => Array<{ props: unknown }>;
 }): { props: unknown } {
   return node.findAll((n) => typeof n.type === "string" && n.type === "button")[0]!;
 }
 
-describe("RealPromptPanel 轮渲染 + assistant 轮详情 Modal (T-R6)", () => {
+/** 取指定轮卡的展开态 toggle 按钮（`.prompt-turn-card__toggle`）。 */
+function turnToggle(
+  root: ReactTestRendererRoot,
+  turnId: string,
+): { props: unknown } {
+  const turn = root.findAll(
+    (node) =>
+      typeof node.type === "string" && hasClass(node, "prompt-turn-card") &&
+      node.props?.["data-turn-id"] === turnId,
+  )[0]!;
+  return turn.findAll(
+    (n) => n.props?.className === "prompt-turn-card__toggle",
+  )[0]!;
+}
+
+/** 点开某轮（toggle 展开），返回该轮的轮卡节点。 */
+async function expandTurn(
+  root: ReactTestRendererRoot,
+  turnId: string,
+): Promise<{ props: Record<string, unknown> }> {
+  await act(async () => {
+    click(turnToggle(root, turnId));
+  });
+  return root.findAll(
+    (node) =>
+      typeof node.type === "string" && hasClass(node, "prompt-turn-card") &&
+      node.props?.["data-turn-id"] === turnId,
+  )[0]!;
+}
+
+describe("RealPromptPanel 三层结构轮卡列表 + 全屏富文本 Modal (T-R6 / T-DP1~T-DP3)", () => {
   let restore: () => void;
   let doc: DocumentStub;
 
@@ -308,99 +392,328 @@ describe("RealPromptPanel 轮渲染 + assistant 轮详情 Modal (T-R6)", () => {
     restore();
   });
 
-  it("template/user 轮渲染 cards 卡片（多卡轮包轮壳），assistant 轮渲染摘要卡", async () => {
+  it("T-DP1：template / user / assistant 三类轮统一渲染成轮摘要卡（徽标+单行摘要+meta 行+⤢）", async () => {
     const renderer = await mountPanel();
     const root = renderer.root;
 
-    // template 单卡轮 + user 两卡轮 → 3 张卡片，data-card-id 即 core 的卡片 id
-    const segments = classNodes(root, "prompt-segment");
-    assert.equal(segments.length, 3);
+    // 三类轮 = 三张轮卡，data-turn-kind 一并钉住
+    const turnCards = classListNodes(root, "prompt-turn-card");
+    assert.equal(turnCards.length, 3);
     assert.deepEqual(
-      segments.map((node) => node.props["data-card-id"]),
-      ["seg-sys", "card-u1", "card-u2"],
+      turnCards.map((node) => node.props["data-turn-id"]),
+      ["seg-sys", "turn-5", "turn-7"],
+    );
+    assert.deepEqual(
+      turnCards.map((node) => node.props["data-turn-kind"]),
+      ["template", "user", "assistant"],
+    );
+    // 每张轮卡都同时挂轮壳类与 kind 修饰类（三类统一外壳，只靠色条/徽标区分）
+    for (const turnCard of turnCards) {
+      assert.ok(hasClass(turnCard, "prompt-turn"), "轮卡应挂 .prompt-turn 轮壳类");
+    }
+    assert.equal(classListNodes(root, "prompt-turn--template").length, 1);
+    assert.equal(classListNodes(root, "prompt-turn--user").length, 1);
+    assert.equal(classListNodes(root, "prompt-turn--assistant").length, 1);
+
+    // role 徽标：user 青 / assistant 紫 / template 灰（语义色，对齐设计基准 demo）
+    const roles = classListNodes(root, "prompt-turn-card__role");
+    assert.deepEqual(
+      roles.map((node) => textOf(node)),
+      ["template 轮", "user 轮", "assistant 轮"],
+    );
+    assert.deepEqual(
+      roles.map((node) => (node.props as { style: { color: string } }).style.color),
+      ["#9ca3af", "#2dd4bf", "#a78bfa"],
     );
 
-    // 多卡轮包一层轮壳，单卡轮不加壳（形态与单张卡片一致）
-    const turnGroups = root.findAll((node) => hasClass(node, "prompt-turn"));
-    assert.equal(turnGroups.length, 1);
-    assert.equal(turnGroups[0]!.props["data-turn-id"], "turn-5");
-    assert.ok(
-      turnGroups[0]!.findAll((node) => hasClass(node, "prompt-segment")).length ===
-        2,
-      "user 轮应包含两张卡片",
+    // summaryText 单行摘要 + metaText 计数行（摘要不二次加工，直接读 core 字段）
+    const summaries = classListNodes(root, "prompt-turn-card__summary");
+    assert.deepEqual(
+      summaries.map((node) => textOf(node)),
+      ["system", "帮我写第一章", "好的，我先列提纲"],
     );
+    const metas = classListNodes(root, "prompt-turn-card__meta");
+    assert.deepEqual(
+      metas.map((node) => textOf(node)),
+      ["6 字", "#5 · 15 字", "#7 · 工具调用 1 次 · 128 字"],
+    );
+    // meta 行同时挂 .prompt-segment__preview（契约类名保留）
+    for (const meta of metas) {
+      assert.ok(hasClass(meta, "prompt-segment__preview"));
+    }
 
-    // 卡片 role 标签走 ROLE_LABELS 映射表（system 走 PROMPT_REGION_LABELS）
-    assert.match(textOf(segments[0]!), /你是写作助手/);
-
-    // assistant 轮：摘要卡 + core 钉死的 summaryText + chevron
-    const cards = classListNodes(root, "prompt-turn-card");
-    assert.equal(cards.length, 1);
-    // 摘要卡与卡片共用 .prompt-segment 基类，hasClass 口径下共 4 张
-    assert.equal(classListNodes(root, "prompt-segment").length, 4);
-    assert.equal(cards[0]!.props["data-turn-id"], "turn-7");
-    const cardText = textOf(cards[0]!);
-    assert.match(cardText, /assistant 轮/);
-    assert.match(cardText, /好的，我先列提纲/);
-    assert.doesNotMatch(cardText, /工具调用 1 次/);
-    assert.match(textOf(cards[0]!), /▶/);
-    // 未点开前没有详情 Modal
+    // 每轮一个整轮全屏按钮 ⤢ + 一个 chevron
+    assert.equal(classListNodes(root, "prompt-turn-card__fullscreen").length, 3);
+    assert.match(
+      textOf(classListNodes(root, "prompt-turn-card__fullscreen")[0]!),
+      /⤢/,
+    );
+    assert.equal(classListNodes(root, "prompt-turn-card__body").length, 0);
+    // 默认收起：没有展开区、没有卡片、没有 Modal
     assert.equal(classNodes(root, "text-prompt-overlay").length, 0);
   });
 
-  it("点 assistant 轮摘要卡 → 详情 Modal 挂只读 CodeEditor（value 由 cards 逐卡拼出、无 onChange）", async () => {
+  it("T-DP1：点头部就地展开 → 渲染 turn.cards 叶子卡，再点收起", async () => {
     const renderer = await mountPanel();
     const root = renderer.root;
-    const card = classListNodes(root, "prompt-turn-card")[0]!;
-    const button = firstNativeButton(card);
+
+    const turn = await expandTurn(root, "turn-5");
+    assert.ok(hasClass(turn, "is-expanded"), "展开后轮卡应挂 is-expanded");
+
+    // 展开区挂载 cards 叶子卡，id 即 core 的卡片 id
+    const leafCards = classListNodes(root, "prompt-leaf-card");
+    assert.deepEqual(
+      leafCards.map((node) => node.props["data-card-id"]),
+      ["card-u1", "card-u2"],
+    );
+    // 叶子卡：kind 标签 + 预览正文（限行由 CSS 承担，见 T-DP5）
+    assert.deepEqual(
+      leafCards.map((node) => textOf(node.findAll(
+        (n) => n.props?.className === "prompt-leaf-card__kind",
+      )[0]!)),
+      ["user", "user"],
+    );
+    assert.match(textOf(leafCards[0]!), /帮我写第一章/);
+    assert.match(textOf(leafCards[1]!), /三千字左右/);
+
+    // 再点一次收起：展开区与卡片都消失
+    await act(async () => {
+      click(turnToggle(root, "turn-5"));
+    });
+    assert.equal(classListNodes(root, "prompt-turn-card__body").length, 0);
+    assert.equal(classListNodes(root, "prompt-leaf-card").length, 0);
+    // 别的轮仍是收起态（展开 map 按轮 id 隔离）
+    assert.equal(classListNodes(root, "is-expanded").length, 0);
+  });
+
+  it("T-DP2：展开区渲染组卡三态（ok / error / lost）+ 并行徽标 + use/result 两格", async () => {
+    const renderer = await mountPanelWith(TURNS_GROUP_STATES);
+    const root = renderer.root;
+    await expandTurn(root, "turn-11");
+
+    // thinking 叶子卡与三张组卡按 cards 顺序平铺
+    assert.equal(classListNodes(root, "prompt-leaf-card").length, 1);
+    assert.match(
+      textOf(classListNodes(root, "prompt-leaf-card")[0]!),
+      /（思考正文）/,
+    );
+    assert.equal(classListNodes(root, "prompt-leaf-card--thinking").length, 1);
+
+    const groups = classListNodes(root, "prompt-tool-group");
+    assert.equal(groups.length, 3);
+    assert.deepEqual(
+      groups.map((node) => node.props["data-card-status"]),
+      ["ok", "error", "lost"],
+    );
+
+    // 组头：工具名 + 状态点三色（ok 绿 / error 红 / lost 灰）+ 状态文案
+    assert.deepEqual(
+      groups.map((node) =>
+        textOf(node.findAll(
+          (n) => n.props?.className === "prompt-tool-group__name",
+        )[0]!),
+      ),
+      ["list_chapters", "read_chapter", "write_chapter"],
+    );
+    assert.deepEqual(
+      groups.map((node) =>
+        (node.findAll(
+          (n) => n.props?.className === "prompt-tool-group__dot",
+        )[0]!.props as { style: { background: string } }).style.background,
+      ),
+      ["#34c759", "#f87171", "#9ca3af"],
+    );
+    assert.deepEqual(
+      groups.map((node) => textOf(node).match(/成功|失败|丢失/)![0]),
+      ["成功", "失败", "丢失"],
+    );
+
+    // 并行徽标只挂在 parallel=true 的组卡上
+    assert.equal(classListNodes(root, "prompt-tool-group__parallel").length, 1);
+    assert.match(textOf(groups[0]!), /并行/);
+    assert.equal(groups[1]!.findAll(
+      (n) => n.props?.className === "prompt-tool-group__parallel",
+    ).length, 0);
+
+    // 组卡默认收起，两格不渲染
+    assert.equal(classListNodes(root, "prompt-group-cell").length, 0);
+
+    // 展开组卡 → use / result 两格（等宽入参格 + 正文格），悬挂格走 is-lost 占位
+    await act(async () => {
+      click(
+        classListNodes(root, "prompt-tool-group")[0]!.findAll(
+          (n) => n.props?.className === "prompt-tool-group__head",
+        )[0]!,
+      );
+    });
+    const cells = classListNodes(root, "prompt-group-cell");
+    assert.equal(cells.length, 2);
+    assert.deepEqual(
+      cells.map((node) => node.props["data-leaf-id"]),
+      ["group-ok-use", "group-ok-result"],
+    );
+    assert.match(textOf(cells[0]!), /tool use/);
+    assert.match(textOf(cells[0]!), /"limit": 3/);
+    assert.match(textOf(cells[1]!), /tool result/);
+    assert.match(textOf(cells[1]!), /目录已返回/);
+    // 入参格等宽（is-code），结果格不是
+    assert.equal(
+      cells[0]!.findAll(
+        (n) => typeof n.type === "string" && hasClass(n, "prompt-group-cell__body"),
+      ).filter((n) => hasClass(n, "is-code")).length,
+      1,
+    );
+
+    // 丢失态组卡：展开后出「未返回结果」占位 + is-lost 灰化
+    await act(async () => {
+      click(
+        classListNodes(root, "prompt-tool-group")[2]!.findAll(
+          (n) => n.props?.className === "prompt-tool-group__head",
+        )[0]!,
+      );
+    });
+    const lostCells = classListNodes(root, "prompt-group-cell").filter((n) =>
+      hasClass(n, "is-lost"),
+    );
+    assert.equal(lostCells.length, 1);
+    assert.match(textOf(lostCells[0]!), /未返回结果/);
+    // 组卡展开 map 按 turn.id + card.id 隔离：中间 error 组卡仍是收起态
+    assert.equal(
+      classListNodes(root, "prompt-tool-group").filter((n) =>
+        hasClass(n, "is-expanded"),
+      ).length,
+      2,
+    );
+  });
+
+  it("T-DP3：⤢ 整轮全屏 → Modal 正文容器跑 MermaidMarkdown，cards 逐卡成流且不挂 onLinkClick", async () => {
+    const renderer = await mountPanelWith(TURNS_FULLSCREEN);
+    const root = renderer.root;
 
     await act(async () => {
-      click(button);
+      click(
+        classListNodes(root, "prompt-turn-card")[0]!.findAll(
+          (n) => n.props?.className === "prompt-turn-card__fullscreen",
+        )[0]!,
+      );
     });
 
     const overlays = classNodes(root, "text-prompt-overlay");
     assert.equal(overlays.length, 1);
     const modal = root.findAll((node) => node.props?.role === "dialog")[0]!;
     assert.equal(modal.props["aria-modal"], "true");
-    assert.match(String(modal.props["aria-label"]), /assistant 轮详情/);
-
-    const props = editorProps();
-    assert.equal(props.length, 1);
-    assert.equal(props[0]!["readOnly"], true);
-    assert.equal(props[0]!["languagePath"], "prompt.txt");
-    // 正文载体只有 cards：每张卡的正文（工具组卡取 use 输入 + result）都要进详情
-    const value = String(props[0]!["value"]);
-    for (const card of TURNS[2]!.cards) {
-      if (card.type === "toolGroup") {
-        assert.ok(value.includes(card.inputJson), "详情应含工具输入");
-        assert.ok(value.includes(card.result?.body ?? ""), "详情应含工具结果");
-      } else {
-        assert.ok(value.includes(card.body), "详情应含卡片正文");
-      }
-    }
+    assert.match(String(modal.props["aria-label"]), /assistant 轮 · 全屏流夹具详情/);
+    // 壳复用：.text-prompt-overlay / .prompt-editor-modal / footer 全在
     assert.equal(
-      props[0]!["onChange"],
-      undefined,
-      "只读详情不应挂 onChange（内容永不回写）",
+      modal.findAll(
+        (node) => node.props?.className === "prompt-editor-modal__footer",
+      ).length,
+      1,
+    );
+    // 正文容器是新增的 .prompt-fullscreen__body（flex:1 + overflow-y:auto 由 CSS 保证）
+    const body = modal.findAll(
+      (node) => node.props?.className === "prompt-fullscreen__body",
+    )[0]!;
+
+    // 整轮 = cards 逐卡富文本流：叶子正文 1 段 + 组卡两格 2 段，无 [段名] 前缀
+    const props = mermaidProps();
+    assert.equal(props.length, 3);
+    assert.deepEqual(
+      props.map((p) => p["content"]),
+      [
+        "先列提纲",
+        '[tool_use name=read_chapter id=call-2]',
+        "未返回结果",
+      ],
+    );
+    // 只读预览：链接路由回调不传
+    for (const p of props) {
+      assert.equal(p["onLinkClick"], undefined, "只读全屏不应挂 onLinkClick");
+    }
+    // 三段都落在正文容器里（stub 渲染 data-mermaid-stub 占位节点）
+    const stubs = body.findAll(
+      (node) => node.props?.["data-mermaid-stub"] === "true",
+    );
+    assert.equal(stubs.length, 3);
+    // 逐卡富文本流之间无 `[段名]` 前缀，只有视觉分隔块
+    assert.equal(
+      body.findAll((node) => node.props?.className === "prompt-fullscreen__block")
+        .length,
+      3,
     );
     assert.equal(
-      props[0]!["onSave"],
-      undefined,
-      "只读详情不提供保存动作",
+      textOf(body).includes("["),
+      false,
+      "正文容器不应拼出 [段名] 式前缀",
+    );
+    // CodeEditor 已从本面板退役
+    assert.equal(
+      (globalThis as unknown as { __promptTurnCodeEditorProps?: unknown[] })
+        .__promptTurnCodeEditorProps?.length ?? 0,
+      0,
+      "面板不应再挂 CodeEditor",
     );
   });
 
-  it("Esc 关闭详情 Modal；defaultPrevented 的 Esc 不拦截", async () => {
+  it("T-DP3：叶子卡与组卡格子各自点开全屏（单份正文），⤢ 之外互不串台", async () => {
+    const renderer = await mountPanelWith(TURNS_GROUP_STATES);
+    const root = renderer.root;
+    await expandTurn(root, "turn-11");
+
+    // 叶子卡（thinking）→ 全屏正文就是该卡 body
+    await act(async () => {
+      click(classListNodes(root, "prompt-leaf-card")[0]!);
+    });
+    assert.deepEqual(
+      mermaidProps().map((p) => p["content"]),
+      ["（思考正文）"],
+    );
+    const title = classNodes(root, "prompt-fullscreen__title")[0]!;
+    assert.equal(textOf(title), "thinking");
+    // 先关掉，避免与下一段串台；stub 只 push 不重置，记录也一并清零
+    await act(async () => {
+      click(classNodes(root, "text-prompt-overlay")[0]!);
+    });
+    assert.equal(classNodes(root, "text-prompt-overlay").length, 0);
+    resetMermaidProps();
+
+    // 展开 error 组卡，点其 tool result 格 → 全屏只有 result 正文
+    await act(async () => {
+      click(
+        classListNodes(root, "prompt-tool-group")[1]!.findAll(
+          (n) => n.props?.className === "prompt-tool-group__head",
+        )[0]!,
+      );
+    });
+    const errorCells = classListNodes(root, "prompt-tool-group").filter(
+      (node) => node.props["data-card-id"] === "group-error",
+    )[0]!.findAll(
+      (n) => typeof n.type === "string" && hasClass(n, "prompt-group-cell"),
+    );
+    assert.equal(errorCells.length, 2);
+    await act(async () => {
+      click(errorCells[1]!);
+    });
+    assert.deepEqual(
+      mermaidProps().map((p) => p["content"]),
+      ["Error: 章不存在"],
+    );
+    assert.equal(textOf(classNodes(root, "prompt-fullscreen__title")[0]!), "tool result");
+  });
+
+  it("Esc 关闭全屏 Modal；defaultPrevented 的 Esc 不拦截", async () => {
     const renderer = await mountPanel();
     const root = renderer.root;
-    const button = firstNativeButton(classListNodes(root, "prompt-turn-card")[0]!);
-
     await act(async () => {
-      click(button);
+      click(
+        classListNodes(root, "prompt-turn-card")[2]!.findAll(
+          (n) => n.props?.className === "prompt-turn-card__fullscreen",
+        )[0]!,
+      );
     });
     assert.equal(classNodes(root, "text-prompt-overlay").length, 1);
 
-    // 已被 CodeEditor 等消费掉的 Esc（defaultPrevented）不关闭
+    // 已被下游消费掉的 Esc（defaultPrevented）不关闭
     await act(async () => {
       doc.press("Escape", true);
     });
@@ -412,17 +725,20 @@ describe("RealPromptPanel 轮渲染 + assistant 轮详情 Modal (T-R6)", () => {
     assert.equal(classNodes(root, "text-prompt-overlay").length, 0);
   });
 
-  it("footer 关闭按钮关闭详情 Modal（点遮罩同样关闭）", async () => {
+  it("footer 关闭按钮关闭全屏 Modal（点遮罩同样关闭）", async () => {
     const renderer = await mountPanel();
     const root = renderer.root;
-    const openDetail = async () => {
-      const button = firstNativeButton(classListNodes(root, "prompt-turn-card")[0]!);
+    const openFullscreen = async () => {
       await act(async () => {
-        click(button);
+        click(
+          classListNodes(root, "prompt-turn-card")[2]!.findAll(
+            (n) => n.props?.className === "prompt-turn-card__fullscreen",
+          )[0]!,
+        );
       });
     };
 
-    await openDetail();
+    await openFullscreen();
     let modal = root.findAll((node) => node.props?.role === "dialog")[0]!;
     // Modal 内容区点自身不关闭（stopPropagation），点遮罩才关
     await act(async () => {
@@ -436,7 +752,7 @@ describe("RealPromptPanel 轮渲染 + assistant 轮详情 Modal (T-R6)", () => {
     assert.equal(classNodes(root, "text-prompt-overlay").length, 0);
 
     // footer 关闭按钮
-    await openDetail();
+    await openFullscreen();
     modal = root.findAll((node) => node.props?.role === "dialog")[0]!;
     const footer = modal.findAll(
       (node) => node.props?.className === "prompt-editor-modal__footer",
@@ -458,41 +774,49 @@ describe("RealPromptPanel 轮渲染 + assistant 轮详情 Modal (T-R6)", () => {
     assert.equal(renderer!.toJSON(), null);
   });
 
-  it("payload 无 body 时详情正文仍由 cards 拼出（thinking / 文本 / 丢失工具组三态）", async () => {
-    const renderer = await mountPanelWith(TURNS_CARDS_ONLY);
+  it("整轮全屏正文只由 cards 拼出（thinking / 文本 / 丢失工具组三态，不依赖旧 body）", async () => {
+    const renderer = await mountPanelWith(TURNS_GROUP_STATES);
     const root = renderer.root;
 
-    // assistant 轮：只有一张摘要卡，卡片流不在轮列表里平铺
-    const cards = classListNodes(root, "prompt-turn-card");
-    assert.equal(cards.length, 1);
-    assert.equal(classListNodes(root, "prompt-segment").length, 1);
-    assert.match(textOf(cards[0]!), /先列提纲/);
-
     await act(async () => {
-      click(firstNativeButton(cards[0]!));
+      click(
+        classListNodes(root, "prompt-turn-card")[0]!.findAll(
+          (n) => n.props?.className === "prompt-turn-card__fullscreen",
+        )[0]!,
+      );
     });
 
-    const props = editorProps();
-    assert.equal(props.length, 1);
-    assert.equal(props[0]!["readOnly"], true);
-    const value = String(props[0]!["value"]);
-    // thinking 卡正文进详情
-    assert.match(value, /（思考正文）/);
-    // 文本卡正文进详情
-    assert.match(value, /先列提纲/);
-    // 悬挂工具组卡：use 输入进详情，result 为 null 时出占位文案
-    assert.match(value, /\[tool_use name=read_chapter id=call-2\]/);
-    assert.match(value, /（未返回结果）/);
+    // 逐卡成流：thinking 正文、文本正文、组卡两格入参/结果
+    assert.deepEqual(
+      mermaidProps().map((p) => p["content"]),
+      [
+        "（思考正文）",
+        '{ "limit": 3 }',
+        "目录已返回",
+        "[tool_use name=read_chapter id=call-err]",
+        "Error: 章不存在",
+        "[tool_use name=write_chapter id=call-lost]",
+        "未返回结果",
+      ],
+    );
   });
 
   it("退役字段 body / items 即使残留在 payload 里也不参与渲染（双侧锁定）", async () => {
     const renderer = await mountPanelWith(TURNS_WITH_LEGACY_FIELDS);
     const root = renderer.root;
 
-    // 仍只出 1 张摘要卡
-    assert.equal(classListNodes(root, "prompt-turn-card").length, 1);
-    // .prompt-segment 计数与基线一致（3 张卡片 + 1 摘要卡），未被 items 撑大
-    assert.equal(classListNodes(root, "prompt-segment").length, 4);
+    // 轮卡列表条数与基线一致（3 轮 → 3 张卡），未被 items 撑大
+    assert.equal(classListNodes(root, "prompt-turn-card").length, 3);
+    // 展开 assistant 轮后，卡片流仍只有 cards 里的 2 张（1 文本 + 1 组卡）
+    await expandTurn(root, "turn-7");
+    assert.deepEqual(
+      classListNodes(root, "prompt-leaf-card").map((n) => n.props["data-card-id"]),
+      ["card-a1"],
+    );
+    assert.deepEqual(
+      classListNodes(root, "prompt-tool-group").map((n) => n.props["data-card-id"]),
+      ["group-call-1"],
+    );
     // 偷跑的段一条都没渲染出来
     assert.equal(
       root.findAll((node) => node.props?.["data-card-id"] === "evil-1").length,
@@ -573,29 +897,97 @@ describe("T-R6 契约层：payload 策略 / CodeEditor readOnly / 样式", () =>
     assert.match(src, /drawSelection: true/);
   });
 
-  it("RealPromptPanel：ROLE_LABELS 补 thinking；Modal 套 .text-prompt-overlay + .prompt-editor-modal", () => {
+  it("RealPromptPanel：三层结构源码契约（轮卡 + 组卡/叶子卡 + Modal 跑 MermaidMarkdown）", () => {
     const src = readFileSync(
       join(rendererRoot, "features", "chat", "RealPromptPanel.tsx"),
       "utf8",
     );
-    assert.match(src, /thinking: "思考"/);
-    assert.match(src, /className="text-prompt-overlay"/);
-    assert.match(src, /className="prompt-editor-modal"/);
-    assert.match(src, /className="prompt-editor-modal__footer"/);
-    assert.match(src, /languagePath="prompt\.txt"/);
-    // 摘要读 core 钉死的 summaryText（旧 summary 拼串已退役），不再二次加工
-    assert.match(src, /turn\.summaryText/);
-    // 详情正文由 cards 逐卡拼出（body 已退役）
-    assert.match(src, /cardsToDetailText\(detailTurn\.cards\)/);
+    // 文件头注释里解释「只读」时会提到 onLinkClick / CodeEditor，反向断言得先剥注释。
+    const code = src
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/^\s*\/\/.*$/gm, "");
+    // Modal 壳沿用既有三类（不动 .text-prompt-overlay / .prompt-editor-modal）
+    assert.match(code, /className="text-prompt-overlay"/);
+    assert.match(code, /className="prompt-editor-modal"/);
+    assert.match(code, /className="prompt-editor-modal__footer"/);
+    // 正文容器新增 .prompt-fullscreen__body，内挂 MermaidMarkdown（只读，不接 onLinkClick）
+    assert.match(code, /className="prompt-fullscreen__body"/);
+    assert.match(code, /<MermaidMarkdown content=\{content\} \/>/);
+    assert.doesNotMatch(code, /onLinkClick/);
+    // 轮卡读 core 钉死的 summaryText / metaText（旧 summary 拼串已退役），不再二次加工
+    assert.match(code, /turn\.summaryText/);
+    assert.match(code, /turn\.metaText/);
+    // 轮卡列表 + 展开态受控 map（轮 key = turn.id，组卡 key = turn.id + card.id）
+    assert.match(code, /className=\{`prompt-turn prompt-turn--\$\{turn\.kind\}/);
+    assert.match(code, /expanded\[`\$\{turnId\}::\$\{card\.id\}`\]/);
+    // 组卡 toggle 写入侧与读取侧同 key（否则展开态写进去读不出来）
+    assert.match(code, /onToggle=\{\(cardId\) => toggleExpanded\(`\$\{turnId\}::\$\{cardId\}`\)\}/);
+    // 轮层 role 徽标三色 + 标签（对齐设计基准 demo）
+    assert.match(code, /user: "#2dd4bf"/);
+    assert.match(code, /assistant: "#a78bfa"/);
+    assert.match(code, /template: "#9ca3af"/);
+    // 展开区渲染 cards：新组件是纯展示（无跳转回调），不复用聊天页 ToolCall* 组件
+    assert.match(code, /PromptToolGroupCard/);
+    assert.match(code, /PromptLeafCard/);
+    assert.doesNotMatch(code, /ToolCallGroupCard/);
+    assert.doesNotMatch(code, /ToolCallCard/);
+    // CodeEditor 已从本面板退役（含 editorProps / __promptTurnCodeEditorProps glue）
+    assert.doesNotMatch(code, /CodeEditor/);
+    assert.doesNotMatch(code, /editorProps/);
+    assert.doesNotMatch(code, /__promptTurnCodeEditorProps/);
+    assert.doesNotMatch(code, /languagePath/);
+    assert.doesNotMatch(code, /cardsToDetailText/);
   });
 
-  it("shell.css：新增 assistant 轮卡片与轮壳样式", () => {
+  it("T-DP5：shell.css 保留旧契约类名 + 新增三层结构样式类", () => {
     const css = readFileSync(join(rendererRoot, "styles", "shell.css"), "utf8");
+    // 旧契约类名必须保留（历史消费者 / 既有测试钉死）
     assert.match(css, /\.prompt-turn-card \{/);
     assert.match(css, /\.prompt-turn \{/);
     assert.match(css, /\.prompt-turn-card \.prompt-segment__preview \{/);
     // r4/B-9：hover 基线补在 .prompt-segment 上，.prompt-turn-card 不再自带 box/hover
     assert.match(css, /\.prompt-segment:hover \{/);
     assert.doesNotMatch(css, /\.prompt-turn-card:hover \{/);
+    // 新增：轮卡头 / 摘要单行截断 / 展开区
+    assert.match(css, /\.prompt-turn-card__head \{/);
+    assert.match(css, /\.prompt-turn-card__summary \{/);
+    assert.match(css, /\.prompt-turn-card__body \{/);
+    // 新增：叶子卡（限 2 行预览）+ 工具组卡 + 组内两格 + 全屏正文容器
+    assert.match(css, /\.prompt-leaf-card \{/);
+    assert.match(css, /\.prompt-leaf-card__preview \{/);
+    assert.match(css, /\.prompt-tool-group \{/);
+    assert.match(css, /\.prompt-group-cell \{/);
+    assert.match(css, /\.prompt-fullscreen__body \{/);
+    // 限行口径：叶子预览 2 行 / 组内格 3 行
+    const leafPreview = css.slice(
+      css.indexOf(".prompt-leaf-card__preview {"),
+      css.indexOf("}", css.indexOf(".prompt-leaf-card__preview {")),
+    );
+    assert.match(leafPreview, /-webkit-line-clamp: 2;/);
+    const cellBody = css.slice(
+      css.indexOf(".prompt-group-cell__body {"),
+      css.indexOf("}", css.indexOf(".prompt-group-cell__body {")),
+    );
+    assert.match(cellBody, /-webkit-line-clamp: 3;/);
+    // 「可点开全屏」的视觉线索：叶子卡 / 组内格 / ⤢ 按钮都要有 hover 态
+    assert.match(css, /\.prompt-leaf-card:hover \{/);
+    assert.match(css, /\.prompt-group-cell:hover \{/);
+    assert.match(css, /\.prompt-turn-card__fullscreen:hover \{/);
+    assert.match(css, /\.prompt-tool-group__head:hover \{/);
+    // 摘要单行截断：nowrap + ellipsis（沿用 .prompt-segment__title 先例）
+    const summary = css.slice(
+      css.indexOf(".prompt-turn-card__summary {"),
+      css.indexOf("}", css.indexOf(".prompt-turn-card__summary {")),
+    );
+    assert.match(summary, /text-overflow: ellipsis;/);
+    assert.match(summary, /white-space: nowrap;/);
+    assert.match(summary, /overflow: hidden;/);
+    // 全屏正文容器：吃掉剩余高度并自己滚动
+    const fsBody = css.slice(
+      css.indexOf(".prompt-fullscreen__body {"),
+      css.indexOf("}", css.indexOf(".prompt-fullscreen__body {")),
+    );
+    assert.match(fsBody, /flex: 1;/);
+    assert.match(fsBody, /overflow-y: auto;/);
   });
 });

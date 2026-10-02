@@ -1,28 +1,36 @@
 /**
- * 真实提示词查看面板（desktop，prompt-rounds）。
+ * 真实提示词查看面板（desktop，prompt-rounds）：三层结构。
  *
- * 数据是「轮」数组（core `buildPromptPreviewTurnsFromLayout`）：模板段各占一轮、
- * 真用户输入开新轮、其余消息段归入当前 assistant 轮。
+ * 1. 收起的**轮摘要卡**——role 徽标（user 青 / assistant 紫 / template 灰）+
+ *    `summaryText` 单行截断 + `metaText` 计数行 + `⤢` 整轮全屏；点头部就地展开/收起；
+ * 2. 展开区的**嵌套卡片流**——文本/thinking 叶子卡 + 工具组卡（组头状态点三态，
+ *    组内 use/result 两格各可点开全屏）；
+ * 3. **全屏只读富文本**——复用 `.text-prompt-overlay` / `.prompt-editor-modal` 壳，
+ *    正文容器 `.prompt-fullscreen__body` 内跑 `MermaidMarkdown`（只读，不接 onLinkClick；
+ *    `CodeEditor` 已从本面板退役）。
  *
- * - template / user 轮：按 `cards` 渲染原 `.prompt-segment` 折叠卡片；
- * - assistant 轮：渲染摘要卡（role 标「assistant 轮」+ core 侧钉死的 summaryText +
- *   chevron），点击开**详情 Modal**（只读 CodeEditor，正文由 `cards` 逐卡拼出）。
+ * 数据是「轮」数组（core `buildPromptPreviewTurnsFromLayout`），`cards` 是唯一正文
+ * 载体，`body` / `items` / `summary` 已从 DTO 退役（见 shared/ipc-types.ts 体积策略）。
  *
- * payload 口径：`cards` 是唯一正文载体，`body` / `items` 已从 DTO 退役
- * （见 shared/ipc-types.ts 体积策略注释）。
- *
- * ⚠️ 本文件目前只是「按新 DTO 编译通过」的最小适配：卡片流的三态展开、组卡/叶子卡、
- * 全屏富文本（`MermaidMarkdown`）等 UI 重设计由 prompt-preview-ui-redesign Step 6 落地。
+ * 展开态是**受控 map**（轮 key = `turn.id`，组卡 key = `${turn.id}::${card.id}`）：
+ * 长会话一次只留需要看的展开区，重渲染不丢态。
  */
 import { useCallback, useEffect, useState } from "react";
 import type {
   PromptPreviewTurnDto,
+  PromptTextCardDto,
+  PromptToolGroupDto,
   PromptTurnCardDto,
 } from "@shared/ipc-types";
-import { PROMPT_REGION_LABELS } from "@shared/logic/config-forms-agent";
 import { ipcPromptRealPreview } from "@/ipc/client";
 import { Button } from "@/components/ui/Button";
-import { CodeEditor } from "@/components/ui/CodeEditor";
+import { MermaidMarkdown } from "@/components/MermaidMarkdown";
+import { PromptLeafCard, promptLeafKindLabel } from "./PromptLeafCard";
+import {
+  LOST_RESULT_PLACEHOLDER,
+  PromptToolGroupCard,
+  type ToolGroupLeaf,
+} from "./PromptToolGroupCard";
 
 interface RealPromptPanelProps {
   projectId: string;
@@ -30,66 +38,44 @@ interface RealPromptPanelProps {
   visible: boolean;
 }
 
-const ROLE_LABELS: Record<string, string> = {
-  system: PROMPT_REGION_LABELS.system,
-  user: "用户",
-  assistant: "助手",
-  tool: "工具结果",
-  tool_call: "工具调用",
-  thinking: "思考",
+/** 轮层 role 徽标文案（不是消息角色，是「轮」这一层）。 */
+const TURN_ROLE_LABELS: Record<PromptPreviewTurnDto["kind"], string> = {
+  user: "user 轮",
+  assistant: "assistant 轮",
+  template: "template 轮",
 };
 
-/** assistant 轮的 role 标签（不是消息角色，是「轮」这一层）。 */
-const ASSISTANT_TURN_LABEL = "assistant 轮";
-
-function segmentTitleLabel(title: string): string {
-  if (title === "system") {
-    return PROMPT_REGION_LABELS.system;
-  }
-  if (title === "skills") {
-    return PROMPT_REGION_LABELS.skills;
-  }
-  return title;
-}
-
-function previewLine(body: string): string {
-  const line = body.replace(/\r\n/g, "\n").split("\n")[0]?.trim() ?? "";
-  if (line.length === 0) {
-    return "空内容";
-  }
-  if (line.length <= 72) {
-    return line;
-  }
-  return `${line.slice(0, 69)}…`;
-}
-
-function collapsedHint(body: string): string {
-  const charCount = body.length;
-  const hint = charCount === 0 ? "空内容" : previewLine(body);
-  const countSuffix = charCount > 0 ? ` · ${charCount} 字` : "";
-  return `${hint}${countSuffix}`;
-}
-
-/** 悬挂 tool_use（无 result）的详情占位文案。 */
-const LOST_RESULT_PLACEHOLDER = "（未返回结果）";
-
 /**
- * 卡片 → 详情正文（CodeEditor 的 `value`）。
- *
- * cards 是唯一正文载体，Modal 直接逐卡拼出可读全文；Step 6 会换成
- * `MermaidMarkdown` 富文本流，这里先保住「只读、无 onChange」的既有语义。
+ * 轮层徽标配色（语义色，不随主题变），对齐设计基准 demo：
+ * user 青 / assistant 紫 / template 中性灰。
  */
-function cardsToDetailText(cards: readonly PromptTurnCardDto[]): string {
-  return cards
-    .map((card) =>
-      card.type === "toolGroup"
-        ? [card.inputJson, card.result?.body ?? LOST_RESULT_PLACEHOLDER].join(
-            "\n\n",
-          )
-        : card.body,
-    )
-    .filter((text) => text !== "")
-    .join("\n\n");
+const TURN_ROLE_COLORS: Record<PromptPreviewTurnDto["kind"], string> = {
+  user: "#2dd4bf",
+  assistant: "#a78bfa",
+  template: "#9ca3af",
+};
+
+/** 空正文在全屏里的占位文案。 */
+const EMPTY_TEXT_PLACEHOLDER = "（空）";
+
+/** 全屏 Modal 的内容来源：整轮（cards 逐卡富文本流）或某个叶子（单份正文）。 */
+interface FullscreenTarget {
+  /** Modal 标题（轮摘要 / 叶子标签）。 */
+  title: string;
+  /** 整轮 = 逐卡富文本流；叶子 = 单份正文。 */
+  blocks: readonly string[];
+}
+
+/** 工具组卡 → 某一格正文（use 入参 / result 正文或丢失占位）。 */
+function groupCardBody(card: PromptToolGroupDto, which: "use" | "result"): string {
+  return which === "use" ? card.inputJson : (card.result?.body ?? LOST_RESULT_PLACEHOLDER);
+}
+
+/** 轮内一张卡的正文（组卡两格都进正文流，忠实还原发给模型的内容）。 */
+function cardBodies(card: PromptTurnCardDto): string[] {
+  return card.type === "toolGroup"
+    ? [groupCardBody(card, "use"), groupCardBody(card, "result")]
+    : [card.body];
 }
 
 export function RealPromptPanel({
@@ -98,11 +84,10 @@ export function RealPromptPanel({
   visible,
 }: RealPromptPanelProps) {
   const [turns, setTurns] = useState<PromptPreviewTurnDto[]>([]);
+  // 展开态 map：轮卡 key = turn.id，组卡 key = `${turn.id}::${card.id}`。
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-  // 详情 Modal 打开中的 assistant 轮（null = 未打开）。
-  const [detailTurn, setDetailTurn] = useState<PromptPreviewTurnDto | null>(
-    null,
-  );
+  // 全屏 Modal 打开中的内容（null = 未打开）。
+  const [fullscreen, setFullscreen] = useState<FullscreenTarget | null>(null);
 
   const load = useCallback(async () => {
     const result = await ipcPromptRealPreview({ projectId, sessionId });
@@ -117,134 +102,158 @@ export function RealPromptPanel({
     }
   }, [visible, load]);
 
-  const closeDetail = useCallback(() => setDetailTurn(null), []);
+  const closeFullscreen = useCallback(() => setFullscreen(null), []);
 
-  // Esc 关闭详情 Modal。CodeEditor 内部已消费的 Esc（defaultPrevented）不拦截。
+  const toggleExpanded = useCallback((key: string) => {
+    setExpanded((prev) => ({ ...prev, [key]: !(prev[key] ?? false) }));
+  }, []);
+
+  /** 整轮全屏：cards 逐卡一段富文本（无 `[段名]` 前缀，视觉分隔即可）。 */
+  const openTurnFullscreen = useCallback((turn: PromptPreviewTurnDto) => {
+    setFullscreen({
+      title: `${TURN_ROLE_LABELS[turn.kind] ?? turn.kind} · ${turn.summaryText}`,
+      blocks: turn.cards.flatMap(cardBodies).filter((text) => text !== ""),
+    });
+  }, []);
+
+  /** 叶子卡全屏：该卡正文单份。 */
+  const openLeafFullscreen = useCallback((card: PromptTextCardDto) => {
+    setFullscreen({ title: promptLeafKindLabel(card), blocks: [card.body] });
+  }, []);
+
+  /** 组卡某一格全屏：该格正文单份。 */
+  const openGroupLeafFullscreen = useCallback(
+    (_cardId: string, leaf: ToolGroupLeaf) => {
+      setFullscreen({ title: leaf.label, blocks: [leaf.body] });
+    },
+    [],
+  );
+
+  // Esc 关闭全屏 Modal。已被下游消费掉的 Esc（defaultPrevented）不拦截。
   useEffect(() => {
-    if (detailTurn == null) {
+    if (fullscreen == null) {
       return;
     }
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape" && !e.defaultPrevented) {
-        setDetailTurn(null);
+        setFullscreen(null);
       }
     };
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [detailTurn]);
+  }, [fullscreen]);
 
   if (!visible) {
     return null;
   }
 
-  const renderCard = (card: PromptTurnCardDto) => {
-    const open = expanded[card.id] ?? false;
-    // toolGroup 卡在 template / user 轮不会出现（core 只在 assistant 轮产出），
-    // 这里仍按联合类型收窄取展示标签与正文，避免 `any` 逃逸。
-    const label =
-      card.type === "toolGroup" ? card.toolName : (ROLE_LABELS[card.role] ?? card.role);
-    const title =
-      card.type === "toolGroup" ? card.toolName : segmentTitleLabel(card.role);
-    const body =
-      card.type === "toolGroup"
-        ? cardsToDetailText([card])
-        : card.body;
-    return (
-      <div
-        key={card.id}
-        className={`prompt-segment${open ? " is-expanded" : ""}`}
-        data-card-id={card.id}
-      >
-        <button
-          type="button"
-          className="prompt-segment__header"
-          aria-expanded={open}
-          onClick={() =>
-            setExpanded((prev) => ({ ...prev, [card.id]: !open }))
-          }
-        >
-          <span className="prompt-segment__text">
-            <span className="prompt-segment__role">{label}</span>
-            <span className="prompt-segment__title">{title}</span>
-            <span className="prompt-segment__preview">
-              {collapsedHint(body)}
-            </span>
-          </span>
-          <span className="prompt-segment__chevron" aria-hidden="true">
-            {open ? "▼" : "▶"}
-          </span>
-        </button>
-        <pre className="prompt-segment__body">{body || "（空）"}</pre>
-      </div>
-    );
+  const renderCard = (card: PromptTurnCardDto, turnId: string) => {
+    if (card.type === "toolGroup") {
+      return (
+        <PromptToolGroupCard
+          key={card.id}
+          card={card}
+          expanded={expanded[`${turnId}::${card.id}`] ?? false}
+          // 组卡 key 与读取侧同口径拼 `${turnId}::${cardId}`，否则展开态写进去读不出来。
+          onToggle={(cardId) => toggleExpanded(`${turnId}::${cardId}`)}
+          onOpenLeaf={openGroupLeafFullscreen}
+        />
+      );
+    }
+    return <PromptLeafCard key={card.id} card={card} onOpen={openLeafFullscreen} />;
   };
 
   return (
     <div className="real-prompt-list" id="real-prompt-list">
       {turns.map((turn) => {
-        if (turn.kind === "assistant") {
-          return (
-            <div
-              key={turn.id}
-              className="prompt-segment prompt-turn-card"
-              data-turn-id={turn.id}
-            >
-              <button
-                type="button"
-                className="prompt-segment__header"
-                aria-label={`查看 ${ASSISTANT_TURN_LABEL} 详情`}
-                onClick={() => setDetailTurn(turn)}
-              >
-                <span className="prompt-segment__text">
-                  <span className="prompt-segment__role">
-                    {ASSISTANT_TURN_LABEL}
-                  </span>
-                  <span className="prompt-segment__preview">
-                    {turn.summaryText}
-                  </span>
-                </span>
-                <span className="prompt-segment__chevron" aria-hidden="true">
-                  ▶
-                </span>
-              </button>
-            </div>
-          );
-        }
-        // template / user 轮按卡片顺序展示；单卡轮不加轮壳，视觉与单张卡片一致。
-        const cards = turn.cards;
-        if (cards.length <= 1) {
-          return cards.map(renderCard);
-        }
+        const open = expanded[turn.id] ?? false;
+        const roleLabel = TURN_ROLE_LABELS[turn.kind] ?? turn.kind;
+        const roleColor = TURN_ROLE_COLORS[turn.kind] ?? TURN_ROLE_COLORS.template;
         return (
           <div
             key={turn.id}
-            className={`prompt-turn prompt-turn--${turn.kind}`}
+            className={`prompt-turn prompt-turn--${turn.kind} prompt-turn-card${open ? " is-expanded" : ""}`}
             data-turn-id={turn.id}
+            data-turn-kind={turn.kind}
           >
-            {cards.map(renderCard)}
+            <div className="prompt-turn-card__head">
+              <button
+                type="button"
+                className="prompt-turn-card__toggle"
+                aria-expanded={open}
+                aria-label={`${open ? "收起" : "展开"}${roleLabel}`}
+                onClick={() => toggleExpanded(turn.id)}
+              >
+                <span
+                  className="prompt-turn-card__role"
+                  style={{ color: roleColor }}
+                  data-turn-kind={turn.kind}
+                >
+                  {roleLabel}
+                </span>
+                <span className="prompt-turn-card__summary">
+                  {turn.summaryText}
+                </span>
+                <span className="prompt-segment__preview prompt-turn-card__meta">
+                  {turn.metaText}
+                </span>
+              </button>
+              <button
+                type="button"
+                className="prompt-turn-card__fullscreen"
+                aria-label="整轮全屏"
+                data-action="turn-fullscreen"
+                onClick={() => openTurnFullscreen(turn)}
+              >
+                ⤢
+              </button>
+              <span
+                className="prompt-segment__chevron"
+                aria-hidden="true"
+                data-state={open ? "open" : "closed"}
+              >
+                {open ? "▼" : "▶"}
+              </span>
+            </div>
+            {open ? (
+              <div className="prompt-turn-card__body">
+                {turn.cards.map((card) => renderCard(card, turn.id))}
+              </div>
+            ) : null}
           </div>
         );
       })}
       <p className="real-prompt-hint">
-        在会话工作区调整纳入规则可改变预览内容。默认折叠以减轻长文本渲染压力。
+        在会话工作区调整纳入规则可改变预览内容。点轮卡头部就地展开，点 ⤢ 或任意卡片进入全屏阅读。
       </p>
-      {detailTurn != null ? (
-        <div className="text-prompt-overlay" onClick={closeDetail}>
+      {fullscreen != null ? (
+        <div className="text-prompt-overlay" onClick={closeFullscreen}>
           <div
             className="prompt-editor-modal"
             role="dialog"
             aria-modal="true"
-            aria-label={`${ASSISTANT_TURN_LABEL}详情`}
+            aria-label={`${fullscreen.title}详情`}
             onClick={(e) => e.stopPropagation()}
           >
-            <CodeEditor
-              readOnly
-              value={cardsToDetailText(detailTurn.cards)}
-              languagePath="prompt.txt"
-              aria-label={`${ASSISTANT_TURN_LABEL}详情`}
-            />
+            <div className="prompt-fullscreen__title">{fullscreen.title}</div>
+            <div className="prompt-fullscreen__body">
+              {fullscreen.blocks.length === 0 ? (
+                <p className="prompt-fullscreen__empty">{EMPTY_TEXT_PLACEHOLDER}</p>
+              ) : (
+                fullscreen.blocks.map((content, index) => (
+                  // 同一轮里正文可能重复（两格同文），索引参与 key 保证唯一稳定。
+                  <div
+                    key={`${index}-${content.slice(0, 8)}`}
+                    className="prompt-fullscreen__block"
+                  >
+                    {/* 只读富文本：不接 onLinkClick（预览侧不做链接路由）。 */}
+                    <MermaidMarkdown content={content} />
+                  </div>
+                ))
+              )}
+            </div>
             <div className="prompt-editor-modal__footer">
-              <Button variant="secondary" onClick={closeDetail}>
+              <Button variant="secondary" onClick={closeFullscreen}>
                 关闭
               </Button>
             </div>
