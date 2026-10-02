@@ -77,7 +77,22 @@ export const CodeEditorWebView = forwardRef<
 ) {
   const {tokens} = useTheme();
   const webRef = useRef<WebView>(null);
+  // 回环断路器（长按连删卡顿修，同 chat 侧 webTextRef/M1 纪律）：web 侧
+  // change 上行的最新全文快照 + 其所属 path。value 是它的滞后镜像（经
+  // onChange→父层 state 流回）——镜像连同 path 原样流回时在下行 effect 早退，
+  // 杜绝「上行→setState→下行 setDocument 全文替换→undo/选区作废」的回滚回环
+  // （越卡越回滚）。真外部写入（水合/setText）与镜像不同值，照常下行。
+  //
+  // 基线必须是 {text, path} 结构体而不是裸字符串（cr2-A-1）：光比 text 会让
+  // 「同一实例换 path、草稿恰好没变」的切换（如 PromptEditorScreen 的
+  // prompt.md↔composer.md）命中早退，setDocument 不下行 → web 侧 currentPath
+  // 停在旧文件 → composer 胶囊按旧路径扩展失效。
+  const lastUpstreamRef = useRef<{text: string; path: string} | null>(null);
   const [webReady, setWebReady] = useState(false);
+  // handleMessage 的依赖数组为空，闭包里的 path 会永远是首帧值；上行基线需要
+  // 当前 path，故用 ref 同步。
+  const pathRef = useRef(path);
+  pathRef.current = path;
   const onChangeRef = useRef(onChange);
   const onSelectionChangeRef = useRef(onSelectionChange);
   const onFocusChangeRef = useRef(onFocusChange);
@@ -130,7 +145,9 @@ export const CodeEditorWebView = forwardRef<
         return;
       }
       if (message.type === 'change') {
-        onChangeRef.current(String(message.payload.text ?? ''));
+        const text = String(message.payload.text ?? '');
+        lastUpstreamRef.current = {text, path: pathRef.current};
+        onChangeRef.current(text);
         return;
       }
       if (message.type === 'selectionChange') {
@@ -177,6 +194,17 @@ export const CodeEditorWebView = forwardRef<
     if (!webReady) {
       return;
     }
+    // 回环断路（见 lastUpstreamRef 注释）：value + path 就是 web 刚上行那份
+    // 全文及其归属文件的滞后镜像，原样流回不下行；基线随真下行清空（后续外部
+    // 同值写入仍可下行）。path 必须一起比（cr2-A-1）——只比 value 会吞掉换
+    // path 的下行，让 web 侧 currentPath 停旧值。
+    const baseline = lastUpstreamRef.current;
+    if (baseline != null && baseline.text === value && baseline.path === path) {
+      // 早退分支同步推进基线，保证基线里的 path 不落后于当前 props。
+      lastUpstreamRef.current = {text: value, path};
+      return;
+    }
+    lastUpstreamRef.current = null;
     postToWeb({
       v: 1,
       type: 'setDocument',
