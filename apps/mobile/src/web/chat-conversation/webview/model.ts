@@ -264,6 +264,8 @@ export type ConversationInitPayload = {
   readonly theme: ConversationTheme;
   readonly flags: {readonly richText: boolean; readonly menuDisabled: boolean};
   readonly composer: ConversationInitComposer;
+  /** 转录 only 变体（transcript-converge）：web 据此给 #app 挂类隐藏 dock。 */
+  readonly transcriptOnly?: boolean;
 };
 
 /**

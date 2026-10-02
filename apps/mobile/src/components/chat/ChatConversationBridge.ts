@@ -329,6 +329,12 @@ export type ConversationInitPayload = {
   readonly theme: ConversationTheme;
   readonly flags: TranscriptFlags;
   readonly composer: ConversationInitComposer;
+  /**
+   * 转录 only 变体（子会话屏，transcript-converge）：无输入 dock、无列表
+   * 视图的降级形态。web 侧据此给 #app 挂 transcript-only 类（CSS 隐藏
+   * dock）；可选字段、旧 dist 忽略，v 号不动。
+   */
+  readonly transcriptOnly?: boolean;
 };
 
 /** `sessionSnapshot` 分片载荷（字段分布约定与旧包逐字一致，见 ChatTranscriptBridge 注释）。 */

@@ -71,7 +71,12 @@ if (TRANSCRIPT_BRIDGE_V !== COMPOSER_BRIDGE_V) {
 
 /** dock 域要处理的下行意图（不经旧 runtime，合成包自有 handler 消费）。 */
 export type ConversationDockRoute =
-  | {readonly kind: 'init'; readonly safeAreaBottom: number}
+  | {
+      readonly kind: 'init';
+      readonly safeAreaBottom: number;
+      /** 转录 only 变体（transcript-converge）：#app 挂类隐藏 dock。 */
+      readonly transcriptOnly: boolean;
+    }
   | {readonly kind: 'composerState'; readonly state: ConversationComposerState}
   | {readonly kind: 'composerPaste'; readonly text: string}
   | {readonly kind: 'selectAll'};
@@ -184,7 +189,11 @@ export function routeHostMessage(raw: unknown): ConversationRoute | null {
     return {
       transcript: v1('init', split.transcript),
       composer: v1('init', split.composer),
-      dock: {kind: 'init', safeAreaBottom: split.safeAreaBottom},
+      dock: {
+        kind: 'init',
+        safeAreaBottom: split.safeAreaBottom,
+        transcriptOnly: payload.transcriptOnly === true,
+      },
       list: null,
       theme: null,
     };

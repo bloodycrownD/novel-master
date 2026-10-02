@@ -8,7 +8,6 @@ const distRoot = path.join(__dirname, '../../webview-dist');
 
 export function readWebViewDistFile(
   pkg:
-    | 'chat-transcript'
     | 'rich-document'
     | 'code-editor'
     | 'composer-input'

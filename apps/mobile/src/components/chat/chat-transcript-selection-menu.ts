@@ -2,15 +2,16 @@
  * transcript 划词选区菜单（消息批注已移除；勿与文件预览常量混用）。
  * 自定义项会盖掉原生 Copy，故须自备「复制」。
  *
- * 两份常量并存的原因（chat-webview-unify Step 6）：
- * - `CHAT_TRANSCRIPT_SELECTION_MENU_ITEMS`（仅「复制」）归**旧**转录宿主
- *   `ChatTranscriptWebView` —— 子会话屏/legacy 链零变化。
- * - `CHAT_CONVERSATION_SELECTION_MENU_ITEMS`（复制/全选/粘贴）归**统一**宿主
- *   `ChatConversationWebView` —— 合并后单实例只有一套 `menuItems`，输入框因此
+ * 两份常量并存的原因（chat-webview-unify Step 6 · transcript-converge 后）：
+ * - `CHAT_TRANSCRIPT_SELECTION_MENU_ITEMS`（仅「复制」）归统一宿主的
+ *   **transcriptOnly 变体**（子会话屏）——无 dock 时全选/粘贴的跨桥动作没有
+ *   落点，三项反而制造死按钮。
+ * - `CHAT_CONVERSATION_SELECTION_MENU_ITEMS`（复制/全选/粘贴）归统一宿主的
+ *   **完整形态**（主对话链）——合并后单实例只有一套 `menuItems`，输入框因此
  *   保住了原生菜单的核心三项。
  *
  * 「全选」「粘贴」是跨桥动作（下行 dock 域 `selectAll` / `composerPaste`），
- * 只在统一宿主里接；旧宿主不消费这两个 key，故不能把三项直接塞进旧常量。
+ * 只在完整形态接；transcriptOnly 变体不消费这两个 key。
  */
 
 /** 旧转录宿主用：仅「复制」。 */
