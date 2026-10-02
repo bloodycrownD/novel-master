@@ -38,7 +38,7 @@ date: 2026-10-03
 | L1 持久化 | 原生 gpt 读数（est:false）照常落 KKV | 现有「只收精确档」语义天然覆盖 |
 | gpt2 家族 | 不上原生 | r50k/gpt2 出界域，JS 侧 `resolveRnEncodingName` 返回 null 时根本不发起原生调用 |
 | parity 负例 | `gpt-4o` 换 `gpt2` | `TokenizerEngineTest.kt:79`、`TokenizerParityTest.kt:53` 现拿 gpt-4o 当「无资产家族」反例，gpt 有资产后必红；gpt2 语义贴合（真实家族、原生无资产） |
-| node/desktop 侧 | **不加词表**（死重量 +5.7MB） | desktop gpt 走 WASM tiktoken 不读 assets；README 声明两处资产目录有意分叉 |
+| node/desktop 侧 | **不加词表**（死重量 +9MB） | desktop gpt 走 WASM tiktoken 不读 assets；README 声明两处资产目录有意分叉 |
 | webCache 容量 | 4→6 | WEB 家族 8+tiktoken 2=10 条目抢 4 槽必抖动；+2 槽内存代价数十 MB×2，与既有「LRU 淘汰后懒加载」口径一致 |
 | heuristic 家族是否上原生（Part C 补） | 上，标签/口径不变 | 用户实测盲区：自定义 vendor 名落 heuristic 的会话才是「兜底 gpt 慢」主力；cl100k 词表已在包内，换的只是算力不是口径（仍 heuristic/est:true、不加 overhead、0.85 系数照吃） |
 | 首刷错峰窗口是否保留（Part D 补） | 撤回，1200→300 | 保护对象（重活堵交互）已被取消链路+原生线程+计数提速逐个拆掉，只剩 JS 装配 200-400ms 需错开动画；精确升级延迟同步 2500→800 |
@@ -54,8 +54,8 @@ packages/tokenizer-driver-rn/
   src/count-prompt-llm-input.ts    # tiktoken 路由三层化；vendorModelId 槽传编码名；overhead 补加
   src/android-native-bridge.ts     # NativeCountRequest.vendorModelId 语义注释（gpt 档=编码名）
   android/src/main/assets/tokenizers/
-    cl100k.json                    # 新增（HF tokenizer.json，~1.7MB）
-    o200k.json                     # 新增（~4MB）
+    cl100k.json                    # 新增（HF tokenizer.json，实测 2.6MB）
+    o200k.json                     # 新增（实测 6.4MB）
     README.md / LICENSE.md         # 来源 manifest（repo id+commit+许可）
   android/src/main/java/com/novelmaster/tokenizer/
     TokenizerAssetPaths.kt         # tiktoken→两资产条目（AssetPathSpec 增资产键维度）

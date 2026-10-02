@@ -54,7 +54,11 @@ type NovelMasterTokenizerNative = {
   cancelCount: (requestId: string) => void;
 };
 
-const nativeModule = NativeModules.NovelMasterTokenizer as
+// 可选链是 Jest 工厂防御：部分测试 mock('react-native') 只给 Platform 不给
+// NativeModules，本模块又被 chat-prompt-tokens.service 静态 import——顶层直读
+// 会让这些套件 require 期整炸（merge 后小 CR P1）。真实运行时 NativeModules
+// 恒在，可选链不改变其行为。
+const nativeModule = NativeModules?.NovelMasterTokenizer as
   | NovelMasterTokenizerNative
   | undefined;
 

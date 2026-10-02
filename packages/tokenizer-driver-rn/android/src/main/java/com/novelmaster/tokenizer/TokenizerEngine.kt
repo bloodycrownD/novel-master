@@ -277,11 +277,16 @@ internal class TokenizerEngine(private val context: Context) {
    * 单条收尾打点，字段化 key=value 便于真机 logcat 直接肉眼读：
    * `nm-tok: family=claude chars=139002 vocabLoadMs=8123 encodeMs=5811 totalMs=13951`。
    *
-   * 包 try/catch 是因为 JVM 直测（无 Robolectric）下 `android.util.Log` 未 mock 会
-   * 抛「Method i in android.util.Log not mocked」——打点是探针，绝不能反过来把
+   * release 门（merge 后小 CR 探针双门，与 JS 侧 `__DEV__` 门对应）：性能调查
+   * 已收口，探针不常驻用户设备的 logcat；debug 包照常输出。包 try/catch 是
+   * 因为 JVM 直测（无 Robolectric）下 `android.util.Log` 未 mock 会抛
+   * 「Method i in android.util.Log not mocked」——打点是探针，绝不能反过来把
    * 计数路径搞崩。
    */
   private fun logTimings(timings: CountTimings) {
+    if (!BuildConfig.DEBUG) {
+      return
+    }
     try {
       Log.i(
         LOG_TAG,

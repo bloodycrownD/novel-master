@@ -90,6 +90,18 @@ interface ProbeStats {
 }
 
 /**
+ * [nm-tok-js] 探针输出口（merge 后小 CR 探针双门）：`__DEV__` 门内才落
+ * console——性能调查已收口，release 不该往用户设备的 logcat 常驻写探针；
+ * dev（Metro 调试链）与 jest（RN preset 下 `__DEV__` 为 true）照常输出。
+ */
+function probeLog(message: string): void {
+  if (!__DEV__) {
+    return;
+  }
+  console.info(message);
+}
+
+/**
  * 块级 L2 计数（与 node 驱动同构，spec 计数流程第 3 步）：
  * `splitTextIntoChunks(整串)` → 逐块查 L2 → miss 块经
  * `countTextWithIncrementalTokenizer` 现算写回 → 求和。
@@ -434,14 +446,14 @@ async function countSerialized(
       sessionId,
       probe,
     );
-    console.info(
+    probeLog(
       `[nm-tok-js] family=${family} chars=${serialized.length} ms=${Date.now() - probeT0}` +
         ` route=${probe.route} kind=${result.counterKind} est=${result.estimated}` +
         ` l2Hit=${probe.chunkTotal - probe.chunkMisses}/${probe.chunkTotal}`,
     );
     return result;
   } catch (error) {
-    console.info(
+    probeLog(
       `[nm-tok-js] family=${family} chars=${serialized.length} ms=${Date.now() - probeT0}` +
         ` route=${probe.route} thrown=${error instanceof Error ? error.name : "unknown"}`,
     );

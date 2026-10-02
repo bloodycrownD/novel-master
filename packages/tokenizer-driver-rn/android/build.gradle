@@ -9,6 +9,12 @@ android {
   namespace "com.novelmaster.tokenizer"
   compileSdkVersion rootProject.ext.compileSdkVersion
 
+  buildFeatures {
+    // AGP 8 起 library 默认不生成 BuildConfig；TokenizerEngine 的 nm-tok 探针
+    // release 门（BuildConfig.DEBUG）需要它。
+    buildConfig true
+  }
+
   defaultConfig {
     minSdkVersion rootProject.ext.minSdkVersion
     targetSdkVersion rootProject.ext.targetSdkVersion
