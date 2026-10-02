@@ -7,7 +7,11 @@
 export { countPromptLlmInputRn, __test__ } from "./count-prompt-llm-input.js";
 export {
   countPromptViaNative,
+  cancelSessionNativeCounts,
   isNativeTokenizerAvailable,
+  countPromptCancelableAvailable,
+  cancelCountAvailable,
+  PromptCountCancelledError,
   type NativeCountRequest,
   type NativeCountResponse,
 } from "./android-native-bridge.js";
