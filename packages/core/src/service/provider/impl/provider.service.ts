@@ -241,12 +241,23 @@ export class DefaultProviderService implements ProviderService {
     // 因此不破坏既有五步 CoordinatedWrite 的 rollback 配对。
     for (const m of savedModels) {
       const refs = await findSavedModelReferences(this.deps.conn, m.id);
-      // ⚠️ `currentModelId` 是**软指针**，不是内容引用：CLI（`provider/commands.ts`
-      // delete 分支）与桌面（`handleProvidersDelete`）都在 `providers.delete`
-      // **成功返回之后**按 `saved.providerId === id` 主动 resetCurrentModelId /
-      // resetCurrentProviderId。把它当硬引用会把这层既有契约打死——provider 只要是
-      // 当前模型就永远删不掉。真正的内容引用只有 agent_definition / chat_project /
-      // chat_session 三类，那才是必须前置拒绝的。
+      // ⚠️ `currentModelId` 是**软指针**，不是内容引用。真实契约分两半，缺一不可：
+      //   ① 【本处】把它从 blockingRefs 里滤掉——把它当硬引用会把这层既有契约打死，
+      //      provider 只要是当前模型就永远删不掉。真正必须前置拒绝的内容引用只有
+      //      agent_definition / chat_project / chat_session 三类。
+      //   ② 【调用方】三个调用方都在 **delete 之前**读一次 currentModelId 并按
+      //      `saved.providerId === id` 算好 clearCurrentModel，**delete 成功返回之后**
+      //      才 resetCurrentModelId（currentProviderId 同理）：
+      //        - apps/cli/src/provider/commands.ts `delete` 分支
+      //        - apps/desktop/src/main/ipc/handlers/providers.ts `handleProvidersDelete`
+      //        - apps/mobile/src/screens/stack/ProvidersScreen.tsx `deleteProviderOne`
+      //      顺序不可换：delete 会级联抹掉本 provider 名下的 saved model 行，
+      //      之后再 getSavedById 恒为 null ⇒ reset 永不执行 ⇒ currentModelId 悬空
+      //      固化进新会话的 agent_config_json，发消息才抛 INVALID_SAVED_MODEL_ID。
+      //
+      // ⚠️⚠️ 本过滤**依赖三个调用方的 delete 前置判定顺序**——服务层自己不清理这条软
+      // 指针，全靠调用方兜。改动任一调用方（新增第四个端、或调整上述顺序）**必须**
+      // 同步复核另外两端，否则软指针悬空会静默复发。
       const blockingRefs = refs.filter((r) => r !== "currentModelId");
       if (blockingRefs.length > 0) {
         // 写死复用 SAVED_MODEL_IN_USE、**不新造 PROVIDER_IN_USE**：

@@ -182,6 +182,45 @@ describe("ProviderService", () => {
     assert.equal(await secrets.has(`provider/${created.id}/apiKey`), true);
   });
 
+  it("delete provider 仅被 currentModelId 引用时成功（软指针不阻断，CR-F04）", async () => {
+    // 牙齿：这是 SAVED_MODEL_IN_USE 过滤的另一半（正向）。上一条覆盖「会话硬引用 ⇒ 拒绝」，
+    // 这里覆盖「只有 currentModelId 软引用 ⇒ 放行」——把 currentModelId 误当硬引用会让
+    // 当前模型所属的 provider 永远删不掉。
+    // ⚠️ 契约另一半在调用方：cli / desktop / mobile 都在 delete **之前**判归属、
+    // delete 成功**之后**才 resetCurrentModelId。服务层自己不清这条软指针。
+    const ctx = getNovelMasterTestContext();
+    const secrets = memorySecretStore();
+    const bundle = createProviderServices(ctx.conn, secrets);
+    const created = await bundle.providers.create({
+      protocol: "openai",
+      baseUrl: "https://example.com/v1",
+      displayName: "softgw" + testIsolationSuffix(),
+      apiKey: "soft-secret",
+    });
+    const saved = await bundle.providerModels.create(created.id, "soft-model");
+    await ctx.state.setCurrentModelId(saved.id);
+
+    // 不抛 SAVED_MODEL_IN_USE —— 只有 currentModelId 引用
+    await bundle.providers.delete(created.id);
+
+    const still = await new SqliteSavedModelRepository(
+      ctx.conn
+    ).findById(saved.id);
+    assert.equal(
+      still,
+      null,
+      "放行后模型应被级联抹掉",
+    );
+    assert.equal(await secrets.has(`provider/${created.id}/apiKey`), false);
+    // 服务层刻意不动软指针（清它的是三个调用方，见文件头契约注记）
+    assert.equal(
+      await ctx.state.getCurrentModelId(),
+      saved.id,
+      "DefaultProviderService 不负责清 currentModelId 软指针",
+    );
+    await ctx.state.resetCurrentModelId();
+  });
+
   it("delete removes secret at default ref when secretRef is null", async () => {
     const ctx = getNovelMasterTestContext();
     const secrets = memorySecretStore();

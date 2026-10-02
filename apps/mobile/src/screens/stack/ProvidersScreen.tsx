@@ -72,19 +72,27 @@ export function ProvidersScreen() {
   const metaLine = (row: ProviderRow) => `${row.savedCount} 个已保存模型`;
 
   // 删除单个服务商：级联清掉「当前服务商/模型」的指向，避免悬空引用。
+  // ⚠️ currentModelId 的归属判定必须在 providers.delete 之前完成——delete 会级联抹掉
+  // 该服务商名下的全部已保存模型行，之后再 getSavedById 恒为 null，reset 永不执行，
+  // currentModelId 就会悬空固化进新会话的 agent_config_json，发消息时才抛
+  // INVALID_SAVED_MODEL_ID 且 UI 零解释。这是 core `DefaultProviderService.delete`
+  // 把 currentModelId 当软指针（不参与 SAVED_MODEL_IN_USE 前置拒绝）的另一半契约，
+  // cli / desktop / mobile 三调用方必须一致，改任一方须同步复核另外两方。
   const deleteProviderOne = useCallback(
     async (providerId: string) => {
+      const currentModelId = await runtime.state.getCurrentModelId();
+      let clearCurrentModel = false;
+      if (currentModelId) {
+        const saved = await runtime.providerModels.getSavedById(currentModelId);
+        clearCurrentModel = saved?.providerId === providerId;
+      }
       await runtime.providers.delete(providerId);
       const currentProviderId = await runtime.state.getCurrentProviderId();
       if (currentProviderId === providerId) {
         await runtime.state.resetCurrentProviderId();
       }
-      const currentModelId = await runtime.state.getCurrentModelId();
-      if (currentModelId) {
-        const saved = await runtime.providerModels.getSavedById(currentModelId);
-        if (saved?.providerId === providerId) {
-          await runtime.state.resetCurrentModelId();
-        }
+      if (clearCurrentModel) {
+        await runtime.state.resetCurrentModelId();
       }
     },
     [runtime],
