@@ -464,6 +464,14 @@ class LlmSseModule(reactContext: ReactApplicationContext) :
    */
   private fun finishStream(requestId: String, state: StreamState) {
     synchronized(state) {
+      // 一次性消费必须**早于** streams 闸门（与 [handleStreamFailure] 同一口径）：
+      // 流读完后 call.execute().use 尚未退出时用户点「停止」，sseAbort 会先写标记 +
+      // streams.remove；读循环随后进本方法命中下面的闸门早退——若把 remove 放在
+      // `!streams.containsKey(requestId)` 的 return 之后，这条标记就永远不会被消费
+      // （每点一次「停止」往 map 里永久留一条，userAbortedPending 归不了零），
+      // 且因无异常发生、handleStreamFailure 也不会来兜底。注释宣称覆盖的竞态
+      // 恰被自己的代码位置挡住。
+      userAborted.remove(requestId)
       if (!streams.containsKey(requestId)) {
         return
       }
@@ -471,8 +479,6 @@ class LlmSseModule(reactContext: ReactApplicationContext) :
       // 窗口内的最后一批一定落在 Done 之前。
       flushPending(state)
       streams.remove(requestId)
-      // 正常收尾路径也要消费标记（abort 与正常收尾可能竞态同 requestId）。
-      userAborted.remove(requestId)
       emitDone(requestId)
     }
   }

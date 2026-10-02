@@ -102,8 +102,14 @@ class SkspModule(reactContext: ReactApplicationContext) :
 
   @ReactMethod
   fun encrypt(ref: String, plain: String, promise: Promise) {
-    debugLog("thread=${Thread.currentThread().name} op=encrypt")
+    debugLog("thread=${Thread.currentThread().name} callerThread op=encrypt")
     executor.execute {
+      // 线程名日志必须落在 executor 块内：`executor.execute { … }` 只是把工作**提交**
+      // 出去就返回，字符串插值若在提交前求值，此刻仍在 RN NativeModules 队列线程上，
+      // 打出来的永远是 mqt_native_modules / mqt_js，真机 logcat 永远拿不到 nm-sksp
+      // ⇒ 「nm-sksp 线程名在位」这条验收牙齿会给出「修复没生效」的反向假信号。
+      // 上一行的 callerThread= 只作对照，判据以本行的 thread=nm-sksp op=encrypt 为准。
+      debugLog("thread=${Thread.currentThread().name} op=encrypt")
       try {
         val alias = aliasForRef(ref)
         val key = getOrCreateKey(alias)
@@ -123,8 +129,10 @@ class SkspModule(reactContext: ReactApplicationContext) :
 
   @ReactMethod
   fun decrypt(ref: String, ciphertextB64: String, ivB64: String, promise: Promise) {
-    debugLog("thread=${Thread.currentThread().name} op=decrypt")
+    debugLog("thread=${Thread.currentThread().name} callerThread op=decrypt")
     executor.execute {
+      // 同 encrypt：判据行必须在 executor 块内，理由见上。
+      debugLog("thread=${Thread.currentThread().name} op=decrypt")
       try {
         val alias = aliasForRef(ref)
         val key = keyStore.getKey(alias, null) as? SecretKey
