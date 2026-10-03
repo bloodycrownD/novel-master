@@ -494,22 +494,19 @@ describe("RealPromptPanel 三层结构轮卡列表 + 全屏富文本 Modal (T-R6
     assert.equal(classNodes(root, "text-prompt-overlay").length, 0);
   });
 
-  it("T-WP1：workplace 轮三级结构——组卡→文件列表→预览卡→全屏原文", async () => {
+  it("T-WP1：workplace 轮展开即文件列表（无组头）→预览卡→全屏原文", async () => {
     const renderer = await mountPanel();
     const root = renderer.root;
 
+    // 点轮头展开：直接见文件列表（不再嵌 workplace 组头——用户拍板）。
     await expandTurn(root, "prompt-workplace");
-    // 组卡也默认收起：点组头展开文件列表。
-    await act(async () => {
-      click(classNodes(root, "prompt-workplace__head")[0]!);
-    });
-    // 组头：workplace · N 文件（收窄形态，css 承担）。
     assert.equal(classListNodes(root, "prompt-workplace").length, 1);
     assert.equal(
-      textOf(classNodes(root, "prompt-workplace__count")[0]!),
-      "2 文件",
+      root.findAll((n) => typeof n.type === "string" && hasClass(n, "prompt-workplace__head")).length,
+      0,
+      "不应再有 workplace 组头",
     );
-    // 第一级 → 第二级：文件列表行（路径 + 展示档文案，单行无正文）。
+    // 文件列表行（路径 + 展示档文案，单行无正文）。
     const files = classListNodes(root, "prompt-workplace__file");
     assert.deepEqual(
       files.map((node) => node.props["data-file-path"]),
@@ -517,7 +514,7 @@ describe("RealPromptPanel 三层结构轮卡列表 + 全屏富文本 Modal (T-R6
     );
     assert.deepEqual(
       classListNodes(root, "prompt-workplace__file-display").map((n) => textOf(n)),
-      ["全文", "仅文件名"],
+      ["全内容", "文件名"],
     );
     assert.equal(
       root.findAll((n) => typeof n.type === "string" && hasClass(n, "prompt-workplace__preview")).length,
@@ -1128,16 +1125,11 @@ describe("T-R6 契约层：payload 策略 / CodeEditor readOnly / 样式", () =>
       css.indexOf("}", css.indexOf(".prompt-group-cell__body {")),
     );
     assert.match(cellBody, /-webkit-line-clamp: 24;/);
-    // workplace 组卡族（kkv 快照源头直通的文件级二级卡）；组头收窄 28px
-    //（与工具组卡同款——只是一个名目行，不需要块级高度）。
+    // workplace 文件列表卡族（无组头：轮展开即列表，用户拍板）；预览卡 6 行。
     assert.match(css, /\.prompt-workplace \{/);
-    assert.match(css, /\.prompt-workplace__head \{/);
     assert.match(css, /\.prompt-workplace__file \{/);
-    const wpHead = css.slice(
-      css.indexOf(".prompt-workplace__head {"),
-      css.indexOf("}", css.indexOf(".prompt-workplace__head {")),
-    );
-    assert.match(wpHead, /min-height: 28px;/);
+    assert.match(css, /\.prompt-workplace__preview \{/);
+    assert.doesNotMatch(css, /\.prompt-workplace__head \{/);
     const groupHead = css.slice(
       css.indexOf(".prompt-tool-group__head {"),
       css.indexOf("}", css.indexOf(".prompt-tool-group__head {")),

@@ -4110,59 +4110,21 @@ html[data-theme="dark"] .conversation-tab.is-active {
   color: var(--text-tertiary);
 }
 
-/* ---------- 提示词预览：workplace 组卡（常驻工作区段，文件级二级卡） ----------
-   数据源 = kkv 规则快照源头直通（不从展示串反解）；形态与工具组卡同款。 */
+/* ---------- 提示词预览：workplace 文件列表卡（常驻工作区段） ----------
+   无组头（轮展开即见列表，用户拍板）；数据源 = kkv 规则快照源头直通。 */
 .prompt-workplace {
   border-radius: 10px;
   border: 1px solid var(--border);
   border-left-width: 3px;
   border-left-color: var(--primary);
   background: var(--surface-muted);
-}
-
-.prompt-workplace__head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  min-height: 28px;
-  box-sizing: border-box;
-  padding: 6px 10px;
-  border: none;
-  border-radius: 10px;
-  background: transparent;
-  text-align: left;
-  cursor: pointer;
-  font: inherit;
-}
-
-.prompt-workplace__head:hover {
-  background: var(--background);
-}
-
-.prompt-workplace__name {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text);
-}
-
-.prompt-workplace__count {
-  font-size: 11px;
-  color: var(--text-secondary);
-}
-
-.prompt-workplace__chevron {
-  flex: none;
-  margin-left: auto;
-  font-size: 10px;
-  color: var(--text-tertiary);
+  padding: 8px 10px;
 }
 
 .prompt-workplace__list {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: 0 10px 10px;
 }
 
 /* 文件块：列表行 +（展开时的）预览卡。 */

@@ -149,8 +149,8 @@ export function RealPromptPanel({
       );
     }
     if (card.type === "workplace") {
-      // 文件级展开态与组级共用 expanded map：key 前缀 `${turnId}::${cardId}:`
-      // 区分（onToggleFile 写入侧同口径，读写不串组级 key）。
+      // 无组头：轮展开即见文件列表（用户拍板，不再嵌 workplace 组）。
+      // 文件级展开态落在同一 expanded map：key 前缀 `${turnId}::${cardId}:`。
       const filePrefix = `${turnId}::${card.id}:`;
       const openFilePaths = new Set(
         Object.keys(expanded)
@@ -161,8 +161,6 @@ export function RealPromptPanel({
         <PromptWorkplaceCard
           key={card.id}
           card={card}
-          expanded={expanded[`${turnId}::${card.id}`] ?? false}
-          onToggle={(cardId) => toggleExpanded(`${turnId}::${cardId}`)}
           onToggleFile={(cardId, path) => toggleExpanded(`${turnId}::${cardId}:${path}`)}
           openFilePaths={openFilePaths}
           onOpenFile={openWorkplaceFileFullscreen}

@@ -1,9 +1,9 @@
 /**
- * T-WP1：workplace 组卡（三级结构：组 → 文件列表 → 预览卡 → 全屏）。
+ * T-WP1：workplace 文件列表卡（层级：轮 → 文件列表 → 预览卡 → 全屏）。
  *
- * 覆盖：组头「workplace · N 文件」收起/展开（受控）、文件列表行（路径 +
- * 展示档 pill，单行无正文）、点列表行就地展开预览卡（受控 openFilePaths）、
- * 点预览卡进全屏（载荷带 path 标题与块内正文）。
+ * 无组头（用户拍板：轮摘要已标 workplace，点轮展开直接见文件列表）。
+ * 覆盖：文件列表行（路径 + 展示档 pill，单行无正文）、点列表行就地展开
+ * 预览卡（受控 openFilePaths）、点预览卡进全屏（载荷带 path 标题与块内正文）。
  * 数据源形态对齐 core `PromptWorkplaceCardData`（kkv 规则快照源头直通）。
  */
 import React from 'react';
@@ -14,7 +14,6 @@ import {PromptWorkplaceCard} from '@/components/prompt/PromptWorkplaceCard';
 import {takePromptTurnDetail} from '@/components/prompt/prompt-turn-callback';
 
 const mockNavigate = jest.fn();
-const mockOnToggle = jest.fn();
 const mockOnToggleFile = jest.fn();
 
 jest.mock('@react-navigation/native', () => ({
@@ -68,7 +67,6 @@ const CARD: PromptWorkplaceCardData = {
 };
 
 function renderCard(
-  expanded: boolean,
   openFilePaths: ReadonlySet<string> = new Set<string>(),
 ): TestRenderer.ReactTestRenderer {
   let tree!: TestRenderer.ReactTestRenderer;
@@ -77,8 +75,6 @@ function renderCard(
       <PromptWorkplaceCard
         card={CARD}
         turnId="turn-wt"
-        expanded={expanded}
-        onToggle={mockOnToggle as (id: string) => void}
         openFilePaths={openFilePaths}
         onToggleFile={mockOnToggleFile as (path: string) => void}
       />,
@@ -93,32 +89,8 @@ describe('PromptWorkplaceCard（T-WP1）', () => {
     takePromptTurnDetail();
   });
 
-  it('T-WP1-1 默认收起：组头带文件计数，不挂载文件小卡', () => {
-    const tree = renderCard(false);
-    // mock Text 把 `{n} 文件` 摊成 [3, ' 文件']，join 回来再比。
-    expect(
-      tree.root.findByProps({testID: 'prompt-workplace-count'}).props.children
-        .join(''),
-    ).toBe('3 文件');
-    expect(() =>
-      tree.root.findByProps({testID: 'prompt-workplace-list'}),
-    ).toThrow();
-    expect(
-      tree.root.findByProps({testID: 'prompt-workplace-head'}).props
-        .accessibilityState,
-    ).toEqual({expanded: false});
-  });
-
-  it('T-WP1-2 组头点按走 onToggle(cardId)', () => {
-    const tree = renderCard(false);
-    act(() => {
-      tree.root.findByProps({testID: 'prompt-workplace-head'}).props.onPress();
-    });
-    expect(mockOnToggle).toHaveBeenCalledWith('prompt-workplace');
-  });
-
-  it('T-WP1-3 展开出文件列表行（路径 + 展示档，单行无正文预览）', () => {
-    const tree = renderCard(true);
+  it('T-WP1-1 无组头直出文件列表行（路径 + 展示档，单行无正文预览）', () => {
+    const tree = renderCard();
     // mock 下复合节点与宿主节点带同一份 props，findAllByProps 双计数——滤宿主层。
     const hostsOf = (testID: string) =>
       tree.root.findAllByProps({testID}).filter(n => typeof n.type === 'string');
@@ -134,22 +106,22 @@ describe('PromptWorkplaceCard（T-WP1）', () => {
     const displays = hostsOf('prompt-workplace-file-display').map(
       n => n.props.children,
     );
-    expect(displays).toEqual(['全文', '仅文件名', '头信息']);
-    // 列表行不挂正文预览（三级结构：列表 → 预览 → 全屏）。
+    expect(displays).toEqual(['全内容', '文件名', '文件头']);
+    // 列表行不挂正文预览（层级：列表 → 预览 → 全屏）。
     expect(() =>
       tree.root.findByProps({testID: 'prompt-workplace-file-preview'}),
     ).toThrow();
   });
 
-  it('T-WP1-4 点列表行 toggle 该文件预览卡（受控 openFilePaths）', () => {
-    const tree = renderCard(true);
+  it('T-WP1-2 点列表行 toggle 该文件预览卡（受控 openFilePaths）', () => {
+    const tree = renderCard();
     act(() => {
       tree.root.findAllByProps({testID: 'prompt-workplace-file'})[0]!.props.onPress();
     });
     expect(mockOnToggleFile).toHaveBeenCalledWith('outline/大纲.md');
 
     // openFilePaths 含该文件 → 预览卡挂载（限 6 行，块内正文）。
-    const expandedTree = renderCard(true, new Set(['outline/大纲.md']));
+    const expandedTree = renderCard(new Set(['outline/大纲.md']));
     const preview =
       expandedTree.root.findByProps({testID: 'prompt-workplace-file-preview'});
     expect(preview.props.accessibilityLabel).toBe(
@@ -171,8 +143,8 @@ describe('PromptWorkplaceCard（T-WP1）', () => {
     ).toBe(1);
   });
 
-  it('T-WP1-5 点预览卡进全屏：标题=路径、正文=块内正文、leafId 带路径', () => {
-    const tree = renderCard(true, new Set(['outline/大纲.md']));
+  it('T-WP1-3 点预览卡进全屏：标题=路径、正文=块内正文、leafId 带路径', () => {
+    const tree = renderCard(new Set(['outline/大纲.md']));
     act(() => {
       tree.root.findByProps({testID: 'prompt-workplace-file-preview'}).props.onPress();
     });
@@ -187,8 +159,8 @@ describe('PromptWorkplaceCard（T-WP1）', () => {
     });
   });
 
-  it('T-WP1-6 智能体配置卡片体系：灰底 + 左 3px primary 粗条、预览卡白底浮起', () => {
-    const tree = renderCard(true, new Set(['outline/大纲.md']));
+  it('T-WP1-4 智能体配置卡片体系：列表壳灰底+左 3px primary 粗条、预览卡白底浮起', () => {
+    const tree = renderCard(new Set(['outline/大纲.md']));
     const flatten = (style: unknown): Record<string, unknown> =>
       Array.isArray(style)
         ? Object.assign({}, ...style.map(flatten))
