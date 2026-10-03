@@ -21,6 +21,7 @@ import {useRoute, type RouteProp} from '@react-navigation/native';
 import {PromptTurnCard} from '@/components/prompt/PromptTurnCard';
 import {PromptToolGroupCard} from '@/components/prompt/PromptToolGroupCard';
 import {PromptTurnLeafCard} from '@/components/prompt/PromptTurnLeafCard';
+import {PromptWorkplaceCard} from '@/components/prompt/PromptWorkplaceCard';
 import {useMobileScope} from '@/hooks/useMobileScope';
 import {useRuntime} from '@/hooks/useRuntime';
 import {buildRealPromptPreviewTurns} from '@/services/prompt-preview.service';
@@ -177,19 +178,31 @@ function PromptTurnRow({
   return (
     // key 归 FlatList 的 keyExtractor，这里不加。
     <PromptTurnCard turn={turn} expanded={openTurnIds.has(turn.id)} onToggle={onToggleTurn}>
-      {turn.cards.map(card =>
-        card.type === 'toolGroup' ? (
-          <PromptToolGroupCard
-            key={card.id}
-            card={card}
-            turnId={turn.id}
-            expanded={openGroupIds.has(card.id)}
-            onToggle={onToggleGroup}
-          />
-        ) : (
-          <PromptTurnLeafCard key={card.id} card={card} turnId={turn.id} />
-        ),
-      )}
+      {turn.cards.map(card => {
+        if (card.type === 'toolGroup') {
+          return (
+            <PromptToolGroupCard
+              key={card.id}
+              card={card}
+              turnId={turn.id}
+              expanded={openGroupIds.has(card.id)}
+              onToggle={onToggleGroup}
+            />
+          );
+        }
+        if (card.type === 'workplace') {
+          return (
+            <PromptWorkplaceCard
+              key={card.id}
+              card={card}
+              turnId={turn.id}
+              expanded={openGroupIds.has(card.id)}
+              onToggle={onToggleGroup}
+            />
+          );
+        }
+        return <PromptTurnLeafCard key={card.id} card={card} turnId={turn.id} />;
+      })}
     </PromptTurnCard>
   );
 }

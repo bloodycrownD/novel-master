@@ -59,6 +59,10 @@ export type {
 export { buildPromptPreviewTurnsFromLayout } from "../service/prompt/prompt-preview-turns.js";
 export { formatToolUsePreviewJson } from "../service/prompt/prompt-preview-turns.js";
 export type {
+  PromptWorkplaceCardData,
+  PromptWorkplaceFileCardData,
+} from "../service/prompt/prompt-preview-turns.js";
+export type {
   PromptPreviewTurn,
   PromptTurnCardData,
   PromptTextCardData,
@@ -70,4 +74,5 @@ export type {
   PromptRenderContext,
   PromptSkillIndexEntry,
   PromptLlmInput,
+  PromptWorkplaceFileEntry,
 } from "../domain/prompt/model/prompt-render-context.js";

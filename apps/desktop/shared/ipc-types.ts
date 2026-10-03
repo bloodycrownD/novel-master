@@ -950,8 +950,32 @@ export type PromptTextCardDto = {
   readonly body: string;
 };
 
+/** workplace 单文件格（形状与 core 的 `PromptWorkplaceFileCardData` 逐字段一致）。 */
+export type PromptWorkplaceFileDto = {
+  /** VFS 逻辑路径（kkv 规则快照条目原值）。 */
+  readonly path: string;
+  /** 块内正文（`N|行` 行号格式；header 档为 front-matter 行）。 */
+  readonly body: string;
+  /** 展示档：full / filename / header（快照原值，非推断）。 */
+  readonly display: 'full' | 'filename' | 'header';
+};
+
+/**
+ * workplace 组卡：常驻工作区段拆成的文件级二级卡（数据源 = kkv 规则快照
+ * 源头直通，不从展示串反解）。
+ */
+export type PromptWorkplaceDto = {
+  readonly type: 'workplace';
+  /** 段 id（`prompt-workplace`）。 */
+  readonly id: string;
+  readonly files: readonly PromptWorkplaceFileDto[];
+};
+
 /** 轮内有序卡片流（判别联合，discriminator = `type`）。 */
-export type PromptTurnCardDto = PromptTextCardDto | PromptToolGroupDto;
+export type PromptTurnCardDto =
+  | PromptTextCardDto
+  | PromptToolGroupDto
+  | PromptWorkplaceDto;
 
 /**
  * 提示词预览「轮」（prompt-rounds）：模板段各占一轮、真用户输入开新轮、

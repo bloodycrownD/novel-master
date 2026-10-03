@@ -163,7 +163,7 @@ export function PromptToolGroupCard({card, turnId, expanded, onToggle}: Props) {
             <Text
               testID="prompt-tool-group-use-preview"
               style={[styles.code, {color: tokens.text}]}
-              numberOfLines={12}>
+              numberOfLines={24}>
               {formatToolUsePreviewJson(card.inputJson)}
             </Text>
           </Pressable>
@@ -196,7 +196,7 @@ export function PromptToolGroupCard({card, turnId, expanded, onToggle}: Props) {
                 styles.code,
                 card.result == null && {color: tokens.textTertiary},
               ]}
-              numberOfLines={12}>
+              numberOfLines={24}>
               {card.result == null ? LOST_RESULT_TEXT : card.result.body}
             </Text>
           </Pressable>
@@ -207,18 +207,19 @@ export function PromptToolGroupCard({card, turnId, expanded, onToggle}: Props) {
 }
 
 const styles = StyleSheet.create({
-  // blockCard 形态（智能体配置 PersistBlocksCard 同款）：1px 边 + 左 3px 粗条。
+  // blockCard 形态（智能体配置 PersistBlocksCard 同款）：1px 边 + 左 3px 粗条；
+  // 组头收窄（minHeight 28：只是一个函数名，不需要 40 高的块头）。
   card: {
     borderWidth: 1,
     borderLeftWidth: 3,
     borderRadius: 10,
-    padding: 12,
-    gap: 10,
+    padding: 10,
+    gap: 8,
   },
-  head: {flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 40},
+  head: {flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 28},
   headLeft: {flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1},
   dot: {width: 8, height: 8, borderRadius: 4},
-  name: {fontSize: 15, fontWeight: '600', flexShrink: 1},
+  name: {fontSize: 14, fontWeight: '600', flexShrink: 1},
   parallel: {
     fontSize: 10,
     borderWidth: StyleSheet.hairlineWidth,

@@ -49,12 +49,18 @@ export async function handlePromptRealPreview(
                 status: card.status,
                 parallel: card.parallel,
               } satisfies PromptTurnCardDto)
-            : ({
-                type: card.type,
-                id: card.id,
-                role: card.role,
-                body: card.body,
-              } satisfies PromptTurnCardDto),
+            : card.type === "workplace"
+              ? ({
+                  type: card.type,
+                  id: card.id,
+                  files: card.files,
+                } satisfies PromptTurnCardDto)
+              : ({
+                  type: card.type,
+                  id: card.id,
+                  role: card.role,
+                  body: card.body,
+                } satisfies PromptTurnCardDto),
         ),
       })),
     };

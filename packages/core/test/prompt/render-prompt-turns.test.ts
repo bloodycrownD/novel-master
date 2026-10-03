@@ -125,6 +125,42 @@ describe("T-R1 切轮正确性", () => {
     assert.equal(turns.find((turn) => turn.id === "prompt-workplace-done")?.kind, "assistant");
   });
 
+  it("ctx 带 workplaceFiles（kkv 快照源头直通）时 workplace 段产文件级组卡", async () => {
+    const ctx: PromptRenderContext = {
+      ...ctxOf(messages),
+      workplaceFiles: [
+        { path: "outline/大纲.md", display: "full", body: "1|第一行\n2|第二行" },
+        { path: "notes/草稿.txt", display: "filename", body: "1|草稿.txt" },
+        { path: "meta/info.md", display: "header", body: "---\ntitle: x\n---" },
+      ],
+    };
+    const turns = await buildPromptPreviewTurnsFromLayout(layout, ctx);
+    const workplace = turns.find((turn) => turn.id === "prompt-workplace")!;
+    assert.equal(workplace.cards.length, 1);
+    const card = workplace.cards[0]!;
+    assert.equal(card.type, "workplace");
+    if (card.type === "workplace") {
+      assert.deepEqual(
+        card.files.map((file) => [file.path, file.display]),
+        [
+          ["outline/大纲.md", "full"],
+          ["notes/草稿.txt", "filename"],
+          ["meta/info.md", "header"],
+        ],
+      );
+      // 块内正文原样直通（展示档是快照原值，不做推断）。
+      assert.equal(card.files[0]!.body, "1|第一行\n2|第二行");
+    }
+    // metaText 字数 = 各文件块内正文之和。
+    const filesChars =
+      "1|第一行\n2|第二行".length + "1|草稿.txt".length + "---\ntitle: x\n---".length;
+    assert.equal(workplace.metaText, `${filesChars} 字`);
+    // 无结构化数据（缺省 ctx）退普通 text 卡——旧调用方不空窗。
+    const legacy = await buildPromptPreviewTurnsFromLayout(layout, ctxOf(messages));
+    const legacyCard = legacy.find((turn) => turn.id === "prompt-workplace")!.cards[0]!;
+    assert.equal(legacyCard.type, "text");
+  });
+
   it("assembly chat 段带 messageId / seq 供聚合层分组", async () => {
     const segments = await buildPromptAssemblyFromLayout(layout, ctxOf(messages));
     const chat = segments.filter((segment) => segment.source === "message");

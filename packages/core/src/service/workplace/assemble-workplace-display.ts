@@ -13,12 +13,14 @@ import {
   SESSION_KKV_DOMAIN_FILE_CACHE,
   SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
   fileCacheKey,
+  type WorkplaceDisplayStatus,
 } from "@/domain/session-kkv/model/session-kkv-domains.js";
 import { fillFileCacheFromVfs } from "@/domain/workplace/logic/load-or-fill-file-cache.js";
 import { parseFileCachePayload } from "@/domain/workplace/logic/rule-snapshot-codec.js";
 import {
   joinFileBlocks,
   renderFileBlock,
+  renderFileBlockBody,
 } from "@/domain/workplace/logic/workplace-display.js";
 import {
   parseRuleSnapshotJson,
@@ -45,6 +47,13 @@ export interface AssembleWorkplaceDisplayDeps {
 export interface AssembleWorkplaceDisplayResult {
   /** 常驻前缀展示文本（给模型看的 workplace 块）。 */
   readonly workplaceDisplay: string;
+  /**
+   * 结构化文件清单（提示词预览的 workplace 二级卡数据源，2026-10-02）：
+   * 逐文件 `path` + 展示档 + **块内正文**（`N|行` 行号格式，与
+   * `renderFileBlock` 标签内同口径）——预览侧不再从展示串反解。
+   * 无 workplace 块或快照为空时为 `[]`。
+   */
+  readonly files: readonly WorkplaceAssembledFile[];
   /**
    * S0（attach 去重 seen 初值）：**仅 `status === "full"`** 的规则可见 path，
    * 已规范化为 seen key。无 workplace 块或快照为空时为 `[]`。
@@ -76,6 +85,16 @@ export interface AssembleWorkplaceDisplayResult {
    * 次 mtime 前进或消息事件自愈，与消息尾戳同款取舍）。
    */
   readonly fingerprint: string;
+}
+
+/** 组装产出的单文件结构（预览侧 workplace 二级卡数据源）。 */
+export interface WorkplaceAssembledFile {
+  /** VFS 逻辑路径（规则快照条目原值）。 */
+  readonly path: string;
+  /** 展示档（`full` / `header` / `filename`，快照条目原值）。 */
+  readonly display: WorkplaceDisplayStatus;
+  /** 块内正文（`N|行` 行号格式；header 档为 front-matter 行）。 */
+  readonly body: string;
 }
 
 /**
@@ -151,6 +170,7 @@ export async function assembleWorkplaceDisplay(
   if (!layoutHasWorkplace(deps.layout)) {
     return {
       workplaceDisplay: "",
+      files: [],
       prefixPaths: [],
       visiblePaths: [],
       fingerprint: "",
@@ -162,6 +182,7 @@ export async function assembleWorkplaceDisplay(
   if (entries.length === 0) {
     return {
       workplaceDisplay: "",
+      files: [],
       prefixPaths: [],
       visiblePaths: [],
       fingerprint: "",
@@ -186,6 +207,7 @@ export async function assembleWorkplaceDisplay(
   const prefixPaths: string[] = [];
   const visiblePaths: string[] = [];
   const blocks: string[] = [];
+  const files: WorkplaceAssembledFile[] = [];
   const fingerprintParts: string[] = [];
   for (const entry of entries) {
     // 按文件粒度的中止观察点（见 AssembleWorkplaceDisplayOptions.shouldStop）
@@ -219,6 +241,11 @@ export async function assembleWorkplaceDisplay(
         // file_cache 只是加速层，丢了下次再回填。
         { deferBackfillWrite: true }
       ));
+    const fileBody = renderFileBlockBody({
+      logicalPath: entry.path,
+      display: entry.status,
+      content: payload.body,
+    });
     blocks.push(
       renderFileBlock({
         logicalPath: entry.path,
@@ -227,6 +254,9 @@ export async function assembleWorkplaceDisplay(
         content: payload.body,
       })
     );
+    // 结构化清单（预览侧 workplace 二级卡数据源）：块内正文与展示串同口径，
+    // 预览不再从串反解。
+    files.push({path: entry.path, display: entry.status, body: fileBody});
     // 末段 bodyLength（r4-core-4）：mtime 是毫秒精度且树复制会保留源 mtime，
     // 「mtime 同、正文异」会让指纹假同 → 下游记忆/指纹估读返回陈旧值。
     // 体量是零成本字段（payload 已在手），长度异即指纹异。
@@ -236,6 +266,7 @@ export async function assembleWorkplaceDisplay(
   }
   return {
     workplaceDisplay: wrapWorkplaceDisplay(joinFileBlocks(blocks)),
+    files,
     prefixPaths,
     visiblePaths,
     // 指纹在循环里逐文件拼：entry 顺序即快照序（稳定），mtimeMs / 正文长度

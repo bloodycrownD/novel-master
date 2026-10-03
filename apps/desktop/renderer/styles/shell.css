@@ -3952,8 +3952,8 @@ html[data-theme="dark"] .conversation-tab.is-active {
 .prompt-leaf-card__preview {
   display: -webkit-box;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-  line-clamp: 3;
+  -webkit-line-clamp: 6;
+  line-clamp: 6;
   overflow: hidden;
   word-break: break-word;
   font-size: 12px;
@@ -3964,7 +3964,8 @@ html[data-theme="dark"] .conversation-tab.is-active {
 /* ---------- 提示词预览三层结构：工具组卡（一次 tool_use 一张） ---------- */
 
 /* 工具组卡：blockCard 形态（与叶子卡同层同款，智能体配置体系；子卡层沉一档）。
-   状态点三色（语义色）：ok 绿 / error 红 / lost 灰；组头 40 高（blockHeader）。 */
+   组头收窄（28px：只是一个函数名，不需要块级高度）。
+   状态点三色（语义色）：ok 绿 / error 红 / lost 灰。 */
 .prompt-tool-group {
   border-radius: 10px;
   border: 1px solid var(--border);
@@ -3978,9 +3979,9 @@ html[data-theme="dark"] .conversation-tab.is-active {
   align-items: center;
   gap: 8px;
   width: 100%;
-  min-height: 40px;
+  min-height: 28px;
   box-sizing: border-box;
-  padding: 9px 12px;
+  padding: 6px 10px;
   border: none;
   border-radius: 10px;
   background: transparent;
@@ -4002,7 +4003,7 @@ html[data-theme="dark"] .conversation-tab.is-active {
 
 .prompt-tool-group__name {
   font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--text);
   overflow: hidden;
@@ -4080,12 +4081,12 @@ html[data-theme="dark"] .conversation-tab.is-active {
   color: var(--text-secondary);
 }
 
-/* 预览限 12 行：保结构截大 key 后的 JSON 需要足够行数看清形状（mobile 同款）。 */
+/* 预览限 24 行（用户拍板预览高度翻倍）：保结构截大 key 后的 JSON 需要行数。 */
 .prompt-group-cell__body {
   display: -webkit-box;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 12;
-  line-clamp: 12;
+  -webkit-line-clamp: 24;
+  line-clamp: 24;
   overflow: hidden;
   word-break: break-word;
   font-size: 12px;
@@ -4107,6 +4108,127 @@ html[data-theme="dark"] .conversation-tab.is-active {
 .prompt-group-cell.is-lost .prompt-group-cell__body {
   font-style: italic;
   color: var(--text-tertiary);
+}
+
+/* ---------- 提示词预览：workplace 组卡（常驻工作区段，文件级二级卡） ----------
+   数据源 = kkv 规则快照源头直通（不从展示串反解）；形态与工具组卡同款。 */
+.prompt-workplace {
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  border-left-width: 3px;
+  border-left-color: var(--primary);
+  background: var(--surface-muted);
+}
+
+.prompt-workplace__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 28px;
+  box-sizing: border-box;
+  padding: 6px 10px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+
+.prompt-workplace__head:hover {
+  background: var(--background);
+}
+
+.prompt-workplace__name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.prompt-workplace__count {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.prompt-workplace__chevron {
+  flex: none;
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--text-tertiary);
+}
+
+.prompt-workplace__cells {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 10px 10px;
+}
+
+/* 文件小卡：第三层，白底浮起（明度交替最末档）+ 细左条（与工具格同款）。 */
+.prompt-workplace__file {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  padding: 8px 10px;
+  text-align: left;
+  font: inherit;
+  border-radius: 8px;
+  border: 1px solid var(--border-light);
+  border-left-width: 3px;
+  border-left-color: var(--primary);
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.prompt-workplace__file:hover {
+  border-color: var(--text-tertiary);
+  border-left-color: var(--primary);
+}
+
+.prompt-workplace__file-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.prompt-workplace__file-path {
+  flex: 1;
+  min-width: 0;
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 展示档 pill（badge 形态描边款）：全文 / 仅文件名 / 头信息。 */
+.prompt-workplace__file-display {
+  flex: none;
+  padding: 1px 6px;
+  border-radius: 6px;
+  border: 1px solid var(--border-light);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+
+.prompt-workplace__file-body {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 6;
+  line-clamp: 6;
+  overflow: hidden;
+  word-break: break-word;
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-secondary);
 }
 
 .chat-messages {

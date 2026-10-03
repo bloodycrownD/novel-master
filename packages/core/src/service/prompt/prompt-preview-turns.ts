@@ -57,8 +57,35 @@ export interface PromptTextCardData {
   readonly body: string;
 }
 
+/** workplace 单文件格：块内正文（行号格式原样）+ 展示档（快照条目原值）。 */
+export interface PromptWorkplaceFileCardData {
+  /** VFS 逻辑路径（规则快照条目原值）。 */
+  readonly path: string;
+  /** 块内正文（`N|行` 行号格式原样；header 档为 front-matter 行）。 */
+  readonly body: string;
+  /** 展示档：full（行号全文）/ filename（单行文件名）/ header（front-matter）。 */
+  readonly display: "full" | "header" | "filename";
+}
+
+/**
+ * workplace 组卡：常驻工作区段拆成的文件级二级卡（数据源是 ctx 的
+ * `workplaceFiles`——`assembleWorkplaceDisplay` 从 session kkv 规则快照
+ * 源头顺产，不从展示串反解）。
+ * 组头收起（workplace · N 文件），展开后逐文件一张小卡（路径+展示档），
+ * 点文件卡看该文件块内正文全屏（用户拍板的三级结构）。
+ */
+export interface PromptWorkplaceCardData {
+  readonly type: "workplace";
+  /** 段 id（`prompt-workplace`）。 */
+  readonly id: string;
+  readonly files: readonly PromptWorkplaceFileCardData[];
+}
+
 /** 轮内有序卡片流。 */
-export type PromptTurnCardData = PromptTextCardData | PromptToolGroupCardData;
+export type PromptTurnCardData =
+  | PromptTextCardData
+  | PromptToolGroupCardData
+  | PromptWorkplaceCardData;
 
 /**
  * 一轮提示词：合成段各占一轮，真用户输入开新轮，其余消息段归入当前 assistant 轮。
@@ -316,12 +343,15 @@ function cardId(messageId: string, blockIndex: number): string {
   return `card-${messageId}-${blockIndex}`;
 }
 
-/** 卡片计数字数：文本/thinking 取 `body`；工具组卡取 use 输入 + result 正文。 */
+/** 卡片计数字数：文本/thinking 取 `body`；工具组卡取 use 输入 + result 正文；workplace 取各文件块内正文之和。 */
 function cardCharCount(card: PromptTurnCardData): number {
-  if (card.type !== "toolGroup") {
-    return card.body.length;
+  if (card.type === "toolGroup") {
+    return card.inputJson.length + (card.result?.body.length ?? 0);
   }
-  return card.inputJson.length + (card.result?.body.length ?? 0);
+  if (card.type === "workplace") {
+    return card.files.reduce((sum, file) => sum + file.body.length, 0);
+  }
+  return card.body.length;
 }
 
 /** 一轮全部卡片的字数之和（三类轮的 metaText 共用同一口径）。 */
@@ -462,16 +492,28 @@ export async function buildPromptPreviewTurnsFromLayout(
   for (const segment of segments) {
     const item = toPreviewSegment(segment);
     if (segment.source !== "message") {
-      // 合成段轮：不在 ctx.messages 里，由该轮唯一段的 items 直转一张 text 卡；
+      // 合成段轮：不在 ctx.messages 里，由该轮唯一段的 items 直转卡；
       // kind 取该段的真实消息 role（见接口注释——不设 template 特殊分类）。
       const group = pushGroup(syntheticSegmentKind(segment.role));
       group.items.push(item);
-      group.cards.push({
-        type: "text",
-        id: item.id,
-        role: item.title,
-        body: item.body,
-      });
+      // workplace 段拆文件级组卡（数据源 = ctx.workplaceFiles，kkv 规则快照
+      // 源头直通）；无结构化数据（旧调用方/空快照）退普通 text 卡。
+      const workplaceFiles =
+        segment.id === "prompt-workplace" ? (ctx.workplaceFiles ?? []) : [];
+      if (workplaceFiles.length > 0) {
+        group.cards.push({
+          type: "workplace",
+          id: item.id,
+          files: workplaceFiles,
+        });
+      } else {
+        group.cards.push({
+          type: "text",
+          id: item.id,
+          role: item.title,
+          body: item.body,
+        });
+      }
       // 合成段自成一轮，不并入前后 chat 轮：复位 current，断掉「合成段只出现在 chat 前后」的隐式假设。
       current = null;
       continue;

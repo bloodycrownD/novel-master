@@ -146,11 +146,11 @@ describe('PromptToolGroupCard（T-MP2）', () => {
     expect(
       tree.root.findByProps({testID: 'prompt-tool-group-use-preview'}).props
         .numberOfLines,
-    ).toBe(12);
+    ).toBe(24);
     expect(
       tree.root.findByProps({testID: 'prompt-tool-group-result-preview'}).props
         .numberOfLines,
-    ).toBe(12);
+    ).toBe(24);
   });
 
   it('T-MP2-3 三状态各有独立状态点与文案', () => {
@@ -319,7 +319,7 @@ describe('PromptToolGroupCard（T-MP2）', () => {
     expect(
       tree.root.findByProps({testID: 'prompt-tool-group-use-preview'}).props
         .numberOfLines,
-    ).toBe(12);
+    ).toBe(24);
     press(tree, 'prompt-tool-group-use');
     expect(takePromptTurnDetail()?.body).toBe(OK_CARD.inputJson);
   });
@@ -384,7 +384,7 @@ describe('PromptTurnLeafCard（T-MP2/T-MP4）', () => {
       tree.root.findByProps({testID: 'prompt-turn-leaf-card'}).props
         .accessibilityLabel,
     ).toBe(`assistant，${LEAF_CARD.body.slice(0, 20)}`);
-    expect(preview.props.numberOfLines).toBe(3);
+    expect(preview.props.numberOfLines).toBe(6);
   });
 
   it('T-MP4-5 整卡点按进全屏：载荷带 leafId', () => {

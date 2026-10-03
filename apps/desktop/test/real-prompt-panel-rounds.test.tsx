@@ -59,6 +59,23 @@ const TURNS: PromptPreviewTurnDto[] = [
     ],
   },
   {
+    // workplace 轮（kkv 快照源头直通的文件级组卡）。
+    id: "prompt-workplace",
+    kind: "user",
+    summaryText: "workplace",
+    metaText: "28 字",
+    cards: [
+      {
+        type: "workplace",
+        id: "prompt-workplace",
+        files: [
+          { path: "outline/大纲.md", display: "full", body: "1|第一行\n2|第二行" },
+          { path: "notes/草稿.txt", display: "filename", body: "1|草稿.txt" },
+        ],
+      },
+    ],
+  },
+  {
     id: "turn-5",
     kind: "user",
     summaryText: "帮我写第一章",
@@ -420,23 +437,24 @@ describe("RealPromptPanel 三层结构轮卡列表 + 全屏富文本 Modal (T-R6
     const renderer = await mountPanel();
     const root = renderer.root;
 
-    // 三类轮 = 三张轮卡，data-turn-kind 一并钉住
+    // 四轮（system / workplace(user) / turn-5(user) / turn-7(assistant)），
+    // data-turn-kind 一并钉住（workplace 轮 kind = 段消息 role user）。
     const turnCards = classListNodes(root, "prompt-turn-card");
-    assert.equal(turnCards.length, 3);
+    assert.equal(turnCards.length, 4);
     assert.deepEqual(
       turnCards.map((node) => node.props["data-turn-id"]),
-      ["seg-sys", "turn-5", "turn-7"],
+      ["seg-sys", "prompt-workplace", "turn-5", "turn-7"],
     );
     assert.deepEqual(
       turnCards.map((node) => node.props["data-turn-kind"]),
-      ["system", "user", "assistant"],
+      ["system", "user", "user", "assistant"],
     );
     // 每张轮卡都同时挂轮壳类与 kind 修饰类（三类统一外壳，只靠色条/徽标区分）
     for (const turnCard of turnCards) {
       assert.ok(hasClass(turnCard, "prompt-turn"), "轮卡应挂 .prompt-turn 轮壳类");
     }
     assert.equal(classListNodes(root, "prompt-turn--system").length, 1);
-    assert.equal(classListNodes(root, "prompt-turn--user").length, 1);
+    assert.equal(classListNodes(root, "prompt-turn--user").length, 2);
     assert.equal(classListNodes(root, "prompt-turn--assistant").length, 1);
 
     // role 徽标 pill：三态走 CSS data-turn-kind（user 主蓝底/assistant 中性底/
@@ -444,11 +462,11 @@ describe("RealPromptPanel 三层结构轮卡列表 + 全屏富文本 Modal (T-R6
     const roles = classListNodes(root, "prompt-turn-card__role");
     assert.deepEqual(
       roles.map((node) => textOf(node)),
-      ["system", "user", "assistant"],
+      ["system", "user", "user", "assistant"],
     );
     assert.deepEqual(
       roles.map((node) => (node.props as { "data-turn-kind": unknown })["data-turn-kind"]),
-      ["system", "user", "assistant"],
+      ["system", "user", "user", "assistant"],
     );
     for (const role of roles) {
       assert.equal((role.props as { style?: unknown }).style, undefined);
@@ -458,12 +476,12 @@ describe("RealPromptPanel 三层结构轮卡列表 + 全屏富文本 Modal (T-R6
     const summaries = classListNodes(root, "prompt-turn-card__summary");
     assert.deepEqual(
       summaries.map((node) => textOf(node)),
-      ["system", "帮我写第一章", "好的，我先列提纲"],
+      ["system", "workplace", "帮我写第一章", "好的，我先列提纲"],
     );
     const metas = classListNodes(root, "prompt-turn-card__meta");
     assert.deepEqual(
       metas.map((node) => textOf(node)),
-      ["6 字", "#5 · 15 字", "#7 · 工具调用 1 次 · 128 字"],
+      ["6 字", "28 字", "#5 · 15 字", "#7 · 工具调用 1 次 · 128 字"],
     );
     // meta 行同时挂 .prompt-segment__preview（契约类名保留）
     for (const meta of metas) {
@@ -474,6 +492,50 @@ describe("RealPromptPanel 三层结构轮卡列表 + 全屏富文本 Modal (T-R6
     assert.equal(classListNodes(root, "prompt-turn-card__fullscreen").length, 0);
     assert.equal(classListNodes(root, "prompt-turn-card__body").length, 0);
     assert.equal(classNodes(root, "text-prompt-overlay").length, 0);
+  });
+
+  it("T-WP1：workplace 轮展开文件级组卡——路径+展示档 pill，点文件开全屏原文", async () => {
+    const renderer = await mountPanel();
+    const root = renderer.root;
+
+    await expandTurn(root, "prompt-workplace");
+    // 组卡也默认收起：点组头展开文件小卡。
+    await act(async () => {
+      click(classNodes(root, "prompt-workplace__head")[0]!);
+    });
+    // 组头：workplace · N 文件（收窄形态，css 承担）。
+    assert.equal(classListNodes(root, "prompt-workplace").length, 1);
+    assert.equal(
+      textOf(classNodes(root, "prompt-workplace__count")[0]!),
+      "2 文件",
+    );
+    // 文件小卡：路径 + 展示档文案（快照原值直译）。
+    const files = classListNodes(root, "prompt-workplace__file");
+    assert.deepEqual(
+      files.map((node) => node.props["data-file-path"]),
+      ["outline/大纲.md", "notes/草稿.txt"],
+    );
+    assert.deepEqual(
+      classListNodes(root, "prompt-workplace__file-display").map((n) => textOf(n)),
+      ["全文", "仅文件名"],
+    );
+    // 预览限 6 行（用户拍板预览高度翻倍）。
+    assert.match(
+      readFileSync(join(rendererRoot, "styles", "shell.css"), "utf8"),
+      /\.prompt-workplace__file-body \{[\s\S]*?-webkit-line-clamp: 6;/,
+    );
+
+    // 点文件卡 → 全屏原文（标题 = 路径，正文 = 块内正文）。
+    await act(async () => {
+      click(files[0]!);
+    });
+    const raws = classListNodes(root, "prompt-fullscreen__raw");
+    assert.equal(raws.length, 1);
+    assert.equal(textOf(raws[0]!), "1|第一行\n2|第二行");
+    assert.equal(
+      textOf(classNodes(root, "prompt-fullscreen__title")[0]!),
+      "outline/大纲.md",
+    );
   });
 
   it("T-DP1：点头部就地展开 → 渲染 turn.cards 叶子卡，再点收起", async () => {
@@ -788,7 +850,7 @@ describe("RealPromptPanel 三层结构轮卡列表 + 全屏富文本 Modal (T-R6
     const root = renderer.root;
 
     // 轮卡列表条数与基线一致（3 轮 → 3 张卡），未被 items 撑大
-    assert.equal(classListNodes(root, "prompt-turn-card").length, 3);
+    assert.equal(classListNodes(root, "prompt-turn-card").length, 4);
     // 展开 assistant 轮后，卡片流仍只有 cards 里的 2 张（1 文本 + 1 组卡）
     await expandTurn(root, "turn-7");
     assert.deepEqual(
@@ -817,10 +879,10 @@ describe("RealPromptPanel 三层结构轮卡列表 + 全屏富文本 Modal (T-R6
     const root = renderer.root;
 
     // 三张轮卡照常出（摘要/meta 行不依赖 cards）
-    assert.equal(classListNodes(root, "prompt-turn-card").length, 3);
+    assert.equal(classListNodes(root, "prompt-turn-card").length, 4);
     assert.deepEqual(
       classListNodes(root, "prompt-turn-card__summary").map((node) => textOf(node)),
-      ["system", "帮我写第一章", "好的，我先列提纲"],
+      ["system", "workplace", "帮我写第一章", "好的，我先列提纲"],
     );
 
     // 展开轮卡：展开区挂载了，但一张卡都没有（cards 被归一化成空数组）
@@ -926,7 +988,14 @@ describe("T-R6 契约层：payload 策略 / CodeEditor readOnly / 样式", () =>
     assert.match(src, /readonly type: 'toolGroup';/);
     assert.match(src, /export type PromptTextCardDto = \{/);
     assert.match(src, /readonly type: 'text' \| 'thinking';/);
-    assert.match(src, /export type PromptTurnCardDto = PromptTextCardDto \| PromptToolGroupDto;/);
+    assert.match(src, /export type PromptTextCardDto = \{/);
+    assert.match(src, /export type PromptToolGroupDto = \{/);
+    assert.match(src, /export type PromptWorkplaceDto = \{/);
+    // 轮卡片联合含三成员（text/thinking、toolGroup、workplace）
+    assert.match(
+      src,
+      /export type PromptTurnCardDto =\r?\n  \| PromptTextCardDto\r?\n  \| PromptToolGroupDto\r?\n  \| PromptWorkplaceDto;/,
+    );
     // 反向：旧形态的段 DTO 与可选字段全部退役
     assert.doesNotMatch(src, /PromptPreviewSegmentDto/);
     // 只截 PromptPreviewTurnDto 的类型体比对，并剥掉行内注释，免得注释里解释
@@ -1040,17 +1109,32 @@ describe("T-R6 契约层：payload 策略 / CodeEditor readOnly / 样式", () =>
     assert.match(css, /\.prompt-tool-group \{/);
     assert.match(css, /\.prompt-group-cell \{/);
     assert.match(css, /\.prompt-fullscreen__body \{/);
-    // 限行口径：叶子预览 3 行 / 组内格 12 行（保结构截大 key 后的 JSON 需要行数）
+    // 限行口径（用户拍板预览高度翻倍）：叶子预览 6 行 / 组内格 24 行
     const leafPreview = css.slice(
       css.indexOf(".prompt-leaf-card__preview {"),
       css.indexOf("}", css.indexOf(".prompt-leaf-card__preview {")),
     );
-    assert.match(leafPreview, /-webkit-line-clamp: 3;/);
+    assert.match(leafPreview, /-webkit-line-clamp: 6;/);
     const cellBody = css.slice(
       css.indexOf(".prompt-group-cell__body {"),
       css.indexOf("}", css.indexOf(".prompt-group-cell__body {")),
     );
-    assert.match(cellBody, /-webkit-line-clamp: 12;/);
+    assert.match(cellBody, /-webkit-line-clamp: 24;/);
+    // workplace 组卡族（kkv 快照源头直通的文件级二级卡）；组头收窄 28px
+    //（与工具组卡同款——只是一个名目行，不需要块级高度）。
+    assert.match(css, /\.prompt-workplace \{/);
+    assert.match(css, /\.prompt-workplace__head \{/);
+    assert.match(css, /\.prompt-workplace__file \{/);
+    const wpHead = css.slice(
+      css.indexOf(".prompt-workplace__head {"),
+      css.indexOf("}", css.indexOf(".prompt-workplace__head {")),
+    );
+    assert.match(wpHead, /min-height: 28px;/);
+    const groupHead = css.slice(
+      css.indexOf(".prompt-tool-group__head {"),
+      css.indexOf("}", css.indexOf(".prompt-tool-group__head {")),
+    );
+    assert.match(groupHead, /min-height: 28px;/);
     // 「可点开全屏」的视觉线索：叶子卡 / 组内格要有 hover 态
     assert.match(css, /\.prompt-leaf-card:hover \{/);
     assert.match(css, /\.prompt-group-cell:hover \{/);

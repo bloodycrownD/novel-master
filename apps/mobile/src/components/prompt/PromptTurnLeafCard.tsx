@@ -60,7 +60,7 @@ export function PromptTurnLeafCard({card, turnId}: Props) {
       <Text
         testID="prompt-turn-leaf-preview"
         style={[styles.preview, {color: tokens.textSecondary}]}
-        numberOfLines={3}>
+        numberOfLines={6}>
         {card.body}
       </Text>
     </Pressable>

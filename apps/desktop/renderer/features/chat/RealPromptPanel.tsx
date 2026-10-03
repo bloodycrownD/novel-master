@@ -30,6 +30,7 @@ import {
   PromptToolGroupCard,
   type ToolGroupLeaf,
 } from "./PromptToolGroupCard";
+import { PromptWorkplaceCard } from "./PromptWorkplaceCard";
 
 interface RealPromptPanelProps {
   projectId: string;
@@ -108,6 +109,14 @@ export function RealPromptPanel({
     [],
   );
 
+  /** workplace 某文件全屏：该文件块内正文单份（标题 = 路径）。 */
+  const openWorkplaceFileFullscreen = useCallback(
+    (_cardId: string, path: string, body: string) => {
+      setFullscreen({ title: path, blocks: [body] });
+    },
+    [],
+  );
+
   // Esc 关闭全屏 Modal。已被下游消费掉的 Esc（defaultPrevented）不拦截。
   useEffect(() => {
     if (fullscreen == null) {
@@ -136,6 +145,17 @@ export function RealPromptPanel({
           // 组卡 key 与读取侧同口径拼 `${turnId}::${cardId}`，否则展开态写进去读不出来。
           onToggle={(cardId) => toggleExpanded(`${turnId}::${cardId}`)}
           onOpenLeaf={openGroupLeafFullscreen}
+        />
+      );
+    }
+    if (card.type === "workplace") {
+      return (
+        <PromptWorkplaceCard
+          key={card.id}
+          card={card}
+          expanded={expanded[`${turnId}::${card.id}`] ?? false}
+          onToggle={(cardId) => toggleExpanded(`${turnId}::${cardId}`)}
+          onOpenFile={openWorkplaceFileFullscreen}
         />
       );
     }
