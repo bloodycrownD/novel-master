@@ -32,6 +32,12 @@ export type ChatTranscriptTelemetryEvent =
       readonly name: 'composer_dock_degraded';
       /** ready 上报的能力位条数：区分「完全没带」与「带了别的、唯独缺 dock」。 */
       readonly capabilityCount: number;
+    }
+  | {
+      // webview-background-ready-fail：Android 渲染进程被系统回收/崩溃
+      // （onRenderProcessGone，iOS 对应 onContentProcessDidTerminate）。这条路径原先
+      // 零打点——WebView 残留死态而页面「看着正常」（只是不动），线上无从归因。
+      readonly name: 'render_process_gone';
     };
 // Step 8：`legacy_cache_discarded`（读到 v1 快照时上报）随 legacy 转录引擎退役删除——
 // 读侧已无 v1 回落源，这条事件永不触发，留着只会让人以为还有双引擎在跑。

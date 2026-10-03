@@ -50,7 +50,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import {Linking, StyleSheet, Text, View} from 'react-native';
+import {AppState, Linking, StyleSheet, Text, View} from 'react-native';
 import WebView, {type WebViewMessageEvent} from 'react-native-webview';
 // 根入口 index.d.ts 未 re-export 此类型，只能从 lib/WebViewTypes 深导入；
 // import type 会被擦除，不影响运行时打包。
@@ -633,10 +633,17 @@ export const ChatConversationWebView = memo(
       const onComposerSelectionChangeRef = useRef(onComposerSelectionChange);
       const onDockActionRef = useRef(onDockAction);
       const onListActionRef = useRef(onListAction);
+      /**
+       * 失败态镜像（webview-background-ready-fail）：供 AppState 的 change 回调读
+       * 最新失败态。走 ref 而非把 `readyFailed` 塞进回调依赖——依赖一变回调就换，
+       * 订阅会被反复摘挂重挂（监听本身也跟着抖动）。
+       */
+      const readyFailedRef = useRef(false);
       onComposerChangeTextRef.current = onComposerChangeText;
       onComposerSelectionChangeRef.current = onComposerSelectionChange;
       onDockActionRef.current = onDockAction;
       onListActionRef.current = onListAction;
+      readyFailedRef.current = readyFailed;
 
       const clearReadyTimeout = useCallback(() => {
         if (readyTimeoutRef.current != null) {
@@ -659,9 +666,19 @@ export const ChatConversationWebView = memo(
         clearReadyTimeout();
         readyTimeoutRef.current = setTimeout(() => {
           readyTimeoutRef.current = null;
-          if (!webReadyRef.current) {
-            setReadyFailed(true);
+          if (webReadyRef.current) {
+            return;
           }
+          // 前后台感知（webview-background-ready-fail）：锁屏/后台时 Chromium 冻结
+          // web JS，ready 发不出来不是装配失败——非前台态不判死，挂起等回前台由
+          // AppState 订阅重新计时。显式列举 background/inactive 而非 !== 'active'：
+          // 启动早期 currentState 为 null、jest 环境（@react-native/jest-preset mock）
+          // 为 undefined，按前台处理（真机到期时刻不会处于启动早期）。
+          const appState = AppState.currentState;
+          if (appState === 'background' || appState === 'inactive') {
+            return;
+          }
+          setReadyFailed(true);
         }, READY_TIMEOUT_MS);
       }, [clearReadyTimeout]);
 
@@ -2369,12 +2386,55 @@ export const ChatConversationWebView = memo(
         armReadyTimeout();
       }, [armReadyTimeout]);
 
+      /**
+       * 回前台自愈（webview-background-ready-fail）：
+       * - 错误态（readyFailed）：WebView 已被 early-return 卸载，onLoad/重挂 effect 都
+       *   不会再触发，handleReload 是唯一自洽恢复入口（重置失败态 + 换 key 重挂 + 重新计时）。
+       * - 非错误但握手在途（含后台期间计时器到期挂起的）：重新计 8s，把「冻结期」从
+       *   计时窗口里剔除。
+       * 天然限流：handleReload 置 readyFailed=false 后，后续 active 只走重计时分支，
+       * 前后台抖动不会反复重载。
+       */
+      const handleAppStateChange = useCallback(
+        (state: string) => {
+          if (state !== 'active') {
+            return;
+          }
+          if (webReadyRef.current) {
+            return;
+          }
+          if (readyFailedRef.current) {
+            handleReload();
+            return;
+          }
+          armReadyTimeout();
+        },
+        [armReadyTimeout, handleReload],
+      );
+
+      useEffect(() => {
+        const sub = AppState.addEventListener('change', handleAppStateChange);
+        return () => {
+          sub.remove();
+        };
+      }, [handleAppStateChange]);
+
+      /**
+       * 渲染进程被系统回收/崩溃（webview-background-ready-fail）：webview 库只发事件
+       * 不做恢复，WebView 实例残留死态——复用 handleReload 换 key 重建 + 重新握手。
+       * onContentProcessDidTerminate 是 iOS 对应物，防御性同接。
+       */
+      const handleRenderProcessGone = useCallback(() => {
+        emitChatTranscriptTelemetry({name: 'render_process_gone'});
+        handleReload();
+      }, [handleReload]);
+
       if (readyFailed) {
         return (
           <View style={styles.fill} testID="chat-conversation-ready-error">
             <Text style={{color: tokens.text}}>对话页加载失败</Text>
             <Text style={[styles.hint, {color: tokens.textSecondary}]}>
-              输入组件版本可能过低，请重启应用
+              页面加载超时，点重载恢复；若持续出现请重启应用
             </Text>
             <Text
               style={[styles.retry, {color: tokens.primary}]}
@@ -2406,6 +2466,10 @@ export const ChatConversationWebView = memo(
             onOpenWindow={handleOpenWindow}
             onMessage={handleUpstream}
             onLoad={handleLoad}
+            /* 渲染进程被系统回收/崩溃（Android onRenderProcessGone / iOS
+               onContentProcessDidTerminate）——webview 库只发事件不恢复，换 key 重挂。 */
+            onRenderProcessGone={handleRenderProcessGone}
+            onContentProcessDidTerminate={handleRenderProcessGone}
             javaScriptEnabled
             domStorageEnabled
             scrollEnabled={false}

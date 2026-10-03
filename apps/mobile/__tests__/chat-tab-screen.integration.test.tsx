@@ -283,10 +283,18 @@ jest.mock('../src/storage/chat-rich-text-pref', () => ({
   readChatRichTextEnabled: jest.fn(async () => false),
 }));
 
-jest.mock('../src/services/session-messages-loader', () => ({
-  loadSessionMessagesTail: (...args: any[]) => mockLoadTail(...args),
-  loadSessionMessagesPage: (...args: any[]) => mockLoadPage(...args),
-}));
+// `{virtual: true}`：`session-messages-loader` 已随「Wave D 死通道删净」退役删除
+// （6594b67c9），但本 mock 一直留着——不带 virtual 时 jest 解析不到模块，
+// 整套件在加载期就炸（与本用例无关的 HEAD 既有红）。loader 的 hook 消费方早已退役，
+// 这个 mock 现在是纯历史残留，virtual 挂个幻影模块即可让套件重新跑起来。
+jest.mock(
+  '../src/services/session-messages-loader',
+  () => ({
+    loadSessionMessagesTail: (...args: any[]) => mockLoadTail(...args),
+    loadSessionMessagesPage: (...args: any[]) => mockLoadPage(...args),
+  }),
+  {virtual: true},
+);
 
 jest.mock('../src/components/chrome/AppHeader', () => ({
   AppHeader: () => null,
