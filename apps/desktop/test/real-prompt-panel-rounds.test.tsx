@@ -494,12 +494,12 @@ describe("RealPromptPanel 三层结构轮卡列表 + 全屏富文本 Modal (T-R6
     assert.equal(classNodes(root, "text-prompt-overlay").length, 0);
   });
 
-  it("T-WP1：workplace 轮展开文件级组卡——路径+展示档 pill，点文件开全屏原文", async () => {
+  it("T-WP1：workplace 轮三级结构——组卡→文件列表→预览卡→全屏原文", async () => {
     const renderer = await mountPanel();
     const root = renderer.root;
 
     await expandTurn(root, "prompt-workplace");
-    // 组卡也默认收起：点组头展开文件小卡。
+    // 组卡也默认收起：点组头展开文件列表。
     await act(async () => {
       click(classNodes(root, "prompt-workplace__head")[0]!);
     });
@@ -509,7 +509,7 @@ describe("RealPromptPanel 三层结构轮卡列表 + 全屏富文本 Modal (T-R6
       textOf(classNodes(root, "prompt-workplace__count")[0]!),
       "2 文件",
     );
-    // 文件小卡：路径 + 展示档文案（快照原值直译）。
+    // 第一级 → 第二级：文件列表行（路径 + 展示档文案，单行无正文）。
     const files = classListNodes(root, "prompt-workplace__file");
     assert.deepEqual(
       files.map((node) => node.props["data-file-path"]),
@@ -519,15 +519,23 @@ describe("RealPromptPanel 三层结构轮卡列表 + 全屏富文本 Modal (T-R6
       classListNodes(root, "prompt-workplace__file-display").map((n) => textOf(n)),
       ["全文", "仅文件名"],
     );
-    // 预览限 6 行（用户拍板预览高度翻倍）。
-    assert.match(
-      readFileSync(join(rendererRoot, "styles", "shell.css"), "utf8"),
-      /\.prompt-workplace__file-body \{[\s\S]*?-webkit-line-clamp: 6;/,
+    assert.equal(
+      root.findAll((n) => typeof n.type === "string" && hasClass(n, "prompt-workplace__preview")).length,
+      0,
+      "列表行未展开时不出预览卡",
     );
 
-    // 点文件卡 → 全屏原文（标题 = 路径，正文 = 块内正文）。
+    // 点列表行 → 就地展开预览卡（块内正文，限 6 行由 css 承担）。
     await act(async () => {
       click(files[0]!);
+    });
+    const previews = classListNodes(root, "prompt-workplace__preview");
+    assert.equal(previews.length, 1);
+    assert.equal(textOf(previews[0]!), "1|第一行\n2|第二行");
+
+    // 点预览卡 → 全屏原文（标题 = 路径，正文 = 块内正文）。
+    await act(async () => {
+      click(previews[0]!);
     });
     const raws = classListNodes(root, "prompt-fullscreen__raw");
     assert.equal(raws.length, 1);

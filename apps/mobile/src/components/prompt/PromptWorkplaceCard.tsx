@@ -1,16 +1,15 @@
 /**
- * workplace 组卡（常驻工作区段）：组头「workplace · N 文件」收起，就地展开后
- * 逐文件一张小卡——路径 + 展示档（全文/仅文件名/头信息，kkv 规则快照原值）+
- * 块内正文预览；点文件卡进全屏看该文件完整块内正文。
+ * workplace 组卡（常驻工作区段）：组头「workplace · N 文件」收起，展开后是
+ * **紧凑文件列表**（每行 = 路径 + 展示档，单行不预览正文）；点文件行就地
+ * 展开该文件的预览卡（块内正文预览）；点预览卡才进全屏看完整正文——
+ * 用户拍板的三级结构（列表 → 预览 → 全屏）。
  *
  * 数据源是 core 的 `ctx.workplaceFiles`（`assembleWorkplaceDisplay` 从 session
- * kkv 规则快照源头顺产，不从展示串反解——用户拍板）。
+ * kkv 规则快照源头顺产，不从展示串反解）。
  *
- * 展开态同样**受控**（`expanded` / `onToggle`，与工具组卡共用屏级 openGroupIds）：
- * FlatList 虚拟化会卸载滚出窗口的 item，组件内 state 会丢。
- *
- * 形态与工具组卡同款（blockCard 左 3px 粗条 + 组头一行）；文件小卡与工具格
- * 同层（白底浮起、细左条）。
+ * 两级展开态都**受控**：组级 `expanded` / `onToggle`（与工具组卡共用屏级
+ * openGroupIds），文件级 `openFilePaths` / `onToggleFile`（key =
+ * `${card.id}:${path}`，同样落在屏级集合——FlatList 虚拟化卸载不丢态）。
  */
 import React, {useCallback} from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
@@ -28,11 +27,23 @@ const DISPLAY_LABEL: Record<PromptWorkplaceCardData['files'][number]['display'],
 type Props = {
   card: PromptWorkplaceCardData;
   turnId: string;
+  /** 组级展开态（受控，与工具组卡共用屏级 openGroupIds）。 */
   expanded: boolean;
   onToggle: (groupId: string) => void;
+  /** 展开中的文件路径集合（受控，屏级；key = `${card.id}:${path}` 的 path 段）。 */
+  openFilePaths: ReadonlySet<string>;
+  /** 文件行点按：toggle 该文件的预览卡。 */
+  onToggleFile: (path: string) => void;
 };
 
-export function PromptWorkplaceCard({card, turnId, expanded, onToggle}: Props) {
+export function PromptWorkplaceCard({
+  card,
+  turnId,
+  expanded,
+  onToggle,
+  openFilePaths,
+  onToggleFile,
+}: Props) {
   const {tokens} = useTheme();
   const openDetail = useOpenPromptDetail();
 
@@ -91,47 +102,69 @@ export function PromptWorkplaceCard({card, turnId, expanded, onToggle}: Props) {
         </Text>
       </Pressable>
       {expanded ? (
-        <View testID="prompt-workplace-body" style={styles.cells}>
-          {card.files.map(file => (
-            <Pressable
-              key={file.path}
-              testID="prompt-workplace-file"
-              accessibilityRole="button"
-              accessibilityLabel={`查看工作区文件 ${file.path}`}
-              onPress={() => openFile(file.path, file.body)}
-              style={[
-                styles.cell,
-                {
-                  backgroundColor: tokens.surface,
-                  borderColor: tokens.borderLight,
-                  borderLeftColor: tokens.primary,
-                },
-              ]}>
-              <View style={styles.cellHead}>
-                <Text
-                  testID="prompt-workplace-file-path"
-                  style={[styles.path, {color: tokens.text}]}
-                  numberOfLines={1}>
-                  {file.path}
-                </Text>
-                <Text
-                  testID="prompt-workplace-file-display"
+        <View testID="prompt-workplace-list" style={styles.list}>
+          {card.files.map(file => {
+            const fileOpen = openFilePaths.has(file.path);
+            return (
+              <View key={file.path} style={styles.fileBlock}>
+                {/* 第一级 → 第二级：文件列表行（纯路径，无正文）。 */}
+                <Pressable
+                  testID="prompt-workplace-file"
+                  accessibilityRole="button"
+                  accessibilityLabel={`${fileOpen ? '收起' : '展开'}文件预览 ${file.path}`}
+                  accessibilityState={{expanded: fileOpen}}
+                  onPress={() => onToggleFile(file.path)}
                   style={[
-                    styles.display,
-                    {color: tokens.textSecondary, borderColor: tokens.borderLight},
-                  ]}
-                  numberOfLines={1}>
-                  {DISPLAY_LABEL[file.display]}
-                </Text>
+                    styles.fileRow,
+                    {borderColor: tokens.borderLight},
+                  ]}>
+                  <Text
+                    testID="prompt-workplace-file-path"
+                    style={[styles.path, {color: tokens.text}]}
+                    numberOfLines={1}>
+                    {file.path}
+                  </Text>
+                  <Text
+                    testID="prompt-workplace-file-display"
+                    style={[
+                      styles.display,
+                      {color: tokens.textSecondary, borderColor: tokens.borderLight},
+                    ]}
+                    numberOfLines={1}>
+                    {DISPLAY_LABEL[file.display]}
+                  </Text>
+                  <Text
+                    testID="prompt-workplace-file-chevron"
+                    style={[styles.fileChevron, {color: tokens.textTertiary}]}>
+                    {fileOpen ? '⌄' : '›'}
+                  </Text>
+                </Pressable>
+                {/* 第二级 → 第三级：预览卡（点它进全屏）。 */}
+                {fileOpen ? (
+                  <Pressable
+                    testID="prompt-workplace-file-preview"
+                    accessibilityRole="button"
+                    accessibilityLabel={`查看文件全文 ${file.path}`}
+                    onPress={() => openFile(file.path, file.body)}
+                    style={[
+                      styles.preview,
+                      {
+                        backgroundColor: tokens.surface,
+                        borderColor: tokens.borderLight,
+                        borderLeftColor: tokens.primary,
+                      },
+                    ]}>
+                    <Text
+                      testID="prompt-workplace-file-preview-text"
+                      style={[styles.code, {color: tokens.textSecondary}]}
+                      numberOfLines={6}>
+                      {file.body}
+                    </Text>
+                  </Pressable>
+                ) : null}
               </View>
-              <Text
-                testID="prompt-workplace-file-preview"
-                style={[styles.code, {color: tokens.textSecondary}]}
-                numberOfLines={6}>
-                {file.body}
-              </Text>
-            </Pressable>
-          ))}
+            );
+          })}
         </View>
       ) : null}
     </View>
@@ -152,26 +185,22 @@ const styles = StyleSheet.create({
   name: {fontSize: 14, fontWeight: '600', flexShrink: 1},
   count: {fontSize: 11},
   chevron: {fontSize: 14, marginLeft: 'auto'},
-  cells: {gap: 8},
-  // 文件小卡：第三层，白底浮起（明度交替最末档）+ 细左条。
-  cell: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderLeftWidth: 3,
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    gap: 6,
-  },
-  cellHead: {
+  list: {gap: 2},
+  fileBlock: {gap: 6},
+  // 文件列表行：单行紧凑（路径 + 展示档 + chevron），底部 hairline 分隔。
+  fileRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     gap: 8,
+    minHeight: 34,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    paddingVertical: 2,
   },
   path: {
     fontFamily: 'monospace',
     fontSize: 12,
     flexShrink: 1,
+    flexGrow: 1,
   },
   // 展示档 pill（badge 形态描边款）。
   display: {
@@ -182,6 +211,15 @@ const styles = StyleSheet.create({
     paddingVertical: 1,
     paddingHorizontal: 6,
     overflow: 'hidden',
+  },
+  fileChevron: {fontSize: 13},
+  // 预览卡：列表行下方缩进展开（第三层白底浮起 + 细左条）。
+  preview: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderLeftWidth: 3,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
   },
   code: {fontFamily: 'monospace', fontSize: 11, lineHeight: 16},
 });

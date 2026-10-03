@@ -149,12 +149,22 @@ export function RealPromptPanel({
       );
     }
     if (card.type === "workplace") {
+      // 文件级展开态与组级共用 expanded map：key 前缀 `${turnId}::${cardId}:`
+      // 区分（onToggleFile 写入侧同口径，读写不串组级 key）。
+      const filePrefix = `${turnId}::${card.id}:`;
+      const openFilePaths = new Set(
+        Object.keys(expanded)
+          .filter((key) => key.startsWith(filePrefix))
+          .map((key) => key.slice(filePrefix.length)),
+      );
       return (
         <PromptWorkplaceCard
           key={card.id}
           card={card}
           expanded={expanded[`${turnId}::${card.id}`] ?? false}
           onToggle={(cardId) => toggleExpanded(`${turnId}::${cardId}`)}
+          onToggleFile={(cardId, path) => toggleExpanded(`${turnId}::${cardId}:${path}`)}
+          openFilePaths={openFilePaths}
           onOpenFile={openWorkplaceFileFullscreen}
         />
       );
