@@ -1,15 +1,20 @@
 /**
  * 工具组卡（一次 `tool_use` 一张）：组头「工具名 · 状态点」+ 可选「并行」徽标，
  * 就地展开后是**一对两格**——上格 tool use（等宽 JSON 预览）、下格 tool result
- * （正文预览 / 悬挂时「未返回结果」占位）。两格各自可点开全屏富文本。
+ * （正文预览 / 悬挂时「未返回结果」占位）。整格点开全屏原文（无显式 ⤢，
+ * 用户拍板「点击就好进入全屏」）。
  *
- * 状态点三色（语义色，不随主题变）：ok 绿 / error 红 / lost 灰，与设计基准 demo
- * 的 tool-group 一致；三态另配可读文案，不只靠颜色区分。
+ * tool use 预览走 core `formatToolUsePreviewJson`（保结构截大 key：超长字符串
+ * 值截断、超长数组截项），不直接腰斩 pretty JSON；全屏仍看 `inputJson` 原文。
+ *
+ * 状态点三色（语义色）：ok 绿 / error 红 / lost 灰，三态另配可读文案，
+ * 不只靠颜色区分。
  *
  * **纯展示组件**：展开态由父级（`RealPromptPanel` 的 expanded map，受控 key 用
  * `turn.id + 组卡 id`）下发，全屏也只回抛 `onOpenLeaf`，不接任何跳转。
  * 刻意不复用聊天页 `ToolCallGroupCard` ——后者绑死聊天消息 DTO。
  */
+import { formatToolUsePreviewJson } from "@novel-master/core/prompt";
 import type {
   PromptToolGroupDto,
   PromptToolGroupStatusDto,
@@ -50,9 +55,11 @@ export interface ToolGroupLeaf {
   label: string;
   /** 全屏正文；`lost` 时是占位文案。 */
   body: string;
+  /** 格内预览：use 格是保结构截大 key 的 JSON 收缩版，result 格与 body 同源。 */
+  preview: string;
   /** 悬挂格：预览与全屏都出占位文案，样式走灰化态。 */
   lost: boolean;
-  /** 入参格：等宽字体 + 3 行限高。 */
+  /** 入参格：等宽字体 + 限 12 行。 */
   code: boolean;
 }
 
@@ -62,6 +69,7 @@ export function toolGroupLeaves(card: PromptToolGroupDto): ToolGroupLeaf[] {
       id: `${card.id}-use`,
       label: "tool use",
       body: card.inputJson,
+      preview: formatToolUsePreviewJson(card.inputJson),
       lost: false,
       code: true,
     },
@@ -69,6 +77,7 @@ export function toolGroupLeaves(card: PromptToolGroupDto): ToolGroupLeaf[] {
       id: `${card.id}-result`,
       label: "tool result",
       body: card.result?.body ?? LOST_RESULT_PLACEHOLDER,
+      preview: card.result?.body ?? LOST_RESULT_PLACEHOLDER,
       lost: card.result == null,
       code: false,
     },
@@ -136,20 +145,11 @@ export function PromptToolGroupCard({
               aria-label={`查看${leaf.label}，${card.toolName}`}
               onClick={() => onOpenLeaf(card.id, leaf)}
             >
-              <span className="prompt-group-cell__head">
-                <span className="prompt-group-cell__tag">{leaf.label}</span>
-                {/* 显式全屏入口：lost 格不出（假入口不留）；点击冒泡到整格 button
-                    同一动作（button 不能嵌 button，span 承载视觉）。 */}
-                {leaf.lost ? null : (
-                  <span className="prompt-group-cell__fullscreen" aria-hidden="true">
-                    ⤢
-                  </span>
-                )}
-              </span>
+              <span className="prompt-group-cell__tag">{leaf.label}</span>
               <span
                 className={`prompt-group-cell__body${leaf.code ? " is-code" : ""}`}
               >
-                {leaf.body}
+                {leaf.preview}
               </span>
             </button>
           ))}

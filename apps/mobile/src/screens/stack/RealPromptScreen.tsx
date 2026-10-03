@@ -142,7 +142,7 @@ export function RealPromptScreen() {
           }
           ListFooterComponent={
             <Text style={[styles.hint, {color: tokens.textSecondary}]}>
-              在聊天工作区调整纳入规则可改变预览内容。点轮卡头部就地展开，点 ⤢ 或卡片进入全屏阅读。
+              在聊天工作区调整纳入规则可改变预览内容。点轮卡头部就地展开，点子卡进入全屏阅读。
             </Text>
           }
           renderItem={({item}) => (

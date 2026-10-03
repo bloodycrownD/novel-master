@@ -275,12 +275,6 @@ function mermaidProps(): Record<string, unknown>[] {
   );
 }
 
-/** 清空记录序列，用于「第二次全屏」的断言起点（stub 只 push 不重置）。 */
-function resetMermaidProps(): void {
-  (globalThis as unknown as { __promptTurnMermaidProps?: Record<string, unknown>[] })
-    .__promptTurnMermaidProps = [];
-}
-
 /** 挂载面板并等 load 落地。 */
 async function mountPanel(): Promise<ReactTestRenderer> {
   let renderer: ReactTestRenderer | undefined;
@@ -353,6 +347,12 @@ function click(node: { props: unknown }, arg?: unknown): void {
     ?.onClick;
   assert.equal(typeof handler, "function", "目标节点应挂 onClick");
   handler!(arg);
+}
+
+/** 断言节点挂着 onClick（整卡点按式全屏入口存在性检查）。 */
+function expectClickable(node: { props: unknown }): void {
+  const handler = (node.props as { onClick?: unknown } | null)?.onClick;
+  assert.equal(typeof handler, "function", "目标节点应挂 onClick");
 }
 
 /** 取节点子树里第一个原生 button（轮卡头部 / footer 按钮都是原生 button）。 */
@@ -470,14 +470,9 @@ describe("RealPromptPanel 三层结构轮卡列表 + 全屏富文本 Modal (T-R6
       assert.ok(hasClass(meta, "prompt-segment__preview"));
     }
 
-    // 每轮一个整轮全屏按钮 ⤢ + 一个 chevron
-    assert.equal(classListNodes(root, "prompt-turn-card__fullscreen").length, 3);
-    assert.match(
-      textOf(classListNodes(root, "prompt-turn-card__fullscreen")[0]!),
-      /⤢/,
-    );
+    // 轮卡不再出整轮全屏 ⤢（用户拍板：全屏入口只在二级卡）；默认收起无展开区/Modal
+    assert.equal(classListNodes(root, "prompt-turn-card__fullscreen").length, 0);
     assert.equal(classListNodes(root, "prompt-turn-card__body").length, 0);
-    // 默认收起：没有展开区、没有卡片、没有 Modal
     assert.equal(classNodes(root, "text-prompt-overlay").length, 0);
   });
 
@@ -494,12 +489,12 @@ describe("RealPromptPanel 三层结构轮卡列表 + 全屏富文本 Modal (T-R6
       leafCards.map((node) => node.props["data-card-id"]),
       ["card-u1", "card-u2"],
     );
-    // 叶子卡：kind 标签 + 预览正文（限行由 CSS 承担，见 T-DP5）
-    assert.deepEqual(
-      leafCards.map((node) => textOf(node.findAll(
+    // 叶子卡：无 kind 小标签（用户拍板），正文预览直接铺（限行由 CSS 承担，见 T-DP5）
+    assert.equal(
+      root.findAll(
         (n) => n.props?.className === "prompt-leaf-card__kind",
-      )[0]!)),
-      ["user", "user"],
+      ).length,
+      0,
     );
     assert.match(textOf(leafCards[0]!), /帮我写第一章/);
     assert.match(textOf(leafCards[1]!), /三千字左右/);
@@ -614,23 +609,20 @@ describe("RealPromptPanel 三层结构轮卡列表 + 全屏富文本 Modal (T-R6
     );
   });
 
-  it("T-DP3：⤢ 整轮全屏 → Modal 正文容器跑 MermaidMarkdown，cards 逐卡成流且不挂 onLinkClick", async () => {
+  it("T-DP3：点叶子卡 → Modal 固定原文档（pre 铺开、无渲染管线）", async () => {
     const renderer = await mountPanelWith(TURNS_FULLSCREEN);
     const root = renderer.root;
+    await expandTurn(root, "turn-13");
 
     await act(async () => {
-      click(
-        classListNodes(root, "prompt-turn-card")[0]!.findAll(
-          (n) => n.props?.className === "prompt-turn-card__fullscreen",
-        )[0]!,
-      );
+      click(classListNodes(root, "prompt-leaf-card")[0]!);
     });
 
     const overlays = classNodes(root, "text-prompt-overlay");
     assert.equal(overlays.length, 1);
     const modal = root.findAll((node) => node.props?.role === "dialog")[0]!;
     assert.equal(modal.props["aria-modal"], "true");
-    assert.match(String(modal.props["aria-label"]), /assistant · 全屏流夹具详情/);
+    assert.match(String(modal.props["aria-label"]), /assistant详情/);
     // 壳复用：.text-prompt-overlay / .prompt-editor-modal / footer 全在
     assert.equal(
       modal.findAll(
@@ -638,42 +630,17 @@ describe("RealPromptPanel 三层结构轮卡列表 + 全屏富文本 Modal (T-R6
       ).length,
       1,
     );
-    // 正文容器是新增的 .prompt-fullscreen__body（flex:1 + overflow-y:auto 由 CSS 保证）
+    // 正文容器 .prompt-fullscreen__body 内是 pre 原文（用户拍板：只保留原文）
     const body = modal.findAll(
       (node) => node.props?.className === "prompt-fullscreen__body",
     )[0]!;
-
-    // 整轮 = cards 逐卡富文本流：叶子正文 1 段 + 组卡两格 2 段，无 [段名] 前缀
-    const props = mermaidProps();
-    assert.equal(props.length, 3);
-    assert.deepEqual(
-      props.map((p) => p["content"]),
-      [
-        "先列提纲",
-        '[tool_use name=read_chapter id=call-2]',
-        "未返回结果",
-      ],
+    const raws = body.findAll(
+      (node) => typeof node.type === "string" && hasClass(node, "prompt-fullscreen__raw"),
     );
-    // 只读预览：链接路由回调不传
-    for (const p of props) {
-      assert.equal(p["onLinkClick"], undefined, "只读全屏不应挂 onLinkClick");
-    }
-    // 三段都落在正文容器里（stub 渲染 data-mermaid-stub 占位节点）
-    const stubs = body.findAll(
-      (node) => node.props?.["data-mermaid-stub"] === "true",
-    );
-    assert.equal(stubs.length, 3);
-    // 逐卡富文本流之间无 `[段名]` 前缀，只有视觉分隔块
-    assert.equal(
-      body.findAll((node) => node.props?.className === "prompt-fullscreen__block")
-        .length,
-      3,
-    );
-    assert.equal(
-      textOf(body).includes("["),
-      false,
-      "正文容器不应拼出 [段名] 式前缀",
-    );
+    assert.equal(raws.length, 1);
+    assert.equal(textOf(raws[0]!), "先列提纲");
+    // 渲染管线不再参与（Mermaid stub 零渲染）。
+    assert.equal(mermaidProps().length, 0);
     // CodeEditor 已从本面板退役
     assert.equal(
       (globalThis as unknown as { __promptTurnCodeEditorProps?: unknown[] })
@@ -683,78 +650,26 @@ describe("RealPromptPanel 三层结构轮卡列表 + 全屏富文本 Modal (T-R6
     );
   });
 
-  it("T-DP3：全屏 Modal 渲染/原文切换——原文档铺 pre 原文、渲染档回 MermaidMarkdown", async () => {
-    const renderer = await mountPanelWith(TURNS_FULLSCREEN);
-    const root = renderer.root;
-    await act(async () => {
-      click(
-        classListNodes(root, "prompt-turn-card")[0]!.findAll(
-          (n) => n.props?.className === "prompt-turn-card__fullscreen",
-        )[0]!,
-      );
-    });
-    // 初始渲染档：MermaidMarkdown 三段、无原文 pre。
-    assert.equal(mermaidProps().length, 3);
-    assert.equal(classListNodes(root, "prompt-fullscreen__raw").length, 0);
-
-    // 切「原文」：逐块 pre 铺开原文（大段 tool JSON 不再被富文本管线吃掉格式），
-    // Mermaid 不再渲染。
-    resetMermaidProps();
-    await act(async () => {
-      click(
-        classListNodes(root, "prompt-fullscreen__switch-btn").find((n) =>
-          textOf(n) === "原文",
-        )!,
-      );
-    });
-    assert.equal(mermaidProps().length, 0, "原文档不应再跑富文本管线");
-    const raws = classListNodes(root, "prompt-fullscreen__raw");
-    assert.equal(raws.length, 3);
-    assert.deepEqual(
-      raws.map((n) => textOf(n)),
-      ["先列提纲", "[tool_use name=read_chapter id=call-2]", "未返回结果"],
-    );
-
-    // 切回「渲染」：pre 消失、Mermaid 回来。
-    await act(async () => {
-      click(
-        classListNodes(root, "prompt-fullscreen__switch-btn").find((n) =>
-          textOf(n) === "渲染",
-        )!,
-      );
-    });
-    assert.equal(classListNodes(root, "prompt-fullscreen__raw").length, 0);
-    assert.equal(mermaidProps().length, 3);
-  });
-
-  it("T-DP3：叶子卡与组卡格子都有显式 ⤢ 入口（悬挂 result 格不出）", async () => {
-    // 默认夹具（ok 组卡）：assistant 轮 = 1 叶子 + 组卡两格，⤢ 各一。
+  it("T-DP3：轮卡/叶子卡/格子都不再出显式 ⤢（点击就好进入全屏）", async () => {
     const renderer = await mountPanel();
     const root = renderer.root;
+    assert.equal(
+      classListNodes(root, "prompt-turn-card__fullscreen").length,
+      0,
+      "轮卡不应出 ⤢",
+    );
     await expandTurn(root, "turn-7");
     await act(async () => {
       click(classNodes(root, "prompt-tool-group__head")[0]!);
     });
-    assert.equal(classListNodes(root, "prompt-leaf-card__fullscreen").length, 1);
-    assert.equal(classListNodes(root, "prompt-group-cell__fullscreen").length, 2);
-
-    // 悬挂夹具：组卡 use 格 ⤢ 在、result 格不出（假入口不留）。
-    const lost = await mountPanelWith(TURNS_FULLSCREEN);
-    const lroot = lost.root;
-    await expandTurn(lroot, "turn-13");
-    await act(async () => {
-      click(classNodes(lroot, "prompt-tool-group__head")[0]!);
-    });
-    assert.equal(
-      classListNodes(lroot, "prompt-group-cell__fullscreen").length,
-      1,
-      "悬挂 result 格不应出 ⤢",
-    );
-    // 悬挂夹具的叶子卡 ⤢ 仍在。
-    assert.equal(classListNodes(lroot, "prompt-leaf-card__fullscreen").length, 1);
+    assert.equal(classListNodes(root, "prompt-leaf-card__fullscreen").length, 0);
+    assert.equal(classListNodes(root, "prompt-group-cell__fullscreen").length, 0);
+    // 整卡点按仍是全屏入口（下一用例覆盖载荷）。
+    expectClickable(classListNodes(root, "prompt-leaf-card")[0]!);
+    expectClickable(classListNodes(root, "prompt-group-cell")[0]!);
   });
 
-  it("T-DP3：叶子卡与组卡格子各自点开全屏（单份正文），⤢ 之外互不串台", async () => {
+  it("T-DP3：叶子卡与组卡格子各自点开全屏（单份正文），互不串台", async () => {
     const renderer = await mountPanelWith(TURNS_GROUP_STATES);
     const root = renderer.root;
     await expandTurn(root, "turn-11");
@@ -763,18 +678,16 @@ describe("RealPromptPanel 三层结构轮卡列表 + 全屏富文本 Modal (T-R6
     await act(async () => {
       click(classListNodes(root, "prompt-leaf-card")[0]!);
     });
-    assert.deepEqual(
-      mermaidProps().map((p) => p["content"]),
-      ["（思考正文）"],
-    );
+    let raws = classListNodes(root, "prompt-fullscreen__raw");
+    assert.equal(raws.length, 1);
+    assert.equal(textOf(raws[0]!), "（思考正文）");
     const title = classNodes(root, "prompt-fullscreen__title")[0]!;
     assert.equal(textOf(title), "thinking");
-    // 先关掉，避免与下一段串台；stub 只 push 不重置，记录也一并清零
+    // 先关掉，避免与下一段串台
     await act(async () => {
       click(classNodes(root, "text-prompt-overlay")[0]!);
     });
     assert.equal(classNodes(root, "text-prompt-overlay").length, 0);
-    resetMermaidProps();
 
     // 展开 error 组卡，点其 tool result 格 → 全屏只有 result 正文
     await act(async () => {
@@ -793,22 +706,19 @@ describe("RealPromptPanel 三层结构轮卡列表 + 全屏富文本 Modal (T-R6
     await act(async () => {
       click(errorCells[1]!);
     });
-    assert.deepEqual(
-      mermaidProps().map((p) => p["content"]),
-      ["Error: 章不存在"],
-    );
+    raws = classListNodes(root, "prompt-fullscreen__raw");
+    assert.equal(raws.length, 1);
+    assert.equal(textOf(raws[0]!), "Error: 章不存在");
     assert.equal(textOf(classNodes(root, "prompt-fullscreen__title")[0]!), "tool result");
   });
 
   it("Esc 关闭全屏 Modal；defaultPrevented 的 Esc 不拦截", async () => {
     const renderer = await mountPanel();
     const root = renderer.root;
+    // 点 template 轮的叶子卡开全屏（整卡点按式入口）
+    await expandTurn(root, "seg-sys");
     await act(async () => {
-      click(
-        classListNodes(root, "prompt-turn-card")[2]!.findAll(
-          (n) => n.props?.className === "prompt-turn-card__fullscreen",
-        )[0]!,
-      );
+      click(classListNodes(root, "prompt-leaf-card")[0]!);
     });
     assert.equal(classNodes(root, "text-prompt-overlay").length, 1);
 
@@ -828,12 +738,12 @@ describe("RealPromptPanel 三层结构轮卡列表 + 全屏富文本 Modal (T-R6
     const renderer = await mountPanel();
     const root = renderer.root;
     const openFullscreen = async () => {
+      // 只在首次展开轮卡（二次调用时轮已展开，重复 toggle 会把卡片收掉）。
+      if (classListNodes(root, "prompt-leaf-card").length === 0) {
+        await expandTurn(root, "turn-5");
+      }
       await act(async () => {
-        click(
-          classListNodes(root, "prompt-turn-card")[2]!.findAll(
-            (n) => n.props?.className === "prompt-turn-card__fullscreen",
-          )[0]!,
-        );
+        click(classListNodes(root, "prompt-leaf-card")[0]!);
       });
     };
 
@@ -871,33 +781,6 @@ describe("RealPromptPanel 三层结构轮卡列表 + 全屏富文本 Modal (T-R6
       );
     });
     assert.equal(renderer!.toJSON(), null);
-  });
-
-  it("整轮全屏正文只由 cards 拼出（thinking / 文本 / 丢失工具组三态，不依赖旧 body）", async () => {
-    const renderer = await mountPanelWith(TURNS_GROUP_STATES);
-    const root = renderer.root;
-
-    await act(async () => {
-      click(
-        classListNodes(root, "prompt-turn-card")[0]!.findAll(
-          (n) => n.props?.className === "prompt-turn-card__fullscreen",
-        )[0]!,
-      );
-    });
-
-    // 逐卡成流：thinking 正文、文本正文、组卡两格入参/结果
-    assert.deepEqual(
-      mermaidProps().map((p) => p["content"]),
-      [
-        "（思考正文）",
-        '{ "limit": 3 }',
-        "目录已返回",
-        "[tool_use name=read_chapter id=call-err]",
-        "Error: 章不存在",
-        "[tool_use name=write_chapter id=call-lost]",
-        "未返回结果",
-      ],
-    );
   });
 
   it("退役字段 body / items 即使残留在 payload 里也不参与渲染（双侧锁定）", async () => {
@@ -945,35 +828,16 @@ describe("RealPromptPanel 三层结构轮卡列表 + 全屏富文本 Modal (T-R6
     assert.equal(classListNodes(root, "prompt-turn-card__body").length, 1);
     assert.equal(classListNodes(root, "prompt-leaf-card").length, 0);
     assert.equal(classListNodes(root, "prompt-tool-group").length, 0);
-
-    // ⤢ 整轮全屏同样不炸（另一处裸读 cards 的地方），正文走空占位
-    await act(async () => {
-      click(
-        classListNodes(root, "prompt-turn-card")[0]!.findAll(
-          (n) => n.props?.className === "prompt-turn-card__fullscreen",
-        )[0]!,
-      );
-    });
-    assert.equal(classNodes(root, "text-prompt-overlay").length, 1);
-    assert.equal(
-      classListNodes(root, "prompt-fullscreen__empty").length,
-      1,
-    );
-    assert.equal(mermaidProps().length, 0);
   });
 
-  it("切会话（sessionId 变）→ 展开态与整轮全屏一并清空，不带到下一会话", async () => {
+  it("切会话（sessionId 变）→ 展开态与全屏一并清空，不带到下一会话", async () => {
     const renderer = await mountPanel();
     const root = renderer.root;
 
-    // 先把 user 轮展开 + 打开 ⤢ 全屏，两个临时态都挂上
+    // 先把 user 轮展开 + 点叶子卡开全屏，两个临时态都挂上
     await expandTurn(root, "turn-5");
     await act(async () => {
-      click(
-        classListNodes(root, "prompt-turn-card")[0]!.findAll(
-          (n) => n.props?.className === "prompt-turn-card__fullscreen",
-        )[0]!,
-      );
+      click(classListNodes(root, "prompt-leaf-card")[0]!);
     });
     assert.equal(classNodes(root, "text-prompt-overlay").length, 1);
     assert.equal(classListNodes(root, "is-expanded").length, 1);
@@ -989,7 +853,7 @@ describe("RealPromptPanel 三层结构轮卡列表 + 全屏富文本 Modal (T-R6
     assert.equal(classListNodes(root, "prompt-turn-card__body").length, 0);
   });
 
-  it("J-1：读屏标签带内容——叶子卡带 kind+正文，轮卡 toggle / ⤢ 带 role+摘要", async () => {
+  it("J-1：读屏标签带内容——叶子卡带 kind+正文，轮卡 toggle 带 role+摘要", async () => {
     const renderer = await mountPanel();
     const root = renderer.root;
     await expandTurn(root, "turn-5");
@@ -1011,16 +875,6 @@ describe("RealPromptPanel 三层结构轮卡列表 + 全屏富文本 Modal (T-R6
     assert.equal(
       ariaLabelOf(turnToggle(root, "turn-5")),
       "展开user轮，帮我写第一章",
-    );
-
-    // ⤢ 整轮全屏：带 role 与摘要（不再三个轮卡都只念「整轮全屏」）
-    assert.deepEqual(
-      classListNodes(root, "prompt-turn-card__fullscreen").map(ariaLabelOf),
-      [
-        "整轮全屏，template system",
-        "整轮全屏，user 帮我写第一章",
-        "整轮全屏，assistant 好的，我先列提纲",
-      ],
     );
   });
 
@@ -1122,10 +976,11 @@ describe("T-R6 契约层：payload 策略 / CodeEditor readOnly / 样式", () =>
     assert.match(code, /className="text-prompt-overlay"/);
     assert.match(code, /className="prompt-editor-modal"/);
     assert.match(code, /className="prompt-editor-modal__footer"/);
-    // 正文容器新增 .prompt-fullscreen__body，内挂 MermaidMarkdown（只读，不接 onLinkClick）
+    // 正文容器 .prompt-fullscreen__body 内挂 pre 原文（用户拍板：只保留原文，
+    // MermaidMarkdown 渲染档与切换控件一并退役）。
     assert.match(code, /className="prompt-fullscreen__body"/);
-    assert.match(code, /<MermaidMarkdown content=\{content\} \/>/);
-    assert.doesNotMatch(code, /onLinkClick/);
+    assert.match(code, /prompt-fullscreen__raw/);
+    assert.doesNotMatch(code, /MermaidMarkdown/);
     // 轮卡读 core 钉死的 summaryText / metaText（旧 summary 拼串已退役），不再二次加工
     assert.match(code, /turn\.summaryText/);
     assert.match(code, /turn\.metaText/);
@@ -1148,6 +1003,12 @@ describe("T-R6 契约层：payload 策略 / CodeEditor readOnly / 样式", () =>
     assert.doesNotMatch(code, /__promptTurnCodeEditorProps/);
     assert.doesNotMatch(code, /languagePath/);
     assert.doesNotMatch(code, /cardsToDetailText/);
+    // 整轮全屏入口已退役（openTurnFullscreen / cardBodies / ⤢ 按钮全删）
+    assert.doesNotMatch(code, /openTurnFullscreen/);
+    assert.doesNotMatch(code, /cardBodies/);
+    assert.doesNotMatch(code, /turn-fullscreen/);
+    // 渲染/原文切换已退役（fixed 原文档）
+    assert.doesNotMatch(code, /fullscreenKind/);
   });
 
   it("T-DP5：shell.css 保留旧契约类名 + 新增三层结构样式类", () => {
@@ -1173,27 +1034,26 @@ describe("T-R6 契约层：payload 策略 / CodeEditor readOnly / 样式", () =>
     assert.match(css, /\.prompt-turn-card__head \{/);
     assert.match(css, /\.prompt-turn-card__summary \{/);
     assert.match(css, /\.prompt-turn-card__body \{/);
-    // 新增：叶子卡（限 2 行预览）+ 工具组卡 + 组内两格 + 全屏正文容器
+    // 新增：叶子卡（限 3 行预览）+ 工具组卡 + 组内两格 + 全屏正文容器
     assert.match(css, /\.prompt-leaf-card \{/);
     assert.match(css, /\.prompt-leaf-card__preview \{/);
     assert.match(css, /\.prompt-tool-group \{/);
     assert.match(css, /\.prompt-group-cell \{/);
     assert.match(css, /\.prompt-fullscreen__body \{/);
-    // 限行口径：叶子预览 2 行 / 组内格 3 行
+    // 限行口径：叶子预览 3 行 / 组内格 12 行（保结构截大 key 后的 JSON 需要行数）
     const leafPreview = css.slice(
       css.indexOf(".prompt-leaf-card__preview {"),
       css.indexOf("}", css.indexOf(".prompt-leaf-card__preview {")),
     );
-    assert.match(leafPreview, /-webkit-line-clamp: 2;/);
+    assert.match(leafPreview, /-webkit-line-clamp: 3;/);
     const cellBody = css.slice(
       css.indexOf(".prompt-group-cell__body {"),
       css.indexOf("}", css.indexOf(".prompt-group-cell__body {")),
     );
-    assert.match(cellBody, /-webkit-line-clamp: 3;/);
-    // 「可点开全屏」的视觉线索：叶子卡 / 组内格 / ⤢ 按钮都要有 hover 态
+    assert.match(cellBody, /-webkit-line-clamp: 12;/);
+    // 「可点开全屏」的视觉线索：叶子卡 / 组内格要有 hover 态
     assert.match(css, /\.prompt-leaf-card:hover \{/);
     assert.match(css, /\.prompt-group-cell:hover \{/);
-    assert.match(css, /\.prompt-turn-card__fullscreen:hover \{/);
     assert.match(css, /\.prompt-tool-group__head:hover \{/);
     // 组卡状态文案用主题正文色（语义三色浅底对比仅 1.86~2.54:1，只留给状态点装饰）
     const groupStatus = css.slice(
@@ -1216,12 +1076,14 @@ describe("T-R6 契约层：payload 策略 / CodeEditor readOnly / 样式", () =>
     );
     assert.match(fsBody, /flex: 1;/);
     assert.match(fsBody, /overflow-y: auto;/);
-    // 显式 ⤢ 入口 + Modal 切换控件 + 原文档（真机反馈三件套）
-    assert.match(css, /\.prompt-fullscreen__headrow \{/);
-    assert.match(css, /\.prompt-fullscreen__switch-btn \{/);
+    // 原文档（固定纯文本档）+ ⤢/切换控件全族退役（用户拍板：点击就好进入全屏、
+    // 全屏只保留原文）。
     assert.match(css, /\.prompt-fullscreen__raw \{/);
-    assert.match(css, /\.prompt-leaf-card__fullscreen \{/);
-    assert.match(css, /\.prompt-group-cell__fullscreen \{/);
+    assert.doesNotMatch(css, /\.prompt-fullscreen__headrow \{/);
+    assert.doesNotMatch(css, /\.prompt-fullscreen__switch/);
+    assert.doesNotMatch(css, /\.prompt-leaf-card__fullscreen \{/);
+    assert.doesNotMatch(css, /\.prompt-group-cell__fullscreen \{/);
+    assert.doesNotMatch(css, /\.prompt-turn-card__fullscreen \{/);
     // 智能体配置卡片体系对齐：子卡/格子 = blockCard 形态（1px 边 + 左 3px primary 粗条），
     // 轮卡 = surface-elevated 浮起卡（无左条），role 三态走 data-turn-kind pill。
     const leafCard = css.slice(

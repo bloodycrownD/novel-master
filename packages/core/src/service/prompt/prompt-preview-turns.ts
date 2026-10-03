@@ -546,3 +546,61 @@ export async function buildPromptPreviewTurnsFromLayout(
     };
   });
 }
+
+/**
+ * 工具入参 JSON 的**格子预览**形态：保结构、截大值。
+ *
+ * 直接 `numberOfLines` 截断 pretty JSON 会把结构腰斩（第一屏只剩头一个 key），
+ * 看不清调用形状。这里解析后递归收缩：超长字符串值截断、超长数组截项、
+ * 超深嵌套折叠，再 `JSON.stringify(value, null, 2)` 铺开——顶层（和浅层）的
+ * key 结构始终完整可读。全屏正文仍走 `inputJson` 原文（本函数只服务预览）。
+ *
+ * 兜底：`[tool_use name=… id=…]` 退化单行（CLI 形态，见 `inputJson` 注释）与
+ * 任何 parse 失败串原样返回。
+ */
+const PREVIEW_STRING_LIMIT = 120;
+const PREVIEW_ARRAY_LIMIT = 6;
+const PREVIEW_DEPTH_LIMIT = 4;
+
+function shrinkPreviewValue(value: unknown, depth: number): unknown {
+  if (typeof value === "string") {
+    if (value.length <= PREVIEW_STRING_LIMIT) {
+      return value;
+    }
+    const head = value.slice(0, PREVIEW_STRING_LIMIT).replace(/\s+/g, " ");
+    return `${head}…（截断，全文 ${value.length} 字）`;
+  }
+  if (Array.isArray(value)) {
+    const items = value
+      .slice(0, PREVIEW_ARRAY_LIMIT)
+      .map(item => shrinkPreviewValue(item, depth + 1));
+    if (value.length > PREVIEW_ARRAY_LIMIT) {
+      items.push(`…另有 ${value.length - PREVIEW_ARRAY_LIMIT} 项`);
+    }
+    return items;
+  }
+  if (value != null && typeof value === "object") {
+    if (depth >= PREVIEW_DEPTH_LIMIT) {
+      return "…";
+    }
+    const out: Record<string, unknown> = {};
+    for (const [key, item] of Object.entries(value)) {
+      out[key] = shrinkPreviewValue(item, depth + 1);
+    }
+    return out;
+  }
+  return value;
+}
+
+/** tool use 格子预览：保结构截大 key（`inputJson` 退化形态原样返回）。 */
+export function formatToolUsePreviewJson(inputJson: string): string {
+  try {
+    const parsed: unknown = JSON.parse(inputJson);
+    if (parsed == null || typeof parsed !== "object") {
+      return inputJson;
+    }
+    return JSON.stringify(shrinkPreviewValue(parsed, 0), null, 2);
+  } catch {
+    return inputJson;
+  }
+}

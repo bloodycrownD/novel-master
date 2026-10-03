@@ -1,15 +1,16 @@
 /**
  * 真实提示词查看面板（desktop，prompt-rounds）：三层结构。
  *
- * 1. 收起的**轮摘要卡**——role 徽标 pill（user 主蓝底白字 / assistant 中性底 /
- *    template 描边弱化，走 CSS `data-turn-kind` 三态）+
- *    `summaryText` 单行截断 + `metaText` 计数行 + `⤢` 整轮全屏；点头部就地展开/收起；
- * 2. 展开区的**嵌套卡片流**——文本/thinking 叶子卡 + 工具组卡（组头状态点三态，
- *    组内 use/result 两格各可点开全屏）；
- * 3. **全屏只读正文**——复用 `.text-prompt-overlay` / `.prompt-editor-modal` 壳，
- *    「渲染 / 原文」两档可切（mobile 详情页 segmented 同款）：渲染档跑
- *    `MermaidMarkdown`（只读，不接 onLinkClick），原文档纯文本铺开；
- *    `CodeEditor` 已从本面板退役。
+ * 1. 收起的**轮摘要卡**——role 徽标 pill（user 主蓝底白字 / assistant 与
+ *    template 中性底，走 CSS `data-turn-kind`）+ `summaryText` 单行截断 +
+ *    `metaText` 计数行；点头部就地展开/收起。轮卡不出 ⤢（用户拍板：全屏入口
+ *    只在二级卡，二级整卡点按即进）；
+ * 2. 展开区的**嵌套卡片流**——文本/thinking 叶子卡（无 kind 小标题、无 ⤢，
+ *    整卡点开全屏）+ 工具组卡（组头状态点三态，组内 use/result 两格整格点开
+ *    全屏；tool use 预览走 core `formatToolUsePreviewJson` 保结构截大 key）；
+ * 3. **全屏只读原文**——复用 `.text-prompt-overlay` / `.prompt-editor-modal` 壳，
+ *    正文容器 `.prompt-fullscreen__body` 内逐块 `<pre>` 纯文本铺开（用户拍板：
+ *    只保留原文，无渲染档与切换）。
  *
  * 数据是「轮」数组（core `buildPromptPreviewTurnsFromLayout`），`cards` 是唯一正文
  * 载体，`body` / `items` / `summary` 已从 DTO 退役（见 shared/ipc-types.ts 体积策略）。
@@ -21,15 +22,12 @@ import { useCallback, useEffect, useState } from "react";
 import type {
   PromptPreviewTurnDto,
   PromptTextCardDto,
-  PromptTurnCardDto,
 } from "@shared/ipc-types";
 import { ipcPromptRealPreview } from "@/ipc/client";
 import { Button } from "@/components/ui/Button";
-import { MermaidMarkdown } from "@/components/MermaidMarkdown";
 import { PromptLeafCard, promptLeafKindLabel } from "./PromptLeafCard";
 import {
   PromptToolGroupCard,
-  toolGroupLeaves,
   type ToolGroupLeaf,
 } from "./PromptToolGroupCard";
 
@@ -46,28 +44,15 @@ const TURN_ROLE_LABELS: Record<PromptPreviewTurnDto["kind"], string> = {
   template: "template",
 };
 
-/**
- * 轮层徽标三态走 CSS（shell.css `.prompt-turn-card__role[data-turn-kind=…]`，
- * 对齐智能体配置 badge 形态；深浅主题自动跟随）。kind 值经 span 的
- * `data-turn-kind` 下发，renderer 不再持有 inline 色。
- */
-
 /** 空正文在全屏里的占位文案。 */
 const EMPTY_TEXT_PLACEHOLDER = "（空）";
 
-/** 全屏 Modal 的内容来源：整轮（cards 逐卡富文本流）或某个叶子（单份正文）。 */
+/** 全屏 Modal 的内容来源：某个叶子（单份正文）。 */
 interface FullscreenTarget {
-  /** Modal 标题（轮摘要 / 叶子标签）。 */
+  /** Modal 标题（叶子标签）。 */
   title: string;
-  /** 整轮 = 逐卡富文本流；叶子 = 单份正文。 */
+  /** 正文块（叶子恒为单块，保留数组形态与渲染循环对齐）。 */
   blocks: readonly string[];
-}
-
-/** 轮内一张卡的正文（组卡两格都进正文流，忠实还原发给模型的内容）。 */
-function cardBodies(card: PromptTurnCardDto): string[] {
-  return card.type === "toolGroup"
-    ? toolGroupLeaves(card).map((leaf) => leaf.body)
-    : [card.body];
 }
 
 export function RealPromptPanel({
@@ -80,15 +65,12 @@ export function RealPromptPanel({
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   // 全屏 Modal 打开中的内容（null = 未打开）。
   const [fullscreen, setFullscreen] = useState<FullscreenTarget | null>(null);
-  // 全屏正文档位：渲染（MermaidMarkdown）/ 原文（纯文本铺开）。大段 tool JSON
-  // 在渲染档会被富文本管线吃掉格式，用户需要能切回原文（mobile 详情页同款）。
-  const [fullscreenKind, setFullscreenKind] = useState<"rich" | "txt">("rich");
 
   const load = useCallback(async () => {
     const result = await ipcPromptRealPreview({ projectId, sessionId });
     if (result.ok) {
       // 归一化 `cards` 兜底：Electron dev 下 renderer 会 HMR 而 main 进程不重启，
-      // 旧 main 下发的 payload 没有 `cards` 字段，裸读会在展开轮卡 / ⤢ 时抛
+      // 旧 main 下发的 payload 没有 `cards` 字段，裸读会在展开轮卡时抛
       // undefined（renderer 全仓无 ErrorBoundary，整页会卸载）。这里单点兜空数组。
       setTurns(result.data.map((turn) => ({ ...turn, cards: turn.cards ?? [] })));
     }
@@ -113,25 +95,14 @@ export function RealPromptPanel({
     setExpanded((prev) => ({ ...prev, [key]: !(prev[key] ?? false) }));
   }, []);
 
-  /** 整轮全屏：cards 逐卡一段富文本（无 `[段名]` 前缀，视觉分隔即可）。 */
-  const openTurnFullscreen = useCallback((turn: PromptPreviewTurnDto) => {
-    setFullscreenKind("rich");
-    setFullscreen({
-      title: `${TURN_ROLE_LABELS[turn.kind] ?? turn.kind} · ${turn.summaryText}`,
-      blocks: turn.cards.flatMap(cardBodies).filter((text) => text !== ""),
-    });
-  }, []);
-
   /** 叶子卡全屏：该卡正文单份。 */
   const openLeafFullscreen = useCallback((card: PromptTextCardDto) => {
-    setFullscreenKind("rich");
     setFullscreen({ title: promptLeafKindLabel(card), blocks: [card.body] });
   }, []);
 
   /** 组卡某一格全屏：该格正文单份。 */
   const openGroupLeafFullscreen = useCallback(
     (_cardId: string, leaf: ToolGroupLeaf) => {
-      setFullscreenKind("rich");
       setFullscreen({ title: leaf.label, blocks: [leaf.body] });
     },
     [],
@@ -155,7 +126,7 @@ export function RealPromptPanel({
     return null;
   }
 
-  const renderCard = (card: PromptTurnCardDto, turnId: string) => {
+  const renderCard = (card: PromptPreviewTurnDto["cards"][number], turnId: string) => {
     if (card.type === "toolGroup") {
       return (
         <PromptToolGroupCard
@@ -204,15 +175,6 @@ export function RealPromptPanel({
                   {turn.metaText}
                 </span>
               </button>
-              <button
-                type="button"
-                className="prompt-turn-card__fullscreen"
-                aria-label={`整轮全屏，${roleLabel} ${turn.summaryText.slice(0, 20)}`}
-                data-action="turn-fullscreen"
-                onClick={() => openTurnFullscreen(turn)}
-              >
-                ⤢
-              </button>
               <span
                 className="prompt-segment__chevron"
                 aria-hidden="true"
@@ -230,7 +192,7 @@ export function RealPromptPanel({
         );
       })}
       <p className="real-prompt-hint">
-        在会话工作区调整纳入规则可改变预览内容。点轮卡头部就地展开，点 ⤢ 或任意卡片进入全屏阅读。
+        在会话工作区调整纳入规则可改变预览内容。点轮卡头部就地展开，点子卡进入全屏阅读。
       </p>
       {fullscreen != null ? (
         <div className="text-prompt-overlay" onClick={closeFullscreen}>
@@ -241,53 +203,18 @@ export function RealPromptPanel({
             aria-label={`${fullscreen.title}详情`}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="prompt-fullscreen__headrow">
-              <div className="prompt-fullscreen__title">{fullscreen.title}</div>
-              <div
-                className="prompt-fullscreen__switch"
-                role="group"
-                aria-label="正文档位"
-              >
-                <button
-                  type="button"
-                  className={`prompt-fullscreen__switch-btn${fullscreenKind === "rich" ? " is-active" : ""}`}
-                  aria-pressed={fullscreenKind === "rich"}
-                  onClick={() => setFullscreenKind("rich")}
-                >
-                  渲染
-                </button>
-                <button
-                  type="button"
-                  className={`prompt-fullscreen__switch-btn${fullscreenKind === "txt" ? " is-active" : ""}`}
-                  aria-pressed={fullscreenKind === "txt"}
-                  onClick={() => setFullscreenKind("txt")}
-                >
-                  原文
-                </button>
-              </div>
-            </div>
+            <div className="prompt-fullscreen__title">{fullscreen.title}</div>
             <div className="prompt-fullscreen__body">
               {fullscreen.blocks.length === 0 ? (
                 <p className="prompt-fullscreen__empty">{EMPTY_TEXT_PLACEHOLDER}</p>
-              ) : fullscreenKind === "txt" ? (
+              ) : (
                 fullscreen.blocks.map((content, index) => (
-                  // 同一轮里正文可能重复（两格同文），索引参与 key 保证唯一稳定。
+                  // 叶子恒单块；索引参与 key 保证重复正文时也稳定。
                   <div
                     key={`raw-${index}-${content.slice(0, 8)}`}
                     className="prompt-fullscreen__block"
                   >
                     <pre className="prompt-fullscreen__raw">{content}</pre>
-                  </div>
-                ))
-              ) : (
-                fullscreen.blocks.map((content, index) => (
-                  // 同一轮里正文可能重复（两格同文），索引参与 key 保证唯一稳定。
-                  <div
-                    key={`${index}-${content.slice(0, 8)}`}
-                    className="prompt-fullscreen__block"
-                  >
-                    {/* 只读富文本：不接 onLinkClick（预览侧不做链接路由）。 */}
-                    <MermaidMarkdown content={content} />
                   </div>
                 ))
               )}

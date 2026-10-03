@@ -1,28 +1,24 @@
 /**
- * 提示词「轮详情」页（R4）：把某一轮或某张叶子卡的正文整段铺开阅读，可长按复制。
+ * 提示词「叶子详情」页（R4）：把某张叶子卡的正文整段铺开阅读，可长按复制。
  *
  * - 纯预览态：无保存/编辑切换，`EditorScreenShell` 只渲染 preview slot
  *   （`editor` 是必填 prop，纯预览态传 null）。
- * - 「渲染 / 原文」segmented 切换（与 VFS 文件编辑屏同款交互）：渲染档按 markdown
- *   富文本渲染（WebView 管线），原文档纯文本铺开可长按复制——大段 tool JSON 在
- *   渲染档可能被富文本管线吃掉格式，用户需要能切回原文。
- * - 渲染档内部：超长自动降级 plain；**不用 `.md` 扩展名 + `renderKind='rich'`
- *   跳过 front-matter 拆分**——走文件路径档位时 `---` 开头的正文会被误当 YAML
- *   拆掉。content 纯内存，不碰 VFS（照 PromptEditorScreen 的先例）。
+ * - 渲染档位固定 `txt`（原文纯文本铺开，用户拍板：只保留原文，不再要渲染档
+ *   与切换 tab）。`renderKind='txt'` 走纯文本分支，不进 markdown 管线。
+ *   content 纯内存，不碰 VFS（照 PromptEditorScreen 的先例）。
  * - 正文不走路由参数（可达数百 KB）：挂载时从 prompt-turn-callback 模块级
  *   存取读走，读后即清。路由只带可序列化的短标题与轮 id。
- * - `path` 是稳定伪 key（`turn-<turnId>` / `turn-<turnId>-leaf-<leafId>`）：
- *   防御性——若将来详情页支持页内切换内容，key 让 WebView 重挂载；当前页是终态、
- *   挂载后不再换内容。内容在 VFS 里不存在，path 不作取数用。
+ * - `path` 是稳定伪 key（`turn-<turnId>-leaf-<leafId>`）：防御性——若将来
+ *   详情页支持页内切换内容，key 让组件重挂载；当前页是终态、挂载后不再换内容。
+ *   内容在 VFS 里不存在，path 不作取数用。
  * - 不做二级折叠（v1 简化）。
  */
-import React, {useEffect, useRef, useState} from 'react';
+import React, {useEffect, useRef} from 'react';
 import {useRoute, type RouteProp} from '@react-navigation/native';
 import type {RootStackParamList} from '@/navigation/types';
 import {useStackOverrideSetter} from '@/navigation/HeaderContext';
 import {EditorScreenShell} from '@/components/chrome/EditorScreenShell';
 import {FileMarkdownPreview} from '@/components/vfs/FileMarkdownPreview';
-import type {PreviewRenderKind} from '@/components/vfs/FileMarkdownPreview';
 import {
   takePromptTurnDetail,
   type PromptTurnDetail,
@@ -32,9 +28,6 @@ import {useTheme} from '@/theme/ThemeProvider';
 /** 轮 id 缺失时的占位（route params 可选，不影响渲染）。 */
 const UNKNOWN_TURN_ID = 'unknown';
 
-/** 「渲染 / 原文」两档（详情页内切，文件头注释）。 */
-type DetailRenderKind = Extract<PreviewRenderKind, 'rich' | 'txt'>;
-
 type PromptTurnDetailRoute = RouteProp<RootStackParamList, 'PromptTurnDetail'>;
 
 export function PromptTurnDetailScreen() {
@@ -42,16 +35,14 @@ export function PromptTurnDetailScreen() {
   const route = useRoute<PromptTurnDetailRoute>();
   const title = route.params?.title;
   const turnId = route.params?.turnId ?? UNKNOWN_TURN_ID;
-  // 渲染 / 原文切换（默认渲染档）。换内容不重置：伪 path key 已让 WebView 重挂载。
-  const [renderKind, setRenderKind] = useState<DetailRenderKind>('rich');
   // 屏级 override：自动带 ownerRouteKey，转场期间不泄漏到相邻屏 header。
   const setStackOverride = useStackOverrideSetter();
   // 挂载时消费一次（useRef 初值只跑一次）：读后即清，未消费即离开则丢弃。
   const detailRef = useRef<PromptTurnDetail | null>(takePromptTurnDetail());
   const body = detailRef.current?.body ?? '';
   const leafId = detailRef.current?.leafId;
-  // 伪 path：整轮 / 叶子两种形态各自稳定。防御性——若将来详情页支持页内切换内容，
-  // key 让 WebView 重挂载；当前页是终态、挂载后不再换内容。
+  // 伪 path：叶子形态稳定。防御性——若将来详情页支持页内切换内容，key 让组件
+  // 重挂载；当前页是终态、挂载后不再换内容。
   const path =
     leafId === undefined ? `turn-${turnId}` : `turn-${turnId}-leaf-${leafId}`;
 
@@ -68,21 +59,13 @@ export function PromptTurnDetailScreen() {
       tokens={tokens}
       toolbarBorderColor={tokens.borderLight}
       previewMode
-      segmented={{
-        options: [
-          {value: 'rich', label: '渲染', testID: 'prompt-turn-detail-tab-rich'},
-          {value: 'txt', label: '原文', testID: 'prompt-turn-detail-tab-txt'},
-        ],
-        value: renderKind,
-        onChange: setRenderKind,
-      }}
       preview={
         <FileMarkdownPreview
           path={path}
           content={body}
           tokens={tokens}
           previewFill
-          renderKind={renderKind}
+          renderKind="txt"
         />
       }
       editor={null}

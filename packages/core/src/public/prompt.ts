@@ -57,6 +57,7 @@ export type {
   PromptPreviewSegment,
 } from "../service/prompt/render-prompt.js";
 export { buildPromptPreviewTurnsFromLayout } from "../service/prompt/prompt-preview-turns.js";
+export { formatToolUsePreviewJson } from "../service/prompt/prompt-preview-turns.js";
 export type {
   PromptPreviewTurn,
   PromptTurnCardData,

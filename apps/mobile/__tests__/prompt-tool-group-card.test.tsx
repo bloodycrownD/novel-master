@@ -1,6 +1,10 @@
 /**
  * T-MP2/T-MP4：工具组卡（默认收起 / 展开两格 / 三状态色文案 / 丢失占位）
- * 与叶子卡（kind 标签 + 限 2 行预览）的渲染与全屏载荷。
+ * 与叶子卡（限行预览、无 kind 小标题）的渲染与全屏载荷。
+ *
+ * tool use 格预览走 core `formatToolUsePreviewJson`——这里 mock 成带标记的桩
+ * （`shrink:<原文>`），只断言「预览确实经过了收缩函数」（契约）；函数自身的
+ * 截断行为由 core 侧单测覆盖（真模块链牵 domain 全家，不适合在本 UI 套件拉起）。
  */
 import React from 'react';
 import {describe, expect, it, jest, beforeEach} from '@jest/globals';
@@ -15,6 +19,10 @@ import {takePromptTurnDetail} from '@/components/prompt/prompt-turn-callback';
 
 const mockNavigate = jest.fn();
 const mockOnToggle = jest.fn();
+
+jest.mock('@novel-master/core/prompt', () => ({
+  formatToolUsePreviewJson: (s: string) => `shrink:${s}`,
+}));
 
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({navigate: mockNavigate}),
@@ -133,14 +141,16 @@ describe('PromptToolGroupCard（T-MP2）', () => {
     const resultCell = tree.root.findByProps({testID: 'prompt-tool-group-result'});
     expect(useCell).toBeTruthy();
     expect(resultCell).toBeTruthy();
+    // use 格 12 行（保结构截大 key 后的 JSON 需要行数看清形状），
+    // result 格正文 12 行（与 use 对齐）。
     expect(
       tree.root.findByProps({testID: 'prompt-tool-group-use-preview'}).props
         .numberOfLines,
-    ).toBe(3);
+    ).toBe(12);
     expect(
       tree.root.findByProps({testID: 'prompt-tool-group-result-preview'}).props
         .numberOfLines,
-    ).toBe(3);
+    ).toBe(12);
   });
 
   it('T-MP2-3 三状态各有独立状态点与文案', () => {
@@ -279,33 +289,39 @@ describe('PromptToolGroupCard（T-MP2）', () => {
     ).toBe('#34c759');
   });
 
-  it('T-MP4-5 每格显式 ⤢ 全屏入口：ok 卡两格都有、悬挂 result 格不出', () => {
+  it('T-MP4-5 格子不再出显式 ⤢（用户拍板：点击就好进入全屏）', () => {
     const ok = renderGroup(OK_CARD, true);
-    // use 格与 result 格各一个显式 ⤢（可发现性：不靠用户猜「格子能点」）。
-    expect(
-      ok.root.findByProps({testID: 'prompt-tool-group-use-fullscreen'}).props
-        .accessibilityLabel,
-    ).toBe('工具入参全屏，read');
-    expect(
-      ok.root.findByProps({testID: 'prompt-tool-group-result-fullscreen'}).props
-        .accessibilityLabel,
-    ).toBe('工具结果全屏，read');
-    // 点 ⤢ 与点整格同一动作（payload 一致）。
-    press(ok, 'prompt-tool-group-use-fullscreen');
-    expect(takePromptTurnDetail()).toEqual({
-      title: 'tool use · read',
-      body: OK_CARD.inputJson,
-      leafId: 'group-tu-1-use',
-    });
-
-    // 悬挂卡：use 格仍有 ⤢，占位 result 格不出（假入口不留）。
-    const lost = renderGroup(LOST_CARD, true);
-    expect(
-      lost.root.findByProps({testID: 'prompt-tool-group-use-fullscreen'}),
-    ).toBeTruthy();
     expect(() =>
-      lost.root.findByProps({testID: 'prompt-tool-group-result-fullscreen'}),
+      ok.root.findByProps({testID: 'prompt-tool-group-use-fullscreen'}),
     ).toThrow();
+    expect(() =>
+      ok.root.findByProps({testID: 'prompt-tool-group-result-fullscreen'}),
+    ).toThrow();
+    // 整格点按仍是全屏入口（T-MP4-4 覆盖载荷）。
+    expect(
+      ok.root.findByProps({testID: 'prompt-tool-group-use'}).props.onPress,
+    ).toBeInstanceOf(Function);
+  });
+
+  it('T-MP2-8 use 格预览走 formatToolUsePreviewJson（保结构截大 key），全屏仍原文', () => {
+    const tree = renderGroup(OK_CARD, true);
+    // 桩带标记：预览确实经过收缩函数（契约），全屏载荷不受影响（T-MP4-4 原文）。
+    expect(
+      tree.root.findByProps({testID: 'prompt-tool-group-use-preview'}).props
+        .children,
+    ).toBe(`shrink:${OK_CARD.inputJson}`);
+    // result 格正文不走 JSON 收缩（纯文本预览原样）。
+    expect(
+      tree.root.findByProps({testID: 'prompt-tool-group-result-preview'}).props
+        .children,
+    ).toBe('文件内容');
+    // 预览行数放宽到 12：收缩后的 JSON 需要足够行数看清结构。
+    expect(
+      tree.root.findByProps({testID: 'prompt-tool-group-use-preview'}).props
+        .numberOfLines,
+    ).toBe(12);
+    press(tree, 'prompt-tool-group-use');
+    expect(takePromptTurnDetail()?.body).toBe(OK_CARD.inputJson);
   });
 
   it('T-J2-2 智能体配置卡片体系：子卡灰底+左 3px primary 粗条、格子白底浮起', () => {
@@ -344,29 +360,23 @@ const LEAF_CARD: PromptTextCardData = {
   body: '第一行正文\n第二行正文\n第三行正文',
 };
 
-const THINKING_CARD: PromptTextCardData = {
-  type: 'thinking',
-  id: 'card-m1-1',
-  role: 'assistant',
-  body: '思考中……',
-};
-
 describe('PromptTurnLeafCard（T-MP2/T-MP4）', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     takePromptTurnDetail();
   });
 
-  it('T-MP2-6 kind 标签 + 限 2 行预览（thinking 单独标签）', () => {
+  it('T-MP2-6 限 3 行预览、无 kind 小标题（用户拍板：轮层徽标已标 role）', () => {
     let tree!: TestRenderer.ReactTestRenderer;
     act(() => {
       tree = TestRenderer.create(
         <PromptTurnLeafCard card={LEAF_CARD} turnId="turn-12" />,
       );
     });
-    expect(
-      tree.root.findByProps({testID: 'prompt-turn-leaf-kind'}).props.children,
-    ).toBe('assistant');
+    // 卡片内不再渲染 kind 标签行。
+    expect(() =>
+      tree.root.findByProps({testID: 'prompt-turn-leaf-kind'}),
+    ).toThrow();
     const preview = tree.root.findByProps({
       testID: 'prompt-turn-leaf-preview',
     });
@@ -374,18 +384,7 @@ describe('PromptTurnLeafCard（T-MP2/T-MP4）', () => {
       tree.root.findByProps({testID: 'prompt-turn-leaf-card'}).props
         .accessibilityLabel,
     ).toBe(`assistant，${LEAF_CARD.body.slice(0, 20)}`);
-    expect(preview.props.numberOfLines).toBe(2);
-
-    let thinkingTree!: TestRenderer.ReactTestRenderer;
-    act(() => {
-      thinkingTree = TestRenderer.create(
-        <PromptTurnLeafCard card={THINKING_CARD} turnId="turn-12" />,
-      );
-    });
-    expect(
-      thinkingTree.root.findByProps({testID: 'prompt-turn-leaf-kind'}).props
-        .children,
-    ).toBe('thinking');
+    expect(preview.props.numberOfLines).toBe(3);
   });
 
   it('T-MP4-5 整卡点按进全屏：载荷带 leafId', () => {

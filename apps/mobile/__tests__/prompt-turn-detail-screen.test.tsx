@@ -2,10 +2,9 @@
  * T-R7 / T-MP5（mobile 侧之二）：轮详情屏经模块级 callback 取数渲染正文。
  *
  * 观测面：FileMarkdownPreview 桩收到的 props——纯预览态壳（无 editor 内容、
- * 无保存按钮）、「渲染 / 原文」segmented 两档可切（默认 rich：跳过
- * front-matter 与扩展名判定直接进 WebView 富文本管线，不做「伪 .md 路径」
- * 那条路；原文档纯文本铺开），path 是
- * `turn-<turnId>` / `turn-<turnId>-leaf-<leafId>` 稳定伪 key（WebView 靠它重挂载）。
+ * 无保存按钮）、渲染档位固定 txt（原文纯文本铺开，用户拍板：只保留原文，
+ * 无渲染档与切换 tab），path 是
+ * `turn-<turnId>` / `turn-<turnId>-leaf-<leafId>` 稳定伪 key。
  */
 import React from 'react';
 import {describe, expect, it, jest, beforeEach} from '@jest/globals';
@@ -111,26 +110,33 @@ describe('PromptTurnDetailScreen（T-R7 mobile）', () => {
     takePromptTurnDetail();
   });
 
-  it('T-R7-5 经 callback 取数渲染 body（纯预览态 / rich 档 / 铺满）', () => {
+  it('T-R7-5 经 callback 取数渲染 body（纯预览态 / 固定原文档 / 铺满）', () => {
     setPromptTurnDetail({title: '好的，我来看看。', body: BODY});
     const tree = renderScreen();
     expect(mockPreviewProps[0]).toMatchObject({
       path: 'turn-turn-12',
       content: BODY,
-      renderKind: 'rich',
+      renderKind: 'txt',
       previewFill: true,
     });
-    // 纯预览态：壳内不渲染编辑区，也不渲染保存/切换 toolbar。
+    // 纯预览态：壳内不渲染编辑区，也不渲染保存 toolbar。
     expect(tree.root.findAllByType('FileMarkdownPreview' as never).length).toBe(1);
     expect(tree.root.findAllByType('CodeEditorWebView' as never).length).toBe(0);
+    // 用户拍板只保留原文：不再出「渲染/原文」切换 tab。
+    expect(() =>
+      tree.root.findByProps({testID: 'prompt-turn-detail-tab-txt'}),
+    ).toThrow();
+    expect(() =>
+      tree.root.findByProps({testID: 'prompt-turn-detail-tab-rich'}),
+    ).toThrow();
   });
 
-  it('T-MP5 叶子级全屏：path 带 leafId 后缀（WebView 靠 key 重挂载）', () => {
+  it('T-MP5 叶子级全屏：path 带 leafId 后缀（稳定伪 key）', () => {
     setPromptTurnDetail({title: 'assistant', body: BODY, leafId: 'card-m2-0'});
     renderScreen();
     expect(mockPreviewProps[0]).toMatchObject({
       path: 'turn-turn-12-leaf-card-m2-0',
-      renderKind: 'rich',
+      renderKind: 'txt',
     });
   });
 
@@ -155,24 +161,5 @@ describe('PromptTurnDetailScreen（T-R7 mobile）', () => {
   it('T-R7-8 路由短标题走 header override', () => {
     renderScreen();
     expect(mockSetStackOverride).toHaveBeenCalledWith({title: '好的，我来看看。'});
-  });
-
-  it('T-MP6 渲染/原文 segmented：默认渲染档，点原文切 txt、点渲染切回 rich', () => {
-    setPromptTurnDetail({title: 'A', body: BODY});
-    const tree = renderScreen();
-    // 初始渲染档（富文本管线）。
-    expect(mockPreviewProps[0]?.renderKind).toBe('rich');
-    // 点「原文」tab：FileMarkdownPreview 收到 txt 档（纯文本铺开）。
-    act(() => {
-      tree.root.findByProps({testID: 'prompt-turn-detail-tab-txt'}).props.onPress();
-    });
-    expect(mockPreviewProps[0]?.renderKind).toBe('txt');
-    // 点「渲染」tab：切回 rich。
-    act(() => {
-      tree.root
-        .findByProps({testID: 'prompt-turn-detail-tab-rich'})
-        .props.onPress();
-    });
-    expect(mockPreviewProps[0]?.renderKind).toBe('rich');
   });
 });

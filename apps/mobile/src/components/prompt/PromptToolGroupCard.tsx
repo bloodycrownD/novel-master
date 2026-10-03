@@ -1,8 +1,8 @@
 /**
  * 工具组卡（一次 `tool_use` 一张）：组头「工具名 · 状态点」+ 可选「并行」徽标，
  * 就地展开后是 **一对两格**——左格 tool use（等宽 JSON 预览）、右格 tool result
- * （正文预览 / 悬挂时「未返回结果」占位）。两格各有显式 `⤢` 全屏入口（占位格
- * 不出 ⤢，对齐「假入口不挂 onPress」），整格也可点。
+ * （正文预览 / 悬挂时「未返回结果」占位）。整格点按进全屏（无显式 ⤢，
+ * 用户拍板「点击就好进入全屏」）；悬挂占位格不挂 onPress（假入口不留）。
  *
  * 展开态同样**受控**（`expanded` / `onToggle`）：理由同 PromptTurnCard——
  * 轮卡展开区在 FlatList 里会被虚拟化卸载，组件内 state 会丢。
@@ -12,12 +12,20 @@
  * （对齐智能体页「灰页→白分区卡→灰块→白输入框」的观感规律）：子卡沉一档
  * （bgSecondary 灰底），组头 40 高（blockHeader）、工具名 15·600（blockName）；
  * 格子回到白底浮起（最内层）。
+ *
+ * tool use 预览走 core `formatToolUsePreviewJson`（保结构截大 key：超长字符串
+ * 值截断、超长数组截项），不直接腰斩 pretty JSON——结构可读性优先；全屏仍看
+ * `inputJson` 原文。
  */
 import React, {useCallback} from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
 import type {PromptToolGroupCardData} from '@novel-master/core/prompt';
-import {useOpenPromptDetail, LOST_RESULT_TEXT} from './PromptTurnCard';
+import {formatToolUsePreviewJson} from '@novel-master/core/prompt';
+import {useOpenPromptDetail} from './PromptTurnCard';
 import {useTheme} from '@/theme/ThemeProvider';
+
+/** 悬挂 use 的占位文案（result 为 null，槽位保留不隐藏）。 */
+const LOST_RESULT_TEXT = '未返回结果';
 
 /**
  * 状态点配色走主题 token（成功/危险/中性，对齐 app 工具卡先例 ToolCallCard 的
@@ -55,32 +63,23 @@ export function PromptToolGroupCard({card, turnId, expanded, onToggle}: Props) {
     onToggle(card.id);
   }, [onToggle, card.id]);
 
-  const openUse = useCallback(
-    (event?: {stopPropagation?: () => void}) => {
-      // ⤢ 嵌在格子 Pressable 里：阻止冒泡，否则一次点按触发两次 navigate。
-      event?.stopPropagation?.();
-      openDetail({
-        title: `tool use · ${card.toolName}`,
-        body: card.inputJson,
-        leafId: `${card.id}-use`,
-        turnId,
-      });
-    },
-    [openDetail, card.id, card.toolName, card.inputJson, turnId],
-  );
+  const openUse = useCallback(() => {
+    openDetail({
+      title: `tool use · ${card.toolName}`,
+      body: card.inputJson,
+      leafId: `${card.id}-use`,
+      turnId,
+    });
+  }, [openDetail, card.id, card.toolName, card.inputJson, turnId]);
 
-  const openResult = useCallback(
-    (event?: {stopPropagation?: () => void}) => {
-      event?.stopPropagation?.();
-      openDetail({
-        title: `tool result · ${card.toolName}`,
-        body: card.result?.body ?? '',
-        leafId: `${card.id}-result`,
-        turnId,
-      });
-    },
-    [openDetail, card.id, card.toolName, card.result, turnId],
-  );
+  const openResult = useCallback(() => {
+    openDetail({
+      title: `tool result · ${card.toolName}`,
+      body: card.result?.body ?? '',
+      leafId: `${card.id}-result`,
+      turnId,
+    });
+  }, [openDetail, card.id, card.toolName, card.result, turnId]);
 
   return (
     <View
@@ -152,31 +151,20 @@ export function PromptToolGroupCard({card, turnId, expanded, onToggle}: Props) {
                 borderLeftColor: tokens.primary,
               },
             ]}>
-            <View style={styles.cellHead}>
-              <Text
-                testID="prompt-tool-group-use-label"
-                style={[
-                  styles.cellLabel,
-                  {color: tokens.textSecondary, borderColor: tokens.borderLight},
-                ]}
-                numberOfLines={1}>
-                tool use
-              </Text>
-              <Pressable
-                testID="prompt-tool-group-use-fullscreen"
-                accessibilityRole="button"
-                accessibilityLabel={`工具入参全屏，${card.toolName}`}
-                hitSlop={6}
-                onPress={openUse}
-                style={styles.iconBtn}>
-                <Text style={[styles.icon, {color: tokens.textTertiary}]}>⤢</Text>
-              </Pressable>
-            </View>
+            <Text
+              testID="prompt-tool-group-use-label"
+              style={[
+                styles.cellLabel,
+                {color: tokens.textSecondary, borderColor: tokens.borderLight},
+              ]}
+              numberOfLines={1}>
+              tool use
+            </Text>
             <Text
               testID="prompt-tool-group-use-preview"
               style={[styles.code, {color: tokens.text}]}
-              numberOfLines={3}>
-              {card.inputJson}
+              numberOfLines={12}>
+              {formatToolUsePreviewJson(card.inputJson)}
             </Text>
           </Pressable>
           <Pressable
@@ -193,37 +181,22 @@ export function PromptToolGroupCard({card, turnId, expanded, onToggle}: Props) {
                 borderLeftColor: tokens.primary,
               },
             ]}>
-            <View style={styles.cellHead}>
-              <Text
-                testID="prompt-tool-group-result-label"
-                style={[
-                  styles.cellLabel,
-                  {color: tokens.textSecondary, borderColor: tokens.borderLight},
-                ]}
-                numberOfLines={1}>
-                tool result
-              </Text>
-              {card.result == null ? null : (
-                <Pressable
-                  testID="prompt-tool-group-result-fullscreen"
-                  accessibilityRole="button"
-                  accessibilityLabel={`工具结果全屏，${card.toolName}`}
-                  hitSlop={6}
-                  onPress={openResult}
-                  style={styles.iconBtn}>
-                  <Text style={[styles.icon, {color: tokens.textTertiary}]}>
-                    ⤢
-                  </Text>
-                </Pressable>
-              )}
-            </View>
+            <Text
+              testID="prompt-tool-group-result-label"
+              style={[
+                styles.cellLabel,
+                {color: tokens.textSecondary, borderColor: tokens.borderLight},
+              ]}
+              numberOfLines={1}>
+              tool result
+            </Text>
             <Text
               testID="prompt-tool-group-result-preview"
               style={[
                 styles.code,
                 card.result == null && {color: tokens.textTertiary},
               ]}
-              numberOfLines={3}>
+              numberOfLines={12}>
               {card.result == null ? LOST_RESULT_TEXT : card.result.body}
             </Text>
           </Pressable>
@@ -265,12 +238,6 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     gap: 6,
   },
-  cellHead: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
-  },
   // 格头标签 pill（badge 形态）：描边款，色随 textSecondary。
   cellLabel: {
     fontSize: 10,
@@ -279,9 +246,8 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     paddingVertical: 1,
     paddingHorizontal: 6,
+    alignSelf: 'flex-start',
     overflow: 'hidden',
   },
-  iconBtn: {paddingHorizontal: 2},
-  icon: {fontSize: 12},
   code: {fontFamily: 'monospace', fontSize: 11, lineHeight: 16},
 });

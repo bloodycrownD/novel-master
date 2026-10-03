@@ -3902,22 +3902,6 @@ html[data-theme="dark"] .conversation-tab.is-active {
   white-space: nowrap;
 }
 
-.prompt-turn-card__fullscreen {
-  flex: none;
-  padding: 0 4px;
-  border: none;
-  background: transparent;
-  color: var(--text-tertiary);
-  font: inherit;
-  font-size: 13px;
-  line-height: 1;
-  cursor: pointer;
-}
-
-.prompt-turn-card__fullscreen:hover {
-  color: var(--text);
-}
-
 /* 轮卡展开区：挂载 turn.cards 的有序卡片流。嵌套从属由子卡（叶子/组卡）的
    3px primary 左条表达，本层只留间距。 */
 .prompt-turn-card__body {
@@ -3969,52 +3953,13 @@ html[data-theme="dark"] .conversation-tab.is-active {
   border-left-color: var(--primary);
 }
 
-.prompt-leaf-card__kind {
-  align-self: flex-start;
-  padding: 1px 6px;
-  border-radius: 6px;
-  border: 1px solid var(--border-light);
-  font-size: 10px;
-  font-weight: 600;
-  line-height: 1.4;
-  color: var(--text-secondary);
-}
-
-/* head 行：kind 徽标居左，显式 ⤢ 全屏入口居右（点击冒泡到整卡 button，同一动作）。 */
-.prompt-leaf-card__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  width: 100%;
-}
-
-.prompt-leaf-card__fullscreen {
-  flex: none;
-  font-size: 12px;
-  line-height: 1;
-  color: var(--text-tertiary);
-  cursor: pointer;
-}
-
-.prompt-leaf-card:hover .prompt-leaf-card__fullscreen {
-  color: var(--text);
-}
-
-/* thinking 卡：kind 徽标染警示色（主题 warning），与文本卡区分。 */
-.prompt-leaf-card--thinking .prompt-leaf-card__kind {
-  color: var(--warning);
-  border-color: color-mix(in srgb, var(--warning) 35%, transparent);
-}
-
 .prompt-leaf-card__preview {
   display: -webkit-box;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
   overflow: hidden;
   word-break: break-word;
-  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
   font-size: 12px;
   line-height: 1.6;
   color: var(--text-secondary);
@@ -4139,32 +4084,12 @@ html[data-theme="dark"] .conversation-tab.is-active {
   color: var(--text-secondary);
 }
 
-/* 格头行：tag 居左，显式 ⤢ 全屏入口居右（lost 格不出，假入口不留）。 */
-.prompt-group-cell__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  width: 100%;
-}
-
-.prompt-group-cell__fullscreen {
-  flex: none;
-  font-size: 12px;
-  line-height: 1;
-  color: var(--text-tertiary);
-  cursor: pointer;
-}
-
-.prompt-group-cell:hover .prompt-group-cell__fullscreen {
-  color: var(--text);
-}
-
+/* 预览限 12 行：保结构截大 key 后的 JSON 需要足够行数看清形状（mobile 同款）。 */
 .prompt-group-cell__body {
   display: -webkit-box;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-  line-clamp: 3;
+  -webkit-line-clamp: 12;
+  line-clamp: 12;
   overflow: hidden;
   word-break: break-word;
   font-size: 12px;
@@ -5749,54 +5674,18 @@ html[data-theme="dark"] .chat-batch-bar {
   padding-top: 12px;
 }
 
-/* 提示词预览全屏只读：标题行（标题 + 渲染/原文切换）+ 正文（富文本或原文）
+/* 提示词预览全屏只读：标题 + 原文正文（固定纯文本档，无渲染切换）
    + 底部关闭条，壳复用 .text-prompt-overlay / .prompt-editor-modal，
    正文容器自己吃掉剩余高度并滚动。 */
-.prompt-fullscreen__headrow {
-  flex: none;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding-bottom: 10px;
-}
-
 .prompt-fullscreen__title {
-  flex: 1;
-  min-width: 0;
+  flex: none;
+  padding-bottom: 10px;
   font-size: 14px;
   font-weight: 600;
   color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-/* 渲染 / 原文两档切换（对齐 mobile 详情页 segmented 的交互语义）。 */
-.prompt-fullscreen__switch {
-  flex: none;
-  display: flex;
-  gap: 4px;
-  padding: 2px;
-  border-radius: 8px;
-  border: 1px solid var(--border-light);
-}
-
-.prompt-fullscreen__switch-btn {
-  padding: 3px 12px;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  font: inherit;
-  font-size: 12px;
-  line-height: 1.4;
-  color: var(--text-secondary);
-  cursor: pointer;
-}
-
-.prompt-fullscreen__switch-btn.is-active {
-  background: var(--primary);
-  color: #fff;
 }
 
 .prompt-fullscreen__body {
@@ -5807,7 +5696,7 @@ html[data-theme="dark"] .chat-batch-bar {
   color: var(--text);
 }
 
-/* 逐卡富文本之间的视觉分隔（不加 `[段名]` 前缀，靠留白与分隔线断段）。 */
+/* 逐块原文之间的视觉分隔（不加 `[段名]` 前缀，靠留白与分隔线断段）。 */
 .prompt-fullscreen__block + .prompt-fullscreen__block {
   margin-top: 18px;
   padding-top: 14px;
@@ -5818,7 +5707,7 @@ html[data-theme="dark"] .chat-batch-bar {
   overflow-x: auto;
 }
 
-/* 原文档：逐 block 纯文本铺开（等宽、保留换行），与渲染档互斥。 */
+/* 原文：逐 block 纯文本铺开（等宽、保留换行）。 */
 .prompt-fullscreen__raw {
   margin: 0;
   white-space: pre-wrap;

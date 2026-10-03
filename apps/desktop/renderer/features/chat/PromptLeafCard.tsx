@@ -1,17 +1,17 @@
 /**
- * 叶子卡（text / thinking）：kind 标签 + 限 2 行预览，整卡可点开全屏富文本。
+ * 叶子卡（text / thinking）：限 3 行预览，整卡点开全屏原文。
  *
- * 「就地展开 → 全屏」链路的最末端：预览只给两行（`-webkit-line-clamp:2`，见
- * shell.css `.prompt-leaf-card__preview`），全文走 Modal 的 `MermaidMarkdown`。
+ * 无 kind 小标题行（用户拍板：轮层徽标已标 role，卡片内再标一遍 user/assistant
+ * 纯冗余）、无显式 ⤢（点击就好进入全屏）。
  *
  * **纯展示组件**：不接聊天页的跳转/回调语义，只把「点开全屏」这一件事交给父级
  * （`RealPromptPanel` 持 Modal 状态）。刻意不复用 `ToolCallCard` / `ToolCallGroupCard`
- * ——那两个绑死聊天消息 DTO（`ToolCallBlock` 形态），与预览侧 `PromptTurnCardDto`
+ * ——那两个绑死聊天消息 DTO（`ToolCallBlock` 形态），与预览侧 DTO
  * 不是同一套数据。
  */
 import type { PromptTextCardDto } from "@shared/ipc-types";
 
-/** thinking 卡单独叫「thinking」，其余读 core 给的 role 展示标签（空则「文本」）。 */
+/** 详情标题：thinking 卡单独叫「thinking」，其余读 core 给的 role 展示标签（空则「文本」）。 */
 export function promptLeafKindLabel(card: PromptTextCardDto): string {
   if (card.type === "thinking") {
     return "thinking";
@@ -36,14 +36,6 @@ export function PromptLeafCard({ card, onOpen }: PromptLeafCardProps) {
       aria-label={`${label}，${card.body.slice(0, 20)}`}
       onClick={() => onOpen(card)}
     >
-      <span className="prompt-leaf-card__head">
-        <span className="prompt-leaf-card__kind">{label}</span>
-        {/* 显式全屏入口（aria-hidden：点击冒泡到整卡 button，同一个 onOpen 动作；
-            button 不能嵌 button，span 承载视觉即可）。 */}
-        <span className="prompt-leaf-card__fullscreen" aria-hidden="true">
-          ⤢
-        </span>
-      </span>
       <span className="prompt-leaf-card__preview">{card.body}</span>
     </button>
   );

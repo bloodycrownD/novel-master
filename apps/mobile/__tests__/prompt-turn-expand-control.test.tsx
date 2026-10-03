@@ -268,10 +268,6 @@ describe('RealPromptScreen 屏级受控展开（T-MP3）', () => {
       'prompt-tool-group-card',
       'prompt-turn-leaf-card',
     ]);
-    expect(
-      hostNodes(tree, 'prompt-turn-leaf-kind').map(n => n.props.children),
-    ).toEqual(['assistant', 'thinking']);
-
     // turnId 透传：叶子卡全屏的路由参数带轮 id（不是叶子 id 串进路由）。
     press(tree, 'prompt-turn-leaf-card', 0);
     expect(mockNavigate).toHaveBeenCalledWith('PromptTurnDetail', {
@@ -285,77 +281,4 @@ describe('RealPromptScreen 屏级受控展开（T-MP3）', () => {
     });
   });
 
-  it('T-MP3-6 叶子卡显式 ⤢ 全屏入口：与整卡点按同一载荷', async () => {
-    const tree = await renderScreen();
-    press(tree, 'prompt-turn-head');
-    // 可发现性：每张叶子卡都有显式 ⤢，不必猜「整卡能点」。
-    expect(hostNodes(tree, 'prompt-turn-leaf-fullscreen')).toHaveLength(2);
-    press(tree, 'prompt-turn-leaf-fullscreen', 0);
-    expect(mockNavigate).toHaveBeenCalledWith('PromptTurnDetail', {
-      title: 'assistant',
-      turnId: TURN.id,
-    });
-    expect(takePromptTurnDetail()).toEqual({
-      title: 'assistant',
-      body: '好的，我来看看。',
-      leafId: 'card-12-0',
-    });
-  });
-});
-
-/**
- * T-MP3-5：裁剪复挂载锚。
- *
- * 屏级 data 桩换不掉（`load()` 每次清空两个 Set 且桩常量引用让 effect 不重跑），
- * `PromptTurnRow` 又是 `RealPromptScreen` 的模块内非导出组件——所以直接拿导出的
- * `PromptTurnCard` 做受测组件，测试内自持 `openTurnIds` state 的宿主包住它。
- */
-function RemountHost({rowVisible}: {rowVisible: boolean}) {
-  const [openTurnIds, setOpenTurnIds] = React.useState<ReadonlySet<string>>(
-    () => new Set<string>(),
-  );
-  const onToggle = React.useCallback((turnId: string) => {
-    setOpenTurnIds(prev => {
-      const next = new Set(prev);
-      if (next.has(turnId)) {
-        next.delete(turnId);
-      } else {
-        next.add(turnId);
-      }
-      return next;
-    });
-  }, []);
-  return (
-    <View testID="host">
-      {rowVisible ? (
-        <PromptTurnCard turn={TURN} expanded={openTurnIds.has(TURN.id)} onToggle={onToggle}>
-          <View testID="host-row-children" />
-        </PromptTurnCard>
-      ) : null}
-    </View>
-  );
-}
-
-describe('裁剪复挂载后展开态保留（T-MP3-5）', () => {
-  it('row 被卸载再重挂：受控展开态在宿主，没丢', () => {
-    let tree!: TestRenderer.ReactTestRenderer;
-    act(() => {
-      tree = TestRenderer.create(<RemountHost rowVisible />);
-    });
-    press(tree, 'prompt-turn-head');
-    expect(tree.root.findByProps({testID: 'prompt-turn-body'})).toBeTruthy();
-
-    // 模拟 removeClippedSubviews 把 row 裁掉：宿主保留，卡子树卸载。
-    act(() => {
-      tree.update(<RemountHost rowVisible={false} />);
-    });
-    expect(tree.root.findByProps({testID: 'host'})).toBeTruthy();
-
-    // 滚回来：同一个 row 重挂，展开区应仍在（组件内 state 的话这里必丢）。
-    act(() => {
-      tree.update(<RemountHost rowVisible />);
-    });
-    expect(tree.root.findByProps({testID: 'prompt-turn-body'})).toBeTruthy();
-    expect(tree.root.findByProps({testID: 'host-row-children'})).toBeTruthy();
-  });
 });

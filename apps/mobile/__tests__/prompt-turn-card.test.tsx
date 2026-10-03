@@ -1,6 +1,6 @@
 /**
- * T-MP1/T-MP4：轮摘要卡三态渲染 + 单行限行；整轮/叶子全屏 callback 载荷
- * （title/body/leafId）与「navigate 只带短标题」。
+ * T-MP1：轮摘要卡三态渲染 + 单行限行 + role 徽标 pill 两态样式；轮卡不再出
+ * ⤢（全屏入口只在二级卡，见 expand-control / tool-group-card 两套测试）。
  *
  * 另外覆盖 `prompt-turn-callback` 的 take 语义（读后即清）——正文可达数百 KB，
  * 走路由参数不可行，残留就会让下一次进详情显示上一轮的内容。
@@ -94,39 +94,6 @@ const TURN = {
   ],
 };
 
-/** 组卡夹具：一次 tool_use + 已回结果，整轮全屏应拆成 use/result 两段。 */
-const TURN_WITH_GROUP = {
-  ...TURN,
-  cards: [
-    {type: 'text' as const, id: 'card-12-0', role: 'assistant', body: '好的，我来看看。'},
-    {
-      type: 'toolGroup' as const,
-      id: 'group-tu-1',
-      toolName: 'read',
-      inputJson: '{"path":"a.md"}',
-      result: {toolUseId: 'tu-1', ok: true, body: '文件内容'},
-      status: 'ok' as const,
-      parallel: false,
-    },
-  ],
-};
-
-/** 悬挂 use 的组卡：result 段走占位文案，不吃空串。 */
-const TURN_WITH_LOST_GROUP = {
-  ...TURN,
-  cards: [
-    {
-      type: 'toolGroup' as const,
-      id: 'group-tu-9',
-      toolName: 'read',
-      inputJson: '{"path":"b.md"}',
-      result: null,
-      status: 'lost' as const,
-      parallel: false,
-    },
-  ],
-};
-
 function renderCard(
   overrides: Partial<typeof TURN> = {},
   expanded = false,
@@ -201,23 +168,25 @@ describe('PromptTurnCard（T-MP1/T-MP4 mobile）', () => {
     expect(card.borderRadius).toBe(16);
   });
 
-  it('T-MP1-5 role 徽标 pill 三态（user 主蓝底白字 / assistant 灰底 / template 描边）', () => {
+  it('T-MP1-5 role 徽标 pill 两态（user 主蓝底白字 / assistant 与 template 中性灰底）', () => {
     const roleStyle = (kind: 'user' | 'assistant' | 'template') =>
       flattenStyle(
         renderCard({kind}).root.findByProps({testID: 'prompt-turn-role'})
           .props.style,
       );
-    // mock token：primary=#06c、bgSecondary=#f4f4f5、borderLight=#ddd、textTertiary=#999。
+    // mock token：primary=#06c、bgSecondary=#f4f4f5、text=#111。
     expect(roleStyle('user').backgroundColor).toBe('#06c');
     expect(roleStyle('user').color).toBe('#fff');
+    // assistant 与 template 共用中性灰底正文色（用户拍板：template 不做特殊款，
+    // 卡片内容自带各自 role/段名）。
     expect(roleStyle('assistant').backgroundColor).toBe('#f4f4f5');
     expect(roleStyle('assistant').color).toBe('#111');
-    expect(roleStyle('template').borderWidth).toBe(1);
-    // template 徽标字色取正文色（textTertiary 浅色下过浅，用户反馈）。
+    expect(roleStyle('template').backgroundColor).toBe('#f4f4f5');
     expect(roleStyle('template').color).toBe('#111');
+    expect(roleStyle('template').borderWidth).toBeUndefined();
   });
 
-  it('T-MP1-4 头部点按走 onToggle(turnId)，⤢ 不触发 toggle', () => {
+  it('T-MP1-4 头部点按走 onToggle(turnId)；轮卡不再出 ⤢（全屏入口只在二级卡）', () => {
     const onToggle = jest.fn();
     let tree!: TestRenderer.ReactTestRenderer;
     act(() => {
@@ -231,51 +200,14 @@ describe('PromptTurnCard（T-MP1/T-MP4 mobile）', () => {
     });
     pressByTestID(tree, 'prompt-turn-head');
     expect(onToggle).toHaveBeenCalledWith(TURN.id);
-    const stopPropagation = jest.fn();
-    act(() => {
-      (tree.root.findByProps({testID: 'prompt-turn-fullscreen'}).props as {
-        onPress: (e?: unknown) => void;
-      }).onPress({stopPropagation});
-    });
-    // 嵌套 Pressable 阻止冒泡：点 ⤢ 不会顺带把轮展开。
-    expect(stopPropagation).toHaveBeenCalled();
     expect(onToggle).toHaveBeenCalledTimes(1);
+    // 轮卡无整轮全屏入口（用户拍板：一级卡片下有二级卡片，二级能进全屏就够）。
+    expect(() =>
+      tree.root.findByProps({testID: 'prompt-turn-fullscreen'}),
+    ).toThrow();
   });
 
-  it('T-MP4-1 整轮全屏：正文经 callback 交付、路由只带短标题', () => {
-    pressByTestID(renderCard(), 'prompt-turn-fullscreen');
-    expect(mockNavigate).toHaveBeenCalledWith('PromptTurnDetail', {
-      title: TURN.summaryText,
-      turnId: TURN.id,
-    });
-    // 正文是 cards 逐卡拼接（默认夹具一张 text 卡），不是 CLI parity 的 turn.body 平铺串。
-    expect(takePromptTurnDetail()).toEqual({
-      title: TURN.summaryText,
-      body: '好的，我来看看。',
-    });
-  });
-
-  it('T-MP4-6 整轮全屏：组卡拆 use/result 两段（配对结构不丢）', () => {
-    pressByTestID(renderCard(TURN_WITH_GROUP), 'prompt-turn-fullscreen');
-    const detail = takePromptTurnDetail();
-    expect(detail?.body).toBe(
-      '好的，我来看看。\n\n{"path":"a.md"}\n\n文件内容',
-    );
-    expect(detail?.body).toContain('{"path":"a.md"}');
-    expect(detail?.body).toContain('文件内容');
-  });
-
-  it('T-MP4-7 整轮全屏：悬挂 use 走占位文案、空正文被滤掉', () => {
-    pressByTestID(renderCard(TURN_WITH_LOST_GROUP), 'prompt-turn-fullscreen');
-    expect(takePromptTurnDetail()?.body).toBe(
-      '{"path":"b.md"}\n\n未返回结果',
-    );
-    // 丢了整轮 body 的退化路径：cards 为空时正文是空串，不能变成 undefined。
-    pressByTestID(renderCard({cards: []}), 'prompt-turn-fullscreen');
-    expect(takePromptTurnDetail()?.body).toBe('');
-  });
-
-  it('T-J1-1 轮头/⤢ 无障碍标签带角色与摘要、头部带 expanded 态', () => {
+  it('T-J1-1 轮头无障碍标签带角色与摘要、头部带 expanded 态', () => {
     const tree = renderCard({}, false);
     expect(
       tree.root.findByProps({testID: 'prompt-turn-head'}).props
@@ -286,10 +218,6 @@ describe('PromptTurnCard（T-MP1/T-MP4 mobile）', () => {
         .accessibilityState,
     ).toEqual({expanded: false});
     expect(
-      tree.root.findByProps({testID: 'prompt-turn-fullscreen'}).props
-        .accessibilityLabel,
-    ).toBe('整轮全屏，assistant 好的，我来看看。');
-    expect(
       renderCard({}, true).root.findByProps({testID: 'prompt-turn-head'}).props
         .accessibilityLabel,
     ).toBe('收起assistant轮，好的，我来看看。');
@@ -299,23 +227,5 @@ describe('PromptTurnCard（T-MP1/T-MP4 mobile）', () => {
     setPromptTurnDetail({title: 'A', body: '轮 A'});
     expect(takePromptTurnDetail()).toEqual({title: 'A', body: '轮 A'});
     expect(takePromptTurnDetail()).toBeNull();
-  });
-
-  it('T-MP4-3 叶子全屏载荷带 leafId、路由标题截到 24 字', () => {
-    const longSummary = 'x'.repeat(80);
-    let tree!: TestRenderer.ReactTestRenderer;
-    act(() => {
-      tree = TestRenderer.create(
-        <PromptTurnCard
-          turn={{...TURN, summaryText: longSummary}}
-          expanded={false}
-          onToggle={() => undefined}
-        />,
-      );
-    });
-    pressByTestID(tree, 'prompt-turn-fullscreen');
-    const params = mockNavigate.mock.calls[0]?.[1] as {title: string};
-    expect(params.title.length).toBe(24);
-    expect(params.title.endsWith('…')).toBe(true);
   });
 });
