@@ -5,7 +5,7 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
 
-## [Unreleased]
+## [1.5.32] - 2026-10-02
 
 ### 变更
 
