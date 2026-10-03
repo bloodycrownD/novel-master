@@ -58,18 +58,19 @@ function formatReplaceNotFound(
       String(details.lcsOccurrences) +
       " times; ensure oldString is unique or include more context.";
   }
-  // 补上 codepoint 转储：肉眼看起来一样的中文引号 / HTML entity，码点一摆出来就露馅。
-  // 这里同时展示 oldString 和文件对应区域的前 100 个码点，方便对比到底差在哪。
-  if (details.oldStringCodepoints || details.fileHintCodepoints) {
-    out += "\nCodepoint dump (first 100 chars, hex):";
-    if (details.oldStringCodepoints) {
-      out += `\n  oldString: ${details.oldStringCodepoints}`;
+  // 补上预览对照：肉眼看起来一样的中文引号 / HTML entity、看不见的换行制表，
+  // JSON 转义一摆出来就露馅（“ vs " vs &ldquo;、\n/\t 显形）——且 LLM 能直接
+  // 照抄预览修正 oldString（hex 码点无法反向消费，已退役）。
+  if (details.oldStringPreview != null || details.fileHintPreview != null) {
+    out += "\nPreview (first 100 chars, JSON-escaped):";
+    if (details.oldStringPreview != null) {
+      out += `\n  oldString: ${JSON.stringify(details.oldStringPreview)}`;
     }
-    if (details.fileHintCodepoints) {
-      out += `\n  fileHint:  ${details.fileHintCodepoints}`;
+    if (details.fileHintPreview != null) {
+      out += `\n  fileHint:  ${JSON.stringify(details.fileHintPreview)}`;
     }
     out +=
-      "\nIf you see sequences like 26 6c 64 71 75 6f 3b, that is an unescaped HTML entity (e.g. &ldquo;); 201c is “, 201d is ”, 22 is an ASCII double quote.";
+      '\nCompare the two previews: sequences like &ldquo; are unescaped HTML entities (the file likely has “, U+201C, instead); “ and " are different quote characters; hidden whitespace shows up as \\n / \\t.';
   }
   return out;
 }

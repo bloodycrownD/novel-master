@@ -386,26 +386,28 @@ describe("formatToolErrorForLlm", () => {
     assert.ok(content.includes("Almost no matching text"));
   });
 
-  it("T-ERR-06: REPLACE_NOT_FOUND 携带 codepoint 诊断", () => {
+  it("T-ERR-06: REPLACE_NOT_FOUND 携带预览（JSON 转义）诊断", () => {
     // 模拟 bug 3：oldString 里是字面 entity，文件里是真正的中文引号。
-    // codepoint 一摆出来就能看出 26（&）vs 201c（“）的区别。
+    // 预览并列就能看出 `&ldquo;` vs `“` 的区别，且 LLM 可直接照抄修正。
     const cause = vfsReplaceNotFound(physicalPath, {
       oldStringLength: 20,
       longestCommonSubstring: "你好世界测试",
       lcsLength: 6,
       lcsOccurrences: 1,
-      oldStringCodepoints: "26 6c 64 71 75 6f 3b 4f60 597d",
-      fileHintCodepoints: "201c 4f60 597d",
+      oldStringPreview: '&ldquo;你好',
+      fileHintPreview: '“你好',
     });
     const content = formatToolErrorForLlm(
       new ToolError("FAILED", "x", { cause }),
       { vfsScope: sessionScope },
     );
-    assert.ok(content.includes("Codepoint dump"));
-    assert.ok(content.includes("oldString: 26 6c 64 71 75 6f 3b"));
-    assert.ok(content.includes("fileHint:  201c"));
+    assert.ok(content.includes("Preview (first 100 chars, JSON-escaped)"));
+    assert.ok(content.includes('oldString: "&ldquo;你好"'));
+    assert.ok(content.includes('fileHint:  "“你好"'));
     // 提示文案里要点名 &ldquo; 这个典型 entity。
     assert.ok(content.includes("&ldquo;"));
+    // 提示语含不可见空白的显形指引（\n / \t 字面量）。
+    assert.ok(content.includes("\\n / \\t"));
   });
 
   it("summarizes INVALID_ARGUMENT zod issues", () => {
