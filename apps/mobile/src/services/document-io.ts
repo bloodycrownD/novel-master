@@ -15,6 +15,14 @@ import {
 import {isUserCancelledPick, pickSingleDocument} from './document-pick';
 import {base64ToBytes, blobFs, localUriToFsPath, toFileUri} from './rn-file-io';
 
+/**
+ * 所选项既无自带名、又无兜底名时的最终占位名。
+ *
+ * WHY 必须是常量：单文件导入把 fileName 直接当 VFS 的 relativePath，
+ * 空名会让落点退化成目录级路径，必须保证非空。
+ */
+const DEFAULT_PICKED_FILE_NAME = 'import.bin';
+
 /** 已知扩展名 → MIME 列表（无法识别时返回空数组；services/C-4 收编）。 */
 export function knownTypesForExtension(ext: string): string[] {
   try {
@@ -83,6 +91,14 @@ export interface PickLocalFileOptions {
 
 export interface PickedLocalFile {
   readonly fsPath: string;
+  /**
+   * **原件名**（所选项自带名；为空时退到 `fallbackLocalFileName`，再无则 undefined）。
+   *
+   * ⚠️ 与本地落盘名（`localFileName`）刻意分开：后者只是缓存目录里的临时名，
+   * 会覆盖原件名；需要拿真实文件名决定业务落点的调用方（如单文件导入把它当
+   * VFS 的 relativePath）必须读这个字段。
+   */
+  readonly fileName?: string;
 }
 
 /** 选一个文档并拷入 caches 目录，返回本地 fs 路径；用户取消返回 null。 */
@@ -94,11 +110,14 @@ export async function pickToLocalPath(
     return null;
   }
   options.assertFileName?.(file.name);
+  const originalName =
+    typeof file.name === 'string' && file.name.trim() !== ''
+      ? file.name
+      : options.fallbackLocalFileName;
   const fileName =
     options.localFileName ??
-    file.name ??
-    options.fallbackLocalFileName ??
-    'import.bin';
+    originalName ??
+    DEFAULT_PICKED_FILE_NAME;
   const [copyResult] = await keepLocalCopy({
     files: [{uri: file.uri, fileName}],
     destination: 'cachesDirectory',
@@ -109,7 +128,10 @@ export async function pickToLocalPath(
       new Error(copyResult.copyError ?? '无法读取所选文件')
     );
   }
-  return {fsPath: localUriToFsPath(copyResult.localUri)};
+  return {
+    fsPath: localUriToFsPath(copyResult.localUri),
+    fileName: originalName,
+  };
 }
 
 export interface PickAndReadOptions extends PickLocalFileOptions {
@@ -136,6 +158,38 @@ export async function pickAndReadBytes(
   }
   await assertLocalFileSizeWithin(picked.fsPath, options);
   return readLocalFileBytes(picked.fsPath, options.buildMissingError);
+}
+
+/** `pickAndReadFileWithMeta` 的返回值：字节 + 原件名（fileName 非空保证）。 */
+export interface PickedFileWithMeta {
+  readonly bytes: Uint8Array;
+  /** 原件名；无自带名时退 `fallbackLocalFileName`，再无则 `import.bin`。 */
+  readonly fileName: string;
+}
+
+/**
+ * 选一个文档并整包读为字节，**连同原件名一起返回**；用户取消返回 null。
+ *
+ * 与 `pickAndReadBytes` 同一条链路（pick → keepLocalCopy → stat 预检 → 读字节），
+ * 差别只在多透出 fileName：单文件导入要用它当 VFS 的 relativePath，而
+ * `pickAndReadBytes` 的裸字节形态不能改——现有两个调用方整体把它当 bytes 用。
+ *
+ * `maxBytes` 预检约定与 `pickAndReadBytes` 完全一致：两者必须成对传或都不传，
+ * 只传其一则预检整体不生效。
+ */
+export async function pickAndReadFileWithMeta(
+  options: PickAndReadOptions,
+): Promise<PickedFileWithMeta | null> {
+  const picked = await pickToLocalPath(options);
+  if (picked == null) {
+    return null;
+  }
+  await assertLocalFileSizeWithin(picked.fsPath, options);
+  const bytes = await readLocalFileBytes(picked.fsPath, options.buildMissingError);
+  return {
+    bytes,
+    fileName: picked.fileName ?? DEFAULT_PICKED_FILE_NAME,
+  };
 }
 
 /** stat 预检：超过 maxBytes 抛业务错误；stat 失败（权限/时序等）放行走原流程。 */

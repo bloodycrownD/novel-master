@@ -42,6 +42,7 @@ import {
   exportBytesViaDocumentPicker,
   knownTypesForExtension,
   pickAndReadBytes,
+  pickAndReadFileWithMeta,
   pickAndReadText,
   pickToLocalPath,
 } from '@/services/document-io';
@@ -289,6 +290,107 @@ describe('document-io', () => {
         'name: a',
       );
       expect(mockReadFile).toHaveBeenCalledWith('/cache/a.yaml', 'utf8');
+    });
+  });
+
+  describe('pickAndReadFileWithMeta', () => {
+    /** 让 pick 成功并把 keepLocalCopy 落到指定缓存路径。 */
+    function arrangePick(
+      picked: {uri: string; name?: string},
+      localUri = 'file:///cache/import.bin',
+    ): void {
+      mockPick.mockResolvedValue([picked]);
+      mockKeepLocalCopy.mockResolvedValue([
+        {status: 'success', localUri, sourceUri: picked.uri},
+      ]);
+      mockReadFile.mockResolvedValue(globalThis.btoa('hi'));
+    }
+
+    it('返回 {bytes, fileName}：落盘用临时名，fileName 取原件名', async () => {
+      arrangePick({uri: 'content://x', name: '资料.md'});
+
+      const result = await pickAndReadFileWithMeta({
+        mimeTypes: ['text/plain'],
+        localFileName: 'import.bin',
+      });
+
+      expect(mockKeepLocalCopy).toHaveBeenCalledWith({
+        files: [{uri: 'content://x', fileName: 'import.bin'}],
+        destination: 'cachesDirectory',
+      });
+      expect(mockReadFile).toHaveBeenCalledWith('/cache/import.bin', 'base64');
+      expect(result).toEqual({
+        bytes: new Uint8Array([0x68, 0x69]),
+        fileName: '资料.md',
+      });
+    });
+
+    it('原件名为空时退到 fallbackLocalFileName', async () => {
+      arrangePick({uri: 'content://x'});
+
+      const result = await pickAndReadFileWithMeta({
+        mimeTypes: ['text/plain'],
+        fallbackLocalFileName: '资料.md',
+      });
+
+      expect(result?.fileName).toBe('资料.md');
+    });
+
+    it('原件名为空且无兜底时退到 import.bin（保证非空）', async () => {
+      arrangePick({uri: 'content://x', name: ''});
+
+      const result = await pickAndReadFileWithMeta({
+        mimeTypes: ['text/plain'],
+        localFileName: 'import.bin',
+      });
+
+      expect(result?.fileName).toBe('import.bin');
+    });
+
+    it('用户取消返回 null 且不触发 keepLocalCopy', async () => {
+      mockPick.mockResolvedValue([]);
+
+      await expect(
+        pickAndReadFileWithMeta({mimeTypes: ['text/plain']}),
+      ).resolves.toBeNull();
+      expect(mockKeepLocalCopy).not.toHaveBeenCalled();
+      expect(mockReadFile).not.toHaveBeenCalled();
+    });
+
+    it('maxBytes + buildTooLargeError 成对预检：超限抛错且不读字节', async () => {
+      arrangePick({uri: 'content://x', name: 'a.bin'});
+      mockStat.mockResolvedValue({
+        path: '/cache/import.bin',
+        size: 64 * 1024 * 1024,
+      });
+
+      await expect(
+        pickAndReadFileWithMeta({
+          mimeTypes: ['application/octet-stream'],
+          maxBytes: 32 * 1024 * 1024,
+          buildTooLargeError: size => new Error(`too large: ${size}`),
+        }),
+      ).rejects.toThrow('too large: 67108864');
+      expect(mockStat).toHaveBeenCalledWith('/cache/import.bin');
+      expect(mockExists).not.toHaveBeenCalled();
+      expect(mockReadFile).not.toHaveBeenCalled();
+    });
+
+    it('只传 maxBytes 不传 buildTooLargeError 时不做 stat 预检（成对约定）', async () => {
+      arrangePick({uri: 'content://x', name: 'a.bin'});
+      mockStat.mockResolvedValue({
+        path: '/cache/import.bin',
+        size: 64 * 1024 * 1024,
+      });
+
+      const result = await pickAndReadFileWithMeta({
+        mimeTypes: ['application/octet-stream'],
+        maxBytes: 32 * 1024 * 1024,
+      });
+
+      expect(mockStat).not.toHaveBeenCalled();
+      expect(result?.fileName).toBe('a.bin');
+      expect(result?.bytes).toEqual(new Uint8Array([0x68, 0x69]));
     });
   });
 
