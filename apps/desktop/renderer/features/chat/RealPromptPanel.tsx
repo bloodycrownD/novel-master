@@ -2,7 +2,7 @@
  * 真实提示词查看面板（desktop，prompt-rounds）：三层结构。
  *
  * 1. 收起的**轮摘要卡**——role 徽标 pill（user 主蓝底白字 / assistant 与
- *    template 中性底，走 CSS `data-turn-kind`）+ `summaryText` 单行截断 +
+ *    system 中性底，走 CSS `data-turn-kind`）+ `summaryText` 单行截断 +
  *    `metaText` 计数行；点头部就地展开/收起。轮卡不出 ⤢（用户拍板：全屏入口
  *    只在二级卡，二级整卡点按即进）；
  * 2. 展开区的**嵌套卡片流**——文本/thinking 叶子卡（无 kind 小标题、无 ⤢，
@@ -37,11 +37,11 @@ interface RealPromptPanelProps {
   visible: boolean;
 }
 
-/** 轮层 role 徽标文案（不是消息角色，是「轮」这一层）。 */
+/** 轮层 role 徽标文案（轮的消息 role；合成段按真实 role 归轮，无 template 分类）。 */
 const TURN_ROLE_LABELS: Record<PromptPreviewTurnDto["kind"], string> = {
   user: "user",
   assistant: "assistant",
-  template: "template",
+  system: "system",
 };
 
 /** 空正文在全屏里的占位文案。 */

@@ -979,7 +979,8 @@ export type PromptTurnCardDto = PromptTextCardDto | PromptToolGroupDto;
  */
 export type PromptPreviewTurnDto = {
   readonly id: string;
-  readonly kind: 'template' | 'user' | 'assistant';
+  /** 轮的消息 role（用户拍板：合成段按真实消息 role 归轮，无 template 特殊分类）。 */
+  readonly kind: 'system' | 'user' | 'assistant';
   /** 真摘要：单行语义（>70 字截断，三类轮统一）。 */
   readonly summaryText: string;
   /** 计数行：字数 / 工具调用次数 / 失败丢失计数 / 附件计数。 */

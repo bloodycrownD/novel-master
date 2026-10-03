@@ -129,11 +129,11 @@ describe('PromptTurnCard（T-MP1/T-MP4 mobile）', () => {
     takePromptTurnDetail();
   });
 
-  it('T-MP1-1 三态 role 徽标渲染（user/assistant/template，无「轮」字后缀）', () => {
+  it('T-MP1-1 三类 role 徽标渲染（user/assistant/system，无「轮」字后缀）', () => {
     expect(textsOf(renderCard().toJSON())).toContain('assistant');
     expect(textsOf(renderCard({kind: 'user'}).toJSON())).toContain('user');
-    expect(textsOf(renderCard({kind: 'template'}).toJSON())).toContain(
-      'template',
+    expect(textsOf(renderCard({kind: 'system'}).toJSON())).toContain(
+      'system',
     );
   });
 
@@ -168,8 +168,8 @@ describe('PromptTurnCard（T-MP1/T-MP4 mobile）', () => {
     expect(card.borderRadius).toBe(16);
   });
 
-  it('T-MP1-5 role 徽标 pill 两态（user 主蓝底白字 / assistant 与 template 中性灰底）', () => {
-    const roleStyle = (kind: 'user' | 'assistant' | 'template') =>
+  it('T-MP1-5 role 徽标 pill 两态（user 主蓝底白字 / assistant 与 system 中性灰底）', () => {
+    const roleStyle = (kind: 'user' | 'assistant' | 'system') =>
       flattenStyle(
         renderCard({kind}).root.findByProps({testID: 'prompt-turn-role'})
           .props.style,
@@ -177,13 +177,12 @@ describe('PromptTurnCard（T-MP1/T-MP4 mobile）', () => {
     // mock token：primary=#06c、bgSecondary=#f4f4f5、text=#111。
     expect(roleStyle('user').backgroundColor).toBe('#06c');
     expect(roleStyle('user').color).toBe('#fff');
-    // assistant 与 template 共用中性灰底正文色（用户拍板：template 不做特殊款，
-    // 卡片内容自带各自 role/段名）。
+    // assistant 与 system 共用中性灰底正文色（轮 kind = 消息 role，无特殊分类）。
     expect(roleStyle('assistant').backgroundColor).toBe('#f4f4f5');
     expect(roleStyle('assistant').color).toBe('#111');
-    expect(roleStyle('template').backgroundColor).toBe('#f4f4f5');
-    expect(roleStyle('template').color).toBe('#111');
-    expect(roleStyle('template').borderWidth).toBeUndefined();
+    expect(roleStyle('system').backgroundColor).toBe('#f4f4f5');
+    expect(roleStyle('system').color).toBe('#111');
+    expect(roleStyle('system').borderWidth).toBeUndefined();
   });
 
   it('T-MP1-4 头部点按走 onToggle(turnId)；轮卡不再出 ⤢（全屏入口只在二级卡）', () => {

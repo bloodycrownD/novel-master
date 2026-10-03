@@ -87,13 +87,15 @@ describe("T-R1 切轮正确性", () => {
 
   it("真用户输入开新轮，含 tool_result 的 user 消息归 assistant 轮", async () => {
     const turns = await buildPromptPreviewTurnsFromLayout(layout, ctxOf(messages));
+    // 前四轮是合成段（system / workplace / workplace·done / persist-persona），
+    // kind = 各段真实消息 role。
     assert.deepEqual(
       turns.map((turn) => turn.kind),
       [
-        "template",
-        "template",
-        "template",
-        "template",
+        "system",
+        "user",
+        "assistant",
+        "user",
         "user",
         "assistant",
         "user",
@@ -116,9 +118,11 @@ describe("T-R1 切轮正确性", () => {
   it("workplace 合成 user 段（role user、source template）不误切", async () => {
     const turns = await buildPromptPreviewTurnsFromLayout(layout, ctxOf(messages));
     const workplace = turns.find((turn) => turn.id === "prompt-workplace");
-    assert.equal(workplace?.kind, "template");
+    // kind = 段的真实消息 role（无 template 分类）：workplace 是 user 段、
+    // workplace·done 是 assistant 段。
+    assert.equal(workplace?.kind, "user");
     assert.equal(workplace?.items[0]?.role, "user");
-    assert.equal(turns.find((turn) => turn.id === "prompt-workplace-done")?.kind, "template");
+    assert.equal(turns.find((turn) => turn.id === "prompt-workplace-done")?.kind, "assistant");
   });
 
   it("assembly chat 段带 messageId / seq 供聚合层分组", async () => {
@@ -137,17 +141,25 @@ describe("T-R1 切轮正确性", () => {
     );
   });
 
-  it("段上的 seq 真参与轮 id：message 轮 id 为 turn-${seq}，template 轮不含", async () => {
+  it("段上的 seq 真参与轮 id：message 轮 id 为 turn-${seq}，合成段轮不含", async () => {
     const turns = await buildPromptPreviewTurnsFromLayout(layout, ctxOf(messages));
+    // 合成段轮按 id 前缀识别（kind 已是消息 role，不再可区分来源）。
+    const isSynthetic = (turn: PromptPreviewTurn) =>
+      !turn.id.startsWith("turn-");
     // m1(user) / m2(assistant 首段起算) / m5(user) / m6(assistant)
     assert.deepEqual(
-      turns.filter((turn) => turn.kind !== "template").map((turn) => turn.id),
+      turns.filter((turn) => !isSynthetic(turn)).map((turn) => turn.id),
       ["turn-1", "turn-2", "turn-5", "turn-6"]
     );
-    // template 轮保留段 id 拼法，不带 turn- 前缀
+    // 合成段轮保留段 id 拼法，不带 turn- 前缀；kind = 各段真实消息 role。
     assert.deepEqual(
-      turns.filter((turn) => turn.kind === "template").map((turn) => turn.id),
-      ["system", "prompt-workplace", "prompt-workplace-done", "persist-persona"]
+      turns.filter(isSynthetic).map((turn) => [turn.id, turn.kind]),
+      [
+        ["system", "system"],
+        ["prompt-workplace", "user"],
+        ["prompt-workplace-done", "assistant"],
+        ["persist-persona", "user"],
+      ]
     );
     // assistant 轮内跨了 m2/m3/m4，id 只取首段 seq，轮内段 id 仍是 chat-mN-K
     const assistantTurn = turns.find((turn) => turn.id === "turn-2")!;
@@ -206,7 +218,7 @@ describe("T-R2 首轮与空轮守卫", () => {
 });
 
 describe("T-R3 模板段各自独立", () => {
-  it("system / persist / dynamic 各占独立 template 轮，dynamic 排在 chat 之后", async () => {
+  it("system / persist / dynamic 各占独立轮（kind=段消息 role），dynamic 排在 chat 之后", async () => {
     const layout: AgentPromptLayout = {
       system: "sys",
       persistEnabled: true,
@@ -219,24 +231,25 @@ describe("T-R3 模板段各自独立", () => {
     };
     const messages = [message("user", "hi", 1), message("assistant", "yo", 2)];
     const turns = await buildPromptPreviewTurnsFromLayout(layout, ctxOf(messages, ""));
-    // message 轮 id 由 seq 生成（turn-1 / turn-2）；template 轮无 seq，沿用段 id。
+    // message 轮 id 由 seq 生成（turn-1 / turn-2）；合成段轮无 seq，沿用段 id。
     assert.deepEqual(
       turns.map((turn) => turn.id),
       ["system", "persist-persona", "persist-tail", "turn-1", "turn-2", "dynamic-state"]
     );
+    // kind = 各段真实消息 role（无 template 分类）。
     assert.deepEqual(
       turns.map((turn) => turn.kind),
-      ["template", "template", "template", "user", "assistant", "template"]
+      ["system", "user", "assistant", "user", "assistant", "user"]
     );
-    // role 为 user 的 persist / dynamic 合成段仍是 template 轮
+    // role 为 user / assistant 的 persist / dynamic 合成段仍各自独立成轮
     assert.ok(
       turns
-        .filter((turn) => turn.kind === "template")
+        .filter((turn) => !turn.id.startsWith("turn-"))
         .every((turn) => turn.items.length === 1)
     );
     assert.equal(turns[turns.length - 1]!.summary, "state");
     assert.equal(turns[turns.length - 1]!.body, "[state]\ndyn");
-    // template 轮：summaryText = 段标题、metaText = 字数；卡片由该轮唯一段直转（id=段 id）
+    // 合成段轮：summaryText = 段标题、metaText = 字数；卡片由该轮唯一段直转（id=段 id）
     const dynamicTurn = turns[turns.length - 1]!;
     assert.equal(dynamicTurn.summaryText, "state");
     assert.equal(dynamicTurn.metaText, "3 字");
@@ -682,7 +695,7 @@ describe("T-PT5 user 轮真摘要与计数", () => {
   });
 });
 
-describe("T-PT6 template 轮摘要", () => {
+describe("T-PT6 合成段轮摘要", () => {
   it("summaryText = 段标题、metaText = 字数", async () => {
     const layout: AgentPromptLayout = {
       system: "系统提示词正文",
@@ -693,7 +706,7 @@ describe("T-PT6 template 轮摘要", () => {
     const messages: ChatMessage[] = [message("user", "hi", 1)];
     const turns = await buildPromptPreviewTurnsFromLayout(layout, ctxOf(messages, ""));
     const system = turns[0]!;
-    assert.equal(system.kind, "template");
+    assert.equal(system.kind, "system");
     assert.equal(system.summaryText, "system");
     assert.equal(system.metaText, "7 字");
     // 卡片由该轮唯一段直转：id=段 id、role=段标题、body=段 body
@@ -857,7 +870,7 @@ describe("T-PT9 items / body / 切轮零改动回归", () => {
     const turns = await buildPromptPreviewTurnsFromLayout(layout, ctxOf(messages));
     assert.deepEqual(
       turns.map((turn) => turn.kind),
-      ["template", "template", "template", "template", "user", "assistant", "user", "assistant"]
+      ["system", "user", "assistant", "user", "user", "assistant", "user", "assistant"]
     );
     assert.deepEqual(
       turns.map((turn) => turn.id),

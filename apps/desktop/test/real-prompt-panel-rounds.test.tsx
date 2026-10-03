@@ -50,11 +50,11 @@ const { RealPromptPanel } = await import("@/features/chat/RealPromptPanel");
 const TURNS: PromptPreviewTurnDto[] = [
   {
     id: "seg-sys",
-    kind: "template",
+    kind: "system",
     summaryText: "system",
     metaText: "6 字",
     cards: [
-      // template 轮的卡片 id 沿用段 id（core 侧同口径）。
+      // system 轮（system 段）的卡片 id 沿用段 id（core 侧同口径）。
       { type: "text", id: "seg-sys", role: "system", body: "你是写作助手。" },
     ],
   },
@@ -416,7 +416,7 @@ describe("RealPromptPanel 三层结构轮卡列表 + 全屏富文本 Modal (T-R6
     restore();
   });
 
-  it("T-DP1：template / user / assistant 三类轮统一渲染成轮摘要卡（徽标+单行摘要+meta 行+⤢）", async () => {
+  it("T-DP1：system / user / assistant 三类轮统一渲染成轮摘要卡（徽标+单行摘要+meta 行）", async () => {
     const renderer = await mountPanel();
     const root = renderer.root;
 
@@ -429,26 +429,26 @@ describe("RealPromptPanel 三层结构轮卡列表 + 全屏富文本 Modal (T-R6
     );
     assert.deepEqual(
       turnCards.map((node) => node.props["data-turn-kind"]),
-      ["template", "user", "assistant"],
+      ["system", "user", "assistant"],
     );
     // 每张轮卡都同时挂轮壳类与 kind 修饰类（三类统一外壳，只靠色条/徽标区分）
     for (const turnCard of turnCards) {
       assert.ok(hasClass(turnCard, "prompt-turn"), "轮卡应挂 .prompt-turn 轮壳类");
     }
-    assert.equal(classListNodes(root, "prompt-turn--template").length, 1);
+    assert.equal(classListNodes(root, "prompt-turn--system").length, 1);
     assert.equal(classListNodes(root, "prompt-turn--user").length, 1);
     assert.equal(classListNodes(root, "prompt-turn--assistant").length, 1);
 
     // role 徽标 pill：三态走 CSS data-turn-kind（user 主蓝底/assistant 中性底/
-    // template 描边），renderer 不再持有 inline 色（对齐智能体配置 badge 体系）。
+    // system 中性底），renderer 不再持有 inline 色（对齐智能体配置 badge 体系）。
     const roles = classListNodes(root, "prompt-turn-card__role");
     assert.deepEqual(
       roles.map((node) => textOf(node)),
-      ["template", "user", "assistant"],
+      ["system", "user", "assistant"],
     );
     assert.deepEqual(
       roles.map((node) => (node.props as { "data-turn-kind": unknown })["data-turn-kind"]),
-      ["template", "user", "assistant"],
+      ["system", "user", "assistant"],
     );
     for (const role of roles) {
       assert.equal((role.props as { style?: unknown }).style, undefined);
@@ -715,7 +715,7 @@ describe("RealPromptPanel 三层结构轮卡列表 + 全屏富文本 Modal (T-R6
   it("Esc 关闭全屏 Modal；defaultPrevented 的 Esc 不拦截", async () => {
     const renderer = await mountPanel();
     const root = renderer.root;
-    // 点 template 轮的叶子卡开全屏（整卡点按式入口）
+    // 点 system 轮的叶子卡开全屏（整卡点按式入口）
     await expandTurn(root, "seg-sys");
     await act(async () => {
       click(classListNodes(root, "prompt-leaf-card")[0]!);
@@ -1116,8 +1116,9 @@ describe("T-R6 契约层：payload 策略 / CodeEditor readOnly / 样式", () =>
     assert.match(turnCard, /border-radius: 16px;/);
     assert.doesNotMatch(turnCard, /border-left/);
     assert.match(css, /\.prompt-turn-card__role\[data-turn-kind="user"\] \{/);
-    assert.match(css, /\.prompt-turn-card__role\[data-turn-kind="assistant"\] \{/);
-    assert.match(css, /\.prompt-turn-card__role\[data-turn-kind="template"\] \{/);
+    // assistant 与 system 共用中性底（合并选择器：assistant 行尾逗号、system 行接花括号）。
+    assert.match(css, /\.prompt-turn-card__role\[data-turn-kind="assistant"\],/);
+    assert.match(css, /\.prompt-turn-card__role\[data-turn-kind="system"\] \{/);
     // 展开区不再画左竖线（子卡左条负责层级表达）
     const turnBody = css.slice(
       css.indexOf(".prompt-turn-card__body {"),

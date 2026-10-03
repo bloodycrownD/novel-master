@@ -50,9 +50,9 @@ export interface PromptToolGroupCardData {
 /** 文本 / thinking 卡：正文即「发给模型（或预览开关打开时的思考块）」的形态。 */
 export interface PromptTextCardData {
   readonly type: "text" | "thinking";
-  /** 独立命名空间 `card-${message.id}-${blockIndex}`（template 轮卡用段 id）；仅要求轮内唯一。 */
+  /** 独立命名空间 `card-${message.id}-${blockIndex}`（合成段轮卡用段 id）；仅要求轮内唯一。 */
   readonly id: string;
-  /** 展示标签用：user / assistant / template 段名。 */
+  /** 展示标签用（详情标题源）：user / assistant / 合成段名（system、skills、workplace…）。 */
   readonly role: string;
   readonly body: string;
 }
@@ -61,9 +61,13 @@ export interface PromptTextCardData {
 export type PromptTurnCardData = PromptTextCardData | PromptToolGroupCardData;
 
 /**
- * 一轮提示词：模板段各占一轮，真用户输入开新轮，其余消息段归入当前 assistant 轮。
+ * 一轮提示词：合成段各占一轮，真用户输入开新轮，其余消息段归入当前 assistant 轮。
  *
- * - `template` 轮：system / skills 索引 / workplace 双段 / persist-* / dynamic-*，每轮一段；
+ * - 合成段轮（system / skills 索引 / workplace 双段 / persist-* / dynamic-*）：
+ *   **kind 用该段的真实消息 role**（system 段=system、skills/workplace=user、
+ *   workplace·done=assistant、persist 按块自身 role）——不设 template 特殊分类
+ *   （用户拍板：轮卡徽标统一 user/assistant/system 消息标记，不特殊区分
+ *   workplace/persist），每轮一段；
  * - `user` 轮：一条真用户输入消息的全部段（至少一段，无空轮）；
  * - `assistant` 轮：紧跟其后的 assistant 文本 / thinking / tool_call / tool 段，正文在 `body` 一份字符串里。
  *
@@ -73,7 +77,7 @@ export type PromptTurnCardData = PromptTextCardData | PromptToolGroupCardData;
  */
 export interface PromptPreviewTurn {
   readonly id: string;
-  readonly kind: "template" | "user" | "assistant";
+  readonly kind: "system" | "user" | "assistant";
   readonly items: PromptPreviewSegment[];
   readonly summary: string;
   readonly body: string;
@@ -392,7 +396,7 @@ interface TurnGroup {
   readonly kind: PromptPreviewTurn["kind"];
   /** 来源 ChatMessage id（user 组用于判断是否同一条消息的多段）。 */
   readonly messageId: string | undefined;
-  /** 来源 ChatMessage seq：message 段入组时取首段的 seq，template 轮无此值。 */
+  /** 来源 ChatMessage seq：message 段入组时取首段的 seq，合成段轮无此值。 */
   readonly seq?: number;
   readonly items: PromptPreviewSegment[];
   /** 结构化卡片流（从 ctx.messages 的 blocks 重建，与 items 段序无关）。 */
@@ -401,6 +405,11 @@ interface TurnGroup {
   readonly consumedMessageIds: Set<string>;
   /** user 轮附件计数（含 workplace 源附件）。 */
   attachmentCount: number;
+}
+
+/** 合成段的轮 kind：取段的真实消息 role，非三值（异常兜底）归 system。 */
+function syntheticSegmentKind(role: string): TurnGroup["kind"] {
+  return role === "user" || role === "assistant" ? role : "system";
 }
 
 /**
@@ -453,8 +462,9 @@ export async function buildPromptPreviewTurnsFromLayout(
   for (const segment of segments) {
     const item = toPreviewSegment(segment);
     if (segment.source !== "message") {
-      // template 轮：合成段不在 ctx.messages 里，由该轮唯一段的 items 直转一张 text 卡。
-      const group = pushGroup("template");
+      // 合成段轮：不在 ctx.messages 里，由该轮唯一段的 items 直转一张 text 卡；
+      // kind 取该段的真实消息 role（见接口注释——不设 template 特殊分类）。
+      const group = pushGroup(syntheticSegmentKind(segment.role));
       group.items.push(item);
       group.cards.push({
         type: "text",
@@ -462,7 +472,7 @@ export async function buildPromptPreviewTurnsFromLayout(
         role: item.title,
         body: item.body,
       });
-      // 模板段自成一轮，不并入前后 chat 轮：复位 current，断掉「模板段只出现在 chat 前后」的隐式假设。
+      // 合成段自成一轮，不并入前后 chat 轮：复位 current，断掉「合成段只出现在 chat 前后」的隐式假设。
       current = null;
       continue;
     }
@@ -505,11 +515,14 @@ export async function buildPromptPreviewTurnsFromLayout(
   }
 
   return groups.map((group) => {
+    // 分派键用「有无 seq」（消息轮必有 seq）而不是 kind：合成段轮的 kind
+    // 已是段的真实消息 role（可能是 user/assistant），按 kind 分派会把合成轮
+    // 错带进真消息轮的摘要口径。
     const summary =
-      group.kind === "assistant"
-        ? buildAssistantTurnSummary(group.items)
-        : group.items[0]!.title;
-    // message 轮用 `turn-${seq}`（跨段稳定、与段 id 解耦）；template 轮无 seq，沿用段 id。
+      group.seq == null || group.kind !== "assistant"
+        ? group.items[0]!.title
+        : buildAssistantTurnSummary(group.items);
+    // message 轮用 `turn-${seq}`（跨段稳定、与段 id 解耦）；合成段轮无 seq，沿用段 id。
     const id = group.seq != null ? `turn-${group.seq}` : group.items[0]!.id;
     const base = {
       id,
@@ -519,6 +532,15 @@ export async function buildPromptPreviewTurnsFromLayout(
       body: joinTurnBody(group.items),
       cards: group.cards,
     };
+    if (group.seq == null) {
+      // 合成段轮（原 template 分支口径逐字保留）：summaryText = 段标题、metaText = 字数。
+      const charCount = cardCharsOf(group.cards);
+      return {
+        ...base,
+        summaryText: group.items[0]!.title,
+        metaText: `${charCount} 字`,
+      };
+    }
     if (group.kind === "assistant") {
       return {
         ...base,
@@ -526,23 +548,15 @@ export async function buildPromptPreviewTurnsFromLayout(
         metaText: buildAssistantMetaText(group.seq, group.cards),
       };
     }
-    if (group.kind === "user") {
-      const firstCard = group.cards[0];
-      const charCount = cardCharsOf(group.cards);
-      return {
-        ...base,
-        summaryText:
-          firstCard != null && firstCard.type === "text"
-            ? buildUserSummaryText(firstCard)
-            : EMPTY_SUMMARY_TEXT,
-        metaText: buildUserMetaText(group.seq, charCount, group.attachmentCount),
-      };
-    }
+    const firstCard = group.cards[0];
     const charCount = cardCharsOf(group.cards);
     return {
       ...base,
-      summaryText: group.items[0]!.title,
-      metaText: `${charCount} 字`,
+      summaryText:
+        firstCard != null && firstCard.type === "text"
+          ? buildUserSummaryText(firstCard)
+          : EMPTY_SUMMARY_TEXT,
+      metaText: buildUserMetaText(group.seq, charCount, group.attachmentCount),
     };
   });
 }

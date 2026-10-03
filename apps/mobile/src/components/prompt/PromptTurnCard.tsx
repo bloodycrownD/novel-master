@@ -38,16 +38,16 @@ type Nav = NativeStackNavigationProp<RootStackParamList>;
 const DETAIL_TITLE_LIMIT = 24;
 
 /**
- * 轮层 role 徽标（不是消息角色，是「轮」这一层）文案与 badge 配色。
+ * 轮层 role 徽标文案与 badge 配色（轮的消息 role；合成段按真实消息 role 归轮，
+ * 无 template 分类——用户拍板）。
  * 对齐智能体配置 `.config-block-card__badge` 的 pill 形态与对话页
  * 「user=主蓝气泡、assistant=中性」的全局先例：user 主蓝底白字，
- * assistant/template 共用中性灰底正文色（template 是系统段聚合，
- * 卡片内容自带各自 role/段名，轮层徽标不单独做弱化特殊款）。
+ * assistant/system 共用中性灰底正文色。
  */
 const TURN_ROLE_LABEL: Record<PromptPreviewTurn['kind'], string> = {
   user: 'user',
   assistant: 'assistant',
-  template: 'template',
+  system: 'system',
 };
 
 function roleBadgeStyle(

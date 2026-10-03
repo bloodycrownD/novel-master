@@ -3863,19 +3863,15 @@ html[data-theme="dark"] .conversation-tab.is-active {
 
 /* role 徽标三态（对齐 .config-block-card__badge 的 pill 形态 + 对话页
    「user=主蓝气泡、assistant=中性」先例）：user 主蓝底白字、
-   assistant 中性底正文色、template（系统段）描边弱化。 */
+   assistant/system 中性底正文色（合成段按真实消息 role 归轮，无 template 分类）。 */
 .prompt-turn-card__role[data-turn-kind="user"] {
   background: var(--primary);
   color: #fff;
 }
 
-.prompt-turn-card__role[data-turn-kind="assistant"] {
+.prompt-turn-card__role[data-turn-kind="assistant"],
+.prompt-turn-card__role[data-turn-kind="system"] {
   background: var(--surface-muted);
-  color: var(--text);
-}
-
-.prompt-turn-card__role[data-turn-kind="template"] {
-  border: 1px solid var(--border-light);
   color: var(--text);
 }
 
