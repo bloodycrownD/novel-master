@@ -24,6 +24,7 @@ jest.mock('@/theme/ThemeProvider', () => ({
   useTheme: () => ({
     tokens: {
       surface: '#fff',
+      surfaceElevated: '#fff',
       bgSecondary: '#f4f4f5',
       text: '#111',
       textSecondary: '#666',
@@ -187,13 +188,32 @@ describe('PromptTurnCard（T-MP1/T-MP4 mobile）', () => {
     ).toThrow();
     const tree = renderCard({}, true);
     expect(tree.root.findByProps({testID: 'prompt-turn-body'})).toBeTruthy();
-    // 嵌套层次：展开区左缩进 + 2px 左竖线（borderLeftColor 走主题 token）。
+    // 展开区不画左竖线（智能体配置体系：子卡自带 3px 左条表达嵌套）。
     const body = flattenStyle(
       tree.root.findByProps({testID: 'prompt-turn-body'}).props.style,
     );
-    expect(body.borderLeftWidth).toBe(2);
-    expect(body.borderLeftColor).toBe('#ccc');
-    expect(body.paddingStart).toBe(10);
+    expect(body.borderLeftWidth).toBeUndefined();
+    // 外层轮卡 = FormSectionCard 形态：surfaceElevated 底 + 16 圆角浮起。
+    const card = flattenStyle(
+      tree.root.findByProps({testID: 'prompt-turn-card'}).props.style,
+    );
+    expect(card.backgroundColor).toBe('#fff');
+    expect(card.borderRadius).toBe(16);
+  });
+
+  it('T-MP1-5 role 徽标 pill 三态（user 主蓝底白字 / assistant 灰底 / template 描边）', () => {
+    const roleStyle = (kind: 'user' | 'assistant' | 'template') =>
+      flattenStyle(
+        renderCard({kind}).root.findByProps({testID: 'prompt-turn-role'})
+          .props.style,
+      );
+    // mock token：primary=#06c、bgSecondary=#f4f4f5、borderLight=#ddd、textTertiary=#999。
+    expect(roleStyle('user').backgroundColor).toBe('#06c');
+    expect(roleStyle('user').color).toBe('#fff');
+    expect(roleStyle('assistant').backgroundColor).toBe('#f4f4f5');
+    expect(roleStyle('assistant').color).toBe('#111');
+    expect(roleStyle('template').borderWidth).toBe(1);
+    expect(roleStyle('template').color).toBe('#999');
   });
 
   it('T-MP1-4 头部点按走 onToggle(turnId)，⤢ 不触发 toggle', () => {

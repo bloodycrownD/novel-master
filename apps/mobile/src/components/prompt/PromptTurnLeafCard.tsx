@@ -1,6 +1,9 @@
 /**
  * 叶子卡（文本 / thinking）：kind 标签 + 显式 `⤢` 全屏入口 + 限 2 行预览，整卡也可点。
  *
+ * 视觉对齐智能体配置 blockCard 体系（与工具组卡同层同款）：1px 边 +
+ * 左侧 3px primary 粗条 + 10 圆角 + surface 底；kind 标签 pill 化（badge 形态）。
+ *
  * 叶子卡是「就地展开 → 全屏」链路的最末端：预览只给两行，全文走详情页的
  * rich 渲染管线（`FileMarkdownPreview` 的 `renderKind='rich'`，详情页内可切原文档）。
  */
@@ -49,12 +52,19 @@ export function PromptTurnLeafCard({card, turnId}: Props) {
       onPress={handlePress}
       style={[
         styles.card,
-        {backgroundColor: tokens.bgSecondary, borderColor: tokens.borderLight},
+        {
+          backgroundColor: tokens.surface,
+          borderColor: tokens.border,
+          borderLeftColor: tokens.primary,
+        },
       ]}>
       <View style={styles.kindRow}>
         <Text
           testID="prompt-turn-leaf-kind"
-          style={[styles.kind, {color: tokens.textSecondary}]}
+          style={[
+            styles.kind,
+            {color: tokens.textSecondary, borderColor: tokens.borderLight},
+          ]}
           numberOfLines={1}>
           {promptLeafKindLabel(card)}
         </Text>
@@ -79,20 +89,31 @@ export function PromptTurnLeafCard({card, turnId}: Props) {
 }
 
 const styles = StyleSheet.create({
+  // blockCard 形态（智能体配置同款）：1px 边 + 左 3px primary 粗条 + 10 圆角。
   card: {
+    borderWidth: 1,
+    borderLeftWidth: 3,
     borderRadius: 10,
-    borderWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: 11,
-    paddingVertical: 8,
-    gap: 4,
+    padding: 12,
+    gap: 8,
   },
   kindRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 8,
+    minHeight: 24,
   },
-  kind: {fontSize: 10, letterSpacing: 0.5, fontWeight: '600'},
+  // kind 标签 pill（badge 形态）：描边款，thinking 由文案本身区分。
+  kind: {
+    fontSize: 10,
+    fontWeight: '600',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 6,
+    paddingVertical: 1,
+    paddingHorizontal: 6,
+    overflow: 'hidden',
+  },
   iconBtn: {paddingHorizontal: 2},
   icon: {fontSize: 12},
   preview: {fontSize: 12, lineHeight: 17},

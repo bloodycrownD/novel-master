@@ -439,16 +439,20 @@ describe("RealPromptPanel 三层结构轮卡列表 + 全屏富文本 Modal (T-R6
     assert.equal(classListNodes(root, "prompt-turn--user").length, 1);
     assert.equal(classListNodes(root, "prompt-turn--assistant").length, 1);
 
-    // role 徽标：user 青 / assistant 紫 / template 灰（语义色，对齐设计基准 demo）
+    // role 徽标 pill：三态走 CSS data-turn-kind（user 主蓝底/assistant 中性底/
+    // template 描边），renderer 不再持有 inline 色（对齐智能体配置 badge 体系）。
     const roles = classListNodes(root, "prompt-turn-card__role");
     assert.deepEqual(
       roles.map((node) => textOf(node)),
       ["template", "user", "assistant"],
     );
     assert.deepEqual(
-      roles.map((node) => (node.props as { style: { color: string } }).style.color),
-      ["var(--text-tertiary)", "var(--primary)", "var(--text-secondary)"],
+      roles.map((node) => (node.props as { "data-turn-kind": unknown })["data-turn-kind"]),
+      ["template", "user", "assistant"],
     );
+    for (const role of roles) {
+      assert.equal((role.props as { style?: unknown }).style, undefined);
+    }
 
     // summaryText 单行摘要 + metaText 计数行（摘要不二次加工，直接读 core 字段）
     const summaries = classListNodes(root, "prompt-turn-card__summary");
@@ -1130,10 +1134,9 @@ describe("T-R6 契约层：payload 策略 / CodeEditor readOnly / 样式", () =>
     assert.match(code, /expanded\[`\$\{turnId\}::\$\{card\.id\}`\]/);
     // 组卡 toggle 写入侧与读取侧同 key（否则展开态写进去读不出来）
     assert.match(code, /onToggle=\{\(cardId\) => toggleExpanded\(`\$\{turnId\}::\$\{cardId\}`\)\}/);
-    // 轮层 role 徽标三色 + 标签（对齐设计基准 demo）
-    assert.match(code, /user: "var\(--primary\)"/);
-    assert.match(code, /assistant: "var\(--text-secondary\)"/);
-    assert.match(code, /template: "var\(--text-tertiary\)"/);
+    // 轮层 role 徽标三态经 data-turn-kind 下发（CSS 侧消费，无 inline 色 map）
+    assert.match(code, /data-turn-kind=\{turn\.kind\}/);
+    assert.doesNotMatch(code, /TURN_ROLE_COLORS/);
     // 展开区渲染 cards：新组件是纯展示（无跳转回调），不复用聊天页 ToolCall* 组件
     assert.match(code, /PromptToolGroupCard/);
     assert.match(code, /PromptLeafCard/);
@@ -1219,12 +1222,43 @@ describe("T-R6 契约层：payload 策略 / CodeEditor readOnly / 样式", () =>
     assert.match(css, /\.prompt-fullscreen__raw \{/);
     assert.match(css, /\.prompt-leaf-card__fullscreen \{/);
     assert.match(css, /\.prompt-group-cell__fullscreen \{/);
-    // 展开区嵌套左线（mobile 同款层次表达）
+    // 智能体配置卡片体系对齐：子卡/格子 = blockCard 形态（1px 边 + 左 3px primary 粗条），
+    // 轮卡 = surface-elevated 浮起卡（无左条），role 三态走 data-turn-kind pill。
+    const leafCard = css.slice(
+      css.indexOf(".prompt-leaf-card {"),
+      css.indexOf("}", css.indexOf(".prompt-leaf-card {")),
+    );
+    assert.match(leafCard, /border-left-width: 3px;/);
+    assert.match(leafCard, /border-left-color: var\(--primary\);/);
+    assert.match(leafCard, /background: var\(--surface\);/);
+    const toolGroup = css.slice(
+      css.indexOf(".prompt-tool-group {"),
+      css.indexOf("}", css.indexOf(".prompt-tool-group {")),
+    );
+    assert.match(toolGroup, /border-left-width: 3px;/);
+    assert.match(toolGroup, /border-left-color: var\(--primary\);/);
+    const groupCell = css.slice(
+      css.indexOf(".prompt-group-cell {"),
+      css.indexOf("}", css.indexOf(".prompt-group-cell {")),
+    );
+    assert.match(groupCell, /border-left-width: 3px;/);
+    assert.match(groupCell, /background: var\(--surface-muted\);/);
+    const turnCard = css.slice(
+      css.indexOf(".prompt-turn-card {"),
+      css.indexOf("}", css.indexOf(".prompt-turn-card {")),
+    );
+    assert.match(turnCard, /background: var\(--surface-elevated\);/);
+    assert.match(turnCard, /border-radius: 16px;/);
+    assert.doesNotMatch(turnCard, /border-left/);
+    assert.match(css, /\.prompt-turn-card__role\[data-turn-kind="user"\] \{/);
+    assert.match(css, /\.prompt-turn-card__role\[data-turn-kind="assistant"\] \{/);
+    assert.match(css, /\.prompt-turn-card__role\[data-turn-kind="template"\] \{/);
+    // 展开区不再画左竖线（子卡左条负责层级表达）
     const turnBody = css.slice(
       css.indexOf(".prompt-turn-card__body {"),
       css.indexOf("}", css.indexOf(".prompt-turn-card__body {")),
     );
-    assert.match(turnBody, /border-left: 2px solid var\(--border-light\);/);
+    assert.doesNotMatch(turnBody, /border-left/);
     // demo 紫残留清除：格头标签中性描边，全仓不再出现 violet 色板
     assert.doesNotMatch(css, /rgba\(167, ?139, ?250/);
   });

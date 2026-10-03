@@ -1,7 +1,8 @@
 /**
  * 真实提示词查看面板（desktop，prompt-rounds）：三层结构。
  *
- * 1. 收起的**轮摘要卡**——role 徽标（user 青 / assistant 紫 / template 灰）+
+ * 1. 收起的**轮摘要卡**——role 徽标 pill（user 主蓝底白字 / assistant 中性底 /
+ *    template 描边弱化，走 CSS `data-turn-kind` 三态）+
  *    `summaryText` 单行截断 + `metaText` 计数行 + `⤢` 整轮全屏；点头部就地展开/收起；
  * 2. 展开区的**嵌套卡片流**——文本/thinking 叶子卡 + 工具组卡（组头状态点三态，
  *    组内 use/result 两格各可点开全屏）；
@@ -46,14 +47,10 @@ const TURN_ROLE_LABELS: Record<PromptPreviewTurnDto["kind"], string> = {
 };
 
 /**
- * 轮层徽标配色走主题 CSS 变量（对齐对话页「user=主蓝、assistant=中性」的全局先例，
- * 深浅主题自动跟随；inline style 里消费 CSS 变量字符串）。
+ * 轮层徽标三态走 CSS（shell.css `.prompt-turn-card__role[data-turn-kind=…]`，
+ * 对齐智能体配置 badge 形态；深浅主题自动跟随）。kind 值经 span 的
+ * `data-turn-kind` 下发，renderer 不再持有 inline 色。
  */
-const TURN_ROLE_COLORS: Record<PromptPreviewTurnDto["kind"], string> = {
-  user: "var(--primary)",
-  assistant: "var(--text-secondary)",
-  template: "var(--text-tertiary)",
-};
 
 /** 空正文在全屏里的占位文案。 */
 const EMPTY_TEXT_PLACEHOLDER = "（空）";
@@ -179,7 +176,6 @@ export function RealPromptPanel({
       {turns.map((turn) => {
         const open = expanded[turn.id] ?? false;
         const roleLabel = TURN_ROLE_LABELS[turn.kind] ?? turn.kind;
-        const roleColor = TURN_ROLE_COLORS[turn.kind] ?? TURN_ROLE_COLORS.template;
         return (
           <div
             key={turn.id}
@@ -197,7 +193,6 @@ export function RealPromptPanel({
               >
                 <span
                   className="prompt-turn-card__role"
-                  style={{ color: roleColor }}
                   data-turn-kind={turn.kind}
                 >
                   {roleLabel}

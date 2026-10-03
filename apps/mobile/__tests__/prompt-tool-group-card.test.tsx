@@ -308,20 +308,31 @@ describe('PromptToolGroupCard（T-MP2）', () => {
     ).toThrow();
   });
 
-  it('T-J2-2 视觉打磨：格底 surface 浮起、格头标签 textSecondary+600', () => {
+  it('T-J2-2 智能体配置卡片体系：组卡/格子左 3px primary 粗条、格子沉一档', () => {
     const tree = renderGroup(OK_CARD, true);
-    // 格底从组卡 bgSecondary（mock=#f4f4f5）上浮起（mock surface=#fff）。
+    // 组卡 blockCard：1px 边 + 左 3px 主色粗条（mock primary=#06c、border=#ccc）。
+    const group = flattenStyle(
+      tree.root.findByProps({testID: 'prompt-tool-group-card'}).props.style,
+    );
+    expect(group.borderLeftWidth).toBe(3);
+    expect(group.borderLeftColor).toBe('#06c');
+    expect(group.backgroundColor).toBe('#fff');
+    expect(group.borderRadius).toBe(10);
+    // 格子第三层：bgSecondary 沉一档（mock=#f4f4f5）+ 细一号左条。
     const cell = flattenStyle(
       tree.root.findByProps({testID: 'prompt-tool-group-use'}).props.style,
     );
-    expect(cell.backgroundColor).toBe('#fff');
-    // 格头小标签对比度提到 textSecondary（mock=#666）+ 600 字重。
+    expect(cell.backgroundColor).toBe('#f4f4f5');
+    expect(cell.borderLeftWidth).toBe(3);
+    expect(cell.borderLeftColor).toBe('#06c');
+    // 格头小标签 pill：textSecondary（mock=#666）+ 600 字重 + 描边。
     const label = flattenStyle(
       tree.root.findByProps({testID: 'prompt-tool-group-use-label'}).props
         .style,
     );
     expect(label.color).toBe('#666');
     expect(label.fontWeight).toBe('600');
+    expect(label.borderWidth).toBe(1);
   });
 });
 

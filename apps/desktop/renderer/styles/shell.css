@@ -3805,26 +3805,16 @@ html[data-theme="dark"] .conversation-tab.is-active {
 }
 
 /* prompt-rounds：轮摘要卡（三类轮统一形态）。
-   左侧色条按轮 kind 分色：user 青 / assistant 紫 / template 中性灰（语义色，不随主题变）。 */
+   视觉对齐智能体配置外层卡（FormSectionCard 等价）：surface-elevated 底 +
+   16 圆角 + subtle 阴影浮起；role 色在徽标 pill 上（.prompt-turn-card__role），
+   嵌套从属由子卡的 3px primary 左条表达，本层不画左条。 */
 .prompt-turn-card {
-  margin-bottom: 10px;
-  padding: 10px 12px;
-  border-radius: 12px;
+  margin-bottom: 12px;
+  padding: 14px 16px;
+  border-radius: 16px;
   border: 1px solid var(--border-light);
-  border-left-width: 3px;
-  background: var(--surface);
-}
-
-.prompt-turn--user {
-  border-left-color: var(--primary);
-}
-
-.prompt-turn--assistant {
-  border-left-color: var(--text-secondary);
-}
-
-.prompt-turn--template {
-  border-left-color: var(--text-tertiary);
+  background: var(--surface-elevated);
+  box-shadow: var(--shadow-card-subtle);
 }
 
 /* 轮卡头部行：可点的展开区 + ⤢ 全屏 + chevron（flex 排布，等宽摘要区吃掉中间余量）。
@@ -3865,8 +3855,28 @@ html[data-theme="dark"] .conversation-tab.is-active {
 .prompt-turn-card__role {
   flex: none;
   align-self: flex-start;
-  font-size: 12px;
-  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* role 徽标三态（对齐 .config-block-card__badge 的 pill 形态 + 对话页
+   「user=主蓝气泡、assistant=中性」先例）：user 主蓝底白字、
+   assistant 中性底正文色、template（系统段）描边弱化。 */
+.prompt-turn-card__role[data-turn-kind="user"] {
+  background: var(--primary);
+  color: #fff;
+}
+
+.prompt-turn-card__role[data-turn-kind="assistant"] {
+  background: var(--surface-muted);
+  color: var(--text);
+}
+
+.prompt-turn-card__role[data-turn-kind="template"] {
+  border: 1px solid var(--border-light);
+  color: var(--text-tertiary);
 }
 
 /* 摘要单行截断：nowrap + ellipsis + overflow hidden。 */
@@ -3908,14 +3918,13 @@ html[data-theme="dark"] .conversation-tab.is-active {
   color: var(--text);
 }
 
-/* 轮卡展开区：挂载 turn.cards 的有序卡片流。左缩进+竖线画嵌套从属（mobile 同款）。 */
+/* 轮卡展开区：挂载 turn.cards 的有序卡片流。嵌套从属由子卡（叶子/组卡）的
+   3px primary 左条表达，本层只留间距。 */
 .prompt-turn-card__body {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin-top: 10px;
-  padding-left: 10px;
-  border-left: 2px solid var(--border-light);
+  gap: 10px;
+  margin-top: 12px;
 }
 
 .prompt-turn-card .prompt-segment__preview {
@@ -3936,32 +3945,38 @@ html[data-theme="dark"] .conversation-tab.is-active {
 
 /* ---------- 提示词预览三层结构：叶子卡（text / thinking） ---------- */
 
+/* 叶子卡（text / thinking）：blockCard 形态（智能体配置 PersistBlocksCard 同款）——
+   1px 边 + 左 3px primary 粗条 + 10 圆角 + surface 底。 */
 .prompt-leaf-card {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
   width: 100%;
-  padding: 8px 11px;
+  padding: 10px 12px;
   text-align: left;
   font: inherit;
   border-radius: 10px;
-  border: 1px solid var(--border-light);
+  border: 1px solid var(--border);
+  border-left-width: 3px;
+  border-left-color: var(--primary);
   background: var(--surface);
   cursor: pointer;
 }
 
 .prompt-leaf-card:hover {
   border-color: var(--text-tertiary);
+  border-left-color: var(--primary);
 }
 
 .prompt-leaf-card__kind {
   align-self: flex-start;
   padding: 1px 6px;
-  border-radius: 4px;
+  border-radius: 6px;
   border: 1px solid var(--border-light);
   font-size: 10px;
+  font-weight: 600;
   line-height: 1.4;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
 }
 
 /* head 行：kind 徽标居左，显式 ⤢ 全屏入口居右（点击冒泡到整卡 button，同一动作）。 */
@@ -4006,9 +4021,13 @@ html[data-theme="dark"] .conversation-tab.is-active {
 
 /* ---------- 提示词预览三层结构：工具组卡（一次 tool_use 一张） ---------- */
 
+/* 工具组卡：blockCard 形态（与叶子卡同层同款，智能体配置体系）。
+   状态点三色（语义色）：ok 绿 / error 红 / lost 灰；组头 40 高（blockHeader）。 */
 .prompt-tool-group {
   border-radius: 10px;
-  border: 1px solid var(--border-light);
+  border: 1px solid var(--border);
+  border-left-width: 3px;
+  border-left-color: var(--primary);
   background: var(--surface);
 }
 
@@ -4017,7 +4036,9 @@ html[data-theme="dark"] .conversation-tab.is-active {
   align-items: center;
   gap: 8px;
   width: 100%;
-  padding: 9px 11px;
+  min-height: 40px;
+  box-sizing: border-box;
+  padding: 9px 12px;
   border: none;
   border-radius: 10px;
   background: transparent;
@@ -4039,7 +4060,7 @@ html[data-theme="dark"] .conversation-tab.is-active {
 
 .prompt-tool-group__name {
   font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 600;
   color: var(--text);
   overflow: hidden;
@@ -4080,23 +4101,27 @@ html[data-theme="dark"] .conversation-tab.is-active {
   padding: 0 10px 10px;
 }
 
-/* 组卡内的两格：上 tool use（等宽）/ 下 tool result；每格可点开全屏。 */
+/* 组卡内的两格：上 tool use（等宽）/ 下 tool result；每格可点开全屏。
+   第三层：surface-muted 沉一档 + 细一号的左条与圆角（mobile 同款口径）。 */
 .prompt-group-cell {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
   width: 100%;
-  padding: 6px 9px 8px;
+  padding: 8px 10px;
   text-align: left;
   font: inherit;
   border-radius: 8px;
   border: 1px solid var(--border-light);
-  background: var(--background);
+  border-left-width: 3px;
+  border-left-color: var(--primary);
+  background: var(--surface-muted);
   cursor: pointer;
 }
 
 .prompt-group-cell:hover {
   border-color: var(--text-tertiary);
+  border-left-color: var(--primary);
 }
 
 .prompt-group-cell__tag {

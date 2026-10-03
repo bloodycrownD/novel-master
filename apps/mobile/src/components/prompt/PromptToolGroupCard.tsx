@@ -7,9 +7,10 @@
  * 展开态同样**受控**（`expanded` / `onToggle`）：理由同 PromptTurnCard——
  * 轮卡展开区在 FlatList 里会被虚拟化卸载，组件内 state 会丢。
  *
- * 配色：状态点走语义 token（ok 绿 / error 红 / lost 灰）；格底用 surface 从组卡
- * bgSecondary 底上浮起（浅色=白格浮灰底、深色=亮层浮深底），小标签用
- * textSecondary+600 保证灰底上可读。
+ * 视觉对齐智能体配置 blockCard 体系（PersistBlocksCard 同款）：1px 边 +
+ * **左侧 3px primary 粗条** + 10 圆角 + surface 底；组头 40 高（blockHeader），
+ * 工具名 15·600（blockName）；格头标签 pill 化（badge 形态），格子沉一档
+ * （bgSecondary 底）表达最内层。
  */
 import React, {useCallback} from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
@@ -85,7 +86,11 @@ export function PromptToolGroupCard({card, turnId, expanded, onToggle}: Props) {
       testID="prompt-tool-group-card"
       style={[
         styles.card,
-        {backgroundColor: tokens.bgSecondary, borderColor: tokens.borderLight},
+        {
+          backgroundColor: tokens.surface,
+          borderColor: tokens.border,
+          borderLeftColor: tokens.primary,
+        },
       ]}>
       <Pressable
         testID="prompt-tool-group-head"
@@ -140,12 +145,19 @@ export function PromptToolGroupCard({card, turnId, expanded, onToggle}: Props) {
             onPress={openUse}
             style={[
               styles.cell,
-              {backgroundColor: tokens.surface, borderColor: tokens.borderLight},
+              {
+                backgroundColor: tokens.bgSecondary,
+                borderColor: tokens.borderLight,
+                borderLeftColor: tokens.primary,
+              },
             ]}>
             <View style={styles.cellHead}>
               <Text
                 testID="prompt-tool-group-use-label"
-                style={[styles.cellLabel, {color: tokens.textSecondary}]}
+                style={[
+                  styles.cellLabel,
+                  {color: tokens.textSecondary, borderColor: tokens.borderLight},
+                ]}
                 numberOfLines={1}>
                 tool use
               </Text>
@@ -174,12 +186,19 @@ export function PromptToolGroupCard({card, turnId, expanded, onToggle}: Props) {
             onPress={card.result == null ? undefined : openResult}
             style={[
               styles.cell,
-              {backgroundColor: tokens.surface, borderColor: tokens.borderLight},
+              {
+                backgroundColor: tokens.bgSecondary,
+                borderColor: tokens.borderLight,
+                borderLeftColor: tokens.primary,
+              },
             ]}>
             <View style={styles.cellHead}>
               <Text
                 testID="prompt-tool-group-result-label"
-                style={[styles.cellLabel, {color: tokens.textSecondary}]}
+                style={[
+                  styles.cellLabel,
+                  {color: tokens.textSecondary, borderColor: tokens.borderLight},
+                ]}
                 numberOfLines={1}>
                 tool result
               </Text>
@@ -214,16 +233,18 @@ export function PromptToolGroupCard({card, turnId, expanded, onToggle}: Props) {
 }
 
 const styles = StyleSheet.create({
+  // blockCard 形态（智能体配置 PersistBlocksCard 同款）：1px 边 + 左 3px 粗条。
   card: {
+    borderWidth: 1,
+    borderLeftWidth: 3,
     borderRadius: 10,
-    borderWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: 11,
-    paddingVertical: 8,
+    padding: 12,
+    gap: 10,
   },
-  head: {flexDirection: 'row', alignItems: 'center', gap: 8},
+  head: {flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 40},
   headLeft: {flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1},
   dot: {width: 8, height: 8, borderRadius: 4},
-  name: {fontSize: 13, fontWeight: '600', flexShrink: 1},
+  name: {fontSize: 15, fontWeight: '600', flexShrink: 1},
   parallel: {
     fontSize: 10,
     borderWidth: StyleSheet.hairlineWidth,
@@ -233,13 +254,15 @@ const styles = StyleSheet.create({
   },
   statusLabel: {fontSize: 11},
   chevron: {fontSize: 14, marginLeft: 'auto'},
-  cells: {marginTop: 8, gap: 8},
+  cells: {gap: 10},
+  // 格子：第三层，bgSecondary 沉一档 + 细一号的左条与圆角。
   cell: {
     borderWidth: StyleSheet.hairlineWidth,
+    borderLeftWidth: 3,
     borderRadius: 8,
-    paddingHorizontal: 9,
-    paddingVertical: 7,
-    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    gap: 6,
   },
   cellHead: {
     flexDirection: 'row',
@@ -247,7 +270,16 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 8,
   },
-  cellLabel: {fontSize: 10, letterSpacing: 0.5, fontWeight: '600'},
+  // 格头标签 pill（badge 形态）：描边款，色随 textSecondary。
+  cellLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 6,
+    paddingVertical: 1,
+    paddingHorizontal: 6,
+    overflow: 'hidden',
+  },
   iconBtn: {paddingHorizontal: 2},
   icon: {fontSize: 12},
   code: {fontFamily: 'monospace', fontSize: 11, lineHeight: 16},

@@ -2,6 +2,10 @@
  * 轮摘要卡（三层结构第一层，默认收起）：role 徽标 + 单行真摘要 + 单行计数行 +
  * `⤢` 整轮全屏 + chevron；点头部就地展开（受控），展开区挂载 `children` 卡片流。
  *
+ * 视觉对齐智能体配置页（AgentEditor）卡片体系：外层 = FormSectionCard 形态
+ * （surfaceElevated 底 + 大圆角 + 浅阴影浮起）；子卡（组卡/叶子卡）自带
+ * 「1px 边 + 左侧 3px primary 粗条」的 blockCard 形态表达嵌套，本层不再画竖线。
+ *
  * 展开态**受控**（`expanded` / `onToggle`）而不是组件内 state：展开区在 FlatList
  * 里，`removeClippedSubviews` 会把滚出窗口的 item 卸载掉，组件内 state 随之丢失，
  * 用户滚回来会发现展开态被重置。状态提升到 `RealPromptScreen`（屏级
@@ -61,14 +65,33 @@ function fullscreenBodies(cards: ReadonlyArray<PromptTurnCardData>): string {
 }
 
 /**
- * 轮层 role 徽标（不是消息角色，是「轮」这一层）文案。配色走主题 token
- * （对齐对话页「user=主蓝气泡、assistant=中性气泡」的全局先例，深浅主题自动跟随）。
+ * 轮层 role 徽标（不是消息角色，是「轮」这一层）文案与 badge 配色。
+ * 对齐智能体配置 `.config-block-card__badge` 的 pill 形态与对话页
+ * 「user=主蓝气泡、assistant=中性」的全局先例：user 主蓝底白字、
+ * assistant 灰底正文色、template（系统段）描边弱化。深浅主题自动跟随。
  */
 const TURN_ROLE_LABEL: Record<PromptPreviewTurn['kind'], string> = {
   user: 'user',
   assistant: 'assistant',
   template: 'template',
 };
+
+function roleBadgeStyle(
+  tokens: ReturnType<typeof useTheme>['tokens'],
+  kind: PromptPreviewTurn['kind'],
+) {
+  if (kind === 'user') {
+    return {backgroundColor: tokens.primary, color: '#fff'};
+  }
+  if (kind === 'assistant') {
+    return {backgroundColor: tokens.bgSecondary, color: tokens.text};
+  }
+  return {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: tokens.borderLight,
+    color: tokens.textTertiary,
+  };
+}
 
 /** 标题截断口径（详情页 header 与卡片标题同一上限）。 */
 function promptDetailTitle(summary: string): string {
@@ -112,12 +135,7 @@ type Props = {
 export function PromptTurnCard({turn, expanded, onToggle, children}: Props) {
   const {tokens} = useTheme();
 
-  const roleColor =
-    turn.kind === 'user'
-      ? tokens.primary
-      : turn.kind === 'assistant'
-        ? tokens.textSecondary
-        : tokens.textTertiary;
+  const roleBadge = roleBadgeStyle(tokens, turn.kind);
   const openDetail = useOpenPromptDetail();
   const roleLabel = TURN_ROLE_LABEL[turn.kind];
   // 无障碍标签不能只有动作名：多轮多卡时读屏全念同一个词，靠摘要尾巴才区分得开。
@@ -147,7 +165,7 @@ export function PromptTurnCard({turn, expanded, onToggle, children}: Props) {
       style={[
         styles.card,
         {
-          backgroundColor: tokens.surface,
+          backgroundColor: tokens.surfaceElevated,
           borderColor: tokens.borderLight,
         },
       ]}
@@ -162,7 +180,7 @@ export function PromptTurnCard({turn, expanded, onToggle, children}: Props) {
       >
         <Text
           testID="prompt-turn-role"
-          style={[styles.role, {color: roleColor}]}
+          style={[styles.role, roleBadge]}
           numberOfLines={1}>
           {roleLabel}
         </Text>
@@ -194,9 +212,7 @@ export function PromptTurnCard({turn, expanded, onToggle, children}: Props) {
         </Text>
       </Pressable>
       {expanded ? (
-        <View
-          testID="prompt-turn-body"
-          style={[styles.body, {borderLeftColor: tokens.border}]}>
+        <View testID="prompt-turn-body" style={styles.body}>
           {children}
         </View>
       ) : null}
@@ -205,30 +221,37 @@ export function PromptTurnCard({turn, expanded, onToggle, children}: Props) {
 }
 
 const styles = StyleSheet.create({
+  // 外层轮卡 = FormSectionCard 形态（智能体配置卡片体系）：surfaceElevated 底、
+  // 16 圆角、浅阴影 + elevation 浮起；子卡的 3px 左条负责表达嵌套从属。
   card: {
-    marginBottom: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 12,
+    marginBottom: 12,
+    padding: 16,
+    borderRadius: 16,
     borderWidth: StyleSheet.hairlineWidth,
+    shadowColor: '#000',
+    shadowOffset: {width: 0, height: 1},
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    elevation: 2,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
-  role: {fontSize: 12, fontWeight: '700', flexShrink: 0},
+  // role 徽标 pill（对齐 .config-block-card__badge：2×8 内衬 / 6 圆角 / 11·600）。
+  role: {
+    fontSize: 11,
+    fontWeight: '600',
+    paddingVertical: 2,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+    overflow: 'hidden',
+  },
   summary: {fontSize: 13, lineHeight: 18, flexShrink: 1, flexGrow: 1},
   meta: {fontSize: 11, lineHeight: 16, flexShrink: 1, flexGrow: 1},
   iconBtn: {paddingHorizontal: 2},
   icon: {fontSize: 13},
   chevron: {fontSize: 16},
-  body: {
-    marginTop: 8,
-    gap: 8,
-    // 嵌套层次：展开区整体缩进 + 左竖线，把「子卡挂在这轮下」的从属关系画出来
-    // （不靠 bgSecondary 与 surface 的微弱色差硬撑三层灰上灰）。
-    paddingStart: 10,
-    borderLeftWidth: 2,
-  },
+  body: {marginTop: 12, gap: 12},
 });

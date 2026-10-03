@@ -51,6 +51,7 @@ jest.mock('@/theme/ThemeProvider', () => ({
     tokens: {
       background: '#fff',
       surface: '#fff',
+      surfaceElevated: '#fff',
       bgSecondary: '#f4f4f5',
       text: '#111',
       textSecondary: '#666',
