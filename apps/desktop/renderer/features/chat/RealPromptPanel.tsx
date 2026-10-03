@@ -45,13 +45,13 @@ const TURN_ROLE_LABELS: Record<PromptPreviewTurnDto["kind"], string> = {
 };
 
 /**
- * 轮层徽标配色（语义色，不随主题变），对齐设计基准 demo：
- * user 青 / assistant 紫 / template 中性灰。
+ * 轮层徽标配色走主题 CSS 变量（对齐对话页「user=主蓝、assistant=中性」的全局先例，
+ * 深浅主题自动跟随；inline style 里消费 CSS 变量字符串）。
  */
 const TURN_ROLE_COLORS: Record<PromptPreviewTurnDto["kind"], string> = {
-  user: "#2dd4bf",
-  assistant: "#a78bfa",
-  template: "#9ca3af",
+  user: "var(--primary)",
+  assistant: "var(--text-secondary)",
+  template: "var(--text-tertiary)",
 };
 
 /** 空正文在全屏里的占位文案。 */

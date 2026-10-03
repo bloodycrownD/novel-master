@@ -31,6 +31,8 @@ jest.mock('@/theme/ThemeProvider', () => ({
       border: '#ccc',
       borderLight: '#ddd',
       primary: '#06c',
+      success: '#34c759',
+      danger: '#ff3b30',
     },
   }),
 }));
@@ -267,7 +269,7 @@ describe('PromptToolGroupCard（T-MP2）', () => {
     );
     // 状态文案走主题正文色（mock token text=#111），语义色不再染到承载语义的词上。
     expect(statusLabel.color).toBe('#111');
-    // 状态点仍是语义色（装饰性）。
+    // 状态点走主题 token（mock token success=#34c759，深浅主题自动跟随）。
     expect(
       flattenStyle(
         renderGroup(OK_CARD, true).root.findByProps({

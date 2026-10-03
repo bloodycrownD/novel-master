@@ -61,20 +61,13 @@ function fullscreenBodies(cards: ReadonlyArray<PromptTurnCardData>): string {
 }
 
 /**
- * 轮层 role 徽标（不是消息角色，是「轮」这一层）：三类轮的徽标文案与配色
- * 与设计基准 demo 的 turn-head 一致（user 青 / assistant 紫 / template 灰）。
+ * 轮层 role 徽标（不是消息角色，是「轮」这一层）文案。配色走主题 token
+ * （对齐对话页「user=主蓝气泡、assistant=中性气泡」的全局先例，深浅主题自动跟随）。
  */
 const TURN_ROLE_LABEL: Record<PromptPreviewTurn['kind'], string> = {
   user: 'user',
   assistant: 'assistant',
   template: 'template',
-};
-
-/** 徽标配色：user 青、assistant 紫、template 中性灰（不随主题变，语义色）。 */
-const TURN_ROLE_COLOR: Record<PromptPreviewTurn['kind'], string> = {
-  user: '#2dd4bf',
-  assistant: '#a78bfa',
-  template: '#9ca3af',
 };
 
 /** 标题截断口径（详情页 header 与卡片标题同一上限）。 */
@@ -118,9 +111,15 @@ type Props = {
 
 export function PromptTurnCard({turn, expanded, onToggle, children}: Props) {
   const {tokens} = useTheme();
+
+  const roleColor =
+    turn.kind === 'user'
+      ? tokens.primary
+      : turn.kind === 'assistant'
+        ? tokens.textSecondary
+        : tokens.textTertiary;
   const openDetail = useOpenPromptDetail();
   const roleLabel = TURN_ROLE_LABEL[turn.kind];
-  const roleColor = TURN_ROLE_COLOR[turn.kind];
   // 无障碍标签不能只有动作名：多轮多卡时读屏全念同一个词，靠摘要尾巴才区分得开。
   const summaryTail = turn.summaryText.slice(0, 20);
   const headLabel = `${expanded ? '收起' : '展开'}${roleLabel}轮，${summaryTail}`;

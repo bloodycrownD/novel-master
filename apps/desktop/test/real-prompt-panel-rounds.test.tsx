@@ -447,7 +447,7 @@ describe("RealPromptPanel 三层结构轮卡列表 + 全屏富文本 Modal (T-R6
     );
     assert.deepEqual(
       roles.map((node) => (node.props as { style: { color: string } }).style.color),
-      ["#9ca3af", "#2dd4bf", "#a78bfa"],
+      ["var(--text-tertiary)", "var(--primary)", "var(--text-secondary)"],
     );
 
     // summaryText 单行摘要 + metaText 计数行（摘要不二次加工，直接读 core 字段）
@@ -545,7 +545,7 @@ describe("RealPromptPanel 三层结构轮卡列表 + 全屏富文本 Modal (T-R6
           (n) => n.props?.className === "prompt-tool-group__dot",
         )[0]!.props as { style: { background: string } }).style.background,
       ),
-      ["#34c759", "#f87171", "#9ca3af"],
+      ["var(--success)", "var(--danger)", "var(--text-tertiary)"],
     );
     assert.deepEqual(
       groups.map((node) => textOf(node).match(/成功|失败|丢失/)![0]),
@@ -1060,9 +1060,9 @@ describe("T-R6 契约层：payload 策略 / CodeEditor readOnly / 样式", () =>
     // 组卡 toggle 写入侧与读取侧同 key（否则展开态写进去读不出来）
     assert.match(code, /onToggle=\{\(cardId\) => toggleExpanded\(`\$\{turnId\}::\$\{cardId\}`\)\}/);
     // 轮层 role 徽标三色 + 标签（对齐设计基准 demo）
-    assert.match(code, /user: "#2dd4bf"/);
-    assert.match(code, /assistant: "#a78bfa"/);
-    assert.match(code, /template: "#9ca3af"/);
+    assert.match(code, /user: "var\(--primary\)"/);
+    assert.match(code, /assistant: "var\(--text-secondary\)"/);
+    assert.match(code, /template: "var\(--text-tertiary\)"/);
     // 展开区渲染 cards：新组件是纯展示（无跳转回调），不复用聊天页 ToolCall* 组件
     assert.match(code, /PromptToolGroupCard/);
     assert.match(code, /PromptLeafCard/);

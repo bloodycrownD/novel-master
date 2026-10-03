@@ -14,11 +14,19 @@ import type {PromptToolGroupCardData} from '@novel-master/core/prompt';
 import {useOpenPromptDetail, LOST_RESULT_TEXT} from './PromptTurnCard';
 import {useTheme} from '@/theme/ThemeProvider';
 
-const STATUS_COLOR: Record<PromptToolGroupCardData['status'], string> = {
-  ok: '#34c759',
-  error: '#f87171',
-  lost: '#9ca3af',
-};
+/**
+ * 状态点配色走主题 token（成功/危险/中性，对齐 app 工具卡先例 ToolCallCard 的
+ * statusColor 语义色体系，深浅主题自动跟随）；状态文字仍为正文色（见 statusLabel）。
+ */
+const statusDotColor = (
+  tokens: ReturnType<typeof useTheme>['tokens'],
+  status: PromptToolGroupCardData['status'],
+) =>
+  status === 'ok'
+    ? tokens.success
+    : status === 'error'
+      ? tokens.danger
+      : tokens.textTertiary;
 
 /** 状态点旁的状态文案（三态可读，不只靠颜色区分）。 */
 const STATUS_LABEL: Record<PromptToolGroupCardData['status'], string> = {
@@ -77,7 +85,7 @@ export function PromptToolGroupCard({card, turnId, expanded, onToggle}: Props) {
         <View testID="prompt-tool-group-status" style={styles.headLeft}>
           <View
             testID={`prompt-tool-group-dot-${card.status}`}
-            style={[styles.dot, {backgroundColor: STATUS_COLOR[card.status]}]}
+            style={[styles.dot, {backgroundColor: statusDotColor(tokens, card.status)}]}
           />
           <Text
             testID="prompt-tool-group-name"

@@ -3816,15 +3816,15 @@ html[data-theme="dark"] .conversation-tab.is-active {
 }
 
 .prompt-turn--user {
-  border-left-color: #2dd4bf;
+  border-left-color: var(--primary);
 }
 
 .prompt-turn--assistant {
-  border-left-color: #a78bfa;
+  border-left-color: var(--text-secondary);
 }
 
 .prompt-turn--template {
-  border-left-color: #9ca3af;
+  border-left-color: var(--text-tertiary);
 }
 
 /* 轮卡头部行：可点的展开区 + ⤢ 全屏 + chevron（flex 排布，等宽摘要区吃掉中间余量）。
@@ -3962,10 +3962,10 @@ html[data-theme="dark"] .conversation-tab.is-active {
   color: var(--text-tertiary);
 }
 
-/* thinking 卡：kind 徽标染琥珀色，与文本卡区分。 */
+/* thinking 卡：kind 徽标染警示色（主题 warning），与文本卡区分。 */
 .prompt-leaf-card--thinking .prompt-leaf-card__kind {
-  color: #d29922;
-  border-color: rgba(210, 153, 34, 0.35);
+  color: var(--warning);
+  border-color: color-mix(in srgb, var(--warning) 35%, transparent);
 }
 
 .prompt-leaf-card__preview {
