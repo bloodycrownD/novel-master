@@ -72,6 +72,10 @@ import {refreshRuleSnapshotAfterRuleChange} from '../../services/workplace-rule-
 import {toastMessage} from '../../errors/toast-message';
 import {useRuntime} from '../../hooks/useRuntime';
 import {importCharacterCard} from '../../services/vfs-character-card.service';
+import {
+  exportVfsSingleFile,
+  importVfsSingleFile,
+} from '../../services/vfs-single-file.service';
 import {exportVfsZip, importVfsZip} from '../../services/vfs-zip.service';
 import {useTheme} from '../../theme/ThemeProvider';
 import {TemplatePullButton} from '../prompt/TemplatePullButton';
@@ -146,6 +150,55 @@ export type VfsFileManagerProps = {
 
 type PromptState = VfsPromptState;
 
+/* ------------------------------------------------------------------ *
+ * 导入/导出菜单同源常量
+ *
+ * WHY 抽到模块级：行菜单（entityMenuItems）与「更多」菜单（moreMenuItems）
+ * 原本各写一遍字面量，收敛后极易再次漂移。这里一份 items 两处引用，
+ * 分派侧按来源（行菜单 menuPath / more 菜单 currentPath）各自接线。
+ * ------------------------------------------------------------------ */
+
+const IMPORT_MENU_ITEM: SheetMenuItem = {label: '导入', action: 'import'};
+const EXPORT_MENU_ITEM: SheetMenuItem = {label: '导出', action: 'export'};
+
+/** 导入形式选择 sheet 的标题与三项（spec D5 mobile 形态）。 */
+const IMPORT_FORM_SHEET_TITLE = '导入';
+const IMPORT_FORM_SHEET_ITEMS: SheetMenuItem[] = [
+  {label: '单文件', action: 'file'},
+  {label: 'ZIP 包', action: 'zip'},
+  {label: '角色卡', action: 'character-card'},
+];
+
+/** 批量导入（ZIP / 角色卡）的形态：三种导入各自的文案独立，不共用（spec D9）。 */
+type BulkImportKind = 'zip' | 'character-card';
+
+/** 目标目录在确认文案里的写法：根路径说人话，其余带引号原样。 */
+function importTargetLabel(path: string): string {
+  return path === '/' ? '「当前目录（工作区根）」' : `「${path}」`;
+}
+
+/** ZIP 导入：覆盖目标目录下全部文件。 */
+function zipImportConfirmCopy(path: string): string {
+  return `将覆盖目录${importTargetLabel(path)}下的全部文件，同级其他内容不受影响。是否继续？`;
+}
+
+/** 角色卡导入：只覆盖目标目录下的同名角色卡文件（与 ZIP 文案语义不同）。 */
+function characterCardImportConfirmCopy(path: string): string {
+  return `将覆盖目录${importTargetLabel(path)}下的同名角色卡文件，同级其他文件不受影响。是否继续？`;
+}
+
+/** 单文件导入的同名覆盖确认文案（数量来自 core 报的 conflicts 条数）。 */
+function singleFileImportConfirmCopy(conflictCount: number): string {
+  return `目标处已有 ${conflictCount} 个同名文件，覆盖后不可撤销，是否继续？`;
+}
+
+/** 单文件导入成功 toast；非 UTF-8 跳过项非空时明示跳过数（spec D6）。 */
+function singleFileImportToast(skippedBinary: readonly string[]): string {
+  return skippedBinary.length > 0
+    ? `已导入单文件，跳过 ${skippedBinary.length} 个非 UTF-8 文件`
+    : '已导入单文件';
+}
+
 export const VfsFileManager = forwardRef<
   VfsFileManagerHandle,
   VfsFileManagerProps
@@ -184,11 +237,23 @@ export const VfsFileManager = forwardRef<
     Partial<SetDirRuleInput> | undefined
   >();
   const [prompt, setPrompt] = useState<PromptState | null>(null);
+  /**
+   * 导入形式选择 sheet 的目标目录；null = sheet 关闭。
+   * 记的是「目标路径」而不是来源标记：行菜单来源取 menuPath，more 菜单来源取
+   * currentPath，两条分派都在开 sheet 前把目标写进来。
+   */
+  const [importSheetTarget, setImportSheetTarget] = useState<string | null>(
+    null,
+  );
   const [vfsBatchActive, setVfsBatchActive] = useState(false);
   const [vfsBatchSelected, setVfsBatchSelected] = useState<Set<string>>(
     () => new Set(),
   );
-  const [exportingZip, setExportingZip] = useState(false);
+  /**
+   * 导出 in-flight 守卫：ZIP 导出与单文件导出共用一个 boolean，两者互斥，
+   * 防止用户连点重复拉起系统导出面板（spec D7）。
+   */
+  const [exporting, setExporting] = useState(false);
   /** 批量移动：目标目录选择器是否打开 */
   const [movePickerOpen, setMovePickerOpen] = useState(false);
 
@@ -254,6 +319,7 @@ export const VfsFileManager = forwardRef<
     setMoreOpen(false);
     setDirRuleOpen(false);
     setPrompt(null);
+    setImportSheetTarget(null);
     vfsBatchExit();
   }, [vfsBatchExit]);
 
@@ -602,6 +668,8 @@ export const VfsFileManager = forwardRef<
 
   // 无 workplace（非工作区域，如技能目录）时隐藏纳入/目录规则/角色卡/ZIP 导入导出菜单
   // （技能包的导入导出在技能管理页提供）；readOnly 模式下整体置空（无任何入口可打开）。
+  // dir 分支的「导入」「导出」与 more 菜单同源常量；file 分支新增「导出」（同样包在
+  // workplace 门控内——技能详情页不传 workplace，不能在那里泄漏导出入口）。
   const entityMenuItems: SheetMenuItem[] =
     readOnly || !menuRow
       ? []
@@ -609,9 +677,8 @@ export const VfsFileManager = forwardRef<
       ? [
           ...(workplace != null
             ? [
-                {label: '导出 ZIP', action: 'export-zip'},
-                {label: '导入 ZIP', action: 'import-zip'},
-                {label: '导入角色卡', action: 'import-character-card'},
+                EXPORT_MENU_ITEM,
+                IMPORT_MENU_ITEM,
                 {label: '状态变更', action: 'toggle-include'},
               ]
             : []),
@@ -620,7 +687,10 @@ export const VfsFileManager = forwardRef<
         ]
       : [
           ...(workplace != null
-            ? [{label: '状态变更', action: 'toggle-include'}]
+            ? [
+                EXPORT_MENU_ITEM,
+                {label: '状态变更', action: 'toggle-include'},
+              ]
             : []),
           {label: '重命名', action: 'rename'},
           {label: '删除', action: 'delete', danger: true},
@@ -633,13 +703,17 @@ export const VfsFileManager = forwardRef<
         {label: '新建文件', action: 'create-file'},
         ...(workplace != null
           ? [
-              {label: '导入 ZIP', action: 'import-zip'},
-              {label: '导出 ZIP', action: 'export-zip'},
-              {label: '导入角色卡', action: 'import-character-card'},
+              IMPORT_MENU_ITEM,
+              EXPORT_MENU_ITEM,
               {label: '目录规则', action: 'directory-rule'},
             ]
           : []),
       ];
+
+  /** 导入形式 sheet 的 items：readOnly 下必须为空（只读屏不留任何写入口）。 */
+  const importFormSheetItems: SheetMenuItem[] = readOnly
+    ? []
+    : IMPORT_FORM_SHEET_ITEMS;
 
   const openPrompt = (state: PromptState) => {
     setPrompt(state);
@@ -826,16 +900,18 @@ export const VfsFileManager = forwardRef<
         ]);
         return;
       }
-      if (action === 'export-zip') {
-        runExport(menuPath);
+      if (action === 'export') {
+        // dir 行导出 ZIP，file 行导出单文件——同一「导出」按行类型分流
+        // （menuRow 在闭包内有效，见入口守卫时序注释）。
+        if (menuRow.kind === 'file') {
+          runExportFile(menuPath);
+        } else {
+          runExportZip(menuPath);
+        }
         return;
       }
-      if (action === 'import-zip') {
-        runImport('zip', menuPath);
-        return;
-      }
-      if (action === 'import-character-card') {
-        runImport('character-card', menuPath);
+      if (action === 'import') {
+        setImportSheetTarget(menuPath);
         return;
       }
     } catch (error) {
@@ -843,21 +919,23 @@ export const VfsFileManager = forwardRef<
     }
   };
 
-  const zipImportConfirmCopy = (path: string): string => {
-    if (path === '/') {
-      return '将覆盖目录「当前目录（工作区根）」下的全部文件，同级其他内容不受影响。是否继续？';
-    }
-    return `将覆盖目录「${path}」下的全部文件，同级其他内容不受影响。是否继续？`;
-  };
-
-  // 导入 ZIP / 角色卡的共用流程：Alert 确认 → 调对应 service → 刷新列表 → toast。
-  // 目录规则默认开启由 Core 导入链路在事务内统一保证（ensureImportDirRules，
-  // 含任意深度嵌套、已有 rule_off 行不覆盖），UI 层不再补行——旧方案补行发生在
-  // 列表刷新之后且只覆盖一层子目录，会出现「先显示关闭、进出文件夹才变开启」。
-  const runImport = (kind: 'zip' | 'character-card', targetPath: string) => {
+  /**
+   * ZIP / 角色卡导入的共用流程：Alert 确认 → 调对应 service → 刷新列表 → toast。
+   *
+   * 文案三份独立（spec D9）：ZIP 覆盖目标目录全部内容，角色卡只覆盖同名角色卡，
+   * 单文件走 runImportFile 的「同名文件数」确认框（不共用这里的 Alert）。
+   * 目录规则默认开启由 Core 导入链路在事务内统一保证（ensureImportDirRules，
+   * 含任意深度嵌套、已有 rule_off 行不覆盖），UI 层不再补行——旧方案补行发生在
+   * 列表刷新之后且只覆盖一层子目录，会出现「先显示关闭、进出文件夹才变开启」。
+   */
+  const runImport = (kind: BulkImportKind, targetPath: string) => {
     const title = kind === 'zip' ? '导入 ZIP' : '导入角色卡';
     const successToast = kind === 'zip' ? 'ZIP 导入完成' : '已导入角色卡';
-    Alert.alert(title, zipImportConfirmCopy(targetPath), [
+    const confirmCopy =
+      kind === 'zip'
+        ? zipImportConfirmCopy(targetPath)
+        : characterCardImportConfirmCopy(targetPath);
+    Alert.alert(title, confirmCopy, [
       {text: '取消', style: 'cancel'},
       {
         text: '导入',
@@ -887,12 +965,77 @@ export const VfsFileManager = forwardRef<
     ]);
   };
 
-  // 导出 ZIP 的共用流程：exportingZip 守卫 → exportVfsZip → toast → 清状态。
-  const runExport = (targetPath: string) => {
-    if (exportingZip) {
+  /**
+   * 单文件导入：调单文件服务 → 有同名冲突先 Alert 确认（确认走服务挂在结果上的
+   * confirm 闭包，保证写的就是用户看到的那个文件）→ 刷新列表 → toast。
+   * picker 取消静默返回，不弹任何提示。
+   */
+  const runImportFile = async (targetPath: string) => {
+    try {
+      const result = await importVfsSingleFile(runtime, scope, {
+        targetDir: targetPath,
+      });
+      if (result.status === 'cancelled') {
+        return;
+      }
+      if (result.status === 'needs-confirm') {
+        const {conflictCount, confirm} = result;
+        Alert.alert(
+          '导入单文件',
+          singleFileImportConfirmCopy(conflictCount),
+          [
+            {text: '取消', style: 'cancel'},
+            {
+              text: '导入',
+              style: 'destructive',
+              onPress: () => {
+                void (async () => {
+                  try {
+                    const applied = await confirm();
+                    await reloadVfsListOnly();
+                    showToast(singleFileImportToast(applied.skippedBinary));
+                  } catch (err) {
+                    showToast(toastMessage('导入失败', err));
+                  }
+                })();
+              },
+            },
+          ],
+        );
+        return;
+      }
+      await reloadVfsListOnly();
+      showToast(singleFileImportToast(result.skippedBinary));
+    } catch (err) {
+      showToast(toastMessage('导入失败', err));
+    }
+  };
+
+  /** 导入形式 sheet 的分派：三项各自走对应链路（单文件不与批量共用 Alert）。 */
+  const handleImportFormAction = (form: string) => {
+    const target = importSheetTarget;
+    if (target == null) {
       return;
     }
-    setExportingZip(true);
+    if (form === 'file') {
+      void runImportFile(target);
+      return;
+    }
+    if (form === 'zip') {
+      runImport('zip', target);
+      return;
+    }
+    if (form === 'character-card') {
+      runImport('character-card', target);
+    }
+  };
+
+  // 导出 ZIP 的流程：exporting 守卫 → exportVfsZip → toast → 清状态。
+  const runExportZip = (targetPath: string) => {
+    if (exporting) {
+      return;
+    }
+    setExporting(true);
     exportVfsZip(runtime, scope, {directoryPath: targetPath})
       .then(result => {
         if (result === 'saved') {
@@ -900,7 +1043,23 @@ export const VfsFileManager = forwardRef<
         }
       })
       .catch(err => showToast(toastMessage('导出失败', err)))
-      .finally(() => setExportingZip(false));
+      .finally(() => setExporting(false));
+  };
+
+  // 导出单个文件：与 ZIP 共用 exporting 守卫（互斥防重入），另存面板写 utf8。
+  const runExportFile = (logicalPath: string) => {
+    if (exporting) {
+      return;
+    }
+    setExporting(true);
+    exportVfsSingleFile(runtime, scope, logicalPath)
+      .then(result => {
+        if (result === 'saved') {
+          showToast('文件已保存到所选位置');
+        }
+      })
+      .catch(err => showToast(toastMessage('导出失败', err)))
+      .finally(() => setExporting(false));
   };
 
   const handleMoreAction = (action: string) => {
@@ -981,16 +1140,13 @@ export const VfsFileManager = forwardRef<
       })();
       return;
     }
-    if (action === 'import-zip') {
-      runImport('zip', currentPath);
+    if (action === 'import') {
+      setImportSheetTarget(currentPath);
       return;
     }
-    if (action === 'export-zip') {
-      runExport(currentPath);
-      return;
-    }
-    if (action === 'import-character-card') {
-      runImport('character-card', currentPath);
+    if (action === 'export') {
+      // more 菜单只出现在目录列表里，目标恒为当前目录 → ZIP 导出。
+      runExportZip(currentPath);
     }
   };
 
@@ -1193,6 +1349,13 @@ export const VfsFileManager = forwardRef<
         items={moreMenuItems}
         onSelect={handleMoreAction}
         onClose={() => setMoreOpen(false)}
+      />
+      <BottomSheetMenu
+        visible={!readOnly && importSheetTarget != null}
+        title={IMPORT_FORM_SHEET_TITLE}
+        items={importFormSheetItems}
+        onSelect={handleImportFormAction}
+        onClose={() => setImportSheetTarget(null)}
       />
       <DirectoryRuleSheet
         visible={dirRuleOpen}
