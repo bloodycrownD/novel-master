@@ -12,6 +12,8 @@ import {
   relativePathUnderAnchor,
 } from "@/domain/vfs/logic/vfs-batch-path.js";
 import { writeWithRevision } from "@/domain/vfs/logic/write-with-revision.js";
+import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
+import { clearSessionPromptCaches } from "@/service/vfs/logic/clear-session-prompt-caches.js";
 import {
   assertLogicalPathAllowed,
   resolveLogicalPath,
@@ -203,10 +205,16 @@ function exportRelativePath(
 export type DefaultVfsBatchIoServiceOptions = {
   /** @internal 回滚单测专用 */
   readonly testHook?: VfsBatchImportTestHook;
+  /**
+   * session scope 导入事务提交后清空提示词缓存用。
+   * 缺省**不清空**——由工厂负责注入；测试可直接构造 Default 验证旧行为或做故障注入。
+   */
+  readonly sessionKkv?: SessionKkvService;
 };
 
 export class DefaultVfsBatchIoService implements VfsBatchIoService {
   private readonly testHook?: VfsBatchImportTestHook;
+  private readonly sessionKkv?: SessionKkvService;
 
   constructor(
     private readonly conn: TdbcConnection,
@@ -214,6 +222,7 @@ export class DefaultVfsBatchIoService implements VfsBatchIoService {
     options: DefaultVfsBatchIoServiceOptions = {}
   ) {
     this.testHook = options.testHook;
+    this.sessionKkv = options.sessionKkv;
   }
 
   async planBatchIngest(
@@ -396,6 +405,17 @@ export class DefaultVfsBatchIoService implements VfsBatchIoService {
       };
     }
 
+    // 事务成功提交后再对齐提示词缓存；helper 自吞错（best-effort），不影响导入结果。
+    // 口径「有成功写入才清」：上面三条早退（typeConflicts / 冲突未确认 / 分片失败）
+    // 都不清——没写成的东西不该让会话提示词缓存失效。
+    // ⚠️ **有意不补 backfillBaseline**（zip 的段 C 有、这里没有）：批量 ingest 走
+    // `writeWithRevision`，它自带 head 与 revision 对齐（`insertFileSeedingRevision`
+    // 把 head 同步落库），与 zip「整树导入后给历史 message 补 checkpoint 快照」
+    // 是两件事——这里没有需要补的 baseline 写点。
+    if (writtenLogical.length > 0 && this.sessionKkv && scope.kind === "session") {
+      await clearSessionPromptCaches(scope.sessionId, this.sessionKkv);
+    }
+
     return {
       written: writtenLogical,
       skipped: skippedBase,
@@ -404,6 +424,7 @@ export class DefaultVfsBatchIoService implements VfsBatchIoService {
   }
 
   async applyBatchIngestWithWriter(
+    scope: VfsScope,
     targetDir: string,
     plan: BatchIngestPlan,
     options: BatchApplyOptions,
@@ -453,6 +474,14 @@ export class DefaultVfsBatchIoService implements VfsBatchIoService {
         const message = error instanceof Error ? error.message : "write failed";
         failed.push({ path: logical, message });
       }
+    }
+
+    // 与 applyBatchIngest 同一口径：written 非空才清，门闸同款。
+    // 这条链（session + user-vfs-turn 统一工具轮）自身不清缓存——vfs write 工具
+    // 反而会 upsert 单条 file_cache，不清 rule_snapshot、不失效 token cache，
+    // 所以「上层已保证一致性」不成立，必须在这里补。
+    if (written.length > 0 && this.sessionKkv && scope.kind === "session") {
+      await clearSessionPromptCaches(scope.sessionId, this.sessionKkv);
     }
 
     return { written, skipped, failed };

@@ -212,6 +212,7 @@ export async function ingestVfsFromHostPaths(
     const vfs = runtime.sessionVfs(scope.projectId, scope.sessionId);
     const writer = createSessionBatchWriter(runtime, scope.sessionId, vfs);
     report = await batch.applyBatchIngestWithWriter(
+      scope,
       targetDir,
       plan,
       applyOptions,
