@@ -872,6 +872,11 @@ describe('chat-conversation 列表视图（第二阶段 wave-1 · T-CL-DIST）',
     expect(check).toMatch(/height:\s*18px/);
     expect(check).toMatch(/border-radius:\s*4px/);
     expect(check).toMatch(/border:\s*1\.5px solid/);
+    // 命中区只能由 ::after 外扩承担——padding/content-box 会把边框底色一起撑成
+    // 37px 大方块（真机视觉回归，2026-10-03 用户反馈实锤），此处钉死不再回潮。
+    expect(check).not.toMatch(/padding:/);
+    expect(check).not.toMatch(/box-sizing:\s*content-box/);
+    expect(rule(css, '.session-row__check::after')).toMatch(/inset:\s*-8px/);
     expect(rule(css, '.session-row__check--on')).toMatch(/var\(--primary/);
     // 批量勾选态描边加粗主色（现网 borderColor:primary + borderWidth:2）
     expect(rule(css, '.session-row--selected')).toMatch(

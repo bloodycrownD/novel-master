@@ -601,9 +601,11 @@ body {
 }
 
 /* BatchCheckbox styles.box：18 见方 / radius4 / 1.5 描边 / mr8，勾上时底色=primary、
-   边框同色；未勾选时描边走 --border、底透明。现网 hitSlop 8 → web 侧 padding 撑到
-   34 见方（18+8×2），让手指不必精确点中那个 18px 小方块。 */
+   边框同色；未勾选时描边走 --border、底透明。RN 的 hitSlop 8 在 web 侧由 ::after
+   伪元素外扩 8px 承担（只扩命中区不扩视觉盒）——不能用 padding：padding 会把
+   边框和底色一起撑大（18+8×2+1.5×2=37px 大方块，视觉即坏）。 */
 .session-row__check {
+  position: relative;
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -611,14 +613,17 @@ body {
   width: 18px;
   height: 18px;
   margin-right: 8px;
-  padding: 8px;
-  box-sizing: content-box;
   border: 1.5px solid var(--border, #e5e5ea);
   border-radius: 4px;
   background: transparent;
   font-size: 11px;
   font-weight: 700;
   color: #fff;
+}
+.session-row__check::after {
+  content: '';
+  position: absolute;
+  inset: -8px;
 }
 .session-row__check--on {
   border-color: var(--primary, #007aff);
