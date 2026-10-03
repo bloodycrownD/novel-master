@@ -278,6 +278,51 @@ describe('PromptToolGroupCard（T-MP2）', () => {
       ).backgroundColor,
     ).toBe('#34c759');
   });
+
+  it('T-MP4-5 每格显式 ⤢ 全屏入口：ok 卡两格都有、悬挂 result 格不出', () => {
+    const ok = renderGroup(OK_CARD, true);
+    // use 格与 result 格各一个显式 ⤢（可发现性：不靠用户猜「格子能点」）。
+    expect(
+      ok.root.findByProps({testID: 'prompt-tool-group-use-fullscreen'}).props
+        .accessibilityLabel,
+    ).toBe('工具入参全屏，read');
+    expect(
+      ok.root.findByProps({testID: 'prompt-tool-group-result-fullscreen'}).props
+        .accessibilityLabel,
+    ).toBe('工具结果全屏，read');
+    // 点 ⤢ 与点整格同一动作（payload 一致）。
+    press(ok, 'prompt-tool-group-use-fullscreen');
+    expect(takePromptTurnDetail()).toEqual({
+      title: 'tool use · read',
+      body: OK_CARD.inputJson,
+      leafId: 'group-tu-1-use',
+    });
+
+    // 悬挂卡：use 格仍有 ⤢，占位 result 格不出（假入口不留）。
+    const lost = renderGroup(LOST_CARD, true);
+    expect(
+      lost.root.findByProps({testID: 'prompt-tool-group-use-fullscreen'}),
+    ).toBeTruthy();
+    expect(() =>
+      lost.root.findByProps({testID: 'prompt-tool-group-result-fullscreen'}),
+    ).toThrow();
+  });
+
+  it('T-J2-2 视觉打磨：格底 surface 浮起、格头标签 textSecondary+600', () => {
+    const tree = renderGroup(OK_CARD, true);
+    // 格底从组卡 bgSecondary（mock=#f4f4f5）上浮起（mock surface=#fff）。
+    const cell = flattenStyle(
+      tree.root.findByProps({testID: 'prompt-tool-group-use'}).props.style,
+    );
+    expect(cell.backgroundColor).toBe('#fff');
+    // 格头小标签对比度提到 textSecondary（mock=#666）+ 600 字重。
+    const label = flattenStyle(
+      tree.root.findByProps({testID: 'prompt-tool-group-use-label'}).props
+        .style,
+    );
+    expect(label.color).toBe('#666');
+    expect(label.fontWeight).toBe('600');
+  });
 });
 
 const LEAF_CARD: PromptTextCardData = {

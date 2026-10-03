@@ -283,6 +283,23 @@ describe('RealPromptScreen 屏级受控展开（T-MP3）', () => {
       leafId: 'card-12-0',
     });
   });
+
+  it('T-MP3-6 叶子卡显式 ⤢ 全屏入口：与整卡点按同一载荷', async () => {
+    const tree = await renderScreen();
+    press(tree, 'prompt-turn-head');
+    // 可发现性：每张叶子卡都有显式 ⤢，不必猜「整卡能点」。
+    expect(hostNodes(tree, 'prompt-turn-leaf-fullscreen')).toHaveLength(2);
+    press(tree, 'prompt-turn-leaf-fullscreen', 0);
+    expect(mockNavigate).toHaveBeenCalledWith('PromptTurnDetail', {
+      title: 'assistant',
+      turnId: TURN.id,
+    });
+    expect(takePromptTurnDetail()).toEqual({
+      title: 'assistant',
+      body: '好的，我来看看。',
+      leafId: 'card-12-0',
+    });
+  });
 });
 
 /**

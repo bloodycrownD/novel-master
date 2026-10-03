@@ -69,6 +69,14 @@ function textsOf(node: unknown): string[] {
   return [];
 }
 
+/** 展平 StyleSheet 数组样式（RN mock 的 StyleSheet.create 是恒等函数）。 */
+function flattenStyle(style: unknown): Record<string, unknown> {
+  if (Array.isArray(style)) {
+    return Object.assign({}, ...style.map(flattenStyle));
+  }
+  return (style ?? {}) as Record<string, unknown>;
+}
+
 const TURN = {
   id: 'turn-12',
   kind: 'assistant' as const,
@@ -179,6 +187,13 @@ describe('PromptTurnCard（T-MP1/T-MP4 mobile）', () => {
     ).toThrow();
     const tree = renderCard({}, true);
     expect(tree.root.findByProps({testID: 'prompt-turn-body'})).toBeTruthy();
+    // 嵌套层次：展开区左缩进 + 2px 左竖线（borderLeftColor 走主题 token）。
+    const body = flattenStyle(
+      tree.root.findByProps({testID: 'prompt-turn-body'}).props.style,
+    );
+    expect(body.borderLeftWidth).toBe(2);
+    expect(body.borderLeftColor).toBe('#ccc');
+    expect(body.paddingStart).toBe(10);
   });
 
   it('T-MP1-4 头部点按走 onToggle(turnId)，⤢ 不触发 toggle', () => {

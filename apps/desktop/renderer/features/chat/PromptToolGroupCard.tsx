@@ -138,6 +138,13 @@ export function PromptToolGroupCard({
             >
               <span className="prompt-group-cell__head">
                 <span className="prompt-group-cell__tag">{leaf.label}</span>
+                {/* 显式全屏入口：lost 格不出（假入口不留）；点击冒泡到整格 button
+                    同一动作（button 不能嵌 button，span 承载视觉）。 */}
+                {leaf.lost ? null : (
+                  <span className="prompt-group-cell__fullscreen" aria-hidden="true">
+                    ⤢
+                  </span>
+                )}
               </span>
               <span
                 className={`prompt-group-cell__body${leaf.code ? " is-code" : ""}`}

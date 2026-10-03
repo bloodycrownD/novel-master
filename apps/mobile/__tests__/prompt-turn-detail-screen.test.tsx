@@ -2,8 +2,9 @@
  * T-R7 / T-MP5（mobile 侧之二）：轮详情屏经模块级 callback 取数渲染正文。
  *
  * 观测面：FileMarkdownPreview 桩收到的 props——纯预览态壳（无 editor 内容、
- * 无保存/切换按钮）、渲染档位固定 rich（跳过 front-matter 与扩展名判定，
- * 直接进 WebView 富文本管线；不做「伪 .md 路径」那条路），path 是
+ * 无保存按钮）、「渲染 / 原文」segmented 两档可切（默认 rich：跳过
+ * front-matter 与扩展名判定直接进 WebView 富文本管线，不做「伪 .md 路径」
+ * 那条路；原文档纯文本铺开），path 是
  * `turn-<turnId>` / `turn-<turnId>-leaf-<leafId>` 稳定伪 key（WebView 靠它重挂载）。
  */
 import React from 'react';
@@ -70,15 +71,23 @@ jest.mock('react-native', () => {
   const mockReact = require('react');
   return {
     Platform: {OS: 'android'},
-    Pressable: ({children}: {children?: React.ReactNode}) =>
-      mockReact.createElement('Pressable', {}, children),
+    // 透传 onPress/testID：segmented 切换用例要真点 tab（T-MP6）。
+    Pressable: ({
+      children,
+      onPress,
+      testID,
+    }: {
+      children?: React.ReactNode;
+      onPress?: () => void;
+      testID?: string;
+    }) => mockReact.createElement('Pressable', {onPress, testID}, children),
     ScrollView: ({children}: {children?: React.ReactNode}) =>
       mockReact.createElement('ScrollView', {}, children),
     StyleSheet: {create: (s: object) => s, hairlineWidth: 1},
     Text: ({children}: {children?: React.ReactNode}) =>
       mockReact.createElement('Text', null, children),
     View: ({children}: {children?: React.ReactNode}) =>
-      mockReact.createElement('View', null, children),
+      mockReact.createElement('View', {}, children),
   };
 });
 
@@ -146,5 +155,24 @@ describe('PromptTurnDetailScreen（T-R7 mobile）', () => {
   it('T-R7-8 路由短标题走 header override', () => {
     renderScreen();
     expect(mockSetStackOverride).toHaveBeenCalledWith({title: '好的，我来看看。'});
+  });
+
+  it('T-MP6 渲染/原文 segmented：默认渲染档，点原文切 txt、点渲染切回 rich', () => {
+    setPromptTurnDetail({title: 'A', body: BODY});
+    const tree = renderScreen();
+    // 初始渲染档（富文本管线）。
+    expect(mockPreviewProps[0]?.renderKind).toBe('rich');
+    // 点「原文」tab：FileMarkdownPreview 收到 txt 档（纯文本铺开）。
+    act(() => {
+      tree.root.findByProps({testID: 'prompt-turn-detail-tab-txt'}).props.onPress();
+    });
+    expect(mockPreviewProps[0]?.renderKind).toBe('txt');
+    // 点「渲染」tab：切回 rich。
+    act(() => {
+      tree.root
+        .findByProps({testID: 'prompt-turn-detail-tab-rich'})
+        .props.onPress();
+    });
+    expect(mockPreviewProps[0]?.renderKind).toBe('rich');
   });
 });

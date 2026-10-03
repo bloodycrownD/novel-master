@@ -1,11 +1,11 @@
 /**
- * 叶子卡（文本 / thinking）：kind 标签 + 限 2 行预览，整卡可点进全屏富文本。
+ * 叶子卡（文本 / thinking）：kind 标签 + 显式 `⤢` 全屏入口 + 限 2 行预览，整卡也可点。
  *
  * 叶子卡是「就地展开 → 全屏」链路的最末端：预览只给两行，全文走详情页的
- * rich 渲染管线（`FileMarkdownPreview` 的 `renderKind='rich'`）。
+ * rich 渲染管线（`FileMarkdownPreview` 的 `renderKind='rich'`，详情页内可切原文档）。
  */
 import React, {useCallback} from 'react';
-import {Pressable, StyleSheet, Text} from 'react-native';
+import {Pressable, StyleSheet, Text, View} from 'react-native';
 import type {PromptTextCardData} from '@novel-master/core/prompt';
 import {useOpenPromptDetail} from './PromptTurnCard';
 import {useTheme} from '@/theme/ThemeProvider';
@@ -27,14 +27,19 @@ export function PromptTurnLeafCard({card, turnId}: Props) {
   const {tokens} = useTheme();
   const openDetail = useOpenPromptDetail();
 
-  const handlePress = useCallback(() => {
-    openDetail({
-      title: promptLeafKindLabel(card),
-      body: card.body,
-      leafId: card.id,
-      turnId,
-    });
-  }, [openDetail, card, turnId]);
+  const handlePress = useCallback(
+    (event?: {stopPropagation?: () => void}) => {
+      // ⤢ 嵌在整卡 Pressable 里：阻止冒泡，否则一次点按触发两次 navigate 推两层栈。
+      event?.stopPropagation?.();
+      openDetail({
+        title: promptLeafKindLabel(card),
+        body: card.body,
+        leafId: card.id,
+        turnId,
+      });
+    },
+    [openDetail, card, turnId],
+  );
 
   return (
     <Pressable
@@ -46,12 +51,23 @@ export function PromptTurnLeafCard({card, turnId}: Props) {
         styles.card,
         {backgroundColor: tokens.bgSecondary, borderColor: tokens.borderLight},
       ]}>
-      <Text
-        testID="prompt-turn-leaf-kind"
-        style={[styles.kind, {color: tokens.textTertiary}]}
-        numberOfLines={1}>
-        {promptLeafKindLabel(card)}
-      </Text>
+      <View style={styles.kindRow}>
+        <Text
+          testID="prompt-turn-leaf-kind"
+          style={[styles.kind, {color: tokens.textSecondary}]}
+          numberOfLines={1}>
+          {promptLeafKindLabel(card)}
+        </Text>
+        <Pressable
+          testID="prompt-turn-leaf-fullscreen"
+          accessibilityRole="button"
+          accessibilityLabel={`${promptLeafKindLabel(card)}全屏`}
+          hitSlop={6}
+          onPress={handlePress}
+          style={styles.iconBtn}>
+          <Text style={[styles.icon, {color: tokens.textTertiary}]}>⤢</Text>
+        </Pressable>
+      </View>
       <Text
         testID="prompt-turn-leaf-preview"
         style={[styles.preview, {color: tokens.textSecondary}]}
@@ -70,6 +86,14 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     gap: 4,
   },
-  kind: {fontSize: 10, letterSpacing: 0.5},
+  kindRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  kind: {fontSize: 10, letterSpacing: 0.5, fontWeight: '600'},
+  iconBtn: {paddingHorizontal: 2},
+  icon: {fontSize: 12},
   preview: {fontSize: 12, lineHeight: 17},
 });

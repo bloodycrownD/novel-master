@@ -5,9 +5,10 @@
  *    `summaryText` 单行截断 + `metaText` 计数行 + `⤢` 整轮全屏；点头部就地展开/收起；
  * 2. 展开区的**嵌套卡片流**——文本/thinking 叶子卡 + 工具组卡（组头状态点三态，
  *    组内 use/result 两格各可点开全屏）；
- * 3. **全屏只读富文本**——复用 `.text-prompt-overlay` / `.prompt-editor-modal` 壳，
- *    正文容器 `.prompt-fullscreen__body` 内跑 `MermaidMarkdown`（只读，不接 onLinkClick；
- *    `CodeEditor` 已从本面板退役）。
+ * 3. **全屏只读正文**——复用 `.text-prompt-overlay` / `.prompt-editor-modal` 壳，
+ *    「渲染 / 原文」两档可切（mobile 详情页 segmented 同款）：渲染档跑
+ *    `MermaidMarkdown`（只读，不接 onLinkClick），原文档纯文本铺开；
+ *    `CodeEditor` 已从本面板退役。
  *
  * 数据是「轮」数组（core `buildPromptPreviewTurnsFromLayout`），`cards` 是唯一正文
  * 载体，`body` / `items` / `summary` 已从 DTO 退役（见 shared/ipc-types.ts 体积策略）。
@@ -82,6 +83,9 @@ export function RealPromptPanel({
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   // 全屏 Modal 打开中的内容（null = 未打开）。
   const [fullscreen, setFullscreen] = useState<FullscreenTarget | null>(null);
+  // 全屏正文档位：渲染（MermaidMarkdown）/ 原文（纯文本铺开）。大段 tool JSON
+  // 在渲染档会被富文本管线吃掉格式，用户需要能切回原文（mobile 详情页同款）。
+  const [fullscreenKind, setFullscreenKind] = useState<"rich" | "txt">("rich");
 
   const load = useCallback(async () => {
     const result = await ipcPromptRealPreview({ projectId, sessionId });
@@ -114,6 +118,7 @@ export function RealPromptPanel({
 
   /** 整轮全屏：cards 逐卡一段富文本（无 `[段名]` 前缀，视觉分隔即可）。 */
   const openTurnFullscreen = useCallback((turn: PromptPreviewTurnDto) => {
+    setFullscreenKind("rich");
     setFullscreen({
       title: `${TURN_ROLE_LABELS[turn.kind] ?? turn.kind} · ${turn.summaryText}`,
       blocks: turn.cards.flatMap(cardBodies).filter((text) => text !== ""),
@@ -122,12 +127,14 @@ export function RealPromptPanel({
 
   /** 叶子卡全屏：该卡正文单份。 */
   const openLeafFullscreen = useCallback((card: PromptTextCardDto) => {
+    setFullscreenKind("rich");
     setFullscreen({ title: promptLeafKindLabel(card), blocks: [card.body] });
   }, []);
 
   /** 组卡某一格全屏：该格正文单份。 */
   const openGroupLeafFullscreen = useCallback(
     (_cardId: string, leaf: ToolGroupLeaf) => {
+      setFullscreenKind("rich");
       setFullscreen({ title: leaf.label, blocks: [leaf.body] });
     },
     [],
@@ -239,10 +246,44 @@ export function RealPromptPanel({
             aria-label={`${fullscreen.title}详情`}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="prompt-fullscreen__title">{fullscreen.title}</div>
+            <div className="prompt-fullscreen__headrow">
+              <div className="prompt-fullscreen__title">{fullscreen.title}</div>
+              <div
+                className="prompt-fullscreen__switch"
+                role="group"
+                aria-label="正文档位"
+              >
+                <button
+                  type="button"
+                  className={`prompt-fullscreen__switch-btn${fullscreenKind === "rich" ? " is-active" : ""}`}
+                  aria-pressed={fullscreenKind === "rich"}
+                  onClick={() => setFullscreenKind("rich")}
+                >
+                  渲染
+                </button>
+                <button
+                  type="button"
+                  className={`prompt-fullscreen__switch-btn${fullscreenKind === "txt" ? " is-active" : ""}`}
+                  aria-pressed={fullscreenKind === "txt"}
+                  onClick={() => setFullscreenKind("txt")}
+                >
+                  原文
+                </button>
+              </div>
+            </div>
             <div className="prompt-fullscreen__body">
               {fullscreen.blocks.length === 0 ? (
                 <p className="prompt-fullscreen__empty">{EMPTY_TEXT_PLACEHOLDER}</p>
+              ) : fullscreenKind === "txt" ? (
+                fullscreen.blocks.map((content, index) => (
+                  // 同一轮里正文可能重复（两格同文），索引参与 key 保证唯一稳定。
+                  <div
+                    key={`raw-${index}-${content.slice(0, 8)}`}
+                    className="prompt-fullscreen__block"
+                  >
+                    <pre className="prompt-fullscreen__raw">{content}</pre>
+                  </div>
+                ))
               ) : (
                 fullscreen.blocks.map((content, index) => (
                   // 同一轮里正文可能重复（两格同文），索引参与 key 保证唯一稳定。

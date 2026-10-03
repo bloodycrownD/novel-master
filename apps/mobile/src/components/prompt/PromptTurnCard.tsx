@@ -194,7 +194,9 @@ export function PromptTurnCard({turn, expanded, onToggle, children}: Props) {
         </Text>
       </Pressable>
       {expanded ? (
-        <View testID="prompt-turn-body" style={styles.body}>
+        <View
+          testID="prompt-turn-body"
+          style={[styles.body, {borderLeftColor: tokens.border}]}>
           {children}
         </View>
       ) : null}
@@ -221,5 +223,12 @@ const styles = StyleSheet.create({
   iconBtn: {paddingHorizontal: 2},
   icon: {fontSize: 13},
   chevron: {fontSize: 16},
-  body: {marginTop: 8, gap: 8},
+  body: {
+    marginTop: 8,
+    gap: 8,
+    // 嵌套层次：展开区整体缩进 + 左竖线，把「子卡挂在这轮下」的从属关系画出来
+    // （不靠 bgSecondary 与 surface 的微弱色差硬撑三层灰上灰）。
+    paddingStart: 10,
+    borderLeftWidth: 2,
+  },
 });

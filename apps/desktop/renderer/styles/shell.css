@@ -3908,12 +3908,14 @@ html[data-theme="dark"] .conversation-tab.is-active {
   color: var(--text);
 }
 
-/* 轮卡展开区：挂载 turn.cards 的有序卡片流。 */
+/* 轮卡展开区：挂载 turn.cards 的有序卡片流。左缩进+竖线画嵌套从属（mobile 同款）。 */
 .prompt-turn-card__body {
   display: flex;
   flex-direction: column;
   gap: 8px;
   margin-top: 10px;
+  padding-left: 10px;
+  border-left: 2px solid var(--border-light);
 }
 
 .prompt-turn-card .prompt-segment__preview {
@@ -3960,6 +3962,27 @@ html[data-theme="dark"] .conversation-tab.is-active {
   font-size: 10px;
   line-height: 1.4;
   color: var(--text-tertiary);
+}
+
+/* head 行：kind 徽标居左，显式 ⤢ 全屏入口居右（点击冒泡到整卡 button，同一动作）。 */
+.prompt-leaf-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+}
+
+.prompt-leaf-card__fullscreen {
+  flex: none;
+  font-size: 12px;
+  line-height: 1;
+  color: var(--text-tertiary);
+  cursor: pointer;
+}
+
+.prompt-leaf-card:hover .prompt-leaf-card__fullscreen {
+  color: var(--text);
 }
 
 /* thinking 卡：kind 徽标染警示色（主题 warning），与文本卡区分。 */
@@ -4080,11 +4103,35 @@ html[data-theme="dark"] .conversation-tab.is-active {
   align-self: flex-start;
   padding: 1px 6px;
   border-radius: 4px;
-  background: rgba(167, 139, 250, 0.13);
+  /* 中性描边款（对齐 .prompt-leaf-card__kind）：token 化时漏改的 demo 紫
+     （violet 色板淡底）在此清除，app 全局无第二彩色 accent。 */
+  border: 1px solid var(--border-light);
+  background: transparent;
   font-size: 10px;
   font-weight: 600;
   line-height: 1.4;
   color: var(--text-secondary);
+}
+
+/* 格头行：tag 居左，显式 ⤢ 全屏入口居右（lost 格不出，假入口不留）。 */
+.prompt-group-cell__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+}
+
+.prompt-group-cell__fullscreen {
+  flex: none;
+  font-size: 12px;
+  line-height: 1;
+  color: var(--text-tertiary);
+  cursor: pointer;
+}
+
+.prompt-group-cell:hover .prompt-group-cell__fullscreen {
+  color: var(--text);
 }
 
 .prompt-group-cell__body {
@@ -4107,7 +4154,7 @@ html[data-theme="dark"] .conversation-tab.is-active {
 
 /* 悬挂 tool_use（result 为 null）：占位文案灰化斜体，槽位保留不隐藏。 */
 .prompt-group-cell.is-lost .prompt-group-cell__tag {
-  background: rgba(156, 163, 175, 0.13);
+  color: var(--text-tertiary);
 }
 
 .prompt-group-cell.is-lost .prompt-group-cell__body {
@@ -5676,17 +5723,54 @@ html[data-theme="dark"] .chat-batch-bar {
   padding-top: 12px;
 }
 
-/* 提示词预览全屏只读：标题 + 富文本正文（MermaidMarkdown）+ 底部关闭条，
-   壳复用 .text-prompt-overlay / .prompt-editor-modal，正文容器自己吃掉剩余高度并滚动。 */
-.prompt-fullscreen__title {
+/* 提示词预览全屏只读：标题行（标题 + 渲染/原文切换）+ 正文（富文本或原文）
+   + 底部关闭条，壳复用 .text-prompt-overlay / .prompt-editor-modal，
+   正文容器自己吃掉剩余高度并滚动。 */
+.prompt-fullscreen__headrow {
   flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   padding-bottom: 10px;
+}
+
+.prompt-fullscreen__title {
+  flex: 1;
+  min-width: 0;
   font-size: 14px;
   font-weight: 600;
   color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* 渲染 / 原文两档切换（对齐 mobile 详情页 segmented 的交互语义）。 */
+.prompt-fullscreen__switch {
+  flex: none;
+  display: flex;
+  gap: 4px;
+  padding: 2px;
+  border-radius: 8px;
+  border: 1px solid var(--border-light);
+}
+
+.prompt-fullscreen__switch-btn {
+  padding: 3px 12px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.prompt-fullscreen__switch-btn.is-active {
+  background: var(--primary);
+  color: #fff;
 }
 
 .prompt-fullscreen__body {
@@ -5706,6 +5790,17 @@ html[data-theme="dark"] .chat-batch-bar {
 
 .prompt-fullscreen__block pre {
   overflow-x: auto;
+}
+
+/* 原文档：逐 block 纯文本铺开（等宽、保留换行），与渲染档互斥。 */
+.prompt-fullscreen__raw {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--text);
 }
 
 .prompt-fullscreen__empty {

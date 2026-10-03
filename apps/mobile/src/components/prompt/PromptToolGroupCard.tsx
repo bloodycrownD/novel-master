@@ -1,12 +1,15 @@
 /**
  * 工具组卡（一次 `tool_use` 一张）：组头「工具名 · 状态点」+ 可选「并行」徽标，
  * 就地展开后是 **一对两格**——左格 tool use（等宽 JSON 预览）、右格 tool result
- * （正文预览 / 悬挂时「未返回结果」占位）。两格各自可点进全屏富文本。
+ * （正文预览 / 悬挂时「未返回结果」占位）。两格各有显式 `⤢` 全屏入口（占位格
+ * 不出 ⤢，对齐「假入口不挂 onPress」），整格也可点。
  *
  * 展开态同样**受控**（`expanded` / `onToggle`）：理由同 PromptTurnCard——
  * 轮卡展开区在 FlatList 里会被虚拟化卸载，组件内 state 会丢。
  *
- * 状态点配色：ok 绿 / error 红 / lost 灰（语义色，不随主题变）。
+ * 配色：状态点走语义 token（ok 绿 / error 红 / lost 灰）；格底用 surface 从组卡
+ * bgSecondary 底上浮起（浅色=白格浮灰底、深色=亮层浮深底），小标签用
+ * textSecondary+600 保证灰底上可读。
  */
 import React, {useCallback} from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
@@ -50,23 +53,32 @@ export function PromptToolGroupCard({card, turnId, expanded, onToggle}: Props) {
     onToggle(card.id);
   }, [onToggle, card.id]);
 
-  const openUse = useCallback(() => {
-    openDetail({
-      title: `tool use · ${card.toolName}`,
-      body: card.inputJson,
-      leafId: `${card.id}-use`,
-      turnId,
-    });
-  }, [openDetail, card.id, card.toolName, card.inputJson, turnId]);
+  const openUse = useCallback(
+    (event?: {stopPropagation?: () => void}) => {
+      // ⤢ 嵌在格子 Pressable 里：阻止冒泡，否则一次点按触发两次 navigate。
+      event?.stopPropagation?.();
+      openDetail({
+        title: `tool use · ${card.toolName}`,
+        body: card.inputJson,
+        leafId: `${card.id}-use`,
+        turnId,
+      });
+    },
+    [openDetail, card.id, card.toolName, card.inputJson, turnId],
+  );
 
-  const openResult = useCallback(() => {
-    openDetail({
-      title: `tool result · ${card.toolName}`,
-      body: card.result?.body ?? '',
-      leafId: `${card.id}-result`,
-      turnId,
-    });
-  }, [openDetail, card.id, card.toolName, card.result, turnId]);
+  const openResult = useCallback(
+    (event?: {stopPropagation?: () => void}) => {
+      event?.stopPropagation?.();
+      openDetail({
+        title: `tool result · ${card.toolName}`,
+        body: card.result?.body ?? '',
+        leafId: `${card.id}-result`,
+        turnId,
+      });
+    },
+    [openDetail, card.id, card.toolName, card.result, turnId],
+  );
 
   return (
     <View
@@ -126,12 +138,27 @@ export function PromptToolGroupCard({card, turnId, expanded, onToggle}: Props) {
             accessibilityRole="button"
             accessibilityLabel={`查看工具入参，${card.toolName}`}
             onPress={openUse}
-            style={[styles.cell, {borderColor: tokens.borderLight}]}>
-            <Text
-              style={[styles.cellLabel, {color: tokens.textTertiary}]}
-              numberOfLines={1}>
-              tool use
-            </Text>
+            style={[
+              styles.cell,
+              {backgroundColor: tokens.surface, borderColor: tokens.borderLight},
+            ]}>
+            <View style={styles.cellHead}>
+              <Text
+                testID="prompt-tool-group-use-label"
+                style={[styles.cellLabel, {color: tokens.textSecondary}]}
+                numberOfLines={1}>
+                tool use
+              </Text>
+              <Pressable
+                testID="prompt-tool-group-use-fullscreen"
+                accessibilityRole="button"
+                accessibilityLabel={`工具入参全屏，${card.toolName}`}
+                hitSlop={6}
+                onPress={openUse}
+                style={styles.iconBtn}>
+                <Text style={[styles.icon, {color: tokens.textTertiary}]}>⤢</Text>
+              </Pressable>
+            </View>
             <Text
               testID="prompt-tool-group-use-preview"
               style={[styles.code, {color: tokens.text}]}
@@ -145,12 +172,31 @@ export function PromptToolGroupCard({card, turnId, expanded, onToggle}: Props) {
             accessibilityLabel={`查看工具结果，${card.toolName}`}
             // 悬挂 use 的占位格不挂 onPress：否则点进去是一份空正文（假入口）。
             onPress={card.result == null ? undefined : openResult}
-            style={[styles.cell, {borderColor: tokens.borderLight}]}>
-            <Text
-              style={[styles.cellLabel, {color: tokens.textTertiary}]}
-              numberOfLines={1}>
-              tool result
-            </Text>
+            style={[
+              styles.cell,
+              {backgroundColor: tokens.surface, borderColor: tokens.borderLight},
+            ]}>
+            <View style={styles.cellHead}>
+              <Text
+                testID="prompt-tool-group-result-label"
+                style={[styles.cellLabel, {color: tokens.textSecondary}]}
+                numberOfLines={1}>
+                tool result
+              </Text>
+              {card.result == null ? null : (
+                <Pressable
+                  testID="prompt-tool-group-result-fullscreen"
+                  accessibilityRole="button"
+                  accessibilityLabel={`工具结果全屏，${card.toolName}`}
+                  hitSlop={6}
+                  onPress={openResult}
+                  style={styles.iconBtn}>
+                  <Text style={[styles.icon, {color: tokens.textTertiary}]}>
+                    ⤢
+                  </Text>
+                </Pressable>
+              )}
+            </View>
             <Text
               testID="prompt-tool-group-result-preview"
               style={[
@@ -195,6 +241,14 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
     gap: 4,
   },
-  cellLabel: {fontSize: 10, letterSpacing: 0.5},
+  cellHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  cellLabel: {fontSize: 10, letterSpacing: 0.5, fontWeight: '600'},
+  iconBtn: {paddingHorizontal: 2},
+  icon: {fontSize: 12},
   code: {fontFamily: 'monospace', fontSize: 11, lineHeight: 16},
 });

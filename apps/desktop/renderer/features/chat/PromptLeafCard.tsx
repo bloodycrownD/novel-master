@@ -38,6 +38,11 @@ export function PromptLeafCard({ card, onOpen }: PromptLeafCardProps) {
     >
       <span className="prompt-leaf-card__head">
         <span className="prompt-leaf-card__kind">{label}</span>
+        {/* 显式全屏入口（aria-hidden：点击冒泡到整卡 button，同一个 onOpen 动作；
+            button 不能嵌 button，span 承载视觉即可）。 */}
+        <span className="prompt-leaf-card__fullscreen" aria-hidden="true">
+          ⤢
+        </span>
       </span>
       <span className="prompt-leaf-card__preview">{card.body}</span>
     </button>
