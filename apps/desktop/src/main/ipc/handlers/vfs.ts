@@ -21,6 +21,9 @@ import type {
   VfsWriteRequest,
   VfsCharacterCardImportRequest,
   VfsCharacterCardImportResult,
+  VfsFileExportRequest,
+  VfsFileExportResult,
+  VfsFilePickResult,
   VfsZipExportResult,
   VfsZipImportResult,
   VfsZipPickResult,
@@ -50,7 +53,9 @@ import {
 } from "../../services/user-vfs-turn-execute.service.js";
 import {
   clearVfsBatchExportStaging,
+  exportVfsFileWithDialog,
   ingestVfsFromHostPaths,
+  pickHostFileWithDialog,
   stageVfsBatchExport,
   startDragExport,
 } from "../../services/vfs-batch.service.js";
@@ -357,6 +362,41 @@ export async function handleVfsCharacterCardImport(
         confirmed: req.confirmed === true,
         directoryPath: req.directoryPath,
       },
+      focusedWindow(),
+    );
+    return { ok: true, data: result };
+  } catch (err) {
+    return { ok: false, error: formatIpcError(err) };
+  }
+}
+
+/**
+ * 弹框选单个本机文件，只回路径：菜单侧单文件导入的入口。
+ *
+ * 与 {@link handleVfsZipPick} 同为 noArg，但**不读字节**——真正的导入走既有
+ * `VFS_BATCH_INGEST_FROM_PATHS`（两段式 + needs_confirm 协议）。这里不做 scope
+ * 解析也无写库动作，故不推 workspaceMutated。
+ */
+export async function handleVfsFilePick(): Promise<IpcResult<VfsFilePickResult>> {
+  try {
+    const path = await pickHostFileWithDialog(focusedWindow());
+    return { ok: true, data: path };
+  } catch (err) {
+    return { ok: false, error: formatIpcError(err) };
+  }
+}
+
+/** 单文件另存导出：无库变更，故不推 workspaceMutated。 */
+export async function handleVfsFileExport(
+  req: VfsFileExportRequest,
+): Promise<IpcResult<VfsFileExportResult>> {
+  try {
+    const rt = await getDesktopRuntime();
+    const scope = resolveVfsScopeFromRequest(req);
+    const result = await exportVfsFileWithDialog(
+      rt,
+      scope,
+      { logicalPath: req.logicalPath },
       focusedWindow(),
     );
     return { ok: true, data: result };

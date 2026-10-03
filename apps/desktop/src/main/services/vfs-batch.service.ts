@@ -16,7 +16,7 @@ import {
   type VfsScope,
 } from "@novel-master/core/vfs";
 import { isUserVfsUnifiedToolTurnEnabled } from "@novel-master/core/feature-flags";
-import { app, nativeImage, type WebContents } from "electron";
+import { app, dialog, nativeImage, type BrowserWindow, type WebContents } from "electron";
 import { randomUUID } from "node:crypto";
 import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
@@ -232,6 +232,87 @@ export async function ingestVfsFromHostPaths(
     report,
     skippedBinary: [...plan.skippedBinary],
   };
+}
+
+/**
+ * 逻辑路径 → 末段文件名（`/a/b.md` → `b.md`；根路径返回 null）。
+ *
+ * 与 `vfs-zip.service.ts` 的 `zipBaseNameFromPath`（:15-22）同款语义，刻意**平移**
+ * 而非 import：那条 import 会让本服务多出一条 main→main 依赖边，在 renderer tsconfig
+ * 下多出一条 TS6307 诊断（棘轮按「新增诊断必须为零」判红）。两处都是几行纯字符串逻辑，
+ * 各自有测试锁住，比多一条依赖边划算。
+ */
+function logicalBaseName(logicalPath: string): string | null {
+  const normalized = logicalPath.replace(/\/+$/, "");
+  if (normalized === "" || normalized === "/") {
+    return null;
+  }
+  const lastSegment = normalized.slice(normalized.lastIndexOf("/") + 1);
+  return lastSegment === "" ? null : lastSegment;
+}
+
+/**
+ * 弹框选择单个本机文件，只回绝对路径（不读字节）。
+ *
+ * ⚠️ **刻意不传 filters**：VFS 内容既不限扩展名（`.md`/`.txt`/`.yaml`…）也不限格式，
+ * 白名单只会把无扩展名文件挡在门外。非 UTF-8 的把关在 core 的
+ * `planBatchIngest`（`skippedBinary`），UI 层明示「跳过 N 个非 UTF-8 文件」——
+ * 选择阶段拦比事后解释更省事（用户仍可自选，错了有 toast）。
+ *
+ * 取消 / 未选任何文件返回 null。
+ */
+export async function pickHostFileWithDialog(
+  parentWindow?: BrowserWindow | null,
+): Promise<string | null> {
+  const win = parentWindow ?? undefined;
+  const dialogOpts = { properties: ["openFile" as const] };
+  const result = win
+    ? await dialog.showOpenDialog(win, dialogOpts)
+    : await dialog.showOpenDialog(dialogOpts);
+  if (result.canceled || result.filePaths.length === 0) {
+    return null;
+  }
+  return result.filePaths[0] ?? null;
+}
+
+/**
+ * 单文件「另存为」导出：plan 单条目 → 校验恰好一条 → 保存框（默认名 = 文件名）→
+ * utf8 写盘。取消保存框返回 `cancelled`。
+ *
+ * ⚠️ `files.length === 1` 的校验是**安全闸**不是可选加固：`planBatchExport` 收到目录
+ * 路径时会递归整棵子树且不报错，只取 `files[0]` 会静默把「导出一个目录」降级成
+ * 「导出该目录下的某个文件」。校验放在 showSaveDialog **之前**，免得误传时先弹框再报错。
+ *
+ * 导出无库变更，故不经 `pushWorkspaceMutated`（调用方无需刷新 Explorer）。
+ */
+export async function exportVfsFileWithDialog(
+  runtime: DesktopNovelMasterRuntime,
+  scope: VfsScope,
+  options: { readonly logicalPath: string },
+  parentWindow?: BrowserWindow | null,
+): Promise<"saved" | "cancelled"> {
+  const batch = createVfsBatchIoService(runtime.conn);
+  const plan = await batch.planBatchExport(scope, [options.logicalPath]);
+  if (plan.files.length !== 1) {
+    throw new Error(
+      `只能导出单个文件（收到 ${plan.files.length} 个条目）：${options.logicalPath}`,
+    );
+  }
+  const file = plan.files[0]!;
+  const base = logicalBaseName(options.logicalPath);
+  if (base == null) {
+    throw new Error(`无法解析导出文件名：${options.logicalPath}`);
+  }
+
+  const win = parentWindow ?? undefined;
+  const result = win
+    ? await dialog.showSaveDialog(win, { defaultPath: base })
+    : await dialog.showSaveDialog({ defaultPath: base });
+  if (result.canceled || result.filePath == null) {
+    return "cancelled";
+  }
+  await writeFile(result.filePath, file.content, "utf8");
+  return "saved";
 }
 
 export type ExportStageResult = {

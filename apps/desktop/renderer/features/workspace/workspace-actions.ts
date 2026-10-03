@@ -4,14 +4,19 @@ import {
   validateVfsEntryName,
 } from "@shared/logic/vfs";
 import type {
+  VfsBatchApplyReportDto,
   VfsScopeRequest,
   WorkplaceSetDirRuleRequest,
 } from "@shared/ipc-types";
 import {
+  ipcVfsBatchIngestFromPaths,
   ipcVfsDelete,
+  ipcVfsFileExport,
+  ipcVfsFilePick,
   ipcVfsMkdir,
   ipcVfsRename,
   ipcVfsWrite,
+  ipcVfsZipExport,
   ipcWorkplaceGetDirRule,
   ipcWorkplaceSetDirRule,
   ipcWorkplaceSetFileRule,
@@ -20,7 +25,10 @@ import {
 import { joinVfsPath } from "@/utils/vfs-path";
 import { entryName } from "./vfs-tree-utils";
 import type { WorkspaceContextTarget } from "./workspace-context";
-import { parentPathForTarget } from "./workspace-context";
+import {
+  parentPathForTarget,
+  zipDirectoryPathForTarget,
+} from "./workspace-context";
 
 /**
  * VFS 动作失败时把 IPC payload（{code,message}）转成终端用户可见的中文文案；
@@ -231,4 +239,129 @@ export function entryLabelForTarget(target: WorkspaceContextTarget): string {
     return "条目";
   }
   return entryName(target.row.path);
+}
+
+/**
+ * 单文件导入的「已应用」结果。
+ *
+ * 在 spec 钉死的 `{status:'applied'; report}` 之外**多带一个** `skippedBinary`：
+ * D6 要求非 UTF-8 被跳过的数量必须明示给用户，而跳过信息只在这一层能看到
+ * （main 侧把非 UTF-8 判掉后不会写库，回不上 VFS）。多带字段对只读
+ * `status`/`report` 的消费方无影响，Step 3 的 App 接线直接拿它出 toast。
+ */
+export type SingleFileImportApplied = {
+  readonly status: "applied";
+  readonly report: VfsBatchApplyReportDto;
+  readonly skippedBinary: readonly string[];
+};
+
+/**
+ * 单文件导入首段：弹框选文件 → 走既有批量 ingest 通道（**未**确认覆盖）。
+ *
+ * 刻意复用 `VFS_BATCH_INGEST_FROM_PATHS` 而非新开一条端到端通道：覆盖确认必须能
+ * 在**不重弹文件选择框**的前提下再提交一次，这是两段式协议的全部价值（needs_confirm
+ * DTO / apply report / skippedBinary toast / pushWorkspaceMutated 全部零改动复用）。
+ *
+ * IPC 失败一律抛出（错误文案由 main 侧给出）：本模块是纯编排，toast 归 Step 3 的
+ * App 接线，不在这里做 UI。
+ */
+export async function startSingleFileImport(
+  scope: VfsScopeRequest,
+  targetDir: string,
+): Promise<
+  | { readonly status: "cancelled" }
+  | {
+      readonly status: "needs-confirm";
+      readonly hostPaths: string[];
+      readonly conflictCount: number;
+    }
+  | SingleFileImportApplied
+> {
+  const picked = await ipcVfsFilePick();
+  if (!picked.ok) {
+    throw new Error(picked.error.message || "选择文件失败");
+  }
+  const hostPath = picked.data;
+  if (hostPath == null) {
+    return { status: "cancelled" };
+  }
+
+  const result = await ipcVfsBatchIngestFromPaths({
+    ...scope,
+    targetDir,
+    hostPaths: [hostPath],
+    overwriteConfirmed: false,
+  });
+  if (!result.ok) {
+    throw new Error(result.error.message || "导入失败");
+  }
+  if (result.data.status === "needs_confirm") {
+    return {
+      status: "needs-confirm",
+      hostPaths: [hostPath],
+      conflictCount: result.data.conflicts.length,
+    };
+  }
+  return {
+    status: "applied",
+    report: result.data.report,
+    skippedBinary: result.data.skippedBinary,
+  };
+}
+
+/** 单文件导入次段：同一通道二次提交（`overwriteConfirmed: true`）。 */
+export async function confirmSingleFileImport(
+  scope: VfsScopeRequest,
+  targetDir: string,
+  hostPaths: string[],
+): Promise<SingleFileImportApplied> {
+  const result = await ipcVfsBatchIngestFromPaths({
+    ...scope,
+    targetDir,
+    hostPaths,
+    overwriteConfirmed: true,
+  });
+  if (!result.ok) {
+    throw new Error(result.error.message || "导入失败");
+  }
+  if (result.data.status !== "applied") {
+    // 已确认覆盖后 core 仍报 needs_confirm 属协议破损；宁可显式失败也不静默当成功。
+    throw new Error("导入未完成");
+  }
+  return {
+    status: "applied",
+    report: result.data.report,
+    skippedBinary: result.data.skippedBinary,
+  };
+}
+
+/**
+ * 菜单侧「导出」分派：文件行走单文件另存（无确认，类型直达），目录 / 空白行走既有
+ * ZIP 导出（子树语义）。
+ *
+ * 目录路径的取法直接复用 `zipDirectoryPathForTarget`（blank → `/`、dir → 其 path）
+ * 而不是在本函数里重写一遍——两处各写一遍 blank/dir 分支迟早漂移。该 helper 对文件
+ * 行返回 null，而文件行已在上面分流，故此处的 `?? "/"` 只是防御。
+ */
+export async function exportWorkspaceTarget(
+  scope: VfsScopeRequest,
+  target: WorkspaceContextTarget,
+): Promise<"saved" | "cancelled"> {
+  if (target.kind === "row" && target.row.kind === "file") {
+    const single = await ipcVfsFileExport({
+      ...scope,
+      logicalPath: target.row.path,
+    });
+    if (!single.ok) {
+      throw new Error(single.error.message || "导出失败");
+    }
+    return single.data;
+  }
+
+  const directoryPath = zipDirectoryPathForTarget(target) ?? "/";
+  const zip = await ipcVfsZipExport({ ...scope, directoryPath });
+  if (!zip.ok) {
+    throw new Error(zip.error.message || "导出失败");
+  }
+  return zip.data;
 }
