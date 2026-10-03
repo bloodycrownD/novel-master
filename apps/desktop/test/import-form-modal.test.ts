@@ -146,8 +146,10 @@ describe("ImportFormModal 导入形式弹窗（源码断言）", () => {
   it("变异自证：只在注释里提锚、Button 上删掉属性，结构断言仍必红", () => {
     // 上一条变异的所有者陷阱：注释里留着锚名骗 includes。这里只删 Button 的属性行，
     // 注释原封不动——锚名还在源码里，纯 includes 会照绿，必须靠属性形态匹配拦下。
+    // 行尾用 \r?\n：仓库 autocrlf 下 Windows 检出的源码是 CRLF，裸 \n 匹配不上
+    // 属性行、变异不生效，本用例会以「Missing expected exception」假红。
     const mutated = source.replace(
-      /\n(\s*)data-import-form-submit\n/,
+      /\r?\n(\s*)data-import-form-submit\r?\n/,
       "\n$1data-other\n",
     );
     assert.ok(
