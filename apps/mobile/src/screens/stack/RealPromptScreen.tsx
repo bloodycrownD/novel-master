@@ -196,12 +196,8 @@ function PromptTurnRow({
               key={card.id}
               card={card}
               turnId={turn.id}
-              // 文件级展开态与组级共用屏级集合：key 前缀 `${card.id}:` 区分。
-              openFilePaths={new Set(
-                [...openGroupIds]
-                  .filter(key => key.startsWith(`${card.id}:`))
-                  .map(key => key.slice(card.id.length + 1)),
-              )}
+              // 文件级展开态共用屏级集合：key=`${card.id}:${path}`，组件内逐行 O(1) 查。
+              openGroupIds={openGroupIds}
               onToggleFile={path => onToggleGroup(`${card.id}:${path}`)}
             />
           );

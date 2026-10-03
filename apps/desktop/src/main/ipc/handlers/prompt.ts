@@ -7,6 +7,7 @@ import {
   resolveSavedModelId,
 } from "@novel-master/core/agent";
 import { savedModelDisplayName } from "@novel-master/core/provider";
+import { formatToolUsePreviewJson } from "@novel-master/core/prompt";
 import type {
   IpcResult,
   PromptAgentMetaResponse,
@@ -45,6 +46,9 @@ export async function handlePromptRealPreview(
                 id: card.id,
                 toolName: card.toolName,
                 inputJson: card.inputJson,
+                // 保结构截大 key 的预览在 main 侧算好下发（renderer 不引
+                // core 运行时——这条 import 会把 zod 等整图拖进沙箱 bundle）。
+                inputPreview: formatToolUsePreviewJson(card.inputJson),
                 result: card.result,
                 status: card.status,
                 parallel: card.parallel,
@@ -172,5 +176,21 @@ export type CoreTextParityCheck = Record<
   >,
   never
 >;
+export type CoreWorkplaceParityCheck = Record<
+  Exclude<
+    keyof import("@novel-master/core/prompt").PromptWorkplaceCardData,
+    keyof import("../../../../shared/ipc-types.js").PromptWorkplaceDto
+  >,
+  never
+>;
+export type CoreWorkplaceFileParityCheck = Record<
+  Exclude<
+    keyof import("@novel-master/core/prompt").PromptWorkplaceFileCardData,
+    keyof import("../../../../shared/ipc-types.js").PromptWorkplaceFileDto
+  >,
+  never
+>;
 export const CORE_GROUP_PARITY_CHECK: CoreGroupParityCheck = {};
 export const CORE_TEXT_PARITY_CHECK: CoreTextParityCheck = {};
+export const CORE_WORKPLACE_PARITY_CHECK: CoreWorkplaceParityCheck = {};
+export const CORE_WORKPLACE_FILE_PARITY_CHECK: CoreWorkplaceFileParityCheck = {};

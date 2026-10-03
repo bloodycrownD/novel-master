@@ -67,7 +67,7 @@ const CARD: PromptWorkplaceCardData = {
 };
 
 function renderCard(
-  openFilePaths: ReadonlySet<string> = new Set<string>(),
+  openGroupIds: ReadonlySet<string> = new Set<string>(),
 ): TestRenderer.ReactTestRenderer {
   let tree!: TestRenderer.ReactTestRenderer;
   act(() => {
@@ -75,7 +75,7 @@ function renderCard(
       <PromptWorkplaceCard
         card={CARD}
         turnId="turn-wt"
-        openFilePaths={openFilePaths}
+        openGroupIds={openGroupIds}
         onToggleFile={mockOnToggleFile as (path: string) => void}
       />,
     );
@@ -121,7 +121,7 @@ describe('PromptWorkplaceCard（T-WP1）', () => {
     expect(mockOnToggleFile).toHaveBeenCalledWith('outline/大纲.md');
 
     // openFilePaths 含该文件 → 预览卡挂载（限 6 行，块内正文）。
-    const expandedTree = renderCard(new Set(['outline/大纲.md']));
+    const expandedTree = renderCard(new Set(['prompt-workplace:outline/大纲.md']));
     const preview =
       expandedTree.root.findByProps({testID: 'prompt-workplace-file-preview'});
     expect(preview.props.accessibilityLabel).toBe(
@@ -144,7 +144,7 @@ describe('PromptWorkplaceCard（T-WP1）', () => {
   });
 
   it('T-WP1-3 点预览卡进全屏：标题=路径、正文=块内正文、leafId 带路径', () => {
-    const tree = renderCard(new Set(['outline/大纲.md']));
+    const tree = renderCard(new Set(['prompt-workplace:outline/大纲.md']));
     act(() => {
       tree.root.findByProps({testID: 'prompt-workplace-file-preview'}).props.onPress();
     });
@@ -160,7 +160,7 @@ describe('PromptWorkplaceCard（T-WP1）', () => {
   });
 
   it('T-WP1-4 智能体配置卡片体系：列表壳灰底+左 3px primary 粗条、预览卡白底浮起', () => {
-    const tree = renderCard(new Set(['outline/大纲.md']));
+    const tree = renderCard(new Set(['prompt-workplace:outline/大纲.md']));
     const flatten = (style: unknown): Record<string, unknown> =>
       Array.isArray(style)
         ? Object.assign({}, ...style.map(flatten))

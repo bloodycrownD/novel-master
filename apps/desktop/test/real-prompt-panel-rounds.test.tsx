@@ -2,22 +2,18 @@
  * T-R6 / T-DP1~T-DP5：desktop 提示词查看「三层结构」UI（prompt-preview-ui-redesign Step6）。
  *
  * 覆盖：
- * - 轮卡列表：三类轮统一形态（role 徽标 + summaryText 单行截断 + metaText 行 + ⤢ 整轮全屏），
+ * - 轮卡列表：轮统一形态（role 徽标 + summaryText 单行截断 + metaText 行），
  *   点头部就地展开/收起（展开区渲染 `turn.cards`）；
- * - 展开区的叶子卡（text / thinking，kind 标签 + 限 2 行预览）与工具组卡
+ * - 展开区的叶子卡（text / thinking，限 6 行预览）与工具组卡
  *   （组头状态点三态 + 可选「并行」徽标 + use/result 两格，悬挂时「未返回结果」占位）；
- * - 全屏 Modal：正文容器 `.prompt-fullscreen__body` 内跑 **MermaidMarkdown**（只读、
- *   不接 onLinkClick）；Esc（defaultPrevented 不拦截）/ 遮罩 / footer 三条关闭路径；
+ * - 全屏 Modal：正文容器 `.prompt-fullscreen__body` 内挂 pre 原文（用户拍板只保留
+ *   原文档，渲染管线退役）；Esc（defaultPrevented 不拦截）/ 遮罩 / footer 三条关闭路径；
  * - 退役字段（`body` / `items`）即便残留在 payload 里也不参与渲染。
  *
  * 范式对齐 fetch-models-modal.test.tsx / chat-search-race-guard.test.tsx：
  * react-alias-hook.mjs 统一根 react 副本，react-test-renderer 真渲面板；
  * IPC 拦在 window.novelMasterDesktop.invoke（ipc client 底层出口）。
- * 两处替身说明：
- * - MermaidMarkdown 经 prompt-turn-mermaid-hook.mjs 重定向到 stub（真组件依赖
- *   documentElement / MutationObserver，node 环境下跑不动），content 断言落在 props 形状上，
- *   MermaidMarkdown 自身行为由 mermaid-markdown.test.tsx 覆盖；
- * - node 环境无 document，Modal 的 Esc 监听用最小 document 桩驱动。
+ * node 环境无 document，Modal 的 Esc 监听用最小 document 桩驱动。
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -36,7 +32,6 @@ const rendererRoot = join(__dirname, "..", "renderer");
 const desktopRoot = join(__dirname, "..");
 
 register(new URL("./react-alias-hook.mjs", import.meta.url));
-register(new URL("./prompt-turn-mermaid-hook.mjs", import.meta.url));
 const { act } = await import("react");
 const { RealPromptPanel } = await import("@/features/chat/RealPromptPanel");
 
@@ -99,6 +94,7 @@ const TURNS: PromptPreviewTurnDto[] = [
         id: "group-call-1",
         toolName: "list_chapters",
         inputJson: '{\n  "limit": 10\n}',
+        inputPreview: '{\n  "limit": 10\n}',
         result: { toolUseId: "call-1", ok: true, body: "第一章 …" },
         status: "ok",
         parallel: false,
@@ -124,6 +120,7 @@ const TURNS_GROUP_STATES: PromptPreviewTurnDto[] = [
         id: "group-ok",
         toolName: "list_chapters",
         inputJson: '{ "limit": 3 }',
+        inputPreview: '{ "limit": 3 }',
         result: { toolUseId: "call-ok", ok: true, body: "目录已返回" },
         status: "ok",
         parallel: true,
@@ -133,6 +130,7 @@ const TURNS_GROUP_STATES: PromptPreviewTurnDto[] = [
         id: "group-error",
         toolName: "read_chapter",
         inputJson: '[tool_use name=read_chapter id=call-err]',
+        inputPreview: '[tool_use name=read_chapter id=call-err]',
         result: { toolUseId: "call-err", ok: false, body: "Error: 章不存在" },
         status: "error",
         parallel: false,
@@ -142,6 +140,7 @@ const TURNS_GROUP_STATES: PromptPreviewTurnDto[] = [
         id: "group-lost",
         toolName: "write_chapter",
         inputJson: '[tool_use name=write_chapter id=call-lost]',
+        inputPreview: '[tool_use name=write_chapter id=call-lost]',
         result: null,
         status: "lost",
         parallel: false,
@@ -167,6 +166,7 @@ const TURNS_FULLSCREEN: PromptPreviewTurnDto[] = [
         id: "group-call-2",
         toolName: "read_chapter",
         inputJson: '[tool_use name=read_chapter id=call-2]',
+        inputPreview: '[tool_use name=read_chapter id=call-2]',
         result: null,
         status: "lost",
         parallel: false,
@@ -253,12 +253,10 @@ function installGlobals(turns: PromptPreviewTurnDto[]): {
     window?: unknown;
     document?: unknown;
     IS_REACT_ACT_ENVIRONMENT?: boolean;
-    __promptTurnMermaidProps?: Record<string, unknown>[];
   };
   const prevWindow = g.window;
   const prevDocument = g.document;
   const prevActEnv = g.IS_REACT_ACT_ENVIRONMENT;
-  const prevMermaidProps = g.__promptTurnMermaidProps;
   const doc = makeDocumentStub();
   g.window = {
     novelMasterDesktop: {
@@ -272,24 +270,14 @@ function installGlobals(turns: PromptPreviewTurnDto[]): {
   };
   g.document = doc;
   g.IS_REACT_ACT_ENVIRONMENT = true;
-  g.__promptTurnMermaidProps = [];
   return {
     doc,
     restore: () => {
       g.window = prevWindow;
       g.document = prevDocument;
       g.IS_REACT_ACT_ENVIRONMENT = prevActEnv;
-      g.__promptTurnMermaidProps = prevMermaidProps;
     },
   };
-}
-
-/** stub 记下的 MermaidMarkdown props 序列（每次渲染 push 一份）。 */
-function mermaidProps(): Record<string, unknown>[] {
-  return (
-    (globalThis as unknown as { __promptTurnMermaidProps?: Record<string, unknown>[] })
-      .__promptTurnMermaidProps ?? []
-  );
 }
 
 /** 挂载面板并等 load 落地。 */
@@ -706,8 +694,7 @@ describe("RealPromptPanel 三层结构轮卡列表 + 全屏富文本 Modal (T-R6
     );
     assert.equal(raws.length, 1);
     assert.equal(textOf(raws[0]!), "先列提纲");
-    // 渲染管线不再参与（Mermaid stub 零渲染）。
-    assert.equal(mermaidProps().length, 0);
+    // 渲染管线已从面板退役（源码契约用例断言 doesNotMatch MermaidMarkdown）。
     // CodeEditor 已从本面板退役
     assert.equal(
       (globalThis as unknown as { __promptTurnCodeEditorProps?: unknown[] })
@@ -1037,7 +1024,7 @@ describe("T-R6 契约层：payload 策略 / CodeEditor readOnly / 样式", () =>
     assert.match(src, /drawSelection: true/);
   });
 
-  it("RealPromptPanel：三层结构源码契约（轮卡 + 组卡/叶子卡 + Modal 跑 MermaidMarkdown）", () => {
+  it("RealPromptPanel：三层结构源码契约（轮卡 + 组卡/叶子卡/workplace 列表 + Modal 固定原文）", () => {
     const src = readFileSync(
       join(rendererRoot, "features", "chat", "RealPromptPanel.tsx"),
       "utf8",

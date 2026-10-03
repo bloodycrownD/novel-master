@@ -11,6 +11,7 @@
   "computeLlmExportZonesFromLayout",
   "expandDynamicMacros",
   "formatPromptLlmInputForCliFromLayout",
+  "formatToolUsePreviewJson",
   "layoutHasWorkplace",
   "messageBodyText",
   "messageBodyTextFromBlocks",

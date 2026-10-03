@@ -930,6 +930,11 @@ export type PromptToolGroupDto = {
   readonly toolName: string;
   /** 美化 JSON（`JSON.stringify(input, null, 2)`）；空 input 退化为 `[tool_use name=… id=…]` 单行。 */
   readonly inputJson: string;
+  /**
+   * 保结构截大 key 的预览形态（main 侧 `formatToolUsePreviewJson` 算好下发，
+   * renderer 只读不引 core 运行时）。全屏正文仍走 `inputJson` 原文。
+   */
+  readonly inputPreview: string;
   readonly result: PromptToolGroupResultDto | null;
   readonly status: PromptToolGroupStatusDto;
   /** 同一消息内多个 `tool_use`（并行调用徽标）。 */

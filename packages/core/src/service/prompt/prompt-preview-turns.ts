@@ -616,6 +616,7 @@ export async function buildPromptPreviewTurnsFromLayout(
  */
 const PREVIEW_STRING_LIMIT = 120;
 const PREVIEW_ARRAY_LIMIT = 6;
+const PREVIEW_OBJECT_KEY_LIMIT = 40;
 const PREVIEW_DEPTH_LIMIT = 4;
 
 function shrinkPreviewValue(value: unknown, depth: number): unknown {
@@ -627,6 +628,11 @@ function shrinkPreviewValue(value: unknown, depth: number): unknown {
     return `${head}…（截断，全文 ${value.length} 字）`;
   }
   if (Array.isArray(value)) {
+    // 深度护栏同样盖住数组（纯数组深嵌套走不到对象分支，缺这道会栈溢出
+    // 后整份原样回吐——恰好是本函数要避免的形态）。
+    if (depth >= PREVIEW_DEPTH_LIMIT) {
+      return "…";
+    }
     const items = value
       .slice(0, PREVIEW_ARRAY_LIMIT)
       .map(item => shrinkPreviewValue(item, depth + 1));
@@ -639,9 +645,15 @@ function shrinkPreviewValue(value: unknown, depth: number): unknown {
     if (depth >= PREVIEW_DEPTH_LIMIT) {
       return "…";
     }
+    // 宽对象同样截断（只截数组不截 key 的话，几万 key 的平铺对象原样铺出
+    // 数百 KB——clamp 只是视觉截，内存与布局照付）。
+    const entries = Object.entries(value);
     const out: Record<string, unknown> = {};
-    for (const [key, item] of Object.entries(value)) {
+    for (const [key, item] of entries.slice(0, PREVIEW_OBJECT_KEY_LIMIT)) {
       out[key] = shrinkPreviewValue(item, depth + 1);
+    }
+    if (entries.length > PREVIEW_OBJECT_KEY_LIMIT) {
+      out[`…另有 ${entries.length - PREVIEW_OBJECT_KEY_LIMIT} 个字段`] = "…";
     }
     return out;
   }

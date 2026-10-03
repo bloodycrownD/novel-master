@@ -4,8 +4,9 @@
  * （正文预览 / 悬挂时「未返回结果」占位）。整格点开全屏原文（无显式 ⤢，
  * 用户拍板「点击就好进入全屏」）。
  *
- * tool use 预览走 core `formatToolUsePreviewJson`（保结构截大 key：超长字符串
- * 值截断、超长数组截项），不直接腰斩 pretty JSON；全屏仍看 `inputJson` 原文。
+ * tool use 预览是 main 侧 `formatToolUsePreviewJson` 算好下发的 DTO 字段
+ * `inputPreview`（保结构截大 key：超长值截断、超长数组截项），不直接腰斩
+ * pretty JSON；全屏仍看 `inputJson` 原文。renderer 不引 core 运行时。
  *
  * 状态点三色（语义色）：ok 绿 / error 红 / lost 灰，三态另配可读文案，
  * 不只靠颜色区分。
@@ -14,7 +15,6 @@
  * `turn.id + 组卡 id`）下发，全屏也只回抛 `onOpenLeaf`，不接任何跳转。
  * 刻意不复用聊天页 `ToolCallGroupCard` ——后者绑死聊天消息 DTO。
  */
-import { formatToolUsePreviewJson } from "@novel-master/core/prompt";
 import type {
   PromptToolGroupDto,
   PromptToolGroupStatusDto,
@@ -55,11 +55,12 @@ export interface ToolGroupLeaf {
   label: string;
   /** 全屏正文；`lost` 时是占位文案。 */
   body: string;
-  /** 格内预览：use 格是保结构截大 key 的 JSON 收缩版，result 格与 body 同源。 */
+  /** 格内预览：use 格是 main 侧算好的保结构截大 key JSON（DTO `inputPreview`），
+   * result 格与 body 同源。renderer 不引 core 运行时。 */
   preview: string;
   /** 悬挂格：预览与全屏都出占位文案，样式走灰化态。 */
   lost: boolean;
-  /** 入参格：等宽字体 + 限 12 行。 */
+  /** 入参格：等宽字体。 */
   code: boolean;
 }
 
@@ -69,7 +70,7 @@ export function toolGroupLeaves(card: PromptToolGroupDto): ToolGroupLeaf[] {
       id: `${card.id}-use`,
       label: "tool use",
       body: card.inputJson,
-      preview: formatToolUsePreviewJson(card.inputJson),
+      preview: card.inputPreview,
       lost: false,
       code: true,
     },

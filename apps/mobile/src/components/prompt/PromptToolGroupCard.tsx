@@ -17,7 +17,7 @@
  * 值截断、超长数组截项），不直接腰斩 pretty JSON——结构可读性优先；全屏仍看
  * `inputJson` 原文。
  */
-import React, {useCallback} from 'react';
+import React, {useCallback, useMemo} from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
 import type {PromptToolGroupCardData} from '@novel-master/core/prompt';
 import {formatToolUsePreviewJson} from '@novel-master/core/prompt';
@@ -58,6 +58,11 @@ type Props = {
 export function PromptToolGroupCard({card, turnId, expanded, onToggle}: Props) {
   const {tokens} = useTheme();
   const openDetail = useOpenPromptDetail();
+  // 解析+收缩是纯函数重活（大 JSON 实测 ~90ms 量级），memo 住防展开态重渲染重跑。
+  const usePreviewJson = useMemo(
+    () => formatToolUsePreviewJson(card.inputJson),
+    [card.inputJson],
+  );
 
   const handleToggle = useCallback(() => {
     onToggle(card.id);
@@ -164,7 +169,7 @@ export function PromptToolGroupCard({card, turnId, expanded, onToggle}: Props) {
               testID="prompt-tool-group-use-preview"
               style={[styles.code, {color: tokens.text}]}
               numberOfLines={24}>
-              {formatToolUsePreviewJson(card.inputJson)}
+              {usePreviewJson}
             </Text>
           </Pressable>
           <Pressable

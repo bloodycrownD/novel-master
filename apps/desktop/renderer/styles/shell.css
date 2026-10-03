@@ -4071,7 +4071,7 @@ html[data-theme="dark"] .conversation-tab.is-active {
   align-self: flex-start;
   padding: 1px 6px;
   border-radius: 4px;
-  /* 中性描边款（对齐 .prompt-leaf-card__kind）：token 化时漏改的 demo 紫
+  /* 中性描边款（对齐 .prompt-leaf-card 的描边款口径）：token 化时漏改的 demo 紫
      （violet 色板淡底）在此清除，app 全局无第二彩色 accent。 */
   border: 1px solid var(--border-light);
   background: transparent;

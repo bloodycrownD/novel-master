@@ -42,7 +42,7 @@ describe("formatToolUsePreviewJson（tool use 格子预览：保结构截大 key
     assert.equal(formatToolUsePreviewJson("not json"), "not json");
   });
 
-  it("超深嵌套折叠为 …（第 4 层起）", () => {
+  it("超深嵌套折叠为 …（第 4 层起，数组与对象同受护栏）", () => {
     const deep = { a: { b: { c: { d: { e: "x".repeat(300) } } } } };
     const out = formatToolUsePreviewJson(JSON.stringify(deep));
     const parsed = JSON.parse(out) as Record<string, unknown>;
@@ -50,5 +50,27 @@ describe("formatToolUsePreviewJson（tool use 格子预览：保结构截大 key
     const b = a.b as Record<string, unknown>;
     const c = b.c as Record<string, unknown>;
     assert.equal(c.d, "…");
+    // 纯数组深嵌套不再绕过深度护栏（此前只挡对象，深数组在 stringify 侧
+    // 就有爆栈风险；60 层已远超护栏且构造安全）。
+    let deepArray: unknown = ["leaf"];
+    for (let i = 0; i < 60; i++) {
+      deepArray = [deepArray];
+    }
+    const arrayOut = formatToolUsePreviewJson(JSON.stringify(deepArray));
+    assert.match(arrayOut, /…/);
+    assert.ok(arrayOut.length < 200, `深数组应折叠而非原样回吐（${arrayOut.length} 字）`);
+  });
+
+  it("宽对象截 key：前 40 个字段 + 「…另有 N 个字段」占位", () => {
+    const wide: Record<string, string> = {};
+    for (let i = 0; i < 50; i++) {
+      wide[`key_${i}`] = `v${i}`;
+    }
+    const out = formatToolUsePreviewJson(JSON.stringify({ wide }));
+    const parsed = JSON.parse(out) as { wide: Record<string, unknown> };
+    const keys = Object.keys(parsed.wide);
+    assert.equal(keys.length, 41);
+    assert.equal(keys[0], "key_0");
+    assert.equal(keys[40], "…另有 10 个字段");
   });
 });

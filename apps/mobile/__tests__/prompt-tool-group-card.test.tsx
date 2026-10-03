@@ -135,7 +135,7 @@ describe('PromptToolGroupCard（T-MP2）', () => {
     expect(tree.root.findByProps({testID: 'prompt-tool-group-dot-ok'})).toBeTruthy();
   });
 
-  it('T-MP2-2 展开出 use/result 两格，预览限 3 行', () => {
+  it('T-MP2-2 展开出 use/result 两格，预览限 24 行', () => {
     const tree = renderGroup(OK_CARD, true);
     const useCell = tree.root.findByProps({testID: 'prompt-tool-group-use'});
     const resultCell = tree.root.findByProps({testID: 'prompt-tool-group-result'});
@@ -366,7 +366,7 @@ describe('PromptTurnLeafCard（T-MP2/T-MP4）', () => {
     takePromptTurnDetail();
   });
 
-  it('T-MP2-6 限 3 行预览、无 kind 小标题（用户拍板：轮层徽标已标 role）', () => {
+  it('T-MP2-6 限 6 行预览、无 kind 小标题（用户拍板：轮层徽标已标 role）', () => {
     let tree!: TestRenderer.ReactTestRenderer;
     act(() => {
       tree = TestRenderer.create(

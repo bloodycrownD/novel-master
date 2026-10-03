@@ -7,7 +7,7 @@
  * 数据源是 core 的 `ctx.workplaceFiles`（`assembleWorkplaceDisplay` 从 session
  * kkv 规则快照源头顺产，不从展示串反解）。
  *
- * 文件级展开态**受控**（`openFilePaths` / `onToggleFile`，key =
+ * 文件级展开态**受控**（`openGroupIds` 前缀 key / `onToggleFile`，key =
  * `${card.id}:${path}` 落在屏级集合——FlatList 虚拟化卸载不丢态）。
  */
 import React, {useCallback} from 'react';
@@ -26,8 +26,9 @@ const DISPLAY_LABEL: Record<PromptWorkplaceCardData['files'][number]['display'],
 type Props = {
   card: PromptWorkplaceCardData;
   turnId: string;
-  /** 展开中的文件路径集合（受控，屏级；key = `${card.id}:${path}` 的 path 段）。 */
-  openFilePaths: ReadonlySet<string>;
+  /** 屏级展开集合原样透传：文件级 key = `${card.id}:${path}` 由组件内逐行
+   * O(1) 查询（免得每次渲染新建过滤 Set，也避免父层在 map 回调里用 hook）。 */
+  openGroupIds: ReadonlySet<string>;
   /** 文件行点按：toggle 该文件的预览卡。 */
   onToggleFile: (path: string) => void;
 };
@@ -35,7 +36,7 @@ type Props = {
 export function PromptWorkplaceCard({
   card,
   turnId,
-  openFilePaths,
+  openGroupIds,
   onToggleFile,
 }: Props) {
   const {tokens} = useTheme();
@@ -66,7 +67,7 @@ export function PromptWorkplaceCard({
       ]}>
       <View testID="prompt-workplace-list" style={styles.list}>
         {card.files.map(file => {
-          const fileOpen = openFilePaths.has(file.path);
+          const fileOpen = openGroupIds.has(`${card.id}:${file.path}`);
           return (
             <View key={file.path} style={styles.fileBlock}>
               {/* 轮 → 文件列表：单行路径 + 展示档（无正文）。 */}
