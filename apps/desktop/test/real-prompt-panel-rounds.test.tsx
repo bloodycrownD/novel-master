@@ -1230,19 +1230,22 @@ describe("T-R6 契约层：payload 策略 / CodeEditor readOnly / 样式", () =>
     );
     assert.match(leafCard, /border-left-width: 3px;/);
     assert.match(leafCard, /border-left-color: var\(--primary\);/);
-    assert.match(leafCard, /background: var\(--surface\);/);
+    // 子卡层沉一档（「灰→白→灰→白」明度交替，对齐智能体页观感）。
+    assert.match(leafCard, /background: var\(--surface-muted\);/);
     const toolGroup = css.slice(
       css.indexOf(".prompt-tool-group {"),
       css.indexOf("}", css.indexOf(".prompt-tool-group {")),
     );
     assert.match(toolGroup, /border-left-width: 3px;/);
     assert.match(toolGroup, /border-left-color: var\(--primary\);/);
+    assert.match(toolGroup, /background: var\(--surface-muted\);/);
     const groupCell = css.slice(
       css.indexOf(".prompt-group-cell {"),
       css.indexOf("}", css.indexOf(".prompt-group-cell {")),
     );
     assert.match(groupCell, /border-left-width: 3px;/);
-    assert.match(groupCell, /background: var\(--surface-muted\);/);
+    // 格子第三层：白底浮起（明度交替的最末一档）。
+    assert.match(groupCell, /background: var\(--surface\);/);
     const turnCard = css.slice(
       css.indexOf(".prompt-turn-card {"),
       css.indexOf("}", css.indexOf(".prompt-turn-card {")),

@@ -8,9 +8,10 @@
  * 轮卡展开区在 FlatList 里会被虚拟化卸载，组件内 state 会丢。
  *
  * 视觉对齐智能体配置 blockCard 体系（PersistBlocksCard 同款）：1px 边 +
- * **左侧 3px primary 粗条** + 10 圆角 + surface 底；组头 40 高（blockHeader），
- * 工具名 15·600（blockName）；格头标签 pill 化（badge 形态），格子沉一档
- * （bgSecondary 底）表达最内层。
+ * **左侧 3px primary 粗条** + 10 圆角；底色走「灰→白→灰→白」明度交替
+ * （对齐智能体页「灰页→白分区卡→灰块→白输入框」的观感规律）：子卡沉一档
+ * （bgSecondary 灰底），组头 40 高（blockHeader）、工具名 15·600（blockName）；
+ * 格子回到白底浮起（最内层）。
  */
 import React, {useCallback} from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
@@ -87,7 +88,7 @@ export function PromptToolGroupCard({card, turnId, expanded, onToggle}: Props) {
       style={[
         styles.card,
         {
-          backgroundColor: tokens.surface,
+          backgroundColor: tokens.bgSecondary,
           borderColor: tokens.border,
           borderLeftColor: tokens.primary,
         },
@@ -146,7 +147,7 @@ export function PromptToolGroupCard({card, turnId, expanded, onToggle}: Props) {
             style={[
               styles.cell,
               {
-                backgroundColor: tokens.bgSecondary,
+                backgroundColor: tokens.surface,
                 borderColor: tokens.borderLight,
                 borderLeftColor: tokens.primary,
               },
@@ -187,7 +188,7 @@ export function PromptToolGroupCard({card, turnId, expanded, onToggle}: Props) {
             style={[
               styles.cell,
               {
-                backgroundColor: tokens.bgSecondary,
+                backgroundColor: tokens.surface,
                 borderColor: tokens.borderLight,
                 borderLeftColor: tokens.primary,
               },
@@ -255,7 +256,7 @@ const styles = StyleSheet.create({
   statusLabel: {fontSize: 11},
   chevron: {fontSize: 14, marginLeft: 'auto'},
   cells: {gap: 10},
-  // 格子：第三层，bgSecondary 沉一档 + 细一号的左条与圆角。
+  // 格子：第三层，白底浮起（「灰→白→灰→白」明度交替的最末一档）+ 细一号左条与圆角。
   cell: {
     borderWidth: StyleSheet.hairlineWidth,
     borderLeftWidth: 3,

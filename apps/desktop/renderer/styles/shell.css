@@ -3876,7 +3876,7 @@ html[data-theme="dark"] .conversation-tab.is-active {
 
 .prompt-turn-card__role[data-turn-kind="template"] {
   border: 1px solid var(--border-light);
-  color: var(--text-tertiary);
+  color: var(--text);
 }
 
 /* 摘要单行截断：nowrap + ellipsis + overflow hidden。 */
@@ -3946,7 +3946,8 @@ html[data-theme="dark"] .conversation-tab.is-active {
 /* ---------- 提示词预览三层结构：叶子卡（text / thinking） ---------- */
 
 /* 叶子卡（text / thinking）：blockCard 形态（智能体配置 PersistBlocksCard 同款）——
-   1px 边 + 左 3px primary 粗条 + 10 圆角 + surface 底。 */
+   1px 边 + 左 3px primary 粗条 + 10 圆角；底色走「灰→白→灰→白」明度交替
+   （智能体页观感规律），子卡层沉一档（surface-muted）。 */
 .prompt-leaf-card {
   display: flex;
   flex-direction: column;
@@ -3959,7 +3960,7 @@ html[data-theme="dark"] .conversation-tab.is-active {
   border: 1px solid var(--border);
   border-left-width: 3px;
   border-left-color: var(--primary);
-  background: var(--surface);
+  background: var(--surface-muted);
   cursor: pointer;
 }
 
@@ -4021,14 +4022,14 @@ html[data-theme="dark"] .conversation-tab.is-active {
 
 /* ---------- 提示词预览三层结构：工具组卡（一次 tool_use 一张） ---------- */
 
-/* 工具组卡：blockCard 形态（与叶子卡同层同款，智能体配置体系）。
+/* 工具组卡：blockCard 形态（与叶子卡同层同款，智能体配置体系；子卡层沉一档）。
    状态点三色（语义色）：ok 绿 / error 红 / lost 灰；组头 40 高（blockHeader）。 */
 .prompt-tool-group {
   border-radius: 10px;
   border: 1px solid var(--border);
   border-left-width: 3px;
   border-left-color: var(--primary);
-  background: var(--surface);
+  background: var(--surface-muted);
 }
 
 .prompt-tool-group__head {
@@ -4102,7 +4103,7 @@ html[data-theme="dark"] .conversation-tab.is-active {
 }
 
 /* 组卡内的两格：上 tool use（等宽）/ 下 tool result；每格可点开全屏。
-   第三层：surface-muted 沉一档 + 细一号的左条与圆角（mobile 同款口径）。 */
+   第三层：白底浮起（「灰→白→灰→白」明度交替的最末一档）+ 细一号的左条与圆角。 */
 .prompt-group-cell {
   display: flex;
   flex-direction: column;
@@ -4115,7 +4116,7 @@ html[data-theme="dark"] .conversation-tab.is-active {
   border: 1px solid var(--border-light);
   border-left-width: 3px;
   border-left-color: var(--primary);
-  background: var(--surface-muted);
+  background: var(--surface);
   cursor: pointer;
 }
 

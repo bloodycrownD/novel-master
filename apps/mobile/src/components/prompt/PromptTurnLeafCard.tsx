@@ -2,7 +2,8 @@
  * 叶子卡（文本 / thinking）：kind 标签 + 显式 `⤢` 全屏入口 + 限 2 行预览，整卡也可点。
  *
  * 视觉对齐智能体配置 blockCard 体系（与工具组卡同层同款）：1px 边 +
- * 左侧 3px primary 粗条 + 10 圆角 + surface 底；kind 标签 pill 化（badge 形态）。
+ * 左侧 3px primary 粗条 + 10 圆角；底色沉一档（bgSecondary，白轮卡内
+ * 「灰→白→灰→白」明度交替的中层）；kind 标签 pill 化（badge 形态）。
  *
  * 叶子卡是「就地展开 → 全屏」链路的最末端：预览只给两行，全文走详情页的
  * rich 渲染管线（`FileMarkdownPreview` 的 `renderKind='rich'`，详情页内可切原文档）。
@@ -53,7 +54,7 @@ export function PromptTurnLeafCard({card, turnId}: Props) {
       style={[
         styles.card,
         {
-          backgroundColor: tokens.surface,
+          backgroundColor: tokens.bgSecondary,
           borderColor: tokens.border,
           borderLeftColor: tokens.primary,
         },

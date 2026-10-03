@@ -308,21 +308,22 @@ describe('PromptToolGroupCard（T-MP2）', () => {
     ).toThrow();
   });
 
-  it('T-J2-2 智能体配置卡片体系：组卡/格子左 3px primary 粗条、格子沉一档', () => {
+  it('T-J2-2 智能体配置卡片体系：子卡灰底+左 3px primary 粗条、格子白底浮起', () => {
     const tree = renderGroup(OK_CARD, true);
-    // 组卡 blockCard：1px 边 + 左 3px 主色粗条（mock primary=#06c、border=#ccc）。
+    // 组卡 blockCard：1px 边 + 左 3px 主色粗条（mock primary=#06c、border=#ccc）；
+    // 底色沉一档（「灰→白→灰→白」明度交替的中层，mock bgSecondary=#f4f4f5）。
     const group = flattenStyle(
       tree.root.findByProps({testID: 'prompt-tool-group-card'}).props.style,
     );
     expect(group.borderLeftWidth).toBe(3);
     expect(group.borderLeftColor).toBe('#06c');
-    expect(group.backgroundColor).toBe('#fff');
+    expect(group.backgroundColor).toBe('#f4f4f5');
     expect(group.borderRadius).toBe(10);
-    // 格子第三层：bgSecondary 沉一档（mock=#f4f4f5）+ 细一号左条。
+    // 格子第三层：白底浮起（mock surface=#fff）+ 细一号左条。
     const cell = flattenStyle(
       tree.root.findByProps({testID: 'prompt-tool-group-use'}).props.style,
     );
-    expect(cell.backgroundColor).toBe('#f4f4f5');
+    expect(cell.backgroundColor).toBe('#fff');
     expect(cell.borderLeftWidth).toBe(3);
     expect(cell.borderLeftColor).toBe('#06c');
     // 格头小标签 pill：textSecondary（mock=#666）+ 600 字重 + 描边。

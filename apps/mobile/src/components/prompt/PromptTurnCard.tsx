@@ -86,10 +86,12 @@ function roleBadgeStyle(
   if (kind === 'assistant') {
     return {backgroundColor: tokens.bgSecondary, color: tokens.text};
   }
+  // template（系统段）：描边弱化款，但字色取正文色——textTertiary 在浅色下
+  // 过浅（用户反馈「字体颜色这么浅干什么」），徽标小字必须可读。
   return {
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: tokens.borderLight,
-    color: tokens.textTertiary,
+    color: tokens.text,
   };
 }
 

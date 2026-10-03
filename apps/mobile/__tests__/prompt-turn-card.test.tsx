@@ -213,7 +213,8 @@ describe('PromptTurnCard（T-MP1/T-MP4 mobile）', () => {
     expect(roleStyle('assistant').backgroundColor).toBe('#f4f4f5');
     expect(roleStyle('assistant').color).toBe('#111');
     expect(roleStyle('template').borderWidth).toBe(1);
-    expect(roleStyle('template').color).toBe('#999');
+    // template 徽标字色取正文色（textTertiary 浅色下过浅，用户反馈）。
+    expect(roleStyle('template').color).toBe('#111');
   });
 
   it('T-MP1-4 头部点按走 onToggle(turnId)，⤢ 不触发 toggle', () => {
