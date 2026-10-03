@@ -13,7 +13,7 @@
 import React from 'react';
 import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
-import {Linking, Platform} from 'react-native';
+import {AppState, Linking, Platform, Text} from 'react-native';
 import {type ChatMessage} from '@novel-master/core/chat';
 import {CONVERSATION_BRIDGE_V} from '@/components/chat/ChatConversationBridge';
 import {
@@ -583,6 +583,191 @@ describe('ChatConversationWebView · ready 握手与兜底', () => {
     expect(
       tree!.root.findAllByProps({testID: 'chat-conversation-ready-error'}),
     ).toHaveLength(0);
+  });
+});
+
+/**
+ * webview-background-ready-fail：后台冷启动 + 渲染进程被系统回收。
+ *
+ * 聊天页是 WebView（RN 宿主 + Chromium 渲染进程双进程协作）。长时间后台时系统杀
+ * 整个 app 进程，回前台冷启动若 Activity/屏幕不可见，Chromium 冻结 web JS，
+ * ready 发不出来——而 RN 侧 8s 握手兜底计时器照常到期，会把这个「冻着」误判成
+ * 「装配失败」，落进「对话页加载失败」错误页（early-return 把 WebView 卸载了，
+ * 用户只能杀 app 重来）。
+ *
+ * AppState mock 基建（@react-native/jest-preset 的 AppState mock：`currentState` 是
+ * jest.fn() 返回 undefined、`addEventListener` 返回 {remove}），手法照
+ * agent-finished-notification.test.ts：`Object.defineProperty` 换 currentState 的
+ * getter，再手动取出组件注册的 change 回调 act 触发。
+ */
+describe('ChatConversationWebView · 前后台感知自愈（webview-background-ready-fail）', () => {
+  const ORIGINAL_APP_STATE_DESCRIPTOR = Object.getOwnPropertyDescriptor(
+    AppState,
+    'currentState',
+  );
+
+  function setAppState(state: string): void {
+    Object.defineProperty(AppState, 'currentState', {
+      get: () => state,
+      configurable: true,
+    });
+  }
+
+  /** 取组件最近一次注册的 change 回调（mock 调用跨用例累积，取最后一个）。 */
+  function appStateChangeListener(): (state: string) => void {
+    const calls = (AppState.addEventListener as unknown as jest.Mock).mock.calls;
+    const listener = [...calls].reverse().find(([event]) => event === 'change')?.[1];
+    if (listener == null) {
+      throw new Error('AppState change 回调未注册');
+    }
+    return listener as (state: string) => void;
+  }
+
+  function emitAppState(state: string): void {
+    act(() => {
+      appStateChangeListener()(state);
+    });
+  }
+
+  function errorCount(tree: TestRenderer.ReactTestRenderer): number {
+    return tree.root.findAllByProps({testID: 'chat-conversation-ready-error'})
+      .length;
+  }
+
+  beforeEach(() => {
+    clearMockWebViewPostMessages();
+    telemetryMock.mockClear();
+    // 默认按前台——与真机常态一致（组件对 undefined/null 也按前台处理）
+    setAppState('active');
+  });
+
+  afterEach(async () => {
+    jest.useRealTimers();
+    await unmountAll();
+    clearMockWebViewPostMessages();
+    // 还原 mock 本体，别让本套件的状态漏给后面的 describe（T-CU15 等按前台判死）
+    if (ORIGINAL_APP_STATE_DESCRIPTOR != null) {
+      Object.defineProperty(
+        AppState,
+        'currentState',
+        ORIGINAL_APP_STATE_DESCRIPTOR,
+      );
+    }
+  });
+
+  async function mount(): Promise<TestRenderer.ReactTestRenderer> {
+    let tree!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = track(TestRenderer.create(<ChatConversationWebView {...baseProps()} />));
+    });
+    return tree;
+  }
+
+  it('后台期间 8s 到期不判死；回前台重新计时，仍收不到 ready 才落错误态', async () => {
+    jest.useFakeTimers();
+    const tree = await mount();
+    setAppState('background');
+    simulateLoad(tree.root);
+
+    // 冻着 9s：握手计时器到期，但此刻在前台之外 → 不判死（变异点：去掉前后台
+    // 判定，这一步就会弹错误态）
+    await act(async () => {
+      jest.advanceTimersByTime(9_000);
+    });
+    expect(errorCount(tree)).toBe(0);
+
+    // 回前台：重新计时——「冻结期」不算进 8s 窗口
+    setAppState('active');
+    emitAppState('active');
+    await act(async () => {
+      jest.advanceTimersByTime(7_999);
+    });
+    expect(errorCount(tree)).toBe(0);
+
+    // 前台再熬满 8s 仍没 ready：这次是真·装配失败，判死（证明不是无限挂起）
+    await act(async () => {
+      jest.advanceTimersByTime(2);
+    });
+    expect(errorCount(tree)).toBeGreaterThan(0);
+  });
+
+  it('错误态下回前台自动重载：early-return 卸载的 WebView 自己回来并重新握手', async () => {
+    jest.useFakeTimers();
+    const tree = await mount();
+    simulateLoad(tree.root);
+    await act(async () => {
+      jest.advanceTimersByTime(8_000);
+    });
+    expect(errorCount(tree)).toBeGreaterThan(0);
+
+    // 回前台 → 走 handleReload：重置失败态 + 换 key 重挂 + 重新计时
+    emitAppState('active');
+    expect(errorCount(tree)).toBe(0);
+
+    // 重挂后的新实例重新握手，恢复正常态（下行重新开始）
+    simulateLoad(tree.root);
+    simulateReadyV2(tree.root);
+    await flushMicrotasks();
+    expect(errorCount(tree)).toBe(0);
+    expect(sentTypes()).toContain('init');
+  });
+
+  it('onRenderProcessGone（渲染进程被系统回收）→ 换 key 重挂恢复，不弹错误态', async () => {
+    jest.useFakeTimers();
+    const tree = await mount();
+    simulateLoad(tree.root);
+    simulateReadyV2(tree.root);
+    await flushMicrotasks();
+
+    const webViewProps = webViewOf(tree.root).props as Record<string, unknown>;
+    expect(typeof webViewProps.onRenderProcessGone).toBe('function');
+    // iOS 对应物防御性同接
+    expect(typeof webViewProps.onContentProcessDidTerminate).toBe('function');
+
+    act(() => {
+      (webViewProps.onRenderProcessGone as (event: unknown) => void)({
+        nativeEvent: {didCrash: false},
+      });
+    });
+    // 换了 key 重挂：重挂后的 8s 窗口内不得报错
+    await act(async () => {
+      jest.advanceTimersByTime(7_999);
+    });
+    expect(errorCount(tree)).toBe(0);
+    expect(
+      telemetryMock.mock.calls
+        .map(call => (call as [{name?: string}][])[0])
+        .filter(event => event?.name === 'render_process_gone'),
+    ).toHaveLength(1);
+
+    // 重挂后的实例重新握手，一切照常
+    simulateLoad(tree.root);
+    simulateReadyV2(tree.root);
+    await flushMicrotasks();
+    expect(errorCount(tree)).toBe(0);
+    expect(sentTypes()).toContain('init');
+  });
+
+  it('错误页文案指向「点重载恢复」（旧文案只谈重启，用户不知有重载入口）', async () => {
+    jest.useFakeTimers();
+    const tree = await mount();
+    simulateLoad(tree.root);
+    await act(async () => {
+      jest.advanceTimersByTime(8_000);
+    });
+
+    const errorView = tree.root.findAllByProps({
+      testID: 'chat-conversation-ready-error',
+    });
+    expect(errorView.length).toBeGreaterThan(0);
+    // 错误态整棵树里的文案：Text 节点的 children 就是那两行提示
+    const hints = errorView[0]!
+      .findAllByType(Text)
+      .map(node => String(node.props.children))
+      .join('|');
+    expect(hints).toContain('点重载恢复');
+    // 降级横幅（真·版本过旧场景）的文案一字不动，错误页不得复用它
+    expect(hints).not.toContain('输入组件版本可能过低');
   });
 });
 

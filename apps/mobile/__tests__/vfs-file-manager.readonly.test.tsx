@@ -73,15 +73,15 @@ const mockMenuOpenCount = {opened: 0};
 
 jest.mock('../src/components/sheet/BottomSheetMenu', () => ({
   BottomSheetMenu: ({
-    visible,
     items,
   }: {
     visible: boolean;
     onSelect: (action: string) => void;
     items: {action: string}[];
   }) => {
-    if (visible && items.length > 0) {
-      // 记录任何被打开的菜单（readOnly 断言应为零）。
+    // 不看 visible：只按 items 内容计数——readOnly 下三张 sheet（行菜单 /
+    // more 菜单 / 导入形式选择）都必须 items 全空，任何一张漏网都会被记上。
+    if (items.length > 0) {
       mockMenuOpenCount.opened += 1;
     }
     return null;
@@ -103,6 +103,12 @@ jest.mock('../src/services/vfs-zip.service', () => ({
 
 jest.mock('../src/services/vfs-character-card.service', () => ({
   importCharacterCard: jest.fn(),
+}));
+
+// Step 5 起组件直接 import 单文件导入导出服务（picker / 另存面板，测试里 mock）。
+jest.mock('../src/services/vfs-single-file.service', () => ({
+  exportVfsSingleFile: jest.fn(),
+  importVfsSingleFile: jest.fn(),
 }));
 
 jest.mock('../src/services/user-vfs-turn-execute.service', () => ({
@@ -213,7 +219,7 @@ describe('T-PB3: VfsFileManager readOnly 模式（全局文件浏览器）', () 
       testID: 'vfs-row-item-readme.md',
     });
     expect(fileItem.props.onLongPress).toBeUndefined();
-    // 无任何 BottomSheetMenu 被打开。
+    // 三张 sheet 的 items 全空（T-MM3：新增的导入形式 sheet 也要守住）。
     expect(mockMenuOpenCount.opened).toBe(0);
   });
 

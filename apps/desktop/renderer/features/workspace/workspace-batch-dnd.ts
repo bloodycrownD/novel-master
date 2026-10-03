@@ -140,6 +140,16 @@ export function formatBatchApplyToast(report: VfsBatchApplyReportDto): string {
   return `导入完成：${parts.join("，")}`;
 }
 
+/**
+ * 非 UTF-8 文件被跳过的 toast 文案。
+ *
+ * 批量 ingest 只有这一层看得到「跳过了几个」（被跳过的文件根本没写库，回不上 VFS），
+ * 所以拖入链路两处与菜单单文件链路共用同一句，避免第三处再抄一遍。
+ */
+export function skippedBinaryToastMessage(count: number): string {
+  return `跳过 ${count} 个非 UTF-8 文件`;
+}
+
 function hostPathsFromDataTransfer(dt: DataTransfer): string[] {
   const bridge = getDesktopBridge();
   const paths: string[] = [];
@@ -289,7 +299,7 @@ export async function handleFilesDropIngest(options: {
   options.onApplied();
   showToast(formatBatchApplyToast(result.data.report));
   if (result.data.skippedBinary.length > 0) {
-    showToast(`跳过 ${result.data.skippedBinary.length} 个非 UTF-8 文件`);
+    showToast(skippedBinaryToastMessage(result.data.skippedBinary.length));
   }
 }
 
@@ -314,7 +324,7 @@ export async function confirmAndApplyBatchIngest(
   onApplied();
   showToast(formatBatchApplyToast(result.data.report));
   if (result.data.skippedBinary.length > 0) {
-    showToast(`跳过 ${result.data.skippedBinary.length} 个非 UTF-8 文件`);
+    showToast(skippedBinaryToastMessage(result.data.skippedBinary.length));
   }
 }
 

@@ -169,6 +169,8 @@ import {
   handleVfsBatchExportStage,
   handleVfsBatchIngestFromPaths,
   handleVfsDelete,
+  handleVfsFileExport,
+  handleVfsFilePick,
   handleVfsMkdir,
   handleVfsRead,
   handleVfsRename,
@@ -259,6 +261,8 @@ export function registerHandlersFromRegistry(): void {
   bindNoArg(IPC_CHANNELS.VFS_ZIP_PICK, handleVfsZipPick);
   bindReq(IPC_CHANNELS.VFS_ZIP_IMPORT_BYTES, handleVfsZipImportBytes);
   bindReq(IPC_CHANNELS.VFS_CHARACTER_CARD_IMPORT, handleVfsCharacterCardImport);
+  bindNoArg(IPC_CHANNELS.VFS_FILE_PICK, handleVfsFilePick);
+  bindReq(IPC_CHANNELS.VFS_FILE_EXPORT, handleVfsFileExport);
   bindReq(IPC_CHANNELS.VFS_BATCH_INGEST_FROM_PATHS, handleVfsBatchIngestFromPaths);
   bindReq(IPC_CHANNELS.VFS_BATCH_EXPORT_STAGE, handleVfsBatchExportStage);
   bindReq(IPC_CHANNELS.VFS_BATCH_CLEAR_STAGING, handleVfsBatchClearStaging);

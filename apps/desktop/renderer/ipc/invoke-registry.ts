@@ -92,6 +92,9 @@ import {
   type VfsWriteRequest,
   type VfsCharacterCardImportRequest,
   type VfsCharacterCardImportResult,
+  type VfsFileExportRequest,
+  type VfsFileExportResult,
+  type VfsFilePickResult,
   type VfsZipExportResult,
   type VfsZipImportResult,
   type VfsZipPickResult,
@@ -297,6 +300,14 @@ export function createInvokeClient(invoke: InvokeFn) {
       VfsCharacterCardImportRequest,
       IpcResult<VfsCharacterCardImportResult>
     >(invoke, IPC_CHANNELS.VFS_CHARACTER_CARD_IMPORT),
+    ipcVfsFilePick: noArg<IpcResult<VfsFilePickResult>>(
+      invoke,
+      IPC_CHANNELS.VFS_FILE_PICK,
+    ),
+    ipcVfsFileExport: withReq<
+      VfsFileExportRequest,
+      IpcResult<VfsFileExportResult>
+    >(invoke, IPC_CHANNELS.VFS_FILE_EXPORT),
     ipcVfsBatchIngestFromPaths: withReq<
       VfsBatchIngestFromPathsRequest,
       IpcResult<VfsBatchIngestFromPathsResult>

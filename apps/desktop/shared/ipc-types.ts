@@ -57,6 +57,10 @@ export const IPC_CHANNELS = {
   VFS_ZIP_IMPORT_BYTES: 'nm:vfs/zipImportBytes',
   /** 角色卡导入（PNG/JSON → 子树替换） */
   VFS_CHARACTER_CARD_IMPORT: 'nm:vfs/characterCardImport',
+  /** 弹框选单个本机文件（只回路径，不读字节；导入编排在 Renderer 走既有批量通道） */
+  VFS_FILE_PICK: 'nm:vfs/filePick',
+  /** 单文件另存导出（plan 单条目 → 保存框 → writeFile） */
+  VFS_FILE_EXPORT: 'nm:vfs/fileExport',
   /** 本机路径批量 ingest（plan + 可选 apply） */
   VFS_BATCH_INGEST_FROM_PATHS: 'nm:vfs/batchIngestFromPaths',
   /** 导出物化到临时目录（供 startDrag） */
@@ -489,6 +493,28 @@ export type VfsCharacterCardImportRequest = VfsScopeRequest & {
 };
 
 export type VfsCharacterCardImportResult = 'imported' | 'cancelled';
+
+/**
+ * filePick 结果：用户所选的本机绝对路径；null = 取消选择。
+ *
+ * 只回路径不读字节是刻意的（与 {@link VfsZipPickResult} 相反）：菜单侧单文件导入
+ * 复用的是既有「本机路径批量 ingest」通道（needs_confirm 两段式协议），
+ * 若在 Main 侧一次性端到端做掉，覆盖确认就会被迫重弹文件选择框。
+ */
+export type VfsFilePickResult = string | null;
+
+/**
+ * 单文件导出请求。
+ *
+ * `logicalPath` 必须是**单个文件**逻辑路径：Main 侧据此 `planBatchExport`，
+ * 并硬校验 plan.files.length === 1（传目录会递归整棵子树且不报错）。
+ */
+export type VfsFileExportRequest = VfsScopeRequest & {
+  readonly logicalPath: string;
+};
+
+/** 与 {@link VfsZipExportResult} 同构，便于 Renderer 共用 toast 分支。 */
+export type VfsFileExportResult = 'saved' | 'cancelled';
 
 export type VfsBatchConflictDto = {
   readonly logicalPath: string;

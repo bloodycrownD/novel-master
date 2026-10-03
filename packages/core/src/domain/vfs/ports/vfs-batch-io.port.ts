@@ -133,8 +133,13 @@ export interface VfsBatchIoService {
 
   /**
    * session 通道：按 writer 逐文件执行；部分失败保留已成功项并汇总 Report。
+   *
+   * ⚠️ `scope` 是**必传**首参：只有它能判出 session 作用域，导入成功后要清空该
+   * session 的提示词缓存（`rule_snapshot` + `file_cache`）。旧签名（无 scope）
+   * 无法判 session，调用方必须一并迁移。
    */
   applyBatchIngestWithWriter(
+    scope: VfsScope,
     targetDir: string,
     plan: BatchIngestPlan,
     options: BatchApplyOptions,

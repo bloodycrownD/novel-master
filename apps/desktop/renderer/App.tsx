@@ -8,13 +8,27 @@ import { showToast } from './components/ui/show-toast';
 import { DirectoryRuleModal } from './features/workspace/DirectoryRuleModal';
 import { FileInclusionModal } from './features/workspace/FileInclusionModal';
 import {
+  ImportFormModal,
+  type ImportForm,
+} from './features/workspace/ImportFormModal';
+import {
   createWorkspaceEntry,
   deleteWorkspaceEntry,
   entryLabelForTarget,
   renameWorkspaceEntry,
   scopeRequestFromTarget,
+  startSingleFileImport,
+  confirmSingleFileImport,
+  exportWorkspaceTarget,
 } from './features/workspace/workspace-actions';
 import {
+  formatBatchApplyToast,
+  skippedBinaryToastMessage,
+} from './features/workspace/workspace-batch-dnd';
+import {
+  batchIngestOverwriteMessage,
+  characterCardImportConfirmMessage,
+  exportFilePathForTarget,
   workspaceMenuItems,
   zipDirectoryPathForTarget,
   zipImportConfirmMessage,
@@ -29,7 +43,6 @@ import { ToastHost } from './components/ui/ToastHost';
 import { ThemeProvider } from './providers/ThemeProvider';
 import {
   ipcVfsCharacterCardImport,
-  ipcVfsZipExport,
   ipcVfsZipImport,
 } from './ipc/client';
 import {
@@ -53,7 +66,26 @@ type WorkspaceConfirmState =
       kind: 'import-character-card';
       target: WorkspaceContextTarget;
       directoryPath: string;
+    }
+  // 菜单单文件导入的覆盖确认（needs_confirm 后二次提交，与拖拽链路同协议不同编排）。
+  | {
+      kind: 'ingest-file';
+      target: WorkspaceContextTarget;
+      targetDir: string;
+      hostPaths: string[];
+      conflictCount: number;
     };
+
+/** 批量 ingest 成功后的两条 toast（写入汇总 + 非 UTF-8 跳过明示），菜单与拖拽同口径。 */
+function showBatchIngestAppliedToast(
+  report: Parameters<typeof formatBatchApplyToast>[0],
+  skippedBinary: readonly string[],
+): void {
+  showToast(formatBatchApplyToast(report));
+  if (skippedBinary.length > 0) {
+    showToast(skippedBinaryToastMessage(skippedBinary.length));
+  }
+}
 
 function DesktopOverlays() {
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -99,6 +131,15 @@ function DesktopOverlays() {
     useState<WorkspaceContextTarget | null>(null);
   const [fileInclusionTarget, setFileInclusionTarget] =
     useState<WorkspaceContextTarget | null>(null);
+  // 菜单「导入」的形式选择弹窗目标（ZIP / 角色卡 / 单文件三选一）。
+  const [importFormTarget, setImportFormTarget] =
+    useState<WorkspaceContextTarget | null>(null);
+  const [ingestFileBusy, setIngestFileBusy] = useState(false);
+  // 覆盖确认弹窗点「覆盖」的防重入闸：弹窗关闭与 await 之间可能连点两次。
+  const ingestFileBusyRef = useRef(false);
+  // 「导入」形式选择提交（ImportFormModal 底部主按钮）的在途闸：纵深防御，
+  // 防连点或多入口重复触发同一次导入编排（单文件分支会连弹系统选择框）。
+  const importFormBusyRef = useRef(false);
   // 会话详情抽屉（原 #session-actions-menu 收拢入口）
   const [sessionDetailOpen, setSessionDetailOpen] = useState(false);
 
@@ -189,42 +230,31 @@ function DesktopOverlays() {
         setFileInclusionTarget(target);
         return;
       }
-      if (action === 'export-zip') {
-        const directoryPath = zipDirectoryPathForTarget(target);
-        if (directoryPath == null) {
-          return;
-        }
-        const req = {
-          ...scopeRequestFromTarget(target, projectId, workspaceSessionId),
-          directoryPath,
-        };
-        const result = await ipcVfsZipExport(req);
-        if (result.ok && result.data === 'saved') {
-          showToast('已导出 ZIP');
-        } else if (!result.ok) {
-          showToast(result.error.message);
+      if (action === 'import') {
+        setImportFormTarget(target);
+        return;
+      }
+      if (action === 'export') {
+        // 导出类型直达：文件行单文件另存、目录/空白行 ZIP 子树，由编排函数分流，
+        // 这里不判类型也不弹确认（导出无库写入，无覆盖风险）。
+        try {
+          const status = await exportWorkspaceTarget(
+            scopeRequestFromTarget(target, projectId, workspaceSessionId),
+            target,
+          );
+          if (status === 'saved') {
+            // 文案按分流来源走：文件行导的是单文件、目录/空白行导的是 ZIP 子树，
+            // 共用一句「已导出」用户分辨不出落盘的是什么。
+            showToast(
+              exportFilePathForTarget(target) == null ? '已导出 ZIP' : '已导出文件',
+            );
+          }
+        } catch (err) {
+          showToast(err instanceof Error ? err.message : '导出失败');
         }
         return;
       }
-      if (action === 'import-zip') {
-        const directoryPath = zipDirectoryPathForTarget(target);
-        if (directoryPath == null) {
-          return;
-        }
-        setWorkspaceConfirm({ kind: 'import-zip', target, directoryPath });
-        return;
-      }
-      if (action === 'import-character-card') {
-        const directoryPath = zipDirectoryPathForTarget(target);
-        if (directoryPath == null) {
-          return;
-        }
-        setWorkspaceConfirm({
-          kind: 'import-character-card',
-          target,
-          directoryPath,
-        });
-      }
+      showToast('未知操作');
     },
     [projectId, workspaceSessionId],
   );
@@ -346,6 +376,94 @@ function DesktopOverlays() {
     notifyWorkspaceMutated,
     markPreviewTabsDeletedUnderPath,
   ]);
+
+  // 「导入」弹窗选定的形式分流：zip / 角色卡进既有确认链路（状态形态与确认处理一行未改），
+  // 单文件走「选择文件 → 批量 ingest」两段式编排，needs_confirm 时才再弹覆盖确认。
+  // 外层 in-flight 闸（importFormBusyRef）防同一次选择被重复提交——单文件分支会弹系统
+  // 选择框，重复进入必然重复导入。
+  const handleImportFormSelect = useCallback(
+    async (target: WorkspaceContextTarget, form: ImportForm) => {
+      if (importFormBusyRef.current) {
+        return;
+      }
+      importFormBusyRef.current = true;
+      try {
+        const directoryPath = zipDirectoryPathForTarget(target);
+        if (directoryPath == null) {
+          return;
+        }
+        if (form === 'zip') {
+          setWorkspaceConfirm({ kind: 'import-zip', target, directoryPath });
+          return;
+        }
+        if (form === 'card') {
+          setWorkspaceConfirm({
+            kind: 'import-character-card',
+            target,
+            directoryPath,
+          });
+          return;
+        }
+
+        try {
+          const result = await startSingleFileImport(
+            scopeRequestFromTarget(target, projectId, workspaceSessionId),
+            directoryPath,
+          );
+          if (result.status === 'cancelled') {
+            // 用户在系统文件框点了取消：静默返回，不打扰。
+            return;
+          }
+          if (result.status === 'needs-confirm') {
+            setWorkspaceConfirm({
+              kind: 'ingest-file',
+              target,
+              targetDir: directoryPath,
+              hostPaths: result.hostPaths,
+              conflictCount: result.conflictCount,
+            });
+            return;
+          }
+          notifyWorkspaceMutated();
+          showBatchIngestAppliedToast(result.report, result.skippedBinary);
+        } catch (err) {
+          showToast(err instanceof Error ? err.message : '导入失败');
+        }
+      } finally {
+        importFormBusyRef.current = false;
+      }
+    },
+    [projectId, workspaceSessionId, notifyWorkspaceMutated],
+  );
+
+  const handleIngestFileConfirm = useCallback(async () => {
+    const confirm = workspaceConfirm;
+    if (!confirm || confirm.kind !== 'ingest-file') {
+      return;
+    }
+    if (ingestFileBusyRef.current) {
+      return;
+    }
+    ingestFileBusyRef.current = true;
+    setIngestFileBusy(true);
+    try {
+      const applied = await confirmSingleFileImport(
+        scopeRequestFromTarget(confirm.target, projectId, workspaceSessionId),
+        confirm.targetDir,
+        confirm.hostPaths,
+      );
+      notifyWorkspaceMutated();
+      showBatchIngestAppliedToast(applied.report, applied.skippedBinary);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : '导入失败');
+    } finally {
+      ingestFileBusyRef.current = false;
+      setIngestFileBusy(false);
+      // 确认期间弹窗保持打开（busy「处理中」真能渲染出来，用户看得见导入在跑），
+      // 跑完再关；提前关掉的话 busy 态永远渲染不到，防重入就只剩 ref 一道。
+      setWorkspaceConfirm(null);
+    }
+  }, [workspaceConfirm, projectId, workspaceSessionId, notifyWorkspaceMutated]);
 
   return (
     <>
@@ -481,11 +599,26 @@ function DesktopOverlays() {
         title="导入角色卡"
         message={
           workspaceConfirm?.kind === 'import-character-card'
-            ? zipImportConfirmMessage(workspaceConfirm.directoryPath)
+            ? characterCardImportConfirmMessage(workspaceConfirm.directoryPath)
             : ''
         }
         danger
         onConfirm={handleWorkspaceConfirm}
+        onCancel={() => setWorkspaceConfirm(null)}
+      />
+
+      <ConfirmModal
+        open={workspaceConfirm?.kind === 'ingest-file'}
+        title="覆盖确认"
+        message={
+          workspaceConfirm?.kind === 'ingest-file'
+            ? batchIngestOverwriteMessage(workspaceConfirm.conflictCount)
+            : ''
+        }
+        confirmLabel="覆盖"
+        danger
+        busy={ingestFileBusy}
+        onConfirm={handleIngestFileConfirm}
         onCancel={() => setWorkspaceConfirm(null)}
       />
 
@@ -508,6 +641,22 @@ function DesktopOverlays() {
         sessionId={workspaceSessionId}
         onClose={() => setFileInclusionTarget(null)}
         onSaved={() => notifyWorkspaceMutated()}
+      />
+
+      <ImportFormModal
+        open={importFormTarget != null}
+        target={importFormTarget}
+        projectId={projectId}
+        sessionId={workspaceSessionId}
+        onClose={() => setImportFormTarget(null)}
+        onSelect={(form) => {
+          const target = importFormTarget;
+          setImportFormTarget(null);
+          if (!target) {
+            return;
+          }
+          void handleImportFormSelect(target, form);
+        }}
       />
 
       <ToastHost />

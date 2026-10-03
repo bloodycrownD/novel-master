@@ -2,11 +2,18 @@ import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 import { createScopedVfsService, createVfsBatchIoService } from "@novel-master/core/vfs";
 import type { TdbcConnection } from "../../src/infra/tdbc/ports/connection.port.js";
+import {
+  SESSION_KKV_DOMAIN_FILE_CACHE,
+  SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
+} from "../../src/domain/session-kkv/model/session-kkv-domains.js";
+import { DefaultVfsBatchIoService } from "../../src/service/vfs/impl/vfs-batch-io.service.js";
+import { SqliteVfsEntryRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { openNovelMasterTestConnection } from "../helpers/novel-master.js";
 import {
   probeTransactions,
   type TransactionProbe,
 } from "../helpers/transaction-probe.js";
+import { createMemorySessionKkv } from "../helpers/prompt-layout-test-helpers.js";
 import {
   getNovelMasterTestContext,
   novelMasterTestFixture,
@@ -304,6 +311,7 @@ describe("VfsBatchIoService", () => {
 
     const writtenViaWriter: string[] = [];
     const report = await batch.applyBatchIngestWithWriter(
+      scope,
       "/chap",
       plan,
       { overwriteConfirmed: false },
@@ -324,6 +332,485 @@ describe("VfsBatchIoService", () => {
     assert.equal((await vfs.read("/chap/a.md")).content, "A");
     await assert.rejects(() => vfs.read("/chap/b.md"));
     assert.deepEqual(writtenViaWriter, ["/chap/a.md"]);
+  });
+});
+
+/**
+ * R5：session scope 导入成功后清空提示词缓存（rule_snapshot + file_cache）。
+ *
+ * 口径「有成功写入才清」——**零写入**早退（typeConflicts / 冲突未确认 / 同片失败）不清；
+ * 分片失败只要有已提交分片就清（清理排在 failedPath 早退之前）；
+ * 清理是 best-effort（helper 自吞错）。与 zip / 角色卡导入的既有范式同款。
+ */
+describe("VfsBatchIoService 导入后清 session 提示词缓存", () => {
+  /** 预置两域脏数据，返回 session scope 与 kkv 上的取值函数。 */
+  async function seedDirtyCaches(
+    sessionId: string,
+    tag: string,
+  ): Promise<{ ruleKeys: string[]; fileKeys: string[] }> {
+    const ctx = getNovelMasterTestContext();
+    await ctx.sessionKkv.set(
+      sessionId,
+      SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
+      `${tag}:canon`,
+      "snap",
+    );
+    await ctx.sessionKkv.set(
+      sessionId,
+      SESSION_KKV_DOMAIN_FILE_CACHE,
+      `${tag}:full:/a.md`,
+      "a",
+    );
+    return {
+      ruleKeys: await ctx.sessionKkv.listKeys(
+        sessionId,
+        SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
+      ),
+      fileKeys: await ctx.sessionKkv.listKeys(
+        sessionId,
+        SESSION_KKV_DOMAIN_FILE_CACHE,
+      ),
+    };
+  }
+
+  it("T-C1: session scope applyBatchIngest 成功后两域被清空", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-tc1-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    const scope = {
+      kind: "session" as const,
+      projectId: project.id,
+      sessionId: session.id,
+    };
+
+    const seeded = await seedDirtyCaches(session.id, "tc1");
+    assert.deepEqual(seeded.ruleKeys, ["tc1:canon"]);
+    assert.deepEqual(seeded.fileKeys, ["tc1:full:/a.md"]);
+
+    const batch = new DefaultVfsBatchIoService(
+      ctx.conn,
+      new SqliteVfsEntryRepository(ctx.conn),
+      { sessionKkv: ctx.sessionKkv },
+    );
+    const plan = await batch.planBatchIngest(scope, "/导入", [
+      { kind: "file", relativePath: "a.md", bytes: enc("A") },
+    ]);
+    const report = await batch.applyBatchIngest(scope, "/导入", plan, {
+      overwriteConfirmed: false,
+    });
+
+    assert.deepEqual(report.written, ["/导入/a.md"]);
+    assert.equal((await vfs.read("/导入/a.md")).content, "A");
+    assert.deepEqual(
+      await ctx.sessionKkv.listKeys(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT),
+      [],
+    );
+    assert.deepEqual(
+      await ctx.sessionKkv.listKeys(session.id, SESSION_KKV_DOMAIN_FILE_CACHE),
+      [],
+    );
+  });
+
+  it("T-C2: project scope 导入成功后两域不动", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-tc2-${testIsolationSuffix()}`);
+    // session 只用来埋脏数据：验证走 project scope 时缓存对齐门闸不触发
+    const session = await ctx.sessions.create(project.id);
+    const pvfs = ctx.projectVfs(project.id);
+
+    const seeded = await seedDirtyCaches(session.id, "tc2");
+    assert.deepEqual(seeded.ruleKeys, ["tc2:canon"]);
+
+    const batch = new DefaultVfsBatchIoService(
+      ctx.conn,
+      new SqliteVfsEntryRepository(ctx.conn),
+      { sessionKkv: ctx.sessionKkv },
+    );
+    const scope = { kind: "project" as const, projectId: project.id };
+    const plan = await batch.planBatchIngest(scope, "/导入", [
+      { kind: "file", relativePath: "a.md", bytes: enc("A") },
+    ]);
+    const report = await batch.applyBatchIngest(scope, "/导入", plan, {
+      overwriteConfirmed: false,
+    });
+
+    assert.deepEqual(report.written, ["/导入/a.md"]);
+    assert.equal((await pvfs.read("/导入/a.md")).content, "A");
+    assert.deepEqual(
+      await ctx.sessionKkv.listKeys(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT),
+      ["tc2:canon"],
+    );
+    assert.deepEqual(
+      await ctx.sessionKkv.listKeys(session.id, SESSION_KKV_DOMAIN_FILE_CACHE),
+      ["tc2:full:/a.md"],
+    );
+  });
+
+  it("T-C3: sessionKkv 抛错时导入仍成功返回（best-effort 吞错）", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-tc3-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    const scope = {
+      kind: "session" as const,
+      projectId: project.id,
+      sessionId: session.id,
+    };
+
+    const throwingKkv = Object.assign(createMemorySessionKkv(), {
+      clearDomain: async (): Promise<void> => {
+        throw new Error("kkv-boom");
+      },
+    });
+    const batch = new DefaultVfsBatchIoService(
+      ctx.conn,
+      new SqliteVfsEntryRepository(ctx.conn),
+      { sessionKkv: throwingKkv },
+    );
+
+    const originalWarn = console.warn;
+    const warnCalls: unknown[][] = [];
+    console.warn = (...args: unknown[]) => {
+      warnCalls.push(args);
+    };
+    let report:
+      | Awaited<ReturnType<typeof batch.applyBatchIngest>>
+      | undefined;
+    try {
+      const plan = await batch.planBatchIngest(scope, "/导入", [
+        { kind: "file", relativePath: "a.md", bytes: enc("A") },
+      ]);
+      await assert.doesNotReject(async () => {
+        report = await batch.applyBatchIngest(scope, "/导入", plan, {
+          overwriteConfirmed: false,
+        });
+      });
+    } finally {
+      console.warn = originalWarn;
+    }
+
+    // 导入本体已落库；缓存对齐失败只 warn 留痕
+    assert.deepEqual(report!.written, ["/导入/a.md"]);
+    assert.equal((await vfs.read("/导入/a.md")).content, "A");
+    assert.ok(warnCalls.length >= 1);
+  });
+
+  it("T-C4: 冲突未确认早退不清缓存；确认覆盖成功后清理", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-tc4-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    const scope = {
+      kind: "session" as const,
+      projectId: project.id,
+      sessionId: session.id,
+    };
+    await vfs.write("/导入/a.md", "old");
+
+    const batch = new DefaultVfsBatchIoService(
+      ctx.conn,
+      new SqliteVfsEntryRepository(ctx.conn),
+      { sessionKkv: ctx.sessionKkv },
+    );
+    const plan = await batch.planBatchIngest(scope, "/导入", [
+      { kind: "file", relativePath: "a.md", bytes: enc("new") },
+    ]);
+    assert.equal(plan.conflicts.length, 1);
+    await seedDirtyCaches(session.id, "tc4");
+
+    // 未确认覆盖 ⇒ 零写入早退 ⇒ 缓存不动
+    const skippedReport = await batch.applyBatchIngest(scope, "/导入", plan, {
+      overwriteConfirmed: false,
+    });
+    assert.deepEqual(skippedReport.written, []);
+    assert.deepEqual(
+      await ctx.sessionKkv.listKeys(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT),
+      ["tc4:canon"],
+    );
+    assert.deepEqual(
+      await ctx.sessionKkv.listKeys(session.id, SESSION_KKV_DOMAIN_FILE_CACHE),
+      ["tc4:full:/a.md"],
+    );
+
+    // 确认覆盖 ⇒ 真写入 ⇒ 两域清理
+    const applied = await batch.applyBatchIngest(scope, "/导入", plan, {
+      overwriteConfirmed: true,
+    });
+    assert.deepEqual(applied.written, ["/导入/a.md"]);
+    assert.equal((await vfs.read("/导入/a.md")).content, "new");
+    assert.deepEqual(
+      await ctx.sessionKkv.listKeys(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT),
+      [],
+    );
+    assert.deepEqual(
+      await ctx.sessionKkv.listKeys(session.id, SESSION_KKV_DOMAIN_FILE_CACHE),
+      [],
+    );
+  });
+
+  it("T-C4b: typeConflicts 早退（零写入）两域保持脏 key 原样", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-tc4b-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const scope = {
+      kind: "session" as const,
+      projectId: project.id,
+      sessionId: session.id,
+    };
+
+    const batch = new DefaultVfsBatchIoService(
+      ctx.conn,
+      new SqliteVfsEntryRepository(ctx.conn),
+      { sessionKkv: ctx.sessionKkv },
+    );
+    // 同一相对路径既是文件又是目录 ⇒ plan 带 typeConflicts（T-B7 同款构造）。
+    const plan = await batch.planBatchIngest(scope, "/冲突", [
+      { kind: "file", relativePath: "foo", bytes: enc("file") },
+      { kind: "directory", relativePath: "foo" },
+    ]);
+    assert.equal(plan.typeConflicts.length, 1);
+
+    await seedDirtyCaches(session.id, "tc4b");
+    const report = await batch.applyBatchIngest(scope, "/冲突", plan, {
+      overwriteConfirmed: true,
+    });
+
+    // 零写入 ⇒ 两域不动，脏 key 原样（这里 overwriteConfirmed=true 也不改变口径：
+    // 门闸看的是 written，不是确认位）。
+    assert.deepEqual(report.written, []);
+    assert.equal(report.failed.length, 1);
+    assert.deepEqual(
+      await ctx.sessionKkv.listKeys(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT),
+      ["tc4b:canon"],
+    );
+    assert.deepEqual(
+      await ctx.sessionKkv.listKeys(session.id, SESSION_KKV_DOMAIN_FILE_CACHE),
+      ["tc4b:full:/a.md"],
+    );
+  });
+
+  it("T-C5: 工厂单参 createVfsBatchIoService(conn) 默认注入 sessionKkv", async () => {
+    const ctx = getNovelMasterTestContext();
+    const batch = createVfsBatchIoService(ctx.conn);
+    // 这里只锁「工厂单参即带 sessionKkv」这一件事：由后续 seed + import 能清空两域
+    // 反证（ctx.sessionKkv 的脏 key 能被清掉）。不断言 applyBatchIngest 的存在性
+    // ——那是类型层的既有事实，写出来只是恒真噪声。
+
+    const project = await ctx.projects.create(`P-tc5-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    const scope = {
+      kind: "session" as const,
+      projectId: project.id,
+      sessionId: session.id,
+    };
+    await seedDirtyCaches(session.id, "tc5");
+
+    const plan = await batch.planBatchIngest(scope, "/导入", [
+      { kind: "file", relativePath: "a.md", bytes: enc("A") },
+    ]);
+    const report = await batch.applyBatchIngest(scope, "/导入", plan, {
+      overwriteConfirmed: false,
+    });
+
+    assert.deepEqual(report.written, ["/导入/a.md"]);
+    assert.equal((await vfs.read("/导入/a.md")).content, "A");
+    assert.deepEqual(
+      await ctx.sessionKkv.listKeys(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT),
+      [],
+    );
+    assert.deepEqual(
+      await ctx.sessionKkv.listKeys(session.id, SESSION_KKV_DOMAIN_FILE_CACHE),
+      [],
+    );
+  });
+
+  it("T-C6: applyBatchIngestWithWriter（新 scope 签名）session + written 非空清理", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-tc6-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    const scope = {
+      kind: "session" as const,
+      projectId: project.id,
+      sessionId: session.id,
+    };
+
+    // 预置同名文件 ⇒ plan 带 conflict，才能造出「零写入早退」
+    await vfs.write("/导入/a.md", "old");
+
+    const batch = new DefaultVfsBatchIoService(
+      ctx.conn,
+      new SqliteVfsEntryRepository(ctx.conn),
+      { sessionKkv: ctx.sessionKkv },
+    );
+    const plan = await batch.planBatchIngest(scope, "/导入", [
+      { kind: "file", relativePath: "a.md", bytes: enc("A") },
+    ]);
+    assert.equal(plan.conflicts.length, 1);
+
+    // 零写入（冲突未确认早退）⇒ 不清
+    await seedDirtyCaches(session.id, "tc6-early");
+    const zeroWritten = await batch.applyBatchIngestWithWriter(
+      scope,
+      "/导入",
+      plan,
+      { overwriteConfirmed: false },
+      { async mkdir() {}, async writeFile() {} },
+    );
+    assert.deepEqual(zeroWritten.written, []);
+    assert.deepEqual(
+      await ctx.sessionKkv.listKeys(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT),
+      ["tc6-early:canon"],
+    );
+
+    // 真写入 ⇒ 清（这条链自身不清缓存：user-vfs-turn + vfs write 工具只 upsert
+    // 单条 file_cache，不清 rule_snapshot）
+    await seedDirtyCaches(session.id, "tc6");
+    const report = await batch.applyBatchIngestWithWriter(
+      scope,
+      "/导入",
+      plan,
+      { overwriteConfirmed: true },
+      {
+        async mkdir() {},
+        async writeFile(logical, content) {
+          await vfs.write(logical, content, { versionCheck: false });
+        },
+      },
+    );
+
+    assert.deepEqual(report.written, ["/导入/a.md"]);
+    assert.equal((await vfs.read("/导入/a.md")).content, "A");
+    assert.deepEqual(
+      await ctx.sessionKkv.listKeys(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT),
+      [],
+    );
+    assert.deepEqual(
+      await ctx.sessionKkv.listKeys(session.id, SESSION_KKV_DOMAIN_FILE_CACHE),
+      [],
+    );
+
+    // 第三段：writer **部分失败**（b.md 抛错、a.md 成功，T-B8 同款 writer）⇒ written
+    // 非空 ⇒ 两域照清。护的是「writer 链只看 written、不看 failed」这条口径。
+    // 两个执行要点（不这么做就恒绿）：
+    // ① 必须**重新埋脏**——第二段结尾两域已被清空，不重新 seed 就成「空集断空集」；
+    // ② 必须**重新 plan 一份含 a.md+b.md 的 plan**——第二段的 plan 只有 a.md，
+    // writer 碰不到 b.md，「b.md 抛错」根本无从发生。
+    await seedDirtyCaches(session.id, "tc6-writer-partial");
+    const partialPlan = await batch.planBatchIngest(scope, "/导入2", [
+      { kind: "file", relativePath: "a.md", bytes: enc("A2") },
+      { kind: "file", relativePath: "b.md", bytes: enc("B2") },
+    ]);
+    assert.equal(partialPlan.writes.length, 2);
+    const partial = await batch.applyBatchIngestWithWriter(
+      scope,
+      "/导入2",
+      partialPlan,
+      { overwriteConfirmed: false },
+      {
+        async mkdir() {},
+        async writeFile(logical, content) {
+          if (logical.endsWith("/b.md")) {
+            throw new Error("simulated write fail");
+          }
+          await vfs.write(logical, content, { versionCheck: false });
+        },
+      },
+    );
+
+    assert.deepEqual(partial.written, ["/导入2/a.md"]);
+    assert.equal(partial.failed.length, 1);
+    assert.deepEqual(
+      await ctx.sessionKkv.listKeys(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT),
+      [],
+    );
+    assert.deepEqual(
+      await ctx.sessionKkv.listKeys(session.id, SESSION_KKV_DOMAIN_FILE_CACHE),
+      [],
+    );
+  });
+
+  it("T-C7: 跨片失败已有已提交分片 ⇒ 两域清空；同片失败（零写入）⇒ 两域不动", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-tc7-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const scope = {
+      kind: "session" as const,
+      projectId: project.id,
+      sessionId: session.id,
+    };
+
+    // 场景一：**同片**失败（零写入）⇒ 两域保持脏 key 原样。抛错点在第 1 片内，
+    // 没有任何已提交分片，门闸 writtenLogical.length > 0 不该放行。
+    const sameShardBatch = createVfsBatchIoService(ctx.conn, {
+      testHook: { throwOnWriteLogical: "/chap/b.md" },
+    });
+    await seedDirtyCaches(session.id, "tc7-same-shard");
+    const sameShardPlan = await sameShardBatch.planBatchIngest(scope, "/chap", [
+      { kind: "file", relativePath: "a.md", bytes: enc("A") },
+      { kind: "file", relativePath: "b.md", bytes: enc("B") },
+    ]);
+    const sameShardReport = await sameShardBatch.applyBatchIngest(
+      scope,
+      "/chap",
+      sameShardPlan,
+      { overwriteConfirmed: false }
+    );
+    assert.deepEqual(sameShardReport.written, [], "同片失败没有任何已提交分片");
+    assert.equal(sameShardReport.failed.length, 1);
+    assert.deepEqual(
+      await ctx.sessionKkv.listKeys(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT),
+      ["tc7-same-shard:canon"],
+    );
+    assert.deepEqual(
+      await ctx.sessionKkv.listKeys(session.id, SESSION_KKV_DOMAIN_FILE_CACHE),
+      ["tc7-same-shard:full:/a.md"],
+    );
+
+    // 场景二：**跨片**失败——401 文件切 3 片，第 2 片首个文件抛错 ⇒ 第 1 片 200 个
+    // **已真实落库**。下一轮提示词必须按这 200 个新文件重评，所以两域要清
+    // （清理排在 failedPath 早退之前，按 writtenLogical.length > 0 判定）。
+    // 401 文件 / testHook 构造照 T-B6b。
+    const total = 401;
+    const failIndex = 200;
+    const failLogical = `/chap2/f${String(failIndex).padStart(4, "0")}.md`;
+    const crossShardBatch = createVfsBatchIoService(ctx.conn, {
+      testHook: { throwOnWriteLogical: failLogical },
+    });
+    const entries = Array.from({ length: total }, (_, i) => ({
+      kind: "file" as const,
+      relativePath: `f${String(i).padStart(4, "0")}.md`,
+      bytes: enc(`T${i}`),
+    }));
+    const crossShardPlan = await crossShardBatch.planBatchIngest(
+      scope,
+      "/chap2",
+      entries
+    );
+    assert.equal(crossShardPlan.writes.length, total);
+
+    await seedDirtyCaches(session.id, "tc7-cross-shard");
+    const crossShardReport = await crossShardBatch.applyBatchIngest(
+      scope,
+      "/chap2",
+      crossShardPlan,
+      { overwriteConfirmed: false }
+    );
+
+    assert.equal(crossShardReport.written.length, 200, "第 1 片 200 个已提交");
+    assert.equal(crossShardReport.failed.length, 1);
+    assert.deepEqual(
+      await ctx.sessionKkv.listKeys(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT),
+      [],
+      "跨片失败有已提交分片 ⇒ rule_snapshot 必须清",
+    );
+    assert.deepEqual(
+      await ctx.sessionKkv.listKeys(session.id, SESSION_KKV_DOMAIN_FILE_CACHE),
+      [],
+      "跨片失败有已提交分片 ⇒ file_cache 必须清",
+    );
   });
 });
 

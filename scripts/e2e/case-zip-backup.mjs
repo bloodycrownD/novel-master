@@ -7,12 +7,14 @@ const { app, page, vite } = await launchApp({ errors });
 const sleep = (ms) => page.waitForTimeout(ms);
 
 // patch 原生对话框：保存返回预置路径，打开返回预置文件
+// 返回形态=对象式（与 service 层 result.canceled / result.filePath(s) 的读取一致；
+// 旧式数组返回与当前代码读取形态不符，属既有隐患，本迭代顺手修正）
 const patchRes = await app.evaluate(({ savePath, openPath }) => {
   const binding = process._linkedBinding("electron_browser_dialog");
   try {
     const patched = { save: false, open: false };
-    if (binding.showSaveDialog) { try { binding.showSaveDialog = function () { return [savePath]; }; patched.save = true; } catch (e) {} }
-    if (binding.showOpenDialog) { try { binding.showOpenDialog = function () { return [openPath]; }; patched.open = true; } catch (e) {} }
+    if (binding.showSaveDialog) { try { binding.showSaveDialog = function () { return { canceled: false, filePath: savePath }; }; patched.save = true; } catch (e) {} }
+    if (binding.showOpenDialog) { try { binding.showOpenDialog = function () { return { canceled: false, filePaths: [openPath] }; }; patched.open = true; } catch (e) {} }
     return patched;
   } catch (e) { return { err: String(e) }; }
 }, { savePath: "/tmp/nm-e2e-export.zip", openPath: "/tmp/nm-e2e-export.zip" });
@@ -28,22 +30,28 @@ try {
   await page.locator("#session-list li:visible").first().click();
   await sleep(1200);
 
-  // ===== 1. 导出 ZIP（根目录右键）=====
+  // ===== 1. 导出 ZIP（根目录行右键 →「导出」类型直达：目录=zip）=====
   const rootNode = page.locator(".tree-node").first();
   const box = await rootNode.boundingBox();
   await page.mouse.click(box.x + box.width / 2, box.y + 8, { button: "right" });
   await sleep(700);
-  await page.locator('[data-workspace-action="export-zip"]').first().click();
+  await page.locator('[data-workspace-action="export"]').first().click();
   await sleep(1800); // 导出+写盘
   await shot(page, "620", "zip-exported");
   const zipOk = fs.existsSync("/tmp/nm-e2e-export.zip");
   const zipSize = zipOk ? fs.statSync("/tmp/nm-e2e-export.zip").size : 0;
   console.log("ZIP_EXPORTED", zipOk, "size:", zipSize);
 
-  // ===== 2. 导入 ZIP（树空白右键；工作区有文件时覆盖确认）=====
+  // ===== 2. 导入 ZIP（树空白右键 →「导入」→ 形式弹窗选 ZIP 包；工作区有文件时覆盖确认）=====
   await openWorkspaceContextMenu(page);
   await sleep(600);
-  await page.locator('[data-workspace-action="import-zip"]').first().click();
+  await page.locator('[data-workspace-action="import"]').first().click();
+  await sleep(600);
+  // 形式选择弹窗：两步——点选项只改选中态，再点底部「导入」主按钮才生效
+  //（ImportFormModal 的 onSelect 唯一来源是 data-import-form-submit 按钮）
+  await page.locator('[data-import-form="zip"]').first().click();
+  await sleep(400);
+  await page.locator("[data-import-form-submit]").first().click();
   await sleep(1000);
   // 可能弹覆盖确认
   const ovText = await page.evaluate(() => document.querySelector(".confirm-modal")?.textContent?.slice(0, 120) ?? null);

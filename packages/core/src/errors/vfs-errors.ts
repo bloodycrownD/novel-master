@@ -7,8 +7,10 @@
 /**
  * edit REPLACE_NOT_FOUND 时的 LCS 诊断字段。
  *
- * oldStringCodepoints / fileHintCodepoints 是按 codepoint 转储的十六进制串，
- * 用来排查中文引号、HTML entity 这类「肉眼看着一样但码点不同」的不匹配。
+ * oldStringPreview / fileHintPreview 是双方前 100 字符的**原始文本**预览，
+ * 由 formatter 以 JSON 转义形态展示——中文引号、HTML entity、换行/制表
+ * 这类「肉眼看着一样或看不见」的差异会直接显形（`“` vs `"` vs `&ldquo;`、
+ * `\n`/`\t`），且 LLM 可直接照抄修正 oldString（hex 码点无法反向消费，已退役）。
  * 设为可选，老的对象字面量构造路径不强制要求。
  */
 export type VfsReplaceNotFoundDetails = {
@@ -16,8 +18,8 @@ export type VfsReplaceNotFoundDetails = {
   readonly longestCommonSubstring: string;
   readonly lcsLength: number;
   readonly lcsOccurrences: number;
-  readonly oldStringCodepoints?: string;
-  readonly fileHintCodepoints?: string;
+  readonly oldStringPreview?: string;
+  readonly fileHintPreview?: string;
 };
 
 /** Discriminant codes for {@link VfsError}. */
