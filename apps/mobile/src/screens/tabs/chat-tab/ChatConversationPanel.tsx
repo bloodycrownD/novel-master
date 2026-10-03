@@ -496,7 +496,11 @@ export function ChatConversationPanel({
             >
               <VfsFileManager
                 ref={workspaceVfsRef}
-                key={`session-vfs-${vfsRefreshKey}`}
+                // key 必须含 sessionId：SPA 化后外层不再随会话重挂，而浏览位置等
+                // 面板状态属会话——key 丢掉 sessionId 会跨会话残留 currentPath，
+                // 切会话以新 VFS list 旧目录 → 误弹「文件不存在或已被删除」
+                // （10-02 修复曾因未合入 main 丢失，v1.5.30~33 连续带病，勿再冲掉）。
+                key={`session-vfs-${sessionId}-${vfsRefreshKey}`}
                 scope={sessionVfsScope!}
                 vfs={sessionVfs}
                 workplace={sessionWorktree}

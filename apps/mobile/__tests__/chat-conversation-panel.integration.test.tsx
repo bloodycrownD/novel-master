@@ -4,11 +4,21 @@ import TestRenderer, {act} from 'react-test-renderer';
 
 const mockReload = jest.fn(async () => undefined);
 
+// 生命周期流水（跨会话重挂回归锁的断言面）：mock 组件 mount/unmount 各记一行，
+// 用例按 toEqual 断言完整序列（mount→unmount→mount / 仅一次 mount）。
+const mockVfsLifecycle: string[] = [];
+
 jest.mock('../src/components/vfs/VfsFileManager', () => {
   const React = require('react');
   return {
     VfsFileManager: React.forwardRef(
       (_props: unknown, ref: React.Ref<{reload: () => Promise<void>}>) => {
+        React.useEffect(() => {
+          mockVfsLifecycle.push('mount');
+          return () => {
+            mockVfsLifecycle.push('unmount');
+          };
+        }, []);
         React.useImperativeHandle(ref, () => ({
           canGoUp: () => false,
           goUp: () => undefined,
@@ -189,6 +199,8 @@ const tokens = {
 };
 
 let mockConversationPanel: 'chat' | 'workspace' = 'chat';
+// 按用例可变的 sessionId（跨会话重挂回归锁）：默认 's1'，用例内切 's2' 模拟换会话。
+let mockSessionId: string | null = 's1';
 const mockSetConversationPanel = jest.fn((panel: 'chat' | 'workspace') => {
   mockConversationPanel = panel;
 });
@@ -222,7 +234,7 @@ function makeMockContext(
 ) {
   return {
     projectId: 'p1',
-    sessionId: 's1',
+    sessionId: mockSessionId,
     conversationPanel: mockConversationPanel,
     setConversationPanel: mockSetConversationPanel,
     chatSubview: 'conversation' as const,
@@ -331,6 +343,8 @@ function flushPromises(): Promise<void> {
 beforeEach(() => {
   installMockRuntime();
   clearChatComposerDraft('s1');
+  mockVfsLifecycle.length = 0;
+  mockSessionId = 's1';
   mockWebViewPropsList.length = 0;
   mockListListeners.length = 0;
   mockListManager.activeSessionIds.mockReturnValue([]);
@@ -411,6 +425,68 @@ describe('ChatConversationPanel workspace reload', () => {
     });
 
     expect(mockReload).toHaveBeenCalled();
+  });
+});
+
+// ── 工作区面板跨会话重挂（workspace-stale-on-session-switch 回归锁）─────────
+//
+// SPA 化（会话列表进同一 WebView 文档）后外层不再随会话强制重挂，VfsFileManager
+// 的挂载 key 必须自带 sessionId：浏览位置（currentPath）等面板状态属会话，跨会话
+// 复用旧实例会拿新会话 VFS list 旧目录 → 切会话误弹「文件不存在或已被删除」。
+// v1.5.30 引入；10-02 的修复曾因未合入 main 丢失（v1.5.30~33 连续带病），
+// 此为重做后的回归锁——拔牙验证过：key 去掉 sessionId 即首条用例红。
+
+describe('ChatConversationPanel 工作区面板跨会话重挂', () => {
+  let tree: TestRenderer.ReactTestRenderer | undefined;
+
+  beforeEach(() => {
+    mockConversationPanel = 'workspace';
+  });
+
+  afterEach(() => {
+    if (tree != null) {
+      act(() => {
+        tree!.unmount();
+      });
+    }
+    tree = undefined;
+  });
+
+  it('sessionId 变化时 VfsFileManager 整实例重挂（mount→unmount→mount）', async () => {
+    mockSessionId = 's1';
+    await act(async () => {
+      tree = TestRenderer.create(<TestHost />);
+      await flushPromises();
+    });
+    expect(mockVfsLifecycle).toEqual(['mount']);
+
+    mockSessionId = 's2';
+    await act(async () => {
+      tree!.update(<TestHost />);
+      await flushPromises();
+    });
+    expect(mockVfsLifecycle).toEqual(['mount', 'unmount', 'mount']);
+  });
+
+  it('同一会话内重渲染（chat ↔ workspace 切换）不重挂', async () => {
+    mockSessionId = 's1';
+    await act(async () => {
+      tree = TestRenderer.create(<TestHost />);
+      await flushPromises();
+    });
+    expect(mockVfsLifecycle).toEqual(['mount']);
+
+    mockConversationPanel = 'chat';
+    await act(async () => {
+      tree!.update(<TestHost />);
+      await flushPromises();
+    });
+    mockConversationPanel = 'workspace';
+    await act(async () => {
+      tree!.update(<TestHost />);
+      await flushPromises();
+    });
+    expect(mockVfsLifecycle).toEqual(['mount']);
   });
 });
 
