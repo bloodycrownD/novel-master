@@ -21,6 +21,7 @@ import {
   decodeVfsDragPayload,
   NM_VFS_PATHS_MIME,
 } from "../features/workspace/vfs-tree-dnd";
+import { batchIngestOverwriteMessage } from "../features/workspace/workspace-context";
 
 interface ExplorerPaneProps {
   onOpenContextMenu: (target: WorkspaceContextTarget) => void;
@@ -189,7 +190,7 @@ export function ExplorerPane({
         message={
           ingestConfirm == null
             ? ""
-            : `目标处已有 ${ingestConfirm.conflictCount} 个同名文件/目录。覆盖后不可撤销，是否继续？`
+            : batchIngestOverwriteMessage(ingestConfirm.conflictCount)
         }
         confirmLabel="覆盖"
         danger

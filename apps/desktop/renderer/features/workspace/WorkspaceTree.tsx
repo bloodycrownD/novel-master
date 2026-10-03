@@ -11,7 +11,7 @@ import {
 } from "@/ipc/client";
 import { useShellNav } from "@/providers/ShellNavProvider";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
-import type { WorkspaceContextTarget } from "./workspace-context";
+import { batchIngestOverwriteMessage, type WorkspaceContextTarget } from "./workspace-context";
 import {
   entryName,
   ancestorDirPaths,
@@ -336,7 +336,7 @@ export function WorkspaceTree({
         message={
           ingestConfirm == null
             ? ""
-            : `目标处已有 ${ingestConfirm.conflictCount} 个同名文件/目录。覆盖后不可撤销，是否继续？`
+            : batchIngestOverwriteMessage(ingestConfirm.conflictCount)
         }
         confirmLabel="覆盖"
         danger
