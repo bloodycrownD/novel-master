@@ -903,11 +903,7 @@ export const VfsFileManager = forwardRef<
       if (action === 'export') {
         // dir 行导出 ZIP，file 行导出单文件——同一「导出」按行类型分流
         // （menuRow 在闭包内有效，见入口守卫时序注释）。
-        if (menuRow.kind === 'file') {
-          runExportFile(menuPath);
-        } else {
-          runExportZip(menuPath);
-        }
+        runExport(menuRow.kind === 'file' ? 'file' : 'zip', menuPath);
         return;
       }
       if (action === 'import') {
@@ -1030,32 +1026,29 @@ export const VfsFileManager = forwardRef<
     }
   };
 
-  // 导出 ZIP 的流程：exporting 守卫 → exportVfsZip → toast → 清状态。
-  const runExportZip = (targetPath: string) => {
+  /**
+   * 导出的统一编排：exporting 守卫 → 按 kind 分流到服务 → toast → 清状态。
+   *
+   * WHY 收敛成一个函数（原先 ZIP 与单文件两份复制）：两条分支的
+   * 「守卫 → 服务 → 成功 toast → 失败 toast → 清状态」骨架完全同形，复制两份必然
+   * 随改动漂移；守卫本身就是共用的（一个 exporting 布尔，spec D7），两份各判一次
+   * 反而容易漏改出「两个守卫」的错觉。kind 只影响调哪个服务与成功文案。
+   */
+  const runExport = (kind: 'zip' | 'file', targetPath: string) => {
     if (exporting) {
       return;
     }
     setExporting(true);
-    exportVfsZip(runtime, scope, {directoryPath: targetPath})
+    const task =
+      kind === 'zip'
+        ? exportVfsZip(runtime, scope, {directoryPath: targetPath})
+        : exportVfsSingleFile(runtime, scope, targetPath);
+    task
       .then(result => {
         if (result === 'saved') {
-          showToast('ZIP 已保存到所选位置');
-        }
-      })
-      .catch(err => showToast(toastMessage('导出失败', err)))
-      .finally(() => setExporting(false));
-  };
-
-  // 导出单个文件：与 ZIP 共用 exporting 守卫（互斥防重入），另存面板写 utf8。
-  const runExportFile = (logicalPath: string) => {
-    if (exporting) {
-      return;
-    }
-    setExporting(true);
-    exportVfsSingleFile(runtime, scope, logicalPath)
-      .then(result => {
-        if (result === 'saved') {
-          showToast('文件已保存到所选位置');
+          showToast(
+            kind === 'zip' ? 'ZIP 已保存到所选位置' : '文件已保存到所选位置',
+          );
         }
       })
       .catch(err => showToast(toastMessage('导出失败', err)))
@@ -1146,7 +1139,7 @@ export const VfsFileManager = forwardRef<
     }
     if (action === 'export') {
       // more 菜单只出现在目录列表里，目标恒为当前目录 → ZIP 导出。
-      runExportZip(currentPath);
+      runExport('zip', currentPath);
     }
   };
 

@@ -99,21 +99,31 @@ describe('vfs 导入导出菜单源码契约（vfs-import-export-menu / Step 5�
     expect(src).toContain('跳过 ${skippedBinary.length} 个非 UTF-8 文件');
   });
 
-  it('T-MM2/T-MM5：导出按行类型分流，单文件导出与 ZIP 共用 exporting 守卫', () => {
+  it('T-MM2/T-MM5：导出收敛为单一 runExport(kind, targetPath)，守卫与 toast 骨架共用', () => {
     const src = readSrc('src/components/vfs/VfsFileManager.tsx');
     const flat = flatSrc('src/components/vfs/VfsFileManager.tsx');
-    // 行菜单：file → 单文件导出，dir → ZIP 导出（分流注释在两行之间，用正则）。
-    expect(flat).toMatch(
-      /if \(action === 'export'\) \{[\s\S]*?if \(menuRow\.kind === 'file'\) \{ runExportFile\(menuPath\); \} else \{ runExportZip\(menuPath\); \}/,
+    // 旧的两份复制已退役，只剩单一 runExport(kind: 'zip' | 'file', targetPath)。
+    expect(src).not.toContain('runExportZip');
+    expect(src).not.toContain('runExportFile');
+    expect(src).toContain(
+      "const runExport = (kind: 'zip' | 'file', targetPath: string) => {",
+    );
+    // 行菜单：按行类型选 kind（file 行单文件，其余 ZIP），路径恒为 menuPath。
+    expect(flat).toContain(
+      "runExport(menuRow.kind === 'file' ? 'file' : 'zip', menuPath);",
     );
     // more 菜单只出现在目录列表，目标恒为当前目录 → ZIP。
-    expect(flat).toContain('runExportZip(currentPath);');
-    // 守卫改名 exporting：ZIP 与单文件互斥防重入。
+    expect(flat).toContain("runExport('zip', currentPath);");
+    // 守卫改名 exporting：两个分支共用同一把（收敛后计数为 1）。
     expect(src).not.toContain('exportingZip');
-    expect(flat.match(/if \(exporting\) \{ return; \}/g)?.length).toBe(2);
-    expect(src).toContain('exportVfsSingleFile(runtime, scope, logicalPath)');
-    expect(src).toContain("showToast('文件已保存到所选位置')");
-    expect(src).toContain("showToast('ZIP 已保存到所选位置')");
+    expect(flat.match(/if \(exporting\) \{ return; \}/g)?.length).toBe(1);
+    // 服务调用与成功文案：形参名钉死为 targetPath（收敛后不再叫 logicalPath）。
+    expect(flat).toContain(
+      'kind === \'zip\' ? exportVfsZip(runtime, scope, {directoryPath: targetPath}) : exportVfsSingleFile(runtime, scope, targetPath);',
+    );
+    expect(src).not.toContain('exportVfsSingleFile(runtime, scope, logicalPath)');
+    expect(src).toContain("'文件已保存到所选位置'");
+    expect(src).toContain("'ZIP 已保存到所选位置'");
   });
 
   it('format-error 特判 CharacterCardError（对齐 VfsZipError）', () => {

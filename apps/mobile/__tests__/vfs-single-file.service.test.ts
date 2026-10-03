@@ -61,6 +61,7 @@ import {
   importVfsSingleFile,
 } from '@/services/vfs-single-file.service';
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
+import {VfsSingleFileError} from '@/errors/vfs-single-file-error';
 
 /** 选中文件在 blob 层的 base64 载荷（btoa 只吃 Latin-1，用 ASCII 内容）。 */
 const FILE_BYTES_BASE64 = globalThis.btoa('hi');
@@ -202,6 +203,27 @@ describe('vfs-single-file.service', () => {
     expect(mockApplyBatchIngest).not.toHaveBeenCalled();
   });
 
+  // 超限链（CR G-2）：stat 造 32MB+ 文件 → buildTooLargeError 抛 VfsSingleFileError
+  // → 不读字节、不触达 core。
+  it('超限：stat 32MB+ 文件直接抛 VfsSingleFileError，不读字节不触达 core', async () => {
+    const oversize = 33 * 1024 * 1024;
+    mockStat.mockResolvedValue({path: '/cache/import.bin', size: oversize});
+
+    const error = await importVfsSingleFile(runtime, scope).then(
+      () => undefined,
+      (err: unknown) => err,
+    );
+
+    expect(error).toBeInstanceOf(VfsSingleFileError);
+    expect((error as VfsSingleFileError).name).toBe('VfsSingleFileError');
+    const message = (error as Error).message;
+    expect(message).toContain(`${oversize} 字节`);
+    expect(message).toContain(`超过导入上限 ${32 * 1024 * 1024} 字节`);
+    expect(mockReadFile).not.toHaveBeenCalled();
+    expect(mockPlanBatchIngest).not.toHaveBeenCalled();
+    expect(mockApplyBatchIngest).not.toHaveBeenCalled();
+  });
+
   // T-MF3
   it('非 UTF-8 文件被 core 判跳过：结果带回 skippedBinary 供 UI 明示', async () => {
     mockPlanBatchIngest.mockResolvedValue(
@@ -260,9 +282,12 @@ describe('vfs-single-file.service', () => {
       skipped: [],
     });
 
-    await expect(
-      exportVfsSingleFile(runtime, scope, '/角色'),
-    ).rejects.toThrow('/角色');
+    const failure = await exportVfsSingleFile(runtime, scope, '/角色').then(
+      () => undefined,
+      (err: unknown) => err,
+    );
+    expect(failure).toBeInstanceOf(VfsSingleFileError);
+    expect((failure as Error).message).toContain('/角色');
     expect(mockWriteFile).not.toHaveBeenCalled();
     expect(mockSaveDocuments).not.toHaveBeenCalled();
   });

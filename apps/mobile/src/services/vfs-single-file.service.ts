@@ -25,6 +25,7 @@ import {
 } from './document-io';
 import {blobFs} from './rn-file-io';
 import {vfsSingleFileImportPickTypes} from './vfs-single-file-document-pick';
+import {VfsSingleFileError} from '../errors/vfs-single-file-error';
 import type {MobileNovelMasterRuntime} from '../runtime/types';
 
 /**
@@ -99,11 +100,13 @@ export async function importVfsSingleFile(
     localFileName: 'import.bin',
     maxBytes: VFS_SINGLE_FILE_MAX_INPUT_BYTES,
     buildTooLargeError: sizeBytes =>
-      new Error(
+      new VfsSingleFileError(
         `文件过大：${sizeBytes} 字节，超过导入上限 ${VFS_SINGLE_FILE_MAX_INPUT_BYTES} 字节（约 32MB），已拒绝导入`,
       ),
-    buildCopyError: copyError => new Error(copyError ?? '无法读取所选文件'),
-    buildMissingError: fsPath => new Error(`所选文件不存在：${fsPath}`),
+    buildCopyError: copyError =>
+      new VfsSingleFileError(copyError ?? '无法读取所选文件'),
+    buildMissingError: fsPath =>
+      new VfsSingleFileError(`所选文件不存在：${fsPath}`),
   });
   if (picked == null) {
     return {status: 'cancelled'};
@@ -163,7 +166,7 @@ export async function exportVfsSingleFile(
   const batchIo = createVfsBatchIoService(runtime.conn);
   const plan = await batchIo.planBatchExport(scope, [logicalPath]);
   if (plan.files.length !== 1) {
-    throw new Error(`导出目标不是单个文件：${logicalPath}`);
+    throw new VfsSingleFileError(`导出目标不是单个文件：${logicalPath}`);
   }
 
   const file = plan.files[0]!;

@@ -39,9 +39,13 @@ jest.mock('../src/components/chrome/ToastHost', () => ({
   useToast: () => ({showToast: mockShowToast}),
 }));
 
+/**
+ * toastMessage 的真形态是「标题：错误详情」。这里保留标题前缀（真实实现见
+ * src/errors/toast-message.ts），失败链才能断言到「导入失败」这类标题文案。
+ */
 jest.mock('../src/errors/toast-message', () => ({
-  toastMessage: (_title: string, err: unknown) =>
-    err instanceof Error ? err.message : String(err),
+  toastMessage: (title: string, err: unknown) =>
+    err instanceof Error ? `${title}：${err.message}` : title,
 }));
 
 jest.mock('../src/services/vfs-operations.service', () => ({
@@ -160,6 +164,7 @@ import {
   exportVfsSingleFile,
   importVfsSingleFile,
 } from '../src/services/vfs-single-file.service';
+import {VfsSingleFileError} from '../src/errors/vfs-single-file-error';
 
 const {VfsFileManager} =
   require('../src/components/vfs/VfsFileManager') as typeof import('../src/components/vfs/VfsFileManager');
@@ -520,6 +525,27 @@ describe('VfsFileManager 导入导出菜单（Step 5）', () => {
     expect(mockShowToast).toHaveBeenCalledWith('文件已保存到所选位置');
   });
 
+  it('T-MM2：dir 行「导出」走 ZIP 导出服务（directoryPath=目录路径）', async () => {
+    // 目录行才有 /sub 可导出：list 须先 mock 出该目录行（同 T-MM1）。
+    list.mockResolvedValue([
+      {path: '/sub', kind: 'directory'},
+      {path: '/note.md', kind: 'file'},
+    ]);
+    await renderAndSettle(renderSessionVfm());
+    await openRowMenu('sub');
+
+    await act(async () => {
+      capturedEntityMenu!.onSelect('export');
+      await flushPromises();
+    });
+
+    expect(exportVfsZip).toHaveBeenCalledWith(mockRuntime, expect.anything(), {
+      directoryPath: '/sub',
+    });
+    expect(exportVfsSingleFile).not.toHaveBeenCalled();
+    expect(mockShowToast).toHaveBeenCalledWith('ZIP 已保存到所选位置');
+  });
+
   it('T-MM4：「导入」开第三张 sheet（单文件 / ZIP 包 / 角色卡）', async () => {
     await renderAndSettle(renderSessionVfm());
     await openMoreMenu();
@@ -588,7 +614,7 @@ describe('VfsFileManager 导入导出菜单（Step 5）', () => {
     );
   });
 
-  it('T-MM4：sheet 选 file 走单文件导入；同名冲突先确认再落库', async () => {
+  it('T-MM4：dir 行「导入」→ sheet 选 file 走单文件导入；同名冲突先确认再落库', async () => {
     const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
     const confirmMock = jest.fn(async () => ({
       status: 'applied' as const,
@@ -601,9 +627,14 @@ describe('VfsFileManager 导入导出菜单（Step 5）', () => {
       fileName: 'note.md',
       confirm: confirmMock,
     });
+    // 目录行才有「导入」入口（file 行菜单不含 import），须先 mock 出 /sub 目录行。
+    list.mockResolvedValue([
+      {path: '/sub', kind: 'directory'},
+      {path: '/note.md', kind: 'file'},
+    ]);
 
     await renderAndSettle(renderSessionVfm());
-    await openRowMenu('note.md');
+    await openRowMenu('sub');
     await act(async () => {
       capturedEntityMenu!.onSelect('import');
       await flushPromises();
@@ -614,10 +645,11 @@ describe('VfsFileManager 导入导出菜单（Step 5）', () => {
       await flushPromises();
     });
 
+    // targetDir 是目录路径（行菜单来源 = menuPath），不是文件路径。
     expect(importVfsSingleFile).toHaveBeenCalledWith(
       mockRuntime,
       expect.anything(),
-      {targetDir: '/note.md'},
+      {targetDir: '/sub'},
     );
     // 冲突确认框：文案带同名文件数，且确认前不落库。
     const [confirmTitle, confirmMessage] = alertSpy.mock.calls.at(-1) as [
@@ -657,6 +689,32 @@ describe('VfsFileManager 导入导出菜单（Step 5）', () => {
 
     expect(alertSpy).not.toHaveBeenCalled();
     expect(mockShowToast).not.toHaveBeenCalled();
+  });
+
+  it('T-MM4：单文件导入超限被拒（服务抛错）→ toast 含「导入失败」与超限详情', async () => {
+    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    mockFn(importVfsSingleFile).mockRejectedValue(
+      new VfsSingleFileError(
+        '文件过大：34000000 字节，超过导入上限 33554432 字节（约 32MB），已拒绝导入',
+      ),
+    );
+
+    await renderAndSettle(renderSessionVfm());
+    await openMoreMenu();
+    await act(async () => {
+      capturedMoreMenu!.onSelect('import');
+      await flushPromises();
+    });
+    await act(async () => {
+      capturedImportSheet!.onSelect('file');
+      await flushPromises();
+    });
+
+    // 失败不弹确认框（超限发生在 picker 读字节阶段，走不到 needs-confirm）。
+    expect(alertSpy).not.toHaveBeenCalled();
+    const toast = mockFn(mockShowToast).mock.calls.at(-1)?.[0] as string;
+    expect(toast).toContain('导入失败');
+    expect(toast).toContain('超过导入上限');
   });
 
   it('T-MM4：切走浮层（dismissAllOverlays）后导入 sheet 一并关闭', async () => {
