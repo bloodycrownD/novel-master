@@ -392,6 +392,13 @@ export class DefaultVfsBatchIoService implements VfsBatchIoService {
       }
     }
 
+    // WHY 清理排在 failedPath 早退**之前**：跨片失败时前几片已真实落库，下一轮
+    // 提示词必须按新文件重评（否则拿旧文件重评 = 用户看到过期内容）。
+    // 门闸按 `writtenLogical.length > 0` 判定 ⇒ 分片失败只要有已提交分片就清，
+    // 同片失败（零写入）与下面两条早退（typeConflicts / 冲突未确认，走在分片之前
+    // 直接 return，压根到不了这里）保持不清。
+    await this.alignPromptCachesAfterWrite(scope, writtenLogical.length);
+
     if (failedPath != null) {
       return {
         written: [...writtenLogical],
@@ -403,17 +410,6 @@ export class DefaultVfsBatchIoService implements VfsBatchIoService {
           },
         ],
       };
-    }
-
-    // 事务成功提交后再对齐提示词缓存；helper 自吞错（best-effort），不影响导入结果。
-    // 口径「有成功写入才清」：上面三条早退（typeConflicts / 冲突未确认 / 分片失败）
-    // 都不清——没写成的东西不该让会话提示词缓存失效。
-    // ⚠️ **有意不补 backfillBaseline**（zip 的段 C 有、这里没有）：批量 ingest 走
-    // `writeWithRevision`，它自带 head 与 revision 对齐（`insertFileSeedingRevision`
-    // 把 head 同步落库），与 zip「整树导入后给历史 message 补 checkpoint 快照」
-    // 是两件事——这里没有需要补的 baseline 写点。
-    if (writtenLogical.length > 0 && this.sessionKkv && scope.kind === "session") {
-      await clearSessionPromptCaches(scope.sessionId, this.sessionKkv);
     }
 
     return {
@@ -476,15 +472,34 @@ export class DefaultVfsBatchIoService implements VfsBatchIoService {
       }
     }
 
-    // 与 applyBatchIngest 同一口径：written 非空才清，门闸同款。
-    // 这条链（session + user-vfs-turn 统一工具轮）自身不清缓存——vfs write 工具
-    // 反而会 upsert 单条 file_cache，不清 rule_snapshot、不失效 token cache，
-    // 所以「上层已保证一致性」不成立，必须在这里补。
-    if (written.length > 0 && this.sessionKkv && scope.kind === "session") {
-      await clearSessionPromptCaches(scope.sessionId, this.sessionKkv);
-    }
+    // 与 applyBatchIngest 同一门闸（收敛到 alignPromptCachesAfterWrite，口径改一处即可）。
+    // WHY 这里也必须自己清：这条链（session + user-vfs-turn 统一工具轮）自身不清缓存
+    // ——vfs write 工具反而会 upsert 单条 file_cache，不清 rule_snapshot、不失效
+    // token cache，所以「上层已保证一致性」不成立。
+    await this.alignPromptCachesAfterWrite(scope, written.length);
 
     return { written, skipped, failed };
+  }
+
+  /**
+   * 写入后对齐 session 提示词缓存（`rule_snapshot` + `file_cache` 两域 + token/用量）。
+   *
+   * 口径「有成功写入才清」——`writtenCount === 0` 是**零写入**早退（typeConflicts /
+   * 冲突未确认 / 同片失败），没写成东西不该让会话提示词缓存失效；非空则清，
+   * **包括分片失败但已有已提交分片的情形**（那部分是真落库了）。
+   * best-effort：helper 自带 try/catch + warn，清理失败不影响导入结果。
+   * ⚠️ **有意不补 backfillBaseline**（zip 的段 C 有、这里没有）：批量 ingest 走
+   * `writeWithRevision`，它自带 head 与 revision 对齐（`insertFileSeedingRevision`
+   * 把 head 同步落库），与 zip「整树导入后给历史 message 补 checkpoint 快照」
+   * 是两件事——这里没有需要补的 baseline 写点。
+   */
+  private async alignPromptCachesAfterWrite(
+    scope: VfsScope,
+    writtenCount: number
+  ): Promise<void> {
+    if (writtenCount > 0 && this.sessionKkv && scope.kind === "session") {
+      await clearSessionPromptCaches(scope.sessionId, this.sessionKkv);
+    }
   }
 
   async planBatchExport(
