@@ -24,7 +24,7 @@ describe("agent-prompt-layout-wire", () => {
     });
   });
 
-  it("dynamic 块无 lifecycle 时省略字段", () => {
+  it("dynamic 块恒不含 lifecycle 键", () => {
     const block: DynamicPromptBlock = {
       name: "state",
       type: "text",
@@ -35,22 +35,6 @@ describe("agent-prompt-layout-wire", () => {
       type: "text",
       role: "user",
       content: "{{$filetree}}",
-    });
-  });
-
-  it("dynamic 块 lifecycle once 写入 wire", () => {
-    const block: DynamicPromptBlock = {
-      name: "once",
-      type: "text",
-      role: "assistant",
-      content: "x",
-      lifecycle: "once",
-    };
-    assert.deepEqual(dynamicBlockToWire(block), {
-      type: "text",
-      role: "assistant",
-      content: "x",
-      lifecycle: "once",
     });
   });
 });

@@ -439,7 +439,7 @@ export class DefaultAgentRunner implements AgentRunner {
         // 分解；丢掉则 run 侧全程无指纹（既不命中记忆也不分解，①②批收益在
         // 评估链归零）。与 desktop build 的 ctx 同款透传（见
         // session-prompt-input.service.ts 的 `workplaceFingerprint: fingerprint`）。
-        const { workplaceDisplay, prefixPaths, visiblePaths, fingerprint } =
+        const { workplaceDisplay, files, prefixPaths, visiblePaths, fingerprint } =
           await assembleWorkplaceDisplay(
             wtScope,
             {
@@ -520,6 +520,8 @@ export class DefaultAgentRunner implements AgentRunner {
           workplace: wt,
           filetree: turnFiletree,
           skillsIndex,
+          // 结构化文件清单（预览侧 workplace 二级卡数据源）：组装顺产直通。
+          workplaceFiles: files,
           // 组装指纹随 ctx 进压缩评估（r4-core-2）：只被 token 读口
           // （记忆键 / 增量分解的按指纹缓存）消费，渲染侧忽略——零行为影响。
           workplaceFingerprint: fingerprint,

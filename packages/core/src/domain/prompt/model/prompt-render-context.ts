@@ -15,6 +15,16 @@ export interface PromptSkillIndexEntry {
   readonly domain: "global" | "project";
 }
 
+/** workplace 结构化文件条目（`assembleWorkplaceDisplay` 顺产，预览侧二级卡数据源）。 */
+export interface PromptWorkplaceFileEntry {
+  /** VFS 逻辑路径（规则快照条目原值）。 */
+  readonly path: string;
+  /** 展示档（与 `WorkplaceDisplayStatus` 同值：`full` / `header` / `filename`）。 */
+  readonly display: "full" | "header" | "filename";
+  /** 块内正文（`N|行` 行号格式；header 档为 front-matter 行）。 */
+  readonly body: string;
+}
+
 /** Workplace + 会话消息 + VFS 上下文（dynamic 宏展开）。 */
 export interface PromptRenderContext {
   readonly workplaceDisplay: string;
@@ -32,6 +42,13 @@ export interface PromptRenderContext {
    * （`SkillService.effectiveSkills`）；空/缺省不产生技能索引段。
    */
   readonly skillsIndex?: readonly PromptSkillIndexEntry[];
+  /**
+   * workplace 的**结构化文件清单**（`assembleWorkplaceDisplay` 顺产）：
+   * 预览侧 workplace 二级卡的数据源——不从 `workplaceDisplay` 展示串反解
+   * （用户拍板：从 session kkv 规则快照源头直通更干净）。缺省/空时预览侧
+   * workplace 段退普通文本卡。
+   */
+  readonly workplaceFiles?: readonly PromptWorkplaceFileEntry[];
   /**
    * workplaceDisplay 的**廉价内容指纹**（`assembleWorkplaceDisplay` 产出，
    * `path|status|mtimeMs|bodyLen` 列表 join，2026-09-30；体量段为 r4-core-4

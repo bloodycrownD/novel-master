@@ -11,7 +11,6 @@ import type {
   PersistTextPromptBlock,
 } from "../model/agent-prompt-layout.js";
 import { WORKPLACE_TRUE_COMPAT_ASSISTANT_TEXT } from "../model/agent-prompt-layout.js";
-import type { PromptBlockLifecycle } from "../model/prompt-block.js";
 import {
   dynamicBlockToWire,
   persistBlockToWire,
@@ -21,8 +20,6 @@ import {
   rejectPersistMacros,
   validateDynamicMacros,
 } from "./validate-dynamic-macros.js";
-
-const LIFECYCLES = new Set<PromptBlockLifecycle>(["always", "once"]);
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.length > 0;
@@ -112,12 +109,6 @@ function parsePersistTextBlock(
       `${label}：文本块须为字符串 content`
     );
   }
-  if ("lifecycle" in record) {
-    throw new PromptError(
-      "INVALID_BLOCK",
-      `${label}：持久区文本块不得包含 lifecycle`
-    );
-  }
   rejectPersistMacros(record.content, label);
   return {
     name,
@@ -162,20 +153,6 @@ function parseDynamicBlock(name: string, item: unknown): DynamicPromptBlock {
     );
   }
 
-  let lifecycle: PromptBlockLifecycle | undefined;
-  if ("lifecycle" in record && record.lifecycle != null) {
-    const lc = record.lifecycle;
-    if (typeof lc !== "string" || !LIFECYCLES.has(lc as PromptBlockLifecycle)) {
-      throw new PromptError(
-        "INVALID_BLOCK",
-        `${label}：lifecycle 须为 always 或 once`
-      );
-    }
-    if (lc === "once") {
-      lifecycle = "once";
-    }
-  }
-
   validateDynamicMacros(record.content, label);
 
   return {
@@ -183,7 +160,6 @@ function parseDynamicBlock(name: string, item: unknown): DynamicPromptBlock {
     type: "text",
     role,
     content: record.content,
-    ...(lifecycle != null ? { lifecycle } : {}),
   };
 }
 

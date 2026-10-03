@@ -17,24 +17,46 @@ import {
 import { stripLegacyWorktreeBlocksFromPersistMap } from "@/domain/prompt/logic/normalize-agent-prompt-layout.js";
 import type { AgentDefinition, AgentToolPolicy } from "./agent-definition.js";
 
-const persistTextBlockValueSchema = z
-  .object({
-    type: z.literal("text"),
-    role: z.enum(["user", "assistant"]),
-    content: z.string(),
-  })
-  .strict();
+/**
+ * 剥掉 wire 上已下线的 `lifecycle` 键后再入 strict parse。
+ *
+ * @remarks 常驻开关下线后 dynamic 一律 once 语义，persist 恒无该字段。存量定义
+ * （`lifecycle:"once"` / `"always"` / 非法值）一律静默剥键照常 decode，不拒载、不迁移；
+ * 与 raw-map 校验层（`validate-agent-prompt-layout`）同为 strip 语义，避免双入口分歧。
+ */
+function stripLifecycleKey(raw: unknown): unknown {
+  if (raw == null || typeof raw !== "object" || Array.isArray(raw)) {
+    return raw;
+  }
+  const record = raw as Record<string, unknown>;
+  if (!("lifecycle" in record)) {
+    return raw;
+  }
+  const rest: Record<string, unknown> = { ...record };
+  delete rest.lifecycle;
+  return rest;
+}
 
-const persistBlockValueSchema = persistTextBlockValueSchema;
+/**
+ * 文本块 wire 值 schema：剥 lifecycle 键后 strict 解析。
+ *
+ * @remarks persist 与 dynamic 两区文本块形态一致（type/role/content），共用本常量；
+ * 下方三个具名别名只为保持既有引用面。
+ */
+const textBlockValueSchema = z.preprocess(
+  stripLifecycleKey,
+  z
+    .object({
+      type: z.literal("text"),
+      role: z.enum(["user", "assistant"]),
+      content: z.string(),
+    })
+    .strict()
+);
 
-const dynamicTextBlockValueSchema = z
-  .object({
-    type: z.literal("text"),
-    role: z.enum(["user", "assistant"]),
-    content: z.string(),
-    lifecycle: z.enum(["always", "once"]).optional(),
-  })
-  .strict();
+const persistBlockValueSchema = textBlockValueSchema;
+
+const dynamicTextBlockValueSchema = textBlockValueSchema;
 
 function rejectLegacyPromptKeys(raw: unknown): unknown {
   if (raw == null || typeof raw !== "object" || Array.isArray(raw)) {

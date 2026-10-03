@@ -36,11 +36,11 @@ prompts:
     assert.equal(again.prompts.persist[0]?.name, "persona");
   });
 
-  it("L10: lifecycle once written on encode in dynamic; always omitted", () => {
+  it("L10: 存量 lifecycle 读入剥键，写出恒不含 lifecycle 键", () => {
     const def = decode(
       {
         schemaVersion: 1,
-        name: "lifecycle",
+        name: "lc-agent",
         prompts: {
           persist: {},
           dynamic: {
@@ -56,19 +56,24 @@ prompts:
       },
       agentDefinitionSchema,
     );
-    const yaml = stringifyText(encode(def, agentDefinitionSchema), "yaml");
-    assert.match(yaml, /lifecycle:\s*once/);
-    assert.doesNotMatch(yaml, /lifecycle:\s*always/);
+    // 读入：域对象无 lifecycle 键
+    assert.equal("lifecycle" in (def.prompts.dynamic[0] as Record<string, unknown>), false);
+
+    // 写出：wire 文档恒不含 lifecycle 键
     const doc = encode(def, agentDefinitionSchema) as {
       prompts?: { dynamic?: Record<string, Record<string, unknown>> };
     };
+    assert.equal(doc.prompts?.dynamic?.kick?.lifecycle, undefined);
     assert.equal(doc.prompts?.dynamic?.ctx?.lifecycle, undefined);
+    const yaml = stringifyText(encode(def, agentDefinitionSchema), "yaml");
+    assert.doesNotMatch(yaml, /lifecycle/);
 
     const again = decode(parseText(yaml, "yaml"), agentDefinitionSchema);
-    const kick = again.prompts.dynamic.find((b) => b.name === "kick");
-    assert.equal(kick?.lifecycle, "once");
-    const ctx = again.prompts.dynamic.find((b) => b.name === "ctx");
-    assert.equal(ctx?.lifecycle, undefined);
+    assert.equal(again.prompts.dynamic.length, 2);
+    assert.equal(
+      "lifecycle" in (again.prompts.dynamic[0] as Record<string, unknown>),
+      false
+    );
   });
 
   it("T-CA1a: prompts.customAttach 走 definitionToDocument → documentToDefinition 往返不丢字段", () => {

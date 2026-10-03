@@ -1,11 +1,15 @@
 /**
- * Real prompt preview segments for desktop conversation tab.
+ * Real prompt preview turns for desktop conversation tab.
+ *
+ * 轮聚合（prompt-rounds）：返回按「模板段各占一轮 / 真用户输入开新轮 / 其余归
+ * assistant 轮」聚合后的轮数组，而不是扁平段数组——renderer 直接按轮渲染，
+ * assistant 轮正文已在 `body` 一份字符串里。
  */
 import {
   applyThinkingContextForLlm,
-  buildPromptPreviewSegmentsFromLayout,
+  buildPromptPreviewTurnsFromLayout,
   resolvePreviewThinkingContext,
-  type PromptPreviewSegment,
+  type PromptPreviewTurn,
   type PromptRenderContext,
   type PromptSkillIndexEntry,
 } from "@novel-master/core/prompt";
@@ -53,10 +57,10 @@ async function budgetSkillsIndex(
     }));
 }
 
-export async function buildRealPromptPreviewSegments(
+export async function buildRealPromptPreviewTurns(
   runtime: DesktopNovelMasterRuntime,
   scope: PromptPreviewScope,
-): Promise<readonly PromptPreviewSegment[]> {
+): Promise<readonly PromptPreviewTurn[]> {
   const { definition } = await resolveAgentForProject(
     runtime,
     scope.projectId,
@@ -96,7 +100,7 @@ export async function buildRealPromptPreviewSegments(
     skillsIndex != null
       ? { ...ctx, skillsIndex, messages: filteredMessages }
       : { ...ctx, messages: filteredMessages };
-  return await buildPromptPreviewSegmentsFromLayout(layout, previewCtx, {
+  return await buildPromptPreviewTurnsFromLayout(layout, previewCtx, {
     includeThinkingBlocks: thinking.enabled,
   });
 }

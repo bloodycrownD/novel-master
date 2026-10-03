@@ -18,7 +18,6 @@ export {
   WORKPLACE_TRUE_COMPAT_ASSISTANT_TEXT,
   layoutHasWorkplace,
 } from "../domain/prompt/model/agent-prompt-layout.js";
-export { shouldIncludeDynamicBlock } from "../domain/prompt/logic/should-include-dynamic-block.js";
 export {
   messageBodyText,
   messageBodyTextFromBlocks,
@@ -57,8 +56,23 @@ export type {
   PromptAssemblyOptions,
   PromptPreviewSegment,
 } from "../service/prompt/render-prompt.js";
+export { buildPromptPreviewTurnsFromLayout } from "../service/prompt/prompt-preview-turns.js";
+export { formatToolUsePreviewJson } from "../service/prompt/prompt-preview-turns.js";
+export type {
+  PromptWorkplaceCardData,
+  PromptWorkplaceFileCardData,
+} from "../service/prompt/prompt-preview-turns.js";
+export type {
+  PromptPreviewTurn,
+  PromptTurnCardData,
+  PromptTextCardData,
+  PromptToolGroupCardData,
+  PromptToolGroupResultData,
+  PromptToolGroupStatus,
+} from "../service/prompt/prompt-preview-turns.js";
 export type {
   PromptRenderContext,
   PromptSkillIndexEntry,
   PromptLlmInput,
+  PromptWorkplaceFileEntry,
 } from "../domain/prompt/model/prompt-render-context.js";

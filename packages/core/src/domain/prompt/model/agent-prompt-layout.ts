@@ -4,10 +4,16 @@
  * @module domain/prompt/model/agent-prompt-layout
  */
 
-import type { PromptBlockLifecycle } from "./prompt-block.js";
-
 /** persist 区文本块（user | assistant）。 */
 export type PersistTextPromptBlock = {
+  readonly name: string;
+  readonly type: "text";
+  readonly role: "user" | "assistant";
+  readonly content: string;
+};
+
+/** dynamic 区文本块（允许宏；一律 once 语义，仅 step 0 注入）。 */
+export type DynamicPromptBlock = {
   readonly name: string;
   readonly type: "text";
   readonly role: "user" | "assistant";
@@ -32,15 +38,6 @@ export type EditorPersistPromptBlock =
 
 /** @deprecated 域 persist 仅 text；请用 {@link PersistTextPromptBlock}。 */
 export type PersistPromptBlock = EditorPersistPromptBlock;
-
-/** dynamic 区文本块（允许宏与 lifecycle）。 */
-export type DynamicPromptBlock = {
-  readonly name: string;
-  readonly type: "text";
-  readonly role: "user" | "assistant";
-  readonly content: string;
-  readonly lifecycle?: PromptBlockLifecycle;
-};
 
 /**
  * wire `workplace: true` 读入后的兼容助手确认语

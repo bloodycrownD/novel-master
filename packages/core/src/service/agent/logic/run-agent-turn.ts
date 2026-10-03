@@ -901,16 +901,6 @@ async function runAgentTurnWithController(
       // 真正的硬互斥在 runChildAgent 内的 tryRegister claim（spec D5）。
       isSessionRunActive: (id: string): boolean =>
         runtime.abortRegistry?.has(id) ?? true,
-      // fileAttachment 预算计量（spec D11）：主装配点的 vfs 就是本 run 的会话视图。
-      getContentSize: async (path: string) => {
-        const size = await vfs.findContentSize(path);
-        if (size == null) {
-          return null;
-        }
-        return size.kind === "inlineChars"
-          ? ({ kind: "inline", size: size.size } as const)
-          : ({ kind: "blob", size: size.size } as const);
-      },
       resolveChildModelId: (
         def: AgentDefinition
       ): { savedModelId: string; workspaceModelId: string } => {
@@ -1292,16 +1282,6 @@ async function runChildAgent(args: {
         // 并发软闸与主装配点同款（缺 registry 保守拒绝）。
         isSessionRunActive: (id: string): boolean =>
           runtime.abortRegistry?.has(id) ?? true,
-        // 预算计量绑定本层 vfs（= 父会话工作区视图，孙会话同样只在父工作区取文件）。
-        getContentSize: async (path: string) => {
-          const size = await vfs.findContentSize(path);
-          if (size == null) {
-            return null;
-          }
-          return size.kind === "inlineChars"
-            ? ({ kind: "inline", size: size.size } as const)
-            : ({ kind: "blob", size: size.size } as const);
-        },
         resolveChildModelId: (
           grandchildDef: AgentDefinition
         ): { savedModelId: string; workspaceModelId: string } => {

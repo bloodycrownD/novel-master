@@ -67,7 +67,7 @@ function mockToolCtx(vfs: VfsService): BuiltinToolContext {
  * 回合内所有 step 复用同一份文本，保证每步请求是前一步的纯追加（提升前缀缓存命中）。
  */
 describe("AgentRunner macro turn snapshot", () => {
-  it("T-SNAP2: 多 step 内 renderFileTree 只调一次且 dynamic 块文本跨 step 一致", async () => {
+  it("T-SNAP2: renderFileTree 只调一次且 dynamic 块仅 step0 注入（展开值取自回合快照）", async () => {
     const session = new InMemoryAgentSession(SESSION_ID);
     await session.append("user", textBlocks("go"));
 
@@ -81,7 +81,6 @@ describe("AgentRunner macro turn snapshot", () => {
             name: "ctx",
             type: "text",
             role: "user",
-            lifecycle: "always",
             content: "时间 {{$time}}\n树 {{$filetree}}",
           },
         ],
@@ -155,13 +154,18 @@ describe("AgentRunner macro turn snapshot", () => {
     // 快照只取一次：customAttach/dynamic/token 计数各链路共享，不重复渲染。
     assert.equal(renderFileTree.mock.callCount(), 1);
 
-    const dynamicBodies = histories.map((opts) => {
+    const dynamicBodies: string[] = [];
+    // dynamic 一律 once 语义：仅 step 0 出现，step≥1 跳过。
+    for (const [index, opts] of histories.entries()) {
       const hit = (opts.history ?? []).find((m) => m.id === "prompt:ctx");
-      assert.notEqual(hit, undefined, "dynamic 合成消息应存在于 history");
-      return messageBodyText(hit!);
-    });
-    // $time 与 $filetree 均来自回合快照：跨 step 逐字一致。
-    assert.equal(dynamicBodies[0], dynamicBodies[1]);
+      if (index === 0) {
+        assert.notEqual(hit, undefined, "step0 应注入 dynamic 合成消息");
+        dynamicBodies.push(messageBodyText(hit!));
+      } else {
+        assert.equal(hit, undefined, "step≥1 不应重复注入 dynamic 块");
+      }
+    }
+    // $time 与 $filetree 均来自回合快照（单次渲染）。
     assert.match(dynamicBodies[0]!, /\/tree-call-1/);
   });
 

@@ -18,6 +18,7 @@ export const PAGE_HEADER_CONFIG: Record<HeaderPageKey, PageHeaderConfig> = {
   AgentsSettings: {title: '智能体配置', showBack: true, showNav: false},
   AgentEditor: {title: '智能体配置', showBack: true, showNav: false},
   RealPrompt: {title: '查看提示词', showBack: true, showNav: false},
+  PromptTurnDetail: {title: '轮详情', showBack: true, showNav: false},
   Providers: {title: '服务商配置', showBack: true, showNav: false},
   ProviderCreate: {title: '添加服务商', showBack: true, showNav: false},
   ProviderDetail: {title: '模型管理', showBack: true, showNav: false},

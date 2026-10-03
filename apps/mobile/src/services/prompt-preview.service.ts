@@ -1,5 +1,5 @@
 /**
- * Real prompt preview: agent prompts + structured segments.
+ * Real prompt preview: agent prompts + structured turns.
  */
 import {registerBuiltinTools, ToolRegistry} from '@novel-master/core';
 import {
@@ -9,9 +9,9 @@ import {
 } from '@novel-master/core/agent';
 import {
   applyThinkingContextForLlm,
-  buildPromptPreviewSegmentsFromLayout,
+  buildPromptPreviewTurnsFromLayout,
   resolvePreviewThinkingContext,
-  type PromptPreviewSegment,
+  type PromptPreviewTurn,
   type PromptRenderContext,
   type PromptSkillIndexEntry,
 } from '@novel-master/core/prompt';
@@ -53,11 +53,15 @@ async function budgetSkillsIndex(
     }));
 }
 
-/** Ordered segments for collapsible real-prompt UI (one card per bubble). */
-export async function buildRealPromptPreviewSegments(
+/**
+ * 按「轮」聚合的真实提示词（R4）：模板段各占一轮、真用户输入开一轮、
+ * 其余 assistant 文本/thinking/工具段归入同一 assistant 轮。轮摘要口径在
+ * core 侧钉死，本地不再二次加工。
+ */
+export async function buildRealPromptPreviewTurns(
   runtime: MobileNovelMasterRuntime,
   scope: PromptPreviewScope,
-): Promise<readonly PromptPreviewSegment[]> {
+): Promise<readonly PromptPreviewTurn[]> {
   const {definition} = await resolveAgentForProject(
     runtime,
     scope.projectId,
@@ -97,7 +101,7 @@ export async function buildRealPromptPreviewSegments(
     skillsIndex != null
       ? {...ctx, skillsIndex, messages: filteredMessages}
       : {...ctx, messages: filteredMessages};
-  return await buildPromptPreviewSegmentsFromLayout(layout, previewCtx, {
+  return await buildPromptPreviewTurnsFromLayout(layout, previewCtx, {
     includeThinkingBlocks: thinking.enabled,
   });
 }

@@ -9,6 +9,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
 import { messageBodyText } from "../../src/domain/chat/content/message-body-text.js";
+import { ATTACH_PROMPT_CHAR_BUDGET } from "../../src/domain/chat/logic/attach-budget.js";
 import { prepareUserMessagesForPrompt } from "../../src/domain/chat/logic/prepare-user-messages-for-prompt.js";
 import type { ChatMessage } from "../../src/domain/chat/model/message.js";
 import type { MessageAttachment } from "../../src/domain/chat/model/message-attachment.schema.js";
@@ -458,5 +459,92 @@ describe("prepareUserMessagesForPrompt skillAttach (T-SK12)", () => {
     assert.deepEqual(prepared[0]!.attachments, [att]);
     // 无可拼 body → wrap 恒等原文
     assert.equal(messageBodyText(prepared[0]!), "m1");
+  });
+
+  it("T-A2: skill 全文超附件预算 → skillAttach 降级 display:\"filename\" + 分段读取引导；恰好等于预算不降级", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const sk = createSessionKkvService(ctx.conn);
+    const runtimeBase = {
+      sessionId: session.id,
+      sessionKkv: sk,
+      vfs: ctx.sessionVfs(project.id, session.id),
+      projectId: project.id,
+    };
+
+    // 恰好等于预算：全文照旧（边界不降级）
+    const exact = fakeSkillService({
+      names: ["demo"],
+      content: "x".repeat(ATTACH_PROMPT_CHAR_BUDGET),
+    });
+    const exactBody = messageBodyText(
+      (
+        await prepareUserMessagesForPrompt(
+          [
+            userMsg("m1", {
+              sessionId: session.id,
+              attachments: [skillAttach("demo")],
+            }),
+          ],
+          { ...runtimeBase, skills: exact },
+        )
+      )[0]!,
+    );
+    assert.match(exactBody, /<action name="skillAttach">/);
+    assert.equal(exactBody.includes('"display"'), false);
+    assert.equal(exactBody.includes("文件过长"), false);
+
+    // 超过预算一个字符：降级
+    const over = fakeSkillService({
+      names: ["demo"],
+      content: "x".repeat(ATTACH_PROMPT_CHAR_BUDGET + 1),
+    });
+    const overBody = messageBodyText(
+      (
+        await prepareUserMessagesForPrompt(
+          [
+            userMsg("m1", {
+              sessionId: session.id,
+              attachments: [skillAttach("demo")],
+            }),
+          ],
+          { ...runtimeBase, skills: over },
+        )
+      )[0]!,
+    );
+    assert.match(overBody, /<action name="skillAttach">/);
+    assert.match(overBody, /"display": "filename"/);
+    assert.match(overBody, /文件过长，可用 read 配合 offset\/limit 分段读取/);
+    assert.equal((overBody.match(/xxxx/g) ?? []).length, 0);
+  });
+
+  it("T-A5: skill 超限降级后仍写 seen → 同会话后续同技能走 alreadyReferenced", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const sk = createSessionKkvService(ctx.conn);
+    const skills = fakeSkillService({
+      names: ["demo"],
+      content: "x".repeat(ATTACH_PROMPT_CHAR_BUDGET + 1),
+    });
+
+    const prepared = await prepareUserMessagesForPrompt(
+      [
+        userMsg("m1", { id: "u1", sessionId: session.id, attachments: [skillAttach("demo")] }),
+        userMsg("m2", { id: "u2", sessionId: session.id, attachments: [skillAttach("demo")] }),
+      ],
+      {
+        sessionId: session.id,
+        sessionKkv: sk,
+        vfs: ctx.sessionVfs(project.id, session.id),
+        skills,
+        projectId: project.id,
+      },
+    );
+    assert.match(messageBodyText(prepared[0]!), /"display": "filename"/);
+    const body2 = messageBodyText(prepared[1]!);
+    assert.match(body2, /"alreadyReferenced": true/);
+    assert.equal(body2.includes("文件过长"), false);
   });
 });

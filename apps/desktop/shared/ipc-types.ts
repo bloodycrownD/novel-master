@@ -899,11 +899,123 @@ export type PromptScopeRequest = {
   readonly sessionId: string;
 };
 
-export type PromptPreviewSegmentDto = {
-  readonly id: string;
-  readonly role: string;
-  readonly title: string;
+/**
+ * 工具组卡状态（线上口径）：`ok` 成功 / `error` 失败（显式 `ok:false` 或 legacy
+ * `Error:` 前缀）/ `lost` 悬挂未回结果。
+ *
+ * 形状与 core 的 `PromptToolGroupStatus` 逐值一致。
+ */
+export type PromptToolGroupStatusDto = 'ok' | 'error' | 'lost';
+
+/**
+ * 工具组卡的 result 格；`null` 表示悬挂 use（丢失占位，槽位保留）。
+ *
+ * 形状与 core 的 `PromptToolGroupResultData` 逐字段一致。
+ */
+export type PromptToolGroupResultDto = {
+  readonly toolUseId: string;
+  readonly ok: boolean;
   readonly body: string;
+};
+
+/**
+ * 工具调用组卡：一次 `tool_use` 一张，跨消息按 `toolUseId` 与 `tool_result` 配对。
+ *
+ * 形状与 core 的 `PromptToolGroupCardData` 逐字段一致。
+ */
+export type PromptToolGroupDto = {
+  readonly type: 'toolGroup';
+  /** `group-${toolUseId}`，轮内唯一，React key 直接用它。 */
+  readonly id: string;
+  readonly toolName: string;
+  /** 美化 JSON（`JSON.stringify(input, null, 2)`）；空 input 退化为 `[tool_use name=… id=…]` 单行。 */
+  readonly inputJson: string;
+  /**
+   * 保结构截大 key 的预览形态（main 侧 `formatToolUsePreviewJson` 算好下发，
+   * renderer 只读不引 core 运行时）。全屏正文仍走 `inputJson` 原文。
+   */
+  readonly inputPreview: string;
+  readonly result: PromptToolGroupResultDto | null;
+  readonly status: PromptToolGroupStatusDto;
+  /** 同一消息内多个 `tool_use`（并行调用徽标）。 */
+  readonly parallel: boolean;
+};
+
+/**
+ * 文本 / thinking 卡：正文即「发给模型（或预览开关打开时的思考块）」的形态。
+ *
+ * 形状与 core 的 `PromptTextCardData` 逐字段一致。
+ */
+export type PromptTextCardDto = {
+  readonly type: 'text' | 'thinking';
+  /** 独立命名空间 `card-${message.id}-${blockIndex}`（template 轮卡用段 id）；仅要求轮内唯一。 */
+  readonly id: string;
+  /** 展示标签用：user / assistant / template 段名。 */
+  readonly role: string;
+  readonly body: string;
+};
+
+/** workplace 单文件格（形状与 core 的 `PromptWorkplaceFileCardData` 逐字段一致）。 */
+export type PromptWorkplaceFileDto = {
+  /** VFS 逻辑路径（kkv 规则快照条目原值）。 */
+  readonly path: string;
+  /** 块内正文（`N|行` 行号格式；header 档为 front-matter 行）。 */
+  readonly body: string;
+  /** 展示档：full / filename / header（快照原值，非推断）。 */
+  readonly display: 'full' | 'filename' | 'header';
+};
+
+/**
+ * workplace 组卡：常驻工作区段拆成的文件级二级卡（数据源 = kkv 规则快照
+ * 源头直通，不从展示串反解）。
+ */
+export type PromptWorkplaceDto = {
+  readonly type: 'workplace';
+  /** 段 id（`prompt-workplace`）。 */
+  readonly id: string;
+  readonly files: readonly PromptWorkplaceFileDto[];
+};
+
+/** 轮内有序卡片流（判别联合，discriminator = `type`）。 */
+export type PromptTurnCardDto =
+  | PromptTextCardDto
+  | PromptToolGroupDto
+  | PromptWorkplaceDto;
+
+/**
+ * 提示词预览「轮」（prompt-rounds）：模板段各占一轮、真用户输入开新轮、
+ * 其余消息段归入当前 assistant 轮。
+ *
+ * ## 体积策略（2026-10 起的口径，与旧策略**有意反转**）
+ *
+ * 全轮统一下发 `{id, kind, summaryText, metaText, cards}`，**不再按 kind 分叉**，
+ * 也**不再下发 `body` / `items`**：
+ *
+ * - `cards` 是**唯一正文载体**——一份结构化数据同时喂「就地展开」与「全屏」两处
+ *   渲染源。此前 `body` 与 `items` 并存才需要「assistant 轮只发 body、其余轮只发
+ *   items」的三元分叉来压体积；而那份顾虑（body 可达数百 KB、items 重复携带让
+ *   payload 近似翻倍）的根因是**同一份正文被拆成两种粒度各下发一次**。
+ *   cards 把正文按块序拆成结构化单元后，单份下发即可，旧顾虑自然消失。
+ * - `items` 退役：它是 core 的 CLI parity 冻结面（段集合/段序一字不动，见
+ *   `PromptPreviewTurn.items`），**只服务于 CLI 序列化契约**，不是好的渲染源——
+ *   段序是 parity 的副产物（合并的 tool 段恒在消息首位），与因果序不符。
+ *   renderer 要的因果序由 `cards` 提供。
+ * - `body` 退役：它是同轮 items 的 `[段名]\n正文` 拼接版，信息量被 cards 完全覆盖，
+ *   且拼接本身要在 main 侧对每轮做一次无谓的字符串拼接。
+ * - `summary` 退役：旧摘要是 `文本首行 · 工具调用 X 次 · Y 字` 的**拼串**，
+ *   消费方只能整段显示。新 `summaryText`（单行语义摘要，限 70 字）与 `metaText`
+ *   （计数行）由 core 分别计算，UI 各自决定怎么排版，不再被迫拆串。
+ */
+export type PromptPreviewTurnDto = {
+  readonly id: string;
+  /** 轮的消息 role（用户拍板：合成段按真实消息 role 归轮，无 template 特殊分类）。 */
+  readonly kind: 'system' | 'user' | 'assistant';
+  /** 真摘要：单行语义（>70 字截断，三类轮统一）。 */
+  readonly summaryText: string;
+  /** 计数行：字数 / 工具调用次数 / 失败丢失计数 / 附件计数。 */
+  readonly metaText: string;
+  /** 有序卡片流，顺序=消息块序重建的因果序（与 core 的 items 段序无关）。 */
+  readonly cards: readonly PromptTurnCardDto[];
 };
 
 export type PromptAgentMetaResponse = {

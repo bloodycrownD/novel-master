@@ -12,7 +12,7 @@
  */
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
-import { textBlocks } from "@novel-master/core/chat";
+import { textBlocks, ATTACH_PROMPT_CHAR_BUDGET } from "@novel-master/core/chat";
 import { buildDefaultAgentDefinitionPreservingName } from "@novel-master/core/config-forms/stored-config-validity";
 import { serializeRuleSnapshot } from "@novel-master/core/workplace";
 import { handleProjectsCreate } from "../src/main/ipc/handlers/projects.js";
@@ -115,6 +115,103 @@ describe("session-prompt-input.service (T-CA5 desktop)", () => {
       userBody,
       /这是常驻附加信息：优先级最高/,
       "customAttach 文本应原样出现在 extra-info 块内",
+    );
+  });
+});
+
+/**
+ * T-A8（desktop 侧）：附件预算降级 parity —— 预览链与实发链同一口径。
+ *
+ * 预算降级此前只在 core 的 prepare 单测里钉过，双端 service 侧零断言，实现方
+ * 以「一致性由 prepare 单源结构性保证」判过。本用例把结构性保证**落成一条会红
+ * 的断言**：超大文本附件经 buildSessionPromptInput（预览路径）产出后，attach
+ * XML 必须是 filename 档 + 「文件过长，可用 read 配合 offset/limit 分段读取」
+ * 引导文案，且不得残留正文——真发链（agent-runner）走同一个 prepare，出现分歧
+ * 时这条会红。
+ *
+ * 与 mobile 侧同款：真 DB / 真 VFS，只在最后一步断言 prepare 的降级形态。
+ */
+describe("session-prompt-input.service 附件预算降级 parity（T-A8）", () => {
+  let tempDir: string;
+  let projectId: string;
+  let sessionId: string;
+
+  /** 超预算附件路径。 */
+  const HUGE_PATH = "/huge.md";
+  /**
+   * 超预算正文长度 = 预算 + 1。
+   *
+   * 预算来源：core `ATTACH_PROMPT_CHAR_BUDGET`（public 子路径已导出），
+   * 直接引用常量——预算值若调整，这里自动跟随，不会以「不降级」红脸告警。
+   */
+  const OVER_BUDGET_BODY = "H".repeat(ATTACH_PROMPT_CHAR_BUDGET + 1);
+
+  before(async () => {
+    ({ tempDir } = await setupDesktopDbTestEnv("nm-desktop-attach-budget-"));
+    const project = await handleProjectsCreate({ name: "attach-budget" });
+    assert.equal(project.ok, true);
+    if (!project.ok) return;
+    projectId = project.data.id;
+    const agent = await handleAgentRegistryCreateBlank();
+    assert.equal(agent.ok, true);
+    if (!agent.ok) return;
+    const setAgent = await handleAgentSetCurrent({ agentId: agent.data.agentId });
+    assert.equal(setAgent.ok, true);
+    const session = await handleSessionsCreate({ projectId, title: "attach-budget" });
+    assert.equal(session.ok, true);
+    if (!session.ok) return;
+    sessionId = session.data.id;
+
+    const rt = await getDesktopRuntime();
+    // 真写一份超预算正文进 VFS：prepare 首次全文 hydrate 走
+    // file_cache miss → vfs.read 这条路。
+    await rt.sessionVfs(projectId, sessionId).write(HUGE_PATH, OVER_BUDGET_BODY);
+    // content: null ⇒ prepare 不走「已是 action XML」旁路，预算判据真的生效。
+    await rt.messages.append(sessionId, "user", textBlocks("帮我看看这个附件"), {
+      attachments: [
+        {
+          name: HUGE_PATH,
+          source: "attach",
+          type: "text",
+          content: null,
+          path: HUGE_PATH,
+        },
+      ],
+    });
+  });
+
+  after(async () => {
+    await teardownDesktopDbTestEnv(tempDir);
+  });
+
+  it("T-A8: 超预算文本附件在预览路径降级为 filename 档引导文案（与实发链同口径）", async () => {
+    const rt = await getDesktopRuntime();
+    const bundle = await buildSessionPromptInput(rt, { projectId, sessionId });
+
+    const attachXml = bundle.ctx.messages[0]?.attachments?.[0]?.content ?? "";
+    // ① 降级文案：与实发链同一份 OVERSIZED_ATTACH_NOTE。
+    assert.match(
+      attachXml,
+      /文件过长，可用 read 配合 offset\/limit 分段读取/,
+      "预览路径产出的 attach XML 应含超预算降级引导文案",
+    );
+    // ② display 强制 filename 档（action JSON 里的 display 字段）。
+    assert.match(
+      attachXml,
+      /"display": "filename"/,
+      "超预算降级应把 display 强制成 filename 档",
+    );
+    // ③ 正文确实没进 XML（否则「降级」只是加了一句提示，白烧 token）。
+    assert.equal(
+      attachXml.includes("HHH"),
+      false,
+      "降级后不应把超预算正文塞回 attach XML",
+    );
+    // ④ 包裹后的消息体里同样能看到降级文案（预览渲染消费的就是它）。
+    assert.match(
+      bodyText(bundle.ctx.messages[0]?.content),
+      /文件过长，可用 read 配合 offset\/limit 分段读取/,
+      "包裹后的 user 消息体也应能看到降级文案",
     );
   });
 });

@@ -43,7 +43,7 @@ import {
   type ProjectDto,
   type ProjectRenameRequest,
   type PromptAgentMetaResponse,
-  type PromptPreviewSegmentDto,
+  type PromptPreviewTurnDto,
   type PromptChatTokenStatsResponse,
   type PromptScopeRequest,
   type ScopeSetProjectRequest,
@@ -403,7 +403,7 @@ export function createInvokeClient(invoke: InvokeFn) {
     ),
     ipcPromptRealPreview: withReq<
       PromptScopeRequest,
-      IpcResult<PromptPreviewSegmentDto[]>
+      IpcResult<PromptPreviewTurnDto[]>
     >(invoke, IPC_CHANNELS.PROMPT_REAL_PREVIEW),
     // data 可为 null：读口在 run 在途时被抑制 / 中途弃权时回 null，
     // 消费方按「保留旧标签」处理（r3-dt-align 第 2 层返回契约）。

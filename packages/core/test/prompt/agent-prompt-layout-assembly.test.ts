@@ -49,7 +49,6 @@ describe("buildPromptLlmInputFromLayout assembly order", () => {
         type: "text",
         role: "user",
         content: "树: {{$filetree}}",
-        lifecycle: "once",
       },
     ],
   };
@@ -76,7 +75,7 @@ describe("buildPromptLlmInputFromLayout assembly order", () => {
     assert.equal(input.messages[5]!.id, "prompt:state");
   });
 
-  it("dynamic lifecycle once 在 step≥1 跳过", async () => {
+  it("dynamic 块在 step≥1 跳过（once 语义）", async () => {
     const input = await buildPromptLlmInputFromLayout(
       layout,
       { workplaceDisplay: "WT", messages: [], workplace: mockWorktree("/") },

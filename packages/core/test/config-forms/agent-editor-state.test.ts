@@ -9,13 +9,11 @@ import {
   createDefaultAgentEditorPrompts,
   definitionToForm,
   formSnapshotJson,
-  isDynamicBlockPersistent,
   layoutFromFormInput,
   movePersistBlock,
   PROMPT_REGION_LABELS,
   splitPersistBlocksForEditor,
   toolsSelectionFromDefinition,
-  withDynamicBlockPersistence,
   hasAnyPromptRegionEnabled,
   WORKPLACE_BLOCK_HINT,
   WORKPLACE_DISABLED_HINT,
@@ -66,11 +64,12 @@ test("PROMPT_REGION_LABELS 三区主文案为中文且无 wire 英文主标签",
   );
   assert.equal(
     PROMPT_REGION_LABELS.persistRegionHint,
-    "持久区禁止宏与生命周期。"
+    "持久区禁止使用宏。"
   );
+  // lifecycle 常驻开关已下线：文案表不再有 dynamicLifecycleOnceHint。
   assert.equal(
-    PROMPT_REGION_LABELS.dynamicLifecycleOnceHint,
-    "仅首轮请求带入。"
+    "dynamicLifecycleOnceHint" in PROMPT_REGION_LABELS,
+    false
   );
 
   const values = Object.values(PROMPT_REGION_LABELS).filter(
@@ -147,7 +146,6 @@ test("definitionToForm maps system toggle and three regions", () => {
           type: "text",
           role: "user",
           content: "{{$time}}",
-          lifecycle: "once",
         },
       ],
     },
@@ -159,7 +157,13 @@ test("definitionToForm maps system toggle and three regions", () => {
   assert.equal(form.dynamicEnabled, true);
   assert.equal(form.workplaceEnabled, true);
   assert.equal(form.persist.length, 0);
-  assert.equal(form.dynamic[0]?.lifecycle, "once");
+  // dynamic 块 round-trip 保持内容，域对象恒无 lifecycle 键。
+  assert.deepEqual(form.dynamic[0], {
+    name: "state",
+    type: "text",
+    role: "user",
+    content: "{{$time}}",
+  });
 });
 
 test("definitionToForm 缺省 persistEnabled/dynamicEnabled 为 false", () => {
@@ -207,21 +211,6 @@ test("layoutFromFormInput wires persistEnabled/dynamicEnabled when on", () => {
   });
   assert.equal(layout.persistEnabled, true);
   assert.equal(layout.dynamicEnabled, true);
-});
-
-test("withDynamicBlockPersistence maps UI switch to lifecycle", () => {
-  const block = {
-    name: "k",
-    type: "text" as const,
-    role: "user" as const,
-    content: "go",
-  };
-  assert.equal(isDynamicBlockPersistent(block), true);
-  const once = withDynamicBlockPersistence(block, false);
-  assert.equal(once.lifecycle, "once");
-  assert.equal(isDynamicBlockPersistent(once), false);
-  const again = withDynamicBlockPersistence(once, true);
-  assert.equal(again.lifecycle, undefined);
 });
 
 test("splitPersistBlocksForEditor strips legacy worktree blocks", () => {

@@ -132,8 +132,10 @@ function extractLangFromClass(className: string | undefined): string | null {
 /**
  * rehype-highlight 处理后的 pre children（code 元素）→ 块级代码渲染：
  * - 清单内语言：`<pre data-lang={规范名}>`（标签走 CSS 伪元素，不进文本流，批注零偏移）；
- * - 无语言 / 清单外语言：裸 `<pre>`，并剥掉插件静默跳过后残留的空 `hljs` 类
- *   （避免降级块被 `.hljs` 类选择器误命中，样式隔离不干净）。
+ * - 无语言 / 清单外语言（含 mjs/cjs 等内置别名）：统一 `<pre data-lang="plain">`，
+ *   并剥掉插件静默跳过后残留的空 `hljs` 类（避免降级块被 `.hljs` 类选择器误命中，
+ *   样式隔离不干净）。MF-1 契约已由「表外语言故意无标签」修订为「统一 plain 标」。
+ * - mermaid 不经本函数（走 MermaidBlock 图表链路），天然豁免语言标。
  */
 export function renderCodeBlock(children: ReactNode): ReactNode {
   const child = Array.isArray(children) ? children[0] : children;
@@ -146,7 +148,7 @@ export function renderCodeBlock(children: ReactNode): ReactNode {
   const copyBtn = <CodeCopyButton source={source} />;
   if (child == null || typeof child !== "object" || !("props" in child)) {
     return (
-      <pre>
+      <pre data-lang="plain">
         {copyBtn}
         {children}
       </pre>
@@ -171,14 +173,15 @@ export function renderCodeBlock(children: ReactNode): ReactNode {
         .filter((cls) => cls && cls !== "hljs")
         .join(" ") || undefined;
     return (
-      <pre>
+      <pre data-lang="plain">
         {copyBtn}
         {cloneElement(child as ReactElement, { className: stripped })}
       </pre>
     );
   }
+  // 兜底：无语言 fence / 4 空格缩进块（extractChildCode 取不到 language-* className）
   return (
-    <pre>
+    <pre data-lang="plain">
       {copyBtn}
       {children}
     </pre>

@@ -38,9 +38,11 @@ export interface RunChildAgentOptions {
    */
   readonly prompt?: string;
   /**
-   * task 工具入参 `fileAttachment` 预算内物化出的附件（已按
-   * `attachmentsFromPaths` 合规形态 + 预算筛选），随子 session 首条 user
-   * 消息落库——与主会话 `@path` 附件同链路（`content:null` 落库、view-time hydrate）。
+   * task 工具入参 `fileAttachment` 全量物化出的附件（`attachmentsFromPaths`
+   * 合规形态），随子 session 首条 user 消息落库——与主会话 `@path` 附件同链路
+   * （`content:null` 落库、view-time hydrate）。
+   *
+   * 体积预算与降级由**子会话自己的 prepare 链**负责：派发侧不再自带预算软闸。
    */
   readonly attachments?: readonly MessageAttachment[];
 }
@@ -66,20 +68,6 @@ export interface BuiltinToolSubagentContext {
    * 不放行续用（真正的并发硬互斥在 `runChildAgent` 内的 `tryRegister` claim）。
    */
   readonly isSessionRunActive: (sessionId: string) => boolean;
-  /**
-   * 按路径探测内容大小（`fileAttachment` 预算制软闸用，spec D11）。
-   *
-   * 装配点绑 `runtime.sessionVfs(projectId, parentSessionId).findContentSize`：
-   * `inline` = 明文字符数直接计；`blob` = 压缩字节 ×4 折算明文当量；
-   * `null`（目录 / 不存在）按 0 计。未注入时按「不计字节」处理（仍占条数名额）。
-   */
-  readonly getContentSize?: (
-    path: string
-  ) => Promise<
-    | { readonly kind: "inline"; readonly size: number }
-    | { readonly kind: "blob"; readonly size: number }
-    | null
-  >;
   /**
    * 派生 `AbortController`（监听父 signal 一次）并装配子 agent runner 跑完。
    *

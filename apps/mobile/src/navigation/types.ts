@@ -19,6 +19,12 @@ export type RootStackParamList = {
    * 而页面上没有任何会话名提示、用户无从察觉（AM-3）。
    */
   RealPrompt: {projectId?: string; sessionId?: string} | undefined;
+  /**
+   * 提示词单轮详情页（纯预览态，只读）。轮正文可达数百 KB，**不走路由参数**，
+   * 由 prompt-turn-callback 模块级存取传递；params 只带可序列化的短标题与轮 id
+   * （标题用于 header 覆盖，轮 id 拼详情页 `FileMarkdownPreview` 的稳定伪 path）。
+   */
+  PromptTurnDetail: {title?: string; turnId?: string} | undefined;
   Providers: undefined;
   ProviderCreate: undefined;
   ProviderDetail: {providerId?: string} | undefined;

@@ -125,7 +125,6 @@ describe("buildPromptAssemblyFromLayout worktree", () => {
           type: "text",
           role: "user",
           content: "dyn",
-          lifecycle: "once",
         },
       ],
     };
@@ -326,7 +325,6 @@ describe("persistEnabled / dynamicEnabled 开关", () => {
           type: "text",
           role: "user",
           content: "go",
-          lifecycle: "once",
         },
       ],
     };

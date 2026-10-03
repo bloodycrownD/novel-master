@@ -19,8 +19,12 @@ import type { ChatMessage } from "../../src/domain/chat/model/message.js";
 import type { MessageAttachment } from "../../src/domain/chat/model/message-attachment.schema.js";
 import {
   fileCacheKey,
+  RULE_SNAPSHOT_CANON_KEY,
   SESSION_KKV_DOMAIN_FILE_CACHE,
+  SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
 } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
+import { ATTACH_PROMPT_CHAR_BUDGET } from "../../src/domain/chat/logic/attach-budget.js";
+import { serializeRuleSnapshot } from "../../src/domain/workplace/logic/rule-snapshot-codec.js";
 import { createSessionKkvService } from "../../src/service/session-kkv/create-session-kkv-service.js";
 import {
   getNovelMasterTestContext,
@@ -921,7 +925,9 @@ describe("prepareUserMessagesForPrompt path degrade (T-PD*)", () => {
     const body2 = messageBodyText(prepared[1]!);
     assert.match(body2, /<action name="userAttach">/);
     assert.match(body2, /"display": "filename"/);
-    assert.match(body2, /1\|pic\.png/);
+    // R2：attach 侧 filename 档正文改 BINARY_ATTACH_NOTE（原 1|basename）
+    assert.match(body2, /二进制文件，不提供正文/);
+    assert.equal(body2.includes("1|pic.png"), false);
     assert.equal(body2.includes("alreadyReferenced"), false);
     assert.equal(body2.includes("<file "), false);
     assert.equal(body2.includes("createdAt="), false);
@@ -1311,5 +1317,380 @@ describe("prepareUserMessagesForPrompt tool_result 透传 (T-S1)", () => {
     });
     assert.equal(prepared.length, 1);
     assert.equal(prepared[0]!.content.blocks[0]!.type, "tool_result");
+  });
+});
+
+/**
+ * T-A 组（spec R2）：附件体积预算与降级收敛到 prepare 链（core 单源）。
+ * 预算 = 整个拼装共享一次 100k；恰好等于预算不降级；workplace 源豁免。
+ */
+describe("prepareUserMessagesForPrompt 附件预算与降级 (T-A)", () => {
+  function attachFile(path: string): MessageAttachment {
+    return { name: path, source: "attach", type: "text", content: null, path };
+  }
+
+  it("T-A1: 合计超 100k → 超限项 display:\"filename\" + 分段读取引导；预算内项仍 full", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    const small = "S".repeat(1_000);
+    const big = "B".repeat(ATTACH_PROMPT_CHAR_BUDGET);
+    await vfs.write("/small.md", small);
+    await vfs.write("/big.md", big);
+    const sk = createSessionKkvService(ctx.conn);
+
+    const prepared = await prepareUserMessagesForPrompt(
+      [
+        userMsg("refs", {
+          sessionId: session.id,
+          attachments: [attachFile("/small.md"), attachFile("/big.md")],
+        }),
+      ],
+      { sessionId: session.id, sessionKkv: sk, vfs },
+    );
+    const body = messageBodyText(prepared[0]!);
+    // 预算内项仍 full（行号正文）
+    assert.match(body, /1\|S{50}/);
+    assert.match(body, /"display": "full"/);
+    // 超限项降级：绕过 renderFileBlockBody，只给 filename + 引导文案
+    assert.match(body, /文件过长，可用 read 配合 offset\/limit 分段读取/);
+    assert.equal(body.includes("1|BBBB"), false);
+    // 超限项的 display 被强制为 filename
+    const bigBlock = body
+      .split("<action name=")
+      .find((chunk) => chunk.includes('"path": "/big.md"'));
+    assert.ok(bigBlock != null);
+    assert.match(bigBlock, /"display": "filename"/);
+  });
+
+  it("T-A1 边界: 合计恰好等于 100k → 不降级", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    const half = "A".repeat(ATTACH_PROMPT_CHAR_BUDGET / 2);
+    await vfs.write("/a.md", half);
+    await vfs.write("/b.md", half);
+    const sk = createSessionKkvService(ctx.conn);
+
+    const prepared = await prepareUserMessagesForPrompt(
+      [
+        userMsg("refs", {
+          sessionId: session.id,
+          attachments: [attachFile("/a.md"), attachFile("/b.md")],
+        }),
+      ],
+      { sessionId: session.id, sessionKkv: sk, vfs },
+    );
+    const body = messageBodyText(prepared[0]!);
+    assert.equal(body.includes("文件过长"), false);
+    assert.match(body, /1\|AAAA/);
+    assert.match(body, /"display": "full"/);
+  });
+
+  it("T-A3: 存量裸正文（无 VFS 读盘）的 binary attach → 正文为「二进制文件，不提供正文」", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    await vfs.write("/blob.bin", "x");
+    const sk = createSessionKkvService(ctx.conn);
+
+    const prepared = await prepareUserMessagesForPrompt(
+      [
+        userMsg("m1", {
+          sessionId: session.id,
+          attachments: [
+            {
+              name: "/blob.bin",
+              source: "attach",
+              type: "text",
+              content: "1|blob.bin",
+              path: "/blob.bin",
+            },
+          ],
+        }),
+      ],
+      { sessionId: session.id, sessionKkv: sk, vfs },
+    );
+    const body = messageBodyText(prepared[0]!);
+    assert.match(body, /二进制文件，不提供正文/);
+    assert.equal(body.includes("1|blob.bin"), false);
+    assert.match(body, /"display": "filename"/);
+  });
+
+  it("T-A4: workplace 侧目录规则 filename 档 → 仍 1|basename，且不吃预算不降级", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    await vfs.write("/fn.md", "WORKPLACE-FILENAME-BODY");
+    await vfs.write("/huge.md", "H".repeat(ATTACH_PROMPT_CHAR_BUDGET + 1));
+    const sk = createSessionKkvService(ctx.conn);
+    await sk.set(
+      session.id,
+      SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
+      RULE_SNAPSHOT_CANON_KEY,
+      serializeRuleSnapshot([{ path: "/fn.md", status: "filename" }]),
+    );
+
+    // 先用一条满预算的 attach 吃光预算，再看 workplace 侧是否被牵连
+    const prepared = await prepareUserMessagesForPrompt(
+      [
+        userMsg("m1", {
+          id: "m1",
+          sessionId: session.id,
+          attachments: [attachFile("/huge.md")],
+        }),
+        userMsg("m2", {
+          id: "m2",
+          sessionId: session.id,
+          attachments: [
+            {
+              name: "/fn.md",
+              source: "workplace",
+              type: "text",
+              content: null,
+              path: "/fn.md",
+            },
+          ],
+        }),
+      ],
+      { sessionId: session.id, sessionKkv: sk, vfs, seenPaths: [] },
+    );
+    // attach 侧确实被降级（预算生效）
+    assert.match(messageBodyText(prepared[0]!), /文件过长，可用 read/);
+    // workplace 侧豁免：仍是 1|basename，且没有二进制/超限文案
+    const body2 = messageBodyText(prepared[1]!);
+    assert.match(body2, /1\|fn\.md/);
+    assert.equal(body2.includes("文件过长"), false);
+    assert.equal(body2.includes("不提供正文"), false);
+  });
+
+  it("T-A4b: workplace 侧 full 档不计入预算（预算被 attach 恰好吃满也不降级）", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    await vfs.write("/w.md", "1|WORKPLACE-FULL");
+    // ⚠️ 前置必须**恰好吃满**（`= BUDGET`）而不是超预算：
+    // `tryConsume` 超限时不动 `used`，前置若真是 `BUDGET + 1` 则 used 恒停 0，
+    // 「预算被吃光」这个前提压根不成立，workplace 豁免与否都看不出差别——
+    // 用例照绿，豁免判据可以整个删掉。恰好吃满时 used = 100_000 才是真前提。
+    await vfs.write("/fill.md", "F".repeat(ATTACH_PROMPT_CHAR_BUDGET));
+    const sk = createSessionKkvService(ctx.conn);
+
+    const prepared = await prepareUserMessagesForPrompt(
+      [
+        userMsg("m1", {
+          id: "m1",
+          sessionId: session.id,
+          attachments: [attachFile("/fill.md")],
+        }),
+        userMsg("m2", {
+          id: "m2",
+          sessionId: session.id,
+          attachments: [
+            {
+              name: "/w.md",
+              source: "workplace",
+              type: "text",
+              content: null,
+              path: "/w.md",
+            },
+          ],
+        }),
+      ],
+      { sessionId: session.id, sessionKkv: sk, vfs, seenPaths: [] },
+    );
+    // 前提自查：前置附件确实恰好吃满、未被降级（降了就说明 used 没被填满）
+    assert.equal(
+      messageBodyText(prepared[0]!).includes("文件过长"),
+      false,
+      "前置应恰好吃满预算而不降级"
+    );
+    const body2 = messageBodyText(prepared[1]!);
+    assert.match(body2, /1\|WORKPLACE-FULL/);
+    assert.equal(body2.includes("文件过长"), false);
+  });
+
+  it("T-A5: 降级附件仍写 seen → 同会话后续同路径走 alreadyReferenced，不重复试全文", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    await vfs.write("/huge.md", "H".repeat(ATTACH_PROMPT_CHAR_BUDGET + 1));
+    await vfs.write("/filler.md", "F".repeat(ATTACH_PROMPT_CHAR_BUDGET));
+    const sk = createSessionKkvService(ctx.conn);
+
+    const prepared = await prepareUserMessagesForPrompt(
+      [
+        userMsg("m1", {
+          id: "m1",
+          sessionId: session.id,
+          attachments: [attachFile("/huge.md"), attachFile("/filler.md")],
+        }),
+        userMsg("m2", {
+          id: "m2",
+          sessionId: session.id,
+          attachments: [attachFile("/huge.md")],
+        }),
+      ],
+      { sessionId: session.id, sessionKkv: sk, vfs },
+    );
+    const body1 = messageBodyText(prepared[0]!);
+    assert.match(body1, /文件过长，可用 read/);
+    const body2 = messageBodyText(prepared[1]!);
+    assert.match(body2, /"alreadyReferenced": true/);
+    assert.match(body2, /"path": "\/huge\.md"/);
+    assert.equal(body2.includes("文件过长"), false);
+  });
+
+  it("T-A7: content 已是 action XML 的存量附件原样带过（不计量、不降级）", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    await vfs.write("/huge.md", "H".repeat(ATTACH_PROMPT_CHAR_BUDGET));
+    const sk = createSessionKkvService(ctx.conn);
+    const legacyXml =
+      '<action name="userAttach">\n{"path":"/huge.md","content":"1|OLD"}\n</action>';
+
+    const prepared = await prepareUserMessagesForPrompt(
+      [
+        userMsg("m1", {
+          sessionId: session.id,
+          attachments: [
+            {
+              name: "/huge.md",
+              source: "attach",
+              type: "text",
+              content: legacyXml,
+              path: "/huge.md",
+            },
+          ],
+        }),
+      ],
+      { sessionId: session.id, sessionKkv: sk, vfs },
+    );
+    const body = messageBodyText(prepared[0]!);
+    // 主牙齿：原样带过 ⇒ **无 display 键**。走 fileRefAction 重排必然带上
+    // `display`，所以这条断言直接钉死「有没有被重排」，比断言文案有力得多。
+    assert.equal(body.includes('"display"'), false);
+    // 次牙齿：紧凑 JSON 形态原样保留。⚠️ 冒号后**不能**有空格——
+    // 带空格形态是 fileRefAction 的 `JSON.stringify(params, null, 2)` 出口产物，
+    // 写成带空格就把「重排后」当成了「原样带过」，写反了正确行为下当场红。
+    assert.match(body, /"content":"1\|OLD"/);
+    assert.match(body, /1\|OLD/);
+    assert.equal(body.includes("文件过长"), false);
+  });
+
+  it("T-A7 变体: 存量 action XML 正文撑到超预算仍不降级（钉「不计量」）", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    await vfs.write("/x.md", "x");
+    const sk = createSessionKkvService(ctx.conn);
+    // 正文长度 = 预算 + 1：若「已是 action XML」旁路被删、正文参与计量，
+    // 这条必定降级 → 断言红。旁路在，则一个字符都不计。
+    const fatContent = "O".repeat(ATTACH_PROMPT_CHAR_BUDGET + 1);
+    const legacyXml = `<action name="userAttach">\n{"path":"/x.md","content":"${fatContent}"}\n</action>`;
+
+    const prepared = await prepareUserMessagesForPrompt(
+      [
+        userMsg("m1", {
+          sessionId: session.id,
+          attachments: [
+            {
+              name: "/x.md",
+              source: "attach",
+              type: "text",
+              content: legacyXml,
+              path: "/x.md",
+            },
+          ],
+        }),
+      ],
+      { sessionId: session.id, sessionKkv: sk, vfs },
+    );
+    const body = messageBodyText(prepared[0]!);
+    assert.equal(body.includes("文件过长"), false);
+    assert.equal(body.includes('"display"'), false);
+    // 原样带过 ⇒ 正文一个不少（无行号前缀：本就未经 fileRefAction 重排）
+    assert.match(body, /"content":"OOO/);
+  });
+
+  it("T-A9: 预算跨消息累加——m1 恰好吃满 → m2 的 1000 字符附件降级", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    await vfs.write("/a.md", "A".repeat(ATTACH_PROMPT_CHAR_BUDGET));
+    await vfs.write("/b.md", "B".repeat(1_000));
+    const sk = createSessionKkvService(ctx.conn);
+
+    const prepared = await prepareUserMessagesForPrompt(
+      [
+        userMsg("m1", { id: "m1", sessionId: session.id, attachments: [attachFile("/a.md")] }),
+        userMsg("m2", { id: "m2", sessionId: session.id, attachments: [attachFile("/b.md")] }),
+      ],
+      { sessionId: session.id, sessionKkv: sk, vfs },
+    );
+    // m1 恰好吃满、不降级（前提自查）
+    const body1 = messageBodyText(prepared[0]!);
+    assert.equal(body1.includes("文件过长"), false);
+    assert.match(body1, /1\|AAAA/);
+    // m2 的 1000 字符没有预算了 → 降级。累加器作用域在 prepareUserMessagesForPrompt
+    // 函数体、与 seen 同级：把累加器改成「每条消息一份」本用例立刻红。
+    const body2 = messageBodyText(prepared[1]!);
+    assert.match(body2, /文件过长，可用 read/);
+    assert.equal(body2.includes("1|BBBB"), false);
+  });
+
+  it("T-A10: 旧 `<file>` 外壳按明文计量（剥掉行号前缀，与读盘分支同口径）", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    const sk = createSessionKkvService(ctx.conn);
+
+    // 前置：一条 attach 挂载把预算吃到只剩 20 字符（attachFile 走读盘分支，纯明文）
+    const filler = "Z".repeat(ATTACH_PROMPT_CHAR_BUDGET - 20);
+    await vfs.write("/filler.md", filler);
+    // 被测：旧 `<file>` 外壳包 2 行、每行 10 字正文 → 明文 20 字符，剩余额度恰 20。
+    // 按明文计量：20 + 20 = 100_000 恰好不降级；
+    // 按含行号计量（`1|` / `2|` 共 4 字符）：20 + 24 > 100_000 → 降级。
+    // 差额 4 字符正好落在「剩余 20 与 24 之间」这条缝里，所以本用例对口径敏感。
+    const legacyFile =
+      '<file path="/legacy.md" createdAt="" updatedAt="" updatedBy="user">\n' +
+      "1|AAAAAAAAAA\n2|BBBBBBBBBB" +
+      "\n</file>";
+
+    const prepared = await prepareUserMessagesForPrompt(
+      [
+        userMsg("m1", { id: "m1", sessionId: session.id, attachments: [attachFile("/filler.md")] }),
+        userMsg("m2", {
+          id: "m2",
+          sessionId: session.id,
+          attachments: [
+            {
+              name: "/legacy.md",
+              source: "attach",
+              type: "text",
+              content: legacyFile,
+              path: "/legacy.md",
+            },
+          ],
+        }),
+      ],
+      { sessionId: session.id, sessionKkv: sk, vfs },
+    );
+    // 前提自查：前置吃掉 99_980，剩 20 额度恰等于明文 20。
+    const body2 = messageBodyText(prepared[1]!);
+    assert.equal(body2.includes("文件过长"), false, "按明文计量 → 20 字符在预算内，不降级");
+    assert.match(body2, /1\|AAAAAAAAAA/);
+    assert.match(body2, /2\|BBBBBBBBBB/);
   });
 });

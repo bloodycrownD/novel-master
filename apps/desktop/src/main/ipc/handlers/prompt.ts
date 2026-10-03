@@ -1,5 +1,5 @@
 /**
- * Prompt IPC handlers — real prompt preview segments, chat token label, agent meta.
+ * Prompt IPC handlers — real prompt preview turns, chat token label, agent meta.
  */
 import {
   AgentRunResolveError,
@@ -7,31 +7,65 @@ import {
   resolveSavedModelId,
 } from "@novel-master/core/agent";
 import { savedModelDisplayName } from "@novel-master/core/provider";
+import { formatToolUsePreviewJson } from "@novel-master/core/prompt";
 import type {
   IpcResult,
   PromptAgentMetaResponse,
   PromptChatTokenStatsResponse,
-  PromptPreviewSegmentDto,
+  PromptPreviewTurnDto,
   PromptScopeRequest,
+  PromptTextCardDto,
+  PromptToolGroupDto,
+  PromptTurnCardDto,
 } from "../../../../shared/ipc-types.js";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
 import { loadChatPromptTokenStatsResilient } from "../../services/chat-prompt-tokens.service.js";
-import { buildRealPromptPreviewSegments } from "../../services/prompt-preview.service.js";
+import { buildRealPromptPreviewTurns } from "../../services/prompt-preview.service.js";
 import { formatIpcError } from "../format-ipc-error.js";
 
 export async function handlePromptRealPreview(
   req: PromptScopeRequest,
-): Promise<IpcResult<PromptPreviewSegmentDto[]>> {
+): Promise<IpcResult<PromptPreviewTurnDto[]>> {
   try {
     const rt = await getDesktopRuntime();
-    const segments = await buildRealPromptPreviewSegments(rt, req);
+    const turns = await buildRealPromptPreviewTurns(rt, req);
     return {
       ok: true,
-      data: segments.map((s) => ({
-        id: s.id,
-        role: s.role,
-        title: s.title,
-        body: s.body,
+      data: turns.map((turn) => ({
+        id: turn.id,
+        kind: turn.kind,
+        summaryText: turn.summaryText,
+        metaText: turn.metaText,
+        // cards 是唯一正文载体：三类轮统一下发，body / items 已从 DTO 退役
+        // （它们是同一份正文的两种粒度，各下发一次才需要按 kind 分叉压体积；
+        // 详见 shared/ipc-types.ts 的体积策略注释）。
+        cards: turn.cards.map((card) =>
+          card.type === "toolGroup"
+            ? ({
+                type: card.type,
+                id: card.id,
+                toolName: card.toolName,
+                inputJson: card.inputJson,
+                // 保结构截大 key 的预览在 main 侧算好下发（renderer 不引
+                // core 运行时——这条 import 会把 zod 等整图拖进沙箱 bundle）。
+                inputPreview: formatToolUsePreviewJson(card.inputJson),
+                result: card.result,
+                status: card.status,
+                parallel: card.parallel,
+              } satisfies PromptTurnCardDto)
+            : card.type === "workplace"
+              ? ({
+                  type: card.type,
+                  id: card.id,
+                  files: card.files,
+                } satisfies PromptTurnCardDto)
+              : ({
+                  type: card.type,
+                  id: card.id,
+                  role: card.role,
+                  body: card.body,
+                } satisfies PromptTurnCardDto),
+        ),
       })),
     };
   } catch (err) {
@@ -126,3 +160,37 @@ export async function handlePromptAgentMeta(
     return { ok: false, error: formatIpcError(err) };
   }
 }
+
+// core 侧加字段而 DTO 未跟时，下列导出 const 构造 {} 编译红（TS2741：差集键 missing）
+export type CoreGroupParityCheck = Record<
+  Exclude<
+    keyof import("@novel-master/core/prompt").PromptToolGroupCardData,
+    keyof PromptToolGroupDto
+  >,
+  never
+>;
+export type CoreTextParityCheck = Record<
+  Exclude<
+    keyof import("@novel-master/core/prompt").PromptTextCardData,
+    keyof PromptTextCardDto
+  >,
+  never
+>;
+export type CoreWorkplaceParityCheck = Record<
+  Exclude<
+    keyof import("@novel-master/core/prompt").PromptWorkplaceCardData,
+    keyof import("../../../../shared/ipc-types.js").PromptWorkplaceDto
+  >,
+  never
+>;
+export type CoreWorkplaceFileParityCheck = Record<
+  Exclude<
+    keyof import("@novel-master/core/prompt").PromptWorkplaceFileCardData,
+    keyof import("../../../../shared/ipc-types.js").PromptWorkplaceFileDto
+  >,
+  never
+>;
+export const CORE_GROUP_PARITY_CHECK: CoreGroupParityCheck = {};
+export const CORE_TEXT_PARITY_CHECK: CoreTextParityCheck = {};
+export const CORE_WORKPLACE_PARITY_CHECK: CoreWorkplaceParityCheck = {};
+export const CORE_WORKPLACE_FILE_PARITY_CHECK: CoreWorkplaceFileParityCheck = {};

@@ -8,7 +8,7 @@
  * 这时点「查看提示词」就会显示另一个会话的提示词，屏上不出现会话名、
  * 用户无从察觉（错数据 + 零逃生路线）。
  *
- * 观测面是 `buildRealPromptPreviewSegments` 收到的实参（注入缝，与实现同源）。
+ * 观测面是 `buildRealPromptPreviewTurns` 收到的实参（注入缝，与实现同源）。
  */
 import {describe, expect, it, jest, beforeEach} from '@jest/globals';
 import React from 'react';
@@ -25,12 +25,17 @@ jest.mock('@react-navigation/native', () => ({
   useRoute: jest.fn(() => ({params: undefined as unknown})),
 }));
 
+// ⚠️ 必须返回**稳定引用**：屏内 load 的 useCallback 依赖 runtime，runtime 一变
+// effect 就重跑 → setTurns 触发重渲染 → 又是新 runtime，测试结束前一直循环
+// （表现为 "Cannot log after tests are done" 噪声刷屏）。
+const mockRuntime = {};
+
 jest.mock('@/hooks/useRuntime', () => ({
-  useRuntime: () => ({}),
+  useRuntime: () => mockRuntime,
 }));
 
 jest.mock('@/services/prompt-preview.service', () => ({
-  buildRealPromptPreviewSegments: (...args: unknown[]) =>
+  buildRealPromptPreviewTurns: (...args: unknown[]) =>
     mockBuildSegments(...(args as [])),
 }));
 
@@ -51,10 +56,27 @@ jest.mock('@/theme/ThemeProvider', () => ({
   }),
 }));
 
-jest.mock('@/components/prompt/PromptPreviewSegmentCard', () => {
+// 轮卡自带 useNavigation（顶层禁用的红线只约束屏组件），这里整族桩掉：
+// FlatList 桩不渲染 row，本来也渲染不到，桩掉只为免掉重依赖树。
+jest.mock('@/components/prompt/PromptTurnCard', () => {
   const mockReact = require('react');
   return {
-    PromptPreviewSegmentCard: () => mockReact.createElement('View', {}),
+    PromptTurnCard: () => mockReact.createElement('View', {}),
+    useOpenPromptDetail: () => () => undefined,
+  };
+});
+
+jest.mock('@/components/prompt/PromptToolGroupCard', () => {
+  const mockReact = require('react');
+  return {
+    PromptToolGroupCard: () => mockReact.createElement('View', {}),
+  };
+});
+
+jest.mock('@/components/prompt/PromptTurnLeafCard', () => {
+  const mockReact = require('react');
+  return {
+    PromptTurnLeafCard: () => mockReact.createElement('View', {}),
   };
 });
 

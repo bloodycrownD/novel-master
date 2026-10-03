@@ -35,6 +35,12 @@ import { textBlocks } from "../content/text-blocks.js";
 import type { ChatMessage } from "../model/message.js";
 import type { MessageAttachment } from "../model/message-attachment.schema.js";
 import {
+  BINARY_ATTACH_NOTE,
+  OVERSIZED_ATTACH_NOTE,
+  createAttachBudget,
+  type AttachBudget,
+} from "./attach-budget.js";
+import {
   isBinaryAttachPath,
   isImageAttachPath,
 } from "./attach-binary-heuristic.js";
@@ -148,30 +154,100 @@ function isBinaryOrImageAttach(attachment: MessageAttachment): boolean {
   return isBinaryAttachPath(path) || isImageAttachPath(path);
 }
 
+/** {@link fileRefAction} 的可选正文口径开关。 */
+interface FileRefActionOpts {
+  /**
+   * 二进制 / 图片文案（{@link BINARY_ATTACH_NOTE}）：传入则 content 直用文案，
+   * **不再走行号正文**（attach 侧 filename 档不再是 `1|basename`）。
+   * 仅 attach 源传入——workplace 源豁免（目录规则的 `1|basename` 原样保留）。
+   */
+  readonly noteText?: string;
+  /**
+   * 内层正文已是展示正文（旧 `<file>` 外壳剥出的行号块），**勿再 contentLines**。
+   */
+  readonly bodyIsRendered?: boolean;
+  /** 超预算降级：绕过 renderFileBlockBody，display 强制 `filename`。 */
+  readonly oversized?: boolean;
+}
+
+/**
+ * 文件附件的唯一 action XML 出口：正文口径（行号正文 / 二进制文案 / 超限降级）
+ * 全部集中于此，避免各分支各写一份 `buildFileRefActionXml` 走形。
+ */
 function fileRefAction(
   source: "attach" | "workplace",
   logicalPath: string,
   display: WorkplaceDisplayStatus,
-  rawContent: string
+  rawContent: string,
+  opts?: FileRefActionOpts
 ): string {
-  const lineBody = renderFileBlockBody({
-    logicalPath,
-    display,
-    content: rawContent,
-  });
+  const action = source === "workplace" ? ("workplaceChange" as const) : ("userAttach" as const);
+  // ⚠️ 下面两个分支**互斥且顺序敏感**：`noteText` 先于 `oversized` 命中。
+  // 互斥依据（改任一侧判据前先读这段）：
+  // `noteText` 只在 attach 源的 `filename` 档出现，而 `filename` 档由
+  // {@link resolveAttachFileStatus} 对 image / binary / 图片启发式路径派发——
+  // 这类附件的 `isOversizedAttach` 在计字符前就 return false（没有可注明正文），
+  // 故 `oversized` **恒为 false**，与 `noteText` 永不同时成立。
+  // 推论：binary 永不超预算，所以 `noteText` 优先是安全的；若日后给 binary
+  // 也计量，`noteText` 提前返回会**静默吃掉降级**，那时必须改成先算再互斥组装。
+  if (opts?.noteText != null) {
+    return buildFileRefActionXml({
+      action,
+      path: logicalPath,
+      content: opts.noteText,
+      display,
+    });
+  }
+  if (opts?.oversized === true) {
+    return buildFileRefActionXml({
+      action,
+      path: logicalPath,
+      content: OVERSIZED_ATTACH_NOTE,
+      display: "filename",
+    });
+  }
+  const lineBody =
+    opts?.bodyIsRendered === true
+      ? rawContent
+      : renderFileBlockBody({
+          logicalPath,
+          display,
+          content: rawContent,
+        });
   return buildFileRefActionXml({
-    action: source === "workplace" ? "workplaceChange" : "userAttach",
+    action,
     path: logicalPath,
     content: lineBody,
     display,
   });
 }
 
+/**
+ * attach 侧「是否超预算」判据（返回 `true` 即**超限**，走降级出口）。
+ *
+ * 红线豁免：`attachment.source === "workplace"` 一律不接累加器——workplace 的
+ * full 档附件由工作区目录规则支配，若一并计入，用户一条目录规则就能把全部
+ * 附件预算吃掉。（这条判据是 workplace 豁免的**真正落点**：预算由
+ * `hydrateWorkplaceWithSeen` 照常透传进来，由这里显式拦住。）
+ * 二进制 / 图片（`isBinaryOrImageAttach`）没有可注明正文，不计字符。
+ */
+function isOversizedAttach(
+  attachment: MessageAttachment,
+  plainLength: number,
+  budget: AttachBudget | undefined
+): boolean {
+  if (budget == null) return false;
+  if (attachment.source === "workplace") return false;
+  if (isBinaryOrImageAttach(attachment)) return false;
+  return !budget.tryConsume(plainLength);
+}
+
 /** 首次全文 hydrate（文本 / workplace / filename 档）→ action XML。 */
 async function hydrateFileFull(
   attachment: MessageAttachment,
   logicalPath: string,
-  runtime: PrepareUserMessagesForPromptRuntime
+  runtime: PrepareUserMessagesForPromptRuntime,
+  budget: AttachBudget | undefined
 ): Promise<MessageAttachment> {
   const action =
     attachment.source === "workplace"
@@ -179,7 +255,7 @@ async function hydrateFileFull(
       : ("userAttach" as const);
 
   if (attachment.content != null) {
-    // 已是 action XML → 原样带过
+    // 已是 action XML → 原样带过（不计量、不降级）
     if (attachment.content.includes("<action ")) {
       return {
         ...attachment,
@@ -196,20 +272,26 @@ async function hydrateFileFull(
     const wasLegacyFile =
       trimmed.startsWith("<file ") && trimmed.endsWith("</file>");
     const fileBody = stripLegacyFileWrap(attachment.content, logicalPath);
+    // 计量口径与读盘分支对齐：**按原始明文 length**（忽略行号前缀开销）。
+    // 旧 `<file>` 外壳内层已是 `renderFileBlockBody` 的行号正文（`1|xxx`），
+    // 直接用 `fileBody.length` 会把 `N|` 前缀也计进去，系统性偏高——
+    // 同一个文件走存量分支和走读盘分支会得到不同的降级结论。
+    const plainLength = wasLegacyFile ? plainLengthOfLineBody(fileBody) : fileBody.length;
+    const oversized = isOversizedAttach(attachment, plainLength, budget);
     // 旧块内层已是展示正文（含行号），勿再 contentLines；裸正文走 fileRefAction
-    const content = wasLegacyFile
-      ? buildFileRefActionXml({
-          action,
-          path: logicalPath,
-          content: fileBody,
-          display: status,
-        })
-      : fileRefAction(
-          attachment.source === "workplace" ? "workplace" : "attach",
-          logicalPath,
-          status,
-          fileBody
-        );
+    const content = fileRefAction(
+      attachment.source === "workplace" ? "workplace" : "attach",
+      logicalPath,
+      status,
+      fileBody,
+      wasLegacyFile
+        ? {
+            bodyIsRendered: true,
+            oversized,
+            noteText: attachBinaryNote(attachment, status),
+          }
+        : { oversized, noteText: attachBinaryNote(attachment, status) }
+    );
     return {
       ...attachment,
       path: logicalPath,
@@ -238,9 +320,25 @@ async function hydrateFileFull(
       attachment.source === "workplace" ? "workplace" : "attach",
       logicalPath,
       status,
-      cached.body
+      cached.body,
+      {
+        oversized: isOversizedAttach(attachment, cached.body.length, budget),
+        noteText: attachBinaryNote(attachment, status),
+      }
     ),
   };
+}
+
+/**
+ * attach 源 `filename` 档（`resolveAttachFileStatus` 仅对 image / binary 判 filename）
+ * 的正文占位文案；workplace 源返回 undefined（目录规则的 `1|basename` 豁免）。
+ */
+function attachBinaryNote(
+  attachment: MessageAttachment,
+  status: WorkplaceDisplayStatus
+): string | undefined {
+  if (attachment.source === "workplace") return undefined;
+  return status === "filename" ? BINARY_ATTACH_NOTE : undefined;
 }
 
 async function hydrateDirAttach(
@@ -296,6 +394,20 @@ function stripLegacyDirWrap(content: string, logicalPath: string): string {
   return trimmed;
 }
 
+/**
+ * 行号正文（`renderFileBlockBody` 的产物，形如 `1|foo\n2|bar`）的**明文当量长度**。
+ *
+ * 逐行剥掉 `/^\d+\|` 前缀后求和——降级判据要跟读盘分支（纯明文）同口径，
+ * 不能让「存量 `<file>` 外壳」与「读盘全文」对同一份文件给出不同结论。
+ */
+function plainLengthOfLineBody(lineBody: string): number {
+  let total = 0;
+  for (const line of lineBody.split("\n")) {
+    total += line.replace(/^\d+\|/, "").length;
+  }
+  return total;
+}
+
 /** 剥旧增量外壳 `<file …>…</file>`，取内层正文；非外壳则原样返回。 */
 function stripLegacyFileWrap(content: string, logicalPath: string): string {
   const trimmed = content.trim();
@@ -336,7 +448,8 @@ async function hydrateSkillAttachWithSeen(
   attachment: MessageAttachment,
   runtime: PrepareUserMessagesForPromptRuntime,
   seen: Set<string>,
-  resolveSkillNames: () => Promise<Set<string>>
+  resolveSkillNames: () => Promise<Set<string>>,
+  budget: AttachBudget | undefined
 ): Promise<MessageAttachment> {
   const name = attachment.skillName;
   if (typeof name !== "string" || name === "") {
@@ -374,12 +487,16 @@ async function hydrateSkillAttachWithSeen(
       runtime.projectId
     );
     seen.add(key);
+    // 与 userAttach 同一预算累加器：超限则降级为 filename 档引导文案（seen 时序不动）
+    const oversized =
+      budget != null && !budget.tryConsume(file.content.length);
     return {
       ...attachment,
       action: "skillAttach",
       content: buildAttachmentActionXml("skillAttach", {
         name,
-        content: file.content,
+        content: oversized ? OVERSIZED_ATTACH_NOTE : file.content,
+        ...(oversized ? { display: "filename" as const } : {}),
       }),
     };
   } catch {
@@ -400,7 +517,8 @@ async function hydrateAttachWithSeen(
   attachment: MessageAttachment,
   runtime: PrepareUserMessagesForPromptRuntime,
   seen: Set<string>,
-  resolveSkillNames: () => Promise<Set<string>>
+  resolveSkillNames: () => Promise<Set<string>>,
+  budget: AttachBudget | undefined
 ): Promise<MessageAttachment> {
   // skillAttach：无 path，不走路径规范化/文件 hydrate
   if (attachment.action === "skillAttach") {
@@ -408,7 +526,8 @@ async function hydrateAttachWithSeen(
       attachment,
       runtime,
       seen,
-      resolveSkillNames
+      resolveSkillNames,
+      budget
     );
   }
   const rawPath = attachment.path;
@@ -434,7 +553,8 @@ async function hydrateAttachWithSeen(
     return hydrateFileFull(
       { ...attachment, path: logicalPath },
       logicalPath,
-      runtime
+      runtime,
+      budget
     );
   }
 
@@ -450,7 +570,8 @@ async function hydrateAttachWithSeen(
   return hydrateFileFull(
     { ...attachment, path: logicalPath },
     logicalPath,
-    runtime
+    runtime,
+    budget
   );
 }
 
@@ -465,7 +586,8 @@ async function hydrateWorkplaceWithSeen(
   attachment: MessageAttachment,
   runtime: PrepareUserMessagesForPromptRuntime,
   seen: Set<string>,
-  workplaceSeen: Set<string>
+  workplaceSeen: Set<string>,
+  budget: AttachBudget | undefined
 ): Promise<MessageAttachment> {
   const rawPath = attachment.path;
   if (rawPath == null || rawPath === "") {
@@ -485,10 +607,14 @@ async function hydrateWorkplaceWithSeen(
     };
   }
   seen.add(logicalPath);
+  // 预算照常透传给 hydrateFileFull：workplace 豁免 = 其内部 {@link isOversizedAttach}
+  // 里那条显式 source 判据（透传后生效）。豁免因此落在「判据」而非「不传参」——
+  // 传参缺失会让该判据退化成死代码，日后有人删掉它也毫无症状。
   return hydrateFileFull(
     { ...attachment, path: logicalPath },
     logicalPath,
-    runtime
+    runtime,
+    budget
   );
 }
 
@@ -498,7 +624,8 @@ async function prepareOneUserMessage(
   seen: Set<string>,
   workplaceSeen: Set<string>,
   isLatestUser: boolean,
-  resolveSkillNames: () => Promise<Set<string>>
+  resolveSkillNames: () => Promise<Set<string>>,
+  budget: AttachBudget | undefined
 ): Promise<ChatMessage> {
   if (message.hidden) {
     // hidden：不 hydrate/wrap；库内 attachments 保留在原消息上
@@ -527,13 +654,13 @@ async function prepareOneUserMessage(
   for (const att of attachList) {
     hydratedBySource.set(
       att,
-      await hydrateAttachWithSeen(att, runtime, seen, resolveSkillNames)
+      await hydrateAttachWithSeen(att, runtime, seen, resolveSkillNames, budget)
     );
   }
   for (const att of workplaceList) {
     hydratedBySource.set(
       att,
-      await hydrateWorkplaceWithSeen(att, runtime, seen, workplaceSeen)
+      await hydrateWorkplaceWithSeen(att, runtime, seen, workplaceSeen, budget)
     );
   }
   for (const att of userOpsList) {
@@ -574,6 +701,10 @@ export async function prepareUserMessagesForPrompt(
   runtime: PrepareUserMessagesForPromptRuntime
 ): Promise<ChatMessage[]> {
   const seen = createPromptPathSeenSet(runtime.seenPaths);
+  // 附件明文体积预算（与 seen 同级作用域）：**整个拼装共享一份** 100k 上限，
+  // 逐条累加、恰好等于预算不降级，超出项降级为 filename 档引导文案。
+  // workplace 源豁免（见 hydrateFileFull 的红线注释）。
+  const attachBudget = createAttachBudget();
   // workplace 省略判定的第二读集合（spec G6 双读）：初值取 assemble 的
   // `visiblePaths`（full + header + filename 全量可见集），**未注入时回落
   // `seenPaths`**——旧调用方与既有语义（T-PD3 / T-PD4 / T-PD8 / T-SR6）零变化。
@@ -659,7 +790,8 @@ export async function prepareUserMessagesForPrompt(
         seen,
         workplaceSeen,
         i === latestUserInputIndex,
-        resolveSkillNames
+        resolveSkillNames,
+        attachBudget
       )
     );
   }

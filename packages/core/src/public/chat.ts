@@ -55,6 +55,9 @@ export type {
   ComposerDraft,
   ComposerDraftAttachment,
 } from "../domain/chat/model/composer-draft.schema.js";
+export {
+  ATTACH_PROMPT_CHAR_BUDGET,
+} from "../domain/chat/logic/attach-budget.js";
 export { wrapUserMessageForLlm } from "../domain/chat/logic/wrap-user-message-for-llm.js";
 export { prepareUserMessagesForPrompt } from "../domain/chat/logic/prepare-user-messages-for-prompt.js";
 export type { PrepareUserMessagesForPromptRuntime } from "../domain/chat/logic/prepare-user-messages-for-prompt.js";

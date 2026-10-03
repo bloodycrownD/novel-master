@@ -17,7 +17,6 @@ import {
   layoutHasWorkplace,
 } from "../../domain/prompt/model/agent-prompt-layout.js";
 import { expandDynamicMacros } from "../../domain/prompt/logic/expand-dynamic-macros.js";
-import { shouldIncludeDynamicBlock } from "../../domain/prompt/logic/should-include-dynamic-block.js";
 import type { LlmExportZones } from "../../domain/prompt/logic/normalize-for-llm-export.js";
 import type {
   PromptLlmInput,
@@ -37,6 +36,10 @@ export interface PromptAssemblySegment {
   readonly title: string;
   readonly body: string;
   readonly source: "template" | "message" | "system";
+  /** 来源 ChatMessage id（仅 `source === "message"` 有值）；轮聚合按它分组。 */
+  readonly messageId?: string;
+  /** 来源 ChatMessage 的会话内序号（仅 `source === "message"` 有值）。 */
+  readonly seq?: number;
 }
 
 /** One collapsible preview card in CLI / mobile real-prompt UI. */
@@ -81,14 +84,11 @@ export function computeLlmExportZonesFromLayout(
     (options?.skillsIndex?.length ? 1 : 0) +
     (injectWorkplace ? 2 : 0) +
     (layout.persistEnabled === true ? textBlockCount : 0);
-  let dynamicCount = 0;
-  if (layout.dynamicEnabled === true) {
-    for (const block of layout.dynamic) {
-      if (shouldIncludeDynamicBlock(block, agentStepIndex)) {
-        dynamicCount += 1;
-      }
-    }
-  }
+  // dynamic 区一律 once 语义：仅 step 0 注入（缺省 0 ⇒ preview/token 链恒含）。
+  const dynamicCount =
+    layout.dynamicEnabled === true && agentStepIndex === 0
+      ? layout.dynamic.length
+      : 0;
   return { persistCount, dynamicCount };
 }
 
@@ -316,16 +316,15 @@ export async function buildPromptAssemblyFromLayout(
         title: `#${message.seq} · ${segment.role}`,
         body: segment.body,
         source: "message",
+        messageId: message.id,
+        seq: message.seq,
       });
       segmentIndex += 1;
     }
   }
 
-  if (layout.dynamicEnabled === true) {
+  if (layout.dynamicEnabled === true && agentStepIndex === 0) {
     for (const block of layout.dynamic) {
-      if (!shouldIncludeDynamicBlock(block, agentStepIndex)) {
-        continue;
-      }
       const expanded = await expandDynamicMacros(block.content, {
         now: ctx.now,
         workplace: ctx.workplace,
@@ -378,11 +377,8 @@ export async function buildPromptLlmInputFromLayout(
 
   messages.push(...ctx.messages.filter((m) => !m.hidden));
 
-  if (layout.dynamicEnabled === true) {
+  if (layout.dynamicEnabled === true && agentStepIndex === 0) {
     for (const block of layout.dynamic) {
-      if (!shouldIncludeDynamicBlock(block, agentStepIndex)) {
-        continue;
-      }
       const expanded = await expandDynamicMacros(block.content, {
         now: ctx.now,
         workplace: ctx.workplace,

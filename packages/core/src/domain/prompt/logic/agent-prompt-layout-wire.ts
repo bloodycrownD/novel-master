@@ -19,12 +19,11 @@ export type PersistTextBlockWire = {
 /** persist 块 wire 形状（仅 text）。 */
 export type PersistPromptBlockWire = PersistTextBlockWire;
 
-/** dynamic 块 wire 形状。 */
+/** dynamic 块 wire 形状（lifecycle 已下线，恒不带该键）。 */
 export type DynamicPromptBlockWire = {
   readonly type: "text";
   readonly role: "user" | "assistant";
   readonly content: string;
-  readonly lifecycle?: "once";
 };
 
 /**
@@ -39,7 +38,7 @@ export function persistBlockToWire(
 /**
  * 将 dynamic 区块序列化为 wire map 条目。
  *
- * @remarks 仅 `lifecycle: "once"` 写入 wire；缺省 always 省略字段。
+ * @remarks lifecycle 已下线：写出的块恒不含该键（存量读入侧由 schema preprocess 剥除）。
  */
 export function dynamicBlockToWire(
   block: DynamicPromptBlock
@@ -48,6 +47,5 @@ export function dynamicBlockToWire(
     type: "text",
     role: block.role,
     content: block.content,
-    ...(block.lifecycle === "once" ? { lifecycle: "once" as const } : {}),
   };
 }

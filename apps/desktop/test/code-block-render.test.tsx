@@ -97,7 +97,8 @@ export const UNIFIED_CODE_BLOCK_SAMPLE = [
   "```",
 ].join("\n");
 
-/** T-CB13 契约：统一样例的 data-lang 文案集合（归一化后；shell → bash）。 */
+/** T-CB13 契约：统一样例的 data-lang 文案集合（归一化后；shell → bash）。
+ *  含 plain：统一样例里的 mjs / 无语言 fence / rust 三块按 MF-1 修订统一出 plain 标。 */
 export const UNIFIED_DATA_LANGS = [
   "typescript",
   "python",
@@ -108,6 +109,7 @@ export const UNIFIED_DATA_LANGS = [
   "html",
   "css",
   "markdown",
+  "plain",
 ];
 
 /** T-CB13 契约：统一样例的 .hljs-* token 类名并集（与 mobile 侧一致）。 */
@@ -177,21 +179,33 @@ test("T-CB2: ```mermaid → MermaidBlock，extractChildCode 取纯文本（插�
   assert.doesNotMatch(html, /hljs/);
 });
 
-test("T-CB3: 无语言 fence 与未知语言 → 无 data-lang、无 .hljs 类、无标签残留", () => {
+test("T-L1/T-L2: 无语言 fence 与未知语言 → pre[data-lang=plain]、无 .hljs 类、无标签残留", () => {
   const html = renderToStaticMarkup(
     <MermaidMarkdown
       content={"```\nno language fence\n```\n\n```rust\nfn main() {}\n```"}
     />,
   );
-  // 无 data-lang（无语言与 rust 均不出）
-  assert.doesNotMatch(html, /data-lang/);
+  // MF-1 修订：表外语言不再「故意无标签」，统一 plain 标
+  assert.equal(html.match(/<pre data-lang="plain">/g)?.length, 2);
+  assert.doesNotMatch(html, /data-lang="(?:rust|ts)"/);
   // 插件静默跳过后注入的空 hljs 类已被 renderCodeBlock 剥除
   assert.doesNotMatch(html, /hljs/);
   assert.match(html, /no language fence/);
   assert.match(html, /fn main\(\)/);
-  // 裸 <pre>（不带属性）
-  // 复制按钮（T-CB16）插在 pre 首位：无语言块形态为 pre > button + code
-  assert.match(html, /<pre><button[^>]*code-copy-btn[^>]*><svg[\s\S]*?<\/svg><\/button><code>/);
+  // 复制按钮（T-CB16）插在 pre 首位：plain 块形态为 pre[data-lang] > button + code
+  assert.match(html, /<pre data-lang="plain"><button[^>]*code-copy-btn[^>]*><svg[\s\S]*?<\/svg><\/button><code/);
+});
+
+test("T-L3: 4 空格缩进块 → pre[data-lang=plain] + 复制按钮（走 renderCodeBlock 兜底分支）", () => {
+  const html = renderToStaticMarkup(
+    <MermaidMarkdown content={"正文\n\n    indented line one\n    indented line two"} />,
+  );
+  assert.match(html, /<pre data-lang="plain">/);
+  assert.match(html, /indented line one[\s\S]*?indented line two/);
+  // 缩进块无 language-* className，不参与归一化表判定
+  assert.doesNotMatch(html, /language-/);
+  // 缩进块已有复制按钮（copyBtn 无条件构造），与 mobile 缩进块形态对齐
+  assert.match(html, /<pre data-lang="plain"><button[^>]*code-copy-btn/);
 });
 
 test("T-CB4: shell.css 含两套 --hljs-* 变量、.hljs-* 规则与 pre[data-lang]::before", () => {
@@ -268,7 +282,7 @@ test("T-CB13: 统一样例 → data-lang 集合与 token 类名并集与 mobile 
   assert.match(html, /mermaid-block__source/);
 });
 
-test("T-CB13: 表外内置别名 mjs/cjs → 高亮但无 data-lang（MF-1 双端一致，与 mobile 同一判定）", () => {
+test("T-L2/T-CB13: 表外内置别名 mjs/cjs → 高亮但语言标回落 plain（MF-1 修订，双端一致，与 mobile 同一判定）", () => {
   const html = renderToStaticMarkup(
     <MermaidMarkdown
       content={
@@ -281,8 +295,9 @@ test("T-CB13: 表外内置别名 mjs/cjs → 高亮但无 data-lang（MF-1 双�
   assert.match(html, /language-cjs/);
   assert.match(html, /<span class="hljs-keyword">/);
   assert.match(html, /<span class="hljs-string">/);
-  // 归一化表外语言不出语言标签，且剥壳后 code 无 hljs 壳类残留
-  assert.doesNotMatch(html, /data-lang/);
+  // 归一化表未命中 → 不出表内语言标签，但按契约回落 plain 标；剥壳后 code 无 hljs 壳类残留
+  assert.doesNotMatch(html, /data-lang="(?:mjs|cjs)"/);
+  assert.equal(html.match(/<pre data-lang="plain">/g)?.length, 2);
   const mjsCode = html.match(/<code class="language-mjs[^"]*">/)![0];
   assert.doesNotMatch(mjsCode, /(^|\s)hljs(\s|$)/);
 });

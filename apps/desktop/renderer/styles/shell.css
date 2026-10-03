@@ -2976,30 +2976,6 @@ html:not([data-theme="dark"]) .chat-composer__send:not(:disabled) {
   color: var(--text-secondary);
 }
 
-.config-block-card__switch-row {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
-  min-height: 28px;
-}
-
-.config-block-card__switch-row .settings-switch {
-  flex-shrink: 0;
-  margin-top: 1px;
-}
-
-.config-block-card__switch-hint {
-  margin: 0;
-  padding-top: 2px;
-}
-
-.config-block-card__switch-label {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-secondary);
-}
-
 .config-block-card .settings-switch {
   width: 36px;
   height: 22px;
@@ -3808,60 +3784,11 @@ html[data-theme="dark"] .conversation-tab.is-active {
   flex-shrink: 0;
 }
 
-.prompt-segment {
-  margin-bottom: 10px;
-  padding: 10px 12px;
-  border-radius: 12px;
-  border: 1px solid var(--border-light);
-  background: var(--surface);
-}
-
-.prompt-segment__header {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  width: 100%;
-  padding: 0;
-  border: none;
-  background: transparent;
-  text-align: left;
-  cursor: pointer;
-  font: inherit;
-}
-
-.prompt-segment__text {
-  flex: 1;
-  min-width: 0;
-}
-
-.prompt-segment__role {
-  display: block;
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--primary);
-  margin-bottom: 2px;
-}
-
-.prompt-segment__title {
-  display: block;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text);
-  margin-bottom: 4px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .prompt-segment__preview {
   display: block;
   font-size: 12px;
   line-height: 1.4;
   color: var(--text-secondary);
-}
-
-.prompt-segment.is-expanded .prompt-segment__preview {
-  display: none;
 }
 
 .prompt-segment__chevron {
@@ -3871,19 +3798,420 @@ html[data-theme="dark"] .conversation-tab.is-active {
   padding-top: 4px;
 }
 
-.prompt-segment__body {
-  display: none;
-  margin-top: 10px;
-  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
-  font-size: 12px;
-  line-height: 1.5;
-  white-space: pre-wrap;
+/* prompt-rounds：轮容器（每轮一张摘要卡 + 就地展开的卡片流）。 */
+.prompt-turn {
+  display: flex;
+  flex-direction: column;
+}
+
+/* prompt-rounds：轮摘要卡（三类轮统一形态）。
+   视觉对齐智能体配置外层卡（FormSectionCard 等价）：surface-elevated 底 +
+   16 圆角 + subtle 阴影浮起；role 色在徽标 pill 上（.prompt-turn-card__role），
+   嵌套从属由子卡的 3px primary 左条表达，本层不画左条。 */
+.prompt-turn-card {
+  margin-bottom: 12px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px solid var(--border-light);
+  background: var(--surface-elevated);
+  box-shadow: var(--shadow-card-subtle);
+}
+
+/* 轮卡头部行：可点的展开区 + ⤢ 全屏 + chevron（flex 排布，等宽摘要区吃掉中间余量）。
+   内衬用「padding + 等量负 margin」——hover 底色因此是 10px 圆角的内衬块，
+   不会在 12px 圆角卡里画出直角矩形，且内容仍与卡内 padding 对齐。 */
+.prompt-turn-card__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: -4px -6px;
+  padding: 4px 6px;
+  border-radius: 10px;
+}
+
+.prompt-turn-card__head:hover {
+  background: var(--background);
+}
+
+/* 键盘可达性：头内的 toggle / ⤢ 聚焦时给整个头部一圈焦点环（只描边不位移）。 */
+.prompt-turn-card__head:focus-within {
+  outline: 1px solid var(--primary);
+}
+
+.prompt-turn-card__toggle {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+
+.prompt-turn-card__role {
+  flex: none;
+  align-self: flex-start;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* role 徽标三态（对齐 .config-block-card__badge 的 pill 形态 + 对话页
+   「user=主蓝气泡、assistant=中性」先例）：user 主蓝底白字、
+   assistant/system 中性底正文色（合成段按真实消息 role 归轮，无 template 分类）。 */
+.prompt-turn-card__role[data-turn-kind="user"] {
+  background: var(--primary);
+  color: #fff;
+}
+
+.prompt-turn-card__role[data-turn-kind="assistant"],
+.prompt-turn-card__role[data-turn-kind="system"] {
+  background: var(--surface-muted);
   color: var(--text);
+}
+
+/* 摘要单行截断：nowrap + ellipsis + overflow hidden。 */
+.prompt-turn-card__summary {
+  display: block;
+  max-width: 100%;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.prompt-turn-card__meta {
+  display: block;
+  max-width: 100%;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 轮卡展开区：挂载 turn.cards 的有序卡片流。嵌套从属由子卡（叶子/组卡）的
+   3px primary 左条表达，本层只留间距。 */
+.prompt-turn-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.prompt-turn-card .prompt-segment__preview {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
   word-break: break-word;
 }
 
-.prompt-segment.is-expanded .prompt-segment__body {
-  display: block;
+.prompt-turn-card .prompt-segment__chevron {
+  flex: none;
+  font-size: 10px;
+  color: var(--text-tertiary);
+  line-height: 1;
+}
+
+/* ---------- 提示词预览三层结构：叶子卡（text / thinking） ---------- */
+
+/* 叶子卡（text / thinking）：blockCard 形态（智能体配置 PersistBlocksCard 同款）——
+   1px 边 + 左 3px primary 粗条 + 10 圆角；底色走「灰→白→灰→白」明度交替
+   （智能体页观感规律），子卡层沉一档（surface-muted）。 */
+.prompt-leaf-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  padding: 10px 12px;
+  text-align: left;
+  font: inherit;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  border-left-width: 3px;
+  border-left-color: var(--primary);
+  background: var(--surface-muted);
+  cursor: pointer;
+}
+
+.prompt-leaf-card:hover {
+  border-color: var(--text-tertiary);
+  border-left-color: var(--primary);
+}
+
+.prompt-leaf-card__preview {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 6;
+  line-clamp: 6;
+  overflow: hidden;
+  word-break: break-word;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+/* ---------- 提示词预览三层结构：工具组卡（一次 tool_use 一张） ---------- */
+
+/* 工具组卡：blockCard 形态（与叶子卡同层同款，智能体配置体系；子卡层沉一档）。
+   组头收窄（28px：只是一个函数名，不需要块级高度）。
+   状态点三色（语义色）：ok 绿 / error 红 / lost 灰。 */
+.prompt-tool-group {
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  border-left-width: 3px;
+  border-left-color: var(--primary);
+  background: var(--surface-muted);
+}
+
+.prompt-tool-group__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 28px;
+  box-sizing: border-box;
+  padding: 6px 10px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+
+.prompt-tool-group__head:hover {
+  background: var(--background);
+}
+
+.prompt-tool-group__dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.prompt-tool-group__name {
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.prompt-tool-group__parallel {
+  flex: none;
+  padding: 1px 5px;
+  border-radius: 4px;
+  border: 1px dashed var(--border-light);
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--text-tertiary);
+}
+
+.prompt-tool-group__status {
+  flex: none;
+  font-size: 11px;
+  line-height: 1.4;
+  /* 状态文案承载语义（成功/失败/丢失），必须用主题正文色保证可读：
+     语义三色在浅色主题底上对比仅 1.86~2.54:1，低于 3:1 门槛，只留给状态点做装饰。 */
+  color: var(--text);
+}
+
+.prompt-tool-group__chevron {
+  flex: none;
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--text-tertiary);
+}
+
+.prompt-tool-group__cells {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 10px 10px;
+}
+
+/* 组卡内的两格：上 tool use（等宽）/ 下 tool result；每格可点开全屏。
+   第三层：白底浮起（「灰→白→灰→白」明度交替的最末一档）+ 细一号的左条与圆角。 */
+.prompt-group-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  padding: 8px 10px;
+  text-align: left;
+  font: inherit;
+  border-radius: 8px;
+  border: 1px solid var(--border-light);
+  border-left-width: 3px;
+  border-left-color: var(--primary);
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.prompt-group-cell:hover {
+  border-color: var(--text-tertiary);
+  border-left-color: var(--primary);
+}
+
+.prompt-group-cell__tag {
+  align-self: flex-start;
+  padding: 1px 6px;
+  border-radius: 4px;
+  /* 中性描边款（对齐 .prompt-leaf-card 的描边款口径）：token 化时漏改的 demo 紫
+     （violet 色板淡底）在此清除，app 全局无第二彩色 accent。 */
+  border: 1px solid var(--border-light);
+  background: transparent;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+
+/* 预览限 24 行（用户拍板预览高度翻倍）：保结构截大 key 后的 JSON 需要行数。 */
+.prompt-group-cell__body {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 24;
+  line-clamp: 24;
+  overflow: hidden;
+  word-break: break-word;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+/* tool use 格是 JSON，等宽呈现。 */
+.prompt-group-cell__body.is-code {
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 11.5px;
+}
+
+/* 悬挂 tool_use（result 为 null）：占位文案灰化斜体，槽位保留不隐藏。 */
+.prompt-group-cell.is-lost .prompt-group-cell__tag {
+  color: var(--text-tertiary);
+}
+
+.prompt-group-cell.is-lost .prompt-group-cell__body {
+  font-style: italic;
+  color: var(--text-tertiary);
+}
+
+/* ---------- 提示词预览：workplace 文件列表卡（常驻工作区段） ----------
+   无组头（轮展开即见列表，用户拍板）；数据源 = kkv 规则快照源头直通。 */
+.prompt-workplace {
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  border-left-width: 3px;
+  border-left-color: var(--primary);
+  background: var(--surface-muted);
+  padding: 8px 10px;
+}
+
+.prompt-workplace__list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* 文件块：列表行 +（展开时的）预览卡。 */
+.prompt-workplace__file-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* 第一级 → 第二级：文件列表行（纯路径 + 展示档 + chevron，单行紧凑，
+   底部 hairline 分隔——是列表行不是卡片）。 */
+.prompt-workplace__file {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 32px;
+  box-sizing: border-box;
+  padding: 4px 0;
+  border: none;
+  border-bottom: 1px solid var(--border-light);
+  border-radius: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+
+.prompt-workplace__file:hover {
+  background: var(--background);
+}
+
+.prompt-workplace__file-path {
+  flex: 1;
+  min-width: 0;
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 12px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 展示档 pill（badge 形态描边款）：全文 / 仅文件名 / 头信息。 */
+.prompt-workplace__file-display {
+  flex: none;
+  padding: 1px 6px;
+  border-radius: 6px;
+  border: 1px solid var(--border-light);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+
+.prompt-workplace__file-chevron {
+  flex: none;
+  font-size: 10px;
+  color: var(--text-tertiary);
+}
+
+/* 第二级 → 第三级：预览卡（列表行下方展开，第三层白底浮起 + 细左条，
+   点它开全屏）。 */
+.prompt-workplace__preview {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 6;
+  line-clamp: 6;
+  overflow: hidden;
+  word-break: break-word;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border-light);
+  border-left-width: 3px;
+  border-left-color: var(--primary);
+  background: var(--surface);
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.prompt-workplace__preview:hover {
+  border-color: var(--text-tertiary);
+  border-left-color: var(--primary);
 }
 
 .chat-messages {
@@ -5445,6 +5773,55 @@ html[data-theme="dark"] .chat-batch-bar {
   gap: 10px;
   flex-shrink: 0;
   padding-top: 12px;
+}
+
+/* 提示词预览全屏只读：标题 + 原文正文（固定纯文本档，无渲染切换）
+   + 底部关闭条，壳复用 .text-prompt-overlay / .prompt-editor-modal，
+   正文容器自己吃掉剩余高度并滚动。 */
+.prompt-fullscreen__title {
+  flex: none;
+  padding-bottom: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.prompt-fullscreen__body {
+  flex: 1;
+  overflow-y: auto;
+  font-size: 14px;
+  line-height: 1.85;
+  color: var(--text);
+}
+
+/* 逐块原文之间的视觉分隔（不加 `[段名]` 前缀，靠留白与分隔线断段）。 */
+.prompt-fullscreen__block + .prompt-fullscreen__block {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px dashed var(--border-light);
+}
+
+.prompt-fullscreen__block pre {
+  overflow-x: auto;
+}
+
+/* 原文：逐 block 纯文本铺开（等宽、保留换行）。 */
+.prompt-fullscreen__raw {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--text);
+}
+
+.prompt-fullscreen__empty {
+  margin: 0;
+  color: var(--text-tertiary);
 }
 
 .project-agent-config-modal {

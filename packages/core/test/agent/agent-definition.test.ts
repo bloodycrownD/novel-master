@@ -175,54 +175,98 @@ describe("agentDefinitionSchema", () => {
     );
   });
 
-  it("L10-Z1: rejects lifecycle on persist text via validate", () => {
-    assert.throws(
-      () =>
-        decode(
-          {
-            schemaVersion: 1,
-            name: "x",
-            prompts: {
-              persist: {
-                a: {
-                  type: "text",
-                  role: "user",
-                  content: "x",
-                  lifecycle: "once",
-                },
-              },
-              dynamic: {},
+  it("L10-Z1: persist text 上的 lifecycle 静默剥键后正常 decode", () => {
+    const def = decode(
+      {
+        schemaVersion: 1,
+        name: "x",
+        prompts: {
+          persist: {
+            a: {
+              type: "text",
+              role: "user",
+              content: "x",
+              lifecycle: "once",
             },
           },
-          agentDefinitionSchema,
-        ),
-      (e: unknown) => e instanceof ConfigDecodeError,
+          dynamic: {},
+        },
+      },
+      agentDefinitionSchema,
     );
+    assert.equal(def.prompts.persist.length, 1);
+    assert.deepEqual(def.prompts.persist[0], {
+      name: "a",
+      type: "text",
+      role: "user",
+      content: "x",
+    });
   });
 
-  it("L10-Z3: rejects invalid lifecycle on dynamic text block", () => {
-    assert.throws(
-      () =>
-        decode(
-          {
-            schemaVersion: 1,
-            name: "x",
-            prompts: {
-              persist: {},
-              dynamic: {
-                a: {
-                  type: "text",
-                  role: "user",
-                  content: "x",
-                  lifecycle: "foo",
-                },
+  it("L10-Z3: dynamic text 上的非法 lifecycle 静默剥键后正常 decode", () => {
+    const def = decode(
+      {
+        schemaVersion: 1,
+        name: "x",
+        prompts: {
+          persist: {},
+          dynamic: {
+            a: {
+              type: "text",
+              role: "user",
+              content: "x",
+              lifecycle: "foo",
+            },
+          },
+        },
+      },
+      agentDefinitionSchema,
+    );
+    assert.equal(def.prompts.dynamic.length, 1);
+    assert.deepEqual(def.prompts.dynamic[0], {
+      name: "a",
+      type: "text",
+      role: "user",
+      content: "x",
+    });
+  });
+
+  it("L10-Z4: 存量 lifecycle once / always 均剥键，四态 decode 后域对象无 lifecycle", () => {
+    for (const lifecycle of ["once", "always", "foo", null]) {
+      const def = decode(
+        {
+          schemaVersion: 1,
+          name: "x",
+          prompts: {
+            persist: {
+              p: {
+                type: "text",
+                role: "user",
+                content: "p",
+                lifecycle,
+              },
+            },
+            dynamic: {
+              d: {
+                type: "text",
+                role: "user",
+                content: "d",
+                lifecycle,
               },
             },
           },
-          agentDefinitionSchema,
-        ),
-      (e: unknown) => e instanceof ConfigDecodeError,
-    );
+        },
+        agentDefinitionSchema,
+      );
+      assert.equal(
+        "lifecycle" in (def.prompts.persist[0] as Record<string, unknown>),
+        false
+      );
+      assert.equal(
+        "lifecycle" in (def.prompts.dynamic[0] as Record<string, unknown>),
+        false
+      );
+    }
   });
 
   // ---- RT-04：definitionToDocument 的块名塌缩（写侧裸、读侧有唯一性语义）----

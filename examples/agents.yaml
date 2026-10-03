@@ -18,7 +18,6 @@ agents:
         state:
           type: text
           role: user
-          lifecycle: once
           content: |
             当前时间：{{$time}}（{{$week_cn}}）
             目录：

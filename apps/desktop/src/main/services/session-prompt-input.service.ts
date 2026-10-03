@@ -113,7 +113,7 @@ export async function buildSessionPromptInput(
     }
     throw error;
   }
-  const { workplaceDisplay, prefixPaths, visiblePaths, fingerprint } = assembled;
+  const { workplaceDisplay, files: workplaceFiles, prefixPaths, visiblePaths, fingerprint } = assembled;
   bail();
   const messages = await prepareUserMessagesForPrompt(visibleMessages, {
     sessionId: scope.sessionId,
@@ -138,6 +138,8 @@ export async function buildSessionPromptInput(
     messages,
     workplace: wt,
     vfs,
+    // 结构化文件清单（预览侧 workplace 二级卡数据源）：组装顺产直通。
+    workplaceFiles,
     workplaceFingerprint: fingerprint,
   };
   // 预览与 token 计数默认 agentStepIndex 为 0，含 once dynamic 块
