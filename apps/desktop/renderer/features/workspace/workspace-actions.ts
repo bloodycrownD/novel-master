@@ -26,6 +26,7 @@ import { joinVfsPath } from "@/utils/vfs-path";
 import { entryName } from "./vfs-tree-utils";
 import type { WorkspaceContextTarget } from "./workspace-context";
 import {
+  exportFilePathForTarget,
   parentPathForTarget,
   zipDirectoryPathForTarget,
 } from "./workspace-context";
@@ -339,18 +340,21 @@ export async function confirmSingleFileImport(
  * 菜单侧「导出」分派：文件行走单文件另存（无确认，类型直达），目录 / 空白行走既有
  * ZIP 导出（子树语义）。
  *
- * 目录路径的取法直接复用 `zipDirectoryPathForTarget`（blank → `/`、dir → 其 path）
- * 而不是在本函数里重写一遍——两处各写一遍 blank/dir 分支迟早漂移。该 helper 对文件
- * 行返回 null，而文件行已在上面分流，故此处的 `?? "/"` 只是防御。
+ * 分流直接复用 `exportFilePathForTarget`（非 null 即文件行）——两个 helper 互为镜像
+ * 各管一半（`zipDirectoryPathForTarget` 管 ZIP 侧），不再在本函数里重写一遍
+ * row/file 判定，否则两处各写一遍迟早漂移。ZIP 侧的目录取法仍复用
+ * `zipDirectoryPathForTarget`（blank → `/`、dir → 其 path），该 helper 对文件行返回
+ * null 而文件行已在上面分流，故 `?? "/"` 只是防御。
  */
 export async function exportWorkspaceTarget(
   scope: VfsScopeRequest,
   target: WorkspaceContextTarget,
 ): Promise<"saved" | "cancelled"> {
-  if (target.kind === "row" && target.row.kind === "file") {
+  const logicalPath = exportFilePathForTarget(target);
+  if (logicalPath != null) {
     const single = await ipcVfsFileExport({
       ...scope,
-      logicalPath: target.row.path,
+      logicalPath,
     });
     if (!single.ok) {
       throw new Error(single.error.message || "导出失败");

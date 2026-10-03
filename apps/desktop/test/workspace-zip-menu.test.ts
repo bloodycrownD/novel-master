@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 import {
   batchIngestOverwriteMessage,
   characterCardImportConfirmMessage,
@@ -170,4 +172,33 @@ test("T-DM4: ZIP 与角色卡覆盖确认文案独立，批量覆盖文案含冲
   const message = batchIngestOverwriteMessage(3);
   assert.ok(message.includes("3"));
   assert.equal(batchIngestOverwriteMessage(0).includes("3"), false);
+});
+
+/**
+ * T-DM5: 导出 toast 文案按分流来源分家（源码断言，desktop/C-3）。
+ *
+ * 为什么是源码断言：desktop 测试不 import App.tsx（整棵树要不起），组件层断言拿不到。
+ * 契约点只有一条——「已导出文件」与「已导出 ZIP」两句锚必须同时存在于 App.tsx，
+ * 防止任一分支退化成共用的「已导出」（用户就分辨不出落盘的是 zip 还是单文件）。
+ */
+test("T-DM5: 导出 toast 文案按 file / zip 分流，两句锚并存", () => {
+  const appSource = readFileSync(
+    fileURLToPath(new URL("../renderer/App.tsx", import.meta.url)),
+    "utf8",
+  );
+  assert.ok(
+    appSource.includes("已导出文件"),
+    "缺少单文件导出的 toast 文案锚",
+  );
+  assert.ok(appSource.includes("已导出 ZIP"), "缺少 ZIP 导出的 toast 文案锚");
+  // 共用的退化文案不该再出现（'已导出 ZIP' / '已导出文件' 是子串，按带引号的整句查）。
+  assert.ok(
+    !appSource.includes("showToast('已导出')"),
+    "不应退化成不分流的共用「已导出」",
+  );
+  // 文案与分流来源绑在一起：判定用的正是 exportFilePathForTarget（文件行非 null）。
+  assert.ok(
+    appSource.includes("exportFilePathForTarget(target) == null"),
+    "toast 文案应按 exportFilePathForTarget 的分流结果选取",
+  );
 });

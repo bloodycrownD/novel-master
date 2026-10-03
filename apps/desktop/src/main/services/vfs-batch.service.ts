@@ -280,8 +280,14 @@ export async function pickHostFileWithDialog(
  * utf8 写盘。取消保存框返回 `cancelled`。
  *
  * ⚠️ `files.length === 1` 的校验是**安全闸**不是可选加固：`planBatchExport` 收到目录
- * 路径时会递归整棵子树且不报错，只取 `files[0]` 会静默把「导出一个目录」降级成
- * 「导出该目录下的某个文件」。校验放在 showSaveDialog **之前**，免得误传时先弹框再报错。
+ * 路径时会递归整棵子树且不报错，**多文件目录**只取 `files[0]` 会静默把「导出一个目录」
+ * 降级成「导出该目录下的某个文件」。校验放在 showSaveDialog **之前**，免得误传时先弹框
+ * 再报错。
+ *
+ * 闸的边界说实话：**恰好只含一个文件的目录仍会过闸**并被同样静默降级（core 侧
+ * planBatchExport 不区分锚点是文件还是目录，本函数也就不判 entryKind，避免扩到 core）。
+ * 不变量靠调用方保证——只把**文件行**的路径传进来（见 workspace-actions 的
+ * `exportWorkspaceTarget`：文件行走单文件导出、目录行走 ZIP 分支）。
  *
  * 导出无库变更，故不经 `pushWorkspaceMutated`（调用方无需刷新 Explorer）。
  */

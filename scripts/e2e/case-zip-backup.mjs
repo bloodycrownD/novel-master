@@ -47,8 +47,11 @@ try {
   await sleep(600);
   await page.locator('[data-workspace-action="import"]').first().click();
   await sleep(600);
-  // 形式选择弹窗：点选项即生效（ImportFormModal 点 label 直接 onSelect）
+  // 形式选择弹窗：两步——点选项只改选中态，再点底部「导入」主按钮才生效
+  //（ImportFormModal 的 onSelect 唯一来源是 data-import-form-submit 按钮）
   await page.locator('[data-import-form="zip"]').first().click();
+  await sleep(400);
+  await page.locator("[data-import-form-submit]").first().click();
   await sleep(1000);
   // 可能弹覆盖确认
   const ovText = await page.evaluate(() => document.querySelector(".confirm-modal")?.textContent?.slice(0, 120) ?? null);

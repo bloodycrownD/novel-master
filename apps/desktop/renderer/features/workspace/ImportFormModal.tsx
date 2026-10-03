@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import {
   zipDirectoryPathForTarget,
@@ -9,7 +9,8 @@ import {
  * 导入形式（菜单「导入」弹窗的三个选项）。
  *
  * 取值与 E2E 锚 `data-import-form="zip|card|file"` 一一对应，E2E 靠它点选，
- * 改这里必须同步改 E2E 选择器。
+ * 改这里必须同步改 E2E 选择器。E2E 流程是两步：点选项选中 → 点
+ * `data-import-form-submit` 提交，选项本身不生效。
  */
 export type ImportForm = "zip" | "card" | "file";
 
@@ -48,7 +49,10 @@ type ImportFormModalProps = {
   projectId: string | undefined;
   sessionId: string | undefined;
   onClose: () => void;
-  /** 选中即生效：App 按形式分流（zip/card 进既有确认弹窗，file 走选择+ingest 链）。 */
+  /**
+   * 点底部「导入」主按钮才触发：App 按形式分流（zip/card 进既有确认弹窗，
+   * file 走选择+ingest 链）。**唯一触发源就是这枚按钮**——选项 label 只改选中态。
+   */
   onSelect: (form: ImportForm) => void;
 };
 
@@ -59,6 +63,15 @@ export function ImportFormModal({
   onSelect,
 }: ImportFormModalProps) {
   const [selected, setSelected] = useState<ImportForm>("zip");
+
+  // 每次打开重置为默认形式（照 FileInclusionModal 的 [open, target] effect）：
+  // 防二次打开时带着上一次的选中项，用户以为已经选好了就直接点确认。
+  useEffect(() => {
+    if (!open || !target) {
+      return;
+    }
+    setSelected("zip");
+  }, [open, target]);
 
   if (!open || !target) {
     return null;
@@ -98,18 +111,13 @@ export function ImportFormModal({
               key={opt.value}
               data-import-form={opt.value}
               className={`file-inclusion-modal__option${selected === opt.value ? " is-selected" : ""}`}
-              onClick={() => {
-                setSelected(opt.value);
-                onSelect(opt.value);
-                onClose();
-              }}
             >
               <input
                 type="radio"
                 name="import-form"
                 value={opt.value}
                 checked={selected === opt.value}
-                readOnly
+                onChange={() => setSelected(opt.value)}
               />
               <span className="file-inclusion-modal__option-body">
                 <span className="file-inclusion-modal__option-label">
@@ -126,6 +134,17 @@ export function ImportFormModal({
         <div className="text-prompt-modal__actions">
           <Button variant="secondary" onClick={onClose}>
             取消
+          </Button>
+          {/* 确认入口：onSelect 的唯一触发源。data-import-form-submit 是 E2E 选择器锚。 */}
+          <Button
+            variant="primary"
+            data-import-form-submit
+            onClick={() => {
+              onSelect(selected);
+              onClose();
+            }}
+          >
+            导入
           </Button>
         </div>
       </div>

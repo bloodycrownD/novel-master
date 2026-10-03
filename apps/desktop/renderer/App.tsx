@@ -28,6 +28,7 @@ import {
 import {
   batchIngestOverwriteMessage,
   characterCardImportConfirmMessage,
+  exportFilePathForTarget,
   workspaceMenuItems,
   zipDirectoryPathForTarget,
   zipImportConfirmMessage,
@@ -136,6 +137,9 @@ function DesktopOverlays() {
   const [ingestFileBusy, setIngestFileBusy] = useState(false);
   // 覆盖确认弹窗点「覆盖」的防重入闸：弹窗关闭与 await 之间可能连点两次。
   const ingestFileBusyRef = useRef(false);
+  // 「导入」形式选择提交（ImportFormModal 底部主按钮）的在途闸：纵深防御，
+  // 防连点或多入口重复触发同一次导入编排（单文件分支会连弹系统选择框）。
+  const importFormBusyRef = useRef(false);
   // 会话详情抽屉（原 #session-actions-menu 收拢入口）
   const [sessionDetailOpen, setSessionDetailOpen] = useState(false);
 
@@ -239,7 +243,11 @@ function DesktopOverlays() {
             target,
           );
           if (status === 'saved') {
-            showToast('已导出');
+            // 文案按分流来源走：文件行导的是单文件、目录/空白行导的是 ZIP 子树，
+            // 共用一句「已导出」用户分辨不出落盘的是什么。
+            showToast(
+              exportFilePathForTarget(target) == null ? '已导出 ZIP' : '已导出文件',
+            );
           }
         } catch (err) {
           showToast(err instanceof Error ? err.message : '导出失败');
@@ -371,48 +379,58 @@ function DesktopOverlays() {
 
   // 「导入」弹窗选定的形式分流：zip / 角色卡进既有确认链路（状态形态与确认处理一行未改），
   // 单文件走「选择文件 → 批量 ingest」两段式编排，needs_confirm 时才再弹覆盖确认。
+  // 外层 in-flight 闸（importFormBusyRef）防同一次选择被重复提交——单文件分支会弹系统
+  // 选择框，重复进入必然重复导入。
   const handleImportFormSelect = useCallback(
     async (target: WorkspaceContextTarget, form: ImportForm) => {
-      const directoryPath = zipDirectoryPathForTarget(target);
-      if (directoryPath == null) {
+      if (importFormBusyRef.current) {
         return;
       }
-      if (form === 'zip') {
-        setWorkspaceConfirm({ kind: 'import-zip', target, directoryPath });
-        return;
-      }
-      if (form === 'card') {
-        setWorkspaceConfirm({
-          kind: 'import-character-card',
-          target,
-          directoryPath,
-        });
-        return;
-      }
-
+      importFormBusyRef.current = true;
       try {
-        const result = await startSingleFileImport(
-          scopeRequestFromTarget(target, projectId, workspaceSessionId),
-          directoryPath,
-        );
-        if (result.status === 'cancelled') {
-          // 用户在系统文件框点了取消：静默返回，不打扰。
+        const directoryPath = zipDirectoryPathForTarget(target);
+        if (directoryPath == null) {
           return;
         }
-        if (result.status === 'needs-confirm') {
+        if (form === 'zip') {
+          setWorkspaceConfirm({ kind: 'import-zip', target, directoryPath });
+          return;
+        }
+        if (form === 'card') {
           setWorkspaceConfirm({
-            kind: 'ingest-file',
+            kind: 'import-character-card',
             target,
-            targetDir: directoryPath,
-            hostPaths: result.hostPaths,
-            conflictCount: result.conflictCount,
+            directoryPath,
           });
           return;
         }
-        notifyWorkspaceMutated();
-        showBatchIngestAppliedToast(result.report, result.skippedBinary);
-      } catch (err) {
-        showToast(err instanceof Error ? err.message : '导入失败');
+
+        try {
+          const result = await startSingleFileImport(
+            scopeRequestFromTarget(target, projectId, workspaceSessionId),
+            directoryPath,
+          );
+          if (result.status === 'cancelled') {
+            // 用户在系统文件框点了取消：静默返回，不打扰。
+            return;
+          }
+          if (result.status === 'needs-confirm') {
+            setWorkspaceConfirm({
+              kind: 'ingest-file',
+              target,
+              targetDir: directoryPath,
+              hostPaths: result.hostPaths,
+              conflictCount: result.conflictCount,
+            });
+            return;
+          }
+          notifyWorkspaceMutated();
+          showBatchIngestAppliedToast(result.report, result.skippedBinary);
+        } catch (err) {
+          showToast(err instanceof Error ? err.message : '导入失败');
+        }
+      } finally {
+        importFormBusyRef.current = false;
       }
     },
     [projectId, workspaceSessionId, notifyWorkspaceMutated],
@@ -420,7 +438,6 @@ function DesktopOverlays() {
 
   const handleIngestFileConfirm = useCallback(async () => {
     const confirm = workspaceConfirm;
-    setWorkspaceConfirm(null);
     if (!confirm || confirm.kind !== 'ingest-file') {
       return;
     }
@@ -442,6 +459,9 @@ function DesktopOverlays() {
     } finally {
       ingestFileBusyRef.current = false;
       setIngestFileBusy(false);
+      // 确认期间弹窗保持打开（busy「处理中」真能渲染出来，用户看得见导入在跑），
+      // 跑完再关；提前关掉的话 busy 态永远渲染不到，防重入就只剩 ref 一道。
+      setWorkspaceConfirm(null);
     }
   }, [workspaceConfirm, projectId, workspaceSessionId, notifyWorkspaceMutated]);
 
