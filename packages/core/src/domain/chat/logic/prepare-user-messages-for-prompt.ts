@@ -701,8 +701,9 @@ export async function prepareUserMessagesForPrompt(
   runtime: PrepareUserMessagesForPromptRuntime
 ): Promise<ChatMessage[]> {
   const seen = createPromptPathSeenSet(runtime.seenPaths);
-  // 附件明文体积预算（与 seen 同级作用域）：**整个拼装共享一份** 100k 上限，
-  // 逐条累加、恰好等于预算不降级，超出项降级为 filename 档引导文案。
+  // 附件明文体积预算（与 seen 同级作用域）：**整个拼装共享一份** 500k 上限
+  // （ATTACH_PROMPT_CHAR_BUDGET，50 万明文字符），逐条累加、恰好等于预算不降级，
+  // 超出项降级为 filename 档引导文案。
   // workplace 源豁免（见 hydrateFileFull 的红线注释）。
   const attachBudget = createAttachBudget();
   // workplace 省略判定的第二读集合（spec G6 双读）：初值取 assemble 的

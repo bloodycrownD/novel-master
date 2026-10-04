@@ -1322,14 +1322,14 @@ describe("prepareUserMessagesForPrompt tool_result 透传 (T-S1)", () => {
 
 /**
  * T-A 组（spec R2）：附件体积预算与降级收敛到 prepare 链（core 单源）。
- * 预算 = 整个拼装共享一次 100k；恰好等于预算不降级；workplace 源豁免。
+ * 预算 = 整个拼装共享一次 500k；恰好等于预算不降级；workplace 源豁免。
  */
 describe("prepareUserMessagesForPrompt 附件预算与降级 (T-A)", () => {
   function attachFile(path: string): MessageAttachment {
     return { name: path, source: "attach", type: "text", content: null, path };
   }
 
-  it("T-A1: 合计超 100k → 超限项 display:\"filename\" + 分段读取引导；预算内项仍 full", async () => {
+  it("T-A1: 合计超 500k → 超限项 display:\"filename\" + 分段读取引导；预算内项仍 full", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
@@ -1364,7 +1364,7 @@ describe("prepareUserMessagesForPrompt 附件预算与降级 (T-A)", () => {
     assert.match(bigBlock, /"display": "filename"/);
   });
 
-  it("T-A1 边界: 合计恰好等于 100k → 不降级", async () => {
+  it("T-A1 边界: 合计恰好等于 500k → 不降级", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
@@ -1477,7 +1477,7 @@ describe("prepareUserMessagesForPrompt 附件预算与降级 (T-A)", () => {
     // ⚠️ 前置必须**恰好吃满**（`= BUDGET`）而不是超预算：
     // `tryConsume` 超限时不动 `used`，前置若真是 `BUDGET + 1` 则 used 恒停 0，
     // 「预算被吃光」这个前提压根不成立，workplace 豁免与否都看不出差别——
-    // 用例照绿，豁免判据可以整个删掉。恰好吃满时 used = 100_000 才是真前提。
+    // 用例照绿，豁免判据可以整个删掉。恰好吃满时 used = ATTACH_PROMPT_CHAR_BUDGET 才是真前提。
     await vfs.write("/fill.md", "F".repeat(ATTACH_PROMPT_CHAR_BUDGET));
     const sk = createSessionKkvService(ctx.conn);
 
@@ -1660,8 +1660,8 @@ describe("prepareUserMessagesForPrompt 附件预算与降级 (T-A)", () => {
     const filler = "Z".repeat(ATTACH_PROMPT_CHAR_BUDGET - 20);
     await vfs.write("/filler.md", filler);
     // 被测：旧 `<file>` 外壳包 2 行、每行 10 字正文 → 明文 20 字符，剩余额度恰 20。
-    // 按明文计量：20 + 20 = 100_000 恰好不降级；
-    // 按含行号计量（`1|` / `2|` 共 4 字符）：20 + 24 > 100_000 → 降级。
+    // 按明文计量：20 + 20 = 预算值 恰好不降级；
+    // 按含行号计量（`1|` / `2|` 共 4 字符）：20 + 24 > 预算值 → 降级。
     // 差额 4 字符正好落在「剩余 20 与 24 之间」这条缝里，所以本用例对口径敏感。
     const legacyFile =
       '<file path="/legacy.md" createdAt="" updatedAt="" updatedBy="user">\n' +

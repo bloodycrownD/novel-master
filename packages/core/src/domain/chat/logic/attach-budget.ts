@@ -26,8 +26,13 @@
  * @module domain/chat/logic/attach-budget
  */
 
-/** 单次拼装内文本附件明文的合计上限（明文当量字符）。 */
-export const ATTACH_PROMPT_CHAR_BUDGET = 100_000;
+/**
+ * 单次拼装内文本附件明文的合计上限（明文当量字符）。
+ *
+ * 500_000 ≈ 50 万明文字符（CJK 场景 UTF-8 约 1.5MB），v1.5.34 起从 100_000 放宽：
+ * 超限降级只应兜住真正的巨型文件，正常长章节不该被误降级。
+ */
+export const ATTACH_PROMPT_CHAR_BUDGET = 500_000;
 
 /** 超预算附件的降级正文：不再送全文，引导模型用 `read` 分段取。 */
 export const OVERSIZED_ATTACH_NOTE =
