@@ -215,6 +215,11 @@ export type ChatConversationWebViewProps = {
   readonly onLinkClick?: (href: string) => void;
   readonly onOpenSubagentSession?: (sessionId: string) => void;
   readonly onOpenSkillDetail?: (ref: TranscriptSkillRef) => void;
+  /** 工具结果阅读（search/curl/grep/glob 卡片点击 → 全屏阅读页）。 */
+  readonly onOpenToolResult?: (payload: {
+    title: string;
+    content: string;
+  }) => void;
   readonly onOpenMessageMenu?: (
     messageId: string,
     pageX: number,
@@ -503,6 +508,7 @@ export const ChatConversationWebView = memo(
         onLinkClick,
         onOpenSubagentSession,
         onOpenSkillDetail,
+        onOpenToolResult,
         onOpenMessageMenu,
         onMessageMenuAction,
         onWebMenuOpenChange,
@@ -1697,6 +1703,13 @@ export const ChatConversationWebView = memo(
               ...(payload.projectId != null
                 ? {projectId: String(payload.projectId)}
                 : {}),
+            });
+            return;
+          }
+          if (message.type === 'openToolResult') {
+            onOpenToolResult?.({
+              title: String(payload.title ?? ''),
+              content: String(payload.content ?? ''),
             });
             return;
           }

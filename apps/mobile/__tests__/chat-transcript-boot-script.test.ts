@@ -1,4 +1,4 @@
-﻿/**
+/**
  * T-BB-06：chat-transcript 契约测迁移矩阵 — 读 webview-dist 产物（pretest 已 build:webview）。
  * 三列矩阵见 mobile-webview-preact-htm SPEC（必须保留 / 可改为 token / 允许删除）。
  *
@@ -87,6 +87,15 @@ describe('chat-transcript WebView boot (T-BB-06 / dist)', () => {
     expect(script).toContain('renderRows();');
     // 行列表主路径不再 list.innerHTML = 拼串骨架
     expect(script).not.toMatch(/list\.innerHTML\s*=\s*html/);
+  });
+
+  it('T-TRB: 工具结果阅读分支进包（渲染键与上抛键成对出现）', () => {
+    // 弱证据但有兜底价值：渲染侧 data-action='open-tool-result' 与
+    // rows-click 上抛 'openToolResult' 必须同时存在于产物——少一个即
+    // 点了没反应（渲染键/读取键不一致是 ucu P0 的旧伤）。
+    const script = bootScript();
+    expect(script).toContain('open-tool-result');
+    expect(script).toContain('openToolResult');
   });
 
   it('T-BR-CT-01: menu overlay / grace / layoutContextMenu contracts', () => {

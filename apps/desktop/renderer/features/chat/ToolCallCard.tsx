@@ -5,6 +5,10 @@ import {
   vfsToolFilePath,
 } from "./message-blocks";
 import { dispatchOpenSettingsView } from "@/features/skills/skill-ui";
+import {
+  dispatchOpenToolResultView,
+  toolResultViewFor,
+} from "./ToolResultViewer";
 
 type ToolCallCardProps = {
   tool: ToolCallView;
@@ -50,7 +54,11 @@ export function ToolCallCard({
   const canOpenSubagent =
     subagentSessionId != null && onOpenSubagentSession != null;
   const canOpenSkill = skillRef != null;
-  const canOpen = canOpenFile || canOpenSubagent || canOpenSkill;
+  // 结果阅读（search/curl/grep/glob）：正文在手即读，不依赖落盘文件——
+  // 摆在跳转门控最后一级（这四个工具名不会命中文件/子会话/技能解析）。
+  const resultView = toolResultViewFor(tool);
+  const canOpen =
+    canOpenFile || canOpenSubagent || canOpenSkill || resultView != null;
   const summary = toolCallSummary(tool);
   const detail = showFullParams
     ? JSON.stringify(tool.input, null, 2)
@@ -60,7 +68,9 @@ export function ToolCallCard({
     ? "点击查看 · 子智能体会话"
     : canOpenSkill
       ? "点击查看 · 技能"
-      : "点击查看 · 聊天工作区";
+      : resultView != null
+        ? "点击查看 · 结果"
+        : "点击查看 · 聊天工作区";
 
   const handleClick = () => {
     // 文件路径优先（同一张卡理论上不会同时具备多种入口，仍以文件优先兜底）
@@ -75,6 +85,10 @@ export function ToolCallCard({
     if (canOpenSkill && skillRef != null) {
       // 跳设置技能详情页（App 监听事件开设置页 + 导航栈 push skillDetail）
       dispatchOpenSettingsView({ view: "skillDetail", skillRef });
+      return;
+    }
+    if (resultView != null) {
+      dispatchOpenToolResultView(resultView);
     }
   };
 
@@ -84,7 +98,9 @@ export function ToolCallCard({
       ? `查看子智能体会话 ${subagentSessionId}`
       : canOpenSkill
         ? `查看技能 ${skillRef?.name}`
-        : "";
+        : resultView != null
+          ? `查看工具结果 ${tool.name}`
+          : "";
 
   const content = (
     <>

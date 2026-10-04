@@ -49,6 +49,7 @@ import {
   OPEN_SETTINGS_VIEW_EVENT,
   type OpenSettingsViewDetail,
 } from './features/skills/skill-ui';
+import { ToolResultViewerModal } from './features/chat/ToolResultViewer';
 
 type WorkspaceMenuState = WorkspaceContextTarget & {
   items: ReturnType<typeof workspaceMenuItems>;
@@ -508,6 +509,8 @@ function DesktopOverlays() {
         onClose={() => setSessionDetailOpen(false)}
         onRenamed={updateSessionName}
       />
+
+      <ToolResultViewerModal />
 
       <div
         id="workspace-context-menu"

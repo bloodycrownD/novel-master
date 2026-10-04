@@ -17,6 +17,8 @@ export type ToolCallRow = {
   summary?: string;
   input?: Record<string, unknown> | null;
   resultContent?: unknown;
+  /** 工具调用 id：结果阅读分支按它从 state.rows 反查 resultContent（同 subagentSessionId，运行时数据已挂，这里补类型声明）。 */
+  toolUseId?: string;
   /** 子智能体会话 id：非空时卡片可点击进入子会话只读浏览。applySnapshot 是浅引用赋值，运行时数据已挂在对象上，这里只是补类型声明。 */
   subagentSessionId?: string;
   /** skill 跳转三元组：read 由 tool_result meta 透传；write/edit 由 skill-tool-ref.ts 从 input 解析。 */

@@ -38,6 +38,7 @@ import {
 import {clearScrollSnapshotsByProject} from '@/services/chat-list-scroll-cache';
 import {clearTranscriptScrollSnapshotsByProject} from '@/services/chat-transcript-scroll-cache';
 import {setFileEditorOnSessionVfsSaved} from '@/components/agent/file-editor-saved-callback';
+import {setPromptTurnDetail} from '@/components/prompt/prompt-turn-callback';
 import {nextDefaultSessionTitle} from '@/utils/session-default-title';
 import {
   resolveChatLinkIntent,
@@ -777,6 +778,22 @@ export function useChatTabScope({
     [navigation, projectId],
   );
 
+  // 工具结果阅读（search/curl/grep/glob 卡片）：复用「预览提示词」的
+  // PromptTurnDetail 阅读页（纯文本铺开）。正文不走路由参数（可达数百
+  // KB），照 useOpenPromptDetail 先例写模块级单例、挂载时读走即清；
+  // turnId 作伪 path 稳定 key，用 title 派生避免额外过桥字段。
+  const openToolResult = useCallback(
+    (payload: {title: string; content: string}) => {
+      const title = payload.title === '' ? '工具结果' : payload.title;
+      setPromptTurnDetail({title, body: payload.content});
+      navigation.navigate('PromptTurnDetail', {
+        title,
+        turnId: `tool-result-${title}`,
+      });
+    },
+    [navigation],
+  );
+
   const sessionVfs = useMemo(
     () =>
       projectId != null && sessionId != null
@@ -876,6 +893,7 @@ export function useChatTabScope({
     openChatLink,
     openSubagentSession,
     openSkillDetail,
+    openToolResult,
     sessionVfs,
     sessionWorktree,
     projectVfs,

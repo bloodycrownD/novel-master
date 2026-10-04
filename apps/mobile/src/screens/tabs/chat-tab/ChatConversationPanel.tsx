@@ -214,6 +214,7 @@ function ChatConversationWebSurface(props: {
         onLinkClick={ctx.scope.openChatLink}
         onOpenSubagentSession={ctx.scope.openSubagentSession}
         onOpenSkillDetail={ctx.scope.openSkillDetail}
+        onOpenToolResult={ctx.scope.openToolResult}
         pendingSubagentSessions={pendingSubagentSessions}
         onWebMenuOpenChange={controller.onWebMenuOpenChange}
         onWebMermaidViewerOpenChange={ctx.setMermaidViewerOpen}

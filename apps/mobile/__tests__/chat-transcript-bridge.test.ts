@@ -56,6 +56,17 @@ describe('chat-transcript-bridge', () => {
     });
   });
 
+  it('round-trips Web→RN openToolResult envelope（工具结果阅读）', () => {
+    const message = {
+      v: CHAT_TRANSCRIPT_BRIDGE_VERSION,
+      type: 'openToolResult' as const,
+      payload: {title: 'search', content: '第 1 条结果\n第 2 条结果'},
+    };
+    const raw = encodeTranscriptToHost(message);
+    const parsed = decodeTranscriptToHost(raw);
+    expect(parsed).toEqual(message);
+  });
+
   it('rejects invalid bridge version', () => {
     expect(() =>
       decodeTranscriptToHost(

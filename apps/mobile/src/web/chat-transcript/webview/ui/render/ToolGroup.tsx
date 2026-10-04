@@ -19,6 +19,14 @@ export type ToolGroupProps = {
   groupTitle?: string;
 };
 
+/** 结果可全文阅读的工具（无跳转目标，正文即阅读对象）。 */
+const RESULT_READ_TOOLS: ReadonlySet<string> = new Set([
+  'search',
+  'curl',
+  'grep',
+  'glob',
+]);
+
 function ToolGroupItem({tool}: {tool: ToolCallRow}) {
   const filePath = vfsToolFilePath(tool.name || '', tool.input || {});
   // Bug1 加固：write/edit 卡片点击跳不了时，这里是最可能的断点（input 字段名不标准）。
@@ -53,7 +61,15 @@ function ToolGroupItem({tool}: {tool: ToolCallRow}) {
   // projectId 缺省时由宿主按会话上下文补齐（webview 无会话上下文）
   const skillRef = skillToolRef(tool);
   const hasSkill = !hasSubagent && skillRef != null;
-  const canOpen = filePath != null || hasSubagent || hasSkill;
+  // 结果阅读（search/curl/grep/glob）：正文在手即读，不依赖落盘文件。
+  // 摆在跳转门控最后一级（这四个工具名不会命中文件/子会话/技能解析）。
+  const hasResult =
+    filePath == null &&
+    !hasSkill &&
+    RESULT_READ_TOOLS.has(tool.name || '') &&
+    typeof tool.resultContent === 'string' &&
+    tool.resultContent.trim() !== '';
+  const canOpen = filePath != null || hasSubagent || hasSkill || hasResult;
   const summary = toolCallSummary(tool);
   const statusClass = toolStatusClass(tool.status);
   const statusInner = toolStatusLabel(tool.status);
@@ -61,6 +77,8 @@ function ToolGroupItem({tool}: {tool: ToolCallRow}) {
     ? '点击查看 · 子会话'
     : hasSkill
     ? '点击查看 · 技能'
+    : hasResult
+    ? '点击查看 · 结果'
     : '点击查看 · 聊天工作区';
   return (
     <div
@@ -70,15 +88,20 @@ function ToolGroupItem({tool}: {tool: ToolCallRow}) {
           ? 'open-subagent-session'
           : hasSkill
           ? 'open-skill'
-          : canOpen
+          : filePath != null
           ? 'open-tool-file'
+          : hasResult
+          ? 'open-tool-result'
           : undefined
       }
       data-session-id={hasSubagent ? subagentSessionId : undefined}
       data-domain={hasSkill ? skillRef!.domain : undefined}
       data-project-id={hasSkill ? skillRef!.projectId ?? undefined : undefined}
       data-name={hasSkill ? skillRef!.name : undefined}
-      data-path={!hasSubagent && !hasSkill && canOpen ? filePath! : undefined}
+      data-path={
+        !hasSubagent && !hasSkill && filePath != null ? filePath : undefined
+      }
+      data-tool-use-id={hasResult ? tool.toolUseId : undefined}
     >
       <div className="tool-header">
         <span className="tool-name">{tool.name || ''}</span>

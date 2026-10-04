@@ -21,7 +21,8 @@ type ToolInput = Record<string, unknown> | null | undefined;
  * 生成工具调用入参的一行摘要。
  *
  * 分支顺序：`!input` → `""`；`skill` → skill 摘要；`task` → `@agent · desc`；
- * 其余走公共尾巴（path/dir/from → 120 字符截断的 JSON → 键名列表）。
+ * `fs` → `action path`（mv/cp 带 `from → to`）；其余走公共尾巴
+ * （path/dir/from → 120 字符截断的 JSON → 键名列表）。
  *
  * @param name 工具名
  * @param input 工具入参原始对象（可为 null/undefined）
@@ -55,6 +56,37 @@ export function summarizeToolInput(
     if (agent) parts.push(`@${agent}`);
     if (desc) parts.push(desc);
     return parts.join(" · ");
+  }
+  // fs 摘要：`action path`（mv/cp 为 `action from → to`）。卡片工具名只写「fs」，
+  // 不带子命令时用户看不出这次是 ls 还是 mkdir；ls 省略 path = 列根目录，显示
+  // `ls /`。空串 path 按省略处理（fs 无「明确空值」语义，与公共尾巴的 `??` 定死
+  // 语义无关）。缺参（如 cp 少 to）展示已有部分，不全则回落公共尾巴。
+  if (name === "fs") {
+    const action =
+      typeof input.action === "string" ? input.action.trim() : "";
+    const from = input.from;
+    const to = input.to;
+    if (action === "mv" || action === "cp") {
+      const fromText = typeof from === "string" ? from : "";
+      const toText = typeof to === "string" ? to : "";
+      if (fromText !== "" && toText !== "") {
+        return `${action} ${fromText} → ${toText}`;
+      }
+      if (fromText !== "" || toText !== "") {
+        return `${action} ${fromText || toText}`;
+      }
+    }
+    const path = input.path;
+    if (typeof path === "string" && path !== "") {
+      return action !== "" ? `${action} ${path}` : path;
+    }
+    if (action === "ls") {
+      return "ls /";
+    }
+    if (action !== "") {
+      return action;
+    }
+    // action 与 path 全缺：回落公共尾巴（JSON 截断兜底）
   }
   const path = input.path ?? input.dir ?? input.from;
   if (typeof path === "string") {

@@ -1,4 +1,5 @@
 import {state} from '../state/state';
+import type {ToolCallRow} from '../state/state';
 import {post} from '../bridge';
 import {closeContextMenu} from '../menu/menu';
 import {renderRows} from './row-logic';
@@ -77,9 +78,38 @@ export function onRowsClick(event: MouseEvent): void {
     }
     return;
   }
+  if (action === 'open-tool-result') {
+    // 正文不进 DOM 属性（可达数百 KB）：按 toolUseId 从 state.rows 反查
+    // resultContent，标题取工具名，一次 post 上抛宿主阅读页。
+    const toolUseId = actionEl.getAttribute('data-tool-use-id');
+    if (toolUseId) {
+      const row = findToolRowByUseId(toolUseId);
+      if (row != null) {
+        const content = row.resultContent;
+        if (typeof content === 'string' && content !== '') {
+          post('openToolResult', {
+            title: row.name || '工具结果',
+            content: content,
+          });
+        }
+      }
+    }
+    return;
+  }
   if (action === 'load-older') {
     requestLoadOlder();
   }
+}
+
+/** 按 toolUseId 在 state.rows 的 tools 里反查工具行（结果阅读分支专用）。 */
+function findToolRowByUseId(toolUseId: string): ToolCallRow | null {
+  for (const row of state.rows) {
+    if (row.kind !== 'message' || !row.tools) continue;
+    for (const tool of row.tools) {
+      if (tool.toolUseId === toolUseId) return tool;
+    }
+  }
+  return null;
 }
 
 /**

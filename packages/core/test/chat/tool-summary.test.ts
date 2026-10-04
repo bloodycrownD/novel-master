@@ -58,4 +58,47 @@ describe("summarizeToolInput（core 单源）", () => {
   it("T-TS-08: dir / from 依次回落（公共尾巴不回归）", () => {
     assert.equal(summarizeToolInput("read", { from: "z.md" }), "z.md");
   });
+
+  it("T-TS-09: fs / ls + path → `ls /foo`（卡片给出具体 action）", () => {
+    assert.equal(
+      summarizeToolInput("fs", { action: "ls", path: "/foo" }),
+      "ls /foo"
+    );
+  });
+
+  it("T-TS-10: fs / ls 省略 path（列根目录）→ `ls /`", () => {
+    assert.equal(summarizeToolInput("fs", { action: "ls" }), "ls /");
+  });
+
+  it("T-TS-11: fs / mkdir + path → `mkdir /foo`", () => {
+    assert.equal(
+      summarizeToolInput("fs", { action: "mkdir", path: "/foo" }),
+      "mkdir /foo"
+    );
+  });
+
+  it("T-TS-12: fs / mv + from/to → `mv /a.md → /b.md`（cp 同形）", () => {
+    assert.equal(
+      summarizeToolInput("fs", { action: "mv", from: "/a.md", to: "/b.md" }),
+      "mv /a.md → /b.md"
+    );
+    assert.equal(
+      summarizeToolInput("fs", { action: "cp", from: "/a.md", to: "/dir" }),
+      "cp /a.md → /dir"
+    );
+  });
+
+  it("T-TS-13: fs / cp 缺 to → 展示已有部分 `cp /a.md`（不全则不造箭头）", () => {
+    assert.equal(
+      summarizeToolInput("fs", { action: "cp", from: "/a.md" }),
+      "cp /a.md"
+    );
+  });
+
+  it("T-TS-14: fs / action 与 path 全缺 → 回落公共尾巴（JSON 兜底）", () => {
+    assert.equal(
+      summarizeToolInput("fs", { recursive: true }),
+      '{"recursive":true}'
+    );
+  });
 });
