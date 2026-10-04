@@ -21,8 +21,8 @@ type ToolInput = Record<string, unknown> | null | undefined;
  * 生成工具调用入参的一行摘要。
  *
  * 分支顺序：`!input` → `""`；`skill` → skill 摘要；`task` → `@agent · desc`；
- * `fs` → `action path`（mv/cp 带 `from → to`）；其余走公共尾巴
- * （path/dir/from → 120 字符截断的 JSON → 键名列表）。
+ * `fs` → `action path`（mv/cp 带 `from → to`）；`agent` → `action name`；
+ * 其余走公共尾巴（path/dir/from → 120 字符截断的 JSON → 键名列表）。
  *
  * @param name 工具名
  * @param input 工具入参原始对象（可为 null/undefined）
@@ -87,6 +87,38 @@ export function summarizeToolInput(
       return action;
     }
     // action 与 path 全缺：回落公共尾巴（JSON 截断兜底）
+  }
+  // agent 摘要：`action name`（照 fs 的 action 前缀模式——卡片只写「agent」
+  // 看不出在管理哪个智能体，且 definition 大对象会撑成 JSON 截断一坨）。
+  // 名字取值 name > definition.name（create/update 的定义体必带 name 作
+  // upsert key）> `id:agentId`；list 无目标显示裸 action。
+  if (name === "agent") {
+    const action =
+      typeof input.action === "string" ? input.action.trim() : "";
+    const definition =
+      input.definition != null &&
+      typeof input.definition === "object" &&
+      !Array.isArray(input.definition)
+        ? (input.definition as Record<string, unknown>)
+        : undefined;
+    const nameFromDefinition =
+      typeof definition?.name === "string" ? definition.name : undefined;
+    const agentName =
+      typeof input.name === "string" && input.name !== ""
+        ? input.name
+        : nameFromDefinition;
+    const idText =
+      typeof input.agentId === "string" && input.agentId !== ""
+        ? `id:${input.agentId}`
+        : undefined;
+    if (action !== "") {
+      const target =
+        agentName != null && agentName !== "" ? agentName : idText;
+      return target != null && target !== ""
+        ? `${action} ${target}`
+        : action;
+    }
+    // action 缺失：回落公共尾巴（JSON 截断兜底）
   }
   const path = input.path ?? input.dir ?? input.from;
   if (typeof path === "string") {

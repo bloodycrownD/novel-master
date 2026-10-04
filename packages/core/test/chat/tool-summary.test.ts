@@ -101,4 +101,61 @@ describe("summarizeToolInput（core 单源）", () => {
       '{"recursive":true}'
     );
   });
+
+  it("T-TS-15: agent / get + name → `get general`（卡片给出具体 action 与目标）", () => {
+    assert.equal(
+      summarizeToolInput("agent", { action: "get", name: "general" }),
+      "get general"
+    );
+  });
+
+  it("T-TS-16: agent / list 无目标 → 裸 `list`", () => {
+    assert.equal(summarizeToolInput("agent", { action: "list" }), "list");
+  });
+
+  it("T-TS-17: agent / create 的名字从 definition.name 取 → `create 写作助手`", () => {
+    assert.equal(
+      summarizeToolInput("agent", {
+        action: "create",
+        definition: {
+          name: "写作助手",
+          mode: "primary",
+          prompts: { system: "…" },
+        },
+      }),
+      "create 写作助手"
+    );
+  });
+
+  it("T-TS-18: agent / update 名字取值 name > definition.name > id:agentId", () => {
+    // name 显式给出：优先（definition.name 是 patch 旧名时也不干扰）
+    assert.equal(
+      summarizeToolInput("agent", {
+        action: "update",
+        name: "general",
+        definition: { name: "旧名" },
+      }),
+      "update general"
+    );
+    // name 缺、definition.name 有：从定义体取
+    assert.equal(
+      summarizeToolInput("agent", {
+        action: "update",
+        definition: { name: "改后的名" },
+      }),
+      "update 改后的名"
+    );
+    // 两者都缺：退 agentId
+    assert.equal(
+      summarizeToolInput("agent", { action: "update", agentId: "agent-123" }),
+      "update id:agent-123"
+    );
+  });
+
+  it("T-TS-19: agent / action 缺失 → 回落公共尾巴（JSON 兜底）", () => {
+    assert.equal(
+      summarizeToolInput("agent", { name: "general" }),
+      '{"name":"general"}'
+    );
+  });
 });
