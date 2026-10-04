@@ -3,6 +3,7 @@
  */
 import type {ToolCallRow} from '../../runtime/state/state';
 import {
+  readableToolResult,
   toolCallSummary,
   toolStatusClass,
   toolStatusLabel,
@@ -55,13 +56,9 @@ function ToolGroupItem({tool}: {tool: ToolCallRow}) {
   const hasSkill = !hasSubagent && skillRef != null;
   // 结果阅读兜底：无专属跳转（文件/子会话/技能）而有可读结果时点击进
   // 阅读页——任何工具通用（fs/agent/search/…），点了至少有反应。
-  // 可读结果 = resultContent 非空，否则回落 summary（fs 空目录 / glob
-  // 0 paths 的 content 是空串，信息全在 summary「0 entries」里）。
-  const pickReadable = (value: unknown): string | null =>
-    typeof value === 'string' && value.trim() !== '' ? value : null;
-  const resultBody =
-    pickReadable(tool.resultContent) ?? pickReadable(tool.summary);
-  const hasResult = filePath == null && !hasSkill && resultBody != null;
+  // 可读结果判定/回落 summary 单源在 readableToolResult（与 rows-click 共用）。
+  const hasResult =
+    filePath == null && !hasSkill && readableToolResult(tool) != null;
   const canOpen = filePath != null || hasSubagent || hasSkill || hasResult;
   const summary = toolCallSummary(tool);
   const statusClass = toolStatusClass(tool.status);

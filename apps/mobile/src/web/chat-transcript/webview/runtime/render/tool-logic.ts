@@ -13,6 +13,20 @@ import type {ToolCallRow} from '../state/state';
 // 该 `export` 的唯一作用是保住本地引用（`ToolGroup.tsx` 并不 import 它），不是对外新增 API。
 export {summarizeToolInput};
 
+/**
+ * 解析工具卡片「结果阅读」的可读正文：resultContent 非空（trim 口径）
+ * 用之，否则回落 summary（fs 空目录 / glob 0 paths 的 content 是空串、
+ * 信息全在 summary「0 entries」里）；两者皆空返回 undefined。
+ *
+ * **单源**：ToolGroup 的可点判定与 rows-click 的上抛正文都走这里——
+ * 两处口径分叉会出现「渲染判可点、点击上抛空白串」（ucu P0 同族）。
+ */
+export function readableToolResult(tool: ToolCallRow): string | undefined {
+  const pickReadable = (value: unknown): string | undefined =>
+    typeof value === 'string' && value.trim() !== '' ? value : undefined;
+  return pickReadable(tool.resultContent) ?? pickReadable(tool.summary);
+}
+
 export function toolCallSummary(row: ToolCallRow): string {
   if (row.status === 'error' && row.summary) {
     return row.summary;

@@ -241,10 +241,7 @@ export type TranscriptToHostMessage =
       }
     >
   /** 工具结果阅读（search/curl/grep/glob 无跳转目标，正文直接进宿主阅读页）。 */
-  | BridgeEnvelope<
-      'openToolResult',
-      {title: string; content: string}
-    >
+  | BridgeEnvelope<'openToolResult', {title: string; content: string}>
   | BridgeEnvelope<'messageMenuAction', {messageId: string; action: string}>
   | BridgeEnvelope<'menuOpened', Record<string, never>>
   | BridgeEnvelope<'menuClosed', Record<string, never>>

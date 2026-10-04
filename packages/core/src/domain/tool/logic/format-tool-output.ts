@@ -156,17 +156,13 @@ export function formatGlobOutput(rec: Record<string, unknown>): string {
   return out;
 }
 
-function isFsLsOutput(rec: Record<string, unknown>): boolean {
-  return Array.isArray(rec.entries) && typeof rec.total === "number";
-}
-
 /**
  * 拼单条 entries 行：字段自适应。
  *
  * fs ls 的条目是 `{path, kind}`（`path\tkind`）；skill / agent 的 list
- * 条目是 `{name, description?}`——同为 entries+total 形态、共用本分支
- * （历史教训：按 fs 字段硬拼会把 name/description 条目拼成字面
- * `undefined\tundefined` 进 tool_result 落库）。
+ * 条目是 `{name, description?}`——同为 entries+total 形态、共用
+ * `formatEntriesListOutput`（历史教训：按 fs 字段硬拼会把 name/description
+ * 条目拼成字面 `undefined\tundefined` 进 tool_result 落库）。
  */
 function formatEntryLine(entry: Record<string, unknown>): string {
   if (typeof entry.path === "string") {
@@ -179,7 +175,12 @@ function formatEntryLine(entry: Record<string, unknown>): string {
   return description !== "" ? `${name}\t${description}` : name;
 }
 
-function formatFsLsOutput(rec: Record<string, unknown>): string {
+function isEntriesListOutput(rec: Record<string, unknown>): boolean {
+  return Array.isArray(rec.entries) && typeof rec.total === "number";
+}
+
+/** fs ls / skill list / agent list 共用的条目列表格式化（entries+total 形态）。 */
+function formatEntriesListOutput(rec: Record<string, unknown>): string {
   const entries = rec.entries as Array<Record<string, unknown>>;
   const lines = entries.map((e) => formatEntryLine(e));
   let out = lines.join("\n");
@@ -387,8 +388,8 @@ export function formatToolOutputForLlm(out: unknown): string {
       return formatReadOutput(rec);
     }
 
-    if (isFsLsOutput(rec)) {
-      return formatFsLsOutput(rec);
+    if (isEntriesListOutput(rec)) {
+      return formatEntriesListOutput(rec);
     }
 
     if (isGrepOutput(rec)) {

@@ -2,6 +2,7 @@ import {state} from '../state/state';
 import type {ToolCallRow} from '../state/state';
 import {post} from '../bridge';
 import {closeContextMenu} from '../menu/menu';
+import {readableToolResult} from './tool-logic';
 import {renderRows} from './row-logic';
 import {requestLoadOlder} from '../scroll/scroll';
 
@@ -80,18 +81,13 @@ export function onRowsClick(event: MouseEvent): void {
   }
   if (action === 'open-tool-result') {
     // 正文不进 DOM 属性（可达数百 KB）：按 toolUseId 从 state.rows 反查，
-    // 一次 post 上抛宿主阅读页。content 为空串时回落 summary（fs 空目录
-    // / glob 0 paths 的结果只在 summary 里）。
+    // 一次 post 上抛宿主阅读页。可读正文（content 空串回落 summary）判定
+    // 单源在 readableToolResult——与 ToolGroup 的可点判定共用，口径不分叉。
     const toolUseId = actionEl.getAttribute('data-tool-use-id');
     if (toolUseId) {
       const row = findToolRowByUseId(toolUseId);
       if (row != null) {
-        const content =
-          typeof row.resultContent === 'string' && row.resultContent !== ''
-            ? row.resultContent
-            : typeof row.summary === 'string' && row.summary !== ''
-            ? row.summary
-            : null;
+        const content = readableToolResult(row);
         if (content != null) {
           post('openToolResult', {
             title: row.name || '工具结果',

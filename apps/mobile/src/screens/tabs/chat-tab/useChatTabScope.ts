@@ -778,17 +778,17 @@ export function useChatTabScope({
     [navigation, projectId],
   );
 
-  // 工具结果阅读（search/curl/grep/glob 卡片）：复用「预览提示词」的
+  // 工具结果阅读（search/curl/grep/glob 等兜底卡片）：复用「预览提示词」的
   // PromptTurnDetail 阅读页（纯文本铺开）。正文不走路由参数（可达数百
   // KB），照 useOpenPromptDetail 先例写模块级单例、挂载时读走即清；
-  // turnId 作伪 path 稳定 key，用 title 派生避免额外过桥字段。
+  // turnId 作伪 path 稳定 key。title 兜底在 webview 侧（rows-click 的
+  // row.name || '工具结果'，数据源就近），宿主不再重复兜底。
   const openToolResult = useCallback(
     (payload: {title: string; content: string}) => {
-      const title = payload.title === '' ? '工具结果' : payload.title;
-      setPromptTurnDetail({title, body: payload.content});
+      setPromptTurnDetail({title: payload.title, body: payload.content});
       navigation.navigate('PromptTurnDetail', {
-        title,
-        turnId: `tool-result-${title}`,
+        title: payload.title,
+        turnId: `tool-result-${payload.title}`,
       });
     },
     [navigation],
