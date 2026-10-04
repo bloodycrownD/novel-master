@@ -385,6 +385,10 @@ describe('PromptTurnLeafCard（T-MP2/T-MP4）', () => {
         .accessibilityLabel,
     ).toBe(`assistant，${LEAF_CARD.body.slice(0, 20)}`);
     expect(preview.props.numberOfLines).toBe(6);
+    // R3：叶子卡预览正文用正常正文色（mock token text=#111），非禁用灰 #666。
+    expect(
+      flattenStyle(preview.props.style).color,
+    ).toBe('#111');
   });
 
   it('T-MP4-5 整卡点按进全屏：载荷带 leafId', () => {

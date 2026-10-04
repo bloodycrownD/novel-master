@@ -119,7 +119,7 @@ export function PromptWorkplaceCard({
                   ]}>
                   <Text
                     testID="prompt-workplace-file-preview-text"
-                    style={[styles.code, {color: tokens.textSecondary}]}
+                    style={[styles.code, {color: tokens.text}]}
                     numberOfLines={6}>
                     {file.body}
                   </Text>

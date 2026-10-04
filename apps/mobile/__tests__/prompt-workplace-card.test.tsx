@@ -37,6 +37,12 @@ jest.mock('@/theme/ThemeProvider', () => ({
   }),
 }));
 
+/** 样式数组拍平成单对象（与 prompt-turn-card.test 同款）。 */
+function flattenStyle(style: unknown): Record<string, unknown> {
+  if (Array.isArray(style)) return Object.assign({}, ...style.map(flattenStyle));
+  return style as Record<string, unknown>;
+}
+
 jest.mock('react-native', () => {
   const mockReact = require('react');
   return {
@@ -135,6 +141,13 @@ describe('PromptWorkplaceCard（T-WP1）', () => {
       expandedTree.root.findByProps({testID: 'prompt-workplace-file-preview-text'})
         .props.numberOfLines,
     ).toBe(6);
+    // R3：预览正文用正常正文色（mock token text=#111），非禁用灰 #666。
+    expect(
+      flattenStyle(
+        expandedTree.root.findByProps({testID: 'prompt-workplace-file-preview-text'})
+          .props.style,
+      ).color,
+    ).toBe('#111');
     // 未展开的文件不出预览卡（滤宿主层防复合/宿主双计）。
     expect(
       expandedTree.root

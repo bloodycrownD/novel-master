@@ -1107,15 +1107,26 @@ describe("T-R6 契约层：payload 策略 / CodeEditor readOnly / 样式", () =>
       css.indexOf("}", css.indexOf(".prompt-leaf-card__preview {")),
     );
     assert.match(leafPreview, /-webkit-line-clamp: 6;/);
+    // R3：预览正文用正常正文色（非禁用灰）；pill 徽标仍保留次级色（豁免）。
+    assert.match(leafPreview, /color: var\(--text\);/);
+    assert.doesNotMatch(leafPreview, /text-secondary/);
     const cellBody = css.slice(
       css.indexOf(".prompt-group-cell__body {"),
       css.indexOf("}", css.indexOf(".prompt-group-cell__body {")),
     );
     assert.match(cellBody, /-webkit-line-clamp: 24;/);
+    assert.match(cellBody, /color: var\(--text\);/);
+    assert.doesNotMatch(cellBody, /text-secondary/);
     // workplace 文件列表卡族（无组头：轮展开即列表，用户拍板）；预览卡 6 行。
     assert.match(css, /\.prompt-workplace \{/);
     assert.match(css, /\.prompt-workplace__file \{/);
     assert.match(css, /\.prompt-workplace__preview \{/);
+    const workplacePreview = css.slice(
+      css.indexOf(".prompt-workplace__preview {"),
+      css.indexOf("}", css.indexOf(".prompt-workplace__preview {")),
+    );
+    assert.match(workplacePreview, /color: var\(--text\);/);
+    assert.doesNotMatch(workplacePreview, /text-secondary/);
     assert.doesNotMatch(css, /\.prompt-workplace__head \{/);
     const groupHead = css.slice(
       css.indexOf(".prompt-tool-group__head {"),

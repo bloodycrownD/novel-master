@@ -59,7 +59,7 @@ export function PromptTurnLeafCard({card, turnId}: Props) {
       ]}>
       <Text
         testID="prompt-turn-leaf-preview"
-        style={[styles.preview, {color: tokens.textSecondary}]}
+        style={[styles.preview, {color: tokens.text}]}
         numberOfLines={6}>
         {card.body}
       </Text>
