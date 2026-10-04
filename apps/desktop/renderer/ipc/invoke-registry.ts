@@ -30,7 +30,6 @@ import {
   type MessagesHideRequest,
   type MessagesHideRangeRequest,
   type MessagesListRequest,
-  type MessagesSearchRequest,
   type MessagesSetFloorPayload,
   type MessagesSetFloorResult,
   type MessagesShowRequest,
@@ -332,10 +331,6 @@ export function createInvokeClient(invoke: InvokeFn) {
       invoke,
       IPC_CHANNELS.MESSAGES_LIST,
     ),
-    ipcMessagesSearch: withReq<
-      MessagesSearchRequest,
-      IpcResult<ChatMessageDto[]>
-    >(invoke, IPC_CHANNELS.MESSAGES_SEARCH),
     ipcMessagesAppend: withReq<
       MessagesAppendRequest,
       IpcResult<ChatMessageDto>

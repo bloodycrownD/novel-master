@@ -92,7 +92,6 @@ export const IPC_CHANNELS = {
   MESSAGES_FORK: 'nm:messages/fork',
   MESSAGES_ROLLBACK: 'nm:messages/rollback',
   MESSAGES_SET_FLOOR: 'nm:messages/setFloor',
-  MESSAGES_SEARCH: 'nm:messages/search',
 
   AGENT_RUN: 'nm:agent/run',
   AGENT_ABORT: 'nm:agent/abort',
@@ -694,18 +693,6 @@ export type SessionPushTemplateRequest = {
 export type MessagesListRequest = {
   readonly sessionId: string;
 };
-
-/** 聊天记录查询入参，透传 core 的 MessageSearchQuery。 */
-export interface MessagesSearchRequest {
-  readonly sessionId: string;
-  readonly keyword?: string;
-  readonly limit: number;
-  readonly beforeSeq?: number;
-  /** 区间下界（闭区间，含 hidden 消息）：为空/undefined 时不设下界。 */
-  readonly fromSeq?: number;
-  /** 区间上界（闭区间，含 hidden 消息）：为空/undefined 时不设上界。 */
-  readonly toSeq?: number;
-}
 
 export type ContentBlockDto =
   | { readonly type: 'text'; readonly text: string }

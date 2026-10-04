@@ -10,7 +10,7 @@
  *   原文档，渲染管线退役）；Esc（defaultPrevented 不拦截）/ 遮罩 / footer 三条关闭路径；
  * - 退役字段（`body` / `items`）即便残留在 payload 里也不参与渲染。
  *
- * 范式对齐 fetch-models-modal.test.tsx / chat-search-race-guard.test.tsx：
+ * 范式对齐 fetch-models-modal.test.tsx / metrics-detail-popover.test.tsx：
  * react-alias-hook.mjs 统一根 react 副本，react-test-renderer 真渲面板；
  * IPC 拦在 window.novelMasterDesktop.invoke（ipc client 底层出口）。
  * node 环境无 document，Modal 的 Esc 监听用最小 document 桩驱动。

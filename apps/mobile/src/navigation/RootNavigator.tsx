@@ -43,7 +43,6 @@ import {SkillsSettingsScreen} from '../screens/stack/SkillsSettingsScreen';
 import {SkillDetailScreen} from '../screens/stack/SkillDetailScreen';
 import {PromptEditorScreen} from '../screens/stack/PromptEditorScreen';
 
-import {ChatHistorySearchScreen} from '../screens/stack/ChatHistorySearchScreen';
 import {TokenUsageStatsScreen} from '../screens/stack/TokenUsageStatsScreen';
 import {AboutScreen} from '../screens/stack/AboutScreen';
 
@@ -197,10 +196,6 @@ const PromptEditorStackScreen = withStackLayout(
   'PromptEditor',
   PromptEditorScreen,
 );
-const ChatHistorySearchStackScreen = withStackLayout(
-  'ChatHistorySearch',
-  ChatHistorySearchScreen,
-);
 const TokenUsageStatsStackScreen = withStackLayout(
   'TokenUsageStats',
   TokenUsageStatsScreen,
@@ -312,10 +307,6 @@ export function RootNavigator() {
             <Stack.Screen
               name="SkillDetail"
               component={SkillDetailStackScreen}
-            />
-            <Stack.Screen
-              name="ChatHistorySearch"
-              component={ChatHistorySearchStackScreen}
             />
             <Stack.Screen
               name="TokenUsageStats"

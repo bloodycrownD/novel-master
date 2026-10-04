@@ -359,38 +359,6 @@ export function SessionDetailScreen() {
         </Text>
       </Pressable>
 
-      {/* 聊天记录查询：跳转到 ChatHistorySearch 页面，参数与 SessionDetail 一致。 */}
-      <Pressable
-        testID="chat-history-row"
-        onPress={() =>
-          navigation.navigate('ChatHistorySearch', {projectId, sessionId})
-        }
-        accessibilityLabel="聊天记录查询"
-        style={[
-          styles.card,
-          cardShadow,
-          {
-            backgroundColor: tokens.surface,
-            borderColor: tokens.borderLight,
-          },
-        ]}
-      >
-        <View
-          style={[styles.iconBox, {backgroundColor: tokens.primary + '1A'}]}
-        >
-          <Text style={styles.iconGlyph}>🔍</Text>
-        </View>
-        <View style={styles.cardBody}>
-          <Text style={[styles.cardLabel, {color: tokens.textSecondary}]}>
-            聊天记录
-          </Text>
-          <Text style={[styles.cardValue, {color: tokens.text}]}>
-            查询历史消息
-          </Text>
-        </View>
-        <Text style={[styles.chevron, {color: tokens.textTertiary}]}>›</Text>
-      </Pressable>
-
       {/* 查看提示词：跳转到 RealPromptScreen，预览当前会话实际发送的提示词。 */}
       <Pressable
         testID="real-prompt-row"

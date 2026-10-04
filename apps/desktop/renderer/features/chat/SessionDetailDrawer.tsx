@@ -59,7 +59,6 @@ import {
 } from "@shared/logic/events";
 import { useShellNav } from "@/providers/ShellNavProvider";
 import { runCompaction } from "./ConversationPanel";
-import { ChatHistorySearchPanel } from "./ChatHistorySearchPanel";
 import { SessionSkillPanel } from "./SessionSkillPanel";
 
 interface SessionDetailDrawerProps {
@@ -96,7 +95,6 @@ export function SessionDetailDrawer({
     Array<{ savedModelId: string; label: string }>
   >([]);
   const [compactOpen, setCompactOpen] = useState(false);
-  const [searchPanelOpen, setSearchPanelOpen] = useState(false);
   const [skillsPanelOpen, setSkillsPanelOpen] = useState(false);
 
   // 聊天名行内编辑状态
@@ -107,14 +105,13 @@ export function SessionDetailDrawer({
   const submittingRef = useRef(false);
 
   // 子面板状态重置：组件 if (!open) return null 只是隐藏、并不卸载，
-  // searchPanelOpen / skillsPanelOpen 会跨「关闭再打开」、跨会话切换残留
-  // （上个会话停在技能/查找面板，重开抽屉仍停在原面板）。
+  // skillsPanelOpen 会跨「关闭再打开」、跨会话切换残留
+  // （上个会话停在技能面板，重开抽屉仍停在原面板）。
   // 打开抽屉或切换会话时统一拉回默认视图。
   useEffect(() => {
     if (!open) {
       return;
     }
-    setSearchPanelOpen(false);
     setSkillsPanelOpen(false);
     // 新一轮加载：失败标记随抽屉重开/会话切换重置，badge 回到「加载中…」语义。
     setMetaLoadFailed(false);
@@ -364,13 +361,7 @@ export function SessionDetailDrawer({
           </button>
         </div>
 
-        {searchPanelOpen ? (
-          <ChatHistorySearchPanel
-            projectId={projectId}
-            sessionId={sessionId}
-            onClose={() => setSearchPanelOpen(false)}
-          />
-        ) : skillsPanelOpen ? (
+        {skillsPanelOpen ? (
           <SessionSkillPanel
             projectId={projectId}
             onClose={() => setSkillsPanelOpen(false)}
@@ -595,17 +586,6 @@ export function SessionDetailDrawer({
               onClick={() => setCompactOpen(true)}
             >
               压缩上下文
-            </button>
-            <span className="session-detail-drawer__dot" aria-hidden="true">
-              ·
-            </span>
-            <button
-              type="button"
-              className="session-detail-drawer__link"
-              data-session-detail-action="search-history"
-              onClick={() => setSearchPanelOpen(true)}
-            >
-              查找聊天记录
             </button>
           </div>
         </div>

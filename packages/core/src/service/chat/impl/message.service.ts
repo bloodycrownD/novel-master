@@ -7,10 +7,6 @@
 import { randomUUID } from "@/infra/random-uuid.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { assertMessageContent } from "@/domain/chat/content/parse-message-content.js";
-import {
-  messageMatchesKeyword,
-  type MessageSearchQuery,
-} from "@/domain/chat/content/message-content-match.js";
 import type { MessageContent } from "@/domain/chat/model/content-block.js";
 import type {
   ChatMessage,
@@ -569,29 +565,5 @@ export class DefaultMessageService implements MessageService {
     });
     await this.invalidatePromptTokens(sessionId);
     await this.invalidateToolUseCount(sessionId);
-  }
-
-  async searchMessages(
-    sessionId: string,
-    query: MessageSearchQuery
-  ): Promise<ChatMessage[]> {
-    const candidates = await this.deps.messages.searchMessages(
-      sessionId,
-      query
-    );
-    const keyword = query.keyword?.trim() ?? "";
-    if (keyword.length === 0) {
-      // keyword 为空时不做关键词过滤，仓储层已返回所有符合时间/limit 约束的消息。
-      return candidates;
-    }
-    // 仓储层（SqliteMessageRepository）已在内存层按 TextBlock 精筛——这里是
-    // 防御性重筛：port 合同允许其它实现退回超集召回（如曾经的 SQL LIKE 粗筛），
-    // messageMatchesKeyword 是最终判定口径（幂等，对已精筛结果零开销）。
-    // 精筛后防御性截断到 limit（ic-31）：换一个「退回超集召回」的 port 实现
-    // 时不会把超量结果透传给 UI——截断口径与仓储层 clampedLimit 一致
-    // （Math.max(1, Math.floor(limit))，规避负数/浮点）。
-    return candidates
-      .filter((msg) => messageMatchesKeyword(msg, keyword))
-      .slice(0, Math.max(1, Math.floor(query.limit)));
   }
 }

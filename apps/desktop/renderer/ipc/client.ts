@@ -82,7 +82,6 @@ export const {
   ipcSessionsPullTemplate,
   ipcSessionsPushTemplate,
   ipcMessagesList,
-  ipcMessagesSearch,
   ipcMessagesAppend,
   ipcMessagesEdit,
   ipcMessagesHide,

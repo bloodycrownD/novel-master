@@ -1,8 +1,8 @@
 {
   "$comment": "Renderer typecheck ratchet baseline (RULE: count/identity numbers are always measured, never copied from spec). `known` is the set of tsc error identities; an identity is `file: code: message` and deliberately carries NO line/column (CR-F13). Line/column are kept only for printing; a moved line must not mint a new identity (coordinate identities produced 78 phantom reds on a 79-error file). `maxErrors` and the GREEN count are DEDUPLICATED identity counts, not tsc's raw diagnostic count: same file + same code + same message count once (Set). When a red entry is printed, the line/column shown is the LAST occurrence of that identity (the parse Map overwrites on duplicate keys). The gate turns red on NEW identities (now \\ known) only; `maxErrors` is a real ceiling but never judges on its own. Lowering the baseline = paying down debt. Raising it = must be justified in the PR.",
   "tscConfig": "tsconfig.renderer.json",
-  "maxErrors": 190,
-  "previousMaxErrors": 371,
+  "maxErrors": 189,
+  "previousMaxErrors": 190,
   "known": [
     "../../packages/core/src/errors/session-fs-errors.ts: TS2307: Cannot find module '@/domain/chat/logic/rollback-confirm-copy.js' or its corresponding type declarations.",
     "renderer/components/code-block.tsx: TS2769: No overload matches this call.",
@@ -122,8 +122,6 @@
     "test/chat-prompt-tokens.test.ts: TS18047: 'next' is possibly 'null'.",
     "test/chat-prompt-tokens.test.ts: TS18047: 'second' is possibly 'null'.",
     "test/chat-prompt-tokens.test.ts: TS18047: 'stats' is possibly 'null'.",
-    "test/chat-search-race-guard.test.tsx: TS18048: 'renderer' is possibly 'undefined'.",
-    "test/chat-search-race-guard.test.tsx: TS2571: Object is of type 'unknown'.",
     "test/cloud-sync-handlers.test.ts: TS6307: File 'D:/Dev/nm-worktree/mcr/apps/desktop/src/main/ipc/handlers/cloud-sync.ts' is not listed within the file list of project 'D:/Dev/nm-worktree/mcr/apps/desktop/tsconfig.renderer.json'. Projects must list all files or use an 'include' pattern.",
     "test/cloud-sync-pull-accounting.test.ts: TS2339: Property 'databaseReplaced' does not exist on type 'CloudSyncPullResult'.",
     "test/compaction-handler.test.ts: TS18047: 'firstFrame' is possibly 'null'.",

@@ -6,7 +6,6 @@
 
 import type { ChatMessage, ChatMessageHeader } from "../model/message.js";
 import type { MessageContent } from "../model/content-block.js";
-import type { MessageSearchQuery } from "../content/message-content-match.js";
 // 仅取类型（编译后擦除，运行时不成环）：ReadRefPointer 在 vfs 侧定义，
 // 这里不重新定义第二份，避免两个模块的 read 引用形状漂移。
 import type { ReadRefPointer } from "@/domain/vfs/logic/revision-ref-count.js";
@@ -198,15 +197,4 @@ export interface MessageRepository {
     toSeq: number,
     hidden: boolean
   ): Promise<number>;
-
-  /**
-   * 搜索会话内消息：keyword 非空时全量拉取后按 TextBlock 内存精筛再截断
-   * limit（正文压缩后无 SQL LIKE 粗筛），keyword 为空时全量返回（不过滤
-   * role）；seq DESC + 可选 beforeSeq/fromSeq/toSeq；不在 SQL 层过滤
-   * hidden（始终含隐藏消息）。
-   */
-  searchMessages(
-    sessionId: string,
-    query: MessageSearchQuery
-  ): Promise<ChatMessage[]>;
 }

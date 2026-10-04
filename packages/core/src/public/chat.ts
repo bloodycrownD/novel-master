@@ -118,7 +118,6 @@ export {
   assertMessageContent,
 } from "../domain/chat/content/parse-message-content.js";
 export { formatMessageForCli } from "../domain/chat/content/format-message-cli.js";
-export type { MessageSearchQuery } from "../domain/chat/content/message-content-match.js";
 export type {
   MessageMetadata,
   MessageMetadataKind,

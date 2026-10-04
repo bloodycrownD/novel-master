@@ -5,9 +5,8 @@
  * 断言目标弹窗在 Android 分支渲染了 Animated.View 接线（panel 级 translateY），
  * 并且不再走 KeyboardAvoidingView 的 Android 路径（即外层包裹不是 KeyboardAvoidingView）。
  *
- * T-KB4（整页类 SessionDetailScreen / ChatHistorySearchScreen）的断言分别在
- * session-detail-screen.test.tsx 和 chat-history-search-screen.test.tsx 里，
- * 因为那两个测试文件已经 mock 好了各自的重依赖。
+ * T-KB4（整页类 SessionDetailScreen）的断言在 session-detail-screen.test.tsx 里，
+ * 因为那个测试文件已经 mock 好了各自的重依赖。
  *
  * mock 基建在 jest.config.js 里已就位：
  * - react-native-reanimated → test-utils/react-native-reanimated-mock.tsx

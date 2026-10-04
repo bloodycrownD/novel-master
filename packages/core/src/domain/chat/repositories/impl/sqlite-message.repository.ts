@@ -13,8 +13,6 @@ import {
 } from "@/infra/tdbc/logic/template-helper.js";
 import type { Row } from "@/infra/tdbc/types.js";
 import { parseMessageContent } from "../../content/parse-message-content.js";
-import type { MessageSearchQuery } from "../../content/message-content-match.js";
-import { messageMatchesKeyword } from "../../content/message-content-match.js";
 import {
   parseAttachmentsJson,
   serializeAttachmentsJson,
@@ -104,26 +102,6 @@ async function runInTransactionOrConn<T>(
     }
     throw error;
   }
-}
-
-/**
- * keyword 里出现这些字符时，LIKE 不能当 parse 前粗筛用（见
- * {@link SqliteMessageRepository.searchMessages} 的召回守卫说明）：
- * - `"` `\` 与 C0 控制字符：`content_json` 是 JSON 字符串，原字符会被转义成
- *   `\"` / `\\` / `\uXXXX`，按原字符 LIKE 必然漏命中；
- * - 任何非 ASCII 字符：内存判据 `messageMatchesKeyword` 是 Unicode 感知的
- *   `toLowerCase().includes()`，而 SQLite 内建 LIKE 只折叠 ASCII 大小写
- *   （正文存 `ÄRGER`、`LIKE '%ärger%'` 命中 0）。
- *
- * 注意 `%` / `_` 是 LIKE 通配符但**不在**此列：通配只会造成过宽（多 parse 几行，
- * 内存精筛再滤掉），不违反「召回不得小于全量精筛」的红线，不拦。
- */
-// eslint-disable-next-line no-control-regex -- 故意按控制字符内容匹配：用于判定 keyword 能否安全走 LIKE 粗筛
-const LIKE_PREFILTER_UNSAFE_RE = /["\\\x00-\x1f]|[^\x00-\x7f]/;
-
-/** keyword 是否可安全用作 SQL LIKE 粗筛（false = 退回全量精筛）。 */
-function canPrefilterWithLike(keyword: string): boolean {
-  return !LIKE_PREFILTER_UNSAFE_RE.test(keyword);
 }
 
 /** 双形态读：content_blob 非空走解压，否则 parse content_json 明文。 */
@@ -648,110 +626,5 @@ export class SqliteMessageRepository implements MessageRepository {
       { sessionId, fromSeq, toSeq, hidden: hidden ? 1 : 0 }
     );
     return result.changes;
-  }
-
-  async searchMessages(
-    sessionId: string,
-    query: MessageSearchQuery
-  ): Promise<ChatMessage[]> {
-    // 全量精筛（不做 LIKE 粗筛）：明文化让 content_json 重新有了明文，
-    // LIKE 看似可恢复，但存量行迁移期 content_blob 非空、LIKE 恒不命中，
-    // 搬完也是独立优化项——与本迭代解耦，全量精筛路径零改动。
-    // 旧 LIKE 只是超集预筛（且会漏 thinking/tool_result 块含关键词的场景
-    // 反被 role 粗筛误杀），新实现按 TextBlock 精确匹配，召回语义严格
-    // 不小于现状；大会话搜索多付解压成本，与 listBySession 全量路径同量级。
-    const keyword = query.keyword?.trim() ?? "";
-    const hasKeyword = keyword.length > 0;
-    const clampedLimit = Math.max(1, Math.floor(query.limit));
-    if (!hasKeyword) {
-      // keyword 为空：不做关键词/role 过滤，SQL 直接 LIMIT（与旧口径一致）。
-      const rows = await queryTemplate(
-        this.conn,
-        this.parser,
-        `SELECT ${MESSAGE_SELECT_COLUMNS}
-         FROM chat_message
-         WHERE session_id = #{sessionId}
-           AND (#{beforeSeq} IS NULL OR seq < #{beforeSeq})
-           AND (#{fromSeq} IS NULL OR seq >= #{fromSeq})
-           AND (#{toSeq} IS NULL OR seq <= #{toSeq})
-         ORDER BY seq DESC
-         LIMIT #{limit}`,
-        {
-          sessionId,
-          beforeSeq: query.beforeSeq ?? null,
-          fromSeq: query.fromSeq ?? null,
-          toSeq: query.toSeq ?? null,
-          limit: clampedLimit,
-        }
-      );
-      return this.mapRows(rows);
-    }
-    // keyword 非空：SQL 加扫描上限（ic-08 方案 A）——scanLimit = max(limit*20, 200)，
-    // 按 seq DESC keyset 续扫（AND seq < 游标），本段命中不足 limit 且本段拉满
-    // scanLimit 行（可能还有剩余）时继续下一段，直到凑满 limit 或本段返回行数
-    // 小于 scanLimit（SQLite LIMIT 语义保证此时已无剩余行）。
-    // 语义红线：召回不得小于全量精筛——只有「凑满 limit」或「扫完全部行」
-    // 两个出口，绝不在中途放弃续扫，返回结果恒为「最新的 limit 条命中」。
-    const scanLimit = Math.max(clampedLimit * 20, 200);
-    const matched: ChatMessage[] = [];
-    // parse 前粗筛：明文化后 JSON.parse 成了搜索的主导成本（inflate 消失，
-    // parse 顶上），5350 行库一次罕见关键词搜索就是 5350 次 parse，零护栏。
-    // 谓词只放行「可能命中」的行：压缩行 content_json 是空串、正文在 blob
-    // 里，LIKE 必然不命中，故 content_blob 非空一律放行；明文行 LIKE 命中
-    // 才进 mapRows 去 parse。
-    // 召回红线（不得小于全量精筛）：LIKE 只是粗筛，命中与否最终仍由内存
-    // 精筛 messageMatchesKeyword 决定。守卫（见 LIKE_PREFILTER_UNSAFE_RE）：
-    // keyword 含 JSON 转义字符或任何非 ASCII 字符时**不加**粗筛，退回全量
-    // 精筛——两个方向都会让 LIKE 漏召回（转义 / Unicode 大小写）。
-    const keywordPrefilter = canPrefilterWithLike(keyword)
-      ? ` AND (content_blob IS NOT NULL OR content_json LIKE '%' || #{keyword} || '%')`
-      : "";
-    // 游标初值即 beforeSeq（seq < beforeSeq 的翻页口径原样保留在第一段），
-    // 后续段游标 = 上一段最小 seq（严格递减，恒不构成死循环）。
-    let cursor: number | null = query.beforeSeq ?? null;
-    for (;;) {
-      const rows = await queryTemplate(
-        this.conn,
-        this.parser,
-        `SELECT ${MESSAGE_SELECT_COLUMNS}
-         FROM chat_message
-         WHERE session_id = #{sessionId}
-           AND (#{cursor} IS NULL OR seq < #{cursor})
-           AND (#{fromSeq} IS NULL OR seq >= #{fromSeq})
-           AND (#{toSeq} IS NULL OR seq <= #{toSeq})${keywordPrefilter}
-         ORDER BY seq DESC
-         LIMIT #{scanLimit}`,
-        {
-          sessionId,
-          cursor,
-          fromSeq: query.fromSeq ?? null,
-          toSeq: query.toSeq ?? null,
-          scanLimit,
-          keyword,
-        }
-      );
-      if (rows.length === 0) {
-        break;
-      }
-      // mcdev 的内存精筛语义 + main 的分片映射（mapRows 分批让步，大会话
-      // 搜索不长时间占住 JS 线程）——两条改动的并集；按段拉取后每段独立
-      // 精筛，命中按 seq DESC 顺序累计。
-      const messages = await this.mapRows(rows);
-      for (const msg of messages) {
-        if (messageMatchesKeyword(msg, keyword)) {
-          matched.push(msg);
-        }
-      }
-      if (matched.length >= clampedLimit) {
-        break;
-      }
-      if (rows.length < scanLimit) {
-        // 本段未拉满 scanLimit：剩余行已扫尽，允许返回不足 limit 的结果。
-        break;
-      }
-      // keyset 续扫：下一段从本段最小 seq 之前继续（seq DESC 排序下末行最小）。
-      cursor = Number(rows[rows.length - 1]!.seq);
-    }
-    return matched.slice(0, clampedLimit);
   }
 }

@@ -1,6 +1,6 @@
 /**
  * N-P1-04 压缩防抖用例的模块重定向钩子：ShellNavProvider → no-op stub。
- * 形态对齐 chat-search-shell-nav-hook.mjs。
+ * 形态对齐 settings-overlay-views-hook.mjs。
  */
 const navStubUrl = new URL(
   "./workspace-settings-shell-nav-stub.mjs",

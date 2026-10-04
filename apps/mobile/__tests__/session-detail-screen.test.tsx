@@ -534,30 +534,13 @@ describe('T-M5 picker select 分流', () => {
   });
 });
 
-// ── T-MO1 聊天记录查询入口 ─────────────────────────────────────────────────
-describe('T-MO1 SessionDetailScreen 聊天记录查询入口', () => {
+// ── T-MO1 查看提示词入口 ─────────────────────────────────────────────────
+describe('T-MO1 SessionDetailScreen 查看提示词入口', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockRouteParams = {projectId: 'p1', sessionId: 's1'};
     mockSessionsGet.mockResolvedValue({id: 's1', title: '我的会话'});
     mockLoadChatAgentMeta.mockResolvedValue(meta());
-  });
-
-  it('渲染「聊天记录」入口卡片，点击 navigate 到 ChatHistorySearch', async () => {
-    let tree!: TestRenderer.ReactTestRenderer;
-    await act(async () => {
-      tree = TestRenderer.create(<SessionDetailScreen />);
-      await flushPromises();
-    });
-    const json = JSON.stringify(tree.toJSON());
-    expect(json).toContain('聊天记录');
-    await act(async () => {
-      tree.root.findByProps({testID: 'chat-history-row'}).props.onPress();
-    });
-    expect(mockNavigate).toHaveBeenCalledWith('ChatHistorySearch', {
-      projectId: 'p1',
-      sessionId: 's1',
-    });
   });
 
   // ── T-AM3-3 提示词入口必须带 scope（AM-3）────────────────────────────────
@@ -573,7 +556,7 @@ describe('T-MO1 SessionDetailScreen 聊天记录查询入口', () => {
       tree.root.findByProps({testID: 'real-prompt-row'}).props.onPress();
     });
     // 不传 scope 的话屏内回落读全局 scope，后台通知栈外改过 scope 时
-    // 就会显示别的会话的提示词（同页 ChatHistorySearch 入口一直传了）。
+    // 就会显示别的会话的提示词。
     expect(mockNavigate).toHaveBeenCalledWith('RealPrompt', {
       projectId: 'p1',
       sessionId: 's1',

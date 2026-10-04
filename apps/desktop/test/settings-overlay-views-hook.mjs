@@ -4,7 +4,7 @@
  * SettingsOverlay 静态 import 了 9 个 view 模块，每个都牵 core 的一大片
  * （providers / prompts / skills / yaml …）。本用例只验 Overlay 壳层
  * （导航分发 / 守卫 / 关闭），把 view 全部打成 no-op，依赖树才起得来。
- * 形态对齐 chat-search-shell-nav-hook.mjs。
+ * 形态对齐 workspace-settings-shell-nav-hook.mjs。
  */
 const stubUrl = new URL("./settings-overlay-views-stub.ts", import.meta.url)
   .href;

@@ -41,7 +41,6 @@ export const PAGE_HEADER_CONFIG: Record<HeaderPageKey, PageHeaderConfig> = {
   SkillsSettings: {title: '技能管理', showBack: true, showNav: false},
   SkillDetail: {title: '技能详情', showBack: true, showNav: false},
   SubagentSessionView: {title: '子会话', showBack: true, showNav: false},
-  ChatHistorySearch: {title: '聊天记录', showBack: true, showNav: false},
   TokenUsageStats: {title: '数据统计', showBack: true, showNav: false},
   About: {title: '关于 Novel Master', showBack: true, showNav: false},
 };

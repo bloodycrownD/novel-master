@@ -240,15 +240,3 @@ test("T-L6 源码契约: MessageList 正文与流式尾巴均透传 onLinkClick�
     shell.includes("showToast(chatLinkNotFoundMessage(action.path))"),
   );
 });
-
-test("T-L6 源码契约: 搜索结果面板路径链接与正文同源路由（MF-12）", () => {
-  const panel = readSrc(
-    "renderer",
-    "features",
-    "chat",
-    "ChatHistorySearchPanel.tsx",
-  );
-  // 复用 ShellNavProvider 的 openChatLink，与 ConversationPanel 同一传递链
-  assert.ok(panel.includes("useShellNav"));
-  assert.ok(panel.includes("onLinkClick={openChatLink}"));
-});

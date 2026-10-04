@@ -94,8 +94,6 @@ export type RootStackParamList = {
     sessionId: string;
     parentSessionId: string;
   };
-  /** 聊天记录查询页：参数与 SessionDetail 一致，限定单会话范围搜索。 */
-  ChatHistorySearch: {projectId: string; sessionId: string};
   /** 数据统计页：Token 用量与缓存命中率（无参数，筛选在页内进行）。 */
   TokenUsageStats: undefined;
   About: undefined;

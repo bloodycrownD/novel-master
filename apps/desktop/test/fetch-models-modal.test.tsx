@@ -4,7 +4,7 @@
  * - T-FM6：过滤只作用展示层——被过滤隐藏的勾选行仍计入「已选 N 项」，清空后勾选态不丢。
  * - T-FM7：关闭再打开弹窗，过滤词重置为空。
  *
- * 行为用例与 chat-search-race-guard.test.tsx 同范式：注册 react-alias-hook.mjs
+ * 行为用例与 real-prompt-panel-rounds.test.tsx 同范式：注册 react-alias-hook.mjs
  * 把整棵依赖树动态导入统一到根 react 副本上，用 react-test-renderer 真渲组件；
  * mock 拦在 window.novelMasterDesktop.invoke（ipc client 底层出口），按 channel 路由。
  */

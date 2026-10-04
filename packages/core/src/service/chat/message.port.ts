@@ -12,7 +12,6 @@ import type {
 } from "@/domain/chat/model/message.js";
 import type { MessageUsage } from "@/domain/chat/model/message-usage.js";
 import type { ChatSession } from "@/domain/chat/model/session.js";
-import type { MessageSearchQuery } from "@/domain/chat/content/message-content-match.js";
 
 /** Message CRUD and fork (branch) operations. */
 export interface MessageService {
@@ -105,12 +104,4 @@ export interface MessageService {
     sessionId: string,
     afterMessageId: string | null
   ): Promise<void>;
-
-  /**
-   * 搜索会话内消息（透传仓储层召回，keyword 非空时在内存层精筛 TextBlock）。
-   */
-  searchMessages(
-    sessionId: string,
-    query: MessageSearchQuery
-  ): Promise<ChatMessage[]>;
 }
