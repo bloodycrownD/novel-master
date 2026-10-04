@@ -79,14 +79,20 @@ export function onRowsClick(event: MouseEvent): void {
     return;
   }
   if (action === 'open-tool-result') {
-    // 正文不进 DOM 属性（可达数百 KB）：按 toolUseId 从 state.rows 反查
-    // resultContent，标题取工具名，一次 post 上抛宿主阅读页。
+    // 正文不进 DOM 属性（可达数百 KB）：按 toolUseId 从 state.rows 反查，
+    // 一次 post 上抛宿主阅读页。content 为空串时回落 summary（fs 空目录
+    // / glob 0 paths 的结果只在 summary 里）。
     const toolUseId = actionEl.getAttribute('data-tool-use-id');
     if (toolUseId) {
       const row = findToolRowByUseId(toolUseId);
       if (row != null) {
-        const content = row.resultContent;
-        if (typeof content === 'string' && content !== '') {
+        const content =
+          typeof row.resultContent === 'string' && row.resultContent !== ''
+            ? row.resultContent
+            : typeof row.summary === 'string' && row.summary !== ''
+            ? row.summary
+            : null;
+        if (content != null) {
           post('openToolResult', {
             title: row.name || '工具结果',
             content: content,

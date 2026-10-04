@@ -60,6 +60,22 @@ test("T-TR3: toolResultViewFor — 空串/纯空白/缺失正文 → undefined�
   assert.equal(toolResultViewFor({ name: "curl" }), undefined);
 });
 
+test("T-TR3b: toolResultViewFor — content 空串但 summary 有信息 → 用 summary（fs 空目录/glob 0 paths 真机实锤）", () => {
+  assert.deepEqual(
+    toolResultViewFor({ name: "fs", resultContent: "", summary: "0 entries" }),
+    { title: "fs", content: "0 entries" },
+  );
+  assert.deepEqual(
+    toolResultViewFor({ name: "glob", summary: "0 paths" }),
+    { title: "glob", content: "0 paths" },
+  );
+  // 两者皆空 → 不可点
+  assert.equal(
+    toolResultViewFor({ name: "fs", resultContent: "", summary: "" }),
+    undefined,
+  );
+});
+
 test("T-TR4: ToolCallCard — search 带结果渲染可点 button + 「点击查看 · 结果」+ aria-label", () => {
   const html = renderToStaticMarkup(
     <ToolCallCard tool={makeTool({ resultContent: "结果正文" })} />,

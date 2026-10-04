@@ -160,9 +160,28 @@ function isFsLsOutput(rec: Record<string, unknown>): boolean {
   return Array.isArray(rec.entries) && typeof rec.total === "number";
 }
 
+/**
+ * 拼单条 entries 行：字段自适应。
+ *
+ * fs ls 的条目是 `{path, kind}`（`path\tkind`）；skill / agent 的 list
+ * 条目是 `{name, description?}`——同为 entries+total 形态、共用本分支
+ * （历史教训：按 fs 字段硬拼会把 name/description 条目拼成字面
+ * `undefined\tundefined` 进 tool_result 落库）。
+ */
+function formatEntryLine(entry: Record<string, unknown>): string {
+  if (typeof entry.path === "string") {
+    return typeof entry.kind === "string" ? `${entry.path}\t${entry.kind}` : entry.path;
+  }
+  const name =
+    typeof entry.name === "string" && entry.name !== "" ? entry.name : "(未命名)";
+  const description =
+    typeof entry.description === "string" ? entry.description.trim() : "";
+  return description !== "" ? `${name}\t${description}` : name;
+}
+
 function formatFsLsOutput(rec: Record<string, unknown>): string {
-  const entries = rec.entries as Array<{ path: string; kind: string }>;
-  const lines = entries.map((e) => `${e.path}\t${e.kind}`);
+  const entries = rec.entries as Array<Record<string, unknown>>;
+  const lines = entries.map((e) => formatEntryLine(e));
   let out = lines.join("\n");
   if (rec.truncated === true) {
     const omitted =

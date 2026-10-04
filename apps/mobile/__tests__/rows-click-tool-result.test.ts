@@ -173,4 +173,30 @@ describe('rows-click open-tool-result 分支 (T-TRW)', () => {
       },
     ]);
   });
+
+  it('T-TRW6: content 空串但 summary 有信息 → 上抛 summary（fs 空目录真机实锤）', () => {
+    state.rows = [
+      {
+        kind: 'message',
+        id: 'm1',
+        role: 'assistant',
+        tools: [{toolUseId: 'tu-1', name: 'fs', resultContent: '', summary: '0 entries'}],
+      },
+    ];
+    onRowsClick(
+      makeEvent(
+        makeEl('div', {
+          'data-action': 'open-tool-result',
+          'data-tool-use-id': 'tu-1',
+        }),
+      ),
+    );
+    expect(postedEnvelopes()).toEqual([
+      {
+        v: 1,
+        type: 'openToolResult',
+        payload: {title: 'fs', content: '0 entries'},
+      },
+    ]);
+  });
 });

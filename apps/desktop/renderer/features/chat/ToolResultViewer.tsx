@@ -26,18 +26,23 @@ export type ToolResultViewDetail = {
 };
 
 /**
- * 解析工具卡片的「结果阅读」载荷：正文非空即返回 {title, content}，
- * 否则 undefined（卡片不可点）。不设工具集合——专属跳转工具（read 等）
- * 也产载荷，但 ToolCallCard 的优先级链保证它们仍走文件/子会话/技能
- * 跳转，本函数只在无专属去向时被消费（判定 + 载荷构造单源）。
+ * 解析工具卡片的「结果阅读」载荷：正文非空用正文，否则回落 summary
+ *（fs 空目录 / glob 0 paths / grep 0 matches 的 content 是空串，信息全
+ * 在 summary——「0 entries」也是可读结果）；两者皆空返回 undefined
+ * （卡片不可点）。不设工具集合——专属跳转工具（read 等）也产载荷，
+ * 但 ToolCallCard 的优先级链保证它们仍走文件/子会话/技能跳转，本函数
+ * 只在无专属去向时被消费（判定 + 载荷构造单源）。
  */
 export function toolResultViewFor(tool: {
   readonly name: string;
   readonly resultContent?: string;
+  readonly summary?: string;
 }): ToolResultViewDetail | undefined {
+  const pickReadable = (value: unknown): string | undefined =>
+    typeof value === "string" && value.trim() !== "" ? value : undefined;
   const content =
-    typeof tool.resultContent === "string" ? tool.resultContent : undefined;
-  if (content == null || content.trim() === "") {
+    pickReadable(tool.resultContent) ?? pickReadable(tool.summary);
+  if (content == null) {
     return undefined;
   }
   return { title: tool.name, content };

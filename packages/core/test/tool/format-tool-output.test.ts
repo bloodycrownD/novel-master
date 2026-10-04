@@ -297,6 +297,43 @@ describe("formatToolOutputForLlm", () => {
     assert.ok(out.includes("/a\tfile"));
     assert.ok(out.includes("truncated"));
   });
+
+  it("FMT-LIST-01: skill list 条目（name/description）不再拼出 undefined", () => {
+    const out = formatToolOutputForLlm({
+      action: "list",
+      entries: [
+        { name: "助手派遣", description: "派发任务的通用规范", mode: "primary" },
+        { name: "审查派单" },
+      ],
+      total: 2,
+    });
+    // 真机实锤回归锁：修复前这里是 "undefined\tundefined" 满屏
+    assert.ok(!out.includes("undefined"), `actual: ${out}`);
+    assert.ok(out.includes("助手派遣\t派发任务的通用规范"));
+    // 无 description 的条目只显示名字，不带悬空制表符
+    assert.ok(out.includes("\n审查派单"));
+  });
+
+  it("FMT-LIST-02: agent list 条目（name/description/mode）同款字段自适应", () => {
+    const out = formatToolOutputForLlm({
+      action: "list",
+      entries: [{ name: "理性助手", description: "理性分析", mode: "primary" }],
+      total: 1,
+    });
+    assert.ok(!out.includes("undefined"), `actual: ${out}`);
+    assert.ok(out.includes("理性助手\t理性分析"));
+  });
+
+  it("FMT-LIST-03: fs ls 条目（path/kind）不受自适应影响", () => {
+    const out = formatToolOutputForLlm({
+      entries: [
+        { path: "/创作规则.md", kind: "file" },
+        { path: "/原著", kind: "directory" },
+      ],
+      total: 2,
+    });
+    assert.equal(out, "/创作规则.md\tfile\n/原著\tdirectory");
+  });
 });
 
 describe("formatToolErrorForLlm", () => {
