@@ -54,8 +54,9 @@ export function ToolCallCard({
   const canOpenSubagent =
     subagentSessionId != null && onOpenSubagentSession != null;
   const canOpenSkill = skillRef != null;
-  // 结果阅读（search/curl/grep/glob）：正文在手即读，不依赖落盘文件——
-  // 摆在跳转门控最后一级（这四个工具名不会命中文件/子会话/技能解析）。
+  // 结果阅读兜底：正文在手即读（任何工具通用），摆在跳转门控最后一级——
+  // 文件/子会话/技能的专属跳转优先，其余（fs/agent/search/…）点了至少
+  // 有反应，进阅读页看工具返回全文。
   const resultView = toolResultViewFor(tool);
   const canOpen =
     canOpenFile || canOpenSubagent || canOpenSkill || resultView != null;

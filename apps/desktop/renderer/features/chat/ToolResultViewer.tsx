@@ -1,8 +1,11 @@
 /**
- * 工具结果阅读 Modal（chat 工具卡片 → 全屏结果阅读）。
+ * 工具结果阅读 Modal（chat 工具卡片 → 全屏结果阅读，通用兜底）。
  *
- * search / curl / grep / glob 这类无跳转目标的工具卡，点击后在此展示
+ * 所有无专属跳转目标的工具卡（fs / agent / search / curl / grep / glob …
+ * 以及 read/write/edit 等在未挂文件回调时的回落），点击后在此展示
  * tool_result 全文——不落临时文件、不依赖 savedPath（正文就在消息里）。
+ * 专属跳转（文件/子会话/技能详情）由 ToolCallCard 的优先级链前置，
+ * 本阅读分支只是「点了至少有反应」的兜底。
  * 形态复用「预览提示词」的全屏阅读 Modal（`text-prompt-overlay` +
  * `prompt-editor-modal` + `prompt-fullscreen__*`，用户拍板参考其阅读效果）。
  *
@@ -22,21 +25,16 @@ export type ToolResultViewDetail = {
   readonly content: string;
 };
 
-/** 结果可全文阅读的工具（无跳转目标，正文即阅读对象）。 */
-const RESULT_READ_TOOL_NAMES = new Set(["search", "curl", "grep", "glob"]);
-
 /**
- * 解析工具卡片的「结果阅读」载荷：工具名在阅读集合内且正文非空时返回
- * {title, content}，否则 undefined（卡片不可点）。纯函数，供双处共用
- * （判定 + 载荷构造单源，ToolCallCard 据此挂点击分支）。
+ * 解析工具卡片的「结果阅读」载荷：正文非空即返回 {title, content}，
+ * 否则 undefined（卡片不可点）。不设工具集合——专属跳转工具（read 等）
+ * 也产载荷，但 ToolCallCard 的优先级链保证它们仍走文件/子会话/技能
+ * 跳转，本函数只在无专属去向时被消费（判定 + 载荷构造单源）。
  */
 export function toolResultViewFor(tool: {
   readonly name: string;
   readonly resultContent?: string;
 }): ToolResultViewDetail | undefined {
-  if (!RESULT_READ_TOOL_NAMES.has(tool.name)) {
-    return undefined;
-  }
   const content =
     typeof tool.resultContent === "string" ? tool.resultContent : undefined;
   if (content == null || content.trim() === "") {

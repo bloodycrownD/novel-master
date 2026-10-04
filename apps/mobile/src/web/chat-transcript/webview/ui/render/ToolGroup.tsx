@@ -19,14 +19,6 @@ export type ToolGroupProps = {
   groupTitle?: string;
 };
 
-/** 结果可全文阅读的工具（无跳转目标，正文即阅读对象）。 */
-const RESULT_READ_TOOLS: ReadonlySet<string> = new Set([
-  'search',
-  'curl',
-  'grep',
-  'glob',
-]);
-
 function ToolGroupItem({tool}: {tool: ToolCallRow}) {
   const filePath = vfsToolFilePath(tool.name || '', tool.input || {});
   // Bug1 加固：write/edit 卡片点击跳不了时，这里是最可能的断点（input 字段名不标准）。
@@ -61,12 +53,11 @@ function ToolGroupItem({tool}: {tool: ToolCallRow}) {
   // projectId 缺省时由宿主按会话上下文补齐（webview 无会话上下文）
   const skillRef = skillToolRef(tool);
   const hasSkill = !hasSubagent && skillRef != null;
-  // 结果阅读（search/curl/grep/glob）：正文在手即读，不依赖落盘文件。
-  // 摆在跳转门控最后一级（这四个工具名不会命中文件/子会话/技能解析）。
+  // 结果阅读兜底：无专属跳转（文件/子会话/技能）而有结果正文时，点击进
+  // 阅读页看工具返回——任何工具通用（fs/agent/search/…），点了至少有反应。
   const hasResult =
     filePath == null &&
     !hasSkill &&
-    RESULT_READ_TOOLS.has(tool.name || '') &&
     typeof tool.resultContent === 'string' &&
     tool.resultContent.trim() !== '';
   const canOpen = filePath != null || hasSubagent || hasSkill || hasResult;
