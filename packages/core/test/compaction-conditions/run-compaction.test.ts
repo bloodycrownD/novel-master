@@ -1,9 +1,13 @@
 /**
- * runCompaction 执行器测试（对应 SPEC T-CC1~T-CC4）。
+ * runCompaction 执行器测试（对应 SPEC T-CC1~T-CC4 与 T-CR1~T-CR4）。
  *
  * T-CC1 覆盖 v3 文档读迁移到 v4（store 层）；
  * T-CC2/T-CC3 用真实 DB fixture 验证 runCompaction 端到端副作用；
- * T-CC4 用抛异常的 messageTranscriptEffects stub 验证降级返回。
+ * T-CC4 用抛异常的 messageTranscriptEffects stub 验证降级返回；
+ * T-CR1 验证手动压缩清 `rule_snapshot` + `file_cache`，
+ * T-CR2 验证 auto（不传 trigger / 显式 "auto"）两域保留，
+ * T-CR3 是 T-CC4 的 manual 变量断言（hide 失败 → ok:false 且两域不清），
+ * T-CR4 验证清域失败只 warn、不把压缩成功翻成失败。
  */
 
 import assert from "node:assert/strict";
@@ -120,13 +124,84 @@ describe("runCompaction", () => {
     assert.equal(parsed.hideStartDepth, 6);
   });
 
-  it("T-CC2: 正常执行时 hide-message 生效，保留 RULE_SNAPSHOT + FILE_CACHE，invalidate token cache", async () => {
+  it("T-CC2 / T-CR2（auto 语义）：不传 trigger 或显式传 \"auto\" 时 hide 生效、两域保留、invalidate token cache", async () => {
+    const ctx = getNovelMasterTestContext();
+
+    // 两个变体各跑一遍独立会话：① 完全不传 trigger（既有调用零改动，缺省 auto）
+    // ② 显式传 "auto"。语义必须完全一致——「把缺省改成显式 auto」这类实现漂移
+    // 会让其中一条红。
+    for (const trigger of [undefined, "auto"] as const) {
+      const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+      const sessionRow = await ctx.sessions.create(project.id);
+      const sessionId = sessionRow.id;
+
+      // 10 条消息：depth 9..0，hideStartDepth=6 会 hide 掉 depth>=6 的前缀段。
+      await appendMany(ctx.messages, sessionId, [
+        "user",
+        "assistant",
+        "user",
+        "user",
+        "assistant",
+        "assistant",
+        "assistant",
+        "assistant",
+        "assistant",
+        "assistant",
+      ]);
+
+      const effects = createMessageTranscriptEffectsService(ctx.conn);
+
+      // 预置 rule_snapshot / file_cache 数据，验证**自动**压缩不清这两域
+      // （2026-09-29 修正：缓存与消息可见性正交，agent 回合中段压缩要保前缀冻结；
+      // 用户主动的置位/导入/手动压缩才清）。
+      await ctx.sessionKkv.set(sessionId, RULE_SNAPSHOT, "canon", "snap");
+      await ctx.sessionKkv.set(sessionId, FILE_CACHE, "fc-key", "fc-val");
+      // 预置 prompt token cache，验证会被 invalidate（热层 + KKV 行双删）。
+      sessionApiPromptTokenCache.set(sessionId, {
+        promptTokens: 1234,
+        updatedAt: Date.now(),
+      });
+      await seedPromptTokenRow(sessionId);
+      assert.ok(sessionApiPromptTokenCache.get(sessionId) != null);
+
+      const result = await runCompaction(
+        {
+          sessionKkv: ctx.sessionKkv,
+          messages: ctx.messages,
+          messageTranscriptEffects: effects,
+        },
+        {
+          sessionId,
+          projectId: project.id,
+          ...(trigger === undefined ? {} : { trigger }),
+        },
+      );
+
+      assert.equal(result.ok, true);
+
+      // hide-message 确实 hide 了消息（depth>=6 的前缀被置 hidden）。
+      const list = await ctx.messages.listBySession(sessionId);
+      const hiddenCount = list.filter((m) => m.hidden).length;
+      assert.ok(hiddenCount > 0, "expected some messages to be hidden");
+
+      // rule_snapshot / file_cache 保留（自动压缩不清，见 run-compaction 模块头注释）。
+      const snapKeys = await ctx.sessionKkv.listKeys(sessionId, RULE_SNAPSHOT);
+      const fcKeys = await ctx.sessionKkv.listKeys(sessionId, FILE_CACHE);
+      assert.deepEqual(snapKeys, ["canon"]);
+      assert.deepEqual(fcKeys, ["fc-key"]);
+
+      // prompt token cache 失效（进程内热层 + session KKV 行双删）。
+      assert.equal(sessionApiPromptTokenCache.get(sessionId), undefined);
+      await assertPromptTokenRowGone(sessionId);
+    }
+  });
+
+  it("T-CR1（manual 语义）：trigger=\"manual\" + ok:true → 清空 rule_snapshot + file_cache，token 失效断言不变", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const sessionRow = await ctx.sessions.create(project.id);
     const sessionId = sessionRow.id;
 
-    // 10 条消息：depth 9..0，hideStartDepth=6 会 hide 掉 depth>=6 的前缀段。
     await appendMany(ctx.messages, sessionId, [
       "user",
       "assistant",
@@ -142,18 +217,15 @@ describe("runCompaction", () => {
 
     const effects = createMessageTranscriptEffectsService(ctx.conn);
 
-    // 预置 rule_snapshot / file_cache 数据，验证压缩**不清**这两域
-    // （2026-09-29 修正：压缩只动消息可见性，与文件缓存正交；用户主动的
-    // 置位/导入仍清）。
+    // 预置两域各一条：手动压缩后下一次组装按当前工作区完整刷新
+    // （等价「手动调整工作区规则」的效果），所以这里必须都清掉。
     await ctx.sessionKkv.set(sessionId, RULE_SNAPSHOT, "canon", "snap");
     await ctx.sessionKkv.set(sessionId, FILE_CACHE, "fc-key", "fc-val");
-    // 预置 prompt token cache，验证会被 invalidate（热层 + KKV 行双删）。
     sessionApiPromptTokenCache.set(sessionId, {
       promptTokens: 1234,
       updatedAt: Date.now(),
     });
     await seedPromptTokenRow(sessionId);
-    assert.ok(sessionApiPromptTokenCache.get(sessionId) != null);
 
     const result = await runCompaction(
       {
@@ -161,28 +233,102 @@ describe("runCompaction", () => {
         messages: ctx.messages,
         messageTranscriptEffects: effects,
       },
-      { sessionId, projectId: project.id },
+      { sessionId, projectId: project.id, trigger: "manual" },
     );
 
     assert.equal(result.ok, true);
 
-    // hide-message 确实 hide 了消息（depth>=6 的前缀被置 hidden）。
+    // hide 语义不变。
     const list = await ctx.messages.listBySession(sessionId);
-    const hiddenCount = list.filter((m) => m.hidden).length;
-    assert.ok(hiddenCount > 0, "expected some messages to be hidden");
+    assert.ok(
+      list.filter((m) => m.hidden).length > 0,
+      "expected some messages to be hidden",
+    );
 
-    // rule_snapshot / file_cache 保留（压缩不清，2026-09-29 修正）。
+    // 两域皆空（观测口径走 listKeys，不加返回字段）。
     const snapKeys = await ctx.sessionKkv.listKeys(sessionId, RULE_SNAPSHOT);
     const fcKeys = await ctx.sessionKkv.listKeys(sessionId, FILE_CACHE);
-    assert.deepEqual(snapKeys, ["canon"]);
-    assert.deepEqual(fcKeys, ["fc-key"]);
+    assert.deepEqual(snapKeys, []);
+    assert.deepEqual(fcKeys, []);
 
-    // prompt token cache 失效（进程内热层 + session KKV 行双删）。
+    // prompt token cache 失效断言与 auto 路径完全一致（口径不变）。
     assert.equal(sessionApiPromptTokenCache.get(sessionId), undefined);
     await assertPromptTokenRowGone(sessionId);
   });
 
-  it("T-CC3: hideStartDepth=10 时 hide-message 用 depth 10", async () => {
+  it("T-CR4（manual 容错）：clearDomain 抛错时吞错 + warn，ok:true 照旧返回", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const sessionRow = await ctx.sessions.create(project.id);
+    const sessionId = sessionRow.id;
+
+    await appendMany(ctx.messages, sessionId, [
+      "user",
+      "assistant",
+      "user",
+      "user",
+      "assistant",
+      "assistant",
+      "assistant",
+      "assistant",
+      "assistant",
+      "assistant",
+    ]);
+
+    await ctx.sessionKkv.set(sessionId, RULE_SNAPSHOT, "canon", "snap");
+    await ctx.sessionKkv.set(sessionId, FILE_CACHE, "fc-key", "fc-val");
+
+    // 只在清 workplace 两域时抛错；其余方法（尤其 invalidate 用的 delete）照常转发。
+    const boomKkv = new Proxy(ctx.sessionKkv, {
+      get(target, prop, receiver) {
+        if (prop === "clearDomain") {
+          return async () => {
+            throw new Error("boom-from-clear-domain");
+          };
+        }
+        const value = Reflect.get(target, prop, receiver);
+        return typeof value === "function"
+          ? value.bind(target)
+          : value;
+      },
+    }) as SessionKkvService;
+
+    const warns: unknown[][] = [];
+    const originalWarn = console.warn;
+    console.warn = (...args: unknown[]) => {
+      warns.push(args);
+    };
+    let result;
+    try {
+      result = await runCompaction(
+        {
+          sessionKkv: boomKkv,
+          messages: ctx.messages,
+          messageTranscriptEffects:
+            createMessageTranscriptEffectsService(ctx.conn),
+        },
+        { sessionId, projectId: project.id, trigger: "manual" },
+      );
+    } finally {
+      console.warn = originalWarn;
+    }
+
+    // 压缩本身是成功的：清域失败不得把它翻成失败（file_cache 只是加速层）。
+    assert.equal(result.ok, true);
+    // 吞错但留痕：至少一条 warn 指向 runCompaction 的清域路径。
+    assert.ok(warns.length >= 1, "expected a console.warn for the failed clear");
+    assert.ok(
+      warns.some((args) =>
+        String(args[0]).includes("runCompaction"),
+      ),
+      `expected warn tagged runCompaction, got ${JSON.stringify(warns[0])}`,
+    );
+    // hide 与 token 失效都不受清域异常影响。
+    const list = await ctx.messages.listBySession(sessionId);
+    assert.ok(list.filter((m) => m.hidden).length > 0);
+  });
+
+  it("T-CC3（auto 语义）：hideStartDepth=10 时 hide-message 用 depth 10", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const sessionRow = await ctx.sessions.create(project.id);
@@ -228,7 +374,7 @@ describe("runCompaction", () => {
     await assertPromptTokenRowGone(sessionId);
   });
 
-  it("T-CC4: hide-message 抛异常时返回 { ok: false }，不 crash 且不清 kkv", async () => {
+  it("T-CC4 / T-CR3（manual 变量）：hide-message 抛异常时返回 { ok: false }，不 crash 且两域不清", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const sessionRow = await ctx.sessions.create(project.id);
@@ -248,6 +394,8 @@ describe("runCompaction", () => {
     ]);
 
     // 预置 kkv + cache，验证异常路径下不会被清（与旧编排器 result.ok 门控一致）。
+    // 用 trigger="manual" 这个变量：hide 失败的早 return 必须发生在清域之前，
+    // 否则手动压缩会把「hide 没生效」也刷成 workplace 刷新。
     await ctx.sessionKkv.set(sessionId, RULE_SNAPSHOT, "canon", "snap");
     await ctx.sessionKkv.set(sessionId, FILE_CACHE, "fc-key", "fc-val");
     sessionApiPromptTokenCache.set(sessionId, {
@@ -262,12 +410,12 @@ describe("runCompaction", () => {
         messages: ctx.messages,
         messageTranscriptEffects: throwingEffects(),
       },
-      { sessionId, projectId: project.id },
+      { sessionId, projectId: project.id, trigger: "manual" },
     );
 
     assert.equal(result.ok, false);
 
-    // 异常路径不清 kkv、不失效 cache。
+    // 异常路径不清 kkv、不失效 cache——manual 也不例外（hide 失败 ⇒ 不刷）。
     const snapKeys = await ctx.sessionKkv.listKeys(sessionId, RULE_SNAPSHOT);
     const fcKeys = await ctx.sessionKkv.listKeys(sessionId, FILE_CACHE);
     assert.deepEqual(snapKeys, ["canon"]);

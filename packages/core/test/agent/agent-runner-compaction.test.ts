@@ -26,7 +26,12 @@ import type { VfsService } from "@novel-master/core/vfs";
 /** 捕获 runCompaction 调用参数，供断言。 */
 const runCompactionCalls: Array<{
   deps: unknown;
-  params: { sessionId: unknown; projectId: unknown; hideStartDepth?: unknown };
+  params: {
+    sessionId: unknown;
+    projectId: unknown;
+    hideStartDepth?: unknown;
+    trigger?: unknown;
+  };
 }> = [];
 
 const runCompactionMock = mock.fn(
@@ -36,6 +41,7 @@ const runCompactionMock = mock.fn(
       sessionId: unknown;
       projectId: unknown;
       hideStartDepth?: unknown;
+      trigger?: unknown;
     },
   ) => {
     runCompactionCalls.push({ deps: _deps, params });
@@ -236,6 +242,16 @@ describe("AgentRunner compaction (T-AR1)", () => {
     assert.equal(call.params.sessionId, MOCK_SESSION_ID);
     assert.equal(call.params.projectId, MOCK_PROJECT_ID);
     assert.equal(call.params.hideStartDepth, HIDE_START_DEPTH);
+
+    // T-CR8：自动压缩路径**不传 trigger**（缺省即 "auto"）——回合中段压缩
+    // 不能清 rule_snapshot / file_cache，要保住前缀回合内冻结（2026-09-29 拍板）。
+    // 断言用 own-property 而非 `=== undefined`：显式塞 `trigger: undefined` 也会
+    // 让后者通过，但把语义钉在「根本没有这个键」上更严。
+    assert.equal(
+      Object.prototype.hasOwnProperty.call(call.params, "trigger"),
+      false,
+      "自动压缩不应传 trigger（缺省 auto 即两域保留）",
+    );
 
     // evaluator.getHideStartDepth 在压缩分支被调一次（取 hideStartDepth 用）。
     assert.equal(compactionConditions.getHideStartDepth.mock.callCount(), 1);
