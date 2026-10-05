@@ -22,6 +22,7 @@ type ToolInput = Record<string, unknown> | null | undefined;
  *
  * 分支顺序：`!input` → `""`；`skill` → skill 摘要；`task` → `@agent · desc`；
  * `fs` → `action path`（mv/cp 带 `from → to`）；`agent` → `action name`；
+ * `curl` → `METHOD url`；`search` → `query`（带 engine 时 `query · engine`）；
  * 其余走公共尾巴（path/dir/from → 120 字符截断的 JSON → 键名列表）。
  *
  * @param name 工具名
@@ -120,6 +121,35 @@ export function summarizeToolInput(
     }
     // action 缺失：回落公共尾巴（JSON 截断兜底）
   }
+  // curl 摘要：`METHOD url`。卡片只写「curl」看不出这次请求打哪、方法是什么，
+  // 而 headers/body/timeout 三个字段会让裸 JSON 撑成一坨带截断后缀的噪声
+  // （这正是用户投诉的那张卡）。method 缺省按工具 schema 的默认值 GET 补齐；
+  // url 缺失（非 string 或空串）不造假值，回落公共尾巴。
+  if (name === "curl") {
+    const url = typeof input.url === "string" ? input.url : "";
+    if (url !== "") {
+      const method =
+        typeof input.method === "string" && input.method.trim() !== ""
+          ? input.method.trim().toUpperCase()
+          : "GET";
+      return clampSummary(`${method} ${url}`);
+    }
+    // url 缺失：回落公共尾巴（JSON 截断兜底）
+  }
+  // search 摘要：`query`（显式指定 engine 时补 ` · engine`）。同 curl 的理由——
+  // maxResults/engine 裸 JSON 无信息量。engine 缺省即按优先级链自动降级，
+  // 没有明确引擎可写，此时只显示 query。
+  if (name === "search") {
+    const query = typeof input.query === "string" ? input.query : "";
+    if (query !== "") {
+      const engine =
+        typeof input.engine === "string" ? input.engine.trim() : "";
+      return clampSummary(
+        engine !== "" ? `${query} · ${engine}` : query,
+      );
+    }
+    // query 缺失：回落公共尾巴（JSON 截断兜底）
+  }
   const path = input.path ?? input.dir ?? input.from;
   if (typeof path === "string") {
     return path;
@@ -129,9 +159,19 @@ export function summarizeToolInput(
     return "";
   }
   try {
-    const raw = JSON.stringify(input);
-    return raw.length > 120 ? `${raw.slice(0, 117)}…` : raw;
+    return clampSummary(JSON.stringify(input));
   } catch {
     return keys.join(", ");
   }
+}
+
+/**
+ * 摘要长度收敛（单一口径 120 字）：超长截断并补省略号。
+ *
+ * 公共尾巴的 JSON 兜底与 curl/search 分支共用——两处各写一套口径的话，
+ * 卡片上限迟早会分叉（`test/chat/tool-summary.test.ts` 只钉住总长 ≤ 118
+ * 且以 `…` 结尾，不区分来路）。
+ */
+function clampSummary(raw: string): string {
+  return raw.length > 120 ? `${raw.slice(0, 117)}…` : raw;
 }

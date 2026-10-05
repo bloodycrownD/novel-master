@@ -158,4 +158,88 @@ describe("summarizeToolInput（core 单源）", () => {
       '{"name":"general"}'
     );
   });
+
+  it("T-TS-20: curl / 只给 url → method 缺省补 `GET`（schema 默认值）", () => {
+    assert.equal(
+      summarizeToolInput("curl", { url: "https://example.com/a" }),
+      "GET https://example.com/a"
+    );
+  });
+
+  it("T-TS-21: curl / 带 method → `METHOD url`（body/headers/timeout 不进摘要）", () => {
+    assert.equal(
+      summarizeToolInput("curl", {
+        url: "https://example.com/api",
+        method: "POST",
+        headers: { Authorization: "Bearer x" },
+        body: { a: 1 },
+        timeout: 30,
+      }),
+      "POST https://example.com/api"
+    );
+  });
+
+  it("T-TS-22: curl / method 小写 → 大写化（与工具结果首行同口径）", () => {
+    assert.equal(
+      summarizeToolInput("curl", { url: "https://example.com", method: "put" }),
+      "PUT https://example.com"
+    );
+  });
+
+  it("T-TS-23: curl / url 缺失或空串 → 回落公共尾巴（JSON 兜底 / path 取值）", () => {
+    assert.equal(
+      summarizeToolInput("curl", { method: "POST", timeout: 10 }),
+      '{"method":"POST","timeout":10}'
+    );
+    // 空串 url 视为未给（curl 的 url schema 是 min(1)），交回公共尾巴：
+    // 公共尾巴有 path 语义就取 path，没有就 JSON 兜底。
+    assert.equal(summarizeToolInput("curl", { url: "", dir: "/tmp" }), "/tmp");
+    assert.equal(summarizeToolInput("curl", { url: "" }), '{"url":""}');
+  });
+
+  it("T-TS-24: curl / url 超长 → 120 口径截断（总长 ≤ 118 且以 `…` 结尾）", () => {
+    const summary = summarizeToolInput("curl", {
+      url: `https://example.com/${"x".repeat(400)}`,
+    });
+    assert.ok(summary.length <= 118, `实际长度 ${summary.length}`);
+    assert.ok(summary.endsWith("…"));
+    assert.ok(summary.startsWith("GET https://example.com/"));
+  });
+
+  it("T-TS-25: search / 只给 query → query 本身（maxResults 不进摘要）", () => {
+    assert.equal(
+      summarizeToolInput("search", { query: "novel master", maxResults: 8 }),
+      "novel master"
+    );
+  });
+
+  it("T-TS-26: search / 带 engine → `query · engine`（engine 缺省不拼）", () => {
+    assert.equal(
+      summarizeToolInput("search", { query: "小说大纲", engine: "bocha" }),
+      "小说大纲 · bocha"
+    );
+    assert.equal(
+      summarizeToolInput("search", { query: "小说大纲", engine: "" }),
+      "小说大纲"
+    );
+  });
+
+  it("T-TS-27: search / query 缺失或空串 → 回落公共尾巴（JSON 兜底）", () => {
+    assert.equal(
+      summarizeToolInput("search", { maxResults: 3 }),
+      '{"maxResults":3}'
+    );
+    assert.equal(summarizeToolInput("search", { query: "" }), '{"query":""}');
+  });
+
+  it("T-TS-28: search / query 超长 → 120 口径截断（保留 query 开头，不带 JSON 括号）", () => {
+    const summary = summarizeToolInput("search", {
+      query: "词".repeat(300),
+      engine: "bocha",
+    });
+    assert.ok(summary.length <= 118, `实际长度 ${summary.length}`);
+    assert.ok(summary.endsWith("…"));
+    // 变异自证：拿掉 search 分支时会退化成 `{"query":"词…"}`，开头不是「词」。
+    assert.ok(summary.startsWith("词"), `实际开头 ${summary.slice(0, 12)}`);
+  });
 });
