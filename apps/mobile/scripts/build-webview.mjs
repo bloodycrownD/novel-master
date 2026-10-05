@@ -406,7 +406,11 @@ async function bundleAppJs(pkgId, entryAbs) {
     entryPoints: [entryAbs],
     bundle: true,
     format: 'iife',
-    minify: false,
+    // minify: true（2026-10-05 SPA 回滚轮拍板）：app.js 约 8.5MB → 约 1/3，所有
+    // WebView 冷启动受益（含切会话 key 重挂重建与子会话新实例）。字符串字面量/
+    // CSS/HTML 不受压缩影响，dist 契约测断言的是这些；若新增「读源码形态」类
+    // 断言（如按标识符 grep dist），需同步本开关的两种形态。
+    minify: true,
     platform: 'browser',
     target: ['es2018'],
     outfile,

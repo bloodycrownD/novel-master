@@ -67,7 +67,13 @@ describe('buildDocumentBody (T-FA4 分支选择)', () => {
 
   it('DocumentApp 分支接线在 WebView 产物中经由 buildDocumentBody', () => {
     const script = readWebViewDistFile('rich-document', 'app.js');
-    const callCount = script.split('buildDocumentBody').length - 1;
-    expect(callCount).toBeGreaterThanOrEqual(1);
+    // minify 重命名 buildDocumentBody（→ 短符号），函数名指纹失效；断言换它
+    // **产出**的稳定面：分支判别式返回的对象字面量键与 kind 字面量
+    // （对象属性名 / 字符串字面量都不受压缩影响）。分支语义本身由上面直测
+    // buildDocumentBody 的四个用例承担，这里只钉「DocumentApp 真走了这条
+    // 分支选择，且 plain 分支的 fmHtml 确实被单独消费」。
+    expect(script).toMatch(/kind:\s*['"]html['"]\s*,\s*html:/);
+    expect(script).toMatch(/kind:\s*['"]plain['"]\s*,\s*fmHtml:/);
+    expect(script).toMatch(/\.fmHtml\s*\?/);
   });
 });

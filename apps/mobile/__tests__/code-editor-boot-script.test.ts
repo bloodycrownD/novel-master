@@ -35,15 +35,18 @@ describe('code-editor WebView boot (dist)', () => {
 
   it('T-CE-BR-01: init / setDocument / themeUpdate / blur; emits ready/change', () => {
     const script = bootScript();
-    expect(script).toContain('handleHostMessage');
-    // 引号风格容忍（prettier singleQuote 后 dist 产物为单引号），只锁 msg.type + init 语义
-    expect(script).toMatch(/msg\.type === ['"]init['"]/);
+    // minify 重命名 dispatcher 形参与 handler 本体（`msg.type === …` → `e.type === …`，
+    // `handleHostMessage` 消失）。断言换稳定的协议面：`<局部>.type === "<type>"`
+    // 路由形态（引号风格容忍）+ 协议 type 字符串本身。
+    expect(script).toMatch(/type\s*===\s*['"]init['"]/);
     expect(script).toContain('setDocument');
     expect(script).toContain('themeUpdate');
-    expect(script).toContain('blurEditor');
-    // esbuild 打包时同名 post 会被去重重命名为 post2 等形态，断言需兼容 postN。
-    expect(script).toMatch(/post\d*\(['"]ready['"]/);
-    expect(script).toMatch(/post\d*\(['"]change['"]/);
+    expect(script).toMatch(/type\s*===\s*['"]blur['"]/);
+    // 上行出口：esbuild 打包时绑定过的 post 会被去重重命名（post / post2 / _t…），
+    // 且 minify 会重命名绑定本身——锚「(type 字面量, payload 形态)」这个调用
+    // 形态而非函数名：ready 带 {version:1}，change 带 {text:…}。
+    expect(script).toMatch(/\(\s*['"]ready['"]\s*,\s*\{\s*version:\s*1\s*\}\s*\)/);
+    expect(script).toMatch(/\(\s*['"]change['"]\s*,\s*\{\s*text:/);
   });
 
   it('T-CE-CSS-01: editor shell CSS for full height + touch scroll', () => {
@@ -57,17 +60,20 @@ describe('code-editor WebView boot (dist)', () => {
     const script = bootScript();
     // 胶囊装饰：mark 装饰 + atomicRanges 原子区间（退格整段删、方向键跳过）
     expect(script).toContain('cm-composer-token');
-    // 锁 `EditorView.atomicRanges.of(` 这个「扩展侧注册点」而不是裸词
-    // atomicRanges——裸词在 CM 自带产物里就有（Facet.define / facet(...)），
-    // 删掉 composer-tokens.ts 里的 provide 也不会红，断言就没牙了
-    expect(script).toContain('EditorView.atomicRanges.of(');
+    // 锁 `atomicRanges.of(` 这个「扩展侧注册点」而不是裸词 atomicRanges——
+    // 裸词在 CM 自带产物里就有（Facet.define / facet(...)），删掉
+    // composer-tokens.ts 里的 provide 也不会红，断言就没牙了。
+    // minify 会把 `EditorView` 压成短符号，但成员访问 `atomicRanges.of(` 是
+    // 属性名，压缩动不了，故把宿主符号放宽成属性链起点。
+    expect(script).toMatch(/atomicRanges\.of\(/);
     // 双处镜像常量：web 侧 COMPOSER_TOKEN_PATH 与 RN 侧 PromptEditorScreen 同值，
     // 改一边不同步会让胶囊在真机上彻底不亮——只能靠 dist 断言把住（capsule/G-2）
     expect(script).toContain('composer.md');
     // 选区上报协议（capsule/B-1 之后仅 composer 路径发，消息本身仍须在产物里）。
-    // 锁「post("selectionChange"」这个发送点而不是裸词——裸词在 CM 自带产物里
-    // 出现 10 处（this.selectionChanged 等内部字段），删掉 editor.ts 的 post 也不会红
-    expect(script).toMatch(/post\d*\(['"]selectionChange['"]/);
+    // 锁「("selectionChange", {start:…})」这个发送点的调用形态而不是裸词——裸词在
+    // CM 自带产物里出现 10 处（this.selectionChanged 等内部字段），删掉 editor.ts
+    // 的 post 也不会红。
+    expect(script).toMatch(/\(\s*['"]selectionChange['"]\s*,\s*\{\s*start:/);
   });
 
   it('T-CE-CAPSULE-02: 胶囊 CSS 与 --primary-muted（宿主算色，capsule/C-orch-1 + C-2/C-3）', () => {

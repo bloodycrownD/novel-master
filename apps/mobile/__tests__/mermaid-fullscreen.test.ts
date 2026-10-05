@@ -224,7 +224,8 @@ describe('mermaid 全屏查看器 dist 产物契约 (T-MF5)', () => {
       expect(appJs).toContain('closeMermaidViewer');
       // 引号风格容忍（prettier singleQuote 后 dist 产物为单引号），只锁选择器语义
       expect(appJs).toMatch(/closest\(['"]\.mermaid-block__chart['"]\)/);
-      expect(appJs).toContain('cloneNode(true)');
+      // minify 把 `cloneNode(true)` 压成 `cloneNode(!0)`；两种构建形态都锁。
+      expect(appJs).toMatch(/cloneNode\(\s*(?:true|!0)\s*\)/);
 
       const appCss = readWebViewDistFile(pkg, 'app.css');
       expect(appCss).toContain('.mermaid-fullscreen-backdrop');

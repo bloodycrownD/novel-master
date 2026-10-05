@@ -130,7 +130,13 @@ describe('mermaid rich-document 预览管线 (T-MV1 / T-MV2)', () => {
     expect(runtime).toContain('renderMermaidCodeBlocks');
 
     const dist = readWebViewDistFile('rich-document', 'app.js');
-    expect(dist).toContain('renderMermaidBlocks');
+    // minify 重命名 renderMermaidBlocks / renderMermaidCodeBlocks 等函数标识符，
+    // 断言换该扫描器写进 DOM 的**稳定面**（选择器字面量 + 容器/失败类名）：
+    // 三样都由「扫 code.language-mermaid → 造 mermaid-block 容器」这一条路径
+    // 独家产出，谁把扫描器删了/断链了三样一起归零。
+    expect(dist).toContain('code.language-mermaid');
+    expect(dist).toContain('mermaid-block__chart');
+    expect(dist).toContain('mermaid-block__source');
     expect(dist).toContain('language-mermaid');
     expect(dist).toContain('mermaid.initialize');
     expect(dist).toContain('data-mermaid-error');
@@ -176,7 +182,11 @@ describe('mermaid chat 转录管线 (T-MT1 / T-MT2)', () => {
     // 源码真源仍在 chat-transcript/webview/runtime 下（合成包复用），
     // dist 侧读 chat-conversation（转录并入合成包）。
     const dist = readWebViewDistFile('chat-conversation', 'app.js');
-    expect(dist).toContain('scheduleMermaidScan');
+    // minify 重命名 scheduleMermaidScan，本体无字符串面；断言换它在产物里
+    // 留下的两处稳定指纹：扫描入口的选择器 `code.language-mermaid`，以及
+    // 「流式尾增量岛跳过」契约的唯一标记 `closest('#stream-tail')`
+    // （只有 transcript runtime 的 mermaid 扫描器会带这个 skip 选择器）。
+    expect(dist).toMatch(/closest\(["']#stream-tail["']\)/);
     expect(dist).toContain('language-mermaid');
   });
 
