@@ -1,6 +1,21 @@
 /**
  * 提示词查看「轮聚合」：把 assembly 段折叠成轮（turn），供双端真实提示词面板直接消费。
  *
+ * ## 行号口径（显示层剥离，wire 不动）
+ *
+ * 预览屏看到的正文不该带 `N|` 行号——行号是模型侧的定位辅助，对读者只是噪声。
+ * 本模块在 **cards 构造层**（仅预览消费）逐行剥掉行号前缀，判据**按卡类型限定**，
+ * 不做全行一致启发式（详见 {@link stripWorkplaceLinePrefix} /
+ * {@link stripToolResultLinePrefix} / {@link stripAttachmentContentLinePrefix}）。
+ *
+ * 三条硬约束：
+ *
+ * - **wire 零改动**：发给模型的 `buildPromptLlmInputFromLayout` 产物不经本模块，
+ *   `PromptPreviewTurn.items` / `.body`（CLI parity 冻结面）也**保留行号**；
+ * - **不改入参**：`ctx.workplaceFiles` 的 file 对象是 desktop DTO 整数组直传的
+ *   源头，原地 mutate 会污染 wire 侧——故一律 map 出新对象；
+ * - **text / thinking 卡不剥**：误伤用户正文（PRD 验收 3 要求其余字符逐字一致）。
+ *
  * @module service/prompt/prompt-preview-turns
  */
 
@@ -31,6 +46,13 @@ export interface PromptToolGroupResultData {
   readonly toolUseId: string;
   /** `resolveToolResultOk` 产出（显式 `ok` 优先，legacy 回落 `Error:` 前缀）。 */
   readonly ok: boolean;
+  /**
+   * 结果正文 —— **cards 为显示层口径（已剥行号），items/body 为 wire parity 口径（保留行号）**。
+   *
+   * @remarks 剥的是 read / skill load 的 `padStart(6," ")` 右对齐行号（判据见
+   * {@link stripToolResultLinePrefix}）；wire 侧同源正文在 `PromptPreviewTurn.items`
+   * / `.body` 里原样保留。
+   */
   readonly body: string;
 }
 
@@ -54,14 +76,28 @@ export interface PromptTextCardData {
   readonly id: string;
   /** 展示标签用（详情标题源）：user / assistant / 合成段名（system、skills、workplace…）。 */
   readonly role: string;
+  /**
+   * 卡片正文 —— **cards 为显示层口径**，与 items/body 的 wire parity 口径可能不同。
+   *
+   * @remarks 唯一的差异面：user 轮附件 action 块 `"content"` 值内的**转义行号已剥**
+   * （见 {@link stripAttachmentContentLinePrefix}）。对话正文 / assistant 正文 /
+   * thinking 正文**一律一字不动**（不剥行号，避免误伤用户与模型的正文）。
+   */
   readonly body: string;
 }
 
-/** workplace 单文件格：块内正文（行号格式原样）+ 展示档（快照条目原值）。 */
+/** workplace 单文件格：块内正文（**cards 已剥行号**）+ 展示档（快照条目原值）。 */
 export interface PromptWorkplaceFileCardData {
   /** VFS 逻辑路径（规则快照条目原值）。 */
   readonly path: string;
-  /** 块内正文（`N|行` 行号格式原样；header 档为 front-matter 行）。 */
+  /**
+   * 块内正文 —— **cards 为显示层口径（已剥行号），items/body 为 wire parity 口径（保留行号）**。
+   *
+   * @remarks 判据 `^\d+\|`（零前导空格），逐行至多剥一次（见
+   * {@link stripWorkplaceLinePrefix}）。header 档为 front-matter 行，兜底两行
+   * （`（无 Front Matter）` / `（空 Front Matter）`）同形，一并剥前缀。
+   * wire 侧的带行号原文在 `ctx.workplaceFiles` 与 `PromptPreviewTurn.body` 里原样保留。
+   */
   readonly body: string;
   /** 展示档：full（行号全文）/ filename（单行文件名）/ header（front-matter）。 */
   readonly display: "full" | "header" | "filename";
@@ -105,10 +141,17 @@ export type PromptTurnCardData =
 export interface PromptPreviewTurn {
   readonly id: string;
   readonly kind: "system" | "user" | "assistant";
+  /** CLI parity 冻结面：合成段各占一轮，段 body **一字不动**（**保留行号**）。 */
   readonly items: PromptPreviewSegment[];
   readonly summary: string;
+  /** CLI parity 冻结面：`items` 段正文拼接，**保留行号**（wire 口径）。 */
   readonly body: string;
-  /** 有序卡片流（就地展开与全屏的渲染源），顺序=消息块序重建的因果序，与 `items` 段序无关。 */
+  /**
+   * 有序卡片流（就地展开与全屏的渲染源），顺序=消息块序重建的因果序，与 `items` 段序无关。
+   *
+   * @remarks **显示层口径：workplace / tool result / user 附件的行号已剥**；
+   * 与 `items` / `.body` 的 wire parity 口径刻意不同（见模块头「行号口径」段）。
+   */
   readonly cards: ReadonlyArray<PromptTurnCardData>;
   /** 真摘要：单行语义（>70 字截断，三类轮统一）。 */
   readonly summaryText: string;
@@ -202,6 +245,89 @@ function formatToolUseInputJson(block: ToolUseBlock): string {
     : inputJson;
 }
 
+/** workplace 行的行号前缀：`^\d+\|`（零前导空格）。 */
+const WORKPLACE_LINE_PREFIX = /^\d+\|/;
+
+/**
+ * 剥 workplace 文件块正文的 `N|` 行号前缀（**每行至多替换一次**，非全局贪婪）。
+ *
+ * @remarks 判据零前导空格是刻意收窄的：`workplace-display.ts` 的 `${idx+1}|` /
+ * filename 档 `1|basename` / header 档兜底 `1|（无 Front Matter）` 都是零空格形态。
+ * 原文自身以 `数字|` 开头的行（如 `12|2024|年报`）只剥外层一次即逐字还原——
+ * 正则 `^\d+\|` 锚定行首且单次替换，`1|12|34` → `12|34` 而非继续吃掉内层。
+ */
+function stripWorkplaceLinePrefix(body: string): string {
+  return body
+    .split("\n")
+    .map((line) => line.replace(WORKPLACE_LINE_PREFIX, ""))
+    .join("\n");
+}
+
+/** tool result 行的行号前缀：`^ +\d+\|`（**至少 1 个前导空格**）。 */
+const TOOL_RESULT_LINE_PREFIX = /^ +\d+\|/;
+
+/**
+ * 剥 tool result 正文的 read 行号前缀（**每行至多替换一次**）。
+ *
+ * @remarks read / skill load 用 `String(n).padStart(6, " ")` 右对齐
+ * （`format-tool-output.ts` 的 `formatLineNumber`），行号 < 100000 时**必有前导空格**；
+ * 「至少一空格」的判据把「普通文本恰好以 `数字|` 开头」的误伤面压到近零。
+ * 追加行（`Output truncated.` / `续读请用 skill read 的 offset/limit。` / 附属文件清单）
+ * 无行号，自然保留。
+ *
+ * @remarks 已知边界：**行号 ≥ 100000 的超长文件行漏剥**（`padStart` 不再补空格，
+ * 形态与 workplace 判据撞不上）——罕见，spec 已登记接受。
+ */
+function stripToolResultLinePrefix(body: string): string {
+  return body
+    .split("\n")
+    .map((line) => line.replace(TOOL_RESULT_LINE_PREFIX, ""))
+    .join("\n");
+}
+
+/**
+ * user 附件 action 块（`userAttach` / `workplaceChange`）：JSON 正文在 `"content": "…"` 值内。
+ *
+ * @remarks 只圈这两类是因为它们的 `content` **必是** `renderFileBlockBody` 的行号正文；
+ * `skillAttach` 的 `content` 是 SKILL.md 原始全文（无行号）、`annotate` 压根没有
+ * `content` 键——把它们放进来就是拿行号判据去砍无行号正文，属误伤。
+ */
+const LINE_NUMBERED_ATTACHMENT_ACTION =
+  /<action name="(?:userAttach|workplaceChange)">[\s\S]*?<\/action>/g;
+
+/**
+ * `"content": "…"` 三段（前缀 / 值体 / 收尾引号）。
+ *
+ * @remarks 值体**不含引号**——`^` 锚点必须落在值的第一个字符上，否则行首那一行永远剥不掉。
+ * 转义反斜杠与引号成对，故值体用 `(?:[^"\\]|\\.)*`。
+ */
+const JSON_CONTENT_FIELD = /("content":\s*")((?:[^"\\]|\\.)*)(")/;
+
+/** 转义串内的行号前缀：行首或**字面 `\n` 转义序列**（反斜杠 + n 两字符）之后，容忍空格。 */
+const ESCAPED_LINE_PREFIX = /(^|\\n) *\d+\|/g;
+
+/**
+ * 剥 user 附件 JSON 转义形态的行号前缀（每处一次替换）。
+ *
+ * @remarks 附件正文经 `JSON.stringify(params, null, 2)` 转义后落在**单个物理行**里
+ * （真换行变成 `\n` 两字符），所以逐行正则够不着——只在 `"content"` 值内匹配字面
+ * `\n` 转义序列才对得上。限定在 `userAttach` / `workplaceChange` 块内是判据可用的关键：
+ * 这些块的 `content` 恒为行号正文，而 dirTree（`├── …` 前缀）、binary / 超限降级
+ * 文案、grep 的 `path:line:col:` 都构不成 `^ *\d+\|`，不会误伤。
+ */
+function stripAttachmentContentLinePrefix(text: string): string {
+  if (!text.includes('"content":')) {
+    return text;
+  }
+  return text.replace(LINE_NUMBERED_ATTACHMENT_ACTION, (block) =>
+    block.replace(
+      JSON_CONTENT_FIELD,
+      (_field, prefix: string, value: string, tail: string) =>
+        `${prefix}${value.replace(ESCAPED_LINE_PREFIX, "$1")}${tail}`
+    )
+  );
+}
+
 /** 工具组卡的结果格 + 状态：一次判定同时产出两格，`ok` 不再判两遍。 */
 function buildToolResultCell(
   block: ToolResultBlock | undefined
@@ -218,7 +344,10 @@ function buildToolResultCell(
     result: {
       toolUseId: block.toolUseId,
       ok,
-      body: formatToolResultContentForDisplay(block.content),
+      // cards 是显示层口径 → 剥行号；同源 wire 正文在 items/body 段原样保留。
+      body: stripToolResultLinePrefix(
+        formatToolResultContentForDisplay(block.content)
+      ),
     },
     status: ok ? "ok" : "error",
   };
@@ -314,7 +443,13 @@ function buildMessageCards(
   return cards;
 }
 
-/** user 轮卡片：wrap 后的整条文本（发给模型的形态）直转一张 text 卡。 */
+/**
+ * user 轮卡片：wrap 后的整条文本（发给模型的形态）直转一张 text 卡。
+ *
+ * @remarks 卡片正文是显示层口径：附件 action 块里 `"content"` 值内的转义行号会被剥掉
+ * （见 {@link stripAttachmentContentLinePrefix}）。`<user-input>` 内层与摘要取值
+ * 不受影响——附件块整体在 `<user-input>` 之外。
+ */
 function buildUserTurnCards(message: ChatMessage): PromptTurnCardData[] {
   const blocks = message.content.blocks;
   const parts: Array<{ index: number; text: string }> = [];
@@ -333,7 +468,9 @@ function buildUserTurnCards(message: ChatMessage): PromptTurnCardData[] {
       type: "text",
       id: cardId(message.id, first.index),
       role: message.role,
-      body: parts.map((part) => part.text).join("\n\n"),
+      body: stripAttachmentContentLinePrefix(
+        parts.map((part) => part.text).join("\n\n")
+      ),
     },
   ];
 }
@@ -504,7 +641,13 @@ export async function buildPromptPreviewTurnsFromLayout(
         group.cards.push({
           type: "workplace",
           id: item.id,
-          files: workplaceFiles,
+          // cards 是显示层口径 → map 出**新对象**并剥行号。
+          // 严禁原地 mutate：`ctx.workplaceFiles` 的 file 对象是 desktop DTO 整数组
+          // 直传的源头（`handlers/prompt.ts`），改它会连 wire 侧一起污染。
+          files: workplaceFiles.map((file) => ({
+            ...file,
+            body: stripWorkplaceLinePrefix(file.body),
+          })),
         });
       } else {
         group.cards.push({

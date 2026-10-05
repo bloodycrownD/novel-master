@@ -928,6 +928,12 @@ export type PromptToolGroupStatusDto = 'ok' | 'error' | 'lost';
 export type PromptToolGroupResultDto = {
   readonly toolUseId: string;
   readonly ok: boolean;
+  /**
+   * 结果正文 —— **cards 为显示层口径（已剥行号），items/body 为 wire parity 口径（保留行号）**。
+   *
+   * 剥的是 read / skill load 的 `padStart(6," ")` 右对齐行号（判据 `^ +\d+\|`）；
+   * 形状与 core 的 `PromptToolGroupResultData` 逐字段一致。
+   */
   readonly body: string;
 };
 
@@ -965,6 +971,11 @@ export type PromptTextCardDto = {
   readonly id: string;
   /** 展示标签用：user / assistant / template 段名。 */
   readonly role: string;
+  /**
+   * 卡片正文 —— 显示层口径：user 轮附件 action 块 `"content"` 值内的**转义行号已剥**。
+   *
+   * 其余情形（对话正文 / assistant 正文 / thinking）**一字不动**（不剥行号，避免误伤正文）。
+   */
   readonly body: string;
 };
 
@@ -972,7 +983,12 @@ export type PromptTextCardDto = {
 export type PromptWorkplaceFileDto = {
   /** VFS 逻辑路径（kkv 规则快照条目原值）。 */
   readonly path: string;
-  /** 块内正文（`N|行` 行号格式；header 档为 front-matter 行）。 */
+  /**
+   * 块内正文 —— **cards 为显示层口径（已剥行号），items/body 为 wire parity 口径（保留行号）**。
+   *
+   * 判据 `^\d+\|`（零前导空格），逐行至多剥一次；header 档为 front-matter 行，
+   * 两个兜底（`（无 Front Matter）` / `（空 Front Matter）`）同形一并剥前缀。
+   */
   readonly body: string;
   /** 展示档：full / filename / header（快照原值，非推断）。 */
   readonly display: 'full' | 'filename' | 'header';

@@ -1,12 +1,24 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, it } from "node:test";
-import { textBlocks, type ChatMessage, type ContentBlock } from "@novel-master/core/chat";
+import {
+  buildAttachmentActionXml,
+  buildDirTreeActionXml,
+  buildFileRefActionXml,
+  textBlocks,
+  wrapUserMessageForLlm,
+  type ChatMessage,
+  type ContentBlock,
+} from "@novel-master/core/chat";
 
 import {
   buildPromptAssemblyFromLayout,
+  buildPromptLlmInputFromLayout,
   buildPromptPreviewSegmentsFromLayout,
   buildPromptPreviewTurnsFromLayout,
   formatPromptLlmInputForCliFromLayout,
+  messageBodyTextFromBlocks,
   type AgentPromptLayout,
   type PromptPreviewTurn,
   type PromptRenderContext,
@@ -125,7 +137,7 @@ describe("T-R1 切轮正确性", () => {
     assert.equal(turns.find((turn) => turn.id === "prompt-workplace-done")?.kind, "assistant");
   });
 
-  it("ctx 带 workplaceFiles（kkv 快照源头直通）时 workplace 段产文件级组卡", async () => {
+  it("ctx 带 workplaceFiles（kkv 快照源头直通）时 workplace 段产文件级组卡（body 已剥行号）", async () => {
     const ctx: PromptRenderContext = {
       ...ctxOf(messages),
       workplaceFiles: [
@@ -148,13 +160,18 @@ describe("T-R1 切轮正确性", () => {
           ["meta/info.md", "header"],
         ],
       );
-      // 块内正文原样直通（展示档是快照原值，不做推断）。
-      assert.equal(card.files[0]!.body, "1|第一行\n2|第二行");
+      // cards 是显示层口径：`N|` 行号已逐行剥掉（展示档仍是快照原值，不做推断）。
+      assert.equal(card.files[0]!.body, "第一行\n第二行");
+      assert.equal(card.files[1]!.body, "草稿.txt");
+      // 展示档本身不带行号的正文原样透出。
+      assert.equal(card.files[2]!.body, "---\ntitle: x\n---");
     }
-    // metaText 字数 = 各文件块内正文之和。
+    // metaText 字数 = 各文件**剥后**正文之和（口径=与用户所见字符一致）。
     const filesChars =
-      "1|第一行\n2|第二行".length + "1|草稿.txt".length + "---\ntitle: x\n---".length;
+      "第一行\n第二行".length + "草稿.txt".length + "---\ntitle: x\n---".length;
     assert.equal(workplace.metaText, `${filesChars} 字`);
+    // 纯函数、不改入参：ctx.workplaceFiles 的原 body 仍带行号（T-PL7 判据②）。
+    assert.equal(ctx.workplaceFiles![0]!.body, "1|第一行\n2|第二行");
     // 无结构化数据（缺省 ctx）退普通 text 卡——旧调用方不空窗。
     const legacy = await buildPromptPreviewTurnsFromLayout(layout, ctxOf(messages));
     const legacyCard = legacy.find((turn) => turn.id === "prompt-workplace")!.cards[0]!;
@@ -1014,5 +1031,442 @@ describe("T-PT10 thinking 卡门控与 redacted 形态", () => {
       turn.cards.map((card) => card.id),
       ["card-m2-0", "card-m2-1", "card-m2-2"]
     );
+  });
+});
+
+/* ───────────────────── T-PL 行号剥离（仅显示层，wire 不动） ───────────────────── */
+
+/** 带 workplace 段的 layout（workplace 组卡的数据源是 ctx.workplaceFiles）。 */
+const workplaceLayout: AgentPromptLayout = {
+  workplace: "【done】",
+  persistEnabled: false,
+  dynamic: [],
+};
+
+/** workplace 轮（合成段轮，id = 段 id `prompt-workplace`）。 */
+async function workplaceTurnOf(
+  files: NonNullable<PromptRenderContext["workplaceFiles"]>
+): Promise<PromptPreviewTurn> {
+  const ctx: PromptRenderContext = { ...ctxOf([], "WT"), workplaceFiles: files };
+  const turns = await buildPromptPreviewTurnsFromLayout(workplaceLayout, ctx);
+  return turns.find((turn) => turn.id === "prompt-workplace")!;
+}
+
+/** workplace 组卡的 files（断言用：先判类型再取，避免非空断言噪音）。 */
+function workplaceFilesOf(turn: PromptPreviewTurn) {
+  const card = turn.cards[0]!;
+  assert.equal(card.type, "workplace");
+  return card.type === "workplace" ? card.files : [];
+}
+
+/**
+ * 一轮「assistant 工具调用 + tool_result 回传」：组卡的 result.body 即断言对象。
+ *
+ * @param toolName 工具名（只影响组卡标签，不影响正文判据）。
+ * @param content tool_result 原始 content（走 `formatToolResultContentForDisplay`）。
+ */
+async function toolResultBodyOf(toolName: string, content: string): Promise<string> {
+  const messages: ChatMessage[] = [
+    message("user", "跑", 1),
+    blocksMessage("assistant", [
+      { type: "tool_use", id: "t1", name: toolName, input: { path: "a.md" } },
+    ], 2),
+    blocksMessage("user", [{ type: "tool_result", toolUseId: "t1", content }], 3),
+  ];
+  const turns = await buildPromptPreviewTurnsFromLayout(chatOnlyLayout, ctxOf(messages, ""));
+  const [group] = groupCards(turns[1]!);
+  return group!.result!.body;
+}
+
+/** read / skill load 的行号正文（`String(n).padStart(6, " ")` 右对齐）。 */
+function readOutputJson(content: string, extra?: Record<string, unknown>): string {
+  return JSON.stringify({
+    path: "a.md",
+    content,
+    totalLines: content.split("\n").length,
+    returnedLines: content.split("\n").length,
+    truncated: false,
+    ...extra,
+  });
+}
+
+describe("T-PL1 workplace full 档逐行剥行号", () => {
+  it("多行 `N|` 每行各剥一次，缩进与内容一字不动", async () => {
+    const turn = await workplaceTurnOf([
+      { path: "a.md", display: "full", body: "1|第一行\n2|  第二行带缩进\n3|第三行" },
+    ]);
+    assert.deepEqual(
+      workplaceFilesOf(turn).map((file) => file.body),
+      ["第一行\n  第二行带缩进\n第三行"]
+    );
+  });
+
+  it("十位以上行号同样剥（`\\d+` 非固定宽度）", async () => {
+    const turn = await workplaceTurnOf([
+      { path: "a.md", display: "full", body: "9|第九\n10|第十\n1234|第一千二百三十四" },
+    ]);
+    assert.equal(workplaceFilesOf(turn)[0]!.body, "第九\n第十\n第一千二百三十四");
+  });
+});
+
+describe("T-PL2 workplace filename / header 档剥前缀", () => {
+  it("filename 档单行 `1|basename` → basename", async () => {
+    const turn = await workplaceTurnOf([
+      { path: "notes/草稿.txt", display: "filename", body: "1|草稿.txt" },
+    ]);
+    assert.equal(workplaceFilesOf(turn)[0]!.body, "草稿.txt");
+  });
+
+  it("header 档两个兜底文案同形剥前缀，正常 front-matter 行也剥", async () => {
+    const turn = await workplaceTurnOf([
+      { path: "no-fm.md", display: "header", body: "1|（无 Front Matter）" },
+      { path: "empty-fm.md", display: "header", body: "1|（空 Front Matter）" },
+      { path: "ok.md", display: "header", body: "1|title: 大纲\n2|tags: [a, b]" },
+    ]);
+    assert.deepEqual(
+      workplaceFilesOf(turn).map((file) => file.body),
+      ["（无 Front Matter）", "（空 Front Matter）", "title: 大纲\ntags: [a, b]"]
+    );
+  });
+});
+
+describe("T-PL3 tool result read 行号剥离", () => {
+  it("6 位右对齐行号逐行剥掉", async () => {
+    const body = await toolResultBodyOf("read", readOutputJson("甲\n乙\n丙"));
+    assert.equal(body, "甲\n乙\n丙");
+  });
+
+  it("截断追加行（无行号）原样保留", async () => {
+    const body = await toolResultBodyOf(
+      "read",
+      readOutputJson("甲\n乙", { truncated: true, totalLines: 100, nextOffset: 3 })
+    );
+    assert.equal(body, "甲\n乙\n\nOutput truncated. Total lines: 100. Continue with offset=3.");
+  });
+
+  it("已知边界：行号 ≥ 100000 无前导空格，本用例锁定「漏剥」现状（spec 已登记接受）", async () => {
+    // `padStart(6, " ")` 在 6 位数时不再补空格 → 形态是 `100000|…`（零前导空格），
+    // 与 tool result 判据 `^ +\d+\|` 撞不上，故**漏剥**。此断言是现状锁定，不是期望值：
+    // 若将来放宽判据，此用例会红，提示同步更新 spec 的「已知边界」登记。
+    const body = await toolResultBodyOf(
+      "read",
+      readOutputJson("甲", { offset: 100000 })
+    );
+    assert.match(body, /^100000\|甲$/);
+  });
+});
+
+describe("T-PL4 tool result 非 read 输出零改动", () => {
+  it("skill load 追加行（续读提示 / 附属文件列表）不误剥", async () => {
+    const body = await toolResultBodyOf(
+      "skill",
+      JSON.stringify({
+        action: "load",
+        content: "甲\n乙",
+        version: 1,
+        truncated: true,
+        files: ["ref/a.md", "ref/b.md"],
+      })
+    );
+    assert.equal(
+      body,
+      "甲\n乙\n\nOutput truncated.\n续读请用 skill read 的 offset/limit。\n\n附属文件（相对技能目录）：ref/a.md、ref/b.md"
+    );
+  });
+
+  it("grep 的 `path:line:col:` 输出零改动", async () => {
+    const body = await toolResultBodyOf(
+      "grep",
+      JSON.stringify({
+        matches: [{ path: "src/a.ts", line: 12, column: 5, excerpt: "  1|const x = 1" }],
+        total: 1,
+        truncated: false,
+      })
+    );
+    // excerpt 里恰好含 `  1|` 形态，但它不在行首（前缀是 `src/a.ts:12:5:`），不触剥。
+    assert.equal(body, "src/a.ts:12:5:   1|const x = 1");
+  });
+
+  it("JSON 兜底输出零改动", async () => {
+    const body = await toolResultBodyOf("custom", JSON.stringify({ a: 1, b: "x" }));
+    assert.equal(body, '{\n  "a": 1,\n  "b": "x"\n}');
+  });
+});
+
+describe("T-PL5 原文自身含 `12|34` 只剥外层一次", () => {
+  it("workplace body `1|12|34` → `12|34`", async () => {
+    const turn = await workplaceTurnOf([
+      { path: "a.md", display: "full", body: "1|12|34\n2|12|2024|年报" },
+    ]);
+    assert.deepEqual(workplaceFilesOf(turn).map((file) => file.body), [
+      "12|34\n12|2024|年报",
+    ]);
+  });
+
+  it("tool result 里内层 `|` 同样只剥一次", async () => {
+    // read 输出形态：`     1|12|34` / `     2|7|7|7` → 各剥外层一次。
+    const body = await toolResultBodyOf("read", readOutputJson("12|34\n7|7|7"));
+    assert.equal(body, "12|34\n7|7|7");
+  });
+
+  it("原文行首自带缩进 + 伪行号时只剥外层一次（内层缩进保留）", async () => {
+    const turn = await workplaceTurnOf([
+      { path: "a.md", display: "full", body: "1|正文\n2|   3|缩进的伪行号" },
+    ]);
+    assert.equal(workplaceFilesOf(turn)[0]!.body, "正文\n   3|缩进的伪行号");
+  });
+});
+
+describe("T-PL6 text / thinking 卡不剥（防误伤用户正文）", () => {
+  it("assistant 文本卡以 `N|` 开头的正文零改动", async () => {
+    const messages: ChatMessage[] = [
+      message("user", "hi", 1),
+      message("assistant", "1|第一行\n2|第二行", 2),
+    ];
+    const turns = await buildPromptPreviewTurnsFromLayout(chatOnlyLayout, ctxOf(messages, ""));
+    const textCard = turns[1]!.cards[0]!;
+    assert.equal(textCard.type === "text" ? textCard.body : "", "1|第一行\n2|第二行");
+  });
+
+  it("thinking 卡正文零改动", async () => {
+    const messages: ChatMessage[] = [
+      message("user", "hi", 1),
+      blocksMessage("assistant", [
+        { type: "thinking", text: "     1|我在想" },
+      ], 2),
+    ];
+    const on = await buildPromptPreviewTurnsFromLayout(
+      chatOnlyLayout,
+      ctxOf(messages, ""),
+      { includeThinkingBlocks: true }
+    );
+    const thinkingCard = on[1]!.cards[0]!;
+    assert.equal(
+      thinkingCard.type === "thinking" ? thinkingCard.body : "",
+      "     1|我在想"
+    );
+  });
+
+  it("user 文本卡（无附件 action）以 `N|` 开头的正文零改动", async () => {
+    const messages: ChatMessage[] = [
+      message("user", "1|这是用户正文\n2|第二行", 1),
+      message("assistant", "好", 2),
+    ];
+    const turns = await buildPromptPreviewTurnsFromLayout(chatOnlyLayout, ctxOf(messages, ""));
+    const card = turns[0]!.cards[0]!;
+    assert.equal(card.type === "text" ? card.body : "", "1|这是用户正文\n2|第二行");
+  });
+});
+
+describe("T-PL7 wire 不变（三段结构判据）", () => {
+  it("① wire 组装链不经 cards 构造路径（源码 import 关系断言）", async () => {
+    // 仓内无字节级 golden 机制，故用「源码零交集」作结构判据：wire 链的
+    // `render-prompt.ts` 不得引用剥离函数，也不得 import cards 构造模块。
+    const src = readFileSync(
+      join(import.meta.dirname, "../../src/service/prompt/render-prompt.ts"),
+      "utf8"
+    );
+    assert.doesNotMatch(src, /stripWorkplaceLinePrefix/);
+    assert.doesNotMatch(src, /stripToolResultLinePrefix/);
+    assert.doesNotMatch(src, /stripAttachmentContentLinePrefix/);
+    assert.doesNotMatch(src, /prompt-preview-turns/);
+    // 反向：cards 构造模块 import wire 组装函数（分叉方向单一）。
+    const turnsSrc = readFileSync(
+      join(import.meta.dirname, "../../src/service/prompt/prompt-preview-turns.ts"),
+      "utf8"
+    );
+    assert.match(turnsSrc, /buildPromptAssemblyFromLayout/);
+  });
+
+  it("① 补充：wire 产物里的行号一字未动（行为面交叉核实）", async () => {
+    // wire 的 workplace 段走 `ctx.workplaceDisplay` 展示串（与 cards 的
+    // `ctx.workplaceFiles` 是**两条独立通道**）：这里展示串里带行号，wire 原样带。
+    const ctx: PromptRenderContext = {
+      ...ctxOf([message("user", "hi", 1)], "<file path=\"a.md\">\n1|第一行\n2|第二行\n</file>"),
+      workplaceFiles: [{ path: "a.md", display: "full", body: "1|第一行\n2|第二行" }],
+    };
+    const wire = await buildPromptLlmInputFromLayout(workplaceLayout, ctx);
+    const workplaceMsg = wire.messages.find((m) => m.role === "user")!;
+    const body = messageBodyTextFromBlocks(workplaceMsg.content.blocks);
+    assert.match(body, /1\|第一行\n2\|第二行/);
+    // 同一次组装产出的 cards 侧已剥——两条通道各自独立。
+    const turns = await buildPromptPreviewTurnsFromLayout(workplaceLayout, ctx);
+    assert.deepEqual(
+      workplaceFilesOf(turns.find((t) => t.id === "prompt-workplace")!).map((f) => f.body),
+      ["第一行\n第二行"]
+    );
+  });
+
+  it("② 剥离不改入参：cards 是新对象，`ctx.workplaceFiles` 原 body 不变", async () => {
+    const files: NonNullable<PromptRenderContext["workplaceFiles"]> = [
+      { path: "a.md", display: "full", body: "1|第一行\n2|第二行" },
+    ];
+    const ctx: PromptRenderContext = { ...ctxOf([], "WT"), workplaceFiles: files };
+    const turns = await buildPromptPreviewTurnsFromLayout(workplaceLayout, ctx);
+    const card = turns.find((t) => t.id === "prompt-workplace")!.cards[0]!;
+    assert.notEqual(card.type === "workplace" ? card.files[0] : null, files[0]);
+    assert.equal(files[0]!.body, "1|第一行\n2|第二行");
+    assert.deepEqual(Object.keys(files[0]!).sort(), ["body", "display", "path"]);
+  });
+
+  it("③ `items` / `.body` 仍带行号（CLI parity 冻结面）", async () => {
+    const ctx: PromptRenderContext = {
+      ...ctxOf([], "WT"),
+      workplaceFiles: [{ path: "a.md", display: "full", body: "1|第一行\n2|第二行" }],
+    };
+    const turns = await buildPromptPreviewTurnsFromLayout(workplaceLayout, ctx);
+    const turn = turns.find((t) => t.id === "prompt-workplace")!;
+    // items / body 走 `ctx.workplaceDisplay`，这里用 chat 轮交叉核实同一断言：
+    // 轮 body 完全由 items 拼成，段 body 未被剥。
+    const messages: ChatMessage[] = [
+      message("user", "hi", 1),
+      message("assistant", "1|第一行\n2|第二行", 2),
+    ];
+    const chatTurns = await buildPromptPreviewTurnsFromLayout(
+      chatOnlyLayout,
+      ctxOf(messages, "")
+    );
+    const assistantTurn = chatTurns[1]!;
+    assert.match(assistantTurn.items[0]!.body, /^1\|第一行\n2\|第二行$/);
+    assert.equal(assistantTurn.body, "[#2 · assistant]\n1|第一行\n2|第二行");
+    // 段 id 集合与 cards 存在与否无关（parity 面未被剥离改动过）。
+    assert.deepEqual(itemIds([turn]), [["prompt-workplace"]]);
+  });
+});
+
+describe("T-PL8 metaText 字数按剥后正文", () => {
+  it("workplace 合成段轮 metaText = 剥后各文件正文之和", async () => {
+    const turn = await workplaceTurnOf([
+      { path: "a.md", display: "full", body: "1|第一行\n2|第二行" },
+      { path: "b.txt", display: "filename", body: "1|b.txt" },
+    ]);
+    // 手写期望值（不用自派生 helper，同漂不发现）："第一行\n第二行"=7 + "b.txt"=5
+    assert.equal(turn.metaText, "12 字");
+  });
+
+  it("assistant 轮 metaText 的工具结果字数按剥后正文", async () => {
+    const messages: ChatMessage[] = [
+      message("user", "跑", 1),
+      blocksMessage("assistant", [
+        { type: "tool_use", id: "t1", name: "read", input: { path: "a.md" } },
+      ], 2),
+      blocksMessage("user", [
+        { type: "tool_result", toolUseId: "t1", content: readOutputJson("甲\n乙") },
+      ], 3),
+    ];
+    const turns = await buildPromptPreviewTurnsFromLayout(chatOnlyLayout, ctxOf(messages, ""));
+    const turn = turns[1]!;
+    // inputJson `{\n  "path": "a.md"\n}` = 20 字 + 剥后 result 正文 3 字 = 23
+    assert.equal(turn.metaText, "#2 · 工具调用 1 次 · 23 字");
+  });
+});
+
+describe("T-PL9 user 附件 JSON 转义形态定向剥离（Step 7）", () => {
+  /** 走生产构造器拼 wrap 形态，保证 fixture 与 wire 侧同源。 */
+  function userAttachBody(content: string, path = "notes/a.md"): string {
+    const actionXml = buildFileRefActionXml({
+      action: "userAttach",
+      path,
+      content,
+      display: "full",
+    });
+    return wrapUserMessageForLlm("看看这个", [
+      {
+        name: "a.md",
+        source: "attach",
+        type: "text",
+        content: actionXml,
+      },
+    ]);
+  }
+
+  /** user 轮 text 卡正文（唯一的 user 轮卡片）。 */
+  async function userCardBody(text: string): Promise<string> {
+    const messages: ChatMessage[] = [
+      blocksMessage("user", textBlocks(text).blocks, 1),
+      message("assistant", "好", 2),
+    ];
+    const turns = await buildPromptPreviewTurnsFromLayout(chatOnlyLayout, ctxOf(messages, ""));
+    const card = turns[0]!.cards[0]!;
+    return card.type === "text" ? card.body : "";
+  }
+
+  it("`\"content\"` 值内的字面 `\\n` 转义行号逐处剥掉", async () => {
+    const body = await userCardBody(userAttachBody("1|第一行\n2|第二行\n3|第三行"));
+    // 转义形态：值内换行是反斜杠 + n 两字符，剥完仍留转义（不改 JSON 结构）。
+    assert.match(body, /"content": "第一行\\n第二行\\n第三行"/);
+    assert.doesNotMatch(body, /\\n\d+\|/);
+  });
+
+  it("filename 档 `1|basename` 与 header 兜底同样剥前缀", async () => {
+    const body = await userCardBody(userAttachBody("1|草稿.txt", "notes/草稿.txt"));
+    assert.match(body, /"content": "草稿\.txt"/);
+  });
+
+  it("原文含 `12|34` 时只剥外层一次（转义形态同款判据）", async () => {
+    const body = await userCardBody(userAttachBody("1|12|34\n2|12|2024|年报"));
+    assert.match(body, /"content": "12\|34\\n12\|2024\|年报"/);
+  });
+
+  it("annotate 块不动（没有 `content` 键，原文一律不碰）", async () => {
+    const actionXml = buildAttachmentActionXml("annotate", {
+      path: "notes/a.md",
+      originalText: "1|这行不是行号",
+      userAnnotation: "2|批注也不是",
+    });
+    const wrapped = wrapUserMessageForLlm("批注一下", [
+      { name: "a.md", source: "user_ops", type: "text", content: actionXml },
+    ]);
+    assert.equal(await userCardBody(wrapped), wrapped);
+  });
+
+  it("`<user-input>` 内层用户正文零改动（摘要取值也不受影响）", async () => {
+    const messages: ChatMessage[] = [
+      blocksMessage(
+        "user",
+        textBlocks(userAttachBody("1|附件行")).blocks,
+        1
+      ),
+      message("assistant", "好", 2),
+    ];
+    const turns = await buildPromptPreviewTurnsFromLayout(chatOnlyLayout, ctxOf(messages, ""));
+    assert.equal(turns[0]!.summaryText, "看看这个");
+    assert.match(turns[0]!.cards[0]!.type === "text" ? turns[0]!.cards[0]!.body : "", /<user-input>\n看看这个\n<\/user-input>/);
+  });
+
+  it("skillAttach 块不动（`content` 是无行号原文，判据不适用）", async () => {
+    const actionXml = buildAttachmentActionXml("skillAttach", {
+      name: "novel-master",
+      content: "第一行\n12|这不是行号",
+    });
+    const wrapped = wrapUserMessageForLlm("用一下技能", [
+      { name: "skill", source: "attach", type: "text", content: actionXml },
+    ]);
+    const body = await userCardBody(wrapped);
+    assert.match(body, /"content": "第一行\\n12\|这不是行号"/);
+  });
+
+  it("dirTree 块不动（ASCII 树不构成 `^ *\\d+\\|`）", async () => {
+    const actionXml = buildDirTreeActionXml("notes", "notes/\n├── sub/\n└── a.md");
+    const wrapped = wrapUserMessageForLlm("看下目录", [
+      { name: "notes", source: "attach", type: "text", content: actionXml },
+    ]);
+    const body = await userCardBody(wrapped);
+    assert.match(body, /"content": "notes\/\\n├── sub\/\\n└── a\.md"/);
+  });
+
+  it("binary / 超限降级文案零改动", async () => {
+    for (const note of ["二进制文件，不提供正文", "文件过长，可用 read 配合 offset/limit 分段读取"]) {
+      const actionXml = buildFileRefActionXml({
+        action: "userAttach",
+        path: "a.bin",
+        content: note,
+        display: "filename",
+      });
+      const wrapped = wrapUserMessageForLlm("看下", [
+        { name: "a.bin", source: "attach", type: "text", content: actionXml },
+      ]);
+      assert.equal(await userCardBody(wrapped), wrapped);
+    }
   });
 });
