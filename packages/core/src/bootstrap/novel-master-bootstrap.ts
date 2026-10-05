@@ -7,7 +7,7 @@
  * 稳态冷启动：若 `PRAGMA user_version` ≥ {@link SCHEMA_BOOT_VERSION}，跳过 DDL 与
  * 列对齐，仅跑 pending migration 与 builtin seed，避免 RN 上数十次桥接往返。
  *
- * 最低支持版本：v1.5.5。低于此版本的极旧库需先升级到 v1.5.5，再升级到本版本——
+ * 最低支持版本：v1.5.23。低于此版本的极旧库需先升级到 v1.5.23，再升级到本版本——
  * {@link assertMinimumBaseline} 会在 migration runner 之前做 fail-fast 检查，
  * 防止跨大版本升级走样。
  *
@@ -81,7 +81,9 @@ import { IntegrityRepairRegistry } from "@/service/integrity-repair.js";
  * + 新表 smart_sort_rule（规则管理）与内置规则 seed。老库（v12）靠本轮
  * bump 走慢路径：新表由 DDL 建出；但 CHECK 变更对已存在的表不生效，
  * 由 workplace-dir-rule-smart-field-v1 migration rebuild 承担（存量行
- * 原样搬运）。本条在分支内原编号 v11；merge origin/main（已发布 v11/v12）
+ * 原样搬运；该迁移已于第五轮退役，约束形态已逐字固化进 canonical DDL，
+ * 见 BASELINE_MIGRATION_IDS）。本条在分支内原编号 v11；merge origin/main
+ * （已发布 v11/v12）
  * 时顺延为 v13，保证走过 v1.5.16（user_version=12）的存量库走慢路径。
  * v14：新增 session_run_state 表（会话流式单元的 run 状态持久层：
  * status/partial 快照/metrics，session_id 主键单行）。本条在分支内原
@@ -94,7 +96,8 @@ import { IntegrityRepairRegistry } from "@/service/integrity-repair.js";
  * （v14）靠本轮 bump 走慢路径由 DDL 建出两表与索引；全新库直接建表。
  * 存量 file_cache 缓存行不搬运——由 dedup-file-cache-storage-v1
  * migration 在同一 bootstrap 事务内清空（清空重填口径：file_cache 可
- * 再生，各会话下次组装提示词时按新结构重填，重填即天然去重）；旧表
+ * 再生，各会话下次组装提示词时按新结构重填，重填即天然去重；该迁移已于
+ * 第五轮退役，见 BASELINE_MIGRATION_IDS）；旧表
  * session_kkv_entry 不加列不改列。
  * v16：session_run_state 新增 completion_tokens / token_source 两列
  * （stream-metrics-tokens：指标条 token 化，usage 优先 / heuristic 兜底）。
@@ -178,12 +181,12 @@ async function writeSchemaBootVersion(
 }
 
 /**
- * v1.4.27 之前上线的 schema migration id 清单。
+ * v1.5.23 之前上线的 schema migration id 清单。
  *
- * 本版本最低支持 v1.4.27，这些 migration 的逻辑已融入 canonical DDL 与 align（或
+ * 本版本最低支持 v1.5.23，这些 migration 的逻辑已融入 canonical DDL 与 align（或
  * 已不再需要），源文件已删除，不再在 {@link runPendingSchemaMigrations} 阵列里执行。
  * 但运行时仍需确认老库走过它们——若表里一条都没登记、又探测到 legacy 形态，
- * 说明用户跳过了 v1.4.27 直接到本版本，须 fail-fast 提示先升级。
+ * 说明用户跳过了 v1.5.23 直接到本版本，须 fail-fast 提示先升级。
  *
  * 前三条（vfs-entry-id-redesign-v1、session-agent-config-v2、
  * project-agent-config-cleanup-v1）为第二轮退役：所有 ≥v1.4.27 的库都已应用过。
@@ -191,6 +194,12 @@ async function writeSchemaBootVersion(
  * ≥v1.4.28 的库都已应用过，最低支持版本随之升至 v1.4.28。
  * 第四轮退役：usage-cache-model-backfill-v1（数据回填，v1.5.4 首发引入）——
  * 所有 ≥v1.5.5 的库都已应用过，最低支持版本随之升至 v1.5.5。
+ * 第五轮退役（2026-10-05）：retire-pref-session-fs-version-check-v1（v1.5.12）、
+ * workplace-dir-rule-smart-field-v1（v1.5.17）、rename-smart-sort-rule-example-v1
+ * （v1.5.17）、add-smart-sort-capture-kind-v1（v1.5.17）、
+ * add-mcp-file-path-snapshot-v1（v1.5.20）、dedup-file-cache-storage-v1（v1.5.22）
+ * ——最晚一条首发 tag 为 v1.5.22，所有 ≥v1.5.23 的库都已应用过，
+ * 最低支持版本随之升至 v1.5.23（基线算法＝最晚退役条目首发 tag + 1）。
  */
 export const BASELINE_MIGRATION_IDS: readonly string[] = [
   "saved-model-identity-v1",
@@ -205,11 +214,25 @@ export const BASELINE_MIGRATION_IDS: readonly string[] = [
   "orphan-revision-gc-v1",
   "table-constraints-v1b",
   "usage-cache-model-backfill-v1",
+  "retire-pref-session-fs-version-check-v1",
+  "workplace-dir-rule-smart-field-v1",
+  "rename-smart-sort-rule-example-v1",
+  "add-smart-sort-capture-kind-v1",
+  "add-mcp-file-path-snapshot-v1",
+  "dedup-file-cache-storage-v1",
 ];
 
-/** 老库升级失败提示，指引用户先升到 v1.5.5。 */
+/**
+ * 最低支持版本——单一常量。
+ *
+ * 抬基线时只改这里与本文件的文档注释，别再散落字面量，
+ * 免得下一轮又漏改（第五轮之前 v1.4.27/v1.4.28 的旧字面量就散在注释里）。
+ */
+const BASELINE_MINIMUM_VERSION = "v1.5.23";
+
+/** 老库升级失败提示，指引用户先升到最低支持版本。 */
 export const BASELINE_TOO_OLD_MESSAGE =
-  "检测到当前数据库低于本版本最低支持版本（v1.5.5）。请先升级到 v1.5.5，再升级到本版本。";
+  `检测到当前数据库低于本版本最低支持版本（${BASELINE_MINIMUM_VERSION}）。请先升级到${BASELINE_MINIMUM_VERSION}，再升级到本版本。`;
 
 /** `llm_saved_model` 无 `id` 列 → 常见老库尚未走 saved-model-identity-v1。 */
 async function hasLegacySavedModelShape(tx: TdbcConnection): Promise<boolean> {
@@ -331,7 +354,7 @@ async function hasLegacyVfsRevisionShape(tx: TdbcConnection): Promise<boolean> {
   return !/WITHOUT\s+ROWID/i.test(String(rows[0]?.sql ?? ""));
 }
 
-/** 任一 legacy 形态命中即视为未升级到 v1.4.28。 */
+/** 任一 legacy 形态命中即视为未升级到最低支持版本。 */
 async function detectLegacyShape(tx: TdbcConnection): Promise<boolean> {
   if (await hasLegacySavedModelShape(tx)) {
     return true;
