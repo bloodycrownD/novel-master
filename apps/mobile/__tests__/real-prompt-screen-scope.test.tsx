@@ -134,27 +134,79 @@ async function flush(): Promise<void> {
 }
 
 /** 手控的 promise：用来把某一次取数的落定时机攥在用例手里。 */
-function deferred<T>(): {promise: Promise<T>; resolve: (value: T) => void} {
+function deferred<T>(): {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+  reject: (reason: unknown) => void;
+} {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>(res => {
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
     resolve = res;
+    reject = rej;
   });
-  return {promise, resolve};
+  return {promise, resolve, reject};
+}
+
+/** FlatList 宿主节点（列表被 spinner 顶掉时为空数组，是静默档的观测面）。 */
+function promptListNodes(
+  tree: TestRenderer.ReactTestRenderer,
+): TestRenderer.ReactTestInstance[] {
+  return tree.root.findAll(
+    node =>
+      typeof node.type === 'string' &&
+      (node.props as {testID?: string}).testID === 'prompt-list',
+  );
+}
+
+/** 屏上是否还有列表（false = 被全屏 spinner 顶掉了）。 */
+function hasPromptList(tree: TestRenderer.ReactTestRenderer): boolean {
+  return promptListNodes(tree).length > 0;
 }
 
 /** 取 FlatList 宿主节点上落地的那份 data（竞态守卫的观测面）。 */
 function listData(
   tree: TestRenderer.ReactTestRenderer,
 ): readonly {id: string}[] {
-  const nodes = tree.root.findAll(
-    node =>
-      typeof node.type === 'string' &&
-      (node.props as {testID?: string}).testID === 'prompt-list',
-  );
+  const nodes = promptListNodes(tree);
   return nodes.length === 0
     ? []
     : ((nodes[nodes.length - 1].props as {data?: readonly {id: string}[]})
         .data ?? []);
+}
+
+/** 屏上所有 Text 渲染出的文案（error 文案的观测面）。 */
+function textLines(tree: TestRenderer.ReactTestRenderer): string[] {
+  const out: string[] = [];
+  const walk = (node: unknown): void => {
+    if (Array.isArray(node)) {
+      node.forEach(walk);
+      return;
+    }
+    if (node == null || typeof node !== 'object') {
+      return;
+    }
+    const obj = node as {type?: unknown; children?: unknown};
+    if (obj.type === 'Text') {
+      out.push(flattenText(obj.children));
+    }
+    walk(obj.children);
+  };
+  walk(tree.toJSON());
+  return out;
+}
+
+function flattenText(node: unknown): string {
+  if (node == null || typeof node === 'boolean') {
+    return '';
+  }
+  if (Array.isArray(node)) {
+    return node.map(flattenText).join('');
+  }
+  if (typeof node === 'object') {
+    return flattenText((node as {children?: unknown}).children);
+  }
+  return String(node);
 }
 
 /** 手动模拟一次「聚焦回流」：重跑屏内登记的 focus 回调（即 load）。 */
@@ -236,9 +288,14 @@ describe('RealPromptScreen focus 重载（preview-refresh）', () => {
   });
 
   it('T-PR1 挂载只取一次、聚焦回流再取一次（useFocusEffect 单通道不双跑）', async () => {
-    mockBuildSegments
-      .mockResolvedValueOnce([{id: 'turn-old', kind: 'assistant', cards: []}])
-      .mockResolvedValue([{id: 'turn-new', kind: 'assistant', cards: []}]);
+    mockBuildSegments.mockResolvedValueOnce([
+      {id: 'turn-old', kind: 'assistant', cards: []},
+    ]);
+    // 第二轮挂住不落定：只有取数在途时才看得见「静默档」——非静默档会在
+    // refocus 瞬间把整列表换成全屏 spinner，等取数回来又换回来，事后断言
+    // 什么都看不见（这条断言的全部价值就在这个在途窗口里）。
+    const second = deferred<unknown[]>();
+    mockBuildSegments.mockImplementationOnce(() => second.promise);
     const tree = await renderScreen();
     // 首焦恰好一轮：换成 useFocusEffect 之后若忘了删挂载 effect，这里会是 2。
     expect(mockBuildSegments).toHaveBeenCalledTimes(1);
@@ -247,7 +304,14 @@ describe('RealPromptScreen focus 重载（preview-refresh）', () => {
     await refocus();
     // 从别的屏回来（手动压缩完 workplace 已重评估）要重新取数。
     expect(mockBuildSegments).toHaveBeenCalledTimes(2);
+    // 静默档（cr-mobile/B-1）：refocus 在途时列表节点仍在，没被 spinner 顶掉——
+    // 否则「每读一张子卡返回一次闪一次转圈」。
+    expect(hasPromptList(tree)).toBe(true);
+
+    second.resolve([{id: 'turn-new', kind: 'assistant', cards: []}]);
+    await flush();
     expect(listData(tree).map(t => t.id)).toEqual(['turn-new']);
+    expect(hasPromptList(tree)).toBe(true);
   });
 
   it('T-PR2 竞态守卫：先发后到的旧响应被丢弃，屏上留最后一次结果', async () => {
@@ -268,5 +332,26 @@ describe('RealPromptScreen focus 重载（preview-refresh）', () => {
     first.resolve([{id: 'turn-stale', kind: 'assistant', cards: []}]);
     await flush();
     expect(listData(tree).map(t => t.id)).toEqual(['turn-new']);
+  });
+
+  it('T-PR2b 过期请求的失败不覆盖新一轮成功结果', async () => {
+    const first = deferred<unknown[]>();
+    const second = deferred<unknown[]>();
+    mockBuildSegments.mockImplementationOnce(() => first.promise);
+    mockBuildSegments.mockImplementationOnce(() => second.promise);
+    const tree = await renderScreen();
+    await refocus();
+    expect(mockBuildSegments).toHaveBeenCalledTimes(2);
+
+    second.resolve([{id: 'turn-new', kind: 'assistant', cards: []}]);
+    await flush();
+    expect(listData(tree).map(t => t.id)).toEqual(['turn-new']);
+
+    // 旧请求此刻才失败（真机最易撞的时序：VFS 读一半被新压缩打断）——报错
+    // 文案不能跳出来盖掉新一轮的成功结果，否则用户以为当前会话出错。
+    first.reject(new Error('stale boom'));
+    await flush();
+    expect(listData(tree).map(t => t.id)).toEqual(['turn-new']);
+    expect(textLines(tree)).not.toContain('stale boom');
   });
 });
