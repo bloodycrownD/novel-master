@@ -67,6 +67,19 @@ export function RealPromptScreen() {
    * `TokenUsageStatsScreen.reloadSeqRef` 同款）。
    */
   const requestIdRef = useRef(0);
+  /**
+   * 上一次 load 取的会话 id：**只有换会话才清展开态**。同会话 refocus（点子卡
+   * 看全屏详情再返回，是本屏最高频的出栈路径）保留用户刚展开的轮。
+   */
+  const lastSessionRef = useRef<string | null>(null);
+  /**
+   * 是否已经取过数（refocus 静默档开关）：首焦走整屏档（`loading` 从 true 起、
+   * 整列表换成全屏 spinner），之后一律静默档——refocus 不该让整列表闪成
+   * 转圈（对齐仓内 `useFocusListReload.focusSilent` 的惯例）。
+   * ⚠️ 只能用 ref 管，勿把 `turns.length` 之类进 useFocusEffect 依赖：回调身份
+   * 变 → 效果重跑 → 又 load 一次，取数自己触发的重渲染会把自己套进循环。
+   */
+  const hasLoadedRef = useRef(false);
 
   const toggleId = useCallback(
     (
@@ -95,7 +108,7 @@ export function RealPromptScreen() {
     [toggleId],
   );
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (opts?: {silent?: boolean}) => {
     // 取号必须在最前面：scope 缺失的早退分支同样要让在途的上一轮作废，
     // 否则它照样会回来把 turns 写回去。
     const requestId = ++requestIdRef.current;
@@ -105,14 +118,22 @@ export function RealPromptScreen() {
       setLoading(false);
       return;
     }
-    setLoading(true);
+    // `silent` **只压这一步**：焦点回流时不把整列表换成全屏 spinner，其余
+    // （清 error、重取数、竞态守卫）一律照旧。
+    if (!opts?.silent) {
+      setLoading(true);
+    }
     setError(undefined);
-    // 换了会话，旧会话的展开态没有意义：跟随数据一起清。
-    // ⚠️ 已经空的时候**返回原引用**：屏级 runtime 若不是稳定引用，load 会随每次
-    // 重渲染换新的 useCallback → 重载通道重跑；这里若无条件塞新 Set，
-    // setState 永远「有变化」→ 重渲染 → 再跑一次，死循环到 Maximum update depth。
-    setOpenTurnIds(prev => (prev.size === 0 ? prev : new Set()));
-    setOpenGroupIds(prev => (prev.size === 0 ? prev : new Set()));
+    // 换了会话，旧会话的展开态没有意义：跟随数据一起清；同会话 refocus 保留。
+    // ⚠️ 这里可**无条件换新 Set**：原注释里那道「已空则返回原引用」的守卫防的是
+    // load 换引用自激的死循环，而那段前提（load 依赖里不含展开态、每次 load 都
+    // 清一遍）已随本改动消失——现在只在 sessionId 变化时触发，展开态被写成空集
+    // 不会再引起任何额外重渲染。
+    if (lastSessionRef.current !== sessionId) {
+      setOpenTurnIds(new Set());
+      setOpenGroupIds(new Set());
+      lastSessionRef.current = sessionId;
+    }
     try {
       const list = await buildRealPromptPreviewTurns(runtime, {
         projectId,
@@ -146,7 +167,11 @@ export function RealPromptScreen() {
   // 旧数据留着就是错的）。双通道会让挂载跑两轮，故这里**替换**而非新增。
   useFocusEffect(
     useCallback(() => {
-      load().catch(() => undefined);
+      // 首焦整屏档、之后一律静默档（两个口径各管各的：静默只压 setLoading，
+      // 展开态清空由 load 内按会话判，与 loading 档位无关）。
+      const silent = hasLoadedRef.current;
+      hasLoadedRef.current = true;
+      load({silent}).catch(() => undefined);
     }, [load]),
   );
 
