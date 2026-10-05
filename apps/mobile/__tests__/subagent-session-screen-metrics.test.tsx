@@ -35,13 +35,22 @@ let mockRuntime: unknown;
 const mockGetSessionUsageDetail = jest.fn();
 /** ChatConversationWebView 哑组件收到的 props 流水（变体装配断言面）。 */
 const mockChatWebViewProps: Array<Record<string, unknown>> = [];
+/** 子会话屏的 navigation.navigate 断言面（handler 行为验证）。 */
+const mockNavigate = jest.fn();
+/**
+ * 稳定的 navigation 对象（名字带 mock 前缀：jest.mock 工厂只允许引用
+ * mock* 开头的模块级绑定）。真机 useNavigation 返回同一实例，若这里每次
+ * 新建对象，handler 的 useCallback 会因 deps 变化而每次重渲染都换引用——
+ * 「稳定引用」用例就成了对 mock 的自证而不是对实现的断言。
+ */
+const mockNavigation = {navigate: mockNavigate, setOptions: jest.fn()};
 
 jest.mock('../src/hooks/useRuntime', () => ({
   useRuntime: () => mockRuntime,
 }));
 
 jest.mock('@react-navigation/native', () => ({
-  useNavigation: () => ({navigate: jest.fn(), setOptions: jest.fn()}),
+  useNavigation: () => mockNavigation,
   useRoute: () => ({
     params: {
       projectId: 'p1',
@@ -118,6 +127,7 @@ jest.mock('../src/screens/tabs/chat-tab/useInterruptedPartialCommit', () => ({
 }));
 
 import {SubagentSessionScreen} from '../src/screens/stack/SubagentSessionScreen';
+import {takePromptTurnDetail} from '../src/components/prompt/prompt-turn-callback';
 
 function buildHarness(): {
   manager: SessionStreamUnitManager;
@@ -212,6 +222,7 @@ describe('SubagentSessionScreen 指标条渲染（G-2）', () => {
     mockRuntime = undefined;
     mockGetSessionUsageDetail.mockClear();
     mockChatWebViewProps.length = 0;
+    mockNavigate.mockClear();
     jest.useRealTimers();
     setMobileAgentActive(false);
   });
@@ -392,5 +403,155 @@ describe('SubagentSessionScreen 指标条渲染（G-2）', () => {
     act(() => {
       tree.unmount();
     });
+  });
+});
+
+describe('SubagentSessionScreen 卡片点击 handler 装配（子会话点卡片进预览）', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+    setMobileAgentActive(false);
+  });
+
+  afterEach(() => {
+    mockManager?.dispose();
+    mockManager = undefined;
+    mockRuntime = undefined;
+    mockGetSessionUsageDetail.mockClear();
+    mockChatWebViewProps.length = 0;
+    mockNavigate.mockClear();
+    jest.useRealTimers();
+    setMobileAgentActive(false);
+  });
+
+  /** 挂一次屏并返回最后一次 webview 收到的 props + 事件总线（驱动重渲染）。 */
+  async function renderAndGetProps(): Promise<{
+    props: Record<string, unknown>;
+    eventBus: SimpleEventBus;
+    unmount: () => void;
+  }> {
+    const h = buildHarness();
+    mockManager = h.manager;
+    mockRuntime = {
+      sessionStreamUnitManager: h.manager,
+      usageStats: {getSessionUsageDetail: mockGetSessionUsageDetail},
+    };
+    driveConsumptiveRun(h.eventBus, 3);
+    const {unmount} = await renderScreen();
+    return {
+      props: mockChatWebViewProps[mockChatWebViewProps.length - 1],
+      eventBus: h.eventBus,
+      unmount,
+    };
+  }
+
+  it('回归护栏：onOpenToolResult / onOpenSkillDetail 都有传（漏传=点了没反应）', async () => {
+    // 事故根因：本屏曾只传 onOpenToolFile/onLinkClick/onOpenSubagentSession，
+    // 桥消息里的 openToolResult/openSkillDetail 被宿主 `?.()` 可选调用静默吞掉。
+    const {props, unmount} = await renderAndGetProps();
+    expect(props.onOpenToolResult).toBeInstanceOf(Function);
+    expect(props.onOpenSkillDetail).toBeInstanceOf(Function);
+    unmount();
+  });
+
+  it('两个 handler 是稳定引用（重渲染后仍是同一个函数，webview 不重挂）', async () => {
+    // ChatConversationWebView 的 memo 比较器不比 handler prop，靠稳定引用兜底：
+    // handler 写成内联箭头函数就会每次渲染换引用，整块 webview 跟着重挂。
+    const h = buildHarness();
+    mockManager = h.manager;
+    mockRuntime = {
+      sessionStreamUnitManager: h.manager,
+      usageStats: {getSessionUsageDetail: mockGetSessionUsageDetail},
+    };
+    driveConsumptiveRun(h.eventBus, 3);
+    let tree!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(<SubagentSessionScreen />);
+    });
+    const first = mockChatWebViewProps[mockChatWebViewProps.length - 1];
+    await act(async () => {
+      tree.update(<SubagentSessionScreen />);
+    });
+    const last = mockChatWebViewProps[mockChatWebViewProps.length - 1];
+    expect(mockChatWebViewProps.length).toBeGreaterThan(1);
+    expect(last.onOpenToolResult).toBe(first.onOpenToolResult);
+    expect(last.onOpenSkillDetail).toBe(first.onOpenSkillDetail);
+    act(() => {
+      tree.unmount();
+    });
+  });
+
+  it('onOpenToolResult：带 inputJson → 写两段 body 并跳 PromptTurnDetail', async () => {
+    const {props, unmount} = await renderAndGetProps();
+    const handler = props.onOpenToolResult as (payload: {
+      title: string;
+      content: string;
+      inputJson?: string;
+    }) => void;
+    act(() => {
+      handler({
+        title: 'curl',
+        content: 'HTTP 200',
+        inputJson: '{\n  "url": "https://example.com"\n}',
+      });
+    });
+    expect(mockNavigate).toHaveBeenCalledWith('PromptTurnDetail', {
+      title: 'curl',
+      turnId: 'tool-result-curl',
+    });
+    // 正文走模块级单例（不进路由参数），读走即清。
+    expect(takePromptTurnDetail()).toEqual({
+      title: 'curl',
+      body: '【输入】\n{\n  "url": "https://example.com"\n}\n\n【输出】\nHTTP 200',
+    });
+    unmount();
+  });
+
+  it('onOpenToolResult：无 inputJson → body 就是纯 content（旧行为不变）', async () => {
+    const {props, unmount} = await renderAndGetProps();
+    const handler = props.onOpenToolResult as (payload: {
+      title: string;
+      content: string;
+      inputJson?: string;
+    }) => void;
+    act(() => {
+      handler({title: 'search', content: '结果正文'});
+    });
+    expect(takePromptTurnDetail()).toEqual({title: 'search', body: '结果正文'});
+    unmount();
+  });
+
+  it('onOpenSkillDetail：project 域缺 projectId → 用 route.params 的项目补齐', async () => {
+    const {props, unmount} = await renderAndGetProps();
+    const handler = props.onOpenSkillDetail as (ref: {
+      domain: 'global' | 'project';
+      name: string;
+      projectId?: string;
+    }) => void;
+    act(() => {
+      handler({domain: 'project', name: 'my-skill'});
+    });
+    expect(mockNavigate).toHaveBeenCalledWith('SkillDetail', {
+      domain: 'project',
+      name: 'my-skill',
+      projectId: 'p1',
+    });
+    unmount();
+  });
+
+  it('onOpenSkillDetail：global 域不带 projectId', async () => {
+    const {props, unmount} = await renderAndGetProps();
+    const handler = props.onOpenSkillDetail as (ref: {
+      domain: 'global' | 'project';
+      name: string;
+      projectId?: string;
+    }) => void;
+    act(() => {
+      handler({domain: 'global', name: 'my-skill'});
+    });
+    expect(mockNavigate).toHaveBeenCalledWith('SkillDetail', {
+      domain: 'global',
+      name: 'my-skill',
+    });
+    unmount();
   });
 });

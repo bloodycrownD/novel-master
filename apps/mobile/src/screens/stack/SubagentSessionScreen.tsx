@@ -27,6 +27,7 @@ import {
   type RouteProp,
 } from '@react-navigation/native';
 import type {ChatMessage} from '@novel-master/core/chat';
+import type {SkillToolRef} from '@novel-master/core/chat';
 import {
   ChatStreamMetricsBarLive,
   hasVisibleSettledMetrics,
@@ -35,6 +36,7 @@ import {ChatConversationWebView} from '../../components/chat/ChatConversationWeb
 import {showAppToast} from '@/services/app-toast';
 import {chatLinkNotFoundMessage} from '@novel-master/core/chat';
 import type {ChatConversationWebViewHandle} from '../../components/chat/ChatConversationWebView';
+import {setPromptTurnDetail} from '../../components/prompt/prompt-turn-callback';
 import {useToast} from '../../components/chrome/ToastHost';
 import {toastMessage} from '../../errors/toast-message';
 import {useRuntime} from '../../hooks/useRuntime';
@@ -241,6 +243,46 @@ export function SubagentSessionScreen() {
     [runtime, navigation, projectId, parentSessionId],
   );
 
+  // 技能卡片跳详情：与主会话 useChatTabScope 的 openSkillDetail 同实现。
+  // write/edit 缺省域解析出的三元组不带 projectId（webview 侧无会话上下文），
+  // 这里按当前子会话所属项目补齐——补不出来（无项目）则不跳，避免进错项目。
+  const openSkillDetail = useCallback(
+    (ref: SkillToolRef) => {
+      const targetProjectId =
+        ref.domain === 'project' ? ref.projectId ?? projectId : undefined;
+      if (ref.domain === 'project' && targetProjectId == null) {
+        return;
+      }
+      navigation.navigate('SkillDetail', {
+        domain: ref.domain,
+        name: ref.name,
+        ...(targetProjectId != null ? {projectId: targetProjectId} : {}),
+      });
+    },
+    [navigation, projectId],
+  );
+
+  // 工具结果阅读（search/curl/grep/glob 等无专属跳转的卡片）：同样复用
+  // PromptTurnDetail 阅读页。正文不走路由参数（可达数百 KB），照主会话
+  // useOpenPromptDetail 先例写模块级单例、挂载时读走即清；turnId 作伪 path
+  // 稳定 key。有 inputJson（卡片带入参）时铺「【输入】+【输出】」两段。
+  // useCallback：ChatConversationWebView 的 memo 比较器不比 handler prop，
+  // 稳定引用是它唯一的兜底（每次渲染新建函数会让整个 webview 重挂）。
+  const openToolResult = useCallback(
+    (payload: {title: string; content: string; inputJson?: string}) => {
+      const body =
+        payload.inputJson != null && payload.inputJson !== ''
+          ? `【输入】\n${payload.inputJson}\n\n【输出】\n${payload.content}`
+          : payload.content;
+      setPromptTurnDetail({title: payload.title, body});
+      navigation.navigate('PromptTurnDetail', {
+        title: payload.title,
+        turnId: `tool-result-${payload.title}`,
+      });
+    },
+    [navigation],
+  );
+
   const sessionKey = useMemo(
     () => `${projectId}:${sessionId}`,
     [projectId, sessionId],
@@ -316,6 +358,8 @@ export function SubagentSessionScreen() {
           onOpenToolFile={onOpenToolFile}
           onLinkClick={onLinkClick}
           onOpenSubagentSession={onOpenSubagentSession}
+          onOpenSkillDetail={openSkillDetail}
+          onOpenToolResult={openToolResult}
         />
       )}
       {agentRunning ? (
