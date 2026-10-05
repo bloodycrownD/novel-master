@@ -30,7 +30,13 @@ import {
 } from './chat-prompt-tokens.service';
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
 
-/** 一次压缩编排的结果（供 `onFinally` 判别该补哪些尾巴）。 */
+/**
+ * 一次压缩编排的结果（供 `onFinally` 判别该补哪些尾巴）。
+ *
+ * ⚠️ 本类型只服务 {@link runCompactionWithTokenWarm}——**手动压缩专属**编排
+ * （硬约束见该函数 JSDoc 首行）：`ok` 为真即表示这一轮是手动压缩且已清
+ * `rule_snapshot` + `file_cache` 两域，调用方据此刷新预览/workplace。
+ */
 export type RunCompactionWithTokenWarmOutcome = {
   /** 压缩本体是否成功。 */
   readonly ok: boolean;
@@ -59,6 +65,10 @@ export type RunCompactionWithTokenWarmHooks = {
 /**
  * 手动压缩的单一编排入口：冻结 → 压缩 →（成功则）预热 → 解冻 → UI 尾巴。
  *
+ * ⚠️ 本编排是**手动压缩专属**入口：两处调用方均为 UI「压缩上下文」按钮，故
+ * `trigger` 硬写 "manual"。接自动压缩前必须先给本函数加 trigger 透传参数，
+ * 不得沿用这一行——自动压缩清两域会打破回合内前缀冻结。
+ *
  * 本函数**不外抛异常**：所有出口（成功 / 明确失败 / 抛错 / 尾巴自身抛错）都在
  * 内部收口，调用方可以直接 `void` 掉它。
  */
@@ -85,6 +95,8 @@ export async function runCompactionWithTokenWarm(
       // `trigger:"manual"`：手动压缩要清该会话 KKV 的 `rule_snapshot` +
       // `file_cache` 两域，下一次拼提示词时 workplace 块按当前工作区重评估
       // （自动压缩刻意**不清**——agent 回合中段要保住「回合内前缀冻结」）。
+      // ⚠️ 这行硬写 manual 依赖「本编排只服务手动入口」这一前置（见上 JSDoc
+      // 首行）：将来接自动压缩必须先加 trigger 透传参数，不得沿用。
       {sessionId, projectId, hideStartDepth, trigger: 'manual'},
     );
     if (result.ok) {
