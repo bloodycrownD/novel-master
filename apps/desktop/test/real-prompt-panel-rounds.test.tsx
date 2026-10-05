@@ -244,37 +244,110 @@ function makeDocumentStub(): DocumentStub {
   };
 }
 
+/**
+ * window 事件桩的监听器签名：只用到 detail，与 renderer 侧 `CustomEvent<T>` 收窄同形。
+ */
+type WindowListener = (e: { type: string; detail?: unknown }) => void;
+
+/** 最小 CustomEvent 桩（node 测试环境无 DOM 构造器）。 */
+class CustomEventStub {
+  readonly type: string;
+  readonly detail: unknown;
+  constructor(type: string, init?: { detail?: unknown }) {
+    this.type = type;
+    this.detail = init?.detail;
+  }
+}
+
 /** 挂全局 window.novelMasterDesktop + document 桩，返回还原函数。 */
-function installGlobals(turns: PromptPreviewTurnDto[]): {
+interface InstalledGlobals {
   restore: () => void;
   doc: DocumentStub;
-} {
+  /** T-PR3：向 window 派发 CustomEvent（等价 ConversationPanel 的 dispatchEvent）。 */
+  dispatchWindowEvent: (type: string, detail?: unknown) => void;
+  /** T-PR3：换掉后续 `nm:prompt/realPreview` 的返回体，用来断言「数据真刷新了」。 */
+  setTurns: (next: PromptPreviewTurnDto[]) => void;
+  /** T-PR3：`nm:prompt/realPreview` 的累计调用次数（重取与否的直接证据）。 */
+  ipcInvokeCount: () => number;
+  /** T-PR3：当前 window 上某类事件的监听器个数（卸载清理断言用）。 */
+  listenerCount: (type: string) => number;
+}
+
+function installGlobals(turns: PromptPreviewTurnDto[]): InstalledGlobals {
   const g = globalThis as unknown as {
     window?: unknown;
     document?: unknown;
+    CustomEvent?: unknown;
     IS_REACT_ACT_ENVIRONMENT?: boolean;
   };
   const prevWindow = g.window;
   const prevDocument = g.document;
+  const prevCustomEvent = g.CustomEvent;
   const prevActEnv = g.IS_REACT_ACT_ENVIRONMENT;
   const doc = makeDocumentStub();
+
+  // 窗口事件：renderer 侧只走 `window.addEventListener` / `window.dispatchEvent`
+  // （`SessionDetailDrawer` 订阅 context-changed、`ConversationPanel` 派发
+  // session-compacted 同范式），node 环境无这套 API，这里补一份最小可运行实现。
+  const listeners = new Map<string, WindowListener[]>();
+  const ipcChannel = "nm:prompt/realPreview";
+  let currentTurns = turns;
+  let invokeCount = 0;
+
   g.window = {
     novelMasterDesktop: {
       invoke: (channel: string) => {
-        if (channel === "nm:prompt/realPreview") {
-          return Promise.resolve({ ok: true, data: turns });
+        if (channel === ipcChannel) {
+          invokeCount += 1;
+          return Promise.resolve({ ok: true, data: currentTurns });
         }
         return Promise.reject(new Error(`测试未预期的 IPC channel: ${channel}`));
       },
     },
+    addEventListener: (type: string, fn: WindowListener) => {
+      const bucket = listeners.get(type);
+      if (bucket) {
+        bucket.push(fn);
+        return;
+      }
+      listeners.set(type, [fn]);
+    },
+    removeEventListener: (type: string, fn: WindowListener) => {
+      const bucket = listeners.get(type);
+      if (!bucket) {
+        return;
+      }
+      const at = bucket.indexOf(fn);
+      if (at >= 0) {
+        bucket.splice(at, 1);
+      }
+    },
+    dispatchEvent: (event: { type: string; detail?: unknown }) => {
+      for (const fn of [...(listeners.get(event.type) ?? [])]) {
+        fn(event);
+      }
+      return true;
+    },
   };
   g.document = doc;
+  g.CustomEvent = CustomEventStub;
   g.IS_REACT_ACT_ENVIRONMENT = true;
   return {
     doc,
+    dispatchWindowEvent: (type, detail) => {
+      (g.window as { dispatchEvent: (e: unknown) => void }).dispatchEvent(
+        new CustomEventStub(type, { detail }),
+      );
+    },
+    setTurns: (next) => {
+      currentTurns = next;
+    },
+    ipcInvokeCount: () => invokeCount,
+    listenerCount: (type) => listeners.get(type)?.length ?? 0,
     restore: () => {
       g.window = prevWindow;
       g.document = prevDocument;
+      g.CustomEvent = prevCustomEvent;
       g.IS_REACT_ACT_ENVIRONMENT = prevActEnv;
     },
   };
@@ -948,6 +1021,136 @@ describe("RealPromptPanel 三层结构轮卡列表 + 全屏富文本 Modal (T-R6
       classListNodes(root, "prompt-group-cell").map(ariaLabelOf),
       ["查看tool use，list_chapters", "查看tool result，list_chapters"],
     );
+  });
+});
+
+describe("T-PR3：手动压缩成功后按 sessionId 订阅 window 事件重取", () => {
+  let restore: () => void;
+  let dispatchWindowEvent: (type: string, detail?: unknown) => void;
+  let setTurns: (next: PromptPreviewTurnDto[]) => void;
+  let ipcInvokeCount: () => number;
+  let listenerCount: (type: string) => number;
+
+  beforeEach(() => {
+    const installed = installGlobals(TURNS);
+    restore = installed.restore;
+    dispatchWindowEvent = installed.dispatchWindowEvent;
+    setTurns = installed.setTurns;
+    ipcInvokeCount = installed.ipcInvokeCount;
+    listenerCount = installed.listenerCount;
+  });
+
+  afterEach(() => {
+    restore();
+  });
+
+  it("T-PR3：sessionId 匹配 + visible 时收到 session-compacted → 面板重取且数据刷新", async () => {
+    const renderer = await mountPanel();
+    const root = renderer.root;
+    assert.equal(ipcInvokeCount(), 1, "挂载时（visible）应已取数一次");
+    assert.equal(listenerCount("session-compacted"), 1, "应订阅了压缩事件");
+
+    // 压缩后 workplace 重评估：返回体换成只有一轮的压缩后快照。
+    setTurns(TURNS_GROUP_STATES);
+    await act(async () => {
+      dispatchWindowEvent("session-compacted", { sessionId: "s1" });
+    });
+
+    assert.equal(ipcInvokeCount(), 2, "匹配会话的压缩事件应触发一次重取");
+    assert.deepEqual(
+      classListNodes(root, "prompt-turn-card").map((n) => n.props["data-turn-id"]),
+      ["turn-11"],
+      "重取后的轮卡应为新数据",
+    );
+  });
+
+  it("T-PR3：sessionId 不匹配 / 载荷缺 sessionId → 不重取", async () => {
+    const renderer = await mountPanel();
+    const root = renderer.root;
+    assert.equal(ipcInvokeCount(), 1);
+
+    await act(async () => {
+      dispatchWindowEvent("session-compacted", { sessionId: "other-session" });
+    });
+    assert.equal(ipcInvokeCount(), 1, "别的会话压缩不应让本面板重取");
+
+    await act(async () => {
+      dispatchWindowEvent("session-compacted");
+    });
+    assert.equal(ipcInvokeCount(), 1, "缺 sessionId 的载荷不应触发重取");
+
+    // 事件落到别的名字上也不该被当压缩信号（订阅是按类型精确匹配的）。
+    await act(async () => {
+      dispatchWindowEvent("context-changed", { sessionId: "s1" });
+    });
+    assert.equal(ipcInvokeCount(), 1, "本面板只订阅 session-compacted");
+
+    // 原数据仍在（没被清空）
+    assert.equal(classListNodes(root, "prompt-turn-card").length, 4);
+  });
+
+  it("T-PR3：visible=false 时不订阅也不因压缩事件重取", async () => {
+    let renderer: ReactTestRenderer | undefined;
+    await act(async () => {
+      renderer = TestRenderer.create(
+        <RealPromptPanel projectId="p1" sessionId="s1" visible={false} />,
+      );
+    });
+    assert.equal(ipcInvokeCount(), 0, "不可见时不取数");
+    assert.equal(listenerCount("session-compacted"), 0, "不可见时不必订阅");
+
+    await act(async () => {
+      dispatchWindowEvent("session-compacted", { sessionId: "s1" });
+    });
+    assert.equal(ipcInvokeCount(), 0, "不可见时压缩事件不应触发重取");
+
+    // 翻成可见后补订阅，并按 visible 翻转这条既有链路取数一次。
+    await act(async () => {
+      renderer!.update(<RealPromptPanel projectId="p1" sessionId="s1" visible />);
+    });
+    assert.equal(ipcInvokeCount(), 1);
+    assert.equal(listenerCount("session-compacted"), 1);
+
+    await act(async () => {
+      dispatchWindowEvent("session-compacted", { sessionId: "s1" });
+    });
+    assert.equal(ipcInvokeCount(), 2, "可见后压缩事件应恢复触发重取");
+  });
+
+  it("T-PR3：切会话后监听器跟随新 sessionId（不按旧会话重取），卸载时移除监听", async () => {
+    const renderer = await mountPanel();
+    const root = renderer.root;
+    assert.equal(ipcInvokeCount(), 1);
+    assert.equal(listenerCount("session-compacted"), 1);
+
+    // 切到 s2：既有 effect 取数一次，且订阅重挂到 s2 上（监听器总数仍为 1）。
+    await act(async () => {
+      renderer.update(<RealPromptPanel projectId="p1" sessionId="s2" visible />);
+    });
+    assert.equal(ipcInvokeCount(), 2);
+    assert.equal(listenerCount("session-compacted"), 1, "旧监听器应被移除，不叠加");
+
+    // 旧会话 id 的事件此时不得再触发重取（stale closure 守卫）。
+    await act(async () => {
+      dispatchWindowEvent("session-compacted", { sessionId: "s1" });
+    });
+    assert.equal(ipcInvokeCount(), 2, "切会话后旧 sessionId 的事件不应触发重取");
+
+    await act(async () => {
+      dispatchWindowEvent("session-compacted", { sessionId: "s2" });
+    });
+    assert.equal(ipcInvokeCount(), 3, "新 sessionId 的事件应触发重取");
+
+    await act(async () => {
+      renderer.unmount();
+    });
+    assert.equal(listenerCount("session-compacted"), 0, "卸载应移除监听");
+    // 卸载后再派发不再有任何副作用。
+    await act(async () => {
+      dispatchWindowEvent("session-compacted", { sessionId: "s2" });
+    });
+    assert.equal(ipcInvokeCount(), 3);
+    assert.ok(root != null);
   });
 });
 

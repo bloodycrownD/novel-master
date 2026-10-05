@@ -83,6 +83,30 @@ export function RealPromptPanel({
     }
   }, [visible, load]);
 
+  // 手动压缩成功后，`ConversationPanel.runCompaction` 会在 renderer 进程内 dispatch
+  // `session-compacted`（detail 带 sessionId）。本面板是**常驻挂载**的（visible 只是
+  // prop），压缩前后 visible 不翻转，仅靠上面那个 effect 不会重取——而手动压缩刚清了
+  // `rule_snapshot` + `file_cache` 两域，下一次拼提示词的 workplace 块是按当前工作区
+  // 重评估的结果，面板里这份旧快照必须跟着刷新。这里订阅该事件：按 sessionId 过滤
+  // 且仅在 visible 时重取（不可见时省掉一次无用 IPC）。
+  // 同范式先例：`SessionDetailDrawer` 订阅 `context-changed`。不复用
+  // `onComposerAttachmentsSuggest`（载荷语义是 composer 附件条，不符）。
+  // 依赖数组带 `load`：它随 projectId/sessionId 变化，监听器闭包里的 sessionId 不会
+  // 停在旧会话上（stale closure 会让旧 sessionId 的事件误触发重取）。
+  useEffect(() => {
+    if (!visible) {
+      return;
+    }
+    const handleCompacted = (e: Event) => {
+      const detail = (e as CustomEvent<{ sessionId?: string }>).detail;
+      if (detail?.sessionId === sessionId) {
+        void load();
+      }
+    };
+    window.addEventListener("session-compacted", handleCompacted);
+    return () => window.removeEventListener("session-compacted", handleCompacted);
+  }, [visible, sessionId, load]);
+
   // 换会话清展开态与全屏：core 的轮 id 是会话内相对的 `turn-${seq}`，切会话后
   // 上一会话的展开态会被新会话同 id 的轮「继承」（口径对齐 mobile 的 load 清空）。
   useEffect(() => {
