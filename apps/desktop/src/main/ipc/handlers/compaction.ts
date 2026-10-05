@@ -37,7 +37,12 @@ export async function handleCompactionManual(
     if (isDesktopSessionRunInFlight(rt, req.sessionId)) {
       return {
         ok: false,
-        error: { code: "run-in-flight", message: "Agent 运行中无法压缩" },
+        // 机器码走 SCREAMING_SNAKE，与 `IpcErrorPayload.code` 家族其余成员一致
+        //（同语义先例 `AGENT_BUSY`）。
+        error: {
+          code: "AGENT_RUN_IN_FLIGHT",
+          message: "Agent 运行中无法压缩",
+        },
       };
     }
     const deps: RunCompactionDeps = {

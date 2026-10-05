@@ -198,7 +198,7 @@ describe("handleCompactionManual", () => {
    * ②composer 广播 0 次；③两域 listKeys 与触发前逐字相同——先预置各一键，
    * 防「空对空恒真」。
    */
-  it("T-CR6: run 在途时手动压缩被拦（run-in-flight），不广播不清理", async () => {
+  it("T-CR6: run 在途时手动压缩被拦（AGENT_RUN_IN_FLIGHT），不广播不清理", async () => {
     const rt = await getDesktopRuntime();
 
     // 独立会话：不污染 T-CR5「无预置 kkv」的干净前提（同 T-IPC2 的做法）。
@@ -245,7 +245,10 @@ describe("handleCompactionManual", () => {
         sessionId: cr6SessionId,
       });
       assert.equal(result.ok, false);
-      assert.equal(result.ok ? undefined : result.error.code, "run-in-flight");
+      assert.equal(
+        result.ok ? undefined : result.error.code,
+        "AGENT_RUN_IN_FLIGHT",
+      );
       assert.equal(
         result.ok ? undefined : result.error.message,
         "Agent 运行中无法压缩",
