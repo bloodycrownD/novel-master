@@ -27,8 +27,9 @@ export const SESSION_KKV_DOMAIN_BACKFILL_CURSOR = "backfill_cursor" as const;
  *
  * 纯展示派生值：run 收尾时写一次，冻结态（含跨重启水合）读它拼速率段；
  * 行缺失/损坏即省略速率段，不影响任何账本语义，也不做兜底造数。
- * 置位/压缩只清 `rule_snapshot` + `file_cache`，本域不受其影响（上次生成
- * 的速率与工作区缓存无关）；会话删除走 `clearSession` 整表清。
+ * 置位与手动压缩清 `rule_snapshot` + `file_cache`（2026-10-05 起手动压缩按
+ * `trigger:"manual"` 清两域、自动压缩不清，见 run-compaction 头注释），本域不受
+ * 其影响（上次生成的速率与工作区缓存无关）；会话删除走 `clearSession` 整表清。
  */
 export const SESSION_KKV_DOMAIN_STREAM_METRICS = "stream_metrics" as const;
 

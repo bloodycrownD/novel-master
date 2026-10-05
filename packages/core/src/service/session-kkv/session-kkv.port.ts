@@ -10,7 +10,7 @@
  * @remarks
  * - {@link get} 缺失时返回 `null`（不抛错），便于 assemble 判断空快照。
  * - {@link clearSession} 在 session 删除 / 手动重置常驻缓存时调用（整表清，含 pending）。
- * - 置位成功改为 {@link clearDomain}(`rule_snapshot`)+{@link clearDomain}(`file_cache`)，保留 pending（压缩不再清——见 run-compaction 头注释）。
+ * - 置位成功改为 {@link clearDomain}(`rule_snapshot`)+{@link clearDomain}(`file_cache`)，保留 pending（压缩仅手动 trigger 清、自动不清——见 run-compaction 头注释）。
  * - fork / copy 会话**不**复制本表行。
  */
 export interface SessionKkvService {
