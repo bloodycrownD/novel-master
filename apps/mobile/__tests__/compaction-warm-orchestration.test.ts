@@ -129,19 +129,19 @@ describe('runCompactionWithTokenWarm（r3-orc-1）', () => {
     expect(order).toEqual(['succeeded', 'finally:true']);
   });
 
-  it('T-CR7：编排层是手动入口，runCompaction 必须收到 trigger:"manual"', async () => {
-    // 少了这个参数，core 走默认 auto 分支**不清** `rule_snapshot` /
+  it('T-CR7：编排层是手动入口，runCompaction 必须收到 trigger:"manual" 与压缩深度', async () => {
+    // 少了 trigger，core 走默认 auto 分支**不清** `rule_snapshot` /
     // `file_cache` 两域——手动压缩后 workplace 块仍吃旧快照，新文件不进清单，
     // 且这件事在编排层没有任何报错，属于静默失效，故在此钉死。
+    // 用**全等**而非 objectContaining：压缩深度 `hideStartDepth` 同样得钉住
+    // （beforeEach 固定回 3），少传/误清该键时 core 会静默走默认深度。
     await runCompactionWithTokenWarm(stubRuntime(), {projectId: 'p', sessionId: 's-manual'}, {});
-    expect(mockRunCompaction).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({
-        sessionId: 's-manual',
-        projectId: 'p',
-        trigger: 'manual',
-      }),
-    );
+    expect(mockRunCompaction).toHaveBeenCalledWith(expect.anything(), {
+      sessionId: 's-manual',
+      projectId: 'p',
+      hideStartDepth: 3,
+      trigger: 'manual',
+    });
   });
 
   it('压缩本体返回失败：不预热、标志归 false、只走 onFailed + onFinally', async () => {
