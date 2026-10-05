@@ -83,6 +83,10 @@ export function onRowsClick(event: MouseEvent): void {
     // 正文不进 DOM 属性（可达数百 KB）：按 toolUseId 从 state.rows 反查，
     // 一次 post 上抛宿主阅读页。可读正文（content 空串回落 summary）判定
     // 单源在 readableToolResult——与 ToolGroup 的可点判定共用，口径不分叉。
+    // 入参（input）同样走反查：curl 的 body/headers、fs 的 from→to 只在
+    // 摘要一行里看不全，阅读页要能同时看到「发了什么」与「回了什么」。
+    // 用原文 pretty JSON（2 空格缩进），不是格子预览形态——formatToolUsePreviewJson
+    // 是卡片格子的截断摘要形态，放进阅读页会被误当正文。
     const toolUseId = actionEl.getAttribute('data-tool-use-id');
     if (toolUseId) {
       const row = findToolRowByUseId(toolUseId);
@@ -92,6 +96,9 @@ export function onRowsClick(event: MouseEvent): void {
           post('openToolResult', {
             title: row.name || '工具结果',
             content: content,
+            ...(row.input != null
+              ? {inputJson: JSON.stringify(row.input, null, 2)}
+              : {}),
           });
         }
       }

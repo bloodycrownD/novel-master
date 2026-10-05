@@ -23,6 +23,13 @@ export type ToolResultViewDetail = {
   readonly title: string;
   /** tool_result 正文全文。 */
   readonly content: string;
+  /**
+   * 入参原文 pretty JSON（2 空格缩进）。curl 的 body/headers、fs 的
+   * `from → to` 这类信息只在原始入参里，卡片摘要一行给不全；阅读页要能
+   * 同时看到「发了什么」与「回了什么」。无入参的工具不带此字段，
+   * Modal 只渲染结果区块。
+   */
+  readonly inputJson?: string;
 };
 
 /**
@@ -37,6 +44,7 @@ export function toolResultViewFor(tool: {
   readonly name: string;
   readonly resultContent?: string;
   readonly summary?: string;
+  readonly input?: Record<string, unknown>;
 }): ToolResultViewDetail | undefined {
   const pickReadable = (value: unknown): string | undefined =>
     typeof value === "string" && value.trim() !== "" ? value : undefined;
@@ -45,7 +53,17 @@ export function toolResultViewFor(tool: {
   if (content == null) {
     return undefined;
   }
-  return { title: tool.name, content };
+  // 入参 stringify 可能抛（循环引用等），抛了就不带 inputJson——阅读页退回
+  // 只看结果，绝不让一次格式化失败把整条工具结果阅读点崩掉。
+  let inputJson: string | undefined;
+  if (tool.input != null) {
+    try {
+      inputJson = JSON.stringify(tool.input, null, 2);
+    } catch {
+      inputJson = undefined;
+    }
+  }
+  return inputJson != null ? { title: tool.name, content, inputJson } : { title: tool.name, content };
 }
 
 export function dispatchOpenToolResultView(
@@ -75,10 +93,21 @@ export function ToolResultViewOverlay({
       >
         <div className="prompt-fullscreen__title">{target.title}</div>
         <div className="prompt-fullscreen__body">
+          {/* 两段式阅读（有入参时）：入参在上、结果在下，各配一个中文标签行。
+              复用 prompt-fullscreen__block/__raw 的 pre 形态，不新造样式类。 */}
+          {target.inputJson != null && target.inputJson !== "" ? (
+            <div className="prompt-fullscreen__block">
+              <div className="prompt-fullscreen__label">入参</div>
+              <pre className="prompt-fullscreen__raw">{target.inputJson}</pre>
+            </div>
+          ) : null}
           {target.content === "" ? (
             <p className="prompt-fullscreen__empty">（空）</p>
           ) : (
             <div className="prompt-fullscreen__block">
+              {target.inputJson != null && target.inputJson !== "" ? (
+                <div className="prompt-fullscreen__label">结果</div>
+              ) : null}
               <pre className="prompt-fullscreen__raw">{target.content}</pre>
             </div>
           )}

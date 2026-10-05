@@ -138,3 +138,77 @@ test("T-TR7: ToolResultViewOverlay — 渲染标题、正文与关闭按钮", ()
   assert.match(html, /第 2 行结果/);
   assert.match(html, /关闭/);
 });
+
+test("T-TR9: toolResultViewFor — 带 input → 载荷带 inputJson（原文 pretty JSON）", () => {
+  const detail = toolResultViewFor({
+    name: "curl",
+    input: { url: "https://example.com", method: "POST" },
+    resultContent: "HTTP 200",
+  });
+  assert.deepEqual(detail, {
+    title: "curl",
+    content: "HTTP 200",
+    inputJson: JSON.stringify(
+      { url: "https://example.com", method: "POST" },
+      null,
+      2,
+    ),
+  });
+});
+
+test("T-TR9b: toolResultViewFor — 无 input → 不带 inputJson 字段", () => {
+  assert.deepEqual(toolResultViewFor({ name: "search", resultContent: "结果" }), {
+    title: "search",
+    content: "结果",
+  });
+  // ToolCallView.input 是必有字段，但入参在真实载荷里仍可能缺失（老消息 /
+  // 流式未拼齐）：这时载荷退回纯结果形态，Modal 也只渲染结果区块。
+  assert.deepEqual(
+    toolResultViewFor({ name: "search", input: undefined, resultContent: "结果" }),
+    { title: "search", content: "结果" },
+  );
+});
+
+test("T-TR9c: toolResultViewFor — input stringify 抛（循环引用）→ 只退结果，不崩", () => {
+  const cyclic: Record<string, unknown> = {};
+  cyclic.self = cyclic;
+  assert.deepEqual(
+    toolResultViewFor({ name: "custom", input: cyclic, resultContent: "结果" }),
+    { title: "custom", content: "结果" },
+  );
+});
+
+test("T-TR10: ToolResultViewOverlay — 带 inputJson → 「入参」+「结果」两段（入参在前）", () => {
+  const html = renderToStaticMarkup(
+    <ToolResultViewOverlay
+      target={{
+        title: "curl",
+        content: "HTTP 200 OK",
+        inputJson: '{\n  "url": "https://example.com"\n}',
+      }}
+      onClose={() => undefined}
+    />,
+  );
+  assert.match(html, /prompt-fullscreen__label[^>]*>入参</);
+  assert.match(html, /prompt-fullscreen__label[^>]*>结果</);
+  assert.match(html, /&quot;url&quot;: &quot;https:\/\/example\.com&quot;/);
+  assert.match(html, /HTTP 200 OK/);
+  // 入参区块必须排在结果之前（阅读顺序：先看发了什么，再看回了什么）。
+  // 锚到 label 类名上比较位置：Modal 根上还有 `curl结果` 这类 aria-label，
+  // 直接找「结果」二字会命中它，顺序断言就废了。
+  const inputAt = html.search(/prompt-fullscreen__label[^>]*>入参</);
+  const resultAt = html.search(/prompt-fullscreen__label[^>]*>结果</);
+  assert.ok(inputAt < resultAt, `入参 label @${inputAt}，结果 label @${resultAt}`);
+});
+
+test("T-TR10b: ToolResultViewOverlay — 无 inputJson → 只渲染结果区块，无「入参」标签", () => {
+  const html = renderToStaticMarkup(
+    <ToolResultViewOverlay
+      target={{ title: "search", content: "结果正文" }}
+      onClose={() => undefined}
+    />,
+  );
+  assert.doesNotMatch(html, /入参/);
+  assert.doesNotMatch(html, /prompt-fullscreen__label/);
+  assert.match(html, /结果正文/);
+});

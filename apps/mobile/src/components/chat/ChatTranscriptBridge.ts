@@ -241,7 +241,19 @@ export type TranscriptToHostMessage =
       }
     >
   /** 工具结果阅读（search/curl/grep/glob 无跳转目标，正文直接进宿主阅读页）。 */
-  | BridgeEnvelope<'openToolResult', {title: string; content: string}>
+  | BridgeEnvelope<
+      'openToolResult',
+      {
+        title: string;
+        content: string;
+        /**
+         * 入参原文 pretty JSON（2 空格缩进，webview 侧按 toolUseId 反查
+         * row.input 后 stringify）。无入参时不带此字段——宿主据此决定阅读页
+         * 是「输入 + 输出」两段还是只有输出。
+         */
+        inputJson?: string;
+      }
+    >
   | BridgeEnvelope<'messageMenuAction', {messageId: string; action: string}>
   | BridgeEnvelope<'menuOpened', Record<string, never>>
   | BridgeEnvelope<'menuClosed', Record<string, never>>

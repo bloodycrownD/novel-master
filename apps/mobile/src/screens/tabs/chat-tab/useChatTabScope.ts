@@ -783,9 +783,20 @@ export function useChatTabScope({
   // KB），照 useOpenPromptDetail 先例写模块级单例、挂载时读走即清；
   // turnId 作伪 path 稳定 key。title 兜底在 webview 侧（rows-click 的
   // row.name || '工具结果'，数据源就近），宿主不再重复兜底。
+  // 带 inputJson（卡片有入参）时阅读页铺「【输入】+【输出】」两段：curl 的
+  // body/headers 这类入参只存在于原始入参里，摘要一行给不出，光看输出没法
+  // 判断「为什么发了这个请求」。正文用原文 pretty JSON，不做二次格式化。
   const openToolResult = useCallback(
-    (payload: {title: string; content: string}) => {
-      setPromptTurnDetail({title: payload.title, body: payload.content});
+    (payload: {
+      title: string;
+      content: string;
+      inputJson?: string;
+    }) => {
+      const body =
+        payload.inputJson != null && payload.inputJson !== ''
+          ? `【输入】\n${payload.inputJson}\n\n【输出】\n${payload.content}`
+          : payload.content;
+      setPromptTurnDetail({title: payload.title, body});
       navigation.navigate('PromptTurnDetail', {
         title: payload.title,
         turnId: `tool-result-${payload.title}`,

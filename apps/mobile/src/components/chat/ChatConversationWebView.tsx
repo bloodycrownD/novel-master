@@ -216,6 +216,8 @@ export type ChatConversationWebViewProps = {
   readonly onOpenToolResult?: (payload: {
     title: string;
     content: string;
+    /** 入参原文 pretty JSON；无入参时宿主不带该字段。 */
+    inputJson?: string;
   }) => void;
   readonly onOpenMessageMenu?: (
     messageId: string,
@@ -1678,6 +1680,10 @@ export const ChatConversationWebView = memo(
             onOpenToolResult?.({
               title: String(payload.title ?? ''),
               content: String(payload.content ?? ''),
+              // 入参原文：无入参的卡片不带该字段，宿主据此只铺输出。
+              ...(typeof payload.inputJson === 'string'
+                ? {inputJson: payload.inputJson}
+                : {}),
             });
             return;
           }
@@ -1749,6 +1755,7 @@ export const ChatConversationWebView = memo(
           onLinkClick,
           onOpenSubagentSession,
           onOpenSkillDetail,
+          onOpenToolResult,
           onOpenMessageMenu,
           onMessageMenuAction,
           onWebMenuOpenChange,

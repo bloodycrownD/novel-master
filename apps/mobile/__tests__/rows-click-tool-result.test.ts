@@ -262,4 +262,70 @@ describe('rows-click open-tool-result 分支 (T-TRW)', () => {
     );
     expect(postedEnvelopes()).toEqual([]);
   });
+
+  it('T-TRW9: 行上有 input → 载荷带 inputJson（原文 pretty JSON，2 空格缩进）', () => {
+    // 阅读页要能同时看「发了什么」：curl 的 body/headers 只在原始入参里。
+    // 用原文 pretty JSON，不是 formatToolUsePreviewJson 的格子预览形态。
+    seedToolRow('tu-1', {
+      name: 'curl',
+      input: {url: 'https://example.com', method: 'POST', body: {a: 1}},
+      resultContent: 'HTTP 200',
+    });
+    onRowsClick(
+      makeEvent(
+        makeEl('div', {
+          'data-action': 'open-tool-result',
+          'data-tool-use-id': 'tu-1',
+        }),
+      ),
+    );
+    expect(postedEnvelopes()).toEqual([
+      {
+        v: 1,
+        type: 'openToolResult',
+        payload: {
+          title: 'curl',
+          content: 'HTTP 200',
+          inputJson: JSON.stringify(
+            {url: 'https://example.com', method: 'POST', body: {a: 1}},
+            null,
+            2,
+          ),
+        },
+      },
+    ]);
+    // 明确钉住「是 pretty JSON」：带换行与缩进，不是压平的一行。
+    const payload = postedEnvelopes()[0].payload as {inputJson: string};
+    expect(payload.inputJson).toContain('\n  "url": "https://example.com"');
+  });
+
+  it('T-TRW10: 行上无 input / input 为 null → 载荷不带 inputJson 字段（不是 undefined 值）', () => {
+    seedToolRow('tu-1', {name: 'search', resultContent: '结果'});
+    onRowsClick(
+      makeEvent(
+        makeEl('div', {
+          'data-action': 'open-tool-result',
+          'data-tool-use-id': 'tu-1',
+        }),
+      ),
+    );
+    seedToolRow('tu-2', {
+      name: 'search',
+      input: null,
+      resultContent: '结果2',
+    });
+    onRowsClick(
+      makeEvent(
+        makeEl('div', {
+          'data-action': 'open-tool-result',
+          'data-tool-use-id': 'tu-2',
+        }),
+      ),
+    );
+    const envelopes = postedEnvelopes();
+    expect(envelopes).toHaveLength(2);
+    for (const envelope of envelopes) {
+      expect(Object.keys(envelope.payload as object)).not.toContain('inputJson');
+    }
+  });
 });

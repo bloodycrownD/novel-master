@@ -5822,6 +5822,15 @@ html[data-theme="dark"] .chat-batch-bar {
   color: var(--text);
 }
 
+/* 区块小标题（工具结果阅读的「入参」/「结果」）：只在需要区分语义段时出现，
+   纯文本整轮阅读（RealPromptPanel）仍走「留白 + 分隔线断段」，不加标签。 */
+.prompt-fullscreen__label {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+}
+
 .prompt-fullscreen__empty {
   margin: 0;
   color: var(--text-tertiary);
