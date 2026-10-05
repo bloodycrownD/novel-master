@@ -360,25 +360,36 @@ async function flush(): Promise<void> {
 }
 
 /**
- * 进会话（第二阶段：列表已搬进 WebView 文档，RN 侧没有会话行了）。
+ * 进会话（回滚 SPA 化后：会话列表回到 RN 侧）。
  *
- * 断的还是同一条链——web 列表行点击 → `listAction/open` → 宿主 openConversation
- * 状态机 → 切到对话子视图；变的只是入口从「按 RN 会话卡」换成「往桥派一条上行」。
+ * 断的还是同一条链——RN 会话行点击 → onOpenConversation → 宿主状态机 →
+ * 切到对话子视图（对话面板随之条件挂载）。
  */
 async function enterConversation(
   tree: TestRenderer.ReactTestRenderer,
 ): Promise<void> {
-  const webView = findMockWebViewByDomain(tree.root, CONVERSATION_DOMAIN);
-  await act(async () => {
-    webView.props.onMessage?.({
-      nativeEvent: {
-        data: JSON.stringify({
-          v: CONVERSATION_BRIDGE_V,
-          type: 'listAction',
-          payload: {kind: 'open', sessionId: 's1'},
-        }),
-      },
+  const sessionCard = tree.root
+    .findAll(n => typeof n.props?.onPress === 'function')
+    .find(n => {
+      const selfText =
+        typeof n.props?.children === 'string' &&
+        n.props.children.includes('S1');
+      if (selfText) {
+        return true;
+      }
+      return (
+        n.findAll(
+          d =>
+            typeof d.props?.children === 'string' &&
+            d.props.children.includes('S1'),
+        ).length > 0
+      );
     });
+  if (sessionCard == null) {
+    throw new Error('会话行（S1）未渲染');
+  }
+  await act(async () => {
+    sessionCard.props.onPress();
   });
   await flush();
 }

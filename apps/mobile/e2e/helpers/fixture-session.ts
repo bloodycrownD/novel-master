@@ -46,12 +46,17 @@ export function fixtureSessionSelector(
 }
 
 /**
- * True when the injected fixture session title appears in the native session list.
+ * True when the injected fixture session title appears in the session list.
  *
- * 判定必须落在「fixture 项目的会话列表」上：会话行是 WebView 里的 web DOM，
- * 原生 textContains 只有在该列表**可见**（data-view=list、项目已选中）时才
- * 暴露文本——app 停在 conversation 视图或别的项目上时直接查会误判 missing
- * （2026-10-02 实跑实锤：注入明明是好的，判 false 连锁带崩 T-E2/T-E3）。
+ * 会话列表已回 RN（`ChatSessionListPanel` 的会话行 FlatList），原生
+ * `textContains` 走 a11y 树直接查得到；但**判定必须落在「fixture 项目的会话列表」
+ * 上**——app 停在别的项目、或停在对话态（MainTabs 隐藏、列表不渲染）时直接查会
+ * 误判 missing，所以先 `ensureProject` 再关抽屉，切完项目还要再关一次
+ * （conversation 态点项目行后抽屉不一定自动关，盖着列表时会话行文本查不到）。
+ *
+ * （历史：会话列表在 WebView 里的那阵子，会话行是 web DOM 文本，原生
+ * `textContains` 只有在列表视图可见时才暴露，这里因此多写过按 `data-view` 属性
+ * 判「是不是列表视图」的配套 helper；回滚后那些判据一并删除。）
  */
 export async function isFixtureSessionAvailable(
   projectName = E2E_FIXTURE_PROJECT_NAME,
@@ -67,7 +72,7 @@ export async function isFixtureSessionAvailable(
     return false;
   }
   // 切完项目再关一次抽屉：conversation 态点项目行后抽屉不一定自动关，
-  // 盖着列表时会话行文本（WebView 暴露）查不到。
+  // 盖着列表时会话行文本查不到。
   await appPage.closeProjectDrawerIfOpen();
   await switchToNative();
   const sessionTitle = await $(fixtureSessionSelector(title));

@@ -290,19 +290,17 @@ function mk(id: string, parent?: FakeElement): FakeElement {
 }
 
 /**
- * 建出与 index.html 同形的壳。三个开关各自制造一种「装配失败」真因，
+ * 建出与 index.html 同形的壳。两个开关各自制造一种「装配失败」真因，
  * 供入口层 ready 闸门验证（真因而非 mock：pickElements 未命中 / host 未命中都是生产路径）。
  *
- * `listShell` 控制列表视图四段（#session-list 及其子节点）是否挂出。**默认挂出**：
- * 绝大多数用例关心的是对话链，列表在场才是真实壳的样子；只有专门验「列表壳缺失」
- * 的用例才关掉它。
+ * 列表视图随「会话列表进 WebView」回滚整体退役：壳里不再有 #session-list，
+ * 入口也不再有 sessionList.mount()（见下方 describe）。
  */
 function buildShell(
-  opts: {dockShell?: boolean; composerHost?: boolean; listShell?: boolean} = {},
+  opts: {dockShell?: boolean; composerHost?: boolean} = {},
 ): void {
   const dockShell = opts.dockShell !== false;
   const composerHost = opts.composerHost !== false;
-  const listShell = opts.listShell !== false;
   const app = mk('app');
 
   if (dockShell) {
@@ -318,20 +316,6 @@ function buildShell(
   } else if (composerHost) {
     // 只留 composer 挂载点：dock 的 pickElements 必然未命中 → mount() 返回 false
     mk('composer-input', app);
-  }
-
-  if (listShell) {
-    const list = mk('session-list', app);
-    const header = mk('session-list-header', list);
-    mk('session-list-title', header);
-    mk('session-list-create', header);
-    // 批量头三段（wave-3）：壳缺任一段 pickElements 就返回 false → mount 报 false
-    const batchBar = mk('session-list-batch-bar', header);
-    mk('session-list-batch-cancel', batchBar);
-    mk('session-list-batch-count', batchBar);
-    mk('session-list-batch-delete', batchBar);
-    mk('session-list-rows', list);
-    mk('session-list-empty', list);
   }
 
   fakeDocument.appendChild(app);
@@ -594,10 +578,10 @@ describe('ready 装配闸门（T-CE-6）', () => {
 });
 
 /* ------------------------------------------------------------------ *
- * ⑤ 列表视图（第二阶段 wave-1）：装配序扩展 + 闸门刻意不含它
+ * ⑤ 列表视图装配面已随回滚整体退役（会话列表回到 RN）
  * ------------------------------------------------------------------ */
 
-describe('列表视图装配（T-CEL）', () => {
+describe('列表视图装配退役（T-CEL）', () => {
   let consoleError: jest.SpyInstance;
 
   beforeEach(() => {
@@ -607,61 +591,61 @@ describe('列表视图装配（T-CEL）', () => {
     consoleError.mockRestore();
   });
 
-  it('T-CEL-1：列表壳齐时零诊断、照常发 ready（正常路径不多打一行）', () => {
+  it('T-CEL-1：壳里没有列表子节点时仍零诊断、照常发 ready', () => {
+    // 列表视图随 SPA 化回滚整体退役：入口不再 mount 列表，也就没有「列表未装配」
+    // 这条诊断。少了它之后，正常路径一条 console.error 都不该打。
     fakeDocument.readyState = 'complete';
     buildShell();
     loadEntry();
 
     expect(readyEnvelopes()).toHaveLength(1);
     expect(consoleError).not.toHaveBeenCalled();
-    // 列表视图的事件已绑在壳上（点新建会上行 listAction）
-    expect(
-      fakeDocument.getElementById('session-list-create')?.countListeners(
-        'click',
-      ),
-    ).toBe(1);
   });
 
-  it('T-CEL-2：列表壳未命中 → **照常发 ready**，只打一条列表诊断', () => {
-    // 关键定案：列表是宿主下行走主链的那半边的投影，列表壳漂移不得把一个能正常
-    // 对话的页面判成死页（8s 白屏 + 错误态）。用户会看到「列表打不开」而不是
-    // 「整页死了」——前者可绕、后者不可绕。
-    fakeDocument.readyState = 'complete';
-    buildShell({listShell: false});
-    loadEntry();
-
-    expect(readyEnvelopes()).toHaveLength(1);
-    expect(readyEnvelopes()[0].v).toBe(2);
-    // 如实诊断、且只诊断一次
-    expect(consoleError).toHaveBeenCalledTimes(1);
-    const message = String(consoleError.mock.calls[0][0]);
-    expect(message).toContain('列表视图未装配');
-    expect(message).toContain('不影响对话');
+  it('T-CEL-2：入口源码里不再有列表装配调用与列表诊断', () => {
+    const entry = mainSource();
+    expect(entry).not.toContain('sessionList.mount()');
+    expect(entry).not.toContain('createConversationSessionList');
+    expect(entry).not.toContain('viewState');
+    expect(entry).not.toContain('listAction');
   });
 
-  it('T-CEL-3：对话壳已失败时**不追加**列表诊断（同一根因只打一条）', () => {
-    // 壳 id 漂移会同时打掉列表壳。此时若列表再打一行，同一个根因会刷出两条互相
-    // 干扰的错误（「装配未完成」+「列表未装配」），真机排查时反而看不出是同一次漂移。
-    fakeDocument.readyState = 'complete';
-    buildShell({dockShell: false, composerHost: false, listShell: false});
-    loadEntry();
-
-    expect(posted).toEqual([]);
-    expect(consoleError).toHaveBeenCalledTimes(1);
-    expect(String(consoleError.mock.calls[0][0])).toContain('装配未完成');
-  });
-
-  it('T-CEL-4：装配序 = dock.mount() 之后才是 sessionList.mount()', () => {
-    // 顺序不是美观问题：dock.mount() 里的诊断与列表的诊断刻意分开打，
-    // 谁先落谁后落决定了「对话装配失败」这条永远不会夹着列表的行。
+  it('T-CEL-3：壳里不存在任何 #session-list* 节点（文档结构回退到纯对话）', () => {
     fakeDocument.readyState = 'complete';
     buildShell();
     loadEntry();
 
-    const entry = mainSource();
-    const dockAt = entry.indexOf('dock.mount()');
-    const listAt = entry.indexOf('sessionList.mount()');
-    expect(dockAt).toBeGreaterThan(-1);
-    expect(listAt).toBeGreaterThan(dockAt);
+    for (const id of [
+      'session-list',
+      'session-list-header',
+      'session-list-create',
+      'session-list-rows',
+      'session-list-empty',
+    ]) {
+      expect(fakeDocument.getElementById(id)).toBeNull();
+    }
+  });
+
+  it('T-CEL-4：装配序 = 通道 → 两 runtime → dock.mount() → ready（无列表一档）', () => {
+    fakeDocument.readyState = 'complete';
+    buildShell();
+    loadEntry();
+
+    // 顶部文档注释里也逐条列了这五步，所以判序只在**注释之后**的正文里数。
+    const source = mainSource();
+    const entry = source.slice(source.indexOf('bindHostMessageChannel(dispatcher)'));
+    const at = (needle: string) => entry.indexOf(needle);
+    const channelAt = at('bindHostMessageChannel(dispatcher)');
+    const transcriptAt = at('createTranscriptRuntime({');
+    const composerAt = at('createComposerRuntime(');
+    const dockAt = at('dock.mount()');
+    expect(channelAt).toBe(0);
+    expect(transcriptAt).toBeGreaterThan(channelAt);
+    expect(composerAt).toBeGreaterThan(transcriptAt);
+    expect(dockAt).toBeGreaterThan(composerAt);
+    // ready 闸门只看 composerMounted + dockMounted（dockMounted 是简写属性名）
+    expect(entry).toMatch(
+      /shouldEmitConversationReady\(\{\s*composerMounted:\s*composerRuntime\.mounted,\s*dockMounted,?\s*\}\)/,
+    );
   });
 });

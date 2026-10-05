@@ -50,11 +50,11 @@ jest.mock('../src/components/chat/ChatStreamMetricsBarLive', () => ({
 // 单实例承载转录 + dock）。经 ref 暴露可记录的 commitSyntheticAssistantRow
 // （ui/B-1 中断现场用例的断言面）；组件本体渲染 null，其余 props 不消费。
 //
-// 第二阶段起这层 mock 还多担一件事：**抓 props**——`viewState` 就是宿主从
-// `chatSubview` 映射出来的 `view` prop（面板 → WebView → 下行消息），
-// viewState 断言面的第一环就落在这里。
+// 这层 mock 另担两件事：①抓 props（面板→宿主的 props 面回归锁的观察面）；
+// ②记 mount/unmount 流水（切会话 key 重挂回归锁的观察面）。
 const mockCommitSyntheticAssistantRow = jest.fn(() => true);
 const mockWebViewPropsList: Array<Record<string, unknown>> = [];
+const mockWebViewLifecycle: string[] = [];
 jest.mock('../src/components/chat/ChatConversationWebView', () => {
   const mockReact = require('react');
   return {
@@ -64,6 +64,12 @@ jest.mock('../src/components/chat/ChatConversationWebView', () => {
         ref: React.Ref<{commitSyntheticAssistantRow: unknown}>,
       ) => {
         mockWebViewPropsList.push(props as Record<string, unknown>);
+        mockReact.useEffect(() => {
+          mockWebViewLifecycle.push('mount');
+          return () => {
+            mockWebViewLifecycle.push('unmount');
+          };
+        }, []);
         mockReact.useImperativeHandle(ref, () => ({
           commitSyntheticAssistantRow: mockCommitSyntheticAssistantRow,
         }));
@@ -147,35 +153,6 @@ function installMockRuntime(): void {
     },
   });
 }
-
-/**
- * 列表域（第二阶段）的 manager 判活桩：挂在 **ctx.runtime** 上（面板侧的
- * `useSessionListBridge` 从 ctx.runtime 取，不是 `useRuntime()`——同一个对象，
- * 但测试里 ctx.runtime 是独立字段，得单独喂）。
- */
-const mockListManager = {
-  activeSessionIds: jest.fn((): readonly string[] => []),
-  interruptedSessionIds: jest.fn((): ReadonlySet<string> => new Set()),
-  subscribe: jest.fn((listener: () => void) => {
-    mockListListeners.push(listener);
-    return () => undefined;
-  }),
-  stopRun: jest.fn(),
-};
-
-/** manager 订阅捕获：手动驱动 listener 验证判活刷新接线。 */
-const mockListListeners: Array<() => void> = [];
-
-/** 批量选择态桩（真源在 ChatTabScreen，这里只做注入）。 */
-const mockSessionBatch = {
-  active: false,
-  selectedIds: new Set<string>(),
-  enter: jest.fn(),
-  exit: jest.fn(),
-  toggle: jest.fn(),
-};
-
-const mockOpenConversation = jest.fn();
 
 const tokens = {
   background: '#000',
@@ -290,20 +267,16 @@ function makeMockContext(
       setSessionRenamePrompt: jest.fn(),
       refreshChatTokenLabel: jest.fn(),
       reloadLists: jest.fn(async () => undefined),
-      // ---- 列表域（第二阶段） ----
-      sessions: [],
-      menuSessionId: undefined,
-      setMenuSessionId: jest.fn(),
-      openSessionRenamePrompt: jest.fn(),
-      handleCopySession: jest.fn(async () => undefined),
-      confirmDeleteSession: jest.fn(),
-      handleCreateSession: jest.fn(async () => undefined),
+      openSessionFilePreview: jest.fn(),
+      openChatLink: jest.fn(),
+      openSubagentSession: jest.fn(),
+      openSkillDetail: jest.fn(),
     },
     messages: {hydrateFromSessionCache: jest.fn()},
     resetStreamingDisplay: jest.fn(),
     navigation: {} as any,
     showToast: jest.fn(),
-    runtime: {sessionStreamUnitManager: mockListManager} as any,
+    runtime: {sessionStreamUnitManager: {}} as any,
     setCurrentSession: jest.fn(async () => undefined),
     closeMessageMenu: jest.fn(),
   };
@@ -330,7 +303,6 @@ jest.mock('../src/screens/tabs/chat-tab/ChatTabNavigationProvider', () => ({
 }));
 
 import {useChatTabContext} from '../src/screens/tabs/chat-tab/ChatTabProvider';
-import {sameStringSet} from '../src/screens/tabs/chat-tab/useSessionListBridge';
 
 const mockUseChatTabContext = useChatTabContext as jest.MockedFunction<
   typeof useChatTabContext
@@ -346,16 +318,8 @@ beforeEach(() => {
   mockVfsLifecycle.length = 0;
   mockSessionId = 's1';
   mockWebViewPropsList.length = 0;
-  mockListListeners.length = 0;
-  mockListManager.activeSessionIds.mockReturnValue([]);
-  mockListManager.interruptedSessionIds.mockReturnValue(new Set());
-  mockListManager.stopRun.mockClear();
-  mockOpenConversation.mockClear();
-  mockSessionBatch.active = false;
-  mockSessionBatch.selectedIds = new Set();
-  mockSessionBatch.enter.mockClear();
-  mockSessionBatch.exit.mockClear();
-  mockSessionBatch.toggle.mockClear();
+  mockWebViewLifecycle.length = 0;
+  mockCommitSyntheticAssistantRow.mockClear();
 });
 
 /** 取最近一次渲染时统一宿主收到的 props（viewState 断言面）。 */
@@ -372,15 +336,7 @@ function TestHost() {
   mockUseChatTabContext.mockReturnValue(
     makeMockContext(workspaceVfsRef) as ReturnType<typeof useChatTabContext>,
   );
-  return (
-    <ChatConversationPanel
-      tokens={tokens}
-      visible
-      chatSubview="conversation"
-      sessionBatch={mockSessionBatch}
-      onOpenConversation={mockOpenConversation}
-    />
-  );
+  return <ChatConversationPanel tokens={tokens} visible />;
 }
 
 describe('ChatConversationPanel workspace reload', () => {
@@ -539,15 +495,7 @@ describe('ChatConversationPanel 中断现场合成行提交（ui/B-1）', () => 
     ctx.transcriptReadyEpoch = mockReadyEpoch;
     ctx.useWebviewTranscript = true;
     mockUseChatTabContext.mockReturnValue(ctx);
-    return (
-      <ChatConversationPanel
-        tokens={tokens}
-        visible
-        chatSubview="conversation"
-        sessionBatch={mockSessionBatch}
-        onOpenConversation={mockOpenConversation}
-      />
-    );
+    return <ChatConversationPanel tokens={tokens} visible />;
   }
 
   let tree: TestRenderer.ReactTestRenderer | undefined;
@@ -696,36 +644,34 @@ describe('ChatConversationPanel 顶栏 agent 卡分流（au/B-1 / au/G-4）', ()
   });
 });
 
-// ── viewState 下发（第二阶段 wave-2）────────────────────────────────────────
+// ── 切会话 key 重挂（回滚 SPA 化的核心命题）──────────────────────────────
 //
-// `chatSubview` → 统一宿主的 `view` prop（宿主再经 postToWeb 下发
-// `{type:'viewState', payload:{view}}`，web 据此切 `data-view`）。
-// 断言面落在**这层映射**：映射错了 web 就一直停在首帧的 conversation 视图
-// ——冷启动直接进列表的用户看到的是一张空白的对话页，且没有任何报错。
-
-describe('ChatConversationPanel · viewState 映射（chatSubview → view）', () => {
-  /** 子视图由用例驱动（面板真源就是它，props 进来）。 */
-  let mockChatSubview: 'sessions' | 'conversation';
+// 面板不再有 chatSubview / sessionList / viewState 这些列表域 props，也不再有
+// sessionBatch / onOpenConversation（会话列表与 ⋮ 菜单整体回迁 ChatSessionListPanel）。
+// 切会话改为 `<ChatConversationWebView key={chatScrollKey}>` 销毁重建——文档内状态
+// 天然归零，不再需要宿主侧手动清场。
+describe('ChatConversationPanel · 切会话 key 重挂', () => {
   let tree: TestRenderer.ReactTestRenderer | undefined;
 
-  function SubviewTestHost() {
+  /** chatScrollKey 由用例驱动（默认 'p1:s1'，切到 'p1:s2' 模拟换会话）。 */
+  let mockChatScrollKey: string | null = 'p1:s1';
+
+  function ScrollKeyTestHost() {
     const workspaceVfsRef = useRef<VfsFileManagerHandle>(null);
+    const ctx = makeMockContext(workspaceVfsRef) as unknown as Record<
+      string,
+      unknown
+    >;
+    ctx.chatScrollKey = mockChatScrollKey;
     mockUseChatTabContext.mockReturnValue(
-      makeMockContext(workspaceVfsRef) as ReturnType<typeof useChatTabContext>,
+      ctx as unknown as ReturnType<typeof useChatTabContext>,
     );
-    return (
-      <ChatConversationPanel
-        tokens={tokens}
-        visible
-        chatSubview={mockChatSubview}
-        sessionBatch={mockSessionBatch}
-        onOpenConversation={mockOpenConversation}
-      />
-    );
+    return <ChatConversationPanel tokens={tokens} visible />;
   }
 
   beforeEach(() => {
-    mockChatSubview = 'sessions';
+    mockChatScrollKey = 'p1:s1';
+    mockConversationPanel = 'chat';
   });
 
   afterEach(() => {
@@ -737,289 +683,56 @@ describe('ChatConversationPanel · viewState 映射（chatSubview → view）', 
     tree = undefined;
   });
 
-  it("chatSubview='sessions' → view=list（冷启动列表视图）", async () => {
+  it('chatScrollKey 变化 → ChatConversationWebView 整实例重挂（mount→unmount→mount）', async () => {
     await act(async () => {
-      tree = TestRenderer.create(<SubviewTestHost />);
+      tree = TestRenderer.create(<ScrollKeyTestHost />);
       await flushPromises();
     });
-    expect(lastWebViewProps().view).toBe('list');
+    expect(mockWebViewLifecycle).toEqual(['mount']);
+
+    mockChatScrollKey = 'p1:s2';
+    await act(async () => {
+      tree!.update(<ScrollKeyTestHost />);
+      await flushPromises();
+    });
+    // 拔牙验证：key 从 ChatConversationWebView 上摘掉即红（只剩一次 mount）
+    expect(mockWebViewLifecycle).toEqual(['mount', 'unmount', 'mount']);
   });
 
-  it("chatSubview='conversation' → view=conversation（且切回 list 会再变一次）", async () => {
-    mockChatSubview = 'conversation';
+  it('同一会话内重渲染不重挂（key 不变 = 实例恒等）', async () => {
     await act(async () => {
-      tree = TestRenderer.create(<SubviewTestHost />);
+      tree = TestRenderer.create(<ScrollKeyTestHost />);
       await flushPromises();
     });
-    expect(lastWebViewProps().view).toBe('conversation');
+    expect(mockWebViewLifecycle).toEqual(['mount']);
 
-    // 返回键回到列表：view 必须跟着变（漏了这个就是「返回键点了没反应」）
-    mockChatSubview = 'sessions';
-    await act(async () => {
-      tree!.update(<SubviewTestHost />);
-      await flushPromises();
-    });
-    expect(lastWebViewProps().view).toBe('list');
-  });
-
-  it('列表视图下即便没选中会话也挂载宿主（列表本体就在这个 WebView 里）', async () => {
-    // 「一个会话都没选中」时 ctx.sessionId 为空——若此时不挂 WebView，
-    // 冷启动（默认就停在列表视图）用户看到的就是一片空白。
-    mockChatSubview = 'sessions';
-    function NoSessionTestHost() {
-      const workspaceVfsRef = useRef<VfsFileManagerHandle>(null);
-      const ctx = makeMockContext(workspaceVfsRef) as ReturnType<
-        typeof useChatTabContext
-      >;
-      (ctx as {sessionId: string | undefined}).sessionId = undefined;
-      // chatScrollKey 是 useChatTabScrollCache 由 projectId+sessionId 派生的，
-      // 面板拿不到那两个 null 就拿不到它——这里照真实链路一并置空。
-      (ctx as {chatScrollKey: string | null}).chatScrollKey = null;
-      mockUseChatTabContext.mockReturnValue(ctx);
-      return (
-        <ChatConversationPanel
-          tokens={tokens}
-          visible
-          chatSubview="sessions"
-          sessionBatch={mockSessionBatch}
-          onOpenConversation={mockOpenConversation}
-        />
-      );
-    }
-    await act(async () => {
-      tree = TestRenderer.create(<NoSessionTestHost />);
-      await flushPromises();
-    });
-    expect(lastWebViewProps().view).toBe('list');
-    expect(lastWebViewProps().sessionKey).toBe('no-session');
-  });
-
-  it('列表快照：列表视图下发载荷，对话视图传 null（攒着不跨桥）', async () => {
-    // 载荷真源的判据在 useSessionListBridge（独立 hook 有自己的单测面）；
-    // 这里钉住面板这侧的契约：对话视图必须传 null，否则对话期间列表数据每变
-    // 一次就跨一次桥（也正是「仅 list 态推」的实现点）。
-    mockChatSubview = 'conversation';
-    await act(async () => {
-      tree = TestRenderer.create(<SubviewTestHost />);
-      await flushPromises();
-    });
-    expect(lastWebViewProps().sessionList).toBeNull();
-
-    mockChatSubview = 'sessions';
-    await act(async () => {
-      tree!.update(<SubviewTestHost />);
-      await flushPromises();
-    });
-    // 本用例的 scope.sessions 是空数组：非 null 即为「已在推列表视图载荷」
-    expect(lastWebViewProps().sessionList).toEqual({sessions: []});
-  });
-
-  it('「工作区面板开着 + 切回列表视图」时 WebView 容器不得被收起', async () => {
-    // 这条路真实存在：删掉当前会话时 `handleDeleteSession` 会
-    // `setChatSubview('sessions')`，而 `conversationPanel` 还停在 'workspace'。
-    // 若对话面容器按 conversationPanel 一刀切 display:none，WebView（= 列表的
-    // 载体）就被藏起来了，用户看到的是一片空白列表。
-    mockChatSubview = 'sessions';
     mockConversationPanel = 'workspace';
-    function WorkspaceThenListTestHost() {
-      const workspaceVfsRef = useRef<VfsFileManagerHandle>(null);
-      mockUseChatTabContext.mockReturnValue(
-        makeMockContext(workspaceVfsRef) as ReturnType<typeof useChatTabContext>,
-      );
-      return (
-        <ChatConversationPanel
-          tokens={tokens}
-          visible
-          chatSubview="sessions"
-          sessionBatch={mockSessionBatch}
-          onOpenConversation={mockOpenConversation}
-        />
-      );
-    }
     await act(async () => {
-      tree = TestRenderer.create(<WorkspaceThenListTestHost />);
+      tree!.update(<ScrollKeyTestHost />);
       await flushPromises();
     });
-    // chatPanel 容器有唯一指纹 backgroundColor:'transparent'
-    const chatPanels = tree!.root.findAll(node => {
-      const style = node.props?.style;
-      return (
-        Array.isArray(style) &&
-        style.some(
-          (item: Record<string, unknown>) =>
-            item != null && item.backgroundColor === 'transparent',
-        )
-      );
-    });
-    expect(chatPanels.length).toBeGreaterThan(0);
-    for (const panel of chatPanels) {
-      expect(panel.props.style).not.toContainEqual(
-        expect.objectContaining({display: 'none'}),
-      );
-    }
-  });
-});
-
-// ── manager 通知的无效全量重推去重（cr2-fix-spec cr2-E-3）──────────────────
-//
-// 两个徽标集合合挂在同一个 `subscribe` 通知上（受理 / 收尾 / 替换 / 水合都
-// 触发），而一次通知里两个集合**常常都没变**。sync() 原先无条件
-// `setState(new Set(...))`——引用必变，链条一路放行：`sessionListPayload`
-// 的 useMemo 依赖变了 → 重算出新对象 → 宿主比较器是引用比较、判「变了」→
-// 列表态全量重推一次。内容一模一样，web 侧却要整批重建 DOM。
-//
-// 观测面是 `sessionList` **prop 的引用**（本文件的 ChatConversationWebView 是
-// jest.mock 哑组件，只抓 props 不消费），不是 postToWeb 计数——真要数下发
-// 得去 chat-conversation-webview.test.tsx，那边已被别的节点占了。
-describe('ChatConversationPanel · manager 通知去重（cr2-E-3）', () => {
-  let tree: TestRenderer.ReactTestRenderer | undefined;
-
-  /** 列表态宿主；scope 带一条会话，好让 `active` 徽标有观测面。 */
-  function ListSubviewTestHost() {
-    const workspaceVfsRef = useRef<VfsFileManagerHandle>(null);
-    const ctx = makeMockContext(workspaceVfsRef) as ReturnType<
-      typeof useChatTabContext
-    >;
-    ctx.scope.sessions = [
-      {id: 's1', title: 'S1', updatedAtMs: 1},
-    ] as typeof ctx.scope.sessions;
-    mockUseChatTabContext.mockReturnValue(ctx);
-    return (
-      <ChatConversationPanel
-        tokens={tokens}
-        visible
-        chatSubview="sessions"
-        sessionBatch={mockSessionBatch}
-        onOpenConversation={mockOpenConversation}
-      />
-    );
-  }
-
-  /**
-   * `sessionList` prop 的**引用变化次数**（相邻两次渲染比对）。
-   *
-   * 刻意数「引用变了」而不是「渲染了几次」：面板还有 controller 等一堆异步态，
-   * 无关重渲会让渲染计数虚高；引用没变就等于宿主那次下发被挡住了，这才是
-   * 这条判路要保的东西。
-   */
-  function sessionListRefChangeCount(): number {
-    let changes = 0;
-    for (let i = 1; i < mockWebViewPropsList.length; i += 1) {
-      if (
-        mockWebViewPropsList[i].sessionList !==
-        mockWebViewPropsList[i - 1].sessionList
-      ) {
-        changes += 1;
-      }
-    }
-    return changes;
-  }
-
-  /** 手动发一次 manager 通知（全部已捕获的 listener 都叫一遍）。 */
-  async function notifyManager(): Promise<void> {
+    mockConversationPanel = 'chat';
     await act(async () => {
-      for (const listener of mockListListeners) {
-        listener();
-      }
+      tree!.update(<ScrollKeyTestHost />);
       await flushPromises();
     });
-  }
-
-  afterEach(() => {
-    if (tree != null) {
-      act(() => {
-        tree!.unmount();
-      });
-    }
-    tree = undefined;
+    expect(mockWebViewLifecycle).toEqual(['mount']);
   });
 
-  it('列表态连续两次同内容 manager 通知 → sessionList 引用只变化一次', async () => {
+  it('面板 props 面不再有 chatSubview / sessionBatch / onOpenConversation（列表域整体回迁）', async () => {
+    // 编译期 + 运行期双锁：TS 侧这些 props 已从 ChatConversationPanelProps
+    // 移除（多传一个就红），运行期再钉一次「宿主拿到的 props 里没有它们」。
     await act(async () => {
-      tree = TestRenderer.create(<ListSubviewTestHost />);
+      tree = TestRenderer.create(<ScrollKeyTestHost />);
       await flushPromises();
     });
-    // 订阅确实挂上了，否则下面的通知是空转、断言会假绿
-    expect(mockListListeners.length).toBeGreaterThan(0);
-    const baseline = sessionListRefChangeCount();
-    // 初始无活跃 run：徽标应为 false（此时载荷引用已在 baseline 里定型）
-    expect(lastWebViewProps().sessionList).toEqual({
-      sessions: [
-        {
-          id: 's1',
-          title: 'S1',
-          updatedAtMs: 1,
-          active: false,
-          interrupted: false,
-          current: true,
-        },
-      ],
-    });
-
-    // 第一次通知：内容真变了（无活跃 → s1 在跑），徽标该刷新、载荷该换引用
-    mockListManager.activeSessionIds.mockReturnValue(['s1']);
-    await notifyManager();
-    expect(lastWebViewProps().sessionList).toEqual({
-      sessions: [
-        {
-          id: 's1',
-          title: 'S1',
-          updatedAtMs: 1,
-          active: true,
-          interrupted: false,
-          current: true,
-        },
-      ],
-    });
-    const afterFirst = lastWebViewProps().sessionList;
-    expect(sessionListRefChangeCount() - baseline).toBe(1);
-
-    // 第二次通知：**同内容**。同步判等后不得再换引用，否则就是一次白推的全量重推
-    await notifyManager();
-    // 验收口径（cr2-E-3）：两次同内容通知合起来只准让载荷引用变化 **+1** 次
-    expect(sessionListRefChangeCount() - baseline).toBe(1);
-    expect(lastWebViewProps().sessionList).toBe(afterFirst);
-  });
-
-  it('内容真变的通知照样放行（去重不能把徽标刷新一起挡掉）', async () => {
-    await act(async () => {
-      tree = TestRenderer.create(<ListSubviewTestHost />);
-      await flushPromises();
-    });
-    const baseline = sessionListRefChangeCount();
-
-    // ① 活跃：0 → 1 条
-    mockListManager.activeSessionIds.mockReturnValue(['s1']);
-    await notifyManager();
-    // ② 中断：新出现的另一条集合内容
-    mockListManager.interruptedSessionIds.mockReturnValue(new Set(['s1']));
-    await notifyManager();
-    // ③ 再撤掉活跃（收尾）
-    mockListManager.activeSessionIds.mockReturnValue([]);
-    await notifyManager();
-
-    // 三次都是真变化 → 三次都该重算载荷
-    expect(sessionListRefChangeCount() - baseline).toBe(3);
-    const list = lastWebViewProps().sessionList as {sessions: Array<Record<string, unknown>>};
-    expect(list.sessions[0]).toMatchObject({active: false, interrupted: true});
-  });
-});
-
-// ── sameStringSet 纯函数（cr2-E-3 的判路本体）──────────────────────────────
-describe('sameStringSet（内容级判等）', () => {
-  it('同内容不同引用判等；size 或成员有别即判不等', () => {
-    expect(sameStringSet(new Set(['a']), new Set(['a']))).toBe(true);
-    expect(sameStringSet(new Set(), new Set())).toBe(true);
-    // 内容相同但顺序不同 → 仍是等（集合无序，不能按迭代顺序比）
-    expect(sameStringSet(new Set(['a', 'b']), new Set(['b', 'a']))).toBe(true);
-    // size 相同但成员不同
-    expect(sameStringSet(new Set(['a']), new Set(['b']))).toBe(false);
-    // size 不同
-    expect(sameStringSet(new Set(['a']), new Set(['a', 'b']))).toBe(false);
-  });
-
-  it('同一引用短路返回 true', () => {
-    const s = new Set(['a']);
-    expect(sameStringSet(s, s)).toBe(true);
+    const props = lastWebViewProps();
+    expect(props).not.toHaveProperty('chatSubview');
+    expect(props).not.toHaveProperty('sessionBatch');
+    expect(props).not.toHaveProperty('onOpenConversation');
+    // 列表域下发面同样不在了
+    expect(props).not.toHaveProperty('view');
+    expect(props).not.toHaveProperty('sessionList');
+    expect(props).not.toHaveProperty('onListAction');
   });
 });

@@ -1,7 +1,4 @@
-import {
-  switchToNative,
-  switchToSessionListView,
-} from '../helpers/context';
+import {switchToNative} from '../helpers/context';
 import {alertPage} from './alert.page';
 import {chatTranscriptPage} from './chat-transcript.page';
 
@@ -20,18 +17,6 @@ const RUN_SUFFIX = `${Date.now().toString(36).slice(-5)}${Math.floor(
 export function isolatedProjectName(base: string): string {
   return `${base}-${RUN_SUFFIX}`;
 }
-
-/**
- * 新建项目后自动生成的会话标题。
- *
- * `nextDefaultSessionTitle`（`utils/session-default-title.ts`）按项目内已用编号取下一个，
- * 所以**全新项目**里的第一个会话固定是「新会话1」。旧页对象用
- * `textMatches("会话.*")` 去找最新会话——那个模式连原生 SegmentedControl 上的「会话」
- * 标签和（当年的）ManageHeader 标题都会命中，在多会话场景下点到的未必是目标行。
- * 会话列表搬进 web 之后更不能用它：`session-row__title` 是 web 文本，
- * 原生 `UiSelector().text()` 走的是 a11y 树，根本看不见它。
- */
-const NEW_SESSION_TITLE = '新会话1';
 
 /**
  * 首屏「版本检查」弹窗的关闭候选（「今日不再提醒」优先，避免误触「去下载」）。
@@ -266,65 +251,39 @@ export class AppPage {
   /**
    * 新建会话（点会话列表头的「新建会话」）。
    *
-   * chat-webview-unify 第二阶段之后，会话列表整体搬进了合成包文档
-   * （`src/web/chat-conversation/webview/session-list.ts`），RN 侧已经没有会话行了——
-   * 旧写法「切 NATIVE 按 `text("新建会话")` 找原生按钮」在真机上必然查不到。
+   * 会话列表已回 RN（`ChatSessionListPanel`：`ManageHeader` + 会话行 `FlatList`），
+   * 所以走原生 a11y 定位即可：`UiSelector().text("新建会话")` 命中 ManageHeader
+   * 里那个 `PrimaryButton`。合成包 WebView 不参与这一步。
    *
-   * 走 web 的两道前置：
-   * 1. {@link switchToSessionListView} 切到那个唯一 WebView **并且**等 `data-view=list`
-   *    （冷启动首帧是 conversation 视图，DOM 在但用户看不见）；
-   * 2. 点 `[data-testid="session-list-create"]`。
-   *
-   * 点击后等新行出现（会话行由 `sessionList` 下行渲染，DOM 节点逐条重建），而不是
-   * 死等固定时长。
+   * 点击后 `handleCreateSession` 只**创建+刷列表**、不选会话也不切视图，
+   * 所以固定 pause 一小段，等新行渲染进 FlatList 再由 {@link openLatestSession} 进。
    */
   async createSession(): Promise<void> {
-    // 冷启动后 WebView 挂载晚于原生首屏（dev bundle 20MB+ 每次启动重拉），
-    // context 出现的时间波动大——预算放宽到 40s（一半给 context、一半给
-    // data-view），20s 在模拟器负载上来后实测会假超时。
-    await switchToSessionListView(40000);
-    const create = await $('[data-testid="session-list-create"]');
-    await create.waitForDisplayed({timeout: 10000});
-    // 不断言「行数比点击前多」：项目切换（launchFresh）的列表重推是异步的，
-    // 点击前的任何基线读数都可能取到中间态（fixture 场景两轮实锤——before
-    // 数到旧项目残留行，点击后新项目 1 行，`1 > before` 误判失败）。本方法的
-    // 唯一调用方是 launchFresh（全新空项目），改为断言**新会话行出现**：
-    // 新项目的第一个会话固定叫「新会话1」，标题存在性不依赖基线计数。
-    await create.click();
-    const newRow = await $(
-      `//div[@data-testid="session-row"]//div[contains(@class,"session-row__title") and normalize-space(text())="${NEW_SESSION_TITLE}"]`,
-    );
-    await newRow.waitForExist({timeout: 10000, timeoutMsg: '新建会话后未见「新会话1」行出现'});
-    await browser.pause(400);
+    await switchToNative();
+    const createSession = await $('android=new UiSelector().text("新建会话")');
+    await createSession.waitForDisplayed({timeout: 10000});
+    await createSession.click();
+    await browser.pause(800);
   }
 
   /**
-   * 打开新建出来的那个会话（标题固定「新会话1」）。
+   * 打开会话列表里最新新建的那个会话。
    *
-   * @param title 精确标题；不传用 {@link NEW_SESSION_TITLE}（= 全新项目里的第一个会话）
+   * 会话行回到 RN FlatList 后，`textMatches("会话.*")` 又能用了：`nextDefaultSessionTitle`
+   * 按项目内编号生成（「新会话1」「新会话2」…），`launchFresh` 建的是**全新空项目**，
+   * 列表里只有刚建的那一行，所以第一个匹配就是目标。
+   *
+   * ⚠️ 这个模式**不区分**原生 SegmentedControl 上的「会话」标签和 ManageHeader 的
+   * 「会话」标题——那两处在多会话项目下也会命中。空项目场景下无碍（列表只有一行，
+   * 切换条/标题在 WebView 文档里、而查询走的是原生树）；若日后要在**已有多个会话**
+   * 的项目里用本方法，得改成按行精确匹配。
    */
-  async openLatestSession(title = NEW_SESSION_TITLE): Promise<void> {
-    await switchToSessionListView();
-    // 会话行按 data-session-id + 行内 .session-row__title 定位；web 侧没有
-    // 「按文本找行」的稳定选择器（RN 那套 UiSelector().text() 是原生 a11y 树的事）。
-    // 用 XPath 按行标题精确匹配，比 `.session-row*` 通配稳，也不会误命中
-    // SegmentedControl 上的「会话」标签（那是原生树里的东西，不在 web DOM 内）。
+  async openLatestSession(): Promise<void> {
+    await switchToNative();
     const sessionTitle = await $(
-      `//div[@data-testid="session-row"]//div[contains(@class,"session-row__title") and normalize-space(text())="${title}"]`,
+      'android=new UiSelector().textMatches("会话.*")',
     );
-    // 行短暂消失要重试而不是立刻判死：reloadLists 会整段重渲染 #session-list-rows，
-    // 「waitForExist 刚过、这里 isExisting 又 false」的重渲染窗口实测存在
-    // （2026-10-02 连发轮一轮过一轮挂的根源之一）。
-    let rowExists = false;
-    for (let attempt = 0; attempt < 8 && !(rowExists = await sessionTitle.isExisting()); attempt++) {
-      await browser.pause(500);
-    }
-    if (!rowExists) {
-      throw new Error(
-        `[e2e] 会话行「${title}」不存在（web 列表视图里，重试 4s 后仍无）。` +
-          '确认 createSession() 已成功（需要先选中项目），且项目内没有同名旧会话。',
-      );
-    }
+    await sessionTitle.waitForDisplayed({timeout: 10000});
     await sessionTitle.click();
     await this.waitForConversationEntered();
   }
@@ -507,10 +466,10 @@ export class AppPage {
     const projectName = isolatedProjectName(projectBaseName);
     await this.ensureProject(projectName);
     await this.createSession();
-    // 「新建会话」只**创建+刷列表**，app 停在列表视图（useChatTabScope.
-    // handleCreateSession 不切视图不选会话）；而 tab-chat 在列表视图被
-    // display:none 整行收起（ChatConversationPanel）——等 tab-chat 等不出来，
-    // 正路就是点列表行进会话（openLatestSession），进去后 tab-chat 才显示。
+    // 「新建会话」只**创建+刷列表**，app 停在 RN 会话列表（useChatTabScope.
+    // handleCreateSession 不选会话）；而 tab-chat 在列表态被 display:none 整行收起
+    // （ChatConversationPanel）——等 tab-chat 等不出来，正路就是点列表行进会话
+    // （openLatestSession），进去后 tab-chat 才显示。
     await this.openLatestSession();
     await this.switchToChatPanel();
     await this.ensureWorkspaceModel();

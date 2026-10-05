@@ -31,14 +31,15 @@
  * **不得**因为「收到了 ready」就置位 `webReady`：置位了就会把 v2 协议消息灌进一个
  * 根本不认得的页面（静默白屏，比报错更难查）。
  *
- * ## 第二阶段：会话列表进同一文档（wave-2）
+ * ## 回滚 SPA 化之后的形态
  *
- * 1. **列表域**（`view` / `sessionList` 下行、`onListAction` 上行）——薄渲染，
- *    业务全留 RN，纪律同 dock 域：直发不进 deferred 队列。
- * 2. **去 `key`**：本组件不再随 `sessionKey` 销毁重建，所有「换文档」清场改为
- *    `[sessionKey]` effect 驱动（见恢复链段的两处触发点注释）。这是本轮最容易
- *    踩坏的地方——**新增任何一条「靠重挂初始化」的 ref 状态，都得同步补一条
- *    `[sessionKey]` 清场**，否则切会话后会带着上一个会话的残留。
+ * 1. **列表域已整体拆除**：`view` / `sessionList` 下行与 `onListAction` 上行随会话
+ *    列表回迁 RN（`ChatSessionListPanel`）一并删掉，文档恒停在对话视图。
+ * 2. **重挂归零靠 key，不靠 effect**：调用方（`ChatConversationPanel`）给本组件
+ *    传 `key={chatScrollKey ?? 'no-session-scroll'}`，切会话销毁重建整个实例——
+ *    文档内状态、`ref` 状态、8s 握手计时全部天然归零，本组件内**不再有任何
+ *    `[sessionKey]` 清场 effect**。这份「新增 ref 必须同步补清场」的负担随 key
+ *    恢复一并消失（它在 SPA 化那轮才被引进来）。
  */
 import React, {
   forwardRef,
@@ -80,17 +81,13 @@ import {
   conversationDockActionIncludes,
   decodeConversationUpstream,
   encodeHostToConversation,
-  parseConversationListAction,
   parseConversationScrollSnapshot,
   readReadyCapabilities,
   type ConversationComposerState,
   type ConversationDockAction,
   type ConversationHostMessage,
-  type ConversationListAction,
-  type ConversationSessionListPayload,
   type ConversationTheme,
   type ConversationTypeaheadSource,
-  type ConversationView,
 } from './ChatConversationBridge';
 import type {ComposerInputSelection} from './ComposerInputBridge';
 import {enrichTranscriptRows} from './enrich-transcript-rows';
@@ -266,36 +263,11 @@ export type ChatConversationWebViewProps = {
   /** dock 域上行处置（send/terminate/needModel/fullscreen/atPicker/skillPicker）。 */
   readonly onDockAction?: (action: ConversationDockAction) => void;
 
-  /* ---------------- 列表域（第二阶段：会话列表进同一文档） ---------------- */
-
-  /**
-   * 当前显示哪个视图（宿主把 `chatSubview` 映射成它）。
-   *
-   * web 首帧恒停在 `conversation`（拿不准就显示正在写的对话，把用户踢出列表更糟），
-   * ready 后本组件补发一条 `viewState` 完成切换——冷启动直接进列表视图靠的就是这条。
-   */
-  readonly view?: ConversationView;
-  /**
-   * 会话列表快照（列表域下行）。
-   *
-   * **`null` = 本拍不推**（不是「空列表」）：宿主在对话视图里把它置 null，于是
-   * 对话期间的数据变化不会反复跨桥；切回列表视图时恢复成真对象 → effect 重跑 →
-   * 一次性补推最新快照（顺带治了现网「回列表不刷新」那条老毛病）。
-   * 载荷引用由宿主 memo 到「五个输入真变」为止，故这里的判等是引用相等。
-   */
-  readonly sessionList?: ConversationSessionListPayload | null;
-  /** 列表域上行处置（open/create/menuOpen/rename/copy/delete/stopRun/longPress/batchToggle）。 */
-  readonly onListAction?: (action: {
-    readonly kind: ConversationListAction;
-    readonly sessionId?: string;
-  }) => void;
-
   /**
    * 转录 only 变体（transcript-converge，子会话屏）：只要转录、不要输入
-   * dock 与列表视图的降级形态。init 下发该字段，web 侧给 #app 挂类隐藏
+   * dock 的降级形态。init 下发该字段，web 侧给 #app 挂类隐藏
    * dock；该变体下 composer-dock 能力位缺失也不渲染降级横幅（本就没有
-   * dock，横幅的「输入组件版本过低」语义不成立）。视图恒 conversation
-   * （调用方不传 view 即默认值）。
+   * dock，横幅的「输入组件版本过低」语义不成立）。
    */
   readonly transcriptOnly?: boolean;
 };
@@ -311,7 +283,7 @@ function transcriptFlagsEqual(
 }
 
 /**
- * memo 比较器：转录域照旧，composer 域与列表域**逐个入列**。
+ * memo 比较器：转录域照旧，composer 域**逐个入列**。
  *
  * 为什么必须逐个入列而不是「`composerState` 一个对象引用比」：spec 记过一次踩坑史
  * （`pendingSubagentSessions` 漏加 → 静默吞更新）。composer 域字段多（11 个），
@@ -354,13 +326,6 @@ function chatConversationWebViewPropsEqual(
     // 候选源按引用判等（controller 内容不变时下发同一引用）
     prev.composerTypeahead === next.composerTypeahead &&
     prev.safeAreaBottom === next.safeAreaBottom &&
-    // ---- 列表域（同样逐个入列） ----
-    // 踩坑史同款：`pendingSubagentSessions` 漏加过一次，症状是「改了没生效」且
-    // 无任何报错。新增 prop 若不在这里比，memo 会把它连同整个子树一起吞掉——
-    // 漏 `view` 则是「返回键回到列表还是对话视图」，漏 `sessionList` 则是
-    // 「新建/删除会话后列表不刷新」，两者都无声无息。
-    prev.view === next.view &&
-    prev.sessionList === next.sessionList &&
     // ---- 变体（transcript-converge）：漏比会吞掉子会话屏的降级形态 ----
     prev.transcriptOnly === next.transcriptOnly
   );
@@ -533,9 +498,6 @@ export const ChatConversationWebView = memo(
         composerTypeahead = EMPTY_CONVERSATION_TYPEAHEAD_SOURCE,
         safeAreaBottom = 0,
         onDockAction,
-        view = 'conversation',
-        sessionList = null,
-        onListAction,
         transcriptOnly = false,
       },
       ref,
@@ -599,7 +561,6 @@ export const ChatConversationWebView = memo(
       const visibilityHiddenAppStateRef = useRef<string | null>(null);
       const prevStreamTextRef = useRef('');
       const prevStreamThinkingRef = useRef('');
-      const sessionKeyRef = useRef(sessionKey);
       const prevFirstMessageIdRef = useRef<string | undefined>(undefined);
       const prevMessageCountRef = useRef(0);
       const prevRichTextRef = useRef(flags?.richText ?? false);
@@ -609,9 +570,6 @@ export const ChatConversationWebView = memo(
       const initialScrollRef = useRef(initialScroll);
       const defaultScrollToBottomRef = useRef(defaultScrollToBottom);
       const needsOpenSnapshotRef = useRef(true);
-      // 视图切离对话时若快照分片在途被中止，半截转录留在 web 侧 DOM 里；
-      // 重进该会话必须全量补铺一次，否则露出半截（见 viewState 旁的中止 effect）。
-      const needsResumeSnapshotRef = useRef(false);
       const snapshotDeferTimerRef = useRef<ReturnType<
         typeof setTimeout
       > | null>(null);
@@ -653,7 +611,6 @@ export const ChatConversationWebView = memo(
       const onComposerChangeTextRef = useRef(onComposerChangeText);
       const onComposerSelectionChangeRef = useRef(onComposerSelectionChange);
       const onDockActionRef = useRef(onDockAction);
-      const onListActionRef = useRef(onListAction);
       /**
        * 失败态镜像（webview-background-ready-fail）：供 AppState 的 change 回调读
        * 最新失败态。走 ref 而非把 `readyFailed` 塞进回调依赖——依赖一变回调就换，
@@ -663,7 +620,6 @@ export const ChatConversationWebView = memo(
       onComposerChangeTextRef.current = onComposerChangeText;
       onComposerSelectionChangeRef.current = onComposerSelectionChange;
       onDockActionRef.current = onDockAction;
-      onListActionRef.current = onListAction;
       readyFailedRef.current = readyFailed;
 
       const clearReadyTimeout = useCallback(() => {
@@ -678,10 +634,9 @@ export const ChatConversationWebView = memo(
        * repaintEpoch 重挂（Android WebView 恢复显示后仍渲染摘除前的旧帧 /
        * 用户点「重载」）。重挂后是新文档、新一轮握手，不能拿上一轮的计时器判超时。
        *
-       * **切会话（`sessionKey` 变化）刻意不重挂**（第二阶段去 key 后的口径）：
-       * 去 `key={chatScrollKey}` 之后切会话**不再销毁重建** WebView，文档还是那份、
-       * `ready` 也不会重来——拿 8s 计时器去判「切会话后的握手」等于凭空造一个
-       * 永远不会到来的超时（切会话必超 8s → 白屏错误态，纯自伤）。
+       * **切会话（`sessionKey` 变化）靠 `key` 重挂自然重新计时**：调用方传
+       * `key={chatScrollKey}`，切会话销毁重建整个组件实例，`onLoad` 天然重新
+       * 走一遍本计时器，本组件内不必再为 sessionKey 补一条重计时。
        */
       const armReadyTimeout = useCallback(() => {
         clearReadyTimeout();
@@ -727,15 +682,10 @@ export const ChatConversationWebView = memo(
       /**
        * composer 域三条基线清场（IME 防线 M1/M4/M5 的公共入口）。
        *
-       * **调用点有两处，语义不同，缺一不可**：
-       * 1. `ready` 到达：`webReady` 会 false→true 让 ③ 草稿 effect 重跑，而新文档
-       *    的 textarea 是空的——不把 `webTextRef` 打回 null，③ 会拿「与基线同值」
-       *    早退，草稿永远写不进去（这条对应 visibility 摘除后重挂 / 点「重载」，
-       *    两种真·换文档场景）。
-       * 2. `[sessionKey]` 变化（第二阶段去 key 后的新场景）：文档**没换**，但草稿
-       *    已经是上一个会话的了。原先靠「重挂 → ready 清场」顺带解决，现在得
-       *    显式做——否则新会话的草稿在 M1 判据下被当成「与基线同值」而早退，
-       *    上一会话的草稿留在输入框里。
+       * **唯一调用点是 `ready` 到达**：`webReady` 会 false→true 让 ③ 草稿 effect
+       * 重跑，而新文档的 textarea 是空的——不把 `webTextRef` 打回 null，③ 会拿
+       * 「与基线同值」早退，草稿永远写不进去。visibility 脏重挂 / 点「重载」/
+       * 切会话（`key` 重挂）三条路径都经「换文档 → ready 重来」顺带解决。
        */
       const resetComposerBaselines = useCallback(() => {
         webTextRef.current = null;
@@ -1207,12 +1157,6 @@ export const ChatConversationWebView = memo(
                 }
               }
             }
-            // 「末片 post 完 + deferred 已 flush」= DOM 完整时刻，此刻清补铺标记：
-            // 无论这份完整快照是在对话视图发的，还是中止后在列表视图里因
-            // richText / pendingSubagentSessions / messages 变化跑成的，
-            // web 侧 DOM 都已经完整，下次重进不必再全量补铺一次。
-            // 中止路径走上面的 `return`，不经过这里，语义不冲突。
-            needsResumeSnapshotRef.current = false;
             onSnapshotComplete?.();
           } finally {
             if (inFlightSnapshotGenerationRef.current === generation) {
@@ -1304,6 +1248,26 @@ export const ChatConversationWebView = memo(
       useEffect(() => {
         sendSessionSnapshotRef.current = sendSessionSnapshot;
       });
+
+      /**
+       * 卸载 cleanup：掐掉 defer 定时器并丢掉 pending 快照档。
+       *
+       * 这份清理原本挂在「视图切离对话」那条 effect 上（会话列表进同一文档期间
+       * 切离视图是唯一的「不进对话却还留着快照」场景）。列表域拆除后那条路径
+       * 不复存在，但**切会话 = `key` 重挂 = 组件卸载**这条路径仍在：uiRunning
+       * 期间挂起的 pending 档若没人掐，0ms 定时器会在实例已卸载后照常 fire，
+       * 拿已失效的 webRef 发起一次快照分片。清理顺序与 `flushPendingSnapshot`
+       * 同款：先掐定时器再丢档。
+       */
+      useEffect(() => {
+        return () => {
+          if (snapshotDeferTimerRef.current != null) {
+            clearTimeout(snapshotDeferTimerRef.current);
+            snapshotDeferTimerRef.current = null;
+          }
+          pendingSnapshotRef.current = null;
+        };
+      }, []);
 
       const sendAppendTailRows = useCallback(
         (tailMessages: readonly ChatMessage[]) => {
@@ -1597,16 +1561,6 @@ export const ChatConversationWebView = memo(
             return;
           }
 
-          /* ---- 列表域上行（v:2；业务全留 RN） ---- */
-          if (message.type === 'listAction') {
-            // 宽松解码（白名单九项，枚举外静默丢弃——理由见 Bridge 的定案注释）
-            const action = parseConversationListAction(message);
-            if (action != null) {
-              onListActionRef.current?.(action);
-            }
-            return;
-          }
-
           /* ---- ready（v:2 单条；能力协商全集） ---- */
           if (message.type === 'ready') {
             webReadyRef.current = true;
@@ -1614,7 +1568,6 @@ export const ChatConversationWebView = memo(
             setReadyFailed(false);
             clearReadyTimeout();
             // 新文档 = 新基线：草稿基线作废（强制恢复链重发 setText，否则草稿丢失）。
-            // 切会话不再走这里（文档没换），那条路由 [sessionKey] effect 负责。
             resetComposerBaselines();
             const capabilities = readReadyCapabilities(payload);
             streamBlockCapableRef.current = transcriptCapabilitiesInclude(
@@ -1884,31 +1837,10 @@ export const ChatConversationWebView = memo(
        * 顺序前先想清楚：composerState 晚于 setText 会让首帧 textarea 的
        * readOnly/placeholder 与真源分叉；快照早于 setText 会先渲染空 dock。
        *
-       * **第二阶段去 key 后这条链有两个触发点**：ready（首挂 / 重挂）与
-       * `sessionKey` 变化（切会话，文档不换）。后者的清场 effect 必须声明在
-       * ① 之前——它把草稿基线打回 null，①③④ 靠这个基线判断「要不要重发」。
+       * **触发点只有 ready 一个**：调用方按 `key={chatScrollKey}` 重挂本组件，
+       * 切会话即销毁重建、所有 ref 重新初始化，故这些 effect 的依赖里**不必**
+       * 再列 `sessionKey`。
        * ================================================================== */
-
-      /**
-       * 切会话清场（`sessionKey` 变化时执行；首挂也会跑一遍，此时三条基线本来就是
-       * 空的，是空操作）。
-       *
-       * 去 `key={chatScrollKey}` 之前这里什么都不用做：重挂让整棵组件重新初始化，
-       * 所有 ref 自然归零。现在组件常驻，**切会话的清场责任落到本 effect**：
-       * - composer 三基线（`webTextRef` / `lastSelectionRef` / `pendingSelection`）
-       *   —— 否则新会话的草稿会被 M1 判成「与基线同值」而早退，上个会话的草稿
-       *   继续留在输入框里；
-       * - 流式本地缓冲（pending 队列 / 累加器 / RAF / `prevStream*` 基线）——
-       *   与 `key` 重挂时组件初始化做的事逐项对齐。④ 快照 effect 自己也会清
-       *   `prevStream*`，这里是提前一拍，两者不冲突。
-       *
-       * 刻意**不动**的：`needsOpenSnapshotRef`（由 ④ 在检测到 sessionKey 变化时
-       * 置位）、8s 兜底计时器（见 `armReadyTimeout` 注释）。
-       */
-      useEffect(() => {
-        resetComposerBaselines();
-        clearLocalStreamBuffers();
-      }, [sessionKey, resetComposerBaselines, clearLocalStreamBuffers]);
 
       // ① init
       useEffect(() => {
@@ -1916,7 +1848,7 @@ export const ChatConversationWebView = memo(
           return;
         }
         sendInit();
-      }, [webReady, sendInit, sessionKey]);
+      }, [webReady, sendInit]);
 
       // ② composerState（直发；未声明 composer-dock 时不下发——web 侧不认识它）
       useEffect(() => {
@@ -1924,7 +1856,7 @@ export const ChatConversationWebView = memo(
           return;
         }
         sendComposerState();
-      }, [webReady, composerDockCapable, sendComposerState, sessionKey]);
+      }, [webReady, composerDockCapable, sendComposerState]);
 
       /**
        * ③ 草稿 setText + ④ 光标期望 —— M1 / M2 / M5 的合并落点。
@@ -1967,11 +1899,8 @@ export const ChatConversationWebView = memo(
         // 依赖刻意不含 composerCursor：光标只在**文本真变**这一次对齐，
         // 用户自己移动光标不受控（对齐 ComposerAtPathInput 的原口径）。
         //
-        // `sessionKey` 入列（第二阶段）：切会话时 web 的 textarea 里还留着上一个
-        // 会话的草稿。少了这一条，「新会话恰好没有草稿」这一常见情形会因为
-        // `composerText` 两边都是空串而**整条早退**——输入框里那个旧草稿就永远
-        // 留下了。清场 effect 已把基线打成 null，所以这里必然走真外部写入分支。
-      }, [webReady, composerText, composerCursor, postToWeb, sessionKey]);
+        // 依赖里也不含 sessionKey：切会话经 `key` 重挂归零，基线本来就是新的。
+      }, [webReady, composerText, composerCursor, postToWeb]);
 
       // M4 · setSelection 回声抑制：web 刚上报的同值 = 自身回声，跳过
       useEffect(() => {
@@ -2043,91 +1972,6 @@ export const ChatConversationWebView = memo(
         });
       }, [webReady, mermaidViewerCloseSignal, postToWeb]);
 
-      /* ---- 列表域下行（第二阶段） ---- */
-
-      /**
-       * `viewState`（`chatSubview` 的投影）：web 据此切 `#app` 的 `data-view`。
-       *
-       * 声明在 ④ 快照**之前**是刻意的：切回列表视图时，视图切换与快照开屏落在
-       * 同一次 commit，先切视图再推列表，用户先看到列表框后看到行，中间那一瞬
-       * 是空列表（web 侧空态是按行数现算的，那一瞬不闪）。
-       *
-       * 不用 ref 记「已发过」做去重：ready 会 false→true（重挂），那时必须重发；
-       * 而 chatSubview 变化次数极少，一条几十字节的消息不值得为它引一层状态。
-       */
-      useEffect(() => {
-        if (!webReady) {
-          return;
-        }
-        postToWeb({
-          v: CONVERSATION_BRIDGE_V,
-          type: 'viewState',
-          payload: {view},
-        });
-      }, [webReady, view, postToWeb]);
-
-      /**
-       * 视图切离对话时**中止在途快照分片**。
-       *
-       * 大会话的开屏快照是逐片 yield 发送的，进入会话后的几秒里分片流持续
-       * 占着 RN 的 JS 线程与 WebView 的消息管道；此时侧滑退出，`viewState`
-       * 要排在剩余分片后面，用户看到的就是「滑了要等一会才切回列表」。
-       * （对照实验实锤：进大会话停 10 秒等分片流发完再滑，退出瞬时。）
-       *
-       * 中止手法：把在途代次顶掉——`sendSessionSnapshotNow` 的分片循环每片
-       * 发送前自检代次，发现被顶替即退出，剩余分片不再构建也不再过桥。
-       * 半截转录会留在 web 侧 DOM（列表视图下不可见），因此同时记
-       * `needsResumeSnapshotRef`，重进时全量补铺自愈；被中止快照压着的
-       * deferred 动作（含 streamFlush）由补铺完成时统一 flush。
-       *
-       * 「已挂起未起跑」的快照档同样要无条件清（不挂在 inFlight 判据下）：
-       * `uiRunning` 期间的非 force 快照先落进 `pendingSnapshotRef` + 0ms 定时器
-       * 等流式间歇，切视图时那一次宏任务照样会 fire，把整份浏览史分片灌进
-       * 列表视图下的 WebView——正是要消除的堵塞（此时窗口最窄）。
-       * 注意清理顺序与 flushPendingSnapshot 同款：先掐定时器再丢档。
-       */
-      useEffect(() => {
-        if (view === 'conversation') {
-          return;
-        }
-        if (inFlightSnapshotGenerationRef.current != null) {
-          inFlightSnapshotGenerationRef.current = null;
-          needsResumeSnapshotRef.current = true;
-        }
-        if (snapshotDeferTimerRef.current != null) {
-          clearTimeout(snapshotDeferTimerRef.current);
-          snapshotDeferTimerRef.current = null;
-        }
-        pendingSnapshotRef.current = null;
-      }, [view]);
-
-      /**
-       * `sessionList`（会话行快照）。
-       *
-       * `sessionList == null` 早退 = 「本拍不推」：宿主在对话视图里把它置 null，
-       * 于是对话期间列表数据怎么变都不会跨桥；切回列表视图时它恢复成真对象、
-       * 本 effect 重跑，一次性补推**最新**快照。顺带治掉了现网那条
-       * 「从对话返回列表不刷新」的老毛病（RN FlatList 靠 `reloadLists` 的
-       * `useState` 引用变化，漏跑一次就一直显示旧数组）。
-       *
-       * ⚠️ **声明序依赖，勿与上面的 viewState effect 对调**：切回列表时两条
-       * effect 落在同一次 commit，顺序只由声明序决定——必须先切视图、再推列表，
-       * 用户才先看到列表框后看到行（中间那一瞬的空列表按行数现算，不闪）。对调后
-       * 两者仍都发得出、零报错，只是那一瞬变成「有行的列表框 + 空列表」闪一下。
-       * 护栏：`chat-conversation-webview.test.tsx` 的「G-3: 切回列表同 commit 内
-       * viewState 必须先于首条 sessionList」按下标关系断，调换声明序即红。
-       */
-      useEffect(() => {
-        if (!webReady || sessionList == null) {
-          return;
-        }
-        postToWeb({
-          v: CONVERSATION_BRIDGE_V,
-          type: 'sessionList',
-          payload: sessionList,
-        });
-      }, [webReady, sessionList, postToWeb]);
-
       useEffect(() => {
         syncStreamToolInvoking();
       }, [syncStreamToolInvoking, toolInvoking]);
@@ -2158,58 +2002,13 @@ export const ChatConversationWebView = memo(
         );
       }, [webReady, pendingSubagentSessions]);
 
-      /**
-       * 重进对话视图时补铺被中止的快照（对照上一段中止 effect）。
-       *
-       * 只有「切离时有分片在途被中止」才会走到这里；快照本来就没在途的
-       * 正常进出，web 侧 DOM 完整保留，重进零成本——这正是 SPA 化的卖点，
-       * 不能为了修中止而把它退化为每次进出都全量重发。
-       *
-       * force=true 立即发送：uiRunning 时非 force 会挂 pending 等 stream
-       * 间歇，补铺不能等——用户正盯着重进的会话看。
-       *
-       * 三重守卫（两条早退都在**清标记之前**，否则标记被消费却没补上，
-       * 下一次重进就再也补不回来了）：
-       * ① `messages.length === 0`：空面补铺等于发一份空快照把转录清掉，
-       *    真消息随后到位再全量 → 3 轮快照抖动。留标记等真面。
-       * ② `sessionKeyRef.current !== sessionKey`：同一次 commit 里换了会话，
-       *    补铺这一轮让给 ④ 的开屏轮（两者互斥，否则双发分片流）。本 effect
-       *    声明在 ④ 之前，读到的 sessionKeyRef 还是上一拍的值，判据成立。
-       *    让位后标记不清——④ 的完整快照收尾会清（见 sendSessionSnapshotNow）。
-       * ③ messages 显式入依赖：①② 的判据都读它，隐式挂在
-       *    sendSessionSnapshot 的间接依赖上不直观。
-       */
-      useEffect(() => {
-        if (view !== 'conversation' || !webReady) {
-          return;
-        }
-        if (!needsResumeSnapshotRef.current) {
-          return;
-        }
-        if (messages.length === 0) {
-          return;
-        }
-        if (sessionKeyRef.current !== sessionKey) {
-          return;
-        }
-        needsResumeSnapshotRef.current = false;
-        sendSessionSnapshot('preserve', undefined, true);
-      }, [view, webReady, sendSessionSnapshot, messages, sessionKey]);
-
       // ④ 快照（恢复链最后一步）
       useEffect(() => {
         if (!webReady) {
           return;
         }
-        if (sessionKeyRef.current !== sessionKey) {
-          sessionKeyRef.current = sessionKey;
-          prevStreamTextRef.current = '';
-          prevStreamThinkingRef.current = '';
-          prevFirstMessageIdRef.current = undefined;
-          prevMessageCountRef.current = 0;
-          needsOpenSnapshotRef.current = true;
-        }
-
+        // 无需再判「换会话」：切会话经 `key` 重挂，本组件整体重新初始化，
+        // `needsOpenSnapshotRef` 从 true 起、流式基线本来就是空的。
         if (needsOpenSnapshotRef.current) {
           if (messages.length === 0) {
             return;
@@ -2407,9 +2206,8 @@ export const ChatConversationWebView = memo(
       /**
        * 首挂 / repaintEpoch 重挂后重新计时（换文档 = 新一轮握手）。
        *
-       * 依赖里**没有 `sessionKey`**（第二阶段去 key 的直接后果）：去 key 之后切会话
-       * 不再销毁重建，文档还是那份、`ready` 不会重来——此时重启 8s 计时等于给一个
-       * 永远不会到来的握手兜底，用户每切一次会话就可能撞上「对话页加载失败」。
+       * 依赖里**没有 `sessionKey`**：切会话由调用方的 `key={chatScrollKey}`
+       * 销毁重建整个组件实例（首挂即重新计时），本组件实例存活期内它根本不会变。
        */
       useEffect(() => {
         armReadyTimeout();

@@ -150,104 +150,6 @@ export const CONVERSATION_DOCK_ACTIONS: readonly ConversationDockAction[] = [
 ];
 
 /* ------------------------------------------------------------------ *
- * 列表域（下行 sessionList / viewState · 上行 listAction）
- * ------------------------------------------------------------------ */
-
-/**
- * 会话列表行（下行 `sessionList` 的元素形状）。
- *
- * **纯数据、零业务推导**：三个徽标判据（生成中 / 已中断 / 当前）由 RN 侧算好后逐会话
- * 下发——`active` 是 manager 的真实判活（starting|running 单元集合），
- * `interrupted` 是水合回填的中断现场，`current` 是「当前会话」。web 侧**不得**自己
- * 推导任何一个（`current` 尤其推不出来：web 只知道自己渲染的是哪个 sessionKey，
- * 而宿主可能同时开着别的会话面板）。理由见 spec §桥协议扩展。
- */
-export type SessionListItem = {
-  readonly id: string;
-  /** 缺省回落 `id`（与现网 `item.title ?? item.id` 同款）。 */
-  readonly title?: string;
-  readonly updatedAtMs: number;
-  /** 「生成中」徽标 + meta 的「 · 活跃中」后缀，二者同判据。 */
-  readonly active: boolean;
-  /** 「已中断」徽标（RN 侧已与 active 互斥：真在跑就不标中断）。 */
-  readonly interrupted: boolean;
-  /** 「当前」位置徽标（批量态下 RN 不渲染它）。 */
-  readonly current: boolean;
-};
-
-/**
- * 下行 `sessionList` 载荷。
- *
- * `batchSelect` 是**可选**而非空数组：它的双重职责是「批量勾选集合」与「批量态开关」
- * （RN 的 `sessionBatchActive` 单独一个 prop）。字段缺省 = 不在批量态；给了（哪怕是
- * 空数组）= 在批量态、暂未勾选任何一行。合成一个字段省掉第二个布尔，省不掉的那层
- * 语义（勾选集合）本来就要传。
- */
-export type ConversationSessionListPayload = {
-  readonly sessions: readonly SessionListItem[];
-  readonly batchSelect?: readonly string[];
-};
-
-/** 当前显示哪个视图（宿主把 `chatSubview` 映射下发；web 侧只切 `data-view` 属性）。 */
-export type ConversationView = 'list' | 'conversation';
-
-export type ConversationViewStatePayload = {
-  readonly view: ConversationView;
-};
-
-/**
- * listAction 动作枚举（spec §桥协议扩展 · 上行）。
- *
- * 业务**全留 RN**：open 走 openConversation 状态机、delete 弹原生确认、rename 走既有
- * prompt、stopRun 走 manager 单元 abort。web 侧只做手势识别与命中判定。
- * `menuOpen` 只上报「点了 ⋮」，菜单本身由 RN 的 BottomSheetMenu 渲染（弹层留原生，
- * 见 spec §范围「不做」）。
- *
- * `batchDelete` / `batchExit` 是**批量头专有的两项**（wave-3）：批量 UI 归 web，
- * 但删不删、退出不退出由宿主定——web 侧只报「点了删除 / 点了取消」，确认链
- * （原生 Alert）与批量态真源（`useBatchSelection`）全在 RN。二者同 `create` 一样
- * **不带 sessionId**：作用于整个勾选集合，没有「哪一行」可言。
- */
-export type ConversationListAction =
-  | 'open'
-  | 'create'
-  | 'menuOpen'
-  | 'rename'
-  | 'copy'
-  | 'delete'
-  | 'stopRun'
-  | 'longPress'
-  | 'batchToggle'
-  | 'batchDelete'
-  | 'batchExit';
-
-export const CONVERSATION_LIST_ACTIONS: readonly ConversationListAction[] = [
-  'open',
-  'create',
-  'menuOpen',
-  'rename',
-  'copy',
-  'delete',
-  'stopRun',
-  'longPress',
-  'batchToggle',
-  'batchDelete',
-  'batchExit',
-];
-
-/**
- * 上行 `listAction` 载荷。
- *
- * `sessionId` 只在「作用于某一行」的动作上带（open/menuOpen/longPress/batchToggle/
- * rename/copy/delete/stopRun）；`create` / `batchDelete` / `batchExit` 不带
- * （前者没有行可指，后两者作用于整个勾选集合）。
- */
-export type ConversationListActionPayload = {
-  readonly kind: ConversationListAction;
-  readonly sessionId?: string;
-};
-
-/* ------------------------------------------------------------------ *
  * 下行消息清单（v2 信封）
  * ------------------------------------------------------------------ */
 
@@ -306,18 +208,6 @@ export const CONVERSATION_DOCK_TYPES: readonly string[] = [
   'selectAll',
 ];
 
-/**
- * 走 session-list 自有 handler 的下行 type（**第四域**，与前三张表并列）。
- *
- * 独立成域而不挂在 transcript/dock 域下：这两条的下游是 `#session-list` 这块独立视图，
- * 与转录行窗口化、composer 输入区都没有任何共享面；混进已有域会让 `dispatchRoute`
- * 的「该域本条无消息」判据失去意义。
- */
-export const CONVERSATION_LIST_TYPES: readonly string[] = [
-  'sessionList',
-  'viewState',
-];
-
 export type ConversationHostMessage = {
   readonly v?: number;
   readonly type?: string;
@@ -330,16 +220,12 @@ export type ConversationHostToWebType =
   | 'themeUpdate'
   | (typeof CONVERSATION_TRANSCRIPT_TYPES)[number]
   | (typeof CONVERSATION_COMPOSER_TYPES)[number]
-  | (typeof CONVERSATION_DOCK_TYPES)[number]
-  | (typeof CONVERSATION_LIST_TYPES)[number];
+  | (typeof CONVERSATION_DOCK_TYPES)[number];
 
 /**
- * Web → Host（**v:2 的只有新包自有的三条**；其余上行由两 runtime 的 v:1 单例负责）。
+ * Web → Host（**v:2 的只有新包自有的两条**；其余上行由两 runtime 的 v:1 单例负责）。
  *
  * 命名带 `V2` 是因为它只描述 v:2 那一小段——叫 `ConversationWebToHostType` 会
  * 被误读成「web→host 全量上行 type 清单」，而全量里还混着两 runtime 的 v:1 单例。
  */
-export type ConversationWebToHostV2Type =
-  | 'ready'
-  | 'dockAction'
-  | 'listAction';
+export type ConversationWebToHostV2Type = 'ready' | 'dockAction';

@@ -13,16 +13,17 @@
  * `useChatTabController` / `useChatComposerController` 都只在这里调，面板本体
  * 只管 header、workspace 面板与各类 RN Modal 开关。
  *
- * ## 第二阶段：面板常驻 + 列表视图透出（wave-2）
+ * ## 回滚 SPA 化之后的形态
  *
- * 1. **常驻挂载**：父层不再用 `chatSubview === 'conversation'` 条件渲染本面板
- *    （那正是「进出会话销毁重建 WebView」的另一半原因），`chatSubview` 改成 prop。
- *    面板据此把 `viewState`（列表/对话视图切换）经 `ChatConversationWebView` 下发。
- * 2. **列表视图 = 同一个 WebView 的另一个视图**：列表视图激活时，本面板只把
- *    「顶部 SegmentedControl + meta 条」收起（`display:none`），WebView 原样透出
- *    在下方——文档内部切 `data-view`，不重建、不握手。
- * 3. **会话行 ⋮ 菜单**从已退役的 `ChatSessionListPanel` 迁来（菜单本体留在 RN，
- *    见 spec §范围：BottomSheetMenu/Alert 不搬进 web）。
+ * 1. **面板随 `chatSubview` 条件渲染**：`ChatTabScreen` 在 `chatSubview ===
+ *    'conversation'` 时才挂本面板，会话列表（RN 的 `ChatSessionListPanel`）与它
+ *    平铺为两个兄弟——WebView 文档里不再有「列表视图」这回事，`viewState` /
+ *    `sessionList` / `onListAction` 一整套列表域已从宿主侧拆除。
+ * 2. **切会话经 key 重挂**：`<ChatConversationWebView>` 带
+ *    `key={chatScrollKey ?? 'no-session-scroll'}`，切会话销毁重建 WebView，
+ *    文档状态天然归零（这段 key 曾随 SPA 化被拆，本轮回滚恢复）。
+ * 3. **会话行 ⋮ 菜单**随之回迁 `ChatSessionListPanel`（菜单本体始终留在 RN：
+ *    BottomSheetMenu/Alert 不进 web）。
  */
 import React, {useCallback, useEffect, useMemo} from 'react';
 import {Platform, StyleSheet, Text, View} from 'react-native';
@@ -55,39 +56,10 @@ import {useChatTabContext} from './ChatTabProvider';
 import {useChatTabWorkspaceBackState} from './ChatTabNavigationProvider';
 import {useChatTabController} from './useChatTabController';
 import {useInterruptedPartialCommit} from './useInterruptedPartialCommit';
-import {
-  useSessionListBridge,
-  type SessionBatchSelection,
-} from './useSessionListBridge';
-import type {ChatSubview} from './useChatTabScope';
-
-/**
- * 未就绪 scope 的占位 id。
- *
- * 列表视图下 WebView **必须**挂载（它就是列表的载体），而此时可能一个会话都
- * 没选中——`projectId` / `sessionId` 为空。controller 侧（composer）要求两者皆
- * 必填字符串，故给一对哨兵值；这与面板原有的
- * `sessionKey={chatScrollKey ?? 'no-session'}` 是同一个既有做法。
- * 哨兵只影响 composer 的读口（草稿/typeahead 一律空），且列表视图下 dock 被
- * `data-view` 隐藏，用户碰不到它；一旦真选中会话，props 立刻换成真 id。
- */
-const NO_SCOPE_ID = 'no-session';
 
 export type ChatConversationPanelProps = {
   tokens: ThemeTokens;
   visible: boolean;
-  /**
-   * 当前子视图（第二阶段起**常驻挂载**，本 prop 是唯一视图真源）：
-   * `'sessions'` → 下发 `viewState: list`（列表视图透出），`'conversation'` → 对话视图。
-   */
-  chatSubview: ChatSubview;
-  /** 批量选择态（真源在 `ChatTabScreen`，返回键与列表共用同一份）。 */
-  sessionBatch: SessionBatchSelection;
-  /**
-   * 进对话（web 上行 `listAction/open`）：走父层那套状态机
-   * （setCurrentSession + 水化消息面 + 切子视图）。本面板不做导航。
-   */
-  onOpenConversation: (sessionId: string) => void;
   /**
    * ⛶ 全屏编辑入口：父层（ChatTabScreen）注入，转交 composer controller。
    * 本面板不做导航（chat-tab 目录零导航依赖），只当通道。
@@ -105,15 +77,11 @@ export type ChatConversationPanelProps = {
 function ChatConversationWebSurface(props: {
   readonly projectId: string;
   readonly sessionId: string;
-  /** 列表域载荷（对话视图下为 null = 本拍不推）。 */
-  readonly viewState: ReturnType<typeof useSessionListBridge>['viewState'];
-  readonly sessionList: ReturnType<typeof useSessionListBridge>['sessionListPayload'];
-  readonly onListAction: ReturnType<typeof useSessionListBridge>['onListAction'];
   readonly onOpenComposerFullscreen?: (
     payload: ComposerFullscreenPayload,
   ) => void;
 }) {
-  const {projectId, sessionId, viewState, sessionList, onListAction} = props;
+  const {projectId, sessionId} = props;
   const ctx = useChatTabContext();
   const controller = useChatTabController();
   const {
@@ -196,7 +164,12 @@ function ChatConversationWebSurface(props: {
     <>
       <ChatConversationWebView
         ref={transcriptWebRef}
-        sessionKey={chatScrollKey ?? NO_SCOPE_ID}
+        // 切会话经 key 重挂：销毁重建整个 WebView，文档内状态（转录滚动、
+        // 会话工作区游标等）天然归零，不必在宿主侧手动清场。SPA 化期间这段
+        // key 与配套的 sessionKey 清场链一并被拆（改为文档内切视图），
+        // 本轮回滚恢复。
+        key={chatScrollKey ?? 'no-session-scroll'}
+        sessionKey={chatScrollKey ?? 'no-session'}
         messages={chatMessages}
         hasMore={hasMoreMessages}
         agentRunning={unitActive}
@@ -237,12 +210,6 @@ function ChatConversationWebSurface(props: {
         composerTypeahead={composerState.typeahead}
         safeAreaBottom={composer.safeAreaBottom}
         onDockAction={composer.handleDockAction}
-        /* ---- 列表域（第二阶段：会话列表进同一文档） ---- */
-        // view 取 hook 里的唯一映射结果，别在本组件再手写一遍 chatSubview 三元
-        view={viewState.view}
-        // 对话视图下为 null = 本拍不推（攒着，切回列表时一次性补发最新快照）
-        sessionList={sessionList}
-        onListAction={onListAction}
       />
       {/* 两个选择器仍是 RN 全屏 Modal（spec Q2 定案）：选中后经 M7 通道回填正文。 */}
       <FileReferencePicker
@@ -269,9 +236,6 @@ function ChatConversationWebSurface(props: {
 export function ChatConversationPanel({
   tokens,
   visible,
-  chatSubview,
-  sessionBatch,
-  onOpenConversation,
   onOpenComposerFullscreen,
 }: ChatConversationPanelProps) {
   const ctx = useChatTabContext();
@@ -302,29 +266,6 @@ export function ChatConversationPanel({
     workspaceVfsRef,
   } = ctx;
 
-  // 列表视图激活 = 会话列表那一屏（列表本体在同一个 WebView 文档里透出）。
-  // 它是**唯一**的视图真源：顶部 chrome 收起、viewState 下发、列表快照下发、
-  // 工作区分支收起，四处全看它——别处别再各判一遍 chatSubview。
-  const listViewActive = chatSubview === 'sessions';
-
-  // 列表域接线（数据面 + 动作面，见 useSessionListBridge 文件头）。
-  const {
-    viewState,
-    sessionListPayload,
-    onListAction,
-    activeRunIds,
-    menuSessionId,
-    setMenuSessionId,
-  } = useSessionListBridge({
-    chatSubview,
-    batch: sessionBatch,
-    onOpenConversation,
-    // 批量删除的原生 Alert 确认链在本面板的 controller 上（web 只上行意图）。
-    // 直接透传函数引用即可：它内部是纯 useCallback([...])，身份稳定，
-    // 不会把 onListAction 连带重算。
-    confirmBatchDelete: controller.confirmBatchDeleteSessions,
-  });
-
   // 当前会话 run 是否活跃（单元投影派生：starting|running）。
   const unitActive =
     unitView?.status === 'starting' || unitView?.status === 'running';
@@ -340,9 +281,7 @@ export function ChatConversationPanel({
     if (setWorkspaceBackState == null) {
       return;
     }
-    // 列表视图下工作区不可见：注销回上级态，否则 Android 返回键会先去操作一个
-    // 用户看不见的文件管理器。
-    if (conversationPanel !== 'workspace' || listViewActive) {
+    if (conversationPanel !== 'workspace') {
       setWorkspaceBackState(null);
       return;
     }
@@ -355,17 +294,17 @@ export function ChatConversationPanel({
       canGoUp: handle.canGoUp(),
       goUp: () => handle.goUp(),
     });
-  }, [conversationPanel, listViewActive, setWorkspaceBackState, workspaceVfsRef]);
+  }, [conversationPanel, setWorkspaceBackState, workspaceVfsRef]);
 
   useEffect(() => {
     emitWorkspaceBackState();
   }, [emitWorkspaceBackState, vfsRefreshKey]);
 
   useEffect(() => {
-    if (conversationPanel === 'workspace' && !listViewActive) {
+    if (conversationPanel === 'workspace') {
       void workspaceVfsRef?.current?.reload();
     }
-  }, [conversationPanel, listViewActive, workspaceVfsRef]);
+  }, [conversationPanel, workspaceVfsRef]);
 
   // 顶部 meta 条点 agent / model 名 → 判锁定后开对应 picker，判据统一走 helper，
   // 不再各处手写 source/modelSource/hasDedicatedModel 的组合。
@@ -388,16 +327,9 @@ export function ChatConversationPanel({
     setModelPickerOpen(true);
   }, [agentMeta, showToast, setModelPickerOpen]);
 
-  // 对话面容器显隐：**列表视图下必须保持展开**——WebView 就在里面，它是列表的载体。
-  // 只有「工作区面板盖住对话面」这一种情况才收起来。
-  const workspaceActive = conversationPanel === 'workspace' && !listViewActive;
-  // 对话面容器显隐：只有「**对话**视图下的工作区面板盖住对话面」这一种情况才收起。
-  //
-  // 列表视图下必须保持展开——WebView 就在这个容器里，它正是列表的载体。判据里
-  // 的 `listViewActive` 不是冗余：删掉当前会话（`handleDeleteSession` 在删掉当前
-  // 会话时会 `setChatSubview('sessions')`）这条路能在 `conversationPanel ===
-  // 'workspace'` 时切走，于是容器被 display:none → 列表视图上是一片空白。
-  const chatPanelHidden = !listViewActive && conversationPanel !== 'chat';
+  // 「工作区面板盖住对话面」是唯一收起对话面的场景。
+  const workspaceActive = conversationPanel === 'workspace';
+  const chatPanelHidden = conversationPanel !== 'chat';
   const chatPanelStyle = [
     styles.chatPanel,
     chatPanelHidden && styles.panelHidden,
@@ -424,22 +356,14 @@ export function ChatConversationPanel({
       </>
     ) : null;
 
-  /**
-   * WebView 容器是否渲染。
-   *
-   * 列表视图下**即便一个会话都没选中也要渲染**——那一屏的列表就长在这个 WebView
-   * 里（scope 判空只在对话视图有意义，此时有占位文案兜底）。
-   */
-  const surfaceReady = listViewActive || (projectId != null && sessionId != null);
+  /** WebView 容器是否渲染：scope 就绪才挂，否则落「请先选择会话」占位。 */
+  const surfaceReady = projectId != null && sessionId != null;
   const chatBody = surfaceReady ? (
-    // 单 WebView：转录 + dock + 会话列表合并在同一文档内 flex 布局，高度变化
+    // 单 WebView：转录 + dock 合并在同一文档内 flex 布局，高度变化
     // 文档内消化，跨桥 heightChange 链彻底消失。
     <ChatConversationWebSurface
-      projectId={projectId ?? NO_SCOPE_ID}
-      sessionId={sessionId ?? NO_SCOPE_ID}
-      viewState={viewState}
-      sessionList={sessionListPayload}
-      onListAction={onListAction}
+      projectId={projectId!}
+      sessionId={sessionId!}
       onOpenComposerFullscreen={onOpenComposerFullscreen}
     />
   ) : null;
@@ -449,44 +373,32 @@ export function ChatConversationPanel({
       style={[styles.subviewFill, !visible && styles.panelHidden]}
       pointerEvents={visible ? 'auto' : 'none'}
     >
-      {/* 对话视图的「聊天 / 聊天工作区」切换条。列表视图下整行收起
-          （display:none）——列表视图有自己的切换条（会话列表面板那一条）。 */}
-      <View
-        style={listViewActive && styles.panelHidden}
-        pointerEvents={listViewActive ? 'none' : 'auto'}>
-        <SegmentedControl
-          tokens={tokens}
-          value={conversationPanel}
-          onChange={setConversationPanel}
-          options={[
-            {value: 'chat', label: '聊天', testID: 'tab-chat'},
-            {value: 'workspace', label: '聊天工作区', testID: 'tab-workspace'},
-          ]}
-        />
-      </View>
+      <SegmentedControl
+        tokens={tokens}
+        value={conversationPanel}
+        onChange={setConversationPanel}
+        options={[
+          {value: 'chat', label: '聊天', testID: 'tab-chat'},
+          {value: 'workspace', label: '聊天工作区', testID: 'tab-workspace'},
+        ]}
+      />
       {surfaceReady ? (
         <>
           {Platform.OS === 'android' ? (
             <View style={chatPanelStyle} pointerEvents={chatPointerEvents}>
-              {/* meta 条同属对话视图：列表视图下收起，WebView 顶到屏幕顶透出列表 */}
-              <View style={listViewActive && styles.panelHidden}>
-                {chatHeader}
-              </View>
+              {chatHeader}
               <AndroidKeyboardClipBody>
                 <View style={styles.transcriptHost}>{chatBody}</View>
               </AndroidKeyboardClipBody>
             </View>
           ) : (
             <View style={chatPanelStyle} pointerEvents={chatPointerEvents}>
-              <View style={listViewActive && styles.panelHidden}>
-                {chatHeader}
-              </View>
+              {chatHeader}
               <View style={styles.transcriptHost}>{chatBody}</View>
             </View>
           )}
-          {/* 工作区只在「确有选中会话」时存在（列表视图下 sessionId 可能为空，
-              此时没有会话级工作区可言——`sessionVfs` 恒为 null，此处显式带上
-              `sessionId != null` 一并收窄类型）。 */}
+          {/* 工作区只在「确有选中会话」时存在（`surfaceReady` 已保证两者皆非空，
+              这里显式带上 `sessionId != null` 一并收窄类型）。 */}
           {sessionVfs && sessionWorktree && sessionId != null ? (
             <View
               style={[
@@ -531,44 +443,6 @@ export function ChatConversationPanel({
           <Text style={{color: tokens.textSecondary}}>请先选择会话</Text>
         </View>
       )}
-      {/* 会话行 ⋮ 菜单（从已退役的 ChatSessionListPanel 迁来，spec §范围：原生弹层
-          留 RN）。web 侧只上报「点了 ⋮」（listAction/menuOpen），菜单项与执行
-          都在这里；「停止生成」按 manager 的真实判活现挂，与退役前一字不差。 */}
-      <BottomSheetMenu
-        visible={menuSessionId != null}
-        items={
-          menuSessionId != null && activeRunIds.has(menuSessionId)
-            ? [
-                {label: '停止生成', action: 'stop-generating'},
-                {label: '重命名', action: 'rename'},
-                {label: '复制', action: 'copy'},
-                {label: '删除', action: 'delete', danger: true},
-              ]
-            : [
-                {label: '重命名', action: 'rename'},
-                {label: '复制', action: 'copy'},
-                {label: '删除', action: 'delete', danger: true},
-              ]
-        }
-        onClose={() => setMenuSessionId(undefined)}
-        onSelect={action => {
-          const sid = menuSessionId;
-          setMenuSessionId(undefined);
-          if (sid == null) {
-            return;
-          }
-          // 菜单项 → listAction 枚举的同款映射：菜单与 web 直报两条路走同一个执行口
-          if (action === 'stop-generating') {
-            onListAction({kind: 'stopRun', sessionId: sid});
-          } else if (action === 'rename') {
-            onListAction({kind: 'rename', sessionId: sid});
-          } else if (action === 'copy') {
-            onListAction({kind: 'copy', sessionId: sid});
-          } else if (action === 'delete') {
-            onListAction({kind: 'delete', sessionId: sid});
-          }
-        }}
-      />
       <BottomSheetMenu
         visible={sessionDrawerOpen}
         title="会话操作"

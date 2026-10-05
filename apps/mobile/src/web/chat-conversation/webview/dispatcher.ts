@@ -1,7 +1,7 @@
 /**
  * 合成包下行消息 dispatcher（chat-webview-unify Step 5 · web 半）。
  *
- * 职责（spec §合成 dispatcher 契约五条之 2/5）：
+ * 职责（spec §合成 dispatcher 契约；列表域已随 SPA 回滚拆除）：
  * 1. 解析 v2 信封，按 §下行消息路由表分流；
  * 2. transcript / composer 两域**重打包为 v1 信封**再喂各自 runtime 的既有
  *    `handleHostMessage(raw)`——两个 runtime 内部零改动（其 `BRIDGE_V` 硬编码
@@ -10,9 +10,7 @@
  * 3. `themeUpdate`（9 键超集）**fan-out 三方**——transcript + composer + dock 自有
  *    `applyHostTheme`，三者写的都是 documentElement、键集互为超集不漏键；
  * 4. 聚合 `init` 拆包：transcript 喂 `{theme, flags}`、composer 喂
- *    `{mode, disabled, theme, metrics, placeholder}`、`safeAreaBottom` 由 dock 消费；
- * 5. **列表域（第四域）**：`sessionList` / `viewState` 走 `applyListRoute` 一条回调，
- *    与前三域正交、互不影响（切列表视图不该惊动转录与输入框）。
+ *    `{mode, disabled, theme, metrics, placeholder}`、`safeAreaBottom` 由 dock 消费。
  *
  * 路由判定本身是**纯函数**（`routeHostMessage`）：不碰 DOM、不 post，输入一条
  * raw 消息输出一份「各域该收到什么」的路由表——单测直接在 node 环境断言
@@ -31,15 +29,11 @@ import {
   CONVERSATION_COMPOSER_METRICS,
   CONVERSATION_COMPOSER_TYPES,
   CONVERSATION_DOCK_TYPES,
-  CONVERSATION_LIST_TYPES,
   CONVERSATION_TRANSCRIPT_TYPES,
   type ConversationComposerState,
   type ConversationHostMessage,
-  type ConversationSessionListPayload,
   type ConversationTheme,
   type ConversationTypeaheadSource,
-  type ConversationView,
-  type SessionListItem,
 } from './model';
 
 /**
@@ -82,25 +76,13 @@ export type ConversationDockRoute =
   | {readonly kind: 'selectAll'};
 
 /**
- * 列表域要处理的下行意图（第四域，自有 handler 消费）。
- *
- * 显式枚举逐条列举，**不带默认分支**——与 dock 域同款红线：清单里登记了 type 而
- * 分支没跟上时，宁可空路由也不要让宿主发来的新意图被猜成别的动作。
- */
-export type ConversationListRoute =
-  | {readonly kind: 'sessionList'; readonly payload: ConversationSessionListPayload}
-  | {readonly kind: 'viewState'; readonly view: ConversationView};
-
-/**
- * 一次下行的路由结果：四个域各自「该收到什么」。
+ * 一次下行的路由结果：三个域各自「该收到什么」。
  * `null` = 该域本条无消息（不调用其 handler）。
  */
 export type ConversationRoute = {
   readonly transcript: V1Envelope | null;
   readonly composer: V1Envelope | null;
   readonly dock: ConversationDockRoute | null;
-  /** 列表域（第四域）：`sessionList` / `viewState` 两条走这里，与前三域正交。 */
-  readonly list: ConversationListRoute | null;
   /** `themeUpdate` 时给 dock 的第三份 fan-out（transcript/composer 走上面两个字段）。 */
   readonly theme: ConversationTheme | null;
 };
@@ -109,7 +91,6 @@ const EMPTY_ROUTE: ConversationRoute = {
   transcript: null,
   composer: null,
   dock: null,
-  list: null,
   theme: null,
 };
 
@@ -194,7 +175,6 @@ export function routeHostMessage(raw: unknown): ConversationRoute | null {
         safeAreaBottom: split.safeAreaBottom,
         transcriptOnly: payload.transcriptOnly === true,
       },
-      list: null,
       theme: null,
     };
   }
@@ -209,7 +189,6 @@ export function routeHostMessage(raw: unknown): ConversationRoute | null {
       transcript: v1('themeUpdate', {theme}),
       composer: v1('themeUpdate', {theme}),
       dock: null,
-      list: null,
       theme,
     };
   }
@@ -246,22 +225,6 @@ export function routeHostMessage(raw: unknown): ConversationRoute | null {
     return EMPTY_ROUTE;
   }
 
-  if (contains(CONVERSATION_LIST_TYPES, type)) {
-    // 同 dock 域的显式分支纪律：登记了 type 却没写分支时**空路由**，不猜动作。
-    // 这条尤其要紧——list 域的兜底若写成「不是 sessionList 就是 viewState」，
-    // 将来新增的 `sessionDetail` 类下行会被当成「切到列表视图」，用户当场被踢出对话。
-    if (type === 'sessionList') {
-      return {
-        ...EMPTY_ROUTE,
-        list: {kind: 'sessionList', payload: coerceSessionListPayload(payload)},
-      };
-    }
-    if (type === 'viewState') {
-      return {...EMPTY_ROUTE, list: {kind: 'viewState', view: coerceView(payload)}};
-    }
-    return EMPTY_ROUTE;
-  }
-
   // 未知 type：静默丢弃（与两个 runtime 的 matchHostMessage 同口径）。
   return EMPTY_ROUTE;
 }
@@ -286,68 +249,12 @@ export function coerceComposerState(
   };
 }
 
-/** 单条会话行宽松取值：坏字段逐项回落，绝不因一行畸形打挂整张列表。 */
-export function coerceSessionListItem(raw: unknown): SessionListItem {
-  const item = (raw ?? {}) as Record<string, unknown>;
-  const id = str(item.id, '');
-  return {
-    id,
-    // title 缺省回落 id（现网 `item.title ?? item.id` 的同款口径）
-    ...(typeof item.title === 'string' ? {title: item.title} : {}),
-    updatedAtMs: num(item.updatedAtMs, 0),
-    active: item.active === true,
-    interrupted: item.interrupted === true,
-    current: item.current === true,
-  };
-}
-
-/**
- * `sessionList` 载荷宽松取值。
- *
- * `batchSelect` 保持**可选**语义：`undefined` = 不在批量态；给了（哪怕空数组）= 批量态。
- * 丢了这个区分，批量态下点行会走成「打开会话」而不是「勾选」——用户看到的是点一下
- * 直接跳进对话，且没有返回路径（返回键判定看的是 chatSubview，已被 open 改掉了）。
- */
-export function coerceSessionListPayload(
-  payload: ConversationHostMessage['payload'] | Record<string, unknown>,
-): ConversationSessionListPayload {
-  const raw = (payload ?? {}) as Record<string, unknown>;
-  return {
-    sessions: Array.isArray(raw.sessions)
-      ? raw.sessions.map(coerceSessionListItem)
-      : [],
-    ...(Array.isArray(raw.batchSelect)
-      ? {
-          batchSelect: (raw.batchSelect as unknown[]).filter(
-            (id): id is string => typeof id === 'string',
-          ),
-        }
-      : {}),
-  };
-}
-
-/**
- * `viewState` 宽松取值：**只认两个合法值**。
- *
- * 未知值回落 `conversation` 而不是 `list`：默认落列表意味着「宿主下发了一条 web 不认的
- * 消息」时，用户正写着的对话会被换成一张列表、正文连同草稿一起看不见。落 conversation
- * 最多是「这次切换没生效」，损害小一个量级。
- */
-export function coerceView(
-  payload: ConversationHostMessage['payload'] | Record<string, unknown>,
-): ConversationView {
-  const raw = (payload ?? {}) as Record<string, unknown>;
-  return raw.view === 'list' ? 'list' : 'conversation';
-}
-
-/** dispatcher 依赖的最小面（两 runtime 的 `handleHostMessage` + dock / list handler）。 */
+/** dispatcher 依赖的最小面（两 runtime 的 `handleHostMessage` + dock handler）。 */
 export type ConversationDispatcherDeps = {
   readonly handleTranscript: (raw: unknown) => void;
   readonly handleComposer: (raw: unknown) => void;
   readonly applyDockRoute: (route: ConversationDockRoute) => void;
   readonly applyDockTheme: (theme: ConversationTheme) => void;
-  /** 列表域第四回调：`sessionList` 渲染行 / `viewState` 切 data-view。 */
-  readonly applyListRoute: (route: ConversationListRoute) => void;
 };
 
 /** 路由表 → 副作用（分开是为了单测能只测纯路由、或只测副作用投递）。 */
@@ -366,9 +273,6 @@ export function dispatchRoute(
   }
   if (route.dock != null) {
     deps.applyDockRoute(route.dock);
-  }
-  if (route.list != null) {
-    deps.applyListRoute(route.list);
   }
   if (route.theme != null) {
     deps.applyDockTheme(route.theme);
