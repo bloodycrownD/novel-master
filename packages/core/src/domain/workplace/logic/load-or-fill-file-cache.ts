@@ -42,8 +42,10 @@ export type LoadOrFillFileCacheDeps = {
  * filename 不读盘；缺失用 `(missing)` 占位。
  *
  * ⚠️ 占位 payload **不写 file_cache**（降级来源一律不落库，见 {@link FillResult.degraded}）：
- * `file_cache` 命中无条件返回、**无 mtime 校验**，改写它的只有改规则 / 手动压缩 /
- * 置位 / 会话删除（自动压缩不清，见 run-compaction 头注释）⇒ 一次偶发读失败就会
+ * `file_cache` 命中无条件返回、**无 mtime 校验**，改写它的只有改规则
+ * （`refreshRuleSnapshot`）/ 手动压缩 / 置位 / 回滚与截尾（`truncateTailInTransaction`
+ * 清 `SESSION_KKV_COMPOSER_STATUS_DOMAINS`，含本域）/ 会话删除（自动压缩不清，
+ * 见 run-compaction 头注释）⇒ 一次偶发读失败就会
  * 让该 path 在本会话余下所有轮次都渲染成 `(missing)`，且再也不会自愈。
  * 这与同域「超大文件占位符不写 cache」的既有决策自相矛盾。
  *
