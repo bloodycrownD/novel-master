@@ -929,7 +929,9 @@ export type PromptToolGroupResultDto = {
   readonly toolUseId: string;
   readonly ok: boolean;
   /**
-   * 结果正文 —— **cards 为显示层口径（已剥行号），items/body 为 wire parity 口径（保留行号）**。
+   * 结果正文 —— **显示层口径（已剥行号）**。wire parity 的带行号原文在 core
+   * `PromptPreviewTurn.items` / `.body`，不经本 DTO 下发（`PromptPreviewTurnDto`
+   * 只有 cards，无 items/body 字段）。
    *
    * 剥的是 read / skill load 的 `padStart(6," ")` 右对齐行号（判据 `^ +\d+\|`）；
    * 形状与 core 的 `PromptToolGroupResultData` 逐字段一致。
@@ -984,7 +986,9 @@ export type PromptWorkplaceFileDto = {
   /** VFS 逻辑路径（kkv 规则快照条目原值）。 */
   readonly path: string;
   /**
-   * 块内正文 —— **cards 为显示层口径（已剥行号），items/body 为 wire parity 口径（保留行号）**。
+   * 块内正文 —— **显示层口径（已剥行号）**。wire parity 的带行号原文在 core
+   * `PromptPreviewTurn.items` / `.body`，不经本 DTO 下发（`PromptPreviewTurnDto`
+   * 只有 cards，无 items/body 字段）。
    *
    * 判据 `^\d+\|`（零前导空格），逐行至多剥一次；header 档为 front-matter 行，
    * 两个兜底（`（无 Front Matter）` / `（空 Front Matter）`）同形一并剥前缀。
