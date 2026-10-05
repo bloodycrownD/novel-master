@@ -18,7 +18,7 @@
  * 展开态是**受控 map**（轮 key = `turn.id`，组卡 key = `${turn.id}::${card.id}`）：
  * 长会话一次只留需要看的展开区，重渲染不丢态。
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   PromptPreviewTurnDto,
   PromptTextCardDto,
@@ -66,9 +66,19 @@ export function RealPromptPanel({
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   // 全屏 Modal 打开中的内容（null = 未打开）。
   const [fullscreen, setFullscreen] = useState<FullscreenTarget | null>(null);
+  // load 的请求序号（竞态守卫）：只认最后一次发起的请求，旧响应后到直接丢弃。
+  const requestIdRef = useRef(0);
 
   const load = useCallback(async () => {
+    // 竞态守卫（对齐 mobile 侧 requestIdRef）：`load` 的旧 promise 闭包带着旧的
+    // projectId/sessionId，在途期间切了会话照样会回来无条件 setTurns，把别的会话的
+    // 轮卡写进面板（且会一直留到下一次重取）。本迭代新增的 `session-compacted`
+    // 订阅又多了一条触发源，这条路径从「偶发」变成「可达」，故补序号守卫。
+    const requestId = ++requestIdRef.current;
     const result = await ipcPromptRealPreview({ projectId, sessionId });
+    if (requestId !== requestIdRef.current) {
+      return;
+    }
     if (result.ok) {
       // 归一化 `cards` 兜底：Electron dev 下 renderer 会 HMR 而 main 进程不重启，
       // 旧 main 下发的 payload 没有 `cards` 字段，裸读会在展开轮卡时抛

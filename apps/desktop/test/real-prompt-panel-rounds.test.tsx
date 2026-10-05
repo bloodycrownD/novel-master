@@ -259,6 +259,17 @@ class CustomEventStub {
   }
 }
 
+/**
+ * 排队的手控响应：入队后由用例自己决定何时落地、落地什么数据。
+ *
+ * 默认桩是 `Promise.resolve(...)`，挂载那次取数必然先落定，**构造不出「旧的响应
+ * 后到」**——竞态守卫（T-PR3b）需要一个可挂 pending、可按序 resolve 的桩，故加它。
+ */
+interface QueuedInvokeResponse {
+  /** 落地这次响应（不传则用桩当前的 `currentTurns`）。 */
+  resolve: (data?: PromptPreviewTurnDto[]) => void;
+}
+
 /** 挂全局 window.novelMasterDesktop + document 桩，返回还原函数。 */
 interface InstalledGlobals {
   restore: () => void;
@@ -271,6 +282,8 @@ interface InstalledGlobals {
   ipcInvokeCount: () => number;
   /** T-PR3：当前 window 上某类事件的监听器个数（卸载清理断言用）。 */
   listenerCount: (type: string) => number;
+  /** T-PR3b：把下一次（或再下一次）取数的响应挂成 pending，由用例控制落地时机。 */
+  queueInvokeResponse: (data?: PromptPreviewTurnDto[]) => QueuedInvokeResponse;
 }
 
 function installGlobals(turns: PromptPreviewTurnDto[]): InstalledGlobals {
@@ -293,12 +306,23 @@ function installGlobals(turns: PromptPreviewTurnDto[]): InstalledGlobals {
   const ipcChannel = "nm:prompt/realPreview";
   let currentTurns = turns;
   let invokeCount = 0;
+  // 手控响应队列（按调用序消费，T-PR3b 用）：入队的槽位在对应 invoke 到来时被领走，
+  // 领走前不动、领走后由用例的 `resolve()` 决定何时落地。
+  const queuedResponses: Array<{
+    settle: (data: PromptPreviewTurnDto[]) => void;
+  }> = [];
 
   g.window = {
     novelMasterDesktop: {
       invoke: (channel: string) => {
         if (channel === ipcChannel) {
           invokeCount += 1;
+          const slot = queuedResponses.shift();
+          if (slot) {
+            return new Promise((resolve) => {
+              slot.settle = (data) => resolve({ ok: true, data });
+            });
+          }
           return Promise.resolve({ ok: true, data: currentTurns });
         }
         return Promise.reject(new Error(`测试未预期的 IPC channel: ${channel}`));
@@ -344,6 +368,17 @@ function installGlobals(turns: PromptPreviewTurnDto[]): InstalledGlobals {
     },
     ipcInvokeCount: () => invokeCount,
     listenerCount: (type) => listeners.get(type)?.length ?? 0,
+    queueInvokeResponse: (data) => {
+      const slot: { settle: (next: PromptPreviewTurnDto[]) => void } = {
+        settle: () => {
+          throw new Error("该排队响应尚未被 invoke 领走，无处落地");
+        },
+      };
+      queuedResponses.push(slot);
+      return {
+        resolve: (next) => slot.settle(next ?? data ?? currentTurns),
+      };
+    },
     restore: () => {
       g.window = prevWindow;
       g.document = prevDocument;
@@ -1087,6 +1122,9 @@ describe("T-PR3：手动压缩成功后按 sessionId 订阅 window 事件重取"
   let setTurns: (next: PromptPreviewTurnDto[]) => void;
   let ipcInvokeCount: () => number;
   let listenerCount: (type: string) => number;
+  let queueInvokeResponse: (
+    data?: PromptPreviewTurnDto[],
+  ) => QueuedInvokeResponse;
 
   beforeEach(() => {
     const installed = installGlobals(TURNS);
@@ -1095,6 +1133,7 @@ describe("T-PR3：手动压缩成功后按 sessionId 订阅 window 事件重取"
     setTurns = installed.setTurns;
     ipcInvokeCount = installed.ipcInvokeCount;
     listenerCount = installed.listenerCount;
+    queueInvokeResponse = installed.queueInvokeResponse;
   });
 
   afterEach(() => {
@@ -1118,6 +1157,45 @@ describe("T-PR3：手动压缩成功后按 sessionId 订阅 window 事件重取"
       classListNodes(root, "prompt-turn-card").map((n) => n.props["data-turn-id"]),
       ["turn-11"],
       "重取后的轮卡应为新数据",
+    );
+  });
+
+  it("T-PR3b：旧的取数响应后到 → 不覆盖新数据（load 竞态守卫，对齐 mobile T-PR2）", async () => {
+    // 两次取数的响应都挂成 pending：#1 = 挂载那次，#2 = 压缩事件触发那次。
+    // 前置：默认桩是 Promise.resolve，挂载响应必先落定，构造不出「旧的在前」——
+    // 故必须先入队两个手控响应，再让它们按调用序被 invoke 领走。
+    const stale = queueInvokeResponse(TURNS);
+    const fresh = queueInvokeResponse(TURNS_GROUP_STATES);
+
+    const renderer = await mountPanel();
+    const root = renderer.root;
+    const turnIds = () =>
+      classListNodes(root, "prompt-turn-card").map((n) => n.props["data-turn-id"]);
+    assert.equal(ipcInvokeCount(), 1, "挂载时应已发起一次取数");
+    assert.deepEqual(turnIds(), [], "响应还没落地，面板上无轮卡");
+
+    // #1 仍 pending，此时压缩事件触发第二次取数（#2）
+    await act(async () => {
+      dispatchWindowEvent("session-compacted", { sessionId: "s1" });
+    });
+    assert.equal(ipcInvokeCount(), 2, "压缩事件应触发第二次取数");
+    assert.deepEqual(turnIds(), [], "两次响应都还没落地");
+
+    // 新数据先落地，成为面板当前数据
+    await act(async () => {
+      fresh.resolve();
+    });
+    assert.deepEqual(turnIds(), ["turn-11"], "第二次（新）响应应成为面板数据");
+
+    // 旧响应后到：必须被序号守卫丢弃，否则旧会话轮卡会盖回来并一直留到下一次重取
+    await act(async () => {
+      stale.resolve();
+    });
+    assert.equal(ipcInvokeCount(), 2, "不应因过期响应再触发任何取数");
+    assert.deepEqual(
+      turnIds(),
+      ["turn-11"],
+      "旧响应后到不得覆盖新数据（缺 requestIdRef 守卫时这里会变回 TURNS 的 4 张）",
     );
   });
 
