@@ -5,6 +5,7 @@
  * T-CC2/T-CC3 用真实 DB fixture 验证 runCompaction 端到端副作用；
  * T-CC4 用抛异常的 messageTranscriptEffects stub 验证降级返回；
  * T-CR1 验证手动压缩清 `rule_snapshot` + `file_cache`，
+ * T-CR1b 验证 hide 命中 0 条时 manual 仍清两域且 ok:true（短会话真实路径），
  * T-CR2 验证 auto（不传 trigger / 显式 "auto"）两域保留，
  * T-CR3 是 T-CC4 的 manual 变量断言（hide 失败 → ok:false 且两域不清），
  * T-CR4 验证清域失败只 warn、不把压缩成功翻成失败。
@@ -254,6 +255,50 @@ describe("runCompaction", () => {
     // prompt token cache 失效断言与 auto 路径完全一致（口径不变）。
     assert.equal(sessionApiPromptTokenCache.get(sessionId), undefined);
     await assertPromptTokenRowGone(sessionId);
+  });
+
+  it("T-CR1b：hide 无可隐藏范围（锚不出真用户输入）时 manual 仍清两域且 ok:true", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const sessionRow = await ctx.sessions.create(project.id);
+    const sessionId = sessionRow.id;
+
+    // 只放 2 条 assistant：depth 只有 1 / 0，都小于 startDepth=6，
+    // slice 内一条消息都圈不进（更谈不上锚定真用户输入），hide 直接早退、
+    // **不抛错也不隐藏任何消息**——短会话用户点「压缩上下文」的真实路径。
+    await appendMany(ctx.messages, sessionId, ["assistant", "assistant"]);
+
+    await ctx.sessionKkv.set(sessionId, RULE_SNAPSHOT, "canon", "snap");
+    await ctx.sessionKkv.set(sessionId, FILE_CACHE, "fc-key", "fc-val");
+
+    const result = await runCompaction(
+      {
+        sessionKkv: ctx.sessionKkv,
+        messages: ctx.messages,
+        messageTranscriptEffects:
+          createMessageTranscriptEffectsService(ctx.conn),
+      },
+      {
+        sessionId,
+        projectId: project.id,
+        hideStartDepth: 6,
+        trigger: "manual",
+      },
+    );
+
+    // spec《总体方案》口径：`ok:true` 即刷，**与 hide 实际命中数无关**。
+    assert.equal(result.ok, true);
+
+    // 一条都没隐藏（本用例存在的意义：盖住「hide 命中 0 条」这条分支）。
+    const list = await ctx.messages.listBySession(sessionId);
+    assert.equal(list.filter((m) => m.hidden).length, 0);
+
+    // 两域照清：把清域挪进 `hiddenCount > 0` 分支（看似自然的优化）时本用例红。
+    assert.deepEqual(
+      await ctx.sessionKkv.listKeys(sessionId, RULE_SNAPSHOT),
+      []
+    );
+    assert.deepEqual(await ctx.sessionKkv.listKeys(sessionId, FILE_CACHE), []);
   });
 
   it("T-CR4（manual 容错）：clearDomain 抛错时吞错 + warn，ok:true 照旧返回", async () => {

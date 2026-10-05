@@ -1332,6 +1332,24 @@ describe("T-PL7 wire 不变（三段结构判据）", () => {
     // 段 id 集合与 cards 存在与否无关（parity 面未被剥离改动过）。
     assert.deepEqual(itemIds([turn]), [["prompt-workplace"]]);
   });
+
+  it("④ workplace 合成段的 items / body 也保留行号（cards 已剥，两条通道各钉一次）", async () => {
+    // ③ 只盖了普通 chat 轮；本迭代真正剥离的 workplace 合成段此前无断言——
+    // 默认 ctx 的 `workplaceDisplay` 是无行号字面量 "WT"，无从验起。这里显式
+    // 给一条**带行号**的展示串（`ctx.workplaceDisplay` 是 wire 侧通道，
+    // `ctx.workplaceFiles` 才是 cards 侧通道），把分叉钉死。
+    const ctx: PromptRenderContext = {
+      ...ctxOf([], "<file path=\"a.md\">\n1|第一行\n2|第二行\n</file>"),
+      workplaceFiles: [{ path: "a.md", display: "full", body: "1|第一行\n2|第二行" }],
+    };
+    const turns = await buildPromptPreviewTurnsFromLayout(workplaceLayout, ctx);
+    const turn = turns.find((t) => t.id === "prompt-workplace")!;
+    // wire parity 侧：items / body 一字未动（剥行号只发生在 cards 构造层）。
+    assert.match(turn.items[0]!.body, /1\|第一行\n2\|第二行/);
+    assert.match(turn.body, /1\|第一行\n2\|第二行/);
+    // 显示层侧：同一次组装的 workplace 组卡已剥——一正一反钉死分叉方向。
+    assert.equal(workplaceFilesOf(turn)[0]!.body, "第一行\n第二行");
+  });
 });
 
 describe("T-PL8 metaText 字数按剥后正文", () => {
@@ -1398,6 +1416,30 @@ describe("T-PL9 user 附件 JSON 转义形态定向剥离（Step 7）", () => {
     assert.doesNotMatch(body, /\\n\d+\|/);
   });
 
+  it("userAttach 轮的 items / body 保留行号（parity 面），cards 已剥", async () => {
+    // ① 只断 `cards[0].body`。这里内联组装整轮，把「剥只发生在 cards 构造层」
+    // 钉在附件段上：剥离一旦上提到 `toPreviewSegment` / `segment.body`，
+    // 本用例的 items/body 断言立刻红。
+    const wrapped = userAttachBody("1|第一行\n2|第二行");
+    const messages: ChatMessage[] = [
+      blocksMessage("user", textBlocks(wrapped).blocks, 1),
+      message("assistant", "好", 2),
+    ];
+    const turns = await buildPromptPreviewTurnsFromLayout(
+      chatOnlyLayout,
+      ctxOf(messages, "")
+    );
+    const turn = turns[0]!;
+    // wire parity 侧：段 body 原样带行号。
+    assert.match(turn.items[0]!.body, /"content": "1\|第一行\\n2\|第二行"/);
+    assert.match(turn.body, /"content": "1\|第一行\\n2\|第二行"/);
+    // 显示层侧：同一轮的 text 卡已剥成无行号形态。
+    assert.match(
+      turn.cards[0]!.type === "text" ? turn.cards[0]!.body : "",
+      /"content": "第一行\\n第二行"/
+    );
+  });
+
   it("filename 档 `1|basename` 与 header 兜底同样剥前缀", async () => {
     const body = await userCardBody(userAttachBody("1|草稿.txt", "notes/草稿.txt"));
     assert.match(body, /"content": "草稿\.txt"/);
@@ -1418,6 +1460,25 @@ describe("T-PL9 user 附件 JSON 转义形态定向剥离（Step 7）", () => {
       { name: "a.md", source: "user_ops", type: "text", content: actionXml },
     ]);
     assert.equal(await userCardBody(wrapped), wrapped);
+  });
+
+  it("workplaceChange 块同样剥（与 userAttach 同判据）", async () => {
+    // `LINE_NUMBERED_ATTACHMENT_ACTION` 显式枚举 `userAttach|workplaceChange`
+    // 两个 action；此前只测了前者。工作区规则调整变更卡（workplaceChange）
+    // 是生产常客，枚举被误改/收窄成只 userAttach 时本用例红。
+    const actionXml = buildFileRefActionXml({
+      action: "workplaceChange",
+      path: "notes/a.md",
+      content: "1|第一行\n2|第二行",
+      display: "full",
+    });
+    const wrapped = wrapUserMessageForLlm("规则改了", [
+      { name: "a.md", source: "attach", type: "text", content: actionXml },
+    ]);
+    const body = await userCardBody(wrapped);
+    assert.match(body, /"content": "第一行\\n第二行"/);
+    // 转义形态残留检查（与 ① 同款判据：值内换行是 `\n` 两字符）。
+    assert.doesNotMatch(body, /\\n\d+\|/);
   });
 
   it("`<user-input>` 内层用户正文零改动（摘要取值也不受影响）", async () => {
