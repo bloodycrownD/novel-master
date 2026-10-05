@@ -571,7 +571,7 @@ async function loadChatPromptTokenStatsNow(
  * - **run 在途即跳过本轮**（r3-dt-align 第 2 层，判活源与读口同款）：本路径是
  *   完整口径 resolve（整串级重活），与发送链抢同一条 SQLite 连接。手动压缩 IPC
  *   自 2026-10-05 起有 run 在途门禁（handlers/compaction.ts 拦截返回
- *   run-in-flight，压缩本体不会执行）；本防御保留用于门禁的注册时序残窗与
+ *   AGENT_RUN_IN_FLIGHT，压缩本体不会执行）；本防御保留用于门禁的注册时序残窗与
  *   未来新增的直连调用方（run 在途时只是「升级变慢」，不破「IPC 返回前已暖好」
  *   的不变式——压缩本身已完成，chip 晚一拍到精确档而已）。
  *   与 mobile 一致：这里只查判活，不把 shouldBail 透传进 resolve（压缩的语义
