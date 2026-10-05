@@ -104,21 +104,21 @@ export async function runCompaction(
   // 手动压缩：清 workplace 两域，让下一次拼提示词时按当前工作区完整刷新
   // （新文件进清单、正文重读）。失败只吞错 + warn——file_cache 是纯加速层，
   // 清不掉最多多读一次 VFS，不能把「压缩成功」翻成「压缩失败」。
+  // 两域各自独立 try：rule_snapshot 清失败不能拦住 file_cache 的清空，
+  // 否则快照已重评估而正文缓存命中旧正文，静默沿用旧内容。
   if ((params.trigger ?? "auto") === "manual") {
-    try {
-      await deps.sessionKkv.clearDomain(
-        params.sessionId,
-        SESSION_KKV_DOMAIN_RULE_SNAPSHOT
-      );
-      await deps.sessionKkv.clearDomain(
-        params.sessionId,
-        SESSION_KKV_DOMAIN_FILE_CACHE
-      );
-    } catch (error) {
-      console.warn(
-        `runCompaction: 手动压缩后 best-effort 清空 workplace 两域失败（session=${params.sessionId}）`,
-        error
-      );
+    for (const domain of [
+      SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
+      SESSION_KKV_DOMAIN_FILE_CACHE,
+    ]) {
+      try {
+        await deps.sessionKkv.clearDomain(params.sessionId, domain);
+      } catch (error) {
+        console.warn(
+          `runCompaction: 手动压缩后 best-effort 清空 ${domain} 失败（session=${params.sessionId}）`,
+          error
+        );
+      }
     }
   }
 
