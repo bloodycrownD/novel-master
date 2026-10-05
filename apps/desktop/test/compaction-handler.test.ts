@@ -1,18 +1,25 @@
 /**
  * Manual 压缩 IPC 测试：handleCompactionManual 调 runCompaction 后的行为。
  *
- * T-IPC1：runCompaction 成功后**不清**预置的 session kkv（file_cache /
- * rule_snapshot 都保留——2026-09-29 修正：压缩只动消息可见性，与按内容
- * 寻址的文件缓存正交；置位 / 导入 / 规则刷新才清），保留 user_vfs_pending，
- * 并调 notifyComposerStatusAfterFloorOrCompaction（SPEC L274）。
+ * T-IPC1R（原 T-IPC1 反转）：runCompaction 以 `trigger:"manual"` 成功后**清掉**
+ * 预置的 session kkv（file_cache / rule_snapshot 都空——手动压缩是用户主动的
+ * 重整意图，下一次拼提示词时 workplace 块按当前工作区重评估；自动压缩才不清），
+ * 保留 user_vfs_pending，并调 notifyComposerStatusAfterFloorOrCompaction。
  * 该函数最终经 notifyComposerAttachmentsSuggestToRenderer 向 renderer 广播
  * COMPOSER_ATTACHMENTS_SUGGEST，用 setComposerAttachmentsSuggestForwardTarget 注入假 webContents
  * 捕获 send，即可观测调用是否发生（与同目录其他测试同范式）。
  *
+ * T-CR6：run 在途时手动压缩被拦。注入方式是向 `rt.abortRegistry` 真注册一个
+ * controller（`isDesktopSessionRunInFlight` 的判定源；desktop 测试运行器未开
+ * `--experimental-test-module-mocks`，**不能用 mock.module**，先例见
+ * chat-prompt-tokens-run-suppression.test.ts 的 registerRunInFlight）。
+ * 断言走副作用代理（拦下时 runCompaction 压根没跑）：composer 广播 0 次 +
+ * 两域 listKeys 与触发前一致。
+ *
  * T-CR5：原测 condition 压缩走 eventOrchestrator.emit 的旧路径（Step 9 已删该装配）。
- * Step 20 改为测 runCompaction：验证「无预置 kkv 数据」的干净 session 下再次调
+ * Step 20 改为测 runCompaction：验证「无预置 kkv」的干净 session 下再次调
  * handleCompactionManual（内部走 runCompaction）仍返回 data.ok=true 并触发 composer 广播——
- * 覆盖了 T-IPC1（预置了 kkv）未验证的维度，即 runCompaction 对空 kkv 的容错。
+ * 覆盖了 T-IPC1R（预置了 kkv）未验证的维度，即 runCompaction 对空 kkv 的容错。
  *
  * T-IPC2：手动压缩返回前必须已完成 prompt 占用的精确档预热
  * （`await warmChatPromptTokenStatsAfterCompaction`），否则 renderer 压缩完成后
@@ -92,7 +99,7 @@ describe("handleCompactionManual", () => {
     await teardownDesktopDbTestEnv(tempDir);
   });
 
-  it("T-IPC1: manual 压缩 runCompaction 成功后不清 file_cache / rule_snapshot（2026-09-29 修正），保留 pending", async () => {
+  it("T-IPC1R: manual 压缩（trigger:manual）成功后清 file_cache / rule_snapshot，保留 pending", async () => {
     const rt = await getDesktopRuntime();
     const pendingJson = JSON.stringify([
       {
@@ -115,6 +122,14 @@ describe("handleCompactionManual", () => {
       pendingJson,
     );
 
+    // 入口传了 trigger:"manual"，runCompaction 成功后清两域。
+    assert.deepEqual(await rt.sessionKkv.listKeys(sessionId, "file_cache"), [
+      "full:/a.md",
+    ]);
+    assert.deepEqual(await rt.sessionKkv.listKeys(sessionId, "rule_snapshot"), [
+      "canon",
+    ]);
+
     // SPEC L274：runCompaction 成功后调 notifyComposerStatusAfterFloorOrCompaction，
     // 该函数最终经 notifyComposerAttachmentsSuggestToRenderer 向 renderer 广播
     // COMPOSER_ATTACHMENTS_SUGGEST。注入假 webContents 捕获 send（与同目录
@@ -130,19 +145,21 @@ describe("handleCompactionManual", () => {
 
     const result = await handleCompactionManual({ projectId, sessionId });
     assert.equal(result.ok, true);
-    // 压缩只动消息可见性：file_cache / rule_snapshot 均保留（2026-09-29
-    // 修正——历史行为是清两域，与按内容寻址的文件缓存正交且回合中段清
-    // 缓存违背「前缀回合内冻结」不变量；置位 / 导入 / 规则刷新才清）。
-    assert.equal(
-      await rt.sessionKkv.get(sessionId, "file_cache", "full:/a.md"),
-      JSON.stringify({ body: "x", mtimeMs: 1 }),
-      "压缩不得清 file_cache",
+    // 手动压缩是用户主动的「重整 + 刷新」意图：按内容寻址的 file_cache 与
+    // workplace 规则快照一并作废，下一次拼提示词（发送或预览）时 workplace
+    // 块按当前工作区重评估（新文件进清单、正文重读）。
+    assert.deepEqual(
+      await rt.sessionKkv.listKeys(sessionId, "file_cache"),
+      [],
+      "手动压缩应清空 file_cache（workplace 刷新前置）",
     );
-    assert.equal(
-      await rt.sessionKkv.get(sessionId, "rule_snapshot", "canon"),
-      "[]",
-      "压缩不得清 rule_snapshot",
+    assert.deepEqual(
+      await rt.sessionKkv.listKeys(sessionId, "rule_snapshot"),
+      [],
+      "手动压缩应清空 rule_snapshot（workplace 规则重评估前置）",
     );
+    // user_vfs_pending 不在清理范围内：它是待执行的写盘动作队列，与
+    // workplace 刷新正交。
     assert.equal(
       await rt.sessionKkv.get(sessionId, "user_vfs_pending", "queue"),
       pendingJson,
@@ -166,9 +183,102 @@ describe("handleCompactionManual", () => {
     setComposerAttachmentsSuggestForwardTarget(() => undefined);
   });
 
+  /**
+   * T-CR6：run 在途时手动压缩被 main 侧门禁拦下。
+   *
+   * 为什么注入 abortRegistry 真态而不是 mock 掉 runCompaction：desktop 测试
+   * 运行器没开 `--experimental-test-module-mocks`，`mock.module` 不可用；判活源
+   * 写死 `rt.abortRegistry.has(sessionId)`，而 abortRegistry 是 core 受理 run 时
+   * 自己登记的，desktop 侧没有可写的影子——只能按 `runAgentTurn` 入口同款真
+   * 注册一个 controller（先例：chat-prompt-tokens-run-suppression.test.ts 的
+   * registerRunInFlight）。
+   *
+   * 断言走**副作用代理**（拦下时 runCompaction 压根没被调用，spy 本体做不到）：
+   * ①返回 error 形态（`IpcResult` 既有失败分支，无 data 层 reason 字段）；
+   * ②composer 广播 0 次；③两域 listKeys 与触发前逐字相同——先预置各一键，
+   * 防「空对空恒真」。
+   */
+  it("T-CR6: run 在途时手动压缩被拦（run-in-flight），不广播不清理", async () => {
+    const rt = await getDesktopRuntime();
+
+    // 独立会话：不污染 T-CR5「无预置 kkv」的干净前提（同 T-IPC2 的做法）。
+    const session = await handleSessionsCreate({
+      projectId,
+      title: "compaction-run-in-flight",
+    });
+    assert.equal(session.ok, true, session.ok ? "" : session.error.message);
+    if (!session.ok) {
+      return;
+    }
+    const cr6SessionId = session.data.id;
+
+    // 预置：先让两域非空，拦截后必须原样保留。
+    await rt.sessionKkv.set(
+      cr6SessionId,
+      "file_cache",
+      "full:/cr6.md",
+      JSON.stringify({ body: "y", mtimeMs: 2 }),
+    );
+    await rt.sessionKkv.set(
+      cr6SessionId,
+      "rule_snapshot",
+      "canon-cr6",
+      "[]",
+    );
+
+    const sent: Array<{ channel: string; payload: unknown }> = [];
+    setComposerAttachmentsSuggestForwardTarget(() => {
+      return {
+        send(channel: string, payload: unknown) {
+          sent.push({ channel, payload });
+        },
+      } as never;
+    });
+
+    // 伪造成「run 在途」：向 core abortRegistry 注册一个 controller。
+    const controller = new AbortController();
+    rt.abortRegistry.register(cr6SessionId, controller);
+
+    try {
+      const result = await handleCompactionManual({
+        projectId,
+        sessionId: cr6SessionId,
+      });
+      assert.equal(result.ok, false);
+      assert.equal(result.ok ? undefined : result.error.code, "run-in-flight");
+      assert.equal(
+        result.ok ? undefined : result.error.message,
+        "Agent 运行中无法压缩",
+      );
+
+      const composerBroadcasts = sent.filter(
+        (s) => s.channel === IPC_CHANNELS.COMPOSER_ATTACHMENTS_SUGGEST,
+      );
+      assert.equal(
+        composerBroadcasts.length,
+        0,
+        "被拦下时不得进入 runCompaction 成功分支，故不应广播 composer 状态",
+      );
+
+      assert.deepEqual(
+        await rt.sessionKkv.listKeys(cr6SessionId, "file_cache"),
+        ["full:/cr6.md"],
+        "被拦下时不得清 file_cache",
+      );
+      assert.deepEqual(
+        await rt.sessionKkv.listKeys(cr6SessionId, "rule_snapshot"),
+        ["canon-cr6"],
+        "被拦下时不得清 rule_snapshot",
+      );
+    } finally {
+      rt.abortRegistry.unregister(cr6SessionId, controller);
+      setComposerAttachmentsSuggestForwardTarget(() => undefined);
+    }
+  });
+
   // T-CR5：原测 condition 压缩走 eventOrchestrator.emit（Step 9 已删），
   // Step 20 改为测 runCompaction 对「无预置 kkv」的干净 session 的容错。
-  // T-IPC1 预置了 file_cache / rule_snapshot / user_vfs_pending；本用例不预置，
+  // T-IPC1R 预置了 file_cache / rule_snapshot / user_vfs_pending；本用例不预置，
   // 验证 runCompaction 在 kkv 空时仍返回 ok:true 并触发 composer 广播。
   //
   // 注意：core 侧 run-compaction.test.ts 已覆盖 runCompaction 的成败两路；
