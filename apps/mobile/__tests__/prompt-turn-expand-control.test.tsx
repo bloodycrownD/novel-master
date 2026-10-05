@@ -21,6 +21,13 @@ const mockNavigate = jest.fn();
 const mockBuildTurns = jest.fn(async () => [] as unknown[]);
 /** 稳定引用的 runtime 桩（见下方 useRuntime 注释）。 */
 const mockRuntime = {};
+/**
+ * 最近一次注册的 useFocusEffect 回调（focus 桩自己登记，供用例手动模拟
+ * 「聚焦回流」）。只留最新一个：模拟回流只需最新那个。
+ */
+const mockFocus = {
+  handler: undefined as (() => void | (() => void)) | undefined,
+};
 
 jest.mock('@/hooks/useMobileScope', () => ({
   useMobileScope: () => ({projectId: 'p1', sessionId: 's1'}),
@@ -32,8 +39,10 @@ jest.mock('@react-navigation/native', () => {
     useRoute: () => ({params: undefined as unknown}),
     useNavigation: () => ({navigate: mockNavigate}),
     // 屏内重载已收敛为 useFocusEffect 单通道：按 useEffect 语义近似（挂载跑一次、
-    // 回调变化重跑），照 TokenUsageStatsScreen 套件的先例。
+    // 回调变化重跑），照 TokenUsageStatsScreen 套件的先例；同时登记回调让用例
+    // 能再触发一次，模拟「从别的屏聚焦回流」（refocus 后展开态是否保留的观测点）。
     useFocusEffect: (cb: () => void | (() => void)) => {
+      mockFocus.handler = cb;
       mockReact.useEffect(cb, [cb]);
     },
   };
@@ -163,6 +172,16 @@ async function renderScreen(
   return tree;
 }
 
+/** 手动模拟一次「聚焦回流」：重跑屏内登记的 focus 回调（即 load），并冲干净微任务。 */
+async function refocus(): Promise<void> {
+  act(() => {
+    mockFocus.handler?.();
+  });
+  for (let i = 0; i < 8; i++) {
+    await new Promise(resolve => setImmediate(resolve));
+  }
+}
+
 /**
  * 只取宿主节点。
  *
@@ -222,6 +241,7 @@ function pressHead(tree: TestRenderer.ReactTestRenderer, index: number): void {
 describe('RealPromptScreen 屏级受控展开（T-MP3）', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockFocus.handler = undefined;
     mockBuildTurns.mockResolvedValue([TURN]);
     // 模块级单例复位：残留正文会让下一条用例读到上一轮的数据。
     takePromptTurnDetail();
@@ -289,4 +309,16 @@ describe('RealPromptScreen 屏级受控展开（T-MP3）', () => {
     });
   });
 
+  it('T-PR1 聚焦回流后展开态保留（同会话 refocus 不清展开态）', async () => {
+    const tree = await renderScreen();
+    press(tree, 'prompt-turn-head');
+    expect(tree.root.findByProps({testID: 'prompt-turn-body'})).toBeTruthy();
+
+    await refocus();
+    // 前置：refocus 真的重取了一轮数，否则本用例会白绿。
+    expect(mockBuildTurns).toHaveBeenCalledTimes(2);
+    // 点子卡看全屏详情再返回是本屏最高频的出栈路径，用户刚展开的轮不能被收走
+    // （清展开态改按 sessionId 判，同会话 refocus 保留）。
+    expect(tree.root.findByProps({testID: 'prompt-turn-body'})).toBeTruthy();
+  });
 });
