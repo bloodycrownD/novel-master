@@ -582,6 +582,21 @@ export const ChatConversationWebView = memo(
 
       const forceSnapshotOnReadyRef = useRef(false);
       const statePushSinceResumeRef = useRef(0);
+      /**
+       * web 上报 `visibility {hidden:true}` 那一刻的 app 前台态快照（2026-10-05
+       * 加）。用于区分「WebView 不可见」的两种成因：
+       * - **app 进后台**（锁屏/切走）：Chromium 冻结 web JS，恢复后文档可能陈旧，
+       *   沿用 visibility 脏重挂（webview-background-ready-fail 的原始场景）；
+       * - **被栈内屏盖住**（push 子会话屏时 native-stack 把主屏 view 摘出窗口）：
+       *   app 仍前台、web JS 活着、RN→web 的推送照发照收，文档**不脏**——
+       *   不可见期间有推送就重挂 = 误伤（真机实锤：退出子会话返回主屏落
+       *   「对话页加载失败」错误页，重挂后 8s 握手赛跑在 dev 包下必超时）。
+       *
+       * 快照为 `null`（本次可见周期内没收到过 hidden，如 jest 用例只喂 visible、
+       * 或后台期间 JS 冻结到 hidden 都没发出）时保守沿用原重挂判据——与 :680
+       * 的方向约定不同（那边未知态当前台防误判死，这边未知态当后台保重挂兜底）。
+       */
+      const visibilityHiddenAppStateRef = useRef<string | null>(null);
       const prevStreamTextRef = useRef('');
       const prevStreamThinkingRef = useRef('');
       const sessionKeyRef = useRef(sessionKey);
@@ -1750,17 +1765,26 @@ export const ChatConversationWebView = memo(
             return;
           }
           if (message.type === 'visibility') {
-            if (!payload.hidden) {
-              const dirty = statePushSinceResumeRef.current > 0;
-              statePushSinceResumeRef.current = 0;
-              if (dirty) {
-                prevStreamTextRef.current = '';
-                prevStreamThinkingRef.current = '';
-                forceSnapshotOnReadyRef.current = true;
-                webReadyRef.current = false;
-                setWebReady(false);
-                setRepaintEpoch(epoch => epoch + 1);
-              }
+            if (payload.hidden) {
+              // 快照 hidden 时刻的 app 前台态，供恢复可见时区分成因（见 ref 声明注释）。
+              visibilityHiddenAppStateRef.current = AppState.currentState ?? null;
+              return;
+            }
+            const hiddenAppState = visibilityHiddenAppStateRef.current;
+            visibilityHiddenAppStateRef.current = null;
+            // 仅「hidden 发生在 app 前台期间」判为栈内被盖（不重挂）；后台/未知
+            // （null）沿用原脏重挂判据，保守兼容既有行为。
+            const coveredWhileForeground = hiddenAppState === 'active';
+            const dirty =
+              !coveredWhileForeground && statePushSinceResumeRef.current > 0;
+            statePushSinceResumeRef.current = 0;
+            if (dirty) {
+              prevStreamTextRef.current = '';
+              prevStreamThinkingRef.current = '';
+              forceSnapshotOnReadyRef.current = true;
+              webReadyRef.current = false;
+              setWebReady(false);
+              setRepaintEpoch(epoch => epoch + 1);
             }
             return;
           }

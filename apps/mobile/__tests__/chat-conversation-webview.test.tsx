@@ -748,6 +748,51 @@ describe('ChatConversationWebView · 前后台感知自愈（webview-background-
     expect(sentTypes()).toContain('init');
   });
 
+  it('栈内被盖（hidden 时 app 仍前台）→ 恢复可见不重挂：被盖期间的改画推送不算脏', async () => {
+    const ref = React.createRef<ChatConversationWebViewHandle>();
+    let tree: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = track(
+        TestRenderer.create(<ChatConversationWebView ref={ref} {...baseProps()} />),
+      );
+    });
+    simulateLoad(tree.root);
+    simulateReadyV2(tree.root);
+    await flushMicrotasks();
+    const initCount = sentOfType('init').length;
+
+    // push 子会话屏的形态：native-stack 把主屏 view 摘出窗口，web 报
+    // hidden——但 app 仍前台（beforeEach 已 setAppState('active')），web JS
+    // 活着、文档不脏。
+    await act(async () => {
+      simulateUpstream(tree.root, 'visibility', {hidden: true});
+    });
+
+    // 被盖期间主会话后台流式推送照发（streamDelta 在
+    // STATE_PAINTING_HOST_MESSAGES 清单内，statePushSinceResumeRef 计数 > 0
+    // ——旧判据会把它当脏、恢复可见即重挂）。
+    ref.current?.pushStreamDelta('text', '被盖期间的后台流式推送');
+    await flushAnimationFrame();
+
+    // 恢复可见：不得重挂（重挂会清 webReady、后续一切下行被 postToWeb 早退，
+    // dev 包下还要重跑 8s 握手赛跑落「对话页加载失败」错误页——2026-10-05
+    // 真机实锤）。
+    await act(async () => {
+      simulateUpstream(tree.root, 'visibility', {hidden: false});
+    });
+    await flushMicrotasks();
+    expect(sentOfType('init')).toHaveLength(initCount);
+
+    // webReady 未被清：恢复可见后的新推送必须照常发出（若被误重挂，
+    // postToWeb 早退、基线不增——以「增量 = 1」为牙口，被盖期间已发的那条
+    // 不计入）。
+    const deltaBaseline = sentOfType('streamDelta').length;
+    ref.current?.pushStreamDelta('text', '恢复后的推送');
+    await flushAnimationFrame();
+    expect(sentOfType('streamDelta').length).toBe(deltaBaseline + 1);
+    expect(sentOfType('streamDelta').at(-1)!.sessionKey).toBe('p1:s1');
+  });
+
   it('错误页文案指向「点重载恢复」（旧文案只谈重启，用户不知有重载入口）', async () => {
     jest.useFakeTimers();
     const tree = await mount();
