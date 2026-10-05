@@ -367,16 +367,20 @@ async function mountPanel(): Promise<ReactTestRenderer> {
   return renderer;
 }
 
-/** 用指定轮数据挂载面板（覆盖 beforeEach 装好的默认 IPC 返回体）。 */
+/**
+ * 用指定轮数据挂载面板（覆盖 beforeEach 装好的默认 IPC 返回体）。
+ *
+ * ⚠️ **不在这里还原全局**：被挂载的面板已在临时 window 对象上注册了
+ * `session-compacted` 监听（RealPromptPanel.tsx 的订阅 effect），提前 `restore()`
+ * 会把全局 window 摘回 undefined——任一用例将来加 `renderer.unmount()` 时，React
+ * 清理走 `window.removeEventListener` 直接 TypeError，报错点还离成因隔着一层 helper。
+ * 故把 `restore` 一并交回调用方，在用例末尾（或所在 describe 的 `afterEach`）还原。
+ */
 async function mountPanelWith(
   turns: PromptPreviewTurnDto[],
-): Promise<ReactTestRenderer> {
+): Promise<{ renderer: ReactTestRenderer; restore: () => void }> {
   const installed = installGlobals(turns);
-  try {
-    return await mountPanel();
-  } finally {
-    installed.restore();
-  }
+  return { renderer: await mountPanel(), restore: installed.restore };
 }
 
 function classNodes(root: ReactTestRendererRoot, className: string) {
@@ -483,14 +487,30 @@ async function expandTurn(
 describe("RealPromptPanel 三层结构轮卡列表 + 全屏富文本 Modal (T-R6 / T-DP1~T-DP3)", () => {
   let restore: () => void;
   let doc: DocumentStub;
+  /**
+   * `mountPanelWith` 挂出来的那批（自带一份独立 IPC 全局桩），统一在 afterEach 里
+   * **先 unmount 再 restore**——先卸载是必须的：面板的 `session-compacted` 订阅清理
+   * 要用 window 桩，桩先没了会在 `removeEventListener` 上炸（见 mountPanelWith 注释）。
+   */
+  let mountedWith: Array<{
+    renderer: ReactTestRenderer;
+    restore: () => void;
+  }> = [];
 
   beforeEach(() => {
     const installed = installGlobals(TURNS);
     restore = installed.restore;
     doc = installed.doc;
+    mountedWith = [];
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    for (const mounted of mountedWith) {
+      await act(async () => {
+        mounted.renderer.unmount();
+      });
+      mounted.restore();
+    }
     restore();
   });
 
@@ -638,8 +658,9 @@ describe("RealPromptPanel 三层结构轮卡列表 + 全屏富文本 Modal (T-R6
   });
 
   it("T-DP2：展开区渲染组卡三态（ok / error / lost）+ 并行徽标 + use/result 两格", async () => {
-    const renderer = await mountPanelWith(TURNS_GROUP_STATES);
-    const root = renderer.root;
+    const mounted = await mountPanelWith(TURNS_GROUP_STATES);
+    mountedWith.push(mounted);
+    const root = mounted.renderer.root;
     await expandTurn(root, "turn-11");
 
     // thinking 叶子卡与三张组卡按 cards 顺序平铺
@@ -738,8 +759,9 @@ describe("RealPromptPanel 三层结构轮卡列表 + 全屏富文本 Modal (T-R6
   });
 
   it("T-DP3：点叶子卡 → Modal 固定原文档（pre 铺开、无渲染管线）", async () => {
-    const renderer = await mountPanelWith(TURNS_FULLSCREEN);
-    const root = renderer.root;
+    const mounted = await mountPanelWith(TURNS_FULLSCREEN);
+    mountedWith.push(mounted);
+    const root = mounted.renderer.root;
     await expandTurn(root, "turn-13");
 
     await act(async () => {
@@ -797,8 +819,9 @@ describe("RealPromptPanel 三层结构轮卡列表 + 全屏富文本 Modal (T-R6
   });
 
   it("T-DP3：叶子卡与组卡格子各自点开全屏（单份正文），互不串台", async () => {
-    const renderer = await mountPanelWith(TURNS_GROUP_STATES);
-    const root = renderer.root;
+    const mounted = await mountPanelWith(TURNS_GROUP_STATES);
+    mountedWith.push(mounted);
+    const root = mounted.renderer.root;
     await expandTurn(root, "turn-11");
 
     // 叶子卡（thinking）→ 全屏正文就是该卡 body
@@ -911,7 +934,9 @@ describe("RealPromptPanel 三层结构轮卡列表 + 全屏富文本 Modal (T-R6
   });
 
   it("退役字段 body / items 即使残留在 payload 里也不参与渲染（双侧锁定）", async () => {
-    const renderer = await mountPanelWith(TURNS_WITH_LEGACY_FIELDS);
+    const mounted = await mountPanelWith(TURNS_WITH_LEGACY_FIELDS);
+    mountedWith.push(mounted);
+    const { renderer } = mounted;
     const root = renderer.root;
 
     // 轮卡列表条数与基线一致（3 轮 → 3 张卡），未被 items 撑大
@@ -940,8 +965,9 @@ describe("RealPromptPanel 三层结构轮卡列表 + 全屏富文本 Modal (T-R6
   });
 
   it("防御：payload 的轮没有 cards 字段（旧 main）→ 轮卡照常渲染，展开区为空且不崩", async () => {
-    const renderer = await mountPanelWith(TURNS_WITHOUT_CARDS);
-    const root = renderer.root;
+    const mounted = await mountPanelWith(TURNS_WITHOUT_CARDS);
+    mountedWith.push(mounted);
+    const root = mounted.renderer.root;
 
     // 三张轮卡照常出（摘要/meta 行不依赖 cards）
     assert.equal(classListNodes(root, "prompt-turn-card").length, 4);
@@ -1006,8 +1032,9 @@ describe("RealPromptPanel 三层结构轮卡列表 + 全屏富文本 Modal (T-R6
   });
 
   it("J-1：组卡两格的读屏标签带工具名（同名工具的两格也分得开）", async () => {
-    const renderer = await mountPanelWith(TURNS_GROUP_STATES);
-    const root = renderer.root;
+    const mounted = await mountPanelWith(TURNS_GROUP_STATES);
+    mountedWith.push(mounted);
+    const root = mounted.renderer.root;
     await expandTurn(root, "turn-11");
     await act(async () => {
       click(
@@ -1021,6 +1048,36 @@ describe("RealPromptPanel 三层结构轮卡列表 + 全屏富文本 Modal (T-R6
       classListNodes(root, "prompt-group-cell").map(ariaLabelOf),
       ["查看tool use，list_chapters", "查看tool result，list_chapters"],
     );
+  });
+});
+
+/**
+ * T-G1（cr-desktop/G-1）：`mountPanelWith` 不再在 helper 内部提前还原全局。
+ *
+ * 本 describe **故意不装任何前置全局桩**——这正是该用例的价值所在：若 helper
+ * 仍在 `finally` 里 `restore()`，全局 window 会被摘回 undefined，随后任一用例
+ * `renderer.unmount()` 触发 React 清理走 `window.removeEventListener` 即 TypeError，
+ * 且报错点离成因隔着一层 helper。若放在外层 describe（其 `beforeEach` 已先装过一份
+ * 桩）里跑，restore 只是换回另一份 stub，炸不出来，用例就成了假绿。
+ */
+describe("T-G1：mountPanelWith 交回还原（先卸载、后还原）", () => {
+  it("mountPanelWith 挂载的面板，unmount 不抛错", async () => {
+    const { renderer, restore: restoreWith } = await mountPanelWith(
+      TURNS_GROUP_STATES,
+    );
+    try {
+      assert.equal(classListNodes(renderer.root, "prompt-turn-card").length, 1);
+
+      // 订阅 effect 已在临时 window 上挂了 `session-compacted` 监听，卸载会走
+      // window.removeEventListener——桩仍在，故此处必须干净通过。
+      await act(async () => {
+        renderer.unmount();
+      });
+      assert.equal(renderer.toJSON(), null, "卸载后无残留树");
+    } finally {
+      // 卸载完成才轮到还原全局（顺序反了就会在 removeEventListener 上炸）。
+      restoreWith();
+    }
   });
 });
 
