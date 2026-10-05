@@ -82,7 +82,10 @@ export async function runCompactionWithTokenWarm(
         messages: runtime.messages,
         messageTranscriptEffects: runtime.messageTranscriptEffects,
       },
-      {sessionId, projectId, hideStartDepth},
+      // `trigger:"manual"`：手动压缩要清该会话 KKV 的 `rule_snapshot` +
+      // `file_cache` 两域，下一次拼提示词时 workplace 块按当前工作区重评估
+      // （自动压缩刻意**不清**——agent 回合中段要保住「回合内前缀冻结」）。
+      {sessionId, projectId, hideStartDepth, trigger: 'manual'},
     );
     if (result.ok) {
       // 预热本体自带 try/catch（失败只回退为两阶段跳变，不影响压缩流程）。

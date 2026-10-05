@@ -26,10 +26,18 @@ jest.mock('@/hooks/useMobileScope', () => ({
   useMobileScope: () => ({projectId: 'p1', sessionId: 's1'}),
 }));
 
-jest.mock('@react-navigation/native', () => ({
-  useRoute: () => ({params: undefined as unknown}),
-  useNavigation: () => ({navigate: mockNavigate}),
-}));
+jest.mock('@react-navigation/native', () => {
+  const mockReact = require('react');
+  return {
+    useRoute: () => ({params: undefined as unknown}),
+    useNavigation: () => ({navigate: mockNavigate}),
+    // 屏内重载已收敛为 useFocusEffect 单通道：按 useEffect 语义近似（挂载跑一次、
+    // 回调变化重跑），照 TokenUsageStatsScreen 套件的先例。
+    useFocusEffect: (cb: () => void | (() => void)) => {
+      mockReact.useEffect(cb, [cb]);
+    },
+  };
+});
 
 // ⚠️ 必须返回**稳定引用**：runtime 一变，屏内 load 的 useCallback 依赖就变，
 // useEffect 跟着重跑 → setState → 重渲染 → 又是新 runtime，死循环直到 OOM。

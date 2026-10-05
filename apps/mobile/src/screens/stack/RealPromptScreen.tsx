@@ -5,10 +5,11 @@
  * FlatList 里，`removeClippedSubviews` 会卸载滚出窗口的 item，组件内 state 随之
  * 丢失，用户滚回来会发现展开态被重置。屏级 state 只随数据重载清空。
  *
- * 导航红线：顶层**只** import `useRoute`，`useNavigation` 留在 PromptTurnCard
- * 内部（既有 scope 用例对 @react-navigation/native 整模块 mock 只有 useRoute）。
+ * 导航红线：顶层**只** import `useRoute` / `useFocusEffect`，`useNavigation` 留在
+ * PromptTurnCard 内部（既有 scope 用例对 @react-navigation/native 整模块 mock
+ * 只有这两个）。
  */
-import React, {useCallback, useEffect, useState} from 'react';
+import React, {useCallback, useRef, useState} from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -17,7 +18,11 @@ import {
   View,
 } from 'react-native';
 import type {PromptPreviewTurn} from '@novel-master/core/prompt';
-import {useRoute, type RouteProp} from '@react-navigation/native';
+import {
+  useFocusEffect,
+  useRoute,
+  type RouteProp,
+} from '@react-navigation/native';
 import {PromptTurnCard} from '@/components/prompt/PromptTurnCard';
 import {PromptToolGroupCard} from '@/components/prompt/PromptToolGroupCard';
 import {PromptTurnLeafCard} from '@/components/prompt/PromptTurnLeafCard';
@@ -55,6 +60,13 @@ export function RealPromptScreen() {
   const [openGroupIds, setOpenGroupIds] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
+  /**
+   * load 请求序号（竞态守卫）：每次发起前 ++，响应回来后对不上号即整轮丢弃。
+   * 预览取数没有中止点（`buildSessionPromptInput` 不传 shouldBail，行为不变），
+   * 快速进出聚焦时旧响应可能后到、盖掉新一轮数据，故按序号过滤（与
+   * `TokenUsageStatsScreen.reloadSeqRef` 同款）。
+   */
+  const requestIdRef = useRef(0);
 
   const toggleId = useCallback(
     (
@@ -84,6 +96,9 @@ export function RealPromptScreen() {
   );
 
   const load = useCallback(async () => {
+    // 取号必须在最前面：scope 缺失的早退分支同样要让在途的上一轮作废，
+    // 否则它照样会回来把 turns 写回去。
+    const requestId = ++requestIdRef.current;
     if (projectId == null || sessionId == null) {
       setError('请先选择项目与会话');
       setTurns([]);
@@ -94,8 +109,8 @@ export function RealPromptScreen() {
     setError(undefined);
     // 换了会话，旧会话的展开态没有意义：跟随数据一起清。
     // ⚠️ 已经空的时候**返回原引用**：屏级 runtime 若不是稳定引用，load 会随每次
-    // 重渲染换新的 useCallback → useEffect 重跑；这里若无条件塞新 Set，
-    // setState 永远「有变化」→ 重渲染 → 再跑 effect，死循环到 Maximum update depth。
+    // 重渲染换新的 useCallback → 重载通道重跑；这里若无条件塞新 Set，
+    // setState 永远「有变化」→ 重渲染 → 再跑一次，死循环到 Maximum update depth。
     setOpenTurnIds(prev => (prev.size === 0 ? prev : new Set()));
     setOpenGroupIds(prev => (prev.size === 0 ? prev : new Set()));
     try {
@@ -103,8 +118,14 @@ export function RealPromptScreen() {
         projectId,
         sessionId,
       });
+      if (requestId !== requestIdRef.current) {
+        return; // 过期响应：新一轮取数已在途，丢弃本轮结果。
+      }
       setTurns(list);
     } catch (err) {
+      if (requestId !== requestIdRef.current) {
+        return; // 过期请求的报错不覆盖新一轮状态。
+      }
       const message =
         err instanceof AgentRunError
           ? err.message
@@ -114,13 +135,20 @@ export function RealPromptScreen() {
       setError(message);
       setTurns([]);
     } finally {
-      setLoading(false);
+      if (requestId === requestIdRef.current) {
+        setLoading(false);
+      }
     }
   }, [runtime, projectId, sessionId]);
 
-  useEffect(() => {
-    load().catch(() => undefined);
-  }, [load]);
+  // 重载单通道：只挂 useFocusEffect（依赖 load），不再并挂 useEffect——挂载由
+  // 首焦覆盖，从别的屏返回时再取一次数（手动压缩完 workplace 已重评估，
+  // 旧数据留着就是错的）。双通道会让挂载跑两轮，故这里**替换**而非新增。
+  useFocusEffect(
+    useCallback(() => {
+      load().catch(() => undefined);
+    }, [load]),
+  );
 
   return (
     <View style={[styles.root, {backgroundColor: tokens.background}]}>
