@@ -67,6 +67,12 @@ const mockRuntime: any = {
   state: {
     getCurrentModelId: jest.fn(async () => 'openai/gpt-4o-mini'),
   },
+  // 批量/单删路径每删一个会话就调 manager.forgetSession（部分成功语义：
+  // 中途失败时已删的照常遗忘）——缺这个成员会让首轮 delete 后就抛
+  // TypeError 进 catch，测试只看到「删了 1 个」的假象（v1.5.37 发版轮补）。
+  sessionStreamUnitManager: {
+    forgetSession: jest.fn(),
+  },
   sessionVfs: jest.fn(() => ({})),
   workplace: jest.fn(() => ({})),
   projectVfs: jest.fn(() => ({})),
