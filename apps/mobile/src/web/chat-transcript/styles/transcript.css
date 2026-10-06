@@ -10,6 +10,20 @@ body {
   color: var(--text, #111);
   font-family: system-ui, -apple-system, sans-serif;
 }
+/*
+ * #app 纵向排布容器（composer-native-2026-10 Step 2 · chat-transcript 独立入口）：
+ * 独立入口壳在 #scroller 外再包一层 #app，四属性与 chat-conversation.css 的同名
+ * 规则**逐字同值**——独立包 app.css 只有本基底（无合成包覆盖段），没有这条
+ * #scroller 的 height:100% 就解析不到高度（百分比参照未定高的父级会塌陷成 auto）。
+ * 合成包 join 本基底时它排在前、chat-conversation.css 的同名规则在后，值相同，
+ * 层叠结果不变（chat-conversation dist 的壳断言取第一条 #app 规则也四属性齐全）。
+ */
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
 #scroller {
   height: 100%;
   overflow-y: auto;

@@ -7,10 +7,13 @@
 import {readdirSync, readFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {readWebViewDistFile} from './helpers/read-webview-dist';
+// RN 参照面已搬 RN 侧新址（composer-native-2026-10 Step 2 · 变更点 #9 前半）：
+// 内容与 chat-conversation/styles/dock-style-reference.ts 逐字同构，Step 6 旧
+// 址随包删除后本断言面不变。
 import {
   attachmentDraftChipsStyles,
   composerToolBtnStyle,
-} from '../src/web/chat-conversation/styles/dock-style-reference';
+} from '../src/components/chat/native-composer/dock-style';
 
 function bootScript(): string {
   return readWebViewDistFile('chat-conversation', 'app.js');
@@ -67,10 +70,10 @@ function placeholderCount(css: string, placeholder: string): number {
   return css.split(placeholder).length - 1;
 }
 
-/** dock 样式参照真源模块（RN 参照面，不进 bundle）。 */
+/** dock 样式参照真源模块（RN 参照面，不进 bundle；Step 2 起 RN 侧新址）。 */
 const DOCK_STYLE_REFERENCE_SRC = join(
   __dirname,
-  '../src/web/chat-conversation/styles/dock-style-reference.ts',
+  '../src/components/chat/native-composer/dock-style.ts',
 );
 
 /** 递归收集目录下的 `.ts` / `.tsx` 文件绝对路径。 */
@@ -258,7 +261,7 @@ describe('chat-conversation WebView boot (dist)', () => {
     // 'heightChange'——枚举/类型字符串在 dist 里有 1 处合法残留。
   });
 
-  it('T-CC-BUILD-01: PACKAGES 四包齐全；chat-conversation 的 cssRel 为 join 数组（transcript-converge）', () => {
+  it('T-CC-BUILD-01: PACKAGES 五包过渡态齐全；chat-conversation 的 cssRel 为 join 数组（transcript-converge）', () => {
     const buildScript = readFileSync(
       join(__dirname, '../scripts/build-webview.mjs'),
       'utf8',
@@ -270,17 +273,21 @@ describe('chat-conversation WebView boot (dist)', () => {
     expect(buildScript).toMatch(
       /id: 'chat-conversation',[\s\S]*?cssRel:\s*\[\s*'chat-transcript\/styles\/transcript\.css',\s*'chat-conversation\/styles\/chat-conversation\.css',\s*\]/,
     );
-    // 四包齐全（chat-transcript 不再是独立包）
+    // 五包过渡态（composer-native-2026-10 Step 2）：chat-transcript 拆回独立
+    // 入口与 chat-conversation 合成包**并存**（宿主未切，Step 6 收口为四包）。
     for (const id of [
       'rich-document',
       'code-editor',
       'composer-input',
+      'chat-transcript',
       'chat-conversation',
     ]) {
       expect(buildScript).toContain(`id: '${id}'`);
     }
-    // 反面：旧 chat-transcript 包条目不得回流（转录已并入合成包）
-    expect(buildScript).not.toMatch(/id: 'chat-transcript'/);
+    // 独立入口形态：cssRel 单值（基底全文，#app 四属性已并入 transcript.css）
+    expect(buildScript).toMatch(
+      /id: 'chat-transcript',[\s\S]*?cssRel:\s*'chat-transcript\/styles\/transcript\.css'/,
+    );
   });
 });
 
@@ -480,7 +487,10 @@ describe('chat-conversation dock 样式数值清单（Step 4 · T-CU10 样式相
     expect(rules.get('.chip') ?? '').not.toMatch(/opacity/);
   });
 
-  it('T-CC-CSS-15: dock-style-reference 每个导出都有消费方（RN 真源死了就不许再抄一份快照）', () => {
+  it('T-CC-CSS-15: dock-style 参照真源每个导出都有消费方（RN 真源死了就不许再抄一份快照）', () => {
+    // composer-native-2026-10 Step 2：参照面搬到 RN 侧
+    // native-composer/dock-style.ts（内容与 chat-conversation/styles 旧址逐字
+    // 同构；旧址文件待 Step 6 随包删除）。防快照纪律同构迁移到新址。
     const source = readFileSync(DOCK_STYLE_REFERENCE_SRC, 'utf8');
     const exported = new Set<string>();
     for (const m of source.matchAll(
@@ -507,11 +517,11 @@ describe('chat-conversation dock 样式数值清单（Step 4 · T-CU10 样式相
     ];
     for (const file of files) {
       const text = readFileSync(file, 'utf8');
-      if (!text.includes('dock-style-reference')) {
+      if (!text.includes('dock-style')) {
         continue;
       }
       for (const m of text.matchAll(
-        /import\s*(?:type\s*)?\{([^}]*)\}\s*from\s*'[^']*dock-style-reference'/g,
+        /import\s*(?:type\s*)?\{([^}]*)\}\s*from\s*'[^']*dock-style'/g,
       )) {
         for (const part of m[1].split(',')) {
           const name = originalName(part);

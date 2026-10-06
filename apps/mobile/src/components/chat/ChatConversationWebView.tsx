@@ -1,33 +1,27 @@
 /**
- * 统一对话宿主（chat-webview-unify Step 6）：转录 + 输入框 dock 合并进**单个**
- * chat-conversation WebView。
- *
- * ## 为什么是这一个组件
- * 旧链是 `ChatTranscriptWebView` + `ComposerInputWebView` 两个原生实例，输入框
- * 高度变化要「跨桥上报 heightChange → RN 80ms `withTiming` 渐变 → 容器变高」才
- * 传导到转录区（滞后 1~2 帧 + 一段动画）。合并后 dock 在同一文档内 flex 布局，
- * 输入框换行时转录区 `flex:1` 当帧收缩——**高度链彻底消失**，键盘动画期间每帧
- * relayout 的原生节点也从 2 个降到 1 个。
- *
- * ## 本组件继承的全部机制（转录侧，照 `ChatTranscriptWebView` 逐条搬）
+ * 对话宿主（chat-webview-unify Step 6 引入；composer-native-2026-10 Step 2 剥离）：
+ * 转录 + 输入框 dock 曾合并进**单个** chat-conversation WebView；输入框原生化迭代
+ * 起本组件按 D4b 剥离 composer/dock 域，退为**纯转录宿主**——composer 域的 props、
+ * 桥消息（下行 setText/setSelection/setDisabled/blur/composerState/composerPaste/
+ * selectAll，上行 change/selectionChange/dockAction）、IME 桥侧防线（M2/M4/M5）、
+ * COMPOSER_PASTE_MAX_CHARS 消费与「composerState → 草稿 setText」恢复链两步全部拆除，
+ * 恢复链缩为 `init → 快照直发`。dock 在 Step 5 由 RN 原生 composer 承接。
+
+ * ## 继承的全部机制（转录侧，照 `ChatTranscriptWebView` 逐条搬）
  * 快照分片（`SNAPSHOT_CHUNK_SIZE=50` / `SNAPSHOT_CHUNK_BYTES=256KB` /
  * `./snapshot-chunk-bounds` 的 `planSnapshotChunkBounds` 预扫 / 代次作废）、流式三通道（delta/batch/blockCommit）
  * + 能力协商、`repaintEpoch` 与 visibility 重挂、滚动缓存恢复、安全守卫
  * （`originWhitelist=['file://']` + `onShouldStartLoadWithRequest` 只放行新包目录 +
  * `messageMenuAction` 仍走宿主回调）。
- *
- * ## 三条硬纪律（动本文件前先读）
+
+ * ## 两条硬纪律（动本文件前先读）
  *
  * **(A) deferred 队列只装改画三通道**（`appendTailRows` / `prependPage` / `streamCommit`）。
- * composer 域（`setText` / `composerState` / `selectAll` / `composerPaste`）与 dock 上行
- * **一律走 `postToWeb` 直发**。理由：deferred 的唯一目的是防快照末片整体替换 rows 时
- * 抹掉增量行，composer 域根本不碰 `state.rows`；误 defer 的代价是分片窗口（约 1.15s）
- * 内用户打不了字，且重挂时 deferred 队列整队丢弃 → 草稿静默丢失。T-CU7 负面断言。
+ * 其余域一律走 `postToWeb` 直发。理由：deferred 的唯一目的是防快照末片整体替换 rows 时
+ * 抹掉增量行；误 defer 的代价是分片窗口（约 1.15s）内的增量被排队。composer 域已随
+ * 剥离退役，本纪律对转录域其余直发消息同样生效。
  *
- * **(B) IME 七条防线的 ref 归属**（spec §IME / 选区防线表，注释标 M 编号）：
- * M3 在 web 侧不动；其余六条落在本组件——打字真源在 web，`change` 只上抛不回写。
- *
- * **(C) ready 只认 `v === 2`**。旧 dist 的 v:1 ready 被拒 → 走 8s 超时兜底错误态，
+ * **(B) ready 只认 `v === 2`**。旧 dist 的 v:1 ready 被拒 → 走 8s 超时兜底错误态，
  * **不得**因为「收到了 ready」就置位 `webReady`：置位了就会把 v2 协议消息灌进一个
  * 根本不认得的页面（静默白屏，比报错更难查）。
  *
@@ -73,23 +67,13 @@ import type {
 } from './ChatTranscriptBridge';
 import {
   CONVERSATION_BRIDGE_V,
-  CONVERSATION_CAPABILITY_COMPOSER_DOCK,
-  CONVERSATION_COMPOSER_METRICS,
-  CONVERSATION_COMPOSER_MODE,
-  EMPTY_CONVERSATION_TYPEAHEAD_SOURCE,
-  conversationCapabilitiesInclude,
-  conversationDockActionIncludes,
   decodeConversationUpstream,
   encodeHostToConversation,
   parseConversationScrollSnapshot,
   readReadyCapabilities,
-  type ConversationComposerState,
-  type ConversationDockAction,
   type ConversationHostMessage,
   type ConversationTheme,
-  type ConversationTypeaheadSource,
 } from './ChatConversationBridge';
-import type {ComposerInputSelection} from './ComposerInputBridge';
 import {enrichTranscriptRows} from './enrich-transcript-rows';
 import {createQuantumYield} from '@/services/yield-quantum';
 import {
@@ -118,7 +102,6 @@ import type {StreamWireChunk} from '@/services/stream-wire-queue';
 import {appendWireChunk} from '@/services/stream-wire-queue';
 import {decodeLiteralHtmlEntities} from '@/components/rich-content/decode-literal-html-entities';
 import {
-  CHAT_CONVERSATION_SELECTION_MENU_ITEMS,
   CHAT_TRANSCRIPT_SELECTION_MENU_ITEMS,
 } from './chat-transcript-selection-menu';
 import type {ChatTranscriptWebViewHandle} from './ChatTranscriptWebViewHandle';
@@ -126,30 +109,23 @@ import type {ChatTranscriptWebViewHandle} from './ChatTranscriptWebViewHandle';
 export type {ChatTranscriptWebViewHandle} from './ChatTranscriptWebViewHandle';
 
 /**
- * 统一宿主句柄 = 转录七方法（`ChatTranscriptWebViewHandle` 逐字复用，方法面不变）
- * + **一个** composer 命令式写入。
+ * 宿主句柄 = 转录七方法（`ChatTranscriptWebViewHandle` 逐字复用，方法面不变）。
  *
- * 为什么必须多这一个：IME 防线 M7（命令式 `setText` 带选区**不**作废选区基线）与
- * M2（effect 版 `setText` **要**作废）是两条**相反**规则，只能靠两条独立通道实现——
- * 合并成一条就必然要把其中一条改错。转录七方法本身一个都没动，故
- * `session-stream-webview-adapter` / `ChatTabProvider` / `useInterruptedPartialCommit` /
- * `SubagentSessionScreen` 的消费代码零改动。
+ * composer 命令式写入（`setComposerText`）随 D4b 剥离删除：composer 域下行
+ * `setText` 桥消息退役后该方法失去落点，M7 命令式通道语义由 Step 3 起的
+ * `NativeChatComposer` ref 通道承接。`session-stream-webview-adapter` /
+ * `ChatTabProvider` / `useInterruptedPartialCommit` / `SubagentSessionScreen`
+ * 的转录七方法消费零改动。
  *
  * `transcriptOnly` 变体（子会话屏）的行为面断言在同文件 transcriptOnly describe，
  * web 侧（CSS 隐藏 dock + `init.transcriptOnly` 消费）断言在
  * `__tests__/chat-conversation-boot-script.test.ts` 的产物面。
  */
-export type ChatConversationWebViewHandle = ChatTranscriptWebViewHandle & {
-  /**
-   * M7 · 命令式整段写入（Picker 路径 token 插入 / 草稿水化 / 全屏回填）：
-   * 写 web + 同步 web 文本基线 + 光标经 `setText.selection` 一次落位；
-   * **选区基线不置 null**（与 M2 相反，勿"顺手统一"）。
-   * 未就绪时静默返回：ready 后的恢复链会用最新 `composerText` 补齐全量写入。
-   */
-  setComposerText: (text: string, cursor?: number) => void;
-};
+export type ChatConversationWebViewHandle = ChatTranscriptWebViewHandle;
 
-/** 会改变**转录**画面的宿主消息类型；用于「隐藏期间脏推送」计数（composer 域不计）。 */
+/**
+ * 会改变**转录**画面的宿主消息类型；用于「隐藏期间脏推送」计数。
+ */
 const STATE_PAINTING_HOST_MESSAGES: ReadonlySet<string> = new Set([
   'sessionSnapshot',
   'prependPage',
@@ -178,16 +154,6 @@ const STREAM_BLOCK_RENDER_ENABLED = true;
  * 错误态 + 提示重载，而不是依赖 ready 门控本身发现。
  */
 const READY_TIMEOUT_MS = 8000;
-
-/**
- * 划词「粘贴」跨桥文本上限（r6-I-2）。
- *
- * 口径是 **UTF-16 码元**（`String.length`），不是字节——这里要卡的是
- * `JSON.stringify` 后 postMessage 的串长度量级，码元数与之同数量级，
- * 拿字节数算反而在 RN 侧多绕一层编码。256KB 与快照分片的字节预算同数，
- * 两者互不相干，别互相引用。
- */
-const COMPOSER_PASTE_MAX_CHARS = 256 * 1024;
 
 export type ChatConversationWebViewProps = {
   readonly sessionKey: string;
@@ -230,41 +196,6 @@ export type ChatConversationWebViewProps = {
   readonly pendingSubagentSessions?: ReadonlyMap<string, string>;
   readonly onSnapshotComplete?: () => void;
 
-  /* ---------------- composer 域（全部由 controller 算好后下发） ---------------- */
-
-  /**
-   * 外部真源草稿文本。**只为识别「外部变化」**（水化 / 清空 / 回填）——打字真源
-   * 在 web 侧，宿主收到 `change` 只上抛、绝不回写（M1 / M6）。
-   */
-  /** 可选仅因 transcriptOnly 变体（子会话屏）省传；主链恒传。 */
-  readonly composerText?: string;
-  readonly onComposerChangeText?: (text: string) => void;
-  /** 外部受控光标（插入 token / 水化 / 清空后）：随外部 value 变化对齐一次。 */
-  readonly composerCursor?: number;
-  readonly onComposerSelectionChange?: (selection: ComposerInputSelection) => void;
-  readonly composerInputDisabled?: boolean;
-  readonly composerHasModel?: boolean;
-  readonly composerSendDisabled?: boolean;
-  readonly composerRunning?: boolean;
-  readonly composerError?: string;
-  readonly composerFullscreenEnabled?: boolean;
-  readonly composerPlaceholder?: string;
-  readonly composerChips?: ConversationComposerState['chips'];
-  readonly composerKeyboardUp?: boolean;
-  /**
-   * typeahead **候选源**（非过滤结果）。
-   *
-   * 比较口径：**引用相等**（spec 定案 ③）。候选列表是 `buildListRows()` /
-   * `effectiveSkills()` 的产物，内容不变时 controller 下发同一引用即可——memo
-   * 比较器按引用判等，引用变了就下行一次 `composerState`（不做深比较：那既 O(n)
-   * 又必然造出新引用，把这条捷径彻底废掉）。
-   */
-  readonly composerTypeahead?: ConversationTypeaheadSource;
-  /** 安全区底部高度（init.composer.safeAreaBottom 下发；键盘弹起时 dock padding 归零）。 */
-  readonly safeAreaBottom?: number;
-  /** dock 域上行处置（send/terminate/needModel/fullscreen/atPicker/skillPicker）。 */
-  readonly onDockAction?: (action: ConversationDockAction) => void;
-
   /**
    * 转录 only 变体（transcript-converge，子会话屏）：只要转录、不要输入
    * dock 的降级形态。init 下发该字段，web 侧给 #app 挂类隐藏
@@ -285,12 +216,10 @@ function transcriptFlagsEqual(
 }
 
 /**
- * memo 比较器：转录域照旧，composer 域**逐个入列**。
+ * memo 比较器：转录域照旧（composer 域已随 D4b 剥离，比较面只剩转录字段）。
  *
- * 为什么必须逐个入列而不是「`composerState` 一个对象引用比」：spec 记过一次踩坑史
- * （`pendingSubagentSessions` 漏加 → 静默吞更新）。composer 域字段多（11 个），
- * 漏一个就是「改了没生效」且无任何报错。`composerTypeahead` 按**引用**判等
- * （见 props 注释）。
+ * 历史教训（spec 记过一次踩坑史）：`pendingSubagentSessions` 漏加 → 静默吞更新。
+ * 往本比较器加字段时逐个入列，漏一个就是「改了没生效」且无任何报错。
  */
 function chatConversationWebViewPropsEqual(
   prev: ChatConversationWebViewProps,
@@ -313,21 +242,6 @@ function chatConversationWebViewPropsEqual(
     prev.initialScroll === next.initialScroll &&
     transcriptFlagsEqual(prev.flags, next.flags) &&
     prev.pendingSubagentSessions === next.pendingSubagentSessions &&
-    // ---- composer 域（逐个入列，漏一个就是静默吞更新） ----
-    prev.composerText === next.composerText &&
-    prev.composerCursor === next.composerCursor &&
-    prev.composerInputDisabled === next.composerInputDisabled &&
-    prev.composerHasModel === next.composerHasModel &&
-    prev.composerSendDisabled === next.composerSendDisabled &&
-    prev.composerRunning === next.composerRunning &&
-    prev.composerError === next.composerError &&
-    prev.composerFullscreenEnabled === next.composerFullscreenEnabled &&
-    prev.composerPlaceholder === next.composerPlaceholder &&
-    prev.composerChips === next.composerChips &&
-    prev.composerKeyboardUp === next.composerKeyboardUp &&
-    // 候选源按引用判等（controller 内容不变时下发同一引用）
-    prev.composerTypeahead === next.composerTypeahead &&
-    prev.safeAreaBottom === next.safeAreaBottom &&
     // ---- 变体（transcript-converge）：漏比会吞掉子会话屏的降级形态 ----
     prev.transcriptOnly === next.transcriptOnly
   );
@@ -360,25 +274,6 @@ function conversationThemeFromTokens(tokens: {
     borderLight: tokens.borderLight,
   };
   return theme;
-}
-
-/** 光标落点归一到 [0, len]（对齐 ComposerAtPathInput 的 clamp 口径）。 */
-function clampCursor(value: number, length: number): number {
-  if (!Number.isFinite(value)) {
-    return length;
-  }
-  return Math.max(0, Math.min(Math.floor(value), length));
-}
-
-function finiteOrNull(value: unknown): number | null {
-  return typeof value === 'number' && Number.isFinite(value) ? value : null;
-}
-
-function sameSelection(
-  a: ComposerInputSelection | null,
-  b: ComposerInputSelection | null,
-): boolean {
-  return a != null && b != null && a.start === b.start && a.end === b.end;
 }
 
 function resolveOpenScrollIntent(
@@ -482,24 +377,6 @@ export const ChatConversationWebView = memo(
         onWebMermaidViewerOpenChange,
         pendingSubagentSessions,
         onSnapshotComplete,
-        // transcriptOnly 变体（子会话屏）不需要 composer 域输入——默认空串，
-        // 使该 prop 在降级形态下可省（消息无 dock 消费者，值不产生副作用）。
-        composerText = '',
-        onComposerChangeText,
-        composerCursor,
-        onComposerSelectionChange,
-        composerInputDisabled = false,
-        composerHasModel = true,
-        composerSendDisabled = false,
-        composerRunning = false,
-        composerError,
-        composerFullscreenEnabled = false,
-        composerPlaceholder = '',
-        composerChips,
-        composerKeyboardUp = false,
-        composerTypeahead = EMPTY_CONVERSATION_TYPEAHEAD_SOURCE,
-        safeAreaBottom = 0,
-        onDockAction,
         transcriptOnly = false,
       },
       ref,
@@ -541,8 +418,6 @@ export const ChatConversationWebView = memo(
       const [repaintEpoch, setRepaintEpoch] = useState(0);
       /** T-CU15：ready 超时兜底错误态（onLoad 后 8s 未收到 v:2 ready）。 */
       const [readyFailed, setReadyFailed] = useState(false);
-      /** 能力协商：未声明 `composer-dock` → 输入区降级提示（不是静默不可点）。 */
-      const [composerDockCapable, setComposerDockCapable] = useState(false);
 
       const forceSnapshotOnReadyRef = useRef(false);
       const statePushSinceResumeRef = useRef(0);
@@ -593,35 +468,16 @@ export const ChatConversationWebView = memo(
       const inFlightSnapshotGenerationRef = useRef<number | null>(null);
       const deferredSnapshotActionsRef = useRef<DeferredSnapshotAction[]>([]);
 
-      /* ---- composer 域的基线 ref（IME 防线 M1/M2/M4/M5/M7 的落点） ---- */
-
-      /** M1 · web 侧文本基线：`change` 到达时**先推进再上抛**（详见 handleUpstream change 分支）。 */
-      const webTextRef = useRef<string | null>(null);
-      /** M4 · web 侧选区基线：web 上报或我们下发，用于回声抑制。 */
-      const lastSelectionRef = useRef<ComposerInputSelection | null>(null);
-      /**
-       * M5 · 短暂受控选区：外部写入/命令式写入给出的「光标期望」。
-       * web 上报用户选区即解除（对齐 main 版：原生已应用选区后置空）。
-       */
-      const [pendingSelection, setPendingSelection] =
-        useState<ComposerInputSelection | null>(null);
-
       const readyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
         null,
       );
 
-      const onComposerChangeTextRef = useRef(onComposerChangeText);
-      const onComposerSelectionChangeRef = useRef(onComposerSelectionChange);
-      const onDockActionRef = useRef(onDockAction);
       /**
        * 失败态镜像（webview-background-ready-fail）：供 AppState 的 change 回调读
        * 最新失败态。走 ref 而非把 `readyFailed` 塞进回调依赖——依赖一变回调就换，
        * 订阅会被反复摘挂重挂（监听本身也跟着抖动）。
        */
       const readyFailedRef = useRef(false);
-      onComposerChangeTextRef.current = onComposerChangeText;
-      onComposerSelectionChangeRef.current = onComposerSelectionChange;
-      onDockActionRef.current = onDockAction;
       readyFailedRef.current = readyFailed;
 
       const clearReadyTimeout = useCallback(() => {
@@ -681,20 +537,6 @@ export const ChatConversationWebView = memo(
         richTextRef.current = flags?.richText ?? false;
       }, [flags?.richText]);
 
-      /**
-       * composer 域三条基线清场（IME 防线 M1/M4/M5 的公共入口）。
-       *
-       * **唯一调用点是 `ready` 到达**：`webReady` 会 false→true 让 ③ 草稿 effect
-       * 重跑，而新文档的 textarea 是空的——不把 `webTextRef` 打回 null，③ 会拿
-       * 「与基线同值」早退，草稿永远写不进去。visibility 脏重挂 / 点「重载」/
-       * 切会话（`key` 重挂）三条路径都经「换文档 → ready 重来」顺带解决。
-       */
-      const resetComposerBaselines = useCallback(() => {
-        webTextRef.current = null;
-        lastSelectionRef.current = null;
-        setPendingSelection(null);
-      }, []);
-
       useEffect(() => {
         initialScrollRef.current = initialScroll;
       }, [initialScroll]);
@@ -707,7 +549,7 @@ export const ChatConversationWebView = memo(
        * 唯一的下行出口。
        *
        * 纪律 (A)：只有改画三通道的调用方才允许改走 `postOrDeferSnapshotPaint`；
-       * composer / dock 域一律直接走这里（不排队、不 defer）。
+       * 其余域一律直接走这里（不排队、不 defer）。
        */
       const postToWeb = useCallback((message: ConversationHostMessage) => {
         if (!webReadyRef.current) {
@@ -973,44 +815,24 @@ export const ChatConversationWebView = memo(
 
             /**
        * `init` 是 ready 后的一次性快照：取当拍值，此后变化各有专线消息
-       * （richText/menuDisabled → `flagsUpdate`；dock 侧一切 → `composerState`）。
+       * （richText/menuDisabled → `flagsUpdate`）。
        *
        * 取「每次渲染刷新 ref、发送时读 ref」而不是把字段挂 `useCallback` 依赖：
-       * 后者会让 `sendInit` 的身份随 `inputDisabled` / `placeholder` 变，
-       * 于是 `useEffect([webReady, sendInit])` 在这些字段变化时**重发 init**——
-       * 既多一条消息，又会打乱恢复链四消息的固定顺序。
+       * 后者会让 `sendInit` 的身份随依赖变，导致 `useEffect([webReady, sendInit])`
+       * 重发 init。D4b 剥离后 init 不再带 `composer` 段（web 侧 dispatcher 的
+       * splitInitPayload 对缺失段有兜底，合成包过渡期不崩）。
        */
       const initSnapshotRef = useRef({
         theme: conversationThemeFromTokens(tokens),
         flags: resolvedFlags,
-        composer: {
-          mode: CONVERSATION_COMPOSER_MODE,
-          disabled: composerInputDisabled,
-          metrics: CONVERSATION_COMPOSER_METRICS,
-          placeholder: composerPlaceholder,
-          safeAreaBottom,
-        },
       });
       initSnapshotRef.current = {
         theme: conversationThemeFromTokens(tokens),
         flags: resolvedFlags,
-        composer: {
-          mode: CONVERSATION_COMPOSER_MODE,
-          disabled: composerInputDisabled,
-          metrics: CONVERSATION_COMPOSER_METRICS,
-          placeholder: composerPlaceholder,
-          safeAreaBottom,
-        },
       };
 
       /**
        * 恢复链第 1 步 · 聚合 `init`。
-       *
-       * **契约（CR 首评 OQ 定案 ②）**：`readOnly` / `placeholder` / `disabled` 的
-       * **唯一真源是 `composerState`**；init 只管 metrics / mode / safeAreaBottom。
-       * 这里那份 `disabled` / `placeholder` 是同一渲染拍点的初值快照（web 侧
-       * `applyInit` 需要才能摆对首帧），不是第二真源——紧随其后的第 2 步
-       * `composerState` 才是真值。改动会让首帧与真源短暂分叉。
        */
       const sendInit = useCallback(() => {
         const snapshot = initSnapshotRef.current;
@@ -1020,48 +842,11 @@ export const ChatConversationWebView = memo(
           payload: {
             theme: snapshot.theme,
             flags: snapshot.flags,
-            composer: snapshot.composer,
             // 转录 only 变体（transcript-converge）：web 据此隐藏 dock。
             ...(transcriptOnly ? {transcriptOnly: true} : {}),
           },
         });
       }, [postToWeb, transcriptOnly]);
-
-      /** 恢复链第 2 步 · `composerState`（dock 域**直发**，纪律 A）。 */
-      const sendComposerState = useCallback(() => {
-        const state: ConversationComposerState = {
-          inputDisabled: composerInputDisabled,
-          hasModel: composerHasModel,
-          sendDisabled: composerSendDisabled,
-          running: composerRunning,
-          ...(composerError != null && composerError !== ''
-            ? {error: composerError}
-            : {}),
-          fullscreenEnabled: composerFullscreenEnabled,
-          placeholder: composerPlaceholder,
-          chips: composerChips ?? [],
-          keyboardUp: composerKeyboardUp,
-          // 必达（定案 ①）：不下 undefined，让 web 侧永远拿到可渲染的源
-          typeahead: composerTypeahead,
-        };
-        postToWeb({
-          v: CONVERSATION_BRIDGE_V,
-          type: 'composerState',
-          payload: state,
-        });
-      }, [
-        postToWeb,
-        composerInputDisabled,
-        composerHasModel,
-        composerSendDisabled,
-        composerRunning,
-        composerError,
-        composerFullscreenEnabled,
-        composerPlaceholder,
-        composerChips,
-        composerKeyboardUp,
-        composerTypeahead,
-      ]);
 
       /** 快照分片化（照搬 ChatTranscriptWebView 全部语义）。 */
       const sendSessionSnapshotNow = useCallback(
@@ -1164,8 +949,7 @@ export const ChatConversationWebView = memo(
             if (inFlightSnapshotGenerationRef.current === generation) {
               inFlightSnapshotGenerationRef.current = null;
               if (!webReadyRef.current) {
-                // 重挂作废：推迟队列整队丢弃（草稿不靠它保——草稿由 composerState
-                // 之后的 setText 恢复链负责）
+                // 重挂作废：推迟队列整队丢弃（重挂后 ready 会重来，快照链重发）
                 deferredSnapshotActionsRef.current = [];
               }
             }
@@ -1459,42 +1243,6 @@ export const ChatConversationWebView = memo(
         syncStreamToolInvoking,
       ]);
 
-      /**
-       * M7 · 命令式整段写入。
-       *
-       * 与 M2 的**相反**规则：这里**不作废**选区基线，反而把 `lastSelectionRef`
-       * 推进到目标位——程序化写入自带 selection，web 落位即期望位，保留基线能白赚
-       * 一次回声抑制（若置 null，随后的 setSelection 会多下发一条同值命令，
-       * 在 IME 组合态上就是一次多余的光标重摆）。
-       */
-      const setComposerTextNow = useCallback(
-        (text: string, cursor?: number) => {
-          if (!webReady) {
-            // 未就绪不写基线：ready 后的恢复链第 3 步会用最新 composerText 补写
-            return;
-          }
-          webTextRef.current = text;
-          const pos = clampCursor(cursor ?? text.length, text.length);
-          const next = {start: pos, end: pos};
-          lastSelectionRef.current = next;
-          setPendingSelection(next);
-          postToWeb({
-            v: CONVERSATION_BRIDGE_V,
-            type: 'setText',
-            payload: {
-              text,
-              selectionStart: pos,
-              selectionEnd: pos,
-            },
-          });
-          // 与现网 ComposerAtPathInput 同口径：程序化写入同样回调 onChangeText
-          // （controller 的 text / 草稿靠它同步）与合成选区事件。
-          onComposerChangeTextRef.current?.(text);
-          onComposerSelectionChangeRef.current?.(next);
-        },
-        [webReady, postToWeb],
-      );
-
       useImperativeHandle(
         ref,
         () => ({
@@ -1505,7 +1253,6 @@ export const ChatConversationWebView = memo(
           commitAbortOverlaySnapshot,
           forceSnapshot: forceSnapshotNow,
           commitSyntheticAssistantRow,
-          setComposerText: setComposerTextNow,
         }),
         [
           queueStreamDelta,
@@ -1515,7 +1262,6 @@ export const ChatConversationWebView = memo(
           commitAbortOverlaySnapshot,
           forceSnapshotNow,
           commitSyntheticAssistantRow,
-          setComposerTextNow,
         ],
       );
 
@@ -1543,7 +1289,7 @@ export const ChatConversationWebView = memo(
 
       const handleUpstream = useCallback(
         (event: WebViewMessageEvent) => {
-          // 宽松 decoder（纪律 C）：坏 JSON 静默丢弃；ready 由 v===2 判。
+          // 宽松 decoder（纪律 B）：坏 JSON 静默丢弃；ready 由 v===2 判。
           const decoded = decodeConversationUpstream(event.nativeEvent.data);
           if (!decoded.ok) {
             if (decoded.reason === 'stale-ready') {
@@ -1555,46 +1301,17 @@ export const ChatConversationWebView = memo(
           const message = decoded.message;
           const payload = message.payload;
 
-          /* ---- dock 域上行（v:2） ---- */
-          if (message.type === 'dockAction') {
-            if (conversationDockActionIncludes(payload.action)) {
-              onDockActionRef.current?.(payload.action);
-            }
-            return;
-          }
-
-          /* ---- ready（v:2 单条；能力协商全集） ---- */
+          /* ---- ready（v:2 单条；转录域能力协商） ---- */
           if (message.type === 'ready') {
             webReadyRef.current = true;
             setWebReady(true);
             setReadyFailed(false);
             clearReadyTimeout();
-            // 新文档 = 新基线：草稿基线作废（强制恢复链重发 setText，否则草稿丢失）。
-            resetComposerBaselines();
             const capabilities = readReadyCapabilities(payload);
             streamBlockCapableRef.current = transcriptCapabilitiesInclude(
               capabilities,
               TRANSCRIPT_CAPABILITY_STREAM_BLOCK_COMMIT,
             );
-            // 「未声明 = 不支持」：未带 composer-dock 即旧 dist，输入区降级
-            const dockCapable = conversationCapabilitiesInclude(
-              capabilities,
-              CONVERSATION_CAPABILITY_COMPOSER_DOCK,
-            );
-            setComposerDockCapable(dockCapable);
-            if (!dockCapable) {
-              // r6-I-1：降级路径原先只渲染横幅、零打点。线上看到「输入框不见了」
-              // 分不清是旧 dist、能力位没带、还是 ready 压根没来——这里把
-              // 「ready 到了但没带 dock 能力位」这一事实显式上报（含能力位条数，
-              // 用来区分「一条没带」和「带了别的、唯独缺 dock」）。
-              emitChatTranscriptTelemetry({
-                name: 'composer_dock_degraded',
-                capabilityCount: capabilities.length,
-              });
-              bootTimingLog(
-                `composer dock degraded (capabilities=${capabilities.length})`,
-              );
-            }
             timingLog('conversation webview ready (v2 handshake done)');
             bootTimingLog('conversation webview ready (v2 handshake done)');
             onReady?.();
@@ -1602,28 +1319,8 @@ export const ChatConversationWebView = memo(
             return;
           }
 
-          /* ---- composer 域上行（v:1 单例，change / selectionChange / focus / blur） ---- */
-          if (message.type === 'change') {
-            // M1 + M6：打字真源在 web——**先推进差分基线再上抛，绝不回写 setText**。
-            // 不推进的话父层把文本原样写回 composerText 时会被下面的 effect 误判成
-            // 「外部写入」，于是按上一拍 cursor 强制摆一次选区——打在正在输入
-            // （尤其 IME 组合态）的 textarea 上会把光标拽回去一两个字。
-            const text = String(payload.text ?? '');
-            webTextRef.current = text;
-            onComposerChangeTextRef.current?.(text);
-            return;
-          }
-          if (message.type === 'selectionChange') {
-            const next = {
-              start: finiteOrNull(payload.start) ?? 0,
-              end: finiteOrNull(payload.end) ?? 0,
-            };
-            // M5：用户选区到达即解除短暂受控
-            lastSelectionRef.current = next;
-            setPendingSelection(null);
-            onComposerSelectionChangeRef.current?.(next);
-            return;
-          }
+          // change / selectionChange / dockAction 三条 composer/dock 域上行已随
+          // D4b 剥离删除（解码器对未知 type 宽松放行，本组件不再消费）。
           // 键盘链路由 keyboard-controller insets 驱动，focus / blur 无消费。
           // heightChange 不上行（heightReport: false，高度由文档内布局消化）。
 
@@ -1763,67 +1460,15 @@ export const ChatConversationWebView = memo(
           onScrollSnapshot,
           uiRunning,
           clearReadyTimeout,
-          resetComposerBaselines,
         ],
       );
 
-      /** 划词三项菜单（spec §划词菜单）：复制 / 全选 / 粘贴。 */
+      /** 划词菜单（D4b 剥离后仅剩「复制」）：nbsp 清洗链保留。 */
       const handleCustomMenuSelection = useCallback(
         (event: {nativeEvent: {key?: string; selectedText?: string}}) => {
           const key = String(event.nativeEvent.key ?? '');
-          if (key === 'selectAll') {
-            // dock 域直发（纪律 A）：web handler 判 activeElement 是 textarea 就
-            // select()，否则整篇文档选区
-            postToWeb({
-              v: CONVERSATION_BRIDGE_V,
-              type: 'selectAll',
-              payload: {},
-            });
-            return;
-          }
-          if (key === 'paste') {
-            // 运行中禁粘贴（与 copy 同口径，r6-D-1）：旧链 textarea 是 RN
-            // TextInput，editable=false 时原生粘贴根本进不来；新链走 WebView +
-            // 划词菜单，菜单三项静态展示、点击不拦，漏判就等于向被禁用的输入框
-            // 注入文本——该文本经 commitComposerText 落库成草稿、下一轮被发出去。
-            // web 侧 composerPaste 另有一道 inputDisabled 闸门，这里是宿主侧第一道。
-            if (uiRunning) {
-              return;
-            }
-            // 剪贴板读取只经 RN（web 侧不读剪贴板）
-            void Clipboard.getString()
-              .then(raw => {
-                if (raw === '') {
-                  // r6-I-2：空串原为静默 return。线上「长按粘贴没反应」无从归因，
-                  // 打一条日志（不含剪贴板内容）比静默好排查。
-                  console.warn('[chat] composerPaste clipboard empty');
-                  return;
-                }
-                // 跨桥上限：剪贴板全文无上限就是整篇 JSON.stringify 跨 postMessage
-                // （5MB 剪贴板 = 5MB 消息），在 RN 侧先截断并打点，别让 web 收超大包。
-                const text =
-                  raw.length > COMPOSER_PASTE_MAX_CHARS
-                    ? raw.slice(0, COMPOSER_PASTE_MAX_CHARS)
-                    : raw;
-                if (text !== raw) {
-                  console.warn(
-                    `[chat] composerPaste truncated ${raw.length} -> ${text.length}`,
-                  );
-                }
-                postToWeb({
-                  v: CONVERSATION_BRIDGE_V,
-                  type: 'composerPaste',
-                  payload: {text},
-                });
-              })
-              // r6-I-2：读失败原为 `.catch(() => undefined)` 全吞。失败与「剪贴板
-              // 确实是空的」在用户侧表现相同（都没粘上），日志只报失败这一事实，
-              // 不带任何剪贴板内容。
-              .catch(() => {
-                console.warn('[chat] composerPaste clipboard read failed');
-              });
-            return;
-          }
+          // selectAll / paste 两项是跨桥动作（下行 selectAll / composerPaste），
+          // 随 composer/dock 域剥离删除——menuItems 也退回仅复制，不留死按钮。
           if (uiRunning) {
             return;
           }
@@ -1834,15 +1479,15 @@ export const ChatConversationWebView = memo(
             Clipboard.setString(selectedText);
           }
         },
-        [uiRunning, postToWeb],
+        [uiRunning],
       );
 
       /* ================================================================== *
-       * 恢复链（ready → 下行四消息固定顺序）
-       *   ① init → ② composerState → ③ 草稿 setText → ④ 快照直发
-       * 顺序由 effect 声明序保证（同一次 commit 内按声明序执行）。改动本段
-       * 顺序前先想清楚：composerState 晚于 setText 会让首帧 textarea 的
-       * readOnly/placeholder 与真源分叉；快照早于 setText 会先渲染空 dock。
+       * 恢复链（ready → 下行两步固定顺序）
+       *   ① init → ② 快照直发
+       * 顺序由 effect 声明序保证（同一次 commit 内按声明序执行）。
+       * （composer 域的 composerState / 草稿 setText 两步随 D4b 剥离删除：
+       *   桥侧 setText / composerState 下行退役，草稿链落点移步原生 composer。）
        *
        * **触发点只有 ready 一个**：调用方按 `key={chatScrollKey}` 重挂本组件，
        * 切会话即销毁重建、所有 ref 重新初始化，故这些 effect 的依赖里**不必**
@@ -1856,74 +1501,6 @@ export const ChatConversationWebView = memo(
         }
         sendInit();
       }, [webReady, sendInit]);
-
-      // ② composerState（直发；未声明 composer-dock 时不下发——web 侧不认识它）
-      useEffect(() => {
-        if (!webReady || !composerDockCapable) {
-          return;
-        }
-        sendComposerState();
-      }, [webReady, composerDockCapable, sendComposerState]);
-
-      /**
-       * ③ 草稿 setText + ④ 光标期望 —— M1 / M2 / M5 的合并落点。
-       *
-       * **为什么合并成一个 effect**：旧链分两层（`ComposerAtPathInput` 对齐光标、
-       * `ComposerInputWebView` 下发 setText），两层的触发判据都是「外部文本相对基线
-       * 变了」。合并后判据只有一个（`composerText !== webTextRef.current`），不可能
-       * 出现「setText 发了但光标没摆」或反之；顺序也天然是「先 setText 后
-       * setSelection」（下面的 M4 effect 声明序在后）。
-       *
-       * - **M1**：web 上报的 `change` 已把 `webTextRef` 推到同一文本，所以父层把
-       *   文本原样写回 `composerText` 时本条**早退**，绝不误判成外部写入——这一条
-       *   就是「打字时光标被拽回去一两个字」的根治点（尤其 IME 组合态）。
-       * - **M2**：真外部写入时把选区基线**置 null**。web 侧 value 赋值必然把光标推到
-       *   文末，旧基线从此不成立；若随后的 setSelection 恰与旧基线同值，会被回声
-       *   抑制吞掉，光标就永久停在文末。
-       * - **M5**：光标期望 `pendingSelection` 是**短暂**受控——web 上报用户选区即解除。
-       */
-      useEffect(() => {
-        if (!webReady) {
-          return;
-        }
-        if (composerText === webTextRef.current) {
-          return;
-        }
-        webTextRef.current = composerText;
-        lastSelectionRef.current = null; // M2：作废选区基线
-        postToWeb({
-          v: CONVERSATION_BRIDGE_V,
-          type: 'setText',
-          payload: {text: composerText},
-        });
-        const pos = clampCursor(
-          composerCursor ?? composerText.length,
-          composerText.length,
-        );
-        const next = {start: pos, end: pos};
-        setPendingSelection(next); // M5：短暂受控
-        onComposerSelectionChangeRef.current?.(next);
-        // 依赖刻意不含 composerCursor：光标只在**文本真变**这一次对齐，
-        // 用户自己移动光标不受控（对齐 ComposerAtPathInput 的原口径）。
-        //
-        // 依赖里也不含 sessionKey：切会话经 `key` 重挂归零，基线本来就是新的。
-      }, [webReady, composerText, composerCursor, postToWeb]);
-
-      // M4 · setSelection 回声抑制：web 刚上报的同值 = 自身回声，跳过
-      useEffect(() => {
-        if (!webReady || pendingSelection == null) {
-          return;
-        }
-        if (sameSelection(lastSelectionRef.current, pendingSelection)) {
-          return;
-        }
-        lastSelectionRef.current = pendingSelection;
-        postToWeb({
-          v: CONVERSATION_BRIDGE_V,
-          type: 'setSelection',
-          payload: {start: pendingSelection.start, end: pendingSelection.end},
-        });
-      }, [webReady, pendingSelection, postToWeb]);
 
       /* ---- 其余转录域 effects（照搬 ChatTranscriptWebView） ---- */
 
@@ -2009,7 +1586,7 @@ export const ChatConversationWebView = memo(
         );
       }, [webReady, pendingSubagentSessions]);
 
-      // ④ 快照（恢复链最后一步）
+      // ② 快照（恢复链最后一步）
       useEffect(() => {
         if (!webReady) {
           return;
@@ -2317,27 +1894,13 @@ export const ChatConversationWebView = memo(
             scrollEnabled={false}
             showsVerticalScrollIndicator={false}
             keyboardDisplayRequiresUserAction={false}
-            /* 划词三项：复制（现行 nbsp 清洗链）/ 全选（下行 selectAll）/ 粘贴（下行 composerPaste）。
-               transcriptOnly 变体退回旧口径（仅复制）：无 dock 时全选/粘贴的跨桥
-               动作没有落点，三项反而制造死按钮（transcript-converge）。 */
-            menuItems={
-              transcriptOnly
-                ? [...CHAT_TRANSCRIPT_SELECTION_MENU_ITEMS]
-                : [...CHAT_CONVERSATION_SELECTION_MENU_ITEMS]
-            }
+            /* 划词菜单（composer-native-2026-10 D4b 剥离后退回仅复制）：全选/粘贴
+               的跨桥落点（selectAll / composerPaste 下行）已随 composer/dock 域
+               删除，三项形态不再有落点、留了就是死按钮。transcriptOnly 与否不再
+               分叉（该字段仍进 init 载荷，web 侧 CSS 隐藏机制沿用）。 */
+            menuItems={[...CHAT_TRANSCRIPT_SELECTION_MENU_ITEMS]}
             onCustomMenuSelection={handleCustomMenuSelection}
           />
-          {/* transcriptOnly 不判降级横幅：该变体本就无 dock，能力位缺失是
-              预期形态而非「输入组件版本过低」。 */}
-          {!transcriptOnly && webReady && !composerDockCapable ? (
-            <View
-              style={[styles.degrade, {backgroundColor: tokens.background}]}
-              testID="chat-conversation-dock-degraded">
-              <Text style={{color: tokens.textSecondary}}>
-                输入组件版本过低，请重启应用
-              </Text>
-            </View>
-          ) : null}
         </View>
       );
     },
@@ -2349,5 +1912,4 @@ const styles = StyleSheet.create({
   fill: {flex: 1, minHeight: 0, overflow: 'hidden'},
   hint: {marginTop: 8, fontSize: 13},
   retry: {marginTop: 16, fontSize: 15},
-  degrade: {paddingVertical: 12, alignItems: 'center'},
 });

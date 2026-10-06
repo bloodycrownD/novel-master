@@ -735,4 +735,36 @@ describe('ChatConversationPanel · 切会话 key 重挂', () => {
     expect(props).not.toHaveProperty('sessionList');
     expect(props).not.toHaveProperty('onListAction');
   });
+
+  it('composer 域 props 不再下发宿主（D4b 剥离；dock 由 Step 5 原生 composer 承接）', async () => {
+    // 过渡态反面锁：面板保留 controller（Picker/草稿链照旧），但其 composer 域
+    // 产出不再经 props 进宿主——宿主 props 面一旦回潮即红。
+    await act(async () => {
+      tree = TestRenderer.create(<ScrollKeyTestHost />);
+      await flushPromises();
+    });
+    const props = lastWebViewProps();
+    for (const retired of [
+      'composerText',
+      'composerCursor',
+      'onComposerChangeText',
+      'onComposerSelectionChange',
+      'composerInputDisabled',
+      'composerHasModel',
+      'composerSendDisabled',
+      'composerRunning',
+      'composerError',
+      'composerFullscreenEnabled',
+      'composerPlaceholder',
+      'composerChips',
+      'composerKeyboardUp',
+      'composerTypeahead',
+      'safeAreaBottom',
+      'onDockAction',
+    ]) {
+      expect(props).not.toHaveProperty(retired);
+    }
+    // dock 占位在（保持「转录在上、dock 在下」的排布骨架）
+    expect(tree!.root.findByProps({testID: 'chat-dock-placeholder'})).toBeDefined();
+  });
 });

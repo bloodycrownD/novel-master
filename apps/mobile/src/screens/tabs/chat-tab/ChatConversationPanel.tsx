@@ -132,19 +132,13 @@ function ChatConversationWebSurface(props: {
   const onOpenComposerFullscreen = props.onOpenComposerFullscreen;
 
   /**
-   * M7 命令式写入通道：转交宿主句柄的 `setComposerText`。
-   *
-   * 身份刻意保持稳定（依赖只有那个本身稳定的 ref）：它是 controller 的
-   * `setComposerTextRef` 转发目标，也是「Picker 插入 → 宿主」这条跨层链路上
-   * **唯一**可变环节——少一个就少一处可能漂移。
+   * 过渡态（composer-native-2026-10 Step 2）：composer controller 暂保留但不接
+   * webview——宿主已按 D4b 剥离 composer 域（无 onComposerChangeText /
+   * onDockAction / composerState 下行，handle 无 setComposerText），controller 的
+   * 草稿链 / 候选源拉取 / Picker 状态机照旧运转，只是产出的 composerState 不再
+   * 下发。Picker 确认回调经 controller 的本地 state 落库（草稿不丢），待 Step 3/4
+   * 的 `NativeChatComposer` 落地后恢复整链（spec 变更点 #6）。
    */
-  const applyProgrammaticText = useCallback(
-    (text: string, cursor?: number) => {
-      transcriptWebRef.current?.setComposerText(text, cursor);
-    },
-    [transcriptWebRef],
-  );
-
   const composer = useChatComposerController({
     scope: {projectId, sessionId},
     hasModel: hasWorkspaceModel || (agentMeta?.hasDedicatedModel ?? false),
@@ -155,10 +149,7 @@ function ChatConversationWebSurface(props: {
     lastMessageIsPlainUserText,
     draftRestoreToken,
     onOpenComposerFullscreen,
-    setComposerText: applyProgrammaticText,
   });
-
-  const {composerState} = composer;
 
   return (
     <>
@@ -193,25 +184,15 @@ function ChatConversationWebSurface(props: {
         onWebMermaidViewerOpenChange={ctx.setMermaidViewerOpen}
         onMessageMenuAction={controller.onWebMessageMenuAction}
         onSnapshotComplete={controller.notifySnapshotComplete}
-        /* ---- composer 域（controller 算好后逐字段下发） ---- */
-        composerText={composer.text}
-        composerCursor={composer.cursor}
-        onComposerChangeText={composer.onChangeText}
-        onComposerSelectionChange={composer.onSelectionChange}
-        composerInputDisabled={composerState.inputDisabled}
-        composerHasModel={composerState.hasModel}
-        composerSendDisabled={composerState.sendDisabled}
-        composerRunning={composerState.running}
-        composerError={composerState.error}
-        composerFullscreenEnabled={composerState.fullscreenEnabled}
-        composerPlaceholder={composerState.placeholder}
-        composerChips={composerState.chips}
-        composerKeyboardUp={composerState.keyboardUp}
-        composerTypeahead={composerState.typeahead}
-        safeAreaBottom={composer.safeAreaBottom}
-        onDockAction={composer.handleDockAction}
       />
-      {/* 两个选择器仍是 RN 全屏 Modal（spec Q2 定案）：选中后经 M7 通道回填正文。 */}
+      {/*
+        dock 占位（composer-native-2026-10 Step 2 过渡态）：宿主剥离 composer 域后
+        输入框暂缺，这里以空 View 占住布局位置（不渲染任何内容、零高度），保持
+        「转录区在上、dock 在下」的排布骨架；Step 5 由 <NativeChatComposer> 替换
+        （spec Step 5：键盘 padding/滚动跟随接原生）。
+      */}
+      <View testID="chat-dock-placeholder" />
+      {/* 两个选择器仍是 RN 全屏 Modal：过渡期经 controller 本地 state 落库草稿。 */}
       <FileReferencePicker
         visible={composer.pickerOpen}
         projectId={projectId}

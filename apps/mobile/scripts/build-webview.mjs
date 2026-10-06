@@ -151,6 +151,20 @@ const WEBVIEW_CORE_ALLOWLIST = {
     'errors/prompt-errors.js',
     'errors/tool-errors.js',
     'errors/vfs-errors.js',
+
+    // ── 族 6 · 独立入口增量（composer-native-2026-10 Step 2）─────────────
+    // chat-transcript 从合成包拆回独立入口后，runtime 闭包里新实测到的依赖
+    // （构建期 metafile 实测：合成包时代这批经 dock/typeahead 路径进包，
+    // 独立入口不再带 dock，但下列 5 条仍被转录侧传递闭包拉进）。
+    // 删了会怎样：@路径附件 chip 判定、重复路径提示、历史版本打包内容
+    // 解码与路径映射在 webview 侧失效。
+    // ⚠️ `composer-at-path.js` 刻意**不**在本组——它是 dock/typeahead 的
+    // @ 查询纯函数，仅合成包（含 dock）的闭包消费，独立入口实测未拉入。
+    'domain/chat/logic/attach-binary-heuristic.js',
+    'domain/chat/logic/prompt-path-seen.js',
+    'domain/chat/logic/scan-at-path-attachments.js',
+    'domain/vfs/content-store/logic/pack-codec.js',
+    'domain/vfs/logic/vfs-path-mapper.js',
   ],
   // chat-conversation（chat-webview-unify 合成包）= chat-transcript runtime 合流 + dock/typeahead：
   // 依赖闭包与 chat-transcript 逐条相同（同一 runtime 经 factory.ts 装配进合成包），
@@ -329,6 +343,19 @@ const PACKAGES = [
     entryRel: 'composer-input/webview/main.ts',
     cssRel: 'composer-input/styles/composer-input.css',
     htmlRel: 'composer-input/index.html',
+  },
+  {
+    // chat-transcript 独立入口（composer-native-2026-10 Step 2）：转录侧从
+    // chat-conversation 合成包拆回独立文档（runtime 自绑通道 + 入口层单条 v:2
+    // ready、能力位无 composer-dock）。cssRel 单值 = transcript.css 基底全文
+    // （两个注入占位随基底走，#app 四属性规则已并入基底）；chat-conversation
+    // 合成包过渡期仍在构建（宿主尚未切独立入口），退役删除在 Step 6。
+    id: 'chat-transcript',
+    entryRel: 'chat-transcript/webview/main.ts',
+    cssRel: 'chat-transcript/styles/transcript.css',
+    htmlRel: 'chat-transcript/index.html',
+    richCssKey: 'CHAT_TRANSCRIPT_RICH_CSS',
+    mermaidFullscreenCss: true,
   },
   {
     // chat-conversation（chat-webview-unify Step 2 / transcript-converge 收官）：
