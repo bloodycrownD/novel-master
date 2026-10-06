@@ -44,6 +44,8 @@ module.exports = {
       '<rootDir>/test-utils/react-native-keyboard-controller-mock.tsx',
     '^react-native-webview$':
       '<rootDir>/test-utils/react-native-webview-mock.tsx',
+    '^react-native-enriched-markdown$':
+      '<rootDir>/test-utils/enriched-markdown-mock.tsx',
     // 原生包在 Jest 环境顶层即抛错（blob-util 的 NativeEventEmitter / op-sqlite 的
     // turbo module），挂全局 stub 保证未被局部 mock 的套件也能加载；
     // 测试文件内的 jest.mock 仍会覆盖这里的映射。

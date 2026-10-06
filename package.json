@@ -13,7 +13,13 @@
       "-DSQLITE_TEMP_STORE=2"
     ]
   },
+  "enriched-markdown": {
+    "enableCodeHighlight": false,
+    "enableMath": false,
+    "enableVideo": false
+  },
   "scripts": {
+    "postinstall": "patch-package",
     "prepare": "node scripts/link-hooks.mjs",
     "check:encoding": "node scripts/check-encoding.mjs",
     "check:ci-gates": "node scripts/check-ci-gates.mjs",
@@ -41,6 +47,7 @@
     "@types/node": "^25.6.2",
     "eslint": "^9.22.0",
     "linkedom": "^0.18.13",
+    "patch-package": "^8.0.1",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.59.4"
   },
