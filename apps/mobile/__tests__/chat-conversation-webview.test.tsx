@@ -824,10 +824,12 @@ describe('ChatConversationWebView · 安全守卫与加载源', () => {
     });
     const guard = webViewOf(tree.root).props
       .onShouldStartLoadWithRequest as (req: {url: string}) => boolean;
-    expect(guard({url: 'file:///android_asset/webview/chat-conversation/index.html'})).toBe(
+    // 宿主加载源已是 chat-transcript 独立包（composer-native-2026-10 Step 5），
+    // 放行面随之切换；旧合成包目录不再放行（Step 6 随包退役）。
+    expect(guard({url: 'file:///android_asset/webview/chat-transcript/index.html'})).toBe(
       true,
     );
-    expect(guard({url: 'file:///android_asset/webview/chat-transcript/index.html'})).toBe(
+    expect(guard({url: 'file:///android_asset/webview/chat-conversation/index.html'})).toBe(
       false,
     );
     expect(guard({url: 'https://evil.example.com'})).toBe(false);
@@ -837,13 +839,13 @@ describe('ChatConversationWebView · 安全守卫与加载源', () => {
     openUrl.mockRestore();
   });
 
-  it('加载源为 chat-conversation 包 URI（过渡期宿主仍指合成包；独立入口切换在 Step 5）', async () => {
+  it('加载源为 chat-transcript 包 URI（Step 5 宿主切换独立入口）', async () => {
     let tree: TestRenderer.ReactTestRenderer;
     await act(async () => {
       tree = track(TestRenderer.create(<ChatConversationWebView {...baseProps()} />));
     });
     expect(webViewOf(tree.root).props.source).toEqual({
-      uri: 'file:///android_asset/webview/chat-conversation/index.html',
+      uri: 'file:///android_asset/webview/chat-transcript/index.html',
     });
   });
 });

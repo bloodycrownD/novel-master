@@ -1,39 +1,40 @@
 /**
- * Composer 逻辑层（chat-webview-unify Step 7）：从 `ChatComposer.tsx` 拆出的
- * 无渲染 hook —— **RN 侧 dock 域的一切真源**。
+ * Composer 逻辑层（chat-webview-unify Step 7 拆出；composer-native-2026-10
+ * Step 5 数据来源换向）—— **RN 侧 dock 域的一切真源**。
  *
  * ## 为什么要拆
- * dock 全区（chips / input / toolbar / typeahead 浮层）随 Step 3/4 进了 chat-conversation
- * 文档，RN 侧不再有「输入框组件」可言。留在 RN 的只有三样东西，本 hook 就是它们的
- * 集合体：
+ * dock 全区（chips / input / toolbar / typeahead 浮层）由 `NativeChatComposer`
+ * 承接（原 Step 3/4 期间曾进 chat-conversation 文档，输入框原生化后回到 RN）。
+ * 留在本 hook 的是三样东西：
  * 1. **发送决策**（`executeRun` / `send` 三分支 / `resolveComposerSendIntent`）；
  * 2. **草稿三订阅链**（水化 / `subscribeChatComposerDraft` / `subscribeChatAnnotateDraft`）；
  * 3. **候选源拉取**（`buildListRows` 过滤目录 → `AtPathRef[]` / `effectiveSkills`）。
  *
- * 这三样算完的产物按 spec §composerState 字段表**一次性组装**成
- * `ConversationComposerState` 下发（web 侧不做任何业务推导），另加键盘态
- * `keyboardUp` 与 `safeAreaBottom` 两条 init 用信号。
+ * 这三样算完的产物组装成 `composerState` 供面板**直连** `NativeChatComposer`
+ * 的 props（组件不做业务推导），另加键盘态 `keyboardUp` 与 `safeAreaBottom`。
+ * 数据来源在 Step 5 换向（spec 变更点 #6）：打字/选区/dock 上行不再走桥
+ * （`ChatConversationWebView` 已退为纯转录宿主），改为组件事件直连；命令式写入
+ * 走组件 `ref.setText`（M7）。回调签名（onChangeText / onSelectionChange /
+ * handleDockAction）保持不变——只是调用方从桥上行换成了组件 props。
  *
  * ## 三条纪律
  *
- * **(A) 打字真源在 web，`change` 只上抛不回写**（M6）。`onChangeText` 是唯一消费口：
- * web 每键上行一条，落库即走。typeahead 点选 / 划词粘贴这类 **web 自治写入**同样经此
- * 补发一条 `change`（见 `web/chat-conversation/webview/dock.ts` 的
- * `commitComposerText`），本 hook 一视同仁落库——**不区分来源**是这里最容易写错的
- * 地方：若按「来源是 Picker 就走 `insertTokens*`」分流，web 补发的那条就会漏落库。
+ * **(A) 打字真源在输入组件内部，`change` 只上抛不回写**（M6）。`onChangeText` 是
+ * 唯一消费口：每键上行一条，落库即走。typeahead 点选 / 粘贴这类 **组件自治写入**
+ * 由 `NativeChatComposer` 在命令式写入后补发一条 `change`（M7/E10/F6），本 hook
+ * 一视同仁落库——**不区分来源**是这里最容易写错的地方：若按「来源是 Picker 就走
+ * `insertTokens*`」分流，组件补发的那条就会漏落库。
  *
  * **(B) 键盘态只能由 UI 线程的**布尔翻转**驱动，禁止每帧 JS 读 SharedValue**。
  * `useReanimatedKeyboardAnimation()` 的 `height` 是每帧在变的 SharedValue；若在
  * render / effect 里直读它派生 state，就是「键盘动画期间每帧一次 RN 侧 setState +
- * 重渲染」，把本迭代刚省下的 relayout 又还回去。正确形态是 `useAnimatedReaction`
- * （跑在 UI 线程）+ `runOnJS`（**仅在布尔翻转时**过桥）。
- * RN 侧的 padding 动画（`dockPaddingBottom` 的 `useAnimatedStyle`）随 padding 归 web
- * 一并移除——它服务的白条防线改由 web 侧 `keyboardUp ? 0 : max(8, safeAreaBottom)`
- * 承担。
+ * 重渲染」。正确形态是 `useAnimatedReaction`（跑在 UI 线程）+ `runOnJS`（**仅在
+ * 布尔翻转时**过桥）。翻转出的 `keyboardUp` 经 props 进 `NativeChatComposer`，
+ * 由它做 dock 底 padding 的归零/回落（`resolveDockBottomPadding`）。
  *
- * **(C) typeahead 候选源按引用下发**。`composerState.typeahead` 逐内容比对后
- * **复用旧引用**：宿主的 memo 比较器按引用判等（不做深比较——那既 O(n) 又必然造出
- * 新引用，把这条捷径废掉），引用变了才下行一次 `composerState`。
+ * **(C) typeahead 候选源按引用下发**。候选源内容不变时复用旧引用：`NativeChatComposer`
+ * 的 typeahead 视图是 `useMemo`（依赖含 `typeaheadSource`），引用稳定就不过滤重算，
+ * 浮层不会因无关重渲染闪动。
  */
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
@@ -97,31 +98,37 @@ export type UseChatComposerControllerOptions = {
     payload: ComposerFullscreenPayload,
   ) => void;
   /**
-   * **M7 · 命令式整段写入通道**：宿主 `ChatConversationWebViewHandle.setComposerText`。
+   * **M7 · 命令式整段写入通道**（composer-native-2026-10 Step 5 起的落点是
+   * `NativeChatComposer` 的 `ref.setText`；Step 2~4 过渡期曾是宿主
+   * `ChatConversationWebViewHandle.setComposerText`，桥侧下行已随 D4b 退役）。
    *
-   * 为什么 Picker 路径必须走它而不是「改 text state 让宿主的 effect 下发 setText」：
-   * effect 版是 M2 规则（**作废**选区基线），命令式是 M7 规则（**不置** null、保留
-   * 基线）。带选区的程序化写入要落到指定光标，两条相反规则只能靠两条独立通道实现。
+   * 为什么 Picker 路径必须走它而不是「改 text state 让组件的 value effect 下发」：
+   * value effect 靠「外部直改 state」触发，命令式通道显式声明写入意图并携带光标，
+   * 两条通道在组件内收敛到同一个 `commitExternalText` 内部实现（行为零差分），
+   * 但命令式调用让「写入发生」这件事不依赖渲染时序，时序上更确定。
    *
-   * 缺省时退化为「只改本地 state」（宿主的 `composerText` prop 变化仍会补下发），
-   * 供不挂 WebView 的调用方（单测 / 降级）使用。
+   * 缺省时退化为「只改本地 state」（组件的 `value` prop 变化仍会经 effect 补写），
+   * 供不挂输入组件的调用方（单测 / 降级）使用。
    */
   readonly setComposerText?: (text: string, cursor?: number) => void;
 };
 
 export type ChatComposerController = {
-  /** 下发给宿主的 dock 域聚合状态（类型上就是 `composerState` 载荷）。 */
+  /**
+   * dock 域聚合状态：面板按字段拆开直连 `NativeChatComposer` 的 props
+   * （类型载体仍是 `ConversationComposerState`，不再经桥收发）。
+   */
   readonly composerState: ConversationComposerState;
-  /** 输入框当前全文（外部真源草稿文本；**打字真源在 web 侧**）。 */
+  /** 输入框当前全文（外部真源草稿文本；**打字真源在输入组件内部编辑器态**）。 */
   readonly text: string;
   /** 外部受控光标（插入 token / 水化 / 清空后）：随外部 value 变化对齐一次。 */
   readonly cursor: number;
-  /** web `change` 上行的唯一消费口（打字 / typeahead 点选 / 粘贴补发共用）。 */
+  /** 打字 / 命令式写入补发的唯一消费口（纪律 A：不区分来源）。 */
   readonly onChangeText: (text: string) => void;
-  /** web `selectionChange` 上行消费口。 */
+  /** 选区变化上行消费口（`NativeChatComposer.onComposerSelectionChange` 直挂）。 */
   readonly onSelectionChange: (selection: ComposerInputSelection) => void;
 
-  /** dock 域上行处置（宿主 `onDockAction` 直挂这个）。 */
+  /** dock 上行处置（`NativeChatComposer.onDockAction` 直挂这个）。 */
   readonly handleDockAction: (action: ConversationDockAction) => void;
   readonly send: () => Promise<void>;
   readonly terminate: () => void;
@@ -136,6 +143,14 @@ export type ChatComposerController = {
   readonly onAtPickerConfirm: (pathTokens: readonly string[]) => void;
   /** `$` Picker 选择确认 → 整段写入（经 M7 命令式通道）。 */
   readonly onSkillPickerConfirm: (skillName: string) => void;
+
+  /**
+   * typeahead 点选落文（Step 5 起 `NativeChatComposer.onTypeaheadSelect` 消费）：
+   * `@` 侧整 token（含触发符），`$` 侧传剥掉触发符的技能名。两者经
+   * `commitComposerText`（M7 命令式通道）落文，并替换活跃的半截查询。
+   */
+  readonly insertTokensIntoComposer: (pathTokens: readonly string[]) => void;
+  readonly insertSkillToken: (skillName: string) => void;
 
   /** 安全区底部高度（`init.composer.safeAreaBottom` 的取值）。 */
   readonly safeAreaBottom: number;
@@ -242,7 +257,7 @@ export function useChatComposerController({
   const [error, setError] = useState<string | undefined>();
   const [pickerOpen, setPickerOpen] = useState(false);
   const [skillPickerOpen, setSkillPickerOpen] = useState(false);
-  /** `@` typeahead 候选源（`AtPathRef[]`；非过滤结果，过滤在 web 侧）。 */
+  /** `@` typeahead 候选源（`AtPathRef[]`；非过滤结果，过滤在组件侧）。 */
   const [fileRefs, setFileRefs] =
     useState<readonly AtPathRef[]>(EMPTY_FILE_REFS);
   /** `$` 技能候选源（当前项目合并视图，不走会话工作区）。 */
@@ -362,21 +377,34 @@ export function useChatComposerController({
     [sessionId],
   );
 
-  /** 草稿重读进本地 state（水化链与 `subscribeChatComposerDraft` 共用一条路径）。 */
+  /**
+   * 草稿重读进本地 state（水化链与 `subscribeChatComposerDraft` 共用一条路径）。
+   *
+   * 文本真变时同步经命令式通道下发（D8：水化不等转录 webview 的 ready 握手，
+   * 两链并行；见 `commitComposerText` 与 options.setComposerText 注释）。只在
+   * 文本变化时下发——状态条整表替换（`applyComposerStatusAttachmentsReplace`）
+   * 也会广播到这里，文本未变就重写输入框是无谓的 `setValue`，还会打断 IME
+   * 组合态。
+   */
   const syncFromDraft = useCallback(() => {
     const draft = readChatComposerDraftState(sessionId);
+    const textChanged = draft.text !== textRef.current;
     setText(draft.text);
     textRef.current = draft.text;
     setAttachments([...draft.attachments]);
+    if (textChanged) {
+      setComposerTextRef.current?.(draft.text);
+    }
   }, [sessionId]);
 
   /**
    * 整段写入（Picker 路径的唯一入口）。
    *
    * 三件事一起做：本地 state 立即落位（供 `composerState` 派生与后续插入算光标）、
-   * 草稿落库、**命令式通道下发**（M7）。本地先落位而不是等 web 回声：命令式通道在
-   * web 未就绪时静默返回（宿主内部有 `webReady` 守卫），那时若只靠回声同步，本地
-   * state 会停在旧值，下一次插入就算错光标了。
+   * 草稿落库、**命令式通道下发**（M7，落点 `NativeChatComposer` 的 `ref.setText`）。
+   * 本地先落位而不是等组件回声：命令式通道在输入组件未挂载时静默返回（ref 为
+   * null），那时若只靠回声同步，本地 state 会停在旧值，下一次插入就算错光标了
+   * （挂载后的 value effect 会兜底补写，见组件侧注释）。
    */
   const commitComposerText = useCallback(
     (next: string, nextCursor?: number) => {
@@ -493,6 +521,9 @@ export function useChatComposerController({
         setText('');
         textRef.current = '';
         setAttachments([]);
+        // 清空同样走 M7 命令式通道：本地 state 归零之外显式把输入框清掉，
+        // 不依赖 value effect 的下一轮回程。
+        setComposerTextRef.current?.('', 0);
       };
 
       try {
@@ -676,9 +707,9 @@ export function useChatComposerController({
    * 有未完成的 `@…` / `$…` 时从触发符起替换到光标，避免残留半截查询。
    *
    * 注意这里仍然要算一次 `findActiveAtQuery`（纯函数，插入那一刻才算）：typeahead
-   * 的**开合**归 web 自治了，但**插入落点**仍在 RN 侧算——RN 只有 text 与 cursor
-   * 两份数据，没有 web 的活动 token 概念。去掉这一步会让「`@半截` → 打开选择器 →
-   * 选中」在光标后留下残渣。
+   * 的**开合**归 `NativeChatComposer` 组件自治（computeTypeaheadView 内部算），
+   * 但**插入落点**仍在 RN 侧算——controller 只有 text 与 cursor 两份数据。去掉
+   * 这一步会让「`@半截` → 点选候选」在光标后留下残渣。
    */
   const insertTokensIntoComposer = useCallback(
     (pathTokens: readonly string[]) => {
@@ -792,6 +823,8 @@ export function useChatComposerController({
     closeSkillPicker,
     onAtPickerConfirm,
     onSkillPickerConfirm,
+    insertTokensIntoComposer,
+    insertSkillToken,
     safeAreaBottom: insets.bottom,
   };
 }

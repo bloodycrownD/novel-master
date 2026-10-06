@@ -218,7 +218,9 @@ describe('WebViewAssetPackageId 联合类型镜像（cr2-C-1）', () => {
     expect(parseBuildScriptPackages()).toEqual(union);
   });
 
-  it('退役包 chat-transcript 已不在联合类型里', () => {
-    expect(parseAssetUriUnionIds()).not.toContain('chat-transcript');
+  it('chat-transcript 已随独立包恢复回归联合类型（composer-native-2026-10 Step 5）', () => {
+    // Step 2 建独立入口、Step 5 宿主切源——联合类型与 PACKAGES（五包过渡态）
+    // 重新对齐；Step 6 退役 chat-conversation 收口为四包时随清单一并收窄。
+    expect(parseAssetUriUnionIds()).toContain('chat-transcript');
   });
 });

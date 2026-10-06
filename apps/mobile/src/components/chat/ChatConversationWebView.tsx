@@ -72,9 +72,9 @@ import {
   parseConversationScrollSnapshot,
   readReadyCapabilities,
   type ConversationHostMessage,
-  type ConversationTheme,
 } from './ChatConversationBridge';
 import {enrichTranscriptRows} from './enrich-transcript-rows';
+import {conversationThemeFromTokens} from './conversation-theme';
 import {createQuantumYield} from '@/services/yield-quantum';
 import {
   buildTranscriptRows,
@@ -86,9 +86,9 @@ import {
 } from './message-blocks';
 import {planSnapshotChunkBounds} from './snapshot-chunk-bounds';
 import {
-  getChatConversationPackageDirUri,
-  getChatConversationUri,
-} from '@/webview-host/chat-conversation/uri';
+  getChatTranscriptPackageDirUri,
+  getChatTranscriptUri,
+} from '@/webview-host/chat-transcript/uri';
 import {emitChatTranscriptTelemetry} from '@/services/chat-transcript-telemetry';
 import {CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION} from '@/services/chat-transcript-scroll-cache';
 import {useTheme} from '@/theme/ThemeProvider';
@@ -248,33 +248,9 @@ function chatConversationWebViewPropsEqual(
 }
 
 /**
- * 主题 9 键超集：transcript 7 键 ∪ composer 6 键去重，一次 `themeUpdate` 全文档生效。
- * `primaryMuted` 由宿主算（`${primary}22`，web 不做颜色计算）；`selection` 直接取
- * tokens（缺了 `::selection` 会回落 `--primary-muted` 变色）。
+ * init / themeUpdate 的主题载荷即 `conversationThemeFromTokens(tokens)` 的产物
+ * （映射本体在 `conversation-theme.ts`，与原生 composer 共用一份）。
  */
-function conversationThemeFromTokens(tokens: {
-  background: string;
-  text: string;
-  textSecondary: string;
-  primary: string;
-  selection: string;
-  danger: string;
-  surface: string;
-  borderLight: string;
-}): ConversationTheme {
-  const theme: ConversationTheme = {
-    background: tokens.background,
-    text: tokens.text,
-    textSecondary: tokens.textSecondary,
-    primary: tokens.primary,
-    primaryMuted: `${tokens.primary}22`,
-    selection: tokens.selection,
-    danger: tokens.danger,
-    surface: tokens.surface,
-    borderLight: tokens.borderLight,
-  };
-  return theme;
-}
 
 function resolveOpenScrollIntent(
   initialScroll: ChatTranscriptScrollSnapshot | null,
@@ -1765,7 +1741,7 @@ export const ChatConversationWebView = memo(
        */
       const shouldStartLoadWithRequest = useCallback(
         (req: {url: string}): boolean => {
-          if (req.url.startsWith(getChatConversationPackageDirUri())) {
+          if (req.url.startsWith(getChatTranscriptPackageDirUri())) {
             return true;
           }
           if (/^https?:\/\//i.test(req.url)) {
@@ -1877,10 +1853,10 @@ export const ChatConversationWebView = memo(
             style={[styles.fill, {backgroundColor: tokens.background}]}
             /* sec/D-1：收紧为包内 file:// */
             originWhitelist={['file://']}
-            source={{uri: getChatConversationUri()}}
+            source={{uri: getChatTranscriptUri()}}
             allowFileAccess
             allowFileAccessFromFileURLs
-            allowingReadAccessToURL={getChatConversationPackageDirUri()}
+            allowingReadAccessToURL={getChatTranscriptPackageDirUri()}
             onShouldStartLoadWithRequest={shouldStartLoadWithRequest}
             onOpenWindow={handleOpenWindow}
             onMessage={handleUpstream}

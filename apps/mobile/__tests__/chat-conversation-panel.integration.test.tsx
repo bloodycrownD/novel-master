@@ -92,6 +92,29 @@ jest.mock('../src/services/project-composer-status.service', () => ({
 jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({top: 0, bottom: 0, left: 0, right: 0}),
 }));
+
+// 原生输入 dock 的接线观察面（composer-native-2026-10 Step 5）：mock 掉
+// NativeChatComposer，①抓 props（面板 → composer 的 props 面回归锁）；
+// ②经 ref 暴露可记录的 setText（M7 命令式通道落点的断言面）。组件本体渲染
+// null——dock 内部行为（胶囊/typeahead/粘贴门控）由 native-composer*.test.tsx 覆盖。
+const mockComposerSetText = jest.fn();
+const mockComposerPropsList: Array<Record<string, unknown>> = [];
+jest.mock('../src/components/chat/NativeChatComposer', () => {
+  const mockReact = require('react');
+  return {
+    NativeChatComposer: mockReact.forwardRef(
+      (props: unknown, ref: React.Ref<unknown>) => {
+        mockComposerPropsList.push(props as Record<string, unknown>);
+        mockReact.useImperativeHandle(ref, () => ({
+          setText: mockComposerSetText,
+          focus: () => undefined,
+          blur: () => undefined,
+        }));
+        return null;
+      },
+    ),
+  };
+});
 // 两个 RN Modal 选择器（面板直挂）：只挡掉真实 Modal 依赖。
 jest.mock('../src/components/chat/FileReferencePicker', () => ({
   FileReferencePicker: () => null,
@@ -112,8 +135,20 @@ jest.mock('../src/components/sheet/BottomSheetMenu', () => ({
   BottomSheetMenu: () => null,
 }));
 // BottomSheetMenu 的骨架（ModalShell）内部用 useTheme，mock 掉避免拉起 runtime 链。
+// tokens 带 9 键：原生 composer 的 theme props 断言面（conversation-theme 映射）。
 jest.mock('../src/theme/ThemeProvider', () => ({
-  useTheme: () => ({tokens: {surface: '#111'}}),
+  useTheme: () => ({
+    tokens: {
+      background: '#000',
+      text: '#fff',
+      textSecondary: '#ccc',
+      primary: '#08f',
+      selection: '#08f55',
+      danger: '#f55',
+      surface: '#111',
+      borderLight: '#222',
+    },
+  }),
 }));
 // toast 记录用模块级 mock：组件每次渲染取到的 showToast 是同一实例，
 // 断言（重选/锁定提示文案）才能拿到调用记录。
@@ -125,7 +160,13 @@ jest.mock('../src/components/chrome/ToastHost', () => ({
 import {ChatConversationPanel} from '../src/screens/tabs/chat-tab/ChatConversationPanel';
 import type {VfsFileManagerHandle} from '../src/components/vfs/VfsFileManager';
 import type {SessionStreamUnitView} from '../src/services/session-stream-unit';
-import {clearChatComposerDraft} from '../src/storage/chat-composer-draft';
+import {
+  applyComposerStatusAttachmentsReplace,
+  clearChatComposerDraft,
+  readChatComposerDraftState,
+} from '../src/storage/chat-composer-draft';
+import {serializeComposerDraftJson} from '@novel-master/core/chat';
+import {formatStatusChipLabelFromAttachment} from '@novel-master/core/chat';
 
 /**
  * 灌一个够 controller 跑起来的 mock runtime（草稿水化 + 两路候选源拉取 + 发送决策）。
@@ -178,6 +219,8 @@ const tokens = {
 let mockConversationPanel: 'chat' | 'workspace' = 'chat';
 // 按用例可变的 sessionId（跨会话重挂回归锁）：默认 's1'，用例内切 's2' 模拟换会话。
 let mockSessionId: string | null = 's1';
+// 按用例可变的 ctx 覆盖面（发送分支用例置 hasWorkspaceModel 等；beforeEach 清空）。
+let mockContextOverrides: Record<string, unknown> = {};
 const mockSetConversationPanel = jest.fn((panel: 'chat' | 'workspace') => {
   mockConversationPanel = panel;
 });
@@ -279,6 +322,7 @@ function makeMockContext(
     runtime: {sessionStreamUnitManager: {}} as any,
     setCurrentSession: jest.fn(async () => undefined),
     closeMessageMenu: jest.fn(),
+    ...mockContextOverrides,
   };
 }
 
@@ -320,6 +364,9 @@ beforeEach(() => {
   mockWebViewPropsList.length = 0;
   mockWebViewLifecycle.length = 0;
   mockCommitSyntheticAssistantRow.mockClear();
+  mockComposerPropsList.length = 0;
+  mockComposerSetText.mockClear();
+  mockContextOverrides = {};
 });
 
 /** 取最近一次渲染时统一宿主收到的 props（viewState 断言面）。 */
@@ -327,6 +374,15 @@ function lastWebViewProps(): Record<string, unknown> {
   const last = mockWebViewPropsList[mockWebViewPropsList.length - 1];
   if (last == null) {
     throw new Error('ChatConversationWebView 未渲染');
+  }
+  return last;
+}
+
+/** 取最近一次渲染时原生 dock 收到的 props（Step 5 接线断言面）。 */
+function lastComposerProps(): Record<string, unknown> {
+  const last = mockComposerPropsList[mockComposerPropsList.length - 1];
+  if (last == null) {
+    throw new Error('NativeChatComposer 未渲染');
   }
   return last;
 }
@@ -737,8 +793,8 @@ describe('ChatConversationPanel · 切会话 key 重挂', () => {
   });
 
   it('composer 域 props 不再下发宿主（D4b 剥离；dock 由 Step 5 原生 composer 承接）', async () => {
-    // 过渡态反面锁：面板保留 controller（Picker/草稿链照旧），但其 composer 域
-    // 产出不再经 props 进宿主——宿主 props 面一旦回潮即红。
+    // 反面锁：面板保留 controller，但其 composer 域产出不经 props 进转录宿主——
+    // 宿主 props 面一旦回潮即红。
     await act(async () => {
       tree = TestRenderer.create(<ScrollKeyTestHost />);
       await flushPromises();
@@ -764,7 +820,206 @@ describe('ChatConversationPanel · 切会话 key 重挂', () => {
     ]) {
       expect(props).not.toHaveProperty(retired);
     }
-    // dock 占位在（保持「转录在上、dock 在下」的排布骨架）
-    expect(tree!.root.findByProps({testID: 'chat-dock-placeholder'})).toBeDefined();
+    // dock 占位已被原生 composer 替换（Step 5）
+    expect(() =>
+      tree!.root.findByProps({testID: 'chat-dock-placeholder'}),
+    ).toThrow();
+    expect(lastComposerProps()).toBeDefined();
+  });
+});
+
+// ── 原生 dock 接线（composer-native-2026-10 Step 5 · 变更点 #6/#14/D8）───────
+//
+// 面板把 controller 真源拆字段直连 <NativeChatComposer>。断言面：
+// - props 面回归锁（hasModel/canSend/error/chipLabels/typeahead/keyboardUp/
+//   safeAreaBottom/fullscreenEnabled/theme 9 键逐项对照 controller 真源）；
+// - dock 上行转发 controller（needModel / send 分支）；
+// - 命令式写入通道（M7）落 ref.setText（发送清空 / typeahead 点选）；
+// - 恢复链并行（D8）：草稿水化不等转录 webview 的 ready 握手——本文件的
+//   webview mock 从不触发 onReady，composer 链照常水化即并行成立的直接证据。
+describe('ChatConversationPanel · 原生 dock 接线（Step 5）', () => {
+  let tree: TestRenderer.ReactTestRenderer | undefined;
+
+  afterEach(() => {
+    if (tree != null) {
+      act(() => {
+        tree!.unmount();
+      });
+    }
+    tree = undefined;
+  });
+
+  it('NativeChatComposer 渲染并收到 controller 派生的关键 props', async () => {
+    await act(async () => {
+      tree = TestRenderer.create(<TestHost />);
+      await flushPromises();
+    });
+    const props = lastComposerProps();
+    // 默认 ctx：无模型 → hasModel false、inputDisabled true、canSend false
+    expect(props.hasModel).toBe(false);
+    expect(props.disabled).toBe(true);
+    expect(props.inputDisabled).toBe(true);
+    expect(props.canSend).toBe(false);
+    expect(props.running).toBe(false);
+    expect(props.uiRunning).toBe(false);
+    expect(props.error).toBeUndefined();
+    expect(props.chipLabels).toEqual([]);
+    expect(props.keyboardUp).toBe(false);
+    // insets mock bottom=0 → safeAreaBottom 0；TestHost 未注入 ⛶ 回调 → 不可用
+    expect(props.safeAreaBottom).toBe(0);
+    expect(props.fullscreenEnabled).toBe(false);
+    // 候选源真源：buildListRows 过滤根目录后的 AtPathRef[]
+    expect(props.typeaheadSource).toEqual({
+      files: [{path: '/a.md', kind: 'file'}],
+      skills: [],
+    });
+    // theme 9 键与转录文档同源（conversation-themeFromTokens 映射）
+    expect(props.theme).toEqual({
+      background: '#000',
+      text: '#fff',
+      textSecondary: '#ccc',
+      primary: '#08f',
+      primaryMuted: '#08f22',
+      selection: '#08f55',
+      danger: '#f55',
+      surface: '#111',
+      borderLight: '#222',
+    });
+  });
+
+  it('onDockAction 转发 controller：needModel 落 ctx.onNeedModel', async () => {
+    const onNeedModel = jest.fn();
+    mockContextOverrides.onNeedModel = onNeedModel;
+    await act(async () => {
+      tree = TestRenderer.create(<TestHost />);
+      await flushPromises();
+    });
+
+    await act(async () => {
+      lastComposerProps().onDockAction('needModel');
+    });
+
+    expect(onNeedModel).toHaveBeenCalledTimes(1);
+  });
+
+  it('onComposerChangeText 直连 controller.onChangeText（打字落草稿 + value 镜像回传）', async () => {
+    await act(async () => {
+      tree = TestRenderer.create(<TestHost />);
+      await flushPromises();
+    });
+
+    await act(async () => {
+      lastComposerProps().onComposerChangeText('hello');
+    });
+
+    expect(readChatComposerDraftState('s1').text).toBe('hello');
+    expect(lastComposerProps().value).toBe('hello');
+  });
+
+  it('onTypeaheadSelect：@ 行与 $ 行都经 M7 通道 ref.setText 落文', async () => {
+    await act(async () => {
+      tree = TestRenderer.create(<TestHost />);
+      await flushPromises();
+    });
+
+    // @ 行：整 token 插入（补尾空格，光标落插入段末）
+    await act(async () => {
+      lastComposerProps().onTypeaheadSelect({
+        label: '📄/a.md',
+        token: '@a.md',
+        tag: '',
+      });
+    });
+    expect(mockComposerSetText).toHaveBeenCalledWith('@a.md ', 6);
+
+    // $ 行：剥触发符走 insertSkillToken，追加在既有文本后
+    await act(async () => {
+      lastComposerProps().onTypeaheadSelect({
+        label: '$ 写作',
+        token: '$写作',
+        tag: '项目',
+      });
+    });
+    expect(mockComposerSetText).toHaveBeenLastCalledWith('@a.md $写作 ', 10);
+    expect(readChatComposerDraftState('s1').text).toBe('@a.md $写作 ');
+  });
+
+  it('发送分支走 controller：受理后经 M7 通道清空输入框与草稿', async () => {
+    const onNeedModel = jest.fn();
+    mockContextOverrides.onNeedModel = onNeedModel;
+    mockContextOverrides.hasWorkspaceModel = true;
+    // startRun mock 受理即回调 onUserMessageAppended（真机上是 append 落库后）
+    const startRun = jest.fn(async (...args: unknown[]) => {
+      (args[3] as {onUserMessageAppended?: () => void})
+        .onUserMessageAppended?.();
+      return {ok: true};
+    });
+    mockRuntime.sessionStreamUnitManager.startRun = startRun;
+
+    await act(async () => {
+      tree = TestRenderer.create(<TestHost />);
+      await flushPromises();
+    });
+
+    await act(async () => {
+      lastComposerProps().onComposerChangeText('你好');
+    });
+    // 有正文 → 发送钮可用（canSend = !sendDisabled，hasComposerSendableInput 语义）
+    expect(lastComposerProps().canSend).toBe(true);
+
+    await act(async () => {
+      await lastComposerProps().onDockAction('send');
+      await flushPromises();
+    });
+
+    expect(startRun).toHaveBeenCalledTimes(1);
+    expect(onNeedModel).not.toHaveBeenCalled();
+    // 清空走 M7 命令式通道（clearComposerNow → ref.setText('', 0)）
+    expect(mockComposerSetText).toHaveBeenCalledWith('', 0);
+    expect(readChatComposerDraftState('s1').text).toBe('');
+  });
+
+  it('chipLabels 由状态条附件经 core formatStatusChipLabelFromAttachment 派生', async () => {
+    await act(async () => {
+      tree = TestRenderer.create(<TestHost />);
+      await flushPromises();
+    });
+
+    const attachment = {
+      id: 'c1',
+      source: 'workplace',
+      action: 'read',
+      label: '工作区文件',
+    } as never;
+    await act(async () => {
+      applyComposerStatusAttachmentsReplace({
+        sessionId: 's1',
+        attachments: [attachment],
+      });
+      await flushPromises();
+    });
+
+    expect(lastComposerProps().chipLabels).toEqual([
+      formatStatusChipLabelFromAttachment(attachment),
+    ]);
+  });
+
+  it('恢复链并行（D8）：草稿水化经 ref.setText 进框，不等转录 webview ready', async () => {
+    // DB 侧预置草稿：水化链读到后经 syncFromDraft → 命令式通道进框。
+    // 本文件的 ChatConversationWebView mock 从不触发 onReady（webview 链永未
+    // ready），composer 链照常完成水化——两链并行、无握手依赖的直接证据。
+    mockRuntime.sessions.getComposerDraftJson = jest.fn(async () =>
+      serializeComposerDraftJson({text: '草稿正文', attachments: []}),
+    );
+
+    await act(async () => {
+      tree = TestRenderer.create(<TestHost />);
+      await flushPromises();
+    });
+
+    expect(mockComposerSetText).toHaveBeenCalledTimes(1);
+    expect(mockComposerSetText).toHaveBeenCalledWith('草稿正文', undefined);
+    // value 镜像同步（面板声明式面也拿到草稿明文）
+    expect(lastComposerProps().value).toBe('草稿正文');
   });
 });

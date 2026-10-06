@@ -14,10 +14,12 @@
  * 能力位、`init.composer` 段全部删除——输入框由 RN 原生组件承接，本桥退为纯转录
  * 协议。`ConversationComposerState` / `ConversationTypeaheadSource` /
  * `EMPTY_CONVERSATION_TYPEAHEAD_SOURCE` / `ConversationDockAction` /
- * `CONVERSATION_DOCK_ACTIONS` 这五个**类型面**暂时保留：`useChatComposerController`
- * 的回调签名在 Step 3/5 之前语义不变，仍以它们为类型载体（不再经本桥收发）。
- * 宏链与全屏编辑走独立的 `ComposerInputBridge.ts`（`COMPOSER_INPUT_BRIDGE_VERSION`），
- * 与该文件零耦合，不受影响。
+ * `CONVERSATION_DOCK_ACTIONS` 这五个**类型面**已随 Step 5（Panel 接线
+ * `NativeChatComposer` + `useChatComposerController`）落定为 dock 域的纯类型
+ * 载体：只做类型与常量，**不再经本桥收发**；真正的去处是 `useChatComposerController`
+ * 的返回面与 `NativeChatComposer` 的 props 面。宏链与全屏编辑走独立的
+ * `ComposerInputBridge.ts`（`COMPOSER_INPUT_BRIDGE_VERSION`），与该文件零耦合，
+ * 不受影响。
  *
  * 上行 v 号：转录 runtime 上行恒为 v:1（模块级 `post` 单例不可替换），宿主自有的
  * `ready` 才是 v:2。因此**解码必须宽松**：先宽松 parse 取 `type`，`ready` 判
@@ -90,15 +92,15 @@ export const CONVERSATION_THEME_KEYS: readonly (keyof ConversationTheme)[] =
   HOST_THEME_KEYS;
 
 /* ------------------------------------------------------------------ *
- * composerState（类型面 · 暂留）
+ * composerState（类型面 · dock 域纯类型载体，不再经桥收发）
  * ------------------------------------------------------------------ */
 
 /**
  * typeahead **候选源**（非过滤结果）。
  *
- * D4c 后不再经桥收发（composerState 下行消息已删），类型暂时保留：
- * `useChatComposerController` 的回调签名在 Step 3/5 前语义不变，
- * 仍以本类型为载体（Step 5 起数据直连 `NativeChatComposer`）。
+ * D4c 后不经桥收发（composerState 下行消息已删）；Step 5 起是
+ * `useChatComposerController` → `NativeChatComposer.typeaheadSource` 的
+ * 数据面类型。
  */
 export type ConversationTypeaheadSource = {
   readonly files: readonly AtPathRef[];
@@ -106,7 +108,7 @@ export type ConversationTypeaheadSource = {
 };
 
 /**
- * dock 全字段状态（类型面 · 暂留，理由同上）。
+ * dock 全字段状态（类型面：controller 组装、面板拆字段直连组件 props）。
  */
 export type ConversationComposerState = {
   readonly inputDisabled: boolean;
@@ -134,12 +136,12 @@ export const EMPTY_CONVERSATION_TYPEAHEAD_SOURCE: ConversationTypeaheadSource = 
 };
 
 /* ------------------------------------------------------------------ *
- * dockAction（类型面 · 暂留）
+ * dockAction（类型面 · dock 域纯类型载体，不再经桥收发）
  * ------------------------------------------------------------------ */
 
 /**
- * dock 上行动作枚举（类型面 · 暂留：`handleDockAction` 的调用方在 Step 4/5 从
- * web dockAction 上行改为 RN toolbar/typeahead 直调，枚举语义不变）。
+ * dock 上行动作枚举（`handleDockAction` 的入参；调用方自 Step 5 起是
+ * `NativeChatComposer` 的 toolbar / hintRow / 发送钮直调，枚举语义不变）。
  */
 export type ConversationDockAction =
   | 'send'
