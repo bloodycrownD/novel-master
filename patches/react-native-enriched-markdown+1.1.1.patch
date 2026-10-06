@@ -25,10 +25,18 @@ index 90aad4a..a93d541 100644
    void removeLink(T view);
    void copyToClipboard(T view);
 diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/EnrichedMarkdownTextInputManager.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/EnrichedMarkdownTextInputManager.kt
-index 512f5fc..5fc3f5f 100644
+index 512f5fc..7c51716 100644
 --- a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/EnrichedMarkdownTextInputManager.kt
 +++ b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/EnrichedMarkdownTextInputManager.kt
-@@ -503,6 +503,20 @@ class EnrichedMarkdownTextInputManager :
+@@ -300,6 +300,7 @@ class EnrichedMarkdownTextInputManager :
+           formatLabel = value.getString("formatLabel") ?: "",
+           copyAsMarkdown = value.getBoolean("copyAsMarkdown"),
+           copyAsMarkdownLabel = value.getString("copyAsMarkdownLabel") ?: "",
++          paste = value.getBoolean("paste"),
+         )
+       }
+   }
+@@ -503,6 +504,20 @@ class EnrichedMarkdownTextInputManager :
      }
    }
  
@@ -50,10 +58,25 @@ index 512f5fc..5fc3f5f 100644
      view: EnrichedMarkdownTextInputView?,
      indicator: String?,
 diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/EnrichedMarkdownTextInputView.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/EnrichedMarkdownTextInputView.kt
-index 561cf66..e2664ae 100644
+index 561cf66..ec3dc8b 100644
 --- a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/EnrichedMarkdownTextInputView.kt
 +++ b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/EnrichedMarkdownTextInputView.kt
-@@ -936,10 +936,18 @@ class EnrichedMarkdownTextInputView(
+@@ -729,6 +729,14 @@ class EnrichedMarkdownTextInputView(
+   // and block ranges survive the round trip — mirrors iOS's copy:/cut:/paste:
+   // overrides. External clips keep default handling.
+   override fun onTextContextMenuItem(id: Int): Boolean {
++    // 应用层关闭内置粘贴（selectionMenuConfig.paste=false）的事件层兜底：部分
++    // ROM 会绕过 ActionMode 菜单直接派发这两个 id，消费掉（返回 true、不执行
++    // 默认/自定义粘贴），保证关闭语义在所有派发路径上无操作。
++    if (id == android.R.id.paste || id == android.R.id.pasteAsPlainText) {
++      if (!contextMenu.selectionMenuConfig.paste) {
++        return true
++      }
++    }
+     if (id == android.R.id.paste) {
+       MarkdownClipboard.markdownFromClipboard(context)?.let { markdown ->
+         pasteMarkdown(markdown)
+@@ -936,10 +944,18 @@ class EnrichedMarkdownTextInputView(
      if (cursorStart != cursorEnd || cursorStart <= 0) return false
      if (text == null) return false
  
@@ -76,7 +99,7 @@ index 561cf66..e2664ae 100644
      }
      dispatchMentionEvents(mentionCoordinator.clear())
      return true
-@@ -950,6 +958,26 @@ class EnrichedMarkdownTextInputView(
+@@ -950,6 +966,26 @@ class EnrichedMarkdownTextInputView(
      dispatchMentionUpdate()
    }
  
@@ -318,10 +341,55 @@ index 0000000..ec42f3c
 +    )
 +}
 diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/toolbar/InputContextMenu.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/toolbar/InputContextMenu.kt
-index 1ebda75..5be8779 100644
+index 1ebda75..634645b 100644
 --- a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/toolbar/InputContextMenu.kt
 +++ b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/toolbar/InputContextMenu.kt
-@@ -135,6 +135,7 @@ class InputContextMenu(
+@@ -19,6 +19,10 @@ data class InputSelectionMenuConfig(
+   val formatLabel: String = "",
+   val copyAsMarkdown: Boolean = true,
+   val copyAsMarkdownLabel: String = "",
++  // 内置「粘贴/粘贴为纯文本」开关：false 时长按菜单移除这两项，且
++  // onTextContextMenuItem 对其事件整体消费（无操作）——供应用用
++  // contextMenuItems 的自定义粘贴项接管（门控/截断由应用负责）。
++  val paste: Boolean = true,
+ )
+ 
+ data class FormatMenuConfig(
+@@ -63,6 +67,12 @@ class InputContextMenu(
+           menu.removeItem(MENU_COPY_MARKDOWN_ID)
+           menu.removeGroup(FORMAT_MENU_GROUP_ID)
+           menu.removeGroup(CUSTOM_MENU_GROUP_ID)
++          // 应用层关闭内置粘贴时，把系统长按菜单的粘贴/粘贴为纯文本项一并移除
++          // （事件层的 onTextContextMenuItem 拦截是第二道防线，见 View）。
++          if (!selectionMenuConfig.paste) {
++            menu.removeItem(android.R.id.paste)
++            menu.removeItem(android.R.id.pasteAsPlainText)
++          }
+ 
+           if (selectionMenuConfig.format) {
+             val formatSubMenu =
+@@ -78,12 +88,15 @@ class InputContextMenu(
+             if (selectionMenuConfig.copyAsMarkdown) {
+               menu.add(FORMAT_MENU_GROUP_ID, MENU_COPY_MARKDOWN_ID, 101, selectionMenuConfig.copyAsMarkdownLabel)
+             }
++          }
+ 
+-            customItemTexts.forEachIndexed { index, text ->
+-              menu
+-                .add(CUSTOM_MENU_GROUP_ID, MENU_CUSTOM_BASE + index, index, text)
+-                .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+-            }
++          // 自定义项不受选区限制：无选区的长按（光标定位态）同样需要可达的自定义
++          // 入口——composer 关闭内置粘贴后，「粘贴」是唯一粘贴通道，必须在光标态
++          // 可见。onActionItemClicked 的 custom 处理对无选区返回空选中文本，已兼容。
++          customItemTexts.forEachIndexed { index, text ->
++            menu
++              .add(CUSTOM_MENU_GROUP_ID, MENU_CUSTOM_BASE + index, index, text)
++              .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+           }
+ 
+           return true
+@@ -135,6 +148,7 @@ class InputContextMenu(
        StyleType.STRIKETHROUGH -> formatMenuConfig.strikethrough
        StyleType.SPOILER -> formatMenuConfig.spoiler
        StyleType.LINK -> formatMenuConfig.link
@@ -431,10 +499,20 @@ index 9ff71ed..804f67c 100644
      }
    }
 diff --git a/node_modules/react-native-enriched-markdown/lib/module/EnrichedMarkdownTextInput.js b/node_modules/react-native-enriched-markdown/lib/module/EnrichedMarkdownTextInput.js
-index 5b348e8..a851758 100644
+index 5b348e8..520ef2b 100644
 --- a/node_modules/react-native-enriched-markdown/lib/module/EnrichedMarkdownTextInput.js
 +++ b/node_modules/react-native-enriched-markdown/lib/module/EnrichedMarkdownTextInput.js
-@@ -364,6 +364,7 @@ export const EnrichedMarkdownTextInput = ({
+@@ -136,7 +136,8 @@ export const EnrichedMarkdownTextInput = ({
+       format: format.enabled,
+       formatLabel: format.label,
+       copyAsMarkdown: copyAsMarkdown.enabled,
+-      copyAsMarkdownLabel: copyAsMarkdown.label
++      copyAsMarkdownLabel: copyAsMarkdown.label,
++      paste: selectionMenuConfig?.paste ?? true
+     };
+   }, [selectionMenuConfig]);
+   const normalizedFormatMenuConfig = useMemo(() => {
+@@ -364,6 +365,7 @@ export const EnrichedMarkdownTextInput = ({
        insertLink: (text, url) => Commands.insertLink(commandRef, text, url),
        insertText: text => Commands.insertText(commandRef, text),
        insertMention: (displayText, url) => Commands.insertMention(commandRef, displayText, url),
@@ -542,7 +620,7 @@ index 90562c8..2bd338b 100644
      spoiler: {
        color: normalizeColor(style.spoiler?.color) ?? defaultInternal.spoiler.color,
 diff --git a/node_modules/react-native-enriched-markdown/lib/typescript/src/EnrichedMarkdownTextInput.d.ts b/node_modules/react-native-enriched-markdown/lib/typescript/src/EnrichedMarkdownTextInput.d.ts
-index 631fb19..b0785cd 100644
+index 631fb19..44db59b 100644
 --- a/node_modules/react-native-enriched-markdown/lib/typescript/src/EnrichedMarkdownTextInput.d.ts
 +++ b/node_modules/react-native-enriched-markdown/lib/typescript/src/EnrichedMarkdownTextInput.d.ts
 @@ -6,6 +6,14 @@ export interface LinkStyle {
@@ -571,6 +649,21 @@ index 631fb19..b0785cd 100644
      startMention: (indicator: string) => void;
      removeLink: () => void;
      copyToClipboard: () => void;
+@@ -147,6 +159,14 @@ export interface InputSelectionMenuConfig {
+      * @default { enabled: true, label: "Copy as Markdown" }
+      */
+     copyAsMarkdown?: MenuItem;
++    /**
++     * 内置「粘贴 / 粘贴为纯文本」开关（Android 长按菜单的系统项）。`false` 时
++     * 菜单项被移除，且 onTextContextMenuItem 对两个 paste id 整体消费（无操作，
++     * 兜底 ROM 直派路径）。供应用用 `contextMenuItems` 的自定义粘贴项接管，
++     * 由应用负责门控与截断。
++     * @default true
++     */
++    paste?: boolean;
+ }
+ /** Controls the individual items inside the Format submenu. */
+ export interface FormatMenuConfig {
 diff --git a/node_modules/react-native-enriched-markdown/lib/typescript/src/EnrichedMarkdownTextInputNativeComponent.d.ts b/node_modules/react-native-enriched-markdown/lib/typescript/src/EnrichedMarkdownTextInputNativeComponent.d.ts
 index 6f9148c..2f1d101 100644
 --- a/node_modules/react-native-enriched-markdown/lib/typescript/src/EnrichedMarkdownTextInputNativeComponent.d.ts
@@ -613,7 +706,7 @@ index a306bfd..ff435cb 100644
      linkVariants: LinkVariantEntryInternal[];
      spoiler: {
 diff --git a/node_modules/react-native-enriched-markdown/src/EnrichedMarkdownTextInput.tsx b/node_modules/react-native-enriched-markdown/src/EnrichedMarkdownTextInput.tsx
-index 4100c70..c41f1d6 100644
+index 4100c70..7065f69 100644
 --- a/node_modules/react-native-enriched-markdown/src/EnrichedMarkdownTextInput.tsx
 +++ b/node_modules/react-native-enriched-markdown/src/EnrichedMarkdownTextInput.tsx
 @@ -56,6 +56,14 @@ export interface LinkStyle {
@@ -639,7 +732,41 @@ index 4100c70..c41f1d6 100644
    startMention: (indicator: string) => void;
    removeLink: () => void;
    copyToClipboard: () => void;
-@@ -704,6 +713,7 @@ export const EnrichedMarkdownTextInput = ({
+@@ -176,15 +185,23 @@ export interface InputSelectionMenuConfig {
+   /**
+    * The built-in "Format" submenu (Bold, Italic, Underline, etc.) in the
+    * text selection context menu. `label` overrides the submenu title.
+-   * @default { enabled: true, label: "Format" }
++   * @default { format: true, label: "Format" }
+    */
+   format?: MenuItem;
+   /**
+    * The built-in "Copy as Markdown" action in the text selection context
+    * menu. `label` overrides the action title.
+-   * @default { enabled: true, label: "Copy as Markdown" }
++   * @default { format: true, label: "Copy as Markdown" }
+    */
+   copyAsMarkdown?: MenuItem;
++  /**
++   * 内置「粘贴 / 粘贴为纯文本」开关（Android 长按菜单的系统项）。`false` 时
++   * 菜单项被移除，且 onTextContextMenuItem 对两个 paste id 整体消费（无操作，
++   * 兜底 ROM 直派路径）。供应用用 `contextMenuItems` 的自定义粘贴项接管，
++   * 由应用负责门控与截断。
++   * @default true
++   */
++  paste?: boolean;
+ }
+ 
+ /** Controls the individual items inside the Format submenu. */
+@@ -435,6 +452,7 @@ export const EnrichedMarkdownTextInput = ({
+       formatLabel: format.label,
+       copyAsMarkdown: copyAsMarkdown.enabled,
+       copyAsMarkdownLabel: copyAsMarkdown.label,
++      paste: selectionMenuConfig?.paste ?? true,
+     };
+   }, [selectionMenuConfig]);
+ 
+@@ -704,6 +722,7 @@ export const EnrichedMarkdownTextInput = ({
        insertText: (text) => Commands.insertText(commandRef, text),
        insertMention: (displayText, url) =>
          Commands.insertMention(commandRef, displayText, url),

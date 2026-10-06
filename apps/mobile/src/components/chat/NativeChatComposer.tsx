@@ -494,14 +494,20 @@ export const NativeChatComposer = forwardRef<
     );
 
     /**
-     * 选区菜单配置：关掉库自带的 Format 子菜单与 Copy-as-Markdown（composer
-     * 的输入语义是纯文本 + token，两库项都无消费方）。平台自带的复制/粘贴等
-     * 标准项不在此配置面内；TODO(patch)：内置粘贴的关闭需要补丁层给
-     * `selectionMenuConfig` 加 paste 键（并行节点在收 patch 接口），落地后把
-     * 内置粘贴也并进 handlePasteMenuPress 的同一道闸。
+     * 选区菜单配置：关掉库自带的 Format 子菜单、Copy-as-Markdown 与内置粘贴
+     * （composer 的输入语义是纯文本 + token，前两者无消费方；内置粘贴经补丁
+     * `selectionMenuConfig.paste=false` 关闭——菜单层移除 paste/pasteAsPlainText
+     * 两项、事件层消费兜底 ROM 直派，deviation ① 闭合）。全量粘贴统一走
+     * contextMenuItems 的自定义「粘贴」项（无选区光标态也可见），只过
+     * handlePasteMenuPress 这一道闸（uiRunning/inputDisabled + 256KB 截断），
+     * 不再存在绕过双闸的内置粘贴通道。
      */
     const selectionMenuConfig = useMemo<InputSelectionMenuConfig>(
-      () => ({format: {enabled: false}, copyAsMarkdown: {enabled: false}}),
+      () => ({
+        format: {enabled: false},
+        copyAsMarkdown: {enabled: false},
+        paste: false,
+      }),
       [],
     );
 

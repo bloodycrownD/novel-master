@@ -12,6 +12,8 @@
  * dock-style.ts 参照常量（T-NC10）。
  */
 import React from 'react';
+import {readFileSync, readdirSync} from 'node:fs';
+import {join} from 'node:path';
 import TestRenderer, {act} from 'react-test-renderer';
 import type {ReactTestInstance, ReactTestRenderer} from 'react-test-renderer';
 import type {ConversationTheme} from '../src/components/chat/ChatConversationBridge';
@@ -386,15 +388,19 @@ describe('NativeChatComposer dock（T-NC9 粘贴门控）', () => {
     return item!;
   };
 
-  it('T-NC9 自定义「粘贴」菜单项存在，且选区菜单关掉库自带项', () => {
+  it('T-NC9 自定义「粘贴」菜单项存在，且选区菜单关掉库自带项（含内置粘贴）', () => {
     const rendered = renderDock();
     findPasteItem(rendered);
     const config = rendered.input().props.selectionMenuConfig as {
       format: {enabled: boolean};
       copyAsMarkdown: {enabled: boolean};
+      paste: boolean;
     };
     expect(config.format.enabled).toBe(false);
     expect(config.copyAsMarkdown.enabled).toBe(false);
+    // deviation ① 闭合：内置粘贴经补丁的 paste 键关闭（菜单层移除 +
+    // onTextContextMenuItem 事件层消费），粘贴统一走自定义项的单一闸门
+    expect(config.paste).toBe(false);
   });
 
   it('T-NC9 uiRunning 拒：不读剪贴板、不上屏、不补 change', async () => {
@@ -645,5 +651,86 @@ describe('NativeChatComposer dock（T-NC10 样式 ⇄ dock-style.ts 单源）', 
       expect(capsule.paddingTop).toBe(composerTokenCapsule.paddingTop);
       expect(capsule.paddingBottom).toBe(composerTokenCapsule.paddingBottom);
     }
+  });
+});
+
+/* ================================================================== *
+ * dock-style 参照真源消费方守卫（T-CC-CSS-15 迁居）
+ *
+ * 原长在 chat-conversation-boot-script.test.ts（chat-webview-unify cr1-P1-5
+ * 防快照纪律），composer-native-2026-10 Step 6 随合成包退役整体删除该文件后，
+ * 这条不依赖合成包的活断言迁到 dock-style.ts 的家测——它锁的是「参照真源
+ * 每个导出都有消费方」，与 T-NC10 的家语义同源。
+ * ================================================================== */
+
+describe('dock-style 参照真源消费方守卫（T-CC-CSS-15）', () => {
+  /** 从 `{ a, b as c }` 的一段里取**原标识符**（`b as c` → `b`）。 */
+  function originalName(raw: string): string {
+    const alias = raw.search(/\s+as\s+/);
+    return (alias === -1 ? raw : raw.slice(0, alias)).trim();
+  }
+
+  /** 递归收集目录下的 `.ts` / `.tsx` 文件绝对路径。 */
+  function tsFilesIn(dir: string, acc: string[] = []): string[] {
+    for (const entry of readdirSync(dir, {withFileTypes: true})) {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        tsFilesIn(full, acc);
+      } else if (/\.tsx?$/.test(entry.name)) {
+        acc.push(full);
+      }
+    }
+    return acc;
+  }
+
+  it('dock-style.ts 参照真源每个导出都有消费方（RN 真源死了就不许再抄一份快照）', () => {
+    const source = readFileSync(
+      join(
+        __dirname,
+        '../src/components/chat/native-composer/dock-style.ts',
+      ),
+      'utf8',
+    );
+    const exported = new Set<string>();
+    for (const m of source.matchAll(
+      /^export\s+(?:const|function|class)\s+([A-Za-z0-9_$]+)/gm,
+    )) {
+      exported.add(m[1]);
+    }
+    for (const m of source.matchAll(/^export\s*\{([^}]*)\}/gm)) {
+      for (const part of m[1].split(',')) {
+        const name = originalName(part);
+        if (name) {
+          exported.add(name);
+        }
+      }
+    }
+    // 解析器本身也要有牙齿：全空说明上面的匹配写坏了，断言会假绿
+    expect(exported.size).toBeGreaterThan(0);
+
+    // 消费面 = 全仓 import 了本模块的文件里实际引入的标识符
+    const consumed = new Set<string>();
+    const files = [
+      ...tsFilesIn(join(__dirname, '../src')),
+      ...tsFilesIn(__dirname),
+    ];
+    for (const file of files) {
+      const text = readFileSync(file, 'utf8');
+      if (!text.includes('dock-style')) {
+        continue;
+      }
+      for (const m of text.matchAll(
+        /import\s*(?:type\s*)?\{([^}]*)\}\s*from\s*'[^']*dock-style'/g,
+      )) {
+        for (const part of m[1].split(',')) {
+          const name = originalName(part);
+          if (name) {
+            consumed.add(name);
+          }
+        }
+      }
+    }
+    // 零消费导出 = 又一份没人对照的数值快照；当初手抄 8 份的教训就是它们全在等文件删除。
+    expect([...exported].filter(name => !consumed.has(name))).toEqual([]);
   });
 });
