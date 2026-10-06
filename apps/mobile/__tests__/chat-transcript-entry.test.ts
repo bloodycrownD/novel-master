@@ -4,6 +4,7 @@
  * 读 webview-dist 产物（pretest 已 build:webview），风格对照 chat-conversation-boot-script.test.ts。
  * 锁的是「转录拆回独立文档」这条链的外部可见面：
  * - ready v2 握手面：入口自包的 ready 带 `version:'t1'` 与转录域能力清单；
+ * - 入口上行出口 v:2（src 源面：TRANSCRIPT_ENTRY_BRIDGE_V = 2 且绑定 createBoundPost）；
  * - composer/dock 域完全不在独立入口里（能力位字符串、dockAction/composerState
  *   协议 type、壳子树三重反面）；
  * - 壳结构与样式：#app（flex 列容器）/ #scroller / #rows / 双 portal，基底
@@ -29,6 +30,18 @@ function appCss(): string {
   return readWebViewDistFile('chat-transcript', 'app.css');
 }
 
+/**
+ * 入口 src 源码文本（T-TS1e 的源面断言用）：dist 产物是 minify 的，常量名会被
+ * 抹掉、数字可能被折叠，`v:2` 形态在产物里未必可寻址；信封版本锁在源码文本上。
+ * 手法同 chat-conversation-entry.test.ts 的 mainSource()。
+ */
+function entrySource(): string {
+  return readFileSync(
+    join(__dirname, '../src/web/chat-transcript/webview/main.ts'),
+    'utf8',
+  );
+}
+
 describe('chat-transcript 独立入口（T-TS1 · dist）', () => {
   it('T-TS1a: ready v2 面——version t1 字面量 + DOMContentLoaded 兜底 + 装配闸', () => {
     const script = bootScript();
@@ -44,6 +57,17 @@ describe('chat-transcript 独立入口（T-TS1 · dist）', () => {
       // eslint-disable-next-line no-new-func -- 语法守护：boot IIFE 不可损坏
       new Function(script);
     }).not.toThrow();
+  });
+
+  it('T-TS1e: 入口上行出口 v:2——src 源面锁 TRANSCRIPT_ENTRY_BRIDGE_V = 2 且绑定 createBoundPost', () => {
+    // 宿主只认 v === 2 的 ready（v:1 envelope 被直接丢弃），入口上行出口的版本
+    // 锁在 src 源码文本上（dist 是 minify 的，常量名不可寻址）。两处都锁：
+    // 常量定义必须是 2（改 1/改 3 都算漂移），且它必须真作为 createBoundPost
+    // 的实参（绕开常量直接传字面量同样算漂移）。变异自检：把常量临时改 1，
+    // 第一条断言必红。
+    const source = entrySource();
+    expect(source).toMatch(/const\s+TRANSCRIPT_ENTRY_BRIDGE_V\s*=\s*2\s*;/);
+    expect(source).toMatch(/createBoundPost\(\s*TRANSCRIPT_ENTRY_BRIDGE_V\s*\)/);
   });
 
   it('T-TS1b: composer/dock 域完全不在独立入口（能力位 / 协议 type / 壳子树三重反面）', () => {
