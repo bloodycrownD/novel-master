@@ -1,25 +1,28 @@
 /**
  * chat-conversation 桥协议 v2 · **RN 侧单源**（chat-webview-unify Step 5 · RN 半；
- * composer-native-2026-10 Step 2 按 D4c 收口）。
+ * composer-native-2026-10 Step 2 按 D4c 收口、Step 6 随合成包退役完成单源化）。
  *
- * 定位：本文件是**合成包 web 侧**的协议真源镜像（web 侧同形声明在
- * `src/web/chat-conversation/webview/model.ts`，两侧 `CONVERSATION_BRIDGE_V`
- * **必须一致**——一致性由 `__tests__/chat-conversation-bridge.test.ts` 直接 import
- * 双端比对断言锁死，勿改任一侧而不改另一侧）。之所以不共享一份：web bundle 不引
- * RN 模块，共享会把 RN 依赖拖进 8.9MB 产物。
+ * 定位：本文件是宿主（RN）侧下行信封与上行宽松解码的**唯一真源**。原本与
+ * 合成包 web 侧 `model.ts` 互为镜像、由 `chat-conversation-bridge.test.ts` 双端
+ * 比对锁定——合成包已于 Step 6 退役，web 侧不再有第二份声明，下行 type 的
+ * web 侧路由面在 `chat-transcript` 独立入口的 runtime（`bridge.ts` 的 switch），
+ * 能力位真源在 `@/web/chat-transcript/transcript-capabilities`（本文件已 import
+ * 同源常量）。之所以不共享一份类型：web bundle 不引 RN 模块，共享会把 RN 依赖
+ * 拖进 8.9MB 产物。
  *
  * **D4c 收口**：composer/dock 域的 10 条消息（下行 `setText` / `setSelection` /
  * `setDisabled` / `blur` / `composerState` / `composerPaste` / `selectAll`，上行
  * `change` / `selectionChange` / `dockAction`）与 `CONVERSATION_CAPABILITY_COMPOSER_DOCK`
  * 能力位、`init.composer` 段全部删除——输入框由 RN 原生组件承接，本桥退为纯转录
- * 协议。`ConversationComposerState` / `ConversationTypeaheadSource` /
- * `EMPTY_CONVERSATION_TYPEAHEAD_SOURCE` / `ConversationDockAction` /
- * `CONVERSATION_DOCK_ACTIONS` 这五个**类型面**已随 Step 5（Panel 接线
- * `NativeChatComposer` + `useChatComposerController`）落定为 dock 域的纯类型
- * 载体：只做类型与常量，**不再经本桥收发**；真正的去处是 `useChatComposerController`
- * 的返回面与 `NativeChatComposer` 的 props 面。宏链与全屏编辑走独立的
- * `ComposerInputBridge.ts`（`COMPOSER_INPUT_BRIDGE_VERSION`），与该文件零耦合，
- * 不受影响。
+ * 协议。宏链与全屏编辑走独立的 `ComposerInputBridge.ts`
+ * （`COMPOSER_INPUT_BRIDGE_VERSION`），与该文件零耦合，不受影响。
+ *
+ * **dock 域残余类型面（Step 6 现状）**：`ConversationComposerState` 已迁
+ * `useChatComposerController` 自持（唯一消费方）；`CONVERSATION_DOCK_ACTIONS`
+ * 死导出已删。`ConversationTypeaheadSource` / `EMPTY_CONVERSATION_TYPEAHEAD_SOURCE` /
+ * `ConversationDockAction` 仍被 `NativeChatComposer` 与 `native-composer/` 下的
+ * `send-button` / `typeahead-view` 消费，暂留此处（不再经桥收发，只做类型载体）；
+ * 待消费侧共享模块落位后再迁出本文件。
  *
  * 上行 v 号：转录 runtime 上行恒为 v:1（模块级 `post` 单例不可替换），宿主自有的
  * `ready` 才是 v:2。因此**解码必须宽松**：先宽松 parse 取 `type`，`ready` 判
@@ -28,10 +31,7 @@
  * **禁止复用 `decodeTranscriptToHost`**：它对 `v !== 1` 直接 throw，会被宿主
  * try/catch 静默吞掉 → `webReady` 永假 → 全部下行丢弃 → 落进 8s 兜底白屏。
  */
-import type {
-  AtPathRef,
-  MessageAttachment,
-} from '@novel-master/core/chat';
+import type {AtPathRef} from '@novel-master/core/chat';
 import type {EffectiveSkill} from '@novel-master/core/skills';
 import type {
   ChatTranscriptScrollSnapshot,
@@ -54,7 +54,8 @@ import {TRANSCRIPT_READY_VERSION} from '@/web/chat-transcript/transcript-capabil
 
 /**
  * 下行信封桥版本（**与旧包 `BRIDGE_V = 1` 刻意不同名**，避免重载歧义）。
- * 与 `src/web/chat-conversation/webview/model.ts` 同值，双端一致性有测试锁定。
+ * 宿主下行恒为 v:2；web 侧（chat-transcript 独立入口 runtime）对下行信封的
+ * 解码容忍该 v 号，不再有第二份同值常量需要对账。
  */
 export const CONVERSATION_BRIDGE_V = 2 as const;
 
@@ -92,7 +93,7 @@ export const CONVERSATION_THEME_KEYS: readonly (keyof ConversationTheme)[] =
   HOST_THEME_KEYS;
 
 /* ------------------------------------------------------------------ *
- * composerState（类型面 · dock 域纯类型载体，不再经桥收发）
+ * dock 域残余类型面（纯类型载体，不再经桥收发）
  * ------------------------------------------------------------------ */
 
 /**
@@ -107,37 +108,11 @@ export type ConversationTypeaheadSource = {
   readonly skills: readonly EffectiveSkill[];
 };
 
-/**
- * dock 全字段状态（类型面：controller 组装、面板拆字段直连组件 props）。
- */
-export type ConversationComposerState = {
-  readonly inputDisabled: boolean;
-  readonly hasModel: boolean;
-  readonly sendDisabled: boolean;
-  readonly running: boolean;
-  readonly error?: string;
-  readonly fullscreenEnabled: boolean;
-  readonly placeholder: string;
-  /**
-   * 状态 chip 列表。**纯展示、不可点、不随 `inputDisabled` 置灰**——现网
-   * `AttachmentDraftChips` 的 `disabled` 是透传后未使用的死参数。
-   */
-  readonly chips: readonly MessageAttachment[];
-  /** 键盘态（RN 侧 `useReanimatedKeyboardAnimation` 派生）。 */
-  readonly keyboardUp: boolean;
-  /** typeahead 候选源。 */
-  readonly typeahead: ConversationTypeaheadSource;
-};
-
 /** 空候选源（controller 尚未拉取 / 拉取失败时的显式空值，不用 undefined 表达「没有」）。 */
 export const EMPTY_CONVERSATION_TYPEAHEAD_SOURCE: ConversationTypeaheadSource = {
   files: [],
   skills: [],
 };
-
-/* ------------------------------------------------------------------ *
- * dockAction（类型面 · dock 域纯类型载体，不再经桥收发）
- * ------------------------------------------------------------------ */
 
 /**
  * dock 上行动作枚举（`handleDockAction` 的入参；调用方自 Step 5 起是
@@ -150,15 +125,6 @@ export type ConversationDockAction =
   | 'fullscreen'
   | 'atPicker'
   | 'skillPicker';
-
-export const CONVERSATION_DOCK_ACTIONS: readonly ConversationDockAction[] = [
-  'send',
-  'terminate',
-  'needModel',
-  'fullscreen',
-  'atPicker',
-  'skillPicker',
-];
 
 /* ------------------------------------------------------------------ *
  * 下行消息清单（v2 信封 · D4c 收口后纯转录域）

@@ -70,10 +70,33 @@ import {
 import type {ComposerInputSelection} from './ComposerInputBridge';
 import {
   EMPTY_CONVERSATION_TYPEAHEAD_SOURCE,
-  type ConversationComposerState,
   type ConversationDockAction,
   type ConversationTypeaheadSource,
 } from './ChatConversationBridge';
+
+/**
+ * dock 全字段状态（composer-native-2026-10 Step 6 自 `ChatConversationBridge`
+ * 迁入：本 hook 是它的唯一消费方——组装后面板按字段拆开直连
+ * `NativeChatComposer` 的 props，不再经桥收发）。
+ */
+export type ConversationComposerState = {
+  readonly inputDisabled: boolean;
+  readonly hasModel: boolean;
+  readonly sendDisabled: boolean;
+  readonly running: boolean;
+  readonly error?: string;
+  readonly fullscreenEnabled: boolean;
+  readonly placeholder: string;
+  /**
+   * 状态 chip 列表。**纯展示、不可点、不随 `inputDisabled` 置灰**——现网
+   * `AttachmentDraftChips` 的 `disabled` 是透传后未使用的死参数。
+   */
+  readonly chips: readonly MessageAttachment[];
+  /** 键盘态（RN 侧 `useReanimatedKeyboardAnimation` 派生）。 */
+  readonly keyboardUp: boolean;
+  /** typeahead 候选源。 */
+  readonly typeahead: ConversationTypeaheadSource;
+};
 import {resetRunTiming, timingLog} from '@/debug/run-timing';
 
 /** ⛶ 全屏编辑入口载荷：当前输入文本原样带给父层（父层负责导航与保存回填）。 */

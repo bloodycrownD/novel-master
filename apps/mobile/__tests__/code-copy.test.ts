@@ -49,10 +49,10 @@ describe('copyCode 共享委托模块源码契约 (T-CB19)', () => {
 });
 
 describe('copyCode dist 产物契约 (T-CB21)', () => {
-  it('chat-conversation 与 rich-document 两包 app.js 均含 code-copy 委托标记（模块确实进了 bundle）', () => {
-    // transcript-converge：转录并入 chat-conversation 合成包，旧 chat-transcript
-    // 包不再产出 dist，故 chat 侧的产物断言改指合成包。
-    for (const pkg of ['chat-conversation', 'rich-document'] as const) {
+  it('chat-transcript 与 rich-document 两包 app.js 均含 code-copy 委托标记（模块确实进了 bundle）', () => {
+    // composer-native-2026-10 Step 6：chat-conversation 合成包退役，转录 dist
+    // 唯一落地面回到 chat-transcript 独立包。
+    for (const pkg of ['chat-transcript', 'rich-document'] as const) {
       const appJs = readWebViewDistFile(pkg, 'app.js');
       expect(appJs).toContain('.code-copy');
       expect(appJs).toContain('copyCode');

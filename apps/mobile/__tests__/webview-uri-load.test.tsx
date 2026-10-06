@@ -2,8 +2,8 @@
  * T-BB-04：URI helper + WebView 必配 props 矩阵（静态断言）。
  *
  * composer-native-2026-10 Step 5 起 chat-transcript 恢复独立包且成为对话宿主的
- * 加载源（Step 2 建包、Step 5 切源）；chat-conversation 合成包过渡期仍在构建，
- * 其 helper 待 Step 6 随包退役——在那之前两包 helper 都有断言。
+ * 加载源（Step 2 建包、Step 5 切源）；Step 6 合成包退役，chat-conversation 的
+ * helper 与断言面随之移除，转录侧只认 chat-transcript。
  */
 import React from 'react';
 import {Platform} from 'react-native';
@@ -20,10 +20,6 @@ import {
   getCodeEditorPackageDirUri,
   getCodeEditorUri,
 } from '@/webview-host/code-editor/uri';
-import {
-  getChatConversationPackageDirUri,
-  getChatConversationUri,
-} from '@/webview-host/chat-conversation/uri';
 import {
   getChatTranscriptPackageDirUri,
   getChatTranscriptUri,
@@ -90,12 +86,6 @@ describe('WebView URI load (T-BB-04)', () => {
       expect(getCodeEditorPackageDirUri()).toBe(
         'file:///android_asset/webview/code-editor/',
       );
-      expect(getChatConversationUri()).toBe(
-        'file:///android_asset/webview/chat-conversation/index.html',
-      );
-      expect(getChatConversationPackageDirUri()).toBe(
-        'file:///android_asset/webview/chat-conversation/',
-      );
       expect(getChatTranscriptUri()).toBe(
         'file:///android_asset/webview/chat-transcript/index.html',
       );
@@ -120,12 +110,6 @@ describe('WebView URI load (T-BB-04)', () => {
       );
       expect(getCodeEditorPackageDirUri()).toBe(
         'file:///App/NovelMaster.app/WebViewDist/code-editor/',
-      );
-      expect(getChatConversationUri()).toBe(
-        'file:///App/NovelMaster.app/WebViewDist/chat-conversation/index.html',
-      );
-      expect(getChatConversationPackageDirUri()).toBe(
-        'file:///App/NovelMaster.app/WebViewDist/chat-conversation/',
       );
       expect(getChatTranscriptUri()).toBe(
         'file:///App/NovelMaster.app/WebViewDist/chat-transcript/index.html',

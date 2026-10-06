@@ -2,26 +2,26 @@
  * T-BB-06：chat-transcript 契约测迁移矩阵 — 读 webview-dist 产物（pretest 已 build:webview）。
  * 三列矩阵见 mobile-webview-preact-htm SPEC（必须保留 / 可改为 token / 允许删除）。
  *
- * transcript-converge 后转录不再有独立的 chat-transcript 文档包（转录并入
- * chat-conversation 合成包，旧 index.html / main.ts 退役），故本套件的 dist 读取
- * 一律改指合成包产物——转录 runtime（renderRows / 菜单 / 流式 / 快照）由合成包
- * 以 `bindChannel:false, emitReady:false` 装配后打进同一份 app.js，契约面不变。
- * 合成包壳自身的结构断言由 chat-conversation-boot-script.test.ts 承担。
+ * transcript-converge 曾把本套件的 dist 读取改指合成包产物（转录并入
+ * chat-conversation）；composer-native-2026-10 Step 6 合成包退役后，读取面切回
+ * chat-transcript 独立包——转录 runtime（renderRows / 菜单 / 流式 / 快照）由
+ * 独立入口以 `bindChannel:true, emitReady:false` 装配后打进同一份 app.js，
+ * 转录域契约面不变。独立入口壳自身的结构断言由 chat-transcript-entry.test.ts 承担。
  */
 import {readFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {readWebViewDistFile} from './helpers/read-webview-dist';
 
 function bootScript(): string {
-  return readWebViewDistFile('chat-conversation', 'app.js');
+  return readWebViewDistFile('chat-transcript', 'app.js');
 }
 
 function indexHtml(): string {
-  return readWebViewDistFile('chat-conversation', 'index.html');
+  return readWebViewDistFile('chat-transcript', 'index.html');
 }
 
 function appCss(): string {
-  return readWebViewDistFile('chat-conversation', 'app.css');
+  return readWebViewDistFile('chat-transcript', 'app.css');
 }
 
 describe('chat-transcript WebView boot (T-BB-06 / dist)', () => {
@@ -44,9 +44,9 @@ describe('chat-transcript WebView boot (T-BB-06 / dist)', () => {
     // 故用容忍空白的正则锁「DOMContentLoaded 兜底」这一形态。
     expect(script).toMatch(/readyState\s*===\s*['"]loading['"]/);
     // minify 重命名 bootTranscript 本体；换它唯一产出的稳定面——转录 runtime
-    // 发 ready 时带的版本标识字面量 `version:"m4"`（数字 1 / 'u1' 是合成包
-    // 壳的 ready，别混）。装配行为由 chat-conversation-entry.test 真跑
-    // main.ts 的断言锁（那里更强）。
+    // 自发 ready 代码里的版本标识字面量 `version:"m4"`（emitReady:false 下不
+    // 调用但代码在包；入口层自持的 ready 是 't1'，别混）。装配行为由
+    // chat-transcript-entry.test 真跑 main.ts 的断言锁（那里更强）。
     expect(script).toMatch(/version:\s*['"]m4['"]/);
     expect(() => {
       // eslint-disable-next-line no-new-func -- 语法守护：boot IIFE 不可损坏
@@ -67,8 +67,9 @@ describe('chat-transcript WebView boot (T-BB-06 / dist)', () => {
 
   it('T-BR-ASM-04: ready post and bootTranscript present', () => {
     const script = bootScript();
-    // transcript-converge：转录 runtime 在合成包里以 `emitReady:!1` 装配，
-    // ready 由合成包入口自持的 post 发（转录侧 `version:"m4"`、壳侧 `"u1"`）。
+    // 独立入口：转录 runtime 以 `emitReady:!1` 装配（runtime 自发的 ready 是
+    // v:1 形态，入口显式关掉），ready 由入口层自持的 post 发（version 't1'，
+    // runtime 代码里的 `version:"m4"` 不再被调用但字面量仍在包内）。
     // minify 会把 post 绑定本身重命名（post / post2 / _t / mot…），函数名锚恒失；
     // 锚「(type 字面量, {version:…} payload)」这个调用形态——发单条 ready 的
     // 意图由 T-BR-ASM-01 的 version:"m4" 与本条的 version payload 共同钉住。

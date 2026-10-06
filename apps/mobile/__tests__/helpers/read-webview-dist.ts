@@ -11,7 +11,6 @@ export function readWebViewDistFile(
     | 'rich-document'
     | 'code-editor'
     | 'composer-input'
-    | 'chat-conversation'
     | 'chat-transcript',
   file: 'index.html' | 'app.js' | 'app.css',
 ): string {
