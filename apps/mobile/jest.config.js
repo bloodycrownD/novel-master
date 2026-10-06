@@ -46,6 +46,11 @@ module.exports = {
       '<rootDir>/test-utils/react-native-webview-mock.tsx',
     '^react-native-enriched-markdown$':
       '<rootDir>/test-utils/enriched-markdown-mock.tsx',
+    // clipboard 的 turbo module（RNCClipboard）在 Jest import 期即 getEnforcing
+    // 抛错，与 notifee/op-sqlite 同款全局 stub：未局部 mock 的套件也能加载；
+    // 测试文件内的 jest.mock 仍会覆盖这里的映射。
+    '^@react-native-clipboard/clipboard$':
+      '<rootDir>/test-utils/react-native-clipboard-mock.ts',
     // 原生包在 Jest 环境顶层即抛错（blob-util 的 NativeEventEmitter / op-sqlite 的
     // turbo module），挂全局 stub 保证未被局部 mock 的套件也能加载；
     // 测试文件内的 jest.mock 仍会覆盖这里的映射。

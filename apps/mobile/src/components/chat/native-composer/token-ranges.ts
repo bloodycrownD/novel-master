@@ -1,0 +1,99 @@
+/**
+ * composer token 链路纯函数层（composer-native-2026-10 Step 3 · D3 水化路径）：
+ * 明文 → token 区间 → 胶囊 markdown 合成。
+ *
+ * **正则真源不变（D1）**：token 的识别永远以 `composer-highlight.ts` 的
+ * `COMPOSER_TOKEN_RE` / `composerTokenRanges` 为准（打字高亮、发送扫描
+ * `scanAtPathAttachments`、原子删 `tryAtomicRangeDelete` 全部建在它上面），
+ * 本模块只做「区间下发」与「合成 markdown」两件事，不引入第二套识别口径。
+ *
+ * ## 合成形态（D3）
+ *
+ * `@path` → `[@path](nmtoken://path)`、`$name` → `[$name](nmskill://name)`。
+ * 合成结果只喂给库的 `setValue`（水化 / 命令式写入），库解析出 LINK range 后
+ * 由 `linkVariants`（`^nmtoken:` / `^nmskill:`）渲染成胶囊；发送语义继续吃
+ * `onChangeText` 的明文，markdown 形态不参与发送。
+ *
+ * ## 为什么**没有** plainTextFromMarkdown（语义边界）
+ *
+ * 本模块刻意不提供「markdown → 明文」的反解函数。明文真源永远来自库的
+ * `onChangeText`（原生侧编辑器 CharSequence 本身就是明文，Kotlin 侧
+ * `InputEventEmitter.emitChangeText` 直发，与序列化无关）；markdown 只是
+ * `setValue` 的**入口形态**，进去之后库就拆回明文 + LINK range 了。若在这里
+ * 再养一份「从 markdown 反解明文」的路径，明文真源就分叉成两份，D6 的
+ * 「最后已知明文」基线会失去唯一出处——任何想从 markdown 拿明文的调用方，
+ * 都应该等 `onChangeText` 回报。
+ */
+import {composerTokenRanges} from '../composer-highlight';
+
+/** token 完整区间（含触发符；与 `ComposerTokenRange` 同构，end 为开区间下标）。 */
+export type TokenRange = {
+  readonly start: number;
+  readonly end: number;
+};
+
+/** `nmtoken://` scheme：`@` 文件引用 token 的链接 destination 前缀（D3）。 */
+export const NM_TOKEN_SCHEME = 'nmtoken://';
+
+/** `nmskill://` scheme：`$` 技能 token 的链接 destination 前缀（D3）。 */
+export const NM_SKILL_SCHEME = 'nmskill://';
+
+/**
+ * 扫描明文，返回全部 token 区间（按出现顺序，互不重叠）。
+ *
+ * 纯转发 `composerTokenRanges`：留这层壳是为了让下发链（NativeChatComposer
+ * 与测试）读起来语义直达，也方便日后在此追加 mobile 侧专属的识别微调而不动
+ * 桌面对齐的正则真源。
+ */
+export function scanTokensToRanges(text: string): readonly TokenRange[] {
+  return composerTokenRanges(text);
+}
+
+/**
+ * 明文 → 胶囊 markdown 合成（水化 / 命令式 setText 的唯一合成入口）。
+ *
+ * 逐 token 包成链接、普通段原样拼接；无 token 时原串返回（不做无谓拷贝）。
+ *
+ * **转义兜底**：token 正文含 `[` / `]` 时会提前终结链接文本（CommonMark 的
+ * 链接文本不支持转义方括号），这类 token 退化为**纯明文不合成**——胶囊视觉由
+ * `setTokenRanges` 的 TOKEN span 兜底（纯文本 token 同样命中胶囊样式），发送
+ * 语义吃明文零影响。destination 里的 `(` / `)` 则走百分号编码（对齐库端
+ * `LinkCoordinator.sanitizeUrl` 的括号编码口径），避免破坏链接语法。
+ */
+export function synthesizeTokenMarkdown(text: string): string {
+  const ranges = scanTokensToRanges(text);
+  if (ranges.length === 0) {
+    return text;
+  }
+
+  const parts: string[] = [];
+  let cursor = 0;
+  for (const range of ranges) {
+    parts.push(text.slice(cursor, range.start));
+    parts.push(synthesizeToken(text.slice(range.start, range.end)));
+    cursor = range.end;
+  }
+  parts.push(text.slice(cursor));
+  return parts.join('');
+}
+
+/** 单个 token（形如 `@path` / `$name`）→ 链接 markdown；不可合成时原样返回。 */
+function synthesizeToken(token: string): string {
+  const indicator = token[0];
+  const body = token.slice(1);
+  if (body.length === 0) {
+    return token;
+  }
+  // 链接文本破坏字符：不合成（理由见 synthesizeTokenMarkdown 的转义兜底说明）
+  if (body.includes('[') || body.includes(']')) {
+    return token;
+  }
+  const scheme = indicator === '@' ? NM_TOKEN_SCHEME : NM_SKILL_SCHEME;
+  const destination = scheme + encodeDestination(body);
+  return `[${token}](${destination})`;
+}
+
+/** destination 的括号百分号编码（对齐库端 `LinkCoordinator.sanitizeUrl`）。 */
+function encodeDestination(body: string): string {
+  return body.replace(/\(/g, '%28').replace(/\)/g, '%29');
+}
