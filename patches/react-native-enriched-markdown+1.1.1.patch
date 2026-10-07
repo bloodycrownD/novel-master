@@ -1,5 +1,5 @@
 diff --git a/node_modules/react-native-enriched-markdown/android/generated/java/com/facebook/react/viewmanagers/EnrichedMarkdownTextInputManagerDelegate.java b/node_modules/react-native-enriched-markdown/android/generated/java/com/facebook/react/viewmanagers/EnrichedMarkdownTextInputManagerDelegate.java
-index 2f3cc47..08660ed 100644
+index 2f3cc47..c5e2dce 100644
 --- a/node_modules/react-native-enriched-markdown/android/generated/java/com/facebook/react/viewmanagers/EnrichedMarkdownTextInputManagerDelegate.java
 +++ b/node_modules/react-native-enriched-markdown/android/generated/java/com/facebook/react/viewmanagers/EnrichedMarkdownTextInputManagerDelegate.java
 @@ -160,6 +160,9 @@ public class EnrichedMarkdownTextInputManagerDelegate<T extends View, U extends
@@ -7,25 +7,25 @@ index 2f3cc47..08660ed 100644
          mViewManager.insertMention(view, args.getString(0), args.getString(1));
          break;
 +      case "setTokenRanges":
-+        mViewManager.setTokenRanges(view, args.getArray(0));
++        mViewManager.setTokenRanges(view, args.getString(0));
 +        break;
        case "startMention":
          mViewManager.startMention(view, args.getString(0));
          break;
 diff --git a/node_modules/react-native-enriched-markdown/android/generated/java/com/facebook/react/viewmanagers/EnrichedMarkdownTextInputManagerInterface.java b/node_modules/react-native-enriched-markdown/android/generated/java/com/facebook/react/viewmanagers/EnrichedMarkdownTextInputManagerInterface.java
-index 90aad4a..a93d541 100644
+index 90aad4a..1a36e6b 100644
 --- a/node_modules/react-native-enriched-markdown/android/generated/java/com/facebook/react/viewmanagers/EnrichedMarkdownTextInputManagerInterface.java
 +++ b/node_modules/react-native-enriched-markdown/android/generated/java/com/facebook/react/viewmanagers/EnrichedMarkdownTextInputManagerInterface.java
 @@ -58,6 +58,7 @@ public interface EnrichedMarkdownTextInputManagerInterface<T extends View> exten
    void insertLink(T view, String text, String url);
    void insertText(T view, String text);
    void insertMention(T view, String displayText, String url);
-+  void setTokenRanges(T view, ReadableArray ranges);
++  void setTokenRanges(T view, String ranges);
    void startMention(T view, String indicator);
    void removeLink(T view);
    void copyToClipboard(T view);
 diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/EnrichedMarkdownTextInputManager.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/EnrichedMarkdownTextInputManager.kt
-index 512f5fc..7c51716 100644
+index 512f5fc..19baa9b 100644
 --- a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/EnrichedMarkdownTextInputManager.kt
 +++ b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/EnrichedMarkdownTextInputManager.kt
 @@ -300,6 +300,7 @@ class EnrichedMarkdownTextInputManager :
@@ -36,19 +36,20 @@ index 512f5fc..7c51716 100644
          )
        }
    }
-@@ -503,6 +504,20 @@ class EnrichedMarkdownTextInputManager :
+@@ -503,6 +504,21 @@ class EnrichedMarkdownTextInputManager :
      }
    }
  
 +  override fun setTokenRanges(
 +    view: EnrichedMarkdownTextInputView?,
-+    ranges: ReadableArray?,
++    rangesJson: String?,
 +  ) {
-+    if (view == null || ranges == null) return
-+    val tokenRanges = (0 until ranges.size()).mapNotNull { index ->
-+      val map = ranges.getMap(index) ?: return@mapNotNull null
-+      val start = map.getInt("start")
-+      val end = map.getInt("end")
++    if (view == null || rangesJson == null) return
++    val arr = org.json.JSONArray(rangesJson)
++    val tokenRanges = (0 until arr.length()).mapNotNull { index ->
++      val pair = arr.getJSONArray(index)
++      val start = pair.getInt(0)
++      val end = pair.getInt(1)
 +      if (start in 0..end) Pair(start, end) else null
 +    }
 +    view.setTokenRanges(tokenRanges)
@@ -499,7 +500,7 @@ index 9ff71ed..804f67c 100644
      }
    }
 diff --git a/node_modules/react-native-enriched-markdown/lib/module/EnrichedMarkdownTextInput.js b/node_modules/react-native-enriched-markdown/lib/module/EnrichedMarkdownTextInput.js
-index 5b348e8..520ef2b 100644
+index 5b348e8..d4ff3c0 100644
 --- a/node_modules/react-native-enriched-markdown/lib/module/EnrichedMarkdownTextInput.js
 +++ b/node_modules/react-native-enriched-markdown/lib/module/EnrichedMarkdownTextInput.js
 @@ -136,7 +136,8 @@ export const EnrichedMarkdownTextInput = ({
@@ -516,12 +517,12 @@ index 5b348e8..520ef2b 100644
        insertLink: (text, url) => Commands.insertLink(commandRef, text, url),
        insertText: text => Commands.insertText(commandRef, text),
        insertMention: (displayText, url) => Commands.insertMention(commandRef, displayText, url),
-+      setTokenRanges: ranges => Commands.setTokenRanges(commandRef, ranges),
++      setTokenRanges: ranges => Commands.setTokenRanges(commandRef, JSON.stringify(ranges.map(r => [r.start, r.end]))),
        startMention: indicator => Commands.startMention(commandRef, indicator),
        removeLink: () => Commands.removeLink(commandRef),
        copyToClipboard: () => Commands.copyToClipboard(commandRef),
 diff --git a/node_modules/react-native-enriched-markdown/lib/module/EnrichedMarkdownTextInputNativeComponent.ts b/node_modules/react-native-enriched-markdown/lib/module/EnrichedMarkdownTextInputNativeComponent.ts
-index c2fec26..29046bb 100644
+index c2fec26..5342c1e 100644
 --- a/node_modules/react-native-enriched-markdown/lib/module/EnrichedMarkdownTextInputNativeComponent.ts
 +++ b/node_modules/react-native-enriched-markdown/lib/module/EnrichedMarkdownTextInputNativeComponent.ts
 @@ -25,6 +25,10 @@ interface MarkdownTextInputStyleInternal {
@@ -552,7 +553,7 @@ index c2fec26..29046bb 100644
    ) => void;
 +  setTokenRanges: (
 +    viewRef: React.ElementRef<ComponentType>,
-+    ranges: ReadonlyArray<Readonly<{ start: CodegenTypes.Int32; end: CodegenTypes.Int32 }>>
++    rangesJson: string
 +  ) => void;
    startMention: (
      viewRef: React.ElementRef<ComponentType>,
@@ -706,7 +707,7 @@ index a306bfd..ff435cb 100644
      linkVariants: LinkVariantEntryInternal[];
      spoiler: {
 diff --git a/node_modules/react-native-enriched-markdown/src/EnrichedMarkdownTextInput.tsx b/node_modules/react-native-enriched-markdown/src/EnrichedMarkdownTextInput.tsx
-index 4100c70..7065f69 100644
+index 4100c70..fc8ed34 100644
 --- a/node_modules/react-native-enriched-markdown/src/EnrichedMarkdownTextInput.tsx
 +++ b/node_modules/react-native-enriched-markdown/src/EnrichedMarkdownTextInput.tsx
 @@ -56,6 +56,14 @@ export interface LinkStyle {
@@ -770,12 +771,12 @@ index 4100c70..7065f69 100644
        insertText: (text) => Commands.insertText(commandRef, text),
        insertMention: (displayText, url) =>
          Commands.insertMention(commandRef, displayText, url),
-+      setTokenRanges: (ranges) => Commands.setTokenRanges(commandRef, ranges),
++      setTokenRanges: (ranges) => Commands.setTokenRanges(commandRef, JSON.stringify(ranges.map((r) => [r.start, r.end]))),
        startMention: (indicator) => Commands.startMention(commandRef, indicator),
        removeLink: () => Commands.removeLink(commandRef),
        copyToClipboard: () => Commands.copyToClipboard(commandRef),
 diff --git a/node_modules/react-native-enriched-markdown/src/EnrichedMarkdownTextInputNativeComponent.ts b/node_modules/react-native-enriched-markdown/src/EnrichedMarkdownTextInputNativeComponent.ts
-index c2fec26..29046bb 100644
+index c2fec26..5342c1e 100644
 --- a/node_modules/react-native-enriched-markdown/src/EnrichedMarkdownTextInputNativeComponent.ts
 +++ b/node_modules/react-native-enriched-markdown/src/EnrichedMarkdownTextInputNativeComponent.ts
 @@ -25,6 +25,10 @@ interface MarkdownTextInputStyleInternal {
@@ -806,7 +807,7 @@ index c2fec26..29046bb 100644
    ) => void;
 +  setTokenRanges: (
 +    viewRef: React.ElementRef<ComponentType>,
-+    ranges: ReadonlyArray<Readonly<{ start: CodegenTypes.Int32; end: CodegenTypes.Int32 }>>
++    rangesJson: string
 +  ) => void;
    startMention: (
      viewRef: React.ElementRef<ComponentType>,
