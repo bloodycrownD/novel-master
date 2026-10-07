@@ -25,10 +25,25 @@ index 90aad4a..1a36e6b 100644
    void removeLink(T view);
    void copyToClipboard(T view);
 diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/EnrichedMarkdownTextInputManager.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/EnrichedMarkdownTextInputManager.kt
-index 512f5fc..19baa9b 100644
+index 512f5fc..8b98937 100644
 --- a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/EnrichedMarkdownTextInputManager.kt
 +++ b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/EnrichedMarkdownTextInputManager.kt
-@@ -300,6 +300,7 @@ class EnrichedMarkdownTextInputManager :
+@@ -247,7 +247,13 @@ class EnrichedMarkdownTextInputManager :
+     value: Float,
+   ) {
+     if (value > 0 && view != null) {
+-      view.setLineSpacing(value - view.textSize, 1f)
++      // RN convention passes lineHeight in dp; upstream subtracted the raw value
++      // from textSize (px), yielding a large negative add per line that collapses
++      // adjacent text lines onto each other. Convert to px and compensate from the
++      // paint's actual font metrics so each line lands on the requested height.
++      val targetPx = value * view.resources.displayMetrics.density
++      val fm = view.paint.fontMetricsInt
++      view.setLineSpacing(targetPx - (fm.descent - fm.ascent), 1f)
+     }
+   }
+ 
+@@ -300,6 +306,7 @@ class EnrichedMarkdownTextInputManager :
            formatLabel = value.getString("formatLabel") ?: "",
            copyAsMarkdown = value.getBoolean("copyAsMarkdown"),
            copyAsMarkdownLabel = value.getString("copyAsMarkdownLabel") ?: "",
@@ -36,7 +51,7 @@ index 512f5fc..19baa9b 100644
          )
        }
    }
-@@ -503,6 +504,21 @@ class EnrichedMarkdownTextInputManager :
+@@ -503,6 +510,21 @@ class EnrichedMarkdownTextInputManager :
      }
    }
  
