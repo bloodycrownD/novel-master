@@ -521,17 +521,17 @@ index 5b348e8..520ef2b 100644
        removeLink: () => Commands.removeLink(commandRef),
        copyToClipboard: () => Commands.copyToClipboard(commandRef),
 diff --git a/node_modules/react-native-enriched-markdown/lib/module/EnrichedMarkdownTextInputNativeComponent.ts b/node_modules/react-native-enriched-markdown/lib/module/EnrichedMarkdownTextInputNativeComponent.ts
-index c2fec26..1a0cf8b 100644
+index c2fec26..29046bb 100644
 --- a/node_modules/react-native-enriched-markdown/lib/module/EnrichedMarkdownTextInputNativeComponent.ts
 +++ b/node_modules/react-native-enriched-markdown/lib/module/EnrichedMarkdownTextInputNativeComponent.ts
 @@ -25,6 +25,10 @@ interface MarkdownTextInputStyleInternal {
      color: ColorValue;
      underline: boolean;
      backgroundColor: ColorValue;
-+    borderRadius: number;
-+    paddingHorizontal: number;
-+    paddingTop: number;
-+    paddingBottom: number;
++    borderRadius: CodegenTypes.Float;
++    paddingHorizontal: CodegenTypes.Float;
++    paddingTop: CodegenTypes.Float;
++    paddingBottom: CodegenTypes.Float;
    };
    linkVariants: ReadonlyArray<
      Readonly<{
@@ -539,10 +539,10 @@ index c2fec26..1a0cf8b 100644
        color: ColorValue;
        underline: boolean;
        backgroundColor: ColorValue;
-+      borderRadius: number;
-+      paddingHorizontal: number;
-+      paddingTop: number;
-+      paddingBottom: number;
++      borderRadius: CodegenTypes.Float;
++      paddingHorizontal: CodegenTypes.Float;
++      paddingTop: CodegenTypes.Float;
++      paddingBottom: CodegenTypes.Float;
      }>
    >;
    spoiler: {
@@ -775,17 +775,17 @@ index 4100c70..7065f69 100644
        removeLink: () => Commands.removeLink(commandRef),
        copyToClipboard: () => Commands.copyToClipboard(commandRef),
 diff --git a/node_modules/react-native-enriched-markdown/src/EnrichedMarkdownTextInputNativeComponent.ts b/node_modules/react-native-enriched-markdown/src/EnrichedMarkdownTextInputNativeComponent.ts
-index c2fec26..1a0cf8b 100644
+index c2fec26..29046bb 100644
 --- a/node_modules/react-native-enriched-markdown/src/EnrichedMarkdownTextInputNativeComponent.ts
 +++ b/node_modules/react-native-enriched-markdown/src/EnrichedMarkdownTextInputNativeComponent.ts
 @@ -25,6 +25,10 @@ interface MarkdownTextInputStyleInternal {
      color: ColorValue;
      underline: boolean;
      backgroundColor: ColorValue;
-+    borderRadius: number;
-+    paddingHorizontal: number;
-+    paddingTop: number;
-+    paddingBottom: number;
++    borderRadius: CodegenTypes.Float;
++    paddingHorizontal: CodegenTypes.Float;
++    paddingTop: CodegenTypes.Float;
++    paddingBottom: CodegenTypes.Float;
    };
    linkVariants: ReadonlyArray<
      Readonly<{
@@ -793,10 +793,10 @@ index c2fec26..1a0cf8b 100644
        color: ColorValue;
        underline: boolean;
        backgroundColor: ColorValue;
-+      borderRadius: number;
-+      paddingHorizontal: number;
-+      paddingTop: number;
-+      paddingBottom: number;
++      borderRadius: CodegenTypes.Float;
++      paddingHorizontal: CodegenTypes.Float;
++      paddingTop: CodegenTypes.Float;
++      paddingBottom: CodegenTypes.Float;
      }>
    >;
    spoiler: {
