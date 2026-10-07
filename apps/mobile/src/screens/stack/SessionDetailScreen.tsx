@@ -31,7 +31,7 @@ import Animated, {useAnimatedStyle} from 'react-native-reanimated';
 import {useReanimatedKeyboardAnimation} from 'react-native-keyboard-controller';
 import {KeyboardAvoidingView} from 'react-native-keyboard-controller';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
-import {runCompactionWithTokenWarm} from '../../services/compaction-warm-orchestration.service';
+import {runManualCompaction} from '../../services/manual-compaction.service';
 import {AgentPickerModal} from '../../components/agent/AgentPickerModal';
 import {ModelPickerModal} from '../../components/provider/ModelPickerModal';
 import {useRuntime} from '../../hooks/useRuntime';
@@ -159,10 +159,11 @@ export function SessionDetailScreen() {
       {
         text: '压缩',
         onPress: () => {
-          // 冻结/压缩/预热/解冻的编排收在 runCompactionWithTokenWarm（r3-orc-1：
-          // 与聊天页那份手工副本曾漂移五处），本处只留 UI 尾巴——三出口
-          // （成功 / 明确失败 / 抛错）一个不能少。
-          void runCompactionWithTokenWarm(
+          // 编排收在 runManualCompaction（r3-orc-1：与聊天页那份手工副本曾
+          // 漂移五处），本处只留 UI 尾巴——三出口（成功 / 明确失败 / 抛错）
+          // 一个不能少。token 读数不做显式预热（2026-10-07 拍板，与置位同
+          // 路径）：toast 即回，聊天页自己收到转录变更后按常规两阶段刷 chip。
+          void runManualCompaction(
             runtime,
             {projectId, sessionId},
             {
@@ -180,19 +181,12 @@ export function SessionDetailScreen() {
                 });
                 showToast('已压缩');
                 // 通知聊天页刷新消息列表（压缩后旧消息 hidden 已置 true，聊天页需
-                // reload 才能渲染降透明度）
+                // reload 才能渲染降透明度；chip 顺带走常规两阶段刷新）。
                 DeviceEventEmitter.emit('session-transcript-changed', {
                   sessionId,
                 });
               },
-              // 预热落定 + 冻结已解之后：此刻 L1 已命中，聊天页首帧即精确档，
-              // 补发一次转录变更让聊天页把 chip 刷成精确标签。
-              onFinally: async outcome => {
-                if (outcome.ok) {
-                  DeviceEventEmitter.emit('session-transcript-changed', {
-                    sessionId,
-                  });
-                }
+              onFinally: async () => {
                 await load();
               },
             },

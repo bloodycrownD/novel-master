@@ -25,7 +25,6 @@ import {
 import {
   cancelPreciseUpgrade,
   cancelPreciseUpgradeDelay,
-  isChatTokenPreciseWarmInflight,
   loadChatPromptTokenLabelResilient,
 } from '@/services/chat-prompt-tokens.service';
 import type {RootStackParamList} from '@/navigation/types';
@@ -267,11 +266,6 @@ export function useChatTabScope({
   }, [runtime, projectId, sessionId]);
 
   const refreshChatTokenLabel = useCallback((): Promise<void> => {
-    // 压缩预热窗口（warmChatTokenLabelAfterCompaction）：chip 冻结旧标签，
-    // 预热完成后由压缩流程补一次刷新（首帧 L1 命中精确档，无 gpt ≈ 跳变）。
-    if (sessionId != null && isChatTokenPreciseWarmInflight(sessionId)) {
-      return Promise.resolve();
-    }
     const key = `${projectId ?? ''}#${sessionId ?? ''}`;
     const slot = chatTokenLabelDebounceRef.current;
     if (slot.key !== key) {

@@ -38,7 +38,6 @@ import {
   chatPromptTokenDebounceExecCountForTests,
   loadChatPromptTokenStatsResilient,
   resetChatPromptTokenDebounceForTests,
-  warmChatPromptTokenStatsAfterCompaction,
 } from "../src/main/services/chat-prompt-tokens.service.js";
 import {
   setupDesktopDbTestEnv,
@@ -213,54 +212,6 @@ describe("chat-prompt-tokens：run 在途四层防护（r3-dt-align）", () => {
     } finally {
       await release();
     }
-  });
-
-  it("T-DA1b: run 在途 ⇒ 压缩暖机也跳过本轮（且不误占 inflight 去重）", async () => {
-    const rt = await getDesktopRuntime();
-    const scope = { projectId, sessionId };
-
-    let listCalls = 0;
-    const countingMessages = new Proxy(rt.messages, {
-      get(target, prop, receiver) {
-        if (prop === "listBySession") {
-          return async (...args: unknown[]) => {
-            listCalls += 1;
-            return (
-              target.listBySession as (...a: unknown[]) => Promise<unknown>
-            )(...args);
-          };
-        }
-        return Reflect.get(target, prop, receiver);
-      },
-    });
-    const probeRt = new Proxy(rt, {
-      get(target, prop, receiver) {
-        if (prop === "messages") {
-          return countingMessages;
-        }
-        return Reflect.get(target, prop, receiver);
-      },
-    }) as typeof rt;
-
-    const release = await registerRunInFlight(sessionId);
-    try {
-      await warmChatPromptTokenStatsAfterCompaction(probeRt, scope);
-      assert.equal(
-        listCalls,
-        0,
-        "run 在途时压缩暖机不该起步（完整口径 resolve 是整串级重活）",
-      );
-    } finally {
-      await release();
-    }
-
-    // 抑制不许顺带占住 compactionWarmInflight：否则 run 一结束，压缩暖机就会
-    // 被自己的去重挡下、prewarm 永远排不上（这正是 r3-cache-1 的失效形态）。
-    await warmChatPromptTokenStatsAfterCompaction(probeRt, scope);
-    assert.ok(
-      listCalls > 0,
-      "run 结束后压缩暖机必须真能再跑（跳过时不该登记在途）",
-    );
   });
 
   it("T-DA2a: run 终态后补推读口恰好一次（不经 renderer 触发）", async () => {

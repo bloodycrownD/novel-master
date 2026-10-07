@@ -1,43 +1,33 @@
 /**
- * 压缩编排（token 预热版）：冻结窗口 → runCompaction → 精确预热 → 解冻 → UI 尾巴。
+ * 手动压缩编排：runCompaction → UI 尾巴（与置位同口径，2026-10-07）。
  *
  * 存在的理由（r3-orc-1）：手动压缩此前有两份手工副本——聊天页
  * `useChatTabMessageActions.handleCompactSession` 与详情页
- * `SessionDetailScreen.handleCompact`。两份在「谁负责解冻、失败出口补哪些 UI 尾巴、
- * 抛错出口补哪些 UI 尾巴」上已漂移五处，而解冻这件事本身在旧代码里是**隐式**的：
- * 成功路径上没人显式调 `endChatTokenLabelFreeze`，全靠预热自己的 finally 兜底，
- * 任何一处副本改动都可能提前解冻或永久不解冻。本入口把编排收成唯一一份，
- * UI 侧只提供尾巴钩子。
+ * `SessionDetailScreen.handleCompact`，两份在「失败出口补哪些 UI 尾巴、抛错
+ * 出口补哪些 UI 尾巴」上已漂移五处。本入口把编排收成唯一一份，UI 侧只提供
+ * 尾巴钩子。
  *
- * 时序（写死，勿调换）：
- * 1. {@link beginChatTokenLabelFreeze} —— 冻结窗口必须**先于** `runCompaction`
- *    打开：压缩过程的转录事件会触发 chip 刷新，开晚一步估算首帧（gpt ≈）就先
- *    跳出来了（2026-09-30 真机实锤）。
- * 2. 取 hideStartDepth → `runCompaction`。
- * 3. 成功 → `await` {@link warmChatTokenLabelAfterCompaction}（压缩改串 L1 必 miss，
- *    先完整解析一轮暖 L1；暖完首帧即精确档，无跳变）。
- * 4. {@link endChatTokenLabelFreeze} 解冻（成败/异常都执行，finally 收口）。
- * 5. 跑 UI 尾巴钩子。
+ * 2026-10-07 起不再做「token 精确预热」（旧版 runCompactionWithTokenWarm 在
+ * runCompaction 成功后同步 await 一轮完整解析暖 L1，为消 2026-09-30 拍板的
+ * `gpt ≈` 跳变）：v1.5.39 起手动压缩清 `rule_snapshot` + `file_cache` 两域，
+ * 预热变成全量冷组装（清单重评估 + 逐文件读盘 + inflate + 回填 deflate），
+ * 全被压在「压缩完成」toast 之前，真机卡顿实锤。用户重新拍板：置位与压缩
+ * 同路径——核心操作落库即返回，chip 读数交给常规两阶段刷新（估算首帧 +
+ * 后台精确升级）自然跟进，跳变与短暂旧值可接受。
  *
- * @module services/compaction-warm-orchestration
+ * @module services/manual-compaction
  */
 
 import {runCompaction} from '@novel-master/core/compaction';
-import {
-  beginChatTokenLabelFreeze,
-  endChatTokenLabelFreeze,
-  warmChatTokenLabelAfterCompaction,
-} from './chat-prompt-tokens.service';
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
 
 /**
- * 一次压缩编排的结果（供 `onFinally` 判别该补哪些尾巴）。
+ * 一次手动压缩的结果（供 `onFinally` 判别该补哪些尾巴）。
  *
- * ⚠️ 本类型只服务 {@link runCompactionWithTokenWarm}——**手动压缩专属**编排
- * （硬约束见该函数 JSDoc 首行）：`ok` 为真即表示这一轮是手动压缩且已清
- * `rule_snapshot` + `file_cache` 两域，调用方据此刷新预览/workplace。
+ * `ok` 为真即表示这一轮手动压缩成功（core 侧已清 `rule_snapshot` +
+ * `file_cache` 两域），调用方据此刷新预览/workplace。
  */
-export type RunCompactionWithTokenWarmOutcome = {
+export type ManualCompactionOutcome = {
   /** 压缩本体是否成功。 */
   readonly ok: boolean;
   /**
@@ -48,8 +38,8 @@ export type RunCompactionWithTokenWarmOutcome = {
   readonly error: unknown;
 };
 
-/** 压缩编排的 UI 尾巴钩子（全部可选，都在解冻之后调用）。 */
-export type RunCompactionWithTokenWarmHooks = {
+/** 手动压缩的 UI 尾巴钩子（全部可选）。 */
+export type ManualCompactionHooks = {
   /** 压缩失败（明确失败或抛错）时的尾巴。 */
   readonly onFailed?: (
     error: unknown,
@@ -58,12 +48,12 @@ export type RunCompactionWithTokenWarmHooks = {
   readonly onSucceeded?: () => void | Promise<void>;
   /** 成功与失败都会跑的尾巴。 */
   readonly onFinally?: (
-    outcome: RunCompactionWithTokenWarmOutcome,
+    outcome: ManualCompactionOutcome,
   ) => void | Promise<void>;
 };
 
 /**
- * 手动压缩的单一编排入口：冻结 → 压缩 →（成功则）预热 → 解冻 → UI 尾巴。
+ * 手动压缩的单一编排入口：runCompaction → UI 尾巴。
  *
  * ⚠️ 本编排是**手动压缩专属**入口：两处调用方均为 UI「压缩上下文」按钮，故
  * `trigger` 硬写 "manual"。接自动压缩前必须先给本函数加 trigger 透传参数，
@@ -72,14 +62,12 @@ export type RunCompactionWithTokenWarmHooks = {
  * 本函数**不外抛异常**：所有出口（成功 / 明确失败 / 抛错 / 尾巴自身抛错）都在
  * 内部收口，调用方可以直接 `void` 掉它。
  */
-export async function runCompactionWithTokenWarm(
+export async function runManualCompaction(
   runtime: MobileNovelMasterRuntime,
   scope: {readonly projectId: string; readonly sessionId: string},
-  hooks: RunCompactionWithTokenWarmHooks = {},
+  hooks: ManualCompactionHooks = {},
 ): Promise<void> {
   const {projectId, sessionId} = scope;
-  // 冻结计数 ++（与第 4 步的 -- 配对）
-  beginChatTokenLabelFreeze(sessionId);
   let ok = false;
   // `null` 表示「压缩本体明确返回失败」（无错误详情）；`{error}` 表示抛错。
   let failure: {readonly error: unknown} | null = null;
@@ -99,20 +87,11 @@ export async function runCompactionWithTokenWarm(
       // 首行）：将来接自动压缩必须先加 trigger 透传参数，不得沿用。
       {sessionId, projectId, hideStartDepth, trigger: 'manual'},
     );
-    if (result.ok) {
-      // 预热本体自带 try/catch（失败只回退为两阶段跳变，不影响压缩流程）。
-      await warmChatTokenLabelAfterCompaction(runtime, {projectId, sessionId});
-      ok = true;
-    }
+    ok = result.ok;
   } catch (error) {
     failure = {error};
-  } finally {
-    // 解冻：与 beginChatTokenLabelFreeze 的 ++ 配对。计数归零才真解冻——预热那一路
-    // 已在 warmChatTokenLabelAfterCompaction 自己的 finally 里配掉（配对关系见
-    // chat-prompt-tokens.service 中 preciseWarmInflight 的注释）。
-    endChatTokenLabelFreeze(sessionId);
   }
-  const outcome: RunCompactionWithTokenWarmOutcome = {
+  const outcome: ManualCompactionOutcome = {
     ok,
     error: failure?.error,
   };

@@ -7,8 +7,7 @@
  * - 并发 5 触发在途合并为一次 service 调用；
  * - trailing 语义：窗口内不执行、窗口过后必有最终一次计算、不吞任何一击；
  * - 计算在途时新触发复用在途（不并发第二轮），随后追赶轮保证新数据最终被算。
- * - 两道前置冻结闸：run 在途（abortRegistry.has，有标签可保才冻）与压缩预热
- *   在途（isChatTokenPreciseWarmInflight，命中即不排程）。
+ * - 前置冻结闸：run 在途（abortRegistry.has，有标签可保才冻）。
  * - 精确升级的延迟收口（cr2-E-2）：切会话按「发起那一轮」的会话身份 cancel
  *   升级延迟计时；卸载 cleanup 经 ref 收口；shouldBailPrecise 双条件认会话身份
  *   （视图仍在 conversation 时也能拦下旧会话的挂起升级）。
@@ -34,7 +33,6 @@ import {
 import {
   cancelPreciseUpgrade,
   cancelPreciseUpgradeDelay,
-  isChatTokenPreciseWarmInflight,
   loadChatPromptTokenLabelResilient,
 } from '../src/services/chat-prompt-tokens.service';
 
@@ -49,7 +47,6 @@ jest.mock('../src/services/chat-agent-meta', () => ({
 
 jest.mock('../src/services/chat-prompt-tokens.service', () => ({
   loadChatPromptTokenLabelResilient: jest.fn(async () => '1K tokens · 预估'),
-  isChatTokenPreciseWarmInflight: jest.fn(() => false),
   // hook 侧换会话/卸载时的精确升级延迟计时收口出口（cr2-E-2）
   cancelPreciseUpgradeDelay: jest.fn(),
   // 在途原生精确计数的取消下发出口（tokenizer-native-cancel，与上者同点并调）
@@ -58,7 +55,6 @@ jest.mock('../src/services/chat-prompt-tokens.service', () => ({
 
 const loadChatAgentMetaMock = loadChatAgentMeta as jest.Mock;
 const loadLabelMock = loadChatPromptTokenLabelResilient as jest.Mock;
-const warmInflightMock = isChatTokenPreciseWarmInflight as jest.Mock;
 const cancelDelayMock = cancelPreciseUpgradeDelay as jest.Mock;
 const cancelMock = cancelPreciseUpgrade as jest.Mock;
 
@@ -694,70 +690,7 @@ describe('useChatTabScope refreshChatTokenLabel run 在途冻结（2026-09-30）
       jest.advanceTimersByTime(1200);
       await flushMicrotasks();
     });
-    expect(harness.api().agentMeta?.tokenLabel).toBe('1K tokens · 预估');
-  });
-});
-
-describe('useChatTabScope refreshChatTokenLabel 压缩预热冻结闸（r3-test-1 ③）', () => {
-  let harness: Awaited<ReturnType<typeof mountScopeHarness>> | undefined;
-
-  beforeEach(() => {
-    jest.clearAllMocks();
-    jest.useFakeTimers();
-    // meta 查询挂起：refreshChatMeta 停在 getCurrentModelId，不链触发标签刷新。
-    loadChatAgentMetaMock.mockImplementation(
-      () => createDeferred<unknown>().promise,
-    );
-  });
-
-  afterEach(() => {
-    harness?.unmount();
-    harness = undefined;
-    jest.useRealTimers();
-  });
-
-  it('预热在途（isChatTokenPreciseWarmInflight 翻真）：本轮不排程、零 service 调用；预热落定后下一击照常计算', async () => {
-    // 压缩暖机窗口（runCompactionWithTokenWarm → warmChatTokenLabelAfterCompaction）
-    // 里 chip 冻结在旧标签，等预热算出的精确档由压缩流程补写。这道闸在防抖
-    // 排程**之前**：命中即 return，连计时器都不建——否则窗口内的转录/settle
-    // 触发会各起一轮抢跑，把预热那一轮整串计数的时间预算吃掉。
-    //
-    // 旧覆盖（run 在途冻结那组）只钉 abortRegistry.has 那一道闸；本组钉的是
-    // 同函数里紧邻的 isChatTokenPreciseWarmInflight 那道——删掉它本用例立刻红
-    // （300ms 窗口过后 service 被调 1 次）。
-    const warm = {inflight: false};
-    warmInflightMock.mockImplementation(() => warm.inflight);
-    harness = await mountScopeHarness();
-
-    // 预热前一轮正常计算：把「窗口外读口是通的」这一前提立起来。
-    await act(async () => {
-      void harness.api().refreshChatTokenLabel();
-      jest.advanceTimersByTime(1200);
-      await flushMicrotasks();
-    });
-    expect(loadLabelMock).toHaveBeenCalledTimes(1);
-
-    // 预热窗口内：翻真 → 触发不排程。窗口跨过两轮 300ms 仍零调用
-    // （闸若只挡一次，第二轮就会漏进来）。
-    await act(async () => {
-      warm.inflight = true;
-      for (let i = 0; i < 2; i++) {
-        void harness.api().refreshChatTokenLabel();
-        jest.advanceTimersByTime(1200);
-        await flushMicrotasks();
-      }
-    });
-    expect(warmInflightMock).toHaveBeenCalled();
-    expect(loadLabelMock).toHaveBeenCalledTimes(1);
-
-    // 预热落定：下一击照常排程计算（闸不吞触发，chip 由压缩流程补写后
-    // 还能继续跟读数）。
-    await act(async () => {
-      warm.inflight = false;
-      void harness.api().refreshChatTokenLabel();
-      jest.advanceTimersByTime(1200);
-      await flushMicrotasks();
-    });
     expect(loadLabelMock).toHaveBeenCalledTimes(2);
   });
 });
+

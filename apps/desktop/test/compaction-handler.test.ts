@@ -21,13 +21,13 @@
  * handleCompactionManual（内部走 runCompaction）仍返回 data.ok=true 并触发 composer 广播——
  * 覆盖了 T-IPC1R（预置了 kkv）未验证的维度，即 runCompaction 对空 kkv 的容错。
  *
- * T-IPC2：手动压缩返回前必须已完成 prompt 占用的精确档预热
- * （`await warmChatPromptTokenStatsAfterCompaction`），否则 renderer 压缩完成后
- * 的那次刷新首帧会落到 `gpt ≈`，用户看到 chip 跳变。
- *
- * T-IPC2b（r3-cache-1）：同样的判据，但**读口暖机在途时**也必须成立——压缩暖机
- * 与读口暖机分属两个 inflight Set，被共用去重挡下时预热不会跑，IPC 仍会返回，
- * 但那一刻精确档并不就绪。
+ * T-IPC2（2026-10-07 反转）：手动压缩 IPC 成功返回**不依赖也不触发**显式暖机
+ * ——与置位同路径（handleMessagesSetFloor），核心操作落库即返回，token 读数
+ * 交给 renderer chip 的常规两阶段刷新（估算首帧 + 后台精确升级）自然跟进。
+ * 旧实现（IPC 返回前 await 显式精确暖机）在 v1.5.39 手动压缩
+ * 清 rule_snapshot + file_cache 两域后变成全量冷组装、挡在 IPC 前造成卡顿，
+ * 故删除（跳变口径由用户重新拍板放宽）。用例钉住：IPC 返回 ok 且没有任何
+ * warm 相关推送，读数仍走常规刷新路径升级到精确档。
  */
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
@@ -49,10 +49,7 @@ import {
 } from "../shared/ipc-types.js";
 import { setComposerAttachmentsSuggestForwardTarget } from "../src/main/ipc/forward-composer-attachments-suggest.js";
 import { setPromptChatTokenUpdatedForwardTarget } from "../src/main/ipc/forward-prompt-chat-token-updated.js";
-import {
-  holdReadWarmInflightForTests,
-  loadChatPromptTokenStats,
-} from "../src/main/services/chat-prompt-tokens.service.js";
+import { loadChatPromptTokenStats } from "../src/main/services/chat-prompt-tokens.service.js";
 import {
   setupDesktopDbTestEnv,
   teardownDesktopDbTestEnv,
@@ -318,22 +315,28 @@ describe("handleCompactionManual", () => {
   });
 
   /**
-   * T-IPC2：手动压缩**返回之前**已经把精确档暖好（chip 不跳 `gpt ≈`）。
+   * T-IPC2（2026-10-07 反转）：压缩 IPC 成功返回**不依赖也不触发**显式暖机。
    *
-   * 判据是「IPC resolve 的那一刻推送已经发生」——不是轮询等待后的结果。
-   * 若把 `await warmChatPromptTokenStatsAfterCompaction(...)` 改成 fire-and-forget，
-   * 预热链还挂在 DB/分词器的 await 上，IPC 会先返回，这条断言立刻红。
+   * 口径与置位同路径（handleMessagesSetFloor）：核心操作落库即返回，token 读数
+   * 交给 renderer chip 的常规两阶段刷新（估算首帧 + 后台精确升级）自然跟进。
+   * 旧实现（IPC 返回前 await 显式精确暖机）在
+   * v1.5.39 手动压缩清两域后变成全量冷组装、挡在 IPC 前造成卡顿，故删除；
+   * 跳变/短暂旧值已被用户重新拍板接受。
+   *
+   * 判据：① IPC 返回 ok；② 返回那一刻、以及一个完整防抖窗口内都没有任何
+   * PROMPT_CHAT_TOKEN_UPDATED 推送（显式暖机若复活，这条会红）；③ 紧随其后的
+   * 常规读口首帧如实回落估算档（L1 没被压缩路径提前写热），再由读口自己的
+   * 后台暖机推送精确档——这正是「交给常规刷新自然跟进」的形态。
    */
-  it("T-IPC2: 压缩 IPC 返回前精确档已就绪（首帧不再回落 gpt ≈）", async () => {
+  it("T-IPC2: 压缩 IPC 成功返回不依赖也不触发显式暖机（读数交给常规刷新）", async () => {
     const rt = await getDesktopRuntime();
 
-    // 本文件其它用例的会话没有可用模型（无 provider/savedModel），
-    // resolveSavedModelId 会返回空 → 走 heuristic 早退，压根没有精确档可暖。
-    // 这里现搭一个 gpt-4o 模型 + 独立会话，构造「本该有精确档」的前提。
+    // 与旧用例同款前提：现搭一个 gpt-4o 模型 + 独立会话，构造「本该有精确档」
+    // 的场景——没有可用模型时压根没有精确档，「没有推送」的断言会失去牙齿。
     const provider = await handleProvidersCreate({
       protocol: "openai",
       baseUrl: "https://api.openai.com/v1",
-      displayName: "openai-compaction",
+      displayName: "openai-compaction-nowarm",
       apiKey: "sk-test",
     });
     assert.equal(provider.ok, true, provider.ok ? "" : provider.error.message);
@@ -346,29 +349,31 @@ describe("handleCompactionManual", () => {
     );
     await rt.state.setCurrentModelId(saved.id);
 
-    const project = await handleProjectsCreate({ name: "compaction-warm-ipc" });
+    const project = await handleProjectsCreate({
+      name: "compaction-nowarm-ipc",
+    });
     assert.equal(project.ok, true);
     if (!project.ok) {
       return;
     }
     const session = await handleSessionsCreate({
       projectId: project.data.id,
-      title: "compaction-warm",
+      title: "compaction-nowarm",
     });
     assert.equal(session.ok, true);
     if (!session.ok) {
       return;
     }
-    const warmSessionId = session.data.id;
+    const scope = { projectId: project.data.id, sessionId: session.data.id };
     await handleMessagesAppend({
-      sessionId: warmSessionId,
+      sessionId: scope.sessionId,
       role: "user",
       text: "他把伞收了，窗外的雨顺着玻璃往下淌，街灯在水洼里碎成一片橙。".repeat(
         8,
       ),
     });
 
-    // L1 冷 + 无 API 基线：压缩后首帧本会落到 `gpt ≈`。
+    // L1 冷 + 无 API 基线：显式暖机若还在，它必须在这里写热 L1 并推送。
     sessionApiPromptTokenCache.clearAll();
     promptWholeCache.clearForTests();
 
@@ -385,143 +390,51 @@ describe("handleCompactionManual", () => {
     );
 
     try {
-      const result = await handleCompactionManual({
-        projectId: project.data.id,
-        sessionId: warmSessionId,
-      });
+      const result = await handleCompactionManual(scope);
       assert.equal(result.ok, true);
       assert.equal(result.data?.ok, true);
 
-      // 同步判据：IPC 一返回，精确档推送就已经发生（不是「等一会就来了」）。
-      const hit = pushed.find((p) => p.sessionId === warmSessionId);
-      assert.ok(
-        hit != null,
-        "压缩 IPC 返回前应已完成精确档预热并推送（await 被去掉就会红）",
-      );
-      assert.equal(hit.stats.estimated, false);
-      assert.equal(hit.stats.counterKind, "tiktoken");
-      assert.match(hit.stats.label, /^gpt = \S+ \/ 128k \(\d+%\)$/);
-
-      // 另一条腿：L1 已暖 ⇒ renderer 压缩完成后的那次刷新首帧直读精确档。
-      const firstFrame = await loadChatPromptTokenStats(rt, {
-        projectId: project.data.id,
-        sessionId: warmSessionId,
-      });
+      // 判据②a：IPC 返回那一刻没有任何推送（旧实现在这里必然已推送）。
       assert.equal(
-        firstFrame.estimated,
-        false,
-        "压缩后首帧应已是精确档，不该回落 gpt ≈",
+        pushed.length,
+        0,
+        "压缩 IPC 成功返回不该触发显式暖机（返回前推送即旧实现复活）",
       );
-      assert.equal(firstFrame.counterKind, "tiktoken");
+      // 判据②b：一个完整防抖窗口之后再确认一次——顺带挡住 fire-and-forget
+      // 形态的暖机（它会在返回后偷偷补推）。
+      await new Promise((resolve) => setTimeout(resolve, 450));
+      assert.equal(
+        pushed.length,
+        0,
+        "压缩 IPC 返回后也不该有暖机推送（fire-and-forget 形态同样不许）",
+      );
+
+      // 判据③：常规读口首帧如实回落估算档（L1 没被压缩路径写热）。
+      const firstFrame = await loadChatPromptTokenStats(rt, scope);
+      assert.equal(
+        firstFrame?.estimated,
+        true,
+        "压缩后常规读口首帧应回落估算档（压缩路径不该预写 L1）",
+      );
+
+      // 随后由读口自己的后台暖机自然升级到精确档（读数不时间敏感，晚一拍可接受）。
+      const deadline = Date.now() + 4000;
+      let upgraded: PromptChatTokenUpdatedPayload | undefined;
+      while (upgraded == null && Date.now() < deadline) {
+        upgraded = pushed.find((p) => p.sessionId === scope.sessionId);
+        if (upgraded == null) {
+          await new Promise((resolve) => setTimeout(resolve, 25));
+        }
+      }
+      assert.ok(
+        upgraded != null,
+        "常规读口应自然升级到精确档（后台暖机推送）",
+      );
+      assert.equal(upgraded.stats.estimated, false);
+      assert.equal(upgraded.stats.counterKind, "tiktoken");
     } finally {
       setPromptChatTokenUpdatedForwardTarget(() => undefined);
     }
   });
 
-  /**
-   * T-IPC2b：读口暖机在途（inflight 已占位）时，「IPC 返回那一刻精确档就绪」
-   * 这条不变式**依然**成立。
-   *
-   * 为什么这是独立的一条：读口暖机是 void 出去的（`loadChatPromptTokenStatsNow`
-   * 里 fire-and-forget），没有可 await 的句柄，压缩暖机没法「等它落定」。所以
-   * 两条路径一旦共用一个 inflight Set，读口在途时压缩暖机会直接 return，
-   * 预热一轮都不跑 —— 而 IPC 照样返回 ok，调用方看不出任何异常，跳变照旧。
-   *
-   * 构造前提只能靠置位（真实窗口只有几毫秒，撞不出来）。
-   */
-  it("T-IPC2b: 读口暖机在途（inflight 占位）时，压缩 IPC 返回那一刻精确档仍就绪", async () => {
-    const rt = await getDesktopRuntime();
-
-    // 前提与 T-IPC2 同款：现搭 gpt-4o + 独立会话（否则没有精确档可暖）。
-    // 正文与 T-IPC2 刻意不同：L1 按内容指纹寻址，同文案会跨用例命中旧条目。
-    const provider = await handleProvidersCreate({
-      protocol: "openai",
-      baseUrl: "https://api.openai.com/v1",
-      displayName: "openai-compaction-2b",
-      apiKey: "sk-test",
-    });
-    assert.equal(provider.ok, true, provider.ok ? "" : provider.error.message);
-    if (!provider.ok) {
-      return;
-    }
-    const saved = await rt.providerModels.save(
-      provider.data.providerId,
-      "gpt-4o",
-    );
-    await rt.state.setCurrentModelId(saved.id);
-
-    const project = await handleProjectsCreate({ name: "compaction-warm-ipc-2b" });
-    assert.equal(project.ok, true);
-    if (!project.ok) {
-      return;
-    }
-    const session = await handleSessionsCreate({
-      projectId: project.data.id,
-      title: "compaction-warm-2b",
-    });
-    assert.equal(session.ok, true);
-    if (!session.ok) {
-      return;
-    }
-    const warmSessionId = session.data.id;
-    await handleMessagesAppend({
-      sessionId: warmSessionId,
-      role: "user",
-      text: "巷口的修表铺还亮着灯，秒针走得很慢，像谁在替整条街数时间。".repeat(
-        9,
-      ),
-    });
-
-    sessionApiPromptTokenCache.clearAll();
-    promptWholeCache.clearForTests();
-
-    const pushed: PromptChatTokenUpdatedPayload[] = [];
-    setPromptChatTokenUpdatedForwardTarget(
-      () =>
-        ({
-          send: (channel: string, payload: unknown) => {
-            if (channel === IPC_CHANNELS.PROMPT_CHAT_TOKEN_UPDATED) {
-              pushed.push(payload as PromptChatTokenUpdatedPayload);
-            }
-          },
-        }) as never,
-    );
-
-    // 构造前提：读口那一轮后台暖机仍在途。
-    const releaseReadWarm = holdReadWarmInflightForTests(warmSessionId);
-    try {
-      const result = await handleCompactionManual({
-        projectId: project.data.id,
-        sessionId: warmSessionId,
-      });
-      assert.equal(result.ok, true);
-      assert.equal(result.data?.ok, true);
-
-      // 同步判据：IPC 一返回那一刻精确档推送就已经发生。
-      // 若两个 inflight Set 被合并，这条会在此红——共用去重会把预热挡成 no-op。
-      const hit = pushed.find((p) => p.sessionId === warmSessionId);
-      assert.ok(
-        hit != null,
-        "读口暖机在途不得挡下压缩预热：IPC 返回那一刻精确档必须已就绪",
-      );
-      assert.equal(hit.stats.estimated, false);
-      assert.equal(hit.stats.counterKind, "tiktoken");
-      assert.match(hit.stats.label, /^gpt = \S+ \/ 128k \(\d+%\)$/);
-
-      // 另一条腿：L1 已暖 ⇒ 压缩后 renderer 那次刷新的首帧直读精确档。
-      const firstFrame = await loadChatPromptTokenStats(rt, {
-        projectId: project.data.id,
-        sessionId: warmSessionId,
-      });
-      assert.equal(
-        firstFrame.estimated,
-        false,
-        "读口在途时压缩预热仍应把 L1 写热，首帧不该回落 gpt ≈",
-      );
-      assert.equal(firstFrame.counterKind, "tiktoken");
-    } finally {
-      releaseReadWarm();
-      setPromptChatTokenUpdatedForwardTarget(() => undefined);
-    }
-  });
 });
