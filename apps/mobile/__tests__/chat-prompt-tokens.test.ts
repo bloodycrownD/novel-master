@@ -6,11 +6,9 @@ import {
   __setPreciseUpgradeDelayForTests,
   cancelPreciseUpgrade,
   cancelPreciseUpgradeDelay,
-  isChatTokenPreciseWarmInflight,
   loadChatPromptTokenLabel,
   loadChatPromptTokenLabelResilient,
   PRECISE_UPGRADE_START_DELAY_MS,
-  warmChatTokenLabelAfterCompaction,
 } from '@/services/chat-prompt-tokens.service';
 // jest.mock 拦截后这里拿到的是工厂里的同构类——被测服务的 instanceof 与
 // 测试里 throw 的实例同源（中途弃权用例的观测前提）。
@@ -999,61 +997,6 @@ describe('chat-prompt-tokens.service', () => {
     expect(mockResolvePromptTokensWithBackfill.mock.calls[0]![3]).toEqual({
       sessionKkv: expect.objectContaining({get: expect.any(Function)}),
     });
-  });
-
-  it('压缩预热（消跳变）：warm 在途时冻结标志为真、走完整解析；结束/失败均清标志', async () => {
-    mockBuildSessionPromptInput.mockResolvedValue({
-      definition: {model: 'zai/glm-4.6'},
-      layout: {persist: [], dynamic: []},
-      ctx: {workplaceDisplay: '', messages: []},
-    });
-    mockResolveSavedModelId.mockReturnValue('zai/glm-4.6');
-    mockResolveTokenCounterModeForModel.mockResolvedValue('glm');
-
-    let release!: () => void;
-    const gate = new Promise<void>(resolve => {
-      release = resolve;
-    });
-    mockResolvePromptTokensWithBackfill.mockImplementation(
-      async () =>
-        await gate.then(() => ({
-          tokenCount: 99_300,
-          estimated: false,
-          counterKind: 'glm',
-          source: 'local',
-        })),
-    );
-
-    const runtime = stubRuntime({contextWindow: 128_000});
-    const warm = warmChatTokenLabelAfterCompaction(runtime, {
-      projectId: 'p',
-      sessionId: 's-warm',
-    });
-    await new Promise(resolve => setImmediate(resolve));
-    // warm 在途：chip 冻结标志生效（hook 层据此跳过刷新）
-    expect(isChatTokenPreciseWarmInflight('s-warm')).toBe(true);
-    expect(isChatTokenPreciseWarmInflight('s-other')).toBe(false);
-
-    release();
-    await warm;
-    expect(isChatTokenPreciseWarmInflight('s-warm')).toBe(false);
-    // warm 走完整解析（不带 preferEstimate——首帧即精确档的预热本体）
-    const opts = mockResolvePromptTokensWithBackfill.mock.calls[0]![3] as {
-      preferEstimate?: boolean;
-    };
-    expect(opts?.preferEstimate).toBeUndefined();
-  });
-
-  it('压缩预热：解析失败静默吞错（压缩流程不受影响）且标志必清', async () => {
-    mockBuildSessionPromptInput.mockRejectedValue(new Error('build boom'));
-    const runtime = stubRuntime({contextWindow: 128_000});
-    await expect(
-      warmChatTokenLabelAfterCompaction(runtime, {
-        projectId: 'p',
-        sessionId: 's-warm-fail',
-      }),
-    ).resolves.toBeUndefined();
-    expect(isChatTokenPreciseWarmInflight('s-warm-fail')).toBe(false);
   });
 
   it('两阶段：api 命中即精确，不触发后台升级', async () => {

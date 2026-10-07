@@ -11,7 +11,7 @@
  * 计数）与发送链共享 main 进程的单事件循环与单 SQLite 连接，mobile 真机实锤过
  * 它把 POST 派发从 +1.2s 拖到 +19.6s。desktop 侧四层落点：
  * ① 判活源 {@link isDesktopSessionRunInFlight}（core abortRegistry，单向 import）；
- * ② run 在途抑制（读口/后台暖机/压缩暖机三处入口）+ **null 哨兵**返回契约；
+ * ② run 在途抑制（读口入口 + 后台暖机排程两处判活）+ **null 哨兵**返回契约；
  * ③ build 分段弃权（{@link buildSessionPromptInput} 的 shouldBail）与 resolve 段
  *   弃权（core 抛 {@link PromptTokenResolveBailedError}）——两类都由
  *   {@link isChipBailError} 收口，**绝不进 fallback**；
@@ -202,8 +202,8 @@ type CountResult = {
 // 以及 savedModelId 缺失时的 heuristic 早退。只有真正调用 token counter 的部分通过 countFn 分叉。
 //
 // `shouldBail`（r3-dt-align 第 2/3 层）：读口两条路径（首帧、后台暖机）传「run 在途」
-// 判据进来，让 build 的分段检查点与 resolve 的整串级检查点都有观察点；fallback 与
-// 压缩暖机不传（前者只在真异常后跑、后者入口已查判活，见各自注释）。
+// 判据进来，让 build 的分段检查点与 resolve 的整串级检查点都有观察点；fallback
+// 不传（它只在真异常后跑，见 loadChatPromptTokenStatsFallback 注释）。
 async function computeChatPromptTokenStats(
   runtime: DesktopNovelMasterRuntime,
   scope: SessionPromptScope,
@@ -268,41 +268,21 @@ async function computeChatPromptTokenStats(
  * 压缩/置位/回滚这类一次性动作之后没有「下一次触发」，只暖 L1 的话 chip
  * 就停在估算档 `gpt ≈`（用户实报「手动压缩后分词器变成 gpt 兜底」）。
  *
- * ⚠️ 这里只管**读口**自己排的那一轮（{@link loadChatPromptTokenStatsNow}），
- * **与压缩暖机 {@link compactionWarmInflight} 是两个独立 Set**——见
- * {@link compactionWarmInflight} 头注释里「为什么不能共用」。
+ * 去重语义（排程处见 {@link loadChatPromptTokenStatsNow}）：本路径是 void 出去的
+ * （fire-and-forget），在途只意味着「别重复排一轮，白烧一次分词」，同 key 去重
+ * 完全安全。
  */
 const readWarmInflight = new Set<string>();
-
-/**
- * **压缩暖机**在途标记（按 sessionId）：由
- * {@link warmChatPromptTokenStatsAfterCompaction} 一条路径独占 add/finally delete。
- *
- * ⚠️ **必须与 {@link readWarmInflight} 分开，不能共用一个 Set**（cr-fix-spec-r3
- * r3-cache-1）：两者各自的**时序承诺**根本不同。
- *
- * - 读口暖机是 void 出去的（`loadChatPromptTokenStatsNow` 里 fire-and-forget），
- *   在途只意味着「别重复排一轮，白烧一次分词」——所以同 Set 去重完全安全。
- * - 压缩暖机由 IPC `await`，去重挡下就等于**直接放弃预热**：压缩 IPC 立刻返回，
- *   而 L1 还没写热，renderer 压缩完成后的首帧照样落到 `gpt ≈`——正是
- *   r3-cache-1 要消灭的那个「IPC 返回前已暖好」不变式的破坏。
- *
- * 两者还天然会同时在途（读口防抖 300ms trailing 常与用户点压缩重叠）。共用一个
- * Set 时，压缩暖机会被读口那一轮无声挡下，压缩路径**没有任何可 await 的句柄**去
- * 「等读口在途轮落定」（读口是 void 的），于是不变式随机破。拆开之后压缩路径
- * 自己完整跑一轮并 await，**该不变式恒成立**——代价只是多烧一次分词。
- */
-const compactionWarmInflight = new Set<string>();
 
 /**
  * 一次「完整口径」resolve 所需的 params 组装（tokenizerOverride / registry /
  * savedModels 三件套）。
  *
- * 抽成单点是因为**两条暖机路径必须同款**：读口首帧后的后台暖机
- * （{@link loadChatPromptTokenStatsNow} 内）与压缩后的显式暖机
- * （{@link warmChatPromptTokenStatsAfterCompaction}）一旦口径漂移（比如一份
- * 漏传 `tokenizerOverride`），L1 写入的 scope 键就对不上，暖过的缓存没人命中，
- * 跳变会「偶发复现」——这类 bug 极难从现象反推。宁可多一个函数也不复制参数。
+ * 抽成单点是为了口径单源：首帧 resolve 与紧随其后的后台暖机**复用同一份
+ * params**（暖机不重新组装，见 {@link loadChatPromptTokenStatsNow}）——一旦口径
+ * 漂移（比如漏传 `tokenizerOverride`），L1 写入的 scope 键就对不上，暖过的缓存
+ * 没人命中，升级推送会「偶发失效」——这类 bug 极难从现象反推。宁可多一个函数
+ * 也不复制参数。
  */
 async function buildResolveParams(
   runtime: DesktopNovelMasterRuntime,
@@ -543,111 +523,6 @@ async function loadChatPromptTokenStatsNow(
 }
 
 /**
- * 手动压缩成功后的**显式精确暖机**：在压缩 IPC 返回之前把 L1 整串缓存跑热。
- *
- * 为什么要专门走这一趟（desktop 结构与 mobile 不同，mobile 是「冻结 + 预热 +
- * 暖后补刷」，这里一次预热就够）：手动压缩会作废 API 基线，renderer 压缩完成
- * 后立刻触发的刷新首帧必然是 `preferEstimate` 档——而压缩后内容指纹全变，L1
- * 必然 miss，于是首帧落到廉价估算 `gpt ≈`，再由读口自己的后台暖机在 ~1~2s 后
- * 推精确档覆盖。用户实报的就是这个跳变（`glm =` → `gpt ≈` → `glm =`）。
- *
- * 关键在**时序**：这里由 IPC 侧 `await`，所以等压缩 IPC 返回时 L1 已经写好，
- * renderer 那次刷新的首帧经 core 读口的 L1 预查直接命中精确档，跳变整段消失。
- * 若改成 fire-and-forget，首帧与后台暖机仍是竞态，跳变照旧。
- *
- * 语义约束：
- * - 与 {@link loadChatPromptTokenStatsNow} 的后台暖机**分属两个 inflight Set**
- *   （{@link compactionWarmInflight} / {@link readWarmInflight}，cr-fix-spec-r3
- *   r3-cache-1）：本路径**只查自己的 {@link compactionWarmInflight}**，不查读口
- *   在途。读口暖机是 void 出去的、没有可 await 的句柄，若与它共用去重，读口
- *   在途时本函数会直接 `return` → 预热根本没跑 → 压缩 IPC 立刻返回而 L1 仍冷
- *   → renderer 首帧照样回落 `gpt ≈`。「IPC 返回前已暖好」这条不变式就此随机破。
- *   去重只保留**同路径同 key**的去重（连点两次压缩时省一次分词）。
- * - 只在拿到**非估算**结果时才 {@link pushPreciseStatsIfReady}（且推的是这一轮
- *   手里那份，不重跑 build，r3-cache-3）；否则如实停在估算档（没有更准的读数
- *   可给）。
- * - 永不 reject：暖机失败只丢这次升级，压缩结果照常返回（调用方在 IPC 里
- *   `await` 它，必须不会把压缩的成功态变成失败态）。
- * - **run 在途即跳过本轮**（r3-dt-align 第 2 层，判活源与读口同款）：本路径是
- *   完整口径 resolve（整串级重活），与发送链抢同一条 SQLite 连接。手动压缩 IPC
- *   自 2026-10-05 起有 run 在途门禁（handlers/compaction.ts 拦截返回
- *   AGENT_RUN_IN_FLIGHT，压缩本体不会执行）；本防御保留用于门禁的注册时序残窗与
- *   未来新增的直连调用方（run 在途时只是「升级变慢」，不破「IPC 返回前已暖好」
- *   的不变式——压缩本身已完成，chip 晚一拍到精确档而已）。
- *   与 mobile 一致：这里只查判活，不把 shouldBail 透传进 resolve（压缩的语义
- *   就是「一定要暖」，中途半途而废反而不如不暖）。
- */
-export async function warmChatPromptTokenStatsAfterCompaction(
-  runtime: DesktopNovelMasterRuntime,
-  scope: SessionPromptScope,
-): Promise<void> {
-  // 同路径同 key 的去重先判（连点两次压缩时省一次分词），再判 run 在途。
-  // 顺序有讲究：已经在途时本函数无论如何都不跑，判活就是多余的一次 runtime
-  // 触碰——而「重复调用一次 runtime 都不碰」正是 T-CW2 钉的形态。
-  if (compactionWarmInflight.has(scope.sessionId)) {
-    return;
-  }
-  if (isDesktopSessionRunInFlight(runtime, scope.sessionId)) {
-    return;
-  }
-  compactionWarmInflight.add(scope.sessionId);
-  try {
-    // 完整口径（**不带** `preferEstimate`）：家族真分词器计数 + L1 整串写入，
-    // 这正是要让首帧能命中的那份数据。
-    //
-    // r3-cache-3：顺手把这一轮的精确结果与 savedModelId 留下来，投递时直接推
-    // （不重跑 build）；只有「暖机期间模型已变」才在 push 内部补读一次。
-    //
-    // ⚠️ 用**盒子对象**而不是裸 `let`：赋值发生在 countFn 闭包里，TS 的控制流
-    // 分析看不见跨闭包的赋值，裸 `let` 在 await 之后会被窄化成初始值 `null`，
-    // 判空走完之后 `preciseMaterial` 变成 `never`（`.estimated` 直接报
-    // TS2339）。盒子对象的属性读取不受这条窄化影响。
-    const preciseBox: { material: PrecisePushMaterial | null } = {
-      material: null,
-    };
-    await computeChatPromptTokenStats(runtime, scope, async (args) => {
-      const savedModelId = args.savedModelId;
-      const params = await buildResolveParams(runtime, args);
-      const precise = await resolvePromptTokensWithBackfill(
-        scope.sessionId,
-        args.rawMessages,
-        params,
-        { sessionKkv: runtime.sessionKkv },
-      );
-      preciseBox.material = {
-        savedModelId,
-        tokenCount: precise.tokenCount,
-        estimated: precise.estimated,
-        counterKind: precise.counterKind,
-        source: precise.source,
-      };
-      const contextWindow =
-        await runtime.providerModels.getContextWindow(savedModelId);
-      return {
-        tokenCount: precise.tokenCount,
-        estimated: precise.estimated,
-        counterKind: precise.counterKind,
-        contextWindow: contextWindow ?? undefined,
-        source: precise.source,
-      };
-    });
-    const preciseMaterial = preciseBox.material;
-    if (preciseMaterial == null || preciseMaterial.estimated) {
-      return;
-    }
-    await pushPreciseStatsIfReady(runtime, scope, preciseMaterial);
-  } catch (error) {
-    // 失败静默：压缩已经成功了，暖机只是「让首帧不跳」的锦上添花。
-    // 但开发期留痕——完全静默会让「压缩后仍是估算档」无从排查。
-    if (!app.isPackaged) {
-      console.warn("[chat] prompt token compaction warm failed", error);
-    }
-  } finally {
-    compactionWarmInflight.delete(scope.sessionId);
-  }
-}
-
-/**
  * token 读口防抖窗口（message-token-cache Step 4 / T-TC6）：300ms trailing。
  *
  * renderer 侧 SessionDetailDrawer 有 5 个触发源（会话切换、消息收尾、编辑、
@@ -783,28 +658,6 @@ export function chatPromptTokenDebounceExecCountForTests(
 }
 
 /**
- * 测试钩子：占住**读口**暖机在途标记（`readWarmInflight`），返回释放函数。
- *
- * 为什么需要它（cr-fix-spec-r3 r3-cache-1）：真实时序里「读口那一轮后台暖机
- * 还在途」是个**竞态窗口**——读口防抖 300ms trailing、暖机又是 void 出去的，
- * 窗口宽度不可控且极窄，靠自然撞出来的用例是概率性的、等于没有牙齿。
- * 而本条要钉的性质恰恰是「**读口在途时压缩暖机照样完整跑一轮**」，所以直接
- * 把该 Set 置位来构造前提。
- *
- * ⚠️ 钩子只动 `readWarmInflight`：**若有人把两个 Set 合并回一个**（即本条要
- * 消灭的写法），压缩暖机会被这个占位挡下而静默 return，用例立刻红。
- *
- * 用例必须 `finally` 释放：占位期间读口自己排的暖机也会被去重挡下，泄漏到
- * 其它用例会让它们的首帧永远停在估算档。
- */
-export function holdReadWarmInflightForTests(sessionId: string): () => void {
-  readWarmInflight.add(sessionId);
-  return () => {
-    readWarmInflight.delete(sessionId);
-  };
-}
-
-/**
  * 异常兜底：主路径（真 tokenizer / API 占用）抛异常时的降级读数。
  *
  * 仍然用 core 的 `countPromptLlmInputHeuristicOnly`（序列化 + 家族解析口径不重复
@@ -869,13 +722,9 @@ export async function loadChatPromptTokenStatsResilient(
 /**
  * run 终态后的读口补跑（r3-dt-align 第 4 层，注册进 agent.ts 的终态钩子）。
  *
- * 走的是**防抖入口** `loadChatPromptTokenStats` 而不是
- * `warmChatPromptTokenStatsAfterCompaction`，两条理由：
- * ① 前者自带首帧估算 + 后台暖 + 精确档推送，语义就是「补跑一拍」；
- * ② 后者会占 `compactionWarmInflight`（r3-cache-1 刚拆出来的那个 Set），
- *    语义串味——那是「压缩后必须已暖好」的承诺，被 run 结束事件占用会让下一次
- *    手动压缩的预热被无声挡下。而防抖入口与 SessionDetailDrawer 在 FINISHED
- *    时自发的那次读口 IPC 共享同一防抖槽，会合并成一次底层计算。
+ * 走的是**防抖入口** `loadChatPromptTokenStats`：它自带首帧估算 + 后台暖 +
+ * 精确档推送，语义就是「补跑一拍」；且与 SessionDetailDrawer 在 FINISHED 时
+ * 自发的那次读口 IPC 共享同一防抖槽，会合并成一次底层计算。
  *
  * 失败只丢这一拍：绝不让 chip 补刷的异常变成终态事件的噪声（agent.ts 侧还有
  * 一层 try/catch 兜底）。

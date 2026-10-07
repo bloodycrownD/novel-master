@@ -26,7 +26,6 @@ jest.mock('../src/services/chat-prompt-tokens.service', () => ({
   // 返回真标签而非 ''：空串是「中途弃权（保留旧标签）」哨兵（2026-09-30
   // 回滚竞态修复），写不进 meta——本套件要观测的是防抖后写入落位。
   loadChatPromptTokenLabelResilient: jest.fn(async () => '1K tokens · 预估'),
-  isChatTokenPreciseWarmInflight: jest.fn(() => false),
   // cr2-E-2 新导出：useChatTabScope 换会话/卸载时会调；手写 mock 缺它会让
   // 整条 meta 加载链炸在 "is not a function"（2026-10-02 全量门实锤）。
   cancelPreciseUpgradeDelay: jest.fn(),

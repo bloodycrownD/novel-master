@@ -36,7 +36,6 @@ jest.mock('../src/services/chat-agent-meta', () => ({
 
 jest.mock('../src/services/chat-prompt-tokens.service', () => ({
   loadChatPromptTokenLabelResilient: jest.fn(async () => ''),
-  isChatTokenPreciseWarmInflight: jest.fn(() => false),
   // 防御性补键（tokenizer-native-cancel）：hook 的换 key 分支 / 卸载 cleanup
   // 也会调 cancelPreciseUpgrade，缺键即 undefined 抛。
   cancelPreciseUpgrade: jest.fn(),

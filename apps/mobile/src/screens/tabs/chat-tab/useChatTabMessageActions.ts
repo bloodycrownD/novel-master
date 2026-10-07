@@ -37,7 +37,7 @@ import {
 } from '@/services/project-composer-status.service';
 import type {RollbackOptions} from '@novel-master/core/message-checkpoint';
 import {rollbackToMessage} from '@/services/message-rollback.service';
-import {runCompactionWithTokenWarm} from '@/services/compaction-warm-orchestration.service';
+import {runManualCompaction} from '@/services/manual-compaction.service';
 import {
   resetRollbackTiming,
   rollbackTimingLog,
@@ -109,9 +109,11 @@ export function useChatTabMessageActions({
       {
         text: '压缩',
         onPress: () => {
-          // 冻结/压缩/预热/解冻的编排收在 runCompactionWithTokenWarm（r3-orc-1：
-          // 详情页那份手工副本曾与之漂移五处），本处只留 UI 尾巴。
-          void runCompactionWithTokenWarm(
+          // 编排收在 runManualCompaction（r3-orc-1：详情页那份手工副本曾与
+          // 之漂移五处），本处只留 UI 尾巴。token 读数不做显式预热（2026-10-07
+          // 拍板，与置位同路径）：toast 即回，chip 由下面的 refresh 走常规
+          // 两阶段（估算首帧 + 后台精确升级）自然到位。
+          void runManualCompaction(
             runtime,
             {projectId, sessionId},
             {
@@ -127,8 +129,6 @@ export function useChatTabMessageActions({
                 showToast(toastMessage('压缩失败', error));
               },
               onSucceeded: async () => {
-                // 精确预热由编排层并行起跑（压缩改串 L1 必 miss，直接刷新首帧必是
-                // 估算档再后台升级；这里期间 chip 冻结旧标签，暖完补刷见 onFinally）。
                 await reloadMessages(true);
                 void refreshChatTokenLabel();
                 await refreshComposerStatusAfterFloorOrCompaction(runtime, {
@@ -136,12 +136,6 @@ export function useChatTabMessageActions({
                   sessionId,
                 });
                 showToast('已压缩');
-              },
-              // 预热落定 + 冻结已解之后：此刻 L1 已命中，补刷一次即精确档（消跳变）。
-              onFinally: outcome => {
-                if (outcome.ok) {
-                  void refreshChatTokenLabel();
-                }
               },
             },
           );
