@@ -643,7 +643,8 @@ describe('NativeChatComposer dock（T-NC10 样式 ⇄ dock-style.ts 单源）', 
       expect(capsule.color).toBe(THEME.primary);
       expect(capsule.backgroundColor).toBe(THEME.primaryMuted);
       expect(capsule.borderRadius).toBe(composerTokenCapsule.borderRadius);
-      expect(capsule.borderRadius).toBe(4);
+      // 2026-10-07 真机轮 4→8（圆角不明显，半高强圆角药丸观感）
+      expect(capsule.borderRadius).toBe(8);
       expect(capsule.paddingHorizontal).toBe(
         composerTokenCapsule.paddingHorizontal,
       );

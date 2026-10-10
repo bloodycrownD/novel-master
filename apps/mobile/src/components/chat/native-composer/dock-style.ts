@@ -44,9 +44,11 @@ export const composerInputMetrics = {
  *
  * 与 Kotlin `RoundedBackgroundSpan` 的消费口径对齐：color 取主题 `primary`、
  * 背景取 `primaryMuted`（颜色值是主题运行时数据，不落本表；本表只锁几何）。
+ * borderRadius 8（2026-10-07 真机轮 4→8：用户反馈 4 圆角不明显；胶囊视觉
+ * 高约 24（lineHeight 22 + paddingV 2），8 为半高强圆角、药丸观感明确）。
  */
 export const composerTokenCapsule = {
-  borderRadius: 4,
+  borderRadius: 8,
   paddingHorizontal: 4,
   paddingTop: 1,
   paddingBottom: 1,

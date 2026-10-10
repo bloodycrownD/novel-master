@@ -41,11 +41,29 @@ describe('buildTokenInsertion', () => {
     expect(buildTokenInsertion('@a and more', 2, 0, '@b')).toEqual({
       text: '@b and more',
       cursor: 2,
+      tokenRanges: [{start: 0, end: 2}],
     });
     expect(buildTokenInsertion('', 0, 0, '$技能')).toEqual({
       text: '$技能 ',
       cursor: '$技能 '.length,
+      tokenRanges: [{start: 0, end: 3}],
     });
+  });
+
+  test('tokenRanges：多 token 含前导空格时逐个登记、互不相邻（下标针对返回 text）', () => {
+    // '你好' 无尾空白 → 补前导空格：'你好 @docs/a.md @docs/b/ '
+    const next = buildTokenInsertion('你好', 2, 2, ['@docs/a.md', '@docs/b/']);
+    expect(next.tokenRanges).toEqual([
+      {start: 3, end: 13},
+      {start: 14, end: 22},
+    ]);
+    // 区间与返回 text 对齐：逐段切出来正是两个 token 本体
+    expect(next.text.slice(3, 13)).toBe('@docs/a.md');
+    expect(next.text.slice(14, 22)).toBe('@docs/b/');
+    // typeahead 替换半截查询：区间落在替换后的插入段内
+    const ta = buildTokenInsertion('见 @ab', 5, 2, '@x.md');
+    expect(ta.tokenRanges).toEqual([{start: 2, end: 7}]);
+    expect(ta.text.slice(2, 7)).toBe('@x.md');
   });
 });
 

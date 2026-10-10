@@ -102,8 +102,11 @@ import {
   type TypeaheadItem,
 } from './native-composer/typeahead-view';
 import {
+  remapTokenRanges,
   scanTokensToRanges,
   synthesizeTokenMarkdown,
+  synthesizeTokenMarkdownFromRanges,
+  type TokenRange,
 } from './native-composer/token-ranges';
 
 /**
@@ -138,6 +141,14 @@ export type NativeChatComposerProps = {
    * 仅外部直改 state（水化/清空/undo）会经 effect 兜底进 M7 通道。
    */
   readonly value: string;
+  /**
+   * 胶囊确认区间（controller 的确认制真源，2026-10-07 真机轮）：提供时本组件
+   * 进入确认制——下发 `setTokenRanges` 只发这些区间、合成 markdown 只包这些
+   * 区间，**手输的 `$xxx` / `@xxx` 不再成胶囊**；打字瞬间先本地差分重映射
+   * （不等 controller 提交回传，避免逐键滞后），prop 变化后再以 controller
+   * 版本为准收敛（幂等）。缺省时回落正则全扫（旧行为，兼容独立用例）。
+   */
+  readonly tokenRanges?: readonly TokenRange[];
   /** 工区有模型：placeholder 与 hintRow 显隐的真源（**不能**用 disabled 代替）。 */
   readonly hasModel: boolean;
   /** 输入禁用。走 readOnly（editable）而非 disabled 语义、不淡出——对齐 web dock。 */
@@ -223,6 +234,7 @@ export const NativeChatComposer = forwardRef<
   (
     {
       value,
+      tokenRanges,
       hasModel,
       disabled,
       theme,
@@ -254,6 +266,25 @@ export const NativeChatComposer = forwardRef<
      */
     const baselineRef = useRef(value);
 
+    /**
+     * 胶囊确认区间镜像（`tokenRanges` prop 的组件侧工作副本）。**首帧是否
+     * 提供 prop 即固定模式**：提供 = 确认制（打字/写入瞬间先本地差分重映射，
+     * 与 controller 侧同款纯函数同款输入、收敛幂等，省一次 React 提交流转的
+     * 视觉滞后；prop 变化由同步 effect 覆盖为准）；null = 正则全扫旧行为
+     * （每次明文变化重扫，独立用例兼容面）。
+     */
+    const confirmedRangesRef = useRef<readonly TokenRange[] | null>(
+      tokenRanges ?? null,
+    );
+
+    /**
+     * 内容高度是否顶到 maxHeight 封顶（D7 · Step 7 真机轮补齐）：未封顶时
+     * scrollEnabled=false（自增高模式，库禁内部滚动防 resize 前滚动的闪烁）；
+     * 封顶后切 true——库恢复 TextView 内部滚动（触摸拖动 + 打字
+     * bringPointIntoView），输入框内部可纵向滑动。
+     */
+    const [inputClamped, setInputClamped] = useState(false);
+
     /** 已上报高度（首帧豁免的真源：null = 从未上报过）。 */
     const lastReportedHeightRef = useRef<number | null>(null);
 
@@ -282,7 +313,11 @@ export const NativeChatComposer = forwardRef<
      * `useRef(表达式)` 每帧都会求值但只保留首帧结果——synthesize 是纯函数，
      * 草稿量级下重复求值可忽略。
      */
-    const initialMarkdownRef = useRef(synthesizeTokenMarkdown(value));
+    const initialMarkdownRef = useRef(
+      confirmedRangesRef.current != null
+        ? synthesizeTokenMarkdownFromRanges(value, confirmedRangesRef.current)
+        : synthesizeTokenMarkdown(value),
+    );
 
     // 回调可能逐帧重建：回调链与命令式通道统一读 ref，避免旧闭包差分。
     const changeTextRef = useRef(onComposerChangeText);
@@ -303,19 +338,24 @@ export const NativeChatComposer = forwardRef<
     /**
      * token ranges 下发（T-NC1 · D2 补丁二的 RN 侧消费）。
      *
-     * 每次明文变化全量重扫、全量下发（库端 `setTokenRanges` 先清后加，天然
-     * 幂等）。TODO(IME)：中文组合态下也照发——组合期间的区间会落在拼音串上、
-     * 提交后回摆，风险面是组合中胶囊闪动/错位；「组合中挂起、提交后重扫」的
-     * 收紧策略等真机 QA 观察后再做（spec D8/risk 表，Step 7 验证项）。
+     * 确认制（2026-10-07 真机轮）：ranges 由调用方给出（打字=本地重映射、
+     * prop 收敛=controller 真源）；null 时回落正则全扫（旧行为）。库端
+     * `setTokenRanges` 先清后加，天然幂等。TODO(IME)：中文组合态下也照发——
+     * 组合期间的区间会落在拼音串上、提交后回摆，风险面是组合中胶囊闪动/错位；
+     * 「组合中挂起、提交后重扫」的收紧策略等真机 QA 观察后再做。
      */
-    const dispatchTokenRanges = useCallback((plain: string) => {
-      inputRef.current?.setTokenRanges(
-        scanTokensToRanges(plain).map(range => ({
-          start: range.start,
-          end: range.end,
-        })),
-      );
-    }, []);
+    const dispatchTokenRanges = useCallback(
+      (plain: string, ranges?: readonly TokenRange[] | null) => {
+        const payload = ranges ?? scanTokensToRanges(plain);
+        inputRef.current?.setTokenRanges(
+          payload.map(range => ({
+            start: range.start,
+            end: range.end,
+          })),
+        );
+      },
+      [],
+    );
 
     /**
      * 外部写入的内部通道（M7 语义全量）。`ref.setText`、value effect 兜底与
@@ -331,9 +371,23 @@ export const NativeChatComposer = forwardRef<
         if (instance == null) {
           return;
         }
+        if (confirmedRangesRef.current != null) {
+          confirmedRangesRef.current = remapTokenRanges(
+            baselineRef.current,
+            plain,
+            confirmedRangesRef.current,
+          );
+        }
         baselineRef.current = plain;
-        instance.setValue(synthesizeTokenMarkdown(plain));
-        dispatchTokenRanges(plain);
+        instance.setValue(
+          confirmedRangesRef.current != null
+            ? synthesizeTokenMarkdownFromRanges(
+                plain,
+                confirmedRangesRef.current,
+              )
+            : synthesizeTokenMarkdown(plain),
+        );
+        dispatchTokenRanges(plain, confirmedRangesRef.current);
         const resolvedCursor = cursor ?? plain.length;
         instance.setSelection(resolvedCursor, resolvedCursor);
         // E10/F6 补发语义：库在 Importing 期不自发回声，change 上抛由这里补；
@@ -349,9 +403,16 @@ export const NativeChatComposer = forwardRef<
     /** 打字路径（M6）：推进基线 → 上抛明文 → 下发 ranges；绝不回写 setValue。 */
     const handleChangeText = useCallback(
       (plain: string) => {
+        if (confirmedRangesRef.current != null) {
+          confirmedRangesRef.current = remapTokenRanges(
+            baselineRef.current,
+            plain,
+            confirmedRangesRef.current,
+          );
+        }
         baselineRef.current = plain;
         changeTextRef.current(plain);
-        dispatchTokenRanges(plain);
+        dispatchTokenRanges(plain, confirmedRangesRef.current);
         // typeahead 镜像同步：光标先乐观塌缩到文末（对齐 web 侧
         // `selectionStart ?? value.length` 的兜底口径），紧随其后的选区事件
         // 会用真实位置覆盖。
@@ -371,6 +432,10 @@ export const NativeChatComposer = forwardRef<
 
     const handleLayout = useCallback((event: LayoutChangeEvent) => {
       const height = event.nativeEvent.layout.height;
+      // 封顶判定（死区内不翻转，防亚像素抖动来回切滚动模式）
+      const clamped =
+        height >= composerInputMetrics.maxHeight - COMPOSER_HEIGHT_EPSILON;
+      setInputClamped(prev => (prev === clamped ? prev : clamped));
       const last = lastReportedHeightRef.current;
       // 死区内的变化不上抛；last 为 null（首帧）无条件上抛——首帧豁免
       if (last != null && Math.abs(height - last) <= COMPOSER_HEIGHT_EPSILON) {
@@ -404,8 +469,19 @@ export const NativeChatComposer = forwardRef<
     // 已出胶囊，兜底覆盖「转义退化纯明文」的病态 token 与解析行为差异（D3 的
     // 「setValue 后 setTokenRanges 兜底」在首帧路径上的等价物）。
     useEffect(() => {
-      dispatchTokenRanges(baselineRef.current);
+      dispatchTokenRanges(baselineRef.current, confirmedRangesRef.current);
     }, [dispatchTokenRanges]);
+
+    // 确认区间 prop 收敛（controller 的登记/引导/清空结果以此为准）：打字
+    // 期间的本地重映射与 controller 侧跑的是同款纯函数同款输入，收敛即幂等；
+    // 插入落文的首帧（M7 命令先于 prop 到达）也靠这里补上新胶囊。
+    useEffect(() => {
+      if (tokenRanges == null) {
+        return;
+      }
+      confirmedRangesRef.current = tokenRanges;
+      dispatchTokenRanges(baselineRef.current, tokenRanges);
+    }, [tokenRanges, dispatchTokenRanges]);
 
     useImperativeHandle(
       ref,
@@ -726,9 +802,10 @@ export const NativeChatComposer = forwardRef<
               }
               placeholderTextColor={theme.textSecondary}
               editable={!disabled}
-              // D7 高度链：false 时编辑器报告内容完整高度（onLayout 随内容长高），
-              // maxHeight 钳制封顶；封顶后的滚动细节属真机 QA（Step 7）。
-              scrollEnabled={false}
+              // D7 高度链 · Step 7 补齐：未封顶 = 自增高（false，库禁内部滚动
+              // 防 resize 前滚动的闪烁）；顶到 maxHeight 封顶 = true，输入框
+              // 内部恢复纵向滚动（触摸拖动 + 打字 bringPointIntoView）。
+              scrollEnabled={inputClamped}
               onChangeText={handleChangeText}
               onChangeSelection={handleSelectionChange}
               onLayout={handleLayout}

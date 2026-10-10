@@ -20,6 +20,7 @@ import {
 import type { NativeChatComposerProps } from '../src/components/chat/NativeChatComposer';
 import { composerTokenRanges } from '../src/components/chat/composer-highlight';
 import {
+  remapTokenRanges,
   scanTokensToRanges,
   synthesizeTokenMarkdown,
 } from '../src/components/chat/native-composer/token-ranges';
@@ -318,7 +319,8 @@ describe('NativeChatComposer（T-NC1~T-NC6）', () => {
       ]) {
         expect(capsule.color).toBe(THEME.primary);
         expect(capsule.backgroundColor).toBe(THEME.primaryMuted);
-        expect(capsule.borderRadius).toBe(4);
+        // 2026-10-07 真机轮 4→8（圆角不明显，半高强圆角药丸观感）
+        expect(capsule.borderRadius).toBe(8);
         expect(capsule.paddingHorizontal).toBe(4);
         expect(capsule.paddingTop).toBe(1);
         expect(capsule.paddingBottom).toBe(1);
@@ -334,6 +336,130 @@ describe('NativeChatComposer（T-NC1~T-NC6）', () => {
         input().props.onChangeSelection({ start: 4, end: 9 });
       });
       expect(onSelection).toHaveBeenCalledWith({ start: 4, end: 9 });
+    });
+  });
+
+  describe('胶囊确认制（tokenRanges prop · 2026-10-07 真机轮拍板）', () => {
+    it('手输 $xxx 不成胶囊：打字只重映射既有确认区间、不登记新区间', () => {
+      const { input } = renderComposer({ value: '', tokenRanges: [] });
+      act(() => {
+        input().props.onChangeText('$手动输入的技能');
+      });
+      // 确认区间为空 → 无论打什么字都不新增胶囊（旧行为会正则全扫出区间）
+      expect(lastRanges()).toEqual([]);
+    });
+
+    it('胶囊边缘不空格继续打字：贴边插入不并入胶囊', () => {
+      const { input } = renderComposer({
+        value: '$时序图大纲',
+        tokenRanges: [{ start: 0, end: 6 }],
+      });
+      act(() => {
+        input().props.onChangeText('$时序图大纲后续字符');
+      });
+      // 插入点 == 区间 end（贴右边界）：区间原位保留、插入字符落在区间外
+      expect(lastRanges()).toEqual([{ start: 0, end: 6 }]);
+    });
+
+    it('胶囊中段被改动：区间摘除（不再视为那条引用）', () => {
+      const { input } = renderComposer({
+        value: '$时序图大纲',
+        tokenRanges: [{ start: 0, end: 6 }],
+      });
+      act(() => {
+        input().props.onChangeText('$时序x图大纲');
+      });
+      expect(lastRanges()).toEqual([]);
+    });
+
+    it('胶囊前插入：区间右移保留；胶囊整体删除：区间摘除', () => {
+      const { input } = renderComposer({
+        value: '$时序图大纲 sss',
+        tokenRanges: [
+          { start: 0, end: 6 },
+          { start: 7, end: 10 },
+        ],
+      });
+      act(() => {
+        input().props.onChangeText('x$时序图大纲 sss');
+      });
+      expect(lastRanges()).toEqual([
+        { start: 1, end: 7 },
+        { start: 8, end: 11 },
+      ]);
+      act(() => {
+        input().props.onChangeText('x sss');
+      });
+      expect(lastRanges()).toEqual([{ start: 2, end: 5 }]);
+    });
+
+    it('M7 外部写入：合成 markdown 只包确认区间（手输 token 不合成链接）', () => {
+      const ref = React.createRef<NativeChatComposerInstance>();
+      const { input } = renderComposer({
+        ref,
+        value: '$时序图大纲',
+        tokenRanges: [{ start: 0, end: 6 }],
+      });
+      expect(input).toBeTruthy();
+      act(() => {
+        ref.current?.setText('$时序图大纲 手输$不成胶囊', 0);
+      });
+      expect(mockCalls.setValue).toEqual([
+        '[$时序图大纲](nmskill://时序图大纲) 手输$不成胶囊',
+      ]);
+    });
+  });
+
+  describe('remapTokenRanges 纯函数（编辑侧语义单测）', () => {
+    it('同文本返回拷贝', () => {
+      expect(remapTokenRanges('abc', 'abc', [{ start: 0, end: 1 }])).toEqual([
+        { start: 0, end: 1 },
+      ]);
+    });
+
+    it('token 中段删一字 → 该区间摘除、右侧区间平移', () => {
+      expect(
+        remapTokenRanges('$aa $bb', '$a $bb', [
+          { start: 0, end: 3 },
+          { start: 4, end: 7 },
+        ]),
+      ).toEqual([{ start: 3, end: 6 }]);
+    });
+
+    it('头部插入 → 区间整体右移', () => {
+      expect(
+        remapTokenRanges('$a x', 'w$a x', [
+          { start: 0, end: 2 },
+          { start: 3, end: 4 },
+        ]),
+      ).toEqual([
+        { start: 1, end: 3 },
+        { start: 4, end: 5 },
+      ]);
+    });
+
+    it('多处差异折叠为单编辑区：跨编辑区的区间保守摘除', () => {
+      expect(
+        remapTokenRanges('x$a y$b z', 'w$a y$b!', [
+          { start: 1, end: 3 },
+          { start: 5, end: 7 },
+        ]),
+      ).toEqual([]);
+    });
+  });
+
+  describe('封顶滚动切换（D7 · Step 7 真机轮补齐）', () => {
+    it('未封顶 scrollEnabled=false；顶到 maxHeight 切 true；回落回 false', () => {
+      const { input } = renderComposer();
+      expect(input().props.scrollEnabled).toBe(false);
+      act(() => {
+        input().props.onLayout({ nativeEvent: { layout: { height: 122 } } });
+      });
+      expect(input().props.scrollEnabled).toBe(true);
+      act(() => {
+        input().props.onLayout({ nativeEvent: { layout: { height: 100 } } });
+      });
+      expect(input().props.scrollEnabled).toBe(false);
     });
   });
 });

@@ -259,6 +259,7 @@ function ChatConversationWebSurface(props: {
         ref={composerRef}
         testID="chat-native-composer-input"
         value={composer.text}
+        tokenRanges={composer.tokenRanges}
         hasModel={composer.composerState.hasModel}
         disabled={composer.composerState.inputDisabled}
         theme={composerTheme}

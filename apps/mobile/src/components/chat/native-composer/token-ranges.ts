@@ -50,6 +50,57 @@ export function scanTokensToRanges(text: string): readonly TokenRange[] {
 }
 
 /**
+ * 单编辑区差分重映射（胶囊确认制的编辑侧核心，2026-10-07 真机轮拍板）。
+ *
+ * 语义前提：胶囊区间只在「引用落文」（typeahead / 选择器插入）与水化引导时
+ * 产生；此后的**任何**文本编辑都不并入胶囊——
+ * - 编辑区（prev 与 next 的单处差异段）与某区间**有重叠** → 该区间摘除
+ *   （胶囊中段被改动即不再是那条引用）；
+ * - 编辑区在区间**左侧贴边**（插入点 == 区间 start）→ 区间整体右移保留；
+ * - 编辑区在区间**右侧贴边**（插入点 == 区间 end）→ 区间原位保留，插入的
+ *   字符落在区间之外（「胶囊边缘不空格继续打字被并进胶囊」的修复点）；
+ * - 区间整体在编辑区左侧 → 不动；整体在右侧 → 平移 delta。
+ *
+ * 多处差异（全量 setValue / 全屏编辑回填）会被折叠为一个编辑区处理：区间
+ * 落在区外的照常平移，跨编辑区的摘除——保守但可预测。
+ */
+export function remapTokenRanges(
+  prev: string,
+  next: string,
+  ranges: readonly TokenRange[],
+): TokenRange[] {
+  if (prev === next) {
+    return [...ranges];
+  }
+  let prefix = 0;
+  const maxPrefix = Math.min(prev.length, next.length);
+  while (prefix < maxPrefix && prev[prefix] === next[prefix]) {
+    prefix++;
+  }
+  let suffix = 0;
+  while (
+    suffix < prev.length - prefix &&
+    suffix < next.length - prefix &&
+    prev[prev.length - 1 - suffix] === next[next.length - 1 - suffix]
+  ) {
+    suffix++;
+  }
+  const editStart = prefix;
+  const editEndPrev = prev.length - suffix;
+  const delta = next.length - prev.length;
+  const remapped: TokenRange[] = [];
+  for (const range of ranges) {
+    if (range.end <= editStart) {
+      remapped.push({start: range.start, end: range.end});
+    } else if (range.start >= editEndPrev) {
+      remapped.push({start: range.start + delta, end: range.end + delta});
+    }
+    // 其余情形（区间与编辑区相交）一律摘除，不做部分保留。
+  }
+  return remapped;
+}
+
+/**
  * 明文 → 胶囊 markdown 合成（水化 / 命令式 setText 的唯一合成入口）。
  *
  * 逐 token 包成链接、普通段原样拼接；无 token 时原串返回（不做无谓拷贝）。
@@ -61,14 +112,29 @@ export function scanTokensToRanges(text: string): readonly TokenRange[] {
  * `LinkCoordinator.sanitizeUrl` 的括号编码口径），避免破坏链接语法。
  */
 export function synthesizeTokenMarkdown(text: string): string {
-  const ranges = scanTokensToRanges(text);
+  return synthesizeTokenMarkdownFromRanges(text, scanTokensToRanges(text));
+}
+
+/**
+ * 按确认区间合成胶囊 markdown（胶囊确认制的合成侧入口，2026-10-07 真机轮）。
+ *
+ * 与 {@link synthesizeTokenMarkdown} 的唯一区别：区间由调用方给定（引用落文
+ * 登记的确认区间），**不再正则全扫**——手输的 `$xxx` / `@xxx` 不合成链接、
+ * 不成胶囊。区间须按 start 升序且互不重叠（登记与重映射的产物天然满足）。
+ */
+export function synthesizeTokenMarkdownFromRanges(
+  text: string,
+  ranges: readonly TokenRange[],
+): string {
   if (ranges.length === 0) {
     return text;
   }
-
   const parts: string[] = [];
   let cursor = 0;
   for (const range of ranges) {
+    if (range.start < cursor || range.end > text.length) {
+      continue;
+    }
     parts.push(text.slice(cursor, range.start));
     parts.push(synthesizeToken(text.slice(range.start, range.end)));
     cursor = range.end;

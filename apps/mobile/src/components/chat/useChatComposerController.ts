@@ -67,6 +67,11 @@ import {
   buildTokenInsertion,
   statusOnlyComposerAttachments,
 } from './composer-token-insert';
+import {
+  remapTokenRanges,
+  scanTokensToRanges,
+  type TokenRange,
+} from './native-composer/token-ranges';
 import type {ComposerInputSelection} from './ComposerInputBridge';
 import {
   EMPTY_CONVERSATION_TYPEAHEAD_SOURCE,
@@ -144,6 +149,13 @@ export type ChatComposerController = {
   readonly composerState: ConversationComposerState;
   /** 输入框当前全文（外部真源草稿文本；**打字真源在输入组件内部编辑器态**）。 */
   readonly text: string;
+  /**
+   * 胶囊确认区间（2026-10-07 真机轮拍板：胶囊只允许引用得到，手输不成胶囊）。
+   * 引用落文（typeahead / 选择器插入）时登记，水化时正则全扫一次性引导，
+   * 其后一切文本编辑经差分重映射维护——传给 `NativeChatComposer` 的
+   * `tokenRanges` prop，下发 `setTokenRanges` 渲染胶囊。
+   */
+  readonly tokenRanges: readonly TokenRange[];
   /** 外部受控光标（插入 token / 水化 / 清空后）：随外部 value 变化对齐一次。 */
   readonly cursor: number;
   /** 打字 / 命令式写入补发的唯一消费口（纪律 A：不区分来源）。 */
@@ -273,6 +285,14 @@ export function useChatComposerController({
 
   const initial = readChatComposerDraftState(sessionId);
   const [text, setText] = useState(initial.text);
+  /**
+   * 胶囊确认区间（语义见 `ChatComposerController.tokenRanges`）。初值对内存
+   * 缓存草稿做一次正则全扫引导（水化语义同款）：历史草稿里的 token 全部视为
+   * 已确认——确认制约束的是**之后的**手输，不追溯旧草稿。
+   */
+  const [tokenRanges, setTokenRanges] = useState<readonly TokenRange[]>(() =>
+    scanTokensToRanges(initial.text),
+  );
   const [cursor, setCursor] = useState(0);
   const [attachments, setAttachments] = useState<MessageAttachment[]>([
     ...initial.attachments,
@@ -301,6 +321,27 @@ export function useChatComposerController({
   /** text 的镜像 ref：命令式写入的回声去重（纪律 A，见 `onChangeText`）。 */
   const textRef = useRef(text);
   textRef.current = text;
+  /** tokenRanges 的镜像 ref：打字/写入回调内即时重映射，不等 React 提交。 */
+  const tokenRangesRef = useRef(tokenRanges);
+  tokenRangesRef.current = tokenRanges;
+
+  /**
+   * 确认区间的统一推进口：差分重映射旧区间（编辑区与胶囊重叠即摘除、贴边
+   * 插入不并入），可选拼接新登记区间（引用落文）。所有文本变更咽喉点都走
+   * 这里，保证 state 与 ref 同拍一致。
+   */
+  const advanceTokenRanges = useCallback(
+    (prev: string, next: string, inserted?: readonly TokenRange[]) => {
+      const remapped = remapTokenRanges(prev, next, tokenRangesRef.current);
+      const merged =
+        inserted != null && inserted.length > 0
+          ? [...remapped, ...inserted].sort((a, b) => a.start - b.start)
+          : remapped;
+      tokenRangesRef.current = merged;
+      setTokenRanges(merged);
+    },
+    [],
+  );
 
   /** M7 命令式通道的最新引用（options 里那个可能被逐帧重建）。 */
   const setComposerTextRef = useRef(setComposerText);
@@ -416,6 +457,10 @@ export function useChatComposerController({
     textRef.current = draft.text;
     setAttachments([...draft.attachments]);
     if (textChanged) {
+      // 确认区间引导扫描：草稿库里的 token 视为已确认（与 hook 初值同语义）。
+      const nextRanges = scanTokensToRanges(draft.text);
+      tokenRangesRef.current = nextRanges;
+      setTokenRanges(nextRanges);
       setComposerTextRef.current?.(draft.text);
     }
   }, [sessionId]);
@@ -430,7 +475,8 @@ export function useChatComposerController({
    * （挂载后的 value effect 会兜底补写，见组件侧注释）。
    */
   const commitComposerText = useCallback(
-    (next: string, nextCursor?: number) => {
+    (next: string, nextCursor?: number, insertedRanges?: readonly TokenRange[]) => {
+      advanceTokenRanges(textRef.current, next, insertedRanges);
       setText(next);
       textRef.current = next;
       if (nextCursor != null) {
@@ -439,7 +485,7 @@ export function useChatComposerController({
       persistDraft(next, statusOnlyComposerAttachments(attachments));
       setComposerTextRef.current?.(next, nextCursor);
     },
-    [attachments, persistDraft],
+    [attachments, persistDraft, advanceTokenRanges],
   );
 
   useEffect(() => {
@@ -508,11 +554,12 @@ export function useChatComposerController({
       if (next === textRef.current) {
         return;
       }
+      advanceTokenRanges(textRef.current, next);
       textRef.current = next;
       setText(next);
       persistDraft(next, statusOnlyComposerAttachments(attachments));
     },
-    [attachments, persistDraft],
+    [attachments, persistDraft, advanceTokenRanges],
   );
 
   const onSelectionChange = useCallback(
@@ -543,6 +590,8 @@ export function useChatComposerController({
         clearChatComposerDraft(sessionId, runtime.sessions);
         setText('');
         textRef.current = '';
+        tokenRangesRef.current = [];
+        setTokenRanges([]);
         setAttachments([]);
         // 清空同样走 M7 命令式通道：本地 state 归零之外显式把输入框清掉，
         // 不依赖 value effect 的下一轮回程。
@@ -748,7 +797,7 @@ export function useChatComposerController({
         replaceStart,
         pathTokens,
       );
-      commitComposerText(next.text, next.cursor);
+      commitComposerText(next.text, next.cursor, next.tokenRanges);
     },
     [cursor, commitComposerText],
   );
@@ -765,7 +814,7 @@ export function useChatComposerController({
         replaceStart,
         token,
       );
-      commitComposerText(next.text, next.cursor);
+      commitComposerText(next.text, next.cursor, next.tokenRanges);
     },
     [cursor, commitComposerText],
   );
@@ -832,6 +881,7 @@ export function useChatComposerController({
   return {
     composerState,
     text,
+    tokenRanges,
     cursor,
     onChangeText,
     onSelectionChange,
