@@ -845,11 +845,24 @@ export const NativeChatComposer = forwardRef<
               onPress={() => emitDockAction('fullscreen')}
               disabled={!fullscreenEnabled}
               /* 同排按钮风格一致：与 @ / $ 同款圆钮（同尺寸、同描边），
-                 字形保留 20（⛶ 笔画细、同样字号下视觉比 @/$ 小一档）。 */
+                 字形保留 20（⛶ 笔画细、同样字号下视觉比 @/$ 小一档）。
+                 Android 居中修正：默认 includeFontPadding 会在字形上下各留
+                 一段字体空隙，行盒（≈fontSize×1.3）被撑高后容器居中的是
+                 行盒而非字形——⛶ 走 fallback 字体 metrics 更偏。钉死
+                 lineHeight=字号 + 关 fontPadding，行盒紧贴字形，容器
+                 center 即字形视觉居中（真机 2026-10-12 实报偏移修正）。 */
               style={[composerToolBtnStyle, {borderColor: theme.borderLight}]}
               accessibilityLabel="全屏编辑"
             >
-              <Text style={{color: theme.textSecondary, fontSize: 20}}>⛶</Text>
+              <Text
+                style={{
+                  color: theme.textSecondary,
+                  fontSize: 20,
+                  lineHeight: 20,
+                  includeFontPadding: false,
+                }}>
+                ⛶
+              </Text>
             </Pressable>
             <Pressable
               testID="composer-at-picker"

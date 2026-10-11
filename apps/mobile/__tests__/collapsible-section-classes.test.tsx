@@ -40,7 +40,8 @@ describe('CollapsibleHeader class 派生（regression: 工具调用/思考过程
     const cls = classNames(vnode);
     expect(cls.root).toBe('tool-group-header');
     expect(cls.title).toBe('tool-group-title');
-    expect(cls.chevron).toBe('tool-group-chevron');
+    // chevron--closed 修饰：css border 三角方向（替代 ▼/▶ 字符，见 transcript.css）
+    expect(cls.chevron).toBe('tool-group-chevron chevron--closed');
   });
 
   it('thinking-header → thinking-title / thinking-chevron', () => {
@@ -54,7 +55,7 @@ describe('CollapsibleHeader class 派生（regression: 工具调用/思考过程
     });
     const cls = classNames(vnode);
     expect(cls.title).toBe('thinking-title');
-    expect(cls.chevron).toBe('thinking-chevron');
+    expect(cls.chevron).toBe('thinking-chevron chevron--open');
   });
 });
 

@@ -38,7 +38,16 @@ export function CollapsibleHeader({
       {...({['data-' + dataKey]: dataValue} as Record<string, string>)}
     >
       <span className={base + '-title'}>{title}</span>
-      <span className={base + '-chevron'}>{expanded ? '▼' : '▶'}</span>
+      {/* 折叠三角：css border 三角（chevron--open/closed，见 transcript.css）——
+          不再用 ▼/▶ 字符。几何形状码位的 glyph 随系统字体漂移，鸿蒙 7 真机
+          （2026-10-12 实报）把 ▶ 画成 email 标签形三角，与荣耀的灰色三角形状
+          不一致；css 三角跨系统形状一致。字符移除后 className 断言随
+          collapsible-section-classes.test 同步。 */}
+      <span
+        className={
+          base + '-chevron chevron--' + (expanded ? 'open' : 'closed')
+        }
+      />
     </div>
   );
 }
