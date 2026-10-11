@@ -1,42 +1,45 @@
 /**
  * T-FS2/T-FS3：chat 全屏编辑链的 **RN 侧**（⛶ 入口的宿主处置 / 退出回填）。
  *
- * ## Step 8 迁居说明
+ * ## 形态变迁
  *
- * 本文件原先还有 T-FS1（⛶ 与同排 @/$ 同款圆钮，量的是 RN `ChatComposer` 工具栏
- * 三个 Pressable 的展平 style）。legacy 转录引擎退役后 `ChatComposer.tsx` 整个
- * 删除、⛶ 变成 web 文档里的 `<button class="toolbar__btn toolbar__fullscreen">`，
- * RN 树里已经没有这个元素——T-FS1 因此迁到 `chat-conversation-boot-script.test.ts`
- * 的 T-CU10 段（改比「web CSS 规则 ⇄ RN 参照常量 `composerToolBtnStyle`」，
- * 参照真源是 Step 6 手抄进 `dock-style-reference.ts` 的那份）。
+ * T-FS1（⛶ 与同排 @/$ 同款圆钮的展平样式）随 legacy 转录引擎退役迁到
+ * `chat-conversation-boot-script.test.ts` 的 T-CU10 段；composer-native-2026-10
+ * 后 ⛶ 回到 RN——`NativeChatComposer` toolbar 的 fullscreen Pressable（其样式
+ * 数值由 `native-composer-dock.test.tsx` 的 T-NC10 ⇄ dock-style.ts 断言面接管，
+ * 按钮三态由同文件 T-NC7 锁）。
  *
- * 留下的 T-FS2/T-FS3 断的仍是 RN 链，入口改从 web 上行走：
- * ⛶ 点击在 web 侧派 `dockAction: 'fullscreen'`（v:2 信封）→ 宿主转交
- * composer controller → `onOpenComposerFullscreen` → 路由到 PromptEditor。
- * 输入驱动同样从 web 侧模拟：统一宿主的 ready 必须带 `v:2` + `composer-dock`
- * 能力位（缺任一项就走 8s 兜底错误态 / 输入区降级，用例会变成假绿）。
+ * 留下的 T-FS2/T-FS3 断的仍是 RN **全链路**，入口从 web 上行换成组件直连
+ * （composer-native-2026-10 Step 5 起）：⛶ 点击 → 组件 emitDockAction('fullscreen')
+ * → 面板转 controller.handleDockAction → openFullscreen → onOpenComposerFullscreen
+ * → ChatTabScreen 路由 PromptEditor（composer 变体）。输入驱动经
+ * `onComposerChangeText` 直连 controller（打字真源在输入组件内部，RN 侧落草稿 +
+ * text 镜像）。**panel.integration 锁不到这段**：它 mock 掉 ChatTabProvider ctx
+ * 与 NativeChatComposer，路由落点（navigate 参数）与退出回填只有本文件能断。
  *
- * 退出即回填（无保存按钮、无未保存拦截）与编辑器本体（markdown 预览/编辑互切）
- * 的屏内断言在 `prompt-editor-screen.test.tsx` 的 composer 变体用例里。
+ * 退出即回填（无保存按钮、无未保存拦截）：onExit → 写草稿 + bump
+ * draftRestoreToken → controller 水化链重读 → **M7 命令式通道 ref.setText** →
+ * 输入组件 setValue（断言面 = enriched-markdown-mock 的 `mockCalls.setValue`；
+ * 旧「宿主下行 setText」桥消息已随 D4b 退役）。转录 webview（chat-transcript
+ * 独立包）与 composer 链并行零依赖（D8），本文件不再做 ready 握手。
+ *
+ * 输入基座（EnrichedMarkdownTextInput）经 jest moduleNameMapper 落到
+ * `test-utils/enriched-markdown-mock`——真实 `NativeChatComposer` 可渲染，断言
+ * 视角是「全链路对 mock 输入组件的驱动行为」。
+ *
+ * 编辑器本体（markdown 预览/编辑互切）的屏内断言在
+ * `prompt-editor-screen.test.tsx` 的 composer 变体用例里。
  */
 import React from 'react';
 import {afterEach, beforeEach, describe, expect, it, jest} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
 import {SimpleEventBus} from '@novel-master/core/events';
 import {SessionStreamUnitManager} from '../src/services/session-stream-unit-manager.service';
+import {NativeChatComposer} from '@/components/chat/NativeChatComposer';
 import {
-  CONVERSATION_BRIDGE_V,
-  CONVERSATION_CAPABILITY_COMPOSER_DOCK,
-} from '@/components/chat/ChatConversationBridge';
-import {
-  clearMockWebViewPostMessages,
-  findMockWebViewByDomain,
-  getMockWebViewPosts,
-  type MockWebViewDomain,
-} from '../test-utils/react-native-webview-mock';
-
-/** 统一宿主所在的合成包域（`source.uri` 里的包名）。 */
-const CONVERSATION_DOMAIN: MockWebViewDomain = 'chat-conversation';
+  mockCalls,
+  resetMockCalls,
+} from '../test-utils/enriched-markdown-mock';
 
 // —— mock 前缀变量（jest.mock 工厂只能引用 mock* 前缀标识符）——
 
@@ -292,60 +295,45 @@ import {
 import {takePromptEditorOnSaved} from '@/components/agent/prompt-editor-callback';
 
 /**
- * 合成包宿主 WebView 的 onMessage 入口（按域取，不靠位置）。
+ * 树里的原生 dock 组件实例（props 即面板 → composer 的全量接线面）。
  *
- * 纪律：ready 必须带 `v:2` 与 `composer-dock` 能力位——旧 dist 的 v:1 ready 被
- * 拒、缺能力位则输入区走降级提示，两种情况下行全丢，用例会静默变成假绿。
+ * 用 `type` 判等而非 testID：`native-composer-dock` 在根 View 与组件元素上
+ * 双双可见（findByProps 会先命中组件 fiber，拿不到 props 消费面）。
  */
-function findComposerWebView(
+function findComposerDock(
   root: TestRenderer.ReactTestInstance,
 ): TestRenderer.ReactTestInstance {
-  return findMockWebViewByDomain(root, CONVERSATION_DOMAIN);
+  const dock = root.findAll(n => n.type === NativeChatComposer);
+  if (dock.length === 0) {
+    throw new Error('NativeChatComposer 未渲染');
+  }
+  return dock[0]!;
 }
 
-/** 模拟 web → host 上报（v 号由调用方给：ready / dockAction 走 2，其余 1）。 */
-function simulateWebMessage(
-  webView: TestRenderer.ReactTestInstance,
-  type: string,
-  payload: Record<string, unknown> = {},
-  v = 1,
+/** 打字：面板 `onComposerChangeText` 直连 controller（落草稿 + text 镜像）。 */
+function typeComposerText(
+  root: TestRenderer.ReactTestInstance,
+  text: string,
 ): void {
   act(() => {
-    webView.props.onMessage?.({
-      nativeEvent: {data: JSON.stringify({v, type, payload})},
-    });
+    findComposerDock(root).props.onComposerChangeText(text);
   });
 }
 
-/** 合成包 ready 握手（v:2 + composer-dock 能力位）。 */
-function simulateConversationReady(
-  root: TestRenderer.ReactTestInstance,
-): void {
-  simulateWebMessage(
-    findComposerWebView(root),
-    'ready',
-    {
-      version: 'u1',
-      readyState: 'complete',
-      capabilities: [CONVERSATION_CAPABILITY_COMPOSER_DOCK],
-    },
-    CONVERSATION_BRIDGE_V,
-  );
-}
-
-/** ⛶ 点击：web 侧派 dockAction.fullscreen（v:2 通道）。 */
+/**
+ * ⛶ 点击：toolbar 的 fullscreen Pressable（D5/K 组）。
+ *
+ * 按钮可用性（`fullscreenEnabled` = ChatTabScreen 注入了 ⛶ 回调）是既有通路，
+ * 这里同时锁「按钮触发 → onDockAction('fullscreen') → controller 转发」整段。
+ */
 function pressFullscreen(root: TestRenderer.ReactTestInstance): void {
-  simulateWebMessage(
-    findComposerWebView(root),
-    'dockAction',
-    {action: 'fullscreen'},
-    CONVERSATION_BRIDGE_V,
-  );
-}
-
-/** 只看合成包域的下行（域分流：新 mock 的按域取面）。 */
-function conversationPosts(): unknown[] {
-  return getMockWebViewPosts(CONVERSATION_DOMAIN).map(raw => JSON.parse(raw));
+  const button = root.findAll(n => n.props?.testID === 'composer-fullscreen');
+  if (button.length === 0) {
+    throw new Error('⛶ 全屏按钮（composer-fullscreen）未渲染');
+  }
+  act(() => {
+    button[0]!.props.onPress();
+  });
 }
 
 /** 冲净 effect 与异步批（real timers）。 */
@@ -397,10 +385,10 @@ function flattenedStyle(node: TestRenderer.ReactTestInstance): ViewStyle {
   return StyleSheet.flatten(node.props.style) as ViewStyle;
 }
 
-describe('T-FS2/T-FS3 全屏编辑链（ChatTabScreen → 面板 → 统一宿主）', () => {
+describe('T-FS2/T-FS3 全屏编辑链（ChatTabScreen → 面板 → NativeChatComposer）', () => {
   const mountedTrees: TestRenderer.ReactTestRenderer[] = [];
 
-  /** 挂载 ChatTabScreen 并进入会话子视图（真实面板 + 真实统一宿主）。 */
+  /** 挂载 ChatTabScreen 并进入会话子视图（真实面板 + 真实原生 composer）。 */
   async function mountConversation(): Promise<TestRenderer.ReactTestRenderer> {
     let tree!: TestRenderer.ReactTestRenderer;
     await act(async () => {
@@ -418,7 +406,7 @@ describe('T-FS2/T-FS3 全屏编辑链（ChatTabScreen → 面板 → 统一宿�
     mockBeforeRemoveHandlers.length = 0;
     mockDraftJsonBySession.clear();
     clearChatComposerDraft('s1');
-    clearMockWebViewPostMessages();
+    resetMockCalls();
     // 模块级回调不留残留（各用例自行 set）。
     takePromptEditorOnSaved();
     mockHarnessManager?.dispose();
@@ -437,14 +425,11 @@ describe('T-FS2/T-FS3 全屏编辑链（ChatTabScreen → 面板 → 统一宿�
     mockHarnessManager = undefined;
   });
 
-  it('T-FS2: ⛶ 派 dockAction.fullscreen 后带当前文本跳全屏编辑页（composer 变体）', async () => {
+  it('T-FS2: ⛶ 点击经 onDockAction.fullscreen 带当前文本跳全屏编辑页（composer 变体）', async () => {
     const tree = await mountConversation();
-    const webView = findComposerWebView(tree.root);
-    simulateConversationReady(tree.root);
-    await flush();
 
-    // web 自持真源：打字经 change 上报进 composer controller 文本态。
-    simulateWebMessage(webView, 'change', {text: '当前的草稿文本'});
+    // 打字经组件 onComposerChangeText 直连 controller 文本态（落草稿）。
+    typeComposerText(tree.root, '当前的草稿文本');
     await flush();
 
     pressFullscreen(tree.root);
@@ -462,15 +447,13 @@ describe('T-FS2/T-FS3 全屏编辑链（ChatTabScreen → 面板 → 统一宿�
     expect(typeof takePromptEditorOnSaved()).toBe('function');
   });
 
-  it('T-FS3: 退出即回填 —— 写会话草稿并 bump 令牌，宿主重读后经 setText 回填', async () => {
+  it('T-FS3: 退出即回填 —— 写会话草稿并 bump 令牌，水化链经 M7 ref.setText 回填输入框', async () => {
     const tree = await mountConversation();
-    const webView = findComposerWebView(tree.root);
-    simulateConversationReady(tree.root);
-    await flush();
-    simulateWebMessage(webView, 'change', {text: '全屏前文本'});
+    typeComposerText(tree.root, '全屏前文本');
     await flush();
 
-    const beforeFullscreen = conversationPosts().length;
+    // 只看进全屏之后输入组件收到的写入（打字路径不产生 setValue，M6）。
+    resetMockCalls();
     pressFullscreen(tree.root);
     const onExit = takePromptEditorOnSaved();
     expect(onExit).not.toBeNull();
@@ -482,15 +465,10 @@ describe('T-FS2/T-FS3 全屏编辑链（ChatTabScreen → 面板 → 统一宿�
     await flush();
 
     expect(readChatComposerDraftState('s1').text).toBe('全屏改完的文本');
-    // controller 从草稿重读 → 外部文本真变 → 宿主下发 setText（回填落地）。
-    // 只看进全屏之后的下行，免得把 ready 恢复链里的草稿 setText 算进来。
-    const after = conversationPosts().slice(beforeFullscreen);
-    const setTexts = after.filter(
-      (m): m is {type: string; payload: {text: string}} =>
-        typeof m === 'object' &&
-        m != null &&
-        (m as {type?: string}).type === 'setText',
-    );
-    expect(setTexts.map(m => m.payload.text)).toContain('全屏改完的文本');
+    // controller 从草稿重读（draftRestoreToken bump → 水化链）→ 外部文本真变 →
+    // M7 命令式通道 ref.setText → 输入组件 setValue（合成 markdown；无 token 时
+    // 与明文同形）。旧「宿主下行 setText」桥消息已随 D4b 退役，断言面换到
+    // mock 输入组件的调用记录。
+    expect(mockCalls.setValue).toContain('全屏改完的文本');
   });
 });

@@ -1,17 +1,18 @@
 /**
  * Chat tab conversation subview: transcript, composer, session workspace.
  *
- * 布局形态（chat-webview-unify Step 7 起，Step 8 收敛为唯一路径）：
- * 裁切容器内**只有一个** `<ChatConversationWebView>`——转录 + 输入框 dock 合并在
- * 同一个文档里 flex 布局，Android 与 iOS 同构（iOS 不套裁切容器）。两个 RN
- * Modal 选择器仍挂本面板（选文件 / 选技能后经 M7 命令式通道回填正文）。
+ * 布局形态（chat-webview-unify Step 7 起；composer-native-2026-10 Step 5 起
+ * 输入框原生化）：裁切容器内是「转录 webview + 原生输入 dock」两个 RN 兄弟——
+ * `<ChatConversationWebView>` 已退为纯转录宿主（加载 chat-transcript 独立包），
+ * 输入框由 `<NativeChatComposer>`（EnrichedMarkdownTextInput 基座）承接，
+ * Android 与 iOS 同构（iOS 不套裁切容器）。转录文档的恢复链（init→快照）与
+ * composer 的恢复链（草稿水化 → ref.setText）**并行**、互不握手（D8）。
+ * 两个 RN Modal 选择器仍挂本面板（选文件 / 选技能后经 M7 命令式通道回填正文）。
  *
- * Step 8：legacy-rn 分支（`MessageList` + 旧 `ChatComposer`）随引擎开关退役
- * 一并删除，chatBody 不再有条件分支。`ChatConversationWebSurface` 这个子组件
- * 边界保留下来——它存在的理由不再是「把 controller 的生命周期钉在 webview
- * 分支」，而是**把 controller 与它的一堆派生收敛在一个稳定的子树上**：
- * `useChatTabController` / `useChatComposerController` 都只在这里调，面板本体
- * 只管 header、workspace 面板与各类 RN Modal 开关。
+ * `ChatConversationWebSurface` 这个子组件边界的存在理由是**把 controller 与它的
+ * 一堆派生收敛在一个稳定的子树上**：`useChatTabController` /
+ * `useChatComposerController` 都只在这里调，面板本体只管 header、workspace
+ * 面板与各类 RN Modal 开关。
  *
  * ## 回滚 SPA 化之后的形态
  *
@@ -21,15 +22,24 @@
  *    `sessionList` / `onListAction` 一整套列表域已从宿主侧拆除。
  * 2. **切会话经 key 重挂**：`<ChatConversationWebView>` 带
  *    `key={chatScrollKey ?? 'no-session-scroll'}`，切会话销毁重建 WebView，
- *    文档状态天然归零（这段 key 曾随 SPA 化被拆，本轮回滚恢复）。
+ *    文档状态天然归零（这段 key 曾随 SPA 化被拆，本轮回滚恢复）。composer 不随
+ *    key 重挂：草稿属 controller（订阅 sessionId），切会话由水化链把新会话草稿
+ *    经命令式通道送进输入框。
  * 3. **会话行 ⋮ 菜单**随之回迁 `ChatSessionListPanel`（菜单本体始终留在 RN：
  *    BottomSheetMenu/Alert 不进 web）。
  */
-import React, {useCallback, useEffect, useMemo} from 'react';
+import React, {useCallback, useEffect, useMemo, useRef} from 'react';
 import {Platform, StyleSheet, Text, View} from 'react-native';
 import {type VfsScope} from '@novel-master/core/vfs';
+import {formatStatusChipLabelFromAttachment} from '@novel-master/core/chat';
 import {AgentPickerModal} from '@/components/agent/AgentPickerModal';
 import {ChatConversationWebView} from '@/components/chat/ChatConversationWebView';
+import {conversationThemeFromTokens} from '@/components/chat/conversation-theme';
+import {
+  NativeChatComposer,
+  type NativeChatComposerInstance,
+} from '@/components/chat/NativeChatComposer';
+import type {TypeaheadItem} from '@/components/chat/native-composer/typeahead-view';
 import {FileReferencePicker} from '@/components/chat/FileReferencePicker';
 import {SkillPicker} from '@/components/skills/SkillPicker';
 import {
@@ -45,6 +55,7 @@ import {VfsFileManager} from '@/components/vfs/VfsFileManager';
 import {SegmentedControl} from '@/components/ui/SegmentedControl';
 import {AndroidKeyboardClipBody} from '@/components/chrome/AndroidKeyboardClipBody';
 import {useToast} from '@/components/chrome/ToastHost';
+import {useTheme} from '@/theme/ThemeProvider';
 import {
   AGENT_LOCK_TOAST_GUIDE,
   isAgentLocked,
@@ -68,7 +79,8 @@ export type ChatConversationPanelProps = {
 };
 
 /**
- * 对话面：单 `<ChatConversationWebView>` + controller 接线 + 两个 RN Modal 选择器。
+ * 对话面：纯转录 `<ChatConversationWebView>` + 原生 `<NativeChatComposer>` +
+ * controller 接线 + 两个 RN Modal 选择器（composer-native-2026-10 Step 5）。
  *
  * `projectId` / `sessionId` 由调用方在已判非空的分支里传入——controller 的 scope
  * 两者皆必填，**不**在本组件里做二次判空（判空就得放 hook 之前 early return，
@@ -131,20 +143,27 @@ function ChatConversationWebSurface(props: {
   // return 的死按钮（fullscreen/B-1）。本组件的 scope 由调用方判过非空，故恒可用。
   const onOpenComposerFullscreen = props.onOpenComposerFullscreen;
 
+  const composerRef = useRef<NativeChatComposerInstance | null>(null);
+
   /**
-   * M7 命令式写入通道：转交宿主句柄的 `setComposerText`。
-   *
-   * 身份刻意保持稳定（依赖只有那个本身稳定的 ref）：它是 controller 的
-   * `setComposerTextRef` 转发目标，也是「Picker 插入 → 宿主」这条跨层链路上
-   * **唯一**可变环节——少一个就少一处可能漂移。
+   * M7 命令式通道的原生落点：controller 的整段写入（Picker 插入 / 草稿水化 /
+   * 发送清空）经 ref.setText 进框。ref 为 null（composer 未挂载）时静默忽略，
+   * 挂载后由 value effect 兜底补写，写入不丢。
    */
-  const applyProgrammaticText = useCallback(
+  const setComposerText = useCallback(
     (text: string, cursor?: number) => {
-      transcriptWebRef.current?.setComposerText(text, cursor);
+      composerRef.current?.setText(text, cursor);
     },
-    [transcriptWebRef],
+    [],
   );
 
+  /**
+   * composer controller（dock 域一切真源，spec 变更点 #6）：草稿链 / 候选源拉取 /
+   * Picker 状态机 / 发送决策照旧运转，产出的 composerState 不再经桥下发——
+   * **数据来源在 Step 5 换向**：打字/选区来自 `NativeChatComposer` 组件事件直连，
+   * 命令式写入（Picker 插入 / 水化 / 清空）经 `setComposerText` 落到 composer 的
+   * `ref.setText`（M7 通道，见下方接线）。
+   */
   const composer = useChatComposerController({
     scope: {projectId, sessionId},
     hasModel: hasWorkspaceModel || (agentMeta?.hasDedicatedModel ?? false),
@@ -155,10 +174,45 @@ function ChatConversationWebSurface(props: {
     lastMessageIsPlainUserText,
     draftRestoreToken,
     onOpenComposerFullscreen,
-    setComposerText: applyProgrammaticText,
+    setComposerText,
   });
 
-  const {composerState} = composer;
+  /**
+   * 主题 9 键：与转录文档同源同值（同一份 tokens 经同一映射），面板不各算一套。
+   */
+  const {tokens: themeTokens} = useTheme();
+  const composerTheme = useMemo(
+    () => conversationThemeFromTokens(themeTokens),
+    [themeTokens],
+  );
+
+  /**
+   * chip 文案表（I 组）：core `formatStatusChipLabelFromAttachment` 单一真源，
+   * 与 web dock 的 resolveChipLabels 同口径；chips 引用稳定时文案引用随稳。
+   */
+  const chipLabels = useMemo(
+    () =>
+      composer.composerState.chips.map(formatStatusChipLabelFromAttachment),
+    [composer.composerState.chips],
+  );
+
+  const {insertSkillToken, insertTokensIntoComposer} = composer;
+
+  /**
+   * typeahead 点选落文（E 组收口）：候选 item 只带 token，`$` 侧剥掉触发符交给
+   * insertSkillToken、`@` 侧整 token 走 insertTokensIntoComposer——两者内部都经
+   * commitComposerText（M7 命令式通道 ref.setText）落文，替换掉活跃的半截查询。
+   */
+  const handleTypeaheadSelect = useCallback(
+    (item: TypeaheadItem) => {
+      if (item.token.startsWith('$')) {
+        insertSkillToken(item.token.slice(1));
+        return;
+      }
+      insertTokensIntoComposer([item.token]);
+    },
+    [insertSkillToken, insertTokensIntoComposer],
+  );
 
   return (
     <>
@@ -193,25 +247,38 @@ function ChatConversationWebSurface(props: {
         onWebMermaidViewerOpenChange={ctx.setMermaidViewerOpen}
         onMessageMenuAction={controller.onWebMessageMenuAction}
         onSnapshotComplete={controller.notifySnapshotComplete}
-        /* ---- composer 域（controller 算好后逐字段下发） ---- */
-        composerText={composer.text}
-        composerCursor={composer.cursor}
+      />
+      {/*
+        原生输入 dock（composer-native-2026-10 Step 5，spec 变更点 #14）：
+        与转录 webview 平级的 RN 兄弟节点，flex 布局天然实现「输入框长高 →
+        转录区当帧收缩」；键盘 padding / dock 结构内置在组件里（D7/D8）。
+        恢复链并行：本组件挂载即拉起 controller 草稿水化 → ref.setText，
+        不等转录 webview 的 ready 握手（D8，两链零依赖）。
+      */}
+      <NativeChatComposer
+        ref={composerRef}
+        testID="chat-native-composer-input"
+        value={composer.text}
+        tokenRanges={composer.tokenRanges}
+        hasModel={composer.composerState.hasModel}
+        disabled={composer.composerState.inputDisabled}
+        theme={composerTheme}
+        running={unitActive}
+        canSend={!composer.composerState.sendDisabled}
+        error={composer.composerState.error}
+        chipLabels={chipLabels}
+        typeaheadSource={composer.composerState.typeahead}
+        uiRunning={unitActive}
+        inputDisabled={composer.composerState.inputDisabled}
+        keyboardUp={composer.composerState.keyboardUp}
+        safeAreaBottom={composer.safeAreaBottom}
+        fullscreenEnabled={composer.composerState.fullscreenEnabled}
         onComposerChangeText={composer.onChangeText}
         onComposerSelectionChange={composer.onSelectionChange}
-        composerInputDisabled={composerState.inputDisabled}
-        composerHasModel={composerState.hasModel}
-        composerSendDisabled={composerState.sendDisabled}
-        composerRunning={composerState.running}
-        composerError={composerState.error}
-        composerFullscreenEnabled={composerState.fullscreenEnabled}
-        composerPlaceholder={composerState.placeholder}
-        composerChips={composerState.chips}
-        composerKeyboardUp={composerState.keyboardUp}
-        composerTypeahead={composerState.typeahead}
-        safeAreaBottom={composer.safeAreaBottom}
         onDockAction={composer.handleDockAction}
+        onTypeaheadSelect={handleTypeaheadSelect}
       />
-      {/* 两个选择器仍是 RN 全屏 Modal（spec Q2 定案）：选中后经 M7 通道回填正文。 */}
+      {/* 两个选择器仍是 RN 全屏 Modal：确认后经 controller 的 M7 通道回填正文。 */}
       <FileReferencePicker
         visible={composer.pickerOpen}
         projectId={projectId}
@@ -359,8 +426,8 @@ export function ChatConversationPanel({
   /** WebView 容器是否渲染：scope 就绪才挂，否则落「请先选择会话」占位。 */
   const surfaceReady = projectId != null && sessionId != null;
   const chatBody = surfaceReady ? (
-    // 单 WebView：转录 + dock 合并在同一文档内 flex 布局，高度变化
-    // 文档内消化，跨桥 heightChange 链彻底消失。
+    // 转录 webview（flex:1 吃满余高）+ 原生 dock（自然高度贴底）：输入框长高
+    // 挤压转录区，flex 布局当帧生效，无跨桥 heightChange。
     <ChatConversationWebSurface
       projectId={projectId!}
       sessionId={sessionId!}
@@ -506,10 +573,9 @@ const styles = StyleSheet.create({
   panelHidden: {display: 'none'},
   chatPanel: {flex: 1, backgroundColor: 'transparent'},
   /**
-   * 对话面容器：`flex: 1, minHeight: 0` 语义对单 WebView 容器**仍然适用**——
-   * 裁切容器（AndroidKeyboardClipBody）/ 面板给它一个确定高度，WebView 自身的
-   * `styles.fill` 再吃满。文档内部那层「转录 flex:1 / dock 贴底」是另一层布局，
-   * 与这里的 RN 容器 flex 互不干扰。
+   * 对话面容器：`flex: 1, minHeight: 0` 给对话面一个确定高度；其内转录 webview
+   * 自身的 `styles.fill` 吃满余高，原生 dock 以自然高度贴底（composer-native
+   * Step 5 起两层都是 RN 兄弟节点，布局当帧生效）。
    */
   transcriptHost: {flex: 1, minHeight: 0},
   flexFill: {flex: 1},

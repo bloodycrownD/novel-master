@@ -64,11 +64,11 @@ describe('mermaid 全屏查看器共享模块源码契约 (T-MF1)', () => {
 
 describe('mermaid 全屏查看器两管线接线 (T-MF3)', () => {
   it('两 index.html 含 portal 宿主；chat 侧挂接由 runtime 工厂承担；两 bridge 含 closeMermaidViewer 分支', () => {
-    // rich-document：#overlay-portal 与 #doc 平级；chat：合成包 index.html 的
-    // #mermaid-viewer-portal 与 #menu-portal 平级（transcript-converge 后
-    // 旧 chat-transcript/index.html 已退役，chat 侧壳改读 chat-conversation）。
+    // rich-document：#overlay-portal 与 #doc 平级；chat：独立入口 index.html 的
+    // #mermaid-viewer-portal 与 #menu-portal 平级（composer-native-2026-10
+    // Step 6 合成包退役后，chat 侧壳为 chat-transcript 独立入口）。
     expect(webSrc('rich-document/index.html')).toContain('id="overlay-portal"');
-    expect(webSrc('chat-conversation/index.html')).toContain(
+    expect(webSrc('chat-transcript/index.html')).toContain(
       'id="mermaid-viewer-portal"',
     );
 
@@ -127,8 +127,9 @@ describe('mermaid 全屏查看器两管线接线 (T-MF3)', () => {
  * transcript-converge 后旧 `chat-transcript/webview/main.ts` 整个退役
  * （转录并入 chat-conversation 合成包），「薄入口只做 import 工厂 + 一行调用 +
  * re-export」那条断言随之失去被测物——它的行为没有搬到别处，而是**随该文件消亡**。
- * 合成包入口 `chat-conversation/webview/main.ts` 的装配序与 ready 闸门由
- * `chat-conversation-boot-script.test.ts`（T-CC-V2-02 / T-CL-DIST-08）承担。
+ * composer-native-2026-10 Step 6 合成包也退役后，独立入口
+ * `chat-transcript/webview/main.ts` 的装配序与 ready 闸门由
+ * `chat-transcript-entry.test.ts` 承担。
  */
 describe('chat-transcript runtime 工厂装配链（Step 1 工厂化 / Step 8 补强）', () => {
   it('工厂体内装配动作齐全，mermaid 两挂接真被调用', () => {
@@ -215,9 +216,9 @@ describe('mermaid 全屏查看器 RN 返回键契约 (T-MF4)', () => {
 
 describe('mermaid 全屏查看器 dist 产物契约 (T-MF5)', () => {
   it('两包 app.js 含全屏模块标识；app.css 含 .mermaid-fullscreen 样式；index.html 含 portal', () => {
-    // chat 侧读 chat-conversation：transcript-converge 后旧 chat-transcript 包
-    // 不再产出 dist（本地若还留着旧目录是上一次构建的残渣，不能当真源依赖）。
-    for (const pkg of ['chat-conversation', 'rich-document'] as const) {
+    // chat 侧读 chat-transcript：composer-native-2026-10 Step 6 合成包退役，
+    // 转录 dist 唯一落地面回到独立包（chat-transcript）。
+    for (const pkg of ['chat-transcript', 'rich-document'] as const) {
       const appJs = readWebViewDistFile(pkg, 'app.js');
       expect(appJs).toContain('mermaidViewerOpened');
       expect(appJs).toContain('mermaidViewerClosed');
@@ -235,7 +236,7 @@ describe('mermaid 全屏查看器 dist 产物契约 (T-MF5)', () => {
     expect(readWebViewDistFile('rich-document', 'index.html')).toContain(
       'overlay-portal',
     );
-    expect(readWebViewDistFile('chat-conversation', 'index.html')).toContain(
+    expect(readWebViewDistFile('chat-transcript', 'index.html')).toContain(
       'mermaid-viewer-portal',
     );
   });
@@ -243,7 +244,7 @@ describe('mermaid 全屏查看器 dist 产物契约 (T-MF5)', () => {
   it('按压暗示进入两包富文本样式（rich-content-styles 单源）', () => {
     const styles = webSrc('shared/rich-content-styles.ts');
     expect(styles).toContain('.mermaid-block__chart:active');
-    for (const pkg of ['chat-conversation', 'rich-document'] as const) {
+    for (const pkg of ['chat-transcript', 'rich-document'] as const) {
       expect(readWebViewDistFile(pkg, 'app.css')).toContain(
         '.mermaid-block__chart:active',
       );

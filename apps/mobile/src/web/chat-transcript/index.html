@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <link rel="stylesheet" href="./app.css" />
+  </head>
+  <body>
+    <!--
+      chat-transcript 独立入口壳（composer-native-2026-10 Step 2）：纯转录文档，
+      无 dock / composer 子树——输入框由 RN 原生组件承接，转录侧只管渲染行列表。
+      纵向排布：#app（flex 列容器，样式见 transcript.css 基底）→ #scroller(flex:1)
+      → #rows（行列表挂载点，createTranscriptRuntime 经 registerRenderRows 渲染）。
+      双 portal 刻意留在 body 直接子级——fixed 定位包含块语境与 chat-conversation
+      一致（menu/mermaid 全屏不能被 #app 的布局语境裹挟）。
+    -->
+    <div id="app">
+      <div id="scroller"><div id="rows"></div></div>
+    </div>
+    <!-- Portal 等价宿主：MenuOverlay render 至此，避免与 #rows 互毁。
+         刻意留在 body 直接子级——fixed 定位的包含块语境与 chat-conversation 一致，勿移入 #app。 -->
+    <div id="menu-portal"></div>
+    <!-- Mermaid 全屏覆盖层宿主：与 #menu-portal 平级，renderRows 重建不冲掉；同上为 body 直接子级。 -->
+    <div id="mermaid-viewer-portal"></div>
+    <script src="./app.js"></script>
+  </body>
+</html>

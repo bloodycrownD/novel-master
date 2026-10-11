@@ -142,9 +142,9 @@ describe('mermaid rich-document 预览管线 (T-MV1 / T-MV2)', () => {
     expect(dist).toContain('data-mermaid-error');
 
     // dist 两管线均含错误属性（JS）与 attr 展示（CSS）。
-    // chat 侧读 chat-conversation：transcript-converge 后旧 chat-transcript 包
-    // 不再产出 dist（转录并入合成包，样式由构建期 join 带进来）。
-    for (const pkg of ['chat-conversation', 'rich-document'] as const) {
+    // chat 侧读 chat-transcript：composer-native-2026-10 Step 6 合成包退役，
+    // 转录 dist 唯一落地面回到独立包。
+    for (const pkg of ['chat-transcript', 'rich-document'] as const) {
       expect(readWebViewDistFile(pkg, 'app.js')).toContain(
         'data-mermaid-error',
       );
@@ -179,9 +179,9 @@ describe('mermaid chat 转录管线 (T-MT1 / T-MT2)', () => {
     expect(src.match(/scheduleMermaidScan\(\)/g)).toHaveLength(5);
     expect(src).toContain("from '../mermaid'");
 
-    // 源码真源仍在 chat-transcript/webview/runtime 下（合成包复用），
-    // dist 侧读 chat-conversation（转录并入合成包）。
-    const dist = readWebViewDistFile('chat-conversation', 'app.js');
+    // 源码真源仍在 chat-transcript/webview/runtime 下，
+    // dist 侧读 chat-transcript（Step 6 合成包退役后的唯一落地面）。
+    const dist = readWebViewDistFile('chat-transcript', 'app.js');
     // minify 重命名 scheduleMermaidScan，本体无字符串面；断言换它在产物里
     // 留下的两处稳定指纹：扫描入口的选择器 `code.language-mermaid`，以及
     // 「流式尾增量岛跳过」契约的唯一标记 `closest('#stream-tail')`

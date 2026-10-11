@@ -1,12 +1,17 @@
 /**
  * 四包资产管线**三处手写锚点**的统一守卫（chat-webview-unify cr1-P1-2 / cr2-K-2 /
- * cr2-C-1）：
+ * cr2-C-1；composer-native-2026-10 Step 6 收口四包终态）：
  *
  * 1. Android 守卫清单：`android/app/build.gradle` 的 checkWebViewAssets packages；
  * 2. iOS 出包守卫清单：`ios/NovelMaster.xcodeproj/project.pbxproj` 里
  *    `Copy WebViewDist into App Bundle` 的 `[ ! -f ... ]` 清单；
  * 3. 消费侧类型镜像：`src/webview-host/webview-asset-uri.ts` 的
  *    `WebViewAssetPackageId` 联合类型。
+ *
+ * ⚠️ iOS 侧说明（composer-native-2026-10 Step 6）：pbxproj 是 iOS 侧历史文件，
+ * 本迭代只出 Android，**不随本迭代动**——它钉的仍是旧四包（含已退役的
+ * chat-conversation），用 `IOS_HISTORY_PACKAGES` 单独锁形，待 iOS 侧跟进迭代
+ * 再收口到 chat-transcript。
  *
  * 另有产物面断言：三根产物目录（webview-dist / Android assets / iOS WebViewDist）
  * 里不得存在 PACKAGES 之外的包目录——退役包的历史残留会原样进 APK/IPA
@@ -29,12 +34,27 @@ const ASSET_URI_SRC = join(
 );
 
 /**
- * 与 scripts/build-webview.mjs 的 PACKAGES 同序的四个包 id。
+ * 与 scripts/build-webview.mjs 的 PACKAGES 同序的四个包 id（四包终态）。
  *
- * transcript-converge 后 chat-transcript 不再是独立包（转录并入 chat-conversation
- * 合成包、旧文档壳退役），故清单从五包改四包。
+ * composer-native-2026-10 Step 6：chat-conversation 合成包退役，chat-transcript
+ * 独立入口成为转录侧唯一文档包——清单回到「 rich-document / code-editor /
+ * composer-input / chat-transcript」四包。
  */
 const EXPECTED_PACKAGES = [
+  'rich-document',
+  'code-editor',
+  'composer-input',
+  'chat-transcript',
+];
+
+/**
+ * iOS pbxproj 出包守卫脚本当前钉的包清单（历史面）。
+ *
+ * pbxproj 属 iOS 侧历史文件、本迭代（只出 Android）不动——它仍含已退役的
+ * chat-conversation、尚无 chat-transcript。iOS 侧跟进迭代收口清单时，
+ * 把这里的期望同步换成 EXPECTED_PACKAGES 即可。
+ */
+const IOS_HISTORY_PACKAGES = [
   'rich-document',
   'code-editor',
   'composer-input',
@@ -151,9 +171,9 @@ describe('android checkWebViewAssets 守卫清单', () => {
     expect(packages).toHaveLength(4);
   });
 
-  it('漏 chat-conversation 即红——它缺失时守卫会放过白屏 APK', () => {
+  it('漏 chat-transcript 即红——它缺失时守卫会放过白屏 APK', () => {
     const packages = parseGradlePackages(readLinesByByte(BUILD_GRADLE));
-    expect(packages).toContain('chat-conversation');
+    expect(packages).toContain('chat-transcript');
   });
 
   it('与 build-webview.mjs 的 PACKAGES 零漂移（新增包必须同步守卫清单）', () => {
@@ -183,7 +203,7 @@ describe('产物面不得残留退役包目录（cr2-K-2）', () => {
   }
 });
 
-describe('iOS pbxproj 出包守卫脚本（cr2-K-1 镜像）', () => {
+describe('iOS pbxproj 出包守卫脚本（cr2-K-1 镜像 · iOS 历史面）', () => {
   it('shellScript 是完整 if 形态：-f 分支恰 4 且以 if [ ! -f 起头', () => {
     const script = readIosCopyScript();
     expect(script).toContain('\nif [ ! -f ');
@@ -202,9 +222,13 @@ describe('iOS pbxproj 出包守卫脚本（cr2-K-1 镜像）', () => {
     expect(script).not.toMatch(/^\s*\]; then/m);
   });
 
-  it('四包名都列在守卫里', () => {
+  it('pbxproj 历史四包名都列在守卫里（iOS 侧未随本迭代收口）', () => {
+    // composer-native-2026-10 Step 6：本迭代只出 Android，ios/ 目录不动——
+    // pbxproj 仍钉旧四包（含已退役的 chat-conversation）。锁历史面是防它被
+    // 无意改坏；Android 侧四包终态由上面 android describe 的 EXPECTED_PACKAGES
+    // 断言承担，两侧清单在此刻意不同。
     const script = readIosCopyScript();
-    for (const pkg of EXPECTED_PACKAGES) {
+    for (const pkg of IOS_HISTORY_PACKAGES) {
       expect(script).toContain(`$SRC/${pkg}/index.html`);
     }
   });
@@ -218,7 +242,11 @@ describe('WebViewAssetPackageId 联合类型镜像（cr2-C-1）', () => {
     expect(parseBuildScriptPackages()).toEqual(union);
   });
 
-  it('退役包 chat-transcript 已不在联合类型里', () => {
-    expect(parseAssetUriUnionIds()).not.toContain('chat-transcript');
+  it('联合类型已收口四包终态（chat-conversation 成员随 Step 6 退役移除）', () => {
+    // Step 2 建独立入口、Step 5 宿主切源、Step 6 合成包退役——联合类型与
+    // PACKAGES 双向相等断言即终态守卫；此条钉「退役成员不得回流」。
+    const union = parseAssetUriUnionIds();
+    expect(union).not.toContain('chat-conversation');
+    expect(union).toContain('chat-transcript');
   });
 });

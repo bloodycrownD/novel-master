@@ -15,7 +15,7 @@ export type WebViewAssetPackageId =
   | 'rich-document'
   | 'code-editor'
   | 'composer-input'
-  | 'chat-conversation';
+  | 'chat-transcript';
 
 function blobFsDirs(): typeof ReactNativeBlobUtil.fs.dirs {
   const anyMod = ReactNativeBlobUtil as unknown as {

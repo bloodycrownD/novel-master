@@ -5,10 +5,17 @@
  * commitComposerText）。
  */
 import type {MessageAttachment} from '@novel-master/core/chat';
+import type {ComposerTokenRange} from './composer-highlight';
 
 export type ComposerTokenInsertion = {
   readonly text: string;
   readonly cursor: number;
+  /**
+   * 插入段内每个 token 的完整区间（含触发符，下标针对返回值 `text`；
+   * 2026-10-07 胶囊确认制：引用落文时随插入一并登记，手输永不登记）。
+   * 多 token 以空格连接时逐个给出，区间互不相邻。
+   */
+  readonly tokenRanges: readonly ComposerTokenRange[];
 };
 
 /**
@@ -28,12 +35,20 @@ export function buildTokenInsertion(
   const before = text.slice(0, replaceStart);
   const after = text.slice(cursor);
   const gapBefore = before.length === 0 || /\s$/.test(before) ? '' : ' ';
-  const joined = typeof token === 'string' ? token : token.join(' ');
+  const tokens = typeof token === 'string' ? [token] : token;
+  const joined = tokens.join(' ');
   const gapAfter = after.length === 0 || !/^\s/.test(after) ? ' ' : '';
   const inserted = `${gapBefore}${joined}${gapAfter}`;
+  const tokenRanges: ComposerTokenRange[] = [];
+  let offset = before.length + gapBefore.length;
+  for (const item of tokens) {
+    tokenRanges.push({start: offset, end: offset + item.length});
+    offset += item.length + 1; // 连接空格
+  }
   return {
     text: `${before}${inserted}${after}`,
     cursor: before.length + inserted.length,
+    tokenRanges,
   };
 }
 

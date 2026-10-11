@@ -1,0 +1,1276 @@
+diff --git a/node_modules/react-native-enriched-markdown/android/generated/java/com/facebook/react/viewmanagers/EnrichedMarkdownTextInputManagerDelegate.java b/node_modules/react-native-enriched-markdown/android/generated/java/com/facebook/react/viewmanagers/EnrichedMarkdownTextInputManagerDelegate.java
+index 2f3cc47..c5e2dce 100644
+--- a/node_modules/react-native-enriched-markdown/android/generated/java/com/facebook/react/viewmanagers/EnrichedMarkdownTextInputManagerDelegate.java
++++ b/node_modules/react-native-enriched-markdown/android/generated/java/com/facebook/react/viewmanagers/EnrichedMarkdownTextInputManagerDelegate.java
+@@ -160,6 +160,9 @@ public class EnrichedMarkdownTextInputManagerDelegate<T extends View, U extends
+       case "insertMention":
+         mViewManager.insertMention(view, args.getString(0), args.getString(1));
+         break;
++      case "setTokenRanges":
++        mViewManager.setTokenRanges(view, args.getString(0));
++        break;
+       case "startMention":
+         mViewManager.startMention(view, args.getString(0));
+         break;
+diff --git a/node_modules/react-native-enriched-markdown/android/generated/java/com/facebook/react/viewmanagers/EnrichedMarkdownTextInputManagerInterface.java b/node_modules/react-native-enriched-markdown/android/generated/java/com/facebook/react/viewmanagers/EnrichedMarkdownTextInputManagerInterface.java
+index 90aad4a..1a36e6b 100644
+--- a/node_modules/react-native-enriched-markdown/android/generated/java/com/facebook/react/viewmanagers/EnrichedMarkdownTextInputManagerInterface.java
++++ b/node_modules/react-native-enriched-markdown/android/generated/java/com/facebook/react/viewmanagers/EnrichedMarkdownTextInputManagerInterface.java
+@@ -58,6 +58,7 @@ public interface EnrichedMarkdownTextInputManagerInterface<T extends View> exten
+   void insertLink(T view, String text, String url);
+   void insertText(T view, String text);
+   void insertMention(T view, String displayText, String url);
++  void setTokenRanges(T view, String ranges);
+   void startMention(T view, String indicator);
+   void removeLink(T view);
+   void copyToClipboard(T view);
+diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/EnrichedMarkdownTextInputManager.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/EnrichedMarkdownTextInputManager.kt
+index 512f5fc..89b4c31 100644
+--- a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/EnrichedMarkdownTextInputManager.kt
++++ b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/EnrichedMarkdownTextInputManager.kt
+@@ -246,9 +246,12 @@ class EnrichedMarkdownTextInputManager :
+     view: EnrichedMarkdownTextInputView?,
+     value: Float,
+   ) {
+-    if (value > 0 && view != null) {
+-      view.setLineSpacing(value - view.textSize, 1f)
+-    }
++    // RN 约定 lineHeight 传 dp；上游把它从 textSize（px）里直减，每行得到
++    // 一个大负增量、相邻文本行被压叠（空行隔开处不可见、连续行肉眼叠印）。
++    // dp→px 换算与基于 paint 真实 fontMetrics 的补偿由 View 侧承担；
++    // value > 0 的门禁一并下沉到 View：lineHeight 改回 0 / prop 删除时消
++    // 息同样要到达，行距才能回落回正（CR-fix-02）。
++    view?.setPendingLineHeightDp(value)
+   }
+ 
+   @ReactProp(name = "fontFamily")
+@@ -300,6 +303,7 @@ class EnrichedMarkdownTextInputManager :
+           formatLabel = value.getString("formatLabel") ?: "",
+           copyAsMarkdown = value.getBoolean("copyAsMarkdown"),
+           copyAsMarkdownLabel = value.getString("copyAsMarkdownLabel") ?: "",
++          paste = value.getBoolean("paste"),
+         )
+       }
+   }
+@@ -503,6 +507,21 @@ class EnrichedMarkdownTextInputManager :
+     }
+   }
+ 
++  override fun setTokenRanges(
++    view: EnrichedMarkdownTextInputView?,
++    rangesJson: String?,
++  ) {
++    if (view == null || rangesJson == null) return
++    val arr = org.json.JSONArray(rangesJson)
++    val tokenRanges = (0 until arr.length()).mapNotNull { index ->
++      val pair = arr.getJSONArray(index)
++      val start = pair.getInt(0)
++      val end = pair.getInt(1)
++      if (start in 0..end) Pair(start, end) else null
++    }
++    view.setTokenRanges(tokenRanges)
++  }
++
+   override fun startMention(
+     view: EnrichedMarkdownTextInputView?,
+     indicator: String?,
+diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/EnrichedMarkdownTextInputView.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/EnrichedMarkdownTextInputView.kt
+index 561cf66..45956a5 100644
+--- a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/EnrichedMarkdownTextInputView.kt
++++ b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/EnrichedMarkdownTextInputView.kt
+@@ -13,6 +13,7 @@ import android.util.TypedValue
+ import android.view.Gravity
+ import android.view.KeyEvent
+ import android.view.MotionEvent
++import android.view.ViewConfiguration
+ import android.view.View.OnFocusChangeListener
+ import android.view.inputmethod.EditorInfo
+ import android.view.inputmethod.InputConnection
+@@ -23,6 +24,8 @@ import com.facebook.react.uimanager.BackgroundStyleApplicator
+ import com.facebook.react.uimanager.PixelUtil
+ import com.facebook.react.uimanager.StateWrapper
+ import com.facebook.react.views.text.ReactTypefaceUtils
++import kotlin.math.abs
++import kotlin.math.roundToInt
+ import com.swmansion.enriched.markdown.input.autolink.AutoLinkDetector
+ import com.swmansion.enriched.markdown.input.autolink.LinkRegexConfig
+ import com.swmansion.enriched.markdown.input.detection.DetectorPipeline
+@@ -47,6 +50,7 @@ import com.swmansion.enriched.markdown.input.formatting.InputFormatter
+ import com.swmansion.enriched.markdown.input.formatting.InputParser
+ import com.swmansion.enriched.markdown.input.layout.InputEventEmitter
+ import com.swmansion.enriched.markdown.input.layout.InputLayoutManager
++import com.swmansion.enriched.markdown.input.layout.lineSpacingAddFrom
+ import com.swmansion.enriched.markdown.input.model.BlockRange
+ import com.swmansion.enriched.markdown.input.model.BlockType
+ import com.swmansion.enriched.markdown.input.model.FormattingRange
+@@ -277,7 +281,82 @@ class EnrichedMarkdownTextInputView(
+   // See: ReactEditText in React Native core.
+   override fun isLayoutRequested(): Boolean = false
+ 
++  /*
++   * 触摸拖动纵向滚动（novel-master 补丁）：Editor 把拖动手势全部交给
++   * 光标/选择逻辑，高度封顶的多行输入框因此没有「用手指滚」的通路
++   * （scrollEnabled 只带动光标跟随）。当 scrollEnabled 开启且内容溢出可视
++   * 区时，接管纵向主导的拖动（超过触摸 slop、无活跃选区）翻译成 scrollTo；
++   * 点按与长按选择仍原样落给 super，行为不变。
++   */
++  private var dragScrollDownX = 0f
++  private var dragScrollDownY = 0f
++  private var dragScrollLastY = 0f
++  private var dragScrollActive = false
++  private val dragScrollSlop: Int by lazy {
++    ViewConfiguration.get(context).scaledTouchSlop
++  }
++
++  private fun maxDragScrollY(): Int =
++    (computeVerticalScrollRange() - computeVerticalScrollExtent()).coerceAtLeast(0)
++
+   override fun onTouchEvent(ev: MotionEvent): Boolean {
++    when (ev.actionMasked) {
++      MotionEvent.ACTION_DOWN -> {
++        dragScrollDownX = ev.x
++        dragScrollDownY = ev.y
++        dragScrollLastY = ev.y
++        dragScrollActive = false
++      }
++
++      MotionEvent.ACTION_MOVE -> {
++        if (!dragScrollActive) {
++          val dy = ev.y - dragScrollDownY
++          val dx = ev.x - dragScrollDownX
++          if (selectionStart == selectionEnd &&
++            (canScrollVertically(1) || canScrollVertically(-1)) &&
++            abs(dy) > dragScrollSlop &&
++            abs(dy) > abs(dx)
++          ) {
++            dragScrollActive = true
++            // 这一手势是滚动不是按压：取消挂起的长按，别让它在拖动中途
++            // 触发选区。
++            cancelLongPress()
++            parent?.requestDisallowInterceptTouchEvent(true)
++          }
++        }
++        if (dragScrollActive) {
++          val dy = dragScrollLastY - ev.y
++          dragScrollLastY = ev.y
++          if (dy != 0f) {
++            val next = (scrollY + dy.roundToInt()).coerceIn(0, maxDragScrollY())
++            if (next != scrollY) {
++              scrollTo(0, next)
++              awakenScrollBars()
++            }
++          }
++          return true
++        }
++        dragScrollLastY = ev.y
++      }
++
++      MotionEvent.ACTION_UP,
++      MotionEvent.ACTION_CANCEL,
++      -> {
++        if (dragScrollActive) {
++          dragScrollActive = false
++          // 归还父容器拦截权：拖滚激活时向 parent 借了
++          // requestDisallowInterceptTouchEvent(true)，只复位 dragScrollActive
++          // 不还会把拦截状态悬挂在父容器上——封顶态长草稿拖滚后转录列表
++          // （滚动父级）再也收不到触摸事件（CR-fix-09）。UP/CANCEL 都要还。
++          parent?.requestDisallowInterceptTouchEvent(false)
++          if (ev.actionMasked == MotionEvent.ACTION_UP) {
++            performClick()
++          }
++          return true
++        }
++      }
++    }
++
+     when (ev.action) {
+       MotionEvent.ACTION_DOWN -> {
+         detectScrollMovement = true
+@@ -324,11 +403,18 @@ class EnrichedMarkdownTextInputView(
+ 
+   // In auto-grow mode (scrollEnabled=false) TextView's internal bringPointIntoView
+   // scrolls content before Fabric has resized the view, causing a visible flicker.
++  // Auto-grow 态仍要放行 TextView 把残留偏移归零回正：内容缩短后旧偏移不
++  // 归零会把首行胶囊顶裁（本仓补丁，scrollEnabled=false 分支的唯一放行口）。
+   override fun scrollTo(
+     x: Int,
+     y: Int,
+   ) {
+-    if (!scrollEnabled) return
++    if (!scrollEnabled) {
++      if (scrollY != 0 && x == 0 && y == 0) {
++        super.scrollTo(0, 0)
++      }
++      return
++    }
+     super.scrollTo(x, y)
+   }
+ 
+@@ -729,6 +815,14 @@ class EnrichedMarkdownTextInputView(
+   // and block ranges survive the round trip — mirrors iOS's copy:/cut:/paste:
+   // overrides. External clips keep default handling.
+   override fun onTextContextMenuItem(id: Int): Boolean {
++    // 应用层关闭内置粘贴（selectionMenuConfig.paste=false）的事件层兜底：部分
++    // ROM 会绕过 ActionMode 菜单直接派发这两个 id，消费掉（返回 true、不执行
++    // 默认/自定义粘贴），保证关闭语义在所有派发路径上无操作。
++    if (id == android.R.id.paste || id == android.R.id.pasteAsPlainText) {
++      if (!contextMenu.selectionMenuConfig.paste) {
++        return true
++      }
++    }
+     if (id == android.R.id.paste) {
+       MarkdownClipboard.markdownFromClipboard(context)?.let { markdown ->
+         pasteMarkdown(markdown)
+@@ -936,10 +1030,18 @@ class EnrichedMarkdownTextInputView(
+     if (cursorStart != cursorEnd || cursorStart <= 0) return false
+     if (text == null) return false
+ 
+-    val linkRange = linkCoordinator.linkRangeForDeletion(cursorStart) ?: return false
+-
+-    replaceTextInRange(linkRange.start, linkRange.end, "") { editable ->
+-      setSelection(linkRange.start.coerceAtMost(editable.length))
++    // TOKEN（本仓 fork）并入同一条删除拦截路径（D2 原子删）：LINK 优先（保上游
++    // 语义不变），未命中 LINK 再查光标前一个字符所在的 TOKEN 区间——退格/删除
++    // 触及 token 胶囊中段时整段摘除，光标落删除窗起点。软键盘三条退格入口
++    // （deleteSurroundingText / sendKeyEvent / onKeyDown）都汇聚到本函数，
++    // 并入这里即全覆盖，无需逐入口接线。
++    val linkRange = linkCoordinator.linkRangeForDeletion(cursorStart)
++    val tokenRange =
++      if (linkRange == null) formattingStore.rangeOfType(StyleType.TOKEN, cursorStart - 1) else null
++    val range = linkRange ?: tokenRange ?: return false
++
++    replaceTextInRange(range.start, range.end, "") { editable ->
++      setSelection(range.start.coerceAtMost(editable.length))
+     }
+     dispatchMentionEvents(mentionCoordinator.clear())
+     return true
+@@ -950,6 +1052,26 @@ class EnrichedMarkdownTextInputView(
+     dispatchMentionUpdate()
+   }
+ 
++  /**
++   * 设置 token 区间，渲染为胶囊 span。
++   * 复用补丁一的样式链，加一个「token」变体入口。
++   * 原子删已接线：TOKEN 区间在 [deleteLinkBeforeCursor] 的删除拦截路径里
++   * 与 LINK 同款整段摘除（本仓 fork，composer-native-2026-10 Step 3）。
++   */
++  fun setTokenRanges(ranges: List<Pair<Int, Int>>) {
++    val editable = text ?: return
++    // 先清除所有 TOKEN 类型的 ranges
++    formattingStore.removeType(StyleType.TOKEN, 0, editable.length)
++    // 添加新的 TOKEN ranges
++    for ((start, end) in ranges) {
++      if (start in 0..end && end <= editable.length) {
++        formattingStore.addRange(FormattingRange(StyleType.TOKEN, start, end))
++      }
++    }
++    // 重绘
++    applyFormatting()
++  }
++
+   fun dismissActiveMention() {
+     mentionCoordinator.clear(emit = false)
+   }
+@@ -1007,9 +1129,49 @@ class EnrichedMarkdownTextInputView(
+     if (size <= 0f) return
+     val sizePx = ceil(PixelUtil.toPixelFromSP(size))
+     setTextSize(TypedValue.COMPLEX_UNIT_PX, sizePx)
++    applyPendingLineSpacing()
+     layoutManager.invalidateLayout()
+   }
+ 
++  /**
++   * 调用方请求的行高目标（dp 口径，novel-master 补丁；由
++   * Manager.setLineHeight 下发）。存 dp 是为了字号/字体变化后能重算 px 补偿
++   * ——prop 应用顺序不保证，拿过期 paint 测会让每行差出几 px。
++   */
++  private var pendingLineHeightDp = 0f
++
++  /**
++   * 设置行高目标（dp）并立即生效（CR-fix-02：门禁从 Manager 下沉到这里——
++   * lineHeight 改回 0 / prop 被删除时也照达，行距才会回落回正）。
++   */
++  fun setPendingLineHeightDp(valueDp: Float) {
++    pendingLineHeightDp = valueDp
++    applyPendingLineSpacing()
++    layoutManager.invalidateLayout()
++  }
++
++  /**
++   * 把当前行高目标落到 setLineSpacing。<= 0f（无目标或目标被撤掉）时清掉
++   * 已应用的补偿、回到字体自然行距（CR-fix-02：此前这里直接 return，行距
++   * 卡在旧值不回退、测量缓存键还留着旧行高）。
++   */
++  private fun applyPendingLineSpacing() {
++    if (pendingLineHeightDp <= 0f) {
++      setLineSpacing(0f, 1f)
++      return
++    }
++    setLineSpacing(lineSpacingAddPx, 1f)
++  }
++
++  /**
++   * 行距补偿增量（px），与 InputMeasurementStore 的测量共用同一公式源
++   * （lineSpacingAddFrom，CR-fix-03）：Yoga 测量必须套与渲染一致的每行
++   * 高度，否则测得的内容高度比实际绘制的矮——lineHeight 超过字体自然行高
++   * 时最后一行会被裁。
++   */
++  internal val lineSpacingAddPx: Float
++    get() = lineSpacingAddFrom(paint, pendingLineHeightDp, resources.displayMetrics.density)
++
+   fun setColorFromProps(colorInt: Int?) {
+     setTextColor(colorInt ?: Color.BLACK)
+   }
+@@ -1055,6 +1217,10 @@ class EnrichedMarkdownTextInputView(
+       )
+     typeface = newTypeface
+     paint.typeface = newTypeface
++    // CR-fix-07：行距补偿基于 paint 的真实 fontMetrics 折算，字体换了必须
++    // 重算——fontFamily/fontWeight prop 晚于 lineHeight 到达时，补偿若按旧
++    // 字体算就落不到目标行高（此前的「顺序无关」只覆盖了字号）。
++    applyPendingLineSpacing()
+     layoutManager.invalidateLayout()
+   }
+ 
+diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/formatting/InputFormatter.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/formatting/InputFormatter.kt
+index 8e3fc76..be2c0c2 100644
+--- a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/formatting/InputFormatter.kt
++++ b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/formatting/InputFormatter.kt
+@@ -17,6 +17,7 @@ import com.swmansion.enriched.markdown.input.styles.OrderedListBlockHandler
+ import com.swmansion.enriched.markdown.input.styles.SpoilerStyleHandler
+ import com.swmansion.enriched.markdown.input.styles.StrikethroughStyleHandler
+ import com.swmansion.enriched.markdown.input.styles.StyleHandler
++import com.swmansion.enriched.markdown.input.styles.TokenStyleHandler
+ import com.swmansion.enriched.markdown.input.styles.UnderlineStyleHandler
+ import com.swmansion.enriched.markdown.input.styles.UnorderedListBlockHandler
+ 
+@@ -43,6 +44,7 @@ class InputFormatter(
+       StyleType.STRIKETHROUGH to StrikethroughStyleHandler(),
+       StyleType.LINK to LinkStyleHandler(),
+       StyleType.SPOILER to SpoilerStyleHandler(),
++      StyleType.TOKEN to TokenStyleHandler(),
+     )
+ 
+   /**
+diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/formatting/MarkdownSerializer.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/formatting/MarkdownSerializer.kt
+index 6b1d266..c4ab77e 100644
+--- a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/formatting/MarkdownSerializer.kt
++++ b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/formatting/MarkdownSerializer.kt
+@@ -150,6 +150,7 @@ object MarkdownSerializer {
+       StyleType.STRIKETHROUGH -> "~~"
+       StyleType.LINK -> "["
+       StyleType.SPOILER -> "||"
++      StyleType.TOKEN -> ""
+     }
+ 
+   private fun closingDelimiter(
+@@ -161,8 +162,15 @@ object MarkdownSerializer {
+       StyleType.ITALIC -> "*"
+       StyleType.UNDERLINE -> "_"
+       StyleType.STRIKETHROUGH -> "~~"
++      // 原版形态 `](${url})`：LINK 是完整 markdown 链接的闭合（displayText + destination）。
++      // 前一轮补丁曾误改为 `(${url})`（丢了 `]`，序列化输出破 markdown），本轮回退——
++      // 「token 输出纯明文」由下方 TOKEN 分支（开闭均为空串）承担，与 LINK 无关。
+       StyleType.LINK -> "](${url ?: ""})"
+       StyleType.SPOILER -> "||"
++      // TOKEN（本仓 fork 新增类型）：开/闭分隔符均为空串——序列化输出纯 displayText
++      // （不带方括号/圆括号），对齐 composer token 的明文形态（D3）：编辑器文本
++      // 就是 token 原文，TOKEN span 只是视觉胶囊，不参与任何 markdown 输出。
++      StyleType.TOKEN -> ""
+     }
+ 
+   // Lower value = outermost wrapper. Font styles wrap around structural styles (link).
+@@ -174,6 +182,7 @@ object MarkdownSerializer {
+       StyleType.STRIKETHROUGH -> 3
+       StyleType.SPOILER -> 4
+       StyleType.LINK -> 5
++      StyleType.TOKEN -> 6
+     }
+ 
+   private data class BoundaryEvent(
+diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/layout/InputLayoutManager.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/layout/InputLayoutManager.kt
+index 4e96cb7..b149d26 100644
+--- a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/layout/InputLayoutManager.kt
++++ b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/layout/InputLayoutManager.kt
+@@ -14,7 +14,7 @@ class InputLayoutManager(
+     val text = view.text
+     val paint = view.paint
+ 
+-    val needUpdate = InputMeasurementStore.store(view.id, text, paint)
++    val needUpdate = InputMeasurementStore.store(view.id, text, paint, view.lineSpacingAddPx)
+     if (!needUpdate) return
+ 
+     val state = Arguments.createMap()
+diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/layout/InputMeasurementStore.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/layout/InputMeasurementStore.kt
+index d7fc9ac..3492e32 100644
+--- a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/layout/InputMeasurementStore.kt
++++ b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/layout/InputMeasurementStore.kt
+@@ -6,7 +6,9 @@ import android.text.StaticLayout
+ import android.text.TextPaint
+ import androidx.appcompat.widget.AppCompatEditText
+ import com.facebook.react.bridge.ReadableMap
++import com.facebook.react.common.ReactConstants
+ import com.facebook.react.uimanager.PixelUtil
++import com.facebook.react.views.text.ReactTypefaceUtils
+ import com.facebook.yoga.YogaMeasureMode
+ import com.facebook.yoga.YogaMeasureOutput
+ import com.swmansion.enriched.markdown.input.formatting.InputParser
+@@ -16,6 +18,9 @@ object InputMeasurementStore {
+   private data class PaintParams(
+     val typeface: android.graphics.Typeface?,
+     val fontSize: Float,
++    // novel-master 补丁：渲染侧的行距补偿增量（px）。进缓存键——lineHeight
++    // prop 变化时缓存尺寸必须失效，否则旧行高的测量结果会被继续复用。
++    val lineSpacingAddPx: Float,
+   )
+ 
+   private data class MeasurementParams(
+@@ -31,12 +36,13 @@ object InputMeasurementStore {
+     id: Int,
+     text: CharSequence?,
+     paint: TextPaint,
++    lineSpacingAddPx: Float,
+   ): Boolean {
+     val cachedWidth = data[id]?.cachedWidth ?: 0f
+     val cachedSize = data[id]?.cachedSize ?: 0L
+ 
+-    val size = measure(cachedWidth, text, paint)
+-    val paintParams = PaintParams(paint.typeface, paint.textSize)
++    val size = measure(cachedWidth, text, paint, lineSpacingAddPx)
++    val paintParams = PaintParams(paint.typeface, paint.textSize, lineSpacingAddPx)
+ 
+     data[id] = MeasurementParams(cachedWidth, size, text, paintParams)
+     return size != cachedSize
+@@ -84,7 +90,7 @@ object InputMeasurementStore {
+         textSize = value.paintParams.fontSize
+       }
+ 
+-    val size = measure(width, value.text, paint)
++    val size = measure(width, value.text, paint, value.paintParams.lineSpacingAddPx)
+     data[id] = MeasurementParams(width, size, value.text, value.paintParams)
+     return size
+   }
+@@ -104,19 +110,43 @@ object InputMeasurementStore {
+     val spSize = kotlin.math.ceil(PixelUtil.toPixelFromSP(fontSize).toDouble()).toFloat()
+ 
+     val defaultView = AppCompatEditText(context)
++    // CR-fix-03：paint 按 props 声明的 fontFamily/fontWeight 构造（与 View
++    // updateTypeface 的 ReactTypefaceUtils.applyStyles 同口径）——冷启动测量
++    // 若用 AppCompatEditText 默认字体，自定义字体下 fontMetrics 与渲染侧不
++    // 一致，行距补偿会差一行。props 未声明字体时 applyStyles 等价于默认字体
++    // （weight/family 皆 UNSET/null），无差异。
++    val typeface = ReactTypefaceUtils.applyStyles(
++      defaultView.typeface,
++      ReactConstants.UNSET,
++      ReactTypefaceUtils.parseFontWeight(props?.getString("fontWeight")),
++      props?.getString("fontFamily"),
++      context.assets,
++    )
+     val paint =
+       TextPaint(defaultView.paint).apply {
++        this.typeface = typeface
+         textSize = spSize
+         isAntiAlias = true
+       }
+ 
+-    return measure(width, text, paint)
++    // novel-master 补丁：复刻渲染侧的行高补偿，让冷测的每行高度与 View 实际
++    // 绘制对齐（公式同源见 lineSpacingAddFrom / lineSpacingAddPx）。
++    val lineHeightDp = props
++      ?.takeIf { it.hasKey("lineHeight") }
++      ?.getDouble("lineHeight")
++      ?.toFloat()
++      ?: 0f
++    val lineSpacingAddPx =
++      lineSpacingAddFrom(paint, lineHeightDp, context.resources.displayMetrics.density)
++
++    return measure(width, text, paint, lineSpacingAddPx)
+   }
+ 
+   private fun measure(
+     maxWidth: Float,
+     text: CharSequence?,
+     paint: TextPaint,
++    lineSpacingAddPx: Float,
+   ): Long {
+     val content = text ?: ""
+     val widthPx = maxWidth.toInt().coerceAtLeast(0)
+@@ -125,7 +155,7 @@ object InputMeasurementStore {
+       StaticLayout.Builder
+         .obtain(content, 0, content.length, paint, widthPx)
+         .setIncludePad(true)
+-        .setLineSpacing(0f, 1f)
++        .setLineSpacing(lineSpacingAddPx, 1f)
+ 
+     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+       builder.setBreakStrategy(android.graphics.text.LineBreaker.BREAK_STRATEGY_HIGH_QUALITY)
+diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/layout/LineSpacing.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/layout/LineSpacing.kt
+new file mode 100644
+index 0000000..01f4214
+--- /dev/null
++++ b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/layout/LineSpacing.kt
+@@ -0,0 +1,31 @@
++package com.swmansion.enriched.markdown.input.layout
++
++import android.text.TextPaint
++
++/**
++ * 行距补偿增量的单一公式源（novel-master 补丁，CR-fix-03）。
++ *
++ * Yoga 测量与渲染必须套同一份「每行增量」：库的 InputMeasurementStore 原先以
++ * StaticLayout.setLineSpacing(0f, 1f) 自然行距测 content 高，而行高补偿只落
++ * 在渲染侧（View 每行 lineHeight dp）——测量每行比渲染矮一截，五行累计差出
++ * 一个行框，view 高度装不下渲染内容（真机像素取证：第五行暗像素仅
++ * 12px/66px 行框，输入框五行封顶后最后一行被裁）。
++ *
++ * 口径（RN 约定 lineHeight 入参是 dp）：换算成 px 后减去 paint 的真实字高
++ * （fontMetricsInt 的 ascent~descent），余数即每行要补的 px。调用方必须传入
++ * 与渲染路径同源的 paint（View 用自身 paint；InputMeasurementStore 冷测按
++ * props 的 fontFamily/fontWeight 构造），否则自定义字体下冷启动测量与渲染
++ * 仍会差一行。
++ *
++ * lineHeightDp <= 0 时返回 0f（自然行距、无补偿）。
++ */
++internal fun lineSpacingAddFrom(
++  paint: TextPaint,
++  lineHeightDp: Float,
++  density: Float,
++): Float {
++  if (lineHeightDp <= 0f) return 0f
++  val targetPx = lineHeightDp * density
++  val fm = paint.fontMetricsInt
++  return targetPx - (fm.descent - fm.ascent)
++}
+diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/model/InputFormatterStyle.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/model/InputFormatterStyle.kt
+index a961e67..bbad75c 100644
+--- a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/model/InputFormatterStyle.kt
++++ b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/model/InputFormatterStyle.kt
+@@ -6,6 +6,10 @@ data class InputFormatterStyle(
+   val linkColor: Int,
+   val linkUnderline: Boolean,
+   val linkBackgroundColor: Int,
++  val linkBorderRadius: Int,
++  val linkPaddingHorizontal: Int,
++  val linkPaddingTop: Int,
++  val linkPaddingBottom: Int,
+   val linkVariants: List<InputLinkVariantStyle>,
+   val spoilerColor: Int,
+   val spoilerBackgroundColor: Int,
+@@ -45,6 +49,10 @@ data class InputLinkVariantStyle(
+   val color: Int,
+   val underline: Boolean,
+   val backgroundColor: Int,
++  val borderRadius: Int,
++  val paddingHorizontal: Int,
++  val paddingTop: Int,
++  val paddingBottom: Int,
+ ) {
+   val compiledRegex: Regex? =
+     try {
+diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/model/StyleType.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/model/StyleType.kt
+index 17ec49b..33b916e 100644
+--- a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/model/StyleType.kt
++++ b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/model/StyleType.kt
+@@ -7,4 +7,5 @@ enum class StyleType {
+   STRIKETHROUGH,
+   LINK,
+   SPOILER,
++  TOKEN,
+ }
+diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/styles/LinkStyleHandler.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/styles/LinkStyleHandler.kt
+index 8b90a87..ed7fd5b 100644
+--- a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/styles/LinkStyleHandler.kt
++++ b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/styles/LinkStyleHandler.kt
+@@ -8,6 +8,7 @@ import com.swmansion.enriched.markdown.input.formatting.MarkdownSpan
+ import com.swmansion.enriched.markdown.input.model.FormattingRange
+ import com.swmansion.enriched.markdown.input.model.InputFormatterStyle
+ import com.swmansion.enriched.markdown.input.model.StyleType
++import com.swmansion.enriched.markdown.spans.RoundedBackgroundSpan
+ 
+ private class MarkdownLinkColorSpan(
+   color: Int,
+@@ -32,7 +33,20 @@ class LinkStyleHandler : StyleHandler {
+       spans.add(MarkdownLinkUnderlineSpan())
+     }
+     if (linkStyle.backgroundColor != 0) {
+-      spans.add(MarkdownLinkBackgroundColorSpan(linkStyle.backgroundColor))
++      // 有 borderRadius/padding 配置时用 RoundedBackgroundSpan 替代 BackgroundColorSpan
++      if (linkStyle.borderRadius > 0 || linkStyle.paddingHorizontal > 0) {
++        spans.add(
++          RoundedBackgroundSpan(
++            backgroundColor = linkStyle.backgroundColor,
++            borderRadius = linkStyle.borderRadius.toFloat(),
++            paddingHorizontal = linkStyle.paddingHorizontal.toFloat(),
++            paddingTop = linkStyle.paddingTop.toFloat(),
++            paddingBottom = linkStyle.paddingBottom.toFloat(),
++          )
++        )
++      } else {
++        spans.add(MarkdownLinkBackgroundColorSpan(linkStyle.backgroundColor))
++      }
+     }
+     return spans
+   }
+@@ -42,6 +56,7 @@ class LinkStyleHandler : StyleHandler {
+       MarkdownLinkColorSpan::class.java,
+       MarkdownLinkUnderlineSpan::class.java,
+       MarkdownLinkBackgroundColorSpan::class.java,
++      RoundedBackgroundSpan::class.java,
+     )
+ 
+   private fun resolveLinkStyle(
+@@ -59,6 +74,10 @@ class LinkStyleHandler : StyleHandler {
+       color = variant?.color ?: style.linkColor,
+       underline = variant?.underline ?: style.linkUnderline,
+       backgroundColor = variant?.backgroundColor ?: style.linkBackgroundColor,
++      borderRadius = variant?.borderRadius ?: style.linkBorderRadius,
++      paddingHorizontal = variant?.paddingHorizontal ?: style.linkPaddingHorizontal,
++      paddingTop = variant?.paddingTop ?: style.linkPaddingTop,
++      paddingBottom = variant?.paddingBottom ?: style.linkPaddingBottom,
+     )
+   }
+ 
+@@ -66,6 +85,10 @@ class LinkStyleHandler : StyleHandler {
+     val color: Int,
+     val underline: Boolean,
+     val backgroundColor: Int,
++    val borderRadius: Int,
++    val paddingHorizontal: Int,
++    val paddingTop: Int,
++    val paddingBottom: Int,
+   )
+ }
+ 
+diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/styles/TokenStyleHandler.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/styles/TokenStyleHandler.kt
+new file mode 100644
+index 0000000..ec42f3c
+--- /dev/null
++++ b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/styles/TokenStyleHandler.kt
+@@ -0,0 +1,52 @@
++package com.swmansion.enriched.markdown.input.styles
++
++import android.text.style.CharacterStyle
++import android.text.style.ForegroundColorSpan
++import com.swmansion.enriched.markdown.input.formatting.MarkdownSpan
++import com.swmansion.enriched.markdown.input.model.FormattingRange
++import com.swmansion.enriched.markdown.input.model.InputFormatterStyle
++import com.swmansion.enriched.markdown.input.model.StyleType
++import com.swmansion.enriched.markdown.spans.RoundedBackgroundSpan
++
++private class MarkdownTokenColorSpan(
++  color: Int,
++) : ForegroundColorSpan(color),
++  MarkdownSpan
++
++/**
++ * Token 样式处理器，用于渲染胶囊 span。
++ * 复用 LinkStyleHandler 的逻辑，但使用固定的样式（primary 字色 + primaryMuted 底色）。
++ */
++class TokenStyleHandler : StyleHandler {
++  override val styleType = StyleType.TOKEN
++  override val mergingConfig = StyleMergingConfig()
++
++  override fun createSpans(
++    range: FormattingRange,
++    style: InputFormatterStyle,
++  ): List<CharacterStyle> {
++    val spans = mutableListOf<CharacterStyle>()
++    // 使用 link 的样式作为基础
++    val linkStyle = style.linkColor
++    spans.add(MarkdownTokenColorSpan(linkStyle))
++    // 如果有背景色，用 RoundedBackgroundSpan
++    if (style.linkBackgroundColor != 0) {
++      spans.add(
++        RoundedBackgroundSpan(
++          backgroundColor = style.linkBackgroundColor,
++          borderRadius = style.linkBorderRadius.toFloat(),
++          paddingHorizontal = style.linkPaddingHorizontal.toFloat(),
++          paddingTop = style.linkPaddingTop.toFloat(),
++          paddingBottom = style.linkPaddingBottom.toFloat(),
++        )
++      )
++    }
++    return spans
++  }
++
++  override fun spanClasses(): List<Class<out CharacterStyle>> =
++    listOf(
++      MarkdownTokenColorSpan::class.java,
++      RoundedBackgroundSpan::class.java,
++    )
++}
+diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/toolbar/InputContextMenu.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/toolbar/InputContextMenu.kt
+index 1ebda75..634645b 100644
+--- a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/toolbar/InputContextMenu.kt
++++ b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/toolbar/InputContextMenu.kt
+@@ -19,6 +19,10 @@ data class InputSelectionMenuConfig(
+   val formatLabel: String = "",
+   val copyAsMarkdown: Boolean = true,
+   val copyAsMarkdownLabel: String = "",
++  // 内置「粘贴/粘贴为纯文本」开关：false 时长按菜单移除这两项，且
++  // onTextContextMenuItem 对其事件整体消费（无操作）——供应用用
++  // contextMenuItems 的自定义粘贴项接管（门控/截断由应用负责）。
++  val paste: Boolean = true,
+ )
+ 
+ data class FormatMenuConfig(
+@@ -63,6 +67,12 @@ class InputContextMenu(
+           menu.removeItem(MENU_COPY_MARKDOWN_ID)
+           menu.removeGroup(FORMAT_MENU_GROUP_ID)
+           menu.removeGroup(CUSTOM_MENU_GROUP_ID)
++          // 应用层关闭内置粘贴时，把系统长按菜单的粘贴/粘贴为纯文本项一并移除
++          // （事件层的 onTextContextMenuItem 拦截是第二道防线，见 View）。
++          if (!selectionMenuConfig.paste) {
++            menu.removeItem(android.R.id.paste)
++            menu.removeItem(android.R.id.pasteAsPlainText)
++          }
+ 
+           if (selectionMenuConfig.format) {
+             val formatSubMenu =
+@@ -78,12 +88,15 @@ class InputContextMenu(
+             if (selectionMenuConfig.copyAsMarkdown) {
+               menu.add(FORMAT_MENU_GROUP_ID, MENU_COPY_MARKDOWN_ID, 101, selectionMenuConfig.copyAsMarkdownLabel)
+             }
++          }
+ 
+-            customItemTexts.forEachIndexed { index, text ->
+-              menu
+-                .add(CUSTOM_MENU_GROUP_ID, MENU_CUSTOM_BASE + index, index, text)
+-                .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+-            }
++          // 自定义项不受选区限制：无选区的长按（光标定位态）同样需要可达的自定义
++          // 入口——composer 关闭内置粘贴后，「粘贴」是唯一粘贴通道，必须在光标态
++          // 可见。onActionItemClicked 的 custom 处理对无选区返回空选中文本，已兼容。
++          customItemTexts.forEachIndexed { index, text ->
++            menu
++              .add(CUSTOM_MENU_GROUP_ID, MENU_CUSTOM_BASE + index, index, text)
++              .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+           }
+ 
+           return true
+@@ -135,6 +148,7 @@ class InputContextMenu(
+       StyleType.STRIKETHROUGH -> formatMenuConfig.strikethrough
+       StyleType.SPOILER -> formatMenuConfig.spoiler
+       StyleType.LINK -> formatMenuConfig.link
++      StyleType.TOKEN -> false
+     }
+ 
+   private fun applyFormat(styleType: StyleType) {
+diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/spans/RoundedBackgroundSpan.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/spans/RoundedBackgroundSpan.kt
+new file mode 100644
+index 0000000..7451bf6
+--- /dev/null
++++ b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/spans/RoundedBackgroundSpan.kt
+@@ -0,0 +1,76 @@
++package com.swmansion.enriched.markdown.spans
++
++import android.graphics.Canvas
++import android.graphics.Paint
++import android.graphics.RectF
++import android.text.style.ReplacementSpan
++import kotlin.math.roundToInt
++
++/**
++ * 圆角背景 span，用于胶囊视觉。
++ *
++ * getSize 返回文本实测宽 + paddingHorizontal * 2，draw 画 roundRect 圆角底。
++ * 纵向以基线 + 字形 ascent/descent 定界（而非整行行框 top/bottom）：行距的
++ * 富余空间全加在 descent 侧，用行框会让胶囊比文字高一截、垂到下一行
++ * （真机实报「回车后胶囊下面多了一部分渲染」）；贴字形度量即可与 web 的
++ * 行内 mark 视觉对齐。
++ */
++class RoundedBackgroundSpan(
++  private val backgroundColor: Int,
++  private val borderRadius: Float,
++  private val paddingHorizontal: Float,
++  private val paddingTop: Float,
++  private val paddingBottom: Float,
++) : ReplacementSpan() {
++
++  private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
++    style = Paint.Style.FILL
++    color = backgroundColor
++  }
++
++  private val rect = RectF()
++
++  override fun getSize(
++    paint: Paint,
++    text: CharSequence,
++    start: Int,
++    end: Int,
++    fm: Paint.FontMetricsInt?,
++  ): Int {
++    val textWidth = paint.measureText(text, start, end).roundToInt()
++    return (textWidth + paddingHorizontal * 2).roundToInt()
++  }
++
++  override fun draw(
++    canvas: Canvas,
++    text: CharSequence,
++    start: Int,
++    end: Int,
++    x: Float,
++    top: Int,
++    y: Int,
++    bottom: Int,
++    paint: Paint,
++  ) {
++    val textWidth = paint.measureText(text, start, end)
++    val totalWidth = textWidth + paddingHorizontal * 2
++
++    val left = x - paddingHorizontal
++    val right = x + totalWidth + paddingHorizontal
++    val fm = paint.fontMetrics
++    val rectTop = y + fm.ascent - paddingTop
++    val rectBottom = y + fm.descent + paddingBottom
++
++    rect.set(left, rectTop, right, rectBottom)
++
++    // 处理 span 首尾 padding 的 canvas translate
++    canvas.save()
++    canvas.translate(-paddingHorizontal, 0f)
++    canvas.drawRoundRect(rect, borderRadius, borderRadius, this.paint)
++    canvas.restore()
++    // ReplacementSpan 整体接管文本绘制：画完胶囊底色后必须自己把文字画出
++    // 来（基线 y、起点在 span 的 x 加前置 padding），复用传入的 paint——
++    // token 字色 span 才能照常生效。
++    canvas.drawText(text, start, end, left + paddingHorizontal, y.toFloat(), paint)
++  }
++}
+diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/utils/input/MarkdownStyleParser.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/utils/input/MarkdownStyleParser.kt
+index 9ff71ed..804f67c 100644
+--- a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/utils/input/MarkdownStyleParser.kt
++++ b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/utils/input/MarkdownStyleParser.kt
+@@ -22,6 +22,10 @@ object MarkdownStyleParser {
+       linkColor = linkMap!!.getInt("color"),
+       linkUnderline = linkMap.getBoolean("underline"),
+       linkBackgroundColor = linkMap.getInt("backgroundColor"),
++      linkBorderRadius = if (linkMap.hasKey("borderRadius")) linkMap.getInt("borderRadius") else 0,
++      linkPaddingHorizontal = if (linkMap.hasKey("paddingHorizontal")) linkMap.getInt("paddingHorizontal") else 0,
++      linkPaddingTop = if (linkMap.hasKey("paddingTop")) linkMap.getInt("paddingTop") else 0,
++      linkPaddingBottom = if (linkMap.hasKey("paddingBottom")) linkMap.getInt("paddingBottom") else 0,
+       linkVariants = parseLinkVariants(map),
+       spoilerColor = spoilerMap!!.getInt("color"),
+       spoilerBackgroundColor = spoilerMap.getInt("backgroundColor"),
+@@ -64,6 +68,10 @@ object MarkdownStyleParser {
+         color = variant.getInt("color"),
+         underline = variant.getBoolean("underline"),
+         backgroundColor = variant.getInt("backgroundColor"),
++        borderRadius = if (variant.hasKey("borderRadius")) variant.getInt("borderRadius") else 0,
++        paddingHorizontal = if (variant.hasKey("paddingHorizontal")) variant.getInt("paddingHorizontal") else 0,
++        paddingTop = if (variant.hasKey("paddingTop")) variant.getInt("paddingTop") else 0,
++        paddingBottom = if (variant.hasKey("paddingBottom")) variant.getInt("paddingBottom") else 0,
+       )
+     }
+   }
+diff --git a/node_modules/react-native-enriched-markdown/lib/module/EnrichedMarkdownTextInput.js b/node_modules/react-native-enriched-markdown/lib/module/EnrichedMarkdownTextInput.js
+index 5b348e8..d4ff3c0 100644
+--- a/node_modules/react-native-enriched-markdown/lib/module/EnrichedMarkdownTextInput.js
++++ b/node_modules/react-native-enriched-markdown/lib/module/EnrichedMarkdownTextInput.js
+@@ -136,7 +136,8 @@ export const EnrichedMarkdownTextInput = ({
+       format: format.enabled,
+       formatLabel: format.label,
+       copyAsMarkdown: copyAsMarkdown.enabled,
+-      copyAsMarkdownLabel: copyAsMarkdown.label
++      copyAsMarkdownLabel: copyAsMarkdown.label,
++      paste: selectionMenuConfig?.paste ?? true
+     };
+   }, [selectionMenuConfig]);
+   const normalizedFormatMenuConfig = useMemo(() => {
+@@ -364,6 +365,7 @@ export const EnrichedMarkdownTextInput = ({
+       insertLink: (text, url) => Commands.insertLink(commandRef, text, url),
+       insertText: text => Commands.insertText(commandRef, text),
+       insertMention: (displayText, url) => Commands.insertMention(commandRef, displayText, url),
++      setTokenRanges: ranges => Commands.setTokenRanges(commandRef, JSON.stringify(ranges.map(r => [r.start, r.end]))),
+       startMention: indicator => Commands.startMention(commandRef, indicator),
+       removeLink: () => Commands.removeLink(commandRef),
+       copyToClipboard: () => Commands.copyToClipboard(commandRef),
+diff --git a/node_modules/react-native-enriched-markdown/lib/module/EnrichedMarkdownTextInputNativeComponent.ts b/node_modules/react-native-enriched-markdown/lib/module/EnrichedMarkdownTextInputNativeComponent.ts
+index c2fec26..5342c1e 100644
+--- a/node_modules/react-native-enriched-markdown/lib/module/EnrichedMarkdownTextInputNativeComponent.ts
++++ b/node_modules/react-native-enriched-markdown/lib/module/EnrichedMarkdownTextInputNativeComponent.ts
+@@ -25,6 +25,10 @@ interface MarkdownTextInputStyleInternal {
+     color: ColorValue;
+     underline: boolean;
+     backgroundColor: ColorValue;
++    borderRadius: CodegenTypes.Float;
++    paddingHorizontal: CodegenTypes.Float;
++    paddingTop: CodegenTypes.Float;
++    paddingBottom: CodegenTypes.Float;
+   };
+   linkVariants: ReadonlyArray<
+     Readonly<{
+@@ -32,6 +36,10 @@ interface MarkdownTextInputStyleInternal {
+       color: ColorValue;
+       underline: boolean;
+       backgroundColor: ColorValue;
++      borderRadius: CodegenTypes.Float;
++      paddingHorizontal: CodegenTypes.Float;
++      paddingTop: CodegenTypes.Float;
++      paddingBottom: CodegenTypes.Float;
+     }>
+   >;
+   spoiler: {
+@@ -355,6 +363,10 @@ interface NativeCommands {
+     displayText: string,
+     url: string
+   ) => void;
++  setTokenRanges: (
++    viewRef: React.ElementRef<ComponentType>,
++    rangesJson: string
++  ) => void;
+   startMention: (
+     viewRef: React.ElementRef<ComponentType>,
+     indicator: string
+@@ -391,6 +403,7 @@ export const Commands: NativeCommands = codegenNativeCommands<NativeCommands>({
+     'insertLink',
+     'insertText',
+     'insertMention',
++    'setTokenRanges',
+     'startMention',
+     'removeLink',
+     'copyToClipboard',
+diff --git a/node_modules/react-native-enriched-markdown/lib/module/normalizeMarkdownTextInputStyle.js b/node_modules/react-native-enriched-markdown/lib/module/normalizeMarkdownTextInputStyle.js
+index 90562c8..2bd338b 100644
+--- a/node_modules/react-native-enriched-markdown/lib/module/normalizeMarkdownTextInputStyle.js
++++ b/node_modules/react-native-enriched-markdown/lib/module/normalizeMarkdownTextInputStyle.js
+@@ -6,6 +6,10 @@ import { normalizeColor } from "./styleUtils.js";
+ import { DEFAULT_HEADING_FONT_WEIGHT, HEADING_DEFAULTS } from "./headingDefaults.js";
+ const DEFAULT_LINK_COLOR = '#2563EB';
+ const DEFAULT_LINK_BG_COLOR = 'transparent';
++const DEFAULT_LINK_BORDER_RADIUS = 0;
++const DEFAULT_LINK_PADDING_H = 0;
++const DEFAULT_LINK_PADDING_TOP = 0;
++const DEFAULT_LINK_PADDING_BOTTOM = 0;
+ const DEFAULT_SPOILER_COLOR = '#374151';
+ const DEFAULT_SPOILER_BG_COLOR = '#E5E7EB';
+ 
+@@ -29,7 +33,11 @@ const defaultInternal = Object.freeze({
+   link: {
+     color: processColor(DEFAULT_LINK_COLOR),
+     underline: true,
+-    backgroundColor: processColor(DEFAULT_LINK_BG_COLOR)
++    backgroundColor: processColor(DEFAULT_LINK_BG_COLOR),
++    borderRadius: DEFAULT_LINK_BORDER_RADIUS,
++    paddingHorizontal: DEFAULT_LINK_PADDING_H,
++    paddingTop: DEFAULT_LINK_PADDING_TOP,
++    paddingBottom: DEFAULT_LINK_PADDING_BOTTOM
+   },
+   linkVariants: [],
+   spoiler: {
+@@ -60,7 +68,11 @@ function normalizeInputLinkStyle(style, fallback) {
+   return {
+     color: normalizeColor(style?.color) ?? fallback.color,
+     underline: style?.underline ?? fallback.underline,
+-    backgroundColor: normalizeColor(style?.backgroundColor) ?? fallback.backgroundColor
++    backgroundColor: normalizeColor(style?.backgroundColor) ?? fallback.backgroundColor,
++    borderRadius: style?.borderRadius ?? fallback.borderRadius,
++    paddingHorizontal: style?.paddingHorizontal ?? fallback.paddingHorizontal,
++    paddingTop: style?.paddingTop ?? fallback.paddingTop,
++    paddingBottom: style?.paddingBottom ?? fallback.paddingBottom
+   };
+ }
+ export const normalizeMarkdownTextInputStyle = style => {
+@@ -83,7 +95,11 @@ export const normalizeMarkdownTextInputStyle = style => {
+       pattern,
+       color: normalizeColor(override.color) ?? linkBase.color,
+       underline: override.underline ?? linkBase.underline,
+-      backgroundColor: normalizeColor(override.backgroundColor) ?? defaultInternal.link.backgroundColor
++      backgroundColor: normalizeColor(override.backgroundColor) ?? defaultInternal.link.backgroundColor,
++      borderRadius: override.borderRadius ?? linkBase.borderRadius,
++      paddingHorizontal: override.paddingHorizontal ?? linkBase.paddingHorizontal,
++      paddingTop: override.paddingTop ?? linkBase.paddingTop,
++      paddingBottom: override.paddingBottom ?? linkBase.paddingBottom
+     })),
+     spoiler: {
+       color: normalizeColor(style.spoiler?.color) ?? defaultInternal.spoiler.color,
+diff --git a/node_modules/react-native-enriched-markdown/lib/typescript/src/EnrichedMarkdownTextInput.d.ts b/node_modules/react-native-enriched-markdown/lib/typescript/src/EnrichedMarkdownTextInput.d.ts
+index 631fb19..44db59b 100644
+--- a/node_modules/react-native-enriched-markdown/lib/typescript/src/EnrichedMarkdownTextInput.d.ts
++++ b/node_modules/react-native-enriched-markdown/lib/typescript/src/EnrichedMarkdownTextInput.d.ts
+@@ -6,6 +6,14 @@ export interface LinkStyle {
+     color?: string;
+     underline?: boolean;
+     backgroundColor?: string;
++    /** 圆角半径（dp），>0 时用 RoundedBackgroundSpan 替代 BackgroundColorSpan */
++    borderRadius?: number;
++    /** 水平内边距（dp），胶囊左右各加此宽度 */
++    paddingHorizontal?: number;
++    /** 顶部内边距（dp） */
++    paddingTop?: number;
++    /** 底部内边距（dp） */
++    paddingBottom?: number;
+ }
+ export type HeadingLevel = 1 | 2 | 3 | 4 | 5 | 6;
+ export interface HeadingStyle {
+@@ -120,6 +128,10 @@ export interface EnrichedMarkdownTextInputInstance {
+     insertLink: (text: string, url: string) => void;
+     insertText: (text: string) => void;
+     insertMention: (displayText: string, url: string) => void;
++    setTokenRanges: (ranges: Array<{
++        start: number;
++        end: number;
++    }>) => void;
+     startMention: (indicator: string) => void;
+     removeLink: () => void;
+     copyToClipboard: () => void;
+@@ -147,6 +159,14 @@ export interface InputSelectionMenuConfig {
+      * @default { enabled: true, label: "Copy as Markdown" }
+      */
+     copyAsMarkdown?: MenuItem;
++    /**
++     * 内置「粘贴 / 粘贴为纯文本」开关（Android 长按菜单的系统项）。`false` 时
++     * 菜单项被移除，且 onTextContextMenuItem 对两个 paste id 整体消费（无操作，
++     * 兜底 ROM 直派路径）。供应用用 `contextMenuItems` 的自定义粘贴项接管，
++     * 由应用负责门控与截断。
++     * @default true
++     */
++    paste?: boolean;
+ }
+ /** Controls the individual items inside the Format submenu. */
+ export interface FormatMenuConfig {
+diff --git a/node_modules/react-native-enriched-markdown/lib/typescript/src/EnrichedMarkdownTextInputNativeComponent.d.ts b/node_modules/react-native-enriched-markdown/lib/typescript/src/EnrichedMarkdownTextInputNativeComponent.d.ts
+index 6f9148c..2f1d101 100644
+--- a/node_modules/react-native-enriched-markdown/lib/typescript/src/EnrichedMarkdownTextInputNativeComponent.d.ts
++++ b/node_modules/react-native-enriched-markdown/lib/typescript/src/EnrichedMarkdownTextInputNativeComponent.d.ts
+@@ -329,6 +329,10 @@ interface NativeCommands {
+     insertLink: (viewRef: React.ElementRef<ComponentType>, text: string, url: string) => void;
+     insertText: (viewRef: React.ElementRef<ComponentType>, text: string) => void;
+     insertMention: (viewRef: React.ElementRef<ComponentType>, displayText: string, url: string) => void;
++    setTokenRanges: (viewRef: React.ElementRef<ComponentType>, ranges: ReadonlyArray<Readonly<{
++        start: CodegenTypes.Int32;
++        end: CodegenTypes.Int32;
++    }>>) => void;
+     startMention: (viewRef: React.ElementRef<ComponentType>, indicator: string) => void;
+     removeLink: (viewRef: React.ElementRef<ComponentType>) => void;
+     copyToClipboard: (viewRef: React.ElementRef<ComponentType>) => void;
+diff --git a/node_modules/react-native-enriched-markdown/lib/typescript/src/normalizeMarkdownTextInputStyle.d.ts b/node_modules/react-native-enriched-markdown/lib/typescript/src/normalizeMarkdownTextInputStyle.d.ts
+index a306bfd..ff435cb 100644
+--- a/node_modules/react-native-enriched-markdown/lib/typescript/src/normalizeMarkdownTextInputStyle.d.ts
++++ b/node_modules/react-native-enriched-markdown/lib/typescript/src/normalizeMarkdownTextInputStyle.d.ts
+@@ -5,6 +5,10 @@ interface LinkVariantEntryInternal {
+     color: ColorValue;
+     underline: boolean;
+     backgroundColor: ColorValue;
++    borderRadius: number;
++    paddingHorizontal: number;
++    paddingTop: number;
++    paddingBottom: number;
+ }
+ interface HeadingStyleInternal {
+     fontSize: number;
+@@ -22,6 +26,10 @@ interface MarkdownTextInputStyleInternal {
+         color: ColorValue;
+         underline: boolean;
+         backgroundColor: ColorValue;
++        borderRadius: number;
++        paddingHorizontal: number;
++        paddingTop: number;
++        paddingBottom: number;
+     };
+     linkVariants: LinkVariantEntryInternal[];
+     spoiler: {
+diff --git a/node_modules/react-native-enriched-markdown/src/EnrichedMarkdownTextInput.tsx b/node_modules/react-native-enriched-markdown/src/EnrichedMarkdownTextInput.tsx
+index 4100c70..fc8ed34 100644
+--- a/node_modules/react-native-enriched-markdown/src/EnrichedMarkdownTextInput.tsx
++++ b/node_modules/react-native-enriched-markdown/src/EnrichedMarkdownTextInput.tsx
+@@ -56,6 +56,14 @@ export interface LinkStyle {
+   color?: string;
+   underline?: boolean;
+   backgroundColor?: string;
++  /** 圆角半径（dp），>0 时用 RoundedBackgroundSpan 替代 BackgroundColorSpan */
++  borderRadius?: number;
++  /** 水平内边距（dp），胶囊左右各加此宽度 */
++  paddingHorizontal?: number;
++  /** 顶部内边距（dp） */
++  paddingTop?: number;
++  /** 底部内边距（dp） */
++  paddingBottom?: number;
+ }
+ 
+ export type HeadingLevel = 1 | 2 | 3 | 4 | 5 | 6;
+@@ -159,6 +167,7 @@ export interface EnrichedMarkdownTextInputInstance {
+   insertLink: (text: string, url: string) => void;
+   insertText: (text: string) => void;
+   insertMention: (displayText: string, url: string) => void;
++  setTokenRanges: (ranges: Array<{ start: number; end: number }>) => void;
+   startMention: (indicator: string) => void;
+   removeLink: () => void;
+   copyToClipboard: () => void;
+@@ -176,15 +185,23 @@ export interface InputSelectionMenuConfig {
+   /**
+    * The built-in "Format" submenu (Bold, Italic, Underline, etc.) in the
+    * text selection context menu. `label` overrides the submenu title.
+-   * @default { enabled: true, label: "Format" }
++   * @default { format: true, label: "Format" }
+    */
+   format?: MenuItem;
+   /**
+    * The built-in "Copy as Markdown" action in the text selection context
+    * menu. `label` overrides the action title.
+-   * @default { enabled: true, label: "Copy as Markdown" }
++   * @default { format: true, label: "Copy as Markdown" }
+    */
+   copyAsMarkdown?: MenuItem;
++  /**
++   * 内置「粘贴 / 粘贴为纯文本」开关（Android 长按菜单的系统项）。`false` 时
++   * 菜单项被移除，且 onTextContextMenuItem 对两个 paste id 整体消费（无操作，
++   * 兜底 ROM 直派路径）。供应用用 `contextMenuItems` 的自定义粘贴项接管，
++   * 由应用负责门控与截断。
++   * @default true
++   */
++  paste?: boolean;
+ }
+ 
+ /** Controls the individual items inside the Format submenu. */
+@@ -435,6 +452,7 @@ export const EnrichedMarkdownTextInput = ({
+       formatLabel: format.label,
+       copyAsMarkdown: copyAsMarkdown.enabled,
+       copyAsMarkdownLabel: copyAsMarkdown.label,
++      paste: selectionMenuConfig?.paste ?? true,
+     };
+   }, [selectionMenuConfig]);
+ 
+@@ -704,6 +722,7 @@ export const EnrichedMarkdownTextInput = ({
+       insertText: (text) => Commands.insertText(commandRef, text),
+       insertMention: (displayText, url) =>
+         Commands.insertMention(commandRef, displayText, url),
++      setTokenRanges: (ranges) => Commands.setTokenRanges(commandRef, JSON.stringify(ranges.map((r) => [r.start, r.end]))),
+       startMention: (indicator) => Commands.startMention(commandRef, indicator),
+       removeLink: () => Commands.removeLink(commandRef),
+       copyToClipboard: () => Commands.copyToClipboard(commandRef),
+diff --git a/node_modules/react-native-enriched-markdown/src/EnrichedMarkdownTextInputNativeComponent.ts b/node_modules/react-native-enriched-markdown/src/EnrichedMarkdownTextInputNativeComponent.ts
+index c2fec26..5342c1e 100644
+--- a/node_modules/react-native-enriched-markdown/src/EnrichedMarkdownTextInputNativeComponent.ts
++++ b/node_modules/react-native-enriched-markdown/src/EnrichedMarkdownTextInputNativeComponent.ts
+@@ -25,6 +25,10 @@ interface MarkdownTextInputStyleInternal {
+     color: ColorValue;
+     underline: boolean;
+     backgroundColor: ColorValue;
++    borderRadius: CodegenTypes.Float;
++    paddingHorizontal: CodegenTypes.Float;
++    paddingTop: CodegenTypes.Float;
++    paddingBottom: CodegenTypes.Float;
+   };
+   linkVariants: ReadonlyArray<
+     Readonly<{
+@@ -32,6 +36,10 @@ interface MarkdownTextInputStyleInternal {
+       color: ColorValue;
+       underline: boolean;
+       backgroundColor: ColorValue;
++      borderRadius: CodegenTypes.Float;
++      paddingHorizontal: CodegenTypes.Float;
++      paddingTop: CodegenTypes.Float;
++      paddingBottom: CodegenTypes.Float;
+     }>
+   >;
+   spoiler: {
+@@ -355,6 +363,10 @@ interface NativeCommands {
+     displayText: string,
+     url: string
+   ) => void;
++  setTokenRanges: (
++    viewRef: React.ElementRef<ComponentType>,
++    rangesJson: string
++  ) => void;
+   startMention: (
+     viewRef: React.ElementRef<ComponentType>,
+     indicator: string
+@@ -391,6 +403,7 @@ export const Commands: NativeCommands = codegenNativeCommands<NativeCommands>({
+     'insertLink',
+     'insertText',
+     'insertMention',
++    'setTokenRanges',
+     'startMention',
+     'removeLink',
+     'copyToClipboard',
+diff --git a/node_modules/react-native-enriched-markdown/src/normalizeMarkdownTextInputStyle.ts b/node_modules/react-native-enriched-markdown/src/normalizeMarkdownTextInputStyle.ts
+index 240cd3e..df2f13e 100644
+--- a/node_modules/react-native-enriched-markdown/src/normalizeMarkdownTextInputStyle.ts
++++ b/node_modules/react-native-enriched-markdown/src/normalizeMarkdownTextInputStyle.ts
+@@ -17,6 +17,10 @@ interface LinkVariantEntryInternal {
+   color: ColorValue;
+   underline: boolean;
+   backgroundColor: ColorValue;
++  borderRadius: number;
++  paddingHorizontal: number;
++  paddingTop: number;
++  paddingBottom: number;
+ }
+ 
+ interface HeadingStyleInternal {
+@@ -36,6 +40,10 @@ interface MarkdownTextInputStyleInternal {
+     color: ColorValue;
+     underline: boolean;
+     backgroundColor: ColorValue;
++    borderRadius: number;
++    paddingHorizontal: number;
++    paddingTop: number;
++    paddingBottom: number;
+   };
+   linkVariants: LinkVariantEntryInternal[];
+   spoiler: {
+@@ -55,6 +63,10 @@ interface MarkdownTextInputStyleInternal {
+ 
+ const DEFAULT_LINK_COLOR = '#2563EB';
+ const DEFAULT_LINK_BG_COLOR = 'transparent';
++const DEFAULT_LINK_BORDER_RADIUS = 0;
++const DEFAULT_LINK_PADDING_H = 0;
++const DEFAULT_LINK_PADDING_TOP = 0;
++const DEFAULT_LINK_PADDING_BOTTOM = 0;
+ const DEFAULT_SPOILER_COLOR = '#374151';
+ const DEFAULT_SPOILER_BG_COLOR = '#E5E7EB';
+ 
+@@ -80,6 +92,10 @@ const defaultInternal: MarkdownTextInputStyleInternal = Object.freeze({
+     color: processColor(DEFAULT_LINK_COLOR)!,
+     underline: true,
+     backgroundColor: processColor(DEFAULT_LINK_BG_COLOR)!,
++    borderRadius: DEFAULT_LINK_BORDER_RADIUS,
++    paddingHorizontal: DEFAULT_LINK_PADDING_H,
++    paddingTop: DEFAULT_LINK_PADDING_TOP,
++    paddingBottom: DEFAULT_LINK_PADDING_BOTTOM,
+   },
+   linkVariants: [],
+   spoiler: {
+@@ -121,6 +137,10 @@ function normalizeInputLinkStyle(
+     underline: style?.underline ?? fallback.underline,
+     backgroundColor:
+       normalizeColor(style?.backgroundColor) ?? fallback.backgroundColor,
++    borderRadius: style?.borderRadius ?? fallback.borderRadius,
++    paddingHorizontal: style?.paddingHorizontal ?? fallback.paddingHorizontal,
++    paddingTop: style?.paddingTop ?? fallback.paddingTop,
++    paddingBottom: style?.paddingBottom ?? fallback.paddingBottom,
+   };
+ }
+ 
+@@ -152,6 +172,10 @@ export const normalizeMarkdownTextInputStyle = (
+         backgroundColor:
+           normalizeColor(override.backgroundColor) ??
+           defaultInternal.link.backgroundColor,
++        borderRadius: override.borderRadius ?? linkBase.borderRadius,
++        paddingHorizontal: override.paddingHorizontal ?? linkBase.paddingHorizontal,
++        paddingTop: override.paddingTop ?? linkBase.paddingTop,
++        paddingBottom: override.paddingBottom ?? linkBase.paddingBottom,
+       })
+     ),
+     spoiler: {
+diff --git a/node_modules/react-native-enriched-markdown/src/types/MarkdownStyle.ts b/node_modules/react-native-enriched-markdown/src/types/MarkdownStyle.ts
+index 11ec780..f54e925 100644
+--- a/node_modules/react-native-enriched-markdown/src/types/MarkdownStyle.ts
++++ b/node_modules/react-native-enriched-markdown/src/types/MarkdownStyle.ts
+@@ -120,6 +120,14 @@ export interface LinkStyle {
+   color?: string;
+   underline?: boolean;
+   backgroundColor?: string;
++  /** 圆角半径（dp），>0 时用 RoundedBackgroundSpan 替代 BackgroundColorSpan */
++  borderRadius?: number;
++  /** 水平内边距（dp），胶囊左右各加此宽度 */
++  paddingHorizontal?: number;
++  /** 顶部内边距（dp） */
++  paddingTop?: number;
++  /** 底部内边距（dp） */
++  paddingBottom?: number;
+ }
+ 
+ /**

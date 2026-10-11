@@ -1,37 +1,36 @@
 /**
- * chat-conversation 桥协议 v2 · RN 侧单源契约测试（chat-webview-unify Step 5/6）。
+ * chat-conversation 桥协议 v2 · RN 侧单源契约测试（chat-webview-unify Step 5/6；
+ * composer-native-2026-10 Step 2 按 D4c 改写到剥离后 API、Step 6 随合成包退役
+ * 去掉双端对账面）。
  *
- * 覆盖三块：
- * 1. **双端一致性**（T-CU3）：直接 import web 侧 `model.ts` 与 RN 侧
- *    `ChatConversationBridge.ts` 比对——这是「两份同形声明」唯一的正确性保障。
+ * 覆盖两块：
+ * 1. **单源形态锁**：`CONVERSATION_BRIDGE_V` / ready 版本 / 主题键集 /
+ *    下行 type 全集在 RN 侧的形态——合成包 web 侧 `model.ts` 已随 Step 6 退役，
+ *    「双端比对」不再存在；web 侧路由面在 chat-transcript 独立入口的 runtime
+ *    （switch 分发，无集中清单常量可 import），能力位真源在
+ *    `@/web/chat-transcript/transcript-capabilities`（RN 桥与 web 入口同源）。
  * 2. **宽松 decoder**：`ready` 判 `v === 2`；其余 type **不校验 v**
- *    （transcript / composer 两域上行恒为 v:1，校验即丢消息）。
+ *    （转录域上行恒为 v:1，校验即丢消息；剥离后残余 composer 域上行同样宽松放行、
+ *    宿主不消费）。
  * 3. **坏 JSON 宽容**：坏信封返回 `malformed`，宿主静默丢弃、绝不 throw 到渲染树。
  */
 import {describe, expect, it} from '@jest/globals';
 import {
   CONVERSATION_BRIDGE_V,
-  CONVERSATION_DOCK_ACTIONS,
+  CONVERSATION_READY_VERSION,
   CONVERSATION_THEME_KEYS,
   conversationCapabilitiesInclude,
-  conversationDockActionIncludes,
   decodeConversationUpstream,
   parseConversationScrollSnapshot,
   readReadyCapabilities,
   type ConversationHostMessage,
 } from '@/components/chat/ChatConversationBridge';
-// web 侧协议真源（同一份声明的另一半）
+// ready 的 t1 标识与转录域能力清单真源（web 独立入口 / RN 桥同源常量）
 import {
-  CONVERSATION_BRIDGE_V as WEB_CONVERSATION_BRIDGE_V,
-  CONVERSATION_READY_VERSION as WEB_CONVERSATION_READY_VERSION,
-  CONVERSATION_COMPOSER_METRICS as WEB_CONVERSATION_COMPOSER_METRICS,
-  CONVERSATION_DOCK_ACTIONS as WEB_CONVERSATION_DOCK_ACTIONS,
-  CONVERSATION_THEME_KEYS as WEB_CONVERSATION_THEME_KEYS,
-  CONVERSATION_COMPOSER_TYPES as WEB_CONVERSATION_COMPOSER_TYPES,
-  CONVERSATION_DOCK_TYPES as WEB_CONVERSATION_DOCK_TYPES,
-  CONVERSATION_TRANSCRIPT_TYPES as WEB_CONVERSATION_TRANSCRIPT_TYPES,
-  conversationCapabilities as webConversationCapabilities,
-} from '@/web/chat-conversation/webview/model';
+  TRANSCRIPT_READY_VERSION,
+  TRANSCRIPT_CAPABILITIES,
+  TRANSCRIPT_CAPABILITY_STREAM_BLOCK_COMMIT,
+} from '@/web/chat-transcript/transcript-capabilities';
 // 主题键集的唯一真源（web 侧 shared/host-theme；RN 与 web 两侧清单都从它派生）
 import {HOST_THEME_KEYS} from '@/web/shared/host-theme';
 import {CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION} from '@/services/chat-transcript-scroll-cache';
@@ -43,6 +42,10 @@ import {CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION} from '@/services/chat-transcript-
  * RN 联合类型增删一条 type 时这里是**编译错误**（缺键 / 多键都红），
  * 逼着同步本清单——否则「RN 加了下行 type 而 web 侧不跟随」就又变成无声漂移。
  * 类型擦除拿不到联合成员，所以这里必须落一份运行时名单；关键是让它被类型锁住。
+ *
+ * D4c 收口后为纯转录域 14 键：composer 域 7 条下行
+ * （setText/setSelection/setDisabled/blur/composerState/composerPaste/selectAll）
+ * 已从联合删除。
  */
 const RN_HOST_MESSAGE_TYPES: Record<ConversationHostMessage['type'], true> = {
   init: true,
@@ -59,114 +62,79 @@ const RN_HOST_MESSAGE_TYPES: Record<ConversationHostMessage['type'], true> = {
   flagsUpdate: true,
   closeMenu: true,
   closeMermaidViewer: true,
-  setText: true,
-  setSelection: true,
-  setDisabled: true,
-  blur: true,
-  composerState: true,
-  composerPaste: true,
-  selectAll: true,
 };
 
-describe('chat-conversation 桥协议 v2 · 双端一致性', () => {
-  it('T-CU3: CONVERSATION_BRIDGE_V 双端同为 2', () => {
+describe('chat-conversation 桥协议 v2 · 单源形态锁', () => {
+  it('T-CU3: CONVERSATION_BRIDGE_V 为 2（宿主下行信封 v；web 侧对账面已随合成包退役）', () => {
     expect(CONVERSATION_BRIDGE_V).toBe(2);
-    expect(WEB_CONVERSATION_BRIDGE_V).toBe(2);
-    expect(CONVERSATION_BRIDGE_V).toBe(WEB_CONVERSATION_BRIDGE_V);
   });
 
-  it('主题 9 键超集双端同序同集，且三处同源于 HOST_THEME_KEYS', () => {
+  it('ready 的 t1 标识：RN 侧与转录域真源同源（独立入口 t1），宿主判定只认 v===2', () => {
+    // 宿主对 ready 的判定只认 v === 2（decodeConversationUpstream），version
+    // 是辅助信息；同源断言保证「标识字符串」不出现第二份手抄。
+    expect(CONVERSATION_READY_VERSION).toBe(TRANSCRIPT_READY_VERSION);
+    expect(CONVERSATION_READY_VERSION).toBe('t1');
+  });
+
+  it('主题 9 键超集同源于 HOST_THEME_KEYS（web 侧同取此真源）', () => {
     expect(CONVERSATION_THEME_KEYS).toHaveLength(9);
     expect(CONVERSATION_THEME_KEYS).toContain('selection');
-    expect([...CONVERSATION_THEME_KEYS]).toEqual([...WEB_CONVERSATION_THEME_KEYS]);
-    // 排序对照（顺序之外的集合相等，防止两侧把同九个键排成两种顺序）
-    expect([...CONVERSATION_THEME_KEYS].sort()).toEqual(
-      [...WEB_CONVERSATION_THEME_KEYS].sort(),
-    );
     expect([...CONVERSATION_THEME_KEYS].sort()).toEqual(
       [...HOST_THEME_KEYS].sort(),
     );
-    // 三份键集不是各抄一份，而是同一个数组的三次引用——宿主改 THEME_VARS 一处即全跟随
+    // 两份键集不是各抄一份，而是同一个数组引用——宿主改 THEME_VARS 一处即全跟随
     expect(CONVERSATION_THEME_KEYS).toBe(HOST_THEME_KEYS);
-    expect(WEB_CONVERSATION_THEME_KEYS).toBe(HOST_THEME_KEYS);
   });
 
-  it('下行 type 全集：RN ConversationHostMessage 与 web 三清单扁平化相等', () => {
-    const webDownstreamTypes = [
-      'init',
-      'themeUpdate',
-      ...WEB_CONVERSATION_TRANSCRIPT_TYPES,
-      ...WEB_CONVERSATION_COMPOSER_TYPES,
-      ...WEB_CONVERSATION_DOCK_TYPES,
-    ];
+  it('下行 type 全集：RN 联合为纯转录 14 键', () => {
+    // 合成包退役后 web 侧无集中清单可对账（独立入口 runtime 用 switch 分发）；
+    // RN 侧的增删由上面的 Record 类型编译期锁住，此处钉运行时形态。
     const rnDownstreamTypes = Object.keys(RN_HOST_MESSAGE_TYPES);
-    // web 侧三清单内部不得有重复项（否则扁平化会引入伪计数）
-    expect(new Set(webDownstreamTypes).size).toBe(webDownstreamTypes.length);
-    // 双向相等：任一侧多一条/少一条都红（RN 侧的增删另由上面的 Record 类型锁住）
-    expect([...webDownstreamTypes].sort()).toEqual([...rnDownstreamTypes].sort());
-    // stickIfNearBottom 已在 web 清单移除（BASE 起无生产方），双端都不该再有
-    expect(webDownstreamTypes).not.toContain('stickIfNearBottom');
+    expect(rnDownstreamTypes).toHaveLength(14);
+    // stickIfNearBottom 已在 RN 联合移除（BASE 起无生产方）
     expect(rnDownstreamTypes).not.toContain('stickIfNearBottom');
+    // composer/dock 域 7 条下行已随 D4c 从 RN 联合退役
+    for (const retired of [
+      'setText',
+      'setSelection',
+      'setDisabled',
+      'blur',
+      'composerState',
+      'composerPaste',
+      'selectAll',
+    ]) {
+      expect(rnDownstreamTypes).not.toContain(retired);
+    }
   });
 
-  it('列表域下行/上行协议面已随回滚整体退役（双端都不该再有这些 type）', () => {
-    // 会话列表回到 RN：sessionList / viewState 下行与 listAction 上行三条协议面
-    // 双端同时删除。这里的 Record 类型锁 + 清单比对已经是强约束，再钉一次显式
-    // 名单，避免将来「只删一侧」被静默放过。
+  it('列表域下行协议面已随回滚整体退役（RN 侧不该再有这些 type）', () => {
+    // 会话列表回到 RN：sessionList / viewState 下行两条协议面已删除。
+    // 这里的 Record 类型锁 + 显式名单是防「只删一半」的静默放过；web 侧
+    // 对账面（合成包 model 的 LIST 常量）已随包退役，无从再查。
     const rnDownstreamTypes = Object.keys(RN_HOST_MESSAGE_TYPES);
     for (const retired of ['sessionList', 'viewState']) {
       expect(rnDownstreamTypes).not.toContain(retired);
     }
-    const webDownstreamTypes = [
-      ...WEB_CONVERSATION_TRANSCRIPT_TYPES,
-      ...WEB_CONVERSATION_COMPOSER_TYPES,
-      ...WEB_CONVERSATION_DOCK_TYPES,
-    ];
-    for (const retired of ['sessionList', 'viewState']) {
-      expect(webDownstreamTypes).not.toContain(retired);
-    }
-    // 上行 listAction 宽松 decoder 仍会收（它不校验 type 白名单），但 RN 侧
-    // 已无 parseConversationListAction 消费方 → 不再有任何 action 枚举声明。
-    const model = require('@/web/chat-conversation/webview/model');
-    expect(model.CONVERSATION_LIST_ACTIONS).toBeUndefined();
-    expect(model.CONVERSATION_LIST_TYPES).toBeUndefined();
   });
 
-  it('metrics 六值双端一致（漏 minHeight/fontSize 都违反 UI 一致）', () => {
-    expect(WEB_CONVERSATION_COMPOSER_METRICS).toEqual({
-      fontSize: 16,
-      lineHeight: 22,
-      paddingH: 4,
-      paddingV: 6,
-      minHeight: 56,
-      maxHeight: 122,
-    });
-  });
-
-  it('dockAction 六项双端一致', () => {
-    expect([...CONVERSATION_DOCK_ACTIONS]).toEqual([
-      ...WEB_CONVERSATION_DOCK_ACTIONS,
-    ]);
-    expect(CONVERSATION_DOCK_ACTIONS).toHaveLength(6);
-  });
-
-  it('能力协商：composer-dock 在 web capabilities 内，RN 侧可判定', () => {
-    const caps = webConversationCapabilities();
-    expect(caps).toContain('composer-dock');
-    expect(conversationCapabilitiesInclude(caps, 'composer-dock')).toBe(true);
+  it('能力协商：转录域能力位可判定（真源 = 独立入口 TRANSCRIPT_CAPABILITIES）', () => {
+    // 独立入口 ready 上报的 capabilities 是真源（RN 桥与 web main.ts 同源
+    // import）；RN 侧 ready 消费面只剩转录域 streamBlockCommit
+    // （D4b 剥离 composer-dock 判定）。
+    expect(TRANSCRIPT_CAPABILITIES).toContain(
+      TRANSCRIPT_CAPABILITY_STREAM_BLOCK_COMMIT,
+    );
+    expect(
+      conversationCapabilitiesInclude(
+        TRANSCRIPT_CAPABILITIES,
+        'streamBlockCommit',
+      ),
+    ).toBe(true);
     // 「未声明 = 不支持」：空清单一律 false
-    expect(conversationCapabilitiesInclude([], 'composer-dock')).toBe(false);
-    expect(conversationCapabilitiesInclude(undefined, 'composer-dock')).toBe(
+    expect(conversationCapabilitiesInclude([], 'streamBlockCommit')).toBe(false);
+    expect(conversationCapabilitiesInclude(undefined, 'streamBlockCommit')).toBe(
       false,
     );
-  });
-
-  it('dockAction 判定：枚举外一律拒（含类型混淆）', () => {
-    expect(conversationDockActionIncludes('send')).toBe(true);
-    expect(conversationDockActionIncludes('skillPicker')).toBe(true);
-    expect(conversationDockActionIncludes('rollback')).toBe(false);
-    expect(conversationDockActionIncludes(42)).toBe(false);
-    expect(conversationDockActionIncludes(null)).toBe(false);
   });
 });
 
@@ -176,7 +144,7 @@ describe('chat-conversation 宽松 decoder', () => {
       JSON.stringify({
         v: 2,
         type: 'ready',
-        payload: {version: WEB_CONVERSATION_READY_VERSION, capabilities: []},
+        payload: {version: TRANSCRIPT_READY_VERSION, capabilities: []},
       }),
     );
     expect(ok.ok).toBe(true);
@@ -198,8 +166,10 @@ describe('chat-conversation 宽松 decoder', () => {
     expect(res.ok).toBe(false);
   });
 
-  it('其余 type **不校验 v**：transcript / composer 域上行恒为 v:1 也要收', () => {
-    // 两旧 runtime 的 post 是模块级单例、BRIDGE_V=1 硬编码，上行必然是 v:1
+  it('其余 type **不校验 v**：转录域上行恒为 v:1 也要收', () => {
+    // 转录 runtime 的 post 是模块级单例、BRIDGE_V=1 硬编码，上行必然是 v:1。
+    // change / selectionChange 是剥离后的残余 composer 域上行（旧 dist 仍在发）：
+    // decoder 宽松放行、宿主不消费。
     for (const type of [
       'scrollSnapshot',
       'loadOlder',
@@ -209,8 +179,6 @@ describe('chat-conversation 宽松 decoder', () => {
       'copyCode',
       'change',
       'selectionChange',
-      'focus',
-      'blur',
     ]) {
       const res = decodeConversationUpstream(
         JSON.stringify({v: 1, type, payload: {}}),
@@ -227,16 +195,13 @@ describe('chat-conversation 宽松 decoder', () => {
     expect(noV.ok).toBe(true);
   });
 
-  it('dockAction（v:2）收下并保留 payload.action 供枚举判定', () => {
+  it('dockAction（v:2）宽松收下（宿主已不消费该上行，decoder 不做白名单过滤）', () => {
     const res = decodeConversationUpstream(
       JSON.stringify({v: 2, type: 'dockAction', payload: {action: 'send'}}),
     );
     expect(res.ok).toBe(true);
     if (res.ok) {
       expect(res.message.payload.action).toBe('send');
-      expect(conversationDockActionIncludes(res.message.payload.action)).toBe(
-        true,
-      );
     }
   });
 
@@ -273,12 +238,12 @@ describe('chat-conversation 宽松 decoder', () => {
     const res = decodeConversationUpstream({
       v: 2,
       type: 'ready',
-      payload: {capabilities: ['composer-dock']},
+      payload: {capabilities: ['streamBlockCommit']},
     });
     expect(res.ok).toBe(true);
     if (res.ok) {
       expect(readReadyCapabilities(res.message.payload)).toEqual([
-        'composer-dock',
+        'streamBlockCommit',
       ]);
     }
   });

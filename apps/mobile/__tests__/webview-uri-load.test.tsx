@@ -1,9 +1,9 @@
 /**
  * T-BB-04：URI helper + WebView 必配 props 矩阵（静态断言）。
  *
- * transcript-converge 后 chat-transcript 不再是独立包（旧文档壳与
- * `webview-host/chat-transcript/uri.ts` 一并退役，转录并入 chat-conversation），
- * 故本套件只覆盖余下四包。
+ * composer-native-2026-10 Step 5 起 chat-transcript 恢复独立包且成为对话宿主的
+ * 加载源（Step 2 建包、Step 5 切源）；Step 6 合成包退役，chat-conversation 的
+ * helper 与断言面随之移除，转录侧只认 chat-transcript。
  */
 import React from 'react';
 import {Platform} from 'react-native';
@@ -21,9 +21,9 @@ import {
   getCodeEditorUri,
 } from '@/webview-host/code-editor/uri';
 import {
-  getChatConversationPackageDirUri,
-  getChatConversationUri,
-} from '@/webview-host/chat-conversation/uri';
+  getChatTranscriptPackageDirUri,
+  getChatTranscriptUri,
+} from '@/webview-host/chat-transcript/uri';
 
 jest.mock('@/theme/ThemeProvider', () => ({
   useTheme: () => ({
@@ -86,11 +86,11 @@ describe('WebView URI load (T-BB-04)', () => {
       expect(getCodeEditorPackageDirUri()).toBe(
         'file:///android_asset/webview/code-editor/',
       );
-      expect(getChatConversationUri()).toBe(
-        'file:///android_asset/webview/chat-conversation/index.html',
+      expect(getChatTranscriptUri()).toBe(
+        'file:///android_asset/webview/chat-transcript/index.html',
       );
-      expect(getChatConversationPackageDirUri()).toBe(
-        'file:///android_asset/webview/chat-conversation/',
+      expect(getChatTranscriptPackageDirUri()).toBe(
+        'file:///android_asset/webview/chat-transcript/',
       );
     });
 
@@ -111,11 +111,11 @@ describe('WebView URI load (T-BB-04)', () => {
       expect(getCodeEditorPackageDirUri()).toBe(
         'file:///App/NovelMaster.app/WebViewDist/code-editor/',
       );
-      expect(getChatConversationUri()).toBe(
-        'file:///App/NovelMaster.app/WebViewDist/chat-conversation/index.html',
+      expect(getChatTranscriptUri()).toBe(
+        'file:///App/NovelMaster.app/WebViewDist/chat-transcript/index.html',
       );
-      expect(getChatConversationPackageDirUri()).toBe(
-        'file:///App/NovelMaster.app/WebViewDist/chat-conversation/',
+      expect(getChatTranscriptPackageDirUri()).toBe(
+        'file:///App/NovelMaster.app/WebViewDist/chat-transcript/',
       );
     });
   });
@@ -139,12 +139,12 @@ describe('WebView URI load (T-BB-04)', () => {
         require('react-native-webview').default as React.ComponentType,
       );
       expect(webView.props.source).toEqual({
-        uri: 'file:///android_asset/webview/chat-conversation/index.html',
+        uri: 'file:///android_asset/webview/chat-transcript/index.html',
       });
       expect(webView.props.allowFileAccess).toBe(true);
       expect(webView.props.allowFileAccessFromFileURLs).toBe(true);
       expect(webView.props.allowingReadAccessToURL).toBe(
-        'file:///android_asset/webview/chat-conversation/',
+        'file:///android_asset/webview/chat-transcript/',
       );
       expect(webView.props.javaScriptEnabled).toBe(true);
       // 合成包额外两项：sec/D-1 收紧到 file://（包内放行、外跳/拒绝在守卫里），
