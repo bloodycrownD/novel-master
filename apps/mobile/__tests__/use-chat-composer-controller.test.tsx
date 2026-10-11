@@ -484,6 +484,9 @@ describe('useChatComposerController · Picker 路径（M7 命令式通道）', (
     expect(cursor).toBe((text as string).length);
     expect(readChatComposerDraftState('s1').text).toBe('看这里 @docs/a.md ');
     expect(current().pickerOpen).toBe(true); // 关闭由宿主 Modal 自己驱动
+    // 插入咽喉点（CR-fix-04）：落文同时登记插入 token 的确认区间——
+    // '@docs/a.md' 落在 [4, 14)（'看这里 ' 之后），打字改中段前它就是胶囊。
+    expect(current().tokenRanges).toEqual([{start: 4, end: 14}]);
   });
 
   it('`$` 选择器确认：插入 $技能 token', async () => {
@@ -504,6 +507,9 @@ describe('useChatComposerController · Picker 路径（M7 命令式通道）', (
 
     expect(setComposerText).toHaveBeenCalledWith('$写作 ', 4);
     expect(readChatComposerDraftState('s1').text).toBe('$写作 ');
+    // 插入咽喉点（CR-fix-04）：空草稿插入 $技能，登记区间 [0, 3)（含触发符，
+    // '$写作' 共 3 字符）。
+    expect(current().tokenRanges).toEqual([{start: 0, end: 3}]);
   });
 
   it('有未完成 @ 查询时从触发符起替换（不残留半截查询）', async () => {
@@ -556,5 +562,81 @@ describe('useChatComposerController · composerState 组装', () => {
   it('safeAreaBottom 取 insets.bottom（键盘弹起时 dock 底 padding 归零由 web 侧做）', async () => {
     await mount();
     expect(current().safeAreaBottom).toBe(24);
+  });
+});
+
+/**
+ * 胶囊确认制 · tokenRanges 四咽喉点（CR-fix-04）。
+ *
+ * controller 的 tokenRanges state 有四处推进口，每处都是「注释掉就红」的
+ * 变异点：onChangeText 打字差分重映射、Picker/typeahead 落文登记（上方两条
+ * 断言补过）、水化/切换会话引导扫描、发送/清空归空。这里补打字/水化/清空
+ * 三条，插入登记两条已并入上方 Picker 用例。
+ */
+describe('useChatComposerController · tokenRanges 四咽喉点', () => {
+  /** 预置带 token 的初始草稿（controller 初值对它做一次正则全扫引导）。 */
+  function seedDraft(sessionId: string, text: string) {
+    writeChatComposerDraft(sessionId, text, mockRuntime.sessions);
+  }
+
+  it('打字咽喉点：差分重映射（头部插入右移 / 中段改动摘除）', async () => {
+    seedDraft('s1', '$时序图大纲');
+    await mount();
+    expect(current().tokenRanges).toEqual([{start: 0, end: 6}]);
+
+    // 头部插入：区间整体右移保留
+    await act(async () => {
+      current().onChangeText('先看 $时序图大纲');
+    });
+    expect(current().tokenRanges).toEqual([{start: 3, end: 9}]);
+
+    // 区间中段被改动（删除窗与胶囊重叠）：整条摘除
+    await act(async () => {
+      current().onChangeText('先看 $时序改稿');
+    });
+    expect(current().tokenRanges).toEqual([]);
+  });
+
+  it('水化/切换会话咽喉点：rerender 换 sessionId 后 tokenRanges 重扫', async () => {
+    seedDraft('s1', '');
+    const tree = await mount();
+    expect(current().tokenRanges).toEqual([]);
+
+    // s2 有带 token 的草稿：换 scope 触发水化 effect 的引导扫描
+    seedDraft('s2', '换个会话 $技能');
+    await act(async () => {
+      tree.update(<Harness scope={{projectId: 'p2', sessionId: 's2'}} />);
+    });
+    await flush();
+
+    expect(current().text).toBe('换个会话 $技能');
+    expect(current().tokenRanges).toEqual([{start: 5, end: 8}]);
+  });
+
+  it('发送咽喉点：append 成功后 tokenRanges 归空', async () => {
+    seedDraft('s1', '$时序图大纲');
+    await mount({setComposerText: jest.fn()});
+    expect(current().tokenRanges).toEqual([{start: 0, end: 6}]);
+
+    // 真机 manager 在 append 成功后同步回调；mock 补上这条回调路径。
+    mockStartRun.mockImplementation((...args: unknown[]) => {
+      const opts = args[3] as
+        | {
+            onUserMessageAppended?: () => void;
+            onSettled?: () => void;
+          }
+        | undefined;
+      opts?.onUserMessageAppended?.();
+      opts?.onSettled?.();
+      return {ok: true};
+    });
+
+    await act(async () => {
+      current().handleDockAction('send');
+    });
+    await flush();
+
+    expect(current().text).toBe('');
+    expect(current().tokenRanges).toEqual([]);
   });
 });

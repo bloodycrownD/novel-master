@@ -25,25 +25,26 @@ index 90aad4a..1a36e6b 100644
    void removeLink(T view);
    void copyToClipboard(T view);
 diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/EnrichedMarkdownTextInputManager.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/EnrichedMarkdownTextInputManager.kt
-index 512f5fc..c5fd500 100644
+index 512f5fc..89b4c31 100644
 --- a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/EnrichedMarkdownTextInputManager.kt
 +++ b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/EnrichedMarkdownTextInputManager.kt
-@@ -247,7 +247,13 @@ class EnrichedMarkdownTextInputManager :
+@@ -246,9 +246,12 @@ class EnrichedMarkdownTextInputManager :
+     view: EnrichedMarkdownTextInputView?,
      value: Float,
    ) {
-     if (value > 0 && view != null) {
+-    if (value > 0 && view != null) {
 -      view.setLineSpacing(value - view.textSize, 1f)
-+      // RN convention passes lineHeight in dp; upstream subtracted the raw value
-+      // from textSize (px), yielding a large negative add per line that collapses
-+      // adjacent text lines onto each other. Convert to px and compensate from the
-+      // paint's actual font metrics so each line lands on the requested height;
-+      // the view stores the dp target and recomputes after font-size changes
-+      // (prop order is not guaranteed).
-+      view.setPendingLineHeightDp(value)
-     }
+-    }
++    // RN 约定 lineHeight 传 dp；上游把它从 textSize（px）里直减，每行得到
++    // 一个大负增量、相邻文本行被压叠（空行隔开处不可见、连续行肉眼叠印）。
++    // dp→px 换算与基于 paint 真实 fontMetrics 的补偿由 View 侧承担；
++    // value > 0 的门禁一并下沉到 View：lineHeight 改回 0 / prop 删除时消
++    // 息同样要到达，行距才能回落回正（CR-fix-02）。
++    view?.setPendingLineHeightDp(value)
    }
  
-@@ -300,6 +306,7 @@ class EnrichedMarkdownTextInputManager :
+   @ReactProp(name = "fontFamily")
+@@ -300,6 +303,7 @@ class EnrichedMarkdownTextInputManager :
            formatLabel = value.getString("formatLabel") ?: "",
            copyAsMarkdown = value.getBoolean("copyAsMarkdown"),
            copyAsMarkdownLabel = value.getString("copyAsMarkdownLabel") ?: "",
@@ -51,7 +52,7 @@ index 512f5fc..c5fd500 100644
          )
        }
    }
-@@ -503,6 +510,21 @@ class EnrichedMarkdownTextInputManager :
+@@ -503,6 +507,21 @@ class EnrichedMarkdownTextInputManager :
      }
    }
  
@@ -74,7 +75,7 @@ index 512f5fc..c5fd500 100644
      view: EnrichedMarkdownTextInputView?,
      indicator: String?,
 diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/EnrichedMarkdownTextInputView.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/EnrichedMarkdownTextInputView.kt
-index 561cf66..e58f744 100644
+index 561cf66..45956a5 100644
 --- a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/EnrichedMarkdownTextInputView.kt
 +++ b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/EnrichedMarkdownTextInputView.kt
 @@ -13,6 +13,7 @@ import android.util.TypedValue
@@ -94,18 +95,24 @@ index 561cf66..e58f744 100644
  import com.swmansion.enriched.markdown.input.autolink.AutoLinkDetector
  import com.swmansion.enriched.markdown.input.autolink.LinkRegexConfig
  import com.swmansion.enriched.markdown.input.detection.DetectorPipeline
-@@ -277,7 +280,79 @@ class EnrichedMarkdownTextInputView(
+@@ -47,6 +50,7 @@ import com.swmansion.enriched.markdown.input.formatting.InputFormatter
+ import com.swmansion.enriched.markdown.input.formatting.InputParser
+ import com.swmansion.enriched.markdown.input.layout.InputEventEmitter
+ import com.swmansion.enriched.markdown.input.layout.InputLayoutManager
++import com.swmansion.enriched.markdown.input.layout.lineSpacingAddFrom
+ import com.swmansion.enriched.markdown.input.model.BlockRange
+ import com.swmansion.enriched.markdown.input.model.BlockType
+ import com.swmansion.enriched.markdown.input.model.FormattingRange
+@@ -277,7 +281,82 @@ class EnrichedMarkdownTextInputView(
    // See: ReactEditText in React Native core.
    override fun isLayoutRequested(): Boolean = false
  
 +  /*
-+   * Touch-drag vertical scrolling (novel-master patch): Editor gives drag
-+   * gestures to caret/selection, so a height-clamped multiline input has no
-+   * way to scroll by touch (scrollEnabled only enables caret-follow). When
-+   * scrollEnabled is on and the content overflows the viewport, take over
-+   * vertical-dominant drags (past touch slop, no active selection) and
-+   * translate them into scrollTo; taps and long-press selection still fall
-+   * through to super untouched.
++   * 触摸拖动纵向滚动（novel-master 补丁）：Editor 把拖动手势全部交给
++   * 光标/选择逻辑，高度封顶的多行输入框因此没有「用手指滚」的通路
++   * （scrollEnabled 只带动光标跟随）。当 scrollEnabled 开启且内容溢出可视
++   * 区时，接管纵向主导的拖动（超过触摸 slop、无活跃选区）翻译成 scrollTo；
++   * 点按与长按选择仍原样落给 super，行为不变。
 +   */
 +  private var dragScrollDownX = 0f
 +  private var dragScrollDownY = 0f
@@ -137,8 +144,8 @@ index 561cf66..e58f744 100644
 +            abs(dy) > abs(dx)
 +          ) {
 +            dragScrollActive = true
-+            // The gesture is a scroll, not a press: cancel the pending
-+            // long-press so it doesn't fire a selection mid-drag.
++            // 这一手势是滚动不是按压：取消挂起的长按，别让它在拖动中途
++            // 触发选区。
 +            cancelLongPress()
 +            parent?.requestDisallowInterceptTouchEvent(true)
 +          }
@@ -163,6 +170,11 @@ index 561cf66..e58f744 100644
 +      -> {
 +        if (dragScrollActive) {
 +          dragScrollActive = false
++          // 归还父容器拦截权：拖滚激活时向 parent 借了
++          // requestDisallowInterceptTouchEvent(true)，只复位 dragScrollActive
++          // 不还会把拦截状态悬挂在父容器上——封顶态长草稿拖滚后转录列表
++          // （滚动父级）再也收不到触摸事件（CR-fix-09）。UP/CANCEL 都要还。
++          parent?.requestDisallowInterceptTouchEvent(false)
 +          if (ev.actionMasked == MotionEvent.ACTION_UP) {
 +            performClick()
 +          }
@@ -174,12 +186,12 @@ index 561cf66..e58f744 100644
      when (ev.action) {
        MotionEvent.ACTION_DOWN -> {
          detectScrollMovement = true
-@@ -324,11 +399,18 @@ class EnrichedMarkdownTextInputView(
+@@ -324,11 +403,18 @@ class EnrichedMarkdownTextInputView(
  
    // In auto-grow mode (scrollEnabled=false) TextView's internal bringPointIntoView
    // scrolls content before Fabric has resized the view, causing a visible flicker.
-+  // Auto-grow still must let TextView reset a stale offset to zero after content
-+  // shrank (blocked otherwise, the old offset clips the first line's tops).
++  // Auto-grow 态仍要放行 TextView 把残留偏移归零回正：内容缩短后旧偏移不
++  // 归零会把首行胶囊顶裁（本仓补丁，scrollEnabled=false 分支的唯一放行口）。
    override fun scrollTo(
      x: Int,
      y: Int,
@@ -194,7 +206,7 @@ index 561cf66..e58f744 100644
      super.scrollTo(x, y)
    }
  
-@@ -729,6 +811,14 @@ class EnrichedMarkdownTextInputView(
+@@ -729,6 +815,14 @@ class EnrichedMarkdownTextInputView(
    // and block ranges survive the round trip — mirrors iOS's copy:/cut:/paste:
    // overrides. External clips keep default handling.
    override fun onTextContextMenuItem(id: Int): Boolean {
@@ -209,7 +221,7 @@ index 561cf66..e58f744 100644
      if (id == android.R.id.paste) {
        MarkdownClipboard.markdownFromClipboard(context)?.let { markdown ->
          pasteMarkdown(markdown)
-@@ -936,10 +1026,18 @@ class EnrichedMarkdownTextInputView(
+@@ -936,10 +1030,18 @@ class EnrichedMarkdownTextInputView(
      if (cursorStart != cursorEnd || cursorStart <= 0) return false
      if (text == null) return false
  
@@ -232,7 +244,7 @@ index 561cf66..e58f744 100644
      }
      dispatchMentionEvents(mentionCoordinator.clear())
      return true
-@@ -950,6 +1048,26 @@ class EnrichedMarkdownTextInputView(
+@@ -950,6 +1052,26 @@ class EnrichedMarkdownTextInputView(
      dispatchMentionUpdate()
    }
  
@@ -259,7 +271,7 @@ index 561cf66..e58f744 100644
    fun dismissActiveMention() {
      mentionCoordinator.clear(emit = false)
    }
-@@ -1007,9 +1125,44 @@ class EnrichedMarkdownTextInputView(
+@@ -1007,9 +1129,49 @@ class EnrichedMarkdownTextInputView(
      if (size <= 0f) return
      val sizePx = ceil(PixelUtil.toPixelFromSP(size))
      setTextSize(TypedValue.COMPLEX_UNIT_PX, sizePx)
@@ -268,42 +280,58 @@ index 561cf66..e58f744 100644
    }
  
 +  /**
-+   * Requested line height in dp (novel-master patch, see Manager.setLineHeight).
-+   * Stored so the px compensation can be recomputed after font-size/typeface
-+   * changes — prop application order is not guaranteed, and measuring against
-+   * a stale paint lands each line a few px off the target.
++   * 调用方请求的行高目标（dp 口径，novel-master 补丁；由
++   * Manager.setLineHeight 下发）。存 dp 是为了字号/字体变化后能重算 px 补偿
++   * ——prop 应用顺序不保证，拿过期 paint 测会让每行差出几 px。
 +   */
 +  private var pendingLineHeightDp = 0f
 +
++  /**
++   * 设置行高目标（dp）并立即生效（CR-fix-02：门禁从 Manager 下沉到这里——
++   * lineHeight 改回 0 / prop 被删除时也照达，行距才会回落回正）。
++   */
 +  fun setPendingLineHeightDp(valueDp: Float) {
 +    pendingLineHeightDp = valueDp
 +    applyPendingLineSpacing()
 +    layoutManager.invalidateLayout()
 +  }
 +
++  /**
++   * 把当前行高目标落到 setLineSpacing。<= 0f（无目标或目标被撤掉）时清掉
++   * 已应用的补偿、回到字体自然行距（CR-fix-02：此前这里直接 return，行距
++   * 卡在旧值不回退、测量缓存键还留着旧行高）。
++   */
 +  private fun applyPendingLineSpacing() {
-+    if (pendingLineHeightDp <= 0f) return
++    if (pendingLineHeightDp <= 0f) {
++      setLineSpacing(0f, 1f)
++      return
++    }
 +    setLineSpacing(lineSpacingAddPx, 1f)
 +  }
 +
 +  /**
-+   * Line-spacing addend in px (novel-master patch), shared with InputMeasurementStore:
-+   * the Yoga measure must apply the same per-line height as the renderer, otherwise
-+   * the measured content height drifts below what the view actually draws and the
-+   * last line gets clipped once the requested lineHeight exceeds the font's natural
-+   * line height.
++   * 行距补偿增量（px），与 InputMeasurementStore 的测量共用同一公式源
++   * （lineSpacingAddFrom，CR-fix-03）：Yoga 测量必须套与渲染一致的每行
++   * 高度，否则测得的内容高度比实际绘制的矮——lineHeight 超过字体自然行高
++   * 时最后一行会被裁。
 +   */
 +  internal val lineSpacingAddPx: Float
-+    get() {
-+      if (pendingLineHeightDp <= 0f) return 0f
-+      val targetPx = pendingLineHeightDp * resources.displayMetrics.density
-+      val fm = paint.fontMetricsInt
-+      return targetPx - (fm.descent - fm.ascent)
-+    }
++    get() = lineSpacingAddFrom(paint, pendingLineHeightDp, resources.displayMetrics.density)
 +
    fun setColorFromProps(colorInt: Int?) {
      setTextColor(colorInt ?: Color.BLACK)
    }
+@@ -1055,6 +1217,10 @@ class EnrichedMarkdownTextInputView(
+       )
+     typeface = newTypeface
+     paint.typeface = newTypeface
++    // CR-fix-07：行距补偿基于 paint 的真实 fontMetrics 折算，字体换了必须
++    // 重算——fontFamily/fontWeight prop 晚于 lineHeight 到达时，补偿若按旧
++    // 字体算就落不到目标行高（此前的「顺序无关」只覆盖了字号）。
++    applyPendingLineSpacing()
+     layoutManager.invalidateLayout()
+   }
+ 
 diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/formatting/InputFormatter.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/formatting/InputFormatter.kt
 index 8e3fc76..be2c0c2 100644
 --- a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/formatting/InputFormatter.kt
@@ -374,20 +402,30 @@ index 4e96cb7..b149d26 100644
  
      val state = Arguments.createMap()
 diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/layout/InputMeasurementStore.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/layout/InputMeasurementStore.kt
-index d7fc9ac..89a0fb5 100644
+index d7fc9ac..3492e32 100644
 --- a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/layout/InputMeasurementStore.kt
 +++ b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/layout/InputMeasurementStore.kt
-@@ -16,6 +16,9 @@ object InputMeasurementStore {
+@@ -6,7 +6,9 @@ import android.text.StaticLayout
+ import android.text.TextPaint
+ import androidx.appcompat.widget.AppCompatEditText
+ import com.facebook.react.bridge.ReadableMap
++import com.facebook.react.common.ReactConstants
+ import com.facebook.react.uimanager.PixelUtil
++import com.facebook.react.views.text.ReactTypefaceUtils
+ import com.facebook.yoga.YogaMeasureMode
+ import com.facebook.yoga.YogaMeasureOutput
+ import com.swmansion.enriched.markdown.input.formatting.InputParser
+@@ -16,6 +18,9 @@ object InputMeasurementStore {
    private data class PaintParams(
      val typeface: android.graphics.Typeface?,
      val fontSize: Float,
-+    // novel-master patch: the renderer's line-spacing addend (px). Part of the
-+    // cache key so a lineHeight prop change invalidates the cached size.
++    // novel-master 补丁：渲染侧的行距补偿增量（px）。进缓存键——lineHeight
++    // prop 变化时缓存尺寸必须失效，否则旧行高的测量结果会被继续复用。
 +    val lineSpacingAddPx: Float,
    )
  
    private data class MeasurementParams(
-@@ -31,12 +34,13 @@ object InputMeasurementStore {
+@@ -31,12 +36,13 @@ object InputMeasurementStore {
      id: Int,
      text: CharSequence?,
      paint: TextPaint,
@@ -403,7 +441,7 @@ index d7fc9ac..89a0fb5 100644
  
      data[id] = MeasurementParams(cachedWidth, size, text, paintParams)
      return size != cachedSize
-@@ -84,7 +88,7 @@ object InputMeasurementStore {
+@@ -84,7 +90,7 @@ object InputMeasurementStore {
          textSize = value.paintParams.fontSize
        }
  
@@ -412,27 +450,39 @@ index d7fc9ac..89a0fb5 100644
      data[id] = MeasurementParams(width, size, value.text, value.paintParams)
      return size
    }
-@@ -110,13 +114,31 @@ object InputMeasurementStore {
+@@ -104,19 +110,43 @@ object InputMeasurementStore {
+     val spSize = kotlin.math.ceil(PixelUtil.toPixelFromSP(fontSize).toDouble()).toFloat()
+ 
+     val defaultView = AppCompatEditText(context)
++    // CR-fix-03：paint 按 props 声明的 fontFamily/fontWeight 构造（与 View
++    // updateTypeface 的 ReactTypefaceUtils.applyStyles 同口径）——冷启动测量
++    // 若用 AppCompatEditText 默认字体，自定义字体下 fontMetrics 与渲染侧不
++    // 一致，行距补偿会差一行。props 未声明字体时 applyStyles 等价于默认字体
++    // （weight/family 皆 UNSET/null），无差异。
++    val typeface = ReactTypefaceUtils.applyStyles(
++      defaultView.typeface,
++      ReactConstants.UNSET,
++      ReactTypefaceUtils.parseFontWeight(props?.getString("fontWeight")),
++      props?.getString("fontFamily"),
++      context.assets,
++    )
+     val paint =
+       TextPaint(defaultView.paint).apply {
++        this.typeface = typeface
+         textSize = spSize
          isAntiAlias = true
        }
  
 -    return measure(width, text, paint)
-+    // novel-master patch: mirror the renderer's line-height compensation so the
-+    // cold measure lands on the same per-line height the view will draw (see
-+    // EnrichedMarkdownTextInputView.lineSpacingAddPx).
++    // novel-master 补丁：复刻渲染侧的行高补偿，让冷测的每行高度与 View 实际
++    // 绘制对齐（公式同源见 lineSpacingAddFrom / lineSpacingAddPx）。
 +    val lineHeightDp = props
 +      ?.takeIf { it.hasKey("lineHeight") }
 +      ?.getDouble("lineHeight")
 +      ?.toFloat()
 +      ?: 0f
 +    val lineSpacingAddPx =
-+      if (lineHeightDp > 0f) {
-+        val targetPx = lineHeightDp * context.resources.displayMetrics.density
-+        val fm = paint.fontMetricsInt
-+        targetPx - (fm.descent - fm.ascent)
-+      } else {
-+        0f
-+      }
++      lineSpacingAddFrom(paint, lineHeightDp, context.resources.displayMetrics.density)
 +
 +    return measure(width, text, paint, lineSpacingAddPx)
    }
@@ -445,7 +495,7 @@ index d7fc9ac..89a0fb5 100644
    ): Long {
      val content = text ?: ""
      val widthPx = maxWidth.toInt().coerceAtLeast(0)
-@@ -125,7 +147,7 @@ object InputMeasurementStore {
+@@ -125,7 +155,7 @@ object InputMeasurementStore {
        StaticLayout.Builder
          .obtain(content, 0, content.length, paint, widthPx)
          .setIncludePad(true)
@@ -454,6 +504,43 @@ index d7fc9ac..89a0fb5 100644
  
      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
        builder.setBreakStrategy(android.graphics.text.LineBreaker.BREAK_STRATEGY_HIGH_QUALITY)
+diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/layout/LineSpacing.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/layout/LineSpacing.kt
+new file mode 100644
+index 0000000..01f4214
+--- /dev/null
++++ b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/layout/LineSpacing.kt
+@@ -0,0 +1,31 @@
++package com.swmansion.enriched.markdown.input.layout
++
++import android.text.TextPaint
++
++/**
++ * 行距补偿增量的单一公式源（novel-master 补丁，CR-fix-03）。
++ *
++ * Yoga 测量与渲染必须套同一份「每行增量」：库的 InputMeasurementStore 原先以
++ * StaticLayout.setLineSpacing(0f, 1f) 自然行距测 content 高，而行高补偿只落
++ * 在渲染侧（View 每行 lineHeight dp）——测量每行比渲染矮一截，五行累计差出
++ * 一个行框，view 高度装不下渲染内容（真机像素取证：第五行暗像素仅
++ * 12px/66px 行框，输入框五行封顶后最后一行被裁）。
++ *
++ * 口径（RN 约定 lineHeight 入参是 dp）：换算成 px 后减去 paint 的真实字高
++ * （fontMetricsInt 的 ascent~descent），余数即每行要补的 px。调用方必须传入
++ * 与渲染路径同源的 paint（View 用自身 paint；InputMeasurementStore 冷测按
++ * props 的 fontFamily/fontWeight 构造），否则自定义字体下冷启动测量与渲染
++ * 仍会差一行。
++ *
++ * lineHeightDp <= 0 时返回 0f（自然行距、无补偿）。
++ */
++internal fun lineSpacingAddFrom(
++  paint: TextPaint,
++  lineHeightDp: Float,
++  density: Float,
++): Float {
++  if (lineHeightDp <= 0f) return 0f
++  val targetPx = lineHeightDp * density
++  val fm = paint.fontMetricsInt
++  return targetPx - (fm.descent - fm.ascent)
++}
 diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/model/InputFormatterStyle.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/model/InputFormatterStyle.kt
 index a961e67..bbad75c 100644
 --- a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/model/InputFormatterStyle.kt
@@ -671,7 +758,7 @@ index 1ebda75..634645b 100644
    private fun applyFormat(styleType: StyleType) {
 diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/spans/RoundedBackgroundSpan.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/spans/RoundedBackgroundSpan.kt
 new file mode 100644
-index 0000000..a9a5c16
+index 0000000..7451bf6
 --- /dev/null
 +++ b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/spans/RoundedBackgroundSpan.kt
 @@ -0,0 +1,76 @@
@@ -745,9 +832,9 @@ index 0000000..a9a5c16
 +    canvas.translate(-paddingHorizontal, 0f)
 +    canvas.drawRoundRect(rect, borderRadius, borderRadius, this.paint)
 +    canvas.restore()
-+    // ReplacementSpan replaces the default text rendering entirely: after painting the
-+    // capsule background we must draw the text ourselves (baseline y, origin at the
-+    // span's x plus leading padding), reusing the incoming paint so token color spans apply.
++    // ReplacementSpan 整体接管文本绘制：画完胶囊底色后必须自己把文字画出
++    // 来（基线 y、起点在 span 的 x 加前置 padding），复用传入的 paint——
++    // token 字色 span 才能照常生效。
 +    canvas.drawText(text, start, end, left + paddingHorizontal, y.toFloat(), paint)
 +  }
 +}

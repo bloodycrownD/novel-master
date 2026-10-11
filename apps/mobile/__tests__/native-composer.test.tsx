@@ -23,6 +23,7 @@ import {
   remapTokenRanges,
   scanTokensToRanges,
   synthesizeTokenMarkdown,
+  synthesizeTokenMarkdownFromRanges,
 } from '../src/components/chat/native-composer/token-ranges';
 import { composerInputMetrics } from '../src/components/chat/native-composer/dock-style';
 import { tryAtomicRangeDelete } from '../src/components/common/atomic-range-delete';
@@ -408,6 +409,51 @@ describe('NativeChatComposer（T-NC1~T-NC6）', () => {
         '[$时序图大纲](nmskill://时序图大纲) 手输$不成胶囊',
       ]);
     });
+
+    it('prop 收敛内容相等短路：同内容新数组身份不再二次下发（CR-fix-06）', () => {
+      const onChange = jest.fn();
+      const { tree } = renderComposer({
+        value: '$时序图大纲',
+        tokenRanges: [{ start: 0, end: 6 }],
+        onComposerChangeText: onChange,
+      });
+      // 挂载兜底下发 1 次（首帧 ranges）
+      expect(mockCalls.setTokenRanges).toHaveLength(1);
+
+      // controller 每键都产出新数组身份（差分重映射产物）：内容逐项相同即
+      // 视为已收敛——只更新 ref 不 dispatch。否则这里会形成第二次
+      // removeType+addRange+applyFormatting（span 全删重加），打字这一最热
+      // 路径上白付一次全量重格式化。
+      act(() => {
+        tree.update(
+          makeElement(onChange, {
+            value: '$时序图大纲',
+            tokenRanges: [{ start: 0, end: 6 }],
+          }),
+        );
+      });
+      expect(mockCalls.setTokenRanges).toHaveLength(1);
+
+      // 内容真变（登记了新胶囊）必须照常下发——注意只动 tokenRanges，
+      // value 保持同值：同时改 value 会触发 value 兜底 effect 的
+      // commitExternalText（另一条合法下发路径），把 dispatch 次数搅浑。
+      act(() => {
+        tree.update(
+          makeElement(onChange, {
+            value: '$时序图大纲',
+            tokenRanges: [
+              { start: 0, end: 6 },
+              { start: 7, end: 9 },
+            ],
+          }),
+        );
+      });
+      expect(mockCalls.setTokenRanges).toHaveLength(2);
+      expect(lastRanges()).toEqual([
+        { start: 0, end: 6 },
+        { start: 7, end: 9 },
+      ]);
+    });
   });
 
   describe('remapTokenRanges 纯函数（编辑侧语义单测）', () => {
@@ -445,6 +491,37 @@ describe('NativeChatComposer（T-NC1~T-NC6）', () => {
           { start: 5, end: 7 },
         ]),
       ).toEqual([]);
+    });
+  });
+
+  describe('synthesizeTokenMarkdownFromRanges 非法区间守卫（CR-fix-11）', () => {
+    const text = '正文 @a/b 尾';
+
+    it('负 start 跳过：slice(cursor, -1) 会按 from-end 切出错拼文本', () => {
+      expect(
+        synthesizeTokenMarkdownFromRanges(text, [{ start: -3, end: 2 }]),
+      ).toBe(text);
+    });
+
+    it('end < start 的翻转区间跳过', () => {
+      expect(
+        synthesizeTokenMarkdownFromRanges(text, [{ start: 5, end: 2 }]),
+      ).toBe(text);
+    });
+
+    it('end 越界（> text.length）跳过', () => {
+      expect(
+        synthesizeTokenMarkdownFromRanges(text, [{ start: 0, end: 99 }]),
+      ).toBe(text);
+    });
+
+    it('非法区间与合法区间混排：跳过坏的、照常合成好的', () => {
+      expect(
+        synthesizeTokenMarkdownFromRanges(text, [
+          { start: -3, end: 2 },
+          { start: 3, end: 7 },
+        ]),
+      ).toBe('正文 [@a/b](nmtoken://a/b) 尾');
     });
   });
 

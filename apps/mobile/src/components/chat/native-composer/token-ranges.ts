@@ -121,6 +121,8 @@ export function synthesizeTokenMarkdown(text: string): string {
  * 与 {@link synthesizeTokenMarkdown} 的唯一区别：区间由调用方给定（引用落文
  * 登记的确认区间），**不再正则全扫**——手输的 `$xxx` / `@xxx` 不合成链接、
  * 不成胶囊。区间须按 start 升序且互不重叠（登记与重映射的产物天然满足）。
+ * 越界/翻转/负下标的非法区间一律跳过（跳到下一区间，其余段照常拼接）——纯
+ * 防御，见循环内守卫注释。
  */
 export function synthesizeTokenMarkdownFromRanges(
   text: string,
@@ -132,7 +134,15 @@ export function synthesizeTokenMarkdownFromRanges(
   const parts: string[] = [];
   let cursor = 0;
   for (const range of ranges) {
-    if (range.start < cursor || range.end > text.length) {
+    // 守卫：负 start 会让 slice(cursor, -1) 改为按 from-end 切、切出错拼文本；
+    // end < start 的翻转区间同理。上游数学上不产出非法区间，这里是纯防御缺口
+    // （登记/重映射的产物天然合法，坏数据从外部调用方进来时才见）。
+    if (
+      range.start < 0 ||
+      range.end < range.start ||
+      range.end > text.length ||
+      range.start < cursor
+    ) {
       continue;
     }
     parts.push(text.slice(cursor, range.start));

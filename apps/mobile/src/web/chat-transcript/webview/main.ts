@@ -2,10 +2,13 @@
  * chat-transcript 独立入口（esbuild → IIFE app.js；composer-native-2026-10 Step 2）。
  *
  * 转录侧从 chat-conversation 合成包拆回独立文档：本包没有 composer runtime /
- * dock / dispatcher，runtime 自绑宿主 message 通道（`bindChannel: true`——合成包
- * 传 false 是因为 dispatcher 先行单次注册；独立入口无 dispatcher，注册权交还
- * runtime）。`emitReady: false` 必须显式关：runtime 自发的 ready 是 v:1 envelope
- * （`version:'m4'`），宿主只认 `v === 2`，由本入口自包一条 v:2 ready。
+ * dock / dispatcher——宿主 message 通道由本入口**自行**
+ * `bindHostMessageChannel(rawDowntranslate)` 承接 v2→v1 下译（拆包重打包逻辑
+ * 在 host-downtranslate.ts，原 dispatcher 的 transcript 半边，真机白屏根因层），
+ * runtime 以 `bindChannel: false` 装配、不再自绑（单次注册纪律保持）。
+ * `emitReady: false` 必须显式关：runtime 自发的 ready 是 v:1 envelope
+ * （`version:'m4'`），宿主只认 `v === 2`，由本入口自包一条 v:2 ready——
+ * ready 发言权仍归本入口。
  *
  * ready 形态与 chat-conversation/main.ts 的 `emitConversationReady` 同构（闸门 +
  * 单条 + DOMContentLoaded 兜底），两处差异：
@@ -20,66 +23,36 @@
  * 装配失败诊断」同一纪律。
  *
  * 上行 v 号：转录 runtime 内部的 `post` 单例仍是模块级 v:1（6+ 兄弟模块直接
- * import，不可替换）；本入口自持的 `createBoundPost(2)` **只**供 ready 使用。
- * 宿主只认 `v === 2` 的 ready，其余上行宽容解析（不校验 v）。
+ * import，不可替换）；本入口的 `createBoundPost(2)`（常量
+ * `TRANSCRIPT_ENTRY_BRIDGE_V`，host-downtranslate.ts 同源导出）**只**供 ready
+ * 使用。宿主只认 `v === 2` 的 ready，其余上行宽容解析（不校验 v）。
  *
  * es2018 纪律：web 代码禁 ES2021+ 运行时 API 与 lookbehind 正则（esbuild target es2018）。
  */
 import {createBoundPost} from '@web/shared/post';
 import {bindHostMessageChannel} from '@web/shared/host-message-channel';
 import {createTranscriptRuntime} from '@web/chat-transcript/webview/runtime/factory';
-import {handleHostMessage} from '@web/chat-transcript/webview/runtime/bridge';
+import {
+  TRANSCRIPT_ENTRY_BRIDGE_V,
+  rawDowntranslate,
+} from './host-downtranslate';
 import {
   TRANSCRIPT_CAPABILITIES,
   TRANSCRIPT_READY_VERSION,
 } from '@web/chat-transcript/transcript-capabilities';
 
-/**
- * 独立入口下行信封桥版本。与合成包 `CONVERSATION_BRIDGE_V` 同值：宿主的
- * ready 验收只认 `v === 2`，v 号语义是「v2 协议文档」而非「某个具体包」。
- */
-const TRANSCRIPT_ENTRY_BRIDGE_V = 2;
-
-/** runtime 老桥的下行信封版本（state.BRIDGE_V，消息头 v 恒为 1）。 */
-const TRANSCRIPT_RUNTIME_BRIDGE_V = 1;
-
 // 新入口自有上行出口（v:2）：仅 ready 一条（dockAction 随 dock 退役，无此上行）。
 const post = createBoundPost(TRANSCRIPT_ENTRY_BRIDGE_V);
 
 /**
- * 下行 v2→v1 翻译层（真机实锤补上）：宿主下行全是 v2 信封，而 runtime 的
- * `handleHostMessage` 用 `matchHostMessage(raw, BRIDGE_V)` 只认 v1——合成包时代
- * 这层拆包重打包由 dispatcher 承担，dispatcher 随包退役后若 runtime 直绑通道，
- * init/快照会在 `if (!msg) return` 处被静默丢弃（白屏无错误页）。故本入口承接
- * dispatcher 的 transcript 半边：**先**单次注册宿主通道，把 v2 拆包重打包成 v1
- * 喂给 runtime；runtime 以 `bindChannel: false` 装配（不再自绑，单次注册纪律保持）。
+ * 下行 v2→v1 翻译接线（真机实锤补上，3d206251e）：宿主下行全是 v2 信封，而
+ * runtime 的 `handleHostMessage` 用 `matchHostMessage(raw, BRIDGE_V)` 只认
+ * v1——合成包时代这层拆包重打包由 dispatcher 承担，dispatcher 随包退役后若
+ * runtime 直绑通道，init/快照会在 `if (!msg) return` 处被静默丢弃（白屏无
+ * 错误页）。故本入口**先**单次注册宿主通道承接翻译，runtime 不再自绑。
  * 未知 type 透传给 runtime 的 switch 自行忽略（宽松口径与 dispatcher 一致）。
  */
 bindHostMessageChannel(rawDowntranslate);
-
-function rawDowntranslate(raw: unknown): void {
-  let env: any = raw;
-  if (typeof raw === 'string') {
-    try {
-      env = JSON.parse(raw);
-    } catch {
-      return;
-    }
-  }
-  if (
-    env == null ||
-    typeof env !== 'object' ||
-    env.v !== TRANSCRIPT_ENTRY_BRIDGE_V ||
-    typeof env.type !== 'string'
-  ) {
-    return;
-  }
-  handleHostMessage({
-    v: TRANSCRIPT_RUNTIME_BRIDGE_V,
-    type: env.type,
-    payload: env.payload,
-  });
-}
 
 /* ---- 转录 runtime：不自绑通道（本入口已先绑并承接 v2→v1 翻译）、ready 发言权交本入口。 ---- */
 createTranscriptRuntime({bindChannel: false, emitReady: false});

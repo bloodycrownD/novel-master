@@ -475,8 +475,30 @@ export const NativeChatComposer = forwardRef<
     // 确认区间 prop 收敛（controller 的登记/引导/清空结果以此为准）：打字
     // 期间的本地重映射与 controller 侧跑的是同款纯函数同款输入，收敛即幂等；
     // 插入落文的首帧（M7 命令先于 prop 到达）也靠这里补上新胶囊。
+    //
+    // 内容相等短路（CR-fix-06）：controller 每键都产出新数组身份（重映射产物
+    // 逐键 setState），此 effect 若只按引用判等会每键重跑，与 handleChangeText
+    // 里的本地 dispatch 形成第二次 removeType+addRange+applyFormatting——span
+    // 全删重加，打字这一最热路径上白付一次全量重格式化（目标机低端荣耀
+    // Android 12 上表现为掉帧/IME 滞后）。逐项内容相同（length + start/end）
+    // 即判定已收敛：只把 ref 更新到 controller 那一份（后续差分重映射以它为
+    // 输入，内容同值与赋值等价），不再二次 dispatch；内容真变（登记/引导/
+    // 清空/会话切换）才下发。
     useEffect(() => {
       if (tokenRanges == null) {
+        return;
+      }
+      const confirmed = confirmedRangesRef.current;
+      if (
+        confirmed != null &&
+        confirmed.length === tokenRanges.length &&
+        confirmed.every(
+          (range, index) =>
+            range.start === tokenRanges[index]!.start &&
+            range.end === tokenRanges[index]!.end,
+        )
+      ) {
+        confirmedRangesRef.current = tokenRanges;
         return;
       }
       confirmedRangesRef.current = tokenRanges;
