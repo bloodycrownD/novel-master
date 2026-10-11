@@ -490,6 +490,23 @@ describe('T-SD2 useChatTabScope session-renamed 订阅契约', () => {
   });
 });
 
+// ── T-SD3 会话详情页失焦提交契约（源码正则断言） ────────────────────────────
+// 源码契约测豁免（tests/G-3，仿 T-SD2）：本文件 RN mock 把 ScrollView 渲染成普通
+// View、不消费 keyboardShouldPersistTaps，responder 抢占链（ScrollView capture →
+// blurTextInput → onEndEditing）无法行为化断言；回归仅守护 prop 值不被改回。
+// 历史坑：keyboardShouldPersistTaps="handled" 时页面 Pressable 卡片在 bubble 阶段
+// 抢走 responder，输入框永不失焦，inline 重命名提交不了（2026-10 真机反馈）。
+describe('T-SD3 会话详情页失焦提交契约', () => {
+  it('ScrollView 用 keyboardShouldPersistTaps="never" 保障编辑态点任意处失焦提交', () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, '../src/screens/stack/SessionDetailScreen.tsx'),
+      'utf8',
+    );
+    expect(source).toMatch(/keyboardShouldPersistTaps="never"/);
+    expect(source).not.toMatch(/keyboardShouldPersistTaps="handled"/);
+  });
+});
+
 // ── T-M5 picker select 分流 ─────────────────────────────────────────────────
 describe('T-M5 picker select 分流', () => {
   beforeEach(() => {

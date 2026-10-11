@@ -231,7 +231,13 @@ export function SessionDetailScreen() {
     <ScrollView
       style={styles.scroll}
       contentContainerStyle={styles.scrollContent}
-      keyboardShouldPersistTaps="handled"
+      keyboardShouldPersistTaps="never"
+      // ↑ 失焦提交的关键：编辑态（键盘弹起）时点击任意位置由 ScrollView capture
+      // 抢 responder → 收键盘 + blur → onEndEditing 触发 commitTitle，改名才提交。
+      // 之前用 "handled" 时点击被本页五张 Pressable 卡片在 bubble 阶段抢走，
+      // ScrollView 永不执行 blurTextInput → 输入框永不失焦 → 重命名提交不了。
+      // 非编辑态无焦点输入框，capture 不生效（_keyboardIsDismissable=false），
+      // 卡片仍是单次点击即达，行为零变化。
     >
       {/* 聊天名：大字标题 + 弱化铅笔暗示可编辑，点击切到 TextInput inline 编辑。 */}
       <View style={styles.titleBlock}>
