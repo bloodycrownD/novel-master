@@ -3,23 +3,16 @@
  *
  * 清理执行链在 core `createDbMaintenanceService`（缓存 GC → 防御性
  * checkpoint → VACUUM，事务外、驱动层互斥串行）；本服务只补 mobile 侧
- * 事情——Agent 运行守卫、数据库文件体积采样（blob-util stat），以及
- * 后台搬运的状态透传（存量 blob 行形态归一「去 base64」+ VFS 历史版本
- * 打包，均只读 KKV 标记/谓词计数，存储页状态行数据源）。
+ * 事情——Agent 运行守卫与数据库文件体积采样（blob-util stat）。
  * 错误口径：主链路（统计主指标/清理执行）以 reject 语义上抛（由调用方
- * toast）；两类状态采样是附属展示字段，独立兜底降级不上抛（见各自
- * sample 函数）。
+ * toast）。
+ *
+ * 存量 blob 归一与 VFS 历史版本打包两个后台搬运任务的状态透传已随
+ * 第七轮退役删除（v1.5.41 同批，任务本体一并出列）。
  *
  * @module services/db-maintenance.service
  */
-import {
-  createDbMaintenanceService,
-  getBlobBinaryStatus,
-  getVfsContentPackStatus,
-  type BlobBinaryTableStatus,
-  type TdbcConnection,
-  type VfsContentPackStatus,
-} from '@novel-master/core';
+import {createDbMaintenanceService} from '@novel-master/core';
 import {resolveMobileDatabaseFilePath} from '../db/db-file-path';
 import {isMobileAgentActive} from '../runtime/agent-activity';
 import type {MobileNovelMasterRuntime} from '../runtime/types';
@@ -30,9 +23,6 @@ import {
   releaseMobileDbMaintenanceBusy,
 } from './db-maintenance-busy';
 
-/** 归一状态行 DTO 直通 core 类型，调用方无需再引 core（app 层单一出口）。 */
-export type {BlobBinaryTableStatus, VfsContentPackStatus};
-
 /** 数据库文件体积采样（blob-util stat 的 size 为字符串，统一转 number）。 */
 async function statDatabaseFileBytes(): Promise<number> {
   const dbPath = await resolveMobileDatabaseFilePath();
@@ -41,64 +31,15 @@ async function statDatabaseFileBytes(): Promise<number> {
 }
 
 /**
- * blob 归一状态采样（附属展示字段，独立兜底）：失败只 console.warn 一次
- * 后返回空数组，不打拖主统计（库体积/可回收量）——对齐 desktop 侧同名
- * sample 的降级口径，空数组由 UI 渲染成占位 '—'。
- */
-async function sampleBlobBinaryStatus(
-  conn: TdbcConnection,
-): Promise<BlobBinaryTableStatus[]> {
-  try {
-    // 数组直接给列表渲染用：FlatList 需要稳定的扁平数组，故在此拍平；
-    // desktop 走 IPC DTO 惯例保留 { tables } 包装，两端形状不统一是
-    // 有意为之。
-    return [...(await getBlobBinaryStatus(conn)).tables];
-  } catch (err) {
-    console.warn('[db-maintenance] blobBinary 状态采样失败，展示为空', err);
-    return [];
-  }
-}
-
-/**
- * VFS 历史版本打包状态采样（附属展示字段，独立兜底）：失败只
- * console.warn 一次后返回 null，UI 侧 null → 占位 '—'。core 侧自带 3s
- * 采样节流（候选谓词查询防轮询 IO 放大），本层不再节流。
- */
-async function sampleVfsPackStatus(
-  conn: TdbcConnection,
-): Promise<VfsContentPackStatus | null> {
-  try {
-    return await getVfsContentPackStatus(conn);
-  } catch (err) {
-    console.warn(
-      '[db-maintenance] vfsPack 状态采样失败，展示为占位',
-      err,
-    );
-    return null;
-  }
-}
-
-/**
- * 采样当前存储统计：数据库文件体积 + VACUUM 理论可回收量（只读 PRAGMA）
- * + 存量 blob 行形态归一（去 base64）各注册表的进度 + VFS 历史版本打包状态。
+ * 采样当前存储统计：数据库文件体积 + VACUUM 理论可回收量（只读 PRAGMA）。
  *
- * `blobBinary` 为 core `getBlobBinaryStatus` 结果数组的拍平形态（只含已
- * 注册适配器的表，顺序与 core 注册表一致），调用方按 `table` 渲染状态行。
- * blobBinary 稳态为只读 KKV 标记，零 COUNT 成本；vfsPack 带 3s 节流（见
- * sample 注释）。仅用于展示，Agent 运行中抛中文 Error，由调用方决定
- * 静默或提示。
- *
- * 主统计（体积/可回收量）与两类状态采样各自独立兜底：状态采样失败只
- * warn 一次并降级（blobBinary → 空数组、vfsPack → null），不把附属展示
- * 字段的失败源传染给主统计指标（与 desktop 同口径）。
+ * 仅用于展示，Agent 运行中抛中文 Error，由调用方决定静默或提示。
  */
 export async function getDatabaseMaintenanceStats(
   runtime: MobileNovelMasterRuntime,
 ): Promise<{
   fileBytes: number;
   reclaimableBytes: number;
-  blobBinary: BlobBinaryTableStatus[];
-  vfsPack: VfsContentPackStatus | null;
 }> {
   if (isMobileAgentActive()) {
     throw new Error('Agent 运行中，请稍后再操作');
@@ -107,13 +48,9 @@ export async function getDatabaseMaintenanceStats(
     statDatabaseFileBytes(),
     createDbMaintenanceService(runtime.conn).getStorageStats(),
   ]);
-  const blobBinary = await sampleBlobBinaryStatus(runtime.conn);
-  const vfsPack = await sampleVfsPackStatus(runtime.conn);
   return {
     fileBytes,
     reclaimableBytes: stats.reclaimableBytes,
-    blobBinary,
-    vfsPack,
   };
 }
 

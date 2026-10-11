@@ -54,8 +54,6 @@ import {
 } from '@/services/stream-token-estimator';
 import {showAppToast} from '@/services/app-toast';
 import {setKeepAliveResidentEnabled} from '@/services/agent-finished-notification';
-import {scheduleMobileBlobBinaryNormalization} from '@/services/blob-binary-normalization.service';
-import {scheduleMobileVfsContentPacking} from '@/services/vfs-content-packing.service';
 import {readMessageNotificationEnabled} from '@/storage/message-notification-pref';
 import {tokensForMode} from '../theme/tokens';
 
@@ -188,8 +186,7 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
 
   // 可等待重建的挂起槽：retryAndWait 把自己挂上来，由下面的 boot effect 在
   // setRuntime 之后兑现。cancelled 分支也必须 reject——漏掉会让调用方永挂在
-  // await 上，外层 busy 令牌永不 release ⇒ 消息正文解压 / blob 归一两个后台
-  // 循环全进程停摆。
+  // await 上，外层 busy 令牌永不 release ⇒ 各后台循环全进程停摆。
   //
   // 归属判定（cr1-cloudsync P1-2）：槽内 waiter 带 bootToken 代号，兑现必须
   // 代际一致。原先这里是「单个全局槽 + 无归属」，已被 cleanup 标记 cancelled
@@ -356,14 +353,6 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
     // （fire-and-forget；retry 重建 runtime 后本 effect 重跑，dispose 全停
     // → 重新拉起的秒级闪断 PRD 已接受）。
     void ensureKeepAliveResidentBoot(appUiRef.current);
-    // 存量 blob 行形态归一（去 base64）的后台循环：同样 fire-and-forget，
-    // 幂等挂载（同一 runtime 重复调用不叠加循环）；retry 换新 runtime 时
-    // 本 effect 重跑，对新连接重挂一次。
-    scheduleMobileBlobBinaryNormalization(runtime);
-    // VFS 非 head 历史版本混合打包：同样 fire-and-forget，幂等挂载；无终态
-    // （本轮收敛即收工，新版本攒的新组由下次启动收敛），Agent 活跃/维护
-    // busy 自动让路（守卫口径与归一循环同源）。
-    scheduleMobileVfsContentPacking(runtime);
   }, [runtime]);
 
   const refreshScope = useCallback(async () => {

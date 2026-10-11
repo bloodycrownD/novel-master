@@ -2,15 +2,11 @@
  * 数据库维护（数据清理）服务：存储统计 + 缓存 GC/checkpoint/VACUUM 维护链路，
  * 外加启动期维护欠账的 pending 补跑公共逻辑。
  *
- * **为什么 pending 补跑落在本模块**（message-plaintext 迭代）：它的唯一定义
- * 原先内联在正向压缩任务 `message-content-compaction.ts` 里，而该文件已随
- * Step 3 整文件删除——留着会留下悬空的历史库维护欠账（旧
- * `nm-message-content/startupMaintenancePending` 再无人消费、页空间永不归还）。
- * 故把这段逻辑提到本公共模块并参数化 module/key，两代任务共用同一实现：
- * - blob 归一任务（`nm-blob-binary`）——
- *   `runDatabaseMaintenance` 内直查直删，见该函数注释；
- * - 旧/新 message 任务（`nm-message-content`）——反向搬运任务入口消费
- *   正向任务遗留的 pending 标记。
+ * 各端后台搬运任务已全部退役（消息正文解压/引用化回迁随 v1.5.40，blob 形态
+ * 归一与 VFS 历史版本打包随 v1.5.41 第七轮）；pending 补跑（module/key
+ * 参数化）作为通用件保留，供后续启动期后台任务复用——历史库残留的失败兜底
+ * 标记已无消费方（各任务入口均已退役），手动「数据清理」也不再顺带清标记
+ * （见 `runDatabaseMaintenance`）。
  *
  * @module infra/db-maintenance/impl/db-maintenance.service
  */
@@ -90,32 +86,6 @@ export function createDbMaintenanceService(
 
       const after = await readStorageStats(conn);
 
-      // advisory③（cr-01 方案 A）：手动「数据清理」成功返回前顺带清归一
-      // 任务的 startupMaintenancePending 补跑标记。手动链路同样回收了
-      // freelist 页，标记留着只会让下次冷启动多跑一次全库 VACUUM（纯浪费、
-      // 无正确性损失）。key 用字面量而不 import
-      // blob-binary-normalization 的常量——那边已经 import 了本模块的
-      // runStartupMaintenanceOnce，反向引用会形成循环依赖；nm-vfs-pack
-      // 同理（vfs-content-packing.ts 也 import 本模块）。清失败只
-      // warn：最坏后果就是那一次多余的 VACUUM，不得让手动清理报错。
-      try {
-        await conn.execute(
-          "DELETE FROM kkv_entry WHERE (module = ? AND key = ?) OR (module = ? AND key = ?)",
-          [
-            "nm-blob-binary",
-            "startupMaintenancePending",
-            "nm-vfs-pack",
-            "startupMaintenancePending",
-          ]
-        );
-      } catch (error) {
-        console.warn(
-          `[db-maintenance] 清 startupMaintenancePending 兜底标记失败，下次冷启动可能多跑一次维护：${
-            error instanceof Error ? error.message : String(error)
-          }`
-        );
-      }
-
       return {
         before,
         after,
@@ -131,10 +101,10 @@ export function createDbMaintenanceService(
 /**
  * 进程级「维护链路已跑过」标记。
  *
- * @remarks 归一任务（blob-binary-normalization）等启动期后台任务完成后会
- * 触发一次 VACUUM；同一进程内多个任务叠加时不应反复全库 VACUUM。手动
- * 「数据清理」走 {@link DbMaintenanceService.runDatabaseMaintenance}，
- * **不受**本标记约束——用户显式点击必须永远真执行。
+ * @remarks 启动期后台任务完成后会触发一次 VACUUM；同一进程内多个任务叠加
+ * 时不应反复全库 VACUUM。手动「数据清理」走 {@link
+ * DbMaintenanceService.runDatabaseMaintenance}，**不受**本标记约束——用户
+ * 显式点击必须永远真执行。
  */
 let startupMaintenanceRan = false;
 
@@ -184,7 +154,7 @@ export function callMaintenanceHook(
   }
 }
 
-/** {@link runPendingStartupMaintenance} 入参（module/key 参数化，两代任务共用）。 */
+/** {@link runPendingStartupMaintenance} 入参（module/key 参数化，各后台任务共用）。 */
 export interface PendingStartupMaintenanceArgs {
   /** pending 标记所在的 KKV module。 */
   readonly kkvModule: string;
@@ -210,8 +180,8 @@ export interface PendingStartupMaintenanceArgs {
  * （多补一次 VACUUM 无害，漏补则页空间永不回收），warn 说明即可。
  *
  * 必须用去重版而非手动 `runDatabaseMaintenance`：后者不受进程级去重
- * 约束，与 blob 归一任务叠加会跑出双 VACUUM（76MB 量级库的同步阻塞
- * 翻倍，正是 ic-01 要收口的事故形态）。
+ * 约束，多任务叠加时会把全库 VACUUM 跑成多次（大库的同步阻塞翻倍，正是
+ * ic-01 要收口的事故形态）。
  */
 export async function runPendingStartupMaintenance(
   conn: TdbcConnection,
