@@ -97,48 +97,21 @@ export type {
 
 /**
  * 数据库维护（数据清理）：存储统计 + 缓存 GC/checkpoint/VACUUM 维护链路
- * （VACUUM 须事务外调用，事务中调用由 SQLite 原生报错兜底）；另含两个
- * 谓词驱动、幂等可重入的后台搬运任务——存量 blob 行形态归一（zlib-b64
- * 文本 → 二进制 BLOB，完成后挂一次维护链路）与 VFS 非 head 历史版本
- * 混合打包（完成后挂一次维护链路）。不新增 exports 子路径——
- * `./compaction` 已被上下文裁剪域占用。VFS 打包另附应急工具：
- * verifyVfsContentPacks（pack 自包含校验）与 unpackVfsContent（反向展开
- * 回独立 blob 行）。
+ * （VACUUM 须事务外调用，事务中调用由 SQLite 原生报错兜底）。
  *
- * 消息正文解压搬运任务（message-plaintext 迁移层反向任务）与引用化回迁
- * 任务（v1.5.30 unref 回退的反向搬运）已随 V1' 与 E1 清理版退役
- * （v1.5.40 同批：真实库 content_blob IS NOT NULL / contentRef 谓词均
- * 归零、KKV decompressDone / unrefDone 均已置，读路径收口为单形态明文）。
+ * 四个谓词驱动的后台搬运任务均已退役：消息正文解压/引用化回迁（v1.5.40
+ * 第六轮）、存量 blob 形态归一与 VFS 非 head 历史版本打包（v1.5.41 第七轮
+ * ——真实库前置确认门均已过）。pack 两表与 `pack-codec` 读路径是现行数据
+ * 形态，继续由 content store 消费。
  */
 export {
-  BLOB_BINARY_KKV_MODULE,
   createDbMaintenanceService,
-  DEFAULT_BLOB_BINARY_SYNC_BUDGET_MS,
-  DEFAULT_VFS_PACK_SYNC_BUDGET_MS,
-  getBlobBinaryStatus,
-  getVfsContentPackStatus,
-  runBlobBinaryNormalization,
   runStartupMaintenanceOnce,
-  runVfsContentPacking,
-  unpackVfsContent,
-  verifyVfsContentPacks,
-  VFS_PACK_KKV_MODULE,
 } from "./infra/db-maintenance/index.js";
 export type {
-  BlobBinaryRunResult,
-  BlobBinaryStatus,
-  BlobBinaryTableId,
-  BlobBinaryTableStatus,
   DatabaseMaintenanceResult,
   DbMaintenanceService,
-  RunBlobBinaryNormalizationOptions,
-  RunVfsContentPackingOptions,
   StorageStats,
-  VfsContentPackRunResult,
-  VfsContentPackStatus,
-  VfsContentPackVerifyResult,
-  VfsContentUnpackResult,
-  VfsPackVerifyFailure,
 } from "./infra/db-maintenance/index.js";
 
 /**

@@ -1,12 +1,14 @@
 /**
- * 存储配置：存储空间概览、存量数据迁移进度、云端配置入口、数据清理与
- * 数据库导入导出。云同步状态与拉取/推送操作已迁移至 CloudSyncStorageScreen。
+ * 存储配置：存储空间概览、云端配置入口、数据清理与数据库导入导出。
+ * 云同步状态与拉取/推送操作已迁移至 CloudSyncStorageScreen。
+ *
+ * 「存量数据迁移」指标卡已随第七轮退役整卡移除（v1.5.41：存量 blob 形态
+ * 归一与 VFS 历史版本打包两个后台搬运任务退役，状态行与取值模块一并删除）。
  */
 import React, {useCallback, useEffect, useState} from 'react';
-import {Alert, ScrollView, StyleSheet, Text, View} from 'react-native';
+import {Alert, ScrollView, StyleSheet} from 'react-native';
 import {useFocusEffect, useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
-import {FormSectionCard} from '../../components/form/FormSectionCard';
 import {ProfileMenuItem} from '../../components/profile/ProfileMenuItem';
 import {ProfileStatusCard} from '../../components/profile/ProfileStatusCard';
 import {useToast} from '../../components/chrome/ToastHost';
@@ -20,14 +22,7 @@ import {
 import {
   getDatabaseMaintenanceStats,
   runDatabaseMaintenance,
-  type BlobBinaryTableStatus,
-  type VfsContentPackStatus,
 } from '../../services/db-maintenance.service';
-import {
-  blobBinaryValue,
-  vfsPackValue,
-  type MigrationValue,
-} from './storage-config-migration-values';
 import {getCloudSyncLocalStatus} from '../../services/cloud-sync-config.store';
 import {
   isMobileAgentActive,
@@ -37,14 +32,6 @@ import type {RootStackParamList} from '../../navigation/types';
 import {useTheme} from '../../theme/ThemeProvider';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
-
-/**
- * 维护指标轮询间隔（ic-23，方案 A）：长耗时搬运期间页面聚焦时按此间隔
- * 重采样，进度不再停在进页快照。取区间上沿 5s——blobBinary 未完成态的
- * 谓词 COUNT 不可索引（每表一次全表扫），mobile 端从宽留 IO 余量；
- * 稳态只读 KKV 标记，零 COUNT 成本。
- */
-const MAINTENANCE_STATS_POLL_INTERVAL_MS = 5_000;
 
 export function StorageConfigScreen() {
   const {tokens} = useTheme();
@@ -59,8 +46,6 @@ export function StorageConfigScreen() {
   const [dbReclaimableBytes, setDbReclaimableBytes] = useState<number | null>(
     null,
   );
-  const [blobBinary, setBlobBinary] = useState<BlobBinaryTableStatus[]>([]);
-  const [vfsPack, setVfsPack] = useState<VfsContentPackStatus | null>(null);
 
   const refreshCloudConfigured = useCallback(async () => {
     try {
@@ -78,14 +63,10 @@ export function StorageConfigScreen() {
       const stats = await getDatabaseMaintenanceStats(runtime);
       setDbFileBytes(stats.fileBytes);
       setDbReclaimableBytes(stats.reclaimableBytes);
-      setBlobBinary(stats.blobBinary);
-      setVfsPack(stats.vfsPack);
     } catch {
       // 统计仅用于展示（Agent 运行中会被守卫拒绝），失败静默占位
       setDbFileBytes(null);
       setDbReclaimableBytes(null);
-      setBlobBinary([]);
-      setVfsPack(null);
     }
   }, [runtime]);
 
@@ -113,38 +94,6 @@ export function StorageConfigScreen() {
     return '清理数据库空间';
   };
 
-  /**
-   * 迁移卡片三行（前两行用户拍板 2026-09-28；第三行随 vfs-content-pack
-   * 迭代新增）：两张 blob 表去 base64 + VFS 历史版本打包，指标卡形态
-   * 只读展示（非菜单项）。消息正文「去 base64」不设状态行——发版形态
-   * 下解压搬运直接写明文，不存在用户可见的中间态，仅开发机历史形态由
-   * 归一任务静默收敛。取值逻辑在 storage-config-migration-values
-   * （ic-22 抽出的纯函数，夹具直测）。
-   */
-  const migrationRows: ReadonlyArray<{label: string} & MigrationValue> = [
-    {
-      ...blobBinaryValue(blobBinary.find(row => row.table === 'vfsContent')),
-      label: '版本内容去 base64',
-    },
-    {
-      ...blobBinaryValue(blobBinary.find(row => row.table === 'fileCache')),
-      label: '文件缓存去 base64',
-    },
-    // 第三行（vfs-content-pack）：非 head 历史版本混合打包，无终态——
-    // 两态「无需处理 / 剩余 N 组」+ 坏组第三态，取值在 vfsPackValue。
-    {...vfsPackValue(vfsPack), label: '历史版本打包'},
-  ];
-
-  const migrationValueColor = (tone: MigrationValue['tone']): string => {
-    if (tone === 'success') {
-      return tokens.success;
-    }
-    if (tone === 'warning') {
-      return tokens.warning;
-    }
-    return tokens.text;
-  };
-
   useEffect(() => {
     setAgentActive(isMobileAgentActive());
     return subscribeMobileAgentActivity(setAgentActive);
@@ -154,13 +103,6 @@ export function StorageConfigScreen() {
     useCallback(() => {
       refreshCloudConfigured().catch(() => undefined);
       refreshMaintenanceStats().catch(() => undefined);
-      // ic-23（方案 A）：聚焦期间轮询重采样，长耗时搬运的进度不停在
-      // 进页快照；同一 cleanup 覆盖失焦与卸载，离开页面即停（不再空转
-      // 采样）。与「后台自动整理、期间可正常使用」的文案预期对齐。
-      const interval = setInterval(() => {
-        refreshMaintenanceStats().catch(() => undefined);
-      }, MAINTENANCE_STATS_POLL_INTERVAL_MS);
-      return () => clearInterval(interval);
     }, [refreshCloudConfigured, refreshMaintenanceStats]),
   );
 
@@ -179,27 +121,6 @@ export function StorageConfigScreen() {
         ]}
         tokens={tokens}
       />
-      <FormSectionCard
-        title="存量数据迁移"
-        hint="后台自动整理存量数据（消息正文解回明文、二进制化），期间可正常使用，Agent 运行时自动让路"
-        tokens={tokens}>
-        {migrationRows.map(row => (
-          <View key={row.label} style={styles.migrationRow}>
-            <Text
-              style={[styles.migrationLabel, {color: tokens.textSecondary}]}
-              numberOfLines={2}>
-              {row.label}
-            </Text>
-            <Text
-              style={[
-                styles.migrationValue,
-                {color: migrationValueColor(row.tone)},
-              ]}>
-              {row.value}
-            </Text>
-          </View>
-        ))}
-      </FormSectionCard>
       <ProfileMenuItem
         icon="☁️"
         label="云端配置"
@@ -297,23 +218,4 @@ export function StorageConfigScreen() {
 const styles = StyleSheet.create({
   scroll: {flex: 1},
   scrollContent: {paddingBottom: 24},
-  migrationRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    justifyContent: 'space-between',
-    gap: 12,
-    paddingVertical: 6,
-  },
-  migrationLabel: {
-    flexShrink: 1,
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  migrationValue: {
-    flexShrink: 0,
-    fontSize: 14,
-    lineHeight: 20,
-    fontVariant: ['tabular-nums'],
-    textAlign: 'right',
-  },
 });

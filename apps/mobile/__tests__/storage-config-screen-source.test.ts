@@ -1,16 +1,16 @@
 /**
  * StorageConfigScreen 重排后源码契约：T-UIM1。
  *
- * 断言：五区顺序（存储空间 → 云端配置 → 数据清理 → 导出 → 导入；存量
- * 数据迁移为存储空间卡之后的独立指标卡，不计入菜单区序）、存储空间卡
- * 体积展示、云端配置入口（进 CloudSyncStorage）、数据清理的 dbBusy 守
- * 卫、Alert 二次确认、失败 toast（toastMessage('清理失败')）、finally
- * 复位 dbBusy、云同步区已迁出本页（不再直接出现同步状态卡与拉取/推送
- * 菜单项）、迁移三行状态行契约（cr-21）与指标轮询接线（ic-23）。与
- * provider-detail-tabs.test.ts 同款源码断言手法：整屏依赖 runtime/
- * navigation/Toast 上下文，TestRenderer 行为化需逐层 mock，代价远超收
- * 益；交互行为由服务层 T-DMM 系列与 storage-config-screen-poll.test.tsx
- * 承担，此处钉住接线。
+ * 断言：五区顺序（存储空间 → 云端配置 → 数据清理 → 导出 → 导入）、存储
+ * 空间卡体积展示、云端配置入口（进 CloudSyncStorage）、数据清理的
+ * dbBusy 守卫、Alert 二次确认、失败 toast（toastMessage('清理失败')）、
+ * finally 复位 dbBusy、云同步区已迁出本页（不再直接出现同步状态卡与
+ * 拉取/推送菜单项）。与 provider-detail-tabs.test.ts 同款源码断言手法：
+ * 整屏依赖 runtime/navigation/Toast 上下文，TestRenderer 行为化需逐层
+ * mock，代价远超收益；交互行为由服务层 T-DMM 系列承担，此处钉住接线。
+ *
+ * 「存量数据迁移」卡片相关契约（cr-21 / ic-23 / T-VP22）已随第七轮退役
+ * 整卡移除（v1.5.41 同批）。
  */
 import {describe, expect, it} from '@jest/globals';
 import {readFileSync} from 'fs';
@@ -18,13 +18,6 @@ import {join} from 'path';
 
 const source = readFileSync(
   join(__dirname, '../src/screens/stack/StorageConfigScreen.tsx'),
-  'utf8',
-);
-
-// ic-22 后第三态分支移入纯函数模块：source 契约钉模块内分支字样，
-// 分支行为由 storage-config-migration-values.test.ts 四组夹具直测
-const migrationValuesSource = readFileSync(
-  join(__dirname, '../src/screens/stack/storage-config-migration-values.ts'),
   'utf8',
 );
 
@@ -89,89 +82,5 @@ describe('StorageConfigScreen 数据清理行为 — T-UIM1', () => {
   it('确认后调用 runDatabaseMaintenance(runtime)，成功 toast 含前后体积对比', () => {
     expect(source).toMatch(/runDatabaseMaintenance\(runtime\)/);
     expect(source).toMatch(/清理完成/);
-  });
-});
-
-describe('StorageConfigScreen 存量数据迁移卡片 — 指标卡形态（用户拍板 2026-09-28）', () => {
-  it('T-VP22: 状态行：版本内容去 base64 + 文件缓存去 base64 + 历史版本打包（相对顺序钉住）', () => {
-    expect(source).toMatch(/title="存量数据迁移"/);
-    // 状态行按此相对顺序渲染（两张 blob 表在前，历史版本打包收尾）
-    const vfsIdx = source.indexOf(`label: '版本内容去 base64'`);
-    const fileCacheIdx = source.indexOf(`label: '文件缓存去 base64'`);
-    expect(vfsIdx).toBeGreaterThanOrEqual(0);
-    expect(fileCacheIdx).toBeGreaterThan(vfsIdx);
-  });
-
-  it('cr-21: 迁移卡片位于存储空间卡之后（独立指标卡，先于菜单区，读的是拍平后既有形状）', () => {
-    // cr-21 原文写「顺序在『数据清理』之后」——与重排后的现状不符：
-    // 迁移指标卡排在存储空间卡之后、云端配置菜单之前（数据清理之前）。
-    // 此处按现状钉住相对位置；若后续用户拍板把迁移卡挪到数据清理之后，
-    // 本断言需同步改（位置契约以页面现状为准，不为本轮新增搬动）。
-    const storageIdx = source.indexOf('title="存储空间"');
-    const migrationIdx = source.indexOf('title="存量数据迁移"');
-    const cloudIdx = source.indexOf('label="云端配置"');
-    const cleanupIdx = source.indexOf('label="数据清理"');
-    expect(migrationIdx).toBeGreaterThan(storageIdx);
-    expect(migrationIdx).toBeLessThan(cloudIdx);
-    expect(migrationIdx).toBeLessThan(cleanupIdx);
-  });
-
-  it('cr-21: blob 状态行 value 取自 blobBinary 数组（拍平形态，按 table 查找）', () => {
-    // value 数据源是 service 拍平后的 BlobBinaryTableStatus[]（ic-22 抽出的
-    // 纯函数 + 组件内 find），不是 desktop 侧的 { tables } 包装形状
-    expect(source).toMatch(/blobBinary\.find\(row => row\.table === 'vfsContent'\)/);
-    expect(source).toMatch(/blobBinary\.find\(row => row.table === 'fileCache'\)/);
-    expect(source).toMatch(/from '\.\/storage-config-migration-values'/);
-  });
-
-  it('指标卡只读展示：迁移行不以 ProfileMenuItem 菜单项渲染', () => {
-    expect(source).not.toMatch(/label="版本内容去 base64"/);
-    expect(source).not.toMatch(/label="文件缓存去 base64"/);
-  });
-
-  it('cr-06 第三态：done 且 failedCount > 0 时显示「已完成（N 条需人工处理）」（分支在纯函数模块）', () => {
-    // 分支行为（四组夹具）由 storage-config-migration-values.test.ts 直测；
-    // 此处钉住模块内第三态分支与消费接线
-    expect(migrationValuesSource).toMatch(/failedCount > 0/);
-    expect(migrationValuesSource).toMatch(/条需人工处理/);
-    expect(source).toMatch(/from '\.\/storage-config-migration-values'/);
-  });
-
-  it('消息正文「去 base64」不设状态行（发版形态无用户可见中间态）', () => {
-    expect(source).not.toMatch(/消息正文去 base64/);
-  });
-
-  it('ic-23（方案 A）：聚焦轮询接线——useFocusEffect 内 setInterval，cleanup 里 clearInterval', () => {
-    expect(source).toMatch(/useFocusEffect\(/);
-    const intervalIdx = source.indexOf('setInterval(');
-    const focusIdx = source.indexOf('useFocusEffect(');
-    expect(intervalIdx).toBeGreaterThan(focusIdx);
-    // 同一 cleanup 覆盖失焦/卸载：clearInterval 在 useFocusEffect 的
-    // cleanup 返回函数里
-    expect(source).toMatch(/return \(\) => clearInterval\(interval\)/);
-  });
-
-  it('T-VP22: 第四行「历史版本打包」排在文件缓存去 base64 之后（相对顺序钉住）', () => {
-    const fileCacheIdx = source.indexOf(`label: '文件缓存去 base64'`);
-    const vfsPackIdx = source.indexOf(`label: '历史版本打包'`);
-    expect(fileCacheIdx).toBeGreaterThanOrEqual(0);
-    expect(vfsPackIdx).toBeGreaterThan(fileCacheIdx);
-  });
-
-  it('T-VP22: 第四行取值走 vfsPackValue 纯函数、数据源经 vfsPack state 接线', () => {
-    expect(source).toMatch(/vfsPackValue\(vfsPack\)/);
-    expect(source).toMatch(/setVfsPack\(stats\.vfsPack\)/);
-    expect(source).toMatch(/from '\.\/storage-config-migration-values'/);
-  });
-
-  it('T-VP22: 第四行同样只读展示（不以 ProfileMenuItem 菜单项渲染）', () => {
-    expect(source).not.toMatch(/label="历史版本打包"/);
-  });
-
-  it('T-VP22: 第三态分支在纯函数模块（failedGroups > 0 与「组需人工处理」字样）', () => {
-    // 分支行为（夹具直测）由 storage-config-migration-values.test.ts 的
-    // vfsPackValue describe 承担；此处钉住模块内第三态分支字样
-    expect(migrationValuesSource).toMatch(/failedGroups > 0/);
-    expect(migrationValuesSource).toMatch(/组需人工处理/);
   });
 });

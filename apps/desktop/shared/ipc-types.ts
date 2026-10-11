@@ -1746,64 +1746,10 @@ export type CompactionConditionsSetRequest = {
 export type BackupExportResult = 'saved' | 'cancelled';
 export type BackupImportResult = 'imported' | 'cancelled';
 
-/**
- * 存量 blob 形态归一覆盖的表标识全集。
- *
- * core 按适配器注册表回报状态（vfsContent / fileCache 两张均已注册；
- * messageContent 适配器已随 V1' 第 4 项退役——v1.5.40 同批）；`tables`
- * 缺席的表按「未取到」展示。
- */
-export type BlobBinaryTableIdDto = 'vfsContent' | 'fileCache';
-
-/** 单表归一状态：已完成（含需人工处理的坏行计数）/ 进行中（剩余 N 条）。 */
-export type BlobBinaryTableStatusDto = {
-  readonly table: BlobBinaryTableIdDto;
-  /** 已完成：KKV 完成标记已置，或谓词已空（等价完成）。 */
-  readonly done: boolean;
-  /** 未归一行数（进行中态的「剩余 N 条」，已完成恒为 0）。 */
-  readonly pendingCount: number;
-  /** 完成时被跳过的坏行数（原样保留、读路径按 miss 自愈，需人工关注）。 */
-  readonly failedCount: number;
-};
-
-/**
- * 存量 blob 形态归一状态（base64 文本 → 二进制 BLOB）。
- *
- * `tables` 只含 core 已注册的适配器，故本类型不含「未知表」兜底行；
- * 采样失败时为空数组，renderer 按未取到展示占位。
- */
-export type BlobBinaryStatusDto = {
-  readonly tables: readonly BlobBinaryTableStatusDto[];
-};
-
-/**
- * VFS 历史版本打包状态：无终态（新版本持续攒组），两态口径为「剩余
- * N 组 / 无需处理」+ 坏组第三态「已完成（N 组需人工处理）」；
- * `DbStatsResult.vfsPack` 上的 `null` = 未取到（采样失败），renderer
- * 显示占位 '—'，与 `blobBinary` 空表同口径。
- */
-export type VfsContentPackStatusDto = {
-  /** 候选组数（entry 口径近似；UI「剩余 N 组」）。 */
-  readonly pendingGroups: number;
-  /** 已打包成员数（pack member 表总行数）。 */
-  readonly memberCount: number;
-  /** pack 流字节总量（SUM(byte_len)）。 */
-  readonly streamBytes: number;
-  /** 上次收敛轮的坏组数快照（无快照为 0；第三态数据源）。 */
-  readonly failedGroups: number;
-};
-
 /** 数据库存储统计（文件体积由 main 侧 stat 提供，可回收量为 freelist 口径）。 */
 export type DbStatsResult = {
   readonly fileBytes: number;
   readonly reclaimableBytes: number;
-  /** 存量 blob 形态归一状态（存储页状态行数据源）。 */
-  readonly blobBinary: BlobBinaryStatusDto;
-  /**
-   * VFS 历史版本打包状态（迁移卡第三行数据源）；null = 未取到（采样
-   * 失败），renderer 显示 '—'；与 blobBinary 空表同口径。
-   */
-  readonly vfsPack: VfsContentPackStatusDto | null;
 };
 
 /** 数据清理（GC + checkpoint + VACUUM）前后库文件体积。 */

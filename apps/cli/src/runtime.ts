@@ -8,7 +8,7 @@ import { mkdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { deflateSync, inflateSync } from "node:zlib";
 import { registerTokenizerNodeDriver } from "@novel-master/tokenizer-driver-node";
-import { bootstrapNovelMaster, createPersistentPreferences, createPersistentState, open, registerZlibCodecAccelerator, runBlobBinaryNormalization, runVfsContentPacking, type PersistentPreferences, type PersistentState, type TdbcConnection } from "@novel-master/core";
+import { bootstrapNovelMaster, createPersistentPreferences, createPersistentState, open, registerZlibCodecAccelerator, type PersistentPreferences, type PersistentState, type TdbcConnection } from "@novel-master/core";
 import { refreshUserVfsUnifiedToolTurnSnapshot } from "@novel-master/core/feature-flags";
 
 import { createAgentRegistryService, createAgentStreamRegistry, createAgentAbortRegistry } from "@novel-master/core/agent";
@@ -201,19 +201,6 @@ export async function createNovelMasterRuntime(
     driver: "better-sqlite3",
   });
   await bootstrapNovelMaster(conn);
-  // 两任务串行最坏 60+30≈90s（命令进程短命，超预算残余由下次命令或
-  // 双端启动续跑）。顺序无功能依赖——归一谓词（blob 形态，仅 vfs/文件
-  // 缓存两张表）与打包谓词（hash 仍是 blob 行的非 head 历史版本）读明文
-  // 经 content store 三形态兼容，交错安全。
-  // 存量 blob 形态归一（zlib-b64 文本 → 二进制 BLOB）：幂等可重入；收尾
-  // 维护仅在本轮确有推进（成功改写 ≥1 行）且全部表完成时触发一次（稳态
-  // 零成本短路），上一轮维护失败由持久化标记 startupMaintenancePending 补跑。
-  await runBlobBinaryNormalization(conn);
-  // VFS 非 head 历史版本混合打包（小组 zlib-concat / 大组 fossil 链）：
-  // 同样幂等可重入（已落库的 pack 永不重写）；无终态——预算 30s 内收敛
-  // 即收工，新版本攒的新组由下次命令 / 双端启动收敛；收尾维护仅在本轮
-  // 确有打包或读到 pending 兜底标记时触发一次。
-  await runVfsContentPacking(conn);
 
   const state = createPersistentState(conn);
   const smartSortRule = createSmartSortRuleService(conn);

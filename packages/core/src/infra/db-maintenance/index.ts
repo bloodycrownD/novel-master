@@ -1,33 +1,16 @@
 /**
- * 数据库维护（数据清理）：存储统计、VACUUM 维护链路与两个谓词驱动的
- * 后台搬运任务（存量 blob 形态归一、VFS 非 head 历史版本混合打包）。
+ * 数据库维护（数据清理）：存储统计与 VACUUM 维护链路，外加启动期维护
+ * 欠账的 pending 补跑公共逻辑。
  *
- * 适配器注册表覆盖两张表（vfs_content_blob / session_file_cache_blob）；
- * blob 归一与 VFS 打包（含应急校验/反向展开工具）均从此出口导出。本目录
- * 任务并入主入口 index.ts 是既定出口设计（`./compaction` 子路径名已归属
- * 历史上下文裁剪域，不新增子路径）。
- *
- * 消息正文解压搬运（message-plaintext 反向任务）、blob 归一的 chat_message
- * 适配器与消息引用化回迁（v1.5.30 unref 回退的反向搬运）已随 V1' 与 E1
- * 清理版退役（v1.5.40 同批，前置确认：真实库 content_blob IS NOT NULL /
- * contentRef 谓词均归零，KKV decompressDone / unrefDone 均已置）。
+ * 两个谓词驱动的后台搬运任务——存量 blob 形态归一（`nm-blob-binary`）与
+ * VFS 非 head 历史版本混合打包（`nm-vfs-pack`）——已随第七轮退役（v1.5.41
+ * 同批：真实库前置确认门均已过，两表 content_hash 全为 64 位 hex 明文键、
+ * 打包零候选水位已置且零失败）。pack 两表与其读路径编码
+ * （`domain/vfs/content-store/logic/pack-codec.ts`）是现行数据形态，继续保留。
  *
  * @module infra/db-maintenance
  */
 
-export {
-  BLOB_BINARY_KKV_MODULE,
-  DEFAULT_BLOB_BINARY_SYNC_BUDGET_MS,
-  getBlobBinaryStatus,
-  runBlobBinaryNormalization,
-} from "./impl/blob-binary-normalization.js";
-export type {
-  BlobBinaryRunResult,
-  BlobBinaryStatus,
-  BlobBinaryTableId,
-  BlobBinaryTableStatus,
-  RunBlobBinaryNormalizationOptions,
-} from "./impl/blob-binary-normalization.js";
 export {
   createDbMaintenanceService,
   runStartupMaintenanceOnce,
@@ -37,19 +20,3 @@ export type {
   DbMaintenanceService,
   StorageStats,
 } from "./db-maintenance.port.js";
-export {
-  DEFAULT_VFS_PACK_SYNC_BUDGET_MS,
-  getVfsContentPackStatus,
-  runVfsContentPacking,
-  unpackVfsContent,
-  verifyVfsContentPacks,
-  VFS_PACK_KKV_MODULE,
-} from "./impl/vfs-content-packing.js";
-export type {
-  RunVfsContentPackingOptions,
-  VfsContentPackRunResult,
-  VfsContentPackStatus,
-  VfsContentPackVerifyResult,
-  VfsContentUnpackResult,
-  VfsPackVerifyFailure,
-} from "./impl/vfs-content-packing.js";

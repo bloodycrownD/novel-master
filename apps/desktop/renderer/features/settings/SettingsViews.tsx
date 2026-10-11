@@ -140,14 +140,10 @@ function formatStorageBytes(bytes: number): string {
 }
 
 /**
- * 存量数据迁移卡片的三行进度与取值逻辑（用户拍板 2026-09-28）已抽到同目录
- * 纯 ts 模块 {@link ./migration-row-value}（ic-22：测试直接 import 喂夹具，
- * 不拖 React 组件树）。
+ * 存量数据迁移卡片（三行进度：版本内容/文件缓存去 base64 + 历史版本打包）
+ * 已随第七轮退役整卡移除（v1.5.41：两个后台搬运任务退役，状态行与取值
+ * 模块一并删除）。
  */
-import {
-  MIGRATION_ROWS,
-  migrationRowValue,
-} from "./migration-row-value";
 
 export function DataManagementView() {
   const { retry } = useNovelMaster();
@@ -583,40 +579,6 @@ export function DataManagementView() {
           <Button variant="primary" disabled={controlsDisabled} onClick={() => setConfirmImport(true)}>
             导入数据库
           </Button>
-        }
-      />
-      <SettingsActionSection
-        title="存量数据迁移"
-        desc="后台自动整理存量数据（消息正文解回明文、二进制化），期间可正常使用，Agent 运行时自动让路。"
-        action={
-          <div className="settings-rows">
-            {MIGRATION_ROWS.map((row) => {
-              const value = migrationRowValue(dbStats, row);
-              return (
-                <div key={row.kind} className="settings-row settings-row--static">
-                  {/* cr-17：与同分区其它行同一类族（settings-row__*），
-                      缩进由 label 的 flex:1 承担，不写内联左移样式。 */}
-                  <span className="settings-row__label">{row.label}</span>
-                  <span
-                    className="settings-row__value"
-                    style={{
-                      /* ic-18：tone 三态着色走主题变量，不再有硬编码
-                          兜底色（两主题均已定义 --success/--warning，
-                          兜底只会让主题外泄）。 */
-                      color:
-                        value.tone === "success"
-                          ? "var(--success)"
-                          : value.tone === "warning"
-                            ? "var(--warning)"
-                            : undefined,
-                    }}
-                  >
-                    {value.text}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
         }
       />
       <SettingsActionSection

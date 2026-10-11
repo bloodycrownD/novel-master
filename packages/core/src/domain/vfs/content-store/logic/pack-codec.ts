@@ -328,12 +328,12 @@ export function isKnownVfsPackFormat(format: string): format is VfsPackFormat {
 }
 
 /**
- * 按 pack 的 `format` 分派解码组成员：**读路径（content store get/getMany）、
- * 完整性校验（verifyVfsContentPacks）、反向展开（unpackVfsContent）共用的唯一
- * 入口**。
+ * 按 pack 的 `format` 分派解码组成员：**读路径（content store get/getMany）
+ * 的唯一入口**。
  *
- * @remarks 此前这三个消费方各写一份逐字近似（两 if + 未知值抛错）的分派，
- *   新增 format 时漏改一处就会变成「写侧认得、读侧不认」的静默分叉，故收口于此。
+ * @remarks 此前读侧与打包任务各写一份逐字近似（两 if + 未知值抛错）的分派，
+ *   新增 format 时漏改一处就会变成「写侧认得、读侧不认」的静默分叉，故收口于此
+ *   （打包任务已随第七轮退役，本函数仍是 pack 数据的唯一解码入口）。
  *   形参取 `string` 而非 {@link VfsPackFormat}：库里的 `format` 列在 DDL CHECK
  *   之外仍可能读到脏值，未知值必须响亮失败而不是被类型断言掩过去。
  * @param packBytes pack 行的 bytes（fossil 为含段表的整段流）

@@ -1,8 +1,8 @@
 /**
- * T-VP1/2a/2b/4/5/6/6b/11/14/15：vfs_content_pack 读路径收口（content store 六方法
- * + findContentSizeByPath 回退 + 打包后 head 不变式）。pack/member 行分两种来路——
- * T-VP1/2/4/5/6/6b/14 由测试直接 INSERT 构造；T-VP2b 真跑一轮
- * `runVfsContentPacking` 走写侧。
+ * T-VP1/2a/2/4/5/6/6b/11/14/15：vfs_content_pack 读路径收口（content store 六方法
+ * + findContentSizeByPath 回退）。pack/member 行一律由测试直接 INSERT 构造
+ * （原 T-VP2b「真跑一轮 runVfsContentPacking 走写侧」已随第七轮任务退役删除，
+ * v1.5.41 同批；本文件只测读路径）。
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -22,7 +22,6 @@ import {
 import { hashContent } from "@/domain/vfs/content-store/logic/hash-content.js";
 import { compressZlib } from "@/domain/vfs/content-store/logic/zlib-codec.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
-import { runVfsContentPacking } from "@/infra/db-maintenance/impl/vfs-content-packing.js";
 import { CHARACTER_CARD_BLOB_COMPRESSED_GATE_BYTES } from "@/domain/character-card/logic/character-card-limits.js";
 import { loadOrFillFileCache } from "@/domain/workplace/logic/load-or-fill-file-cache.js";
 import {
@@ -671,112 +670,6 @@ describe("vfs content pack: store 读路径（T-VP1/2a/2b/4/5/6/6b/14/15）", ()
 
     assert.equal(await store.get(hHead), pHead);
     assert.equal((await store.getMany([hHead])).get(hHead), pHead);
-  });
-
-  // T-VP2 的打包后全量不变式（pbp-31）：谓词排除 head → 打包只搬非 head 历史
-  // 版本 → 跑完后每个 entry 的 head 都还有权威副本。
-  //
-  // 【口径澄清】判据取 blob 全集，落 blob 的 head 是 **T-VP2 的正常形态判据**；
-  // 跨 entry 归首遇（UNION member 判已存在 → tree-copy/seed 快路径）造成的
-  // member-only head 由 spec 放宽后的宽松式 INV1 覆盖，不在本用例口径内——
-  // 本夹具的 head 一律经 store.put 落 blob 行，不含该形态（末尾的反向验证专门
-  // 造一次该形态，只为证明谓词有判别力，随后立即清掉）。
-  it("T-VP2b: 打包任务跑完后所有 entry head 均有 blob 行（正常形态判据）", async () => {
-    const { conn } = getNovelMasterTestContext();
-    const store = new SqliteVfsContentStore(conn);
-    const entryRepo = new SqliteVfsEntryRepository(conn);
-    const suffix = testIsolationSuffix();
-    const sk = `tvp2b-scope-${suffix}`;
-
-    // 夹具：head 独立 blob + 两个历史版本（各自 blob 行 + active 非 head revision）。
-    const pHead = plainChunk(`vp2b-head`, suffix, 60);
-    const hHead = await store.put(pHead);
-    const path = `/tvp2b/entry-${suffix}.md`;
-    await entryRepo.insertWithContentHash(sk, path, hHead);
-    const entryId = await entryIdOf(conn, sk, path);
-    const historyHashes: string[] = [];
-    for (let version = 1; version <= 2; version++) {
-      const contentHash = await store.put(
-        plainChunk(`vp2b-v${version}`, suffix, 40 + version),
-      );
-      await insertActiveRevision(conn, entryId, version, contentHash);
-      historyHashes.push(contentHash);
-    }
-    await conn.execute(
-      `UPDATE vfs_entry SET head_version = 3 WHERE entry_id = ?`,
-      [entryId],
-    );
-
-    const result = await runVfsContentPacking(conn);
-    assert.equal(result.done, true, "本轮应正常收敛（非打转）");
-    assert.ok(
-      result.packedGroups >= 1,
-      `两个历史版本应至少落 1 组 pack，实际 ${result.packedGroups}`,
-    );
-    // 历史版本的 blob 行已被换成 member 行（谓词排除了 head 的证据）。
-    for (const contentHash of historyHashes) {
-      assert.equal(
-        await countRows(
-          conn,
-          `SELECT COUNT(*) AS n FROM vfs_content_pack_member WHERE content_hash = ?`,
-          [contentHash],
-        ),
-        1,
-        `历史版本 ${contentHash} 应落 member 行`,
-      );
-      assert.equal(
-        await countRows(
-          conn,
-          `SELECT COUNT(*) AS n FROM vfs_content_blob WHERE content_hash = ?`,
-          [contentHash],
-        ),
-        0,
-        "已收编成员的原 blob 行应被删",
-      );
-    }
-
-    // 全库扫描：不得存在「head 有 content_hash 却没有 blob 权威副本」的 entry。
-    const headWithoutBlob = `SELECT COUNT(*) AS n FROM vfs_entry
-      WHERE content_hash IS NOT NULL
-        AND content_hash NOT IN (SELECT content_hash FROM vfs_content_blob)`;
-    assert.equal(
-      await countRows(conn, headWithoutBlob, []),
-      0,
-      "打包跑完后所有 entry head 都应有 blob 行",
-    );
-
-    // 反向验证（谓词判别力）：造一个 head 指向 member-only hash 的 entry，同一
-    // 谓词必须立刻报出 1——否则上面那句 ===0 只是「库里本来就没有脏 head」的
-    // 恒真断言。造完即清，不给后续用例留 member-only head 污染。
-    const pRogue = plainChunk(`vp2b-rogue`, suffix, 20);
-    const rogueHash = hashContent(pRogue);
-    const { packId } = await insertPackRows(
-      conn,
-      /* entryId 对 pack 行只是归属标注，这里用夹具自己的 entry */
-      entryId,
-      VFS_PACK_FORMAT_ZLIB_CONCAT_V1,
-      [pRogue],
-    );
-    const roguePath = `/tvp2b/rogue-${suffix}.md`;
-    await entryRepo.insertWithContentHash(sk, roguePath, rogueHash);
-    assert.equal(
-      await countRows(conn, headWithoutBlob, []),
-      1,
-      "member-only head 必须被谓词报出（判别力自检）",
-    );
-    await conn.execute(`DELETE FROM vfs_entry WHERE scope_key = ? AND path = ?`, [
-      sk,
-      roguePath,
-    ]);
-    await conn.execute(`DELETE FROM vfs_content_pack_member WHERE pack_id = ?`, [
-      packId,
-    ]);
-    await conn.execute(`DELETE FROM vfs_content_pack WHERE pack_id = ?`, [packId]);
-    assert.equal(
-      await countRows(conn, headWithoutBlob, []),
-      0,
-      "夹具清理后全库应回到不变式",
-    );
   });
 
   it("T-VP4: GC 语义——无引用 pack 回收 / 成员被引用整包保留 / 孤儿 member 回收 / ref_count 触发器互不干扰", async () => {
