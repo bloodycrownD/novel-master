@@ -1,14 +1,18 @@
 /**
- * 迁移状态行取值纯函数四组夹具（ic-fix-spec ic-22 desktop）。
+ * 迁移状态行取值纯函数夹具（ic-fix-spec ic-22 desktop）。
  *
  * 取值逻辑已从 SettingsViews.tsx 抽到同目录纯 ts 模块（不拖 React 组件
  * 树与 electron preload 依赖），此处直接 import 喂夹具断言分支行为：
  * null→'—'；done→已完成（success）；!done→进行中（剩余 N 条）；done 且
  * failedCount>0→已完成（N 条需人工处理）（warning）。
  *
- * vfsPack 行（T-VP22 第四行）两态口径不同（无终态、无 done 字段）：
+ * vfsPack 行（历史版本打包）两态口径不同（无终态、无 done 字段）：
  * null→'—'；pendingGroups>0→剩余 N 组；收敛且 failedGroups===0→无需处理
  * （success）；收敛且 failedGroups>0→已完成（N 组需人工处理）（warning）。
+ *
+ * 消息正文明文化状态行（messageDecompress）已随 V1' 退役（v1.5.40 同批：
+ * 真实库实测压缩行归零 + KKV decompressDone 已置），其四组夹具使命完成、
+ * 连同 messageDecompressRow 常量一并删除。
  *
  * @module test/migration-row-value
  */
@@ -20,16 +24,12 @@ import {
 } from "../renderer/features/settings/migration-row-value.js";
 import type { DbStatsResult } from "../shared/ipc-types.js";
 
-const messageDecompressRow = MIGRATION_ROWS.find(
-  (row) => row.kind === "messageDecompress",
-)!;
 const vfsContentRow = MIGRATION_ROWS.find(
   (row) => row.kind === "vfsContent",
 )!;
 const vfsPackRow = MIGRATION_ROWS.find((row) => row.kind === "vfsPack")!;
 
 function stats(partial: {
-  messageDecompress?: DbStatsResult["messageDecompress"];
   blobBinary?: DbStatsResult["blobBinary"];
   vfsPack?: DbStatsResult["vfsPack"];
 }): DbStatsResult {
@@ -37,32 +37,24 @@ function stats(partial: {
     fileBytes: 1024,
     reclaimableBytes: 0,
     blobBinary: partial.blobBinary ?? { tables: [] },
-    messageDecompress: partial.messageDecompress ?? null,
     vfsPack: partial.vfsPack ?? null,
   };
 }
 
-describe("migrationRowValue 四组夹具（ic-22）", () => {
+describe("migrationRowValue 夹具（ic-22）", () => {
   it("null / 表行缺席 → '—'（未取到，tone=default）", () => {
-    assert.deepEqual(migrationRowValue(null, messageDecompressRow), {
+    // blobBinary 空表（采样失败兜底）：该表行缺席 → '—'。
+    assert.deepEqual(migrationRowValue(null, vfsContentRow), {
       text: "—",
       tone: "default",
     });
-    // blobBinary 空表（采样失败兜底）同口径：该表行缺席 → '—'。
-    assert.deepEqual(
-      migrationRowValue(stats({ messageDecompress: { done: true, pendingCount: 0 } }), vfsContentRow),
-      { text: "—", tone: "default" },
-    );
+    assert.deepEqual(migrationRowValue(stats({}), vfsContentRow), {
+      text: "—",
+      tone: "default",
+    });
   });
 
   it("done → 已完成（tone=success）", () => {
-    assert.deepEqual(
-      migrationRowValue(
-        stats({ messageDecompress: { done: true, pendingCount: 0 } }),
-        messageDecompressRow,
-      ),
-      { text: "已完成", tone: "success" },
-    );
     assert.deepEqual(
       migrationRowValue(
         stats({
@@ -79,13 +71,6 @@ describe("migrationRowValue 四组夹具（ic-22）", () => {
   });
 
   it("!done → 进行中（剩余 N 条）（tone=default）", () => {
-    assert.deepEqual(
-      migrationRowValue(
-        stats({ messageDecompress: { done: false, pendingCount: 5 } }),
-        messageDecompressRow,
-      ),
-      { text: "进行中（剩余 5 条）", tone: "default" },
-    );
     assert.deepEqual(
       migrationRowValue(
         stats({
@@ -118,11 +103,11 @@ describe("migrationRowValue 四组夹具（ic-22）", () => {
   });
 });
 
-describe("vfsPack 第四行夹具 + MIGRATION_ROWS 顺序（T-VP22）", () => {
-  it("MIGRATION_ROWS 顺序：消息正文明文化 → 版本内容 → 文件缓存 → 历史版本打包（第四行殿后）", () => {
+describe("vfsPack 行夹具 + MIGRATION_ROWS 顺序（T-VP22）", () => {
+  it("MIGRATION_ROWS 顺序：版本内容 → 文件缓存 → 历史版本打包（殿后）", () => {
     assert.deepEqual(
       MIGRATION_ROWS.map((row) => row.kind),
-      ["messageDecompress", "vfsContent", "fileCache", "vfsPack"],
+      ["vfsContent", "fileCache", "vfsPack"],
     );
     assert.equal(vfsPackRow.label, "历史版本打包");
   });
@@ -133,13 +118,10 @@ describe("vfsPack 第四行夹具 + MIGRATION_ROWS 顺序（T-VP22）", () => {
       tone: "default",
     });
     // 夹具默认 vfsPack 为 null（未传）同口径
-    assert.deepEqual(
-      migrationRowValue(
-        stats({ messageDecompress: { done: true, pendingCount: 0 } }),
-        vfsPackRow,
-      ),
-      { text: "—", tone: "default" },
-    );
+    assert.deepEqual(migrationRowValue(stats({}), vfsPackRow), {
+      text: "—",
+      tone: "default",
+    });
   });
 
   it("pendingGroups > 0 → 剩余 N 组（tone=default 进行中态）", () => {

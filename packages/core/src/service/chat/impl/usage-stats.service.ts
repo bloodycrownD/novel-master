@@ -9,7 +9,6 @@ import { queryTemplate } from "@/infra/tdbc/logic/template-helper.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import type { Row } from "@/infra/tdbc/types.js";
 import { parseMessageContent } from "@/domain/chat/content/parse-message-content.js";
-import { decodeMessageContent } from "@/domain/chat/logic/message-content-codec.js";
 import { countToolUseBlocks } from "@/domain/chat/logic/tool-use-count.js";
 import {
   SESSION_KKV_DOMAIN_USAGE_STATS,
@@ -505,14 +504,14 @@ export class DefaultUsageStatsService implements UsageStatsService {
     if (Number.isFinite(cached)) {
       return { last, visibleMessageCount, toolUseCount: cached };
     }
-    // 缓存 miss：解压 assistant 行现算（含 hidden 行——累计口径；user 侧
-    // tool_result 不计）。只投影 content 三列，不选 raw_json/attachments、
-    // 不解压 user 行。坏行（解压/parse 失败）按 0 计并 warn：计数是统计
-    // 读数，单条历史坏行不该让整个弹窗报错。
+    // 缓存 miss：现算 assistant 行（含 hidden 行——累计口径；user 侧
+    // tool_result 不计）。只投影 content 列，不选 raw_json/attachments。
+    // 坏行（parse 失败）按 0 计并 warn：计数是统计读数，单条历史坏行
+    // 不该让整个弹窗报错。
     const assistantRows = await queryTemplate<Row>(
       this.conn,
       this.parser,
-      `SELECT id, content_json, content_encoding, content_blob
+      `SELECT id, content_json
        FROM chat_message
        WHERE session_id = #{sessionId} AND role = 'assistant'`,
       { sessionId }
@@ -521,15 +520,9 @@ export class DefaultUsageStatsService implements UsageStatsService {
     // 无 keyword 语义，无粗筛面：全量 parse 为固有成本
     for (const row of assistantRows) {
       try {
-        const raw =
-          row.content_blob != null
-            ? decodeMessageContent(
-                row.content_encoding,
-                row.content_blob,
-                String(row.id)
-              )
-            : String(row.content_json);
-        toolUseCount += countToolUseBlocks(parseMessageContent(raw));
+        toolUseCount += countToolUseBlocks(
+          parseMessageContent(String(row.content_json))
+        );
       } catch (error) {
         console.warn(
           `[usage-stats] 工具调用现算遇坏行（按 0 计）：${

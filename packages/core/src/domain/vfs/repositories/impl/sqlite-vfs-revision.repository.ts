@@ -463,10 +463,10 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
     // delta < 0 的下限夹逼（D15）：`ref_count` 误减会把计数打到负数，而负数与
     // 0 在 `deleteUnreferencedUnderScope`（`ref_count <= 0` 判删）眼里一样是
     // 「无持有者」——误减活 revision 是不可恢复方向。夹逼**必须按 |delta| 量级**，
-    // 不能用 `> 0`：五条删除路径的 −1 经 `aggregateReadRefs` 聚合后单 pair 的
-    // delta 可为 −2/−3（多条消息持有同一 pair），`ref_count = 1, delta = −2`
-    // 在 `> 0` 夹逼下照样写出 −1。前值不足时 UPDATE 命不中 → 计数保持原样
-    // （坏行由回迁侧「−1 之前前值」warn 记线索，见 message-ref-unref）。
+    // 不能用 `> 0`：本口是通用批量口，delta 幅值不限于 1（历史 read 引用聚合
+    // 曾产 −2/−3，该机制已随 E1 清理版退役；checkpoint 的按消息数批量口
+    // `batchAdjustRefCountWithDelta` 同样是幅值参数），`ref_count = 1, delta = −2`
+    // 在 `> 0` 夹逼下照样写出 −1。前值不足时 UPDATE 命不中 → 计数保持原样。
     const clamp = delta < 0 ? ` AND ref_count >= ${Math.abs(delta)}` : "";
     for (let offset = 0; offset < pointers.length; offset += CHUNK_SIZE) {
       const chunk = pointers.slice(offset, offset + CHUNK_SIZE);

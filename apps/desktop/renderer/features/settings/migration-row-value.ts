@@ -1,19 +1,21 @@
 import type { DbStatsResult } from "@shared/ipc-types";
 
 /**
- * 存量数据迁移卡片的四行进度（前三行用户拍板 2026-09-28；第四行随
- * vfs-content-pack 迭代新增）：消息正文解压回明文 + 两张 blob 表去
- * base64 + VFS 历史版本打包，只读状态行（非菜单项）。消息正文「去
- * base64」不设状态行——发版形态下解压搬运直接写明文，不存在用户可见的
- * 中间态，仅开发机历史形态由归一任务静默收敛。
+ * 存量数据迁移卡片的三行进度（前两行用户拍板 2026-09-28；第三行随
+ * vfs-content-pack 迭代新增）：两张 blob 表去 base64 + VFS 历史版本打包，
+ * 只读状态行（非菜单项）。消息正文「去 base64」不设状态行——发版形态下
+ * 解压搬运直接写明文，不存在用户可见的中间态，仅开发机历史形态由归一
+ * 任务静默收敛。
+ *
+ * 消息正文明文化状态行已随 V1' 退役（v1.5.40 同批：真实库实测压缩行
+ * 归零 + KKV decompressDone 已置，解压任务与状态行一并删除）。
  *
  * 抽成同目录纯 ts 模块的原因（ic-22）：渲染取值要被测试直接 import 喂
- * 夹具断言四组分支（null→'—' / done→已完成 / 进行中 / 第三态），留在
+ * 夹具断言各组分支（null→'—' / done→已完成 / 进行中 / 第三态），留在
  * SettingsViews.tsx 里会把 React 组件树与 electron preload 依赖一起拖进
  * 测试进程。
  */
 export const MIGRATION_ROWS = [
-  { kind: "messageDecompress", label: "消息正文明文化" },
   { kind: "vfsContent", label: "版本内容去 base64" },
   { kind: "fileCache", label: "文件缓存去 base64" },
   { kind: "vfsPack", label: "历史版本打包" },
@@ -44,15 +46,6 @@ export function migrationRowValue(
   dbStats: DbStatsResult | null,
   row: (typeof MIGRATION_ROWS)[number],
 ): MigrationRowValue {
-  if (row.kind === "messageDecompress") {
-    const status = dbStats?.messageDecompress;
-    if (status == null) {
-      return { text: "—", tone: "default" };
-    }
-    return status.done
-      ? { text: "已完成", tone: "success" }
-      : { text: `进行中（剩余 ${status.pendingCount} 条）`, tone: "default" };
-  }
   if (row.kind === "vfsPack") {
     const pack = dbStats?.vfsPack;
     if (pack == null) {

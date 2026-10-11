@@ -4,8 +4,8 @@
  * - T-DMM1：Agent 运行中两入口均 reject 中文错误且不触 stat/core；
  *   正常路径 getDatabaseMaintenanceStats 返回文件体积 + 可回收量 + blob
  *   归一状态（blobBinary 透传 core getBlobBinaryStatus 的 tables 数组）
- *   + 消息解压状态、runDatabaseMaintenance 按序 stat → core 维护 → stat
- *   返回前后体积。
+ *   + VFS 历史版本打包状态、runDatabaseMaintenance 按序 stat → core 维护
+ *   → stat 返回前后体积。
  * - T-DMM2：core runDatabaseMaintenance 抛错时以 reject 语义上抛
  *   （可被调用方捕获），不吞错、错误后不再采后置体积。
  * - T-BB-S：归一状态数组原样透传（注册表增项不改本服务），Agent 守卫同样
@@ -25,7 +25,6 @@ const mockGetStorageStats = jest.fn();
 const mockRunMaintenance = jest.fn();
 const mockCreateService = jest.fn();
 const mockGetBlobBinaryStatus = jest.fn();
-const mockGetDecompressStatus = jest.fn();
 const mockGetVfsPackStatus = jest.fn();
 
 const liveConn = {tag: 'live'};
@@ -34,8 +33,6 @@ jest.mock('@novel-master/core', () => ({
   createDbMaintenanceService: (...args: unknown[]) =>
     mockCreateService(...args),
   getBlobBinaryStatus: (...args: unknown[]) => mockGetBlobBinaryStatus(...args),
-  getMessageDecompressStatus: (...args: unknown[]) =>
-    mockGetDecompressStatus(...args),
   getVfsContentPackStatus: (...args: unknown[]) =>
     mockGetVfsPackStatus(...args),
 }));
@@ -102,9 +99,6 @@ describe('db-maintenance.service', () => {
     mockGetStorageStats.mockReset().mockResolvedValue(STORAGE_STATS);
     mockRunMaintenance.mockReset().mockResolvedValue(MAINTENANCE_RESULT);
     mockGetBlobBinaryStatus.mockReset().mockResolvedValue(BLOB_BINARY_STATUS);
-    mockGetDecompressStatus
-      .mockReset()
-      .mockResolvedValue({done: true, pendingCount: 0});
     mockGetVfsPackStatus.mockReset().mockResolvedValue(VFS_PACK_STATUS);
     mockCreateService.mockReset().mockReturnValue({
       getStorageStats: (...args: unknown[]) => mockGetStorageStats(...args),
@@ -137,7 +131,6 @@ describe('db-maintenance.service', () => {
 
   it('T-DMM1: getDatabaseMaintenanceStats 正常路径返回文件体积、可回收量与 blob 归一状态', async () => {
     mockStat.mockResolvedValue({size: 1048576});
-    mockGetDecompressStatus.mockResolvedValue({done: false, pendingCount: 7});
 
     const stats = await getDatabaseMaintenanceStats(runtime);
 
@@ -146,7 +139,6 @@ describe('db-maintenance.service', () => {
     expect(mockGetStorageStats).toHaveBeenCalledTimes(1);
     expect(mockGetBlobBinaryStatus).toHaveBeenCalledTimes(1);
     expect(mockGetBlobBinaryStatus).toHaveBeenCalledWith(liveConn);
-    expect(mockGetDecompressStatus).toHaveBeenCalledWith(liveConn);
     expect(stats).toEqual({
       fileBytes: 1048576,
       reclaimableBytes: 40960,
@@ -154,23 +146,16 @@ describe('db-maintenance.service', () => {
         {table: 'vfsContent', done: false, pendingCount: 1100, failedCount: 0},
         {table: 'fileCache', done: true, pendingCount: 0, failedCount: 0},
       ],
-      messageDecompress: {done: false, pendingCount: 7},
       vfsPack: VFS_PACK_STATUS,
     });
   });
 
   it('T-BB-S: blobBinary 原样透传 core 状态数组（注册表增项不改本服务）', async () => {
-    // 模拟后续波次注册第三张表：本服务只做透传，不硬编码表清单
+    // 模拟后续波次注册新表：本服务只做透传，不硬编码表清单。
     mockGetBlobBinaryStatus.mockResolvedValue({
       tables: [
         {table: 'vfsContent', done: true, pendingCount: 0, failedCount: 0},
-        {table: 'fileCache', done: true, pendingCount: 0, failedCount: 0},
-        {
-          table: 'messageContent',
-          done: true,
-          pendingCount: 0,
-          failedCount: 2,
-        },
+        {table: 'fileCache', done: true, pendingCount: 0, failedCount: 2},
       ],
     });
 
@@ -178,8 +163,7 @@ describe('db-maintenance.service', () => {
 
     expect(stats.blobBinary).toEqual([
       {table: 'vfsContent', done: true, pendingCount: 0, failedCount: 0},
-      {table: 'fileCache', done: true, pendingCount: 0, failedCount: 0},
-      {table: 'messageContent', done: true, pendingCount: 0, failedCount: 2},
+      {table: 'fileCache', done: true, pendingCount: 0, failedCount: 2},
     ]);
   });
 
@@ -195,28 +179,10 @@ describe('db-maintenance.service', () => {
     expect(stats.fileBytes).toEqual(1024);
     expect(stats.reclaimableBytes).toEqual(40960);
     expect(stats.blobBinary).toEqual([]);
-    expect(mockGetDecompressStatus).toHaveBeenCalledWith(liveConn);
-  });
-
-  it('ic-03: getMessageDecompressStatus 抛错时整体不 reject，messageDecompress 降级为 null 且其余指标有值', async () => {
-    // 与 cr-04 对称：压缩状态采样（第四个失败源）独立兜底，不传染
-    mockGetDecompressStatus.mockRejectedValue(
-      new Error('message decompress status boom'),
-    );
-
-    const stats = await getDatabaseMaintenanceStats(runtime);
-
-    expect(stats.fileBytes).toEqual(1024);
-    expect(stats.reclaimableBytes).toEqual(40960);
-    expect(stats.messageDecompress).toBeNull();
-    expect(stats.blobBinary).toEqual([
-      {table: 'vfsContent', done: false, pendingCount: 1100, failedCount: 0},
-      {table: 'fileCache', done: true, pendingCount: 0, failedCount: 0},
-    ]);
   });
 
   it('T-VP22: getVfsContentPackStatus 抛错时整体不 reject，vfsPack 降级为 null 且其余指标有值', async () => {
-    // 与 cr-04/ic-03 对称：打包状态采样（第五个失败源）独立兜底，不传染
+    // 与 cr-04 对称：打包状态采样独立兜底，不传染
     mockGetVfsPackStatus.mockRejectedValue(
       new Error('vfs pack status boom'),
     );
@@ -230,7 +196,6 @@ describe('db-maintenance.service', () => {
       {table: 'vfsContent', done: false, pendingCount: 1100, failedCount: 0},
       {table: 'fileCache', done: true, pendingCount: 0, failedCount: 0},
     ]);
-    expect(stats.messageDecompress).toEqual({done: true, pendingCount: 0});
   });
 
   it('T-DMM1: runDatabaseMaintenance 正常路径 stat 前后各一次并返回前后体积', async () => {

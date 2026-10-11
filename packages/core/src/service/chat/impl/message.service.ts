@@ -36,12 +36,6 @@ import {
   USAGE_STATS_TOOL_USE_COUNT_KEY,
 } from "@/domain/session-kkv/model/session-kkv-domains.js";
 import { countToolUseBlocks } from "@/domain/chat/logic/tool-use-count.js";
-import {
-  aggregateReadRefPointers,
-  aggregateReadRefs,
-  adjustReadRefCount,
-  collectReadRefs,
-} from "@/domain/vfs/logic/revision-ref-count.js";
 import { chatInvalidArgument, chatNotFound } from "@/errors/chat-errors.js";
 import { invalidateSessionApiPromptTokenEntry } from "@/infra/tokenizer/logic/session-api-prompt-token-store.js";
 import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
@@ -252,10 +246,6 @@ export class DefaultMessageService implements MessageService {
       const entries = new SqliteVfsEntryRepository(tx);
       const revisions = new SqliteVfsRevisionRepository(tx);
 
-      // read 引用 −1（消息内 (entryId, version) 去重）：必须在 sweep 之前，
-      // 否则被引用 revision 会被 GC（read 引用是 ref_count 第三类持有者）。
-      await adjustReadRefCount(revisions, collectReadRefs(message.content), -1);
-
       const deleted = await messages.delete(id);
       if (!deleted) {
         throw chatNotFound("message", id);
@@ -287,28 +277,19 @@ export class DefaultMessageService implements MessageService {
     content: MessageContent
   ): Promise<ChatMessage> {
     assertMessageContent(content);
-    // 覆写换算 read 引用（旧 blocks −1、新 blocks +1）+ 正文替换收进同一事务：
-    // 引用计数与消息行要么同时生效、要么同时回滚，不产生无主计数。
-    // 序列化与压缩编码都下沉到 repository（port 签名为 MessageContent 对象）。
+    // 正文替换收进事务（行缺失即抛、不留半写状态）。序列化与压缩编码都
+    // 下沉到 repository（port 签名为 MessageContent 对象）。
+    // read 引用换算（旧 blocks −1、新 blocks +1）已随 E1 清理版退役。
     await this.deps.conn.transaction(async (tx) => {
       const messages = new SqliteMessageRepository(tx);
-      const revisions = new SqliteVfsRevisionRepository(tx);
       const existing = await messages.findById(messageId);
       if (existing == null) {
         throw chatNotFound("message", messageId);
       }
-      await adjustReadRefCount(
-        revisions,
-        collectReadRefs(existing.content),
-        -1
-      );
       const updated = await messages.updateContent(messageId, content);
       if (!updated) {
         throw chatNotFound("message", messageId);
       }
-      // +1 带 NOT_FOUND 守护（batchAdjustRefCountWithDelta 语义）：新 blocks
-      // 引用的 revision 必须存在，悬空引用在落库前 fail-fast。
-      await adjustReadRefCount(revisions, collectReadRefs(content), +1);
     });
     const message = await this.get(messageId);
     await this.invalidatePromptTokens(message.sessionId);
@@ -326,7 +307,7 @@ export class DefaultMessageService implements MessageService {
       throw chatNotFound("message", upToMessageId, { sessionId });
     }
     // 上界收窄读口：fork 的全部消费都落在「锚点及更早」方向（下方
-    // aggregateReadRefs / seedForkCopyParity 都吃同一份 toCopy），锚点之后的
+    // seedForkCopyParity 吃同一份 toCopy），锚点之后的
     // 整条尾巴是纯浪费。旧形态是 listBySession 全量读 + 事务内 filter 丢弃。
     const all = await this.deps.messages.listBySessionUpToSeq(
       sessionId,
@@ -397,14 +378,6 @@ export class DefaultMessageService implements MessageService {
         seq++;
       }
       await r.messages.batchInsert(forkedMessages);
-      // fork 消息浅拷贝原样保留 contentRef 的 (entryId, version)（指向源会话的
-      // revision）——按全局键对**源** revision +1（消息内去重、消息间累加），
-      // 源会话删除后 fork 侧引用依旧保活。
-      await adjustReadRefCount(
-        new SqliteVfsRevisionRepository(tx),
-        aggregateReadRefs(toCopy.map((m) => m.content)),
-        +1
-      );
       await seedForkCopyParity(tx, {
         projectId: source.projectId,
         sourceSessionId: source.id,
@@ -493,31 +466,22 @@ export class DefaultMessageService implements MessageService {
     }
 
     if (afterMessageId == null) {
-      // anchor 为 null → 清空整 session：产出「要删的消息 id + 它们的 read 引用」
-      // 这两样删除链素材。窄投影读口（4 列）替掉原来的 21 列全量读，
-      // 且**移进写事务**——旧形态读在事务外，读到 id 集合之后新 append 的消息
-      // 会被 deleteBySession 删掉、但它的 checkpoint 不在 ids 里 ⇒ 孤儿 checkpoint。
-      // 产出的 ids/refs 就是要删的写集合，按「产出写集合的读必须留在事务内」处理。
+      // anchor 为 null → 清空整 session：产出「要删的消息 id」这一删除链素材。
+      // 窄投影读口（1 列 id）替掉原来的 21 列全量读，且**移进写事务**——旧形态
+      // 读在事务外，读到 id 集合之后新 append 的消息会被 deleteBySession 删掉、
+      // 但它的 checkpoint 不在 ids 里 ⇒ 孤儿 checkpoint。产出的 ids 就是要删的
+      // 写集合，按「产出写集合的读必须留在事务内」处理。
       await this.deps.conn.transaction(async (tx) => {
         const messages = new SqliteMessageRepository(tx);
         const checkpoints = new SqliteMessageCheckpointRepository(tx);
-        const targets = await messages.listReadRefTargetsBySession(sessionId);
-        if (targets.length > 0) {
+        const ids = await messages.listIdsBySession(sessionId);
+        if (ids.length > 0) {
           // 发生删除即清 backfill 游标（清空重聊场景 seq 全量复用，防线同 delete）。
           await new SqliteSessionKkvRepository(tx).clearDomain(
             sessionId,
             SESSION_KKV_DOMAIN_BACKFILL_CURSOR
           );
-          // read 引用 −1（公开 API 不留无挂点的消息删除面）：与消息删除同事务。
-          await adjustReadRefCount(
-            new SqliteVfsRevisionRepository(tx),
-            aggregateReadRefPointers(targets.map((t) => t.refs)),
-            -1
-          );
-          await checkpoints.deleteCheckpointsForMessages(
-            sessionId,
-            targets.map((t) => t.id)
-          );
+          await checkpoints.deleteCheckpointsForMessages(sessionId, ids);
         }
         await messages.deleteBySession(sessionId);
       });
@@ -531,8 +495,7 @@ export class DefaultMessageService implements MessageService {
       throw chatNotFound("message", afterMessageId, { sessionId });
     }
 
-    // 拉带正文的 tail（seq > anchor.seq ⟺ seq >= anchor.seq + 1）：id 列表与
-    // read 引用收集共用一次查询。
+    // 拉 tail（seq > anchor.seq ⟺ seq >= anchor.seq + 1）：id 列表删除链素材。
     const tailMessages = await this.deps.messages.listBySessionFromSeq(
       sessionId,
       anchor.seq + 1
@@ -550,12 +513,6 @@ export class DefaultMessageService implements MessageService {
       await new SqliteSessionKkvRepository(tx).clearDomain(
         sessionId,
         SESSION_KKV_DOMAIN_BACKFILL_CURSOR
-      );
-      // read 引用 −1（公开 API 不留无挂点的消息删除面）：与消息删除同事务。
-      await adjustReadRefCount(
-        new SqliteVfsRevisionRepository(tx),
-        aggregateReadRefs(tailMessages.map((m) => m.content)),
-        -1
       );
       await checkpoints.deleteCheckpointsForMessages(
         sessionId,

@@ -1,12 +1,16 @@
 /**
- * 数据库维护（数据清理）：存储统计、VACUUM 维护链路与四个谓词驱动的
- * 后台搬运任务（存量 blob 形态归一、存量消息正文解压回明文、VFS 非 head
- * 历史版本混合打包、消息引用化存量回迁）。
+ * 数据库维护（数据清理）：存储统计、VACUUM 维护链路与两个谓词驱动的
+ * 后台搬运任务（存量 blob 形态归一、VFS 非 head 历史版本混合打包）。
  *
- * 适配器注册表覆盖三张表（vfs_content_blob / session_file_cache_blob /
- * chat_message）；解压任务、blob 归一与 VFS 打包（含应急校验/反向展开
- * 工具）均从此出口导出。本目录任务并入主入口 index.ts 是既定出口设计
- * （`./compaction` 子路径名已归属历史上下文裁剪域，不新增子路径）。
+ * 适配器注册表覆盖两张表（vfs_content_blob / session_file_cache_blob）；
+ * blob 归一与 VFS 打包（含应急校验/反向展开工具）均从此出口导出。本目录
+ * 任务并入主入口 index.ts 是既定出口设计（`./compaction` 子路径名已归属
+ * 历史上下文裁剪域，不新增子路径）。
+ *
+ * 消息正文解压搬运（message-plaintext 反向任务）、blob 归一的 chat_message
+ * 适配器与消息引用化回迁（v1.5.30 unref 回退的反向搬运）已随 V1' 与 E1
+ * 清理版退役（v1.5.40 同批，前置确认：真实库 content_blob IS NOT NULL /
+ * contentRef 谓词均归零，KKV decompressDone / unrefDone 均已置）。
  *
  * @module infra/db-maintenance
  */
@@ -33,24 +37,6 @@ export type {
   DbMaintenanceService,
   StorageStats,
 } from "./db-maintenance.port.js";
-/**
- * 消息正文解压搬运（反向任务，message-plaintext 迁移层）：存量压缩行
- * → 明文。KKV 常量从此出口导出（迁移期断言完成标记需要）。
- */
-export {
-  DEFAULT_DECOMPRESS_SYNC_BUDGET_MS,
-  getMessageDecompressStatus,
-  LEGACY_MAINTENANCE_PENDING_KKV_KEY,
-  LEGACY_MESSAGE_CONTENT_KKV_MODULE,
-  MESSAGE_DECOMPRESS_KKV_KEY,
-  MESSAGE_DECOMPRESS_KKV_MODULE,
-  runMessageContentDecompress,
-} from "./impl/message-content-decompression.js";
-export type {
-  MessageDecompressRunResult,
-  MessageDecompressStatus,
-  RunMessageContentDecompressOptions,
-} from "./impl/message-content-decompression.js";
 export {
   DEFAULT_VFS_PACK_SYNC_BUDGET_MS,
   getVfsContentPackStatus,
@@ -67,20 +53,3 @@ export type {
   VfsContentUnpackResult,
   VfsPackVerifyFailure,
 } from "./impl/vfs-content-packing.js";
-/**
- * 消息引用化回迁（v1.5.30 unref 回退的反向搬运）：存量 contentRef 行 →
- * `{path, content}` 明文包 + 源 revision 精确 −1。KKV 常量从此出口导出
- * （迁移期断言完成标记需要）。
- */
-export {
-  DEFAULT_REF_UNREF_SYNC_BUDGET_MS,
-  getMessageRefUnrefStatus,
-  MESSAGE_REF_UNREF_KKV_KEY,
-  MESSAGE_REF_UNREF_KKV_MODULE,
-  runMessageRefUnref,
-} from "./impl/message-ref-unref.js";
-export type {
-  MessageRefUnrefRunResult,
-  MessageRefUnrefStatus,
-  RunMessageRefUnrefOptions,
-} from "./impl/message-ref-unref.js";

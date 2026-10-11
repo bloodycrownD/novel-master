@@ -1,13 +1,14 @@
 /**
  * T-MP-P0b：messages 列表 IPC DTO 形态断言——content 恒为明文文本。
  *
- * **为什么要有这条**：chat_message 的存储形态在明文化迭代里分两极——新行
- * 直写 `content_json` 明文、压缩两列恒 NULL；存量压缩行在迁移期由后台
- * 反向任务解压回明文。读路径双形态（压缩行永远合法）意味着**任何**读到的
- * 正文在 DTO 边界上必须是**解码后的明文**，绝不能把压缩字节 / raw blob
+ * **为什么要有这条**：chat_message 的存储形态在明文化迭代里收敛为单形态
+ * ——新行直写 `content_json` 明文、压缩两列恒 NULL，存量压缩行已由反向
+ * 搬运任务全部解回明文（V1' 退役确认：真实库谓词归零 + KKV
+ * decompressDone 已置）。读路径（readRowContent）随之收口为纯明文 parse，
+ * 任何读到的正文在 DTO 边界上必须是**明文**，绝不能把压缩字节 / raw blob
  * 形态泄漏进 IPC——否则 renderer 会拿到一坨二进制、或按 base64 误解码。
- * 这条断言就是钉死这个边界的牙齿：造一条**存量压缩行**（迁移期最恶劣的
- * 形态），走 IPC 后逐字段核对 bodyText / contentBlocks 全文等值。
+ * 这条断言就是钉死这个边界的牙齿：走 IPC 后逐字段核对 bodyText /
+ * contentBlocks 全文等值。
  *
  * 附带钉死 DTO 里不存在任何承载原始 blob 的键（`contentEncoding` /
  * `contentBlob` / `encoding` / `blob`）——字段层面的形态泄漏同样要挡。
@@ -15,8 +16,6 @@
  * @module test/messages-ipc-plaintext-shape
  */
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
-import { deflateSync } from "node:zlib";
 import { after, before, describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
 import { handleMessagesList } from "../src/main/ipc/handlers/messages.js";
@@ -95,27 +94,14 @@ describe("messages 列表 DTO 恒为明文（T-MP-P0b）", () => {
     await teardownDesktopDbTestEnv(tempDir);
   });
 
-  it("存量压缩行经 IPC 后 bodyText / contentBlocks 逐字节等于明文", async () => {
+  it("明文行经 IPC 后 bodyText / contentBlocks 逐字节等于原文", async () => {
     const rt = await getDesktopRuntime();
-    const bodyText = `明文化正文 · 压缩形态只存在于存储层：${"中文与标点、emoji 🎯 混排。".repeat(30)}`;
+    const firstBody = `明文化正文 · 压缩形态只存在于存储层：${"中文与标点、emoji 🎯 混排。".repeat(30)}`;
+    const secondBody = `第二条正文 · ${"逐字节等值校验。".repeat(40)}`;
 
-    // 1) 明文行：走生产写路径（append）。
-    await rt.messages.append(sessionId, "user", textBlocks(bodyText));
-
-    // 2) 存量压缩行：不经生产写路径（deflateSync + 裸 INSERT），
-    //    模拟迁移期尚未被反向任务搬运的那批行——最恶劣的存储形态。
-    const compressedBody = `存量压缩行 · ${"解码后应逐字节等值。".repeat(40)}`;
-    const content = textBlocks(compressedBody);
-    const blob = deflateSync(
-      Buffer.from(JSON.stringify(content), "utf8"),
-    );
-    await rt.conn.execute(
-      `INSERT INTO chat_message (
-         id, session_id, seq, role, content_json, content_encoding,
-         content_blob, created_at_ms, hidden
-       ) VALUES (?, ?, ?, 'assistant', '', 'zlib', ?, ?, 0)`,
-      [randomUUID(), sessionId, 2, blob, Date.now()],
-    );
+    // 两条明文行：走生产写路径（append）。
+    await rt.messages.append(sessionId, "user", textBlocks(firstBody));
+    await rt.messages.append(sessionId, "assistant", textBlocks(secondBody));
 
     const res = await handleMessagesList({ sessionId });
     assert.equal(
@@ -149,27 +135,27 @@ describe("messages 列表 DTO 恒为明文（T-MP-P0b）", () => {
       }
     }
 
-    const plaintextRow = list.find((m) => m.seq === 1)!;
-    const compressedRow = list.find((m) => m.seq === 2)!;
-    assert.ok(plaintextRow && compressedRow, "明文行与压缩行都必须在列");
+    const firstRow = list.find((m) => m.seq === 1)!;
+    const secondRow = list.find((m) => m.seq === 2)!;
+    assert.ok(firstRow && secondRow, "两条明文行都必须在列");
     assert.equal(
-      plaintextRow.bodyText,
-      bodyText,
-      "明文行的 bodyText 必须逐字节等值",
+      firstRow.bodyText,
+      firstBody,
+      "第一条的 bodyText 必须逐字节等值",
     );
     assert.equal(
-      compressedRow.bodyText,
-      compressedBody,
-      "存量压缩行的 bodyText 必须是解码后的明文，不得是压缩字节",
+      secondRow.bodyText,
+      secondBody,
+      "第二条的 bodyText 必须逐字节等值",
     );
-    const compressedTextBlock = compressedRow.contentBlocks.find(
+    const secondTextBlock = secondRow.contentBlocks.find(
       (b) => b.type === "text",
     );
-    assert.ok(compressedTextBlock && compressedTextBlock.type === "text");
+    assert.ok(secondTextBlock && secondTextBlock.type === "text");
     assert.equal(
-      compressedTextBlock.text,
-      compressedBody,
-      "存量压缩行的 text 块 content 必须是解码后的明文",
+      secondTextBlock.text,
+      secondBody,
+      "第二条的 text 块 content 必须逐字节等值",
     );
   });
 });

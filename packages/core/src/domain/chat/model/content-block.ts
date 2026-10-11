@@ -49,21 +49,6 @@ export interface ToolResultBlock {
   /** Short UI hint; not sent to LLM adapters. */
   readonly summary?: string;
   /**
-   * 工具结果的引用化元数据（read-tool-result-ref / skill-result-ref）——
-   * **存量兼容 + 过渡期（v1.5.30 回迁期）**。
-   *
-   * v1.5.30 起写侧（`buildToolResultBlock` 成功分支）恒存全文，本字段
-   * **不再被写入**。但 v1.5.29 装机窗口落库的存量行 `content` 是占位空串、
-   * 正文只在这条引用里，故类型与 parse 白名单**本版保留**：靠它把存量引用块
-   * 解析出来，交给 `hydrateToolResultsForPrompt` 的极简兜底 hydrate 按
-   * `(entryId, version)` 取明文回填 `{path, content}` JSON（内存态，不写回）。
-   *
-   * 存量行被回迁任务（`message-ref-unref`）处理完后，本字段连同两个 ref
-   * 类型与 parse 白名单一并删除（见 spec「后续清理轮」）。**新代码不得写入
-   * 本字段**。
-   */
-  readonly contentRef?: ReadResultRef | SkillResultRef;
-  /**
    * meta 字段同时供 UI 卡片读取；task 工具 content 改全 JSON 后（59d84726），
    * subagentSessionId 与 failureReason 也会随 content 回流给 LLM。
    *
@@ -89,113 +74,6 @@ export interface SkillToolRef {
   /** project 域定位用；由解析方按会话上下文补齐，global 域缺省。 */
   readonly projectId?: string;
   readonly name: string;
-}
-
-/**
- * read 工具结果的引用化元数据（read-tool-result-ref）——
- * **存量兼容 + 过渡期（v1.5.30 回迁期），仅供解析存量行**。
- *
- * v1.5.29 曾让 read 的 tool_result 不存 `formatReadOutput` 全文、改存这条
- * 引用（全局键 `(entryId, version)` + 冗余 `contentHash`），v1.5.30 已整体
- * 回迁：写侧恒存全文，本类型**不再被写入**，只用来把存量行的引用块解析出来
- * 交给兜底 hydrate 取明文。清理轮（存量回迁完成后）本类型一并删除。
- *
- * 引用键用全局键 `(entryId, version)`（不用 path——导入重开 entry 会让 path
- * 重绑新 entryId；不用裸 contentHash——无 revision 锚点则无法挂保活计数）。
- *
- * 分页派生字段（offset/limit/returnedLines/totalLines/truncated/
- * lastLineTruncated/nextOffset）是 v1.5.29 wire 重放的输入，兜底 hydrate
- * **不再重放 wire**（不做逐字节还原），故这些字段在过渡期只被解析、不被消费。
- */
-export interface ReadResultRef {
-  /**
-   * 判别字段（skill-result-ref 起）：**可选且缺省即 `"read"`**——存量
-   * content_json 与本分支之前的 read 引用块都没有 `kind` 键，向后兼容
-   * 零迁移。全链窄化统一判 `kind === "skill"`，其余一律按 read 走。
-   */
-  readonly kind?: "read";
-  /** 展示用（hydrate 不依赖它定位）。 */
-  readonly path: string;
-  /** 全局键（源会话的 entry）。 */
-  readonly entryId: number;
-  /** 全局键。 */
-  readonly version: number;
-  /** 冗余校验：hydrate 后比对，防版本错位/内容漂移。 */
-  readonly contentHash: string;
-  /** 明文总字节（UTF-8）。 */
-  readonly totalBytes: number;
-  /** read 的输入参数（1 起始行号）。 */
-  readonly offset: number;
-  /** read 的输入参数。 */
-  readonly limit?: number;
-  readonly returnedLines: number;
-  readonly totalLines: number;
-  readonly truncated: boolean;
-  readonly lastLineTruncated?: boolean;
-  readonly nextOffset?: number;
-}
-
-/**
- * `skill` 工具结果的引用化元数据（skill-result-ref）——
- * **存量兼容 + 过渡期（v1.5.30 回迁期），仅供解析存量行**。
- *
- * 与 {@link ReadResultRef} 同为过渡期残件：写侧不再产，兜底 hydrate 只按
- * `(entryId, version)` 取明文填 `{path, content}` JSON（`kind: "skill"` 同款，
- * `files` 等派生字段弃置）。清理轮一并删除。
- *
- * 解析侧仍须按 `kind === "skill"` 窄化：存量 content_json 里 read 引用没有
- * `kind` 键（缺省即 read），skill 引用必带 `kind`——`ReadResultRef` 的 parse
- * 白名单不得吞掉本类型的 `action/domain/name/files`。
- *
- * ⚠️ `offset` / `returnedLines` / `totalLines` 在 load 侧恒为占位假值
- * `1 / 0 / 0`（v1.5.29 为了让两条 action 共用 parse 白名单而设，不是真实行数），
- * **消费方禁读**；任何按 `totalLines` 渲染的逻辑必须先按 `action` 分派。
- */
-export interface SkillResultRef {
-  readonly kind: "skill";
-  /** 引用的是 load（生效副本 SKILL.md 全文）还是 read（任意路径分页）。 */
-  readonly action: "load" | "read";
-  /** 实际命中的技能域（read 缺省域经生效副本解析后的结果）。 */
-  readonly domain: "global" | "project";
-  readonly name: string;
-  /** 相对技能目录的路径（定位用；过渡期兜底 hydrate 只用它填 JSON 的 path）。 */
-  readonly path: string;
-  /** 全局键（源 entry，跨会话有效）。 */
-  readonly entryId: number;
-  /** 全局键。 */
-  readonly version: number;
-  /** v1.5.29 的冗余校验位；兜底 hydrate 改为「不一致也回填 + warn」，非强校验。 */
-  readonly contentHash: string;
-  /** 明文总字节（UTF-8）。 */
-  readonly totalBytes: number;
-  /**
-   * read 输入参数（1 起始行号）；load 恒 1。
-   *
-   * **load 侧是占位假值、消费方禁读**：load 输出没有分页入参（无 offset/limit），
-   * 这三个数对 load 恒为 `1 / 0 / 0`，既不是真实行数、过渡期也无消费方
-   * （不再做 wire 重放）。它们只为让两条 action 共用一套 parse 白名单而存在。
-   */
-  readonly offset: number;
-  /** read 输入参数；load 缺省（load 无分页参数）。 */
-  readonly limit?: number;
-  /**
-   * read 侧是真实推导值；**load 侧恒 0（占位假值、消费方禁读）**，理由同
-   * {@link SkillResultRef.offset}。
-   */
-  readonly returnedLines: number;
-  /**
-   * read 侧是真实推导值；**load 侧恒 0（占位假值、消费方禁读）**，理由同
-   * {@link SkillResultRef.offset}。任何按 `ref.totalLines` 渲染的消费方
-   * （如「共 N 行」徽标）必须先按 `action` 分派，load 侧读到的 0 是假值。
-   */
-  readonly totalLines: number;
-  readonly truncated: boolean;
-  readonly nextOffset?: number;
-  /**
-   * load 专属：附属文件清单（不含 SKILL.md）。过渡期兜底 hydrate **不再
-   * 重放 wire**，故本字段只被解析、不被消费；清理轮随本类型一并删除。
-   */
-  readonly files: string[];
 }
 
 export interface ThinkingBlock {

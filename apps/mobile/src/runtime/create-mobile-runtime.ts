@@ -35,7 +35,6 @@ import {createSessionFsService} from '@novel-master/core/session-fs';
 import {
   createPhysicalVfsService,
   createScopedVfsService,
-  SqliteVfsRevisionRepository,
   type VfsScope,
 } from '@novel-master/core/vfs';
 import {createWorkplaceService} from '@novel-master/core/workplace';
@@ -116,9 +115,6 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileRuntimeCor
 
   const messageTranscriptEffects = createMessageTranscriptEffectsService(conn);
   const sessionKkv = createSessionKkvService(conn);
-  // 存量 contentRef 行的兜底 hydrate 取数用（同 conn 单实例；
-  // 回迁完成前保留，回迁后无生产消费方）。
-  const revisionRepo = new SqliteVfsRevisionRepository(conn);
   const {userVfsTurn} = createUserVfsTurnServiceBundle(conn);
 
   let compactionConditionEvaluator:
@@ -199,6 +195,5 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileRuntimeCor
     modelRequests: providerBundle.modelRequests,
     smartSortRule,
     userVfsTurn,
-    revisionRepo,
   };
 }

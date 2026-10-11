@@ -22,12 +22,6 @@ import {
   deleteVfsPrefix,
 } from "@/domain/vfs/logic/vfs-tree-copy.js";
 import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
-import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
-import {
-  aggregateReadRefs,
-  aggregateReadRefPointers,
-  adjustReadRefCount,
-} from "@/domain/vfs/logic/revision-ref-count.js";
 import { DefaultTemplatePullService } from "@/service/template/impl/template-pull.service.js";
 import { chatInvalidArgument, chatNotFound } from "@/errors/chat-errors.js";
 import { decode } from "@/infra/serialization/decode.js";
@@ -231,20 +225,6 @@ export class DefaultSessionService implements SessionService {
     for (const child of children) {
       await this.deleteSessionTree(tx, child);
     }
-    // read 引用 −1（被删会话全部消息，消息内去重、消息间累加）：fork/copy 出的
-    // **其它**会话的引用不受影响——ref_count 不归零的 revision/blob 自动留存。
-    // 窄投影读口（4 列）替掉 21 列全量读：删除链要的只是 id + read 引用指针。
-    // ⚠️ 读**留在事务内**——它产出的正是要减的那批写集合（按 wave-c2 的判据
-    // 「产出写集合的读必须留在事务内」）。本条只降列数，不动事务边界。
-    await adjustReadRefCount(
-      new SqliteVfsRevisionRepository(tx),
-      aggregateReadRefPointers(
-        (await r.messages.listReadRefTargetsBySession(session.id)).map(
-          (t) => t.refs
-        )
-      ),
-      -1
-    );
     await r.messages.deleteBySession(session.id);
     await deleteSessionFsData(tx, session.id, session.projectId);
     await createSessionKkvService(tx).clearSession(session.id);
@@ -365,9 +345,8 @@ export class DefaultSessionService implements SessionService {
    * composer_draft_json 维持现状不复制。
    *
    * 消息的**全量读**在事务之外（与 `fork` 同款形状）：旧形态在写事务里对源会话
-   * 做 21 列全量读 + N 次 `JSON.parse`，全程独占连接写锁。头投影救不了这一侧——
-   * 下面 `aggregateReadRefs` 要从 blocks 统计 contentRef 并对**源** revision +1，
-   * 必须拿到正文；收益全部来自「不再在写事务里做 N 次 parse」。
+   * 做 21 列全量读 + N 次 `JSON.parse`，全程独占连接写锁。收益全部来自「不再在
+   * 写事务里做 N 次 parse」。
    * ⚠️ 引入的 TOCTOU 窗口后果是「复制到一个稍旧快照」——copy 的语义本就是快照，
    * 可接受；这里刻意不引入新锁（引入就退化成今天的全事务形态）。
    */
@@ -424,13 +403,6 @@ export class DefaultSessionService implements SessionService {
         { contentStore: new SqliteVfsContentStore(tx) }
       );
       await r.messages.batchInsert(copyMessages);
-      // copy 消息浅拷贝原样保留 contentRef 的 (entryId, version)（指向源会话的
-      // revision）——按全局键对**源** revision +1，与 fork 同款换算。
-      await adjustReadRefCount(
-        new SqliteVfsRevisionRepository(tx),
-        aggregateReadRefs(messages.map((m) => m.content)),
-        +1
-      );
       await seedForkCopyParity(tx, {
         projectId: source.projectId,
         sourceSessionId: source.id,

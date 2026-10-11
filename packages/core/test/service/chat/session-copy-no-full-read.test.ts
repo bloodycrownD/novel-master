@@ -10,19 +10,19 @@
  *  - **C1 事务内零全量读**：`listBySession` 的调用发生在 `conn.transaction`
  *    回调**之外**；回调内消息相关语句只有 `batchInsert` 的分片 INSERT。
  *  - **C2 与 fork 对称**：copy 与 fork 都是「事务外 list → 事务内写」。
- *  - **C3 复制结果等价**：hidden 行 / attachments / usage / legacy
- *    `content_blob` 压缩行都覆盖，逐字段比对。
+ *  - **C3 复制结果等价**：hidden 行 / attachments / usage 都覆盖，逐字段比对。
  *
- * 观测面纪律（照 truncate-after-readref-targets.test.ts 的既有形态）：
+ * 观测面纪律（照 message-fork-upper-bound.test.ts 的既有形态）：
  *  - **调用点位置**用 `SqliteMessageRepository.prototype` 桩 + 「此刻是否在
  *    事务回调窗口内」的标记（RULE 明禁给读路径换实现的观测面）；
  *  - **语句窗口**用 conn 上的 `transaction` 覆写（better-sqlite3 的
  *    BEGIN/COMMIT 不经 `conn.execute` 发出，按 SQL 顺序判事务边界不可行，
  *    只能标记回调窗口本身）。
  *
- * ⚠ C3 对 legacy 压缩行的口径：`content_encoding` / `content_blob` 两列
+ * ⚠ C3 对压缩两列的口径：`content_encoding` / `content_blob` 两列
  * **不做逐字段比对**——写侧 `toMessageParams` 对这两列无条件写 `null`，
- * 所以「压缩源行经 copy 归一为明文行」是明文化拍板的正形态，不是回归。
+ * 副本行两列恒 NULL、正文落 content_json 是明文化拍板的正形态，不是回归。
+ * V1' 退役（v1.5.40 同批）后全库单形态明文读，布局内不再造 legacy 压缩行。
  *
  * @module test/service/chat/session-copy-no-full-read
  */
@@ -31,7 +31,6 @@ import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
 import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
-import { compressZlib } from "@/domain/vfs/content-store/logic/zlib-codec.js";
 import { openSqlCountingNovelMasterTestConnection } from "../../helpers/sql-counting-connection.js";
 import { testIsolationSuffix } from "../../helpers/novel-master-fixture.js";
 import type { TdbcConnection } from "../../../src/infra/tdbc/ports/connection.port.js";
@@ -339,8 +338,8 @@ describe("C2-3 C2: copy 与 fork 的读/写顺序形状一致", () => {
 // C3：复制结果等价
 // ---------------------------------------------------------------------------
 
-describe("C2-3 C3: copy 结果等价（含 hidden / attachments / usage / legacy 压缩行）", () => {
-  it("T-COPY-4: 三类消息逐字段复制，压缩两列归一为 NULL", async () => {
+describe("C2-3 C3: copy 结果等价（含 hidden / attachments / usage）", () => {
+  it("T-COPY-4: 三类消息逐字段复制，两列恒 NULL", async () => {
     const project = await ctx.projects.create(
       `P-c3-${testIsolationSuffix()}`
     );
@@ -375,34 +374,12 @@ describe("C2-3 C3: copy 结果等价（含 hidden / attachments / usage / legacy
         },
       }
     );
-    // ③ hidden 行，随后被改造成 legacy zlib 压缩形态（明文化前的存量行）。
+    // ③ hidden 行（明文；V1' 后全库单形态明文读，布局内不再造压缩行）。
     const m3 = await ctx.messages.append(session.id, "user", textBlocks("第三条"));
     await ctx.conn.execute(
       `UPDATE chat_message SET hidden = 1 WHERE id = ?`,
       [m3.id]
     );
-    await ctx.conn.execute(
-      `UPDATE chat_message
-          SET content_json = '', content_encoding = 'zlib', content_blob = ?
-        WHERE id = ?`,
-      [
-        compressZlib(
-          new TextEncoder().encode(JSON.stringify(textBlocks("第三条")))
-        ),
-        m3.id,
-      ]
-    );
-
-    // 前置自证：源行确为压缩形态。
-    const legacyRow = await ctx.conn.query<{
-      content_encoding: string | null;
-      hidden: number;
-    }>(
-      `SELECT content_encoding, hidden FROM chat_message WHERE id = ?`,
-      [m3.id]
-    );
-    assert.equal(legacyRow[0]!.content_encoding, "zlib", "前置：源行是压缩形态");
-    assert.equal(Number(legacyRow[0]!.hidden), 1, "前置：源行是 hidden 行");
 
     const copied = await ctx.sessions.copy(session.id);
     const source = await ctx.messages.listBySession(session.id);
@@ -426,7 +403,6 @@ describe("C2-3 C3: copy 结果等价（含 hidden / attachments / usage / legacy
       assert.deepEqual(t.raw, s.raw, `${label}: raw 一致`);
       assert.deepEqual(t.attachments, s.attachments, `${label}: attachments 一致`);
       assert.deepEqual(t.usage, s.usage, `${label}: usage 一致`);
-      // legacy 压缩源行经 copy 归一为明文行：正文必须可读且逐字段相等。
       assert.deepEqual(t.content, s.content, `${label}: content 一致`);
     }
 
@@ -450,19 +426,19 @@ describe("C2-3 C3: copy 结果等价（含 hidden / attachments / usage / legacy
       assert.equal(row.content_blob, null, "副本行 content_blob 恒 NULL");
       assert.ok(row.content_json.length > 0, "副本行正文落明文列");
     }
-    // legacy 那条的明文正文与源行一致。
+    // 第三条的明文正文与源一致。
     assert.deepEqual(
       JSON.parse(copyRows[2]!.content_json),
       textBlocks("第三条"),
-      "压缩源行归一出的明文正文与源一致"
+      "副本正文与源一致"
     );
 
     // 源行未被就地改写（copy 不得动源会话）。
-    const sourceRows = await ctx.conn.query<{ content_encoding: string | null }>(
-      `SELECT content_encoding FROM chat_message WHERE id = ?`,
+    const sourceRows = await ctx.conn.query<{ hidden: number }>(
+      `SELECT hidden FROM chat_message WHERE id = ?`,
       [m3.id]
     );
-    assert.equal(sourceRows[0]!.content_encoding, "zlib", "源压缩行保持原状");
+    assert.equal(Number(sourceRows[0]!.hidden), 1, "源行保持原状（hidden 仍置）");
   });
 
   it("T-COPY-5: 空会话 copy 不抛，且不产生任何 chat_message 读", async () => {

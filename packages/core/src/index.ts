@@ -97,33 +97,27 @@ export type {
 
 /**
  * 数据库维护（数据清理）：存储统计 + 缓存 GC/checkpoint/VACUUM 维护链路
- * （VACUUM 须事务外调用，事务中调用由 SQLite 原生报错兜底）；另含四个
+ * （VACUUM 须事务外调用，事务中调用由 SQLite 原生报错兜底）；另含两个
  * 谓词驱动、幂等可重入的后台搬运任务——存量 blob 行形态归一（zlib-b64
- * 文本 → 二进制 BLOB，完成后挂一次维护链路）、存量消息正文解压回明文
- * （message-plaintext 迁移层，**不挂**维护链路：增容无 freelist 可归还）、
- * VFS 非 head 历史版本混合打包（完成后挂一次维护链路）与引用化回迁任务
- * （存量 contentRef 行 → 明文包 + 源 revision 精确 −1，同样不挂维护链路；
- * 与解压任务交叠时 deferred 让位，见 runMessageRefUnref 结果类型）。不新增
- * exports 子路径——`./compaction` 已被上下文裁剪域占用。VFS 打包另附
- * 应急工具：verifyVfsContentPacks（pack 自包含校验）与 unpackVfsContent
- * （反向展开回独立 blob 行）。
+ * 文本 → 二进制 BLOB，完成后挂一次维护链路）与 VFS 非 head 历史版本
+ * 混合打包（完成后挂一次维护链路）。不新增 exports 子路径——
+ * `./compaction` 已被上下文裁剪域占用。VFS 打包另附应急工具：
+ * verifyVfsContentPacks（pack 自包含校验）与 unpackVfsContent（反向展开
+ * 回独立 blob 行）。
+ *
+ * 消息正文解压搬运任务（message-plaintext 迁移层反向任务）与引用化回迁
+ * 任务（v1.5.30 unref 回退的反向搬运）已随 V1' 与 E1 清理版退役
+ * （v1.5.40 同批：真实库 content_blob IS NOT NULL / contentRef 谓词均
+ * 归零、KKV decompressDone / unrefDone 均已置，读路径收口为单形态明文）。
  */
 export {
   BLOB_BINARY_KKV_MODULE,
   createDbMaintenanceService,
   DEFAULT_BLOB_BINARY_SYNC_BUDGET_MS,
-  DEFAULT_DECOMPRESS_SYNC_BUDGET_MS,
-  DEFAULT_REF_UNREF_SYNC_BUDGET_MS,
   DEFAULT_VFS_PACK_SYNC_BUDGET_MS,
   getBlobBinaryStatus,
-  getMessageDecompressStatus,
-  getMessageRefUnrefStatus,
   getVfsContentPackStatus,
-  MESSAGE_REF_UNREF_KKV_KEY,
-  MESSAGE_REF_UNREF_KKV_MODULE,
   runBlobBinaryNormalization,
-  runMessageContentDecompress,
-  runMessageRefUnref,
   runStartupMaintenanceOnce,
   runVfsContentPacking,
   unpackVfsContent,
@@ -137,13 +131,7 @@ export type {
   BlobBinaryTableStatus,
   DatabaseMaintenanceResult,
   DbMaintenanceService,
-  MessageDecompressRunResult,
-  MessageDecompressStatus,
-  MessageRefUnrefRunResult,
-  MessageRefUnrefStatus,
   RunBlobBinaryNormalizationOptions,
-  RunMessageContentDecompressOptions,
-  RunMessageRefUnrefOptions,
   RunVfsContentPackingOptions,
   StorageStats,
   VfsContentPackRunResult,

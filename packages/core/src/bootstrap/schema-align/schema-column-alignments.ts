@@ -155,9 +155,9 @@ export const SCHEMA_COLUMN_ALIGNMENTS: readonly SchemaColumnAlignment[] = [
   },
   // 消息正文存储两列（明文为正形态）：老库靠
   // SCHEMA_BOOT_VERSION v17 bump 走慢路径补列；新列全 NULL = 明文行的
-  // 正常形态，存量压缩行的搬运由后台解压任务 runMessageContentDecompress
-  // （infra/db-maintenance）谓词驱动完成，
-  // 不在 align 里回填（空占位 migration 禁令；数据迁移走后台任务拍板）。
+  // 正常形态。存量压缩行的搬运原由后台解压任务（infra/db-maintenance）谓词
+  // 驱动完成，不在 align 里回填（空占位 migration 禁令；数据迁移走后台
+  // 任务拍板）；该任务已随 V1' 退役（v1.5.40 同批，真实库实测谓词归零）。
   {
     table: "chat_message",
     column: "content_encoding",

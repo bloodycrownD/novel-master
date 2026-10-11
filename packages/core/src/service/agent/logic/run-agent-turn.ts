@@ -66,7 +66,6 @@ import type { LlmStreamEvent } from "@/infra/llm-protocol/ports/adapter.port.js"
 import type { ProviderRepository } from "@/domain/provider/repositories/provider.port.js";
 import type { SavedModelRepository } from "@/domain/provider/repositories/saved-model.port.js";
 import type { VfsService } from "@/service/vfs/vfs.port.js";
-import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revision.port.js";
 import type { WorkplaceService } from "@/service/workplace/workplace.port.js";
 import type { ProjectService } from "@/service/chat/project.port.js";
 import type { UserVfsTurnService } from "@/service/chat/user-vfs-turn.port.js";
@@ -163,16 +162,6 @@ export interface AgentTurnRuntimePort extends AgentRunRuntimePort {
    * limitation，后续迭代 CLI 接入 kkv 后补一行装配即可启用）。
    */
   readonly searchConfig?: SearchConfigStore;
-  /**
-   * revision 仓库（v1.5.30 unref 回迁后只剩**兜底 hydrate** 一个消费点）。
-   *
-   * 经 `assembleAgentRunnerDeps` 透传给 agent-runner，作为 prepare 的
-   * `revisionRepo`：v1.5.29 装机窗口写入的存量 `contentRef` 行内容为空串，
-   * 拼提示词前要按 `(entryId, version)` 取明文回填（见
-   * `domain/chat/logic/hydrate-tool-results-for-prompt.ts`）。三端 runtime
-   * 构造处各注入一份（同 conn 的 `SqliteVfsRevisionRepository`）。
-   */
-  readonly revisionRepo?: VfsRevisionRepository;
 }
 
 export class AgentTurnError extends Error {

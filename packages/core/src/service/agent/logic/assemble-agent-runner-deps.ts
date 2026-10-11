@@ -28,7 +28,6 @@ export interface AssembleAgentRunnerDepsInput {
     | "streamRegistry"
     | "skills"
     | "preferences"
-    | "revisionRepo"
   > & {
     readonly workplace: AgentTurnRuntimePort["workplace"];
     readonly savedModelRepo?: SavedModelRepository;
@@ -76,10 +75,6 @@ export function assembleAgentRunnerDeps(
       }),
     // 思考上下文偏好窄切片透传（可选；未注入时 runner 等同默认开）。
     preferences: input.runtime.preferences,
-    // read 引用块 hydrate 的 revision 仓库（read-tool-result-ref Step 6）：
-    // 从 runtime 单点透传给 runner 的 prepare 调用（可选；装配缺口时
-    // 含 contentRef 的消息不抛错，改填错误占位 + warn）。
-    revisionRepo: input.runtime.revisionRepo,
   };
 
   if (!input.includeCompactionOrchestrator) {

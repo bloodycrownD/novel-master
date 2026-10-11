@@ -1,20 +1,20 @@
 /**
- * 存量 blob 行形态归一任务用例（T-BB4 ~ T-BB7 + 标记短路面 + chat_message
- * 适配器 + cr-fix-spec r4 验收族）。
+ * 存量 blob 行形态归一任务用例（T-BB4 ~ T-BB7 + 标记短路面 +
+ * cr-fix-spec r4 验收族）。
  *
  * 归一口径见 spec「Part A 归一任务」：谓词 `encoding = 'zlib-b64' OR
  * (encoding = 'zlib' AND TYPEOF(bytes) = 'text')`，批 ≤100 行短事务，
  * 每表各自置 KKV 完成标记（两段式 nm-blob-binary / vfsContentDone /
- * fileCacheDone / messageContentDone）。chat_message（A2 适配器）列名为
- * content_encoding / content_blob、无 byte_len 列，legacy 明文行
- * （content_encoding IS NULL）不命中谓词——那是 compaction 任务的谓词范围。
+ * fileCacheDone）。chat_message（A2 适配器）已随 V1' 第 4 项退役
+ * （v1.5.40 同批：消息正文全库明文、content_blob 谓词归零的死代码），
+ * 其专属用例与 `messageContentDone` 断言一并删除。
  *
  * 测试数据一律**直插 SQL 构造**（不依赖写侧 codec），并显式把 `byte_len`
  * 写成三态混杂的历史形态，验证归一后一律重算为物理字节长度。
  *
- * 每个用例开头 {@link resetNormalizationState} 清三表谓词命中行 + 完成
+ * 每个用例开头 {@link resetNormalizationState} 清两表谓词命中行 + 完成
  * 标记：共享库上用例自管状态（口径照 message-content-decompression.test.ts
- * 的 clearMarkers），用例之间互不污染计数。
+ * 的 clearMarkers，该文件已随同名任务退役），用例之间互不污染计数。
  *
  * 【ic-06① 节流串值】getBlobBinaryStatus 的谓词 COUNT 路径带 3s 模块级
  * 节流（按连接实例缓存未完成态采样值），共享连接的用例之间会串值——
@@ -74,9 +74,6 @@ novelMasterTestFixture();
 /** 归一谓词（与实现同形，测试侧直查断言用）。 */
 const PREDICATE = `(encoding = 'zlib-b64' OR (encoding = 'zlib' AND TYPEOF(bytes) = 'text'))`;
 
-/** chat_message 侧同形谓词（列名不同）。 */
-const MESSAGE_PREDICATE = `(content_encoding = 'zlib-b64' OR (content_encoding = 'zlib' AND TYPEOF(content_blob) = 'text'))`;
-
 /** 本轮注册的两张 blob 表。 */
 type BlobTable = "vfs_content_blob" | "session_file_cache_blob";
 
@@ -89,10 +86,6 @@ function conn(): TdbcConnection {
 
 /**
  * 谓词命中行清零 + 完成/兜底标记清零（用例自管状态的地基）。
- *
- * @remarks ic-27：chat_message 的 DELETE 限定 `id LIKE 'bb-msg-%'`——本
- * 文件插入的 chat_message 夹具统一带 `bb-msg-` 前缀，只清本文件前缀夹具，
- * 避免越界影响共享库其它用例（谓词命中的非本文件行不得被顺手删掉）。
  */
 async function resetNormalizationState(): Promise<void> {
   // ic-06①：共享连接上清节流缓存——前序用例的未完成态采样不得在 3s
@@ -101,9 +94,6 @@ async function resetNormalizationState(): Promise<void> {
   const c = conn();
   await c.execute(`DELETE FROM vfs_content_blob WHERE ${PREDICATE}`);
   await c.execute(`DELETE FROM session_file_cache_blob WHERE ${PREDICATE}`);
-  await c.execute(
-    `DELETE FROM chat_message WHERE ${MESSAGE_PREDICATE} AND id LIKE 'bb-msg-%'`
-  );
   await c.execute("DELETE FROM session_file_cache_entry WHERE key LIKE 'bb-%'");
   await c.execute("DELETE FROM kkv_entry WHERE module = ?", [
     BLOB_BINARY_KKV_MODULE,
@@ -337,11 +327,6 @@ function isBlobTableUpdate(sql: string): boolean {
   return /^\s*UPDATE\s+(?:vfs_content_blob|session_file_cache_blob)\b/i.test(sql);
 }
 
-/** chat_message 的 UPDATE 识别（与 isBlobTableUpdate 同口径，三表断言用）。 */
-function isChatMessageUpdate(sql: string): boolean {
-  return /^\s*UPDATE\s+chat_message\b/i.test(sql);
-}
-
 /**
  * 让 blob 表 UPDATE 恒返回 `changes = 0` 的连接替身。
  *
@@ -477,20 +462,10 @@ describe("存量 blob 形态归一任务（T-BB4 ~ T-BB7）", () => {
     await insertLegacyRow("vfs_content_blob", "bb-idem-2", corpus(2));
     await insertLegacyRow("session_file_cache_blob", "bb-idem-3", corpus(3));
 
-    // 未完成态采样：两张 blob 表 pendingCount ≥ 1；chat_message 空表
-    // （谓词零命中）等价完成态。
+    // 未完成态采样：两张 blob 表 pendingCount ≥ 1。
     const before = await getBlobBinaryStatus(conn());
-    assert.equal(before.tables.length, 3);
+    assert.equal(before.tables.length, 2);
     for (const table of before.tables) {
-      if (table.table === "messageContent") {
-        assert.deepEqual(table, {
-          table: "messageContent",
-          done: true,
-          pendingCount: 0,
-          failedCount: 0,
-        });
-        continue;
-      }
       assert.equal(table.done, false, `${table.table} 应处于进行中`);
       assert.ok(table.pendingCount >= 1, `${table.table} 剩余行 ≥ 1`);
     }
@@ -520,11 +495,6 @@ describe("存量 blob 形态归一任务（T-BB4 ~ T-BB7）", () => {
       second.seen.filter((sql) => isBlobTableUpdate(sql)).length,
       0,
       "标记已置后不得再下发 vfs_content_blob / session_file_cache_blob 的 UPDATE（路径覆盖级：证短路时不多跑）"
-    );
-    assert.equal(
-      second.seen.filter((sql) => isChatMessageUpdate(sql)).length,
-      0,
-      "chat_message 同口径（三表标记短路互不牵连）"
     );
     assert.deepEqual(await snapshotShapes("vfs_content_blob", "bb-idem"), afterFirst.vfs);
     assert.deepEqual(
@@ -568,20 +538,14 @@ describe("存量 blob 形态归一任务（T-BB4 ~ T-BB7）", () => {
     );
     assert.equal(marker, null, "中断时完成标记未置");
 
-    // 【cr-10】中断轮内另一（两）张表照常收敛置标记：三表各自短路、互不
-    // 牵连——vfs 预算耗尽不会拖住空表的 fileCache / messageContent 完成。
-    // （适配器顺序 vfs → fileCache → messageContent，后两张在中断轮内
-    // 正常跑完。）
+    // 【cr-10】中断轮内另一张表照常收敛置标记：两表各自短路、互不
+    // 牵连——vfs 预算耗尽不会拖住空表的 fileCache 完成。
+    // （适配器顺序 vfs → fileCache，后者在中断轮内正常跑完。）
     const fileCacheMarker = await new SqliteKkvRepository(conn()).get(
       BLOB_BINARY_KKV_MODULE,
       "fileCacheDone"
     );
     assert.ok(fileCacheMarker, "中断轮内 fileCache 标记仍置（互不牵连）");
-    const messageMarker = await new SqliteKkvRepository(conn()).get(
-      BLOB_BINARY_KKV_MODULE,
-      "messageContentDone"
-    );
-    assert.ok(messageMarker, "中断轮内 messageContent 标记仍置（互不牵连）");
 
     // 模拟重启：重新调用（默认预算），谓词重扫续跑收敛。
     const resumed = await runBlobBinaryNormalization(conn());
@@ -995,7 +959,6 @@ describe("存量 blob 形态归一任务（T-BB4 ~ T-BB7）", () => {
     assert.deepEqual(tables, [
       { table: "vfsContent", done: false, pendingCount: 1, failedCount: 0 },
       { table: "fileCache", done: true, pendingCount: 0, failedCount: 0 },
-      { table: "messageContent", done: true, pendingCount: 0, failedCount: 0 },
     ]);
     assert.equal(
       probed.seen.filter(
@@ -1016,127 +979,6 @@ describe("存量 blob 形态归一任务（T-BB4 ~ T-BB7）", () => {
       (Object.getPrototypeOf(conn()) as TdbcConnection).query,
       "用例后 conn.query 必须还是原型上的原生实现（delete 恢复而非赋回）"
     );
-  });
-
-  it("chat_message 适配器：zlib-b64 行转二进制、坏行跳过计数、legacy 明文行不动、独立完成标记", async () => {
-    await resetNormalizationState();
-    const ctx = getNovelMasterTestContext();
-    // 先建 project/session（chat_message 有 session 外键）。
-    const project = await ctx.projects.create(`P-bbmsg-${Date.now()}`);
-    const session = await ctx.sessions.create(project.id, `S-bbmsg-${Date.now()}`);
-    const sessionId = session.id;
-
-    // 一条好的 zlib-b64 存量行（RN 旧版形态：content_blob 存 base64 文本）。
-    const plain = corpus(101);
-    const compressed = compressZlib(new TextEncoder().encode(plain));
-    const b64 = Buffer.from(compressed).toString("base64");
-    const goodId = `bb-msg-good-${Date.now()}`;
-    await conn().execute(
-      `INSERT INTO chat_message (id, session_id, seq, role, content_json, content_encoding, content_blob, created_at_ms, hidden)
-       VALUES (?, ?, 1, 'assistant', '', 'zlib-b64', ?, 1, 0)`,
-      [goodId, sessionId, b64]
-    );
-    // 一条坏的 zlib-b64 行（base64 非法，解码必失败）。
-    const badId = `bb-msg-bad-${Date.now()}`;
-    await conn().execute(
-      `INSERT INTO chat_message (id, session_id, seq, role, content_json, content_encoding, content_blob, created_at_ms, hidden)
-       VALUES (?, ?, 2, 'assistant', '', 'zlib-b64', ?, 2, 0)`,
-      [badId, sessionId, "not-base64!!"]
-    );
-    // 一条 legacy 明文行（content_encoding IS NULL）——明文是 chat_message 的
-    // 正形态，不在本任务谓词内（也不在反向解压任务谓词内），本任务不得触碰。
-    const legacyId = `bb-msg-legacy-${Date.now()}`;
-    const legacyJson = JSON.stringify({ blocks: [{ type: "text", text: "legacy 明文" }] });
-    await conn().execute(
-      `INSERT INTO chat_message (id, session_id, seq, role, content_json, created_at_ms, hidden)
-       VALUES (?, ?, 3, 'user', ?, 3, 0)`,
-      [legacyId, sessionId, legacyJson]
-    );
-
-    // 捕获 warn（ic-15：坏行告警必须用 blob 列真名 chat_message.content_blob，
-    // 不得再产出「列不存在」的误导文案 chat_message.bytes）。
-    const warnings: string[] = [];
-    const originalWarn = console.warn;
-    console.warn = (...args: unknown[]) => {
-      warnings.push(args.map((a) => String(a)).join(" "));
-    };
-    let result: Awaited<ReturnType<typeof runBlobBinaryNormalization>>;
-    try {
-      result = await runBlobBinaryNormalization(conn());
-    } finally {
-      console.warn = originalWarn;
-    }
-    assert.equal(result.done, true);
-    assert.equal(result.normalizedCount, 1, "只有好的 b64 行被归一");
-    assert.equal(result.failedCount, 1, "坏行跳过并计数");
-    assert.ok(
-      warnings.some((line) => line.includes("chat_message.content_blob")),
-      "坏行告警应指向真实列 chat_message.content_blob（ic-15）"
-    );
-    assert.ok(
-      !warnings.some((line) => line.includes("chat_message.bytes")),
-      "坏行告警不得引用不存在的列 chat_message.bytes（ic-15）"
-    );
-
-    // 好行形态：encoding=zlib、TYPEOF(content_blob)=blob，且读回明文一致。
-    const good = await conn().query<{
-      content_encoding: string;
-      typeOf: string;
-    }>(
-      `SELECT content_encoding, TYPEOF(content_blob) AS typeOf FROM chat_message WHERE id = ?`,
-      [goodId]
-    );
-    assert.equal(good[0]!.content_encoding, "zlib");
-    assert.equal(String(good[0]!.typeOf), "blob");
-    const readBack = await conn().query<{ content_blob: SqlValue }>(
-      `SELECT content_blob FROM chat_message WHERE id = ?`,
-      [goodId]
-    );
-    const decoded = new TextDecoder().decode(
-      decompressZlib(readBack[0]!.content_blob as Uint8Array)
-    );
-    assert.equal(decoded, plain, "归一后逐字节一致");
-
-    // 坏行原样保留；legacy 明文行一字未动（compaction 的谓词范围）。
-    const bad = await conn().query<{
-      content_encoding: string;
-      content_blob: string;
-    }>(
-      `SELECT content_encoding, CAST(content_blob AS TEXT) AS content_blob FROM chat_message WHERE id = ?`,
-      [badId]
-    );
-    assert.equal(bad[0]!.content_encoding, "zlib-b64");
-    assert.equal(bad[0]!.content_blob, "not-base64!!");
-    const legacy = await conn().query<{
-      content_json: string;
-      content_encoding: string | null;
-    }>(
-      `SELECT content_json, content_encoding FROM chat_message WHERE id = ?`,
-      [legacyId]
-    );
-    assert.equal(legacy[0]!.content_json, legacyJson, "legacy 明文行不得被触碰");
-    assert.equal(legacy[0]!.content_encoding, null);
-
-    // 独立完成标记 + 状态行（含坏行仍置标记：不阻断收敛；failedCount 经
-    // 标记 JSON 快照透出，UI 第三态「已完成（N 条需人工处理）」数据源）。
-    const kkv = new SqliteKkvRepository(conn());
-    const markerValue = await kkv.get(
-      BLOB_BINARY_KKV_MODULE,
-      "messageContentDone"
-    );
-    assert.ok(markerValue, "chat_message 完成标记已置");
-    const parsedMarker = JSON.parse(markerValue.value) as {
-      failedCount: number;
-    };
-    assert.equal(parsedMarker.failedCount, 1, "标记 JSON 快照含 failedCount");
-    const status = await getBlobBinaryStatus(conn());
-    const messageStatus = status.tables.find((t) => t.table === "messageContent");
-    assert.deepEqual(messageStatus, {
-      table: "messageContent",
-      done: true,
-      pendingCount: 0,
-      failedCount: 1,
-    });
   });
 
   it("cr-06：旧版 ISO 字符串标记向后兼容 + 状态查询纯读无副作用", async () => {
@@ -1228,7 +1070,6 @@ describe("存量 blob 形态归一任务（T-BB4 ~ T-BB7）", () => {
       0,
       "已归一的行不得再被改写（清标记后第二遍零 UPDATE）"
     );
-    assert.equal(second.seen.filter((sql) => isChatMessageUpdate(sql)).length, 0);
     assert.deepEqual(
       await snapshotShapes("vfs_content_blob", "bb-idem2"),
       afterFirst.vfs,
@@ -1245,18 +1086,17 @@ describe("存量 blob 形态归一任务（T-BB4 ~ T-BB7）", () => {
     assert.equal(counter.maintCalls(), 0, "零改写不得触发收尾维护（cr-01）");
   });
 
-  it("cr-09：空库（无行、标记皆无）→ 状态查询纯读回报三表 done", async () => {
+  it("cr-09：空库（无行、标记皆无）→ 状态查询纯读回报两表 done", async () => {
     await resetNormalizationState();
     const status = await getBlobBinaryStatus(conn());
     assert.deepEqual(status.tables, [
       { table: "vfsContent", done: true, pendingCount: 0, failedCount: 0 },
       { table: "fileCache", done: true, pendingCount: 0, failedCount: 0 },
-      { table: "messageContent", done: true, pendingCount: 0, failedCount: 0 },
     ]);
   });
 
-  it("cr-09：全新内存库直跑 → 全零返回且三表标记置上（空库首启由任务侧置标记）", async () => {
-    // 独立于共享库的全新 :memory: 连接（三表全空、标记皆无）。
+  it("cr-09：全新内存库直跑 → 全零返回且两表标记置上（空库首启由任务侧置标记）", async () => {
+    // 独立于共享库的全新 :memory: 连接（两表全空、标记皆无）。
     const fresh = await openNovelMasterTestConnection();
     try {
       const counter = maintenanceCounter();
@@ -1271,7 +1111,6 @@ describe("存量 blob 形态归一任务（T-BB4 ~ T-BB7）", () => {
       for (const key of [
         "vfsContentDone",
         "fileCacheDone",
-        "messageContentDone",
       ]) {
         assert.ok(await kkv.get(BLOB_BINARY_KKV_MODULE, key), `${key} 应被置上`);
       }
@@ -1314,29 +1153,23 @@ describe("存量 blob 形态归一任务（T-BB4 ~ T-BB7）", () => {
       await kkv.get(BLOB_BINARY_KKV_MODULE, "fileCacheDone"),
       "fileCache 完成标记已置"
     );
-    assert.ok(
-      await kkv.get(BLOB_BINARY_KKV_MODULE, "messageContentDone"),
-      "messageContent（空表）标记照置，三表互不牵连（ic-36b）"
-    );
     assert.equal(
       probed.seen.filter((sql) => /^\s*UPDATE\s+vfs_content_blob\b/i.test(sql))
         .length,
       0,
       "已置标记的 vfs_content_blob 整轮零 UPDATE"
     );
-    assert.equal(probed.seen.filter((sql) => isChatMessageUpdate(sql)).length, 0);
-    // 验收语义（cr-10）：若把三表完成标记合并成一个共享 key，本用例应变红
+    // 验收语义（cr-10）：若把两表完成标记合并成一个共享 key，本用例应变红
     //（fileCache 的行会因 vfsContentDone 短路而永不被归一）。
     // maintCalls 语义（cr-31）：本轮 1 行改写 ⇒ processedAny ⇒ 进维护段一次。
     assert.equal(counter.maintCalls(), 1);
   });
 
-  it("cr-01 稳态：三表完成标记已置 → 零归一、零 UPDATE、不进收尾维护段", async () => {
+  it("cr-01 稳态：两表完成标记已置 → 零归一、零 UPDATE、不进收尾维护段", async () => {
     await resetNormalizationState();
     for (const key of [
       "vfsContentDone",
       "fileCacheDone",
-      "messageContentDone",
     ]) {
       await setDoneMarker(key);
     }
@@ -1357,7 +1190,6 @@ describe("存量 blob 形态归一任务（T-BB4 ~ T-BB7）", () => {
       stalled: false,
     });
     assert.equal(probed.seen.filter((sql) => isBlobTableUpdate(sql)).length, 0);
-    assert.equal(probed.seen.filter((sql) => isChatMessageUpdate(sql)).length, 0);
   });
 
   it("cr-01 空库首启（标记皆无、谓词空）→ 置标记但不进收尾维护段", async () => {
@@ -1377,7 +1209,6 @@ describe("存量 blob 形态归一任务（T-BB4 ~ T-BB7）", () => {
     for (const key of [
       "vfsContentDone",
       "fileCacheDone",
-      "messageContentDone",
     ]) {
       assert.ok(await kkv.get(BLOB_BINARY_KKV_MODULE, key), `${key} 应被置上`);
     }
@@ -1421,7 +1252,6 @@ describe("存量 blob 形态归一任务（T-BB4 ~ T-BB7）", () => {
       "标记 JSON 快照含 failedCount=100"
     );
     assert.ok(await kkv.get(BLOB_BINARY_KKV_MODULE, "fileCacheDone"));
-    assert.ok(await kkv.get(BLOB_BINARY_KKV_MODULE, "messageContentDone"));
     // 按 cr-25 收敛：零行被改写 → 不释放 freelist 页 → 不触发收尾维护
     //（maintCalls 语义见 maintenanceCounter）。反向判据（cr-31 C）：把
     // (done && failedCount > 0) 那一支补回门条件，本用例即变红
@@ -1475,82 +1305,6 @@ describe("存量 blob 形态归一任务（T-BB4 ~ T-BB7）", () => {
     // 20 行 → 进一次维护段（maintCalls 语义见 maintenanceCounter）。
     // 反向判据（cr-35）：把 allKnownFailed 分支改回 break，本用例变红
     //（第一批 100 坏行即整表收尾，20 行正常行一条都不归一）。
-    assert.equal(counter.maintCalls(), 1);
-  });
-
-  it("cr-02/ic-36a chat_message 前 100 条 id 全坏：尾部正常行仍被归一", async () => {
-    await resetNormalizationState();
-    const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-bbmsg2-${Date.now()}`);
-    const session = await ctx.sessions.create(project.id, `S-bbmsg2-${Date.now()}`);
-    const sessionId = session.id;
-    const pad = (i: number) => String(i).padStart(4, "0");
-
-    // 100 条坏行（id 前缀 a- 排序在前）+ 5 条正常行（前缀 b- 排在后），
-    // 夹具统一 bb-msg- 前缀（ic-27 口径）。
-    for (let i = 0; i < 100; i++) {
-      await conn().execute(
-        `INSERT INTO chat_message (id, session_id, seq, role, content_json, content_encoding, content_blob, created_at_ms, hidden)
-         VALUES (?, ?, ?, 'assistant', '', 'zlib-b64', 'not-base64!!', 0, 0)`,
-        [`bb-msg-a-bad-${pad(i)}`, sessionId, i + 1]
-      );
-    }
-    const goodIds: Array<{ id: string; plain: string }> = [];
-    for (let i = 0; i < 5; i++) {
-      const id = `bb-msg-b-good-${pad(i)}`;
-      const plain = corpus(200 + i);
-      const b64 = Buffer.from(
-        compressZlib(new TextEncoder().encode(plain))
-      ).toString("base64");
-      await conn().execute(
-        `INSERT INTO chat_message (id, session_id, seq, role, content_json, content_encoding, content_blob, created_at_ms, hidden)
-         VALUES (?, ?, ?, 'assistant', '', 'zlib-b64', ?, 0, 0)`,
-        [id, sessionId, 1000 + i, b64]
-      );
-      goodIds.push({ id, plain });
-    }
-
-    const counter = maintenanceCounter();
-    const result = await runBlobBinaryNormalization(conn(), counter.hooks);
-    assert.equal(result.normalizedCount, 5, "尾部正常行全部被归一");
-    assert.equal(result.failedCount, 100, "坏行跳过并计数");
-    assert.equal(result.done, true);
-    assert.equal(result.stalled, false);
-
-    // 好行形态 + 逐字节读回。
-    for (const good of goodIds) {
-      const rows = await conn().query<{
-        content_encoding: string;
-        typeOf: string;
-      }>(
-        `SELECT content_encoding, TYPEOF(content_blob) AS typeOf FROM chat_message WHERE id = ?`,
-        [good.id]
-      );
-      assert.equal(rows[0]!.content_encoding, "zlib");
-      assert.equal(String(rows[0]!.typeOf), "blob");
-      const blobRows = await conn().query<{ content_blob: SqlValue }>(
-        `SELECT content_blob FROM chat_message WHERE id = ?`,
-        [good.id]
-      );
-      assert.equal(
-        new TextDecoder().decode(
-          decompressZlib(blobRows[0]!.content_blob as Uint8Array)
-        ),
-        good.plain,
-        "归一后逐字节一致"
-      );
-    }
-    const marker = await new SqliteKkvRepository(conn()).get(
-      BLOB_BINARY_KKV_MODULE,
-      "messageContentDone"
-    );
-    assert.ok(marker, "chat_message 完成标记已置");
-    assert.equal(
-      (JSON.parse(marker.value) as { failedCount: number }).failedCount,
-      100,
-      "标记快照 failedCount=100"
-    );
-    // 5 行改写 ⇒ 进维护段（maintCalls 语义见 maintenanceCounter）。
     assert.equal(counter.maintCalls(), 1);
   });
 
@@ -1621,7 +1375,7 @@ describe("存量 blob 形态归一任务（T-BB4 ~ T-BB7）", () => {
     );
   });
 
-  it("ic-12：标记值损坏（负数/小数）不透传，非负整数正常透出", async () => {
+  it("ic-12：标记值损坏（负数）不透传，非负整数正常透出", async () => {
     await resetNormalizationState();
     const kkv = new SqliteKkvRepository(conn());
     await kkv.set(
@@ -1632,11 +1386,6 @@ describe("存量 blob 形态归一任务（T-BB4 ~ T-BB7）", () => {
     await kkv.set(
       BLOB_BINARY_KKV_MODULE,
       "fileCacheDone",
-      JSON.stringify({ at: new Date().toISOString(), failedCount: 1.5 })
-    );
-    await kkv.set(
-      BLOB_BINARY_KKV_MODULE,
-      "messageContentDone",
       JSON.stringify({ at: new Date().toISOString(), failedCount: 5 })
     );
     const status = await getBlobBinaryStatus(conn());
@@ -1646,15 +1395,9 @@ describe("存量 blob 形态归一任务（T-BB4 ~ T-BB7）", () => {
       done: true,
       pendingCount: 0,
       failedCount: 0,
-    }, "负数归 0（透传会渲染出「已完成（-3 条需人工处理）」）");
+    }, "负数归 0（透传会渲染出「已完成（-3 条需人工处理）」；非整数与负数共用同一校验分支）");
     assert.deepEqual(byTable.get("fileCache"), {
       table: "fileCache",
-      done: true,
-      pendingCount: 0,
-      failedCount: 0,
-    }, "小数归 0");
-    assert.deepEqual(byTable.get("messageContent"), {
-      table: "messageContent",
       done: true,
       pendingCount: 0,
       failedCount: 5,

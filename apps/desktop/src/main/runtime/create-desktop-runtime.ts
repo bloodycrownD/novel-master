@@ -39,7 +39,6 @@ import {
 import {
   createPhysicalVfsService,
   createScopedVfsService,
-  SqliteVfsRevisionRepository,
   type VfsScope,
 } from "@novel-master/core/vfs";
 import {
@@ -143,9 +142,6 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
   const { projects, sessions, messages, usageStats } = chat;
   const messageTranscriptEffects = createMessageTranscriptEffectsService(conn);
   const sessionKkv = createSessionKkvService(conn);
-  // 存量 contentRef 行的兜底 hydrate 取数用（同 conn 单实例；
-  // 回迁完成前保留，回迁后无生产消费方）。
-  const revisionRepo = new SqliteVfsRevisionRepository(conn);
   const { userVfsTurn } = createUserVfsTurnServiceBundle(conn);
 
   const compactionConditionEvaluator = createCompactionConditionEvaluator({
@@ -203,6 +199,5 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
     smartSortRule,
     userVfsTurn,
     searchConfig,
-    revisionRepo,
   };
 }

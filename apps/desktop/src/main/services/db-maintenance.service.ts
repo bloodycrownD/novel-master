@@ -7,7 +7,6 @@ import { stat } from "node:fs/promises";
 import {
   createDbMaintenanceService,
   getBlobBinaryStatus,
-  getMessageDecompressStatus,
   getVfsContentPackStatus,
 } from "@novel-master/core";
 import { getDesktopRuntime } from "../runtime/desktop-runtime-singleton.js";
@@ -20,16 +19,14 @@ import {
 } from "./db-maintenance-busy.js";
 import type {
   BlobBinaryStatusDto,
-  MessageDecompressStatusDto,
   VfsContentPackStatusDto,
 } from "../../../shared/ipc-types.js";
 
-/** 采样存储统计：库文件体积（main 侧 stat）+ freelist 可回收量（core PRAGMA）+ 三类搬运状态。 */
+/** 采样存储统计：库文件体积（main 侧 stat）+ freelist 可回收量（core PRAGMA）+ 搬运状态。 */
 export async function getDbMaintenanceStats(): Promise<{
   fileBytes: number;
   reclaimableBytes: number;
   blobBinary: BlobBinaryStatusDto;
-  messageDecompress: MessageDecompressStatusDto | null;
   vfsPack: VfsContentPackStatusDto | null;
 }> {
   // 先确保 runtime/库文件就绪再 stat：并行赛跑会在冷启动（库尚未
@@ -37,40 +34,17 @@ export async function getDbMaintenanceStats(): Promise<{
   const runtime = await getDesktopRuntime();
   const fileInfo = await stat(resolveDbPath());
   const maintenance = createDbMaintenanceService(runtime.conn);
-  const [storage, messageDecompress] = await Promise.all([
+  const [storage, blobBinary] = await Promise.all([
     maintenance.getStorageStats(),
-    // 消息解压状态行数据源（稳态已完成时只读 KKV 标记，零 COUNT 成本）。
-    sampleMessageDecompressStatus(runtime.conn),
+    // 存量 blob 形态归一状态行数据源（稳态已完成时只读 KKV 标记，零 COUNT 成本）。
+    sampleBlobBinaryStatus(runtime.conn),
   ]);
   return {
     fileBytes: fileInfo.size,
     reclaimableBytes: storage.reclaimableBytes,
-    blobBinary: await sampleBlobBinaryStatus(runtime.conn),
-    messageDecompress,
+    blobBinary,
     vfsPack: await sampleVfsPackStatus(runtime.conn),
   };
-}
-
-/**
- * 采样消息正文解压搬运状态（存储页状态行）。
- *
- * 与 {@link sampleBlobBinaryStatus} 同口径：附属信息采样失败不拖垮
- * db/stats 主统计，吞掉异常按「未取到」展示——返回 `null`（ic-04），
- * renderer 侧 null 分支显示占位 '—'；不再用 `{done:false,pendingCount:0}`
- * 假数据（会被渲染成不真的「进行中（剩余 0 条）」）。
- */
-async function sampleMessageDecompressStatus(
-  conn: Parameters<typeof getMessageDecompressStatus>[0],
-): Promise<MessageDecompressStatusDto | null> {
-  try {
-    return await getMessageDecompressStatus(conn);
-  } catch (err) {
-    console.warn(
-      "[desktop] 采样消息解压状态失败：",
-      err instanceof Error ? err.message : err,
-    );
-    return null;
-  }
 }
 
 /**
@@ -96,12 +70,13 @@ async function sampleBlobBinaryStatus(
 }
 
 /**
- * 采样 VFS 历史版本打包状态（迁移卡第四行）。
+ * 采样 VFS 历史版本打包状态（迁移卡第三行）。
  *
- * 与 {@link sampleMessageDecompressStatus} 同口径：附属信息采样失败不
- * 拖垮 db/stats 主统计，吞掉异常按「未取到」展示——返回 `null`，
- * renderer 侧 null 分支显示占位 '—'。core 侧自带 3s 采样节流（候选谓词
- * 查询防 2s 轮询 IO 放大），本层不再节流。
+ * 附属信息采样失败不拖垮 db/stats 主统计，吞掉异常按「未取到」展示——
+ * 返回 `null`（ic-04），renderer 侧 null 分支显示占位 '—'；不再用
+ * `{done:false,pendingCount:0}` 假数据（会被渲染成不真的「进行中（剩余
+ * 0 条）」）。core 侧自带 3s 采样节流（候选谓词查询防 2s 轮询 IO 放大），
+ * 本层不再节流。
  */
 async function sampleVfsPackStatus(
   conn: Parameters<typeof getVfsContentPackStatus>[0],

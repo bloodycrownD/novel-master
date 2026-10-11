@@ -9,7 +9,6 @@ import type { ToolRegistry } from "@/domain/tool/logic/tool-registry.js";
 import type { BuiltinToolContext } from "@/domain/tool/builtin/builtin-tool-context.js";
 import type { ChatMessage } from "@/domain/chat/model/message.js";
 import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
-import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revision.port.js";
 import type { ProviderRepository } from "@/domain/provider/repositories/provider.port.js";
 import type { SavedModelRepository } from "@/domain/provider/repositories/saved-model.port.js";
 import type { ModelRequestService } from "../provider/model-request.port.js";
@@ -71,14 +70,6 @@ export interface CreateAgentRunnerDeps {
     PersistentPreferences,
     "getThinkingContextEnabled"
   >;
-  /**
-   * read 引用块 hydrate（read-tool-result-ref Step 6 生产装配）所需的
-   * revision 仓库：透传给每步 `prepareUserMessagesForPrompt` 的 runtime。
-   * 未注入且可见消息含 `contentRef` 块时 prepare **不抛错**（task-attach-unref
-   * Step 3）：填错误占位 JSON 并 `console.warn`——宁可让模型看到一段可读的
-   * 错误占位，也不把整回合打断在这里；装配缺口靠 warn 信号暴露。
-   */
-  readonly revisionRepo?: VfsRevisionRepository;
 }
 
 /** Creates an agent runner with injected dependencies. */

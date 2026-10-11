@@ -151,7 +151,7 @@ describe("db-maintenance ipc handlers", () => {
     }
   });
 
-  it("ic-04/cr-21③：正常路径返回体 blobBinary 形状为 { tables: [...] } 且 messageDecompress 字段贯通", async () => {
+  it("ic-04/cr-21③：正常路径返回体 blobBinary 形状为 { tables: [...] } 且 vfsPack 字段贯通", async () => {
     const res = await handleDbStats();
     assert.equal(res.ok, true);
     if (!res.ok) {
@@ -160,47 +160,8 @@ describe("db-maintenance ipc handlers", () => {
     // blobBinary 保留 IPC DTO 惯例的 { tables } 包装（cr-20 r3：与 mobile
     // 拍平数组是有意的两端惯例差异，不要求统一）。
     assert.ok(Array.isArray(res.data.blobBinary.tables));
-    // messageDecompress 两态本体贯通（非 null：稳态空库已完成或进行中均合法）。
-    assert.ok(res.data.messageDecompress != null);
-    assert.equal(typeof res.data.messageDecompress!.done, "boolean");
-    assert.equal(
-      typeof res.data.messageDecompress!.pendingCount,
-      "number",
-    );
-  });
-
-  it("ic-04：消息解压采样抛错 → messageDecompress === null 且 fileBytes 仍在（不再兜底成「进行中（剩余 0 条）」）", async () => {
-    const runtime = await getDesktopRuntime();
-    const conn = runtime.conn as unknown as {
-      query: (sql: string, params?: unknown) => Promise<unknown>;
-    };
-    const originalQuery = conn.query.bind(conn);
-    // KKV 模板经 SqlTemplateParser 转成位置参数数组，module 恒为首参：
-    // 只打掉解压状态采样这一路（module 为 nm-message-decompress；
-    // 正向遗留的 nm-message-content pending 欠账标记也是该 module，
-    // 本用例不打它——避免连带打掉别的采样面），getStorageStats /
-    // blobBinary 采样不受影响。
-    conn.query = (sql: string, params?: unknown) => {
-      if (
-        Array.isArray(params) &&
-        params[0] === "nm-message-decompress" &&
-        typeof sql === "string" &&
-        sql.includes("kkv_entry")
-      ) {
-        return Promise.reject(new Error("注入：消息解压状态采样失败"));
-      }
-      return originalQuery(sql, params);
-    };
-    try {
-      const res = await handleDbStats();
-      assert.equal(res.ok, true);
-      if (res.ok) {
-        assert.equal(res.data.messageDecompress, null);
-        assert.ok(res.data.fileBytes > 0);
-      }
-    } finally {
-      conn.query = originalQuery;
-    }
+    // vfsPack 字段贯通（null 或对象两态均合法：null = 采样失败未取到）。
+    assert.ok(res.data.vfsPack == null || typeof res.data.vfsPack === "object");
   });
 
   it("cr-21③：blobBinary 采样抛错 → tables: [] 且 fileBytes 仍在（cr-04 兜底分支）", async () => {

@@ -271,9 +271,9 @@ export function buildToolResultBlock(
     // read 都不再产 contentRef，也不再触发 revision +1（先保活、后引用是
     // v1.5.29 的引用化约束，本版整体摘除）。
     //
-    // 存量引用块（v1.5.29 装机窗口写入的 `content === ""` + contentRef 行）
-    // 仍由 `hydrateToolResultsForPrompt` 的极简兜底 hydrate 按
-    // `(entryId, version)` 回填 JSON 明文，详见该模块文件头。
+    // E1 清理版（v1.5.40 同批）进一步删除了读侧兜底：存量引用行已由回迁任务
+    // 全部改写回全文（真实库 contentRef 谓词归零 + KKV unrefDone 已置），
+    // 类型与 parse 白名单随 hydrate 一并退役。
 
     // 中断回流（phase-1-abort-reflow）：outcome.ok=true 但 output.stopped=true 表示
     // 子 agent 被用户中断。tool-result 要标 ok=false（主 agent 区分「用户停止」与「崩溃」），

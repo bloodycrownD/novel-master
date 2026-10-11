@@ -254,11 +254,10 @@ async function readCursor(sessionId: string): Promise<string | null> {
  *   立刻回归（这正是本轮修的性能病灶）。
  *
  * ⚠️ **覆盖范围只含上面这两个方法**：wave-c1 新增的窄读口
- * （`listBySessionUpToSeq` / `listBySessionTailOfRole` /
- * `listReadRefTargetsBySession`）**不在本 spy 覆盖内**——它们不是
+ * （`listBySessionUpToSeq` / `listBySessionTailOfRole` / `listIdsBySession`）
+ * **不在本 spy 覆盖内**——它们不是
  * `listBySession`，对它们的断言必须**直接 spy 新方法名**（见
- * `test/chat/message-fork-upper-bound.test.ts` 与
- * `test/chat/truncate-after-readref-targets.test.ts`）。
+ * `test/chat/message-fork-upper-bound.test.ts`）。
  */
 function spyFullSessionReads(): {
   readonly callCount: () => number;

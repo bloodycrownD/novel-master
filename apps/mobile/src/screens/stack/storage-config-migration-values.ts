@@ -1,13 +1,15 @@
 /**
  * 存储配置页「存量数据迁移」状态行的取值纯函数（从 StorageConfigScreen
- * 抽出，ic-22）：四组夹具可直测（未取到 → '—' / 已完成 / 进行中 /
+ * 抽出，ic-22）：三组夹具可直测（未取到 → '—' / 已完成 / 进行中 /
  * 已完成（N 条需人工处理）），不再靠源码正则拼字面量钉分支行为。
+ *
+ * 消息正文明文化状态行已随 V1' 退役（v1.5.40 同批：真实库实测压缩行
+ * 归零 + KKV decompressDone 已置，解压任务、状态行与取值函数一并删除）。
  *
  * @module screens/stack/storage-config-migration-values
  */
 import type {
   BlobBinaryTableStatus,
-  MessageDecompressStatus,
   VfsContentPackStatus,
 } from '@/services/db-maintenance.service';
 
@@ -15,24 +17,6 @@ import type {
 export interface MigrationValue {
   readonly value: string;
   readonly tone: 'default' | 'success' | 'warning';
-}
-
-/**
- * 消息正文明文化（存量压缩行 → 明文）状态行取值。
- * 未取到状态（如采样失败、Agent 运行中被守卫拒绝）显示占位 '—'。
- */
-export function messageDecompressValue(
-  status: MessageDecompressStatus | null,
-): MigrationValue {
-  if (status == null) {
-    return {value: '—', tone: 'default'};
-  }
-  return status.done
-    ? {value: '已完成', tone: 'success'}
-    : {
-        value: `进行中（剩余 ${status.pendingCount} 条）`,
-        tone: 'default',
-      };
 }
 
 /**

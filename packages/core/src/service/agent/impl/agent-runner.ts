@@ -61,7 +61,6 @@ import type { WorkplaceService } from "@/service/workplace/workplace.port.js";
 import type { AgentPromptLayout } from "@/domain/prompt/model/agent-prompt-layout.js";
 import type { PromptSkillIndexEntry } from "@/domain/prompt/model/prompt-render-context.js";
 import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
-import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revision.port.js";
 import type { CompactionConditionEvaluator } from "@/service/compaction-conditions/create-compaction-condition-evaluator.js";
 import { runCompaction } from "@/service/compaction-conditions/run-compaction.js";
 import type { MessageService } from "@/service/chat/message.port.js";
@@ -122,14 +121,6 @@ export interface DefaultAgentRunnerDeps {
     PersistentPreferences,
     "getThinkingContextEnabled"
   >;
-  /**
-   * read 引用块 hydrate（read-tool-result-ref Step 6 生产装配）所需的
-   * revision 仓库：每步 `prepareUserMessagesForPrompt` 透传。未注入且可见
-   * 消息含 `contentRef` 块时**不抛错**（task-attach-unref Step 3）：prepare
-   * 填错误占位 JSON 并 `console.warn`——写侧已不再产 contentRef，此路只
-   * 为存量行兜底，装配缺口靠 warn 信号暴露而不是打断整回合。
-   */
-  readonly revisionRepo?: VfsRevisionRepository;
 }
 
 /**
@@ -475,12 +466,6 @@ export class DefaultAgentRunner implements AgentRunner {
           // deny（D4）时置空，而显式引用不受工具禁用影响。
           skills: this.deps.skills?.(),
           projectId,
-          // read 引用块 hydrate（read-tool-result-ref Step 6）：deps 未注入
-          // 且消息含 contentRef 时不抛错，prepare 填错误占位 + warn
-          // （task-attach-unref Step 3；装配缺口由 warn 暴露，不打断整回合）。
-          ...(this.deps.revisionRepo != null
-            ? { revisionRepo: this.deps.revisionRepo }
-            : {}),
         });
         if (signal?.aborted) {
           await handleAbort("after_prepare_user_messages");

@@ -6,20 +6,6 @@
 
 import type { ChatMessage, ChatMessageHeader } from "../model/message.js";
 import type { MessageContent } from "../model/content-block.js";
-// 仅取类型（编译后擦除，运行时不成环）：ReadRefPointer 在 vfs 侧定义，
-// 这里不重新定义第二份，避免两个模块的 read 引用形状漂移。
-import type { ReadRefPointer } from "@/domain/vfs/logic/revision-ref-count.js";
-
-/**
- * 一条消息的「删除链素材」：id + 它的 read 引用指针。
- *
- * 窄投影（21 → 4 列）读口的返回元素：删除链需要的就是这两样东西，
- * 此前只能靠 21 列 `listBySession` 顺带取。
- */
-export type MessageReadRefTarget = {
-  readonly id: string;
-  readonly refs: readonly ReadRefPointer[];
-};
 
 /** Persistence for `chat_message` rows. */
 export interface MessageRepository {
@@ -118,23 +104,21 @@ export interface MessageRepository {
   ): Promise<ChatMessage[]>;
 
   /**
-   * 列出会话内每条消息的 id 与其 read 引用指针（entryId/version），不解压/不解析
-   * 正文以外的任何列。删除链（清空会话 / 删会话 / 删项目）需要「id 列表 +
-   * read 引用 −1 素材」两样东西，此前只能靠 21 列 `listBySession` 顺带取。
+   * 列出会话内全部消息 id（清空会话场景的删除链素材），不投影任何其他列。
    *
-   * @remarks **谁在用**：`message.service.ts:508`（`truncateAfter` 空锚分支）、
-   *          `session.service.ts:231`（`deleteSessionTree`）、
-   *          `project.service.ts:182`（删项目连带删会话）。
-   * @remarks **为什么不能用别的**：不能用 `listBySession` + 内存
-   *          `collectReadRefs` ——省不下任何一列，21 列的正文全部读回再丢掉。
-   * @remarks ⚠ 不过滤 hidden：本读口产出的是「即将被 deleteBySession 全删」的消息集合，
-   *          漏掉 hidden 行 = 漏减 read 引用 = revision 永不 GC（内容不可再生的方向）。
-   * @remarks ⚠ 返回类型**仍是**逐条 parse 后的 refs（`collectReadRefs` 需要完整
-   *          `MessageContent`）——本读口省的是**列数**与**事务外往返**，不是省 parse。
+   * @remarks **谁在用**：`message.service.ts`（`truncateAfter` 空锚分支——
+   *          `deleteBySession` 前把每条消息的 checkpoint 一并删掉）。
+   * @remarks **为什么不能用别的**：不能用 `listBySession` ——21 列 + 逐行
+   *          `JSON.parse` 换一批根本不需要任何正文的 id；`listMessageHeaders
+   *          BySession` 也已含多余列。
+   * @remarks ⚠ 不过滤 hidden：本读口产出的是「即将被 deleteBySession 全删」的
+   *          消息集合，漏掉 hidden 行 = 漏删 checkpoint（孤儿行）。
+   *
+   * @remarks 本读口原为 `listReadRefTargetsBySession`（id + read 引用指针
+   *          双素材）——read 引用机制随 E1 清理版退役后（v1.5.40 同批），
+   *          refs 消费方全灭，收窄为 id 单素材。
    */
-  listReadRefTargetsBySession(
-    sessionId: string
-  ): Promise<readonly MessageReadRefTarget[]>;
+  listIdsBySession(sessionId: string): Promise<readonly string[]>;
 
   /**
    * 按 seq 升序列出「seq >= fromSeq（含下界）」的消息。

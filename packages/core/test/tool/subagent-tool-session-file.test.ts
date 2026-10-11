@@ -7,9 +7,10 @@
  * 预算与降级已收敛到 prepare 链（core 单源），派发侧不再有任何条数 / 字符闸：
  * 超限附件照挂（附件落库事实不变 → chip 可见），降级只发生在提示词产物侧（T-A6）。
  *
- * 这里的 `runChildAgent` 是 mock（只观测收到的 opts），并发硬互斥（D5）与
- * 子会话落库的真实链路由 `test/service/agent/subagent-task-session-attach.test.ts`
- * 走 runAgentTurn 完整路径覆盖。
+ * 这里的 `runChildAgent` 是 mock（只观测收到的 opts）；并发硬互斥（D5）与
+ * 子会话落库的完整链路集成用例（原 `test/service/agent/subagent-task-
+ * session-attach.test.ts`）已随 E1 清理版退役（v1.5.40 同批）——本文件保留
+ * 的 mock 版形态 / 文案 / 预算断言是 TS / TA 线的现行覆盖。
  *
  * @module test/tool/subagent-tool-session-file
  */

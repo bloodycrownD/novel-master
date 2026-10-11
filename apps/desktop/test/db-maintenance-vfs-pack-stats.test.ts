@@ -9,9 +9,9 @@
  * 窗口、失败路径不写缓存），贯通用例在后（缓存无值、真采样），判据
  * 可靠。
  *
- * - 兜底（对齐 cr-21③ 的 blobBinary / ic-04 的 messageDecompress 口径）：
- *   候选谓词查询抛错 → `vfsPack === null` 且主统计（fileBytes /
- *   reclaimableBytes）与其余状态行不受影响。
+ * - 兜底（对齐 cr-21③ 的 blobBinary 口径）：候选谓词查询抛错 →
+ *   `vfsPack === null` 且主统计（fileBytes / reclaimableBytes）与其余
+ *   状态行不受影响。
  * - 正常路径：vfsPack 两态本体贯通（pendingGroups / memberCount /
  *   streamBytes / failedGroups 四字段；空库下全 0 收敛态）。
  *
@@ -44,8 +44,7 @@ describe("db/stats vfsPack 字段（T-VP22）", () => {
     };
     const originalQuery = conn.query.bind(conn);
     // 只打掉候选谓词查询（FROM vfs_revision 为其特有；getStorageStats 的
-    // PRAGMA / blobBinary 谓词 / messageDecompress 的 kkv 读均不含），
-    // 构造 getVfsContentPackStatus 抛错路径。
+    // PRAGMA / blobBinary 谓词均不含），构造 getVfsContentPackStatus 抛错路径。
     conn.query = (sql: string, params?: unknown) => {
       if (typeof sql === "string" && sql.includes("FROM vfs_revision")) {
         return Promise.reject(new Error("注入：vfs 打包状态采样失败"));
@@ -63,7 +62,6 @@ describe("db/stats vfsPack 字段（T-VP22）", () => {
       assert.ok(res.data.fileBytes > 0);
       assert.ok(res.data.reclaimableBytes >= 0);
       assert.ok(Array.isArray(res.data.blobBinary.tables));
-      assert.ok(res.data.messageDecompress != null);
     } finally {
       conn.query = originalQuery;
     }

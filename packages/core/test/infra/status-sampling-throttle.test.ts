@@ -1,17 +1,20 @@
 /**
  * 状态采样 COUNT 路径节流验收（ic-06①）。
  *
- * getMessageDecompressStatus / getBlobBinaryStatus 的谓词 COUNT 路径带
- * 3s 模块级节流（按连接实例隔离的 WeakMap 缓存）：窗口内重复调用回放
- * 上次采样值。只有真触 COUNT 的未完成态采样才写缓存——标记已置的免
- * COUNT 快路径不进节流域（既有文件标记短路面用例已覆盖，此处
- * 不重复）。**2s 轮询 + 全表扫 = 迁移期 IO 风暴，节流窗口取 3s**。
+ * getBlobBinaryStatus 的谓词 COUNT 路径带 3s 模块级节流（按连接实例隔离的
+ * WeakMap 缓存）：窗口内重复调用回放上次采样值。只有真触 COUNT 的未完成态
+ * 采样才写缓存——标记已置的免 COUNT 快路径不进节流域（既有文件标记短路
+ * 面用例已覆盖，此处不重复）。**2s 轮询 + 全表扫 = 迁移期 IO 风暴，节流
+ * 窗口取 3s**。
  *
  * 时序口径：10 次调用为同步连调（无人为 sleep），天然在 3s 窗口内完成
  * ——断言 COUNT 下发 ≤2 次；reset 钩子（__resetStatusSamplingThrottle
  * ForTests）清缓存后首次调用重新下发。独立新文件承载（node test runner
- * 每文件一进程），避免与 message-content-decompression.test.ts /
- * blob-binary-normalization.test.ts 的进程级顺序约束互相牵连。
+ * 每文件一进程），避免与 blob-binary-normalization.test.ts 的进程级顺序
+ * 约束互相牵连。
+ *
+ * getMessageDecompressStatus 的同款节流验收随消息正文解压任务本体在
+ * V1' 退役（v1.5.40 同批：真实库谓词归零 + KKV decompressDone 已置）。
  *
  * @module test/infra/status-sampling-throttle
  */
@@ -22,14 +25,8 @@ import { describe, it } from "node:test";
 import { compressZlib } from "../../src/domain/vfs/content-store/logic/zlib-codec.js";
 import {
   BLOB_BINARY_KKV_MODULE,
-  LEGACY_MAINTENANCE_PENDING_KKV_KEY,
-  LEGACY_MESSAGE_CONTENT_KKV_MODULE,
-  MESSAGE_DECOMPRESS_KKV_KEY,
-  MESSAGE_DECOMPRESS_KKV_MODULE,
   getBlobBinaryStatus,
-  getMessageDecompressStatus,
 } from "../../src/infra/db-maintenance/index.js";
-import { __resetStatusSamplingThrottleForTests as resetDecompressThrottle } from "../../src/infra/db-maintenance/impl/message-content-decompression.js";
 import { __resetStatusSamplingThrottleForTests as resetBlobThrottle } from "../../src/infra/db-maintenance/impl/blob-binary-normalization.js";
 import type { TdbcConnection } from "../../src/infra/tdbc/ports/connection.port.js";
 import {
@@ -42,9 +39,6 @@ novelMasterTestFixture();
 
 /** 归一谓词（与实现同形，测试侧清理夹具用）。 */
 const PREDICATE = `(encoding = 'zlib-b64' OR (encoding = 'zlib' AND TYPEOF(bytes) = 'text'))`;
-
-/** chat_message 侧同形谓词（列名不同）。 */
-const MESSAGE_PREDICATE = `(content_encoding = 'zlib-b64' OR (content_encoding = 'zlib' AND TYPEOF(content_blob) = 'text'))`;
 
 function conn(): TdbcConnection {
   return getNovelMasterTestContext().conn;
@@ -95,99 +89,15 @@ async function withSqlProbe<T>(
   }
 }
 
-describe("getMessageDecompressStatus 的谓词 COUNT 节流（ic-06①）", () => {
-  it("标记未置 + 有待解压行：3s 窗口内连调 10 次，COUNT 下发 ≤2；reset 后首次调用重新下发", async () => {
-    resetDecompressThrottle();
-    resetBlobThrottle();
-    const c = conn();
-
-    // 夹具：清解压完成标记 + 正向遗留 pending 标记 + 全表压缩行，
-    // 再插 1 条压缩行（pendingCount 精确为 1）。
-    await c.execute("DELETE FROM kkv_entry WHERE module IN (?, ?)", [
-      MESSAGE_DECOMPRESS_KKV_MODULE,
-      LEGACY_MESSAGE_CONTENT_KKV_MODULE,
-    ]);
-    await c.execute("DELETE FROM chat_message WHERE content_blob IS NOT NULL");
-    const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(
-      project.id,
-      `S-${testIsolationSuffix()}`
-    );
-    const blob = compressZlib(
-      new TextEncoder().encode(
-        JSON.stringify({ blocks: [{ type: "text", text: "节流验证压缩行" }] })
-      )
-    );
-    await c.execute(
-      `INSERT INTO chat_message (
-         id, session_id, seq, role, content_json, content_encoding, content_blob,
-         created_at_ms, hidden
-       ) VALUES (?, ?, 1, 'user', '', 'zlib', ?, ?, 0)`,
-      [randomUUID(), session.id, blob, Date.now()]
-    );
-
-    // 同步连调 10 次（无人为 sleep，天然在 3s 窗口内完成，不跨窗）。
-    const statuses: Awaited<ReturnType<typeof getMessageDecompressStatus>>[] =
-      [];
-    const { seen } = await withSqlProbe(async () => {
-      for (let i = 0; i < 10; i++) {
-        statuses.push(await getMessageDecompressStatus(c));
-      }
-    });
-
-    const countSqls = seen.filter(isCountStar);
-    assert.ok(
-      countSqls.length >= 1,
-      "首轮采样应真下发 COUNT（对照：证明探针有牙，防恒真）"
-    );
-    assert.ok(
-      countSqls.length <= 2,
-      `3s 窗口内 10 次连调的 COUNT 下发应 ≤2 次，实际 ${countSqls.length}`
-    );
-    for (const [i, status] of statuses.entries()) {
-      assert.deepEqual(
-        status,
-        { done: false, pendingCount: 1 },
-        `第 ${i + 1} 次返回值应与首轮一致（窗口内回放上次采样值）`
-      );
-    }
-
-    // reset 钩子清缓存后：首次调用重新下发 COUNT（拿到的是新采样值）。
-    resetDecompressThrottle();
-    const afterReset = await withSqlProbe(() =>
-      getMessageDecompressStatus(c)
-    );
-    assert.deepEqual(afterReset.result, { done: false, pendingCount: 1 });
-    assert.ok(
-      afterReset.seen.some(isCountStar),
-      "reset 后首次调用应重新下发 COUNT"
-    );
-    // 收尾清夹具：本文件自造压缩行，别留给同进程后续用例的谓词计数。
-    await c.execute("DELETE FROM chat_message WHERE content_blob IS NOT NULL");
-    await c.execute(
-      "DELETE FROM kkv_entry WHERE module = ? AND key = ?",
-      [
-        LEGACY_MESSAGE_CONTENT_KKV_MODULE,
-        LEGACY_MAINTENANCE_PENDING_KKV_KEY,
-      ]
-    );
-  });
-});
-
 describe("getBlobBinaryStatus 的谓词 COUNT 节流（ic-06①）", () => {
   it("标记未置 + 有待归一行：3s 窗口内连调 10 次，每表 COUNT 下发 ≤2；reset 后首次调用重新下发", async () => {
-    resetDecompressThrottle();
     resetBlobThrottle();
     const c = conn();
 
-    // 夹具：三表谓词命中行清零 + nm-blob-binary 标记清零，vfs 插 1 条
-    // legacy base64 行（pendingCount 精确为 1；另两表谓词空、标记未置）。
+    // 夹具：两表谓词命中行清零 + nm-blob-binary 标记清零，vfs 插 1 条
+    // legacy base64 行（pendingCount 精确为 1；fileCache 谓词空、标记未置）。
     await c.execute(`DELETE FROM vfs_content_blob WHERE ${PREDICATE}`);
     await c.execute(`DELETE FROM session_file_cache_blob WHERE ${PREDICATE}`);
-    await c.execute(
-      `DELETE FROM chat_message WHERE ${MESSAGE_PREDICATE}`
-    );
     await c.execute("DELETE FROM kkv_entry WHERE module = ?", [
       BLOB_BINARY_KKV_MODULE,
     ]);
@@ -216,7 +126,6 @@ describe("getBlobBinaryStatus 的谓词 COUNT 节流（ic-06①）", () => {
     for (const table of [
       "vfs_content_blob",
       "session_file_cache_blob",
-      "chat_message",
     ]) {
       const tableCounts = seen.filter(
         (sql) => isCountStar(sql) && sql.includes(table)
@@ -236,7 +145,6 @@ describe("getBlobBinaryStatus 的谓词 COUNT 节流（ic-06①）", () => {
         [
           { table: "vfsContent", done: false, pendingCount: 1, failedCount: 0 },
           { table: "fileCache", done: true, pendingCount: 0, failedCount: 0 },
-          { table: "messageContent", done: true, pendingCount: 0, failedCount: 0 },
         ],
         `第 ${i + 1} 次返回值应与首轮一致（窗口内回放上次采样值）`
       );

@@ -1,46 +1,27 @@
 /**
- * storage-config-migration-values 纯函数单测（ic-22）：迁移状态行四组
- * 夹具直测，替代源码正则拼字面量——任一渲染分支写错（如 null 分支返回
+ * storage-config-migration-values 纯函数单测（ic-22）：迁移状态行夹具
+ * 直测，替代源码正则拼字面量——任一渲染分支写错（如 null 分支返回
  * 「进行中」）对应夹具即红。
  *
- * 四组夹具（两端渲染值函数的全集口径）：
+ * 夹具口径（两端渲染值函数的全集口径）：
  * 未取到 → '—'；done → 已完成；!done → 进行中（剩余 N 条）；
  * done && failedCount > 0 → 已完成（N 条需人工处理）。
  * 第三组「需人工处理」只在 blobBinaryValue 上成立（cr-06：core
- * BlobBinaryTableStatus 携带 failedCount；MessageDecompressStatus 无此
- * 字段，迁移期坏行不改变状态行的两态形态）。
+ * BlobBinaryTableStatus 携带 failedCount）。
  *
- * vfsPackValue（T-VP22 第四行）：打包无终态、无 done 字段，收敛判定取
+ * messageDecompressValue 的夹具随消息正文明文化状态行在 V1' 退役
+ * （v1.5.40 同批：真实库实测压缩行归零 + KKV decompressDone 已置）
+ * 一并删除——取值函数本体已从实现模块删除。
+ *
+ * vfsPackValue（历史版本打包行）：打包无终态、无 done 字段，收敛判定取
  * pendingGroups === 0——夹具口径为：null → '—'；pendingGroups > 0 →
  * 剩余 N 组；pendingGroups === 0 && failedGroups === 0 → 无需处理；
  * pendingGroups === 0 && failedGroups > 0 → 已完成（N 组需人工处理）。
  */
 import {
   blobBinaryValue,
-  messageDecompressValue,
   vfsPackValue,
 } from '@/screens/stack/storage-config-migration-values';
-
-describe('messageDecompressValue 夹具', () => {
-  it('null（未取到）→ 占位 ‘—’，默认色', () => {
-    expect(messageDecompressValue(null)).toEqual({
-      value: '—',
-      tone: 'default',
-    });
-  });
-
-  it('done → 已完成，success 色', () => {
-    expect(
-      messageDecompressValue({done: true, pendingCount: 0}),
-    ).toEqual({value: '已完成', tone: 'success'});
-  });
-
-  it('!done → 进行中（剩余 N 条），默认色', () => {
-    expect(
-      messageDecompressValue({done: false, pendingCount: 7}),
-    ).toEqual({value: '进行中（剩余 7 条）', tone: 'default'});
-  });
-});
 
 describe('blobBinaryValue 夹具（cr-06 三态）', () => {
   it('undefined（表未注册/未取到）→ 占位 ‘—’，默认色', () => {

@@ -95,9 +95,9 @@ export interface VfsRevisionRepository {
   /**
    * 同 {@link listKeysUnderScope}，但一并带回当前 `ref_count`。
    *
-   * @remarks repair 三类化（read-tool-result-ref）用：期望值（checkpoint 指针 +
-   * live head + read 引用三类之和）与当前值的双向对账——偏低走 floor 上调，
-   * 偏高（疑似泄漏）只报告不自动修，都需要当前值参与比对。
+   * @remarks repair 对账用：期望值（checkpoint 指针 + live head 两类之和）
+   * 与当前值的双向对账——偏低走 floor 上调，偏高（疑似泄漏）只报告不自动修，
+   * 都需要当前值参与比对。
    */
   listKeysWithRefCountUnderScope(
     scopeKey: string,

@@ -96,14 +96,13 @@ jest.mock('@react-navigation/native', () => {
   };
 });
 
-/** 两次采样返回值：剩余条数从 100 推进到 50（搬运进行中的口径）。 */
+/** 两次采样返回值：剩余条数从 1100 推进到 550（搬运进行中的口径）。 */
 const STATS_SNAPSHOT_A = {
   fileBytes: 1_048_576,
   reclaimableBytes: 40_960,
   blobBinary: [
     {table: 'vfsContent', done: false, pendingCount: 1100, failedCount: 0},
   ],
-  messageDecompress: {done: false, pendingCount: 100},
 };
 const STATS_SNAPSHOT_B = {
   fileBytes: 1_048_576,
@@ -111,7 +110,6 @@ const STATS_SNAPSHOT_B = {
   blobBinary: [
     {table: 'vfsContent', done: false, pendingCount: 550, failedCount: 0},
   ],
-  messageDecompress: {done: false, pendingCount: 50},
 };
 
 /** 收集渲染树上的全部文本节点（宿主 Text 的 children）。 */
@@ -151,19 +149,19 @@ describe('StorageConfigScreen 维护指标轮询（ic-23）', () => {
     await act(async () => {
       renderer = TestRenderer.create(<StorageConfigScreen />);
     });
-    // 进页快照：剩余 100 条
+    // 进页快照：剩余 1100 条
     expect(collectText(renderer.toJSON()).join('\n')).toContain(
-      '进行中（剩余 100 条）',
+      '进行中（剩余 1100 条）',
     );
     expect(mockGetStats).toHaveBeenCalledTimes(1);
 
-    // 5s 后轮询触发第二次采样，UI 值更新为 50
+    // 5s 后轮询触发第二次采样，UI 值更新为 550
     await act(async () => {
       await jest.advanceTimersByTimeAsync(5_000);
     });
     expect(mockGetStats).toHaveBeenCalledTimes(2);
     expect(collectText(renderer.toJSON()).join('\n')).toContain(
-      '进行中（剩余 50 条）',
+      '进行中（剩余 550 条）',
     );
 
     await act(async () => {
