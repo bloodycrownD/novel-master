@@ -74,7 +74,7 @@ index 512f5fc..c5fd500 100644
      view: EnrichedMarkdownTextInputView?,
      indicator: String?,
 diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/EnrichedMarkdownTextInputView.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/EnrichedMarkdownTextInputView.kt
-index 561cf66..2682cfb 100644
+index 561cf66..e58f744 100644
 --- a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/EnrichedMarkdownTextInputView.kt
 +++ b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/EnrichedMarkdownTextInputView.kt
 @@ -13,6 +13,7 @@ import android.util.TypedValue
@@ -259,7 +259,7 @@ index 561cf66..2682cfb 100644
    fun dismissActiveMention() {
      mentionCoordinator.clear(emit = false)
    }
-@@ -1007,9 +1125,30 @@ class EnrichedMarkdownTextInputView(
+@@ -1007,9 +1125,44 @@ class EnrichedMarkdownTextInputView(
      if (size <= 0f) return
      val sizePx = ceil(PixelUtil.toPixelFromSP(size))
      setTextSize(TypedValue.COMPLEX_UNIT_PX, sizePx)
@@ -278,14 +278,28 @@ index 561cf66..2682cfb 100644
 +  fun setPendingLineHeightDp(valueDp: Float) {
 +    pendingLineHeightDp = valueDp
 +    applyPendingLineSpacing()
++    layoutManager.invalidateLayout()
 +  }
 +
 +  private fun applyPendingLineSpacing() {
 +    if (pendingLineHeightDp <= 0f) return
-+    val targetPx = pendingLineHeightDp * resources.displayMetrics.density
-+    val fm = paint.fontMetricsInt
-+    setLineSpacing(targetPx - (fm.descent - fm.ascent), 1f)
++    setLineSpacing(lineSpacingAddPx, 1f)
 +  }
++
++  /**
++   * Line-spacing addend in px (novel-master patch), shared with InputMeasurementStore:
++   * the Yoga measure must apply the same per-line height as the renderer, otherwise
++   * the measured content height drifts below what the view actually draws and the
++   * last line gets clipped once the requested lineHeight exceeds the font's natural
++   * line height.
++   */
++  internal val lineSpacingAddPx: Float
++    get() {
++      if (pendingLineHeightDp <= 0f) return 0f
++      val targetPx = pendingLineHeightDp * resources.displayMetrics.density
++      val fm = paint.fontMetricsInt
++      return targetPx - (fm.descent - fm.ascent)
++    }
 +
    fun setColorFromProps(colorInt: Int?) {
      setTextColor(colorInt ?: Color.BLACK)
@@ -346,6 +360,100 @@ index 6b1d266..c4ab77e 100644
      }
  
    private data class BoundaryEvent(
+diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/layout/InputLayoutManager.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/layout/InputLayoutManager.kt
+index 4e96cb7..b149d26 100644
+--- a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/layout/InputLayoutManager.kt
++++ b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/layout/InputLayoutManager.kt
+@@ -14,7 +14,7 @@ class InputLayoutManager(
+     val text = view.text
+     val paint = view.paint
+ 
+-    val needUpdate = InputMeasurementStore.store(view.id, text, paint)
++    val needUpdate = InputMeasurementStore.store(view.id, text, paint, view.lineSpacingAddPx)
+     if (!needUpdate) return
+ 
+     val state = Arguments.createMap()
+diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/layout/InputMeasurementStore.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/layout/InputMeasurementStore.kt
+index d7fc9ac..89a0fb5 100644
+--- a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/layout/InputMeasurementStore.kt
++++ b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/layout/InputMeasurementStore.kt
+@@ -16,6 +16,9 @@ object InputMeasurementStore {
+   private data class PaintParams(
+     val typeface: android.graphics.Typeface?,
+     val fontSize: Float,
++    // novel-master patch: the renderer's line-spacing addend (px). Part of the
++    // cache key so a lineHeight prop change invalidates the cached size.
++    val lineSpacingAddPx: Float,
+   )
+ 
+   private data class MeasurementParams(
+@@ -31,12 +34,13 @@ object InputMeasurementStore {
+     id: Int,
+     text: CharSequence?,
+     paint: TextPaint,
++    lineSpacingAddPx: Float,
+   ): Boolean {
+     val cachedWidth = data[id]?.cachedWidth ?: 0f
+     val cachedSize = data[id]?.cachedSize ?: 0L
+ 
+-    val size = measure(cachedWidth, text, paint)
+-    val paintParams = PaintParams(paint.typeface, paint.textSize)
++    val size = measure(cachedWidth, text, paint, lineSpacingAddPx)
++    val paintParams = PaintParams(paint.typeface, paint.textSize, lineSpacingAddPx)
+ 
+     data[id] = MeasurementParams(cachedWidth, size, text, paintParams)
+     return size != cachedSize
+@@ -84,7 +88,7 @@ object InputMeasurementStore {
+         textSize = value.paintParams.fontSize
+       }
+ 
+-    val size = measure(width, value.text, paint)
++    val size = measure(width, value.text, paint, value.paintParams.lineSpacingAddPx)
+     data[id] = MeasurementParams(width, size, value.text, value.paintParams)
+     return size
+   }
+@@ -110,13 +114,31 @@ object InputMeasurementStore {
+         isAntiAlias = true
+       }
+ 
+-    return measure(width, text, paint)
++    // novel-master patch: mirror the renderer's line-height compensation so the
++    // cold measure lands on the same per-line height the view will draw (see
++    // EnrichedMarkdownTextInputView.lineSpacingAddPx).
++    val lineHeightDp = props
++      ?.takeIf { it.hasKey("lineHeight") }
++      ?.getDouble("lineHeight")
++      ?.toFloat()
++      ?: 0f
++    val lineSpacingAddPx =
++      if (lineHeightDp > 0f) {
++        val targetPx = lineHeightDp * context.resources.displayMetrics.density
++        val fm = paint.fontMetricsInt
++        targetPx - (fm.descent - fm.ascent)
++      } else {
++        0f
++      }
++
++    return measure(width, text, paint, lineSpacingAddPx)
+   }
+ 
+   private fun measure(
+     maxWidth: Float,
+     text: CharSequence?,
+     paint: TextPaint,
++    lineSpacingAddPx: Float,
+   ): Long {
+     val content = text ?: ""
+     val widthPx = maxWidth.toInt().coerceAtLeast(0)
+@@ -125,7 +147,7 @@ object InputMeasurementStore {
+       StaticLayout.Builder
+         .obtain(content, 0, content.length, paint, widthPx)
+         .setIncludePad(true)
+-        .setLineSpacing(0f, 1f)
++        .setLineSpacing(lineSpacingAddPx, 1f)
+ 
+     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+       builder.setBreakStrategy(android.graphics.text.LineBreaker.BREAK_STRATEGY_HIGH_QUALITY)
 diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/model/InputFormatterStyle.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/model/InputFormatterStyle.kt
 index a961e67..bbad75c 100644
 --- a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/model/InputFormatterStyle.kt
