@@ -106,7 +106,12 @@ export interface UsageStatsModelRow {
   readonly billedInputTokens: number;
 }
 
-/** 请求流水行（一条 assistant 消息 = 一次 LLM 请求）。 */
+/**
+ * 请求流水行（账本一行 = 一次带 token 真值的 LLM 请求）。
+ *
+ * 数据源为 usage_record（独立账本）：行不随会话/消息删除消失，删除后的
+ * 历史请求照常出现在流水里。
+ */
 export interface UsageStatsRequestRow {
   /** 请求完成落库时刻（本地时区展示）。 */
   readonly createdAtMs: number;
@@ -135,8 +140,9 @@ export interface UsageStatsRequestPage {
 }
 
 /**
- * 会话详情 · 最近一次请求：会话内 `seq` 最大且 usage 非空的 assistant 行
- * （OpenAI/Gemini 等无 cache_creation 概念的协议 cache 列为 null，展示层
+ * 会话详情 · 最近一次请求：该会话在账本（usage_record）里落库时刻最新的一行
+ * （`seq` 为写入时快照的 assistant 消息 seq，消息删除后仍保留——账本与内容
+ * 分离；OpenAI/Gemini 等无 cache_creation 概念的协议 cache 列为 null，展示层
  * 出「—」；`atMs` 为该行落库时刻，本地时区展示）。
  */
 export interface SessionUsageLastRequest {
@@ -178,7 +184,12 @@ export interface SessionUsageDetail {
   readonly toolUseCount: number;
 }
 
-/** Token 用量统计聚合服务。 */
+/**
+ * Token 用量统计聚合服务。
+ *
+ * 聚合与流水读口的数据源是 usage_record（独立用量账本，按请求粒度，账本与
+ * 内容分离——删除会话/消息/回滚截尾都不删账本行，统计数字因此不随内容消失）。
+ */
 export interface UsageStatsService {
   /** 范围内汇总（`filter.range` 缺省时为全历史）。 */
   getSummary(filter: UsageStatsFilter): Promise<UsageStatsSummary>;

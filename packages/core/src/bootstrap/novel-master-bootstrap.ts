@@ -24,6 +24,7 @@ import { KKV_SCHEMA_STATEMENTS } from "./kkv/kkv-schema.js";
 import { SESSION_KKV_SCHEMA_STATEMENTS } from "./session-kkv/session-kkv-schema.js";
 import { FILE_CACHE_SCHEMA_STATEMENTS } from "./session-kkv/file-cache-schema.js";
 import { SESSION_RUN_STATE_SCHEMA_STATEMENTS } from "./session-run-state/session-run-state-schema.js";
+import { USAGE_RECORD_SCHEMA_STATEMENTS } from "./usage/usage-record-schema.js";
 import { CHAT_SCHEMA_STATEMENTS } from "./chat/chat-schema.js";
 import { SESSION_FS_SCHEMA_STATEMENTS } from "./session-fs/session-fs-schema.js";
 import { WORKPLACE_SCHEMA_STATEMENTS } from "./workplace/workplace-schema.js";
@@ -143,8 +144,12 @@ import { IntegrityRepairRegistry } from "@/service/integrity-repair.js";
  * vfs_entry）。bump 19 同时救回「曾被撤回 v18 写到 user_version = 18 的
  * 开发库」——这批库在 18 >= 18 快路径下旧名无守卫触发器永远不会被 DROP，
  * bump 后重新落慢路径一并收口。
+ * v20：新增 usage_record 表与两条索引（独立用量账本，按请求粒度，账本与
+ * 内容分离——删除会话/消息/回滚截尾都不删本表行，统计不再随内容消失）。
+ * 老库（v19）靠本轮 bump 走慢路径由 DDL 建表建索引；全新库直接建表；
+ * **无存量回填**（用户拍板：空表直接上，统计数字自本表上线起算）。
  */
-export const SCHEMA_BOOT_VERSION = 19;
+export const SCHEMA_BOOT_VERSION = 20;
 
 /** 各模块 DDL 语句，按依赖安全顺序排列。 */
 export const NOVEL_MASTER_SCHEMA_STATEMENTS: readonly string[] = [
@@ -157,6 +162,7 @@ export const NOVEL_MASTER_SCHEMA_STATEMENTS: readonly string[] = [
   ...SESSION_KKV_SCHEMA_STATEMENTS,
   ...FILE_CACHE_SCHEMA_STATEMENTS,
   ...SESSION_RUN_STATE_SCHEMA_STATEMENTS,
+  ...USAGE_RECORD_SCHEMA_STATEMENTS,
   ...CHAT_SCHEMA_STATEMENTS,
   ...SESSION_FS_SCHEMA_STATEMENTS,
   ...WORKPLACE_SCHEMA_STATEMENTS,
@@ -464,7 +470,7 @@ export async function bootstrapNovelMaster(
   // `no such table: vfs_content_pack` 报错（荣耀真机 2026-10-01 实锤）。慢路径
   // 库由事务内语句集建出后此处为幂等 no-op；放进语句集对快路径无效果（快路径
   // 不执行 DDL 循环）。全部语句带 IF NOT EXISTS、不 bump、不挂 migration——与
-  // 上方 `idx_chat_message_pending_blob` 先例同款落点纪律。**失败语义 fail
+  // `idx_chat_message_pending_blob` 先例（V1' 退役第六轮已删）同款落点纪律。**失败语义 fail
   // loud**：静默吞掉建表失败会让任务持续报 no such table 且无任何痕迹。V1'
   // 退役 Part B 时随迭代一并评估删除。
   for (const sql of VFS_CONTENT_PACK_SCHEMA_STATEMENTS) {

@@ -65,8 +65,16 @@ const AGG_SELECT_SQL =
   `CAST(SUM(completion_tokens) FILTER (${RATE_FILTER_SQL}) AS REAL) ` +
   `/ (SUM(duration_ms - first_token_ms) FILTER (${RATE_FILTER_SQL}) / 1000.0) AS avg_tokens_per_second`;
 
-/** usage 非空判定的公共片断（NULL usage 行不计任何求和与次数）。 */
-const USAGE_NOT_NULL_SQL = `role = 'assistant' AND (prompt_tokens IS NOT NULL OR completion_tokens IS NOT NULL)`;
+/**
+ * 账本有效行判据（公共片断）：prompt / completion 至少一侧非空。
+ *
+ * 统计唯一数据源是 usage_record（独立用量账本，按请求粒度，账本与内容
+ * 分离——删除会话/消息/回滚截尾都不删本表行）。新表只在记账点插入，写入端
+ * 按同判据把关（无 token 真值的请求不入账本），此处保留 token 非空判据作为
+ * 写入契约的防御性复核；旧口径的 `role = 'assistant'` 判据随之退役（账本表
+ * 不存在非 assistant 行，hidden 维度也不存在——hidden 只是内容侧可见性）。
+ */
+const USAGE_NOT_NULL_SQL = `(prompt_tokens IS NOT NULL OR completion_tokens IS NOT NULL)`;
 
 /**
  * 模型筛选片断：undefined = 全部；null = 「其他」桶（未记录 + 不在
@@ -209,7 +217,7 @@ export class DefaultUsageStatsService implements UsageStatsService {
       this.parser,
       `SELECT strftime('%Y-%m-%d', created_at_ms / 1000, 'unixepoch', 'localtime') AS day_key,
               ${AGG_SELECT_SQL}
-       FROM chat_message
+       FROM usage_record
        WHERE ${USAGE_NOT_NULL_SQL}
          AND created_at_ms >= #{fromMs}
          AND created_at_ms < #{toMs}
@@ -279,7 +287,7 @@ export class DefaultUsageStatsService implements UsageStatsService {
       this.conn,
       this.parser,
       `SELECT provider_id, model_name, ${AGG_SELECT_SQL}
-       FROM chat_message
+       FROM usage_record
        WHERE ${USAGE_NOT_NULL_SQL}
          ${timeRangeSql(fromMs, toMs)}
          ${modelFilterSql(filter.model)}
@@ -382,7 +390,7 @@ export class DefaultUsageStatsService implements UsageStatsService {
     const totalRows = await queryTemplate<{ n: number }>(
       this.conn,
       this.parser,
-      `SELECT COUNT(*) AS n FROM chat_message ${whereSql}`,
+      `SELECT COUNT(*) AS n FROM usage_record ${whereSql}`,
       params
     );
     const rows = await queryTemplate<Row>(
@@ -391,7 +399,7 @@ export class DefaultUsageStatsService implements UsageStatsService {
       `SELECT created_at_ms, model_name, prompt_tokens, completion_tokens,
               total_tokens, cache_read_tokens, cache_creation_tokens,
               first_token_ms, duration_ms
-       FROM chat_message
+       FROM usage_record
        ${whereSql}
        ORDER BY created_at_ms DESC, id ASC
        LIMIT #{limit} OFFSET #{offset}`,
@@ -441,8 +449,11 @@ export class DefaultUsageStatsService implements UsageStatsService {
         `getSessionUsageDetail 须提供 sessionId，收到：${String(sessionId)}`
       );
     }
-    // 最近行 + 可见计数两条 SQL 与会话 KKV 缓存读并行。可见数 SQL 数行
-    // （hidden 列判定，与 listVisibleSorted 同口径——只剔 hidden 不筛角色）。
+    // 最近行 + 可见计数两条 SQL 与会话 KKV 缓存读并行。最近行改打账本
+    // （usage_record，按 created_at_ms 倒序取首行）——消息被删除/回滚后
+    // 账本行仍在，「最近一次请求」不再随内容消失；可见数 SQL 数行
+    // （hidden 列判定，与 listVisibleSorted 同口径——只剔 hidden 不筛角色），
+    // 它属内容侧读数（随会话删），仍打 chat_message。
     // 工具调用数走会话 KKV `usage_stats.toolUseCount` 缓存（2026-09-29 用户
     // 拍板「实时算 + 缓存，失效挂 run/编辑/删除」；缓存跟随会话生命周期，
     // fork 新会话天然 miss 重算）；miss 时解压 assistant 行现算并回填——
@@ -452,11 +463,11 @@ export class DefaultUsageStatsService implements UsageStatsService {
       queryTemplate<Row>(
         this.conn,
         this.parser,
-        `SELECT seq, model_name, provider, prompt_tokens, completion_tokens,
+        `SELECT message_seq, model_name, provider, prompt_tokens, completion_tokens,
                 cache_read_tokens, cache_creation_tokens, created_at_ms
-         FROM chat_message
+         FROM usage_record
          WHERE ${USAGE_NOT_NULL_SQL} AND session_id = #{sessionId}
-         ORDER BY seq DESC
+         ORDER BY created_at_ms DESC, id DESC
          LIMIT 1`,
         { sessionId }
       ),
@@ -479,7 +490,8 @@ export class DefaultUsageStatsService implements UsageStatsService {
       lastRow == null
         ? null
         : {
-            seq: Number(lastRow.seq),
+            // 账本行自带消息 seq 快照；异常缺省按 0（展示层不消费 seq）。
+            seq: Number(lastRow.message_seq ?? 0),
             modelName:
               lastRow.model_name == null
                 ? null
@@ -612,7 +624,7 @@ export class DefaultUsageStatsService implements UsageStatsService {
       this.conn,
       this.parser,
       `SELECT ${AGG_SELECT_SQL}
-       FROM chat_message
+       FROM usage_record
        WHERE ${USAGE_NOT_NULL_SQL}
          ${timeRangeSql(fromMs, toMs)}
          ${modelFilterSql(model)}

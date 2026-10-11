@@ -21,6 +21,8 @@ import { beforeEach, describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
 import type { ChatMessage } from "../../src/domain/chat/model/message.js";
 import { SqliteMessageRepository } from "../../src/domain/chat/repositories/impl/sqlite-message.repository.js";
+import { SqliteUsageRecordRepository } from "../../src/domain/usage/repositories/impl/sqlite-usage-record.repository.js";
+import { buildUsageRecordFromMessage } from "../../src/domain/usage/logic/build-usage-record.js";
 import { ChatError } from "../../src/errors/chat-errors.js";
 import { createUsageStatsService } from "../../src/service/chat/create-chat-services.js";
 import type { UsageStatsRange } from "../../src/service/chat/usage-stats.port.js";
@@ -37,10 +39,12 @@ process.env.TZ = "America/New_York";
 
 novelMasterTestFixture();
 
-// 统计查询扫全表，而 fixture 是整文件共享一条库：每个用例前清空消息表
-// 与模型配置表隔离数据（llm_saved_model 外键引用 llm_provider，先删子表）。
+// 统计查询扫全表（账本表 usage_record 自 v20 起为唯一数据源），而 fixture 是
+// 整文件共享一条库：每个用例前清空账本表、消息表与模型配置表隔离数据
+//（llm_saved_model 外键引用 llm_provider，先删子表）。
 beforeEach(async () => {
   const ctx = getNovelMasterTestContext();
+  await ctx.conn.execute("DELETE FROM usage_record");
   await ctx.conn.execute("DELETE FROM chat_message");
   await ctx.conn.execute("DELETE FROM llm_saved_model");
   await ctx.conn.execute("DELETE FROM llm_provider");
@@ -144,6 +148,14 @@ async function seedMsg(
     ...(usage != null ? { usage } : {}),
   };
   await new SqliteMessageRepository(ctx.conn).insert(message);
+  // 账本行同步 seed：统计读口打 usage_record（v20 起唯一数据源），seed 走与
+  // 生产记账点同一构建/写入链（buildUsageRecordFromMessage +
+  // SqliteUsageRecordRepository），保证测试数据形态与落库形态逐列一致；
+  // user 行 / 无 usage 行 / 只有耗时无 token 真值的行同样不入账本。
+  const usageRecord = buildUsageRecordFromMessage(message);
+  if (usageRecord != null) {
+    await new SqliteUsageRecordRepository(ctx.conn).insert(usageRecord);
+  }
   return message.id;
 }
 
@@ -1691,5 +1703,177 @@ describe("usage stats service 会话维度详情（T-MD1/T-MD2，metric-detail-s
       (ctx.conn as unknown as { query: typeof ctx.conn.query }).query =
         originalQuery;
     }
+  });
+
+  it("账本回归（核心）：删除会话（物理硬删消息）后 summary/daily/modelBreakdown/流水数字逐字段不变", async () => {
+    const { ctx, session } = await seedSession();
+    const today0 = localDayStart(Date.now());
+    await seedMsg(ctx, session.id, 1, {
+      createdAtMs: today0 + 10 * MIN,
+      provider: "anthropic",
+      providerId: "prov-1",
+      modelName: "claude-sonnet-4",
+      usage: {
+        prompt: 100,
+        completion: 50,
+        total: 150,
+        cacheRead: 30,
+        cacheCreation: 10,
+        firstTokenMs: 100,
+        durationMs: 1100,
+      },
+    });
+    await seedMsg(ctx, session.id, 2, {
+      createdAtMs: today0 + 20 * MIN,
+      provider: "openai",
+      providerId: "prov-2",
+      modelName: "gpt-5",
+      usage: {
+        prompt: 20,
+        completion: 10,
+        total: 30,
+        firstTokenMs: 50,
+        durationMs: 550,
+      },
+    });
+    const svc = createUsageStatsService(ctx.conn);
+    const filter = { range: dayRange(today0, today0) };
+    const beforeSummary = await svc.getSummary(filter);
+    const beforeDaily = await svc.getDailyBuckets(filter);
+    const beforeModels = await svc.getModelBreakdown(filter);
+    const beforePage = await svc.listRequestUsage(filter, {
+      offset: 0,
+      limit: 50,
+    });
+    assert.equal(beforeSummary.calls, 2);
+    assert.equal(beforeSummary.totalTokens, 180);
+    assert.equal(beforePage.total, 2);
+
+    // 物理硬删会话：chat_message 行全清；usage_record 无外键无级联，删除链不碰它。
+    await ctx.sessions.delete(session.id);
+    const remaining = await ctx.conn.query<{ n: number }>(
+      `SELECT COUNT(*) AS n FROM chat_message WHERE session_id = ?`,
+      [session.id]
+    );
+    assert.equal(Number(remaining[0]?.n ?? 0), 0, "前置：消息确已物理删除");
+
+    assert.deepEqual(await svc.getSummary(filter), beforeSummary, "summary 逐字段不变");
+    assert.deepEqual(await svc.getDailyBuckets(filter), beforeDaily, "日桶不变");
+    assert.deepEqual(await svc.getModelBreakdown(filter), beforeModels, "模型维度不变");
+    const afterPage = await svc.listRequestUsage(filter, {
+      offset: 0,
+      limit: 50,
+    });
+    assert.equal(afterPage.total, beforePage.total, "流水计数不变");
+    assert.deepEqual(afterPage.rows, beforePage.rows, "流水行逐字段不变");
+    // 会话维度：最近请求读账本（不随会话删除消失）；可见消息数属内容侧，随删归零。
+    const detail = await svc.getSessionUsageDetail(session.id);
+    assert.equal(detail.last?.atMs, today0 + 20 * MIN, "最近请求仍可读（账本行）");
+    assert.equal(detail.last?.promptTokens, 20);
+    assert.equal(detail.last?.completionTokens, 10);
+    assert.equal(detail.visibleMessageCount, 0, "可见消息数属内容侧，随删除归零");
+  });
+
+  it("账本回归：删单条消息 / 回滚截尾（truncateAfter）后统计数字不变", async () => {
+    const { ctx, session } = await seedSession();
+    const today0 = localDayStart(Date.now());
+    const msg1 = await seedMsg(ctx, session.id, 1, {
+      createdAtMs: today0 + 10 * MIN,
+      usage: { prompt: 100, completion: 50, total: 150 },
+    });
+    const msg2 = await seedMsg(ctx, session.id, 2, {
+      createdAtMs: today0 + 20 * MIN,
+      usage: { prompt: 20, completion: 10, total: 30 },
+    });
+    await seedMsg(ctx, session.id, 3, {
+      createdAtMs: today0 + 30 * MIN,
+      usage: { prompt: 5, completion: 5, total: 10 },
+    });
+    const svc = createUsageStatsService(ctx.conn);
+    const filter = { range: dayRange(today0, today0) };
+    const before = await svc.getSummary(filter);
+    assert.equal(before.calls, 3);
+    assert.equal(before.totalTokens, 190);
+
+    const { createMessageService } = await import(
+      "../../src/service/chat/create-chat-services.js"
+    );
+    const messages = createMessageService(ctx.conn);
+    // 删单条消息：内容消失，账本行保留。
+    await messages.delete(msg2);
+    assert.deepEqual(await svc.getSummary(filter), before, "删单条消息后统计不变");
+    // 回滚截尾：锚 seq1，截掉其后全部（此时 seq2 已删、seq3 被截）。
+    await messages.truncateAfter(session.id, msg1);
+    assert.deepEqual(await svc.getSummary(filter), before, "回滚截尾后统计不变");
+  });
+
+  it("记账点写入：append 带 token 真值的 assistant 消息 → usage_record 出一行（快照列 + 与消息同 seq/时刻）", async () => {
+    const { ctx, session } = await seedSession();
+    const { createMessageService } = await import(
+      "../../src/service/chat/create-chat-services.js"
+    );
+    const messages = createMessageService(ctx.conn);
+    const appended = await messages.append(
+      session.id,
+      "assistant",
+      textBlocks("hello"),
+      {
+        provider: "anthropic",
+        providerId: "prov-1",
+        modelName: "claude-sonnet-4",
+        usage: {
+          promptTokens: 100,
+          completionTokens: 50,
+          totalTokens: 150,
+          cacheReadTokens: 30,
+          cacheCreationTokens: 10,
+          firstTokenMs: 120,
+          durationMs: 900,
+        },
+      }
+    );
+
+    const rows = await ctx.conn.query<Record<string, unknown>>(
+      `SELECT session_id, message_seq, provider, provider_id, model_name,
+              prompt_tokens, completion_tokens, total_tokens,
+              cache_read_tokens, cache_creation_tokens,
+              first_token_ms, duration_ms, created_at_ms
+       FROM usage_record`
+    );
+    assert.equal(rows.length, 1);
+    const row = rows[0]!;
+    assert.equal(String(row.session_id), session.id);
+    assert.equal(Number(row.message_seq), appended.seq);
+    assert.equal(String(row.provider), "anthropic");
+    assert.equal(String(row.provider_id), "prov-1");
+    assert.equal(String(row.model_name), "claude-sonnet-4");
+    assert.equal(Number(row.prompt_tokens), 100);
+    assert.equal(Number(row.completion_tokens), 50);
+    assert.equal(Number(row.total_tokens), 150);
+    assert.equal(Number(row.cache_read_tokens), 30);
+    assert.equal(Number(row.cache_creation_tokens), 10);
+    assert.equal(Number(row.first_token_ms), 120);
+    assert.equal(Number(row.duration_ms), 900);
+    assert.equal(Number(row.created_at_ms), appended.createdAtMs);
+
+    // chat_message 统计列照写不停写（上下文占用 chip / session_run_state 链依赖）。
+    const msgRow = await ctx.conn.query<{ prompt_tokens: number }>(
+      `SELECT prompt_tokens FROM chat_message WHERE id = ?`,
+      [appended.id]
+    );
+    assert.equal(Number(msgRow[0]?.prompt_tokens), 100);
+
+    // 不入账本的三类：无 usage 的 assistant、带 usage 的 user、只有耗时无 token 真值。
+    await messages.append(session.id, "assistant", textBlocks("no usage"));
+    await messages.append(session.id, "user", textBlocks("user with usage"), {
+      usage: { promptTokens: 7, completionTokens: 3 },
+    });
+    await messages.append(session.id, "assistant", textBlocks("timing only"), {
+      usage: { firstTokenMs: 5, durationMs: 10 },
+    });
+    const count = await ctx.conn.query<{ n: number }>(
+      `SELECT COUNT(*) AS n FROM usage_record`
+    );
+    assert.equal(Number(count[0]?.n ?? 0), 1, "仅 token 真值 assistant 行入账本");
   });
 });

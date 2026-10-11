@@ -42,6 +42,8 @@ import { createSessionKkvService } from "@/service/session-kkv/create-session-kk
 import { SqliteSessionRepository } from "@/domain/chat/repositories/impl/sqlite-session.repository.js";
 import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import { SqliteUsageRecordRepository } from "@/domain/usage/repositories/impl/sqlite-usage-record.repository.js";
+import { buildUsageRecordFromMessage } from "@/domain/usage/logic/build-usage-record.js";
 import type { MessageService } from "../message.port.js";
 
 function reposFor(conn: TdbcConnection) {
@@ -214,7 +216,23 @@ export class DefaultMessageService implements MessageService {
       ...(attachments != null ? { attachments } : {}),
       ...(options?.usage != null ? { usage: options.usage } : {}),
     };
-    await this.deps.messages.insert(message);
+    // 记账点（唯一）：带 token 真值的 assistant 消息与账本行同事务落库——
+    // chat_message 九列照写不停写（上下文占用 chip 与 session_run_state 依赖
+    // 它，那是「会话内容属性」，随会话删），usage_record 另起一行作「账本」
+    // （永续，删除链不碰），统计读口改打账本后数字不再随删除归零。
+    // 无 token 真值（prompt/completion 皆空）与无 usage 的消息不写账本——
+    // 与旧统计口径 USAGE_NOT_NULL_SQL 同源，普通消息走原直通插入零额外开销。
+    const usageRecord = buildUsageRecordFromMessage(message);
+    if (usageRecord == null) {
+      await this.deps.messages.insert(message);
+    } else {
+      await this.deps.conn.transaction(async (tx) => {
+        // 事务内必须用 tx 句柄建仓储：根连接在事务持有连接互斥锁期间不可用
+        //（tdbc 驱动 mutex 语义），与 delete() 的多表同事务写法一致。
+        await new SqliteMessageRepository(tx).insert(message);
+        await new SqliteUsageRecordRepository(tx).insert(usageRecord);
+      });
+    }
     // 消息「增」不再失效 API 占用（统计优先口径，2026-09-29 真机复验拍板）：
     // 纯追加由读口的「基线 + anchorSeq 之后追加消息的增量估算」覆盖（metric
     // 同款），失效反而会让 run 起步的压缩评估与 chip 首帧跌回估算档（评估
