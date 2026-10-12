@@ -15,6 +15,11 @@
  *
  * 溯源列（session_id / message_seq）仅供会话维度读口与问题定位，会话删除后
  * 保持原值不清理——本表不依赖 `chat_session` / `chat_message` 任何一行的存在。
+ *
+ * **记账点唯一**：账本行只在 `DefaultMessageService.append` 产生——fork/copy
+ * 复制的消息走 `batchInsert`、不产生新账本行（源请求已在源会话记账），故
+ * fork 会话的 `getSessionUsageDetail.last` 在其自身首次新请求前为 null
+ * （此时可见消息数非零，两者口径不同属预期，非缺陷）。
  */
 export const USAGE_RECORD_SCHEMA_STATEMENTS: readonly string[] = [
   `CREATE TABLE IF NOT EXISTS usage_record (

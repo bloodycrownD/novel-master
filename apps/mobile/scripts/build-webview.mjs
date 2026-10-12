@@ -128,7 +128,6 @@ const WEBVIEW_CORE_ALLOWLIST = {
     //    **刻意不在**本白名单里——它一旦被 barrel 拖进来就是老 WebView 白屏，门 B 会直接打红。
     'domain/agent/logic/merge-agent-definition-patch.js',
     'domain/character-card/logic/character-card-limits.js',
-    'domain/chat/logic/message-content-codec.js',
     'domain/chat/logic/render-dir-attach-tree.js',
     'domain/chat/logic/status-chip-label.js',
     'domain/chat/logic/tool-summary.js',

@@ -216,24 +216,22 @@ body {
 /* 折叠三角改 css border 三角（跨系统形状一致，替代 ▼/▶ 字符——几何码位
    glyph 随系统字体漂移，鸿蒙 7 真机把 ▶ 画成 email 标签形）。border-color
    用 currentColor：颜色仍由上方 color 规则与 user-compose 白色 override 控制。
-   尺寸对齐旧 10px 字符视觉：展开（下指）10 宽×7 高、折叠（右指）7 宽×10 高。 */
+   尺寸对齐旧 10px 字符视觉：展开（下指）10 宽×7 高、折叠（右指）7 宽×10 高。
+   （`.tool-group-chevron` 的 font-size:10px 为字符时代残留，对三角无作用。） */
 .thinking-chevron,
-.tool-group-chevron,
-.attach-group-chevron {
+.tool-group-chevron {
   width: 0;
   height: 0;
   border-style: solid;
   flex: none;
 }
 .thinking-chevron.chevron--open,
-.tool-group-chevron.chevron--open,
-.attach-group-chevron.chevron--open {
+.tool-group-chevron.chevron--open {
   border-width: 7px 5px 0;
   border-color: currentColor transparent transparent transparent;
 }
 .thinking-chevron.chevron--closed,
-.tool-group-chevron.chevron--closed,
-.attach-group-chevron.chevron--closed {
+.tool-group-chevron.chevron--closed {
   border-width: 5px 0 5px 7px;
   border-color: transparent transparent transparent currentColor;
 }

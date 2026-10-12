@@ -144,6 +144,10 @@ export interface UsageStatsRequestPage {
  * （`seq` 为写入时快照的 assistant 消息 seq，消息删除后仍保留——账本与内容
  * 分离；OpenAI/Gemini 等无 cache_creation 概念的协议 cache 列为 null，展示层
  * 出「—」；`atMs` 为该行落库时刻，本地时区展示）。
+ *
+ * 空值口径：本会话无任何账本行时为 null——含全新会话与 fork/copy 出的会话
+ * （复制的消息不记账，见 usage-record-schema 模块注释），在其自身首次新请求
+ * 前保持 null，属预期行为。
  */
 export interface SessionUsageLastRequest {
   readonly seq: number;
