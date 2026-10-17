@@ -65,6 +65,21 @@ describe('chat-transcript WebView boot (T-BB-06 / dist)', () => {
     expect(html).not.toContain('https://novel-master.local/');
   });
 
+  it('T-PF8(chat-transcript): head 内联 bootstrap 先于 stylesheet（C′ fix-D 契约）', () => {
+    // dist 面契约：会话屏冷挂载白窗（2026-10-18 二轮取证）的 C′ 堵法——
+    // bootstrap 物理先于 stylesheet（解析期同步执行、先于首绘），
+    // 参数取 search+hash 双形态（宿主发 `#bg=`），只预置 --bg。
+    const html = indexHtml();
+    const scriptAt = html.indexOf('decodeURIComponent');
+    const linkAt = html.indexOf('<link rel="stylesheet"');
+    expect(scriptAt).toBeGreaterThan(-1);
+    expect(linkAt).toBeGreaterThan(-1);
+    expect(scriptAt).toBeLessThan(linkAt);
+    expect(html).toContain('location.search + location.hash');
+    expect(html).toContain("setProperty('--bg'");
+    expect(html).not.toContain("setProperty('--editor-bg'");
+  });
+
   it('T-BR-ASM-04: ready post and bootTranscript present', () => {
     const script = bootScript();
     // 独立入口：转录 runtime 以 `emitReady:!1` 装配（runtime 自发的 ready 是

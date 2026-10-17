@@ -36,6 +36,20 @@ describe('rich-document WebView boot (T-BB-07 / dist)', () => {
     expect(html).not.toContain('https://novel-master.local/');
   });
 
+  it('T-PF8(rich-document): head 内联 bootstrap 先于 stylesheet（C′ fix-D 契约）', () => {
+    // dist 面契约：bootstrap 必须物理先于 stylesheet（解析期同步执行、先于首绘），
+    // 参数取 search+hash 双形态（fix-D 后宿主发 `#bg=`），只预置 --bg。
+    const html = indexHtml();
+    const scriptAt = html.indexOf('decodeURIComponent');
+    const linkAt = html.indexOf('<link rel="stylesheet"');
+    expect(scriptAt).toBeGreaterThan(-1);
+    expect(linkAt).toBeGreaterThan(-1);
+    expect(scriptAt).toBeLessThan(linkAt);
+    expect(html).toContain('location.search + location.hash');
+    expect(html).toContain("setProperty('--bg'");
+    expect(html).not.toContain("setProperty('--editor-bg'");
+  });
+
   it('T-BR-RD-01: setDocument / themeUpdate / annotate; no chat menu handlers', () => {
     const script = bootScript();
     expect(script).toContain('setDocument');

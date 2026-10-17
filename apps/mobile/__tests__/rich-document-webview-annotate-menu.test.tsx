@@ -157,20 +157,22 @@ describe('RichDocumentWebView 暗色白闪 C′+E（T-PF5/T-PF6）', () => {
     mockWebViewProps.length = 0;
   });
 
-  // T-PF5：C′ 链路——source.uri 追加 `?bg=` + encodeURIComponent(tokens.background)，
-  // 供 index.html head 内联 bootstrap 首绘前同步写 --bg（B 在 Android 是异步注入、
-  // 输给首绘，故 URI 参数是确定性通道）。mock background='#fff'、surface='#f2f2f7'
-  // 编码值不同，断言等值即同时排除误用 surface（同 T-PF1 口径，RULE #17）。
-  it('T-PF5：WebView source.uri 携带 ?bg= 编码参数', () => {
+  // T-PF5：C′ 链路——source.uri 追加 `#bg=`（hash 形态，fix-D 2026-10-18：file://
+  // + query 在部分 WebView 实现会被丢弃，hash 全平台保留）+ encodeURIComponent(
+  // tokens.background)，供 index.html head 内联 bootstrap 首绘前同步写 --bg
+  // （B 在 Android 是异步注入、输给首绘，故 URI 参数是确定性通道）。mock
+  // background='#fff'、surface='#f2f2f7' 编码值不同，断言等值即同时排除误用
+  // surface（同 T-PF1 口径，RULE #17）。
+  it('T-PF5：WebView source.uri 携带 #bg= 编码参数', () => {
     act(() => {
       TestRenderer.create(<RichDocumentWebView plain="hello" />);
     });
     const last = mockWebViewProps[mockWebViewProps.length - 1];
     const source = last?.source as {uri?: string} | undefined;
     expect(source?.uri).toBe(
-      `file:///rich-document/index.html?bg=${encodeURIComponent('#fff')}`,
+      `file:///rich-document/index.html#bg=${encodeURIComponent('#fff')}`,
     );
-    expect(source?.uri?.endsWith('?bg=%23fff')).toBe(true);
+    expect(source?.uri?.endsWith('#bg=%23fff')).toBe(true);
     expect(source?.uri).not.toContain(encodeURIComponent('#f2f2f7'));
   });
 

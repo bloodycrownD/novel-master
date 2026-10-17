@@ -6,6 +6,29 @@
       name="viewport"
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
     />
+    <!-- 首帧主题预注入（C′，fix-D 2026-10-18）：head 内联脚本解析期同步执行、
+         物理上先于首绘，从宿主 URI 的 hash（兼容 query）读 bg 参数先写主题
+         背景变量，堵住 editor.css `background: var(--editor-bg, var(--bg, #fff))`
+         兜底白窗的 first-paint 竞态。同时写 `--bg` 与 `--editor-bg`（同值）：
+         映射真源 host-theme.ts THEME_VARS（background→--bg），`--editor-*`
+         为其 extraVars 派生（code-editor/webview/runtime/theme.ts 的
+         extraVars.background=['--editor-bg']），首绘背景直接命中 --editor-bg。
+         参数先于 stylesheet 生效；参数丢失时由 RN 侧 B
+         （injectedJavaScriptBeforeContentLoaded）注入兜底。 -->
+    <script>
+      (function () {
+        try {
+          var m = /(?:[?&#])bg=([^&#]*)/.exec(location.search + location.hash);
+          if (m) {
+            var bg = decodeURIComponent(m[1]);
+            if (bg) {
+              document.documentElement.style.setProperty('--bg', bg);
+              document.documentElement.style.setProperty('--editor-bg', bg);
+            }
+          }
+        } catch (e) {}
+      })();
+    </script>
     <link rel="stylesheet" href="./app.css" />
   </head>
   <body>

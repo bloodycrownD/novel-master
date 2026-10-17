@@ -839,14 +839,23 @@ describe('ChatConversationWebView · 安全守卫与加载源', () => {
     openUrl.mockRestore();
   });
 
-  it('加载源为 chat-transcript 包 URI（Step 5 宿主切换独立入口）', async () => {
+  it('加载源为 chat-transcript 包 URI + C′ #bg 参数（fix-D 白闪修正轮）', async () => {
     let tree: TestRenderer.ReactTestRenderer;
     await act(async () => {
       tree = track(TestRenderer.create(<ChatConversationWebView {...baseProps()} />));
     });
+    // fix-D：source 追加 `#bg=` hash 参数（file:// + query 会被部分 WebView 丢弃），
+    // 供 index.html head 内联 bootstrap 首绘前同步写 --bg；B 注入同时保留作兜底。
     expect(webViewOf(tree.root).props.source).toEqual({
-      uri: 'file:///android_asset/webview/chat-transcript/index.html',
+      uri:
+        'file:///android_asset/webview/chat-transcript/index.html#bg=' +
+        encodeURIComponent('#000'),
     });
+    expect(
+      String(
+        webViewOf(tree.root).props.injectedJavaScriptBeforeContentLoaded ?? '',
+      ),
+    ).toContain(`'--bg'`);
   });
 });
 

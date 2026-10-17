@@ -33,6 +33,21 @@ describe('code-editor WebView boot (dist)', () => {
     expect(html).not.toContain('type="module"');
   });
 
+  it('T-PF8(code-editor): head 内联 bootstrap 先于 stylesheet 且双变量（C′ fix-D 契约）', () => {
+    // dist 面契约：编辑器背景链 var(--editor-bg, var(--bg, #fff))——bootstrap
+    // 须物理先于 stylesheet，并同时预置 --bg 与 --editor-bg（同值），否则首帧
+    // 仍走 --editor-bg 的 #fff 兜底。
+    const html = indexHtml();
+    const scriptAt = html.indexOf('decodeURIComponent');
+    const linkAt = html.indexOf('<link rel="stylesheet"');
+    expect(scriptAt).toBeGreaterThan(-1);
+    expect(linkAt).toBeGreaterThan(-1);
+    expect(scriptAt).toBeLessThan(linkAt);
+    expect(html).toContain('location.search + location.hash');
+    expect(html).toContain("setProperty('--bg'");
+    expect(html).toContain("setProperty('--editor-bg'");
+  });
+
   it('T-CE-BR-01: init / setDocument / themeUpdate / blur; emits ready/change', () => {
     const script = bootScript();
     // minify 重命名 dispatcher 形参与 handler 本体（`msg.type === …` → `e.type === …`，

@@ -138,9 +138,17 @@ describe('WebView URI load (T-BB-04)', () => {
       const webView = root!.root.findByType(
         require('react-native-webview').default as React.ComponentType,
       );
+      // C′（fix-D）——会话屏冷挂载白窗，source 追加 `#bg=` hash 参数
+      // （file:// + query 在部分 WebView 实现被丢，hash 全平台保留）。
       expect(webView.props.source).toEqual({
-        uri: 'file:///android_asset/webview/chat-transcript/index.html',
+        uri:
+          'file:///android_asset/webview/chat-transcript/index.html#bg=' +
+          encodeURIComponent('#000'),
       });
+      // B 兜底注入（与 C′ 双通道）
+      expect(
+        String(webView.props.injectedJavaScriptBeforeContentLoaded ?? ''),
+      ).toContain(`'--bg'`);
       expect(webView.props.allowFileAccess).toBe(true);
       expect(webView.props.allowFileAccessFromFileURLs).toBe(true);
       expect(webView.props.allowingReadAccessToURL).toBe(
@@ -161,11 +169,11 @@ describe('WebView URI load (T-BB-04)', () => {
       const webView = root!.root.findByType(
         require('react-native-webview').default as React.ComponentType,
       );
-      // C′（白闪补篇 #14/T-PF5）：rich-document 的 URI 追加 `?bg=` 参数，
-      // 供 index.html head 内联 bootstrap 首绘前同步写 --bg。
+      // C′（白闪补篇 #14/T-PF5，fix-D 改 hash 形态）：rich-document 的 URI 追加
+      // `#bg=` 参数，供 index.html head 内联 bootstrap 首绘前同步写 --bg。
       expect(webView.props.source).toEqual({
         uri:
-          'file:///android_asset/webview/rich-document/index.html?bg=' +
+          'file:///android_asset/webview/rich-document/index.html#bg=' +
           encodeURIComponent('#000'),
       });
       expect(webView.props.allowFileAccess).toBe(true);
@@ -190,9 +198,16 @@ describe('WebView URI load (T-BB-04)', () => {
       const webView = root!.root.findByType(
         require('react-native-webview').default as React.ComponentType,
       );
+      // C′（fix-D）——编辑器背景链 `var(--editor-bg, var(--bg, #fff))`，
+      // source 追加 `#bg=` hash 参数；bootstrap 同时预置 --bg 与 --editor-bg。
       expect(webView.props.source).toEqual({
-        uri: 'file:///android_asset/webview/code-editor/index.html',
+        uri:
+          'file:///android_asset/webview/code-editor/index.html#bg=' +
+          encodeURIComponent('#000'),
       });
+      expect(
+        String(webView.props.injectedJavaScriptBeforeContentLoaded ?? ''),
+      ).toContain(`'--bg'`);
       expect(webView.props.allowFileAccess).toBe(true);
       expect(webView.props.allowFileAccessFromFileURLs).toBe(true);
       expect(webView.props.allowingReadAccessToURL).toBe(

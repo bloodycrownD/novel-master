@@ -32,6 +32,7 @@ import {
   getCodeEditorPackageDirUri,
   getCodeEditorUri,
 } from '@/webview-host/code-editor/uri';
+import {buildThemeInjectScript} from '@/webview-host/webview-theme-inject';
 import {useTheme} from '@/theme/ThemeProvider';
 
 export type CodeEditorWebViewProps = {
@@ -69,24 +70,10 @@ function themeFromTokens(tokens: ThemeTokens): CodeEditorTheme {
 }
 
 /**
- * 首帧主题预注入（暗色白闪 B，与 RichDocumentWebView 同构）：文档开始加载前
- * 先把 `--bg` 写成主题背景色，堵住 editor.css 兜底 `var(--bg,#fff)` 的暗色
- * 白窗。正文要等 web 侧 ready→init 才渲染，其余变量不参与首帧，只注入
- * `--bg`；先写后由 init 的 `applyHostTheme` 同节点同属性重写同值，无冲突。
- *
- * `'--bg'` 字面量是 `src/web/shared/host-theme.ts` 的 `THEME_VARS`
- * （background→--bg）在 RN 侧的镜像——映射表是 cssVar 的唯一真源，此处
- * 手写不会随表变化报错，改表时必须同步核对（RULE #17：取
- * `tokens.background`，不得用 `surface`）。
- *
- * 防御（Android 时机弱于 iOS）：Android 侧 beforeContentLoaded 落在
- * onPageStarted 上异步 evaluateJavascript，`documentElement` 可能尚未就绪；
- * null 防护 + try/catch 静默失败（A 的 WebView 控件底色兜底）。IIFE 包裹：
- * 注入面按表达式求值，返回值直接丢弃。
+ * 首帧主题预注入（暗色白闪 B）与 chat-transcript / rich-document 同源：
+ * `buildThemeInjectScript` 已抽到 `@/webview-host/webview-theme-inject`
+ * （fix-D 2026-10-18 单源化）；注入面见该模块注释。
  */
-export function buildThemeInjectScript(background: string): string {
-  return `(function(){try{var el=document.documentElement;if(!el){return;}el.style.setProperty('--bg', ${JSON.stringify(background)});}catch(e){}})();`;
-}
 
 export const CodeEditorWebView = forwardRef<
   CodeEditorWebViewHandle,
@@ -278,7 +265,15 @@ export const CodeEditorWebView = forwardRef<
         /* sec/D-1：收紧为包内 file://（库会自动附带 about:blank）；初始加载与同包相对资源
            均命中此前缀，已验证收紧不影响首载。白名单外的导航由库自行外跳系统浏览器。 */
         originWhitelist={['file://']}
-        source={{uri: getCodeEditorUri()}}
+        /* 首帧主题预注入（白闪 C′，fix-D）：URI 追加 `#bg=` 参数（hash 形态，
+           file:// + query 在部分 WebView 实现会被丢弃），index.html head 内联
+           bootstrap 首绘前同步写 `--bg` + `--editor-bg`（editor.css 背景是
+           `var(--editor-bg, var(--bg, #fff))`，映射真源 host-theme.ts THEME_VARS：
+           background→--bg，--editor-* 为其 extraVars 派生）。B 仍在作兜底。 */
+        source={{
+          uri:
+            getCodeEditorUri() + '#bg=' + encodeURIComponent(tokens.background),
+        }}
         allowFileAccess
         allowFileAccessFromFileURLs
         allowingReadAccessToURL={getCodeEditorPackageDirUri()}

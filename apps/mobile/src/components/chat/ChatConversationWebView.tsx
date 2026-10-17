@@ -89,6 +89,7 @@ import {
   getChatTranscriptPackageDirUri,
   getChatTranscriptUri,
 } from '@/webview-host/chat-transcript/uri';
+import {buildThemeInjectScript} from '@/webview-host/webview-theme-inject';
 import {emitChatTranscriptTelemetry} from '@/services/chat-transcript-telemetry';
 import {CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION} from '@/services/chat-transcript-scroll-cache';
 import {useTheme} from '@/theme/ThemeProvider';
@@ -1851,9 +1852,27 @@ export const ChatConversationWebView = memo(
                背景色设成主题背景后，即使有重建空窗，露的也是主题色、与周围
                融合。走 style：native 控件底色不在 WebView props 白名单里。 */
             style={[styles.fill, {backgroundColor: tokens.background}]}
+            /* 首帧主题预注入（白闪 B，fix-D）：文档开始加载前先写 `--bg`。
+               Android 侧本注入落在 onPageStarted 上异步执行、输给首绘
+               （2026-10-18 录屏取证实锤），确定性通道是 C′（source `#bg=` +
+               index.html head 内联 bootstrap，解析期同步执行）；本注入是
+               iOS 主通道 + Android 双层兜底。 */
+            injectedJavaScriptBeforeContentLoaded={buildThemeInjectScript(
+              tokens.background,
+            )}
             /* sec/D-1：收紧为包内 file:// */
             originWhitelist={['file://']}
-            source={{uri: getChatTranscriptUri()}}
+            /* 首帧主题预注入（白闪 C′，fix-D）：URI 追加 `#bg=` hash 参数
+               （file:// + query 在部分 WebView 实现会被丢弃，hash 全平台保留），
+               供 index.html head 内联 bootstrap 首绘前同步写 `--bg`。
+               会话屏消息区冷挂载白窗（2026-10-18 二轮取证）即本链 CSS 兜底
+               `var(--bg,#fff)` 的首绘帧。 */
+            source={{
+              uri:
+                getChatTranscriptUri() +
+                '#bg=' +
+                encodeURIComponent(tokens.background),
+            }}
             allowFileAccess
             allowFileAccessFromFileURLs
             allowingReadAccessToURL={getChatTranscriptPackageDirUri()}

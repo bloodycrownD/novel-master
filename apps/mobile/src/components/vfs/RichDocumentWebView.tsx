@@ -31,6 +31,7 @@ import {
   getRichDocumentPackageDirUri,
   getRichDocumentUri,
 } from '@/webview-host/rich-document/uri';
+import {buildThemeInjectScript} from '@/webview-host/webview-theme-inject';
 import {useTheme} from '@/theme/ThemeProvider';
 
 const EMPTY_ANNOTATIONS: readonly RichDocumentAnnotationMark[] = [];
@@ -46,26 +47,6 @@ export const RICH_DOCUMENT_ANNOTATE_MENU_ITEMS = [
 
 const COLLECT_RECOGITO_JS =
   '(function(){try{window.__nmCollectRecogitoSelection&&window.__nmCollectRecogitoSelection();}catch(e){} true;})();';
-
-/**
- * 首帧主题预注入（暗色白闪 B）：文档开始加载前先把 `--bg` 写成主题背景色，
- * 堵住 CSS 兜底 `var(--bg,#fff)` 的暗色白窗。正文要等 web 侧 ready→init
- * 才渲染，其余变量不参与首帧，只注入 `--bg`；先写后由 init 的
- * `applyHostTheme` 同节点同属性重写同值，覆盖无冲突。
- *
- * `'--bg'` 字面量是 `src/web/shared/host-theme.ts` 的 `THEME_VARS`
- * （background→--bg）在 RN 侧的镜像——映射表是 cssVar 的唯一真源，此处
- * 手写不会随表变化报错，改表时必须同步核对（RULE #17：取
- * `tokens.background`，不得用 `surface`）。
- *
- * 防御（Android 时机弱于 iOS）：Android 侧 beforeContentLoaded 落在
- * onPageStarted 上异步 evaluateJavascript，`documentElement` 可能尚未就绪；
- * null 防护 + try/catch 静默失败（A 的 WebView 控件底色兜底）。IIFE 包裹：
- * 注入面按表达式求值，返回值直接丢弃。
- */
-export function buildThemeInjectScript(background: string): string {
-  return `(function(){try{var el=document.documentElement;if(!el){return;}el.style.setProperty('--bg', ${JSON.stringify(background)});}catch(e){}})();`;
-}
 
 export type RichDocumentWebViewProps = {
   readonly html?: string;
@@ -402,16 +383,18 @@ export function RichDocumentWebView({
         /* sec/D-1：收紧为包内 file://（库会自动附带 about:blank）；初始加载与同包相对资源
            均命中此前缀，已验证收紧不影响首载。白名单外的导航由库自行外跳系统浏览器。 */
         originWhitelist={['file://']}
-        /* 首帧主题预注入（白闪 C′）：URI 追加 `?bg=` 参数，供 index.html head
+        /* 首帧主题预注入（白闪 C′）：URI 追加 `#bg=` 参数，供 index.html head
            内联 bootstrap 在首绘前同步写 `--bg`（零竞态，堵 CSS 兜底白窗）。
-           iOS 若丢弃 file:// query，由 B（injectedJavaScriptBeforeContentLoaded）
+           改用 hash 形态（fix-D 2026-10-18）：file:// + query 在部分 WebView
+           实现会被丢弃，hash 全平台保留；bootstrap 同时解析 search+hash，两
+           形态都吃。iOS 若参数仍丢失，由 B（injectedJavaScriptBeforeContentLoaded）
            注入兜底；两者写同节点同属性同值，覆盖无冲突。
            `shouldStartLoadWithRequest` 前缀判定与 originWhitelist=['file://']
-           对带 query 的 URI 均放行（prefix 命中 + scheme 不变）。 */
+           对带 hash 的 URI 均放行（prefix 命中 + scheme 不变）。 */
         source={{
           uri:
             getRichDocumentUri() +
-            '?bg=' +
+            '#bg=' +
             encodeURIComponent(tokens.background),
         }}
         allowFileAccess
