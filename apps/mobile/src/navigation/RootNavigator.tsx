@@ -1,11 +1,15 @@
 /**
  * Root navigation: bottom tabs (Chat, Profile) + native stack.
  */
-import React from 'react';
-import {NavigationContainer} from '@react-navigation/native';
+import React, {useMemo} from 'react';
+import {
+  DarkTheme,
+  DefaultTheme,
+  NavigationContainer,
+} from '@react-navigation/native';
 import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
 import {createNativeStackNavigator} from '@react-navigation/native-stack';
-import {StyleSheet} from 'react-native';
+import {StyleSheet, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {navigationContainerRef} from './navigation-container-ref';
 import {ChatTabIcon, ProfileTabIcon} from '../components/icons/TabIcons';
@@ -203,12 +207,31 @@ const TokenUsageStatsStackScreen = withStackLayout(
 const AboutStackScreen = withStackLayout('About', AboutScreen);
 
 export function RootNavigator() {
-  const {tokens} = useTheme();
+  const {tokens, mode} = useTheme();
+  /**
+   * 导航主题对齐（fix-E 次修）：NavigationContainer 的 theme 决定导航容器
+   * colors.background（缺省 DefaultTheme 是浅色 #fff 系），转场剥开的底不得
+   * 是浅色——按当前 mode 取 Dark/Default 基础主题、覆写 background 为
+   * tokens.background（与 A 层底色同口径，RULE #17）。
+   */
+  const navigationTheme = useMemo(() => {
+    const base = mode === 'dark' ? DarkTheme : DefaultTheme;
+    return {...base, colors: {...base.colors, background: tokens.background}};
+  }, [mode, tokens.background]);
 
   return (
-    <>
+    /* 转场白闪（fix-E 主修）：native-stack 转场对新屏做 alpha 过渡，混合底层
+       是 ScreenStack 容器——它只有 flex:1（透明），往下透过 RN 根直到窗口
+       DayNight 背景（系统浅色=白）；深色屏对白底 alpha 混合 = 均匀灰白帧
+       （2026-10-18 三轮取证：进预览 3-4 帧全屏均匀抬亮）。react-native-screens
+       4.25 在 Android 上把 ScreenStack 的 style.backgroundColor 等价于
+       nativeContainerBackgroundColor（ScreenStackViewManager.kt:85-87），但
+       @react-navigation 未透传该 style，故在 NavigationContainer 外衬一层
+       主题色 View 作稳定混合底。只包 NavigationContainer（HeaderProvider 在其
+       内、不动）；导航外的透明层不受影响。 */
+    <View style={[styles.navHost, {backgroundColor: tokens.background}]}>
       {/* 通知点按等 React 外路径经 navigationContainerRef 编程式导航 */}
-      <NavigationContainer ref={navigationContainerRef}>
+      <NavigationContainer ref={navigationContainerRef} theme={navigationTheme}>
         <HeaderProvider>
           <Stack.Navigator
             screenOptions={{
@@ -316,11 +339,12 @@ export function RootNavigator() {
           </Stack.Navigator>
         </HeaderProvider>
       </NavigationContainer>
-    </>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  navHost: {flex: 1},
   tabLabel: {
     fontSize: 11,
     fontWeight: '600',
