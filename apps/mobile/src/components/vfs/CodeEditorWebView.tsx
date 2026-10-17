@@ -68,6 +68,26 @@ function themeFromTokens(tokens: ThemeTokens): CodeEditorTheme {
   };
 }
 
+/**
+ * 首帧主题预注入（暗色白闪 B，与 RichDocumentWebView 同构）：文档开始加载前
+ * 先把 `--bg` 写成主题背景色，堵住 editor.css 兜底 `var(--bg,#fff)` 的暗色
+ * 白窗。正文要等 web 侧 ready→init 才渲染，其余变量不参与首帧，只注入
+ * `--bg`；先写后由 init 的 `applyHostTheme` 同节点同属性重写同值，无冲突。
+ *
+ * `'--bg'` 字面量是 `src/web/shared/host-theme.ts` 的 `THEME_VARS`
+ * （background→--bg）在 RN 侧的镜像——映射表是 cssVar 的唯一真源，此处
+ * 手写不会随表变化报错，改表时必须同步核对（RULE #17：取
+ * `tokens.background`，不得用 `surface`）。
+ *
+ * 防御（Android 时机弱于 iOS）：Android 侧 beforeContentLoaded 落在
+ * onPageStarted 上异步 evaluateJavascript，`documentElement` 可能尚未就绪；
+ * null 防护 + try/catch 静默失败（A 的 WebView 控件底色兜底）。IIFE 包裹：
+ * 注入面按表达式求值，返回值直接丢弃。
+ */
+export function buildThemeInjectScript(background: string): string {
+  return `(function(){try{var el=document.documentElement;if(!el){return;}el.style.setProperty('--bg', ${JSON.stringify(background)});}catch(e){}})();`;
+}
+
 export const CodeEditorWebView = forwardRef<
   CodeEditorWebViewHandle,
   CodeEditorWebViewProps
@@ -245,7 +265,16 @@ export const CodeEditorWebView = forwardRef<
     <View style={[styles.fill, style]} testID={testID}>
       <WebView
         ref={webRef}
-        style={styles.fill}
+        /* 白屏防线（暗色白闪 A，仿 ChatConversationWebView 先例）：Android
+           WebView 的画面层露的是控件自己的原生底色（默认白）。背景色设成
+           主题背景后，即使有重建空窗，露的也是主题色、与周围融合。走 style：
+           native 控件底色不在 WebView props 白名单里。底色只挂 WebView
+           本体，不挂外层 wrapper View。 */
+        style={[styles.fill, {backgroundColor: tokens.background}]}
+        /* 首帧主题预注入（白闪 B）——见 buildThemeInjectScript 注释。 */
+        injectedJavaScriptBeforeContentLoaded={buildThemeInjectScript(
+          tokens.background,
+        )}
         /* sec/D-1：收紧为包内 file://（库会自动附带 about:blank）；初始加载与同包相对资源
            均命中此前缀，已验证收紧不影响首载。白名单外的导航由库自行外跳系统浏览器。 */
         originWhitelist={['file://']}

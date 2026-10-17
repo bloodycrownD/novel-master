@@ -7,7 +7,8 @@
  * 锁三条：①镜像流回零下行；②真外部写入照常下行；③只换 path 时照常下行。
  */
 import React from 'react';
-import {describe, expect, it, afterEach} from '@jest/globals';
+import {StyleSheet} from 'react-native';
+import {describe, expect, it, jest, afterEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
 
 const mockWebViewPostMessages: string[] = [];
@@ -170,5 +171,35 @@ describe('CodeEditorWebView · 回环断路器（lastUpstreamRef）', () => {
       );
     });
     expect(setDocumentCount()).toBe(baseCount + 1);
+  });
+});
+
+/**
+ * T-PF3：暗色白闪 A+B 同构断言（与 RichDocumentWebView 同款两 prop）。
+ * mock 主题 background='#fff'；组件 WebView props 经 findByType 直读。
+ */
+describe('CodeEditorWebView · 暗色白闪 A+B（T-PF3）', () => {
+  afterEach(() => {
+    mockWebViewPostMessages.length = 0;
+  });
+
+  it('WebView 本体 style 含 tokens.background 底色，且预注入 --bg 脚本', () => {
+    const tree = renderTree('hello', jest.fn());
+    const props = webViewNode(tree).props as Record<string, unknown>;
+
+    const flat = StyleSheet.flatten(props.style as never) as Record<
+      string,
+      unknown
+    >;
+    expect(flat).toEqual(expect.objectContaining({backgroundColor: '#fff'}));
+
+    const script = String(props.injectedJavaScriptBeforeContentLoaded ?? '');
+    expect(script.startsWith('(function(){')).toBe(true);
+    expect(script).toContain('document.documentElement');
+    expect(script).toContain('if(!el)');
+    expect(script).toContain('catch');
+    expect(script).toContain(`'--bg'`);
+    expect(script).toContain(JSON.stringify('#fff'));
+    expect(script.match(/setProperty\(/g)).toHaveLength(1);
   });
 });

@@ -2,6 +2,7 @@
  * RichDocumentWebView：MD 批注 = 原生「复制/批注」菜单 + Recogito 仅投影。
  */
 import React from 'react';
+import {StyleSheet} from 'react-native';
 import {describe, expect, it, jest, beforeEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
 import {readFileSync} from 'node:fs';
@@ -108,5 +109,45 @@ describe('RichDocumentWebView annotate（原生菜单 + Recogito 投影）', () 
     expect(web).toContain('recogitoCreate');
     expect(annotate).toMatch(/annotatingEnabled:\s*false/);
     expect(annotate).not.toMatch(/\.on\(\s*['\"]createAnnotation['\"]/);
+  });
+});
+
+describe('RichDocumentWebView 暗色白闪 A+B（T-PF1/T-PF2）', () => {
+  beforeEach(() => {
+    mockWebViewProps.length = 0;
+  });
+
+  // T-PF1：mock 主题 background='#fff'、surface='#f2f2f7' 取值不同——
+  // 断言等于 background 即同时排除误用 surface（RULE #17 颜色映射陷阱）。
+  it('T-PF1：WebView 本体 style 含 tokens.background 底色', () => {
+    act(() => {
+      TestRenderer.create(<RichDocumentWebView plain="hello" />);
+    });
+    const last = mockWebViewProps[mockWebViewProps.length - 1];
+    const flat = StyleSheet.flatten(last?.style as never) as Record<
+      string,
+      unknown
+    >;
+    expect(flat).toEqual(expect.objectContaining({backgroundColor: '#fff'}));
+    expect(flat?.backgroundColor).not.toBe('#f2f2f7');
+  });
+
+  // T-PF2：锁注入串形态——IIFE + documentElement null 防护 + 只写 --bg，
+  // 值为当前主题 background（JSON.stringify 拼入）。
+  it('T-PF2：injectedJavaScriptBeforeContentLoaded 预注入 --bg', () => {
+    act(() => {
+      TestRenderer.create(<RichDocumentWebView plain="hello" />);
+    });
+    const last = mockWebViewProps[mockWebViewProps.length - 1];
+    const script = String(last?.injectedJavaScriptBeforeContentLoaded ?? '');
+    expect(script.startsWith('(function(){')).toBe(true);
+    expect(script).toContain('document.documentElement');
+    expect(script).toContain('if(!el)');
+    expect(script).toContain('catch');
+    expect(script).toContain(`'--bg'`);
+    expect(script).toContain(JSON.stringify('#fff'));
+    // 只注入 --bg：其余变量等 init 后 applyHostTheme 写，不参与首帧白窗。
+    expect(script.match(/setProperty\(/g)).toHaveLength(1);
+    expect(script).not.toContain('--surface');
   });
 });
