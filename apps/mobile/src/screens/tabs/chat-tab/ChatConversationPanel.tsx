@@ -39,7 +39,6 @@ import {
   NativeChatComposer,
   type NativeChatComposerInstance,
 } from '@/components/chat/NativeChatComposer';
-import type {TypeaheadItem} from '@/components/chat/native-composer/typeahead-view';
 import {FileReferencePicker} from '@/components/chat/FileReferencePicker';
 import {SkillPicker} from '@/components/skills/SkillPicker';
 import {
@@ -196,24 +195,6 @@ function ChatConversationWebSurface(props: {
     [composer.composerState.chips],
   );
 
-  const {insertSkillToken, insertTokensIntoComposer} = composer;
-
-  /**
-   * typeahead 点选落文（E 组收口）：候选 item 只带 token，`$` 侧剥掉触发符交给
-   * insertSkillToken、`@` 侧整 token 走 insertTokensIntoComposer——两者内部都经
-   * commitComposerText（M7 命令式通道 ref.setText）落文，替换掉活跃的半截查询。
-   */
-  const handleTypeaheadSelect = useCallback(
-    (item: TypeaheadItem) => {
-      if (item.token.startsWith('$')) {
-        insertSkillToken(item.token.slice(1));
-        return;
-      }
-      insertTokensIntoComposer([item.token]);
-    },
-    [insertSkillToken, insertTokensIntoComposer],
-  );
-
   return (
     <>
       <ChatConversationWebView
@@ -267,7 +248,6 @@ function ChatConversationWebSurface(props: {
         canSend={!composer.composerState.sendDisabled}
         error={composer.composerState.error}
         chipLabels={chipLabels}
-        typeaheadSource={composer.composerState.typeahead}
         uiRunning={unitActive}
         inputDisabled={composer.composerState.inputDisabled}
         keyboardUp={composer.composerState.keyboardUp}
@@ -276,7 +256,6 @@ function ChatConversationWebSurface(props: {
         onComposerChangeText={composer.onChangeText}
         onComposerSelectionChange={composer.onSelectionChange}
         onDockAction={composer.handleDockAction}
-        onTypeaheadSelect={handleTypeaheadSelect}
       />
       {/* 两个选择器仍是 RN 全屏 Modal：确认后经 controller 的 M7 通道回填正文。 */}
       <FileReferencePicker

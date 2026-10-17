@@ -19,9 +19,8 @@
  *
  * **dock 域残余类型面（Step 6 现状）**：`ConversationComposerState` 已迁
  * `useChatComposerController` 自持（唯一消费方）；`CONVERSATION_DOCK_ACTIONS`
- * 死导出已删。`ConversationTypeaheadSource` / `EMPTY_CONVERSATION_TYPEAHEAD_SOURCE` /
- * `ConversationDockAction` 仍被 `NativeChatComposer` 与 `native-composer/` 下的
- * `send-button` / `typeahead-view` 消费，暂留此处（不再经桥收发，只做类型载体）；
+ * 死导出已删。`ConversationDockAction` 仍被 `NativeChatComposer` 与
+ * `useChatComposerController` 消费，暂留此处（不再经桥收发，只做类型载体）；
  * 待消费侧共享模块落位后再迁出本文件。
  *
  * 上行 v 号：转录 runtime 上行恒为 v:1（模块级 `post` 单例不可替换），宿主自有的
@@ -31,8 +30,6 @@
  * **禁止复用 `decodeTranscriptToHost`**：它对 `v !== 1` 直接 throw，会被宿主
  * try/catch 静默吞掉 → `webReady` 永假 → 全部下行丢弃 → 落进 8s 兜底白屏。
  */
-import type {AtPathRef} from '@novel-master/core/chat';
-import type {EffectiveSkill} from '@novel-master/core/skills';
 import type {
   ChatTranscriptScrollSnapshot,
   TranscriptFlags,
@@ -95,24 +92,6 @@ export const CONVERSATION_THEME_KEYS: readonly (keyof ConversationTheme)[] =
 /* ------------------------------------------------------------------ *
  * dock 域残余类型面（纯类型载体，不再经桥收发）
  * ------------------------------------------------------------------ */
-
-/**
- * typeahead **候选源**（非过滤结果）。
- *
- * D4c 后不经桥收发（composerState 下行消息已删）；Step 5 起是
- * `useChatComposerController` → `NativeChatComposer.typeaheadSource` 的
- * 数据面类型。
- */
-export type ConversationTypeaheadSource = {
-  readonly files: readonly AtPathRef[];
-  readonly skills: readonly EffectiveSkill[];
-};
-
-/** 空候选源（controller 尚未拉取 / 拉取失败时的显式空值，不用 undefined 表达「没有」）。 */
-export const EMPTY_CONVERSATION_TYPEAHEAD_SOURCE: ConversationTypeaheadSource = {
-  files: [],
-  skills: [],
-};
 
 /**
  * dock 上行动作枚举（`handleDockAction` 的入参；调用方自 Step 5 起是

@@ -16,7 +16,7 @@
  *
  * **职责边界**：数值对照表 + **Step 3/4 起的 RN 消费真源**——`NativeChatComposer` /
  * `token-ranges.ts` 的输入框尺寸与胶囊数值从这里的常量取（单源），不再各抄一份；
- * Step 4 的 dock 外围件（容器/hint/error/toolbar/typeahead 浮层）数值同样收进本表；
+ * Step 4 的 dock 外围件（容器/hint/error/toolbar）数值同样收进本表；
  * web 侧对照面仍由 `chat-conversation-boot-script.test.ts` 消费（旧址同款纪律）。
  */
 
@@ -68,12 +68,12 @@ export {composerToolBtnStyle};
 export {attachmentDraftChipsStyles};
 
 /* ==================================================================== *
- * Step 4 追加段：dock 外围件（容器 / hint / error / toolbar / typeahead 浮层）
+ * Step 4 追加段：dock 外围件（容器 / hint / error / toolbar）
  * 的 RN 数值单源。出处 = 退役前 `ChatComposer.tsx` 的 `styles.*`（dock/box/
- * hintRow/error/toolbar/sendBtn）与 `TypeaheadList.tsx`（list/行内边距），
- * 与 `chat-conversation.css` 的 dock 段（.dock__hint-row / .dock__error /
- * .dock__box / .typeahead / .toolbar）逐项同构；颜色值不落本表，由组件从
- * 主题 9 键取（--border 对应 `borderLight`，映射表见 web `host-theme.ts`）。
+ * hintRow/error/toolbar/sendBtn），与 `chat-conversation.css` 的 dock 段
+ * （.dock__hint-row / .dock__error / .dock__box / .toolbar）逐项同构；
+ * 颜色值不落本表，由组件从主题 9 键取（--border 对应 `borderLight`，
+ * 映射表见 web `host-theme.ts`）。
  * ==================================================================== */
 
 /**
@@ -121,7 +121,7 @@ export const composerDockStyles = StyleSheet.create({
     paddingTop: 4,
     paddingBottom: 6,
   },
-  /** typeahead 浮层的锚定壳（现网 .dock__box 内 .dock__input-area 的等价物）。 */
+  /** 输入区壳（现网 .dock__box 内 .dock__input-area 的等价物）。 */
   inputArea: {
     position: 'relative',
   },
@@ -150,43 +150,5 @@ export const composerDockStyles = StyleSheet.create({
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-});
-
-/**
- * typeahead 浮层段（`TypeaheadList.tsx` 的 list / 行内边距 + web CSS
- * `.typeahead` 的绝对定位形态逐项迁入）：锚定在输入区上缘整体浮起
- * （bottom: 100%），行内边距与退役前 RN 版一致（paddingH 10 / paddingV 8），
- * 字号对齐 web CSS（行 14 / tag 11）。
- */
-export const composerTypeaheadStyles = StyleSheet.create({
-  list: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: '100%',
-    zIndex: 20,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 10,
-    overflow: 'hidden',
-    marginBottom: 4,
-  },
-  row: {
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-  },
-  /** 技能行：label 与来源 tag 横排（web `.typeahead__row--skill` gap 8）。 */
-  rowSkill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  rowLabel: {
-    fontSize: 14,
-    flexShrink: 1,
-  },
-  rowTag: {
-    flexShrink: 0,
-    fontSize: 11,
   },
 });

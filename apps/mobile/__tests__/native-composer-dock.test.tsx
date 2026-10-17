@@ -7,9 +7,9 @@
  * 走全局 stub（test-utils/react-native-clipboard-mock）。
  *
  * 断言视角：「组件对 mock 面/样式常量的驱动行为」——发送钮三分支（T-NC7）、
- * hintRow/error/chips 显隐判据（T-NC7）、typeahead 浮层开合与点选上抛（T-NC8，
- * 纯函数半见 typeahead-view.test.ts）、粘贴门控三闸（T-NC9）、样式逐项对齐
- * dock-style.ts 参照常量（T-NC10）。
+ * hintRow/error/chips 显隐判据（T-NC7）、粘贴门控三闸（T-NC9）、样式逐项对齐
+ * dock-style.ts 参照常量（T-NC10）、联想浮层已移除（T-TR1，`composer-typeahead`
+ * 不再渲染；typeahead 浮层链 2026-10 迭代整体删除，原 T-NC8 段随之退役）。
  */
 import React from 'react';
 import {readFileSync, readdirSync} from 'node:fs';
@@ -17,11 +17,11 @@ import {join} from 'node:path';
 import TestRenderer, {act} from 'react-test-renderer';
 import type {ReactTestInstance, ReactTestRenderer} from 'react-test-renderer';
 import type {ConversationTheme} from '../src/components/chat/ChatConversationBridge';
-import type {AtPathRef} from '../src/components/chat/composer-at-path';
 import {
   NativeChatComposer,
   COMPOSER_PASTE_MAX_CHARS,
   COMPOSER_PASTE_MENU_LABEL,
+  type NativeChatComposerInstance,
   type NativeChatComposerProps,
 } from '../src/components/chat/NativeChatComposer';
 import {
@@ -29,12 +29,10 @@ import {
   composerDockStyles,
   composerTokenCapsule,
   composerToolBtnStyle,
-  composerTypeaheadStyles,
   DOCK_PADDING_BASE,
   resolveDockBottomPadding,
 } from '../src/components/chat/native-composer/dock-style';
 import {resolveSendButtonState} from '../src/components/chat/native-composer/send-button';
-import {TYPEAHEAD_LIMIT} from '../src/components/chat/native-composer/typeahead-view';
 import {
   EnrichedMarkdownTextInput,
   mockCalls,
@@ -88,14 +86,12 @@ const baseProps = (overrides: DockOverrides): NativeChatComposerProps => ({
   canSend: true,
   error: undefined,
   chipLabels: [],
-  typeaheadSource: {files: [], skills: []},
   uiRunning: false,
   inputDisabled: false,
   keyboardUp: false,
   safeAreaBottom: 0,
   fullscreenEnabled: true,
   onDockAction: jest.fn(),
-  onTypeaheadSelect: jest.fn(),
   ...overrides,
 });
 
@@ -121,9 +117,9 @@ const renderDock = (overrides: DockOverrides = {}): RenderedDock => {
 };
 
 const byTestId = (tree: ReactTestRenderer, testID: string): ReactTestInstance =>
-  // findAll[0]（首个命中）而非 findByProps/find（要求唯一）：typeahead-row
-  // 一类 testID 一行一个，取首个命中的最外层复合元素即「我传给 Pressable 的
-  // 那份 props」。
+  // findAll[0]（首个命中）而非 findByProps/find（要求唯一）：同一 testID 可能在
+  // 「复合元素 → 内层复合 → host View」多层命中，取首个命中的最外层复合元素即
+  // 「我传给组件的那份 props」。
   tree.root.findAll(node => node.props.testID === testID)[0]!;
 
 /**
@@ -140,11 +136,6 @@ const allByTestId = (
   testID: string,
 ): ReactTestInstance[] =>
   tree.root.findAll(node => node.props.testID === testID);
-
-const FILE_REFS: AtPathRef[] = [1, 2, 3, 4, 5, 6, 7, 8].map(n => ({
-  path: `src/${n}.ts`,
-  kind: 'file' as const,
-}));
 
 beforeEach(() => {
   resetMockCalls();
@@ -321,58 +312,33 @@ describe('NativeChatComposer dock（T-NC7 发送钮与 dock 显隐）', () => {
   });
 });
 
-describe('NativeChatComposer dock（T-NC8 typeahead 浮层）', () => {
-  it('T-NC8 光标处 @x 触发 → 候选 ≤5；点选上抛载荷（token 归一化）', () => {
-    const {tree, input, props} = renderDock({
-      typeaheadSource: {files: FILE_REFS, skills: []},
+describe('NativeChatComposer dock（T-TR1 联想浮层已移除）', () => {
+  it('T-TR1 打 @ / $ 与命令式插入后均不渲染 composer-typeahead', () => {
+    const ref = React.createRef<NativeChatComposerInstance>();
+    const props = baseProps({});
+    let tree!: ReactTestRenderer;
+    act(() => {
+      tree = TestRenderer.create(<NativeChatComposer ref={ref} {...props} />);
     });
-    // 初始无浮层
-    expect(allByTestId(tree, 'typeahead-row')).toHaveLength(0);
+    const input = () => tree.root.findByType(EnrichedMarkdownTextInput);
 
-    // 打字触发（光标乐观塌缩到文末 = 查询位）
+    // 打字触发记号：旧版此时展开候选浮层（T-NC8），移除后不应出现任何浮层
     act(() => {
       input().props.onChangeText('@src');
     });
-    // 计数取 host 层（一行一个 host 节点）
-    expect(countHostByTestId(tree, 'typeahead-row')).toBe(TYPEAHEAD_LIMIT);
-    expect(countHostByTestId(tree, 'typeahead-row')).toBeLessThanOrEqual(5);
-
-    // 浮层锚定形态：absolute + 锚在输入区上缘（bottom: 100%）
-    const overlay = byTestId(tree, 'composer-typeahead');
-    expect(overlay.props.style[0].position).toBe('absolute');
-    expect(overlay.props.style[0].bottom).toBe('100%');
-
-    // 点选：上抛 item（label + 归一化 token，插入语义由上层完成）
+    expect(allByTestId(tree, 'composer-typeahead')).toHaveLength(0);
     act(() => {
-      byTestId(tree, 'typeahead-row').props.onPress();
+      input().props.onChangeText('$skill');
     });
-    expect(props.onTypeaheadSelect).toHaveBeenCalledTimes(1);
-    expect(props.onTypeaheadSelect).toHaveBeenCalledWith({
-      label: '📄src/1.ts',
-      token: '@/src/1.ts',
-      tag: '',
-    });
-  });
+    expect(allByTestId(tree, 'composer-typeahead')).toHaveLength(0);
 
-  it('T-NC8 无候选 / inputDisabled 不渲染浮层', () => {
-    const {tree, input} = renderDock({
-      typeaheadSource: {files: FILE_REFS, skills: []},
-    });
-    // 查询无命中 → 无浮层
+    // 命令式插入（Picker 落文路径）确实走了 M7 通道落文，同样不出现浮层/候选行
     act(() => {
-      input().props.onChangeText('@zzz');
+      ref.current!.setText('@src/1.ts 看这个 ', 15);
     });
+    expect(mockCalls.setValue).toHaveLength(1);
+    expect(allByTestId(tree, 'composer-typeahead')).toHaveLength(0);
     expect(allByTestId(tree, 'typeahead-row')).toHaveLength(0);
-
-    // 禁用（inputDisabled）时即使有活跃查询也不展开（E5 判据）
-    const disabled = renderDock({
-      inputDisabled: true,
-      typeaheadSource: {files: FILE_REFS, skills: []},
-    });
-    act(() => {
-      disabled.input().props.onChangeText('@src');
-    });
-    expect(allByTestId(disabled.tree, 'typeahead-row')).toHaveLength(0);
   });
 });
 
@@ -607,30 +573,9 @@ describe('NativeChatComposer dock（T-NC10 样式 ⇄ dock-style.ts 单源）', 
     expect(composerDockStyles.sendBtn.borderRadius).toBe(20);
   });
 
-  it('T-NC10 typeahead 浮层壳/行样式 ⇄ composerTypeaheadStyles、胶囊 ⇄ composerTokenCapsule', () => {
-    const rendered = renderDock({
-      typeaheadSource: {files: FILE_REFS, skills: []},
-    });
-    act(() => {
-      rendered.input().props.onChangeText('@src');
-    });
+  it('T-NC10 胶囊（token span）几何与配色 ⇄ composerTokenCapsule + 主题', () => {
+    const rendered = renderDock();
 
-    const overlay = byTestId(rendered.tree, 'composer-typeahead');
-    expect(overlay.props.style[0]).toEqual(composerTypeaheadStyles.list);
-    expect(overlay.props.style[1].backgroundColor).toBe(THEME.surface);
-    expect(overlay.props.style[1].borderColor).toBe(THEME.borderLight);
-    expect(composerTypeaheadStyles.list.borderRadius).toBe(10);
-    expect(composerTypeaheadStyles.list.position).toBe('absolute');
-
-    const row = byTestId(rendered.tree, 'typeahead-row');
-    // '@' 行样式是单对象（'$' 行才是 [row, rowSkill] 数组）
-    expect(row.props.style).toBe(composerTypeaheadStyles.row);
-    expect(composerTypeaheadStyles.row.paddingHorizontal).toBe(10);
-    expect(composerTypeaheadStyles.row.paddingVertical).toBe(8);
-    expect(composerTypeaheadStyles.rowLabel.fontSize).toBe(14);
-    expect(composerTypeaheadStyles.rowTag.fontSize).toBe(11);
-
-    // 胶囊（token span）几何与配色 ⇄ composerTokenCapsule + 主题
     const markdownStyle = rendered.input().props.markdownStyle as {
       link: Record<string, unknown>;
       linkVariants: Record<string, Record<string, unknown>>;

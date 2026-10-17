@@ -8,7 +8,7 @@
  *
  * ## dock 纵向结构（K 组，对齐 web `#composer-dock` 的 DOM 形态）
  *
- * `[hintRow] → [error] → box（[chips 行] → [输入区（含 typeahead 浮层锚定）] →
+ * `[hintRow] → [error] → box（[chips 行] → [输入区] →
  * [toolbar 行]）`。box 是输入区的单一视觉容器（横向接缝不切开它）；dock 底
  * padding = `keyboardUp ? 0 : max(8, safeAreaBottom)`（`resolveDockBottomPadding`，
  * web `DOCK_PADDING_BASE` 语义照搬）。
@@ -24,7 +24,7 @@
  * `setValueFromJS` 会 `setText` 整个编辑器）。文本真源 = 库内部编辑器态，
  * RN 侧只持「最后已知明文」镜像。
  *
- * **M7 · 命令式通道**：外部写入（Picker 插入 / typeahead 点选 / 草稿水化 /
+ * **M7 · 命令式通道**：外部写入（Picker 插入 / 草稿水化 /
  * 发送清空 / undo 回滚 / **粘贴上屏**）一律走 `ref.setText(text, cursor?)`：
  * 推进基线 → 扫描 token 合成 markdown → `setValue` → 下发 `setTokenRanges` →
  * 可选光标落位 → **主动补发一次 `onComposerChangeText`**。补发的理由：库在
@@ -37,19 +37,6 @@
  * ——即「外部改了 state 但没经本组件通道」的场景（水化 / 清空 / undo），
  * 走与 M7 完全相同的 `commitExternalText` 内部通道；打字与命令式写入的
  * 回声因基线已推进而不触发，M6 就是这样保住的。
- *
- * ## typeahead 浮层（E 组）与文本/光标镜像
- *
- * 候选计算纯函数化（`native-composer/typeahead-view.ts`，web 版逐字迁移）：
- * 触发判定复用 core 的 `findActiveAtQuery`、过滤复用两个 filter、上限 5。
- * 计算吃**组件内部的文本/光标镜像 state**（不是 value prop）——打字路径里
- * 镜像与基线在同一个 handler 内更新，浮层不需要等父层回程的 value prop 就能
- * 当帧重算；镜像只是 typeahead 的私有输入，不参与文本真源（真源仍只有
- * `baselineRef` 一份）。不渲染判据照 E5：无活跃 token / 候选空 / inputDisabled。
- *
- * 浮层是 RN absolute View，简化锚定在**输入区上缘整体浮起**（bottom: 100%）；
- * `onCaretRectChange` 的光标 rect 与输入区 onLayout 已收进 ref，精确到行的
- * 锚定接口留给真机 QA 后再接（TODO）。
  *
  * ## 粘贴门控（D9 / F 组）
  *
@@ -74,7 +61,6 @@ import Svg, {Path, Rect} from 'react-native-svg';
 import Clipboard from '@react-native-clipboard/clipboard';
 import {EnrichedMarkdownTextInput} from 'react-native-enriched-markdown';
 import type {
-  CaretRect,
   ContextMenuItem,
   EnrichedMarkdownTextInputInstance,
   InputSelectionMenuConfig,
@@ -83,24 +69,16 @@ import type {
 import type {
   ConversationDockAction,
   ConversationTheme,
-  ConversationTypeaheadSource,
 } from './ChatConversationBridge';
-import {EMPTY_CONVERSATION_TYPEAHEAD_SOURCE} from './ChatConversationBridge';
 import {
   attachmentDraftChipsStyles,
   composerDockStyles,
   composerInputMetrics,
   composerTokenCapsule,
   composerToolBtnStyle,
-  composerTypeaheadStyles,
   resolveDockBottomPadding,
 } from './native-composer/dock-style';
 import {resolveSendButtonState} from './native-composer/send-button';
-import {
-  computeTypeaheadView,
-  typeaheadRenderKey,
-  type TypeaheadItem,
-} from './native-composer/typeahead-view';
 import {
   remapTokenRanges,
   scanTokensToRanges,
@@ -184,15 +162,13 @@ export type NativeChatComposerProps = {
    * 算好传入，组件纯展示——不可点、不随 inputDisabled 置灰。
    */
   readonly chipLabels?: readonly string[];
-  /** typeahead 候选源（files/skills，controller 按引用下发，纪律 C）。 */
-  readonly typeaheadSource?: ConversationTypeaheadSource;
   /**
    * 粘贴门控的「运行中」闸（D9）。缺省回落 `running`——controller 侧两者同源，
    * 拆开是为了让调用方将来可以只关粘贴而不动发送钮形态。
    */
   readonly uiRunning?: boolean;
   /**
-   * 输入域总禁用（typeahead 开合与 toolbar @/$ 的禁用判据）。缺省回落
+   * 输入域总禁用（toolbar @/$ 的禁用判据）。缺省回落
    * `disabled`——controller 侧 `inputDisabled = !hasModel || running ||
    * lastMessageIsPlainUserText`，本体只读（disabled）与外围判据同源同值。
    */
@@ -208,11 +184,6 @@ export type NativeChatComposerProps = {
    * terminate / needModel 六种，controller 的 `handleDockAction` 直挂。
    */
   readonly onDockAction?: (action: ConversationDockAction) => void;
-  /**
-   * typeahead 行点选上抛（E 组）：本组件只交回候选 item（含落文 token），
-   * 插入由上层经 insertTokensIntoComposer / ref.setText 落文（M7）。
-   */
-  readonly onTypeaheadSelect?: (item: TypeaheadItem) => void;
   readonly testID?: string;
 };
 
@@ -245,14 +216,12 @@ export const NativeChatComposer = forwardRef<
       canSend = true,
       error,
       chipLabels = [],
-      typeaheadSource = EMPTY_CONVERSATION_TYPEAHEAD_SOURCE,
       uiRunning,
       inputDisabled,
       keyboardUp = false,
       safeAreaBottom = 0,
       fullscreenEnabled = true,
       onDockAction,
-      onTypeaheadSelect,
       testID,
     },
     ref,
@@ -288,24 +257,6 @@ export const NativeChatComposer = forwardRef<
     /** 已上报高度（首帧豁免的真源：null = 从未上报过）。 */
     const lastReportedHeightRef = useRef<number | null>(null);
 
-    /** typeahead 用的明文镜像（首值同基线；只在文本路径上跟随，见文件头注释）。 */
-    const [composerText, setComposerText] = useState(value);
-    /** typeahead 用的光标镜像（选区起点；文本变化时先乐观塌缩到文末）。 */
-    const [selectionStart, setSelectionStart] = useState(0);
-
-    /**
-     * 光标 rect 与输入区布局（简化锚定的后续接口）：先收着不进 state——
-     * 精确到行的浮层锚定（caret rect + 输入区 onLayout 联合换算）等真机 QA
-     * 观察整体浮层的视觉后再接，接之前不为它多付一帧 setState。
-     */
-    const caretRectRef = useRef<CaretRect | null>(null);
-    const inputAreaLayoutRef = useRef<{
-      x: number;
-      y: number;
-      width: number;
-      height: number;
-    } | null>(null);
-
     /**
      * 首帧初值（只算一次）：库是 defaultValue 挂载语义（后续 prop 变化不重置
      * 编辑器），草稿明文在初渲染时就合成 markdown 进框；之后的 value 变化一律
@@ -328,8 +279,6 @@ export const NativeChatComposer = forwardRef<
     heightChangeRef.current = onHeightChange;
     const dockActionRef = useRef(onDockAction);
     dockActionRef.current = onDockAction;
-    const typeaheadSelectRef = useRef(onTypeaheadSelect);
-    typeaheadSelectRef.current = onTypeaheadSelect;
 
     /** 门闩 props 的缺省回落（缺省语义见 props 注释）。 */
     const inputDisabledResolved = inputDisabled ?? disabled;
@@ -393,9 +342,6 @@ export const NativeChatComposer = forwardRef<
         // E10/F6 补发语义：库在 Importing 期不自发回声，change 上抛由这里补；
         // controller 的同值去重使这条补发在所有调用场景下都是幂等回声。
         changeTextRef.current(plain);
-        // typeahead 镜像同步（只在写入发生时）：写入后光标落在指定位置。
-        setComposerText(plain);
-        setSelectionStart(resolvedCursor);
       },
       [dispatchTokenRanges],
     );
@@ -413,18 +359,12 @@ export const NativeChatComposer = forwardRef<
         baselineRef.current = plain;
         changeTextRef.current(plain);
         dispatchTokenRanges(plain, confirmedRangesRef.current);
-        // typeahead 镜像同步：光标先乐观塌缩到文末（对齐 web 侧
-        // `selectionStart ?? value.length` 的兜底口径），紧随其后的选区事件
-        // 会用真实位置覆盖。
-        setComposerText(plain);
-        setSelectionStart(plain.length);
       },
       [dispatchTokenRanges],
     );
 
     const handleSelectionChange = useCallback(
       (selection: {start: number; end: number}) => {
-        setSelectionStart(selection.start);
         selectionChangeRef.current(selection);
       },
       [],
@@ -443,17 +383,6 @@ export const NativeChatComposer = forwardRef<
       }
       lastReportedHeightRef.current = height;
       heightChangeRef.current?.(height);
-    }, []);
-
-    /** 光标 rect 收集（不进 state，见 caretRectRef 注释）。 */
-    const handleCaretRectChange = useCallback((rect: CaretRect) => {
-      caretRectRef.current = rect;
-    }, []);
-
-    /** 输入区布局收集（typeahead 浮层的锚定参照，TODO 接口见 caretRectRef）。 */
-    const handleInputAreaLayout = useCallback((event: LayoutChangeEvent) => {
-      const {x, y, width, height} = event.nativeEvent.layout;
-      inputAreaLayoutRef.current = {x, y, width, height};
     }, []);
 
     // value 兜底同步：外部直改 state（水化 / 清空 / undo）时经 M7 通道进框。
@@ -517,37 +446,11 @@ export const NativeChatComposer = forwardRef<
     );
 
     /* ------------------------------------------------------------------ *
-     * dock 上行与 typeahead 视图（Step 4 · E/J/K 组）
+     * dock 上行（Step 4 · J/K 组）
      * ------------------------------------------------------------------ */
 
     const emitDockAction = useCallback((action: ConversationDockAction) => {
       dockActionRef.current?.(action);
-    }, []);
-
-    /**
-     * typeahead 视图（纯函数算出，null = 不展开）。判据照 E5：
-     * `!inputDisabled` 之外，无活跃 token / 候选空都返回 null。
-     */
-    const typeaheadView = useMemo(
-      () =>
-        computeTypeaheadView(
-          composerText,
-          selectionStart,
-          typeaheadSource,
-          !inputDisabledResolved,
-        ),
-      [composerText, selectionStart, typeaheadSource, inputDisabledResolved],
-    );
-
-    /**
-     * 浮层容器的 React key = 幂等键（web dock `typeaheadRenderKey` 的消费面）：
-     * 键同（光标随手抖动、候选集未变）复用既有挂载，键变（换 token 集/换触发
-     * 形态/收起再开）才重挂——重挂顺带把浮层滚动位置归零，与 web 重渲语义一致。
-     */
-    const typeaheadKey = typeaheadRenderKey(typeaheadView);
-
-    const handleTypeaheadSelect = useCallback((item: TypeaheadItem) => {
-      typeaheadSelectRef.current?.(item);
     }, []);
 
     /**
@@ -566,7 +469,7 @@ export const NativeChatComposer = forwardRef<
      * 即拒绝——**不读剪贴板也不上屏**（旧链 composerPaste 桥侧闸门的等价物，
      * 防止向禁用输入框注入文本、落库成草稿后下轮被发出去）。通过后读剪贴板、
      * 截断到 256KB、按触发时的选区替换插入，经 M7 通道落文并补发 change
-     * （F5/F6：typeahead 点选与粘贴都是「组件自治写入」，落库靠这条补发）。
+     * （F5/F6：粘贴这类「组件自治写入」，落库靠这条补发）。
      */
     const handlePasteMenuPress = useCallback(
       (event: {selection: {start: number; end: number}}) => {
@@ -622,7 +525,8 @@ export const NativeChatComposer = forwardRef<
      * 主题 9 键 → markdownStyle：
      * - `link` 基础键直接给胶囊样式——合成 markdown 的 LINK range URL 均以
      *   `nmtoken:` / `nmskill:` 开头，非 token 的手输 `[x](y)` 在 composer 里
-     *   不存在（typeahead/水化是唯一写入源），link 键与变体同样式零副作用；
+     *   不存在（引用落文与水化是 token 的唯一写入源），link 键与变体同样式
+     *   零副作用；
      * - `linkVariants` 按库的 URL 正则匹配（Kotlin `Regex(pattern)` 编译 key）
      *   给 `^nmtoken:` / `^nmskill:` 两变体，几何数值走 dock-style.ts 单源。
      */
@@ -753,64 +657,7 @@ export const NativeChatComposer = forwardRef<
             </ScrollView>
           ) : null}
 
-          <View
-            style={composerDockStyles.inputArea}
-            onLayout={handleInputAreaLayout}
-          >
-            {typeaheadView != null ? (
-              <View
-                key={typeaheadKey}
-                testID="composer-typeahead"
-                accessibilityLabel={
-                  typeaheadView.trigger === '@' ? '文件路径建议' : '技能建议'
-                }
-                style={[
-                  composerTypeaheadStyles.list,
-                  {
-                    backgroundColor: theme.surface,
-                    borderColor: theme.borderLight,
-                  },
-                ]}
-              >
-                {typeaheadView.items.map(item => (
-                  <Pressable
-                    key={item.token}
-                    testID="typeahead-row"
-                    style={
-                      typeaheadView.trigger === '$'
-                        ? [
-                            composerTypeaheadStyles.row,
-                            composerTypeaheadStyles.rowSkill,
-                          ]
-                        : composerTypeaheadStyles.row
-                    }
-                    onPress={() => handleTypeaheadSelect(item)}
-                    accessibilityRole="button"
-                  >
-                    <Text
-                      style={[
-                        composerTypeaheadStyles.rowLabel,
-                        {color: theme.text},
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {item.label}
-                    </Text>
-                    {item.tag !== '' ? (
-                      <Text
-                        style={[
-                          composerTypeaheadStyles.rowTag,
-                          {color: theme.textSecondary},
-                        ]}
-                      >
-                        {item.tag}
-                      </Text>
-                    ) : null}
-                  </Pressable>
-                ))}
-              </View>
-            ) : null}
-
+          <View style={composerDockStyles.inputArea}>
             <EnrichedMarkdownTextInput
               ref={inputRef}
               testID={testID}
@@ -831,7 +678,6 @@ export const NativeChatComposer = forwardRef<
               onChangeText={handleChangeText}
               onChangeSelection={handleSelectionChange}
               onLayout={handleLayout}
-              onCaretRectChange={handleCaretRectChange}
               selectionMenuConfig={selectionMenuConfig}
               contextMenuItems={contextMenuItems}
             />

@@ -3,24 +3,23 @@
  * Step 5 数据来源换向）—— **RN 侧 dock 域的一切真源**。
  *
  * ## 为什么要拆
- * dock 全区（chips / input / toolbar / typeahead 浮层）由 `NativeChatComposer`
+ * dock 全区（chips / input / toolbar）由 `NativeChatComposer`
  * 承接（原 Step 3/4 期间曾进 chat-conversation 文档，输入框原生化后回到 RN）。
- * 留在本 hook 的是三样东西：
+ * 留在本 hook 的是两样东西：
  * 1. **发送决策**（`executeRun` / `send` 三分支 / `resolveComposerSendIntent`）；
- * 2. **草稿三订阅链**（水化 / `subscribeChatComposerDraft` / `subscribeChatAnnotateDraft`）；
- * 3. **候选源拉取**（`buildListRows` 过滤目录 → `AtPathRef[]` / `effectiveSkills`）。
+ * 2. **草稿三订阅链**（水化 / `subscribeChatComposerDraft` / `subscribeChatAnnotateDraft`）。
  *
- * 这三样算完的产物组装成 `composerState` 供面板**直连** `NativeChatComposer`
+ * 这两样算完的产物组装成 `composerState` 供面板**直连** `NativeChatComposer`
  * 的 props（组件不做业务推导），另加键盘态 `keyboardUp` 与 `safeAreaBottom`。
  * 数据来源在 Step 5 换向（spec 变更点 #6）：打字/选区/dock 上行不再走桥
  * （`ChatConversationWebView` 已退为纯转录宿主），改为组件事件直连；命令式写入
  * 走组件 `ref.setText`（M7）。回调签名（onChangeText / onSelectionChange /
  * handleDockAction）保持不变——只是调用方从桥上行换成了组件 props。
  *
- * ## 三条纪律
+ * ## 两条纪律
  *
  * **(A) 打字真源在输入组件内部，`change` 只上抛不回写**（M6）。`onChangeText` 是
- * 唯一消费口：每键上行一条，落库即走。typeahead 点选 / 粘贴这类 **组件自治写入**
+ * 唯一消费口：每键上行一条，落库即走。粘贴这类 **组件自治写入**
  * 由 `NativeChatComposer` 在命令式写入后补发一条 `change`（M7/E10/F6），本 hook
  * 一视同仁落库——**不区分来源**是这里最容易写错的地方：若按「来源是 Picker 就走
  * `insertTokens*`」分流，组件补发的那条就会漏落库。
@@ -31,10 +30,6 @@
  * 重渲染」。正确形态是 `useAnimatedReaction`（跑在 UI 线程）+ `runOnJS`（**仅在
  * 布尔翻转时**过桥）。翻转出的 `keyboardUp` 经 props 进 `NativeChatComposer`，
  * 由它做 dock 底 padding 的归零/回落（`resolveDockBottomPadding`）。
- *
- * **(C) typeahead 候选源按引用下发**。候选源内容不变时复用旧引用：`NativeChatComposer`
- * 的 typeahead 视图是 `useMemo`（依赖含 `typeaheadSource`），引用稳定就不过滤重算，
- * 浮层不会因无关重渲染闪动。
  */
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
@@ -48,7 +43,6 @@ import {
   subscribeChatAnnotateDraft,
   type MessageAttachment,
 } from '@novel-master/core/chat';
-import type {EffectiveSkill} from '@novel-master/core/skills';
 import type {AgentRunScope} from '@/services/agent-run.service';
 import {useRuntime} from '@/hooks/useRuntime';
 import {formatError} from '@/errors/format-error';
@@ -62,7 +56,7 @@ import {
   writeChatComposerDraftState,
 } from '@/storage/chat-composer-draft';
 import {projectComposerStatusForSession} from '@/services/project-composer-status.service';
-import {findActiveAtQuery, type AtPathRef} from './composer-at-path';
+import {findActiveAtQuery} from './composer-at-path';
 import {
   buildTokenInsertion,
   statusOnlyComposerAttachments,
@@ -73,11 +67,7 @@ import {
   type TokenRange,
 } from './native-composer/token-ranges';
 import type {ComposerInputSelection} from './ComposerInputBridge';
-import {
-  EMPTY_CONVERSATION_TYPEAHEAD_SOURCE,
-  type ConversationDockAction,
-  type ConversationTypeaheadSource,
-} from './ChatConversationBridge';
+import type {ConversationDockAction} from './ChatConversationBridge';
 
 /**
  * dock 全字段状态（composer-native-2026-10 Step 6 自 `ChatConversationBridge`
@@ -99,8 +89,6 @@ export type ConversationComposerState = {
   readonly chips: readonly MessageAttachment[];
   /** 键盘态（RN 侧 `useReanimatedKeyboardAnimation` 派生）。 */
   readonly keyboardUp: boolean;
-  /** typeahead 候选源。 */
-  readonly typeahead: ConversationTypeaheadSource;
 };
 import {resetRunTiming, timingLog} from '@/debug/run-timing';
 
@@ -151,7 +139,7 @@ export type ChatComposerController = {
   readonly text: string;
   /**
    * 胶囊确认区间（2026-10-07 真机轮拍板：胶囊只允许引用得到，手输不成胶囊）。
-   * 引用落文（typeahead / 选择器插入）时登记，水化时正则全扫一次性引导，
+   * 引用落文（选择器插入）时登记，水化时正则全扫一次性引导，
    * 其后一切文本编辑经差分重映射维护——传给 `NativeChatComposer` 的
    * `tokenRanges` prop，下发 `setTokenRanges` 渲染胶囊。
    */
@@ -180,7 +168,7 @@ export type ChatComposerController = {
   readonly onSkillPickerConfirm: (skillName: string) => void;
 
   /**
-   * typeahead 点选落文（Step 5 起 `NativeChatComposer.onTypeaheadSelect` 消费）：
+   * Picker 确认落文（`onAtPickerConfirm` / `onSkillPickerConfirm` 消费）：
    * `@` 侧整 token（含触发符），`$` 侧传剥掉触发符的技能名。两者经
    * `commitComposerText`（M7 命令式通道）落文，并替换活跃的半截查询。
    */
@@ -190,82 +178,6 @@ export type ChatComposerController = {
   /** 安全区底部高度（`init.composer.safeAreaBottom` 的取值）。 */
   readonly safeAreaBottom: number;
 };
-
-const EMPTY_FILE_REFS: readonly AtPathRef[] = [];
-const EMPTY_SKILLS: readonly EffectiveSkill[] = [];
-
-/** `buildListRows()` 的行 → `AtPathRef`（过滤根目录；与现网 typeahead 候选同口径）。 */
-function toAtPathRefs(
-  rows: readonly {readonly path: string; readonly kind: string}[],
-): readonly AtPathRef[] {
-  const refs: AtPathRef[] = [];
-  for (const row of rows) {
-    if (row.path === '/') {
-      continue;
-    }
-    refs.push({
-      path: row.path,
-      kind: row.kind === 'dir' ? ('dir' as const) : ('file' as const),
-    });
-  }
-  return refs;
-}
-
-/** `AtPathRef[]` 逐项比对（内容不变则复用旧引用，纪律 C）。 */
-function sameAtPathRefs(
-  a: readonly AtPathRef[],
-  b: readonly AtPathRef[],
-): boolean {
-  if (a === b) {
-    return true;
-  }
-  if (a.length !== b.length) {
-    return false;
-  }
-  for (let i = 0; i < a.length; i += 1) {
-    if (a[i]!.path !== b[i]!.path || a[i]!.kind !== b[i]!.kind) {
-      return false;
-    }
-  }
-  return true;
-}
-
-/**
- * `EffectiveSkill[]` 逐项比对 typeahead 消费到的字段（内容不变则复用旧引用）。
- *
- * 刻意不比 `JSON.stringify`（候选多时是 O(n·字段) 的字符串拼装）也不比引用
- * （`effectiveSkills()` 每次都造新对象，比引用等于永不相等，这条捷径直接失效）。
- * 取中：只比 web 侧 `skillTypeaheadItem` / `filterSkillTypeaheadCandidates`
- * 真正读的字段。
- */
-function sameSkills(
-  a: readonly EffectiveSkill[],
-  b: readonly EffectiveSkill[],
-): boolean {
-  if (a === b) {
-    return true;
-  }
-  if (a.length !== b.length) {
-    return false;
-  }
-  for (let i = 0; i < a.length; i += 1) {
-    const left = a[i]!;
-    const right = b[i]!;
-    if (
-      left.name !== right.name ||
-      left.valid !== right.valid ||
-      left.effective !== right.effective ||
-      left.disabled !== right.disabled ||
-      left.domain !== right.domain ||
-      left.overridden !== right.overridden ||
-      left.description !== right.description ||
-      left.invalidReason !== right.invalidReason
-    ) {
-      return false;
-    }
-  }
-  return true;
-}
 
 export function useChatComposerController({
   scope,
@@ -300,13 +212,6 @@ export function useChatComposerController({
   const [error, setError] = useState<string | undefined>();
   const [pickerOpen, setPickerOpen] = useState(false);
   const [skillPickerOpen, setSkillPickerOpen] = useState(false);
-  /** `@` typeahead 候选源（`AtPathRef[]`；非过滤结果，过滤在组件侧）。 */
-  const [fileRefs, setFileRefs] =
-    useState<readonly AtPathRef[]>(EMPTY_FILE_REFS);
-  /** `$` 技能候选源（当前项目合并视图，不走会话工作区）。 */
-  const [skillRows, setSkillRows] = useState<readonly EffectiveSkill[]>(
-    EMPTY_SKILLS,
-  );
   /** 文件批注 store 变更时 bump，驱动 hasAnnotateDrafts 重算。 */
   const [annotateEpoch, setAnnotateEpoch] = useState(0);
   /** 键盘态（纪律 B：只在布尔翻转时 setState）。 */
@@ -366,65 +271,6 @@ export function useChatComposerController({
     },
     [keyboardHeightSV],
   );
-
-  /* ------------------------------------------------------------------ *
-   * 候选源拉取（两个 effect；输出改 composerState.typeahead 的候选源）
-   * ------------------------------------------------------------------ */
-
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const session = await runtimeRef.current.sessions.get(sessionId);
-        const worktree = runtimeRef.current.workplace({
-          kind: 'session',
-          projectId: session.projectId,
-          sessionId,
-        });
-        const rows = await worktree.buildListRows();
-        if (!cancelled) {
-          const next = toAtPathRefs(rows);
-          setFileRefs(prev => (sameAtPathRefs(prev, next) ? prev : next));
-        }
-      } catch {
-        if (!cancelled) {
-          setFileRefs(prev => (prev === EMPTY_FILE_REFS ? prev : EMPTY_FILE_REFS));
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [sessionId]);
-
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const list = await runtimeRef.current
-          .skills()
-          .effectiveSkills(scope.projectId);
-        if (!cancelled) {
-          const next: readonly EffectiveSkill[] = list;
-          setSkillRows(prev => (sameSkills(prev, next) ? prev : next));
-        }
-      } catch {
-        if (!cancelled) {
-          setSkillRows(prev => (prev === EMPTY_SKILLS ? prev : EMPTY_SKILLS));
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [scope.projectId]);
-
-  const typeahead = useMemo<ConversationTypeaheadSource>(() => {
-    if (fileRefs.length === 0 && skillRows.length === 0) {
-      return EMPTY_CONVERSATION_TYPEAHEAD_SOURCE;
-    }
-    return {files: fileRefs, skills: skillRows};
-  }, [fileRefs, skillRows]);
 
   /* ------------------------------------------------------------------ *
    * 草稿链
@@ -776,12 +622,10 @@ export function useChatComposerController({
    * ------------------------------------------------------------------ */
 
   /**
-   * 有未完成的 `@…` / `$…` 时从触发符起替换到光标，避免残留半截查询。
-   *
-   * 注意这里仍然要算一次 `findActiveAtQuery`（纯函数，插入那一刻才算）：typeahead
-   * 的**开合**归 `NativeChatComposer` 组件自治（computeTypeaheadView 内部算），
-   * 但**插入落点**仍在 RN 侧算——controller 只有 text 与 cursor 两份数据。去掉
-   * 这一步会让「`@半截` → 点选候选」在光标后留下残渣。
+   * 有未完成的 `@…` / `$…` 时从触发符起替换到光标，避免残留半截查询
+   * （Picker 的「半截查询替换」语义）。插入那一刻现算一次
+   * `findActiveAtQuery`（纯函数）——controller 只有 text 与 cursor 两份数据，
+   * 去掉这一步会让「`@半截` → Picker 确认」在光标后留下残渣。
    */
   const insertTokensIntoComposer = useCallback(
     (pathTokens: readonly string[]) => {
@@ -862,7 +706,6 @@ export function useChatComposerController({
       placeholder,
       chips: attachments,
       keyboardUp,
-      typeahead,
     }),
     [
       inputDisabled,
@@ -874,7 +717,6 @@ export function useChatComposerController({
       placeholder,
       attachments,
       keyboardUp,
-      typeahead,
     ],
   );
 

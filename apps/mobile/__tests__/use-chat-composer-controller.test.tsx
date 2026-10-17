@@ -5,13 +5,13 @@
  * （`ChatConversationWebView` 的下行协议由 `chat-conversation-webview.test.tsx` 覆盖，
  * 宿主与 controller 的接线由 `chat-conversation-panel.integration.test.tsx` 覆盖）：
  * - `send` 三分支路由（needModel / 空输入 canResume 续跑 / 正常发送）+ `terminate`；
- * - typeahead 候选源拉取（`buildListRows` 过滤根目录 → `AtPathRef[]`；`effectiveSkills`）
- *   与**内容不变时引用稳定**（宿主 memo 按引用判等，引用抖一次就多下行一次
- *   `composerState`）；
  * - 键盘态 `keyboardUp` 的布尔翻转（**不**每帧刷 state——只断言翻转结果与翻转次数）；
- * - `change` 落库（纪律 A）：打字与 **web 自治写入补发**（typeahead 点选/粘贴）走同
+ * - `change` 落库（纪律 A）：打字与 **命令式写入补发**（粘贴上屏）走同
  *   一条消费口，不区分来源；
  * - Picker 路径 token 插入经 **M7 命令式通道**下发，且带选区（不是 effect 版 setText）。
+ *
+ * （typeahead 候选源拉取与引用稳定两组用例随 2026-10 迭代 typeahead 浮层链移除
+ * 而退役——候选源已无消费方。）
  */
 import React from 'react';
 import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
@@ -41,8 +41,6 @@ const mockStartRun = jest.fn(
   (..._args: unknown[]) => ({ok: true}) as {ok: boolean; error?: string},
 );
 const mockStopRun = jest.fn();
-const mockBuildListRows = jest.fn(async () => [] as unknown[]);
-const mockEffectiveSkills = jest.fn(async () => [] as unknown[]);
 
 const mockRuntime: Record<string, any> = {};
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -131,8 +129,6 @@ beforeEach(() => {
   mockDraftDb.clear();
   mockStartRun.mockClear().mockImplementation(() => ({ok: true}));
   mockStopRun.mockClear();
-  mockBuildListRows.mockReset().mockResolvedValue([]);
-  mockEffectiveSkills.mockReset().mockResolvedValue([]);
   mockProjectComposerStatus.mockReset().mockResolvedValue([]);
   clearChatComposerDraft('s1');
   resetChatAnnotateDraftStoreForTests();
@@ -151,8 +147,6 @@ beforeEach(() => {
         },
       ),
     },
-    workplace: jest.fn(() => ({buildListRows: mockBuildListRows})),
-    skills: jest.fn(() => ({effectiveSkills: mockEffectiveSkills})),
     sessionStreamUnitManager: {
       startRun: mockStartRun,
       stopRun: mockStopRun,
@@ -277,82 +271,6 @@ describe('useChatComposerController · send 三分支路由', () => {
   });
 });
 
-describe('useChatComposerController · typeahead 候选源', () => {
-  it('`@` 源过滤根目录并映射成 AtPathRef；`$` 源取 effectiveSkills', async () => {
-    mockBuildListRows.mockResolvedValue([
-      {path: '/', kind: 'dir'},
-      {path: '/docs', kind: 'dir'},
-      {path: '/docs/a.md', kind: 'file'},
-    ]);
-    mockEffectiveSkills.mockResolvedValue([
-      {
-        name: '写作',
-        description: null,
-        domain: 'project',
-        overridden: false,
-        disabled: false,
-        valid: true,
-        effective: true,
-      },
-    ]);
-    await mount();
-    await flush();
-
-    expect(mockBuildListRows).toHaveBeenCalled();
-    expect(current().composerState.typeahead.files).toEqual([
-      {path: '/docs', kind: 'dir'},
-      {path: '/docs/a.md', kind: 'file'},
-    ]);
-    expect(current().composerState.typeahead.skills.map(s => s.name)).toEqual([
-      '写作',
-    ]);
-  });
-
-  it('内容不变时 typeahead 引用保持同一对象（memo 按引用判等）', async () => {
-    const rows = [{path: '/a.md', kind: 'file'}];
-    mockBuildListRows.mockResolvedValue(rows);
-    await mount();
-    await flush();
-    const first = current().composerState.typeahead;
-
-    // 重新拉一次同样内容（每次调用都造新数组新对象）
-    mockBuildListRows.mockResolvedValue(rows.map(r => ({...r})));
-    await act(async () => {
-      current().onChangeText('x');
-    });
-    await flush();
-
-    expect(current().composerState.typeahead).toBe(first);
-  });
-
-  it('内容真变时引用换新（否则下行 composerState 会被 memo 吞掉）', async () => {
-    const skill = (name: string) => ({
-      name,
-      description: null,
-      domain: 'project',
-      overridden: false,
-      disabled: false,
-      valid: true,
-      effective: true,
-    });
-    mockEffectiveSkills.mockResolvedValue([skill('写作')]);
-    const tree = await mount();
-    const first = current().composerState.typeahead;
-    expect(first.skills.map(s => s.name)).toEqual(['写作']);
-
-    // 换项目 → 技能候选源重拉，且内容真的变了 → 引用必须换新。
-    mockEffectiveSkills.mockResolvedValue([skill('写作'), skill('校对')]);
-    await act(async () => {
-      tree.update(<Harness scope={{projectId: 'p2', sessionId: 's1'}} />);
-    });
-    await flush();
-
-    const second = current().composerState.typeahead;
-    expect(second).not.toBe(first);
-    expect(second.skills.map(s => s.name)).toEqual(['写作', '校对']);
-  });
-});
-
 describe('useChatComposerController · keyboardUp 派生', () => {
   it('键盘弹起/收起各翻转一次，且不逐帧刷 state', async () => {
     await mount();
@@ -391,9 +309,9 @@ describe('useChatComposerController · change 落库（纪律 A）', () => {
     expect(current().text).toBe('hello');
   });
 
-  it('web 自治写入补发的 change（typeahead 点选/粘贴）同样落库——不区分来源', async () => {
+  it('命令式写入补发的 change（粘贴上屏）同样落库——不区分来源', async () => {
     await mount();
-    // 这条上行在真机上来自 web 的 commitComposerText（typeahead 点选 / 划词粘贴），
+    // 这条上行在真机上来自 NativeChatComposer 的 M7 写入补发（粘贴落文），
     // RN 侧完全无从知道来源，只能靠「同一个消费口」保证它落库。
     await act(async () => {
       current().onChangeText('看这里 $写作 ');
@@ -554,7 +472,6 @@ describe('useChatComposerController · composerState 组装', () => {
     expect(state.fullscreenEnabled).toBe(true);
     expect(Array.isArray(state.chips)).toBe(true);
     expect(state.keyboardUp).toBe(false);
-    expect(state.typeahead).toBeDefined();
     // 无 error 时不下 error 键（web 侧按缺省渲染空行）。
     expect('error' in state).toBe(false);
   });
@@ -569,7 +486,7 @@ describe('useChatComposerController · composerState 组装', () => {
  * 胶囊确认制 · tokenRanges 四咽喉点（CR-fix-04）。
  *
  * controller 的 tokenRanges state 有四处推进口，每处都是「注释掉就红」的
- * 变异点：onChangeText 打字差分重映射、Picker/typeahead 落文登记（上方两条
+ * 变异点：onChangeText 打字差分重映射、Picker 落文登记（上方两条
  * 断言补过）、水化/切换会话引导扫描、发送/清空归空。这里补打字/水化/清空
  * 三条，插入登记两条已并入上方 Picker 用例。
  */
