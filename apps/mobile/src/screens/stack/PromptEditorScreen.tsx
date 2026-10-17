@@ -17,10 +17,10 @@
  *   后原样回到输入框。编辑区仍是 CodeEditorWebView（用户拍板不换引擎），但走
  *   composer 伪路径（COMPOSER_EDITOR_PATH）激活 **skill/@ tag 胶囊**——
  *   CodeMirror 侧 mark 装饰 + atomicRanges 原子删（web/code-editor 的
- *   composer-tokens 扩展），插入链（typeahead / @/$ 选择器）与内联输入框
- *   （ChatComposer）同款：`$`/`@` 手输触发 typeahead，底排按钮开选择器，
- *   buildTokenInsertion 统一拼 token 与光标。路由需带 projectId/sessionId
- *   （ChatTabScreen 负责），缺省时 tag 高亮仍在、typeahead/选择器静默降级。
+ *   composer-tokens 扩展），底排 `@`/`$` 按钮开选择器（FileReferencePicker /
+ *   SkillPicker），插入链与内联输入框（ChatComposer）同款：buildTokenInsertion
+ *   统一拼 token 与光标。路由需带 projectId/sessionId（ChatTabScreen 负责），
+ *   缺省时 tag 高亮仍在、选择器静默降级。
  *
  * 回调不走路由参数（不可序列化），挂载时从模块级存取取走（读后即清）。
  * 顶栏/预览二态/键盘三分支外壳由 components/chrome/EditorScreenShell 统一
@@ -52,16 +52,7 @@ import {
   takePromptEditorOnSaved,
   type PromptEditorOnSaved,
 } from '../../components/agent/prompt-editor-callback';
-import {AtPathTypeahead} from '../../components/chat/AtPathTypeahead';
-import {
-  filterSkillTypeaheadCandidates,
-  SkillTypeahead,
-} from '../../components/chat/SkillTypeahead';
-import {
-  filterAtPathTypeaheadCandidates,
-  findActiveAtQuery,
-  type AtPathRef,
-} from '../../components/chat/composer-at-path';
+import {findActiveAtQuery} from '../../components/chat/composer-at-path';
 import {
   buildTokenInsertion,
   type ComposerTokenInsertion,
@@ -69,8 +60,6 @@ import {
 import {FileReferencePicker} from '../../components/chat/FileReferencePicker';
 import {SkillPicker} from '../../components/skills/SkillPicker';
 import {composerToolBtnStyle} from '../../components/chat/composer-toolbar-style';
-import type {EffectiveSkill} from '@novel-master/core/skills';
-import type {WorkplaceListRow} from '@novel-master/core/workplace';
 import {useNovelMaster} from '../../runtime/novel-master-context';
 import {useTheme} from '../../theme/ThemeProvider';
 
@@ -116,9 +105,9 @@ export function PromptEditorScreen() {
     useState<PreviewRenderKind>('markdown');
   const codeEditorRef = useRef<CodeEditorWebViewHandle>(null);
 
-  /* ---- composer 变体的 tag 插入链（typeahead / 选择器；form 变体不参与） ---- */
+  /* ---- composer 变体的 tag 插入链（选择器；form 变体不参与） ---- */
   const {runtime} = useNovelMaster();
-  /** 光标（typeahead 活跃查询判定用；来自 web 选区上报）。
+  /** 光标（`@`/`$` 半截查询识别用；来自 web 选区上报）。
    * 初值＝文末：进全屏不点正文直接插 token 时落在末尾（与 web 侧 mount 默认
    * 选区成对——CM 挂载不触发 selectionChange，RN 侧若停在 0 会插到整篇开头）。 */
   const [cursor, setCursor] = useState(() =>
@@ -126,100 +115,17 @@ export function PromptEditorScreen() {
   );
   const [skillPickerOpen, setSkillPickerOpen] = useState(false);
   const [pathPickerOpen, setPathPickerOpen] = useState(false);
-  /** `$` 技能 typeahead 候选源（当前项目合并视图，不走会话工作区）。 */
-  const [skillRows, setSkillRows] = useState<EffectiveSkill[]>([]);
-  /** `@` 路径 typeahead 候选源（会话工作区行）。 */
-  const [typeaheadRows, setTypeaheadRows] = useState<WorkplaceListRow[]>([]);
 
-  /** typeahead/选择器可用：composer 变体、路由带齐 scope 且 runtime 就绪
-   * （选择器内部走 useRuntime 会抛——未就绪时静默降级，旧调用方缺参同理）。 */
-  const canTypeahead =
+  /** 选择器可用（按钮 disabled 与 Picker 挂载共用判据）：composer 变体、路由
+   * 带齐 scope 且 runtime 就绪（选择器内部走 useRuntime 会抛——未就绪时静默
+   * 降级，旧调用方缺参同理）。 */
+  const canOpenPicker =
     isComposer && projectId != null && sessionId != null && runtime != null;
-  const activeAt = canTypeahead ? findActiveAtQuery(draft, cursor) : null;
-  const activeSkill = canTypeahead
+  /** 活跃的 `@`/`$` 半截查询：Picker 确认时从查询起点替换到光标（不残留半截）。 */
+  const activeAt = canOpenPicker ? findActiveAtQuery(draft, cursor) : null;
+  const activeSkill = canOpenPicker
     ? findActiveAtQuery(draft, cursor, '$')
     : null;
-  /** 活跃查询的开关位（effect 依赖用布尔常量，避免复杂表达式进 deps）。 */
-  const atQueryActive = activeAt != null;
-  const skillQueryActive = activeSkill != null;
-
-  // `$` 技能候选：当前项目合并视图（与 ChatComposer 同源同口径）
-  useEffect(() => {
-    if (!canTypeahead || !skillQueryActive || projectId == null) {
-      return;
-    }
-    let cancelled = false;
-    const rt = runtime;
-    if (rt == null) {
-      return;
-    }
-    void (async () => {
-      try {
-        const list = await rt.skills().effectiveSkills(projectId);
-        if (!cancelled) {
-          setSkillRows(list);
-        }
-      } catch {
-        if (!cancelled) {
-          setSkillRows([]);
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [canTypeahead, skillQueryActive, projectId, runtime]);
-
-  // `@` 路径候选：会话工作区行（与 ChatComposer 同源同口径）
-  useEffect(() => {
-    if (!canTypeahead || !atQueryActive || sessionId == null) {
-      return;
-    }
-    let cancelled = false;
-    const rt = runtime;
-    if (rt == null) {
-      return;
-    }
-    void (async () => {
-      try {
-        const session = await rt.sessions.get(sessionId);
-        const worktree = rt.workplace({
-          kind: 'session',
-          projectId: session.projectId,
-          sessionId,
-        });
-        const rows = await worktree.buildListRows();
-        if (!cancelled) {
-          setTypeaheadRows(rows);
-        }
-      } catch {
-        if (!cancelled) {
-          setTypeaheadRows([]);
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [canTypeahead, atQueryActive, sessionId, runtime]);
-
-  const typeaheadCandidates = (() => {
-    if (activeAt == null) {
-      return [] as AtPathRef[];
-    }
-    const refs: AtPathRef[] = typeaheadRows
-      .filter(r => r.path !== '/')
-      .map(r => ({
-        path: r.path,
-        kind: r.kind === 'dir' ? ('dir' as const) : ('file' as const),
-      }));
-    return filterAtPathTypeaheadCandidates(refs, activeAt.query, 5);
-  })();
-
-  const skillTypeaheadCandidates =
-    activeSkill == null
-      ? []
-      : filterSkillTypeaheadCandidates(skillRows, activeSkill.query, 5);
 
   /** 提交 token 插入：web 一次写入 + 光标落位，本地草稿/光标同步推进。 */
   const commitDraft = useCallback((next: ComposerTokenInsertion) => {
@@ -230,30 +136,6 @@ export function PromptEditorScreen() {
     setDraft(next.text);
     setCursor(next.cursor);
   }, []);
-
-  /** `@` typeahead 点选：从活跃 `@` 起替换到光标（plain + 尾空格）。 */
-  const applyTypeaheadToken = useCallback(
-    (token: string) => {
-      if (activeAt == null) {
-        return;
-      }
-      commitDraft(buildTokenInsertion(draft, cursor, activeAt.start, token));
-    },
-    [activeAt, cursor, draft, commitDraft],
-  );
-
-  /** `$` typeahead 点选：插 `$技能名` token。 */
-  const applySkillTypeaheadToken = useCallback(
-    (skillName: string) => {
-      if (activeSkill == null) {
-        return;
-      }
-      commitDraft(
-        buildTokenInsertion(draft, cursor, activeSkill.start, `$${skillName}`),
-      );
-    },
-    [activeSkill, cursor, draft, commitDraft],
-  );
 
   /** SkillPicker 单选：从光标（或活跃 `$` 查询）处插入 `$技能名` token。 */
   const insertSkillToken = useCallback(
@@ -401,25 +283,12 @@ export function PromptEditorScreen() {
                 onChange={setDraft}
                 onSelectionChange={handleSelectionChange}
               />
-              {/* typeahead 浮层：底部动作行上方（键盘起时随编辑区一起抬升） */}
-              <View pointerEvents="box-none" style={styles.typeaheadDock}>
-                <AtPathTypeahead
-                  open={activeAt != null}
-                  candidates={typeaheadCandidates}
-                  onSelect={applyTypeaheadToken}
-                />
-                <SkillTypeahead
-                  open={activeSkill != null}
-                  candidates={skillTypeaheadCandidates}
-                  onSelect={applySkillTypeaheadToken}
-                />
-              </View>
               {/* 底排动作行：@ / $ 同款 36 圆钮（与 ChatComposer 工具栏同源单一样式） */}
               <View style={[styles.actionRow, {borderTopColor: tokens.border}]}>
                 <Pressable
                   testID="composer-editor-at-btn"
                   onPress={() => setPathPickerOpen(true)}
-                  disabled={!canTypeahead}
+                  disabled={!canOpenPicker}
                   style={[composerToolBtnStyle, {borderColor: tokens.border}]}
                   accessibilityLabel="引用文件"
                 >
@@ -430,7 +299,7 @@ export function PromptEditorScreen() {
                 <Pressable
                   testID="composer-editor-skill-btn"
                   onPress={() => setSkillPickerOpen(true)}
-                  disabled={!canTypeahead}
+                  disabled={!canOpenPicker}
                   style={[composerToolBtnStyle, {borderColor: tokens.border}]}
                   accessibilityLabel="引用技能"
                 >
@@ -450,9 +319,9 @@ export function PromptEditorScreen() {
           )
         }
       />
-      {/* 选择器挂载也看 runtime：其内部走 useRuntime()，未就绪渲染即抛——
-          与 canTypeahead 同源降级（按钮 disabled + 选择器不挂载）。 */}
-      {isComposer && projectId != null && sessionId != null && runtime != null ? (
+      {/* 挂载判据与按钮 disabled 同源（canOpenPicker）：选择器内部走
+          useRuntime()，未就绪渲染即抛——缺 scope / runtime 时静默降级不挂载。 */}
+      {canOpenPicker ? (
         <>
           <FileReferencePicker
             visible={pathPickerOpen}
@@ -475,14 +344,6 @@ export function PromptEditorScreen() {
 
 const styles = StyleSheet.create({
   composerWrap: {flex: 1, minHeight: 0},
-  /** 浮层锚在动作行上方；列表关闭时子组件渲染 null，不挡编辑区触摸。 */
-  typeaheadDock: {
-    position: 'absolute',
-    left: 12,
-    right: 12,
-    bottom: 56,
-    zIndex: 1,
-  },
   actionRow: {
     flexDirection: 'row',
     justifyContent: 'flex-end',

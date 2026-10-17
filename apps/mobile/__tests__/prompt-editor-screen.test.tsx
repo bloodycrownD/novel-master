@@ -41,13 +41,9 @@ const mockEditorProps: {
 // 编辑器 handle 桩：token 插入链（commitDraft → setText）的断言面。
 const mockEditorSetText = jest.fn();
 const mockEditorBlur = jest.fn();
-// composer 变体的候选源与选择器（typeahead 插入链的 mock 底座）。
-const mockEffectiveSkills = jest.fn();
-const mockRuntime = {
-  skills: () => ({effectiveSkills: mockEffectiveSkills}),
-  sessions: {get: jest.fn(async () => ({id: 's1', projectId: 'p1'}))},
-  workplace: jest.fn(),
-};
+// composer 变体的选择器 mock 底座：runtime 非空即满足「Picker 可用」判据
+// （按钮 disabled / 挂载判据），capsule/B-2 用例置 null 模拟未就绪。
+const mockRuntime = {};
 const mockFilePickerProps: {
   visible: boolean;
   projectId: string;
@@ -219,6 +215,15 @@ function renderScreen() {
   return tree!;
 }
 
+/** 联想浮层残留探针：typeahead 组件已整体移除，任何含 typeahead 的 testID 都是残留。 */
+function findTypeaheadNodes(tree: TestRenderer.ReactTestRenderer) {
+  return tree.root.findAll(
+    node =>
+      typeof node.props.testID === 'string' &&
+      node.props.testID.includes('typeahead'),
+  );
+}
+
 function pressToggle(tree: TestRenderer.ReactTestRenderer) {
   act(() => {
     tree.root.findByProps({testID: 'prompt-editor-toggle'}).props.onPress();
@@ -252,17 +257,6 @@ describe('PromptEditorScreen (T-PE3 + R5 + R6)', () => {
     mockSkillPickerProps.length = 0;
     mockEditorSetText.mockClear();
     mockEditorBlur.mockClear();
-    // `$` 技能候选源缺省返回一条可用技能（typeahead 用例可覆盖）。
-    mockEffectiveSkills.mockReset().mockResolvedValue([
-      {
-        name: '写作',
-        description: '',
-        valid: true,
-        disabled: false,
-        domain: 'global',
-        overridden: false,
-      },
-    ]);
     mockRuntimeHolder.runtime = mockRuntime;
     // 清空模块级回调残留，各用例自行决定是否 set。
     takePromptEditorOnSaved();
@@ -538,7 +532,7 @@ describe('PromptEditorScreen composer 变体（chat 输入框全屏）', () => {
     ).toHaveLength(0);
   });
 
-  it('composer 变体：`$` 打字触发技能 typeahead，点选经 setText 插入 $技能名', async () => {
+  it('composer 变体：`$`/`@` 打字不再渲染联想浮层（T-TR3，浮层已整体移除）', () => {
     mockRoute.params = {
       initialText: '',
       variant: 'composer',
@@ -547,30 +541,26 @@ describe('PromptEditorScreen composer 变体（chat 输入框全屏）', () => {
     };
     const tree = renderScreen();
 
-    // web 上报打字与选区：光标在孤立 `$` 后（空查询 = 全量候选）。
+    // 历史行为：打字后 web 上报选区即弹候选浮层；现在两步都做一遍，
+    // 树里不允许再出现任何含 typeahead 的 testID（旧 skill-typeahead-* 行）。
     act(() => {
       mockEditorProps[0]!.onChange('$');
     });
     act(() => {
       mockEditorProps[0]!.onSelectionChange!({start: 1, end: 1});
     });
-    await act(async () => {});
+    expect(mockEditorProps[0]!.value).toBe('$');
+    expect(findTypeaheadNodes(tree)).toHaveLength(0);
 
-    const row = tree.root.findByProps({testID: 'skill-typeahead-写作'});
     act(() => {
-      row.props.onPress();
+      mockEditorProps[0]!.onChange('@');
     });
+    act(() => {
+      mockEditorProps[0]!.onSelectionChange!({start: 1, end: 1});
+    });
+    expect(findTypeaheadNodes(tree)).toHaveLength(0);
 
-    // 插入 = 程序化一次写入 + 光标落位（buildTokenInsertion：token + 尾空格）。
-    expect(mockEditorSetText).toHaveBeenCalledTimes(1);
-    expect(mockEditorSetText).toHaveBeenCalledWith('$写作 ', {
-      start: 4,
-      end: 4,
-    });
-    // 本地草稿同步推进（退出即回填读的就是它）。
-    expect(mockEditorProps[0]!.value).toBe('$写作 ');
-    // 收尾卸载：挂载着选择器/typeahead 的树若留着，后续用例的 act 会全局
-    // flush 它的 pending 重渲、把捕获槽再写一遍（跨用例污染断言面）。
+    // 收尾卸载（照本组惯例：防止跨用例污染断言面）。
     act(() => {
       tree.unmount();
     });
@@ -632,7 +622,7 @@ describe('PromptEditorScreen composer 变体（chat 输入框全屏）', () => {
       sessionId: 's1',
     };
     const tree = renderScreen();
-    // capsule/B-2：选择器内部走 useRuntime 会抛，canTypeahead 必须看 runtime。
+    // capsule/B-2：选择器内部走 useRuntime 会抛，canOpenPicker 必须看 runtime。
     expect(
       tree.root.findByProps({testID: 'composer-editor-at-btn'}).props.disabled,
     ).toBe(true);
