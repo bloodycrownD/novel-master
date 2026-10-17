@@ -5,9 +5,11 @@
  * ## 为什么要拆
  * dock 全区（chips / input / toolbar）由 `NativeChatComposer`
  * 承接（原 Step 3/4 期间曾进 chat-conversation 文档，输入框原生化后回到 RN）。
- * 留在本 hook 的是两样东西：
+ * 留在本 hook 的职责：
  * 1. **发送决策**（`executeRun` / `send` 三分支 / `resolveComposerSendIntent`）；
- * 2. **草稿三订阅链**（水化 / `subscribeChatComposerDraft` / `subscribeChatAnnotateDraft`）。
+ * 2. **草稿三订阅链**（水化 / `subscribeChatComposerDraft` / `subscribeChatAnnotateDraft`）；
+ * 另有 **Picker 状态机**（`pickerOpen` / `skillPickerOpen` 与 confirm 回调）
+ * 与 **token 插入 / 胶囊区间维护链**（`insertSkillToken` / `insertTokensIntoComposer` 一族）。
  *
  * 这两样算完的产物组装成 `composerState` 供面板**直连** `NativeChatComposer`
  * 的 props（组件不做业务推导），另加键盘态 `keyboardUp` 与 `safeAreaBottom`。

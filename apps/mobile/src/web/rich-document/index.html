@@ -6,11 +6,13 @@
       name="viewport"
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
     />
-    <!-- 首帧主题预注入（C′）：head 内联脚本在解析期同步执行、物理上先于首绘，
-         从宿主 URI 的 query/hash 读 bg 参数先写 --bg，堵住 stylesheet
-         `html,body{background:var(--bg,#fff)}` 兜底白窗的 first-paint 竞态；
-         参数先于 stylesheet 生效。iOS 若丢弃 file:// query，由 RN 侧 B
-         （injectedJavaScriptBeforeContentLoaded）注入兜底。 -->
+    <!-- 首帧主题预注入（C′；fix-D 2026-10-18 口径对齐）：head 内联脚本在解析期
+         同步执行、物理上先于首绘，从宿主 URI 的 hash 读 bg 参数先写 --bg——
+         `#bg=` hash 全平台保留，`file://`+query 会被部分 WebView 实现丢弃，
+         故本脚本兼容解析 search+hash 双形态。它堵住本包 stylesheet
+         `html,body{background:var(--bg,#fff)}`（document.css）兜底白窗的
+         first-paint 竞态——白帧是首绘帧自己画的；参数先于 stylesheet 生效。
+         参数丢失时由 RN 侧 B（injectedJavaScriptBeforeContentLoaded）注入兜底。 -->
     <script>
       (function () {
         try {

@@ -17,7 +17,8 @@
  * **职责边界**：数值对照表 + **Step 3/4 起的 RN 消费真源**——`NativeChatComposer` /
  * `token-ranges.ts` 的输入框尺寸与胶囊数值从这里的常量取（单源），不再各抄一份；
  * Step 4 的 dock 外围件（容器/hint/error/toolbar）数值同样收进本表；
- * web 侧对照面仍由 `chat-conversation-boot-script.test.ts` 消费（旧址同款纪律）。
+ * 对照面由 `__tests__/native-composer-dock.test.tsx` 消费（T-NC10 样式逐项 +
+ * T-CC-CSS-15 消费方守卫）；web 侧旧对照面随 chat-conversation web 包退役已删。
  */
 
 /**

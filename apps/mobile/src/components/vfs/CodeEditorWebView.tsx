@@ -69,12 +69,6 @@ function themeFromTokens(tokens: ThemeTokens): CodeEditorTheme {
   };
 }
 
-/**
- * 首帧主题预注入（暗色白闪 B）与 chat-transcript / rich-document 同源：
- * `buildThemeInjectScript` 已抽到 `@/webview-host/webview-theme-inject`
- * （fix-D 2026-10-18 单源化）；注入面见该模块注释。
- */
-
 export const CodeEditorWebView = forwardRef<
   CodeEditorWebViewHandle,
   CodeEditorWebViewProps

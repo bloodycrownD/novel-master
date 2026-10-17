@@ -215,12 +215,19 @@ function renderScreen() {
   return tree!;
 }
 
-/** 联想浮层残留探针：typeahead 组件已整体移除，任何含 typeahead 的 testID 都是残留。 */
+/**
+ * 联想浮层残留探针：typeahead 组件已整体移除，任何残留都会被抓——
+ * ① 含 `typeahead` 的 testID；② 「…建议」结尾的 accessibilityLabel
+ * （历史 @ 支路浮层 AtPathTypeahead 无 testID，只有 a11y 标签「文件路径建议/
+ * 技能建议」，仅靠 ① 兜不住 @ 侧）。「建议」a11y 标签当前树上零误报源（cr 已核）。
+ */
 function findTypeaheadNodes(tree: TestRenderer.ReactTestRenderer) {
   return tree.root.findAll(
     node =>
-      typeof node.props.testID === 'string' &&
-      node.props.testID.includes('typeahead'),
+      (typeof node.props.testID === 'string' &&
+        node.props.testID.includes('typeahead')) ||
+      (typeof node.props.accessibilityLabel === 'string' &&
+        node.props.accessibilityLabel.endsWith('建议')),
   );
 }
 

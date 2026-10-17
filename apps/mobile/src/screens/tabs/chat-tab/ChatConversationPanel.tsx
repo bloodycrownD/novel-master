@@ -157,7 +157,7 @@ function ChatConversationWebSurface(props: {
   );
 
   /**
-   * composer controller（dock 域一切真源，spec 变更点 #6）：草稿链 / 候选源拉取 /
+   * composer controller（dock 域一切真源，spec 变更点 #6）：草稿链 /
    * Picker 状态机 / 发送决策照旧运转，产出的 composerState 不再经桥下发——
    * **数据来源在 Step 5 换向**：打字/选区来自 `NativeChatComposer` 组件事件直连，
    * 命令式写入（Picker 插入 / 水化 / 清空）经 `setComposerText` 落到 composer 的

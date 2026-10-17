@@ -7,11 +7,12 @@
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
     />
     <!-- 首帧主题预注入（C′，fix-D 2026-10-18）：head 内联脚本解析期同步执行、
-         物理上先于首绘，从宿主 URI 的 hash（兼容 query）读 bg 参数先写 --bg，
-         堵住 transcript.css `background: var(--bg, #fff)` 兜底白窗的 first-paint
-         竞态——会话屏消息区冷挂载 ~350ms 白窗（2026-10-18 录屏取证）即此。
-         参数先于 stylesheet 生效；参数丢失时由 RN 侧 B
-         （injectedJavaScriptBeforeContentLoaded）注入兜底。 -->
+         物理上先于首绘，从宿主 URI 的 hash 读 bg 参数先写 --bg——`#bg=` hash
+         全平台保留，`file://`+query 会被部分 WebView 实现丢弃，故兼容解析
+         search+hash 双形态。它堵住 transcript.css `background: var(--bg, #fff)`
+         兜底白窗的 first-paint 竞态——会话屏消息区冷挂载 ~350ms 白窗
+         （2026-10-18 录屏取证）即此；参数先于 stylesheet 生效。参数丢失时由
+         RN 侧 B（injectedJavaScriptBeforeContentLoaded）注入兜底。 -->
     <script>
       (function () {
         try {

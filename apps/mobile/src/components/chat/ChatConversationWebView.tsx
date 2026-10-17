@@ -118,9 +118,10 @@ export type {ChatTranscriptWebViewHandle} from './ChatTranscriptWebViewHandle';
  * `ChatTabProvider` / `useInterruptedPartialCommit` / `SubagentSessionScreen`
  * 的转录七方法消费零改动。
  *
- * `transcriptOnly` 变体（子会话屏）的行为面断言在同文件 transcriptOnly describe，
- * web 侧（CSS 隐藏 dock + `init.transcriptOnly` 消费）断言在
- * `__tests__/chat-conversation-boot-script.test.ts` 的产物面。
+ * `transcriptOnly` 变体（子会话屏）的行为面断言在
+ * `__tests__/chat-conversation-webview.test.tsx` 的 transcriptOnly describe
+ * （RN 侧 init 载荷 + memo 比较器）；web 侧旧产物面断言随 chat-conversation
+ * 包退役已删（chat-transcript web 侧亦无 dock/transcriptOnly 消费）。
  */
 export type ChatConversationWebViewHandle = ChatTranscriptWebViewHandle;
 
