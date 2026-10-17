@@ -6,6 +6,24 @@
       name="viewport"
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
     />
+    <!-- 首帧主题预注入（C′）：head 内联脚本在解析期同步执行、物理上先于首绘，
+         从宿主 URI 的 query/hash 读 bg 参数先写 --bg，堵住 stylesheet
+         `html,body{background:var(--bg,#fff)}` 兜底白窗的 first-paint 竞态；
+         参数先于 stylesheet 生效。iOS 若丢弃 file:// query，由 RN 侧 B
+         （injectedJavaScriptBeforeContentLoaded）注入兜底。 -->
+    <script>
+      (function () {
+        try {
+          var m = /(?:[?&#])bg=([^&#]*)/.exec(location.search + location.hash);
+          if (m) {
+            var bg = decodeURIComponent(m[1]);
+            if (bg) {
+              document.documentElement.style.setProperty('--bg', bg);
+            }
+          }
+        } catch (e) {}
+      })();
+    </script>
     <link rel="stylesheet" href="./app.css" />
   </head>
   <body>

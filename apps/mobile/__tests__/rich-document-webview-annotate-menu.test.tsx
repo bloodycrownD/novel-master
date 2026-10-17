@@ -151,3 +151,66 @@ describe('RichDocumentWebView 暗色白闪 A+B（T-PF1/T-PF2）', () => {
     expect(script).not.toContain('--surface');
   });
 });
+
+describe('RichDocumentWebView 暗色白闪 C′+E（T-PF5/T-PF6）', () => {
+  beforeEach(() => {
+    mockWebViewProps.length = 0;
+  });
+
+  // T-PF5：C′ 链路——source.uri 追加 `?bg=` + encodeURIComponent(tokens.background)，
+  // 供 index.html head 内联 bootstrap 首绘前同步写 --bg（B 在 Android 是异步注入、
+  // 输给首绘，故 URI 参数是确定性通道）。mock background='#fff'、surface='#f2f2f7'
+  // 编码值不同，断言等值即同时排除误用 surface（同 T-PF1 口径，RULE #17）。
+  it('T-PF5：WebView source.uri 携带 ?bg= 编码参数', () => {
+    act(() => {
+      TestRenderer.create(<RichDocumentWebView plain="hello" />);
+    });
+    const last = mockWebViewProps[mockWebViewProps.length - 1];
+    const source = last?.source as {uri?: string} | undefined;
+    expect(source?.uri).toBe(
+      `file:///rich-document/index.html?bg=${encodeURIComponent('#fff')}`,
+    );
+    expect(source?.uri?.endsWith('?bg=%23fff')).toBe(true);
+    expect(source?.uri).not.toContain(encodeURIComponent('#f2f2f7'));
+  });
+
+  // T-PF6：E 遮罩——初始（!webReady）渲染绝对定位盖层、底色 tokens.background；
+  // web 侧 ready 上报后（handleMessage setWebReady(true)）遮罩不再渲染。
+  it('T-PF6：ready 前渲染 flash-cover 遮罩、ready 后消失', () => {
+    let tree: TestRenderer.ReactTestRenderer | undefined;
+    act(() => {
+      tree = TestRenderer.create(<RichDocumentWebView plain="hello" />);
+    });
+    const findAllCovers = () =>
+      tree!.root.findAll(
+        node =>
+          // 只认 host 实例（composite View 与其 host 节点同 props，会重复命中）
+          typeof node.type === 'string' &&
+          node.props?.testID === 'rich-document-flash-cover',
+      );
+    const covers = findAllCovers();
+    expect(covers).toHaveLength(1);
+    const flat = StyleSheet.flatten(
+      covers[0]?.props?.style as never,
+    ) as Record<string, unknown>;
+    expect(flat).toEqual(
+      expect.objectContaining({
+        position: 'absolute',
+        backgroundColor: '#fff',
+      }),
+    );
+    const last = mockWebViewProps[mockWebViewProps.length - 1];
+    act(() => {
+      (
+        last?.onMessage as (event: {
+          nativeEvent: {data: string};
+        }) => void
+      )({
+        nativeEvent: {
+          data: JSON.stringify({v: 1, type: 'ready', payload: {version: 1}}),
+        },
+      });
+    });
+    expect(findAllCovers()).toHaveLength(0);
+  });
+});

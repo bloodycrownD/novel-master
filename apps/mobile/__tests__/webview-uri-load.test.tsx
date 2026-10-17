@@ -161,8 +161,12 @@ describe('WebView URI load (T-BB-04)', () => {
       const webView = root!.root.findByType(
         require('react-native-webview').default as React.ComponentType,
       );
+      // C′（白闪补篇 #14/T-PF5）：rich-document 的 URI 追加 `?bg=` 参数，
+      // 供 index.html head 内联 bootstrap 首绘前同步写 --bg。
       expect(webView.props.source).toEqual({
-        uri: 'file:///android_asset/webview/rich-document/index.html',
+        uri:
+          'file:///android_asset/webview/rich-document/index.html?bg=' +
+          encodeURIComponent('#000'),
       });
       expect(webView.props.allowFileAccess).toBe(true);
       expect(webView.props.allowFileAccessFromFileURLs).toBe(true);

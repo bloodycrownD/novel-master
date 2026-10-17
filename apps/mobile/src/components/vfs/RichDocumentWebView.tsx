@@ -402,7 +402,18 @@ export function RichDocumentWebView({
         /* sec/D-1：收紧为包内 file://（库会自动附带 about:blank）；初始加载与同包相对资源
            均命中此前缀，已验证收紧不影响首载。白名单外的导航由库自行外跳系统浏览器。 */
         originWhitelist={['file://']}
-        source={{uri: getRichDocumentUri()}}
+        /* 首帧主题预注入（白闪 C′）：URI 追加 `?bg=` 参数，供 index.html head
+           内联 bootstrap 在首绘前同步写 `--bg`（零竞态，堵 CSS 兜底白窗）。
+           iOS 若丢弃 file:// query，由 B（injectedJavaScriptBeforeContentLoaded）
+           注入兜底；两者写同节点同属性同值，覆盖无冲突。
+           `shouldStartLoadWithRequest` 前缀判定与 originWhitelist=['file://']
+           对带 query 的 URI 均放行（prefix 命中 + scheme 不变）。 */
+        source={{
+          uri:
+            getRichDocumentUri() +
+            '?bg=' +
+            encodeURIComponent(tokens.background),
+        }}
         allowFileAccess
         allowFileAccessFromFileURLs
         allowingReadAccessToURL={getRichDocumentPackageDirUri()}
@@ -422,6 +433,18 @@ export function RichDocumentWebView({
             }
           : {})}
       />
+      {/* E 遮罩（白闪 C′+E）：冷挂载到 web ready 期间盖主题色，通杀任何残余
+          首帧白（CSS 兜底 / 内核合成 / 窗口层）；web 侧 ready 上报
+          （handleMessage 已 setWebReady(true)）后不再渲染。无动画、无 spinner。
+          上层 `key={path}` 重挂时 WebView 重建、webReady 复位，遮罩随之重新
+          盖起——每次重挂生效属预期语义。 */}
+      {!webReady ? (
+        <View
+          testID="rich-document-flash-cover"
+          pointerEvents="none"
+          style={[StyleSheet.absoluteFill, {backgroundColor: tokens.background}]}
+        />
+      ) : null}
     </View>
   );
 }
