@@ -24,13 +24,17 @@
  * 「最后已知明文」基线会失去唯一出处——任何想从 markdown 拿明文的调用方，
  * 都应该等 `onChangeText` 回报。
  */
+import type {ComposerDraftTokenRange} from '@novel-master/core/chat';
 import {composerTokenRanges} from '../composer-highlight';
 
-/** token 完整区间（含触发符；与 `ComposerTokenRange` 同构，end 为开区间下标）。 */
-export type TokenRange = {
-  readonly start: number;
-  readonly end: number;
-};
+/**
+ * token 完整区间（含触发符；end 为开区间下标）。
+ *
+ * 复用 core 草稿 schema 导出的 `ComposerDraftTokenRange`（D1）：持久化层与 UI
+ * 层共用同一结构类型，避免 storage → UI 组件目录的反向依赖。形状同构
+ * `{ start, end }`，`end` 为开区间。
+ */
+export type TokenRange = ComposerDraftTokenRange;
 
 /** `nmtoken://` scheme：`@` 文件引用 token 的链接 destination 前缀（D3）。 */
 export const NM_TOKEN_SCHEME = 'nmtoken://';

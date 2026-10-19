@@ -127,8 +127,17 @@ export type UseChatComposerControllerOptions = {
    *
    * 缺省时退化为「只改本地 state」（组件的 `value` prop 变化仍会经 effect 补写），
    * 供不挂输入组件的调用方（单测 / 降级）使用。
+   *
+   * **第三参 `ranges`（D1/D4 接口位）**：水化链携带持久化确认区间下发，
+   * 组件侧跳 remap 直写基线。本 Step 只扩类型，通道本体（NativeChatComposer
+   * 三跳 / 面板透传）由 Step 3 落地；漏改中间跳时 TypeScript 少参兼容会静默
+   * 丢第三参，故类型先行钉死。
    */
-  readonly setComposerText?: (text: string, cursor?: number) => void;
+  readonly setComposerText?: (
+    text: string,
+    cursor?: number,
+    ranges?: readonly TokenRange[],
+  ) => void;
 };
 
 export type ChatComposerController = {
@@ -181,6 +190,34 @@ export type ChatComposerController = {
   readonly safeAreaBottom: number;
 };
 
+/**
+ * 区间内容比较（长度 + 逐元素 start/end）。
+ *
+ * `syncFromDraft` 的 ranges 更新判据**不能**挂在 `textChanged` 上：切会话时
+ * 两个会话可能持有同一份文本但不同的确认状态（A 会话是确认胶囊、B 会话是
+ * 同串手输），只按文本判断会让 B 继承 A 的区间（串台）。按内容比较而不是按
+ * 数组引用比较：每次水化都重建数组，引用恒不相等会让每个广播都刷一次 state。
+ */
+function tokenRangesEqual(
+  a: readonly TokenRange[],
+  b: readonly TokenRange[],
+): boolean {
+  if (a === b) {
+    return true;
+  }
+  if (a.length !== b.length) {
+    return false;
+  }
+  for (let index = 0; index < a.length; index += 1) {
+    const left = a[index]!;
+    const right = b[index]!;
+    if (left.start !== right.start || left.end !== right.end) {
+      return false;
+    }
+  }
+  return true;
+}
+
 export function useChatComposerController({
   scope,
   hasModel,
@@ -200,12 +237,15 @@ export function useChatComposerController({
   const initial = readChatComposerDraftState(sessionId);
   const [text, setText] = useState(initial.text);
   /**
-   * 胶囊确认区间（语义见 `ChatComposerController.tokenRanges`）。初值对内存
-   * 缓存草稿做一次正则全扫引导（水化语义同款）：历史草稿里的 token 全部视为
-   * 已确认——确认制约束的是**之后的**手输，不追溯旧草稿。
+   * 胶囊确认区间（语义见 `ChatComposerController.tokenRanges`）。
+   *
+   * **D1 持久化优先**：草稿带 `tokenRanges` → 直接使用（`[]` 也算有值，表示
+   * 确认无胶囊）；只有 `undefined`（旧草稿 / 带外写入）才做一次正则全扫兜底，
+   * 兜底结果由 `syncFromDraft` 写回固化。历史上的「水化全扫」在此退役——
+   * 那会把尾追内容重新吞进胶囊、把半截手输升格。
    */
   const [tokenRanges, setTokenRanges] = useState<readonly TokenRange[]>(() =>
-    scanTokensToRanges(initial.text),
+    initial.tokenRanges ?? scanTokensToRanges(initial.text),
   );
   const [cursor, setCursor] = useState(0);
   const [attachments, setAttachments] = useState<MessageAttachment[]>([
@@ -282,7 +322,12 @@ export function useChatComposerController({
     (nextText: string, nextAttachments: readonly MessageAttachment[]) => {
       writeChatComposerDraftState(
         sessionId,
-        {text: nextText, attachments: nextAttachments},
+        {
+          text: nextText,
+          attachments: nextAttachments,
+          // D1 落库咽喉点：带上当前确认区间（含 `[]` = 确认无胶囊）。
+          tokenRanges: tokenRangesRef.current,
+        },
         runtimeRef.current.sessions,
       );
     },
@@ -304,14 +349,26 @@ export function useChatComposerController({
     setText(draft.text);
     textRef.current = draft.text;
     setAttachments([...draft.attachments]);
-    if (textChanged) {
-      // 确认区间引导扫描：草稿库里的 token 视为已确认（与 hook 初值同语义）。
-      const nextRanges = scanTokensToRanges(draft.text);
+    // D1 持久化优先：草稿带 `tokenRanges`（含 `[]`）直接采用；仅 `undefined`
+    // （旧草稿 / 全屏回填未给值 / undo_send 恢复）才做一次正则兜底扫描。
+    // ranges 的更新按**内容**比较而非挂在 textChanged 上——同文本不同会话
+    // 切换时（A 确认胶囊 / B 手输同串）才不会串台。
+    const nextRanges = draft.tokenRanges ?? scanTokensToRanges(draft.text);
+    if (!tokenRangesEqual(nextRanges, tokenRangesRef.current)) {
       tokenRangesRef.current = nextRanges;
       setTokenRanges(nextRanges);
+    }
+    if (textChanged) {
+      // 命令式通道只带文本（第三参 ranges 通道本体由 Step 3 / D4 落地）。
       setComposerTextRef.current?.(draft.text);
     }
-  }, [sessionId]);
+    if (draft.tokenRanges === undefined && draft.text !== '') {
+      // 兜底扫描结果写回固化（仅此一次）：text 与 ranges 均空（空会话）跳过，
+      // 避免每次水化写一次 null 的无害写放大。persistDraft 读的是刚推进过的
+      // tokenRangesRef，落库即固化本次扫描值。
+      persistDraft(draft.text, draft.attachments);
+    }
+  }, [sessionId, persistDraft]);
 
   /**
    * 整段写入（Picker 路径的唯一入口）。

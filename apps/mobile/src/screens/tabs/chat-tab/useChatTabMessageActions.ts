@@ -223,6 +223,9 @@ export function useChatTabMessageActions({
         }
         if (restoreText != null) {
           // T-TX2：仅正文（含 `@路径`）；无 attach chip
+          // D1 带外路径：恢复文本没有确认区间 → **不传 tokenRanges**（undefined，
+          // 非 `[]`），允许下一次水化兜底扫描一次。恢复的通常是完整历史明文，
+          // 扫描升格面与旧行为相同，记入已知限制。
           writeChatComposerDraftState(
             sessionId,
             {
