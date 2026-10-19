@@ -4,7 +4,7 @@ date: 2026-10-19
 
 # 输入框胶囊原子化根治（composer-capsule-atomic-2026-10）技术规格（SPEC）
 
-> 版本：r2（2026-10-19 R1 审查 No-Go 后 doc-fix：闭合 P0×2 / P1×9 / P2×7，逐条见文末「R1 修订记录」）
+> 版本：r3（2026-10-19 R2 审查 No-Go + review-full 复核后 doc-fix：闭合 P0×2 / P1×1 / P2×11，见「R2 修订记录」；同日第 3/4 轮增量：P1×3 + 新增 P1-a + P2×12，见「R3 修订记录」；r2 历史：R1 审查 No-Go 后闭合 P0×2 / P1×9 / P2×7，见「R1 修订记录」）
 
 ## 需求来源
 
@@ -21,6 +21,7 @@ date: 2026-10-19
    - 中文 IME 组合提交（`setComposingText` `:52-77` 整段替换语义，类注释 `:8-28`）走替换分支扩边——疑似用户真机实撞路径（`NativeChatComposer.tsx:287-295` 留有 TODO(IME)）。
 4. **哨兵字符路线否决**：U+200B 被 native `stripZwsp` 进出双向剥掉（`InputEventEmitter.kt:36-42`、`InputParser.kt:24-31`）直接打爆所有 offset；U+FFFC 污染 5+ 处 token 正则与 skill 名校验（`scan-skill-attachments.ts:22`、`skill-name.ts:17-22`、`composer-at-path.ts:52-74`、转录渲染 `RefTokenText.tsx:11-19`、desktop `ComposerAtPathInput.tsx:14`），且防不了胶囊内部编辑——只配当辅助不配当主路线。
 5. **手输语义现状**：线上恒传 `tokenRanges`（`ChatConversationPanel.tsx:243`），手打 `$xxx` 不在确认集合 → 同会话内不成胶囊（`__tests__/native-composer.test.tsx:344-351` 锁定）；发送时 core 扫描照常生效。「手输边打边成胶囊、可增长」为非目标。
+6. **e2e 真机佐证（2026-10-19，荣耀 EBG-AN00 debug 包）**：①水化吸收复现——贴胶囊右缘打 `z` 活态不吸收（胶囊右缘像素不动），force-stop 冷启水化后被正则引导吞入（右缘 +23px ≈ z 字宽）——确证第 3 条第 1 项与 D1 的必要性；②插入落文后首次退格观测为「整颗胶囊+尾空格一键全删」，与现行代码静态推演不符，根因待实现期取证（见 S10 实现注）；③点胶囊中部光标被吸附到胶囊尾（现由 LINK 语义承担）——D4 的 LINK→TOKEN 映射落地后，D2 的 selectionAdjustedForAtomicLinks 纳入 TOKEN 成为防回归必要条件（D4 依赖 D2 同批）。
 
 ## 设计目标
 
@@ -37,7 +38,7 @@ date: 2026-10-19
 - iOS 不在范围（本仓只出 Android，补丁仅 Android 侧；iOS input 无 TOKEN 概念）。
 - 宏链 `ComposerInputWebView` / composer-input 包不动（独立链路）。
 - 全屏 CodeMirror 编辑器（`PromptEditorScreen`）与旧 webview composer 的胶囊高亮行为不改（独立正则高亮体系，共享 `COMPOSER_TOKEN_RE`；其「尾追并入高亮」行为作为已知限制披露，见兼容性节）。
-- IME 组合态的选区规范化拦截（InputConnectionWrapper pre-super）为 P2 阶段（D5）；P1 的 native 区间策略只调区间不改文本，不与组合态抢编辑权。
+- IME 组合态的选区规范化（InputConnectionWrapper pre-super 的**非删除语义**拦截）为 P2 阶段（D5）；D3 的空 `commitText` **删除**拦截属 P1（`isComposing` 门控，仅非组合态）；P1 的 native 区间策略只调区间不改文本，不与组合态抢编辑权。
 
 ## 总体方案
 
@@ -47,20 +48,21 @@ date: 2026-10-19
 
 - **schema（`packages/core/src/domain/chat/model/composer-draft.schema.ts`）**：
   - 新导出结构类型 `ComposerDraftTokenRange = { start: number; end: number }`（供 storage 层与 `token-ranges.ts` 复用，避免 storage → UI 组件目录的反向依赖）；`token-ranges.ts` 的 `TokenRange`（`:29-33`）改为复用该类型。
-  - `composerDraftSchema` 加 `tokenRanges: z.array(...).optional()`（元素 `start/end` 非负整数 + `start <= end` refine）；**不设 default**——`undefined`（旧数据，允许兜底扫描）与 `[]`（确认无胶囊，禁止扫描）语义不同。
-  - `serializeComposerDraftJson`（`:98-118`）：有值透传；既有「text 空 + attachments 空 → null」语义不变（见下「清空口径」）。
-  - `parseComposerDraftJson`（`:57-87`）：`tokenRanges` **单独 safeParse**（不与 text/attachments 共用一次调用）——非法 ranges（`start > end`、负数、非整数、字符串、null）→ 当作 `undefined`，**text/attachments 照常保留**（对齐既有「非法附件逐条丢、正文永不因附件而丢」的 `:52-55` 口径）；**字段缺失时结果对象不写入 `tokenRanges` 自有键**（避免 zod optional 输出自带 undefined 键打破既有 `node:assert/strict` deepEqual 断言 `composer-draft.schema.test.ts:79-86`、`:174-189`）。
+  - `composerDraftSchema` 加 `tokenRanges: z.array(...).optional()`（元素 `start/end` 非负整数 + **`start < end`** refine——零长度区间 JS remap 保留、native `RangeEditAdjustment.kt:125` 剔除，两侧行为不一，一律拒之门外）；**不设 default**——`undefined`（旧数据，允许兜底扫描）与 `[]`（确认无胶囊，禁止扫描）语义不同。
+  - 不做 `text.length` 长度/有序/重叠校验——越界由消费侧防御（JS `token-ranges.ts:140-147`、native `EnrichedMarkdownTextInputView.kt:1067` 丢越界）。
+  - `serializeComposerDraftJson`（`:98-118`）：有值**过滤非法区间后透传**（丢弃 `start >= end` 等非法条目、其余照写，全空写 `[]`，**不抛错**——落库链永不被 ranges 炸；与 parse 同口径）；既有「text 空 + attachments 空 → null」语义不变（见下「清空口径」）。
+  - `parseComposerDraftJson`（`:57-87`）：`tokenRanges` **单独 safeParse**（不与 text/attachments 共用一次调用）——非法 ranges（`start > end`、负数、非整数、字符串、null）→ 当作 `undefined`，**text/attachments 照常保留**（对齐既有「非法附件逐条丢、正文永不因附件而丢」的 `:52-55` 口径）；**字段缺失或存在但非法，结果对象一律不写入 `tokenRanges` 自有键**（避免 zod optional 输出自带 undefined 键打破既有 `node:assert/strict` deepEqual 断言 `composer-draft.schema.test.ts:79-86`、`:174-189`）。
 - **mobile 存储链（`apps/mobile/src/storage/chat-composer-draft.ts`）**：
   - `ChatComposerDraft` 类型（`:13-16`）、`persistAttachTextDraft`（`:61-72`）、`writeChatComposerDraft`/`writeChatComposerDraftState`（`:78-134`）、内存缓存、`hydrateChatComposerDraftFromDb`（`:156-180`）全链透传；
   - **`applyComposerStatusAttachmentsReplace`（`:186-204`）**：重建缓存条目时**保留 `prev.tokenRanges`**（现为 `{text: prev.text, attachments: merged}` 丢字段——controller 水化链 hydrate → project → apply（`useChatComposerController.ts:344-364`）会先丢 ranges 再进 `syncFromDraft` 兜底扫描，`tokenRanges: []` 的「确认无胶囊」退化为 undefined，手输 `$foo` 每次水化被升格，打死目标 3/5）；`refreshComposerAnnotateChips` 走同一函数自动修复。
-  - `writeChatComposerDraft` 增加可选 `tokenRanges` 参数（带外写入口，见下）。
+  - `writeChatComposerDraft` 追加**第 4 参** `(sessionId, text, sessions?, tokenRanges?)`（带外写入口，见下；现有三参调用与 `chat-composer-draft.test.ts:173` 零改动）。
 - **controller 四咽喉点 + 水化（`apps/mobile/src/components/chat/useChatComposerController.ts`）**：
-  - 初值（`:207-209`）与 `syncFromDraft`（`:301-314`）：`draft.tokenRanges ?? scanTokensToRanges(draft.text)`——undefined 才扫描兜底，兜底结果随 `persistDraft` 写回固化；
+  - 初值（`:207-209`）与 `syncFromDraft`（`:301-314`）：`draft.tokenRanges ?? scanTokensToRanges(draft.text)`——undefined 才扫描兜底，兜底结果**在 syncFromDraft 的 undefined 分支内直接调一次 `persistDraft` 写回固化（仅此一次；text 与 ranges 均空则跳过，避免空会话每次水化写一次 null 的无害写放大）**；
   - `syncFromDraft` 的 ranges 更新**按内容比较**（长度 + 逐元素 start/end）而非卡在 `textChanged`（`:303` 现条件）——否则同文本不同会话切换时 ranges 串台（A 会话确认胶囊 vs B 会话手输同串）；
   - `persistDraft`（`:281-290`）/ `onChangeText`（`:400-411`）/ `commitComposerText`（`:325-337`）落库带 `tokenRangesRef.current`；
   - **清空口径**：发送清空走 `clearChatComposerDraft`（`:438`）写 DB `null`（serialize 对空 text+空 attachments 恒 null，`composer-draft.schema.ts:110-112`，`[]` 落不了库）——下次水化 `undefined` + 空文本，扫描结果必空，无升格风险；React state 侧置 `[]`（`:441-442`）不变。
 - **带外写入路径两条**：
-  - 全屏编辑退出回填（`apps/mobile/src/screens/tabs/ChatTabScreen.tsx:172-174` 现调 `writeChatComposerDraft(targetSessionId, text, sessions)` 覆盖掉 DB ranges）：改为读旧草稿后用 `remapTokenRanges(旧文本, 新文本, 旧 ranges)`（`token-ranges.ts:67-101`，需以可导出纯函数形态复用）映射写入——全屏 CodeMirror 的正则高亮虽不动（非目标），但区间数值可用 remap 保真；
+  - 全屏编辑退出回填（`apps/mobile/src/screens/tabs/ChatTabScreen.tsx:172-174` 现调 `writeChatComposerDraft(targetSessionId, text, sessions)` 覆盖掉 DB ranges）：改为读旧草稿后用 `remapTokenRanges(旧文本, 新文本, 旧 ranges)`（`token-ranges.ts:67-101`，需以可导出纯函数形态复用）映射写入；**旧草稿 `tokenRanges` 为 undefined → 回填写 `undefined`（不传字段，允许下一次水化兜底扫描一次），不做扫描预处理**——全屏 CodeMirror 的正则高亮虽不动（非目标），但区间数值可用 remap 保真（remap 调用点钉在 `ChatTabScreen` 退出回填处：读旧草稿 → remap → 带第 4 参写入）；
   - undo_send 恢复（`apps/mobile/src/screens/tabs/chat-tab/useChatTabMessageActions.ts:226-233`）：恢复文本无 ranges → 写 `undefined`（不传字段），允许下一次水化兜底扫描一次，记入已知限制（恢复的文本通常是完整历史明文，扫描升格面与旧行为相同）。
 - 无 DDL 迁移（`composer_draft_json` TEXT 列，`chat-schema.ts:16-25`；读写 `sqlite-session.repository.ts:133-158`）。
 
@@ -69,7 +71,7 @@ date: 2026-10-19
 - `FormattingStore.adjustForEdit`（`:166-179`）：`inheritsReplacementAtStart` 改为 `{ it.type != StyleType.LINK && it.type != StyleType.TOKEN }`。
 - `selectionAdjustedForAtomicLinks`（`:41-54`）：纳入 TOKEN（光标落 TOKEN 内部 → 推到 `token.end`；选区与 TOKEN 部分相交 → 扩整颗）——与 LINK 既有语义同款，`onSelectionChanged` 消费点 `EnrichedMarkdownTextInputView.kt:481-499` 自动生效。
 - `seedPendingStylesFromSelection`（`EnrichedMarkdownTextInputView.kt:543-554`）：`if (style == StyleType.LINK || style == StyleType.TOKEN) continue`——选区改写不再给 TOKEN 种 pending style。
-- **`addRange` 合并抑制**（`FormattingStore.kt:105-126`）：合并条件 `existing.start <= mergedEnd && existing.end >= mergedStart` 对「相邻」（`existing.end == new.start`）也成立——为 TOKEN 提供无合并添加路径（`addRange(..., allowMerge: Boolean = true)` 或 TOKEN 专用方法），`setTokenRanges` 逐条添加（`:1061-1073`）改走无合并路径；`coalesceAdjacentSameTypeRanges`（`:187-203`）跳过 TOKEN。两处一起改才能保证「删掉两颗胶囊之间的字符后」逐键下发不把两条 TOKEN 合成一条。
+- **`addRange` 合并抑制**（`FormattingStore.kt:105-126`）：合并条件 `existing.start <= mergedEnd && existing.end >= mergedStart` 对「相邻」（`existing.end == new.start`）也成立——为 TOKEN 提供无合并添加路径——**钉 `addRange(..., allowMerge: Boolean = true)` 参数形态**（不用 TOKEN 专用方法），`setTokenRanges` 逐条添加（`:1061-1073`）改走 `allowMerge = false`；`coalesceAdjacentSameTypeRanges`（`:187-203`）跳过 TOKEN。两处一起改才能保证「删掉两颗胶囊之间的字符后」逐键下发不把两条 TOKEN 合成一条。protected 判定入口：`RangeEditAdjustment.adjustForEdit` 为泛型（`<T : MutableRangeBounds>`，`RangeEditAdjustment.kt:45`）拿不到 type——加参数 `isProtected: (T) -> Boolean = { false }`，`FormattingStore.adjustForEdit`（`FormattingStore.kt:166`）传 `{ it.type == StyleType.TOKEN }`，protected 为 true 时走下表分支。
 - **`RangeEditAdjustment` protected 分支表（仅 TOKEN；与 JS `remapTokenRanges` 逐条对齐）**：
 
   | 编辑形态 | 区间结果 | 与 JS 对齐点 |
@@ -77,32 +79,35 @@ date: 2026-10-19
   | 纯插入，插入点 `<= range.start` | 整体右移 `insertedLength`（新字符落左侧外） | `token-ranges.ts:95-96` 左边界右移 |
   | 纯插入，插入点 `>= range.end` | 原样不动（新字符落右侧外） | `:93-94` 右边界保留 |
   | 纯插入，插入点严格在 `(start, end)` 内 | **整条移除**（胶囊死亡） | `:98` 内部插入摘除分支 |
-  | 删除/替换与区间任意部分相交（含整条覆盖、部分覆盖） | **整条移除** | 替换类 JS 侧无对应（确认区间不经历替换），native 兜底 |
+  | 删除/替换与区间任意部分相交（含整条覆盖、部分覆盖） | **整条移除** | 替换与删除共用同一相交判据；JS 侧同样摘除（remap 单编辑区折叠，`token-ranges.ts:88-99`），native 兜底的是不经过 JS 的编辑路径 |
   | 删除完全在区间左侧 / 右侧 | 平移 / 不动 | remap 平移分支 |
 
   - 禁用对 TOKEN 的内部插入增长（`:103-118` 现三支中「内部增长」分支）、CLIPPED_END 扩尾（`:83-88`）、CLIPPED_START 继承（`:90-101`）；`growsAtStartOnInsert` 对 TOKEN 固定 `false`。
   - 安全网定位：正常路径下光标吸附 + 前三条特判已阻止「编辑落进区间内部」；protected 分支兜底 FormattingStore 层不产生半截/扩张/融合 range。该层只调区间不改文本，与 IME 组合态兼容（`EditSession.kt:23-30` phase 抑制 + `lastProcessedText` 早退先例）。
   - **Kotlin 单测锁表**（blocking，见测试策略）：分支表逐行矩阵。
 
-**D3 原子删除覆盖面扩展（补丁内 Kotlin，五入口统一 helper）**
+**D3 原子删除覆盖面扩展（补丁内 Kotlin，七入口统一 helper）**
 
-- 既有两入口保留：`onKeyDown` KEYCODE_DEL（`EnrichedMarkdownTextInputView.kt:225-243`）、`InputConnectionWrapper.deleteSurroundingText(1,0)`（`:97-106`）。
-- 新增三入口，统一走「选区/删除区与原子区间（LINK/TOKEN）相交 → 扩为整颗区间 → 删除」helper（复用 `deleteLinkBeforeCursor` `:1027-1048` 的区间删除内核）：
-  - **空 `commitText`**（`InputConnectionWrapper.kt:19-21` 注释明确空文本表示退格；`:86-95` 现只发按键事件不走原子删）——先判原子区间再决定走 helper 还是原路径；
-  - **`deleteSurroundingText(n, m)` 一般参数**：计算出受影响文本区间与原子区间相交 → 扩整颗（词删 `n>1`、前向 `m>0` 均覆盖）；
+- 既有三入口保留：`onKeyDown` KEYCODE_DEL（`EnrichedMarkdownTextInputView.kt:225-243`）、`InputConnectionWrapper.deleteSurroundingText(1,0)`（`:97-106`）、`InputConnectionWrapper.sendKeyEvent` KEYCODE_DEL（`:108-121`）。
+- 新增四入口，统一走「选区/删除区与原子区间（LINK/TOKEN）相交 → 扩为整颗区间 → 删除」helper（复用 `deleteLinkBeforeCursor` `:1027-1048` 的区间删除内核）：
+  - **空 `commitText`**（`InputConnectionWrapper.kt:19-21` 注释明确空文本表示退格；`:86-95` 现只发按键事件不走原子删）——删除窗：有选区用选区，无选区用 `[max(0, sel-1), sel)`；命中原子区间 → 调 helper 删整颗、**保留原 Backspace 按键事件**、返回 true、**不调 super**；未命中走原路径。**仅 `!isComposing` 时启用**（组合态信号见下，P1 就引入）；
+  - **`deleteSurroundingText(n, m)` 一般参数**：计算出受影响文本区间与原子区间相交 → 扩整颗（词删 `n>1`、前向 `m>0` 均覆盖）。**并集口径（全部删除类入口统一）**：删除区 = 原删除窗 ∪ 所有相交原子区间（多颗胶囊各自扩整颗）；删除后光标落删除区起点，前向删除光标不动；
   - **前向删除**：`onKeyDown` 与 `sendKeyEvent` 补 `KEYCODE_FORWARD_DEL`（光标后一字符在区间内 → 整颗删，光标不动）。
-- `deleteLinkBeforeCursor` 扩展选区删除：`cursorStart != cursorEnd` 且选区与 LINK/TOKEN 相交时，删除范围扩整颗（光标落区间起点）。
+  - **`deleteSurroundingTextInCodePoints`**：override 转发——code-points 偏移换算为字符偏移后走同一 helper（部分 IME 用该变体，不覆盖则绕过原子删）。
+- `deleteLinkBeforeCursor` 扩展选区删除：`cursorStart != cursorEnd` 且选区与 **TOKEN** 相交时，删除范围扩整颗（光标落区间起点）。**LINK 保持上游折叠光标语义不动**（改动面最小；现网 LINK 选区删除未观测到问题，e2e 佐证吸附由 LINK 正常承担——若未来要求 LINK 同款扩整，另立变更并过兼容性披露）。
+- **组合态信号（P1 引入，D5 复用）**：wrapper 加最小 `isComposing` 标志——`setComposingText` 非空置 true，`finishComposingText` / `commitText` / **`setComposingText` 空串**清 false（部分 IME 用空 setComposingText 结束组合，不清理则标志卡 true、原子拦截失效）；空 `commitText` 删除拦截仅 `!isComposing` 时启用（**读旧值判定、再清标志**——`commitText` 若先清后判，组合态的空 commitText 会被误当非组合态拦截，恰是本门要防的误删）。P1 若无此信号，「仅非组合态触发」无从判定（要么中文 IME 组合期误删、要么私自发明），阶段边界倒置。备选：`BaseInputConnection.getComposingSpanStart(editText.text) == -1`（无状态，但依赖平台 span 行为）。
+- **同一按键并发收敛**：华为隐藏 IME 可能一次按键同时触发两条删除路径（空 `commitText` + `deleteSurroundingText`，S10 e2e 观测疑点）。机制钉死（**batch 域内抑制**，不吞独立退格）：原子删除仅在 `isBatchEdit == true` 时置一次性标志 `suppressNextDelete`，`endBatchEdit` **无条件清**——同 batch 的后续删除入口读到标志 → 本次不删、不调 super、**也不再 dispatch Backspace**（首个入口已发过，避免 JS 收双 keyPress），标志放 view 层共享（`onKeyDown`/`sendKeyEvent` 在 view，wrapper 经 view 访问）。判据（**仅限同一物理按键多入口并发**）：最多删一颗胶囊；单个删除窗正常覆盖多颗时（词删 `n>1`、选区跨胶囊）仍按并集各自扩整颗；「无多删字符」= 不删删除窗 ∪ 相交原子区间之外的字。取证回退：若 S10 取证显示双路径不共享 batch（拆 batch），改用 clear-on-consume 变体（标志消费即清 + 抑制条件收紧为删除窗与刚删区间快照相交）。若取证证明单键只发一种信号，可简化为仅保留该信号路径。
 
 **D4 水化链路统一与 native 区间一致性（补丁内 Kotlin + JS）**
 
-- **M7 命令式通道扩展**：`EnrichedMarkdownTextInputInstance.setText` 扩签名 `setText(text, cursor?, ranges?)`（`NativeChatComposer.tsx:196` 接口 + `commitExternalText` `:317-347` 实现接受 ranges 参数，用其合成 markdown 与首帧 TOKEN 下发）。理由：`syncFromDraft` 调 `setComposerTextRef.current?.(draft.text)`（`useChatComposerController.ts:312`）是同步命令调用，React prop 不会即时更新——不带 ranges 会用上一帧 `confirmedRangesRef`（冷启动 `[]` / 切会话旧区间）合成 markdown，正确值要等 prop 收敛 effect（`:416-435`）二次补发，存在旧区间合成窗口。水化链改为 `setText(draft.text, undefined, draft.tokenRanges ?? 兜底扫描值)`。
+- **M7 命令式通道扩展（三跳全链）**：`NativeChatComposerInstance.setText`（本仓 `NativeChatComposer.tsx:190-199`；库侧 instance 无 setText，勿改库类型）扩签名 `setText(text, cursor?, ranges?)`（`NativeChatComposer.tsx:196` 接口 + `useImperativeHandle` 实现体 `:437-446` + `commitExternalText` `:317-347`）；**中间跳同步扩参**——controller options.`setComposerText` 类型（`useChatComposerController.ts:118-131`）与 `ChatConversationPanel.tsx:152-157` 的面板回调都改三参透传（TypeScript 允许少参函数赋多参类型，漏改则第三参被静默丢弃、编译不报错——D4 在真实链路上等于没生效）。`commitExternalText` 收到 ranges 时**跳过 `remapTokenRanges`**，直接 `confirmedRangesRef.current = ranges` 后用它合成 markdown 并 dispatch（prop 收敛 effect 因内容相等短路 `:421-431`，不二次下发）；未传 ranges 保持现行 remap 路径；`confirmedRangesRef === null`（未传 tokenRanges prop 的旧模式）收到 ranges → 切确认制（现网恒传 prop，暴露面 0）。理由：`syncFromDraft` 调 `setComposerTextRef.current?.(draft.text, undefined, ranges)` 是同步命令调用，React prop 不会即时更新——不带 ranges 会用上一帧 `confirmedRangesRef`（冷启动 `[]` / 切会话旧区间）合成 markdown，正确值要等 prop 收敛 effect（`:416-435`）二次补发，存在旧区间合成窗口；**state 下发与 setText 第三参必须同一份数组**，防 prop 收敛用旧 state 覆盖。**依赖：D2 的 selectionAdjustedForAtomicLinks 纳入 TOKEN（现网吸附由 LINK 承担，映射成 TOKEN 后无人接管即回归）——D4 与 D2 同批落地。**`syncFromDraft` 的命令式下发条件为 `textChanged || rangesChanged`（带同一份 ranges）；instance 为 null 时第三参自然丢弃，由 prop 收敛 effect 兜底。
 - **LINK→TOKEN 映射收敛在 `setValueFromJS`**：`setValueFromJS`（`EnrichedMarkdownTextInputView.kt:1104-1122`）在 parse 结果上做映射——`StyleType.LINK` 且 url 以 `nmskill://`/`nmtoken://` 开头 → `StyleType.TOKEN`（url 置 null）。**不改 `InputParser.parseToPlainTextAndRanges` 本体**：其另两个调用点 `pasteMarkdown`（`:881`）与 `InputMeasurementStore`（`:108`，只用 plainText）不受影响——粘贴路径的 `nmskill://` 链接保持 LINK（用户手输 markdown 链接语义），测量链无感。
 - `setTokenRanges`（`:1061-1073`）保持「先清 TOKEN 再加」幂等覆盖，配合 D2 无合并添加。
 - `MarkdownSerializer`（`:153`、`:173`）TOKEN 空分隔符输出明文——无需改；composer 已禁用 Copy-as-Markdown（`NativeChatComposer.tsx:506-513`），无泄漏面。
 
 **D5 IME 组合态防线（P2 阶段，P1 过真机门后实施）**
 - `InputConnectionWrapper`：`commitText` / `setComposingText`（`:52-77`）在 super 前做选区规范化——光标落 TOKEN 内部 → `setSelection(token.end)` 后照常提交；替换区与 TOKEN 相交 → 扩整颗后照常。**禁止 `return false` 拒绝**（IME 重试）；**禁止事后文本回滚**（每次 `setComposingText` 回滚 → IME 重提交 → 死循环抖光标）。
-- 新增 `finishComposingText` 组合生命周期记录（override 记标志）：组合期间（`isTextChanging` 已跳过选区修正的 `:488` 语义沿用）只做 D2 区间保守策略，组合提交后做一次修复。
+- 组合生命周期：**复用 P1 已引入的 `isComposing` 信号（D3）**，D5 扩展为完整 `finishComposingText` override 记录 + 修复动作：组合期间（`isTextChanging` 已跳过选区修正的 `:488` 语义沿用）只做 D2 区间保守策略，组合提交后做一次修复。
 - 注意：wrapper 用「光标是否后退」推断退格（`:52-77`）；super 前移动光标会污染推断——规范化仅在「目标区间确为 TOKEN」时执行，且移动方向单调向后（token.end），不触发退格误判路径。
 - 真机中文 IME 验证门：候选窗不抖、光标不飘、组合期间胶囊不闪、提交后尾追文字在胶囊外。
 
@@ -113,7 +118,7 @@ date: 2026-10-19
   - desktop 自身不产生/不编辑 ranges（无胶囊 UI）；若未来要求编辑保真，将 `remapTokenRanges` 上提 core 两端共用（本迭代不做）。
 
 **D7 阶段划分与验收门**
-- **P1（本迭代主体）**：D1 + D2 + D3 + D4 + D6 + JS 测试 + Kotlin 单测 + 真机场景验收（S1-S6、S8、S9）。
+- **P1（本迭代主体）**：D1 + D2 + D3 + D4 + JS 测试 + Kotlin 单测 + 真机场景验收（S1-S6、S8-**S10**；S10 主判据「**一次物理退格最多删一颗胶囊且无多删字符**」，期望形态按取证回填）；D6 desktop 透传非阻塞（Step 4 可延后到迭代末，不 gate P1 移动端验收）。
 - **P2（第二阶段）**：D5 IME 深水区 + 真机 S7 专项。**若 P1 真机验收（S1）复现 IME 尾追并入且 P1 未能闭合该路径，P2 升级为 blocking**（调查结论第 3 条：中文 IME 疑似用户实撞路径）。
 
 ### 范围内胶囊语义总表
@@ -137,43 +142,46 @@ date: 2026-10-19
 
 | # | 文件 | 变更 |
 |---|------|------|
-| 1 | `packages/core/src/domain/chat/model/composer-draft.schema.ts` | 导出 `ComposerDraftTokenRange`；schema 加 `tokenRanges` optional + 校验；serialize 透传；parse 单独 safeParse（非法→undefined 正文保留、缺失不写自有键） |
+| 1 | `packages/core/src/domain/chat/model/composer-draft.schema.ts` + `packages/core/src/public/chat.ts` | 导出 `ComposerDraftTokenRange`（schema 内定义，**public/chat.ts 的 type 导出桶补一行**——mobile/storage 与 token-ranges.ts 经 `@novel-master/core/chat` 导入，漏则 Step 1 编译失败；类型导出不触发 export-snapshot 更新）；schema 加 `tokenRanges` optional + 校验（`start < end`）；serialize 过滤非法区间不抛错；parse 单独 safeParse（非法→undefined 正文保留、缺失**或非法**不写自有键） |
 | 2 | `apps/mobile/src/storage/chat-composer-draft.ts` | 类型/写/读/缓存全链透传；**`applyComposerStatusAttachmentsReplace` 保留 `prev.tokenRanges`**；`writeChatComposerDraft` 加可选 ranges 参数 |
-| 3 | `apps/mobile/src/components/chat/useChatComposerController.ts` | 四咽喉点落库；初值/syncFromDraft 持久化优先 + undefined 兜底；syncFromDraft ranges 按内容比较；清空口径 DB NULL |
-| 4 | `apps/mobile/src/components/chat/NativeChatComposer.tsx` | `setText(text, cursor?, ranges?)` M7 扩展（接口 + commitExternalText）；水化链携带 ranges；TODO(IME) 注释更新为指向 D5 |
+| 3 | `apps/mobile/src/components/chat/useChatComposerController.ts` | 四咽喉点落库；初值/syncFromDraft 持久化优先 + undefined 兜底（兜底在 undefined 分支内一次 `persistDraft` 写回）；syncFromDraft ranges 按内容比较；清空口径 DB NULL；**options.`setComposerText` 类型扩为 `(text, cursor?, ranges?) => void`（`:118-131` 注释同步三参口径）** |
+| 4 | `apps/mobile/src/components/chat/NativeChatComposer.tsx` + `apps/mobile/src/screens/tabs/chat-tab/ChatConversationPanel.tsx` | `setText(text, cursor?, ranges?)` M7 扩展（接口 `:196` + `useImperativeHandle` `:437-446` + `commitExternalText` `:317-347` 跳 remap 直写基线）；**ChatConversationPanel `:152-157` 回调扩三参透传（`:147-151` 注释同步）**——漏改则 TS 静默丢第三参；`NativeChatComposer.tsx:28` ref 注释同步三参；水化链携带 ranges；TODO(IME) 注释更新为指向 D5 |
 | 5 | `apps/mobile/src/components/chat/native-composer/token-ranges.ts` | `TokenRange` 复用 core 类型；`remapTokenRanges` 导出供全屏回填复用；`scanTokensToRanges` 定位注释更新（undefined 兜底 + 发送/测试辅助） |
 | 6 | `apps/mobile/src/screens/tabs/ChatTabScreen.tsx` | 全屏退出回填改带 remap 后的 ranges（D1 带外路径） |
 | 7 | `apps/mobile/src/screens/tabs/chat-tab/useChatTabMessageActions.ts` | undo_send 恢复写 undefined（不传字段，允许兜底一次） |
 | 8 | `apps/desktop/renderer/features/chat/ConversationPanel.tsx` | 水化 {text, ranges} ref；写回仅未编辑时透传（D6） |
-| 9 | `patches/react-native-enriched-markdown+1.1.1.patch`（包内 Kotlin） | D2 五处特判 + protected 分支表 + addRange 无合并 + D3 五入口 + D4 setValueFromJS 映射（补丁重生成，`npx patch-package react-native-enriched-markdown`） |
+| 9 | `patches/react-native-enriched-markdown+1.1.1.patch`（包内 Kotlin） | D2 五处特判 + protected 分支表（isProtected 入参）+ addRange 无合并 + D3 七入口 + 组合态 `isComposing` + 同键并发收敛 + D4 setValueFromJS 映射（补丁重生成 `npx patch-package react-native-enriched-markdown`，**重生成后 grep 补丁文本必含 RangeEditAdjustmentTest / FormattingStoreTest 等测试类名**，否则 clean install 后测试静默消失） |
 | 10 | `apps/mobile/__tests__/` + core schema 测试 + 包内 Kotlin 测试 | 见测试策略 |
 
 ## 详细实现步骤
 
-- Step 1 — phase-schema-ranges — blocking: yes — qa: auto：D1 全链（core schema + mobile 存储含 applyComposerStatusAttachmentsReplace + controller 四咽喉点 + 两条带外路径 + undefined 兜底）+ T-CA1~T-CA5。
-- Step 2 — phase-native-protect — blocking: yes — qa: auto：D2 + D3 补丁扩展（node_modules 内改源 → 重生成补丁）+ **Kotlin 单测（blocking）：RangeEditAdjustmentTest 分支表矩阵 + FormattingStoreTest 相邻不融合/无半截/替换继承排除**。
-- Step 3 — phase-hydrate-link2token — blocking: yes — qa: auto：D4 setText ranges 扩展 + setValueFromJS 映射 + setTokenRanges 幂等 + 水化通道 + T-CA6。
+- Step 1 — phase-schema-ranges — blocking: yes — qa: auto：D1 全链（core schema + mobile 存储含 applyComposerStatusAttachmentsReplace + controller 四咽喉点 + 两条带外路径 + undefined 兜底）+ T-CA1~T-CA5、**T-CA8**。
+- Step 2 — phase-native-protect — blocking: yes — qa: auto：D2 + D3 补丁扩展（node_modules 内改源 → 重生成补丁 + grep 测试类名核对）+ **Kotlin 单测（blocking）：RangeEditAdjustmentTest 分支表矩阵（含多胶囊并集/零长度用例）+ FormattingStoreTest 相邻不融合/无半截/替换继承排除/选区吸附（TOKEN 扩整、内部推 end、在外返 null）**。
+- Step 3 — phase-hydrate-link2token — blocking: yes — qa: auto（**依赖 Step 2**：D4 的 LINK→TOKEN 映射依赖 D2 选区吸附纳入 TOKEN，同批才不回归）：D4 setText 三跳扩参 + setValueFromJS 映射（KT-CA3）+ setTokenRanges 幂等 + 水化通道 + T-CA6（面板集成测试断言）。
 - Step 4 — phase-desktop-passthrough — blocking: no — qa: auto：D6 + T-CA7。
-- Step 5 — phase-device-qa-p1 — blocking: yes — qa: manual_user：真机 P1 验收 S1-S6、S8、S9（场景清单见测试策略；荣耀真机过 PC 安装门流程照 RULE）。
+- Step 5 — phase-device-qa-p1 — blocking: yes — qa: manual_user：真机 P1 验收 S1-S6、S8-S10（场景清单见测试策略；S10 判据见 D7；荣耀真机过 PC 安装门流程照 RULE）。
 - Step 6 — phase-ime-p2 — blocking: 按 D7 触发条件 — qa: manual_user：D5 + 真机 S7 中文 IME 专项。
 - Step 7 — phase-docs — blocking: no — qa: auto：CHANGELOG + iteration-state 收口。
 
 ## 测试策略
 
-JS 侧（jest，mock 原生输入 + 断言 wrapper 行为，既有 `enriched-markdown-mock` 体系沿用；mock 只记录调用 `test-utils/enriched-markdown-mock.tsx:157-159`，native 幂等等行为由 Kotlin 单测/真机承担）：
+JS 侧（jest，mock 原生输入 + 断言 wrapper 行为，既有 `enriched-markdown-mock` 体系沿用；mock 只记录调用 `test-utils/enriched-markdown-mock.tsx:157-159`，native 幂等等行为由 Kotlin 单测/真机承担。**运行命令：`npm test -w @novel-master/mobile`（pretest 自动 build core+webview；直接 `npx jest` 会读旧 dist——jest.config 把 `@novel-master/core/chat` 直连 `packages/core/dist`）**；core 用 `npm test -w @novel-master/core`、desktop 用 `npm test -w @novel-master/desktop`）：
 
-- T-CA1 — blocking: yes — 草稿 schema roundtrip：带 tokenRanges 读写逐字段相等；`start > end` / 负数 / 非整数拒；**坏 ranges + 正文 → text/attachments 保留、tokenRanges === undefined**；旧 JSON（无字段）parse 后结果对象**无 tokenRanges 自有键**；**旧代码读新 JSON（parse 自构造对象路径）→ text 保留、ranges 静默丢弃（回滚兼容）** → Step 1
+- T-CA1 — blocking: yes — 草稿 schema roundtrip：带 tokenRanges 读写逐字段相等；`start > end` / **`start == end`（零长度，两侧行为不一故拒收）** / 负数 / 非整数拒；**坏 ranges + 正文 → text/attachments 保留、tokenRanges === undefined**；**字段存在但非法 → 结果对象同样无 tokenRanges 自有键**；**serialize 过滤非法条目（丢该条其余照写、全空写 `[]`、不抛错）**；旧 JSON（无字段）parse 后结果对象**无 tokenRanges 自有键**；**旧代码读新 JSON（parse 自构造对象路径）→ text 保留、ranges 静默丢弃（回滚兼容）** → Step 1
 - T-CA2 — blocking: yes — controller 初值：草稿带 ranges → 直接使用（探针断言 `scanTokensToRanges` 不被调用）；undefined → 兜底扫描一次且首次 persistDraft 写回带值；**水化 `{text:'手输$foo', tokenRanges:[]}` → 经 project/applyComposerStatusAttachmentsReplace 状态条后 tokenRanges 仍为 `[]`，不触发扫描** → Step 1
 - T-CA3 — blocking: yes — 切会话 `syncFromDraft` 同 T-CA2 两分支；半截场景：草稿文本 `$技能尾追` + ranges `[{0,3}]` → 水化后 tokenRanges 仍 `[{0,3}]`（尾追不升格）；**同文本不同 ranges 切会话**（A `[{0,3}]` vs B `[]`，文本相同）→ ranges 各归各位不串台 → Step 1
 - T-CA4 — blocking: yes — 落库咽喉点：插入/打字/删除后 persistDraft 的 payload 含正确 ranges；**发送清空 → DB 置 NULL**（下次水化 undefined + 空文本，扫描必空）→ Step 1
 - T-CA5 — blocking: yes — 既有贴边不并入用例（`native-composer.test.tsx:353-362`）保持绿；新增粘贴贴边变体 → Step 1
-- T-CA6 — blocking: yes — 水化两条真实链：首帧 `defaultValue` 按持久化 ranges 合成 markdown（`$技能尾追` + `[{0,3}]` → 链接只包 `$技能`）；**运行期水化 `setText(text, undefined, ranges)` 合成与首帧一致**（不等 prop 收敛）；同内容不二次下发（复用 `native-composer.test.tsx:413` 既有断言手法）→ Step 3
-- T-CA7 — blocking: yes — desktop 写回：未编辑（composerText === 水化文本）→ payload 含原样 tokenRanges；**已编辑 → payload 无 tokenRanges 字段** → Step 4
+- T-CA6 — blocking: yes — 水化两条真实链：首帧 `defaultValue` 按持久化 ranges 合成 markdown（`$技能尾追` + `[{0,3}]` → 链接只包 `$技能`）；**运行期水化 setText 三参合成与首帧一致**（不等 prop 收敛；**跳 remap 直写**：测试先种子一个与传入 ranges 不同的 `confirmedRangesRef` 基线，断言合成用的是传入值而非 remap 值）；同内容不二次下发（复用 `native-composer.test.tsx:413` 既有断言手法）；**面板集成测试断言（`apps/mobile/__tests__/chat-conversation-panel.integration.test.tsx`，`mockComposerSetText`）：带 ranges 草稿水化 → 三参且第三参为持久化值；同步把 `:981` 改三参断言（无 ranges 草稿 → 第三参 `[]`）——controller spy 注入自己的 spy 绕过面板箭头，抓不到丢参缺陷，不得替代** → Step 3
+- T-CA7 — blocking: yes — desktop 写回：未编辑（composerText === 水化文本）→ payload 含原样 tokenRanges；**已编辑 → payload 无 tokenRanges 字段**；**payload 组装抽纯函数再测（照 `rollback-composer.ts` 先例），不挂整个 ConversationPanel** → Step 4
+- T-CA8 — blocking: yes — 带外两路径：全屏回填 remap 保真（`apps/mobile/__tests__/composer-fullscreen.test.tsx` 既有链扩用例）；**旧草稿 tokenRanges undefined → 回填 payload 无 tokenRanges 字段（非 `[]`）**；undo_send 恢复写 undefined（`apps/mobile/__tests__/use-chat-tab-message-actions-rollback.test.ts` 既有链扩用例）→ Step 1
 
-Kotlin 单测（**blocking**；`android/build.gradle:291-292` 已有 junit 4.13.2 + robolectric 4.14.1，`FormattingStore`/`RangeEditAdjustment` 纯 Kotlin 不依赖 View，与既有 `HarnessSmokeTest.kt` 同目录）：
+Kotlin 单测（**blocking**；`android/build.gradle:291-292` 已有 junit 4.13.2 + robolectric 4.14.1，`FormattingStore`/`RangeEditAdjustment` 纯 Kotlin 不依赖 View，与既有 `HarnessSmokeTest.kt` 同目录。**运行：`cd apps/mobile/android && gradlew.bat :react-native-enriched-markdown:testDebugUnitTest`（项目名按 autolinking.json）；测试文件只存在于补丁内，重生成补丁后必须 grep 类名核对（见变更点 #9）**）：
 
 - KT-CA1 — blocking: yes — `RangeEditAdjustmentTest`：D2 protected 分支表逐行矩阵（左插右移/右插不动/内插整删/相交删整删/左右侧平移；`growsAtStartOnInsert=false` 锁定）→ Step 2
-- KT-CA2 — blocking: yes — `FormattingStoreTest`：相邻 TOKEN 不融合（`addRange` 无合并路径 + `coalesce` 跳过）；`adjustForEdit` 替换不继承 TOKEN；调整后不产生半截 range → Step 2
+- KT-CA2 — blocking: yes — `FormattingStoreTest`：相邻 TOKEN 不融合（`addRange` 无合并路径 + `coalesce` 跳过）；`adjustForEdit` 替换不继承 TOKEN；调整后不产生半截 range；**selectionAdjustedForAtomicLinks 扩 TOKEN（选区部分相交→扩整颗 / 光标内部→推 end / 完全在外→返回 null）** → Step 2
+- KT-CA3 — blocking: yes — `setValueFromJS` 的 LINK→TOKEN 映射抽 internal 纯函数：`nmskill://`/`nmtoken://` 链接 → TOKEN 且 url 置 null；普通链接保持 LINK；多 link 顺序不变 → Step 3
+- 说明：InputConnectionWrapper 的组合态门控（`isComposing`）与删除入口拦截不做 wrapper 级单测（强依赖 EditText 运行态，Robolectric 保真度不足），由真机 S1/S7/S10 覆盖；区间语义已由 KT-CA1/CA2 锁定。**残留风险**：S7 属 P2——若 P2 不触发，`isComposing` 门控的「组合期不误删」在 P1 无专项真机场景（S10 为非组合态退格），由 S1 中文尾追路径间接覆盖；P2 触发时 S7 补齐。
 
 真机场景清单（S = device scenario，manual_user）：
 
@@ -186,25 +194,27 @@ Kotlin 单测（**blocking**；`android/build.gradle:291-292` 已有 junit 4.13.
 - S7 中文 IME 组合态贴胶囊提交（拼音组合中光标位置/提交后归属）→ P2 门
 - S8 胶囊相邻粘贴多行文本 → 粘贴内容落胶囊外、不误转 markdown（既有粘贴链回归）
 - S9 **相邻两颗胶囊间字符删除** → 两颗各自独立不融合（D2 双处合并抑制的真机验证）
+- S10 **插入落文后立即单次退格** → 期望形态（**待取证回填，主判据见 D7**）：先删尾随空格；光标贴胶囊右缘后再退格整删。实现注：e2e（2026-10-19）观测为「整颗胶囊+尾空格一键全删」，与静态推演不符——实现期先取证（log tokenRanges 与 cursor 落位、每次 `deleteSurroundingText` 的**调用次数与 beforeLength/afterLength**；根因候选按贴合代码程度排序：①同一次按键连续两次 `deleteSurroundingText(1,0)`——第一次删尾空格（光标 14→13）、第二次 `rangeOfType(TOKEN, 12)` 命中胶囊区间整删，最贴合 e2e 观测；②空 `commitText` + `deleteSurroundingText` 双路径并发；③华为隐藏 IME 其他单键双发组合——取证结论直接决定 S10 期望形态与并发收敛机制是否需走回退变体）；若取证证实范围含尾空格或双路径并发，改口径为「一键整删含空格」并同步 D3 删除窗/并集口径与语义总表（KT-CA1 仅在涉及区间矩阵时补用例）
 
 ## 兼容性或迁移说明
 
 - **草稿迁移**：JSON optional 字段，无 DDL；旧草稿 undefined → 兜底扫描一次，写回固化，升级无感（旧行为残留面仅限「从未再次打开过的旧草稿」与 undo_send 恢复）。
 - **回滚（新版本草稿被旧代码读）**：`parseComposerDraftJson` 自构造 `{text, attachments: kept}` 喂 schema（`:82`），未知字段到不了 `.strict()`——**静默丢弃 tokenRanges、正文保留**（zod 4 `.strict()` 对未知键是 reject，但该路径根本不把未知键喂进去）；后果仅是「旧版本下一次写回永久丢 ranges」，无文本丢失风险。
 - **desktop**：读侧忽略新字段；写回仅未编辑时透传（D6），编辑后省略字段。
+- **LINK 选区删除保持上游**：D3 的选区删除扩整只对 TOKEN；LINK 维持上游折叠光标语义（改动面最小，现网未观测到问题）。
 - **发送管线零改动**：明文形态、core 扫描、发送门闩全不动。
 - **转录渲染不动**：`RefTokenText` 是显示链路，与输入框 stores 无关。
 - **手输行为不变**：纯文本；发送扫描照常把 `$技能名` 变 skillAttach。
 - **linkVariants 说明**：D4 后 `^nmskill:`/`^nmtoken:` 两个变体对胶囊不再生效（TOKEN 样式由 `TokenStyleHandler` 取 `style.linkColor`/`linkBackgroundColor`/`linkBorderRadius` 等基础键，`TokenStyleHandler.kt:24-45`）——**胶囊视觉不变**；变体键退化为冗余配置，`markdownStyle.link` 基础键**禁止删除**（删则胶囊掉样式）；既有测试 `native-composer.test.tsx:308-331` 锁着变体键，清理时同步改。
-- **已知限制披露**：①全屏 CodeMirror（`PromptEditorScreen`）与旧 webview composer 的高亮仍按 `COMPOSER_TOKEN_RE` 全扫，「尾追并入高亮」不在本迭代闭合范围；②undo_send 恢复允许兜底扫描一次；③P1 阶段组合态替换（S7 路径）未闭合前，选区跨胶囊输入依赖 D5。
+- **已知限制披露**：①全屏 CodeMirror（`PromptEditorScreen`）与旧 webview composer 的高亮仍按 `COMPOSER_TOKEN_RE` 全扫，「尾追并入高亮」不在本迭代闭合范围；②undo_send 恢复允许兜底扫描一次；③组合态（IME）替换（S7 路径）依赖 D5（P2）；非组合态的选区跨胶囊输入在 P1 经选区吸附（D2）已闭合；④全屏 CodeMirror 内新打的 `$x` 按正则高亮显示为胶囊，但 D1 remap 不升格确认胶囊，回到内联输入框后是纯文本（视觉与确认态不一致，与目标 5「手输不成胶囊」一致）；⑤desktop 编辑后写回省略 tokenRanges → 移动端下次水化兜底扫描一次（行为同现状）。
 - **上游对照**：`.reference/enriched-markdown` 仅供 rebase 参考；本迭代全部 native 改动落在补丁内，升级库版本须重生成补丁（既有 D10 流程，composer-native spec）。
 
 ## 风险与回滚方案
 
 | 风险 | 应对 |
 |------|------|
-| 补丁面扩大 → 上游 1.1.x rebase 成本上升 | native 改动收敛在 5 个 Kotlin 文件（FormattingStore / RangeEditAdjustment / EnrichedMarkdownTextInputView / InputConnectionWrapper 不动于 P1 / InputParser 经 setValueFromJS）；升级前重生成补丁 |
-| protected 区间策略与 IME 组合态冲突（抢 composing 区间） | P1 不动 InputConnectionWrapper（D5 属 P2）；RangeEditAdjustment 层只调区间不改文本，组合态安全（phase 抑制 + lastProcessedText 早退先例）；S1 真机门兜底 |
+| 补丁面扩大 → 上游 1.1.x rebase 成本上升 | native 改动收敛在 4 个 Kotlin 文件（FormattingStore / RangeEditAdjustment / EnrichedMarkdownTextInputView / InputConnectionWrapper）；InputParser 不改——LINK→TOKEN 映射收敛在 setValueFromJS（D4）；升级前重生成补丁 |
+| protected 区间策略与 IME 组合态冲突（抢 composing 区间） | P1 不做 D5 的「非删除语义的选区规范化」（commitText/setComposingText 提交前的光标/选区调整与组合期修复）——**D3 的空 commitText 删除拦截不在此列，P1 照常改 InputConnectionWrapper**（isComposing 门控）；RangeEditAdjustment 层只调区间不改文本，组合态安全（phase 抑制 + lastProcessedText 早退先例）；S1 真机门兜底 |
 | 光标吸附影响点击手感（点胶囊中间光标跳尾） | 与 LINK 既有上游语义一致；S3 真机验收，不可接受再调吸附策略（如点击落 start） |
 | desktop 写回透传遗漏/错位 → 跨端丢或错 ranges | D6 编辑检测 + T-CA7 两分支锁死 |
 | undefined 与 `[]` 语义混用导致兜底扫描复活 | T-CA1/T-CA2 锁死「undefined ≠ 空数组」；schema 不设 default；parse 缺失不写自有键 |
@@ -224,7 +234,7 @@ Kotlin 单测（**blocking**；`android/build.gradle:291-292` 已有 junit 4.13.
 - P1-5：`addRange` 无合并路径 + `coalesce` 跳过（双处）；S9 真机场景。
 - P1-6：M7 扩展 `setText(text, cursor?, ranges?)`；T-CA6 运行期水化链断言。
 - P1-7：`syncFromDraft` ranges 按内容比较；T-CA3 同文本变体。
-- P1-8：D3 五入口统一 helper（空 commitText + deleteSurroundingText 一般参数 + FORWARD_DEL）。
+- P1-8：D3 五入口统一 helper（空 commitText + deleteSurroundingText 一般参数 + FORWARD_DEL）（R2 修正为六入口，R3 补 code-points 变体与并发收敛为七入口）。
 - P1-9：Kotlin 单测升 blocking（KT-CA1/KT-CA2，junit+robolectric 已在）；S4 改 adb keyevent 112。
 - P2-1：实现注改写（parse 自构造对象 → 静默丢字段正文保留；回滚后果=下次写回丢 ranges）；T-CA1 回滚用例。
 - P2-2：兼容性节 linkVariants/TokenStyleHandler 说明。
@@ -234,3 +244,28 @@ Kotlin 单测（**blocking**；`android/build.gradle:291-292` 已有 junit 4.13.
 - P2-6：`ComposerDraftTokenRange` 类型由 core 导出，storage/token-ranges 复用。
 - P2-7：语义总表选区跨胶囊「输入」标 (D5/P2)。
 - 证据锚点修正：`run-agent-turn.ts:543` → 扫描 `:663-667` / append `:724-731`；`token-ranges.ts` 类型 `:29-33`（`:12-15` 为模块注释）；右边界 `:93-94`（循环 `:92-99`）；`InputConnectionWrapper.kt` 类注释 `:8-28`、`setComposingText` `:52-77`。
+
+## R2 修订记录（doc-fix 闭合清单，r2 → r3）
+
+- P0-1（cca/P0-1）：风险表两行改写——P1 不动的是 D5「非删除语义的选区规范化」，D3 空 commitText 删除拦截照常改 InputConnectionWrapper；文件清单 5→4（InputParser 移出，映射收敛 setValueFromJS）。
+- P0-2（cca/P0-2）：D4 扩为「三跳全链」——`ChatConversationPanel.tsx:152-157` 回调与 options.`setComposerText` 类型同步三参（TS 少参兼容会静默丢第三参）；变更点 #4 纳入面板文件；T-CA6 改面板集成测试断言（controller spy 抓不到面板箭头丢参）+ `:981` 三参化。
+- P1-1（cca/P1-1）：D3 新增组合态信号（P1 引入最小 `isComposing`），空 commitText 拦截加 `!isComposing` 门；D5 改为复用该信号——修复「P1 依赖 P2 才引入的信号」阶段倒置。
+- P2-1（cca/P2-1）：变更点 #1 补 `packages/core/src/public/chat.ts` type 导出桶（漏则 Step 1 编译失败）。
+- P2-2（cca/P2-2）：D4 补 commitExternalText 收 ranges 语义（跳 remap、直写 confirmedRangesRef、prop 收敛短路、state 与第三参同份数组、null 基线切确认制）。
+- P2-3（cca/P2-3）：D1 带外路径补 undefined 口径（回填写 undefined 不预处理）；`writeChatComposerDraft` 定为第 4 参（现有三参调用零改动）。
+- P2-4（cca/P2-4）：D3 空 commitText 删除窗/super 语义写死；入口计数改「既有三入口（补 sendKeyEvent KEYCODE_DEL）+ 新增三入口 = 六入口」（R3 补 code-points 变体与并发收敛后为七入口）；补并集口径（删除窗 ∪ 相交原子区间、光标落删除区起点）；新增 S10（期望先删尾空格；e2e 观测整删根因待取证，见实现注）。
+- P2-5（cca/P2-5）：测试策略新增 T-CA8（带外两路径，挂既有测试文件扩用例）；T-CA7 补纯函数化测试形态。
+- P2-6（cca/P2-6）：D2 表替换行改「替换与删除共用相交判据；JS 同样摘除，native 兜底不经 JS 的路径」。
+- P2-7（cca/P2-7）：refine 收紧 `start < end`；serialize 过滤非法不抛错；parse 缺失或非法均不写自有键；T-CA1 加三用例。
+- P2-8（cca/P2-8）：新增 KT-CA3（setValueFromJS 映射纯函数）；KT-CA2 扩选区吸附三断言（e2e 佐证：D4 后吸附由 TOKEN 接管，D2 纳入 TOKEN 为防回归必要条件）。
+- P2-9（cca/P2-9）：补 Kotlin 运行命令（`gradlew.bat :react-native-enriched-markdown:testDebugUnitTest`）与补丁 grep 测试类名核对（防 clean install 后测试静默消失）。
+- P2-10（cca/P2-10）：D3 选区删除扩整收窄为仅 TOKEN，LINK 保持上游（兼容性节披露）。
+- P2-11（cca/P2-11）：D2 protected 入口定为 `adjustForEdit` 加 `isProtected: (T) -> Boolean` 参数（FormattingStore 传 `type == TOKEN` 判定）。（R3 修正：本行原误写 adjustRangeForEdit，真实函数名见 `RangeEditAdjustment.kt:45`。）
+- 佐证与流程：需求来源补 e2e 真机佐证三条（水化吸收复现 / 单退格整删待取证 / 光标吸附 D4→D2 联动）；测试策略补运行命令（`npm test -w`，jest 直连 dist 的坑）；syncFromDraft 兜底写回点定为 undefined 分支内一次 persistDraft；D5 补「依赖 D2 同批」句；Step 3 注明依赖 Step 2。
+
+## R3 修订记录（第 3/4 轮审查增量，doc-fix 闭合清单）
+
+- P1-1：S10 进验收门——D7 P1 清单与 Step 5 改「S1-S6、S8-S10」，主判据「一次物理退格最多删一颗胶囊且无多删字符」（取证无关的稳定判据），期望形态按取证回填。
+- P1-2：Step 1 测试清单补 T-CA8（与 T-CA8 自标 Step 1 对齐）。
+- P1-3 + P1-a：D3 新增「同一按键并发收敛」——`suppressNextDelete` 仅在 `isBatchEdit == true` 时置位、`endBatchEdit` 无条件清（batch 域内抑制，不吞独立退格）；抑制时跳过重复 dispatch Backspace；标志放 view 层共享；判据限定同键并发场景（词删/选区跨多颗仍按并集）；取证回退路径（拆 batch → clear-on-consume + 快照相交；单信号 → 简化）写明。
+- P2 汇总：函数名修正（`adjustForEdit`、`NativeChatComposerInstance.setText`——库侧 instance 无 setText）；七入口三处一致（补 `deleteSurroundingTextInCodePoints` 第四新增入口）；`setComposingText` 空串清 `isComposing`；D4 补 `textChanged || rangesChanged` 命令式下发条件与 instance null 兜底；已知限制③改写 + 补④⑤；S10 同步对象改 D3；wrapper 单测豁免说明 + 组合期残留风险注；Q2 防御性校验声明（不做长度校验，消费侧防御）；`addRange` 钉 `allowMerge` 参数形态；remap 落点钉 ChatTabScreen 退出回填处；空会话兜底写回跳过；R1/R2 历史记录加括注。
