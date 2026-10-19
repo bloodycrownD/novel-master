@@ -25,12 +25,18 @@
  * RN 侧只持「最后已知明文」镜像。
  *
  * **M7 · 命令式通道**：外部写入（Picker 插入 / 草稿水化 /
- * 发送清空 / undo 回滚 / **粘贴上屏**）一律走 `ref.setText(text, cursor?)`：
+ * 发送清空 / undo 回滚 / **粘贴上屏**）一律走 `ref.setText(text, cursor?, ranges?)`：
  * 推进基线 → 扫描 token 合成 markdown → `setValue` → 下发 `setTokenRanges` →
  * 可选光标落位 → **主动补发一次 `onComposerChangeText`**。补发的理由：库在
  * `setValueFromJS` 期间处于 `EditPhase.Importing`、事件被抑制，`onChangeText`
  * 不会自发回声；web 侧 dock 的 `commitComposerText` 同样是写入后补发 change
  * （E10/F6 语义），controller 的同值回声去重保证补发幂等。
+ *
+ * **第三参 `ranges`（D4 水化直写）**：草稿水化链把持久化的确认区间**直接**
+ * 交给本通道——传入时跳过一次差分重映射（`remapTokenRanges`）并把
+ * `confirmedRangesRef` 直写为这份区间。原因：`syncFromDraft` 是命令调用，
+ * React prop 不会即时更新，拿上一帧基线重映射（冷启动 `[]` / 切会话旧区间）
+ * 会把正确的持久化区间算丢。
  *
  * value prop 的职责边界：它是外部明文真源的**镜像**（供父层声明式渲染与
  * effect 兜底），不是逐键回写的受控值。effect 只在 `value !== 基线` 时介入
@@ -192,8 +198,15 @@ export type NativeChatComposerInstance = {
    * **M7 · 命令式整段写入通道**（`useChatComposerController` 的
    * `setComposerText` 在原生侧的落点）：明文进、库内 markdown 出。
    * `cursor` 缺省时库把光标落到文本末尾（`setValueFromJS` 的默认行为）。
+   *
+   * 第三参 `ranges` 为水化直写区间（D4）：传入时跳过差分重映射、直接以它为
+   * 确认制真源合成 markdown 并下发 `setTokenRanges`；缺省保持现行 remap 路径。
    */
-  setText: (text: string, cursor?: number) => void;
+  setText: (
+    text: string,
+    cursor?: number,
+    ranges?: readonly TokenRange[],
+  ) => void;
   focus: () => void;
   blur: () => void;
 };
@@ -310,17 +323,26 @@ export const NativeChatComposer = forwardRef<
      * 外部写入的内部通道（M7 语义全量）。`ref.setText`、value effect 兜底与
      * 粘贴上屏都收敛到这里，保证所有入口行为零差分。
      *
+     * **第三参 `ranges`（D4 水化直写）**：传入时跳过 `remapTokenRanges`，
+     * 直接把这份区间写成确认制真源（P2-2）——水化链的调用方是同步命令，
+     * 上一帧基线（冷启动 `[]` / 切会话旧区间）不可信，不能拿来重映射。
+     * 未传时维持现行路径：以 `baselineRef`（上一帧明文）为输入做差分重映射。
+     * `confirmedRangesRef` 为 null（未传 `tokenRanges` prop 的旧模式）时收到
+     * ranges 同样切确认制（现网恒传 prop，暴露面为零）。
+     *
      * 输入框未挂载时（理论上 effect 晚于 ref 挂接，不会发生）直接早退且
      * **不推进基线**——让下一次 value 变化重试，避免「基线推进了、库没收到」
      * 的永久丢失。
      */
     const commitExternalText = useCallback(
-      (plain: string, cursor?: number) => {
+      (plain: string, cursor?: number, ranges?: readonly TokenRange[]) => {
         const instance = inputRef.current;
         if (instance == null) {
           return;
         }
-        if (confirmedRangesRef.current != null) {
+        if (ranges != null) {
+          confirmedRangesRef.current = ranges;
+        } else if (confirmedRangesRef.current != null) {
           confirmedRangesRef.current = remapTokenRanges(
             baselineRef.current,
             plain,
@@ -437,8 +459,11 @@ export const NativeChatComposer = forwardRef<
     useImperativeHandle(
       ref,
       () => ({
-        setText: (text: string, cursor?: number) =>
-          commitExternalText(text, cursor),
+        setText: (
+          text: string,
+          cursor?: number,
+          ranges?: readonly TokenRange[],
+        ) => commitExternalText(text, cursor, ranges),
         focus: () => inputRef.current?.focus(),
         blur: () => inputRef.current?.blur(),
       }),

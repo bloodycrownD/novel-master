@@ -456,6 +456,71 @@ describe('NativeChatComposer（T-NC1~T-NC6）', () => {
     });
   });
 
+  describe('D4 水化三跳（T-CA6）', () => {
+    it('首帧 defaultValue 按持久化 ranges 合成（尾追内容不并入胶囊）', () => {
+      const { input } = renderComposer({
+        value: '$技能尾追',
+        tokenRanges: [{ start: 0, end: 3 }],
+      });
+
+      // 链接只包 [0,3) 的 `$技能`；水化不再正则全扫（旧行为会包整串）。
+      expect(input().props.defaultValue).toBe(
+        '[$技能](nmskill://技能)尾追',
+      );
+    });
+
+    it('运行期水化 setText 三参：跳 remap 直写传入 ranges（基线区间不同也不影响）', () => {
+      const ref = React.createRef<NativeChatComposerInstance>();
+      renderComposer({
+        ref,
+        value: 'aaaaaaaaaa',
+        tokenRanges: [{ start: 0, end: 10 }],
+      });
+
+      // 先种一个与传入 ranges 不同的基线：走 remap 的话，'aaaaaaaaaa' 与
+      // '$技能尾追' 的整串差异会与 [0,10) 相交 → 区间摘除 → 合成纯明文。
+      act(() => {
+        ref.current?.setText('$技能尾追', undefined, [{ start: 0, end: 3 }]);
+      });
+
+      expect(
+        mockCalls.setValue[mockCalls.setValue.length - 1],
+      ).toBe('[$技能](nmskill://技能)尾追');
+      expect(lastRanges()).toEqual([{ start: 0, end: 3 }]);
+    });
+
+    it('幂等：同内容 ranges 经 prop 收敛不二次下发（mock view 层计数）', () => {
+      const onChange = jest.fn();
+      const ref = React.createRef<NativeChatComposerInstance>();
+      const { tree } = renderComposer({
+        ref,
+        value: 'aaaaaaaaaa',
+        tokenRanges: [{ start: 0, end: 10 }],
+        onComposerChangeText: onChange,
+      });
+      // 挂载兜底下发 1 次（首帧 ranges）
+      expect(mockCalls.setTokenRanges).toHaveLength(1);
+
+      act(() => {
+        ref.current?.setText('$技能尾追', undefined, [{ start: 0, end: 3 }]);
+      });
+      // 命令式写入带 ranges 下发 1 次
+      expect(mockCalls.setTokenRanges).toHaveLength(2);
+
+      // controller 的反向收敛：同内容新数组身份 → 逐项相等短路，不再下发。
+      act(() => {
+        tree.update(
+          makeElement(onChange, {
+            ref,
+            value: '$技能尾追',
+            tokenRanges: [{ start: 0, end: 3 }],
+          }),
+        );
+      });
+      expect(mockCalls.setTokenRanges).toHaveLength(2);
+    });
+  });
+
   describe('remapTokenRanges 纯函数（编辑侧语义单测）', () => {
     it('同文本返回拷贝', () => {
       expect(remapTokenRanges('abc', 'abc', [{ start: 0, end: 1 }])).toEqual([

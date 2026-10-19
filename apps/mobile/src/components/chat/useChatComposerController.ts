@@ -128,10 +128,10 @@ export type UseChatComposerControllerOptions = {
    * 缺省时退化为「只改本地 state」（组件的 `value` prop 变化仍会经 effect 补写），
    * 供不挂输入组件的调用方（单测 / 降级）使用。
    *
-   * **第三参 `ranges`（D1/D4 接口位）**：水化链携带持久化确认区间下发，
-   * 组件侧跳 remap 直写基线。本 Step 只扩类型，通道本体（NativeChatComposer
-   * 三跳 / 面板透传）由 Step 3 落地；漏改中间跳时 TypeScript 少参兼容会静默
-   * 丢第三参，故类型先行钉死。
+   * **第三参 `ranges`（D1/D4 接口）**：水化链携带持久化确认区间下发，
+   * 组件侧跳 remap 直写基线（见 `NativeChatComposer.commitExternalText`）。
+   * 漏改中间跳时 TypeScript 少参兼容会静默丢第三参，面板回调
+   * （`ChatConversationPanel.setComposerText`）与组件接口必须同步三参。
    */
   readonly setComposerText?: (
     text: string,
@@ -337,11 +337,16 @@ export function useChatComposerController({
   /**
    * 草稿重读进本地 state（水化链与 `subscribeChatComposerDraft` 共用一条路径）。
    *
-   * 文本真变时同步经命令式通道下发（D8：水化不等转录 webview 的 ready 握手，
-   * 两链并行；见 `commitComposerText` 与 options.setComposerText 注释）。只在
-   * 文本变化时下发——状态条整表替换（`applyComposerStatusAttachmentsReplace`）
-   * 也会广播到这里，文本未变就重写输入框是无谓的 `setValue`，还会打断 IME
-   * 组合态。
+   * 文本真变或确认区间真变时同步经命令式通道下发（D8：水化不等转录 webview
+   * 的 ready 握手，两链并行；见 `commitComposerText` 与 options.setComposerText
+   * 注释）。ranges 变化也要下发：同文本不同确认状态的会话切换（A 确认胶囊 /
+   * B 同串手输）只改区间不改文本，漏发会让输入框渲染上一会话的胶囊。
+   * 状态条整表替换（`applyComposerStatusAttachmentsReplace`）也广播到这里，
+   * 文本与区间都未变就重写输入框是无谓的 `setValue`，还会打断 IME 组合态。
+   *
+   * **D4 三跳**：第三参携带的必须与 `setTokenRanges` 的 state 是**同一份数组**
+   * （`nextRanges`）——组件侧对第三参跳 remap 直写，prop 收敛 effect 再按内容
+   * 相等短路，不会用旧 state 覆盖。
    */
   const syncFromDraft = useCallback(() => {
     const draft = readChatComposerDraftState(sessionId);
@@ -354,13 +359,14 @@ export function useChatComposerController({
     // ranges 的更新按**内容**比较而非挂在 textChanged 上——同文本不同会话
     // 切换时（A 确认胶囊 / B 手输同串）才不会串台。
     const nextRanges = draft.tokenRanges ?? scanTokensToRanges(draft.text);
-    if (!tokenRangesEqual(nextRanges, tokenRangesRef.current)) {
+    const rangesChanged = !tokenRangesEqual(nextRanges, tokenRangesRef.current);
+    if (rangesChanged) {
       tokenRangesRef.current = nextRanges;
       setTokenRanges(nextRanges);
     }
-    if (textChanged) {
-      // 命令式通道只带文本（第三参 ranges 通道本体由 Step 3 / D4 落地）。
-      setComposerTextRef.current?.(draft.text);
+    if (textChanged || rangesChanged) {
+      // D4 第三参：水化链把持久化确认区间直接交给组件（跳 remap 直写）。
+      setComposerTextRef.current?.(draft.text, undefined, nextRanges);
     }
     if (draft.tokenRanges === undefined && draft.text !== '') {
       // 兜底扫描结果写回固化（仅此一次）：text 与 ranges 均空（空会话）跳过，

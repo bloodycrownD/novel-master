@@ -39,6 +39,7 @@ import {
   NativeChatComposer,
   type NativeChatComposerInstance,
 } from '@/components/chat/NativeChatComposer';
+import type {TokenRange} from '@/components/chat/native-composer/token-ranges';
 import {FileReferencePicker} from '@/components/chat/FileReferencePicker';
 import {SkillPicker} from '@/components/skills/SkillPicker';
 import {
@@ -148,10 +149,14 @@ function ChatConversationWebSurface(props: {
    * M7 命令式通道的原生落点：controller 的整段写入（Picker 插入 / 草稿水化 /
    * 发送清空）经 ref.setText 进框。ref 为 null（composer 未挂载）时静默忽略，
    * 挂载后由 value effect 兜底补写，写入不丢。
+   *
+   * **三参必须逐字透传（D4 / R2 P0-2）**：TypeScript 允许少参函数赋多参类型，
+   * 这里漏写第三参编译不报错、运行期被静默丢弃，等于水化直写通道没接上——
+   * 面板集成测试（T-CA6）锁的就是这条真实下发路径。
    */
   const setComposerText = useCallback(
-    (text: string, cursor?: number) => {
-      composerRef.current?.setText(text, cursor);
+    (text: string, cursor?: number, ranges?: readonly TokenRange[]) => {
+      composerRef.current?.setText(text, cursor, ranges);
     },
     [],
   );
