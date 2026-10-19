@@ -496,7 +496,7 @@ describe('T-FS2/T-FS3 全屏编辑链（ChatTabScreen → 面板 → NativeChatC
       );
   }
 
-  it('T-CA5: 全屏退出回填按旧草稿 remap 保真写入 tokenRanges', async () => {
+  it('T-CA8: 全屏退出回填按旧草稿 remap 保真写入 tokenRanges', async () => {
     // 带确认胶囊的草稿：`$技能` 是确认胶囊（区间 [{0,3}]）。
     mockDraftJsonBySession.set(
       's1',
@@ -540,7 +540,7 @@ describe('T-FS2/T-FS3 全屏编辑链（ChatTabScreen → 面板 → NativeChatC
     ]);
   });
 
-  it('T-CA5: 全屏里在胶囊后尾追 → 回填 remap 不升格（区间保持，不并入尾追文本）', async () => {
+  it('T-CA8: 全屏里在胶囊后尾追 → 回填 remap 不升格（区间保持，不并入尾追文本）', async () => {
     mockDraftJsonBySession.set(
       's1',
       JSON.stringify({

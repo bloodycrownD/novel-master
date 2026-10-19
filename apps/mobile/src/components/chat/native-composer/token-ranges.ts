@@ -45,9 +45,10 @@ export const NM_SKILL_SCHEME = 'nmskill://';
 /**
  * 扫描明文，返回全部 token 区间（按出现顺序，互不重叠）。
  *
- * 纯转发 `composerTokenRanges`：留这层壳是为了让下发链（NativeChatComposer
- * 与测试）读起来语义直达，也方便日后在此追加 mobile 侧专属的识别微调而不动
- * 桌面对齐的正则真源。
+ * 定位（D1 后）：**undefined 兜底 + 发送/测试辅助**——运行期水化优先用持久化
+ * tokenRanges（scan 只在草稿无 ranges 时兜底）；发送链与测试仍用它取区间。
+ * 保留这层转发壳是为了让下发链（NativeChatComposer 与测试）读起来语义直达，
+ * 也方便日后在此追加 mobile 侧专属的识别微调而不动桌面对齐的正则真源。
  */
 export function scanTokensToRanges(text: string): readonly TokenRange[] {
   return composerTokenRanges(text);

@@ -362,6 +362,19 @@ describe('NativeChatComposer（T-NC1~T-NC6）', () => {
       expect(lastRanges()).toEqual([{ start: 0, end: 6 }]);
     });
 
+    it('粘贴贴边落文：多字符一次性粘贴不并入胶囊（T-CA5 粘贴变体）', () => {
+      const { input } = renderComposer({
+        value: '$技能',
+        tokenRanges: [{ start: 0, end: 3 }],
+      });
+      act(() => {
+        // 模拟剪贴板粘贴：单次 change 事件一次性携带多字符（区别于逐字打字）
+        input().props.onChangeText('$技能粘贴内容');
+      });
+      // 粘贴点 == 区间 end（贴右边界）：区间原位保留，粘贴文本全部落在胶囊外
+      expect(lastRanges()).toEqual([{ start: 0, end: 3 }]);
+    });
+
     it('胶囊中段被改动：区间摘除（不再视为那条引用）', () => {
       const { input } = renderComposer({
         value: '$时序图大纲',

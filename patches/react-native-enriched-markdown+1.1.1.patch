@@ -622,7 +622,7 @@ index 561cf66..344a5ef 100644
    }
  
 diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/editing/InputConnectionWrapper.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/editing/InputConnectionWrapper.kt
-index 32f71ef..7e43c38 100644
+index 32f71ef..8d2a89b 100644
 --- a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/editing/InputConnectionWrapper.kt
 +++ b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/editing/InputConnectionWrapper.kt
 @@ -33,15 +33,30 @@ class InputConnectionWrapper(
@@ -684,12 +684,12 @@ index 32f71ef..7e43c38 100644
 +    val wasComposing = isComposing
 +    isComposing = false
 +
-+    // 同键并发收敛（D3）：前一个删除入口已处理同一物理按键，本次整体短路——
-+    // 不删、不调 super、也不再 dispatch Backspace。
-+    if (editText.isDeleteSuppressed()) return true
-+
      val key = text.toString()
 +    if (key.isEmpty()) {
++      // 同键并发收敛（D3）：仅空 commitText（退格语义）读抑制标志——同 batch
++      // 的后续删除入口整体短路；非空提交（联想/纠错落字）不在此列，照常走
++      // super 落字（CR-S12-01：抑制判定曾置于空串分支之前，会吞掉非空提交）。
++      if (editText.isDeleteSuppressed()) return true
 +      // 空文本表示退格（见类注释）。按键事件照旧上报；命中原子区间时由
 +      // helper 删整颗并吞掉 super，未命中走平台原路径。
 +      dispatchKeyPressOrEnqueue(BACKSPACE_KEY_VALUE)
