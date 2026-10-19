@@ -188,6 +188,50 @@ describe('useChatTabMessageActions rollback', () => {
     expect(mockSetDraftRestoreToken).toHaveBeenCalled();
   });
 
+  it('T-CA8: undo_send 恢复不带 tokenRanges（undefined 而非 []），允许下次水化兜底一次', async () => {
+    // 预置旧草稿带区间：恢复必须把它清成「无字段」，不能被旧区间沿用。
+    writeChatComposerDraftState('s1', {
+      text: 'old draft',
+      attachments: [],
+      tokenRanges: [{start: 0, end: 3}],
+    });
+    const sessions = {
+      getComposerDraftJson: jest.fn(async () => null),
+      setComposerDraftJson: jest.fn(
+        async (_id: string, _json: string | null) => true,
+      ),
+    };
+    (mockRuntime as Record<string, unknown>).sessions = sessions;
+    try {
+      const anchor = plainUserMessage('继续写 $技能');
+      const api = mountActions([anchor]);
+
+      await act(async () => {
+        api.handleMessageMenuAction(anchor, 'rollback');
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      const draft = readChatComposerDraftState('s1');
+      expect(draft.text).toBe('继续写 $技能');
+      // 缓存对象无自有键（不是 tokenRanges: undefined / []）。
+      expect(Object.prototype.hasOwnProperty.call(draft, 'tokenRanges')).toBe(
+        false,
+      );
+
+      // 落库 payload 同样无字段（undefined 原样透传，不臆造 []）。
+      const written = sessions.setComposerDraftJson.mock.calls
+        .map(([, json]) => json)
+        .filter((json): json is string => json != null)
+        .map(json => JSON.parse(json) as Record<string, unknown>)
+        .filter(payload => payload.text === '继续写 $技能');
+      expect(written.length).toBeGreaterThan(0);
+      expect('tokenRanges' in written[0]!).toBe(false);
+    } finally {
+      delete (mockRuntime as Record<string, unknown>).sessions;
+    }
+  });
+
   it('T-S5: undo_send 成功后 refreshChatTokenLabel 被调用', async () => {
     const anchor = plainUserMessage('hello');
     const api = mountActions([anchor]);

@@ -154,6 +154,179 @@ describe('chat-composer-draft', () => {
   });
 });
 
+/**
+ * T-CA2（mobile 存储侧）：tokenRanges 全链透传（D1）。
+ *
+ * 口径必须锁死：`undefined`（旧草稿 / 带外写入，允许兜底扫描）≠ `[]`
+ * （确认无胶囊，禁止扫描）；序列化侧 undefined **不写自有键**。
+ */
+describe('chat-composer-draft · tokenRanges 持久化（D1）', () => {
+  it('T-CA2: 带 ranges 写→读 roundtrip（缓存 / DB JSON / 水化逐字段相等）', async () => {
+    let stored: string | null = null;
+    const sessions = {
+      getComposerDraftJson: jest.fn(async () => stored),
+      setComposerDraftJson: jest.fn(async (_id: string, json: string | null) => {
+        stored = json;
+        return true;
+      }),
+    };
+    const ranges = [
+      {start: 0, end: 3},
+      {start: 8, end: 15},
+    ];
+
+    writeChatComposerDraftState(
+      's-ca2-storage',
+      {text: '$技能 中间 $另一个', attachments: [], tokenRanges: ranges},
+      sessions,
+    );
+
+    expect(readChatComposerDraftState('s-ca2-storage').tokenRanges).toEqual(
+      ranges,
+    );
+    await new Promise(resolve => setImmediate(resolve));
+    expect(JSON.parse(stored!)).toEqual({
+      text: '$技能 中间 $另一个',
+      attachments: [],
+      tokenRanges: ranges,
+    });
+
+    const hydrated = await hydrateChatComposerDraftFromDb(
+      's-ca2-storage',
+      sessions,
+    );
+    expect(hydrated.tokenRanges).toEqual(ranges);
+    expect(readChatComposerDraftState('s-ca2-storage').tokenRanges).toEqual(
+      ranges,
+    );
+  });
+
+  it('T-CA2: 无 ranges（undefined）→ JSON 与缓存对象都没有 tokenRanges 自有键', async () => {
+    let stored: string | null = null;
+    const sessions = {
+      getComposerDraftJson: jest.fn(async () => stored),
+      setComposerDraftJson: jest.fn(async (_id: string, json: string | null) => {
+        stored = json;
+        return true;
+      }),
+    };
+
+    // 三参调用（既有形态，零改动）：undefined 原样透传，不臆造 `[]`。
+    writeChatComposerDraft('s-ca2-undef', '手输 $foo', sessions);
+
+    const cached = readChatComposerDraftState('s-ca2-undef');
+    expect(Object.prototype.hasOwnProperty.call(cached, 'tokenRanges')).toBe(
+      false,
+    );
+    await new Promise(resolve => setImmediate(resolve));
+    const payload = JSON.parse(stored!) as Record<string, unknown>;
+    expect(Object.prototype.hasOwnProperty.call(payload, 'tokenRanges')).toBe(
+      false,
+    );
+
+    // 旧 JSON 水化：parse 不写自有键，缓存条目同样没有。
+    const hydrated = await hydrateChatComposerDraftFromDb(
+      's-ca2-undef',
+      sessions,
+    );
+    expect(Object.prototype.hasOwnProperty.call(hydrated, 'tokenRanges')).toBe(
+      false,
+    );
+    expect(
+      Object.prototype.hasOwnProperty.call(
+        readChatComposerDraftState('s-ca2-undef'),
+        'tokenRanges',
+      ),
+    ).toBe(false);
+  });
+
+  it('T-CA2: 空数组 []（确认无胶囊）roundtrip 保留，不退化为 undefined', async () => {
+    let stored: string | null = null;
+    const sessions = {
+      getComposerDraftJson: jest.fn(async () => stored),
+      setComposerDraftJson: jest.fn(async (_id: string, json: string | null) => {
+        stored = json;
+        return true;
+      }),
+    };
+
+    writeChatComposerDraftState(
+      's-ca2-empty',
+      {text: '手输$foo', attachments: [], tokenRanges: []},
+      sessions,
+    );
+    await new Promise(resolve => setImmediate(resolve));
+
+    const payload = JSON.parse(stored!) as Record<string, unknown>;
+    expect(payload.tokenRanges).toEqual([]);
+
+    const hydrated = await hydrateChatComposerDraftFromDb(
+      's-ca2-empty',
+      sessions,
+    );
+    expect(hydrated.tokenRanges).toEqual([]);
+  });
+
+  it('T-CA2/P0-2: applyComposerStatusAttachmentsReplace 保留 prev.tokenRanges（[] 不被投影链抹掉）', () => {
+    // 水化链 hydrate → project → apply：投影重建缓存条目时丢字段会让
+    // 「确认无胶囊」退化为 undefined，手输 `$foo` 每次水化被升格。
+    writeChatComposerDraftState('s-ca2-replace', {
+      text: '手输$foo',
+      attachments: [],
+      tokenRanges: [],
+    });
+
+    applyComposerStatusAttachmentsReplace({
+      sessionId: 's-ca2-replace',
+      attachments: [
+        {
+          name: '/w.md',
+          source: 'workplace',
+          type: 'text',
+          content: null,
+          path: '/w.md',
+        },
+      ],
+    });
+
+    expect(readChatComposerDraftState('s-ca2-replace').tokenRanges).toEqual([]);
+
+    // 有值场景同样保留（引用落文后投影刷新不发丢区间）。
+    writeChatComposerDraftState('s-ca2-replace2', {
+      text: '$技能',
+      attachments: [],
+      tokenRanges: [{start: 0, end: 3}],
+    });
+    applyComposerStatusAttachmentsReplace({
+      sessionId: 's-ca2-replace2',
+      attachments: [],
+    });
+    expect(readChatComposerDraftState('s-ca2-replace2').tokenRanges).toEqual([
+      {start: 0, end: 3},
+    ]);
+  });
+
+  it('T-CA2: 第 4 参覆盖写（undefined 明确清掉旧区间，供全屏回填 undefined 口径）', async () => {
+    writeChatComposerDraftState('s-ca2-override', {
+      text: '$技能',
+      attachments: [],
+      tokenRanges: [{start: 0, end: 3}],
+    });
+    expect(readChatComposerDraftState('s-ca2-override').tokenRanges).toEqual([
+      {start: 0, end: 3},
+    ]);
+
+    writeChatComposerDraft('s-ca2-override', '改写后的正文');
+    expect(
+      Object.prototype.hasOwnProperty.call(
+        readChatComposerDraftState('s-ca2-override'),
+        'tokenRanges',
+      ),
+    ).toBe(false);
+  });
+});
+
+
 describe('chat-composer-draft 持久化失败（infra/B-2）', () => {
   it('setComposerDraftJson reject：warn 有日志、无 unhandled rejection、内存缓存不受影响', async () => {
     const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});

@@ -37,6 +37,19 @@ jest.mock('../src/services/project-composer-status.service', () => ({
     mockProjectComposerStatus(...(args as [])),
 }));
 
+// token-ranges 探针：D1 水化优先的验收点是「持久化 ranges 生效时**不**扫描」，
+// 行为断言（[{0,3}] vs 全扫 [{0,5}]）之外再用调用探针钉一次（spec T-CA2）。
+// 只包一层计数，实现仍是 actual——remap/synthesize 行为零差分。
+jest.mock('../src/components/chat/native-composer/token-ranges', () => {
+  const actual = jest.requireActual<
+    typeof import('../src/components/chat/native-composer/token-ranges')
+  >('../src/components/chat/native-composer/token-ranges');
+  return {
+    ...actual,
+    scanTokensToRanges: jest.fn(actual.scanTokensToRanges),
+  };
+});
+
 const mockStartRun = jest.fn(
   (..._args: unknown[]) => ({ok: true}) as {ok: boolean; error?: string},
 );
@@ -58,10 +71,17 @@ import {
   clearChatComposerDraft,
   readChatComposerDraftState,
   writeChatComposerDraft,
+  writeChatComposerDraftState,
 } from '../src/storage/chat-composer-draft';
+import {
+  scanTokensToRanges,
+} from '../src/components/chat/native-composer/token-ranges';
 import {
   resetChatAnnotateDraftStoreForTests,
 } from '@novel-master/core/chat';
+
+/** 探针（模块被 jest.mock 包了一层计数，实现仍是 actual）。 */
+const mockScanTokensToRanges = jest.mocked(scanTokensToRanges);
 
 type Mutable<T> = {-readonly [K in keyof T]: T[K]};
 
@@ -553,6 +573,221 @@ describe('useChatComposerController · tokenRanges 四咽喉点', () => {
     });
     await flush();
 
+    expect(current().text).toBe('');
+    expect(current().tokenRanges).toEqual([]);
+  });
+});
+
+/**
+ * D1 草稿 tokenRanges 持久化优先（T-CA2/T-CA3/T-CA4/T-CA8 · mobile controller）。
+ *
+ * 验收路径必须走**真实水化链**（hydrateChatComposerDraftFromDb →
+ * projectComposerStatusForSession → applyComposerStatusAttachmentsReplace →
+ * syncFromDraft）：statusBar 投影重建缓存条目时丢字段的缺陷（R2 P0-2）只有
+ * 走整链才抓得到，controller spy 之间的一致性不算数。
+ */
+describe('useChatComposerController · D1 tokenRanges 持久化优先', () => {
+  /** 直接预置 DB 行（绕开 store，模拟旧版本落下的 JSON）。 */
+  function seedDbJson(sessionId: string, payload: unknown): void {
+    mockDraftDb.set(sessionId, JSON.stringify(payload));
+  }
+
+  function readDbPayload(sessionId: string): Record<string, unknown> {
+    const raw = mockDraftDb.get(sessionId);
+    if (raw == null) {
+      throw new Error(`session ${sessionId} 没有草稿 JSON`);
+    }
+    return JSON.parse(raw) as Record<string, unknown>;
+  }
+
+  it('T-CA3: 持久化 ranges 直接生效（尾追不升格），扫描探针零调用', async () => {
+    // 缓存与 DB 双侧都带 ranges（冷启动 + 已启动两种入口都不该扫描）。
+    writeChatComposerDraftState(
+      's1',
+      {
+        text: '$技能尾追',
+        attachments: [],
+        tokenRanges: [{start: 0, end: 3}],
+      },
+      mockRuntime.sessions,
+    );
+    mockScanTokensToRanges.mockClear();
+
+    await mount();
+
+    // 全扫会得到 [{0,5}]（尾追并入胶囊）；必须是持久化值 [{0,3}]。
+    expect(current().text).toBe('$技能尾追');
+    expect(current().tokenRanges).toEqual([{start: 0, end: 3}]);
+    expect(mockScanTokensToRanges).not.toHaveBeenCalled();
+  });
+
+  it('T-CA8: 水化真实链（DB → hydrate → project → apply → sync）带 ranges 生效且不回写扫描值', async () => {
+    // 只预置 DB：首帧缓存为空，水化链才是 ranges 的唯一来源。
+    seedDbJson('s1', {
+      text: '$技能尾追',
+      attachments: [],
+      tokenRanges: [{start: 0, end: 3}],
+    });
+
+    await mount();
+    await flush();
+
+    expect(current().text).toBe('$技能尾追');
+    expect(current().tokenRanges).toEqual([{start: 0, end: 3}]);
+    // 带值分支不做兜底写回，DB 保持原值（没有被投影链抹成 undefined/[]）。
+    expect(readDbPayload('s1').tokenRanges).toEqual([{start: 0, end: 3}]);
+  });
+
+  it('T-CA8/P0-2: 水化 {手输$foo, tokenRanges: []} 经投影链后仍为 []，不触发扫描升格', async () => {
+    seedDbJson('s1', {
+      text: '手输$foo',
+      attachments: [],
+      tokenRanges: [],
+    });
+
+    await mount();
+    await flush();
+
+    // `[]` = 确认无胶囊：全扫会得到 [{2,6}]，这里必须保持空。
+    expect(current().tokenRanges).toEqual([]);
+    expect(readDbPayload('s1').tokenRanges).toEqual([]);
+    expect(current().text).toBe('手输$foo');
+  });
+
+  it('T-CA3: 旧草稿 tokenRanges undefined → 兜底扫描一次并写回固化', async () => {
+    seedDbJson('s1', {text: '$技能尾追', attachments: []});
+
+    await mount();
+    await flush();
+
+    expect(current().tokenRanges).toEqual([{start: 0, end: 5}]);
+    // 写回固化：下一次水化就有值，不再进入扫描分支。
+    expect(readDbPayload('s1').tokenRanges).toEqual([{start: 0, end: 5}]);
+  });
+
+  it('T-CA3: 空草稿水化跳过写回（不产生空会话 null 写放大）', async () => {
+    await mount();
+    await flush();
+
+    expect(mockRuntime.sessions.setComposerDraftJson).not.toHaveBeenCalled();
+  });
+
+  it('T-CA3: 同文本不同 ranges 切会话 → 各自归位（不按 textChanged 短路）', async () => {
+    writeChatComposerDraftState(
+      's1',
+      {
+        text: '$技能尾追',
+        attachments: [],
+        tokenRanges: [{start: 0, end: 3}],
+      },
+      mockRuntime.sessions,
+    );
+    writeChatComposerDraftState(
+      's2',
+      {text: '$技能尾追', attachments: [], tokenRanges: []},
+      mockRuntime.sessions,
+    );
+
+    const tree = await mount();
+    expect(current().tokenRanges).toEqual([{start: 0, end: 3}]);
+
+    // 文本完全相同（textChanged=false），只有 ranges 不同：必须按内容比较更新。
+    await act(async () => {
+      tree.update(<Harness scope={{projectId: 'p1', sessionId: 's2'}} />);
+    });
+    await flush();
+
+    expect(current().text).toBe('$技能尾追');
+    expect(current().tokenRanges).toEqual([]);
+  });
+
+  it('T-CA4: 尾追打字 remap 保持区间不增长，落库 payload 带当前 ranges', async () => {
+    writeChatComposerDraftState(
+      's1',
+      {text: '$技能', attachments: [], tokenRanges: [{start: 0, end: 3}]},
+      mockRuntime.sessions,
+    );
+    await mount();
+
+    await act(async () => {
+      current().onChangeText('$技能z');
+    });
+
+    // 贴右缘尾追不并入胶囊（区间不增长），且落库带同一份区间。
+    expect(current().tokenRanges).toEqual([{start: 0, end: 3}]);
+    const payload = readDbPayload('s1');
+    expect(payload.text).toBe('$技能z');
+    expect(payload.tokenRanges).toEqual([{start: 0, end: 3}]);
+  });
+
+  it('T-CA4: 删除与胶囊相交 → 区间摘除并落库 []（不是缺字段）', async () => {
+    writeChatComposerDraftState(
+      's1',
+      {
+        text: '$技能尾追',
+        attachments: [],
+        tokenRanges: [{start: 0, end: 3}],
+      },
+      mockRuntime.sessions,
+    );
+    await mount();
+
+    // 删掉胶囊中段的「能」：区间与编辑区相交 → 整条摘除。
+    await act(async () => {
+      current().onChangeText('$技尾追');
+    });
+
+    expect(current().tokenRanges).toEqual([]);
+    const payload = readDbPayload('s1');
+    expect(payload.text).toBe('$技尾追');
+    expect(payload.tokenRanges).toEqual([]);
+    expect(
+      Object.prototype.hasOwnProperty.call(payload, 'tokenRanges'),
+    ).toBe(true);
+  });
+
+  it('T-CA4: Picker 插入落库 payload 带登记区间', async () => {
+    await mount({setComposerText: jest.fn()});
+    await act(async () => {
+      current().onChangeText('看这里');
+      current().onSelectionChange({start: 3, end: 3});
+    });
+    await act(async () => {
+      current().onSkillPickerConfirm('写作');
+    });
+
+    // '看这里 $写作 '：'$写作' 落在 [4, 7)。
+    expect(current().tokenRanges).toEqual([{start: 4, end: 7}]);
+    const payload = readDbPayload('s1');
+    expect(payload.text).toBe('看这里 $写作 ');
+    expect(payload.tokenRanges).toEqual([{start: 4, end: 7}]);
+  });
+
+  it('T-CA4: 发送清空 → DB 置 NULL（下次水化 undefined + 空文本，扫描必空）', async () => {
+    writeChatComposerDraftState(
+      's1',
+      {text: '$技能', attachments: [], tokenRanges: [{start: 0, end: 3}]},
+      mockRuntime.sessions,
+    );
+    await mount({setComposerText: jest.fn()});
+    mockStartRun.mockImplementation((...args: unknown[]) => {
+      const opts = args[3] as
+        | {
+            onUserMessageAppended?: () => void;
+            onSettled?: () => void;
+          }
+        | undefined;
+      opts?.onUserMessageAppended?.();
+      opts?.onSettled?.();
+      return {ok: true};
+    });
+
+    await act(async () => {
+      current().handleDockAction('send');
+    });
+    await flush();
+
+    expect(mockDraftDb.get('s1')).toBeNull();
     expect(current().text).toBe('');
     expect(current().tokenRanges).toEqual([]);
   });

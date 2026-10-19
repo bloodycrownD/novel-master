@@ -471,4 +471,135 @@ describe('T-FS2/T-FS3 全屏编辑链（ChatTabScreen → 面板 → NativeChatC
     // mock 输入组件的调用记录。
     expect(mockCalls.setValue).toContain('全屏改完的文本');
   });
+
+  /**
+   * 取「正文为 text」的写盘 payload（按调用顺序）。
+   *
+   * 退出回填的写盘是同步发生的（落库 mock 先于任何 await 被调用），随后的
+   * 水化兜底写回会排在后面——所以 `[0]` 就是退出回填本身的 payload，用来
+   * 断言「回填当时写了什么」，不被后续固化覆盖。
+   */
+  function writtenDraftsForText(text: string): {
+    text: string;
+    tokenRanges?: unknown;
+  }[] {
+    return (
+      mockRuntime.sessions.setComposerDraftJson.mock.calls as unknown as [
+        string,
+        string | null,
+      ][]
+    )
+      .map(([, json]) => (json == null ? null : JSON.parse(json)))
+      .filter(
+        (payload): payload is {text: string; tokenRanges?: unknown} =>
+          payload != null && payload.text === text,
+      );
+  }
+
+  it('T-CA5: 全屏退出回填按旧草稿 remap 保真写入 tokenRanges', async () => {
+    // 带确认胶囊的草稿：`$技能` 是确认胶囊（区间 [{0,3}]）。
+    mockDraftJsonBySession.set(
+      's1',
+      JSON.stringify({
+        text: '$技能',
+        attachments: [],
+        tokenRanges: [{start: 0, end: 3}],
+      }),
+    );
+    const tree = await mountConversation();
+    await flush();
+    expect(readChatComposerDraftState('s1').text).toBe('$技能');
+    expect(readChatComposerDraftState('s1').tokenRanges).toEqual([
+      {start: 0, end: 3},
+    ]);
+
+    resetMockCalls();
+    pressFullscreen(tree.root);
+    const onExit = takePromptEditorOnSaved();
+    expect(onExit).not.toBeNull();
+
+    // 全屏里在胶囊前插入两个字符：remap 语义=整体右移，区间保真（不丢、不扩）。
+    await act(async () => {
+      onExit!('前缀$技能');
+    });
+    await flush();
+
+    // 回填**当时**的 payload 就带 remap 值（不是靠后续水化兜底扫描补出来的）。
+    const written = writtenDraftsForText('前缀$技能');
+    expect(written.length).toBeGreaterThan(0);
+    expect(written[0]!.tokenRanges).toEqual([{start: 2, end: 5}]);
+
+    const payload = JSON.parse(mockDraftJsonBySession.get('s1')!) as {
+      text: string;
+      tokenRanges?: unknown;
+    };
+    expect(payload.text).toBe('前缀$技能');
+    expect(payload.tokenRanges).toEqual([{start: 2, end: 5}]);
+    expect(readChatComposerDraftState('s1').tokenRanges).toEqual([
+      {start: 2, end: 5},
+    ]);
+  });
+
+  it('T-CA5: 全屏里在胶囊后尾追 → 回填 remap 不升格（区间保持，不并入尾追文本）', async () => {
+    mockDraftJsonBySession.set(
+      's1',
+      JSON.stringify({
+        text: '$技能',
+        attachments: [],
+        tokenRanges: [{start: 0, end: 3}],
+      }),
+    );
+    const tree = await mountConversation();
+    await flush();
+
+    resetMockCalls();
+    pressFullscreen(tree.root);
+    const onExit = takePromptEditorOnSaved();
+    expect(onExit).not.toBeNull();
+
+    // `$技能尾追`：正则全扫会给出 [{0,5}]（尾追被并入）；remap 必须保持 [{0,3}]。
+    await act(async () => {
+      onExit!('$技能尾追');
+    });
+    await flush();
+
+    const written = writtenDraftsForText('$技能尾追');
+    expect(written.length).toBeGreaterThan(0);
+    expect(written[0]!.tokenRanges).toEqual([{start: 0, end: 3}]);
+
+    expect(readChatComposerDraftState('s1').tokenRanges).toEqual([
+      {start: 0, end: 3},
+    ]);
+    expect(
+      (JSON.parse(mockDraftJsonBySession.get('s1')!) as {tokenRanges?: unknown})
+        .tokenRanges,
+    ).toEqual([{start: 0, end: 3}]);
+  });
+
+  it('T-CA8: 旧草稿无 tokenRanges → 回填 payload 无该字段（undefined 而非 []）', async () => {
+    // 空草稿（无缓存、无 DB 行）→ 旧语义的「无 ranges」。
+    const tree = await mountConversation();
+    pressFullscreen(tree.root);
+    const onExit = takePromptEditorOnSaved();
+    expect(onExit).not.toBeNull();
+
+    await act(async () => {
+      onExit!('$技能');
+    });
+
+    // 退出回填本身不预处理：payload 无 tokenRanges 自有键。
+    const writes = writtenDraftsForText('$技能');
+    expect(writes.length).toBeGreaterThan(0);
+    expect('tokenRanges' in writes[0]!).toBe(false);
+
+    // 回填不预处理：水化链随后兜底扫描一次并写回固化（旧草稿语义）。
+    await flush();
+    expect(readChatComposerDraftState('s1').tokenRanges).toEqual([
+      {start: 0, end: 3},
+    ]);
+    expect(
+      (JSON.parse(mockDraftJsonBySession.get('s1')!) as {tokenRanges?: unknown})
+        .tokenRanges,
+    ).toEqual([{start: 0, end: 3}]);
+  });
 });
