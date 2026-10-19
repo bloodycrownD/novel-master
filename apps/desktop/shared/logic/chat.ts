@@ -19,6 +19,7 @@ export type {
   BuildAnnotatedSourceMode,
   BuildAnnotatedSourceResult,
   ChatMessage,
+  ComposerDraftTokenRange,
   ComposerSendIntent,
   ComposerSendIntentAttachment,
   ComposerSendIntentInput,
