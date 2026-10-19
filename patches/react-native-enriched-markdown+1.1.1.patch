@@ -75,7 +75,7 @@ index 512f5fc..89b4c31 100644
      view: EnrichedMarkdownTextInputView?,
      indicator: String?,
 diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/EnrichedMarkdownTextInputView.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/EnrichedMarkdownTextInputView.kt
-index 561cf66..344a5ef 100644
+index 561cf66..a261f4e 100644
 --- a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/EnrichedMarkdownTextInputView.kt
 +++ b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/EnrichedMarkdownTextInputView.kt
 @@ -13,6 +13,7 @@ import android.util.TypedValue
@@ -543,14 +543,16 @@ index 561cf66..344a5ef 100644
    fun dismissActiveMention() {
      mentionCoordinator.clear(emit = false)
    }
-@@ -981,10 +1328,15 @@ class EnrichedMarkdownTextInputView(
+@@ -981,10 +1328,17 @@ class EnrichedMarkdownTextInputView(
  
    fun setValueFromJS(markdown: String) {
      val parsed = InputParser.parseToPlainTextAndRanges(markdown)
 +    // D4 水化映射（本仓 fork）：JS 合成的 `[$技能](nmskill://技能)` /
-+    // `[@路径](nmtoken://路径)` 被解析成 LINK 后在此并挂 TOKEN——胶囊的
-+    // 边界冻结/选区吸附/原子删由 TOKEN 接管，LINK 不参与胶囊渲染。
-+    // 只改本函数（不碰 InputParser 本体）：pasteMarkdown 与测量链保持 LINK。
++    // `[@路径](nmtoken://路径)` 被解析成 LINK 后在此**替换**为 TOKEN——
++    // 胶囊的边界冻结/选区吸附/原子删由 TOKEN 接管。替换（而非并挂）是
++    // spec 兼容性口径：D4 后 nmskill/nmtoken 变体对胶囊不再生效，保留
++    // LINK 副本会让变体键继续生效。只改本函数（不碰 InputParser 本体）：
++    // pasteMarkdown 与测量链保持 LINK。
 +    val hydrationRanges = TokenLinkMapping.mapTokenLinks(parsed.formattingRanges)
      editSession.enter(EditPhase.Importing)
      try {
@@ -560,7 +562,7 @@ index 561cf66..344a5ef 100644
        blockStore.setRanges(parsed.blockRanges)
        setText(parsed.plainText)
        setSelection(text?.length ?: 0)
-@@ -1007,9 +1359,49 @@ class EnrichedMarkdownTextInputView(
+@@ -1007,9 +1361,49 @@ class EnrichedMarkdownTextInputView(
      if (size <= 0f) return
      val sizePx = ceil(PixelUtil.toPixelFromSP(size))
      setTextSize(TypedValue.COMPLEX_UNIT_PX, sizePx)
@@ -610,7 +612,7 @@ index 561cf66..344a5ef 100644
    fun setColorFromProps(colorInt: Int?) {
      setTextColor(colorInt ?: Color.BLACK)
    }
-@@ -1055,6 +1447,10 @@ class EnrichedMarkdownTextInputView(
+@@ -1055,6 +1449,10 @@ class EnrichedMarkdownTextInputView(
        )
      typeface = newTypeface
      paint.typeface = newTypeface
@@ -979,10 +981,10 @@ index 725533c..b2e417c 100644
            insertedLength > 0 && range.start == editLocation && inheritsReplacementAtStart(range)
 diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/formatting/TokenHydration.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/formatting/TokenHydration.kt
 new file mode 100644
-index 0000000..f535ef4
+index 0000000..6e569d2
 --- /dev/null
 +++ b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/formatting/TokenHydration.kt
-@@ -0,0 +1,77 @@
+@@ -0,0 +1,79 @@
 +package com.swmansion.enriched.markdown.input.formatting
 +
 +import com.swmansion.enriched.markdown.input.model.FormattingRange
@@ -1000,13 +1002,15 @@ index 0000000..f535ef4
 +  private const val TOKEN_SCHEME = "nmtoken://"
 +
 +  /**
-+   * 把水化 markdown 解析出的胶囊链接映射为 TOKEN（url 置 null）。
++   * 把水化 markdown 解析出的胶囊链接**替换**为 TOKEN（url 置 null）。
 +   *
-+   * 为什么是「并挂」而不是「替换 LINK」：JS 合成的 `[$技能](nmskill://技能)`
-+   * 先被 `InputParser` 解析成 LINK（解析器不认识胶囊概念），这里再贴一层
-+   * TOKEN——TOKEN 接管 D2 的边界冻结/选区吸附/原子删语义；LINK 侧不参与
-+   * 渲染（span 类型不同），序列化由 `MarkdownSerializer` 的 TOKEN 空分隔符
-+   * 输出明文，与 LINK displayText 一致，发送语义零影响。
++   * 为什么是「替换 LINK」而不是「并挂」：spec D4 兼容性口径——D4 后
++   * `^nmskill:`/`^nmtoken:` 两个变体对胶囊**不再生效**（胶囊样式由
++   * `TokenStyleHandler` 承担）；若同区间保留 LINK 副本，变体键会继续生效，
++   * 与该口径矛盾。JS 合成的 `[$技能](nmskill://技能)` 先被 `InputParser`
++   * 解析成 LINK（解析器不认识胶囊概念），这里整条换成 TOKEN——TOKEN 接管
++   * D2 的边界冻结/选区吸附/原子删语义；序列化由 `MarkdownSerializer` 的
++   * TOKEN 空分隔符输出明文，与 LINK displayText 一致，发送语义零影响。
 +   *
 +   * 不改 `InputParser.parseToPlainTextAndRanges` 本体：它的另两个调用点
 +   * （`pasteMarkdown` / `InputMeasurementStore`）必须保持 LINK 语义——粘贴

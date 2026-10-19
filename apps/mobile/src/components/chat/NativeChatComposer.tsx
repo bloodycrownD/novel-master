@@ -302,9 +302,10 @@ export const NativeChatComposer = forwardRef<
      *
      * 确认制（2026-10-07 真机轮）：ranges 由调用方给出（打字=本地重映射、
      * prop 收敛=controller 真源）；null 时回落正则全扫（旧行为）。库端
-     * `setTokenRanges` 先清后加，天然幂等。TODO(IME)：中文组合态下也照发——
-     * 组合期间的区间会落在拼音串上、提交后回摆，风险面是组合中胶囊闪动/错位；
-     * 「组合中挂起、提交后重扫」的收紧策略等真机 QA 观察后再做。
+     * `setTokenRanges` 内容相同即早退（D4 幂等）。TODO(IME · D5)：中文
+     * 组合态下也照发——组合期间的区间会落在拼音串上、提交后回摆，风险面是
+     * 组合中胶囊闪动/错位；「组合中挂起、提交后重扫」的收紧策略见 spec D5
+     * （P2，Step 6/7 按触发条件延后），真机 QA 观察后再做。
      */
     const dispatchTokenRanges = useCallback(
       (plain: string, ranges?: readonly TokenRange[] | null) => {
