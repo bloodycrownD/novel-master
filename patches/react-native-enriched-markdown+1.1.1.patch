@@ -75,7 +75,7 @@ index 512f5fc..89b4c31 100644
      view: EnrichedMarkdownTextInputView?,
      indicator: String?,
 diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/EnrichedMarkdownTextInputView.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/EnrichedMarkdownTextInputView.kt
-index 561cf66..1afc251 100644
+index 561cf66..344a5ef 100644
 --- a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/EnrichedMarkdownTextInputView.kt
 +++ b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/EnrichedMarkdownTextInputView.kt
 @@ -13,6 +13,7 @@ import android.util.TypedValue
@@ -95,15 +95,19 @@ index 561cf66..1afc251 100644
  import com.swmansion.enriched.markdown.input.autolink.AutoLinkDetector
  import com.swmansion.enriched.markdown.input.autolink.LinkRegexConfig
  import com.swmansion.enriched.markdown.input.detection.DetectorPipeline
-@@ -47,6 +50,7 @@ import com.swmansion.enriched.markdown.input.formatting.InputFormatter
+@@ -45,8 +48,11 @@ import com.swmansion.enriched.markdown.input.formatting.BlockStore
+ import com.swmansion.enriched.markdown.input.formatting.FormattingStore
+ import com.swmansion.enriched.markdown.input.formatting.InputFormatter
  import com.swmansion.enriched.markdown.input.formatting.InputParser
++import com.swmansion.enriched.markdown.input.formatting.TokenLinkMapping
++import com.swmansion.enriched.markdown.input.formatting.TokenRangeSync
  import com.swmansion.enriched.markdown.input.layout.InputEventEmitter
  import com.swmansion.enriched.markdown.input.layout.InputLayoutManager
 +import com.swmansion.enriched.markdown.input.layout.lineSpacingAddFrom
  import com.swmansion.enriched.markdown.input.model.BlockRange
  import com.swmansion.enriched.markdown.input.model.BlockType
  import com.swmansion.enriched.markdown.input.model.FormattingRange
-@@ -72,6 +76,19 @@ class EnrichedMarkdownTextInputView(
+@@ -72,6 +78,19 @@ class EnrichedMarkdownTextInputView(
    val editSession = EditSession()
    val blockCoordinator = BlockEditCoordinator(blockStore)
  
@@ -123,7 +127,7 @@ index 561cf66..1afc251 100644
    private var lastProcessedText: String = ""
    private var preEditSelectionStart = 0
    private var preEditSelectionEnd = 0
-@@ -229,8 +246,18 @@ class EnrichedMarkdownTextInputView(
+@@ -229,8 +248,18 @@ class EnrichedMarkdownTextInputView(
        text?.replace(start, end, "\t")
        return true
      }
@@ -144,7 +148,7 @@ index 561cf66..1afc251 100644
      }
      if (handleListKey(keyCode, event)) {
        return true
-@@ -277,7 +304,82 @@ class EnrichedMarkdownTextInputView(
+@@ -277,7 +306,82 @@ class EnrichedMarkdownTextInputView(
    // See: ReactEditText in React Native core.
    override fun isLayoutRequested(): Boolean = false
  
@@ -227,7 +231,7 @@ index 561cf66..1afc251 100644
      when (ev.action) {
        MotionEvent.ACTION_DOWN -> {
          detectScrollMovement = true
-@@ -324,11 +426,18 @@ class EnrichedMarkdownTextInputView(
+@@ -324,11 +428,18 @@ class EnrichedMarkdownTextInputView(
  
    // In auto-grow mode (scrollEnabled=false) TextView's internal bringPointIntoView
    // scrolls content before Fabric has resized the view, causing a visible flicker.
@@ -247,7 +251,7 @@ index 561cf66..1afc251 100644
      super.scrollTo(x, y)
    }
  
-@@ -453,6 +562,8 @@ class EnrichedMarkdownTextInputView(
+@@ -453,6 +564,8 @@ class EnrichedMarkdownTextInputView(
     * Seeding here is the only chance to carry the style through the whole typed
     * run: the post-edit grace period above skips reseeding between keystrokes.
     * LINK is excluded — typing over a selected link replaces it, not extends it.
@@ -256,7 +260,7 @@ index 561cf66..1afc251 100644
     */
    private fun seedPendingStylesFromSelection(
      selStart: Int,
-@@ -460,7 +571,7 @@ class EnrichedMarkdownTextInputView(
+@@ -460,7 +573,7 @@ class EnrichedMarkdownTextInputView(
    ) {
      if (selStart == selEnd) return
      for (style in StyleType.entries) {
@@ -265,7 +269,7 @@ index 561cf66..1afc251 100644
        if (formattingStore.isStyleActive(style, selStart)) {
          pendingStyles.add(style)
        }
-@@ -729,6 +840,14 @@ class EnrichedMarkdownTextInputView(
+@@ -729,6 +842,14 @@ class EnrichedMarkdownTextInputView(
    // and block ranges survive the round trip — mirrors iOS's copy:/cut:/paste:
    // overrides. External clips keep default handling.
    override fun onTextContextMenuItem(id: Int): Boolean {
@@ -280,7 +284,7 @@ index 561cf66..1afc251 100644
      if (id == android.R.id.paste) {
        MarkdownClipboard.markdownFromClipboard(context)?.let { markdown ->
          pasteMarkdown(markdown)
-@@ -930,19 +1049,218 @@ class EnrichedMarkdownTextInputView(
+@@ -930,19 +1051,218 @@ class EnrichedMarkdownTextInputView(
      applyFormattingAndEmit()
    }
  
@@ -505,7 +509,7 @@ index 561cf66..1afc251 100644
    }
  
    fun setMentionIndicators(indicators: List<String>) {
-@@ -950,6 +1268,26 @@ class EnrichedMarkdownTextInputView(
+@@ -950,6 +1270,33 @@ class EnrichedMarkdownTextInputView(
      dispatchMentionUpdate()
    }
  
@@ -517,13 +521,20 @@ index 561cf66..1afc251 100644
 +   */
 +  fun setTokenRanges(ranges: List<Pair<Int, Int>>) {
 +    val editable = text ?: return
++    // 越界/翻转/零长度一律丢弃（与 JS 合成守卫、core schema 的 start < end 同口径）。
++    val next = TokenRangeSync.sanitize(ranges, editable.length)
++    // D4 幂等（本仓 fork）：内容与现有 TOKEN 相同则直接早退——逐键下发时区间
++    // 大多不变，重复 removeType + addRange + applyFormatting 会把 span 全删重加，
++    // 打字这条最热路径上白付一次全量重格式化。水化路径同理：setValueFromJS 已
++    // 按同一批区间建立 TOKEN，紧随其后的首帧下发在这里短路。
++    if (TokenRangeSync.sameAsTokenRanges(formattingStore.allRanges, next)) {
++      return
++    }
 +    // 先清除所有 TOKEN 类型的 ranges
 +    formattingStore.removeType(StyleType.TOKEN, 0, editable.length)
 +    // 添加新的 TOKEN ranges：逐条 allowMerge = false（D2）——相邻胶囊不得融合成一颗。
-+    for ((start, end) in ranges) {
-+      if (start in 0..end && end <= editable.length) {
-+        formattingStore.addRange(FormattingRange(StyleType.TOKEN, start, end), allowMerge = false)
-+      }
++    for ((start, end) in next) {
++      formattingStore.addRange(FormattingRange(StyleType.TOKEN, start, end), allowMerge = false)
 +    }
 +    // 重绘
 +    applyFormatting()
@@ -532,7 +543,24 @@ index 561cf66..1afc251 100644
    fun dismissActiveMention() {
      mentionCoordinator.clear(emit = false)
    }
-@@ -1007,9 +1345,49 @@ class EnrichedMarkdownTextInputView(
+@@ -981,10 +1328,15 @@ class EnrichedMarkdownTextInputView(
+ 
+   fun setValueFromJS(markdown: String) {
+     val parsed = InputParser.parseToPlainTextAndRanges(markdown)
++    // D4 水化映射（本仓 fork）：JS 合成的 `[$技能](nmskill://技能)` /
++    // `[@路径](nmtoken://路径)` 被解析成 LINK 后在此并挂 TOKEN——胶囊的
++    // 边界冻结/选区吸附/原子删由 TOKEN 接管，LINK 不参与胶囊渲染。
++    // 只改本函数（不碰 InputParser 本体）：pasteMarkdown 与测量链保持 LINK。
++    val hydrationRanges = TokenLinkMapping.mapTokenLinks(parsed.formattingRanges)
+     editSession.enter(EditPhase.Importing)
+     try {
+       formattingStore.clearAll()
+-      formattingStore.setRanges(parsed.formattingRanges)
++      formattingStore.setRanges(hydrationRanges)
+       blockStore.setRanges(parsed.blockRanges)
+       setText(parsed.plainText)
+       setSelection(text?.length ?: 0)
+@@ -1007,9 +1359,49 @@ class EnrichedMarkdownTextInputView(
      if (size <= 0f) return
      val sizePx = ceil(PixelUtil.toPixelFromSP(size))
      setTextSize(TypedValue.COMPLEX_UNIT_PX, sizePx)
@@ -582,7 +610,7 @@ index 561cf66..1afc251 100644
    fun setColorFromProps(colorInt: Int?) {
      setTextColor(colorInt ?: Color.BLACK)
    }
-@@ -1055,6 +1433,10 @@ class EnrichedMarkdownTextInputView(
+@@ -1055,6 +1447,10 @@ class EnrichedMarkdownTextInputView(
        )
      typeface = newTypeface
      paint.typeface = newTypeface
@@ -949,6 +977,89 @@ index 725533c..b2e417c 100644
        if (deletedLength > 0) {
          val inheritsReplacement =
            insertedLength > 0 && range.start == editLocation && inheritsReplacementAtStart(range)
+diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/formatting/TokenHydration.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/formatting/TokenHydration.kt
+new file mode 100644
+index 0000000..f535ef4
+--- /dev/null
++++ b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/formatting/TokenHydration.kt
+@@ -0,0 +1,77 @@
++package com.swmansion.enriched.markdown.input.formatting
++
++import com.swmansion.enriched.markdown.input.model.FormattingRange
++import com.swmansion.enriched.markdown.input.model.StyleType
++
++/**
++ * D4（本仓 fork，composer-capsule-atomic-2026-10）：水化链路的纯函数层。
++ *
++ * 放在 FormattingStore 同目录、不依赖 View：KT-CA3 在 JVM 单测里直接锁矩阵
++ * （单颗/多颗/普通链接保持/顺序不变/越界丢弃），无需 Robolectric。
++ */
++internal object TokenLinkMapping {
++  /** 胶囊专用 destination scheme（与 JS `token-ranges.ts` 的 NM_*_SCHEME 同值）。 */
++  private const val SKILL_SCHEME = "nmskill://"
++  private const val TOKEN_SCHEME = "nmtoken://"
++
++  /**
++   * 把水化 markdown 解析出的胶囊链接映射为 TOKEN（url 置 null）。
++   *
++   * 为什么是「并挂」而不是「替换 LINK」：JS 合成的 `[$技能](nmskill://技能)`
++   * 先被 `InputParser` 解析成 LINK（解析器不认识胶囊概念），这里再贴一层
++   * TOKEN——TOKEN 接管 D2 的边界冻结/选区吸附/原子删语义；LINK 侧不参与
++   * 渲染（span 类型不同），序列化由 `MarkdownSerializer` 的 TOKEN 空分隔符
++   * 输出明文，与 LINK displayText 一致，发送语义零影响。
++   *
++   * 不改 `InputParser.parseToPlainTextAndRanges` 本体：它的另两个调用点
++   * （`pasteMarkdown` / `InputMeasurementStore`）必须保持 LINK 语义——粘贴
++   * 进来的手输 markdown 链接不是确认胶囊。
++   */
++  fun mapTokenLinks(ranges: List<FormattingRange>): List<FormattingRange> = ranges.map { range ->
++    val url = range.url
++    if (range.type == StyleType.LINK && url != null && isTokenUrl(url)) {
++      FormattingRange(StyleType.TOKEN, range.start, range.end, null)
++    } else {
++      range
++    }
++  }
++
++  private fun isTokenUrl(url: String): Boolean = url.startsWith(SKILL_SCHEME) || url.startsWith(TOKEN_SCHEME)
++}
++
++/**
++ * `setTokenRanges` 的下发域纯函数：越界区间丢弃 + 幂等内容判定。
++ */
++internal object TokenRangeSync {
++  /**
++   * 剔除非法区间并按 start 升序（与 FormattingStore 的存储序一致）。
++   *
++   * 非法 = 负 start / 翻转（end < start）/ 零长度（start == end）/ 越界
++   * （end > textLength）。零长度与 core schema 的 `start < end` refine、
++   * native `RangeEditAdjustment` 的零长度剔除同口径——两侧都不接受空胶囊。
++   */
++  fun sanitize(
++    ranges: List<Pair<Int, Int>>,
++    textLength: Int,
++  ): List<Pair<Int, Int>> =
++    ranges
++      .filter { (start, end) -> start >= 0 && start < end && end <= textLength }
++      .sortedBy { it.first }
++
++  /**
++   * 待下发区间与 store 现有 TOKEN 内容相同？相同则调用方跳过
++   * removeType + addRange + applyFormatting（逐键下发时区间大多不变，
++   * 重复重绘会让 span 全删重加，打字热路径上白付一次全量重格式化）。
++   */
++  fun sameAsTokenRanges(
++    current: List<FormattingRange>,
++    next: List<Pair<Int, Int>>,
++  ): Boolean {
++    val tokens = current.filter { it.type == StyleType.TOKEN }
++    if (tokens.size != next.size) return false
++    return tokens.withIndex().all { (index, range) ->
++      val (start, end) = next[index]
++      range.start == start && range.end == end
++    }
++  }
++}
 diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/layout/InputLayoutManager.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/layout/InputLayoutManager.kt
 index 4e96cb7..b149d26 100644
 --- a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/layout/InputLayoutManager.kt
@@ -1848,6 +1959,173 @@ index 0000000..2e08400
 +    assertEquals(1, ranges.size)
 +    assertEquals(5, ranges[0].start)
 +    assertEquals(10, ranges[0].end)
++  }
++}
+diff --git a/node_modules/react-native-enriched-markdown/android/src/test/java/com/swmansion/enriched/markdown/TokenLinkMappingTest.kt b/node_modules/react-native-enriched-markdown/android/src/test/java/com/swmansion/enriched/markdown/TokenLinkMappingTest.kt
+new file mode 100644
+index 0000000..c4f2742
+--- /dev/null
++++ b/node_modules/react-native-enriched-markdown/android/src/test/java/com/swmansion/enriched/markdown/TokenLinkMappingTest.kt
+@@ -0,0 +1,161 @@
++package com.swmansion.enriched.markdown
++
++import com.swmansion.enriched.markdown.input.formatting.TokenLinkMapping
++import com.swmansion.enriched.markdown.input.formatting.TokenRangeSync
++import com.swmansion.enriched.markdown.input.model.FormattingRange
++import com.swmansion.enriched.markdown.input.model.StyleType
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertFalse
++import org.junit.Assert.assertNull
++import org.junit.Assert.assertSame
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++/**
++ * KT-CA3（D4，本仓 fork）：`setValueFromJS` 水化映射的纯函数矩阵——
++ * `nmskill://` / `nmtoken://` 链接 → TOKEN（url 置 null）、普通链接保持 LINK、
++ * 多颗顺序不变；外加 `setTokenRanges` 下发域的越界丢弃与幂等判定。
++ */
++class TokenLinkMappingTest {
++  private fun link(
++    start: Int,
++    end: Int,
++    url: String?,
++  ): FormattingRange = FormattingRange(StyleType.LINK, start, end, url)
++
++  private fun token(
++    start: Int,
++    end: Int,
++  ): FormattingRange = FormattingRange(StyleType.TOKEN, start, end)
++
++  // ---- LINK → TOKEN 映射 ----
++
++  @Test
++  fun skillLinkMapsToTokenWithNullUrl() {
++    val mapped = TokenLinkMapping.mapTokenLinks(listOf(link(0, 3, "nmskill://写作")))
++
++    assertEquals(1, mapped.size)
++    val range = mapped.single()
++    assertEquals(StyleType.TOKEN, range.type)
++    assertEquals(0, range.start)
++    assertEquals(3, range.end)
++    assertNull("映射成 TOKEN 后 url 必须置 null（不进 LINK 渲染/序列化）", range.url)
++  }
++
++  @Test
++  fun atPathTokenLinkMapsToToken() {
++    val mapped = TokenLinkMapping.mapTokenLinks(listOf(link(5, 15, "nmtoken://docs/a.md")))
++
++    val range = mapped.single()
++    assertEquals(StyleType.TOKEN, range.type)
++    assertEquals(5, range.start)
++    assertEquals(15, range.end)
++    assertNull(range.url)
++  }
++
++  @Test
++  fun ordinaryLinkStaysLinkWithUrl() {
++    val original = link(0, 5, "https://example.com")
++    val mapped = TokenLinkMapping.mapTokenLinks(listOf(original))
++
++    assertEquals(1, mapped.size)
++    assertSame("普通链接原样返回（不复制、不改类型）", original, mapped.single())
++    assertEquals(StyleType.LINK, mapped.single().type)
++    assertEquals("https://example.com", mapped.single().url)
++  }
++
++  @Test
++  fun linkWithoutUrlStaysLink() {
++    val original = link(0, 5, null)
++    val mapped = TokenLinkMapping.mapTokenLinks(listOf(original))
++
++    assertSame(original, mapped.single())
++  }
++
++  @Test
++  fun multipleCapsulesAndLinksKeepOrder() {
++    val bold = FormattingRange(StyleType.BOLD, 20, 22)
++    val input =
++      listOf(
++        link(0, 3, "nmskill://写作"),
++        link(4, 8, "https://example.com"),
++        bold,
++        link(9, 17, "nmtoken://a/b.md"),
++      )
++
++    val mapped = TokenLinkMapping.mapTokenLinks(input)
++
++    assertEquals("顺序与数量不变", 4, mapped.size)
++    assertEquals(StyleType.TOKEN, mapped[0].type)
++    assertEquals(StyleType.LINK, mapped[1].type)
++    assertEquals("https://example.com", mapped[1].url)
++    assertEquals(StyleType.BOLD, mapped[2].type)
++    assertEquals(StyleType.TOKEN, mapped[3].type)
++    assertEquals(9, mapped[3].start)
++    assertEquals(17, mapped[3].end)
++  }
++
++  @Test
++  fun textWithoutTokensMapsToEmptyList() {
++    assertTrue(TokenLinkMapping.mapTokenLinks(emptyList()).isEmpty())
++  }
++
++  @Test
++  fun onlyPlainTextHasNoRanges() {
++    // parse 后的纯文本没有 formatting ranges；映射层对空输入是恒等。
++    val plainRanges = emptyList<FormattingRange>()
++    assertEquals(plainRanges, TokenLinkMapping.mapTokenLinks(plainRanges))
++  }
++
++  // ---- setTokenRanges 下发域：越界丢弃 + 幂等判定 ----
++
++  @Test
++  fun sanitizeDropsOutOfBoundsAndDegenerateRanges() {
++    val sanitized =
++      TokenRangeSync.sanitize(
++        listOf(
++          0 to 3,
++          10 to 20, // end 越界（textLength = 16）
++          -1 to 2, // 负 start
++          5 to 5, // 零长度
++          7 to 4, // 翻转
++          4 to 6,
++        ),
++        16,
++      )
++
++    assertEquals(listOf(0 to 3, 4 to 6), sanitized)
++  }
++
++  @Test
++  fun sanitizeKeepsInBoundsRangesAtBoundaries() {
++    val sanitized = TokenRangeSync.sanitize(listOf(0 to 16), 16)
++
++    assertEquals(listOf(0 to 16), sanitized)
++  }
++
++  @Test
++  fun sanitizeSortsByStart() {
++    val sanitized = TokenRangeSync.sanitize(listOf(8 to 10, 0 to 2), 20)
++
++    assertEquals(listOf(0 to 2, 8 to 10), sanitized)
++  }
++
++  @Test
++  fun sameContentIsIdempotent() {
++    val store = listOf(token(0, 3), FormattingRange(StyleType.BOLD, 4, 6), token(7, 9))
++
++    assertTrue(
++      "非 TOKEN 区间不参与比较",
++      TokenRangeSync.sameAsTokenRanges(store, listOf(0 to 3, 7 to 9)),
++    )
++    assertFalse(TokenRangeSync.sameAsTokenRanges(store, listOf(0 to 3)))
++    assertFalse(TokenRangeSync.sameAsTokenRanges(store, listOf(0 to 4, 7 to 9)))
++    assertFalse(TokenRangeSync.sameAsTokenRanges(store, listOf(0 to 3, 6 to 9)))
++  }
++
++  @Test
++  fun emptyVersusEmptyIsIdempotent() {
++    assertTrue(TokenRangeSync.sameAsTokenRanges(emptyList(), emptyList()))
 +  }
 +}
 diff --git a/node_modules/react-native-enriched-markdown/lib/module/EnrichedMarkdownTextInput.js b/node_modules/react-native-enriched-markdown/lib/module/EnrichedMarkdownTextInput.js
