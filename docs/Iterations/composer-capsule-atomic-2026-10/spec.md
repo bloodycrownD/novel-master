@@ -21,7 +21,7 @@ date: 2026-10-19
    - 中文 IME 组合提交（`setComposingText` `:52-77` 整段替换语义，类注释 `:8-28`）走替换分支扩边——疑似用户真机实撞路径（`NativeChatComposer.tsx:287-295` 留有 TODO(IME)）。
 4. **哨兵字符路线否决**：U+200B 被 native `stripZwsp` 进出双向剥掉（`InputEventEmitter.kt:36-42`、`InputParser.kt:24-31`）直接打爆所有 offset；U+FFFC 污染 5+ 处 token 正则与 skill 名校验（`scan-skill-attachments.ts:22`、`skill-name.ts:17-22`、`composer-at-path.ts:52-74`、转录渲染 `RefTokenText.tsx:11-19`、desktop `ComposerAtPathInput.tsx:14`），且防不了胶囊内部编辑——只配当辅助不配当主路线。
 5. **手输语义现状**：线上恒传 `tokenRanges`（`ChatConversationPanel.tsx:243`），手打 `$xxx` 不在确认集合 → 同会话内不成胶囊（`__tests__/native-composer.test.tsx:344-351` 锁定）；发送时 core 扫描照常生效。「手输边打边成胶囊、可增长」为非目标。
-6. **e2e 真机佐证（2026-10-19，荣耀 EBG-AN00 debug 包）**：①水化吸收复现——贴胶囊右缘打 `z` 活态不吸收（胶囊右缘像素不动），force-stop 冷启水化后被正则引导吞入（右缘 +23px ≈ z 字宽）——确证第 3 条第 1 项与 D1 的必要性；②插入落文后首次退格观测为「整颗胶囊+尾空格一键全删」，与现行代码静态推演不符，根因待实现期取证（见 S10 实现注）；③点胶囊中部光标被吸附到胶囊尾（现由 LINK 语义承担）——D4 的 LINK→TOKEN 映射落地后，D2 的 selectionAdjustedForAtomicLinks 纳入 TOKEN 成为防回归必要条件（D4 依赖 D2 同批）。
+6. **e2e 真机佐证（2026-10-19，荣耀 EBG-AN00 debug 包）**：①水化吸收复现——贴胶囊右缘打 `z` 活态不吸收（胶囊右缘像素不动），force-stop 冷启水化后被正则引导吞入（右缘 +23px ≈ z 字宽）——确证第 3 条第 1 项与 D1 的必要性；②插入落文后首次退格观测为「整颗胶囊一键全删」——**已取证（2026-10-20 NMTrace 插桩）**：根因是空草稿插入无尾随空格、光标贴胶囊右缘（`setTokenRanges [(0,13)] textLen=13 sel=13`），整删即原子删除的正确表现（详见 S10）；③点胶囊中部光标被吸附到胶囊尾（现由 LINK 语义承担）——D4 的 LINK→TOKEN 映射落地后，D2 的 selectionAdjustedForAtomicLinks 纳入 TOKEN 成为防回归必要条件（D4 依赖 D2 同批）。**附发现（取证副产品）**：焦点收起再唤起键盘 + 光标置于 0 处输入单字符后，JS 侧下发 `ranges=[]`——既有胶囊区间丢失不恢复（D1 持久化优先 + D4 三跳水化的修复面实证）。
 
 ## 设计目标
 
@@ -96,7 +96,7 @@ date: 2026-10-19
   - **`deleteSurroundingTextInCodePoints`**：override 转发——code-points 偏移换算为字符偏移后走同一 helper（部分 IME 用该变体，不覆盖则绕过原子删）。
 - `deleteLinkBeforeCursor` 扩展选区删除：`cursorStart != cursorEnd` 且选区与 **TOKEN** 相交时，删除范围扩整颗（光标落区间起点）。**LINK 保持上游折叠光标语义不动**（改动面最小；现网 LINK 选区删除未观测到问题，e2e 佐证吸附由 LINK 正常承担——若未来要求 LINK 同款扩整，另立变更并过兼容性披露）。
 - **组合态信号（P1 引入，D5 复用）**：wrapper 加最小 `isComposing` 标志——`setComposingText` 非空置 true，`finishComposingText` / `commitText` / **`setComposingText` 空串**清 false（部分 IME 用空 setComposingText 结束组合，不清理则标志卡 true、原子拦截失效）；空 `commitText` 删除拦截仅 `!isComposing` 时启用（**读旧值判定、再清标志**——`commitText` 若先清后判，组合态的空 commitText 会被误当非组合态拦截，恰是本门要防的误删）。P1 若无此信号，「仅非组合态触发」无从判定（要么中文 IME 组合期误删、要么私自发明），阶段边界倒置。备选：`BaseInputConnection.getComposingSpanStart(editText.text) == -1`（无状态，但依赖平台 span 行为）。
-- **同一按键并发收敛**：华为隐藏 IME 可能一次按键同时触发两条删除路径（空 `commitText` + `deleteSurroundingText`，S10 e2e 观测疑点）。机制钉死（**batch 域内抑制**，不吞独立退格）：原子删除仅在 `isBatchEdit == true` 时置一次性标志 `suppressNextDelete`，`endBatchEdit` **无条件清**——同 batch 的后续删除入口读到标志 → 本次不删、不调 super、**也不再 dispatch Backspace**（首个入口已发过，避免 JS 收双 keyPress），标志放 view 层共享（`onKeyDown`/`sendKeyEvent` 在 view，wrapper 经 view 访问）。判据（**仅限同一物理按键多入口并发**）：最多删一颗胶囊；单个删除窗正常覆盖多颗时（词删 `n>1`、选区跨胶囊）仍按并集各自扩整颗；「无多删字符」= 不删删除窗 ∪ 相交原子区间之外的字。取证回退：若 S10 取证显示双路径不共享 batch（拆 batch），改用 clear-on-consume 变体（标志消费即清 + 抑制条件收紧为删除窗与刚删区间快照相交）。若取证证明单键只发一种信号，可简化为仅保留该信号路径。
+- **同一按键并发收敛**：华为隐藏 IME 可能一次按键同时触发两条删除路径（空 `commitText` + `deleteSurroundingText`，S10 e2e 观测疑点）。机制钉死（**batch 域内抑制**，不吞独立退格）：原子删除仅在 `isBatchEdit == true` 时置一次性标志 `suppressNextDelete`，`endBatchEdit` **无条件清**——同 batch 的后续删除入口读到标志 → 本次不删、不调 super、**也不再 dispatch Backspace**（首个入口已发过，避免 JS 收双 keyPress），标志放 view 层共享（`onKeyDown`/`sendKeyEvent` 在 view，wrapper 经 view 访问）。判据（**仅限同一物理按键多入口并发**）：最多删一颗胶囊；单个删除窗正常覆盖多颗时（词删 `n>1`、选区跨胶囊）仍按并集各自扩整颗；「无多删字符」= 不删删除窗 ∪ 相交原子区间之外的字。取证回退：若 S10 取证显示双路径不共享 batch（拆 batch），改用 clear-on-consume 变体（标志消费即清 + 抑制条件收紧为删除窗与刚删区间快照相交）。若取证证明单键只发一种信号，可简化为仅保留该信号路径。（**取证 2026-10-20 已定**：HwIME 单键不双发独立信号——「双路径」实为 sendKeyEvent 的 super 级联 onKeyDown，原子命中即 return true 短路，实测无双删；suppressNextDelete 保留为对其他 IME 的 deleteSurroundingText/空 commitText 组合的防御性兜底。）
 
 **D4 水化链路统一与 native 区间一致性（补丁内 Kotlin + JS）**
 
@@ -194,7 +194,7 @@ Kotlin 单测（**blocking**；`android/build.gradle:291-292` 已有 junit 4.13.
 - S7 中文 IME 组合态贴胶囊提交（拼音组合中光标位置/提交后归属）→ P2 门
 - S8 胶囊相邻粘贴多行文本 → 粘贴内容落胶囊外、不误转 markdown（既有粘贴链回归）
 - S9 **相邻两颗胶囊间字符删除** → 两颗各自独立不融合（D2 双处合并抑制的真机验证）
-- S10 **插入落文后立即单次退格** → 期望形态（**待取证回填，主判据见 D7**）：先删尾随空格；光标贴胶囊右缘后再退格整删。实现注：e2e（2026-10-19）观测为「整颗胶囊+尾空格一键全删」，与静态推演不符——实现期先取证（log tokenRanges 与 cursor 落位、每次 `deleteSurroundingText` 的**调用次数与 beforeLength/afterLength**；根因候选按贴合代码程度排序：①同一次按键连续两次 `deleteSurroundingText(1,0)`——第一次删尾空格（光标 14→13）、第二次 `rangeOfType(TOKEN, 12)` 命中胶囊区间整删，最贴合 e2e 观测；②空 `commitText` + `deleteSurroundingText` 双路径并发；③华为隐藏 IME 其他单键双发组合——取证结论直接决定 S10 期望形态与并发收敛机制是否需走回退变体）；若取证证实范围含尾空格或双路径并发，改口径为「一键整删含空格」并同步 D3 删除窗/并集口径与语义总表（KT-CA1 仅在涉及区间矩阵时补用例）
+- S10 **插入落文后立即单次退格** → 期望形态（**真机取证已定 2026-10-20，NMTrace 插桩**）：**空草稿插入无尾随空格、光标贴胶囊右缘 → 首次退格即整颗原子删除**；有既有文本时插入带尾空格缓冲 → 首次退格删空格、贴缘后再退格整删——两种形态均须满足主判据「一次物理退格最多删一颗胶囊且无多删字符」。取证记录（荣耀 EBG-AN00，插桩 debug 包）：① HwIME 软键盘退格走 `sendKeyEvent(DEL)` 入口，miss 时 super 级联触发 `onKeyDown`（同键双检查、单次删除）；**原子命中时 return true 短路级联，无双删**；② `adb shell input keyevent` 注入路径只走 `onKeyDown`；③ 全程未观测到 `deleteSurroundingText` / 空 `commitText` 删除路径（D3 新增入口保留为其他 IME 的覆盖）；④ 插入落文 `setTokenRanges [(0,13)] textLen=13 sel=13`——「无空格+贴边」即 B2 观测的唯一根因
 
 ## 兼容性或迁移说明
 
