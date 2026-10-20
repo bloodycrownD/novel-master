@@ -153,17 +153,21 @@ export function PromptEditorScreen() {
    * 确认区间推进（全屏版 `advanceTokenRanges`）：先按文本差分 remap 旧区间
    * （用户在编辑器里打字/删除时区间随正文走），再拼接本次插入登记的新区间。
    * 守卫读到的区间必须始终对应当前正文，否则删改后的陈旧区间会误判/漏判。
+   * `nextCursor` 是插入落文后的光标（chip 纯插入锚）：不传时差分对齐会把
+   * 「新 token 插在旧 token 头部」的公共触发符咬进旧区间，与 dock 同口径传。
    */
   const advanceConfirmedRanges = useCallback(
     (
       prevText: string,
       nextText: string,
       inserted: readonly ComposerDraftTokenRange[] = [],
+      nextCursor?: number,
     ) => {
       const remapped = remapTokenRanges(
         prevText,
         nextText,
         confirmedRangesRef.current,
+        nextCursor,
       );
       confirmedRangesRef.current =
         inserted.length > 0
@@ -186,7 +190,12 @@ export function PromptEditorScreen() {
   /** 提交 token 插入：web 一次写入 + 光标落位，本地草稿/光标/区间同步推进。 */
   const commitDraft = useCallback(
     (next: ComposerTokenInsertion) => {
-      advanceConfirmedRanges(draftRef.current, next.text, next.tokenRanges);
+      advanceConfirmedRanges(
+        draftRef.current,
+        next.text,
+        next.tokenRanges,
+        next.cursor,
+      );
       draftRef.current = next.text;
       codeEditorRef.current?.setText(next.text, {
         start: next.cursor,
