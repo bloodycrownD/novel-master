@@ -4,7 +4,7 @@ date: 2026-10-19
 
 # 输入框胶囊原子化根治（composer-capsule-atomic-2026-10）技术规格（SPEC）
 
-> 版本：r3（2026-10-19 R2 审查 No-Go + review-full 复核后 doc-fix：闭合 P0×2 / P1×1 / P2×11，见「R2 修订记录」；同日第 3/4 轮增量：P1×3 + 新增 P1-a + P2×12，见「R3 修订记录」；r2 历史：R1 审查 No-Go 后闭合 P0×2 / P1×9 / P2×7，见「R1 修订记录」）
+> 版本：r4（2026-10-21 dev-loop 真机轮后 cr-func 复检 No-Go：P1×2 / P2×1 / P3×2 fold 为 D8-D11，见「R4 修订记录」；r3 历史：2026-10-19 R2 审查 No-Go 后 doc-fix 闭合 P0×2 / P1×1 / P2×11 + 第 3/4 轮增量 P1×3 + P1-a + P2×12；r2 历史：R1 审查 No-Go 后闭合 P0×2 / P1×9 / P2×7，见「R1-R3 修订记录」）
 
 ## 需求来源
 
@@ -28,7 +28,7 @@ date: 2026-10-19
 1. **边界冻结**：胶囊生成后 `[start,end)` 不可因任何编辑增长/被部分改写；尾追/贴边输入落在胶囊外。
 2. **原子删除覆盖完整**：折叠光标退格（既有）、选区删除、前向删除全部整颗删除。
 3. **确认态持久化**：草稿 JSON 记录 `tokenRanges`，水化直接使用；正则全扫从水化链路退役（仅无字段的旧草稿与明确允许的带外写入兜底）。
-4. **发送管线零改动**：胶囊明文形态不变，core 扫描（`scanAtPathAttachments` / `scanSkillAttachments` / `composer-send-intent`，发送链挂点 `run-agent-turn.ts:663-667`、append `:724-731`）不动。
+4. **发送管线最小改动**：core 扫描正则（`scanAtPathAttachments` / `scanSkillAttachments` / `composer-send-intent`，发送链挂点 `run-agent-turn.ts:663-667`、append `:724-731`）**不动**；chip 模型（D8）后明文出现贴邻 token（`$A$B`）全量扫描不认——发送挂点前加**区间感知扫描**（D9）以 `tokenRanges` 为权威补挂，全量扫描保留给手输 token，两路去重合并。
 5. **手输语义显式化**：手输 `$xxx`/`@xxx` 保持纯文本不成胶囊，行为与现状一致。
 
 ## 非目标
@@ -37,7 +37,7 @@ date: 2026-10-19
 - 不做哨兵字符（调查结论第 4 条否决）。
 - iOS 不在范围（本仓只出 Android，补丁仅 Android 侧；iOS input 无 TOKEN 概念）。
 - 宏链 `ComposerInputWebView` / composer-input 包不动（独立链路）。
-- 全屏 CodeMirror 编辑器（`PromptEditorScreen`）与旧 webview composer 的胶囊高亮行为不改（独立正则高亮体系，共享 `COMPOSER_TOKEN_RE`；其「尾追并入高亮」行为作为已知限制披露，见兼容性节）。
+- 全屏 CodeMirror 编辑器（`PromptEditorScreen`）与旧 webview composer 的胶囊**高亮体系**不改（独立正则高亮，共享 `COMPOSER_TOKEN_RE`；「尾追并入高亮」作为已知限制披露，见兼容性节）；但全屏的**插入落文形态**与 dock 共用 `buildTokenInsertion`，随 D8 chip 口径一并零空格化（D10 统一口径，断言同步）。
 - IME 组合态的选区规范化（InputConnectionWrapper pre-super 的**非删除语义**拦截）为 P2 阶段（D5）；D3 的空 `commitText` **删除**拦截属 P1（`isComposing` 门控，仅非组合态）；P1 的 native 区间策略只调区间不改文本，不与组合态抢编辑权。
 
 ## 总体方案
@@ -120,23 +120,47 @@ date: 2026-10-19
 **D7 阶段划分与验收门**
 - **P1（本迭代主体）**：D1 + D2 + D3 + D4 + JS 测试 + Kotlin 单测 + 真机场景验收（S1-S6、S8-**S10**；S10 主判据「**一次物理退格最多删一颗胶囊且无多删字符**」，期望形态按取证回填）；D6 desktop 透传非阻塞（Step 4 可延后到迭代末，不 gate P1 移动端验收）。
 - **P2（第二阶段）**：D5 IME 深水区 + 真机 S7 专项。**若 P1 真机验收（S1）复现 IME 尾追并入且 P1 未能闭合该路径，P2 升级为 blocking**（调查结论第 3 条：中文 IME 疑似用户实撞路径）。
+- **R2 一致性批（Step 8，blocking）**：D8 已落事实入档 + D9 + D10 + D11 + T-CA9/10/11 + S11 真机抽样。
+
+**D8 chip 插入口径（已落；2026-10-20 用户真机轮拍板）**
+- 口径：胶囊是 chip 对象——**插入不产生任何分隔空格**（`buildTokenInsertion` 的 gapBefore/gapAfter/多 token join 空格全删，`composer-token-insert.ts`）；明文 `$A$B` 贴邻、token 由触发符切分，用户想加空格自行输入。**视觉分隔由胶囊自身承担**：原生 `TokenBackgroundSpan`（继承 open 化的 `RoundedBackgroundSpan`，`gapHorizontal=10f`/侧 → 相邻两颗 20px 缝）+ 矩形严格夹回 getSize 预留框（修旧版左右各溢出 padding 的互相叠压）。
+- 实现记录（已落 commit，真机验证过）：`154b98976` remap 纯插入光标锚；`f0c808527` `findActiveAtQuery` 确认胶囊查询守卫（插 A 后光标贴尾不再把 A 整颗误当活动查询替换——「连插互替换」真因）；`4e5240bb4` 盒内 gap 几何；`06b00ba8a` chip 零空格 + TokenBackgroundSpan。
+- 根因记录（NMTrace 真机取证）：`InputFormatter` 的 span 重挂按**span 类名**反查 handler，`RoundedBackgroundSpan` 同时注册于 Link/Token 两 handler——`firstOrNull` 撞 `LinkStyleHandler` 用 link 基础样式重造出 gap=0 实例，且描述符按类名相等导致旧 LINK pill 跨型复用——TOKEN 胶囊（含 gap）从未真正挂上，相邻胶囊视觉熔合成一条。子类让类名唯一命中 `TokenStyleHandler`，反查与 diff 复用均不再跨型。
+- r3 中与 chip 口径冲突的描述（插入补尾空格/分隔空格等）以本节为准；本决策推翻 r3「发送管线零改动」前提 → D9 闭环。
+
+**D9 发送链区间感知（CR-R2-01，P1，Step 8）**
+- 缺陷（实测复现）：core `SKILL_TOKEN_RE = /(?<!\S)\$…/`（`scan-skill-attachments.ts:22`）要求 `$` 前空白/行首——`$A$B` 全量扫描只挂第一颗、`看这里$写作`（chip 插入贴文本）一颗不挂；`scan-at-path-attachments.ts:32` 的 `@([^\s@]+)` 未把 `$` 当终止符——`@路径$技能` 路径被污染成不存在路径。恰为本批测试锁定的形态。
+- 设计：发送挂点（`run-agent-turn.ts:663-667`）前以 `tokenRanges` 为权威做**逐区间扫描**——每个确认区间 slice 出区间文本后单独扫描（区间内触发符在 index 0，天然满足 `(?<!\S)` 边界），结果与全量文本扫描合并去重（按 path/name，区间结果优先）；core 正则**不改**——全量扫描保留给手输 token 与无字段兼容路径；手打贴字 `$`（无空格）维持历史不识别口径。
+- 透传：`SessionStreamStartOptions` 补 attachments 字段（`session-stream-unit-manager.service.ts:224` 透传）；`run-agent-turn.ts:551` 附件只放行 `source === 'attach'`，区间结果按该 source 接入正好兼容。
+- 验收：连插两颗 `$A$B` 发送 → 两颗技能均挂载；`@docs/a.md$技能` 发送 → 路径附件不污染、技能正常挂；无区间草稿发送行为与现状逐字节一致（回归锁）。
+
+**D10 全屏统一 chip 口径 + 注释同步（CR-R2-02 P1 + CR-R2-04 P3，Step 8）**
+- 决策：`buildTokenInsertion` 为 dock/全屏共用件，**统一 chip 零空格口径**（不加分隔符参数）——单一口径、无参数分叉，全屏与 dock 编辑同一草稿行为一致。
+- 断言同步：`prompt-editor-screen.test.tsx:594-599 / :660-666 / :694-697` 三断言改零空格期望（含光标值 15/7/3）。
+- 注释同步清单：`PromptEditorScreen.tsx:152`；`composer-token-insert.ts` 头注释（`:3`「补前后空格」、`:16`「以空格连接」残留）；patch 内 `RoundedBackgroundSpan` KDoc（getSize 公式补 gap 项）；`useChatComposerController.ts:694-699` 旧 JSDoc 与 `queryWithinConfirmedRange`(`:708`)/`insertTokensIntoComposer`(`:712`) 错挂归位。
+
+**D11 remap 删除锚（CR-R2-03，P2，Step 8）**
+- 缺陷（实测复现）：相邻胶囊删左颗（`$A$B` 退格原子删 A → `$B`），JS remap 差分对齐把删除点猜进幸存 B 内部 → 保守摘除把 B 的区间一并抹掉（`remapTokenRanges('$A$B','$B',[{0,2},{2,4}]) → []`，应 `[{0,2}]`）；native D2 平移幸存正确，JS 把样式与持久化一起抹掉。chip 贴邻成默认态后此路径高频。
+- 设计：与 D8 光标锚同构的**删除锚**——`remapTokenRanges` 增编辑前光标（prevCursor）参数；`delta < 0` 时删除段 `D = [min(prevCursor, nextCursor), max(prevCursor, nextCursor))`（编辑前后光标差区间，天然覆盖原生原子删除的整颗区间）；区间与 D **有公共字符**（`r.start < D.end && D.start < r.end`，端点相触不算）→ 摘除（被删胶囊），否则按 delta 平移（幸存）。原子删 A：prevCursor=2（A 右缘）→ D=[0,2)=A → 摘 A、B 平移至 [0,2) ✓；删 A 右侧普通字符 x（`$Ax` 退格删 x）：D=[2,3) 与 A 无公共字符 → A 不动 ✓——无需退格/前删方向信号，统一语义。
+- 接线：`NativeChatComposer` 打字路径把编辑前 selection 下沉传入（onSelectionChange 已维护的 selectionRef）；无光标/守卫失败 → 回退现状保守口径（只增强不回退）。
+- 回归：相邻删左颗幸存保留；删普通尾字符不摘相邻区间；无光标维持现状锁定。
 
 ### 范围内胶囊语义总表
 
 | 场景 | 行为 |
 |------|------|
-| Picker/引用落文插入 | 确认胶囊，登记持久化区间 |
+| Picker/引用落文插入 | 确认胶囊，登记持久化区间；**零分隔空格直插**（chip，D8） |
 | 胶囊后直接尾追（中/英/粘贴） | 新内容落胶囊外，区间不变 |
 | 胶囊内部点击/方向键 | 光标吸附到胶囊 end |
 | 选区跨胶囊删除 | 整颗删除（D3，P1） |
 | 选区跨胶囊输入/组合态替换 | 整颗删除 + 输入纯文本落文（**依赖 D5，P2**；P1 阶段手动整选输入经选区吸附正常，组合态未闭合前为已知限制） |
 | 退格贴胶囊 / 前向删除 / 空 commitText 退格 / 词删相交 | 整颗删除（D3，P1） |
-| 相邻两颗胶囊间字符被删 | 不融合（各自独立，D2 双处合并抑制） |
+| 相邻两颗胶囊间字符被删 | 不融合（各自独立，D2 双处合并抑制）；删掉其中一颗 → 幸存胶囊区间平移保留（D11 删除锚） |
 | 切会话/重启水化 | 持久化区间直接恢复，不重扫 |
 | 旧版本草稿（无 tokenRanges 字段）/ undo_send 恢复 | 扫描兜底一次，写回固化（已知限制） |
 | 全屏编辑退出回填 | remap 保真写入（D1 带外路径） |
 | 手输 `$xxx` | 纯文本不成胶囊（现状） |
-| 发送 | 明文照旧，core 扫描不动 |
+| 发送 | 明文贴邻（chip，D8），core 正则不动；发送挂点区间感知补挂（D9） |
 
 ## 变更点清单
 
@@ -152,6 +176,9 @@ date: 2026-10-19
 | 8 | `apps/desktop/renderer/features/chat/ConversationPanel.tsx` | 水化 {text, ranges} ref；写回仅未编辑时透传（D6） |
 | 9 | `patches/react-native-enriched-markdown+1.1.1.patch`（包内 Kotlin） | D2 五处特判 + protected 分支表（isProtected 入参）+ addRange 无合并 + D3 七入口 + 组合态 `isComposing` + 同键并发收敛 + D4 setValueFromJS 映射（补丁重生成 `npx patch-package react-native-enriched-markdown`，**重生成后 grep 补丁文本必含 RangeEditAdjustmentTest / FormattingStoreTest 等测试类名**，否则 clean install 后测试静默消失） |
 | 10 | `apps/mobile/__tests__/` + core schema 测试 + 包内 Kotlin 测试 | 见测试策略 |
+| 11 | 发送链：`run-agent-turn.ts` 扫描挂点 + `SessionStreamStartOptions`/`session-stream-unit-manager.service.ts:224` | D9 区间感知扫描：tokenRanges 逐区间 slice 扫描 + 与全量扫描按 path/name 去重合并；options 补 attachments 透传（`source === 'attach'` 接入） |
+| 12 | `apps/mobile/__tests__/prompt-editor-screen.test.tsx` + `PromptEditorScreen.tsx:152` 注释 | D10：三断言零空格口径（含光标值）+ 注释同步清单（composer-token-insert 头注释 / patch KDoc / controller JSDoc 归位） |
+| 13 | `apps/mobile/src/components/chat/native-composer/token-ranges.ts` + `NativeChatComposer.tsx` | D11 删除锚：remap 增 prevCursor 参数（D=光标差区间、公共字符判摘除/平移）；onChange 前编辑前 selection 下沉；无光标回退现状 |
 
 ## 详细实现步骤
 
@@ -162,6 +189,7 @@ date: 2026-10-19
 - Step 5 — phase-device-qa-p1 — blocking: yes — qa: manual_user：真机 P1 验收 S1-S6、S8-S10（场景清单见测试策略；S10 判据见 D7；荣耀真机过 PC 安装门流程照 RULE）。
 - Step 6 — phase-ime-p2 — blocking: 按 D7 触发条件 — qa: manual_user：D5 + 真机 S7 中文 IME 专项。
 - Step 7 — phase-docs — blocking: no — qa: auto：CHANGELOG + iteration-state 收口。
+- Step 8 — phase-r2-consistency — blocking: yes — qa: auto + S11 真机抽样：D9 发送链区间感知（T-CA9）+ D10 全屏统一 chip 断言与注释同步 + D11 删除锚（T-CA10）+ 接线测试（T-CA11）。依赖：D8 已落（真机轮四 commit），无需重做。
 
 ## 测试策略
 
@@ -175,6 +203,9 @@ JS 侧（jest，mock 原生输入 + 断言 wrapper 行为，既有 `enriched-mar
 - T-CA6 — blocking: yes — 水化两条真实链：首帧 `defaultValue` 按持久化 ranges 合成 markdown（`$技能尾追` + `[{0,3}]` → 链接只包 `$技能`）；**运行期水化 setText 三参合成与首帧一致**（不等 prop 收敛；**跳 remap 直写**：测试先种子一个与传入 ranges 不同的 `confirmedRangesRef` 基线，断言合成用的是传入值而非 remap 值）；同内容不二次下发（复用 `native-composer.test.tsx:413` 既有断言手法）；**面板集成测试断言（`apps/mobile/__tests__/chat-conversation-panel.integration.test.tsx`，`mockComposerSetText`）：带 ranges 草稿水化 → 三参且第三参为持久化值；同步把 `:981` 改三参断言（无 ranges 草稿 → 第三参 `[]`）——controller spy 注入自己的 spy 绕过面板箭头，抓不到丢参缺陷，不得替代** → Step 3
 - T-CA7 — blocking: yes — desktop 写回：未编辑（composerText === 水化文本）→ payload 含原样 tokenRanges；**已编辑 → payload 无 tokenRanges 字段**；**payload 组装抽纯函数再测（照 `rollback-composer.ts` 先例），不挂整个 ConversationPanel** → Step 4
 - T-CA8 — blocking: yes — 带外两路径：全屏回填 remap 保真（`apps/mobile/__tests__/composer-fullscreen.test.tsx` 既有链扩用例）；**旧草稿 tokenRanges undefined → 回填 payload 无 tokenRanges 字段（非 `[]`）**；undo_send 恢复写 undefined（`apps/mobile/__tests__/use-chat-tab-message-actions-rollback.test.ts` 既有链扩用例）→ Step 1
+- T-CA9 — blocking: yes — 发送链区间感知（D9）：①草稿 `$agent-config$节拍成章` + ranges `[{0,13},{13,18}]` 发送 → **两颗技能均挂载**；②`@docs/a.md$写作` + 对应区间 → 路径附件 `/docs/a.md`（不被 `$` 污染）+ 技能 `写作`；③无区间（undefined/`[]`）草稿发送 → 结果与现状全量扫描逐项一致（回归锁：手输带空格 token 照常识别、贴字 `$` 维持不识别）→ Step 8
+- T-CA10 — blocking: yes — remap 删除锚（D11）：`remapTokenRanges('$A$B','$B',[{0,2},{2,4}], prevCursor=2) → [{0,2}]`（删左颗幸存保留）；`('$Ax','$A',[{0,2}], prevCursor=3) → [{0,2}]`（删普通尾字符不摘相邻区间）；无 prevCursor → 现状保守口径锁定（兼容）→ Step 8
+- T-CA11 — blocking: yes — 组件接线（CR-R2-05）：`native-composer.test.tsx` 增 `ref.setText(next, cursor)` 后 `lastRanges()` 反映锚定/直写结果的断言，防光标透传回退 → Step 8
 
 Kotlin 单测（**blocking**；`android/build.gradle:291-292` 已有 junit 4.13.2 + robolectric 4.14.1，`FormattingStore`/`RangeEditAdjustment` 纯 Kotlin 不依赖 View，与既有 `HarnessSmokeTest.kt` 同目录。**运行：`cd apps/mobile/android && gradlew.bat :react-native-enriched-markdown:testDebugUnitTest`（项目名按 autolinking.json）；测试文件只存在于补丁内，重生成补丁后必须 grep 类名核对（见变更点 #9）**）：
 
@@ -194,7 +225,8 @@ Kotlin 单测（**blocking**；`android/build.gradle:291-292` 已有 junit 4.13.
 - S7 中文 IME 组合态贴胶囊提交（拼音组合中光标位置/提交后归属）→ P2 门
 - S8 胶囊相邻粘贴多行文本 → 粘贴内容落胶囊外、不误转 markdown（既有粘贴链回归）
 - S9 **相邻两颗胶囊间字符删除** → 两颗各自独立不融合（D2 双处合并抑制的真机验证）
-- S10 **插入落文后立即单次退格** → 期望形态（**真机取证已定 2026-10-20，NMTrace 插桩**）：**空草稿插入无尾随空格、光标贴胶囊右缘 → 首次退格即整颗原子删除**；有既有文本时插入带尾空格缓冲 → 首次退格删空格、贴缘后再退格整删——两种形态均须满足主判据「一次物理退格最多删一颗胶囊且无多删字符」。取证记录（荣耀 EBG-AN00，插桩 debug 包）：① HwIME 软键盘退格走 `sendKeyEvent(DEL)` 入口，miss 时 super 级联触发 `onKeyDown`（同键双检查、单次删除）；**原子命中时 return true 短路级联，无双删**；② `adb shell input keyevent` 注入路径只走 `onKeyDown`；③ 全程未观测到 `deleteSurroundingText` / 空 `commitText` 删除路径（D3 新增入口保留为其他 IME 的覆盖）；④ 插入落文 `setTokenRanges [(0,13)] textLen=13 sel=13`——「无空格+贴边」即 B2 观测的唯一根因
+- S10 **插入落文后立即单次退格** → 期望形态（**真机取证已定 2026-10-20，NMTrace 插桩**；chip 模型 D8 后统一为）：**插入恒无空格缓冲、光标贴胶囊右缘 → 首次退格即整颗原子删除**；主判据不变「一次物理退格最多删一颗胶囊且无多删字符」。取证记录（荣耀 EBG-AN00，插桩 debug 包）：① HwIME 软键盘退格走 `sendKeyEvent(DEL)` 入口，miss 时 super 级联触发 `onKeyDown`（同键双检查、单次删除）；**原子命中时 return true 短路级联，无双删**；② `adb shell input keyevent` 注入路径只走 `onKeyDown`；③ 全程未观测到 `deleteSurroundingText` / 空 `commitText` 删除路径（D3 新增入口保留为其他 IME 的覆盖）；④ 插入落文 `setTokenRanges [(0,13)] textLen=13 sel=13`——「无空格+贴边」即 B2 观测的唯一根因（r3 时代「有既有文本时插入带尾空格缓冲」的两种形态表述已被 D8 推翻，以本条统一形态为准）
+- S11 **chip 贴邻发送与相邻删除**（Step 8 真机抽样）：连插两颗（贴邻）→ 发送 → 两颗技能均生效（消息回放/日志确认）；相邻态退格删左颗 → 幸存右颗胶囊样式与持久化区间保留（D11）
 
 ## 兼容性或迁移说明
 
@@ -202,11 +234,11 @@ Kotlin 单测（**blocking**；`android/build.gradle:291-292` 已有 junit 4.13.
 - **回滚（新版本草稿被旧代码读）**：`parseComposerDraftJson` 自构造 `{text, attachments: kept}` 喂 schema（`:82`），未知字段到不了 `.strict()`——**静默丢弃 tokenRanges、正文保留**（zod 4 `.strict()` 对未知键是 reject，但该路径根本不把未知键喂进去）；后果仅是「旧版本下一次写回永久丢 ranges」，无文本丢失风险。
 - **desktop**：读侧忽略新字段；写回仅未编辑时透传（D6），编辑后省略字段。
 - **LINK 选区删除保持上游**：D3 的选区删除扩整只对 TOKEN；LINK 维持上游折叠光标语义（改动面最小，现网未观测到问题）。
-- **发送管线零改动**：明文形态、core 扫描、发送门闩全不动。
-- **转录渲染不动**：`RefTokenText` 是显示链路，与输入框 stores 无关。
+- **发送管线最小改动**：core 扫描正则与发送门闩不动；chip 贴邻明文（D8）由发送挂点区间感知补挂（D9），全量扫描保留手输兼容。
+- **转录渲染不动**：`RefTokenText` 是显示链路，与输入框 stores 无关；chip 贴邻（`$A$B`）在转录高亮层第二颗可能不高亮（同款边界正则）——显示层已知限制⑥，不影发送与附件（D9 已闭环挂载），后续迭代评估。
 - **手输行为不变**：纯文本；发送扫描照常把 `$技能名` 变 skillAttach。
 - **linkVariants 说明**：D4 后 `^nmskill:`/`^nmtoken:` 两个变体对胶囊不再生效（TOKEN 样式由 `TokenStyleHandler` 取 `style.linkColor`/`linkBackgroundColor`/`linkBorderRadius` 等基础键，`TokenStyleHandler.kt:24-45`）——**胶囊视觉不变**；变体键退化为冗余配置，`markdownStyle.link` 基础键**禁止删除**（删则胶囊掉样式）；既有测试 `native-composer.test.tsx:308-331` 锁着变体键，清理时同步改。
-- **已知限制披露**：①全屏 CodeMirror（`PromptEditorScreen`）与旧 webview composer 的高亮仍按 `COMPOSER_TOKEN_RE` 全扫，「尾追并入高亮」不在本迭代闭合范围；②undo_send 恢复允许兜底扫描一次；③组合态（IME）替换（S7 路径）依赖 D5（P2）；非组合态的选区跨胶囊输入在 P1 经选区吸附（D2）已闭合；④全屏 CodeMirror 内新打的 `$x` 按正则高亮显示为胶囊，但 D1 remap 不升格确认胶囊，回到内联输入框后是纯文本（视觉与确认态不一致，与目标 5「手输不成胶囊」一致）；⑤desktop 编辑后写回省略 tokenRanges → 移动端下次水化兜底扫描一次（行为同现状）。
+- **已知限制披露**：①全屏 CodeMirror（`PromptEditorScreen`）与旧 webview composer 的高亮仍按 `COMPOSER_TOKEN_RE` 全扫，「尾追并入高亮」不在本迭代闭合范围；②undo_send 恢复允许兜底扫描一次；③组合态（IME）替换（S7 路径）依赖 D5（P2）；非组合态的选区跨胶囊输入在 P1 经选区吸附（D2）已闭合；④全屏 CodeMirror 内新打的 `$x` 按正则高亮显示为胶囊，但 D1 remap 不升格确认胶囊，回到内联输入框后是纯文本（视觉与确认态不一致，与目标 5「手输不成胶囊」一致）；⑤desktop 编辑后写回省略 tokenRanges → 移动端下次水化兜底扫描一次（行为同现状）；⑥转录渲染对贴邻 token（`$A$B`）第二颗不高亮（显示层正则边界；发送/附件已由 D9 闭环）；⑦旧草稿中的历史空格分隔不强制迁移（用户手删即可，删后不粘连——原生盒内 gap 承担视觉分隔）。
 - **上游对照**：`.reference/enriched-markdown` 仅供 rebase 参考；本迭代全部 native 改动落在补丁内，升级库版本须重生成补丁（既有 D10 流程，composer-native spec）。
 
 ## 风险与回滚方案
@@ -222,6 +254,7 @@ Kotlin 单测（**blocking**；`android/build.gradle:291-292` 已有 junit 4.13.
 | 水化 LINK→TOKEN 后序列化形态变化 | composer 已禁 Copy-as-Markdown；MarkdownSerializer TOKEN 输出明文与 LINK displayText 一致 |
 | 旧草稿兜底扫描升格半截 token（旧行为残留） | 仅 undefined 草稿一次；S6 验收；接受为已知限制 |
 | 回滚 | JS 层与补丁层独立可回退；草稿新字段向后兼容（旧代码静默丢弃，正文保留） |
+| chip 贴邻明文 → core 全量扫描丢技能/污染 @ 路径 | D9 区间感知补挂（区间为权威 + 全量去重合并）；T-CA9 三断言锁死；S11 真机抽样 |
 
 ## R1 修订记录（doc-fix 闭合清单）
 
@@ -269,3 +302,15 @@ Kotlin 单测（**blocking**；`android/build.gradle:291-292` 已有 junit 4.13.
 - P1-2：Step 1 测试清单补 T-CA8（与 T-CA8 自标 Step 1 对齐）。
 - P1-3 + P1-a：D3 新增「同一按键并发收敛」——`suppressNextDelete` 仅在 `isBatchEdit == true` 时置位、`endBatchEdit` 无条件清（batch 域内抑制，不吞独立退格）；抑制时跳过重复 dispatch Backspace；标志放 view 层共享；判据限定同键并发场景（词删/选区跨多颗仍按并集）；取证回退路径（拆 batch → clear-on-consume + 快照相交；单信号 → 简化）写明。
 - P2 汇总：函数名修正（`adjustForEdit`、`NativeChatComposerInstance.setText`——库侧 instance 无 setText）；七入口三处一致（补 `deleteSurroundingTextInCodePoints` 第四新增入口）；`setComposingText` 空串清 `isComposing`；D4 补 `textChanged || rangesChanged` 命令式下发条件与 instance null 兜底；已知限制③改写 + 补④⑤；S10 同步对象改 D3；wrapper 单测豁免说明 + 组合期残留风险注；Q2 防御性校验声明（不做长度校验，消费侧防御）；`addRange` 钉 `allowMerge` 参数形态；remap 落点钉 ChatTabScreen 退出回填处；空会话兜底写回跳过；R1/R2 历史记录加括注。
+
+## R4 修订记录（dev-loop 真机轮 cr-func 复检 fold，r3 → r4）
+
+背景：D1-D4/D6 实现落地 + 真机 S1-S10 用户自测通过后，真机反馈轮追加四 commit（`154b98976` 光标锚 / `f0c808527` 查询守卫 / `4e5240bb4` 盒内 gap / `06b00ba8a` chip 零空格 + TokenBackgroundSpan——即 D8 已落事实），cr-func 复检 **func-ready: no**（P1×2 / P2×1 / P3×2，复跑 109 jest + 45 Kotlin + tsc 全绿、补丁无插桩残留、四 commit 裁定合规），must-fix fold 如下：
+
+- CR-R2-01（P1）→ **D9 发送链区间感知** + 变更点 #11 + T-CA9 + S11 + 设计目标 4 改「最小改动」+ 兼容性同步 + 风险表增行。
+- CR-R2-02（P1）→ **D10 全屏统一 chip**（决策：不加分隔符参数，单一口径）+ 变更点 #12 + prompt-editor 三断言零空格 + 非目标全屏表述修订。
+- CR-R2-03（P2）→ **D11 remap 删除锚**（D=编辑前后光标差区间、公共字符判摘除/平移、无光标回退现状）+ 变更点 #13 + T-CA10 + 语义总表「相邻删除」行补幸存保留。
+- CR-R2-04（P3）→ D10 注释同步清单（composer-token-insert 头注释 / PromptEditorScreen:152 / patch RoundedBackgroundSpan KDoc 补 gap / controller JSDoc 归位）。
+- CR-R2-05（P3）→ T-CA11 组件接线断言（`ref.setText` 光标透传防回退）。
+- **D8 落地事实入核心决策**（用户 2026-10-20 拍板口径 + 四 commit + TokenBackgroundSpan 根因记录 + r3 冲突描述以 D8 为准）；S10 期望形态按 chip 统一改写（取证历史保留）；语义总表三行同步；已知限制补⑥⑦；Step 8（phase-r2-consistency，blocking）入实现步骤。
+- cr-func 非阻塞观察入档：chip 贴尾后手打孤立 `$`（`$A$$B`）不识别为查询属边界交互，不闭合（手输语义与目标 5 一致）。
