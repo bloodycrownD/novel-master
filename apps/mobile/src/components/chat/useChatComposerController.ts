@@ -63,6 +63,7 @@ import {
   buildTokenInsertion,
   statusOnlyComposerAttachments,
 } from './composer-token-insert';
+import {scanComposerTokenRangesForSend} from './composer-send-scan';
 import {
   remapTokenRanges,
   scanTokensToRanges,
@@ -271,6 +272,16 @@ export function useChatComposerController({
   /** tokenRanges 的镜像 ref：打字/写入回调内即时重映射，不等 React 提交。 */
   const tokenRangesRef = useRef(tokenRanges);
   tokenRangesRef.current = tokenRanges;
+  /**
+   * 编辑前选区右缘镜像（D11 删除锚，与组件侧 `selectionRef` 同款）。
+   *
+   * `onSelectionChange` 逐次推进；打字 `change` 事件到达时原生**先发文本变更、
+   * 后发选区回调**，所以 `onChangeText` 里读到的还是变更前的值——remap 删除锚
+   * 据此反推真实删除段（相邻胶囊删左颗时不被公共前后缀咬进幸存胶囊）。
+   * null = 从未收到选区事件，删除锚回退差分口径（只增强不回退）。
+   * 命令式写入落位后同步镜像，下一次打字读到的就是刚落下的光标。
+   */
+  const prevCursorRef = useRef<number | null>(null);
 
   /**
    * 确认区间的统一推进口：差分重映射旧区间（编辑区与胶囊重叠即摘除、贴边
@@ -283,8 +294,17 @@ export function useChatComposerController({
       next: string,
       inserted?: readonly TokenRange[],
       nextCursor?: number,
+      prevCursor?: number,
     ) => {
-      const remapped = remapTokenRanges(prev, next, tokenRangesRef.current, nextCursor);
+      const remapped = remapTokenRanges(
+        prev,
+        next,
+        tokenRangesRef.current,
+        nextCursor,
+        // D11 删除锚：编辑前光标（打字路径由选区镜像带入；Picker 落文不带，
+        // 走既有纯插入/差分口径）。
+        prevCursor,
+      );
       const merged =
         inserted != null && inserted.length > 0
           ? [...remapped, ...inserted].sort((a, b) => a.start - b.start)
@@ -397,6 +417,9 @@ export function useChatComposerController({
       textRef.current = next;
       if (nextCursor != null) {
         setCursor(nextCursor);
+        // 命令式写入的落位同步进编辑前光标镜像（D11）：下一次打字事件读到的
+        // 「编辑前光标」就是这里落下的位置，不能沿用上一次打字的旧选区。
+        prevCursorRef.current = nextCursor;
       }
       persistDraft(next, statusOnlyComposerAttachments(attachments));
       setComposerTextRef.current?.(next, nextCursor);
@@ -470,7 +493,16 @@ export function useChatComposerController({
       if (next === textRef.current) {
         return;
       }
-      advanceTokenRanges(textRef.current, next);
+      // D11 删除锚：编辑前选区右缘（原生先发文本变更、后发选区回调，此刻
+      // ref 里还是变更前的值）。整段选区删除时右缘贴着删除段右端，退格时
+      // 就是光标位——两种形态都能反推出真实的删除段。
+      advanceTokenRanges(
+        textRef.current,
+        next,
+        undefined,
+        undefined,
+        prevCursorRef.current ?? undefined,
+      );
       textRef.current = next;
       setText(next);
       persistDraft(next, statusOnlyComposerAttachments(attachments));
@@ -480,6 +512,9 @@ export function useChatComposerController({
 
   const onSelectionChange = useCallback(
     (selection: ComposerInputSelection) => {
+      // 选区右缘是删除锚的「编辑前光标」（D11）：选区删除后光标落在起点，
+      // 用右缘才能把整段选区反推成删除段。
+      prevCursorRef.current = selection.end;
       setCursor(selection.start);
     },
     [],
@@ -493,6 +528,16 @@ export function useChatComposerController({
     async (content: string, allowResumeWithoutInput: boolean) => {
       timingLog('executeRun enter (tap→run dispatch gap)');
       setError(undefined);
+
+      // D9 掩码二段式（发送侧）：区间下标相对**未 trim** 的草稿原文（发送正文
+      // 沿用历史口径 `content = text.trim()`）。先按区间 slice 单独扫描得到
+      // rangeResults，再把同一批区间换算到正文坐标交给 core 掩码全量扫描；
+      // 区间为空（旧草稿 / 手输无胶囊）时零扫描，与 D9 之前逐字节一致。
+      const sendScan = scanComposerTokenRangesForSend(
+        textRef.current,
+        content,
+        tokenRangesRef.current,
+      );
 
       // 有正文 / 批注草稿 → 成功后清输入
       // annotate 仅在 onUserMessageAppended 清 store（与正文分轨可并存于回调）
@@ -527,6 +572,16 @@ export function useChatComposerController({
         const started = manager.startRun(sessionId, scope.projectId, content, {
           stream,
           allowResumeWithoutInput,
+          // D9：区间扫描结果随 run 下传，core 以 existing 位合并（区间结果
+          // 优先于掩码后的全量扫描）；excludedScanRanges 让 core 的全量扫描
+          // 看不到胶囊内触发符（`@path$技能` 不再污染路径、`$A$B` 不重复挂载）。
+          // 空数组不传：undefined 与 `[]` 在 core 侧行为等价，不传更贴近旧调用形态。
+          attachments:
+            sendScan.attachments.length > 0 ? sendScan.attachments : undefined,
+          excludedScanRanges:
+            sendScan.excludedScanRanges.length > 0
+              ? sendScan.excludedScanRanges
+              : undefined,
           annotateDrafts:
             annotateDrafts.length > 0 ? annotateDrafts : undefined,
           onUserMessageAppended: () => {

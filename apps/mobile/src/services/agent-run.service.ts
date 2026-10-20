@@ -13,6 +13,7 @@ import {
   type AgentTurnScope,
 } from '@novel-master/core/agent';
 import type {
+  ComposerDraftTokenRange,
   MessageAttachment,
   SendAnnotateDraft,
 } from '@novel-master/core/chat';
@@ -71,6 +72,8 @@ export async function runAgentTurn(
     readonly allowResumeWithoutInput?: boolean;
     readonly attachments?: readonly MessageAttachment[];
     readonly annotateDrafts?: readonly SendAnnotateDraft[];
+    /** D9：确认胶囊区间（已换算到 trim 后正文坐标；空/缺失退回全量扫描）。 */
+    readonly excludedScanRanges?: readonly ComposerDraftTokenRange[];
     readonly signal?: AbortSignal;
     readonly onUserMessageAppended?: () => void | Promise<void>;
   },
