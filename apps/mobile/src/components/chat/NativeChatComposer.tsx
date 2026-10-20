@@ -271,6 +271,16 @@ export const NativeChatComposer = forwardRef<
     const lastReportedHeightRef = useRef<number | null>(null);
 
     /**
+     * 编辑前选区镜像（D11 删除锚）：`onChangeSelection` 逐次推进，文本变更
+     * 事件（`onChangeText`）到达时读到的还是**变更前**的值（原生先发文本
+     * 变更、后发选区回调）——删除锚据此把「相邻胶囊删左颗」被公共前后缀
+     * 咬歪的编辑区锚回真实删除段。null = 尚未收到任何选区事件，删除锚回退
+     * 差分口径（只增强不回退）。命令式写入的 `setSelection` 落位后同步镜像，
+     * 保证下一次打字读到的是最新光标。
+     */
+    const selectionRef = useRef<{start: number; end: number} | null>(null);
+
+    /**
      * 首帧初值（只算一次）：库是 defaultValue 挂载语义（后续 prop 变化不重置
      * 编辑器），草稿明文在初渲染时就合成 markdown 进框；之后的 value 变化一律
      * 走 value effect / M7 通道，不再碰 defaultValue。
@@ -366,6 +376,9 @@ export const NativeChatComposer = forwardRef<
         dispatchTokenRanges(plain, confirmedRangesRef.current);
         const resolvedCursor = cursor ?? plain.length;
         instance.setSelection(resolvedCursor, resolvedCursor);
+        // 命令式写入的落位同步进编辑前选区镜像（D11）：下一次打字事件读到的
+        // 「编辑前光标」就是这里落下的位置，不能用上一次打字遗留的旧选区。
+        selectionRef.current = {start: resolvedCursor, end: resolvedCursor};
         // E10/F6 补发语义：库在 Importing 期不自发回声，change 上抛由这里补；
         // controller 的同值去重使这条补发在所有调用场景下都是幂等回声。
         changeTextRef.current(plain);
@@ -381,6 +394,12 @@ export const NativeChatComposer = forwardRef<
             baselineRef.current,
             plain,
             confirmedRangesRef.current,
+            undefined,
+            // D11 删除锚：编辑前选区右缘。原子退格把整颗胶囊删在光标左侧，
+            // 删除段 `[光标 + delta, 光标)` 正好覆盖被删胶囊；选区整体删除时
+            // 右缘同样贴着删除段（原生把光标落到选区起点）。打字路径没有
+            // 「编辑后光标」的独立来源，nextCursor 留给派生的光标差。
+            selectionRef.current?.end,
           );
         }
         baselineRef.current = plain;
@@ -392,6 +411,7 @@ export const NativeChatComposer = forwardRef<
 
     const handleSelectionChange = useCallback(
       (selection: {start: number; end: number}) => {
+        selectionRef.current = {start: selection.start, end: selection.end};
         selectionChangeRef.current(selection);
       },
       [],
