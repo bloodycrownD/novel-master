@@ -232,6 +232,159 @@ describe('useChatComposerController · send 三分支路由', () => {
       .allowResumeWithoutInput).toBe(false);
   });
 
+  it('T-CA9 ①: 贴邻两颗技能 $A$B → 区间扫描两颗都进 attachments，掩码区间同步透传', async () => {
+    writeChatComposerDraftState(
+      's1',
+      {
+        text: '$agent-config$节拍成章',
+        attachments: [],
+        tokenRanges: [
+          {start: 0, end: 13},
+          {start: 13, end: 18},
+        ],
+      },
+      mockRuntime.sessions,
+    );
+    await mount();
+    expect(current().tokenRanges).toEqual([
+      {start: 0, end: 13},
+      {start: 13, end: 18},
+    ]);
+
+    await act(async () => {
+      current().handleDockAction('send');
+    });
+    await flush();
+
+    expect(mockStartRun).toHaveBeenCalledTimes(1);
+    const args = mockStartRun.mock.calls[0]!;
+    expect(args[2]).toBe('$agent-config$节拍成章');
+    const options = args[3] as {
+      attachments?: readonly {action?: string; skillName?: string}[];
+      excludedScanRanges?: unknown;
+    };
+    // 全量扫描只认第一颗（`$` 前无空白），区间扫描把两颗都挂上。
+    expect(
+      (options.attachments ?? [])
+        .filter(item => item.action === 'skillAttach')
+        .map(item => item.skillName)
+        .sort(),
+    ).toEqual(['agent-config', '节拍成章']);
+    expect(options.excludedScanRanges).toEqual([
+      {start: 0, end: 13},
+      {start: 13, end: 18},
+    ]);
+  });
+
+  it('T-CA9 ②: @docs/a.md$写作 → 路径无污染 + 技能各挂各的', async () => {
+    writeChatComposerDraftState(
+      's1',
+      {
+        text: '@docs/a.md$写作',
+        attachments: [],
+        tokenRanges: [
+          {start: 0, end: 10},
+          {start: 10, end: 13},
+        ],
+      },
+      mockRuntime.sessions,
+    );
+    await mount();
+
+    await act(async () => {
+      current().handleDockAction('send');
+    });
+    await flush();
+
+    const args = mockStartRun.mock.calls[0]!;
+    expect(args[2]).toBe('@docs/a.md$写作');
+    const options = args[3] as {
+      attachments?: readonly {action?: string; path?: string; skillName?: string}[];
+      excludedScanRanges?: unknown;
+    };
+    const attachments = options.attachments ?? [];
+    // 全量扫描的 `@([^\s@]+)` 会把 `$写作` 并进路径——区间结果必须干净。
+    expect(
+      attachments.filter(item => item.path != null).map(item => item.path),
+    ).toEqual(['/docs/a.md']);
+    expect(
+      attachments
+        .filter(item => item.action === 'skillAttach')
+        .map(item => item.skillName),
+    ).toEqual(['写作']);
+    expect(options.excludedScanRanges).toEqual([
+      {start: 0, end: 10},
+      {start: 10, end: 13},
+    ]);
+  });
+
+  it('T-CA9 ③: 无区间草稿发送不传扫描字段（core 退回全量扫描，与现状一致）', async () => {
+    await mount();
+    await act(async () => {
+      current().onChangeText('用 $foo 看 @notes/a.md');
+    });
+    await act(async () => {
+      current().handleDockAction('send');
+    });
+    await flush();
+
+    expect(current().tokenRanges).toEqual([]);
+    const args = mockStartRun.mock.calls[0]!;
+    expect(args[2]).toBe('用 $foo 看 @notes/a.md');
+    const options = args[3] as {
+      attachments?: unknown;
+      excludedScanRanges?: unknown;
+    };
+    expect(options.attachments).toBeUndefined();
+    expect(options.excludedScanRanges).toBeUndefined();
+  });
+
+  it('T-CA9 ④: 草稿首带空白 + 区间 → trimStart 换算不错位', async () => {
+    // 草稿两端带空白：tokenRanges 相对原文，发送正文是 text.trim()。
+    writeChatComposerDraftState(
+      's1',
+      {
+        text: '  $agent-config$节拍成章 ',
+        attachments: [],
+        tokenRanges: [
+          {start: 2, end: 15},
+          {start: 15, end: 20},
+        ],
+      },
+      mockRuntime.sessions,
+    );
+    await mount();
+    expect(current().text).toBe('  $agent-config$节拍成章 ');
+    expect(current().tokenRanges).toEqual([
+      {start: 2, end: 15},
+      {start: 15, end: 20},
+    ]);
+
+    await act(async () => {
+      current().handleDockAction('send');
+    });
+    await flush();
+
+    expect(mockStartRun).toHaveBeenCalledTimes(1);
+    const args = mockStartRun.mock.calls[0]!;
+    expect(args[2]).toBe('$agent-config$节拍成章');
+    const options = args[3] as {
+      attachments?: readonly {action?: string; skillName?: string}[];
+      excludedScanRanges?: unknown;
+    };
+    expect(
+      (options.attachments ?? [])
+        .filter(item => item.action === 'skillAttach')
+        .map(item => item.skillName)
+        .sort(),
+    ).toEqual(['agent-config', '节拍成章']);
+    // 前导 2 个空格被 trim：区间整体左移 2，尾部裁到正文长度。
+    expect(options.excludedScanRanges).toEqual([
+      {start: 0, end: 13},
+      {start: 13, end: 18},
+    ]);
+  });
+
   it('空输入 + 不可续跑：既不 needModel 也不起 run', async () => {
     const onNeedModel = jest.fn();
     await mount({canResumeWithoutInput: false, onNeedModel});
@@ -588,6 +741,43 @@ describe('useChatComposerController · tokenRanges 四咽喉点', () => {
       current().onChangeText('先看 $时序改稿');
     });
     expect(current().tokenRanges).toEqual([]);
+  });
+
+  it('T-CA10: 相邻胶囊 $A$B 删左颗 → 幸存区间保留且落库 payload 同值（D11 controller 跳）', async () => {
+    writeChatComposerDraftState(
+      's1',
+      {
+        text: '$A$B',
+        attachments: [],
+        tokenRanges: [
+          {start: 0, end: 2},
+          {start: 2, end: 4},
+        ],
+      },
+      mockRuntime.sessions,
+    );
+    await mount();
+    expect(current().tokenRanges).toEqual([
+      {start: 0, end: 2},
+      {start: 2, end: 4},
+    ]);
+
+    // 编辑前光标由上一次选区事件落位（贴在 A 右缘）；随后文本变更事件到达
+    // （原生先发文本变更、后发选区回调，此刻 ref 里仍是编辑前的值）。
+    await act(async () => {
+      current().onSelectionChange({start: 2, end: 2});
+    });
+    await act(async () => {
+      current().onChangeText('$B');
+    });
+
+    // 没有 prevCursor 时差分对齐会把删除点咬进 B 内部、两颗一起摘除；
+    // controller 补传之后 A 被摘、B 平移幸存为 [0,2)。
+    expect(current().tokenRanges).toEqual([{start: 0, end: 2}]);
+    const payload = JSON.parse(mockDraftDb.get('s1')!) as {
+      tokenRanges?: unknown;
+    };
+    expect(payload.tokenRanges).toEqual([{start: 0, end: 2}]);
   });
 
   it('水化/切换会话咽喉点：rerender 换 sessionId 后 tokenRanges 重扫', async () => {
