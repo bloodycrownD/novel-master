@@ -474,6 +474,64 @@ describe('useChatComposerController · Picker 路径（M7 命令式通道）', (
 
     expect(setComposerText).not.toHaveBeenCalled();
   });
+
+  it('连插两颗 $ 技能：光标贴第一颗胶囊尾部时第二颗纯插入，不替换（2026-10-20 真机轮）', async () => {
+    const setComposerText = jest.fn();
+    await mount({setComposerText});
+    await act(async () => {
+      current().handleDockAction('skillPicker');
+    });
+    await act(async () => {
+      current().onSkillPickerConfirm('agent-config');
+    });
+    // 真机形态：native 侧裁掉尾空格后回声，文本=`$agent-config`、光标贴
+    // 胶囊末端 13——正是旧逻辑把整颗胶囊误当活动查询替换掉的现场。
+    await act(async () => {
+      current().onChangeText('$agent-config');
+      current().onSelectionChange({start: 13, end: 13});
+    });
+
+    await act(async () => {
+      current().onSkillPickerConfirm('节拍成章');
+    });
+
+    expect(setComposerText).toHaveBeenLastCalledWith(
+      '$agent-config $节拍成章 ',
+      20,
+    );
+    expect(current().tokenRanges).toEqual([
+      {start: 0, end: 13},
+      {start: 14, end: 19},
+    ]);
+  });
+
+  it('连插两颗 @ 引用：确认胶囊不被当查询替换（@ 侧同守卫）', async () => {
+    const setComposerText = jest.fn();
+    await mount({setComposerText});
+    await act(async () => {
+      current().handleDockAction('atPicker');
+    });
+    await act(async () => {
+      current().onAtPickerConfirm(['@docs/a.md']);
+    });
+    await act(async () => {
+      current().onChangeText('@docs/a.md');
+      current().onSelectionChange({start: 10, end: 10});
+    });
+
+    await act(async () => {
+      current().onAtPickerConfirm(['@docs/b.md']);
+    });
+
+    expect(setComposerText).toHaveBeenLastCalledWith(
+      '@docs/a.md @docs/b.md ',
+      22, // 光标在插入段末尾（含尾随分隔空格，与 buildTokenInsertion 口径一致）
+    );
+    expect(current().tokenRanges).toEqual([
+      {start: 0, end: 10},
+      {start: 11, end: 21},
+    ]);
+  });
 });
 
 describe('useChatComposerController · composerState 组装', () => {
