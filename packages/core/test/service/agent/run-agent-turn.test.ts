@@ -10,7 +10,24 @@ import {
   runAgentTurn,
   type AgentTurnRuntimePort,
 } from "@/service/agent/logic/run-agent-turn.js";
+import { scanAtPathAttachments } from "@/domain/chat/logic/scan-at-path-attachments.js";
+import { scanSkillAttachments } from "@/domain/chat/logic/scan-skill-attachments.js";
+import type { ComposerDraftTokenRange } from "@/domain/chat/model/composer-draft.schema.js";
+import type { MessageAttachment } from "@/domain/chat/model/message-attachment.schema.js";
 import type { UserVfsTurnService } from "@/service/chat/user-vfs-turn.port.js";
+
+/** 发送侧（mobile）区间扫描口径：逐区间 slice 单独扫（D9）。 */
+function scanComposerRanges(
+  text: string,
+  ranges: readonly ComposerDraftTokenRange[]
+): MessageAttachment[] {
+  const out: MessageAttachment[] = [];
+  for (const range of ranges) {
+    const slice = text.slice(range.start, range.end);
+    out.push(...scanAtPathAttachments(slice), ...scanSkillAttachments(slice));
+  }
+  return out;
+}
 
 function mockUserVfsTurn(): UserVfsTurnService {
   return {
@@ -291,6 +308,97 @@ describe("runAgentTurn", () => {
     }
     assert.equal(appendedOptions?.attachments?.length, 1);
     assert.equal(appendedOptions?.attachments?.[0]?.path, "/notes/a.md");
+    resetUserVfsUnifiedToolTurnSnapshotForTests();
+  });
+
+  it("T-CA9: attachments 区间结果 + excludedScanRanges 掩码驱动发送挂点补挂（贴邻 chip）", async () => {
+    resetUserVfsUnifiedToolTurnSnapshotForTests();
+    refreshUserVfsUnifiedToolTurnSnapshot(false);
+    let appendedOptions:
+      | {
+          attachments?: readonly {
+            path?: string;
+            action?: string;
+            skillName?: string;
+            source?: string;
+          }[];
+        }
+      | undefined;
+    const runtime = makeRuntime({
+      append: async (_sid, _role, _content, opts) => {
+        appendedOptions = opts;
+        return { id: "m-ca9" };
+      },
+    });
+    const text = "$agent-config$节拍成章";
+    const ranges: ComposerDraftTokenRange[] = [
+      { start: 0, end: 13 },
+      { start: 13, end: 18 },
+    ];
+    try {
+      await runAgentTurn(runtime, { projectId: "p", sessionId: "s" }, text, {
+        attachments: scanComposerRanges(text, ranges),
+        excludedScanRanges: ranges,
+      });
+    } catch {
+      // runner deps stubbed
+    }
+    const attachments = appendedOptions?.attachments ?? [];
+    assert.deepEqual(
+      attachments
+        .filter((a) => a.action === "skillAttach")
+        .map((a) => a.skillName)
+        .sort(),
+      ["agent-config", "节拍成章"],
+      "贴邻两颗技能都应挂载（全量扫描只认第一颗）",
+    );
+    resetUserVfsUnifiedToolTurnSnapshotForTests();
+  });
+
+  it("T-CA9: excludedScanRanges 掩码后 @path 不被贴邻 $技能 污染", async () => {
+    resetUserVfsUnifiedToolTurnSnapshotForTests();
+    refreshUserVfsUnifiedToolTurnSnapshot(false);
+    let appendedOptions:
+      | {
+          attachments?: readonly {
+            path?: string;
+            action?: string;
+            skillName?: string;
+            source?: string;
+          }[];
+        }
+      | undefined;
+    const runtime = makeRuntime({
+      append: async (_sid, _role, _content, opts) => {
+        appendedOptions = opts;
+        return { id: "m-ca9-path" };
+      },
+    });
+    const text = "@docs/a.md$写作";
+    const ranges: ComposerDraftTokenRange[] = [
+      { start: 0, end: 10 },
+      { start: 10, end: 13 },
+    ];
+    try {
+      await runAgentTurn(runtime, { projectId: "p", sessionId: "s" }, text, {
+        attachments: scanComposerRanges(text, ranges),
+        excludedScanRanges: ranges,
+      });
+    } catch {
+      // runner deps stubbed
+    }
+    const attachments = appendedOptions?.attachments ?? [];
+    assert.deepEqual(
+      attachments.filter((a) => a.path != null).map((a) => a.path),
+      ["/docs/a.md"],
+      "路径附件不得被 $技能 粘成 /docs/a.md$写作",
+    );
+    assert.deepEqual(
+      attachments
+        .filter((a) => a.action === "skillAttach")
+        .map((a) => a.skillName),
+      ["写作"],
+    );
     resetUserVfsUnifiedToolTurnSnapshotForTests();
   });
 
