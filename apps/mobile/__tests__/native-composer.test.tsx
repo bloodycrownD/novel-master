@@ -570,6 +570,42 @@ describe('NativeChatComposer（T-NC1~T-NC6）', () => {
         ]),
       ).toEqual([]);
     });
+
+    it('纯插入光标锚（2026-10-20 真机轮）：同 `$` 头新胶囊插在旧胶囊头部——对齐点漂移进旧区间，无光标维持保守摘除', () => {
+      // prev=`$agent-config `（旧胶囊 [0,13)），头部插入 `$节拍成章 `：
+      // 公共前缀咬住 `$`，对齐插入点=1（旧区间内部）→ 误摘（真机「连插
+      // 两颗只剩一颗」缺陷的根因面）。
+      expect(
+        remapTokenRanges('$agent-config ', '$节拍成章 $agent-config ', [
+          { start: 0, end: 13 },
+        ]),
+      ).toEqual([]);
+    });
+
+    it('纯插入光标锚：给编辑后光标（插入段末尾）→ 反推真实插入点 0，旧区间右移保真', () => {
+      expect(
+        remapTokenRanges(
+          '$agent-config ',
+          '$节拍成章 $agent-config ',
+          [{ start: 0, end: 13 }],
+          6, // 光标落在插入段 `$节拍成章 ` 末尾
+        ),
+      ).toEqual([{ start: 6, end: 19 }]);
+    });
+
+    it('纯插入光标锚：守卫不过（反推点前缀不一致）→ 回退对齐点，摘除语义不变', () => {
+      // next=`abXbc` 光标 5 反推 t=3：`abc` 非 next 前缀 → 守卫拒收，
+      // 用对齐点 2（区间 {0,3} 内）→ 摘除。
+      expect(
+        remapTokenRanges('abc', 'abXbc', [{ start: 0, end: 3 }], 5),
+      ).toEqual([]);
+    });
+
+    it('纯插入光标锚：反推点与对齐点一致 → 与既有头部插入语义等价', () => {
+      expect(
+        remapTokenRanges('$a x', 'w$a x', [{ start: 0, end: 2 }], 1),
+      ).toEqual([{ start: 1, end: 3 }]);
+    });
   });
 
   describe('synthesizeTokenMarkdownFromRanges 非法区间守卫（CR-fix-11）', () => {

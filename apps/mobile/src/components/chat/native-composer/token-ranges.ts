@@ -68,11 +68,20 @@ export function scanTokensToRanges(text: string): readonly TokenRange[] {
  *
  * 多处差异（全量 setValue / 全屏编辑回填）会被折叠为一个编辑区处理：区间
  * 落在区外的照常平移，跨编辑区的摘除——保守但可预测。
+ *
+ * **纯插入的光标锚（2026-10-20 真机轮）**：文本对齐在「插入内容与邻接文本
+ * 共享字符」时会把插入点咬进公共前缀（典型：新胶囊 `$B` 插在旧胶囊 `$A` 头
+ * 部——公共前缀吃掉 `$`，对齐插入点落进旧区间内部 → 旧胶囊被误摘，表现为
+ * 「连插两颗只剩一颗」）。纯编辑区为空（纯插入）且调用方给出编辑后光标
+ * （引用落文 / 命令式提交恒有）时，用 `光标 - 插入长度` 反推真实插入点，
+ * 并以前缀/后缀一致性守卫反推结果的合法性；守卫不过或未传光标则维持对齐
+ * 点（打字路径不传光标：手输落进胶囊内部本就摘除，语义一致）。
  */
 export function remapTokenRanges(
   prev: string,
   next: string,
   ranges: readonly TokenRange[],
+  nextCursor?: number,
 ): TokenRange[] {
   if (prev === next) {
     return [...ranges];
@@ -93,14 +102,33 @@ export function remapTokenRanges(
   const editStart = prefix;
   const editEndPrev = prev.length - suffix;
   const delta = next.length - prev.length;
+  let anchor = editStart;
+  if (editStart === editEndPrev && nextCursor != null) {
+    // 纯插入：插入段长 = delta，真实插入点 = 光标 - delta。
+    const inferred = nextCursor - delta;
+    const plausible =
+      Number.isInteger(inferred) &&
+      inferred >= 0 &&
+      inferred <= prev.length &&
+      next.startsWith(prev.slice(0, inferred)) &&
+      next.endsWith(prev.slice(inferred));
+    if (plausible) {
+      anchor = inferred;
+    }
+  }
   const remapped: TokenRange[] = [];
+  // 纯插入（编辑区在 prev 侧为空）时左右边界同为一个插入点（可能已被光标锚
+  // 修正）；替换场景维持原双边界：跨编辑区的区间一律摘除。
+  const pureInsert = editStart === editEndPrev;
+  const leftBound = pureInsert ? anchor : editStart;
+  const rightBound = pureInsert ? anchor : editEndPrev;
   for (const range of ranges) {
-    if (range.end <= editStart) {
+    if (range.end <= leftBound) {
       remapped.push({start: range.start, end: range.end});
-    } else if (range.start >= editEndPrev) {
+    } else if (range.start >= rightBound) {
       remapped.push({start: range.start + delta, end: range.end + delta});
     }
-    // 其余情形（区间与编辑区相交）一律摘除，不做部分保留。
+    // 其余情形（区间跨插入点 / 与编辑区相交）一律摘除，不做部分保留。
   }
   return remapped;
 }

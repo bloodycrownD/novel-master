@@ -344,10 +344,14 @@ export const NativeChatComposer = forwardRef<
         if (ranges != null) {
           confirmedRangesRef.current = ranges;
         } else if (confirmedRangesRef.current != null) {
+          // 纯插入的光标锚（见 remapTokenRanges）：只信调用方显式给的
+          // 光标（引用落文恒有）；兜底路径的 plain.length 不代表真实插入
+          // 点，不传——对齐点兜底已是保守正确。
           confirmedRangesRef.current = remapTokenRanges(
             baselineRef.current,
             plain,
             confirmedRangesRef.current,
+            cursor,
           );
         }
         baselineRef.current = plain;

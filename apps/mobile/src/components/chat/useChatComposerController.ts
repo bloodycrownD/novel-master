@@ -278,8 +278,13 @@ export function useChatComposerController({
    * 这里，保证 state 与 ref 同拍一致。
    */
   const advanceTokenRanges = useCallback(
-    (prev: string, next: string, inserted?: readonly TokenRange[]) => {
-      const remapped = remapTokenRanges(prev, next, tokenRangesRef.current);
+    (
+      prev: string,
+      next: string,
+      inserted?: readonly TokenRange[],
+      nextCursor?: number,
+    ) => {
+      const remapped = remapTokenRanges(prev, next, tokenRangesRef.current, nextCursor);
       const merged =
         inserted != null && inserted.length > 0
           ? [...remapped, ...inserted].sort((a, b) => a.start - b.start)
@@ -387,7 +392,7 @@ export function useChatComposerController({
    */
   const commitComposerText = useCallback(
     (next: string, nextCursor?: number, insertedRanges?: readonly TokenRange[]) => {
-      advanceTokenRanges(textRef.current, next, insertedRanges);
+      advanceTokenRanges(textRef.current, next, insertedRanges, nextCursor);
       setText(next);
       textRef.current = next;
       if (nextCursor != null) {
