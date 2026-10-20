@@ -4,7 +4,7 @@ date: 2026-10-19
 
 # 输入框胶囊原子化根治（composer-capsule-atomic-2026-10）技术规格（SPEC）
 
-> 版本：r5（2026-10-21 spec-check 第 1 轮 No-Go 后 doc-fix：P0×2（D9 运输链/掩码）+ P1×3（D11 对齐实现与 controller 跳、D10 全屏守卫）+ P2×4 + P3×3，见「R5 修订记录」；r4：cr-func 复检 fold（P1×2/P2×1/P3×2 → D8-D11）；r3：R2/R3 审查闭合；r2：R1 审查闭合，见「R1-R5 修订记录」）
+> 版本：r6（2026-10-21 fix-p3 收口：P3-1 全屏删除锚 / P3-2 水化对称 / P3-4 T-CA9③ 单链路直出口径 + D 空措辞以实现为准 + 锚点漂移括注，见「R6 修订记录」；r5：spec-check 第 1 轮 No-Go fold（D9 运输链/掩码、D11 对齐、D10 守卫）；r4：cr-func fold D8-D11；r3/r2：R2/R3/R1 审查闭合）
 
 ## 需求来源
 
@@ -130,7 +130,7 @@ date: 2026-10-19
 
 **D9 发送链区间感知（CR-R2-01 P1 + R5 P0-1/P0-2 重设计，Step 8）**
 - 缺陷（实测复现）：core `SKILL_TOKEN_RE = /(?<!\S)\$…/`（`scan-skill-attachments.ts:22`）要求 `$` 前空白/行首——`$A$B` 全量扫描只挂第一颗、`看这里$写作` 一颗不挂；`scan-at-path-attachments.ts:32` 的 `@([^\s@]+)` 未把 `$` 当终止符——`@路径$技能` 路径被污染成不存在路径。恰为本批测试锁定的形态。
-- **运输链（R5 钉死，防静默断链三处）**：①mobile `executeRun`（`useChatComposerController.ts:527-539`，发送 content 在 `:628` `text.trim()`）用**未 trim 的 `textRef.current`** 做区间/掩码扫描（区间下标基于未 trim 草稿）；②结果经 `RunAgentTurnOptions` 新增字段（`attachments` + `excludedScanRanges`）下传——**三处必须同步补**：类型定义（`run-agent-turn.ts:251-287`）、`session-stream-unit-manager.service.ts` 的**转发白名单 `:1213-1218`**（只加 interface 不改白名单会被静默丢弃，与 r3 P0-2 同类坑）、`agent-run.service.ts:69-76` 选项类型；③core 全量扫描（`run-agent-turn.ts:543` 以 **trimmed** 为文本）用 `excludedScanRanges` 掩码——**trim 偏移换算**：传给 core 的区间 = 原区间下标 − trimStart（trim 掉的前缀长度），越界/翻转丢弃。
+- **运输链（R5 钉死，防静默断链三处）**：①mobile `executeRun`（`useChatComposerController.ts:527-539`，发送 content 在 `:628` `text.trim()`【r6 括注：行号随后续提交漂移至 `:684` 附近，以函数名定位为准】）用**未 trim 的 `textRef.current`** 做区间/掩码扫描（区间下标基于未 trim 草稿）；②结果经 `RunAgentTurnOptions` 新增字段（`attachments` + `excludedScanRanges`）下传——**三处必须同步补**：类型定义（`run-agent-turn.ts:251-287`）、`session-stream-unit-manager.service.ts` 的**转发白名单 `:1213-1218`**（只加 interface 不改白名单会被静默丢弃，与 r3 P0-2 同类坑）、`agent-run.service.ts:69-76` 选项类型；③core 全量扫描（`run-agent-turn.ts:543` 以 **trimmed** 为文本【r6 括注：漂移至 `:684-689` `maskComposerScanRanges` 调用点】）用 `excludedScanRanges` 掩码——**trim 偏移换算**：传给 core 的区间 = 原区间下标 − trimStart（trim 掉的前缀长度），越界/翻转丢弃。【r6 口径补：无区间草稿发送时 controller 也以 trim 后正文全量扫描直出 `attachments` 占 existing 位（87aa6ac5a，使 T-CA9③ 可单链路断言），core 侧再扫同键去重幂等，最终附件集合/顺序与旧口径逐项一致】。
 - **掩码二段式（R5 P0-2：合并去重救不了 @ 污染——去重 key 不同）**：
   1. **区间扫描**：每个确认区间 slice 出区间文本单独扫（触发符在 index 0 天然过边界）→ `rangeResults`；
   2. **掩码全量扫描**：把每个确认区间替换成**等长空白**（下标不变）后再全量扫——掩码后全量扫描看不到胶囊内触发符，`@路径$技能` 的污染在源头消失，手输 token（区间外）照常识别 → `fullScanResults`；
@@ -147,10 +147,10 @@ date: 2026-10-19
 **D11 remap 删除锚（CR-R2-03 P2 + R5 P1-1/P1-2 对齐，Step 8；实现已落 `aaa7fa30b`/`b3125a812`/`6418750e4`，本节为规格对齐记录）**
 - 缺陷（实测复现）：相邻胶囊删左颗（`$A$B` 退格原子删 A → `$B`），JS remap 差分对齐把删除点猜进幸存 B 内部 → 保守摘除把 B 的区间一并抹掉（`remapTokenRanges('$A$B','$B',[{0,2},{2,4}]) → []`，应 `[{0,2}]`）。chip 贴邻成默认态后此路径高频。
 - **签名（R5 钉死）**：`remapTokenRanges(prev, next, ranges, nextCursor?, prevCursor?)`——第 4 参 `nextCursor` 为既有纯插入锚（delta>0 分支不动）；**第 5 参 `prevCursor` 为编辑前光标**（新增），既有四参调用零影响。
-- **删除锚语义（delta < 0 且 prevCursor 可用）**：删除段 D 由编辑前后光标差反推，**候选优先级**：显式编辑后光标 → 退格（编辑前光标=编辑区右缘）→ 前向删除（=左缘）→ 歧义区先退格后前向。**纯删除一致性守卫**：`prev` 去掉候选 D 后必须逐字等于 `next`，不过则回退。分类：区间与 D **有公共字符**（`r.start < D.end && D.start < r.end`，端点相触不算）→ 摘除；`r.end <= D.start`（D 左侧）→ **原位不动**；`r.start >= D.end`（D 右侧）→ 平移 delta；D 空（前向删除光标不动等）或光标缺失/守卫不过 → **现状差分分支**（只增强不回退）。
+- **删除锚语义（delta < 0 且 prevCursor 可用）**：删除段 D 由编辑前后光标差反推，**候选优先级**：显式编辑后光标 → 退格（编辑前光标=编辑区右缘）→ 前向删除（=左缘）→ 歧义区先退格后前向。**纯删除一致性守卫**：`prev` 去掉候选 D 后必须逐字等于 `next`，不过则回退。分类：区间与 D **有公共字符**（`r.start < D.end && D.start < r.end`，端点相触不算）→ 摘除；`r.end <= D.start`（D 左侧）→ **原位不动**；`r.start >= D.end`（D 右侧）→ 平移 delta；D 空（前向删除光标不动等）或光标缺失/守卫不过 → **现状差分分支**（只增强不回退）。【r6 修正：实现（`resolveDeletionSpan`）对 D 空候选是**跳过后按光标与差分编辑区相对位置反推非空 D**，`('$A$B','$B', undefined, 0)` 类场景优于「回退现状」原措辞；反推不出才落现状分支——以实现为准】。
 - 纸面验算：删左颗（prevCursor=2, D=[0,2)）→ A 摘、B→[0,2) ✓；删普通尾字符（`$Ax`→`$A`，D=[2,3)）→ A 不动 ✓；删右颗（D=[2,4)）→ B 摘、A 不动 ✓；前向删 B（D 空）→ 现状分支正确摘 B ✓。
-- **接线双侧（R5 P1-2：只接组件不接 controller 会被 prop 收敛覆盖）**：组件侧 `NativeChatComposer` 已加 `selectionRef` 镜像（`onChangeSelection` 推进、命令式 `setSelection` 落位同步），打字路径 `handleChangeText` 以选区右缘作 prevCursor 下沉（已落 `b3125a812`）；**controller 侧**：`advanceTokenRanges`（`useChatComposerController.ts:287`）经 `onChangeText` 调用时补传 prevCursor（编辑前 cursor 快照，注意选区事件与文本变更事件时序——以变更前值为准），否则 controller 保守摘除结果经 tokenRanges prop 收敛回组件并写库，幸存胶囊样式与持久化一起丢。
-- 测试（T-CA10，已落 8 例 + controller 级）：相邻删左颗幸存、显式双光标、删普通尾字符、删右颗、文本中段、前向删除、无 prevCursor 现状锁、守卫回退变体；**controller 级：`$A$B` 删左颗 → controller tokenRanges 幸存 `[{0,2}]` 且 persistDraft payload 同值**；S11 真机断言 DB `tokenRanges`。
+- **接线双侧（R5 P1-2：只接组件不接 controller 会被 prop 收敛覆盖）**：组件侧 `NativeChatComposer` 已加 `selectionRef` 镜像（`onChangeSelection` 推进、命令式 `setSelection` 落位同步），打字路径 `handleChangeText` 以选区右缘作 prevCursor 下沉（已落 `b3125a812`）；**controller 侧**：`advanceTokenRanges`（`useChatComposerController.ts:287`）经 `onChangeText` 调用时补传 prevCursor（编辑前 cursor 快照，注意选区事件与文本变更事件时序——以变更前值为准），否则 controller 保守摘除结果经 tokenRanges prop 收敛回组件并写库，幸存胶囊样式与持久化一起丢。【r6 补：**全屏侧**（`PromptEditorScreen.tsx`）打字/删除路径同接 prevCursor（CodeMirror 选区上报先于变更上发，用「上一拍」选区右缘快照，87aa6ac5a）；`syncFromDraft` 水化时 `prevCursorRef` 落 `draft.text.length` 与组件 `commitExternalText` 对称（87aa6ac5a）——三侧齐】。
+- 测试（T-CA10，已落 8 例 + controller 级）：相邻删左颗幸存、显式双光标、删普通尾字符、删右颗、文本中段、前向删除、无 prevCursor 现状锁、守卫回退变体【r6 括注：前向删除用例实测形态 `('$A$B','$A', undefined, 0)`（判别力强于 r5 文字的 `(2,2)` 形态，`(2,2)` 行为已核验同得 `[{0,2}]`）】；**controller 级：`$A$B` 删左颗 → controller tokenRanges 幸存 `[{0,2}]` 且 persistDraft payload 同值**；**水化对称：切会话带区间草稿后不模拟选区直接原子退格 → 幸存保留**（87aa6ac5a）；S11 真机断言 DB `tokenRanges`。
 
 ### 范围内胶囊语义总表
 
@@ -334,3 +334,13 @@ Kotlin 单测（**blocking**；`android/build.gradle:291-292` 已有 junit 4.13.
 - **P1-3（D10 全屏守卫）**：零空格使全屏「连插互替换」回归（全屏无 `queryWithinConfirmedRange`，`findActiveAtQuery` 把整颗 token 当活跃查询、`PromptEditorScreen.tsx:141-150` 整颗替换）——守卫抽共享纯函数复用 + 路由带入 tokenRanges + 连插两颗用例。
 - **P2**：T-CA9/10/11 测试落点钉死（T-CA9 走 controller/面板真实链路；T-CA10/11 落 `native-composer.test.tsx:537` 既有 describe）；S9 措辞改「手动键入空格后删除」（chip 后默认贴邻无字符）；合并方向钉 existing=区间；兼容性/风险表掩码措辞。
 - **P3**：D1 锚点括注（`ChatTabScreen.tsx` 回填实际在 `:181-192`，spec 原 `:172-174` 漂移）；`PromptEditorScreen` 路径补目录 `apps/mobile/src/screens/stack/`；D11 守卫定义钉「prevCursor 整数且 ∈[0, prev.length]、纯删除一致性、D 边界自洽，否则回退」（与 D8 插入锚 plausibility 同款）。
+
+## R6 修订记录（cr-func step-8 P3 收口，r5 → r6）
+
+dev-loop Step 8 终检（cr-func func-ready 条件闭合 + S11 模拟器四连过）后，P3 三项以 fix-p3 节点收口（87aa6ac5a）：
+
+- **P3-1 全屏打字路径删除锚**：`PromptEditorScreen.advanceConfirmedRanges` 增 prevCursor；CodeMirror 选区上报先于变更上发（updateListener 同步 vs change 经 rAF 合帧），采用「上一拍」选区右缘快照；全屏 `$A$B` 删左颗幸存用例（读回复用全屏守卫：删后文末插 `$C` 应得 `$B$C`）。
+- **P3-2 controller 水化对称**：`syncFromDraft` 真正下发 setComposerText 的分支把 `prevCursorRef` 落 `draft.text.length`（与组件 `commitExternalText` 对称；状态条空广播不推进）；切会话后不模拟选区直接原子退格幸存用例。
+- **P3-4 T-CA9③ 单链路断言 + 直出口径**：无区间草稿 controller 以 trim 后正文全量扫描直出 `attachments`（existing 位），core 再扫同键去重幂等——附件集合/顺序与旧口径逐项一致，断言从分层覆盖升级为单链路。
+- **措辞修正**：D11「D 空 → 回退现状」改为「D 空候选跳过、按光标与差分编辑区相对位置反推非空 D，反推不出才回退」（以 `resolveDeletionSpan` 实现为准，`('$A$B','$B', undefined, 0)` 优于原措辞）；T-CA10 前向删除用例实测形态 `(undefined, 0)` 括注；D9 运输链 `:628`/`:543` 行号漂移括注（`:684`/`:684-689`，以函数名定位）。
+- **判别力**：fix-p3 探针——临时回退两实现文件 → 3 failed（全屏 `$B$C`→`$C`、③ attachments 空、水化对称 `[]`），恢复全绿（2 suites/64 + 4 suites/75，tsc 0）。
