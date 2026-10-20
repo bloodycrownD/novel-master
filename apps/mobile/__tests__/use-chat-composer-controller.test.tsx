@@ -418,13 +418,13 @@ describe('useChatComposerController · Picker 路径（M7 命令式通道）', (
 
     expect(setComposerText).toHaveBeenCalledTimes(1);
     const [text, cursor] = setComposerText.mock.calls[0]!;
-    expect(text).toBe('看这里 @docs/a.md ');
+    expect(text).toBe('看这里@docs/a.md');
     expect(cursor).toBe((text as string).length);
-    expect(readChatComposerDraftState('s1').text).toBe('看这里 @docs/a.md ');
+    expect(readChatComposerDraftState('s1').text).toBe('看这里@docs/a.md');
     expect(current().pickerOpen).toBe(true); // 关闭由宿主 Modal 自己驱动
     // 插入咽喉点（CR-fix-04）：落文同时登记插入 token 的确认区间——
-    // '@docs/a.md' 落在 [4, 14)（'看这里 ' 之后），打字改中段前它就是胶囊。
-    expect(current().tokenRanges).toEqual([{start: 4, end: 14}]);
+    // '@docs/a.md' 落在 [3, 13)（'看这里' 之后），打字改中段前它就是胶囊。
+    expect(current().tokenRanges).toEqual([{start: 3, end: 13}]);
   });
 
   it('`$` 选择器确认：插入 $技能 token', async () => {
@@ -443,8 +443,8 @@ describe('useChatComposerController · Picker 路径（M7 命令式通道）', (
       current().onSkillPickerConfirm('写作');
     });
 
-    expect(setComposerText).toHaveBeenCalledWith('$写作 ', 4);
-    expect(readChatComposerDraftState('s1').text).toBe('$写作 ');
+    expect(setComposerText).toHaveBeenCalledWith('$写作', 3);
+    expect(readChatComposerDraftState('s1').text).toBe('$写作');
     // 插入咽喉点（CR-fix-04）：空草稿插入 $技能，登记区间 [0, 3)（含触发符，
     // '$写作' 共 3 字符）。
     expect(current().tokenRanges).toEqual([{start: 0, end: 3}]);
@@ -462,7 +462,7 @@ describe('useChatComposerController · Picker 路径（M7 命令式通道）', (
       current().onAtPickerConfirm(['@docs/ab.md']);
     });
 
-    expect(setComposerText).toHaveBeenCalledWith('@docs/ab.md ', 12);
+    expect(setComposerText).toHaveBeenCalledWith('@docs/ab.md', 11);
   });
 
   it('空 token 列表：什么都不做（不写库、不下发）', async () => {
@@ -484,10 +484,9 @@ describe('useChatComposerController · Picker 路径（M7 命令式通道）', (
     await act(async () => {
       current().onSkillPickerConfirm('agent-config');
     });
-    // 真机形态：native 侧裁掉尾空格后回声，文本=`$agent-config`、光标贴
-    // 胶囊末端 13——正是旧逻辑把整颗胶囊误当活动查询替换掉的现场。
+    // chip 模型：插入即贴尾（无尾随空格），光标 13 正贴第一颗胶囊末端
+    // ——正是旧逻辑把整颗胶囊误当活动查询替换掉的现场。
     await act(async () => {
-      current().onChangeText('$agent-config');
       current().onSelectionChange({start: 13, end: 13});
     });
 
@@ -496,12 +495,12 @@ describe('useChatComposerController · Picker 路径（M7 命令式通道）', (
     });
 
     expect(setComposerText).toHaveBeenLastCalledWith(
-      '$agent-config $节拍成章 ',
-      20,
+      '$agent-config$节拍成章',
+      18,
     );
     expect(current().tokenRanges).toEqual([
       {start: 0, end: 13},
-      {start: 14, end: 19},
+      {start: 13, end: 18},
     ]);
   });
 
@@ -515,7 +514,6 @@ describe('useChatComposerController · Picker 路径（M7 命令式通道）', (
       current().onAtPickerConfirm(['@docs/a.md']);
     });
     await act(async () => {
-      current().onChangeText('@docs/a.md');
       current().onSelectionChange({start: 10, end: 10});
     });
 
@@ -524,12 +522,12 @@ describe('useChatComposerController · Picker 路径（M7 命令式通道）', (
     });
 
     expect(setComposerText).toHaveBeenLastCalledWith(
-      '@docs/a.md @docs/b.md ',
-      22, // 光标在插入段末尾（含尾随分隔空格，与 buildTokenInsertion 口径一致）
+      '@docs/a.md@docs/b.md',
+      20,
     );
     expect(current().tokenRanges).toEqual([
       {start: 0, end: 10},
-      {start: 11, end: 21},
+      {start: 10, end: 20},
     ]);
   });
 });
@@ -814,11 +812,11 @@ describe('useChatComposerController · D1 tokenRanges 持久化优先', () => {
       current().onSkillPickerConfirm('写作');
     });
 
-    // '看这里 $写作 '：'$写作' 落在 [4, 7)。
-    expect(current().tokenRanges).toEqual([{start: 4, end: 7}]);
+    // '看这里$写作'（chip 模型：无补空格）：'$写作' 落在 [3, 6)。
+    expect(current().tokenRanges).toEqual([{start: 3, end: 6}]);
     const payload = readDbPayload('s1');
-    expect(payload.text).toBe('看这里 $写作 ');
-    expect(payload.tokenRanges).toEqual([{start: 4, end: 7}]);
+    expect(payload.text).toBe('看这里$写作');
+    expect(payload.tokenRanges).toEqual([{start: 3, end: 6}]);
   });
 
   it('T-CA4: 发送清空 → DB 置 NULL（下次水化 undefined + 空文本，扫描必空）', async () => {

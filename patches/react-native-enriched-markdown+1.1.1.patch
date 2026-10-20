@@ -1319,10 +1319,10 @@ index 8b90a87..ed7fd5b 100644
  
 diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/styles/TokenStyleHandler.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/styles/TokenStyleHandler.kt
 new file mode 100644
-index 0000000..873f80e
+index 0000000..48358df
 --- /dev/null
 +++ b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/styles/TokenStyleHandler.kt
-@@ -0,0 +1,58 @@
+@@ -0,0 +1,85 @@
 +package com.swmansion.enriched.markdown.input.styles
 +
 +import android.text.style.CharacterStyle
@@ -1337,6 +1337,32 @@ index 0000000..873f80e
 +  color: Int,
 +) : ForegroundColorSpan(color),
 +  MarkdownSpan
++
++/**
++ * TOKEN 专属底色 span（继承 RoundedBackgroundSpan 的几何，携带盒内 gap）。
++ *
++ * 必须是**独立子类**而非直接用 RoundedBackgroundSpan：InputFormatter 的
++ * span 重挂按「span 类名 → handler」反查（spanClasses().firstOrNull 匹配），
++ * RoundedBackgroundSpan 同时注册在 Link 与 Token 两个 handler 上，按类名
++ * 反查会撞上 LinkStyleHandler，用 link 基础样式重造出 gap=0 的实例
++ * （2026-10-20 真机轮：相邻胶囊视觉熔合成一条的根因）。子类让类名唯一
++ * 命中 TokenStyleHandler，diff 复用也不会跨型存续旧 LINK pill。
++ */
++class TokenBackgroundSpan(
++  backgroundColor: Int,
++  borderRadius: Float,
++  paddingHorizontal: Float,
++  paddingTop: Float,
++  paddingBottom: Float,
++  gapHorizontal: Float,
++) : RoundedBackgroundSpan(
++  backgroundColor = backgroundColor,
++  borderRadius = borderRadius,
++  paddingHorizontal = paddingHorizontal,
++  paddingTop = paddingTop,
++  paddingBottom = paddingBottom,
++  gapHorizontal = gapHorizontal,
++)
 +
 +/**
 + * Token 样式处理器，用于渲染胶囊 span。
@@ -1354,10 +1380,11 @@ index 0000000..873f80e
 +    // 使用 link 的样式作为基础
 +    val linkStyle = style.linkColor
 +    spans.add(MarkdownTokenColorSpan(linkStyle))
-+    // 如果有背景色，用 RoundedBackgroundSpan
++    // 如果有背景色，用 TOKEN 专属底色 span（TokenBackgroundSpan——类名唯一
++    // 命中本 handler，见该类注释）
 +    if (style.linkBackgroundColor != 0) {
 +      spans.add(
-+        RoundedBackgroundSpan(
++        TokenBackgroundSpan(
 +          backgroundColor = style.linkBackgroundColor,
 +          borderRadius = style.linkBorderRadius.toFloat(),
 +          paddingHorizontal = style.linkPaddingHorizontal.toFloat(),
@@ -1378,7 +1405,7 @@ index 0000000..873f80e
 +  override fun spanClasses(): List<Class<out CharacterStyle>> =
 +    listOf(
 +      MarkdownTokenColorSpan::class.java,
-+      RoundedBackgroundSpan::class.java,
++      TokenBackgroundSpan::class.java,
 +    )
 +}
 diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/toolbar/InputContextMenu.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/toolbar/InputContextMenu.kt
@@ -1440,7 +1467,7 @@ index 1ebda75..634645b 100644
    private fun applyFormat(styleType: StyleType) {
 diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/spans/RoundedBackgroundSpan.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/spans/RoundedBackgroundSpan.kt
 new file mode 100644
-index 0000000..a5cfc1a
+index 0000000..227baa3
 --- /dev/null
 +++ b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/spans/RoundedBackgroundSpan.kt
 @@ -0,0 +1,79 @@
@@ -1461,7 +1488,7 @@ index 0000000..a5cfc1a
 + * （真机实报「回车后胶囊下面多了一部分渲染」）；贴字形度量即可与 web 的
 + * 行内 mark 视觉对齐。
 + */
-+class RoundedBackgroundSpan(
++open class RoundedBackgroundSpan(
 +  private val backgroundColor: Int,
 +  private val borderRadius: Float,
 +  private val paddingHorizontal: Float,

@@ -19,11 +19,11 @@ export type ComposerTokenInsertion = {
 };
 
 /**
- * 用 token 替换 `[replaceStart, cursor)` 区间：
- * - 前段非空且不以空白结尾时补一个前导空格（typeahead 路径因触发字符前必有
- *   空白，该前导空格恒为空，与 replaceActiveAtWithToken 行为一致）；
- * - 后段为空或非空白开头时补尾空格；
- * - 多 token（@ 选择器多选）以空格连接；
+ * 用 token 替换 `[replaceStart, cursor)` 区间（chip 模型，2026-10-20 真机轮
+ * 用户定口径）：**不插入任何分隔空格**——胶囊之间、胶囊与前后文本之间直接
+ * 相邻，视觉分隔由原生胶囊盒内留白（RoundedBackgroundSpan gapHorizontal）
+ * 承担；明文 token（`$A$B`）由触发符天然切分，用户想加空格自行输入。
+ * - 多 token（@ 选择器多选）也直接拼接（无连接空格）；
  * - 光标落在插入段末尾。
  */
 export function buildTokenInsertion(
@@ -34,20 +34,17 @@ export function buildTokenInsertion(
 ): ComposerTokenInsertion {
   const before = text.slice(0, replaceStart);
   const after = text.slice(cursor);
-  const gapBefore = before.length === 0 || /\s$/.test(before) ? '' : ' ';
   const tokens = typeof token === 'string' ? [token] : token;
-  const joined = tokens.join(' ');
-  const gapAfter = after.length === 0 || !/^\s/.test(after) ? ' ' : '';
-  const inserted = `${gapBefore}${joined}${gapAfter}`;
+  const joined = tokens.join('');
   const tokenRanges: ComposerTokenRange[] = [];
-  let offset = before.length + gapBefore.length;
+  let offset = before.length;
   for (const item of tokens) {
     tokenRanges.push({start: offset, end: offset + item.length});
-    offset += item.length + 1; // 连接空格
+    offset += item.length;
   }
   return {
-    text: `${before}${inserted}${after}`,
-    cursor: before.length + inserted.length,
+    text: `${before}${joined}${after}`,
+    cursor: before.length + joined.length,
     tokenRanges,
   };
 }
