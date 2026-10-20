@@ -782,6 +782,55 @@ describe('PromptEditorScreen composer 变体（chat 输入框全屏）', () => {
     });
   });
 
+  it('D11 删除锚：全屏内 $A$B 删左颗 → 幸存右颗的区间保留', () => {
+    mockRoute.params = {
+      initialText: '$A$B',
+      variant: 'composer',
+      projectId: 'p1',
+      sessionId: 's1',
+      tokenRanges: [
+        {start: 0, end: 2},
+        {start: 2, end: 4},
+      ],
+    };
+    const tree = renderScreen();
+
+    // 用户把光标放在两颗胶囊之间（编辑前光标 = 2）。
+    act(() => {
+      mockEditorProps[0]!.onSelectionChange!({start: 2, end: 2});
+    });
+    // 原子删 A：CM 的删除事务先上报变更后的选区（0），rAF 合帧后才上发新
+    // 正文——全屏侧据此把上一拍选区（2）留作删除锚。
+    act(() => {
+      mockEditorProps[0]!.onSelectionChange!({start: 0, end: 0});
+    });
+    act(() => {
+      mockEditorProps[0]!.onChange('$B');
+    });
+    expect(mockEditorProps[0]!.value).toBe('$B');
+
+    // 读回幸存区间：光标移到文末再插一颗。`$B` 若仍是确认胶囊，查询守卫
+    // 会命中「纯插入」→ `$B$C`；区间若被差分对齐保守摘掉，会走整颗替换
+    // → `$C`（无删除锚时 `remapTokenRanges('$A$B','$B',…)` 返回 []）。
+    act(() => {
+      mockEditorProps[0]!.onSelectionChange!({start: 2, end: 2});
+    });
+    act(() => {
+      tree.root.findByProps({testID: 'composer-editor-skill-btn'}).props.onPress();
+    });
+    act(() => {
+      mockSkillPickerProps[0]!.onConfirm('C');
+    });
+    expect(mockEditorSetText).toHaveBeenLastCalledWith('$B$C', {
+      start: 4,
+      end: 4,
+    });
+    expect(mockEditorProps[0]!.value).toBe('$B$C');
+    act(() => {
+      tree.unmount();
+    });
+  });
+
   it('form 变体不受影响：右侧「预览」切换仍在（对照断言）', () => {
     mockRoute.params = {initialText: '初稿'};
     const tree = renderScreen();

@@ -125,6 +125,24 @@ export function PromptEditorScreen() {
   const [cursor, setCursor] = useState(() =>
     isComposer ? (initialText ?? '').length : 0,
   );
+  /**
+   * 最近一次选区的右缘（D11 删除锚的取值基准）：只在选区回调与命令式写入
+   * 落位时显式推进，不随渲染从 `cursor` state 回灌——state 存的是 start
+   * （活跃查询判定用），非折叠选区时两者不同。
+   */
+  const selectionEndRef = useRef(cursor);
+  /**
+   * 编辑前光标快照（D11 删除锚，全屏侧）。
+   *
+   * web 侧 CodeMirror 的选区上报与文本变更走两条消息：选区在 update listener
+   * 里**同步**上报，文本变更经 rAF 合帧后才上发（`editor.ts` 的
+   * `scheduleChangePost`）。也就是说打字/删除时 RN 先收到「变更后选区」、
+   * 后收到新正文——直接把最新选区当编辑前光标会把删除锚指错位置。这里按
+   * 「上一拍」留快照：每次选区上报先把旧值存进来再推进镜像，文本变更事件
+   * 读到的就是变更前光标；纯点选没有后续变更，下一次上报会自然把它推进到
+   * 最新位置（打字事务自带一遍选区上报）。
+   */
+  const prevCursorRef = useRef<number | null>(null);
   const [skillPickerOpen, setSkillPickerOpen] = useState(false);
   const [pathPickerOpen, setPathPickerOpen] = useState(false);
 
@@ -155,6 +173,8 @@ export function PromptEditorScreen() {
    * 守卫读到的区间必须始终对应当前正文，否则删改后的陈旧区间会误判/漏判。
    * `nextCursor` 是插入落文后的光标（chip 纯插入锚）：不传时差分对齐会把
    * 「新 token 插在旧 token 头部」的公共触发符咬进旧区间，与 dock 同口径传。
+   * `prevCursor` 是编辑前光标（D11 删除锚）：全屏内删相邻胶囊左颗时，靠它
+   * 反推真实删除段，幸存区间才不会被子差分对齐误摘——与 dock 语义一致。
    */
   const advanceConfirmedRanges = useCallback(
     (
@@ -162,12 +182,14 @@ export function PromptEditorScreen() {
       nextText: string,
       inserted: readonly ComposerDraftTokenRange[] = [],
       nextCursor?: number,
+      prevCursor?: number,
     ) => {
       const remapped = remapTokenRanges(
         prevText,
         nextText,
         confirmedRangesRef.current,
         nextCursor,
+        prevCursor,
       );
       confirmedRangesRef.current =
         inserted.length > 0
@@ -180,7 +202,14 @@ export function PromptEditorScreen() {
   /** 编辑器打字/删除：草稿与确认区间一起推进（programmatic setText 无回声）。 */
   const handleDraftChange = useCallback(
     (nextText: string) => {
-      advanceConfirmedRanges(draftRef.current, nextText);
+      // D11 删除锚：编辑前光标（选区上报的上一拍，见 prevCursorRef 注释）。
+      advanceConfirmedRanges(
+        draftRef.current,
+        nextText,
+        undefined,
+        undefined,
+        prevCursorRef.current ?? undefined,
+      );
       draftRef.current = nextText;
       setDraft(nextText);
     },
@@ -203,6 +232,10 @@ export function PromptEditorScreen() {
       });
       setDraft(next.text);
       setCursor(next.cursor);
+      // 命令式写入的落位同步进镜像（与 dock 的 controller 同款）：下一次
+      // 打字事件读到的「编辑前光标」不能沿用插入前的旧选区。
+      selectionEndRef.current = next.cursor;
+      prevCursorRef.current = next.cursor;
     },
     [advanceConfirmedRanges],
   );
@@ -250,9 +283,18 @@ export function PromptEditorScreen() {
     [activeAt, cursor, draft, commitDraft],
   );
 
-  const handleSelectionChange = useCallback((selection: {start: number}) => {
-    setCursor(selection.start);
-  }, []);
+  const handleSelectionChange = useCallback(
+    (selection: {start: number; end: number}) => {
+      // 快照上一拍选区右缘再推进镜像（D11 删除锚，与 controller 的
+      // `onSelectionChange` 同口径——选区删除后光标落起点，右缘才贴着删除段）：
+      // web 侧选区上报先于文本变更（见 prevCursorRef 注释），change 到达时
+      // 这里留着的就是编辑前光标。
+      prevCursorRef.current = selectionEndRef.current;
+      selectionEndRef.current = selection.end;
+      setCursor(selection.start);
+    },
+    [],
+  );
 
   const isDirty = draft !== savedDraft;
   // composer 变体不拦退出：文本退出即回填，没有「丢掉改动」这回事。

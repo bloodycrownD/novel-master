@@ -318,10 +318,10 @@ describe('useChatComposerController · send 三分支路由', () => {
     ]);
   });
 
-  it('T-CA9 ③: 无区间草稿发送不传扫描字段（core 退回全量扫描，与现状一致）', async () => {
+  it('T-CA9 ③: 无区间草稿 → 全量扫描直出 attachments（单条链路，不经掩码路径）', async () => {
     await mount();
     await act(async () => {
-      current().onChangeText('用 $foo 看 @notes/a.md');
+      current().onChangeText('手输 $A 与 @docs/b.md');
     });
     await act(async () => {
       current().handleDockAction('send');
@@ -330,13 +330,21 @@ describe('useChatComposerController · send 三分支路由', () => {
 
     expect(current().tokenRanges).toEqual([]);
     const args = mockStartRun.mock.calls[0]!;
-    expect(args[2]).toBe('用 $foo 看 @notes/a.md');
+    expect(args[2]).toBe('手输 $A 与 @docs/b.md');
     const options = args[3] as {
-      attachments?: unknown;
+      attachments?: readonly {
+        action?: string;
+        path?: string;
+        skillName?: string;
+      }[];
       excludedScanRanges?: unknown;
     };
-    expect(options.attachments).toBeUndefined();
+    // 无区间 = 历史全量扫描（scanAtPath → scanSkill 顺序，与 core 同序）；
+    // 不经掩码路径，也不下传 excludedScanRanges。
     expect(options.excludedScanRanges).toBeUndefined();
+    expect(
+      (options.attachments ?? []).map(item => item.skillName ?? item.path),
+    ).toEqual(['/docs/b.md', 'A']);
   });
 
   it('T-CA9 ③b: 区间外手输 token 仍经掩码全量扫描挂载（二段式的第 2 段）', async () => {
@@ -831,6 +839,53 @@ describe('useChatComposerController · tokenRanges 四咽喉点', () => {
     const payload = JSON.parse(mockDraftDb.get('s1')!) as {
       tokenRanges?: unknown;
     };
+    expect(payload.tokenRanges).toEqual([{start: 0, end: 2}]);
+  });
+
+  it('T-CA10 水化对称：syncFromDraft 把编辑前光标落到文本尾，相邻删除不被旧选区污染', async () => {
+    // s1 上先留下一个「上一个会话」的选区：不同步推进的话，它会在切会话后
+    // 继续充当删除锚（P3-2 的污染源）。
+    const tree = await mount();
+    await act(async () => {
+      current().onSelectionChange({start: 3, end: 3});
+    });
+
+    // 切到 s2：水化带区间草稿 `$A$A`。组件侧水化会把选区落到文本尾（4），
+    // controller 的编辑前光标必须同拍对齐。
+    mockDraftDb.set(
+      's2',
+      JSON.stringify({
+        text: '$A$A',
+        attachments: [],
+        tokenRanges: [
+          {start: 0, end: 2},
+          {start: 2, end: 4},
+        ],
+      }),
+    );
+    await act(async () => {
+      tree.update(<Harness scope={{projectId: 'p1', sessionId: 's2'}} />);
+    });
+    await flush();
+    expect(current().text).toBe('$A$A');
+    expect(current().tokenRanges).toEqual([
+      {start: 0, end: 2},
+      {start: 2, end: 4},
+    ]);
+
+    // 水化后直接一次原子退格（原生顺序：文本变更先到、选区回调后到，此刻
+    // 编辑前光标只能来自水化对齐值）。旧值 3 会反推出守卫可通过的删除段
+    // [1,3)，把左颗一并摘掉；对齐到 4 后删除段是 [2,4)，左颗幸存。
+    await act(async () => {
+      current().onChangeText('$A');
+    });
+
+    expect(current().tokenRanges).toEqual([{start: 0, end: 2}]);
+    const payload = JSON.parse(mockDraftDb.get('s2')!) as {
+      text?: string;
+      tokenRanges?: unknown;
+    };
+    expect(payload.text).toBe('$A');
     expect(payload.tokenRanges).toEqual([{start: 0, end: 2}]);
   });
 

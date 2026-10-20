@@ -42,6 +42,8 @@ import {
   hasChatAnnotateDrafts,
   listChatAnnotateDrafts,
   resolveComposerSendIntent,
+  scanAtPathAttachments,
+  scanSkillAttachments,
   subscribeChatAnnotateDraft,
   type MessageAttachment,
 } from '@novel-master/core/chat';
@@ -393,6 +395,12 @@ export function useChatComposerController({
     if (textChanged || rangesChanged) {
       // D4 第三参：水化链把持久化确认区间直接交给组件（跳 remap 直写）。
       setComposerTextRef.current?.(draft.text, undefined, nextRanges);
+      // D11 水化对称（P3-2）：组件侧 `commitExternalText` 在水化下发时会把
+      // 原生选区落到文本尾（cursor 缺省 = plain.length），controller 侧的
+      // 「编辑前光标」必须同拍对齐——否则上一个会话残留的旧选区会让下一次
+      // 删除的删除锚指错位置。只在真正下发时推进：text/ranges 都未变的
+      // 状态条广播不重写输入框，也不该动光标快照。
+      prevCursorRef.current = draft.text.length;
     }
     if (draft.tokenRanges === undefined && draft.text !== '') {
       // 兜底扫描结果写回固化（仅此一次）：text 与 ranges 均空（空会话）跳过，
@@ -533,12 +541,25 @@ export function useChatComposerController({
       // D9 掩码二段式（发送侧）：区间下标相对**未 trim** 的草稿原文（发送正文
       // 沿用历史口径 `content = text.trim()`）。先按区间 slice 单独扫描得到
       // rangeResults，再把同一批区间换算到正文坐标交给 core 掩码全量扫描；
-      // 区间为空（旧草稿 / 手输无胶囊）时零扫描，与 D9 之前逐字节一致。
+      // 区间为空（旧草稿 / 手输无胶囊）时走下方的全量扫描直出（不掩码）。
       const sendScan = scanComposerTokenRangesForSend(
         textRef.current,
         content,
         tokenRangesRef.current,
       );
+      // D9 ③ 无区间草稿（T-CA9 ③ 端到端）：不走掩码二段式，直接全量扫描
+      // trim 后正文（与 core 的 scanText 同一份）产出 attachments，随 run
+      // 下传占 existing 位。core 随后仍会全量扫描一次，但去重键相同的条目
+      // 保留 existing——最终结果与 core 自行扫描逐项一致（手输 `$技能` /
+      // `@路径` 照常挂载、贴字 `$` 维持不识别），发送行为零变化，只是让
+      // 「与现状一致」可以在本链路端到端断言。
+      const sendAttachments =
+        tokenRangesRef.current.length > 0
+          ? sendScan.attachments
+          : [
+              ...scanAtPathAttachments(content),
+              ...scanSkillAttachments(content),
+            ];
 
       // 有正文 / 批注草稿 → 成功后清输入
       // annotate 仅在 onUserMessageAppended 清 store（与正文分轨可并存于回调）
@@ -578,7 +599,7 @@ export function useChatComposerController({
           // 看不到胶囊内触发符（`@path$技能` 不再污染路径、`$A$B` 不重复挂载）。
           // 空数组不传：undefined 与 `[]` 在 core 侧行为等价，不传更贴近旧调用形态。
           attachments:
-            sendScan.attachments.length > 0 ? sendScan.attachments : undefined,
+            sendAttachments.length > 0 ? sendAttachments : undefined,
           excludedScanRanges:
             sendScan.excludedScanRanges.length > 0
               ? sendScan.excludedScanRanges
