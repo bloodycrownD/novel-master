@@ -2,10 +2,11 @@
  * 发送链区间扫描（D9 · mobile 侧）：以 Composer 确认胶囊区间为权威，逐区间
  * `slice` 出区间文本单独扫描，产出两类东西：
  *
- * 1. `attachments`：区间扫描得到的 `source: 'attach'` 附件（贴邻 chip 的
- *    `$A$B` 第二颗、`@path$技能` 的干净路径与技能）——经
- *    `SessionStreamStartOptions.attachments` 透传，core 发送挂点把它放在
- *    「existing 位」合并（区间结果优先）；
+ * 1. `attachments`：区间扫描（rangeResults）∪ 掩码全量扫描（fullScanResults）
+ *    按「existing=区间」合并后的 `source: 'attach'` 附件（贴邻 chip 的
+ *    `$A$B` 第二颗、`@path$技能` 的干净路径与技能、区间外手输 token）——
+ *    经 `SessionStreamStartOptions.attachments` 透传，core 发送挂点再把它放在
+ *    「existing 位」与自身掩码扫描结果去重合并（区间结果优先）；
  * 2. `excludedScanRanges`：同一批区间换算到 **trim 后正文** 的坐标系，供 core
  *    做全量扫描掩码（等长空白）——`@([^\s@]+)` 不再把 `$技能` 并进路径，
  *    区间内 token 也不会被全量扫描重复挂载。
@@ -39,7 +40,15 @@ export const EMPTY_COMPOSER_SEND_SCAN: ComposerSendScan = {
 };
 
 /**
- * 扫描发送草稿的确认区间。
+ * 扫描发送草稿的确认区间（D9 掩码二段式）。
+ *
+ * 1. **区间扫描**：每个确认区间 `slice` 出区间文本单独扫（触发符在 index 0
+ *    天然过边界）→ `rangeResults`；
+ * 2. **掩码全量扫描**：区间替换成**等长空白**（下标不变）后全量扫原文——
+ *    区间内触发符不再参与识别，手输 token（区间外）照常可扫 →
+ *    `fullScanResults`；
+ * 3. **合并**：`mergeAttachmentsByPath(rangeResults, fullScanResults)`——
+ *    该函数已有优先，区间结果必须放 existing 位。
  *
  * @param sourceText 未 trim 的草稿原文（区间下标基准）
  * @param content 发送正文（`sourceText.trim()`，core 扫描与落库 body）
@@ -55,21 +64,45 @@ export function scanComposerTokenRangesForSend(
     return EMPTY_COMPOSER_SEND_SCAN;
   }
 
-  const rangedScanned: MessageAttachment[] = [];
+  // 第 1 段：区间扫描。区间内触发符在 index 0：`$` 满足 `(?<!\S)`，`@` 到
+  // 区间尾自然终止，`$技能` 与 `@path` 因切分互不吞噬。
+  const rangeResults: MessageAttachment[] = [];
   for (const range of normalized) {
     const slice = sourceText.slice(range.start, range.end);
-    // 区间内触发符在 index 0：`$` 满足 `(?<!\S)`，`@` 到区间尾自然终止，
-    // `$技能` 与 `@path` 因切分互不吞噬。
-    rangedScanned.push(
+    rangeResults.push(
       ...scanAtPathAttachments(slice),
       ...scanSkillAttachments(slice),
     );
   }
 
+  // 第 2 段：掩码全量扫描。等长空白保证下标不变；区间外的手输 token
+  // （`用 $foo 看 @notes/a.md`）照常识别，贴邻触发器（`$A$B`）在源头消失。
+  const maskedText = maskRangesWithSpaces(sourceText, normalized);
+  const fullScanResults: MessageAttachment[] = [
+    ...scanAtPathAttachments(maskedText),
+    ...scanSkillAttachments(maskedText),
+  ];
+
+  // 第 3 段：合并——existing=区间（区间结果优先，去重键相同则保留区间对象）。
   return {
-    attachments: mergeAttachmentsByPath([], rangedScanned),
+    attachments: mergeAttachmentsByPath(rangeResults, fullScanResults),
     excludedScanRanges: toTrimmedCoordinates(sourceText, content, normalized),
   };
+}
+
+/** 区间替换为等长空白（下标不变；只喂扫描函数，不动正文）。 */
+function maskRangesWithSpaces(
+  text: string,
+  ranges: readonly ComposerDraftTokenRange[],
+): string {
+  let masked = "";
+  let cursor = 0;
+  for (const range of ranges) {
+    masked += text.slice(cursor, range.start);
+    masked += " ".repeat(range.end - range.start);
+    cursor = range.end;
+  }
+  return masked + text.slice(cursor);
 }
 
 /**

@@ -339,6 +339,52 @@ describe('useChatComposerController · send 三分支路由', () => {
     expect(options.excludedScanRanges).toBeUndefined();
   });
 
+  it('T-CA9 ③b: 区间外手输 token 仍经掩码全量扫描挂载（二段式的第 2 段）', async () => {
+    writeChatComposerDraftState(
+      's1',
+      {
+        text: '$A$B 手输 $C 与 @notes/a.md',
+        attachments: [],
+        tokenRanges: [
+          {start: 0, end: 2},
+          {start: 2, end: 4},
+        ],
+      },
+      mockRuntime.sessions,
+    );
+    await mount();
+
+    await act(async () => {
+      current().handleDockAction('send');
+    });
+    await flush();
+
+    const args = mockStartRun.mock.calls[0]!;
+    const options = args[3] as {
+      attachments?: readonly {
+        action?: string;
+        path?: string;
+        skillName?: string;
+      }[];
+      excludedScanRanges?: unknown;
+    };
+    const attachments = options.attachments ?? [];
+    // 区间段给 A/B，掩码后的全量扫描给区间外手输的 C 与路径——两段合并。
+    expect(
+      attachments
+        .filter(item => item.action === 'skillAttach')
+        .map(item => item.skillName)
+        .sort(),
+    ).toEqual(['A', 'B', 'C']);
+    expect(
+      attachments.filter(item => item.path != null).map(item => item.path),
+    ).toEqual(['/notes/a.md']);
+    expect(options.excludedScanRanges).toEqual([
+      {start: 0, end: 2},
+      {start: 2, end: 4},
+    ]);
+  });
+
   it('T-CA9 ④: 草稿首带空白 + 区间 → trimStart 换算不错位', async () => {
     // 草稿两端带空白：tokenRanges 相对原文，发送正文是 text.trim()。
     writeChatComposerDraftState(
