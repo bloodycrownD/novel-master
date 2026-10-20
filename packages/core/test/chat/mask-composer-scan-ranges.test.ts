@@ -131,8 +131,16 @@ describe("maskComposerScanRanges (T-CA9 · core)", () => {
     const ranged = scanTokenRanges(text, ranges);
     const merged = fullScanMasked(text, ranges, ranged);
     assert.deepEqual(skillNames(merged), ["A", "B"]);
-    // 区间结果先入：A 来自区间对象而非掩码后全量扫描的 `$A`
+    // 区间结果先入：A 来自区间对象而非掩码后全量扫描的 `$A`（重名去重，区间对象胜出）
     assert.equal(merged[0]!.skillName, "A");
+
+    // 保序断言（merge 方向判别力）：不重名场景下区间结果（A/B）必须排在
+    // 掩码全量扫描的手输结果（C）之前——两参对调时顺序反转为 ["C","A","B"]，本断言红。
+    const text2 = "$A$B 手输 $C";
+    assert.deepEqual(
+      skillNames(fullScanMasked(text2, ranges, scanTokenRanges(text2, ranges))),
+      ["A", "B", "C"],
+    );
   });
 
   it("越界区间夹取；重叠区间只保留先覆盖到的一段", () => {

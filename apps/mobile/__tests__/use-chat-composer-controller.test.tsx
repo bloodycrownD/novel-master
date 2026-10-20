@@ -379,6 +379,14 @@ describe('useChatComposerController · send 三分支路由', () => {
     expect(
       attachments.filter(item => item.path != null).map(item => item.path),
     ).toEqual(['/notes/a.md']);
+    // 保序断言（merge 方向判别力）：区间结果（A/B）必须占据 existing 位排在前面——
+    // 若 mergeAttachmentsByPath 两参对调，顺序会变成 ['/notes/a.md','C','A','B']，本断言红。
+    expect(attachments.map(item => item.skillName ?? item.path)).toEqual([
+      'A',
+      'B',
+      '/notes/a.md',
+      'C',
+    ]);
     expect(options.excludedScanRanges).toEqual([
       {start: 0, end: 2},
       {start: 2, end: 4},
