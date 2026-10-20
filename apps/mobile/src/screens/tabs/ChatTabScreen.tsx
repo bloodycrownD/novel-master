@@ -20,7 +20,11 @@ import {useTheme} from '@/theme/ThemeProvider';
 import {resolveChatTabBarStyle} from '@/navigation/main-tab-bar-style';
 import type {MainTabParamList, RootStackParamList} from '@/navigation/types';
 import {setPromptEditorOnSaved} from '@/components/agent/prompt-editor-callback';
-import {writeChatComposerDraft} from '@/storage/chat-composer-draft';
+import {remapTokenRanges} from '@/components/chat/native-composer/token-ranges';
+import {
+  readChatComposerDraftState,
+  writeChatComposerDraft,
+} from '@/storage/chat-composer-draft';
 import {ChatConversationPanel} from './chat-tab/ChatConversationPanel';
 import {ChatSessionListPanel} from './chat-tab/ChatSessionListPanel';
 import {ChatTabProvider, useChatTabContext} from './chat-tab/ChatTabProvider';
@@ -169,10 +173,29 @@ function ChatTabScreenContent({
       // composer 变体没有保存按钮：编辑器卸载（返回/手势）即回填——写入会话草稿
       // （内联输入 onChangeText 落的是同一条 store），再 bump 草稿恢复令牌触发
       // 下游从草稿重读（undo_send 同款回填链路）。
+      //
+      // D1 带外路径：全屏编辑器只改文本不改区间，退出回填时用正式编辑前的旧草稿
+      // 区间做一次 remap（全屏内的新 `$x` 不升格，与目标 5 一致）。旧草稿
+      // `tokenRanges` 为 undefined → **原样写 undefined**（不传字段、不做扫描
+      // 预处理），允许下一次水化兜底扫描一次（与旧版本草稿同语义）。
       setPromptEditorOnSaved(text => {
-        writeChatComposerDraft(targetSessionId, text, runtime.sessions);
+        const previous = readChatComposerDraftState(targetSessionId);
+        writeChatComposerDraft(
+          targetSessionId,
+          text,
+          runtime.sessions,
+          previous.tokenRanges !== undefined
+            ? remapTokenRanges(previous.text, text, previous.tokenRanges)
+            : undefined,
+        );
         setDraftRestoreToken(token => token + 1);
       });
+      // D10 全屏守卫：进入全屏时的确认胶囊区间随路由带入（与 initialText 同一
+      // 坐标系）。全屏内新插入的区间由屏幕自身累积；这里只负责把进屏前的
+      // 草稿区间交过去，避免「已有胶囊贴尾 → 再插一颗」在无守卫时被整颗替换。
+      // 正常路径下 payload.text 与草稿文本一致（打字/插入都同步落草稿），
+      // remap 只是把「万一不一致」的坐标系对齐，相等时是恒等拷贝。
+      const entryDraft = readChatComposerDraftState(targetSessionId);
       navigation.navigate('PromptEditor', {
         title: '编辑消息',
         initialText: payload.text,
@@ -180,6 +203,14 @@ function ChatTabScreenContent({
         // @/$ tag 的选择器需要 scope（技能合并视图 / 会话工作区）
         projectId: ctx.projectId,
         sessionId: targetSessionId,
+        tokenRanges:
+          entryDraft.tokenRanges !== undefined
+            ? remapTokenRanges(
+                entryDraft.text,
+                payload.text,
+                entryDraft.tokenRanges,
+              )
+            : undefined,
       });
     },
     [ctx.projectId, ctx.sessionId, runtime, setDraftRestoreToken, navigation],

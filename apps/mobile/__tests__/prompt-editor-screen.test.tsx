@@ -23,6 +23,8 @@ const mockRoute = {
     variant?: 'form' | 'composer';
     projectId?: string;
     sessionId?: string;
+    /** D10 全屏守卫：进屏前草稿的确认胶囊区间（随路由带入）。 */
+    tokenRanges?: readonly {start: number; end: number}[];
   },
 };
 // 捕获 useUnsavedGuard 注册的 beforeRemove handler（effect 随 isDirty 重跑，槽位始终存最新）。
@@ -274,6 +276,7 @@ describe('PromptEditorScreen (T-PE3 + R5 + R6)', () => {
       title?: string;
       initialText: string;
       variant?: 'form' | 'composer';
+      tokenRanges?: readonly {start: number; end: number}[];
     };
   });
 
@@ -471,6 +474,7 @@ describe('PromptEditorScreen composer 变体（chat 输入框全屏）', () => {
       title?: string;
       initialText: string;
       variant?: 'form' | 'composer';
+      tokenRanges?: readonly {start: number; end: number}[];
     };
   });
 
@@ -591,12 +595,13 @@ describe('PromptEditorScreen composer 变体（chat 输入框全屏）', () => {
       mockFilePickerProps[0]!.onConfirm(['@docs/', '@notes.md']);
     });
 
-    // 多 token 空格连接 + 尾空格，光标落插入段末尾。
-    expect(mockEditorSetText).toHaveBeenCalledWith('@docs/ @notes.md ', {
-      start: 17,
-      end: 17,
+    // chip 口径：多 token 零分隔空格直接拼接（`@docs/@notes.md`），光标落
+    // 插入段末尾（15 = 两个 token 长度之和）。
+    expect(mockEditorSetText).toHaveBeenCalledWith('@docs/@notes.md', {
+      start: 15,
+      end: 15,
     });
-    expect(mockEditorProps[0]!.value).toBe('@docs/ @notes.md ');
+    expect(mockEditorProps[0]!.value).toBe('@docs/@notes.md');
     // 收尾卸载（同上：防止跨用例的捕获污染）。
     act(() => {
       tree.unmount();
@@ -657,13 +662,13 @@ describe('PromptEditorScreen composer 变体（chat 输入框全屏）', () => {
     act(() => {
       mockSkillPickerProps[0]!.onConfirm('写作');
     });
-    // buildTokenInsertion('已有文本', 4, 4, '$写作')：前导空格 + token + 尾空格，
-    // 光标落插入段末尾——cursor 若停在 0 会插到整篇开头（该回归的本体）。
-    expect(mockEditorSetText).toHaveBeenCalledWith('已有文本 $写作 ', {
-      start: 9,
-      end: 9,
+    // buildTokenInsertion('已有文本', 4, 4, '$写作')：chip 零分隔空格直插，
+    // 光标落插入段末尾（7 = 4 + 3）——cursor 若停在 0 会插到整篇开头（该回归的本体）。
+    expect(mockEditorSetText).toHaveBeenCalledWith('已有文本$写作', {
+      start: 7,
+      end: 7,
     });
-    expect(mockEditorProps[0]!.value).toBe('已有文本 $写作 ');
+    expect(mockEditorProps[0]!.value).toBe('已有文本$写作');
     act(() => {
       tree.unmount();
     });
@@ -690,10 +695,11 @@ describe('PromptEditorScreen composer 变体（chat 输入框全屏）', () => {
     act(() => {
       mockSkillPickerProps[0]!.onConfirm('写作');
     });
-    // 活跃 $ 查询 [0,1) 被整段替换（不残留半截查询）。
-    expect(mockEditorSetText).toHaveBeenCalledWith('$写作 ', {
-      start: 4,
-      end: 4,
+    // 活跃 $ 查询 [0,1) 被整段替换（不残留半截查询）；chip 零分隔空格，
+    // 光标落 token 末尾（3）。
+    expect(mockEditorSetText).toHaveBeenCalledWith('$写作', {
+      start: 3,
+      end: 3,
     });
     // FileReferencePicker 空选早退：零写入。
     act(() => {
@@ -704,6 +710,122 @@ describe('PromptEditorScreen composer 变体（chat 输入框全屏）', () => {
       mockFilePickerProps[0]!.onConfirm([]);
     });
     expect(mockEditorSetText).toHaveBeenCalledTimes(1);
+    act(() => {
+      tree.unmount();
+    });
+  });
+
+  it('D10 全屏守卫：连续插两颗技能 → `$A$B` 贴邻，不互替换', () => {
+    mockRoute.params = {
+      initialText: '',
+      variant: 'composer',
+      projectId: 'p1',
+      sessionId: 's1',
+    };
+    const tree = renderScreen();
+
+    // 第一颗：空文档，光标初值 0。
+    act(() => {
+      tree.root.findByProps({testID: 'composer-editor-skill-btn'}).props.onPress();
+    });
+    act(() => {
+      mockSkillPickerProps[0]!.onConfirm('A');
+    });
+    expect(mockEditorSetText).toHaveBeenLastCalledWith('$A', {
+      start: 2,
+      end: 2,
+    });
+
+    // 第二颗：光标贴第一颗右缘，`findActiveAtQuery` 会把 `$A` 当成活跃查询；
+    // 守卫认出查询区 [0,2) 整落在已确认区间内 → 纯插入不替换。
+    // 没有守卫时 replaceStart 会取 0、文本变 `$B`（本用例即为其回归锁）。
+    act(() => {
+      tree.root.findByProps({testID: 'composer-editor-skill-btn'}).props.onPress();
+    });
+    act(() => {
+      mockSkillPickerProps[0]!.onConfirm('B');
+    });
+    expect(mockEditorSetText).toHaveBeenLastCalledWith('$A$B', {
+      start: 4,
+      end: 4,
+    });
+    expect(mockEditorProps[0]!.value).toBe('$A$B');
+    act(() => {
+      tree.unmount();
+    });
+  });
+
+  it('D10 全屏守卫：路由带入的既有胶囊区间同样受保护（进屏前已有 `$A`）', () => {
+    mockRoute.params = {
+      initialText: '$A',
+      variant: 'composer',
+      projectId: 'p1',
+      sessionId: 's1',
+      // ChatTabScreen 透传的进屏前草稿确认区间。
+      tokenRanges: [{start: 0, end: 2}],
+    };
+    const tree = renderScreen();
+    // 不点编辑器：cursor 初值在文末（2），直接插第二颗。
+    act(() => {
+      tree.root.findByProps({testID: 'composer-editor-skill-btn'}).props.onPress();
+    });
+    act(() => {
+      mockSkillPickerProps[0]!.onConfirm('B');
+    });
+    expect(mockEditorSetText).toHaveBeenLastCalledWith('$A$B', {
+      start: 4,
+      end: 4,
+    });
+    expect(mockEditorProps[0]!.value).toBe('$A$B');
+    act(() => {
+      tree.unmount();
+    });
+  });
+
+  it('D11 删除锚：全屏内 $A$B 删左颗 → 幸存右颗的区间保留', () => {
+    mockRoute.params = {
+      initialText: '$A$B',
+      variant: 'composer',
+      projectId: 'p1',
+      sessionId: 's1',
+      tokenRanges: [
+        {start: 0, end: 2},
+        {start: 2, end: 4},
+      ],
+    };
+    const tree = renderScreen();
+
+    // 用户把光标放在两颗胶囊之间（编辑前光标 = 2）。
+    act(() => {
+      mockEditorProps[0]!.onSelectionChange!({start: 2, end: 2});
+    });
+    // 原子删 A：CM 的删除事务先上报变更后的选区（0），rAF 合帧后才上发新
+    // 正文——全屏侧据此把上一拍选区（2）留作删除锚。
+    act(() => {
+      mockEditorProps[0]!.onSelectionChange!({start: 0, end: 0});
+    });
+    act(() => {
+      mockEditorProps[0]!.onChange('$B');
+    });
+    expect(mockEditorProps[0]!.value).toBe('$B');
+
+    // 读回幸存区间：光标移到文末再插一颗。`$B` 若仍是确认胶囊，查询守卫
+    // 会命中「纯插入」→ `$B$C`；区间若被差分对齐保守摘掉，会走整颗替换
+    // → `$C`（无删除锚时 `remapTokenRanges('$A$B','$B',…)` 返回 []）。
+    act(() => {
+      mockEditorProps[0]!.onSelectionChange!({start: 2, end: 2});
+    });
+    act(() => {
+      tree.root.findByProps({testID: 'composer-editor-skill-btn'}).props.onPress();
+    });
+    act(() => {
+      mockSkillPickerProps[0]!.onConfirm('C');
+    });
+    expect(mockEditorSetText).toHaveBeenLastCalledWith('$B$C', {
+      start: 4,
+      end: 4,
+    });
+    expect(mockEditorProps[0]!.value).toBe('$B$C');
     act(() => {
       tree.unmount();
     });

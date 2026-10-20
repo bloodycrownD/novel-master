@@ -21,6 +21,7 @@ import {
   EVENT_AGENT_RUN_STARTED,
   SimpleEventBus,
 } from '@novel-master/core/events';
+import type {MessageAttachment} from '@novel-master/core/chat';
 import {
   isMobileAgentActive,
   setMobileAgentActive,
@@ -135,6 +136,36 @@ describe('SessionStreamUnitManager', () => {
     for (const manager of liveManagers.splice(0)) {
       manager.dispose();
     }
+  });
+
+  it('D9: startRun 的 excludedScanRanges/attachments 原样透传给 runAgentTurn', () => {
+    const h = createHarness();
+    const excludedScanRanges = [
+      {start: 0, end: 13},
+      {start: 13, end: 18},
+    ];
+    const attachments: MessageAttachment[] = [
+      {
+        name: 'a.md',
+        source: 'attach',
+        type: 'text',
+        content: null,
+        path: '/docs/a.md',
+      },
+    ];
+
+    expect(
+      h.manager.startRun('a', 'p', '$agent-config$节拍成章', {
+        excludedScanRanges,
+        attachments,
+      }).ok,
+    ).toBe(true);
+    expect(h.runAgentTurn).toHaveBeenCalledWith(
+      expect.anything(),
+      {projectId: 'p', sessionId: 'a'},
+      '$agent-config$节拍成章',
+      expect.objectContaining({excludedScanRanges, attachments}),
+    );
   });
 
   it('水合语义：markHydrated 前投影一律 null（会话呈现为无 run）；置位后可读并通知', () => {

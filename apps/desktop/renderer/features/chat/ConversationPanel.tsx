@@ -52,6 +52,10 @@ import {
   chatMessageFromDto,
 } from './composer-send-state';
 import {
+  resolveComposerDraftPersistPayload,
+  type HydratedComposerDraft,
+} from './composer-draft-passthrough';
+import {
   buildMessageActionItems,
   editableTextFromMessage,
 } from './message-edit';
@@ -202,6 +206,8 @@ export function ConversationPanel({
     MessageAttachmentDto[]
   >([]);
   const composerDraftHydratedRef = useRef(false);
+  // D6：水化时的 { text, tokenRanges } 快照；写回仅在正文未编辑时原样透传 ranges。
+  const composerDraftSnapshotRef = useRef<HydratedComposerDraft | null>(null);
   const [chatRichText, setChatRichText] = useState(true);
   const [messageMenu, setMessageMenu] = useState<{
     message: ChatMessageDto;
@@ -308,6 +314,7 @@ export function ConversationPanel({
     onStreamReset();
     setComposerError(undefined);
     composerDraftHydratedRef.current = false;
+    composerDraftSnapshotRef.current = null;
     setComposerText('');
     setComposerAttachments([]);
 
@@ -329,6 +336,14 @@ export function ConversationPanel({
         draftRes.ok ? draftRes.data : null,
       );
       const status = statusRes.ok ? statusRes.data : [];
+      // D6：快照连同 tokenRanges 一起存 ref（desktop 无胶囊 UI，读侧渲染语义不变）；
+      // 写回时用它判断正文是否被编辑，未编辑才原样透传。
+      composerDraftSnapshotRef.current = {
+        text: draft.text,
+        ...(draft.tokenRanges !== undefined
+          ? { tokenRanges: draft.tokenRanges }
+          : {}),
+      };
       setComposerText(draft.text);
       // 历史 draft attach chip 丢弃；文件引用只认正文 `@路径`
       // 投影直接作状态条，再 ∪ annotate（切会话回来 store 未清则 chip 仍在）
@@ -351,11 +366,14 @@ export function ConversationPanel({
     if (!composerDraftHydratedRef.current) {
       return;
     }
-    // draft attach 恒空；仅持久正文（含 `@路径`）
-    const draftJson = serializeComposerDraftJson({
-      text: composerText,
-      attachments: [],
-    });
+    // draft attach 恒空；仅持久正文（含 `@路径`）。D6：正文未编辑时原样透传 tokenRanges，
+    // 已编辑则省略字段（undefined ≠ []，交给 mobile 侧兜底扫描）。
+    const draftJson = serializeComposerDraftJson(
+      resolveComposerDraftPersistPayload(
+        composerDraftSnapshotRef.current,
+        composerText,
+      ),
+    );
     void ipcSessionsSetComposerDraft({ sessionId, draftJson });
   }, [sessionId, composerText, composerAttachments, readOnly]);
 

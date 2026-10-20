@@ -50,9 +50,11 @@ import {
   EVENT_SUBAGENT_CHILD_SESSION_CREATED,
 } from "@/domain/events/model/event-types.js";
 import type { SendAnnotateDraft } from "@/domain/chat/model/annotate-draft.schema.js";
+import type { ComposerDraftTokenRange } from "@/domain/chat/model/composer-draft.schema.js";
 import type { MessageAttachment } from "@/domain/chat/model/message-attachment.schema.js";
 import { buildAnnotateAttachmentFromDraft } from "@/domain/chat/logic/build-attachment-action-xml.js";
 import { estimateSoftRangeFromOriginalText } from "@/domain/chat/logic/annotate-source-range.js";
+import { maskComposerScanRanges } from "@/domain/chat/logic/mask-composer-scan-ranges.js";
 import { mergeAttachmentsWithScannedAtPaths } from "@/domain/chat/logic/scan-at-path-attachments.js";
 import { mergeAttachmentsWithScannedSkills } from "@/domain/chat/logic/scan-skill-attachments.js";
 import type { CompactionConditionEvaluator } from "@/service/compaction-conditions/create-compaction-condition-evaluator.js";
@@ -265,8 +267,23 @@ export interface RunAgentTurnOptions {
    * Composer 显式附件；**仅** `source===attach` 生效。
    * 误传的 `user_ops` 预览一律丢弃（filter 保留拦截）；`@` 扫描由 Core 合并。
    * workplace 为历史只读兼容，新数据不再产生。
+   *
+   * **D9**：发送侧按确认胶囊区间预扫出的附件也经这里进入——合并时位于
+   * existing 位（`mergeAttachmentsWithScannedAtPaths` 已有优先），优先于
+   * {@link excludedScanRanges} 掩码后的全量扫描结果。
    */
   readonly attachments?: readonly MessageAttachment[];
+  /**
+   * Composer 确认胶囊区间（`[start, end)`，相对正文；D9 发送链区间感知）。
+   *
+   * chip 模型（D8）插入不产生分隔空格，贴邻 token（`$A$B` / `@path$技能`）
+   * 全量扫描认不出：发送侧已按区间逐段扫描并把结果放进 {@link attachments}
+   * （`source === 'attach'`），本字段只供**全量扫描掩码**——扫描前把区间替换成
+   * 等长空白，避免 `$技能` 被并进 `@path`、避免区间内 token 重复扫描。
+   * 缺失或空数组 → 全量扫描不掩码，与历史行为逐字节一致。
+   * 越界/重叠区间由掩码侧夹取与过滤（见 `maskComposerScanRanges`）。
+   */
+  readonly excludedScanRanges?: readonly ComposerDraftTokenRange[];
   /**
    * App 本轮未发送批注草稿（文件形 | 消息形联合）；Core 物化为 `action:annotate` 并 **concat** 进落库。
    * 非空时计入 hasInput / shouldAppendNewUser，且禁止空续跑 re-append。
@@ -661,9 +678,13 @@ async function runAgentTurnWithController(
   });
 
   // Scan typed @path / $skill into attach; dedupe with chips; keep tokens in body text.
+  // D9：确认胶囊区间先掩码成等长空白再全量扫描——区间内触发符（`$A$B` /
+  // `@path$技能`）不再污染/重复扫描；区间结果由发送侧预扫后经 attachments
+  // 传入（composerAttachOnly 在合并时位于 existing 位 = 区间结果优先）。
+  const scanText = maskComposerScanRanges(trimmed, options?.excludedScanRanges);
   const scannedComposer = mergeAttachmentsWithScannedSkills(
-    trimmed,
-    mergeAttachmentsWithScannedAtPaths(trimmed, composerAttachOnly)
+    scanText,
+    mergeAttachmentsWithScannedAtPaths(scanText, composerAttachOnly)
   );
 
   let checkpointAnchorMessageId: string | undefined;

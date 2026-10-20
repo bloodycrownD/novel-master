@@ -54,6 +54,8 @@ export {
 export type {
   ComposerDraft,
   ComposerDraftAttachment,
+  /** Composer 草稿中的确认胶囊区间（`[start, end)`，UTF-16 码元偏移）。 */
+  ComposerDraftTokenRange,
 } from "../domain/chat/model/composer-draft.schema.js";
 export {
   ATTACH_PROMPT_CHAR_BUDGET,

@@ -75,7 +75,7 @@ index 512f5fc..89b4c31 100644
      view: EnrichedMarkdownTextInputView?,
      indicator: String?,
 diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/EnrichedMarkdownTextInputView.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/EnrichedMarkdownTextInputView.kt
-index 561cf66..45956a5 100644
+index 561cf66..a261f4e 100644
 --- a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/EnrichedMarkdownTextInputView.kt
 +++ b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/EnrichedMarkdownTextInputView.kt
 @@ -13,6 +13,7 @@ import android.util.TypedValue
@@ -95,15 +95,60 @@ index 561cf66..45956a5 100644
  import com.swmansion.enriched.markdown.input.autolink.AutoLinkDetector
  import com.swmansion.enriched.markdown.input.autolink.LinkRegexConfig
  import com.swmansion.enriched.markdown.input.detection.DetectorPipeline
-@@ -47,6 +50,7 @@ import com.swmansion.enriched.markdown.input.formatting.InputFormatter
+@@ -45,8 +48,11 @@ import com.swmansion.enriched.markdown.input.formatting.BlockStore
+ import com.swmansion.enriched.markdown.input.formatting.FormattingStore
+ import com.swmansion.enriched.markdown.input.formatting.InputFormatter
  import com.swmansion.enriched.markdown.input.formatting.InputParser
++import com.swmansion.enriched.markdown.input.formatting.TokenLinkMapping
++import com.swmansion.enriched.markdown.input.formatting.TokenRangeSync
  import com.swmansion.enriched.markdown.input.layout.InputEventEmitter
  import com.swmansion.enriched.markdown.input.layout.InputLayoutManager
 +import com.swmansion.enriched.markdown.input.layout.lineSpacingAddFrom
  import com.swmansion.enriched.markdown.input.model.BlockRange
  import com.swmansion.enriched.markdown.input.model.BlockType
  import com.swmansion.enriched.markdown.input.model.FormattingRange
-@@ -277,7 +281,82 @@ class EnrichedMarkdownTextInputView(
+@@ -72,6 +78,19 @@ class EnrichedMarkdownTextInputView(
+   val editSession = EditSession()
+   val blockCoordinator = BlockEditCoordinator(blockStore)
+ 
++  /**
++   * 同键并发收敛的共享状态（本仓 fork，D3）。InputConnectionWrapper 在
++   * begin/endBatchEdit 里镜像 IME 的 batch 编辑状态：原子删除只在 batch 域内
++   * 置位 [suppressNextDelete]，同一物理按键的后续删除入口读到标志后不再删、
++   * 不再调 super、也不再补发 Backspace 事件；endBatchEdit 无条件清标志。
++   * 独立按键（不落在 batch 里）永远不会被吞。
++   */
++  internal var isInBatchEdit: Boolean = false
++  internal var suppressNextDelete: Boolean = false
++
++  /** 本次删除入口是否已被同一按键的前一个入口消费（是则整体短路）。 */
++  internal fun isDeleteSuppressed(): Boolean = suppressNextDelete
++
+   private var lastProcessedText: String = ""
+   private var preEditSelectionStart = 0
+   private var preEditSelectionEnd = 0
+@@ -229,8 +248,18 @@ class EnrichedMarkdownTextInputView(
+       text?.replace(start, end, "\t")
+       return true
+     }
+-    if (keyCode == KeyEvent.KEYCODE_DEL && deleteLinkBeforeCursor()) {
+-      return true
++    if (keyCode == KeyEvent.KEYCODE_DEL) {
++      // 同键并发收敛（D3）：同一物理按键的前一个删除入口已处理过，本入口整体短路。
++      if (isDeleteSuppressed()) return true
++      if (deleteLinkBeforeCursor()) {
++        return true
++      }
++    }
++    if (keyCode == KeyEvent.KEYCODE_FORWARD_DEL) {
++      if (isDeleteSuppressed()) return true
++      if (deleteAtomicAfterCursor()) {
++        return true
++      }
+     }
+     if (handleListKey(keyCode, event)) {
+       return true
+@@ -277,7 +306,82 @@ class EnrichedMarkdownTextInputView(
    // See: ReactEditText in React Native core.
    override fun isLayoutRequested(): Boolean = false
  
@@ -186,7 +231,7 @@ index 561cf66..45956a5 100644
      when (ev.action) {
        MotionEvent.ACTION_DOWN -> {
          detectScrollMovement = true
-@@ -324,11 +403,18 @@ class EnrichedMarkdownTextInputView(
+@@ -324,11 +428,18 @@ class EnrichedMarkdownTextInputView(
  
    // In auto-grow mode (scrollEnabled=false) TextView's internal bringPointIntoView
    // scrolls content before Fabric has resized the view, causing a visible flicker.
@@ -206,7 +251,25 @@ index 561cf66..45956a5 100644
      super.scrollTo(x, y)
    }
  
-@@ -729,6 +815,14 @@ class EnrichedMarkdownTextInputView(
+@@ -453,6 +564,8 @@ class EnrichedMarkdownTextInputView(
+    * Seeding here is the only chance to carry the style through the whole typed
+    * run: the post-edit grace period above skips reseeding between keystrokes.
+    * LINK is excluded — typing over a selected link replaces it, not extends it.
++   * 本仓 fork（D2）：TOKEN 胶囊同样排除——选区改写胶囊时整颗摘除后落纯文本，
++   * 绝不能把 TOKEN 种成 pending style 传给后续输入。
+    */
+   private fun seedPendingStylesFromSelection(
+     selStart: Int,
+@@ -460,7 +573,7 @@ class EnrichedMarkdownTextInputView(
+   ) {
+     if (selStart == selEnd) return
+     for (style in StyleType.entries) {
+-      if (style == StyleType.LINK) continue
++      if (style == StyleType.LINK || style == StyleType.TOKEN) continue
+       if (formattingStore.isStyleActive(style, selStart)) {
+         pendingStyles.add(style)
+       }
+@@ -729,6 +842,14 @@ class EnrichedMarkdownTextInputView(
    // and block ranges survive the round trip — mirrors iOS's copy:/cut:/paste:
    // overrides. External clips keep default handling.
    override fun onTextContextMenuItem(id: Int): Boolean {
@@ -221,30 +284,232 @@ index 561cf66..45956a5 100644
      if (id == android.R.id.paste) {
        MarkdownClipboard.markdownFromClipboard(context)?.let { markdown ->
          pasteMarkdown(markdown)
-@@ -936,10 +1030,18 @@ class EnrichedMarkdownTextInputView(
-     if (cursorStart != cursorEnd || cursorStart <= 0) return false
+@@ -930,19 +1051,218 @@ class EnrichedMarkdownTextInputView(
+     applyFormattingAndEmit()
+   }
+ 
++  /**
++   * 原子删除统一内核（本仓 fork，D3 七入口共用）：删除窗 [windowStart, windowEnd)
++   * 与所有相交的原子区间（LINK/TOKEN）取并集——每颗胶囊各自扩成整条——再一次性
++   * 删掉并集文本。返回 false 表示没有命中任何应扩整的原子区间，调用方照常走平台
++   * 原路径，普通删除的行为因此不变。
++   *
++   * [expandLinks]：LINK 是否参与扩整。折叠光标退格/词删为 true；选区删除只扩
++   * TOKEN，LINK 保持上游折叠光标语义（部分覆盖的 LINK 由平台按原样裁剪）。
++   * [caretAfter]：删除后的光标位置；null 表示落到删除区起点（退格/选区/词删
++   * 统一口径），前向删除显式传原光标保持不动。
++   */
++  internal fun deleteAtomicRegion(
++    windowStart: Int,
++    windowEnd: Int,
++    expandLinks: Boolean,
++    expandTokens: Boolean = true,
++    caretAfter: Int? = null,
++  ): Boolean {
++    val editable = text ?: return false
++    val length = editable.length
++    var start = minOf(windowStart, windowEnd).coerceIn(0, length)
++    var end = maxOf(windowStart, windowEnd).coerceIn(0, length)
++    if (start == end) return false
++
++    var hitAtomic = false
++    var expanded = true
++    while (expanded) {
++      expanded = false
++      for (range in formattingStore.allRanges) {
++        val atomicType =
++          (expandLinks && range.type == StyleType.LINK) ||
++            (expandTokens && range.type == StyleType.TOKEN)
++        if (!atomicType) continue
++        if (range.start >= end || range.end <= start) continue
++        hitAtomic = true
++        if (range.start < start) {
++          start = range.start
++          expanded = true
++        }
++        if (range.end > end) {
++          end = range.end
++          expanded = true
++        }
++      }
++    }
++    if (!hitAtomic) return false
++
++    replaceTextInRange(start, end, "") { ed ->
++      setSelection((caretAfter ?: start).coerceIn(start, ed.length))
++    }
++    dispatchMentionEvents(mentionCoordinator.clear())
++    // 同键并发收敛：只有 batch 编辑域内才置位抑制标志——独立按键绝不被吞。
++    if (isInBatchEdit) suppressNextDelete = true
++    return true
++  }
++
++  /**
++   * 删除窗口径（D3）：有选区用选区，无选区用光标前 [beforeLength] 个字符与后
++   * [afterLength] 个字符。返回 (start, end, 是否折叠光标)。
++   */
++  private fun deletionWindow(
++    beforeLength: Int,
++    afterLength: Int,
++  ): Triple<Int, Int, Boolean> {
++    val length = text?.length ?: 0
++    val selStart = minOf(selectionStart, selectionEnd).coerceIn(0, length)
++    val selEnd = maxOf(selectionStart, selectionEnd).coerceIn(0, length)
++    val collapsed = selStart == selEnd
++    val start = (selStart - beforeLength.coerceAtLeast(0)).coerceAtLeast(0)
++    val end = (selEnd + afterLength.coerceAtLeast(0)).coerceAtMost(length)
++    return Triple(start, end, collapsed)
++  }
++
++  /**
++   * 退格原子删（既有入口，D3 扩展选区）：折叠光标查光标前一个字符所在的
++   * LINK/TOKEN 并整条摘除（LINK 优先的上游语义由并集自然覆盖）；有选区时只把
++   * 相交的 TOKEN 扩整颗，LINK 保持上游折叠光标语义（交给平台按原选区处理）。
++   */
+   fun deleteLinkBeforeCursor(): Boolean {
+     val cursorStart = selectionStart
+     val cursorEnd = selectionEnd
+-    if (cursorStart != cursorEnd || cursorStart <= 0) return false
      if (text == null) return false
++    return if (cursorStart == cursorEnd) {
++      if (cursorStart <= 0) return false
++      deleteAtomicRegion(
++        windowStart = cursorStart - 1,
++        windowEnd = cursorStart,
++        expandLinks = true,
++      )
++    } else {
++      deleteAtomicRegion(
++        windowStart = minOf(cursorStart, cursorEnd),
++        windowEnd = maxOf(cursorStart, cursorEnd),
++        expandLinks = false,
++      )
++    }
++  }
++
++  /**
++   * 前向删除原子删（D3 新入口）：删除窗为光标后一个字符（有选区用选区），命中
++   * LINK/TOKEN 时整条摘除，光标保持原位置（前向删除光标不动）。
++   */
++  internal fun deleteAtomicAfterCursor(): Boolean {
++    val cursorStart = selectionStart
++    val cursorEnd = selectionEnd
++    if (text == null) return false
++    return if (cursorStart == cursorEnd) {
++      if (cursorStart >= (text?.length ?: 0)) return false
++      deleteAtomicRegion(
++        windowStart = cursorStart,
++        windowEnd = cursorStart + 1,
++        expandLinks = true,
++        caretAfter = cursorStart,
++      )
++    } else {
++      deleteAtomicRegion(
++        windowStart = minOf(cursorStart, cursorEnd),
++        windowEnd = maxOf(cursorStart, cursorEnd),
++        expandLinks = false,
++      )
++    }
++  }
++
++  /**
++   * 空 commitText 退格（D3 新入口）：删除窗=有选区用选区，无选区用
++   * [max(0, sel-1), sel)。命中原子区间时 helper 删整颗；未命中返回 false，
++   * 调用方走平台原路径（空 commitText 只清组合区）。
++   */
++  internal fun deleteForEmptyCommit(): Boolean {
++    val length = text?.length ?: return false
++    val selStart = minOf(selectionStart, selectionEnd).coerceIn(0, length)
++    val selEnd = maxOf(selectionStart, selectionEnd).coerceIn(0, length)
++    val collapsed = selStart == selEnd
++    val start = if (collapsed) (selStart - 1).coerceAtLeast(0) else selStart
++    val end = if (collapsed) selStart else selEnd
++    if (start == end) return false
++    return deleteAtomicRegion(
++      windowStart = start,
++      windowEnd = end,
++      expandLinks = collapsed,
++    )
++  }
  
 -    val linkRange = linkCoordinator.linkRangeForDeletion(cursorStart) ?: return false
--
++  /**
++   * deleteSurroundingText(n, m) 一般参数（D3 新入口）：删除窗扩到光标/选区前后
++   * 的 n、m 个字符，词删（n > 1）与前向删除（m > 0）都走同一 helper。
++   */
++  internal fun deleteSurroundingRegion(
++    beforeLength: Int,
++    afterLength: Int,
++  ): Boolean {
++    if (beforeLength <= 0 && afterLength <= 0) return false
++    val (start, end, collapsed) = deletionWindow(beforeLength, afterLength)
++    if (start == end) return false
++    return deleteAtomicRegion(
++      windowStart = start,
++      windowEnd = end,
++      expandLinks = collapsed,
++    )
++  }
+ 
 -    replaceTextInRange(linkRange.start, linkRange.end, "") { editable ->
 -      setSelection(linkRange.start.coerceAtMost(editable.length))
-+    // TOKEN（本仓 fork）并入同一条删除拦截路径（D2 原子删）：LINK 优先（保上游
-+    // 语义不变），未命中 LINK 再查光标前一个字符所在的 TOKEN 区间——退格/删除
-+    // 触及 token 胶囊中段时整段摘除，光标落删除窗起点。软键盘三条退格入口
-+    // （deleteSurroundingText / sendKeyEvent / onKeyDown）都汇聚到本函数，
-+    // 并入这里即全覆盖，无需逐入口接线。
-+    val linkRange = linkCoordinator.linkRangeForDeletion(cursorStart)
-+    val tokenRange =
-+      if (linkRange == null) formattingStore.rangeOfType(StyleType.TOKEN, cursorStart - 1) else null
-+    val range = linkRange ?: tokenRange ?: return false
++  /**
++   * deleteSurroundingTextInCodePoints（D3 新入口，部分 IME 用该变体绕过原子删）：
++   * code point 数换算成字符偏移后走同一 helper（代理对按一步计）。
++   */
++  internal fun deleteSurroundingRegionInCodePoints(
++    beforeLength: Int,
++    afterLength: Int,
++  ): Boolean {
++    val editable = text ?: return false
++    if (beforeLength <= 0 && afterLength <= 0) return false
++    val length = editable.length
++    val selStart = minOf(selectionStart, selectionEnd).coerceIn(0, length)
++    val selEnd = maxOf(selectionStart, selectionEnd).coerceIn(0, length)
++    val collapsed = selStart == selEnd
 +
-+    replaceTextInRange(range.start, range.end, "") { editable ->
-+      setSelection(range.start.coerceAtMost(editable.length))
++    var start = selStart
++    var remainingBefore = beforeLength.coerceAtLeast(0)
++    while (remainingBefore > 0 && start > 0) {
++      start =
++        if (start >= 2 &&
++          Character.isLowSurrogate(editable[start - 1]) &&
++          Character.isHighSurrogate(editable[start - 2])
++        ) {
++          start - 2
++        } else {
++          start - 1
++        }
++      remainingBefore--
      }
-     dispatchMentionEvents(mentionCoordinator.clear())
-     return true
-@@ -950,6 +1052,26 @@ class EnrichedMarkdownTextInputView(
+-    dispatchMentionEvents(mentionCoordinator.clear())
+-    return true
++
++    var end = selEnd
++    var remainingAfter = afterLength.coerceAtLeast(0)
++    while (remainingAfter > 0 && end < length) {
++      end =
++        if (end + 1 < length &&
++          Character.isHighSurrogate(editable[end]) &&
++          Character.isLowSurrogate(editable[end + 1])
++        ) {
++          end + 2
++        } else {
++          end + 1
++        }
++      remainingAfter--
++    }
++
++    if (start == end) return false
++    return deleteAtomicRegion(
++      windowStart = start,
++      windowEnd = end,
++      expandLinks = collapsed,
++    )
+   }
+ 
+   fun setMentionIndicators(indicators: List<String>) {
+@@ -950,6 +1270,33 @@ class EnrichedMarkdownTextInputView(
      dispatchMentionUpdate()
    }
  
@@ -256,13 +521,20 @@ index 561cf66..45956a5 100644
 +   */
 +  fun setTokenRanges(ranges: List<Pair<Int, Int>>) {
 +    val editable = text ?: return
++    // 越界/翻转/零长度一律丢弃（与 JS 合成守卫、core schema 的 start < end 同口径）。
++    val next = TokenRangeSync.sanitize(ranges, editable.length)
++    // D4 幂等（本仓 fork）：内容与现有 TOKEN 相同则直接早退——逐键下发时区间
++    // 大多不变，重复 removeType + addRange + applyFormatting 会把 span 全删重加，
++    // 打字这条最热路径上白付一次全量重格式化。水化路径同理：setValueFromJS 已
++    // 按同一批区间建立 TOKEN，紧随其后的首帧下发在这里短路。
++    if (TokenRangeSync.sameAsTokenRanges(formattingStore.allRanges, next)) {
++      return
++    }
 +    // 先清除所有 TOKEN 类型的 ranges
 +    formattingStore.removeType(StyleType.TOKEN, 0, editable.length)
-+    // 添加新的 TOKEN ranges
-+    for ((start, end) in ranges) {
-+      if (start in 0..end && end <= editable.length) {
-+        formattingStore.addRange(FormattingRange(StyleType.TOKEN, start, end))
-+      }
++    // 添加新的 TOKEN ranges：逐条 allowMerge = false（D2）——相邻胶囊不得融合成一颗。
++    for ((start, end) in next) {
++      formattingStore.addRange(FormattingRange(StyleType.TOKEN, start, end), allowMerge = false)
 +    }
 +    // 重绘
 +    applyFormatting()
@@ -271,14 +543,33 @@ index 561cf66..45956a5 100644
    fun dismissActiveMention() {
      mentionCoordinator.clear(emit = false)
    }
-@@ -1007,9 +1129,49 @@ class EnrichedMarkdownTextInputView(
+@@ -981,10 +1328,17 @@ class EnrichedMarkdownTextInputView(
+ 
+   fun setValueFromJS(markdown: String) {
+     val parsed = InputParser.parseToPlainTextAndRanges(markdown)
++    // D4 水化映射（本仓 fork）：JS 合成的 `[$技能](nmskill://技能)` /
++    // `[@路径](nmtoken://路径)` 被解析成 LINK 后在此**替换**为 TOKEN——
++    // 胶囊的边界冻结/选区吸附/原子删由 TOKEN 接管。替换（而非并挂）是
++    // spec 兼容性口径：D4 后 nmskill/nmtoken 变体对胶囊不再生效，保留
++    // LINK 副本会让变体键继续生效。只改本函数（不碰 InputParser 本体）：
++    // pasteMarkdown 与测量链保持 LINK。
++    val hydrationRanges = TokenLinkMapping.mapTokenLinks(parsed.formattingRanges)
+     editSession.enter(EditPhase.Importing)
+     try {
+       formattingStore.clearAll()
+-      formattingStore.setRanges(parsed.formattingRanges)
++      formattingStore.setRanges(hydrationRanges)
+       blockStore.setRanges(parsed.blockRanges)
+       setText(parsed.plainText)
+       setSelection(text?.length ?: 0)
+@@ -1007,9 +1361,49 @@ class EnrichedMarkdownTextInputView(
      if (size <= 0f) return
      val sizePx = ceil(PixelUtil.toPixelFromSP(size))
      setTextSize(TypedValue.COMPLEX_UNIT_PX, sizePx)
 +    applyPendingLineSpacing()
-     layoutManager.invalidateLayout()
-   }
- 
++    layoutManager.invalidateLayout()
++  }
++
 +  /**
 +   * 调用方请求的行高目标（dp 口径，novel-master 补丁；由
 +   * Manager.setLineHeight 下发）。存 dp 是为了字号/字体变化后能重算 px 补偿
@@ -293,9 +584,9 @@ index 561cf66..45956a5 100644
 +  fun setPendingLineHeightDp(valueDp: Float) {
 +    pendingLineHeightDp = valueDp
 +    applyPendingLineSpacing()
-+    layoutManager.invalidateLayout()
-+  }
-+
+     layoutManager.invalidateLayout()
+   }
+ 
 +  /**
 +   * 把当前行高目标落到 setLineSpacing。<= 0f（无目标或目标被撤掉）时清掉
 +   * 已应用的补偿、回到字体自然行距（CR-fix-02：此前这里直接 return，行距
@@ -321,7 +612,7 @@ index 561cf66..45956a5 100644
    fun setColorFromProps(colorInt: Int?) {
      setTextColor(colorInt ?: Color.BLACK)
    }
-@@ -1055,6 +1217,10 @@ class EnrichedMarkdownTextInputView(
+@@ -1055,6 +1449,10 @@ class EnrichedMarkdownTextInputView(
        )
      typeface = newTypeface
      paint.typeface = newTypeface
@@ -332,6 +623,238 @@ index 561cf66..45956a5 100644
      layoutManager.invalidateLayout()
    }
  
+diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/editing/InputConnectionWrapper.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/editing/InputConnectionWrapper.kt
+index 32f71ef..8d2a89b 100644
+--- a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/editing/InputConnectionWrapper.kt
++++ b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/editing/InputConnectionWrapper.kt
+@@ -33,15 +33,30 @@ class InputConnectionWrapper(
+   var isBatchEdit = false
+     private set
+ 
++  /**
++   * 最小组合态信号（本仓 fork，D3；D5 复用）：setComposingText 非空置 true，
++   * finishComposingText / commitText / setComposingText 空串清 false。
++   * 空 commitText 的原子删除拦截只在 !isComposing 时启用——组合态的删除语义
++   * 归 IME，抢了会误删。
++   */
++  private var isComposing = false
++
+   private var pendingKey: String? = null
+ 
+   override fun beginBatchEdit(): Boolean {
+     isBatchEdit = true
++    // 镜像到 view 层共享状态（onKeyDown / sendKeyEvent 在 view 侧也要读）。
++    editText.isInBatchEdit = true
++    // 新 batch 开始时清掉上一批可能残留的抑制标志（防御性）。
++    editText.suppressNextDelete = false
+     return super.beginBatchEdit()
+   }
+ 
+   override fun endBatchEdit(): Boolean {
+     isBatchEdit = false
++    editText.isInBatchEdit = false
++    // 无条件清：抑制只存在于同一物理按键的 batch 域内。
++    editText.suppressNextDelete = false
+     pendingKey?.let {
+       dispatchKeyPress(it)
+       pendingKey = null
+@@ -49,10 +64,18 @@ class InputConnectionWrapper(
+     return super.endBatchEdit()
+   }
+ 
++  override fun finishComposingText(): Boolean {
++    isComposing = false
++    return super.finishComposingText()
++  }
++
+   override fun setComposingText(
+     text: CharSequence,
+     newCursorPosition: Int,
+   ): Boolean {
++    // 空串 setComposingText 也是一些 IME 结束组合的方式，必须同步清标志。
++    isComposing = text.isNotEmpty()
++
+     val previousSelectionStart = editText.selectionStart
+     val previousSelectionEnd = editText.selectionEnd
+ 
+@@ -87,9 +110,27 @@ class InputConnectionWrapper(
+     text: CharSequence,
+     newCursorPosition: Int,
+   ): Boolean {
++    // 「读旧值判定、再清标志」：若先清后判，组合态的空 commitText 会被误当
++    // 非组合态拦截（恰是本门要防的误删）。
++    val wasComposing = isComposing
++    isComposing = false
++
+     val key = text.toString()
++    if (key.isEmpty()) {
++      // 同键并发收敛（D3）：仅空 commitText（退格语义）读抑制标志——同 batch
++      // 的后续删除入口整体短路；非空提交（联想/纠错落字）不在此列，照常走
++      // super 落字（CR-S12-01：抑制判定曾置于空串分支之前，会吞掉非空提交）。
++      if (editText.isDeleteSuppressed()) return true
++      // 空文本表示退格（见类注释）。按键事件照旧上报；命中原子区间时由
++      // helper 删整颗并吞掉 super，未命中走平台原路径。
++      dispatchKeyPressOrEnqueue(BACKSPACE_KEY_VALUE)
++      if (!wasComposing && editText.deleteForEmptyCommit()) {
++        return true
++      }
++      return super.commitText(text, newCursorPosition)
++    }
+     if (key.length <= 2) {
+-      dispatchKeyPressOrEnqueue(key.ifEmpty { BACKSPACE_KEY_VALUE })
++      dispatchKeyPressOrEnqueue(key)
+     }
+     return super.commitText(text, newCursorPosition)
+   }
+@@ -98,23 +139,49 @@ class InputConnectionWrapper(
+     beforeLength: Int,
+     afterLength: Int,
+   ): Boolean {
++    if (editText.isDeleteSuppressed()) return true
+     dispatchKeyPress(BACKSPACE_KEY_VALUE)
+     if (beforeLength == 1 && afterLength == 0 && editText.deleteLinkBeforeCursor()) {
+       return true
+     }
++    // 一般参数入口（D3）：词删 n > 1、前向 m > 0 都并入原子删并集口径。
++    if (editText.deleteSurroundingRegion(beforeLength, afterLength)) {
++      return true
++    }
+     return super.deleteSurroundingText(beforeLength, afterLength)
+   }
+ 
++  override fun deleteSurroundingTextInCodePoints(
++    beforeLength: Int,
++    afterLength: Int,
++  ): Boolean {
++    if (editText.isDeleteSuppressed()) return true
++    dispatchKeyPress(BACKSPACE_KEY_VALUE)
++    // code point 变体（D3）：换算成字符偏移后走同一原子删内核。
++    if (editText.deleteSurroundingRegionInCodePoints(beforeLength, afterLength)) {
++      return true
++    }
++    return super.deleteSurroundingTextInCodePoints(beforeLength, afterLength)
++  }
++
+   override fun sendKeyEvent(event: KeyEvent): Boolean {
+     if (event.action == KeyEvent.ACTION_DOWN) {
++      val isDeleteKey =
++        event.keyCode == KeyEvent.KEYCODE_DEL || event.keyCode == KeyEvent.KEYCODE_FORWARD_DEL
++      if (isDeleteKey && editText.isDeleteSuppressed()) {
++        // 同键并发收敛：不删、不调 super、也不再 dispatch。
++        return true
++      }
+       val isNumberKey = event.unicodeChar in 48..57
+       when (event.keyCode) {
+         KeyEvent.KEYCODE_DEL -> dispatchKeyPress(BACKSPACE_KEY_VALUE)
+         KeyEvent.KEYCODE_ENTER -> dispatchKeyPress(ENTER_KEY_VALUE)
+         else -> if (isNumberKey) dispatchKeyPress(event.number.toString())
+       }
+-      if (event.keyCode == KeyEvent.KEYCODE_DEL && editText.deleteLinkBeforeCursor()) {
+-        return true
++      when (event.keyCode) {
++        KeyEvent.KEYCODE_DEL -> if (editText.deleteLinkBeforeCursor()) return true
++        // 前向删除（D3 新入口）：光标后一字符在区间内 → 整颗删、光标不动。
++        KeyEvent.KEYCODE_FORWARD_DEL -> if (editText.deleteAtomicAfterCursor()) return true
+       }
+     }
+     return super.sendKeyEvent(event)
+diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/formatting/FormattingStore.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/formatting/FormattingStore.kt
+index 6f6a2ea..76588a9 100644
+--- a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/formatting/FormattingStore.kt
++++ b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/formatting/FormattingStore.kt
+@@ -35,8 +35,11 @@ class FormattingStore {
+   ): Boolean = ranges.any { it.type == type && it.start < end && it.end > start }
+ 
+   /**
+-   * Snaps a selection so it never partially overlaps an atomic link: a partial selection expands to
+-   * the whole link, a caret inside a link moves to its end. Returns the adjusted (start, end) or null.
++   * Snaps a selection so it never partially overlaps an atomic range: a partial selection expands to
++   * the whole range, a caret inside a range moves to its end. Returns the adjusted (start, end) or null.
++   *
++   * 本仓 fork（D2）：原子区间除 LINK（上游语义）外还纳入 TOKEN 胶囊——胶囊边界不可变，
++   * 任何半覆盖的选区/内部光标都要先扩整再交给编辑链，否则会出现半截胶囊。
+    */
+   fun selectionAdjustedForAtomicLinks(
+     start: Int,
+@@ -45,14 +48,18 @@ class FormattingStore {
+     if (start != end) {
+       var newStart = start
+       var newEnd = end
+-      rangeOfType(StyleType.LINK, newStart)?.let { newStart = minOf(newStart, it.start) }
+-      if (newEnd > 0) rangeOfType(StyleType.LINK, newEnd - 1)?.let { newEnd = maxOf(newEnd, it.end) }
++      atomicRangeAt(newStart)?.let { newStart = minOf(newStart, it.start) }
++      if (newEnd > 0) atomicRangeAt(newEnd - 1)?.let { newEnd = maxOf(newEnd, it.end) }
+       return if (newStart != start || newEnd != end) Pair(newStart, newEnd) else null
+     }
+-    val link = rangeOfType(StyleType.LINK, start)
+-    return if (link != null && start > link.start && start < link.end) Pair(link.end, link.end) else null
++    val atomic = atomicRangeAt(start)
++    return if (atomic != null && start > atomic.start && start < atomic.end) Pair(atomic.end, atomic.end) else null
+   }
+ 
++  /** 命中位置的原子区间：LINK 优先（上游语义不变），未命中再取 TOKEN（本仓 fork）。 */
++  private fun atomicRangeAt(position: Int): FormattingRange? =
++    rangeOfType(StyleType.LINK, position) ?: rangeOfType(StyleType.TOKEN, position)
++
+   enum class ToggleResult {
+     /** The style was active and has been removed (or is active at the caret). */
+     WAS_ACTIVE,
+@@ -102,7 +109,23 @@ class FormattingStore {
+     return blockingStyles.any { isStyleActive(it, position) }
+   }
+ 
+-  fun addRange(newRange: FormattingRange) {
++  /**
++   * Adds [newRange], merging it with overlapping or adjacent ranges of the same
++   * type (and url) unless [allowMerge] is false.
++   *
++   * 本仓 fork（D2）：TOKEN 胶囊必须逐条独立——[allowMerge] = false 走纯插入
++   * 路径，既不合并也不吞掉同类型邻居；两颗相邻胶囊因此永远保持两条区间。
++   */
++  fun addRange(
++    newRange: FormattingRange,
++    allowMerge: Boolean = true,
++  ) {
++    if (!allowMerge) {
++      val insertAt = sortedInsertionIndex(ranges, newRange.start)
++      ranges.add(insertAt, newRange)
++      return
++    }
++
+     var mergedStart = newRange.start
+     var mergedEnd = newRange.end
+     val mergeIndexes = mutableListOf<Int>()
+@@ -173,7 +196,10 @@ class FormattingStore {
+       editLocation,
+       deletedLength,
+       insertedLength,
+-      inheritsReplacementAtStart = { it.type != StyleType.LINK },
++      // 替换文本不继承 LINK（上游语义）也不继承 TOKEN（本仓 fork，D2 胶囊边界冻结）。
++      inheritsReplacementAtStart = { it.type != StyleType.LINK && it.type != StyleType.TOKEN },
++      // TOKEN 走 protected 分支表：相交整删 / 内部插入整删 / 端点外插入不增长。
++      isProtected = { it.type == StyleType.TOKEN },
+     )
+     coalesceAdjacentSameTypeRanges()
+   }
+@@ -183,6 +209,9 @@ class FormattingStore {
+    * edit — e.g. deleting the space in "**foo** **bar**" leaves two touching
+    * bold ranges that would serialize as "**foo****bar**". [addRange] keeps
+    * this invariant on insert; the edit path must too.
++   *
++   * 本仓 fork（D2）：TOKEN 不参与融合——删掉两颗胶囊之间的字符后，两条 TOKEN
++   * 会变成相邻，但胶囊必须各自独立（否则下一次逐键下发/序列化会把它们并成一颗）。
+    */
+   private fun coalesceAdjacentSameTypeRanges() {
+     var idx = 0
+@@ -191,7 +220,7 @@ class FormattingStore {
+       var next = idx + 1
+       while (next < ranges.size && ranges[next].start <= current.end) {
+         val candidate = ranges[next]
+-        if (candidate.type == current.type && candidate.url == current.url) {
++        if (candidate.type == current.type && candidate.url == current.url && current.type != StyleType.TOKEN) {
+           current.end = maxOf(current.end, candidate.end)
+           ranges.removeAt(next)
+         } else {
 diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/formatting/InputFormatter.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/formatting/InputFormatter.kt
 index 8e3fc76..be2c0c2 100644
 --- a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/formatting/InputFormatter.kt
@@ -388,6 +911,159 @@ index 6b1d266..c4ab77e 100644
      }
  
    private data class BoundaryEvent(
+diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/formatting/RangeEditAdjustment.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/formatting/RangeEditAdjustment.kt
+index 725533c..b2e417c 100644
+--- a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/formatting/RangeEditAdjustment.kt
++++ b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/formatting/RangeEditAdjustment.kt
+@@ -41,6 +41,15 @@ internal object RangeEditAdjustment {
+    * past it. Block ranges own their whole line, so a character typed at the line
+    * start must keep the line's block; inline styles must NOT set this (a
+    * character typed before a bold run must not become bold).
++   *
++   * [isProtected]: ranges for which this returns true are frozen spans (the
++   * TOKEN chip, novel-master fork). They bypass every inheritance/clip/growth
++   * branch above and follow the atomic-chip policy instead: any delete or
++   * replacement intersecting the range removes it whole (no clipped halves, no
++   * replacement inheritance), and a pure insert only kills the range when it
++   * lands strictly inside it — an insert at or before `range.start` shifts the
++   * range right, an insert at or after `range.end` leaves it untouched, so
++   * typed text never joins a chip from either side.
+    */
+   fun <T : MutableRangeBounds> adjustForEdit(
+     ranges: MutableList<T>,
+@@ -49,6 +58,7 @@ internal object RangeEditAdjustment {
+     insertedLength: Int,
+     inheritsReplacementAtStart: (T) -> Boolean = { false },
+     growsAtStartOnInsert: (T) -> Boolean = { false },
++    isProtected: (T) -> Boolean = { false },
+   ) {
+     if (deletedLength == 0 && insertedLength == 0) return
+ 
+@@ -56,6 +66,39 @@ internal object RangeEditAdjustment {
+     val indexesToRemove = mutableListOf<Int>()
+ 
+     for ((idx, range) in ranges.withIndex()) {
++      if (isProtected(range)) {
++        // 受保护区间（TOKEN 胶囊，本仓 fork）：边界不可变。
++        if (deletedLength > 0) {
++          when (classifyOverlap(range.start, range.end, editLocation, deleteEnd)) {
++            EditOverlap.BEFORE_EDIT -> { /* 删除完全在胶囊右侧：不动 */ }
++
++            EditOverlap.AFTER_EDIT -> {
++              // 删除/替换完全在胶囊左侧：整体平移
++              range.start = range.start - deletedLength + insertedLength
++              range.end = range.end - deletedLength + insertedLength
++            }
++
++            // 任意相交（整条覆盖 / 部分覆盖 / 内部删除）：整条摘除，绝不留下半截
++            else -> indexesToRemove.add(idx)
++          }
++        } else {
++          when {
++            // 插入点落在左端点或更左侧：整体右移，新字符落在胶囊外
++            editLocation <= range.start -> {
++              range.start += insertedLength
++              range.end += insertedLength
++            }
++
++            // 插入点落在右端点或更右侧：原样不动（右边界不吞尾追）
++            editLocation >= range.end -> { /* no change */ }
++
++            // 插入点严格在胶囊内部：胶囊死亡
++            else -> indexesToRemove.add(idx)
++          }
++        }
++        continue
++      }
++
+       if (deletedLength > 0) {
+         val inheritsReplacement =
+           insertedLength > 0 && range.start == editLocation && inheritsReplacementAtStart(range)
+diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/formatting/TokenHydration.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/formatting/TokenHydration.kt
+new file mode 100644
+index 0000000..6e569d2
+--- /dev/null
++++ b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/formatting/TokenHydration.kt
+@@ -0,0 +1,79 @@
++package com.swmansion.enriched.markdown.input.formatting
++
++import com.swmansion.enriched.markdown.input.model.FormattingRange
++import com.swmansion.enriched.markdown.input.model.StyleType
++
++/**
++ * D4（本仓 fork，composer-capsule-atomic-2026-10）：水化链路的纯函数层。
++ *
++ * 放在 FormattingStore 同目录、不依赖 View：KT-CA3 在 JVM 单测里直接锁矩阵
++ * （单颗/多颗/普通链接保持/顺序不变/越界丢弃），无需 Robolectric。
++ */
++internal object TokenLinkMapping {
++  /** 胶囊专用 destination scheme（与 JS `token-ranges.ts` 的 NM_*_SCHEME 同值）。 */
++  private const val SKILL_SCHEME = "nmskill://"
++  private const val TOKEN_SCHEME = "nmtoken://"
++
++  /**
++   * 把水化 markdown 解析出的胶囊链接**替换**为 TOKEN（url 置 null）。
++   *
++   * 为什么是「替换 LINK」而不是「并挂」：spec D4 兼容性口径——D4 后
++   * `^nmskill:`/`^nmtoken:` 两个变体对胶囊**不再生效**（胶囊样式由
++   * `TokenStyleHandler` 承担）；若同区间保留 LINK 副本，变体键会继续生效，
++   * 与该口径矛盾。JS 合成的 `[$技能](nmskill://技能)` 先被 `InputParser`
++   * 解析成 LINK（解析器不认识胶囊概念），这里整条换成 TOKEN——TOKEN 接管
++   * D2 的边界冻结/选区吸附/原子删语义；序列化由 `MarkdownSerializer` 的
++   * TOKEN 空分隔符输出明文，与 LINK displayText 一致，发送语义零影响。
++   *
++   * 不改 `InputParser.parseToPlainTextAndRanges` 本体：它的另两个调用点
++   * （`pasteMarkdown` / `InputMeasurementStore`）必须保持 LINK 语义——粘贴
++   * 进来的手输 markdown 链接不是确认胶囊。
++   */
++  fun mapTokenLinks(ranges: List<FormattingRange>): List<FormattingRange> = ranges.map { range ->
++    val url = range.url
++    if (range.type == StyleType.LINK && url != null && isTokenUrl(url)) {
++      FormattingRange(StyleType.TOKEN, range.start, range.end, null)
++    } else {
++      range
++    }
++  }
++
++  private fun isTokenUrl(url: String): Boolean = url.startsWith(SKILL_SCHEME) || url.startsWith(TOKEN_SCHEME)
++}
++
++/**
++ * `setTokenRanges` 的下发域纯函数：越界区间丢弃 + 幂等内容判定。
++ */
++internal object TokenRangeSync {
++  /**
++   * 剔除非法区间并按 start 升序（与 FormattingStore 的存储序一致）。
++   *
++   * 非法 = 负 start / 翻转（end < start）/ 零长度（start == end）/ 越界
++   * （end > textLength）。零长度与 core schema 的 `start < end` refine、
++   * native `RangeEditAdjustment` 的零长度剔除同口径——两侧都不接受空胶囊。
++   */
++  fun sanitize(
++    ranges: List<Pair<Int, Int>>,
++    textLength: Int,
++  ): List<Pair<Int, Int>> =
++    ranges
++      .filter { (start, end) -> start >= 0 && start < end && end <= textLength }
++      .sortedBy { it.first }
++
++  /**
++   * 待下发区间与 store 现有 TOKEN 内容相同？相同则调用方跳过
++   * removeType + addRange + applyFormatting（逐键下发时区间大多不变，
++   * 重复重绘会让 span 全删重加，打字热路径上白付一次全量重格式化）。
++   */
++  fun sameAsTokenRanges(
++    current: List<FormattingRange>,
++    next: List<Pair<Int, Int>>,
++  ): Boolean {
++    val tokens = current.filter { it.type == StyleType.TOKEN }
++    if (tokens.size != next.size) return false
++    return tokens.withIndex().all { (index, range) ->
++      val (start, end) = next[index]
++      range.start == start && range.end == end
++    }
++  }
++}
 diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/layout/InputLayoutManager.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/layout/InputLayoutManager.kt
 index 4e96cb7..b149d26 100644
 --- a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/layout/InputLayoutManager.kt
@@ -643,10 +1319,10 @@ index 8b90a87..ed7fd5b 100644
  
 diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/styles/TokenStyleHandler.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/styles/TokenStyleHandler.kt
 new file mode 100644
-index 0000000..ec42f3c
+index 0000000..48358df
 --- /dev/null
 +++ b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/styles/TokenStyleHandler.kt
-@@ -0,0 +1,52 @@
+@@ -0,0 +1,85 @@
 +package com.swmansion.enriched.markdown.input.styles
 +
 +import android.text.style.CharacterStyle
@@ -661,6 +1337,32 @@ index 0000000..ec42f3c
 +  color: Int,
 +) : ForegroundColorSpan(color),
 +  MarkdownSpan
++
++/**
++ * TOKEN 专属底色 span（继承 RoundedBackgroundSpan 的几何，携带盒内 gap）。
++ *
++ * 必须是**独立子类**而非直接用 RoundedBackgroundSpan：InputFormatter 的
++ * span 重挂按「span 类名 → handler」反查（spanClasses().firstOrNull 匹配），
++ * RoundedBackgroundSpan 同时注册在 Link 与 Token 两个 handler 上，按类名
++ * 反查会撞上 LinkStyleHandler，用 link 基础样式重造出 gap=0 的实例
++ * （2026-10-20 真机轮：相邻胶囊视觉熔合成一条的根因）。子类让类名唯一
++ * 命中 TokenStyleHandler，diff 复用也不会跨型存续旧 LINK pill。
++ */
++class TokenBackgroundSpan(
++  backgroundColor: Int,
++  borderRadius: Float,
++  paddingHorizontal: Float,
++  paddingTop: Float,
++  paddingBottom: Float,
++  gapHorizontal: Float,
++) : RoundedBackgroundSpan(
++  backgroundColor = backgroundColor,
++  borderRadius = borderRadius,
++  paddingHorizontal = paddingHorizontal,
++  paddingTop = paddingTop,
++  paddingBottom = paddingBottom,
++  gapHorizontal = gapHorizontal,
++)
 +
 +/**
 + * Token 样式处理器，用于渲染胶囊 span。
@@ -678,15 +1380,22 @@ index 0000000..ec42f3c
 +    // 使用 link 的样式作为基础
 +    val linkStyle = style.linkColor
 +    spans.add(MarkdownTokenColorSpan(linkStyle))
-+    // 如果有背景色，用 RoundedBackgroundSpan
++    // 如果有背景色，用 TOKEN 专属底色 span（TokenBackgroundSpan——类名唯一
++    // 命中本 handler，见该类注释）
 +    if (style.linkBackgroundColor != 0) {
 +      spans.add(
-+        RoundedBackgroundSpan(
++        TokenBackgroundSpan(
 +          backgroundColor = style.linkBackgroundColor,
 +          borderRadius = style.linkBorderRadius.toFloat(),
 +          paddingHorizontal = style.linkPaddingHorizontal.toFloat(),
 +          paddingTop = style.linkPaddingTop.toFloat(),
 +          paddingBottom = style.linkPaddingBottom.toFloat(),
++          // 相邻 TOKEN 胶囊的盒内间隔：删掉两颗胶囊间的分隔空格后区间贴邻，
++          // 盒内 gap 保证圆角矩形不互相叠压（2026-10-20 真机轮）。取 10px：
++          // p=4 时按 padding 比例（p*0.5=2px/侧 → 4px 缝）在同色药丸间视觉
++          // 熔合仍读作一颗——固定 10px/侧（20px 视觉缝）才有明确的「两颗」
++          // 观感（第二次真机轮「紧密连接」反馈后定值）。
++          gapHorizontal = 10f,
 +        )
 +      )
 +    }
@@ -696,7 +1405,7 @@ index 0000000..ec42f3c
 +  override fun spanClasses(): List<Class<out CharacterStyle>> =
 +    listOf(
 +      MarkdownTokenColorSpan::class.java,
-+      RoundedBackgroundSpan::class.java,
++      TokenBackgroundSpan::class.java,
 +    )
 +}
 diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/toolbar/InputContextMenu.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/toolbar/InputContextMenu.kt
@@ -758,10 +1467,10 @@ index 1ebda75..634645b 100644
    private fun applyFormat(styleType: StyleType) {
 diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/spans/RoundedBackgroundSpan.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/spans/RoundedBackgroundSpan.kt
 new file mode 100644
-index 0000000..7451bf6
+index 0000000..dcec883
 --- /dev/null
 +++ b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/spans/RoundedBackgroundSpan.kt
-@@ -0,0 +1,76 @@
+@@ -0,0 +1,81 @@
 +package com.swmansion.enriched.markdown.spans
 +
 +import android.graphics.Canvas
@@ -773,18 +1482,27 @@ index 0000000..7451bf6
 +/**
 + * 圆角背景 span，用于胶囊视觉。
 + *
-+ * getSize 返回文本实测宽 + paddingHorizontal * 2，draw 画 roundRect 圆角底。
-+ * 纵向以基线 + 字形 ascent/descent 定界（而非整行行框 top/bottom）：行距的
-+ * 富余空间全加在 descent 侧，用行框会让胶囊比文字高一截、垂到下一行
-+ * （真机实报「回车后胶囊下面多了一部分渲染」）；贴字形度量即可与 web 的
-+ * 行内 mark 视觉对齐。
++ * getSize 返回文本实测宽 + paddingHorizontal * 2 + gapHorizontal * 2（盒内
++ * 两侧各留 gap），draw 画 roundRect 圆角底；圆角矩形严格夹回这方预留框内
++ * （left = x + gapHorizontal，右缘不越框）——相邻胶囊靠盒内 gap 拉开视觉
++ * 间隔，不再互相叠压。纵向以基线 + 字形 ascent/descent 定界（而非整行行框
++ * top/bottom）：行距的富余空间全加在 descent 侧，用行框会让胶囊比文字高
++ * 一截、垂到下一行（真机实报「回车后胶囊下面多了一部分渲染」）；贴字形度量
++ * 即可与 web 的行内 mark 视觉对齐。
 + */
-+class RoundedBackgroundSpan(
++open class RoundedBackgroundSpan(
 +  private val backgroundColor: Int,
 +  private val borderRadius: Float,
 +  private val paddingHorizontal: Float,
 +  private val paddingTop: Float,
 +  private val paddingBottom: Float,
++  /**
++   * 盒内额外留白（两侧各 gap）：相邻 span 的胶囊之间保持视觉间隔。圆角
++   * 矩形严格落在 getSize 预留框内——旧实现向框外两侧各溢出 paddingHorizontal，
++   * 相邻胶囊（删掉分隔空格后区间贴邻）的圆角矩形互相叠压（真机 2026-10-20
++   * 「删空格→胶囊重叠」）；gap=0 时框内几何不变（左右各 padding 的对称胶囊）。
++   */
++  private val gapHorizontal: Float = 0f,
 +) : ReplacementSpan() {
 +
 +  private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -802,7 +1520,7 @@ index 0000000..7451bf6
 +    fm: Paint.FontMetricsInt?,
 +  ): Int {
 +    val textWidth = paint.measureText(text, start, end).roundToInt()
-+    return (textWidth + paddingHorizontal * 2).roundToInt()
++    return (textWidth + paddingHorizontal * 2 + gapHorizontal * 2).roundToInt()
 +  }
 +
 +  override fun draw(
@@ -817,24 +1535,20 @@ index 0000000..7451bf6
 +    paint: Paint,
 +  ) {
 +    val textWidth = paint.measureText(text, start, end)
-+    val totalWidth = textWidth + paddingHorizontal * 2
 +
-+    val left = x - paddingHorizontal
-+    val right = x + totalWidth + paddingHorizontal
++    // 矩形严格落在 [x, x + getSize] 预留框内：left 从 x+gap 起，宽度为
++    // 字宽 + 两侧 padding，文字画在 left+padding（胶囊内对称）。
++    val left = x + gapHorizontal
++    val right = left + textWidth + paddingHorizontal * 2
 +    val fm = paint.fontMetrics
 +    val rectTop = y + fm.ascent - paddingTop
 +    val rectBottom = y + fm.descent + paddingBottom
 +
 +    rect.set(left, rectTop, right, rectBottom)
-+
-+    // 处理 span 首尾 padding 的 canvas translate
-+    canvas.save()
-+    canvas.translate(-paddingHorizontal, 0f)
 +    canvas.drawRoundRect(rect, borderRadius, borderRadius, this.paint)
-+    canvas.restore()
-+    // ReplacementSpan 整体接管文本绘制：画完胶囊底色后必须自己把文字画出
-+    // 来（基线 y、起点在 span 的 x 加前置 padding），复用传入的 paint——
-+    // token 字色 span 才能照常生效。
++    // ReplacementSpan 整体接管文本绘制：画完胶囊底色后必须自己把文字画回来
++    // （基线 y、起点在胶囊内左 padding 处），复用传入的 paint——token 字色
++    // span 才能照常生效。
 +    canvas.drawText(text, start, end, left + paddingHorizontal, y.toFloat(), paint)
 +  }
 +}
@@ -864,6 +1578,598 @@ index 9ff71ed..804f67c 100644
        )
      }
    }
+diff --git a/node_modules/react-native-enriched-markdown/android/src/test/java/com/swmansion/enriched/markdown/FormattingStoreTest.kt b/node_modules/react-native-enriched-markdown/android/src/test/java/com/swmansion/enriched/markdown/FormattingStoreTest.kt
+new file mode 100644
+index 0000000..a037392
+--- /dev/null
++++ b/node_modules/react-native-enriched-markdown/android/src/test/java/com/swmansion/enriched/markdown/FormattingStoreTest.kt
+@@ -0,0 +1,182 @@
++package com.swmansion.enriched.markdown
++
++import com.swmansion.enriched.markdown.input.formatting.FormattingStore
++import com.swmansion.enriched.markdown.input.model.FormattingRange
++import com.swmansion.enriched.markdown.input.model.StyleType
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertNull
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++/**
++ * KT-CA2（D2，本仓 fork）：TOKEN 胶囊在 FormattingStore 层的独立性与原子性——
++ * 相邻不融合、替换不继承、调整后无半截、选区吸附纳入 TOKEN。
++ */
++class FormattingStoreTest {
++  private fun token(
++    start: Int,
++    end: Int,
++  ): FormattingRange = FormattingRange(StyleType.TOKEN, start, end)
++
++  private fun link(
++    start: Int,
++    end: Int,
++  ): FormattingRange = FormattingRange(StyleType.LINK, start, end, "https://example.com")
++
++  // ---- 相邻 TOKEN 不融合（addRange 无合并 + coalesce 跳过） ----
++
++  @Test
++  fun adjacentTokensDoNotMergeOnAdd() {
++    val store = FormattingStore()
++    store.addRange(token(0, 3), allowMerge = false)
++    store.addRange(token(3, 6), allowMerge = false)
++
++    assertEquals(2, store.allRanges.size)
++    assertEquals(0, store.allRanges[0].start)
++    assertEquals(3, store.allRanges[0].end)
++    assertEquals(3, store.allRanges[1].start)
++    assertEquals(6, store.allRanges[1].end)
++  }
++
++  @Test
++  fun adjacentBoldRangesStillMergeByDefault() {
++    val store = FormattingStore()
++    store.addRange(FormattingRange(StyleType.BOLD, 0, 3))
++    store.addRange(FormattingRange(StyleType.BOLD, 3, 6))
++
++    // 上游合并语义保持不变（只有 TOKEN 走无合并路径）。
++    assertEquals(1, store.allRanges.size)
++    assertEquals(0, store.allRanges[0].start)
++    assertEquals(6, store.allRanges[0].end)
++  }
++
++  @Test
++  fun coalesceSkipsTokensLeftAdjacentByEdit() {
++    val store = FormattingStore()
++    store.setRanges(listOf(token(0, 3), token(4, 7)))
++
++    // 删掉两颗胶囊之间的字符：两条 TOKEN 变成相邻，(3,6) 与 (0,3) 贴边。
++    store.adjustForEdit(3, 1, 0)
++
++    assertEquals("coalesce 必须跳过 TOKEN，两颗胶囊各自独立", 2, store.allRanges.size)
++    assertEquals(0, store.allRanges[0].start)
++    assertEquals(3, store.allRanges[0].end)
++    assertEquals(3, store.allRanges[1].start)
++    assertEquals(6, store.allRanges[1].end)
++  }
++
++  @Test
++  fun coalesceSkipsTokensShiftedAdjacentByInsert() {
++    val store = FormattingStore()
++    store.setRanges(listOf(token(0, 3), token(3, 6)))
++
++    store.adjustForEdit(0, 0, 2)
++
++    assertEquals(2, store.allRanges.size)
++    assertEquals(2, store.allRanges[0].start)
++    assertEquals(5, store.allRanges[0].end)
++    assertEquals(5, store.allRanges[1].start)
++    assertEquals(8, store.allRanges[1].end)
++  }
++
++  // ---- adjustForEdit：替换不继承 / 无半截 ----
++
++  @Test
++  fun replacementAtTokenStartDoesNotInheritToken() {
++    val store = FormattingStore()
++    store.setRanges(listOf(token(5, 10)))
++
++    store.adjustForEdit(5, 2, 2)
++
++    assertTrue("替换不继承 TOKEN，整条摘除", store.allRanges.isEmpty())
++  }
++
++  @Test
++  fun deleteInsideTokenLeavesNoHalfRange() {
++    val store = FormattingStore()
++    store.setRanges(listOf(token(5, 10)))
++
++    store.adjustForEdit(7, 1, 0)
++
++    assertTrue("内部删除整条摘除，不允许缩尾留下半截", store.allRanges.isEmpty())
++  }
++
++  @Test
++  fun deleteOverlappingTokenEndLeavesNoHalfRange() {
++    val store = FormattingStore()
++    store.setRanges(listOf(token(5, 10)))
++
++    store.adjustForEdit(8, 4, 0)
++
++    assertTrue(store.allRanges.isEmpty())
++  }
++
++  @Test
++  fun everyRangeStaysWellFormedAfterEdits() {
++    val store = FormattingStore()
++    store.setRanges(listOf(token(5, 10), FormattingRange(StyleType.BOLD, 12, 18)))
++
++    // 删除 TOKEN 前半段 + 插入：TOKEN 整删，BOLD 平移。
++    store.adjustForEdit(4, 4, 1)
++
++    assertTrue(store.allRanges.none { it.type == StyleType.TOKEN })
++    assertTrue("调整后不允许出现空/倒挂区间", store.allRanges.all { it.end > it.start })
++    val bold = store.allRanges.single { it.type == StyleType.BOLD }
++    assertEquals(9, bold.start)
++    assertEquals(15, bold.end)
++  }
++
++  // ---- selectionAdjustedForAtomicLinks 三断言（部分相交扩整 / 内部推 end / 在外 null） ----
++
++  @Test
++  fun selectionPartiallyOverlappingTokenExpandsToWholeToken() {
++    val store = FormattingStore()
++    store.setRanges(listOf(token(5, 10)))
++
++    assertEquals(Pair(4, 10), store.selectionAdjustedForAtomicLinks(4, 7))
++    assertEquals(Pair(5, 12), store.selectionAdjustedForAtomicLinks(7, 12))
++    // 选区完全落在胶囊内部 → 扩成整颗
++    assertEquals(Pair(5, 10), store.selectionAdjustedForAtomicLinks(6, 8))
++  }
++
++  @Test
++  fun caretInsideTokenMovesToTokenEnd() {
++    val store = FormattingStore()
++    store.setRanges(listOf(token(5, 10)))
++
++    assertEquals(Pair(10, 10), store.selectionAdjustedForAtomicLinks(7, 7))
++    // 起点/终点本身不算「内部」，不吸附
++    assertNull(store.selectionAdjustedForAtomicLinks(5, 5))
++    assertNull(store.selectionAdjustedForAtomicLinks(10, 10))
++  }
++
++  @Test
++  fun selectionOrCaretOutsideTokenReturnsNull() {
++    val store = FormattingStore()
++    store.setRanges(listOf(token(5, 10)))
++
++    assertNull(store.selectionAdjustedForAtomicLinks(3, 3))
++    assertNull("选区终点贴着胶囊起点不算相交", store.selectionAdjustedForAtomicLinks(3, 5))
++    assertNull("选区起点贴着胶囊终点不算相交", store.selectionAdjustedForAtomicLinks(10, 12))
++    assertNull("完整覆盖胶囊无需调整", store.selectionAdjustedForAtomicLinks(5, 10))
++  }
++
++  @Test
++  fun linkSnappingStillWorks() {
++    val store = FormattingStore()
++    store.setRanges(listOf(link(5, 10)))
++
++    assertEquals("LINK 内部光标仍然推 end（上游语义）", Pair(10, 10), store.selectionAdjustedForAtomicLinks(7, 7))
++    assertEquals(Pair(4, 10), store.selectionAdjustedForAtomicLinks(4, 7))
++    assertNull(store.selectionAdjustedForAtomicLinks(10, 12))
++  }
++
++  @Test
++  fun tokenWinsWhenOnlyTokenHasCaret() {
++    val store = FormattingStore()
++    store.setRanges(listOf(link(0, 4), token(8, 14)))
++
++    assertEquals(Pair(14, 14), store.selectionAdjustedForAtomicLinks(10, 10))
++    assertNull(store.selectionAdjustedForAtomicLinks(4, 8))
++  }
++}
+diff --git a/node_modules/react-native-enriched-markdown/android/src/test/java/com/swmansion/enriched/markdown/RangeEditAdjustmentTest.kt b/node_modules/react-native-enriched-markdown/android/src/test/java/com/swmansion/enriched/markdown/RangeEditAdjustmentTest.kt
+new file mode 100644
+index 0000000..2e08400
+--- /dev/null
++++ b/node_modules/react-native-enriched-markdown/android/src/test/java/com/swmansion/enriched/markdown/RangeEditAdjustmentTest.kt
+@@ -0,0 +1,231 @@
++package com.swmansion.enriched.markdown
++
++import com.swmansion.enriched.markdown.input.formatting.RangeEditAdjustment
++import com.swmansion.enriched.markdown.input.model.FormattingRange
++import com.swmansion.enriched.markdown.input.model.MutableRangeBounds
++import com.swmansion.enriched.markdown.input.model.StyleType
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertSame
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++/**
++ * KT-CA1（D2 分支表逐行矩阵，本仓 fork）：protected 区间 = TOKEN 胶囊，
++ * 边界冻结——删除/替换任意相交 → 整条摘除；纯插入严格内部 → 整条摘除；
++ * 左端点及左侧插入 → 整体右移；右端点及右侧插入 → 原样不动。
++ */
++class RangeEditAdjustmentTest {
++  /** 纯区间载体，避免测试依赖 FormattingRange 的样式语义。 */
++  private class Bounds(
++    override var start: Int,
++    override var end: Int,
++  ) : MutableRangeBounds
++
++  private fun adjustProtected(
++    ranges: MutableList<Bounds>,
++    editLocation: Int,
++    deletedLength: Int,
++    insertedLength: Int,
++  ) {
++    RangeEditAdjustment.adjustForEdit(
++      ranges,
++      editLocation,
++      deletedLength,
++      insertedLength,
++      isProtected = { true },
++    )
++  }
++
++  private fun bounds(vararg pairs: Pair<Int, Int>): MutableList<Bounds> =
++    pairs.map { Bounds(it.first, it.second) }.toMutableList()
++
++  // ---- 纯插入分支 ----
++
++  @Test
++  fun insertBeforeRangeShiftsRight() {
++    val ranges = bounds(5 to 10)
++    adjustProtected(ranges, editLocation = 2, deletedLength = 0, insertedLength = 3)
++    assertEquals(1, ranges.size)
++    assertEquals(8, ranges[0].start)
++    assertEquals(13, ranges[0].end)
++  }
++
++  @Test
++  fun insertAtRangeStartShiftsRightAndNeverGrows() {
++    val ranges = bounds(5 to 10)
++    // growsAtStartOnInsert 对 TOKEN 固定 false：protected 分支压根不看它。
++    RangeEditAdjustment.adjustForEdit(
++      ranges,
++      editLocation = 5,
++      deletedLength = 0,
++      insertedLength = 2,
++      growsAtStartOnInsert = { true },
++      isProtected = { true },
++    )
++    assertEquals(1, ranges.size)
++    assertEquals(7, ranges[0].start)
++    assertEquals(12, ranges[0].end)
++  }
++
++  @Test
++  fun insertAtRangeEndKeepsRangeUnchanged() {
++    val ranges = bounds(5 to 10)
++    adjustProtected(ranges, editLocation = 10, deletedLength = 0, insertedLength = 4)
++    assertEquals(1, ranges.size)
++    assertEquals(5, ranges[0].start)
++    // 右边界不吞尾追：插入点在端点处，区间不增长。
++    assertEquals(10, ranges[0].end)
++  }
++
++  @Test
++  fun insertAfterRangeEndKeepsRangeUnchanged() {
++    val ranges = bounds(5 to 10)
++    adjustProtected(ranges, editLocation = 12, deletedLength = 0, insertedLength = 3)
++    assertEquals(1, ranges.size)
++    assertEquals(5, ranges[0].start)
++    assertEquals(10, ranges[0].end)
++  }
++
++  @Test
++  fun insertStrictlyInsideRangeRemovesIt() {
++    val ranges = bounds(5 to 10)
++    adjustProtected(ranges, editLocation = 7, deletedLength = 0, insertedLength = 1)
++    assertTrue("胶囊内部插入 → 整条摘除", ranges.isEmpty())
++  }
++
++  // ---- 删除/替换分支 ----
++
++  @Test
++  fun deleteFullyCoveringRangeRemovesIt() {
++    val ranges = bounds(5 to 10)
++    adjustProtected(ranges, editLocation = 3, deletedLength = 10, insertedLength = 0)
++    assertTrue(ranges.isEmpty())
++  }
++
++  @Test
++  fun deleteOverlappingStartRemovesWholeRange() {
++    val ranges = bounds(5 to 10)
++    adjustProtected(ranges, editLocation = 3, deletedLength = 4, insertedLength = 0)
++    assertTrue("部分覆盖起点也整删，不留半截", ranges.isEmpty())
++  }
++
++  @Test
++  fun deleteOverlappingEndRemovesWholeRange() {
++    val ranges = bounds(5 to 10)
++    adjustProtected(ranges, editLocation = 8, deletedLength = 4, insertedLength = 0)
++    assertTrue("部分覆盖终点也整删，不留半截", ranges.isEmpty())
++  }
++
++  @Test
++  fun deleteStrictlyInsideRangeRemovesIt() {
++    val ranges = bounds(5 to 10)
++    adjustProtected(ranges, editLocation = 7, deletedLength = 1, insertedLength = 0)
++    assertTrue("内部删除 → 整条摘除（禁止区间缩尾留下半截）", ranges.isEmpty())
++  }
++
++  @Test
++  fun deleteEntirelyBeforeRangeShiftsLeft() {
++    val ranges = bounds(5 to 10)
++    adjustProtected(ranges, editLocation = 0, deletedLength = 2, insertedLength = 0)
++    assertEquals(1, ranges.size)
++    assertEquals(3, ranges[0].start)
++    assertEquals(8, ranges[0].end)
++  }
++
++  @Test
++  fun deleteEndingAtRangeStartShiftsLeft() {
++    val ranges = bounds(5 to 10)
++    adjustProtected(ranges, editLocation = 2, deletedLength = 3, insertedLength = 0)
++    assertEquals(1, ranges.size)
++    assertEquals(2, ranges[0].start)
++    assertEquals(7, ranges[0].end)
++  }
++
++  @Test
++  fun deleteStartingAtRangeEndKeepsRange() {
++    val ranges = bounds(5 to 10)
++    adjustProtected(ranges, editLocation = 10, deletedLength = 2, insertedLength = 0)
++    assertEquals(1, ranges.size)
++    assertEquals(5, ranges[0].start)
++    assertEquals(10, ranges[0].end)
++  }
++
++  @Test
++  fun replacementIntersectingStartDoesNotInherit() {
++    val ranges = bounds(5 to 10)
++    RangeEditAdjustment.adjustForEdit(
++      ranges,
++      editLocation = 5,
++      deletedLength = 2,
++      insertedLength = 3,
++      inheritsReplacementAtStart = { true },
++      isProtected = { true },
++    )
++    assertTrue("替换不继承 TOKEN，整条摘除", ranges.isEmpty())
++  }
++
++  @Test
++  fun replacementEntirelyBeforeRangeShifts() {
++    val ranges = bounds(5 to 10)
++    adjustProtected(ranges, editLocation = 1, deletedLength = 2, insertedLength = 4)
++    assertEquals(1, ranges.size)
++    assertEquals(7, ranges[0].start)
++    assertEquals(12, ranges[0].end)
++  }
++
++  // ---- 多胶囊并集 / 零长度 / 混合类型 ----
++
++  @Test
++  fun deleteSpanningTwoCapsulesRemovesBoth() {
++    val ranges = bounds(5 to 8, 12 to 15)
++    adjustProtected(ranges, editLocation = 4, deletedLength = 9, insertedLength = 0)
++    assertTrue("删除窗跨两颗胶囊 → 各自整删", ranges.isEmpty())
++  }
++
++  @Test
++  fun deleteBetweenTwoCapsulesKeepsBothAndShiftsRightOne() {
++    val ranges = bounds(0 to 3, 4 to 7)
++    adjustProtected(ranges, editLocation = 3, deletedLength = 1, insertedLength = 0)
++    assertEquals(2, ranges.size)
++    assertEquals(0, ranges[0].start)
++    assertEquals(3, ranges[0].end)
++    assertEquals(3, ranges[1].start)
++    assertEquals(6, ranges[1].end)
++  }
++
++  @Test
++  fun zeroLengthRangeIsPruned() {
++    val ranges = bounds(5 to 5)
++    adjustProtected(ranges, editLocation = 0, deletedLength = 1, insertedLength = 0)
++    assertTrue("零长度区间一律剔除", ranges.isEmpty())
++  }
++
++  @Test
++  fun mixedRangesOnlyTokenIsProtected() {
++    val bold = FormattingRange(StyleType.BOLD, 5, 10)
++    val token = FormattingRange(StyleType.TOKEN, 5, 10)
++    val ranges = mutableListOf<FormattingRange>(bold, token)
++    RangeEditAdjustment.adjustForEdit(
++      ranges,
++      editLocation = 5,
++      deletedLength = 2,
++      insertedLength = 2,
++      inheritsReplacementAtStart = { true },
++      isProtected = { it.type == StyleType.TOKEN },
++    )
++    assertEquals(1, ranges.size)
++    assertSame("BOLD 保持上游继承语义，只有 TOKEN 被摘除", bold, ranges[0])
++    // CLIPPED_START + 继承：替换文本并入，存活段 (7,10) 保留，区间仍是 (5,10)。
++    assertEquals(5, bold.start)
++    assertEquals(10, bold.end)
++  }
++
++  @Test
++  fun emptyEditLeavesRangesUntouched() {
++    val ranges = bounds(5 to 10)
++    adjustProtected(ranges, editLocation = 7, deletedLength = 0, insertedLength = 0)
++    assertEquals(1, ranges.size)
++    assertEquals(5, ranges[0].start)
++    assertEquals(10, ranges[0].end)
++  }
++}
+diff --git a/node_modules/react-native-enriched-markdown/android/src/test/java/com/swmansion/enriched/markdown/TokenLinkMappingTest.kt b/node_modules/react-native-enriched-markdown/android/src/test/java/com/swmansion/enriched/markdown/TokenLinkMappingTest.kt
+new file mode 100644
+index 0000000..c4f2742
+--- /dev/null
++++ b/node_modules/react-native-enriched-markdown/android/src/test/java/com/swmansion/enriched/markdown/TokenLinkMappingTest.kt
+@@ -0,0 +1,161 @@
++package com.swmansion.enriched.markdown
++
++import com.swmansion.enriched.markdown.input.formatting.TokenLinkMapping
++import com.swmansion.enriched.markdown.input.formatting.TokenRangeSync
++import com.swmansion.enriched.markdown.input.model.FormattingRange
++import com.swmansion.enriched.markdown.input.model.StyleType
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertFalse
++import org.junit.Assert.assertNull
++import org.junit.Assert.assertSame
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++/**
++ * KT-CA3（D4，本仓 fork）：`setValueFromJS` 水化映射的纯函数矩阵——
++ * `nmskill://` / `nmtoken://` 链接 → TOKEN（url 置 null）、普通链接保持 LINK、
++ * 多颗顺序不变；外加 `setTokenRanges` 下发域的越界丢弃与幂等判定。
++ */
++class TokenLinkMappingTest {
++  private fun link(
++    start: Int,
++    end: Int,
++    url: String?,
++  ): FormattingRange = FormattingRange(StyleType.LINK, start, end, url)
++
++  private fun token(
++    start: Int,
++    end: Int,
++  ): FormattingRange = FormattingRange(StyleType.TOKEN, start, end)
++
++  // ---- LINK → TOKEN 映射 ----
++
++  @Test
++  fun skillLinkMapsToTokenWithNullUrl() {
++    val mapped = TokenLinkMapping.mapTokenLinks(listOf(link(0, 3, "nmskill://写作")))
++
++    assertEquals(1, mapped.size)
++    val range = mapped.single()
++    assertEquals(StyleType.TOKEN, range.type)
++    assertEquals(0, range.start)
++    assertEquals(3, range.end)
++    assertNull("映射成 TOKEN 后 url 必须置 null（不进 LINK 渲染/序列化）", range.url)
++  }
++
++  @Test
++  fun atPathTokenLinkMapsToToken() {
++    val mapped = TokenLinkMapping.mapTokenLinks(listOf(link(5, 15, "nmtoken://docs/a.md")))
++
++    val range = mapped.single()
++    assertEquals(StyleType.TOKEN, range.type)
++    assertEquals(5, range.start)
++    assertEquals(15, range.end)
++    assertNull(range.url)
++  }
++
++  @Test
++  fun ordinaryLinkStaysLinkWithUrl() {
++    val original = link(0, 5, "https://example.com")
++    val mapped = TokenLinkMapping.mapTokenLinks(listOf(original))
++
++    assertEquals(1, mapped.size)
++    assertSame("普通链接原样返回（不复制、不改类型）", original, mapped.single())
++    assertEquals(StyleType.LINK, mapped.single().type)
++    assertEquals("https://example.com", mapped.single().url)
++  }
++
++  @Test
++  fun linkWithoutUrlStaysLink() {
++    val original = link(0, 5, null)
++    val mapped = TokenLinkMapping.mapTokenLinks(listOf(original))
++
++    assertSame(original, mapped.single())
++  }
++
++  @Test
++  fun multipleCapsulesAndLinksKeepOrder() {
++    val bold = FormattingRange(StyleType.BOLD, 20, 22)
++    val input =
++      listOf(
++        link(0, 3, "nmskill://写作"),
++        link(4, 8, "https://example.com"),
++        bold,
++        link(9, 17, "nmtoken://a/b.md"),
++      )
++
++    val mapped = TokenLinkMapping.mapTokenLinks(input)
++
++    assertEquals("顺序与数量不变", 4, mapped.size)
++    assertEquals(StyleType.TOKEN, mapped[0].type)
++    assertEquals(StyleType.LINK, mapped[1].type)
++    assertEquals("https://example.com", mapped[1].url)
++    assertEquals(StyleType.BOLD, mapped[2].type)
++    assertEquals(StyleType.TOKEN, mapped[3].type)
++    assertEquals(9, mapped[3].start)
++    assertEquals(17, mapped[3].end)
++  }
++
++  @Test
++  fun textWithoutTokensMapsToEmptyList() {
++    assertTrue(TokenLinkMapping.mapTokenLinks(emptyList()).isEmpty())
++  }
++
++  @Test
++  fun onlyPlainTextHasNoRanges() {
++    // parse 后的纯文本没有 formatting ranges；映射层对空输入是恒等。
++    val plainRanges = emptyList<FormattingRange>()
++    assertEquals(plainRanges, TokenLinkMapping.mapTokenLinks(plainRanges))
++  }
++
++  // ---- setTokenRanges 下发域：越界丢弃 + 幂等判定 ----
++
++  @Test
++  fun sanitizeDropsOutOfBoundsAndDegenerateRanges() {
++    val sanitized =
++      TokenRangeSync.sanitize(
++        listOf(
++          0 to 3,
++          10 to 20, // end 越界（textLength = 16）
++          -1 to 2, // 负 start
++          5 to 5, // 零长度
++          7 to 4, // 翻转
++          4 to 6,
++        ),
++        16,
++      )
++
++    assertEquals(listOf(0 to 3, 4 to 6), sanitized)
++  }
++
++  @Test
++  fun sanitizeKeepsInBoundsRangesAtBoundaries() {
++    val sanitized = TokenRangeSync.sanitize(listOf(0 to 16), 16)
++
++    assertEquals(listOf(0 to 16), sanitized)
++  }
++
++  @Test
++  fun sanitizeSortsByStart() {
++    val sanitized = TokenRangeSync.sanitize(listOf(8 to 10, 0 to 2), 20)
++
++    assertEquals(listOf(0 to 2, 8 to 10), sanitized)
++  }
++
++  @Test
++  fun sameContentIsIdempotent() {
++    val store = listOf(token(0, 3), FormattingRange(StyleType.BOLD, 4, 6), token(7, 9))
++
++    assertTrue(
++      "非 TOKEN 区间不参与比较",
++      TokenRangeSync.sameAsTokenRanges(store, listOf(0 to 3, 7 to 9)),
++    )
++    assertFalse(TokenRangeSync.sameAsTokenRanges(store, listOf(0 to 3)))
++    assertFalse(TokenRangeSync.sameAsTokenRanges(store, listOf(0 to 4, 7 to 9)))
++    assertFalse(TokenRangeSync.sameAsTokenRanges(store, listOf(0 to 3, 6 to 9)))
++  }
++
++  @Test
++  fun emptyVersusEmptyIsIdempotent() {
++    assertTrue(TokenRangeSync.sameAsTokenRanges(emptyList(), emptyList()))
++  }
++}
 diff --git a/node_modules/react-native-enriched-markdown/lib/module/EnrichedMarkdownTextInput.js b/node_modules/react-native-enriched-markdown/lib/module/EnrichedMarkdownTextInput.js
 index 5b348e8..d4ff3c0 100644
 --- a/node_modules/react-native-enriched-markdown/lib/module/EnrichedMarkdownTextInput.js

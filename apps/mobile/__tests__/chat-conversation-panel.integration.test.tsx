@@ -934,8 +934,9 @@ describe('ChatConversationPanel · 原生 dock 接线（Step 5）', () => {
 
     expect(startRun).toHaveBeenCalledTimes(1);
     expect(onNeedModel).not.toHaveBeenCalled();
-    // 清空走 M7 命令式通道（clearComposerNow → ref.setText('', 0)）
-    expect(mockComposerSetText).toHaveBeenCalledWith('', 0);
+    // 清空走 M7 命令式通道（clearComposerNow → ref.setText('', 0)）；面板
+    // 回调恒三参透传（D4），未给 ranges 时第三参为 undefined。
+    expect(mockComposerSetText).toHaveBeenCalledWith('', 0, undefined);
     expect(readChatComposerDraftState('s1').text).toBe('');
   });
 
@@ -978,8 +979,38 @@ describe('ChatConversationPanel · 原生 dock 接线（Step 5）', () => {
     });
 
     expect(mockComposerSetText).toHaveBeenCalledTimes(1);
-    expect(mockComposerSetText).toHaveBeenCalledWith('草稿正文', undefined);
+    // D4 三参：无 ranges 的草稿经兜底扫描得到 `[]`，第三参必须是这份数组
+    // （不是 undefined——undefined 会让组件走 remap 旧路径）。
+    expect(mockComposerSetText).toHaveBeenCalledWith('草稿正文', undefined, []);
     // value 镜像同步（面板声明式面也拿到草稿明文）
     expect(lastComposerProps().value).toBe('草稿正文');
+  });
+
+  it('T-CA6 水化三参：带持久化 tokenRanges 的草稿 → setText 第三参为持久化值', async () => {
+    // 真实下发路径断言（R2 P0-2）：面板 → controller.syncFromDraft → 面板
+    // setComposerText → composerRef.setText。controller spy 注入自己的 spy 会
+    // 绕过面板箭头、抓不到丢参缺陷，所以必须在这里断言。
+    mockRuntime.sessions.getComposerDraftJson = jest.fn(async () =>
+      serializeComposerDraftJson({
+        text: '$技能尾追',
+        attachments: [],
+        tokenRanges: [{start: 0, end: 3}],
+      }),
+    );
+
+    await act(async () => {
+      tree = TestRenderer.create(<TestHost />);
+      await flushPromises();
+    });
+
+    expect(mockComposerSetText).toHaveBeenCalledTimes(1);
+    expect(mockComposerSetText).toHaveBeenCalledWith(
+      '$技能尾追',
+      undefined,
+      [{start: 0, end: 3}],
+    );
+    // 确认态同样进 prop 面（composer 的 tokenRanges = 持久化值，不是兜底扫描
+    // 出来的 [{0,5}]——尾追不升格）。
+    expect(lastComposerProps().tokenRanges).toEqual([{start: 0, end: 3}]);
   });
 });

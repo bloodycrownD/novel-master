@@ -96,8 +96,12 @@ import type {
   AgentStreamUsagePayload,
   SubagentChildSessionCreatedPayload,
 } from '@novel-master/core/events';
-import type {SendAnnotateDraft} from '@novel-master/core/chat';
-import type {ChatMessage} from '@novel-master/core/chat';
+import type {
+  ChatMessage,
+  ComposerDraftTokenRange,
+  MessageAttachment,
+  SendAnnotateDraft,
+} from '@novel-master/core/chat';
 import type {EventSubscription} from '@novel-master/core/events';
 import {
   parseStreamFinalRateSnapshot,
@@ -226,6 +230,17 @@ export interface SessionStreamStartOptions {
   readonly stream?: boolean;
   readonly annotateDrafts?: readonly SendAnnotateDraft[];
   readonly allowResumeWithoutInput?: boolean;
+  /**
+   * D9：Composer 确认胶囊区间（**已换算到 trim 后正文坐标**；空/缺失 →
+   * core 全量扫描不掩码）。core 发送挂点把这几段替换成等长空白后再全量扫描，
+   * 贴邻 chip（`$A$B` / `@path$技能`）的触发符不再参与全量识别。
+   */
+  readonly excludedScanRanges?: readonly ComposerDraftTokenRange[];
+  /**
+   * Composer 显式附件（D9 区间扫描结果由此透传；core 只放行
+   * `source === 'attach'`，并在合并时位于 existing 位 = 区间结果优先）。
+   */
+  readonly attachments?: readonly MessageAttachment[];
   /**
    * 用户消息 append 成功后回调（透传 runAgentTurn 同名回调）——
    * UI 侧在此清批注草稿与输入草稿（失败不丢草稿的既有语义不变）。
@@ -1214,6 +1229,10 @@ export class SessionStreamUnitManager {
         stream: options?.stream,
         annotateDrafts: options?.annotateDrafts,
         allowResumeWithoutInput: options?.allowResumeWithoutInput,
+        // D9：区间扫描结果与掩码区间同步透传（白名单漏一处 = 静默断链；
+        // core 对 attachments 过滤非 attach，对 excludedScanRanges 做掩码）。
+        excludedScanRanges: options?.excludedScanRanges,
+        attachments: options?.attachments,
         onUserMessageAppended: options?.onUserMessageAppended,
       })
       .then(result => {

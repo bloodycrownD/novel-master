@@ -42,6 +42,8 @@ import {
   hasChatAnnotateDrafts,
   listChatAnnotateDrafts,
   resolveComposerSendIntent,
+  scanAtPathAttachments,
+  scanSkillAttachments,
   subscribeChatAnnotateDraft,
   type MessageAttachment,
 } from '@novel-master/core/chat';
@@ -61,8 +63,10 @@ import {projectComposerStatusForSession} from '@/services/project-composer-statu
 import {findActiveAtQuery} from './composer-at-path';
 import {
   buildTokenInsertion,
+  queryWithinConfirmedRange,
   statusOnlyComposerAttachments,
 } from './composer-token-insert';
+import {scanComposerTokenRangesForSend} from './composer-send-scan';
 import {
   remapTokenRanges,
   scanTokensToRanges,
@@ -127,8 +131,17 @@ export type UseChatComposerControllerOptions = {
    *
    * 缺省时退化为「只改本地 state」（组件的 `value` prop 变化仍会经 effect 补写），
    * 供不挂输入组件的调用方（单测 / 降级）使用。
+   *
+   * **第三参 `ranges`（D1/D4 接口）**：水化链携带持久化确认区间下发，
+   * 组件侧跳 remap 直写基线（见 `NativeChatComposer.commitExternalText`）。
+   * 漏改中间跳时 TypeScript 少参兼容会静默丢第三参，面板回调
+   * （`ChatConversationPanel.setComposerText`）与组件接口必须同步三参。
    */
-  readonly setComposerText?: (text: string, cursor?: number) => void;
+  readonly setComposerText?: (
+    text: string,
+    cursor?: number,
+    ranges?: readonly TokenRange[],
+  ) => void;
 };
 
 export type ChatComposerController = {
@@ -181,6 +194,34 @@ export type ChatComposerController = {
   readonly safeAreaBottom: number;
 };
 
+/**
+ * 区间内容比较（长度 + 逐元素 start/end）。
+ *
+ * `syncFromDraft` 的 ranges 更新判据**不能**挂在 `textChanged` 上：切会话时
+ * 两个会话可能持有同一份文本但不同的确认状态（A 会话是确认胶囊、B 会话是
+ * 同串手输），只按文本判断会让 B 继承 A 的区间（串台）。按内容比较而不是按
+ * 数组引用比较：每次水化都重建数组，引用恒不相等会让每个广播都刷一次 state。
+ */
+function tokenRangesEqual(
+  a: readonly TokenRange[],
+  b: readonly TokenRange[],
+): boolean {
+  if (a === b) {
+    return true;
+  }
+  if (a.length !== b.length) {
+    return false;
+  }
+  for (let index = 0; index < a.length; index += 1) {
+    const left = a[index]!;
+    const right = b[index]!;
+    if (left.start !== right.start || left.end !== right.end) {
+      return false;
+    }
+  }
+  return true;
+}
+
 export function useChatComposerController({
   scope,
   hasModel,
@@ -200,12 +241,15 @@ export function useChatComposerController({
   const initial = readChatComposerDraftState(sessionId);
   const [text, setText] = useState(initial.text);
   /**
-   * 胶囊确认区间（语义见 `ChatComposerController.tokenRanges`）。初值对内存
-   * 缓存草稿做一次正则全扫引导（水化语义同款）：历史草稿里的 token 全部视为
-   * 已确认——确认制约束的是**之后的**手输，不追溯旧草稿。
+   * 胶囊确认区间（语义见 `ChatComposerController.tokenRanges`）。
+   *
+   * **D1 持久化优先**：草稿带 `tokenRanges` → 直接使用（`[]` 也算有值，表示
+   * 确认无胶囊）；只有 `undefined`（旧草稿 / 带外写入）才做一次正则全扫兜底，
+   * 兜底结果由 `syncFromDraft` 写回固化。历史上的「水化全扫」在此退役——
+   * 那会把尾追内容重新吞进胶囊、把半截手输升格。
    */
   const [tokenRanges, setTokenRanges] = useState<readonly TokenRange[]>(() =>
-    scanTokensToRanges(initial.text),
+    initial.tokenRanges ?? scanTokensToRanges(initial.text),
   );
   const [cursor, setCursor] = useState(0);
   const [attachments, setAttachments] = useState<MessageAttachment[]>([
@@ -231,6 +275,16 @@ export function useChatComposerController({
   /** tokenRanges 的镜像 ref：打字/写入回调内即时重映射，不等 React 提交。 */
   const tokenRangesRef = useRef(tokenRanges);
   tokenRangesRef.current = tokenRanges;
+  /**
+   * 编辑前选区右缘镜像（D11 删除锚，与组件侧 `selectionRef` 同款）。
+   *
+   * `onSelectionChange` 逐次推进；打字 `change` 事件到达时原生**先发文本变更、
+   * 后发选区回调**，所以 `onChangeText` 里读到的还是变更前的值——remap 删除锚
+   * 据此反推真实删除段（相邻胶囊删左颗时不被公共前后缀咬进幸存胶囊）。
+   * null = 从未收到选区事件，删除锚回退差分口径（只增强不回退）。
+   * 命令式写入落位后同步镜像，下一次打字读到的就是刚落下的光标。
+   */
+  const prevCursorRef = useRef<number | null>(null);
 
   /**
    * 确认区间的统一推进口：差分重映射旧区间（编辑区与胶囊重叠即摘除、贴边
@@ -238,8 +292,22 @@ export function useChatComposerController({
    * 这里，保证 state 与 ref 同拍一致。
    */
   const advanceTokenRanges = useCallback(
-    (prev: string, next: string, inserted?: readonly TokenRange[]) => {
-      const remapped = remapTokenRanges(prev, next, tokenRangesRef.current);
+    (
+      prev: string,
+      next: string,
+      inserted?: readonly TokenRange[],
+      nextCursor?: number,
+      prevCursor?: number,
+    ) => {
+      const remapped = remapTokenRanges(
+        prev,
+        next,
+        tokenRangesRef.current,
+        nextCursor,
+        // D11 删除锚：编辑前光标（打字路径由选区镜像带入；Picker 落文不带，
+        // 走既有纯插入/差分口径）。
+        prevCursor,
+      );
       const merged =
         inserted != null && inserted.length > 0
           ? [...remapped, ...inserted].sort((a, b) => a.start - b.start)
@@ -282,7 +350,12 @@ export function useChatComposerController({
     (nextText: string, nextAttachments: readonly MessageAttachment[]) => {
       writeChatComposerDraftState(
         sessionId,
-        {text: nextText, attachments: nextAttachments},
+        {
+          text: nextText,
+          attachments: nextAttachments,
+          // D1 落库咽喉点：带上当前确认区间（含 `[]` = 确认无胶囊）。
+          tokenRanges: tokenRangesRef.current,
+        },
         runtimeRef.current.sessions,
       );
     },
@@ -292,11 +365,16 @@ export function useChatComposerController({
   /**
    * 草稿重读进本地 state（水化链与 `subscribeChatComposerDraft` 共用一条路径）。
    *
-   * 文本真变时同步经命令式通道下发（D8：水化不等转录 webview 的 ready 握手，
-   * 两链并行；见 `commitComposerText` 与 options.setComposerText 注释）。只在
-   * 文本变化时下发——状态条整表替换（`applyComposerStatusAttachmentsReplace`）
-   * 也会广播到这里，文本未变就重写输入框是无谓的 `setValue`，还会打断 IME
-   * 组合态。
+   * 文本真变或确认区间真变时同步经命令式通道下发（D8：水化不等转录 webview
+   * 的 ready 握手，两链并行；见 `commitComposerText` 与 options.setComposerText
+   * 注释）。ranges 变化也要下发：同文本不同确认状态的会话切换（A 确认胶囊 /
+   * B 同串手输）只改区间不改文本，漏发会让输入框渲染上一会话的胶囊。
+   * 状态条整表替换（`applyComposerStatusAttachmentsReplace`）也广播到这里，
+   * 文本与区间都未变就重写输入框是无谓的 `setValue`，还会打断 IME 组合态。
+   *
+   * **D4 三跳**：第三参携带的必须与 `setTokenRanges` 的 state 是**同一份数组**
+   * （`nextRanges`）——组件侧对第三参跳 remap 直写，prop 收敛 effect 再按内容
+   * 相等短路，不会用旧 state 覆盖。
    */
   const syncFromDraft = useCallback(() => {
     const draft = readChatComposerDraftState(sessionId);
@@ -304,14 +382,33 @@ export function useChatComposerController({
     setText(draft.text);
     textRef.current = draft.text;
     setAttachments([...draft.attachments]);
-    if (textChanged) {
-      // 确认区间引导扫描：草稿库里的 token 视为已确认（与 hook 初值同语义）。
-      const nextRanges = scanTokensToRanges(draft.text);
+    // D1 持久化优先：草稿带 `tokenRanges`（含 `[]`）直接采用；仅 `undefined`
+    // （旧草稿 / 全屏回填未给值 / undo_send 恢复）才做一次正则兜底扫描。
+    // ranges 的更新按**内容**比较而非挂在 textChanged 上——同文本不同会话
+    // 切换时（A 确认胶囊 / B 手输同串）才不会串台。
+    const nextRanges = draft.tokenRanges ?? scanTokensToRanges(draft.text);
+    const rangesChanged = !tokenRangesEqual(nextRanges, tokenRangesRef.current);
+    if (rangesChanged) {
       tokenRangesRef.current = nextRanges;
       setTokenRanges(nextRanges);
-      setComposerTextRef.current?.(draft.text);
     }
-  }, [sessionId]);
+    if (textChanged || rangesChanged) {
+      // D4 第三参：水化链把持久化确认区间直接交给组件（跳 remap 直写）。
+      setComposerTextRef.current?.(draft.text, undefined, nextRanges);
+      // D11 水化对称（P3-2）：组件侧 `commitExternalText` 在水化下发时会把
+      // 原生选区落到文本尾（cursor 缺省 = plain.length），controller 侧的
+      // 「编辑前光标」必须同拍对齐——否则上一个会话残留的旧选区会让下一次
+      // 删除的删除锚指错位置。只在真正下发时推进：text/ranges 都未变的
+      // 状态条广播不重写输入框，也不该动光标快照。
+      prevCursorRef.current = draft.text.length;
+    }
+    if (draft.tokenRanges === undefined && draft.text !== '') {
+      // 兜底扫描结果写回固化（仅此一次）：text 与 ranges 均空（空会话）跳过，
+      // 避免每次水化写一次 null 的无害写放大。persistDraft 读的是刚推进过的
+      // tokenRangesRef，落库即固化本次扫描值。
+      persistDraft(draft.text, draft.attachments);
+    }
+  }, [sessionId, persistDraft]);
 
   /**
    * 整段写入（Picker 路径的唯一入口）。
@@ -324,11 +421,14 @@ export function useChatComposerController({
    */
   const commitComposerText = useCallback(
     (next: string, nextCursor?: number, insertedRanges?: readonly TokenRange[]) => {
-      advanceTokenRanges(textRef.current, next, insertedRanges);
+      advanceTokenRanges(textRef.current, next, insertedRanges, nextCursor);
       setText(next);
       textRef.current = next;
       if (nextCursor != null) {
         setCursor(nextCursor);
+        // 命令式写入的落位同步进编辑前光标镜像（D11）：下一次打字事件读到的
+        // 「编辑前光标」就是这里落下的位置，不能沿用上一次打字的旧选区。
+        prevCursorRef.current = nextCursor;
       }
       persistDraft(next, statusOnlyComposerAttachments(attachments));
       setComposerTextRef.current?.(next, nextCursor);
@@ -402,7 +502,16 @@ export function useChatComposerController({
       if (next === textRef.current) {
         return;
       }
-      advanceTokenRanges(textRef.current, next);
+      // D11 删除锚：编辑前选区右缘（原生先发文本变更、后发选区回调，此刻
+      // ref 里还是变更前的值）。整段选区删除时右缘贴着删除段右端，退格时
+      // 就是光标位——两种形态都能反推出真实的删除段。
+      advanceTokenRanges(
+        textRef.current,
+        next,
+        undefined,
+        undefined,
+        prevCursorRef.current ?? undefined,
+      );
       textRef.current = next;
       setText(next);
       persistDraft(next, statusOnlyComposerAttachments(attachments));
@@ -412,6 +521,9 @@ export function useChatComposerController({
 
   const onSelectionChange = useCallback(
     (selection: ComposerInputSelection) => {
+      // 选区右缘是删除锚的「编辑前光标」（D11）：选区删除后光标落在起点，
+      // 用右缘才能把整段选区反推成删除段。
+      prevCursorRef.current = selection.end;
       setCursor(selection.start);
     },
     [],
@@ -425,6 +537,29 @@ export function useChatComposerController({
     async (content: string, allowResumeWithoutInput: boolean) => {
       timingLog('executeRun enter (tap→run dispatch gap)');
       setError(undefined);
+
+      // D9 掩码二段式（发送侧）：区间下标相对**未 trim** 的草稿原文（发送正文
+      // 沿用历史口径 `content = text.trim()`）。先按区间 slice 单独扫描得到
+      // rangeResults，再把同一批区间换算到正文坐标交给 core 掩码全量扫描；
+      // 区间为空（旧草稿 / 手输无胶囊）时走下方的全量扫描直出（不掩码）。
+      const sendScan = scanComposerTokenRangesForSend(
+        textRef.current,
+        content,
+        tokenRangesRef.current,
+      );
+      // D9 ③ 无区间草稿（T-CA9 ③ 端到端）：不走掩码二段式，直接全量扫描
+      // trim 后正文（与 core 的 scanText 同一份）产出 attachments，随 run
+      // 下传占 existing 位。core 随后仍会全量扫描一次，但去重键相同的条目
+      // 保留 existing——最终结果与 core 自行扫描逐项一致（手输 `$技能` /
+      // `@路径` 照常挂载、贴字 `$` 维持不识别），发送行为零变化，只是让
+      // 「与现状一致」可以在本链路端到端断言。
+      const sendAttachments =
+        tokenRangesRef.current.length > 0
+          ? sendScan.attachments
+          : [
+              ...scanAtPathAttachments(content),
+              ...scanSkillAttachments(content),
+            ];
 
       // 有正文 / 批注草稿 → 成功后清输入
       // annotate 仅在 onUserMessageAppended 清 store（与正文分轨可并存于回调）
@@ -459,6 +594,16 @@ export function useChatComposerController({
         const started = manager.startRun(sessionId, scope.projectId, content, {
           stream,
           allowResumeWithoutInput,
+          // D9：区间扫描结果随 run 下传，core 以 existing 位合并（区间结果
+          // 优先于掩码后的全量扫描）；excludedScanRanges 让 core 的全量扫描
+          // 看不到胶囊内触发符（`@path$技能` 不再污染路径、`$A$B` 不重复挂载）。
+          // 空数组不传：undefined 与 `[]` 在 core 侧行为等价，不传更贴近旧调用形态。
+          attachments:
+            sendAttachments.length > 0 ? sendAttachments : undefined,
+          excludedScanRanges:
+            sendScan.excludedScanRanges.length > 0
+              ? sendScan.excludedScanRanges
+              : undefined,
           annotateDrafts:
             annotateDrafts.length > 0 ? annotateDrafts : undefined,
           onUserMessageAppended: () => {
@@ -628,6 +773,10 @@ export function useChatComposerController({
    * （Picker 的「半截查询替换」语义）。插入那一刻现算一次
    * `findActiveAtQuery`（纯函数）——controller 只有 text 与 cursor 两份数据，
    * 去掉这一步会让「`@半截` → Picker 确认」在光标后留下残渣。
+   *
+   * 确认区间守卫（共享纯函数 `queryWithinConfirmedRange`，见
+   * composer-token-insert）排除「整段落进已确认胶囊」的假查询：chip 零空格
+   * 插入后光标贴 token 右缘，不守的话第二次确认会把上一颗整颗替换。
    */
   const insertTokensIntoComposer = useCallback(
     (pathTokens: readonly string[]) => {
@@ -636,7 +785,15 @@ export function useChatComposerController({
       }
       const current = textRef.current;
       const activeAt = findActiveAtQuery(current, cursor);
-      const replaceStart = activeAt != null ? activeAt.start : cursor;
+      const replaceStart =
+        activeAt != null &&
+        !queryWithinConfirmedRange(
+          tokenRangesRef.current,
+          activeAt.start,
+          cursor,
+        )
+          ? activeAt.start
+          : cursor;
       const next = buildTokenInsertion(
         current,
         cursor,
@@ -653,7 +810,15 @@ export function useChatComposerController({
       const current = textRef.current;
       const token = `$${skillName}`;
       const activeSkill = findActiveAtQuery(current, cursor, '$');
-      const replaceStart = activeSkill != null ? activeSkill.start : cursor;
+      const replaceStart =
+        activeSkill != null &&
+        !queryWithinConfirmedRange(
+          tokenRangesRef.current,
+          activeSkill.start,
+          cursor,
+        )
+          ? activeSkill.start
+          : cursor;
       const next = buildTokenInsertion(
         current,
         cursor,

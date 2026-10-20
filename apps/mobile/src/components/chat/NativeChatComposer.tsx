@@ -25,12 +25,18 @@
  * RN 侧只持「最后已知明文」镜像。
  *
  * **M7 · 命令式通道**：外部写入（Picker 插入 / 草稿水化 /
- * 发送清空 / undo 回滚 / **粘贴上屏**）一律走 `ref.setText(text, cursor?)`：
+ * 发送清空 / undo 回滚 / **粘贴上屏**）一律走 `ref.setText(text, cursor?, ranges?)`：
  * 推进基线 → 扫描 token 合成 markdown → `setValue` → 下发 `setTokenRanges` →
  * 可选光标落位 → **主动补发一次 `onComposerChangeText`**。补发的理由：库在
  * `setValueFromJS` 期间处于 `EditPhase.Importing`、事件被抑制，`onChangeText`
  * 不会自发回声；web 侧 dock 的 `commitComposerText` 同样是写入后补发 change
  * （E10/F6 语义），controller 的同值回声去重保证补发幂等。
+ *
+ * **第三参 `ranges`（D4 水化直写）**：草稿水化链把持久化的确认区间**直接**
+ * 交给本通道——传入时跳过一次差分重映射（`remapTokenRanges`）并把
+ * `confirmedRangesRef` 直写为这份区间。原因：`syncFromDraft` 是命令调用，
+ * React prop 不会即时更新，拿上一帧基线重映射（冷启动 `[]` / 切会话旧区间）
+ * 会把正确的持久化区间算丢。
  *
  * value prop 的职责边界：它是外部明文真源的**镜像**（供父层声明式渲染与
  * effect 兜底），不是逐键回写的受控值。effect 只在 `value !== 基线` 时介入
@@ -192,8 +198,15 @@ export type NativeChatComposerInstance = {
    * **M7 · 命令式整段写入通道**（`useChatComposerController` 的
    * `setComposerText` 在原生侧的落点）：明文进、库内 markdown 出。
    * `cursor` 缺省时库把光标落到文本末尾（`setValueFromJS` 的默认行为）。
+   *
+   * 第三参 `ranges` 为水化直写区间（D4）：传入时跳过差分重映射、直接以它为
+   * 确认制真源合成 markdown 并下发 `setTokenRanges`；缺省保持现行 remap 路径。
    */
-  setText: (text: string, cursor?: number) => void;
+  setText: (
+    text: string,
+    cursor?: number,
+    ranges?: readonly TokenRange[],
+  ) => void;
   focus: () => void;
   blur: () => void;
 };
@@ -258,6 +271,16 @@ export const NativeChatComposer = forwardRef<
     const lastReportedHeightRef = useRef<number | null>(null);
 
     /**
+     * 编辑前选区镜像（D11 删除锚）：`onChangeSelection` 逐次推进，文本变更
+     * 事件（`onChangeText`）到达时读到的还是**变更前**的值（原生先发文本
+     * 变更、后发选区回调）——删除锚据此把「相邻胶囊删左颗」被公共前后缀
+     * 咬歪的编辑区锚回真实删除段。null = 尚未收到任何选区事件，删除锚回退
+     * 差分口径（只增强不回退）。命令式写入的 `setSelection` 落位后同步镜像，
+     * 保证下一次打字读到的是最新光标。
+     */
+    const selectionRef = useRef<{start: number; end: number} | null>(null);
+
+    /**
      * 首帧初值（只算一次）：库是 defaultValue 挂载语义（后续 prop 变化不重置
      * 编辑器），草稿明文在初渲染时就合成 markdown 进框；之后的 value 变化一律
      * 走 value effect / M7 通道，不再碰 defaultValue。
@@ -289,9 +312,10 @@ export const NativeChatComposer = forwardRef<
      *
      * 确认制（2026-10-07 真机轮）：ranges 由调用方给出（打字=本地重映射、
      * prop 收敛=controller 真源）；null 时回落正则全扫（旧行为）。库端
-     * `setTokenRanges` 先清后加，天然幂等。TODO(IME)：中文组合态下也照发——
-     * 组合期间的区间会落在拼音串上、提交后回摆，风险面是组合中胶囊闪动/错位；
-     * 「组合中挂起、提交后重扫」的收紧策略等真机 QA 观察后再做。
+     * `setTokenRanges` 内容相同即早退（D4 幂等）。TODO(IME · D5)：中文
+     * 组合态下也照发——组合期间的区间会落在拼音串上、提交后回摆，风险面是
+     * 组合中胶囊闪动/错位；「组合中挂起、提交后重扫」的收紧策略见 spec D5
+     * （P2，Step 6/7 按触发条件延后），真机 QA 观察后再做。
      */
     const dispatchTokenRanges = useCallback(
       (plain: string, ranges?: readonly TokenRange[] | null) => {
@@ -310,21 +334,34 @@ export const NativeChatComposer = forwardRef<
      * 外部写入的内部通道（M7 语义全量）。`ref.setText`、value effect 兜底与
      * 粘贴上屏都收敛到这里，保证所有入口行为零差分。
      *
+     * **第三参 `ranges`（D4 水化直写）**：传入时跳过 `remapTokenRanges`，
+     * 直接把这份区间写成确认制真源（P2-2）——水化链的调用方是同步命令，
+     * 上一帧基线（冷启动 `[]` / 切会话旧区间）不可信，不能拿来重映射。
+     * 未传时维持现行路径：以 `baselineRef`（上一帧明文）为输入做差分重映射。
+     * `confirmedRangesRef` 为 null（未传 `tokenRanges` prop 的旧模式）时收到
+     * ranges 同样切确认制（现网恒传 prop，暴露面为零）。
+     *
      * 输入框未挂载时（理论上 effect 晚于 ref 挂接，不会发生）直接早退且
      * **不推进基线**——让下一次 value 变化重试，避免「基线推进了、库没收到」
      * 的永久丢失。
      */
     const commitExternalText = useCallback(
-      (plain: string, cursor?: number) => {
+      (plain: string, cursor?: number, ranges?: readonly TokenRange[]) => {
         const instance = inputRef.current;
         if (instance == null) {
           return;
         }
-        if (confirmedRangesRef.current != null) {
+        if (ranges != null) {
+          confirmedRangesRef.current = ranges;
+        } else if (confirmedRangesRef.current != null) {
+          // 纯插入的光标锚（见 remapTokenRanges）：只信调用方显式给的
+          // 光标（引用落文恒有）；兜底路径的 plain.length 不代表真实插入
+          // 点，不传——对齐点兜底已是保守正确。
           confirmedRangesRef.current = remapTokenRanges(
             baselineRef.current,
             plain,
             confirmedRangesRef.current,
+            cursor,
           );
         }
         baselineRef.current = plain;
@@ -339,6 +376,9 @@ export const NativeChatComposer = forwardRef<
         dispatchTokenRanges(plain, confirmedRangesRef.current);
         const resolvedCursor = cursor ?? plain.length;
         instance.setSelection(resolvedCursor, resolvedCursor);
+        // 命令式写入的落位同步进编辑前选区镜像（D11）：下一次打字事件读到的
+        // 「编辑前光标」就是这里落下的位置，不能用上一次打字遗留的旧选区。
+        selectionRef.current = {start: resolvedCursor, end: resolvedCursor};
         // E10/F6 补发语义：库在 Importing 期不自发回声，change 上抛由这里补；
         // controller 的同值去重使这条补发在所有调用场景下都是幂等回声。
         changeTextRef.current(plain);
@@ -354,6 +394,12 @@ export const NativeChatComposer = forwardRef<
             baselineRef.current,
             plain,
             confirmedRangesRef.current,
+            undefined,
+            // D11 删除锚：编辑前选区右缘。原子退格把整颗胶囊删在光标左侧，
+            // 删除段 `[光标 + delta, 光标)` 正好覆盖被删胶囊；选区整体删除时
+            // 右缘同样贴着删除段（原生把光标落到选区起点）。打字路径没有
+            // 「编辑后光标」的独立来源，nextCursor 留给派生的光标差。
+            selectionRef.current?.end,
           );
         }
         baselineRef.current = plain;
@@ -365,6 +411,7 @@ export const NativeChatComposer = forwardRef<
 
     const handleSelectionChange = useCallback(
       (selection: {start: number; end: number}) => {
+        selectionRef.current = {start: selection.start, end: selection.end};
         selectionChangeRef.current(selection);
       },
       [],
@@ -437,8 +484,11 @@ export const NativeChatComposer = forwardRef<
     useImperativeHandle(
       ref,
       () => ({
-        setText: (text: string, cursor?: number) =>
-          commitExternalText(text, cursor),
+        setText: (
+          text: string,
+          cursor?: number,
+          ranges?: readonly TokenRange[],
+        ) => commitExternalText(text, cursor, ranges),
         focus: () => inputRef.current?.focus(),
         blur: () => inputRef.current?.blur(),
       }),
