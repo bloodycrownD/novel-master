@@ -61,6 +61,7 @@ import {projectComposerStatusForSession} from '@/services/project-composer-statu
 import {findActiveAtQuery} from './composer-at-path';
 import {
   buildTokenInsertion,
+  queryWithinConfirmedRange,
   statusOnlyComposerAttachments,
 } from './composer-token-insert';
 import {scanComposerTokenRangesForSend} from './composer-send-scan';
@@ -751,19 +752,11 @@ export function useChatComposerController({
    * （Picker 的「半截查询替换」语义）。插入那一刻现算一次
    * `findActiveAtQuery`（纯函数）——controller 只有 text 与 cursor 两份数据，
    * 去掉这一步会让「`@半截` → Picker 确认」在光标后留下残渣。
+   *
+   * 确认区间守卫（共享纯函数 `queryWithinConfirmedRange`，见
+   * composer-token-insert）排除「整段落进已确认胶囊」的假查询：chip 零空格
+   * 插入后光标贴 token 右缘，不守的话第二次确认会把上一颗整颗替换。
    */
-  /**
-   * Picker 确认的「活动查询」守卫：查询区 [start, cursor) 若整段落在一颗
-   * **已确认胶囊**区间内，它就是引用落文的成品胶囊（光标贴其尾部——空草稿
-   * 插入无尾随空格，native 回声还会裁掉尾空格把光标贴回胶囊末端），不是
-   * 用户手输的半截查询——不替换、纯插入（2026-10-20 真机轮：连插两颗被
-   * 替换成一颗的根因）。真手输的 `$半截` / `@半截` 不在任何确认区间内，
-   * 替换补全语义不受影响。
-   */
-  const queryWithinConfirmedRange = useCallback((start: number, end: number) => {
-    return tokenRangesRef.current.some(r => r.start <= start && end <= r.end);
-  }, []);
-
   const insertTokensIntoComposer = useCallback(
     (pathTokens: readonly string[]) => {
       if (pathTokens.length === 0) {
@@ -772,7 +765,12 @@ export function useChatComposerController({
       const current = textRef.current;
       const activeAt = findActiveAtQuery(current, cursor);
       const replaceStart =
-        activeAt != null && !queryWithinConfirmedRange(activeAt.start, cursor)
+        activeAt != null &&
+        !queryWithinConfirmedRange(
+          tokenRangesRef.current,
+          activeAt.start,
+          cursor,
+        )
           ? activeAt.start
           : cursor;
       const next = buildTokenInsertion(
@@ -783,7 +781,7 @@ export function useChatComposerController({
       );
       commitComposerText(next.text, next.cursor, next.tokenRanges);
     },
-    [cursor, commitComposerText, queryWithinConfirmedRange],
+    [cursor, commitComposerText],
   );
 
   const insertSkillToken = useCallback(
@@ -793,7 +791,11 @@ export function useChatComposerController({
       const activeSkill = findActiveAtQuery(current, cursor, '$');
       const replaceStart =
         activeSkill != null &&
-        !queryWithinConfirmedRange(activeSkill.start, cursor)
+        !queryWithinConfirmedRange(
+          tokenRangesRef.current,
+          activeSkill.start,
+          cursor,
+        )
           ? activeSkill.start
           : cursor;
       const next = buildTokenInsertion(
@@ -804,7 +806,7 @@ export function useChatComposerController({
       );
       commitComposerText(next.text, next.cursor, next.tokenRanges);
     },
-    [cursor, commitComposerText, queryWithinConfirmedRange],
+    [cursor, commitComposerText],
   );
 
   const closeAtPicker = useCallback(() => {

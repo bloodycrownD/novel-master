@@ -1,6 +1,7 @@
 /**
  * Composer token 插入纯函数：四条插入路径（@ 选择器 / $ 选择器 / @ typeahead /
- * $ typeahead）共用的「补前后空格 + 拼接 + 算光标」。
+ * $ typeahead）共用的「零分隔空格拼接 + 算光标」，外加 Picker 确认前的
+ * 确认区间守卫（dock 与全屏共用）。
  * 组件侧只负责 mention ref 优先与纯文本 fallback 的提交（见 ChatComposer 的
  * commitComposerText）。
  */
@@ -13,7 +14,8 @@ export type ComposerTokenInsertion = {
   /**
    * 插入段内每个 token 的完整区间（含触发符，下标针对返回值 `text`；
    * 2026-10-07 胶囊确认制：引用落文时随插入一并登记，手输永不登记）。
-   * 多 token 以空格连接时逐个给出，区间互不相邻。
+   * 多 token 直接拼接（无连接空格）时按出现顺序逐个给出，chip 贴邻时
+   * 区间首尾相接（前一颗 end == 后一颗 start）。
    */
   readonly tokenRanges: readonly ComposerTokenRange[];
 };
@@ -47,6 +49,23 @@ export function buildTokenInsertion(
     cursor: before.length + joined.length,
     tokenRanges,
   };
+}
+
+/**
+ * Picker 确认的「活动查询」守卫（dock 与全屏共用，2026-10-20 真机轮定）。
+ *
+ * 查询区 `[start, end)` 若整段落在一颗**已确认胶囊**区间内，它就是引用落文的
+ * 成品胶囊（光标贴其尾部——chip 零空格插入后光标就在 token 右缘），不是用户
+ * 手输的半截查询：确认时**不替换、纯插入**。否则 `findActiveAtQuery` 会把整颗
+ * 已插入 token 当成活跃查询，第二次确认把上一颗整颗替换掉（「连插互替换」的
+ * 真因）。真手输的 `$半截` / `@半截` 不在任何确认区间内，替换补全语义不变。
+ */
+export function queryWithinConfirmedRange(
+  ranges: readonly ComposerTokenRange[],
+  start: number,
+  end: number,
+): boolean {
+  return ranges.some(r => r.start <= start && end <= r.end);
 }
 
 /** draft 持久化只保留状态 chip（workplace / user_ops）；文件引用由正文 `@` 扫描。 */

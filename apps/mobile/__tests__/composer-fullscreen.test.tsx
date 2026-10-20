@@ -442,6 +442,8 @@ describe('T-FS2/T-FS3 全屏编辑链（ChatTabScreen → 面板 → NativeChatC
       variant: 'composer',
       projectId: 'p1',
       sessionId: 's1',
+      // D10：进屏前草稿的确认区间随路由带入（打字路径已落 `[]` = 确认无胶囊）。
+      tokenRanges: [],
     });
     // 回调走模块级存取（不可序列化，不进路由参数），未消费前只有 set 的这一次。
     expect(typeof takePromptEditorOnSaved()).toBe('function');

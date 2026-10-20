@@ -190,6 +190,12 @@ function ChatTabScreenContent({
         );
         setDraftRestoreToken(token => token + 1);
       });
+      // D10 全屏守卫：进入全屏时的确认胶囊区间随路由带入（与 initialText 同一
+      // 坐标系）。全屏内新插入的区间由屏幕自身累积；这里只负责把进屏前的
+      // 草稿区间交过去，避免「已有胶囊贴尾 → 再插一颗」在无守卫时被整颗替换。
+      // 正常路径下 payload.text 与草稿文本一致（打字/插入都同步落草稿），
+      // remap 只是把「万一不一致」的坐标系对齐，相等时是恒等拷贝。
+      const entryDraft = readChatComposerDraftState(targetSessionId);
       navigation.navigate('PromptEditor', {
         title: '编辑消息',
         initialText: payload.text,
@@ -197,6 +203,14 @@ function ChatTabScreenContent({
         // @/$ tag 的选择器需要 scope（技能合并视图 / 会话工作区）
         projectId: ctx.projectId,
         sessionId: targetSessionId,
+        tokenRanges:
+          entryDraft.tokenRanges !== undefined
+            ? remapTokenRanges(
+                entryDraft.text,
+                payload.text,
+                entryDraft.tokenRanges,
+              )
+            : undefined,
       });
     },
     [ctx.projectId, ctx.sessionId, runtime, setDraftRestoreToken, navigation],

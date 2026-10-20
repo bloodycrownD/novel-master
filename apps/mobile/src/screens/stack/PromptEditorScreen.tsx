@@ -55,8 +55,11 @@ import {
 import {findActiveAtQuery} from '../../components/chat/composer-at-path';
 import {
   buildTokenInsertion,
+  queryWithinConfirmedRange,
   type ComposerTokenInsertion,
 } from '../../components/chat/composer-token-insert';
+import {remapTokenRanges} from '../../components/chat/native-composer/token-ranges';
+import type {ComposerDraftTokenRange} from '@novel-master/core/chat';
 import {FileReferencePicker} from '../../components/chat/FileReferencePicker';
 import {SkillPicker} from '../../components/skills/SkillPicker';
 import {composerToolBtnStyle} from '../../components/chat/composer-toolbar-style';
@@ -84,8 +87,14 @@ export function PromptEditorScreen() {
   const {tokens} = useTheme();
   const {showToast} = useToast();
   const route = useRoute<PromptEditorRoute>();
-  const {title, initialText, variant = 'form', projectId, sessionId} =
-    route.params;
+  const {
+    title,
+    initialText,
+    variant = 'form',
+    projectId,
+    sessionId,
+    tokenRanges: initialTokenRanges,
+  } = route.params;
   const isComposer = variant === 'composer';
   // 屏级 override：自动带 ownerRouteKey，转场期间不泄漏到相邻屏 header。
   const setStackOverride = useStackOverrideSetter();
@@ -98,6 +107,9 @@ export function PromptEditorScreen() {
   // form 保存只回填调用方并推进基线，不离开页面；composer 无基线消费方。
   const [draft, setDraft] = useState(initialText);
   const [savedDraft, setSavedDraft] = useState(initialText);
+  /** 当拍草稿镜像：插入链与卸载回填（effect 不重挂）共用的同步读取点。 */
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
   // 编辑/预览切换（照 FileEditorScreen）：入口按钮叫「全屏编辑」，
   // 进屏默认编辑态；预览渲染当前草稿。
   const [previewMode, setPreviewMode] = useState(false);
@@ -127,21 +139,79 @@ export function PromptEditorScreen() {
     ? findActiveAtQuery(draft, cursor, '$')
     : null;
 
-  /** 提交 token 插入：web 一次写入 + 光标落位，本地草稿/光标同步推进。 */
-  const commitDraft = useCallback((next: ComposerTokenInsertion) => {
-    codeEditorRef.current?.setText(next.text, {
-      start: next.cursor,
-      end: next.cursor,
-    });
-    setDraft(next.text);
-    setCursor(next.cursor);
-  }, []);
+  /**
+   * 全屏侧的确认胶囊区间：进入全屏时路由带入的草稿 `tokenRanges`（ChatTabScreen
+   * 透传）+ 本次会话内新插入的胶囊。守卫与 dock 同口径
+   * （`queryWithinConfirmedRange` 共享纯函数）：chip 零空格插入后光标贴 token
+   * 右缘，不守的话第二次确认会把上一颗整颗替换。
+   */
+  const confirmedRangesRef = useRef<readonly ComposerDraftTokenRange[]>(
+    initialTokenRanges ?? [],
+  );
+
+  /**
+   * 确认区间推进（全屏版 `advanceTokenRanges`）：先按文本差分 remap 旧区间
+   * （用户在编辑器里打字/删除时区间随正文走），再拼接本次插入登记的新区间。
+   * 守卫读到的区间必须始终对应当前正文，否则删改后的陈旧区间会误判/漏判。
+   */
+  const advanceConfirmedRanges = useCallback(
+    (
+      prevText: string,
+      nextText: string,
+      inserted: readonly ComposerDraftTokenRange[] = [],
+    ) => {
+      const remapped = remapTokenRanges(
+        prevText,
+        nextText,
+        confirmedRangesRef.current,
+      );
+      confirmedRangesRef.current =
+        inserted.length > 0
+          ? [...remapped, ...inserted].sort((a, b) => a.start - b.start)
+          : remapped;
+    },
+    [],
+  );
+
+  /** 编辑器打字/删除：草稿与确认区间一起推进（programmatic setText 无回声）。 */
+  const handleDraftChange = useCallback(
+    (nextText: string) => {
+      advanceConfirmedRanges(draftRef.current, nextText);
+      draftRef.current = nextText;
+      setDraft(nextText);
+    },
+    [advanceConfirmedRanges],
+  );
+
+  /** 提交 token 插入：web 一次写入 + 光标落位，本地草稿/光标/区间同步推进。 */
+  const commitDraft = useCallback(
+    (next: ComposerTokenInsertion) => {
+      advanceConfirmedRanges(draftRef.current, next.text, next.tokenRanges);
+      draftRef.current = next.text;
+      codeEditorRef.current?.setText(next.text, {
+        start: next.cursor,
+        end: next.cursor,
+      });
+      setDraft(next.text);
+      setCursor(next.cursor);
+    },
+    [advanceConfirmedRanges],
+  );
 
   /** SkillPicker 单选：从光标（或活跃 `$` 查询）处插入 `$技能名` token。 */
   const insertSkillToken = useCallback(
     (skillName: string) => {
-      // 有未完成 $… 时从 $ 起替换到光标，避免残留半截查询
-      const replaceStart = activeSkill != null ? activeSkill.start : cursor;
+      // 有未完成 $… 时从 $ 起替换到光标，避免残留半截查询；但整段落进已确认
+      // 胶囊的查询是成品胶囊（光标贴其尾部），纯插入不替换。
+      const replaceStart =
+        activeSkill != null &&
+        !queryWithinConfirmedRange(
+          confirmedRangesRef.current,
+          activeSkill.start,
+          cursor,
+        )
+          ? activeSkill.start
+          : cursor;
       commitDraft(
         buildTokenInsertion(draft, cursor, replaceStart, `$${skillName}`),
       );
@@ -149,13 +219,21 @@ export function PromptEditorScreen() {
     [activeSkill, cursor, draft, commitDraft],
   );
 
-  /** FileReferencePicker 多选：`@path` token 以空格连接插入。 */
+  /** FileReferencePicker 多选：`@path` token 零分隔空格直插（chip 口径）。 */
   const insertPathTokens = useCallback(
     (pathTokens: readonly string[]) => {
       if (pathTokens.length === 0) {
         return;
       }
-      const replaceStart = activeAt != null ? activeAt.start : cursor;
+      const replaceStart =
+        activeAt != null &&
+        !queryWithinConfirmedRange(
+          confirmedRangesRef.current,
+          activeAt.start,
+          cursor,
+        )
+          ? activeAt.start
+          : cursor;
       commitDraft(
         buildTokenInsertion(draft, cursor, replaceStart, pathTokens),
       );
@@ -173,8 +251,6 @@ export function PromptEditorScreen() {
 
   // 退出即回填（composer）：卸载点覆盖 header 返回与手势返回两条路。
   // 用 ref 取当拍草稿，effect 不随每次输入重挂（否则会中途提前回填）。
-  const draftRef = useRef(draft);
-  draftRef.current = draft;
   useEffect(() => {
     if (!isComposer) {
       return undefined;
@@ -280,7 +356,7 @@ export function PromptEditorScreen() {
                 ref={codeEditorRef}
                 value={draft}
                 path={COMPOSER_EDITOR_PATH}
-                onChange={setDraft}
+                onChange={handleDraftChange}
                 onSelectionChange={handleSelectionChange}
               />
               {/* 底排动作行：@ / $ 同款 36 圆钮（与 ChatComposer 工具栏同源单一样式） */}

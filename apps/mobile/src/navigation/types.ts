@@ -3,6 +3,7 @@
  */
 import type {NavigatorScreenParams} from '@react-navigation/native';
 import type {EngineId} from '@novel-master/core';
+import type {ComposerDraftTokenRange} from '@novel-master/core/chat';
 
 export type MainTabParamList = {
   Chat: undefined;
@@ -77,6 +78,12 @@ export type RootStackParamList = {
     variant?: 'form' | 'composer';
     projectId?: string;
     sessionId?: string;
+    /**
+     * 进入全屏时随草稿带入的确认胶囊区间（D10 全屏守卫的数据源）：与
+     * `initialText` 同一坐标系，作为 Picker 插入守卫的初始确认集合；本次
+     * 会话内新插入的胶囊由屏幕自身累积。可序列化（纯 `{start,end}` 数组）。
+     */
+    tokenRanges?: readonly ComposerDraftTokenRange[];
   };
   /** 设置·技能管理页：全局默认 / 项目分组双 tab。 */
   SkillsSettings: undefined;
