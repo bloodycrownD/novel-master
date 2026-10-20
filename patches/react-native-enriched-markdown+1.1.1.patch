@@ -1467,10 +1467,10 @@ index 1ebda75..634645b 100644
    private fun applyFormat(styleType: StyleType) {
 diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/spans/RoundedBackgroundSpan.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/spans/RoundedBackgroundSpan.kt
 new file mode 100644
-index 0000000..227baa3
+index 0000000..dcec883
 --- /dev/null
 +++ b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/spans/RoundedBackgroundSpan.kt
-@@ -0,0 +1,79 @@
+@@ -0,0 +1,81 @@
 +package com.swmansion.enriched.markdown.spans
 +
 +import android.graphics.Canvas
@@ -1482,11 +1482,13 @@ index 0000000..227baa3
 +/**
 + * 圆角背景 span，用于胶囊视觉。
 + *
-+ * getSize 返回文本实测宽 + paddingHorizontal * 2，draw 画 roundRect 圆角底。
-+ * 纵向以基线 + 字形 ascent/descent 定界（而非整行行框 top/bottom）：行距的
-+ * 富余空间全加在 descent 侧，用行框会让胶囊比文字高一截、垂到下一行
-+ * （真机实报「回车后胶囊下面多了一部分渲染」）；贴字形度量即可与 web 的
-+ * 行内 mark 视觉对齐。
++ * getSize 返回文本实测宽 + paddingHorizontal * 2 + gapHorizontal * 2（盒内
++ * 两侧各留 gap），draw 画 roundRect 圆角底；圆角矩形严格夹回这方预留框内
++ * （left = x + gapHorizontal，右缘不越框）——相邻胶囊靠盒内 gap 拉开视觉
++ * 间隔，不再互相叠压。纵向以基线 + 字形 ascent/descent 定界（而非整行行框
++ * top/bottom）：行距的富余空间全加在 descent 侧，用行框会让胶囊比文字高
++ * 一截、垂到下一行（真机实报「回车后胶囊下面多了一部分渲染」）；贴字形度量
++ * 即可与 web 的行内 mark 视觉对齐。
 + */
 +open class RoundedBackgroundSpan(
 +  private val backgroundColor: Int,
