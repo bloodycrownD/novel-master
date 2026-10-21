@@ -24,6 +24,9 @@ type RefMatch = {
  * 字面量子串搜索：正文里出现 `$<skillName>` / `@<path>` 整串才算命中——
  * 构造即精确边界（任何尾随字符都不吞），与附件逐字相等天然成立。
  * 同位置多名字命中（如技能 `A` 与 `AB`）保留最长（更具体）。
+ * path 侧额外接受去前导 `/` 形态：core 扫描落库时把相对路径归一成绝对
+ * （`notes/a.md` → `/notes/a.md`），正文保留用户原样 `@notes/a.md`，
+ * 双形态探测保证手输相对路径的真实挂载引用也能命中。
  */
 function findLiteralTokenMatches(
   text: string,
@@ -32,15 +35,26 @@ function findLiteralTokenMatches(
   kind: 'path' | 'skill',
 ): RefMatch[] {
   const out: RefMatch[] = [];
+  const seen = new Set<string>();
   for (const name of names) {
     if (name === '') {
       continue;
     }
-    const needle = trigger + name;
-    let idx = text.indexOf(needle);
-    while (idx >= 0) {
-      out.push({index: idx, end: idx + needle.length, text: needle, kind});
-      idx = text.indexOf(needle, idx + needle.length);
+    const needles = [name];
+    if (kind === 'path' && name.startsWith('/')) {
+      needles.push(name.slice(1));
+    }
+    for (const n of needles) {
+      const needle = trigger + n;
+      if (seen.has(needle)) {
+        continue;
+      }
+      seen.add(needle);
+      let idx = text.indexOf(needle);
+      while (idx >= 0) {
+        out.push({index: idx, end: idx + needle.length, text: needle, kind});
+        idx = text.indexOf(needle, idx + needle.length);
+      }
     }
   }
   return out;
@@ -52,9 +66,17 @@ export type AttachedRefTokens = {
   paths: Set<string>;
 };
 
+type AttachLike = {
+  source?: string;
+  path?: string;
+  skillName?: string;
+  name?: string;
+  action?: string;
+};
+
 /** 从消息附件提取胶囊真源（skillAttach → skillName/name；路径附件 → path）。 */
 export function attachedRefTokensFrom(
-  attachments: readonly {source?: string; path?: string; skillName?: string; name?: string; action?: string}[],
+  attachments: readonly AttachLike[],
 ): AttachedRefTokens {
   const skills = new Set<string>();
   const paths = new Set<string>();

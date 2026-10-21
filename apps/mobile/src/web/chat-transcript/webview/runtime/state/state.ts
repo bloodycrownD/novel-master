@@ -38,6 +38,8 @@ export type AttachmentChip = {
   type?: string;
   name?: string;
   path?: string;
+  /** skillAttach 专用：技能名真源（message-blocks 行构建透传；旧数据可能缺省）。 */
+  skillName?: string;
   action?: string;
   content?: string | null;
 };

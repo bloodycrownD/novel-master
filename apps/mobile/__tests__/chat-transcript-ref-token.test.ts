@@ -70,7 +70,10 @@ describe('splitRefTokenSpans（附件真源口径）', () => {
   });
 
   it('尾随文字无空白精确切分（胶囊不吞文字）', () => {
-    const attached = {skills: new Set(['agent-config']), paths: new Set<string>()};
+    const attached = {
+      skills: new Set(['agent-config']),
+      paths: new Set<string>(),
+    };
     expect(splitRefTokenSpans('甲$agent-config乙', attached)).toEqual([
       {kind: 'text', text: '甲'},
       {kind: 'skill', text: '$agent-config'},
@@ -125,6 +128,37 @@ describe('splitRefTokenSpans（附件真源口径）', () => {
     expect(splitRefTokenSpans('$技能开始吧', attached)).toEqual([
       {kind: 'skill', text: '$技能'},
       {kind: 'text', text: '开始吧'},
+    ]);
+  });
+
+  it('互为前缀的技能同挂时同位取最长', () => {
+    const attached = {skills: new Set(['A', 'AB']), paths: new Set<string>()};
+    expect(splitRefTokenSpans('$AB', attached)).toEqual([
+      {kind: 'skill', text: '$AB'},
+    ]);
+  });
+
+  it('path 与 skill 同名字面量各自成胶囊不互吞', () => {
+    const attached = {skills: new Set(['x']), paths: new Set(['x'])};
+    expect(splitRefTokenSpans('$x@x', attached)).toEqual([
+      {kind: 'skill', text: '$x'},
+      {kind: 'path', text: '@x'},
+    ]);
+  });
+
+  it('手输相对路径命中去前导斜杠形态（落库归一 /、正文原样无斜杠）', () => {
+    const attached = {skills: new Set<string>(), paths: new Set(['/notes/a.md'])};
+    expect(splitRefTokenSpans('见 @notes/a.md', attached)).toEqual([
+      {kind: 'text', text: '见 '},
+      {kind: 'path', text: '@notes/a.md'},
+    ]);
+  });
+
+  it('挂载 path 为正文更长 token 前缀时按挂载边界切分', () => {
+    const attached = {skills: new Set<string>(), paths: new Set(['/notes/a.md'])};
+    expect(splitRefTokenSpans('@notes/a.md.bak', attached)).toEqual([
+      {kind: 'path', text: '@notes/a.md'},
+      {kind: 'text', text: '.bak'},
     ]);
   });
 });

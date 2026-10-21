@@ -450,6 +450,9 @@ function transcriptRowFromItem(item: ChatListItem): TranscriptRow {
           type: a.type,
           name: a.name,
           path: a.path ?? a.name,
+          // skillAttach 的技能名真源（落库与 name 同值）：显式透传，
+          // 避免 path 兜底把技能名伪装成路径的形状错位
+          ...(a.skillName != null ? {skillName: a.skillName} : {}),
           ...(a.action != null ? {action: a.action} : {}),
           ...(a.content !== undefined ? {content: a.content} : {}),
         }))
