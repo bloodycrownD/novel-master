@@ -20,6 +20,13 @@ describe('attachedRefTokensFrom', () => {
     expect([...attached.paths]).toEqual(['/chapters/01.md']);
   });
 
+  it('转录行形状无 skillName 时回落 name（AttachmentChip 不携带 skillName）', () => {
+    const attached = attachedRefTokensFrom([
+      {source: 'attach', action: 'skillAttach', name: '助手派遣'},
+    ]);
+    expect([...attached.skills]).toEqual(['助手派遣']);
+  });
+
   it('非 attach 来源（annotate/user_ops）不产生胶囊真源', () => {
     const attached = attachedRefTokensFrom([
       {source: 'user_ops', action: 'annotate', path: '/a.md'},

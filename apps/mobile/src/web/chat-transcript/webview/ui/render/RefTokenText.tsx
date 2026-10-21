@@ -52,9 +52,9 @@ export type AttachedRefTokens = {
   paths: Set<string>;
 };
 
-/** 从消息附件提取胶囊真源（skillAttach → skillName；userAttach → path）。 */
+/** 从消息附件提取胶囊真源（skillAttach → skillName/name；路径附件 → path）。 */
 export function attachedRefTokensFrom(
-  attachments: readonly {source?: string; path?: string; skillName?: string; action?: string}[],
+  attachments: readonly {source?: string; path?: string; skillName?: string; name?: string; action?: string}[],
 ): AttachedRefTokens {
   const skills = new Set<string>();
   const paths = new Set<string>();
@@ -62,8 +62,12 @@ export function attachedRefTokensFrom(
     if (a?.source !== 'attach') {
       continue;
     }
-    if (a.action === 'skillAttach' && typeof a.skillName === 'string' && a.skillName !== '') {
-      skills.add(a.skillName);
+    if (a.action === 'skillAttach') {
+      // 转录行附件形状（AttachmentChip）不携带 skillName 字段，回落 name（落库时与 skillName 同值）
+      const skill = a.skillName ?? a.name;
+      if (typeof skill === 'string' && skill !== '') {
+        skills.add(skill);
+      }
     } else if (typeof a.path === 'string' && a.path !== '') {
       paths.add(a.path);
     }
