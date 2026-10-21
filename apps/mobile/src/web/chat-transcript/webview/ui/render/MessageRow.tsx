@@ -10,7 +10,7 @@ import {openContextMenuFromAnchor} from '../../runtime/menu/menu';
 import {assistantBubbleExtraClasses} from '../../runtime/stream/stream';
 import {AttachGroup} from './AttachGroup';
 import {AssistantBubbleInner} from './AssistantBubble';
-import {RefTokenText} from './RefTokenText';
+import {attachedRefTokensFrom, RefTokenText} from './RefTokenText';
 
 export type MessageRowProps = {
   row: MessageRowModel;
@@ -51,6 +51,8 @@ export function MessageRow({row}: MessageRowProps) {
     const attachments = row.attachments || [];
     const hasAttach = attachments.length > 0;
     const hasText = !!(row.text && String(row.text).length > 0);
+    // 胶囊边界真源 = 附件（skillName/path 与正文精确匹配），RefTokenText 据此切分
+    const attached = attachedRefTokensFrom(attachments);
     if (hasAttach || hasText) {
       if (hasAttach) {
         const attachKey = 'attach:' + row.id;
@@ -60,7 +62,7 @@ export function MessageRow({row}: MessageRowProps) {
             {menuRow}
             {hasText ? (
               <div className="bubble-body">
-                <RefTokenText text={String(row.text)} />
+                <RefTokenText text={String(row.text)} attached={attached} />
               </div>
             ) : null}
             <AttachGroup
@@ -76,7 +78,7 @@ export function MessageRow({row}: MessageRowProps) {
           <div className="bubble">
             {menuRow}
             <div className="bubble-body">
-              <RefTokenText text={String(row.text)} />
+              <RefTokenText text={String(row.text)} attached={attached} />
             </div>
           </div>
         );
