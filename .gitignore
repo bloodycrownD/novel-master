@@ -55,6 +55,9 @@ tmp/
 # Cursor IDE local files (debug logs, etc.)
 .cursor/
 
+# JetBrains / IntelliJ local files
+.idea/
+
 # ZCode 客户端本地文件（忽略清单同步产物，不入库）
 .zcodeignore
 
@@ -77,3 +80,6 @@ mock*.log
 .nm-regr-tmp/
 tmp-*.log
 docs/Iterations/*/cache/
+
+# 本地测试证据（截图 / uiautomator dump，按需重跑生成，不入库）
+docs/Iterations/*/evidence/
