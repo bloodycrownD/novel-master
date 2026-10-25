@@ -128,3 +128,37 @@ assistant:
 - `buildFileAnnotateAttachmentFromDraft` 8 段 `if (draft.x != null) params.x = draft.x` 重复 → 收敛成 key 列表循环。
 
 `parseAnnotateDraftsFromAttachments` 经脚本 v2 核对是 **2 处生产调用**（desktop `rollback-annotate-restore.ts:55`、mobile `useChatTabMessageActions.ts:241`），WebStorm 显示的 1 处是直接引用；用户确认不内联。
+
+## 2026-10-25 08:25 composer 四文件收敛与导出审计 v3
+
+- composer-sendable-input.ts 删除：hasComposerSendableInput 的唯一三元门闩内联进 resolveComposerSendIntent；输入 attachments 字段从未被读取，连同 ComposerSendIntentAttachment 一起移除，desktop/mobile 调用点与测试同步删除。
+- 类型面收私有：ComposerSendIntent/Input、ComposerTrigger、ComposerChipAttachment、ComposerSendableInput，以及 mobile controller 的 ConversationComposerState/ChatComposerController/UseChatComposerControllerOptions；测试改用 ReturnType/Parameters。
+- composer-at-path：5 个多行签名压成一行，basename 内联；countScannedAtPathAttachments 删除（测试改用 scanAtPathAttachments）；filterAtPathTypeaheadCandidates 只有 desktop ChatComposer 一处生产调用，已内联并从 public/shared/双端 wrapper/allowlist/测试撤出。
+- composer-chip-attachment：isComposerStatusAttachment 内联进 partition，不再导出。
+- compute-stream-tail-generating.ts 与 DEFAULT_STREAM_TAIL_IDLE_MS 全删（public 转发 + 测试，无生产消费者），测试与 allowlist 同步清理。
+- 脚本 v3：find-fake-exports --strict 纳入 PUBLIC_ONE_REF；check-style --changed/--all 把导出审计计入退出码；新增 --all 全 core 扫描，解决 --changed 看不到未改动文件死代码的问题；新增 nm-style: keep-public 注释豁免（跨层唯一入口/契约常量/测试支持 API），ATTACH_PROMPT_CHAR_BUDGET 与 resetChatAnnotateDraftStoreForTests 已标注；INLINE_CANDIDATE 改为必须恰好 1 次调用 + 0 值引用，修掉 JSX/值引用组件误报。
+- 验证：check-style --changed PASS（signatures/inline/exports）；脚本自测通过；core composer 18、desktop 11、mobile 12 + controller 41、package-exports 21 全绿；core/desktop main/mobile typecheck 通过，renderer 仅基线错误且无 composer 报错。chat logic 目录严格审计仍有 30 FAKE_PUBLIC/18 DEAD/2 TEST_ONLY/4 INLINE_CANDIDATE/11 PUBLIC_ONE_REF 存量，未在本轮处理。
+- 改动未提交。
+
+补充（脚本修正）：
+- check-signatures 原实现有 `params.length < 2` / `args.length < 2` / import `< 2` 的早退，单参数多行签名、单实参多行调用、单具名 import 拆行全部漏检；已改为比较节点起始行与第一个参数/实参/import 元素行，并继续比较相邻行。resolveComposerSendIntent 的单参数多行签名已压回一行。
+- PUBLIC_ONE_REF verdict 取消：public 单点函数统一判 INLINE_CANDIDATE（public=yes），public 不再是保留理由；strict 直接失败。public=yes 只影响撤导出时要同步 barrel/allowlist。
+- SKILL 强制“未处理项报告”：DEAD/FAKE_PUBLIC/TEST_ONLY/INLINE_CANDIDATE 未改必须在交付说明逐条列符号、计数、理由、证据；“public/共享 API”不能作为理由，只能写三端唯一入口/契约常量/测试支持 API 等具体原因。
+
+再补充（一行规则扩展）：
+- check-signatures 新增 VARDECL / ASSIGN：const/let/var 与赋值右侧简单表达式不得拆行（含 `=` 后换行、二元/三元跨行）；对象/数组/箭头/JSX/模板等多行块不误报，调用/构造的多行实参仍由 ARGS 报，避免重复。
+- 新增 scripts/test-check-signatures.mjs：fixture 覆盖单参数签名、单实参调用、单个具名 import、const RHS 拆行、赋值 RHS 拆行，并断言对象/数组/箭头多行不报。
+- composer-send-intent 的 scannedCount/hasSendable/sendDisabled 等已由用户压成一行；脚本现在能在回退时抓到。
+
+## chat-annotate-draft-store 对象化
+- bySession / listeners 收进 ChatAnnotateDraftStore 类私有字段；CRUD/订阅/chip 投影改为实例方法（箭头字段，保持解构调用不丢 this）。
+- 模块继续 export const xxx = store.method 保留现有函数入口，public/chat、allowlist 与三端调用点不动；对象成为唯一状态归属。
+- notify 不作为 class private method（check-inline 的 CLASS_PRIVATE 口径），改为模块级 notifyListeners(listeners, sessionId)。
+- 验证：core typecheck / eslint / check-style 单文件 PASS；store 6、desktop annotate 6、mobile annotate 9、package-exports 21 全绿；core build 通过。
+
+## 2026-10-25 chat-annotate-draft-store 完整对象化 + OOP 检查
+- 导出 chatAnnotateDraftStore 单例，删除 10 个函数别名；public/chat、allowlist、desktop shared、desktop renderer wrapper、desktop main、mobile 生产代码与 12+ 测试全部改为 store.method。
+- desktop wrapper 保留 unionComposerStatusWithAnnotate DTO 适配；chipsFromAnnotateStore 无消费者已删。
+- 新增 check-oop.mjs：模块级 Map/Set/let + >=2 导出函数共享状态 → OOP_CANDIDATE；导出函数 >=6 → MANY_EXPORTS（人工 review）；类/对象模块不报；接入 check-style（默认 REVIEW，--strict 阻断），新增 test-check-oop.mjs。
+- SKILL 新增 §9：OOP 最后一步；只在共享可变状态 + 多操作 + 生命周期/不变量时对象化；纯函数/DTO/hook 不建类；OOP_CANDIDATE 必须处理或报告理由。
+- 四 composer 文件 check-oop 全 KEEP；下一个候选是 apps/mobile/src/storage/chat-composer-draft.ts（8 导出、bySession×7 + listeners），但先要清它的 DEAD/INLINE 项，符合 OOP-last。
