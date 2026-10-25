@@ -64,12 +64,6 @@
 4. 荣耀真机（DSLDU20407006179）对 PC 来源安装一律弹锁屏密码/确认门（覆盖装与全新装都拦），必须用户在场配合点确认；adb install 失败报 `INSTALL_FAILED_ABORTED` 时不要反复重试，直接请用户配合或转 `/sdcard/Download/` 本地安装。
 5. gradle 出包从 subst 盘跑（路径超长问题），Metro 从真实路径跑——两者不可互换。
 
-## 编码风格（2026-10-25 用户拍板）
+## 编码风格
 
-**类里不写 private 方法，一律内联进公开方法。** 用户习惯：把一段顺序逻辑抽成 private 方法对 agent 没有收益（只是多一层跳转），内联后才能看清是否有可简化的地方（顺序能否合并、条件是否重复、中间结构是否可以省掉）。类里只保留 private 字段承载状态；确实被多处复用的纯比较/纯映射可以留模块级私有函数，但不要为了「分层」把顺序流程切碎。
-
-先例：`DoomLoopDetector` 内联 `assertNoRepeatedInput` / `remember` / `assertNoAlternation` 之后，发现轨迹已裁到恰好一个窗口，`slice(-crossRoundWindow)` 是多余的，直接读 `trajectory` 即可。
-
-**函数签名和调用的参数列表写在一行里，不换行。** 参数按个拆成多行读起来会断气，也不方便一眼扫清签名；参数多到一行放不下时，先想办法减少参数或缩短参数名，而不是换行。
-
-**通用谓词/纯工具函数统一放 `packages/core/src/common/`，经 `@novel-master/core/common` 给三端共用。** 同一个「对象非空非数组」守卫曾在 core 与 mobile 里抄了 15 份；这种一行但到处需要的函数最容易被复制。发现第二处就地实现时，先收敛到 common，不允许在业务文件里再定义一份。文件名按类别起（`guards.ts`、`merge-patch.ts`），不要按单个函数起（`is-record.ts` 这种），否则下一个小工具又得新开一个文件。
+写、改、重构代码前先加载 `nm-code-style` skill（`.agents/skills/nm-code-style/SKILL.md`）。核心原则：private 方法内联、签名/调用/错误构造一行、错误走 Either 且只在边界 throw、单行转手 wrapper 删除、通用工具进 `core/common`、文件名按类别起、不为抽象而抽象。
