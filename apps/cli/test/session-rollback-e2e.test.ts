@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -53,19 +52,16 @@ function appendMessageId(
   return lastLine(append.stdout);
 }
 
-/** fresh DB registry 为空会让 session create 失败——先种一个最小 agent。 */
-function seedAgent(dir: string, dbPath: string): void {
-  const bundlePath = join(dir, "agents.json");
-  writeFileSync(
-    bundlePath,
-    JSON.stringify({
-      schemaVersion: 1,
-      agents: {
-        "agent-rollback": { prompts: {}, description: "rollback seed", mode: "all" },
-      },
-    }),
-  );
-  const seeded = runNm(["agent", "import", bundlePath, "--db", dbPath]);
+/** fresh DB registry 为空会让 session create 失败——先建一个最小 agent。 */
+function seedAgent(dbPath: string): void {
+  const seeded = runNm([
+    "agent",
+    "create",
+    "--name",
+    "agent-rollback",
+    "--db",
+    dbPath,
+  ]);
   assert.equal(seeded.status, 0, seeded.stderr);
 }
 
@@ -87,7 +83,7 @@ describe("session rollback CLI e2e", () => {
     const dir = await mkdtemp(join(tmpdir(), "nm-srb-"));
     const dbPath = join(dir, "novel.db");
     try {
-      seedAgent(dir, dbPath);
+      seedAgent(dbPath);
       seedProjectSession(dbPath);
 
       const userAnchorId = appendMessageId(dbPath, "user", "hello anchor");
@@ -118,7 +114,7 @@ describe("session rollback CLI e2e", () => {
     const dir = await mkdtemp(join(tmpdir(), "nm-srb-"));
     const dbPath = join(dir, "novel.db");
     try {
-      seedAgent(dir, dbPath);
+      seedAgent(dbPath);
       seedProjectSession(dbPath);
 
       appendMessageId(dbPath, "user", "setup user");

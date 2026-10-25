@@ -1,5 +1,5 @@
 /**
- * CLI: read agent config file (single agent or bundle) via parseText + decode.
+ * CLI: read a single-agent config file via parseText + decode.
  *
  * @module config/load-agent-config-file
  */
@@ -10,12 +10,6 @@ import { decode, parseText, type TextFormat } from "@novel-master/core";
 
 import { agentDefinitionSchema, type AgentDefinition } from "@novel-master/core/agent";
 
-import { validateAgentPromptLayoutFromMaps } from "@novel-master/core/prompt";
-import {
-  agentsBundleDocumentSchema,
-  isAgentsBundleDocument,
-} from "../agent/schemas/agents-bundle.schema.js";
-
 function formatFromPath(path: string): TextFormat {
   const ext = extname(path).toLowerCase();
   if (ext === ".json") {
@@ -25,40 +19,14 @@ function formatFromPath(path: string): TextFormat {
 }
 
 /**
- * Loads one agent from a config path (single-agent doc or bundle + agentId).
+ * Loads one agent from a single-agent config path.
  */
 export async function loadAgentFromConfig(
   path: string,
-  agentId?: string,
 ): Promise<AgentDefinition> {
   const source = await readFile(path, "utf8");
   const format = formatFromPath(path);
   const raw = parseText(source, format);
-
-  if (isAgentsBundleDocument(raw)) {
-    if (agentId == null || agentId === "") {
-      throw new Error(
-        "Config file is an agents bundle; use --agent-id <id> to select an agent",
-      );
-    }
-    const doc = decode(raw, agentsBundleDocumentSchema);
-    const entry = doc.agents[agentId];
-    if (entry == null) {
-      throw new Error(`agent not found in bundle: ${agentId}`);
-    }
-    const prompts = validateAgentPromptLayoutFromMaps(
-      entry.prompts.persist,
-      entry.prompts.dynamic,
-      entry.prompts.system,
-    );
-    return {
-      name: agentId,
-      prompts,
-      model: entry.model,
-      runtime: entry.runtime,
-    };
-  }
-
   return decode(raw, agentDefinitionSchema);
 }
 

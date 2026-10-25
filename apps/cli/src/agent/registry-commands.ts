@@ -1,12 +1,10 @@
 /**
- * `nm agent list|show|create|import|export|migrate|delete` commands.
+ * `nm agent list|show|create|delete` commands.
  *
  * @module agent/registry-commands
  */
 
 import { randomUUID } from "node:crypto";
-import { access } from "node:fs/promises";
-import { join } from "node:path";
 import { encode, registerBuiltinTools, ToolRegistry } from "@novel-master/core";
 
 import {
@@ -17,9 +15,7 @@ import {
 
 import { assertSavedModelUuid } from "@novel-master/core/provider";
 import type { NovelMasterRuntime } from "../runtime.js";
-import { resolveNovelMasterHome } from "../compaction/novel-master-home.js";
 import { parseCliArgs } from "../vfs/parse-args.js";
-import { importAgentsFromFile, exportAgentsToFile } from "./import-export.js";
 
 function flagString(
   flags: ReadonlyMap<string, string | true>,
@@ -45,8 +41,8 @@ export async function runAgentRegistryCommand(
   // `args` 里 flag 本身也在第一层，`nm agent create --description "写手" smoke`
   // 会把 agent 命名成 `--description` 并静默成功（随后 `session create` 照样能
   // 开 ⇒ 不报错，只是名字离谱）。`parseCliArgs` 已经把 flag 剔干净了，直接用它的
-  // 产出即可。`create` / `show` / `import` / `export` / `delete` 五个 case 已同批
-  // 收口，避免只改新增的那一个造成行为不一致。
+  // 产出即可。`create` / `show` / `delete` 三个 case 已同批收口，避免只改新增的
+  // 那一个造成行为不一致。
   // 📌 坐标一律用 case 名、不用行号（同 CR WA-P2-02 的教训：行号必然再次腐烂）。
   const { positional, flags } = parseCliArgs(args);
   const registry = rt.agentRegistry;
@@ -81,7 +77,7 @@ export async function runAgentRegistryCommand(
       const defs = await registry.list();
       if (defs.length === 0) {
         console.log(
-          "No agents in registry. Run: nm agent import <path>, or: nm agent create --name <name>",
+          "No agents in registry. Run: nm agent create --name <name>",
         );
         return;
       }
@@ -99,50 +95,6 @@ export async function runAgentRegistryCommand(
       console.log(JSON.stringify(encode(def, agentDefinitionSchema), null, 2));
       return;
     }
-    case "import": {
-      const path = flagString(flags, "file") ?? positional[0];
-      if (path == null || path === "") {
-        throw new Error("Usage: nm agent import <path>");
-      }
-      const count = await importAgentsFromFile(
-        registry,
-        path,
-        createRegistryValidateOptions(rt),
-      );
-      console.log(`Imported ${count} agent(s) from ${path}`);
-      return;
-    }
-    case "export": {
-      const path = flagString(flags, "file") ?? positional[0];
-      if (path == null || path === "") {
-        throw new Error("Usage: nm agent export <path>");
-      }
-      await exportAgentsToFile(registry, path);
-      console.log(`Exported agents to ${path}`);
-      return;
-    }
-    case "migrate": {
-      const home = resolveNovelMasterHome(rt.dbPath);
-      const bundlePath = join(home, "agents.yaml");
-      try {
-        await access(bundlePath);
-      } catch {
-        throw new Error(`No ${bundlePath} found to migrate`);
-      }
-      const ids = await registry.listAgentIds();
-      if (ids.length > 0) {
-        throw new Error(
-          "Agent registry is not empty; migrate only when DB has no agents",
-        );
-      }
-      const count = await importAgentsFromFile(
-        registry,
-        bundlePath,
-        createRegistryValidateOptions(rt),
-      );
-      console.log(`Migrated ${count} agent(s) from ${bundlePath}`);
-      return;
-    }
     case "delete": {
       const agentId = flagString(flags, "id") ?? positional[0];
       if (agentId == null || agentId === "") {
@@ -154,7 +106,7 @@ export async function runAgentRegistryCommand(
     }
     default:
       throw new Error(
-        "Usage: nm agent <list|show|create|import|export|migrate|delete> ...",
+        "Usage: nm agent <list|show|create|delete> ...",
       );
   }
 }

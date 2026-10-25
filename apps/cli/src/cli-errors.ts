@@ -7,7 +7,7 @@
 import { PreferencesError, TdbcError } from "@novel-master/core";
 
 
-import { AgentConfigError, AgentError } from "@novel-master/core/agent";
+import { AgentConfigError, AppError } from "@novel-master/core/agent";
 
 
 import { ChatError } from "@novel-master/core/chat";
@@ -33,7 +33,7 @@ export const EXIT_USAGE = 1;
 export const EXIT_RUNTIME = 2;
 
 export function formatCliError(error: unknown): string {
-  if (error instanceof AgentError) {
+  if (error instanceof AppError) {
     return error.message;
   }
   if (
@@ -60,7 +60,7 @@ export function formatCliError(error: unknown): string {
 }
 
 export function exitCodeForError(error: unknown): number {
-  if (error instanceof AgentError) {
+  if (error instanceof AppError) {
     return EXIT_RUNTIME;
   }
   if (
