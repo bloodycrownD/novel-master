@@ -67,7 +67,7 @@ node .agents/skills/nm-code-style/scripts/find-fake-exports.mjs packages/core/sr
 - `TEST_ONLY`：非 public、生产 0、只有测试引用；
 - `DEAD`：生产 / 测试都 0；
 - `INLINE_CANDIDATE`：非 public、生产 1 处（函数）；
-- `PUBLIC_ONE_REF`：public + 生产 1 处（函数）；
+- `INLINE_CANDIDATE`：生产 1 处（函数）；**public=yes 只表示撤导出时还要同步 barrel/allowlist，不是保留理由**。默认内联；确认不能内联时写 `nm-style: keep-public — 理由`，并在交付报告列未处理项；
 - `AMBIGUOUS`：同名多定义，计数按名字合并，需人工看；
 - `KEEP` / 类 / 常量：类保留状态边界，大写常量是命名契约，不做 inline 候选。
 
@@ -96,30 +96,60 @@ node .agents/skills/nm-code-style/scripts/find-fake-exports.mjs packages/core/sr
 不要只靠通读代码找违规；先跑脚本，按报告改，再跑。内联/删除会制造新的单点与死引用，所以**至少循环 2 次**，直到 signatures/inline 都是 0 处。
 
 ```bash
-# 只扫本次 git 改动（默认排除 test/__tests__/dist）
+# 只扫本次 git 改动（默认排除 test/__tests__/dist）；导出审计按严格模式
 node .agents/skills/nm-code-style/scripts/check-style.mjs --changed
+
+# 全 core 死导出体检；不受 --changed 限制，能扫到本轮没改过的文件
+node .agents/skills/nm-code-style/scripts/check-style.mjs --all
 
 # 扫指定目录/文件；需要连测试一起扫时加 --include-tests
 node .agents/skills/nm-code-style/scripts/check-style.mjs packages/core/src/domain/chat/logic
 node .agents/skills/nm-code-style/scripts/check-style.mjs --changed --include-tests
 ```
 
+`--changed` 只看改过的文件；未改动文件里的死导出（例如 `computeStreamTailGenerating` 这种只剩 public 转发 + 测试的旧模块）必须靠 `--all` 或显式传目录才能发现。**每轮收尾至少跑一次 `--all`，不要只跑 `--changed`。**
+
 | 脚本 | 检测 | 处理 |
 | --- | --- | --- |
-| `check-signatures.mjs` | 多行函数参数、调用参数、`new` 构造、1–3 个具名 import 拆行 | 参数并回一行；放不下先减参数或缩短名字 |
+| `check-signatures.mjs` | 多行函数参数、调用参数、`new` 构造、1–3 个具名 import 拆行、const/赋值右侧简单表达式拆行 | 参数并回一行；RHS 并回一行或抽有名字的中间变量；放不下先减参数或缩短名字 |
 | `check-inline.mjs` | `DEAD_LOCAL` 零引用私有函数、`INLINE_LOCAL` 单点私有函数、`PASS_THROUGH` 单行转手、`CLASS_PRIVATE` | 删除 / 内联 / 删 wrapper / 并进公开方法 |
-| `find-fake-exports.mjs` | `FAKE_PUBLIC` / `TEST_ONLY` / `DEAD` / `INLINE_CANDIDATE` / `AMBIGUOUS` | 撤 public → 看调用点 → 沿死链删到底；`--strict` 可让问题类退出码 1 |
+| `find-fake-exports.mjs` | `FAKE_PUBLIC` / `TEST_ONLY` / `DEAD` / `INLINE_CANDIDATE` / `AMBIGUOUS` | 撤 public → 看调用点 → 沿死链删到底；`INLINE_CANDIDATE` 默认内联（public=yes 也一样），确认不能内联才写 `nm-style: keep-public` 理由；`--strict` 问题类退出码 1 |
+| `check-oop.mjs` | `OOP_CANDIDATE`（共享状态 + 多导出函数）、`MANY_EXPORTS`（导出函数 ≥6，人工 review） | 有状态才对象化；纯函数命名空间不建类；`OOP_CANDIDATE` 必须处理或报告理由 |
 
-- `check-style.mjs` 的退出码只由 signatures/inline 决定；fake-exports 是线索表。`INLINE_CANDIDATE` 默认按内联处理；只有确认是跨层唯一入口才留，并在改动说明里写明理由。
-- 脚本自测：`node --test .agents/skills/nm-code-style/scripts/test-find-fake-exports.mjs`（fixture 覆盖 barrel 单/双调用、测试引用、类型引用）。
+- `check-style.mjs --changed` / `--all` / `--strict` 现在把导出审计也计入退出码；默认全 core 扫描仍只输出线索表。`INLINE_CANDIDATE` 默认按内联处理；只有确认是跨层唯一入口才留，并在声明上方写 `nm-style: keep-public — 理由`。
+- 脚本自测：`node --test .agents/skills/nm-code-style/scripts/test-find-fake-exports.mjs`（fixture 覆盖 barrel 单/双调用、测试引用、类型引用、public 单引用与 keep-public 豁免）、`node --test .agents/skills/nm-code-style/scripts/test-check-signatures.mjs`（fixture 覆盖单参数/单实参/单 import 与 const/赋值 RHS 拆行，并确认对象/数组/箭头函数多行不误报）、`node --test .agents/skills/nm-code-style/scripts/test-check-oop.mjs`（共享状态 → OOP_CANDIDATE；纯函数多导出 → MANY_EXPORTS；已有对象 → 不报）。
 - `--changed` 只报新增行（未跟踪文件按整文件新增），适合修复循环；全量体检时传目录。每轮改完立刻重跑，直到 `check-style: PASS`。
 - 脚本按标识符/import 计数，是启发式：barrel 转发、同名遮蔽、动态引用需人工复核。
 - 不要用脚本自动改文件；报告只给位置，改动仍按本 skill 的语义判断。
 
+## 9. OOP 化（最后一步）
+
+顺序上先收死代码、单点内联、导出面、签名、重复工具；这些都干净后，才看要不要 OOP。**不要一边修 bug 一边把模块改成类。**
+
+只有同时满足才值得对象化：
+
+1. 模块有**共享可变状态**（`Map` / `Set` / 数组 / `let`），或多个操作围绕同一个实体；
+2. 至少两个导出函数读写同一份状态；
+3. 有生命周期、订阅、不变量需要封装（store / cache / 连接池 / 状态机 / 队列）。
+
+不要 OOP 的情况：
+
+- 纯函数工具（`composer-at-path`、`build-attachment-action-xml` 这类）——导出再多也只是命名空间，建类只增加壳；
+- DTO / schema / factory（`MessageContent` 这类持久化数据）；
+- 单个函数、React hook（hook 本身就是状态边界）；
+- 只是为了“看起来面向对象”。
+
+形态与迁移：
+
+- 状态放 class private 字段，操作放实例方法；进程级单例导出 `xxxStore`，不要模块顶层 `const map` + 一堆 free functions。
+- 先对象化内部并保留方法引用兼容，再切消费者，最后撤别名 / public / allowlist；不要一次性把 API 和状态迁移混在一起。
+- `check-oop.mjs` 的 `OOP_CANDIDATE` 必须处理或按“未处理项报告”给理由；`MANY_EXPORTS` 只表示人工 review，纯函数模块可以不 OOP。
+
 ## 交付前 30 秒检查
 
-- 有没有跑 `check-style.mjs --changed`，并循环到 0 处？
-- `INLINE_CANDIDATE` 都处理了吗？默认内联，留必须写明跨层唯一入口理由。
+- 有没有跑 `check-style.mjs --changed`，并循环到 0 处？收尾再跑一次 `--all` 找未改动文件的死导出。
+- `check-oop.mjs` 的 `OOP_CANDIDATE` 处理了吗？`MANY_EXPORTS` 看过并说明纯函数/该 OOP 了吗？
+- `INLINE_CANDIDATE` 都处理了吗？public=yes 也一样默认内联；留必须写 `nm-style: keep-public` 理由。
 - 只调用一次的 private / 模块级函数，内联了吗？（`check-inline`）
 - 死链的 caller 也一起删了吗？
 - 这个 export 的生产引用有几处？测试 import / allowlist 都不算消费者。（`find-fake-exports`）
@@ -129,3 +159,14 @@ node .agents/skills/nm-code-style/scripts/check-style.mjs --changed --include-te
 - 这个 Result 真的有失败分支吗，还是为了“统一”硬加的？
 - 有没有第二份通用工具/守卫/纯映射该进 `core/common`？
 - 改完 typecheck、相关测试、lint 都跑了吗？
+
+## 未处理项报告（强制）
+
+`DEAD` / `FAKE_PUBLIC` / `TEST_ONLY` / `INLINE_CANDIDATE` 只要本轮没改掉，交付说明必须逐条列出：
+
+| 符号 | verdict | prod/test | 不处理理由 | 证据 |
+| --- | --- | --- | --- | --- |
+
+没有这张表 = 视为漏处理。`nm-style: keep-public` 只是代码里的标记，不能替代报告里的理由。
+
+**“public / 共享 API”不是理由。** public 只说明撤导出时要同步 barrel 与 allowlist，不说明调用点不止一个；必须说明为什么唯一调用方不能 own 这段逻辑，例如三端共用的唯一入口、跨端契约常量、测试支持 API。说不出来就内联或删除。

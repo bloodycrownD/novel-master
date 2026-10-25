@@ -33,7 +33,7 @@ export function isTestPath(rel) {
 }
 
 export function parseFlags(argv) {
-  return { changed: argv.includes("--changed"), includeTests: argv.includes("--include-tests"), json: argv.includes("--json"), paths: argv.filter((arg) => !arg.startsWith("--")) };
+  return { changed: argv.includes("--changed"), includeTests: argv.includes("--include-tests"), all: argv.includes("--all"), strict: argv.includes("--strict"), verbose: argv.includes("--verbose"), json: argv.includes("--json"), paths: argv.filter((arg) => !arg.startsWith("--")) };
 }
 
 function gitLines(command) {

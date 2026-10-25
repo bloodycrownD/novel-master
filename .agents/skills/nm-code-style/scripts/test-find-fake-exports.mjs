@@ -19,20 +19,25 @@ test("find-fake-exports：经 barrel 的调用点 / 测试引用 / 类型引用�
       "export function oneCall(): void {}",
       "export function twoCalls(): void {}",
       "export function deadCall(): void {}",
+      "export function publicOne(): void {}",
+      "/** nm-style: keep-public — 跨层唯一入口 fixture */",
+      "export function keptPublic(): void {}",
       "export type DeadType = string;",
       "",
     ].join("\n"));
     fs.writeFileSync(path.join(fixtureRoot, "barrel.ts"), [
-      'export { oneCall, twoCalls, deadCall } from "./defs.js";',
+      'export { oneCall, twoCalls, deadCall, publicOne, keptPublic } from "./defs.js";',
       'export type { DeadType } from "./defs.js";',
       "",
     ].join("\n"));
     fs.writeFileSync(path.join(fixtureRoot, "consumer.ts"), [
-      'import { oneCall, twoCalls, type DeadType } from "./barrel.js";',
+      'import { oneCall, twoCalls, publicOne, keptPublic, type DeadType } from "./barrel.js";',
       'const typed: DeadType = "x";',
       "oneCall();",
       "twoCalls();",
       "twoCalls();",
+      "publicOne();",
+      "keptPublic();",
       "void typed;",
       "",
     ].join("\n"));
@@ -41,14 +46,19 @@ test("find-fake-exports：经 barrel 的调用点 / 测试引用 / 类型引用�
       "deadCall();",
       "",
     ].join("\n"));
+    const fixtureSnapshot = path.join(repoRoot, "packages/core/test/package-exports/snapshots/__style_fixture__.json");
+    fs.writeFileSync(fixtureSnapshot, JSON.stringify(["publicOne", "keptPublic"]));
 
     const out = execFileSync(process.execPath, [script, "packages/core/src/__style_fixture__/defs.ts"], { cwd: repoRoot, encoding: "utf8" });
     assert.match(out, /INLINE_CANDIDATE\s+1c\/0r\s+0c\/0r\s+.*oneCall/);
     assert.match(out, /KEEP\s+2c\/0r\s+0c\/0r\s+.*twoCalls/);
     assert.match(out, /TEST_ONLY\s+0c\/0r\s+1c\/0r\s+.*deadCall/);
+    assert.match(out, /INLINE_CANDIDATE\s+1c\/0r\s+0c\/0r\s+yes\s+.*publicOne/);
+    assert.match(out, /KEEP\s+1c\/0r\s+0c\/0r\s+yes\s+.*keptPublic/);
     assert.match(out, /KEEP\s+0c\/1r\s+0c\/0r\s+.*DeadType/);
   } finally {
     fs.rmSync(fixtureRoot, { recursive: true, force: true });
     fs.rmSync(testFixtureRoot, { recursive: true, force: true });
+    fs.rmSync(path.join(repoRoot, "packages/core/test/package-exports/snapshots/__style_fixture__.json"), { force: true });
   }
 });

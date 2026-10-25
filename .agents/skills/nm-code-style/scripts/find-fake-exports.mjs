@@ -70,20 +70,25 @@ function hasExportModifier(node) {
 function exportedSymbols(sourceFile) {
   const symbols = [];
   const lineOf = (node) => sourceFile.getLineAndCharacterOfPosition(node.getStart()).line + 1;
+  const keepPublicOf = (statement) => {
+    const comments = ts.getLeadingCommentRanges(sourceFile.text, statement.getFullStart()) ?? [];
+    return comments.some((range) => /nm-style:\s*(keep-public|public-one-ref)/.test(sourceFile.text.slice(range.pos, range.end)));
+  };
   for (const statement of sourceFile.statements) {
     if (!hasExportModifier(statement)) continue;
+    const keepPublic = keepPublicOf(statement);
     if (ts.isFunctionDeclaration(statement) && statement.name != null) {
-      symbols.push({ name: statement.name.text, kind: "function", line: lineOf(statement) });
+      symbols.push({ name: statement.name.text, kind: "function", line: lineOf(statement), keepPublic });
     } else if (ts.isClassDeclaration(statement) && statement.name != null) {
-      symbols.push({ name: statement.name.text, kind: "class", line: lineOf(statement) });
+      symbols.push({ name: statement.name.text, kind: "class", line: lineOf(statement), keepPublic });
     } else if ((ts.isTypeAliasDeclaration(statement) || ts.isInterfaceDeclaration(statement)) && statement.name != null) {
-      symbols.push({ name: statement.name.text, kind: "type", line: lineOf(statement) });
+      symbols.push({ name: statement.name.text, kind: "type", line: lineOf(statement), keepPublic });
     } else if (ts.isVariableStatement(statement)) {
       for (const declaration of statement.declarationList.declarations) {
         if (!ts.isIdentifier(declaration.name)) continue;
         const initializer = declaration.initializer;
         const kind = initializer != null && (ts.isArrowFunction(initializer) || ts.isFunctionExpression(initializer)) ? "function" : "variable";
-        symbols.push({ name: declaration.name.text, kind, line: lineOf(declaration) });
+        symbols.push({ name: declaration.name.text, kind, line: lineOf(declaration), keepPublic });
       }
     }
   }
@@ -195,9 +200,8 @@ const verdictOrder = new Map([
   ["DEAD", 1],
   ["TEST_ONLY", 2],
   ["INLINE_CANDIDATE", 3],
-  ["PUBLIC_ONE_REF", 4],
-  ["AMBIGUOUS", 5],
-  ["KEEP", 6],
+  ["AMBIGUOUS", 4],
+  ["KEEP", 5],
 ]);
 
 const rows = definitions.map((definition) => {
@@ -212,10 +216,10 @@ const rows = definitions.map((definition) => {
   const duplicate = (definitionsByName.get(name)?.length ?? 0) > 1;
   let verdict;
   if (duplicate) verdict = "AMBIGUOUS";
-  else if (prod === 0 && isPublic) verdict = "FAKE_PUBLIC";
+  else if (prod === 0 && isPublic) verdict = definition.keepPublic ? "KEEP" : "FAKE_PUBLIC";
   else if (prod === 0 && test > 0) verdict = "TEST_ONLY";
   else if (prod === 0) verdict = "DEAD";
-  else if (prod === 1 && definition.kind === "function") verdict = isPublic ? "PUBLIC_ONE_REF" : "INLINE_CANDIDATE";
+  else if (prod === 1 && definition.kind === "function" && calls === 1 && refs === 0) verdict = definition.keepPublic ? "KEEP" : "INLINE_CANDIDATE";
   else verdict = "KEEP";
   return { ...definition, calls, refs, testCalls: testCallCount, testRefs: testRefCount, prod, test, public: isPublic ? "yes" : "", verdict };
 });
@@ -237,5 +241,6 @@ console.log(`summary: ${Object.entries(counts).map(([verdict, count]) => `${verd
 console.log("prod/test = 生产/测试代码里的 调用点/值引用点；已解析 named import、as 别名与 barrel 转发。");
 console.log("同名多定义 → AMBIGUOUS；类与常量不做 INLINE_CANDIDATE；测试 import / allowlist 不算消费者。");
 console.log("仍是启发式：同名遮蔽、动态属性、跨包重建导出需人工复核。--strict 时 DEAD/FAKE_PUBLIC/TEST_ONLY/INLINE_CANDIDATE 退出码 1。");
+console.log("INLINE_CANDIDATE 默认内联；public=yes 只表示还要撤 barrel/allowlist，不是保留理由。确认不能内联时写 `nm-style: keep-public — 理由`，并在交付报告列未处理项。");
 
 if (strict && rows.some((row) => ["FAKE_PUBLIC", "DEAD", "TEST_ONLY", "INLINE_CANDIDATE"].includes(row.verdict))) process.exitCode = 1;
