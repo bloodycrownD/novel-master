@@ -61,15 +61,17 @@ description: novel-master 的代码优化与重构原则。写新代码、重构
 node .agents/skills/nm-code-style/scripts/find-fake-exports.mjs packages/core/src/domain/character-card
 ```
 
-输出列：`prod` 生产 import 文件数、`test` 测试 import 文件数、`public` 是否在 allowlist；verdict：
+输出列：`prod` / `test` = 生产 / 测试代码里的 **调用点 / 值引用点**（`Nc/Nr`）；已解析 named import、`as` 别名与 `@novel-master/core/chat` 这类 barrel 转发；`public` 是否在 allowlist；`kind` 为 function / class / variable。verdict：
 
-- `FAKE_PUBLIC`：public 有名字但生产引用 0；
+- `FAKE_PUBLIC`：public 有名字但生产调用 / 引用 0；
 - `TEST_ONLY`：非 public、生产 0、只有测试引用；
-- `INLINE_CANDIDATE`：非 public、生产 1 处（再判断是否跨层唯一入口）；
-- `PUBLIC_ONE_REF`：public + 生产 1 处（检查它到底是不是对外 API）；
-- `DEAD` / `KEEP`。
+- `DEAD`：生产 / 测试都 0；
+- `INLINE_CANDIDATE`：非 public、生产 1 处（函数）；
+- `PUBLIC_ONE_REF`：public + 生产 1 处（函数）；
+- `AMBIGUOUS`：同名多定义，计数按名字合并，需人工看；
+- `KEEP` / 类 / 常量：类保留状态边界，大写常量是命名契约，不做 inline 候选。
 
-脚本只看直接 import 定义文件，经 barrel 转发的引用会漏计；它给线索，边界判断还是人来定。
+仍是启发式：同名遮蔽、动态属性、跨包重建导出需人工复核；`--strict` 时 `DEAD` / `FAKE_PUBLIC` / `TEST_ONLY` / `INLINE_CANDIDATE` 退出码 1。
 
 ## 5. 通用工具与命名
 
@@ -106,9 +108,10 @@ node .agents/skills/nm-code-style/scripts/check-style.mjs --changed --include-te
 | --- | --- | --- |
 | `check-signatures.mjs` | 多行函数参数、调用参数、`new` 构造、1–3 个具名 import 拆行 | 参数并回一行；放不下先减参数或缩短名字 |
 | `check-inline.mjs` | `DEAD_LOCAL` 零引用私有函数、`INLINE_LOCAL` 单点私有函数、`PASS_THROUGH` 单行转手、`CLASS_PRIVATE` | 删除 / 内联 / 删 wrapper / 并进公开方法 |
-| `find-fake-exports.mjs` | `FAKE_PUBLIC` / `TEST_ONLY` / `DEAD` / `INLINE_CANDIDATE` | 撤 public → 看调用方 → 沿死链删到底 |
+| `find-fake-exports.mjs` | `FAKE_PUBLIC` / `TEST_ONLY` / `DEAD` / `INLINE_CANDIDATE` / `AMBIGUOUS` | 撤 public → 看调用点 → 沿死链删到底；`--strict` 可让问题类退出码 1 |
 
 - `check-style.mjs` 的退出码只由 signatures/inline 决定；fake-exports 是线索表。`INLINE_CANDIDATE` 默认按内联处理；只有确认是跨层唯一入口才留，并在改动说明里写明理由。
+- 脚本自测：`node --test .agents/skills/nm-code-style/scripts/test-find-fake-exports.mjs`（fixture 覆盖 barrel 单/双调用、测试引用、类型引用）。
 - `--changed` 只报新增行（未跟踪文件按整文件新增），适合修复循环；全量体检时传目录。每轮改完立刻重跑，直到 `check-style: PASS`。
 - 脚本按标识符/import 计数，是启发式：barrel 转发、同名遮蔽、动态引用需人工复核。
 - 不要用脚本自动改文件；报告只给位置，改动仍按本 skill 的语义判断。
