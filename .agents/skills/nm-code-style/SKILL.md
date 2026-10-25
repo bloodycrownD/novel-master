@@ -17,6 +17,8 @@ description: novel-master 的代码优化与重构原则。写新代码、重构
 
 先例：`DoomLoopDetector` 内联三个 private 方法后，发现轨迹已裁到恰好一个窗口，`slice(-crossRoundWindow)` 是多余复制；`validateAgentDefinition` 内联后，`prompts` 的对象/数组检查被证明冗余，直接要求 `persist`/`dynamic` 是数组即可。
 
+- **死代码沿调用链删到底**：一个符号只剩测试/barrel 引用时，先找它的调用方；调用方自己也没有生产调用，就继续往上，整条链一起删，不要只删叶子留下空壳 caller。先例：`applyAnnotateHighlights` 生产零调用，它的 `findAnnotateOccurrenceInSource` / `buildFlatTextIndex` / `estimateSoftOffsetRangeFromQuoteContext` 全部只服务这条死链，最终整条链与两个 logic 文件一起删除。
+
 ## 2. 一行写完
 
 - **函数签名、调用参数列表写在一行**，不按参数拆行。参数多到一行放不下，先减少参数或缩短参数名，而不是换行。
@@ -51,6 +53,7 @@ description: novel-master 的代码优化与重构原则。写新代码、重构
   4. 只有测试直接 import → 不构成保留理由；测试改走公开入口/service，或随内联删除；
   5. service→domain 这类跨层唯一入口可以保留**一个内部 export**，但它不该出现在 public allowlist 里。
 - 先例：`parseCharacterCardToMdTree` 曾在 public allowlist、service 一处调用、测试多处直引；public 是假的，已撤导出并把解析并回 domain 单文件；`validateMdTreeForImport` / `validateMdTreeLimits`、`sanitizeEntryFilename`、`extractPngCharaJsonText` 都是一处引用，已内联。
+- 先例：`buildAnnotatedSource`、`applyAnnotateHighlights` 这类“保留供测试/兼容”的导出，生产零引用就整条删；测试不是保留理由，兼容也要有真实消费者。
 
 **审计脚本**（skill 自带，不用装依赖）：
 
@@ -86,13 +89,40 @@ node .agents/skills/nm-code-style/scripts/find-fake-exports.mjs packages/core/sr
 - 改了公共导出或 `dist` 消费方，重建 core 并跑 package-exports 快照。
 - 提交前看 `git diff --stat` 和关键 diff，避免整文件 CRLF/LF 换行噪音；换行噪音单独还原，不要混进逻辑提交。
 
+## 8. 脚本化检查（改完必跑，循环到 PASS）
+
+不要只靠通读代码找违规；先跑脚本，按报告改，再跑。内联/删除会制造新的单点与死引用，所以**至少循环 2 次**，直到 signatures/inline 都是 0 处。
+
+```bash
+# 只扫本次 git 改动（默认排除 test/__tests__/dist）
+node .agents/skills/nm-code-style/scripts/check-style.mjs --changed
+
+# 扫指定目录/文件；需要连测试一起扫时加 --include-tests
+node .agents/skills/nm-code-style/scripts/check-style.mjs packages/core/src/domain/chat/logic
+node .agents/skills/nm-code-style/scripts/check-style.mjs --changed --include-tests
+```
+
+| 脚本 | 检测 | 处理 |
+| --- | --- | --- |
+| `check-signatures.mjs` | 多行函数参数、调用参数、`new` 构造、1–3 个具名 import 拆行 | 参数并回一行；放不下先减参数或缩短名字 |
+| `check-inline.mjs` | `DEAD_LOCAL` 零引用私有函数、`INLINE_LOCAL` 单点私有函数、`PASS_THROUGH` 单行转手、`CLASS_PRIVATE` | 删除 / 内联 / 删 wrapper / 并进公开方法 |
+| `find-fake-exports.mjs` | `FAKE_PUBLIC` / `TEST_ONLY` / `DEAD` / `INLINE_CANDIDATE` | 撤 public → 看调用方 → 沿死链删到底 |
+
+- `check-style.mjs` 的退出码只由 signatures/inline 决定；fake-exports 是线索表。`INLINE_CANDIDATE` 默认按内联处理；只有确认是跨层唯一入口才留，并在改动说明里写明理由。
+- `--changed` 只报新增行（未跟踪文件按整文件新增），适合修复循环；全量体检时传目录。每轮改完立刻重跑，直到 `check-style: PASS`。
+- 脚本按标识符/import 计数，是启发式：barrel 转发、同名遮蔽、动态引用需人工复核。
+- 不要用脚本自动改文件；报告只给位置，改动仍按本 skill 的语义判断。
+
 ## 交付前 30 秒检查
 
-- 只调用一次的 private / 模块级函数，内联了吗？
-- 这个 export 的生产引用有几处？测试 import / allowlist 都不算消费者。
-- 有没有 `return f(x)` 这种单行转手 wrapper？
-- 签名、调用参数、错误构造，是不是还有多行？
+- 有没有跑 `check-style.mjs --changed`，并循环到 0 处？
+- `INLINE_CANDIDATE` 都处理了吗？默认内联，留必须写明跨层唯一入口理由。
+- 只调用一次的 private / 模块级函数，内联了吗？（`check-inline`）
+- 死链的 caller 也一起删了吗？
+- 这个 export 的生产引用有几处？测试 import / allowlist 都不算消费者。（`find-fake-exports`）
+- 有没有 `return f(x)` 这种单行转手 wrapper？（`check-inline` 的 `PASS_THROUGH`）
+- 签名、调用参数、错误构造，是不是还有多行？（`check-signatures`）
 - 域逻辑里还有 throw 吗？throw 是否都收在边界？
-- 这个 Result 真的有失败分支吗，还是为了"统一"硬加的？
+- 这个 Result 真的有失败分支吗，还是为了“统一”硬加的？
 - 有没有第二份通用工具/守卫/纯映射该进 `core/common`？
 - 改完 typecheck、相关测试、lint 都跑了吗？

@@ -49,7 +49,7 @@ function isTestPath(rel) {
 function isProductionPath(rel) {
   if (isTestPath(rel)) return false;
   if (rel.startsWith("packages/core/src/public/")) return false;
-  return /^packages\/[^/]+\/src\//.test(rel) || /^apps\/[^/]+\/src\//.test(rel);
+  return /^packages\/[^/]+\/src\//.test(rel) || /^apps\/[^/]+\/src\//.test(rel) || /^apps\/desktop\/(renderer|shared|src)\//.test(rel);
 }
 
 function hasExportModifier(node) {
@@ -183,6 +183,8 @@ for (const row of rows) {
   console.log(format([row.verdict, row.prod, row.test, row.public, row.name, `${row.rel}:${row.line}`]));
 }
 console.log("");
+const counts = rows.reduce((acc, row) => ({ ...acc, [row.verdict]: (acc[row.verdict] ?? 0) + 1 }), {});
+console.log(`summary: ${Object.entries(counts).map(([verdict, count]) => `${verdict}=${count}`).join("  ")}`);
 console.log("说明：prod=生产 import 文件数；test=测试 import 文件数；public=allowlist 有名字。");
 console.log("测试 import 不算消费者；allowlist 不算消费者。INLINE_CANDIDATE 需再判断是否跨层唯一入口。");
 console.log("经 barrel 转发的 import 不会计入 prod，需人工补看。");
