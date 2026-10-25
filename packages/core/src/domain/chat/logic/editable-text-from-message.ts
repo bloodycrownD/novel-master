@@ -6,24 +6,24 @@
 
 import type { ChatMessage } from "../model/message.js";
 import { readMessageMetadata } from "../model/message-metadata.js";
-import {
-  hasAnnotateAttachment,
-  hasToolResult,
-} from "./message-content-helpers.js";
+import { hasAnnotateAttachment, hasToolResult } from "./message-content-helpers.js";
 
 /**
  * 提取可编辑正文（仅 `text` 块；thinking / tool_use 等排除）。
  *
  * @remarks 多段 text 以 `\n\n` 拼接；trim 后为空则返回 null。
  */
-export function extractEditableTextFromMessage(
-  message: ChatMessage
-): string | null {
-  const blocks = message.content.blocks ?? [];
-  const parts = blocks
-    .filter((b): b is Extract<typeof b, { type: "text" }> => b.type === "text")
-    .map((b) => b.text.trim())
-    .filter(Boolean);
+export function extractEditableTextFromMessage(message: ChatMessage): string | null {
+  const parts: string[] = [];
+  for (const block of message.content.blocks ?? []) {
+    if (block.type !== "text") {
+      continue;
+    }
+    const text = block.text.trim();
+    if (text !== "") {
+      parts.push(text);
+    }
+  }
   return parts.length > 0 ? parts.join("\n\n") : null;
 }
 
@@ -46,6 +46,5 @@ export function isPlainUserUndoSendEligible(message: ChatMessage): boolean {
   if (readMessageMetadata(message.raw)?.kind === "user_vfs_action") {
     return false;
   }
-  if (extractEditableTextFromMessage(message) != null) return true;
-  return hasAnnotateAttachment(message);
+  return extractEditableTextFromMessage(message) != null || hasAnnotateAttachment(message);
 }

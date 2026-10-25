@@ -52,7 +52,6 @@ import type { SendAnnotateDraft } from "@/domain/chat/model/annotate-draft.schem
 import type { ComposerDraftTokenRange } from "@/domain/chat/model/composer-draft.schema.js";
 import type { MessageAttachment } from "@/domain/chat/model/message-attachment.schema.js";
 import { buildFileAnnotateAttachmentFromDraft } from "@/domain/chat/logic/build-attachment-action-xml.js";
-import { maskComposerScanRanges } from "@/domain/chat/logic/mask-composer-scan-ranges.js";
 import { mergeAttachmentsWithScannedAtPaths } from "@/domain/chat/logic/scan-at-path-attachments.js";
 import { mergeAttachmentsWithScannedSkills } from "@/domain/chat/logic/scan-skill-attachments.js";
 import type { CompactionConditionEvaluator } from "@/service/compaction-conditions/create-compaction-condition-evaluator.js";
@@ -262,7 +261,7 @@ export function assembleAgentsToolContext(
   };
 }
 
-export interface RunAgentTurnAfterResolveContext {
+interface RunAgentTurnAfterResolveContext {
   readonly scope: AgentTurnScope;
   readonly definition: AgentDefinition;
   readonly savedModelId: string;
@@ -270,7 +269,7 @@ export interface RunAgentTurnAfterResolveContext {
   readonly stream: boolean;
 }
 
-export interface RunAgentTurnOptions {
+interface RunAgentTurnOptions {
   readonly stream?: boolean;
   /**
    * 空 content 续跑且末条为 user（含 App Composer 空发）。
@@ -301,7 +300,7 @@ export interface RunAgentTurnOptions {
    * （`source === 'attach'`），本字段只供**全量扫描掩码**——扫描前把区间替换成
    * 等长空白，避免 `$技能` 被并进 `@path`、避免区间内 token 重复扫描。
    * 缺失或空数组 → 全量扫描不掩码，与历史行为逐字节一致。
-   * 越界/重叠区间由掩码侧夹取与过滤（见 `maskComposerScanRanges`）。
+   * 越界/重叠区间由本段掩码逻辑夹取与过滤。
    */
   readonly excludedScanRanges?: readonly ComposerDraftTokenRange[];
   /**
@@ -701,7 +700,38 @@ async function runAgentTurnWithController(
   // D9：确认胶囊区间先掩码成等长空白再全量扫描——区间内触发符（`$A$B` /
   // `@path$技能`）不再污染/重复扫描；区间结果由发送侧预扫后经 attachments
   // 传入（composerAttachOnly 在合并时位于 existing 位 = 区间结果优先）。
-  const scanText = maskComposerScanRanges(trimmed, options?.excludedScanRanges);
+  const excludedScanRanges = options?.excludedScanRanges ?? [];
+  const clampedScanRanges: ComposerDraftTokenRange[] = [];
+  for (const range of excludedScanRanges) {
+    if (!Number.isInteger(range.start) || !Number.isInteger(range.end)) {
+      continue;
+    }
+    const start = Math.max(0, range.start);
+    const end = Math.min(trimmed.length, range.end);
+    if (start < end) {
+      clampedScanRanges.push({ start, end });
+    }
+  }
+  clampedScanRanges.sort((a, b) => a.start - b.start || a.end - b.end);
+  const disjointScanRanges: ComposerDraftTokenRange[] = [];
+  let coveredUntil = 0;
+  for (const range of clampedScanRanges) {
+    if (range.start >= coveredUntil) {
+      disjointScanRanges.push(range);
+      coveredUntil = range.end;
+    }
+  }
+  let scanText = trimmed;
+  if (disjointScanRanges.length > 0) {
+    let masked = "";
+    let cursor = 0;
+    for (const range of disjointScanRanges) {
+      masked += trimmed.slice(cursor, range.start);
+      masked += " ".repeat(range.end - range.start);
+      cursor = range.end;
+    }
+    scanText = masked + trimmed.slice(cursor);
+  }
   const scannedComposer = mergeAttachmentsWithScannedSkills(
     scanText,
     mergeAttachmentsWithScannedAtPaths(scanText, composerAttachOnly)

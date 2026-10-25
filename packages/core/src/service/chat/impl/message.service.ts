@@ -19,7 +19,6 @@ import { messageAttachmentsSchema } from "@/domain/chat/model/message-attachment
 import type { MessageRepository } from "@/domain/chat/repositories/message.port.js";
 import type { SessionRepository } from "@/domain/chat/repositories/session.port.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
-import { nextForkSessionTitle } from "@/domain/chat/logic/fork-session-title.js";
 import { seedForkCopyParity } from "@/domain/chat/logic/seed-fork-copy-parity.js";
 import { copyVfsTree } from "@/domain/vfs/logic/vfs-tree-copy.js";
 import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
@@ -64,7 +63,7 @@ function normalizeAppendAttachments(
 }
 
 /** Dependencies for {@link DefaultMessageService}. */
-export interface MessageServiceDeps {
+interface MessageServiceDeps {
   readonly conn: TdbcConnection;
   readonly sessions: SessionRepository;
   readonly messages: MessageRepository;
@@ -346,10 +345,19 @@ export class DefaultMessageService implements MessageService {
     const projectSessions = await this.deps.sessions.listByProject(
       source.projectId
     );
-    const forkTitle = nextForkSessionTitle(
-      source.title,
-      projectSessions.map((s) => s.title)
-    );
+    const forkBaseTitle = source.title?.trim() || "会话";
+    const forkTitlePattern = new RegExp(`^${forkBaseTitle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}_ckpt_(\\d+)$`);
+    let maxForkIndex = 0;
+    for (const session of projectSessions) {
+      if (session.title == null || session.title === "") {
+        continue;
+      }
+      const match = session.title.match(forkTitlePattern);
+      if (match) {
+        maxForkIndex = Math.max(maxForkIndex, Number.parseInt(match[1]!, 10));
+      }
+    }
+    const forkTitle = `${forkBaseTitle}_ckpt_${maxForkIndex + 1}`;
     return this.deps.conn.transaction(async (tx) => {
       const r = reposFor(tx);
       // 上界读口的返回集合与旧的 all.filter(m => m.seq <= upTo.seq) 逐条等价，

@@ -61,8 +61,6 @@ export {
 export type {
   AgentTurnScope,
   AgentTurnRuntimePort,
-  RunAgentTurnOptions,
-  RunAgentTurnAfterResolveContext,
 } from "../service/agent/logic/run-agent-turn.js";
 export {
   PENDING_RUN_ID,
