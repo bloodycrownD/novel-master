@@ -38,6 +38,16 @@ const mockToolCtx: BuiltinToolContext = {
 describe("agent tool policy", () => {
   const registryNames = new Set(vfsRegistryNames());
 
+  function expectPolicyError(result: ReturnType<typeof validateAgentToolPolicy>): AgentConfigError {
+    assert.equal(result.ok, false);
+    if (result.ok) {
+      throw new Error("expected tool policy error");
+    }
+    assert.ok(result.error instanceof AgentConfigError);
+    assert.equal(result.error.code, "INVALID_TOOL_POLICY");
+    return result.error;
+  }
+
   it("T1: no tools config exposes all builtin tools", () => {
     const base = new ToolRegistry<BuiltinToolContext>();
     registerBuiltinTools(base);
@@ -85,15 +95,7 @@ describe("agent tool policy", () => {
   });
 
   it("T5: allow and deny together fails validation", () => {
-    assert.throws(
-      () =>
-        validateAgentToolPolicy(
-          { allow: ["read"], deny: ["write"] },
-          registryNames,
-        ),
-      (e: unknown) =>
-        e instanceof AgentConfigError && e.code === "INVALID_TOOL_POLICY",
-    );
+    expectPolicyError(validateAgentToolPolicy({ allow: ["read"], deny: ["write"] }, registryNames));
   });
 
   it("accepts legacy vfs.* names in allow list", () => {
@@ -108,25 +110,13 @@ describe("agent tool policy", () => {
   });
 
   it("T6: unknown tool name fails validation", () => {
-    assert.throws(
-      () =>
-        validateAgentToolPolicy({ allow: ["vfs.nope"] }, registryNames),
-      (e: unknown) =>
-        e instanceof AgentConfigError && e.code === "INVALID_TOOL_POLICY",
-    );
+    expectPolicyError(validateAgentToolPolicy({ allow: ["vfs.nope"] }, registryNames));
   });
 
   it("T9: legacy replace tool name fails validation with migration hint", () => {
-    assert.throws(
-      () => validateAgentToolPolicy({ allow: ["replace"] }, registryNames),
-      (e: unknown) => {
-        assert.ok(e instanceof AgentConfigError);
-        assert.equal(e.code, "INVALID_TOOL_POLICY");
-        assert.ok(e.message.includes("replace"));
-        assert.ok(e.message.includes("edit"));
-        return true;
-      },
-    );
+    const error = expectPolicyError(validateAgentToolPolicy({ allow: ["replace"] }, registryNames));
+    assert.ok(error.message.includes("replace"));
+    assert.ok(error.message.includes("edit"));
   });
 
   it("validateAgentDefinition runs tool policy when names provided", async () => {
@@ -134,12 +124,7 @@ describe("agent tool policy", () => {
       { ...BASE_DEF, tools: { allow: ["vfs.nope"] } },
       { registeredToolNames: vfsRegistryNames() },
     );
-    assert.equal(result.ok, false);
-    if (result.ok) {
-      return;
-    }
-    assert.ok(result.error instanceof AgentConfigError);
-    assert.equal(result.error.code, "INVALID_TOOL_POLICY");
+    expectPolicyError(result);
   });
 
   it("empty deny matches default (all tools)", () => {
@@ -169,21 +154,11 @@ describe("agent tool policy", () => {
   // T-SK7a：skill 可配置（allow / deny 校验通过，deny 后运行时 registry 不含它）
   it("T-SK7a: skill 在 allow / deny 名单中均校验通过", () => {
     // allow 名单含 skill：校验通过
-    validateAgentToolPolicy(
-      { allow: ["skill", "read"] },
-      registryNames,
-    );
+    assert.equal(validateAgentToolPolicy({ allow: ["skill", "read"] }, registryNames).ok, true);
     // deny 名单含 skill：校验同样通过
-    validateAgentToolPolicy(
-      { deny: ["skill"] },
-      registryNames,
-    );
+    assert.equal(validateAgentToolPolicy({ deny: ["skill"] }, registryNames).ok, true);
     // 未知名 + skill 仍报错（skill 不是白名单里的例外）
-    assert.throws(
-      () => validateAgentToolPolicy({ allow: ["skill", "vfs.nope"] }, registryNames),
-      (e: unknown) =>
-        e instanceof AgentConfigError && e.code === "INVALID_TOOL_POLICY",
-    );
+    expectPolicyError(validateAgentToolPolicy({ allow: ["skill", "vfs.nope"] }, registryNames));
   });
 
   it("T-SK7a: deny skill 后运行时 resolve 产物不含 skill（其余工具不受影响）", () => {
@@ -279,7 +254,7 @@ describe("agent tool policy", () => {
     registerBuiltinTools(base);
 
     // deny 名单校验通过（agent 是合法策略名）
-    validateAgentToolPolicy({ deny: ["agent"] }, registryNames);
+    assert.equal(validateAgentToolPolicy({ deny: ["agent"] }, registryNames).ok, true);
     const denied = resolveAgentToolRegistry(
       base,
       { ...BASE_DEF, tools: { deny: ["agent"] } },
@@ -288,7 +263,7 @@ describe("agent tool policy", () => {
     assert.equal(denied.list().length, vfsRegistryNames().length - 1);
 
     // allow 名单校验通过，且主 agent 显式 allow 含 agent 时保留
-    validateAgentToolPolicy({ allow: ["agent", "read"] }, registryNames);
+    assert.equal(validateAgentToolPolicy({ allow: ["agent", "read"] }, registryNames).ok, true);
     const allowed = resolveAgentToolRegistry(
       base,
       { ...BASE_DEF, tools: { allow: ["agent", "read"] } },

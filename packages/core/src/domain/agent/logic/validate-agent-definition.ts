@@ -35,41 +35,26 @@ export interface ValidateAgentDefinitionOptions {
  */
 export async function validateAgentDefinition(def: AgentDefinition, options: ValidateAgentDefinitionOptions = {}): Promise<Result<void, AgentConfigError>> {
   if (options.registeredToolNames != null) {
-    try {
-      validateAgentToolPolicy(def.tools, new Set(options.registeredToolNames));
-    } catch (error) {
-      if (error instanceof AgentConfigError) {
-        return Result.err(error);
-      }
-      const detail = error instanceof Error ? error.message : String(error);
-      return Result.err(new AgentConfigError("INVALID_TOOL_POLICY", detail));
+    const policy = validateAgentToolPolicy(def.tools, new Set(options.registeredToolNames));
+    if (!policy.ok) {
+      return Result.err(policy.error);
     }
   }
-  // name：顶层必填（工具参数 name 仅用于 get/update 定位，不能替代）。
-  if (def.name.trim().length === 0) {
-    return Result.err(
-      new AgentConfigError(
-        "INVALID_SCHEMA",
-        "definition.name 必填且为非空字符串（写在 definition 顶层；工具参数 name 仅用于定位，不能替代）"
-      )
-    );
+  // 入参按不可信处理：agent 工具会把 LLM 原始 JSON 直接塞进来，类型断言不保证运行时形状。
+  const name: unknown = def.name;
+  if (typeof name !== "string" || name.trim().length === 0) {
+    return Result.err(new AgentConfigError("INVALID_SCHEMA", "definition.name 必填且为非空字符串（写在 definition 顶层；工具参数 name 仅用于定位，不能替代）"));
   }
   // description：可省略，但给出时必须是字符串（序列化 toWire 会 trim）。
-  if (def.description != null && false) {
-    return Result.err(
-      new AgentConfigError("INVALID_SCHEMA", "definition.description 如填写必须为字符串")
-    );
+  const description: unknown = def.description;
+  if (description != null && typeof description !== "string") {
+    return Result.err(new AgentConfigError("INVALID_SCHEMA", "definition.description 如填写必须为字符串"));
   }
   // prompts：必填对象，persist / dynamic 为块数组（域格式，对齐 get 的输出），
   // 不是 wire 格式的「块名 → 块」对象映射。
   const prompts = def.prompts as {persist?: unknown; dynamic?: unknown} | null | undefined;
-  if (prompts == null || typeof prompts !== "object" || Array.isArray(prompts) || !Array.isArray(prompts.persist) || !Array.isArray(prompts.dynamic)) {
-    return Result.err(
-      new AgentConfigError(
-        "INVALID_SCHEMA",
-        "definition.prompts 必填且含 persist / dynamic 块数组（结构对齐 get 的输出，不是以块名为键的对象映射）"
-      )
-    );
+  if (prompts == null || !Array.isArray(prompts.persist) || !Array.isArray(prompts.dynamic)) {
+    return Result.err(new AgentConfigError("INVALID_SCHEMA", "definition.prompts 必填且含 persist / dynamic 块数组（结构对齐 get 的输出，不是以块名为键的对象映射）"));
   }
   // 终极防线：wire 往返（toWire → 与读侧同一 schema decode）。mode / model
   // uuid / runtime / 块形状 / 未知键等其余字段错误在此以 zod 消息拒绝，

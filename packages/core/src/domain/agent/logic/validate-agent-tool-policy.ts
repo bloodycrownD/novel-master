@@ -9,6 +9,7 @@ import {
   normalizeAgentToolPolicyName,
 } from "@/domain/tool/builtin/vfs-tools.js";
 import { AgentConfigError } from "@/errors/agent-config-errors.js";
+import { Result } from "@/errors/either.js";
 import type { AgentToolPolicy } from "../model/agent-definition.js";
 
 const LEGACY_TOOL_MIGRATION: Readonly<Record<string, string>> = {
@@ -20,59 +21,32 @@ const LEGACY_TOOL_MIGRATION: Readonly<Record<string, string>> = {
   list: "fs (ls / ls -r)",
 };
 
-function migrationHint(raw: string): string | undefined {
-  const normalized = normalizeAgentToolPolicyName(raw);
-  return LEGACY_TOOL_MIGRATION[normalized];
-}
-
-function assertKnownNames(
-  names: readonly string[],
-  registryNames: ReadonlySet<string>,
-  listLabel: string
-): void {
-  for (const raw of names) {
-    const name = normalizeAgentToolPolicyName(raw);
-    if (!registryNames.has(name)) {
-      const hint = migrationHint(raw);
-      const v2List = FILE_TOOL_NAMES.join(", ");
-      const suffix =
-        hint != null
-          ? ` Legacy tool "${raw}" was removed; use ${hint} instead. V2 tools: ${v2List}.`
-          : ` Known V2 tools: ${v2List}.`;
-      throw new AgentConfigError(
-        "INVALID_TOOL_POLICY",
-        `${listLabel} references unknown tool: ${raw}.${suffix}`
-      );
-    }
-  }
-}
-
 /**
  * Ensures tool policy is well-formed and references only registered tools.
  *
- * @throws {AgentConfigError} `INVALID_TOOL_POLICY` on mutual exclusion or unknown names
+ * @returns Result.err(AgentConfigError) `INVALID_TOOL_POLICY` on mutual exclusion or unknown names.
  */
-export function validateAgentToolPolicy(
-  tools: AgentToolPolicy | undefined,
-  registryNames: ReadonlySet<string>
-): void {
+export function validateAgentToolPolicy(tools: AgentToolPolicy | undefined, registryNames: ReadonlySet<string>): Result<void, AgentConfigError> {
   if (tools == null) {
-    return;
+    return Result.ok(undefined);
   }
-
-  const hasAllow = tools.allow != null;
-  const hasDeny = tools.deny != null;
-  if (hasAllow && hasDeny) {
-    throw new AgentConfigError(
-      "INVALID_TOOL_POLICY",
-      "tools.allow and tools.deny cannot both be set"
-    );
+  if (tools.allow != null && tools.deny != null) {
+    return Result.err(new AgentConfigError("INVALID_TOOL_POLICY", "tools.allow and tools.deny cannot both be set"));
   }
-
-  if (tools.allow != null) {
-    assertKnownNames(tools.allow, registryNames, "tools.allow");
+  for (const [listLabel, names] of [["tools.allow", tools.allow], ["tools.deny", tools.deny]] as const) {
+    if (names == null) {
+      continue;
+    }
+    for (const raw of names) {
+      const name = normalizeAgentToolPolicyName(raw);
+      if (registryNames.has(name)) {
+        continue;
+      }
+      const hint = LEGACY_TOOL_MIGRATION[name];
+      const v2List = FILE_TOOL_NAMES.join(", ");
+      const suffix = hint != null ? ` Legacy tool "${raw}" was removed; use ${hint} instead. V2 tools: ${v2List}.` : ` Known V2 tools: ${v2List}.`;
+      return Result.err(new AgentConfigError("INVALID_TOOL_POLICY", `${listLabel} references unknown tool: ${raw}.${suffix}`));
+    }
   }
-  if (tools.deny != null) {
-    assertKnownNames(tools.deny, registryNames, "tools.deny");
-  }
+  return Result.ok(undefined);
 }
