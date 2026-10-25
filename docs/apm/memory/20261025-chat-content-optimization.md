@@ -162,3 +162,12 @@ assistant:
 - 新增 check-oop.mjs：模块级 Map/Set/let + >=2 导出函数共享状态 → OOP_CANDIDATE；导出函数 >=6 → MANY_EXPORTS（人工 review）；类/对象模块不报；接入 check-style（默认 REVIEW，--strict 阻断），新增 test-check-oop.mjs。
 - SKILL 新增 §9：OOP 最后一步；只在共享可变状态 + 多操作 + 生命周期/不变量时对象化；纯函数/DTO/hook 不建类；OOP_CANDIDATE 必须处理或报告理由。
 - 四 composer 文件 check-oop 全 KEEP；下一个候选是 apps/mobile/src/storage/chat-composer-draft.ts（8 导出、bySession×7 + listeners），但先要清它的 DEAD/INLINE 项，符合 OOP-last。
+
+## 2026-10-25 第二批四文件收敛
+- diff-workspace-for-user-vfs-flush.ts：@deprecated，生产 0、测试独占（diff/isEmpty），整模块 + 单测删除；无 public/allowlist 引用。
+- fork-session-title.ts：nextForkSessionTitle 唯一生产调用在 message.service.forkUpTo；标题生成逻辑内联进该 service，模块 + 单测删除。
+- mask-composer-scan-ranges.ts：maskComposerScanRanges 唯一生产调用在 run-agent-turn；夹取/排序/去重/等长空白掩码整段内联到 scanText 计算处，模块 + 单测删除。
+- editable-text-from-message.ts：extractEditableText 改为 for-of + text 块收集，去掉 type predicate 链；两个导出保持 KEEP；签名/import 压一行。
+- run-agent-turn 的 RunAgentTurnOptions / RunAgentTurnAfterResolveContext 从 public/agent 撤出并收私有；message.service 的 MessageServiceDeps 收私有。
+- find-fake-exports 增加同文件调用计数（prod 含 local calls），修掉 assemble{Sills,Search,Agents}ToolContext 的 TEST_ONLY 假阳性。
+- 验证：core typecheck/build、package-exports 21、editable+prepare 55、chat.services+run-agent+annotate 52、desktop/mobile typecheck 全绿；目标文件 check-style PASS；check-style --changed PASS。
