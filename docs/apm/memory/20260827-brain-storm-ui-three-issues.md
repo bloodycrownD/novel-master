@@ -1,8 +1,8 @@
 ---
-date: 2026-09-28 10:50
-title: 三处 UI 优化收官 + tag 闪烁择期后的复查轮（换库调研与模拟器复现）
-keywords: composer 抖动, tag 闪烁, 多行重排, controlled-mentions, 编辑时降级纯文本, overlay 方案, ux-fixes-2026-08, 换库调研, 模拟器复现
-abstract: ux-fixes-2026-08 收官归档：除「tag 多行输入闪烁」择期修复外全部完成。闪烁定性＝库每键全量重推 children→Android spannable 重建→多行全量重排；两条死路（children 复用/库内短路）已验证。2026-09-28 复查轮：搜索确认无值得换的 RN mention 库（现库 293 星半弃维护、同类库全同构 children 内嵌 span 架构）；模拟器复现确认打字重绘仍在但淡背景（primary 22≈13% alpha）下肉眼闪烁不明显。根治方向仍是 overlay（桌面端现成蓝本），快速缓解是 focus 降级纯文本着色（未验证）。
+date: 2026-09-30 04:20
+title: 三处 UI 优化收官 + tag 闪烁根治全链（composer-overlay → composer-webview dev-ready + 真机轮）；真机四问后 chat 全屏改走提示词编辑屏同一套；输入框高度过渡补齐
+keywords: composer 抖动, tag 闪烁, 多行重排, controlled-mentions, overlay 方案, ux-fixes-2026-08, webview 输入框, composer-webview, 软键盘链路, edge-to-edge, box-decoration-break, spike, 全屏编辑, CHANGELOG 落位, bundle 地址陷阱, 真机装机, dev-ready, composer 全屏重做, PromptEditor composer 变体, 退出即回填, ⛶ 按钮对齐, 高度过渡, reanimated withTiming, 跨引擎滞后
+abstract: composer tag 闪烁根治全链：ux-fixes-2026-08 归案 → 2026-09-28 复查 → composer-overlay 双层重写（dev-ready）→ 2026-09-29 真机三连修后拍板换 WebView 输入框：spec 轮（4 子代理探索+MCP 搜索）→ spec-check-loop 2 轮 Go → code-dev-loop 全程（分支 feat/composer-webview 基于 main@dbd6789b 拉出、纯函数摘入，spike 五点模拟器双轨全过 → 4 impl 节点 → 集成迁移 → verify-full PASS → cr-func-final func-ready）→ 验收 A1-A13 双轨实测（含抓到并修复两处真缺陷：全屏输入区不铺满、全屏保存被未保存拦截竞态）→ **dev-ready @ a56cbde9（19 提交未推送）** → 真机 arm64 覆盖装完成（数据保留）、Metro 8081 运行、用户实测中。**真机轮四问（2026-09-29 晚）**：⛶ 按钮风格不一致 / 全屏页没处理键盘顶起 / 为何自写一套没有预览 / 为何要保存——用户点破参照物（「智能体配置的编辑框是好的」），据此删自写 ChatComposerEditorScreen，改走 PromptEditorScreen 的 composer 变体（同一 CodeEditorWebView + 编辑/预览互切 + markdown 预览、无保存、退出即回填），⛶ 改 @/$ 同款 36 圆钮；模拟器四项复验全过（head 61362952）。**追加轮（同日深夜）**：输入框高度变化不丝滑/闪抖——定性为「没有高度动画 + 上报被 rAF 推迟 1~2 帧」，容器高度改 reanimated withTiming(120ms, out(quad))、首个上报不走过渡（head a89cf86a），跨引擎滞后保留待 web 侧测高提前。**再续轮**：输入框封顶 160 → 122（5 行关系式断言）；修「键盘输入时光标往回跳一两个字」——父层 value 回声被误判成外部写入（基线未随 web 上报推进）→ 按上一拍 cursor 强制 setSelection 打断 IME 组合态（head 0a671219，+2 回归锁）；高度过渡按用户要求 120ms → 80ms（head 30b62335）。**收尾轮**：输入框全屏改**纯编辑态**——移除预览与 markdown/文本档位切换（head f7500a7d），shell 预览三件套改可选、form 变体零变化；去页内重复标题（753f9971）。**tag 胶囊轮（2026-09-30 凌晨）**：全屏编辑页支持 @/$ tag——用户拍板**不换引擎**（CodeMirror 稳定），走 CM6 原生 atomicRanges + mark 装饰（composer.md 伪路径激活、与内联同一正则口径、桥加 selectionChange/选区落位，head 1ad1742e，全量 1640/1641，用户自测通过）；随后进 code-review-loop 收口（5×scope 并行 + review-full 两轮，32 条 must-fix 落 cr-fix-spec.md）。教训：CHANGELOG 必须落迭代分支不碰主仓；模拟器 bundle 地址陷阱与 Metro watcher 失联已进 RULE；自写 UI 前先找同型屏复用，键盘/光标这类链路差异优先复用已验证组件；模拟器 screenrecord 只有 ~2.9fps，量不出 120ms 过渡；真机 reload 后必须核 bundle 内容（Metro 缓存中间态残影会编出语法错、白屏），reverse 隧道掉了先重建再 reload。
 ---
 
 user:
@@ -148,3 +148,234 @@ user:
 
 assistant:
 spec-check-loop 第 1 轮审查（readonly 子代理对照代码库全量核验）：结论 Go（execute-ready），0 P0。关键断言抽查全过——composer-at-path-mention.ts 整删安全（8 值导出+2 type 导出的 src 消费方全在 Composer 内，唯一遗漏点是 composer-at-path.ts:3 死注释）、replaceActiveAt 移除后 fallback 路径行为等价属实、依赖清理面与 jest 配置判断正确、core 不误伤、A1-A9 与 Step/测试映射闭合。P1×2（typeahead 单路径化缺测试护栏、ExpandablePromptInput 挂载置顶视口对齐验证无归属）+ P2×7（手输退格语义明示、T-CR4② 差异化、判据与降级档联动、导出数更正、宏表单外观迁移、cursor/pendingSelection 契约显式化、措辞精度）已由主代理 doc-fix 全部闭合（PRD 需求 4 + SPEC 变更点 4/5/6/8/10/11、T-INT/T-MAC3/T-MAC4、Step 6/7）。状态：待用户确认 execute-ready；确认后可走 code-dev-loop 开工。
+
+user:
+确认 execute-ready，挂 code-dev-loop 开发（worktree 根 D:\Dev\nm-worktree，未建则新建）。
+
+assistant:
+code-dev-loop 收口 **dev-ready**（worktree D:\Dev\nm-worktree\composer-overlay，分支 feat/composer-overlay，base 45328831 → head ed092164，15 提交未推送）：①立项文档先入 main（45328831）；②wave-0 双轨——spike 主代理实测四点拍板（onScroll 镜像方案 a 有效、Text 树胶囊圆角在 Android 生效、pad3 无负 margin 可行、尾换行零宽补位；IME 组合态模拟器不可构造转 jest+真机观察）+ impl-core 子代理（tryAtomicRangeDelete 泛化/composer-highlight 切分，28 用例）；③wave-1 impl-infra（OverlayTextInputStack 共享件）；④wave-2 并行 impl-chat（组件重写+单路径化+测试迁移）与 impl-macro（宏 overlay 化+maxHeight 提取入 metrics）；⑤cr-func-w2 抓到 MF-1（chat 漏传 highlightTextStyle 深色正文不可见——impl-macro 补通道时 chat 已先提交的时序缺口）主代理一行修复+守门断言，复核 func-ready；⑥cleanup 主代理直改（删 composer-at-path-mention.ts、移库依赖、CHANGELOG）；⑦verify-full：typecheck 零错误、jest 1567 过（8 套件失败=CRLF 环境性存量零交集）；⑧模拟器验收 A1-A9 全过——**A1 帧差实锤闪烁消除（28 输入命令=28 变化帧、0 孤立跳变 vs 旧实现 73/242 帧持续重排）**；⑨cr-func-final 四条文档收口（RULE.md:21 改已根治、context-bundle 终态、e2e 豁免留痕、knip 通过）。验收新发现（非本迭代）：发送清空后旧草稿回灌+工作区草稿共享，疑似 main 既有（chat-composer-draft 订阅竞态），acceptance.md 记录建议另立案。模拟器留有测试数据（项目 flicker/agent1tester/OpenCode Zen claude-fable-5/会话）；Metro 8082 仍从 composer-overlay worktree 运行（8081 是 agent-tabs 的）。
+
+user:
+（2026-09-29）确认开发完是否用模拟器测试过——「UI 开发完还得测试验证」。
+
+assistant:
+已测：开发阶段 Step 7 就在模拟器（emulator-5554）跑过 A1-A9 全量验收（A1 打字无闪烁有帧差实锤：28 输入命令=28 变化帧、0 孤立跳变帧 vs 旧实现 73/242 帧持续重排；A2 手输即时高亮/A3 原子删/A4 技能引用/A5 水化/A6 发送/A8 宏输入均逐项实测留截图与 dump）。本轮按用户要求再补两个盲区：①跨行 token 断口——78 字符超长 token 强制跨行，两段胶囊完整无撕裂，风险表残余项关闭；②深色主题视觉——系统夜间模式下 app 仅「我的」列表页跟随深色、会话页与 agent 编辑页仍浅色（main 既有适配现状），MF-1 场景无法视觉复现，由 jest 等式断言（color === tokens.text）锁定。过程发现：adb reverse 会随模拟器重启/配置变更丢失致 debug 包冷启动红屏，重建 reverse + RELOAD 即恢复（非代码问题）。补充记录已提交（8779ba70）。
+
+user:
+（2026-09-29 真机测试轮）多 worktree 是否影响增量编译？真机怎么测最省时？
+
+assistant:
+各 worktree 的 Metro 编译缓存独立（各自 node_modules/.cache），互不影响增量速度；唯一注意别同时跑多个 Metro 抢资源。真机最省时路径：复用 worktree 现成热 Metro 8082（增量缓存满），`adb -s DSLDU20407006179 reverse tcp:8081 tcp:8082` + force-stop 重启 app 拉新 bundle（首次全量 ~23MB USB 秒级，之后一直增量）；真机/模拟器 reverse 各自独立可同时连同一 Metro。注意 Metro 后台进程会被回收（8082 曾掉线重启）；adb reverse 会随设备重启/配置变更丢失，症状是 debug 包冷启动红屏（loadJSBundleFromAssets 栈），重建 reverse + RELOAD 即恢复。**荣耀真机 screenrecord 被系统禁用（exit 127）**，真机录屏帧差验证不可用。
+
+user:
+真机反馈：打字不再闪烁了（老根因修实锤），但回车换行还是闪——只要输入框高度变化就闪，和之前一样。
+
+assistant:
+根因定位：方案 a 照搬桌面「高亮层流内定尺寸、输入框 absoluteFill」——web 两层同一布局引擎同帧重排没问题，RN 是 JS 文字树+原生 EditText 双引擎，回车时原生输入框当帧要长高、容器要等 JS 回路一帧，内容被裁切即闪。修复＝主从反转（c5e27f14）：TextInput 回流内定尺寸（原生自增高+maxHeight 封顶内滚，回车当帧长高零时序差），高亮层改 absoluteFill 铺满跟随（内容晚一帧无碍——回车新行是空行）。58 用例全绿+typecheck 过。
+
+user:
+反转后输入框无法点击了，你自己边测边修，不需要我操作。
+
+assistant:
+回归根因：反转后高亮层 ScrollView（absolute）在 DOM 后位盖住输入层，**Android 上 pointerEvents="none" 的 ScrollView 触摸穿透不可靠**。修复＝DOM 顺序调整（5dfbf87f）：高亮层移前位（下层）、输入层 TextInput 回后位保持上层触摸优先，不依赖穿透。真机 adb 验证：tap 后 mInputShown=true 键盘弹出、input text 与回车全部生效（用户草稿中插入了 QW/ER）。教训进 RULE 候选：RN 上层交互元素必须 DOM 后位，pointerEvents none 只当双保险。
+
+user:
+真机再试：好了一点但滚动输入时有明显的分层现象。想到一个方案——web 上输入框 tag 特效很成熟，能不能用 web 输入框（WebView）替代 RN 原生输入框？
+
+assistant:
+支持换道，分析：①滚动分层是透明双层的固有物理上限（onScroll→JS→scrollTo 桥接慢一拍，快速/惯性滚动肉眼错位），继续打补丁到顶了；②WebView 输入框单引擎同帧重排，打字闪/回车闪/滚动分层同一病根（双引擎同步）一次全消；③桌面 renderComposerAtPathHighlightHtml（正则+胶囊+负margin+box-decoration-break）可原样复用，宏输入桌面逻辑同；④项目 chat-transcript webview 先例（桥协议/log 通道/基建全熟），气泡真胶囊就是 HTML 画的；⑤web 有 compositionstart/end 事件，「组合中不回写」比 RN 受控更精确（1.5.9 类丢字有标准解法）。风险点（唯一大未知）：webview textarea 聚焦的软键盘链路（容器顶起/KeyboardAvoiding 感知），需半天 spike。工程量：桥协议+渲染层重做（每组键一条 postMessage 量级无压力但要处理竞态），解析纯函数层（切分/原子删）与组件对外契约原样保留，overlay 渲染树断言面改桥消息。备选退路（次优）：胶囊-only overlay（文字恢复不透明、只高亮层画胶囊，错位降为背景块漂移）/候选①降级纯色字。建议：先 spike webview+键盘交互再全量。用户随后要求压缩上下文，spike 未启动。
+
+user:
+（过程备忘）模拟器重建环境时：AVD 名 nm-e2e 已不存在（-list-avds 实际为 Medium_Phone_API_36.1 / Pixel_7，跑的应是前者）；该 AVD 数据被清（全新无项目/智能体/模型）；「新建项目」对话框的「创建」按钮 adb 点击屡屡无效，**输入名称后按回车（keyevent 66）直接提交成功**；项目 Flicker 已建成（名称首字母自动大写），智能体/模型/会话未建（用户中断转 webview 讨论）。当前现场：feat/composer-overlay head 5dfbf87f；真机 reverse 8081→8082 连 worktree Metro；模拟器停在项目抽屉页。
+
+user:
+（2026-09-29 spec 轮）恢复记忆后设计 webview 方案（spec-generate）。补充约束：需考虑低版本和高版本安卓对输入框和键盘的支持——之前高版本安卓出过「输入框无法顶起键盘」，现在的代码已特殊处理。另可用 MCP 网络搜索业界方案。
+
+assistant:
+按 spec-generate 流程并行派 4 只只读探索子代理（webview 基建 / RN 输入组件与键盘链路 / 桌面 HTML 高亮与解析层复用 / 测试与 e2e），加 MCP 搜索两条关键情报（react-native-webview#3848：新架构下 WebView input 聚焦内容被键盘顶出可视区、Closed as Stale 无解；#1172：Android 程序化 focus 不弹键盘）。关键结论：①高版本顶不起键盘根因 = targetSdk 36 强制 edge-to-edge 下 adjustResize 不可靠，特殊处理 = keyboard-controller insets 动画范式（AndroidKeyboardClipBody），**与输入框类型解耦，webview 方案键盘代码零新增**，且 CodeEditorWebView 已生产验证「WebView focus 弹 IME + 容器收缩」完整链路（文件编辑器本来就是 WebView/CodeMirror）；②code-editor 的受控桥模式（web 自持真源 + suppressChange 防回环 + setText 仅外部变化）整套照抄，架构性消除 v1.5.9 回写打断 IME 路径；③桌面 renderComposerAtPathHighlightHtml + 负 margin/box-decoration-break:clone CSS 手法整套照搬，mobile 纯函数（composer-highlight/atomic-range-delete）零依赖经 esbuild @/ alias 直接进 bundle；④mock WebView 协议测试范本（simulateWebMessage + mockWebViewPostMessages）现成，e2e 走 switchToWebView 先例。落盘 docs/Iterations/composer-webview/{prd.md,spec.md,cache/context-bundle.md}：基线 5dfbf87f 拉分支 feat/composer-webview、Phase A 仅 chat 链（宏链 Phase B 另拍板）、桥协议 v=1 九消息、7 Step（spike 前置五点双轨验证高低版本，不过则迭代终止退回 overlay）、17 变更点、T-CB/T-CW/T-HOST/T-CR4/T-INT/T-IME 用例矩阵。待用户确认 spec。
+
+user:
+（同日第 2 轮补充）既然要改造输入框：① chat 输入框加全屏输入 icon（类似智能体配置那种，输入一多内联不方便）；② PromptMacroTextInput 也一起做，理解输入框组件可以复用。
+
+assistant:
+确认复用成立，修订 PRD/SPEC/context-bundle（第 2 版）：①单包双模式（init.mode = composer-token | prompt-macro，纯函数两套均零依赖进同一 bundle）+ 通用宿主 ComposerInputWebView 三处复用（chat 内联壳/宏壳/chat 全屏屏）；②chat 全屏 = 工具栏 ⛶ → 新 ChatComposerEditorScreen（EditorScreenShell 键盘三分支 + ComposerInputWebView 保留 token 高亮 + useUnsavedGuard + composer-editor-callback set/take 模式，全照 PromptEditorScreen 先例）；宏链既有全屏（CodeEditorWebView）不动；③宏链并入后 overlay-input.tsx 迁完退役（Step 7 条件执行）；④新风险：agent 配置页动态块同屏多 WebView 实例内存——Step 5 模拟器实测（动态块 ≥3），不可接受则宏链退 overlay。spec 扩为 9 Step（Step5 宏壳与 Step6 全屏可并行）、23 变更点，验收加 A12（宏链不回归）/A13（chat 全屏）。待用户确认 spec。
+
+user:
+（同日第 3 轮）基线改主意：最好在 worktree 新拉分支、基于主分支已发布的实现——overlay 本次也没修好（滚动分层遗留），不带它的中间态，git 也干净。
+
+assistant:
+采纳并修订（第 3 版）：基线 main @ dbd6789b（v1.5.26 已发布代码），worktree 内 `git checkout -b feat/composer-webview main`（main 被主仓占用须拉新分支；切换后 npm install 对齐依赖）；从 overlay 分支只 cherry-pick 纯函数资产（composer-highlight/atomic-range-delete 泛化版/composer-token-insert 按需核对，带测试），组件实现全部不摘；随基线并入原 overlay 的三件事（ChatComposer typeahead 单路径化、controlled-mentions 依赖摘除 + composer-at-path-mention.ts 整删、children span 断言体系换协议断言）。回滚锚点 = main 本身（不合入即保持已发布现状），feat/composer-overlay 长期保留作备选实验线（胶囊-only overlay/纯色字）不参与合并。jest 基线口径改主仓 1577/1577 全绿（v1.5.26 发版记录），worktree CRLF 红灯按 RULE 归一化修法不计回归。宏链回退预案改「revert 宏壳重写回 main 现实现（props 面不变）」。PRD/SPEC/context-bundle 三件同步。待用户确认 spec。
+
+user:
+（同日第 5 轮）确认 execute-ready，挂 code-dev-loop 开发；高低版本安卓都用模拟器测试（环境统一），开发完成后再测真机。
+
+assistant:
+code-dev-loop 启动：spec/PRD 设备策略修订（模拟器双轨、真机后置）→ worktree 内 `git checkout -b feat/composer-webview main`（基于已发布实现，da0750f4 摘入纯函数资产 4 文件含测试，npm install 对齐）→ 初始 DAG（wave-0 spike → impl-web → impl-host → impl-macro∥impl-fullscreen → cr-func-w1 → impl-integration → verify-full → cr-func-final → acceptance）→ **wave-0 spike 双轨全过**（head 07557d25）：低版本 nm33（API 33）+ 高版本 nm35（API 35 强制 edge-to-edge）各建 google_apis AVD，内联 HTML WebView 挂真实 ChatComposer dock 验证五点——①键盘链路（聚焦弹 IME+ClipBody 收缩+#3848 未复现，输入框完整悬键盘上方）②高度上报（56→160 +22 步进封顶）③光标可见 ④逐字符 change 流 ⑤滚动零分层（帧差双层掩码互相关：49/40 对帧 0 错配）。**方案可行性确认，可进 Step 2**。连锁事故与修复：①旧模拟器 app 库损坏（malformed DB）→ 全部弃用、新建 AVD（协作红线禁 pm clear/卸载，未越线）；②**bundle 地址陷阱（重大）**：RN 模拟器 debug 包默认 bundle location=10.0.2.2:8081 绕过 adb reverse 直达宿主 8081，宿主 8081 跑着 cuo worktree 的 Metro → app 静默拉 cuo 分支同款 UI 的代码，排查多轮（spike 打点全静默、Metro 日志无请求、netstat 实锤）；解法=杀 cuo Metro + 本 worktree Metro 起在 8081；③模拟器 adb 输入不稳（对话框按钮 tap 时灵时不灵用回车提交；列表行 tap 完全失灵靠临时 auto-open 打点绕过）；④灭屏黑屏（svc power stayon / 重启）；⑤playstore 镜像 AVD 起不来（用 google_apis）；⑥**API 37（Pixel_7）app 红屏 get UIManager 未定位崩溃**（与 2026-09-28 真机同款，发版前置项）。附带修复（独立提交）：**AgentList 白屏崩溃**（内置 general 虚拟行 getRawWire undefined → raw.name TypeError，空 registry/坏库均可触发，防御 raw==null 跳过）+ worktree core dist stale 重建（public/agent.js 缺 DEFAULT_SUBAGENT_DEFINITION，metro.config 冒烟清单建议补）。spike-notes.md 已落盘。待用户确认进 wave-1 impl-web。
+
+assistant:
+（同日续）用户「继续」后按 code-dev-loop 波次连续推进至 dev 收口：**wave-1 impl-web**（web 包六文件：透明 textarea+高亮层双模式/桥/editor 652 行 + 四处注册 + 桥类型层 + T-CB7/T-CW20；ed7165c2）→ **wave-2 impl-host**（ComposerInputWebView 通用宿主 + chat 壳重写 + T-HOST8；c3bda43a，保留 replaceActiveAt 垫片与 theme? 通道）→ **wave-3 并行** impl-macro（宏壳 + T-MAC-W6；8cd7577e）∥ impl-fullscreen（⛶+全屏屏+路由+callback+T-FS6；cfbe2be4，含清单外 header-config.ts 必需接线）→ DAG 重编排 v4（cr-func-w1 合并入 final）→ **wave-4 impl-integration**（单路径化+失效 props/垫片清理 + 集成测试桥协议迁移 T-CR4/T-INT/T-IME + controlled-mentions 依赖与 mention markup 层移除 + e2e pageobject 切 WEBVIEW；4f466d34）→ **wave-5 verify-full**（独立复核 PASS：typecheck 零错误、1633/1634、唯一红 mermaid-fullscreen 经主仓对照实测定性 CRLF、门禁 100/100、残留清零）→ **wave-6 cr-func-final**（readonly 小检 **func-ready: yes**，无 P0/P1，P2 为文档措辞/落位级；指正 AgentList 崩溃机制归因——main 源码层 getRawWire null-safe，「general 虚拟行」说法不准，实锤现场是坏库+dist stale 复合场景，防御无害）→ **wave-7 acceptance（进行中）**：nm33 实现版聊天页就绪；**发现验收环境阻塞并定位**——实现版 WebView 走 file:///android_asset 资产链，而模拟器装的 APK 的 assets 无 composer-input（spike 内联 HTML 绕开过此链）→ build:webview:native 拷贝 + gradle assembleDebug（x86_64）出包中，待覆盖安装后继续 A1-A13。文档收尾：CHANGELOG Unreleased 补四条（输入框 WebView 化/全屏编辑/AgentList 修复/依赖移除）；spec 就地校正四处（build.gradle 实为 UTF-8、#10 回填走 draftRestoreToken 链路、#17 测试落位、决策 7 光标可见保守策略实现注）。验收环境坑续记：RN 列表行 adb tap 时灵时不灵（验收期临时 auto-open hack，ACCEPT-TEMP 标记验收后还原）、版本弹窗须点「今日不再提醒」、screenrecord 须自然结束再 pull（提前 pull 得损坏文件）。
+
+assistant:
+（同日收尾）**dev-ready 达成**（feat/composer-webview，head a56cbde9，未推送）。验收（模拟器双轨 nm33 API33 + nm35 API35）：A1 打字零闪（105 对帧 0 孤立跳变）、A2 手输高亮（蓝层胶囊与文字逐帧重叠）、A3 原子删（退格 diff/输入 diff=1.06 整段删数值实锤）、A4/A5/A7/A8（滚动零分层双轨 49/40/105 对帧 0 错配）、A9/A10 键盘链路（聚焦弹键盘+输入框完整悬于键盘上方+#3848 未复现）、A13 全屏完整闭环（⛶ 携带→输入→保存直接返回+回填→未保存拦截）；A6/A11/A12 降级口径（无模型/无真 IME/表单页 adb 输入限制，jest 全绿+同源宿主，真机轮补）。**验收抓到并修复两处真缺陷**：①全屏输入区不铺满（maxHeight=null 时 web 侧 html/body/#root 无全高链路+容器流式布局→触摸区只到内容底部；修法全高链路+.composer-input--unbounded 类，080f6198+T-CW10 断言）②全屏保存被自身未保存拦截（setSavedDraft 异步落地 vs goBack 的 beforeRemove 同拍读旧 isDirty；修法同步 allowLeaveWithoutPrompt，a56cbde9——jest act 冲刷复现不了的竞态，验收实测独有发现）。CHANGELOG 条目按纪律改在**迭代分支**（修订此前误改主仓 main 工作区的失误，已还原主仓、条目落 worktree 42466be5——教训：迭代产物一律在 worktree 分支，不碰主仓工作区，尤其主仓已有并行会话时）。**重要发现：主仓 main 已被并行会话推进**（cuo 迭代合并至 b6ec44e1、CHANGELOG 由其重排）——合并回 main 时 CHANGELOG 与 ChatComposer 有冲突面（merge_notes 已记 context-bundle）。ACCEPT-TEMP 全部还原、残留 grep 零。下一步：全量 jest 复跑确认→汇报 dev-ready；合并/真机轮待用户拍板。
+
+user:
+你装到真机上，我测试下效果，启动 metro。
+
+assistant:
+真机装机完成（荣耀 DSLDU20407006179）并交用户实测：先探现场（真机在线·arm64-v8a·用户在用 app·Metro 8081 活着）→ **arm64 出包**（`gradlew assembleDebug -PreactNativeArchitectures=arm64-v8a`，3m8s 缓存热）→ 建 reverse（真机 8081→宿主 8081 我们 Metro）→ force-stop 后 `install -r -d` **覆盖装成功（未弹荣耀锁屏密码门，-r 保数据：日志见 hydrate settled=4，用户 4 条历史完好）**→ curl 预热 bundle（23MB）→ 启动 app，跑我们分支代码（nm-boot hydrate complete）。给用户测试指引：重点看 tag 胶囊高亮跟手/滚动零分层/回车自增高/⛶ 全屏编辑/中文 IME 组合态；若红屏或「Loading from localhost:8081…」长挂=USB 反向隧道抖（重启 adb+force-stop 重开，首包冷编译数分钟正常）。现场状态：Metro 8081（worktree 真实路径）、真机 reverse 已建、模拟器 nm33/nm35 亦在跑（可杀腾资源）。
+
+**压缩上下文交接要点（本轮收口）**：
+- 进度：composer-webview **dev-ready**（分支 feat/composer-webview，**head a56cbde9，未推送**，19 提交）；验收 A1-A13 模拟器双轨已完成（acceptance.md），**真机轮进行中（等用户实测反馈）**
+- 真机轮待验项：A9 真机键盘复核 / A11 中文 IME 组合态 / A6 配模型发送清空 / A12 宏链走查 / A2 真机手感与 tag 高亮
+- 待用户拍板：①合并回 main（**主仓已前进到 b6ec44e1**——cuo 迭代已合并，CHANGELOG 与 ChatComposer 有冲突面，merge_notes 见 context-bundle）②AgentList 空值防御（07557d25）去留 ③metro.config dist 冒烟清单补 public/agent.js
+- 会话教训（已进 RULE）：迭代产物含 CHANGELOG 一律落迭代分支不碰主仓工作区；模拟器 debug 包 bundle 地址陷阱（10.0.2.2:8081 绕过 reverse 直达宿主、跨 worktree Metro 静默串台）；Metro watcher 跨越分支失联（改代码后 force-stop 重启 + curl bundle 校验）；playstore 镜像 AVD 起不来用 google_apis；RN 列表行 adb tap 时灵时不灵
+
+user:
+（同日第 4 轮）慎重一些，spec-check-loop 过一遍。
+
+assistant:
+spec-check-loop 第 1 轮审查（readonly 子代理对照代码库全量核验）：结论 Go（execute-ready），0 P0。关键断言抽查全过——composer-at-path-mention.ts 整删安全（8 值导出+2 type 导出的 src 消费方全在 Composer 内，唯一遗漏点是 composer-at-path.ts:3 死注释）、replaceActiveAt 移除后 fallback 路径行为等价属实、依赖清理面与 jest 配置判断正确、core 不误伤、A1-A9 与 Step/测试映射闭合。P1×2（typeahead 单路径化缺测试护栏、ExpandablePromptInput 挂载置顶视口对齐验证无归属）+ P2×7（手输退格语义明示、T-CR4② 差异化、判据与降级档联动、导出数更正、宏表单外观迁移、cursor/pendingSelection 契约显式化、措辞精度）已由主代理 doc-fix 全部闭合（PRD 需求 4 + SPEC 变更点 4/5/6/8/10/11、T-INT/T-MAC3/T-MAC4、Step 6/7）。状态：待用户确认 execute-ready；确认后可走 code-dev-loop 开工。
+
+user:
+（2026-09-30 凌晨）还有个问题，编辑详情页能支持 skill tag 吗？就像输入框一样？——等会要换编辑引擎吗？CodeMirror 还是挺稳定的，没有其他办法吗？CodeMirror 有原生支持类似 tag 的东西吗？支持连锁删除这种。
+
+assistant:
+方案定案：**不换引擎**。CodeMirror 6 原生就有「tag 类能力」——`EditorView.atomicRanges` 就是连锁删除（退格整段摘除、方向键跳过，mention 芯片在 CM6 的标准做法），胶囊视觉用 `Decoration.mark` 挂样式类即可。落地（head 1ad1742e，14 文件 +789/−87）：web code-editor 包新增 `composer-tokens` 扩展——区间复用 chat 链 `composerTokenRanges` 同一正则（es2018 安全、双端口径天然一致），同一份区间既做 mark 装饰（`.cm-composer-token`，与内联 `.composer-input__token` 同款样式含负 margin）也喂 atomicRanges（语义对齐内联 `tryAtomicRangeDelete`：删除窗碰区间未盖满即整段删）；伪路径 `composer.md` 激活（Compartment 按 path 启停，文件编辑不受影响，RN 侧常量双处镜像）。桥两侧各加一条：web 上报 `selectionChange`（typeahead 判活跃查询要光标）、`setDocument` 载荷可选选区（token 插入一次落位）。屏幕侧 PromptEditorScreen composer 变体接插入链：`$`/`@` 手输 typeahead + 底排 @/$ 圆钮选择器 + `buildTokenInsertion` 复用 ChatComposer 同源纯函数；路由补 projectId/sessionId（缺参降级：胶囊仍在、插入链禁用）。测试坑：prompt-editor-screen 的 jest.mock 组件桩若直接引用模块级 jest.fn 常量会在 import 期 TDZ 成 undefined（工厂执行早于 const 初始化）——包一层函数延迟到渲染期解析；跨用例的挂载树残留会在后续用例的 act 全局 flush 里重渲、把捕获槽再写一遍——带选择器的用例收尾 unmount。全量 1640/1641（唯一红＝存量 mermaid CRLF）；三层产物链：胶囊显示在 APK webview 资产里，Metro reload 看不到，须 build:webview:native + 重打 APK。
+
+user:
+我测试了，没什么问题，进入 cr 阶段吧 [$code-review-loop] 这可是大迭代。
+
+assistant:
+code-review-loop 收口（大迭代 full 模式，基线 dbd6789b → b86b83ad，51 文件 +5576/−1128）：wave-1 五模块并行 readonly 评审（scope-web/host/chat/fullscreen/capsule，全部同步等齐）→ 主代理 spec-fix 落 cr-fix-spec.md → wave-2 review-full 全维终审（B–K + fix-spec 覆盖度校验）→ 按其三条阻塞修订回填（round2）。产出：**P0=0、P1=2、P2=30**，全落 `docs/Iterations/composer-webview/cr-fix-spec.md`。两条 P1：①宿主 `setText` 下发后 `lastSelectionRef` 基线不失效，壳随后的 `setSelection` 被回声抑制误吞——全屏回填光标落文末；②胶囊 web 侧整块零回归锁。教训：**fix-spec 计数必须实测复核**（round1 头部 P2=28 实为 27——并入项没扣掉，被 review-full 按 RULE 抓包）；评审子代理给的「改法」也要验（两条改法达不到自身验收：mock 回写版、只修 web 侧光标）；CHANGELOG 合并冲突面——主仓已发 1.5.27 且收录本分支 Unreleased 同两条，合并时勿重复（K-4）。fix-spec-ready 后请用户确认执行。
+
+user:
+[$code-dev-loop] 修复吧
+
+assistant:
+（执行轮，用户确认后）code-dev-loop 按 cr-fix-spec 执行完毕：四波 DAG——wave-0 fix-web（主代理直改）∥ fix-capsule（子代理）→ wave-1 fix-host-chat ∥ fix-fullscreen（并发子代理）→ wave-2 fix-screen（主代理直改）→ cr-func 复核 func-ready yes（32/32 闭合）。终态 head 33652f0a（6 笔修复提交），全量 1658/1660（两条红＝存量 mermaid CRLF + chat-transcript 满负载 flaky 隔离绿）。文档回填全闭。残留：合并后 QA 四条待用户。
+
+user:
+启动metro，我真机测试下
+
+assistant:
+真机轮现场铺好：Metro 8081 从 worktree 真实路径启动（curl 预热 bundle 并验五个新代码标志在）→ build:webview:native（CR 修复后的 webview 资产拷入 android assets）→ arm64 APK 重打（15:24）→ 荣耀真机 force-stop + install -r -d 覆盖装成功（未弹锁屏门，用户四个会话数据完好）→ reverse 建立 → app 启动加载完成（Metro 日志见设备 bundle 2841 模块编完）。给用户四项 QA 清单：全屏回填光标落点（P1 修复实感）、胶囊手感与整段删、@http://x 类 token 字色统一、80ms 高度过渡手感。
+
+user:
+合并到main吧，并补全changelog
+
+assistant:
+合并完成（main head d9c2fec1，no-ff merge commit）。冲突面预判命中：ChatComposer 零冲突（main 自基线没动过它——merge_notes 的担忧未发生）、package.json/package-lock/build.gradle 全自动合（main 只 bump 1.5.27 版本、分支只删 mention 依赖，不同 hunk）、**CHANGELOG 唯一手工解**：分支的 Unreleased 内容进 main 的 Unreleased（新增×2/修复×1/维护×1），1.5.27 段按 main 原样还原，分支 Unreleased 里与 1.5.27 重复的两条变更（统计总览指标卡重排/服务商模型格式统一）随 common 区自然去重——正是 cr-fix-spec K-4 预告的冲突面。main 门禁三件套：npm install（removed 2 packages）→ typecheck 零错 → 全量 jest **先挂 dist 契约测试**（main 的 webview-dist 陈旧不进 git，RULE「改 dist 消费的包必须重建 dist」同族坑）→ build:webview 重建后 **1687/1687 全绿**。未 push（用户未指令）。分支与 worktree 保留未清。
+
+user:
+确认 execute-ready，挂 code-dev-loop 开发（worktree 根 D:\Dev\nm-worktree，未建则新建）。
+
+assistant:
+code-dev-loop 收口 **dev-ready**（worktree D:\Dev\nm-worktree\composer-overlay，分支 feat/composer-webview，base 45328831 → head ed092164，15 提交未推送）：①立项文档先入 main（45328831）；②wave-0 双轨——spike 主代理实测四点拍板（onScroll 镜像方案 a 有效、Text 树胶囊圆角在 Android 生效、pad3 无负 margin 可行、尾换行零宽补位；IME 组合态模拟器不可构造转 jest+真机观察）+ impl-core 子代理（tryAtomicRangeDelete 泛化/composer-highlight 切分，28 用例）；③wave-1 impl-infra（OverlayTextInputStack 共享件）；④wave-2 并行 impl-chat（组件重写+单路径化+测试迁移）与 impl-macro（宏 overlay 化+maxHeight 提取入 metrics）；⑤cr-func-w2 抓到 MF-1（chat 漏传 highlightTextStyle 深色正文不可见——impl-macro 补通道时 chat 已先提交的时序缺口）主代理一行修复+守门断言，复核 func-ready；⑥cleanup 主代理直改（删 composer-at-path-mention.ts、移库依赖、CHANGELOG）；⑦verify-full：typecheck 零错误、jest 1567 过（8 套件失败=CRLF 环境性存量零交集）；⑧模拟器验收 A1-A9 全过——**A1 帧差实锤闪烁消除（28 输入命令=28 变化帧、0 孤立跳变 vs 旧实现 73/242 帧持续重排）**；⑨cr-func-final 四条文档收口（RULE.md:21 改已根治、context-bundle 终态、e2e 豁免留痕、knip 通过）。验收新发现（非本迭代）：发送清空后旧草稿回灌+工作区草稿共享，疑似 main 既有（chat-composer-draft 订阅竞态），acceptance.md 记录建议另立案。模拟器留有测试数据（项目 flicker/agent1tester/OpenCode Zen claude-fable-5/会话）；Metro 8082 仍从 composer-overlay worktree 运行（8081 是 agent-tabs 的）。
+
+user:
+（2026-09-29 真机轮）多 worktree 是否影响增量编译？真机怎么测最省时？
+
+assistant:
+各 worktree 的 Metro 编译缓存独立（各自 node_modules/.cache），互不影响增量速度；唯一注意别同时跑多个 Metro 抢资源。真机最省时路径：复用 worktree 现成热 Metro 8082（增量缓存满），`adb -s DSLDU20407006179 reverse tcp:8081 tcp:8082` + force-stop 重启 app 拉新 bundle（首次全量 ~23MB USB 秒级，之后一直增量）；真机/模拟器 reverse 各自独立可同时连同一 Metro。注意 Metro 后台进程会被回收（8082 曾掉线重启）；adb reverse 会随设备重启/配置变更丢失，症状是 debug 包冷启动红屏（loadJSBundleFromAssets 栈），重建 reverse + RELOAD 即恢复。**荣耀真机 screenrecord 被系统禁用（exit 127）**，真机录屏帧差验证不可用。
+
+user:
+真机反馈：打字不再闪烁了（老根因修实锤），但回车换行还是闪——只要输入框高度变化就闪，和之前一样。
+
+assistant:
+根因定位：方案 a 照搬桌面「高亮层流内定尺寸、输入框 absoluteFill」——web 两层同一布局引擎同帧重排没问题，RN 是 JS 文字树+原生 EditText 双引擎，回车时原生输入框当帧要长高、容器要等 JS 回路一帧，内容被裁切即闪。修复＝主从反转（c5e27f14）：TextInput 回流内定尺寸（原生自增高+maxHeight 封顶内滚，回车当帧长高零时序差），高亮层改 absoluteFill 铺满跟随（内容晚一帧无碍——回车新行是空行）。58 用例全绿+typecheck 过。
+
+user:
+反转后输入框无法点击了，你自己边测边修，不需要我操作。
+
+assistant:
+回归根因：反转后高亮层 ScrollView（absolute）在 DOM 后位盖住输入层，**Android 上 pointerEvents="none" 的 ScrollView 触摸穿透不可靠**。修复＝DOM 顺序调整（5dfbf87f）：高亮层移前位（下层）、输入层 TextInput 回后位保持上层触摸优先，不依赖穿透。真机 adb 验证：tap 后 mInputShown=true 键盘弹出、input text 与回车全部生效（用户草稿中插入了 QW/ER）。教训进 RULE 候选：RN 上层交互元素必须 DOM 后位，pointerEvents none 只当双保险。
+
+user:
+真机再试：好了一点但滚动输入时有明显的分层现象。想到一个方案——web 上输入框 tag 特效很成熟，能不能用 web 输入框（WebView）替代 RN 原生输入框？
+
+assistant:
+支持换道，分析：①滚动分层是透明双层的固有物理上限（onScroll→JS→scrollTo 桥接慢一拍，快速/惯性滚动肉眼错位），继续打补丁到顶了；②WebView 输入框单引擎同帧重排，打字闪/回车闪/滚动分层同一病根（双引擎同步）一次全消；③桌面 renderComposerAtPathHighlightHtml（正则+胶囊+负margin+box-decoration-break）可原样复用，宏输入桌面逻辑同；④项目 chat-transcript webview 先例（桥协议/log 通道/基建全熟），气泡真胶囊就是 HTML 画的；⑤web 有 compositionstart/end 事件，「组合中不回写」比 RN 受控更精确（1.5.9 类丢字有标准解法）。风险点（唯一大未知）：webview textarea 聚焦的软键盘链路（容器顶起/KeyboardAvoiding 感知），需半天 spike。工程量：桥协议+渲染层重做（每组键一条 postMessage 量级无压力但要处理竞态），解析纯函数层（切分/原子删）与组件对外契约原样保留，overlay 渲染树断言面改桥消息。备选退路（次优）：胶囊-only overlay（文字恢复不透明、只高亮层画胶囊，错位降为背景块漂移）/候选①降级纯色字。建议：先 spike webview+键盘交互再全量。用户随后要求压缩上下文，spike 未启动。
+
+user:
+（过程备忘）模拟器重建环境时：AVD 名 nm-e2e 已不存在（-list-avds 实际为 Medium_Phone_API_36.1 / Pixel_7，跑的应是前者）；该 AVD 数据被清（全新无项目/智能体/模型）；「新建项目」对话框的「创建」按钮 adb 点击屡屡无效，**输入名称后按回车（keyevent 66）直接提交成功**；项目 Flicker 已建成（名称首字母自动大写），智能体/模型/会话未建（用户中断转 webview 讨论）。当前现场：feat/composer-overlay head 5dfbf87f；真机 reverse 8081→8082 连 worktree Metro；模拟器停在项目抽屉页。
+
+user:
+（2026-09-29 spec 轮）恢复记忆后设计 webview 方案（spec-generate）。补充约束：需考虑低版本和高版本安卓对输入框和键盘的支持——之前高版本安卓出过「输入框无法顶起键盘」，现在的代码已特殊处理。另可用 MCP 网络搜索业界方案。
+
+assistant:
+按 spec-generate 流程并行派 4 只只读探索子代理（webview 基建 / RN 输入组件与键盘链路 / 桌面 HTML 高亮与解析层复用 / 测试与 e2e），加 MCP 搜索两条关键情报（react-native-webview#3848：新架构下 WebView input 聚焦内容被键盘顶出可视区、Closed as Stale 无解；#1172：Android 程序化 focus 不弹键盘）。关键结论：①高版本顶不起键盘根因 = targetSdk 36 强制 edge-to-edge 下 adjustResize 不可靠，特殊处理 = keyboard-controller insets 动画范式（AndroidKeyboardClipBody），**与输入框类型解耦，webview 方案键盘代码零新增**，且 CodeEditorWebView 已生产验证「WebView focus 弹 IME + 容器收缩」完整链路（文件编辑器本来就是 WebView/CodeMirror）；②code-editor 的受控桥模式（web 自持真源 + suppressChange 防回环 + setText 仅外部变化）整套照抄，架构性消除 v1.5.9 回写打断 IME 路径；③桌面 renderComposerAtPathHighlightHtml + 负 margin/box-decoration-break:clone CSS 手法整套照搬，mobile 纯函数（composer-highlight/atomic-range-delete）零依赖经 esbuild @/ alias 直接进 bundle；④mock WebView 协议测试范本（simulateWebMessage + mockWebViewPostMessages）现成，e2e 走 switchToWebView 先例。落盘 docs/Iterations/composer-webview/{prd.md,spec.md,cache/context-bundle.md}：基线 5dfbf87f 拉分支 feat/composer-webview、Phase A 仅 chat 链（宏链 Phase B 另拍板）、桥协议 v=1 九消息、7 Step（spike 前置五点双轨验证高低版本，不过则迭代终止退回 overlay）、17 变更点、T-CB/T-CW/T-HOST/T-CR4/T-INT/T-IME 用例矩阵。待用户确认 spec。
+
+user:
+（同日第 2 轮补充）既然要改造输入框：① chat 输入框加全屏输入 icon（类似智能体配置那种，输入一多内联不方便）；② PromptMacroTextInput 也一起做，理解输入框组件可以复用。
+
+assistant:
+确认复用成立，修订 PRD/SPEC/context-bundle（第 2 版）：①单包双模式（init.mode = composer-token | prompt-macro，纯函数两套均零依赖进同一 bundle）+ 通用宿主 ComposerInputWebView 三处复用（chat 内联壳/宏壳/chat 全屏屏）；②chat 全屏 = 工具栏 ⛶ → 新 ChatComposerEditorScreen（EditorScreenShell 键盘三分支 + ComposerInputWebView 保留 token 高亮 + useUnsavedGuard + composer-editor-callback set/take 模式，全照 PromptEditorScreen 先例）；宏链既有全屏（CodeEditorWebView）不动；③宏链并入后 overlay-input.tsx 迁完退役（Step 7 条件执行）；④新风险：agent 配置页动态块同屏多 WebView 实例内存——Step 5 模拟器实测（动态块 ≥3），不可接受则宏链退 overlay。spec 扩为 9 Step（Step5 宏壳与 Step6 全屏可并行）、23 变更点，验收加 A12（宏链不回归）/A13（chat 全屏）。待用户确认 spec。
+
+user:
+（同日第 3 轮）基线改主意：最好在 worktree 新拉分支、基于主分支已发布的实现——overlay 本次也没修好（滚动分层遗留），不带它的中间态，git 也干净。
+
+assistant:
+采纳并修订（第 3 版）：基线 main @ dbd6789b（v1.5.26 已发布代码），worktree 内 `git checkout -b feat/composer-webview main`（main 被主仓占用须拉新分支；切换后 npm install 对齐依赖）；从 overlay 分支只 cherry-pick 纯函数资产（composer-highlight/atomic-range-delete 泛化版/composer-token-insert 按需核对，带测试），组件实现全部不摘；随基线并入原 overlay 的三件事（ChatComposer typeahead 单路径化、controlled-mentions 依赖摘除 + composer-at-path-mention.ts 整删、children span 断言体系换协议断言）。回滚锚点 = main 本身（不合入即保持已发布现状），feat/composer-overlay 长期保留作备选实验线（胶囊-only overlay/纯色字）不参与合并。jest 基线口径改主仓 1577/1577 全绿（v1.5.26 发版记录），worktree CRLF 红灯按 RULE 归一化修法不计回归。宏链回退预案改「revert 宏壳重写回 main 现实现（props 面不变）」。PRD/SPEC/context-bundle 三件同步。待用户确认 spec。
+
+user:
+（同日第 5 轮）确认 execute-ready，挂 code-dev-loop 开发；高低版本安卓都用模拟器测试（环境统一），开发完成后再测真机。
+
+assistant:
+code-dev-loop 启动：spec/PRD 设备策略修订（模拟器双轨、真机后置）→ worktree 内 `git checkout -b feat/composer-webview main`（基于已发布实现，da0750f4 摘入纯函数资产 4 文件含测试，npm install 对齐）→ 初始 DAG（wave-0 spike → impl-web → impl-host → impl-macro∥impl-fullscreen → cr-func-w1 → impl-integration → verify-full → cr-func-final → acceptance）→ **wave-0 spike 双轨全过**（head 07557d25）：低版本 nm33（API 33）+ 高版本 nm35（API 35 强制 edge-to-edge）各建 google_apis AVD，内联 HTML WebView 挂真实 ChatComposer dock 验证五点——①键盘链路（聚焦弹 IME+ClipBody 收缩+#3848 未复现，输入框完整悬键盘上方）②高度上报（56→160 +22 步进封顶）③光标可见 ④逐字符 change 流 ⑤滚动零分层（帧差双层掩码互相关：49/40 对帧 0 错配）。**方案可行性确认，可进 Step 2**。连锁事故与修复：①旧模拟器 app 库损坏（malformed DB）→ 全部弃用、新建 AVD（协作红线禁 pm clear/卸载，未越线）；②**bundle 地址陷阱（重大）**：RN 模拟器 debug 包默认 bundle location=10.0.2.2:8081 绕过 adb reverse 直达宿主 8081，宿主 8081 跑着 cuo worktree 的 Metro → app 静默拉 cuo 分支同款 UI 的代码，排查多轮（spike 打点全静默、Metro 日志无请求、netstat 实锤）；解法=杀 cuo Metro + 本 worktree Metro 起在 8081；③模拟器 adb 输入不稳（对话框按钮 tap 时灵时不灵用回车提交；列表行 tap 完全失灵靠临时 auto-open 打点绕过）；④灭屏黑屏（svc power stayon / 重启）；⑤playstore 镜像 AVD 起不来（用 google_apis）；⑥**API 37（Pixel_7）app 红屏 get UIManager 未定位崩溃**（与 2026-09-28 真机同款，发版前置项）。附带修复（独立提交）：**AgentList 白屏崩溃**（内置 general 虚拟行 getRawWire undefined → raw.name TypeError，空 registry/坏库均可触发，防御 raw==null 跳过）+ worktree core dist stale 重建（public/agent.js 缺 DEFAULT_SUBAGENT_DEFINITION，metro.config 冒烟清单建议补）。spike-notes.md 已落盘。待用户确认进 wave-1 impl-web。
+
+assistant:
+（同日续）用户「继续」后按 code-dev-loop 波次连续推进至 dev 收口：**wave-1 impl-web**（web 包六文件：透明 textarea+高亮层双模式/桥/editor 652 行 + 四处注册 + 桥类型层 + T-CB7/T-CW20；ed7165c2）→ **wave-2 impl-host**（ComposerInputWebView 通用宿主 + chat 壳重写 + T-HOST8；c3bda43a，保留 replaceActiveAt 垫片与 theme? 通道）→ **wave-3 并行** impl-macro（宏壳 + T-MAC-W6；8cd7577e）∥ impl-fullscreen（⛶+全屏屏+路由+callback+T-FS6；cfbe2be4，含清单外 header-config.ts 必需接线）→ DAG 重编排 v4（cr-func-w1 合并入 final）→ **wave-4 impl-integration**（单路径化+失效 props/垫片清理 + 集成测试桥协议迁移 T-CR4/T-INT/T-IME + controlled-mentions 依赖与 mention markup 层移除 + e2e pageobject 切 WEBVIEW；4f466d34）→ **wave-5 verify-full**（独立复核 PASS：typecheck 零错误、1633/1634、唯一红 mermaid-fullscreen 经主仓对照实测定性 CRLF、门禁 100/100、残留清零）→ **wave-6 cr-func-final**（readonly 小检 **func-ready: yes**，无 P0/P1，P2 为文档措辞/落位级；指正 AgentList 崩溃机制归因——main 源码层 getRawWire null-safe，「general 虚拟行」说法不准，实锤现场是坏库+dist stale 复合场景，防御无害）→ **wave-7 acceptance（进行中）**：nm33 实现版聊天页就绪；**发现验收环境阻塞并定位**——实现版 WebView 走 file:///android_asset 资产链，而模拟器装的 APK 的 assets 无 composer-input（spike 内联 HTML 绕开过此链）→ build:webview:native 拷贝 + gradle assembleDebug（x86_64）出包中，待覆盖安装后继续 A1-A13。文档收尾：CHANGELOG Unreleased 补四条（输入框 WebView 化/全屏编辑/AgentList 修复/依赖移除）；spec 就地校正四处（build.gradle 实为 UTF-8、#10 回填走 draftRestoreToken 链路、#17 测试落位、决策 7 光标可见保守策略实现注）。验收环境坑续记：RN 列表行 adb tap 时灵时不灵（验收期临时 auto-open hack，ACCEPT-TEMP 标记验收后还原）、版本弹窗须点「今日不再提醒」、screenrecord 须自然结束再 pull（提前 pull 得损坏文件）。
+
+assistant:
+（同日收尾）**dev-ready 达成**（feat/composer-webview，head a56cbde9，未推送）。验收（模拟器双轨 nm33 API33 + nm35 API35）：A1 打字零闪（105 对帧 0 孤立跳变）、A2 手输高亮（蓝层胶囊与文字逐帧重叠）、A3 原子删（退格 diff/输入 diff=1.06 整段删数值实锤）、A4/A5/A7/A8（滚动零分层双轨 49/40/105 对帧 0 错配）、A9/A10 键盘链路（聚焦弹键盘+输入框完整悬于键盘上方+#3848 未复现）、A13 全屏完整闭环（⛶ 携带→输入→保存直接返回+回填→未保存拦截）；A6/A11/A12 降级口径（无模型/无真 IME/表单页 adb 输入限制，jest 全绿+同源宿主，真机轮补）。**验收抓到并修复两处真缺陷**：①全屏输入区不铺满（maxHeight=null 时 web 侧 html/body/#root 无全高链路+容器流式布局→触摸区只到内容底部；修法全高链路+.composer-input--unbounded 类，080f6198+T-CW10 断言）②全屏保存被自身未保存拦截（setSavedDraft 异步落地 vs goBack 的 beforeRemove 同拍读旧 isDirty；修法同步 allowLeaveWithoutPrompt，a56cbde9——jest act 冲刷复现不了的竞态，验收实测独有发现）。CHANGELOG 条目按纪律改在**迭代分支**（修订此前误改主仓 main 工作区的失误，已还原主仓、条目落 worktree 42466be5——教训：迭代产物一律在 worktree 分支，不碰主仓工作区，尤其主仓已有并行会话时）。**重要发现：主仓 main 已被并行会话推进**（cuo 迭代合并至 b6ec44e1、CHANGELOG 由其重排）——合并回 main 时 CHANGELOG 与 ChatComposer 有冲突面（merge_notes 已记 context-bundle）。ACCEPT-TEMP 全部还原、残留 grep 零。下一步：全量 jest 复跑确认→汇报 dev-ready；合并/真机轮待用户拍板。
+
+user:
+你装到真机上，我测试下效果，启动 metro。
+
+assistant:
+真机装机完成（荣耀 DSLDU20407006179）并交用户实测：先探现场（真机在线·arm64-v8a·用户在用 app·Metro 8081 活着）→ **arm64 出包**（`gradlew assembleDebug -PreactNativeArchitectures=arm64-v8a`，3m8s 缓存热）→ 建 reverse（真机 8081→宿主 8081 我们 Metro）→ force-stop 后 `install -r -d` **覆盖装成功（未弹荣耀锁屏密码门，-r 保数据：日志见 hydrate settled=4，用户 4 条历史完好）**→ curl 预热 bundle（23MB）→ 启动 app，跑我们分支代码（nm-boot hydrate complete）。给用户测试指引：重点看 tag 胶囊高亮跟手/滚动零分层/回车自增高/⛶ 全屏编辑/中文 IME 组合态；若红屏或「Loading from localhost:8081…」长挂=USB 反向隧道抖（重启 adb+force-stop 重开，首包冷编译数分钟正常）。现场状态：Metro 8081（worktree 真实路径）、真机 reverse 已建、模拟器 nm33/nm35 亦在跑（可杀腾资源）。
+
+**压缩上下文交接要点（本轮收口）**：
+- 进度：composer-webview **dev-ready**（分支 feat/composer-webview，**head a56cbde9，未推送**，19 提交）；验收 A1-A13 模拟器双轨已完成（acceptance.md），**真机轮进行中（等用户实测反馈）**
+- 真机轮待验项：A9 真机键盘复核 / A11 中文 IME 组合态 / A6 配模型发送清空 / A12 宏链走查 / A2 真机手感与 tag 高亮
+- 待用户拍板：①合并回 main（**主仓已前进到 b6ec44e1**——cuo 迭代已合并，CHANGELOG 与 ChatComposer 有冲突面，merge_notes 见 context-bundle）②AgentList 空值防御（07557d25）去留 ③metro.config dist 冒烟清单补 public/agent.js
+- 会话教训（已进 RULE）：迭代产物含 CHANGELOG 一律落迭代分支不碰主仓工作区；模拟器 debug 包 bundle 地址陷阱（10.0.2.2:8081 绕过 reverse 直达宿主、跨 worktree Metro 静默串台）；Metro watcher 跨越分支失联（改代码后 force-stop 重启 + curl bundle 校验）；playstore 镜像 AVD 起不来用 google_apis；RN 列表行 adb tap 时灵时不灵
+
+user:
+（同日第 4 轮）慎重一些，spec-check-loop 过一遍。
+
+assistant:
+spec-check-loop 2 轮收敛 Go（execute-ready）：第 1 轮审查（readonly 子代理对照双仓代码逐行核）No-Go——**P0-1 禁用态通道缺失**（spec 声称 editable 无消费失实：ChatComposer:585 传 editable={!inputDisabled}（running/无模型/末条纯文本只读是现网行为）、宏链 disabled prop 被 DynamicBlocksCard:193/PromptLayoutSection:282 消费，桥协议无禁用消息，照稿实施第一步即 TS 报错）+ P1-1（全屏「取消/保存双角」放不进 EditorScreenShell 单左动作位）+ P1-2（ChatComposer 零导航依赖，全屏导航通道未定）+ P2×5（@/alias 先例引用失实等）。主代理 doc-fix 全闭合：桥协议加 init.disabled+setDisabled（web readOnly+灰显 0.55、chips 灰显留 RN 壳）、editable 保留零改动、全屏顶栏改「左保存+系统返回 useUnsavedGuard 拦截」、导航照 onOpenSessionDetail 先例 prop 注入链。第 2 轮审查逐项代码核对 8/8 闭合、Go，2 条新 P2（T-MAC-W 清单同步、shell 必填占位提示）顺手闭合。状态：待用户确认 execute-ready 后可走 code-dev-loop。教训：写 spec 时「无实际消费」这类否定性声称必须逐行 grep 核实（本轮 editable 差点漏掉现网只读行为）。
+
+user:
+（2026-09-29 深夜·真机轮反馈）输入框全屏按钮问题：①按钮风格和其他几个按钮风格不一致；②进入的编辑页面，没有处理键盘顶起问题；③编辑页面为什么要自己写？为什么不用和 agent 配置相同的组件？什么预览/markdown 都没有；④为什么要有保存？这是输入框的全屏，不是文件，退出后就在输入框中，为什么要保存？
+
+user:
+（过程中打断）「你为什么不看看智能体配置的那个编辑框？那个编辑页面是好的，你隔着乱研究什么呢？」
+
+assistant:
+先核了四条底数：①⛶ 是 28×28 无边框小触达（真机截图实锤：同排 @ / $ 是 36 圆钮带描边；dump 触达盒 `[597,2210][671,2284]`=74px≈28dp）；②全屏页是自写的 `ChatComposerEditorScreen`（EditorScreenShell 占位 segmented + ComposerInputWebView 解除限高 + 左「保存」+ useUnsavedGuard + composer-editor-callback），键盘那条链在模拟器上其实是顶起的（台架实测容器 2337→1517、mInputShown=true），用户点破的参照物才是关键；③该页确实没有预览/markdown；④保存语义对「输入框的全屏」不成立。按用户指定参照物改道：**删掉自写屏**，`PromptEditorScreen` 加 `variant: 'form' | 'composer'`——composer 变体不传 `EditorScreenShell.save`（左位不渲染、shell 的 save 改可选）、标题恒「编辑消息」不切「未保存」、`useUnsavedGuard` 关闭、**卸载（返回/手势）时以当拍草稿回填会话草稿 store + bump 恢复令牌**（这就是「退出后就在输入框中」，无需保存）；编辑区/预览与提示词字段完全同款（CodeEditorWebView md 高亮 + FileMarkdownPreview + markdown/文本档位）；⛶ 改 `[styles.toolBtn, {borderColor}]`＝与 @ / $ 同款 36 圆钮（字形保留 fontSize 20）；`composer-editor-callback.ts`、`ChatComposerEditorScreen.tsx`、路由 `ChatComposerEditor`（types/header-config/RootNavigator 三处）一并删除，回填回调统一走 `prompt-editor-callback.ts`。验证：mobile typecheck 过；全量 jest **1634/1635**（唯一红＝既有 mermaid-fullscreen CRLF 环境性）；nm33 模拟器四项复验全过——⛶ 触达盒 95×94px 与 @ 完全同款、全屏页无保存+右侧预览、聚焦弹键盘且编辑区收缩到键盘上方（1517）光标可见、预览渲染当前草稿、返回后输入框文本即带全屏改动（全程未点保存；截图与 dump 留证）。提交 **61362952**（feat/composer-webview，未推送）；文档同步：spec 五处就地修订（决策 8 / 变更点 11·12·18 / 结构 / 不动清单）、acceptance 增「真机轮反馈后的全屏编辑重做」节、CHANGELOG 该条改写。教训三条：①用户心里已有「这一屏该长什么样」的现成参照物时，先去读那个参照物再动手，别自写一套（本轮自写屏的预览/键盘/保存语义全是自造差异）；②键盘、光标这类跨引擎链路差异，优先复用已被真机验证过的组件，别在自研组件上重新踩一遍；③`prettier --write` 会顺带重排无关行（本轮 4 处：ChatComposer 的 deps 数组、ComposerInputWebView 的 useCallback 签名、两处 jest.mock requireActual 换行），提交前逐处回退，保持 diff 只含目标改动。
+
+user:
+（同日深夜·真机轮追问）还有个问题，输入框上高度变化时，感觉动画不太丝滑，有点闪烁或者抖动的感觉，不是 tag 的问题，这个我是指输入框整体的问题，这个高度变化的动画是不是能调整？
+
+assistant:
+定性：**现状根本没有高度动画**。web 侧内容变化后在 rAF 里量一次 `highlight.scrollHeight`、按 metrics clamp 成整数（行粒度，22px 一跳）后 `heightChange` 上报，RN 容器直接换 `{height}` 值——每一步都是硬跳；且上报被 rAF 推迟、再经桥回 RN，容器比文字晚 1~2 帧才长高，那几帧里 web 文档已长高而 WebView 视口还没长，**新行被盒子底边裁掉**（观感＝「闪」），转录区跟着盒子同拍猛地位移（观感＝「抖」）。处置（`ComposerInputWebView`）：容器改 `Animated.View` + reanimated `withTiming`（`HEIGHT_TRANSITION_MS = 120`、`Easing.out(Easing.quad)`）把台阶抹成连续增长、下方转录区随同一段过渡位移；首个上报不走过渡（挂载一次性落位，否则开场像跳一下）；`unbounded`（maxHeight=null）分支不受影响；`currentHeight` state 保留作目标值/断言面；reanimated jest mock 补 `withTiming`/`withSpring`/`withDelay`/`Easing` 桩（返回终值不跑时间轴）并清掉未用 React import——**新增 reanimated 用法要同步补桩，否则整批单测崩在 import 上**。**跨引擎那 1~2 帧滞后未消除**：要再压短得把 web 侧测高从 rAF 提到 `onInput` 同拍，属 webview 资产改动（要 `build:webview(:native)` + 重打包），本轮不做，过渡把它从「闪一下」变成「长出来」。验证：typecheck 过、全量 jest 1634/1635（唯一红＝既有 mermaid-fullscreen CRLF）、nm33 宏输入框（同源宿主，禁用会话打不了字时的等价验体）连续回车后盒子按行增长并稳定落在终值（88dp → 169dp 后不再变化）。**受限点**：模拟器 screenrecord 只有 ~2.9fps（18s 出 52 帧），量不出 120ms 过渡的中间帧，手感以真机为准，`HEIGHT_TRANSITION_MS` 是唯一旋钮。提交 **a89cf86a**；docs 同步（acceptance 增「输入框高度变化过渡」节、context-bundle 记 head、RULE 增高度链路条目）。
+
+user:
+（同日深夜·真机轮续）还有几个问题：1. 输入框最大高度有点高，可以调小些；2. 键盘输入的时候，cursor 指针有时候会向前跳一两个字，而不是正常在最后。很奇怪。
+
+assistant:
+两条都落地（提交 **0a671219**，docs 跟进）：①封顶 **160 → 122**（= `paddingV×2 + lineHeight×5`，正好 5 行）——`ChatComposer.styles.input` 与 `ComposerAtPathInput.DEFAULT_METRICS` 两处同步，断言写成「5 行关系式」而非魔数（跟着行高/内边距走），`composer-input-webview` 的 chat 口径 fixture 镜像 122；②「光标往回跳」病根＝**chat 壳把父层 value 回声误判成外部写入**：web 上报的文本没推进差分基线（`lastValueRef` 只在 effect 里推进），父层 `setText` 回写后 `value !== lastValueRef` → 壳里 effect 按**上一拍的 `cursor`** 置 `pendingSelection` → 宿主下发 `setSelection` → `textarea.setSelectionRange` 落在正在输入（尤其 IME 组合态）的 textarea 上，光标被拽回一两个字。修法：给宿主传一层 `onChangeText` 包装（`handleWebChangeText`）——**先推进基线再上抛**，回声与基线相等自然短路；程序化写入路径（`replaceCommittedText`，自带基线 + `setText.selection` 一次落位）不动。回归锁两条：父层回声 + 故意留旧 `cursor` → 打字全程零 `setSelection`/零 `setText`；默认 metrics `maxHeight === paddingV×2 + lineHeight×5`。验证：typecheck 零错误、全量 jest **1636/1637**（+2 用例，唯一红＝既有 mermaid-fullscreen CRLF）、eslint 本次零新增；设备侧没留 IME 级证据（模拟器 `adb input` 绕开真实输入法，构造不出组合态），以代码定性 + jest 锁证为准，真机手感待复测。**教训**：受控输入里「真源在子层」的通道，一律先对齐基线再上抛；`setSelectionRange` 是能给 IME 组合态踩刹车的危险动作，别在打字路径上发。另：本轮给真机 reload 时踩到 **Metro 缓存里编辑器中间态的残影**（bundle 编出语法错、app 白屏），重发一次 bundle 请求（curl 校验 200 + grep 标记串）后再 broadcast reload 即恢复——reload 后必须核 bundle 内容，不能只看「屏上有 UI」。（继续追问）用户问 `HEIGHT_TRANSITION_MS` 调高是不是更灵敏——不是，它是**过渡时长**：调高更慢更柔（盒子追得更明显），调低更跟手趋近硬跳；按用户要求 120 → **80**（提交 30b62335，三个 composer 套件 24 例绿）。
+
+user:
+输入框的编辑页面再优化下，移除预览，这样就只有编辑模式了，这样就足够了。
+
+assistant:
+composer 变体改**纯编辑态**（提交 **f7500a7d**）：`PromptEditorScreen` 不再给 composer 传 `toggle`/`segmented`/`preview`（只留标题 + 编辑区），`EditorScreenShell` 的预览三件套与 `save` 一样改成可选（都不传即纯编辑态，顺手废掉「占位 props 糊必填」的写法）；`form` 变体（智能体配置提示词字段）语义零变化，编辑/预览互切与 markdown/文本档位照旧。测试：composer 变体断言换成「无切换按钮 / 无档位条 / 无预览挂载 / 编辑器恒在场且草稿不丢」，并加一条 form 变体对照断言（切换仍在）。验证：typecheck 零错误、全量 jest **1637/1638**（唯一红＝既有 mermaid-fullscreen CRLF）。CHANGELOG 该条去掉预览口径；RULE 的全屏条目同步改「composer = 纯编辑态（无预览/无档位/无保存/卸载即回填）」。用户原话入档：「移除预览，这样就只有编辑模式了，这样就足够了。」
+
+user:
+怎么又两个 编辑消息 title？删除一个
+
+assistant:
+查明确是**两层标题叠着**：导航栏一个（`route.params.title` → stackOverride）+ 页内 shell toolbar 居中又一个；纯编辑态下 toolbar 已无任何动作位，就只剩这个重复标题。修法（提交 **753f9971**）：`EditorScreenShell` 的 `title` 改可选 + `hasToolbar` 守卫（`save`/`title`/`titlePress`/`toggle` 全空 → toolbar 整行不渲染，顺带不再留一条空 bar），composer 变体不传 `title`（保留导航栏那一个），缺省标题常量收敛为 `DEFAULT_FORM_TITLE`；`form` 变体仍传 title，行为零变化（既有「标题/未保存」断言全绿）。测试：composer 变体断言页内不再出现「编辑消息」文本。验证：typecheck 零错误、全量 jest 1637/1638（唯一红＝既有 mermaid CRLF）。教训：**导航栏已有标题时，页内再放一个标题就是重复**——「无动作位就别渲染那条 bar」比「留空 bar」干净。

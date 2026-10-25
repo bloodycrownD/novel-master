@@ -22,3 +22,15 @@ user:
 
 assistant:
 第四轮 10-tag 清理：目标 usage-cache-model-backfill-v1（v1.5.4 首发引入，chat_message cache/模型快照回填，纯数据迁移）；retire-pref-session-fs-version-check-v1（v1.5.12）在保护期内保留。三件套落地：注册表摘除 + 源文件与专属测试物理删除（照第二/三轮先例，RULE.md「保留文件」口径已被先例实际取代）+ BASELINE_MIGRATION_IDS 追加该 id、最低支持版本 v1.4.28→v1.5.5（提示文案同步）。数据迁移无 schema 形态可探、不加新探针，老库识别依赖既有 legacy 探针；全新空库无 legacy 表征不触发 fail-fast。SCHEMA_BOOT_VERSION 不动（未改 DDL/align）。core 全量 2395/0。下一轮（第五轮）基线预计抬至 v1.5.15 附近、待 10 个版本后。
+
+user:
+（2026-10-05，同日另一会话）就这样吧合并到主分支，另外 10 个 tag 前的 migration 和存量数据迁移可以移除了吧？
+
+assistant:
+第五轮清理（基线严重过期：第四轮 2026-09-12 设 v1.5.5，已到 v1.5.37）。探索核实：SCHEMA_MIGRATIONS 在册 6 条全部到期（retire-pref-session-fs-version-check v1.5.12、workplace-dir-rule-smart-field / rename-smart-sort-rule-example / add-smart-sort-capture-kind 均 v1.5.17、add-mcp-file-path-snapshot v1.5.20、dedup-file-cache-storage v1.5.22），4 条 schema 形态已逐字固化 canonical DDL、2 条数据迁移只进基线。基线拍板 v1.5.23（最晚退役首发 tag +1，第四轮算法）。落地（worktree mc5，提交 2a2b4e728，+53/−1640）：注册表清空为空数组、6 源文件 + 6 专属测试物理删除、BASELINE_MIGRATION_IDS 12→18、基线版本号新增 BASELINE_MINIMUM_VERSION 单常量（下轮只改一处）、SCHEMA_BOOT_VERSION 不动。bootstrap-no-migrate 的 BASELINE_BACKUP_MODULES 恒空 Set 未改（该步骤实际不存在）。门禁：bootstrap 域 66/66（worktree 与 main 双侧）、core 全量 11 红全既有（base stash 对照零新增）、desktop 全量 730/730（main 重建 core dist 后）。已合 main（988a953ca 含 changelog）。**后台迁移任务未随轮动**（关键决策）：blob 二进制归一虽过 spec 参考时点 v1.5.35，但其删除前提（无 zlib-b64 残留的强制收尾门）与 compression V1 细则互相引用、无可执行方案，推迟到前提落地轮；消息压缩正向任务 v1.5.29 已删（decompression 是反向继任者）；到期表与 task-attach-unref 清理版（0% 未做）已固化进 RULE.md 清理节奏条款。
+
+user:
+（2026-10-05 追问）后台存量数据迁移任务什么时候可以移除？假如以 tag10 为标准？
+
+assistant:
+纯答疑，口径已固化进 RULE.md 清理节奏条款。按 10-tag 标准的到期表：blob 归一（v1.5.25 引入）v1.5.35 已到期但删除前提（无 zlib-b64 残留的收尾确认门）无可执行方案，不能光看 tag；message-decompress（v1.5.29）v1.5.39 到期即下一个版本，但 ref-unref 硬依赖它的解压标记（先删解压会让回迁任务收尾否决恒真、永远 deferred），须同批；message-ref-unref（v1.5.30）v1.5.40 到期，连带 task-attach-unref E1 清理版残件（0% 执行）；vfs-content-packing 无退役条款不适用。建议 v1.5.40 一轮同批清：decompress + ref-unref + message-plaintext V1' 清单（双形态读分支/decodeMessageContent/blob 归一的 messageContent adapter）+ E1 残件；blob 归一本体等收尾门落地再排。删除前外部确认：decompress=content_blob 非空计数归零+decompressDone；unref=contentRef LIKE 归零+unrefDone；这些任务不走 schema_migrations、assertMinimumBaseline 管不到，删了跳版用户无自动兜底。

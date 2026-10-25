@@ -53,6 +53,7 @@ apps/mobile/src/
 | 5 | `useChatTabMessageActions.ts` / `useChatTabController.ts` | token 刷新错峰（快照完成信号触发；内部让步经 repo 注入自动生效，`session-prompt-input.service.ts` / `chat-prompt-tokens.service.ts` 均无需改动） |
 | 6 | `run-timing.ts` + 回滚链各段 | 分段打点 |
 | 7 | 测试 | T-R 系列 + 既有回滚用例回归 |
+| 8 | `ChatTranscriptWebView.tsx` / `useChatTabMessageActions.ts` | 用户反馈补修（2026-09-27，随集成提交 a4ac7546）：① 回滚确认门禁 toast→Alert 模态（Agent 运行中给出明确模态提示，不再静默吞咽）；② 吞快照分支加 `committedStreamRowsStillPresent` 校验（回滚删尾后 tail 满页、条数不变但窗口前移时不再静默吞全量快照）；③ composer 状态刷新失败 try/catch 隔离（composer 恢复局部失败不阻断列表刷新与成功反馈） |
 
 ## 详细实现步骤
 
