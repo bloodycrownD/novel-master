@@ -1,25 +1,14 @@
 /**
- * 全局错误码注册表与统一错误类。
+ * 统一错误类。
  *
- * 一个错误由「可读 key + 稳定数字码 + 运行期 message」构成：key 给人和栈用
- * （`error.name` 也设成它），抛出点写可读常量；code 给日志、统计与跨进程用，
- * 一经发布永不复用、永不改号；desc 是静态短标签，只当日志文案与 message 兜底，
- * 不替代带路径/id 的运行期 message。
- *
- * 数字按域分段分配（当前只有 AGENT 段落地，其余随各域迁移补入）：
- * 1xxx agent / 2xxx vfs / 3xxx tool / 4xxx provider / 5xxx chat /
- * 6xxx skill / 7xxx compaction + smart-sort / 8xxx config + preferences / 9xxx infra。
+ * 错误码、可读 key 与静态 desc 定义在 `errors/error-codes.ts`；本文件只负责
+ * 运行期错误对象、跨进程序列化形态与 instanceof 守卫。code 给日志、统计与
+ * 跨进程用，一经发布永不复用、永不改号；message 保留运行期上下文（路径/id 等）。
  *
  * @module errors/app-error
  */
 
-/** 错误码定义表；新增码只能追加，数值不得复用或改号。 */
-export const ErrorCodes = {
-  AGENT_DOOM_LOOP: {code: 1001, desc: "doom loop detected"},
-} as const satisfies Record<string, {readonly code: number; readonly desc: string}>;
-
-export type ErrorKey = keyof typeof ErrorCodes;
-export type ErrorNumber = (typeof ErrorCodes)[ErrorKey]["code"];
+import { ErrorCodes, type ErrorKey, type ErrorNumber } from "./error-codes.js";
 
 /** 跨进程/日志用的序列化形状。 */
 export interface AppErrorWire {

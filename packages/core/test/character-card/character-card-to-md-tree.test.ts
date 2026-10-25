@@ -1,19 +1,31 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import {
-  CharacterCardError,
-  characterCardJsonToMdTree,
-  parseCharacterCardToMdTree,
-} from "@novel-master/core/vfs";
+import { parseCharacterCardToMdTree } from "../../src/domain/character-card/logic/character-card-to-md-tree.js";
 import { buildPngWithTextChara } from "./helpers/png-chara-fixture.js";
 
 function treeKeys(tree: ReadonlyMap<string, string>): string[] {
   return [...tree.keys()].sort();
 }
 
+function cardTree(card: unknown): ReadonlyMap<string, string> {
+  const result = parseCharacterCardToMdTree(JSON.stringify(card));
+  if (!result.ok) {
+    throw result.error;
+  }
+  return result.value;
+}
+
+function parseTree(input: Uint8Array | string): ReadonlyMap<string, string> {
+  const result = parseCharacterCardToMdTree(input);
+  if (!result.ok) {
+    throw result.error;
+  }
+  return result.value;
+}
+
 describe("character-card-to-md-tree", () => {
   it("T-C1: 仅 description → 仅有 角色描述.md，无开场/世界书", () => {
-    const tree = characterCardJsonToMdTree({
+    const tree = cardTree({
       spec: "chara_card_v2",
       data: { description: "只有描述" },
     });
@@ -22,7 +34,7 @@ describe("character-card-to-md-tree", () => {
   });
 
   it("T-C2: first_mes + 2 alternate → 开场001..003 顺序正确", () => {
-    const tree = characterCardJsonToMdTree({
+    const tree = cardTree({
       spec: "chara_card_v2",
       data: {
         description: "d",
@@ -37,7 +49,7 @@ describe("character-card-to-md-tree", () => {
 
   it("开场编号三位对齐：第 10 条为开场010", () => {
     const greets = Array.from({ length: 9 }, (_, i) => `备选${i + 1}`);
-    const tree = characterCardJsonToMdTree({
+    const tree = cardTree({
       spec: "chara_card_v2",
       data: {
         description: "d",
@@ -50,7 +62,7 @@ describe("character-card-to-md-tree", () => {
   });
 
   it("T-C3: 两条 comment 均为「原神」→ 原神.md 与 原神-2.md", () => {
-    const tree = characterCardJsonToMdTree({
+    const tree = cardTree({
       spec: "chara_card_v2",
       data: {
         description: "d",
@@ -67,7 +79,7 @@ describe("character-card-to-md-tree", () => {
   });
 
   it("T-C4: keys 写入 keywords FM，正文=content", () => {
-    const tree = characterCardJsonToMdTree({
+    const tree = cardTree({
       spec: "chara_card_v2",
       data: {
         description: "d",
@@ -89,7 +101,7 @@ describe("character-card-to-md-tree", () => {
   });
 
   it("T-C5: enabled:false 条目仍生成文件", () => {
-    const tree = characterCardJsonToMdTree({
+    const tree = cardTree({
       spec: "chara_card_v2",
       data: {
         description: "d",
@@ -110,7 +122,7 @@ describe("character-card-to-md-tree", () => {
   });
 
   it("T-C13: comment/keys 皆空且位于 entries[2] → 世界书/条目3.md", () => {
-    const tree = characterCardJsonToMdTree({
+    const tree = cardTree({
       spec: "chara_card_v2",
       data: {
         description: "d",
@@ -128,7 +140,7 @@ describe("character-card-to-md-tree", () => {
   });
 
   it("T-C14: 无 keys → keywords: []；content 缺失 → 正文空", () => {
-    const tree = characterCardJsonToMdTree({
+    const tree = cardTree({
       spec: "chara_card_v2",
       data: {
         description: "d",
@@ -142,12 +154,13 @@ describe("character-card-to-md-tree", () => {
     assert.equal(md.endsWith("---\n"), true);
   });
 
-  it("T-C6: 非卡 JSON → NOT_CHARACTER_CARD", () => {
-    assert.throws(
-      () => characterCardJsonToMdTree({ foo: 1 }),
-      (e: unknown) =>
-        e instanceof CharacterCardError && e.code === "NOT_CHARACTER_CARD",
-    );
+  it("T-C6: 非卡 JSON → VFS_CHARACTER_CARD_UNRECOGNIZED", () => {
+    const result = parseCharacterCardToMdTree(JSON.stringify({ foo: 1 }));
+    assert.equal(result.ok, false);
+    if (result.ok) {
+      return;
+    }
+    assert.equal(result.error.key, "VFS_CHARACTER_CARD_UNRECOGNIZED");
   });
 
   it("UTF-8 BOM JSON 可解析", () => {
@@ -155,7 +168,7 @@ describe("character-card-to-md-tree", () => {
       spec: "chara_card_v2",
       data: { description: "bom" },
     })}`;
-    const tree = parseCharacterCardToMdTree(withBom);
+    const tree = parseTree(withBom);
     assert.equal(tree.get("角色描述.md"), "bom");
   });
 
@@ -164,18 +177,18 @@ describe("character-card-to-md-tree", () => {
       spec: "chara_card_v2",
       data: { description: "来自PNG" },
     });
-    const tree = parseCharacterCardToMdTree(bytes);
+    const tree = parseTree(bytes);
     assert.equal(tree.get("角色描述.md"), "来自PNG");
   });
 
   it("无有效世界书（entries 非数组 / 空）不创建世界书/", () => {
-    const empty = characterCardJsonToMdTree({
+    const empty = cardTree({
       spec: "chara_card_v2",
       data: { description: "d", character_book: { entries: [] } },
     });
     assert.ok([...empty.keys()].every((k) => !k.startsWith("世界书/")));
 
-    const missing = characterCardJsonToMdTree({
+    const missing = cardTree({
       spec: "chara_card_v2",
       data: { description: "d", character_book: { entries: "nope" } },
     });
@@ -183,7 +196,7 @@ describe("character-card-to-md-tree", () => {
   });
 
   it("非对象 entries 元素跳过，条目序号仍按原下标", () => {
-    const tree = characterCardJsonToMdTree({
+    const tree = cardTree({
       spec: "chara_card_v2",
       data: {
         description: "d",

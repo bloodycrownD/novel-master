@@ -9,7 +9,7 @@ import { SkillError } from "@novel-master/core/skills";
 import { AgentTurnError } from "@novel-master/core/agent";
 import { ToolError } from "@novel-master/core";
 import {
-  CharacterCardError,
+  AppError,
   VfsError,
   isVfsError,
 } from "@novel-master/core/vfs";
@@ -79,9 +79,9 @@ export function formatIpcError(err: unknown): IpcErrorPayload {
   if (err instanceof SkillError) {
     return { code: err.code, message: err.message };
   }
-  // 角色卡须显式透出 domain code（严于现网 VfsZipError 仅落 name 的路径）
-  if (err instanceof CharacterCardError) {
-    return { code: err.code, message: err.message };
+  // 统一错误透出可读 key（AppError.key），不落成 Error.name
+  if (err instanceof AppError) {
+    return { code: err.key, message: err.message };
   }
   if (err instanceof ToolError) {
     const cause = err.cause;

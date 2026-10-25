@@ -276,7 +276,7 @@ describe("vfs character-card CLI e2e", () => {
     }
   });
 
-  it("bad card JSON surfaces CharacterCardError message", async () => {
+  it("bad card JSON surfaces AppError message", async () => {
     const dir = await mkdtemp(join(tmpdir(), "nm-vfs-card-"));
     const dbPath = join(dir, "novel.db");
     const cardPath = join(dir, "bad.json");

@@ -1,17 +1,20 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { AppError, ErrorCodes, isAppError } from "../../src/errors/app-error.js";
+import { AppError, isAppError } from "../../src/errors/app-error.js";
+import { ErrorCodes } from "../../src/errors/error-codes.js";
 
 /** 各域保留号段；新增域时先在这里登记，守卫会强制 code 落在段内。 */
 const DOMAIN_RANGES: Record<string, readonly [number, number]> = {
-  AGENT: [1000, 1999],
+  AGENT: [101000, 101999],
+  VFS: [102000, 102999],
+  VFS_CHARACTER_CARD: [103000, 103999],
 };
 
 describe("ErrorCodes 注册表", () => {
   it("code 是正整数且落在所属域段内", () => {
     for (const [key, { code }] of Object.entries(ErrorCodes)) {
       assert.ok(Number.isInteger(code) && code > 0, `${key} 的 code 必须是正整数`);
-      const domain = key.split("_")[0]!;
+      const domain = key.startsWith("VFS_CHARACTER_CARD_") ? "VFS_CHARACTER_CARD" : key.split("_")[0]!;
       const range = DOMAIN_RANGES[domain];
       assert.ok(range, `${key} 的域 ${domain} 还没登记号段`);
       assert.ok(code >= range[0] && code <= range[1], `${key} 的 code ${code} 超出 ${domain} 段 ${range[0]}-${range[1]}`);

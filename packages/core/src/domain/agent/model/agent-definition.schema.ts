@@ -134,8 +134,14 @@ export const agentDefinitionSchema = Object.assign(
       // ProjectAgentConfig.updateAgentConfig / 注册表持久化）唯一收敛在 toWire，
       // 一处改动全覆盖，同一条规则插两遍将来必漏改一处。
       validateAgentPromptLayout(def.prompts);
-      const persist = Object.fromEntries(def.prompts.persist.map((block) => [block.name, persistBlockToWire(block)]));
-      const dynamic = Object.fromEntries(def.prompts.dynamic.map((block) => [block.name, dynamicBlockToWire(block)]));
+      const persist: AgentDefinitionDocument["prompts"]["persist"] = {};
+      for (const block of def.prompts.persist) {
+        persist[block.name] = persistBlockToWire(block);
+      }
+      const dynamic: AgentDefinitionDocument["prompts"]["dynamic"] = {};
+      for (const block of def.prompts.dynamic) {
+        dynamic[block.name] = dynamicBlockToWire(block);
+      }
       return {
         schemaVersion: 1,
         name: def.name,

@@ -10,10 +10,8 @@
 
 import { unzlibSync, Unzlib, zlibSync } from "fflate";
 import { tryZlibDeflate, tryZlibInflate } from "./zlib-accelerator.js";
-import {
-  base64ToBytes,
-  VFS_CONTENT_ENCODING_ZLIB_B64,
-} from "./blob-bytes-codec.js";
+import { base64ToBytes } from "@/common/base64.js";
+import { VFS_CONTENT_ENCODING_ZLIB_B64 } from "./blob-bytes-codec.js";
 
 /**
  * ContentStore 落库 encoding：原始 zlib 字节（三端同形态：Node / Desktop / RN）。

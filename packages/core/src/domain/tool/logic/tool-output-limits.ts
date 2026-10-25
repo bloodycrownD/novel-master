@@ -4,16 +4,13 @@
  * @module domain/tool/logic/tool-output-limits
  */
 
+import { utf8ByteLength } from "@/common/utf8.js";
+
 export const TOOL_OUTPUT_MAX_LINES = 2000;
 export const TOOL_OUTPUT_MAX_LINE_LENGTH = 2000;
 export const TOOL_OUTPUT_MAX_BYTES = 50 * 1024;
 export const TOOL_OUTPUT_MAX_MATCHES = 100;
 export const TOOL_OUTPUT_LINE_TRUNCATED_SUFFIX = `... (line truncated to ${TOOL_OUTPUT_MAX_LINE_LENGTH} chars)`;
-
-/** UTF-8 byte length without Node `Buffer` (RN/Hermes has no global Buffer). */
-function utf8ByteLength(text: string): number {
-  return new TextEncoder().encode(text).byteLength;
-}
 
 /** Truncates a single line when it exceeds {@link TOOL_OUTPUT_MAX_LINE_LENGTH}. */
 export function truncateLine(

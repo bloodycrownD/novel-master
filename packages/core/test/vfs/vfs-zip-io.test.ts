@@ -5,9 +5,9 @@ import { createVfsZipIoService, VfsZipError } from "@novel-master/core/vfs";
 import { isVfsError } from "../../src/errors/vfs-errors.js";
 import {
   createCharacterCardImportService,
-  parseCharacterCardToMdTree,
   type VfsService,
 } from "@novel-master/core/vfs";
+import { parseCharacterCardToMdTree } from "../../src/domain/character-card/logic/character-card-to-md-tree.js";
 import { buildVfsZip } from "../../src/domain/vfs/logic/vfs-zip-build.js";
 import { SqliteVfsContentStore } from "../../src/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
 import { createWorkplaceService } from "@novel-master/core/workplace";
@@ -879,14 +879,19 @@ describe("VfsZipIoService", () => {
       "canon",
       "snap",
     );
+    const parsedCard = parseCharacterCardToMdTree(
+      JSON.stringify({
+        spec: "chara_card_v2",
+        data: { description: "d" },
+      }),
+    );
+    assert.equal(parsedCard.ok, true);
+    if (!parsedCard.ok) {
+      return;
+    }
     await cardSvc.import(
       scope2,
-      parseCharacterCardToMdTree(
-        JSON.stringify({
-          spec: "chara_card_v2",
-          data: { description: "d" },
-        }),
-      ),
+      parsedCard.value,
       { confirmed: true, directoryPath: "/角色" },
     );
     assert.deepEqual(

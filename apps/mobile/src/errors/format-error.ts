@@ -12,7 +12,6 @@ import {ProviderError} from '@novel-master/core/provider';
 import {SessionFsError} from '@novel-master/core/session-fs';
 
 import {
-  CharacterCardError,
   VfsError,
   VfsZipError,
   formatVfsErrorForUser,
@@ -54,7 +53,6 @@ export function formatError(error: unknown): string {
   }
   if (
     error instanceof VfsZipError ||
-    error instanceof CharacterCardError ||
     error instanceof ChatError ||
     error instanceof AppError ||
     error instanceof SessionFsError ||

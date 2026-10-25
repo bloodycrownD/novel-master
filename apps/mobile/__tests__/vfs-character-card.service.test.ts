@@ -1,5 +1,5 @@
 import {importCharacterCard} from '@/services/vfs-character-card.service';
-import {CharacterCardError} from '@novel-master/core/vfs';
+import {AppError} from '@novel-master/core/vfs';
 
 const mockImportFromBytes = jest.fn();
 const mockCreateCharacterCardImportService = jest.fn();
@@ -125,12 +125,12 @@ describe('vfs-character-card.service', () => {
     expect(mockImportFromBytes).not.toHaveBeenCalled();
   });
 
-  it('surfaces CharacterCardError from Core without retry', async () => {
+  it('surfaces AppError from Core without retry', async () => {
     mockPick.mockResolvedValue([
       {uri: 'content://downloads/card.json', name: 'card.json'},
     ]);
-    const cardErr = new CharacterCardError(
-      'NOT_CHARACTER_CARD',
+    const cardErr = new AppError(
+      'VFS_CHARACTER_CARD_UNRECOGNIZED',
       '无法识别为角色卡',
     );
     mockImportFromBytes.mockRejectedValue(cardErr);

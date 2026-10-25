@@ -5,6 +5,7 @@
  * @module domain/chat/logic/render-dir-attach-tree
  */
 
+import { utf8ByteLength } from "@/common/utf8.js";
 import type { VfsService } from "@/domain/vfs/ports/vfs-service.port.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
 
@@ -23,9 +24,6 @@ export interface RenderDirAttachTreeDeps {
 
 type ChildEntry = { readonly kind: "dir" | "file"; readonly name: string };
 
-function utf8ByteLength(text: string): number {
-  return Buffer.byteLength(text, "utf8");
-}
 
 /**
  * 根行标签：与 {@link workplaceFileTreeRootLabel} 口径一致——

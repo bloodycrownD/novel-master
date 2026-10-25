@@ -10,10 +10,7 @@ export { createVfsZipIoService } from "../service/vfs/create-vfs-zip-io-service.
 export { createCharacterCardImportService } from "../service/vfs/create-character-card-import-service.js";
 export type { CreateCharacterCardImportServiceOptions } from "../service/vfs/create-character-card-import-service.js";
 export { createVfsBatchIoService } from "../service/vfs/create-vfs-batch-io-service.js";
-export { parseCharacterCardToMdTree } from "../domain/character-card/logic/parse-character-card-to-md-tree.js";
-export { characterCardJsonToMdTree } from "../domain/character-card/logic/character-card-to-md-tree.js";
-export { CharacterCardError } from "../errors/character-card-errors.js";
-export type { CharacterCardErrorCode } from "../errors/character-card-errors.js";
+export { AppError, isAppError } from "../errors/app-error.js";
 export {
   CHARACTER_CARD_MAX_INPUT_BYTES,
   CHARACTER_CARD_MAX_TOTAL_CONTENT_BYTES,

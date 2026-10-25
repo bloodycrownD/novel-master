@@ -3,7 +3,6 @@ import {AppError} from '@novel-master/core/agent';
 import {ChatError} from '@novel-master/core/chat';
 import {ProviderError} from '@novel-master/core/provider';
 import {
-  CharacterCardError,
   VfsError,
   VfsZipError,
 } from '@novel-master/core/vfs';
@@ -15,11 +14,11 @@ describe('formatError (T4)', () => {
     expect(formatError(err)).toBe('文件不存在或已被删除。');
   });
 
-  it('formats CharacterCardError message (align VfsZipError)', () => {
+  it('formats AppError message (align VfsZipError)', () => {
     const zipErr = new VfsZipError('INVALID_ZIP', 'bad zip');
     expect(formatError(zipErr)).toBe('bad zip');
-    const cardErr = new CharacterCardError(
-      'NOT_CHARACTER_CARD',
+    const cardErr = new AppError(
+      'VFS_CHARACTER_CARD_UNRECOGNIZED',
       '无法识别为角色卡',
     );
     expect(formatError(cardErr)).toBe('无法识别为角色卡');

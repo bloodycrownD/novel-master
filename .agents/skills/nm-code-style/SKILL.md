@@ -1,6 +1,6 @@
 ---
 name: nm-code-style
-description: novel-master 的代码优化与重构原则。写新代码、重构、内联收敛、错误处理、命名与文件放置、CR 修复时使用。
+description: novel-master 的代码优化与重构原则。写新代码、重构、内联收敛、假引用/假公开审计、错误处理、命名与文件放置、CR 修复时使用。
 ---
 
 # nm 代码优化原则
@@ -40,6 +40,34 @@ description: novel-master 的代码优化与重构原则。写新代码、重构
 - 判据看"它认识谁"，不看"谁在调它"：逻辑跟数据模型走。合并规则认识 `AgentDefinition`，就放 `domain/agent/logic`；tool 只是入口，不是语义所有者。反过来，只有 tool 认识的 schema/action 分发不要塞进 domain。
 - YAGNI：没有生产者的错误码、没有调用方的别名、没有第二消费者的抽象，直接删，不占号不占文件。
 
+### 4.1 假引用与假公开
+
+- **假引用**：符号的“引用”只来自测试、public allowlist、类型注释或自身模块；生产代码零 import。测试 import 是为了让被导出符号可测，不是消费者。
+- **假公开**：符号在 `public/*.ts` / allowlist 里有名字，但 `packages/*/src`、`apps/*/src` 里没有任何生产 import。allowlist 是承诺，不是引用。
+- 判断顺序：
+  1. 只搜生产代码（排除 `test/`、`__tests__/`、`dist/`、`public/`），得到真实引用数；
+  2. 生产引用为 0 → 假公开或死代码，先撤 public 导出，再决定删不删；
+  3. 只有 1 处生产引用 → 先撤 public 导出；不是跨层契约就直接内联；
+  4. 只有测试直接 import → 不构成保留理由；测试改走公开入口/service，或随内联删除；
+  5. service→domain 这类跨层唯一入口可以保留**一个内部 export**，但它不该出现在 public allowlist 里。
+- 先例：`parseCharacterCardToMdTree` 曾在 public allowlist、service 一处调用、测试多处直引；public 是假的，已撤导出并把解析并回 domain 单文件；`validateMdTreeForImport` / `validateMdTreeLimits`、`sanitizeEntryFilename`、`extractPngCharaJsonText` 都是一处引用，已内联。
+
+**审计脚本**（skill 自带，不用装依赖）：
+
+```bash
+node .agents/skills/nm-code-style/scripts/find-fake-exports.mjs packages/core/src/domain/character-card
+```
+
+输出列：`prod` 生产 import 文件数、`test` 测试 import 文件数、`public` 是否在 allowlist；verdict：
+
+- `FAKE_PUBLIC`：public 有名字但生产引用 0；
+- `TEST_ONLY`：非 public、生产 0、只有测试引用；
+- `INLINE_CANDIDATE`：非 public、生产 1 处（再判断是否跨层唯一入口）；
+- `PUBLIC_ONE_REF`：public + 生产 1 处（检查它到底是不是对外 API）；
+- `DEAD` / `KEEP`。
+
+脚本只看直接 import 定义文件，经 barrel 转发的引用会漏计；它给线索，边界判断还是人来定。
+
 ## 5. 通用工具与命名
 
 - 通用谓词/纯工具统一放 `packages/core/src/common/`，经 `@novel-master/core/common` 给三端共用。发现**第二份**就地实现时就收敛，不等到第三份。
@@ -61,6 +89,7 @@ description: novel-master 的代码优化与重构原则。写新代码、重构
 ## 交付前 30 秒检查
 
 - 只调用一次的 private / 模块级函数，内联了吗？
+- 这个 export 的生产引用有几处？测试 import / allowlist 都不算消费者。
 - 有没有 `return f(x)` 这种单行转手 wrapper？
 - 签名、调用参数、错误构造，是不是还有多行？
 - 域逻辑里还有 throw 吗？throw 是否都收在边界？

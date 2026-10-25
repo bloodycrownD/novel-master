@@ -66,4 +66,4 @@
 
 ## 编码风格
 
-写、改、重构代码前先加载 `nm-code-style` skill（`.agents/skills/nm-code-style/SKILL.md`）。核心原则：private 方法内联、签名/调用/错误构造一行、错误走 Either 且只在边界 throw、单行转手 wrapper 删除、通用工具进 `core/common`、文件名按类别起、不为抽象而抽象。
+写、改、重构代码前先加载 `nm-code-style` skill（`.agents/skills/nm-code-style/SKILL.md`）。核心原则：private 方法内联、签名/调用/错误构造一行、错误走 Either 且只在边界 throw、单行转手 wrapper 删除、测试/allowlist 不算消费者（假公开先撤导出）、通用工具进 `core/common`、文件名按类别起、不为抽象而抽象。

@@ -4,7 +4,7 @@
  * 导出侧：CacheDir 临时文件 → saveDocuments → isUserCancelledPick →
  * 返回 'saved'/'cancelled' → finally unlink，保证取消/失败都不留脏文件。
  * 导入侧：pick → keepLocalCopy 落 caches → localUriToFsPath → 读文件。
- * 各业务域的错误类型（VfsZipError / CharacterCardError 等）通过
+ * 各业务域的错误类型（VfsZipError / AppError 等）通过
  * build*Error 回调注入，避免这层反向依赖具体业务。
  */
 import {

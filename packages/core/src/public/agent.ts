@@ -12,8 +12,9 @@ export { resolveAgentToolRegistry } from "../domain/agent/logic/resolve-agent-to
 export { validateAgentToolPolicy } from "../domain/agent/logic/validate-agent-tool-policy.js";
 export type { AgentToolPolicy } from "../domain/agent/model/agent-definition.js";
 export type { AgentSession } from "../domain/agent/session/agent-session.port.js";
-export { AppError, ErrorCodes, isAppError } from "../errors/app-error.js";
-export type { ErrorKey, ErrorNumber } from "../errors/app-error.js";
+export { AppError, isAppError } from "../errors/app-error.js";
+export { ErrorCodes } from "../errors/error-codes.js";
+export type { ErrorKey, ErrorNumber } from "../errors/error-codes.js";
 export type {
   AgentRunResult,
   ModelRoundSummary,

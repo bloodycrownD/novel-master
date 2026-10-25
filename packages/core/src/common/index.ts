@@ -6,6 +6,9 @@
  * renderer、mobile）共享。
  */
 export { compareAppVersions } from "./compare-app-versions.js";
+export { base64ToBytes } from "./base64.js";
+export { parseJsonText } from "./json.js";
+export { utf8ByteLength } from "./utf8.js";
 export { errorText } from "./error-text.js";
 export { isRecord } from "./guards.js";
 export {

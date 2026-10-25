@@ -69,6 +69,9 @@ const WEBVIEW_CORE_ALLOWLIST = {
     // 是「引用它不会把病根拖进产物」里最安全的一档。
     // 删了会怎样：入参校验直接消失，或要在 React 侧重抄一份常量——重抄就是两处漂移的起点。
     'common/guards.js',
+    // tool-output-limits / curl 在 webview 内也要按 UTF-8 字节算预算；
+    // 删了会退化成按字符数估算，中文/emoji 场景会超预算。
+    'common/utf8.js',
     'bootstrap/skills/skills-schema.js',
     'bootstrap/smart-sort-rule/builtin-smart-sort-rules.js',
     'bootstrap/smart-sort-rule/smart-sort-rule-schema.js',

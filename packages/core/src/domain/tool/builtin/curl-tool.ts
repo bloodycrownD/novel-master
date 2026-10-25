@@ -30,6 +30,7 @@
 
 import { z } from "zod";
 
+import { utf8ByteLength } from "@/common/utf8.js";
 import { toolFailed } from "@/errors/tool-errors.js";
 import { TOOL_OUTPUT_MAX_BYTES } from "../logic/tool-output-limits.js";
 import type { Tool } from "../model/tool.js";
@@ -170,18 +171,6 @@ function curlPhaseError(
  * 全量字符串再 encode 一份完整数组。请求体入参校验与正文 originalBytes
  * 共用（后者是解码后口径而非线上压缩传输字节数）。
  */
-function utf8ByteLength(text: string): number {
-  const encoder = new TextEncoder();
-  const CHUNK = 8192;
-  let total = 0;
-  for (let i = 0; i < text.length; i += CHUNK) {
-    total += encoder.encode(
-      text.slice(i, Math.min(i + CHUNK, text.length))
-    ).byteLength;
-  }
-  return total;
-}
-
 /**
  * 按字节预算返回正文前缀：TextEncoder 增量编码并累计字节数，
  * 找到预算内能容纳的最大字符切点后在该处截断。

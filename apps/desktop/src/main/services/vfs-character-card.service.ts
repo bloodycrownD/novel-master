@@ -22,7 +22,7 @@ function resolveDirectoryPath(directoryPath?: string): string {
 
 /**
  * 弹出文件选择框，读取 png/json 字节后调用 Core 角色卡导入。
- * 取消选文件返回 `cancelled`；解析/写库失败抛 {@link CharacterCardError}。
+ * 取消选文件返回 `cancelled`；解析/写库失败抛 {@link AppError}。
  */
 export async function importCharacterCardWithDialog(
   runtime: DesktopNovelMasterRuntime,
