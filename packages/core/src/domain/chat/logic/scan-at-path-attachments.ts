@@ -15,10 +15,7 @@ import {
   attachmentStorageName,
   type MessageAttachment,
 } from "../model/message-attachment.schema.js";
-import {
-  isBinaryAttachPath,
-  isImageAttachPath,
-} from "./attach-binary-heuristic.js";
+import { isBinaryFilePath, isImageFilePath } from "@/common/file.js";
 import {
   isPromptDirTokenPath,
   normalizePromptStorePath,
@@ -178,7 +175,7 @@ function attachFromPath(rawPath: string): MessageAttachment {
   });
   const seenKey = tryNormalizePromptSeenPath(rawPath) ?? storePath;
   const basename = seenKey.split("/").filter(Boolean).pop() ?? seenKey;
-  if (isImageAttachPath(seenKey) || isImageAttachPath(rawPath)) {
+  if (isImageFilePath(seenKey) || isImageFilePath(rawPath)) {
     return {
       name: basename,
       source: "attach",
@@ -196,7 +193,7 @@ function attachFromPath(rawPath: string): MessageAttachment {
       path: storePath,
     };
   }
-  if (isBinaryAttachPath(seenKey) || isBinaryAttachPath(rawPath)) {
+  if (isBinaryFilePath(seenKey) || isBinaryFilePath(rawPath)) {
     return {
       name: basename,
       source: "attach",

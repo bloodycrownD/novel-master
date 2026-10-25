@@ -10,6 +10,8 @@ export { base64ToBytes } from "./base64.js";
 export { parseJsonText } from "./json.js";
 export { utf8ByteLength } from "./utf8.js";
 export { truncateText } from "./text.js";
+export { isBinaryFilePath, isImageFilePath } from "./file.js";
+export { integerAtLeast, stringOrEmpty } from "./coerce.js";
 export { errorText } from "./error-text.js";
 export { isRecord } from "./guards.js";
 export {

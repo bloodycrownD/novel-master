@@ -33,23 +33,14 @@ import { messageBodyTextFromBlocks } from "../content/message-body-text.js";
 import { textBlocks } from "../content/text-blocks.js";
 import type { ChatMessage } from "../model/message.js";
 import type { MessageAttachment } from "../model/message-attachment.schema.js";
-import {
-  BINARY_ATTACH_NOTE,
-  OVERSIZED_ATTACH_NOTE,
-  createAttachBudget,
-  type AttachBudget,
-} from "./attach-budget.js";
-import {
-  isBinaryAttachPath,
-  isImageAttachPath,
-} from "./attach-binary-heuristic.js";
+import { AttachBudget, BINARY_ATTACH_NOTE, OVERSIZED_ATTACH_NOTE } from "./attach-budget.js";
+import { isBinaryFilePath, isImageFilePath } from "@/common/file.js";
 import { isUserInputMessage } from "./message-content-helpers.js";
 import {
-  buildAlreadyReferencedActionXml,
-  buildAttachmentActionXml,
   buildDirTreeActionXml,
   buildFileRefActionXml,
 } from "./build-attachment-action-xml.js";
+import { buildUserVfsActionXml } from "@/domain/vfs/logic/user-vfs-save-mapping.js";
 import {
   createPromptPathSeenSet,
   tryNormalizePromptSeenPath,
@@ -130,7 +121,7 @@ function resolveAttachFileStatus(
   path: string,
   type: MessageAttachment["type"]
 ): WorkplaceDisplayStatus {
-  if (type === "image" || isBinaryAttachPath(path) || isImageAttachPath(path)) {
+  if (type === "image" || isBinaryFilePath(path) || isImageFilePath(path)) {
     return "filename";
   }
   return "full";
@@ -141,7 +132,7 @@ function isBinaryOrImageAttach(attachment: MessageAttachment): boolean {
     return attachment.type === "image";
   }
   const path = attachment.path ?? "";
-  return isBinaryAttachPath(path) || isImageAttachPath(path);
+  return isBinaryFilePath(path) || isImageFilePath(path);
 }
 
 /** {@link fileRefAction} 的可选正文口径开关。 */
@@ -421,7 +412,7 @@ const SKILL_ATTACH_MISSING_NOTE = "技能不存在或已删除";
 
 /** skillAttach 不存在提示行 XML（不写 seen：技能后续创建可自愈重附全文）。 */
 function buildSkillAttachMissingXml(name: string): string {
-  return buildAttachmentActionXml("skillAttach", {
+  return buildUserVfsActionXml("skillAttach", {
     name,
     missing: true,
     note: SKILL_ATTACH_MISSING_NOTE,
@@ -450,7 +441,7 @@ async function hydrateSkillAttachWithSeen(
     return {
       ...attachment,
       action: "skillAttach",
-      content: buildAttachmentActionXml("skillAttach", {
+      content: buildUserVfsActionXml("skillAttach", {
         name,
         alreadyReferenced: true,
       }),
@@ -483,7 +474,7 @@ async function hydrateSkillAttachWithSeen(
     return {
       ...attachment,
       action: "skillAttach",
-      content: buildAttachmentActionXml("skillAttach", {
+      content: buildUserVfsActionXml("skillAttach", {
         name,
         content: oversized ? OVERSIZED_ATTACH_NOTE : file.content,
         ...(oversized ? { display: "filename" as const } : {}),
@@ -553,7 +544,7 @@ async function hydrateAttachWithSeen(
       ...attachment,
       path: logicalPath,
       action: "userAttach",
-      content: buildAlreadyReferencedActionXml(logicalPath),
+      content: buildUserVfsActionXml("userAttach", { path: logicalPath, alreadyReferenced: true }),
     };
   }
 
@@ -695,7 +686,7 @@ export async function prepareUserMessagesForPrompt(
   // （ATTACH_PROMPT_CHAR_BUDGET，50 万明文字符），逐条累加、恰好等于预算不降级，
   // 超出项降级为 filename 档引导文案。
   // workplace 源豁免（见 hydrateFileFull 的红线注释）。
-  const attachBudget = createAttachBudget();
+  const attachBudget = new AttachBudget();
   // workplace 省略判定的第二读集合（spec G6 双读）：初值取 assemble 的
   // `visiblePaths`（full + header + filename 全量可见集），**未注入时回落
   // `seenPaths`**——旧调用方与既有语义（T-PD3 / T-PD4 / T-PD8 / T-SR6）零变化。

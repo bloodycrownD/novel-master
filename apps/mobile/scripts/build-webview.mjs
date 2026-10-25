@@ -69,6 +69,9 @@ const WEBVIEW_CORE_ALLOWLIST = {
     // 是「引用它不会把病根拖进产物」里最安全的一档。
     // 删了会怎样：入参校验直接消失，或要在 React 侧重抄一份常量——重抄就是两处漂移的起点。
     'common/guards.js',
+    // truncateText：ChatTranscriptBridge 经 common barrel 引入的小纯函数；
+    // 删了 webview 侧得重抄截断逻辑。
+    'common/text.js',
     // tool-output-limits / curl 在 webview 内也要按 UTF-8 字节算预算；
     // 删了会退化成按字符数估算，中文/emoji 场景会超预算。
     'common/utf8.js',
@@ -162,7 +165,7 @@ const WEBVIEW_CORE_ALLOWLIST = {
     // 解码与路径映射在 webview 侧失效。
     // ⚠️ `composer-at-path.js` 刻意**不**在本组——它是 dock/typeahead 的
     // @ 查询纯函数，仅合成包（含 dock）的闭包消费，独立入口实测未拉入。
-    'domain/chat/logic/attach-binary-heuristic.js',
+    'common/file.js',
     'domain/chat/logic/prompt-path-seen.js',
     'domain/chat/logic/scan-at-path-attachments.js',
     'domain/vfs/content-store/logic/pack-codec.js',

@@ -72,11 +72,7 @@ export {
   resolveRenameOrMoveAction,
 } from "../domain/chat/logic/status-chip-label.js";
 export {
-  buildAlreadyReferencedActionXml,
-  buildAttachmentActionXml,
-  buildDirTreeActionXml,
   buildFileAnnotateAttachmentFromDraft,
-  buildFileRefActionXml,
   parseAnnotateDraftsFromAttachments,
 } from "../domain/chat/logic/build-attachment-action-xml.js";
 export {
@@ -176,7 +172,6 @@ export {
   hasChatAnnotateDrafts,
   listChatAnnotateDrafts,
   removeChatAnnotateDraft,
-  removeChatAnnotateDraftsByPath,
   resetChatAnnotateDraftStoreForTests,
   subscribeChatAnnotateDraft,
   unionComposerStatusWithAnnotate,

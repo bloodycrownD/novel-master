@@ -5,10 +5,7 @@
  * @module domain/chat/logic/chat-annotate-draft-store
  */
 
-import {
-  isMessageAnnotatePath,
-  type AnnotateDraft,
-} from "../model/annotate-draft.schema.js";
+import { isMessageAnnotatePath, type AnnotateDraft } from "../model/annotate-draft.schema.js";
 import type { MessageAttachment } from "../model/message-attachment.schema.js";
 
 const bySession = new Map<string, AnnotateDraft[]>();
@@ -17,9 +14,7 @@ type AnnotateListener = (sessionId: string) => void;
 const listeners = new Set<AnnotateListener>();
 
 /** 订阅批注草稿变更；返回取消订阅。 */
-export function subscribeChatAnnotateDraft(
-  listener: AnnotateListener
-): () => void {
+export function subscribeChatAnnotateDraft(listener: AnnotateListener): () => void {
   listeners.add(listener);
   return () => {
     listeners.delete(listener);
@@ -32,18 +27,12 @@ function notifyAnnotateListeners(sessionId: string): void {
   }
 }
 
-function cloneDrafts(list: readonly AnnotateDraft[]): AnnotateDraft[] {
-  return list.map((d) => ({ ...d }));
-}
-
 /** 读本会话未发送批注草稿（快照）。 */
-export function listChatAnnotateDrafts(
-  sessionId: string | undefined
-): readonly AnnotateDraft[] {
+export function listChatAnnotateDrafts(sessionId: string | undefined): readonly AnnotateDraft[] {
   if (sessionId == null || sessionId === "") {
     return [];
   }
-  return cloneDrafts(bySession.get(sessionId) ?? []);
+  return (bySession.get(sessionId) ?? []).map((d) => ({ ...d }));
 }
 
 /** 本会话是否有未发送批注。 */
@@ -58,9 +47,7 @@ export function hasChatAnnotateDrafts(sessionId: string | undefined): boolean {
  * 按 path 聚合一只 annotate 预览 chip（`source:user_ops` + `action:annotate`）。
  * **忽略**历史消息批注伪 path（`path.includes('__message__:')`）——防御误写入。
  */
-export function chipsFromAnnotateStore(
-  sessionId: string | undefined
-): MessageAttachment[] {
+export function chipsFromAnnotateStore(sessionId: string | undefined): MessageAttachment[] {
   const drafts = listChatAnnotateDrafts(sessionId);
   const seen = new Set<string>();
   const chips: MessageAttachment[] = [];
@@ -89,19 +76,13 @@ export function chipsFromAnnotateStore(
  * 投影结果 ∪ annotate store chips（按 path 一只）。
  * 先去掉既有 annotate 预览，再合并 store，避免重复。
  */
-export function unionComposerStatusWithAnnotate(
-  projected: readonly MessageAttachment[],
-  sessionId: string | undefined
-): MessageAttachment[] {
+export function unionComposerStatusWithAnnotate(projected: readonly MessageAttachment[], sessionId: string | undefined): MessageAttachment[] {
   const withoutAnnotate = projected.filter((a) => a.action !== "annotate");
   return [...withoutAnnotate, ...chipsFromAnnotateStore(sessionId)];
 }
 
 /** 新增一条批注草稿。 */
-export function addChatAnnotateDraft(
-  sessionId: string,
-  draft: AnnotateDraft
-): void {
+export function addChatAnnotateDraft(sessionId: string, draft: AnnotateDraft): void {
   if (sessionId === "") {
     return;
   }
@@ -111,12 +92,7 @@ export function addChatAnnotateDraft(
 }
 
 /** 更新一条批注说明（按 id）。 */
-export function updateChatAnnotateDraft(
-  sessionId: string,
-  id: string,
-  patch: Pick<AnnotateDraft, "userAnnotation"> &
-    Partial<Pick<AnnotateDraft, "originalText">>
-): void {
+export function updateChatAnnotateDraft(sessionId: string, id: string, patch: Pick<AnnotateDraft, "userAnnotation"> & Partial<Pick<AnnotateDraft, "originalText">>): void {
   if (sessionId === "") {
     return;
   }
@@ -152,31 +128,7 @@ export function removeChatAnnotateDraft(sessionId: string, id: string): void {
   if (prev == null) {
     return;
   }
-  const next = prev.filter((d) => d.id !== id);
-  if (next.length === prev.length) {
-    return;
-  }
-  if (next.length === 0) {
-    bySession.delete(sessionId);
-  } else {
-    bySession.set(sessionId, next);
-  }
-  notifyAnnotateListeners(sessionId);
-}
-
-/** 删光某 path 下全部批注。 */
-export function removeChatAnnotateDraftsByPath(
-  sessionId: string,
-  path: string
-): void {
-  if (sessionId === "") {
-    return;
-  }
-  const prev = bySession.get(sessionId);
-  if (prev == null) {
-    return;
-  }
-  const next = prev.filter((d) => d.path !== path);
+  const next = prev.filter((draft) => draft.id !== id);
   if (next.length === prev.length) {
     return;
   }

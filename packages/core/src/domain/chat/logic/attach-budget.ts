@@ -42,25 +42,19 @@ export const OVERSIZED_ATTACH_NOTE =
 export const BINARY_ATTACH_NOTE = "二进制文件，不提供正文";
 
 /** 预算累加器（单次拼装一份，与 `seen` 同级作用域）。 */
-export interface AttachBudget {
+export class AttachBudget {
+  private used = 0;
+
   /**
    * 尝试计入 `chars`：计入后**恰好等于**预算仍算通过（边界不降级）；
    * 超预算则不改动并返回 false，调用方据此走降级出口。
    */
-  tryConsume(chars: number): boolean;
-}
-
-/** 新建一份预算累加器（上限 {@link ATTACH_PROMPT_CHAR_BUDGET}）。 */
-export function createAttachBudget(): AttachBudget {
-  let used = 0;
-  return {
-    tryConsume(chars: number): boolean {
-      const next = used + Math.max(0, chars);
-      if (next > ATTACH_PROMPT_CHAR_BUDGET) {
-        return false;
-      }
-      used = next;
-      return true;
-    },
-  };
+  tryConsume(chars: number): boolean {
+    const next = this.used + Math.max(0, chars);
+    if (next > ATTACH_PROMPT_CHAR_BUDGET) {
+      return false;
+    }
+    this.used = next;
+    return true;
+  }
 }

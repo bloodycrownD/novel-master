@@ -17,7 +17,7 @@ import {
 } from "@/domain/feature-flags/user-vfs-unified-tool-turn.js";
 import { hasComposerSendableInput } from "@/domain/chat/logic/composer-sendable-input.js";
 import { wrapUserMessageForLlm } from "@/domain/chat/logic/wrap-user-message-for-llm.js";
-import { buildFileAnnotateAttachmentFromDraft, formatAnnotateLocationLabel } from "@/domain/chat/logic/build-attachment-action-xml.js";
+import { buildFileAnnotateAttachmentFromDraft } from "@/domain/chat/logic/build-attachment-action-xml.js";
 import { mergeAttachmentsByPath } from "@/domain/chat/logic/scan-at-path-attachments.js";
 import {
   messageAttachmentSchema,
@@ -326,35 +326,6 @@ describe("annotateDrafts send (T-AN3/T-AN4/T-AN6 core)", () => {
         err instanceof AgentTurnError && err.message === "消息不能为空",
     );
     resetUserVfsUnifiedToolTurnSnapshotForTests();
-  });
-});
-
-describe("formatAnnotateLocationLabel（位置标签拼装）", () => {
-  it("单行：startLine === endLine → 「第 N 行」", () => {
-    assert.equal(formatAnnotateLocationLabel(5, 5), "第 5 行");
-    assert.equal(formatAnnotateLocationLabel(3, 3), "第 3 行");
-  });
-
-  it("跨行：startLine < endLine → 「第 A-B 行」", () => {
-    assert.equal(formatAnnotateLocationLabel(5, 7), "第 5-7 行");
-    assert.equal(formatAnnotateLocationLabel(1, 10), "第 1-10 行");
-  });
-
-  it("endLine 缺省 → 退化为单行", () => {
-    assert.equal(formatAnnotateLocationLabel(5, undefined), "第 5 行");
-    assert.equal(formatAnnotateLocationLabel(5, null), "第 5 行");
-  });
-
-  it("endLine 小于 startLine → 以 startLine 为下限（防御式 normalize）", () => {
-    assert.equal(formatAnnotateLocationLabel(5, 3), "第 5 行");
-  });
-
-  it("startLine 缺省 / 非正整数 → undefined（不写键）", () => {
-    assert.equal(formatAnnotateLocationLabel(undefined, 5), undefined);
-    assert.equal(formatAnnotateLocationLabel(null, 5), undefined);
-    assert.equal(formatAnnotateLocationLabel(0, 5), undefined);
-    assert.equal(formatAnnotateLocationLabel(-1, 5), undefined);
-    assert.equal(formatAnnotateLocationLabel(Number.NaN, 5), undefined);
   });
 });
 

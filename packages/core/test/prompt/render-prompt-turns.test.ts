@@ -3,14 +3,13 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import {
-  buildAttachmentActionXml,
-  buildDirTreeActionXml,
-  buildFileRefActionXml,
   textBlocks,
   wrapUserMessageForLlm,
   type ChatMessage,
   type ContentBlock,
 } from "@novel-master/core/chat";
+import { buildDirTreeActionXml, buildFileRefActionXml } from "@/domain/chat/logic/build-attachment-action-xml.js";
+import { buildUserVfsActionXml } from "@/domain/vfs/logic/user-vfs-save-mapping.js";
 
 import {
   buildPromptAssemblyFromLayout,
@@ -1451,7 +1450,7 @@ describe("T-PL9 user 附件 JSON 转义形态定向剥离（Step 7）", () => {
   });
 
   it("annotate 块不动（没有 `content` 键，原文一律不碰）", async () => {
-    const actionXml = buildAttachmentActionXml("annotate", {
+    const actionXml = buildUserVfsActionXml("annotate", {
       path: "notes/a.md",
       originalText: "1|这行不是行号",
       userAnnotation: "2|批注也不是",
@@ -1496,7 +1495,7 @@ describe("T-PL9 user 附件 JSON 转义形态定向剥离（Step 7）", () => {
   });
 
   it("skillAttach 块不动（`content` 是无行号原文，判据不适用）", async () => {
-    const actionXml = buildAttachmentActionXml("skillAttach", {
+    const actionXml = buildUserVfsActionXml("skillAttach", {
       name: "novel-master",
       content: "第一行\n12|这不是行号",
     });

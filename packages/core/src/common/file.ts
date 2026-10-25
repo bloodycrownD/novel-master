@@ -1,7 +1,7 @@
 /**
- * `@` / hydrate 文本 vs 二进制扩展名启发式（P2；误判可接受）。
+ * 通用文件路径扩展名启发式（二进制 / 图片；误判可接受）。
  *
- * @module domain/chat/logic/attach-binary-heuristic
+ * @module common/file
  */
 
 /** 常见二进制 / 图片扩展名（小写、无点）。 */
@@ -57,24 +57,10 @@ const BINARY_EXTENSIONS = new Set([
   "sketch",
 ]);
 
-const IMAGE_EXTENSIONS = new Set([
-  "png",
-  "jpg",
-  "jpeg",
-  "gif",
-  "webp",
-  "bmp",
-  "ico",
-  "tif",
-  "tiff",
-  "heic",
-  "avif",
-]);
+const IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "gif", "webp", "bmp", "ico", "tif", "tiff", "heic", "avif"]);
 
 function extensionOf(path: string): string {
-  const base = path.includes("/")
-    ? path.slice(path.lastIndexOf("/") + 1)
-    : path;
+  const base = path.slice(Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\")) + 1);
   const dot = base.lastIndexOf(".");
   if (dot <= 0 || dot === base.length - 1) {
     return "";
@@ -83,13 +69,13 @@ function extensionOf(path: string): string {
 }
 
 /** path 是否按扩展名视为二进制。 */
-export function isBinaryAttachPath(path: string): boolean {
+export function isBinaryFilePath(path: string): boolean {
   const ext = extensionOf(path);
   return ext !== "" && BINARY_EXTENSIONS.has(ext);
 }
 
 /** path 是否按扩展名视为图片。 */
-export function isImageAttachPath(path: string): boolean {
+export function isImageFilePath(path: string): boolean {
   const ext = extensionOf(path);
   return ext !== "" && IMAGE_EXTENSIONS.has(ext);
 }

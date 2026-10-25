@@ -5,6 +5,7 @@
  */
 
 import { messageBodyTextFromBlocks } from "../content/message-body-text.js";
+import { stringOrEmpty } from "@/common/coerce.js";
 import type { ToolResultBlock, ToolUseBlock } from "../model/content-block.js";
 import type { ChatMessage } from "../model/message.js";
 import { readMessageMetadata } from "../model/message-metadata.js";
@@ -73,10 +74,6 @@ function parseJsonParams(inner: string): Record<string, unknown> {
   return {};
 }
 
-function asString(value: unknown, fallback = ""): string {
-  return typeof value === "string" ? value : fallback;
-}
-
 function actionFromNamedTag(
   name: string,
   params: Record<string, unknown>
@@ -84,23 +81,23 @@ function actionFromNamedTag(
   // 旧跨目录 rename XML → 规范为 move（只读兼容）。
   let resolvedName = name;
   if (name === "rename" || name === "move") {
-    const from = asString(params.from);
-    const to = asString(params.to);
+    const from = stringOrEmpty(params.from);
+    const to = stringOrEmpty(params.to);
     if (from !== "" && to !== "") {
       resolvedName = resolveRenameOrMoveAction(from, to);
     }
   }
   const path =
     resolvedName === "rename" || resolvedName === "move"
-      ? `${asString(params.from)}→${asString(params.to)}`
-      : asString(params.path);
+      ? `${stringOrEmpty(params.from)}→${stringOrEmpty(params.to)}`
+      : stringOrEmpty(params.path);
   const hunks: ParsedUserVfsEditHunk[] =
     resolvedName === "edit"
       ? [
           {
             index: "1",
-            old: asString(params.oldString),
-            new: asString(params.newString),
+            old: stringOrEmpty(params.oldString),
+            new: stringOrEmpty(params.newString),
           },
         ]
       : [];

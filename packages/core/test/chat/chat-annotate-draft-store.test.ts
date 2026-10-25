@@ -10,7 +10,6 @@ import {
   hasChatAnnotateDrafts,
   listChatAnnotateDrafts,
   removeChatAnnotateDraft,
-  removeChatAnnotateDraftsByPath,
   resetChatAnnotateDraftStoreForTests,
   subscribeChatAnnotateDraft,
   unionComposerStatusWithAnnotate,
@@ -156,7 +155,7 @@ describe("chat-annotate-draft-store", () => {
     );
     removeChatAnnotateDraft(sessionId, "a2");
     assert.equal(listChatAnnotateDrafts(sessionId).length, 1);
-    removeChatAnnotateDraftsByPath(sessionId, "/gone.md");
+    removeChatAnnotateDraft(sessionId, "a1");
     assert.equal(chipsFromAnnotateStore(sessionId).length, 0);
     assert.equal(hasChatAnnotateDrafts(sessionId), false);
   });

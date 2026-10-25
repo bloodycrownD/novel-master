@@ -1,126 +1,34 @@
 /**
- * 构造消息增量 `<action name="…">` + JSON（userAttach / workplaceChange / annotate）。
+ * 构造 / 解析批注 action XML（userAttach / workplaceChange / annotate）。
  *
  * @module domain/chat/logic/build-attachment-action-xml
  */
 
 import { buildUserVfsActionXml } from "@/domain/vfs/logic/user-vfs-save-mapping.js";
-import type { MessageAttachmentAction } from "../model/message-attachment.schema.js";
-import {
-  isMessageAnnotatePath,
-  type AnnotateDraft,
-} from "../model/annotate-draft.schema.js";
-import {
-  attachmentStorageName,
-  type MessageAttachment,
-} from "../model/message-attachment.schema.js";
+import { integerAtLeast, stringOrEmpty } from "@/common/coerce.js";
+import { isMessageAnnotatePath, type AnnotateDraft } from "../model/annotate-draft.schema.js";
+import { attachmentStorageName, type MessageAttachment } from "../model/message-attachment.schema.js";
 import { parseAllUserVfsActionsFromText } from "./user-vfs-turn-view.js";
 
 /** 文件展示档（与常驻前缀 / renderFileBlock 同口径）。 */
-export type AttachmentDisplayKind = "full" | "filename" | "header";
-
-/**
- * 通用 action XML（JSON pretty-print，与 user_ops 手改同源）。
- */
-export function buildAttachmentActionXml(
-  action: MessageAttachmentAction,
-  params: Record<string, unknown>
-): string {
-  return buildUserVfsActionXml(action, params);
-}
+type AttachmentDisplayKind = "full" | "filename" | "header";
 
 /** `userAttach` / `workplaceChange`：全文 / filename / header（行号正文）。 */
-export function buildFileRefActionXml(params: {
-  readonly action: "userAttach" | "workplaceChange";
-  readonly path: string;
-  readonly content: string;
-  readonly display: AttachmentDisplayKind;
-}): string {
-  return buildAttachmentActionXml(params.action, {
+export function buildFileRefActionXml(params: { readonly action: "userAttach" | "workplaceChange"; readonly path: string; readonly content: string; readonly display: AttachmentDisplayKind }): string {
+  return buildUserVfsActionXml(params.action, {
     path: params.path,
     content: params.content,
     display: params.display,
   });
 }
 
-/** 短提示：`alreadyReferenced: true`，无 content。 */
-export function buildAlreadyReferencedActionXml(path: string): string {
-  return buildAttachmentActionXml("userAttach", {
-    path,
-    alreadyReferenced: true,
-  });
-}
-
 /** 目录树：`kind: "dirTree"`，content = ASCII 树（无外层 `<dir>`）。 */
 export function buildDirTreeActionXml(path: string, treeBody: string): string {
-  return buildAttachmentActionXml("userAttach", {
+  return buildUserVfsActionXml("userAttach", {
     path,
     content: treeBody,
     kind: "dirTree",
   });
-}
-
-function asParamString(value: unknown, fallback = ""): string {
-  return typeof value === "string" ? value : fallback;
-}
-
-/** 读 optional 正整数参数（缺字段 / 非法 → undefined，旧附件兼容）。 */
-function asParamPositiveInt(value: unknown): number | undefined {
-  if (typeof value === "number" && Number.isInteger(value) && value > 0) {
-    return value;
-  }
-  if (typeof value === "string" && value.trim() !== "") {
-    const n = Number(value);
-    if (Number.isInteger(n) && n > 0) {
-      return n;
-    }
-  }
-  return undefined;
-}
-
-/** 读 optional 非负整数（offset；0 合法；旧附件缺字段 → undefined）。 */
-function asParamNonNegInt(value: unknown): number | undefined {
-  if (typeof value === "number" && Number.isInteger(value) && value >= 0) {
-    return value;
-  }
-  if (typeof value === "string" && value.trim() !== "") {
-    const n = Number(value);
-    if (Number.isInteger(n) && n >= 0) {
-      return n;
-    }
-  }
-  return undefined;
-}
-
-/** 新 mint 批注草稿 id（Undo 解析恢复用；与发送原 id 解耦）。 */
-function mintAnnotateDraftId(): string {
-  return `ann-${Date.now().toString(36)}-${Math.random()
-    .toString(36)
-    .slice(2, 10)}`;
-}
-
-/**
- * 由行列号拼自然语言位置标签，喂给模型读（避免它解读 JSON 数字）。
- * `startLine === endLine` →「第 N 行」；跨行 →「第 A-B 行」。
- * 任一行号缺失或非法返回 `undefined`，调用方据此决定是否写键。
- */
-export function formatAnnotateLocationLabel(
-  startLine: number | undefined | null,
-  endLine: number | undefined | null
-): string | undefined {
-  if (
-    typeof startLine !== "number" ||
-    !Number.isFinite(startLine) ||
-    startLine < 1
-  ) {
-    return undefined;
-  }
-  const safeEnd =
-    typeof endLine === "number" && Number.isFinite(endLine) && endLine >= 1
-      ? Math.max(startLine, Math.floor(endLine))
-      : startLine;
-  const start = Math.floor(startLine);
-  return start === safeEnd ? `第 ${start} 行` : `第 ${start}-${safeEnd} 行`;
 }
 
 /**
@@ -129,48 +37,23 @@ export function formatAnnotateLocationLabel(
  * 有 Recogito 渲染坐标 / 半开 offset / 宽松行列时**显式**写入 XML JSON；缺字段不写键。
  * 有 `startLine` 时额外写 `locationLabel`（「第 N 行」/「第 A-B 行」），让模型直接读自然语言。
  */
-export function buildFileAnnotateAttachmentFromDraft(
-  draft: AnnotateDraft
-): MessageAttachment {
+export function buildFileAnnotateAttachmentFromDraft(draft: AnnotateDraft): MessageAttachment {
   const path = draft.path;
-  const params: Record<string, unknown> = {
-    path,
-    originalText: draft.originalText,
-    userAnnotation: draft.userAnnotation,
-  };
-  if (draft.renderStart != null) {
-    params.renderStart = draft.renderStart;
-  }
-  if (draft.renderEnd != null) {
-    params.renderEnd = draft.renderEnd;
-  }
-  if (draft.startOffset != null) {
-    params.startOffset = draft.startOffset;
-  }
-  if (draft.endOffset != null) {
-    params.endOffset = draft.endOffset;
-  }
-  if (draft.startLine != null) {
-    params.startLine = draft.startLine;
-  }
-  if (draft.endLine != null) {
-    params.endLine = draft.endLine;
-  }
-  if (draft.startCol != null) {
-    params.startCol = draft.startCol;
-  }
-  if (draft.endCol != null) {
-    params.endCol = draft.endCol;
+  const params: Record<string, unknown> = { path, originalText: draft.originalText, userAnnotation: draft.userAnnotation };
+  for (const key of ["renderStart", "renderEnd", "startOffset", "endOffset", "startLine", "endLine", "startCol", "endCol"] as const) {
+    const value = draft[key];
+    if (value != null) {
+      params[key] = value;
+    }
   }
   // 行号已就位时附自然语言位置标签，方便模型一眼定位（仅渲染态，不回灌草稿）
-  const locationLabel = formatAnnotateLocationLabel(
-    draft.startLine,
-    draft.endLine
-  );
-  if (locationLabel != null) {
-    params.locationLabel = locationLabel;
+  const { startLine, endLine } = draft;
+  if (typeof startLine === "number" && Number.isFinite(startLine) && startLine >= 1) {
+    const start = Math.floor(startLine);
+    const end = typeof endLine === "number" && Number.isFinite(endLine) && endLine >= 1 ? Math.max(start, Math.floor(endLine)) : start;
+    params.locationLabel = start === end ? `第 ${start} 行` : `第 ${start}-${end} 行`;
   }
-  const xml = buildAttachmentActionXml("annotate", params);
+  const xml = buildUserVfsActionXml("annotate", params);
   return {
     name: attachmentStorageName(path),
     source: "user_ops",
@@ -186,9 +69,7 @@ export function buildFileAnnotateAttachmentFromDraft(
  * 仅 `action===annotate` 且真 VFS path（`!path.includes('__message__:')`）；
  * 每条 **新 mint id**（不复用落库伪 id）。
  */
-export function parseAnnotateDraftsFromAttachments(
-  attachments: readonly MessageAttachment[] | null | undefined
-): AnnotateDraft[] {
+export function parseAnnotateDraftsFromAttachments(attachments: readonly MessageAttachment[] | null | undefined): AnnotateDraft[] {
   if (attachments == null || attachments.length === 0) {
     return [];
   }
@@ -197,11 +78,8 @@ export function parseAnnotateDraftsFromAttachments(
     if (att.action !== "annotate") {
       continue;
     }
-    const pathFromAtt =
-      typeof att.path === "string" && att.path !== "" ? att.path : undefined;
     // 优先附件 path；缺省时从 XML JSON 取 path
-    let path = pathFromAtt;
-    let originalText = "";
+    let path = typeof att.path === "string" && att.path !== "" ? att.path : undefined;    let originalText = "";
     let userAnnotation = "";
     let renderStart: number | undefined;
     let renderEnd: number | undefined;
@@ -215,22 +93,22 @@ export function parseAnnotateDraftsFromAttachments(
       const actions = parseAllUserVfsActionsFromText(att.content);
       const annotate = actions.find((a) => a.name === "annotate");
       if (annotate != null) {
-        if (path == null || path === "") {
-          path = asParamString(annotate.params.path) || annotate.path;
+        if (!path) {
+          path = stringOrEmpty(annotate.params.path) || annotate.path;
         }
-        originalText = asParamString(annotate.params.originalText);
-        userAnnotation = asParamString(annotate.params.userAnnotation);
-        renderStart = asParamNonNegInt(annotate.params.renderStart);
-        renderEnd = asParamNonNegInt(annotate.params.renderEnd);
-        startOffset = asParamNonNegInt(annotate.params.startOffset);
-        endOffset = asParamNonNegInt(annotate.params.endOffset);
-        startLine = asParamPositiveInt(annotate.params.startLine);
-        endLine = asParamPositiveInt(annotate.params.endLine);
-        startCol = asParamPositiveInt(annotate.params.startCol);
-        endCol = asParamPositiveInt(annotate.params.endCol);
+        originalText = stringOrEmpty(annotate.params.originalText);
+        userAnnotation = stringOrEmpty(annotate.params.userAnnotation);
+        renderStart = integerAtLeast(annotate.params.renderStart, 0);
+        renderEnd = integerAtLeast(annotate.params.renderEnd, 0);
+        startOffset = integerAtLeast(annotate.params.startOffset, 0);
+        endOffset = integerAtLeast(annotate.params.endOffset, 0);
+        startLine = integerAtLeast(annotate.params.startLine, 1);
+        endLine = integerAtLeast(annotate.params.endLine, 1);
+        startCol = integerAtLeast(annotate.params.startCol, 1);
+        endCol = integerAtLeast(annotate.params.endCol, 1);
       }
     }
-    if (path == null || path === "") {
+    if (!path) {
       continue;
     }
     // 消息批注伪 path（含 `/__message__:`）→ 跳过 Undo 恢复
@@ -243,7 +121,7 @@ export function parseAnnotateDraftsFromAttachments(
     const offsetsOk =
       startOffset != null && endOffset != null && startOffset < endOffset;
     out.push({
-      id: mintAnnotateDraftId(),
+      id: `ann-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`,
       path,
       originalText,
       userAnnotation,

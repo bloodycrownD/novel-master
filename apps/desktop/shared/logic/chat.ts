@@ -56,7 +56,6 @@ export {
   parseComposerDraftJson,
   partitionComposerChipAttachments,
   removeChatAnnotateDraft,
-  removeChatAnnotateDraftsByPath,
   replaceActiveAtWithToken,
   resetChatAnnotateDraftStoreForTests,
   resolveComposerSendIntent,
