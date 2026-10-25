@@ -20,7 +20,7 @@
  * @module service/agent/logic/run-agent-turn
  */
 
-import { resolveAgentToolRegistry } from "@/domain/agent/logic/resolve-agent-tool-registry.js";
+import { resolveAgentToolRegistry } from "@/domain/agent/logic/resolve-agent-tools.js";
 import { validateAgentDefinition } from "@/domain/agent/logic/validate-agent-definition.js";
 import { resolveSavedModelId } from "@/domain/agent/logic/resolve-saved-model-id.js";
 import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";

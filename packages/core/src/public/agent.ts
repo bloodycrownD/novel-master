@@ -14,7 +14,7 @@ export {
   type ResolveSavedModelIdInput,
   type ResolveSummarySavedModelIdInput,
 } from "../domain/agent/logic/resolve-saved-model-id.js";
-export { resolveAgentToolRegistry } from "../domain/agent/logic/resolve-agent-tool-registry.js";
+export { resolveAgentToolRegistry } from "../domain/agent/logic/resolve-agent-tools.js";
 export { validateAgentToolPolicy } from "../domain/agent/logic/validate-agent-tool-policy.js";
 export type { AgentToolPolicy } from "../domain/agent/model/agent-definition.js";
 export type { AgentSession } from "../domain/agent/session/agent-session.port.js";

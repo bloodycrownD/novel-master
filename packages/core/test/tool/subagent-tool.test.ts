@@ -11,7 +11,7 @@ import type {
   BuiltinToolSubagentContext,
   RunChildAgentOptions,
 } from "@/domain/tool/builtin/builtin-tool-context.js";
-import { resolveAgentToolRegistry } from "@/domain/agent/logic/resolve-agent-tool-registry.js";
+import { resolveAgentToolRegistry } from "@/domain/agent/logic/resolve-agent-tools.js";
 import { ToolRegistry } from "@/domain/tool/logic/tool-registry.js";
 import { registerBuiltinTools } from "@/domain/tool/builtin/register-builtin-tools.js";
 import { ToolError } from "@/errors/tool-errors.js";

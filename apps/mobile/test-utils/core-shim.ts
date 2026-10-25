@@ -58,7 +58,7 @@ export {
   resolveToolResultOk,
 } from '../../../packages/core/dist/domain/tool/logic/build-tool-result-block.js';
 export {registerBuiltinTools} from '../../../packages/core/dist/domain/tool/builtin/register-builtin-tools.js';
-export {resolveAgentToolRegistry} from '../../../packages/core/dist/domain/agent/logic/resolve-agent-tool-registry.js';
+export {resolveAgentToolRegistry} from '../../../packages/core/dist/domain/agent/logic/resolve-agent-tools.js';
 export {validateAgentDefinition} from '../../../packages/core/dist/domain/agent/logic/validate-agent-definition.js';
 export {createAgentRunner} from '../../../packages/core/dist/service/agent/create-agent-runner.js';
 export {ChatAgentSession} from '../../../packages/core/dist/service/agent/impl/chat-agent-session.js';

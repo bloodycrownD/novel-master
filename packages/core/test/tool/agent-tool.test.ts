@@ -10,12 +10,12 @@ import {
 } from "../../src/domain/tool/builtin/agent-tool.js";
 import type { BuiltinToolContext } from "../../src/domain/tool/builtin/builtin-tool-context.js";
 import type { AgentRegistryService } from "../../src/service/agent/agent-registry.port.js";
-import type { ValidateAgentDefinitionOptions } from "../../src/domain/agent/logic/validate-agent-definition.js";
-import type { AgentDefinition } from "../../src/domain/agent/model/agent-definition.js";
+import type { AgentDefinition, AgentDefinitionPatch } from "../../src/domain/agent/model/agent-definition.js";
+import { applyMergePatch } from "../../src/common/merge-patch.js";
 import { AgentConfigError } from "../../src/errors/agent-config-errors.js";
 import { ToolError } from "../../src/errors/tool-errors.js";
 import { assembleAgentsToolContext } from "../../src/service/agent/logic/run-agent-turn.js";
-import { resolveAgentToolRegistry } from "../../src/domain/agent/logic/resolve-agent-tool-registry.js";
+import { resolveAgentToolRegistry } from "../../src/domain/agent/logic/resolve-agent-tools.js";
 
 /** 最小合法 AgentDefinition 形状（照 agent-tool-policy.test.ts 的 BASE_DEF）。 */
 function def(name: string, extra?: Partial<AgentDefinition>): AgentDefinition {
@@ -51,6 +51,12 @@ function fakeAgentRegistry(options?: {
   // 预置一个持久化 agent（beta），供 by-name / by-agentId 定位用。
   persisted.set("agent-1", def("beta"));
 
+  const upsertImpl = async (id: string, definition: AgentDefinition) => {
+    if (options?.upsertThrows != null) throw options.upsertThrows(id);
+    persisted.set(id, definition);
+  };
+  const recordedUpsert = record("upsert", upsertImpl);
+
   const service: AgentRegistryService = {
     listAgentIds: record("listAgentIds", async () => [...persisted.keys()]),
     list: record(
@@ -65,17 +71,14 @@ function fakeAgentRegistry(options?: {
       if (found == null) throw new AgentConfigError("AGENT_NOT_FOUND", `未找到 ${id}`);
       return found;
     }),
-    upsert: record(
-      "upsert",
-      async (
-        id: string,
-        definition: AgentDefinition,
-        _options?: ValidateAgentDefinitionOptions,
-      ) => {
-        if (options?.upsertThrows != null) throw options.upsertThrows(id);
-        persisted.set(id, definition);
-      },
-    ),
+    upsert: recordedUpsert,
+    update: record("update", async (id: string, patch: AgentDefinitionPatch) => {
+      const current = persisted.get(id);
+      if (current == null) throw new AgentConfigError("AGENT_NOT_FOUND", `未找到 ${id}`);
+      const merged = applyMergePatch(current, patch);
+      await recordedUpsert(id, merged);
+      return merged;
+    }),
     delete: record("delete", async (id: string) => {
       persisted.delete(id);
     }),
