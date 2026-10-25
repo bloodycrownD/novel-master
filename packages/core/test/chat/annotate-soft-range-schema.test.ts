@@ -4,14 +4,8 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import {
-  buildFileAnnotateAttachmentFromDraft,
-  parseAnnotateDraftsFromAttachments,
-} from "@/domain/chat/logic/build-attachment-action-xml.js";
-import {
-  annotateDraftSchema,
-  type AnnotateDraft,
-} from "@/domain/chat/model/annotate-draft.schema.js";
+import { buildFileAnnotateAttachmentFromDraft, parseAnnotateDraftsFromAttachments } from "@/domain/chat/logic/build-attachment-action-xml.js";
+import { annotateDraftSchema, type AnnotateDraft } from "@/domain/chat/model/annotate-draft.schema.js";
 import type { MessageAttachment } from "@/domain/chat/model/message-attachment.schema.js";
 
 describe("T-AR1 annotateDraftSchema 行列 decode/encode", () => {
@@ -111,5 +105,43 @@ describe("T-AR3 Undo parse round-trip 保留行列", () => {
     assert.equal(parsed[0]!.endLine, 6);
     assert.equal(parsed[0]!.startCol, 3);
     assert.equal(parsed[0]!.endCol, 4);
+  });
+});
+
+describe("T-SA1 annotateDraftSchema offset 半开语义", () => {
+  it("接受合法半开 offset；缺省旧草稿仍合法", () => {
+    const withOffset = annotateDraftSchema.parse({ id: "a1", path: "/ch.md", originalText: "选区", userAnnotation: "注", startOffset: 0, endOffset: 4 });
+    assert.equal(withOffset.startOffset, 0);
+    assert.equal(withOffset.endOffset, 4);
+    const legacy = annotateDraftSchema.parse({ id: "a2", path: "/old.md", originalText: "旧", userAnnotation: "说明" });
+    assert.equal(legacy.startOffset, undefined);
+    assert.equal(legacy.endOffset, undefined);
+  });
+
+  it("拒绝 start≥end、非整数、负值、成对残缺", () => {
+    for (const offsets of [{ startOffset: 5, endOffset: 5 }, { startOffset: 6, endOffset: 3 }, { startOffset: -1, endOffset: 3 }, { startOffset: 1.5, endOffset: 3 }, { startOffset: 1 }]) {
+      assert.throws(() => annotateDraftSchema.parse({ id: "b", path: "/x.md", originalText: "t", userAnnotation: "u", ...offsets }));
+    }
+  });
+});
+
+describe("T-SA2 offset 与派生行列 round-trip", () => {
+  it("附件携带 offset + 行列；parse 保留", () => {
+    const source = "L1\nhello world\nL3\n";
+    const startOffset = source.indexOf("hello");
+    const endOffset = startOffset + "hello".length;
+    const lines = { startLine: 2, endLine: 2, startCol: 1, endCol: 5 };
+    const draft: AnnotateDraft = { id: "orig", path: "/round.md", originalText: "hello", userAnnotation: "请改", startOffset, endOffset, ...lines };
+    const att = buildFileAnnotateAttachmentFromDraft(draft);
+    assert.match(att.content ?? "", /"startOffset":/);
+    assert.match(att.content ?? "", /"startLine":/);
+    const parsed = parseAnnotateDraftsFromAttachments([att]);
+    assert.equal(parsed.length, 1);
+    assert.equal(parsed[0]!.startOffset, startOffset);
+    assert.equal(parsed[0]!.endOffset, endOffset);
+    assert.equal(parsed[0]!.startLine, lines.startLine);
+    assert.equal(parsed[0]!.endLine, lines.endLine);
+    assert.equal(parsed[0]!.startCol, 1);
+    assert.equal(parsed[0]!.endCol, 5);
   });
 });

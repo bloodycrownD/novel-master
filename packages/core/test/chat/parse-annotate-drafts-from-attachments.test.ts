@@ -5,7 +5,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
-  buildAnnotateAttachmentFromDraft,
+  buildFileAnnotateAttachmentFromDraft,
   parseAnnotateDraftsFromAttachments,
 } from "@/domain/chat/logic/build-attachment-action-xml.js";
 import {
@@ -47,7 +47,7 @@ describe("parseAnnotateDraftsFromAttachments (T-UD3 部分)", () => {
       originalText: "选中原文",
       userAnnotation: "请改短",
     };
-    const att = buildAnnotateAttachmentFromDraft(draft);
+    const att = buildFileAnnotateAttachmentFromDraft(draft);
     const parsed = parseAnnotateDraftsFromAttachments([att]);
     assert.equal(parsed.length, 1);
     assert.equal(parsed[0]!.path, "/chapter/a.md");
@@ -72,7 +72,7 @@ describe("parseAnnotateDraftsFromAttachments (T-UD3 部分)", () => {
     const parsed = parseAnnotateDraftsFromAttachments([
       msgAtt,
       withSlash,
-      buildAnnotateAttachmentFromDraft({
+      buildFileAnnotateAttachmentFromDraft({
         id: "f1",
         path: "/ok.md",
         originalText: "a",

@@ -84,14 +84,6 @@ function readSrc(relFromSrc: string): string {
 }
 
 describe('T-RG2 无插锚预览主路径', () => {
-  it('FileMarkdownPreview 不 import/调用 buildAnnotatedSource', () => {
-    const src = readSrc('components/vfs/FileMarkdownPreview.tsx');
-    expect(src).not.toMatch(
-      /from\s+['"][^'"]*buildAnnotatedSource|buildAnnotatedSource\s*\(/,
-    );
-    expect(src).not.toMatch(/\bbuildAnnotatedSource\b/);
-  });
-
   it('RichDocumentWebView 无 DOM 搜字 fallback 开关', () => {
     const src = readSrc('components/vfs/RichDocumentWebView.tsx');
     expect(src).not.toMatch(/NM_ANNOTATE_DOM_SEARCH_FALLBACK/);

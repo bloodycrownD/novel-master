@@ -8,7 +8,7 @@
 import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
 import {
-  buildAnnotateAttachmentFromDraft,
+  buildFileAnnotateAttachmentFromDraft,
   chipsFromAnnotateStore,
   listChatAnnotateDrafts,
   resetChatAnnotateDraftStoreForTests,
@@ -29,7 +29,7 @@ describe("applyUndoAnnotateRestore (T-CR6 / T-UOL7)", () => {
       originalText: "未发送原文",
       userAnnotation: "未发送说明",
     });
-    const annotateAtt = buildAnnotateAttachmentFromDraft({
+    const annotateAtt = buildFileAnnotateAttachmentFromDraft({
       id: "sent-ann",
       path: "/chapter/a.md",
       originalText: "选中原文",

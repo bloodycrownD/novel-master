@@ -51,8 +51,7 @@ import {
 import type { SendAnnotateDraft } from "@/domain/chat/model/annotate-draft.schema.js";
 import type { ComposerDraftTokenRange } from "@/domain/chat/model/composer-draft.schema.js";
 import type { MessageAttachment } from "@/domain/chat/model/message-attachment.schema.js";
-import { buildAnnotateAttachmentFromDraft } from "@/domain/chat/logic/build-attachment-action-xml.js";
-import { estimateSoftRangeFromOriginalText } from "@/domain/chat/logic/annotate-source-range.js";
+import { buildFileAnnotateAttachmentFromDraft } from "@/domain/chat/logic/build-attachment-action-xml.js";
 import { maskComposerScanRanges } from "@/domain/chat/logic/mask-composer-scan-ranges.js";
 import { mergeAttachmentsWithScannedAtPaths } from "@/domain/chat/logic/scan-at-path-attachments.js";
 import { mergeAttachmentsWithScannedSkills } from "@/domain/chat/logic/scan-skill-attachments.js";
@@ -91,6 +90,28 @@ import { resolveAgentForProject } from "./resolve-agent-for-project.js";
 export interface AgentTurnScope {
   readonly projectId: string;
   readonly sessionId: string;
+}
+
+/** 0-based 字符偏移 → 1-based 行列；用于批注行号补算。 */
+function offsetToSourceLineCol(sourceText: string, offset: number): { readonly line: number; readonly col: number } {
+  let line = 1;
+  let col = 1;
+  for (let i = 0; i < offset; i++) {
+    const ch = sourceText[i]!;
+    if (ch === "\r") {
+      if (sourceText[i + 1] === "\n") {
+        i++;
+      }
+      line++;
+      col = 1;
+    } else if (ch === "\n") {
+      line++;
+      col = 1;
+    } else {
+      col++;
+    }
+  }
+  return { line, col };
 }
 
 /** Runtime surface required to run one agent dialogue turn. */
@@ -690,13 +711,13 @@ async function runAgentTurnWithController(
 
   // annotate：concat 追加（禁止 mergeAttachmentsByPath / path 去重，以免同 path 丢条）
   // 上游划词创建草稿时只传了 renderStart/renderEnd，没填 startLine/endLine，
-  // 这里在落库前用 VFS 读源文本 + originalText 反查，补上精确行号（padding=0）
+  // 这里在落库前用 VFS 读源文本 + originalText 反查，补上精确行号
   // 给模型读附件时多一个「第 N 行」的位置提示；匹配不到或读盘失败就静默跳过。
   const annotateVfs = runtime.sessionVfs(scope.projectId, scope.sessionId);
   const annotateAttachments = await Promise.all(
     annotateDrafts.map(async (draft) => {
       if (draft.startLine != null && draft.endLine != null) {
-        return buildAnnotateAttachmentFromDraft(draft);
+        return buildFileAnnotateAttachmentFromDraft(draft);
       }
       let sourceText: string | undefined;
       try {
@@ -705,25 +726,29 @@ async function runAgentTurnWithController(
         // 文件不存在 / 权限 / 伪 path 等：拿不到源文本就跳过行号补算
       }
       if (typeof sourceText !== "string" || sourceText.length === 0) {
-        return buildAnnotateAttachmentFromDraft(draft);
+        return buildFileAnnotateAttachmentFromDraft(draft);
       }
-      const softRange = estimateSoftRangeFromOriginalText(
-        sourceText,
-        draft.originalText,
-        { linePadding: 0 }
-      );
-      if (softRange == null) {
-        return buildAnnotateAttachmentFromDraft(draft);
+      const needle = draft.originalText.replace(/\u00a0/g, " ");
+      if (needle.length === 0) {
+        return buildFileAnnotateAttachmentFromDraft(draft);
       }
-      // draft 来自 annotateDrafts（SendAnnotateDraft），合并行号后还是同型；显式标注避免依赖推导
-      const enriched: SendAnnotateDraft = {
-        ...draft,
-        startLine: softRange.startLine,
-        endLine: softRange.endLine,
-        ...(softRange.startCol != null ? { startCol: softRange.startCol } : {}),
-        ...(softRange.endCol != null ? { endCol: softRange.endCol } : {}),
-      };
-      return buildAnnotateAttachmentFromDraft(enriched);
+      let at = sourceText.indexOf(needle);
+      let matchLen = needle.length;
+      let haystack = sourceText;
+      if (at < 0) {
+        const normSource = sourceText.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+        const normNeedle = needle.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+        at = normSource.indexOf(normNeedle);
+        if (at < 0) {
+          return buildFileAnnotateAttachmentFromDraft(draft);
+        }
+        matchLen = normNeedle.length;
+        haystack = normSource;
+      }
+      const start = offsetToSourceLineCol(haystack, at);
+      const end = offsetToSourceLineCol(haystack, at + matchLen - 1);
+      const enriched: SendAnnotateDraft = { ...draft, startLine: start.line, endLine: end.line, startCol: start.col, endCol: end.col };
+      return buildFileAnnotateAttachmentFromDraft(enriched);
     })
   );
 

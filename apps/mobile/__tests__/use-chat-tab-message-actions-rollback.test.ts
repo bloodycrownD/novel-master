@@ -5,7 +5,7 @@ import {afterEach, beforeEach, describe, expect, it, jest} from '@jest/globals';
 import React from 'react';
 import TestRenderer, {act} from 'react-test-renderer';
 import {
-  buildAnnotateAttachmentFromDraft,
+  buildFileAnnotateAttachmentFromDraft,
   parseAttachmentsJson,
   type ChatMessage,
   type MessageAttachment,
@@ -356,7 +356,7 @@ describe('useChatTabMessageActions rollback', () => {
       originalText: '未发送原文',
       userAnnotation: '未发送说明',
     });
-    const annotateAtt = buildAnnotateAttachmentFromDraft({
+    const annotateAtt = buildFileAnnotateAttachmentFromDraft({
       id: 'sent-ann',
       path: '/chapter/a.md',
       originalText: '选中原文',
@@ -552,7 +552,7 @@ describe('useChatTabMessageActions rollback', () => {
     // （未知键 → .strict() 拒绝）。旧口径整数组判废 ⇒ ChatMessage.attachments
     // 字段整体缺席 ⇒ useChatTabMessageActions 的 `target.attachments ?? []`
     // 拿到 [] ⇒ 批注恢复不回来。新口径逐条丢弃非法项，合法那条照常在。
-    const annotateAtt = buildAnnotateAttachmentFromDraft({
+    const annotateAtt = buildFileAnnotateAttachmentFromDraft({
       id: 'sent-b18',
       path: '/chapter/a.md',
       originalText: '选中原文',

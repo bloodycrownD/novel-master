@@ -17,7 +17,7 @@ import {
 } from "@/domain/feature-flags/user-vfs-unified-tool-turn.js";
 import { hasComposerSendableInput } from "@/domain/chat/logic/composer-sendable-input.js";
 import { wrapUserMessageForLlm } from "@/domain/chat/logic/wrap-user-message-for-llm.js";
-import { buildAnnotateAttachmentFromDraft, buildFileAnnotateAttachmentFromDraft, formatAnnotateLocationLabel } from "@/domain/chat/logic/build-attachment-action-xml.js";
+import { buildFileAnnotateAttachmentFromDraft, formatAnnotateLocationLabel } from "@/domain/chat/logic/build-attachment-action-xml.js";
 import { mergeAttachmentsByPath } from "@/domain/chat/logic/scan-at-path-attachments.js";
 import {
   messageAttachmentSchema,
@@ -247,7 +247,7 @@ describe("annotateDrafts send (T-AN3/T-AN4/T-AN6 core)", () => {
         userAnnotation: "二",
       },
     ];
-    const annotateAtts = drafts.map(buildAnnotateAttachmentFromDraft);
+    const annotateAtts = drafts.map(buildFileAnnotateAttachmentFromDraft);
     // 若误走 mergeAttachmentsByPath 会丢一条
     const wronglyMerged = mergeAttachmentsByPath([], annotateAtts);
     assert.equal(
@@ -297,14 +297,14 @@ describe("annotateDrafts send (T-AN3/T-AN4/T-AN6 core)", () => {
     resetUserVfsUnifiedToolTurnSnapshotForTests();
   });
 
-  it("T-MA6: 文件形 buildAnnotateAttachmentFromDraft(AnnotateDraft) 签名仍可用", () => {
+  it("T-MA6: 文件形 buildFileAnnotateAttachmentFromDraft(AnnotateDraft) 签名仍可用", () => {
     const fileOnly: AnnotateDraft = {
       id: "desktop-ok",
       path: "/desktop.md",
       originalText: "x",
       userAnnotation: "y",
     };
-    const att = buildAnnotateAttachmentFromDraft(fileOnly);
+    const att = buildFileAnnotateAttachmentFromDraft(fileOnly);
     assert.equal(att.path, "/desktop.md");
     assert.equal(att.action, "annotate");
     assert.equal(att.name, "/desktop.md");

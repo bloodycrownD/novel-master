@@ -7,78 +7,26 @@ import path from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import {
-  isPreviewAnnotateDomSearchFallbackEnabled,
-  isPreviewAnnotateEnabled,
-  setPreviewAnnotateDomSearchFallbackForTests,
-} from "@/layout/preview-annotate";
-import {
   draftToRecogitoAnnotation,
   draftsToRecogitoAnnotations,
   extractRecogitoRenderRange,
   getSelectionOffsetsInElement,
   hasRecogitoRenderRange,
 } from "@/layout/preview-recogito";
-import {
-  getSelectionOffsetsInElement as getLegacySelectionOffsetsInElement,
-} from "@/layout/preview-annotate";
 import type { AnnotateDraft } from "@shared/logic/chat";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const previewPanePath = path.join(
-  __dirname,
-  "..",
-  "renderer",
-  "layout",
-  "PreviewPane.tsx",
-);
-const previewAnnotatePath = path.join(
-  __dirname,
-  "..",
-  "renderer",
-  "layout",
-  "preview-annotate.ts",
-);
-const previewRecogitoPath = path.join(
-  __dirname,
-  "..",
-  "renderer",
-  "layout",
-  "preview-recogito.ts",
-);
-const previewAnnotateUiPath = path.join(
-  __dirname,
-  "..",
-  "renderer",
-  "layout",
-  "PreviewAnnotateUi.tsx",
-);
-const mermaidMarkdownPath = path.join(
-  __dirname,
-  "..",
-  "renderer",
-  "components",
-  "MermaidMarkdown.tsx",
-);
-const messageListPath = path.join(
-  __dirname,
-  "..",
-  "renderer",
-  "features",
-  "chat",
-  "MessageList.tsx",
-);
+const previewPanePath = path.join(__dirname, "..", "renderer", "layout", "PreviewPane.tsx");
+const previewRecogitoPath = path.join(__dirname, "..", "renderer", "layout", "preview-recogito.ts");
+const previewAnnotateUiPath = path.join(__dirname, "..", "renderer", "layout", "PreviewAnnotateUi.tsx");
+const mermaidMarkdownPath = path.join(__dirname, "..", "renderer", "components", "MermaidMarkdown.tsx");
+const messageListPath = path.join(__dirname, "..", "renderer", "features", "chat", "MessageList.tsx");
 const packageJsonPath = path.join(__dirname, "..", "package.json");
 
 describe("T-RG2 Desktop 退役插锚 / 搜字主路径", () => {
-  it("PreviewPane 不调用 buildAnnotatedSource；markdown 渲染经共享 MermaidMarkdown", () => {
+  it("PreviewPane 不插锚；markdown 渲染经共享 MermaidMarkdown", () => {
     const pane = readFileSync(previewPanePath, "utf8");
-    assert.doesNotMatch(pane, /buildAnnotatedSource/);
-    assert.doesNotMatch(pane, /sanitizeAnnotatePreviewHtml/);
     assert.doesNotMatch(pane, /rehypeRaw|rehype-raw/);
-    assert.doesNotMatch(pane, /applyAnnotateHighlights/);
-    assert.doesNotMatch(pane, /isPreviewAnnotateDomSearchFallbackEnabled/);
-    assert.doesNotMatch(pane, /domSearchFallback/);
-    assert.doesNotMatch(pane, /setPreviewAnnotateDomSearchFallbackForTests/);
     // T-MD1：改用共享 MermaidMarkdown（react-markdown 契约已转移到 MermaidMarkdown.tsx）
     assert.doesNotMatch(pane, /from "react-markdown"/);
     assert.match(pane, /MermaidMarkdown/);
@@ -92,15 +40,6 @@ describe("T-RG2 Desktop 退役插锚 / 搜字主路径", () => {
     const mermaidUsages = messageList.match(/<MermaidMarkdown /g) ?? [];
     assert.equal(mermaidUsages.length, 2, `期望两处 MermaidMarkdown，实际 ${mermaidUsages.length} 处`);
     assert.doesNotMatch(messageList, /from "react-markdown"|from 'react-markdown'/);
-  });
-
-  it("DOM 搜字 fallback 开关永久关闭（调用无效）", () => {
-    assert.equal(isPreviewAnnotateDomSearchFallbackEnabled(), false);
-    setPreviewAnnotateDomSearchFallbackForTests(true);
-    assert.equal(isPreviewAnnotateDomSearchFallbackEnabled(), false);
-    setPreviewAnnotateDomSearchFallbackForTests(false);
-    const src = readFileSync(previewAnnotatePath, "utf8");
-    assert.match(src, /永久关闭|始终 false|no-op/);
   });
 });
 
@@ -119,13 +58,10 @@ describe("T-RG6 Desktop MD Recogito；plain 禁用批注", () => {
     assert.match(pane, /setAnnotations/);
     assert.match(pane, /draftsToRecogitoAnnotations|extractRecogitoRenderRange/);
     assert.match(pane, /mdRootRef|preview-markdown/);
-    assert.match(pane, /isPreviewAnnotateEnabled\([\s\S]*isMarkdown/);
+    assert.match(pane, /mode === "read" && previewFile\?\.workspaceScope === "chat"[\s\S]*isMarkdown/);
     // plain 仅 pre.preview-text，不挂 Recogito
     assert.match(pane, /preview-text/);
-    assert.doesNotMatch(
-      pane,
-      /createTextAnnotator\([^)]*preview-text/,
-    );
+    assert.doesNotMatch(pane, /createTextAnnotator\([^)]*preview-text/);
   });
 
   it("R6：annotatingEnabled false；mouseup 不直开 Add；显式 FloatingBar；cancelSelected/destroy", () => {
@@ -141,18 +77,9 @@ describe("T-RG6 Desktop MD Recogito；plain 禁用批注", () => {
     assert.ok(mouseUpBody, "须存在 onMouseUp");
     assert.doesNotMatch(mouseUpBody![0], /setAddOpen\(true\)/);
     // 显式入口：FloatingBar onAdd 才开 AddModal
-    assert.match(
-      pane,
-      /PreviewAnnotateFloatingBar[\s\S]*?onAdd=\{[\s\S]*?setAddOpen\(true\)/,
-    );
+    assert.match(pane, /PreviewAnnotateFloatingBar[\s\S]*?onAdd=\{[\s\S]*?setAddOpen\(true\)/);
     // 命中已有 draft 时关 Add
     assert.match(pane, /setAddOpen\(false\)/);
-  });
-
-  it("门闩：MD 才启用；plain 禁用", () => {
-    assert.equal(isPreviewAnnotateEnabled("read", "chat", "s1", true), true);
-    assert.equal(isPreviewAnnotateEnabled("read", "chat", "s1", false), false);
-    assert.equal(isPreviewAnnotateEnabled("read", "chat", "s1"), false);
   });
 
   it("AddModal 写入 renderStart/renderEnd；不再写 soft offset 权威", () => {
@@ -205,12 +132,6 @@ describe("T-RG6 Desktop MD Recogito；plain 禁用批注", () => {
     assert.match(mapSrc, /getSelectionOffsetsInElement/);
     const pane = readFileSync(previewPanePath, "utf8");
     assert.match(pane, /from "\.\/preview-recogito"/);
-    // 权威实现仅在 preview-recogito；annotate 侧委托
-    const annotateSrc = readFileSync(previewAnnotatePath, "utf8");
-    assert.match(
-      annotateSrc,
-      /getSelectionOffsetsInElement as getRecogitoSelectionOffsetsInElement/,
-    );
   });
 
   it("getSelectionOffsetsInElement：首尾空白 trim 后 slice 对齐 quote（策略 b）", () => {
@@ -258,19 +179,6 @@ describe("T-RG6 Desktop MD Recogito；plain 禁用批注", () => {
     const range = getSelectionOffsetsInElement(el, selection);
     assert.ok(range != null);
     assert.equal(range!.quote, "hello");
-    assert.equal(
-      bodyText.slice(range!.renderStart, range!.renderEnd),
-      range!.quote,
-    );
-
-    // annotate 委托路径与权威一致
-    const legacy = getLegacySelectionOffsetsInElement(
-      el as HTMLElement,
-      selection,
-    );
-    assert.deepEqual(legacy, {
-      start: range!.renderStart,
-      end: range!.renderEnd,
-    });
+    assert.equal(bodyText.slice(range!.renderStart, range!.renderEnd), range!.quote);
   });
 });

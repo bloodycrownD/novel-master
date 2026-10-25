@@ -33,10 +33,6 @@ import {
 import { PreviewEditorTabs } from "./PreviewEditorTabs";
 import { shouldRenderMarkdownPreview } from "./preview-utils";
 import {
-  getSelectionFloatingAnchor,
-  isPreviewAnnotateEnabled,
-} from "./preview-annotate";
-import {
   draftsToRecogitoAnnotations,
   getSelectionOffsetsInElement,
 } from "./preview-recogito";
@@ -109,12 +105,7 @@ export function PreviewPane() {
   // physical 面板只读预览：无编辑模式、无保存，仅读内容展示
   const physicalReadOnly = previewFile?.workspaceScope === "physical";
 
-  const annotateEnabled = isPreviewAnnotateEnabled(
-    mode,
-    previewFile?.workspaceScope,
-    sessionId,
-    isMarkdown,
-  );
+  const annotateEnabled = mode === "read" && previewFile?.workspaceScope === "chat" && typeof sessionId === "string" && sessionId.length > 0 && isMarkdown;
 
   const pathDrafts = useMemo(() => {
     if (!annotateEnabled || previewFile == null) {
@@ -279,15 +270,20 @@ export function PreviewPane() {
         setFloating(null);
         return;
       }
-      const anchor = getSelectionFloatingAnchor();
-      if (anchor == null) {
+      const selection = window.getSelection();
+      if (selection == null || selection.rangeCount === 0 || selection.isCollapsed) {
+        setFloating(null);
+        return;
+      }
+      const rect = selection.getRangeAt(0).getBoundingClientRect();
+      if (rect.width === 0 && rect.height === 0) {
         setFloating(null);
         return;
       }
       setPendingSelection(range.quote);
       setPendingRenderStart(range.renderStart);
       setPendingRenderEnd(range.renderEnd);
-      setFloating({ top: anchor.top, left: anchor.left });
+      setFloating({ top: Math.max(8, rect.top - 8), left: rect.left + rect.width / 2 });
     };
 
     anno.on("selectionChanged", onSelectionChanged);

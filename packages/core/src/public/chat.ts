@@ -73,7 +73,6 @@ export {
 } from "../domain/chat/logic/status-chip-label.js";
 export {
   buildAlreadyReferencedActionXml,
-  buildAnnotateAttachmentFromDraft,
   buildAttachmentActionXml,
   buildDirTreeActionXml,
   buildFileAnnotateAttachmentFromDraft,
@@ -183,69 +182,6 @@ export {
   unionComposerStatusWithAnnotate,
   updateChatAnnotateDraft,
 } from "../domain/chat/logic/chat-annotate-draft-store.js";
-export {
-  buildFlatTextIndex,
-  findAllOccurrences,
-  findAnnotateOccurrenceInSource,
-  groupAnnotateIdsByOriginalText,
-  mapFlatRangeToSegments,
-  normalizeAnnotateNeedle,
-  normalizeAnnotateNeedleStripNewlines,
-  normalizeAnnotateSegmentText,
-  parseAnnotateIdsAttr,
-  annotateOccurrenceOrdinal,
-  countAnnotateOccurrencesInSource,
-  selectAnnotateOccurrenceStarts,
-  sortAnnotateTextsLongestFirst,
-} from "../domain/chat/logic/annotate-highlight.js";
-export type {
-  AnnotateSourceMatch,
-  AnnotateSourceMatchStrategy,
-  FlatSegmentLocalRange,
-  FlatTextIndex,
-  FlatTextSegmentSpan,
-} from "../domain/chat/logic/annotate-highlight.js";
-export {
-  ANNOTATE_SOFT_RANGE_CHAR_PADDING,
-  ANNOTATE_SOFT_RANGE_LINE_PADDING,
-  applySoftRangeLinePadding,
-  deriveSoftRangeFieldsFromOffsets,
-  estimateSoftOffsetRangeFromPlainOffsets,
-  estimateSoftOffsetRangeFromQuoteContext,
-  estimateSoftRangeFromOriginalText,
-  estimateSoftRangeFromPlainOffsets,
-  expandSoftRangeOnce,
-  hasValidAnnotateSoftRange,
-  locateAnnotateOffsetRangeByQuoteContext,
-  offsetToSourceLineCol,
-  sliceSourceBySoftRange,
-  splitSourceLines,
-} from "../domain/chat/logic/annotate-source-range.js";
-export type {
-  AnnotateQuoteContext,
-  AnnotateSoftOffsetRange,
-  AnnotateSoftRangeFields,
-  AnnotateSoftSourceRange,
-} from "../domain/chat/logic/annotate-source-range.js";
-/**
- * 注锚派生导出（非预览投影合同，SPEC R5）：
- * 可暂留 `buildAnnotatedSource` 等符号；宿主 MD/plain 预览主路径禁止调用。
- * 预览高亮唯一走 Recogito + 草稿 `renderStart`/`renderEnd`。
- */
-export {
-  ANNOTATE_ANCHOR_CLASS,
-  annotateRangeMatchesOriginalText,
-  buildAnnotatedSource,
-  escapeAnnotateSourceText,
-  findMarkdownCodeRanges,
-  hasValidAnnotateOffsetRange,
-  splitMarkdownUnderlineRuns,
-} from "../domain/chat/logic/annotate-source-anchor.js";
-export type {
-  BuildAnnotatedSourceInput,
-  BuildAnnotatedSourceMode,
-  BuildAnnotatedSourceResult,
-} from "../domain/chat/logic/annotate-source-anchor.js";
 export {
   USER_VFS_TURN_ACK_TEXT,
   wrapUserVfsActionsForStorage,

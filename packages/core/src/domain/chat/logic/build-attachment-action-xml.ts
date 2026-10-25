@@ -182,16 +182,6 @@ export function buildFileAnnotateAttachmentFromDraft(
 }
 
 /**
- * 由批注草稿构造落库附件（`source:user_ops` + `action:annotate`）。
- * 仅文件形 `AnnotateDraft`（消息批注发送管线已移除）。
- */
-export function buildAnnotateAttachmentFromDraft(
-  draft: AnnotateDraft
-): MessageAttachment {
-  return buildFileAnnotateAttachmentFromDraft(draft);
-}
-
-/**
  * 从消息 attachments 解析可 Undo 恢复的工作区批注草稿。
  * 仅 `action===annotate` 且真 VFS path（`!path.includes('__message__:')`）；
  * 每条 **新 mint id**（不复用落库伪 id）。
