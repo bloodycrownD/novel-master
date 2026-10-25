@@ -171,3 +171,10 @@ assistant:
 - run-agent-turn 的 RunAgentTurnOptions / RunAgentTurnAfterResolveContext 从 public/agent 撤出并收私有；message.service 的 MessageServiceDeps 收私有。
 - find-fake-exports 增加同文件调用计数（prod 含 local calls），修掉 assemble{Sills,Search,Agents}ToolContext 的 TEST_ONLY 假阳性。
 - 验证：core typecheck/build、package-exports 21、editable+prepare 55、chat.services+run-agent+annotate 52、desktop/mobile typecheck 全绿；目标文件 check-style PASS；check-style --changed PASS。
+
+## 2026-10-25 第三批四文件收敛
+- message-content-helpers.ts：isPlainUserText 合并 role/tool_result 守卫，hasText 的 .some 压一行；四个导出均保留（hasToolResult/isUserInputMessage/hasAnnotateAttachment/isPlainUserText）。
+- message-set-floor-range.ts：isSetFloorAnchorRole / computeSetFloorRanges 唯一调用在 message-transcript-effects.service；分别内联为 role !== "user" 与 hidePrefix/showSuffix 计算，模块+单测删除，public/allowlist 撤出。
+- merge-pending-vfs-turns.ts：mergePendingVfsTurns 生产 0、仅测试；模块+单测删除，public/allowlist 撤出。
+- message-visible-floor.ts：listVisibleSorted 被 depth-from-tail 单点使用，visibleFloorByMessageId 仅测试；先内联 filter 到 depth，再发现 depth-from-tail 仅服务 hide-message.action；继续内联 filter 到 hide-message.action，最终把 hide 编排整体内联进 run-compaction，删除 message-visible-floor / depth-from-tail / hide-message.action 三个模块；public/chat、public/compaction 与 allowlist 同步收敛，run-compaction 的 3 个参数/结果类型收私有。
+- 验证：core typecheck/build、package-exports 21、message-content-helpers + message-transcript 16、depth + compaction 17 全绿；check-style --changed PASS；desktop/mobile typecheck 通过。
