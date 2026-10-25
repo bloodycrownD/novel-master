@@ -124,9 +124,11 @@ function skipIdentifier(node) {
 }
 
 const targetFiles = walk(targetPath);
+const targetSources = new Map();
 const definitions = [];
 for (const file of targetFiles) {
   const sourceFile = parseSource(file);
+  targetSources.set(file, sourceFile);
   for (const symbol of exportedSymbols(sourceFile)) definitions.push({ ...symbol, file, rel: toPosix(file) });
 }
 
@@ -194,6 +196,17 @@ for (const file of allFiles) {
   visit(sourceFile);
 }
 
+const localCalls = new Map();
+for (const [file, sourceFile] of targetSources) {
+  const names = new Set(definitions.filter((definition) => definition.file === file).map((definition) => definition.name));
+  if (names.size === 0) continue;
+  const visit = (node) => {
+    if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)) increment(localCalls, node.expression.text);
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+}
+
 const publics = publicNames();
 const verdictOrder = new Map([
   ["FAKE_PUBLIC", 0],
@@ -206,7 +219,7 @@ const verdictOrder = new Map([
 
 const rows = definitions.map((definition) => {
   const name = definition.name;
-  const calls = prodCalls.get(name) ?? 0;
+  const calls = (prodCalls.get(name) ?? 0) + (localCalls.get(name) ?? 0);
   const refs = prodRefs.get(name) ?? 0;
   const testCallCount = testCalls.get(name) ?? 0;
   const testRefCount = testRefs.get(name) ?? 0;
@@ -238,7 +251,7 @@ for (const row of rows) {
 const counts = rows.reduce((acc, row) => ({ ...acc, [row.verdict]: (acc[row.verdict] ?? 0) + 1 }), {});
 console.log("");
 console.log(`summary: ${Object.entries(counts).map(([verdict, count]) => `${verdict}=${count}`).join("  ")}`);
-console.log("prod/test = 生产/测试代码里的 调用点/值引用点；已解析 named import、as 别名与 barrel 转发。");
+console.log("prod/test = 生产/测试代码里的 调用点/值引用点（prod 含同文件调用）；已解析 named import、as 别名与 barrel 转发。");
 console.log("同名多定义 → AMBIGUOUS；类与常量不做 INLINE_CANDIDATE；测试 import / allowlist 不算消费者。");
 console.log("仍是启发式：同名遮蔽、动态属性、跨包重建导出需人工复核。--strict 时 DEAD/FAKE_PUBLIC/TEST_ONLY/INLINE_CANDIDATE 退出码 1。");
 console.log("INLINE_CANDIDATE 默认内联；public=yes 只表示还要撤 barrel/allowlist，不是保留理由。确认不能内联时写 `nm-style: keep-public — 理由`，并在交付报告列未处理项。");

@@ -61,7 +61,7 @@ description: novel-master 的代码优化与重构原则。写新代码、重构
 node .agents/skills/nm-code-style/scripts/find-fake-exports.mjs packages/core/src/domain/character-card
 ```
 
-输出列：`prod` / `test` = 生产 / 测试代码里的 **调用点 / 值引用点**（`Nc/Nr`）；已解析 named import、`as` 别名与 `@novel-master/core/chat` 这类 barrel 转发；`public` 是否在 allowlist；`kind` 为 function / class / variable。verdict：
+输出列：`prod` / `test` = 生产 / 测试代码里的 **调用点 / 值引用点**（`Nc/Nr`；`prod` 含同文件调用）；已解析 named import、`as` 别名与 `@novel-master/core/chat` 这类 barrel 转发；`public` 是否在 allowlist；`kind` 为 function / class / variable。verdict：
 
 - `FAKE_PUBLIC`：public 有名字但生产调用 / 引用 0；
 - `TEST_ONLY`：非 public、生产 0、只有测试引用；
