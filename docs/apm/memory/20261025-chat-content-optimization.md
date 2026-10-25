@@ -90,3 +90,41 @@ assistant:
 - 关键教训：`find-fake-exports` 早已把 `estimateSoftRangeFromOriginalText` 标成 `INLINE_CANDIDATE`，但 `check-style` 只把 signatures/inline 当失败，skill 又留了 service→domain 单引用例外，导致漏做；已收紧为 `INLINE_CANDIDATE` 默认内联，只有确认跨层唯一入口才留并写明理由。
 
 验证：core/desktop main/mobile typecheck 通过；renderer typecheck 仅基线既有错；core chat 478 例 476 绿（T-C2/T-C6 时区/DST 基线红）、package-exports 21、annotate/attachment 24、desktop preview 8、mobile 相关 20+12 全绿；`check-style --changed` 为 signatures=PASS inline=PASS。提交：`2c1092c1d`（annotate 死链清理，24 files，+124/−4437）、`b972aac30`（style 脚本，6 files，+378/−6）；推送：`origin/feat/core-errors-either`。
+
+user:
+下一轮：`attach-binary-heuristic.ts` 感觉是通用的文件工具，可以抽离；然后优化 `chat-annotate-draft-store.ts` / `build-attachment-action-xml.ts` / `attach-budget.ts`，通过脚本循环检查。另问循环检查用动态工作流是否更好。
+
+assistant:
+工作流问题：脚本循环是确定性检测（跑脚本 → 看行号 → 改 → 再跑），普通 shell/代理循环更稳也更省 token；动态工作流适合“多文件并行 + 模型判断”的审查，主循环不上，需要并行复核时再开。
+
+落地：
+- 新增 `core/common/file.ts`：`isBinaryFilePath` / `isImageFilePath`，路径分隔符同时认 `/` 与 `\`；删除 `domain/chat/logic/attach-binary-heuristic.ts`。`prepare-user-messages-for-prompt` / `scan-at-path-attachments` 改深导入 `@/common/file.js`；mobile webview core allowlist 路径同步改成 `common/file.js`，并补 `common/text.js`（ChatTranscriptBridge 经 common barrel 带入的小纯函数）；webview 四包 gate B/C 全绿。
+- `chat-annotate-draft-store`：`cloneDrafts` 单点内联；两个 remove 抽 `removeDraftsBy` 共用；签名/import 收一行。
+- `build-attachment-action-xml`：删除 `buildAttachmentActionXml` 单行转手 wrapper，统一调 `buildUserVfsActionXml`；`buildAlreadyReferencedActionXml` 单点内联；`mintAnnotateDraftId`、`formatAnnotateLocationLabel` 内联；`asParamPositiveInt` / `asParamNonNegInt` 合成 `asParamInt(value, min)`；public/chat 与 allowlist 撤掉 `buildFileRefActionXml` / `buildDirTreeActionXml` / `buildAlreadyReferencedActionXml` / `buildAttachmentActionXml` 四个无 app 消费者的导出，保留 `buildFileAnnotateAttachmentFromDraft` 与 `parseAnnotateDraftsFromAttachments`（mobile/desktop 真用）。
+- `attach-budget`：`createAttachBudget` 闭包工厂改为 `class AttachBudget { private used; tryConsume }`，prepare 改 `new AttachBudget()`。`ATTACH_PROMPT_CHAR_BUDGET` 仍留 public：desktop/mobile 预算测试直接引用它自动跟随预算值，脚本报 FAKE_PUBLIC 属契约常量例外；`OVERSIZED/BINARY` 文案与 `AttachBudget` 只服务 prepare 链，保留为单源模块。
+- 验证：core typecheck；targeted 169 例、package-exports 21、desktop main typecheck、mobile typecheck、webview build 四包 gate 全绿；`check-style --changed` 为 signatures=PASS inline=PASS；改动文件 lint 干净。未提交，等用户审查。
+
+user:
+（质疑 `removeChatAnnotateDraftsByPath` 假引用、`removeChatAnnotateDraft` 单行 wrapper、`updateChatAnnotateDraft` 一处使用、`unionComposerStatusWithAnnotate` 一处引用；问脚本没检测出来还是检测出来没改）
+
+assistant:
+先认两点：脚本 v1 只数「直接 import 定义文件」的文件数，不解析 barrel 再导出、也不数调用点；store 那批 `FAKE_PUBLIC` 我按“barrel 转发”人工放过了，没有逐个核实际调用，这是错的。
+
+- `removeChatAnnotateDraftsByPath`：真实生产调用 0（只有 core 测试），删除；public/chat、desktop shared barrel、renderer 包装层、allowlist、测试引用同步清理。
+- `removeDraftsBy` 因此只剩 `removeChatAnnotateDraft` 一处调用，内联回它；`removeChatAnnotateDraft` 现在是完整过滤/删除/通知实现，不再是单行 wrapper。
+- `removeChatAnnotateDraft` 生产调用 2 处（desktop PreviewAnnotateUi + mobile FileMarkdownPreview）；`updateChatAnnotateDraft` 2 处；`unionComposerStatusWithAnnotate` 7 处——都不是单点，保留。
+- `find-fake-exports.mjs` 升到 v2：`prod`/`test` 改成**调用点 / 值引用点**（`Nc/Nr`），解析 named import、`as` 别名、`@novel-master/core/chat` / `@shared/logic/chat` barrel 转发；新增 `AMBIGUOUS`（同名多定义）与 `--strict`；类和大写常量不做 inline 候选。旧版“直接 import 文件数”既会漏 barrel 调用，也会把 live export 误报成 FAKE_PUBLIC。
+- 仍报 `FAKE_PUBLIC` 的两项保留：`resetChatAnnotateDraftStoreForTests`（测试支持 API，24 处测试调用）、`ATTACH_PROMPT_CHAR_BUDGET`（跨端预算契约，desktop/mobile 预算测试直接引用以自动跟随值）；是否严格撤 public 待用户定。
+- 验证：core typecheck；store 6 例；package-exports 21；webview 四包 gate B/C 绿；`check-style --changed` 为 signatures=PASS inline=PASS。未提交。
+
+user:
+（追问 `build-attachment-action-xml.ts` 是否跑了检测；说还发现一个问题；后澄清 `parseAnnotateDraftsFromAttachments` 的“一处引用”是 WebStorm 直接引用，实际两处 barrel 调用）
+
+assistant:
+跑了：运行时导出 4 个全 KEEP。复核出并修掉三处问题：
+
+- `AttachmentDisplayKind` 是导出类型但外部零引用 → 收成模块内 `type`；`find-fake-exports` 之前只看运行时导出，现已补 `TypeAlias` / `Interface` 与 `TypeReference` / `typeof` 计数，并加 `test-find-fake-exports.mjs` fixture 测试（barrel 单调用 / 双调用 / 测试引用 / 类型引用）。
+- `asParamString(value, fallback = "")` 的 fallback 参数从未被传 → 删掉默认参数。
+- `buildFileAnnotateAttachmentFromDraft` 8 段 `if (draft.x != null) params.x = draft.x` 重复 → 收敛成 key 列表循环。
+
+`parseAnnotateDraftsFromAttachments` 经脚本 v2 核对是 **2 处生产调用**（desktop `rollback-annotate-restore.ts:55`、mobile `useChatTabMessageActions.ts:241`），WebStorm 显示的 1 处是直接引用；用户确认不内联。
