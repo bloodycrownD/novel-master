@@ -6,20 +6,12 @@
 
 import {
   FILE_TOOL_NAMES,
+  LEGACY_FILE_TOOL_HINTS,
   normalizeAgentToolPolicyName,
 } from "@/domain/tool/builtin/vfs-tools.js";
 import { AgentConfigError } from "@/errors/agent-config-errors.js";
 import { Result } from "@/errors/either.js";
 import type { AgentToolPolicy } from "../model/agent-definition.js";
-
-const LEGACY_TOOL_MIGRATION: Readonly<Record<string, string>> = {
-  replace: "edit",
-  delete: "fs (rm / rm -r)",
-  move: "fs (mv)",
-  copy: "fs (cp / cp -r)",
-  mkdir: "fs (mkdir)",
-  list: "fs (ls / ls -r)",
-};
 
 /**
  * Ensures tool policy is well-formed and references only registered tools.
@@ -42,7 +34,7 @@ export function validateAgentToolPolicy(tools: AgentToolPolicy | undefined, regi
       if (registryNames.has(name)) {
         continue;
       }
-      const hint = LEGACY_TOOL_MIGRATION[name];
+      const hint = LEGACY_FILE_TOOL_HINTS[name];
       const v2List = FILE_TOOL_NAMES.join(", ");
       const suffix = hint != null ? ` Legacy tool "${raw}" was removed; use ${hint} instead. V2 tools: ${v2List}.` : ` Known V2 tools: ${v2List}.`;
       return Result.err(new AgentConfigError("INVALID_TOOL_POLICY", `${listLabel} references unknown tool: ${raw}.${suffix}`));

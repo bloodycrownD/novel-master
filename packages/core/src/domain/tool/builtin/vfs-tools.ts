@@ -47,6 +47,16 @@ export const FILE_TOOL_NAMES = [
 
 export type FileToolName = (typeof FILE_TOOL_NAMES)[number];
 
+/** V1 文件工具名 → V2 替代写法提示（错误消息 / UI toast 共用，勿在调用点另抄一份）。 */
+export const LEGACY_FILE_TOOL_HINTS: Readonly<Record<string, string>> = {
+  replace: "edit",
+  delete: "fs (rm / rm -r)",
+  move: "fs (mv)",
+  copy: "fs (cp / cp -r)",
+  mkdir: "fs (mkdir)",
+  list: "fs (ls / ls -r)",
+};
+
 /** Tools that mutate session file content (checkpoint-eligible). */
 export const MUTATING_FILE_TOOL_NAMES = new Set<FileToolName>([
   "write",
