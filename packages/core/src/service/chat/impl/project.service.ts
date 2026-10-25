@@ -239,7 +239,8 @@ export class DefaultProjectService implements ProjectService {
       projectAgentConfigSchema
     );
     if (validated.mode === "custom") {
-      await validateAgentDefinition(validated.definition!, options);
+      const validation = await validateAgentDefinition(validated.definition!, options);
+      if (!validation.ok) throw validation.error;
     }
     const updatedAtMs = Date.now();
     const configJson = serializeAgentConfigForStorage(validated);

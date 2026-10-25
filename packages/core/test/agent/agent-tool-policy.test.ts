@@ -130,15 +130,16 @@ describe("agent tool policy", () => {
   });
 
   it("validateAgentDefinition runs tool policy when names provided", async () => {
-    await assert.rejects(
-      () =>
-        validateAgentDefinition(
-          { ...BASE_DEF, tools: { allow: ["vfs.nope"] } },
-          { registeredToolNames: vfsRegistryNames() },
-        ),
-      (e: unknown) =>
-        e instanceof AgentConfigError && e.code === "INVALID_TOOL_POLICY",
+    const result = await validateAgentDefinition(
+      { ...BASE_DEF, tools: { allow: ["vfs.nope"] } },
+      { registeredToolNames: vfsRegistryNames() },
     );
+    assert.equal(result.ok, false);
+    if (result.ok) {
+      return;
+    }
+    assert.ok(result.error instanceof AgentConfigError);
+    assert.equal(result.error.code, "INVALID_TOOL_POLICY");
   });
 
   it("empty deny matches default (all tools)", () => {

@@ -803,9 +803,8 @@ async function runAgentTurnWithController(
   stage = "validate-agent-definition";
   const toolProbe = new ToolRegistry<BuiltinToolContext>();
   registerBuiltinTools(toolProbe);
-  await validateAgentDefinition(definition, {
-    registeredToolNames: toolProbe.list(),
-  });
+  const validation = await validateAgentDefinition(definition, {registeredToolNames: toolProbe.list()});
+  if (!validation.ok) throw validation.error;
 
   // 预算候选子代理名单：mode !== "primary"（排除主 agent）、排除当前 agent 自身防自递归。
   // 内置 general 永远 mode:"subagent"，排除自身后至少含 general，task 描述始终有内容。

@@ -45,12 +45,13 @@ async function validateDefinitionForCli(
 ): Promise<void> {
     const toolProbe = new ToolRegistry();
     registerBuiltinTools(toolProbe);
-    await validateAgentDefinition(definition, {
+    const validation = await validateAgentDefinition(definition, {
         assertSavedModel: async (savedModelId) => {
             await assertSavedModelUuid(savedModelId, rt.savedModels);
         },
         registeredToolNames: toolProbe.list(),
     });
+    if (!validation.ok) throw validation.error;
 }
 
 /**

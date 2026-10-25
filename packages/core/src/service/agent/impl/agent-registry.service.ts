@@ -97,7 +97,8 @@ export class DefaultAgentRegistryService implements AgentRegistryService {
     options: ValidateAgentDefinitionOptions = {}
   ): Promise<void> {
     const defaulted = withDefaultPromptLayouts(def);
-    await validateAgentDefinition(defaulted, options);
+    const validation = await validateAgentDefinition(defaulted, options);
+    if (!validation.ok) throw validation.error;
     const trimmedName = defaulted.name.trim();
     if (trimmedName.length === 0) {
       throw new AgentConfigError(
