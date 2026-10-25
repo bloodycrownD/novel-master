@@ -178,10 +178,7 @@ async function loadChatTokenLabelWithFlag(
   const sessionConfig = await runtime.sessions.getSessionAgentConfig(
     scope.sessionId,
   );
-  const savedModelId = resolveSavedModelId({
-    agentModelId: definition.model,
-    sessionModelId: sessionConfig.modelId,
-  });
+  const savedModelId = resolveSavedModelId(definition.model, sessionConfig.modelId);
   if (!savedModelId) {
     // 已知残留（r3-chip-1 留痕，刻意不补 bail）：无模型早退分支的 serialize +
     // countFallbackTokens 整串级重活没有弃权点。理由——① 这一分支只统计可见
@@ -562,10 +559,7 @@ async function loadChatPromptTokenLabelFallback(
     const sessionConfig = await runtime.sessions.getSessionAgentConfig(
       scope.sessionId,
     );
-    savedModelId = resolveSavedModelId({
-      agentModelId: definition.model,
-      sessionModelId: sessionConfig.modelId,
-    });
+    savedModelId = resolveSavedModelId(definition.model, sessionConfig.modelId);
   } catch {
     // 兜底显示用 workspace 当前模型（仅用于查 contextWindow，不参与 runtime 解析）。
     savedModelId = workspaceModelId || undefined;

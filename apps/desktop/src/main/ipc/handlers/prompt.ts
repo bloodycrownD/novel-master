@@ -110,10 +110,7 @@ export async function handlePromptAgentMeta(
       const sessionConfig = await rt.sessions.getSessionAgentConfig(
         req.sessionId,
       );
-      const savedModelId = resolveSavedModelId({
-        agentModelId: definition.model,
-        sessionModelId: sessionConfig.modelId,
-      });
+      const savedModelId = resolveSavedModelId(definition.model, sessionConfig.modelId);
       let modelLabel = "未选择模型";
       if (savedModelId) {
         const saved = await rt.providerModels.getSavedById(savedModelId);

@@ -230,10 +230,7 @@ async function computeChatPromptTokenStats(
   const sessionConfig = await runtime.sessions.getSessionAgentConfig(
     scope.sessionId,
   );
-  const savedModelId = resolveSavedModelId({
-    agentModelId: definition.model,
-    sessionModelId: sessionConfig.modelId,
-  });
+  const savedModelId = resolveSavedModelId(definition.model, sessionConfig.modelId);
 
   if (!savedModelId) {
     // 此处恒不拼 tools（UI 读口拿不到定义，`session-prompt-input` 不产 tools）：
@@ -342,10 +339,7 @@ async function isPreciseWarmStillCurrent(
     );
     const definition = await runtime.agentRegistry.get(sessionConfig.agentId);
     return (
-      resolveSavedModelId({
-        agentModelId: definition.model,
-        sessionModelId: sessionConfig.modelId,
-      }) === warmSavedModelId
+      resolveSavedModelId(definition.model, sessionConfig.modelId) === warmSavedModelId
     );
   } catch {
     return false;

@@ -53,7 +53,7 @@ export async function resolvePreviewThinkingContext(
   const { preferences, savedModels, providers, agentModelId, sessionModelId } =
     input;
   const enabled = await preferences.getThinkingContextEnabled();
-  const savedModelId = resolveSavedModelId({ agentModelId, sessionModelId });
+  const savedModelId = resolveSavedModelId(agentModelId, sessionModelId);
   let requestThinkingEnabled = true;
   if (savedModelId != null && savedModelId !== "") {
     const saved = await savedModels.findById(savedModelId);

@@ -915,10 +915,7 @@ async function runAgentTurnWithController(
         def: AgentDefinition
       ): { savedModelId: string; workspaceModelId: string } => {
         // 子 agent pin → 父 savedModelId → 报错（不走 workspace fallback）。
-        const resolved = resolveSavedModelId({
-          agentModelId: def.model,
-          sessionModelId: savedModelId,
-        });
+        const resolved = resolveSavedModelId(def.model, savedModelId);
         if (resolved == null || resolved === "") {
           throw new AgentRunResolveError(
             "子代理未指定模型，且父 agent 也无可用 savedModelId。"
@@ -1296,10 +1293,7 @@ async function runChildAgent(args: {
           grandchildDef: AgentDefinition
         ): { savedModelId: string; workspaceModelId: string } => {
           // 子 agent pin → 父子 agent 的 savedModelId → 报错（不走 workspace fallback）。
-          const resolved = resolveSavedModelId({
-            agentModelId: grandchildDef.model,
-            sessionModelId: opts.savedModelId,
-          });
+          const resolved = resolveSavedModelId(grandchildDef.model, opts.savedModelId);
           if (resolved == null || resolved === "") {
             throw new AgentRunResolveError(
               "孙代理未指定模型，且子 agent 也无可用 savedModelId。"
