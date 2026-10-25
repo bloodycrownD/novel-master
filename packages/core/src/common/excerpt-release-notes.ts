@@ -8,7 +8,7 @@
 
 import { truncateText } from "./text.js";
 
-export type ReleaseNotesFocus = "desktop" | "mobile";
+type ReleaseNotesFocus = "desktop" | "mobile";
 
 const NOTES_EXCERPT_MAX = 280;
 
@@ -30,55 +30,21 @@ function extractSection(body: string, heading: string): string {
   return nextSection >= 0 ? after.slice(0, nextSection) : after;
 }
 
-function pickPlatformSection(body: string, focus: ReleaseNotesFocus): string {
-  const headings =
-    focus === "desktop"
-      ? ["## 下载 · Desktop", "## Desktop"]
-      : ["## 下载 · Android", "## Android"];
-  for (const heading of headings) {
-    const section = extractSection(body, heading);
-    if (section.trim()) {
-      return section;
-    }
-  }
-  return "";
-}
-
-function stripMarkdownTables(text: string): string {
-  return text
-    .split("\n")
-    .filter((line) => {
-      const trimmed = line.trim();
-      if (!trimmed) {
-        return false;
-      }
-      if (trimmed.startsWith("|")) {
-        return false;
-      }
-      if (/^[-|:.\s]+$/.test(trimmed)) {
-        return false;
-      }
-      return true;
-    })
-    .join("\n");
-}
-
-function toPlainText(markdown: string): string {
-  return markdown
-    .replace(/```[\s\S]*?```/g, "")
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
-    .replace(/\*\*([^*]+)\*\*/g, "$1")
-    .replace(/`([^`]+)`/g, "$1")
-    .replace(/^#+\s*/gm, "")
-    .replace(/[#*_>`~]/g, "")
-    .replace(/\n{3,}/g, "\n\n")
-    .replace(/[ \t]+\n/g, "\n")
-    .trim();
-}
-
 function excerptPlainSection(markdown: string): string {
-  const withoutTables = stripMarkdownTables(markdown);
-  return toPlainText(withoutTables);
+  const lines = markdown.split("\n");
+  const textLines = lines.filter((line) => {
+    const trimmed = line.trim();
+    return trimmed !== "" && !trimmed.startsWith("|") && !/^[-|:.\s]+$/.test(trimmed);
+  });
+  const withoutTables = textLines.join("\n");
+  const withoutCodeBlocks = withoutTables.replace(/```[\s\S]*?```/g, "");
+  const withoutLinks = withoutCodeBlocks.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1");
+  const withoutBold = withoutLinks.replace(/\*\*([^*]+)\*\*/g, "$1");
+  const withoutInlineCode = withoutBold.replace(/`([^`]+)`/g, "$1");
+  const withoutHeadings = withoutInlineCode.replace(/^#+\s*/gm, "");
+  const withoutMarkers = withoutHeadings.replace(/[#*_>`~]/g, "");
+  const collapsed = withoutMarkers.replace(/\n{3,}/g, "\n\n");
+  return collapsed.replace(/[ \t]+\n/g, "\n").trim();
 }
 
 function truncateExcerpt(text: string): string {
@@ -91,22 +57,16 @@ function truncateExcerpt(text: string): string {
  * 默认 focus 是 desktop；mobile 端调用时显式传 `"mobile"`。两端调用方
  * 目前都显式传参，所以默认值更多是给单元测试或独立调用兜底。
  */
-export function excerptReleaseNotes(
-  body: string,
-  focus: ReleaseNotesFocus = "desktop"
-): string {
-  const changelog = excerptPlainSection(
-    extractSection(body, CHANGELOG_HEADING)
-  );
+export function excerptReleaseNotes(body: string, focus: ReleaseNotesFocus = "desktop"): string {
+  const changelog = excerptPlainSection(extractSection(body, CHANGELOG_HEADING));
   if (changelog) {
     return truncateExcerpt(changelog);
   }
-
-  const plain = excerptPlainSection(pickPlatformSection(body, focus));
-
+  const headings = focus === "desktop" ? ["## 下载 · Desktop", "## Desktop"] : ["## 下载 · Android", "## Android"];
+  const platformSection = headings.map((heading) => extractSection(body, heading)).find((section) => section.trim()) ?? "";
+  const plain = excerptPlainSection(platformSection);
   if (!plain) {
     return FALLBACK[focus];
   }
-
   return truncateExcerpt(plain);
 }

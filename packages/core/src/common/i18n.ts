@@ -33,10 +33,8 @@ type LocaleCatalogs<K extends string> = Readonly<Record<string, MessageCatalog<K
 
 type Translator<K extends string> = (message: MessageLike<K>, locale?: string) => string;
 
-/** nm-style: keep-local — 通用 translator 工厂，供各域 catalog 复用的唯一入口。 */
 export function createTranslator<K extends string>(catalogs: LocaleCatalogs<K>, defaultLocale: string): Translator<K> {
-  /** nm-style: keep-local — 递归翻译入口，nested descriptor 需要自引用。 */
-  function translateMessage(message: MessageLike<K>, locale = defaultLocale): string {
+  return function translateMessage(message: MessageLike<K>, locale = defaultLocale): string {
     if (typeof message === "string") {
       return message;
     }
@@ -67,6 +65,5 @@ export function createTranslator<K extends string>(catalogs: LocaleCatalogs<K>, 
       }
       return translateMessage(value as MessageLike<K>, locale);
     });
-  }
-  return translateMessage;
+  };
 }

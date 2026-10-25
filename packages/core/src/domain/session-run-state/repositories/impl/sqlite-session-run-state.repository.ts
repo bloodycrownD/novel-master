@@ -6,21 +6,15 @@
 
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { SqlTemplateParser } from "@/infra/sql-template/index.js";
-import {
-  executeTemplate,
-  queryTemplate,
-} from "@/infra/tdbc/logic/template-helper.js";
+import { executeTemplate, queryTemplate } from "@/infra/tdbc/logic/template-helper.js";
 import type { Row } from "@/infra/tdbc/types.js";
+import { nullableText } from "@/common/coerce.js";
 import type {
   SessionRunState,
   SessionRunStatus,
   SessionRunStateTokenSource,
 } from "../../model/session-run-state.js";
 import type { SessionRunStateRepository } from "../session-run-state.port.js";
-
-function nullableText(value: unknown): string | null {
-  return value == null ? null : String(value);
-}
 
 /** token_source 列收窄：仅认 usage/heuristic，脏值/缺省回退 heuristic。 */
 function tokenSource(value: unknown): SessionRunStateTokenSource {

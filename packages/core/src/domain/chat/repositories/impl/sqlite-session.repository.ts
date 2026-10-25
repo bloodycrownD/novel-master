@@ -5,187 +5,92 @@
  */
 
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
-import { SqlTemplateParser } from "@/infra/sql-template/index.js";
-import {
-  executeTemplate,
-  queryTemplate,
-} from "@/infra/tdbc/logic/template-helper.js";
+import { executeTemplate, queryTemplate } from "@/infra/tdbc/logic/template-helper.js";
 import type { Row } from "@/infra/tdbc/types.js";
+import { nullableText } from "@/common/coerce.js";
 import type { ChatSession } from "../../model/session.js";
 import type { SessionRepository } from "../session.port.js";
+import { BaseSqliteChatRepository } from "./base-sqlite-chat-repository.js";
 
-const SESSION_COLUMNS =
-  "id, project_id, title, parent_session_id, created_at_ms, updated_at_ms";
+const SESSION_COLUMNS = "id, project_id, title, parent_session_id, created_at_ms, updated_at_ms";
+
+const SESSION_INSERT_SQL = `INSERT INTO chat_session (${SESSION_COLUMNS}) VALUES (${SESSION_COLUMNS.split(", ").map(() => "?").join(", ")})`;
 
 function rowToSession(row: Row): ChatSession {
   return {
     id: String(row.id),
     projectId: String(row.project_id),
-    title: row.title == null ? null : String(row.title),
-    parentSessionId:
-      row.parent_session_id == null ? null : String(row.parent_session_id),
+    title: nullableText(row.title),
+    parentSessionId: nullableText(row.parent_session_id),
     createdAtMs: Number(row.created_at_ms),
     updatedAtMs: Number(row.updated_at_ms),
   };
 }
 
 /** TDBC-backed `chat_session` repository. */
-export class SqliteSessionRepository implements SessionRepository {
-  private readonly parser = new SqlTemplateParser();
-
-  constructor(private readonly conn: TdbcConnection) {}
+export class SqliteSessionRepository extends BaseSqliteChatRepository<ChatSession> implements SessionRepository {
+  constructor(conn: TdbcConnection) {
+    super(conn, {
+      table: "chat_session",
+      columns: SESSION_COLUMNS,
+      insertSql: SESSION_INSERT_SQL,
+      entityFromRow: rowToSession,
+      insertParams: (session) => [session.id, session.projectId, session.title, session.parentSessionId, session.createdAtMs, session.updatedAtMs],
+    });
+  }
 
   async listByProject(projectId: string): Promise<ChatSession[]> {
-    const rows = await queryTemplate(
-      this.conn,
-      this.parser,
-      `SELECT ${SESSION_COLUMNS}
-       FROM chat_session
-       WHERE project_id = #{projectId} AND parent_session_id IS NULL
-       ORDER BY created_at_ms`,
-      { projectId }
-    );
+    const sql = `SELECT ${SESSION_COLUMNS} FROM chat_session WHERE project_id = #{projectId} AND parent_session_id IS NULL ORDER BY created_at_ms`;
+    const rows = await queryTemplate(this.conn, this.parser, sql, { projectId });
     return rows.map(rowToSession);
   }
 
   async listByParentSession(parentSessionId: string): Promise<ChatSession[]> {
-    const rows = await queryTemplate(
-      this.conn,
-      this.parser,
-      `SELECT ${SESSION_COLUMNS}
-       FROM chat_session
-       WHERE parent_session_id = #{parentSessionId}
-       ORDER BY created_at_ms`,
-      { parentSessionId }
-    );
+    const sql = `SELECT ${SESSION_COLUMNS} FROM chat_session WHERE parent_session_id = #{parentSessionId} ORDER BY created_at_ms`;
+    const rows = await queryTemplate(this.conn, this.parser, sql, { parentSessionId });
     return rows.map(rowToSession);
   }
 
-  async findById(id: string): Promise<ChatSession | null> {
-    const rows = await queryTemplate(
-      this.conn,
-      this.parser,
-      `SELECT ${SESSION_COLUMNS}
-       FROM chat_session WHERE id = #{id}`,
-      { id }
-    );
-    if (rows.length === 0) {
-      return null;
-    }
-    return rowToSession(rows[0]!);
-  }
-
-  async insert(session: ChatSession): Promise<void> {
-    await executeTemplate(
-      this.conn,
-      this.parser,
-      `INSERT INTO chat_session (
-         id, project_id, title, parent_session_id, created_at_ms, updated_at_ms
-       )
-       VALUES (
-         #{id}, #{projectId}, #{title}, #{parentSessionId}, #{createdAtMs}, #{updatedAtMs}
-       )`,
-      {
-        id: session.id,
-        projectId: session.projectId,
-        title: session.title,
-        parentSessionId: session.parentSessionId,
-        createdAtMs: session.createdAtMs,
-        updatedAtMs: session.updatedAtMs,
-      }
-    );
-  }
-
-  async updateTitle(
-    id: string,
-    title: string,
-    updatedAtMs: number
-  ): Promise<boolean> {
-    const result = await executeTemplate(
-      this.conn,
-      this.parser,
-      `UPDATE chat_session SET title = #{title}, updated_at_ms = #{updatedAtMs}
-       WHERE id = #{id}`,
-      { id, title, updatedAtMs }
-    );
-    return result.changes > 0;
-  }
-
-  async delete(id: string): Promise<boolean> {
-    const result = await executeTemplate(
-      this.conn,
-      this.parser,
-      `DELETE FROM chat_session WHERE id = #{id}`,
-      { id }
-    );
+  /** nm-style: keep-public — SessionRepository 端口方法；session.service 单点调用。 */
+  async updateTitle(id: string, title: string, updatedAtMs: number): Promise<boolean> {
+    const sql = "UPDATE chat_session SET title = #{title}, updated_at_ms = #{updatedAtMs} WHERE id = #{id}";
+    const result = await executeTemplate(this.conn, this.parser, sql, { id, title, updatedAtMs });
     return result.changes > 0;
   }
 
   async deleteByProject(projectId: string): Promise<void> {
-    await executeTemplate(
-      this.conn,
-      this.parser,
-      `DELETE FROM chat_session WHERE project_id = #{projectId}`,
-      { projectId }
-    );
+    const sql = "DELETE FROM chat_session WHERE project_id = #{projectId}";
+    await executeTemplate(this.conn, this.parser, sql, { projectId });
   }
 
   async getComposerDraftJson(id: string): Promise<string | null> {
-    const rows = await queryTemplate(
-      this.conn,
-      this.parser,
-      `SELECT composer_draft_json FROM chat_session WHERE id = #{id}`,
-      { id }
-    );
+    const sql = "SELECT composer_draft_json FROM chat_session WHERE id = #{id}";
+    const rows = await queryTemplate(this.conn, this.parser, sql, { id });
     if (rows.length === 0) {
       return null;
     }
-    const value = rows[0]!.composer_draft_json;
-    return value == null ? null : String(value);
+    return nullableText(rows[0]!.composer_draft_json);
   }
 
-  async setComposerDraftJson(
-    id: string,
-    draftJson: string | null
-  ): Promise<boolean> {
-    const result = await executeTemplate(
-      this.conn,
-      this.parser,
-      `UPDATE chat_session SET composer_draft_json = #{draftJson}
-       WHERE id = #{id}`,
-      { id, draftJson }
-    );
+  async setComposerDraftJson(id: string, draftJson: string | null): Promise<boolean> {
+    const sql = "UPDATE chat_session SET composer_draft_json = #{draftJson} WHERE id = #{id}";
+    const result = await executeTemplate(this.conn, this.parser, sql, { id, draftJson });
     return result.changes > 0;
   }
 
   async getSessionAgentConfig(id: string): Promise<string | null> {
-    const rows = await queryTemplate(
-      this.conn,
-      this.parser,
-      `SELECT agent_config_json FROM chat_session WHERE id = #{id}`,
-      { id }
-    );
+    const sql = "SELECT agent_config_json FROM chat_session WHERE id = #{id}";
+    const rows = await queryTemplate(this.conn, this.parser, sql, { id });
     if (rows.length === 0) {
       return null;
     }
-    const value = rows[0]!.agent_config_json;
-    return value == null ? null : String(value);
+    return nullableText(rows[0]!.agent_config_json);
   }
 
-  async setSessionAgentConfig(
-    id: string,
-    agentConfigJson: string | null,
-    updatedAtMs: number
-  ): Promise<boolean> {
+  async setSessionAgentConfig(id: string, agentConfigJson: string | null, updatedAtMs: number): Promise<boolean> {
     // 绑定切换是会话活动（区别于高频草稿写），同步更新 updated_at_ms。
-    const result = await executeTemplate(
-      this.conn,
-      this.parser,
-      `UPDATE chat_session
-         SET agent_config_json = #{agentConfigJson}, updated_at_ms = #{updatedAtMs}
-       WHERE id = #{id}`,
-      { id, agentConfigJson, updatedAtMs }
-    );
+    const sql = "UPDATE chat_session SET agent_config_json = #{agentConfigJson}, updated_at_ms = #{updatedAtMs} WHERE id = #{id}";
+    const result = await executeTemplate(this.conn, this.parser, sql, { id, agentConfigJson, updatedAtMs });
     return result.changes > 0;
   }
 }

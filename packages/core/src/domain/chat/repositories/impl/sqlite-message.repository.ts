@@ -5,49 +5,42 @@
  */
 
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
-import { SqlTemplateParser } from "@/infra/sql-template/index.js";
-import { TdbcError } from "@/infra/tdbc/errors.js";
-import {
-  executeTemplate,
-  queryTemplate,
-} from "@/infra/tdbc/logic/template-helper.js";
+import { executeTemplate, queryTemplate } from "@/infra/tdbc/logic/template-helper.js";
+import { runInTransactionOrConn } from "@/infra/tdbc/index.js";
 import type { Row } from "@/infra/tdbc/types.js";
+import { nullableText } from "@/common/coerce.js";
 import { parseMessageContent } from "../../content/parse-message-content.js";
-import {
-  parseAttachmentsJson,
-  serializeAttachmentsJson,
-} from "../../model/message-attachment.schema.js";
+import { parseAttachmentsJson } from "../../model/message-attachment.schema.js";
 import type { ChatMessageData, ChatMessageHeader } from "../../model/message.js";
 import { ChatMessage } from "../../logic/message/chat-message.js";
 import type { MessageContent } from "../../model/content-block.js";
 import type { MessageUsage } from "../../model/message-usage.js";
 import type { MessageRepository } from "../message.port.js";
+import { BaseSqliteChatRepository } from "./base-sqlite-chat-repository.js";
 
-const MESSAGE_SELECT_COLUMNS = `id, session_id, seq, role, content_json, content_encoding, content_blob, provider, provider_id, raw_json, created_at_ms, hidden, attachments_json, prompt_tokens, completion_tokens, total_tokens, cache_read_tokens, cache_creation_tokens, model_name, first_token_ms, duration_ms`;
+const MESSAGE_SELECT_COLUMNS = `id, session_id, seq, role, content_json, provider, provider_id, raw_json, created_at_ms, hidden, attachments_json, prompt_tokens, completion_tokens, total_tokens, cache_read_tokens, cache_creation_tokens, model_name, first_token_ms, duration_ms`;
+
+const MESSAGE_HEADER_COLUMNS = "id, session_id, seq, role, hidden, created_at_ms";
 
 /**
- * chat_message 的 INSERT 语句（`?` 占位），insert 与 batchInsert 共用。
+ * chat_message 的 INSERT 列清单，insert 与 batchInsert 共用。
  *
- * 列顺序与 {@link toMessageParams} 的参数顺序一一对应，改一处必须同步另一处。
+ * 比读投影多出 content_encoding / content_blob 两个存量兼容列（写侧恒绑
+ * NULL）。列顺序与 {@link toMessageParams} 的参数顺序一一对应，改一处必须同步
+ * 另一处。
  */
-const MESSAGE_INSERT_SQL =
-  `INSERT INTO chat_message ` +
-  `(id, session_id, seq, role, content_json, content_encoding, content_blob, provider, provider_id, raw_json, created_at_ms, hidden, attachments_json, prompt_tokens, completion_tokens, total_tokens, cache_read_tokens, cache_creation_tokens, model_name, first_token_ms, duration_ms) ` +
-  `VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+const MESSAGE_INSERT_COLUMNS = "id, session_id, seq, role, content_json, content_encoding, content_blob, provider, provider_id, raw_json, created_at_ms, hidden, attachments_json, prompt_tokens, completion_tokens, total_tokens, cache_read_tokens, cache_creation_tokens, model_name, first_token_ms, duration_ms";
+
+const MESSAGE_INSERT_SQL = `INSERT INTO chat_message (${MESSAGE_INSERT_COLUMNS}) VALUES (${MESSAGE_INSERT_COLUMNS.split(", ").map(() => "?").join(", ")})`;
 
 /**
- * 把 ChatMessageData 摊平成与 {@link MESSAGE_INSERT_SQL} 列顺序对齐的参数数组。
+ * 把 ChatMessageData 摊平成与 {@link MESSAGE_INSERT_COLUMNS} 列顺序对齐的参数数组。
  *
- * insert 走 executeTemplate 时由 SqlTemplateParser 按 `#{xxx}` 出现顺序收集参数，
- * 这里手写数组必须保持同一顺序——两边的列/`?`/参数三者完全对齐。
- *
- * 消息正文明文化（2026-09-30 拍板的全库明文决策，V1' 退役后读路径单形态）：
- * content_json 直存 blocks JSON 明文，content_encoding/content_blob 显式绑
- * NULL。两列名保留在 INSERT 列清单里（列不删，schema CHECK 约束原样），
- * 只是新行恒为空；存量压缩行已由反向搬运任务全部解回明文（v1.5.40 同批
- * 确认），读路径只认 content_json 明文。
+ * 消息正文只写明文一种形态：content_json 直存 blocks JSON，content_encoding /
+ * content_blob 两列保留在 INSERT 列清单里但恒绑 NULL（读路径只认 content_json）。
  */
 function toMessageParams(message: ChatMessageData): unknown[] {
+  const attachmentsJson = message.attachments == null || message.attachments.length === 0 ? null : JSON.stringify(message.attachments);
   return [
     message.id,
     message.sessionId,
@@ -62,7 +55,7 @@ function toMessageParams(message: ChatMessageData): unknown[] {
     message.createdAtMs,
     // Convert boolean to integer: true = 1, false = 0
     message.hidden ? 1 : 0,
-    serializeAttachmentsJson(message.attachments),
+    attachmentsJson,
     message.usage?.promptTokens ?? null,
     message.usage?.completionTokens ?? null,
     message.usage?.totalTokens ?? null,
@@ -74,114 +67,54 @@ function toMessageParams(message: ChatMessageData): unknown[] {
   ];
 }
 
-/**
- * 无外层事务时开一个事务跑 `fn`；已经身处事务中则直接复用 `conn` 跑。
- *
- * 惯例来源：`service/vfs/impl/revision-aware-vfs.service.ts` 的同名模块私有
- * 函数（那里未导出，这里按同一形状复制一份，避免 domain 层反向依赖 service 层）。
- *
- * 边界（务必保留，别"顺手"改成 try/finally 或吞错）：这个兜底**只**针对
- * `conn.transaction()` 入口抛出的 `NESTED_TRANSACTION`——三驱动契约里 tx 句柄的
- * `transaction()` 无条件 reject 且**不执行** `fn`（connection.port.ts:37），
- * 所以捕获后用 `fn(conn)` 直通是等价且安全的。若 `fn` 内部自己抛出同码错误，
- * 会被误判成「已在事务内」而重跑一遍，已执行的写操作将被重放。
- */
-async function runInTransactionOrConn<T>(
-  conn: TdbcConnection,
-  fn: (tx: TdbcConnection) => Promise<T>
-): Promise<T> {
-  try {
-    return await conn.transaction(fn);
-  } catch (error) {
-    if (error instanceof TdbcError && error.code === "NESTED_TRANSACTION") {
-      return fn(conn);
-    }
-    throw error;
-  }
-}
-
-/**
- * 读消息正文：parse content_json 明文。
- *
- * 明文化收敛（message-plaintext V1' 退役，v1.5.40 同批）：写侧直写明文、
- * 存量压缩行已被反向搬运任务全部解回明文（KKV decompressDone 已置、谓词
- * `content_blob IS NOT NULL` 实测归零），双形态读的 blob 分支随
- * decodeMessageContent 一并退役；压缩两列在 INSERT 里保留不删，恒 NULL。
- */
-function readRowContent(row: Row): MessageContent {
-  const parsed = parseMessageContent(String(row.content_json));
-  if (!parsed.ok) {
-    throw parsed.error;
-  }
-  return parsed.value;
-}
-
 function rowToMessage(row: Row): ChatMessage {
-  const attachments = parseAttachmentsJson(
-    row.attachments_json == null ? null : String(row.attachments_json)
-  );
-  const usage = parseUsage(row);
+  // 正文只有明文一种形态：content_json 直接 parse；解析失败按 repository 边界抛。
+  const content = parseMessageContent(String(row.content_json));
+  if (!content.ok) {
+    throw content.error;
+  }
+  const attachments = parseAttachmentsJson(nullableText(row.attachments_json));
+  // usage 列全空时保持「无 usage 属性」形状（条件 spread 保证空对象没有 key）。
+  const usageFields: MessageUsage = {
+    ...(row.prompt_tokens != null ? { promptTokens: Number(row.prompt_tokens) } : {}),
+    ...(row.completion_tokens != null ? { completionTokens: Number(row.completion_tokens) } : {}),
+    ...(row.total_tokens != null ? { totalTokens: Number(row.total_tokens) } : {}),
+    ...(row.cache_read_tokens != null ? { cacheReadTokens: Number(row.cache_read_tokens) } : {}),
+    ...(row.cache_creation_tokens != null ? { cacheCreationTokens: Number(row.cache_creation_tokens) } : {}),
+    ...(row.first_token_ms != null ? { firstTokenMs: Number(row.first_token_ms) } : {}),
+    ...(row.duration_ms != null ? { durationMs: Number(row.duration_ms) } : {}),
+  };
+  const usage: MessageUsage | undefined = Object.keys(usageFields).length > 0 ? usageFields : undefined;
   return ChatMessage.from({
     id: String(row.id),
     sessionId: String(row.session_id),
     seq: Number(row.seq),
     role: String(row.role),
-    content: readRowContent(row),
-    provider: row.provider == null ? null : String(row.provider),
-    providerId: row.provider_id == null ? null : String(row.provider_id),
-    modelName: row.model_name == null ? null : String(row.model_name),
-    raw:
-      row.raw_json == null
-        ? null
-        : (JSON.parse(String(row.raw_json)) as Record<string, unknown>),
+    content: content.value,
+    provider: nullableText(row.provider),
+    providerId: nullableText(row.provider_id),
+    modelName: nullableText(row.model_name),
+    raw: row.raw_json == null ? null : (JSON.parse(String(row.raw_json)) as Record<string, unknown>),
     createdAtMs: Number(row.created_at_ms),
-    // Parse hidden column: 1 = true, 0 = false
     hidden: Number(row.hidden) === 1,
     ...(attachments != null ? { attachments } : {}),
     ...(usage != null ? { usage } : {}),
   });
 }
 
-function parseUsage(row: Row): MessageUsage | undefined {
-  const promptTokens = row.prompt_tokens;
-  const completionTokens = row.completion_tokens;
-  const totalTokens = row.total_tokens;
-  const cacheReadTokens = row.cache_read_tokens;
-  const cacheCreationTokens = row.cache_creation_tokens;
-  const firstTokenMs = row.first_token_ms;
-  const durationMs = row.duration_ms;
-  if (
-    promptTokens == null &&
-    completionTokens == null &&
-    totalTokens == null &&
-    cacheReadTokens == null &&
-    cacheCreationTokens == null &&
-    firstTokenMs == null &&
-    durationMs == null
-  ) {
-    return undefined;
-  }
+function rowToHeader(row: Row): ChatMessageHeader {
   return {
-    ...(promptTokens != null ? { promptTokens: Number(promptTokens) } : {}),
-    ...(completionTokens != null
-      ? { completionTokens: Number(completionTokens) }
-      : {}),
-    ...(totalTokens != null ? { totalTokens: Number(totalTokens) } : {}),
-    ...(cacheReadTokens != null
-      ? { cacheReadTokens: Number(cacheReadTokens) }
-      : {}),
-    ...(cacheCreationTokens != null
-      ? { cacheCreationTokens: Number(cacheCreationTokens) }
-      : {}),
-    ...(firstTokenMs != null ? { firstTokenMs: Number(firstTokenMs) } : {}),
-    ...(durationMs != null ? { durationMs: Number(durationMs) } : {}),
+    id: String(row.id),
+    sessionId: String(row.session_id),
+    seq: Number(row.seq),
+    role: String(row.role),
+    hidden: Number(row.hidden) === 1,
+    createdAtMs: Number(row.created_at_ms),
   };
 }
 
 /** TDBC-backed `chat_message` repository. */
-export class SqliteMessageRepository implements MessageRepository {
-  private readonly parser = new SqlTemplateParser();
-  private readonly conn: TdbcConnection;
+export class SqliteMessageRepository extends BaseSqliteChatRepository<ChatMessageData> implements MessageRepository {
   private readonly yieldFn: (() => Promise<void>) | undefined;
 
   /**
@@ -213,7 +146,13 @@ export class SqliteMessageRepository implements MessageRepository {
    *   （mobile 传 createQuantumYield(16)），不反向依赖 RN 模块。
    */
   constructor(conn: TdbcConnection, yieldFn?: () => Promise<void>) {
-    this.conn = conn;
+    super(conn, {
+      table: "chat_message",
+      columns: MESSAGE_SELECT_COLUMNS,
+      insertSql: MESSAGE_INSERT_SQL,
+      entityFromRow: rowToMessage,
+      insertParams: toMessageParams,
+    });
     this.yieldFn = yieldFn;
   }
 
@@ -239,233 +178,99 @@ export class SqliteMessageRepository implements MessageRepository {
     return messages;
   }
 
-  async listBySession(
-    sessionId: string,
-    options?: { includeHidden?: boolean }
-  ): Promise<ChatMessageData[]> {
+  async listBySession(sessionId: string, options?: { includeHidden?: boolean }): Promise<ChatMessageData[]> {
     // includeHidden=false 在 SQL 层就滤掉 hidden 行：置位产物不必捞回——
     // 大会话（数千条、hidden 占多数）的 UI 读口（token chip 的 prompt 组装
-    // 只消费可见历史）因此不必把不可见行的正文字节取回来。
-    // 正文读取本身按形态分派（见 readRowContent）：明文行 parse
-    // content_json，压缩行才需解压——迁移期压缩行与明文行共存时，不做这层
-    // 过滤就得为不可见的压缩行逐条解压。
-    const hiddenFilter =
-      options?.includeHidden === false ? " AND hidden = 0" : "";
-    const rows = await queryTemplate(
-      this.conn,
-      this.parser,
-      `SELECT ${MESSAGE_SELECT_COLUMNS}
-       FROM chat_message WHERE session_id = #{sessionId}${hiddenFilter} ORDER BY seq ASC`,
-      { sessionId }
-    );
+    // 只消费可见历史）因此不必把不可见行的正文字节取回来，也省掉逐行
+    // parse content_json（读路径只有明文一种形态）。
+    const hiddenFilter = options?.includeHidden === false ? " AND hidden = 0" : "";
+    const sql = `SELECT ${MESSAGE_SELECT_COLUMNS} FROM chat_message WHERE session_id = #{sessionId}${hiddenFilter} ORDER BY seq ASC`;
+    const rows = await queryTemplate(this.conn, this.parser, sql, { sessionId });
     return this.mapRows(rows);
   }
 
-  async listBySessionFromSeq(
-    sessionId: string,
-    fromSeq: number
-  ): Promise<ChatMessageData[]> {
-    const rows = await queryTemplate(
-      this.conn,
-      this.parser,
-      `SELECT ${MESSAGE_SELECT_COLUMNS}
-       FROM chat_message
-       WHERE session_id = #{sessionId} AND seq >= #{fromSeq}
-       ORDER BY seq ASC`,
-      { sessionId, fromSeq }
-    );
+  async listBySessionFromSeq(sessionId: string, fromSeq: number): Promise<ChatMessageData[]> {
+    const sql = `SELECT ${MESSAGE_SELECT_COLUMNS} FROM chat_message WHERE session_id = #{sessionId} AND seq >= #{fromSeq} ORDER BY seq ASC`;
+    const rows = await queryTemplate(this.conn, this.parser, sql, { sessionId, fromSeq });
     return this.mapRows(rows);
   }
 
-  async listBySessionUpToSeq(
-    sessionId: string,
-    maxSeq: number
-  ): Promise<ChatMessageData[]> {
+  /** nm-style: keep-public — MessageRepository 端口读口；message.service 的 fork 单点消费。 */
+  async listBySessionUpToSeq(sessionId: string, maxSeq: number): Promise<ChatMessageData[]> {
     // 与 listBySessionFromSeq 对称：这边收上界。SQL 里**只**加 seq 上界，
     // 不加 AND hidden = 0（fork 要保留 hidden 状态）。
     // 走 mapRows 保住 yieldFn 分片让步（mobile 上大结果集退化成单次长任务）。
-    const rows = await queryTemplate(
-      this.conn,
-      this.parser,
-      `SELECT ${MESSAGE_SELECT_COLUMNS}
-       FROM chat_message
-       WHERE session_id = #{sessionId} AND seq <= #{maxSeq}
-       ORDER BY seq ASC`,
-      { sessionId, maxSeq }
-    );
+    const sql = `SELECT ${MESSAGE_SELECT_COLUMNS} FROM chat_message WHERE session_id = #{sessionId} AND seq <= #{maxSeq} ORDER BY seq ASC`;
+    const rows = await queryTemplate(this.conn, this.parser, sql, { sessionId, maxSeq });
     return this.mapRows(rows);
   }
 
-  async listBySessionTailOfRole(
-    sessionId: string,
-    role: string,
-    limit: number
-  ): Promise<ChatMessageData[]> {
+  async listBySessionTailOfRole(sessionId: string, role: string, limit: number): Promise<ChatMessageData[]> {
     // role 在子查询里过滤：limit 只数该 role 的行，夹在中间的 tool_result
     // （role=user）不占配额。外层再包一层 ORDER BY seq ASC 保持升序返回。
     const clampedLimit = Math.max(1, Math.floor(limit));
-    const rows = await queryTemplate(
-      this.conn,
-      this.parser,
-      `SELECT ${MESSAGE_SELECT_COLUMNS}
-       FROM (
-         SELECT ${MESSAGE_SELECT_COLUMNS}
-         FROM chat_message
-         WHERE session_id = #{sessionId} AND role = #{role}
-         ORDER BY seq DESC
-         LIMIT #{limit}
-       )
-       ORDER BY seq ASC`,
-      { sessionId, role, limit: clampedLimit }
-    );
+    const sql = `SELECT ${MESSAGE_SELECT_COLUMNS} FROM (SELECT ${MESSAGE_SELECT_COLUMNS} FROM chat_message WHERE session_id = #{sessionId} AND role = #{role} ORDER BY seq DESC LIMIT #{limit}) ORDER BY seq ASC`;
+    const rows = await queryTemplate(this.conn, this.parser, sql, { sessionId, role, limit: clampedLimit });
     return this.mapRows(rows);
   }
 
+  /** nm-style: keep-public — MessageRepository 端口读口；message.service 的 truncateAfter 空锚分支消费。 */
   async listIdsBySession(sessionId: string): Promise<readonly string[]> {
-    // 单列窄投影（21 → 1 列）：只取 id，零 parse。**不过滤 hidden**
+    // 单列窄投影（19 → 1 列）：只取 id，零 parse。**不过滤 hidden**
     // （hidden 行也要在列，否则漏删 checkpoint = 孤儿行）。
     // 读口原为 listReadRefTargetsBySession（id + read 引用指针双素材）——
     // read 引用机制随 E1 清理版退役后（v1.5.40 同批）refs 消费方全灭，
     // 收窄为 id 单素材；写事务内被调用的性质不变（message.service.ts 的
     // truncateAfter 空锚分支），仍刻意不走 mapRows 的分片 yieldFn。
-    const rows = await queryTemplate(
-      this.conn,
-      this.parser,
-      `SELECT id FROM chat_message WHERE session_id = #{sessionId} ORDER BY seq ASC`,
-      { sessionId }
-    );
+    const sql = "SELECT id FROM chat_message WHERE session_id = #{sessionId} ORDER BY seq ASC";
+    const rows = await queryTemplate(this.conn, this.parser, sql, { sessionId });
     return rows.map((row) => String(row.id));
   }
 
-  async listMessageHeadersBySession(
-    sessionId: string
-  ): Promise<ChatMessageHeader[]> {
+  async listMessageHeadersBySession(sessionId: string): Promise<ChatMessageHeader[]> {
     // 头投影：只取 id/seq/role/hidden/created_at_ms——不选 content 列即不取
-    // 正文字节（新行本就是明文、存量行才需解压；不选列让两者都零成本，
-    // 大会话上这曾是秒级全量解压的主源之一）。
-    const rows = await queryTemplate(
-      this.conn,
-      this.parser,
-      `SELECT id, session_id, seq, role, hidden, created_at_ms
-       FROM chat_message WHERE session_id = #{sessionId} ORDER BY seq ASC`,
-      { sessionId }
-    );
-    return rows.map((row) => ({
-      id: String(row.id),
-      sessionId: String(row.session_id),
-      seq: Number(row.seq),
-      role: String(row.role),
-      hidden: Number(row.hidden) === 1,
-      createdAtMs: Number(row.created_at_ms),
-    }));
+    // 正文字节（读路径只有明文一种形态，不选列连 parse 都省；大会话上这曾是
+    // 秒级全量 parse 的主源之一）。
+    const sql = `SELECT ${MESSAGE_HEADER_COLUMNS} FROM chat_message WHERE session_id = #{sessionId} ORDER BY seq ASC`;
+    const rows = await queryTemplate(this.conn, this.parser, sql, { sessionId });
+    return rows.map(rowToHeader);
   }
 
   async countBySession(sessionId: string): Promise<number> {
-    const rows = await queryTemplate<{ n: number }>(
-      this.conn,
-      this.parser,
-      `SELECT COUNT(*) AS n FROM chat_message WHERE session_id = #{sessionId}`,
-      { sessionId }
-    );
+    const sql = "SELECT COUNT(*) AS n FROM chat_message WHERE session_id = #{sessionId}";
+    const rows = await queryTemplate<{ n: number }>(this.conn, this.parser, sql, { sessionId });
     // COUNT(*) 恒返回一行；SQLite 下 COUNT 结果是 INTEGER，Number() 安全。
     return Number(rows[0]!.n);
   }
 
-  async listBySessionOffset(
-    sessionId: string,
-    offset: number
-  ): Promise<ChatMessageHeader[]> {
-    // 头投影：唯一调用方（backfill 增量段判定）只消费 `id`，不取正文字节。
-    // 原先按 21 列全量取并逐条 JSON.parse——会话导入 / 复制 / 首次回填时
-    // offset 可能是 0 或很旧，一次调用就把全会话正文拉回来了。
+  /** nm-style: keep-public — MessageRepository 端口读口；decideBackfillShortCircuit 单点消费。 */
+  async listBySessionOffset(sessionId: string, offset: number): Promise<ChatMessageHeader[]> {
+    // 头投影：唯一调用方 decideBackfillShortCircuit（backfill 增量段判定）只消费 `id`，
+    // 不取正文字节。原先按 19 列全量取并逐条 JSON.parse——会话导入 / 复制 /
+    // 首次回填时 offset 可能是 0 或很旧，一次调用就把全会话正文拉回来了。
     const clampedOffset = Math.max(0, Math.floor(offset));
-    const rows = await queryTemplate(
-      this.conn,
-      this.parser,
-      `SELECT id, session_id, seq, role, hidden, created_at_ms
-       FROM chat_message
-       WHERE session_id = #{sessionId}
-       ORDER BY seq ASC
-       LIMIT -1 OFFSET #{offset}`,
-      { sessionId, offset: clampedOffset }
-    );
-    return rows.map((row) => ({
-      id: String(row.id),
-      sessionId: String(row.session_id),
-      seq: Number(row.seq),
-      role: String(row.role),
-      hidden: Number(row.hidden) === 1,
-      createdAtMs: Number(row.created_at_ms),
-    }));
+    const sql = `SELECT ${MESSAGE_HEADER_COLUMNS} FROM chat_message WHERE session_id = #{sessionId} ORDER BY seq ASC LIMIT -1 OFFSET #{offset}`;
+    const rows = await queryTemplate(this.conn, this.parser, sql, { sessionId, offset: clampedOffset });
+    return rows.map(rowToHeader);
   }
 
-  async listBySessionTail(
-    sessionId: string,
-    limit: number
-  ): Promise<ChatMessageData[]> {
+  async listBySessionTail(sessionId: string, limit: number): Promise<ChatMessageData[]> {
     const clampedLimit = Math.max(1, Math.floor(limit));
-    const rows = await queryTemplate(
-      this.conn,
-      this.parser,
-      `SELECT ${MESSAGE_SELECT_COLUMNS}
-       FROM (
-         SELECT ${MESSAGE_SELECT_COLUMNS}
-         FROM chat_message
-         WHERE session_id = #{sessionId}
-         ORDER BY seq DESC
-         LIMIT #{limit}
-       )
-       ORDER BY seq ASC`,
-      { sessionId, limit: clampedLimit }
-    );
+    const sql = `SELECT ${MESSAGE_SELECT_COLUMNS} FROM (SELECT ${MESSAGE_SELECT_COLUMNS} FROM chat_message WHERE session_id = #{sessionId} ORDER BY seq DESC LIMIT #{limit}) ORDER BY seq ASC`;
+    const rows = await queryTemplate(this.conn, this.parser, sql, { sessionId, limit: clampedLimit });
     return this.mapRows(rows);
   }
 
-  async listBySessionPage(
-    sessionId: string,
-    limit: number,
-    beforeSeq?: number
-  ): Promise<ChatMessageData[]> {
+  async listBySessionPage(sessionId: string, limit: number, beforeSeq?: number): Promise<ChatMessageData[]> {
     const clampedLimit = Math.max(1, Math.floor(limit));
-    const rows = await queryTemplate(
-      this.conn,
-      this.parser,
-      `SELECT ${MESSAGE_SELECT_COLUMNS}
-       FROM (
-         SELECT ${MESSAGE_SELECT_COLUMNS}
-         FROM chat_message
-         WHERE session_id = #{sessionId}
-           AND (#{beforeSeq} IS NULL OR seq < #{beforeSeq})
-         ORDER BY seq DESC
-         LIMIT #{limit}
-       )
-       ORDER BY seq ASC`,
-      { sessionId, beforeSeq: beforeSeq ?? null, limit: clampedLimit }
-    );
+    const sql = `SELECT ${MESSAGE_SELECT_COLUMNS} FROM (SELECT ${MESSAGE_SELECT_COLUMNS} FROM chat_message WHERE session_id = #{sessionId} AND (#{beforeSeq} IS NULL OR seq < #{beforeSeq}) ORDER BY seq DESC LIMIT #{limit}) ORDER BY seq ASC`;
+    const rows = await queryTemplate(this.conn, this.parser, sql, { sessionId, beforeSeq: beforeSeq ?? null, limit: clampedLimit });
     return this.mapRows(rows);
-  }
-
-  async findById(id: string): Promise<ChatMessageData | null> {
-    const rows = await queryTemplate(
-      this.conn,
-      this.parser,
-      `SELECT ${MESSAGE_SELECT_COLUMNS}
-       FROM chat_message WHERE id = #{id}`,
-      { id }
-    );
-    if (rows.length === 0) {
-      return null;
-    }
-    return rowToMessage(rows[0]!);
   }
 
   async nextSeq(sessionId: string): Promise<number> {
-    const rows = await queryTemplate<{ max_seq: number | null }>(
-      this.conn,
-      this.parser,
-      `SELECT MAX(seq) AS max_seq FROM chat_message WHERE session_id = #{sessionId}`,
-      { sessionId }
-    );
+    const sql = "SELECT MAX(seq) AS max_seq FROM chat_message WHERE session_id = #{sessionId}";
+    const rows = await queryTemplate<{ max_seq: number | null }>(this.conn, this.parser, sql, { sessionId });
     const maxSeq = rows[0]?.max_seq;
     return maxSeq == null ? 1 : Number(maxSeq) + 1;
   }
@@ -473,24 +278,13 @@ export class SqliteMessageRepository implements MessageRepository {
   async updateContent(id: string, content: MessageContent): Promise<boolean> {
     // JSON.stringify 下沉到 repository（消除 service 层序列化的不一致编码点）。
     //
-    // P0 约束——三列必须齐置：content_json 写新明文的同时，content_encoding
-    // 与 content_blob 一起置 NULL。编辑一条存量压缩行时若只写 content_json，
-    // 读路径 readRowContent 的「blob 非空优先」分支仍会解压出**旧正文**：
-    // 不崩溃、不报错，只是静默返回错内容（数据错乱，比崩溃更难发现）。
-    // 反例由 test/chat/message-plaintext-write.test.ts 的 T-MP1 锁死。
-    const result = await executeTemplate(
-      this.conn,
-      this.parser,
-      `UPDATE chat_message
-       SET content_json = #{json}, content_encoding = NULL, content_blob = NULL
-       WHERE id = #{id}`,
-      { id, json: JSON.stringify(content) }
-    );
+    // 三列齐置：写新明文 content_json 的同时把 content_encoding / content_blob
+    // 一起置 NULL。存量压缩行改写后仍要清掉旧 blob，避免后续迁移 / 人工排查
+    // 把同一行看成双形态。反例由 test/chat/message-plaintext-write.test.ts 的
+    // T-MP1 锁死。
+    const sql = `UPDATE chat_message SET content_json = #{json}, content_encoding = NULL, content_blob = NULL WHERE id = #{id}`;
+    const result = await executeTemplate(this.conn, this.parser, sql, { id, json: JSON.stringify(content) });
     return result.changes > 0;
-  }
-
-  async insert(message: ChatMessageData): Promise<void> {
-    await this.conn.execute(MESSAGE_INSERT_SQL, toMessageParams(message));
   }
 
   async batchInsert(messages: readonly ChatMessageData[]): Promise<void> {
@@ -522,76 +316,33 @@ export class SqliteMessageRepository implements MessageRepository {
     });
   }
 
-  async delete(id: string): Promise<boolean> {
-    const result = await executeTemplate(
-      this.conn,
-      this.parser,
-      `DELETE FROM chat_message WHERE id = #{id}`,
-      { id }
-    );
-    return result.changes > 0;
-  }
-
   async deleteBySession(sessionId: string): Promise<void> {
-    await executeTemplate(
-      this.conn,
-      this.parser,
-      `DELETE FROM chat_message WHERE session_id = #{sessionId}`,
-      { sessionId }
-    );
+    const sql = "DELETE FROM chat_message WHERE session_id = #{sessionId}";
+    await executeTemplate(this.conn, this.parser, sql, { sessionId });
   }
 
   async deleteAfterSeq(sessionId: string, afterSeq: number): Promise<void> {
-    await executeTemplate(
-      this.conn,
-      this.parser,
-      `DELETE FROM chat_message WHERE session_id = #{sessionId} AND seq > #{afterSeq}`,
-      { sessionId, afterSeq }
-    );
+    const sql = "DELETE FROM chat_message WHERE session_id = #{sessionId} AND seq > #{afterSeq}";
+    await executeTemplate(this.conn, this.parser, sql, { sessionId, afterSeq });
   }
 
-  async listIdsAfterSeq(
-    sessionId: string,
-    afterSeq: number
-  ): Promise<string[]> {
-    const rows = await queryTemplate<{ id: string }>(
-      this.conn,
-      this.parser,
-      `SELECT id FROM chat_message
-       WHERE session_id = #{sessionId} AND seq > #{afterSeq}`,
-      { sessionId, afterSeq }
-    );
+  /** nm-style: keep-public — MessageRepository 端口读口；回滚 tail 截断的 checkpoint 清理消费。 */
+  async listIdsAfterSeq(sessionId: string, afterSeq: number): Promise<string[]> {
+    const sql = "SELECT id FROM chat_message WHERE session_id = #{sessionId} AND seq > #{afterSeq}";
+    const rows = await queryTemplate<{ id: string }>(this.conn, this.parser, sql, { sessionId, afterSeq });
     return rows.map((row) => String(row.id));
   }
 
   async updateHidden(messageId: string, hidden: boolean): Promise<boolean> {
-    const result = await executeTemplate(
-      this.conn,
-      this.parser,
-      `UPDATE chat_message SET hidden = #{hidden} WHERE id = #{id}`,
-      { id: messageId, hidden: hidden ? 1 : 0 }
-    );
+    const sql = "UPDATE chat_message SET hidden = #{hidden} WHERE id = #{id}";
+    const result = await executeTemplate(this.conn, this.parser, sql, { id: messageId, hidden: hidden ? 1 : 0 });
     return result.changes > 0;
   }
 
-  async updateHiddenRange(
-    sessionId: string,
-    fromSeq: number,
-    toSeq: number,
-    hidden: boolean
-  ): Promise<number> {
+  async updateHiddenRange(sessionId: string, fromSeq: number, toSeq: number, hidden: boolean): Promise<number> {
     const hiddenFilter = hidden ? "AND hidden = 0" : "AND hidden = 1";
-    const result = await executeTemplate(
-      this.conn,
-      this.parser,
-      `UPDATE chat_message 
-       SET hidden = #{hidden} 
-       WHERE session_id = #{sessionId} 
-         AND seq >= #{fromSeq} 
-         AND seq <= #{toSeq}
-         ${hiddenFilter}`,
-      { sessionId, fromSeq, toSeq, hidden: hidden ? 1 : 0 }
-    );
+    const sql = `UPDATE chat_message SET hidden = #{hidden} WHERE session_id = #{sessionId} AND seq >= #{fromSeq} AND seq <= #{toSeq} ${hiddenFilter}`;
+    const result = await executeTemplate(this.conn, this.parser, sql, { sessionId, fromSeq, toSeq, hidden: hidden ? 1 : 0 });
     return result.changes;
   }
 }

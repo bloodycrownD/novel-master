@@ -4,19 +4,11 @@
  * @module common/file
  */
 
-/** 常见二进制 / 图片扩展名（小写、无点）。 */
+const IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "gif", "webp", "bmp", "ico", "tif", "tiff", "heic", "avif"]);
+
+/** 常见二进制扩展名（小写、无点）；图片扩展名是它的子集（IMAGE ⊆ BINARY）。 */
 const BINARY_EXTENSIONS = new Set([
-  "png",
-  "jpg",
-  "jpeg",
-  "gif",
-  "webp",
-  "bmp",
-  "ico",
-  "tif",
-  "tiff",
-  "heic",
-  "avif",
+  ...IMAGE_EXTENSIONS,
   "pdf",
   "zip",
   "gz",
@@ -56,8 +48,6 @@ const BINARY_EXTENSIONS = new Set([
   "ai",
   "sketch",
 ]);
-
-const IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "gif", "webp", "bmp", "ico", "tif", "tiff", "heic", "avif"]);
 
 function extensionOf(path: string): string {
   const base = path.slice(Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\")) + 1);

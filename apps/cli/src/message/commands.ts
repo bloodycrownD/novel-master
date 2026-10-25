@@ -6,7 +6,7 @@
 
 import { readFile } from "node:fs/promises";
 import { formatMessageForCli, parseMessageContent, textBlocks } from "@novel-master/core/chat";
-import { type ChatMessage } from "@novel-master/core/chat";
+import { type ChatMessageData } from "@novel-master/core/chat";
 import type { NovelMasterRuntime } from "../runtime.js";
 import { parseCliArgs } from "../vfs/parse-args.js";
 import { seqRangeFromFloors } from "./floor.js";
@@ -25,7 +25,7 @@ function parsePositiveInt(raw: string, label: string): number {
 /** Resolves batch hide/show range: prefer floor (UI), allow seq (scripts). */
 function resolveSeqRange(
   flags: ReadonlyMap<string, string | true>,
-  messages: readonly ChatMessage[],
+  messages: readonly ChatMessageData[],
 ): { fromSeq: number; toSeq: number } {
   const fromFloor = flags.get("from-floor");
   const toFloor = flags.get("to-floor");

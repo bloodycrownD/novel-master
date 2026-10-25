@@ -6,16 +6,12 @@ export type {
   ProjectAgentConfigPatch,
   ProjectAgentMode,
 } from "../domain/chat/model/project-agent-config.js";
-export { DEFAULT_PROJECT_AGENT_CONFIG } from "../domain/chat/model/project-agent-config.js";
-export {
-  projectAgentConfigSchema,
-  projectAgentModeSchema,
-} from "../domain/chat/model/project-agent-config.schema.js";
 export type { ChatSession } from "../domain/chat/model/session.js";
 export type {
   SessionAgentConfig,
   SessionAgentConfigPatch,
 } from "../domain/chat/model/session-agent-config.js";
+/** package-exports-t0 明确断言的公共契约，不随 fake-public 清理删除。 */
 export { sessionAgentConfigSchema } from "../domain/chat/model/session-agent-config.schema.js";
 export type {
   ChatMessageData,
@@ -23,37 +19,23 @@ export type {
   MessageContent,
 } from "../domain/chat/model/message.js";
 export {
-  NO_PATH_ATTACHMENT_NAME,
   attachmentStorageName,
-  messageAttachmentActionSchema,
   messageAttachmentSchema,
   messageAttachmentsSchema,
   parseAttachmentsJson,
-  serializeAttachmentsJson,
 } from "../domain/chat/model/message-attachment.schema.js";
 export type { MessageAttachmentAction } from "../domain/chat/model/message-attachment.schema.js";
-export {
-  annotateDraftSchema,
-  annotateDraftsSchema,
-  isMessageAnnotatePath,
-  MESSAGE_ANNOTATE_PATH_MARKER,
-} from "../domain/chat/model/annotate-draft.schema.js";
+export { isMessageAnnotatePath } from "../domain/chat/model/annotate-draft.schema.js";
 export type {
   AnnotateDraft,
-  AnnotateDrafts,
   SendAnnotateDraft,
 } from "../domain/chat/model/annotate-draft.schema.js";
 export {
-  EMPTY_COMPOSER_DRAFT,
-  composerDraftAttachmentSchema,
-  composerDraftSchema,
-  isComposerDraftAttachment,
   parseComposerDraftJson,
   serializeComposerDraftJson,
 } from "../domain/chat/model/composer-draft.schema.js";
 export type {
   ComposerDraft,
-  ComposerDraftAttachment,
   /** Composer 草稿中的确认胶囊区间（`[start, end)`，UTF-16 码元偏移）。 */
   ComposerDraftTokenRange,
 } from "../domain/chat/model/composer-draft.schema.js";
@@ -83,21 +65,7 @@ export {
   parseMessageContentValue,
 } from "../domain/chat/content/parse-message-content.js";
 export { formatMessageForCli } from "../domain/chat/content/format-message-cli.js";
-export type {
-  MessageMetadata,
-  MessageMetadataKind,
-} from "../domain/chat/model/message-metadata.js";
 export { readMessageMetadata } from "../domain/chat/model/message-metadata.js";
-export {
-  userVfsPendingEntrySchema,
-  userVfsPendingQueueSchema,
-  userVfsPendingToolSchema,
-} from "../domain/chat/model/user-vfs-pending.schema.js";
-export type {
-  UserVfsPendingEntry,
-  UserVfsPendingQueue,
-  UserVfsPendingTool,
-} from "../domain/chat/model/user-vfs-pending.schema.js";
 export { chatLinkResolver } from "../domain/chat/logic/resolve-chat-link-target.js";
 export { composerSendPolicy } from "../domain/chat/logic/composer/composer-send-policy.js";
 export { composerChips } from "../domain/chat/logic/composer/composer-chips.js";

@@ -14,6 +14,7 @@
  * @module domain/tool/builtin/search/engines/bocha
  */
 
+import { isRecord } from "@/common/guards.js";
 import {
   engineApiErrorMessage,
   engineTimeoutError,
@@ -81,14 +82,8 @@ function parseBochaResults(
     );
   }
   const data = envelope.data;
-  const pages =
-    typeof data === "object" && data !== null && !Array.isArray(data)
-      ? (data as Record<string, unknown>).webPages
-      : undefined;
-  const items =
-    typeof pages === "object" && pages !== null && !Array.isArray(pages)
-      ? (pages as Record<string, unknown>).value
-      : undefined;
+  const pages = isRecord(data) ? data.webPages : undefined;
+  const items = isRecord(pages) ? pages.value : undefined;
   if (!Array.isArray(items)) {
     throw new Error(
       "Bocha API returned invalid response: missing data.webPages.value array"
@@ -100,15 +95,12 @@ function parseBochaResults(
     snippet: string;
   }[] = [];
   for (const item of items) {
-    if (item == null || typeof item !== "object" || Array.isArray(item)) {
-      continue;
-    }
-    const entry = item as Record<string, unknown>;
-    const url = firstString(entry.url, entry.link, entry.href);
+    if (!isRecord(item)) continue;
+    const url = firstString(item.url, item.link, item.href);
     if (url == null) continue;
-    const title = firstString(entry.title, entry.name) ?? url;
+    const title = firstString(item.title, item.name) ?? url;
     const snippet =
-      firstString(entry.summary, entry.snippet, entry.description, entry.content) ?? "";
+      firstString(item.summary, item.snippet, item.description, item.content) ?? "";
     results.push({ title, url, snippet });
   }
   return { results };

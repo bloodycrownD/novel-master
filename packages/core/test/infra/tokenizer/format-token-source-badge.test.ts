@@ -13,12 +13,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import {
-  formatContextUsageLabel,
-  formatPromptTokenUsageLabel,
-  formatTokenSourceBadge,
-  formatTokenCount,
-} from "../../../src/common/format-token-count.js";
+import { formatContextUsageLabel, formatTokenSourceBadge, formatTokenCount } from "../../../src/common/format-token-count.js";
 // infra 导出面再导出的同一份实现（index → public/provider 链的源头）。
 import {
   formatContextUsageLabel as formatContextUsageLabelViaInfra,
@@ -200,10 +195,9 @@ describe("formatContextUsageLabel（T-TL2 完整标签格式）", () => {
     assert.equal(formatTokenCount(Number.NaN), "—");
   });
 
-  it("formatPromptTokenUsageLabel 是同一实现的兼容名（无 ~ 前缀、无 estimated 参数）", () => {
-    assert.equal(formatPromptTokenUsageLabel, formatContextUsageLabel);
+  it("formatContextUsageLabel 传 badge 对象时输出前缀形态（无 ~ 前缀、无 estimated 参数）", () => {
     assert.equal(
-      formatPromptTokenUsageLabel(64_000, 128_000, {
+      formatContextUsageLabel(64_000, 128_000, {
         mark: "远程",
         connector: "=",
       }),

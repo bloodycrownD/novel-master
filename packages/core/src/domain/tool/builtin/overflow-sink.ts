@@ -21,6 +21,7 @@
  */
 
 import type { BuiltinToolContext } from "./builtin-tool-context.js";
+import { utf8ByteLength } from "@/common/utf8.js";
 import { TOOL_OUTPUT_MAX_BYTES } from "../logic/tool-output-limits.js";
 import {
   ensureDirRulesForNewPath,
@@ -99,7 +100,7 @@ export async function sinkOversizedOutput(
     );
   }
   await ensureDirRulesForNewPath(ctx, OVERFLOW_SINK_DIR);
-  const contentBytes = new TextEncoder().encode(input.content).byteLength;
+  const contentBytes = utf8ByteLength(input.content);
   return {
     savedPath,
     message: `输出超过 ${

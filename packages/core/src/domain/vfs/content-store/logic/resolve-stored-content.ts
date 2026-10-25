@@ -59,13 +59,3 @@ async function resolveActiveFilePlainContent(
     "vfs 正文损坏：active 文件 content 与 content_hash 均为 NULL"
   );
 }
-
-/**
- * 从 SQL 行安全取出可空 TEXT，禁止 `String(null)` → `"null"`。
- */
-export function nullableText(value: unknown): string | null {
-  if (value == null) {
-    return null;
-  }
-  return String(value);
-}

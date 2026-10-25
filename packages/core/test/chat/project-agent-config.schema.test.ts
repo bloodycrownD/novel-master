@@ -4,7 +4,7 @@ import { decode } from "@novel-master/core";
 import {
   projectAgentConfigSchema,
   projectAgentModeSchema,
-} from "@novel-master/core/chat";
+} from "../../src/domain/chat/model/project-agent-config.schema.js";
 import { agentDefinitionSchema } from "@novel-master/core/agent";
 import { PromptError } from "@novel-master/core/prompt";
 import { ConfigDecodeError } from "../../src/errors/config-decode-errors.js";

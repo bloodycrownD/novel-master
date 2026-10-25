@@ -85,7 +85,6 @@ const WEBVIEW_CORE_ALLOWLIST = {
     'domain/chat/model/message-attachment.schema.js',
     'domain/chat/model/project-agent-config.schema.js',
     'domain/chat/model/session-agent-config.schema.js',
-    'domain/chat/model/user-vfs-pending.schema.js',
     'domain/session-kkv/model/session-kkv-domains.js',
     'domain/smart-sort-rule/model/smart-sort-rule-io.js',
     'domain/smart-sort-rule/model/smart-sort-rule.js',

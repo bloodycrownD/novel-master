@@ -9,6 +9,7 @@
  */
 
 import { isRecord } from "@/common/guards.js";
+import { utf8ByteLength } from "@/common/utf8.js";
 import type {
   SkillToolRef,
   ToolResultBlock,
@@ -202,7 +203,7 @@ function summarizeToolSuccess(
       if (output.truncated === true) {
         const bodyBytes =
           typeof output.body === "string"
-            ? new TextEncoder().encode(output.body as string).byteLength
+            ? utf8ByteLength(output.body)
             : undefined;
         // 正常截断路径 body 含标注行会略超预算，展示上按预算值口径。
         const kept =

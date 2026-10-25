@@ -13,18 +13,13 @@ export interface MessageRepository {
    * 按 seq 升序列出会话消息。`includeHidden: false` 在 SQL 层滤掉 hidden
    * 行（默认含 hidden——回滚锚定等既有口径依赖「含隐藏全量」）。
    */
-  listBySession(
-    sessionId: string,
-    options?: { includeHidden?: boolean }
-  ): Promise<ChatMessageData[]>;
+  listBySession(sessionId: string, options?: { includeHidden?: boolean }): Promise<ChatMessageData[]>;
 
   /**
-   * 消息头投影（无正文，不解压 content）：压缩 hide / 置位锚定等只需要
-   * id/seq/role/hidden 的区间逻辑专用，大会话上替代全量解压。
+   * 消息头投影（无正文，不取 content 列）：压缩 hide / 置位锚定等只需要
+   * id/seq/role/hidden 的区间逻辑专用，大会话上替代全量读。
    */
-  listMessageHeadersBySession(
-    sessionId: string
-  ): Promise<ChatMessageHeader[]>;
+  listMessageHeadersBySession(sessionId: string): Promise<ChatMessageHeader[]>;
 
   /**
    * 统计会话消息行数（`SELECT COUNT(*) ... WHERE session_id = ?`）。
@@ -37,7 +32,7 @@ export interface MessageRepository {
   // ============================================================
   // 窄读口区 · Wave C「全量读收窄系列」四条
   //
-  // 这四条是同一个动作的四次落地：把「本来只需要一小块」的读取从 21 列
+  // 这四条是同一个动作的四次落地：把「本来只需要一小块」的读取从 19 列
   // `listBySession` 上拆下来。**它们相邻排布是有意的护栏**（CR c1 K10）——
   // 下一个人想加第五个全列读口时，会先看见这四条并被提醒「该加窄口，不该加
   // 全列口」。每条都写明了「谁在用、为什么不能用别的」，因为「能不能用现成
@@ -54,18 +49,14 @@ export interface MessageRepository {
    * `LIMIT -1 OFFSET ?` 表示不限条数。消息集只增不减时前 `offset` 行即
    * 上次扫描确认过的消息，返回的就是之后的新增段。
    *
-   * @remarks **谁在用**：`backfill-baseline-checkpoints.ts:132`（增量段判定，
-   *          只消费 `id`）。
+   * @remarks **谁在用**：`decideBackfillShortCircuit`（增量段判定，只消费 `id`）。
    * @remarks **为什么不能用别的**：不能用 `listMessageHeadersBySession` + 内存
    *          `slice` —— 那会把 offset 之前的消息头也读回来，offset 越大浪费越多；
-   *          更不能用 `listBySession` —— 21 列 + 逐行 `JSON.parse` 换一批
-   *          根本不需要的 id。21 列 → 6 列、零 parse。
+   *          更不能用 `listBySession` —— 19 列 + 逐行 `JSON.parse` 换一批
+   *          根本不需要的 id。19 列 → 6 列、零 parse。
    * @remarks 新增第二个「要正文」的调用方时必须**另起读口**，不要放宽本口。
    */
-  listBySessionOffset(
-    sessionId: string,
-    offset: number
-  ): Promise<ChatMessageHeader[]>;
+  listBySessionOffset(sessionId: string, offset: number): Promise<ChatMessageHeader[]>;
 
   /**
    * 按 seq 升序列出「seq <= maxSeq（含上界）」的消息（fork 上界收窄用）。
@@ -75,7 +66,7 @@ export interface MessageRepository {
    * 会话时，2997 条正文被读回、逐行 `JSON.parse`、再整条丢掉。
    * 与 {@link listBySessionFromSeq} 对称（那边收下界、这边收上界）。
    *
-   * @remarks **谁在用**：`message.service.ts:335`（`fork` 的上界收窄）。
+   * @remarks **谁在用**：`message.service.ts` 的 `fork`。
    * @remarks **为什么不能用别的**：不能用 `listBySession` + 内存 `filter`
    *          ——过滤发生在读回**之后**，省不下任何一行；也不能用
    *          `listMessageHeadersBySession`，fork 要的是完整 `ChatMessageData`
@@ -89,7 +80,9 @@ export interface MessageRepository {
   /**
    * tail + role 过滤：取「该 role 的最后 limit 条」（seq 升序返回）。
    *
-   * @remarks **谁在用**：`subagent-tool.ts:230`（拿「末条 assistant 的合并文本」）。
+   * @remarks **谁在用**：`message.service.ts` 的 `listBySessionTailOfRole` 转发
+   *          方法（`subagent-tool.ts` 取「末条 assistant 的合并文本」时经
+   *          service port 调用）。
    * @remarks **为什么不能用别的**：不能用 `listBySessionTail(sessionId, limit)`
    *          ——它的 `limit` 数的是**所有 role 的行**，夹在 assistant 回合之间的
    *          tool_result（role=user）会吃掉配额；也不能用
@@ -97,18 +90,14 @@ export interface MessageRepository {
    *          多半是 tool_result，直接落空。`role` 必须在 SQL 子查询里过滤、
    *          `limit` 只数该 role，子会话 41 条时也不再整条倒扫。
    */
-  listBySessionTailOfRole(
-    sessionId: string,
-    role: string,
-    limit: number
-  ): Promise<ChatMessageData[]>;
+  listBySessionTailOfRole(sessionId: string, role: string, limit: number): Promise<ChatMessageData[]>;
 
   /**
    * 列出会话内全部消息 id（清空会话场景的删除链素材），不投影任何其他列。
    *
-   * @remarks **谁在用**：`message.service.ts`（`truncateAfter` 空锚分支——
+   * @remarks **谁在用**：`message.service.ts` 的 `truncateAfter`（空锚分支——
    *          `deleteBySession` 前把每条消息的 checkpoint 一并删掉）。
-   * @remarks **为什么不能用别的**：不能用 `listBySession` ——21 列 + 逐行
+   * @remarks **为什么不能用别的**：不能用 `listBySession` ——19 列 + 逐行
    *          `JSON.parse` 换一批根本不需要任何正文的 id；`listMessageHeaders
    *          BySession` 也已含多余列。
    * @remarks ⚠ 不过滤 hidden：本读口产出的是「即将被 deleteBySession 全删」的
@@ -127,18 +116,11 @@ export interface MessageRepository {
    * 对消息列表的全部消费都落在「触发消息自身 + seq 更大方向」（锚点解析只做
    * tool_result 前向配对、tail 过滤只取锚点之后），锚点之前的消息不拉取。
    */
-  listBySessionFromSeq(
-    sessionId: string,
-    fromSeq: number
-  ): Promise<ChatMessageData[]>;
+  listBySessionFromSeq(sessionId: string, fromSeq: number): Promise<ChatMessageData[]>;
 
   listBySessionTail(sessionId: string, limit: number): Promise<ChatMessageData[]>;
 
-  listBySessionPage(
-    sessionId: string,
-    limit: number,
-    beforeSeq?: number
-  ): Promise<ChatMessageData[]>;
+  listBySessionPage(sessionId: string, limit: number, beforeSeq?: number): Promise<ChatMessageData[]>;
 
   findById(id: string): Promise<ChatMessageData | null>;
 
@@ -147,17 +129,16 @@ export interface MessageRepository {
   insert(message: ChatMessageData): Promise<void>;
 
   /**
-   * 批量写入消息：一次 `conn.batch` 提交所有行，消除 fork/copy 的逐条 INSERT。
-   *
-   * 空数组是 no-op（不发出 SQL），方便调用方在不判断长度时直接传入。
+   * 批量写入消息：同一事务内按 200 条分片多次 `conn.batch`；空数组是 no-op
+   * （不发出 SQL），方便调用方在不判断长度时直接传入。
    */
   batchInsert(messages: readonly ChatMessageData[]): Promise<void>;
 
   /**
    * 替换存储的消息正文。行缺失时返回 false。
    *
-   * 入参为 MessageContent 对象——JSON 序列化与压缩编码都收口在
-   * repository（service 层不再 stringify）。
+   * 入参为 MessageContent 对象——JSON 序列化收口在 repository（service 层
+   * 不再 stringify）。
    */
   updateContent(id: string, content: MessageContent): Promise<boolean>;
 
@@ -175,10 +156,5 @@ export interface MessageRepository {
   updateHidden(messageId: string, hidden: boolean): Promise<boolean>;
 
   /** Update the hidden state of messages in a seq range. Returns count of affected rows. */
-  updateHiddenRange(
-    sessionId: string,
-    fromSeq: number,
-    toSeq: number,
-    hidden: boolean
-  ): Promise<number>;
+  updateHiddenRange(sessionId: string, fromSeq: number, toSeq: number, hidden: boolean): Promise<number>;
 }

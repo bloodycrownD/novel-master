@@ -19,12 +19,10 @@ import {
   vfsDirectoryNotEmpty,
   vfsNotFound,
 } from "@/errors/vfs-errors.js";
+import { nullableText } from "@/common/coerce.js";
 import { SqliteVfsContentStore } from "../../content-store/impl/sqlite-vfs-content-store.js";
 import type { VfsContentStore } from "../../content-store/vfs-content-store.port.js";
-import {
-  nullableText,
-  resolveEntryPlainContent,
-} from "../../content-store/logic/resolve-stored-content.js";
+import { resolveEntryPlainContent } from "../../content-store/logic/resolve-stored-content.js";
 import type { VfsEntry, VfsEntryKind } from "../../model/vfs-entry.js";
 import type { VfsContentSize } from "../../model/vfs-content-size.js";
 import type { VfsListEntry } from "../../model/vfs-list-entry.js";

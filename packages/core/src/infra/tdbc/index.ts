@@ -21,6 +21,7 @@ export {
   resolveDriver,
 } from "./logic/registry.js";
 export { executeTemplate, queryTemplate } from "./logic/template-helper.js";
+export { runInTransactionOrConn } from "./logic/transaction-helper.js";
 export type {
   BatchResult,
   ExecuteResult,

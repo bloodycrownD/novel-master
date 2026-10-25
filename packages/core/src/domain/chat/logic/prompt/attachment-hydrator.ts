@@ -12,7 +12,7 @@ import {renderFileBlockBody} from "@/domain/workplace/logic/workplace-display.js
 import type {VfsService} from "@/domain/vfs/ports/vfs-service.port.js";
 import type {SessionKkvService} from "@/service/session-kkv/session-kkv.port.js";
 import type {SkillService} from "@/service/skills/skills.port.js";
-import {isBinaryFilePath, isImageFilePath} from "@/common/file.js";
+import {isBinaryFilePath} from "@/common/file.js";
 import {messageBodyTextFromBlocks} from "../../content/message-body-text.js";
 import {textBlocks} from "../../content/text-blocks.js";
 import type {ChatMessageData} from "../../model/message.js";
@@ -47,14 +47,14 @@ async function resolveWorkplaceStatus(path: string, runtime: AttachmentHydratorR
 }
 
 function resolveAttachFileStatus(path: string, type: MessageAttachment["type"]): WorkplaceDisplayStatus {
-    if (type === "image" || isBinaryFilePath(path) || isImageFilePath(path)) return "filename";
+    if (type === "image" || isBinaryFilePath(path)) return "filename";
     return "full";
 }
 
 function isBinaryOrImageAttach(attachment: MessageAttachment): boolean {
     if (attachment.type === "image" || attachment.type === "dir") return attachment.type === "image";
     const path = attachment.path ?? "";
-    return isBinaryFilePath(path) || isImageFilePath(path);
+    return isBinaryFilePath(path);
 }
 
 /** {@link fileRefAction} 的可选正文口径开关。 */

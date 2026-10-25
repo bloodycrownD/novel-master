@@ -6,21 +6,17 @@
  * renderer、mobile）共享。
  */
 export { compareAppVersions } from "./compare-app-versions.js";
-export { base64ToBytes } from "./base64.js";
+export { base64ToBytes, bytesToBase64 } from "./base64.js";
 export { parseJsonText } from "./json.js";
 export { utf8ByteLength } from "./utf8.js";
 export { truncateText } from "./text.js";
 export { isBinaryFilePath, isImageFilePath } from "./file.js";
-export { integerAtLeast, stringOrEmpty } from "./coerce.js";
+export { integerAtLeast, nullableText, stringOrEmpty } from "./coerce.js";
 export { errorText } from "./error-text.js";
 export { isRecord } from "./guards.js";
-export {
-  excerptReleaseNotes,
-  type ReleaseNotesFocus,
-} from "./excerpt-release-notes.js";
+export { excerptReleaseNotes } from "./excerpt-release-notes.js";
 export {
   formatTokenCount,
-  formatPromptTokenUsageLabel,
   // token-source-label：badge 与完整占用标签的单源（infra/tokenizer 与
   // public/provider 经 logic 文件再导出同一份实现）。
   formatTokenSourceBadge,
@@ -28,14 +24,9 @@ export {
   type TokenSourceBadge,
 } from "./format-token-count.js";
 export { normalizeYamlError } from "./normalize-yaml-error.js";
-// 存储类故障判据（YAML 导入通道的「反转让 TdbcError 绕过 normalizeYamlError」）。
-export { isStorageFailure } from "./is-storage-failure.js";
-// 智能排序规则 YAML 导入通道的错误标签单源（把 desktop + mobile 两份字面量三元
+// 智能排序规则 YAML 导入通道的错误归一（把 desktop + mobile 两份字面量三元
 // 收敛成一处，测试直接测它 ⇒ 顺带把「测试只重演、不守接线」的缺口闭上）。
-export {
-  normalizeSmartSortImportError,
-  SMART_SORT_IMPORT_YAML_INVALID_LABEL,
-} from "./normalize-smart-sort-import-error.js";
+export { normalizeSmartSortImportError } from "./normalize-smart-sort-import-error.js";
 export {
   formatDurationMs,
   formatRequestTime,

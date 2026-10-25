@@ -6,6 +6,8 @@
  */
 import ReactNativeBlobUtil from 'react-native-blob-util';
 
+export {base64ToBytes, bytesToBase64} from '@novel-master/core/common';
+
 /** blob-util on Android mishandles `file://` + encoded paths; use absolute fs path. */
 export function localUriToFsPath(localUri: string): string {
   const withoutScheme = localUri.startsWith('file://')
@@ -16,26 +18,6 @@ export function localUriToFsPath(localUri: string): string {
 
 export function toFileUri(path: string): string {
   return path.startsWith('file://') ? path : `file://${path}`;
-}
-
-export function base64ToBytes(base64: string): Uint8Array {
-  const binary = globalThis.atob(base64);
-  const out = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    out[i] = binary.charCodeAt(i);
-  }
-  return out;
-}
-
-/** 按 0x8000 切段再 fromCharCode，避免超大 spread 撑爆调用栈 / Hermes 堆。 */
-export function bytesToBase64(bytes: Uint8Array): string {
-  const chunkSize = 0x8000;
-  let binary = '';
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    const slice = bytes.subarray(i, Math.min(i + chunkSize, bytes.length));
-    binary += String.fromCharCode(...slice);
-  }
-  return globalThis.btoa(binary);
 }
 
 /** 字节块转 ascii 字符串（`writeStream(..., 'ascii')` 需要 string）。 */

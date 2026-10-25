@@ -7,7 +7,7 @@
  * @module message/floor
  */
 
-import { type ChatMessage } from "@novel-master/core/chat";
+import { type ChatMessageData } from "@novel-master/core/chat";
 
 /**
  * Maps inclusive floor range to internal `seq` for repository range updates.
@@ -16,7 +16,7 @@ import { type ChatMessage } from "@novel-master/core/chat";
  * @throws Error when floors are invalid or out of range
  */
 export function seqRangeFromFloors(
-  messages: readonly ChatMessage[],
+  messages: readonly ChatMessageData[],
   fromFloor: number,
   toFloor: number,
 ): { fromSeq: number; toSeq: number } {

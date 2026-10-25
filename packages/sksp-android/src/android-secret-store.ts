@@ -9,6 +9,7 @@
  * @module android-secret-store
  */
 
+import { base64ToBytes, bytesToBase64 } from "@novel-master/core/common";
 import type { TdbcConnection, Row } from "@novel-master/core/tdbc";
 import {
   BaseSqliteSecretStore,
@@ -28,18 +29,6 @@ function decodeBlob(value: unknown): Uint8Array {
     return base64ToBytes(value);
   }
   throw new SkspError("DB_ERROR", "Invalid blob column");
-}
-
-function base64ToBytes(base64: string): Uint8Array {
-  return Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
-}
-
-function bytesToBase64(bytes: Uint8Array): string {
-  let binary = "";
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i]!);
-  }
-  return btoa(binary);
 }
 
 /** Android Keystore 加密策略：密文/iv 都以 base64 文本存进 DB。 */

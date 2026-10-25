@@ -4,15 +4,14 @@
  *
  * 覆盖两条承重约束：
  * - **T-MP1** 写侧三态：新行 content_json 非空且压缩两列为 NULL；且
- *   updateContent 改写一条既有行后三列齐置——反例（只写 content_json、
- *   漏置 blob 两列）会让读路径拿到新旧不一致的形态，是数据错乱而非崩溃，
- *   必须有牙锁死。
+ *   updateContent 改写一条既有行后三列齐置——三列齐置是行级单形态卫生，
+ *   漏置 blob 两列会在行上留下旧形态。
  * - **T-MP6** 重复读正确性：同一行多次读取结果一致（读路径无进程内
  *   正文池，每次重新 parse——性能不设断言，只锁正确性）。
  *
  * 读路径单形态收敛（V1' 退役后）：存量压缩行已由反向搬运任务全部解回
- * 明文（真实库谓词归零 + KKV decompressDone 已置实测确认），readRowContent
- * 的 blob 双形态分支随 decodeMessageContent 退役，迁移期混存读（原 T-MP4）
+ * 明文（真实库谓词归零 + KKV decompressDone 已置实测确认），正文读取的
+ * blob 双形态分支随 decodeMessageContent 退役，迁移期混存读（原 T-MP4）
  * 使命完成、用例删除。
  *
  * @module test/chat/message-plaintext-write
@@ -128,7 +127,7 @@ describe("chat_message 全库明文化（T-MP1 / T-MP6）", () => {
     assert.deepEqual(list[0]!.content, content);
   });
 
-  it("T-MP1 反例：updateContent 改写既有行后三列齐置（漏置 blob 两列留旧值即读出新旧混形态）", async () => {
+  it("T-MP1 反例：updateContent 改写既有行后三列齐置（行级单形态卫生，漏置 blob 两列会留下旧形态）", async () => {
     const { sessionId, repo } = await newSession();
     const oldContent = textBlocks("编辑前的旧正文");
     const plain = messageFixture(sessionId, 1, oldContent);
@@ -149,16 +148,15 @@ describe("chat_message 全库明文化（T-MP1 / T-MP6）", () => {
     assert.equal(
       raw.encoding,
       null,
-      "content_encoding 必须齐置为 NULL（漏置则 encoding/blob 仍是旧值）"
+      "content_encoding 必须齐置为 NULL（三列齐置是行级单形态卫生）"
     );
     assert.equal(
       raw.blobIsNull,
       true,
-      "content_blob 必须齐置为 NULL——压缩两列残留旧值会让读路径按旧形态解释新行"
+      "content_blob 必须齐置为 NULL——三列齐置是行级单形态卫生，避免旧 blob 残留让同一行被看成双形态"
     );
 
-    // 承重断言：读回的是新正文，不是旧正文。
-    // 反例锁死：若 SET 漏掉 content_blob = NULL，此处会读到 oldContent。
+    // 读回新正文：读路径只认 content_json，验证写入已生效。
     const after = await repo.findById(plain.id);
     assert.ok(after);
     assert.deepEqual(

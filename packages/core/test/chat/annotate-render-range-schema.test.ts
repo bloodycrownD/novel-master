@@ -10,7 +10,6 @@ import {
   type AnnotateDraft,
 } from "@/domain/chat/model/annotate-draft.schema.js";
 import type { MessageAttachment } from "@/domain/chat/model/message-attachment.schema.js";
-import * as publicChat from "@novel-master/core/chat";
 
 describe("T-RG1 annotateDraftSchema renderStart/renderEnd", () => {
   it("接受合法半开渲染坐标；缺省旧草稿仍合法", () => {
@@ -148,7 +147,7 @@ describe("T-RG1 annotateDraftSchema renderStart/renderEnd", () => {
     assert.equal(legacyParsed[0]!.endOffset, 5);
   });
 
-  it("残缺/非法 render 对在 parse 时丢弃；public 已导出 schema", () => {
+  it("残缺/非法 render 对在 parse 时丢弃", () => {
     const brokenAtt: MessageAttachment = {
       name: "/broken.md",
       source: "user_ops",
@@ -162,17 +161,5 @@ describe("T-RG1 annotateDraftSchema renderStart/renderEnd", () => {
     assert.equal(parsed.length, 1);
     assert.equal(parsed[0]!.renderStart, undefined);
     assert.equal(parsed[0]!.renderEnd, undefined);
-
-    assert.equal(typeof publicChat.annotateDraftSchema.parse, "function");
-    const viaPublic = publicChat.annotateDraftSchema.parse({
-      id: "pub",
-      path: "/p.md",
-      originalText: "q",
-      userAnnotation: "a",
-      renderStart: 1,
-      renderEnd: 3,
-    });
-    assert.equal(viaPublic.renderStart, 1);
-    assert.equal(viaPublic.renderEnd, 3);
   });
 });

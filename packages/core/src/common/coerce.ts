@@ -22,3 +22,11 @@ export function integerAtLeast(value: unknown, min: number): number | undefined 
   }
   return undefined;
 }
+
+/** 从 SQL 行安全取出可空 TEXT，禁止 `String(null)` → `"null"`。 */
+export function nullableText(value: unknown): string | null {
+  if (value == null) {
+    return null;
+  }
+  return String(value);
+}

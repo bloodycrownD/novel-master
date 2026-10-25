@@ -6,7 +6,6 @@
 
 export type { MessageContent } from "./content-block.js";
 export type { MessageAttachment } from "./message-attachment.schema.js";
-export type { MessageUsage } from "./message-usage.js";
 
 import type { MessageContent } from "./content-block.js";
 import type { MessageAttachment } from "./message-attachment.schema.js";

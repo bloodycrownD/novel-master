@@ -8,6 +8,10 @@ import type { ChatSession } from "../model/session.js";
 
 /** Persistence for `chat_session` rows. */
 export interface SessionRepository {
+  /**
+   * 只返回 `parent_session_id IS NULL` 的顶层会话；子 session 用
+   * {@link listByParentSession} 自行 BFS。
+   */
   listByProject(projectId: string): Promise<ChatSession[]>;
 
   /** 按父 session 查子 session（子 agent 会话）；不含 parent_session_id IS NULL 的主会话。 */
@@ -45,9 +49,5 @@ export interface SessionRepository {
    * 与 `setComposerDraftJson` 不同：绑定切换是会话活动（语义比高频草稿写更重），
    * 因此同步更新 `updated_at_ms`。
    */
-  setSessionAgentConfig(
-    id: string,
-    json: string | null,
-    updatedAtMs: number
-  ): Promise<boolean>;
+  setSessionAgentConfig(id: string, json: string | null, updatedAtMs: number): Promise<boolean>;
 }

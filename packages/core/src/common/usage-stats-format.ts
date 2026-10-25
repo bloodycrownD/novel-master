@@ -9,10 +9,11 @@
 /** 请求流水时间：MM-DD HH:mm（本地时区）。 */
 export function formatRequestTime(ms: number): string {
   const d = new Date(ms);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(
-    d.getHours()
-  )}:${pad(d.getMinutes())}`;
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  return `${month}-${day} ${hh}:${mm}`;
 }
 
 /** 耗时/首字延迟展示：秒级 x.x s / 毫秒级 xxx ms；无数据显示横杠。 */
@@ -24,10 +25,7 @@ export function formatDurationMs(ms: number | null): string {
 }
 
 /** 页码条窗口：总页数 ≤7 全展示；否则首尾页 + 当前页 ±1，间隙用省略号。 */
-export function pageWindowItems(
-  current: number,
-  totalPages: number
-): (number | "…")[] {
+export function pageWindowItems(current: number, totalPages: number): (number | "…")[] {
   if (totalPages <= 7) {
     return Array.from({ length: totalPages }, (_, i) => i + 1);
   }

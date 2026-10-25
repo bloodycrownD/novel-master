@@ -40,7 +40,7 @@ import {
   vfsNotFound,
 } from "@/errors/vfs-errors.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
-import { TdbcError } from "@/infra/tdbc/index.js";
+import { runInTransactionOrConn } from "@/infra/tdbc/index.js";
 import type {
   VfsGrepMatch,
   VfsGrepOptions,
@@ -299,24 +299,6 @@ export class RevisionAwareVfsService implements InternalVfsService {
         normalizedNew
       );
     });
-  }
-}
-
-/**
- * Opens a transaction when none is active; reuses `conn` when already in one.
- */
-async function runInTransactionOrConn<T>(
-  conn: TdbcConnection,
-  fn: (tx: TdbcConnection) => Promise<T>
-): Promise<T> {
-  try {
-    return await conn.transaction(fn);
-  } catch (error) {
-    // Boundary: session-fs execute already holds an outer transaction.
-    if (error instanceof TdbcError && error.code === "NESTED_TRANSACTION") {
-      return fn(conn);
-    }
-    throw error;
   }
 }
 

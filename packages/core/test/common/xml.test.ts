@@ -15,6 +15,10 @@ describe("common/xml", () => {
     assert.equal(unescapeXmlText("&ldquo;你好&rdquo; &hellip;"), "“你好” …");
     assert.equal(unescapeXmlText("&#65;&#x42;"), "AB");
     assert.equal(unescapeXmlText("&unknown;"), "&unknown;");
+    // 原型链上的同名属性不得被当成命名实体（对象字面量查表会泄漏原生函数源码）。
+    assert.equal(unescapeXmlText("&constructor;"), "&constructor;");
+    assert.equal(unescapeXmlText("&toString;"), "&toString;");
+    assert.equal(unescapeXmlText("&valueOf;"), "&valueOf;");
   });
 
   it("&amp; 只解一层", () => {

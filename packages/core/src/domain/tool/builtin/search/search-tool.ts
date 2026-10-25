@@ -26,6 +26,7 @@
  * @module domain/tool/builtin/search/search-tool
  */
 
+import { utf8ByteLength } from "@/common/utf8.js";
 import { z } from "zod";
 
 import { toolFailed } from "@/errors/tool-errors.js";
@@ -266,9 +267,7 @@ export const searchTool: Tool<
     // message}；落盘失败（如 vfs 不可用）回落完整结果，不因落盘
     // 故障丢搜索所得。
     const serialized = JSON.stringify(success);
-    if (
-      new TextEncoder().encode(serialized).byteLength > TOOL_OUTPUT_MAX_BYTES
-    ) {
+    if (utf8ByteLength(serialized) > TOOL_OUTPUT_MAX_BYTES) {
       try {
         const sink = await sinkOversizedOutput(ctx, {
           tool: SEARCH_TOOL_NAME,

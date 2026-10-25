@@ -5,7 +5,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { ChatMessage } from "../../src/domain/chat/logic/message/chat-message.js";
-import { parseAttachmentsJson, NO_PATH_ATTACHMENT_NAME } from "../../src/domain/chat/model/message-attachment.schema.js";
+import { parseAttachmentsJson } from "../../src/domain/chat/model/message-attachment.schema.js";
 import type { ChatMessageData } from "../../src/domain/chat/model/message.js";
 
 function makeMsg(
@@ -63,7 +63,7 @@ describe("isUserInputMessage (T-S2)", () => {
           extra: 1,
         },
         {
-          name: NO_PATH_ATTACHMENT_NAME,
+          name: "__no_path__",
           source: "user_ops",
           type: "text",
           content: null,

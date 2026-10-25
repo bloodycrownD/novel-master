@@ -14,12 +14,10 @@ import {
   queryTemplate,
 } from "@/infra/tdbc/logic/template-helper.js";
 import type { Row } from "@/infra/tdbc/types.js";
+import { nullableText } from "@/common/coerce.js";
 import { SqliteVfsContentStore } from "../../content-store/impl/sqlite-vfs-content-store.js";
 import type { VfsContentStore } from "../../content-store/vfs-content-store.port.js";
-import {
-  nullableText,
-  resolveRevisionPlainContent,
-} from "../../content-store/logic/resolve-stored-content.js";
+import { resolveRevisionPlainContent } from "../../content-store/logic/resolve-stored-content.js";
 import type {
   VfsRevision,
   VfsRevisionStatus,

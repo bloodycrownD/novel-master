@@ -23,6 +23,7 @@ export interface ImageBlock {
   readonly source: ImageSource;
 }
 
+/** nm-style: keep-public — ImageBlock.source 的公开类型，脚本不统计属性类型引用。 */
 export type ImageSource =
   | { readonly kind: "url"; readonly url: string }
   | {
