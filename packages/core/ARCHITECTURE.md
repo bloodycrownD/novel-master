@@ -51,7 +51,9 @@ domain/<ctx>/
 | Repo impl | `repositories/impl/sqlite-<entity>.repository.ts` | `sqlite-message.repository.ts` |
 | Default impl | `action/default-<name>.ts` or `impl/default-*.ts` | `default-compaction-action.ts` |
 | Service factory | `create-<storage>-<role>.ts` or `impl/createSqlite*` | `createSqliteCompactionAgentResolver` |
-| Errors | `errors/<ctx>-errors.ts` or `<ctx>-runtime-errors.ts` | `agent-runtime-errors.ts` |
+| Errors | `errors/<ctx>-errors.ts` | `chat-errors.ts` |
+
+错误方向：新建错误优先用 `AppError` + `ErrorCodes`（`errors/app-error.ts`，数值按域分段，发布后不复用/不改号），存量 `<ctx>-errors.ts` 随 Either 迁移逐步收敛。
 
 ### Documented exceptions
 
