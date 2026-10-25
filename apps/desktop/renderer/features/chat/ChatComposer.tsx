@@ -22,11 +22,7 @@ import { useShellNav } from "@/providers/ShellNavProvider";
 import { ComposerStatusChips } from "./AttachmentDraftChips";
 import { AtPathTypeahead } from "./AtPathTypeahead";
 import { ComposerAtPathInput } from "./ComposerAtPathInput";
-import {
-  type AtPathRef,
-  findActiveAtQuery,
-  replaceActiveAtWithToken,
-} from "./composer-at-path";
+import { composerAtPath, type AtPathRef } from "./composer-at-path";
 import {
   chatAnnotateDraftStore,
   unionComposerStatusWithAnnotate,
@@ -35,7 +31,7 @@ import {
   shouldClearComposerBodyAfterAgentStarted,
   shouldClearComposerBodyOnUserMessageAppended,
 } from "./composer-body-clear";
-import { resolveComposerSendIntent } from "./composer-send-intent";
+import { composerSendPolicy } from "./composer-send-intent";
 import { FileReferencePicker } from "./FileReferencePicker";
 import { SkillTypeahead } from "./SkillTypeahead";
 import { SkillPicker } from "@/features/skills/SkillPicker";
@@ -166,13 +162,13 @@ export function ChatComposer({
   useAutoResizeTextarea(textareaRef, value, 200);
 
   const activeAt = useMemo(
-    () => findActiveAtQuery(value, cursor),
+    () => composerAtPath.detectQuery(value, cursor),
     [value, cursor],
   );
 
   // `$技能名` 手输查询：与 `@` 共用参数化 trigger，空白边界天然互斥
   const activeSkill = useMemo(
-    () => findActiveAtQuery(value, cursor, "$"),
+    () => composerAtPath.detectQuery(value, cursor, "$"),
     [value, cursor],
   );
 
@@ -307,12 +303,7 @@ export function ChatComposer({
       if (activeAt == null) {
         return;
       }
-      const next = replaceActiveAtWithToken(
-        value,
-        cursor,
-        activeAt.start,
-        token,
-      );
+      const next = composerAtPath.replaceToken(value, cursor, activeAt.start, token);
       onChange(next.text);
       requestAnimationFrame(() => {
         const ta = textareaRef.current;
@@ -332,12 +323,7 @@ export function ChatComposer({
       if (activeSkill == null) {
         return;
       }
-      const next = replaceActiveAtWithToken(
-        value,
-        cursor,
-        activeSkill.start,
-        `$${name}`,
-      );
+      const next = composerAtPath.replaceToken(value, cursor, activeSkill.start, `$${name}`);
       onChange(next.text);
       requestAnimationFrame(() => {
         const ta = textareaRef.current;
@@ -434,7 +420,7 @@ export function ChatComposer({
       return;
     }
 
-    const intent = resolveComposerSendIntent({
+    const intent = composerSendPolicy.evaluate({
       text: value,
       canResumeWithoutInput,
       hasAnnotateDrafts: chatAnnotateDraftStore.has(sessionId),
@@ -456,13 +442,14 @@ export function ChatComposer({
 
   const inputDisabled =
     (!hasModel && !running) || lastMessageIsPlainUserText;
-  const sendDisabled = resolveComposerSendIntent({
+  const sendIntent = composerSendPolicy.evaluate({
     text: value,
     canResumeWithoutInput,
     hasAnnotateDrafts: chatAnnotateDraftStore.has(sessionId),
     hasModel,
     running,
-  }).sendDisabled;
+  });
+  const sendDisabled = sendIntent.sendDisabled;
 
   const inputPlaceholder = hasModel
     ? "输入消息…（Ctrl+Enter 发送）"

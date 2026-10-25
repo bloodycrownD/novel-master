@@ -1,11 +1,12 @@
 /**
- * Composer / 气泡状态 chip 中文二字映射（单点真源）。
+ * Composer / 气泡状态 chip 文案（presentation）。
  *
- * @module domain/chat/logic/message/status-chip-label
+ * @module presentation/chat/attachment-chip
  */
 
 import {truncateText} from "@/common/text.js";
-import type {MessageAttachment, MessageAttachmentAction} from "../../model/message-attachment.schema.js";
+import type {MessageAttachment, MessageAttachmentAction} from "@/domain/chat/model/message-attachment.schema.js";
+import {attachmentPath} from "@/domain/chat/logic/message/attachment-path.js";
 
 /** 已知 action → 中文二字。 */
 const STATUS_CHIP_ZH: Readonly<Record<MessageAttachmentAction, string>> = {
@@ -37,27 +38,6 @@ const LEGACY_PREFIX_ZH: Readonly<Record<string, string>> = {
     annotate: "批注",
     userAttach: ""
 };
-
-/** 逻辑父目录：`/a.md`→`/`，`/续写/a.md`→`/续写`。 */
-export function logicalParentDir(path: string): string {
-    const normalized = path.trim();
-    if (normalized === "" || normalized === "/") {
-        return "/";
-    }
-    const noTrail = normalized.length > 1 && normalized.endsWith("/") ? normalized.slice(0, -1) : normalized;
-    const idx = noTrail.lastIndexOf("/");
-    if (idx <= 0) {
-        return "/";
-    }
-    return noTrail.slice(0, idx) || "/";
-}
-
-/**
- * 同目录 → `rename`；跨目录 → `move`（协议与 VFS `mv` 解耦分类）。
- */
-export function resolveRenameOrMoveAction(from: string, to: string): "rename" | "move" {
-    return logicalParentDir(from) === logicalParentDir(to) ? "rename" : "move";
-}
 
 /**
  * 已知枚举 → `中文二字:` + path。
@@ -123,7 +103,7 @@ export function formatStatusChipLabelFromAttachment(a: Pick<MessageAttachment, "
                     const from = suffix.slice(0, idx);
                     const to = suffix.slice(idx + sep.length);
                     if (from !== "" && to !== "") {
-                        return `${STATUS_CHIP_ZH[resolveRenameOrMoveAction(from, to)]}:${to}`;
+                        return `${STATUS_CHIP_ZH[attachmentPath.actionBetween(from, to)]}:${to}`;
                     }
                 }
                 suffix = renameSuffixToChipPath(suffix);

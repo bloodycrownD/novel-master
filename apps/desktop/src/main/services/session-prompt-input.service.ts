@@ -2,13 +2,13 @@
  * Builds {@link PromptLlmInput} for current agent + session (real prompt / token count).
  */
 import { type AgentDefinition, resolveAgentForProject } from "@novel-master/core/agent";
-import { prepareUserMessagesForPrompt } from "@novel-master/core/chat";
+import { promptAssembler } from "@novel-master/core/chat";
 import { buildPromptLlmInputFromLayout, type AgentPromptLayout, type PromptLlmInput, type PromptRenderContext } from "@novel-master/core/prompt";
 import {
   assembleWorkplaceDisplay,
   WorkplaceAssemblyAbortedError,
 } from "@novel-master/core/workplace";
-import type { ChatMessage } from "@novel-master/core/chat";
+import type { ChatMessageData } from "@novel-master/core/chat";
 import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
 
 export interface SessionPromptScope {
@@ -50,7 +50,7 @@ export interface SessionPromptInputBundle {
    * `resolveCurrentPromptTokens`）直接消费，避免再开一次查询；resolve 侧
    * 的回填参数已废弃，可见口径不影响任何消费方。
    */
-  readonly rawMessages: readonly ChatMessage[];
+  readonly rawMessages: readonly ChatMessageData[];
 }
 
 export async function buildSessionPromptInput(
@@ -115,7 +115,7 @@ export async function buildSessionPromptInput(
   }
   const { workplaceDisplay, files: workplaceFiles, prefixPaths, visiblePaths, fingerprint } = assembled;
   bail();
-  const messages = await prepareUserMessagesForPrompt(visibleMessages, {
+  const prepareRuntime = {
     sessionId: scope.sessionId,
     sessionKkv: runtime.sessionKkv,
     vfs,
@@ -128,7 +128,8 @@ export async function buildSessionPromptInput(
     // skillAttach hydrate（`$技能` 首次引用附全文），与 agent-runner 同源。
     skills: runtime.skills(),
     projectId: scope.projectId,
-  });
+  };
+  const messages = await promptAssembler.prepare(visibleMessages, prepareRuntime);
   bail();
   const ctx: PromptRenderContext = {
     workplaceDisplay,

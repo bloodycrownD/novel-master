@@ -6,7 +6,7 @@
 
 import { messageBodyTextFromBlocks } from "../../chat/content/message-body-text.js";
 import { textBlocks } from "../../chat/content/text-blocks.js";
-import type { ChatMessage } from "../../chat/model/message.js";
+import type { ChatMessageData } from "../../chat/model/message.js";
 import { readMessageMetadata } from "../../chat/model/message-metadata.js";
 import type { LlmProtocolKind } from "../../../infra/llm-protocol/ports/adapter.port.js";
 
@@ -44,25 +44,25 @@ function resolveZone(
 }
 
 /** 消息是否仅含 text 块（无 tool / thinking）。 */
-function isPlainTextOnly(message: ChatMessage): boolean {
+function isPlainTextOnly(message: ChatMessageData): boolean {
   const blocks = message.content.blocks ?? [];
   return blocks.every((b) => b.type === "text");
 }
 
 /** VFS 语义段：不得与 plain chat 文本 merge。 */
-function isVfsSemanticSegment(message: ChatMessage): boolean {
+function isVfsSemanticSegment(message: ChatMessageData): boolean {
   const kind = readMessageMetadata(message.raw)?.kind;
   return kind != null && VFS_SEMANTIC_KINDS.has(kind);
 }
 
 /** 带非空 attachments 的 user：禁与相邻 plain chat merge（同 VFS semantic）。 */
-function hasNonEmptyAttachments(message: ChatMessage): boolean {
+function hasNonEmptyAttachments(message: ChatMessageData): boolean {
   return (message.attachments?.length ?? 0) > 0;
 }
 
 function canMergeAdjacent(
-  left: ChatMessage,
-  right: ChatMessage,
+  left: ChatMessageData,
+  right: ChatMessageData,
   leftZone: LlmExportZone,
   rightZone: LlmExportZone
 ): boolean {
@@ -85,9 +85,9 @@ function canMergeAdjacent(
 }
 
 function mergePlainTextMessages(
-  left: ChatMessage,
-  right: ChatMessage
-): ChatMessage {
+  left: ChatMessageData,
+  right: ChatMessageData
+): ChatMessageData {
   const leftText = messageBodyTextFromBlocks(left.content.blocks);
   const rightText = messageBodyTextFromBlocks(right.content.blocks);
   let combined = leftText;
@@ -101,14 +101,14 @@ function mergePlainTextMessages(
 }
 
 function mergeWithinZones(
-  messages: readonly ChatMessage[],
+  messages: readonly ChatMessageData[],
   zones: LlmExportZones | undefined
-): ChatMessage[] {
+): ChatMessageData[] {
   if (messages.length === 0) {
     return [];
   }
 
-  const result: ChatMessage[] = [];
+  const result: ChatMessageData[] = [];
   let buffer = messages[0]!;
   let bufferZone = resolveZone(0, messages.length, zones);
 
@@ -127,18 +127,11 @@ function mergeWithinZones(
   return result;
 }
 
-function isEmptyTextMessage(message: ChatMessage): boolean {
-  if (!isPlainTextOnly(message)) {
-    return false;
-  }
-  return messageBodyTextFromBlocks(message.content.blocks).trim() === "";
-}
-
 /** OpenAI：可剔除空内容的 tool_turn_bridge synthetic。 */
 function applyProviderPostProcess(
-  messages: readonly ChatMessage[],
+  messages: readonly ChatMessageData[],
   provider: LlmProtocolKind
-): ChatMessage[] {
+): ChatMessageData[] {
   if (provider !== "openai") {
     return [...messages];
   }
@@ -147,7 +140,7 @@ function applyProviderPostProcess(
     if (kind !== "tool_turn_bridge") {
       return true;
     }
-    return !isEmptyTextMessage(message);
+    return !(isPlainTextOnly(message) && messageBodyTextFromBlocks(message.content.blocks).trim() === "");
   });
 }
 
@@ -161,10 +154,10 @@ function applyProviderPostProcess(
  * @param zones 三区边界；缺省时整段视为 chat 区
  */
 export function normalizeForLlmExport(
-  messages: readonly ChatMessage[],
+  messages: readonly ChatMessageData[],
   provider: LlmProtocolKind,
   zones?: LlmExportZones
-): ChatMessage[] {
+): ChatMessageData[] {
   const merged = mergeWithinZones(messages, zones);
   return applyProviderPostProcess(merged, provider);
 }

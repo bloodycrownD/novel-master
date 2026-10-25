@@ -47,8 +47,10 @@ function isDeprecated(node, sourceFile) {
 }
 
 function keepDirective(node, sourceFile) {
+  const jsdoc = (node.jsDoc ?? []).map((doc) => doc.getText()).join("\n");
+  if (/nm-style:\s*(keep-local|keep-public)/.test(jsdoc)) return jsdoc;
   const comments = ts.getLeadingCommentRanges(sourceFile.text, node.getFullStart()) ?? [];
-  return comments.find((range) => /nm-style:\s*keep-local/.test(sourceFile.text.slice(range.pos, range.end))) ?? null;
+  return comments.find((range) => /nm-style:\s*(keep-local|keep-public)/.test(sourceFile.text.slice(range.pos, range.end))) ?? null;
 }
 
 function passThroughCall(node) {
@@ -73,6 +75,8 @@ function isParamDerived(arg, paramName) {
 function isPassThrough(node, call) {
   const params = node.parameters;
   if (!params.every((param) => ts.isIdentifier(param.name) && param.initializer == null && param.dotDotDotToken == null)) return false;
+  const expression = call.expression;
+  if (!ts.isIdentifier(expression) && !(ts.isPropertyAccessExpression(expression) && (expression.expression.kind === ts.SyntaxKind.ThisKeyword || expression.expression.kind === ts.SyntaxKind.SuperKeyword))) return false;
   const args = call.arguments ?? [];
   return args.length === params.length && args.every((arg, index) => isParamDerived(arg, params[index].name.text));
 }
@@ -106,7 +110,8 @@ for (const file of targetFiles) {
         private: isPrivateMethod(member),
         deprecated: isDeprecated(member, sourceFile),
         line: lineOf(sourceFile, member),
-        keepLocal: keepDirective(member, sourceFile) != null,
+        keepLocal: /keep-local/.test(keepDirective(member, sourceFile) ?? ""),
+        keepPublic: /keep-public/.test(keepDirective(member, sourceFile) ?? ""),
       };
       definitions.push(definition);
       const list = definitionsByName.get(name) ?? [];
@@ -150,15 +155,17 @@ for (const definition of definitions) {
     rows.push(["PASS_THROUGH_METHOD", location, qualifiedName, `${calls} call / ${refCount} ref`, "方法体只是 return f(x)，无策略"]);
     continue;
   }
-  if (!definition.private && (definitionsByName.get(definition.name)?.length ?? 0) > 1) {
+  if (!definition.private && !hasModifier(definition.member, ts.ModifierFlags.Static) && (definitionsByName.get(definition.name)?.length ?? 0) > 1) {
     rows.push(["AMBIGUOUS_METHOD", location, qualifiedName, `${calls} call / ${refCount} ref`, "同名方法跨类出现，按名字计数不可靠"]);
     continue;
   }
   if (refCount === 0) {
-    rows.push(["DEAD_METHOD", location, qualifiedName, `${calls} call / ${refCount} ref`, "生产引用 0"]);
+    if (definition.keepPublic) rows.push(["KEEP_PUBLIC", location, qualifiedName, `${calls} call / ${refCount} ref`, "nm-style 公共入口（需在报告说明理由）"]);
+    else rows.push(["DEAD_METHOD", location, qualifiedName, `${calls} call / ${refCount} ref`, "生产引用 0"]);
   } else if (refCount === 1) {
     const lines = lineOf(definition.sourceFile, definition.member.getEnd()) - definition.line + 1;
     if (definition.keepLocal && lines > 20) rows.push(["KEEP_LOCAL", location, qualifiedName, `${calls} call / ${refCount} ref`, "nm-style 保留（需在报告说明理由）"]);
+    else if (definition.keepPublic) rows.push(["KEEP_PUBLIC", location, qualifiedName, `${calls} call / ${refCount} ref`, "nm-style 公共入口（需在报告说明理由）"]);
     else rows.push(["INLINE_METHOD", location, qualifiedName, `${calls} call / ${refCount} ref`, "只有一处生产引用，考虑内联"]);
   }
 }
@@ -168,9 +175,9 @@ rows.sort((a, b) => a[0].localeCompare(b[0]) || a[1].localeCompare(b[1]));
 if (flags.json) {
   console.log(JSON.stringify(rows.map(([verdict, location, name, refs, note]) => ({ verdict, location, name, refs, note })), null, 2));
 } else {
-  console.log(`check-methods: ${rows.filter(([verdict]) => verdict !== "KEEP_LOCAL").length} 处（扫描 ${definitions.length} 个类方法 / ${targetFiles.length} 个文件）`);
+  console.log(`check-methods: ${rows.filter(([verdict]) => verdict !== "KEEP_LOCAL" && verdict !== "KEEP_PUBLIC").length} 处（扫描 ${definitions.length} 个类方法 / ${targetFiles.length} 个文件）`);
   if (rows.length > 0) console.log(formatTable(["verdict", "location", "name", "refs", "note"], rows));
   console.log("规则：类方法同样按单点内联/死代码/薄包装处理；public 方法单点先撤 public 或写 keep-public 理由；计数是启发式，接口/动态调用需人工复核。");
 }
 
-process.exit(rows.some(([verdict]) => verdict !== "KEEP_LOCAL") ? 1 : 0);
+process.exit(rows.some(([verdict]) => verdict !== "KEEP_LOCAL" && verdict !== "KEEP_PUBLIC") ? 1 : 0);

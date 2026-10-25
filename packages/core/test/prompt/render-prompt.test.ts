@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { textBlocks, type ChatMessage } from "@novel-master/core/chat";
+import { textBlocks, type ChatMessageData } from "@novel-master/core/chat";
 
 import {
   buildPromptAssemblyFromLayout,
@@ -14,7 +14,7 @@ import {
 
 const fixedNow = new Date(2026, 4, 24, 9, 0, 0);
 
-function message(role: string, content: string, seq: number): ChatMessage {
+function message(role: string, content: string, seq: number): ChatMessageData {
   return {
     id: `m${seq}`,
     sessionId: "s1",
@@ -201,7 +201,7 @@ describe("formatPromptLlmInputForCliFromLayout", () => {
 });
 
 describe("includeThinkingBlocks 预览（T-PV1）", () => {
-  const thinkingMessage: ChatMessage = {
+  const thinkingMessage: ChatMessageData = {
     ...message("assistant", "", 1),
     content: {
       blocks: [
@@ -253,7 +253,7 @@ describe("buildPromptAssemblyFromLayout", () => {
   it("UA 两段按两条普通 message 展示（不合并摘要）", async () => {
     const actionXml = '<action name="delete">\n{"path":"/test.md"}\n</action>';
     const wrapped = `<system-message>\n${actionXml}\n</system-message>`;
-    const messages: ChatMessage[] = [
+    const messages: ChatMessageData[] = [
       {
         id: "u1",
         sessionId: "s1",

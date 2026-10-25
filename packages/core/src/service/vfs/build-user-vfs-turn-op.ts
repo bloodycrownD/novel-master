@@ -4,7 +4,7 @@
  * @module service/vfs/build-user-vfs-turn-op
  */
 
-import { resolveRenameOrMoveAction } from "@/domain/chat/logic/message/status-chip-label.js";
+import { attachmentPath } from "@/domain/chat/logic/message/attachment-path.js";
 import {
   buildUserVfsSaveEditActionXml,
   buildUserVfsSaveWriteActionXml,
@@ -60,7 +60,7 @@ export function buildUserVfsMkdirOp(path: string): UserVfsTurnOp {
  * 同目录 → `<action name="rename">`；跨目录 → `name="move"`；VFS 仍 `mv`。
  */
 export function buildUserVfsRenameOp(from: string, to: string): UserVfsTurnOp {
-  const kind = resolveRenameOrMoveAction(from, to);
+  const kind = attachmentPath.actionBetween(from, to);
   const actionXml = buildUserVfsSimpleActionXml(kind, { from, to });
   const [id] = allocToolIds(1, kind);
   return toOp(actionXml, [

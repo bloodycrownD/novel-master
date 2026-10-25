@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { textBlocks, type ChatMessage } from "@novel-master/core/chat";
+import { textBlocks, type ChatMessageData } from "@novel-master/core/chat";
 
 import {
   buildPromptAssemblyFromLayout,
@@ -13,7 +13,7 @@ import { messageBodyTextFromBlocks } from "@novel-master/core/prompt";
 
 const fixedNow = new Date(2026, 4, 24, 9, 0, 0);
 
-function message(role: string, content: string, seq: number): ChatMessage {
+function message(role: string, content: string, seq: number): ChatMessageData {
   return {
     id: `m${seq}`,
     sessionId: "s1",

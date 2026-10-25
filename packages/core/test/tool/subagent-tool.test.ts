@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 
 import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
 import type { AgentRunResult } from "@/domain/agent/model/agent-run-result.js";
-import type { ChatMessage } from "@/domain/chat/model/message.js";
+import type { ChatMessageData } from "@/domain/chat/model/message.js";
 import { TextBlock, ToolResultBlock } from "@/domain/chat/model/content-block.js";
 import { subagentTool, SUBAGENT_STOP_REASON_USER } from "@/domain/tool/builtin/subagent-tool.js";
 import type {
@@ -37,7 +37,7 @@ function fakeVfs(): VfsService {
 
 interface MockRunChildAgentResult {
   readonly result: AgentRunResult;
-  readonly childMessages: ChatMessage[];
+  readonly childMessages: ChatMessageData[];
 }
 
 function makeMockSubagent(args: {
@@ -57,7 +57,7 @@ function makeMockSubagent(args: {
     args.callableAgents ?? defs.map((d) => ({ name: d.name, description: d.description }));
   const childSessions: { id: string; title: string }[] = [];
   let sessionCounter = 0;
-  const childMsgsBySession = new Map<string, ChatMessage[]>();
+  const childMsgsBySession = new Map<string, ChatMessageData[]>();
 
   const agentRegistry: AgentRegistryService = {
     listAgentIds: async () => defs.map((_, i) => `id-${i}`),
@@ -140,9 +140,9 @@ describe("subagent-tool / task", () => {
       runResult: {
         // 子 agent 中间有 tool_use，末条才是最终 assistant text。
         childMessages: [
-          { role: "assistant", content: { blocks: [{ type: "tool_use", id: "tu1", name: "read", input: { path: "/o.md" } }] } } as ChatMessage,
-          { role: "user", content: { blocks: [{ type: "tool_result", toolUseId: "tu1", content: "..." }] } } as ChatMessage,
-          { role: "assistant", content: { blocks: [{ type: "text", text: expectedText }] } } as ChatMessage,
+          { role: "assistant", content: { blocks: [{ type: "tool_use", id: "tu1", name: "read", input: { path: "/o.md" } }] } } as ChatMessageData,
+          { role: "user", content: { blocks: [{ type: "tool_result", toolUseId: "tu1", content: "..." }] } } as ChatMessageData,
+          { role: "assistant", content: { blocks: [{ type: "text", text: expectedText }] } } as ChatMessageData,
         ],
         result: { stepsExecuted: 3, finished: true, stopReason: "completed", rounds: [] },
       },
@@ -161,7 +161,7 @@ describe("subagent-tool / task", () => {
     const { ctx, childSessions } = makeMockSubagent({
       runResult: {
         childMessages: [
-          { role: "assistant", content: { blocks: [{ type: "text", text: "ok" }] } } as ChatMessage,
+          { role: "assistant", content: { blocks: [{ type: "text", text: "ok" }] } } as ChatMessageData,
         ],
         result: { stepsExecuted: 1, finished: true, stopReason: "completed", rounds: [] },
       },
@@ -248,7 +248,7 @@ describe("subagent-tool / task", () => {
       runResult: {
         childMessages: [
           // 子 agent 中途 max_steps 截断，无末条 assistant text
-          { role: "assistant", content: { blocks: [{ type: "tool_use", id: "x", name: "read", input: {} }] } } as ChatMessage,
+          { role: "assistant", content: { blocks: [{ type: "tool_use", id: "x", name: "read", input: {} }] } } as ChatMessageData,
         ],
         result: { stepsExecuted: 10, finished: false, stopReason: "max_steps", rounds: [] },
       },
@@ -266,7 +266,7 @@ describe("subagent-tool / task", () => {
     const { ctx } = makeMockSubagent({
       runResult: {
         childMessages: [
-          { role: "assistant", content: { blocks: [{ type: "text", text: lastText }] } } as ChatMessage,
+          { role: "assistant", content: { blocks: [{ type: "text", text: lastText }] } } as ChatMessageData,
         ],
         result: { stepsExecuted: 2, finished: false, stopReason: "cancelled", rounds: [] },
       },
@@ -290,7 +290,7 @@ describe("subagent-tool / task", () => {
       runResult: {
         // 子 agent 还没来得及吐 assistant text 就被中断
         childMessages: [
-          { role: "assistant", content: { blocks: [{ type: "tool_use", id: "x", name: "read", input: {} }] } } as ChatMessage,
+          { role: "assistant", content: { blocks: [{ type: "tool_use", id: "x", name: "read", input: {} }] } } as ChatMessageData,
         ],
         result: { stepsExecuted: 1, finished: false, stopReason: "cancelled", rounds: [] },
       },

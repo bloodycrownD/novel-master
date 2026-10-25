@@ -29,7 +29,7 @@ import {
   testIsolationSuffix,
 } from "../helpers/novel-master-fixture.js";
 import type {
-  ChatMessage,
+  ChatMessageData,
   MessageContent,
 } from "../../src/domain/chat/model/message.js";
 
@@ -40,7 +40,7 @@ function messageFixture(
   sessionId: string,
   seq: number,
   content: MessageContent
-): ChatMessage {
+): ChatMessageData {
   return {
     id: randomUUID(),
     sessionId,

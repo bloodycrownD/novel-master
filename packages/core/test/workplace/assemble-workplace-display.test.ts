@@ -15,7 +15,7 @@ import { settlePendingFileCacheBackfills } from "../../src/domain/workplace/logi
 import { createVfsTools } from "../../src/domain/tool/builtin/vfs-tools.js";
 import { textBlocks } from "../../src/domain/chat/content/text-blocks.js";
 import { messageBodyTextFromBlocks } from "../../src/domain/chat/content/message-body-text.js";
-import { prepareUserMessagesForPrompt } from "../../src/domain/chat/logic/prompt/prepare-user-messages-for-prompt.js";
+import { promptAssembler } from "../../src/domain/chat/logic/prompt/prompt-assembler.js";
 import type { AgentPromptLayout } from "../../src/domain/prompt/model/agent-prompt-layout.js";
 import {
   getNovelMasterTestContext,
@@ -622,7 +622,7 @@ describe("assembleWorkplaceDisplay S0 双读（prefixPaths / visiblePaths）", (
    * 零覆盖——把 `evaluateFileDisplay` 的 header 判定或 assemble 的 full
    * 条件改坏，两份用例都照绿。这里从 `setDirRule` 真配目录起手，不预置
    * 任何快照，让 assemble 真跑 `evaluateRuleView`；尾部把 assemble 的
-   * 产物按真实接线喂 `prepareUserMessagesForPrompt`。
+   * 产物按真实接线喂 `promptAssembler`。
    */
   it("T-S01-E2E: 显式 header 目录 → 规则引擎出 header 档 → 只进 visiblePaths → attach 拿全文", async () => {
     const ctx = getNovelMasterTestContext();
@@ -668,7 +668,7 @@ describe("assembleWorkplaceDisplay S0 双读（prefixPaths / visiblePaths）", (
 
     // 段③：按真实接线（prefixPaths→seenPaths、visiblePaths→workplaceSeenPaths）
     // 喂 prepare，断言同路径 attach 拿到全文而不是 alreadyReferenced 短提示。
-    const prepared = await prepareUserMessagesForPrompt(
+    const prepared = await promptAssembler.prepare(
       [
         {
           id: "e2e-attach",

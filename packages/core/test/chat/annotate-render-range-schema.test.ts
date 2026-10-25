@@ -4,10 +4,7 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import {
-  buildFileAnnotateAttachmentFromDraft,
-  parseAnnotateDraftsFromAttachments,
-} from "@/domain/chat/logic/attachment/build-attachment-action-xml.js";
+import { attachmentXmlCodec } from "@/domain/chat/logic/attachment/attachment-xml-codec.js";
 import {
   annotateDraftSchema,
   type AnnotateDraft,
@@ -121,11 +118,11 @@ describe("T-RG1 annotateDraftSchema renderStart/renderEnd", () => {
       renderStart: 12,
       renderEnd: 17,
     };
-    const att = buildFileAnnotateAttachmentFromDraft(draft);
+    const att = attachmentXmlCodec.encodeAnnotateAttachment(draft);
     assert.match(att.content ?? "", /"renderStart": 12/);
     assert.match(att.content ?? "", /"renderEnd": 17/);
 
-    const parsed = parseAnnotateDraftsFromAttachments([att]);
+    const parsed = attachmentXmlCodec.decodeAnnotateDrafts([att]);
     assert.equal(parsed.length, 1);
     assert.notEqual(parsed[0]!.id, "orig");
     assert.equal(parsed[0]!.path, "/round.md");
@@ -143,7 +140,7 @@ describe("T-RG1 annotateDraftSchema renderStart/renderEnd", () => {
       path: "/legacy.md",
       action: "annotate",
     };
-    const legacyParsed = parseAnnotateDraftsFromAttachments([legacyAtt]);
+    const legacyParsed = attachmentXmlCodec.decodeAnnotateDrafts([legacyAtt]);
     assert.equal(legacyParsed.length, 1);
     assert.equal(legacyParsed[0]!.renderStart, undefined);
     assert.equal(legacyParsed[0]!.renderEnd, undefined);
@@ -161,7 +158,7 @@ describe("T-RG1 annotateDraftSchema renderStart/renderEnd", () => {
       path: "/broken.md",
       action: "annotate",
     };
-    const parsed = parseAnnotateDraftsFromAttachments([brokenAtt]);
+    const parsed = attachmentXmlCodec.decodeAnnotateDrafts([brokenAtt]);
     assert.equal(parsed.length, 1);
     assert.equal(parsed[0]!.renderStart, undefined);
     assert.equal(parsed[0]!.renderEnd, undefined);

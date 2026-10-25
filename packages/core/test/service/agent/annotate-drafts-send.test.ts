@@ -15,9 +15,9 @@ import {
   refreshUserVfsUnifiedToolTurnSnapshot,
   resetUserVfsUnifiedToolTurnSnapshotForTests,
 } from "@/domain/feature-flags/user-vfs-unified-tool-turn.js";
-import { wrapUserMessageForLlm } from "@/domain/chat/logic/prompt/wrap-user-message-for-llm.js";
-import { buildFileAnnotateAttachmentFromDraft } from "@/domain/chat/logic/attachment/build-attachment-action-xml.js";
-import { mergeAttachmentsByPath } from "@/domain/chat/logic/attachment/scan-at-path-attachments.js";
+import { userMessageFormatter } from "@/domain/chat/logic/prompt/user-message-formatter.js";
+import { attachmentXmlCodec } from "@/domain/chat/logic/attachment/attachment-xml-codec.js";
+import { attachmentScanner } from "@/domain/chat/logic/attachment/attachment-scanner.js";
 import {
   messageAttachmentSchema,
   type MessageAttachment,
@@ -235,9 +235,9 @@ describe("annotateDrafts send (T-AN3/T-AN4/T-AN6 core)", () => {
         userAnnotation: "二",
       },
     ];
-    const annotateAtts = drafts.map(buildFileAnnotateAttachmentFromDraft);
+    const annotateAtts = drafts.map((draft) => attachmentXmlCodec.encodeAnnotateAttachment(draft));
     // 若误走 mergeAttachmentsByPath 会丢一条
-    const wronglyMerged = mergeAttachmentsByPath([], annotateAtts);
+    const wronglyMerged = attachmentScanner.mergeByPath([], annotateAtts);
     assert.equal(
       wronglyMerged.length,
       1,
@@ -246,7 +246,7 @@ describe("annotateDrafts send (T-AN3/T-AN4/T-AN6 core)", () => {
 
     const concat = [...annotateAtts];
     assert.equal(concat.length, 2);
-    const wrapped = wrapUserMessageForLlm("x", concat);
+    const wrapped = userMessageFormatter.wrapForLlm("x", concat);
     const matches = wrapped.match(/name="annotate"/g) ?? [];
     assert.equal(matches.length, 2);
     assert.match(wrapped, /"userAnnotation": "一"/);
@@ -285,14 +285,14 @@ describe("annotateDrafts send (T-AN3/T-AN4/T-AN6 core)", () => {
     resetUserVfsUnifiedToolTurnSnapshotForTests();
   });
 
-  it("T-MA6: 文件形 buildFileAnnotateAttachmentFromDraft(AnnotateDraft) 签名仍可用", () => {
+  it("T-MA6: 文件形 attachmentXmlCodec.encodeAnnotateAttachment(AnnotateDraft) 签名仍可用", () => {
     const fileOnly: AnnotateDraft = {
       id: "desktop-ok",
       path: "/desktop.md",
       originalText: "x",
       userAnnotation: "y",
     };
-    const att = buildFileAnnotateAttachmentFromDraft(fileOnly);
+    const att = attachmentXmlCodec.encodeAnnotateAttachment(fileOnly);
     assert.equal(att.path, "/desktop.md");
     assert.equal(att.action, "annotate");
     assert.equal(att.name, "/desktop.md");
@@ -317,9 +317,9 @@ describe("annotateDrafts send (T-AN3/T-AN4/T-AN6 core)", () => {
   });
 });
 
-describe("buildFileAnnotateAttachmentFromDraft：locationLabel 注入", () => {
+describe("attachmentXmlCodec.encodeAnnotateAttachment：locationLabel 注入", () => {
   it("有 startLine/endLine → params 含 locationLabel 自然语言", () => {
-    const att = buildFileAnnotateAttachmentFromDraft({
+    const att = attachmentXmlCodec.encodeAnnotateAttachment({
       id: "x",
       path: "/a.md",
       originalText: "原文",
@@ -333,7 +333,7 @@ describe("buildFileAnnotateAttachmentFromDraft：locationLabel 注入", () => {
   });
 
   it("单行 locationLabel", () => {
-    const att = buildFileAnnotateAttachmentFromDraft({
+    const att = attachmentXmlCodec.encodeAnnotateAttachment({
       id: "x",
       path: "/a.md",
       originalText: "原文",
@@ -345,7 +345,7 @@ describe("buildFileAnnotateAttachmentFromDraft：locationLabel 注入", () => {
   });
 
   it("无行号 → 不写 locationLabel（老附件兼容）", () => {
-    const att = buildFileAnnotateAttachmentFromDraft({
+    const att = attachmentXmlCodec.encodeAnnotateAttachment({
       id: "x",
       path: "/a.md",
       originalText: "原文",

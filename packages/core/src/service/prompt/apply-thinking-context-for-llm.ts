@@ -21,7 +21,7 @@
  * @module service/prompt/apply-thinking-context-for-llm
  */
 
-import type { ChatMessage } from "@/domain/chat/model/message.js";
+import type { ChatMessageData } from "@/domain/chat/model/message.js";
 import type { LlmProtocolKind } from "@/infra/llm-protocol/ports/adapter.port.js";
 
 /** 剥离选项。 */
@@ -42,7 +42,7 @@ export interface ThinkingContextOptions {
  * 更早的 assistant 消息。找不到时返回 -1。
  */
 function findProtocolMinimumRetainIndex(
-  messages: readonly ChatMessage[]
+  messages: readonly ChatMessageData[]
 ): number {
   for (let i = messages.length - 1; i >= 0; i--) {
     const message = messages[i]!;
@@ -57,16 +57,10 @@ function findProtocolMinimumRetainIndex(
   return -1;
 }
 
-/** 消息是否含 thinking / redacted_thinking 块。 */
-function hasThinkingBlocks(message: ChatMessage): boolean {
-  return (message.content.blocks ?? []).some(
-    (block) => block.type === "thinking" || block.type === "redacted_thinking"
-  );
-}
-
 /** 剥掉消息内全部 thinking / redacted_thinking 块（无变更时返回原引用）。 */
-function stripThinkingBlocks(message: ChatMessage): ChatMessage {
-  if (!hasThinkingBlocks(message)) {
+function stripThinkingBlocks(message: ChatMessageData): ChatMessageData {
+  const hasThinking = (message.content.blocks ?? []).some((block) => block.type === "thinking" || block.type === "redacted_thinking");
+  if (!hasThinking) {
     return message;
   }
   const blocks = (message.content.blocks ?? []).filter(
@@ -80,9 +74,9 @@ function stripThinkingBlocks(message: ChatMessage): ChatMessage {
  * 不回写数据库）。规则与顺序见模块注释。
  */
 export function applyThinkingContextForLlm(
-  messages: readonly ChatMessage[],
+  messages: readonly ChatMessageData[],
   options: ThinkingContextOptions
-): ChatMessage[] {
+): ChatMessageData[] {
   const { enabled, protocol, retainProtocolMinimum, requestThinkingEnabled } =
     options;
 
@@ -112,8 +106,8 @@ export function applyThinkingContextForLlm(
 }
 
 function stripAllAssistantThinking(
-  messages: readonly ChatMessage[]
-): ChatMessage[] {
+  messages: readonly ChatMessageData[]
+): ChatMessageData[] {
   return messages.map((message) =>
     message.role === "assistant" ? stripThinkingBlocks(message) : message
   );

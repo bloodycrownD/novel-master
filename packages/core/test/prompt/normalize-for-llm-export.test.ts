@@ -4,7 +4,7 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import type { ChatMessage } from "../../src/domain/chat/model/message.js";
+import type { ChatMessageData } from "../../src/domain/chat/model/message.js";
 import { normalizeForLlmExport } from "../../src/domain/prompt/logic/normalize-for-llm-export.js";
 import { messageBodyTextFromBlocks } from "../../src/domain/prompt/logic/message-body.js";
 
@@ -14,9 +14,9 @@ function msg(
   options?: {
     readonly id?: string;
     readonly raw?: Record<string, unknown> | null;
-    readonly blocks?: ChatMessage["content"]["blocks"];
+    readonly blocks?: ChatMessageData["content"]["blocks"];
   }
-): ChatMessage {
+): ChatMessageData {
   const blocks =
     options?.blocks ?? (text === "" ? [] : [{ type: "text" as const, text }]);
   return {
@@ -146,7 +146,7 @@ describe("normalizeForLlmExport", () => {
   });
 
   it("T-PR1: 已 wrap 的带 attachments user 不与相邻 plain user merge", () => {
-    const withAtt: ChatMessage = {
+    const withAtt: ChatMessageData = {
       ...msg("user", "<attachment>\n  <attach></attach>\n</attachment>\n<user-input>\nhi\n</user-input>", {
         id: "u-att",
       }),

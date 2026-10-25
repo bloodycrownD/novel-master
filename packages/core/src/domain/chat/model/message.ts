@@ -12,8 +12,8 @@ import type { MessageContent } from "./content-block.js";
 import type { MessageAttachment } from "./message-attachment.schema.js";
 import type { MessageUsage } from "./message-usage.js";
 
-/** A single message in a session, ordered by `seq`. */
-export interface ChatMessage {
+/** A single message in a session, ordered by `seq` (持久化/IPC 的纯数据形状). */
+export interface ChatMessageData {
   readonly id: string;
   readonly sessionId: string;
   readonly seq: number;

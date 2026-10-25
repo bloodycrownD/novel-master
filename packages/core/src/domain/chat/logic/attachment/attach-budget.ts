@@ -43,18 +43,18 @@ export const BINARY_ATTACH_NOTE = "二进制文件，不提供正文";
 
 /** 预算累加器（单次拼装一份，与 `seen` 同级作用域）。 */
 export class AttachBudget {
-  private used = 0;
+    private used = 0;
 
-  /**
-   * 尝试计入 `chars`：计入后**恰好等于**预算仍算通过（边界不降级）；
-   * 超预算则不改动并返回 false，调用方据此走降级出口。
-   */
-  tryConsume(chars: number): boolean {
-    const next = this.used + Math.max(0, chars);
-    if (next > ATTACH_PROMPT_CHAR_BUDGET) {
-      return false;
+    /**
+     * 尝试计入 `chars`：计入后**恰好等于**预算仍算通过（边界不降级）；
+     * 超预算则不改动并返回 false，调用方据此走降级出口。
+     */
+    tryConsume(chars: number): boolean {
+        const next = this.used + Math.max(0, chars);
+        if (next > ATTACH_PROMPT_CHAR_BUDGET) {
+            return false;
+        }
+        this.used = next;
+        return true;
     }
-    this.used = next;
-    return true;
-  }
 }

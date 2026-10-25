@@ -4,7 +4,7 @@
  * @module domain/prompt/model/prompt-render-context
  */
 
-import type { ChatMessage } from "@/domain/chat/model/message.js";
+import type { ChatMessageData } from "@/domain/chat/model/message.js";
 import type { VfsService } from "@/domain/vfs/ports/vfs-service.port.js";
 import type { WorkplaceService } from "@/service/workplace/workplace.port.js";
 
@@ -28,7 +28,7 @@ export interface PromptWorkplaceFileEntry {
 /** Workplace + 会话消息 + VFS 上下文（dynamic 宏展开）。 */
 export interface PromptRenderContext {
   readonly workplaceDisplay: string;
-  readonly messages: readonly ChatMessage[];
+  readonly messages: readonly ChatMessageData[];
   /** Defaults to `new Date()` when omitted (tests inject a fixed time). */
   readonly now?: Date;
   /** Workplace 服务，供 `{{$filetree}}` 实时渲染。 */
@@ -62,5 +62,5 @@ export interface PromptRenderContext {
 /** Structured input for model request services. */
 export interface PromptLlmInput {
   readonly system?: string;
-  readonly messages: readonly ChatMessage[];
+  readonly messages: readonly ChatMessageData[];
 }

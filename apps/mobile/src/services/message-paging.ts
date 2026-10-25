@@ -1,4 +1,4 @@
-import {type ChatMessage} from '@novel-master/core/chat';
+import {type ChatMessageData} from '@novel-master/core/chat';
 
 /**
  * Merge "older" messages before the currently displayed list.
@@ -6,9 +6,9 @@ import {type ChatMessage} from '@novel-master/core/chat';
  * WHY: paging fetch returns older history; chat timeline is ascending by `seq`.
  */
 export function prependOlderMessages(
-  current: readonly ChatMessage[],
-  older: readonly ChatMessage[],
-): ChatMessage[] {
+  current: readonly ChatMessageData[],
+  older: readonly ChatMessageData[],
+): ChatMessageData[] {
   if (older.length === 0) {
     return [...current];
   }

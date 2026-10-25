@@ -110,7 +110,11 @@
       "types": "./dist/config-forms/stored-config-validity/index.d.ts",
       "import": "./dist/config-forms/stored-config-validity/index.js"
     },
-    "./locales/*": "./locales/*"
+    "./locales/*": "./locales/*",
+    "./presentation/chat/*": {
+      "types": "./dist/presentation/chat/*",
+      "import": "./dist/presentation/chat/*"
+    }
   },
   "scripts": {
     "lint": "eslint src test",

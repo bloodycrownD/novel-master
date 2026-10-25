@@ -6,7 +6,7 @@
 
 import { isRecord } from "@/common/guards.js";
 import type { ContentBlock } from "@/domain/chat/model/content-block.js";
-import type { ChatMessage } from "@/domain/chat/model/message.js";
+import type { ChatMessageData } from "@/domain/chat/model/message.js";
 import type { AnthropicToolNameWire } from "./anthropic-tool-names.js";
 
 type AnthropicContentItem = Record<string, unknown>;
@@ -201,7 +201,7 @@ function mergeAdjacentUserTurns(
 
 /** Session history ??Anthropic `messages[]` (tool_result ??user role). */
 export function chatMessagesToAnthropic(
-  messages: readonly ChatMessage[],
+  messages: readonly ChatMessageData[],
   toolNames?: AnthropicToolNameWire
 ): Array<{ role: string; content: AnthropicContentItem[] }> {
   const out: Array<{ role: string; content: AnthropicContentItem[] }> = [];

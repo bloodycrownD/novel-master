@@ -130,7 +130,7 @@ if (flags.json) {
 } else {
   console.log(`check-inline: ${rows.length} 处（扫描 ${files.length} 个文件）`);
   if (rows.length > 0) console.log(formatTable(["verdict", "location", "name", "refs", "note"], rows));
-  console.log("规则：单点私有函数内联；零引用私有函数删除；return f(x) 无策略 wrapper 删除；类方法看 check-methods；keep-local 仅限 >20 行有名字管线阶段，且需在报告说明。");
+  console.log("规则：单点私有函数内联；零引用私有函数删除；return f(x) 无策略 wrapper 删除；类方法看 check-methods；keep-local 只用于内联简化后仍成立的共享状态阶段，理由必须点名状态/不变量并在报告说明。");
 }
 
 process.exit(rows.some(([verdict]) => verdict !== "KEEP_LOCAL") ? 1 : 0);

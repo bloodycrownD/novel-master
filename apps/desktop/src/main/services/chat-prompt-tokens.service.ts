@@ -25,7 +25,7 @@
  * @module services/chat-prompt-tokens
  */
 import { app } from "electron";
-import type { ChatMessage } from "@novel-master/core/chat";
+import type { ChatMessageData } from "@novel-master/core/chat";
 import { messageBodyTextFromBlocks } from "@novel-master/core/prompt";
 
 import {
@@ -116,7 +116,7 @@ function realFallbackTokenCounter(
     // 上游据此继续按「估算」处理（压缩阈值会乘 0.85 安全系数）。
     kind: "heuristic",
     countText: (text: string) => countFallbackTokens(runtime, text),
-    countMessages: (messages: readonly ChatMessage[]) =>
+    countMessages: (messages: readonly ChatMessageData[]) =>
       // 拼成一整串再计数：按消息逐条计数会丢掉相邻消息之间的合并，拼接口径与
       // 序列化提示词时「合成一串再数」一致。
       countFallbackTokens(

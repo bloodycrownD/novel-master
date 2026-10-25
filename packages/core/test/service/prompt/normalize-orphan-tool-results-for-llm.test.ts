@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import type { ChatMessage } from "../../../src/domain/chat/model/message.js";
+import type { ChatMessageData } from "../../../src/domain/chat/model/message.js";
 import { normalizeOrphanToolResultsForLlm } from "../../../src/service/prompt/normalize-orphan-tool-results-for-llm.js";
 
 describe("normalizeOrphanToolResultsForLlm", () => {
   it("converts tool_result to text when assistant tool_use is not visible", () => {
-    const messages: ChatMessage[] = [
+    const messages: ChatMessageData[] = [
       {
         role: "user",
         content: {
@@ -31,7 +31,7 @@ describe("normalizeOrphanToolResultsForLlm", () => {
   });
 
   it("keeps tool_result when matching tool_use is visible in history", () => {
-    const messages: ChatMessage[] = [
+    const messages: ChatMessageData[] = [
       {
         role: "assistant",
         content: {

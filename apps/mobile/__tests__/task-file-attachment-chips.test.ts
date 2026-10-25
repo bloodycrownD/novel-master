@@ -18,7 +18,7 @@
 import type {VNode} from 'preact';
 import {
   attachmentStorageName,
-  type ChatMessage,
+  type ChatMessageData,
   type MessageAttachment,
 } from '@novel-master/core/chat';
 import {buildTranscriptRows} from '@/components/chat/message-blocks';
@@ -39,7 +39,7 @@ function userAttachAttachment(path: string): MessageAttachment {
 }
 
 /** 造子会话首条 user 消息（附件挂在这条消息上）。 */
-function childSessionUserMessage(attachments: MessageAttachment[]): ChatMessage {
+function childSessionUserMessage(attachments: MessageAttachment[]): ChatMessageData {
   return {
     id: 'child-u1',
     sessionId: 'child-1',

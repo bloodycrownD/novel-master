@@ -27,13 +27,13 @@
 import { z } from "zod";
 
 import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
-import type { ChatMessage } from "@/domain/chat/model/message.js";
+import type { ChatMessageData } from "@/domain/chat/model/message.js";
 import type { TextBlock } from "@/domain/chat/model/content-block.js";
 import type { MessageAttachment } from "@/domain/chat/model/message-attachment.schema.js";
 import {
   AttachmentPathArgumentError,
-  attachmentsFromPaths,
-} from "@/domain/chat/logic/attachment/scan-at-path-attachments.js";
+  attachmentScanner,
+} from "@/domain/chat/logic/attachment/attachment-scanner.js";
 import { ToolError } from "@/errors/tool-errors.js";
 import type { Tool } from "../model/tool.js";
 import type {
@@ -125,7 +125,7 @@ function formatCallableList(
  * @returns 末条 assistant 文本；不存在或无 text block 时返回 undefined。
  */
 function extractLastAssistantText(
-  messages: readonly ChatMessage[]
+  messages: readonly ChatMessageData[]
 ): string | undefined {
   for (let i = messages.length - 1; i >= 0; i--) {
     const msg = messages[i]!;
@@ -341,7 +341,7 @@ ${formatCallableList(callable)}
     if (filePaths != null && filePaths.length > 0) {
       let materialized: MessageAttachment[];
       try {
-        materialized = attachmentsFromPaths(filePaths);
+        materialized = attachmentScanner.fromPaths(filePaths);
       } catch (error) {
         if (error instanceof AttachmentPathArgumentError) {
           throw new ToolError(

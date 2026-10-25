@@ -250,3 +250,27 @@ assistant:
 - `check-inline` 早已报出 `renameChipZh` / `resolveChipPath` / `tryParseRenameTo` / `tryParseRenamePairFromContent` / `tryParseAnnotateChipText` / `truncateChipText` / `parseRenameArrowPair` 7 个 INLINE_LOCAL；上一轮只跑了 check-methods 单文件 0 项，把这 7 项当历史遗留没处理，属于处理遗漏。
 - 全部内联进 `formatStatusChipLabelFromAttachment`；合并 JSON 解析为 `parseChipContent`（annotate/rename 两处调用），保留 `resolvePathOrName` / `renameSuffixToChipPath` / `stripLegacyPrefix` 多调用 helper。
 - 验证：status-chip 4 例、core typecheck/build、chat 430/432（2 条既有 DST）；`check-inline packages/core/src/domain/chat/logic/message` 0 处，status-chip 的 check-inline/signatures 均 0。
+
+## 2026-10-25 DDD 化第一批：attachment 子域
+- 合并 `scan-at-path-attachments.ts` + `scan-skill-attachments.ts` 为 `attachment-scanner.ts`：`AttachmentScanner` 服务（`scanAtPaths` / `scanSkills` / `mergeScannedAtPaths` / `mergeScannedSkills` / `mergeByPath` / `fromPaths`）+ `attachmentScanner` 单例；旧文件删除。`fromPaths` / merge 入口标 `nm-style: keep-public`。
+- 合并 `build-attachment-action-xml.ts` 为 `attachment-xml-codec.ts`：`AttachmentXmlCodec` 的 `encodeFileRef` / `encodeDirTree` / `encodeAnnotateAttachment` / `decodeAnnotateDrafts` + `attachmentXmlCodec` 单例。
+- public/chat、desktop shared、mobile composer、core prepare/subagent/run-agent、测试全部切到服务对象；webview allowlist 改 scanner 路径并补 codec/coerce/xml。
+- 验证：core typecheck/build、chat 430/432（2 条既有 DST）、package-exports 21、desktop/mobile typecheck、desktop annotate 5、mobile rollback 13、webview B/C 全绿；attachment 子域 check-style 全 PASS。
+- 剩余 DDD 批次：composer（at-path/chip/send policy）、prompt（assembler/wrapper）、message presentation（status chip/tool summary）、vfs-turn view、root（link resolver/fork seeder/skill ref/rollback copy）。
+
+## 2026-10-25 logic 全量 DDD 化完成
+- attachment：AttachmentScanner（scanAtPaths/scanSkills/merge*/fromPaths）、AttachmentXmlCodec（encode*/decodeAnnotateDrafts）、PromptPathSeen、AttachBudget、DirAttachTreeRenderer。
+- composer：ComposerAtPath、ComposerChips、ComposerSendPolicy。
+- prompt：PromptAssembler.prepare、UserMessageFormatter.wrapForLlm。
+- message：ChatMessageEntity、MessageContentEntity、AttachmentPath；presentation 拆出 attachment-chip / tool-summary。
+- vfs-turn：UserVfsTurns（parseActions/deriveToolUses/matchAt/buildView）、UserVfsTurnStorage；preview 拆到 presentation/chat/user-vfs-turn-preview.ts。
+- root：ChatLinkResolver、ForkCopySeeder、SkillToolRefResolver；rollback confirm 拆到 presentation/chat/rollback-confirm.ts。
+- core 的 chat logic 已无 `export function`；public/chat 全部改为领域对象/服务入口。webview 改为 presentation 深入口（package export `./presentation/chat/*`），不再拉 public/chat 全图。
+- 脚本：check-methods 支持 static 工厂/keep-public，check-inline 不再一刀切 private；logic+presentation 目录 check-style 全 PASS。
+- 验证：core typecheck/build、chat 430/432（2 条既有 DST）、package 21、desktop 16、mobile 20、desktop/mobile typecheck、webview B/C 全绿。
+
+## 2026-10-25 先内联再抽象：AttachmentHydrator
+- 原 6 个 KEEP_LOCAL 先按调用点内联：`hydrateDirAttach` → `hydrateAttach` 的目录分支；`hydrateWorkplaceWithSeen` → `hydrateMessage` 的 workplace 循环；`matchUserVfsTurnStructureAt` → `UserVfsTurns.matchAt`。
+- 内联后观察：`<file>/<dir>` 旧外壳解包重复，抽 `unwrapLegacyBody`；`prepareOneUserMessage` 的三次 filter + identity Map 改为下标数组两轮有序处理。
+- 剩余 hydrate 阶段共享 `seen` / `workplaceSeen` / `AttachBudget` / `skillNames` 缓存，收成 `AttachmentHydrator` 对象；保留的是对象共享状态阶段，不是自由函数长度。
+- `nm-code-style` 增补 §1.1：先内联 → 简化 → 观察重复 → 再抽象；行数不是 `keep-local` 理由，原代码切分不是合理性证据。

@@ -5,7 +5,7 @@
  */
 
 import type {
-  ChatMessage,
+  ChatMessageData,
   MessageContent,
 } from "@/domain/chat/model/message.js";
 import type { MessageUsage } from "@/domain/chat/model/message-usage.js";
@@ -34,7 +34,7 @@ export interface AgentSession {
   readonly kkvScopeSessionId: string;
 
   /** Visible messages in order (excludes `hidden`). */
-  list(): Promise<readonly ChatMessage[]>;
+  list(): Promise<readonly ChatMessageData[]>;
 
   /** Appends a message to the session. */
   append(
@@ -55,7 +55,7 @@ export interface AgentSession {
        */
       attachments?: readonly MessageAttachment[];
     }
-  ): Promise<ChatMessage>;
+  ): Promise<ChatMessageData>;
 
   /** Hides messages in a seq range (compaction). Returns affected count. */
   hideRange(fromSeq: number, toSeq: number): Promise<number>;

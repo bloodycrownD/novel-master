@@ -4,15 +4,15 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { ChatMessageEntity } from "../../src/domain/chat/logic/message/chat-message-entity.js";
+import { ChatMessage } from "../../src/domain/chat/logic/message/chat-message.js";
 import { parseAttachmentsJson, NO_PATH_ATTACHMENT_NAME } from "../../src/domain/chat/model/message-attachment.schema.js";
-import type { ChatMessage } from "../../src/domain/chat/model/message.js";
+import type { ChatMessageData } from "../../src/domain/chat/model/message.js";
 
 function makeMsg(
   role: string,
-  blocks: ChatMessage["content"]["blocks"],
-  attachments?: ChatMessage["attachments"],
-): ChatMessage {
+  blocks: ChatMessageData["content"]["blocks"],
+  attachments?: ChatMessageData["attachments"],
+): ChatMessageData {
   return {
     id: "m1",
     sessionId: "s1",
@@ -30,22 +30,22 @@ function makeMsg(
 describe("isUserInputMessage (T-S2)", () => {
   it("role=user + 纯 text → true", () => {
     const msg = makeMsg("user", [{ type: "text", text: "你好" }]);
-    assert.equal(ChatMessageEntity.from(msg).isUserInput(), true);
+    assert.equal(ChatMessage.from(msg).isUserInput(), true);
     // hasToolResult 顺便复验：纯 text 无 tool_result
-    assert.equal(ChatMessageEntity.from(msg).hasToolResult(), false);
+    assert.equal(ChatMessage.from(msg).hasToolResult(), false);
   });
 
   it("role=user + 含 tool_result → false", () => {
     const msg = makeMsg("user", [
       { type: "tool_result", toolUseId: "tu_1", content: "result" },
     ]);
-    assert.equal(ChatMessageEntity.from(msg).isUserInput(), false);
-    assert.equal(ChatMessageEntity.from(msg).hasToolResult(), true);
+    assert.equal(ChatMessage.from(msg).isUserInput(), false);
+    assert.equal(ChatMessage.from(msg).hasToolResult(), true);
   });
 
   it("role=assistant → false", () => {
     const msg = makeMsg("assistant", [{ type: "text", text: "我回复" }]);
-    assert.equal(ChatMessageEntity.from(msg).isUserInput(), false);
+    assert.equal(ChatMessage.from(msg).isUserInput(), false);
   });
 
   // 消费链 #2 的观测面：批注附件被整数组判废 ⇒ hasAnnotateAttachment 恒 false
@@ -74,12 +74,12 @@ describe("isUserInputMessage (T-S2)", () => {
     assert.ok(attachments != null, "部分非法不应让 attachments 整体缺席");
     const msg = makeMsg("user", [{ type: "text", text: "" }], attachments);
     assert.equal(
-      ChatMessageEntity.from(msg).hasAnnotateAttachment(),
+      ChatMessage.from(msg).hasAnnotateAttachment(),
       true,
       "整数组判废会让 hasAnnotateAttachment 恒 false、回滚批注恢复不回来",
     );
     assert.equal(
-      ChatMessageEntity.from(msg).isPlainUserText(),
+      ChatMessage.from(msg).isPlainUserText(),
       true,
       "只有批注的 user 消息仍应按 plain user 处理（连续 user 守卫依赖它）",
     );

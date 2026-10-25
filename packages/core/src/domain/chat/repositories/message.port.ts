@@ -4,7 +4,7 @@
  * @module domain/chat/repositories/message.port
  */
 
-import type { ChatMessage, ChatMessageHeader } from "../model/message.js";
+import type { ChatMessageData, ChatMessageHeader } from "../model/message.js";
 import type { MessageContent } from "../model/content-block.js";
 
 /** Persistence for `chat_message` rows. */
@@ -16,7 +16,7 @@ export interface MessageRepository {
   listBySession(
     sessionId: string,
     options?: { includeHidden?: boolean }
-  ): Promise<ChatMessage[]>;
+  ): Promise<ChatMessageData[]>;
 
   /**
    * 消息头投影（无正文，不解压 content）：压缩 hide / 置位锚定等只需要
@@ -78,13 +78,13 @@ export interface MessageRepository {
    * @remarks **谁在用**：`message.service.ts:335`（`fork` 的上界收窄）。
    * @remarks **为什么不能用别的**：不能用 `listBySession` + 内存 `filter`
    *          ——过滤发生在读回**之后**，省不下任何一行；也不能用
-   *          `listMessageHeadersBySession`，fork 要的是完整 `ChatMessage`
+   *          `listMessageHeadersBySession`，fork 要的是完整 `ChatMessageData`
    *          （含正文内容块）来重建目标会话。
    * @remarks **含 hidden**：本读口只加 `seq` 上界，**不得**加 `AND hidden = 0`
    *          ——fork 明确「Preserve hidden state」，滤掉 hidden 行会让 fork
    *          出来的会话**静默丢消息**。
    */
-  listBySessionUpToSeq(sessionId: string, maxSeq: number): Promise<ChatMessage[]>;
+  listBySessionUpToSeq(sessionId: string, maxSeq: number): Promise<ChatMessageData[]>;
 
   /**
    * tail + role 过滤：取「该 role 的最后 limit 条」（seq 升序返回）。
@@ -101,7 +101,7 @@ export interface MessageRepository {
     sessionId: string,
     role: string,
     limit: number
-  ): Promise<ChatMessage[]>;
+  ): Promise<ChatMessageData[]>;
 
   /**
    * 列出会话内全部消息 id（清空会话场景的删除链素材），不投影任何其他列。
@@ -130,28 +130,28 @@ export interface MessageRepository {
   listBySessionFromSeq(
     sessionId: string,
     fromSeq: number
-  ): Promise<ChatMessage[]>;
+  ): Promise<ChatMessageData[]>;
 
-  listBySessionTail(sessionId: string, limit: number): Promise<ChatMessage[]>;
+  listBySessionTail(sessionId: string, limit: number): Promise<ChatMessageData[]>;
 
   listBySessionPage(
     sessionId: string,
     limit: number,
     beforeSeq?: number
-  ): Promise<ChatMessage[]>;
+  ): Promise<ChatMessageData[]>;
 
-  findById(id: string): Promise<ChatMessage | null>;
+  findById(id: string): Promise<ChatMessageData | null>;
 
   nextSeq(sessionId: string): Promise<number>;
 
-  insert(message: ChatMessage): Promise<void>;
+  insert(message: ChatMessageData): Promise<void>;
 
   /**
    * 批量写入消息：一次 `conn.batch` 提交所有行，消除 fork/copy 的逐条 INSERT。
    *
    * 空数组是 no-op（不发出 SQL），方便调用方在不判断长度时直接传入。
    */
-  batchInsert(messages: readonly ChatMessage[]): Promise<void>;
+  batchInsert(messages: readonly ChatMessageData[]): Promise<void>;
 
   /**
    * 替换存储的消息正文。行缺失时返回 false。

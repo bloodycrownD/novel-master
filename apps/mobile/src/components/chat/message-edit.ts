@@ -4,22 +4,22 @@
  * 2026-10-01）——web 侧 menu.ts 的 buildMenuItems 是唯一真源。
  */
 import {
-  type ChatMessage,
+  type ChatMessageData,
   type ContentBlock,
   type MessageContent,
-  ChatMessageEntity,
+  ChatMessage,
 } from '@novel-master/core/chat';
 
 /** Re-export Core 规则。 */
-export function editableTextFromMessage(message: ChatMessage): string | null {
-  return ChatMessageEntity.from(message).editableText();
+export function editableTextFromMessage(message: ChatMessageData): string | null {
+  return ChatMessage.from(message).editableText();
 }
 
 /**
  * Merges edited text into the first text-block slot; non-text blocks keep original order.
  */
 export function applyTextEditToMessage(
-  message: ChatMessage,
+  message: ChatMessageData,
   newText: string,
 ): MessageContent {
   const blocks = message.content.blocks ?? [];

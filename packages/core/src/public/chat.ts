@@ -18,7 +18,7 @@ export type {
 } from "../domain/chat/model/session-agent-config.js";
 export { sessionAgentConfigSchema } from "../domain/chat/model/session-agent-config.schema.js";
 export type {
-  ChatMessage,
+  ChatMessageData,
   MessageAttachment,
   MessageContent,
 } from "../domain/chat/model/message.js";
@@ -60,29 +60,13 @@ export type {
 export {
   ATTACH_PROMPT_CHAR_BUDGET,
 } from "../domain/chat/logic/attachment/attach-budget.js";
-export { wrapUserMessageForLlm } from "../domain/chat/logic/prompt/wrap-user-message-for-llm.js";
-export { prepareUserMessagesForPrompt } from "../domain/chat/logic/prompt/prepare-user-messages-for-prompt.js";
-export { formatStatusChipLabel, formatStatusChipLabelFromAttachment, logicalParentDir, resolveRenameOrMoveAction } from "../domain/chat/logic/message/status-chip-label.js";
-export {
-  buildFileAnnotateAttachmentFromDraft,
-  parseAnnotateDraftsFromAttachments,
-} from "../domain/chat/logic/attachment/build-attachment-action-xml.js";
-export {
-  createPromptPathSeenSet,
-  isPromptDirTokenPath,
-  normalizePromptStorePath,
-  tryNormalizePromptSeenPath,
-} from "../domain/chat/logic/attachment/prompt-path-seen.js";
-export {
-  mergeAttachmentsByPath,
-  mergeAttachmentsWithScannedAtPaths,
-  scanAtPathAttachments,
-} from "../domain/chat/logic/attachment/scan-at-path-attachments.js";
-export {
-  mergeAttachmentsWithScannedSkills,
-  scanSkillAttachments,
-  skillSeenKey,
-} from "../domain/chat/logic/attachment/scan-skill-attachments.js";
+export { userMessageFormatter } from "../domain/chat/logic/prompt/user-message-formatter.js";
+export { promptAssembler } from "../domain/chat/logic/prompt/prompt-assembler.js";
+export { attachmentPath } from "../domain/chat/logic/message/attachment-path.js";
+export { formatStatusChipLabel, formatStatusChipLabelFromAttachment } from "../presentation/chat/attachment-chip.js";
+export { attachmentXmlCodec } from "../domain/chat/logic/attachment/attachment-xml-codec.js";
+export { promptPathSeen } from "../domain/chat/logic/attachment/prompt-path-seen.js";
+export { attachmentScanner, AttachmentPathArgumentError } from "../domain/chat/logic/attachment/attachment-scanner.js";
 export type {
   ContentBlock,
   TextBlock,
@@ -114,26 +98,19 @@ export type {
   UserVfsPendingQueue,
   UserVfsPendingTool,
 } from "../domain/chat/model/user-vfs-pending.schema.js";
-export { resolveChatLinkTarget, isHttpUrl, chatLinkNotFoundMessage } from "../domain/chat/logic/resolve-chat-link-target.js";
-export { resolveComposerSendIntent } from "../domain/chat/logic/composer/composer-send-intent.js";
-export {
-  partitionComposerChipAttachments,
-} from "../domain/chat/logic/composer/composer-chip-attachment.js";
-export {
-  atPathTokensFromPickerSelection,
-  findActiveAtQuery,
-  formatComposerAtPathToken,
-  replaceActiveAtWithToken,
-} from "../domain/chat/logic/composer/composer-at-path.js";
+export { chatLinkResolver } from "../domain/chat/logic/resolve-chat-link-target.js";
+export { composerSendPolicy } from "../domain/chat/logic/composer/composer-send-policy.js";
+export { composerChips } from "../domain/chat/logic/composer/composer-chips.js";
+export { composerAtPath } from "../domain/chat/logic/composer/composer-at-path.js";
 export type { AtPathRef } from "../domain/chat/logic/composer/composer-at-path.js";
 export { chatAnnotateDraftStore } from "../domain/chat/logic/chat-annotate-draft-store.js";
 export {
   USER_VFS_TURN_ACK_TEXT,
-  wrapUserVfsActionsForStorage,
+  userVfsTurnStorage,
 } from "../domain/chat/logic/vfs-turn/user-vfs-turn-constants.js";
-export { ChatMessageEntity } from "../domain/chat/logic/message/chat-message-entity.js";
-export { rollbackConfirmDescriptor } from "../domain/chat/logic/rollback-confirm-copy.js";
-export type { RollbackConfirmDescriptor, RollbackConfirmKind, RollbackMode } from "../domain/chat/logic/rollback-confirm-copy.js";
+export { ChatMessage } from "../domain/chat/logic/message/chat-message.js";
+export { rollbackConfirm } from "../presentation/chat/rollback-confirm.js";
+export type { RollbackConfirmDescriptor, RollbackConfirmKind, RollbackMode } from "../presentation/chat/rollback-confirm.js";
 export type { ChatMessageDescriptor, ChatMessageKey, ChatMessageLike } from "../domain/chat/i18n/keys.js";
 export {
   createChatServices,
@@ -152,7 +129,7 @@ export {
 } from "../service/chat/create-user-vfs-turn-service.js";
 export type { UserVfsTurnServiceBundle } from "../service/chat/create-user-vfs-turn-service.js";
 export { resolveVfsToolFilePath } from "../domain/tool/logic/vfs-tool-file-path.js";
-export { resolveSkillToolRefFromInput } from "../domain/chat/logic/skill-tool-ref.js";
+export { skillToolRefResolver } from "../domain/chat/logic/skill-tool-ref.js";
 export type { SkillToolRef } from "../domain/chat/model/content-block.js";
 export type {
   UserVfsTurnService,
@@ -181,4 +158,4 @@ export type {
   SetMessageFloorResult,
 } from "../service/chat/message-transcript-effects.port.js";
 export { createMessageTranscriptEffectsService } from "../service/chat/create-message-transcript-effects.js";
-export { summarizeToolInput } from "../domain/chat/logic/message/tool-summary.js";
+export { summarizeToolInput } from "../presentation/chat/tool-summary.js";

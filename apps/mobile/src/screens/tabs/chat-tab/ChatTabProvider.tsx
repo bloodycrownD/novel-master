@@ -30,7 +30,7 @@ import React, {
 } from 'react';
 import {useFocusEffect, useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
-import {type ChatMessage} from '@novel-master/core/chat';
+import {type ChatMessageData} from '@novel-master/core/chat';
 import type {VfsService} from '@novel-master/core/vfs';
 import type {WorkplaceService} from '@novel-master/core/workplace';
 /**
@@ -93,7 +93,7 @@ export type ChatTabContextValue = {
   readonly unitView: SessionStreamUnitView | null;
   /** 全局任意会话运行中（refcount 视图）。 */
   readonly agentActive: boolean;
-  readonly chatMessages: readonly ChatMessage[];
+  readonly chatMessages: readonly ChatMessageData[];
   readonly hasMoreMessages: boolean;
   readonly loadingMoreMessages: boolean;
   readonly onMessagesChanged: (options?: {immediate?: boolean}) => void;
@@ -535,4 +535,4 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
 
 const EMPTY_PENDING_SUBAGENT_SESSIONS: ReadonlyMap<string, string> = new Map();
 
-const EMPTY_CHAT_MESSAGES: readonly ChatMessage[] = [];
+const EMPTY_CHAT_MESSAGES: readonly ChatMessageData[] = [];

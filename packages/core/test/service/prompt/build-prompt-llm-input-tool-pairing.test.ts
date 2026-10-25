@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { textBlocks, type ChatMessage } from "@novel-master/core/chat";
+import { textBlocks, type ChatMessageData } from "@novel-master/core/chat";
 
 import { buildPromptLlmInputFromLayout } from "@novel-master/core/prompt";
 import { normalizeOrphanToolResultsForLlm } from "../../../src/service/prompt/normalize-orphan-tool-results-for-llm.js";
 
 describe("buildPromptLlmInputFromLayout tool pairing", () => {
   it("T6: synthetic template messages do not break tool_result pairing", async () => {
-    const messages: ChatMessage[] = [
+    const messages: ChatMessageData[] = [
       {
         id: "m1",
         sessionId: "s1",

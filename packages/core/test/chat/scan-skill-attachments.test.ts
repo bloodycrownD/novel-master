@@ -4,18 +4,13 @@
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import {
-  mergeAttachmentsWithScannedSkills,
-  scanSkillAttachments,
-  skillSeenKey,
-} from "../../src/domain/chat/logic/attachment/scan-skill-attachments.js";
-import { mergeAttachmentsWithScannedAtPaths } from "../../src/domain/chat/logic/attachment/scan-at-path-attachments.js";
+import { attachmentScanner } from "../../src/domain/chat/logic/attachment/attachment-scanner.js";
 import type { MessageAttachment } from "../../src/domain/chat/model/message-attachment.schema.js";
 
 describe("scanSkillAttachments (T-SK11)", () => {
   it("正文含 `$技能名` → skillAttach 附件（无 path，skillName/name 同值，token 保留）", () => {
     const text = "用 $demo-skill 帮我改";
-    const scanned = scanSkillAttachments(text);
+    const scanned = attachmentScanner.scanSkills(text);
     assert.equal(scanned.length, 1);
     const att = scanned[0]!;
     assert.equal(att.action, "skillAttach");
@@ -30,39 +25,39 @@ describe("scanSkillAttachments (T-SK11)", () => {
   });
 
   it("前导边界：行首/空格/tab 后可触发；a$b、$$b 不误吞", () => {
-    assert.equal(scanSkillAttachments("$foo").length, 1);
-    assert.equal(scanSkillAttachments("用 $foo").length, 1);
-    assert.equal(scanSkillAttachments("用\t$foo").length, 1);
-    assert.equal(scanSkillAttachments("用\n$foo").length, 1);
+    assert.equal(attachmentScanner.scanSkills("$foo").length, 1);
+    assert.equal(attachmentScanner.scanSkills("用 $foo").length, 1);
+    assert.equal(attachmentScanner.scanSkills("用\t$foo").length, 1);
+    assert.equal(attachmentScanner.scanSkills("用\n$foo").length, 1);
     // `$` 前是非空白字符 → 正文片段，不扫描
-    assert.equal(scanSkillAttachments("a$b").length, 0);
-    assert.equal(scanSkillAttachments("$$b").length, 0);
-    assert.equal(scanSkillAttachments("价格$100").length, 0);
+    assert.equal(attachmentScanner.scanSkills("a$b").length, 0);
+    assert.equal(attachmentScanner.scanSkills("$$b").length, 0);
+    assert.equal(attachmentScanner.scanSkills("价格$100").length, 0);
   });
 
   it("字符集：`$` 后遇空白/$/@ 停扫；$/x、$@x 不落库；$foo/bar 取 foo", () => {
-    assert.deepEqual(scanSkillAttachments("$foo bar").map((a) => a.skillName), [
+    assert.deepEqual(attachmentScanner.scanSkills("$foo bar").map((a) => a.skillName), [
       "foo",
     ]);
-    assert.equal(scanSkillAttachments("$/foo").length, 0);
-    assert.equal(scanSkillAttachments("$@foo").length, 0);
+    assert.equal(attachmentScanner.scanSkills("$/foo").length, 0);
+    assert.equal(attachmentScanner.scanSkills("$@foo").length, 0);
     // `/` 停扫（避免与 @path token 相互吞噬）
-    assert.deepEqual(scanSkillAttachments("$foo/bar").map((a) => a.skillName), [
+    assert.deepEqual(attachmentScanner.scanSkills("$foo/bar").map((a) => a.skillName), [
       "foo",
     ]);
     // 非法技能名形态（首字符 `.`）视作正文跳过
-    assert.equal(scanSkillAttachments("$..x").length, 0);
-    assert.equal(scanSkillAttachments("$.hidden").length, 0);
+    assert.equal(attachmentScanner.scanSkills("$..x").length, 0);
+    assert.equal(attachmentScanner.scanSkills("$.hidden").length, 0);
   });
 
   it("同名去重；skillSeenKey 与去重键同形", () => {
-    const scanned = scanSkillAttachments("先 $foo 再 $foo 最后 $foo");
+    const scanned = attachmentScanner.scanSkills("先 $foo 再 $foo 最后 $foo");
     assert.equal(scanned.length, 1);
-    assert.equal(skillSeenKey("foo"), "skill:foo");
+    assert.equal(attachmentScanner.skillKey("foo"), "skill:foo");
   });
 
   it("不存在技能名容错：扫描不查存在性，未知名照常落库", () => {
-    const scanned = scanSkillAttachments("调 $no-such-skill 试试");
+    const scanned = attachmentScanner.scanSkills("调 $no-such-skill 试试");
     assert.equal(scanned.length, 1);
     assert.equal(scanned[0]!.skillName, "no-such-skill");
   });
@@ -79,9 +74,9 @@ describe("scanSkillAttachments (T-SK11)", () => {
         action: "skillAttach",
       },
     ];
-    const merged = mergeAttachmentsWithScannedSkills(
+    const merged = attachmentScanner.mergeScannedSkills(
       text,
-      mergeAttachmentsWithScannedAtPaths(text, chips),
+      attachmentScanner.mergeScannedAtPaths(text, chips),
     );
     const skills = merged.filter((a) => a.action === "skillAttach");
     const paths = merged.filter((a) => a.action !== "skillAttach");
@@ -99,7 +94,7 @@ describe("scanSkillAttachments (T-SK11)", () => {
       skillName: name,
       action: "skillAttach",
     });
-    const merged = mergeAttachmentsWithScannedSkills("再提 $demo", [
+    const merged = attachmentScanner.mergeScannedSkills("再提 $demo", [
       chip("demo"),
       chip("demo"),
     ]);
@@ -109,7 +104,7 @@ describe("scanSkillAttachments (T-SK11)", () => {
       2,
     );
     // 换成单 chip：正文同名同样不新增
-    const single = mergeAttachmentsWithScannedSkills("再提 $demo", [
+    const single = attachmentScanner.mergeScannedSkills("再提 $demo", [
       chip("demo"),
     ]);
     assert.equal(

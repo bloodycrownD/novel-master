@@ -6,7 +6,7 @@
 
 import { formatToolResultContentForDisplay } from "@/domain/tool/logic/format-tool-output.js";
 import type { ContentBlock } from "../model/content-block.js";
-import type { ChatMessage } from "../model/message.js";
+import type { ChatMessageData } from "../model/message.js";
 
 function blockBodyText(block: ContentBlock): string | null {
   switch (block.type) {
@@ -49,7 +49,7 @@ export function messageBodyTextFromBlocks(blocks: readonly ContentBlock[]): stri
 }
 
 /** Role-prefixed segments for CLI / real-prompt preview (tool_result → `tool`; tool_use → `tool_call`). */
-export function formatChatMessageForCliPreview(message: ChatMessage, options?: { readonly includeThinking?: boolean }): ReadonlyArray<{ readonly role: string; readonly body: string }> {
+export function formatChatMessageForCliPreview(message: ChatMessageData, options?: { readonly includeThinking?: boolean }): ReadonlyArray<{ readonly role: string; readonly body: string }> {
   const segments: Array<{ role: string; body: string }> = [];
   const toolResultBodies: string[] = [];
   let textBuffer: string[] = [];

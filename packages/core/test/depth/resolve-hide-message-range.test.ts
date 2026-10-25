@@ -8,12 +8,12 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import type { ChatMessage } from "../../src/domain/chat/model/message.js";
+import type { ChatMessageData } from "../../src/domain/chat/model/message.js";
 import type { ContentBlock } from "../../src/domain/chat/model/content-block.js";
 import { resolveHideMessageRange } from "../../src/domain/depth/logic/resolve-hide-message-range.js";
 import { messageIdsInSlice } from "../../src/domain/depth/logic/depth-slice.js";
 
-function filterVisible(messages: readonly ChatMessage[]): ChatMessage[] {
+function filterVisible(messages: readonly ChatMessageData[]): ChatMessageData[] {
   return messages.filter((message) => !message.hidden);
 }
 
@@ -22,7 +22,7 @@ function makeMsg(
   seq: number,
   role: string,
   blocks?: readonly ContentBlock[],
-): ChatMessage {
+): ChatMessageData {
   return {
     id,
     sessionId: "s1",

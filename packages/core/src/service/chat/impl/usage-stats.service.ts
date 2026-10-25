@@ -9,7 +9,6 @@ import { queryTemplate } from "@/infra/tdbc/logic/template-helper.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import type { Row } from "@/infra/tdbc/types.js";
 import { parseMessageContent } from "@/domain/chat/content/parse-message-content.js";
-import { countToolUseBlocks } from "@/domain/chat/logic/message/tool-use-count.js";
 import {
   SESSION_KKV_DOMAIN_USAGE_STATS,
   USAGE_STATS_TOOL_USE_COUNT_KEY,
@@ -536,7 +535,9 @@ export class DefaultUsageStatsService implements UsageStatsService {
         console.warn(`[usage-stats] 工具调用现算遇坏行（按 0 计）：${parsed.error.message}`);
         continue;
       }
-      toolUseCount += countToolUseBlocks(parsed.value);
+      for (const block of parsed.value.blocks) {
+        if (block.type === "tool_use") toolUseCount += 1;
+      }
     }
     // 回填前复核（cr-fix-spec-r2 s3/B-1）：现算的数百毫秒里若发生失效
     // （写哨兵空串），miss 时所见原值已变——放弃回填（本次返回值已出，

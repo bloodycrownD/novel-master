@@ -5,10 +5,10 @@ import {useCallback} from 'react';
 import {Alert} from 'react-native';
 import Clipboard from '@react-native-clipboard/clipboard';
 import {
-  type ChatMessage,
-  ChatMessageEntity,
-  parseAnnotateDraftsFromAttachments,
-  rollbackConfirmDescriptor,
+  type ChatMessageData,
+  ChatMessage,
+  attachmentXmlCodec,
+  rollbackConfirm,
 } from '@novel-master/core/chat';
 
 import {formatError} from '@/errors/format-error';
@@ -49,7 +49,7 @@ export type UseChatTabMessageActionsParams = {
   projectId: string | undefined;
   sessionId: string | undefined;
   /** 消息显示源（Step 7 收口：manager 消息快照经 ctx 传入）。 */
-  chatMessages: readonly ChatMessage[];
+  chatMessages: readonly ChatMessageData[];
   /** 操作后 force 回源刷新消息面（manager 路径）。 */
   reloadMessages: (force?: boolean) => Promise<unknown>;
   /** 编辑消息恢复草稿的 UI 令牌递增。 */
@@ -207,7 +207,7 @@ export function useChatTabMessageActions({
       // mode 与锚点角色一一对应（与 desktop applyUndoAnnotateRestore 的 anchorRole 对齐）：
       // - undo_send ↔ user 锚点：保留未发送草稿，在下方 applyComposerRestore 里从附件反投影
       // - rewind ↔ assistant 锚点：tail 里没有 user 消息，清空全部批注草稿（含未发送）
-      const mode = ChatMessageEntity.from(target).isUndoSendEligible() ? 'undo_send' : 'rewind';
+      const mode = ChatMessage.from(target).isUndoSendEligible() ? 'undo_send' : 'rewind';
       const restoreText = editableTextFromMessage(target);
       // 删消息前 snapshot：undo_send 成功后仅解析批注（rewind / undo_send 均清空 ops store）
       const attachmentsSnapshot =
@@ -236,7 +236,7 @@ export function useChatTabMessageActions({
         // 顺序：正文 → parseAnnotate → project + ∪ annotate（不映回 user_ops）
         if (attachmentsSnapshot != null) {
           const restoredAnnotate =
-            parseAnnotateDraftsFromAttachments(attachmentsSnapshot);
+            attachmentXmlCodec.decodeAnnotateDrafts(attachmentsSnapshot);
           for (const draft of restoredAnnotate) {
             chatAnnotateDraftStore.add(sessionId, draft);
           }
@@ -324,7 +324,7 @@ export function useChatTabMessageActions({
               readRollbackRevisionBackfillMissingPaths(error);
             Alert.alert(
               '快照丢失',
-              chatTranslator(rollbackConfirmDescriptor(mode, 'backfill', {missingPaths})),
+              chatTranslator(rollbackConfirm.descriptor(mode, 'backfill', {missingPaths})),
               [
                 {text: '取消', style: 'cancel'},
                 {
@@ -347,7 +347,7 @@ export function useChatTabMessageActions({
             isRollbackVfsDegradableError(error)
           ) {
             const errorMessage = formatError(error);
-            const confirmMessage = chatTranslator(rollbackConfirmDescriptor(mode, 'degraded'));
+            const confirmMessage = chatTranslator(rollbackConfirm.descriptor(mode, 'degraded'));
             Alert.alert(
               '无法恢复工作区',
               `${errorMessage}\n\n${confirmMessage}`,
@@ -374,7 +374,7 @@ export function useChatTabMessageActions({
 
       Alert.alert(
         '回滚到此消息',
-        chatTranslator(rollbackConfirmDescriptor(mode, 'primary')),
+        chatTranslator(rollbackConfirm.descriptor(mode, 'primary')),
         [
           {text: '取消', style: 'cancel'},
           {
@@ -463,7 +463,7 @@ export function useChatTabMessageActions({
   );
 
   const handleMessageMenuAction = useCallback(
-    (target: ChatMessage, action: string) => {
+    (target: ChatMessageData, action: string) => {
       if (action === 'edit') {
         const initial = editableTextFromMessage(target);
         if (initial == null) {

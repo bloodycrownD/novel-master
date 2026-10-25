@@ -2,11 +2,7 @@ import React from 'react';
 import {describe, expect, it, jest, beforeEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
 import type {WorkplaceListRow} from '@novel-master/core/workplace';
-import {
-  atPathTokensFromPickerSelection,
-  FileReferencePicker,
-  listPickerChildRows,
-} from '@/components/chat/FileReferencePicker';
+import { composerAtPath, FileReferencePicker, listPickerChildRows } from '@/components/chat/FileReferencePicker';
 
 const mockBuildListRows = jest.fn(async (): Promise<WorkplaceListRow[]> => []);
 
@@ -101,7 +97,7 @@ describe('listPickerChildRows / atPathTokensFromPickerSelection', () => {
 
   it('目录多选 + 文件多选同确认产出 @path token', () => {
     expect(
-      atPathTokensFromPickerSelection(
+      composerAtPath.tokensFromPickerSelection(
         ['/notes', '/'],
         ['/a.md', '/notes/b.md'],
       ),

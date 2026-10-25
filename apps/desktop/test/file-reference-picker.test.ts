@@ -1,9 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {
-  atPathTokensFromPickerSelection,
-  listPickerChildRows,
-} from "@/features/chat/FileReferencePicker";
+import { composerAtPath } from "@/features/chat/FileReferencePicker";
+import { listPickerChildRows } from "@/features/chat/FileReferencePicker";
 import type { WorkplaceListRowDto } from "@shared/ipc-types";
 
 const fixtureRows: WorkplaceListRowDto[] = [
@@ -51,22 +49,22 @@ test("listPickerChildRows：点目录进 cwd 后仅显示直子（含隐藏文�
 });
 
 test("勾选目录确认产出 @path/ token", () => {
-  assert.deepEqual(atPathTokensFromPickerSelection(["/notes"], []), [
+  assert.deepEqual(composerAtPath.tokensFromPickerSelection(["/notes"], []), [
     "@/notes/",
   ]);
-  assert.deepEqual(atPathTokensFromPickerSelection(["/"], []), ["@/"]);
+  assert.deepEqual(composerAtPath.tokensFromPickerSelection(["/"], []), ["@/"]);
 });
 
 test("文件多选确认产出多条 @path token", () => {
   assert.deepEqual(
-    atPathTokensFromPickerSelection([], ["/a.md", "/notes/b.md"]),
+    composerAtPath.tokensFromPickerSelection([], ["/a.md", "/notes/b.md"]),
     ["@/a.md", "@/notes/b.md"],
   );
 });
 
 test("多目录与多文件同确认不互斥", () => {
   assert.deepEqual(
-    atPathTokensFromPickerSelection(
+    composerAtPath.tokensFromPickerSelection(
       ["/notes", "/"],
       ["/a.md", "/notes/b.md"],
     ),

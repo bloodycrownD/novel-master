@@ -1,7 +1,7 @@
 import {
   USER_VFS_TURN_ACK_TEXT,
-  wrapUserVfsActionsForStorage,
-  type ChatMessage,
+  userVfsTurnStorage,
+  type ChatMessageData,
 } from '@novel-master/core/chat';
 import {
   buildChatListItems,
@@ -22,11 +22,11 @@ import {
 function msg(
   id: string,
   role: string,
-  blocks: ChatMessage['content']['blocks'],
+  blocks: ChatMessageData['content']['blocks'],
   seq: number,
   hidden = false,
-  raw: ChatMessage['raw'] = null,
-): ChatMessage {
+  raw: ChatMessageData['raw'] = null,
+): ChatMessageData {
   return {
     id,
     sessionId: 's1',
@@ -538,7 +538,7 @@ describe('message-blocks', () => {
   });
 
   it('T-SR3: 空正文 + attachments 仍进 buildChatListItems；仅遗留 user_ops 操作日志则丢弃', () => {
-    const emptyBodyWithAttach: ChatMessage = {
+    const emptyBodyWithAttach: ChatMessageData = {
       ...msg('u-att', 'user', [{type: 'text', text: ''}], 1),
       attachments: [
         {
@@ -566,7 +566,7 @@ describe('message-blocks', () => {
     }
 
     // 空正文且仅遗留 user_ops 操作日志（非 annotate）：不再生成空行。
-    const opsOnly: ChatMessage = {
+    const opsOnly: ChatMessageData = {
       ...msg('u-ops2', 'user', [{type: 'text', text: ''}], 2),
       attachments: [
         {
@@ -814,7 +814,7 @@ describe('message-blocks', () => {
       msg(
         'u1',
         'user',
-        [{type: 'text', text: wrapUserVfsActionsForStorage(actionXml)}],
+        [{type: 'text', text: userVfsTurnStorage.wrapActions(actionXml)}],
         1,
         false,
         {
@@ -847,7 +847,7 @@ describe('message-blocks', () => {
       msg(
         'u1',
         'user',
-        [{type: 'text', text: wrapUserVfsActionsForStorage(actionXml)}],
+        [{type: 'text', text: userVfsTurnStorage.wrapActions(actionXml)}],
         1,
         true,
         {
@@ -933,12 +933,12 @@ describe('message-blocks', () => {
 // 循环内只读）输出与旧实现完全一致。
 // ---------------------------------------------------------------------------
 
-type Block = ChatMessage['content']['blocks'][number];
+type Block = ChatMessageData['content']['blocks'][number];
 type ToolUseBlockOnly = Extract<Block, {type: 'tool_use'}>;
 
 function legacyTurnToolResultsComplete(
-  assistant: ChatMessage,
-  messages: readonly ChatMessage[],
+  assistant: ChatMessageData,
+  messages: readonly ChatMessageData[],
 ): boolean {
   const required = toolUseIdsFromMessage(assistant);
   if (required.length === 0) {
@@ -950,9 +950,9 @@ function legacyTurnToolResultsComplete(
 }
 
 function legacyLastIncompleteToolAssistant(
-  messages: readonly ChatMessage[],
-): ChatMessage | undefined {
-  let last: ChatMessage | undefined;
+  messages: readonly ChatMessageData[],
+): ChatMessageData | undefined {
+  let last: ChatMessageData | undefined;
   for (const message of messages) {
     if (
       message.role === 'assistant' &&
@@ -966,8 +966,8 @@ function legacyLastIncompleteToolAssistant(
 }
 
 function legacyIsTurnToolExecuting(
-  assistant: ChatMessage,
-  messages: readonly ChatMessage[],
+  assistant: ChatMessageData,
+  messages: readonly ChatMessageData[],
   agentRunning: boolean,
 ): boolean {
   if (!agentRunning || !messageHasToolUse(assistant)) {
@@ -981,7 +981,7 @@ function legacyIsTurnToolExecuting(
 
 /** 复刻旧 buildChatListItems 的完整循环体（unpaired 判定走 legacy 现场重算）。 */
 function legacyBuildChatListItems(
-  messages: readonly ChatMessage[],
+  messages: readonly ChatMessageData[],
   options: BuildChatListItemsOptions = {},
 ): ChatListItem[] {
   const agentRunning = options.agentRunning ?? false;
@@ -1068,8 +1068,8 @@ interface DenseToolPlan {
 }
 
 /** 密集 tool 长会话生成器：每轮「user 提问 + assistant(thinking/text/read/list) + hidden user 工具结果」。 */
-function buildDenseToolMessages(plan: DenseToolPlan): ChatMessage[] {
-  const messages: ChatMessage[] = [];
+function buildDenseToolMessages(plan: DenseToolPlan): ChatMessageData[] {
+  const messages: ChatMessageData[] = [];
   let seq = 1;
   let toolSeq = 0;
   for (let round = 0; round < plan.rounds; round += 1) {

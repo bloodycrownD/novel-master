@@ -16,7 +16,7 @@
  * @module renderer/features/chat/chat-link-route
  */
 
-import { isHttpUrl, resolveChatLinkTarget } from "@shared/logic/chat";
+import { chatLinkResolver } from "@shared/logic/chat";
 import type {
   IpcResult,
   VfsReadRequest,
@@ -62,10 +62,10 @@ export async function resolveChatLinkAction(
 ): Promise<ChatLinkAction> {
   const log = deps.log ?? (() => undefined);
   const trimmed = href.trim();
-  if (isHttpUrl(trimmed)) {
+  if (chatLinkResolver.isHttp(trimmed)) {
     return { kind: "external", url: trimmed };
   }
-  const target = resolveChatLinkTarget(trimmed);
+  const target = chatLinkResolver.resolve(trimmed);
   if (target == null) {
     return { kind: "none" };
   }

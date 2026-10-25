@@ -42,7 +42,7 @@
  *
  * @module services/session-stream-unit
  */
-import type {ChatMessage} from '@novel-master/core/chat';
+import type {ChatMessageData} from '@novel-master/core/chat';
 import {
   composeStreamTokens,
   createTokenRateSampler,
@@ -187,11 +187,11 @@ export interface SessionStreamMessageStore {
   listBySessionTail(
     sessionId: string,
     options: {limit: number},
-  ): Promise<readonly ChatMessage[]>;
+  ): Promise<readonly ChatMessageData[]>;
   listBySessionPage(
     sessionId: string,
     options: {limit: number; beforeSeq?: number},
-  ): Promise<readonly ChatMessage[]>;
+  ): Promise<readonly ChatMessageData[]>;
 }
 
 /** 单元只读投影：snapshot(sessionId) 的返回形状，屏幕订阅的唯一消费面。 */
@@ -231,7 +231,7 @@ export interface SessionStreamUnitView {
    * 的引用稳定守卫）——引用稳定是消费方 webview memo 比较成立的必要
    * 条件。调用方只读、不得 mutate。
    */
-  readonly messages: readonly ChatMessage[];
+  readonly messages: readonly ChatMessageData[];
   /** 是否还有更早的消息可翻页（tail 探针/分页结果推导）。 */
   readonly hasMoreMessages: boolean;
   /** 分页加载是否在途（防重入）。 */
@@ -354,11 +354,11 @@ export class SessionStreamUnit {
   private readonly applyBuffer: StreamApplyBuffer;
 
   /** 消息面状态（Step 4：tail/分页/step 级 reload 的落点）。 */
-  private messagesValue: readonly ChatMessage[] = [];
+  private messagesValue: readonly ChatMessageData[] = [];
   private hasMoreMessagesValue = false;
   private loadingMoreMessagesValue = false;
   /** force tail reload 在途去重（蓝本 reloadInFlightRef：force 合流不重发）。 */
-  private tailReloadInFlight: Promise<readonly ChatMessage[]> | null = null;
+  private tailReloadInFlight: Promise<readonly ChatMessageData[]> | null = null;
 
   private readonly webviewHandles: SessionStreamWebviewHandle[] = [];
   private readonly messageStore?:
@@ -948,7 +948,7 @@ export class SessionStreamUnit {
    */
   async loadTailMessages(options?: {
     readonly force?: boolean;
-  }): Promise<readonly ChatMessage[]> {
+  }): Promise<readonly ChatMessageData[]> {
     const force = options?.force ?? false;
     if (force && this.tailReloadInFlight != null) {
       return this.tailReloadInFlight;
@@ -1039,7 +1039,7 @@ export class SessionStreamUnit {
    */
   private async performTailReload(
     force: boolean,
-  ): Promise<readonly ChatMessage[]> {
+  ): Promise<readonly ChatMessageData[]> {
     const cacheKey = sessionViewCacheKey(this.projectId, this.sessionId);
     if (!force) {
       const cached = getSessionViewCache(cacheKey);
@@ -1079,7 +1079,7 @@ export class SessionStreamUnit {
    * webview 被记脏。hasMore 标志仍照常收口；两者均未变时不再触发通知。
    */
   private applyMessages(
-    messages: readonly ChatMessage[],
+    messages: readonly ChatMessageData[],
     hasMore: boolean,
   ): void {
     if (this.destroyed) {

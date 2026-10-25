@@ -1,22 +1,17 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { formatChatMessageForCliPreview } from "../../src/domain/chat/content/message-body-text.js";
-import {
-  buildUserVfsTurnView,
-  matchUserVfsTurnAt,
-  parseAllUserVfsActionsFromText,
-  USER_VFS_TURN_ACK_TEXT,
-} from "../../src/domain/chat/logic/vfs-turn/user-vfs-turn-view.js";
-import { wrapUserVfsActionsForStorage } from "../../src/domain/chat/logic/vfs-turn/user-vfs-turn-constants.js";
-import type { ChatMessage } from "../../src/domain/chat/model/message.js";
+import { userVfsTurns, USER_VFS_TURN_ACK_TEXT } from "../../src/domain/chat/logic/vfs-turn/user-vfs-turn-view.js";
+import { userVfsTurnStorage } from "../../src/domain/chat/logic/vfs-turn/user-vfs-turn-constants.js";
+import type { ChatMessageData } from "../../src/domain/chat/model/message.js";
 
 function msg(
   id: string,
   seq: number,
-  role: ChatMessage["role"],
-  blocks: ChatMessage["content"]["blocks"],
+  role: ChatMessageData["role"],
+  blocks: ChatMessageData["content"]["blocks"],
   raw?: Record<string, unknown>,
-): ChatMessage {
+): ChatMessageData {
   return {
     id,
     sessionId: "s1",
@@ -42,7 +37,7 @@ const BURST_ACTIONS_XML =
 
 describe("parseAllUserVfsActionsFromText", () => {
   it("解析 burst 合并的多条 action", () => {
-    const actions = parseAllUserVfsActionsFromText(BURST_ACTIONS_XML);
+    const actions = userVfsTurns.parseActions(BURST_ACTIONS_XML);
     assert.equal(actions.length, 2);
     assert.equal(actions[0]?.kind, "delete");
     assert.equal(actions[1]?.method, "edit");
@@ -52,17 +47,17 @@ describe("parseAllUserVfsActionsFromText", () => {
 
 describe("matchUserVfsTurnAt", () => {
   it("UA 两段可匹配（LLM 路径）", () => {
-    const messages: ChatMessage[] = [
-      msg("u1", 1, "user", [{ type: "text", text: wrapUserVfsActionsForStorage(DELETE_ACTION_XML) }], {
+    const messages: ChatMessageData[] = [
+      msg("u1", 1, "user", [{ type: "text", text: userVfsTurnStorage.wrapActions(DELETE_ACTION_XML) }], {
         metadata: { kind: "user_vfs_action", source: "user", synthetic: true },
       }),
       msg("a1", 2, "assistant", [{ type: "text", text: USER_VFS_TURN_ACK_TEXT }], {
         metadata: { kind: "user_vfs_ack", synthetic: true },
       }),
     ];
-    const turn = matchUserVfsTurnAt(messages, 0);
+    const turn = userVfsTurns.matchAt(messages, 0);
     assert.ok(turn != null);
-    const view = buildUserVfsTurnView(turn);
+    const view = userVfsTurns.buildView(turn);
     assert.equal(view.id, "u1");
     assert.equal(view.bridgeText, USER_VFS_TURN_ACK_TEXT);
     assert.equal(view.actions.length, 1);
@@ -70,12 +65,12 @@ describe("matchUserVfsTurnAt", () => {
   });
 
   it("hidden UA 对：At 返回 null", () => {
-    const hiddenMessages: ChatMessage[] = [
+    const hiddenMessages: ChatMessageData[] = [
       msg(
         "u1",
         1,
         "user",
-        [{ type: "text", text: wrapUserVfsActionsForStorage(DELETE_ACTION_XML) }],
+        [{ type: "text", text: userVfsTurnStorage.wrapActions(DELETE_ACTION_XML) }],
         { metadata: { kind: "user_vfs_action", source: "user", synthetic: true } },
       ),
       msg(
@@ -89,16 +84,16 @@ describe("matchUserVfsTurnAt", () => {
     hiddenMessages[0] = { ...hiddenMessages[0]!, hidden: true };
     hiddenMessages[1] = { ...hiddenMessages[1]!, hidden: true };
 
-    assert.equal(matchUserVfsTurnAt(hiddenMessages, 0), null);
+    assert.equal(userVfsTurns.matchAt(hiddenMessages, 0), null);
   });
 
   it("仅 ack hidden 时 At 返回 null", () => {
-    const messages: ChatMessage[] = [
+    const messages: ChatMessageData[] = [
       msg(
         "u1",
         1,
         "user",
-        [{ type: "text", text: wrapUserVfsActionsForStorage(DELETE_ACTION_XML) }],
+        [{ type: "text", text: userVfsTurnStorage.wrapActions(DELETE_ACTION_XML) }],
         { metadata: { kind: "user_vfs_action", source: "user", synthetic: true } },
       ),
       msg(
@@ -110,11 +105,11 @@ describe("matchUserVfsTurnAt", () => {
       ),
     ];
     messages[1] = { ...messages[1]!, hidden: true };
-    assert.equal(matchUserVfsTurnAt(messages, 0), null);
+    assert.equal(userVfsTurns.matchAt(messages, 0), null);
   });
 
   it("旧 U-A-U-A 四段不匹配", () => {
-    const messages: ChatMessage[] = [
+    const messages: ChatMessageData[] = [
       msg("u1", 1, "user", [{ type: "text", text: DELETE_ACTION_XML }], {
         metadata: { kind: "user_vfs_action", source: "user", synthetic: true },
       }),
@@ -128,7 +123,7 @@ describe("matchUserVfsTurnAt", () => {
         metadata: { kind: "tool_turn_bridge", synthetic: true },
       }),
     ];
-    assert.equal(matchUserVfsTurnAt(messages, 0), null);
+    assert.equal(userVfsTurns.matchAt(messages, 0), null);
   });
 });
 

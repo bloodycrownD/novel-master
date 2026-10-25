@@ -37,7 +37,7 @@
  * @module infra/tokenizer/logic/chat-token-estimate-memo
  */
 
-import type { ChatMessage } from "@/domain/chat/model/message.js";
+import type { ChatMessageData } from "@/domain/chat/model/message.js";
 import type { AgentPromptLayout } from "@/domain/prompt/model/agent-prompt-layout.js";
 import { hashContent } from "@/domain/vfs/content-store/logic/hash-content.js";
 
@@ -157,7 +157,7 @@ export function clearChatTokenEstimateMemo(sessionId?: string): void {
  * 下一次消息事件自愈，可接受（与旧指纹 memo 同款取舍，见模块头）。
  */
 export function stampMessagesForEstimateMemo(
-  messages: readonly ChatMessage[]
+  messages: readonly ChatMessageData[]
 ): string {
   let lenSum = 0;
   let lastSeq = 0;
@@ -227,7 +227,7 @@ function digestLayoutForEstimateMemo(layout: AgentPromptLayout): string {
 export function buildChatTokenEstimateMemoKey(params: {
   readonly savedModelId: string | undefined;
   readonly workplaceFingerprint: string | undefined;
-  readonly messages: readonly ChatMessage[] | undefined;
+  readonly messages: readonly ChatMessageData[] | undefined;
   readonly tools: unknown;
   readonly layout: AgentPromptLayout | undefined;
 }): string | null {

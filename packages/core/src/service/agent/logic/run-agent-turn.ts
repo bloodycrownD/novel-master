@@ -51,9 +51,8 @@ import {
 import type { SendAnnotateDraft } from "@/domain/chat/model/annotate-draft.schema.js";
 import type { ComposerDraftTokenRange } from "@/domain/chat/model/composer-draft.schema.js";
 import type { MessageAttachment } from "@/domain/chat/model/message-attachment.schema.js";
-import { buildFileAnnotateAttachmentFromDraft } from "@/domain/chat/logic/attachment/build-attachment-action-xml.js";
-import { mergeAttachmentsWithScannedAtPaths } from "@/domain/chat/logic/attachment/scan-at-path-attachments.js";
-import { mergeAttachmentsWithScannedSkills } from "@/domain/chat/logic/attachment/scan-skill-attachments.js";
+import { attachmentXmlCodec } from "@/domain/chat/logic/attachment/attachment-xml-codec.js";
+import { attachmentScanner } from "@/domain/chat/logic/attachment/attachment-scanner.js";
 import type { CompactionConditionEvaluator } from "@/service/compaction-conditions/create-compaction-condition-evaluator.js";
 import { CoordinatedWrite } from "@/service/coordinated-write.js";
 import type { MessageCheckpointService } from "@/service/message-checkpoint/message-checkpoint.port.js";
@@ -732,10 +731,8 @@ async function runAgentTurnWithController(
     }
     scanText = masked + trimmed.slice(cursor);
   }
-  const scannedComposer = mergeAttachmentsWithScannedSkills(
-    scanText,
-    mergeAttachmentsWithScannedAtPaths(scanText, composerAttachOnly)
-  );
+  const withAtPaths = attachmentScanner.mergeScannedAtPaths(scanText, composerAttachOnly);
+  const scannedComposer = attachmentScanner.mergeScannedSkills(scanText, withAtPaths);
 
   let checkpointAnchorMessageId: string | undefined;
 
@@ -747,7 +744,7 @@ async function runAgentTurnWithController(
   const annotateAttachments = await Promise.all(
     annotateDrafts.map(async (draft) => {
       if (draft.startLine != null && draft.endLine != null) {
-        return buildFileAnnotateAttachmentFromDraft(draft);
+        return attachmentXmlCodec.encodeAnnotateAttachment(draft);
       }
       let sourceText: string | undefined;
       try {
@@ -756,11 +753,11 @@ async function runAgentTurnWithController(
         // 文件不存在 / 权限 / 伪 path 等：拿不到源文本就跳过行号补算
       }
       if (typeof sourceText !== "string" || sourceText.length === 0) {
-        return buildFileAnnotateAttachmentFromDraft(draft);
+        return attachmentXmlCodec.encodeAnnotateAttachment(draft);
       }
       const needle = draft.originalText.replace(/\u00a0/g, " ");
       if (needle.length === 0) {
-        return buildFileAnnotateAttachmentFromDraft(draft);
+        return attachmentXmlCodec.encodeAnnotateAttachment(draft);
       }
       let at = sourceText.indexOf(needle);
       let matchLen = needle.length;
@@ -770,7 +767,7 @@ async function runAgentTurnWithController(
         const normNeedle = needle.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
         at = normSource.indexOf(normNeedle);
         if (at < 0) {
-          return buildFileAnnotateAttachmentFromDraft(draft);
+          return attachmentXmlCodec.encodeAnnotateAttachment(draft);
         }
         matchLen = normNeedle.length;
         haystack = normSource;
@@ -778,7 +775,7 @@ async function runAgentTurnWithController(
       const start = offsetToSourceLineCol(haystack, at);
       const end = offsetToSourceLineCol(haystack, at + matchLen - 1);
       const enriched: SendAnnotateDraft = { ...draft, startLine: start.line, endLine: end.line, startCol: start.col, endCol: end.col };
-      return buildFileAnnotateAttachmentFromDraft(enriched);
+      return attachmentXmlCodec.encodeAnnotateAttachment(enriched);
     })
   );
 

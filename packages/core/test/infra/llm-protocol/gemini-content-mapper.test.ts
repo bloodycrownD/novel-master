@@ -5,12 +5,12 @@ import {
   geminiPartsToBlocks,
   toolsToGeminiFunctionDeclarations,
 } from "../../../src/infra/llm-protocol/logic/gemini-content-mapper.js";
-import type { ChatMessage } from "../../../src/domain/chat/model/message.js";
+import type { ChatMessageData } from "../../../src/domain/chat/model/message.js";
 import { normalizeOrphanToolResultsForLlm } from "../../../src/service/prompt/normalize-orphan-tool-results-for-llm.js";
 
 describe("gemini-content-mapper", () => {
   it("T5: multi-turn history with tool_result", () => {
-    const messages: ChatMessage[] = [
+    const messages: ChatMessageData[] = [
       {
         role: "user",
         content: { blocks: [{ type: "text", text: "read file" }] },
@@ -54,7 +54,7 @@ describe("gemini-content-mapper", () => {
   });
 
   it("outbound tool_result uses function name on functionResponse.name", () => {
-    const messages: ChatMessage[] = [
+    const messages: ChatMessageData[] = [
       {
         role: "assistant",
         content: {
@@ -125,7 +125,7 @@ describe("gemini-content-mapper", () => {
   });
 
   it("resolves function name from hidden tool_use via lookup messages", () => {
-    const lookupMessages: ChatMessage[] = [
+    const lookupMessages: ChatMessageData[] = [
       {
         role: "assistant",
         content: {
@@ -140,7 +140,7 @@ describe("gemini-content-mapper", () => {
         },
       },
     ];
-    const visible: ChatMessage[] = [
+    const visible: ChatMessageData[] = [
       {
         role: "user",
         content: {
@@ -169,7 +169,7 @@ describe("gemini-content-mapper", () => {
   });
 
   it("injects synthetic model functionCall when tool_use turn is hidden", () => {
-    const lookupMessages: ChatMessage[] = [
+    const lookupMessages: ChatMessageData[] = [
       {
         role: "assistant",
         content: {
@@ -184,7 +184,7 @@ describe("gemini-content-mapper", () => {
         },
       },
     ];
-    const visible: ChatMessage[] = [
+    const visible: ChatMessageData[] = [
       {
         role: "user",
         content: {
@@ -210,7 +210,7 @@ describe("gemini-content-mapper", () => {
   });
 
   it("assembly normalize + gemini mapper never emits functionResponse for orphan tool_result", () => {
-    const visible: ChatMessage[] = [
+    const visible: ChatMessageData[] = [
       {
         role: "user",
         content: {
@@ -232,7 +232,7 @@ describe("gemini-content-mapper", () => {
   });
 
   it("orphaned tool_result falls back to plain user text (compaction-safe)", () => {
-    const messages: ChatMessage[] = [
+    const messages: ChatMessageData[] = [
       {
         role: "user",
         content: {
@@ -257,7 +257,7 @@ describe("gemini-content-mapper", () => {
   });
 
   it("orphaned tool_result without toolUseId still serializes as user text", () => {
-    const messages: ChatMessage[] = [
+    const messages: ChatMessageData[] = [
       {
         role: "user",
         content: {
@@ -287,7 +287,7 @@ describe("gemini-content-mapper", () => {
   });
 
   it("T-PM2: 相邻 user 合并后 functionResponse part 与 text part 同 content，且前置", () => {
-    const messages: ChatMessage[] = [
+    const messages: ChatMessageData[] = [
       {
         role: "assistant",
         content: {
@@ -335,7 +335,7 @@ describe("gemini-content-mapper", () => {
   });
 
   it("T-PM2: 合成 model turn 修补后再合并相邻 user，model turn 不被吞", () => {
-    const lookupMessages: ChatMessage[] = [
+    const lookupMessages: ChatMessageData[] = [
       {
         role: "assistant",
         content: {
@@ -350,7 +350,7 @@ describe("gemini-content-mapper", () => {
         },
       },
     ];
-    const visible: ChatMessage[] = [
+    const visible: ChatMessageData[] = [
       {
         role: "user",
         content: {
@@ -385,7 +385,7 @@ describe("gemini-content-mapper", () => {
 
   it("W2 收窄等价：可见-only 查找源与全量源对已归一化历史输出逐字段全等", () => {
     // 可见段：assistant tool_use(call_1) + 配对的 user tool_result；另有 hidden 段一对
-    const visible: ChatMessage[] = [
+    const visible: ChatMessageData[] = [
       {
         role: "assistant",
         content: {
@@ -401,7 +401,7 @@ describe("gemini-content-mapper", () => {
         },
       },
     ];
-    const hidden: ChatMessage[] = [
+    const hidden: ChatMessageData[] = [
       {
         role: "assistant",
         content: {

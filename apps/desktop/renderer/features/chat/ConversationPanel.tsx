@@ -1,7 +1,7 @@
 import {
-  ChatMessageEntity,
+  ChatMessage,
   parseComposerDraftJson,
-  rollbackConfirmDescriptor,
+  rollbackConfirm,
   serializeComposerDraftJson,
   type RollbackMode,
 } from '@shared/logic/chat';
@@ -684,7 +684,7 @@ export function ConversationPanel({
       }
       const chatMsg = chatMessageFromDto(target);
       return {
-        rollbackMode: ChatMessageEntity.from(chatMsg).isUndoSendEligible()
+        rollbackMode: ChatMessage.from(chatMsg).isUndoSendEligible()
           ? 'undo_send'
           : 'rewind',
         restoreText: editableTextFromMessage(target),
@@ -923,14 +923,14 @@ export function ConversationPanel({
       return '此消息之前将不参与提示词，此消息及之后将恢复可见。';
     }
     if (confirmState.kind === 'rollback-degraded') {
-      const message = chatTranslator(rollbackConfirmDescriptor(confirmState.rollbackMode, 'degraded'));
+      const message = chatTranslator(rollbackConfirm.descriptor(confirmState.rollbackMode, 'degraded'));
       return `${confirmState.errorMessage}\n\n${message}`;
     }
     if (confirmState.kind === 'rollback-backfill') {
-      return chatTranslator(rollbackConfirmDescriptor(confirmState.rollbackMode, 'backfill', { missingPaths: confirmState.missingLogicalPaths }));
+      return chatTranslator(rollbackConfirm.descriptor(confirmState.rollbackMode, 'backfill', { missingPaths: confirmState.missingLogicalPaths }));
     }
     if (confirmState.kind === 'rollback') {
-      return chatTranslator(rollbackConfirmDescriptor(confirmState.rollbackMode, 'primary'));
+      return chatTranslator(rollbackConfirm.descriptor(confirmState.rollbackMode, 'primary'));
     }
     return '';
   })();

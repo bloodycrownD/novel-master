@@ -12,7 +12,7 @@
  * @module screens/tabs/chat-tab/chat-link-nav
  */
 
-import {isHttpUrl, resolveChatLinkTarget} from '@novel-master/core/chat';
+import {chatLinkResolver} from '@novel-master/core/chat';
 import type {VfsListEntry} from '@novel-master/core/vfs';
 
 /** 探测所需的最小 VFS 面（VfsService.list 的结构子集，测试可直传 stub）。 */
@@ -40,11 +40,11 @@ export async function resolveChatLinkIntent(
   deps: {sessionVfs: ChatLinkProbeVfs | null; projectVfs: ChatLinkProbeVfs | null},
 ): Promise<ChatLinkOpenIntent> {
   const trimmed = href.trim();
-  if (isHttpUrl(trimmed)) {
+  if (chatLinkResolver.isHttp(trimmed)) {
     return {kind: 'external', url: trimmed};
   }
   // mailto 及其它 scheme、非法序列、纯锚点等均为 null → 维持现状无动作
-  const target = resolveChatLinkTarget(trimmed);
+  const target = chatLinkResolver.resolve(trimmed);
   if (target == null) {
     return {kind: 'none'};
   }

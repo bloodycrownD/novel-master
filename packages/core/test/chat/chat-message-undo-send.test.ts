@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { ChatMessageEntity } from "../../src/domain/chat/logic/message/chat-message-entity.js";
+import { ChatMessage } from "../../src/domain/chat/logic/message/chat-message.js";
 import { textBlocks } from "@novel-master/core/chat";
-import type { ChatMessage, MessageAttachment } from "@novel-master/core/chat";
+import type { ChatMessageData, MessageAttachment } from "@novel-master/core/chat";
 
 function stubMessage(
-  overrides: Partial<ChatMessage> & Pick<ChatMessage, "role" | "content">,
-): ChatMessage {
+  overrides: Partial<ChatMessageData> & Pick<ChatMessageData, "role" | "content">,
+): ChatMessageData {
   return {
     id: "msg-1",
     sessionId: "sess-1",
@@ -30,7 +30,7 @@ describe("extractEditableTextFromMessage", () => {
         ],
       },
     });
-    assert.equal(ChatMessageEntity.from(message).editableText(), "hello\n\nworld");
+    assert.equal(ChatMessage.from(message).editableText(), "hello\n\nworld");
   });
 
   it("纯 tool_result user 不可提取文本", () => {
@@ -40,7 +40,7 @@ describe("extractEditableTextFromMessage", () => {
         blocks: [{ type: "tool_result", toolUseId: "tu1", content: "ok" }],
       },
     });
-    assert.equal(ChatMessageEntity.from(message).editableText(), null);
+    assert.equal(ChatMessage.from(message).editableText(), null);
   });
 
   it("空白 text 块返回 null", () => {
@@ -48,7 +48,7 @@ describe("extractEditableTextFromMessage", () => {
       role: "user",
       content: { blocks: [{ type: "text", text: "   " }] },
     });
-    assert.equal(ChatMessageEntity.from(message).editableText(), null);
+    assert.equal(ChatMessage.from(message).editableText(), null);
   });
 });
 
@@ -61,7 +61,7 @@ describe("isPlainUserUndoSendEligible", () => {
         metadata: { kind: "user_vfs_action", source: "user", synthetic: true },
       },
     });
-    assert.equal(ChatMessageEntity.from(message).isUndoSendEligible(), false);
+    assert.equal(ChatMessage.from(message).isUndoSendEligible(), false);
   });
 
   it("T-C3: 纯 tool_result user 不可 Undo Send", () => {
@@ -71,7 +71,7 @@ describe("isPlainUserUndoSendEligible", () => {
         blocks: [{ type: "tool_result", toolUseId: "tu1", content: "ok" }],
       },
     });
-    assert.equal(ChatMessageEntity.from(message).isUndoSendEligible(), false);
+    assert.equal(ChatMessage.from(message).isUndoSendEligible(), false);
   });
 
   it("plain user 文本 eligible", () => {
@@ -79,7 +79,7 @@ describe("isPlainUserUndoSendEligible", () => {
       role: "user",
       content: textBlocks("prompt"),
     });
-    assert.equal(ChatMessageEntity.from(message).isUndoSendEligible(), true);
+    assert.equal(ChatMessage.from(message).isUndoSendEligible(), true);
   });
 
   it("assistant 不可 Undo Send", () => {
@@ -87,7 +87,7 @@ describe("isPlainUserUndoSendEligible", () => {
       role: "assistant",
       content: textBlocks("reply"),
     });
-    assert.equal(ChatMessageEntity.from(message).isUndoSendEligible(), false);
+    assert.equal(ChatMessage.from(message).isUndoSendEligible(), false);
   });
 });
 
@@ -110,7 +110,7 @@ describe("Bug3: 批注附件补判 plain user 资格", () => {
       content: { blocks: [] },
       attachments: [annotateAttachment()],
     });
-    assert.equal(ChatMessageEntity.from(message).isPlainUserText(), true);
+    assert.equal(ChatMessage.from(message).isPlainUserText(), true);
   });
 
   it("T-B3-02: 只有批注附件 → isPlainUserUndoSendEligible 返回 true", () => {
@@ -119,7 +119,7 @@ describe("Bug3: 批注附件补判 plain user 资格", () => {
       content: { blocks: [] },
       attachments: [annotateAttachment()],
     });
-    assert.equal(ChatMessageEntity.from(message).isUndoSendEligible(), true);
+    assert.equal(ChatMessage.from(message).isUndoSendEligible(), true);
   });
 
   it("T-B3-03: 只有批注附件 → extractEditableTextFromMessage 返回 null（不改）", () => {
@@ -128,7 +128,7 @@ describe("Bug3: 批注附件补判 plain user 资格", () => {
       content: { blocks: [] },
       attachments: [annotateAttachment()],
     });
-    assert.equal(ChatMessageEntity.from(message).editableText(), null);
+    assert.equal(ChatMessage.from(message).editableText(), null);
   });
 
   it("T-B3-04: 既有正文又有批注 → isPlainUserUndoSendEligible 返回 true（不回归）", () => {
@@ -137,7 +137,7 @@ describe("Bug3: 批注附件补判 plain user 资格", () => {
       content: textBlocks("正文"),
       attachments: [annotateAttachment()],
     });
-    assert.equal(ChatMessageEntity.from(message).isUndoSendEligible(), true);
+    assert.equal(ChatMessage.from(message).isUndoSendEligible(), true);
   });
 
   it("T-B3-05: assistant 消息含批注 → isPlainUserText 返回 false（role 守卫不回归）", () => {
@@ -146,7 +146,7 @@ describe("Bug3: 批注附件补判 plain user 资格", () => {
       content: textBlocks("reply"),
       attachments: [annotateAttachment()],
     });
-    assert.equal(ChatMessageEntity.from(message).isPlainUserText(), false);
+    assert.equal(ChatMessage.from(message).isPlainUserText(), false);
   });
 
   it("T-B3-06: user 消息含 tool_result + 批注 → isPlainUserText 返回 false（hasToolResult 守卫不回归）", () => {
@@ -159,7 +159,7 @@ describe("Bug3: 批注附件补判 plain user 资格", () => {
       },
       attachments: [annotateAttachment()],
     });
-    assert.equal(ChatMessageEntity.from(message).isPlainUserText(), false);
+    assert.equal(ChatMessage.from(message).isPlainUserText(), false);
   });
 
   it("T-B3-07: user_vfs_action 消息含批注 → isPlainUserUndoSendEligible 返回 false（synthetic 守卫不回归）", () => {
@@ -171,7 +171,7 @@ describe("Bug3: 批注附件补判 plain user 资格", () => {
       },
       attachments: [annotateAttachment()],
     });
-    assert.equal(ChatMessageEntity.from(message).isUndoSendEligible(), false);
+    assert.equal(ChatMessage.from(message).isUndoSendEligible(), false);
   });
 
   it("T-B3-08: attachments 为空数组或 undefined → hasAnnotateAttachment 返回 false", () => {
@@ -180,11 +180,11 @@ describe("Bug3: 批注附件补判 plain user 资格", () => {
       content: textBlocks("x"),
       attachments: [],
     });
-    assert.equal(ChatMessageEntity.from(emptyArray).hasAnnotateAttachment(), false);
+    assert.equal(ChatMessage.from(emptyArray).hasAnnotateAttachment(), false);
     const undefined1 = stubMessage({
       role: "user",
       content: textBlocks("x"),
     });
-    assert.equal(ChatMessageEntity.from(undefined1).hasAnnotateAttachment(), false);
+    assert.equal(ChatMessage.from(undefined1).hasAnnotateAttachment(), false);
   });
 });

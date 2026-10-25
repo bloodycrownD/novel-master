@@ -141,7 +141,7 @@ describe("Message visibility", () => {
     const { conn, sqls } = recordingConnection(ctx.conn);
     const repo = new SqliteMessageRepository(conn);
 
-    // G1 列集（有牙）：旧实现返回 21 键的整条 ChatMessage。
+    // G1 列集（有牙）：旧实现返回 21 键的整条 ChatMessageData。
     const rows = await repo.listBySessionOffset(session.id, 1);
     assert.equal(rows.length, 2);
     assert.deepEqual(Object.keys(rows[0]!).sort(), [

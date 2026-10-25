@@ -9,7 +9,7 @@
 import { isRecord } from "@/common/guards.js";
 import { ProviderError } from "@/errors/provider-errors.js";
 import type { ContentBlock } from "@/domain/chat/model/content-block.js";
-import type { ChatMessage } from "@/domain/chat/model/message.js";
+import type { ChatMessageData } from "@/domain/chat/model/message.js";
 import type {
   LlmStreamEvent,
   DegradedToolCall,
@@ -148,7 +148,7 @@ function toolCallsFromBlocks(
  * redacted_thinking 是 anthropic 加密负载，openai 无对应字段，丢弃。
  */
 export function chatMessagesToOpenAi(
-  messages: readonly ChatMessage[]
+  messages: readonly ChatMessageData[]
 ): OpenAiChatMessage[] {
   const out: OpenAiChatMessage[] = [];
 

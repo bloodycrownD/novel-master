@@ -57,7 +57,7 @@ import {
 } from "../ipc/client";
 
 import { resolveChatLinkAction } from "../features/chat/chat-link-route";
-import { chatLinkNotFoundMessage } from "@shared/logic/chat";
+import { chatLinkResolver } from "@shared/logic/chat";
 import { showToast } from "@/components/ui/show-toast";
 
 import {
@@ -414,7 +414,7 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
         }
         if (action.kind === "not-found") {
           // 路径型链接双域探测未命中：用户拍板弹提示，不再静默无动作
-          showToast(chatLinkNotFoundMessage(action.path));
+          showToast(chatLinkResolver.notFoundMessage(action.path));
         }
       });
     },

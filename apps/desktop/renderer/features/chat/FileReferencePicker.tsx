@@ -9,7 +9,7 @@ import {
   isDirectChild,
   parentLogicalPath,
 } from '@/features/workspace/vfs-tree-utils';
-import { atPathTokensFromPickerSelection } from './composer-at-path';
+import { composerAtPath } from './composer-at-path';
 
 export type FileReferencePickerProps = {
   open: boolean;
@@ -33,7 +33,7 @@ export function listPickerChildRows(
   return rows.filter(r => isDirectChild(currentPath, r.path));
 }
 
-export { atPathTokensFromPickerSelection };
+export { composerAtPath };
 
 function toggleInSet(prev: Set<string>, path: string): Set<string> {
   const next = new Set(prev);
@@ -227,7 +227,7 @@ export function FileReferencePicker({
             disabled={!canConfirm}
             onClick={() => {
               onConfirm(
-                atPathTokensFromPickerSelection(selectedDirs, selectedFiles),
+                composerAtPath.tokensFromPickerSelection(selectedDirs, selectedFiles),
               );
               onClose();
             }}

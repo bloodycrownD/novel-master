@@ -6,7 +6,7 @@
 
 import { randomUUID } from "@/infra/random-uuid.js";
 import type {
-  ChatMessage,
+  ChatMessageData,
   MessageContent,
 } from "@/domain/chat/model/message.js";
 import type { MessageUsage } from "@/domain/chat/model/message-usage.js";
@@ -17,7 +17,7 @@ import type { AgentSession } from "../agent-session.port.js";
  * Ephemeral session storing messages in memory.
  */
 export class InMemoryAgentSession implements AgentSession {
-  private readonly messages: ChatMessage[] = [];
+  private readonly messages: ChatMessageData[] = [];
   private seq = 0;
 
   constructor(
@@ -26,7 +26,7 @@ export class InMemoryAgentSession implements AgentSession {
     readonly kkvScopeSessionId = sessionId
   ) {}
 
-  async list(): Promise<readonly ChatMessage[]> {
+  async list(): Promise<readonly ChatMessageData[]> {
     return this.messages.filter((m) => !m.hidden);
   }
 
@@ -41,9 +41,9 @@ export class InMemoryAgentSession implements AgentSession {
       /** 结构化附件：随内存消息一起保留，供测试断言落库形态。 */
       attachments?: readonly MessageAttachment[];
     }
-  ): Promise<ChatMessage> {
+  ): Promise<ChatMessageData> {
     this.seq += 1;
-    const message: ChatMessage = {
+    const message: ChatMessageData = {
       id: randomUUID(),
       sessionId: this.sessionId,
       seq: this.seq,
@@ -89,7 +89,8 @@ export class InMemoryAgentSession implements AgentSession {
   }
 
   /** All messages including hidden (tests). */
-  allMessages(): readonly ChatMessage[] {
+  /** nm-style: keep-public — 测试读取含 hidden 的完整消息列表。 */
+  allMessages(): readonly ChatMessageData[] {
     return [...this.messages];
   }
 }

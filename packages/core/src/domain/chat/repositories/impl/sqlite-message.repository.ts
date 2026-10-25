@@ -17,7 +17,8 @@ import {
   parseAttachmentsJson,
   serializeAttachmentsJson,
 } from "../../model/message-attachment.schema.js";
-import type { ChatMessage, ChatMessageHeader } from "../../model/message.js";
+import type { ChatMessageData, ChatMessageHeader } from "../../model/message.js";
+import { ChatMessage } from "../../logic/message/chat-message.js";
 import type { MessageContent } from "../../model/content-block.js";
 import type { MessageUsage } from "../../model/message-usage.js";
 import type { MessageRepository } from "../message.port.js";
@@ -35,7 +36,7 @@ const MESSAGE_INSERT_SQL =
   `VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 
 /**
- * 把 ChatMessage 摊平成与 {@link MESSAGE_INSERT_SQL} 列顺序对齐的参数数组。
+ * 把 ChatMessageData 摊平成与 {@link MESSAGE_INSERT_SQL} 列顺序对齐的参数数组。
  *
  * insert 走 executeTemplate 时由 SqlTemplateParser 按 `#{xxx}` 出现顺序收集参数，
  * 这里手写数组必须保持同一顺序——两边的列/`?`/参数三者完全对齐。
@@ -46,7 +47,7 @@ const MESSAGE_INSERT_SQL =
  * 只是新行恒为空；存量压缩行已由反向搬运任务全部解回明文（v1.5.40 同批
  * 确认），读路径只认 content_json 明文。
  */
-function toMessageParams(message: ChatMessage): unknown[] {
+function toMessageParams(message: ChatMessageData): unknown[] {
   return [
     message.id,
     message.sessionId,
@@ -120,7 +121,7 @@ function rowToMessage(row: Row): ChatMessage {
     row.attachments_json == null ? null : String(row.attachments_json)
   );
   const usage = parseUsage(row);
-  return {
+  return ChatMessage.from({
     id: String(row.id),
     sessionId: String(row.session_id),
     seq: Number(row.seq),
@@ -138,7 +139,7 @@ function rowToMessage(row: Row): ChatMessage {
     hidden: Number(row.hidden) === 1,
     ...(attachments != null ? { attachments } : {}),
     ...(usage != null ? { usage } : {}),
-  };
+  });
 }
 
 function parseUsage(row: Row): MessageUsage | undefined {
@@ -216,12 +217,12 @@ export class SqliteMessageRepository implements MessageRepository {
     this.yieldFn = yieldFn;
   }
 
-  /** rows → ChatMessage 列表转换：无 yieldFn 直通同步 map，有则分片让步。 */
-  private async mapRows(rows: Row[]): Promise<ChatMessage[]> {
+  /** rows → ChatMessageData 列表转换：无 yieldFn 直通同步 map，有则分片让步。 */
+  private async mapRows(rows: Row[]): Promise<ChatMessageData[]> {
     if (this.yieldFn == null) {
       return rows.map(rowToMessage);
     }
-    const messages: ChatMessage[] = [];
+    const messages: ChatMessageData[] = [];
     // 注意：分片步长是类静态常量，须以类名引用（this 上取不到 static
     // 成员——实例方法里 this.ROW_PARSE_CHUNK 运行时是 undefined，会让
     // start += undefined 变 NaN 而静默返回空数组）。
@@ -241,7 +242,7 @@ export class SqliteMessageRepository implements MessageRepository {
   async listBySession(
     sessionId: string,
     options?: { includeHidden?: boolean }
-  ): Promise<ChatMessage[]> {
+  ): Promise<ChatMessageData[]> {
     // includeHidden=false 在 SQL 层就滤掉 hidden 行：置位产物不必捞回——
     // 大会话（数千条、hidden 占多数）的 UI 读口（token chip 的 prompt 组装
     // 只消费可见历史）因此不必把不可见行的正文字节取回来。
@@ -263,7 +264,7 @@ export class SqliteMessageRepository implements MessageRepository {
   async listBySessionFromSeq(
     sessionId: string,
     fromSeq: number
-  ): Promise<ChatMessage[]> {
+  ): Promise<ChatMessageData[]> {
     const rows = await queryTemplate(
       this.conn,
       this.parser,
@@ -279,7 +280,7 @@ export class SqliteMessageRepository implements MessageRepository {
   async listBySessionUpToSeq(
     sessionId: string,
     maxSeq: number
-  ): Promise<ChatMessage[]> {
+  ): Promise<ChatMessageData[]> {
     // 与 listBySessionFromSeq 对称：这边收上界。SQL 里**只**加 seq 上界，
     // 不加 AND hidden = 0（fork 要保留 hidden 状态）。
     // 走 mapRows 保住 yieldFn 分片让步（mobile 上大结果集退化成单次长任务）。
@@ -299,7 +300,7 @@ export class SqliteMessageRepository implements MessageRepository {
     sessionId: string,
     role: string,
     limit: number
-  ): Promise<ChatMessage[]> {
+  ): Promise<ChatMessageData[]> {
     // role 在子查询里过滤：limit 只数该 role 的行，夹在中间的 tool_result
     // （role=user）不占配额。外层再包一层 ORDER BY seq ASC 保持升序返回。
     const clampedLimit = Math.max(1, Math.floor(limit));
@@ -401,7 +402,7 @@ export class SqliteMessageRepository implements MessageRepository {
   async listBySessionTail(
     sessionId: string,
     limit: number
-  ): Promise<ChatMessage[]> {
+  ): Promise<ChatMessageData[]> {
     const clampedLimit = Math.max(1, Math.floor(limit));
     const rows = await queryTemplate(
       this.conn,
@@ -424,7 +425,7 @@ export class SqliteMessageRepository implements MessageRepository {
     sessionId: string,
     limit: number,
     beforeSeq?: number
-  ): Promise<ChatMessage[]> {
+  ): Promise<ChatMessageData[]> {
     const clampedLimit = Math.max(1, Math.floor(limit));
     const rows = await queryTemplate(
       this.conn,
@@ -444,7 +445,7 @@ export class SqliteMessageRepository implements MessageRepository {
     return this.mapRows(rows);
   }
 
-  async findById(id: string): Promise<ChatMessage | null> {
+  async findById(id: string): Promise<ChatMessageData | null> {
     const rows = await queryTemplate(
       this.conn,
       this.parser,
@@ -488,11 +489,11 @@ export class SqliteMessageRepository implements MessageRepository {
     return result.changes > 0;
   }
 
-  async insert(message: ChatMessage): Promise<void> {
+  async insert(message: ChatMessageData): Promise<void> {
     await this.conn.execute(MESSAGE_INSERT_SQL, toMessageParams(message));
   }
 
-  async batchInsert(messages: readonly ChatMessage[]): Promise<void> {
+  async batchInsert(messages: readonly ChatMessageData[]): Promise<void> {
     // 空数组直接返回，避免驱动对空 parametersList 的行为分歧，
     // 也让 fork/copy 在源会话无消息时不用特殊判断。
     if (messages.length === 0) {

@@ -5,7 +5,7 @@ import {
   chatAnnotateDraftStore,
   readMessageMetadata,
   textBlocks,
-  type ChatMessage,
+  type ChatMessageData,
   type MessageContent,
 } from '@novel-master/core/chat';
 
@@ -63,7 +63,7 @@ function toContentBlockDto(block: ContentBlock): ContentBlockDto | null {
   }
 }
 
-function toDto(msg: ChatMessage): ChatMessageDto {
+function toDto(msg: ChatMessageData): ChatMessageDto {
   const blocks = msg.content.blocks ?? [];
   const metadata = readMessageMetadata(msg.raw);
   return {

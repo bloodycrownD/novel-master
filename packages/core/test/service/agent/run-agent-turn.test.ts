@@ -10,8 +10,7 @@ import {
   runAgentTurn,
   type AgentTurnRuntimePort,
 } from "@/service/agent/logic/run-agent-turn.js";
-import { scanAtPathAttachments } from "@/domain/chat/logic/attachment/scan-at-path-attachments.js";
-import { scanSkillAttachments } from "@/domain/chat/logic/attachment/scan-skill-attachments.js";
+import { attachmentScanner } from "@/domain/chat/logic/attachment/attachment-scanner.js";
 import type { ComposerDraftTokenRange } from "@/domain/chat/model/composer-draft.schema.js";
 import type { MessageAttachment } from "@/domain/chat/model/message-attachment.schema.js";
 import type { UserVfsTurnService } from "@/service/chat/user-vfs-turn.port.js";
@@ -24,7 +23,7 @@ function scanComposerRanges(
   const out: MessageAttachment[] = [];
   for (const range of ranges) {
     const slice = text.slice(range.start, range.end);
-    out.push(...scanAtPathAttachments(slice), ...scanSkillAttachments(slice));
+    out.push(...attachmentScanner.scanAtPaths(slice), ...attachmentScanner.scanSkills(slice));
   }
   return out;
 }

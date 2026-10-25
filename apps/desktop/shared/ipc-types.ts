@@ -744,7 +744,7 @@ export type ChatMessageDto = {
   readonly contentBlocks: readonly ContentBlockDto[];
   /** synthetic 识别（VFS UA 折叠等）；无则 undefined。 */
   readonly metadata?: MessageMetadataDto;
-  /** 结构化附件；与 Core `ChatMessage.attachments` 对齐。 */
+  /** 结构化附件；与 Core `ChatMessageData.attachments` 对齐。 */
   readonly attachments?: readonly MessageAttachmentDto[];
 };
 

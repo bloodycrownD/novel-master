@@ -4,7 +4,7 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { buildFileAnnotateAttachmentFromDraft, parseAnnotateDraftsFromAttachments } from "@/domain/chat/logic/attachment/build-attachment-action-xml.js";
+import { attachmentXmlCodec } from "@/domain/chat/logic/attachment/attachment-xml-codec.js";
 import { annotateDraftSchema, type AnnotateDraft } from "@/domain/chat/model/annotate-draft.schema.js";
 import type { MessageAttachment } from "@/domain/chat/model/message-attachment.schema.js";
 
@@ -58,7 +58,7 @@ describe("T-AR2 buildFileAnnotateAttachmentFromDraft 行列键", () => {
       startCol: 1,
       endCol: 5,
     };
-    const att = buildFileAnnotateAttachmentFromDraft(draft);
+    const att = attachmentXmlCodec.encodeAnnotateAttachment(draft);
     assert.match(att.content ?? "", /"startLine": 10/);
     assert.match(att.content ?? "", /"endLine": 14/);
     assert.match(att.content ?? "", /"startCol": 1/);
@@ -73,7 +73,7 @@ describe("T-AR2 buildFileAnnotateAttachmentFromDraft 行列键", () => {
       path: "/legacy.md",
       action: "annotate",
     };
-    const parsed = parseAnnotateDraftsFromAttachments([legacyAtt]);
+    const parsed = attachmentXmlCodec.decodeAnnotateDrafts([legacyAtt]);
     assert.equal(parsed.length, 1);
     assert.equal(parsed[0]!.path, "/legacy.md");
     assert.equal(parsed[0]!.originalText, "三字段");
@@ -94,8 +94,8 @@ describe("T-AR3 Undo parse round-trip 保留行列", () => {
       startCol: 3,
       endCol: 4,
     };
-    const att = buildFileAnnotateAttachmentFromDraft(draft);
-    const parsed = parseAnnotateDraftsFromAttachments([att]);
+    const att = attachmentXmlCodec.encodeAnnotateAttachment(draft);
+    const parsed = attachmentXmlCodec.decodeAnnotateDrafts([att]);
     assert.equal(parsed.length, 1);
     assert.notEqual(parsed[0]!.id, "orig");
     assert.equal(parsed[0]!.path, "/round.md");
@@ -132,10 +132,10 @@ describe("T-SA2 offset 与派生行列 round-trip", () => {
     const endOffset = startOffset + "hello".length;
     const lines = { startLine: 2, endLine: 2, startCol: 1, endCol: 5 };
     const draft: AnnotateDraft = { id: "orig", path: "/round.md", originalText: "hello", userAnnotation: "请改", startOffset, endOffset, ...lines };
-    const att = buildFileAnnotateAttachmentFromDraft(draft);
+    const att = attachmentXmlCodec.encodeAnnotateAttachment(draft);
     assert.match(att.content ?? "", /"startOffset":/);
     assert.match(att.content ?? "", /"startLine":/);
-    const parsed = parseAnnotateDraftsFromAttachments([att]);
+    const parsed = attachmentXmlCodec.decodeAnnotateDrafts([att]);
     assert.equal(parsed.length, 1);
     assert.equal(parsed[0]!.startOffset, startOffset);
     assert.equal(parsed[0]!.endOffset, endOffset);

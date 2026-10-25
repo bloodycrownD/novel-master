@@ -4,7 +4,7 @@
  * @module domain/usage/logic/build-usage-record
  */
 
-import type { ChatMessage } from "@/domain/chat/model/message.js";
+import type { ChatMessageData } from "@/domain/chat/model/message.js";
 import type { UsageRecordInsert } from "../model/usage-record.js";
 
 /**
@@ -19,7 +19,7 @@ import type { UsageRecordInsert } from "../model/usage-record.js";
  * NULL——口径由读侧 SQL 决定，账本侧不做二次加工。
  */
 export function buildUsageRecordFromMessage(
-  message: ChatMessage
+  message: ChatMessageData
 ): UsageRecordInsert | null {
   if (message.role !== "assistant") {
     return null;

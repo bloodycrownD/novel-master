@@ -8,7 +8,7 @@ const repoRoot = process.cwd();
 const fixtureRoot = path.join(repoRoot, "tmp", "__inline_fixture__");
 const script = path.join(repoRoot, ".agents/skills/nm-code-style/scripts/check-inline.mjs");
 
-test("check-inline：>20 行 keep-local 保留；小函数 keep-local 仍判内联", () => {
+test("check-inline：长函数 keep-local 保留；行数不是理由，小函数仍判内联", () => {
   fs.rmSync(fixtureRoot, { recursive: true, force: true });
   fs.mkdirSync(fixtureRoot, { recursive: true });
   try {

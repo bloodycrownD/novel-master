@@ -19,7 +19,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { beforeEach, describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
-import type { ChatMessage } from "../../src/domain/chat/model/message.js";
+import type { ChatMessageData } from "../../src/domain/chat/model/message.js";
 import { SqliteMessageRepository } from "../../src/domain/chat/repositories/impl/sqlite-message.repository.js";
 import { SqliteUsageRecordRepository } from "../../src/domain/usage/repositories/impl/sqlite-usage-record.repository.js";
 import { buildUsageRecordFromMessage } from "../../src/domain/usage/logic/build-usage-record.js";
@@ -89,7 +89,7 @@ interface MsgSeed {
   modelName?: string | null;
   hidden?: boolean;
   /** 自定义 content 块（tool_use 计数用例）；缺省为单 text 块。 */
-  blocks?: ChatMessage["content"]["blocks"];
+  blocks?: ChatMessageData["content"]["blocks"];
   usage?: {
     prompt?: number;
     completion?: number;
@@ -130,7 +130,7 @@ async function seedMsg(
           ...(u.firstTokenMs != null ? { firstTokenMs: u.firstTokenMs } : {}),
           ...(u.durationMs != null ? { durationMs: u.durationMs } : {}),
         };
-  const message: ChatMessage = {
+  const message: ChatMessageData = {
     id: randomUUID(),
     sessionId,
     seq,

@@ -20,9 +20,7 @@
  */
 
 import {
-  mergeAttachmentsByPath,
-  scanAtPathAttachments,
-  scanSkillAttachments,
+  attachmentScanner,
   type ComposerDraftTokenRange,
   type MessageAttachment,
 } from '@novel-master/core/chat';
@@ -47,7 +45,7 @@ export const EMPTY_COMPOSER_SEND_SCAN: ComposerSendScan = {
  * 2. **掩码全量扫描**：区间替换成**等长空白**（下标不变）后全量扫原文——
  *    区间内触发符不再参与识别，手输 token（区间外）照常可扫 →
  *    `fullScanResults`；
- * 3. **合并**：`mergeAttachmentsByPath(rangeResults, fullScanResults)`——
+ * 3. **合并**：`attachmentScanner.mergeByPath(rangeResults, fullScanResults)`——
  *    该函数已有优先，区间结果必须放 existing 位。
  *
  * @param sourceText 未 trim 的草稿原文（区间下标基准）
@@ -70,8 +68,8 @@ export function scanComposerTokenRangesForSend(
   for (const range of normalized) {
     const slice = sourceText.slice(range.start, range.end);
     rangeResults.push(
-      ...scanAtPathAttachments(slice),
-      ...scanSkillAttachments(slice),
+      ...attachmentScanner.scanAtPaths(slice),
+      ...attachmentScanner.scanSkills(slice),
     );
   }
 
@@ -79,13 +77,13 @@ export function scanComposerTokenRangesForSend(
   // （`用 $foo 看 @notes/a.md`）照常识别，贴邻触发器（`$A$B`）在源头消失。
   const maskedText = maskRangesWithSpaces(sourceText, normalized);
   const fullScanResults: MessageAttachment[] = [
-    ...scanAtPathAttachments(maskedText),
-    ...scanSkillAttachments(maskedText),
+    ...attachmentScanner.scanAtPaths(maskedText),
+    ...attachmentScanner.scanSkills(maskedText),
   ];
 
   // 第 3 段：合并——existing=区间（区间结果优先，去重键相同则保留区间对象）。
   return {
-    attachments: mergeAttachmentsByPath(rangeResults, fullScanResults),
+    attachments: attachmentScanner.mergeByPath(rangeResults, fullScanResults),
     excludedScanRanges: toTrimmedCoordinates(sourceText, content, normalized),
   };
 }

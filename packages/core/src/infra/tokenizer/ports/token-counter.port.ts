@@ -4,7 +4,7 @@
  * @module infra/tokenizer/ports/token-counter.port
  */
 
-import type { ChatMessage } from "@/domain/chat/model/message.js";
+import type { ChatMessageData } from "@/domain/chat/model/message.js";
 
 /** Aligns with SillyTavern `getTokenizerModel` families plus heuristic fallback. */
 export type TokenizerFamily =
@@ -34,5 +34,5 @@ export interface TokenCounter {
   /** Plain text token count (raw encode or heuristic). */
   countText(text: string): number;
   /** Uses messageBodyTextFromBlocks per message (legacy compaction estimate path). */
-  countMessages(messages: readonly ChatMessage[]): number;
+  countMessages(messages: readonly ChatMessageData[]): number;
 }

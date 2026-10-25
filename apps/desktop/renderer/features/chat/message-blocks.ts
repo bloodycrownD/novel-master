@@ -1,7 +1,7 @@
 /**
  * Message block parsing and tool_use / tool_result pairing for chat UI.
  */
-import { resolveSkillToolRefFromInput, resolveVfsToolFilePath } from "@shared/logic/chat";
+import { skillToolRefResolver, resolveVfsToolFilePath } from "@shared/logic/chat";
 import { resolveToolResultOk } from "@shared/logic/root";
 import { summarizeToolInput } from "@shared/logic/chat";
 import type { ChatMessageDto, ContentBlockDto } from "@shared/ipc-types";
@@ -197,7 +197,7 @@ export function skillToolRef(
   projectId?: string,
 ): ToolCallView["skillRef"] {
   if (tool.skillRef != null) return tool.skillRef;
-  return resolveSkillToolRefFromInput(tool.name, tool.input, projectId);
+  return skillToolRefResolver.fromInput(tool.name, tool.input, projectId);
 }
 
 export function toolCallSummary(tool: ToolCallView): string {

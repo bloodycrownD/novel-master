@@ -3,7 +3,7 @@
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { partitionComposerChipAttachments } from "../../src/domain/chat/logic/composer/composer-chip-attachment.js";
+import { composerChips } from "../../src/domain/chat/logic/composer/composer-chips.js";
 
 type Chip = { readonly source: string; readonly action?: string };
 
@@ -12,7 +12,7 @@ function chip(partial: Chip): Chip {
 }
 
 function isStatus(a: Chip): boolean {
-  return partitionComposerChipAttachments([a]).status.length === 1;
+  return composerChips.partition([a]).status.length === 1;
 }
 
 describe("状态 chip 判定（经 partition）", () => {
@@ -65,7 +65,7 @@ describe("partitionComposerChipAttachments", () => {
       chip({ source: "user_ops", action: "annotate" }),
     ];
     const { status, attach: attachOnly } =
-      partitionComposerChipAttachments(items);
+      composerChips.partition(items);
     assert.deepEqual(
       status.map((a) => a.action ?? a.source),
       ["workplace", "annotate"],
@@ -80,7 +80,7 @@ describe("partitionComposerChipAttachments", () => {
       chip({ source: "attach" }),
     ];
     const { status, attach: attachOnly } =
-      partitionComposerChipAttachments(items);
+      composerChips.partition(items);
     assert.equal(status.length, 1);
     assert.equal(attachOnly.length, 1);
     assert.equal(attachOnly[0]?.source, "attach");
@@ -94,7 +94,7 @@ describe("partitionComposerChipAttachments", () => {
       chip({ source: "user_ops", action: "annotate" }),
     ];
     const { status, attach: attachOnly } =
-      partitionComposerChipAttachments(items);
+      composerChips.partition(items);
     assert.deepEqual(
       status.map((a) => a.action ?? a.source),
       ["workplace", "annotate"],

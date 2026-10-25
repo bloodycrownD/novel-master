@@ -5,7 +5,7 @@
  */
 
 import { truncateText } from "@/common/text.js";
-import type { ChatMessage } from "@/domain/chat/model/message.js";
+import type { ChatMessageData } from "@/domain/chat/model/message.js";
 import type {
   ContentBlock,
   ToolResultBlock,
@@ -43,7 +43,7 @@ import {
 import { normalizeOrphanToolResultsForLlm } from "../../prompt/normalize-orphan-tool-results-for-llm.js";
 import { applyThinkingContextForLlm } from "../../prompt/apply-thinking-context-for-llm.js";
 import { normalizeForLlmExport } from "@/domain/prompt/logic/normalize-for-llm-export.js";
-import { prepareUserMessagesForPrompt } from "@/domain/chat/logic/prompt/prepare-user-messages-for-prompt.js";
+import { promptAssembler } from "@/domain/chat/logic/prompt/prompt-assembler.js";
 import type { SkillService } from "@/service/skills/skills.port.js";
 import { inferLlmProtocolFromSavedModelId } from "@/domain/provider/logic/infer-llm-protocol-from-model-id.js";
 import type { ProviderRepository } from "@/domain/provider/repositories/provider.port.js";
@@ -111,7 +111,7 @@ export interface DefaultAgentRunnerDeps {
   /** 按 sessionId 累积 in-flight 流式 partial，供子会话首次进入查询。 */
   readonly streamRegistry?: AgentStreamRegistry;
   /** 每步 tool_use 查找源（可见-only；见 {@link CreateAgentRunnerDeps} 同名字段）。 */
-  readonly listVisibleSessionMessages?: () => Promise<readonly ChatMessage[]>;
+  readonly listVisibleSessionMessages?: () => Promise<readonly ChatMessageData[]>;
   /** 思考上下文偏好窄切片（每 run 一次快照；未注入时等同默认开）。 */
   readonly preferences?: Pick<
     PersistentPreferences,
@@ -434,7 +434,7 @@ export class DefaultAgentRunner implements AgentRunner {
           break;
         }
 
-        visible = await prepareUserMessagesForPrompt(visible, {
+        const prepareRuntime = {
           sessionId,
           sessionKkv: this.deps.sessionKkv,
           vfs: this.deps.toolCtx.vfs,
@@ -451,7 +451,8 @@ export class DefaultAgentRunner implements AgentRunner {
           // deny（D4）时置空，而显式引用不受工具禁用影响。
           skills: this.deps.skills?.(),
           projectId,
-        });
+        };
+        visible = await promptAssembler.prepare(visible, prepareRuntime);
         if (signal?.aborted) {
           await handleAbort("after_prepare_user_messages");
           break;
@@ -613,7 +614,7 @@ export class DefaultAgentRunner implements AgentRunner {
         //    走旧读法：查找源保持「纯 DB 集」，本 run 追加的 tool_use id 依旧解析不
         //    到名字，出站 wire 与 RT-01 改动前一致（不引入 spec 未承认的 wire 变化）。
         //    代价是 ephemeral run 每 step 一次全列读——已知取舍，甲案保守。
-        let toolUseLookupMessages: readonly ChatMessage[] | undefined;
+        let toolUseLookupMessages: readonly ChatMessageData[] | undefined;
         if (protocol === "gemini" && this.deps.listVisibleSessionMessages != null) {
           toolUseLookupMessages =
             stepCompactionEmitted || !persistMessages
@@ -718,7 +719,7 @@ export class DefaultAgentRunner implements AgentRunner {
 
         stepsExecuted += 1;
 
-        let assistantMessage: ChatMessage | undefined;
+        let assistantMessage: ChatMessageData | undefined;
         if (result.blocks.length > 0 && meaningful) {
           assistantMessage = await session.append(
             "assistant",

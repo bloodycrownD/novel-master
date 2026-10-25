@@ -26,7 +26,7 @@ import {
   useRoute,
   type RouteProp,
 } from '@react-navigation/native';
-import type {ChatMessage} from '@novel-master/core/chat';
+import type {ChatMessageData} from '@novel-master/core/chat';
 import type {SkillToolRef} from '@novel-master/core/chat';
 import {
   ChatStreamMetricsBarLive,
@@ -34,7 +34,7 @@ import {
 } from '../../components/chat/ChatStreamMetricsBarLive';
 import {ChatConversationWebView} from '../../components/chat/ChatConversationWebView';
 import {showAppToast} from '@/services/app-toast';
-import {chatLinkNotFoundMessage} from '@novel-master/core/chat';
+import {chatLinkResolver} from '@novel-master/core/chat';
 import type {ChatConversationWebViewHandle} from '../../components/chat/ChatConversationWebView';
 import {setPromptTurnDetail} from '../../components/prompt/prompt-turn-callback';
 import {useToast} from '../../components/chrome/ToastHost';
@@ -65,7 +65,7 @@ export function SubagentSessionScreen() {
   const {sessionId, projectId, parentSessionId} = route.params;
   const manager = runtime.sessionStreamUnitManager;
 
-  const [messages, setMessages] = useState<readonly ChatMessage[]>([]);
+  const [messages, setMessages] = useState<readonly ChatMessageData[]>([]);
   const [initialLoading, setInitialLoading] = useState(true);
   const [richTextEnabled, setRichTextEnabled] = useState(false);
   const transcriptWebRef = useRef<ChatConversationWebViewHandle>(null);
@@ -86,7 +86,7 @@ export function SubagentSessionScreen() {
   const hasUnit = unitView != null;
   useEffect(() => {
     let cancelled = false;
-    const load = async (): Promise<readonly ChatMessage[]> => {
+    void (async () => {
       if (sessionId == null) {
         return [];
       }
@@ -104,8 +104,7 @@ export function SubagentSessionScreen() {
         showToast(toastMessage('加载子会话失败', error));
         return [];
       }
-    };
-    void load()
+    })()
       .then(list => {
         if (!cancelled) {
           setMessages(list);
@@ -216,7 +215,7 @@ export function SubagentSessionScreen() {
           }
           if (intent.kind === 'not-found') {
             // 路径型链接双域探测未命中：用户拍板弹提示，不再静默无动作
-            showAppToast(chatLinkNotFoundMessage(intent.path));
+            showAppToast(chatLinkResolver.notFoundMessage(intent.path));
             return;
           }
           if (intent.kind === 'file') {

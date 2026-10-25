@@ -4,7 +4,7 @@
 import { app, BrowserWindow, nativeImage, shell } from "electron";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { isHttpUrl } from "@novel-master/core/chat";
+import { chatLinkResolver } from "@novel-master/core/chat";
 import { closeDesktopConnection } from "./runtime/connection.js";
 import { resolveAppIconPath } from "./runtime/resolve-app-icon.js";
 import {
@@ -132,12 +132,12 @@ function createMainWindow(): BrowserWindow {
       return; // dev：vite full-reload 放行
     }
     event.preventDefault();
-    if (isHttpUrl(url)) {
+    if (chatLinkResolver.isHttp(url)) {
       void shell.openExternal(url).catch(() => undefined);
     }
   });
   window.webContents.setWindowOpenHandler(({ url }) => {
-    if (isHttpUrl(url)) {
+    if (chatLinkResolver.isHttp(url)) {
       void shell.openExternal(url).catch(() => undefined);
     }
     return { action: "deny" };

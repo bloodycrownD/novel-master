@@ -9,13 +9,25 @@ description: novel-master 的代码优化与重构原则。写新代码、重构
 
 ## 1. 先内联，再判断
 
-- **类内方法同样受单点内联/死代码检查**：private 方法只有一个类内调用点就内联；零引用删除；`return this.f()` / `return f(x)` 这类薄包装删除。private 方法只有在 >20 行、承担独立不变量或管线阶段且有多个调用点时才保留，并写 `nm-style: keep-local — 理由`。
+- **类内方法同样受单点内联/死代码检查**：private 方法只有一个类内调用点就内联；零引用删除；`return this.f()` / `return f(x)` 这类薄包装删除。只有该方法独立承载本对象的共享状态/不变量，内联会把状态机拆散时才保留，并写 `nm-style: keep-local — 理由`；理由必须点名状态或生命周期，不能只写“超过 20 行”。
 - 类里用 private 字段承载状态；不要为了“封装”给字段再加一层 private getter/setter。
 - 模块级单点调用的私有函数同样内联；`z.preprocess` 的回调、`transform`/`toWire` 这类只挂一次的映射也直接写成箭头。
 - 只有**被多处复用的纯比较/纯映射**才留模块级私有函数（如 `sameToolUse`）；内联会制造三份 `JSON.stringify` 时，留函数是对的。
 - 内联后重点检查四件事：重复条件、可合并的连续步骤、只为下一步服务的中间变量、恒真/恒假的形状守卫。
 
 先例：`DoomLoopDetector` 内联三个 private 方法后，发现轨迹已裁到恰好一个窗口，`slice(-crossRoundWindow)` 是多余复制；`validateAgentDefinition` 内联后，`prompts` 的对象/数组检查被证明冗余，直接要求 `persist`/`dynamic` 是数组即可。
+
+### 1.1 内联 → 简化 → 观察重复 → 再抽象
+
+`KEEP_LOCAL` 不是“函数长”的通行证，也不能拿原代码的切分当合理性证据。遇到单点私有函数/方法，固定顺序：
+
+1. **先内联**到唯一调用点；不要先判断“它看起来像一个阶段”。
+2. 在调用点**简化**：合并重复条件、去掉只为下一步服务的中间变量、把三遍遍历改成有序单遍、把 identity Map 改成下标数组。
+3. **观察**是否真的存在两处以上相同语义，或多个函数共享同一组可变状态（`seen`、`budget`、缓存、生命周期）。
+4. 只有“稳定重复”或“共享可变状态”成立时才重新抽象；优先对象/服务，不要继续造自由函数前缀。
+5. 抽象后如果还写 `keep-local`，理由必须是**状态/不变量/独立 IO 管线**，不能是行数。超过 100 行本身既不是保留理由，也不是拆分理由。
+
+先例（2026-10-25）：`hydrateDirAttach` 先内联进 `hydrateAttach`，发现 legacy `<file>/<dir>` 解包重复，抽成 `unwrapLegacyBody`；`hydrateWorkplaceWithSeen` 内联后发现只是 `seen` 双读；`matchUserVfsTurnStructureAt` 内联进 `matchAt` 后没有独立复用。剩余 hydrate 阶段共享 `seen`/`workplaceSeen`/`AttachBudget`/技能名缓存，才收成 `AttachmentHydrator` 对象；保留的是对象状态阶段，不是“行数很大的自由函数”。
 
 - **死代码沿调用链删到底**：一个符号只剩测试/barrel 引用时，先找它的调用方；调用方自己也没有生产调用，就继续往上，整条链一起删，不要只删叶子留下空壳 caller。先例：`applyAnnotateHighlights` 生产零调用，它的 `findAnnotateOccurrenceInSource` / `buildFlatTextIndex` / `estimateSoftOffsetRangeFromQuoteContext` 全部只服务这条死链，最终整条链与两个 logic 文件一起删除。
 
@@ -112,13 +124,13 @@ node .agents/skills/nm-code-style/scripts/check-style.mjs --changed --include-te
 | 脚本 | 检测 | 处理 |
 | --- | --- | --- |
 | `check-signatures.mjs` | 多行函数参数、调用参数、`new` 构造、1–3 个具名 import 拆行、const/赋值右侧简单表达式拆行 | 参数并回一行；RHS 并回一行或抽有名字的中间变量；放不下先减参数或缩短名字 |
-| `check-inline.mjs` | `DEAD_LOCAL` 零引用私有函数、`INLINE_LOCAL` 单点私有函数、`PASS_THROUGH` 单行转手、`KEEP_LOCAL`（keep-local 豁免） | 删除 / 内联 / 删 wrapper；`KEEP_LOCAL` 仅限 >20 行的有名字管线阶段，且需在报告说明 |
-| `check-methods.mjs` | `DEAD_METHOD` 零生产引用、`INLINE_METHOD` 单点生产引用、`PASS_THROUGH_METHOD` 薄包装、`DEPRECATED_DEAD` / `DEPRECATED_METHOD`、`AMBIGUOUS_METHOD` | 类方法同样删除 / 内联 / 删 wrapper；public 方法单点先判断是否撤 public；同名跨类的方法需人工看，不直接判死 |
+| `check-inline.mjs` | `DEAD_LOCAL` 零引用私有函数、`INLINE_LOCAL` 单点私有函数、`PASS_THROUGH` 单行转手、`KEEP_LOCAL`（keep-local 豁免） | 删除 / 内联 / 删 wrapper；`KEEP_LOCAL` 只能用于内联简化后仍成立的共享状态阶段或稳定重复，理由需点名状态/不变量并在报告说明 |
+| `check-methods.mjs` | `DEAD_METHOD` 零生产引用、`INLINE_METHOD` 单点生产引用、`PASS_THROUGH_METHOD` 薄包装、`DEPRECATED_DEAD` / `DEPRECATED_METHOD`、`AMBIGUOUS_METHOD` | 类方法同样删除 / 内联 / 删 wrapper；public 方法单点先判断是否撤 public；private 阶段只有承载对象共享状态时才保留，不能因为行数保留；同名跨类的方法需人工看，不直接判死 |
 | `find-fake-exports.mjs` | `FAKE_PUBLIC` / `TEST_ONLY` / `DEAD` / `INLINE_CANDIDATE` / `AMBIGUOUS` | 撤 public → 看调用点 → 沿死链删到底；`INLINE_CANDIDATE` 默认内联（public=yes 也一样），确认不能内联才写 `nm-style: keep-public` 理由；`--strict` 问题类退出码 1 |
 | `check-oop.mjs` | `OOP_CANDIDATE`（共享状态 + 多导出函数）、`MANY_EXPORTS`（导出函数 ≥6，人工 review） | 有状态才对象化；纯函数命名空间不建类；`OOP_CANDIDATE` 必须处理或报告理由 |
 
 - `check-style.mjs --changed` / `--all` / `--strict` 现在把导出审计也计入退出码；默认全 core 扫描仍只输出线索表。`INLINE_CANDIDATE` 默认按内联处理；只有确认是跨层唯一入口才留，并在声明上方写 `nm-style: keep-public — 理由`。
-- 单点私有函数默认内联；只有 **>20 行、有名字的管线阶段** 才可写 `nm-style: keep-local — 理由`，且必须在“未处理项报告”里说明；小的外壳、转手 wrapper、零引用函数不允许用 keep-local。
+- 单点私有函数默认内联；`keep-local` 只允许在“先内联、简化、观察重复”之后仍成立的共享状态阶段，必须写 `nm-style: keep-local — 具体状态/不变量`，并在“未处理项报告”里说明。行数不是理由；小的外壳、转手 wrapper、零引用函数不允许用 keep-local。
 - 脚本自测：`node --test .agents/skills/nm-code-style/scripts/test-find-fake-exports.mjs`（fixture 覆盖 barrel 单/双调用、测试引用、类型引用、public 单引用与 keep-public 豁免）、`node --test .agents/skills/nm-code-style/scripts/test-check-signatures.mjs`（fixture 覆盖单参数/单实参/单 import 与 const/赋值 RHS 拆行，并确认对象/数组/箭头函数多行不误报）、`node --test .agents/skills/nm-code-style/scripts/test-check-methods.mjs`（类方法 dead / inline / pass-through / deprecated）、`node --test .agents/skills/nm-code-style/scripts/test-check-oop.mjs`（共享状态 → OOP_CANDIDATE；纯函数多导出 → MANY_EXPORTS；已有对象 → 不报）。
 - `--changed` 只报新增行（未跟踪文件按整文件新增），适合修复循环；全量体检时传目录。每轮改完立刻重跑，直到 `check-style: PASS`。
 - 脚本按标识符/import 计数，是启发式：barrel 转发、同名遮蔽、动态引用需人工复核。
@@ -176,13 +188,40 @@ node .agents/skills/nm-code-style/scripts/check-style.mjs --changed --include-te
 
 ### 9.4 迁移顺序
 
-- 先做**实体/值对象自身行为**（`ChatMessage`、`MessageContent`、`MessageAttachment`），保留 DTO mapper；
+- 先做**实体/值对象自身行为**（`ChatMessage` 类 + `ChatMessageData` 边界；`MessageContent` 仍是值对象），保留 DTO mapper；
 - 再把 presentation 从 domain 拆出去（status chip、tool summary、VFS preview、rollback copy）；
 - 然后把 service 按角色命名（scanner / policy / use case / codec / seeder）；
 - 状态放 class private 字段，操作放实例方法；进程级单例导出 `xxxStore`，不要模块顶层 `const map` + 一堆 free functions；
 - 先对象化内部并保留方法引用兼容，再切消费者，最后撤别名 / public / allowlist；不要一次性把 API 和状态迁移混在一起；
 - `check-oop.mjs` 的 `OOP_CANDIDATE` 必须处理或按“未处理项报告”给理由；`MANY_EXPORTS` 只表示人工 review，纯函数模块可以不 OOP；
 - `check-methods.mjs` 的 `DEAD_METHOD` / `INLINE_METHOD` / `PASS_THROUGH_METHOD` 与自由函数同口径处理；类方法不能成为新的死角。
+
+### 9.5 数据包装类反模式
+
+遇到 `XxxEntity` / `XxxModel` 先问：它是不是只持有一个 DTO/值对象，然后把方法转发过去？
+
+```ts
+// 反例：ChatMessageEntity 只是 ChatMessage 的平行 wrapper
+class ChatMessageEntity {
+  private constructor(private readonly message: ChatMessage) {}
+  static from(message: ChatMessage) { ... }
+  isUserInput() { return this.message.role === "user"; }
+}
+```
+
+这不是组合，也不是继承；它只是把 `ChatMessage` 的行为拆到另一个名字里，调用方还要写 `ChatMessageEntity.from(message).isUserInput()`。如果行为只读被包装对象自身的字段：
+
+1. **行为归被包装对象**：把 `ChatMessage` 从 interface 提升为 class，字段仍在，方法直接挂在 `this` 上；
+2. **数据归边界**：另设 `ChatMessageData`（DB / IPC 纯形状），持久化与 DTO 只认它；不要为了省一个 mapper 让 class 跨 `JSON.stringify` / IPC；
+3. **子字段不是 Entity**：`MessageContent` 是 `ChatMessage.content` 的值对象，不要把它的 `toolUseCount` 单独包装成 `MessageContentEntity`；放到 `ChatMessage` 方法或 `MessageContent` 值对象上；
+4. **无状态 class 不是对象**：只有一个常量/一个无状态 helper 的 class（如只包 `wrapActions` 的 storage）改成 object namespace 或模块函数，不要 `new` 一个壳。
+
+审计 `logic` 目录时按四类标记：
+
+- **有状态服务**：`ChatAnnotateDraftStore`、`AttachBudget`、`AttachmentHydrator` —— class 合理；
+- **无状态领域服务**：`AttachmentScanner`、`AttachmentXmlCodec`、`ComposerSendPolicy`、`ChatLinkResolver` —— 可以是单例对象，但不要假装持有状态；
+- **值对象**：`AttachmentPath`、`PromptPathSeen`、`ComposerAtPath` —— 若没有实例状态，用命名空间对象，不要靠 `new` 制造身份；
+- **数据包装/假对象**：`MessageContentEntity`、`UserVfsTurnStorage`、`ChatMessageEntity` —— 删除或提升为真正的实体；`ChatMessage` 的迁移先例是 `ChatMessageData` + `ChatMessage.from()`。
 
 ## 交付前 30 秒检查
 

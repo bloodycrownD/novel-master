@@ -3,11 +3,11 @@
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { resolveComposerSendIntent } from "../../src/domain/chat/logic/composer/composer-send-intent.js";
+import { composerSendPolicy } from "../../src/domain/chat/logic/composer/composer-send-policy.js";
 
 describe("resolveComposerSendIntent", () => {
   it("T-CR3: 空输入 + 无 resume → 不可发；attachOnly 恒空", () => {
-    const intent = resolveComposerSendIntent({
+    const intent = composerSendPolicy.evaluate({
       text: "",
       canResumeWithoutInput: false,
       hasModel: true,
@@ -19,7 +19,7 @@ describe("resolveComposerSendIntent", () => {
   });
 
   it("T-ATD*: 正文含 @path 可发；attachOnly 恒空", () => {
-    const intent = resolveComposerSendIntent({
+    const intent = composerSendPolicy.evaluate({
       text: "见 @/a.md",
       canResumeWithoutInput: true,
       hasModel: true,
@@ -30,7 +30,7 @@ describe("resolveComposerSendIntent", () => {
   });
 
   it("T-SK11: 纯 `$技能` 无正文可发送（门闩计入 $ 扫描）", () => {
-    const intent = resolveComposerSendIntent({
+    const intent = composerSendPolicy.evaluate({
       text: "$demo-skill",
       canResumeWithoutInput: false,
       hasModel: true,
@@ -41,7 +41,7 @@ describe("resolveComposerSendIntent", () => {
   });
 
   it("空输入 + 不可 resume → 禁用发送", () => {
-    const intent = resolveComposerSendIntent({
+    const intent = composerSendPolicy.evaluate({
       text: "",
       canResumeWithoutInput: false,
       hasModel: true,
@@ -51,7 +51,7 @@ describe("resolveComposerSendIntent", () => {
   });
 
   it("T-AN4: 仅 hasAnnotateDrafts → 可发；intent 须透传", () => {
-    const without = resolveComposerSendIntent({
+    const without = composerSendPolicy.evaluate({
       text: "",
       canResumeWithoutInput: false,
       hasModel: true,
@@ -59,7 +59,7 @@ describe("resolveComposerSendIntent", () => {
     assert.equal(without.hasSendable, false);
     assert.equal(without.sendDisabled, true);
 
-    const withAnnotate = resolveComposerSendIntent({
+    const withAnnotate = composerSendPolicy.evaluate({
       text: "",
       canResumeWithoutInput: false,
       hasAnnotateDrafts: true,
@@ -71,7 +71,7 @@ describe("resolveComposerSendIntent", () => {
   });
 
   it("running 时即使无可发输入也不禁用（供中止）", () => {
-    const intent = resolveComposerSendIntent({
+    const intent = composerSendPolicy.evaluate({
       text: "",
       canResumeWithoutInput: false,
       hasModel: true,

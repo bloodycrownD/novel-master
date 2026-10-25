@@ -24,7 +24,7 @@ export class AlertPage {
       /* fall through to UiAutomator */
     }
     console.log('[e2e] acceptRollback: no W3C alert, waiting native message');
-    // 回滚确认框正文是 `chatTranslator(rollbackConfirmDescriptor(mode, 'primary'))`：
+    // 回滚确认框正文是 `chatTranslator(rollbackConfirm.descriptor(mode, 'primary'))`：
     // undo_send → 「将删除此消息及之后的对话」，rewind → 「将删除此消息之后的对话」。
     await this.acceptDestructive('将删除此消息', '回滚');
   }

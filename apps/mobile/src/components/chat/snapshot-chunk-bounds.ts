@@ -6,7 +6,7 @@
  * 快照分片正确性绑死在旧组件的重构/删除上（r6-C4）。本模块不 import 任何宿主
  * 组件，两个宿主任意 import；旧组件保留 re-export 保兼容。
  */
-import {type ChatMessage} from '@novel-master/core/chat';
+import {type ChatMessageData} from '@novel-master/core/chat';
 import {utf8ByteLength} from '@novel-master/core/common';
 
 /**
@@ -35,7 +35,7 @@ const SNAPSHOT_CHUNK_BYTES = 256 * 1024;
  * 边界；空列表返回单空桶（chunkTotal=1，与旧单包空快照逐字节等价）。
  */
 export function planSnapshotChunkBounds(
-  messages: readonly ChatMessage[],
+  messages: readonly ChatMessageData[],
 ): Array<readonly [number, number]> {
   const bounds: Array<readonly [number, number]> = [];
   let start = 0;

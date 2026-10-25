@@ -4,10 +4,7 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import {
-  buildFileAnnotateAttachmentFromDraft,
-  parseAnnotateDraftsFromAttachments,
-} from "@/domain/chat/logic/attachment/build-attachment-action-xml.js";
+import { attachmentXmlCodec } from "@/domain/chat/logic/attachment/attachment-xml-codec.js";
 import {
   isMessageAnnotatePath,
   type AnnotateDraft,
@@ -47,8 +44,8 @@ describe("parseAnnotateDraftsFromAttachments (T-UD3 部分)", () => {
       originalText: "选中原文",
       userAnnotation: "请改短",
     };
-    const att = buildFileAnnotateAttachmentFromDraft(draft);
-    const parsed = parseAnnotateDraftsFromAttachments([att]);
+    const att = attachmentXmlCodec.encodeAnnotateAttachment(draft);
+    const parsed = attachmentXmlCodec.decodeAnnotateDrafts([att]);
     assert.equal(parsed.length, 1);
     assert.equal(parsed[0]!.path, "/chapter/a.md");
     assert.equal(parsed[0]!.originalText, "选中原文");
@@ -69,10 +66,10 @@ describe("parseAnnotateDraftsFromAttachments (T-UD3 部分)", () => {
     };
     assert.ok(isMessageAnnotatePath(withSlash.path));
 
-    const parsed = parseAnnotateDraftsFromAttachments([
+    const parsed = attachmentXmlCodec.decodeAnnotateDrafts([
       msgAtt,
       withSlash,
-      buildFileAnnotateAttachmentFromDraft({
+      attachmentXmlCodec.encodeAnnotateAttachment({
         id: "f1",
         path: "/ok.md",
         originalText: "a",
@@ -88,11 +85,11 @@ describe("parseAnnotateDraftsFromAttachments (T-UD3 部分)", () => {
     assert.equal(att.path, "__message__:msg-y:draft-x");
     assert.equal(att.name, att.path);
     assert.ok(isMessageAnnotatePath(att.path));
-    assert.equal(parseAnnotateDraftsFromAttachments([att]).length, 0);
+    assert.equal(attachmentXmlCodec.decodeAnnotateDrafts([att]).length, 0);
   });
 
   it("非 annotate / 空 path 跳过", () => {
-    const parsed = parseAnnotateDraftsFromAttachments([
+    const parsed = attachmentXmlCodec.decodeAnnotateDrafts([
       {
         name: "/a.md",
         source: "attach",

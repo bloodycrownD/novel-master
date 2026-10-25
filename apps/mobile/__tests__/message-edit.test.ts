@@ -1,4 +1,4 @@
-import {type ChatMessage} from '@novel-master/core/chat';
+import {type ChatMessageData} from '@novel-master/core/chat';
 import {
   applyTextEditToMessage,
   editableTextFromMessage,
@@ -6,8 +6,8 @@ import {
 
 function msg(
   role: string,
-  blocks: ChatMessage['content']['blocks'],
-): ChatMessage {
+  blocks: ChatMessageData['content']['blocks'],
+): ChatMessageData {
   return {
     id: 'm1',
     sessionId: 's1',

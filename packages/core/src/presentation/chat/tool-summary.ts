@@ -1,7 +1,7 @@
 /**
  * 工具调用入参摘要（**三端唯一单源**）。
  *
- * @module domain/chat/logic/message/tool-summary
+ * @module presentation/chat/tool-summary
  *
  * 历史背景：本函数此前在三个地方各有一份副本（desktop renderer / mobile WebView /
  * mobile RN），三份各带不同的特判分支——同一条 `skill` 调用在 desktop 显示

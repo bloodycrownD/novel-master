@@ -13,7 +13,7 @@ import type {
   SkillToolRef,
   ToolResultBlock,
 } from "@/domain/chat/model/content-block.js";
-import { resolveSkillToolRefFromOutput } from "@/domain/chat/logic/skill-tool-ref.js";
+import { skillToolRefResolver } from "@/domain/chat/logic/skill-tool-ref.js";
 import {
   formatToolErrorForLlm,
   formatToolOutputForLlm,
@@ -388,5 +388,5 @@ function resolveSkillToolRefFromOutcome(
   skillProjectId?: string
 ): SkillToolRef | undefined {
   if (toolName == null) return undefined;
-  return resolveSkillToolRefFromOutput(toolName, output, skillProjectId);
+  return skillToolRefResolver.fromOutput(toolName, output, skillProjectId);
 }

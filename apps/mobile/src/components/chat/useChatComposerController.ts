@@ -39,9 +39,8 @@ import {useAnimatedReaction, runOnJS} from 'react-native-reanimated';
 import {useReanimatedKeyboardAnimation} from 'react-native-keyboard-controller';
 import {
   chatAnnotateDraftStore,
-  resolveComposerSendIntent,
-  scanAtPathAttachments,
-  scanSkillAttachments,
+  composerSendPolicy,
+  attachmentScanner,
   type MessageAttachment,
 } from '@novel-master/core/chat';
 import type {AgentRunScope} from '@/services/agent-run.service';
@@ -57,7 +56,7 @@ import {
   writeChatComposerDraftState,
 } from '@/storage/chat-composer-draft';
 import {projectComposerStatusForSession} from '@/services/project-composer-status.service';
-import {findActiveAtQuery} from './composer-at-path';
+import {composerAtPath} from './composer-at-path';
 import {
   buildTokenInsertion,
   queryWithinConfirmedRange,
@@ -557,8 +556,8 @@ export function useChatComposerController({
         tokenRangesRef.current.length > 0
           ? sendScan.attachments
           : [
-              ...scanAtPathAttachments(content),
-              ...scanSkillAttachments(content),
+              ...attachmentScanner.scanAtPaths(content),
+              ...attachmentScanner.scanSkills(content),
             ];
 
       // 有正文 / 批注草稿 → 成功后清输入
@@ -663,7 +662,7 @@ export function useChatComposerController({
 
   const sendIntent = useMemo(
     () =>
-      resolveComposerSendIntent({
+      composerSendPolicy.evaluate({
         text,
         canResumeWithoutInput,
         hasAnnotateDrafts,
@@ -782,7 +781,7 @@ export function useChatComposerController({
         return;
       }
       const current = textRef.current;
-      const activeAt = findActiveAtQuery(current, cursor);
+      const activeAt = composerAtPath.detectQuery(current, cursor);
       const replaceStart =
         activeAt != null &&
         !queryWithinConfirmedRange(
@@ -807,7 +806,7 @@ export function useChatComposerController({
     (skillName: string) => {
       const current = textRef.current;
       const token = `$${skillName}`;
-      const activeSkill = findActiveAtQuery(current, cursor, '$');
+      const activeSkill = composerAtPath.detectQuery(current, cursor, '$');
       const replaceStart =
         activeSkill != null &&
         !queryWithinConfirmedRange(

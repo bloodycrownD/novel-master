@@ -40,6 +40,7 @@ function checkParameters(node, sourceFile, file) {
 function checkArguments(node, sourceFile, file) {
   const args = node.arguments;
   if (args == null || args.length === 0) return;
+  if (args.length === 1 && (ts.isArrowFunction(args[0]) || ts.isFunctionExpression(args[0]))) return;
   const startLine = lineOf(sourceFile, node.getStart(sourceFile));
   const split = lineOf(sourceFile, args[0]) !== startLine || args.some((arg, index) => index > 0 && lineOf(sourceFile, arg) !== lineOf(sourceFile, args[index - 1]));
   if (split) report(file, sourceFile, node, "ARGS", node.expression.getText(sourceFile).slice(0, 80));

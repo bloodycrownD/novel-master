@@ -1,6 +1,6 @@
 import type { ModelSamplingParams } from "@/domain/provider/model/model-sampling-params.js";
 import type { ModelThinkingParams } from "@/domain/provider/model/model-thinking-params.js";
-import type { ChatMessage } from "@/domain/chat/model/message.js";
+import type { ChatMessageData } from "@/domain/chat/model/message.js";
 import type {
   LlmChatResult,
   LlmStreamEvent,
@@ -8,9 +8,9 @@ import type {
 } from "@/infra/llm-protocol/ports/adapter.port.js";
 
 export interface ModelRequestOptions {
-  readonly history?: readonly ChatMessage[];
+  readonly history?: readonly ChatMessageData[];
   /** Full session messages (including hidden) for Gemini tool_use id → name resolution. */
-  readonly toolUseLookupMessages?: readonly ChatMessage[];
+  readonly toolUseLookupMessages?: readonly ChatMessageData[];
   readonly system?: string;
   readonly tools?: readonly LlmToolDefinition[];
   readonly stream?: boolean;

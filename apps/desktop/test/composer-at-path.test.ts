@@ -3,20 +3,15 @@
  */
 import assert from "node:assert/strict";
 import test from "node:test";
-import { scanAtPathAttachments } from "@shared/logic/chat";
-import {
-  atPathTokensFromPickerSelection,
-  findActiveAtQuery,
-  formatComposerAtPathToken,
-  replaceActiveAtWithToken,
-} from "@/features/chat/composer-at-path";
-import { resolveComposerSendIntent } from "@/features/chat/composer-send-intent";
+import { attachmentScanner } from "@shared/logic/chat";
+import { composerAtPath } from "@/features/chat/composer-at-path";
+import { composerSendPolicy } from "@/features/chat/composer-send-intent";
 import { renderComposerAtPathHighlightHtml } from "@/features/chat/ComposerAtPathInput";
 
 test("T-ATD2: Picker 确认 token 为 @path；目录带尾 /；扫描落库带前导 /", () => {
-  const tokens = atPathTokensFromPickerSelection(["/notes"], ["/a.md"]);
+  const tokens = composerAtPath.tokensFromPickerSelection(["/notes"], ["/a.md"]);
   assert.deepEqual(tokens, ["@/notes/", "@/a.md"]);
-  const scanned = scanAtPathAttachments(tokens.join(" "));
+  const scanned = attachmentScanner.scanAtPaths(tokens.join(" "));
   assert.equal(scanned.length, 2);
   assert.equal(scanned[0]!.path, "/notes/");
   assert.equal(scanned[0]!.type, "dir");
@@ -25,45 +20,45 @@ test("T-ATD2: Picker 确认 token 为 @path；目录带尾 /；扫描落库带�
 });
 
 test("T-ATD3: 点选替换为完整 @path", () => {
-  const active = findActiveAtQuery("见 @ab", 5);
+  const active = composerAtPath.detectQuery("见 @ab", 5);
   assert.ok(active);
   assert.equal(active!.query, "ab");
-  const token = formatComposerAtPathToken("/ab.md", false);
-  const next = replaceActiveAtWithToken("见 @ab", 5, active!.start, token);
+  const token = composerAtPath.formatToken("/ab.md", false);
+  const next = composerAtPath.replaceToken("见 @ab", 5, active!.start, token);
   assert.equal(next.text, "见 @/ab.md ");
   assert.ok(next.text.includes("@/ab.md"));
 });
 
 test("findActiveAtQuery: @/a.md 无尾空格为活跃；带尾空格则关闭", () => {
   const bare = "@/a.md";
-  assert.ok(findActiveAtQuery(bare, bare.length));
-  assert.equal(findActiveAtQuery(bare, bare.length)!.query, "/a.md");
+  assert.ok(composerAtPath.detectQuery(bare, bare.length));
+  assert.equal(composerAtPath.detectQuery(bare, bare.length)!.query, "/a.md");
   const withSpace = "@/a.md ";
-  assert.equal(findActiveAtQuery(withSpace, withSpace.length), null);
+  assert.equal(composerAtPath.detectQuery(withSpace, withSpace.length), null);
 });
 
 test("T-ATD4: 删除正文 @path 后门闩扫描无该 path", () => {
-  const withAt = resolveComposerSendIntent({
+  const withAt = composerSendPolicy.evaluate({
     text: "看 @/a.md",
     canResumeWithoutInput: false,
     hasModel: true,
   });
   assert.equal(withAt.hasSendable, true);
   assert.equal(withAt.attachOnly.length, 0);
-  assert.equal(scanAtPathAttachments("看 @/a.md").length, 1);
+  assert.equal(attachmentScanner.scanAtPaths("看 @/a.md").length, 1);
 
-  const without = resolveComposerSendIntent({
+  const without = composerSendPolicy.evaluate({
     text: "",
     canResumeWithoutInput: false,
     hasModel: true,
   });
   assert.equal(without.hasSendable, false);
   assert.equal(without.attachOnly.length, 0);
-  assert.equal(scanAtPathAttachments("").length, 0);
+  assert.equal(attachmentScanner.scanAtPaths("").length, 0);
 });
 
 test("T-CR3/门闩: 空输入 → 不可发；attachOnly 恒空", () => {
-  const intent = resolveComposerSendIntent({
+  const intent = composerSendPolicy.evaluate({
     text: "",
     canResumeWithoutInput: false,
     hasModel: true,

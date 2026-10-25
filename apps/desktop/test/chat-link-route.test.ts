@@ -197,7 +197,7 @@ test("T-L6 源码契约: main.ts 挂 will-navigate + setWindowOpenHandler + open
   // MF-2：dev 放行 vite full-reload（拦截会拦死 location.reload 触发的导航）
   assert.ok(src.includes("isDev && url.startsWith(DEV_SERVER_URL)"));
   // MF-4：http(s) 判定经 core 单源 isHttpUrl，不再内联正则
-  assert.ok(src.includes('isHttpUrl(url)'));
+  assert.ok(src.includes('chatLinkResolver.isHttp(url)'));
   assert.ok(!src.includes('/^https?:'));
 });
 
@@ -237,6 +237,6 @@ test("T-L6 源码契约: MessageList 正文与流式尾巴均透传 onLinkClick�
   );
   // not-found：双域未命中弹「{省略路径} 不存在」提示（用户拍板，不再静默无动作）
   assert.ok(
-    shell.includes("showToast(chatLinkNotFoundMessage(action.path))"),
+    shell.includes("showToast(chatLinkResolver.notFoundMessage(action.path))"),
   );
 });

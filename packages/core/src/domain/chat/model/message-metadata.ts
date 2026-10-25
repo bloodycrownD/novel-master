@@ -11,7 +11,7 @@ export type MessageMetadataKind =
   | "user_vfs_ack"
   | (string & {});
 
-/** 写入 `ChatMessage.raw.metadata` 的键结构。 */
+/** 写入 `ChatMessageData.raw.metadata` 的键结构。 */
 export interface MessageMetadata {
   /** 消息来源：`user` 表示用户侧 synthetic。 */
   readonly source?: "user";

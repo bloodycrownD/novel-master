@@ -16,7 +16,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
-import type { ChatMessage } from "../../src/domain/chat/model/message.js";
+import type { ChatMessageData } from "../../src/domain/chat/model/message.js";
 import { SqliteMessageRepository } from "../../src/domain/chat/repositories/impl/sqlite-message.repository.js";
 import {
   getNovelMasterTestContext,
@@ -115,8 +115,8 @@ describe("message usage round-trip (T-S1)", () => {
     const session = await ctx.sessions.create(project.id, "legacy-null-usage");
 
     const repo = new SqliteMessageRepository(ctx.conn);
-    // 模拟老消息：构造一个不带 usage 的 ChatMessage（三列会绑成 NULL）
-    const legacy: ChatMessage = {
+    // 模拟老消息：构造一个不带 usage 的 ChatMessageData（三列会绑成 NULL）
+    const legacy: ChatMessageData = {
       id: randomUUID(),
       sessionId: session.id,
       seq: 1,
@@ -210,7 +210,7 @@ describe("message timing fields round-trip (T-MU1)", () => {
     const session = await ctx.sessions.create(project.id, "timing-only");
 
     const repo = new SqliteMessageRepository(ctx.conn);
-    const message: ChatMessage = {
+    const message: ChatMessageData = {
       id: randomUUID(),
       sessionId: session.id,
       seq: 1,
@@ -404,7 +404,7 @@ describe("message cache/model_name round-trip (T-S3)", () => {
     const session = await ctx.sessions.create(project.id, "cache-only");
 
     const repo = new SqliteMessageRepository(ctx.conn);
-    const message: ChatMessage = {
+    const message: ChatMessageData = {
       id: randomUUID(),
       sessionId: session.id,
       seq: 1,
@@ -432,7 +432,7 @@ describe("message cache/model_name round-trip (T-S3)", () => {
     const session = await ctx.sessions.create(project.id, "legacy-null-cache");
 
     const repo = new SqliteMessageRepository(ctx.conn);
-    const legacy: ChatMessage = {
+    const legacy: ChatMessageData = {
       id: randomUUID(),
       sessionId: session.id,
       seq: 1,

@@ -2,7 +2,7 @@
  * Message block parsing and tool_use / tool_result pairing for chat UI.
  */
 import {
-  type ChatMessage,
+  type ChatMessageData,
   type ContentBlock,
   type MessageAttachment,
   type ToolResultBlock,
@@ -12,7 +12,7 @@ import {resolveToolResultOk} from '@novel-master/core';
 import {summarizeToolInput} from '@novel-master/core/chat';
 
 import {
-  resolveSkillToolRefFromInput,
+  skillToolRefResolver,
   resolveVfsToolFilePath,
 } from '@novel-master/core/chat';
 import type {SkillToolRef} from '@novel-master/core/chat';
@@ -45,7 +45,7 @@ export interface ToolCallView {
 
 export interface MessageListItem {
   readonly kind: 'message';
-  readonly message: ChatMessage;
+  readonly message: ChatMessageData;
   readonly textParts: readonly string[];
   /** Model reasoning (`thinking` blocks); shown separately from reply text. */
   readonly thinkingParts: readonly string[];
@@ -63,7 +63,7 @@ export interface BuildChatListItemsOptions {
   readonly pendingSubagentSessions?: ReadonlyMap<string, string>;
 }
 
-function blocksForMessage(message: ChatMessage): readonly ContentBlock[] {
+function blocksForMessage(message: ChatMessageData): readonly ContentBlock[] {
   return message.content.blocks ?? [];
 }
 
@@ -76,14 +76,14 @@ export function isDisplayableAttachment(a: MessageAttachment): boolean {
 }
 
 /** tool_use ids from an assistant message (block order preserved). */
-export function toolUseIdsFromMessage(message: ChatMessage): string[] {
+export function toolUseIdsFromMessage(message: ChatMessageData): string[] {
   return blocksForMessage(message)
     .filter((b): b is ToolUseBlock => b.type === 'tool_use')
     .map(b => b.id);
 }
 
 /** User row that only carries tool_result blocks (never shown as its own bubble). */
-export function messageIsToolResultsOnly(message: ChatMessage): boolean {
+export function messageIsToolResultsOnly(message: ChatMessageData): boolean {
   if (message.role !== 'user') {
     return false;
   }
@@ -94,7 +94,7 @@ export function messageIsToolResultsOnly(message: ChatMessage): boolean {
   return blocks.every(block => block.type === 'tool_result');
 }
 
-export function messageHasToolUse(message: ChatMessage): boolean {
+export function messageHasToolUse(message: ChatMessageData): boolean {
   return toolUseIdsFromMessage(message).length > 0;
 }
 
@@ -102,8 +102,8 @@ export function messageHasToolUse(message: ChatMessage): boolean {
  * First user message after assistant whose tool_result ids cover all assistant tool_use ids.
  */
 export function resolveToolResultsMessageId(
-  messages: readonly ChatMessage[],
-  assistantMessage: ChatMessage,
+  messages: readonly ChatMessageData[],
+  assistantMessage: ChatMessageData,
 ): string | undefined {
   const required = new Set(toolUseIdsFromMessage(assistantMessage));
   if (required.size === 0) {
@@ -128,7 +128,7 @@ export function resolveToolResultsMessageId(
 
 /** Maps tool_use id → tool_result block from user messages in session order. */
 export function buildToolResultByUseId(
-  messages: readonly ChatMessage[],
+  messages: readonly ChatMessageData[],
 ): Map<string, ToolResultBlock> {
   const map = new Map<string, ToolResultBlock>();
   // Pair against all messages so hidden tool_result rows still resolve assistant tool cards.
@@ -144,8 +144,8 @@ export function buildToolResultByUseId(
 
 /** True when every tool_use on the assistant has a paired tool_result. */
 export function turnToolResultsComplete(
-  assistant: ChatMessage,
-  messages: readonly ChatMessage[],
+  assistant: ChatMessageData,
+  messages: readonly ChatMessageData[],
 ): boolean {
   return turnToolResultsCompleteWith(
     assistant,
@@ -155,7 +155,7 @@ export function turnToolResultsComplete(
 
 /** O(1) 判定版本：tool_use id 全部命中预扫 map 即视为本轮工具结果齐备。 */
 function turnToolResultsCompleteWith(
-  assistant: ChatMessage,
+  assistant: ChatMessageData,
   results: ReadonlyMap<string, ToolResultBlock>,
 ): boolean {
   const required = toolUseIdsFromMessage(assistant);
@@ -175,15 +175,15 @@ function turnToolResultsCompleteWith(
  */
 export interface ToolPairingContext {
   readonly results: ReadonlyMap<string, ToolResultBlock>;
-  readonly lastIncompleteAssistant: ChatMessage | undefined;
+  readonly lastIncompleteAssistant: ChatMessageData | undefined;
 }
 
 /** 一次 O(n) 扫描构建工具配对上下文（等价旧 lastIncompleteToolAssistant 的全量扫描）。 */
 export function buildToolPairingContext(
-  messages: readonly ChatMessage[],
+  messages: readonly ChatMessageData[],
 ): ToolPairingContext {
   const results = buildToolResultByUseId(messages);
-  let lastIncompleteAssistant: ChatMessage | undefined;
+  let lastIncompleteAssistant: ChatMessageData | undefined;
   for (const message of messages) {
     if (
       message.role === 'assistant' &&
@@ -197,8 +197,8 @@ export function buildToolPairingContext(
 
 /** Current turn tool execution: agent running + last assistant with incomplete results. */
 export function isTurnToolExecuting(
-  assistant: ChatMessage,
-  messages: readonly ChatMessage[],
+  assistant: ChatMessageData,
+  messages: readonly ChatMessageData[],
   agentRunning: boolean,
 ): boolean {
   return isTurnToolExecutingWith(
@@ -210,7 +210,7 @@ export function isTurnToolExecuting(
 
 /** O(1) 判定版本：agent 运行中且该消息正是预扫出的最后一条结果不齐备 assistant。 */
 function isTurnToolExecutingWith(
-  assistant: ChatMessage,
+  assistant: ChatMessageData,
   context: ToolPairingContext,
   agentRunning: boolean,
 ): boolean {
@@ -296,7 +296,7 @@ export function skillToolRef(
   projectId?: string,
 ): SkillToolRef | undefined {
   if (tool.skillRef != null) return tool.skillRef;
-  return resolveSkillToolRefFromInput(tool.name, tool.input, projectId);
+  return skillToolRefResolver.fromInput(tool.name, tool.input, projectId);
 }
 
 export function toolCallSummary(tool: ToolCallView): string {
@@ -316,7 +316,7 @@ export function toolCallSummary(tool: ToolCallView): string {
 
 /** 未配对 tool_use 的展示状态：runUiStopped 直接 error；agent 运行中且为本轮执行消息则 pending。 */
 function resolveUnpairedToolStatus(
-  assistant: ChatMessage,
+  assistant: ChatMessageData,
   context: ToolPairingContext,
   agentRunning: boolean,
   runUiStopped: boolean,
@@ -331,7 +331,7 @@ function resolveUnpairedToolStatus(
 
 /** Flattens session messages into chat bubbles (tool_use embedded on assistant rows). */
 export function buildChatListItems(
-  messages: readonly ChatMessage[],
+  messages: readonly ChatMessageData[],
   options: BuildChatListItemsOptions = {},
 ): ChatListItem[] {
   return buildChatListItemsWithContext(
@@ -347,7 +347,7 @@ export function buildChatListItems(
  * 保持与全量构建后按 tail id 过滤完全等价。
  */
 function buildChatListItemsWithContext(
-  messages: readonly ChatMessage[],
+  messages: readonly ChatMessageData[],
   context: ToolPairingContext,
   options: BuildChatListItemsOptions,
 ): ChatListItem[] {
@@ -492,8 +492,8 @@ function transcriptRowFromItem(item: ChatListItem): TranscriptRow {
  * 且省掉了 tail 之前所有消息的整段构建（原实现为全量 build 再 filter）。
  */
 export function selectTailTranscriptRows(
-  allMessages: readonly ChatMessage[],
-  tailMessages: readonly ChatMessage[],
+  allMessages: readonly ChatMessageData[],
+  tailMessages: readonly ChatMessageData[],
   options: BuildChatListItemsOptions = {},
 ): TranscriptRow[] {
   if (tailMessages.length === 0) {
@@ -507,7 +507,7 @@ export function selectTailTranscriptRows(
 
 /** Maps session messages to Web transcript rows (seq ascending, forward DOM order). */
 export function buildTranscriptRows(
-  messages: readonly ChatMessage[],
+  messages: readonly ChatMessageData[],
   stream?: TranscriptStreamState,
   options: BuildChatListItemsOptions = {},
 ): TranscriptRow[] {
@@ -535,7 +535,7 @@ export function buildTranscriptRows(
  * 快照路径从不携带 stream 行，这里不设 stream 参数。
  */
 export function buildTranscriptRowsWithContext(
-  messages: readonly ChatMessage[],
+  messages: readonly ChatMessageData[],
   context: ToolPairingContext,
   options: BuildChatListItemsOptions = {},
 ): TranscriptRow[] {

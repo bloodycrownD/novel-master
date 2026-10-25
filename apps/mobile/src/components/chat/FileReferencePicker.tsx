@@ -23,7 +23,7 @@ import {
   parentLogicalPath,
 } from '@/components/vfs/vfs-row-mapper';
 import {isBlockedMoveTarget} from '@/components/vfs/vfs-move-path';
-import {atPathTokensFromPickerSelection} from './composer-at-path';
+import {composerAtPath} from './composer-at-path';
 
 type AtRefPickerProps = {
   visible: boolean;
@@ -72,7 +72,7 @@ export function listPickerDirectoryChildRows(
   return listPickerChildRows(rows, currentPath).filter(r => r.kind === 'dir');
 }
 
-export {atPathTokensFromPickerSelection};
+export {composerAtPath};
 
 function toggleInSet(prev: Set<string>, path: string): Set<string> {
   const next = new Set(prev);
@@ -195,7 +195,7 @@ export function FileReferencePicker(props: FileReferencePickerProps) {
       return;
     }
     props.onConfirm(
-      atPathTokensFromPickerSelection(selectedDirs, selectedFiles),
+      composerAtPath.tokensFromPickerSelection(selectedDirs, selectedFiles),
     );
     onClose();
   };

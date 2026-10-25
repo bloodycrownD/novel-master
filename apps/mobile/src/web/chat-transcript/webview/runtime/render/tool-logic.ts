@@ -1,4 +1,4 @@
-import {summarizeToolInput} from '@novel-master/core/chat';
+import {summarizeToolInput} from '@novel-master/core/presentation/chat/tool-summary.js';
 import type {ToolCallRow} from '../state/state';
 
 /**
@@ -8,7 +8,7 @@ import type {ToolCallRow} from '../state/state';
 
 // 摘要单源已收敛到 core（`domain/chat/logic/message/tool-summary.ts`）。
 // ⚠️ 这里必须写成「import + export」两步，**不能**写成纯 re-export
-// `export { summarizeToolInput } from '@novel-master/core/chat';`——
+// `export { summarizeToolInput } from '@novel-master/core/presentation/chat/tool-summary.js';`——
 // 纯 re-export 不把该符号引入本模块作用域，而下方 `toolCallSummary` 正在本地调用它。
 // 该 `export` 的唯一作用是保住本地引用（`ToolGroup.tsx` 并不 import 它），不是对外新增 API。
 export {summarizeToolInput};

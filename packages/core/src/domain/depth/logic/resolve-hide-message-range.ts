@@ -4,8 +4,8 @@
  * @module domain/depth/logic/resolve-hide-message-range
  */
 
-import type { ChatMessage } from "@/domain/chat/model/message.js";
-import { ChatMessageEntity } from "@/domain/chat/logic/message/chat-message-entity.js";
+import type { ChatMessageData } from "@/domain/chat/model/message.js";
+import { ChatMessage } from "@/domain/chat/logic/message/chat-message.js";
 import type { DepthSlice } from "./depth-slice.js";
 
 export interface HideMessageSeqRange {
@@ -27,7 +27,7 @@ export interface HideMessageSeqRange {
  * `null`，放弃本次压缩。
  */
 function anchorToSeqBeforeUserTurn(
-  visible: readonly ChatMessage[],
+  visible: readonly ChatMessageData[],
   minSeq: number,
   maxSeq: number
 ): number | null {
@@ -36,7 +36,7 @@ function anchorToSeqBeforeUserTurn(
     if (m.seq > maxSeq || m.seq < minSeq) {
       continue;
     }
-    if (m.role === "user" && !ChatMessageEntity.from(m).hasToolResult()) {
+    if (m.role === "user" && !ChatMessage.from(m).hasToolResult()) {
       return m.seq - 1;
     }
   }
@@ -51,7 +51,7 @@ function anchorToSeqBeforeUserTurn(
  * @param messageIds - slice 内待隐藏的消息 id
  */
 export function resolveHideMessageRange(
-  visible: readonly ChatMessage[],
+  visible: readonly ChatMessageData[],
   _slice: DepthSlice,
   messageIds: readonly string[]
 ): HideMessageSeqRange | null {

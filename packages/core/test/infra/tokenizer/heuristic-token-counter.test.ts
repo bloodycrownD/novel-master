@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { HeuristicTokenCounter, CHARACTERS_PER_TOKEN_RATIO } from "../../../src/infra/tokenizer/impl/heuristic-token-counter.js";
 import { estimateTokens } from "../../../src/domain/compaction-conditions/logic/token-estimate.js";
-import type { ChatMessage } from "../../../src/domain/chat/model/message.js";
+import type { ChatMessageData } from "../../../src/domain/chat/model/message.js";
 
-function msg(role: ChatMessage["role"], text: string): ChatMessage {
+function msg(role: ChatMessageData["role"], text: string): ChatMessageData {
   return {
     id: "1",
     sessionId: "s",

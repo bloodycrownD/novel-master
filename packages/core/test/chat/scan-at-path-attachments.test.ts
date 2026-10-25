@@ -4,12 +4,7 @@
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import {
-  AttachmentPathArgumentError,
-  attachmentsFromPaths,
-  mergeAttachmentsWithScannedAtPaths,
-  scanAtPathAttachments,
-} from "../../src/domain/chat/logic/attachment/scan-at-path-attachments.js";
+import { AttachmentPathArgumentError, attachmentScanner } from "../../src/domain/chat/logic/attachment/attachment-scanner.js";
 import {
   attachmentStorageName,
   messageAttachmentsSchema,
@@ -19,7 +14,7 @@ import {
 describe("scanAtPathAttachments (T-AT5 / T-AT6)", () => {
   it("T-AT5: 正文含手输 @path 且 chips 无该 path → 生成 source:attach（path 带 /）", () => {
     const text = "请看 @notes/a.md 与补充";
-    const scanned = scanAtPathAttachments(text);
+    const scanned = attachmentScanner.scanAtPaths(text);
     assert.equal(scanned.length, 1);
     assert.equal(scanned[0]!.source, "attach");
     assert.equal(scanned[0]!.path, "/notes/a.md");
@@ -29,7 +24,7 @@ describe("scanAtPathAttachments (T-AT5 / T-AT6)", () => {
   it("T-AT5: 合并后 content 仍含 @path token（未剥离）", () => {
     const text = "见 @notes/a.md";
     const chips: MessageAttachment[] = [];
-    const merged = mergeAttachmentsWithScannedAtPaths(text, chips);
+    const merged = attachmentScanner.mergeScannedAtPaths(text, chips);
     assert.equal(merged.length, 1);
     assert.equal(merged[0]!.path, "/notes/a.md");
     assert.ok(text.includes("@notes/a.md"));
@@ -46,7 +41,7 @@ describe("scanAtPathAttachments (T-AT5 / T-AT6)", () => {
         path: "notes/a.md",
       },
     ];
-    const merged = mergeAttachmentsWithScannedAtPaths(text, chips);
+    const merged = attachmentScanner.mergeScannedAtPaths(text, chips);
     assert.equal(merged.length, 1);
     // 已有优先，保留原 path 写法
     assert.equal(merged[0]!.path, "notes/a.md");
@@ -54,7 +49,7 @@ describe("scanAtPathAttachments (T-AT5 / T-AT6)", () => {
 
   it("允许多个不同 path 与中文路径；落库一律带前导 /", () => {
     const text = "见 @docs/说明.md 和 @foo/bar.txt";
-    const scanned = scanAtPathAttachments(text);
+    const scanned = attachmentScanner.scanAtPaths(text);
     assert.equal(scanned.length, 2);
     assert.deepEqual(
       scanned.map((a) => a.path).sort(),
@@ -63,7 +58,7 @@ describe("scanAtPathAttachments (T-AT5 / T-AT6)", () => {
   });
 
   it("目录尾 /：type=dir，落库可保留尾 /，seen 去重去尾", () => {
-    const scanned = scanAtPathAttachments("树 @notes/ @notes");
+    const scanned = attachmentScanner.scanAtPaths("树 @notes/ @notes");
     assert.equal(scanned.length, 1);
     assert.equal(scanned[0]!.type, "dir");
     assert.equal(scanned[0]!.path, "/notes/");
@@ -72,7 +67,7 @@ describe("scanAtPathAttachments (T-AT5 / T-AT6)", () => {
 
 describe("attachmentsFromPaths（显式路径列表 → 合规新写入附件）", () => {
   it("name === attachmentStorageName(path)、action=userAttach、content=null、source=attach", () => {
-    const [first] = attachmentsFromPaths(["notes/a.md"]);
+    const [first] = attachmentScanner.fromPaths(["notes/a.md"]);
     assert.ok(first);
     assert.equal(first.source, "attach");
     assert.equal(first.path, "/notes/a.md");
@@ -83,7 +78,7 @@ describe("attachmentsFromPaths（显式路径列表 → 合规新写入附件）
   });
 
   it("产出形态可直接过 messageAttachmentsSchema.parse（落库硬 parse 非 safeParse）", () => {
-    const built = attachmentsFromPaths([
+    const built = attachmentScanner.fromPaths([
       "notes/a.md",
       "notes/",
       "pic.png",
@@ -94,7 +89,7 @@ describe("attachmentsFromPaths（显式路径列表 → 合规新写入附件）
   });
 
   it("牙齿：name 若沿用 basename（不覆写）必被 zod refine 拒绝", () => {
-    const [first] = attachmentsFromPaths(["notes/a.md"]);
+    const [first] = attachmentScanner.fromPaths(["notes/a.md"]);
     assert.ok(first);
     const basenameForm: MessageAttachment = { ...first, name: "a.md" };
     // 带 action 时 name 必须是 attachmentStorageName(path)，basename 形态 100% 抛错。
@@ -102,7 +97,7 @@ describe("attachmentsFromPaths（显式路径列表 → 合规新写入附件）
   });
 
   it("重复路径按 seen key 去重（含相对写法与带前导 / 的同形路径）", () => {
-    const built = attachmentsFromPaths([
+    const built = attachmentScanner.fromPaths([
       "notes/a.md",
       "/notes/a.md",
       "notes/a.md",
@@ -116,7 +111,7 @@ describe("attachmentsFromPaths（显式路径列表 → 合规新写入附件）
   });
 
   it("目录 / 图片 / 二进制形态分派保留（type + 落库 path 形态）", () => {
-    const built = attachmentsFromPaths(["notes/", "pic.png", "data.bin"]);
+    const built = attachmentScanner.fromPaths(["notes/", "pic.png", "data.bin"]);
     assert.equal(built.length, 3);
     assert.equal(built[0]!.type, "dir");
     assert.equal(built[0]!.path, "/notes/");
@@ -134,13 +129,13 @@ describe("attachmentsFromPaths（显式路径列表 → 合规新写入附件）
 
   it("空串 / 纯空白元素抛 AttachmentPathArgumentError（调用方转 ToolError）", () => {
     assert.throws(
-      () => attachmentsFromPaths(["notes/a.md", ""]),
+      () => attachmentScanner.fromPaths(["notes/a.md", ""]),
       AttachmentPathArgumentError,
     );
-    assert.throws(() => attachmentsFromPaths(["   "]), AttachmentPathArgumentError);
+    assert.throws(() => attachmentScanner.fromPaths(["   "]), AttachmentPathArgumentError);
   });
 
   it("空列表 → 空数组（不抛）", () => {
-    assert.deepEqual(attachmentsFromPaths([]), []);
+    assert.deepEqual(attachmentScanner.fromPaths([]), []);
   });
 });

@@ -135,8 +135,10 @@ const WEBVIEW_CORE_ALLOWLIST = {
     //    **刻意不在**本白名单里——它一旦被 barrel 拖进来就是老 WebView 白屏，门 B 会直接打红。
     'domain/character-card/logic/character-card-limits.js',
     'domain/chat/logic/attachment/render-dir-attach-tree.js',
-    'domain/chat/logic/message/status-chip-label.js',
-    'domain/chat/logic/message/tool-summary.js',
+    'presentation/chat/attachment-chip.js',
+    // attachment-chip 的 rename/move 分类依赖；删了 chip 文案退化为裸 path。
+    'domain/chat/logic/message/attachment-path.js',
+    'presentation/chat/tool-summary.js',
     'domain/chat/logic/vfs-turn/user-vfs-turn-view.js',
     // action XML 唯一 codec：user-vfs-turn-view 解析 VFS 操作卡片正文；删了卡片无内容。
     'domain/vfs/logic/user-vfs-action-xml.js',
@@ -171,7 +173,11 @@ const WEBVIEW_CORE_ALLOWLIST = {
     // @ 查询纯函数，仅合成包（含 dock）的闭包消费，独立入口实测未拉入。
     'common/file.js',
     'domain/chat/logic/attachment/prompt-path-seen.js',
-    'domain/chat/logic/attachment/scan-at-path-attachments.js',
+    'domain/chat/logic/attachment/attachment-scanner.js',
+    // public/chat 的 attachmentXmlCodec 导出链：codec → coerce/xml；删了回滚/批注发送侧构造直接断。
+    'domain/chat/logic/attachment/attachment-xml-codec.js',
+    'common/coerce.js',
+    'common/xml.js',
     'domain/vfs/content-store/logic/pack-codec.js',
     'domain/vfs/logic/vfs-path-mapper.js',
   ],

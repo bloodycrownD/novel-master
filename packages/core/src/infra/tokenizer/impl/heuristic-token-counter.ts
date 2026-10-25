@@ -4,7 +4,7 @@
  * @module infra/tokenizer/impl/heuristic-token-counter
  */
 
-import type { ChatMessage } from "@/domain/chat/model/message.js";
+import type { ChatMessageData } from "@/domain/chat/model/message.js";
 import { messageBodyTextFromBlocks } from "@/domain/prompt/logic/message-body.js";
 import type { TokenCounter } from "../ports/token-counter.port.js";
 
@@ -22,7 +22,8 @@ export class HeuristicTokenCounter implements TokenCounter {
     return Math.ceil(text.length / CHARACTERS_PER_TOKEN_RATIO);
   }
 
-  countMessages(messages: readonly ChatMessage[]): number {
+  /** nm-style: keep-public — TokenCounter 端口实现。 */
+  countMessages(messages: readonly ChatMessageData[]): number {
     let chars = 0;
     for (const m of messages) {
       chars += messageBodyTextFromBlocks(m.content.blocks).length;

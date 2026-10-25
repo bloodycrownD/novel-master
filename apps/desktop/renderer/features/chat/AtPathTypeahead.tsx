@@ -1,8 +1,7 @@
 /**
  * 手输 `@` typeahead：最多 5 条；点选插入完整 `@path`。
  */
-import type { AtPathRef } from "./composer-at-path";
-import { formatComposerAtPathToken } from "./composer-at-path";
+import { composerAtPath, type AtPathRef } from "./composer-at-path";
 
 export type AtPathTypeaheadProps = {
   open: boolean;
@@ -25,7 +24,7 @@ export function AtPathTypeahead({
       aria-label="文件路径建议"
     >
       {candidates.map((ref) => {
-        const token = formatComposerAtPathToken(ref.path, ref.kind === "dir");
+        const token = composerAtPath.formatToken(ref.path, ref.kind === "dir");
         const label = ref.kind === "dir" ? `📁${ref.path}/` : `📄${ref.path}`;
         return (
           <li key={`${ref.kind}:${ref.path}`} role="option">

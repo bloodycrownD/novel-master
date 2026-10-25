@@ -217,7 +217,7 @@ export function readRollbackRevisionBackfillMissingPaths(
  */
 export function formatRollbackRevisionBackfillAlertMessage(
   missingLogicalPaths: readonly string[],
-  mode?: import("@/domain/chat/logic/rollback-confirm-copy.js").RollbackMode
+  mode?: import("@/presentation/chat/rollback-confirm.js").RollbackMode
 ): string {
   const displayNames = missingLogicalPaths.map((logicalPath) =>
     logicalPath.startsWith("/") ? logicalPath.slice(1) : logicalPath

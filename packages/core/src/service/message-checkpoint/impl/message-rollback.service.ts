@@ -4,9 +4,9 @@
  * @module service/message-checkpoint/impl/message-rollback.service
  */
 
-import type { ChatMessage } from "@/domain/chat/model/message.js";
-import { ChatMessageEntity } from "@/domain/chat/logic/message/chat-message-entity.js";
-import type { RollbackMode } from "@/domain/chat/logic/rollback-confirm-copy.js";
+import type { ChatMessageData } from "@/domain/chat/model/message.js";
+import { ChatMessage } from "@/domain/chat/logic/message/chat-message.js";
+import type { RollbackMode } from "@/presentation/chat/rollback-confirm.js";
 import { listSessionFileHeads } from "@/domain/message-checkpoint/logic/list-session-files.js";
 import { findMissingRevisionPointers } from "@/domain/message-checkpoint/logic/detect-missing-revisions.js";
 import { resolveRollbackAnchorMessage } from "@/domain/message-checkpoint/logic/resolve-rollback-anchor.js";
@@ -79,7 +79,7 @@ export interface MessageRollbackServiceDeps {
 /** 回滚计划：模式、anchor、tail、待 reconcile 路径与目标树。 */
 type RollbackPlan = {
   mode: RollbackMode;
-  anchor: ChatMessage;
+  anchor: ChatMessageData;
   truncateAfterSeq: number;
   tailMessageIds: string[];
   pathsNeedWrite: ReadonlySet<string>;
@@ -437,7 +437,7 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
       resolveRollbackAnchorMessage(messagesFromClicked, anchorMessageId) ??
       clicked;
 
-    const undoSendEligible = ChatMessageEntity.from(anchor).isUndoSendEligible();
+    const undoSendEligible = ChatMessage.from(anchor).isUndoSendEligible();
     const mode: RollbackMode = undoSendEligible ? "undo_send" : "rewind";
     const truncateAfterSeq = mode === "undo_send" ? anchor.seq - 1 : anchor.seq;
 

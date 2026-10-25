@@ -5,7 +5,7 @@
  */
 import {
   formatStatusChipLabelFromAttachment,
-  partitionComposerChipAttachments,
+  composerChips,
 } from '@shared/logic/chat';
 import type { MessageAttachmentDto } from '@shared/ipc-types';
 
@@ -93,7 +93,7 @@ export function ComposerStatusChips({
   attachments: readonly MessageAttachmentDto[];
   disabled?: boolean;
 }) {
-  const { status } = partitionComposerChipAttachments(attachments);
+  const { status } = composerChips.partition(attachments);
   return (
     <AttachmentDraftChips
       attachments={status}

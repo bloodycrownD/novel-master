@@ -2,10 +2,7 @@
  * Desktop Undo（undo_send / rewind）：从锚点附件反投影工作区批注草稿 + chip。
  * 状态条由 main 推空；本函数仅 ∪ annotate。
  */
-import {
-  parseAnnotateDraftsFromAttachments,
-  type MessageAttachment,
-} from "@shared/logic/chat";
+import { attachmentXmlCodec, type MessageAttachment } from "@shared/logic/chat";
 import type { MessageAttachmentDto } from "@shared/ipc-types";
 import {
   chatAnnotateDraftStore,
@@ -51,9 +48,7 @@ export function applyUndoAnnotateRestore(
     // 锚点为 user：保留未发送草稿，仅把附件里的 annotate 反投影进来（新 mint id），
     // 与未发送草稿并存——不清 store。
     if (attachments != null && attachments.length > 0) {
-      const restored = parseAnnotateDraftsFromAttachments(
-        attachments.map(toMessageAttachment),
-      );
+      const restored = attachmentXmlCodec.decodeAnnotateDrafts(attachments.map(toMessageAttachment));
       for (const draft of restored) {
         chatAnnotateDraftStore.add(sessionId, draft);
       }

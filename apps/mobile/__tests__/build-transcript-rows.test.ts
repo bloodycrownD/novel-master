@@ -1,7 +1,7 @@
 import {
   USER_VFS_TURN_ACK_TEXT,
-  wrapUserVfsActionsForStorage,
-  type ChatMessage,
+  userVfsTurnStorage,
+  type ChatMessageData,
 } from '@novel-master/core/chat';
 import {
   buildChatListItems,
@@ -13,11 +13,11 @@ import {
 function msg(
   id: string,
   role: string,
-  blocks: ChatMessage['content']['blocks'],
+  blocks: ChatMessageData['content']['blocks'],
   seq: number,
   hidden = false,
-  raw: ChatMessage['raw'] = null,
-): ChatMessage {
+  raw: ChatMessageData['raw'] = null,
+): ChatMessageData {
   return {
     id,
     sessionId: 's1',
@@ -43,7 +43,7 @@ describe('buildTranscriptRows', () => {
   });
 
   it('user 带 attachments → row.attachments 摘要', () => {
-    const withAttach: ChatMessage = {
+    const withAttach: ChatMessageData = {
       ...msg('u1', 'user', [{type: 'text', text: '看这个'}], 1),
       attachments: [
         {
@@ -91,7 +91,7 @@ describe('buildTranscriptRows', () => {
   });
 
   it('T-SR3: 仅遗留 user_ops 操作日志（非 annotate）的空正文消息不进 transcript（直接丢弃）', () => {
-    const opsOnly: ChatMessage = {
+    const opsOnly: ChatMessageData = {
       ...msg('u-ops', 'user', [{type: 'text', text: ''}], 3),
       attachments: [
         {
@@ -107,7 +107,7 @@ describe('buildTranscriptRows', () => {
   });
 
   it('T-SR3b: 空正文 + 仅 annotate 附件仍进 transcript（批注保留）', () => {
-    const annotateOnly: ChatMessage = {
+    const annotateOnly: ChatMessageData = {
       ...msg('u-ann', 'user', [{type: 'text', text: ''}], 3),
       attachments: [
         {
@@ -137,7 +137,7 @@ describe('buildTranscriptRows', () => {
   });
 
   it('T-CHIP: transcript 透传 annotate/workplace 的 action/content；遗留 user_ops 操作日志被丢弃', () => {
-    const withAction: ChatMessage = {
+    const withAction: ChatMessageData = {
       ...msg('u-act', 'user', [{type: 'text', text: 'hi'}], 4),
       attachments: [
         {
@@ -178,7 +178,7 @@ describe('buildTranscriptRows', () => {
       msg(
         'u1',
         'user',
-        [{type: 'text', text: wrapUserVfsActionsForStorage(actionXml)}],
+        [{type: 'text', text: userVfsTurnStorage.wrapActions(actionXml)}],
         1,
         false,
         {
@@ -207,7 +207,7 @@ describe('buildTranscriptRows', () => {
   });
 
   it('T-SR3: 空正文 + workplace/attach 摘要进 ChatTranscriptBridge 行', () => {
-    const emptyWithMixed: ChatMessage = {
+    const emptyWithMixed: ChatMessageData = {
       ...msg('u-mix', 'user', [{type: 'text', text: '   '}], 1),
       attachments: [
         {
@@ -422,10 +422,10 @@ describe('buildTranscriptRows', () => {
 // tail id 过滤」在长列表（500+ 消息、密集 tool）上输出全等。
 // ---------------------------------------------------------------------------
 
-type Block = ChatMessage['content']['blocks'][number];
+type Block = ChatMessageData['content']['blocks'][number];
 
-function buildDenseToolMessages(rounds: number): ChatMessage[] {
-  const messages: ChatMessage[] = [];
+function buildDenseToolMessages(rounds: number): ChatMessageData[] {
+  const messages: ChatMessageData[] = [];
   let seq = 1;
   let toolSeq = 0;
   for (let round = 0; round < rounds; round += 1) {

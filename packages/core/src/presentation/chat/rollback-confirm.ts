@@ -4,15 +4,16 @@
  * 只产出 descriptor（key + params），不包含文案、不依赖 locale；由 UI 用 JSON
  * catalog + `createTranslator` 渲染。
  *
- * @module domain/chat/logic/rollback-confirm-copy
+ * @module presentation/chat/rollback-confirm
  */
 
-import type { ChatMessageDescriptor } from "../i18n/keys.js";
+import type { ChatMessageDescriptor } from "@/domain/chat/i18n/keys.js";
 
 /** 回滚模式：plain user Undo Send 或现网 Rewind。 */
 export type RollbackMode = "undo_send" | "rewind";
 
 /** 确认文案种类。 */
+/** nm-style: keep-public — 回滚确认 descriptor 公共类型。 */
 export type RollbackConfirmKind = "primary" | "degraded" | "backfill";
 
 type RollbackConfirmKey =
@@ -22,6 +23,7 @@ type RollbackConfirmKey =
   | "chat.rollback.confirm.degraded.rewind"
   | "chat.rollback.confirm.backfill";
 
+/** nm-style: keep-public — 回滚确认 descriptor 公共类型。 */
 export type RollbackConfirmDescriptor = ChatMessageDescriptor & { readonly key: RollbackConfirmKey };
 
 const ROLLBACK_CONFIRM_KEYS = {
@@ -38,11 +40,13 @@ const ROLLBACK_CONFIRM_KEYS = {
 /**
  * 解析回滚确认 Alert 的 descriptor。
  *
- * @param mode - 由 `ChatMessageEntity.isUndoSendEligible()` 推导的模式
+ * @param mode - 由 `ChatMessage.isUndoSendEligible()` 推导的模式
  * @param kind - primary / degraded / backfill
  * @param ctx - backfill 时需提供缺失快照路径
  */
-export function rollbackConfirmDescriptor(mode: RollbackMode, kind: RollbackConfirmKind, ctx?: { missingPaths?: readonly string[] }): RollbackConfirmDescriptor {
+class RollbackConfirmView {
+  /** 解析回滚确认 Alert 的 descriptor。 */
+  descriptor(mode: RollbackMode, kind: RollbackConfirmKind, ctx?: { missingPaths?: readonly string[] }): RollbackConfirmDescriptor {
   if (kind === "backfill") {
     const missingPaths = ctx?.missingPaths ?? [];
     const files: ChatMessageDescriptor[] = [];
@@ -58,3 +62,6 @@ export function rollbackConfirmDescriptor(mode: RollbackMode, kind: RollbackConf
   }
   return { key: ROLLBACK_CONFIRM_KEYS[kind][mode] };
 }
+}
+
+export const rollbackConfirm = new RollbackConfirmView();
