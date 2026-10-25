@@ -5,11 +5,7 @@
 import { useEffect, useState } from "react";
 import type { AnnotateDraft } from "@shared/logic/chat";
 import { Button } from "../components/ui/Button";
-import {
-  addChatAnnotateDraft,
-  removeChatAnnotateDraft,
-  updateChatAnnotateDraft,
-} from "../features/chat/chat-annotate-draft";
+import { chatAnnotateDraftStore } from "../features/chat/chat-annotate-draft";
 import { randomUUID } from "../shims/node-crypto";
 
 type FloatingBarProps = {
@@ -103,7 +99,7 @@ export function PreviewAnnotateAddModal({
     }
     setSaving(true);
     try {
-      addChatAnnotateDraft(sessionId, {
+      chatAnnotateDraftStore.add(sessionId, {
         id:
           typeof draftId === "string" && draftId.length > 0
             ? draftId
@@ -206,7 +202,7 @@ export function PreviewAnnotateDetailModal({
     }
     setSaving(true);
     try {
-      updateChatAnnotateDraft(sessionId, draft.id, {
+      chatAnnotateDraftStore.update(sessionId, draft.id, {
         userAnnotation: trimmed,
       });
       onClose();
@@ -216,7 +212,7 @@ export function PreviewAnnotateDetailModal({
   };
 
   const handleDelete = () => {
-    removeChatAnnotateDraft(sessionId, draft.id);
+    chatAnnotateDraftStore.remove(sessionId, draft.id);
     onClose();
   };
 

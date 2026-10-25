@@ -8,8 +8,7 @@ import {
 } from "@shared/logic/chat";
 import type { MessageAttachmentDto } from "@shared/ipc-types";
 import {
-  addChatAnnotateDraft,
-  clearChatAnnotateDrafts,
+  chatAnnotateDraftStore,
   unionComposerStatusWithAnnotate,
 } from "./chat-annotate-draft";
 
@@ -47,7 +46,7 @@ export function applyUndoAnnotateRestore(
 ): MessageAttachmentDto[] {
   if (anchorRole === "assistant") {
     // 锚点为 assistant：清空 renderer 侧全部批注草稿，且没有附件可反投影。
-    clearChatAnnotateDrafts(sessionId);
+    chatAnnotateDraftStore.clear(sessionId);
   } else {
     // 锚点为 user：保留未发送草稿，仅把附件里的 annotate 反投影进来（新 mint id），
     // 与未发送草稿并存——不清 store。
@@ -56,7 +55,7 @@ export function applyUndoAnnotateRestore(
         attachments.map(toMessageAttachment),
       );
       for (const draft of restored) {
-        addChatAnnotateDraft(sessionId, draft);
+        chatAnnotateDraftStore.add(sessionId, draft);
       }
     }
   }

@@ -2,7 +2,7 @@
  * Messages IPC handlers — list, append, edit, hide, delete, rollback.
  */
 import {
-  clearChatAnnotateDrafts,
+  chatAnnotateDraftStore,
   readMessageMetadata,
   textBlocks,
   type ChatMessage,
@@ -327,7 +327,7 @@ export async function handleMessagesRollback(
     // D8：undo_send / rewind 均推空状态条；main 侧 annotate store 一并清。
     // main 进程拿不到 mode（mode 由 renderer 算）——renderer 侧的清空 / 反投影
     // 由 renderer 的 applyUndoAnnotateRestore 按锚点角色区分处理（CR-5）。
-    clearChatAnnotateDrafts(req.sessionId);
+    chatAnnotateDraftStore.clear(req.sessionId);
     await notifyComposerStatusAfterSessionKkvCleared(rt, req.sessionId);
     return { ok: true, data: undefined };
   } catch (err) {

@@ -22,10 +22,7 @@ import {
   isRollbackVfsDegradableError,
   readRollbackRevisionBackfillMissingPaths,
 } from '@novel-master/core/session-fs';
-import {
-  addChatAnnotateDraft,
-  clearChatAnnotateDrafts,
-} from '@novel-master/core/chat';
+import { chatAnnotateDraftStore } from '@novel-master/core/chat';
 import {
   applyComposerStatusAttachmentsReplace,
   writeChatComposerDraftState,
@@ -240,7 +237,7 @@ export function useChatTabMessageActions({
           const restoredAnnotate =
             parseAnnotateDraftsFromAttachments(attachmentsSnapshot);
           for (const draft of restoredAnnotate) {
-            addChatAnnotateDraft(sessionId, draft);
+            chatAnnotateDraftStore.add(sessionId, draft);
           }
         }
         const status = await projectComposerStatusForSession(
@@ -277,7 +274,7 @@ export function useChatTabMessageActions({
           // 不清空 store，只把 parseAnnotateDraftsFromAttachments 的结果 add 进去，
           // 未发送草稿原样保留。
           if (mode === 'rewind') {
-            clearChatAnnotateDrafts(sessionId);
+            chatAnnotateDraftStore.clear(sessionId);
           }
           // DB 截断事务已提交成功，后续刷新链（流式显示重置、tail
           // reload、composer 恢复、toast）不允许被 composer 状态刷新

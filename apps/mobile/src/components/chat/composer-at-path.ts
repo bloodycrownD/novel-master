@@ -3,8 +3,6 @@
  */
 export {
   atPathTokensFromPickerSelection,
-  countScannedAtPathAttachments,
-  filterAtPathTypeaheadCandidates,
   findActiveAtQuery,
   formatComposerAtPathToken,
   replaceActiveAtWithToken,

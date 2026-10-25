@@ -24,15 +24,11 @@ import { AtPathTypeahead } from "./AtPathTypeahead";
 import { ComposerAtPathInput } from "./ComposerAtPathInput";
 import {
   type AtPathRef,
-  filterAtPathTypeaheadCandidates,
   findActiveAtQuery,
   replaceActiveAtWithToken,
 } from "./composer-at-path";
 import {
-  clearChatAnnotateDrafts,
-  hasChatAnnotateDrafts,
-  listChatAnnotateDrafts,
-  subscribeChatAnnotateDraft,
+  chatAnnotateDraftStore,
   unionComposerStatusWithAnnotate,
 } from "./chat-annotate-draft";
 import {
@@ -134,7 +130,7 @@ export function ChatComposer({
 
   // annotate store 变更时重合并状态条（删光 path → chip 消失等）
   useEffect(() => {
-    return subscribeChatAnnotateDraft((changedSessionId) => {
+    return chatAnnotateDraftStore.subscribe((changedSessionId) => {
       if (changedSessionId !== sessionId) {
         return;
       }
@@ -152,7 +148,7 @@ export function ChatComposer({
   // 始终按 payload.sessionId 清 annotate store，避免切会话后漏清、再回来重带旧批注。
   useEffect(() => {
     return onUserMessageAppended((payload) => {
-      clearChatAnnotateDrafts(payload.sessionId);
+      chatAnnotateDraftStore.clear(payload.sessionId);
       if (
         !shouldClearComposerBodyOnUserMessageAppended(
           payload.sessionId,
@@ -221,11 +217,23 @@ export function ChatComposer({
     if (activeAt == null) {
       return [];
     }
-    return filterAtPathTypeaheadCandidates(
-      rowsToAtPathRefs(typeaheadRows),
-      activeAt.query,
-      5,
-    );
+    const q = activeAt.query.trim().toLowerCase();
+    const out: AtPathRef[] = [];
+    for (const ref of rowsToAtPathRefs(typeaheadRows)) {
+      if (ref.path === "/") {
+        continue;
+      }
+      const pathLower = ref.path.toLowerCase();
+      const parts = ref.path.split("/").filter(Boolean);
+      const base = (parts[parts.length - 1] ?? ref.path).toLowerCase();
+      if (q === "" || pathLower.includes(q) || base.includes(q)) {
+        out.push(ref);
+        if (out.length >= 5) {
+          break;
+        }
+      }
+    }
+    return out;
   }, [activeAt, typeaheadRows]);
 
   // 名称/描述模糊匹配，最多 5 条；无效技能不出现（手打 token 由 hydrate 容错）
@@ -362,7 +370,7 @@ export function ChatComposer({
       // workplace 走常驻前缀 S0 注入，不构造附件；文件引用由 Core 扫描正文 `@path` 生成 attach
       // B4：禁止 started:true 清正文/projected；append 推送后再清（对齐 Mobile）
       // annotate：禁止在 started 清 store；reproject 时 ∪ store 保留至 append
-      const annotateDrafts = listChatAnnotateDrafts(sessionId);
+      const annotateDrafts = chatAnnotateDraftStore.list(sessionId);
       // 防御观测（D-15 定性遗留）：composer 批注 chip 在而 store 读空——正常流程不应发生
       // （append 推送后才清 store），留痕供 e2e errors 收集定位（launchApp 只收 console.error）
       if (
@@ -428,9 +436,8 @@ export function ChatComposer({
 
     const intent = resolveComposerSendIntent({
       text: value,
-      attachments,
       canResumeWithoutInput,
-      hasAnnotateDrafts: hasChatAnnotateDrafts(sessionId),
+      hasAnnotateDrafts: chatAnnotateDraftStore.has(sessionId),
       hasModel,
       running,
     });
@@ -451,9 +458,8 @@ export function ChatComposer({
     (!hasModel && !running) || lastMessageIsPlainUserText;
   const sendDisabled = resolveComposerSendIntent({
     text: value,
-    attachments,
     canResumeWithoutInput,
-    hasAnnotateDrafts: hasChatAnnotateDrafts(sessionId),
+    hasAnnotateDrafts: chatAnnotateDraftStore.has(sessionId),
     hasModel,
     running,
   }).sendDisabled;

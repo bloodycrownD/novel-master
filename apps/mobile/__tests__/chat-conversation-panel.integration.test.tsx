@@ -924,7 +924,7 @@ describe('ChatConversationPanel · 原生 dock 接线（Step 5）', () => {
     await act(async () => {
       lastComposerProps().onComposerChangeText('你好');
     });
-    // 有正文 → 发送钮可用（canSend = !sendDisabled，hasComposerSendableInput 语义）
+    // 有正文 → 发送钮可用（canSend = !sendDisabled，resolveComposerSendIntent 语义）
     expect(lastComposerProps().canSend).toBe(true);
 
     await act(async () => {

@@ -6,21 +6,17 @@
  */
 
 import { normalizePromptStorePath } from "./prompt-path-seen.js";
-import { scanAtPathAttachments } from "./scan-at-path-attachments.js";
 
 export type AtPathRef = {
   readonly path: string;
   readonly kind: "file" | "dir";
 };
 
-/** 触发字符：`@` 路径引用 / `$` 技能引用（双端 typeahead 共享语义）。 */
-export type ComposerTrigger = "@" | "$";
-
-/** 插入正文的 `@path`（目录带尾 `/`，落库扫描后带前导 `/`）。 */
-export function formatComposerAtPathToken(
-  path: string,
-  isDir: boolean
-): string {
+/**
+ * 插入正文的 `@path`（目录带尾 `/`，落库扫描后带前导 `/`）。
+ * nm-style: keep-public — 双端 typeahead 单条 token 入口；桌面直接调用，批量入口在同文件复用。
+ */
+export function formatComposerAtPathToken(path: string, isDir: boolean): string {
   if (isDir) {
     // 选择器 path 通常无尾 `/`；先补尾再规范化，保证正文 token 与 scan 目录判定一致
     const withSlash = path.endsWith("/") || path === "/" ? path : `${path}/`;
@@ -34,10 +30,7 @@ export function formatComposerAtPathToken(
 }
 
 /** 选择器多选 → 正文 token 列表（先 dir 后 file）。 */
-export function atPathTokensFromPickerSelection(
-  selectedDirs: Iterable<string>,
-  selectedFiles: Iterable<string>
-): string[] {
+export function atPathTokensFromPickerSelection(selectedDirs: Iterable<string>, selectedFiles: Iterable<string>): string[] {
   return [
     ...[...selectedDirs].map((p) => formatComposerAtPathToken(p, true)),
     ...[...selectedFiles].map((p) => formatComposerAtPathToken(p, false)),
@@ -49,11 +42,7 @@ export function atPathTokensFromPickerSelection(
  * `query` 不含触发字符；`start` 为触发字符下标。
  * `trigger` 缺省 `@`（既有行为不变）；`$` 供技能 typeahead 复用。
  */
-export function findActiveAtQuery(
-  text: string,
-  cursor: number,
-  trigger: ComposerTrigger = "@"
-): { readonly start: number; readonly query: string } | null {
+export function findActiveAtQuery(text: string, cursor: number, trigger: "@" | "$" = "@"): { readonly start: number; readonly query: string } | null {
   const safeCursor = Math.max(0, Math.min(cursor, text.length));
   const before = text.slice(0, safeCursor);
   const at = before.lastIndexOf(trigger);
@@ -74,50 +63,11 @@ export function findActiveAtQuery(
 }
 
 /** 用完整 token 替换 `[start, cursor)`，并在末尾补空格（若尚无）；与触发字符无关（纯位置替换）。 */
-export function replaceActiveAtWithToken(
-  text: string,
-  cursor: number,
-  start: number,
-  token: string
-): { readonly text: string; readonly cursor: number } {
+export function replaceActiveAtWithToken(text: string, cursor: number, start: number, token: string): { readonly text: string; readonly cursor: number } {
   const before = text.slice(0, start);
   const after = text.slice(cursor);
   const needsSpace = after.length === 0 || !/^\s/.test(after);
   const inserted = needsSpace ? `${token} ` : token;
   const next = `${before}${inserted}${after}`;
   return { text: next, cursor: before.length + inserted.length };
-}
-
-/** 模糊匹配 path / basename，最多 `limit` 条（默认 5）。 */
-export function filterAtPathTypeaheadCandidates(
-  refs: readonly AtPathRef[],
-  query: string,
-  limit = 5
-): AtPathRef[] {
-  const q = query.trim().toLowerCase();
-  const out: AtPathRef[] = [];
-  for (const ref of refs) {
-    if (ref.path === "/") {
-      continue;
-    }
-    const pathLower = ref.path.toLowerCase();
-    const base = basename(ref.path).toLowerCase();
-    if (q === "" || pathLower.includes(q) || base.includes(q)) {
-      out.push(ref);
-      if (out.length >= limit) {
-        break;
-      }
-    }
-  }
-  return out;
-}
-
-/** 发送门闩：正文 `@` 扫描条数（不再认 draft attach chip）。 */
-export function countScannedAtPathAttachments(text: string): number {
-  return scanAtPathAttachments(text).length;
-}
-
-function basename(path: string): string {
-  const parts = path.split("/").filter(Boolean);
-  return parts[parts.length - 1] ?? path;
 }

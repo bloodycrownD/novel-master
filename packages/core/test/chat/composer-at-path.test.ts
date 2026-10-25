@@ -6,8 +6,6 @@ import { describe, it } from "node:test";
 import { scanAtPathAttachments } from "../../src/domain/chat/logic/scan-at-path-attachments.js";
 import {
   atPathTokensFromPickerSelection,
-  countScannedAtPathAttachments,
-  filterAtPathTypeaheadCandidates,
   findActiveAtQuery,
   formatComposerAtPathToken,
   replaceActiveAtWithToken,
@@ -26,16 +24,6 @@ describe("composer-at-path", () => {
   });
 
   it("T-ATD3: 手输 @ 搜索 ≤5，点选替换为完整 @path", () => {
-    const refs = [
-      { path: "/a.md", kind: "file" as const },
-      { path: "/ab.md", kind: "file" as const },
-      { path: "/abc.md", kind: "file" as const },
-      { path: "/abcd.md", kind: "file" as const },
-      { path: "/abcde.md", kind: "file" as const },
-      { path: "/abcdef.md", kind: "file" as const },
-    ];
-    assert.equal(filterAtPathTypeaheadCandidates(refs, "a", 5).length, 5);
-
     const active = findActiveAtQuery("见 @ab", 5);
     assert.ok(active);
     assert.equal(active!.query, "ab");
@@ -74,18 +62,7 @@ describe("composer-at-path", () => {
   });
 
   it("T-ATD4: 删除正文 @path 后扫描为空", () => {
-    assert.equal(countScannedAtPathAttachments("看 @/a.md"), 1);
-    assert.equal(countScannedAtPathAttachments("看"), 0);
-  });
-
-  it("filterAtPathTypeaheadCandidates: 跳过根 /；空 query 仍可返回", () => {
-    const refs = [
-      { path: "/", kind: "dir" as const },
-      { path: "/notes", kind: "dir" as const },
-      { path: "/a.md", kind: "file" as const },
-    ];
-    const hits = filterAtPathTypeaheadCandidates(refs, "", 5);
-    assert.equal(hits.length, 2);
-    assert.ok(hits.every((r) => r.path !== "/"));
+    assert.equal(scanAtPathAttachments("看 @/a.md").length, 1);
+    assert.equal(scanAtPathAttachments("看").length, 0);
   });
 });

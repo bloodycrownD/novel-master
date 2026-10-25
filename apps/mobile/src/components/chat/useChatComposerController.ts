@@ -7,7 +7,7 @@
  * 承接（原 Step 3/4 期间曾进 chat-conversation 文档，输入框原生化后回到 RN）。
  * 留在本 hook 的职责：
  * 1. **发送决策**（`executeRun` / `send` 三分支 / `resolveComposerSendIntent`）；
- * 2. **草稿三订阅链**（水化 / `subscribeChatComposerDraft` / `subscribeChatAnnotateDraft`）；
+ * 2. **草稿三订阅链**（水化 / `subscribeChatComposerDraft` / `chatAnnotateDraftStore.subscribe`）；
  * 另有 **Picker 状态机**（`pickerOpen` / `skillPickerOpen` 与 confirm 回调）
  * 与 **token 插入 / 胶囊区间维护链**（`insertSkillToken` / `insertTokensIntoComposer` 一族）。
  *
@@ -38,13 +38,10 @@ import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {useAnimatedReaction, runOnJS} from 'react-native-reanimated';
 import {useReanimatedKeyboardAnimation} from 'react-native-keyboard-controller';
 import {
-  clearChatAnnotateDrafts,
-  hasChatAnnotateDrafts,
-  listChatAnnotateDrafts,
+  chatAnnotateDraftStore,
   resolveComposerSendIntent,
   scanAtPathAttachments,
   scanSkillAttachments,
-  subscribeChatAnnotateDraft,
   type MessageAttachment,
 } from '@novel-master/core/chat';
 import type {AgentRunScope} from '@/services/agent-run.service';
@@ -80,7 +77,7 @@ import type {ConversationDockAction} from './ChatConversationBridge';
  * 迁入：本 hook 是它的唯一消费方——组装后面板按字段拆开直连
  * `NativeChatComposer` 的 props，不再经桥收发）。
  */
-export type ConversationComposerState = {
+type ConversationComposerState = {
   readonly inputDisabled: boolean;
   readonly hasModel: boolean;
   readonly sendDisabled: boolean;
@@ -101,7 +98,7 @@ import {resetRunTiming, timingLog} from '@/debug/run-timing';
 /** ⛶ 全屏编辑入口载荷：当前输入文本原样带给父层（父层负责导航与保存回填）。 */
 export type ComposerFullscreenPayload = {text: string};
 
-export type UseChatComposerControllerOptions = {
+type UseChatComposerControllerOptions = {
   /** 会话 scope（`AgentRunScope` = `{projectId, sessionId}`，两者皆必填）。 */
   readonly scope: AgentRunScope;
   /** 工作区有模型（hintRow 显隐的真源，**不能**用 `inputDisabled` 代替）。 */
@@ -144,7 +141,7 @@ export type UseChatComposerControllerOptions = {
   ) => void;
 };
 
-export type ChatComposerController = {
+type ChatComposerController = {
   /**
    * dock 域聚合状态：面板按字段拆开直连 `NativeChatComposer` 的 props
    * （类型载体仍是 `ConversationComposerState`，不再经桥收发）。
@@ -222,6 +219,9 @@ function tokenRangesEqual(
   return true;
 }
 
+/**
+ * nm-style: keep-public — React hook 边界：面板只调用一次，但承载整块输入/发送状态机，不可内联。
+ */
 export function useChatComposerController({
   scope,
   hasModel,
@@ -322,7 +322,7 @@ export function useChatComposerController({
   const setComposerTextRef = useRef(setComposerText);
   setComposerTextRef.current = setComposerText;
 
-  const hasAnnotateDrafts = hasChatAnnotateDrafts(sessionId);
+  const hasAnnotateDrafts = chatAnnotateDraftStore.has(sessionId);
   void annotateEpoch;
 
   /* ------------------------------------------------------------------ *
@@ -478,7 +478,7 @@ export function useChatComposerController({
   }, [sessionId, syncFromDraft]);
 
   useEffect(() => {
-    return subscribeChatAnnotateDraft(changedSessionId => {
+    return chatAnnotateDraftStore.subscribe(changedSessionId => {
       if (changedSessionId !== sessionId) {
         return;
       }
@@ -584,7 +584,7 @@ export function useChatComposerController({
       try {
         const stream = await runtime.preferences.getLlmStreamEnabled();
         timingLog('pref-read done');
-        const annotateDrafts = listChatAnnotateDrafts(sessionId);
+        const annotateDrafts = chatAnnotateDraftStore.list(sessionId);
         // 门禁由 manager 的 per-session 单元拒绝（返回明确错误），run 本体
         // fire-and-forget；refcount 与收尾归 manager。
         const manager = runtime.sessionStreamUnitManager;
@@ -608,7 +608,7 @@ export function useChatComposerController({
             annotateDrafts.length > 0 ? annotateDrafts : undefined,
           onUserMessageAppended: () => {
             // append 成功后再清输入 + 批注，避免失败时丢草稿
-            clearChatAnnotateDrafts(sessionId);
+            chatAnnotateDraftStore.clear(sessionId);
             clearComposerNow();
             void Promise.resolve(
               streamHandlersRef.current.onMessagesChanged(),
@@ -665,7 +665,6 @@ export function useChatComposerController({
     () =>
       resolveComposerSendIntent({
         text,
-        attachments,
         canResumeWithoutInput,
         hasAnnotateDrafts,
         hasModel,
@@ -673,7 +672,6 @@ export function useChatComposerController({
       }),
     [
       text,
-      attachments,
       canResumeWithoutInput,
       hasAnnotateDrafts,
       hasModel,

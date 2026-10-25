@@ -16,13 +16,7 @@ import {
   readVfsMarkdownPreviewEngine,
   type VfsMarkdownPreviewEngine,
 } from '../../storage/vfs-markdown-preview-engine';
-import {
-  addChatAnnotateDraft,
-  listChatAnnotateDrafts,
-  removeChatAnnotateDraft,
-  subscribeChatAnnotateDraft,
-  updateChatAnnotateDraft,
-} from '@novel-master/core/chat';
+import { chatAnnotateDraftStore } from '@novel-master/core/chat';
 import {refreshComposerAnnotateChips} from '../../storage/chat-composer-draft';
 import {RichContentBody} from '../rich-content/RichContentBody';
 import {prepareTranscriptRichHtml} from '../rich-content/prepare-transcript-rich-html';
@@ -177,7 +171,7 @@ export function FileMarkdownPreview({
     if (!annotateEnabled || sessionId == null || sessionId === '') {
       return [];
     }
-    return listChatAnnotateDrafts(sessionId).filter(d => d.path === path);
+    return chatAnnotateDraftStore.list(sessionId).filter(d => d.path === path);
   }, [annotateEnabled, sessionId, path, draftTick]);
 
   const recogitoMarks = useMemo(
@@ -189,7 +183,7 @@ export function FileMarkdownPreview({
     if (!annotateEnabled || sessionId == null || sessionId === '') {
       return;
     }
-    return subscribeChatAnnotateDraft(changed => {
+    return chatAnnotateDraftStore.subscribe(changed => {
       if (changed === sessionId) {
         setDraftTick(t => t + 1);
       }
@@ -219,7 +213,7 @@ export function FileMarkdownPreview({
         return;
       }
       const range = pendingRenderRange;
-      addChatAnnotateDraft(sessionId, {
+      chatAnnotateDraftStore.add(sessionId, {
         id: newAnnotateId(),
         path,
         originalText: pendingOriginalText,
@@ -257,7 +251,7 @@ export function FileMarkdownPreview({
     if (!sessionId || !detailDraft) {
       return;
     }
-    removeChatAnnotateDraft(sessionId, detailDraft.id);
+    chatAnnotateDraftStore.remove(sessionId, detailDraft.id);
     refreshComposerAnnotateChips(sessionId);
     setDetailVisible(false);
     setDetailDraft(null);
@@ -277,7 +271,7 @@ export function FileMarkdownPreview({
       if (!sessionId || !editingDraft) {
         return;
       }
-      updateChatAnnotateDraft(sessionId, editingDraft.id, {userAnnotation});
+      chatAnnotateDraftStore.update(sessionId, editingDraft.id, {userAnnotation});
       refreshComposerAnnotateChips(sessionId);
       setEditingDraft(null);
     },

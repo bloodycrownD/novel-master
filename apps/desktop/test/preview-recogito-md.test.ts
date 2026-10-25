@@ -86,7 +86,7 @@ describe("T-RG6 Desktop MD Recogito；plain 禁用批注", () => {
     const ui = readFileSync(previewAnnotateUiPath, "utf8");
     assert.match(ui, /renderStart/);
     assert.match(ui, /renderEnd/);
-    assert.match(ui, /addChatAnnotateDraft/);
+    assert.match(ui, /chatAnnotateDraftStore\.add/);
     assert.doesNotMatch(ui, /softOffsetRange/);
     assert.doesNotMatch(ui, /startOffset:/);
   });

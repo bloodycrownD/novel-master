@@ -15,7 +15,6 @@ import {
   refreshUserVfsUnifiedToolTurnSnapshot,
   resetUserVfsUnifiedToolTurnSnapshotForTests,
 } from "@/domain/feature-flags/user-vfs-unified-tool-turn.js";
-import { hasComposerSendableInput } from "@/domain/chat/logic/composer-sendable-input.js";
 import { wrapUserMessageForLlm } from "@/domain/chat/logic/wrap-user-message-for-llm.js";
 import { buildFileAnnotateAttachmentFromDraft } from "@/domain/chat/logic/build-attachment-action-xml.js";
 import { mergeAttachmentsByPath } from "@/domain/chat/logic/scan-at-path-attachments.js";
@@ -113,17 +112,6 @@ function makeRuntime(overrides: {
 }
 
 describe("annotateDrafts send (T-AN3/T-AN4/T-AN6 core)", () => {
-  it("T-AN4: hasComposerSendableInput({ hasAnnotateDrafts:true }) 可发", () => {
-    assert.equal(
-      hasComposerSendableInput({
-        text: "",
-        attachmentCount: 0,
-        hasAnnotateDrafts: true,
-      }),
-      true,
-    );
-  });
-
   it("T-AN4: 仅 annotateDrafts → hasInput/shouldAppend；禁空续跑删末条", async () => {
     refreshUserVfsUnifiedToolTurnSnapshot(true);
     const deleted: string[] = [];

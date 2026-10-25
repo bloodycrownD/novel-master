@@ -129,10 +129,6 @@ export type {
   UserVfsPendingQueue,
   UserVfsPendingTool,
 } from "../domain/chat/model/user-vfs-pending.schema.js";
-export {
-  computeStreamTailGenerating,
-  DEFAULT_STREAM_TAIL_IDLE_MS,
-} from "../domain/chat/logic/compute-stream-tail-generating.js";
 export { resolveChatLinkTarget, isHttpUrl, elideChatLinkPath, chatLinkNotFoundMessage } from "../domain/chat/logic/resolve-chat-link-target.js";
 export { mergePendingVfsTurns } from "../domain/chat/logic/merge-pending-vfs-turns.js";
 export type { MergedPendingVfsTurn } from "../domain/chat/logic/merge-pending-vfs-turns.js";
@@ -141,42 +137,18 @@ export {
   deriveDirPathsFromFileTree,
   emptyWorkspaceFlushSnapshot,
 } from "../domain/chat/logic/workspace-flush-snapshot.js";
-export { hasComposerSendableInput } from "../domain/chat/logic/composer-sendable-input.js";
 export { resolveComposerSendIntent } from "../domain/chat/logic/composer-send-intent.js";
-export type {
-  ComposerSendIntent,
-  ComposerSendIntentAttachment,
-  ComposerSendIntentInput,
-} from "../domain/chat/logic/composer-send-intent.js";
 export {
-  isComposerStatusAttachment,
   partitionComposerChipAttachments,
 } from "../domain/chat/logic/composer-chip-attachment.js";
-export type { ComposerChipAttachment } from "../domain/chat/logic/composer-chip-attachment.js";
 export {
   atPathTokensFromPickerSelection,
-  countScannedAtPathAttachments,
-  filterAtPathTypeaheadCandidates,
   findActiveAtQuery,
   formatComposerAtPathToken,
   replaceActiveAtWithToken,
 } from "../domain/chat/logic/composer-at-path.js";
-export type {
-  AtPathRef,
-  ComposerTrigger,
-} from "../domain/chat/logic/composer-at-path.js";
-export {
-  addChatAnnotateDraft,
-  chipsFromAnnotateStore,
-  clearChatAnnotateDrafts,
-  hasChatAnnotateDrafts,
-  listChatAnnotateDrafts,
-  removeChatAnnotateDraft,
-  resetChatAnnotateDraftStoreForTests,
-  subscribeChatAnnotateDraft,
-  unionComposerStatusWithAnnotate,
-  updateChatAnnotateDraft,
-} from "../domain/chat/logic/chat-annotate-draft-store.js";
+export type { AtPathRef } from "../domain/chat/logic/composer-at-path.js";
+export { chatAnnotateDraftStore } from "../domain/chat/logic/chat-annotate-draft-store.js";
 export {
   USER_VFS_TURN_ACK_TEXT,
   wrapUserVfsActionsForStorage,

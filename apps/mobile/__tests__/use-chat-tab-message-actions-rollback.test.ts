@@ -6,17 +6,12 @@ import React from 'react';
 import TestRenderer, {act} from 'react-test-renderer';
 import {
   buildFileAnnotateAttachmentFromDraft,
+  chatAnnotateDraftStore,
   parseAttachmentsJson,
   type ChatMessage,
   type MessageAttachment,
 } from '@novel-master/core/chat';
 import {Alert} from 'react-native';
-import {
-  addChatAnnotateDraft,
-  chipsFromAnnotateStore,
-  listChatAnnotateDrafts,
-  resetChatAnnotateDraftStoreForTests,
-} from '@novel-master/core/chat';
 import {
   readChatComposerDraftState,
   writeChatComposerDraft,
@@ -119,7 +114,7 @@ function mountActions(chatMessages: ChatMessage[]) {
 describe('useChatTabMessageActions rollback', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    resetChatAnnotateDraftStoreForTests();
+    chatAnnotateDraftStore.resetForTests();
     mockRollbackToMessage.mockResolvedValue(undefined);
     mockReloadMessages.mockResolvedValue([]);
     mockSetDraftRestoreToken.mockImplementation(
@@ -132,7 +127,7 @@ describe('useChatTabMessageActions rollback', () => {
   });
 
   afterEach(() => {
-    resetChatAnnotateDraftStoreForTests();
+    chatAnnotateDraftStore.resetForTests();
   });
 
   it('T-M1: plain user 确认文案含「及之后」', async () => {
@@ -350,7 +345,7 @@ describe('useChatTabMessageActions rollback', () => {
   });
 
   it('T-UD1: undo_send 含 annotate → store 含 path 草稿 + chip；与未发送并存', async () => {
-    addChatAnnotateDraft('s1', {
+    chatAnnotateDraftStore.add('s1', {
       id: 'unsent-keep',
       path: '/keep.md',
       originalText: '未发送原文',
@@ -373,7 +368,7 @@ describe('useChatTabMessageActions rollback', () => {
 
     expect(mockRollbackToMessage).toHaveBeenCalled();
     expect(readChatComposerDraftState('s1').text).toBe('请看批注');
-    const drafts = listChatAnnotateDrafts('s1');
+    const drafts = chatAnnotateDraftStore.list('s1');
     expect(drafts).toHaveLength(2);
     expect(
       drafts.some(d => d.id === 'unsent-keep' && d.path === '/keep.md'),
@@ -385,7 +380,7 @@ describe('useChatTabMessageActions rollback', () => {
       userAnnotation: '请改短',
     });
     expect(restored?.id).not.toBe('sent-ann');
-    const chips = chipsFromAnnotateStore('s1');
+    const chips = chatAnnotateDraftStore.chips('s1');
     expect(
       chips.some(c => c.path === '/chapter/a.md' && c.action === 'annotate'),
     ).toBe(true);
@@ -421,8 +416,8 @@ describe('useChatTabMessageActions rollback', () => {
     });
 
     expect(readChatComposerDraftState('s1').text).toBe('仅正文 @/a.md');
-    expect(listChatAnnotateDrafts('s1')).toEqual([]);
-    expect(chipsFromAnnotateStore('s1')).toEqual([]);
+    expect(chatAnnotateDraftStore.list('s1')).toEqual([]);
+    expect(chatAnnotateDraftStore.chips('s1')).toEqual([]);
     expect(readChatComposerDraftState('s1').attachments ?? []).toEqual([]);
   });
 
@@ -452,8 +447,8 @@ describe('useChatTabMessageActions rollback', () => {
     });
 
     expect(readChatComposerDraftState('s1').text).toBe('消息批注 Undo');
-    expect(listChatAnnotateDrafts('s1')).toEqual([]);
-    expect(chipsFromAnnotateStore('s1')).toEqual([]);
+    expect(chatAnnotateDraftStore.list('s1')).toEqual([]);
+    expect(chatAnnotateDraftStore.chips('s1')).toEqual([]);
     expect(readChatComposerDraftState('s1').attachments ?? []).toEqual([]);
   });
 
@@ -590,7 +585,7 @@ describe('useChatTabMessageActions rollback', () => {
     expect(mockRollbackToMessage).toHaveBeenCalled();
     expect(readChatComposerDraftState('s1').text).toBe('请看历史批注');
     // 批注草稿确实从存活的那条附件反投影回来了（旧口径下这里是 []）。
-    const restored = listChatAnnotateDrafts('s1').find(
+    const restored = chatAnnotateDraftStore.list('s1').find(
       d => d.path === '/chapter/a.md',
     );
     expect(restored).toMatchObject({
@@ -599,7 +594,7 @@ describe('useChatTabMessageActions rollback', () => {
       userAnnotation: '请改短',
     });
     expect(
-      chipsFromAnnotateStore('s1').some(
+      chatAnnotateDraftStore.chips('s1').some(
         c => c.path === '/chapter/a.md' && c.action === 'annotate',
       ),
     ).toBe(true);

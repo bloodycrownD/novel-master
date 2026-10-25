@@ -26,10 +26,7 @@ import { formatVfsErrorForUser, type VfsScope } from "@shared/logic/vfs";
 import type { AnnotateDraft } from "@shared/logic/chat";
 import type { WorkspacePanelScope } from "@shared/ipc-types";
 import { useShellNav } from "../providers/ShellNavProvider";
-import {
-  listChatAnnotateDrafts,
-  subscribeChatAnnotateDraft,
-} from "../features/chat/chat-annotate-draft";
+import { chatAnnotateDraftStore } from "../features/chat/chat-annotate-draft";
 import { PreviewEditorTabs } from "./PreviewEditorTabs";
 import { shouldRenderMarkdownPreview } from "./preview-utils";
 import {
@@ -79,7 +76,7 @@ export function PreviewPane() {
   const [loading, setLoading] = useState(false);
   const [fileMissing, setFileMissing] = useState(false);
   const [annotateDrafts, setAnnotateDrafts] = useState<readonly AnnotateDraft[]>(
-    () => listChatAnnotateDrafts(sessionId),
+    () => chatAnnotateDraftStore.list(sessionId),
   );
   const [floating, setFloating] = useState<{
     top: number;
@@ -115,10 +112,10 @@ export function PreviewPane() {
   }, [annotateEnabled, annotateDrafts, previewFile]);
 
   useEffect(() => {
-    setAnnotateDrafts(listChatAnnotateDrafts(sessionId));
-    return subscribeChatAnnotateDraft((changed) => {
+    setAnnotateDrafts(chatAnnotateDraftStore.list(sessionId));
+    return chatAnnotateDraftStore.subscribe((changed) => {
       if (changed === sessionId) {
-        setAnnotateDrafts(listChatAnnotateDrafts(sessionId));
+        setAnnotateDrafts(chatAnnotateDraftStore.list(sessionId));
       }
     });
   }, [sessionId]);

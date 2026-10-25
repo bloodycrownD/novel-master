@@ -61,11 +61,10 @@ jest.mock('../src/hooks/useRuntime', () => ({
   useRuntime: () => mockRuntime,
 }));
 
-import {
-  useChatComposerController,
-  type ChatComposerController,
-  type UseChatComposerControllerOptions,
-} from '../src/components/chat/useChatComposerController';
+import { useChatComposerController } from '../src/components/chat/useChatComposerController';
+
+type ChatComposerController = ReturnType<typeof useChatComposerController>;
+type UseChatComposerControllerOptions = Parameters<typeof useChatComposerController>[0];
 import {
   applyComposerStatusAttachmentsReplace,
   clearChatComposerDraft,
@@ -76,9 +75,7 @@ import {
 import {
   scanTokensToRanges,
 } from '../src/components/chat/native-composer/token-ranges';
-import {
-  resetChatAnnotateDraftStoreForTests,
-} from '@novel-master/core/chat';
+import { chatAnnotateDraftStore } from '@novel-master/core/chat';
 
 /** 探针（模块被 jest.mock 包了一层计数，实现仍是 actual）。 */
 const mockScanTokensToRanges = jest.mocked(scanTokensToRanges);
@@ -151,7 +148,7 @@ beforeEach(() => {
   mockStopRun.mockClear();
   mockProjectComposerStatus.mockReset().mockResolvedValue([]);
   clearChatComposerDraft('s1');
-  resetChatAnnotateDraftStoreForTests();
+  chatAnnotateDraftStore.resetForTests();
   __setKeyboardHeightForTests(0);
   Object.assign(mockRuntime, {
     preferences: {getLlmStreamEnabled: jest.fn(async () => true)},

@@ -3,27 +3,22 @@
  */
 import assert from "node:assert/strict";
 import { afterEach, test } from "node:test";
-import {
-  addChatAnnotateDraft,
-  chipsFromAnnotateStore,
-  resetChatAnnotateDraftStoreForTests,
-  unionComposerStatusWithAnnotate,
-} from "@/features/chat/chat-annotate-draft";
+import { unionComposerStatusWithAnnotate, chatAnnotateDraftStore } from "@/features/chat/chat-annotate-draft";
 import type { MessageAttachmentDto } from "@shared/ipc-types";
 
 afterEach(() => {
-  resetChatAnnotateDraftStoreForTests();
+  chatAnnotateDraftStore.resetForTests();
 });
 
 test("接线: Desktop 壳映射 Dto；chip action/path 可用", () => {
   const sessionId = "s-desktop-wire";
-  addChatAnnotateDraft(sessionId, {
+  chatAnnotateDraftStore.add(sessionId, {
     id: "a1",
     path: "/wire.md",
     originalText: "x",
     userAnnotation: "y",
   });
-  const chips = chipsFromAnnotateStore(sessionId);
+  const chips = chatAnnotateDraftStore.chips(sessionId);
   assert.equal(chips.length, 1);
   assert.equal(chips[0]?.action, "annotate");
   assert.equal(chips[0]?.path, "/wire.md");

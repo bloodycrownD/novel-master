@@ -31,6 +31,7 @@
  *
  * 500_000 ≈ 50 万明文字符（CJK 场景 UTF-8 约 1.5MB），v1.5.34 起从 100_000 放宽：
  * 超限降级只应兜住真正的巨型文件，正常长章节不该被误降级。
+ * nm-style: keep-public — 三端预算契约常量，desktop/mobile 预算测试直接引用以跟随值。
  */
 export const ATTACH_PROMPT_CHAR_BUDGET = 500_000;
 

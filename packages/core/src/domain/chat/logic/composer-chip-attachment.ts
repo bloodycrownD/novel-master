@@ -6,42 +6,17 @@
  * @module domain/chat/logic/composer-chip-attachment
  */
 
-/** 判定只读 `source` / 可选 `action`；与 MessageAttachment / DTO 结构兼容。 */
-export type ComposerChipAttachment = {
-  readonly source: string;
-  readonly action?: string;
-};
-
-/**
- * 是否为状态条附件（annotate 投影；workplace 为历史只读兼容；不含 attach/userAttach）。
- * D3：user_ops 分支须 `action === "annotate"`，不能按 source 一刀切（手改附件不再是状态 chip）。
- */
-export function isComposerStatusAttachment(a: ComposerChipAttachment): boolean {
-  if (a.action === "userAttach" || a.source === "attach") {
-    return false;
-  }
-  return (
-    a.source === "workplace" ||
-    (a.source === "user_ops" && a.action === "annotate")
-  );
-}
-
 /**
  * 拆成状态 / attach（attach 仅兼容旧数据过滤，UI 不再渲染）。
  * 泛型保留调用方附件类型（DTO / domain）。
+ * D3：user_ops 分支须 `action === "annotate"`，不能按 source 一刀切（手改附件不再是状态 chip）。
  */
-export function partitionComposerChipAttachments<
-  T extends ComposerChipAttachment
->(
-  attachments: readonly T[]
-): {
-  readonly status: T[];
-  readonly attach: T[];
-} {
+export function partitionComposerChipAttachments<T extends { readonly source: string; readonly action?: string }>(attachments: readonly T[]): { readonly status: T[]; readonly attach: T[] } {
   const status: T[] = [];
   const attach: T[] = [];
   for (const a of attachments) {
-    if (isComposerStatusAttachment(a)) {
+    const isStatus = a.action !== "userAttach" && a.source !== "attach" && (a.source === "workplace" || (a.source === "user_ops" && a.action === "annotate"));
+    if (isStatus) {
       status.push(a);
     } else if (a.source === "attach") {
       attach.push(a);

@@ -6,7 +6,7 @@
 import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
 import React from 'react';
-import {resetChatAnnotateDraftStoreForTests} from '@novel-master/core/chat';
+import { chatAnnotateDraftStore } from '@novel-master/core/chat';
 import {
   getSelectionOffsetsInElement,
   collectAnnotateSelection,
@@ -233,11 +233,11 @@ describe('reportRecogitoCreateFromSelection（mobile/B-1 / G-1）', () => {
 describe('T-SA8b 原生菜单 + Recogito 投影', () => {
   beforeEach(() => {
     mockWebViewProps.length = 0;
-    resetChatAnnotateDraftStoreForTests();
+    chatAnnotateDraftStore.resetForTests();
   });
 
   afterEach(() => {
-    resetChatAnnotateDraftStoreForTests();
+    chatAnnotateDraftStore.resetForTests();
     delete (global as {document?: unknown}).document;
     delete (global as {window?: unknown}).window;
   });

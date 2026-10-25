@@ -3,10 +3,7 @@
  */
 import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
-import {
-  addChatAnnotateDraft,
-  resetChatAnnotateDraftStoreForTests,
-} from "@novel-master/core/chat";
+import { chatAnnotateDraftStore } from "@novel-master/core/chat";
 import { IPC_CHANNELS } from "../shared/ipc-types.js";
 import { setComposerAttachmentsSuggestForwardTarget } from "../src/main/ipc/forward-composer-attachments-suggest.js";
 import {
@@ -16,7 +13,7 @@ import {
 
 describe("notify-composer-status-after-kkv-clear (T-CR5)", () => {
   beforeEach(() => {
-    resetChatAnnotateDraftStoreForTests();
+    chatAnnotateDraftStore.resetForTests();
   });
 
   it("Undo rewind/手动：推空 attachments", async () => {
@@ -47,19 +44,19 @@ describe("notify-composer-status-after-kkv-clear (T-CR5)", () => {
       } as never;
     });
 
-    addChatAnnotateDraft("s1", {
+    chatAnnotateDraftStore.add("s1", {
       id: "a1",
       path: "/keep.md",
       originalText: "foo",
       userAnnotation: "note1",
     });
-    addChatAnnotateDraft("s1", {
+    chatAnnotateDraftStore.add("s1", {
       id: "a2",
       path: "/keep.md",
       originalText: "bar",
       userAnnotation: "note2",
     });
-    addChatAnnotateDraft("s1", {
+    chatAnnotateDraftStore.add("s1", {
       id: "a3",
       path: "/other.md",
       originalText: "baz",
@@ -92,7 +89,7 @@ describe("notify-composer-status-after-kkv-clear (T-CR5)", () => {
     });
 
     // 清空 store 后再推 → 空 attachments（D7 收窄口径）
-    resetChatAnnotateDraftStoreForTests();
+    chatAnnotateDraftStore.resetForTests();
     await notifyComposerStatusAfterFloorOrCompaction({} as never, "s1");
     assert.equal(sent.length, 2);
     assert.deepEqual(sent[1]?.payload, {

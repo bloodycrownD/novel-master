@@ -3,12 +3,7 @@
  */
 import assert from "node:assert/strict";
 import { after, before, beforeEach, describe, it } from "node:test";
-import {
-  addChatAnnotateDraft,
-  listChatAnnotateDrafts,
-  resetChatAnnotateDraftStoreForTests,
-  textBlocks,
-} from "@novel-master/core/chat";
+import { textBlocks, chatAnnotateDraftStore } from "@novel-master/core/chat";
 import { IPC_CHANNELS } from "../shared/ipc-types.js";
 import { setComposerAttachmentsSuggestForwardTarget } from "../src/main/ipc/forward-composer-attachments-suggest.js";
 import {
@@ -29,7 +24,7 @@ describe("handleMessagesRollback (T-UO4 / D8)", () => {
   let projectId: string;
 
   beforeEach(() => {
-    resetChatAnnotateDraftStoreForTests();
+    chatAnnotateDraftStore.resetForTests();
   });
 
   before(async () => {
@@ -86,13 +81,13 @@ describe("handleMessagesRollback (T-UO4 / D8)", () => {
     );
 
     // main 进程预置一条未发送批注草稿（renderer 侧另有独立 store，此处只验 main 半边）
-    addChatAnnotateDraft(sessionId, {
+    chatAnnotateDraftStore.add(sessionId, {
       id: "a-unsent",
       path: "/keep.md",
       originalText: "foo",
       userAnnotation: "note",
     });
-    assert.equal(listChatAnnotateDrafts(sessionId).length, 1);
+    assert.equal(chatAnnotateDraftStore.list(sessionId).length, 1);
 
     const sent: Array<{ channel: string; payload: unknown }> = [];
     setComposerAttachmentsSuggestForwardTarget(() => {
@@ -111,7 +106,7 @@ describe("handleMessagesRollback (T-UO4 / D8)", () => {
     });
     assert.equal(result.ok, true);
 
-    assert.equal(listChatAnnotateDrafts(sessionId).length, 0);
+    assert.equal(chatAnnotateDraftStore.list(sessionId).length, 0);
 
     assert.equal(sent.length, 1);
     assert.equal(sent[0]?.channel, IPC_CHANNELS.COMPOSER_ATTACHMENTS_SUGGEST);
@@ -138,13 +133,13 @@ describe("handleMessagesRollback (T-UO4 / D8)", () => {
     );
     void userMsg;
 
-    addChatAnnotateDraft(sessionId, {
+    chatAnnotateDraftStore.add(sessionId, {
       id: "a-unsent",
       path: "/keep.md",
       originalText: "foo",
       userAnnotation: "note",
     });
-    assert.equal(listChatAnnotateDrafts(sessionId).length, 1);
+    assert.equal(chatAnnotateDraftStore.list(sessionId).length, 1);
 
     const sent: Array<{ channel: string; payload: unknown }> = [];
     setComposerAttachmentsSuggestForwardTarget(() => {
@@ -162,7 +157,7 @@ describe("handleMessagesRollback (T-UO4 / D8)", () => {
       skipVfsReconcile: true,
     });
     assert.equal(result.ok, true);
-    assert.equal(listChatAnnotateDrafts(sessionId).length, 0);
+    assert.equal(chatAnnotateDraftStore.list(sessionId).length, 0);
     assert.equal(sent.length, 1);
     assert.deepEqual(sent[0]?.payload, {
       sessionId,

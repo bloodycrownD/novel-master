@@ -3,38 +3,38 @@
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import {
-  isComposerStatusAttachment,
-  partitionComposerChipAttachments,
-  type ComposerChipAttachment,
-} from "../../src/domain/chat/logic/composer-chip-attachment.js";
+import { partitionComposerChipAttachments } from "../../src/domain/chat/logic/composer-chip-attachment.js";
 
-function chip(
-  partial: ComposerChipAttachment & { readonly path?: string },
-): ComposerChipAttachment {
+type Chip = { readonly source: string; readonly action?: string };
+
+function chip(partial: Chip): Chip {
   return { source: partial.source, action: partial.action };
 }
 
-describe("isComposerStatusAttachment", () => {
+function isStatus(a: Chip): boolean {
+  return partitionComposerChipAttachments([a]).status.length === 1;
+}
+
+describe("状态 chip 判定（经 partition）", () => {
   it("T-AT1: userAttach / attach 不进状态 chip", () => {
     assert.equal(
-      isComposerStatusAttachment(
+      isStatus(
         chip({ source: "attach", action: "userAttach" }),
       ),
       false,
     );
     assert.equal(
-      isComposerStatusAttachment(
+      isStatus(
         chip({ source: "user_ops", action: "userAttach" }),
       ),
       false,
     );
-    assert.equal(isComposerStatusAttachment(chip({ source: "attach" })), false);
+    assert.equal(isStatus(chip({ source: "attach" })), false);
   });
 
   it("T-CHIP1/T-AN1: annotate 预览进状态 chip", () => {
     assert.equal(
-      isComposerStatusAttachment(
+      isStatus(
         chip({ source: "user_ops", action: "annotate" }),
       ),
       true,
@@ -43,16 +43,16 @@ describe("isComposerStatusAttachment", () => {
 
   it("workplace 仍为状态 chip；手改 user_ops（write）不再是（D3）", () => {
     assert.equal(
-      isComposerStatusAttachment(chip({ source: "workplace" })),
+      isStatus(chip({ source: "workplace" })),
       true,
     );
     assert.equal(
-      isComposerStatusAttachment(chip({ source: "user_ops", action: "write" })),
+      isStatus(chip({ source: "user_ops", action: "write" })),
       false,
     );
     // 无 action 的 user_ops（历史手改附件）也按非状态处理，防按 source 一刀切误判
     assert.equal(
-      isComposerStatusAttachment(chip({ source: "user_ops" })),
+      isStatus(chip({ source: "user_ops" })),
       false,
     );
   });
@@ -71,7 +71,7 @@ describe("partitionComposerChipAttachments", () => {
       ["workplace", "annotate"],
     );
     assert.equal(attachOnly.length, 0);
-    assert.ok(status.every(isComposerStatusAttachment));
+    assert.ok(status.every(isStatus));
   });
 
   it("T-ATD1: 混有历史 attach 时 partition 仍可拆出", () => {
