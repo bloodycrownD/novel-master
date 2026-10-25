@@ -8,6 +8,7 @@ const DOMAIN_RANGES: Record<string, readonly [number, number]> = {
   AGENT: [101000, 101999],
   VFS: [102000, 102999],
   VFS_CHARACTER_CARD: [103000, 103999],
+  CHAT: [106000, 106999],
 };
 
 describe("ErrorCodes 注册表", () => {

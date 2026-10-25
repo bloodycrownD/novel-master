@@ -8,7 +8,7 @@ import { Tokenizer } from "@agnai/web-tokenizers";
 import { type ChatMessage } from "@novel-master/core/chat";
 
 import { type TokenCounter, type TokenizerFamily } from "@novel-master/core/provider";
-import { messageBodyText } from "@novel-master/core/prompt";
+import { messageBodyTextFromBlocks } from "@novel-master/core/prompt";
 
 import { CHARACTERS_PER_TOKEN_RATIO, HeuristicTokenCounter, tokenizerAssetPaths } from "@novel-master/core/provider";
 import {
@@ -94,7 +94,7 @@ export class WebTokenizerCounter implements TokenCounter {
   countMessages(messages: readonly ChatMessage[]): number {
     let chars = 0;
     for (const m of messages) {
-      chars += messageBodyText(m).length;
+      chars += messageBodyTextFromBlocks(m.content.blocks).length;
     }
     return Math.ceil(chars / CHARACTERS_PER_TOKEN_RATIO);
   }

@@ -6,7 +6,7 @@
  * @module infra/llm-protocol/impl/anthropic.adapter
  */
 
-import { messageBodyTextFromContent } from "@/domain/chat/content/message-body-text.js";
+import { messageBodyTextFromBlocks } from "@/domain/chat/content/message-body-text.js";
 import { ANTHROPIC_SAMPLING_DEFAULTS } from "@/domain/provider/model/protocol-sampling-defaults.js";
 import { textBlocks } from "@/domain/chat/content/text-blocks.js";
 import type {
@@ -176,7 +176,7 @@ export class AnthropicProtocolAdapter implements LlmProtocolAdapter {
     });
     const record = raw as { content?: unknown[] };
     const blocks = anthropicContentToBlocks(record.content ?? [], toolNames);
-    const assistantText = messageBodyTextFromContent({ blocks });
+    const assistantText = messageBodyTextFromBlocks(blocks);
     const usage = parseAnthropicUsage(raw);
     return { assistantText, blocks, raw, usage };
   }
@@ -215,7 +215,7 @@ export class AnthropicProtocolAdapter implements LlmProtocolAdapter {
       ? finishAnthropicSsePartial(state, req.onStream, toolNames)
       : finishAnthropicSse(state, req.onStream, toolNames);
     const { blocks, streamRaw, degradedToolCalls = [] } = finishResult;
-    const assistantText = messageBodyTextFromContent({ blocks });
+    const assistantText = messageBodyTextFromBlocks(blocks);
     const usage = parseAnthropicUsage(streamRaw);
     const result: LlmChatResult = {
       assistantText,

@@ -5,8 +5,6 @@
  */
 
 export {
-  messageBodyText,
   messageBodyTextFromBlocks,
-  messageBodyTextFromContent,
   formatChatMessageForCliPreview,
 } from "@/domain/chat/content/message-body-text.js";

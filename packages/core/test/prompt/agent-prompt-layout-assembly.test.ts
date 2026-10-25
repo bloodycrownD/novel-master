@@ -5,7 +5,7 @@ import { textBlocks, type ChatMessage } from "@novel-master/core/chat";
 import {
   buildPromptLlmInputFromLayout,
   formatPromptLlmInputForCliFromLayout,
-  messageBodyText,
+  messageBodyTextFromBlocks,
   type AgentPromptLayout,
 } from "@novel-master/core/prompt";
 
@@ -107,7 +107,7 @@ describe("buildPromptLlmInputFromLayout assembly order", () => {
     );
     assert.equal(renderFileTree.mock.callCount(), 1);
     assert.equal(list.mock.callCount(), 0);
-    assert.match(messageBodyText(input.messages[0]!), /x\.md 全部加载/);
+    assert.match(messageBodyTextFromBlocks(input.messages[0]!.content.blocks), /x\.md 全部加载/);
   });
 });
 

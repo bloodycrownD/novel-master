@@ -5,7 +5,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
-import { messageBodyText } from "../../src/domain/chat/content/message-body-text.js";
+import { messageBodyTextFromBlocks } from "../../src/domain/chat/content/message-body-text.js";
 import { prepareUserMessagesForPrompt } from "../../src/domain/chat/logic/prepare-user-messages-for-prompt.js";
 import { createSessionKkvService } from "../../src/service/session-kkv/create-session-kkv-service.js";
 import { formatStatusChipLabelFromAttachment } from "../../src/domain/chat/logic/status-chip-label.js";
@@ -138,7 +138,7 @@ describe("history workplaceChange compat (T-CR8)", () => {
       { sessionId: session.id, sessionKkv: sk, vfs },
     );
 
-    const body = messageBodyText(prepared[0]!);
+    const body = messageBodyTextFromBlocks(prepared[0]!.content.blocks);
     assert.match(body, /<action name="workplaceChange">/);
     assert.match(body, /hist-body/);
     assert.ok(!body.includes("<workplace>"));

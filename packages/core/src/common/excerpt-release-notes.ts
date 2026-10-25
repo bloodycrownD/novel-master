@@ -6,6 +6,8 @@
  * 「更新说明」段，没命中再回退到对应平台的下载段落。
  */
 
+import { truncateText } from "./text.js";
+
 export type ReleaseNotesFocus = "desktop" | "mobile";
 
 const NOTES_EXCERPT_MAX = 280;
@@ -80,10 +82,7 @@ function excerptPlainSection(markdown: string): string {
 }
 
 function truncateExcerpt(text: string): string {
-  if (text.length <= NOTES_EXCERPT_MAX) {
-    return text;
-  }
-  return `${text.slice(0, NOTES_EXCERPT_MAX)}…`;
+  return truncateText(text, NOTES_EXCERPT_MAX);
 }
 
 /**

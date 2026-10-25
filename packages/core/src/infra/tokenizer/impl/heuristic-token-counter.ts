@@ -5,7 +5,7 @@
  */
 
 import type { ChatMessage } from "@/domain/chat/model/message.js";
-import { messageBodyText } from "@/domain/prompt/logic/message-body.js";
+import { messageBodyTextFromBlocks } from "@/domain/prompt/logic/message-body.js";
 import type { TokenCounter } from "../ports/token-counter.port.js";
 
 /**
@@ -25,7 +25,7 @@ export class HeuristicTokenCounter implements TokenCounter {
   countMessages(messages: readonly ChatMessage[]): number {
     let chars = 0;
     for (const m of messages) {
-      chars += messageBodyText(m).length;
+      chars += messageBodyTextFromBlocks(m.content.blocks).length;
     }
     return Math.ceil(chars / CHARACTERS_PER_TOKEN_RATIO);
   }

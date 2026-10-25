@@ -8,7 +8,7 @@ import {
   buildPromptPreviewSegmentsFromLayout,
   computeLlmExportZonesFromLayout,
   formatPromptLlmInputForCliFromLayout,
-  messageBodyText,
+  messageBodyTextFromBlocks,
   type AgentPromptLayout,
 } from "@novel-master/core/prompt";
 
@@ -47,7 +47,7 @@ describe("buildPromptLlmInputFromLayout", () => {
     assert.equal(input.messages.length, 2);
     assert.equal(input.messages[0]!.id, "prompt:u");
     assert.equal(input.messages[1]!.id, "m1");
-    assert.equal(messageBodyText(input.messages[0]!), "ask");
+    assert.equal(messageBodyTextFromBlocks(input.messages[0]!.content.blocks), "ask");
   });
 
   it("T-WT4: worktree 块注入 user 树 + assistant done 双消息", async () => {
@@ -67,10 +67,10 @@ describe("buildPromptLlmInputFromLayout", () => {
     assert.equal(input.messages.length, 4);
     assert.equal(input.messages[0]!.id, "prompt:workplace");
     assert.equal(input.messages[0]!.role, "user");
-    assert.equal(messageBodyText(input.messages[0]!), "WT");
+    assert.equal(messageBodyTextFromBlocks(input.messages[0]!.content.blocks), "WT");
     assert.equal(input.messages[1]!.id, "prompt:workplace:done");
     assert.equal(input.messages[1]!.role, "assistant");
-    assert.equal(messageBodyText(input.messages[1]!), "【done】");
+    assert.equal(messageBodyTextFromBlocks(input.messages[1]!.content.blocks), "【done】");
   });
 
   it("T-WT5: 无 worktree 块时不注入双消息", async () => {
@@ -408,7 +408,7 @@ describe("persistEnabled / dynamicEnabled 开关", () => {
     const input = await buildPromptLlmInputFromLayout(layout, ctx);
     assert.equal(input.messages[0]!.role, "user");
     assert.equal(input.messages[1]!.role, "assistant");
-    assert.equal(messageBodyText(input.messages[1]!), "【done】");
+    assert.equal(messageBodyTextFromBlocks(input.messages[1]!.content.blocks), "【done】");
 
     const segments = await buildPromptAssemblyFromLayout(layout, ctx);
     const wt = segments.find((s) => s.id === "prompt-workplace");

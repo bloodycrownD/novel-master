@@ -28,11 +28,11 @@ export type TokenizerFamily =
 /** Implementation kind for observability (CLI stderr, debug). */
 export type TokenCounterKind = TokenizerFamily;
 
-/** Counts tokens in text or visible chat messages (`messageBodyText` per message). */
+/** Counts tokens in text or visible chat messages (`messageBodyTextFromBlocks` per message). */
 export interface TokenCounter {
   readonly kind: TokenCounterKind;
   /** Plain text token count (raw encode or heuristic). */
   countText(text: string): number;
-  /** Uses messageBodyText per message (legacy compaction estimate path). */
+  /** Uses messageBodyTextFromBlocks per message (legacy compaction estimate path). */
   countMessages(messages: readonly ChatMessage[]): number;
 }

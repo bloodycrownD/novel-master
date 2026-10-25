@@ -4,6 +4,7 @@
  * @module domain/chat/logic/status-chip-label
  */
 
+import { truncateText } from "@/common/text.js";
 import type {
   MessageAttachment,
   MessageAttachmentAction,
@@ -276,11 +277,7 @@ function tryParseAnnotateChipText(
 
 /** chip 单行展示：换行压空格 + 超长截断加省略号。 */
 function truncateChipText(text: string, maxChars: number): string {
-  const flat = text.replace(/[\r\n]+/g, " ").trim();
-  if (flat.length <= maxChars) {
-    return flat;
-  }
-  return flat.slice(0, maxChars) + "…";
+  return truncateText(text.replace(/[\r\n]+/g, " ").trim(), maxChars);
 }
 
 /** `from→to` 或 `rename:from→to` 后缀。 */

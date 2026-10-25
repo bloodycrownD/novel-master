@@ -4,6 +4,7 @@
  * @module service/agent/impl/agent-runner
  */
 
+import { truncateText } from "@/common/text.js";
 import type { ChatMessage } from "@/domain/chat/model/message.js";
 import type {
   ContentBlock,
@@ -140,13 +141,6 @@ function budgetSkillsIndexEntries(
       description: s.description ?? "",
       domain: s.domain,
     }));
-}
-
-function truncateRaw(raw: string, maxLen: number): string {
-  if (raw.length <= maxLen) {
-    return raw;
-  }
-  return raw.slice(0, maxLen) + "…";
 }
 
 /** 避免落库空正文 assistant（真实提示词 #seq 断层、UI 也不展示）。 */
@@ -849,10 +843,7 @@ export class DefaultAgentRunner implements AgentRunner {
               ok: false,
               error: new ProviderError(
                 "INVALID_TOOL_ARGUMENTS",
-                `${protocol}: invalid tool arguments JSON (${truncateRaw(
-                  degraded.rawArguments,
-                  80
-                )})`
+                `${protocol}: invalid tool arguments JSON (${truncateText(degraded.rawArguments, 80)})`
               ),
             });
             continue;

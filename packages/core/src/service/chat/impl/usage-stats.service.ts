@@ -531,17 +531,12 @@ export class DefaultUsageStatsService implements UsageStatsService {
     let toolUseCount = 0;
     // 无 keyword 语义，无粗筛面：全量 parse 为固有成本
     for (const row of assistantRows) {
-      try {
-        toolUseCount += countToolUseBlocks(
-          parseMessageContent(String(row.content_json))
-        );
-      } catch (error) {
-        console.warn(
-          `[usage-stats] 工具调用现算遇坏行（按 0 计）：${
-            error instanceof Error ? error.message : String(error)
-          }`
-        );
+      const parsed = parseMessageContent(String(row.content_json));
+      if (!parsed.ok) {
+        console.warn(`[usage-stats] 工具调用现算遇坏行（按 0 计）：${parsed.error.message}`);
+        continue;
       }
+      toolUseCount += countToolUseBlocks(parsed.value);
     }
     // 回填前复核（cr-fix-spec-r2 s3/B-1）：现算的数百毫秒里若发生失效
     // （写哨兵空串），miss 时所见原值已变——放弃回填（本次返回值已出，

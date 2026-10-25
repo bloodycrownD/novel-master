@@ -10,7 +10,7 @@ import {
   WORKPLACE_TRUE_COMPAT_ASSISTANT_TEXT,
   buildPromptAssemblyFromLayout,
   buildPromptLlmInputFromLayout,
-  messageBodyText,
+  messageBodyTextFromBlocks,
   PromptError,
 } from "@novel-master/core/prompt";
 import {
@@ -123,7 +123,7 @@ describe("workplace assemble / render（T-WP4–T-WP5）", () => {
       messages: [],
       now: fixedNow,
     });
-    const userBody = messageBodyText(input.messages[0]!);
+    const userBody = messageBodyTextFromBlocks(input.messages[0]!.content.blocks);
     assert.equal(countTag(userBody, "<workplace>"), 1);
     assert.equal(countTag(userBody, "</workplace>"), 1);
     assert.ok(userBody.includes("<file "));
@@ -155,8 +155,8 @@ describe("workplace assemble / render（T-WP4–T-WP5）", () => {
       now: fixedNow,
     });
     assert.equal(input.messages[1]!.id, "prompt:workplace:done");
-    assert.equal(messageBodyText(input.messages[1]!), custom);
-    assert.notEqual(messageBodyText(input.messages[1]!), "【done】");
+    assert.equal(messageBodyTextFromBlocks(input.messages[1]!.content.blocks), custom);
+    assert.notEqual(messageBodyTextFromBlocks(input.messages[1]!.content.blocks), "【done】");
 
     const segments = await buildPromptAssemblyFromLayout(layout, {
       workplaceDisplay: "<workplace>\n<body/>\n</workplace>",

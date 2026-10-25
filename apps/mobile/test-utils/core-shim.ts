@@ -50,7 +50,6 @@ export type {
   WorkplaceDirRule,
   WorkplaceListRow,
 } from '../../../packages/core/dist/domain/workplace/model/workplace-types.js';
-export {messageBodyText} from '../../../packages/core/dist/domain/chat/content/message-body-text.js';
 export {textBlocks} from '../../../packages/core/dist/domain/chat/content/text-blocks.js';
 export {ToolRegistry} from '../../../packages/core/dist/domain/tool/logic/tool-registry.js';
 export {

@@ -14,7 +14,7 @@ import { serializeRuleSnapshot } from "../../src/domain/workplace/logic/rule-sna
 import { settlePendingFileCacheBackfills } from "../../src/domain/workplace/logic/load-or-fill-file-cache.js";
 import { createVfsTools } from "../../src/domain/tool/builtin/vfs-tools.js";
 import { textBlocks } from "../../src/domain/chat/content/text-blocks.js";
-import { messageBodyText } from "../../src/domain/chat/content/message-body-text.js";
+import { messageBodyTextFromBlocks } from "../../src/domain/chat/content/message-body-text.js";
 import { prepareUserMessagesForPrompt } from "../../src/domain/chat/logic/prepare-user-messages-for-prompt.js";
 import type { AgentPromptLayout } from "../../src/domain/prompt/model/agent-prompt-layout.js";
 import {
@@ -699,7 +699,7 @@ describe("assembleWorkplaceDisplay S0 双读（prefixPaths / visiblePaths）", (
         workplaceSeenPaths: out.visiblePaths,
       },
     );
-    const body = messageBodyText(prepared[0]!);
+    const body = messageBodyTextFromBlocks(prepared[0]!.content.blocks);
     assert.match(body, /<action name="userAttach">/);
     assert.match(body, /"display": "full"/);
     assert.match(body, /1\|HEADER-BODY/, "header 档路径的 attach 必须拿到全文");

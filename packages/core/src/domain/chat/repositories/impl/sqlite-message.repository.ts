@@ -108,7 +108,11 @@ async function runInTransactionOrConn<T>(
  * decodeMessageContent 一并退役；压缩两列在 INSERT 里保留不删，恒 NULL。
  */
 function readRowContent(row: Row): MessageContent {
-  return parseMessageContent(String(row.content_json));
+  const parsed = parseMessageContent(String(row.content_json));
+  if (!parsed.ok) {
+    throw parsed.error;
+  }
+  return parsed.value;
 }
 
 function rowToMessage(row: Row): ChatMessage {

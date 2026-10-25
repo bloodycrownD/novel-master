@@ -26,7 +26,7 @@
  */
 import { app } from "electron";
 import type { ChatMessage } from "@novel-master/core/chat";
-import { messageBodyText } from "@novel-master/core/prompt";
+import { messageBodyTextFromBlocks } from "@novel-master/core/prompt";
 
 import {
   countPromptLlmInputHeuristicOnly,
@@ -121,7 +121,7 @@ function realFallbackTokenCounter(
       // 序列化提示词时「合成一串再数」一致。
       countFallbackTokens(
         runtime,
-        messages.map((m) => messageBodyText(m)).join("\n\n"),
+        messages.map((m) => messageBodyTextFromBlocks(m.content.blocks)).join("\n\n"),
       ),
   };
 }

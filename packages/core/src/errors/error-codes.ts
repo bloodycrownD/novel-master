@@ -23,6 +23,7 @@ export const ErrorCodes = {
   VFS_CHARACTER_CARD_NOT_CONFIRMED: {code: 103004, desc: "character card import not confirmed"},
   VFS_CHARACTER_CARD_IMPORT_FAILED: {code: 103005, desc: "character card import failed"},
   VFS_CHARACTER_CARD_TOO_LARGE: {code: 103006, desc: "character card too large"},
+  CHAT_INVALID_ARGUMENT: {code: 106001, desc: "invalid chat argument"},
 } as const satisfies Record<string, {readonly code: number; readonly desc: string}>;
 
 export type ErrorKey = keyof typeof ErrorCodes;

@@ -10,7 +10,7 @@
  * @module infra/llm-protocol/impl/openai.adapter
  */
 
-import { messageBodyTextFromContent } from "@/domain/chat/content/message-body-text.js";
+import { messageBodyTextFromBlocks } from "@/domain/chat/content/message-body-text.js";
 import { textBlocks } from "@/domain/chat/content/text-blocks.js";
 import type {
   FetchFn,
@@ -176,7 +176,7 @@ export class OpenAiProtocolAdapter implements LlmProtocolAdapter {
       choices?: Array<{ message?: unknown }>;
     };
     const blocks = openAiChoiceToBlocks(record.choices?.[0]?.message ?? {});
-    const assistantText = messageBodyTextFromContent({ blocks });
+    const assistantText = messageBodyTextFromBlocks(blocks);
     const usage = parseOpenAiUsage(raw);
     return { assistantText, blocks, raw, usage };
   }
@@ -195,7 +195,7 @@ export class OpenAiProtocolAdapter implements LlmProtocolAdapter {
     });
     const record = raw as { choices?: Array<{ message?: unknown }> };
     const blocks = openAiChoiceToBlocks(record.choices?.[0]?.message ?? {});
-    const assistantText = messageBodyTextFromContent({ blocks });
+    const assistantText = messageBodyTextFromBlocks(blocks);
     const usage = parseOpenAiUsage(raw);
     return { assistantText, blocks, raw, usage };
   }
@@ -239,7 +239,7 @@ export class OpenAiProtocolAdapter implements LlmProtocolAdapter {
         }
       : finishOpenAiSse(state, req.onStream);
     const { blocks, streamRaw, degradedToolCalls } = finishResult;
-    const assistantText = messageBodyTextFromContent({ blocks });
+    const assistantText = messageBodyTextFromBlocks(blocks);
     const usage = parseOpenAiUsage(streamRaw);
     const result: LlmChatResult = {
       assistantText,

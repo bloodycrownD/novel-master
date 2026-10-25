@@ -19,7 +19,6 @@ export {
   layoutHasWorkplace,
 } from "../domain/prompt/model/agent-prompt-layout.js";
 export {
-  messageBodyText,
   messageBodyTextFromBlocks,
 } from "../domain/prompt/logic/message-body.js";
 export {

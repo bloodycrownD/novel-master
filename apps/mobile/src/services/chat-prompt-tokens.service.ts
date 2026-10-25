@@ -15,7 +15,7 @@
  * `heuristic`、`estimated: true`——**近似**这件事不变，变的是读数本身）。
  */
 
-import {messageBodyText} from '@novel-master/core/prompt';
+import {messageBodyTextFromBlocks} from '@novel-master/core/prompt';
 
 import {
   PromptTokenResolveBailedError,
@@ -547,7 +547,7 @@ async function loadChatPromptTokenLabelFallback(
   const all = await runtime.messages.listBySession(scope.sessionId);
   const visible = all.filter(m => !m.hidden);
   const serialized = visible
-    .map(m => `${m.role}: ${messageBodyText(m)}`)
+    .map(m => `${m.role}: ${messageBodyTextFromBlocks(m.content.blocks)}`)
     .join('\n\n');
   const count = countFallbackTokens(runtime, serialized);
 

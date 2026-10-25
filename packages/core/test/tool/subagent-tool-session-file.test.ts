@@ -39,7 +39,7 @@ import type { MessageService } from "@/service/chat/message.port.js";
 import type { SessionService } from "@/service/chat/session.port.js";
 import type { ChatSession } from "@/domain/chat/model/session.js";
 import { textBlocks } from "@novel-master/core/chat";
-import { messageBodyText } from "@/domain/chat/content/message-body-text.js";
+import { messageBodyTextFromBlocks } from "@/domain/chat/content/message-body-text.js";
 import { ATTACH_PROMPT_CHAR_BUDGET } from "@/domain/chat/logic/attach-budget.js";
 import { prepareUserMessagesForPrompt } from "@/domain/chat/logic/prepare-user-messages-for-prompt.js";
 import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
@@ -676,7 +676,7 @@ describe("task fileAttachment 物化与预算（T-TA*）", () => {
         vfs,
       },
     );
-    const body = messageBodyText(prepared[0]!);
+    const body = messageBodyTextFromBlocks(prepared[0]!.content.blocks);
     assert.match(body, /文件过长，可用 read 配合 offset\/limit 分段读取/);
     assert.match(body, /"display": "filename"/);
     assert.equal(body.includes("1|HHHH"), false);

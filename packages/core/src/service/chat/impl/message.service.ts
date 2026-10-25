@@ -6,7 +6,7 @@
 
 import { randomUUID } from "@/infra/random-uuid.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
-import { assertMessageContent } from "@/domain/chat/content/parse-message-content.js";
+import { parseMessageContentValue } from "@/domain/chat/content/parse-message-content.js";
 import type { MessageContent } from "@/domain/chat/model/content-block.js";
 import type {
   ChatMessage,
@@ -197,7 +197,11 @@ export class DefaultMessageService implements MessageService {
     if (session == null) {
       throw chatNotFound("session", sessionId);
     }
-    assertMessageContent(content);
+    const parsedContent = parseMessageContentValue(content);
+    if (!parsedContent.ok) {
+      throw parsedContent.error;
+    }
+    const normalizedContent = parsedContent.value;
     const attachments = normalizeAppendAttachments(options?.attachments);
     const seq = await this.deps.messages.nextSeq(sessionId);
     // New messages are visible by default
@@ -206,7 +210,7 @@ export class DefaultMessageService implements MessageService {
       sessionId,
       seq,
       role,
-      content,
+      content: normalizedContent,
       provider: options?.provider ?? null,
       modelName: options?.modelName ?? null,
       providerId: options?.providerId ?? null,
@@ -241,7 +245,7 @@ export class DefaultMessageService implements MessageService {
     // showRange/truncateAfter）的失效保留——增量表达不了内容消失。
     // 工具调用数缓存：仅含 tool_use 块的追加失效（run 的工具步在此失效、
     // 纯文本追加不动缓存——避免 run 内每步无谓重算）。
-    if (role === "assistant" && countToolUseBlocks(content) > 0) {
+    if (role === "assistant" && countToolUseBlocks(normalizedContent) > 0) {
       await this.invalidateToolUseCount(sessionId);
     }
     return message;
@@ -294,7 +298,10 @@ export class DefaultMessageService implements MessageService {
     messageId: string,
     content: MessageContent
   ): Promise<ChatMessage> {
-    assertMessageContent(content);
+    const parsedContent = parseMessageContentValue(content);
+    if (!parsedContent.ok) {
+      throw parsedContent.error;
+    }
     // 正文替换收进事务（行缺失即抛、不留半写状态）。序列化与压缩编码都
     // 下沉到 repository（port 签名为 MessageContent 对象）。
     // read 引用换算（旧 blocks −1、新 blocks +1）已随 E1 清理版退役。
@@ -304,7 +311,7 @@ export class DefaultMessageService implements MessageService {
       if (existing == null) {
         throw chatNotFound("message", messageId);
       }
-      const updated = await messages.updateContent(messageId, content);
+      const updated = await messages.updateContent(messageId, parsedContent.value);
       if (!updated) {
         throw chatNotFound("message", messageId);
       }

@@ -29,7 +29,7 @@ import { parseRuleSnapshotJson } from "@/domain/workplace/logic/rule-snapshot-co
 import { renderFileBlockBody } from "@/domain/workplace/logic/workplace-display.js";
 import type { VfsService } from "@/domain/vfs/ports/vfs-service.port.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
-import { messageBodyTextFromContent } from "../content/message-body-text.js";
+import { messageBodyTextFromBlocks } from "../content/message-body-text.js";
 import { textBlocks } from "../content/text-blocks.js";
 import type { ChatMessage } from "../model/message.js";
 import type { MessageAttachment } from "../model/message-attachment.schema.js";
@@ -663,7 +663,7 @@ async function prepareOneUserMessage(
     (a) => hydratedBySource.get(a) ?? a
   );
 
-  const plainText = messageBodyTextFromContent(message.content);
+  const plainText = messageBodyTextFromBlocks(message.content.blocks);
   const wrapped = wrapUserMessageForLlm(
     plainText,
     hydrated,

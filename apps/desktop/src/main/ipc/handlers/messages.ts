@@ -10,7 +10,7 @@ import {
 } from '@novel-master/core/chat';
 
 import {
-  messageBodyText,
+  messageBodyTextFromBlocks,
 } from '@novel-master/core/prompt';
 import { type ContentBlock } from '@novel-master/core/chat';
 import type {
@@ -73,7 +73,7 @@ function toDto(msg: ChatMessage): ChatMessageDto {
     hidden: msg.hidden,
     seq: msg.seq,
     createdAtMs: msg.createdAtMs,
-    bodyText: messageBodyText(msg),
+    bodyText: messageBodyTextFromBlocks(msg.content.blocks),
     contentBlocks: blocks
       .map(toContentBlockDto)
       .filter((b): b is ContentBlockDto => b != null),

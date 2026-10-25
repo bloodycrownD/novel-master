@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { ChatMessage } from "../../src/domain/chat/model/message.js";
 import { normalizeForLlmExport } from "../../src/domain/prompt/logic/normalize-for-llm-export.js";
-import { messageBodyText } from "../../src/domain/prompt/logic/message-body.js";
+import { messageBodyTextFromBlocks } from "../../src/domain/prompt/logic/message-body.js";
 
 function msg(
   role: string,
@@ -43,7 +43,7 @@ describe("normalizeForLlmExport", () => {
       dynamicCount: 0,
     });
     assert.equal(out.length, 1);
-    assert.equal(messageBodyText(out[0]!), "a\n\nb");
+    assert.equal(messageBodyTextFromBlocks(out[0]!.content.blocks), "a\n\nb");
     assert.equal(out[0]!.id, "p1");
   });
 
@@ -57,8 +57,8 @@ describe("normalizeForLlmExport", () => {
       dynamicCount: 0,
     });
     assert.equal(out.length, 2);
-    assert.equal(messageBodyText(out[0]!), "persist");
-    assert.equal(messageBodyText(out[1]!), "chat");
+    assert.equal(messageBodyTextFromBlocks(out[0]!.content.blocks), "persist");
+    assert.equal(messageBodyTextFromBlocks(out[1]!.content.blocks), "chat");
   });
 
   it("vfs 段（metadata.kind）不与 plain chat merge", () => {
@@ -140,9 +140,9 @@ describe("normalizeForLlmExport", () => {
       dynamicCount: 0,
     });
     assert.equal(out.length, 3);
-    assert.equal(messageBodyText(out[0]!), "tree");
-    assert.equal(messageBodyText(out[1]!), "【done】");
-    assert.equal(messageBodyText(out[2]!), "chat");
+    assert.equal(messageBodyTextFromBlocks(out[0]!.content.blocks), "tree");
+    assert.equal(messageBodyTextFromBlocks(out[1]!.content.blocks), "【done】");
+    assert.equal(messageBodyTextFromBlocks(out[2]!.content.blocks), "chat");
   });
 
   it("T-PR1: 已 wrap 的带 attachments user 不与相邻 plain user merge", () => {

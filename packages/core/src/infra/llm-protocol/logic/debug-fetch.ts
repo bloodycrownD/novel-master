@@ -8,6 +8,7 @@
  */
 
 import { isRecord } from "@/common/guards.js";
+import { truncateText } from "@/common/text.js";
 import type { FetchFn } from "../ports/adapter.port.js";
 
 const LOG_TAG = "[novel-master/llm]";
@@ -107,7 +108,7 @@ function summarizeBody(body: RequestInit["body"]): string | undefined {
       }
       return JSON.stringify(summary);
     } catch {
-      return body.length > 400 ? `${body.slice(0, 400)}…` : body;
+      return truncateText(body, 400);
     }
   }
   return `[${typeof body}]`;
@@ -173,7 +174,7 @@ export function createLoggingFetch(base: FetchFn = globalThis.fetch): FetchFn {
     if (!response.ok) {
       try {
         const text = await response.clone().text();
-        const snippet = text.length > 600 ? `${text.slice(0, 600)}…` : text;
+        const snippet = truncateText(text, 600);
         console.log(LOG_TAG, "  error body", snippet);
       } catch {
         /* ignore */

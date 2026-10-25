@@ -4,7 +4,7 @@
  * @module domain/chat/logic/user-vfs-turn-view
  */
 
-import { messageBodyTextFromContent } from "../content/message-body-text.js";
+import { messageBodyTextFromBlocks } from "../content/message-body-text.js";
 import type { ToolResultBlock, ToolUseBlock } from "../model/content-block.js";
 import type { ChatMessage } from "../model/message.js";
 import { readMessageMetadata } from "../model/message-metadata.js";
@@ -224,7 +224,7 @@ function matchUserVfsTurnStructureAt(
   if (readMessageMetadata(m0.raw)?.kind !== "user_vfs_action") {
     return null;
   }
-  const actionText = messageBodyTextFromContent(m0.content);
+  const actionText = messageBodyTextFromBlocks(m0.content.blocks);
   if (!actionText.includes("<action")) {
     return null;
   }
@@ -237,7 +237,7 @@ function matchUserVfsTurnStructureAt(
   if (!messageIsPlainTextOnly(m1) || messageHasToolUse(m1)) {
     return null;
   }
-  if (messageBodyTextFromContent(m1.content) !== USER_VFS_TURN_ACK_TEXT) {
+  if (messageBodyTextFromBlocks(m1.content.blocks) !== USER_VFS_TURN_ACK_TEXT) {
     return null;
   }
   return [m0, m1];
@@ -276,7 +276,7 @@ export function buildUserVfsTurnView(
   turn: readonly [ChatMessage, ChatMessage]
 ): UserVfsTurnView {
   const [actionMsg, ackMsg] = turn;
-  const actionText = messageBodyTextFromContent(actionMsg.content);
+  const actionText = messageBodyTextFromBlocks(actionMsg.content.blocks);
   const actions = parseAllUserVfsActionsFromText(actionText);
   const toolUses = derivedToToolUseBlocks(
     deriveToolUsesFromVfsActions(actions)
@@ -287,7 +287,7 @@ export function buildUserVfsTurnView(
     actions,
     toolUses,
     toolResults: syntheticToolResults(toolUses),
-    bridgeText: messageBodyTextFromContent(ackMsg.content),
+    bridgeText: messageBodyTextFromBlocks(ackMsg.content.blocks),
   };
 }
 

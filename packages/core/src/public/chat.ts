@@ -116,7 +116,7 @@ export type {
 export { textBlocks } from "../domain/chat/content/text-blocks.js";
 export {
   parseMessageContent,
-  assertMessageContent,
+  parseMessageContentValue,
 } from "../domain/chat/content/parse-message-content.js";
 export { formatMessageForCli } from "../domain/chat/content/format-message-cli.js";
 export type {

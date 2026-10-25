@@ -4,6 +4,7 @@
  * @module infra/llm-protocol/logic/sse-parse-errors
  */
 
+import { truncateText } from "@/common/text.js";
 import { ProviderError } from "@/errors/provider-errors.js";
 import type { LlmProtocolKind } from "../ports/adapter.port.js";
 
@@ -33,7 +34,7 @@ export function recordMalformedSseLine(
 ): void {
   diag.malformedLineCount += 1;
   if (isSseParseDebugEnabled()) {
-    const prefix = payload.length > 120 ? payload.slice(0, 120) + "…" : payload;
+    const prefix = truncateText(payload, 120);
     console.warn("[llm-sse] malformed JSON line:", prefix);
   }
 }

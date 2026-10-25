@@ -4,7 +4,7 @@
  * @module infra/llm-protocol/impl/gemini.adapter
  */
 
-import { messageBodyTextFromContent } from "@/domain/chat/content/message-body-text.js";
+import { messageBodyTextFromBlocks } from "@/domain/chat/content/message-body-text.js";
 import { textBlocks } from "@/domain/chat/content/text-blocks.js";
 import type {
   FetchFn,
@@ -131,7 +131,7 @@ export class GeminiProtocolAdapter implements LlmProtocolAdapter {
     };
     const parts = record.candidates?.[0]?.content?.parts ?? [];
     const blocks = geminiPartsToBlocks(parts);
-    const assistantText = messageBodyTextFromContent({ blocks });
+    const assistantText = messageBodyTextFromBlocks(blocks);
     const usage = parseGeminiUsage(raw);
     return { assistantText, blocks, raw, usage };
   }
@@ -167,7 +167,7 @@ export class GeminiProtocolAdapter implements LlmProtocolAdapter {
       ? finishGeminiSsePartial(state, req.onStream)
       : finishGeminiSse(state, req.onStream);
     const { blocks, streamRaw, degradedToolCalls = [] } = finishResult;
-    const assistantText = messageBodyTextFromContent({ blocks });
+    const assistantText = messageBodyTextFromBlocks(blocks);
     const usage = parseGeminiUsage(streamRaw);
     const result: LlmChatResult = {
       assistantText,

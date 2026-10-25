@@ -4,6 +4,7 @@
  * @module infra/llm-protocol/logic/http-util
  */
 
+import { truncateText } from "@/common/text.js";
 import { ProviderError } from "@/errors/provider-errors.js";
 import type { FetchFn } from "../ports/adapter.port.js";
 
@@ -33,7 +34,7 @@ export async function assertOk(
   } catch {
     body = "";
   }
-  const snippet = body.length > 500 ? `${body.slice(0, 500)}…` : body;
+  const snippet = truncateText(body, 500);
   throw new ProviderError("HTTP_ERROR", `HTTP ${response.status}: ${snippet}`, {
     providerId,
   });

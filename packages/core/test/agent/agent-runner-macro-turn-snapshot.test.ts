@@ -8,7 +8,7 @@ import {
   type BuiltinToolContext,
 } from "@novel-master/core/agent";
 import { textBlocks } from "@novel-master/core/chat";
-import { messageBodyText } from "@novel-master/core/prompt";
+import { messageBodyTextFromBlocks } from "@novel-master/core/prompt";
 import {
   type LlmChatResult,
   type ModelRequestOptions,
@@ -160,7 +160,7 @@ describe("AgentRunner macro turn snapshot", () => {
       const hit = (opts.history ?? []).find((m) => m.id === "prompt:ctx");
       if (index === 0) {
         assert.notEqual(hit, undefined, "step0 应注入 dynamic 合成消息");
-        dynamicBodies.push(messageBodyText(hit!));
+        dynamicBodies.push(messageBodyTextFromBlocks(hit!.content.blocks));
       } else {
         assert.equal(hit, undefined, "step≥1 不应重复注入 dynamic 块");
       }
@@ -242,6 +242,6 @@ describe("AgentRunner macro turn snapshot", () => {
       (m) => m.role === "user" && m.id !== "prompt:ctx",
     );
     assert.notEqual(userInput, undefined);
-    assert.match(messageBodyText(userInput!), /<extra-info>/);
+    assert.match(messageBodyTextFromBlocks(userInput!.content.blocks), /<extra-info>/);
   });
 });

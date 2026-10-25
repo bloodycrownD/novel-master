@@ -8,7 +8,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
-import { messageBodyText } from "../../src/domain/chat/content/message-body-text.js";
+import { messageBodyTextFromBlocks } from "../../src/domain/chat/content/message-body-text.js";
 import { ATTACH_PROMPT_CHAR_BUDGET } from "../../src/domain/chat/logic/attach-budget.js";
 import { prepareUserMessagesForPrompt } from "../../src/domain/chat/logic/prepare-user-messages-for-prompt.js";
 import type { ChatMessage } from "../../src/domain/chat/model/message.js";
@@ -145,7 +145,7 @@ describe("prepareUserMessagesForPrompt skillAttach (T-SK12)", () => {
         projectId: project.id,
       },
     );
-    const body = messageBodyText(prepared[0]!);
+    const body = messageBodyTextFromBlocks(prepared[0]!.content.blocks);
     assert.match(body, /<action name="skillAttach">/);
     assert.match(body, /"name": "demo"/);
     // SKILL.md 全文（含 front matter 原样）
@@ -175,7 +175,7 @@ describe("prepareUserMessagesForPrompt skillAttach (T-SK12)", () => {
         projectId: project.id,
       },
     );
-    const body2 = messageBodyText(prepared[1]!);
+    const body2 = messageBodyTextFromBlocks(prepared[1]!.content.blocks);
     assert.match(body2, /<action name="skillAttach">/);
     assert.match(body2, /"alreadyReferenced": true/);
     assert.equal(body2.includes("# 演示技能"), false);
@@ -203,7 +203,7 @@ describe("prepareUserMessagesForPrompt skillAttach (T-SK12)", () => {
       },
     );
     for (const m of prepared) {
-      const body = messageBodyText(m!);
+      const body = messageBodyTextFromBlocks(m!.content.blocks);
       assert.match(body, /<action name="skillAttach">/);
       assert.match(body, /"missing": true/);
       assert.match(body, /技能不存在或已删除/);
@@ -229,7 +229,7 @@ describe("prepareUserMessagesForPrompt skillAttach (T-SK12)", () => {
       [userMsg("m1", { sessionId: session.id, attachments: [skillAttach("demo")] })],
       runtimeBase,
     );
-    assert.match(messageBodyText(before[0]!), /技能不存在或已删除/);
+    assert.match(messageBodyTextFromBlocks(before[0]!.content.blocks), /技能不存在或已删除/);
 
     // 技能被创建：同一条消息再次 prepare → 重新附全文（seen 不残留）
     skills.state.names.push("demo");
@@ -237,7 +237,7 @@ describe("prepareUserMessagesForPrompt skillAttach (T-SK12)", () => {
       [userMsg("m1", { sessionId: session.id, attachments: [skillAttach("demo")] })],
       runtimeBase,
     );
-    const body = messageBodyText(after[0]!);
+    const body = messageBodyTextFromBlocks(after[0]!.content.blocks);
     assert.match(body, /# 演示技能/);
     assert.equal(body.includes("技能不存在或已删除"), false);
   });
@@ -294,7 +294,7 @@ describe("prepareUserMessagesForPrompt skillAttach (T-SK12)", () => {
         projectId: project.id,
       },
     );
-    const body = messageBodyText(prepared[0]!);
+    const body = messageBodyTextFromBlocks(prepared[0]!.content.blocks);
     assert.equal((body.match(/# 演示技能/g) ?? []).length, 2);
     assert.equal(body.includes("技能不存在或已删除"), false);
   });
@@ -320,8 +320,8 @@ describe("prepareUserMessagesForPrompt skillAttach (T-SK12)", () => {
       },
     );
     for (const m of prepared) {
-      assert.match(messageBodyText(m!), /技能不存在或已删除/);
-      assert.equal(messageBodyText(m!).includes('"alreadyReferenced"'), false);
+      assert.match(messageBodyTextFromBlocks(m!.content.blocks), /技能不存在或已删除/);
+      assert.equal(messageBodyTextFromBlocks(m!.content.blocks).includes('"alreadyReferenced"'), false);
     }
   });
 
@@ -347,15 +347,15 @@ describe("prepareUserMessagesForPrompt skillAttach (T-SK12)", () => {
       ],
       runtimeBase,
     );
-    assert.match(messageBodyText(full[0]!), /# 演示技能/);
-    assert.match(messageBodyText(full[1]!), /"alreadyReferenced": true/);
+    assert.match(messageBodyTextFromBlocks(full[0]!.content.blocks), /# 演示技能/);
+    assert.match(messageBodyTextFromBlocks(full[1]!.content.blocks), /"alreadyReferenced": true/);
 
     // 压缩/置位后可见窗口只剩 m2：skill seen 随窗口重置 → 再次全文
     const compacted = await prepareUserMessagesForPrompt(
       [userMsg("m2", { id: "u2", sessionId: session.id, attachments: [skillAttach("demo")] })],
       runtimeBase,
     );
-    assert.match(messageBodyText(compacted[0]!), /# 演示技能/);
+    assert.match(messageBodyTextFromBlocks(compacted[0]!.content.blocks), /# 演示技能/);
   });
 
   it("S0 前缀集不预填技能 key：常驻路径 seen 与 skill: 命名空间隔离", async () => {
@@ -377,7 +377,7 @@ describe("prepareUserMessagesForPrompt skillAttach (T-SK12)", () => {
         seenPaths: ["/demo"],
       },
     );
-    const body = messageBodyText(prepared[0]!);
+    const body = messageBodyTextFromBlocks(prepared[0]!.content.blocks);
     assert.match(body, /# 演示技能/);
     assert.equal(body.includes('"alreadyReferenced"'), false);
   });
@@ -407,7 +407,7 @@ describe("prepareUserMessagesForPrompt skillAttach (T-SK12)", () => {
         projectId: project.id,
       },
     );
-    const body = messageBodyText(prepared.at(-1)!);
+    const body = messageBodyTextFromBlocks(prepared.at(-1)!.content.blocks);
     assert.match(body, /"alreadyReferenced": true/);
     assert.equal(body.includes("# 演示技能"), false);
   });
@@ -436,7 +436,7 @@ describe("prepareUserMessagesForPrompt skillAttach (T-SK12)", () => {
         projectId: project.id,
       },
     );
-    const body = messageBodyText(prepared.at(-1)!);
+    const body = messageBodyTextFromBlocks(prepared.at(-1)!.content.blocks);
     assert.match(body, /# 演示技能/);
     assert.equal(body.includes('"alreadyReferenced"'), false);
   });
@@ -458,7 +458,7 @@ describe("prepareUserMessagesForPrompt skillAttach (T-SK12)", () => {
     );
     assert.deepEqual(prepared[0]!.attachments, [att]);
     // 无可拼 body → wrap 恒等原文
-    assert.equal(messageBodyText(prepared[0]!), "m1");
+    assert.equal(messageBodyTextFromBlocks(prepared[0]!.content.blocks), "m1");
   });
 
   it("T-A2: skill 全文超附件预算 → skillAttach 降级 display:\"filename\" + 分段读取引导；恰好等于预算不降级", async () => {
@@ -478,8 +478,7 @@ describe("prepareUserMessagesForPrompt skillAttach (T-SK12)", () => {
       names: ["demo"],
       content: "x".repeat(ATTACH_PROMPT_CHAR_BUDGET),
     });
-    const exactBody = messageBodyText(
-      (
+    const exactBody = messageBodyTextFromBlocks((
         await prepareUserMessagesForPrompt(
           [
             userMsg("m1", {
@@ -489,8 +488,7 @@ describe("prepareUserMessagesForPrompt skillAttach (T-SK12)", () => {
           ],
           { ...runtimeBase, skills: exact },
         )
-      )[0]!,
-    );
+      )[0]!.content.blocks);
     assert.match(exactBody, /<action name="skillAttach">/);
     assert.equal(exactBody.includes('"display"'), false);
     assert.equal(exactBody.includes("文件过长"), false);
@@ -500,8 +498,7 @@ describe("prepareUserMessagesForPrompt skillAttach (T-SK12)", () => {
       names: ["demo"],
       content: "x".repeat(ATTACH_PROMPT_CHAR_BUDGET + 1),
     });
-    const overBody = messageBodyText(
-      (
+    const overBody = messageBodyTextFromBlocks((
         await prepareUserMessagesForPrompt(
           [
             userMsg("m1", {
@@ -511,8 +508,7 @@ describe("prepareUserMessagesForPrompt skillAttach (T-SK12)", () => {
           ],
           { ...runtimeBase, skills: over },
         )
-      )[0]!,
-    );
+      )[0]!.content.blocks);
     assert.match(overBody, /<action name="skillAttach">/);
     assert.match(overBody, /"display": "filename"/);
     assert.match(overBody, /文件过长，可用 read 配合 offset\/limit 分段读取/);
@@ -542,8 +538,8 @@ describe("prepareUserMessagesForPrompt skillAttach (T-SK12)", () => {
         projectId: project.id,
       },
     );
-    assert.match(messageBodyText(prepared[0]!), /"display": "filename"/);
-    const body2 = messageBodyText(prepared[1]!);
+    assert.match(messageBodyTextFromBlocks(prepared[0]!.content.blocks), /"display": "filename"/);
+    const body2 = messageBodyTextFromBlocks(prepared[1]!.content.blocks);
     assert.match(body2, /"alreadyReferenced": true/);
     assert.equal(body2.includes("文件过长"), false);
   });

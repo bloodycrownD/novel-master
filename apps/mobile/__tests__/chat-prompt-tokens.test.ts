@@ -85,7 +85,7 @@ jest.mock('@novel-master/core/provider', () => {
 });
 
 jest.mock('@novel-master/core/prompt', () => ({
-  messageBodyText: () => 'hello',
+  messageBodyTextFromBlocks: () => 'hello',
 }));
 
 jest.mock('@/services/session-prompt-input.service', () => {

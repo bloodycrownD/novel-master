@@ -9,7 +9,7 @@ import {
   type AgentPromptLayout,
   type PromptSkillIndexEntry,
 } from "@novel-master/core/prompt";
-import { messageBodyText } from "@novel-master/core/prompt";
+import { messageBodyTextFromBlocks } from "@novel-master/core/prompt";
 
 const fixedNow = new Date(2026, 4, 24, 9, 0, 0);
 
@@ -94,7 +94,7 @@ describe("T-SK9: 技能索引段（两套遍历）", () => {
     ]);
     const segment = segments.find((s) => s.id === "prompt-skills")!;
     const synthetic = input.messages.find((m) => m.id === "prompt:skills")!;
-    assert.equal(messageBodyText(synthetic), segment.body);
+    assert.equal(messageBodyTextFromBlocks(synthetic.content.blocks), segment.body);
   });
 
   it("空清单 / 缺省不产生技能索引段", async () => {
