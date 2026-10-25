@@ -10,8 +10,8 @@ import {
   runAgentTurn,
   type AgentTurnRuntimePort,
 } from "@/service/agent/logic/run-agent-turn.js";
-import { scanAtPathAttachments } from "@/domain/chat/logic/scan-at-path-attachments.js";
-import { scanSkillAttachments } from "@/domain/chat/logic/scan-skill-attachments.js";
+import { scanAtPathAttachments } from "@/domain/chat/logic/attachment/scan-at-path-attachments.js";
+import { scanSkillAttachments } from "@/domain/chat/logic/attachment/scan-skill-attachments.js";
 import type { ComposerDraftTokenRange } from "@/domain/chat/model/composer-draft.schema.js";
 import type { MessageAttachment } from "@/domain/chat/model/message-attachment.schema.js";
 import type { UserVfsTurnService } from "@/service/chat/user-vfs-turn.port.js";

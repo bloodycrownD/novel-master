@@ -84,13 +84,13 @@ export {
   matchUserVfsTurnAt,
   parseAllUserVfsActionsFromText,
   USER_VFS_TURN_SPAN,
-} from '../../../packages/core/dist/domain/chat/logic/user-vfs-turn-view.js';
+} from '../../../packages/core/dist/domain/chat/logic/vfs-turn/user-vfs-turn-view.js';
 export {
   USER_VFS_TURN_ACK_TEXT,
   wrapUserVfsActionsForStorage,
-} from '../../../packages/core/dist/domain/chat/logic/user-vfs-turn-constants.js';
+} from '../../../packages/core/dist/domain/chat/logic/vfs-turn/user-vfs-turn-constants.js';
 export type {
   ParsedUserVfsAction,
   ParsedUserVfsEditHunk,
   UserVfsTurnView,
-} from '../../../packages/core/dist/domain/chat/logic/user-vfs-turn-view.js';
+} from '../../../packages/core/dist/domain/chat/logic/vfs-turn/user-vfs-turn-view.js';

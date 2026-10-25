@@ -15,9 +15,9 @@ import {
   refreshUserVfsUnifiedToolTurnSnapshot,
   resetUserVfsUnifiedToolTurnSnapshotForTests,
 } from "@/domain/feature-flags/user-vfs-unified-tool-turn.js";
-import { wrapUserMessageForLlm } from "@/domain/chat/logic/wrap-user-message-for-llm.js";
-import { buildFileAnnotateAttachmentFromDraft } from "@/domain/chat/logic/build-attachment-action-xml.js";
-import { mergeAttachmentsByPath } from "@/domain/chat/logic/scan-at-path-attachments.js";
+import { wrapUserMessageForLlm } from "@/domain/chat/logic/prompt/wrap-user-message-for-llm.js";
+import { buildFileAnnotateAttachmentFromDraft } from "@/domain/chat/logic/attachment/build-attachment-action-xml.js";
+import { mergeAttachmentsByPath } from "@/domain/chat/logic/attachment/scan-at-path-attachments.js";
 import {
   messageAttachmentSchema,
   type MessageAttachment,

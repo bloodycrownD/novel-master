@@ -51,9 +51,9 @@ import {
 import type { SendAnnotateDraft } from "@/domain/chat/model/annotate-draft.schema.js";
 import type { ComposerDraftTokenRange } from "@/domain/chat/model/composer-draft.schema.js";
 import type { MessageAttachment } from "@/domain/chat/model/message-attachment.schema.js";
-import { buildFileAnnotateAttachmentFromDraft } from "@/domain/chat/logic/build-attachment-action-xml.js";
-import { mergeAttachmentsWithScannedAtPaths } from "@/domain/chat/logic/scan-at-path-attachments.js";
-import { mergeAttachmentsWithScannedSkills } from "@/domain/chat/logic/scan-skill-attachments.js";
+import { buildFileAnnotateAttachmentFromDraft } from "@/domain/chat/logic/attachment/build-attachment-action-xml.js";
+import { mergeAttachmentsWithScannedAtPaths } from "@/domain/chat/logic/attachment/scan-at-path-attachments.js";
+import { mergeAttachmentsWithScannedSkills } from "@/domain/chat/logic/attachment/scan-skill-attachments.js";
 import type { CompactionConditionEvaluator } from "@/service/compaction-conditions/create-compaction-condition-evaluator.js";
 import { CoordinatedWrite } from "@/service/coordinated-write.js";
 import type { MessageCheckpointService } from "@/service/message-checkpoint/message-checkpoint.port.js";

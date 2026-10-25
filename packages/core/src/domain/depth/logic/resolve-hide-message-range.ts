@@ -5,7 +5,7 @@
  */
 
 import type { ChatMessage } from "@/domain/chat/model/message.js";
-import { hasToolResult } from "@/domain/chat/logic/message-content-helpers.js";
+import { ChatMessageEntity } from "@/domain/chat/logic/message/chat-message-entity.js";
 import type { DepthSlice } from "./depth-slice.js";
 
 export interface HideMessageSeqRange {
@@ -36,7 +36,7 @@ function anchorToSeqBeforeUserTurn(
     if (m.seq > maxSeq || m.seq < minSeq) {
       continue;
     }
-    if (m.role === "user" && !hasToolResult(m)) {
+    if (m.role === "user" && !ChatMessageEntity.from(m).hasToolResult()) {
       return m.seq - 1;
     }
   }

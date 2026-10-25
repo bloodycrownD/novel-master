@@ -5,6 +5,9 @@
  */
 
 import { diffArrays } from "diff";
+import { buildUserVfsActionXml } from "./user-vfs-action-xml.js";
+
+export { buildUserVfsActionXml };
 import type { ToolUseBlock } from "@/domain/chat/model/content-block.js";
 
 /** 保存映射可选参数。 */
@@ -241,29 +244,6 @@ export function mapUserSaveToToolUses(
     toolUses,
     editHunks: hunks,
   };
-}
-
-function escapeXmlText(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-}
-
-function escapeXmlAttr(value: string): string {
-  return escapeXmlText(value).replace(/"/g, "&quot;");
-}
-
-/**
- * 通用 action XML：`<action name="…">{json}</action>`。
- * JSON 为对应 tool / 操作入参（写盘后供 LLM 与 round-trip）。
- */
-export function buildUserVfsActionXml(
-  name: string,
-  params: Record<string, unknown>
-): string {
-  const body = escapeXmlText(JSON.stringify(params, null, 2));
-  return `<action name="${escapeXmlAttr(name)}">\n${body}\n</action>`;
 }
 
 /** 生成 write 的 `<action name="write">`（正文在 JSON `content`）。 */

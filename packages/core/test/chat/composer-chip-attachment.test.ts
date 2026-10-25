@@ -3,7 +3,7 @@
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { partitionComposerChipAttachments } from "../../src/domain/chat/logic/composer-chip-attachment.js";
+import { partitionComposerChipAttachments } from "../../src/domain/chat/logic/composer/composer-chip-attachment.js";
 
 type Chip = { readonly source: string; readonly action?: string };
 

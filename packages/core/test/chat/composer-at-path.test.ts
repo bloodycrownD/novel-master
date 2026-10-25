@@ -3,13 +3,13 @@
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { scanAtPathAttachments } from "../../src/domain/chat/logic/scan-at-path-attachments.js";
+import { scanAtPathAttachments } from "../../src/domain/chat/logic/attachment/scan-at-path-attachments.js";
 import {
   atPathTokensFromPickerSelection,
   findActiveAtQuery,
   formatComposerAtPathToken,
   replaceActiveAtWithToken,
-} from "../../src/domain/chat/logic/composer-at-path.js";
+} from "../../src/domain/chat/logic/composer/composer-at-path.js";
 
 describe("composer-at-path", () => {
   it("T-ATD2: Picker token 为 @path；目录尾 /；扫描落库带前导 /", () => {

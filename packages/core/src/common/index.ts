@@ -41,3 +41,10 @@ export {
   formatRequestTime,
   pageWindowItems,
 } from "./usage-stats-format.js";
+
+export {
+  createTranslator,
+  type MessageCatalog,
+  type MessageDescriptor,
+  type MessageLike,
+} from "./i18n.js";

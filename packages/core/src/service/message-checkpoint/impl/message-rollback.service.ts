@@ -5,7 +5,7 @@
  */
 
 import type { ChatMessage } from "@/domain/chat/model/message.js";
-import { isPlainUserUndoSendEligible } from "@/domain/chat/logic/editable-text-from-message.js";
+import { ChatMessageEntity } from "@/domain/chat/logic/message/chat-message-entity.js";
 import type { RollbackMode } from "@/domain/chat/logic/rollback-confirm-copy.js";
 import { listSessionFileHeads } from "@/domain/message-checkpoint/logic/list-session-files.js";
 import { findMissingRevisionPointers } from "@/domain/message-checkpoint/logic/detect-missing-revisions.js";
@@ -437,9 +437,8 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
       resolveRollbackAnchorMessage(messagesFromClicked, anchorMessageId) ??
       clicked;
 
-    const mode: RollbackMode = isPlainUserUndoSendEligible(anchor)
-      ? "undo_send"
-      : "rewind";
+    const undoSendEligible = ChatMessageEntity.from(anchor).isUndoSendEligible();
+    const mode: RollbackMode = undoSendEligible ? "undo_send" : "rewind";
     const truncateAfterSeq = mode === "undo_send" ? anchor.seq - 1 : anchor.seq;
 
     const tail =

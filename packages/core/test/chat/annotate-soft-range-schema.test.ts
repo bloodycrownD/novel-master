@@ -4,7 +4,7 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { buildFileAnnotateAttachmentFromDraft, parseAnnotateDraftsFromAttachments } from "@/domain/chat/logic/build-attachment-action-xml.js";
+import { buildFileAnnotateAttachmentFromDraft, parseAnnotateDraftsFromAttachments } from "@/domain/chat/logic/attachment/build-attachment-action-xml.js";
 import { annotateDraftSchema, type AnnotateDraft } from "@/domain/chat/model/annotate-draft.schema.js";
 import type { MessageAttachment } from "@/domain/chat/model/message-attachment.schema.js";
 

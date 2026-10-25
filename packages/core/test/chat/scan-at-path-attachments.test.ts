@@ -9,7 +9,7 @@ import {
   attachmentsFromPaths,
   mergeAttachmentsWithScannedAtPaths,
   scanAtPathAttachments,
-} from "../../src/domain/chat/logic/scan-at-path-attachments.js";
+} from "../../src/domain/chat/logic/attachment/scan-at-path-attachments.js";
 import {
   attachmentStorageName,
   messageAttachmentsSchema,

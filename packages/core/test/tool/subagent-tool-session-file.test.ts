@@ -40,8 +40,8 @@ import type { SessionService } from "@/service/chat/session.port.js";
 import type { ChatSession } from "@/domain/chat/model/session.js";
 import { textBlocks } from "@novel-master/core/chat";
 import { messageBodyTextFromBlocks } from "@/domain/chat/content/message-body-text.js";
-import { ATTACH_PROMPT_CHAR_BUDGET } from "@/domain/chat/logic/attach-budget.js";
-import { prepareUserMessagesForPrompt } from "@/domain/chat/logic/prepare-user-messages-for-prompt.js";
+import { ATTACH_PROMPT_CHAR_BUDGET } from "@/domain/chat/logic/attachment/attach-budget.js";
+import { prepareUserMessagesForPrompt } from "@/domain/chat/logic/prompt/prepare-user-messages-for-prompt.js";
 import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
 import {
   getNovelMasterTestContext,

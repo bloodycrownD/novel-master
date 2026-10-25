@@ -21,7 +21,7 @@ import { SqliteWorkplaceRepository } from "@/domain/workplace/repositories/impl/
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 
 /** {@link seedForkCopyParity} 入参。 */
-export interface SeedForkCopyParityInput {
+interface SeedForkCopyParityInput {
   readonly projectId: string;
   readonly sourceSessionId: string;
   readonly targetSessionId: string;
@@ -36,10 +36,7 @@ export interface SeedForkCopyParityInput {
  *
  * @remarks 禁止嵌套调用 MessageCheckpointService.capture；禁止指望 backfill 播种。
  */
-export async function seedForkCopyParity(
-  tx: TdbcConnection,
-  input: SeedForkCopyParityInput
-): Promise<void> {
+export async function seedForkCopyParity(tx: TdbcConnection, input: SeedForkCopyParityInput): Promise<void> {
   const entries = new SqliteVfsEntryRepository(tx);
   const contentStore = new SqliteVfsContentStore(tx);
   const revisions = new SqliteVfsRevisionRepository(tx);
@@ -47,11 +44,7 @@ export async function seedForkCopyParity(
   const checkpoints = new SqliteMessageCheckpointRepository(tx);
 
   const { projectId, sourceSessionId, targetSessionId, newMessages } = input;
-  const targetScopeKey = scopeKey({
-    kind: "session",
-    projectId,
-    sessionId: targetSessionId,
-  });
+  const targetScopeKey = scopeKey({ kind: "session", projectId, sessionId: targetSessionId });
 
   const heads = await listSessionFileHeads(entries, projectId, targetSessionId);
 
@@ -63,13 +56,7 @@ export async function seedForkCopyParity(
   if (heads.length > 0) {
     // 批量验 blob 存在性：同库 fork/copy 时 copyVfsTree 已确保 blob 落位，
     // 一次 IN 查询替代逐 head ensureBlob；缺失时保持与 ensureBlob 相同的报错语义。
-    const hashes = [
-      ...new Set(
-        heads
-          .map((h) => metaByEntryId.get(h.entryId)?.contentHash)
-          .filter((h): h is string => h != null)
-      ),
-    ];
+    const hashes = [...new Set(heads.map((h) => metaByEntryId.get(h.entryId)?.contentHash).filter((h): h is string => h != null))];
     if (hashes.length > 0) {
       const existingBlobs = await contentStore.findExistingBlobHashes(hashes);
       const missing = hashes.find((h) => !existingBlobs.has(h));
@@ -106,36 +93,15 @@ export async function seedForkCopyParity(
     await revisions.batchAppendWithRefCount(items);
   }
 
-  await workplace.copyScope(
-    workplaceScopeKey({
-      kind: "session",
-      projectId,
-      sessionId: sourceSessionId,
-    }),
-    workplaceScopeKey({
-      kind: "session",
-      projectId,
-      sessionId: targetSessionId,
-    }),
-    (p) => normalizePath(p)
-  );
+  await workplace.copyScope(workplaceScopeKey({ kind: "session", projectId, sessionId: sourceSessionId }), workplaceScopeKey({ kind: "session", projectId, sessionId: targetSessionId }), (p) => normalizePath(p));
 
   if (heads.length === 0 || newMessages.length === 0) {
     return;
   }
 
-  const files = heads.map((h) => ({
-    entryId: h.entryId,
-    revisionVersion: h.headVersion,
-    path: h.logicalPath,
-  }));
+  const files = heads.map((h) => ({ entryId: h.entryId, revisionVersion: h.headVersion, path: h.logicalPath }));
   const createdAtMs = Date.now();
   // 批量播种：一次性写入所有消息的 checkpoint 锚点 + 文件指针 + ref_count，
   // 替代逐条 insertCheckpoint 循环。200 文件 × 500 消息从 ~1.8s 降到百毫秒级。
-  await checkpoints.seedCheckpoints(
-    targetSessionId,
-    newMessages,
-    files,
-    createdAtMs
-  );
+  await checkpoints.seedCheckpoints(targetSessionId, newMessages, files, createdAtMs);
 }

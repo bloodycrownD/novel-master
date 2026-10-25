@@ -33,7 +33,7 @@ import type { MessageAttachment } from "@/domain/chat/model/message-attachment.s
 import {
   AttachmentPathArgumentError,
   attachmentsFromPaths,
-} from "@/domain/chat/logic/scan-at-path-attachments.js";
+} from "@/domain/chat/logic/attachment/scan-at-path-attachments.js";
 import { ToolError } from "@/errors/tool-errors.js";
 import type { Tool } from "../model/tool.js";
 import type {

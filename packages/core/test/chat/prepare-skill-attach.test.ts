@@ -9,8 +9,8 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
 import { messageBodyTextFromBlocks } from "../../src/domain/chat/content/message-body-text.js";
-import { ATTACH_PROMPT_CHAR_BUDGET } from "../../src/domain/chat/logic/attach-budget.js";
-import { prepareUserMessagesForPrompt } from "../../src/domain/chat/logic/prepare-user-messages-for-prompt.js";
+import { ATTACH_PROMPT_CHAR_BUDGET } from "../../src/domain/chat/logic/attachment/attach-budget.js";
+import { prepareUserMessagesForPrompt } from "../../src/domain/chat/logic/prompt/prepare-user-messages-for-prompt.js";
 import type { ChatMessage } from "../../src/domain/chat/model/message.js";
 import type { MessageAttachment } from "../../src/domain/chat/model/message-attachment.schema.js";
 import type {

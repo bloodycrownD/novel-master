@@ -17,12 +17,7 @@ import type { SkillToolRef } from "@/domain/chat/model/content-block.js";
 const SKILL_TOOL_NAME = "skill";
 
 /** 输入里可解析出跳转三元组的 action（list 无目标技能，不产生跳转）。 */
-const REF_ACTIONS: ReadonlySet<string> = new Set([
-  "load",
-  "read",
-  "write",
-  "edit",
-]);
+const REF_ACTIONS: ReadonlySet<string> = new Set(["load", "read", "write", "edit"]);
 
 function parseDomain(raw: unknown): "global" | "project" | undefined {
   return raw === "global" || raw === "project" ? raw : undefined;
@@ -40,11 +35,7 @@ function parseName(raw: unknown): string | undefined {
  *   实际命中域只有工具输出知道——此时返回 undefined，等 `meta.skillRef`。
  * - `projectId` 仅 project 域携带（global 域剥离，避免误导跳转）。
  */
-export function resolveSkillToolRefFromInput(
-  toolName: string,
-  input: Record<string, unknown> | null | undefined,
-  projectId?: string
-): SkillToolRef | undefined {
+export function resolveSkillToolRefFromInput(toolName: string, input: Record<string, unknown> | null | undefined, projectId?: string): SkillToolRef | undefined {
   if (toolName !== SKILL_TOOL_NAME) return undefined;
   const action = input?.action;
   if (typeof action !== "string" || !REF_ACTIONS.has(action)) return undefined;
@@ -52,9 +43,7 @@ export function resolveSkillToolRefFromInput(
   if (name == null) return undefined;
   // load / read 缺省读生效副本，实际命中域只有工具输出知道——返回
   // undefined 等 meta.skillRef；write/edit 补工具同款默认 project。
-  const domain =
-    parseDomain(input?.domain) ??
-    (action === "load" || action === "read" ? undefined : "project");
+  const domain = parseDomain(input?.domain) ?? (action === "load" || action === "read" ? undefined : "project");
   if (domain == null) return undefined;
   return {
     domain,
@@ -70,22 +59,14 @@ export function resolveSkillToolRefFromInput(
  * read/write/edit 成功输出均携带实际 domain/name；list 输出无目标技能。
  * `projectId` 输出里不带，由调用方按会话上下文补（仅 project 域）。
  */
-export function resolveSkillToolRefFromOutput(
-  toolName: string,
-  output: unknown,
-  projectId?: string
-): SkillToolRef | undefined {
+/** nm-style: keep-local — buildToolResultBlock 单点解析入口，测试直接锁三元组输出；保持纯函数边界。 */
+export function resolveSkillToolRefFromOutput(toolName: string, output: unknown, projectId?: string): SkillToolRef | undefined {
   if (toolName !== SKILL_TOOL_NAME) return undefined;
   if (output == null || typeof output !== "object" || Array.isArray(output)) {
     return undefined;
   }
   const record = output as Record<string, unknown>;
-  if (
-    record.action !== "load" &&
-    record.action !== "read" &&
-    record.action !== "write" &&
-    record.action !== "edit"
-  ) {
+  if (record.action !== "load" && record.action !== "read" && record.action !== "write" && record.action !== "edit") {
     return undefined;
   }
   const domain = parseDomain(record.domain);

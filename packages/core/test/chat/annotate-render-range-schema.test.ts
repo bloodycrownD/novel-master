@@ -7,7 +7,7 @@ import { describe, it } from "node:test";
 import {
   buildFileAnnotateAttachmentFromDraft,
   parseAnnotateDraftsFromAttachments,
-} from "@/domain/chat/logic/build-attachment-action-xml.js";
+} from "@/domain/chat/logic/attachment/build-attachment-action-xml.js";
 import {
   annotateDraftSchema,
   type AnnotateDraft,

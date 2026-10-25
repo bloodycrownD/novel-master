@@ -72,7 +72,7 @@ function exportedSymbols(sourceFile) {
   const lineOf = (node) => sourceFile.getLineAndCharacterOfPosition(node.getStart()).line + 1;
   const keepPublicOf = (statement) => {
     const comments = ts.getLeadingCommentRanges(sourceFile.text, statement.getFullStart()) ?? [];
-    return comments.some((range) => /nm-style:\s*(keep-public|public-one-ref)/.test(sourceFile.text.slice(range.pos, range.end)));
+    return comments.some((range) => /nm-style:\s*(keep-public|keep-local|public-one-ref)/.test(sourceFile.text.slice(range.pos, range.end)));
   };
   for (const statement of sourceFile.statements) {
     if (!hasExportModifier(statement)) continue;
@@ -230,8 +230,8 @@ const rows = definitions.map((definition) => {
   let verdict;
   if (duplicate) verdict = "AMBIGUOUS";
   else if (prod === 0 && isPublic) verdict = definition.keepPublic ? "KEEP" : "FAKE_PUBLIC";
-  else if (prod === 0 && test > 0) verdict = "TEST_ONLY";
-  else if (prod === 0) verdict = "DEAD";
+  else if (prod === 0 && test > 0) verdict = definition.keepPublic ? "KEEP" : "TEST_ONLY";
+  else if (prod === 0) verdict = definition.keepPublic ? "KEEP" : "DEAD";
   else if (prod === 1 && definition.kind === "function" && calls === 1 && refs === 0) verdict = definition.keepPublic ? "KEEP" : "INLINE_CANDIDATE";
   else verdict = "KEEP";
   return { ...definition, calls, refs, testCalls: testCallCount, testRefs: testRefCount, prod, test, public: isPublic ? "yes" : "", verdict };
@@ -254,6 +254,6 @@ console.log(`summary: ${Object.entries(counts).map(([verdict, count]) => `${verd
 console.log("prod/test = 生产/测试代码里的 调用点/值引用点（prod 含同文件调用）；已解析 named import、as 别名与 barrel 转发。");
 console.log("同名多定义 → AMBIGUOUS；类与常量不做 INLINE_CANDIDATE；测试 import / allowlist 不算消费者。");
 console.log("仍是启发式：同名遮蔽、动态属性、跨包重建导出需人工复核。--strict 时 DEAD/FAKE_PUBLIC/TEST_ONLY/INLINE_CANDIDATE 退出码 1。");
-console.log("INLINE_CANDIDATE 默认内联；public=yes 只表示还要撤 barrel/allowlist，不是保留理由。确认不能内联时写 `nm-style: keep-public — 理由`，并在交付报告列未处理项。");
+console.log("INLINE_CANDIDATE 默认内联；public=yes 只表示还要撤 barrel/allowlist，不是保留理由。确认不能内联时写 `nm-style: keep-local / keep-public — 理由`，并在交付报告列未处理项。");
 
 if (strict && rows.some((row) => ["FAKE_PUBLIC", "DEAD", "TEST_ONLY", "INLINE_CANDIDATE"].includes(row.verdict))) process.exitCode = 1;

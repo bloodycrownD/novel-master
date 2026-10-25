@@ -1,7 +1,7 @@
 import {
-  isPlainUserUndoSendEligible,
+  ChatMessageEntity,
   parseComposerDraftJson,
-  resolveRollbackConfirmMessage,
+  rollbackConfirmDescriptor,
   serializeComposerDraftJson,
   type RollbackMode,
 } from '@shared/logic/chat';
@@ -42,6 +42,7 @@ import { useShellNav } from '@/providers/ShellNavProvider';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { showToast } from '@/components/ui/show-toast';
 import { formatUserError } from '@/utils/format-user-error';
+import { chatTranslator } from '@/i18n/chat';
 import { ChatComposer } from './ChatComposer';
 import {
   unionComposerStatusWithAnnotate,
@@ -683,7 +684,7 @@ export function ConversationPanel({
       }
       const chatMsg = chatMessageFromDto(target);
       return {
-        rollbackMode: isPlainUserUndoSendEligible(chatMsg)
+        rollbackMode: ChatMessageEntity.from(chatMsg).isUndoSendEligible()
           ? 'undo_send'
           : 'rewind',
         restoreText: editableTextFromMessage(target),
@@ -922,23 +923,14 @@ export function ConversationPanel({
       return '此消息之前将不参与提示词，此消息及之后将恢复可见。';
     }
     if (confirmState.kind === 'rollback-degraded') {
-      return `${confirmState.errorMessage}\n\n${resolveRollbackConfirmMessage(
-        confirmState.rollbackMode,
-        'degraded',
-      )}`;
+      const message = chatTranslator(rollbackConfirmDescriptor(confirmState.rollbackMode, 'degraded'));
+      return `${confirmState.errorMessage}\n\n${message}`;
     }
     if (confirmState.kind === 'rollback-backfill') {
-      return resolveRollbackConfirmMessage(
-        confirmState.rollbackMode,
-        'backfill',
-        { missingPaths: confirmState.missingLogicalPaths },
-      );
+      return chatTranslator(rollbackConfirmDescriptor(confirmState.rollbackMode, 'backfill', { missingPaths: confirmState.missingLogicalPaths }));
     }
     if (confirmState.kind === 'rollback') {
-      return resolveRollbackConfirmMessage(
-        confirmState.rollbackMode,
-        'primary',
-      );
+      return chatTranslator(rollbackConfirmDescriptor(confirmState.rollbackMode, 'primary'));
     }
     return '';
   })();

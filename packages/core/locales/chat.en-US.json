@@ -1,0 +1,11 @@
+{
+  "chat.rollback.confirm.primary.undo_send": "This will delete this message and all later messages, and revert related file changes. Continue?",
+  "chat.rollback.confirm.primary.rewind": "This will delete all messages after this one, and revert related file changes. Continue?",
+  "chat.rollback.confirm.degraded.undo_send": "This will only delete this message and all later messages; workspace files will remain unchanged.",
+  "chat.rollback.confirm.degraded.rewind": "This will only delete all messages after this one; workspace files will remain unchanged.",
+  "chat.rollback.confirm.backfill": "Snapshots are missing and will be repaired with the latest content.\n\nFiles with missing snapshots:\n{files}\n\n{tail}",
+  "chat.rollback.confirm.backfill.file": "· {path}",
+  "chat.rollback.confirm.backfill.file.empty": "· (unknown file)",
+  "chat.rollback.confirm.backfill.tail.undo_send": "Other files will be rolled back to their state before sending.",
+  "chat.rollback.confirm.backfill.tail.rewind": "Other files will be rolled back to the anchor."
+}

@@ -57,7 +57,7 @@ function checkImport(node, sourceFile, file) {
 
 function isBlockExpression(node) {
   let current = node;
-  while (ts.isParenthesizedExpression(current) || ts.isAsExpression(current) || ts.isNonNullExpression(current) || ts.isAwaitExpression(current)) current = current.expression;
+  while (ts.isParenthesizedExpression(current) || ts.isAsExpression(current) || ts.isSatisfiesExpression(current) || ts.isNonNullExpression(current) || ts.isAwaitExpression(current)) current = current.expression;
   return ts.isObjectLiteralExpression(current) || ts.isArrayLiteralExpression(current) || ts.isArrowFunction(current) || ts.isFunctionExpression(current) || ts.isClassExpression(current) || ts.isJsxElement(current) || ts.isJsxSelfClosingElement(current) || ts.isJsxFragment(current) || ts.isTemplateExpression(current);
 }
 

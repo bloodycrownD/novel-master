@@ -8,7 +8,7 @@ import {
   type ChatMessage,
   type ContentBlock,
 } from "@novel-master/core/chat";
-import { buildDirTreeActionXml, buildFileRefActionXml } from "@/domain/chat/logic/build-attachment-action-xml.js";
+import { buildDirTreeActionXml, buildFileRefActionXml } from "@/domain/chat/logic/attachment/build-attachment-action-xml.js";
 import { buildUserVfsActionXml } from "@/domain/vfs/logic/user-vfs-save-mapping.js";
 
 import {

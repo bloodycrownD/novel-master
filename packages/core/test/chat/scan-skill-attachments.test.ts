@@ -8,8 +8,8 @@ import {
   mergeAttachmentsWithScannedSkills,
   scanSkillAttachments,
   skillSeenKey,
-} from "../../src/domain/chat/logic/scan-skill-attachments.js";
-import { mergeAttachmentsWithScannedAtPaths } from "../../src/domain/chat/logic/scan-at-path-attachments.js";
+} from "../../src/domain/chat/logic/attachment/scan-skill-attachments.js";
+import { mergeAttachmentsWithScannedAtPaths } from "../../src/domain/chat/logic/attachment/scan-at-path-attachments.js";
 import type { MessageAttachment } from "../../src/domain/chat/model/message-attachment.schema.js";
 
 describe("scanSkillAttachments (T-SK11)", () => {

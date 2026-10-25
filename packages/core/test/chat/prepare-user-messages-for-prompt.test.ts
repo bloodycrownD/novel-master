@@ -8,13 +8,13 @@ import { describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
 import { buildPromptLlmInputFromLayout } from "@novel-master/core/prompt";
 import { messageBodyTextFromBlocks } from "../../src/domain/chat/content/message-body-text.js";
-import { extractEditableTextFromMessage } from "../../src/domain/chat/logic/editable-text-from-message.js";
-import { prepareUserMessagesForPrompt } from "../../src/domain/chat/logic/prepare-user-messages-for-prompt.js";
-import { wrapUserMessageForLlm } from "../../src/domain/chat/logic/wrap-user-message-for-llm.js";
-import { PROMPT_FILE_SEEN_SHORT_TIP } from "../../src/domain/chat/logic/prompt-path-seen.js";
+import { ChatMessageEntity } from "../../src/domain/chat/logic/message/chat-message-entity.js";
+import { prepareUserMessagesForPrompt } from "../../src/domain/chat/logic/prompt/prepare-user-messages-for-prompt.js";
+import { wrapUserMessageForLlm } from "../../src/domain/chat/logic/prompt/wrap-user-message-for-llm.js";
+const PROMPT_FILE_SEEN_SHORT_TIP = "该文件前文已引用，无需读取或加载";
 import {
   renderDirAttachTree,
-} from "../../src/domain/chat/logic/render-dir-attach-tree.js";
+} from "../../src/domain/chat/logic/attachment/render-dir-attach-tree.js";
 import type { ChatMessage } from "../../src/domain/chat/model/message.js";
 import type { MessageAttachment } from "../../src/domain/chat/model/message-attachment.schema.js";
 import {
@@ -23,7 +23,7 @@ import {
   SESSION_KKV_DOMAIN_FILE_CACHE,
   SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
 } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
-import { ATTACH_PROMPT_CHAR_BUDGET } from "../../src/domain/chat/logic/attach-budget.js";
+import { ATTACH_PROMPT_CHAR_BUDGET } from "../../src/domain/chat/logic/attachment/attach-budget.js";
 import { serializeRuleSnapshot } from "../../src/domain/workplace/logic/rule-snapshot-codec.js";
 import { createSessionKkvService } from "../../src/service/session-kkv/create-session-kkv-service.js";
 import {
@@ -464,7 +464,7 @@ describe("wrapUserMessageForLlm / prepareUserMessagesForPrompt (Step 6)", () => 
       { attachments },
     );
     assert.equal(messageBodyTextFromBlocks(stored.content.blocks), "你好");
-    assert.equal(extractEditableTextFromMessage(stored), "你好");
+    assert.equal(ChatMessageEntity.from(stored).editableText(), "你好");
     assert.deepEqual(stored.attachments, attachments);
     assert.equal(messageBodyTextFromBlocks(stored.content.blocks).includes("<user-input>"), false);
   });

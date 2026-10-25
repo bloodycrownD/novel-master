@@ -4,16 +4,10 @@
  * @module domain/workplace/workplace-display
  */
 
+import { escapeXmlAttr } from "@/common/xml.js";
 import { formatLocalDateTime } from "@/infra/date-format.js";
 import type { DisplayState } from "../model/workplace-types.js";
 import { parseMarkdownFrontMatter } from "./front-matter.js";
-
-function escapeXmlAttr(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/"/g, "&quot;")
-    .replace(/</g, "&lt;");
-}
 
 /**
  * Formats epoch ms as local `yyyy-MM-dd HH:mm:ss`.

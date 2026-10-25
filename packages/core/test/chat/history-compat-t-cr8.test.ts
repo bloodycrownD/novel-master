@@ -6,9 +6,9 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
 import { messageBodyTextFromBlocks } from "../../src/domain/chat/content/message-body-text.js";
-import { prepareUserMessagesForPrompt } from "../../src/domain/chat/logic/prepare-user-messages-for-prompt.js";
+import { prepareUserMessagesForPrompt } from "../../src/domain/chat/logic/prompt/prepare-user-messages-for-prompt.js";
 import { createSessionKkvService } from "../../src/service/session-kkv/create-session-kkv-service.js";
-import { formatStatusChipLabelFromAttachment } from "../../src/domain/chat/logic/status-chip-label.js";
+import { formatStatusChipLabelFromAttachment } from "../../src/domain/chat/logic/message/status-chip-label.js";
 import type { ChatMessage } from "../../src/domain/chat/model/message.js";
 import type { MessageAttachment } from "../../src/domain/chat/model/message-attachment.schema.js";
 import {

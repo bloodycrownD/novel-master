@@ -178,3 +178,75 @@ assistant:
 - merge-pending-vfs-turns.ts：mergePendingVfsTurns 生产 0、仅测试；模块+单测删除，public/allowlist 撤出。
 - message-visible-floor.ts：listVisibleSorted 被 depth-from-tail 单点使用，visibleFloorByMessageId 仅测试；先内联 filter 到 depth，再发现 depth-from-tail 仅服务 hide-message.action；继续内联 filter 到 hide-message.action，最终把 hide 编排整体内联进 run-compaction，删除 message-visible-floor / depth-from-tail / hide-message.action 三个模块；public/chat、public/compaction 与 allowlist 同步收敛，run-compaction 的 3 个参数/结果类型收私有。
 - 验证：core typecheck/build、package-exports 21、message-content-helpers + message-transcript 16、depth + compaction 17 全绿；check-style --changed PASS；desktop/mobile typecheck 通过。
+
+## 2026-10-25 第四批四文件收敛
+- prompt-path-seen：PROMPT_FILE_SEEN_SHORT_TIP 生产 0、仅测试，删除并从 public/chat + allowlist 撤出；测试改本地字面量。
+- render-dir-attach-tree：ATTACH_DIR_TREE_MAX_UTF8_BYTES / RenderDirAttachTreeDeps 收私有，renderDirAttachTree 撤 public/allowlist；attachDirTreeRootLabel 小助手内联。
+- prepare-user-messages-for-prompt：PrepareUserMessagesForPromptRuntime 收私有；47 处签名/调用/RHS 拆行用 AST 逐节点合并 + Prettier printWidth=1000 清理；stripLegacyDirWrap / stripLegacyFileWrap / plainLengthOfLineBody 三个小助手内联；hydrateDirAttach / hydrateSkillAttachWithSeen / hydrateAttachWithSeen / hydrateWorkplaceWithSeen / prepareOneUserMessage 五个 >20 行管线阶段加 nm-style: keep-local。
+- resolve-chat-link-target：elideChatLinkPath 撤 public/allowlist，加 keep-local（chatLinkNotFoundMessage 复用 + 测试直锁规则）；isHttpUrl 加 keep-public 语义谓词豁免。
+- check-inline 新增 KEEP_LOCAL：只有 >20 行且带 nm-style: keep-local 的单点私有函数才豁免，小函数仍判 INLINE_LOCAL；新增 test-check-inline.mjs。find-fake-exports 同步识别 keep-local。
+- 验证：check-style --changed PASS；四脚本自测 4/4；prepare+link 59、package-exports 21、core typecheck/build 全绿；desktop/mobile typecheck 通过。
+
+## 2026-10-25 chat/logic 全目录收敛（未提交）
+- 删除死模块：workspace-flush-snapshot / tail-batch-range / visibility-batch-range，连同单测；public/chat、desktop shared、allowlist 同步。全目录 find-fake-exports：KEEP=64，无 DEAD/FAKE_PUBLIC/TEST_ONLY/INLINE_CANDIDATE（user-vfs 的 mobile shim / webview 消费者用 keep-local 标注）。
+- 全目录 112 处签名/调用/RHS 拆行用 AST 逐节点合并 + Prettier printWidth=1000；check-signatures 0。
+- 小助手内联：attachDirTreeRootLabel、stripLegacyDirWrap、stripLegacyFileWrap、plainLengthOfLineBody、wrap-user 的 sectionBody/renderExtraInfoBlock；prepare 五个 >20 行管线阶段 keep-local。
+- public 面收缩：STATUS_CHIP_ZH / renameChipZh / RollbackConfirmKind 收私有；USER_VFS_TURN_SPAN / user-vfs view 函数保留 domain 供 mobile shim，撤 public/allowlist；wrapUserVfsActionsForStorage 保留 public 并标 keep-public（测试构造文本）。
+- 剩余 18 个 INLINE_LOCAL（status-chip 7、user-vfs-turn-view 11）未处理：均为解析/格式化私有阶段，单点调用但语义独立；下一步逐个内联或在报告说明。check-style 目录：signatures=PASS / exports=PASS / oop=PASS，inline=FIND（5 KEEP_LOCAL + 18 INLINE_LOCAL）。
+- 验证：core typecheck/build、full chat 422/424（2 条既有 DST）、package-exports 21、desktop/mobile typecheck 全绿。
+
+## 2026-10-25 XML codec 与 clampSummary 收敛（未提交）
+- 新增 `packages/core/src/common/xml.ts`：escapeXmlText / escapeXmlAttr / unescapeXmlText（XML + HTML + 数字 entity，单层解码）。
+- 新增 `packages/core/src/domain/vfs/logic/user-vfs-action-xml.ts`：action XML 唯一 codec，底层 `fast-xml-parser@^5.7.3`（`preserveOrder` + `stopNodes:["*.action"]` + `parseTagValue:false`）；`buildUserVfsActionXml` 从 save-mapping 迁入；支持嵌套 wrapper、自闭合、多 action、历史非法裸 `&`/`<tag>` 正文。
+- 删除重复 parser：`action-xml-to-tool-uses.ts` 与 `user-vfs-turn-view.ts` 各自的 ACTION_TAG_RE/parseAttrs/unescape/parseJson 删除；前者只做 action→tool 映射，后者只做 turn/view 组装。workplace-display 改用 common escaper；build-attachment 不再用 `includes("<action")` 预判。
+- webview allowlist 增补 `domain/vfs/logic/user-vfs-action-xml.js` 与 `domain/chat/logic/chat-annotate-draft-store.js`；gate B/C 绿。
+- `clampSummary` 改为 `truncateText(raw, 117)`（总长 ≤118），删除手写 `slice(0,117)…`；补 T-TS-29 钉住 118 字边界。之前未检出原因：它有 4 个调用点且非导出，check-inline 只看单点私有函数，find-fake-exports 只看导出；没有“截断语义重复”探测器。
+- 验证：core typecheck/build、chat 423/425（2 条既有 DST）、vfs 395、prompt 202、package-exports 21、desktop/mobile typecheck、webview gate B/C 全绿。全目录 check-style 仍为 inline=FIND，剩 status-chip 7 个私有 JSON 解析单点函数（非 XML），prepare 5 个 keep-local。
+
+## 2026-10-25 chat/logic 子包拆分 + chat i18n 样板（未提交）
+- `domain/chat/logic` 按功能拆为 `composer/`、`attachment/`、`prompt/`、`message/`、`vfs-turn/`；`chat-annotate-draft-store`、`resolve-chat-link-target`、`rollback-confirm-copy`、`seed-fork-copy-parity`、`skill-tool-ref` 暂留根目录。
+- 移动 18 个文件并重写相对/别名 import、public/chat 路径、core 测试路径、mobile core-shim dist 路径、webview allowlist 路径；无行为改动。`check-signatures` 全目录 0，`check-style` 仅剩 7 个 status-chip 单点私有 JSON 解析项。
+- 新增 `common/i18n.ts`：`MessageDescriptor` + `MessageLike = string | descriptor` + `createTranslator`（locale 精确/语言前缀/默认语言回落、字符串直传、函数模板、`{param}` 插值、可序列化）。这是 i18n 的第一条通道；旧字符串路径是第二条通道，二者像 Either/throw 一样并存。
+- 新增 `domain/chat/i18n/messages.ts`：zh-CN / en-US chat catalog（rollback primary/degraded/backfill），`chatTranslator` 默认 zh-CN；`public/chat` 导出 `chatTranslator` 与 `rollbackConfirmDescriptor`。
+- `rollback-confirm-copy.ts` 改双入口：`rollbackConfirmDescriptor` 返回 key+params；`resolveRollbackConfirmMessage` 仍返回字符串（内部走 descriptor + chatTranslator），现有桌面/移动 UI 不用改。
+- webview allowlist 增补 `common/i18n.js`、`domain/chat/i18n/messages.js`；`check-signatures` 支持 `satisfies` 包裹的 object literal，避免 catalog 多行表误报。
+- 验证：core typecheck/build、chat 426/428（2 条既有 DST）、vfs 395、prompt 202、package-exports 21、common i18n 14、desktop/mobile typecheck、webview gate B/C 全绿；i18n 三文件 check-style PASS。
+- 下一阶段：删 `errors/session-fs-errors.ts` 里重复的 backfill 文案（保留兼容入口到迁移结束）；把 `status-chip-label` 等 chat 文案逐个 descriptor 化；toast/error formatter 改为接受 `MessageLike`。
+
+## 2026-10-25 薄包装检测补漏：normalizePromptSeenPath
+- 用户指出 `normalizePromptSeenPath(path) => resolveLogicalPath(path.trim())` 未被脚本发现。根因两条：
+  1. `check-inline` 的 PASS_THROUGH 只匹配 `return f(x)`，参数必须是裸标识符；`path.trim()` 是 CallExpression，直接漏检。
+  2. 该函数是导出函数，`check-inline` 对导出符号跳过单点内联分析；`find-fake-exports` 只数引用，3 个生产调用导致 KEEP。
+- 另外 `resolveLogicalPath` 内部已经 `input.trim()`，所以这个 wrapper 的 trim 是冗余的，确实零策略。
+- 修复脚本：`check-inline` 新增 `isParamDerived`，识别 `param.method()` 与 `String/Number/Boolean(param)` 这类简单参数变换，统一报 `PASS_THROUGH`；`test-check-inline` 增加 `f(x.trim())` fixture。
+- 删除 wrapper：`prompt-path-seen` 三处改直调 `resolveLogicalPath`（其自带 trim），`assemble-workplace-display` 改导入 VFS 函数，撤 `public/chat` 与 allowlist 导出；行为不变。
+- 验证：core typecheck/build、chat 426/428（2 条既有 DST）、package-exports 21、desktop/mobile typecheck、webview gate B/C、check-inline 自测 2/2、check-signatures 自测 1/1 全绿。
+
+## 2026-10-25 i18n 改为 JSON catalog + 通用运行时（修正上一版）
+- 上一版把 zh/en 文案写进 `domain/chat/i18n/messages.ts`，属于代码/文案耦合；已删除该文件。
+- 文案移到 `packages/core/locales/chat.zh-CN.json` / `chat.en-US.json`；`packages/core/package.json` 增 `./locales/*` export。
+- `common/i18n.ts` 现在完全通用：无业务 key/文案，只有 `MessageDescriptor`、`MessageLike = string | descriptor`、`createTranslator`；支持嵌套 descriptor 数组（`{files}` 按行拼接）、locale 精确/语言前缀/默认回落、字符串直传。
+- `domain/chat/i18n/keys.ts` 只保留 key 契约与类型；`rollback-confirm-copy.ts` 只返回 descriptor，不再含中文，也不再有 `resolveRollbackConfirmMessage` 字符串入口。
+- 桌面 `apps/desktop/renderer/i18n/chat.ts`、移动 `apps/mobile/src/i18n/chat.ts` 用 JSON + `createTranslator` 创建各自 `chatTranslator`；两端 rollback UI 改为 `chatTranslator(rollbackConfirmDescriptor(...))`。desktop 用 Vite 构建验证 JSON 可打包，mobile Jest 验证 `@/i18n/chat` 可用。
+- `tsconfig.renderer.json` / `apps/mobile/tsconfig.json` 开 `resolveJsonModule`；webview 不再需要 i18n runtime/catalog allowlist。
+- `packages/core/test/chat/i18n-catalog.test.ts` 校验 zh/en JSON key 集合与 `CHAT_MESSAGE_KEYS` 一致；rollback 测试从 JSON 建 translator。
+- 验证：core typecheck/build、chat 430/432（2 条既有 DST）、package-exports 21、common i18n 18、desktop renderer build + mobile typecheck、webview B/C 全绿；i18n 五文件 check-style PASS（`translateMessage` keep-local）。
+
+## 2026-10-25 message 子域对象化实验（未提交）
+- 新增 `domain/chat/logic/message/chat-message-entity.ts`：`ChatMessageEntity.from(message)` 组合 wire `ChatMessage`，提供 `hasToolResult` / `isUserInput` / `hasAnnotateAttachment` / `isPlainUserText` / `editableText` / `isUndoSendEligible`。DTO/持久化结构保持纯数据，不参与序列化。
+- 删除自由函数模块 `message-content-helpers.ts`、`editable-text-from-message.ts`；core 的 prepare / prompt-preview / depth / rollback、desktop/mobile 的 composer-send-state / message-edit / rollback、测试全部改为 `ChatMessageEntity.from(x).method()`。
+- `public/chat` 与 allowlist 由 6 个自由函数改为导出 `ChatMessageEntity`；测试文件改名为 `chat-message-entity.test.ts` / `chat-message-entity-undo-send.test.ts`。
+- 验证：core typecheck/build、chat 430/432（2 条既有 DST）、entity/prepare 59 例、package-exports 21、desktop rollback 3、mobile composer+rollback 7、desktop/mobile typecheck、webview B/C 全绿；entity 文件 check-style PASS。
+- 暂不动的同类函数： `countToolUseBlocks(content)`、status-chip/tool-summary/VFS preview（presentation）、scan/prepare/seed（services/codecs）。下一步按 DDD 角色命名服务对象，而不是继续把函数塞进 entity。
+
+## 2026-10-25 类方法审计脚本 + DDD 角色规范
+- 新增 `check-methods.mjs`：扫类方法生产引用，报 `DEAD_METHOD` / `INLINE_METHOD` / `PASS_THROUGH_METHOD` / `DEPRECATED_DEAD` / `DEPRECATED_METHOD` / `AMBIGUOUS_METHOD`；private 方法按类内引用计数，public 方法按全仓库属性访问计数（启发式）。
+- `check-inline` 移除 `CLASS_PRIVATE` 一刀切；类方法交给 `check-methods`，private 方法同样按单点内联/死代码处理；`check-style` 汇总新增 `methods=` 并计入退出码。
+- `test-check-methods.mjs` 覆盖 dead / inline / pass-through / deprecated；四个脚本自测全绿。
+- `SKILL.md` §1 改为“类内方法同样受单点/死代码检查”，§9 扩为 DDD 角色选择表 + 命名规则 + 迁移顺序。
+- 当前 `check-methods --changed` 0 处；`check-signatures --changed` 0 处；`chat-message-entity` 的 check-style 全 PASS。
+
+## 2026-10-25 status-chip-label 单点 helper 清零
+- `check-inline` 早已报出 `renameChipZh` / `resolveChipPath` / `tryParseRenameTo` / `tryParseRenamePairFromContent` / `tryParseAnnotateChipText` / `truncateChipText` / `parseRenameArrowPair` 7 个 INLINE_LOCAL；上一轮只跑了 check-methods 单文件 0 项，把这 7 项当历史遗留没处理，属于处理遗漏。
+- 全部内联进 `formatStatusChipLabelFromAttachment`；合并 JSON 解析为 `parseChipContent`（annotate/rename 两处调用），保留 `resolvePathOrName` / `renameSuffixToChipPath` / `stripLegacyPrefix` 多调用 helper。
+- 验证：status-chip 4 例、core typecheck/build、chat 430/432（2 条既有 DST）；`check-inline packages/core/src/domain/chat/logic/message` 0 处，status-chip 的 check-inline/signatures 均 0。

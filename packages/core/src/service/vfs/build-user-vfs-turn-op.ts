@@ -4,7 +4,7 @@
  * @module service/vfs/build-user-vfs-turn-op
  */
 
-import { resolveRenameOrMoveAction } from "@/domain/chat/logic/status-chip-label.js";
+import { resolveRenameOrMoveAction } from "@/domain/chat/logic/message/status-chip-label.js";
 import {
   buildUserVfsSaveEditActionXml,
   buildUserVfsSaveWriteActionXml,

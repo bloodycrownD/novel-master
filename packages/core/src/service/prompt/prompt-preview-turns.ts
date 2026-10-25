@@ -19,7 +19,7 @@
  * @module service/prompt/prompt-preview-turns
  */
 
-import { isUserInputMessage } from "@/domain/chat/logic/message-content-helpers.js";
+import { ChatMessageEntity } from "@/domain/chat/logic/message/chat-message-entity.js";
 import type { ChatMessage } from "@/domain/chat/model/message.js";
 import type {
   ContentBlock,
@@ -584,7 +584,7 @@ function syntheticSegmentKind(role: string): TurnGroup["kind"] {
  *
  * @remarks
  * 切轮判定回到 **ChatMessage 层**：user 且不含 tool_result 才是真用户输入
- * （`isUserInputMessage`）；含 tool_result 的 user 消息是工具结果回传，归 assistant 轮。
+ * （`ChatMessageEntity.isUserInput()`）；含 tool_result 的 user 消息是工具结果回传，归 assistant 轮。
  * workplace / skills 合成段虽然 role 是 user，但 `source !== "message"`，天然不参与切轮。
  * hidden 消息已在 assembly 链上过滤，这里不再处理。
  */
@@ -595,7 +595,7 @@ export async function buildPromptPreviewTurnsFromLayout(
 ): Promise<PromptPreviewTurn[]> {
   const segments = await buildPromptAssemblyFromLayout(layout, ctx, options);
   const userInputMessageIds = new Set(
-    ctx.messages.filter(isUserInputMessage).map((message) => message.id)
+    ctx.messages.filter((message) => ChatMessageEntity.from(message).isUserInput()).map((message) => message.id)
   );
   // cards 旁路的两个预扫：消息 id → 消息本体（段侧 messageId 回查），以及全量 toolUseId→result 配对表。
   const messageById = new Map<string, ChatMessage>();

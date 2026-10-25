@@ -3,7 +3,7 @@
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { resolveComposerSendIntent } from "../../src/domain/chat/logic/composer-send-intent.js";
+import { resolveComposerSendIntent } from "../../src/domain/chat/logic/composer/composer-send-intent.js";
 
 describe("resolveComposerSendIntent", () => {
   it("T-CR3: 空输入 + 无 resume → 不可发；attachOnly 恒空", () => {

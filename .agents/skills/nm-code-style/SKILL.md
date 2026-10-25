@@ -9,8 +9,8 @@ description: novel-master 的代码优化与重构原则。写新代码、重构
 
 ## 1. 先内联，再判断
 
-- **类里不写 private 方法**，一律并进公开方法。抽 private 对 agent 没有收益，只是多一层跳转；内联后才能看清顺序能否合并、条件是否重复、中间结构能否省掉。
-- 类里只留 private 字段承载状态。
+- **类内方法同样受单点内联/死代码检查**：private 方法只有一个类内调用点就内联；零引用删除；`return this.f()` / `return f(x)` 这类薄包装删除。private 方法只有在 >20 行、承担独立不变量或管线阶段且有多个调用点时才保留，并写 `nm-style: keep-local — 理由`。
+- 类里用 private 字段承载状态；不要为了“封装”给字段再加一层 private getter/setter。
 - 模块级单点调用的私有函数同样内联；`z.preprocess` 的回调、`transform`/`toWire` 这类只挂一次的映射也直接写成箭头。
 - 只有**被多处复用的纯比较/纯映射**才留模块级私有函数（如 `sameToolUse`）；内联会制造三份 `JSON.stringify` 时，留函数是对的。
 - 内联后重点检查四件事：重复条件、可合并的连续步骤、只为下一步服务的中间变量、恒真/恒假的形状守卫。
@@ -112,23 +112,58 @@ node .agents/skills/nm-code-style/scripts/check-style.mjs --changed --include-te
 | 脚本 | 检测 | 处理 |
 | --- | --- | --- |
 | `check-signatures.mjs` | 多行函数参数、调用参数、`new` 构造、1–3 个具名 import 拆行、const/赋值右侧简单表达式拆行 | 参数并回一行；RHS 并回一行或抽有名字的中间变量；放不下先减参数或缩短名字 |
-| `check-inline.mjs` | `DEAD_LOCAL` 零引用私有函数、`INLINE_LOCAL` 单点私有函数、`PASS_THROUGH` 单行转手、`CLASS_PRIVATE` | 删除 / 内联 / 删 wrapper / 并进公开方法 |
+| `check-inline.mjs` | `DEAD_LOCAL` 零引用私有函数、`INLINE_LOCAL` 单点私有函数、`PASS_THROUGH` 单行转手、`KEEP_LOCAL`（keep-local 豁免） | 删除 / 内联 / 删 wrapper；`KEEP_LOCAL` 仅限 >20 行的有名字管线阶段，且需在报告说明 |
+| `check-methods.mjs` | `DEAD_METHOD` 零生产引用、`INLINE_METHOD` 单点生产引用、`PASS_THROUGH_METHOD` 薄包装、`DEPRECATED_DEAD` / `DEPRECATED_METHOD`、`AMBIGUOUS_METHOD` | 类方法同样删除 / 内联 / 删 wrapper；public 方法单点先判断是否撤 public；同名跨类的方法需人工看，不直接判死 |
 | `find-fake-exports.mjs` | `FAKE_PUBLIC` / `TEST_ONLY` / `DEAD` / `INLINE_CANDIDATE` / `AMBIGUOUS` | 撤 public → 看调用点 → 沿死链删到底；`INLINE_CANDIDATE` 默认内联（public=yes 也一样），确认不能内联才写 `nm-style: keep-public` 理由；`--strict` 问题类退出码 1 |
 | `check-oop.mjs` | `OOP_CANDIDATE`（共享状态 + 多导出函数）、`MANY_EXPORTS`（导出函数 ≥6，人工 review） | 有状态才对象化；纯函数命名空间不建类；`OOP_CANDIDATE` 必须处理或报告理由 |
 
 - `check-style.mjs --changed` / `--all` / `--strict` 现在把导出审计也计入退出码；默认全 core 扫描仍只输出线索表。`INLINE_CANDIDATE` 默认按内联处理；只有确认是跨层唯一入口才留，并在声明上方写 `nm-style: keep-public — 理由`。
-- 脚本自测：`node --test .agents/skills/nm-code-style/scripts/test-find-fake-exports.mjs`（fixture 覆盖 barrel 单/双调用、测试引用、类型引用、public 单引用与 keep-public 豁免）、`node --test .agents/skills/nm-code-style/scripts/test-check-signatures.mjs`（fixture 覆盖单参数/单实参/单 import 与 const/赋值 RHS 拆行，并确认对象/数组/箭头函数多行不误报）、`node --test .agents/skills/nm-code-style/scripts/test-check-oop.mjs`（共享状态 → OOP_CANDIDATE；纯函数多导出 → MANY_EXPORTS；已有对象 → 不报）。
+- 单点私有函数默认内联；只有 **>20 行、有名字的管线阶段** 才可写 `nm-style: keep-local — 理由`，且必须在“未处理项报告”里说明；小的外壳、转手 wrapper、零引用函数不允许用 keep-local。
+- 脚本自测：`node --test .agents/skills/nm-code-style/scripts/test-find-fake-exports.mjs`（fixture 覆盖 barrel 单/双调用、测试引用、类型引用、public 单引用与 keep-public 豁免）、`node --test .agents/skills/nm-code-style/scripts/test-check-signatures.mjs`（fixture 覆盖单参数/单实参/单 import 与 const/赋值 RHS 拆行，并确认对象/数组/箭头函数多行不误报）、`node --test .agents/skills/nm-code-style/scripts/test-check-methods.mjs`（类方法 dead / inline / pass-through / deprecated）、`node --test .agents/skills/nm-code-style/scripts/test-check-oop.mjs`（共享状态 → OOP_CANDIDATE；纯函数多导出 → MANY_EXPORTS；已有对象 → 不报）。
 - `--changed` 只报新增行（未跟踪文件按整文件新增），适合修复循环；全量体检时传目录。每轮改完立刻重跑，直到 `check-style: PASS`。
 - 脚本按标识符/import 计数，是启发式：barrel 转发、同名遮蔽、动态引用需人工复核。
 - 不要用脚本自动改文件；报告只给位置，改动仍按本 skill 的语义判断。
 
-## 9. OOP 化（最后一步）
+## 9. 领域角色与对象化（最后一步）
 
-顺序上先收死代码、单点内联、导出面、签名、重复工具；这些都干净后，才看要不要 OOP。**不要一边修 bug 一边把模块改成类。**
+顺序上先收死代码、单点内联、导出面、签名、重复工具；这些都干净后，才看要不要对象化。**不要一边修 bug 一边把模块改成类。**
+
+### 9.1 先选 DDD 角色，再选形态
+
+| 角色 | 形态 | 行为放哪 | 例 |
+| --- | --- | --- | --- |
+| Entity | class（或组合式领域对象） | 单实体的谓词、派生值、不变量 | `ChatMessageEntity.from(msg).isUserInput()` |
+| Value Object | class / 冻结对象 | 只依赖自身值的操作 | `content.toolUseCount()`、`path.parent()` |
+| Domain Service | 无状态对象/类 | 跨实体、但不碰 repository/IO 的领域操作 | `AttachmentScanner.scanAtPaths()` |
+| Application Service / Use Case | 类，名词命名 | 编排 repository、IO、多聚合 | `PrepareUserMessages.execute()` |
+| Policy / Resolver | 无状态对象 | 策略判定、目标解析 | `ComposerSendPolicy.evaluate()`、`ChatLinkResolver.resolve()` |
+| Codec / Factory | 无状态对象 | encode/decode、build/parse | `AttachmentXmlCodec.encodeFileRef()` |
+| Presentation / View | view model | chip、摘要、预览、文案 descriptor | `RollbackConfirmView.forPrimary()`、`view.previewBody()` |
+| DTO / Record | interface/type | 纯数据，无行为 | `ChatMessageDto`、`ChatMessageRecord` |
+
+判定规则：
+
+- 只用**一个对象自身字段** → 该对象的方法；
+- 同一聚合内多个对象协作 → 聚合根/值对象方法；
+- 跨聚合、需要 repository/IO → domain/application service；
+- 只做编码/解码 → codec；
+- 只给 UI 展示 → presentation/view；
+- 纯数据跨进程 → DTO，**不要**把方法塞回 DTO。
+
+### 9.2 命名：名词是角色，动词是方法
+
+- 服务/对象名用**角色名词**：`AttachmentScanner`、`ComposerSendPolicy`、`AttachmentXmlCodec`、`ForkCopySeeder`
+- 方法名用**动词**：`scanAtPaths`、`evaluate`、`encodeFileRef`、`seed`
+- 不再写 `xxxForPrompt` / `xxxFromAttachment` / `prepareXxxForYyy` 这类把上下文全塞进函数名的自由函数
+- 同一前缀反复出现在多个导出上，说明它应该是模块/对象，不是函数前缀
+- `Manager` / `Helper` / `Util` / `Service` 只在确实表达角色时使用；说不清职责就不要加
+- DTO / Record / Entity 分工明确：`ChatMessageRecord`（DB 行）、`ChatMessageDto`（IPC）、`ChatMessage`（实体）
+
+### 9.3 什么时候才 OOP
 
 只有同时满足才值得对象化：
 
-1. 模块有**共享可变状态**（`Map` / `Set` / 数组 / `let`），或多个操作围绕同一个实体；
+1. 有**共享可变状态**（`Map` / `Set` / 数组 / `let`），或多个操作围绕同一个实体；
 2. 至少两个导出函数读写同一份状态；
 3. 有生命周期、订阅、不变量需要封装（store / cache / 连接池 / 状态机 / 队列）。
 
@@ -139,18 +174,22 @@ node .agents/skills/nm-code-style/scripts/check-style.mjs --changed --include-te
 - 单个函数、React hook（hook 本身就是状态边界）；
 - 只是为了“看起来面向对象”。
 
-形态与迁移：
+### 9.4 迁移顺序
 
-- 状态放 class private 字段，操作放实例方法；进程级单例导出 `xxxStore`，不要模块顶层 `const map` + 一堆 free functions。
-- 先对象化内部并保留方法引用兼容，再切消费者，最后撤别名 / public / allowlist；不要一次性把 API 和状态迁移混在一起。
-- `check-oop.mjs` 的 `OOP_CANDIDATE` 必须处理或按“未处理项报告”给理由；`MANY_EXPORTS` 只表示人工 review，纯函数模块可以不 OOP。
+- 先做**实体/值对象自身行为**（`ChatMessage`、`MessageContent`、`MessageAttachment`），保留 DTO mapper；
+- 再把 presentation 从 domain 拆出去（status chip、tool summary、VFS preview、rollback copy）；
+- 然后把 service 按角色命名（scanner / policy / use case / codec / seeder）；
+- 状态放 class private 字段，操作放实例方法；进程级单例导出 `xxxStore`，不要模块顶层 `const map` + 一堆 free functions；
+- 先对象化内部并保留方法引用兼容，再切消费者，最后撤别名 / public / allowlist；不要一次性把 API 和状态迁移混在一起；
+- `check-oop.mjs` 的 `OOP_CANDIDATE` 必须处理或按“未处理项报告”给理由；`MANY_EXPORTS` 只表示人工 review，纯函数模块可以不 OOP；
+- `check-methods.mjs` 的 `DEAD_METHOD` / `INLINE_METHOD` / `PASS_THROUGH_METHOD` 与自由函数同口径处理；类方法不能成为新的死角。
 
 ## 交付前 30 秒检查
 
 - 有没有跑 `check-style.mjs --changed`，并循环到 0 处？收尾再跑一次 `--all` 找未改动文件的死导出。
 - `check-oop.mjs` 的 `OOP_CANDIDATE` 处理了吗？`MANY_EXPORTS` 看过并说明纯函数/该 OOP 了吗？
 - `INLINE_CANDIDATE` 都处理了吗？public=yes 也一样默认内联；留必须写 `nm-style: keep-public` 理由。
-- 只调用一次的 private / 模块级函数，内联了吗？（`check-inline`）
+- 只调用一次的 private / 模块级函数，内联了吗？（`check-inline`）；类方法有没有 `DEAD_METHOD` / `INLINE_METHOD` / `PASS_THROUGH_METHOD`？（`check-methods`）
 - 死链的 caller 也一起删了吗？
 - 这个 export 的生产引用有几处？测试 import / allowlist 都不算消费者。（`find-fake-exports`）
 - 有没有 `return f(x)` 这种单行转手 wrapper？（`check-inline` 的 `PASS_THROUGH`）

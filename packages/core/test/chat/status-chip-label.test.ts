@@ -7,7 +7,7 @@ import { describe, it } from "node:test";
 import {
   formatStatusChipLabel,
   formatStatusChipLabelFromAttachment,
-} from "../../src/domain/chat/logic/status-chip-label.js";
+} from "../../src/domain/chat/logic/message/status-chip-label.js";
 
 describe("formatStatusChipLabel (T-CHIP1 / T-CR1)", () => {
   it("已知枚举 → 中文二字:path；mkdir 与 write 同为「创建」；rename/move 自描述", () => {

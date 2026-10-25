@@ -1,7 +1,7 @@
 /**
- * Composer 三分支发送状态（基于 core message-content-helpers）。
+ * Composer 三分支发送状态（基于 core ChatMessageEntity）。
  */
-import { isPlainUserText, type ChatMessage, type ContentBlock } from "@shared/logic/chat";
+import { ChatMessageEntity, type ChatMessage, type ContentBlock } from "@shared/logic/chat";
 import type { ChatMessageDto, ContentBlockDto } from "@shared/ipc-types";
 
 function blockFromDto(dto: ContentBlockDto): ContentBlock | null {
@@ -85,6 +85,6 @@ export function deriveComposerSendState(
   const msg = chatMessageFromDto(lastMessage);
   return {
     canResumeWithoutInput: lastMessage.role === "user",
-    lastMessageIsPlainUserText: isPlainUserText(msg),
+    lastMessageIsPlainUserText: ChatMessageEntity.from(msg).isPlainUserText(),
   };
 }

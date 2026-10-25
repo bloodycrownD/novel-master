@@ -15,7 +15,7 @@ import { settlePendingFileCacheBackfills } from "../../src/domain/workplace/logi
 import { createVfsTools } from "../../src/domain/tool/builtin/vfs-tools.js";
 import { textBlocks } from "../../src/domain/chat/content/text-blocks.js";
 import { messageBodyTextFromBlocks } from "../../src/domain/chat/content/message-body-text.js";
-import { prepareUserMessagesForPrompt } from "../../src/domain/chat/logic/prepare-user-messages-for-prompt.js";
+import { prepareUserMessagesForPrompt } from "../../src/domain/chat/logic/prompt/prepare-user-messages-for-prompt.js";
 import type { AgentPromptLayout } from "../../src/domain/prompt/model/agent-prompt-layout.js";
 import {
   getNovelMasterTestContext,

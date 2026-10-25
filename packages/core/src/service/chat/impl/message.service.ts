@@ -34,7 +34,7 @@ import {
   SESSION_KKV_DOMAIN_USAGE_STATS,
   USAGE_STATS_TOOL_USE_COUNT_KEY,
 } from "@/domain/session-kkv/model/session-kkv-domains.js";
-import { countToolUseBlocks } from "@/domain/chat/logic/tool-use-count.js";
+import { countToolUseBlocks } from "@/domain/chat/logic/message/tool-use-count.js";
 import { chatInvalidArgument, chatNotFound } from "@/errors/chat-errors.js";
 import { invalidateSessionApiPromptTokenEntry } from "@/infra/tokenizer/logic/session-api-prompt-token-store.js";
 import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";

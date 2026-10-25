@@ -30,6 +30,7 @@ const HTTPS_PATTERN = /^https?:\/\//i;
  *
  * 三端（链接路由、导航拦截、新窗口拦截）统一消费本判定，
  * 避免各入口自持正则导致口径漂移。
+ * nm-style: keep-public — 语义谓词，4 个生产入口直接消费。
  */
 export function isHttpUrl(href: string): boolean {
   return HTTPS_PATTERN.test(href);
@@ -89,9 +90,10 @@ const ELIDE_PATH_MIN_LENGTH = 20;
  * 入参应为归一化绝对逻辑路径（/ 开头、无空段无尾斜杠，即
  * resolveChatLinkTarget/resolveLogicalPath 的产出形态）；短路径（两段内或
  * 未超过 ELIDE_PATH_MIN_LENGTH）原样返回；文件名/首段本身超长不截断。
+ * nm-style: keep-local — chatLinkNotFoundMessage 复用；测试直接锁省略规则。
  */
 export function elideChatLinkPath(path: string): string {
-  const parts = path.split("/").filter(p => p.length > 0);
+  const parts = path.split("/").filter((p) => p.length > 0);
   // 拍板口径是「超长才省」：段数>2 且超过显示长度门槛才省略，短而深的路径
   // （如 /notes/2026/x.md）完整显示；文件名/首段本身超长不截断（显示层自适应）。
   if (parts.length <= 2 || path.length <= ELIDE_PATH_MIN_LENGTH) {

@@ -6,8 +6,8 @@ import {
   matchUserVfsTurnAt,
   parseAllUserVfsActionsFromText,
   USER_VFS_TURN_ACK_TEXT,
-} from "../../src/domain/chat/logic/user-vfs-turn-view.js";
-import { wrapUserVfsActionsForStorage } from "../../src/domain/chat/logic/user-vfs-turn-constants.js";
+} from "../../src/domain/chat/logic/vfs-turn/user-vfs-turn-view.js";
+import { wrapUserVfsActionsForStorage } from "../../src/domain/chat/logic/vfs-turn/user-vfs-turn-constants.js";
 import type { ChatMessage } from "../../src/domain/chat/model/message.js";
 
 function msg(

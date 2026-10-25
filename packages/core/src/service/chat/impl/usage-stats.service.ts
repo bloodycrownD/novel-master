@@ -9,7 +9,7 @@ import { queryTemplate } from "@/infra/tdbc/logic/template-helper.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import type { Row } from "@/infra/tdbc/types.js";
 import { parseMessageContent } from "@/domain/chat/content/parse-message-content.js";
-import { countToolUseBlocks } from "@/domain/chat/logic/tool-use-count.js";
+import { countToolUseBlocks } from "@/domain/chat/logic/message/tool-use-count.js";
 import {
   SESSION_KKV_DOMAIN_USAGE_STATS,
   USAGE_STATS_TOOL_USE_COUNT_KEY,

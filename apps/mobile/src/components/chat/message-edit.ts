@@ -7,12 +7,12 @@ import {
   type ChatMessage,
   type ContentBlock,
   type MessageContent,
-  extractEditableTextFromMessage,
+  ChatMessageEntity,
 } from '@novel-master/core/chat';
 
 /** Re-export Core 规则。 */
 export function editableTextFromMessage(message: ChatMessage): string | null {
-  return extractEditableTextFromMessage(message);
+  return ChatMessageEntity.from(message).editableText();
 }
 
 /**

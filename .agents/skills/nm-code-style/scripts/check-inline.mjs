@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
- * nm-code-style §1/§4 检测：单点私有函数、死私有函数、单行转手 wrapper、类 private 方法。
+ * nm-code-style §1/§4 检测：单点私有函数、死私有函数、单行转手 wrapper。
+ * 类方法由 check-methods.mjs 单独审计。
  * 口径：按同文件标识符引用计数（启发式）；导出的符号交给 find-fake-exports.mjs。
  *
  * 用法：
@@ -44,11 +45,21 @@ function passThroughCall(node) {
   return ts.isCallExpression(statement.expression) || ts.isNewExpression(statement.expression) ? statement.expression : null;
 }
 
+function isParamDerived(arg, paramName) {
+  if (ts.isIdentifier(arg)) return arg.text === paramName;
+  if (ts.isParenthesizedExpression(arg) || ts.isAsExpression(arg) || ts.isSatisfiesExpression(arg) || ts.isNonNullExpression(arg)) return isParamDerived(arg.expression, paramName);
+  if (ts.isCallExpression(arg)) {
+    if (ts.isPropertyAccessExpression(arg.expression) && ts.isIdentifier(arg.expression.expression) && arg.expression.expression.text === paramName) return true;
+    if (ts.isIdentifier(arg.expression) && ["String", "Number", "Boolean"].includes(arg.expression.text)) return true;
+  }
+  return false;
+}
+
 function isPassThrough(node, call) {
   const params = node.parameters;
   if (!params.every((param) => ts.isIdentifier(param.name) && param.initializer == null && param.dotDotDotToken == null)) return false;
   const args = call.arguments ?? [];
-  return args.length === params.length && args.every((arg, index) => ts.isIdentifier(arg) && arg.text === params[index].name.text);
+  return args.length === params.length && args.every((arg, index) => isParamDerived(arg, params[index].name.text));
 }
 
 function exportedNamesOf(sourceFile) {
@@ -60,14 +71,18 @@ function exportedNamesOf(sourceFile) {
   return names;
 }
 
+function keepDirective(node, sourceFile) {
+  let statement = node;
+  if ((ts.isArrowFunction(node) || ts.isFunctionExpression(node)) && node.parent != null) statement = node.parent.parent;
+  const comments = ts.getLeadingCommentRanges(sourceFile.text, statement.getFullStart()) ?? [];
+  return comments.map((range) => sourceFile.text.slice(range.pos, range.end)).find((text) => /nm-style:\s*(keep-local|keep-public)/.test(text)) ?? null;
+}
+
 for (const file of files) {
   const sourceFile = parseSource(file);
   const exportedNames = exportedNamesOf(sourceFile);
   const functions = [];
   forEachNode(sourceFile, (node) => {
-    if (ts.isMethodDeclaration(node) && (ts.isPrivateIdentifier(node.name) || (ts.getCombinedModifierFlags(node) & ts.ModifierFlags.Private) !== 0)) {
-      report(file, sourceFile, node, "CLASS_PRIVATE", node.name?.getText(sourceFile) ?? "(anonymous)", "", "类里不写 private 方法");
-    }
     if (ts.isFunctionDeclaration(node) && node.name != null) {
       functions.push({ name: node.name.text, nameNode: node.name, node });
     } else if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer != null && (ts.isArrowFunction(node.initializer) || ts.isFunctionExpression(node.initializer))) {
@@ -76,9 +91,10 @@ for (const file of files) {
   });
 
   for (const fn of functions) {
+    const directive = keepDirective(fn.node, sourceFile);
     const call = passThroughCall(fn.node);
-    if (call != null && isPassThrough(fn.node, call)) {
-      report(file, sourceFile, fn.node, "PASS_THROUGH", fn.name, "", "return f(x) 无策略，直接暴露 f");
+    if (call != null && isPassThrough(fn.node, call) && directive == null) {
+      report(file, sourceFile, fn.node, "PASS_THROUGH", fn.name, "", "return f(x|g(x)) 无策略薄包装");
     }
     if (isExported(fn.node, exportedNames)) continue;
     let calls = 0;
@@ -99,7 +115,11 @@ for (const file of files) {
     });
     const external = calls + refs;
     if (external === 0) report(file, sourceFile, fn.node, "DEAD_LOCAL", fn.name, internal, internal > 0 ? "仅自递归" : "零引用");
-    else if (external === 1) report(file, sourceFile, fn.node, "INLINE_LOCAL", fn.name, `${calls} call / ${refs} ref`, "只有一处外部引用，内联");
+    else if (external === 1) {
+      const lines = lineOf(sourceFile, fn.node.getEnd()) - lineOf(sourceFile, fn.node) + 1;
+      if (directive != null && /keep-local/.test(directive) && lines > 20) report(file, sourceFile, fn.node, "KEEP_LOCAL", fn.name, `${calls} call / ${refs} ref`, "nm-style 保留（需在报告说明理由）");
+      else report(file, sourceFile, fn.node, "INLINE_LOCAL", fn.name, `${calls} call / ${refs} ref`, "只有一处外部引用，内联");
+    }
   }
 }
 
@@ -110,7 +130,7 @@ if (flags.json) {
 } else {
   console.log(`check-inline: ${rows.length} 处（扫描 ${files.length} 个文件）`);
   if (rows.length > 0) console.log(formatTable(["verdict", "location", "name", "refs", "note"], rows));
-  console.log("规则：单点私有函数内联；零引用私有函数删除；return f(x) 无策略 wrapper 删除；类不写 private 方法。");
+  console.log("规则：单点私有函数内联；零引用私有函数删除；return f(x) 无策略 wrapper 删除；类方法看 check-methods；keep-local 仅限 >20 行有名字管线阶段，且需在报告说明。");
 }
 
-process.exit(rows.length > 0 ? 1 : 0);
+process.exit(rows.some(([verdict]) => verdict !== "KEEP_LOCAL") ? 1 : 0);

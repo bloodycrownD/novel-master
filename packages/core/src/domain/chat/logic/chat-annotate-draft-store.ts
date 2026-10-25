@@ -109,11 +109,7 @@ class ChatAnnotateDraftStore {
         return d;
       }
       changed = true;
-      return {
-        ...d,
-        originalText: patch.originalText ?? d.originalText,
-        userAnnotation: patch.userAnnotation,
-      };
+      return { ...d, originalText: patch.originalText ?? d.originalText, userAnnotation: patch.userAnnotation };
     });
     if (!changed) {
       return;

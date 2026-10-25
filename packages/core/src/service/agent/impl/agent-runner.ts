@@ -43,7 +43,7 @@ import {
 import { normalizeOrphanToolResultsForLlm } from "../../prompt/normalize-orphan-tool-results-for-llm.js";
 import { applyThinkingContextForLlm } from "../../prompt/apply-thinking-context-for-llm.js";
 import { normalizeForLlmExport } from "@/domain/prompt/logic/normalize-for-llm-export.js";
-import { prepareUserMessagesForPrompt } from "@/domain/chat/logic/prepare-user-messages-for-prompt.js";
+import { prepareUserMessagesForPrompt } from "@/domain/chat/logic/prompt/prepare-user-messages-for-prompt.js";
 import type { SkillService } from "@/service/skills/skills.port.js";
 import { inferLlmProtocolFromSavedModelId } from "@/domain/provider/logic/infer-llm-protocol-from-model-id.js";
 import type { ProviderRepository } from "@/domain/provider/repositories/provider.port.js";

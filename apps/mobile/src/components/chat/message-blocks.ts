@@ -278,7 +278,7 @@ export function toolCallViewFromUse(
 /**
  * 工具入参摘要：单源在 core（`@novel-master/core/chat` 的 `summarizeToolInput`）。
  * 本文件此前持有一份**两个特判都没有**的副本，与 desktop / mobile WebView 行为不一致，
- * 现已全部改为引用 core；新增特判分支请改 core 的 `domain/chat/logic/tool-summary.ts`。
+ * 现已全部改为引用 core；新增特判分支请改 core 的 `domain/chat/logic/message/tool-summary.ts`。
  */
 
 /** 工具卡片可打开的逻辑文件路径；不可打开时返回 undefined。 */

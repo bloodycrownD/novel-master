@@ -1,7 +1,7 @@
 /**
- * Composer 三分支发送状态（基于 core message-content-helpers）。
+ * Composer 三分支发送状态（基于 core ChatMessageEntity）。
  */
-import {isPlainUserText, type ChatMessage} from '@novel-master/core/chat';
+import {ChatMessageEntity, type ChatMessage} from '@novel-master/core/chat';
 
 export type ComposerSendState = {
   /** 末条为 user 时可空发续跑。 */
@@ -35,6 +35,6 @@ export function deriveComposerSendState(
   }
   return {
     canResumeWithoutInput: lastMessage.role === 'user',
-    lastMessageIsPlainUserText: isPlainUserText(lastMessage),
+    lastMessageIsPlainUserText: ChatMessageEntity.from(lastMessage).isPlainUserText(),
   };
 }

@@ -59,45 +59,30 @@ export type {
 } from "../domain/chat/model/composer-draft.schema.js";
 export {
   ATTACH_PROMPT_CHAR_BUDGET,
-} from "../domain/chat/logic/attach-budget.js";
-export { wrapUserMessageForLlm } from "../domain/chat/logic/wrap-user-message-for-llm.js";
-export { prepareUserMessagesForPrompt } from "../domain/chat/logic/prepare-user-messages-for-prompt.js";
-export type { PrepareUserMessagesForPromptRuntime } from "../domain/chat/logic/prepare-user-messages-for-prompt.js";
-export {
-  STATUS_CHIP_ZH,
-  formatStatusChipLabel,
-  formatStatusChipLabelFromAttachment,
-  logicalParentDir,
-  renameChipZh,
-  resolveRenameOrMoveAction,
-} from "../domain/chat/logic/status-chip-label.js";
+} from "../domain/chat/logic/attachment/attach-budget.js";
+export { wrapUserMessageForLlm } from "../domain/chat/logic/prompt/wrap-user-message-for-llm.js";
+export { prepareUserMessagesForPrompt } from "../domain/chat/logic/prompt/prepare-user-messages-for-prompt.js";
+export { formatStatusChipLabel, formatStatusChipLabelFromAttachment, logicalParentDir, resolveRenameOrMoveAction } from "../domain/chat/logic/message/status-chip-label.js";
 export {
   buildFileAnnotateAttachmentFromDraft,
   parseAnnotateDraftsFromAttachments,
-} from "../domain/chat/logic/build-attachment-action-xml.js";
+} from "../domain/chat/logic/attachment/build-attachment-action-xml.js";
 export {
-  PROMPT_FILE_SEEN_SHORT_TIP,
   createPromptPathSeenSet,
   isPromptDirTokenPath,
-  normalizePromptSeenPath,
   normalizePromptStorePath,
   tryNormalizePromptSeenPath,
-} from "../domain/chat/logic/prompt-path-seen.js";
-export {
-  ATTACH_DIR_TREE_MAX_UTF8_BYTES,
-  renderDirAttachTree,
-} from "../domain/chat/logic/render-dir-attach-tree.js";
-export type { RenderDirAttachTreeDeps } from "../domain/chat/logic/render-dir-attach-tree.js";
+} from "../domain/chat/logic/attachment/prompt-path-seen.js";
 export {
   mergeAttachmentsByPath,
   mergeAttachmentsWithScannedAtPaths,
   scanAtPathAttachments,
-} from "../domain/chat/logic/scan-at-path-attachments.js";
+} from "../domain/chat/logic/attachment/scan-at-path-attachments.js";
 export {
   mergeAttachmentsWithScannedSkills,
   scanSkillAttachments,
   skillSeenKey,
-} from "../domain/chat/logic/scan-skill-attachments.js";
+} from "../domain/chat/logic/attachment/scan-skill-attachments.js";
 export type {
   ContentBlock,
   TextBlock,
@@ -129,79 +114,27 @@ export type {
   UserVfsPendingQueue,
   UserVfsPendingTool,
 } from "../domain/chat/model/user-vfs-pending.schema.js";
-export { resolveChatLinkTarget, isHttpUrl, elideChatLinkPath, chatLinkNotFoundMessage } from "../domain/chat/logic/resolve-chat-link-target.js";
-export type { WorkspaceFlushSnapshot } from "../domain/chat/logic/workspace-flush-snapshot.js";
-export {
-  deriveDirPathsFromFileTree,
-  emptyWorkspaceFlushSnapshot,
-} from "../domain/chat/logic/workspace-flush-snapshot.js";
-export { resolveComposerSendIntent } from "../domain/chat/logic/composer-send-intent.js";
+export { resolveChatLinkTarget, isHttpUrl, chatLinkNotFoundMessage } from "../domain/chat/logic/resolve-chat-link-target.js";
+export { resolveComposerSendIntent } from "../domain/chat/logic/composer/composer-send-intent.js";
 export {
   partitionComposerChipAttachments,
-} from "../domain/chat/logic/composer-chip-attachment.js";
+} from "../domain/chat/logic/composer/composer-chip-attachment.js";
 export {
   atPathTokensFromPickerSelection,
   findActiveAtQuery,
   formatComposerAtPathToken,
   replaceActiveAtWithToken,
-} from "../domain/chat/logic/composer-at-path.js";
-export type { AtPathRef } from "../domain/chat/logic/composer-at-path.js";
+} from "../domain/chat/logic/composer/composer-at-path.js";
+export type { AtPathRef } from "../domain/chat/logic/composer/composer-at-path.js";
 export { chatAnnotateDraftStore } from "../domain/chat/logic/chat-annotate-draft-store.js";
 export {
   USER_VFS_TURN_ACK_TEXT,
   wrapUserVfsActionsForStorage,
-} from "../domain/chat/logic/user-vfs-turn-constants.js";
-export {
-  buildUserVfsTurnView,
-  deriveToolUsesFromVfsActions,
-  formatUserVfsTurnPreviewBody,
-  matchUserVfsTurnAt,
-  parseAllUserVfsActionsFromText,
-  USER_VFS_TURN_SPAN,
-} from "../domain/chat/logic/user-vfs-turn-view.js";
-export type {
-  ParsedUserVfsAction,
-  ParsedUserVfsEditHunk,
-  UserVfsTurnView,
-} from "../domain/chat/logic/user-vfs-turn-view.js";
-export {
-  hasAnnotateAttachment,
-  hasToolResult,
-  isPlainUserText,
-} from "../domain/chat/logic/message-content-helpers.js";
-export {
-  extractEditableTextFromMessage,
-  isPlainUserUndoSendEligible,
-} from "../domain/chat/logic/editable-text-from-message.js";
-export { resolveRollbackConfirmMessage } from "../domain/chat/logic/rollback-confirm-copy.js";
-export type {
-  RollbackConfirmKind,
-  RollbackMode,
-} from "../domain/chat/logic/rollback-confirm-copy.js";
-export type {
-  MessageVisibilityBatchMode,
-  TranscriptSelectableRole,
-  VisibilityBatchMessage,
-} from "../domain/chat/logic/visibility-batch-range.js";
-export {
-  transcriptSelectableRole,
-  isTranscriptRowSelectable,
-  computeHideRangeFromSelection,
-  computeShowRangeFromSelection,
-  computeVisibilityBatchAffectedIds,
-  selectVisibilityBatchEligibleIdsFromAnchor,
-} from "../domain/chat/logic/visibility-batch-range.js";
-export type {
-  TailBatchMode,
-  TailBatchRow,
-} from "../domain/chat/logic/tail-batch-range.js";
-export {
-  isTailBatchRowSelectable,
-  selectTailBatchEligibleIdsFromAnchor,
-  computeTailBatchAffectedIds,
-  computeTailBatchRangeFromSelection,
-  tailBatchDeleteAfterSeq,
-} from "../domain/chat/logic/tail-batch-range.js";
+} from "../domain/chat/logic/vfs-turn/user-vfs-turn-constants.js";
+export { ChatMessageEntity } from "../domain/chat/logic/message/chat-message-entity.js";
+export { rollbackConfirmDescriptor } from "../domain/chat/logic/rollback-confirm-copy.js";
+export type { RollbackConfirmDescriptor, RollbackConfirmKind, RollbackMode } from "../domain/chat/logic/rollback-confirm-copy.js";
+export type { ChatMessageDescriptor, ChatMessageKey, ChatMessageLike } from "../domain/chat/i18n/keys.js";
 export {
   createChatServices,
   createProjectService,
@@ -248,4 +181,4 @@ export type {
   SetMessageFloorResult,
 } from "../service/chat/message-transcript-effects.port.js";
 export { createMessageTranscriptEffectsService } from "../service/chat/create-message-transcript-effects.js";
-export { summarizeToolInput } from "../domain/chat/logic/tool-summary.js";
+export { summarizeToolInput } from "../domain/chat/logic/message/tool-summary.js";

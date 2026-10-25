@@ -1,6 +1,7 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
+    "resolveJsonModule": true,
     // base 用 NodeNext/target ES2022；RN 走 bundler 模式，
     // 这里把 module/moduleResolution 之类覆盖回去，否则 RN bundler 解析会挂。
     "target": "ESNext",

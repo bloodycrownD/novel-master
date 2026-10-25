@@ -6,7 +6,7 @@ import type {ToolCallRow} from '../state/state';
  * 工具组 UI 由 ui/render/ToolGroup 渲染；本文件仅供其复用的纯逻辑。
  */
 
-// 摘要单源已收敛到 core（`domain/chat/logic/tool-summary.ts`）。
+// 摘要单源已收敛到 core（`domain/chat/logic/message/tool-summary.ts`）。
 // ⚠️ 这里必须写成「import + export」两步，**不能**写成纯 re-export
 // `export { summarizeToolInput } from '@novel-master/core/chat';`——
 // 纯 re-export 不把该符号引入本模块作用域，而下方 `toolCallSummary` 正在本地调用它。

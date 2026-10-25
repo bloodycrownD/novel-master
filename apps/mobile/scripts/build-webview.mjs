@@ -134,10 +134,14 @@ const WEBVIEW_CORE_ALLOWLIST = {
     //    （`BUILTIN_DEFAULT_API_KEY_BY_KEY = Object.fromEntries(...)`，顶层执行）
     //    **刻意不在**本白名单里——它一旦被 barrel 拖进来就是老 WebView 白屏，门 B 会直接打红。
     'domain/character-card/logic/character-card-limits.js',
-    'domain/chat/logic/render-dir-attach-tree.js',
-    'domain/chat/logic/status-chip-label.js',
-    'domain/chat/logic/tool-summary.js',
-    'domain/chat/logic/user-vfs-turn-view.js',
+    'domain/chat/logic/attachment/render-dir-attach-tree.js',
+    'domain/chat/logic/message/status-chip-label.js',
+    'domain/chat/logic/message/tool-summary.js',
+    'domain/chat/logic/vfs-turn/user-vfs-turn-view.js',
+    // action XML 唯一 codec：user-vfs-turn-view 解析 VFS 操作卡片正文；删了卡片无内容。
+    'domain/vfs/logic/user-vfs-action-xml.js',
+    // 批注草稿 store：webview composer 经 public/chat 传递消费；删了批注草案丢失。
+    'domain/chat/logic/chat-annotate-draft-store.js',
     'domain/message-checkpoint/logic/restore-path.js',
     'domain/prompt/logic/agent-prompt-layout-wire.js',
     'domain/prompt/logic/normalize-agent-prompt-layout.js',
@@ -166,8 +170,8 @@ const WEBVIEW_CORE_ALLOWLIST = {
     // ⚠️ `composer-at-path.js` 刻意**不**在本组——它是 dock/typeahead 的
     // @ 查询纯函数，仅合成包（含 dock）的闭包消费，独立入口实测未拉入。
     'common/file.js',
-    'domain/chat/logic/prompt-path-seen.js',
-    'domain/chat/logic/scan-at-path-attachments.js',
+    'domain/chat/logic/attachment/prompt-path-seen.js',
+    'domain/chat/logic/attachment/scan-at-path-attachments.js',
     'domain/vfs/content-store/logic/pack-codec.js',
     'domain/vfs/logic/vfs-path-mapper.js',
   ],

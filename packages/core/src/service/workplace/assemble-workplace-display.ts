@@ -28,7 +28,7 @@ import {
   serializeRuleSnapshot,
   type RuleSnapshotEntry,
 } from "@/domain/workplace/logic/rule-snapshot-codec.js";
-import { normalizePromptSeenPath } from "@/domain/chat/logic/prompt-path-seen.js";
+import { resolveLogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
 import type { WorkplaceService } from "@/service/workplace/workplace.port.js";
 
@@ -216,7 +216,7 @@ export async function assembleWorkplaceDisplay(
     if (options?.shouldStop?.() === true) {
       throw new WorkplaceAssemblyAbortedError();
     }
-    const normalized = normalizePromptSeenPath(entry.path);
+    const normalized = resolveLogicalPath(entry.path);
     // 全量可见集（workplace 省略判定用，= 旧 prefixPaths 语义）。
     visiblePaths.push(normalized);
     // S0 入集（attach 去重用）：只有 full 档真正把全文注入了提示词，
