@@ -46,15 +46,9 @@ export function hasAnnotateAttachment(message: ChatMessage): boolean {
  * Composer 的连续 user 守卫才能拦住「批注后又带文字发送」的情况。
  */
 export function isPlainUserText(message: ChatMessage): boolean {
-  if (message.role !== "user") {
+  if (message.role !== "user" || hasToolResult(message)) {
     return false;
   }
-  if (hasToolResult(message)) {
-    return false;
-  }
-  const hasText = (message.content.blocks ?? []).some(
-    (b) => b.type === "text" && b.text.trim().length > 0
-  );
-  if (hasText) return true;
-  return hasAnnotateAttachment(message);
+  const hasText = (message.content.blocks ?? []).some((b) => b.type === "text" && b.text.trim().length > 0);
+  return hasText || hasAnnotateAttachment(message);
 }

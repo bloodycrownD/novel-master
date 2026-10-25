@@ -4,10 +4,6 @@
  * @module service/chat/impl/message-transcript-effects.service
  */
 
-import {
-  computeSetFloorRanges,
-  isSetFloorAnchorRole,
-} from "@/domain/chat/logic/message-set-floor-range.js";
 import { chatInvalidArgument, chatNotFound } from "@/errors/chat-errors.js";
 import { invalidateSessionApiPromptTokenEntry } from "@/infra/tokenizer/logic/session-api-prompt-token-store.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
@@ -28,7 +24,7 @@ import type {
 } from "../message-transcript-effects.port.js";
 
 /** {@link DefaultMessageTranscriptEffectsService} 依赖。 */
-export interface MessageTranscriptEffectsServiceDeps {
+interface MessageTranscriptEffectsServiceDeps {
   readonly conn: TdbcConnection;
   readonly messages: MessageService;
   readonly sessionKkv: SessionKkvService;
@@ -96,7 +92,7 @@ export class DefaultMessageTranscriptEffectsService
     if (anchor.sessionId !== sessionId) {
       throw chatNotFound("message", messageId, { sessionId });
     }
-    if (!isSetFloorAnchorRole(anchor.role)) {
+    if (anchor.role !== "user") {
       throw chatInvalidArgument(
         `set-floor anchor role must be user, got: ${anchor.role}`
       );
@@ -106,10 +102,8 @@ export class DefaultMessageTranscriptEffectsService
       limit: 1,
     });
     const sessionMaxSeq = tail.length > 0 ? tail[0]!.seq : 0;
-    const { hidePrefix, showSuffix } = computeSetFloorRanges(
-      anchor.seq,
-      sessionMaxSeq
-    );
+    const hidePrefix = anchor.seq > 1 ? { fromSeq: 1 as const, toSeq: anchor.seq - 1 } : null;
+    const showSuffix = anchor.seq <= sessionMaxSeq ? { fromSeq: anchor.seq, toSeq: sessionMaxSeq } : null;
 
     let hiddenCount = 0;
     let shownCount = 0;

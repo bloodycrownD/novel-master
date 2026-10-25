@@ -452,7 +452,7 @@ export class DefaultUsageStatsService implements UsageStatsService {
     // 最近行 + 可见计数两条 SQL 与会话 KKV 缓存读并行。最近行改打账本
     // （usage_record，按 created_at_ms 倒序取首行）——消息被删除/回滚后
     // 账本行仍在，「最近一次请求」不再随内容消失；可见数 SQL 数行
-    // （hidden 列判定，与 listVisibleSorted 同口径——只剔 hidden 不筛角色），
+    // （hidden 列判定，只剔 hidden 不筛角色），
     // 它属内容侧读数（随会话删），仍打 chat_message。
     // 工具调用数走会话 KKV `usage_stats.toolUseCount` 缓存（2026-09-29 用户
     // 拍板「实时算 + 缓存，失效挂 run/编辑/删除」；缓存跟随会话生命周期，

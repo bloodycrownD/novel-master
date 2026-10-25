@@ -177,7 +177,7 @@ export interface SessionUsageLastRequest {
  */
 export interface SessionUsageDetail {
   readonly last: SessionUsageLastRequest | null;
-  /** 可见口径消息数（`listVisibleSorted` 同源：hidden 剔除，不筛角色）。 */
+  /** 可见口径消息数（hidden 剔除，不筛角色）。 */
   readonly visibleMessageCount: number;
   /**
    * 会话内 assistant 消息 `tool_use` 块总数（含 hidden 行——累计口径）。

@@ -130,8 +130,6 @@ export type {
   UserVfsPendingTool,
 } from "../domain/chat/model/user-vfs-pending.schema.js";
 export { resolveChatLinkTarget, isHttpUrl, elideChatLinkPath, chatLinkNotFoundMessage } from "../domain/chat/logic/resolve-chat-link-target.js";
-export { mergePendingVfsTurns } from "../domain/chat/logic/merge-pending-vfs-turns.js";
-export type { MergedPendingVfsTurn } from "../domain/chat/logic/merge-pending-vfs-turns.js";
 export type { WorkspaceFlushSnapshot } from "../domain/chat/logic/workspace-flush-snapshot.js";
 export {
   deriveDirPathsFromFileTree,
@@ -193,10 +191,6 @@ export {
   computeVisibilityBatchAffectedIds,
   selectVisibilityBatchEligibleIdsFromAnchor,
 } from "../domain/chat/logic/visibility-batch-range.js";
-export {
-  computeSetFloorRanges,
-  isSetFloorAnchorRole,
-} from "../domain/chat/logic/message-set-floor-range.js";
 export type {
   TailBatchMode,
   TailBatchRow,
@@ -208,10 +202,6 @@ export {
   computeTailBatchRangeFromSelection,
   tailBatchDeleteAfterSeq,
 } from "../domain/chat/logic/tail-batch-range.js";
-export {
-  listVisibleSorted,
-  visibleFloorByMessageId,
-} from "../domain/chat/logic/message-visible-floor.js";
 export {
   createChatServices,
   createProjectService,

@@ -1516,7 +1516,7 @@ describe("usage stats service 会话维度详情（T-MD1/T-MD2，metric-detail-s
 
     const svc = createUsageStatsService(ctx.conn);
     const detail = await svc.getSessionUsageDetail(session.id);
-    // 可见数：4 条里 hidden 1 条 → 3（user 行照计——listVisibleSorted 同源不筛角色）。
+    // 可见数：4 条里 hidden 1 条 → 3（user 行照计——只剔 hidden 不筛角色）。
     assert.equal(detail.visibleMessageCount, 3);
     // 工具计数：2（可见 assistant）+ 1（hidden assistant）= 3；tool_result 不数。
     assert.equal(detail.toolUseCount, 3);

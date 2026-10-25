@@ -4,10 +4,6 @@ export {
   validateDepthSlice,
   messageIdsInSlice,
 } from "../domain/depth/logic/depth-slice.js";
-export {
-  depthByMessageId,
-  listVisibleForDepth,
-} from "../domain/depth/logic/depth-from-tail.js";
 export { resolveHideMessageRange } from "../domain/depth/logic/resolve-hide-message-range.js";
 export type { HideMessageSeqRange } from "../domain/depth/logic/resolve-hide-message-range.js";
 export type { CompactionConditions } from "../domain/compaction-conditions/model/compaction-conditions.js";
@@ -28,6 +24,4 @@ export {
 export {
   runCompaction,
   type RunCompactionDeps,
-  type RunCompactionParams,
-  type RunCompactionResult,
 } from "../service/compaction-conditions/run-compaction.js";

@@ -26,7 +26,8 @@
  * @module service/compaction-conditions/run-compaction
  */
 
-import { runHideMessageAction } from "@/service/compaction-conditions/hide-message.action.js";
+import { messageIdsInSlice } from "@/domain/depth/logic/depth-slice.js";
+import { resolveHideMessageRange } from "@/domain/depth/logic/resolve-hide-message-range.js";
 import type { DepthSlice } from "@/domain/depth/logic/depth-slice.js";
 import { DEFAULT_HIDE_START_DEPTH } from "@/domain/compaction-conditions/model/compaction-conditions.js";
 import {
@@ -39,7 +40,7 @@ import type { MessageTranscriptEffectsService } from "@/service/chat/message-tra
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
 
 /** 压缩触发来源：手动（用户点「压缩上下文」）vs 自动（agent 回合中段条件压缩）。 */
-export type CompactionTrigger = "manual" | "auto";
+type CompactionTrigger = "manual" | "auto";
 
 /** runCompaction 的运行时依赖（与事件编排器原先持有的那组服务同构）。 */
 export interface RunCompactionDeps {
@@ -49,7 +50,7 @@ export interface RunCompactionDeps {
 }
 
 /** runCompaction 的调用参数。 */
-export interface RunCompactionParams {
+interface RunCompactionParams {
   readonly sessionId: string;
   readonly projectId: string;
   /** hide-message 起始深度（tail 0 = newest），缺省按 {@link DEFAULT_HIDE_START_DEPTH}。 */
@@ -64,7 +65,7 @@ export interface RunCompactionParams {
 }
 
 /** 压缩执行结果：只关心成败，不暴露 failures 细节。 */
-export interface RunCompactionResult {
+interface RunCompactionResult {
   readonly ok: boolean;
 }
 
@@ -84,10 +85,21 @@ export async function runCompaction(
   const slice: DepthSlice = { startDepth };
 
   try {
-    await runHideMessageAction(params.projectId, params.sessionId, slice, {
-      messages: deps.messages,
-      messageTranscriptEffects: deps.messageTranscriptEffects,
-    });
+    const headers = await deps.messages.listMessageHeadersBySession(params.sessionId);
+    const stubAll = headers.map((header) => ({ id: header.id, sessionId: header.sessionId, seq: header.seq, role: header.role, content: { blocks: [] }, provider: null, raw: null, createdAtMs: header.createdAtMs, hidden: header.hidden }));
+    const visible = stubAll.filter((m) => !m.hidden);
+    const ids = messageIdsInSlice(visible, slice);
+    if (ids.length > 0) {
+      const idSet = new Set(ids);
+      const minSeq = Math.min(...visible.filter((m) => idSet.has(m.id)).map((m) => m.seq));
+      const fullRows = await deps.messages.listBySessionFromSeq(params.sessionId, minSeq);
+      const fullById = new Map(fullRows.map((m) => [m.id, m]));
+      const mergedVisible = visible.map((m) => fullById.get(m.id) ?? m);
+      const range = resolveHideMessageRange(mergedVisible, slice, ids);
+      if (range != null) {
+        await deps.messageTranscriptEffects.hideMessagesInRange(params.projectId, params.sessionId, range.fromSeq, range.toSeq);
+      }
+    }
   } catch {
     return { ok: false };
   }

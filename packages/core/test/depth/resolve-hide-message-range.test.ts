@@ -12,7 +12,10 @@ import type { ChatMessage } from "../../src/domain/chat/model/message.js";
 import type { ContentBlock } from "../../src/domain/chat/model/content-block.js";
 import { resolveHideMessageRange } from "../../src/domain/depth/logic/resolve-hide-message-range.js";
 import { messageIdsInSlice } from "../../src/domain/depth/logic/depth-slice.js";
-import { listVisibleForDepth } from "../../src/domain/depth/logic/depth-from-tail.js";
+
+function filterVisible(messages: readonly ChatMessage[]): ChatMessage[] {
+  return messages.filter((message) => !message.hidden);
+}
 
 function makeMsg(
   id: string,
@@ -44,13 +47,13 @@ describe("resolveHideMessageRange", () => {
     makeMsg("m6", 6, "assistant"),
     makeMsg("m7", 7, "user"),
   ];
-  const visible = listVisibleForDepth(all);
+  const visible = filterVisible(all);
 
   it("PRD：10 条可见 startDepth 6 时隐藏锚点以旧，保留 8 条", () => {
     const tenVisible = Array.from({ length: 10 }, (_, i) =>
       makeMsg(`m${i}`, i + 1, i % 2 === 0 ? "user" : "assistant"),
     );
-    const vis = listVisibleForDepth(tenVisible);
+    const vis = filterVisible(tenVisible);
     const slice = { startDepth: 6 };
     const ids = messageIdsInSlice(vis, slice);
     assert.equal(ids.length, 4);
@@ -85,7 +88,7 @@ describe("resolveHideMessageRange", () => {
       makeMsg("m11", 11, "user"),
       makeMsg("m12", 12, "assistant"),
     ];
-    const vis = listVisibleForDepth(msgs);
+    const vis = filterVisible(msgs);
     // n=12，startDepth=6 → seq ≤ 6；边界切在轮中段（seq4..8 是同一轮的
     // tool 往返）。向旧锚定到 seq3 真用户输入，只隐藏 1..2；保留
     // seq3..seq12，可见开头 = user, assistant(tool_use), user(tool_result),
@@ -113,7 +116,7 @@ describe("resolveHideMessageRange", () => {
       makeMsg("m11", 11, "user"),
       makeMsg("m12", 12, "assistant"),
     ];
-    const vis = listVisibleForDepth(msgs);
+    const vis = filterVisible(msgs);
     // n=12，startDepth=3 → seq ≤ 9；seq9 恰为真用户输入，锚点即边界，
     // 隐藏 1..8，保留 9..12。
     const slice = { startDepth: 3 };
@@ -161,7 +164,7 @@ describe("resolveHideMessageRange", () => {
       makeMsg("m8", 8, "assistant"),
       makeMsg("m9", 9, "user"),
     ];
-    const vis = listVisibleForDepth(msgs);
+    const vis = filterVisible(msgs);
     // n=9，depth 5..8 → seq 1..4：范围内只有 tool 往返和 assistant，
     // 找不到真用户输入（seq1 真用户输入已隐藏的病态残留形态）——
     // 放弃压缩返回 null，避免压缩后可见历史以 assistant 开头。
