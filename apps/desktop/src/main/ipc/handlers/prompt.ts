@@ -4,7 +4,6 @@
 import {
   AgentRunResolveError,
   resolveAgentForProject,
-  resolveSavedModelId,
 } from "@novel-master/core/agent";
 import { savedModelDisplayName } from "@novel-master/core/provider";
 import { formatToolUsePreviewJson } from "@novel-master/core/prompt";
@@ -110,7 +109,7 @@ export async function handlePromptAgentMeta(
       const sessionConfig = await rt.sessions.getSessionAgentConfig(
         req.sessionId,
       );
-      const savedModelId = resolveSavedModelId(definition.model, sessionConfig.modelId);
+      const savedModelId = definition.model ?? sessionConfig.modelId;
       let modelLabel = "未选择模型";
       if (savedModelId) {
         const saved = await rt.providerModels.getSavedById(savedModelId);

@@ -6,7 +6,6 @@
 
 import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
 import type { SessionAgentConfig } from "@/domain/chat/model/session-agent-config.js";
-import { resolveSavedModelId } from "@/domain/agent/logic/resolve-saved-model-id.js";
 import { AgentConfigError } from "@/errors/agent-config-errors.js";
 
 /**
@@ -112,7 +111,7 @@ export async function resolveApplicationModelIdForRun(
     // modelId 可选；空串归一化为 undefined（与 workspaceModelId 同约束）
     sessionModelId = sessionConfig.modelId || undefined;
   }
-  const resolved = resolveSavedModelId(definition.model, sessionModelId);
+  const resolved = definition.model ?? sessionModelId;
   if (resolved == null || resolved === "") {
     throw new AgentRunResolveError(
       "未选择模型。请为 Agent 设置专属模型，或在会话上设置 modelId。"

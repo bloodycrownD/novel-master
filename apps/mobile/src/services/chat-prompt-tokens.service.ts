@@ -14,7 +14,6 @@
  * 估计的场景，故已改走 RN 驱动的 cl100k 真分词器（`counterKind` 仍是
  * `heuristic`、`estimated: true`——**近似**这件事不变，变的是读数本身）。
  */
-import {resolveSavedModelId} from '@novel-master/core/agent';
 
 import {messageBodyText} from '@novel-master/core/prompt';
 
@@ -167,7 +166,7 @@ async function loadChatTokenLabelWithFlag(
   }
   // 弃权检查点（build/resolve 关键边界，r3-chip-1）：build 的分段 bail 只管得到
   // build 段内部，最后一段 bail 到 resolve 派发之间还夹着 getSessionAgentConfig、
-  // resolveSavedModelId、resolveTokenCounterModeForModel 三次 IO——run 起步的
+  // 模型解析、resolveTokenCounterModeForModel 三次 IO——run 起步的
   // 窗口正落在这里。命中即按空串哨兵收场，绝不放行到 resolve。
   if (shouldBail?.() === true) {
     if (__DEV__) {
@@ -178,7 +177,7 @@ async function loadChatTokenLabelWithFlag(
   const sessionConfig = await runtime.sessions.getSessionAgentConfig(
     scope.sessionId,
   );
-  const savedModelId = resolveSavedModelId(definition.model, sessionConfig.modelId);
+  const savedModelId = definition.model ?? sessionConfig.modelId;
   if (!savedModelId) {
     // 已知残留（r3-chip-1 留痕，刻意不补 bail）：无模型早退分支的 serialize +
     // countFallbackTokens 整串级重活没有弃权点。理由——① 这一分支只统计可见
@@ -559,7 +558,7 @@ async function loadChatPromptTokenLabelFallback(
     const sessionConfig = await runtime.sessions.getSessionAgentConfig(
       scope.sessionId,
     );
-    savedModelId = resolveSavedModelId(definition.model, sessionConfig.modelId);
+    savedModelId = definition.model ?? sessionConfig.modelId;
   } catch {
     // 兜底显示用 workspace 当前模型（仅用于查 contextWindow，不参与 runtime 解析）。
     savedModelId = workspaceModelId || undefined;

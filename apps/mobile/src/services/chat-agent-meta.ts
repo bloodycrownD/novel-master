@@ -10,7 +10,6 @@
 import {
   AgentRunResolveError,
   resolveAgentForProject,
-  resolveSavedModelId,
 } from '@novel-master/core/agent';
 import type {MobileNovelMasterRuntime} from '../runtime/types';
 import {resolveModelDisplayLabel} from './model-display-label';
@@ -69,7 +68,7 @@ export async function loadChatAgentMeta(
     const {definition} = resolved;
     const hasDedicatedModel =
       definition.model != null && definition.model !== '';
-    const savedModelId = resolveSavedModelId(definition.model, sessionConfig.modelId);
+    const savedModelId = definition.model ?? sessionConfig.modelId;
     let modelLabel = '未选择模型';
     if (savedModelId) {
       try {

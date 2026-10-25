@@ -24,7 +24,6 @@
   "resolveApplicationModelIdForRun",
   "resolveCurrentAgentDefinition",
   "resolveCurrentAgentId",
-  "resolveSavedModelId",
   "runAgentTurn",
   "shouldAcceptRunEvent",
   "shouldApplyTranscriptReload",

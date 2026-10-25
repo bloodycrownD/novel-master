@@ -25,7 +25,6 @@
  * @module services/chat-prompt-tokens
  */
 import { app } from "electron";
-import { resolveSavedModelId } from "@novel-master/core/agent";
 import type { ChatMessage } from "@novel-master/core/chat";
 import { messageBodyText } from "@novel-master/core/prompt";
 
@@ -219,7 +218,7 @@ async function computeChatPromptTokenStats(
 
   // 弃权检查点（build/resolve 关键边界，r3-dt-align 第 2 层）：build 的分段 bail 只
   // 管得到 build 段内部，最后一段 bail 到 resolve 派发之间还夹着
-  // getSessionAgentConfig、resolveSavedModelId、resolveTokenCounterModeForModel 三次
+  // getSessionAgentConfig、模型解析、resolveTokenCounterModeForModel 三次
   // IO——run 起步的窗口正落在这里。命中即由上层 catch 收成 null 哨兵（保留旧标签），
   // 绝不放行到 resolve。
   if (shouldBail?.() === true) {
@@ -230,7 +229,7 @@ async function computeChatPromptTokenStats(
   const sessionConfig = await runtime.sessions.getSessionAgentConfig(
     scope.sessionId,
   );
-  const savedModelId = resolveSavedModelId(definition.model, sessionConfig.modelId);
+  const savedModelId = definition.model ?? sessionConfig.modelId;
 
   if (!savedModelId) {
     // 此处恒不拼 tools（UI 读口拿不到定义，`session-prompt-input` 不产 tools）：
@@ -339,7 +338,7 @@ async function isPreciseWarmStillCurrent(
     );
     const definition = await runtime.agentRegistry.get(sessionConfig.agentId);
     return (
-      resolveSavedModelId(definition.model, sessionConfig.modelId) === warmSavedModelId
+      (definition.model ?? sessionConfig.modelId) === warmSavedModelId
     );
   } catch {
     return false;

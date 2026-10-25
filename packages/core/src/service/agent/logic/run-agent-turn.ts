@@ -22,7 +22,6 @@
 
 import { resolveAgentToolRegistry } from "@/domain/agent/logic/resolve-agent-tools.js";
 import { validateAgentDefinition } from "@/domain/agent/logic/validate-agent-definition.js";
-import { resolveSavedModelId } from "@/domain/agent/logic/resolve-saved-model-id.js";
 import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
 import type { AgentRunResult } from "@/domain/agent/model/agent-run-result.js";
 import { registerBuiltinTools } from "@/domain/tool/builtin/register-builtin-tools.js";
@@ -915,7 +914,7 @@ async function runAgentTurnWithController(
         def: AgentDefinition
       ): { savedModelId: string; workspaceModelId: string } => {
         // 子 agent pin → 父 savedModelId → 报错（不走 workspace fallback）。
-        const resolved = resolveSavedModelId(def.model, savedModelId);
+        const resolved = def.model ?? savedModelId;
         if (resolved == null || resolved === "") {
           throw new AgentRunResolveError(
             "子代理未指定模型，且父 agent 也无可用 savedModelId。"
@@ -1293,7 +1292,7 @@ async function runChildAgent(args: {
           grandchildDef: AgentDefinition
         ): { savedModelId: string; workspaceModelId: string } => {
           // 子 agent pin → 父子 agent 的 savedModelId → 报错（不走 workspace fallback）。
-          const resolved = resolveSavedModelId(grandchildDef.model, opts.savedModelId);
+          const resolved = grandchildDef.model ?? opts.savedModelId;
           if (resolved == null || resolved === "") {
             throw new AgentRunResolveError(
               "孙代理未指定模型，且子 agent 也无可用 savedModelId。"

@@ -20,7 +20,6 @@ import type {MobileNovelMasterRuntime} from '@/runtime/types';
 const mockResolvePromptTokensWithBackfill = jest.fn();
 const mockResolveTokenCounterModeForModel = jest.fn();
 const mockBuildSessionPromptInput = jest.fn();
-const mockResolveSavedModelId = jest.fn();
 // 形参写成 rest（而非零参实现）：mock 工厂里要把 unknown[] 原样转发进来，
 // 零参签名会让 tsc 报 TS2556（spread 必须有 tuple/ rest 目标）——既有的类型
 // 欠账，本轮顺手清掉，免得本文件的 typecheck 信号被这一条常年占着。
@@ -84,10 +83,6 @@ jest.mock('@novel-master/core/provider', () => {
     PromptTokenResolveBailedError,
   };
 });
-
-jest.mock('@novel-master/core/agent', () => ({
-  resolveSavedModelId: (...args: unknown[]) => mockResolveSavedModelId(...args),
-}));
 
 jest.mock('@novel-master/core/prompt', () => ({
   messageBodyText: () => 'hello',
@@ -156,7 +151,6 @@ describe('chat-prompt-tokens.service', () => {
     mockResolvePromptTokensWithBackfill.mockReset();
     mockResolveTokenCounterModeForModel.mockReset();
     mockBuildSessionPromptInput.mockReset();
-    mockResolveSavedModelId.mockReset();
     mockSerializePromptLlmInput.mockClear();
     mockCountTextWithDefaultEncoding.mockClear();
     mockCancelSessionNativeCounts.mockReset();
@@ -198,7 +192,6 @@ describe('chat-prompt-tokens.service', () => {
       layout: {persist: [], dynamic: []},
       ctx: {workplaceDisplay: '', messages: []},
     });
-    mockResolveSavedModelId.mockReturnValue('openai/gpt-4o');
     mockResolveTokenCounterModeForModel.mockResolvedValue('gemma');
     mockResolvePromptTokensWithBackfill.mockResolvedValue({
       tokenCount: 24_000,
@@ -230,7 +223,6 @@ describe('chat-prompt-tokens.service', () => {
       layout: {persist: [], dynamic: []},
       ctx: {workplaceDisplay: '', messages: []},
     });
-    mockResolveSavedModelId.mockReturnValue('openai/gpt-4o');
     mockResolveTokenCounterModeForModel.mockResolvedValue('auto');
     mockResolvePromptTokensWithBackfill.mockResolvedValue({
       tokenCount: 24_000,
@@ -263,7 +255,6 @@ describe('chat-prompt-tokens.service', () => {
       ctx: {workplaceDisplay: '', messages: []},
       rawMessages,
     });
-    mockResolveSavedModelId.mockReturnValue('openai/gpt-4o');
     mockResolveTokenCounterModeForModel.mockResolvedValue('auto');
     mockResolvePromptTokensWithBackfill.mockResolvedValue({
       tokenCount: 24_000,
@@ -293,7 +284,6 @@ describe('chat-prompt-tokens.service', () => {
       layout: {persist: [], dynamic: []},
       ctx: {workplaceDisplay: '', messages: []},
     });
-    mockResolveSavedModelId.mockReturnValue(undefined);
 
     const runtime = stubRuntime();
     const label = await loadChatPromptTokenLabel(runtime, {
@@ -343,7 +333,6 @@ describe('chat-prompt-tokens.service', () => {
       layout: {persist: [], dynamic: []},
       ctx: {workplaceDisplay: '', messages: []},
     });
-    mockResolveSavedModelId.mockReturnValue(undefined);
 
     const runtime = stubRuntime();
     const label = await loadChatPromptTokenLabel(runtime, {
@@ -376,7 +365,6 @@ describe('chat-prompt-tokens.service', () => {
       layout: {persist: [], dynamic: []},
       ctx: {workplaceDisplay: '', messages: []},
     });
-    mockResolveSavedModelId.mockReturnValue('zai/glm-4.6');
     mockResolveTokenCounterModeForModel.mockResolvedValue('glm');
     mockResolvePromptTokensWithBackfill.mockImplementation(
       (_sid: string, _raw: unknown, _params: unknown, options?: unknown) => {
@@ -432,7 +420,6 @@ describe('chat-prompt-tokens.service', () => {
         layout: {persist: [], dynamic: []},
         ctx: {workplaceDisplay: '', messages: []},
       });
-      mockResolveSavedModelId.mockReturnValue('zai/glm-4.6');
       mockResolveTokenCounterModeForModel.mockResolvedValue('glm');
       mockResolvePromptTokensWithBackfill.mockImplementation(
         (_sid: string, _raw: unknown, _params: unknown, options?: unknown) => {
@@ -489,7 +476,6 @@ describe('chat-prompt-tokens.service', () => {
         layout: {persist: [], dynamic: []},
         ctx: {workplaceDisplay: '', messages: []},
       });
-      mockResolveSavedModelId.mockReturnValue('zai/glm-4.6');
       mockResolveTokenCounterModeForModel.mockResolvedValue('glm');
       mockResolvePromptTokensWithBackfill.mockImplementation(
         (_sid: string, _raw: unknown, _params: unknown, options?: unknown) => {
@@ -547,7 +533,6 @@ describe('chat-prompt-tokens.service', () => {
         layout: {persist: [], dynamic: []},
         ctx: {workplaceDisplay: '', messages: []},
       });
-      mockResolveSavedModelId.mockReturnValue('zai/glm-4.6');
       mockResolveTokenCounterModeForModel.mockResolvedValue('glm');
       mockResolvePromptTokensWithBackfill.mockImplementation(
         (_sid: string, _raw: unknown, _params: unknown, options?: unknown) => {
@@ -657,7 +642,6 @@ describe('chat-prompt-tokens.service', () => {
       layout: {persist: [], dynamic: []},
       ctx: {workplaceDisplay: '', messages: []},
     });
-    mockResolveSavedModelId.mockReturnValue('zai/glm-4.6');
     mockResolveTokenCounterModeForModel.mockResolvedValue('glm');
     // 精确轮（无 preferEstimate 的那次）挂起，直到取消落地才以取消错收场——
     // 复刻真链路：cancelCount 下发 → Kotlin 检查点命中 → reject → 桥翻成
@@ -742,7 +726,6 @@ describe('chat-prompt-tokens.service', () => {
       layout: {persist: [], dynamic: []},
       ctx: {workplaceDisplay: '', messages: []},
     });
-    mockResolveSavedModelId.mockReturnValue('zai/glm-4.6');
     mockResolveTokenCounterModeForModel.mockResolvedValue('glm');
 
     const runtime = stubRuntime({contextWindow: 128_000});
@@ -785,7 +768,6 @@ describe('chat-prompt-tokens.service', () => {
       layout: {persist: [], dynamic: []},
       ctx: {workplaceDisplay: '', messages: []},
     });
-    mockResolveSavedModelId.mockReturnValue('zai/glm-4.6');
     mockResolveTokenCounterModeForModel.mockResolvedValue('glm');
     mockResolvePromptTokensWithBackfill.mockImplementation(
       (_sid: string, _raw: unknown, _params: unknown, options?: unknown) => {
@@ -855,7 +837,6 @@ describe('chat-prompt-tokens.service', () => {
     mockBuildSessionPromptInput.mockImplementationOnce(() => {
       throw new ChatPromptBuildBailedError();
     });
-    mockResolveSavedModelId.mockReturnValue('zai/glm-4.6');
     mockResolveTokenCounterModeForModel.mockResolvedValue('glm');
 
     const upgrades: string[] = [];
@@ -925,7 +906,6 @@ describe('chat-prompt-tokens.service', () => {
       layout: {persist: [], dynamic: []},
       ctx: {workplaceDisplay: '', messages: []},
     });
-    mockResolveSavedModelId.mockReturnValue('zai/glm-4.6');
     mockResolveTokenCounterModeForModel.mockResolvedValue('glm');
     mockResolvePromptTokensWithBackfill.mockRejectedValue(
       new PromptTokenResolveBailedError(),
@@ -964,7 +944,6 @@ describe('chat-prompt-tokens.service', () => {
       layout: {persist: [], dynamic: []},
       ctx: {workplaceDisplay: '', messages: []},
     });
-    mockResolveSavedModelId.mockReturnValue('openai/gpt-4o');
     mockResolveTokenCounterModeForModel.mockResolvedValue('auto');
     mockResolvePromptTokensWithBackfill.mockResolvedValue({
       tokenCount: 24_000,
@@ -1005,7 +984,6 @@ describe('chat-prompt-tokens.service', () => {
       layout: {persist: [], dynamic: []},
       ctx: {workplaceDisplay: '', messages: []},
     });
-    mockResolveSavedModelId.mockReturnValue('openai/gpt-4o');
     mockResolveTokenCounterModeForModel.mockResolvedValue('auto');
     mockResolvePromptTokensWithBackfill.mockResolvedValue({
       tokenCount: 50_000,
@@ -1043,7 +1021,6 @@ describe('chat-prompt-tokens.service', () => {
       layout: {persist: [], dynamic: []},
       ctx: {workplaceDisplay: '', messages: []},
     });
-    mockResolveSavedModelId.mockReturnValue('zai/glm-4.6');
     mockResolveTokenCounterModeForModel.mockResolvedValue('glm');
     mockResolvePromptTokensWithBackfill.mockImplementation(
       (_sid: string, _raw: unknown, _params: unknown, options?: unknown) => {
@@ -1194,14 +1171,11 @@ describe('chat-prompt-tokens.service', () => {
     // 精确标签不得落 UI（否则 chip 长期显示旧家族记号）。
     let family: 'glm' | 'tiktoken' = 'glm';
     const releaseQueue: Array<() => void> = [];
-    mockBuildSessionPromptInput.mockResolvedValue({
-      definition: {model: 'switchable'},
+    mockBuildSessionPromptInput.mockImplementation(() => ({
+      definition: {model: family === 'glm' ? 'zai/glm-4.6' : 'openai/gpt-4o'},
       layout: {persist: [], dynamic: []},
       ctx: {workplaceDisplay: '', messages: []},
-    });
-    mockResolveSavedModelId.mockImplementation(() =>
-      family === 'glm' ? 'zai/glm-4.6' : 'openai/gpt-4o',
-    );
+    }));
     mockResolveTokenCounterModeForModel.mockImplementation(() =>
       Promise.resolve(family),
     );
