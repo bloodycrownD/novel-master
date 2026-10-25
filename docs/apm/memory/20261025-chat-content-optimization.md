@@ -1,8 +1,8 @@
 ---
-date: 2026-10-25 14:20
+date: 2026-10-25 14:23
 title: chat/content 优化 + truncateText 抽到 core/common + 删除转手 wrapper + parse 迁移 AppError/Result（待用户审查，未提交）
 keywords: domain/chat/content, parse-message-content, message-body-text, format-message-cli, truncateText, common/text, messageBodyTextFromBlocks, CHAT_INVALID_ARGUMENT, AppError, Either, 单行 wrapper, 错误工厂, 内联, nm-code-style
-abstract: 用户要求按 nm-code-style 优化 packages/core/src/domain/chat/content，随后指出 truncate 应抽成通用工具、messageBodyText / messageBodyTextFromContent 两个单行 wrapper 没有存在意义、content 里的 throw 应迁到 AppError + Either。已落地：新增 core/common 的 truncateText 并收敛 core 11 处、mobile 2 处、desktop 1 处同语义截断；删除两个转手 wrapper，全仓改为直接传 blocks；新增 CHAT_INVALID_ARGUMENT=106001，parse 链路改为 Result<MessageContent, AppError>、删除 assertMessageContent、边界统一 throw。第一版迁移因错误工厂 wrapper 与单点私有函数被用户指出不合规，已重写为全部内联（只保留多处复用的 requireString）。core 相关套件、三端 typecheck、CLI chat smoke 全绿；usage-stats 两条时区红与 CLI 其余 25 条会话创建前置 agent 的旧测试红均为基线既有。改动未提交，等用户审查。
+abstract: 用户要求按 nm-code-style 优化 packages/core/src/domain/chat/content，随后指出 truncate 应抽成通用工具、messageBodyText / messageBodyTextFromContent 两个单行 wrapper 没有存在意义、content 里的 throw 应迁到 AppError + Either。已落地：新增 core/common 的 truncateText 并收敛 core 11 处、mobile 2 处、desktop 1 处同语义截断；删除两个转手 wrapper，全仓改为直接传 blocks；新增 CHAT_INVALID_ARGUMENT=106001，parse 链路改为 Result<MessageContent, AppError>、删除 assertMessageContent、边界统一 throw。第一版迁移因错误工厂 wrapper 与单点私有函数被用户指出不合规，已重写为全部内联（只保留多处复用的 requireString）。core 相关套件、三端 typecheck、CLI chat smoke 全绿；usage-stats 两条时区红与 CLI 其余 25 条会话创建前置 agent 的旧测试红均为基线既有。已提交 0ee49a229 并推送到 origin/feat/core-errors-either。
 ---
 
 user:
@@ -75,4 +75,4 @@ assistant:
 - 删掉 `invalid()` 错误工厂（只有 `new AppError` 的 wrapper），所有失败点直接 `Result.err(new AppError("CHAT_INVALID_ARGUMENT", ...))`。
 - 删掉 `optionalString`，可选字符串判断在 4 个使用点内联。
 - 删掉 `parseImageSource` / `parseSkillRef` / `parseMeta` / `parseBlocksArray` / `parseBlock` 这些单点私有函数，全部并回 `parseMessageContentValue` 的循环 + switch（空 text 块直接 `continue`）；只保留被 8 处复用的 `requireString`。
-- 验证：core typecheck；content/meta/registry 27 例、chat 468 例、package-exports 21 例全绿；usage-stats 仍是基线既有的 2 条时区红（37/39）；CLI typecheck、desktop main typecheck、mobile typecheck 通过。重建 core / tokenizer-driver-node / CLI 的 dist 后，CLI chat smoke（message append/list）通过；CLI 全量 68/93，其余 25 条红是基线旧测试——会话创建现在要求先有 agent，错误来自 `session.service.ts:111`（引入于 c3032e5e1），与本次解析链无关。改动仍未提交。
+- 验证：core typecheck；content/meta/registry 27 例、chat 468 例、package-exports 21 例全绿；usage-stats 仍是基线既有的 2 条时区红（37/39）；CLI typecheck、desktop main typecheck、mobile typecheck 通过。重建 core / tokenizer-driver-node / CLI 的 dist 后，CLI chat smoke（message append/list）通过；CLI 全量 68/93，其余 25 条红是基线旧测试——会话创建现在要求先有 agent，错误来自 `session.service.ts:111`（引入于 c3032e5e1），与本次解析链无关。已提交 0ee49a229 并推送到 origin/feat/core-errors-either。
