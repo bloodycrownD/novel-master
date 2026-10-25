@@ -23,6 +23,7 @@ import {
   ipcAgentRegistryDelete,
   ipcAgentRegistryGet,
   ipcAgentRegistryList,
+  ipcAgentRegistryUpdate,
   ipcAgentRegistryUpsert,
   ipcAgentResolveCurrent,
   ipcAgentSetCurrent,
@@ -809,10 +810,9 @@ export function AgentsSettingsView({ nav }: { nav: Nav }) {
       toastSettingsError("配置已失效，请先修复后再重命名");
       return;
     }
-    const def = getRes.data.value;
-    await ipcAgentRegistryUpsert({
+    await ipcAgentRegistryUpdate({
       agentId: prompt.agentId,
-      definition: { ...def, name },
+      patch: { name },
     });
     await reload();
   };

@@ -7,13 +7,10 @@
  * @module infra/llm-protocol/logic/debug-fetch
  */
 
+import { isRecord } from "@/common/guards.js";
 import type { FetchFn } from "../ports/adapter.port.js";
 
 const LOG_TAG = "[novel-master/llm]";
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 /** Whether LLM fetch logging is active. */
 export function isLlmFetchDebugEnabled(): boolean {

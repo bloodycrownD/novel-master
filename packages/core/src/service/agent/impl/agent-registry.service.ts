@@ -5,7 +5,8 @@
  */
 
 import { AgentConfigError } from "@/errors/agent-config-errors.js";
-import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
+import type { AgentDefinition, AgentDefinitionPatch } from "@/domain/agent/model/agent-definition.js";
+import { applyMergePatch } from "@/common/merge-patch.js";
 import type { AgentDefinitionRepository } from "@/domain/agent/repositories/agent-definition.port.js";
 import {
   validateAgentDefinition,
@@ -115,6 +116,13 @@ export class DefaultAgentRegistryService implements AgentRegistryService {
 
     const normalized: AgentDefinition = { ...defaulted, name: trimmedName };
     await this.deps.repository.upsert(agentId, normalized);
+  }
+
+  async update(agentId: string, patch: AgentDefinitionPatch, options: ValidateAgentDefinitionOptions = {}): Promise<AgentDefinition> {
+    const current = await this.get(agentId);
+    const merged = applyMergePatch(current, patch);
+    await this.upsert(agentId, merged, options);
+    return merged;
   }
 
   private async assertUniqueDisplayName(

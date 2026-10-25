@@ -8,6 +8,7 @@
  * @module domain/tool/logic/build-tool-result-block
  */
 
+import { isRecord } from "@/common/guards.js";
 import type {
   SkillToolRef,
   ToolResultBlock,
@@ -46,10 +47,6 @@ export function resolveToolResultOk(block: ToolResultBlock): boolean {
     return true;
   }
   return !block.content.trimStart().startsWith("Error:");
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 /** 字节数格式化：1024 进位（B/KB/MB）、保留 1 位小数（整数位不带 .0）。 */

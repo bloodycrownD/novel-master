@@ -6,6 +6,7 @@
  * @module infra/llm-protocol/logic/openai-content-mapper
  */
 
+import { isRecord } from "@/common/guards.js";
 import { ProviderError } from "@/errors/provider-errors.js";
 import type { ContentBlock } from "@/domain/chat/model/content-block.js";
 import type { ChatMessage } from "@/domain/chat/model/message.js";
@@ -20,10 +21,6 @@ import { tryParseToolArgumentsJson } from "./tool-arguments-parse.js";
 export type OpenAiChatMessage = Record<string, unknown>;
 
 type OpenAiContentPart = Record<string, unknown>;
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 /**
  * 由累加的正文 / 结构化 thinking 字符串组装 NM 块。

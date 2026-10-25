@@ -1,4 +1,4 @@
-export type { AgentDefinition } from "../domain/agent/model/agent-definition.js";
+export type { AgentDefinition, AgentDefinitionPatch } from "../domain/agent/model/agent-definition.js";
 export {
   agentDefinitionSchema,
   agentDefinitionDocumentSchema,
@@ -18,17 +18,15 @@ export { resolveAgentToolRegistry } from "../domain/agent/logic/resolve-agent-to
 export { validateAgentToolPolicy } from "../domain/agent/logic/validate-agent-tool-policy.js";
 export type { AgentToolPolicy } from "../domain/agent/model/agent-definition.js";
 export type { AgentSession } from "../domain/agent/session/agent-session.port.js";
-export { AgentError } from "../errors/agent-runtime-errors.js";
-export type { AgentErrorCode } from "../errors/agent-runtime-errors.js";
+export { AppError, ErrorCodes, isAppError } from "../errors/app-error.js";
+export type { ErrorKey, ErrorNumber } from "../errors/app-error.js";
 export type {
   AgentRunResult,
   ModelRoundSummary,
 } from "../domain/agent/model/agent-run-result.js";
 export {
-  DOOM_LOOP_THRESHOLD,
-  CROSS_ROUND_WINDOW,
-  assertNoDoomLoopInBlocks,
-  assertNoCrossRoundDoomLoop,
+  DoomLoopDetector,
+  type DoomLoopConfig,
 } from "../domain/agent/logic/doom-loop.js";
 export { InMemoryAgentSession } from "../domain/agent/session/impl/in-memory-agent-session.js";
 export { ChatAgentSession } from "../service/agent/impl/chat-agent-session.js";

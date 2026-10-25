@@ -9,6 +9,7 @@
  */
 
 import { z } from "zod";
+import { isRecord } from "@/common/guards.js";
 import {
   messageAttachmentObjectSchema,
   messageAttachmentSchema,
@@ -145,11 +146,6 @@ function parseTokenRangesField(
   }
   const result = composerDraftTokenRangesSchema.safeParse(value);
   return result.success ? result.data : undefined;
-}
-
-/** 最小对象守卫（本文件内定义，不为它引新依赖）。 */
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 /**

@@ -7,6 +7,7 @@ import {
   type AgentListPickerResponse,
   type AgentRegistryCreateBlankRequest,
   type AgentRegistryGetResponse,
+  type AgentRegistryUpdateRequest,
   type AgentResolveCurrentResponse,
   type AgentRunIsActiveRequest,
   type AgentRunRequest,
@@ -514,6 +515,10 @@ export function createInvokeClient(invoke: InvokeFn) {
     ipcAgentRegistryUpsert: withReq<unknown, unknown>(
       invoke,
       IPC_CHANNELS.AGENT_REGISTRY_UPSERT,
+    ),
+    ipcAgentRegistryUpdate: withReq<AgentRegistryUpdateRequest, unknown>(
+      invoke,
+      IPC_CHANNELS.AGENT_REGISTRY_UPDATE,
     ),
     ipcAgentRegistryDelete: withReq<{ agentId: string }, unknown>(
       invoke,

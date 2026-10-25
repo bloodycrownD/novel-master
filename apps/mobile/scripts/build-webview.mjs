@@ -68,6 +68,7 @@ const WEBVIEW_CORE_ALLOWLIST = {
     // 这一档只导出 zod schema、内置规则与 domain 名单，不 import 数据库层、不在顶层做重活，
     // 是「引用它不会把病根拖进产物」里最安全的一档。
     // 删了会怎样：入参校验直接消失，或要在 React 侧重抄一份常量——重抄就是两处漂移的起点。
+    'common/guards.js',
     'bootstrap/skills/skills-schema.js',
     'bootstrap/smart-sort-rule/builtin-smart-sort-rules.js',
     'bootstrap/smart-sort-rule/smart-sort-rule-schema.js',
@@ -126,7 +127,6 @@ const WEBVIEW_CORE_ALLOWLIST = {
     // ⚠️ 病根 `domain/provider/logic/builtin-providers.js`
     //    （`BUILTIN_DEFAULT_API_KEY_BY_KEY = Object.fromEntries(...)`，顶层执行）
     //    **刻意不在**本白名单里——它一旦被 barrel 拖进来就是老 WebView 白屏，门 B 会直接打红。
-    'domain/agent/logic/merge-agent-definition-patch.js',
     'domain/character-card/logic/character-card-limits.js',
     'domain/chat/logic/render-dir-attach-tree.js',
     'domain/chat/logic/status-chip-label.js',

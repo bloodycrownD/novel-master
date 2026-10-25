@@ -9,6 +9,7 @@ import {
 import {
   DEFAULT_SUBAGENT_DEFINITION,
   type AgentDefinition,
+  type AgentDefinitionPatch,
 } from "@shared/logic/agent";
 
 import {
@@ -52,7 +53,7 @@ import {
 import {
   ipcAgentRegistryDelete,
   ipcAgentRegistryGet,
-  ipcAgentRegistryUpsert,
+  ipcAgentRegistryUpdate,
   ipcAgentYamlExport,
   ipcAgentYamlImport,
   ipcProviderModelsSavedList,
@@ -111,6 +112,20 @@ function readAgentNameFromWire(raw: unknown, fallback: string): string {
     }
   }
   return fallback;
+}
+
+/**
+ * 编辑器保存是「整份文档」语义：表单未产出的可选字段用 `null` 显式清除，
+ * 否则 patch 语义下这些字段会被保留，用户关掉开关也删不掉旧值。
+ */
+function toAgentDefinitionPatch(definition: AgentDefinition): AgentDefinitionPatch {
+  return {
+    ...definition,
+    model: definition.model ?? null,
+    runtime: definition.runtime ?? null,
+    tools: definition.tools ?? null,
+    description: definition.description ?? null,
+  };
 }
 
 export function AgentEditorView({ nav }: { nav: Nav }) {
@@ -489,9 +504,9 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
     );
     setSaving(true);
     try {
-      const saveRes = await ipcAgentRegistryUpsert({
+      const saveRes = await ipcAgentRegistryUpdate({
         agentId,
-        definition: def,
+        patch: toAgentDefinitionPatch(def),
       });
       if (saveRes.ok) {
         toastSettingsSuccess("已用默认模板覆盖并保存");
@@ -603,9 +618,9 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
     }
     setSaving(true);
     try {
-      const saveRes = await ipcAgentRegistryUpsert({
+      const saveRes = await ipcAgentRegistryUpdate({
         agentId,
-        definition,
+        patch: toAgentDefinitionPatch(definition),
       });
       if (saveRes.ok) {
         setSavedBaseline(snapshot);

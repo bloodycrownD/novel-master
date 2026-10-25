@@ -27,7 +27,7 @@ export {
   ENGINE_IDS,
   KEY_ENGINE_IDS,
 } from '../../../packages/core/dist/domain/tool/builtin/search/types.js';
-export {AgentError} from '../../../packages/core/dist/errors/agent-runtime-errors.js';
+export {AppError} from '../../../packages/core/dist/errors/app-error.js';
 export {
   CloudSyncError,
   isCloudSyncError,

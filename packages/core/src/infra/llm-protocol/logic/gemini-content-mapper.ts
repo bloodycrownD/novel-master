@@ -4,6 +4,7 @@
  * @module infra/llm-protocol/logic/gemini-content-mapper
  */
 
+import { isRecord } from "@/common/guards.js";
 import { messageBodyTextFromBlocks } from "@/domain/chat/content/message-body-text.js";
 import { ProviderError } from "@/errors/provider-errors.js";
 import type {
@@ -38,10 +39,6 @@ type ResolveContext = {
   readonly lookup: ToolUseLookup;
   readonly knownToolNames?: readonly string[];
 };
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 /** Read Gemini wire thought_signature (snake or camelCase). */
 function readThoughtSignature(

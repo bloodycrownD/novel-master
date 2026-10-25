@@ -129,6 +129,7 @@ export const {
   ipcAgentRegistryList,
   ipcAgentRegistryGet,
   ipcAgentRegistryUpsert,
+  ipcAgentRegistryUpdate,
   ipcAgentRegistryDelete,
   ipcAgentRegistryCreateBlank,
   ipcAgentYamlExport,

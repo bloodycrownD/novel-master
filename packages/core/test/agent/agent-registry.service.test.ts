@@ -25,6 +25,41 @@ describe("AgentRegistryService", () => {
     assert.equal(loaded.name, "写作助手");
   });
 
+  it("update 按 patch 合并：未提供的键保留、null 清除、嵌套对象深合并", async () => {
+    const ctx = getNovelMasterTestContext();
+    const registry = createAgentRegistryService(ctx.conn);
+    const id = `agent-patch-${testIsolationSuffix()}`;
+    await registry.upsert(id, {
+      name: "patch",
+      description: "旧描述",
+      model: "11111111-1111-4111-8111-111111111111",
+      prompts: { persist: [], dynamic: [] },
+      runtime: { maxSteps: 3, doomLoopThreshold: 2 },
+    } as unknown as AgentDefinition);
+    const merged = await registry.update(id, {
+      description: "新描述",
+      model: null,
+      runtime: { maxSteps: 9 },
+    });
+    assert.equal(merged.description, "新描述");
+    assert.ok(!("model" in merged));
+    assert.deepEqual(merged.runtime, { maxSteps: 9, doomLoopThreshold: 2 });
+    const loaded = await registry.get(id);
+    assert.equal(loaded.description, "新描述");
+    assert.equal(loaded.model, undefined);
+    assert.deepEqual(loaded.runtime, { maxSteps: 9, doomLoopThreshold: 2 });
+  });
+
+  it("update 对不存在的 agent 报 AGENT_NOT_FOUND 且不落盘", async () => {
+    const ctx = getNovelMasterTestContext();
+    const registry = createAgentRegistryService(ctx.conn);
+    const id = `agent-missing-${testIsolationSuffix()}`;
+    await assert.rejects(
+      () => registry.update(id, { description: "x" }),
+      (e: unknown) => e instanceof AgentConfigError && e.code === "AGENT_NOT_FOUND",
+    );
+  });
+
   it("写入门禁：upsert 拒绝缺 name 的 definition 且不落盘（毒行防护）", async () => {
     const ctx = getNovelMasterTestContext();
     const registry = createAgentRegistryService(ctx.conn);

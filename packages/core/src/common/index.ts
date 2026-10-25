@@ -7,6 +7,7 @@
  */
 export { compareAppVersions } from "./compare-app-versions.js";
 export { errorText } from "./error-text.js";
+export { isRecord } from "./guards.js";
 export {
   excerptReleaseNotes,
   type ReleaseNotesFocus,

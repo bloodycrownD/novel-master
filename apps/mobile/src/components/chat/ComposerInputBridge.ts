@@ -5,6 +5,8 @@
  * 两侧 BRIDGE_V 必须同为 1（`__tests__/composer-input-bridge.test.ts` 有一致性断言）。
  * decode 走抛错口径（坏信封 = JSON 坏 / v 不符 / type 缺失），由宿主 try/catch 静默丢弃。
  */
+import { isRecord } from '@novel-master/core/common';
+
 export const COMPOSER_INPUT_BRIDGE_VERSION = 1 as const;
 
 export type BridgeEnvelope<T extends string, P> = {
@@ -90,10 +92,6 @@ export function encodeComposerInputToHost(
   message: ComposerInputToHostMessage,
 ): string {
   return JSON.stringify(message);
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value != null && !Array.isArray(value);
 }
 
 export function decodeComposerInputToHost(

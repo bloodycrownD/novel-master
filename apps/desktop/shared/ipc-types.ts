@@ -136,6 +136,7 @@ export const IPC_CHANNELS = {
   AGENT_REGISTRY_LIST: 'nm:agentRegistry/list',
   AGENT_REGISTRY_GET: 'nm:agentRegistry/get',
   AGENT_REGISTRY_UPSERT: 'nm:agentRegistry/upsert',
+  AGENT_REGISTRY_UPDATE: 'nm:agentRegistry/update',
   AGENT_REGISTRY_DELETE: 'nm:agentRegistry/delete',
   AGENT_REGISTRY_CREATE_BLANK: 'nm:agentRegistry/createBlank',
 
@@ -1479,6 +1480,12 @@ export type AgentRegistryGetResponse = StoredConfigHealthDto<AgentDefinitionPlai
 export type AgentRegistryUpsertRequest = {
   readonly agentId: string;
   readonly definition: unknown;
+};
+
+/** 部分更新（RFC 7396）：patch 未提供的键保留，null 清除。 */
+export type AgentRegistryUpdateRequest = {
+  readonly agentId: string;
+  readonly patch: unknown;
 };
 
 export type AgentRegistryDeleteRequest = {

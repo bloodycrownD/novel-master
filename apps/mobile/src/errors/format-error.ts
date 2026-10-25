@@ -3,7 +3,7 @@
  */
 import {CloudSyncError, TdbcError, ToolError} from '@novel-master/core';
 
-import {AgentError} from '@novel-master/core/agent';
+import {AppError} from '@novel-master/core/agent';
 
 import {ChatError} from '@novel-master/core/chat';
 
@@ -56,7 +56,7 @@ export function formatError(error: unknown): string {
     error instanceof VfsZipError ||
     error instanceof CharacterCardError ||
     error instanceof ChatError ||
-    error instanceof AgentError ||
+    error instanceof AppError ||
     error instanceof SessionFsError ||
     error instanceof CloudSyncError
   ) {

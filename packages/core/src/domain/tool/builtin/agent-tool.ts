@@ -26,18 +26,17 @@
  * 字节预算）；get 的定义体不截断——便于完整查看与按需 patch。
  *
  * update 是部分更新（patch）语义：definition 只填要改的字段，未提供的
- * 字段保留现值、置 null 清除回缺省、prompts 按子键合并（详见
- * `mergeAgentDefinitionPatch`）。工具层读当前定义合并后仍走 upsert 全量
- * 校验门禁，安全性与 create 同一标准。
+ * 字段保留现值、置 null 清除回缺省、嵌套对象按 RFC 7396 深合并。工具层
+ * 只把 patch 交给 `registry.update`（内部读当前定义 → 合并 → 走同一套
+ * upsert 校验门禁），安全性与 create 同一标准。
  *
  * @module domain/tool/builtin/agent-tool
  */
 
 import { z } from "zod";
 
-import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
+import type { AgentDefinition, AgentDefinitionPatch } from "@/domain/agent/model/agent-definition.js";
 import type { ValidateAgentDefinitionOptions } from "@/domain/agent/logic/validate-agent-definition.js";
-import { mergeAgentDefinitionPatch } from "@/domain/agent/logic/merge-agent-definition-patch.js";
 import type { AgentRegistryService } from "@/service/agent/agent-registry.port.js";
 import { AgentConfigError } from "@/errors/agent-config-errors.js";
 import { ToolError } from "@/errors/tool-errors.js";
@@ -202,25 +201,15 @@ function buildValidateOptions(
 }
 
 /**
- * 调 upsert 并把服务层校验错误转成 message 含原因的 ToolError。
+ * 调 registry 写操作并把服务层校验错误转成 message 含原因的 ToolError。
  *
  * WHY：`ToolRunner` 对非 ToolError 异常统一包成 `Tool failed: agent`，
  * 原始 message 只进 `cause`——LLM 看不到「哪个字段 / 哪个工具名不合法」。
  * AgentConfigError 是入参语义问题（INVALID_ARGUMENT），其余按 FAILED 透传原因。
  */
-async function upsertWithTranslatedError(
-  agentsCtx: BuiltinToolAgentsContext,
-  agentId: string,
-  definition: AgentDefinition | Record<string, unknown>
-): Promise<void> {
+async function saveWithTranslatedError<T>(action: () => Promise<T>): Promise<T> {
   try {
-    await agentsCtx.registry.upsert(
-      agentId,
-      // D5：schema 宽松收包，类型收窄只是把 Record 视作 AgentDefinition，
-      // 字段级校验完全交 upsert → validateAgentDefinition。
-      definition as unknown as AgentDefinition,
-      buildValidateOptions(agentsCtx)
-    );
+    return await action();
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     throw new ToolError(
@@ -389,7 +378,11 @@ action 一览：list 列清单 / get 查完整定义（name 或 agentId 定位�
       case "create": {
         const definition = requireDefinition("create", input.definition);
         const agentId = await allocateAgentId(agentsCtx.registry);
-        await upsertWithTranslatedError(agentsCtx, agentId, definition);
+        // D5：schema 宽松收包，类型收窄只是把 Record 视作 AgentDefinition，
+        // 字段级校验完全交 upsert → validateAgentDefinition。
+        await saveWithTranslatedError(() =>
+          agentsCtx.registry.upsert(agentId, definition as unknown as AgentDefinition, buildValidateOptions(agentsCtx))
+        );
         return {
           action: "create",
           name: readDefinitionName(definition),
@@ -452,9 +445,9 @@ action 一览：list 列清单 / get 查完整定义（name 或 agentId 定位�
             { toolName: AGENT_TOOL_NAME },
           );
         }
-        const current = await agentsCtx.registry.get(agentId);
-        const merged = mergeAgentDefinitionPatch(current, definition);
-        await upsertWithTranslatedError(agentsCtx, agentId, merged);
+        const merged = await saveWithTranslatedError(() =>
+          agentsCtx.registry.update(agentId, definition as AgentDefinitionPatch, buildValidateOptions(agentsCtx))
+        );
         return {
           action: "update",
           name: readDefinitionName(merged as unknown as Record<string, unknown>),

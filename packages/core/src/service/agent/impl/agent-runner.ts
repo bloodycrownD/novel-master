@@ -11,12 +11,7 @@ import type {
   ToolUseBlock,
 } from "@/domain/chat/model/content-block.js";
 import type { AgentSession } from "@/domain/agent/session/agent-session.port.js";
-import {
-  assertNoCrossRoundDoomLoop,
-  assertNoDoomLoopInBlocks,
-  CROSS_ROUND_WINDOW,
-  DOOM_LOOP_THRESHOLD,
-} from "@/domain/agent/logic/doom-loop.js";
+import { DoomLoopDetector } from "@/domain/agent/logic/doom-loop.js";
 import { buildToolResultBlock } from "@/domain/tool/logic/build-tool-result-block.js";
 import { anyToolUseMutatesWorkspace } from "@/domain/tool/logic/tool-use-mutates-workspace.js";
 import type {
@@ -78,7 +73,7 @@ import {
   EVENT_AGENT_STREAM_USAGE,
 } from "@/domain/events/model/event-types.js";
 import type { LlmStreamEvent } from "@/infra/llm-protocol/ports/adapter.port.js";
-import { generateAgentRunId } from "@/domain/agent/logic/generate-agent-run-id.js";
+import { randomUUID } from "@/infra/random-uuid.js";
 import { DEFAULT_AGENT_MAX_STEPS } from "../logic/agent-run-max-steps.js";
 
 export interface DefaultAgentRunnerDeps {
@@ -230,10 +225,10 @@ export class DefaultAgentRunner implements AgentRunner {
       ? this.deps.session
       : new EphemeralOverlayAgentSession(this.deps.session, sessionId);
 
-    const runId = generateAgentRunId();
+    const runId = randomUUID();
 
     // 注意：EVENT_AGENT_RUN_STARTED 的 publish 位置已下移到主 try 紧前
-    // （r3-run-2 步骤 1）。原先在 `generateAgentRunId()` 之后立刻发，导致
+    // （r3-run-2 步骤 1）。原先在 `runId` 生成后立刻发，导致
     // 本段到主 try 之间（savedModels.findById / preferences 读 / wt 解析）
     // 抛错时「STARTED 已发、终态一个都没有」——desktop 侧 refcount 永久泄漏、
     // 后续全部 AGENT_BUSY，mobile 侧靠 .finally 兜住只是侥幸。
@@ -258,18 +253,14 @@ export class DefaultAgentRunner implements AgentRunner {
      */
     let assistantAppendedInRun = false;
     const signal = options.signal;
-    const toolUseWindow: ToolUseBlock[] = [];
     let vfsMutatedInRun = false;
 
     const maxSteps =
       options.maxSteps ??
       options.definition.runtime?.maxSteps ??
       DEFAULT_AGENT_MAX_STEPS;
-    const doomLoopThreshold =
-      options.definition.runtime?.doomLoopThreshold ?? DOOM_LOOP_THRESHOLD;
-    const doomLoopCrossRoundWindow =
-      options.definition.runtime?.doomLoopCrossRoundWindow ??
-      CROSS_ROUND_WINDOW;
+    // 死循环检测器按 run 建一个：跨轮窗口状态收在实例里，runner 不再手动维护。
+    const doomLoop = new DoomLoopDetector(options.definition.runtime);
 
     const tools = toolsFromRegistry(this.deps.registry, this.deps.toolCtx);
     // 技能索引预算：消费装配期 toolCtx.skills 的生效清单快照（每 run 一次，
@@ -381,7 +372,7 @@ export class DefaultAgentRunner implements AgentRunner {
     };
 
     // STARTED 下移落点（r3-run-2）：紧贴主 try 之前，与主 try 的 FAILED /
-    // FINISHED 构成「要么都发、要么都不发」的配对（细因见上方 generateAgentRunId
+    // FINISHED 构成「要么都发、要么都不发」的配对（细因见上方 runId 生成
     // 处的注释）。紧邻 try 也保证 publish 与随后的失败处理之间没有其他 await
     // 缝隙——事件到达时下游一定还能看到紧随其后的终态。
     if (publishRunLifecycle) {
@@ -834,18 +825,11 @@ export class DefaultAgentRunner implements AgentRunner {
           usage: result.usage,
         });
 
-        assertNoDoomLoopInBlocks(result.blocks, {
-          threshold: doomLoopThreshold,
-        });
-        for (const toolUse of toolUses) {
-          toolUseWindow.push(toolUse);
-          if (toolUseWindow.length > doomLoopCrossRoundWindow * 4) {
-            toolUseWindow.shift();
-          }
+        // 检测器只回报结果（不抛）：run 循环的收口语义仍靠这里抛出 AppError。
+        const doomLoopResult = doomLoop.checkStep(result.blocks);
+        if (!doomLoopResult.ok) {
+          throw doomLoopResult.error;
         }
-        assertNoCrossRoundDoomLoop(toolUseWindow, {
-          crossRoundWindow: doomLoopCrossRoundWindow,
-        });
 
         if (signal?.aborted) {
           await handleAbort("before_tool_run");

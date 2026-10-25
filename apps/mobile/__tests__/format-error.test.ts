@@ -1,5 +1,5 @@
 import {TdbcError, ToolError} from '@novel-master/core';
-import {AgentError} from '@novel-master/core/agent';
+import {AppError} from '@novel-master/core/agent';
 import {ChatError} from '@novel-master/core/chat';
 import {ProviderError} from '@novel-master/core/provider';
 import {
@@ -63,8 +63,8 @@ describe('formatError (T4)', () => {
     expect(formatError(err)).toBe('Tool failed: vfs.read\nPath missing');
   });
 
-  it('formats AgentError message', () => {
-    const err = new AgentError('DOOM_LOOP', 'Doom loop detected');
+  it('formats AppError message', () => {
+    const err = new AppError('AGENT_DOOM_LOOP', 'Doom loop detected');
     expect(formatError(err)).toBe('Doom loop detected');
   });
 

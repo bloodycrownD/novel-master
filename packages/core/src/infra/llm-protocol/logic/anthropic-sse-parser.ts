@@ -6,6 +6,7 @@
  * @module infra/llm-protocol/logic/anthropic-sse-parser
  */
 
+import { isRecord } from "@/common/guards.js";
 import type { ContentBlock } from "@/domain/chat/model/content-block.js";
 import type {
   DegradedToolCall,
@@ -22,10 +23,6 @@ import {
 } from "./sse-parse-errors.js";
 import { tryParseToolArgumentsJson } from "./tool-arguments-parse.js";
 import { parseAnthropicUsage } from "./usage-parser.js";
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 type ToolUseAccumulator = {
   id: string;

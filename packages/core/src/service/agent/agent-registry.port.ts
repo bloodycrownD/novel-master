@@ -4,7 +4,7 @@
  * @module service/agent/agent-registry.port
  */
 
-import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
+import type { AgentDefinition, AgentDefinitionPatch } from "@/domain/agent/model/agent-definition.js";
 import type { ValidateAgentDefinitionOptions } from "@/domain/agent/logic/validate-agent-definition.js";
 
 /** Workspace agent registry (SQL-backed). */
@@ -26,6 +26,14 @@ export interface AgentRegistryService {
     def: AgentDefinition,
     options?: ValidateAgentDefinitionOptions
   ): Promise<void>;
+  /**
+   * 按 RFC 7396 patch 更新已有 agent：读当前定义 → 合并 → 走 upsert 校验落库。
+   *
+   * 与 {@link upsert} 的区别是「部分更新」：patch 未提供的键保留现值、`null`
+   * 清除字段；upsert 则是整份替换（编辑器保存 / 导入等全量场景用它）。
+   * 返回合并后的定义（`name` 的 trim 由 upsert 内部完成）。
+   */
+  update(agentId: string, patch: AgentDefinitionPatch, options?: ValidateAgentDefinitionOptions): Promise<AgentDefinition>;
   /**
    * 删除指定 Agent。
    *

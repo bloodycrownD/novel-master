@@ -4,15 +4,12 @@
  * @module infra/llm-protocol/logic/anthropic-content-mapper
  */
 
+import { isRecord } from "@/common/guards.js";
 import type { ContentBlock } from "@/domain/chat/model/content-block.js";
 import type { ChatMessage } from "@/domain/chat/model/message.js";
 import type { AnthropicToolNameWire } from "./anthropic-tool-names.js";
 
 type AnthropicContentItem = Record<string, unknown>;
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 /** NM blocks ??Anthropic message `content` array. */
 export function blocksToAnthropicContent(

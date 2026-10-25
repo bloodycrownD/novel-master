@@ -4,7 +4,7 @@ import {
   ChatAgentSession,
   createAgentRunner,
   InMemoryAgentSession,
-  AgentError,
+  AppError,
   type AgentDefinition,
   type CreateAgentRunnerDeps,
 } from "@novel-master/core/agent";
@@ -898,7 +898,7 @@ describe("AgentRunner", () => {
           ...defaultRunScope,
         }),
       (e: unknown) =>
-        e instanceof Error && e.name === "AgentError" && (e as AgentError).code === "DOOM_LOOP",
+        e instanceof AppError && e.key === "AGENT_DOOM_LOOP",
     );
   });
 
@@ -1459,7 +1459,7 @@ describe("AgentRunner", () => {
           ...defaultRunScope,
         }),
       (e: unknown) =>
-        e instanceof Error && e.name === "AgentError" && (e as AgentError).code === "DOOM_LOOP",
+        e instanceof AppError && e.key === "AGENT_DOOM_LOOP",
     );
   });
 

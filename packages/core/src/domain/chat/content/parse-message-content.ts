@@ -4,6 +4,7 @@
  * @module domain/chat/content/parse-message-content
  */
 
+import { isRecord } from "@/common/guards.js";
 import { chatInvalidArgument } from "@/errors/chat-errors.js";
 import type {
   ContentBlock,
@@ -36,10 +37,6 @@ function optionalString(value: unknown): string | undefined {
 
 function optionalBoolean(value: unknown): boolean | undefined {
   return typeof value === "boolean" ? value : undefined;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 /**
