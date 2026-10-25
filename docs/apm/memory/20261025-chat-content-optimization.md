@@ -1,6 +1,6 @@
 ---
 date: 2026-10-25 14:23
-title: chat/content 优化 + truncateText 抽到 core/common + 删除转手 wrapper + parse 迁移 AppError/Result（待用户审查，未提交）
+title: chat/content 优化 + truncateText + AppError/Result + annotate 死链清理 + nm-code-style 脚本化检查
 keywords: domain/chat/content, parse-message-content, message-body-text, format-message-cli, truncateText, common/text, messageBodyTextFromBlocks, CHAT_INVALID_ARGUMENT, AppError, Either, 单行 wrapper, 错误工厂, 内联, nm-code-style
 abstract: 用户要求按 nm-code-style 优化 packages/core/src/domain/chat/content，随后指出 truncate 应抽成通用工具、messageBodyText / messageBodyTextFromContent 两个单行 wrapper 没有存在意义、content 里的 throw 应迁到 AppError + Either。已落地：新增 core/common 的 truncateText 并收敛 core 11 处、mobile 2 处、desktop 1 处同语义截断；删除两个转手 wrapper，全仓改为直接传 blocks；新增 CHAT_INVALID_ARGUMENT=106001，parse 链路改为 Result<MessageContent, AppError>、删除 assertMessageContent、边界统一 throw。第一版迁移因错误工厂 wrapper 与单点私有函数被用户指出不合规，已重写为全部内联（只保留多处复用的 requireString）。core 相关套件、三端 typecheck、CLI chat smoke 全绿；usage-stats 两条时区红与 CLI 其余 25 条会话创建前置 agent 的旧测试红均为基线既有。已提交 0ee49a229 并推送到 origin/feat/core-errors-either。
 ---
@@ -76,3 +76,17 @@ assistant:
 - 删掉 `optionalString`，可选字符串判断在 4 个使用点内联。
 - 删掉 `parseImageSource` / `parseSkillRef` / `parseMeta` / `parseBlocksArray` / `parseBlock` 这些单点私有函数，全部并回 `parseMessageContentValue` 的循环 + switch（空 text 块直接 `continue`）；只保留被 8 处复用的 `requireString`。
 - 验证：core typecheck；content/meta/registry 27 例、chat 468 例、package-exports 21 例全绿；usage-stats 仍是基线既有的 2 条时区红（37/39）；CLI typecheck、desktop main typecheck、mobile typecheck 通过。重建 core / tokenizer-driver-node / CLI 的 dist 后，CLI chat smoke（message append/list）通过；CLI 全量 68/93，其余 25 条红是基线旧测试——会话创建现在要求先有 agent，错误来自 `session.service.ts:111`（引入于 c3032e5e1），与本次解析链无关。已提交 0ee49a229 并推送到 origin/feat/core-errors-either。
+
+user:
+（贴出 `sliceSourceBySoftRange` 多行签名）你是不是瞎啊，这些函数参数不换行你一点都不遵守啊？另外 `findAnnotateOccurrenceInSource` / `buildFlatTextIndex` / `estimateSoftOffsetRangeFromQuoteContext` 这些同样无人使用。更新下 skill 吧，对于这种死代码也移除吧。另外我发现 skill 要求检查的东西全部可以通过脚本程序化检测，比如内联、不换行；你应该写出脚本，skill 用这些脚本循环检查再改，不要总靠读整个文件。
+
+assistant:
+先沿调用链确认这三个 annotate 文件都是退役 DOM 搜字 fallback 的一部分：`applyAnnotateHighlights` 生产零调用，`findAnnotateOccurrenceInSource` / `buildFlatTextIndex` / `estimateSoftOffsetRangeFromQuoteContext` 只服务它。按用户决定整条删除，而不是只删叶子：
+
+- 删除 `annotate-highlight.ts`、`annotate-source-anchor.ts`；`annotate-source-range.ts` 先收敛到只剩 `estimateSoftRangeFromOriginalText`，随后按「单引用」内联进 `run-agent-turn.ts`（`offsetToSourceLineCol` + 原文定位块），文件删除。
+- 桌面 `preview-annotate.ts` 的两个单点函数内联进 `PreviewPane.tsx`，文件与测试删除。
+- 删除 `buildAnnotateAttachmentFromDraft` 单行 wrapper，生产调用统一到 `buildFileAnnotateAttachmentFromDraft`；public/chat、desktop shared barrel、allowlist、4 个死 API 测试同步清理。
+- 新增 `check-signatures.mjs`（多行参数/调用/new/import）、`check-inline.mjs`（DEAD_LOCAL / INLINE_LOCAL / PASS_THROUGH / CLASS_PRIVATE）、`check-style.mjs`（`--changed` 只看新增行，循环到 PASS）；`find-fake-exports.mjs` 补 `apps/desktop/renderer|shared` 生产路径与汇总。SKILL 增加死链沿调用链删到底、`INLINE_CANDIDATE` 默认内联、脚本循环与 30 秒清单。
+- 关键教训：`find-fake-exports` 早已把 `estimateSoftRangeFromOriginalText` 标成 `INLINE_CANDIDATE`，但 `check-style` 只把 signatures/inline 当失败，skill 又留了 service→domain 单引用例外，导致漏做；已收紧为 `INLINE_CANDIDATE` 默认内联，只有确认跨层唯一入口才留并写明理由。
+
+验证：core/desktop main/mobile typecheck 通过；renderer typecheck 仅基线既有错；core chat 478 例 476 绿（T-C2/T-C6 时区/DST 基线红）、package-exports 21、annotate/attachment 24、desktop preview 8、mobile 相关 20+12 全绿；`check-style --changed` 为 signatures=PASS inline=PASS。提交：`2c1092c1d`（annotate 死链清理，24 files，+124/−4437）、`b972aac30`（style 脚本，6 files，+378/−6）；推送：`origin/feat/core-errors-either`。
