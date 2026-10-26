@@ -13,7 +13,6 @@
   "formatPromptLlmInputForCliFromLayout",
   "formatToolUsePreviewJson",
   "layoutHasWorkplace",
-  "messageBodyText",
   "messageBodyTextFromBlocks",
   "normalizeForLlmExport",
   "resolvePreviewThinkingContext",

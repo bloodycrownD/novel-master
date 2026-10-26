@@ -21,24 +21,14 @@
  * 候选过滤 / 活动查询（函数本体没删——web 侧 typeahead 与 RN 侧 Picker 仍在用）。
  */
 import {describe, expect, it} from '@jest/globals';
-import {
-  partitionComposerChipAttachments,
-  scanAtPathAttachments,
-} from '@novel-master/core/chat';
-import {
-  atPathTokensFromPickerSelection,
-  countScannedAtPathAttachments,
-  filterAtPathTypeaheadCandidates,
-  findActiveAtQuery,
-  formatComposerAtPathToken,
-  replaceActiveAtWithToken,
-} from '@/components/chat/composer-at-path';
+import { composerChips, attachmentScanner } from '@novel-master/core/chat';
+import { composerAtPath } from '@/components/chat/composer-at-path';
 
 describe('composer-at-path 纯函数域 (T-ATD* / T-AT*)', () => {
   it('T-ATD2: Picker token 为 @path；目录尾 /；扫描落库带前导 /', () => {
-    const tokens = atPathTokensFromPickerSelection(['/notes'], ['/a.md']);
+    const tokens = composerAtPath.tokensFromPickerSelection(['/notes'], ['/a.md']);
     expect(tokens).toEqual(['@/notes/', '@/a.md']);
-    const scanned = scanAtPathAttachments(tokens.join(' '));
+    const scanned = attachmentScanner.scanAtPaths(tokens.join(' '));
     expect(scanned).toHaveLength(2);
     expect(scanned[0]!.path).toBe('/notes/');
     expect(scanned[0]!.type).toBe('dir');
@@ -46,42 +36,32 @@ describe('composer-at-path 纯函数域 (T-ATD* / T-AT*)', () => {
     expect(scanned.every(a => a.path!.startsWith('/'))).toBe(true);
   });
 
-  it('T-ATD3: 手输 @ 搜索 ≤5，点选插入完整 @path', () => {
-    const refs = [
-      {path: '/a.md', kind: 'file' as const},
-      {path: '/ab.md', kind: 'file' as const},
-      {path: '/abc.md', kind: 'file' as const},
-      {path: '/abcd.md', kind: 'file' as const},
-      {path: '/abcde.md', kind: 'file' as const},
-      {path: '/abcdef.md', kind: 'file' as const},
-    ];
-    expect(filterAtPathTypeaheadCandidates(refs, 'a', 5)).toHaveLength(5);
-
-    const active = findActiveAtQuery('见 @ab', 5);
+  it('T-ATD3: 点选插入完整 @path', () => {
+    const active = composerAtPath.detectQuery('见 @ab', 5);
     expect(active).not.toBeNull();
     expect(active!.query).toBe('ab');
-    const token = formatComposerAtPathToken('/ab.md', false);
-    const next = replaceActiveAtWithToken('见 @ab', 5, active!.start, token);
+    const token = composerAtPath.formatToken('/ab.md', false);
+    const next = composerAtPath.replaceToken('见 @ab', 5, active!.start, token);
     expect(next.text).toBe('见 @/ab.md ');
   });
 
   it('findActiveAtQuery: @/a.md 无尾空格为活跃；带尾空格则关闭', () => {
     const bare = '@/a.md';
-    expect(findActiveAtQuery(bare, bare.length)).not.toBeNull();
-    expect(findActiveAtQuery(bare, bare.length)!.query).toBe('/a.md');
-    expect(findActiveAtQuery(`${bare} `, `${bare} `.length)).toBeNull();
+    expect(composerAtPath.detectQuery(bare, bare.length)).not.toBeNull();
+    expect(composerAtPath.detectQuery(bare, bare.length)!.query).toBe('/a.md');
+    expect(composerAtPath.detectQuery(`${bare} `, `${bare} `.length)).toBeNull();
   });
 
   it('T-ATD4: 删除正文 @path 后扫描为空', () => {
-    expect(countScannedAtPathAttachments('看 @/a.md')).toBe(1);
-    expect(countScannedAtPathAttachments('看')).toBe(0);
+    expect(attachmentScanner.scanAtPaths('看 @/a.md')).toHaveLength(1);
+    expect(attachmentScanner.scanAtPaths('看')).toHaveLength(0);
   });
 
   it('T-AT3: 仅 @path 扫描为 source:attach，不进状态 chip', () => {
-    const scanned = scanAtPathAttachments('请看 @/a.md');
+    const scanned = attachmentScanner.scanAtPaths('请看 @/a.md');
     expect(scanned.length).toBeGreaterThan(0);
     expect(scanned.every(a => a.source === 'attach')).toBe(true);
-    const {status, attach} = partitionComposerChipAttachments(scanned);
+    const {status, attach} = composerChips.partition(scanned);
     expect(status).toHaveLength(0);
     expect(attach).toHaveLength(scanned.length);
   });

@@ -1,14 +1,23 @@
 /**
  * Depth slice parse, validate, and match (tail-based 0 = newest).
  *
+ * 校验失败走 `Result`（key `DEPTH_INVALID_SLICE`），本模块不抛；调用方按
+ * `if (!r.ok)` 收窄后自行决定抛还是降级。
+ *
  * @module domain/depth/logic/depth-slice
  */
+
+import { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 
 /** Depth interval parameters (at least one bound required). */
 export interface DepthSlice {
   readonly startDepth?: number;
   readonly endDepth?: number;
 }
+
+/** 本模块的领域失败：depth 区间不合法。 */
+type DepthLogicError = AppError<"DEPTH_INVALID_SLICE">;
 
 const INFINITY = Number.POSITIVE_INFINITY;
 
@@ -26,35 +35,29 @@ export function matchDepth(depth: number, slice: DepthSlice): boolean {
 }
 
 /** Validates non-negative integers and start <= end when both set. */
-export function validateDepthSlice(slice: DepthSlice): void {
+export function validateDepthSlice(slice: DepthSlice): Result<void, DepthLogicError> {
+  const details = { startDepth: slice.startDepth, endDepth: slice.endDepth };
   if (slice.startDepth == null && slice.endDepth == null) {
-    throw new Error("depth slice requires at least startDepth or endDepth");
+    return Result.err(new AppError("DEPTH_INVALID_SLICE", "depth slice requires at least startDepth or endDepth", details));
   }
-  if (slice.startDepth != null) {
-    if (!Number.isInteger(slice.startDepth) || slice.startDepth < 0) {
-      throw new Error("startDepth must be a non-negative integer");
-    }
+  if (slice.startDepth != null && (!Number.isInteger(slice.startDepth) || slice.startDepth < 0)) {
+    return Result.err(new AppError("DEPTH_INVALID_SLICE", "startDepth must be a non-negative integer", details));
   }
-  if (slice.endDepth != null) {
-    if (!Number.isInteger(slice.endDepth) || slice.endDepth < 0) {
-      throw new Error("endDepth must be a non-negative integer");
-    }
+  if (slice.endDepth != null && (!Number.isInteger(slice.endDepth) || slice.endDepth < 0)) {
+    return Result.err(new AppError("DEPTH_INVALID_SLICE", "endDepth must be a non-negative integer", details));
   }
-  if (
-    slice.startDepth != null &&
-    slice.endDepth != null &&
-    slice.startDepth > slice.endDepth
-  ) {
-    throw new Error("startDepth must be <= endDepth");
+  if (slice.startDepth != null && slice.endDepth != null && slice.startDepth > slice.endDepth) {
+    return Result.err(new AppError("DEPTH_INVALID_SLICE", "startDepth must be <= endDepth", details));
   }
+  return Result.ok(undefined);
 }
 
-/** Message ids whose tail depth matches the slice. */
-export function messageIdsInSlice(
-  visibleMessages: readonly { readonly id: string }[],
-  slice: DepthSlice
-): string[] {
-  validateDepthSlice(slice);
+/** Message ids whose tail depth matches the slice; invalid slice → `Err`. */
+export function messageIdsInSlice(visibleMessages: readonly { readonly id: string }[], slice: DepthSlice): Result<string[], DepthLogicError> {
+  const validated = validateDepthSlice(slice);
+  if (!validated.ok) {
+    return Result.err(validated.error);
+  }
   const n = visibleMessages.length;
   const ids: string[] = [];
   for (let i = 0; i < n; i++) {
@@ -63,15 +66,5 @@ export function messageIdsInSlice(
       ids.push(visibleMessages[i]!.id);
     }
   }
-  return ids;
-}
-
-/** Parses kebab or camel depth fields from a wire object. */
-export function depthSliceFromWire(raw: Record<string, unknown>): DepthSlice {
-  const start = raw.startDepth ?? raw["start-depth"];
-  const end = raw.endDepth ?? raw["end-depth"];
-  return {
-    startDepth: typeof start === "number" ? start : undefined,
-    endDepth: typeof end === "number" ? end : undefined,
-  };
+  return Result.ok(ids);
 }

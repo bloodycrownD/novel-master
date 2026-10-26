@@ -6,7 +6,8 @@
  * 快照分片正确性绑死在旧组件的重构/删除上（r6-C4）。本模块不 import 任何宿主
  * 组件，两个宿主任意 import；旧组件保留 re-export 保兼容。
  */
-import {type ChatMessage} from '@novel-master/core/chat';
+import {type ChatMessageData} from '@novel-master/core/chat';
+import {utf8ByteLength} from '@novel-master/core/common';
 
 /**
  * 快照分片大小（init-busy-yield Step 6）：每片最多承载的消息数。行由消息
@@ -14,22 +15,6 @@ import {type ChatMessage} from '@novel-master/core/chat';
  * 故「按消息分片」与「按行分片」同界——单片行数 ≤ 本常量。
  */
 const SNAPSHOT_CHUNK_SIZE = 50;
-
-/**
- * 惰性持有的 UTF-8 编码器（RN/Hermes 无全局 Buffer，故走 TextEncoder 全局；
- * 与 packages/core 的 tool-output-limits 同款惯例）。模块求值期不构造，
- * 规避个别环境缺该全局时直接炸掉整个模块。
- */
-let snapshotChunkEncoder: TextEncoder | undefined;
-
-/** 字符串的 UTF-8 真实字节数（C-02 口径）；无 TextEncoder 全局时按 UTF-16 码元兜底。 */
-function utf8ByteLength(text: string): number {
-  if (typeof TextEncoder === 'undefined') {
-    return text.length;
-  }
-  snapshotChunkEncoder ??= new TextEncoder();
-  return snapshotChunkEncoder.encode(text).byteLength;
-}
 
 /**
  * 快照分片字节预算（rollback-large-jank Step 3）：单桶累计源 content JSON
@@ -50,7 +35,7 @@ const SNAPSHOT_CHUNK_BYTES = 256 * 1024;
  * 边界；空列表返回单空桶（chunkTotal=1，与旧单包空快照逐字节等价）。
  */
 export function planSnapshotChunkBounds(
-  messages: readonly ChatMessage[],
+  messages: readonly ChatMessageData[],
 ): Array<readonly [number, number]> {
   const bounds: Array<readonly [number, number]> = [];
   let start = 0;

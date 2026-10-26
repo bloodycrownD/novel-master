@@ -20,16 +20,11 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { parseText, TdbcError } from "@novel-master/core";
 import { decodeSmartSortRuleBundle } from "@novel-master/core/smart-sort-rule";
-import {
-  isStorageFailure,
-  normalizeSmartSortImportError,
-  SMART_SORT_IMPORT_YAML_INVALID_LABEL,
-} from "../../src/common/index.js";
+import { normalizeSmartSortImportError } from "../../src/common/index.js";
 
 describe("YAML 导入通道的错误标签反转判据（normalizeSmartSortImportError）", () => {
   it("T-SRTX-D1 DB 故障不被贴「YAML 无效」标签", () => {
     const dbFailure = new TdbcError("SQLITE_ERROR", "SQLITE_CONSTRAINT: 撞号");
-    assert.equal(isStorageFailure(dbFailure), true, "TdbcError 必须判为存储类");
 
     // 通道语义：命中即原样上抛，不经 normalizeYamlError。
     const surfaced = normalizeSmartSortImportError(dbFailure);
@@ -52,7 +47,6 @@ describe("YAML 导入通道的错误标签反转判据（normalizeSmartSortImpor
       syntaxErr = e;
     }
     assert.ok(syntaxErr != null, "夹具必须真的抛（否则本条无牙齿）");
-    assert.equal(isStorageFailure(syntaxErr), false, "语法错不得判为存储类");
     assert.match(
       normalizeSmartSortImportError(syntaxErr).message,
       /YAML 无效/,
@@ -66,7 +60,6 @@ describe("YAML 导入通道的错误标签反转判据（normalizeSmartSortImpor
       schemaErr = e;
     }
     assert.ok(schemaErr != null, "夹具必须真的抛");
-    assert.equal(isStorageFailure(schemaErr), false, "schema 错不得判为存储类");
     assert.match(
       normalizeSmartSortImportError(schemaErr).message,
       /YAML 无效/,
@@ -80,10 +73,9 @@ describe("YAML 导入通道的错误标签反转判据（normalizeSmartSortImpor
    */
   it("T-SRTX-D3 非 Error 抛出值照套前缀（不因判据放宽而漏标签）", () => {
     const thrown: unknown = "裸字符串";
-    assert.equal(isStorageFailure(thrown), false);
     const surfaced = normalizeSmartSortImportError(thrown);
     assert.match(surfaced.message, /YAML 无效/);
     // normalizeYamlError 对非 Error 只给 fallback 本身，不拼 ": undefined"
-    assert.equal(surfaced.message, SMART_SORT_IMPORT_YAML_INVALID_LABEL);
+    assert.equal(surfaced.message, "智能排序规则 YAML 无效");
   });
 });

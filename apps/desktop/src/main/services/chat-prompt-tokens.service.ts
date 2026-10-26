@@ -25,9 +25,8 @@
  * @module services/chat-prompt-tokens
  */
 import { app } from "electron";
-import { resolveSavedModelId } from "@novel-master/core/agent";
-import type { ChatMessage } from "@novel-master/core/chat";
-import { messageBodyText } from "@novel-master/core/prompt";
+import type { ChatMessageData } from "@novel-master/core/chat";
+import { messageBodyTextFromBlocks } from "@novel-master/core/prompt";
 
 import {
   countPromptLlmInputHeuristicOnly,
@@ -117,12 +116,12 @@ function realFallbackTokenCounter(
     // 上游据此继续按「估算」处理（压缩阈值会乘 0.85 安全系数）。
     kind: "heuristic",
     countText: (text: string) => countFallbackTokens(runtime, text),
-    countMessages: (messages: readonly ChatMessage[]) =>
+    countMessages: (messages: readonly ChatMessageData[]) =>
       // 拼成一整串再计数：按消息逐条计数会丢掉相邻消息之间的合并，拼接口径与
       // 序列化提示词时「合成一串再数」一致。
       countFallbackTokens(
         runtime,
-        messages.map((m) => messageBodyText(m)).join("\n\n"),
+        messages.map((m) => messageBodyTextFromBlocks(m.content.blocks)).join("\n\n"),
       ),
   };
 }
@@ -219,7 +218,7 @@ async function computeChatPromptTokenStats(
 
   // 弃权检查点（build/resolve 关键边界，r3-dt-align 第 2 层）：build 的分段 bail 只
   // 管得到 build 段内部，最后一段 bail 到 resolve 派发之间还夹着
-  // getSessionAgentConfig、resolveSavedModelId、resolveTokenCounterModeForModel 三次
+  // getSessionAgentConfig、模型解析、resolveTokenCounterModeForModel 三次
   // IO——run 起步的窗口正落在这里。命中即由上层 catch 收成 null 哨兵（保留旧标签），
   // 绝不放行到 resolve。
   if (shouldBail?.() === true) {
@@ -230,10 +229,7 @@ async function computeChatPromptTokenStats(
   const sessionConfig = await runtime.sessions.getSessionAgentConfig(
     scope.sessionId,
   );
-  const savedModelId = resolveSavedModelId({
-    agentModelId: definition.model,
-    sessionModelId: sessionConfig.modelId,
-  });
+  const savedModelId = definition.model ?? sessionConfig.modelId;
 
   if (!savedModelId) {
     // 此处恒不拼 tools（UI 读口拿不到定义，`session-prompt-input` 不产 tools）：
@@ -342,10 +338,7 @@ async function isPreciseWarmStillCurrent(
     );
     const definition = await runtime.agentRegistry.get(sessionConfig.agentId);
     return (
-      resolveSavedModelId({
-        agentModelId: definition.model,
-        sessionModelId: sessionConfig.modelId,
-      }) === warmSavedModelId
+      (definition.model ?? sessionConfig.modelId) === warmSavedModelId
     );
   } catch {
     return false;

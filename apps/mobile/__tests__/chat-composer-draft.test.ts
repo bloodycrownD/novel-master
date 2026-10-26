@@ -7,10 +7,7 @@ import {
   writeChatComposerDraft,
   writeChatComposerDraftState,
 } from '../src/storage/chat-composer-draft';
-import {
-  addChatAnnotateDraft,
-  resetChatAnnotateDraftStoreForTests,
-} from '@novel-master/core/chat';
+import { chatAnnotateDraftStore } from '@novel-master/core/chat';
 
 describe('chat-composer-draft', () => {
   it('reads and writes per session', () => {
@@ -78,15 +75,15 @@ describe('chat-composer-draft', () => {
   });
 
   it('T-AN1: replace projected 后再 ∪ annotate，chip 不被冲掉', () => {
-    resetChatAnnotateDraftStoreForTests();
+    chatAnnotateDraftStore.resetForTests();
     const sessionId = 's-an1-m';
-    addChatAnnotateDraft(sessionId, {
+    chatAnnotateDraftStore.add(sessionId, {
       id: 'a1',
       path: '/note.md',
       originalText: 'sel',
       userAnnotation: 'mark',
     });
-    addChatAnnotateDraft(sessionId, {
+    chatAnnotateDraftStore.add(sessionId, {
       id: 'a2',
       path: '/note.md',
       originalText: 'sel2',
@@ -117,7 +114,7 @@ describe('chat-composer-draft', () => {
     expect(state.attachments.filter(a => a.action === 'annotate').length).toBe(
       1,
     );
-    resetChatAnnotateDraftStoreForTests();
+    chatAnnotateDraftStore.resetForTests();
   });
 
   it('CD-5: hydrateChatComposerDraftFromDb 遇非法附件不清空正文', async () => {

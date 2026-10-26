@@ -7,7 +7,7 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it } from "node:test";
 import { registerNodeTokenizerDriverForTests } from "../../helpers/register-node-tokenizer-driver-for-tests.js";
-import type { ChatMessage } from "../../../src/domain/chat/model/message.js";
+import type { ChatMessageData } from "../../../src/domain/chat/model/message.js";
 import type { ModelRoundSummary } from "../../../src/domain/agent/model/agent-run-result.js";
 import {
   clearTokenizerDrivers,
@@ -274,7 +274,7 @@ describe("resolveCurrentPromptTokens 统计优先（api 基线+增量，本地�
     seq: number,
     text: string,
     role = "user"
-  ): ChatMessage {
+  ): ChatMessageData {
     return {
       id: `m-${seq}`,
       sessionId: SESSION_ID,
@@ -289,7 +289,7 @@ describe("resolveCurrentPromptTokens 统计优先（api 基线+增量，本地�
   }
 
   function paramsWithMessages(
-    messages: ChatMessage[],
+    messages: ChatMessageData[],
     savedModelId: string = RUN_MODEL_ID
   ) {
     return {
@@ -798,7 +798,7 @@ describe("r3-chip-1 resolve 段 shouldBail 弃权观察点", () => {
     let messageTouches = 0;
     const ctx = {
       workplaceDisplay: "",
-      get messages(): ChatMessage[] {
+      get messages(): ChatMessageData[] {
         messageTouches += 1;
         return [];
       },

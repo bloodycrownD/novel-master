@@ -14,6 +14,7 @@ import type {
   AgentRegistryGetRequest,
   AgentRegistryGetResponse,
   AgentRegistryListItemDto,
+  AgentRegistryUpdateRequest,
   AgentRegistryUpsertRequest,
   AgentYamlExportRequest,
   AgentYamlImportRequest,
@@ -143,6 +144,24 @@ export async function handleAgentRegistryUpsert(
     >[1], {
       registeredToolNames: probe.list(),
     });
+    return { ok: true, data: undefined };
+  } catch (err) {
+    return { ok: false, error: formatIpcError(err) };
+  }
+}
+
+export async function handleAgentRegistryUpdate(
+  req: AgentRegistryUpdateRequest,
+): Promise<IpcResult<void>> {
+  try {
+    const rt = await getDesktopRuntime();
+    const probe = new ToolRegistry();
+    registerBuiltinTools(probe);
+    await rt.agentRegistry.update(
+      req.agentId,
+      req.patch as Parameters<typeof rt.agentRegistry.update>[1],
+      { registeredToolNames: probe.list() },
+    );
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };

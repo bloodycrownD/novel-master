@@ -13,18 +13,7 @@
  * @module domain/tool/builtin/search/engines/searxng
  */
 
-import {
-  engineApiErrorMessage,
-  engineTimeoutError,
-  matchesDomainFilters,
-  normalizeMaxResults,
-  parseDomainFilters,
-  type DomainFilters,
-  type ResolvedEngineConfig,
-  type SearchResponse,
-  type SearchResult,
-  type SearchToolOptions,
-} from "../types.js";
+import { engineApiErrorMessage, engineFailed, engineTimeoutError, matchesDomainFilters, normalizeMaxResults, parseDomainFilters, type DomainFilters, type ResolvedEngineConfig, type SearchResponse, type SearchResult, type SearchToolOptions } from "../types.js";
 
 /** 超时（毫秒）：30s（自托管聚合通常快于付费 API）。 */
 export const SEARXNG_TIMEOUT_MS = 30_000;
@@ -35,9 +24,7 @@ function buildSearxngQuery(query: string, filters: DomainFilters): string {
   if (filters.include.length === 1) {
     parts.push(`site:${filters.include[0]}`);
   } else if (filters.include.length > 1) {
-    parts.push(
-      filters.include.map((domain) => `site:${domain}`).join(" OR ")
-    );
+    parts.push(filters.include.map((domain) => `site:${domain}`).join(" OR "));
   }
   for (const domain of filters.exclude) {
     parts.push(`-site:${domain}`);
@@ -59,15 +46,10 @@ interface SearxngResponse {
  * SearXNG 搜索适配器：`resolved.baseUrl` 缺失时抛可读错误（解析链只
  * 路由到已配置实例，此为防御兜底）；超时 30s；无任何鉴权头。
  */
-export async function searchWithSearxng(
-  resolved: ResolvedEngineConfig,
-  query: string,
-  options: SearchToolOptions,
-  fetchFn: typeof globalThis.fetch
-): Promise<SearchResponse> {
+export async function searchWithSearxng(resolved: ResolvedEngineConfig, query: string, options: SearchToolOptions, fetchFn: typeof globalThis.fetch): Promise<SearchResponse> {
   const baseUrl = resolved.baseUrl;
   if (baseUrl == null || baseUrl.length === 0) {
-    throw new Error("SearXNG base URL missing: engine not configured");
+    throw engineFailed("SearXNG base URL missing: engine not configured");
   }
   const numResults = normalizeMaxResults(options.maxResults);
   const filters = parseDomainFilters(options.domainFilter);
@@ -84,36 +66,22 @@ export async function searchWithSearxng(
   try {
     let response: Response;
     try {
-      response = await fetchFn(url.toString(), {
-        method: "GET",
-        headers: { Accept: "application/json" },
-        signal: controller.signal,
-      });
+      const requestInit = { method: "GET", headers: { Accept: "application/json" }, signal: controller.signal };
+      response = await fetchFn(url.toString(), requestInit);
     } catch (e) {
-      throw engineTimeoutError(
-        e,
-        controller.signal.aborted,
-        "SearXNG",
-        SEARXNG_TIMEOUT_MS
-      );
+      throw engineTimeoutError(e, controller.signal.aborted, "SearXNG", SEARXNG_TIMEOUT_MS);
     }
 
     if (!response.ok) {
       const body = await response.text();
-      throw new Error(
-        engineApiErrorMessage("SearXNG", response.status, body)
-      );
+      throw engineFailed(engineApiErrorMessage("SearXNG", response.status, body));
     }
 
     let data: SearxngResponse;
     try {
       data = (await response.json()) as SearxngResponse;
     } catch (e) {
-      throw new Error(
-        `SearXNG returned invalid JSON: ${
-          e instanceof Error ? e.message : String(e)
-        }`
-      );
+      throw engineFailed(`SearXNG returned invalid JSON: ${e instanceof Error ? e.message : String(e)}`);
     }
 
     const results: SearchResult[] = [];

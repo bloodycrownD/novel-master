@@ -5,7 +5,7 @@ import {
   blocksToAnthropicContent,
   chatMessagesToAnthropic,
 } from "../../../src/infra/llm-protocol/logic/anthropic-content-mapper.js";
-import type { ChatMessage } from "../../../src/domain/chat/model/message.js";
+import type { ChatMessageData } from "../../../src/domain/chat/model/message.js";
 
 describe("anthropic thinking signature", () => {
   it("parses thinking block with signature", () => {
@@ -65,7 +65,7 @@ describe("anthropic thinking signature", () => {
   });
 
   it("chatMessagesToAnthropic preserves thinking before tool_use with signature", () => {
-    const messages: ChatMessage[] = [
+    const messages: ChatMessageData[] = [
       {
         role: "assistant",
         content: {

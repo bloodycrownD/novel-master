@@ -4,15 +4,9 @@
  * @module infra/llm-protocol/logic/tool-arguments-parse
  */
 
+import { truncateText } from "@/common/text.js";
 import { ProviderError } from "@/errors/provider-errors.js";
 import type { LlmProtocolKind } from "../ports/adapter.port.js";
-
-function truncate(raw: string, maxLen: number): string {
-  if (raw.length <= maxLen) {
-    return raw;
-  }
-  return raw.slice(0, maxLen) + "…";
-}
 
 export type TryParseToolArgumentsResult =
   | { readonly ok: true; readonly value: Record<string, unknown> }
@@ -43,6 +37,6 @@ export function parseToolArgumentsJson(
   }
   throw new ProviderError(
     "INVALID_TOOL_ARGUMENTS",
-    `${protocol}: invalid tool arguments JSON (${truncate(parsed.raw, 80)})`
+    `${protocol}: invalid tool arguments JSON (${truncateText(parsed.raw, 80)})`
   );
 }

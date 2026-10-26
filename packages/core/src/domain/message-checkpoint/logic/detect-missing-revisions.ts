@@ -20,14 +20,7 @@ import { revisionPairKey } from "@/domain/vfs/logic/revision-pair-key.js";
  *        entry 行已被物理删除但 checkpoint 有指针的路径按旧 entryId 查 revision，
  *        行在即视为可恢复（复活），不算 missing。
  */
-export async function findMissingRevisionPointers(
-  revisionRepo: VfsRevisionRepository,
-  entryRepo: VfsEntryRepository,
-  scope: VfsScope,
-  targetTree: ReadonlyMap<string, number>,
-  pathsToReconcile: Iterable<string>,
-  checkpointEntryIdByPath?: ReadonlyMap<string, number>
-): Promise<string[]> {
+export async function findMissingRevisionPointers(revisionRepo: VfsRevisionRepository, entryRepo: VfsEntryRepository, scope: VfsScope, targetTree: ReadonlyMap<string, number>, pathsToReconcile: Iterable<string>, checkpointEntryIdByPath?: ReadonlyMap<string, number>): Promise<string[]> {
   const scopeKeyStr = scopeKey(scope);
   const pairs: Array<{
     logicalPath: string;
@@ -71,9 +64,7 @@ export async function findMissingRevisionPointers(
   // entryId=-1 的（entry 缺失）无需查 meta，直接算 missing。
   const missing: string[] = [];
   const queryable = pairs.filter((pair) => pair.entryId >= 0);
-  const metas = await revisionRepo.findMetasByEntryVersions(
-    queryable.map((pair) => ({ entryId: pair.entryId, version: pair.version }))
-  );
+  const metas = await revisionRepo.findMetasByEntryVersions(queryable.map((pair) => ({ entryId: pair.entryId, version: pair.version })));
 
   for (const pair of queryable) {
     const key = revisionPairKey(pair.entryId, pair.version);

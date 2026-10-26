@@ -31,7 +31,7 @@ cr_loop_int:
     spec-fix-int-r3: { status: done, executor: main(/trivial 豁免), result: "trivial 直接执行：MF-1（ic-20 选型定稿计数/令牌配对+外层 rebootstrap 后 release+验收对齐+push 措辞订正）、MF-2（ic-01 探针 conn.execute 前提+备选判据改『收尾后手动调 runStartupMaintenanceOnce 断言返回 null』）、MF-3（两表全量 22 处行号）、MF-4（已豁免节编号区间表述）、MF-5（ic-33 连带 :18/:344）、SD 去向补 apps SD-5→ic-04 / int SD-4→ic-17 两行、cr-01 表格行关联列补 ic-36a；均带【r3 修订】标记" }
     review-full-int-3: { status: done, executor: subagent, readonly: true, result: "建议 no（窄口径，2 处微调后可 yes）——MF-1~5 与 3 条 OQ 注记全部落地实测吻合、36 条计数与交叉引用无新错、四条 ready 判据通过；剩余：N1（ic-20 改法 1 与计数选型互斥）N2（mobile pull 的 rebootstrap 落点 :203-224 → pullCloudSync :293-345/:323）两处 P3 措辞 + nit×2（:501 r3 标记与措辞、:306 bootstrap.ts:25 补注）+ OQ×2（ic-01 用例次序前提、chat-history-search 残影留痕）；无新 P0/P1/P2" }
     spec-fix-int-r4: { status: done, executor: main(/trivial 豁免), result: "trivial 直接执行 6 处：N1（ic-20 改法 1 改为外层 acquire 计数配对）N2（mobile 外层落点改 pullCloudSync :293-345/:323 + push 由底层覆盖）nit2（:501 加 r3 标记 + 共用→同构措辞）、:306 bootstrap.ts:25 补注、ic-01 验收补用例次序前提（NF-1 纪律）、K 节补 chat-history-search 残影留痕；元信息 review_round→4；均带【r4 修订】标记" }
-  must_fix: []   # 全部落档：47 原始 + r2 新增 3 = 36 条终态（1 P0 / 10 P1 / 25 P2），无开放项
+  must_fix: 4 条已全部落盘 cr-fix-spec.md（cr-s3/B-1 P0=DEF-03+01 合并；cr-s3/B-2 P1=DEF-02；cr-s3/G-3 P1=复现测试缺口；cr-s4/K-4 P2=注释残留）   # 全部落档：47 原始 + r2 新增 3 = 36 条终态（1 P0 / 10 P1 / 25 P2），无开放项
   spec_fix_plan: []
   status: **fix-spec-ready**（2026-09-28 主代理宣布：round-4 终检「2 处微调后可 yes」+ r4 微调已 trivial 落地；Closure 表已附文档末尾；待用户确认开工——与姊妹 cr-fix-spec 的 35 条建议统筹排波：ic-03↔cr-04 合并、ic-01 前置 cr-26、ic-09 依赖 cr-08、ic-36 随姊妹条目）
 cr_loop:
@@ -68,7 +68,7 @@ cr_loop:
     review-full-3: { status: done, executor: subagent, readonly: true, result: "建议 no —— 新提 NF-1/NF-2/NF-3（r3 自己引入的「照字面实现必然打红」验收断言）；cr-33/34/35 闭合、cr-31/32/36 只闭了改法侧" }
     spec-fix-r4: { status: done, executor: subagent, result: "NF-1/2/3 闭合：maintCalls 语义六处同口径、pending 正向路径拆到新测试文件 blob-binary-normalization-maintenance.test.ts（四处登记 + 第一条约束）、(a)/(b) 两条用例四处逐字一致、cr-36 ② 收窄；C1/C2/C3 落位；计数仍 36（1/9/26）。⚠️ 该子代理越界创建了 docs/apm/memory/20260928-binary-blob-cr-fix-spec-r4.md（违反 RULE「子代理不得写记忆」），主代理已删除" }
     review-full-4: { status: done, executor: subagent, readonly: true, result: "建议 fix-spec-ready: **yes** —— 无新 must-fix；NF-1/2/3 逐条核实闭合（maintCalls 六处同口径、新文件五处登记、a/b 四处一致、NF-3 互斥消除）；计数/SD/OQ/K/QA/advisory 全自洽；仅剩 4 处措辞/事实残影（非阻塞，主代理已订正）" }
-  must_fix: []   # 36 条（P0×1 / P1×9 / P2×26）全部写入 fix-spec；round 4 复检后无新增
+  must_fix: 4 条已全部落盘 cr-fix-spec.md（cr-s3/B-1 P0=DEF-03+01 合并；cr-s3/B-2 P1=DEF-02；cr-s3/G-3 P1=复现测试缺口；cr-s4/K-4 P2=注释残留）   # 36 条（P0×1 / P1×9 / P2×26）全部写入 fix-spec；round 4 复检后无新增
   fix_spec_path: docs/Iterations/binary-blob-and-vfs-pack/cr-fix-spec.md
   spec_fix_plan: []   # 已 fix-spec-ready，无待写章节
   status: **fix-spec-ready**（2026-09-28 宣布；待用户确认是否按 fix-spec 开工执行 —— 确认前不改代码）
@@ -247,3 +247,636 @@ dev_loop_binstore_fix:
     - wave-2 派发前主代理先重建 core dist（npm run build -w @novel-master/core）
   known_baselines: core 2 条 usage-stats 时区红；mobile 1 条 mermaid-fullscreen 红；desktop renderer 349 条既有债
   open_must_fix: []
+
+
+spec_check_partb:
+  spec_path: D:/Dev/nm-worktree/f-vfs-pack/docs/Iterations/binary-blob-and-vfs-pack/spec.md (Part B 章节，2026-09-28 重写混合方案)
+  review_round: 2
+  dag_version: 2
+  round1: Go (P0=0; P2×4 doc-fix)
+  round2: Go (代码锚点抽查全命中；P2-A1 T-VP12 已补进 Step 10)
+  open_must_fix: []
+  status: execute-ready 待用户确认
+
+spec_check_read_ref:
+  spec_path: docs/Iterations/read-tool-result-ref/spec.md
+  review_round: 2
+  dag_version: 2
+  round1: No-Go (P1-1 项目删除漏挂 + P2×2)
+  doc_fix_plan: []
+  round1_fixed: P1-1 挂点表补 project.service delete BFS + T-RR4 五路径 + 影响文件补 project.service.ts；P2-1 truncateAfter 注；P2-2 UI 措辞对齐；集成备注
+  round2: Go (P1-1 经 project.service.ts L149-197 逐行核实闭合；删除面完备性正向证据；P2-B1 impact_files/变更点清单已补)
+  status: execute-ready 待用户确认
+
+spec_check_msg_plaintext:
+  spec_path: D:/Dev/nm-worktree/f-read-ref/docs/Iterations/message-plaintext/spec.md
+  prd_path: 无（用户口述，spec 需求来源节）
+  review_round: 5
+  dag_version: 6
+  user_focus:
+    - 性能维度全面探查：所有读/写 chat_message 的数据消费处逐个过明文化前后的性能语义（上次压缩迭代只考虑空间、反复打补丁的教训）
+    - 逻辑合理性优先于回滚能力（回滚节弱化为说明性内容）
+    - （2026-10-01 追加）迁移中断安全 / 跨版本设备混布 / skill 生命周期边界三维度并入第 2 轮核对清单
+  round1: No-Go (P0×3 + P1×7 + P2×5；性能矩阵 13 行全量产出)
+  round1_fixed:
+    - P0-1 alreadyReferenced seen 不前置（保留 read 后判定，仅不 +1 不产 ref——前置会拿不到 result.version 且 outputSchema 必填）
+    - P0-2 SkillFileContent 三件套改可选/可空对齐 VfsReadResult；refAnchored 判空照抄 vfs-tools；免掉三个测试 mock 连带改动
+    - P0-3 decodeMessageContent 消费方改四处（+revision-ref-count repair 全表扫）；V1' 前置消费者同步
+    - P1-1 补 T-MP-P0 稳态读不劣化护栏（性能主张的唯一自动证据）+ T-MP-P0b IPC DTO 形态断言
+    - P1-2/4 BATCH_BUILD_CHUNK 不退役，改名「参数构造分片」（fork/copy 明文参数数组内存 2-3× 是唯一内存恶化点，让步继续）
+    - P1-3 风险表 + CHANGELOG 补云同步 push +36MB 成本
+    - P1-5 SkillResultRef 补 nextOffset
+    - P1-6 Part 3.4 标题改「usage-stats 保持双形态」清理矛盾
+    - P1-7 desktop DTO contentRef 扩 kind union、占位按 kind 分文案
+    - P2 全闭合（CLI 矩阵行/旧标记孤儿登记/快照回灌取舍/归一 adapter V1'/KKV 常量导出）
+    - 新增「数据消费处 × 性能语义总表」节（13 行固化）
+    - 回滚节改「逻辑合理性总结」（用户拍板）
+    - 新增风险：Step 1-5 发布单元不可拆（中间态正向任务压回新明文行）、跨版本设备混布翻转、迁移中断续跑（T-MP2b）、T-SR6 技能删除保活
+  round2: No-Go (P0×2 均为 r1 修复未回扫的结构图/Step8 旧文本残留 + P1×4 + P2×2；维度 A/B/C 结论：T-MP2b 可执行、collectReadRefs 不查 kind 故 SkillResultRef 全链自动生效、跨域切换与版本演进无问题)
+  round2_fixed:
+    - P0-1 结构图:141 与 Step 8 的「seen 前置」残留清除（与 Part 4 正文对齐）
+    - P0-2 结构图:141「BATCH_BUILD_CHUNK 退役」改「改名保留（参数构造分片）」
+    - P1-1 T-MP-P0 基线构造方式指定（compressZlib + 裸 INSERT，与生产写路径解耦——Step 4 后无生产 API 能造压缩行）
+    - P1-2 Part 2 补收尾不变量（leftover > failedKeys.size → stalled + 不置标记）+ T-MP2 探针断言（驱动写回不生效桩）
+    - P1-3 风险表两行合并重写（根因=标记闩锁随快照 travels 双向失效；混布翻转为窄前提残余）+ Part 2 入口自愈（marker 置位时 LIMIT 1 探测命中清标记续搬）+ T-MP2 自愈断言
+    - P1-4 T-SR2 补同 turn 重复读偏差用例（方向只增不减、登记已知偏差与 read-ref 分支同口径）
+    - P2-1 旧 pending 消费改 runStartupMaintenanceOnce（去重版，防双 VACUUM）
+    - P2-2 T-SR7 技能改名用例（renamePrefix entry_id 保留）
+    - T-SR5 前提写死（ZIP 导入两种实现形态下 hydrate 都必须工作）
+  round3: No-Go (P0×1 设计目标节 BATCH 残留 + P1×5 + P2×6，全部一句话级文档修补；自洽扫描：seen/KKV/kind 一致、T 编号与 Step 映射缺口、encode 删除步骤二义)
+  round3_fixed:
+    - P0-1 设计目标 3 的「BATCH_BUILD_CHUNK 压缩专用分片」移出删除清单（显式标注不在清单）
+    - P1-1 T-MP2/T-MP-P2 与自愈探针互斥 → 改「零 COUNT 谓词 + 自愈 LIMIT 1 探测恰好一次（探针计数）」
+    - P1-2 contentRef union 窄化策略 → ReadResultRef 加 kind?: "read" 缺省兼容、全链判 kind === "skill"、parse 先分派；产块门字段校验按 action 拆两套（load 只校验 version/truncated/files/三件套）
+    - P1-3 测试清单补 infra/content-cache/decoded-content-cache.test.ts（删消息池 describe 保留 contentBodyPool 用例）
+    - P1-4 T 用例 Step 归属补齐：T-MP2b→Step 2、T-MP-P0/P0b→Step 10、T-SR6/7→Step 7；新增文件用例清单同步（T-SR1~7 全量）
+    - P1-5 encodeMessageContent 删除步骤钉死：Step 1 只删两处调用点、函数本体与 roundtrip 测试随 Step 4 删
+    - P2 全闭合：阈值写死（T-MP-P0 ×1、T-MP-P1 ×25）/ 矩阵 #10 改「谓词可交叠、收敛顺序无关」/ DTO 连带字段名（DbStatsResult.messageCompaction 等双端同步改名）/ Step 11 措辞改「DB 还原回测试前副本」/ 行号漂移修正（ipc-types:1640、index 行号、T-SR6 sweepRevisionsUnderScope）
+    - 发布单元口径统一 Step 1-5（风险表与 Context Bundle 一致）
+  round4: No-Go (P0×1 唯一实质矛盾：skill-tool outputSchema 未声明三件套会被 zod strip 静默剥离——引用化实现即空转且无报错；P2×4 一句话级)
+  round4_fixed:
+    - P0-1 Part 4 第 2 条补 outputSchema 同步声明（read/load 两支加三件套 optional，照 vfs-tools.ts:171-173 先例）+ T-SR1 补「三件套经 ToolRunner.call 后仍在」牙齿
+    - P2 allowlist 删 3 增 3 / 测试删除归属钉死（codec/池随 Step 4、Step 9 收口）/ 截断推导单源化（抽 domain/tool/logic/ 纯函数，风险表与 Part 4 统一）/ 措辞修正
+  round5: Go (五条全真闭合、代码锚点逐字核对无漂移；两条一句话尾巴——结构图漏列新纯函数文件与 allowlist 双写——主代理已顺手补：结构图加 skill-read-truncation.ts 行、impact_files 26→27、Step 9 改复核措辞)
+  open_must_fix: []
+  status: execute-ready 待用户确认
+
+
+cr_msg_plaintext:
+  repo: D:/Dev/nm-worktree/f-read-ref
+  base_sha: 5e644277
+  head_sha: 547ee6ab
+  fix_spec_path: docs/Iterations/message-plaintext/cr-fix-spec.md
+  review_round: 3
+  dag_version: 3
+  wave_plan: [[cr-w1-core-write, cr-w1-decompress, cr-w1-skill-ref, cr-w1-ends-doc, cr-w1-perf, cr-w1-safety], [review-full]]
+  node_status:
+    cr-w1-core-write: done (scope-ready:no — P1 G-1 T-MP4 漏 searchMessages)
+    cr-w1-decompress: done (scope-ready:no — P1 B-1 探针×坏行相斥/B-2 全表扫描/G-1 四组用例回退 + P2 C-1)
+    cr-w1-skill-ref: done (scope-ready:yes 附条件 — P1 G-1 sweep 前缀空转 + P2×5)
+    cr-w1-ends-doc: done (scope-ready:no — A-1/A-2 CHANGELOG 披露缺口 + P2×5)
+    cr-w1-perf: done (scope-ready:no — P0 E-1 探测全表扫描 + P1 E-2/E-3/G-1 + P2 G-2/G-3)
+
+
+# === spec-check-loop 编排状态（task-attach-unref：v1.5.30 移除 read/skill 引用化 + task 双参数）===
+spec_check_tau:
+  skill: spec-check-loop
+  repo_path: D:\Dev\Js\novel-master
+  prd_path: 无（用户口述 2026-10-01，决策链见 docs/apm/memory/20260927-worktree-123-verify-guide.md 当日各轮）
+  spec_path: docs/Iterations/task-attach-unref/spec.md
+  dag_version: 4
+  review_round: 4
+  round1: No-Go (P0×3/P1×4/P2×3——S0 打断 workplace 历史附件省略 / D9 basename name 撞 zod refine 硬抛 / 压缩行处理未定义；S0 口径判定本身经逐行核实成立)
+  round1_fixed:
+    - P0-1 S0 拆双集合（prefixPaths 仅 full 入集 + 新增 visiblePaths 喂 prepare 的 workplaceSeenPaths，hydrateWorkplaceWithSeen 改用该集合，三处消费方同步，T-S04）
+    - P0-2 D9/D10 name 一律覆写 attachmentStorageName(storePath)（T-TA1 补 basename 即红牙齿）
+    - P0-3 D19 谓词加 content_blob IS NULL + 解压兄弟任务未竟不置完成标记（T-UM7）
+    - P1-1 AgentSession 扩散面改「3 实现类 + read-ref-production-smoke.test.ts 内联实现」，Step 10 出口含全仓 typecheck
+    - P1-2 D5 claim 落点 = runChildAgent L1187 register 原地改 tryRegister（先于 L1262 session.append，claim 失败不留孤儿 user 消息；T-TS3 补断言）
+    - P1-3 abort registry 修正为 service/agent/ 两文件（port + 工厂）；vfs-tools 行号表述改「注释+hasRefAnchor+refAnchored+同步+1」；build-tool-result-block 删除面补遗（isRecord/import/content 消费点）
+    - P1-4 read-ref-production-smoke.test.ts 显式入 Step 4 + A 线补遗（改写保留三断言口径）
+    - P2-1 T-TA4 落 mobile（desktop 无子会话渲染链）；P2-2 风险2 补 repair×回迁交互方向判定；P2-3 D6 补 ?? true 分支适用面说明
+  round2: No-Go (P0×1/P1×2/P2×3——R1 十项中九项干净闭合；S0 修复只拆初值没拆运行期共享 seen（hydrateWorkplaceWithSeen 的 seen 是三族共用可变集合，照字面换参会打红 T-PD4/T-SR6/T-PD8 且缺省值未定义）；D19 双条件严于解压自身判据可永久锁死 unrefDone 与清理轮闸门；G3 验收与 D19 矛盾)
+  round2_fixed:
+    - P0-4 S0 改「双读」：workplaceSeen 初值（缺省回落 seenPaths）+ hydrateWorkplaceWithSeen 判定 seen.has||workplaceSeen.has + 保留 seen.add；Step 12 回归补 T-PD3/PD4/PD8/T-SR6 四条
+    - P1-1 D19 收尾否决收窄为「解压 KKV 标记未置」单条件（压缩行残留仅 warn deferred）
+    - P1-2 G3 验收补 deferred 例外（与 D19 对齐）
+    - P2-5 Step 12 补 assemble 侧（5 处 prefixPaths 断言 + 两处早退补 visiblePaths:[]）；P2-6 Step 4 改按文件列名（T-SR 与 smart-sort 撞号）；P2-7 清理轮清单补 read-ref-production-smoke.test.ts 整删（与本版改写保留成对）
+    - 用户两轮改口落 D11：路径数 10→20 + 文本总量预算 512KB（默认待确认）+ **超限不报错改优雅降级**（预算内挂附件全量、超限路径拼子会话 prompt 尾注提示可用 read/offset/limit 自取；image/binary 不计字节；硬错误仅空串元素）；Step 11 补尺寸查询闭包；T-TA3 改降级断言
+  round3: No-Go (P0×1/P1×2/P2×4——R2 九项+两改口全部闭合并经代码核验；唯一 P0：D19 deferred 结局在「调度照先例」循环里无停手出口（先例只有 done/stalled 两出口，deferred 落第四象限成永不退出忙循环）；P1：非目标段遗留「体积闸后续项」与 D11 打架 + 512KB 字节口径未定义（findContentSize 两态量纲不同均明文下界）；P2：G5/T-TA1/T-TA2 未标预算内、预算分配与去重先后未定、目录计不计字节未定、待确认与写死数值并存。R3 好消息：findContentSize 现成且装配点 run-agent-turn:1247 能绑、MessageService.append 已支持 attachments、assemble prefixPaths 消费方实测 3 处属实)
+  round3_fixed:
+    - P0-1 deferred 与 stalled 同款停手（B 线 + Step 6 两处纪律句 + Step 5 RunResult 显式 deferred:boolean + T-UM7 补 deferred=true 断言）
+    - P1-1 非目标改为「不做主会话 attach 体积闸；task 侧见 D11」
+    - P1-2 D11 补字节口径（findContentSize 下界累计、inline=字符数/blob=压缩字节、null 按 0 计仍占名额；弃精确 utf8ByteLength 的 O(全文) 方案）
+    - P2-1 G5/T-TA1/T-TA2 标「预算内」+ D11 降级指向 T-TA3；P2-2 分配顺序=mergeAttachmentsByPath 去重后顺序（Step 11 先去重再分配）；P2-3 目录并入 null 口径不计字节；P2-4 D11「待确认」改「确认轮改值须同步 T-TA3 与 Context Bundle」
+  round4: 条件 No-Go (P0×0/P1×2/P2×4——R3 七项全部闭合；P1：T-UM6「hash 不匹配算坏行」与 B 线「照常回填+warn」正面矛盾（四判别血统为已废除的 hydrate fail-fast 四码）、Context Bundle blocking_steps 漏 Step 4/6/7（Step 6 漏排=回迁任务三端永不执行）；P2：Step 11 未复述 image/binary 豁免、D11 同步清单漏 Step 11、「null 按 0 计」易误读成 image/binary 返回 null（实际非 null 须按 type 显式跳过）、D6 唯一落点错挂 B 线 Step 6)
+  round4_fixed:
+    - P1-1 T-UM6 改坏行三判别（hash 不匹配照常回填+warn 不进 failedIds）+ B 线坏行分类补 status=deleted
+    - P1-2 blocking_steps 补全 [1..12,14]
+    - P2×4：Step 11 补 type 显式跳过、D11 同步清单加 Step 11、D11 括注改写（image/binary 非 null 须显式跳过 + null=目录/不存在按 0 计）、Step 9 补 D6 引用
+  open_must_fix: []
+  doc_fix_plan: []
+  status: execute-ready 待用户确认（2026-10-01 主代理认定：round4 P0×0、P1/P2 已全修，R4 审查者明示「补齐后即达 execute-ready」；共 4 轮审查，闭合 P0×5/P1×10/P2×14）。确认轮用户第三轮改口已落：D11 预算 512KB → **10 万 token 当量（明文当量字符 100_000 ≈ 300KB UTF-8；inline 计字符、blob 压缩字节×4 折算）**，D11/Step 11/T-TA3/Context Bundle 四处同步。**用户已确认开工（[$code-dev-loop] 开发吧）**
+
+
+# === code-dev-loop 编排状态（task-attach-unref）===
+dev_loop_tau:
+  skill: code-dev-loop
+  worktree: D:\Dev\nm-worktree\tau
+  branch: feat/task-attach-unref
+  base_sha: fe79b781
+  spec_head: cc11fb21（spec 已入分支；cache/ 八份报告拷入 worktree、gitignore 不入版本）
+  dag_version: 1
+  wave_plan:
+    - [impl-A-core(Step1+2+3), impl-C-infra(Step8+10)]      # 两节点文件零交集可并行
+    - [impl-A-tests(Step4), impl-C-main(Step9+11+12), impl-B(Step5+6+7)]  # cli/runtime.ts 归 impl-B 统一改（含 D6 abortRegistry 注入）
+    - [verify-A, verify-B, verify-C]
+    - [cr-func-1]
+    - （not-ready 时动态 fix → verify+cr-func 循环）
+    - [step13-docs(executor:main), step14-full-verify]
+  node_status:
+    impl-A-core: { status: done, executor: subagent, head_sha: e65c0546 }
+    impl-C-infra: { status: done, executor: subagent, head_sha: 98239d20 }
+    impl-A-tests: { status: done, executor: subagent, head_sha: ac0a3269 }
+    impl-B: { status: done, executor: subagent, head_sha: 5eff06ed }
+    impl-C-main: { status: done, executor: subagent, head_sha: 4fb9a8f1 }
+    verify-core: { status: done, result: "3170/3173（3 红均既存噪音：时区×2+护栏×1，隔离复跑绿+基线溯源）；typecheck 0 错；globstar 在位" }
+    verify-apps: { status: done, result: "desktop 632/632（111 文件真收集）；mobile 1745/1746（1 红 mermaid T-MV1 既存 2026-08-30 遗留）；双端 typecheck 0 错；dist 已重建后跑" }
+    cr-func-1: { status: done, func_ready: no, result: "矩阵 13 blocking 步闭合、24 blocking 用例 22 绿；must-fix×2（T-TA4 零覆盖/D11 binary 子句未落地）+注释漂移×3；五条红线逐处源码确认无误" }
+    fix-1: { status: done, executor: subagent, head_sha: 653dac90, result: "T-TA4 mobile chips 用例（牙齿实测红）+ binary 不吃预算（isBinaryAttachPath 同源）+ 5 处注释清理；core 定向 97 绿 + typecheck、mobile 定向 53 绿" }
+    cr-func-2: { status: done, func_ready: yes, result: "两条 must-fix 独立源码推演+独立复跑确认闭合（mobile 28 绿、core 32 绿）；改动面收敛无新引入；残留 must-fix 0（D3 口径收窄记档非阻塞）" }
+    step13-docs: { status: done, executor: main, result: "CHANGELOG Unreleased 三条（分支提交）；RULE.md 三术语更新（主仓：read/skill 引用化→已回退历史概念+回迁口径、子会话→task 双参数、workplace→S0 双读）" }
+  open_must_fix: []
+  spec_deviations: [D3-subagentName-续用口径收窄记档（cr-func 认定非阻塞、未恶化）]
+  并行纪律: 同文件禁止并行 impl；子代理零 git 写，主代理按 wave 分组提交；wave-0 前置 = npm install + npm run build + apps/mobile build:webview
+  status: dev-ready（2026-10-01：dag v2 共 6 波——wave-0 双 impl / wave-1 三 impl / wave-2 双 verify / wave-3 cr-func-1 / wave-4 fix-1 / wave-5 cr-func-2=func-ready；HEAD=ad1d5ed6；Step 15 真机 manual_user 留给合并后用户验收；merge-ready 未宣称——后续走 code-review-loop）
+    cr-w1-safety: done (scope-ready:no — P1 B-1 decode 成功≠内容合法的不可逆销毁 + P2×4)
+    review-full: done (fix-spec-ready:no — 4 条改法缺陷 E-1 rowid DDL/H-1 快路径 no-op/B-1 slack 洼地/B-2 召回红线)
+    spec-check-judge-r1: done (No-Go — 3×P0 同源 + 3×P1 + 6×P2)
+    spec-check-judge-r3: done (No-Go — 3×P0 改法硬冲突)
+    spec-check-judge-r4: done (No-Go — cr-p2 NESTED_TRANSACTION 契约冲突)
+    spec-check-judge-r5: done (Go — 无 P0/P1，5 条 P2 措辞已顺手回填)
+  must_fix: 4 条已全部落盘 cr-fix-spec.md（cr-s3/B-1 P0=DEF-03+01 合并；cr-s3/B-2 P1=DEF-02；cr-s3/G-3 P1=复现测试缺口；cr-s4/K-4 P2=注释残留）   # 23 条 + round-2 修正当量已回填 cr-fix-spec.md；OQ⑦ 已被 cr-d1 failedIds 方案闭合
+  spec_fix_plan: []
+  fix_dev: { dag_version: 2, waves: [fixA/B/C/D 并行, verify-all+specE(main), cr-func→尾牙fc6c49b0], commits: [15280e0f,85abb7eb,57fea895,ae709039,4da9c8ab,fc6c49b0], status: dev-ready }
+
+
+# ===== CR loop：task-attach-unref（feat/task-attach-unref，2026-10-01 完成）=====
+cr_loop_tau:
+  repo: D:\Dev\nm-worktree\tau
+  spec_path: docs/Iterations/task-attach-unref/spec.md
+  fix_spec_path: D:\Dev\nm-worktree\tau\docs\Iterations\task-attach-unref\cr-fix-spec.md
+  base_sha: fe79b781
+  head_sha: ad1d5ed6
+  diff_scope: 61 files +7649/-2574（core domain/service/infra + 三端 apps + 测试 + CHANGELOG）
+  mode: scope→full（用户令：多派智能体、大范围、准确性/安全性/合理性）
+  dag_version: 3
+  review_round: 3
+  wave_plan: [[review-a-unref, review-b-migration, review-c-task, review-d-s0, review-e-tests, review-f-apps-doc], [review-full], [review-fixspec-r3]]
+  node_status:
+    review-a-unref: done (scope-ready:yes — P2x3：hydrate 注释口径/parse 注释漂移/行尾换行)
+    review-b-migration: done (scope-ready:no — P1 B-01：D15 第三子句未实现+UPDATE 无 ref_count>0 夹逼；P2x3：stalled 误判/整行归一化改写/NOT IN 绑定上限)
+    review-c-task: done (scope-ready:yes — P2x6：VfsError 逃逸+getContentSize 无保护/空孤儿会话/纯空白 prompt 附件蒸发/A-14 白名单绕过/缩进错位/无差别 catch 裁决升格 B-3)
+    review-d-s0: done (scope-ready:yes — P2x2：三处消费方接线无测试锁死/T-WP-VP1 名实不符)
+    review-e-tests: done (scope-ready:no — P1 G-1：S0 显式 header 触发链零端到端覆盖；P2x7：映射闭包零覆盖/T-UA4c 名实不符/memo 有实现无用例/mock 展开丢原型/边界三处未钉/chips 白盒耦合/T-UM5 一档缺失)
+    review-f-apps-doc: done (scope-ready:no — P1x4：CHANGELOG 分类错位/内部细节与归因夸大/过渡期占位未披露/坏行不可恢复未披露；A-4 RULE.md 裁决降 P2（主仓工作区已改未提交、发版随附）；P2x5)
+    review-full: done (fix-spec-ready:no — N-1 B-01 改法②判据照做即 warn 风暴/P1 + N-2 缩进数字写反 + N-3 patch 漏下标约束 + N-4 T-UM7 无承载 + N-5 计数 + N-6 B-01/G-5 同批约束；30 条问题全属实、跨面契约抽查全过、无实现级新增)
+    review-fixspec-r3: done (六项 pass + R3-1..R3-4 文字残留已按改法收口 → fix-spec-ready:yes)
+  evidence_packs: docs/Iterations/task-attach-unref/cache/explore-1-unref-chain.md 等 4 份（spec 阶段探索报告）
+  known_baselines: e2e 三链路 27/27 断言全绿；core 3170/3173、desktop 632/632、mobile 1745/1746（3 红既有噪音）；spec 四轮收敛 execute-ready
+  must_fix: 4 条已全部落盘 cr-fix-spec.md（cr-s3/B-1 P0=DEF-03+01 合并；cr-s3/B-2 P1=DEF-02；cr-s3/G-3 P1=复现测试缺口；cr-s4/K-4 P2=注释残留）   # 全部 33 条（0P0/6P1/27P2）已回填 cr-fix-spec.md；OQ 11 条不阻塞
+  spec_fix_plan: []
+  status: fix-spec-ready 待用户确认开工（用户确认前不改代码；B-01 与 e-tests/G-5 必须同批落地）
+
+# ===== spec-check-loop：cr-fix-spec（2026-10-01 启动）=====
+spec_check_crs:
+  repo: D:\Dev\nm-worktree\tau
+  spec_path: D:\Dev\nm-worktree\tau\docs\Iterations\task-attach-unref\cr-fix-spec.md
+  upstream_spec_path: docs/Iterations/task-attach-unref/spec.md（业务 spec，参照物）
+  prd_path: 无独立 PRD
+  note: 用户令——cr spec 不是开发 spec，需 loop 收敛 execute-ready（审查目标=33 条 must-fix 可按文档执行）
+  dag_version: 3
+  review_round: 3
+  open_must_fix: []   # R2 结论 Go（12 项全修复核验）；附带新-1 P1（B-01 判据改「前值 < ABS(delta)」）+ 新-2..新-9 P2 已全部 doc-fix 订正入条目
+  doc_fix_plan: []
+  status: execute-ready 待用户确认（R1 No-Go→doc-fix 12 项→R2 Go；确认后交 code-dev-loop）
+
+# ===== code-dev-loop：cr-fix-spec 33 条修复（2026-10-02 启动）=====
+dev_fix_tau:
+  repo: D:\Dev\nm-worktree\tau
+  branch: feat/task-attach-unref
+  base: ad1d5ed6
+  spec_path: docs/Iterations/task-attach-unref/cr-fix-spec.md（execute-ready 已确认）
+  dag_version: 1
+  wave_plan: [[impl-A 回迁组, impl-B hydrate组, impl-C task组, impl-D S0组], [impl-E 文档+C-3 主代理直改], [verify-core, verify-apps], [cr-func]]
+  node_status:
+    impl-A: { status: pending, 条目: B-01/B-02/D-01/C-01/G-5/G-8（文件强耦合单节点；B-01↔G-5 同批） }
+    impl-B: { status: pending, 条目: a-unref C-2 + e-tests G-3/G-4（spec.md 订正移 E 组防冲突） }
+    impl-C: { status: pending, 条目: c-task B-1/B-2/B-3/D-1/C-1/C-orch-1 + e-tests G-2/G-6 }
+    impl-D: { status: pending, 条目: e-tests G-1 + d-s0 G-1/G-2 }
+    impl-E: { status: pending, executor: main, 条目: f-doc A-1(含A-2/A-3/H-1/H-2)/A-5/C-1/K-1 + a-unref C-1 的 spec 三处订正 + C-01 的 D13 订正 + C-3 行尾换行15文件 }
+    verify-core: { status: pending }
+    verify-apps: { status: pending }
+    cr-func: { status: pending }
+  open_must_fix: []   # 全闭合（cr-func-r2 五项 pass + 三条措辞 nit 已修 9533a1a5）
+  spec_deviations: []  # 无 open（G-7 由 cr-func 抓出后已补执行；B-01 行缺失档按防御注释+登记结清）
+  discipline: 子代理零 git 写；主代理按 wave 提交；提交信息中文
+  commits: [46b4f324 fix-spec入分支, 18df3457 wave-0四组修复, 0c497cc2 impl-E文档收尾, 34e33da5 cr-func尾牙, 9533a1a5 措辞nit]
+  verify: core 3193/3196（3红=usage-stats时区×2既有+T-MP-P1并发抖动；净增23绿）；desktop 632/632；mobile 1749/1751（mermaid既有+跨套件定时器抖动；净增5绿）；三端 typecheck 干净
+  cr_func: r1 no（G-7漏派+B-01缺行缺失档断言）→ 尾牙 34e33da5 → r2 func-ready:yes
+  findings_登记: desktop run-tests.mjs Windows 单引号 glob 静默假绿（tests 0/exit 0）待单独立项；U+FFFD 立账 K 节（read-ref-prompt-parity.test.ts 732处=ac0a3269引入、mobile service 178处=base既有）
+  status: dev-ready（33/33 闭合；merge-ready 未宣称——发版走用户指令，v1.5.30 +0.0.1；主仓 RULE.md 三处术语随发版提交）
+
+# === spec-check-loop 编排状态（prompt-preview-workplace-lineno-2026-10，2026-10-05 启动）===
+spec_check_ppwl:
+  skill: spec-check-loop
+  repo_path: D:\Dev\Js\novel-master
+  prd_path: docs/Iterations/prompt-preview-workplace-lineno-2026-10/prd.md
+  spec_path: docs/Iterations/prompt-preview-workplace-lineno-2026-10/spec.md
+  note: 三项口径（手动压缩完整刷新+自动不清 / 行号仅显示层 wire 不变 / 双端同构）为 PRD 默认值——用户两轮澄清未作答，spec-generate 后直接点名 spec-check-loop，视为按默认口径收敛文档；口径推翻属范围变更（spec 风险 1 已登记），非文档缺陷
+  round1: No-Go (P0×2 + P1×7 + P2×4——P0-1 T-CR6 mock.module 在 desktop 跑不起来（运行器无 --experimental-test-module-mocks）/ P0-2 PRD 验收3 与 Step7 降级条款互斥；P1：漂移注释漏 clear-session-prompt-caches:23-27 与 chat-prompt-tokens:571-574 两处、T-PL7 字节 golden 无机制、门禁返回形态未钉死、先例引用文件/行号错（实为 ConversationPanel.tsx:681/798/806）、导航红线注释未安排改写、新用例 T-CR5 撞既有号、agent.ts 实为零改动（isDesktopSessionRunInFlight 已导出）；P2×4 注释/理由订正。审查同时验真：分叉点/行号三形态/门禁缺口/全部测试锚点与代码吻合)
+  round1_fixed:
+    - P0-1 T-CR6 改注入真态（rt.abortRegistry 注册 sessionId，零模块 mock）
+    - P0-2 Step 7 降级条款补「口径变更须用户确认」+ PRD 验收 3 同步括注
+    - P1 全闭合（T-PL7 改结构判据；先例行号改正；Step 8 补红线注释改写；新用例编号 T-IPC1R；agent.ts 改直接 import 零改动）
+    - P2 全闭合（Step 10 扩为七项注释清单 + 项目结构补两行 + 风险 4 理由改写 + 变更点 1/2 注释同步）
+  round2: No-Go (上轮 13 条 12 条闭合 + P1-3 半修复引新 P0：门禁返回 {ok:false, reason} 在 IpcResult 类型不存在且与「无 IPC 契约变更」自相矛盾；新 P1×3——renderer 双保险无落点（包装函数模块级拿不到 running、SessionDetailDrawer 无 running 来源）/ T-PR3 与「不改」处置表打架（node 环境 window 桩无事件 API）/ T-IPC1R「新增并存」留旧块必红；P2×6 含跨文件重号（判非阻断遗留）。审查确认：挂点/行号三形态/abortRegistry 注入口/先例行号/测试锚点全部与代码吻合，无设计缺口)
+  round2_fixed:
+    - P0-1 门禁改零契约 error 形态 {ok:false, error:{code:'run-in-flight', message:'Agent 运行中无法压缩'}}，renderer 现有 !ok→showToast(error.message) 链路零改动自动弹文案
+    - P1-1 去掉 renderer 双保险（无落点即不做，main 侧唯一守卫）
+    - P1-2 T-PR3 钉死落 real-prompt-panel-rounds.test.tsx + window 桩扩事件 API，处置表由「不改」改为该处置（mobile prompt-workplace-card 拆出保持不改）
+    - P1-3 T-IPC1R 三处统一为「改写既有 T-IPC1，原块不保留不得并存」（Step 4/用例/处置表/constraints）
+    - P1-4 PRD 包含范围与验收 6 域列表对齐 SPEC（refresh-rule-snapshot 域=不改回归面）
+    - P2 全闭合（设计目标 5 六处清单、Step 1 删 workplaceRefreshed、Step 7 字面 \n 转义注明、Context Bundle impact_files 删 agent.ts+RULE 注释改 6 处、constraints wire 措辞、T-PL2 补「空 Front Matter」、PRD 验收 4 改 T-PL7 结构判据）；P2-6 跨文件重号判非阻断遗留
+  round3: No-Go (上轮 10 条 9 条干净闭合、P0-1 半修复——变更点 3 已改 error 形态但 T-CR6 用例行残留旧 {ok:false, reason} 写法与 IpcResult 冲突；新 P1-A：RULE.md:17 导入条「置位/压缩裸 await」表述漏出文档对齐清单（Step 1 落地后失真）；P2×3——设计目标 3/5 缩进两空格、T-CR6「runCompaction 0 次调用」在禁 mock.module 下不可观测（须改副作用代理）、显示口径清单 :33 实为 :34 且漏 ipc-types.ts:931 对偶。审查补充验真：error 形态与 IpcErrorPayload 逐字段吻合、escapeXmlText 不碰反斜杠（字面 \n 存活前提成立）、agent.ts 无 import 环、mobile 门禁文案与 desktop 拟用文案逐字相同)
+  round3_fixed:
+    - P0-A T-CR6 改 error 形态 + 断言改副作用代理（composer 广播 0 次 + 两域 listKeys 未变，同文件既有手法）
+    - P1-A RULE.md 对齐扩为三条目（:16/:17/:27，:17 的「置位/压缩裸 await」按 manual 吞错收窄改写）——Step 10/设计目标 5/变更点 7 三处同步
+    - P2 全闭合（缩进拉齐、显示口径清单四处化（:34 新增 + :64-66 改写 + :975 改写 + :931 新增））
+  round4: Go (execute-ready——上轮 5 条全闭合且代码可行性实证：T-CR6 副作用代理在 compaction-handler.test.ts:122-164 有既有桩、abortRegistry 真态注入有 chat-prompt-tokens-run-suppression.test.ts:58-67 先例、RULE :16/:17/:27 与显示口径四处行号全命中；全文终检编号/计数/映射零矛盾，代码引用抽验零漂移。余 P1×1（PRD 两处旧计数）+ P2×3，均一句话级，主代理已顺手修完)
+  round4_post: PRD 包含范围/核心需求 6 计数改「三条目+六处（见 Step 10）」；spec 项目结构 RULE 行补 :17；Context Bundle「3 处显示口径」→4 处；T-CR6 补预置句（防恒真）
+  dag_version: 5
+  review_round: 4
+  open_must_fix: []
+  doc_fix_plan: []
+  status: execute-ready 已确认（2026-10-05 用户以 [$code-dev-loop] 点名启动＝开工确认，tau 先例口径；4 轮审查累计闭合 P0×4 / P1×12 / P2×15）
+
+# === code-dev-loop 编排状态（prompt-preview-workplace-lineno-2026-10，2026-10-05 启动）===
+dev_loop_ppwl:
+  skill: code-dev-loop
+  worktree: D:\Dev\nm-worktree\ppwl
+  branch: feat/prompt-preview-workplace-lineno
+  base_sha: 44d266dbc（main HEAD，v1.5.38）
+  spec_path: D:\Dev\Js\novel-master\docs\Iterations\prompt-preview-workplace-lineno-2026-10\spec.md（留主仓未提交区供用户阅读；worktree 无此文档，子代理读主仓绝对路径）
+  prd_path: 同目录 prd.md
+  scope_decision: 三项默认口径随 spec 生效（手动压缩完整刷新+自动不清 / 行号仅显示层 / 双端）；Step 12 真机手动验收留给合并后用户
+  node_status:
+    impl-A-core-compaction: { status: done, executor: subagent, head_sha: 463b00bf5, result: "Step1+2 全落地（trigger 缺省 auto / manual 吞错清两域 / 头+函数注释改写）；run-compaction 6/6 + agent-runner-compaction 4/4 + core tsc 净；CompactionTrigger 仅模块内导出未进 public 面" }
+    impl-B-core-lineno: { status: done, executor: subagent, head_sha: 47048399c, result: "Step5+6+7 全落地且 Step7 未降级（作用域圈定 userAttach/workplaceChange 的 content 值、字面 \\n 定向剥，dirTree/binary/skillAttach/annotate 形态核验不误伤；初版引号吞捕获组的 bug 已修）；render-prompt-turns 73/73 + prompt 全套 199/199 + core/desktop main tsc 净；附带 usage-stats 3 红=本机时区既有噪音" }
+    impl-C-desktop-entry: { status: done, executor: subagent, head_sha: 008c0df2d, result: "Step3/4 desktop 落地（trigger:manual + isDesktopSessionRunInFlight 门禁 error 形态零契约）；compaction-handler 5/5（T-IPC1R 改写/T-CR6 abortRegistry 真态注入）；main tsc 净；desktop 定向跑法实锤=test/register-electron-mock.mjs + --tsconfig tsconfig.renderer.json" }
+    impl-D-mobile: { status: done, executor: subagent, head_sha: ca2c71365, result: "Step3/4 mobile + Step8 落地（trigger:manual + focus 单通道 + requestIdRef 竞态守卫 + 红线注释/mock 同步）；定向 3 套件 23/23 + 相邻 2 套件 23/23 + mobile tsc 净；T-PR2 做过变异验证（守卫置 false 即红）；顺手修 scope 套件 TestRenderer 根未卸载的计数污染（afterEach 统一卸载）" }
+    impl-E-desktop-panel: { status: done, executor: subagent, head_sha: 0a77c1300, result: "Step9 落地（订阅 session-compacted 按 sessionId+visible 重取、stale closure 守卫、卸载清理）；real-prompt-panel-rounds 24/24（T-PR3 四条 + window 事件桩扩）；renderer tsc 改动文件新增 0 错误" }
+    step10-notes: { status: done, executor: main, head_sha: 024839f9c, result: "五文件注释口径对齐（session-kkv-domains/session-kkv.port/load-or-fill-file-cache/clear-session-prompt-caches/chat-prompt-tokens）；core+desktop main tsc 复验净" }
+    verify-all: { status: done, executor: subagent, result: "Step11 三端回归+全量+typecheck 全过：定向 core 87/desktop 29/mobile 27 全绿；desktop 全量 735/735 优于基线 730；core 全量 3533 中 10 红（时区 2+护栏抖动 1+read-ref 退役欠账 8，三重交叉验证与本迭代无关）；mobile 全量 2071 中 2 红=webview assets 未构建（主代理补跑 build:webview:native 后 webview-asset-guard 12/12 绿，噪音消解）；typecheck 四项达标（renderer 368=基线上沿、改动文件零新增）。遗留台账（非本迭代）：read-ref-production-smoke RT-01 六条硬 ReferenceError + delete-session-readref-targets T-DEL-RT2/3 均为 v1.5.30 read-ref 退役测试欠账" }
+    cr-func-1: { status: done, executor: subagent, readonly: true, func_ready: yes, result: "Step 矩阵 1-11 闭合（12 留用户）；blocking 测试 id 逐条读源码核断言方向全对（T-IPC1R 真反转不并存/T-CR6 abortRegistry 真态/T-PL7 三段判据/T-PR2 真 state 观测）；红线零改动面全守住（wire 四文件/renderer 两文件/items.body 冻结/无 mutate/门禁 error 形态/focus 单通道）；T-PL 系实际 30 条子用例（摘要 27 为误记）；must-fix 无阻断——1 条主仓 RULE 三条目（已由主代理补）+1 条低危加固（独立 try）" }
+    fix-hardening: { status: done, executor: main, head_sha: cd258cba9, result: "cr-func-1 加固项落地：manual 清两域改按域独立 for+try（rule_snapshot 失败不再拦 file_cache）；定向 6/6+tsc 净。注：c0ed647df 初笔提交信息 cmd 传递编码坏，已 amend 为 cd258cba9（UTF-8 文件 -F 方式），git log 复验中文正常" }
+    step10-rule: { status: done, executor: main, result: "主仓 RULE.md 三条目口径更新（:16 压缩条自动/手动的分野+门禁、:17 导入条「置位裸 await，压缩同为 best-effort」、:27 workplace 条「手动压缩」限定）——主仓未提交区，提交动作随用户/发版决定" }
+  dag_version: 5
+  spec_deviations:
+    - recorded: "Step 7 作用域收窄为 userAttach/workplaceChange 的 content 值（spec 只写 content 值内）——更优，skillAttach/annotate 不误伤，T-PL9 负向用例钉死"
+    - recorded: "Step 7 未触发降级条款（完整实现），PRD 验收 3 口径无变更"
+    - recorded: "Step 9 订阅粒度=不可见完全不订阅（spec 写订阅但过滤）——行为等价更省，T-PR3 锁住"
+    - recorded: "Step 5/7 同文件同笔提交（提交粒度差异）"
+  known_baselines_update: "mobile 全量等效 2071/2071（webview assets 补齐后）；core 全量既有红 10 条中 8 条为 read-ref 退役测试欠账（RT-01 六条+T-DEL-RT2/3，遗留台账待单独立项）"
+  open_must_fix: []
+  status: **dev-ready**（2026-10-06 宣布：7 笔提交 463b00bf5..cd258cba9；blocking 步骤全闭合、cr-func-1 一次 func-ready、deviations 全为 recorded 可接受；未 merge 未 push 未发版；Step 12 真机/桌面手动验收留合并后用户——PRD 验收 1/3 的端到端）
+  wave_plan:
+    - [impl-A-core-compaction(Step1+2 含 T-CR8 可选), impl-B-core-lineno(Step5+6+7)]
+    - [impl-C-desktop-entry(Step3/4 desktop), impl-D-mobile(Step3/4 mobile + Step8), impl-E-desktop-panel(Step9), step10-notes(五文件注释对齐, executor:main)]
+    - [verify-all(Step11)]
+    - [cr-func-1]
+    - （not-ready 时动态 fix → verify + cr-func 循环）
+    - [fix-hardening + step10-rule(executor:main, 主仓 RULE.md 三条目) + dev-ready 收尾]
+  并行纪律: 同文件禁止并行 impl；子代理零 git 写，主代理按 wave 分组统一提交（中文提交信息）；wave-0 后主代理重建 core dist 再进 wave-1；全量 mobile --maxWorkers=2 / desktop --test-concurrency=2 / core npm test（globstar）；desktop 定向显式文件路径（run-tests.mjs 单引号 glob 假绿坑）；提交信息经 cmd 传递偶发编码坏——改用 UTF-8 文件 -F 方式（cd258cba9 先例）
+
+# === spec-check-loop 编排状态（transcript-native-2026-10，2026-10-12 启动）===
+spec_check_tn:
+  skill: spec-check-loop
+  repo_path: D:\Dev\Js\novel-master
+  prd_path: 无（用户口述 2026-10-12，决策链见 docs/apm/memory/20261005-rn-native-msg-list-brain-storm.md 立项轮与 spec 落盘轮）
+  spec_path: docs/Iterations/transcript-native-2026-10/spec.md
+  note: >-
+    三项拟定决策（S1 FlashList v2+自研行为层 / S2 开 tree-sitter 高亮 / S3 github flavor）
+    为默认口径——用户未答 AskUserQuestion，按探索证据推荐拟定，用户确认 execute-ready 时一并拍板；
+    口径推翻属范围变更（spec §2 已标），非文档缺陷。ppwl 先例口径。
+  dag_version: 3
+  review_round: 2
+  round1: No-Go (P0×2 + P1×4 + P2×3——P0-1 loadOlder 误用 onEndReached（forward 列表历史在顶部，v2 该用 onStartReached+比例阈值）/ P0-2 estimatedItemSize 是 v1 已删 prop（v2 首帧自动测量，EWMA 降诊断工具）；P1：onContentSizeChange 单点依赖 / 子会话 tail 40 窗口漏 loadOlder 接线 / iOS 面实际零改动（pbxproj 从无 chat-transcript，锁的是历史包 chat-conversation）/ createQuantumYield 是数据面共享工具不得退役；P2：附录 C 计数漂移（telemetry 路径、37 文件、patch 26 diff、read-webview-dist 转录侧 6 套）/ C-11 目录另两文件处置 / 快照恢复分步校正。审查同时验真：数据面零改动自洽、纯函数清单/scroll-cache v2/错峰链/渲染库 props/守卫行号/测试套件全部属实，FlashList v2 确认支持 maintainVisibleContentPosition)
+  round1_fixed: [P0-1 §5.2 改 onStartReached+onStartReachedThreshold 比例阈值, P0-2 §5.1 改 v2 口径（首帧自动测量+getItemType 分桶+onCommitLayoutEffect/onLoad 定位）+ spike 判据补「无 v1 专有 API+内建 autoscroll 职责切分」, P1-1 §5.2 触发源组合化（onScroll+onCommitLayoutEffect 主触发+onContentSizeChange 兜底）, P1-2 §5.4 补 subagent loadOlder 接线（loadIdleOlderMessages 不带 projectId 可翻页）, P1-3 §5.5+附录C-7 iOS 面零改动改写, P1-4 §5.5 yield-quantum 模块保留（只退役 webview 消费点）, R4 改写, P2-1 三处计数订正（26 diff/6 套件/37 文件/telemetry 路径）, P2-2 C-11 补 anchored-menu-layout+uri 处置]
+  round2: Go（execute-ready 建议）——R1 九项全部闭合未引新矛盾；FlashList v2 依赖 API（onStartReached/比例阈值/onCommitLayoutEffect/onLoad/getItemType/MVCP 子项 autoscrollToTop+BottomThreshold/startRenderingFromBottom/disabled:true 语义）全部经官方仓库实证为真；数据面/守卫/测试面逐项对得上。剩 P1×1 + P2×6 一句话尾巴：P1 子会话 idle 路径消息面须改订阅 readMessagesSnapshot（ChatTabProvider 同构）；P2=C-19 计数 9 套 / row-windowing 归宿 / MVCP 关闭枚举式判据+prepend 补 autoscrollToTopThreshold / webview-uri-load 矩阵收缩 + README :232/:270 / patch「24 输入面+2 跨面文件」措辞收敛 / pbxproj 存在性断言措辞 + 321 行
+  round2_post: 主代理顺手修完全部 11 处（ppwl round4 先例：审查者已 Go + 尾巴一句话级明确路径，不再派 R3 全量）：§5.4 补消息面订阅句、§5.1 EWMA 补借用与 P5 归宿、§5.1 spike 判据枚举化（保留内建优先/关须点名子项+fallback scrollToIndex）、§5.2 prepend 行补 autoscrollToTopThreshold、§5.6 补 webview-uri-load 收缩、§7/R7 patch 措辞 24+2、§5.5/C-7 pbxproj 措辞、C-9 补 :232/:270、C-14 321 行、C-19 计数 9 套
+  open_must_fix: []
+  doc_fix_plan: []
+  status: execute-ready 待用户确认 → **用户 2026-10-13 追加指令：二次 loop 并发专项轮**（webview 方案历史多次多会话/子会话并发事故，须专项审查 + 设计方案完善后再确认）
+  concurrency_round:
+    dag_version: 4
+    wave: [A 路并发覆盖审查 + B 路历史事故考古与防护盘点（并行）, 主代理交叉汇总+并发设计节 doc-fix, R3 专项复审]
+    status: **Go（并发维度 execute-ready，2026-10-13 R4 终审）**
+    r3_round: >-
+      R3 = No-Go：N1(P0)——§3.3-8 摘 hasUnit 切断 idle→unit 首挂（旧机制 hasUnit flip 是「单元凭空出现补挂句柄」唯一触发器，
+      摘除即 B1 重演/idle 首轮发送流式空屏）；N2 lastMessageId 字段不存在且与「schema 不变」矛盾；N3「唯一数据面改动」口径与
+      §3.3 路由面改动冲突；N4 附录 B D3/D4 旧措辞锁死被推翻机制；N5 idle 路径同型竞态未串行化；N6 双 R8/双 §3.3 撞号；
+      N7 StrictMode「天然覆盖」断言不成立（partial 全量重注入双份风险）；N8 reset-stream 不在后台唤醒枚举+refocus 无消息面重同步；
+      N9 settle 成功分支歧义；N10「零调用方」漏测试引用。A 路 12 项 issue 全部有归宿；B 路必须防清单全部有着落；代码事实抽查全属实。
+    r4_round: >-
+      N1-N10 doc-fix 12 处 Edit 后 R4 复核（同代理恢复）= **Go**：10/10 闭合无新矛盾。关键修法：N1 选 manager 层 per-session
+      常驻句柄注册表（attach 落注册表、单元创建/替换继承、takeWebviewHandles 上移保留注入权）+ DoD-7 增列 idle 首轮发送主线判路；
+      N7 屏幕侧 partial 替换语义（幂等）；N3 口径三层自洽（数据形态 vs 句柄契约路由面）。存量小瑕疵 2 处顺手修（§5.6 引用 §3.1、
+      §3.4 表引 §5.3）；节序 3.1→3.3→3.2→3.4 观感问题按 R4 建议不动（重编号波及全篇引用）。
+      累计：并发专项轮闭合 P0×4（A 路 3+R3 1）/P1×7（A 路 6+R3 1）/P2×12（A 路 3+R3 5+R4 存量 2 顺手修/节序 1 接受）。
+    b_result: >-
+      考古完成：5 世代 27 起事故（A 单槽换绑 9 起：串会话/后台收尾丢/subagent 父屏不刷新/生成中残留六轮插桩/重进 partial 丢；
+      B 单元化 4 起：HANDLE-NULL/三段式错段/列表抖动/双回归；C unify+SPA 11 起：四层卡顿（chip 2.2s 堵 JS）/串台四路径（tsi 未合入，
+      rollback-spa 后「随回滚消失」无复验）/workspace-stale/子会话白屏/后台回收误报/分片在途丢行 CR P0/代次乱序；
+      D 信封白屏；E 并行奠基 3 起）+ 防护机制逐条命运判定（消失/保留/需原生对偶）+ 14 条必须防清单 + 7 项不确定如实声明。
+      关键判定：①「会话内切换陈旧投影帧」webview 时代靠 key 重挂兜底（tsi 判据从未上线），RN 化重挂消失须显式重建；
+      ②isVisible 两屏均不传、恒 true，「最后 attach 的可见句柄」实为「最后 attach 序」隐性依赖（与 A-P0-1 互证）
+    concurrency_doc_fix: >-
+      12 处修订落地：§1 目标4「零改动」→「最小必要改动（除 §3.3-5）」；§3.1 两行重写（死命令面不做对偶 + 引出 §3.3）；
+      **新增 §3.3 并发与多订阅模型 10 小节**（1 可见性真源与流式路由 isVisible 必选+useTranscriptFocus+无 focused 返 null；
+      2 订阅身份 subscriptionId+epoch 回推校验+投影帧身份校验显式重建；3 后台零流式渲染 focus 联动 attach/detach+按订阅者过滤；
+      4 flushStreamTail 四触发点+原子性去重+交错判路；5 消息面写串行化 promise 队列（唯一数据面改动）+nearBottom 忽略触发；
+      6 generation 信号盒+新信号定义；7 写回固化 key+mountEpoch+恢复先消息面后 scrollTo+lastMessageId 校验+nearBottom 冻结；
+      8 injectedInto 句柄级集合消双注+takeWebviewHandles 带注入权+StrictMode 安全；9 在途取消 AbortController+引用稳定硬约束；
+      10 子会话平推 pending 映射语义）；§5.2 loadOlder 补冷却+nearBottom；§5.4 补并发纪律条；§5.6 判路重定义；§6 P3 出口加 §3.3 全量落地；
+      §8 R2/R3 改写+新增 R8；§9 DoD-7 并发专项验收；附录 D 并发考古依据（世代索引+两条关键判定+勿当需求清单）
+    a_result: >-
+      No-Go——P0×3：①「最后 attach 的可见句柄」多订阅下无定义（isVisible 恒 true 全链无实现，
+      resolveStreamingWebview session-stream-unit.ts:887-899 退化「最后挂载的」；父屏 native-stack 不卸载 RootNavigator:213-218；
+      提案：isVisible 强制实现=useIsFocused AND AppState、无 focused 句柄返回 null 后台不推流、attach 带 subscriptionId+epoch 回推校验丢包、
+      focus 联动 detach/re-attach）②活跃尾块缺 settle 收尾（提案：native handle 新增 flushStreamTail()，四触发点=unit.settle 成功/reset-stream/
+      force-snapshot/manager.removeUnit 交接，全在既有广播沿上零数据面改动）③后台订阅者 64ms 持续消耗（提案：与①共用 focus gate +
+      subscribe 按订阅者粒度过滤，后台 surface 仅状态迁移类唤醒）；P1×6：loadOlder×force tail reload 读改写竞态（数据面消息面写串行化
+      ——须把「数据面零改动」口径改「最小必要改动」）/ 错峰信号源语义（generation 信号盒）/ tryCommitStreamTail+commitAbortOverlaySnapshot
+      是死命令面零调用方（宿主早已广播 reset-stream——推翻 spec 原有「7 方法蓝本翻译」设计！随 webview 退役消亡不做对偶）/
+      快照写回节流缺失+跨会话 key 写入窗（mountEpoch+固化 key）/ attach ref 时序与 hasUnit 抖动双注（injectedInto 句柄级集合）/
+      快照恢复布局稳定判据（连续两同 contentHeight+末行 id 校验）；P2×3：后台零渲染验收项/idle 水合×快照恢复顺序（先消息面后 scrollTo）/
+      StrictMode 双挂载潜伏（句柄级方案天然覆盖）。关键代码事实：控制消息全广播 :910-921、removeUnit 交接 :1693-1709、
+      injectedValue 复位 :877-885、App 无 StrictMode
+
+# === code-dev-loop 编排状态（transcript-native-2026-10，2026-10-13 启动）===
+dev_loop_tn:
+  skill: code-dev-loop
+  worktree: D:\worktree\transcript-native
+  branch: feat/transcript-native
+  base_sha: 615dda436（main HEAD，v1.5.41 收尾）
+  spec_path: D:\Dev\Js\novel-master\docs\Iterations\transcript-native-2026-10\spec.md（留主仓未提交区，worktree 子代理读主仓绝对路径——ppwl 先例）
+  scope_decision:
+    - 用户以 [$code-dev-loop] 点名启动 + worktree 目录 D:\worktree：视为 execute-ready 确认 + S1/S2/S3 三项拟定决策按拟定通过（tau/ppwl 先例口径）
+    - **【2026-10-13 用户纠偏】二次 loop（并发专项）未收口前不得推进开发**——主代理曾误将 spike 与并发审查并行，用户点名「整个编排全乱了」；spike 已 TaskStop 冻结（现场：仅 package.json/lock 装包改动+日志，零提交零 demo 源码）。**严格串行链**：B 路考古回来 → 交叉汇总 → 并发设计节写入 spec → R3 专项复审 Go → 用户确认 → 才恢复开发；恢复 spike 用 SendMessage 恢复原代理 agent_93016386（上下文完整，先 git status 核对现场）
+    - P0 三硬门验证手段＝**模拟器 e2e**（用户 2026-10-13 指示，取代真机窗口等待）：万行滚动/streaming perf 门在模拟器上以「RN 版 vs web 版同场景相对对比」口径跑；spike 子代理先 adb devices 探测可用 AVD，e2e 复用仓内基建（e2e/specs + byTestId→resourceId）；模拟器纪律与真机同源：noReset/forceAppLaunch/禁清数据、Metro dev server 跑 debug
+  dag_version: 2
+  p0_status: >-
+    **过门（2026-10-13 wave-1a+1b）**。wave-1a 提交 bc820c561（FlashList ^2.3.3 JS-only 实证 + enableCodeHighlight true +
+    18 grammar 资产入包 + PoC 屏 + .npmrc scope 源）。wave-1b 三硬门实测全 Pass（nm35 AVD + 8084 metro + adb reverse 可育路径；
+    198.18.0.1 直连在本机被 slirp NAT 挂起不可用）：门1 万行滚动 Janky 4.05%/p99 34ms/MissedVsync 0 + 流式贴底/停跟双态
+    offsetBottom 实证全对；门2 千行代码块 Janky 4.64% 与普通行同档无崩溃；门3 双主题实证（GitHub 配色 #F6F8FA/#0D1117）+
+    nmtoken/nmskill 胶囊/tool 卡形态可辨。新实证：MVCP autoscrollToBottomThreshold 抢用户上滑——自研行为层须关该子项
+    非整体 disabled（spec §5.2 预案坐实）。Fabric 同步测量 0ms 实证。证据归档 docs/Iterations/transcript-native-2026-10/
+    evidence/p0/（framestats×2+baseline+双主题 png+a11y dump）。遗留：JS-only 帧预算列 P2/P3 一等实测项；web 同屏对比留 verify。
+  p1_status: >-
+    ✅ DONE（2026-10-13，1e1f3bc67，18 文件 +2143/-9）：apps/mobile/src/components/chat/transcript/ 七件套
+    （TranscriptRowView 分发/transcriptRowItemType 分桶、MessageBody 双路径+12k 护栏、transcript-markmarkdown 双主题+胶囊、
+    AttachmentChipGroup、buildTranscriptMenuItems、MessageActionSheet、TranscriptEmptyState）+ 工具卡翻新
+    （ToolCallCard 四级可点/readableToolResult 单源、ThinkingBlockCard renderExpanded+durationMs 可选）。
+    jest 259 套件 2017 例全绿（新增 7 套件 47 例）+ typecheck exit 0 + eslint 零新增。偏差 2 处已声明（user 行置位菜单简化
+    role==='user'；durationMs 可选 prop 待 P3 数据面）。遗留归 P3：数据面接线回调（onOpenToolResult/openFileEditor/
+    resolveChatLinkTarget/copyAsMarkdown）；P6：长按手势链真机 e2e。
+  p2_status: >-
+    ✅ DONE（2026-10-13，fa605c2b3，24 文件 +5402/-345）：useTranscriptScrollBehavior 全行为（贴底真源/stick 三条件/stop-follow/
+    prepend 双校验/快照恢复 frozenKey+decideRestore+时间制 giveup 2000ms/键盘 reanimated 过桥/写回 100ms 节流 epoch 对账）
+    + 纯函数层 transcript-scroll-behavior.ts（12 纯函数零 DOM）+ stream-blocks.ts（advanceStreamBlocks/materializeStreamText
+    复用 web splitStreamBlocks）+ PoC 屏重挂完整行为层（__DEV__ 浮动入口）。jest 261/2063 全绿（新增 2 套件 46 例）+tsc 零错。
+    模拟器五场景全 Pass（evidence/p2/gate2-*：贴底/停跟恢复/prepend100 零偏差/键盘/流式 64ms tick）+快照往返 tail-mismatch
+    守卫实锤。端上修复×2 已落单测（startRenderingFromBottom 仅无快照开；giveup 计数制→时间制）。遗留 P3：scroll-cache
+    lastMessageId 增列/snapshotReady 闸门/notifyAppend({streaming}) 接真数据面；nonTailRenders=180（FlashList 尾块增高
+    重渲邻项，渲染池行为，数据面仅尾重组由单测钉死）。
+  p3_status: >-
+    ✅ DONE（2026-10-13，5e639c362）：主屏替换（TranscriptHost+TranscriptList+session-stream-native-adapter 三新件；
+    ChatConversationPanel/ChatTabProvider 摘 webview 换宿主）+ §3.3 十小节全量落地（可见性路由/常驻句柄注册表 B1 根除/
+    subscriptionId+epoch 帧守卫/flushStreamTail 四触发点死命令面不对偶/messageWriteChain+idleWriteChains 两域写串行化/
+    generation 信号盒替代退役快照信号/scroll-cache v2 lastMessageId+epoch/injectedInto 幂等+四语义替换/AbortController/
+    variant=subagent 预留）。jest 268/2114 全绿（in-band+maxWorkers=2 双通道）+tsc 零错。模拟器主屏四路径全 Pass
+    （evidence/p3/gate3-four-paths.txt+png/xml：会话打开全形态/流式 mock SSE/切会话/子会话 push 返回）。环境事故×2 已修留痕
+    （junction 误删 node_modules 从主仓恢复重建；两处跨套件泄漏测试修复只动测试文件）。P4 分流：子会话屏仍 webview 宿主
+    接口已就绪；P5：旧链路零删除零改动守卫探针就位；P6：宿主 7 describe 语义等价重写+e2e T-CU12+fixture 三步收
+    inject-tool-turn-fixture.mjs。
+  p4_status: >-
+    ✅ DONE（2026-10-13，890561523，31 文件 +1055/-166）：SubagentSessionScreen 摘 webview transcriptOnly 换 TranscriptList
+    variant=subagent（屏上零 WebView 节点实证）；数据源统一 loadSessionTailMessages/loadOlderSessionMessages 不带 projectId；
+    40 窗口+onStartReached 翻页（45 历史 seq1-5 翻出窗口 40→45 实证）；focus 路由 attach/detach+re-attach 补注入
+    resyncMessagesFromManager；菜单裁剪 readOnly 仅复制；pendingChildParentByChild 未碰（语义保持）。jest 269/2127 全绿
+    （新增 subagent-session-screen-native 10 判路）+tsc 三件套零错。模拟器三路径全 Pass（evidence/p4/gate4-four-paths.txt）。
+    **P5 首项（P3 遗漏缺口，P4 发现）**：主屏 buildTranscriptRows 未传 pendingSubagentSessions——并行 task 最慢子 agent
+    落库前任务卡不可点；修法 TranscriptList 增透传 prop+TranscriptHost 从 ctx 接入。e2e 资产：p4-inject-child-history.mjs/
+    g4-dump-ui.js/g4-find-ui.js 留 P6 复用。
+  p5_status: >-
+    ✅ DONE（2026-10-14，b87be76fa，144 文件 +856/-16238）：附录 C 22 项全量退役（web/chat-transcript 40 文件+webview-host/
+    ChatConversationWebView 1891 行+v1v2 桥+快照分片+enrich-transcript-rows+mermaid webview+死命令面测试；scroll.ts 纯函数迁
+    transcript 层）。首修 pendingSubagentSessions 透传（+transcript-list-pending-subagent 测试）。守卫/基线更新
+    （build-webview PACKAGES/compat-baseline/build.gradle/tsconfig include/asset-guard 断言）。jest 237/1870 全绿+tsc 三件套
+    零错+APK 无 chat-transcript 残留（assets/webview 仅剩三包，197.33MB debug）+退役后模拟器四路径回归全 Pass
+    （evidence/p5/gate5-four-paths.txt）。执行：P5 子代理三轮限流完成 90% 改动后由主代理收尾（守卫核验/APK/回归/提交）。
+  e2e_concurrency_status: >-
+    ✅ DONE（2026-10-14，64dfccd88，主代理亲做——Agent 派遣两连败于限流）：场景矩阵 S3 连切/S4 idle 首发/S8 快照在途
+    Pass；S5 路由面 Pass UI 归属 No-Pass；S1 部分覆盖；S6/S7 降级（jest/P2/P4 已覆盖语义）。**三缺陷定性**：DEF-03 P0
+    切屏往返后消息面丢行（EXP-B3 干净复现 user 丢 reply 在/DB 完好；§3.3-7/3.3-8 交错未闭合）；DEF-01 P1 多段 delta
+    settle 后 assistant 不显示（单段不触发/重启恢复；flushStreamTail 固化后投影重发缺失，疑与 DEF-03 同根）；DEF-02 P1
+    provider 连接半开→run 无限 running→发送静默被吞（无超时）。数据面（路由/落库/写序）全绿。报告
+    evidence/e6/gate6-concurrency-report.txt；基建 mock-slow+fix-fixture-modelid 入 e2e/scripts。**修复立案待用户指令**
+    （DEF-03+01 合并同根排查，DEF-02 独立；修后重跑 S1/S5/S6 收口 DoD-7）。环境教训：mock 重启须配合 app 冷启；Metro
+    reverse 长会话挂死需全套重启。
+  p5_task_card: >-
+    ①首修 P3 遗漏缺口：buildTranscriptRows 未传 pendingSubagentSessions（TranscriptList 增透传 prop+TranscriptHost 从
+    ctx 接入+测试）→ ②附录 C 22 项按测试→包→守卫→基线→文档退役（死命令面随 §5.6 判路；snapshot-complete-signal 先验
+    零消费；勿碰 vfs/宏链/桌面端；未尽依赖项跳过报告不强删）→ ③六处守卫（§8）绿 → ④APK assembleDebug 无 chat-transcript
+    残留验证+体积对比（P7 用）→ ⑤jest 全量+tsc 三件套+eslint 零新增 → ⑥模拟器四路径回归冒烟（playbook：nm35+8084+reverse
+    tcp:8084+host 127.0.0.1:8084 勿直连；fixture 修补见 evidence/p3/gate3-four-paths.txt+p4-inject-child-history.mjs；
+    真机零接触禁清数据）→ feat commit 格式照 890561523。
+  wave_plan:
+    - [wave0-env]                                   # ✅ DONE（六跑收口，op-sqlite 官方源+prefer-offline）
+    - [p0-spike]                                    # ✅ DONE（bc820c561 + 三硬门 Pass，见 p0_status）
+    - [p1-row-components]                           # ▶ 派遣中（与并发设计收口并行——并发轮已 R4 Go，无阻塞）
+    - (gate: spec_check_tn 并发设计节 R3 Go)         # ✅ DONE（R4 Go，2026-10-13）
+    - [p2-behavior-layer]                           # useTranscriptScrollBehavior + 订阅/attach 模型（按 §3.3 并发设计）
+    - [p3-wiring, p4-subagent-screen]               # 顺序或按文件面定
+    - [verify-all, cr-func → 动态 fix 循环]
+    - [p5-retire]                                  # 附录 C 22 项（顺序纪律）
+    - [p6-tests-e2e, p7-docs]
+  node_status:
+    wave0-env: { status: done, executor: main, result: "六跑收敛（事故链见 env_incident）：官方源 --prefer-offline install 2255 包 4m + core dist + webview 四包 gate C GREEN，marker DONE_OK 验证（注意 cd 后日志相对路径漂移到 apps/mobile/）" }
+    p0-spikes: { status: frozen, executor: subagent(agent_93016386, 可 SendMessage 恢复), note: "用户纠偏停摆——二次 loop 收口+用户确认后恢复；现场=package.json/lock 装包+日志，零提交" }
+  纪律: 子代理零 git 写，主代理按 wave 分组提交（中文提交信息，UTF-8 文件 -F 方式）；同 worktree 同一时刻只一个代理写代码；子代理只跑定向测试/typecheck；真机操作须用户在场（AGENTS.md）；Metro dev server 是 debug 包唯一跑法
+  cr_loop_plan: >-
+    用户 2026-10-13 [$code-review-loop]「cr吧」+ [$spec-check-loop]「cr spec不是开发spec，loop」——完整 CR 链路（tau spec_check_crs 先例原话确立为通用纪律）：
+    dev-ready 后自动接 code-review-loop（scope→full，产出 cr-fix-spec.md）→ **cr-fix-spec 须经 spec-check-loop 收敛 execute-ready**
+    （审查目标=must-fix 条目可按文档执行、四要素齐备）→ 用户确认 → code-dev-loop 执行修复。
+    即：cr spec 不是开发 spec，永远不直接开工。wave 内 cr-func 小检照旧内置。两条 loop 启动时均重读 skill 全文。
+  env_incident: >-
+    wave-0 三连：①首跑失败（cmd 无 tail、管道即挂）；②二跑假绿（|| echo 吞退出码报 exit 0，实败于 npm E404——op-sqlite@18.0.0 的 lock resolved 指官方源，
+    npm 将其重写到全局 npmmirror 镜像，镜像未同步该版本 404）——scope 级 .npmrc 对 lock 已有 resolved 的 URL 重写不生效（三跑/四跑同 404）；
+    ③三跑另有 cmd 不认「;」分隔符即崩；④五跑=命令行 --registry=https://registry.npmjs.org 整链官方源（官方连通性与 18.0.0 存在性已 npm view 验证，bg exec_01768448）。
+    教训：本会话 shell 为 cmd（Unix 管道工具不可用、; 不是分隔符）；后台成功判定看日志 marker 不能只看 exit 0（|| echo 会吞码）；
+    npmmirror 未同步的包须命令行 --registry 走官方源（lock resolved 与配置 registry 不一致时 npm 会强改写 URL，scope .npmrc 救不了 lock 已有条目）
+  open_must_fix: []
+
+# === code-review-loop 编排状态（当前进行中：feat/transcript-native 全量 CR）===
+cr_loop_tn:
+  skill: code-review-loop
+  repo_path: D:\worktree\transcript-native
+  branch: feat/transcript-native
+  base_sha: 615dda436
+  head_sha: 64dfccd88
+  spec_path: D:\Dev\Js\novel-master\docs\Iterations\transcript-native-2026-10\spec.md
+  prd_path: 未提供（需求主线见 spec「背景」与记忆 #9/#12）
+  fix_spec_path: D:\Dev\Js\novel-master\docs\Iterations\transcript-native-2026-10\cr-fix-spec.md
+  mode: scope（四路并行）→ spec-fix → review-full
+  已知未修缺陷（e2e 并发专项定性，须核实 file:line 后进 fix-spec）: DEF-03 P0 切屏往返消息面丢行（evidence/e6/gate6-concurrency-report.txt）/ DEF-01 P1 多段 delta settle 后不显示 / DEF-02 P1 run 无限挂死
+  dag_version: 1
+  review_round: 1
+  wave_plan:
+    - [cr-s1-row-components, cr-s2-behavior, cr-s3-concurrency-wiring, cr-s4-retirement-guards]
+    - [review-full-tn]
+  node_status:
+    cr-s1-row-components: { status: done, executor: 主代理手工等效审查（子代理限流豁免）, readonly: true, scope: 'transcript 组件+卡片+主题+测试（jest 2017 锚定信任+注释抽查）' }
+    cr-s2-behavior: { status: done, executor: 主代理手工等效审查, readonly: true, scope: 'scroll-behavior 上收注释质量（抽查 OK）；P2 五场景+e2e 已实证面信任' }
+    cr-s3-concurrency-wiring: { status: done, executor: 主代理手工等效审查, readonly: true, scope: 'adapter/Provider/manager/unit 消息面链全程精读；三缺陷代码级定位（B-1 settle×落库竞态双通道+attach 无回源；B-2 fetch 无超时）；§3.3 十小节判定入 fix-spec deviations 节' }
+    cr-s4-retirement-guards: { status: done, executor: 主代理手工等效审查, readonly: true, scope: '退役符号 grep 全量扫描（4 处注释级残留→K-4）；APK 守卫/四路径回归信任 P5 验证' }
+    review-full-tn: { status: done, executor: 主代理手工等效审查（重试仍限流）, readonly: true, result: '校验 B-1 假说与代码吻合；修正改法③（re-attach 现状无回源调用）；补齐 TranscriptHost+SubagentSessionScreen 同构面；补盲无新 P0/P1' }
+  must_fix: 4 条已全部落盘 cr-fix-spec.md（cr-s3/B-1 P0=DEF-03+01 合并；cr-s3/B-2 P1=DEF-02；cr-s3/G-3 P1=复现测试缺口；cr-s4/K-4 P2=注释残留）
+  spec_fix_plan: []
+  status: fix-spec-ready 待用户确认（确认后按规则 #7 交 code-dev-loop，B-1 诊断步骤先行）
+# === spec-check-loop 编排状态（当前进行中：cr-fix-spec 收敛 execute-ready，规则 #7）===
+spec_check_cr_fix_tn:
+  skill: spec-check-loop
+  repo_path: D:\worktree\transcript-native
+  code_baseline: 64dfccd88
+  spec_path: D:\Dev\Js\novel-master\docs\Iterations\transcript-native-2026-10\cr-fix-spec.md
+  prd_path: 未提供（修复说明书，非业务 spec）
+  审查目标: must-fix 条目可按文档执行、四要素齐备（id/严重度/维度/文件/问题/改法/验收/来源）；改法与代码事实一致；验收可测；无内在矛盾
+  来源: cr_loop_tn R2 fix-spec-ready（规则 #7：CR fix-spec 须经本 loop 收敛 execute-ready + 用户确认后才可交 code-dev-loop）
+  dag_version: 2
+  review_round: 2
+  open_must_fix: []
+  doc_fix_plan: []
+  R1_no_go_findings: N1 [P0] B-1 主案不可执行（DB maxSeq 自我循环+core 落库信号不存在：agent-runner.ts:977 仅 FAILED 有契约）/ N2 [P1] B-2 超时×用户停止语义未区分 / N3 [P1] 验收口径
+  R1_doc_fix: 默认执行案定稿（双阶段 reload 0+600ms+attach force 回源，纯 mobile 侧；可选增强案 core terminalSeq 需用户知情）；B-2 补 AbortSignal.reason 区分+failed+toast；验收口径修正（S1 部分覆盖→补齐、step 边界空窗检查点）
+  R2_verdict: Go（手工：宽限 30s>>600ms 时序核毕、applyMessages unchanged 幂等守卫、attach force 落点可行、N1-N3 全闭合无新问题）
+  executor_note: R1/R2 审查子代理各两连败限流（累计 8 次），按 skill 失败处理条款主代理手工等效审查并标注
+  status: execute-ready 待用户确认（确认后按规则 #7 交 code-dev-loop，B-1 诊断先行；若诊断推翻假说回本文档补定性）
+# === code-dev-loop 编排状态（当前进行中：cr-fix-spec 修复执行）===
+dev_loop_cr_fix_tn:
+  skill: code-dev-loop
+  repo_path: D:\worktree\transcript-native
+  branch: feat/transcript-native
+  base_sha: 64dfccd88
+  spec_path: D:\Dev\Js\novel-master\docs\Iterations\transcript-native-2026-10\cr-fix-spec.md（execute-ready 已确认）
+  dag_version: 1
+  wave_plan:
+    - [b1-diag]              # 单测级红测复现假说（executor: main）
+    - [b1-impl, b2-impl, k4-fix]   # 主代理直做（限流环境+定性上下文在手）；不同文件串行落盘
+    - [g3-tests, verify-jest]
+    - [cr-func]              # readonly 子代理（失败重试一次）
+    - [e2e-rerun-s1s5]       # 模拟器亲做（复用 e6 基建）
+  node_status:
+    b1-diag: { status: pending, executor: main, note: '红测：mock messageStore 首查旧面二次新面→断言最终收敛（复现 settle 单次 reload 停旧面）' }
+    b1-impl: { status: pending, executor: main, files: 'session-stream-unit.ts(双阶段 reload)/TranscriptHost.tsx+SubagentSessionScreen.tsx(attach force 回源)' }
+    b2-impl: { status: pending, executor: main, files: 'provider fetch 层(定位后)+manager.service.ts(语义区分+stale 恢复)' }
+    k4-fix: { status: pending, executor: main, files: '4 处注释清理' }
+    g3-tests: { status: pending, executor: main, note: 'B-1/B-2 复现测试固化（红测转绿+新增）' }
+    verify-jest: { status: pending, executor: main, note: 'jest 全量+tsc' }
+    cr-func: { status: pending, executor: subagent, readonly: true }
+    e2e-rerun-s1s5: { status: pending, executor: main }
+  open_must_fix: []
+  spec_deviations: []
+  status: wave-0 待执行
+
+# === dev_loop_cr_fix_tn 收口（2026-10-15）===
+dev_loop_cr_fix_tn_close:
+  head_sha: ff22b73d5 + 证据提交（evidence/e6-fix）
+  verdict: dev-ready（cr-fix-spec B-1/B-2/G-3/K-4 全闭合）
+  dag:
+    b1-diag: { status: done, executor: main, note: 'T-B1-1 红测复现假说（settle 单次 reload 停旧面）——数据面成立' }
+    b1-impl: { status: done, executor: main, files: 'session-stream-unit.ts 双阶段 reload(0+600ms deferred)/TranscriptHost+SubagentSessionScreen attach force 回源' }
+    b2-impl: { status: done, executor: main, files: 'manager 停滞看门狗(零事件300s→abort解锁registry+finishRun failed)/startRun .catch 防 unhandled' }
+    k4-fix: { status: done, executor: main, note: '12 处注释清理+1 处考古保留（chat-transcript-engine 史实叙述）' }
+    g3-tests: { status: done, executor: main, files: 'b1-settle-race(3例)+b2-stall-watchdog(3例)' }
+    verify-jest: { status: done, note: 'jest 239 套件/1876 例全绿；tsc.build 0 错' }
+    cr-func: { status: done, func_ready: yes, executor: main, note: '子代理限流×2 → 手工核对+欠账标注：独立审查欠账留下一轮 code-review-loop 补' }
+    e2e-rerun-s1s5: { status: done, executor: main, note: 'S1 PASS（fixv2-s1+12段完整+mock req#1）/S5 PASS（切屏往返 user+reply 完整+mock req#2）——证据 evidence/e6-fix/' }
+  spec_deviations:
+    - id: DEV-crfunc-independence
+      note: 'cr-func 由主代理手工执行（子代理持续限流；verify 证据链完整）；独立性欠账显式化，待下轮 CR 补'
+  事故记录:
+    - PS 批量替换事故：单元素数组展平致 6 文件首字符损坏——git checkout 恢复后 Edit 重做；教训：批量清理一律用 Edit 工具
+    - 首轮 S1 假阳性：漏建 reverse tcp:9753 → mock 零请求 → 断言命中 e6 残留行；三重证据（唯一前缀+12段完整性+mock 日志）重验闭合
+  后续: P6 剩余（host 7 describe 迁移+T-CU12+fixture 脚本）→ P7 收尾 → CR loop（含 cr-func 独立性欠账）
+
+
+# === S-D02 补验（2026-10-15，用户点名 e2e 验证）===
+dev_loop_cr_fix_tn_d02:
+  scope: B-2（DEF-02 看门狗）e2e 专项——形态一（kill 保持死）/形态二（kill+立即重启，e6 挂死形态复刻）
+  findings:
+    - 两形态挂死均不复现：native SSE 底座 EOF 防御把 run 正常 FAILED 收尾（EOFException）
+    - e6 时代「mock 重启即挂死」判定疑混入 Metro bundle 挂死干扰（当时 §1022 时期 bundle 挂 0% 并发）
+    - 看门狗正确未 fire（run 已收尾非 active，不误杀）；fire 逻辑由单测 T-B2-1/2/3 覆盖
+    - 失败→registry 解锁→可再发闭环 PASS（重发 mock req done + 12 段完整回复）
+  verdict: DEF-02 用户可见症状（无限卡+吞发送）修复后消失；看门狗定位纵深防御，300s 真机 fire 留 dogfood 观察
+  evidence: evidence/e6-fix/gate-fix-d02-watchdog.txt + mock-log-d02.txt
+
+# === spec-check-loop 编排状态（composer-capsule-atomic-2026-10，2026-10-19 启动）===
+spec_check_cca:
+  skill: spec-check-loop
+  repo_path: D:\Dev\Js\novel-master
+  prd_path: 无（用户口述 2026-10-19「根治吧」；两轮 readonly 调查为需求与设计输入，结论已固化进 spec「需求来源」）
+  spec_path: docs/Iterations/composer-capsule-atomic-2026-10/spec.md
+  note: >-
+    spec 为本会话主代理依据两轮 Explore 调查报告直接撰写（用户 [$spec-check-loop] 点名＝先落初稿再入 loop 收敛）。
+    拟定决策默认口径：手输 $xxx 不成胶囊（现状显式化）/ 旧草稿 undefined 兜底扫描一次 / 哨兵路线否决 /
+    全屏 CodeMirror 不在范围（已知限制披露）——用户确认 execute-ready 时一并拍板，推翻属范围变更。
+  dag_version: 2
+  review_round: 2
+  round1: No-Go (P0×2 + P1×9 + P2×7——P0-1 D2 protected 纯插入策略自相矛盾且与 JS remap 左移/内部摘除语义冲突 / P0-2 缓存投影 applyComposerStatusAttachmentsReplace 丢 tokenRanges 致「确认无胶囊」退化为每次水化升格；P1：全屏回填+undo_send 带外写抹 ranges / 非法 ranges 整体降级丢正文 / 清空写 [] 与 serialize 恒 null 冲突 / desktop 只透传无编辑策略错位 / addRange 相邻也合并不止 coalesce / 运行期水化 setText 不携带 ranges 用旧区间合成 / syncFromDraft 卡 textChanged 同文本切会话串胶囊 / 空 commitText+宽 deleteSurroundingText 不走原子删 / Kotlin 单测应升 blocking(build.gradle 已有 junit+robolectric)；P2×7 证据锚点漂移 4 处等。审查者证据锚点核对：绝大多数吻合)
+  round1_fixed: 全 18 条闭合（spec r2 全量重写+文末 R1 修订记录）：D2 分支表对齐 JS+growsAtStartOnInsert=false+KT-CA1；applyComposerStatusAttachmentsReplace 保留字段+T-CA2 投影断言；带外两路径入 D1+变更点；tokenRanges 单独 safeParse；清空口径 DB NULL；D6 编辑检测；addRange 无合并双处+S9；M7 setText(text,cursor?,ranges?)；syncFromDraft 按内容比较；D3 五入口 helper；Kotlin 单测升 blocking+S4 adb keyevent 112；实现注/兼容性/T-CA 系全改写；锚点修正 4 处
+  open_must_fix: []
+  doc_fix_plan: []
+  status: 待下轮审查（R2 复核；2026-10-19 用户随后即以 [$code-dev-loop] 点名开工——开发与 R2 并行，R2 结果回来收档、若有 must-fix 并入 fix 循环处理）
+
+# === code-dev-loop 编排状态（composer-capsule-atomic-2026-10，2026-10-19 启动）===
+dev_loop_cca:
+  skill: code-dev-loop
+  worktree: D:\worktree\cca
+  branch: feat/composer-capsule-atomic
+  base_sha: c691c8815（main HEAD，v1.5.42 定版）
+  spec_head: 5243f717f（spec r2 已入分支）
+  spec_path: D:\worktree\cca\docs\Iterations\composer-capsule-atomic-2026-10\spec.md（worktree 内路径；主仓未提交区留有同内容副本）
+  prd_path: 无（用户口述，见 spec「需求来源」）
+  scope_decision:
+    - 用户 2026-10-19「新建worktree，然后开发 [$code-dev-loop]」＝ execute-ready 确认 + 开工（tau/ppwl 先例口径）；拟定决策四项（手输不成胶囊 / undefined 兜底 / 哨兵否决 / CodeMirror 出范围）随开工生效
+    - spec_check_cca R2 复核在途（后台）：结果回来收档进 spec_check_cca 块；若提出 must-fix 且影响实现，并入 dev loop 的 fix 循环（不阻塞当前 wave）
+    - Step 5（真机 S1-S6/S8/S9）manual_user 留用户窗口；Step 6（D5 IME/P2）按 D7 触发条件（S1 复现即升 blocking）待真机后定
+  dag_version: 1
+  wave_plan:
+    - [wave0-env]                                   # yarn install + patch-package + enriched postinstall + core build + webview build（executor: main，后台）
+    - [impl-js-core, impl-native, impl-desktop]     # Step1 / Step2 / Step4 三节点文件集不相交，同 wave 并行
+    - [impl-hydrate]                                # Step3：与 js-core 共文件（controller syncFromDraft / NativeChatComposer），须串行；Kotlin 侧与 impl-native 同文件区（EnrichedMarkdownTextInputView.kt），跨 wave 无冲突
+    - [verify-js, verify-native, verify-desktop]    # 三 verify 并行
+    - [cr-func-1]                                   # 全范围功能小检（readonly）
+    - （not-ready 时动态 fix → verify + cr-func 循环）
+    - [step7-docs(executor: main)]
+  node_status:
+    wave0-env: { status: in_progress, executor: main, note: '后台 exec_3afba79a；命令链 cd D:\worktree\cca && yarn install && npx patch-package && node node_modules/react-native-enriched-markdown/postinstall.mjs && npm run build -w @novel-master/core && node apps/mobile/scripts/build-webview.mjs' }
+  open_must_fix: []
+  spec_deviations: []
+  纪律: 子代理零 git 写，主代理按 wave 分组提交（中文提交信息，UTF-8 文件 -F 方式防 cmd 编码坏）；同文件禁止并行 impl；子代理只跑定向测试/typecheck，全量在 verify 波次跑；本会话 shell=cmd（无 Unix 管道工具；; 非分隔符）；native 侧改动流程=node_modules 内改 Kotlin 源 → 真机/gradle 验证 → npx patch-package react-native-enriched-markdown 重生成补丁 → 提交 patches/
+  blocking_steps: [phase-schema-ranges, phase-native-protect, phase-hydrate-link2token, phase-device-qa-p1]

@@ -28,12 +28,7 @@
  */
 
 import type { SmartSortCaptureKind } from "../model/smart-sort-rule.js";
-import {
-  FIXED_MAX_SORT_TUPLE,
-  FIXED_MIN_SORT_TUPLE,
-  formatSortTupleForDisplay,
-  parseChineseNum,
-} from "@/domain/workplace/logic/smart-sort.js";
+import { FIXED_MAX_SORT_TUPLE, FIXED_MIN_SORT_TUPLE, formatSortTupleForDisplay, parseChineseNum } from "@/domain/workplace/logic/smart-sort.js";
 
 /**
  * Single match: full match text + start offset in the tested text
@@ -67,9 +62,7 @@ export interface MatchSmartSortPatternErr {
   readonly error: string;
 }
 
-export type MatchSmartSortPatternResult =
-  | MatchSmartSortPatternOk
-  | MatchSmartSortPatternErr;
+export type MatchSmartSortPatternResult = MatchSmartSortPatternOk | MatchSmartSortPatternErr;
 
 /**
  * Runs a pattern against free text and lists every match + capture groups.
@@ -82,12 +75,7 @@ export type MatchSmartSortPatternResult =
  * 任一组失败则该 match 的 tuple 为 null。匹配本身（text/index/groups）
  * 与档位无关。
  */
-export function matchSmartSortPattern(
-  pattern: string,
-  flags: string,
-  text: string,
-  captureKind: SmartSortCaptureKind = "smart"
-): MatchSmartSortPatternResult {
+export function matchSmartSortPattern(pattern: string, flags: string, text: string, captureKind: SmartSortCaptureKind = "smart"): MatchSmartSortPatternResult {
   let base: RegExp;
   try {
     base = new RegExp(pattern, flags);
@@ -103,44 +91,25 @@ export function matchSmartSortPattern(
     // m.slice(1) keeps holes as undefined; normalize to null for JSON-safe
     // IPC transport (desktop DTO) and a stable '-' rendering on both GUIs.
     const groups = m.slice(1).map((g) => g ?? null);
+    // tuple（D13）：fixed 档哨兵元组与 smart 档数字元组统一经
+    // formatSortTupleForDisplay 格式化（C-3 单源）；smart 档无捕获组或任一
+    // 组转换失败 → null（GUI 渲染「无序号」）。
+    let tuple: string | null;
+    if (captureKind === "fixed_min") {
+      tuple = formatSortTupleForDisplay(FIXED_MIN_SORT_TUPLE);
+    } else if (captureKind === "fixed_max") {
+      tuple = formatSortTupleForDisplay(FIXED_MAX_SORT_TUPLE);
+    } else {
+      const nums = groups.map((g) => (typeof g === "string" ? parseChineseNum(g) : null)).filter((n): n is number => n !== null);
+      tuple = nums.length > 0 && nums.length === groups.length ? formatSortTupleForDisplay(nums) : null;
+    }
     matches.push({
       text: m[0],
       // matchAll 的 m.index 恒为数字；?? 0 仅为类型收窄（never hit）。
       index: m.index ?? 0,
       groups,
-      tuple: tupleForCaptureKind(captureKind, groups),
+      tuple,
     });
   }
   return { ok: true, matches };
-}
-
-/**
- * 单 match 的 tuple 计算（D13）：fixed 档哨兵元组与 smart 档数字元组统一经
- * {@link formatSortTupleForDisplay} 格式化（C-3 单源：哨兵/数字元组文案不再
- * 内联平行实现；smart 档数字管道经 core/B-4 守卫后永不产出 ±Infinity，不会
- * 误触 formatSortTupleForDisplay 的哨兵分支）。
- */
-function tupleForCaptureKind(
-  captureKind: SmartSortCaptureKind,
-  groups: readonly (string | null)[]
-): string | null {
-  if (captureKind === "fixed_min") {
-    return formatSortTupleForDisplay(FIXED_MIN_SORT_TUPLE);
-  }
-  if (captureKind === "fixed_max") {
-    return formatSortTupleForDisplay(FIXED_MAX_SORT_TUPLE);
-  }
-  if (groups.length === 0) {
-    return null;
-  }
-  const nums: number[] = [];
-  for (const group of groups) {
-    const value =
-      typeof group === "string" ? parseChineseNum(group) : null;
-    if (value === null) {
-      return null;
-    }
-    nums.push(value);
-  }
-  return formatSortTupleForDisplay(nums);
 }

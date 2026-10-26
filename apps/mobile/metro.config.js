@@ -35,9 +35,9 @@ for (const rel of coreDistSmokeFiles) {
 }
 const coreChatJs = path.join(coreDistRoot, 'public/chat.js');
 const coreChatSource = fs.readFileSync(coreChatJs, 'utf8');
-if (!coreChatSource.includes('matchUserVfsTurnAt')) {
+if (!coreChatSource.includes('ChatMessage')) {
   throw new Error(
-    '[metro] Stale @novel-master/core chat sub-entry (missing matchUserVfsTurnAt). ' +
+    '[metro] Stale @novel-master/core chat sub-entry (missing ChatMessage). ' +
       'Run: npm run rebuild -w @novel-master/core',
   );
 }

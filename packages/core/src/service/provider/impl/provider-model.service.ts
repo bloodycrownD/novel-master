@@ -58,6 +58,22 @@ function resolvePersistedModelName(
   return trimmed;
 }
 
+/** 解包 domain 的 Result，保持 service 对 app 的 ProviderError 契约。 */
+async function requireSavedModel(
+  savedModelId: string,
+  savedModels: SavedModelRepository
+): Promise<SavedModel> {
+  const asserted = await assertSavedModelUuid(savedModelId, savedModels);
+  if (!asserted.ok) {
+    throw new ProviderError(
+      "INVALID_SAVED_MODEL_ID",
+      asserted.error.message,
+      { modelId: savedModelId }
+    );
+  }
+  return asserted.value;
+}
+
 /** Model suggestion and saved-model service. */
 export class DefaultProviderModelService implements ProviderModelService {
   constructor(private readonly deps: DefaultProviderModelServiceDeps) {}
@@ -69,7 +85,11 @@ export class DefaultProviderModelService implements ProviderModelService {
 
   async fetch(providerId: string): Promise<void> {
     const provider = await this.deps.providers.get(providerId);
-    const apiKey = await resolveProviderApiKey(provider, this.deps.secretStore);
+    const apiKeyResult = await resolveProviderApiKey(provider, this.deps.secretStore);
+    if (!apiKeyResult.ok) {
+      throw new ProviderError("API_KEY_NOT_SET", apiKeyResult.error.message, { providerId });
+    }
+    const apiKey = apiKeyResult.value;
     const adapter = getProtocolAdapter(provider.protocol);
     const result = await adapter.listModels({
       baseUrl: provider.baseUrl,
@@ -133,7 +153,7 @@ export class DefaultProviderModelService implements ProviderModelService {
     savedModelId: string,
     modelName?: string
   ): Promise<SavedModel> {
-    const existing = await assertSavedModelUuid(
+    const existing = await requireSavedModel(
       savedModelId,
       this.deps.savedModels
     );
@@ -166,7 +186,7 @@ export class DefaultProviderModelService implements ProviderModelService {
   }
 
   async deleteSaved(savedModelId: string): Promise<void> {
-    const existing = await assertSavedModelUuid(
+    const existing = await requireSavedModel(
       savedModelId,
       this.deps.savedModels
     );
@@ -192,7 +212,7 @@ export class DefaultProviderModelService implements ProviderModelService {
     savedModelId: string,
     patch: SavedModelSettingsPatch
   ): Promise<SavedModel> {
-    const existing = await assertSavedModelUuid(
+    const existing = await requireSavedModel(
       savedModelId,
       this.deps.savedModels
     );
@@ -224,7 +244,10 @@ export class DefaultProviderModelService implements ProviderModelService {
       existing.settings,
       patch
     );
-    assertSavedModelSettingsPersistable(mergedSettings);
+    const persistable = assertSavedModelSettingsPersistable(mergedSettings);
+    if (!persistable.ok) {
+      throw new ProviderError("INVALID_ARGUMENT", persistable.error.message);
+    }
 
     const updated: SavedModel = {
       ...existing,
@@ -237,7 +260,7 @@ export class DefaultProviderModelService implements ProviderModelService {
   }
 
   async resetContextWindowToDefault(savedModelId: string): Promise<SavedModel> {
-    const existing = await assertSavedModelUuid(
+    const existing = await requireSavedModel(
       savedModelId,
       this.deps.savedModels
     );

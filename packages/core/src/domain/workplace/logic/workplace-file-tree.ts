@@ -5,16 +5,8 @@
  */
 
 import { normalizePath } from "@/domain/vfs/repositories/impl/normalize-path.js";
-import type {
-  DisplayState,
-  WorkplaceDirRule,
-  WorkplaceScope,
-} from "../model/workplace-types.js";
-import {
-  sortDirPaths,
-  sortFilesForDir,
-  type WorkplaceFileSortMeta,
-} from "./workplace-eval.js";
+import type { DisplayState, WorkplaceDirRule, WorkplaceScope } from "../model/workplace-types.js";
+import { sortDirPaths, sortFilesForDir, type WorkplaceFileSortMeta } from "./workplace-eval.js";
 import type { CompiledSmartSortRule } from "./smart-sort.js";
 import { filetreeMacroLoadStateLabel } from "./workplace-labels.js";
 import { workplaceRootLogicalPath } from "./workplace-scope.js";
@@ -33,8 +25,7 @@ export interface RenderWorkplaceFileTreeParams {
 }
 
 /** 宏树渲染参数：在基础树参数上附带各文件 display 状态。 */
-export interface RenderWorkplaceFileTreeForMacroParams
-  extends RenderWorkplaceFileTreeParams {
+export interface RenderWorkplaceFileTreeForMacroParams extends RenderWorkplaceFileTreeParams {
   readonly displayByPath: ReadonlyMap<string, DisplayState>;
 }
 
@@ -65,38 +56,17 @@ export function workplaceFileTreeRootLabel(scope: WorkplaceScope): string {
   return base.length > 0 ? base : "/";
 }
 
-function sortedChildren(
-  dirPath: string,
-  params: RenderWorkplaceFileTreeParams
-): TreeEntry[] {
+function sortedChildren(dirPath: string, params: RenderWorkplaceFileTreeParams): TreeEntry[] {
   const dirRule = params.dirRuleMap.get(dirPath) ?? null;
-  const subdirs = sortDirPaths(
-    directChildDirs(dirPath, params.allDirs),
-    dirRule,
-    { smartRules: params.smartRules, dirMtimeByPath: params.dirMtimeByPath }
-  ).map((path) => ({ kind: "dir" as const, path }));
+  const subdirs = sortDirPaths(directChildDirs(dirPath, params.allDirs), dirRule, { smartRules: params.smartRules, dirMtimeByPath: params.dirMtimeByPath }).map((path) => ({ kind: "dir" as const, path }));
 
-  const files = sortFilesForDir(
-    directChildFiles(dirPath, params.fileSet).map(
-      (logicalPath): WorkplaceFileSortMeta => ({
-        logicalPath,
-        mtimeMs: params.mtimeByPath.get(logicalPath) ?? 0,
-      })
-    ),
-    dirRule,
-    { smartRules: params.smartRules }
-  ).map((file) => ({ kind: "file" as const, path: file.logicalPath }));
+  const fileMetas = directChildFiles(dirPath, params.fileSet).map((logicalPath): WorkplaceFileSortMeta => ({ logicalPath, mtimeMs: params.mtimeByPath.get(logicalPath) ?? 0 }));
+  const files = sortFilesForDir(fileMetas, dirRule, { smartRules: params.smartRules }).map((file) => ({ kind: "file" as const, path: file.logicalPath }));
 
   return [...subdirs, ...files];
 }
 
-function appendDirLines(
-  lines: string[],
-  dirPath: string,
-  prefix: string,
-  params: RenderWorkplaceFileTreeParams,
-  displayByPath?: ReadonlyMap<string, DisplayState>
-): void {
+function appendDirLines(lines: string[], dirPath: string, prefix: string, params: RenderWorkplaceFileTreeParams, displayByPath?: ReadonlyMap<string, DisplayState>): void {
   const children = sortedChildren(dirPath, params);
   for (let i = 0; i < children.length; i++) {
     const isLast = i === children.length - 1;
@@ -109,13 +79,7 @@ function appendDirLines(
     }
     lines.push(`${prefix}${branch}${lineName}`);
     if (child.kind === "dir") {
-      appendDirLines(
-        lines,
-        child.path,
-        prefix + (isLast ? "    " : "│   "),
-        params,
-        displayByPath
-      );
+      appendDirLines(lines, child.path, prefix + (isLast ? "    " : "│   "), params, displayByPath);
     }
   }
 }
@@ -123,9 +87,7 @@ function appendDirLines(
 /**
  * Renders a UTF-8 directory tree (dirs before files, same sort as workplace list).
  */
-export function renderWorkplaceFileTree(
-  params: RenderWorkplaceFileTreeParams
-): string {
+export function renderWorkplaceFileTree(params: RenderWorkplaceFileTreeParams): string {
   const rootPath = workplaceRootLogicalPath(params.scope);
   const rootLabel = workplaceFileTreeRootLabel(params.scope);
   const headerLine = rootLabel === "/" ? "/" : `${rootLabel}/`;
@@ -137,9 +99,7 @@ export function renderWorkplaceFileTree(
 /**
  * 渲染带加载状态后缀的 workplace ASCII 树（`{{$filetree}}` 与工作区宏树）。
  */
-export function renderWorkplaceFileTreeForMacro(
-  params: RenderWorkplaceFileTreeForMacroParams
-): string {
+export function renderWorkplaceFileTreeForMacro(params: RenderWorkplaceFileTreeForMacroParams): string {
   const rootPath = workplaceRootLogicalPath(params.scope);
   const rootLabel = workplaceFileTreeRootLabel(params.scope);
   const headerLine = rootLabel === "/" ? "/" : `${rootLabel}/`;

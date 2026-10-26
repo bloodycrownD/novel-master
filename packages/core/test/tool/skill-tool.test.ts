@@ -18,7 +18,7 @@ import type {
 } from "../../src/service/skills/skills.port.js";
 import { ToolError } from "../../src/errors/tool-errors.js";
 import { assembleSkillsToolContext } from "../../src/service/agent/logic/run-agent-turn.js";
-import { resolveAgentToolRegistry } from "../../src/domain/agent/logic/resolve-agent-tool-registry.js";
+import { resolveAgentToolRegistry } from "../../src/domain/agent/logic/resolve-agent-tools.js";
 import type { AgentDefinition } from "../../src/domain/agent/model/agent-definition.js";
 
 /** 构造 fake SkillService：实现 skill 工具用到的服务方法，按调用记录断言。 */

@@ -17,13 +17,6 @@ import type { MessageCheckpointRepository } from "../repositories/message-checkp
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revision.port.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
-import { revisionPairKey } from "@/domain/vfs/logic/revision-pair-key.js";
-
-/** Builds a stable `entryId:version` key for revision GC fallback。 */
-export function revisionReachableKey(entryId: number, version: number): string {
-  // 保留供 seed-fork / 测试代码复用，不再在本模块内部使用。
-  return revisionPairKey(entryId, version);
-}
 
 /**
  * 仅 revision 行打扫（scope 前缀 ref_count<=0 DELETE + 全局孤儿兜底）。
@@ -52,26 +45,14 @@ export function revisionReachableKey(entryId: number, version: number): string {
  *
  * @returns Count of deleted revision rows (scoped + global orphans).
  */
-export async function sweepSessionRevisions(
-  revisionRepo: VfsRevisionRepository,
-  _entryRepo: VfsEntryRepository,
-  _checkpoints: MessageCheckpointRepository,
-  projectId: string,
-  sessionId: string,
-  _conn: TdbcConnection,
-  options?: {includeGlobalOrphans?: boolean}
-): Promise<number> {
+export async function sweepSessionRevisions(revisionRepo: VfsRevisionRepository, _entryRepo: VfsEntryRepository, _checkpoints: MessageCheckpointRepository, projectId: string, sessionId: string, _conn: TdbcConnection, options?: { includeGlobalOrphans?: boolean }): Promise<number> {
   const scope: VfsScope = {
     kind: "session",
     projectId,
     sessionId,
   };
   const scopeKeyStr = scopeKey(scope);
-  const scoped = await deleteUnreferencedUnderScope(
-    revisionRepo,
-    scopeKeyStr,
-    "/"
-  );
+  const scoped = await deleteUnreferencedUnderScope(revisionRepo, scopeKeyStr, "/");
   if (options?.includeGlobalOrphans === false) {
     // scoped-only：全局孤儿兜底由调用方在事务提交后 deferred 调度。
     return scoped;

@@ -30,6 +30,7 @@
  * **禁止复用 `decodeTranscriptToHost`**：它对 `v !== 1` 直接 throw，会被宿主
  * try/catch 静默吞掉 → `webReady` 永假 → 全部下行丢弃 → 落进 8s 兜底白屏。
  */
+import { isRecord } from '@novel-master/core/common';
 import type {
   ChatTranscriptScrollSnapshot,
   TranscriptFlags,
@@ -312,6 +313,3 @@ export function parseConversationScrollSnapshot(
   };
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value != null && !Array.isArray(value);
-}

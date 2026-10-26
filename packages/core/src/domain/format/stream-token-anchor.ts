@@ -30,9 +30,6 @@ export function composeStreamTokens(base: number, increment: number): number {
  * 此后每个 delta 的增量继续叠加上去——多步 run 的数字因此单调增长，
  * 而不是冻结在上一 step 的真值上。
  */
-export function reanchorStreamTokenBase(
-  truth: number,
-  increment: number,
-): number {
+export function reanchorStreamTokenBase(truth: number, increment: number): number {
   return truth - increment;
 }

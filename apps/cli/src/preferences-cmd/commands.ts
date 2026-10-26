@@ -11,7 +11,7 @@ import {
   PREF_KEY_CHAT_THINKING_CONTEXT,
   PREF_KEY_VFS_USER_VFS_UNIFIED_TOOL_TURN,
 } from "@novel-master/core";
-import { PreferencesError } from "@novel-master/core";
+import { isAppError } from "@novel-master/core/agent";
 import { parseCliArgs } from "../vfs/parse-args.js";
 
 const KNOWN_KEYS = [
@@ -91,7 +91,7 @@ async function setValue(
         return;
     }
   } catch (error) {
-    if (error instanceof PreferencesError && error.code === "INVALID_VALUE") {
+    if (isAppError(error, "PREFERENCES_INVALID_VALUE")) {
       throw new Error(error.message);
     }
     throw error;

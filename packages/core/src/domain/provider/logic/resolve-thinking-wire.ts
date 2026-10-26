@@ -5,11 +5,7 @@
  */
 
 import type { LlmProtocolKind } from "@/infra/llm-protocol/ports/adapter.port.js";
-import {
-  ANTHROPIC_SAMPLING_DEFAULTS,
-  GEMINI_SAMPLING_DEFAULTS,
-  OPENAI_SAMPLING_DEFAULTS,
-} from "@/domain/provider/model/protocol-sampling-defaults.js";
+import { ANTHROPIC_SAMPLING_DEFAULTS, GEMINI_SAMPLING_DEFAULTS, OPENAI_SAMPLING_DEFAULTS } from "@/domain/provider/model/protocol-sampling-defaults.js";
 import type { SavedModelSamplingSettings } from "@/domain/provider/model/saved-model-settings.js";
 import type { ThinkingLevel } from "@/domain/provider/model/saved-model-settings.js";
 import type { ModelThinkingParams } from "@/domain/provider/model/model-thinking-params.js";
@@ -23,8 +19,7 @@ import { thinkingLevelToModelThinkingParams } from "./thinking-level-presets.js"
  * 再叠加 budget 钳制公式用 `max - 1`，三档 thinkingLevel 全部被钳成同一个值、
  * 可见正文只剩 1 token。
  */
-export const ANTHROPIC_BODY_DEFAULT_MAX_TOKENS =
-  ANTHROPIC_SAMPLING_DEFAULTS.max_tokens;
+export const ANTHROPIC_BODY_DEFAULT_MAX_TOKENS = ANTHROPIC_SAMPLING_DEFAULTS.max_tokens;
 
 /**
  * 根据采样设置推断有效 max_tokens（用于 Anthropic budget 上限计算）。
@@ -32,33 +27,21 @@ export const ANTHROPIC_BODY_DEFAULT_MAX_TOKENS =
  * @param sampling 已保存采样小节。
  * @param protocol 目标协议。
  */
-export function resolveEffectiveMaxTokens(
-  sampling: SavedModelSamplingSettings,
-  protocol: LlmProtocolKind
-): number {
+export function resolveEffectiveMaxTokens(sampling: SavedModelSamplingSettings, protocol: LlmProtocolKind): number {
   if (sampling.enabled && sampling.params != null) {
     switch (protocol) {
       case "openai":
-        if (
-          sampling.params.protocol === "openai" &&
-          sampling.params.openai.max_tokens != null
-        ) {
+        if (sampling.params.protocol === "openai" && sampling.params.openai.max_tokens != null) {
           return sampling.params.openai.max_tokens;
         }
         return OPENAI_SAMPLING_DEFAULTS.max_tokens;
       case "anthropic":
-        if (
-          sampling.params.protocol === "anthropic" &&
-          sampling.params.anthropic.max_tokens != null
-        ) {
+        if (sampling.params.protocol === "anthropic" && sampling.params.anthropic.max_tokens != null) {
           return sampling.params.anthropic.max_tokens;
         }
         return ANTHROPIC_BODY_DEFAULT_MAX_TOKENS;
       case "gemini":
-        if (
-          sampling.params.protocol === "gemini" &&
-          sampling.params.gemini.maxOutputTokens != null
-        ) {
+        if (sampling.params.protocol === "gemini" && sampling.params.gemini.maxOutputTokens != null) {
           return sampling.params.gemini.maxOutputTokens;
         }
         return GEMINI_SAMPLING_DEFAULTS.maxOutputTokens;
@@ -82,16 +65,6 @@ export function resolveEffectiveMaxTokens(
  * @param sampling 已保存采样小节。
  * @param vendorModelId 厂商模型 id。
  */
-export function resolveThinkingParamsForLevel(
-  level: ThinkingLevel,
-  protocol: LlmProtocolKind,
-  sampling: SavedModelSamplingSettings,
-  vendorModelId: string
-): ModelThinkingParams | undefined {
-  return thinkingLevelToModelThinkingParams(
-    level,
-    protocol,
-    vendorModelId,
-    sampling
-  );
+export function resolveThinkingParamsForLevel(level: ThinkingLevel, protocol: LlmProtocolKind, sampling: SavedModelSamplingSettings, vendorModelId: string): ModelThinkingParams | undefined {
+  return thinkingLevelToModelThinkingParams(level, protocol, vendorModelId, sampling);
 }

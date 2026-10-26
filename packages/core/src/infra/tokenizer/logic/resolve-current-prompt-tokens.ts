@@ -24,7 +24,7 @@
  * @module infra/tokenizer/logic/resolve-current-prompt-tokens
  */
 
-import type { ChatMessage } from "@/domain/chat/model/message.js";
+import type { ChatMessageData } from "@/domain/chat/model/message.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
 import { formatChatMessageForCliPreview } from "@/domain/chat/content/message-body-text.js";
 import {
@@ -171,7 +171,7 @@ function estimateAnchoredDelta(
   if (anchorSeq == null) {
     return 0;
   }
-  const messages: readonly ChatMessage[] | undefined = params.ctx?.messages;
+  const messages: readonly ChatMessageData[] | undefined = params.ctx?.messages;
   if (messages == null || messages.length === 0) {
     return 0;
   }

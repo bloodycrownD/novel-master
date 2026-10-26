@@ -4,7 +4,7 @@
  * @module service/prompt/render-prompt
  */
 
-import type { ChatMessage } from "../../domain/chat/model/message.js";
+import type { ChatMessageData } from "../../domain/chat/model/message.js";
 import { textBlocks } from "../../domain/chat/content/text-blocks.js";
 import { formatChatMessageForCliPreview } from "../../domain/chat/content/message-body-text.js";
 import type {
@@ -36,9 +36,9 @@ export interface PromptAssemblySegment {
   readonly title: string;
   readonly body: string;
   readonly source: "template" | "message" | "system";
-  /** 来源 ChatMessage id（仅 `source === "message"` 有值）；轮聚合按它分组。 */
+  /** 来源 ChatMessageData id（仅 `source === "message"` 有值）；轮聚合按它分组。 */
   readonly messageId?: string;
-  /** 来源 ChatMessage 的会话内序号（仅 `source === "message"` 有值）。 */
+  /** 来源 ChatMessageData 的会话内序号（仅 `source === "message"` 有值）。 */
   readonly seq?: number;
 }
 
@@ -112,7 +112,7 @@ function syntheticTemplateMessage(
   block: PersistTextPromptBlock | DynamicPromptBlock,
   expanded: string,
   ctx: PromptRenderContext
-): ChatMessage {
+): ChatMessageData {
   return {
     id: `prompt:${block.name}`,
     sessionId: ctx.messages[0]?.sessionId ?? "",
@@ -129,7 +129,7 @@ function syntheticTemplateMessage(
 function syntheticWorkplaceUserMessage(
   workplaceDisplay: string,
   ctx: PromptRenderContext
-): ChatMessage {
+): ChatMessageData {
   return {
     id: "prompt:workplace",
     sessionId: ctx.messages[0]?.sessionId ?? "",
@@ -147,7 +147,7 @@ function syntheticWorkplaceUserMessage(
 function syntheticWorkplaceDoneMessage(
   assistantText: string,
   ctx: PromptRenderContext
-): ChatMessage {
+): ChatMessageData {
   return {
     id: "prompt:workplace:done",
     sessionId: ctx.messages[0]?.sessionId ?? "",
@@ -181,7 +181,7 @@ function formatSkillsIndexBody(
 function syntheticSkillsIndexMessage(
   body: string,
   ctx: PromptRenderContext
-): ChatMessage {
+): ChatMessageData {
   return {
     id: "prompt:skills",
     sessionId: ctx.messages[0]?.sessionId ?? "",
@@ -217,7 +217,7 @@ function appendSkillsIndexSegmentIfPresent(
 function appendWorkplacePairIfPresent(
   layout: AgentPromptLayout,
   ctx: PromptRenderContext,
-  messages: ChatMessage[]
+  messages: ChatMessageData[]
 ): void {
   if (!layoutHasWorkplace(layout)) {
     return;
@@ -330,11 +330,14 @@ export async function buildPromptAssemblyFromLayout(
         workplace: ctx.workplace,
         filetree: ctx.filetree,
       });
+      if (!expanded.ok) {
+        throw expanded.error;
+      }
       segments.push({
         id: `dynamic-${block.name}`,
         role: block.role,
         title: block.name,
-        body: expanded,
+        body: expanded.value,
         source: "template",
       });
     }
@@ -352,7 +355,7 @@ export async function buildPromptLlmInputFromLayout(
   options?: PromptAssemblyOptions
 ): Promise<PromptLlmInput> {
   const agentStepIndex = resolveAgentStepIndex(options);
-  const messages: ChatMessage[] = [];
+  const messages: ChatMessageData[] = [];
 
   if (
     layout.skillsEnabled !== false &&
@@ -384,7 +387,10 @@ export async function buildPromptLlmInputFromLayout(
         workplace: ctx.workplace,
         filetree: ctx.filetree,
       });
-      messages.push(syntheticTemplateMessage(block, expanded, ctx));
+      if (!expanded.ok) {
+        throw expanded.error;
+      }
+      messages.push(syntheticTemplateMessage(block, expanded.value, ctx));
     }
   }
 

@@ -29,6 +29,7 @@ import {
   handleAgentRegistryDelete,
   handleAgentRegistryGet,
   handleAgentRegistryList,
+  handleAgentRegistryUpdate,
   handleAgentRegistryUpsert,
   handleAgentYamlExport,
   handleAgentYamlImport,
@@ -373,6 +374,7 @@ export function registerHandlersFromRegistry(): void {
   bindNoArg(IPC_CHANNELS.AGENT_REGISTRY_LIST, handleAgentRegistryList);
   bindReq(IPC_CHANNELS.AGENT_REGISTRY_GET, handleAgentRegistryGet);
   bindReq(IPC_CHANNELS.AGENT_REGISTRY_UPSERT, handleAgentRegistryUpsert);
+  bindReq(IPC_CHANNELS.AGENT_REGISTRY_UPDATE, handleAgentRegistryUpdate);
   bindReq(IPC_CHANNELS.AGENT_REGISTRY_DELETE, handleAgentRegistryDelete);
   // 可选 payload：renderer 不传参时 req 为 undefined，handler 侧容忍（现行为回归）。
   bindReq(

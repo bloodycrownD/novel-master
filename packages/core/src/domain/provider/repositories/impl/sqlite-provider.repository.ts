@@ -6,42 +6,25 @@
 
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { SqlTemplateParser } from "@/infra/sql-template/index.js";
-import {
-  executeTemplate,
-  queryTemplate,
-} from "@/infra/tdbc/logic/template-helper.js";
+import { executeTemplate, queryTemplate } from "@/infra/tdbc/logic/template-helper.js";
 import type { Row } from "@/infra/tdbc/types.js";
 import type { LlmProtocolKind } from "@/infra/llm-protocol/ports/adapter.port.js";
 import { ProviderError } from "@/errors/provider-errors.js";
 import type { LlmProvider } from "../../model/provider.js";
 import type { ProviderRepository } from "../provider.port.js";
 
-function parseHeaders(json: string): Record<string, string> {
-  try {
-    const parsed = JSON.parse(json) as unknown;
-    if (parsed == null || typeof parsed !== "object" || Array.isArray(parsed)) {
-      return {};
-    }
-    const out: Record<string, string> = {};
-    for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
-      if (typeof v === "string") {
-        out[k] = v;
-      }
-    }
-    return out;
-  } catch {
-    return {};
-  }
-}
+const PROVIDER_COLUMNS = "id, builtin_key, protocol, base_url, display_name, secret_ref, headers_json, body_params_json, is_builtin, created_at_ms, updated_at_ms";
+const SELECT_ALL_SQL = `SELECT ${PROVIDER_COLUMNS} FROM llm_provider ORDER BY id`;
+const SELECT_BY_ID_SQL = `SELECT ${PROVIDER_COLUMNS} FROM llm_provider WHERE id = #{id}`;
+const INSERT_SQL = `INSERT INTO llm_provider (${PROVIDER_COLUMNS}) VALUES (#{id}, #{builtinKey}, #{protocol}, #{baseUrl}, #{displayName}, #{secretRef}, #{headersJson}, #{bodyParamsJson}, #{isBuiltin}, #{createdAtMs}, #{updatedAtMs})`;
+const UPDATE_SQL = `UPDATE llm_provider SET protocol = #{protocol}, base_url = #{baseUrl}, display_name = #{displayName}, secret_ref = #{secretRef}, headers_json = #{headersJson}, body_params_json = #{bodyParamsJson}, updated_at_ms = #{updatedAtMs} WHERE id = #{id}`;
+const DELETE_SQL = "DELETE FROM llm_provider WHERE id = #{id}";
 
-/** 自定义参数根必须是 JSON 对象；根非法（非对象/解析失败）降级 {}，不抛错。 */
-function parseBodyParams(json: string): Record<string, unknown> {
+/** 列 JSON 根必须是对象；根非法（非对象/解析失败）降级 {}，不抛错。 */
+function parseJsonObject(json: string): Record<string, unknown> {
   try {
     const parsed = JSON.parse(json) as unknown;
-    if (parsed == null || typeof parsed !== "object" || Array.isArray(parsed)) {
-      return {};
-    }
-    return parsed as Record<string, unknown>;
+    return parsed != null && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
   } catch {
     return {};
   }
@@ -50,11 +33,11 @@ function parseBodyParams(json: string): Record<string, unknown> {
 function rowToProvider(row: Row): LlmProvider {
   const displayRaw = row.display_name;
   if (displayRaw == null || String(displayRaw).trim() === "") {
-    throw new ProviderError(
-      "INVALID_ARGUMENT",
-      `服务商 display_name 不得为空（id=${String(row.id)}）`,
-      { providerId: String(row.id) }
-    );
+    throw new ProviderError("INVALID_ARGUMENT", `服务商 display_name 不得为空（id=${String(row.id)}）`, { providerId: String(row.id) });
+  }
+  const headers: Record<string, string> = {};
+  for (const [key, value] of Object.entries(parseJsonObject(String(row.headers_json ?? "{}")))) {
+    if (typeof value === "string") headers[key] = value;
   }
   return {
     id: String(row.id),
@@ -63,8 +46,8 @@ function rowToProvider(row: Row): LlmProvider {
     baseUrl: String(row.base_url),
     displayName: String(displayRaw),
     secretRef: row.secret_ref != null ? String(row.secret_ref) : null,
-    headers: parseHeaders(String(row.headers_json ?? "{}")),
-    bodyParams: parseBodyParams(String(row.body_params_json ?? "{}")),
+    headers,
+    bodyParams: parseJsonObject(String(row.body_params_json ?? "{}")),
     isBuiltin: Number(row.is_builtin) === 1,
     createdAtMs: Number(row.created_at_ms),
     updatedAtMs: Number(row.updated_at_ms),
@@ -78,92 +61,47 @@ export class SqliteProviderRepository implements ProviderRepository {
   constructor(private readonly conn: TdbcConnection) {}
 
   async list(): Promise<LlmProvider[]> {
-    const rows = await queryTemplate(
-      this.conn,
-      this.parser,
-      `SELECT id, builtin_key, protocol, base_url, display_name, secret_ref,
-              headers_json, body_params_json, is_builtin, created_at_ms, updated_at_ms
-       FROM llm_provider ORDER BY id`,
-      {}
-    );
+    const rows = await queryTemplate(this.conn, this.parser, SELECT_ALL_SQL, {});
     return rows.map(rowToProvider);
   }
 
   async findById(id: string): Promise<LlmProvider | null> {
-    const rows = await queryTemplate(
-      this.conn,
-      this.parser,
-      `SELECT id, builtin_key, protocol, base_url, display_name, secret_ref,
-              headers_json, body_params_json, is_builtin, created_at_ms, updated_at_ms
-       FROM llm_provider WHERE id = #{id}`,
-      { id }
-    );
-    if (rows.length === 0) {
-      return null;
-    }
+    const rows = await queryTemplate(this.conn, this.parser, SELECT_BY_ID_SQL, { id });
+    if (rows.length === 0) return null;
     return rowToProvider(rows[0]!);
   }
 
   async insert(provider: LlmProvider): Promise<void> {
-    await executeTemplate(
-      this.conn,
-      this.parser,
-      `INSERT INTO llm_provider (
-        id, builtin_key, protocol, base_url, display_name, secret_ref,
-        headers_json, body_params_json, is_builtin, created_at_ms, updated_at_ms
-      ) VALUES (
-        #{id}, #{builtinKey}, #{protocol}, #{baseUrl}, #{displayName}, #{secretRef},
-        #{headersJson}, #{bodyParamsJson}, #{isBuiltin}, #{createdAtMs}, #{updatedAtMs}
-      )`,
-      {
-        id: provider.id,
-        builtinKey: provider.builtinKey,
-        protocol: provider.protocol,
-        baseUrl: provider.baseUrl,
-        displayName: provider.displayName,
-        secretRef: provider.secretRef,
-        headersJson: JSON.stringify(provider.headers),
-        bodyParamsJson: JSON.stringify(provider.bodyParams),
-        isBuiltin: provider.isBuiltin ? 1 : 0,
-        createdAtMs: provider.createdAtMs,
-        updatedAtMs: provider.updatedAtMs,
-      }
-    );
+    await executeTemplate(this.conn, this.parser, INSERT_SQL, {
+      id: provider.id,
+      builtinKey: provider.builtinKey,
+      protocol: provider.protocol,
+      baseUrl: provider.baseUrl,
+      displayName: provider.displayName,
+      secretRef: provider.secretRef,
+      headersJson: JSON.stringify(provider.headers),
+      bodyParamsJson: JSON.stringify(provider.bodyParams),
+      isBuiltin: provider.isBuiltin ? 1 : 0,
+      createdAtMs: provider.createdAtMs,
+      updatedAtMs: provider.updatedAtMs,
+    });
   }
 
   async update(provider: LlmProvider): Promise<void> {
-    await executeTemplate(
-      this.conn,
-      this.parser,
-      `UPDATE llm_provider SET
-        protocol = #{protocol},
-        base_url = #{baseUrl},
-        display_name = #{displayName},
-        secret_ref = #{secretRef},
-        headers_json = #{headersJson},
-        body_params_json = #{bodyParamsJson},
-        updated_at_ms = #{updatedAtMs}
-       WHERE id = #{id}`,
-      {
-        id: provider.id,
-        protocol: provider.protocol,
-        baseUrl: provider.baseUrl,
-        displayName: provider.displayName,
-        secretRef: provider.secretRef,
-        headersJson: JSON.stringify(provider.headers),
-        bodyParamsJson: JSON.stringify(provider.bodyParams),
-        updatedAtMs: provider.updatedAtMs,
-      }
-    );
+    await executeTemplate(this.conn, this.parser, UPDATE_SQL, {
+      id: provider.id,
+      protocol: provider.protocol,
+      baseUrl: provider.baseUrl,
+      displayName: provider.displayName,
+      secretRef: provider.secretRef,
+      headersJson: JSON.stringify(provider.headers),
+      bodyParamsJson: JSON.stringify(provider.bodyParams),
+      updatedAtMs: provider.updatedAtMs,
+    });
   }
 
   async delete(id: string): Promise<boolean> {
-    const result = await executeTemplate(
-      this.conn,
-      this.parser,
-      `DELETE FROM llm_provider WHERE id = #{id}`,
-      { id }
-    );
+    const result = await executeTemplate(this.conn, this.parser, DELETE_SQL, { id });
     return result.changes > 0;
   }
 }

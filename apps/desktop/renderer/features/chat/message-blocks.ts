@@ -1,7 +1,7 @@
 /**
  * Message block parsing and tool_use / tool_result pairing for chat UI.
  */
-import { resolveSkillToolRefFromInput, resolveVfsToolFilePath } from "@shared/logic/chat";
+import { skillToolRefResolver, resolveVfsToolFilePath } from "@shared/logic/chat";
 import { resolveToolResultOk } from "@shared/logic/root";
 import { summarizeToolInput } from "@shared/logic/chat";
 import type { ChatMessageDto, ContentBlockDto } from "@shared/ipc-types";
@@ -179,7 +179,7 @@ export function toolCallViewFromUse(
 /**
  * 工具入参摘要：单源在 core（经 `@shared/logic/chat` 再导出的 `summarizeToolInput`）。
  * 本文件此前持有一份带 `skill` 特判的副本，与 mobile 两面（WebView / RN）行为不一致，
- * 现已全部改为引用 core；新增特判分支请改 core 的 `domain/chat/logic/tool-summary.ts`。
+ * 现已全部改为引用 core；新增特判分支请改 core 的 `domain/chat/logic/message/tool-summary.ts`。
  */
 
 /** 解析工具卡片对应的 VFS 文件路径；不可打开时返回 undefined。 */
@@ -197,7 +197,7 @@ export function skillToolRef(
   projectId?: string,
 ): ToolCallView["skillRef"] {
   if (tool.skillRef != null) return tool.skillRef;
-  return resolveSkillToolRefFromInput(tool.name, tool.input, projectId);
+  return skillToolRefResolver.fromInput(tool.name, tool.input, projectId);
 }
 
 export function toolCallSummary(tool: ToolCallView): string {

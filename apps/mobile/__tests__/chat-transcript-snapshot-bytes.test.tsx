@@ -23,7 +23,7 @@ import React from 'react';
 import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
 import {Platform} from 'react-native';
-import {type ChatMessage} from '@novel-master/core/chat';
+import {type ChatMessageData} from '@novel-master/core/chat';
 import {
   CONVERSATION_BRIDGE_V,
   decodeConversationUpstream,
@@ -93,7 +93,7 @@ Object.defineProperty(Platform, 'OS', {
   get: () => 'android',
 });
 
-function textMessage(id: string, seq: number, text: string): ChatMessage {
+function textMessage(id: string, seq: number, text: string): ChatMessageData {
   return {
     id,
     sessionId: 's1',
@@ -109,11 +109,11 @@ function textMessage(id: string, seq: number, text: string): ChatMessage {
 
 /** C-02 口径：源 content JSON 的 UTF-8 真实字节（与被测实现同口径）。
  *  ASCII 正文下与旧的 `.length` 等值，中文正文下约为其 3 倍。 */
-function contentBytes(message: ChatMessage): number {
+function contentBytes(message: ChatMessageData): number {
   return new TextEncoder().encode(JSON.stringify(message.content)).byteLength;
 }
 
-function bigMessages(count: number): ChatMessage[] {
+function bigMessages(count: number): ChatMessageData[] {
   // 每条源 JSON ~10KB：256KB 预算下贪心每桶 ~25 条，40 条切 2 桶。
   const filler = 'x'.repeat(10 * 1024);
   return Array.from({length: count}, (_, i) =>
@@ -123,7 +123,7 @@ function bigMessages(count: number): ChatMessage[] {
 
 /** C-02 中文正文：每条 8 万汉字 → JSON 真字节 ≈ 240KB（`.length` 口径仅 ≈80KB）。
  *  单条已吃掉 256KB 预算的大半，故真字节口径下每桶恰 1 条。 */
-function chineseMessages(count: number): ChatMessage[] {
+function chineseMessages(count: number): ChatMessageData[] {
   const filler = '汉'.repeat(80_000);
   return Array.from({length: count}, (_, i) =>
     textMessage(`c${i}`, i + 1, `${i}：${filler}`),
@@ -272,7 +272,7 @@ describe('快照分片字节预算（T-R3 组件半）', () => {
     };
   }
 
-  function renderWithMessages(messages: ChatMessage[]) {
+  function renderWithMessages(messages: ChatMessageData[]) {
     return TestRenderer.create(
       <ChatConversationWebView
         {...baseProps({messages, defaultScrollToBottom: true})}

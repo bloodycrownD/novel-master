@@ -5,7 +5,7 @@
 import {describe, expect, it, jest, beforeEach} from '@jest/globals';
 import React from 'react';
 import TestRenderer, {act} from 'react-test-renderer';
-import {type ChatMessage} from '@novel-master/core/chat';
+import {type ChatMessageData} from '@novel-master/core/chat';
 
 import {useChatTabMessageActions} from '@/screens/tabs/chat-tab/useChatTabMessageActions';
 
@@ -78,7 +78,7 @@ function mountActions() {
   return api!;
 }
 
-const sampleMessage = (): ChatMessage => ({
+const sampleMessage = (): ChatMessageData => ({
   id: 'm1',
   sessionId: 's1',
   seq: 2,

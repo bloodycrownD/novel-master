@@ -306,12 +306,13 @@ export function SmartSortRuleEditorScreen() {
     try {
       // 保存前走同一校验（非法正则/flags/捕获组——smart 档才强制捕获组），
       // 提示语与测试一致。
-      validateSmartSortRuleDraft({
+      const draftCheck = validateSmartSortRuleDraft({
         name: fields.name,
         pattern: fields.pattern,
         flags: fields.flags,
         captureKind: fields.captureKind,
       });
+      if (!draftCheck.ok) throw draftCheck.error;
     } catch (error) {
       showToast(toastMessage('无法保存', error));
       return;

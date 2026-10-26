@@ -4,10 +4,7 @@
  * @module domain/session-run-state/repositories/session-run-state.port
  */
 
-import type {
-  SessionRunState,
-  SessionRunStatus,
-} from "../model/session-run-state.js";
+import type { SessionRunState, SessionRunStatus } from "../model/session-run-state.js";
 
 /**
  * `session_run_state` 持久化契约。
@@ -25,9 +22,7 @@ export interface SessionRunStateRepository {
   upsert(state: SessionRunState): Promise<void>;
 
   /** 按状态扫描（如水合时 `['starting','running']` 一批、`['settled']` 一批）。 */
-  listByStatuses(
-    statuses: readonly SessionRunStatus[]
-  ): Promise<SessionRunState[]>;
+  listByStatuses(statuses: readonly SessionRunStatus[]): Promise<SessionRunState[]>;
 
   /** 删除该会话的行，返回是否删到。 */
   deleteBySession(sessionId: string): Promise<boolean>;

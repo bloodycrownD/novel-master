@@ -5,7 +5,7 @@ import {
   chatMessagesToGeminiContents,
   geminiPartsToBlocks,
 } from "../../../src/infra/llm-protocol/logic/gemini-content-mapper.js";
-import type { ChatMessage } from "../../../src/domain/chat/model/message.js";
+import type { ChatMessageData } from "../../../src/domain/chat/model/message.js";
 
 describe("gemini thought_signature", () => {
   it("parses thought_signature on thinking parts", () => {
@@ -75,7 +75,7 @@ describe("gemini thought_signature", () => {
   });
 
   it("chatMessagesToGeminiContents preserves thought_signature on model turn", () => {
-    const messages: ChatMessage[] = [
+    const messages: ChatMessageData[] = [
       {
         role: "assistant",
         content: {

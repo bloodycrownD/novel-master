@@ -23,7 +23,7 @@ import {
 } from "@/domain/session-kkv/model/session-kkv-domains.js";
 import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
 import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
-import type { ChatMessage } from "@/domain/chat/model/message.js";
+import type { ChatMessageData } from "@/domain/chat/model/message.js";
 import {
   getNovelMasterTestContext,
   novelMasterTestFixture,
@@ -70,13 +70,13 @@ function makeDecideHarness(options: {
   } as unknown as SessionKkvRepository;
 
   const listBySession = mock.fn(
-    async (): Promise<ChatMessage[]> => [] as ChatMessage[]
+    async (): Promise<ChatMessageData[]> => [] as ChatMessageData[]
   );
   const countBySession = mock.fn(async () => options.count);
   const listBySessionOffset = mock.fn(
-    async (): Promise<ChatMessage[]> =>
+    async (): Promise<ChatMessageData[]> =>
       (options.segment ?? []).map(
-        (m) => ({ ...m, role: "user" }) as ChatMessage
+        (m) => ({ ...m, role: "user" }) as ChatMessageData
       )
   );
   const messageRepo = {
@@ -269,7 +269,7 @@ function spyFullSessionReads(): {
       this: unknown,
       sessionId: string,
       options?: { includeHidden?: boolean }
-    ) => Promise<ChatMessage[]>;
+    ) => Promise<ChatMessageData[]>;
     listMessageHeadersBySession: (
       this: unknown,
       sessionId: string

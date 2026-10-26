@@ -6,7 +6,7 @@
  * 两条锁的观测面：
  * - S-D-04：`nav.dirtyViews` 这个**注入 Set**（与生产同源、可注入）
  *   + 改字段前后的 has() 读数；
- * - E：`ipcAgentRegistryUpsert` 录下来的载荷的 `definition.model` 字段
+ * - E：`ipcAgentRegistryUpdate` 录下来的载荷的 `patch.model` 字段
  *   （不是「下拉显示成什么」这种可被形态绕开的弱观测）。
  *
  * 不用源码正则做主验收：把 effect 删掉、或把「找不到就传 null」改回去，
@@ -28,7 +28,7 @@ const { AgentEditorView } = await import(
 type SettingsNavHandle = import("@/features/settings/settings-nav").SettingsNavHandle;
 
 const CH_GET = "nm:agentRegistry/get";
-const CH_UPSERT = "nm:agentRegistry/upsert";
+const CH_UPDATE = "nm:agentRegistry/update";
 const CH_PROVIDERS = "nm:providers/list";
 const CH_SAVED_MODELS = "nm:providerModels/savedList";
 
@@ -43,7 +43,7 @@ function makeNav(agentId: string): SettingsNavHandle {
   } as unknown as SettingsNavHandle;
 }
 
-type UpsertCall = {definition: {model?: string}};
+type PatchCall = {patch: {model?: string | null}};
 
 type Scenario = {
   readonly agentModel?: string;
@@ -97,10 +97,10 @@ async function mountEditor(
 ): Promise<{
   renderer: ReactTestRenderer;
   nav: SettingsNavHandle;
-  upserts: UpsertCall[];
+  updates: PatchCall[];
   restore: () => void;
 }> {
-  const upserts: UpsertCall[] = [];
+  const updates: PatchCall[] = [];
   const g = globalThis as unknown as {
     window?: unknown;
     IS_REACT_ACT_ENVIRONMENT?: boolean;
@@ -111,8 +111,8 @@ async function mountEditor(
   g.window = {
     novelMasterDesktop: {
       invoke: async (channel: string, arg?: unknown) => {
-        if (channel === CH_UPSERT) {
-          upserts.push(arg as UpsertCall);
+        if (channel === CH_UPDATE) {
+          updates.push(arg as PatchCall);
           return {ok: true};
         }
         return channelReply(channel);
@@ -134,7 +134,7 @@ async function mountEditor(
   return {
     renderer: renderer!,
     nav,
-    upserts,
+    updates,
     restore: () => {
       g.window = prevWindow;
       g.IS_REACT_ACT_ENVIRONMENT = prevActEnv;
@@ -229,7 +229,7 @@ describe("AgentEditorView dirty 上报 (S-D-04)", () => {
   });
 
   it("T-SD04-2 加载失败态不上报 dirty（那时页面上没有可编辑表单）", async () => {
-    const upserts: UpsertCall[] = [];
+    const upserts: PatchCall[] = [];
     const g = globalThis as unknown as {window?: unknown; IS_REACT_ACT_ENVIRONMENT?: boolean};
     const prevWindow = g.window;
     const prevActEnv = g.IS_REACT_ACT_ENVIRONMENT;
@@ -283,9 +283,9 @@ describe("AgentEditorView 模型绑定保留 (E)", () => {
       );
       await setMaxSteps(mounted.renderer.root, "25");
       await clickSave(mounted.renderer.root);
-      assert.equal(mounted.upserts.length, 1);
+      assert.equal(mounted.updates.length, 1);
       // 牙齿：改回「找不到就传 null」这里会变 undefined
-      assert.equal(mounted.upserts[0]!.definition.model, "m-pinned");
+      assert.equal(mounted.updates[0]!.patch.model, "m-pinned");
     } finally {
       mounted.restore();
     }
@@ -303,13 +303,13 @@ describe("AgentEditorView 模型绑定保留 (E)", () => {
       assert.ok(hint.includes("原绑定模型当前不可用"));
       await setMaxSteps(mounted.renderer.root, "30");
       await clickSave(mounted.renderer.root);
-      assert.equal(mounted.upserts[0]!.definition.model, "m-pinned");
+      assert.equal(mounted.updates[0]!.patch.model, "m-pinned");
     } finally {
       mounted.restore();
     }
   });
 
-  it("T-E-3 出厂无绑定不误报：保存后 definition.model 仍为 undefined", async () => {
+  it("T-E-3 出厂无绑定不误报：保存载荷显式 null 清除绑定", async () => {
     const mounted = await mountEditor({
       providersOk: true,
       savedModelsOk: false,
@@ -323,8 +323,8 @@ describe("AgentEditorView 模型绑定保留 (E)", () => {
       );
       await setMaxSteps(mounted.renderer.root, "31");
       await clickSave(mounted.renderer.root);
-      assert.equal(mounted.upserts.length, 1);
-      assert.equal(mounted.upserts[0]!.definition.model, undefined);
+      assert.equal(mounted.updates.length, 1);
+      assert.equal(mounted.updates[0]!.patch.model, null);
     } finally {
       mounted.restore();
     }
@@ -346,7 +346,7 @@ describe("AgentEditorView 模型绑定保留 (E)", () => {
       });
       await act(async () => {});
       await clickSave(mounted.renderer.root);
-      assert.equal(mounted.upserts[0]!.definition.model, undefined);
+      assert.equal(mounted.updates[0]!.patch.model, null);
     } finally {
       mounted.restore();
     }
@@ -393,9 +393,9 @@ describe("AgentEditorView 模型绑定保留 (E)", () => {
       );
 
       await clickSave(mounted.renderer.root);
-      assert.equal(mounted.upserts.length, 1);
+      assert.equal(mounted.updates.length, 1);
       assert.equal(
-        mounted.upserts[0]!.definition.model,
+        mounted.updates[0]!.patch.model,
         "m-pinned",
         "保存载荷必须是用户主动选的新模型",
       );
@@ -418,7 +418,7 @@ describe("AgentEditorView 模型绑定保留 (E)", () => {
       assert.equal(mounted.nav.dirtyViews.has("agentEditor"), false);
       await setMaxSteps(mounted.renderer.root, "22");
       await clickSave(mounted.renderer.root);
-      assert.equal(mounted.upserts[0]!.definition.model, "m-pinned");
+      assert.equal(mounted.updates[0]!.patch.model, "m-pinned");
     } finally {
       mounted.restore();
     }

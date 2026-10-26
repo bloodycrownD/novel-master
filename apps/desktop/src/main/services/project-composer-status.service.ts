@@ -4,7 +4,7 @@
  * annotate store 各自独立，renderer 收到推送后再 ∪ 自己进程的 annotate chips。
  */
 import {
-  chipsFromAnnotateStore,
+  chatAnnotateDraftStore,
   type MessageAttachment,
 } from "@novel-master/core/chat";
 import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
@@ -17,5 +17,5 @@ export async function projectComposerStatusForSession(
   _rt: DesktopNovelMasterRuntime,
   sessionId: string,
 ): Promise<MessageAttachment[]> {
-  return chipsFromAnnotateStore(sessionId);
+  return chatAnnotateDraftStore.chips(sessionId);
 }

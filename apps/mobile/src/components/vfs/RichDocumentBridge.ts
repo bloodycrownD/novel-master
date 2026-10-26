@@ -2,6 +2,8 @@
  * RN ↔ Web document preview bridge: typed JSON envelopes ({ v, type, payload }).
  * MD 批注：Recogito createAnnotation → recogitoCreate；草稿投影 → setAnnotations。
  */
+import { isRecord } from '@novel-master/core/common';
+
 export const RICH_DOCUMENT_BRIDGE_VERSION = 1 as const;
 
 export type BridgeEnvelope<T extends string, P> = {
@@ -138,6 +140,3 @@ export function decodeHostToRichDocument(
   return parsed as HostToRichDocumentMessage;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value != null && !Array.isArray(value);
-}

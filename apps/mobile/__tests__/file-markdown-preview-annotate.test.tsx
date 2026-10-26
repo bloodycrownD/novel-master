@@ -4,11 +4,7 @@
 import React from 'react';
 import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
-import {
-  addChatAnnotateDraft,
-  chipsFromAnnotateStore,
-  resetChatAnnotateDraftStoreForTests,
-} from '@novel-master/core/chat';
+import { chatAnnotateDraftStore } from '@novel-master/core/chat';
 import {
   readChatComposerDraftState,
   refreshComposerAnnotateChips,
@@ -83,11 +79,11 @@ describe('FileMarkdownPreview annotate wiring (Recogito MD-only)', () => {
     mockReadEngine.mockReset();
     mockReadEngine.mockResolvedValue('webview');
     mockRichDocumentWebView.mockClear();
-    resetChatAnnotateDraftStoreForTests();
+    chatAnnotateDraftStore.resetForTests();
   });
 
   afterEach(() => {
-    resetChatAnnotateDraftStoreForTests();
+    chatAnnotateDraftStore.resetForTests();
   });
 
   it('annotateEnabled=false 不传批注 props', async () => {
@@ -121,7 +117,7 @@ title: T
 ---
 hello world
 `;
-    addChatAnnotateDraft(sessionId, {
+    chatAnnotateDraftStore.add(sessionId, {
       id: 'a1',
       path,
       originalText: 'hello',
@@ -164,8 +160,8 @@ hello world
     expect(String(last?.html ?? '')).not.toContain('data-annotate-id');
     expect(String(last?.html ?? '')).not.toContain('nm-annotate-anchor');
 
-    expect(chipsFromAnnotateStore(sessionId)).toHaveLength(1);
-    expect(chipsFromAnnotateStore(sessionId)[0]?.action).toBe('annotate');
+    expect(chatAnnotateDraftStore.chips(sessionId)).toHaveLength(1);
+    expect(chatAnnotateDraftStore.chips(sessionId)[0]?.action).toBe('annotate');
   });
 
   it('缺 render 坐标的草稿不投影到 annotations', async () => {
@@ -176,7 +172,7 @@ title: T
 ---
 hello world
 `;
-    addChatAnnotateDraft(sessionId, {
+    chatAnnotateDraftStore.add(sessionId, {
       id: 'legacy',
       path,
       originalText: 'hello',
@@ -218,7 +214,7 @@ title: T
 ---
 hello world hello
 `;
-    addChatAnnotateDraft(sessionId, {
+    chatAnnotateDraftStore.add(sessionId, {
       id: 'a1',
       path,
       originalText: 'hello',
@@ -226,7 +222,7 @@ hello world hello
       renderStart: 0,
       renderEnd: 5,
     });
-    addChatAnnotateDraft(sessionId, {
+    chatAnnotateDraftStore.add(sessionId, {
       id: 'a2',
       path,
       originalText: 'hello',
@@ -281,7 +277,7 @@ hello world hello
   it('写入 annotate store 后 refreshComposerAnnotateChips 合并进状态条', () => {
     const sessionId = 's-sel-chip';
     const path = '/c.md';
-    addChatAnnotateDraft(sessionId, {
+    chatAnnotateDraftStore.add(sessionId, {
       id: 'from-sel',
       path,
       originalText: 'alpha',
@@ -289,7 +285,7 @@ hello world hello
     });
     refreshComposerAnnotateChips(sessionId);
 
-    expect(chipsFromAnnotateStore(sessionId)).toHaveLength(1);
+    expect(chatAnnotateDraftStore.chips(sessionId)).toHaveLength(1);
     expect(
       readChatComposerDraftState(sessionId).attachments.some(
         a => a.action === 'annotate' && a.path === path,
@@ -311,7 +307,7 @@ title: B
 ---
 beta text
 `;
-    addChatAnnotateDraft(sessionId, {
+    chatAnnotateDraftStore.add(sessionId, {
       id: 'da',
       path: pathA,
       originalText: 'alpha',
@@ -319,7 +315,7 @@ beta text
       renderStart: 0,
       renderEnd: 5,
     });
-    addChatAnnotateDraft(sessionId, {
+    chatAnnotateDraftStore.add(sessionId, {
       id: 'db',
       path: pathB,
       originalText: 'beta',

@@ -1,108 +1,52 @@
-export { ChatError } from "../errors/chat-errors.js";
-export type { ChatErrorCode } from "../errors/chat-errors.js";
 export type { ChatProject } from "../domain/chat/model/project.js";
 export type {
   ProjectAgentConfig,
   ProjectAgentConfigPatch,
   ProjectAgentMode,
 } from "../domain/chat/model/project-agent-config.js";
-export { DEFAULT_PROJECT_AGENT_CONFIG } from "../domain/chat/model/project-agent-config.js";
-export {
-  projectAgentConfigSchema,
-  projectAgentModeSchema,
-} from "../domain/chat/model/project-agent-config.schema.js";
 export type { ChatSession } from "../domain/chat/model/session.js";
 export type {
   SessionAgentConfig,
   SessionAgentConfigPatch,
 } from "../domain/chat/model/session-agent-config.js";
+/** package-exports-t0 明确断言的公共契约，不随 fake-public 清理删除。 */
 export { sessionAgentConfigSchema } from "../domain/chat/model/session-agent-config.schema.js";
 export type {
-  ChatMessage,
+  ChatMessageData,
   MessageAttachment,
   MessageContent,
 } from "../domain/chat/model/message.js";
 export {
-  NO_PATH_ATTACHMENT_NAME,
   attachmentStorageName,
-  messageAttachmentActionSchema,
   messageAttachmentSchema,
   messageAttachmentsSchema,
   parseAttachmentsJson,
-  serializeAttachmentsJson,
 } from "../domain/chat/model/message-attachment.schema.js";
 export type { MessageAttachmentAction } from "../domain/chat/model/message-attachment.schema.js";
-export {
-  annotateDraftSchema,
-  annotateDraftsSchema,
-  isMessageAnnotatePath,
-  MESSAGE_ANNOTATE_PATH_MARKER,
-} from "../domain/chat/model/annotate-draft.schema.js";
+export { isMessageAnnotatePath } from "../domain/chat/model/annotate-draft.schema.js";
 export type {
   AnnotateDraft,
-  AnnotateDrafts,
   SendAnnotateDraft,
 } from "../domain/chat/model/annotate-draft.schema.js";
 export {
-  EMPTY_COMPOSER_DRAFT,
-  composerDraftAttachmentSchema,
-  composerDraftSchema,
-  isComposerDraftAttachment,
   parseComposerDraftJson,
   serializeComposerDraftJson,
 } from "../domain/chat/model/composer-draft.schema.js";
 export type {
   ComposerDraft,
-  ComposerDraftAttachment,
   /** Composer 草稿中的确认胶囊区间（`[start, end)`，UTF-16 码元偏移）。 */
   ComposerDraftTokenRange,
 } from "../domain/chat/model/composer-draft.schema.js";
 export {
   ATTACH_PROMPT_CHAR_BUDGET,
-} from "../domain/chat/logic/attach-budget.js";
-export { wrapUserMessageForLlm } from "../domain/chat/logic/wrap-user-message-for-llm.js";
-export { prepareUserMessagesForPrompt } from "../domain/chat/logic/prepare-user-messages-for-prompt.js";
-export type { PrepareUserMessagesForPromptRuntime } from "../domain/chat/logic/prepare-user-messages-for-prompt.js";
-export {
-  STATUS_CHIP_ZH,
-  formatStatusChipLabel,
-  formatStatusChipLabelFromAttachment,
-  logicalParentDir,
-  renameChipZh,
-  resolveRenameOrMoveAction,
-} from "../domain/chat/logic/status-chip-label.js";
-export {
-  buildAlreadyReferencedActionXml,
-  buildAnnotateAttachmentFromDraft,
-  buildAttachmentActionXml,
-  buildDirTreeActionXml,
-  buildFileAnnotateAttachmentFromDraft,
-  buildFileRefActionXml,
-  parseAnnotateDraftsFromAttachments,
-} from "../domain/chat/logic/build-attachment-action-xml.js";
-export {
-  PROMPT_FILE_SEEN_SHORT_TIP,
-  createPromptPathSeenSet,
-  isPromptDirTokenPath,
-  normalizePromptSeenPath,
-  normalizePromptStorePath,
-  tryNormalizePromptSeenPath,
-} from "../domain/chat/logic/prompt-path-seen.js";
-export {
-  ATTACH_DIR_TREE_MAX_UTF8_BYTES,
-  renderDirAttachTree,
-} from "../domain/chat/logic/render-dir-attach-tree.js";
-export type { RenderDirAttachTreeDeps } from "../domain/chat/logic/render-dir-attach-tree.js";
-export {
-  mergeAttachmentsByPath,
-  mergeAttachmentsWithScannedAtPaths,
-  scanAtPathAttachments,
-} from "../domain/chat/logic/scan-at-path-attachments.js";
-export {
-  mergeAttachmentsWithScannedSkills,
-  scanSkillAttachments,
-  skillSeenKey,
-} from "../domain/chat/logic/scan-skill-attachments.js";
+} from "../domain/chat/logic/attachment/attach-budget.js";
+export { userMessageFormatter } from "../domain/chat/logic/prompt/user-message-formatter.js";
+export { promptAssembler } from "../domain/chat/logic/prompt/prompt-assembler.js";
+export { attachmentPath } from "../domain/chat/logic/message/attachment-path.js";
+export { formatStatusChipLabel, formatStatusChipLabelFromAttachment } from "../presentation/chat/attachment-chip.js";
+export { attachmentXmlCodec } from "../domain/chat/logic/attachment/attachment-xml-codec.js";
+export { promptPathSeen } from "../domain/chat/logic/attachment/prompt-path-seen.js";
+export { attachmentScanner, AttachmentPathArgumentError } from "../domain/chat/logic/attachment/attachment-scanner.js";
 export type {
   ContentBlock,
   TextBlock,
@@ -116,199 +60,24 @@ export type {
 export { textBlocks } from "../domain/chat/content/text-blocks.js";
 export {
   parseMessageContent,
-  assertMessageContent,
+  parseMessageContentValue,
 } from "../domain/chat/content/parse-message-content.js";
 export { formatMessageForCli } from "../domain/chat/content/format-message-cli.js";
-export type {
-  MessageMetadata,
-  MessageMetadataKind,
-} from "../domain/chat/model/message-metadata.js";
 export { readMessageMetadata } from "../domain/chat/model/message-metadata.js";
-export {
-  userVfsPendingEntrySchema,
-  userVfsPendingQueueSchema,
-  userVfsPendingToolSchema,
-} from "../domain/chat/model/user-vfs-pending.schema.js";
-export type {
-  UserVfsPendingEntry,
-  UserVfsPendingQueue,
-  UserVfsPendingTool,
-} from "../domain/chat/model/user-vfs-pending.schema.js";
-export {
-  computeStreamTailGenerating,
-  DEFAULT_STREAM_TAIL_IDLE_MS,
-} from "../domain/chat/logic/compute-stream-tail-generating.js";
-export { resolveChatLinkTarget, isHttpUrl, elideChatLinkPath, chatLinkNotFoundMessage } from "../domain/chat/logic/resolve-chat-link-target.js";
-export { mergePendingVfsTurns } from "../domain/chat/logic/merge-pending-vfs-turns.js";
-export type { MergedPendingVfsTurn } from "../domain/chat/logic/merge-pending-vfs-turns.js";
-export type { WorkspaceFlushSnapshot } from "../domain/chat/logic/workspace-flush-snapshot.js";
-export {
-  deriveDirPathsFromFileTree,
-  emptyWorkspaceFlushSnapshot,
-} from "../domain/chat/logic/workspace-flush-snapshot.js";
-export { hasComposerSendableInput } from "../domain/chat/logic/composer-sendable-input.js";
-export { resolveComposerSendIntent } from "../domain/chat/logic/composer-send-intent.js";
-export type {
-  ComposerSendIntent,
-  ComposerSendIntentAttachment,
-  ComposerSendIntentInput,
-} from "../domain/chat/logic/composer-send-intent.js";
-export {
-  isComposerStatusAttachment,
-  partitionComposerChipAttachments,
-} from "../domain/chat/logic/composer-chip-attachment.js";
-export type { ComposerChipAttachment } from "../domain/chat/logic/composer-chip-attachment.js";
-export {
-  atPathTokensFromPickerSelection,
-  countScannedAtPathAttachments,
-  filterAtPathTypeaheadCandidates,
-  findActiveAtQuery,
-  formatComposerAtPathToken,
-  replaceActiveAtWithToken,
-} from "../domain/chat/logic/composer-at-path.js";
-export type {
-  AtPathRef,
-  ComposerTrigger,
-} from "../domain/chat/logic/composer-at-path.js";
-export {
-  addChatAnnotateDraft,
-  chipsFromAnnotateStore,
-  clearChatAnnotateDrafts,
-  hasChatAnnotateDrafts,
-  listChatAnnotateDrafts,
-  removeChatAnnotateDraft,
-  removeChatAnnotateDraftsByPath,
-  resetChatAnnotateDraftStoreForTests,
-  subscribeChatAnnotateDraft,
-  unionComposerStatusWithAnnotate,
-  updateChatAnnotateDraft,
-} from "../domain/chat/logic/chat-annotate-draft-store.js";
-export {
-  buildFlatTextIndex,
-  findAllOccurrences,
-  findAnnotateOccurrenceInSource,
-  groupAnnotateIdsByOriginalText,
-  mapFlatRangeToSegments,
-  normalizeAnnotateNeedle,
-  normalizeAnnotateNeedleStripNewlines,
-  normalizeAnnotateSegmentText,
-  parseAnnotateIdsAttr,
-  annotateOccurrenceOrdinal,
-  countAnnotateOccurrencesInSource,
-  selectAnnotateOccurrenceStarts,
-  sortAnnotateTextsLongestFirst,
-} from "../domain/chat/logic/annotate-highlight.js";
-export type {
-  AnnotateSourceMatch,
-  AnnotateSourceMatchStrategy,
-  FlatSegmentLocalRange,
-  FlatTextIndex,
-  FlatTextSegmentSpan,
-} from "../domain/chat/logic/annotate-highlight.js";
-export {
-  ANNOTATE_SOFT_RANGE_CHAR_PADDING,
-  ANNOTATE_SOFT_RANGE_LINE_PADDING,
-  applySoftRangeLinePadding,
-  deriveSoftRangeFieldsFromOffsets,
-  estimateSoftOffsetRangeFromPlainOffsets,
-  estimateSoftOffsetRangeFromQuoteContext,
-  estimateSoftRangeFromOriginalText,
-  estimateSoftRangeFromPlainOffsets,
-  expandSoftRangeOnce,
-  hasValidAnnotateSoftRange,
-  locateAnnotateOffsetRangeByQuoteContext,
-  offsetToSourceLineCol,
-  sliceSourceBySoftRange,
-  splitSourceLines,
-} from "../domain/chat/logic/annotate-source-range.js";
-export type {
-  AnnotateQuoteContext,
-  AnnotateSoftOffsetRange,
-  AnnotateSoftRangeFields,
-  AnnotateSoftSourceRange,
-} from "../domain/chat/logic/annotate-source-range.js";
-/**
- * 注锚派生导出（非预览投影合同，SPEC R5）：
- * 可暂留 `buildAnnotatedSource` 等符号；宿主 MD/plain 预览主路径禁止调用。
- * 预览高亮唯一走 Recogito + 草稿 `renderStart`/`renderEnd`。
- */
-export {
-  ANNOTATE_ANCHOR_CLASS,
-  annotateRangeMatchesOriginalText,
-  buildAnnotatedSource,
-  escapeAnnotateSourceText,
-  findMarkdownCodeRanges,
-  hasValidAnnotateOffsetRange,
-  splitMarkdownUnderlineRuns,
-} from "../domain/chat/logic/annotate-source-anchor.js";
-export type {
-  BuildAnnotatedSourceInput,
-  BuildAnnotatedSourceMode,
-  BuildAnnotatedSourceResult,
-} from "../domain/chat/logic/annotate-source-anchor.js";
+export { chatLinkResolver } from "../domain/chat/logic/resolve-chat-link-target.js";
+export { composerSendPolicy } from "../domain/chat/logic/composer/composer-send-policy.js";
+export { composerChips } from "../domain/chat/logic/composer/composer-chips.js";
+export { composerAtPath } from "../domain/chat/logic/composer/composer-at-path.js";
+export type { AtPathRef } from "../domain/chat/logic/composer/composer-at-path.js";
+export { chatAnnotateDraftStore } from "../domain/chat/logic/chat-annotate-draft-store.js";
 export {
   USER_VFS_TURN_ACK_TEXT,
-  wrapUserVfsActionsForStorage,
-} from "../domain/chat/logic/user-vfs-turn-constants.js";
-export {
-  buildUserVfsTurnView,
-  deriveToolUsesFromVfsActions,
-  formatUserVfsTurnPreviewBody,
-  matchUserVfsTurnAt,
-  parseAllUserVfsActionsFromText,
-  USER_VFS_TURN_SPAN,
-} from "../domain/chat/logic/user-vfs-turn-view.js";
-export type {
-  ParsedUserVfsAction,
-  ParsedUserVfsEditHunk,
-  UserVfsTurnView,
-} from "../domain/chat/logic/user-vfs-turn-view.js";
-export {
-  hasAnnotateAttachment,
-  hasToolResult,
-  isPlainUserText,
-} from "../domain/chat/logic/message-content-helpers.js";
-export {
-  extractEditableTextFromMessage,
-  isPlainUserUndoSendEligible,
-} from "../domain/chat/logic/editable-text-from-message.js";
-export { resolveRollbackConfirmMessage } from "../domain/chat/logic/rollback-confirm-copy.js";
-export type {
-  RollbackConfirmKind,
-  RollbackMode,
-} from "../domain/chat/logic/rollback-confirm-copy.js";
-export type {
-  MessageVisibilityBatchMode,
-  TranscriptSelectableRole,
-  VisibilityBatchMessage,
-} from "../domain/chat/logic/visibility-batch-range.js";
-export {
-  transcriptSelectableRole,
-  isTranscriptRowSelectable,
-  computeHideRangeFromSelection,
-  computeShowRangeFromSelection,
-  computeVisibilityBatchAffectedIds,
-  selectVisibilityBatchEligibleIdsFromAnchor,
-} from "../domain/chat/logic/visibility-batch-range.js";
-export {
-  computeSetFloorRanges,
-  isSetFloorAnchorRole,
-} from "../domain/chat/logic/message-set-floor-range.js";
-export type {
-  TailBatchMode,
-  TailBatchRow,
-} from "../domain/chat/logic/tail-batch-range.js";
-export {
-  isTailBatchRowSelectable,
-  selectTailBatchEligibleIdsFromAnchor,
-  computeTailBatchAffectedIds,
-  computeTailBatchRangeFromSelection,
-  tailBatchDeleteAfterSeq,
-} from "../domain/chat/logic/tail-batch-range.js";
-export {
-  listVisibleSorted,
-  visibleFloorByMessageId,
-} from "../domain/chat/logic/message-visible-floor.js";
+  userVfsTurnStorage,
+} from "../domain/chat/logic/vfs-turn/user-vfs-turn-constants.js";
+export { ChatMessage } from "../domain/chat/logic/message/chat-message.js";
+export { rollbackConfirm } from "../presentation/chat/rollback-confirm.js";
+export type { RollbackConfirmDescriptor, RollbackConfirmKind, RollbackMode } from "../presentation/chat/rollback-confirm.js";
+export type { ChatMessageDescriptor, ChatMessageKey, ChatMessageLike } from "../domain/chat/i18n/keys.js";
 export {
   createChatServices,
   createProjectService,
@@ -326,7 +95,7 @@ export {
 } from "../service/chat/create-user-vfs-turn-service.js";
 export type { UserVfsTurnServiceBundle } from "../service/chat/create-user-vfs-turn-service.js";
 export { resolveVfsToolFilePath } from "../domain/tool/logic/vfs-tool-file-path.js";
-export { resolveSkillToolRefFromInput } from "../domain/chat/logic/skill-tool-ref.js";
+export { skillToolRefResolver } from "../domain/chat/logic/skill-tool-ref.js";
 export type { SkillToolRef } from "../domain/chat/model/content-block.js";
 export type {
   UserVfsTurnService,
@@ -355,4 +124,4 @@ export type {
   SetMessageFloorResult,
 } from "../service/chat/message-transcript-effects.port.js";
 export { createMessageTranscriptEffectsService } from "../service/chat/create-message-transcript-effects.js";
-export { summarizeToolInput } from "../domain/chat/logic/tool-summary.js";
+export { summarizeToolInput } from "../presentation/chat/tool-summary.js";

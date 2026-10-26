@@ -14,7 +14,7 @@ import React from 'react';
 import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
 import {Platform} from 'react-native';
-import {type ChatMessage} from '@novel-master/core/chat';
+import {type ChatMessageData} from '@novel-master/core/chat';
 import {decodeConversationUpstream} from '@/components/chat/ChatConversationBridge';
 import {CONVERSATION_BRIDGE_V} from '@/components/chat/ChatConversationBridge';
 import {
@@ -81,7 +81,7 @@ Object.defineProperty(Platform, 'OS', {
   get: () => 'android',
 });
 
-function sampleMessage(id: string, seq: number): ChatMessage {
+function sampleMessage(id: string, seq: number): ChatMessageData {
   return {
     id,
     sessionId: 's1',

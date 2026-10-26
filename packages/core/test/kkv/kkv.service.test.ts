@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { KkvError } from "../../src/errors/kkv-errors.js";
+import { isAppError } from "../../src/errors/app-error.js";
 import { createKkvService } from "../../src/service/kkv/create-kkv-service.js";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 
@@ -24,8 +24,7 @@ describe("KkvService", () => {
     await assert.rejects(
       () => kkv.delete("mod", "missing"),
       (e: unknown) => {
-        assert.ok(e instanceof KkvError);
-        assert.equal(e.code, "NOT_FOUND");
+        assert.ok(isAppError(e, "KKV_NOT_FOUND"));
         return true;
       },
     );

@@ -1,46 +1,40 @@
 /**
- * 将 {@link VfsError} 格式化为 LLM 可读的分类文案（逻辑路径 + 诊断）。
+ * 将 VfsError / AppError 格式化为 LLM 可读的分类文案（逻辑路径 + 诊断）。
  *
  * @module domain/vfs/logic/format-vfs-error-for-llm
  */
 
-import {
-  VfsError,
-  type VfsErrorCode,
-  type VfsReplaceNotFoundDetails,
-} from "@/errors/vfs-errors.js";
-import {
-  MIN_LCS_LENGTH,
-  truncateLcsSnippet,
-} from "./longest-common-substring.js";
+import { isAppError, type AppError } from "@/errors/app-error.js";
+import type { ErrorKey } from "@/errors/error-codes.js";
+import type { VfsError, VfsErrorCode, VfsReplaceNotFoundDetails } from "@/errors/vfs-errors.js";
+import { MIN_LCS_LENGTH, truncateLcsSnippet } from "./longest-common-substring.js";
 import type { VfsScope } from "./vfs-path-mapper.js";
 import { stripKnownPhysicalPrefixes } from "./strip-known-physical-prefixes.js";
 
-/**
- * entry_id 化后 vfsError.path 就是逻辑路径，直接用它就好。
- * scope 参数保留兼容签名，不再用于转换。
- */
-function resolveLogicalPathForError(
-  vfsError: VfsError,
-  _scope?: VfsScope
-): string | undefined {
-  if (vfsError.path == null) {
-    return undefined;
-  }
-  return vfsError.path;
-}
+type VfsErrorLike = {
+  readonly code: VfsErrorCode;
+  readonly message: string;
+  readonly path?: string;
+  readonly details?: unknown;
+};
 
-function extractInvalidPathReason(message: string): string {
-  const match = message.match(/^Invalid path [^:]+: (.+)$/);
-  return match?.[1] ?? stripKnownPhysicalPrefixes(message);
-}
+const APP_ERROR_TO_VFS_CODE: Partial<Record<ErrorKey, VfsErrorCode>> = {
+  VFS_NOT_FOUND: "NOT_FOUND",
+  VFS_REPLACE_NOT_FOUND: "REPLACE_NOT_FOUND",
+  VFS_DIRECTORY_NOT_EMPTY: "DIRECTORY_NOT_EMPTY",
+  VFS_INVALID_PATH: "INVALID_PATH",
+  VFS_INVALID_NAME: "INVALID_NAME",
+  VFS_IS_DIRECTORY: "IS_DIRECTORY",
+  VFS_ALREADY_EXISTS: "ALREADY_EXISTS",
+  VFS_NOT_A_DIRECTORY: "NOT_A_DIRECTORY",
+  VFS_PARENT_NOT_FOUND: "PARENT_NOT_FOUND",
+};
 
-function formatReplaceNotFound(
-  vfsError: VfsError,
-  logicalPath: string
-): string {
-  const details = vfsError.details as VfsReplaceNotFoundDetails | undefined;
-  const pathLabel = logicalPath || vfsError.path || "unknown path";
+// nm-style: keep-local — REPLACE_NOT_FOUND 分支独占 LCS 诊断与预览渲染；
+// 内联会让主 switch 混入 30 行诊断组装，且两处提前返回都依赖 details 收窄。
+function formatReplaceNotFound(error: VfsErrorLike, logicalPath: string): string {
+  const details = error.details as VfsReplaceNotFoundDetails | undefined;
+  const pathLabel = logicalPath || error.path || "unknown path";
 
   if (details == null) {
     return `[REPLACE_NOT_FOUND] Replace string not found in ${pathLabel}`;
@@ -53,10 +47,7 @@ function formatReplaceNotFound(
   const snippet = truncateLcsSnippet(details.longestCommonSubstring);
   let out = `[REPLACE_NOT_FOUND] Replace string not found in ${pathLabel}.\nLongest matching substring in file (length=${details.lcsLength}, occurrences=${details.lcsOccurrences}): "${snippet}"\nUse this substring to locate the edit region and adjust oldString (e.g. whitespace/newlines).`;
   if (details.lcsOccurrences > 1) {
-    out +=
-      "\nSubstring appears " +
-      String(details.lcsOccurrences) +
-      " times; ensure oldString is unique or include more context.";
+    out += "\nSubstring appears " + String(details.lcsOccurrences) + " times; ensure oldString is unique or include more context.";
   }
   // 补上预览对照：肉眼看起来一样的中文引号 / HTML entity、看不见的换行制表，
   // JSON 转义一摆出来就露馅（“ vs " vs &ldquo;、\n/\t 显形）——且 LLM 能直接
@@ -69,29 +60,36 @@ function formatReplaceNotFound(
     if (details.fileHintPreview != null) {
       out += `\n  fileHint:  ${JSON.stringify(details.fileHintPreview)}`;
     }
-    out +=
-      '\nCompare the two previews: sequences like &ldquo; are unescaped HTML entities (the file likely has “, U+201C, instead); “ and " are different quote characters; hidden whitespace shows up as \\n / \\t.';
+    out += '\nCompare the two previews: sequences like &ldquo; are unescaped HTML entities (the file likely has “, U+201C, instead); “ and " are different quote characters; hidden whitespace shows up as \\n / \\t.';
   }
   return out;
 }
 
-function formatByCode(
-  code: VfsErrorCode,
-  vfsError: VfsError,
-  logicalPath: string
-): string {
-  switch (code) {
+/** 将 VfsError / AppError 格式化为 LLM tool_result 正文（不含 `Error:` 前缀）。 */
+export function formatVfsErrorForLlm(error: VfsError | AppError, _scope?: VfsScope): string {
+  let normalized: VfsErrorLike | null;
+  if (isAppError(error)) {
+    const code = APP_ERROR_TO_VFS_CODE[error.key];
+    normalized = code == null ? null : { code, message: error.message, path: typeof error.details?.path === "string" ? error.details.path : undefined, details: error.details?.details ?? error.details };
+  } else {
+    normalized = error;
+  }
+  if (normalized == null) {
+    return stripKnownPhysicalPrefixes(error.message);
+  }
+  const logicalPath = normalized.path ?? stripKnownPhysicalPrefixes(normalized.message);
+  switch (normalized.code) {
     case "NOT_FOUND":
       return `[NOT_FOUND] Path not found: ${logicalPath}`;
     case "IS_DIRECTORY":
       return `[IS_DIRECTORY] Path is a directory: ${logicalPath}`;
-    case "INVALID_PATH":
-      return `[INVALID_PATH] Invalid path ${logicalPath}: ${extractInvalidPathReason(
-        vfsError.message
-      )}`;
+    case "INVALID_PATH": {
+      const match = normalized.message.match(/^Invalid path [^:]+: (.+)$/);
+      return `[INVALID_PATH] Invalid path ${logicalPath}: ${match?.[1] ?? stripKnownPhysicalPrefixes(normalized.message)}`;
+    }
     case "INVALID_NAME":
       // message 是中文 reason，LLM 面补上 code 前缀与名字定位
-      return `[INVALID_NAME] Invalid entry name ${vfsError.path ?? logicalPath}: ${vfsError.message}`;
+      return `[INVALID_NAME] Invalid entry name ${normalized.path ?? logicalPath}: ${normalized.message}`;
     case "NOT_A_DIRECTORY":
       return `[NOT_A_DIRECTORY] Not a directory: ${logicalPath}`;
     case "PARENT_NOT_FOUND":
@@ -101,19 +99,8 @@ function formatByCode(
     case "ALREADY_EXISTS":
       return `[ALREADY_EXISTS] Path already exists: ${logicalPath}`;
     case "REPLACE_NOT_FOUND":
-      return formatReplaceNotFound(vfsError, logicalPath);
+      return formatReplaceNotFound(normalized, logicalPath);
     default:
-      return `[${code}] ${stripKnownPhysicalPrefixes(vfsError.message)}`;
+      return `[${normalized.code}] ${stripKnownPhysicalPrefixes(normalized.message)}`;
   }
-}
-
-/** 将 VfsError 格式化为 LLM tool_result 正文（不含 `Error:` 前缀）。 */
-export function formatVfsErrorForLlm(
-  vfsError: VfsError,
-  scope?: VfsScope
-): string {
-  const logicalPath =
-    resolveLogicalPathForError(vfsError, scope) ??
-    stripKnownPhysicalPrefixes(vfsError.message);
-  return formatByCode(vfsError.code, vfsError, logicalPath);
 }

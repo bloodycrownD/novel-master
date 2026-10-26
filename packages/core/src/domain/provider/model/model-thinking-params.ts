@@ -38,8 +38,6 @@ export type ModelThinkingParams =
   | { readonly protocol: "gemini"; readonly gemini: GeminiThinkingParams };
 
 /** 返回思考参数的协议标签（若有）。 */
-export function thinkingProtocol(
-  params: ModelThinkingParams | undefined
-): LlmProtocolKind | undefined {
+export function thinkingProtocol(params: ModelThinkingParams | undefined): LlmProtocolKind | undefined {
   return params?.protocol;
 }

@@ -13,15 +13,19 @@
  * @module domain/vfs/logic/write-with-revision
  */
 
+import { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 import { ensureParentDirectories } from "./ensure-parent-dirs.js";
 import { assertValidVfsEntryName } from "./validate-entry-name.js";
 import { normalizePath } from "../repositories/impl/normalize-path.js";
 import { adjustRef, transferLiveRef } from "./revision-ref-count.js";
 import type { VfsEntryRepository } from "../repositories/vfs-entry.port.js";
 import type { VfsRevisionRepository } from "../repositories/vfs-revision.port.js";
-import { vfsIsDirectory } from "@/errors/vfs-errors.js";
 
-export interface WriteWithRevisionOptions {
+/** writeWithRevision 的失败载荷。 */
+type WriteWithRevisionError = AppError<"VFS_IS_DIRECTORY" | "VFS_INVALID_NAME" | "VFS_NOT_A_DIRECTORY">;
+
+interface WriteWithRevisionOptions {
   /**
    * 跳过「文件名合法性」校验（`assertValidVfsEntryName`）。
    *
@@ -42,18 +46,11 @@ export interface WriteWithRevisionOptions {
  *
  * 零 service 层依赖（只吃两个 repo），故下沉不违反分层。
  */
-export async function writeWithRevision(
-  entryRepo: VfsEntryRepository,
-  revisionRepo: VfsRevisionRepository,
-  scopeKey: string,
-  path: string,
-  content: string,
-  options: WriteWithRevisionOptions = {}
-): Promise<{ version: number }> {
+export async function writeWithRevision(entryRepo: VfsEntryRepository, revisionRepo: VfsRevisionRepository, scopeKey: string, path: string, content: string, options: WriteWithRevisionOptions = {}): Promise<Result<{ version: number }, WriteWithRevisionError>> {
   const normalized = normalizePath(path);
   const existing = await entryRepo.findByPath(scopeKey, normalized);
   if (existing?.entryKind === "directory") {
-    throw vfsIsDirectory(normalized);
+    return Result.err(new AppError("VFS_IS_DIRECTORY", `Path is a directory: ${normalized}`, { path: normalized }));
   }
 
   const mtimeMs = Date.now();
@@ -62,9 +59,11 @@ export async function writeWithRevision(
   if (existing == null) {
     // 只拦「创建」：存量条目（含 zip 导入的历史名）内容更新不重新审判名字
     if (options.skipNameValidation !== true) {
-      assertValidVfsEntryName(normalized);
+      const nameCheck = assertValidVfsEntryName(normalized);
+      if (!nameCheck.ok) return Result.err(nameCheck.error);
     }
-    await ensureParentDirectories(entryRepo, scopeKey, normalized);
+    const parentCheck = await ensureParentDirectories(entryRepo, scopeKey, normalized);
+    if (!parentCheck.ok) return Result.err(parentCheck.error);
     // ⚠️ 本分支只在 entry 尚不存在时进入 ⇒ 版本号只能是 1。
     // 曾经的「entry 已删但 revision 历史保留 ⇒ 接着历史最大号往下写」那条边界
     // 在本函数内**不可达**：它依赖的判据是同一个 `findByPath` 查询，而上面刚判过
@@ -85,26 +84,17 @@ export async function writeWithRevision(
       mtimeMs,
     });
     await adjustRef(revisionRepo, entryId, version, +1);
-    return { version };
+    return Result.ok({ version });
   }
 
   // 同文短路：相对 live 明文全等 → 不 bump、不 append
   if (existing.content === content) {
-    return { version: existing.version };
+    return Result.ok({ version: existing.version });
   }
 
   // 统一分配器：max(head, MAX(version)) + 1，避开 head 回拨后历史占号段
-  const nextVersion = await nextVersionFor(
-    revisionRepo,
-    existing.entryId,
-    existing.version
-  );
-  const updated = await entryRepo.update(
-    scopeKey,
-    normalized,
-    content,
-    nextVersion
-  );
+  const nextVersion = await nextVersionFor(revisionRepo, existing.entryId, existing.version);
+  const updated = await entryRepo.update(scopeKey, normalized, content, nextVersion);
   version = updated.version;
   await revisionRepo.append({
     entryId: existing.entryId,
@@ -113,13 +103,8 @@ export async function writeWithRevision(
     status: "active",
     mtimeMs,
   });
-  await transferLiveRef(
-    revisionRepo,
-    existing.entryId,
-    existing.version,
-    version
-  );
-  return { version };
+  await transferLiveRef(revisionRepo, existing.entryId, existing.version, version);
+  return Result.ok({ version });
 }
 
 /**
@@ -129,11 +114,7 @@ export async function writeWithRevision(
  * 是合法状态，新号必须越过 MAX 才能避开历史占号段；防御性的 `max(headVersion, …)`
  * 在健康库上与 head + 1 等价。
  */
-export async function nextVersionFor(
-  revisionRepo: VfsRevisionRepository,
-  entryId: number,
-  headVersion: number
-): Promise<number> {
+export async function nextVersionFor(revisionRepo: VfsRevisionRepository, entryId: number, headVersion: number): Promise<number> {
   const maxStored = await revisionRepo.findMaxVersionForEntry(entryId);
   return Math.max(headVersion, maxStored ?? 0) + 1;
 }

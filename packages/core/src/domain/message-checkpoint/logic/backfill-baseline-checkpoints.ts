@@ -14,10 +14,7 @@ import type { MessageRepository } from "@/domain/chat/repositories/message.port.
 import type { ChatMessageHeader } from "@/domain/chat/model/message.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import type { SessionKkvRepository } from "@/domain/session-kkv/repositories/session-kkv.port.js";
-import {
-  BACKFILL_CURSOR_LAST_SCANNED_COUNT_KEY,
-  SESSION_KKV_DOMAIN_BACKFILL_CURSOR,
-} from "@/domain/session-kkv/model/session-kkv-domains.js";
+import { BACKFILL_CURSOR_LAST_SCANNED_COUNT_KEY, SESSION_KKV_DOMAIN_BACKFILL_CURSOR } from "@/domain/session-kkv/model/session-kkv-domains.js";
 import type { IntegrityRepairOperation } from "@/service/integrity-repair.js";
 
 /**
@@ -84,19 +81,10 @@ export type BackfillShortCircuitDecision =
  *
  * 任何不确定都保守回退全量（宁误报勿漏报）。
  */
-export async function decideBackfillShortCircuit(args: {
-  readonly sessionKkv: SessionKkvRepository;
-  readonly messageRepo: MessageRepository;
-  readonly checkpointRepo: MessageCheckpointRepository;
-  readonly sessionId: string;
-}): Promise<BackfillShortCircuitDecision> {
+export async function decideBackfillShortCircuit(args: { readonly sessionKkv: SessionKkvRepository; readonly messageRepo: MessageRepository; readonly checkpointRepo: MessageCheckpointRepository; readonly sessionId: string }): Promise<BackfillShortCircuitDecision> {
   const { sessionKkv, messageRepo, checkpointRepo, sessionId } = args;
 
-  const cursorEntry = await sessionKkv.get(
-    sessionId,
-    SESSION_KKV_DOMAIN_BACKFILL_CURSOR,
-    BACKFILL_CURSOR_LAST_SCANNED_COUNT_KEY
-  );
+  const cursorEntry = await sessionKkv.get(sessionId, SESSION_KKV_DOMAIN_BACKFILL_CURSOR, BACKFILL_CURSOR_LAST_SCANNED_COUNT_KEY);
   let cursor: number | null = null;
   if (cursorEntry != null) {
     const parsed = Number.parseInt(cursorEntry.value, 10);
@@ -132,10 +120,8 @@ export async function decideBackfillShortCircuit(args: {
   const segment = await messageRepo.listBySessionOffset(sessionId, cursor);
   // 计数比对等价性依赖 message_checkpoint 每 (session_id, message_id) 至多一行
   // （insertCheckpoint 替换语义保证）：段内 checkpoint 行数 == 有 checkpoint 的消息数。
-  const checkpointCount = await checkpointRepo.countCheckpointsForMessages(
-    sessionId,
-    segment.map((m) => m.id)
-  );
+  const checkpointIds = segment.map((m) => m.id);
+  const checkpointCount = await checkpointRepo.countCheckpointsForMessages(sessionId, checkpointIds);
   if (segment.length > 0 && checkpointCount === segment.length) {
     return { kind: "short-circuit", newCursor: count, previousCursor: cursor };
   }
@@ -149,13 +135,8 @@ export async function decideBackfillShortCircuit(args: {
  * 而这段每轮发送都跑）。`findIndex` 命中不了时按「整表都是空窗」兜底
  * （宁可多补不可漏补）。
  */
-async function resolveFirstGapIndex(
-  checkpointRepo: MessageCheckpointRepository,
-  sessionId: string,
-  messages: ReadonlyArray<ChatMessageHeader>
-): Promise<number> {
-  const lastCheckpointedId =
-    await checkpointRepo.findLastCheckpointedMessageId(sessionId);
+async function resolveFirstGapIndex(checkpointRepo: MessageCheckpointRepository, sessionId: string, messages: ReadonlyArray<ChatMessageHeader>): Promise<number> {
+  const lastCheckpointedId = await checkpointRepo.findLastCheckpointedMessageId(sessionId);
   if (lastCheckpointedId == null) {
     return 0;
   }
@@ -170,16 +151,8 @@ async function resolveFirstGapIndex(
  * 允许读到一个稍旧的 head 快照——checkpoint 的语义本就是「某时刻的指针快照」，
  * 旧一版合法；写阶段会对空窗段做「连续前缀复核」闭合并发插点的 TOCTOU。
  */
-export async function scanBackfillGap(args: {
-  readonly entryRepo: VfsEntryRepository;
-  readonly messageRepo: MessageRepository;
-  readonly checkpointRepo: MessageCheckpointRepository;
-  readonly projectId: string;
-  readonly sessionId: string;
-  readonly signal?: AbortSignal;
-}): Promise<BackfillScanResult> {
-  const { entryRepo, messageRepo, checkpointRepo, projectId, sessionId, signal } =
-    args;
+export async function scanBackfillGap(args: { readonly entryRepo: VfsEntryRepository; readonly messageRepo: MessageRepository; readonly checkpointRepo: MessageCheckpointRepository; readonly projectId: string; readonly sessionId: string; readonly signal?: AbortSignal }): Promise<BackfillScanResult> {
+  const { entryRepo, messageRepo, checkpointRepo, projectId, sessionId, signal } = args;
   const empty: BackfillScanResult = {
     confirmedNoGap: false,
     gapMessageIds: [],
@@ -207,11 +180,7 @@ export async function scanBackfillGap(args: {
     return empty;
   }
 
-  const firstGapIndex = await resolveFirstGapIndex(
-    checkpointRepo,
-    sessionId,
-    messages
-  );
+  const firstGapIndex = await resolveFirstGapIndex(checkpointRepo, sessionId, messages);
   if (firstGapIndex >= messages.length) {
     // 无空窗：有文件、有消息、最后一个有 checkpoint 的消息之后没有缺口的。
     return {
@@ -259,12 +228,7 @@ export async function scanBackfillGap(args: {
  * 「查时」，并不真正消除它）。调用方按普通失败重试即可：backfill 幂等，
  * 下轮重新扫描拿到的是收敛后的空窗段。
  */
-export async function writeBackfillGap(args: {
-  readonly checkpointRepo: MessageCheckpointRepository;
-  readonly sessionId: string;
-  readonly scan: BackfillScanResult;
-  readonly signal?: AbortSignal;
-}): Promise<BackfillBaselineResult> {
+export async function writeBackfillGap(args: { readonly checkpointRepo: MessageCheckpointRepository; readonly sessionId: string; readonly scan: BackfillScanResult; readonly signal?: AbortSignal }): Promise<BackfillBaselineResult> {
   const { checkpointRepo, sessionId, scan, signal } = args;
   const gap = scan.gapMessageIds;
   if (gap.length === 0) {
@@ -315,22 +279,9 @@ export async function writeBackfillGap(args: {
  *   会把游标写到 count，下一轮判定短路成「已确认」，剩下的空窗永远补不上。
  *   已 insert 的行随事务提交留下且不可覆盖（幂等），下轮接着补。
  */
-export async function backfillBaselineCheckpoints(
-  entryRepo: VfsEntryRepository,
-  messageRepo: MessageRepository,
-  checkpointRepo: MessageCheckpointRepository,
-  projectId: string,
-  sessionId: string,
-  signal?: AbortSignal
-): Promise<BackfillBaselineResult> {
-  const scan = await scanBackfillGap({
-    entryRepo,
-    messageRepo,
-    checkpointRepo,
-    projectId,
-    sessionId,
-    signal,
-  });
+export async function backfillBaselineCheckpoints(entryRepo: VfsEntryRepository, messageRepo: MessageRepository, checkpointRepo: MessageCheckpointRepository, projectId: string, sessionId: string, signal?: AbortSignal): Promise<BackfillBaselineResult> {
+  const scanInput = { entryRepo, messageRepo, checkpointRepo, projectId, sessionId, signal };
+  const scan = await scanBackfillGap(scanInput);
   return writeBackfillGap({ checkpointRepo, sessionId, scan, signal });
 }
 
@@ -346,14 +297,7 @@ export async function backfillBaselineCheckpoints(
  * repair 直接调用 {@link backfillBaselineCheckpoints}，幂等安全（已有 checkpoint
  * 不会被覆盖）；repair 不写游标——残留旧游标只导致下次判定保守回退，无正确性影响。
  */
-export function createBaselineCheckpointBackfillOperation(args: {
-  readonly entryRepo: VfsEntryRepository;
-  readonly messageRepo: MessageRepository;
-  readonly checkpointRepo: MessageCheckpointRepository;
-  readonly sessionKkv: SessionKkvRepository;
-  readonly projectId: string;
-  readonly sessionId: string;
-}): IntegrityRepairOperation {
+export function createBaselineCheckpointBackfillOperation(args: { readonly entryRepo: VfsEntryRepository; readonly messageRepo: MessageRepository; readonly checkpointRepo: MessageCheckpointRepository; readonly sessionKkv: SessionKkvRepository; readonly projectId: string; readonly sessionId: string }): IntegrityRepairOperation {
   const { entryRepo, messageRepo, checkpointRepo, sessionKkv, projectId, sessionId } = args;
   return {
     name: `baseline-checkpoint-backfill:session=${sessionId}`,
@@ -364,12 +308,8 @@ export function createBaselineCheckpointBackfillOperation(args: {
         return { needsRepair: false };
       }
       // 两段式判定先行：短路即确认无空窗，无需全量找空窗。
-      const decision = await decideBackfillShortCircuit({
-        sessionKkv,
-        messageRepo,
-        checkpointRepo,
-        sessionId,
-      });
+      const decisionInput = { sessionKkv, messageRepo, checkpointRepo, sessionId };
+      const decision = await decideBackfillShortCircuit(decisionInput);
       if (decision.kind === "short-circuit") {
         return { needsRepair: false };
       }
@@ -379,31 +319,17 @@ export function createBaselineCheckpointBackfillOperation(args: {
       if (messages.length === 0) {
         return { needsRepair: false };
       }
-      const firstGapIndex = await resolveFirstGapIndex(
-        checkpointRepo,
-        sessionId,
-        messages
-      );
+      const firstGapIndex = await resolveFirstGapIndex(checkpointRepo, sessionId, messages);
       if (firstGapIndex >= messages.length) {
         return { needsRepair: false };
       }
       return {
         needsRepair: true,
-        details: `session=${sessionId} 在第 ${
-          firstGapIndex + 1
-        } 条消息处开始有空窗，共 ${
-          messages.length - firstGapIndex
-        } 条缺 baseline checkpoint`,
+        details: `session=${sessionId} 在第 ${firstGapIndex + 1} 条消息处开始有空窗，共 ${messages.length - firstGapIndex} 条缺 baseline checkpoint`,
       };
     },
     async repair() {
-      await backfillBaselineCheckpoints(
-        entryRepo,
-        messageRepo,
-        checkpointRepo,
-        projectId,
-        sessionId
-      );
+      await backfillBaselineCheckpoints(entryRepo, messageRepo, checkpointRepo, projectId, sessionId);
     },
   };
 }

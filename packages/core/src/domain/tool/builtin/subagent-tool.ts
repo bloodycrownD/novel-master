@@ -27,19 +27,14 @@
 import { z } from "zod";
 
 import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
-import type { ChatMessage } from "@/domain/chat/model/message.js";
+import type { ChatMessageData } from "@/domain/chat/model/message.js";
 import type { TextBlock } from "@/domain/chat/model/content-block.js";
 import type { MessageAttachment } from "@/domain/chat/model/message-attachment.schema.js";
-import {
-  AttachmentPathArgumentError,
-  attachmentsFromPaths,
-} from "@/domain/chat/logic/scan-at-path-attachments.js";
+import { attachmentScanner } from "@/domain/chat/logic/attachment/attachment-scanner.js";
+import { isAppError } from "@/errors/app-error.js";
 import { ToolError } from "@/errors/tool-errors.js";
 import type { Tool } from "../model/tool.js";
-import type {
-  BuiltinToolContext,
-  BuiltinToolSubagentContext,
-} from "./builtin-tool-context.js";
+import type { BuiltinToolContext, BuiltinToolSubagentContext } from "./builtin-tool-context.js";
 
 /**
  * 续用子会话的历史软闸（spec D7）：目标子会话消息数 > 该阈值即拒绝续用。
@@ -106,17 +101,9 @@ const SUBAGENT_MAX_DEPTH = 2;
  * 候选来自 `ctx.subagent?.callableAgents ?? []`：装配段已过滤掉
  * `mode === "primary"` 的主 agent、排除当前 agent 自身，至少含内置 `general`。
  */
-function formatCallableList(
-  callable: readonly { readonly name: string; readonly description?: string }[]
-): string {
+function formatCallableList(callable: readonly { readonly name: string; readonly description?: string }[]): string {
   if (callable.length === 0) return "（暂无）";
-  return callable
-    .map((a) =>
-      a.description != null && a.description.trim().length > 0
-        ? `${a.name}：${a.description.trim()}`
-        : a.name
-    )
-    .join("\n");
+  return callable.map((a) => (a.description != null && a.description.trim().length > 0 ? `${a.name}：${a.description.trim()}` : a.name)).join("\n");
 }
 
 /**
@@ -124,15 +111,11 @@ function formatCallableList(
  *
  * @returns 末条 assistant 文本；不存在或无 text block 时返回 undefined。
  */
-function extractLastAssistantText(
-  messages: readonly ChatMessage[]
-): string | undefined {
+function extractLastAssistantText(messages: readonly ChatMessageData[]): string | undefined {
   for (let i = messages.length - 1; i >= 0; i--) {
     const msg = messages[i]!;
     if (msg.role !== "assistant") continue;
-    const textBlocks = msg.content.blocks.filter(
-      (b): b is TextBlock => b.type === "text"
-    );
+    const textBlocks = msg.content.blocks.filter((b): b is TextBlock => b.type === "text");
     if (textBlocks.length === 0) continue;
     const joined = textBlocks.map((b) => b.text).join("");
     if (joined.length > 0) return joined;
@@ -146,17 +129,13 @@ function resumeGuide(): string {
 }
 
 /**
- * 鸭子判别「会话不存在」——只认 `ChatError` 的 `NOT_FOUND` 语义，不看具体类。
+ * 鸭子判别「会话不存在」——只认 `CHAT_NOT_FOUND` 语义，不看具体类。
  *
- * 用鸭子读而非 `instanceof`：`src` 与 `dist` 双份模块实例下 `instanceof` 会失效
- * （同 `isVfsError` 的理由），而 `SessionService.get` 的契约只有 code 可依赖。
+ * 用 key 而非 `instanceof`：`src` 与 `dist` 双份模块实例下 `instanceof` 会失效
+ * （同 `isVfsError` 的理由），而 `SessionService.get` 的契约只有 key 可依赖。
  */
 function isSessionNotFound(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    (error as { readonly code?: unknown }).code === "NOT_FOUND"
-  );
+  return isAppError(error, "CHAT_NOT_FOUND");
 }
 
 /**
@@ -173,10 +152,7 @@ function isSessionNotFound(error: unknown): boolean {
  * @throws {ToolError} FAILED：不存在 / 非本会话子会话 / 活跃中 / 历史超限
  * @throws 非 `NOT_FOUND` 的 `sessions.get` 原样上抛
  */
-async function resolveResumeSessionId(
-  sessionId: string,
-  subagent: BuiltinToolSubagentContext
-): Promise<string> {
+async function resolveResumeSessionId(sessionId: string, subagent: BuiltinToolSubagentContext): Promise<string> {
   let session;
   try {
     session = await subagent.sessions.get(sessionId);
@@ -184,36 +160,20 @@ async function resolveResumeSessionId(
     if (!isSessionNotFound(error)) {
       throw error;
     }
-    throw new ToolError(
-      "FAILED",
-      `找不到子会话 "${sessionId}"（可能已被删除）。${resumeGuide()}`,
-      { toolName: "task" }
-    );
+    throw new ToolError("FAILED", `找不到子会话 "${sessionId}"（可能已被删除）。${resumeGuide()}`, { toolName: "task" });
   }
   // 归属：直接父口径。跨 project 的会话同样因父 id 不同被拒（一条判定覆盖两种）。
   if (session.parentSessionId !== subagent.parentSessionId) {
-    throw new ToolError(
-      "FAILED",
-      `子会话 "${sessionId}" 不是当前会话派生的子会话，不能跨会话续用。${resumeGuide()}`,
-      { toolName: "task" }
-    );
+    throw new ToolError("FAILED", `子会话 "${sessionId}" 不是当前会话派生的子会话，不能跨会话续用。${resumeGuide()}`, { toolName: "task" });
   }
   // 活跃中：软闸（给模型可读引导）。真正的硬互斥在 runChildAgent 的 tryRegister claim。
   if (subagent.isSessionRunActive(sessionId)) {
-    throw new ToolError(
-      "FAILED",
-      `子会话 "${sessionId}" 正在运行中，不能同时续用。${resumeGuide()}`,
-      { toolName: "task" }
-    );
+    throw new ToolError("FAILED", `子会话 "${sessionId}" 正在运行中，不能同时续用。${resumeGuide()}`, { toolName: "task" });
   }
   // 历史软闸：子会话永不压缩，消息数线性增长，超限引导新开（spec D7）。
   const existing = await subagent.messages.listBySession(sessionId);
   if (existing.length > TASK_SESSION_RESUME_MAX_MESSAGES) {
-    throw new ToolError(
-      "FAILED",
-      `子会话 "${sessionId}" 已有 ${existing.length} 条消息（上限 ${TASK_SESSION_RESUME_MAX_MESSAGES}），续用会持续拉长历史。${resumeGuide()}`,
-      { toolName: "task" }
-    );
+    throw new ToolError("FAILED", `子会话 "${sessionId}" 已有 ${existing.length} 条消息（上限 ${TASK_SESSION_RESUME_MAX_MESSAGES}），续用会持续拉长历史。${resumeGuide()}`, { toolName: "task" });
   }
   return sessionId;
 }
@@ -225,11 +185,7 @@ async function resolveResumeSessionId(
  * 候选列表拼文案，让 LLM 知道有哪些子 agent 能调以及各自擅长什么。
  * run() 内查找目标 def 时再叠加 `mode !== "primary"` 过滤，防主 agent 被当子 agent 调。
  */
-export const subagentTool: Tool<
-  TaskToolInput,
-  TaskToolOutput,
-  BuiltinToolContext
-> = {
+export const subagentTool: Tool<TaskToolInput, TaskToolOutput, BuiltinToolContext> = {
   name: "task",
   description: (ctx) => {
     const callable = ctx.subagent?.callableAgents ?? [];
@@ -256,78 +212,38 @@ ${formatCallableList(callable)}
   inputSchema: z.object({
     description: z.string().min(1).describe("3-5 词任务描述（用作子会话标题）"),
     prompt: z.string().min(1).describe("任务正文，写清要子代理完成什么"),
-    subagentName: z
-      .string()
-      .min(1)
-      .describe("目标子代理 name（非 id），需为 mode 非 primary 的 agent"),
-    sessionId: z
-      .string()
-      .optional()
-      .describe(
-        "续用已有子会话 id（上次回流的 subagentSessionId）；留空则新开。仅限当前会话派生的子会话，且不可并发续用同一个",
-      ),
-    fileAttachment: z
-      .array(z.string().min(1))
-      .optional()
-      .describe(
-        "要交付给子代理的文件路径列表（正文全文随附件送达）；超出体积预算的部分只给文件名与分段读取引导",
-      ),
+    subagentName: z.string().min(1).describe("目标子代理 name（非 id），需为 mode 非 primary 的 agent"),
+    sessionId: z.string().optional().describe("续用已有子会话 id（上次回流的 subagentSessionId）；留空则新开。仅限当前会话派生的子会话，且不可并发续用同一个"),
+    fileAttachment: z.array(z.string().min(1)).optional().describe("要交付给子代理的文件路径列表（正文全文随附件送达）；超出体积预算的部分只给文件名与分段读取引导"),
   }),
   outputSchema: z.object({
-    text: z
-      .string()
-      .describe("子代理末条回复正文；被中断且未输出文本时为占位文案"),
+    text: z.string().describe("子代理末条回复正文；被中断且未输出文本时为占位文案"),
     subagentSessionId: z.string().describe("子会话 id（UI 跳转用）"),
-    stopped: z
-      .boolean()
-      .optional()
-      .describe("true 表示子代理被用户中断，text 可能是半成品"),
-    failureReason: z
-      .string()
-      .optional()
-      .describe("中断原因（如「用户停止」），仅在 stopped=true 时出现"),
+    stopped: z.boolean().optional().describe("true 表示子代理被用户中断，text 可能是半成品"),
+    failureReason: z.string().optional().describe("中断原因（如「用户停止」），仅在 stopped=true 时出现"),
   }),
   async run(input, ctx) {
     const subagent = ctx.subagent;
     if (subagent == null) {
-      throw new ToolError(
-        "FAILED",
-        "task 工具未装配 subagent 上下文（当前 agent 不允许派生子代理）",
-        { toolName: "task" }
-      );
+      throw new ToolError("FAILED", "task 工具未装配 subagent 上下文（当前 agent 不允许派生子代理）", { toolName: "task" });
     }
     // 双保险：depth >= 2 时拒绝（孙 agent 的 registry 本应已 deny task，见 resolveAgentToolRegistry）。
     if (subagent.depth >= SUBAGENT_MAX_DEPTH) {
-      throw new ToolError(
-        "FAILED",
-        `已达子代理递归上限（depth=${subagent.depth}），不允许再派生`,
-        { toolName: "task" }
-      );
+      throw new ToolError("FAILED", `已达子代理递归上限（depth=${subagent.depth}），不允许再派生`, { toolName: "task" });
     }
 
     const defs = await subagent.agentRegistry.list();
     // mode !== "primary" 过滤：主 agent（mode=primary）不能被当子 agent 调，防自递归。
-    const def = defs.find(
-      (d) => d.name === input.subagentName && d.mode !== "primary"
-    );
+    const def = defs.find((d) => d.name === input.subagentName && d.mode !== "primary");
     if (def == null) {
-      const callableNames = defs
-        .filter((d) => d.mode !== "primary")
-        .map((d) => d.name);
-      throw new ToolError(
-        "FAILED",
-        `未找到名为 "${input.subagentName}" 的子代理；可选：${
-          callableNames.join(", ") || "（暂无）"
-        }`,
-        { toolName: "task" }
-      );
+      const callableNames = defs.filter((d) => d.mode !== "primary").map((d) => d.name);
+      throw new ToolError("FAILED", `未找到名为 "${input.subagentName}" 的子代理；可选：${callableNames.join(", ") || "（暂无）"}`, { toolName: "task" });
     }
 
     // 子 session title（P2-12）：description 非空优先，否则 prompt.slice(0, 40)。
     // 统一 trim，与 mobile 侧 pendingSubagentSessions 的 title 匹配逻辑保持一致。
     const trimmedDesc = input.description.trim();
-    const title =
-      trimmedDesc.length > 0 ? trimmedDesc : input.prompt.trim().slice(0, 40);
+    const title = trimmedDesc.length > 0 ? trimmedDesc : input.prompt.trim().slice(0, 40);
 
     // fileAttachment：只物化（attachmentsFromPaths 内部已按规范化 seen key 去重），
     // **全量挂载**——体积预算与降级收敛到 prepare 链（core 单源），子会话每 step
@@ -339,41 +255,27 @@ ${formatCallableList(callable)}
     let attachments: MessageAttachment[] | undefined;
     const filePaths = input.fileAttachment;
     if (filePaths != null && filePaths.length > 0) {
-      let materialized: MessageAttachment[];
-      try {
-        materialized = attachmentsFromPaths(filePaths);
-      } catch (error) {
-        if (error instanceof AttachmentPathArgumentError) {
-          throw new ToolError(
-            "FAILED",
-            `fileAttachment 路径非法：${error.message}`,
-            { toolName: "task" }
-          );
-        }
-        throw error;
-      }
-      attachments = materialized;
+      const materialized = attachmentScanner.fromPaths(filePaths);
+      if (!materialized.ok) throw new ToolError("FAILED", `fileAttachment 路径非法：${materialized.error.message}`, { toolName: "task" });
+      attachments = materialized.value;
     }
 
     // 续用 vs 新建（spec G4）：sessionId 非空（trim 后）走四态校验后续用同一子会话，
     // 不新建；留空/纯空白一律新开（模型显式传空串等价于不传）。
     const requestedSessionId = input.sessionId?.trim() ?? "";
-    const childSessionId =
-      requestedSessionId.length > 0
-        ? await resolveResumeSessionId(requestedSessionId, subagent)
-        : await subagent.createChildSession(title);
+    const childSessionId = requestedSessionId.length > 0 ? await resolveResumeSessionId(requestedSessionId, subagent) : await subagent.createChildSession(title);
 
-    const { savedModelId, workspaceModelId } =
-      subagent.resolveChildModelId(def);
+    const { savedModelId, workspaceModelId } = subagent.resolveChildModelId(def);
 
-    const result = await subagent.runChildAgent(def, childSessionId, {
+    const runInput = {
       savedModelId,
       workspaceModelId,
       signal: subagent.parentSignal,
       maxSteps: def.runtime?.maxSteps,
       prompt: input.prompt,
       ...(attachments != null ? { attachments } : {}),
-    });
+    };
+    const result = await subagent.runChildAgent(def, childSessionId, runInput);
 
     // AgentRunResult 不带文本，必须自己取末条 assistant text。
     // tail+role 过滤读口（limit 只数 assistant 行）：旧形态 listBySession 读整条
@@ -387,10 +289,7 @@ ${formatCallableList(callable)}
     // 已知差异：子代理连续 8 个 step 只发 tool_use 且更早处有正文时，改后取不到
     // 文本（走 [子代理未完成任务: …] 兜底），已由 subagent-tool-tail-read.test.ts
     // 的 T-SUB-TAIL3 钉成期望。
-    const childMessages = await subagent.messages.listBySessionTailOfRole(
-      childSessionId,
-      { role: "assistant", limit: 8 }
-    );
+    const childMessages = await subagent.messages.listBySessionTailOfRole(childSessionId, { role: "assistant", limit: 8 });
     const lastText = extractLastAssistantText(childMessages);
 
     // 中断回流（phase-1-abort-reflow）：cancelled 单独走「用户停止」分支，

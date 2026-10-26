@@ -31,7 +31,7 @@ import type {
   VfsZipRequest,
 } from "../../../../shared/ipc-types.js";
 import { IPC_CHANNELS } from "../../../../shared/ipc-types.js";
-import { isUserVfsUnifiedToolTurnEnabled } from "@novel-master/core/feature-flags";
+import { userVfsUnifiedToolTurnFlag } from "@novel-master/core/feature-flags";
 
 import {
   buildUserVfsDeleteOp,
@@ -141,7 +141,7 @@ export async function handleVfsWrite(
     const scope = resolveVfsScopeFromRequest(req);
     const vfs = getVfsForScope(rt, scope);
 
-    if (isSessionVfsScope(scope) && isUserVfsUnifiedToolTurnEnabled()) {
+    if (isSessionVfsScope(scope) && userVfsUnifiedToolTurnFlag.isEnabled()) {
       const baseline = await readBaselineContent(vfs, req.path);
       if (
         req.lastKnownContent != null &&
@@ -180,7 +180,7 @@ export async function handleVfsMkdir(
     const rt = await getDesktopRuntime();
     const scope = resolveVfsScopeFromRequest(req);
 
-    if (isSessionVfsScope(scope) && isUserVfsUnifiedToolTurnEnabled()) {
+    if (isSessionVfsScope(scope) && userVfsUnifiedToolTurnFlag.isEnabled()) {
       await executeSessionUserVfsOp(
         rt,
         scope.sessionId,
@@ -207,7 +207,7 @@ export async function handleVfsDelete(
     const scope = resolveVfsScopeFromRequest(req);
     const recursive = req.recursive ?? true;
 
-    if (isSessionVfsScope(scope) && isUserVfsUnifiedToolTurnEnabled()) {
+    if (isSessionVfsScope(scope) && userVfsUnifiedToolTurnFlag.isEnabled()) {
       await executeSessionUserVfsOp(
         rt,
         scope.sessionId,
@@ -235,7 +235,7 @@ export async function handleVfsRename(
     const rt = await getDesktopRuntime();
     const scope = resolveVfsScopeFromRequest(req);
 
-    if (isSessionVfsScope(scope) && isUserVfsUnifiedToolTurnEnabled()) {
+    if (isSessionVfsScope(scope) && userVfsUnifiedToolTurnFlag.isEnabled()) {
       // kind 必须在 execute 之前判定：execute 后旧路径已消失，parent list 查不到。
       const kindBeforeExecute = await findEntryKindBeforeRename(
         getVfsForScope(rt, scope),

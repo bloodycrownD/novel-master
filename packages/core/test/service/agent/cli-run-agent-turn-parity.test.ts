@@ -2,7 +2,9 @@
  * CLI ↔ runAgentTurn 行为 parity（T-R2 / T-R2-CLI / T-R2-cont）。
  */
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import {
+  describe,
+  it } from "node:test";
 import { decode } from "@novel-master/core";
 import {
   agentDefinitionSchema,
@@ -10,16 +12,13 @@ import {
   runAgentTurn,
   type AgentDefinition,
   type AgentTurnRuntimePort,
-} from "@novel-master/core/agent";
+  } from "@novel-master/core/agent";
 import {
   createUserVfsTurnServiceBundle,
   readMessageMetadata,
   textBlocks,
-} from "@novel-master/core/chat";
-import {
-  refreshUserVfsUnifiedToolTurnSnapshot,
-  resetUserVfsUnifiedToolTurnSnapshotForTests,
-} from "@/domain/feature-flags/user-vfs-unified-tool-turn.js";
+  } from "@novel-master/core/chat";
+import { userVfsUnifiedToolTurnFlag } from "@/domain/feature-flags/user-vfs-unified-tool-turn.js";
 import { createSessionKkvService } from "../../../src/service/session-kkv/create-session-kkv-service.js";
 import {
   getNovelMasterTestContext,
@@ -170,8 +169,8 @@ describe("cli-run-agent-turn parity", () => {
   });
 
   it("T-R2：空续跑 + 已执行 VFS 写后 transcript 顺序不变（无 ops 注入，E-core）", async () => {
-    resetUserVfsUnifiedToolTurnSnapshotForTests();
-    refreshUserVfsUnifiedToolTurnSnapshot(true);
+    userVfsUnifiedToolTurnFlag.resetForTests();
+    userVfsUnifiedToolTurnFlag.refresh(true);
 
     const ctx = getNovelMasterTestContext();
     const registry = createAgentRegistryService(ctx.conn, ctx.state);
@@ -215,7 +214,7 @@ describe("cli-run-agent-turn parity", () => {
       false,
     );
 
-    resetUserVfsUnifiedToolTurnSnapshotForTests();
+    userVfsUnifiedToolTurnFlag.resetForTests();
   });
 
   it("T-R2-cont：visible 末条 user 空续跑不 append 新 user", async () => {

@@ -1,14 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
-import {
-  scopeKey,
-} from "../../src/domain/vfs/logic/vfs-path-mapper.js";
-import { revisionReachableKey } from "../../src/domain/message-checkpoint/logic/revision-gc.js";
+import { scopeKey } from "../../src/domain/vfs/logic/vfs-path-mapper.js";
+import { revisionPairKey } from "../../src/domain/vfs/logic/revision-pair-key.js";
 import { SqliteVfsEntryRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteVfsRevisionRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
-
 
 novelMasterTestFixture();
 
@@ -48,22 +45,18 @@ describe("revision GC", () => {
     assert.ok(before.some((r) => r.entryId === entry.entryId && r.version === v1));
     assert.ok(before.some((r) => r.entryId === entry.entryId && r.version === v2));
 
-    await ctx.sessionFs.rollbackToMessage(
-      session.id,
-      project.id,
-      assistant1.id,
-    );
+    await ctx.sessionFs.rollbackToMessage(session.id, project.id, assistant1.id);
 
     const after = await revisions.listKeysUnderScope(sk, "/");
     assert.ok(after.some((r) => r.entryId === entry.entryId && r.version === v1));
     assert.equal(
       after.some((r) => r.entryId === entry.entryId && r.version === v2),
-      false,
+      false
     );
 
     const head = (await svfs.read("/gc.md")).version;
     assert.notEqual(head, v2);
-    assert.equal(revisionReachableKey(entry.entryId, v1).includes(String(entry.entryId)), true);
+    assert.equal(revisionPairKey(entry.entryId, v1).includes(String(entry.entryId)), true);
   });
 
   it("sweep drops intermediate revisions not referenced by checkpoint or live head", async () => {
@@ -92,16 +85,10 @@ describe("revision GC", () => {
     const entry = await entries.findByPath(sk, "/trim.md");
     assert.ok(entry != null);
 
-    await ctx.sessionFs.rollbackToMessage(
-      session.id,
-      project.id,
-      assistant.id,
-    );
+    await ctx.sessionFs.rollbackToMessage(session.id, project.id, assistant.id);
 
     const keys = await revisions.listKeysUnderScope(sk, "/");
-    const versions = keys
-      .filter((k) => k.entryId === entry.entryId)
-      .map((k) => k.version);
+    const versions = keys.filter((k) => k.entryId === entry.entryId).map((k) => k.version);
     assert.ok(versions.includes(v2));
     assert.equal(versions.includes(v1), false);
   });

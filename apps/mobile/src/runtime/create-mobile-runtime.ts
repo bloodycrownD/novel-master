@@ -8,23 +8,23 @@ import {
   createAgentAbortRegistry,
   createAgentRegistryService,
   createAgentStreamRegistry,
-} from '@novel-master/core/agent';
+  } from '@novel-master/core/agent';
 import {
   createCompactionConditionEvaluator,
   createCompactionConditionsStore,
-} from '@novel-master/core/compaction';
+  } from '@novel-master/core/compaction';
 import {SimpleEventBus} from '@novel-master/core/events';
 import {
   createChatServices,
   createMessageTranscriptEffectsService,
   createUserVfsTurnServiceBundle,
-} from '@novel-master/core/chat';
+  } from '@novel-master/core/chat';
 import {
   createPersistentPreferences,
   createPersistentState,
   createSearchConfigStore,
-} from '@novel-master/core';
-import {refreshUserVfsUnifiedToolTurnSnapshot} from '@novel-master/core/feature-flags';
+  } from '@novel-master/core';
+import { userVfsUnifiedToolTurnFlag } from '@novel-master/core/feature-flags';
 import {
   createProviderServices,
   createDefaultTokenCounterRegistry,
@@ -86,7 +86,7 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileRuntimeCor
   const preferences = createPersistentPreferences(conn);
   const userVfsUnifiedToolTurnEnabled =
     await preferences.getUserVfsUnifiedToolTurn();
-  refreshUserVfsUnifiedToolTurnSnapshot(userVfsUnifiedToolTurnEnabled);
+  userVfsUnifiedToolTurnFlag.refresh(userVfsUnifiedToolTurnEnabled);
 
   const smartSortRule = createSmartSortRuleService(conn);
   const agentRegistry = createAgentRegistryService(conn, state);

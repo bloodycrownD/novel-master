@@ -6,17 +6,7 @@
 import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
 import React from 'react';
-import {
-  ANNOTATE_SOFT_RANGE_CHAR_PADDING,
-  ANNOTATE_SOFT_RANGE_LINE_PADDING,
-  estimateSoftOffsetRangeFromPlainOffsets,
-  estimateSoftOffsetRangeFromQuoteContext,
-} from '@novel-master/core/chat';
-import {
-  addChatAnnotateDraft,
-  listChatAnnotateDrafts,
-  resetChatAnnotateDraftStoreForTests,
-} from '@novel-master/core/chat';
+import { chatAnnotateDraftStore } from '@novel-master/core/chat';
 import {
   getSelectionOffsetsInElement,
   collectAnnotateSelection,
@@ -142,15 +132,13 @@ function installPostCapture(): PostedEnvelope[] {
   return posts;
 }
 
-describe('T-SA8 plain 量测 → estimateSoftOffsetRangeFromPlainOffsets', () => {
+describe('T-SA8 plain 量测 → Range 半开 offset', () => {
   afterEach(() => {
     delete (global as {document?: unknown}).document;
     delete (global as {window?: unknown}).window;
   });
 
-  it('Range 半开 offset 相对无锚源串；padding CHAR→LINE；禁止以锚标签计长', () => {
-    expect(ANNOTATE_SOFT_RANGE_CHAR_PADDING).toBe(32);
-    expect(ANNOTATE_SOFT_RANGE_LINE_PADDING).toBe(2);
+  it('Range 半开 offset 相对无锚源串；禁止以锚标签计长', () => {
     const source = ['L1', 'L2', 'L3', 'TARGET HERE', 'L5', 'L6', 'L7'].join(
       '\n',
     );
@@ -159,17 +147,6 @@ describe('T-SA8 plain 量测 → estimateSoftOffsetRangeFromPlainOffsets', () =>
     const {body, selection} = installMiniDom(source, selStart, selEnd);
     const offsets = getSelectionOffsetsInElement(body, selection);
     expect(offsets).toEqual({start: selStart, end: selEnd});
-
-    const soft = estimateSoftOffsetRangeFromPlainOffsets(
-      source,
-      offsets!.start,
-      offsets!.end,
-    );
-    expect(soft.startOffset).toBeLessThanOrEqual(selStart);
-    expect(soft.endOffset).toBeGreaterThanOrEqual(selEnd);
-    expect(soft.endOffset - soft.startOffset).toBeGreaterThan(
-      selEnd - selStart,
-    );
 
     const collected = collectAnnotateSelection('plain');
     expect(collected?.selectionStart).toBe(selStart);
@@ -243,20 +220,11 @@ describe('reportRecogitoCreateFromSelection（mobile/B-1 / G-1）', () => {
         .__nmCollectAnnotateSelection,
     ).toBeUndefined();
 
-    const collectSrc = readFileSync(
-      join(
-        __dirname,
-        '../src/web/rich-document/webview/runtime/annotate-collect.ts',
-      ),
-      'utf8',
-    );
+    const collectSrc = readFileSync(join(__dirname, '../src/web/rich-document/webview/runtime/annotate-collect.ts'), 'utf8');
     expect(collectSrc).toContain('__nmCollectRecogitoSelection');
     expect(collectSrc).not.toMatch(/__nmCollectAnnotateSelection\s*=/);
 
-    const previewSrc = readFileSync(
-      join(__dirname, '../src/components/vfs/FileMarkdownPreview.tsx'),
-      'utf8',
-    );
+    const previewSrc = readFileSync(join(__dirname, '../src/components/vfs/FileMarkdownPreview.tsx'), 'utf8');
     expect(previewSrc).toMatch(/handleRecogitoCreate/);
     expect(previewSrc).not.toMatch(/payload\.quote\.trim\s*\(/);
   });
@@ -265,11 +233,11 @@ describe('reportRecogitoCreateFromSelection（mobile/B-1 / G-1）', () => {
 describe('T-SA8b 原生菜单 + Recogito 投影', () => {
   beforeEach(() => {
     mockWebViewProps.length = 0;
-    resetChatAnnotateDraftStoreForTests();
+    chatAnnotateDraftStore.resetForTests();
   });
 
   afterEach(() => {
-    resetChatAnnotateDraftStoreForTests();
+    chatAnnotateDraftStore.resetForTests();
     delete (global as {document?: unknown}).document;
     delete (global as {window?: unknown}).window;
   });
@@ -297,51 +265,13 @@ describe('T-SA8b 原生菜单 + Recogito 投影', () => {
     expect(last?.menuItems).toBeDefined();
     expect(typeof last?.onCustomMenuSelection).toBe('function');
 
-    const src = readFileSync(
-      join(__dirname, '../src/components/vfs/RichDocumentWebView.tsx'),
-      'utf8',
-    );
+    const src = readFileSync(join(__dirname, '../src/components/vfs/RichDocumentWebView.tsx'), 'utf8');
     expect(src).toContain('RICH_DOCUMENT_ANNOTATE_MENU_ITEMS');
     expect(src).toContain('__nmCollectRecogitoSelection');
     expect(src).toContain('setAnnotations');
     expect(src).toContain('recogitoCreate');
     expect(src).toContain('onRecogitoCreate');
     expect(src).not.toContain('__nmCollectAnnotateSelection');
-  });
-
-  it('邻域定位成功写入半开 offset；无邻域多命中失败不写 offset（A12）', () => {
-    const sessionId = 's-sa8b';
-    const path = '/n.md';
-    const content = 'xx SAME mid SAME yy\n';
-    const second = content.lastIndexOf('SAME');
-
-    const softOk = estimateSoftOffsetRangeFromQuoteContext(content, {
-      originalText: 'SAME',
-      contextBefore: ' mid ',
-      contextAfter: ' yy',
-    });
-    expect(softOk).not.toBeNull();
-    expect(softOk!.startOffset).toBeLessThanOrEqual(second);
-    expect(softOk!.endOffset).toBeGreaterThan(second);
-    expect(content.slice(second, second + 4)).toBe('SAME');
-
-    addChatAnnotateDraft(sessionId, {
-      id: 'ok',
-      path,
-      originalText: 'SAME',
-      userAnnotation: 'hit',
-      startOffset: softOk!.startOffset,
-      endOffset: softOk!.endOffset,
-    });
-    const drafts = listChatAnnotateDrafts(sessionId);
-    expect(drafts).toHaveLength(1);
-    expect(drafts[0]?.startOffset).toBe(softOk!.startOffset);
-    expect(drafts[0]?.endOffset).toBe(softOk!.endOffset);
-
-    const fail = estimateSoftOffsetRangeFromQuoteContext(content, {
-      originalText: 'SAME',
-    });
-    expect(fail).toBeNull();
   });
 
   it('markdown collect 产出 originalText + contextBefore/After（工具层残留）', () => {

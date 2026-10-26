@@ -7,7 +7,7 @@
 import type { AgentSession } from "@/domain/agent/session/agent-session.port.js";
 import type { ToolRegistry } from "@/domain/tool/logic/tool-registry.js";
 import type { BuiltinToolContext } from "@/domain/tool/builtin/builtin-tool-context.js";
-import type { ChatMessage } from "@/domain/chat/model/message.js";
+import type { ChatMessageData } from "@/domain/chat/model/message.js";
 import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { ProviderRepository } from "@/domain/provider/repositories/provider.port.js";
 import type { SavedModelRepository } from "@/domain/provider/repositories/saved-model.port.js";
@@ -62,7 +62,7 @@ export interface CreateAgentRunnerDeps {
    * 解析力等价于全量，却省掉 hidden 行的逐条解压（全量读 212ms → 14ms）。
    * 懒求值：本 step 的可见窗口落定后再取（含本 step 压缩产物）。
    */
-  readonly listVisibleSessionMessages?: () => Promise<readonly ChatMessage[]>;
+  readonly listVisibleSessionMessages?: () => Promise<readonly ChatMessageData[]>;
   /** 按 sessionId 累积 in-flight 流式 partial，供子会话首次进入查询。 */
   readonly streamRegistry?: AgentStreamRegistry;
   /** 思考上下文偏好窄切片（每 run 一次快照；未注入时等同默认开）。 */

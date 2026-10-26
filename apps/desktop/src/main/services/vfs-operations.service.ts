@@ -33,7 +33,8 @@ export async function renameVfsFile(
   oldPath: string,
   newPath: string,
 ): Promise<void> {
-  await moveVfsPath(vfs, oldPath, newPath);
+  const moved = await moveVfsPath(vfs, oldPath, newPath);
+  if (!moved.ok) throw moved.error;
 }
 
 export async function renameVfsDirectory(
@@ -41,7 +42,8 @@ export async function renameVfsDirectory(
   oldPath: string,
   newPath: string,
 ): Promise<void> {
-  await moveVfsPath(vfs, oldPath, newPath);
+  const moved = await moveVfsPath(vfs, oldPath, newPath);
+  if (!moved.ok) throw moved.error;
 }
 
 export { remapPathUnderDir };

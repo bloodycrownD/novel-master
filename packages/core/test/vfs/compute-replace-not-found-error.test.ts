@@ -4,8 +4,8 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { isAppError } from "../../src/errors/app-error.js";
 import { buildReplaceNotFoundError } from "../../src/domain/vfs/logic/compute-replace-not-found-error.js";
-import { isVfsError } from "../../src/errors/vfs-errors.js";
 
 describe("buildReplaceNotFoundError", () => {
   it("details 里带上 oldString 和 fileHint 的文本预览", () => {
@@ -15,8 +15,9 @@ describe("buildReplaceNotFoundError", () => {
     const oldString = "&ldquo;你好世界&rdquo;";
     const err = buildReplaceNotFoundError("/note.md", fileContent, oldString);
 
-    assert.ok(isVfsError(err, "REPLACE_NOT_FOUND"));
-    const details = err.details as {
+    assert.ok(isAppError(err, "VFS_REPLACE_NOT_FOUND"));
+    assert.equal(err.details?.path, "/note.md");
+    const details = err.details?.details as {
       oldStringPreview?: string;
       fileHintPreview?: string;
     };
@@ -37,7 +38,7 @@ describe("buildReplaceNotFoundError", () => {
     const fileContent = "AAAAAAAAAAAAAAAA";
     const oldString = "ZZZZZZZZZZZZZZZZ";
     const err = buildReplaceNotFoundError("/x.md", fileContent, oldString);
-    const details = err.details as { fileHintPreview?: string };
+    const details = err.details?.details as { fileHintPreview?: string };
     assert.equal(details.fileHintPreview, "A".repeat(16));
   });
 
@@ -45,7 +46,7 @@ describe("buildReplaceNotFoundError", () => {
     const longOld = "你".repeat(250);
     const fileContent = "XYZXYZ";
     const err = buildReplaceNotFoundError("/x.md", fileContent, longOld);
-    const details = err.details as { oldStringPreview?: string };
+    const details = err.details?.details as { oldStringPreview?: string };
     // 250 个「你」只该输出 100 个（按码点截，代理对不会切半）。
     assert.equal(details.oldStringPreview, "你".repeat(100));
   });
@@ -56,7 +57,7 @@ describe("buildReplaceNotFoundError", () => {
     const fileContent = "😀abc";
     const oldString = "ZZZ";
     const err = buildReplaceNotFoundError("/x.md", fileContent, oldString);
-    const details = err.details as { fileHintPreview?: string };
+    const details = err.details?.details as { fileHintPreview?: string };
     assert.ok(details.fileHintPreview?.startsWith("😀abc"));
     // 转义后不得出现孤立代理对转义（半个 emoji 被切开的标志）。
     assert.ok(!JSON.stringify(details.fileHintPreview).includes("\\ud"));
@@ -66,7 +67,7 @@ describe("buildReplaceNotFoundError", () => {
     const fileContent = "line1\nline2\ttab";
     const oldString = "line1 line2";
     const err = buildReplaceNotFoundError("/x.md", fileContent, oldString);
-    const details = err.details as { fileHintPreview?: string };
+    const details = err.details?.details as { fileHintPreview?: string };
     // 预览是原始文本：换行/制表保留在字符串里，formatter JSON.stringify 后显形为 \n、\t。
     assert.ok(details.fileHintPreview?.includes("\n"));
     assert.ok(details.fileHintPreview?.includes("\t"));
@@ -85,34 +86,24 @@ describe("buildReplaceNotFoundError", () => {
     const oldString = "B".repeat(1024 * 1024);
 
     // 走公开入口（buildReplaceNotFoundError），不碰 LCS 内部实现。
-    assert.throws(
-      () => {
-        throw buildReplaceNotFoundError("/big.md", fileContent, oldString);
-      },
-      (e: unknown) => {
-        // ① 错误码字面量：降级不得改动对外错误码。
-        assert.ok(isVfsError(e, "REPLACE_NOT_FOUND"), "降级后错误码仍是 REPLACE_NOT_FOUND");
-        assert.equal(e.code, "REPLACE_NOT_FOUND");
-        assert.equal(e.path, "/big.md");
+    const err = buildReplaceNotFoundError("/big.md", fileContent, oldString);
 
-        const details = e.details as {
-          longestCommonSubstring?: string;
-          lcsLength?: number;
-          fileHintPreview?: string;
-        };
-        // ② 两侧字符集不相交 ⇒ 公共子串长度必为 0（降级后的诚实结果）。
-        assert.equal(details.lcsLength, 0);
-        assert.equal(details.longestCommonSubstring, "");
-        // ③ fileHint 必须非空：诊断面板要给得出可比对的文本，否则用户侧无从下手。
-        assert.ok(
-          typeof details.fileHintPreview === "string" &&
-            details.fileHintPreview.length > 0,
-          `降级后 fileHint 不得为空，实际 ${JSON.stringify(details.fileHintPreview)}`
-        );
-        // fileHint 回退到文件开头 100 字符。
-        assert.equal(details.fileHintPreview, "A".repeat(100));
-        return true;
-      }
-    );
+    // ① 错误码字面量：降级不得改动对外错误码。
+    assert.ok(isAppError(err, "VFS_REPLACE_NOT_FOUND"), "降级后错误码仍是 REPLACE_NOT_FOUND");
+    assert.equal(err.key, "VFS_REPLACE_NOT_FOUND");
+    assert.equal(err.details?.path, "/big.md");
+
+    const details = err.details?.details as {
+      longestCommonSubstring?: string;
+      lcsLength?: number;
+      fileHintPreview?: string;
+    };
+    // ② 两侧字符集不相交 ⇒ 公共子串长度必为 0（降级后的诚实结果）。
+    assert.equal(details.lcsLength, 0);
+    assert.equal(details.longestCommonSubstring, "");
+    // ③ fileHint 必须非空：诊断面板要给得出可比对的文本，否则用户侧无从下手。
+    assert.ok(typeof details.fileHintPreview === "string" && details.fileHintPreview.length > 0, `降级后 fileHint 不得为空，实际 ${JSON.stringify(details.fileHintPreview)}`);
+    // fileHint 回退到文件开头 100 字符。
+    assert.equal(details.fileHintPreview, "A".repeat(100));
   });
 });

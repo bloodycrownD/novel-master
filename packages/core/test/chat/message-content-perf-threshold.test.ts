@@ -26,7 +26,7 @@ import {
   novelMasterTestFixture,
   testIsolationSuffix,
 } from "../helpers/novel-master-fixture.js";
-import type { ChatMessage } from "../../src/domain/chat/model/message.js";
+import type { ChatMessageData } from "../../src/domain/chat/model/message.js";
 
 novelMasterTestFixture();
 
@@ -56,7 +56,7 @@ const ABSOLUTE_BUDGET_MS = 5000;
  * 若 role 进了读路径（按 role 过滤/拼接），造数与读数两侧不同构就会让
  * 护栏失真，劣化静默通过。故此处抽成单一函数，不允许各写一份表达式。
  */
-function roleAt(index: number): ChatMessage["role"] {
+function roleAt(index: number): ChatMessageData["role"] {
   return index % 2 === 0 ? "assistant" : "user";
 }
 
@@ -85,7 +85,7 @@ describe("稳态读性能护栏（T-MP-P0：明文 tail 加载绝对预算）", 
       plainProject.id,
       `S-${testIsolationSuffix()}`
     );
-    const messages: ChatMessage[] = [];
+    const messages: ChatMessageData[] = [];
     for (let i = 1; i <= ROWS; i++) {
       messages.push({
         id: randomUUID(),

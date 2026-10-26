@@ -7,7 +7,7 @@ import React from 'react';
 import {ScrollView, StyleSheet, Text, View} from 'react-native';
 import {
   formatStatusChipLabelFromAttachment,
-  partitionComposerChipAttachments,
+  composerChips,
   type MessageAttachment,
 } from '@novel-master/core/chat';
 import {useTheme} from '@/theme/ThemeProvider';
@@ -79,7 +79,7 @@ export function ComposerStatusChips({
   attachments: readonly MessageAttachment[];
   disabled?: boolean;
 }) {
-  const {status} = partitionComposerChipAttachments(attachments);
+  const {status} = composerChips.partition(attachments);
   return (
     <AttachmentDraftChips
       attachments={status}

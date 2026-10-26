@@ -3,7 +3,7 @@
  * Flow: confirmed Alert (caller) → picker png/json → importFromBytes.
  */
 import {
-  CharacterCardError,
+  AppError,
   createCharacterCardImportService,
   CHARACTER_CARD_MAX_INPUT_BYTES,
   type CharacterCardImportOptions,
@@ -31,18 +31,18 @@ export async function importCharacterCard(
     // 与 core 层 importFromBytes 的 bytes.length 闸门同阈值双保险。
     maxBytes: CHARACTER_CARD_MAX_INPUT_BYTES,
     buildTooLargeError: sizeBytes =>
-      new CharacterCardError(
-        'TOO_LARGE',
+      new AppError(
+        'VFS_CHARACTER_CARD_TOO_LARGE',
         `角色卡文件过大：${sizeBytes} 字节，超过输入上限 ${CHARACTER_CARD_MAX_INPUT_BYTES} 字节（约 48MB），已拒绝导入`,
       ),
     buildCopyError: copyError =>
-      new CharacterCardError(
-        'NOT_CHARACTER_CARD',
+      new AppError(
+        'VFS_CHARACTER_CARD_UNRECOGNIZED',
         copyError ?? '无法读取所选角色卡文件',
       ),
     buildMissingError: fsPath =>
-      new CharacterCardError(
-        'NOT_CHARACTER_CARD',
+      new AppError(
+        'VFS_CHARACTER_CARD_UNRECOGNIZED',
         `角色卡文件不存在：${fsPath}`,
       ),
   });

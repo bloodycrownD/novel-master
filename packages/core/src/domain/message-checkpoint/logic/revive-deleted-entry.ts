@@ -6,19 +6,25 @@
  * 记录的旧 entry_id 原位重建 entry 行，使 revision 历史 (entry_id, version)
  * 重新挂回 live head——语义按「回滚后工作区正文 = 目标检查点完成态」拍板。
  *
+ * 领域失败（revision / 正文 / blob 缺失）一律返回 `Result`，不在函数体内
+ * throw；`VfsRestorePort` 的异常按 phase 1 端口约定原样透传。
+ *
  * @module domain/message-checkpoint/logic/revive-deleted-entry
  */
+
+// legacy-port: VfsRestorePort — phase 2
 
 import { adjustRef } from "@/domain/vfs/logic/revision-ref-count.js";
 import { scopeKey, type VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { VfsContentStore } from "@/domain/vfs/content-store/vfs-content-store.port.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revision.port.js";
-import { sessionFsRestoreRevisionMissing } from "@/errors/session-fs-errors.js";
+import { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 import { isVfsError } from "@/errors/vfs-errors.js";
 import type { VfsRestorePort } from "@/domain/vfs/ports/vfs-restore.port.js";
 import { ensureDirectoryChain } from "./ensure-directory-chain.js";
-import type { RestorePathOutcome } from "./restore-path-model.js";
+import type { RestorePathError, RestorePathOutcome } from "./restore-path-model.js";
 
 /** {@link reviveDeletedEntryForRestore} 依赖集合。 */
 export type ReviveDeletedEntryDeps = {
@@ -34,7 +40,7 @@ export type ReviveDeletedEntryDeps = {
  * 按 checkpoint 旧 entryId 复活已删 entry 并把 live head 拨回目标 version。
  *
  * 步骤：
- * 1. 按旧 entryId 查目标 revision；行缺失 → 抛 restore-missing（真缺，降级）；
+ * 1. 按旧 entryId 查目标 revision；行缺失 → 返回 restore-missing（真缺，降级）；
  * 2. 目标 revision 是 deleted 态（backfill 回补的墓碑等）→ 按删除语义处理；
  * 3. 路径被新 entry 占用（删除后同路径重建场景）→ 先墓碑删掉新 entry，
  *    tail 期新建的同路径文件被回退；
@@ -45,23 +51,14 @@ export type ReviveDeletedEntryDeps = {
  * @remarks 占用探测直查 DB（不信 prefetch）：prefetch 的 entryIdByPath 来自
  *          live heads 快照，复活场景本就不在快照内；直查还能兜住快照过时的边界。
  */
-export async function reviveDeletedEntryForRestore(
-  deps: ReviveDeletedEntryDeps,
-  scope: VfsScope,
-  logicalPath: string,
-  checkpointEntryId: number,
-  version: number
-): Promise<RestorePathOutcome> {
+export async function reviveDeletedEntryForRestore(deps: ReviveDeletedEntryDeps, scope: VfsScope, logicalPath: string, checkpointEntryId: number, version: number): Promise<Result<RestorePathOutcome, RestorePathError>> {
   const { vfs, entryRepo, revisionRepo, contentStore } = deps;
   const scopeKeyStr = scopeKey(scope);
 
-  const meta = await revisionRepo.findMetaByEntryAndVersion(
-    checkpointEntryId,
-    version
-  );
+  const meta = await revisionRepo.findMetaByEntryAndVersion(checkpointEntryId, version);
   if (meta == null) {
     // revision 真缺（非 entry 缺）：维持降级语义。
-    throw sessionFsRestoreRevisionMissing(logicalPath, version);
+    return Result.err(new AppError("SESSION_FS_RESTORE_REVISION_MISSING", `恢复所需 revision 缺失：${logicalPath} v${version}`, { logicalPath, revisionVersion: version }));
   }
   if (meta.status === "deleted") {
     // 防御：checkpoint 只 capture live head，正常不指向 deleted 态；
@@ -74,16 +71,13 @@ export async function reviveDeletedEntryForRestore(
         throw error;
       }
     }
-    return "deleted";
+    return Result.ok("deleted");
   }
 
-  const rev = await revisionRepo.findByEntryAndVersion(
-    checkpointEntryId,
-    version
-  );
+  const rev = await revisionRepo.findByEntryAndVersion(checkpointEntryId, version);
   if (rev == null || rev.content == null) {
     // 与 restorePathToRevision 正常分支同口径：active 行无正文无法恢复。
-    throw sessionFsRestoreRevisionMissing(logicalPath, version);
+    return Result.err(new AppError("SESSION_FS_RESTORE_REVISION_MISSING", `恢复所需 revision 缺失：${logicalPath} v${version}`, { logicalPath, revisionVersion: version }));
   }
 
   // 路径被新 entry 占用（删除后同路径重建）：先墓碑删掉新 entry。
@@ -102,14 +96,15 @@ export async function reviveDeletedEntryForRestore(
 
   // put 幂等：blob 正常由 revision 触发器维护在位，这里确保复活 entry 的
   // content_hash 有 blob 可解，并回取权威 hash（对齐 resetHeadToVersion）。
-  const contentHash = contentStore
-    ? await contentStore.put(rev.content)
-    : meta.contentHash;
+  const contentHash = contentStore ? await contentStore.put(rev.content) : meta.contentHash;
   if (contentHash == null || contentHash.length === 0) {
-    throw sessionFsRestoreRevisionMissing(logicalPath, version);
+    return Result.err(new AppError("SESSION_FS_RESTORE_REVISION_MISSING", `恢复所需 revision 缺失：${logicalPath} v${version}`, { logicalPath, revisionVersion: version }));
   }
 
-  await ensureDirectoryChain(vfs, logicalPath);
+  const ensured = await ensureDirectoryChain(vfs, logicalPath);
+  if (!ensured.ok) {
+    return Result.err(ensured.error);
+  }
   await entryRepo.reviveEntryAtVersion({
     entryId: checkpointEntryId,
     scopeKey: scopeKeyStr,
@@ -119,5 +114,5 @@ export async function reviveDeletedEntryForRestore(
     mtimeMs: rev.mtimeMs,
   });
   await adjustRef(revisionRepo, checkpointEntryId, version, +1);
-  return "restored";
+  return Result.ok("restored");
 }

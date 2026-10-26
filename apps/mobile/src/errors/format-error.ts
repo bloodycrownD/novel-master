@@ -3,16 +3,13 @@
  */
 import {CloudSyncError, TdbcError, ToolError} from '@novel-master/core';
 
-import {AgentError} from '@novel-master/core/agent';
-
-import {ChatError} from '@novel-master/core/chat';
+import {AppError} from '@novel-master/core/agent';
 
 import {ProviderError} from '@novel-master/core/provider';
 
 import {SessionFsError} from '@novel-master/core/session-fs';
 
 import {
-  CharacterCardError,
   VfsError,
   VfsZipError,
   formatVfsErrorForUser,
@@ -52,11 +49,13 @@ export function formatError(error: unknown): string {
   if (error instanceof VfsError) {
     return formatVfsErrorForUser(error);
   }
+  // AppError 走同一张 VFS 文案表（核心 formatter 已支持 AppError key 收窄），
+  // 非 VFS key 原样返回 message。
+  if (error instanceof AppError) {
+    return formatVfsErrorForUser(error);
+  }
   if (
     error instanceof VfsZipError ||
-    error instanceof CharacterCardError ||
-    error instanceof ChatError ||
-    error instanceof AgentError ||
     error instanceof SessionFsError ||
     error instanceof CloudSyncError
   ) {

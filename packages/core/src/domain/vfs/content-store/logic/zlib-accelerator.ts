@@ -44,9 +44,7 @@ const warned = { deflate: false, inflate: false };
  * 路径一致（避免下游/断言按原型区分）。Buffer → Uint8Array 视图是零拷贝。
  */
 function asPlainUint8Array(bytes: Uint8Array): Uint8Array {
-  return bytes.constructor === Uint8Array
-    ? bytes
-    : new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  return bytes.constructor === Uint8Array ? bytes : new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength);
 }
 
 /**
@@ -54,9 +52,7 @@ function asPlainUint8Array(bytes: Uint8Array): Uint8Array {
  *
  * @param accelerator 同步 deflate/inflate 实现。
  */
-export function registerZlibCodecAccelerator(
-  accelerator: ZlibCodecAccelerator
-): void {
+export function registerZlibCodecAccelerator(accelerator: ZlibCodecAccelerator): void {
   activeAccelerator = accelerator;
 }
 
@@ -77,10 +73,7 @@ export function clearZlibCodecAccelerator(): void {
 /**
  * 尝试走加速器 deflate；未注册 / 返回 null / 抛错 → null（调用方回落 fflate）。
  */
-export function tryZlibDeflate(
-  data: Uint8Array,
-  level?: number
-): Uint8Array | null {
+export function tryZlibDeflate(data: Uint8Array, level?: number): Uint8Array | null {
   const accelerator = activeAccelerator;
   if (accelerator == null) {
     return null;
@@ -91,9 +84,7 @@ export function tryZlibDeflate(
   } catch (error) {
     if (!warned.deflate) {
       warned.deflate = true;
-      console.warn(
-        `[zlib-accelerator] deflate 加速器抛错，已回落 fflate（本进程只提示一次）：${errorText(error)}`
-      );
+      console.warn(`[zlib-accelerator] deflate 加速器抛错，已回落 fflate（本进程只提示一次）：${errorText(error)}`);
     }
     return null;
   }
@@ -113,9 +104,7 @@ export function tryZlibInflate(data: Uint8Array): Uint8Array | null {
   } catch (error) {
     if (!warned.inflate) {
       warned.inflate = true;
-      console.warn(
-        `[zlib-accelerator] inflate 加速器抛错，已回落 fflate（本进程只提示一次）：${errorText(error)}`
-      );
+      console.warn(`[zlib-accelerator] inflate 加速器抛错，已回落 fflate（本进程只提示一次）：${errorText(error)}`);
     }
     return null;
   }

@@ -16,7 +16,7 @@ import type { ProjectRepository } from "@/domain/chat/repositories/project.port.
 import type { SessionRepository } from "@/domain/chat/repositories/session.port.js";
 import type { MessageRepository } from "@/domain/chat/repositories/message.port.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
-import { seedForkCopyParity } from "@/domain/chat/logic/seed-fork-copy-parity.js";
+import { forkCopySeeder } from "@/domain/chat/logic/fork-copy-seeder.js";
 import {
   copyVfsTree,
   deleteVfsPrefix,
@@ -403,12 +403,8 @@ export class DefaultSessionService implements SessionService {
         { contentStore: new SqliteVfsContentStore(tx) }
       );
       await r.messages.batchInsert(copyMessages);
-      await seedForkCopyParity(tx, {
-        projectId: source.projectId,
-        sourceSessionId: source.id,
-        targetSessionId: copy.id,
-        newMessages,
-      });
+      const seeded = await forkCopySeeder.seed(tx, { projectId: source.projectId, sourceSessionId: source.id, targetSessionId: copy.id, newMessages });
+      if (!seeded.ok) throw seeded.error;
       return copy;
     });
   }

@@ -44,7 +44,8 @@ export async function importAgentYamlWithDialog(
       const def = decodeAgentYamlText(yaml);
       const probe = new ToolRegistry();
       registerBuiltinTools(probe);
-      await validateAgentDefinition(def, { registeredToolNames: probe.list() });
+      const validation = await validateAgentDefinition(def, {registeredToolNames: probe.list()});
+      if (!validation.ok) throw validation.error;
       await runtime.agentRegistry.upsert(agentId, def, {
         registeredToolNames: probe.list(),
       });

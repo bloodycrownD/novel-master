@@ -7,7 +7,7 @@ import {
   parseComposerDraftJson,
   serializeComposerDraftJson,
 } from "../../src/domain/chat/model/composer-draft.schema.js";
-import { hasChatAnnotateDrafts } from "../../src/domain/chat/logic/chat-annotate-draft-store.js";
+import { chatAnnotateDraftStore } from "../../src/domain/chat/logic/chat-annotate-draft-store.js";
 import {
   SESSION_KKV_DOMAIN_FILE_CACHE,
   SESSION_KKV_DOMAIN_USER_VFS_PENDING,
@@ -156,7 +156,7 @@ describe("SqliteSessionRepository", () => {
     );
 
     // user ops 投影链已拆除：clearSession 后无批注草稿残留即可佐证状态层清空
-    assert.equal(hasChatAnnotateDrafts(session.id), false);
+    assert.equal(chatAnnotateDraftStore.has(session.id), false);
   });
 });
 

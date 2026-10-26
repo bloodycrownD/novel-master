@@ -166,30 +166,32 @@ function seededVfs(): FakeVfs {
 }
 
 describe('vfs-operations move/rename 冲突', () => {
-  it('renameVfsFile 目标文件已存在 → ALREADY_EXISTS 且双端内容不变', async () => {
+  // core moveVfsPath 迁 Result 后，失败在 CLI/UI 边界抛 AppError（key=VFS_*），
+  // 不再是旧 VfsError short code。
+  it('renameVfsFile 目标文件已存在 → VFS_ALREADY_EXISTS 且双端内容不变', async () => {
     const vfs = seededVfs();
     await expect(
       renameVfsFile(vfs as unknown as VfsService, '/a.md', '/b.md'),
-    ).rejects.toMatchObject({name: 'VfsError', code: 'ALREADY_EXISTS'});
+    ).rejects.toMatchObject({name: 'VFS_ALREADY_EXISTS'});
     expect(vfs.files.get('/a.md')).toBe('content-a');
     expect(vfs.files.get('/b.md')).toBe('content-b');
   });
 
-  it('renameVfsDirectory 目标目录已存在（非空）→ ALREADY_EXISTS 且子树未动', async () => {
+  it('renameVfsDirectory 目标目录已存在（非空）→ VFS_ALREADY_EXISTS 且子树未动', async () => {
     const vfs = seededVfs();
     await expect(
       renameVfsDirectory(vfs as unknown as VfsService, '/old', '/target'),
-    ).rejects.toMatchObject({name: 'VfsError', code: 'ALREADY_EXISTS'});
+    ).rejects.toMatchObject({name: 'VFS_ALREADY_EXISTS'});
     expect(vfs.files.get('/old/sub/note.md')).toBe('note');
     expect(vfs.files.get('/target/keep.md')).toBe('keep');
     expect(vfs.files.has('/target/sub/note.md')).toBe(false);
   });
 
-  it('rename 源不存在 → NOT_FOUND', async () => {
+  it('rename 源不存在 → VFS_NOT_FOUND', async () => {
     const vfs = seededVfs();
     await expect(
       renameVfsFile(vfs as unknown as VfsService, '/missing.md', '/c.md'),
-    ).rejects.toMatchObject({name: 'VfsError', code: 'NOT_FOUND'});
+    ).rejects.toMatchObject({name: 'VFS_NOT_FOUND'});
   });
 });
 

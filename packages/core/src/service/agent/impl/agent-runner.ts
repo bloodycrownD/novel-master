@@ -4,19 +4,15 @@
  * @module service/agent/impl/agent-runner
  */
 
-import type { ChatMessage } from "@/domain/chat/model/message.js";
+import { truncateText } from "@/common/text.js";
+import type { ChatMessageData } from "@/domain/chat/model/message.js";
 import type {
   ContentBlock,
   ToolResultBlock,
   ToolUseBlock,
 } from "@/domain/chat/model/content-block.js";
 import type { AgentSession } from "@/domain/agent/session/agent-session.port.js";
-import {
-  assertNoCrossRoundDoomLoop,
-  assertNoDoomLoopInBlocks,
-  CROSS_ROUND_WINDOW,
-  DOOM_LOOP_THRESHOLD,
-} from "@/domain/agent/logic/doom-loop.js";
+import { DoomLoopDetector } from "@/domain/agent/logic/doom-loop.js";
 import { buildToolResultBlock } from "@/domain/tool/logic/build-tool-result-block.js";
 import { anyToolUseMutatesWorkspace } from "@/domain/tool/logic/tool-use-mutates-workspace.js";
 import type {
@@ -31,7 +27,7 @@ import {
 } from "@/domain/tool/logic/tool-runner.js";
 import type { BuiltinToolContext } from "@/domain/tool/builtin/builtin-tool-context.js";
 import { ProviderError } from "@/errors/provider-errors.js";
-import { PreferencesError } from "@/errors/preferences-errors.js";
+import { isAppError } from "@/errors/app-error.js";
 import type { MessageCheckpointService } from "@/service/message-checkpoint/message-checkpoint.port.js";
 import { toolsFromRegistry } from "@/infra/llm-protocol/logic/tool-definitions.js";
 import { pickLastPromptUsage } from "@/infra/tokenizer/logic/pick-last-prompt-usage.js";
@@ -47,7 +43,7 @@ import {
 import { normalizeOrphanToolResultsForLlm } from "../../prompt/normalize-orphan-tool-results-for-llm.js";
 import { applyThinkingContextForLlm } from "../../prompt/apply-thinking-context-for-llm.js";
 import { normalizeForLlmExport } from "@/domain/prompt/logic/normalize-for-llm-export.js";
-import { prepareUserMessagesForPrompt } from "@/domain/chat/logic/prepare-user-messages-for-prompt.js";
+import { promptAssembler } from "@/domain/chat/logic/prompt/prompt-assembler.js";
 import type { SkillService } from "@/service/skills/skills.port.js";
 import { inferLlmProtocolFromSavedModelId } from "@/domain/provider/logic/infer-llm-protocol-from-model-id.js";
 import type { ProviderRepository } from "@/domain/provider/repositories/provider.port.js";
@@ -78,7 +74,7 @@ import {
   EVENT_AGENT_STREAM_USAGE,
 } from "@/domain/events/model/event-types.js";
 import type { LlmStreamEvent } from "@/infra/llm-protocol/ports/adapter.port.js";
-import { generateAgentRunId } from "@/domain/agent/logic/generate-agent-run-id.js";
+import { randomUUID } from "@/infra/random-uuid.js";
 import { DEFAULT_AGENT_MAX_STEPS } from "../logic/agent-run-max-steps.js";
 
 export interface DefaultAgentRunnerDeps {
@@ -115,7 +111,7 @@ export interface DefaultAgentRunnerDeps {
   /** 按 sessionId 累积 in-flight 流式 partial，供子会话首次进入查询。 */
   readonly streamRegistry?: AgentStreamRegistry;
   /** 每步 tool_use 查找源（可见-only；见 {@link CreateAgentRunnerDeps} 同名字段）。 */
-  readonly listVisibleSessionMessages?: () => Promise<readonly ChatMessage[]>;
+  readonly listVisibleSessionMessages?: () => Promise<readonly ChatMessageData[]>;
   /** 思考上下文偏好窄切片（每 run 一次快照；未注入时等同默认开）。 */
   readonly preferences?: Pick<
     PersistentPreferences,
@@ -145,13 +141,6 @@ function budgetSkillsIndexEntries(
       description: s.description ?? "",
       domain: s.domain,
     }));
-}
-
-function truncateRaw(raw: string, maxLen: number): string {
-  if (raw.length <= maxLen) {
-    return raw;
-  }
-  return raw.slice(0, maxLen) + "…";
 }
 
 /** 避免落库空正文 assistant（真实提示词 #seq 断层、UI 也不展示）。 */
@@ -230,10 +219,10 @@ export class DefaultAgentRunner implements AgentRunner {
       ? this.deps.session
       : new EphemeralOverlayAgentSession(this.deps.session, sessionId);
 
-    const runId = generateAgentRunId();
+    const runId = randomUUID();
 
     // 注意：EVENT_AGENT_RUN_STARTED 的 publish 位置已下移到主 try 紧前
-    // （r3-run-2 步骤 1）。原先在 `generateAgentRunId()` 之后立刻发，导致
+    // （r3-run-2 步骤 1）。原先在 `runId` 生成后立刻发，导致
     // 本段到主 try 之间（savedModels.findById / preferences 读 / wt 解析）
     // 抛错时「STARTED 已发、终态一个都没有」——desktop 侧 refcount 永久泄漏、
     // 后续全部 AGENT_BUSY，mobile 侧靠 .finally 兜住只是侥幸。
@@ -258,18 +247,14 @@ export class DefaultAgentRunner implements AgentRunner {
      */
     let assistantAppendedInRun = false;
     const signal = options.signal;
-    const toolUseWindow: ToolUseBlock[] = [];
     let vfsMutatedInRun = false;
 
     const maxSteps =
       options.maxSteps ??
       options.definition.runtime?.maxSteps ??
       DEFAULT_AGENT_MAX_STEPS;
-    const doomLoopThreshold =
-      options.definition.runtime?.doomLoopThreshold ?? DOOM_LOOP_THRESHOLD;
-    const doomLoopCrossRoundWindow =
-      options.definition.runtime?.doomLoopCrossRoundWindow ??
-      CROSS_ROUND_WINDOW;
+    // 死循环检测器按 run 建一个：跨轮窗口状态收在实例里，runner 不再手动维护。
+    const doomLoop = new DoomLoopDetector(options.definition.runtime);
 
     const tools = toolsFromRegistry(this.deps.registry, this.deps.toolCtx);
     // 技能索引预算：消费装配期 toolCtx.skills 的生效清单快照（每 run 一次，
@@ -305,7 +290,7 @@ export class DefaultAgentRunner implements AgentRunner {
 
     // 思考上下文偏好（每 run 一次快照，对齐 savedModelForAppend 的读法）：
     // run 中途切换开关不影响进行中的 run，同 run 内各 step 口径一致。
-    // KKV 存了坏值（如手工写入 not-a-bool）时 PreferencesError 不炸 run：
+    // KKV 存了坏值（如手工写入 not-a-bool）时 PREFERENCES_INVALID_VALUE 不炸 run：
     // 回退 false（跟随默认关，与旧版「思考不进上下文」行为一致、无兼容风险）
     // 并记标签日志；GUI 无自愈入口，用户重置偏好后自然恢复。
     let thinkingContextEnabled = false;
@@ -313,13 +298,13 @@ export class DefaultAgentRunner implements AgentRunner {
       thinkingContextEnabled =
         (await this.deps.preferences?.getThinkingContextEnabled()) ?? false;
     } catch (error) {
-      if (!(error instanceof PreferencesError)) {
+      if (!isAppError(error, "PREFERENCES_INVALID_VALUE")) {
         throw error;
       }
       console.error("[agent-runner] thinking_context_pref_read_failed", {
         stage: "thinking_context_pref",
         key: "chat.thinkingContext",
-        code: error.code,
+        code: error.key,
         fallback: false,
         error,
       });
@@ -381,7 +366,7 @@ export class DefaultAgentRunner implements AgentRunner {
     };
 
     // STARTED 下移落点（r3-run-2）：紧贴主 try 之前，与主 try 的 FAILED /
-    // FINISHED 构成「要么都发、要么都不发」的配对（细因见上方 generateAgentRunId
+    // FINISHED 构成「要么都发、要么都不发」的配对（细因见上方 runId 生成
     // 处的注释）。紧邻 try 也保证 publish 与随后的失败处理之间没有其他 await
     // 缝隙——事件到达时下游一定还能看到紧随其后的终态。
     if (publishRunLifecycle) {
@@ -449,7 +434,7 @@ export class DefaultAgentRunner implements AgentRunner {
           break;
         }
 
-        visible = await prepareUserMessagesForPrompt(visible, {
+        const prepareRuntime = {
           sessionId,
           sessionKkv: this.deps.sessionKkv,
           vfs: this.deps.toolCtx.vfs,
@@ -466,7 +451,8 @@ export class DefaultAgentRunner implements AgentRunner {
           // deny（D4）时置空，而显式引用不受工具禁用影响。
           skills: this.deps.skills?.(),
           projectId,
-        });
+        };
+        visible = await promptAssembler.prepare(visible, prepareRuntime);
         if (signal?.aborted) {
           await handleAbort("after_prepare_user_messages");
           break;
@@ -628,7 +614,7 @@ export class DefaultAgentRunner implements AgentRunner {
         //    走旧读法：查找源保持「纯 DB 集」，本 run 追加的 tool_use id 依旧解析不
         //    到名字，出站 wire 与 RT-01 改动前一致（不引入 spec 未承认的 wire 变化）。
         //    代价是 ephemeral run 每 step 一次全列读——已知取舍，甲案保守。
-        let toolUseLookupMessages: readonly ChatMessage[] | undefined;
+        let toolUseLookupMessages: readonly ChatMessageData[] | undefined;
         if (protocol === "gemini" && this.deps.listVisibleSessionMessages != null) {
           toolUseLookupMessages =
             stepCompactionEmitted || !persistMessages
@@ -733,7 +719,7 @@ export class DefaultAgentRunner implements AgentRunner {
 
         stepsExecuted += 1;
 
-        let assistantMessage: ChatMessage | undefined;
+        let assistantMessage: ChatMessageData | undefined;
         if (result.blocks.length > 0 && meaningful) {
           assistantMessage = await session.append(
             "assistant",
@@ -834,18 +820,11 @@ export class DefaultAgentRunner implements AgentRunner {
           usage: result.usage,
         });
 
-        assertNoDoomLoopInBlocks(result.blocks, {
-          threshold: doomLoopThreshold,
-        });
-        for (const toolUse of toolUses) {
-          toolUseWindow.push(toolUse);
-          if (toolUseWindow.length > doomLoopCrossRoundWindow * 4) {
-            toolUseWindow.shift();
-          }
+        // 检测器只回报结果（不抛）：run 循环的收口语义仍靠这里抛出 AppError。
+        const doomLoopResult = doomLoop.checkStep(result.blocks);
+        if (!doomLoopResult.ok) {
+          throw doomLoopResult.error;
         }
-        assertNoCrossRoundDoomLoop(toolUseWindow, {
-          crossRoundWindow: doomLoopCrossRoundWindow,
-        });
 
         if (signal?.aborted) {
           await handleAbort("before_tool_run");
@@ -865,10 +844,7 @@ export class DefaultAgentRunner implements AgentRunner {
               ok: false,
               error: new ProviderError(
                 "INVALID_TOOL_ARGUMENTS",
-                `${protocol}: invalid tool arguments JSON (${truncateRaw(
-                  degraded.rawArguments,
-                  80
-                )})`
+                `${protocol}: invalid tool arguments JSON (${truncateText(degraded.rawArguments, 80)})`
               ),
             });
             continue;

@@ -5,13 +5,7 @@
  */
 
 import { ZodError } from "zod";
-import {
-  toolFailed,
-  toolInvalidArgument,
-  toolNotFound,
-  toolPathForbidden,
-  type ToolError,
-} from "@/errors/tool-errors.js";
+import { toolFailed, toolInvalidArgument, toolNotFound, toolPathForbidden, type ToolError } from "@/errors/tool-errors.js";
 import { classifyMutatingToolCall } from "./fs-command-classify.js";
 import { checkToolPathPolicy } from "./tool-path-policy.js";
 import type { ToolRegistry } from "./tool-registry.js";
@@ -23,20 +17,14 @@ export interface ToolCall {
 }
 
 /** Outcome of one parallel tool invocation (errors are captured, not thrown). */
-export type ParallelToolOutcome =
-  | { readonly ok: true; readonly output: unknown }
-  | { readonly ok: false; readonly error: unknown };
+export type ParallelToolOutcome = { readonly ok: true; readonly output: unknown } | { readonly ok: false; readonly error: unknown };
 
 const DEFAULT_PARALLEL_CONCURRENCY = 8;
 
 /**
  * Runs async tasks with a bounded concurrency (fork-join helper).
  */
-async function mapWithConcurrency<T, R>(
-  items: readonly T[],
-  concurrency: number,
-  fn: (item: T, index: number) => Promise<R>
-): Promise<R[]> {
+async function mapWithConcurrency<T, R>(items: readonly T[], concurrency: number, fn: (item: T, index: number) => Promise<R>): Promise<R[]> {
   if (items.length === 0) {
     return [];
   }
@@ -79,11 +67,7 @@ export class ToolRunner<Ctx = unknown> {
    * @throws ToolError INVALID_ARGUMENT when input invalid
    * @throws ToolError FAILED when tool throws or output violates schema
    */
-  async call<Output = unknown>(
-    name: string,
-    input: unknown,
-    ctx: Ctx
-  ): Promise<Output> {
+  async call<Output = unknown>(name: string, input: unknown, ctx: Ctx): Promise<Output> {
     const tool = this.registry.get(name);
     if (!tool) {
       throw toolNotFound(name);
@@ -131,11 +115,7 @@ export class ToolRunner<Ctx = unknown> {
    *
    * @remarks Individual failures are captured in {@link ParallelToolOutcome}; order matches `calls`.
    */
-  async runParallel(
-    calls: readonly ToolCall[],
-    ctx: Ctx,
-    options?: { concurrency?: number }
-  ): Promise<ParallelToolOutcome[]> {
+  async runParallel(calls: readonly ToolCall[], ctx: Ctx, options?: { concurrency?: number }): Promise<ParallelToolOutcome[]> {
     const concurrency = options?.concurrency ?? DEFAULT_PARALLEL_CONCURRENCY;
     const pathTail = new Map<string, Promise<void>>();
 
@@ -144,9 +124,7 @@ export class ToolRunner<Ctx = unknown> {
       let release: (() => void) | undefined;
 
       if (paths != null && paths.length > 0) {
-        const prevTails = paths.map(
-          (path) => pathTail.get(path) ?? Promise.resolve()
-        );
+        const prevTails = paths.map((path) => pathTail.get(path) ?? Promise.resolve());
         const gate = new Promise<void>((resolve) => {
           release = resolve;
         });
@@ -172,10 +150,5 @@ export class ToolRunner<Ctx = unknown> {
 }
 
 function isToolError(e: unknown): e is ToolError {
-  return (
-    typeof e === "object" &&
-    e !== null &&
-    (e as { name?: unknown }).name === "ToolError" &&
-    typeof (e as { code?: unknown }).code === "string"
-  );
+  return typeof e === "object" && e !== null && (e as { name?: unknown }).name === "ToolError" && typeof (e as { code?: unknown }).code === "string";
 }

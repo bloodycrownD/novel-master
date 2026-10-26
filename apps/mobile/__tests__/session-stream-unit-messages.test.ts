@@ -59,7 +59,7 @@ import {
   setSessionViewCache,
 } from '@/services/chat-session-view-cache';
 import {resetKeepAliveStateForTests} from '@/services/agent-finished-notification';
-import type {ChatMessage} from '@novel-master/core/chat';
+import type {ChatMessageData} from '@novel-master/core/chat';
 
 /** 时钟起点（fake timers 的 Date.now 从此起算）。 */
 const CLOCK_START_MS = 1_000_000;
@@ -84,7 +84,7 @@ function makeMessage(
   sid: string,
   seq: number,
   role: 'user' | 'assistant' = 'user',
-): ChatMessage {
+): ChatMessageData {
   return {
     id: `${sid}-${seq}`,
     sessionId: sid,
@@ -92,17 +92,17 @@ function makeMessage(
     role,
     content: `msg-${sid}-${seq}`,
     createdAtMs: seq * 1000,
-  } as unknown as ChatMessage;
+  } as unknown as ChatMessageData;
 }
 
 /**
  * 内存型消息仓库：db 按 sessionId 存 seq 升序全量行。
  * tail = 尾部 limit 条；page = beforeSeq 之前的尾部 limit 条（core 口径）。
  */
-function makeMessageStore(db: Map<string, ChatMessage[]>) {
+function makeMessageStore(db: Map<string, ChatMessageData[]>) {
   return {
     listBySessionTail: jest.fn(
-      async (sid: string, options: {limit: number}): Promise<ChatMessage[]> => {
+      async (sid: string, options: {limit: number}): Promise<ChatMessageData[]> => {
         const rows = [...(db.get(sid) ?? [])].sort((a, b) => a.seq - b.seq);
         return rows.slice(-options.limit);
       },
@@ -111,7 +111,7 @@ function makeMessageStore(db: Map<string, ChatMessage[]>) {
       async (
         sid: string,
         options: {limit: number; beforeSeq?: number},
-      ): Promise<ChatMessage[]> => {
+      ): Promise<ChatMessageData[]> => {
         const rows = [...(db.get(sid) ?? [])].sort((a, b) => a.seq - b.seq);
         const filtered =
           options.beforeSeq == null
@@ -143,7 +143,7 @@ function createHarness(options?: {readonly settledGraceMs?: number}) {
       name: `项目-${projectId}`,
     })),
   };
-  const db = new Map<string, ChatMessage[]>();
+  const db = new Map<string, ChatMessageData[]>();
   const messages = makeMessageStore(db);
   const runAgentTurn = jest.fn(
     async (_runtime: unknown, _scope: unknown, _content: string) => undefined,
@@ -765,7 +765,7 @@ describe('CR L1-5: idle 上翻 in-flight 不受 LRU 淘汰影响', () => {
           options.beforeSeq == null
             ? rows
             : rows.filter(r => r.seq < options.beforeSeq);
-        return new Promise<ChatMessage[]>(resolve => {
+        return new Promise<ChatMessageData[]>(resolve => {
           releasePage = () => resolve(filtered.slice(-options.limit));
         });
       },
@@ -805,7 +805,7 @@ describe('CR L1-5: idle 上翻 in-flight 不受 LRU 淘汰影响', () => {
     let releasePage: (() => void) | null = null;
     h.messages.listBySessionPage.mockImplementation(
       () =>
-        new Promise<ChatMessage[]>(resolve => {
+        new Promise<ChatMessageData[]>(resolve => {
           releasePage = () => resolve([]);
         }),
     );

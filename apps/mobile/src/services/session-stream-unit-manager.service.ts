@@ -97,7 +97,7 @@ import type {
   SubagentChildSessionCreatedPayload,
 } from '@novel-master/core/events';
 import type {
-  ChatMessage,
+  ChatMessageData,
   ComposerDraftTokenRange,
   MessageAttachment,
   SendAnnotateDraft,
@@ -185,7 +185,7 @@ export const SESSION_STREAM_MAX_MESSAGE_VIEWS = 500;
  * 标记与兜底基线都在 `idleLoadingMore`（不参与淘汰）。
  */
 interface IdleMessageViewEntry {
-  readonly messages: readonly ChatMessage[];
+  readonly messages: readonly ChatMessageData[];
   readonly hasMoreMessages: boolean;
 }
 
@@ -912,7 +912,7 @@ export class SessionStreamUnitManager {
   async loadSessionTailMessages(
     sessionId: string,
     options?: {readonly force?: boolean; readonly projectId?: string},
-  ): Promise<readonly ChatMessage[] | null> {
+  ): Promise<readonly ChatMessageData[] | null> {
     const unit = this.units.get(sessionId);
     if (unit != null) {
       return unit.loadTailMessages(
@@ -1017,7 +1017,7 @@ export class SessionStreamUnitManager {
   private async loadIdleTailMessages(
     sessionId: string,
     options?: {readonly force?: boolean; readonly projectId?: string},
-  ): Promise<readonly ChatMessage[] | null> {
+  ): Promise<readonly ChatMessageData[] | null> {
     const force = options?.force ?? false;
     const projectId = options?.projectId;
     if (projectId != null && !force) {
@@ -1128,7 +1128,7 @@ export class SessionStreamUnitManager {
   /** 采纳 idle 消息面并通知（通知驱动 Provider 的消息快照刷新）。 */
   private applyIdleMessages(
     sessionId: string,
-    messages: readonly ChatMessage[],
+    messages: readonly ChatMessageData[],
     hasMore: boolean,
   ): void {
     this.idleMessageViews.set(sessionId, {

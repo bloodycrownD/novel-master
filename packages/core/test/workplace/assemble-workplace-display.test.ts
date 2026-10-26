@@ -3,25 +3,16 @@ import { describe, it, mock } from "node:test";
 import { createSessionKkvService } from "../../src/service/session-kkv/create-session-kkv-service.js";
 import { createWorkplaceService } from "../../src/service/workplace/create-workplace-service.js";
 import { assembleWorkplaceDisplay } from "../../src/service/workplace/assemble-workplace-display.js";
-import {
-  SESSION_KKV_DOMAIN_FILE_CACHE,
-  SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
-  RULE_SNAPSHOT_CANON_KEY,
-  fileCacheKey,
-} from "../../src/domain/session-kkv/model/session-kkv-domains.js";
+import { SESSION_KKV_DOMAIN_FILE_CACHE, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY, fileCacheKey } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
 import { parseFileCachePayload } from "../../src/domain/workplace/logic/rule-snapshot-codec.js";
 import { serializeRuleSnapshot } from "../../src/domain/workplace/logic/rule-snapshot-codec.js";
 import { settlePendingFileCacheBackfills } from "../../src/domain/workplace/logic/load-or-fill-file-cache.js";
 import { createVfsTools } from "../../src/domain/tool/builtin/vfs-tools.js";
 import { textBlocks } from "../../src/domain/chat/content/text-blocks.js";
-import { messageBodyText } from "../../src/domain/chat/content/message-body-text.js";
-import { prepareUserMessagesForPrompt } from "../../src/domain/chat/logic/prepare-user-messages-for-prompt.js";
+import { messageBodyTextFromBlocks } from "../../src/domain/chat/content/message-body-text.js";
+import { promptAssembler } from "../../src/domain/chat/logic/prompt/prompt-assembler.js";
 import type { AgentPromptLayout } from "../../src/domain/prompt/model/agent-prompt-layout.js";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
+import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 
@@ -54,14 +45,11 @@ describe("assembleWorkplaceDisplay", () => {
         workplace: wt,
         vfs,
         layout: layoutWithoutWorkplace(),
-      },
+      }
     );
     assert.equal(out.workplaceDisplay, "");
     assert.deepEqual(out.prefixPaths, []);
-    assert.equal(
-      await sk.get(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY),
-      null,
-    );
+    assert.equal(await sk.get(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY), null);
   });
 
   it("T-WP2: 空 kkv + 有 worktree 块 → 写快照与 file_cache，display 含 file", async () => {
@@ -89,38 +77,21 @@ describe("assembleWorkplaceDisplay", () => {
         workplace: wt,
         vfs,
         layout: layoutWithWorkplace(),
-      },
+      }
     );
     assert.match(out.workplaceDisplay, /<file /);
     assert.match(out.workplaceDisplay, /hello-world/);
-    assert.equal(
-      (out.workplaceDisplay.match(/<workplace>/g) ?? []).length,
-      1,
-      "T-WP4: 恰好一层开标签",
-    );
-    assert.equal(
-      (out.workplaceDisplay.match(/<\/workplace>/g) ?? []).length,
-      1,
-      "T-WP4: 恰好一层闭标签",
-    );
+    assert.equal((out.workplaceDisplay.match(/<workplace>/g) ?? []).length, 1, "T-WP4: 恰好一层开标签");
+    assert.equal((out.workplaceDisplay.match(/<\/workplace>/g) ?? []).length, 1, "T-WP4: 恰好一层闭标签");
     assert.equal(out.workplaceDisplay.includes("<<workplace>"), false);
-    assert.equal(
-      out.workplaceDisplay.includes("<workplace>\n<workplace>"),
-      false,
-    );
+    assert.equal(out.workplaceDisplay.includes("<workplace>\n<workplace>"), false);
     assert.deepEqual(out.prefixPaths, ["/note.md"]);
-    assert.ok(
-      (await sk.get(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY)) !=
-        null,
-    );
+    assert.ok((await sk.get(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY)) != null);
     // file_cache 回填是 fire-and-forget（2026-09-30 冷路径优化：压缩+落库
     // 推迟到宏任务，不挡 assemble 返回），所以「最终被回填」要在 settle
     // 闸门之后断言，而不是 assemble 返回那一刻。
     await settlePendingFileCacheBackfills();
-    assert.ok(
-      (await sk.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, fileCacheKey("full", "/note.md"))) !=
-        null,
-    );
+    assert.ok((await sk.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, fileCacheKey("full", "/note.md"))) != null);
   });
 
   // T-SR4：kkv canon=[] 后 assemble 仍能对有规则文件产出非空 display（空 [] 不粘住）
@@ -137,12 +108,7 @@ describe("assembleWorkplaceDisplay", () => {
       sessionId: session.id,
     }).setFileRule({ logicalPath: "/note.md", inclusionMode: "show" });
 
-    await sk.set(
-      session.id,
-      SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
-      RULE_SNAPSHOT_CANON_KEY,
-      "[]",
-    );
+    await sk.set(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY, "[]");
 
     const wt = createWorkplaceService(ctx.conn, {
       kind: "session",
@@ -156,7 +122,7 @@ describe("assembleWorkplaceDisplay", () => {
         workplace: wt,
         vfs,
         layout: layoutWithWorkplace(),
-      },
+      }
     );
     assert.match(out.workplaceDisplay, /revived/);
     assert.deepEqual(out.prefixPaths, ["/note.md"]);
@@ -276,17 +242,13 @@ describe("assembleWorkplaceDisplay", () => {
         projectId: project.id,
         sessionId: session.id,
         sessionKkv: sk,
-      },
+      }
     );
-    const raw = await sk.get(
-      session.id,
-      SESSION_KKV_DOMAIN_FILE_CACHE,
-      fileCacheKey("full", "/w.md"),
-    );
+    const raw = await sk.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, fileCacheKey("full", "/w.md"));
     assert.ok(raw != null);
     const payload = parseFileCachePayload(raw!);
-    assert.ok(payload != null);
-    assert.equal(payload!.body, "full-content");
+    assert.ok(payload.ok);
+    assert.equal(payload.value.body, "full-content");
   });
 
   it("T-FC2: edit 成功不改 file_cache", async () => {
@@ -296,12 +258,7 @@ describe("assembleWorkplaceDisplay", () => {
     const sk = createSessionKkvService(ctx.conn);
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write("/e.md", "alpha");
-    await sk.set(
-      session.id,
-      SESSION_KKV_DOMAIN_FILE_CACHE,
-      fileCacheKey("full", "/e.md"),
-      JSON.stringify({ body: "cached-before-edit", mtimeMs: 1 }),
-    );
+    await sk.set(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, fileCacheKey("full", "/e.md"), JSON.stringify({ body: "cached-before-edit", mtimeMs: 1 }));
     const editTool = createVfsTools().find((t) => t.name === "edit");
     assert.ok(editTool != null);
     await editTool!.run(
@@ -311,13 +268,9 @@ describe("assembleWorkplaceDisplay", () => {
         projectId: project.id,
         sessionId: session.id,
         sessionKkv: sk,
-      },
+      }
     );
-    const raw = await sk.get(
-      session.id,
-      SESSION_KKV_DOMAIN_FILE_CACHE,
-      fileCacheKey("full", "/e.md"),
-    );
+    const raw = await sk.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, fileCacheKey("full", "/e.md"));
     assert.equal(raw, JSON.stringify({ body: "cached-before-edit", mtimeMs: 1 }));
     assert.equal((await vfs.read("/e.md")).content, "beta");
   });
@@ -352,25 +305,16 @@ describe("assembleWorkplaceDisplay", () => {
       layout: layoutWithWorkplace(),
     };
     await assembleWorkplaceDisplay(scope, deps);
-    assert.ok(
-      (await sk.get(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY)) !=
-        null,
-    );
+    assert.ok((await sk.get(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY)) != null);
 
     await sk.clearSession(session.id);
-    assert.equal(
-      await sk.get(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY),
-      null,
-    );
+    assert.equal(await sk.get(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY), null);
 
     await vfs.replace("/again.md", "v1", "v2-after-clear");
     const out = await assembleWorkplaceDisplay(scope, deps);
     assert.match(out.workplaceDisplay, /v2-after-clear/);
     assert.deepEqual(out.prefixPaths, ["/again.md"]);
-    assert.ok(
-      (await sk.get(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY)) !=
-        null,
-    );
+    assert.ok((await sk.get(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY)) != null);
   });
 
   it("T-FC3: delete/rename/move 不碰 file_cache 原 key", async () => {
@@ -398,23 +342,10 @@ describe("assembleWorkplaceDisplay", () => {
     await fsTool!.run({ action: "rm", path: "/del.md" }, toolCtx);
     await fsTool!.run({ action: "mv", from: "/old.md", to: "/new.md" }, toolCtx);
 
-    assert.equal(
-      await sk.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, delKey),
-      cachedBody,
-    );
-    assert.equal(
-      await sk.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, mvKey),
-      cachedBody,
-    );
+    assert.equal(await sk.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, delKey), cachedBody);
+    assert.equal(await sk.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, mvKey), cachedBody);
     // 新 path 不自动拷贝 cache
-    assert.equal(
-      await sk.get(
-        session.id,
-        SESSION_KKV_DOMAIN_FILE_CACHE,
-        fileCacheKey("full", "/new.md"),
-      ),
-      null,
-    );
+    assert.equal(await sk.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, fileCacheKey("full", "/new.md")), null);
   });
 
   // huge-card-import-crash：误导入巨型角色卡的存量用户重启后，workplace
@@ -443,7 +374,7 @@ describe("assembleWorkplaceDisplay", () => {
          SELECT content_hash FROM vfs_entry
          WHERE scope_key LIKE ? AND path = ?
        )`,
-      [9 * 1024 * 1024, `%${session.id}%`, "/毒卡/巨型设定.md"],
+      [9 * 1024 * 1024, `%${session.id}%`, "/毒卡/巨型设定.md"]
     );
 
     const out = await assembleWorkplaceDisplay(
@@ -453,42 +384,22 @@ describe("assembleWorkplaceDisplay", () => {
         workplace: wt,
         vfs,
         layout: layoutWithWorkplace(),
-      },
+      }
     );
 
     // 超大文件：占位符进 display，正文不进，file_cache 不写；占位块时间属性
     // 必须是行真实 mtime 而非 1970（CR-1：mtimeMs=0 会被渲染成 1970-01-01 假时间戳）
     assert.match(out.workplaceDisplay, /（文件过大，已跳过，约 \d+ 字符）/);
-    const placeholderBlock = out.workplaceDisplay.match(
-      /<file path="\/毒卡\/巨型设定\.md" createdAt="([^"]*)" updatedAt="[^"]*"/,
-    );
+    const placeholderBlock = out.workplaceDisplay.match(/<file path="\/毒卡\/巨型设定\.md" createdAt="([^"]*)" updatedAt="[^"]*"/);
     assert.ok(placeholderBlock, "占位块带 file 头属性");
-    assert.equal(
-      placeholderBlock[1]!.startsWith("1970"),
-      false,
-      `占位块时间应为真实 mtime，实际：${placeholderBlock[1]}`,
-    );
+    assert.equal(placeholderBlock[1]!.startsWith("1970"), false, `占位块时间应为真实 mtime，实际：${placeholderBlock[1]}`);
     assert.equal(out.workplaceDisplay.includes("poison-body"), false);
-    assert.equal(
-      await sk.get(
-        session.id,
-        SESSION_KKV_DOMAIN_FILE_CACHE,
-        fileCacheKey("full", "/毒卡/巨型设定.md"),
-      ),
-      null,
-    );
+    assert.equal(await sk.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, fileCacheKey("full", "/毒卡/巨型设定.md")), null);
     // 正常文件不受降级影响：正文照常进 display 并写 cache
     // （回填是 fire-and-forget，落定后再断言缓存）
     assert.equal(out.workplaceDisplay.includes("hello-world"), true);
     await settlePendingFileCacheBackfills();
-    assert.notEqual(
-      await sk.get(
-        session.id,
-        SESSION_KKV_DOMAIN_FILE_CACHE,
-        fileCacheKey("full", "/正常.md"),
-      ),
-      null,
-    );
+    assert.notEqual(await sk.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, fileCacheKey("full", "/正常.md")), null);
   });
 
   it("filename 档不得渲染 1970 假时间戳", async () => {
@@ -518,17 +429,10 @@ describe("assembleWorkplaceDisplay", () => {
       fillPolicy: "filename",
     });
 
-    const out = await assembleWorkplaceDisplay(
-      { kind: "session", projectId: project.id, sessionId: session.id },
-      { sessionKkv: sk, workplace: wt, vfs, layout: layoutWithWorkplace() },
-    );
+    const out = await assembleWorkplaceDisplay({ kind: "session", projectId: project.id, sessionId: session.id }, { sessionKkv: sk, workplace: wt, vfs, layout: layoutWithWorkplace() });
 
     assert.match(out.workplaceDisplay, /<file path="\/卷\//, "应有 filename 档文件块");
-    assert.equal(
-      out.workplaceDisplay.includes('createdAt="1970'),
-      false,
-      `filename 档不得渲染 1970 假时间戳：${out.workplaceDisplay}`,
-    );
+    assert.equal(out.workplaceDisplay.includes('createdAt="1970'), false, `filename 档不得渲染 1970 假时间戳：${out.workplaceDisplay}`);
     assert.equal(out.workplaceDisplay.includes("正文一"), false, "filename 档不渲正文");
   });
 });
@@ -590,7 +494,7 @@ describe("assembleWorkplaceDisplay S0 双读（prefixPaths / visiblePaths）", (
       serializeRuleSnapshot([
         { path: "/full.md", status: "full" },
         { path: "/hdr.md", status: "header" },
-      ]),
+      ])
     );
 
     const out = await assembleWorkplaceDisplay(
@@ -604,7 +508,7 @@ describe("assembleWorkplaceDisplay S0 双读（prefixPaths / visiblePaths）", (
         }),
         vfs,
         layout: layoutWithWorkplace(),
-      },
+      }
     );
 
     assert.deepEqual(out.visiblePaths, ["/full.md", "/hdr.md"], "visiblePaths = 全量可见集");
@@ -622,7 +526,7 @@ describe("assembleWorkplaceDisplay S0 双读（prefixPaths / visiblePaths）", (
    * 零覆盖——把 `evaluateFileDisplay` 的 header 判定或 assemble 的 full
    * 条件改坏，两份用例都照绿。这里从 `setDirRule` 真配目录起手，不预置
    * 任何快照，让 assemble 真跑 `evaluateRuleView`；尾部把 assemble 的
-   * 产物按真实接线喂 `prepareUserMessagesForPrompt`。
+   * 产物按真实接线喂 `promptAssembler`。
    */
   it("T-S01-E2E: 显式 header 目录 → 规则引擎出 header 档 → 只进 visiblePaths → attach 拿全文", async () => {
     const ctx = getNovelMasterTestContext();
@@ -649,26 +553,15 @@ describe("assembleWorkplaceDisplay S0 双读（prefixPaths / visiblePaths）", (
 
     // 段②：不预置快照，让 assemble 走真 evaluateRuleView（规则引擎段①
     // 的产物就是这里的输入）。
-    const out = await assembleWorkplaceDisplay(
-      { kind: "session", projectId: project.id, sessionId: session.id },
-      { sessionKkv: sk, workplace: wt, vfs, layout: layoutWithWorkplace() },
-    );
+    const out = await assembleWorkplaceDisplay({ kind: "session", projectId: project.id, sessionId: session.id }, { sessionKkv: sk, workplace: wt, vfs, layout: layoutWithWorkplace() });
 
     // 牙齿：header 档进 visiblePaths、不进 prefixPaths。
-    assert.equal(
-      out.visiblePaths.includes("/hdr.md"),
-      true,
-      `规则引擎应把 /hdr.md 判成 header 档并进 visiblePaths，实际 visiblePaths=${JSON.stringify(out.visiblePaths)}`,
-    );
-    assert.equal(
-      out.prefixPaths.includes("/hdr.md"),
-      false,
-      "header 档没加载全量正文，不得进 prefixPaths（否则会吞掉后续 attach）",
-    );
+    assert.equal(out.visiblePaths.includes("/hdr.md"), true, `规则引擎应把 /hdr.md 判成 header 档并进 visiblePaths，实际 visiblePaths=${JSON.stringify(out.visiblePaths)}`);
+    assert.equal(out.prefixPaths.includes("/hdr.md"), false, "header 档没加载全量正文，不得进 prefixPaths（否则会吞掉后续 attach）");
 
     // 段③：按真实接线（prefixPaths→seenPaths、visiblePaths→workplaceSeenPaths）
     // 喂 prepare，断言同路径 attach 拿到全文而不是 alreadyReferenced 短提示。
-    const prepared = await prepareUserMessagesForPrompt(
+    const prepared = await promptAssembler.prepare(
       [
         {
           id: "e2e-attach",
@@ -697,17 +590,13 @@ describe("assembleWorkplaceDisplay S0 双读（prefixPaths / visiblePaths）", (
         vfs,
         seenPaths: out.prefixPaths,
         workplaceSeenPaths: out.visiblePaths,
-      },
+      }
     );
-    const body = messageBodyText(prepared[0]!);
+    const body = messageBodyTextFromBlocks(prepared[0]!.content.blocks);
     assert.match(body, /<action name="userAttach">/);
     assert.match(body, /"display": "full"/);
     assert.match(body, /1\|HEADER-BODY/, "header 档路径的 attach 必须拿到全文");
-    assert.equal(
-      body.includes("alreadyReferenced"),
-      false,
-      "header 档不在 prefixPaths 里，不该被 S0 判成已引用",
-    );
+    assert.equal(body.includes("alreadyReferenced"), false, "header 档不在 prefixPaths 里，不该被 S0 判成已引用");
     // 组装侧的后台回填是 fire-and-forget，落定后再出本用例，别把在途宏
     // 任务带进后面的用例。
     await settlePendingFileCacheBackfills();

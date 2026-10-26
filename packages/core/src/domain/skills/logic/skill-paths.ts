@@ -20,9 +20,7 @@ export const SKILL_ENTRY_FILE = "SKILL.md";
 export type SkillRelPathInvalidReason = "empty" | "dotdot" | "escape";
 
 /** {@link resolveSkillRelPathCore} 结果：ok 时带相对技能目录的归一化路径。 */
-export type SkillRelPathResolution =
-  | { readonly ok: true; readonly rel: string }
-  | { readonly ok: false; readonly reason: SkillRelPathInvalidReason };
+export type SkillRelPathResolution = { readonly ok: true; readonly rel: string } | { readonly ok: false; readonly reason: SkillRelPathInvalidReason };
 
 /**
  * 把技能内相对路径解析为受控形态：缺省 SKILL.md，禁 `..` 段，
@@ -31,11 +29,10 @@ export type SkillRelPathResolution =
  * 纯函数不抛错——service 层包装成 SkillError，tool 层分类器拿失败
  * 结果保守放弃串行化（该调用会被 schema/服务层拒绝）。
  */
-export function resolveSkillRelPathCore(
-  name: string,
-  path: string | undefined,
-): SkillRelPathResolution {
-  const raw = path ?? SKILL_ENTRY_FILE;
+export function resolveSkillRelPathCore(name: string, path: string | undefined): SkillRelPathResolution {
+  // 反斜杠与 normalizePath 同口径按分隔符处理，否则 `..\..\x` 会绕过下面的
+  // `..` 段拦截，进而在 normalizePath 里以 VfsError 抛错（本函数承诺不抛）。
+  const raw = (path ?? SKILL_ENTRY_FILE).replace(/\\/g, "/");
   if (raw.trim().length === 0) {
     return { ok: false, reason: "empty" };
   }
@@ -45,6 +42,8 @@ export function resolveSkillRelPathCore(
     return { ok: false, reason: "dotdot" };
   }
   const dirPrefix = `${SKILLS_ROOT}/${name}/`;
+  // `..` 段已在上面全部拒绝，dirPrefix 又以 `/meta/skills/` 起头，normalizePath
+  // 没有“越过根”的 throw 路径，剩余失败只有“归一化后跑到技能目录外”。
   const logical = resolveLogicalPath(`${dirPrefix}${raw}`);
   if (!logical.startsWith(dirPrefix)) {
     return { ok: false, reason: "escape" };

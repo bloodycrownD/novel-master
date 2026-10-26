@@ -9,8 +9,9 @@ import {
   StyleSheet,
   Text,
   View,
-} from 'react-native';
-import {useRoute, type RouteProp} from '@react-navigation/native';
+  } from 'react-native';
+import {useRoute,
+  type RouteProp} from '@react-navigation/native';
 import type {RootStackParamList} from '../../navigation/types';
 import type {VfsService} from '@novel-master/core/vfs';
 import {useRuntime} from '../../hooks/useRuntime';
@@ -20,7 +21,7 @@ import {useTheme} from '../../theme/ThemeProvider';
 import {useToast} from '../../components/chrome/ToastHost';
 import {sessionSaveVfsFile} from '../../services/vfs-operations.service';
 import {takeFileEditorOnSessionVfsSaved} from '../../components/agent/file-editor-saved-callback';
-import {isUserVfsUnifiedToolTurnEnabled} from '@novel-master/core/feature-flags';
+import { userVfsUnifiedToolTurnFlag } from '@novel-master/core/feature-flags';
 import {
   FileMarkdownPreview,
   isMarkdownPreviewPath,
@@ -188,7 +189,7 @@ export function FileEditorScreen() {
       if (
         scopeKind === 'session' &&
         sessionId &&
-        isUserVfsUnifiedToolTurnEnabled()
+        userVfsUnifiedToolTurnFlag.isEnabled()
       ) {
         await sessionSaveVfsFile(
           runtime,

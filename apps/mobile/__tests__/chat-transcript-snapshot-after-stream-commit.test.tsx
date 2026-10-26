@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 回滚刷新不丢失（用户实测症状 B 的 P1 病灶回归）：
  * streamCommit 已发生（中断现场的合成行/流式提交）后，messages 更新若
  * 是「tail 满页窗口前移」（条数不变、首条 id 变——回滚删尾后 tail 重新
@@ -14,7 +14,7 @@ import React from 'react';
 import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
 import {Platform} from 'react-native';
-import {type ChatMessage} from '@novel-master/core/chat';
+import {type ChatMessageData} from '@novel-master/core/chat';
 import {
   CONVERSATION_BRIDGE_V,
   decodeConversationUpstream,
@@ -83,7 +83,7 @@ Object.defineProperty(Platform, 'OS', {
   get: () => 'android',
 });
 
-function sampleMessage(id: string, seq: number): ChatMessage {
+function sampleMessage(id: string, seq: number): ChatMessageData {
   return {
     id,
     sessionId: 's1',
@@ -99,7 +99,7 @@ function sampleMessage(id: string, seq: number): ChatMessage {
 
 /** 真实 message id 的 assistant 行（G-01 走 tryCommitStreamTail 的前提：
  *  合成行 id 不在任何 messages 列表里，触发不了「已提交行是否仍在窗内」判定）。 */
-function assistantTextMessage(id: string, seq: number): ChatMessage {
+function assistantTextMessage(id: string, seq: number): ChatMessageData {
   return {
     id,
     sessionId: 's1',

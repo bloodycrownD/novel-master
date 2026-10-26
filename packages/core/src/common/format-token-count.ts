@@ -16,7 +16,11 @@
  * 改动本文件时须同步那份（两份注释互指）。
  */
 
-/** token 占用标签的来源记号：`mark`（源/家族展示名）+ `connector`（精确 = / 估算 ≈）。 */
+/**
+ * nm-style: keep-public — 导出标签函数的 badge 参数契约，跨端构造占用徽标时使用。
+ *
+ * 来源记号：`mark`（源/家族展示名）+ `connector`（精确 = / 估算 ≈）。
+ */
 export interface TokenSourceBadge {
   readonly mark: string;
   readonly connector: "=" | "≈";
@@ -50,18 +54,11 @@ const TOKENIZER_FAMILY_DISPLAY_NAMES: Readonly<Record<string, string>> = {
  *   资产失败回潮时诚实标注估算而非谎报家族精确）。
  * - 未知 counterKind → mark 原样透传（防御未来家族），est=false 仍按精确 `=`。
  */
-export function formatTokenSourceBadge(
-  source: "api" | "local" | undefined,
-  counterKind: string,
-  estimated: boolean,
-): TokenSourceBadge {
+export function formatTokenSourceBadge(source: "api" | "local" | undefined, counterKind: string, estimated: boolean): TokenSourceBadge {
   if (source === "api") {
     return { mark: "远程", connector: "=" };
   }
-  if (counterKind === "heuristic") {
-    return { mark: "gpt", connector: "≈" };
-  }
-  if (estimated) {
+  if (counterKind === "heuristic" || estimated) {
     return { mark: "gpt", connector: "≈" };
   }
   const display = TOKENIZER_FAMILY_DISPLAY_NAMES[counterKind];
@@ -75,11 +72,7 @@ export function formatTokenSourceBadge(
  * 本标签内的数量单位用小写 k/m（与统计页大写 K 的 formatTokenCount 区分，
  * 标签视觉更轻）；pct 封顶 999；非法 count 显示 `—`。
  */
-export function formatContextUsageLabel(
-  count: number,
-  contextWindow?: number,
-  badge?: TokenSourceBadge,
-): string {
+export function formatContextUsageLabel(count: number, contextWindow?: number, badge?: TokenSourceBadge): string {
   const prefix = badge != null ? `${badge.mark} ${badge.connector} ` : "";
   if (!Number.isFinite(count) || count < 0) {
     return `${prefix}—`;
@@ -99,12 +92,6 @@ export function formatContextUsageLabel(
 function labelCount(n: number): string {
   return formatTokenCount(n).replace(/[KM]$/, (unit) => unit.toLowerCase());
 }
-
-/**
- * 兼容名：与 {@link formatContextUsageLabel} 同一实现（token-source-label 收敛
- * 后旧调用方的迁移入口；不再有 `~` 前缀与 estimated 参数）。
- */
-export const formatPromptTokenUsageLabel = formatContextUsageLabel;
 
 function trimTrailingZeros(s: string): string {
   return s.replace(/\.0$/, "");

@@ -5,7 +5,7 @@ const TEST_SAVED_MODEL_A = "11111111-1111-4111-8111-111111111111";
 import { describe, it } from "node:test";
 import { decode } from "@novel-master/core";
 import { agentDefinitionSchema } from "@novel-master/core/agent";
-import { ChatError } from "@novel-master/core/chat";
+import { isAppError } from "@novel-master/core/agent";
 import {
   getNovelMasterTestContext,
   novelMasterTestFixture,
@@ -109,7 +109,7 @@ describe("SessionService agent config（v2，T-S3）", () => {
     await assert.rejects(
       () => svc.create(project.id, "should-fail"),
       (error: unknown) =>
-        error instanceof ChatError && error.code === "INVALID_ARGUMENT",
+        isAppError(error, "CHAT_INVALID_ARGUMENT"),
     );
   });
 
@@ -241,7 +241,7 @@ describe("SessionService agent config（v2，T-S3）", () => {
     await assert.rejects(
       () => ctx.sessions.getSessionAgentConfig(session.id),
       (error: unknown) =>
-        error instanceof ChatError && error.code === "INVALID_ARGUMENT",
+        isAppError(error, "CHAT_INVALID_ARGUMENT"),
     );
   });
 
@@ -298,7 +298,7 @@ describe("SessionService agent config（v2，T-S3）", () => {
     await assert.rejects(
       () => ctx.sessions.getSessionAgentConfig("nope-not-exist"),
       (error: unknown) =>
-        error instanceof ChatError && error.code === "NOT_FOUND",
+        isAppError(error, "CHAT_NOT_FOUND"),
     );
   });
 });

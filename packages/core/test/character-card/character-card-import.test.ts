@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
-  CharacterCardError,
+  AppError,
+  CHARACTER_CARD_MAX_FILE_COUNT,
+  CHARACTER_CARD_MAX_SINGLE_FILE_BYTES,
   createCharacterCardImportService,
-  parseCharacterCardToMdTree,
   type VfsService,
 } from "@novel-master/core/vfs";
+import { parseCharacterCardToMdTree } from "../../src/domain/character-card/logic/character-card-to-md-tree.js";
 import { isVfsError } from "../../src/errors/vfs-errors.js";
 import { createWorkplaceService } from "@novel-master/core/workplace";
 import {
@@ -32,6 +34,14 @@ import { DefaultCharacterCardImportService } from "../../src/service/vfs/impl/ch
 import { createMemorySessionKkv } from "../helpers/prompt-layout-test-helpers.js";
 
 novelMasterTestFixture();
+
+function parseTree(input: Uint8Array | string): ReadonlyMap<string, string> {
+  const result = parseCharacterCardToMdTree(input);
+  if (!result.ok) {
+    throw result.error;
+  }
+  return result.value;
+}
 
 async function listFilePaths(vfs: VfsService, dir = "/"): Promise<string[]> {
   const entries = await vfs.list(dir, { recursive: true });
@@ -69,7 +79,7 @@ describe("CharacterCardImportService", () => {
     await vfs.write("/大纲/保留.md", "outline");
 
     const svc = createCharacterCardImportService(ctx.conn);
-    const tree = parseCharacterCardToMdTree(JSON.stringify(SAMPLE_V2));
+    const tree = parseTree(JSON.stringify(SAMPLE_V2));
     await svc.import(scope, tree, {
       confirmed: true,
       directoryPath: "/角色",
@@ -109,7 +119,7 @@ describe("CharacterCardImportService", () => {
     const oldHash = await new SqliteVfsContentStore(ctx.conn).put(oldBody);
 
     const svc = createCharacterCardImportService(ctx.conn);
-    const tree = parseCharacterCardToMdTree(JSON.stringify(SAMPLE_V2));
+    const tree = parseTree(JSON.stringify(SAMPLE_V2));
     await svc.import(scope, tree, { confirmed: true, directoryPath: "/角色" });
 
     await assert.rejects(() => vfs.read("/角色/独有旧文件.md"));
@@ -138,7 +148,7 @@ describe("CharacterCardImportService", () => {
     await vfs.write("/角色/stay.md", "stay");
 
     const svc = createCharacterCardImportService(ctx.conn);
-    const tree = parseCharacterCardToMdTree(JSON.stringify(SAMPLE_V2));
+    const tree = parseTree(JSON.stringify(SAMPLE_V2));
     await assert.rejects(
       () =>
         svc.import(scope, tree, {
@@ -146,7 +156,7 @@ describe("CharacterCardImportService", () => {
           directoryPath: "/角色",
         }),
       (e: unknown) =>
-        e instanceof CharacterCardError && e.code === "NOT_CONFIRMED",
+        e instanceof AppError && e.key === "VFS_CHARACTER_CARD_NOT_CONFIRMED",
     );
     assert.equal((await vfs.read("/角色/stay.md")).content, "stay");
   });
@@ -170,7 +180,7 @@ describe("CharacterCardImportService", () => {
     const svc = createCharacterCardImportService(ctx.conn, {
       testHook: { throwOnInsertLogical: "/角色/角色描述.md" },
     });
-    const tree = parseCharacterCardToMdTree(JSON.stringify(SAMPLE_V2));
+    const tree = parseTree(JSON.stringify(SAMPLE_V2));
     // 测试钩子直抛分支绕过 IMPORT_FAILED 包装 ⇒ 抛出的是原始 Error。
     await assert.rejects(
       () =>
@@ -216,7 +226,7 @@ describe("CharacterCardImportService", () => {
           directoryPath: "/角色",
         }),
       (e: unknown) =>
-        e instanceof CharacterCardError && e.code === "NOT_CHARACTER_CARD",
+        e instanceof AppError && e.key === "VFS_CHARACTER_CARD_UNRECOGNIZED",
     );
     assert.equal(deleteReached, false);
     assert.equal((await vfs.read("/角色/stay.md")).content, "stay-bytes");
@@ -274,7 +284,6 @@ describe("CharacterCardImportService", () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-ti1-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
-    const vfs = ctx.sessionVfs(project.id, session.id);
     const scope = {
       kind: "session" as const,
       projectId: project.id,
@@ -521,7 +530,7 @@ describe("CharacterCardImportService", () => {
       spec: "chara_card_v2",
       data: { description: "PNG落盘" },
     });
-    const expected = parseCharacterCardToMdTree(bytes);
+    const expected = parseTree(bytes);
     const svc = createCharacterCardImportService(ctx.conn);
     await svc.importFromBytes(scope, bytes, {
       confirmed: true,
@@ -555,7 +564,7 @@ describe("CharacterCardImportService", () => {
     await vfs.mkdir("/开场");
 
     const svc = createCharacterCardImportService(ctx.conn);
-    const tree = parseCharacterCardToMdTree(
+    const tree = parseTree(
       JSON.stringify({
         spec: "chara_card_v2",
         data: {
@@ -586,7 +595,7 @@ describe("CharacterCardImportService", () => {
     };
 
     const svc = createCharacterCardImportService(ctx.conn);
-    const tree = parseCharacterCardToMdTree(
+    const tree = parseTree(
       JSON.stringify({
         spec: "chara_card_v2",
         data: {
@@ -669,7 +678,7 @@ describe("CharacterCardImportService", () => {
     });
 
     const svc = createCharacterCardImportService(ctx.conn);
-    const tree = parseCharacterCardToMdTree(JSON.stringify(SAMPLE_V2));
+    const tree = parseTree(JSON.stringify(SAMPLE_V2));
     await svc.import(scope, tree, {
       confirmed: true,
       directoryPath: "/角色",
@@ -722,7 +731,7 @@ describe("CharacterCardImportService", () => {
     });
 
     const svc = createCharacterCardImportService(ctx.conn);
-    const tree = parseCharacterCardToMdTree(JSON.stringify(SAMPLE_V2));
+    const tree = parseTree(JSON.stringify(SAMPLE_V2));
     await svc.import(
       { kind: "project", projectId: project.id },
       tree,
@@ -769,7 +778,7 @@ describe("CharacterCardImportService", () => {
       warnCalls.push(args);
     };
     try {
-      const tree = parseCharacterCardToMdTree(JSON.stringify(SAMPLE_V2));
+      const tree = parseTree(JSON.stringify(SAMPLE_V2));
       await assert.doesNotReject(() =>
         svc.import(scope, tree, {
           confirmed: true,
@@ -807,8 +816,8 @@ describe("CharacterCardImportService", () => {
           directoryPath: "/角色",
         }),
       (e: unknown) => {
-        assert.ok(e instanceof CharacterCardError);
-        assert.equal(e.code, "TOO_LARGE");
+        assert.ok(e instanceof AppError);
+        assert.equal(e.key, "VFS_CHARACTER_CARD_TOO_LARGE");
         assert.ok(e.message.includes("48"));
         return true;
       },
@@ -844,13 +853,81 @@ describe("CharacterCardImportService", () => {
           directoryPath: "/角色",
         }),
       (e: unknown) => {
-        assert.ok(e instanceof CharacterCardError);
-        assert.equal(e.code, "TOO_LARGE");
+        assert.ok(e instanceof AppError);
+        assert.equal(e.key, "VFS_CHARACTER_CARD_TOO_LARGE");
         assert.ok(e.message.includes("单文件上限"));
         return true;
       },
     );
     // 零写库：子树原样保留
+    assert.equal((await vfs.read("/角色/stay.md")).content, "stay");
+  });
+
+  it("体积闸门：md 树条目数超上限抛 TOO_LARGE 且零写库", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-toolarge-count-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    const scope = {
+      kind: "session" as const,
+      projectId: project.id,
+      sessionId: session.id,
+    };
+    await vfs.write("/角色/stay.md", "stay");
+
+    const tree = new Map<string, string>();
+    for (let i = 0; i <= CHARACTER_CARD_MAX_FILE_COUNT; i++) {
+      tree.set(`f${i}.md`, "x");
+    }
+    const svc = createCharacterCardImportService(ctx.conn);
+    await assert.rejects(
+      () =>
+        svc.import(scope, tree, {
+          confirmed: true,
+          directoryPath: "/角色",
+        }),
+      (e: unknown) => {
+        assert.ok(e instanceof AppError);
+        assert.equal(e.key, "VFS_CHARACTER_CARD_TOO_LARGE");
+        assert.ok(e.message.includes("条目数上限"));
+        return true;
+      },
+    );
+    assert.equal((await vfs.read("/角色/stay.md")).content, "stay");
+  });
+
+  it("体积闸门：md 树总量超上限抛 TOO_LARGE 且零写库", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-toolarge-total-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    const scope = {
+      kind: "session" as const,
+      projectId: project.id,
+      sessionId: session.id,
+    };
+    await vfs.write("/角色/stay.md", "stay");
+
+    // 每条略低于单文件闸，5 条累加超过总量闸。
+    const chunk = "x".repeat(Math.floor(CHARACTER_CARD_MAX_SINGLE_FILE_BYTES * 0.9));
+    const tree = new Map<string, string>();
+    for (let i = 0; i < 5; i++) {
+      tree.set(`part${i}.md`, chunk);
+    }
+    const svc = createCharacterCardImportService(ctx.conn);
+    await assert.rejects(
+      () =>
+        svc.import(scope, tree, {
+          confirmed: true,
+          directoryPath: "/角色",
+        }),
+      (e: unknown) => {
+        assert.ok(e instanceof AppError);
+        assert.equal(e.key, "VFS_CHARACTER_CARD_TOO_LARGE");
+        assert.ok(e.message.includes("总量上限"));
+        return true;
+      },
+    );
     assert.equal((await vfs.read("/角色/stay.md")).content, "stay");
   });
 });

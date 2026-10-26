@@ -3,22 +3,20 @@
  */
 
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import {
+  describe,
+  it } from "node:test";
 import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
 import {
   AgentTurnError,
   runAgentTurn,
   type AgentTurnRuntimePort,
-} from "@/service/agent/logic/run-agent-turn.js";
+  } from "@/service/agent/logic/run-agent-turn.js";
 import type { UserVfsTurnService } from "@/service/chat/user-vfs-turn.port.js";
-import {
-  refreshUserVfsUnifiedToolTurnSnapshot,
-  resetUserVfsUnifiedToolTurnSnapshotForTests,
-} from "@/domain/feature-flags/user-vfs-unified-tool-turn.js";
-import { hasComposerSendableInput } from "@/domain/chat/logic/composer-sendable-input.js";
-import { wrapUserMessageForLlm } from "@/domain/chat/logic/wrap-user-message-for-llm.js";
-import { buildAnnotateAttachmentFromDraft, buildFileAnnotateAttachmentFromDraft, formatAnnotateLocationLabel } from "@/domain/chat/logic/build-attachment-action-xml.js";
-import { mergeAttachmentsByPath } from "@/domain/chat/logic/scan-at-path-attachments.js";
+import { userVfsUnifiedToolTurnFlag } from "@/domain/feature-flags/user-vfs-unified-tool-turn.js";
+import { userMessageFormatter } from "@/domain/chat/logic/prompt/user-message-formatter.js";
+import { attachmentXmlCodec } from "@/domain/chat/logic/attachment/attachment-xml-codec.js";
+import { attachmentScanner } from "@/domain/chat/logic/attachment/attachment-scanner.js";
 import {
   messageAttachmentSchema,
   type MessageAttachment,
@@ -113,19 +111,8 @@ function makeRuntime(overrides: {
 }
 
 describe("annotateDrafts send (T-AN3/T-AN4/T-AN6 core)", () => {
-  it("T-AN4: hasComposerSendableInput({ hasAnnotateDrafts:true }) 可发", () => {
-    assert.equal(
-      hasComposerSendableInput({
-        text: "",
-        attachmentCount: 0,
-        hasAnnotateDrafts: true,
-      }),
-      true,
-    );
-  });
-
   it("T-AN4: 仅 annotateDrafts → hasInput/shouldAppend；禁空续跑删末条", async () => {
-    refreshUserVfsUnifiedToolTurnSnapshot(true);
+    userVfsUnifiedToolTurnFlag.refresh(true);
     const deleted: string[] = [];
     const appended: Array<{
       attachments?: readonly MessageAttachment[];
@@ -179,11 +166,11 @@ describe("annotateDrafts send (T-AN3/T-AN4/T-AN6 core)", () => {
     // user ops 拆除（E-core）：手改 write 附件不再随发送产生
     assert.equal(atts.some((a) => a.action === "write"), false);
 
-    resetUserVfsUnifiedToolTurnSnapshotForTests();
+    userVfsUnifiedToolTurnFlag.resetForTests();
   });
 
   it("T-AN3: append 成功后附件含 annotate action XML；回调可触发", async () => {
-    refreshUserVfsUnifiedToolTurnSnapshot(true);
+    userVfsUnifiedToolTurnFlag.refresh(true);
     let appendedAtts: readonly MessageAttachment[] | undefined;
     let callbackCount = 0;
     const runtime = makeRuntime({
@@ -228,11 +215,11 @@ describe("annotateDrafts send (T-AN3/T-AN4/T-AN6 core)", () => {
     assert.match(ann[0]!.content ?? "", /"userAnnotation"/);
     assert.equal(callbackCount, 1);
 
-    resetUserVfsUnifiedToolTurnSnapshotForTests();
+    userVfsUnifiedToolTurnFlag.resetForTests();
   });
 
   it("T-AN6: 同 path 两条 annotate concat 进落库；禁 path 去重丢条", async () => {
-    refreshUserVfsUnifiedToolTurnSnapshot(true);
+    userVfsUnifiedToolTurnFlag.refresh(true);
     const drafts = [
       {
         id: "1",
@@ -247,9 +234,9 @@ describe("annotateDrafts send (T-AN3/T-AN4/T-AN6 core)", () => {
         userAnnotation: "二",
       },
     ];
-    const annotateAtts = drafts.map(buildAnnotateAttachmentFromDraft);
+    const annotateAtts = drafts.map((draft) => attachmentXmlCodec.encodeAnnotateAttachment(draft));
     // 若误走 mergeAttachmentsByPath 会丢一条
-    const wronglyMerged = mergeAttachmentsByPath([], annotateAtts);
+    const wronglyMerged = attachmentScanner.mergeByPath([], annotateAtts);
     assert.equal(
       wronglyMerged.length,
       1,
@@ -258,7 +245,7 @@ describe("annotateDrafts send (T-AN3/T-AN4/T-AN6 core)", () => {
 
     const concat = [...annotateAtts];
     assert.equal(concat.length, 2);
-    const wrapped = wrapUserMessageForLlm("x", concat);
+    const wrapped = userMessageFormatter.wrapForLlm("x", concat);
     const matches = wrapped.match(/name="annotate"/g) ?? [];
     assert.equal(matches.length, 2);
     assert.match(wrapped, /"userAnnotation": "一"/);
@@ -294,17 +281,17 @@ describe("annotateDrafts send (T-AN3/T-AN4/T-AN6 core)", () => {
     assert.match(ann[0]!.content ?? "", /"userAnnotation": "一"/);
     assert.match(ann[1]!.content ?? "", /"userAnnotation": "二"/);
 
-    resetUserVfsUnifiedToolTurnSnapshotForTests();
+    userVfsUnifiedToolTurnFlag.resetForTests();
   });
 
-  it("T-MA6: 文件形 buildAnnotateAttachmentFromDraft(AnnotateDraft) 签名仍可用", () => {
+  it("T-MA6: 文件形 attachmentXmlCodec.encodeAnnotateAttachment(AnnotateDraft) 签名仍可用", () => {
     const fileOnly: AnnotateDraft = {
       id: "desktop-ok",
       path: "/desktop.md",
       originalText: "x",
       userAnnotation: "y",
     };
-    const att = buildAnnotateAttachmentFromDraft(fileOnly);
+    const att = attachmentXmlCodec.encodeAnnotateAttachment(fileOnly);
     assert.equal(att.path, "/desktop.md");
     assert.equal(att.action, "annotate");
     assert.equal(att.name, "/desktop.md");
@@ -312,7 +299,7 @@ describe("annotateDrafts send (T-AN3/T-AN4/T-AN6 core)", () => {
   });
 
   it("无输入且无 annotate → 仍抛消息不能为空", async () => {
-    refreshUserVfsUnifiedToolTurnSnapshot(true);
+    userVfsUnifiedToolTurnFlag.refresh(true);
     const runtime = makeRuntime({ userVfsTurn: mockUserVfsTurn() });
     await assert.rejects(
       () =>
@@ -325,42 +312,13 @@ describe("annotateDrafts send (T-AN3/T-AN4/T-AN6 core)", () => {
       (err: unknown) =>
         err instanceof AgentTurnError && err.message === "消息不能为空",
     );
-    resetUserVfsUnifiedToolTurnSnapshotForTests();
+    userVfsUnifiedToolTurnFlag.resetForTests();
   });
 });
 
-describe("formatAnnotateLocationLabel（位置标签拼装）", () => {
-  it("单行：startLine === endLine → 「第 N 行」", () => {
-    assert.equal(formatAnnotateLocationLabel(5, 5), "第 5 行");
-    assert.equal(formatAnnotateLocationLabel(3, 3), "第 3 行");
-  });
-
-  it("跨行：startLine < endLine → 「第 A-B 行」", () => {
-    assert.equal(formatAnnotateLocationLabel(5, 7), "第 5-7 行");
-    assert.equal(formatAnnotateLocationLabel(1, 10), "第 1-10 行");
-  });
-
-  it("endLine 缺省 → 退化为单行", () => {
-    assert.equal(formatAnnotateLocationLabel(5, undefined), "第 5 行");
-    assert.equal(formatAnnotateLocationLabel(5, null), "第 5 行");
-  });
-
-  it("endLine 小于 startLine → 以 startLine 为下限（防御式 normalize）", () => {
-    assert.equal(formatAnnotateLocationLabel(5, 3), "第 5 行");
-  });
-
-  it("startLine 缺省 / 非正整数 → undefined（不写键）", () => {
-    assert.equal(formatAnnotateLocationLabel(undefined, 5), undefined);
-    assert.equal(formatAnnotateLocationLabel(null, 5), undefined);
-    assert.equal(formatAnnotateLocationLabel(0, 5), undefined);
-    assert.equal(formatAnnotateLocationLabel(-1, 5), undefined);
-    assert.equal(formatAnnotateLocationLabel(Number.NaN, 5), undefined);
-  });
-});
-
-describe("buildFileAnnotateAttachmentFromDraft：locationLabel 注入", () => {
+describe("attachmentXmlCodec.encodeAnnotateAttachment：locationLabel 注入", () => {
   it("有 startLine/endLine → params 含 locationLabel 自然语言", () => {
-    const att = buildFileAnnotateAttachmentFromDraft({
+    const att = attachmentXmlCodec.encodeAnnotateAttachment({
       id: "x",
       path: "/a.md",
       originalText: "原文",
@@ -374,7 +332,7 @@ describe("buildFileAnnotateAttachmentFromDraft：locationLabel 注入", () => {
   });
 
   it("单行 locationLabel", () => {
-    const att = buildFileAnnotateAttachmentFromDraft({
+    const att = attachmentXmlCodec.encodeAnnotateAttachment({
       id: "x",
       path: "/a.md",
       originalText: "原文",
@@ -386,7 +344,7 @@ describe("buildFileAnnotateAttachmentFromDraft：locationLabel 注入", () => {
   });
 
   it("无行号 → 不写 locationLabel（老附件兼容）", () => {
-    const att = buildFileAnnotateAttachmentFromDraft({
+    const att = attachmentXmlCodec.encodeAnnotateAttachment({
       id: "x",
       path: "/a.md",
       originalText: "原文",
@@ -398,7 +356,7 @@ describe("buildFileAnnotateAttachmentFromDraft：locationLabel 注入", () => {
 
 describe("runAgentTurn 批注行号补算（VFS read + originalText 反查）", () => {
   it("草稿缺 startLine、VFS 能读到源文本且 originalText 命中 → 落库附件含行号 + locationLabel", async () => {
-    refreshUserVfsUnifiedToolTurnSnapshot(true);
+    userVfsUnifiedToolTurnFlag.refresh(true);
     // 源文件第 3 行包含 "find-me"
     const source = "L1\nL2\nfind-me\nL4\nL5\n";
     let appendedAtts: readonly MessageAttachment[] | undefined;
@@ -441,11 +399,11 @@ describe("runAgentTurn 批注行号补算（VFS read + originalText 反查）", 
     assert.match(ann[0]!.content ?? "", /"startLine": 3/);
     assert.match(ann[0]!.content ?? "", /"locationLabel": "第 3 行"/);
 
-    resetUserVfsUnifiedToolTurnSnapshotForTests();
+    userVfsUnifiedToolTurnFlag.resetForTests();
   });
 
   it("草稿缺 startLine、VFS 拿不到源文本（read 招错） → 静默跳过，不写行号也不报错", async () => {
-    refreshUserVfsUnifiedToolTurnSnapshot(true);
+    userVfsUnifiedToolTurnFlag.refresh(true);
     let appendedAtts: readonly MessageAttachment[] | undefined;
     const runtime = makeRuntime({
       append: async (_s, _r, _c, opts) => {
@@ -488,11 +446,11 @@ describe("runAgentTurn 批注行号补算（VFS read + originalText 反查）", 
     assert.doesNotMatch(ann[0]!.content ?? "", /locationLabel/);
     assert.doesNotMatch(ann[0]!.content ?? "", /startLine/);
 
-    resetUserVfsUnifiedToolTurnSnapshotForTests();
+    userVfsUnifiedToolTurnFlag.resetForTests();
   });
 
   it("originalText 在源文本里查不到 → 静默跳过行号补算", async () => {
-    refreshUserVfsUnifiedToolTurnSnapshot(true);
+    userVfsUnifiedToolTurnFlag.refresh(true);
     const source = "aaa\nbbb\nccc\n";
     let appendedAtts: readonly MessageAttachment[] | undefined;
     const runtime = makeRuntime({
@@ -531,11 +489,11 @@ describe("runAgentTurn 批注行号补算（VFS read + originalText 反查）", 
     assert.equal(ann.length, 1);
     assert.doesNotMatch(ann[0]!.content ?? "", /locationLabel/);
 
-    resetUserVfsUnifiedToolTurnSnapshotForTests();
+    userVfsUnifiedToolTurnFlag.resetForTests();
   });
 
   it("草稿已带 startLine/endLine → 不覆盖，原样物化", async () => {
-    refreshUserVfsUnifiedToolTurnSnapshot(true);
+    userVfsUnifiedToolTurnFlag.refresh(true);
     let appendedAtts: readonly MessageAttachment[] | undefined;
     const runtime = makeRuntime({
       append: async (_s, _r, _c, opts) => {
@@ -578,6 +536,6 @@ describe("runAgentTurn 批注行号补算（VFS read + originalText 反查）", 
     assert.match(ann[0]!.content ?? "", /"startLine": 99/);
     assert.match(ann[0]!.content ?? "", /"locationLabel": "第 99 行"/);
 
-    resetUserVfsUnifiedToolTurnSnapshotForTests();
+    userVfsUnifiedToolTurnFlag.resetForTests();
   });
 });

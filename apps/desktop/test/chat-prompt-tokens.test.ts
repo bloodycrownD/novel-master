@@ -479,7 +479,7 @@ describe("chat-prompt-tokens.service", () => {
     }
     assert.ok(precise != null, "暖机后应命中 L1 精确档作为参照");
 
-    // 清掉会话级模型覆盖 + agent 无 model pin ⇒ resolveSavedModelId 返回空
+    // 清掉会话级模型覆盖 + agent 无 model pin ⇒ 模型解析返回空
     // ⇒ 走「无模型早退」分支。
     const cleared = await handleSessionsSetModelOverride({
       sessionId,

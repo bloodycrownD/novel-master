@@ -4,34 +4,28 @@
  * @module domain/provider/model/saved-model-settings-from-json
  */
 
-import { ProviderError } from "@/errors/provider-errors.js";
+import { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 import type { SavedModelSettings } from "./saved-model-settings.js";
-import {
-  savedModelSettingsSchema,
-  type SavedModelSettingsDocument,
-} from "./saved-model-settings.schema.js";
+import { savedModelSettingsSchema, type SavedModelSettingsDocument } from "./saved-model-settings.schema.js";
 
-function zodMessage(error: { message: string }): string {
-  return error.message;
-}
+type SavedModelSettingsError = AppError<"PROVIDER_INVALID_ARGUMENT">;
 
 /**
  * 将 plain JSON 解析并校验为 {@link SavedModelSettings}（内存恒为 v2）。
  */
-export function savedModelSettingsFromJson(raw: unknown): SavedModelSettings {
+export function savedModelSettingsFromJson(raw: unknown): Result<SavedModelSettings, SavedModelSettingsError> {
   const parsed = savedModelSettingsSchema.safeParse(raw);
   if (!parsed.success) {
-    throw new ProviderError("INVALID_ARGUMENT", zodMessage(parsed.error));
+    return Result.err(new AppError("PROVIDER_INVALID_ARGUMENT", parsed.error.message, { issues: parsed.error.issues }));
   }
-  return parsed.data;
+  return Result.ok(parsed.data);
 }
 
 /**
  * 将 {@link SavedModelSettings} 序列化为 v2 JSON 文档。
  */
-export function savedModelSettingsToJson(
-  settings: SavedModelSettings
-): SavedModelSettingsDocument {
+export function savedModelSettingsToJson(settings: SavedModelSettings): SavedModelSettingsDocument {
   return {
     schemaVersion: 2,
     internal: {
@@ -50,8 +44,7 @@ export function savedModelSettingsToJson(
  *
  * @param settings 合并后的设置。
  */
-export function assertSavedModelSettingsPersistable(
-  settings: SavedModelSettings
-): void {
-  savedModelSettingsFromJson(savedModelSettingsToJson(settings));
+export function assertSavedModelSettingsPersistable(settings: SavedModelSettings): Result<void, SavedModelSettingsError> {
+  const parsed = savedModelSettingsFromJson(savedModelSettingsToJson(settings));
+  return parsed.ok ? Result.ok<void>(undefined) : Result.err(parsed.error);
 }

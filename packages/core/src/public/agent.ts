@@ -1,4 +1,4 @@
-export type { AgentDefinition } from "../domain/agent/model/agent-definition.js";
+export type { AgentDefinition, AgentDefinitionPatch } from "../domain/agent/model/agent-definition.js";
 export {
   agentDefinitionSchema,
   agentDefinitionDocumentSchema,
@@ -8,27 +8,20 @@ export {
   validateAgentDefinition,
   type ValidateAgentDefinitionOptions,
 } from "../domain/agent/logic/validate-agent-definition.js";
-export {
-  resolveSavedModelId,
-  resolveSummarySavedModelId,
-  type ResolveSavedModelIdInput,
-  type ResolveSummarySavedModelIdInput,
-} from "../domain/agent/logic/resolve-saved-model-id.js";
-export { resolveAgentToolRegistry } from "../domain/agent/logic/resolve-agent-tool-registry.js";
+export { resolveAgentToolRegistry } from "../domain/agent/logic/resolve-agent-tools.js";
 export { validateAgentToolPolicy } from "../domain/agent/logic/validate-agent-tool-policy.js";
 export type { AgentToolPolicy } from "../domain/agent/model/agent-definition.js";
 export type { AgentSession } from "../domain/agent/session/agent-session.port.js";
-export { AgentError } from "../errors/agent-runtime-errors.js";
-export type { AgentErrorCode } from "../errors/agent-runtime-errors.js";
+export { AppError, isAppError } from "../errors/app-error.js";
+export { ErrorCodes } from "../errors/error-codes.js";
+export type { ErrorKey, ErrorNumber } from "../errors/error-codes.js";
 export type {
   AgentRunResult,
   ModelRoundSummary,
 } from "../domain/agent/model/agent-run-result.js";
 export {
-  DOOM_LOOP_THRESHOLD,
-  CROSS_ROUND_WINDOW,
-  assertNoDoomLoopInBlocks,
-  assertNoCrossRoundDoomLoop,
+  DoomLoopDetector,
+  type DoomLoopConfig,
 } from "../domain/agent/logic/doom-loop.js";
 export { InMemoryAgentSession } from "../domain/agent/session/impl/in-memory-agent-session.js";
 export { ChatAgentSession } from "../service/agent/impl/chat-agent-session.js";
@@ -47,8 +40,6 @@ export type {
   AgentStreamPartial,
 } from "../service/agent/agent-stream-registry.port.js";
 export { createAgentStreamRegistry } from "../service/agent/create-agent-stream-registry.js";
-export { AgentConfigError } from "../errors/agent-config-errors.js";
-export type { AgentConfigErrorCode } from "../errors/agent-config-errors.js";
 export {
   resolveCurrentAgentId,
   resolveCurrentAgentDefinition,
@@ -68,8 +59,6 @@ export {
 export type {
   AgentTurnScope,
   AgentTurnRuntimePort,
-  RunAgentTurnOptions,
-  RunAgentTurnAfterResolveContext,
 } from "../service/agent/logic/run-agent-turn.js";
 export {
   PENDING_RUN_ID,

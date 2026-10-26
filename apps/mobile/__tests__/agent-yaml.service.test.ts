@@ -5,7 +5,7 @@ const mockDecode = jest.fn(() => {
 });
 const mockParseText = jest.fn(() => ({}));
 const mockStringifyText = jest.fn(() => 'yaml');
-const mockValidateAgentDefinition = jest.fn(async () => undefined);
+const mockValidateAgentDefinition = jest.fn(async () => ({ok: true, value: undefined}));
 const mockSaveDocuments = jest.fn(async () => undefined);
 const mockPick = jest.fn(async () => []);
 const mockKeepLocalCopy = jest.fn(async () => []);

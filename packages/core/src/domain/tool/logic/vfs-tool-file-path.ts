@@ -18,10 +18,7 @@ const FILE_OPEN_TOOL_NAMES = new Set(["read", "write", "edit"]);
  * @param input - tool_use 输入对象，需含字符串字段 `path`
  * @returns 规范化逻辑路径（以 `/` 开头），或 undefined
  */
-export function resolveVfsToolFilePath(
-  toolName: string,
-  input: Record<string, unknown> | null | undefined
-): string | undefined {
+export function resolveVfsToolFilePath(toolName: string, input: Record<string, unknown> | null | undefined): string | undefined {
   const name = toolName.startsWith("vfs.") ? toolName.slice(4) : toolName;
   if (!FILE_OPEN_TOOL_NAMES.has(name)) return undefined;
   // Bug1 加固：某些 LLM 会用 file_path 作为字段名而非标准的 path。

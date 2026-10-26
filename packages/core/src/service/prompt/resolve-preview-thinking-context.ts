@@ -4,7 +4,7 @@
  * 与 wire 侧同源（边界判定在 apply-thinking-context-for-llm 纯函数，
  * 本函数只负责喂给它之前的「偏好 + 档位 + 协议」快照）：
  *
- * - savedModelId 解析优先级与 wire 侧 resolveSavedModelId 一致：
+ * - savedModelId 解析优先级与 wire 侧一致：
  *   agent pin 模型 → 会话 modelId 覆盖，再 savedModels.findById 读档位
  *   （`thinkingLevel !== "off"`）；取不到模型时按 true 兜底（档位按开态参与判定）。
  * - 协议经 inferLlmProtocolFromSavedModelId 推断；savedModelId 缺失时兜底 anthropic。
@@ -15,7 +15,6 @@
  * @module service/prompt/resolve-preview-thinking-context
  */
 
-import { resolveSavedModelId } from "@/domain/agent/logic/resolve-saved-model-id.js";
 import { inferLlmProtocolFromSavedModelId } from "@/domain/provider/logic/infer-llm-protocol-from-model-id.js";
 import type { SavedModelRepository } from "@/domain/provider/repositories/saved-model.port.js";
 import type { ProviderRepository } from "@/domain/provider/repositories/provider.port.js";
@@ -53,7 +52,7 @@ export async function resolvePreviewThinkingContext(
   const { preferences, savedModels, providers, agentModelId, sessionModelId } =
     input;
   const enabled = await preferences.getThinkingContextEnabled();
-  const savedModelId = resolveSavedModelId({ agentModelId, sessionModelId });
+  const savedModelId = agentModelId ?? sessionModelId;
   let requestThinkingEnabled = true;
   if (savedModelId != null && savedModelId !== "") {
     const saved = await savedModels.findById(savedModelId);

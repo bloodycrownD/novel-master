@@ -4,32 +4,10 @@
  */
 
 import type { AnnotateDraft, MessageAttachment } from "@shared/logic/chat";
-import {
-  addChatAnnotateDraft,
-  chipsFromAnnotateStore as chipsFromAnnotateStoreCore,
-  clearChatAnnotateDrafts,
-  hasChatAnnotateDrafts,
-  listChatAnnotateDrafts,
-  removeChatAnnotateDraft,
-  removeChatAnnotateDraftsByPath,
-  resetChatAnnotateDraftStoreForTests,
-  subscribeChatAnnotateDraft,
-  unionComposerStatusWithAnnotate as unionComposerStatusWithAnnotateCore,
-  updateChatAnnotateDraft,
-} from "@shared/logic/chat";
+import { chatAnnotateDraftStore } from "@shared/logic/chat";
 import type { MessageAttachmentDto } from "@shared/ipc-types";
 
-export {
-  addChatAnnotateDraft,
-  clearChatAnnotateDrafts,
-  hasChatAnnotateDrafts,
-  listChatAnnotateDrafts,
-  removeChatAnnotateDraft,
-  removeChatAnnotateDraftsByPath,
-  resetChatAnnotateDraftStoreForTests,
-  subscribeChatAnnotateDraft,
-  updateChatAnnotateDraft,
-};
+export { chatAnnotateDraftStore };
 export type { AnnotateDraft };
 
 function toAttachmentDto(a: MessageAttachment): MessageAttachmentDto {
@@ -54,22 +32,7 @@ function toMessageAttachment(a: MessageAttachmentDto): MessageAttachment {
   };
 }
 
-/** 按 path 聚合一只 annotate 预览 chip（DTO）。 */
-export function chipsFromAnnotateStore(
-  sessionId: string | undefined,
-): MessageAttachmentDto[] {
-  return chipsFromAnnotateStoreCore(sessionId).map(toAttachmentDto);
-}
-
-/**
- * 投影结果 ∪ annotate store chips（按 path 一只；DTO）。
- */
-export function unionComposerStatusWithAnnotate(
-  projected: readonly MessageAttachmentDto[],
-  sessionId: string | undefined,
-): MessageAttachmentDto[] {
-  return unionComposerStatusWithAnnotateCore(
-    projected.map(toMessageAttachment),
-    sessionId,
-  ).map(toAttachmentDto);
+/** 投影结果 ∪ annotate store chips（按 path 一只；DTO）。 */
+export function unionComposerStatusWithAnnotate(projected: readonly MessageAttachmentDto[], sessionId: string | undefined): MessageAttachmentDto[] {
+  return chatAnnotateDraftStore.union(projected.map(toMessageAttachment), sessionId).map(toAttachmentDto);
 }

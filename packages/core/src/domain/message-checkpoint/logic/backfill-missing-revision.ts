@@ -26,22 +26,13 @@ export type BackfillRevisionDeps = {
  * @returns 是否写入了回补行
  * @remarks 不 bump live entry 版本，仅补历史 revision 行；只落 content_hash，不 put 明文副本。
  */
-export async function backfillMissingRevisionIfNeeded(
-  deps: BackfillRevisionDeps,
-  scopeKey: string,
-  logicalPath: string,
-  entryId: number | null,
-  targetVersion: number
-): Promise<boolean> {
+export async function backfillMissingRevisionIfNeeded(deps: BackfillRevisionDeps, scopeKey: string, logicalPath: string, entryId: number | null, targetVersion: number): Promise<boolean> {
   if (entryId == null) {
     // entry 已不存在（hardDelete）：无 entry_id 可挂 revision，无法回补。
     return false;
   }
 
-  const exists = await deps.revisionRepo.existsByEntryAndVersion(
-    entryId,
-    targetVersion
-  );
+  const exists = await deps.revisionRepo.existsByEntryAndVersion(entryId, targetVersion);
   if (exists) {
     return false;
   }
@@ -50,10 +41,7 @@ export async function backfillMissingRevisionIfNeeded(
   const mtimeMs = Date.now();
 
   if (entry != null && entry.entryKind === "file") {
-    const contentHash = await deps.entryRepo.findContentHash(
-      scopeKey,
-      logicalPath
-    );
+    const contentHash = await deps.entryRepo.findContentHash(scopeKey, logicalPath);
     if (contentHash != null && deps.contentStore != null) {
       await deps.contentStore.ensureBlob(contentHash, null);
     }

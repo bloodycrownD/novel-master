@@ -15,9 +15,7 @@ import type { SmartSortRuleService } from "./smart-sort-rule.port.js";
  *
  * @param conn - Open connection after {@link bootstrapNovelMaster}
  */
-export function createSmartSortRuleService(
-  conn: TdbcConnection
-): SmartSortRuleService {
+export function createSmartSortRuleService(conn: TdbcConnection): SmartSortRuleService {
   return new DefaultSmartSortRuleService({
     conn,
     // 事务回调内会用 tx 句柄再调一次本工厂造仓储（多语句写入口包事务），

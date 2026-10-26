@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -42,18 +41,15 @@ describe("chat CLI smoke", () => {
     const dbPath = join(dir, "novel.db");
     try {
       // fresh DB 的 agent registry 为空，session create 会因「workspace 未配置
-      // Agent 且 registry 为空」失败——先种一个最小 agent（listAgentIds 回落语义）
-      const bundlePath = join(dir, "agents.json");
-      writeFileSync(
-        bundlePath,
-        JSON.stringify({
-          schemaVersion: 1,
-          agents: {
-            "agent-smoke": { prompts: {}, description: "smoke seed", mode: "all" },
-          },
-        }),
-      );
-      const seeded = runCli(["agent", "import", bundlePath, "--db", dbPath]);
+      // Agent 且 registry 为空」失败——先建一个最小 agent（listAgentIds 回落语义）
+      const seeded = runCli([
+        "agent",
+        "create",
+        "--name",
+        "agent-smoke",
+        "--db",
+        dbPath,
+      ]);
       assert.equal(seeded.status, 0, seeded.stderr);
       const project = runCli([
         "project",

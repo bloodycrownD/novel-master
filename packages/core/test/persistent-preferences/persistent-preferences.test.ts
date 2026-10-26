@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { PreferencesError } from "@novel-master/core";
+import { isAppError } from "@novel-master/core/agent";
 import { createKkvService } from "../../src/service/kkv/create-kkv-service.js";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 
@@ -15,7 +15,7 @@ describe("PersistentPreferences", () => {
     await kkv.set("nm-preferences", "chat.llmStream", "not-a-bool");
     await assert.rejects(
       () => ctx.preferences.getLlmStreamEnabled(),
-      (e: unknown) => e instanceof PreferencesError && e.code === "INVALID_VALUE",
+      (e: unknown) => isAppError(e, "PREFERENCES_INVALID_VALUE"),
     );
     // 清理：同库后续用例（v2 defaults）会读到该键，不能留脏值
     await ctx.preferences.resetLlmStreamEnabled();
@@ -73,7 +73,7 @@ describe("PersistentPreferences", () => {
       await kkv.set("nm-preferences", "vfs.userVfsUnifiedToolTurn", "not-a-bool");
       await assert.rejects(
         () => ctx.preferences.getUserVfsUnifiedToolTurn(),
-        (e: unknown) => e instanceof PreferencesError && e.code === "INVALID_VALUE",
+        (e: unknown) => isAppError(e, "PREFERENCES_INVALID_VALUE"),
       );
     });
   });
@@ -108,7 +108,7 @@ describe("PersistentPreferences", () => {
       await kkv.set("nm-preferences", "chat.subagentStream", "not-a-bool");
       await assert.rejects(
         () => ctx.preferences.getSubagentStreamEnabled(),
-        (e: unknown) => e instanceof PreferencesError && e.code === "INVALID_VALUE",
+        (e: unknown) => isAppError(e, "PREFERENCES_INVALID_VALUE"),
       );
       // 清理：同库共享一条 in-memory DB，list 排序断言是全量 deepEqual，不能留脏值
       await ctx.preferences.resetSubagentStreamEnabled();
@@ -135,7 +135,7 @@ describe("PersistentPreferences", () => {
       await kkv.set("nm-preferences", "chat.thinkingContext", "not-a-bool");
       await assert.rejects(
         () => ctx.preferences.getThinkingContextEnabled(),
-        (e: unknown) => e instanceof PreferencesError && e.code === "INVALID_VALUE",
+        (e: unknown) => isAppError(e, "PREFERENCES_INVALID_VALUE"),
       );
     });
   });

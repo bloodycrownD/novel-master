@@ -153,7 +153,12 @@ export function NewSkillModal({
       if (bytes == null) {
         return;
       }
-      const preview = previewSkillZip(bytes);
+      const previewResult = previewSkillZip(bytes);
+      if (!previewResult.ok) {
+        setError(previewResult.error.message);
+        return;
+      }
+      const preview = previewResult.value;
       if (preview.skillMd == null) {
         setError('ZIP 根目录缺少 SKILL.md（导出格式：zip 根即技能目录）');
         return;

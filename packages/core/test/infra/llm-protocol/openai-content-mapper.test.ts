@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { ProviderError } from "../../../src/errors/provider-errors.js";
-import type { ChatMessage } from "../../../src/domain/chat/model/message.js";
+import type { ChatMessageData } from "../../../src/domain/chat/model/message.js";
 import {
   blocksToOpenAiMessageContent,
   chatMessagesToOpenAi,
@@ -11,7 +11,7 @@ import { applyThinkingContextForLlm } from "../../../src/service/prompt/apply-th
 
 describe("openai-content-mapper", () => {
   it("O1: text + tool_use → assistant message with tool_calls", () => {
-    const messages: ChatMessage[] = [
+    const messages: ChatMessageData[] = [
       {
         id: "a1",
         sessionId: "s1",
@@ -80,7 +80,7 @@ describe("openai-content-mapper", () => {
   });
 
   it("O3: tool_result → role tool messages with tool_call_id", () => {
-    const messages: ChatMessage[] = [
+    const messages: ChatMessageData[] = [
       {
         id: "u1",
         sessionId: "s1",
@@ -110,7 +110,7 @@ describe("openai-content-mapper", () => {
   });
 
   it("R7: tool_result ok/summary metadata omitted from OpenAI POST body", () => {
-    const messages: ChatMessage[] = [
+    const messages: ChatMessageData[] = [
       {
         id: "u1",
         sessionId: "s1",
@@ -204,7 +204,7 @@ describe("openai-content-mapper", () => {
 
   // T-SR5：chatMessagesToOpenAi 丢弃无 content 且无 tool_calls 的空 user
   it("T-SR5: 跳过空正文且无 tool_calls 的 user（避免缺 content 触发 400）", () => {
-    const messages: ChatMessage[] = [
+    const messages: ChatMessageData[] = [
       {
         id: "u0",
         sessionId: "s1",
@@ -237,7 +237,7 @@ describe("openai-content-mapper", () => {
 
   // T-PM3：OpenAI 出站不做相邻 user 合并（零改动锁定）
   it("T-PM3: tool_result user + 纯文本 user 出站为 tool → user 两消息，不合并不报错", () => {
-    const messages: ChatMessage[] = [
+    const messages: ChatMessageData[] = [
       {
         id: "u1",
         sessionId: "s1",
@@ -281,7 +281,7 @@ describe("openai-content-mapper", () => {
   });
 
   it("RC1: assistant thinking 块以 reasoning_content 回传，正文进 content", () => {
-    const messages: ChatMessage[] = [
+    const messages: ChatMessageData[] = [
       {
         id: "a1",
         sessionId: "s1",
@@ -308,7 +308,7 @@ describe("openai-content-mapper", () => {
   });
 
   it("RC2: 多个 thinking 块拼接为一条 reasoning_content；redacted_thinking 丢弃不进任何字段", () => {
-    const messages: ChatMessage[] = [
+    const messages: ChatMessageData[] = [
       {
         id: "a1",
         sessionId: "s1",
@@ -337,7 +337,7 @@ describe("openai-content-mapper", () => {
   });
 
   it("RC3: 纯 thinking 的 assistant 消息不丢：content 置 null + reasoning_content 回传", () => {
-    const messages: ChatMessage[] = [
+    const messages: ChatMessageData[] = [
       {
         id: "a1",
         sessionId: "s1",
@@ -359,7 +359,7 @@ describe("openai-content-mapper", () => {
   });
 
   it("RC4: 与全量保留联动：开态所有历史 thinking 均以 reasoning_content 回传；关态全剥时无 reasoning_content 字段", () => {
-    const mk = (id: string, thinking: string): ChatMessage => ({
+    const mk = (id: string, thinking: string): ChatMessageData => ({
       id,
       sessionId: "s1",
       seq: 1,
@@ -375,7 +375,7 @@ describe("openai-content-mapper", () => {
       createdAtMs: 0,
       hidden: false,
     });
-    const userMsg = (id: string): ChatMessage => ({
+    const userMsg = (id: string): ChatMessageData => ({
       id,
       sessionId: "s1",
       seq: 1,

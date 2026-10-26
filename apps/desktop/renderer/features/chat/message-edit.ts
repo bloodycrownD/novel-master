@@ -1,9 +1,7 @@
 /**
  * Helpers for message edit and action menu items.
  */
-import {
-  extractEditableTextFromMessage,
-} from '@shared/logic/chat';
+import { ChatMessage } from '@shared/logic/chat';
 import type { ChatMessageDto, ContentBlockDto } from '@shared/ipc-types';
 import { chatMessageFromDto } from './composer-send-state';
 
@@ -17,7 +15,7 @@ export interface MessageActionMenuItem {
 export function editableTextFromMessage(
   message: ChatMessageDto,
 ): string | null {
-  return extractEditableTextFromMessage(chatMessageFromDto(message));
+  return ChatMessage.from(chatMessageFromDto(message)).editableText();
 }
 
 /** Merges edited text at first text-block position; preserves thinking / tool_use order. */

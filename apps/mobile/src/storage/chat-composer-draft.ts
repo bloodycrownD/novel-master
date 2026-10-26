@@ -4,9 +4,9 @@
  */
 
 import {
+  chatAnnotateDraftStore,
   parseComposerDraftJson,
   serializeComposerDraftJson,
-  unionComposerStatusWithAnnotate,
   type ComposerDraftTokenRange,
   type MessageAttachment,
 } from '@novel-master/core/chat';
@@ -226,7 +226,7 @@ export function applyComposerStatusAttachmentsReplace(payload: {
   }
   const prev = bySession.get(sessionId) ?? EMPTY;
   const replaced = [...statusProjected];
-  const merged = unionComposerStatusWithAnnotate(replaced, sessionId);
+  const merged = chatAnnotateDraftStore.union(replaced, sessionId);
   if (!prev.text && merged.length === 0) {
     bySession.delete(sessionId);
     notifyDraftListeners(sessionId);

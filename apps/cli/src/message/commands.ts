@@ -5,8 +5,8 @@
  */
 
 import { readFile } from "node:fs/promises";
-import { assertMessageContent, formatMessageForCli, parseMessageContent, textBlocks } from "@novel-master/core/chat";
-import { type ChatMessage } from "@novel-master/core/chat";
+import { formatMessageForCli, parseMessageContent, textBlocks } from "@novel-master/core/chat";
+import { type ChatMessageData } from "@novel-master/core/chat";
 import type { NovelMasterRuntime } from "../runtime.js";
 import { parseCliArgs } from "../vfs/parse-args.js";
 import { seqRangeFromFloors } from "./floor.js";
@@ -25,7 +25,7 @@ function parsePositiveInt(raw: string, label: string): number {
 /** Resolves batch hide/show range: prefer floor (UI), allow seq (scripts). */
 function resolveSeqRange(
   flags: ReadonlyMap<string, string | true>,
-  messages: readonly ChatMessage[],
+  messages: readonly ChatMessageData[],
 ): { fromSeq: number; toSeq: number } {
   const fromFloor = flags.get("from-floor");
   const toFloor = flags.get("to-floor");
@@ -86,11 +86,15 @@ async function resolveAppendContent(
     return textBlocks(contentFlag);
   }
   if (typeof blocksJson === "string") {
-    return parseMessageContent(blocksJson);
+    const parsed = parseMessageContent(blocksJson);
+    if (!parsed.ok) throw parsed.error;
+    return parsed.value;
   }
   if (typeof blocksPath === "string") {
     const raw = await readFile(blocksPath, "utf8");
-    return parseMessageContent(raw);
+    const parsed = parseMessageContent(raw);
+    if (!parsed.ok) throw parsed.error;
+    return parsed.value;
   }
   if (typeof fileFlag === "string") {
     const text = await readFile(fileFlag, "utf8");
@@ -137,7 +141,6 @@ export async function runMessage(
         );
       }
       const content = await resolveAppendContent(flags);
-      assertMessageContent(content);
       const msg = await rt.messages.append(sessionId, role, content);
       console.log(msg.id);
       return;

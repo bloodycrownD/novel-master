@@ -8,7 +8,7 @@
  *   会在重进/切会话当场塌回一屏，并触发一次全量快照重渲。
  */
 import {describe, expect, it, beforeEach} from '@jest/globals';
-import {type ChatMessage} from '@novel-master/core/chat';
+import {type ChatMessageData} from '@novel-master/core/chat';
 import {
   clearAllSessionViewCaches,
   getSessionViewCache,
@@ -19,7 +19,7 @@ import {
 } from '@/services/chat-session-view-cache';
 import {SessionStreamUnit} from '@/services/session-stream-unit';
 
-function sampleMessage(id: string): ChatMessage {
+function sampleMessage(id: string): ChatMessageData {
   return {
     id,
     sessionId: 's1',
@@ -48,7 +48,7 @@ describe('chat-session-view-cache', () => {
   });
 
   describe('hydrateWindowFromCache（水合窗口裁剪）', () => {
-    function seqMessages(n: number): ChatMessage[] {
+    function seqMessages(n: number): ChatMessageData[] {
       return Array.from({length: n}, (_, i) => ({
         ...sampleMessage(`m${i}`),
         seq: i + 1,
@@ -84,7 +84,7 @@ describe('chat-session-view-cache', () => {
      * 仓库是内存型的（tail = 尾部 N 条、page = beforeSeq 之前的尾部 N 条，
      * 与 core 口径一致）。
      */
-    function makeUnit(db: ChatMessage[]): {
+    function makeUnit(db: ChatMessageData[]): {
       readonly unit: SessionStreamUnit;
       readonly tailCalls: () => number;
     } {
@@ -109,7 +109,7 @@ describe('chat-session-view-cache', () => {
       return {unit, tailCalls: () => tailCalls};
     }
 
-    function seqMessages(n: number): ChatMessage[] {
+    function seqMessages(n: number): ChatMessageData[] {
       return Array.from({length: n}, (_, i) => ({
         ...sampleMessage(`s1-m${i}`),
         seq: i + 1,

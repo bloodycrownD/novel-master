@@ -6,10 +6,7 @@
 
 import type { AgentSession } from "@/domain/agent/session/agent-session.port.js";
 import type { AgentPromptLayout } from "@/domain/prompt/model/agent-prompt-layout.js";
-import type {
-  PromptLlmInput,
-  PromptRenderContext,
-} from "@/domain/prompt/model/prompt-render-context.js";
+import type { PromptLlmInput, PromptRenderContext } from "@/domain/prompt/model/prompt-render-context.js";
 import type { LlmToolDefinition } from "@/infra/llm-protocol/ports/adapter.port.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
 
@@ -50,8 +47,5 @@ export interface CompactionEvaluationContext {
 
 /** Returns true when this trigger slice is satisfied. */
 export interface CompactionConditionTrigger {
-  shouldTrigger(
-    session: AgentSession,
-    evaluation: CompactionEvaluationContext
-  ): Promise<boolean>;
+  shouldTrigger(session: AgentSession, evaluation: CompactionEvaluationContext): Promise<boolean>;
 }

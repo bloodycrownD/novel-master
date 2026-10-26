@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { chatMessagesToAnthropic } from "../../../src/infra/llm-protocol/logic/anthropic-content-mapper.js";
-import type { ChatMessage } from "../../../src/domain/chat/model/message.js";
+import type { ChatMessageData } from "../../../src/domain/chat/model/message.js";
 
 describe("anthropic-content-mapper", () => {
   it("T-PM1: tool_result user + 文本 user 合并为单条 user，tool_result 块前置", () => {
-    const messages: ChatMessage[] = [
+    const messages: ChatMessageData[] = [
       {
         role: "assistant",
         content: {
@@ -57,7 +57,7 @@ describe("anthropic-content-mapper", () => {
   });
 
   it("T-PM1: 三连 user 压为一条，块序保持拼接顺序", () => {
-    const messages: ChatMessage[] = [
+    const messages: ChatMessageData[] = [
       {
         role: "user",
         content: { blocks: [{ type: "text", text: "第一段" }] },
@@ -82,7 +82,7 @@ describe("anthropic-content-mapper", () => {
   });
 
   it("相邻 user 中间隔 assistant 时不合并", () => {
-    const messages: ChatMessage[] = [
+    const messages: ChatMessageData[] = [
       {
         role: "user",
         content: { blocks: [{ type: "text", text: "问一" }] },

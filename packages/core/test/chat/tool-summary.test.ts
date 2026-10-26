@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { summarizeToolInput } from "../../src/domain/chat/logic/tool-summary.js";
+import { summarizeToolInput } from "../../src/presentation/chat/tool-summary.js";
 
 describe("summarizeToolInput（core 单源）", () => {
   it("T-TS-01: skill / read + domain=global → `read global:my-skill`", () => {
@@ -241,5 +241,11 @@ describe("summarizeToolInput（core 单源）", () => {
     assert.ok(summary.endsWith("…"));
     // 变异自证：拿掉 search 分支时会退化成 `{"query":"词…"}`，开头不是「词」。
     assert.ok(summary.startsWith("词"), `实际开头 ${summary.slice(0, 12)}`);
+  });
+
+  it("T-TS-29: 118 字 query 也收敛到 118 并补省略号（复用 truncateText）", () => {
+    const summary = summarizeToolInput("search", { query: "字".repeat(118) });
+    assert.equal(summary.length, 118);
+    assert.ok(summary.endsWith("…"));
   });
 });

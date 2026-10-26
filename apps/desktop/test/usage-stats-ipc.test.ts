@@ -17,6 +17,7 @@ import { register } from "node:module";
 import { describe, it } from "node:test";
 
 import type { UsageStatsFilterDto } from "../shared/ipc-types.js";
+import { AppError } from "@novel-master/core/agent";
 
 register(new URL("./usage-stats-runtime-hook.mjs", import.meta.url));
 const { handleUsageStatsQuery } = await import(
@@ -573,10 +574,7 @@ describe("usage stats IPC handler（T-S6 + Step 2 适配）", () => {
       sessionId: string
     ) => {
       calls.push({ method: "getSessionUsageDetail", args: [sessionId] });
-      throw Object.assign(new Error("sessionId 须提供"), {
-        name: "ChatError",
-        code: "INVALID_ARGUMENT",
-      });
+      throw new AppError("CHAT_INVALID_ARGUMENT", "sessionId 须提供");
     };
     const res = await handleUsageStatsQuery({
       kind: "sessionDetail",
@@ -586,19 +584,15 @@ describe("usage stats IPC handler（T-S6 + Step 2 适配）", () => {
     if (res.ok) {
       return;
     }
-    assert.equal(res.error.code, "INVALID_ARGUMENT");
+    assert.equal(res.error.code, "CHAT_INVALID_ARGUMENT");
     assert.deepEqual(calls, [
       { method: "getSessionUsageDetail", args: [""] },
     ]);
   });
 
-  it("service 抛 ChatError 时返回 IpcResult error 形态（code/message 透传）", async () => {
-    // 构造带 domain code 的 ChatError 形状（core 主入口未导出该类，
-    // formatIpcError 按 name ∈ TYPED_ERROR_NAMES + code 字段识别）
-    const chatError = Object.assign(new Error("自然日区间不合法"), {
-      name: "ChatError",
-      code: "INVALID_ARGUMENT",
-    });
+  it("service 抛 CHAT_INVALID_ARGUMENT 时返回 IpcResult error 形态（key/message 透传）", async () => {
+    // 构造带 domain key 的 AppError（formatIpcError 直接透出 AppError.key）。
+    const chatError = new AppError("CHAT_INVALID_ARGUMENT", "自然日区间不合法");
     const calls = installStubRuntime(chatError);
     const res = await handleUsageStatsQuery({
       kind: "summary",
@@ -607,7 +601,7 @@ describe("usage stats IPC handler（T-S6 + Step 2 适配）", () => {
     assert.deepEqual(res, {
       ok: false,
       error: {
-        code: "INVALID_ARGUMENT",
+        code: "CHAT_INVALID_ARGUMENT",
         message: "自然日区间不合法",
       },
     });

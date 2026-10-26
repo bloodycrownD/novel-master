@@ -5,7 +5,7 @@
  * 损坏的布尔/rev 字符串与缺失 key 的回退行为；与 cloud-sync.service 的非 mock
  * 集成用例见 cloud-sync-config.service.integration.test.ts。
  */
-import {KkvError} from '@novel-master/core';
+import {AppError} from '@novel-master/core/agent';
 import type {KkvService} from '@novel-master/core';
 import {
   CLOUD_SYNC_KKV_MODULE,
@@ -38,7 +38,7 @@ class InMemoryKkv implements KkvService {
   async get(module: string, key: string): Promise<string> {
     const value = this.map.get(this.slot(module, key));
     if (value === undefined) {
-      throw new KkvError('NOT_FOUND', `KKV key not found: ${module}/${key}`, {
+      throw new AppError('KKV_NOT_FOUND', `KKV key not found: ${module}/${key}`, {
         module,
         key,
       });
@@ -52,7 +52,7 @@ class InMemoryKkv implements KkvService {
 
   async delete(module: string, key: string): Promise<void> {
     if (!this.map.delete(this.slot(module, key))) {
-      throw new KkvError('NOT_FOUND', `KKV key not found: ${module}/${key}`, {
+      throw new AppError('KKV_NOT_FOUND', `KKV key not found: ${module}/${key}`, {
         module,
         key,
       });
@@ -243,15 +243,15 @@ describe('cloud-sync-config.store 容错', () => {
 
   it('KKV 非 NOT_FOUND 错误原样抛出', async () => {
     const failing = {
-      get: () => Promise.reject(new KkvError('IO', 'disk on fire')),
+      get: () => Promise.reject(new Error( 'disk on fire')),
     } as never;
     const broken = {
       kkv: failing,
       secretStore: new InMemorySecretStore(),
     } as unknown as MobileNovelMasterRuntime;
     await expect(getCloudSyncConfig(broken)).rejects.toMatchObject({
-      name: 'KkvError',
-      code: 'IO',
+      name: 'Error',
+      message: 'disk on fire',
     });
   });
 

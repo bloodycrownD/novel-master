@@ -6,21 +6,21 @@
 
 import { randomUUID } from "@/infra/random-uuid.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
-import { assertMessageContent } from "@/domain/chat/content/parse-message-content.js";
+import { parseMessageContentValue } from "@/domain/chat/content/parse-message-content.js";
 import type { MessageContent } from "@/domain/chat/model/content-block.js";
 import type {
-  ChatMessage,
+  ChatMessageData,
   ChatMessageHeader,
   MessageAttachment,
 } from "@/domain/chat/model/message.js";
+import { ChatMessage } from "@/domain/chat/logic/message/chat-message.js";
 import type { MessageUsage } from "@/domain/chat/model/message-usage.js";
 import type { ChatSession } from "@/domain/chat/model/session.js";
 import { messageAttachmentsSchema } from "@/domain/chat/model/message-attachment.schema.js";
 import type { MessageRepository } from "@/domain/chat/repositories/message.port.js";
 import type { SessionRepository } from "@/domain/chat/repositories/session.port.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
-import { nextForkSessionTitle } from "@/domain/chat/logic/fork-session-title.js";
-import { seedForkCopyParity } from "@/domain/chat/logic/seed-fork-copy-parity.js";
+import { forkCopySeeder } from "@/domain/chat/logic/fork-copy-seeder.js";
 import { copyVfsTree } from "@/domain/vfs/logic/vfs-tree-copy.js";
 import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
 import { sweepSessionRevisions } from "@/domain/message-checkpoint/logic/revision-gc.js";
@@ -35,7 +35,6 @@ import {
   SESSION_KKV_DOMAIN_USAGE_STATS,
   USAGE_STATS_TOOL_USE_COUNT_KEY,
 } from "@/domain/session-kkv/model/session-kkv-domains.js";
-import { countToolUseBlocks } from "@/domain/chat/logic/tool-use-count.js";
 import { chatInvalidArgument, chatNotFound } from "@/errors/chat-errors.js";
 import { invalidateSessionApiPromptTokenEntry } from "@/infra/tokenizer/logic/session-api-prompt-token-store.js";
 import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
@@ -64,7 +63,7 @@ function normalizeAppendAttachments(
 }
 
 /** Dependencies for {@link DefaultMessageService}. */
-export interface MessageServiceDeps {
+interface MessageServiceDeps {
   readonly conn: TdbcConnection;
   readonly sessions: SessionRepository;
   readonly messages: MessageRepository;
@@ -126,7 +125,7 @@ export class DefaultMessageService implements MessageService {
   listBySession(
     sessionId: string,
     options?: { includeHidden?: boolean }
-  ): Promise<ChatMessage[]> {
+  ): Promise<ChatMessageData[]> {
     return this.deps.messages.listBySession(sessionId, options);
   }
 
@@ -139,21 +138,21 @@ export class DefaultMessageService implements MessageService {
   listBySessionFromSeq(
     sessionId: string,
     fromSeq: number
-  ): Promise<ChatMessage[]> {
+  ): Promise<ChatMessageData[]> {
     return this.deps.messages.listBySessionFromSeq(sessionId, fromSeq);
   }
 
   listBySessionTail(
     sessionId: string,
     options: { limit: number }
-  ): Promise<ChatMessage[]> {
+  ): Promise<ChatMessageData[]> {
     return this.deps.messages.listBySessionTail(sessionId, options.limit);
   }
 
   listBySessionTailOfRole(
     sessionId: string,
     options: { role: string; limit: number }
-  ): Promise<ChatMessage[]> {
+  ): Promise<ChatMessageData[]> {
     return this.deps.messages.listBySessionTailOfRole(
       sessionId,
       options.role,
@@ -164,7 +163,7 @@ export class DefaultMessageService implements MessageService {
   listBySessionPage(
     sessionId: string,
     options: { limit: number; beforeSeq?: number }
-  ): Promise<ChatMessage[]> {
+  ): Promise<ChatMessageData[]> {
     return this.deps.messages.listBySessionPage(
       sessionId,
       options.limit,
@@ -172,7 +171,7 @@ export class DefaultMessageService implements MessageService {
     );
   }
 
-  async get(id: string): Promise<ChatMessage> {
+  async get(id: string): Promise<ChatMessageData> {
     const message = await this.deps.messages.findById(id);
     if (message == null) {
       throw chatNotFound("message", id);
@@ -192,21 +191,25 @@ export class DefaultMessageService implements MessageService {
       attachments?: readonly MessageAttachment[];
       usage?: MessageUsage;
     }
-  ): Promise<ChatMessage> {
+  ): Promise<ChatMessageData> {
     const session = await this.deps.sessions.findById(sessionId);
     if (session == null) {
       throw chatNotFound("session", sessionId);
     }
-    assertMessageContent(content);
+    const parsedContent = parseMessageContentValue(content);
+    if (!parsedContent.ok) {
+      throw parsedContent.error;
+    }
+    const normalizedContent = parsedContent.value;
     const attachments = normalizeAppendAttachments(options?.attachments);
     const seq = await this.deps.messages.nextSeq(sessionId);
     // New messages are visible by default
-    const message: ChatMessage = {
+    const message: ChatMessageData = {
       id: randomUUID(),
       sessionId,
       seq,
       role,
-      content,
+      content: normalizedContent,
       provider: options?.provider ?? null,
       modelName: options?.modelName ?? null,
       providerId: options?.providerId ?? null,
@@ -241,10 +244,11 @@ export class DefaultMessageService implements MessageService {
     // showRange/truncateAfter）的失效保留——增量表达不了内容消失。
     // 工具调用数缓存：仅含 tool_use 块的追加失效（run 的工具步在此失效、
     // 纯文本追加不动缓存——避免 run 内每步无谓重算）。
-    if (role === "assistant" && countToolUseBlocks(content) > 0) {
+    const hasToolUse = ChatMessage.from(message).toolUseCount() > 0;
+    if (role === "assistant" && hasToolUse) {
       await this.invalidateToolUseCount(sessionId);
     }
-    return message;
+    return ChatMessage.from(message);
   }
 
   async delete(id: string): Promise<void> {
@@ -293,8 +297,11 @@ export class DefaultMessageService implements MessageService {
   async updateContent(
     messageId: string,
     content: MessageContent
-  ): Promise<ChatMessage> {
-    assertMessageContent(content);
+  ): Promise<ChatMessageData> {
+    const parsedContent = parseMessageContentValue(content);
+    if (!parsedContent.ok) {
+      throw parsedContent.error;
+    }
     // 正文替换收进事务（行缺失即抛、不留半写状态）。序列化与压缩编码都
     // 下沉到 repository（port 签名为 MessageContent 对象）。
     // read 引用换算（旧 blocks −1、新 blocks +1）已随 E1 清理版退役。
@@ -304,7 +311,7 @@ export class DefaultMessageService implements MessageService {
       if (existing == null) {
         throw chatNotFound("message", messageId);
       }
-      const updated = await messages.updateContent(messageId, content);
+      const updated = await messages.updateContent(messageId, parsedContent.value);
       if (!updated) {
         throw chatNotFound("message", messageId);
       }
@@ -339,10 +346,19 @@ export class DefaultMessageService implements MessageService {
     const projectSessions = await this.deps.sessions.listByProject(
       source.projectId
     );
-    const forkTitle = nextForkSessionTitle(
-      source.title,
-      projectSessions.map((s) => s.title)
-    );
+    const forkBaseTitle = source.title?.trim() || "会话";
+    const forkTitlePattern = new RegExp(`^${forkBaseTitle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}_ckpt_(\\d+)$`);
+    let maxForkIndex = 0;
+    for (const session of projectSessions) {
+      if (session.title == null || session.title === "") {
+        continue;
+      }
+      const match = session.title.match(forkTitlePattern);
+      if (match) {
+        maxForkIndex = Math.max(maxForkIndex, Number.parseInt(match[1]!, 10));
+      }
+    }
+    const forkTitle = `${forkBaseTitle}_ckpt_${maxForkIndex + 1}`;
     return this.deps.conn.transaction(async (tx) => {
       const r = reposFor(tx);
       // 上界读口的返回集合与旧的 all.filter(m => m.seq <= upTo.seq) 逐条等价，
@@ -387,7 +403,7 @@ export class DefaultMessageService implements MessageService {
       const newMessages: { id: string }[] = [];
       let seq = 1;
       // 逐条 INSERT 改成先构造数组再一次 batchInsert，把 M 次 round-trip 收敛成 1 次。
-      const forkedMessages: ChatMessage[] = [];
+      const forkedMessages: ChatMessageData[] = [];
       for (const msg of toCopy) {
         const id = randomUUID();
         // Preserve hidden state when forking
@@ -396,12 +412,8 @@ export class DefaultMessageService implements MessageService {
         seq++;
       }
       await r.messages.batchInsert(forkedMessages);
-      await seedForkCopyParity(tx, {
-        projectId: source.projectId,
-        sourceSessionId: source.id,
-        targetSessionId: forked.id,
-        newMessages,
-      });
+      const seeded = await forkCopySeeder.seed(tx, { projectId: source.projectId, sourceSessionId: source.id, targetSessionId: forked.id, newMessages });
+      if (!seeded.ok) throw seeded.error;
       return forked;
     });
   }

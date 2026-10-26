@@ -9,9 +9,9 @@
  * 成了「Provider 每次渲染都在算、却没有测试」的东西——所以按纯函数域补一份。
  *
  * 分工（其余判定面各有其主，不要在这里重复）：
- * - `isPlainUserText` 的 block 级细账 → `packages/core/test/chat/editable-text-from-message.test.ts`
+ * - `isPlainUserText` 的 block 级细账 → `packages/core/test/chat/chat-message-undo-send.test.ts`
  *   （T-B3-01/05/06，含 tool_result 守卫）。
- * - 「有没有可发输入」的三元门闩（正文 / attach / 批注）→ `packages/core/test/chat/composer-sendable-input.test.ts`
+ * - 「有没有可发输入」的三元门闩（正文 / attach / 批注）→ `packages/core/test/chat/composer-send-intent.test.ts`
  *   （T-CR3 / T-CR4 / T-UO3 镜像）。
  * - send 三分支的**路由**（needModel / 空续跑 / 正常发送）→ `use-chat-composer-controller.test.tsx`。
  * - 同一 run 的二次受理被拒、finishRun 的 refcount 兑底 → `SessionStreamUnitManager` 自己的测试面。
@@ -19,7 +19,7 @@
  * 本文件只锁 RN 侧这一层薄推导：**取末条可见消息** + **role 决定可否空续跑**。
  */
 import {describe, expect, it} from '@jest/globals';
-import {type ChatMessage} from '@novel-master/core/chat';
+import {type ChatMessageData} from '@novel-master/core/chat';
 import {
   deriveComposerSendState,
   findLastVisibleMessage,
@@ -28,11 +28,11 @@ import {
 function message(
   id: string,
   role: 'user' | 'assistant',
-  blocks: ChatMessage['content']['blocks'] = [
+  blocks: ChatMessageData['content']['blocks'] = [
     {type: 'text', text: 'hi'},
   ],
   hidden = false,
-): ChatMessage {
+): ChatMessageData {
   return {
     id,
     sessionId: 's1',

@@ -45,12 +45,11 @@ export const CHAT_SCHEMA_STATEMENTS: readonly string[] = [
     model_name TEXT NULL,
     first_token_ms INTEGER NULL,
     duration_ms INTEGER NULL,
-    -- 消息正文存储（明文为正形态）：写侧直写 content_json，两列恒 NULL；
-    -- 两列仅迁移期存量压缩行为非 NULL——读路径双形态保留至 V1'（压缩行按
-    -- content_encoding 解压，否则 parse 明文），content_blob 非空 → 解压，
-    -- 否则 parse content_json。CHECK 对 NULL 放行（写法对齐
-    -- vfs_content_blob.encoding 先例）——legacy 明文行两列皆 NULL，永远合法，
-    -- 这是迁移可中断、e2e fixture 直插明文仍可用的地基。
+    -- 消息正文存储（明文为正形态）：写侧直写 content_json，两列恒 NULL。
+    -- 两列仅作为历史列保留（存量压缩行的痕迹），读路径只认 content_json。
+    -- CHECK 对 NULL 放行（写法对齐 vfs_content_blob.encoding 先例）——
+    -- legacy 明文行两列皆 NULL，永远合法，这是迁移可中断、e2e fixture 直插
+    -- 明文仍可用的地基。
     content_encoding TEXT NULL CHECK (content_encoding IN ('zlib', 'zlib-b64')),
     content_blob BLOB NULL,
     UNIQUE (session_id, seq)

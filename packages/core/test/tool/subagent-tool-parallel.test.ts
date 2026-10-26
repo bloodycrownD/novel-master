@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 
 import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
 import type { AgentRunResult } from "@/domain/agent/model/agent-run-result.js";
-import type { ChatMessage } from "@/domain/chat/model/message.js";
+import type { ChatMessageData } from "@/domain/chat/model/message.js";
 import { subagentTool } from "@/domain/tool/builtin/subagent-tool.js";
 import type {
   BuiltinToolContext,
@@ -34,7 +34,7 @@ function setupParallel(opts: SetupOpts = {}): {
   const stopReason = opts.stopReason ?? "completed";
   const runChildAgentCalls: { childSessionId: string; signal: AbortSignal }[] = [];
   const createdSessions: { id: string; title: string }[] = [];
-  const childMsgs = new Map<string, ChatMessage[]>();
+  const childMsgs = new Map<string, ChatMessageData[]>();
   let counter = 0;
   const defs = [generalDef];
   const agentRegistry: AgentRegistryService = {
@@ -59,7 +59,7 @@ function setupParallel(opts: SetupOpts = {}): {
       const id = `child-${counter}`;
       createdSessions.push({ id, title: title ?? "" });
       childMsgs.set(id, [
-        { role: "assistant", content: { blocks: [{ type: "text", text: `子代理 ${id} 的回复` }] } } as ChatMessage,
+        { role: "assistant", content: { blocks: [{ type: "text", text: `子代理 ${id} 的回复` }] } } as ChatMessageData,
       ]);
       return { id, parentSessionId: _parent, projectId: _proj } as never;
     },

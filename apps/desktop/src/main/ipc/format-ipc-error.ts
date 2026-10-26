@@ -5,11 +5,10 @@
  */
 import type { IpcErrorPayload } from "../../../shared/ipc-types.js";
 import { isCloudSyncError } from "@novel-master/core";
-import { SkillError } from "@novel-master/core/skills";
 import { AgentTurnError } from "@novel-master/core/agent";
 import { ToolError } from "@novel-master/core";
 import {
-  CharacterCardError,
+  AppError,
   VfsError,
   isVfsError,
 } from "@novel-master/core/vfs";
@@ -38,9 +37,26 @@ function formatZodIssues(err: ZodError): string {
 const TYPED_ERROR_NAMES = new Set([
   "SessionFsError",
   "VfsError",
-  "ChatError",
   "ProviderError",
 ]);
+
+/**
+ * 旧 VfsError short code ↔ 新 AppError key 的兼容映射（phase 1）。
+ *
+ * 域逻辑（moveVfsPath 等）迁到 AppError 后，渲染层仍按旧 code 判
+ * NOT_FOUND / ALREADY_EXISTS；在 IPC 边界翻回旧 code，避免行为回退。
+ */
+const VFS_APP_KEY_TO_CODE: Record<string, string> = {
+  VFS_NOT_FOUND: "NOT_FOUND",
+  VFS_REPLACE_NOT_FOUND: "REPLACE_NOT_FOUND",
+  VFS_DIRECTORY_NOT_EMPTY: "DIRECTORY_NOT_EMPTY",
+  VFS_INVALID_PATH: "INVALID_PATH",
+  VFS_INVALID_NAME: "INVALID_NAME",
+  VFS_IS_DIRECTORY: "IS_DIRECTORY",
+  VFS_ALREADY_EXISTS: "ALREADY_EXISTS",
+  VFS_NOT_A_DIRECTORY: "NOT_A_DIRECTORY",
+  VFS_PARENT_NOT_FOUND: "PARENT_NOT_FOUND",
+};
 
 function typedDomainCode(err: Error): string | undefined {
   const coded = err as Error & { code?: unknown };
@@ -75,13 +91,10 @@ export function formatIpcError(err: unknown): IpcErrorPayload {
   if (err instanceof VfsError) {
     return { code: err.code, message: err.message };
   }
-  // 技能域错误透出 domain code（INVALID_NAME / MISSING_DOMAIN / INVALID_PATH / NOT_FOUND 等）
-  if (err instanceof SkillError) {
-    return { code: err.code, message: err.message };
-  }
-  // 角色卡须显式透出 domain code（严于现网 VfsZipError 仅落 name 的路径）
-  if (err instanceof CharacterCardError) {
-    return { code: err.code, message: err.message };
+  // 统一错误透出可读 key（AppError.key），不落成 Error.name；VFS 域在 phase 1
+  // 仍对渲染层承诺旧 short code（NOT_FOUND / ALREADY_EXISTS 等）。
+  if (err instanceof AppError) {
+    return { code: VFS_APP_KEY_TO_CODE[err.key] ?? err.key, message: err.message };
   }
   if (err instanceof ToolError) {
     const cause = err.cause;

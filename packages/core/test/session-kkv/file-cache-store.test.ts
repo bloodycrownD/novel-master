@@ -1,25 +1,14 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { createSessionKkvService } from "../../src/service/session-kkv/create-session-kkv-service.js";
-import {
-  SESSION_KKV_DOMAIN_FILE_CACHE,
-  SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
-  RULE_SNAPSHOT_CANON_KEY,
-} from "../../src/domain/session-kkv/model/session-kkv-domains.js";
+import { SESSION_KKV_DOMAIN_FILE_CACHE, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
 import { serializeFileCachePayload } from "../../src/domain/workplace/logic/rule-snapshot-codec.js";
-import {
-  compressFileCacheBodyForBlob,
-  hashFileCachePayload,
-} from "../../src/domain/session-kkv/logic/file-cache-blob-codec.js";
+import { compressFileCacheBodyForBlob, decodeFileCacheBlobBody, hashFileCachePayload } from "../../src/domain/session-kkv/logic/file-cache-blob-codec.js";
 import { hashContent } from "../../src/domain/vfs/content-store/logic/hash-content.js";
 import { VFS_CONTENT_ENCODING_ZLIB_B64 } from "../../src/domain/vfs/content-store/logic/blob-bytes-codec.js";
 import { VFS_CONTENT_ENCODING_ZLIB } from "../../src/domain/vfs/content-store/logic/zlib-codec.js";
 import type { TdbcConnection } from "@novel-master/core";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
+import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 
@@ -55,43 +44,39 @@ function encodeFileCacheValueForFixture(value: string): {
 }
 
 /** 直查 entry 引用行，拿当前 content_hash（断言引用转移用）。 */
-async function currentEntryHash(
-  conn: TdbcConnection,
-  sessionId: string,
-  key: string
-): Promise<string | null> {
-  const rows = await conn.query<{ content_hash: string }>(
-    "SELECT content_hash FROM session_file_cache_entry WHERE session_id = ? AND key = ?",
-    [sessionId, key]
-  );
+async function currentEntryHash(conn: TdbcConnection, sessionId: string, key: string): Promise<string | null> {
+  const rows = await conn.query<{ content_hash: string }>("SELECT content_hash FROM session_file_cache_entry WHERE session_id = ? AND key = ?", [sessionId, key]);
   return rows.length === 0 ? null : String(rows[0]!.content_hash);
 }
 
 /** 直查 blob 表按 hash 的行数（断言单份存储 / 旧 blob 保留用）。 */
-async function blobCountByHash(
-  conn: TdbcConnection,
-  contentHash: string
-): Promise<number> {
-  const rows = await conn.query<{ n: number }>(
-    "SELECT COUNT(*) AS n FROM session_file_cache_blob WHERE content_hash = ?",
-    [contentHash]
-  );
+async function blobCountByHash(conn: TdbcConnection, contentHash: string): Promise<number> {
+  const rows = await conn.query<{ n: number }>("SELECT COUNT(*) AS n FROM session_file_cache_blob WHERE content_hash = ?", [contentHash]);
   return Number(rows[0]!.n);
 }
 
 describe("file-cache-blob-codec 拆分（先哈希后压缩）", () => {
   it("hashFileCachePayload：hash/mtime/body 三件套；非 payload 形态返回 null", () => {
-    const value = serializeFileCachePayload({body: "正文", mtimeMs: 42});
+    const value = serializeFileCachePayload({ body: "正文", mtimeMs: 42 });
     const hashed = hashFileCachePayload(value);
     assert.notEqual(hashed, null);
     assert.equal(hashed!.mtimeMs, 42);
     assert.equal(hashed!.body, "正文");
-    assert.equal(
-      hashed!.contentHash,
-      hashContent("正文"),
-      "hash 与 vfs 共享 hashContent 同源（sha256(body)，mtime 不参与）"
-    );
+    assert.equal(hashed!.contentHash, hashContent("正文"), "hash 与 vfs 共享 hashContent 同源（sha256(body)，mtime 不参与）");
     assert.equal(hashFileCachePayload("not-a-payload"), null);
+  });
+
+  it("decodeFileCacheBlobBody：坏 encoding / 坏字节返回 Err（不抛出）", () => {
+    const unsupported = decodeFileCacheBlobBody("unsupported", new Uint8Array([1]));
+    assert.equal(unsupported.ok, false);
+    if (!unsupported.ok) {
+      assert.equal(unsupported.error.key, "VFS_CONTENT_UNSUPPORTED_FORMAT");
+    }
+    const corrupt = decodeFileCacheBlobBody(VFS_CONTENT_ENCODING_ZLIB, new Uint8Array([1, 2, 3]));
+    assert.equal(corrupt.ok, false);
+    if (!corrupt.ok) {
+      assert.equal(corrupt.error.key, "VFS_CONTENT_CORRUPT");
+    }
   });
 
   it("compressFileCacheBodyForBlob：zlib 二进制形态（encoding/bytes 一致）", () => {
@@ -104,7 +89,7 @@ describe("file-cache-blob-codec 拆分（先哈希后压缩）", () => {
     const ctx = getNovelMasterTestContext();
     const sk = createSessionKkvService(ctx.conn);
     const sid = `skip-${testIsolationSuffix()}`;
-    const value = serializeFileCachePayload({body: "压缩后回填的常见形态", mtimeMs: 7});
+    const value = serializeFileCachePayload({ body: "压缩后回填的常见形态", mtimeMs: 7 });
     await sk.set(sid, SESSION_KKV_DOMAIN_FILE_CACHE, "full:/a.md", value);
     // 清 entry 模拟压缩/置位清域（blob 表全库共享、clearDomain 只删 entry），
     // 再 set 同内容 → 走「blob 已存在跳过压缩」路径。
@@ -185,11 +170,7 @@ describe("getMany 批量读（两条 IN 查询替代逐键两跳）", () => {
     const sid = `m3-${testIsolationSuffix()}`;
     await sk.set(sid, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY, "[]");
     await sk.set(sid, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, "other", "x");
-    const got = await sk.getMany(sid, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, [
-      RULE_SNAPSHOT_CANON_KEY,
-      "other",
-      "nope",
-    ]);
+    const got = await sk.getMany(sid, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, [RULE_SNAPSHOT_CANON_KEY, "other", "nope"]);
     assert.equal(got.size, 2);
     assert.equal(got.get(RULE_SNAPSHOT_CANON_KEY), "[]");
     assert.equal(got.get("other"), "x");
@@ -238,14 +219,8 @@ describe("getMany 批量读（两条 IN 查询替代逐键两跳）", () => {
 
     // 埋哨兵旧表行：若实现错误地把「entry 在而 blob 缺失」的键回退旧表，
     // 会读到哨兵值——正确语义是与单键 get 同口径的 miss（上层自愈重读）。
-    await ctx.conn.execute(
-      "INSERT INTO session_kkv_entry (session_id, domain, key, value) VALUES (?, ?, ?, ?)",
-      [sid, SESSION_KKV_DOMAIN_FILE_CACHE, key, "sentinel-legacy-value"]
-    );
-    await ctx.conn.execute(
-      "DELETE FROM session_file_cache_blob WHERE content_hash = ?",
-      [hash!]
-    );
+    await ctx.conn.execute("INSERT INTO session_kkv_entry (session_id, domain, key, value) VALUES (?, ?, ?, ?)", [sid, SESSION_KKV_DOMAIN_FILE_CACHE, key, "sentinel-legacy-value"]);
+    await ctx.conn.execute("DELETE FROM session_file_cache_blob WHERE content_hash = ?", [hash!]);
 
     const got = await sk.getMany(sid, SESSION_KKV_DOMAIN_FILE_CACHE, [key]);
     assert.equal(got.size, 0, "blob 行缺失按 miss 处理，不得回退旧表读哨兵值");
@@ -274,19 +249,10 @@ describe("getMany 批量读（两条 IN 查询替代逐键两跳）", () => {
     // 破坏手法照 T-R8：合法 base64 文本但解出的字节不是 zlib 流（解压必失败），
     // 这里用 UPDATE 把真实 set 落下的 blob 行改坏，贴近「存量行损坏」形态。
     const badB64 = legacyB64Text(Uint8Array.of(0x00, 0x01, 0x02, 0x03));
-    await ctx.conn.execute(
-      "UPDATE session_file_cache_blob SET encoding = ?, bytes = ?, byte_len = ? WHERE content_hash = ?",
-      [VFS_CONTENT_ENCODING_ZLIB_B64, badB64, badB64.length, corruptHash!]
-    );
-    await ctx.conn.execute(
-      "INSERT INTO session_kkv_entry (session_id, domain, key, value) VALUES (?, ?, ?, ?)",
-      [sid, SESSION_KKV_DOMAIN_FILE_CACHE, corruptKey, "sentinel-legacy-value"]
-    );
+    await ctx.conn.execute("UPDATE session_file_cache_blob SET encoding = ?, bytes = ?, byte_len = ? WHERE content_hash = ?", [VFS_CONTENT_ENCODING_ZLIB_B64, badB64, badB64.length, corruptHash!]);
+    await ctx.conn.execute("INSERT INTO session_kkv_entry (session_id, domain, key, value) VALUES (?, ?, ?, ?)", [sid, SESSION_KKV_DOMAIN_FILE_CACHE, corruptKey, "sentinel-legacy-value"]);
 
-    const got = await sk.getMany(sid, SESSION_KKV_DOMAIN_FILE_CACHE, [
-      corruptKey,
-      healthyKey,
-    ]);
+    const got = await sk.getMany(sid, SESSION_KKV_DOMAIN_FILE_CACHE, [corruptKey, healthyKey]);
     assert.equal(got.size, 1, "坏行只 miss 自己，不拖垮同批其他键");
     assert.equal(got.has(corruptKey), false, "decode 失败按 miss，不回退旧表哨兵值");
     assert.equal(got.get(healthyKey), healthyValue);
@@ -308,10 +274,7 @@ describe("getMany 批量读（两条 IN 查询替代逐键两跳）", () => {
     await sk.set(sid, SESSION_KKV_DOMAIN_FILE_CACHE, legacyKey, legacyValue);
     await sk.set(sid, SESSION_KKV_DOMAIN_FILE_CACHE, newKey, newValue);
 
-    const got = await sk.getMany(sid, SESSION_KKV_DOMAIN_FILE_CACHE, [
-      newKey,
-      legacyKey,
-    ]);
+    const got = await sk.getMany(sid, SESSION_KKV_DOMAIN_FILE_CACHE, [newKey, legacyKey]);
     assert.equal(got.size, 2);
     assert.equal(got.get(newKey), newValue, "新表键两跳 IN 查询命中");
     assert.equal(got.get(legacyKey), legacyValue, "旧表键经 missing 回退 getManyLegacy 命中");
@@ -328,16 +291,8 @@ describe("session file_cache 分流存储（两新表）", () => {
       mtimeMs: 1758576000123,
     });
 
-    await sk.set(
-      sid,
-      SESSION_KKV_DOMAIN_FILE_CACHE,
-      "full:/小说/第一章.md",
-      value
-    );
-    assert.equal(
-      await sk.get(sid, SESSION_KKV_DOMAIN_FILE_CACHE, "full:/小说/第一章.md"),
-      value
-    );
+    await sk.set(sid, SESSION_KKV_DOMAIN_FILE_CACHE, "full:/小说/第一章.md", value);
+    assert.equal(await sk.get(sid, SESSION_KKV_DOMAIN_FILE_CACHE, "full:/小说/第一章.md"), value);
   });
 
   it("T-R2 两会话 set 同 body 不同 mtime：blob 表恰一行，两 entry 各自还原各自 mtime", async () => {
@@ -348,31 +303,15 @@ describe("session file_cache 分流存储（两新表）", () => {
     const body = `shared-body-${testIsolationSuffix()}`;
     const key = "full:/shared.md";
 
-    await sk.set(
-      s1,
-      SESSION_KKV_DOMAIN_FILE_CACHE,
-      key,
-      serializeFileCachePayload({ body, mtimeMs: 111 })
-    );
-    await sk.set(
-      s2,
-      SESSION_KKV_DOMAIN_FILE_CACHE,
-      key,
-      serializeFileCachePayload({ body, mtimeMs: 222 })
-    );
+    await sk.set(s1, SESSION_KKV_DOMAIN_FILE_CACHE, key, serializeFileCachePayload({ body, mtimeMs: 111 }));
+    await sk.set(s2, SESSION_KKV_DOMAIN_FILE_CACHE, key, serializeFileCachePayload({ body, mtimeMs: 222 }));
 
     const hash = await currentEntryHash(ctx.conn, s1, key);
     assert.notEqual(hash, null);
     assert.equal(await blobCountByHash(ctx.conn, hash!), 1);
 
-    assert.equal(
-      await sk.get(s1, SESSION_KKV_DOMAIN_FILE_CACHE, key),
-      serializeFileCachePayload({ body, mtimeMs: 111 })
-    );
-    assert.equal(
-      await sk.get(s2, SESSION_KKV_DOMAIN_FILE_CACHE, key),
-      serializeFileCachePayload({ body, mtimeMs: 222 })
-    );
+    assert.equal(await sk.get(s1, SESSION_KKV_DOMAIN_FILE_CACHE, key), serializeFileCachePayload({ body, mtimeMs: 111 }));
+    assert.equal(await sk.get(s2, SESSION_KKV_DOMAIN_FILE_CACHE, key), serializeFileCachePayload({ body, mtimeMs: 222 }));
   });
 
   it("T-R3 同 key 两次 set 不同 body：entry 引用转移新 hash，旧 blob 保留", async () => {
@@ -383,20 +322,10 @@ describe("session file_cache 分流存储（两新表）", () => {
     const oldBody = `old-body-${testIsolationSuffix()}`;
     const newBody = `new-body-${testIsolationSuffix()}`;
 
-    await sk.set(
-      sid,
-      SESSION_KKV_DOMAIN_FILE_CACHE,
-      key,
-      serializeFileCachePayload({ body: oldBody, mtimeMs: 1 })
-    );
+    await sk.set(sid, SESSION_KKV_DOMAIN_FILE_CACHE, key, serializeFileCachePayload({ body: oldBody, mtimeMs: 1 }));
     const oldHash = await currentEntryHash(ctx.conn, sid, key);
 
-    await sk.set(
-      sid,
-      SESSION_KKV_DOMAIN_FILE_CACHE,
-      key,
-      serializeFileCachePayload({ body: newBody, mtimeMs: 2 })
-    );
+    await sk.set(sid, SESSION_KKV_DOMAIN_FILE_CACHE, key, serializeFileCachePayload({ body: newBody, mtimeMs: 2 }));
     const newHash = await currentEntryHash(ctx.conn, sid, key);
 
     assert.notEqual(oldHash, null);
@@ -404,10 +333,7 @@ describe("session file_cache 分流存储（两新表）", () => {
     assert.notEqual(oldHash, newHash);
     // entry 已指向新 hash，旧 blob 行保留待 GC（不误删）
     assert.equal(await blobCountByHash(ctx.conn, oldHash!), 1);
-    assert.equal(
-      await sk.get(sid, SESSION_KKV_DOMAIN_FILE_CACHE, key),
-      serializeFileCachePayload({ body: newBody, mtimeMs: 2 })
-    );
+    assert.equal(await sk.get(sid, SESSION_KKV_DOMAIN_FILE_CACHE, key), serializeFileCachePayload({ body: newBody, mtimeMs: 2 }));
   });
 
   it("T-R4 clearDomain(file_cache) 只删该会话 entry 行，blob 与其他会话 entry 不动", async () => {
@@ -418,18 +344,8 @@ describe("session file_cache 分流存储（两新表）", () => {
     const body = `keep-body-${testIsolationSuffix()}`;
     const key = "full:/keep.md";
 
-    await sk.set(
-      s1,
-      SESSION_KKV_DOMAIN_FILE_CACHE,
-      key,
-      serializeFileCachePayload({ body, mtimeMs: 1 })
-    );
-    await sk.set(
-      s2,
-      SESSION_KKV_DOMAIN_FILE_CACHE,
-      key,
-      serializeFileCachePayload({ body, mtimeMs: 2 })
-    );
+    await sk.set(s1, SESSION_KKV_DOMAIN_FILE_CACHE, key, serializeFileCachePayload({ body, mtimeMs: 1 }));
+    await sk.set(s2, SESSION_KKV_DOMAIN_FILE_CACHE, key, serializeFileCachePayload({ body, mtimeMs: 2 }));
     const hash = await currentEntryHash(ctx.conn, s1, key);
 
     await sk.clearDomain(s1, SESSION_KKV_DOMAIN_FILE_CACHE);
@@ -437,10 +353,7 @@ describe("session file_cache 分流存储（两新表）", () => {
     assert.equal(await currentEntryHash(ctx.conn, s1, key), null);
     assert.notEqual(await currentEntryHash(ctx.conn, s2, key), null);
     assert.equal(await blobCountByHash(ctx.conn, hash!), 1);
-    assert.equal(
-      await sk.get(s2, SESSION_KKV_DOMAIN_FILE_CACHE, key),
-      serializeFileCachePayload({ body, mtimeMs: 2 })
-    );
+    assert.equal(await sk.get(s2, SESSION_KKV_DOMAIN_FILE_CACHE, key), serializeFileCachePayload({ body, mtimeMs: 2 }));
   });
 
   it("T-R5 clearSession 删全部 entry 行；listKeys 返回键集合", async () => {
@@ -448,45 +361,17 @@ describe("session file_cache 分流存储（两新表）", () => {
     const sk = createSessionKkvService(ctx.conn);
     const sid = `r5-${testIsolationSuffix()}`;
 
-    await sk.set(
-      sid,
-      SESSION_KKV_DOMAIN_FILE_CACHE,
-      "header:/b.md",
-      serializeFileCachePayload({ body: "b", mtimeMs: 1 })
-    );
-    await sk.set(
-      sid,
-      SESSION_KKV_DOMAIN_FILE_CACHE,
-      "full:/a.md",
-      serializeFileCachePayload({ body: "a", mtimeMs: 2 })
-    );
-    await sk.set(
-      sid,
-      SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
-      RULE_SNAPSHOT_CANON_KEY,
-      "[]"
-    );
+    await sk.set(sid, SESSION_KKV_DOMAIN_FILE_CACHE, "header:/b.md", serializeFileCachePayload({ body: "b", mtimeMs: 1 }));
+    await sk.set(sid, SESSION_KKV_DOMAIN_FILE_CACHE, "full:/a.md", serializeFileCachePayload({ body: "a", mtimeMs: 2 }));
+    await sk.set(sid, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY, "[]");
 
-    assert.deepEqual(await sk.listKeys(sid, SESSION_KKV_DOMAIN_FILE_CACHE), [
-      "full:/a.md",
-      "header:/b.md",
-    ]);
+    assert.deepEqual(await sk.listKeys(sid, SESSION_KKV_DOMAIN_FILE_CACHE), ["full:/a.md", "header:/b.md"]);
 
     await sk.clearSession(sid);
 
     assert.deepEqual(await sk.listKeys(sid, SESSION_KKV_DOMAIN_FILE_CACHE), []);
-    assert.equal(
-      await sk.get(sid, SESSION_KKV_DOMAIN_FILE_CACHE, "full:/a.md"),
-      null
-    );
-    assert.equal(
-      await sk.get(
-        sid,
-        SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
-        RULE_SNAPSHOT_CANON_KEY
-      ),
-      null
-    );
+    assert.equal(await sk.get(sid, SESSION_KKV_DOMAIN_FILE_CACHE, "full:/a.md"), null);
+    assert.equal(await sk.get(sid, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY), null);
   });
 
   it("T-R6 直查删掉 blob 行后 get 返回 null 不抛异常（自愈路径）", async () => {
@@ -507,10 +392,7 @@ describe("session file_cache 分流存储（两新表）", () => {
     const hash = await currentEntryHash(ctx.conn, sid, key);
     assert.notEqual(hash, null);
 
-    await ctx.conn.execute(
-      "DELETE FROM session_file_cache_blob WHERE content_hash = ?",
-      [hash!]
-    );
+    await ctx.conn.execute("DELETE FROM session_file_cache_blob WHERE content_hash = ?", [hash!]);
 
     const got = await sk.get(sid, SESSION_KKV_DOMAIN_FILE_CACHE, key);
     assert.equal(got, null);
@@ -528,10 +410,7 @@ describe("session file_cache 分流存储（两新表）", () => {
     assert.equal(await sk.get(sid, SESSION_KKV_DOMAIN_FILE_CACHE, key), value);
 
     // 存储位置断言：旧表有行，新表 entry 无引用行
-    const legacyRows = await ctx.conn.query<{ value: string }>(
-      "SELECT value FROM session_kkv_entry WHERE session_id = ? AND domain = ? AND key = ?",
-      [sid, SESSION_KKV_DOMAIN_FILE_CACHE, key]
-    );
+    const legacyRows = await ctx.conn.query<{ value: string }>("SELECT value FROM session_kkv_entry WHERE session_id = ? AND domain = ? AND key = ?", [sid, SESSION_KKV_DOMAIN_FILE_CACHE, key]);
     assert.equal(legacyRows.length, 1);
     assert.equal(legacyRows[0]!.value, value);
     assert.equal(await currentEntryHash(ctx.conn, sid, key), null);
@@ -539,18 +418,8 @@ describe("session file_cache 分流存储（两新表）", () => {
     // 退化行的 key 必须并入 listKeys（T-CC4/T-IC3 以裸字符串预置缓存的
     // 既有口径：任意字符串 set 后 listKeys 都要能列出，含新旧表混存合并）。
     const blobKey = `full:/blob-${testIsolationSuffix()}.md`;
-    await sk.set(
-      sid,
-      SESSION_KKV_DOMAIN_FILE_CACHE,
-      blobKey,
-      JSON.stringify({ body: "blob-body", mtimeMs: 1 })
-    );
-    assert.deepEqual(
-      await sk
-        .listKeys(sid, SESSION_KKV_DOMAIN_FILE_CACHE)
-        .then((keys) => keys.sort()),
-      [blobKey, key].sort()
-    );
+    await sk.set(sid, SESSION_KKV_DOMAIN_FILE_CACHE, blobKey, JSON.stringify({ body: "blob-body", mtimeMs: 1 }));
+    assert.deepEqual(await sk.listKeys(sid, SESSION_KKV_DOMAIN_FILE_CACHE).then((keys) => keys.sort()), [blobKey, key].sort());
   });
 
   it("T-BB1 编码组合（hash+压缩）恒落二进制：bytes 为 Uint8Array、encoding=zlib、byteLen 为二进制长度", () => {
@@ -588,10 +457,7 @@ describe("session file_cache 分流存储（两新表）", () => {
       bytes: Uint8Array;
       byte_len: number;
       bytes_type: string;
-    }>(
-      "SELECT encoding, bytes, byte_len, TYPEOF(bytes) AS bytes_type FROM session_file_cache_blob WHERE content_hash = ?",
-      [hash!]
-    );
+    }>("SELECT encoding, bytes, byte_len, TYPEOF(bytes) AS bytes_type FROM session_file_cache_blob WHERE content_hash = ?", [hash!]);
     assert.equal(rows.length, 1);
     assert.equal(rows[0]!.encoding, VFS_CONTENT_ENCODING_ZLIB);
     assert.equal(rows[0]!.bytes_type, "blob");
@@ -617,14 +483,8 @@ describe("session file_cache 分流存储（两新表）", () => {
     const b64 = legacyB64Text(encoded!.bytes);
 
     // 手工 INSERT 模拟 RN 存量库：blob 行（TEXT bytes）+ entry 引用行。
-    await ctx.conn.execute(
-      "INSERT INTO session_file_cache_blob (content_hash, encoding, bytes, byte_len) VALUES (?, ?, ?, ?)",
-      [encoded!.contentHash, VFS_CONTENT_ENCODING_ZLIB_B64, b64, b64.length],
-    );
-    await ctx.conn.execute(
-      "INSERT INTO session_file_cache_entry (session_id, key, content_hash, mtime_ms) VALUES (?, ?, ?, ?)",
-      [sid, key, encoded!.contentHash, encoded!.mtimeMs]
-    );
+    await ctx.conn.execute("INSERT INTO session_file_cache_blob (content_hash, encoding, bytes, byte_len) VALUES (?, ?, ?, ?)", [encoded!.contentHash, VFS_CONTENT_ENCODING_ZLIB_B64, b64, b64.length]);
+    await ctx.conn.execute("INSERT INTO session_file_cache_entry (session_id, key, content_hash, mtime_ms) VALUES (?, ?, ?, ?)", [sid, key, encoded!.contentHash, encoded!.mtimeMs]);
 
     // 前置形态断言：夹具若误建成二进制，读路径兜底分支同样能还原，
     // 用例会绿但没测到存量 base64 文本这条路——先把形态钉死再谈还原
@@ -633,10 +493,7 @@ describe("session file_cache 分流存储（两新表）", () => {
     const shapeRows = await ctx.conn.query<{
       encoding: string;
       bytes_type: string;
-    }>(
-      "SELECT encoding, TYPEOF(bytes) AS bytes_type FROM session_file_cache_blob WHERE content_hash = ?",
-      [encoded!.contentHash]
-    );
+    }>("SELECT encoding, TYPEOF(bytes) AS bytes_type FROM session_file_cache_blob WHERE content_hash = ?", [encoded!.contentHash]);
     assert.equal(shapeRows.length, 1);
     assert.equal(shapeRows[0]!.encoding, "zlib-b64");
     assert.equal(String(shapeRows[0]!.bytes_type), "text", "前置形态确为 TEXT");
@@ -659,14 +516,8 @@ describe("session file_cache 分流存储（两新表）", () => {
     const encoded = encodeFileCacheValueForFixture(value);
     assert.notEqual(encoded, null);
     const b64 = legacyB64Text(encoded!.bytes);
-    await ctx.conn.execute(
-      "INSERT INTO session_file_cache_blob (content_hash, encoding, bytes, byte_len) VALUES (?, ?, ?, ?)",
-      [encoded!.contentHash, VFS_CONTENT_ENCODING_ZLIB_B64, b64, b64.length],
-    );
-    await ctx.conn.execute(
-      "INSERT INTO session_file_cache_entry (session_id, key, content_hash, mtime_ms) VALUES (?, ?, ?, ?)",
-      [sid, key, encoded!.contentHash, encoded!.mtimeMs]
-    );
+    await ctx.conn.execute("INSERT INTO session_file_cache_blob (content_hash, encoding, bytes, byte_len) VALUES (?, ?, ?, ?)", [encoded!.contentHash, VFS_CONTENT_ENCODING_ZLIB_B64, b64, b64.length]);
+    await ctx.conn.execute("INSERT INTO session_file_cache_entry (session_id, key, content_hash, mtime_ms) VALUES (?, ?, ?, ?)", [sid, key, encoded!.contentHash, encoded!.mtimeMs]);
 
     // 再对同一 contentHash 调 sk.set（同一 value 编码出同一 hash）：blob 写入
     // 必须命中 INSERT OR IGNORE 复用存量行，而不是把已归一前的旧形态改写。
@@ -677,10 +528,7 @@ describe("session file_cache 分流存储（两新表）", () => {
       encoding: string;
       byte_len: number;
       bytes_type: string;
-    }>(
-      "SELECT encoding, byte_len, TYPEOF(bytes) AS bytes_type FROM session_file_cache_blob WHERE content_hash = ?",
-      [encoded!.contentHash]
-    );
+    }>("SELECT encoding, byte_len, TYPEOF(bytes) AS bytes_type FROM session_file_cache_blob WHERE content_hash = ?", [encoded!.contentHash]);
     assert.equal(rows[0]!.encoding, "zlib-b64", "encoding 未被改写");
     assert.equal(String(rows[0]!.bytes_type), "text", "TYPEOF(bytes) 未被改写");
     assert.equal(Number(rows[0]!.byte_len), b64.length, "byte_len 未被改写");
@@ -708,20 +556,11 @@ describe("session file_cache 分流存储（两新表）", () => {
     assert.notEqual(encoded, null);
     const b64 = legacyB64Text(encoded!.bytes);
 
-    await ctx.conn.execute(
-      "INSERT INTO session_file_cache_blob (content_hash, encoding, bytes, byte_len) VALUES (?, ?, ?, ?)",
-      [encoded!.contentHash, VFS_CONTENT_ENCODING_ZLIB, b64, b64.length]
-    );
+    await ctx.conn.execute("INSERT INTO session_file_cache_blob (content_hash, encoding, bytes, byte_len) VALUES (?, ?, ?, ?)", [encoded!.contentHash, VFS_CONTENT_ENCODING_ZLIB, b64, b64.length]);
     // entry 引用行必须一并插：无引用行的 blob 会被 file_cache GC 扫掉。
-    await ctx.conn.execute(
-      "INSERT INTO session_file_cache_entry (session_id, key, content_hash, mtime_ms) VALUES (?, ?, ?, ?)",
-      [sid, key, encoded!.contentHash, encoded!.mtimeMs]
-    );
+    await ctx.conn.execute("INSERT INTO session_file_cache_entry (session_id, key, content_hash, mtime_ms) VALUES (?, ?, ?, ?)", [sid, key, encoded!.contentHash, encoded!.mtimeMs]);
 
-    const rows = await ctx.conn.query<{ bytes_type: string }>(
-      "SELECT TYPEOF(bytes) AS bytes_type FROM session_file_cache_blob WHERE content_hash = ?",
-      [encoded!.contentHash]
-    );
+    const rows = await ctx.conn.query<{ bytes_type: string }>("SELECT TYPEOF(bytes) AS bytes_type FROM session_file_cache_blob WHERE content_hash = ?", [encoded!.contentHash]);
     assert.equal(String(rows[0]!.bytes_type), "text", "前置形态确为 TEXT");
 
     assert.equal(await sk.get(sid, SESSION_KKV_DOMAIN_FILE_CACHE, key), value);
@@ -736,24 +575,11 @@ describe("session file_cache 分流存储（两新表）", () => {
     // 坏字节：合法 base64 文本，但解出的字节不是 zlib 流（解压必失败）——
     // 覆盖存量 b64 形态 get 的解压失败分支（T-R6 只覆盖 blob 行整行缺失）。
     const badBytes = legacyB64Text(Uint8Array.of(0x00, 0x01, 0x02, 0x03));
-    const encoded = encodeFileCacheValueForFixture(
-      serializeFileCachePayload({ body: "unused", mtimeMs: 1 }),
-    );
+    const encoded = encodeFileCacheValueForFixture(serializeFileCachePayload({ body: "unused", mtimeMs: 1 }));
     assert.notEqual(encoded, null);
 
-    await ctx.conn.execute(
-      "INSERT INTO session_file_cache_blob (content_hash, encoding, bytes, byte_len) VALUES (?, ?, ?, ?)",
-      [
-        encoded!.contentHash,
-        VFS_CONTENT_ENCODING_ZLIB_B64,
-        badBytes,
-        badBytes.length,
-      ]
-    );
-    await ctx.conn.execute(
-      "INSERT INTO session_file_cache_entry (session_id, key, content_hash, mtime_ms) VALUES (?, ?, ?, ?)",
-      [sid, key, encoded!.contentHash, encoded!.mtimeMs]
-    );
+    await ctx.conn.execute("INSERT INTO session_file_cache_blob (content_hash, encoding, bytes, byte_len) VALUES (?, ?, ?, ?)", [encoded!.contentHash, VFS_CONTENT_ENCODING_ZLIB_B64, badBytes, badBytes.length]);
+    await ctx.conn.execute("INSERT INTO session_file_cache_entry (session_id, key, content_hash, mtime_ms) VALUES (?, ?, ?, ?)", [sid, key, encoded!.contentHash, encoded!.mtimeMs]);
 
     // repository 捕获解码/解压失败按 miss 自愈返回 null，不向调用方抛异常。
     assert.equal(await sk.get(sid, SESSION_KKV_DOMAIN_FILE_CACHE, key), null);

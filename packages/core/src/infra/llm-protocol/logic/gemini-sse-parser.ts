@@ -4,6 +4,7 @@
  * @module infra/llm-protocol/logic/gemini-sse-parser
  */
 
+import { isRecord } from "@/common/guards.js";
 import type { ContentBlock } from "@/domain/chat/model/content-block.js";
 import type {
   DegradedToolCall,
@@ -21,10 +22,6 @@ import {
 } from "./sse-parse-errors.js";
 import { tryParseToolArgumentsJson } from "./tool-arguments-parse.js";
 import { parseGeminiUsage } from "./usage-parser.js";
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 type FunctionCallAccumulator = {
   name: string;

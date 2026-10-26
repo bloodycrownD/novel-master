@@ -5,18 +5,13 @@ import {afterEach, beforeEach, describe, expect, it, jest} from '@jest/globals';
 import React from 'react';
 import TestRenderer, {act} from 'react-test-renderer';
 import {
-  buildAnnotateAttachmentFromDraft,
+  attachmentXmlCodec,
+  chatAnnotateDraftStore,
   parseAttachmentsJson,
-  type ChatMessage,
+  type ChatMessageData,
   type MessageAttachment,
 } from '@novel-master/core/chat';
 import {Alert} from 'react-native';
-import {
-  addChatAnnotateDraft,
-  chipsFromAnnotateStore,
-  listChatAnnotateDrafts,
-  resetChatAnnotateDraftStoreForTests,
-} from '@novel-master/core/chat';
 import {
   readChatComposerDraftState,
   writeChatComposerDraft,
@@ -57,8 +52,8 @@ const mockRuntime = {};
 
 function plainUserMessage(
   text: string,
-  attachments?: ChatMessage['attachments'],
-): ChatMessage {
+  attachments?: ChatMessageData['attachments'],
+): ChatMessageData {
   return {
     id: 'm-user',
     sessionId: 's1',
@@ -73,7 +68,7 @@ function plainUserMessage(
   };
 }
 
-function assistantMessage(): ChatMessage {
+function assistantMessage(): ChatMessageData {
   return {
     id: 'm-asst',
     sessionId: 's1',
@@ -87,7 +82,7 @@ function assistantMessage(): ChatMessage {
   };
 }
 
-function mountActions(chatMessages: ChatMessage[]) {
+function mountActions(chatMessages: ChatMessageData[]) {
   let api: ReturnType<typeof useChatTabMessageActions> | undefined;
   function Harness() {
     api = useChatTabMessageActions({
@@ -119,7 +114,7 @@ function mountActions(chatMessages: ChatMessage[]) {
 describe('useChatTabMessageActions rollback', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    resetChatAnnotateDraftStoreForTests();
+    chatAnnotateDraftStore.resetForTests();
     mockRollbackToMessage.mockResolvedValue(undefined);
     mockReloadMessages.mockResolvedValue([]);
     mockSetDraftRestoreToken.mockImplementation(
@@ -132,7 +127,7 @@ describe('useChatTabMessageActions rollback', () => {
   });
 
   afterEach(() => {
-    resetChatAnnotateDraftStoreForTests();
+    chatAnnotateDraftStore.resetForTests();
   });
 
   it('T-M1: plain user 确认文案含「及之后」', async () => {
@@ -350,13 +345,13 @@ describe('useChatTabMessageActions rollback', () => {
   });
 
   it('T-UD1: undo_send 含 annotate → store 含 path 草稿 + chip；与未发送并存', async () => {
-    addChatAnnotateDraft('s1', {
+    chatAnnotateDraftStore.add('s1', {
       id: 'unsent-keep',
       path: '/keep.md',
       originalText: '未发送原文',
       userAnnotation: '未发送说明',
     });
-    const annotateAtt = buildAnnotateAttachmentFromDraft({
+    const annotateAtt = attachmentXmlCodec.encodeAnnotateAttachment({
       id: 'sent-ann',
       path: '/chapter/a.md',
       originalText: '选中原文',
@@ -373,7 +368,7 @@ describe('useChatTabMessageActions rollback', () => {
 
     expect(mockRollbackToMessage).toHaveBeenCalled();
     expect(readChatComposerDraftState('s1').text).toBe('请看批注');
-    const drafts = listChatAnnotateDrafts('s1');
+    const drafts = chatAnnotateDraftStore.list('s1');
     expect(drafts).toHaveLength(2);
     expect(
       drafts.some(d => d.id === 'unsent-keep' && d.path === '/keep.md'),
@@ -385,7 +380,7 @@ describe('useChatTabMessageActions rollback', () => {
       userAnnotation: '请改短',
     });
     expect(restored?.id).not.toBe('sent-ann');
-    const chips = chipsFromAnnotateStore('s1');
+    const chips = chatAnnotateDraftStore.chips('s1');
     expect(
       chips.some(c => c.path === '/chapter/a.md' && c.action === 'annotate'),
     ).toBe(true);
@@ -421,8 +416,8 @@ describe('useChatTabMessageActions rollback', () => {
     });
 
     expect(readChatComposerDraftState('s1').text).toBe('仅正文 @/a.md');
-    expect(listChatAnnotateDrafts('s1')).toEqual([]);
-    expect(chipsFromAnnotateStore('s1')).toEqual([]);
+    expect(chatAnnotateDraftStore.list('s1')).toEqual([]);
+    expect(chatAnnotateDraftStore.chips('s1')).toEqual([]);
     expect(readChatComposerDraftState('s1').attachments ?? []).toEqual([]);
   });
 
@@ -452,8 +447,8 @@ describe('useChatTabMessageActions rollback', () => {
     });
 
     expect(readChatComposerDraftState('s1').text).toBe('消息批注 Undo');
-    expect(listChatAnnotateDrafts('s1')).toEqual([]);
-    expect(chipsFromAnnotateStore('s1')).toEqual([]);
+    expect(chatAnnotateDraftStore.list('s1')).toEqual([]);
+    expect(chatAnnotateDraftStore.chips('s1')).toEqual([]);
     expect(readChatComposerDraftState('s1').attachments ?? []).toEqual([]);
   });
 
@@ -498,7 +493,7 @@ describe('useChatTabMessageActions rollback', () => {
       action: 'write',
     };
     // assistant 锚点 → rewind；即便误带 user_ops 也不映回
-    const asst: ChatMessage = {
+    const asst: ChatMessageData = {
       ...assistantMessage(),
       attachments: [opsAtt],
     };
@@ -549,10 +544,10 @@ describe('useChatTabMessageActions rollback', () => {
 
   it('B1-8-MA5: undo_send 历史非法附件行 → 部分保留；批注仍可反投影', async () => {
     // 消费链 #2 的观测面：历史消息的 attachments_json 混了一条非法附件
-    // （未知键 → .strict() 拒绝）。旧口径整数组判废 ⇒ ChatMessage.attachments
+    // （未知键 → .strict() 拒绝）。旧口径整数组判废 ⇒ ChatMessageData.attachments
     // 字段整体缺席 ⇒ useChatTabMessageActions 的 `target.attachments ?? []`
     // 拿到 [] ⇒ 批注恢复不回来。新口径逐条丢弃非法项，合法那条照常在。
-    const annotateAtt = buildAnnotateAttachmentFromDraft({
+    const annotateAtt = attachmentXmlCodec.encodeAnnotateAttachment({
       id: 'sent-b18',
       path: '/chapter/a.md',
       originalText: '选中原文',
@@ -590,7 +585,7 @@ describe('useChatTabMessageActions rollback', () => {
     expect(mockRollbackToMessage).toHaveBeenCalled();
     expect(readChatComposerDraftState('s1').text).toBe('请看历史批注');
     // 批注草稿确实从存活的那条附件反投影回来了（旧口径下这里是 []）。
-    const restored = listChatAnnotateDrafts('s1').find(
+    const restored = chatAnnotateDraftStore.list('s1').find(
       d => d.path === '/chapter/a.md',
     );
     expect(restored).toMatchObject({
@@ -599,7 +594,7 @@ describe('useChatTabMessageActions rollback', () => {
       userAnnotation: '请改短',
     });
     expect(
-      chipsFromAnnotateStore('s1').some(
+      chatAnnotateDraftStore.chips('s1').some(
         c => c.path === '/chapter/a.md' && c.action === 'annotate',
       ),
     ).toBe(true);

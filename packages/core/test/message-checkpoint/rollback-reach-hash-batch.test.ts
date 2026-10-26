@@ -1,26 +1,16 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { findMissingRevisionPointers } from "../../src/domain/message-checkpoint/logic/detect-missing-revisions.js";
-import {
-  restorePathToRevision,
-  type RestorePathPrefetch,
-} from "../../src/domain/message-checkpoint/logic/restore-path.js";
+import { restorePathToRevision, type RestorePathPrefetch } from "../../src/domain/message-checkpoint/logic/restore-path.js";
 import { revisionPairKey } from "../../src/domain/vfs/logic/revision-pair-key.js";
-import {
-  scopeKey,
-  toPhysicalPath,
-} from "../../src/domain/vfs/logic/vfs-path-mapper.js";
+import { scopeKey, toPhysicalPath } from "../../src/domain/vfs/logic/vfs-path-mapper.js";
 import { SqliteMessageCheckpointRepository } from "../../src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import { SqliteVfsEntryRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteVfsRevisionRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import type { VfsEntryRepository } from "../../src/domain/vfs/repositories/vfs-entry.port.js";
 import type { VfsRevisionRepository } from "../../src/domain/vfs/repositories/vfs-revision.port.js";
 import type { VfsRestorePort } from "../../src/domain/vfs/ports/vfs-restore.port.js";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
+import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 
@@ -45,9 +35,7 @@ describe("rollback reach hash batch", () => {
     await ctx.messageCheckpoint.capture(session.id, project.id, assistant2.id);
 
     const all = await repo.listFilePointersForSession(session.id);
-    const distinct = await repo.listDistinctCheckpointPointersForSession(
-      session.id,
-    );
+    const distinct = await repo.listDistinctCheckpointPointersForSession(session.id);
 
     assert.equal(all.length, 2);
     assert.equal(distinct.length, 1);
@@ -127,7 +115,7 @@ describe("rollback reach hash batch", () => {
         ["/a.md", 1],
         ["/b.md", 2],
       ]),
-      ["/a.md", "/b.md"],
+      ["/a.md", "/b.md"]
     );
 
     assert.deepEqual(missing, []);
@@ -181,24 +169,15 @@ describe("rollback reach hash batch", () => {
     };
     const prefetch: RestorePathPrefetch = {
       entryIdByPath: new Map([["/hash-same.md", entryId]]),
-      revisionMetaByKey: new Map([
-        [revisionPairKey(entryId, 1), { status: "active", contentHash: "same-hash" }],
-      ]),
+      revisionMetaByKey: new Map([[revisionPairKey(entryId, 1), { status: "active", contentHash: "same-hash" }]]),
       liveHashByPath: new Map([["/hash-same.md", "same-hash"]]),
     };
 
-    const outcome = await restorePathToRevision(
-      vfs,
-      revisionRepo,
-      scope,
-      "/hash-same.md",
-      1,
-      new Map([["/hash-same.md", 3]]),
-      entryRepo,
-      prefetch,
-    );
+    const result = await restorePathToRevision(vfs, revisionRepo, scope, "/hash-same.md", 1, new Map([["/hash-same.md", 3]]), entryRepo, prefetch);
 
-    assert.equal(outcome, "skipped_same_content_hash");
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+    assert.equal(result.value, "skipped_same_content_hash");
     assert.equal(findMetaCalls, 0);
     assert.equal(findHashCalls, 0);
     assert.equal(findFullCalls, 0);
@@ -229,9 +208,7 @@ describe("rollback reach hash batch", () => {
 
     const deleted = await revisions.deleteExceptReachable(sk, "/", reachable);
     const keys = await revisions.listKeysUnderScope(sk, "/");
-    const versions = keys
-      .filter((key) => key.entryId === entry.entryId)
-      .map((key) => key.version);
+    const versions = keys.filter((key) => key.entryId === entry.entryId).map((key) => key.version);
 
     assert.equal(deleted, 2);
     assert.deepEqual(versions, [liveVersion]);

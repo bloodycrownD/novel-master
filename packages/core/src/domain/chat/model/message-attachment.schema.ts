@@ -7,7 +7,7 @@
 import { z } from "zod";
 
 /** 空 path 时落库 `name` 占位（满足 `min(1)`）。 */
-export const NO_PATH_ATTACHMENT_NAME = "__no_path__";
+const NO_PATH_ATTACHMENT_NAME = "__no_path__";
 
 /**
  * 落库 `name`：有非空 path 时与 path 逐字相同；否则 `__no_path__`。
@@ -21,7 +21,7 @@ export function attachmentStorageName(path: string | null | undefined): string {
 }
 
 /** 附件 action 枚举（提示词 `<action name>` / 落库真源）。 */
-export const messageAttachmentActionSchema = z.enum([
+const messageAttachmentActionSchema = z.enum([
   "delete",
   "write",
   "edit",
@@ -36,9 +36,7 @@ export const messageAttachmentActionSchema = z.enum([
   "skillAttach",
 ]);
 
-export type MessageAttachmentAction = z.infer<
-  typeof messageAttachmentActionSchema
->;
+export type MessageAttachmentAction = z.infer<typeof messageAttachmentActionSchema>;
 
 /** 展示 tag 形态：`write:/x`、`edit:/a→/b` 等（禁止写入新附件 `name`）。 */
 const DISPLAY_TAG_NAME_RE = /^\w+:\//;
@@ -46,62 +44,58 @@ const DISPLAY_TAG_NAME_RE = /^\w+:\//;
 /**
  * 附件对象底座（无 refine，供 `.omit` / composer draft 组合）。
  */
-export const messageAttachmentObjectSchema = z
-  .object({
-    name: z.string().min(1),
-    source: z.enum(["workplace", "attach", "user_ops"]),
-    type: z.enum(["text", "image", "dir"]),
-    /** workplace/attach 落库可长期为 null；发送后均为 action XML。workplace 为历史只读兼容，新数据不再产生。 */
-    content: z.string().nullable(),
-    /** workplace/attach/user_ops 的逻辑 path。workplace 为历史只读兼容，新数据不再产生。 */
-    path: z.string().optional(),
-    /** skillAttach 专用：引用的技能名（该形态无 path，chip 文案以此为准）。 */
-    skillName: z.string().optional(),
-    /** 结构化 action；新写入应必填；历史可缺省。 */
-    action: messageAttachmentActionSchema.optional(),
-  })
-  .strict();
+export const messageAttachmentObjectSchema = z.object({
+  name: z.string().min(1),
+  source: z.enum(["workplace", "attach", "user_ops"]),
+  type: z.enum(["text", "image", "dir"]),
+  /** workplace/attach 落库可长期为 null；发送后均为 action XML。workplace 为历史只读兼容，新数据不再产生。 */
+  content: z.string().nullable(),
+  /** workplace/attach/user_ops 的逻辑 path。workplace 为历史只读兼容，新数据不再产生。 */
+  path: z.string().optional(),
+  /** skillAttach 专用：引用的技能名（该形态无 path，chip 文案以此为准）。 */
+  skillName: z.string().optional(),
+  /** 结构化 action；新写入应必填；历史可缺省。 */
+  action: messageAttachmentActionSchema.optional(),
+}).strict();
 
 /** 单条消息附件（含新写入 name 禁展示 tag / 须等于 storage name 校验）。 */
-export const messageAttachmentSchema =
-  messageAttachmentObjectSchema.superRefine((val, ctx) => {
-    // skillAttach：无 path，跳过 path/name 规则；skillName 必填校验在本分支内做
-    if (val.action === "skillAttach") {
-      if (typeof val.skillName !== "string" || val.skillName === "") {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "skillAttach 附件必须携带非空 skillName",
-          path: ["skillName"],
-        });
-      }
-      return;
-    }
-    // 新写入（带 action）禁止把展示 tag 写入 name
-    if (val.action != null && DISPLAY_TAG_NAME_RE.test(val.name)) {
+export const messageAttachmentSchema = messageAttachmentObjectSchema.superRefine((val, ctx) => {
+  // skillAttach：无 path，跳过 path/name 规则；skillName 必填校验在本分支内做
+  if (val.action === "skillAttach") {
+    if (typeof val.skillName !== "string" || val.skillName === "") {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "name 禁止为 action:path 展示 tag（须 name=path）",
+        message: "skillAttach 附件必须携带非空 skillName",
+        path: ["skillName"],
+      });
+    }
+    return;
+  }
+  // 新写入（带 action）禁止把展示 tag 写入 name
+  if (val.action != null && DISPLAY_TAG_NAME_RE.test(val.name)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "name 禁止为 action:path 展示 tag（须 name=path）",
+      path: ["name"],
+    });
+  }
+  // 有 action 时 name 须与 attachmentStorageName(path) 一致
+  if (val.action != null) {
+    const expected = attachmentStorageName(val.path);
+    if (val.name !== expected) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `有 action 时 name 须等于 attachmentStorageName(path)（期望 ${expected}）`,
         path: ["name"],
       });
     }
-    // 有 action 时 name 须与 attachmentStorageName(path) 一致
-    if (val.action != null) {
-      const expected = attachmentStorageName(val.path);
-      if (val.name !== expected) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: `有 action 时 name 须等于 attachmentStorageName(path)（期望 ${expected}）`,
-          path: ["name"],
-        });
-      }
-    }
-  });
+  }
+});
 
 /** 消息附件数组（`attachments_json`）。 */
 export const messageAttachmentsSchema = z.array(messageAttachmentSchema);
 
 export type MessageAttachment = z.infer<typeof messageAttachmentSchema>;
-export type MessageAttachments = z.infer<typeof messageAttachmentsSchema>;
 
 /**
  * 解析 `attachments_json`；NULL/空/非法 → `undefined`。
@@ -112,10 +106,10 @@ export type MessageAttachments = z.infer<typeof messageAttachmentsSchema>;
  * 等价，但返回 `[]` 让「本来就没附件」与「全被丢弃」在下游表现一致）。
  * 理由：消息是 append-only 的历史数据、附件形态跨版本演进，宁可少附件也不可让
  * 整条消息的附件静默蒸发——那会造成落库历史与送给 LLM 的提示词不一致。
+ *
+ * nm-style: keep-public — attachments_json 唯一读侧解码入口；逐条降级/空值写 NULL 是 wire 契约。
  */
-export function parseAttachmentsJson(
-  raw: string | null | undefined
-): MessageAttachment[] | undefined {
+export function parseAttachmentsJson(raw: string | null | undefined): MessageAttachment[] | undefined {
   if (raw == null || raw === "") {
     return undefined;
   }
@@ -137,16 +131,4 @@ export function parseAttachmentsJson(
     }
   }
   return kept;
-}
-
-/**
- * 序列化附件数组；空/undefined → `null`（写入 SQL NULL）。
- */
-export function serializeAttachmentsJson(
-  attachments: readonly MessageAttachment[] | undefined | null
-): string | null {
-  if (attachments == null || attachments.length === 0) {
-    return null;
-  }
-  return JSON.stringify(attachments);
 }

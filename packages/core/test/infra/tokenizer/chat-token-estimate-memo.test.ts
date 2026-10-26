@@ -14,7 +14,7 @@
 import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
 import { registerNodeTokenizerDriverForTests } from "../../helpers/register-node-tokenizer-driver-for-tests.js";
-import type { ChatMessage } from "../../../src/domain/chat/model/message.js";
+import type { ChatMessageData } from "../../../src/domain/chat/model/message.js";
 import {
   createDefaultTokenCounterRegistry,
   resolveCurrentPromptTokens,
@@ -31,7 +31,7 @@ import {
 import type { PromptRenderContext } from "../../../src/domain/prompt/model/prompt-render-context.js";
 import { emptyRegistryDeps } from "./registry-test-helpers.js";
 
-function msg(seq: number, text: string): ChatMessage {
+function msg(seq: number, text: string): ChatMessageData {
   return {
     id: `m${seq}`,
     sessionId: "s",
@@ -47,7 +47,7 @@ function msg(seq: number, text: string): ChatMessage {
 
 function ctxWith(overrides: {
   fingerprint?: string;
-  messages?: readonly ChatMessage[];
+  messages?: readonly ChatMessageData[];
 }): PromptRenderContext {
   return {
     workplaceDisplay: "前缀正文".repeat(20),

@@ -1,26 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {
-  buildAgentDefinitionFromForm,
-  buildToolsPolicyFromSelection,
-  countEffectiveFormPromptSources,
-  countFormPromptSources,
-  countMinimumPromptSources,
-  createDefaultAgentEditorPrompts,
-  definitionToForm,
-  formSnapshotJson,
-  layoutFromFormInput,
-  movePersistBlock,
-  PROMPT_REGION_LABELS,
-  splitPersistBlocksForEditor,
-  toolsSelectionFromDefinition,
-  hasAnyPromptRegionEnabled,
-  WORKPLACE_BLOCK_HINT,
-  WORKPLACE_DISABLED_HINT,
-  WORKPLACE_ASSISTANT_TEXT_REQUIRED_MESSAGE,
-  DEFAULT_WORKPLACE_ASSISTANT_TEXT,
-  withWorkplaceToggle,
-} from "../../src/config-forms/agent/agent-editor-state.js";
+import { buildAgentDefinitionFromForm, buildToolsPolicyFromSelection, countEffectiveFormPromptSources, countFormPromptSources, countMinimumPromptSources, createDefaultAgentEditorPrompts, definitionToForm, formSnapshotJson, layoutFromFormInput, movePersistBlock, PROMPT_REGION_LABELS, splitPersistBlocksForEditor, toolsSelectionFromDefinition, hasAnyPromptRegionEnabled, WORKPLACE_BLOCK_HINT, WORKPLACE_DISABLED_HINT, WORKPLACE_ASSISTANT_TEXT_REQUIRED_MESSAGE, DEFAULT_WORKPLACE_ASSISTANT_TEXT, withWorkplaceToggle } from "../../src/config-forms/agent/agent-editor-state.js";
 import { validateAgentPromptLayout } from "../../src/domain/prompt/logic/validate-agent-prompt-layout.js";
 
 test("PROMPT_REGION_LABELS 三区主文案为中文且无 wire 英文主标签", () => {
@@ -28,53 +8,24 @@ test("PROMPT_REGION_LABELS 三区主文案为中文且无 wire 英文主标签",
   assert.equal(PROMPT_REGION_LABELS.apiSystemField, "系统提示词");
   assert.equal(PROMPT_REGION_LABELS.systemPromptTitle, "系统提示词");
   assert.equal(PROMPT_REGION_LABELS.maxStepsLabel, "最大步数");
-  assert.equal(
-    PROMPT_REGION_LABELS.maxStepsHint,
-    "限制单轮任务中模型与工具的往返次数；未填写时默认为 20。"
-  );
+  assert.equal(PROMPT_REGION_LABELS.maxStepsHint, "限制单轮任务中模型与工具的往返次数；未填写时默认为 20。");
   assert.equal(PROMPT_REGION_LABELS.emptyPersistHint, "暂无块，点击添加");
   assert.equal(PROMPT_REGION_LABELS.emptyDynamicHint, "暂无块，点击添加");
-  assert.equal(
-    PROMPT_REGION_LABELS.systemDisabledHint,
-    "关闭时不写入系统提示词。"
-  );
-  assert.equal(
-    PROMPT_REGION_LABELS.persistDisabledHint,
-    "关闭后持久区内容不会发送给 AI，已填写的内容仍保留。"
-  );
-  assert.equal(
-    PROMPT_REGION_LABELS.dynamicDisabledHint,
-    "关闭后动态区内容不会发送给 AI，已填写的内容仍保留。"
-  );
+  assert.equal(PROMPT_REGION_LABELS.systemDisabledHint, "关闭时不写入系统提示词。");
+  assert.equal(PROMPT_REGION_LABELS.persistDisabledHint, "关闭后持久区内容不会发送给 AI，已填写的内容仍保留。");
+  assert.equal(PROMPT_REGION_LABELS.dynamicDisabledHint, "关闭后动态区内容不会发送给 AI，已填写的内容仍保留。");
   assert.equal(PROMPT_REGION_LABELS.chatTag, "会话消息");
-  assert.equal(
-    PROMPT_REGION_LABELS.layoutOrder,
-    "系统 → 技能索引 → 常驻工作区 → 持久区 → 会话历史 → 动态区"
-  );
+  assert.equal(PROMPT_REGION_LABELS.layoutOrder, "系统 → 技能索引 → 常驻工作区 → 持久区 → 会话历史 → 动态区");
   assert.equal(PROMPT_REGION_LABELS.skills, "技能索引");
   assert.equal(PROMPT_REGION_LABELS.skillsTag, "技能");
   assert.equal(PROMPT_REGION_LABELS.skillsBlocks, "技能索引区");
-  assert.equal(
-    PROMPT_REGION_LABELS.skillsReadonlyHint,
-    "运行时注入生效技能索引。"
-  );
-  assert.equal(
-    PROMPT_REGION_LABELS.skillsDisabledHint,
-    "关闭后不注入索引且不注册 skill 工具；手动引用 skill 不受影响。"
-  );
-  assert.equal(
-    PROMPT_REGION_LABELS.persistRegionHint,
-    "持久区禁止使用宏。"
-  );
+  assert.equal(PROMPT_REGION_LABELS.skillsReadonlyHint, "运行时注入生效技能索引。");
+  assert.equal(PROMPT_REGION_LABELS.skillsDisabledHint, "关闭后不注入索引且不注册 skill 工具；手动引用 skill 不受影响。");
+  assert.equal(PROMPT_REGION_LABELS.persistRegionHint, "持久区禁止使用宏。");
   // lifecycle 常驻开关已下线：文案表不再有 dynamicLifecycleOnceHint。
-  assert.equal(
-    "dynamicLifecycleOnceHint" in PROMPT_REGION_LABELS,
-    false
-  );
+  assert.equal("dynamicLifecycleOnceHint" in PROMPT_REGION_LABELS, false);
 
-  const values = Object.values(PROMPT_REGION_LABELS).filter(
-    (value): value is string => typeof value === "string"
-  );
+  const values = Object.values(PROMPT_REGION_LABELS).filter((value): value is string => typeof value === "string");
   for (const value of values) {
     assert.doesNotMatch(value, /API system/i);
     assert.doesNotMatch(value, /Prompt 布局/i);
@@ -91,10 +42,7 @@ test("PROMPT_REGION_LABELS 三区主文案为中文且无 wire 英文主标签",
 
 test("WORKPLACE_BLOCK_HINT 新文案", () => {
   assert.equal(WORKPLACE_BLOCK_HINT, "可编辑助手确认语。");
-  assert.equal(
-    WORKPLACE_DISABLED_HINT,
-    "关闭时不注入项目文件树。"
-  );
+  assert.equal(WORKPLACE_DISABLED_HINT, "关闭时不注入项目文件树。");
 });
 
 test("buildToolsPolicyFromSelection returns undefined for default mode", () => {
@@ -219,9 +167,7 @@ test("splitPersistBlocksForEditor strips legacy worktree blocks", () => {
     { name: "custom", type: "worktree" },
   ]);
   assert.equal(split.textBlocks.length, 1);
-  assert.deepEqual(split.blocks, [
-    { name: "persona", type: "text", role: "user", content: "x" },
-  ]);
+  assert.deepEqual(split.blocks, [{ name: "persona", type: "text", role: "user", content: "x" }]);
 });
 
 test("layoutFromFormInput maps workplace boolean and strips legacy worktree", () => {
@@ -239,9 +185,7 @@ test("layoutFromFormInput maps workplace boolean and strips legacy worktree", ()
     dynamic: [],
   });
   assert.equal(layout.workplace, DEFAULT_WORKPLACE_ASSISTANT_TEXT);
-  assert.deepEqual(layout.persist, [
-    { name: "persona", type: "text", role: "user", content: "x" },
-  ]);
+  assert.deepEqual(layout.persist, [{ name: "persona", type: "text", role: "user", content: "x" }]);
 });
 
 test("movePersistBlock swaps text blocks", () => {
@@ -277,17 +221,12 @@ test("buildAgentDefinitionFromForm maps workplace boolean", () => {
     dynamicEnabled: false,
     workplaceEnabled: true,
     workplaceAssistantText: DEFAULT_WORKPLACE_ASSISTANT_TEXT,
-    persist: [
-      { name: "p1", type: "text", role: "user", content: "after tree" },
-    ],
+    persist: [{ name: "p1", type: "text", role: "user", content: "after tree" }],
     dynamic: [],
   });
   assert.equal(result.ok, true);
   if (result.ok) {
-    assert.equal(
-      result.definition.prompts.workplace,
-      DEFAULT_WORKPLACE_ASSISTANT_TEXT,
-    );
+    assert.equal(result.definition.prompts.workplace, DEFAULT_WORKPLACE_ASSISTANT_TEXT);
     assert.deepEqual(
       result.definition.prompts.persist.map((block) => block.type),
       ["text"]
@@ -508,10 +447,7 @@ test("T-CA2f: formSnapshotJson 的 mode 缺省显式为 all（不得被 JSON.str
 test("T-CA2d: 只开 customAttachEnabled 不影响 hasAnyPromptRegionEnabled 门闩", () => {
   const base = createDefaultAgentEditorPrompts();
   // 三区全关，仅 customAttach 开 → 门闩仍为 false（customAttach 不是区域）
-  assert.equal(
-    hasAnyPromptRegionEnabled({ ...base, customAttachEnabled: true }),
-    false,
-  );
+  assert.equal(hasAnyPromptRegionEnabled({ ...base, customAttachEnabled: true }), false);
   // 同时打开 system 才变 true
   assert.equal(
     hasAnyPromptRegionEnabled({
@@ -519,7 +455,7 @@ test("T-CA2d: 只开 customAttachEnabled 不影响 hasAnyPromptRegionEnabled 门
       systemEnabled: true,
       customAttachEnabled: true,
     }),
-    true,
+    true
   );
 });
 
@@ -710,9 +646,7 @@ test("buildAgentDefinitionFromForm allows empty persist with dynamic block", () 
     workplaceEnabled: false,
     workplaceAssistantText: "",
     persist: [],
-    dynamic: [
-      { name: "state", type: "text", role: "user", content: "{{$time}}" },
-    ],
+    dynamic: [{ name: "state", type: "text", role: "user", content: "{{$time}}" }],
   });
   assert.equal(result.ok, true);
 });
@@ -1097,10 +1031,7 @@ test("T-WP7: 开启默认文案；清空后 build 显式 ok:false", () => {
   });
   assert.equal(ok.ok, true);
   if (ok.ok) {
-    assert.equal(
-      ok.definition.prompts.workplace,
-      DEFAULT_WORKPLACE_ASSISTANT_TEXT,
-    );
+    assert.equal(ok.definition.prompts.workplace, DEFAULT_WORKPLACE_ASSISTANT_TEXT);
   }
 
   const empty = buildAgentDefinitionFromForm({
@@ -1142,14 +1073,11 @@ test("T-WP8: 关 omit workplace；再开文案空则预填默认", () => {
       persist: [],
       dynamic: [],
     }).workplace,
-    undefined,
+    undefined
   );
 
   const clearedThenOn = withWorkplaceToggle(true, "");
-  assert.equal(
-    clearedThenOn.workplaceAssistantText,
-    DEFAULT_WORKPLACE_ASSISTANT_TEXT,
-  );
+  assert.equal(clearedThenOn.workplaceAssistantText, DEFAULT_WORKPLACE_ASSISTANT_TEXT);
 });
 
 test("layoutFromFormInput output passes validateAgentPromptLayout", () => {
@@ -1166,7 +1094,8 @@ test("layoutFromFormInput output passes validateAgentPromptLayout", () => {
       { name: "d2", type: "text", role: "user", content: "b" },
     ],
   });
-  assert.doesNotThrow(() => validateAgentPromptLayout(layout));
+  const validated = validateAgentPromptLayout(layout);
+  assert.ok(validated.ok, validated.ok ? "" : validated.error.message);
 });
 
 test("T-DESC1: definitionToForm 将非空 description 透传到表单", () => {

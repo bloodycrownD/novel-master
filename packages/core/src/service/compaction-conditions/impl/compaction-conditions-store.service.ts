@@ -12,7 +12,7 @@ import {
 } from "@/domain/compaction-conditions/model/compaction-conditions.js";
 import { ConfigDecodeError } from "@/errors/config-decode-errors.js";
 import { compactionConditionsInvalidSchema } from "@/errors/compaction-conditions-errors.js";
-import { isKkvError } from "@/errors/kkv-errors.js";
+import { isAppError } from "@/errors/app-error.js";
 import type { KkvService } from "@/service/kkv/kkv.port.js";
 import type { CompactionConditionsStore } from "../compaction-conditions-store.port.js";
 
@@ -107,7 +107,7 @@ export class DefaultCompactionConditionsStore
     try {
       await this.kkv.delete(MODULE, KEY_POLICY);
     } catch (error) {
-      if (isKkvError(error, "NOT_FOUND")) {
+      if (isAppError(error, "KKV_NOT_FOUND")) {
         return;
       }
       throw error;
@@ -159,7 +159,7 @@ export class DefaultCompactionConditionsStore
     try {
       return await this.kkv.get(MODULE, KEY_POLICY);
     } catch (error) {
-      if (isKkvError(error, "NOT_FOUND")) {
+      if (isAppError(error, "KKV_NOT_FOUND")) {
         return undefined;
       }
       throw error;

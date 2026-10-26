@@ -2,9 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { decode, encode, ConfigDecodeError } from "@novel-master/core";
 
-import { agentDefinitionSchema, AgentConfigError } from "@novel-master/core/agent";
-
-import { PromptError } from "@novel-master/core/prompt";
+import { agentDefinitionSchema, isAppError } from "@novel-master/core/agent";
 
 const emptyPrompts = { persist: {}, dynamic: {} };
 const TEST_SAVED_MODEL = "11111111-1111-4111-8111-111111111111";
@@ -24,7 +22,7 @@ describe("agentDefinitionSchema", () => {
         },
         model: TEST_SAVED_MODEL,
       },
-      agentDefinitionSchema,
+      agentDefinitionSchema
     );
     assert.equal(def.name, "writer");
     assert.equal(def.model, TEST_SAVED_MODEL);
@@ -42,12 +40,9 @@ describe("agentDefinitionSchema", () => {
             prompts: emptyPrompts,
             preferredModelId: "a/b",
           },
-          agentDefinitionSchema,
+          agentDefinitionSchema
         ),
-      (e: unknown) =>
-        e instanceof AgentConfigError &&
-        e.code === "INVALID_SCHEMA" &&
-        /model/.test(e.message),
+      (e: unknown) => isAppError(e, "AGENT_INVALID_SCHEMA") && /model/.test(e.message)
     );
   });
 
@@ -61,12 +56,9 @@ describe("agentDefinitionSchema", () => {
             prompts: emptyPrompts,
             model: { applicationModelId: "a/b" },
           },
-          agentDefinitionSchema,
+          agentDefinitionSchema
         ),
-      (e: unknown) =>
-        e instanceof AgentConfigError &&
-        e.code === "INVALID_SCHEMA" &&
-        /legacy nested model/.test(e.message),
+      (e: unknown) => isAppError(e, "AGENT_INVALID_SCHEMA") && /legacy nested model/.test(e.message)
     );
   });
 
@@ -78,7 +70,7 @@ describe("agentDefinitionSchema", () => {
         prompts: emptyPrompts,
         model: TEST_SAVED_MODEL,
       },
-      agentDefinitionSchema,
+      agentDefinitionSchema
     );
     const doc = encode(def, agentDefinitionSchema);
     assert.equal((doc as { model?: string }).model, TEST_SAVED_MODEL);
@@ -101,15 +93,15 @@ describe("agentDefinitionSchema", () => {
           },
         },
       },
-      agentDefinitionSchema,
+      agentDefinitionSchema
     );
     assert.deepEqual(
       def.prompts.persist.map((b) => b.name),
-      ["alpha"],
+      ["alpha"]
     );
     assert.deepEqual(
       def.prompts.dynamic.map((b) => b.name),
-      ["gamma"],
+      ["gamma"]
     );
   });
 
@@ -122,11 +114,9 @@ describe("agentDefinitionSchema", () => {
             name: "x",
             prompts: { blocks: {} },
           },
-          agentDefinitionSchema,
+          agentDefinitionSchema
         ),
-      (e: unknown) =>
-        e instanceof AgentConfigError &&
-        e.message.includes("prompts.blocks is removed"),
+      (e: unknown) => isAppError(e, "AGENT_INVALID_SCHEMA") && e.message.includes("prompts.blocks is removed")
     );
   });
 
@@ -144,9 +134,9 @@ describe("agentDefinitionSchema", () => {
               action: { keepLastN: 3, abstract: { type: "agent", agentId: "s" } },
             },
           },
-          agentDefinitionSchema,
+          agentDefinitionSchema
         ),
-      (e: unknown) => e instanceof ConfigDecodeError,
+      (e: unknown) => e instanceof ConfigDecodeError
     );
   });
 
@@ -169,9 +159,9 @@ describe("agentDefinitionSchema", () => {
               dynamic: {},
             },
           },
-          agentDefinitionSchema,
+          agentDefinitionSchema
         ),
-      (e: unknown) => e instanceof ConfigDecodeError,
+      (e: unknown) => e instanceof ConfigDecodeError
     );
   });
 
@@ -192,7 +182,7 @@ describe("agentDefinitionSchema", () => {
           dynamic: {},
         },
       },
-      agentDefinitionSchema,
+      agentDefinitionSchema
     );
     assert.equal(def.prompts.persist.length, 1);
     assert.deepEqual(def.prompts.persist[0], {
@@ -220,7 +210,7 @@ describe("agentDefinitionSchema", () => {
           },
         },
       },
-      agentDefinitionSchema,
+      agentDefinitionSchema
     );
     assert.equal(def.prompts.dynamic.length, 1);
     assert.deepEqual(def.prompts.dynamic[0], {
@@ -256,16 +246,10 @@ describe("agentDefinitionSchema", () => {
             },
           },
         },
-        agentDefinitionSchema,
+        agentDefinitionSchema
       );
-      assert.equal(
-        "lifecycle" in (def.prompts.persist[0] as Record<string, unknown>),
-        false
-      );
-      assert.equal(
-        "lifecycle" in (def.prompts.dynamic[0] as Record<string, unknown>),
-        false
-      );
+      assert.equal("lifecycle" in (def.prompts.persist[0] as Record<string, unknown>), false);
+      assert.equal("lifecycle" in (def.prompts.dynamic[0] as Record<string, unknown>), false);
     }
   });
 
@@ -285,7 +269,7 @@ describe("agentDefinitionSchema", () => {
         },
         model: TEST_SAVED_MODEL,
       },
-      agentDefinitionSchema,
+      agentDefinitionSchema
     );
     return {
       ...base,
@@ -305,18 +289,15 @@ describe("agentDefinitionSchema", () => {
     };
   }
 
-  it("toWire 对重名 persist 块抛 INVALID_BLOCK（不静默塌缩）", () => {
+  it("toWire 对重名 persist 块抛 PROMPT_INVALID_LAYOUT（不静默塌缩）", () => {
     const def = defWithDuplicatePersist();
     assert.throws(
       () => agentDefinitionSchema.toWire(def),
-      (e: unknown) =>
-        e instanceof PromptError &&
-        e.code === "INVALID_BLOCK" &&
-        /重复的块名/.test(e.message),
+      (e: unknown) => isAppError(e, "PROMPT_INVALID_LAYOUT") && /重复的块名/.test(e.message)
     );
   });
 
-  it("toWire 对重名 dynamic 块抛 INVALID_BLOCK", () => {
+  it("toWire 对重名 dynamic 块抛 PROMPT_INVALID_LAYOUT", () => {
     const base = decode(
       {
         schemaVersion: 1,
@@ -329,24 +310,18 @@ describe("agentDefinitionSchema", () => {
         },
         model: TEST_SAVED_MODEL,
       },
-      agentDefinitionSchema,
+      agentDefinitionSchema
     );
     const dup = {
       ...base,
       prompts: {
         ...base.prompts,
-        dynamic: [
-          ...base.prompts.dynamic,
-          { ...base.prompts.dynamic[0]! },
-        ],
+        dynamic: [...base.prompts.dynamic, { ...base.prompts.dynamic[0]! }],
       },
     };
     assert.throws(
       () => agentDefinitionSchema.toWire(dup),
-      (e: unknown) =>
-        e instanceof PromptError &&
-        e.code === "INVALID_BLOCK" &&
-        /重复的块名/.test(e.message),
+      (e: unknown) => isAppError(e, "PROMPT_INVALID_LAYOUT") && /重复的块名/.test(e.message)
     );
   });
 
@@ -354,11 +329,7 @@ describe("agentDefinitionSchema", () => {
     const def = defWithDuplicatePersist();
     const before = JSON.stringify(def);
     assert.throws(() => agentDefinitionSchema.toWire(def));
-    assert.equal(
-      JSON.stringify(def),
-      before,
-      "toWire 抛错不得就地改写入方传入的对象",
-    );
+    assert.equal(JSON.stringify(def), before, "toWire 抛错不得就地改写入方传入的对象");
   });
 
   it("合法 definition（多块不重名）toWire 往返等值（既有行为不受影响）", () => {
@@ -377,18 +348,18 @@ describe("agentDefinitionSchema", () => {
             },
             model: TEST_SAVED_MODEL,
           },
-          agentDefinitionSchema,
-        ),
+          agentDefinitionSchema
+        )
       ),
-      agentDefinitionSchema,
+      agentDefinitionSchema
     );
     assert.deepEqual(
       again.prompts.persist.map((b) => b.name),
-      ["persona", "notes"],
+      ["persona", "notes"]
     );
     assert.deepEqual(
       again.prompts.persist.map((b) => (b as { content: string }).content),
-      ["人设", "笔记"],
+      ["人设", "笔记"]
     );
   });
 });

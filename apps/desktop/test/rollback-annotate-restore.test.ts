@@ -7,29 +7,23 @@
  */
 import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
-import {
-  buildAnnotateAttachmentFromDraft,
-  chipsFromAnnotateStore,
-  listChatAnnotateDrafts,
-  resetChatAnnotateDraftStoreForTests,
-  addChatAnnotateDraft,
-} from "@shared/logic/chat";
+import { attachmentXmlCodec, chatAnnotateDraftStore } from "@shared/logic/chat";
 import type { MessageAttachmentDto } from "@shared/ipc-types";
 import { applyUndoAnnotateRestore } from "@/features/chat/rollback-annotate-restore";
 
 describe("applyUndoAnnotateRestore (T-CR6 / T-UOL7)", () => {
   beforeEach(() => {
-    resetChatAnnotateDraftStoreForTests();
+    chatAnnotateDraftStore.resetForTests();
   });
 
   it("T-UOL7: user 锚点 → annotate 附件重新投影 + 未发送草稿保留；保留 main 已推 ops", () => {
-    addChatAnnotateDraft("s1", {
+    chatAnnotateDraftStore.add("s1", {
       id: "unsent-keep",
       path: "/keep.md",
       originalText: "未发送原文",
       userAnnotation: "未发送说明",
     });
-    const annotateAtt = buildAnnotateAttachmentFromDraft({
+    const annotateAtt = attachmentXmlCodec.encodeAnnotateAttachment({
       id: "sent-ann",
       path: "/chapter/a.md",
       originalText: "选中原文",
@@ -54,7 +48,7 @@ describe("applyUndoAnnotateRestore (T-CR6 / T-UOL7)", () => {
       [annotateAtt],
       mainPushedOps,
     );
-    const drafts = listChatAnnotateDrafts("s1");
+    const drafts = chatAnnotateDraftStore.list("s1");
     assert.equal(drafts.length, 2);
     assert.ok(
       drafts.some((d) => d.id === "unsent-keep" && d.path === "/keep.md"),
@@ -79,7 +73,7 @@ describe("applyUndoAnnotateRestore (T-CR6 / T-UOL7)", () => {
 
   it("T-CR6: user 锚点 + 伪 __message__: path → 跳过反投影；未发送草稿保留", () => {
     // 预置一条未发送草稿，验证 user 锚点不会顺手把它清掉
-    addChatAnnotateDraft("s1", {
+    chatAnnotateDraftStore.add("s1", {
       id: "unsent-survivor",
       path: "/keep.md",
       originalText: "未发送原文",
@@ -96,7 +90,7 @@ describe("applyUndoAnnotateRestore (T-CR6 / T-UOL7)", () => {
     };
     const chips = applyUndoAnnotateRestore("s1", "user", [msgAtt]);
     // __message__: 路径会被 parseAnnotateDraftsFromAttachments 跳过，但未发送草稿仍保留
-    const drafts = listChatAnnotateDrafts("s1");
+    const drafts = chatAnnotateDraftStore.list("s1");
     assert.equal(drafts.length, 1);
     assert.equal(drafts[0]!.id, "unsent-survivor");
     assert.equal(chips.length, 1);
@@ -128,14 +122,14 @@ describe("applyUndoAnnotateRestore (T-CR6 / T-UOL7)", () => {
       ],
       mainOps,
     );
-    assert.equal(listChatAnnotateDrafts("s1").length, 0);
+    assert.equal(chatAnnotateDraftStore.list("s1").length, 0);
     assert.equal(chips.length, 1);
     assert.equal(chips[0]?.path, "/a.md");
     assert.equal(chips[0]?.action, "mkdir");
   });
 
   it("T-UOL7: user 锚点 + 空附件 → 仅 ∪ annotate（未发送草稿保留）", () => {
-    addChatAnnotateDraft("s1", {
+    chatAnnotateDraftStore.add("s1", {
       id: "unsent-only",
       path: "/keep.md",
       originalText: "未发送原文",
@@ -143,13 +137,13 @@ describe("applyUndoAnnotateRestore (T-CR6 / T-UOL7)", () => {
     });
     const chips = applyUndoAnnotateRestore("s1", "user", []);
     // 空附件不会新增 annotate；未发送草稿原样保留，并体现在 chip 中
-    assert.deepEqual(chips, chipsFromAnnotateStore("s1"));
+    assert.deepEqual(chips, chatAnnotateDraftStore.chips("s1"));
     assert.equal(chips.length, 1);
     assert.equal(chips[0]!.path, "/keep.md");
   });
 
   it("T-UOL7 rewind: assistant 锚点 → 清空全部批注草稿（含未发送）", () => {
-    addChatAnnotateDraft("s1", {
+    chatAnnotateDraftStore.add("s1", {
       id: "ann-keep",
       path: "/note.md",
       originalText: "原文",
@@ -158,7 +152,7 @@ describe("applyUndoAnnotateRestore (T-CR6 / T-UOL7)", () => {
     // ConversationPanel rewind：assistant 锚点 + main 已推空，传空 existing 禁止盖回旧 chip
     const chips = applyUndoAnnotateRestore("s1", "assistant", null, []);
     assert.equal(
-      listChatAnnotateDrafts("s1").length,
+      chatAnnotateDraftStore.list("s1").length,
       0,
       "assistant 锚点必须清空全部批注草稿（含未发送）",
     );

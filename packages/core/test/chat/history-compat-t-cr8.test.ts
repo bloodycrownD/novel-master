@@ -5,11 +5,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
-import { messageBodyText } from "../../src/domain/chat/content/message-body-text.js";
-import { prepareUserMessagesForPrompt } from "../../src/domain/chat/logic/prepare-user-messages-for-prompt.js";
+import { messageBodyTextFromBlocks } from "../../src/domain/chat/content/message-body-text.js";
+import { promptAssembler } from "../../src/domain/chat/logic/prompt/prompt-assembler.js";
 import { createSessionKkvService } from "../../src/service/session-kkv/create-session-kkv-service.js";
-import { formatStatusChipLabelFromAttachment } from "../../src/domain/chat/logic/status-chip-label.js";
-import type { ChatMessage } from "../../src/domain/chat/model/message.js";
+import { formatStatusChipLabelFromAttachment } from "../../src/presentation/chat/attachment-chip.js";
+import type { ChatMessageData } from "../../src/domain/chat/model/message.js";
 import type { MessageAttachment } from "../../src/domain/chat/model/message-attachment.schema.js";
 import {
   fileCacheKey,
@@ -31,7 +31,7 @@ function userMsg(
   text: string,
   attachments: readonly MessageAttachment[],
   sessionId: string,
-): ChatMessage {
+): ChatMessageData {
   return {
     id: "u-hist",
     sessionId,
@@ -118,7 +118,7 @@ describe("history workplaceChange compat (T-CR8)", () => {
     await vfs.write("/hist.md", "hist-body");
     const sk = createSessionKkvService(ctx.conn);
 
-    const prepared = await prepareUserMessagesForPrompt(
+    const prepared = await promptAssembler.prepare(
       [
         userMsg(
           "回放",
@@ -138,7 +138,7 @@ describe("history workplaceChange compat (T-CR8)", () => {
       { sessionId: session.id, sessionKkv: sk, vfs },
     );
 
-    const body = messageBodyText(prepared[0]!);
+    const body = messageBodyTextFromBlocks(prepared[0]!.content.blocks);
     assert.match(body, /<action name="workplaceChange">/);
     assert.match(body, /hist-body/);
     assert.ok(!body.includes("<workplace>"));

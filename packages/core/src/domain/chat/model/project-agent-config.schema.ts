@@ -10,35 +10,25 @@ import type { ProjectAgentConfig } from "./project-agent-config.js";
 
 const projectAgentModeSchema = z.enum(["follow", "custom"]);
 
-const projectAgentConfigDocumentSchema = z
-  .object({
-    mode: projectAgentModeSchema,
-    definition: agentDefinitionSchema.optional(),
-  })
-  .strict()
-  .superRefine((value, ctx) => {
-    if (value.mode === "custom" && value.definition == null) {
-      ctx.addIssue({
-        code: "custom",
-        message: "mode 为 custom 时 definition 必填",
-        path: ["definition"],
-      });
-    }
-  });
-
-function configToWire(config: ProjectAgentConfig): Record<string, unknown> {
-  return {
-    mode: config.mode,
-    ...(config.definition != null
-      ? { definition: agentDefinitionSchema.toWire(config.definition) }
-      : {}),
-  };
-}
+const projectAgentConfigDocumentSchema = z.object({
+  mode: projectAgentModeSchema,
+  definition: agentDefinitionSchema.optional(),
+}).strict().superRefine((value, ctx) => {
+  if (value.mode === "custom" && value.definition == null) {
+    ctx.addIssue({
+      code: "custom",
+      message: "mode 为 custom 时 definition 必填",
+      path: ["definition"],
+    });
+  }
+});
 
 /** 列内 JSON → {@link ProjectAgentConfig}；含 `toWire` 用于持久化。 */
-export const projectAgentConfigSchema = Object.assign(
-  projectAgentConfigDocumentSchema,
-  { toWire: configToWire }
-);
+export const projectAgentConfigSchema = Object.assign(projectAgentConfigDocumentSchema, {
+  toWire: (config: ProjectAgentConfig): Record<string, unknown> => ({
+    mode: config.mode,
+    ...(config.definition != null ? { definition: agentDefinitionSchema.toWire(config.definition) } : {}),
+  }),
+});
 
 export { projectAgentModeSchema };

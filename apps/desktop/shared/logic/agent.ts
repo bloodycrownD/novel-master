@@ -5,7 +5,7 @@
  * `AgentDefinition` 等完整定义类型在 assess IPC（Steps 11–12）后优先走 ipc-types DTO。
  */
 
-export type { AgentDefinition } from "@novel-master/core/agent";
+export type { AgentDefinition, AgentDefinitionPatch } from "@novel-master/core/agent";
 
 export {
   DEFAULT_SUBAGENT_DEFINITION,

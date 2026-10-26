@@ -32,9 +32,7 @@ export type PersistWorktreePromptBlock = {
 };
 
 /** 编辑器 persist 块（含过渡态 worktree）；域 {@link AgentPromptLayout.persist} 仅 text。 */
-export type EditorPersistPromptBlock =
-  | PersistTextPromptBlock
-  | PersistWorktreePromptBlock;
+export type EditorPersistPromptBlock = PersistTextPromptBlock | PersistWorktreePromptBlock;
 
 /** @deprecated 域 persist 仅 text；请用 {@link PersistTextPromptBlock}。 */
 export type PersistPromptBlock = EditorPersistPromptBlock;
@@ -49,28 +47,20 @@ export const WORKPLACE_TRUE_COMPAT_ASSISTANT_TEXT = "【done】";
 export const DEFAULT_WORKPLACE_ASSISTANT_TEXT = "我看到工作区了";
 
 /** 技能索引段默认前缀语（`prompts.skillsPrefix` 缺省/空时使用）。 */
-export const DEFAULT_SKILLS_INDEX_PREFIX =
-  "当前可用技能（每条为 名称：描述（来源域），正文经 skill 工具按需读取）：";
+export const DEFAULT_SKILLS_INDEX_PREFIX = "当前可用技能（每条为 名称：描述（来源域），正文经 skill 工具按需读取）：";
 
 /**
  * 布局是否启用常驻工作区（开 = 非空 string）。
  */
-export function layoutHasWorkplace(
-  layout: Pick<AgentPromptLayout, "workplace">
-): boolean {
+export function layoutHasWorkplace(layout: Pick<AgentPromptLayout, "workplace">): boolean {
   return typeof layout.workplace === "string" && layout.workplace.length > 0;
 }
 
 /**
  * 布局是否带自定义附加信息（开 = trim 后非空 string；缺省 = 关）。
  */
-export function layoutHasCustomAttach(
-  layout: Pick<AgentPromptLayout, "customAttach">
-): boolean {
-  return (
-    typeof layout.customAttach === "string" &&
-    layout.customAttach.trim().length > 0
-  );
+export function layoutHasCustomAttach(layout: Pick<AgentPromptLayout, "customAttach">): boolean {
+  return typeof layout.customAttach === "string" && layout.customAttach.trim().length > 0;
 }
 
 /**

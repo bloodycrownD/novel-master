@@ -4,16 +4,12 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import {
-  buildFileAnnotateAttachmentFromDraft,
-  parseAnnotateDraftsFromAttachments,
-} from "@/domain/chat/logic/build-attachment-action-xml.js";
+import { attachmentXmlCodec } from "@/domain/chat/logic/attachment/attachment-xml-codec.js";
 import {
   annotateDraftSchema,
   type AnnotateDraft,
 } from "@/domain/chat/model/annotate-draft.schema.js";
 import type { MessageAttachment } from "@/domain/chat/model/message-attachment.schema.js";
-import * as publicChat from "@novel-master/core/chat";
 
 describe("T-RG1 annotateDraftSchema renderStart/renderEnd", () => {
   it("接受合法半开渲染坐标；缺省旧草稿仍合法", () => {
@@ -121,11 +117,11 @@ describe("T-RG1 annotateDraftSchema renderStart/renderEnd", () => {
       renderStart: 12,
       renderEnd: 17,
     };
-    const att = buildFileAnnotateAttachmentFromDraft(draft);
+    const att = attachmentXmlCodec.encodeAnnotateAttachment(draft);
     assert.match(att.content ?? "", /"renderStart": 12/);
     assert.match(att.content ?? "", /"renderEnd": 17/);
 
-    const parsed = parseAnnotateDraftsFromAttachments([att]);
+    const parsed = attachmentXmlCodec.decodeAnnotateDrafts([att]);
     assert.equal(parsed.length, 1);
     assert.notEqual(parsed[0]!.id, "orig");
     assert.equal(parsed[0]!.path, "/round.md");
@@ -143,7 +139,7 @@ describe("T-RG1 annotateDraftSchema renderStart/renderEnd", () => {
       path: "/legacy.md",
       action: "annotate",
     };
-    const legacyParsed = parseAnnotateDraftsFromAttachments([legacyAtt]);
+    const legacyParsed = attachmentXmlCodec.decodeAnnotateDrafts([legacyAtt]);
     assert.equal(legacyParsed.length, 1);
     assert.equal(legacyParsed[0]!.renderStart, undefined);
     assert.equal(legacyParsed[0]!.renderEnd, undefined);
@@ -151,7 +147,7 @@ describe("T-RG1 annotateDraftSchema renderStart/renderEnd", () => {
     assert.equal(legacyParsed[0]!.endOffset, 5);
   });
 
-  it("残缺/非法 render 对在 parse 时丢弃；public 已导出 schema", () => {
+  it("残缺/非法 render 对在 parse 时丢弃", () => {
     const brokenAtt: MessageAttachment = {
       name: "/broken.md",
       source: "user_ops",
@@ -161,21 +157,9 @@ describe("T-RG1 annotateDraftSchema renderStart/renderEnd", () => {
       path: "/broken.md",
       action: "annotate",
     };
-    const parsed = parseAnnotateDraftsFromAttachments([brokenAtt]);
+    const parsed = attachmentXmlCodec.decodeAnnotateDrafts([brokenAtt]);
     assert.equal(parsed.length, 1);
     assert.equal(parsed[0]!.renderStart, undefined);
     assert.equal(parsed[0]!.renderEnd, undefined);
-
-    assert.equal(typeof publicChat.annotateDraftSchema.parse, "function");
-    const viaPublic = publicChat.annotateDraftSchema.parse({
-      id: "pub",
-      path: "/p.md",
-      originalText: "q",
-      userAnnotation: "a",
-      renderStart: 1,
-      renderEnd: 3,
-    });
-    assert.equal(viaPublic.renderStart, 1);
-    assert.equal(viaPublic.renderEnd, 3);
   });
 });

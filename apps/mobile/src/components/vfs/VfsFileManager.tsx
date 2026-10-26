@@ -10,25 +10,31 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import {Alert, FlatList, Pressable, Text, View} from 'react-native';
+import {
+  Alert,
+  FlatList,
+  Pressable,
+  Text,
+  View} from 'react-native';
 import {useDismissOverlaysOnBlur} from '../../hooks/useDismissOverlaysOnBlur';
 import {
   type PhysicalVfsService,
   type VfsListEntry,
   type VfsScope,
   type VfsService,
-} from '@novel-master/core/vfs';
+  } from '@novel-master/core/vfs';
 
 import {
   DEFAULT_WORKPLACE_DIR_RULE,
   type SetDirRuleInput,
   type WorkplaceListRow,
   type WorkplaceService,
-} from '@novel-master/core/workplace';
+  } from '@novel-master/core/workplace';
 import {ParentDirIcon} from '../icons/TabIcons';
 import {BatchCheckbox} from '../batch/BatchCheckbox';
 import {ManageHeader} from '../batch/ManageHeader';
-import {BottomSheetMenu, type SheetMenuItem} from '../sheet/BottomSheetMenu';
+import {BottomSheetMenu,
+  type SheetMenuItem} from '../sheet/BottomSheetMenu';
 import {DirectoryRuleSheet} from '../sheet/DirectoryRuleSheet';
 import {
   countFilesInDir,
@@ -41,11 +47,11 @@ import {
   pathWithLabels,
   remapDirectChildRows,
   type MappedVfsRow,
-} from './vfs-row-mapper';
+  } from './vfs-row-mapper';
 import {orderedDirectChildPaths} from './vfs-direct-children-order';
-import {isUserVfsUnifiedToolTurnEnabled} from '@novel-master/core/feature-flags';
+import { userVfsUnifiedToolTurnFlag } from '@novel-master/core/feature-flags';
 
-import {formatVfsErrorForUser, isVfsError} from '@novel-master/core/vfs';
+import {formatVfsErrorForUser, isAppError, isVfsError} from '@novel-master/core/vfs';
 import {refreshComposerStatusAfterUserVfsOps} from '../../services/user-vfs-turn-execute.service';
 import {
   createVfsDirectory,
@@ -226,7 +232,7 @@ export const VfsFileManager = forwardRef<
   const writableVfs = vfs as VfsService;
   const root = rootPath ?? vfsScopeRootPath(scope);
   const sessionId = scope.kind === 'session' ? scope.sessionId : undefined;
-  const useUserVfsTurn = sessionId != null && isUserVfsUnifiedToolTurnEnabled();
+  const useUserVfsTurn = sessionId != null && userVfsUnifiedToolTurnFlag.isEnabled();
   const [currentPath, setCurrentPath] = useState(root);
   const [rows, setRows] = useState<MappedVfsRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -620,7 +626,10 @@ export const VfsFileManager = forwardRef<
           moved += 1;
         } catch (err) {
           skipped += 1;
-          if (isVfsError(err, 'ALREADY_EXISTS')) {
+          if (
+            isVfsError(err, 'ALREADY_EXISTS') ||
+            isAppError(err, 'VFS_ALREADY_EXISTS')
+          ) {
             showToast('目标已存在同名项，已跳过');
           } else {
             showToast(toastMessage('移动失败', err));

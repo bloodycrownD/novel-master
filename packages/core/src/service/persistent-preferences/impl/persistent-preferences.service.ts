@@ -4,7 +4,7 @@
  * @module service/persistent-preferences/impl/persistent-preferences.service
  */
 
-import { isKkvError } from "@/errors/kkv-errors.js";
+import { isAppError } from "@/errors/app-error.js";
 import { preferencesInvalidValue } from "@/errors/preferences-errors.js";
 import { formatBoolean, parseBoolean } from "@/infra/kkv-value-codec.js";
 import type { KkvService } from "@/service/kkv/kkv.port.js";
@@ -126,7 +126,7 @@ export class DefaultPersistentPreferences implements PersistentPreferences {
     try {
       return await this.kkv.get(PREFERENCES_MODULE, key);
     } catch (error) {
-      if (isKkvError(error, "NOT_FOUND")) {
+      if (isAppError(error, "KKV_NOT_FOUND")) {
         return undefined;
       }
       throw error;
@@ -137,7 +137,7 @@ export class DefaultPersistentPreferences implements PersistentPreferences {
     try {
       await this.kkv.delete(PREFERENCES_MODULE, key);
     } catch (error) {
-      if (isKkvError(error, "NOT_FOUND")) {
+      if (isAppError(error, "KKV_NOT_FOUND")) {
         return;
       }
       throw error;

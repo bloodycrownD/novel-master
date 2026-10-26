@@ -1,5 +1,4 @@
 [
-  "KkvError",
   "createKkvService",
-  "isKkvError"
+  "kkvNotFound"
 ]

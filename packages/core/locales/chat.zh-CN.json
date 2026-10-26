@@ -1,0 +1,11 @@
+{
+  "chat.rollback.confirm.primary.undo_send": "将删除此消息及之后的对话，并撤销相关文件修改。是否继续？",
+  "chat.rollback.confirm.primary.rewind": "将删除此消息之后的对话，并撤销相关文件修改。是否继续？",
+  "chat.rollback.confirm.degraded.undo_send": "可仅删除此消息及之后的对话，工作区文件将保持现状。",
+  "chat.rollback.confirm.degraded.rewind": "可仅删除此消息之后的对话，工作区文件将保持现状。",
+  "chat.rollback.confirm.backfill": "快照丢失，将使用最新内容修复。\n\n丢失快照的文件：\n{files}\n\n{tail}",
+  "chat.rollback.confirm.backfill.file": "· {path}",
+  "chat.rollback.confirm.backfill.file.empty": "· （未知文件）",
+  "chat.rollback.confirm.backfill.tail.undo_send": "其余文件将正常回滚至发送前状态。",
+  "chat.rollback.confirm.backfill.tail.rewind": "其余文件将正常回滚至锚点。"
+}

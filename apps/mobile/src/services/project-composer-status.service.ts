@@ -2,7 +2,7 @@
  * Composer 状态条投影：仅 annotate（user ops 拆除后收窄保留，D7）。
  */
 import {
-  chipsFromAnnotateStore,
+  chatAnnotateDraftStore,
   type MessageAttachment,
 } from '@novel-master/core/chat';
 import {applyComposerStatusAttachmentsReplace} from '@/storage/chat-composer-draft';
@@ -16,7 +16,7 @@ export async function projectComposerStatusForSession(
   _runtime: MobileNovelMasterRuntime,
   sessionId: string,
 ): Promise<MessageAttachment[]> {
-  return chipsFromAnnotateStore(sessionId);
+  return chatAnnotateDraftStore.chips(sessionId);
 }
 
 /**

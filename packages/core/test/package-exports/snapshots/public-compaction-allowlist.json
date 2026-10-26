@@ -1,13 +1,9 @@
 [
-  "CompactionConditionsError",
   "DEFAULT_HIDE_START_DEPTH",
   "compactionConditionsInvalidSchema",
   "compactionConditionsSchema",
   "createCompactionConditionEvaluator",
   "createCompactionConditionsStore",
-  "depthByMessageId",
-  "isCompactionConditionsError",
-  "listVisibleForDepth",
   "matchDepth",
   "messageIdsInSlice",
   "resolveHideMessageRange",

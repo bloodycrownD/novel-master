@@ -52,7 +52,7 @@ import {
   takePromptEditorOnSaved,
   type PromptEditorOnSaved,
 } from '../../components/agent/prompt-editor-callback';
-import {findActiveAtQuery} from '../../components/chat/composer-at-path';
+import {composerAtPath} from '../../components/chat/composer-at-path';
 import {
   buildTokenInsertion,
   queryWithinConfirmedRange,
@@ -152,9 +152,9 @@ export function PromptEditorScreen() {
   const canOpenPicker =
     isComposer && projectId != null && sessionId != null && runtime != null;
   /** 活跃的 `@`/`$` 半截查询：Picker 确认时从查询起点替换到光标（不残留半截）。 */
-  const activeAt = canOpenPicker ? findActiveAtQuery(draft, cursor) : null;
+  const activeAt = canOpenPicker ? composerAtPath.detectQuery(draft, cursor) : null;
   const activeSkill = canOpenPicker
-    ? findActiveAtQuery(draft, cursor, '$')
+    ? composerAtPath.detectQuery(draft, cursor, '$')
     : null;
 
   /**

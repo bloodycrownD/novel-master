@@ -5,12 +5,7 @@ import { type BuiltinToolContext, type TdbcConnection } from "@novel-master/core
 import { createUserVfsTurnServiceBundle } from "@novel-master/core/chat";
 import { createSessionKkvService } from "../../src/service/session-kkv/create-session-kkv-service.js";
 import { createWorkplaceService } from "../../src/service/workplace/create-workplace-service.js";
-import {
-  fileCacheKey,
-  SESSION_KKV_DOMAIN_FILE_CACHE,
-  SESSION_KKV_DOMAIN_USER_VFS_PENDING,
-  USER_VFS_PENDING_QUEUE_KEY,
-} from "../../src/domain/session-kkv/model/session-kkv-domains.js";
+import { fileCacheKey, SESSION_KKV_DOMAIN_FILE_CACHE, SESSION_KKV_DOMAIN_USER_VFS_PENDING, USER_VFS_PENDING_QUEUE_KEY } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
 import { parseFileCachePayload } from "../../src/domain/workplace/logic/rule-snapshot-codec.js";
 import { SqliteSessionRepository } from "../../src/domain/chat/repositories/impl/sqlite-session.repository.js";
 import { ToolRegistry } from "../../src/domain/tool/logic/tool-registry.js";
@@ -23,38 +18,21 @@ import { SqliteVfsEntryRepository } from "../../src/domain/vfs/repositories/impl
 import { SqliteMessageCheckpointRepository as CheckpointRepo } from "../../src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import { SqliteVfsRevisionRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import { createScopedVfsService } from "../../src/service/vfs/create-scoped-vfs-service.js";
-import {
-  scopeKey,
-} from "../../src/domain/vfs/logic/vfs-path-mapper.js";
+import { scopeKey } from "../../src/domain/vfs/logic/vfs-path-mapper.js";
 import { hashContent } from "../../src/domain/vfs/content-store/logic/hash-content.js";
 import { buildUserVfsDeleteOp } from "../../src/service/vfs/build-user-vfs-turn-op.js";
 import { createMessageCheckpointService } from "../../src/service/message-checkpoint/create-message-checkpoint-services.js";
 import type { UserVfsTurnServiceDeps } from "../../src/service/chat/impl/user-vfs-turn.service.js";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
+import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 
 /** 断言已停写 user_vfs_pending kkv（user ops 拆除后无操作日志半边）。 */
-async function loadPendingQueueJson(
-  conn: TdbcConnection,
-  sessionId: string,
-): Promise<string | null> {
-  return createSessionKkvService(conn).get(
-    sessionId,
-    SESSION_KKV_DOMAIN_USER_VFS_PENDING,
-    USER_VFS_PENDING_QUEUE_KEY,
-  );
+async function loadPendingQueueJson(conn: TdbcConnection, sessionId: string): Promise<string | null> {
+  return createSessionKkvService(conn).get(sessionId, SESSION_KKV_DOMAIN_USER_VFS_PENDING, USER_VFS_PENDING_QUEUE_KEY);
 }
 
-function makeToolCtx(
-  conn: TdbcConnection,
-  projectId: string,
-  sessionId: string,
-): BuiltinToolContext {
+function makeToolCtx(conn: TdbcConnection, projectId: string, sessionId: string): BuiltinToolContext {
   const messageRepo = new SqliteMessageRepository(conn);
   return {
     vfs: createScopedVfsService(conn, {
@@ -68,10 +46,7 @@ function makeToolCtx(
   };
 }
 
-function makeUserVfsTurnDeps(
-  conn: TdbcConnection,
-  overrides: Partial<UserVfsTurnServiceDeps> = {},
-): UserVfsTurnServiceDeps {
+function makeUserVfsTurnDeps(conn: TdbcConnection, overrides: Partial<UserVfsTurnServiceDeps> = {}): UserVfsTurnServiceDeps {
   const sessionRepo = new SqliteSessionRepository(conn);
   const messageRepo = new SqliteMessageRepository(conn);
   const vfsRepo = new SqliteVfsEntryRepository(conn);
@@ -139,16 +114,10 @@ describe("UserVfsTurnService", () => {
     assert.equal(fail.ok, false);
     assert.equal(await loadPendingQueueJson(ctx.conn, session.id), null);
 
-    const ok = await userVfsTurn.executeOp(
-      session.id,
-      writeOp("/ok.md", "hello", "tu_ok"),
-    );
+    const ok = await userVfsTurn.executeOp(session.id, writeOp("/ok.md", "hello", "tu_ok"));
     assert.equal(ok.ok, true);
     assert.equal(await loadPendingQueueJson(ctx.conn, session.id), null);
-    assert.equal(
-      (await ctx.sessionVfs(project.id, session.id).read("/ok.md")).content,
-      "hello",
-    );
+    assert.equal((await ctx.sessionVfs(project.id, session.id).read("/ok.md")).content, "hello");
   });
 
   it("user_ops write 新建文件补父链目录规则（与 agent 链路一致，C-orch-1）", async () => {
@@ -157,10 +126,7 @@ describe("UserVfsTurnService", () => {
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
 
-    const ok = await userVfsTurn.executeOp(
-      session.id,
-      writeOp("/u/v/w/a.md", "hello", "tu_wr"),
-    );
+    const ok = await userVfsTurn.executeOp(session.id, writeOp("/u/v/w/a.md", "hello", "tu_wr"));
     assert.equal(ok.ok, true);
 
     // resolveToolCtx 注入了 session scope workplace：
@@ -191,9 +157,7 @@ describe("UserVfsTurnService", () => {
     });
     const toolRunner = new ToolRunner(registry);
 
-    const userVfsTurn = new DefaultUserVfsTurnService(
-      makeUserVfsTurnDeps(ctx.conn, { toolRunner }),
-    );
+    const userVfsTurn = new DefaultUserVfsTurnService(makeUserVfsTurnDeps(ctx.conn, { toolRunner }));
 
     const result = await userVfsTurn.executeOp(session.id, {
       actionXml: '<action name="write">\n{"path":"/f.md","content":""}\n</action>',
@@ -240,13 +204,10 @@ describe("UserVfsTurnService", () => {
       call: innerRunner.call.bind(innerRunner),
     } as ToolRunner<BuiltinToolContext>;
 
-    const userVfsTurn = new DefaultUserVfsTurnService(
-      makeUserVfsTurnDeps(ctx.conn, { toolRunner }),
-    );
+    const userVfsTurn = new DefaultUserVfsTurnService(makeUserVfsTurnDeps(ctx.conn, { toolRunner }));
 
     const result = await userVfsTurn.executeOp(session.id, {
-      actionXml:
-        '<action name="write">\n{"path":"/a.md","content":""}\n</action>\n<action name="write">\n{"path":"/b.md","content":""}\n</action>',
+      actionXml: '<action name="write">\n{"path":"/a.md","content":""}\n</action>\n<action name="write">\n{"path":"/b.md","content":""}\n</action>',
       tools: [
         {
           id: "tu_1",
@@ -270,22 +231,15 @@ describe("UserVfsTurnService", () => {
     const sk = scopeKey(scope);
     const keys = await revisions.listKeysUnderScope(sk, "/");
     // entry 已被回滚清理，scope 下的 revision 均不可达，应全部被 sweep
-    assert.equal(
-      keys.filter((k) => k.entryId !== undefined).length,
-      0,
-      "失败回滚后 scope 下不应有残留 revision",
-    );
+    assert.equal(keys.filter((k) => k.entryId !== undefined).length, 0, "失败回滚后 scope 下不应有残留 revision");
     // content_hash 列始终存 hashContent() 输出的 hex 格式（SHA-256 hex），
     // zlib b64 只影响 bytes 列编码，不影响 content_hash 列。可直接精确验证。
     const orphanHash = hashContent("A-orphan-body");
-    const hashRows = await ctx.conn.query<{ content_hash: string }>(
-      `SELECT content_hash FROM vfs_content_blob`,
-      [],
-    );
+    const hashRows = await ctx.conn.query<{ content_hash: string }>(`SELECT content_hash FROM vfs_content_blob`, []);
     assert.equal(
       hashRows.some((r) => String(r.content_hash) === orphanHash),
       false,
-      "orphan blob 应被 runDeferredBlobGc 清理",
+      "orphan blob 应被 runDeferredBlobGc 清理"
     );
 
     // composite restore 后仍执行 sweep：预埋不可达 revision，restore 抛错后须消失
@@ -324,12 +278,11 @@ describe("UserVfsTurnService", () => {
           sessionId: session.id,
           sessionKkv: createSessionKkvService(ctx.conn),
         }),
-      }),
+      })
     );
 
     const compositeResult = await compositeTurn.executeOp(session.id, {
-      actionXml:
-        '<action name="write">\n{"path":"/c.md","content":""}\n</action>\n<action name="write">\n{"path":"/d.md","content":""}\n</action>',
+      actionXml: '<action name="write">\n{"path":"/c.md","content":""}\n</action>\n<action name="write">\n{"path":"/d.md","content":""}\n</action>',
       tools: [
         {
           id: "tu_c",
@@ -346,11 +299,7 @@ describe("UserVfsTurnService", () => {
     assert.equal(compositeResult.ok, false);
     assert.ok(compositeResult.partialFailure);
     const afterOrphan = await revisions.findByEntryAndVersion(orphanEntry.entryId, 99);
-    assert.equal(
-      afterOrphan,
-      null,
-      "restore 抛 composite 后仍须 sweep 掉不可达 revision",
-    );
+    assert.equal(afterOrphan, null, "restore 抛 composite 后仍须 sweep 掉不可达 revision");
   });
 
   it("T2：两次 tool 均成功时磁盘保留、停写 pending kkv", async () => {
@@ -362,8 +311,7 @@ describe("UserVfsTurnService", () => {
     const userVfsTurn = new DefaultUserVfsTurnService(makeUserVfsTurnDeps(ctx.conn));
 
     const ok = await userVfsTurn.executeOp(session.id, {
-      actionXml:
-        '<action name="write">\n{"path":"/1.md","content":""}\n</action>\n<action name="write">\n{"path":"/2.md","content":""}\n</action>',
+      actionXml: '<action name="write">\n{"path":"/1.md","content":""}\n</action>\n<action name="write">\n{"path":"/2.md","content":""}\n</action>',
       tools: [
         {
           id: "tu_1",
@@ -394,10 +342,7 @@ describe("UserVfsTurnService", () => {
     await svfs.mkdir("/55");
     await svfs.write("/55/诗歌.txt", "poem", { versionCheck: false });
 
-    const result = await userVfsTurn.executeOp(
-      session.id,
-      buildUserVfsDeleteOp("/55", true),
-    );
+    const result = await userVfsTurn.executeOp(session.id, buildUserVfsDeleteOp("/55", true));
     assert.equal(result.ok, true);
     await assert.rejects(() => svfs.list("/55"));
   });
@@ -409,20 +354,13 @@ describe("UserVfsTurnService", () => {
     const { userVfsTurn } = createUserVfsTurnServiceBundle(ctx.conn);
     const sk = createSessionKkvService(ctx.conn);
 
-    const result = await userVfsTurn.executeOp(
-      session.id,
-      writeOp("/asm-fc.md", "from-bundle"),
-    );
+    const result = await userVfsTurn.executeOp(session.id, writeOp("/asm-fc.md", "from-bundle"));
     assert.equal(result.ok, true);
 
-    const raw = await sk.get(
-      session.id,
-      SESSION_KKV_DOMAIN_FILE_CACHE,
-      fileCacheKey("full", "/asm-fc.md"),
-    );
+    const raw = await sk.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, fileCacheKey("full", "/asm-fc.md"));
     assert.ok(raw != null, "sessionKkv 须经 resolveToolCtx 注入");
     const payload = parseFileCachePayload(raw!);
-    assert.ok(payload != null);
-    assert.equal(payload!.body, "from-bundle");
+    assert.ok(payload.ok);
+    assert.equal(payload.value.body, "from-bundle");
   });
 });

@@ -34,9 +34,6 @@ export function workplaceRootLogicalPath(_scope: WorkplaceScope): string {
 /**
  * Whether `logicalPath` is the scope root (rule cannot be turned off).
  */
-export function isWorkplaceRootPath(
-  scope: WorkplaceScope,
-  logicalPath: string
-): boolean {
+export function isWorkplaceRootPath(scope: WorkplaceScope, logicalPath: string): boolean {
   return logicalPath === workplaceRootLogicalPath(scope);
 }

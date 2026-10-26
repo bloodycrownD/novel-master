@@ -18,8 +18,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import { AppError } from "@/errors/app-error.js";
 import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
-import type { ChatMessage } from "@/domain/chat/model/message.js";
+import type { ChatMessageData } from "@/domain/chat/model/message.js";
 import {
   attachmentStorageName,
   messageAttachmentsSchema,
@@ -39,9 +40,9 @@ import type { MessageService } from "@/service/chat/message.port.js";
 import type { SessionService } from "@/service/chat/session.port.js";
 import type { ChatSession } from "@/domain/chat/model/session.js";
 import { textBlocks } from "@novel-master/core/chat";
-import { messageBodyText } from "@/domain/chat/content/message-body-text.js";
-import { ATTACH_PROMPT_CHAR_BUDGET } from "@/domain/chat/logic/attach-budget.js";
-import { prepareUserMessagesForPrompt } from "@/domain/chat/logic/prepare-user-messages-for-prompt.js";
+import { messageBodyTextFromBlocks } from "@/domain/chat/content/message-body-text.js";
+import { ATTACH_PROMPT_CHAR_BUDGET } from "@/domain/chat/logic/attachment/attach-budget.js";
+import { promptAssembler } from "@/domain/chat/logic/prompt/prompt-assembler.js";
 import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
 import {
   getNovelMasterTestContext,
@@ -83,9 +84,7 @@ interface MockResult {
 }
 
 function chatErrorNotFound(): Error {
-  const err = new Error(`session not found`) as Error & { code?: string };
-  err.code = "NOT_FOUND";
-  return err;
+  return new AppError("CHAT_NOT_FOUND", "session not found");
 }
 
 function makeSubagent(opts: MockOpts = {}): MockResult {
@@ -115,7 +114,7 @@ function makeSubagent(opts: MockOpts = {}): MockResult {
       return Array.from({ length: n }, (_, i) => ({
         role: "user",
         content: { blocks: [{ type: "text", text: `m${i}` }] },
-      })) as unknown as ChatMessage[];
+      })) as unknown as ChatMessageData[];
     },
     // repo-mega-cr Wave C 的 subagent 窄读消费口（src 端已切换，mock 缺方法
     // 会 TypeError——「加方法先扫手写假实现」同族坑；实现抄
@@ -125,7 +124,7 @@ function makeSubagent(opts: MockOpts = {}): MockResult {
       const all = Array.from({ length: n }, (_, i) => ({
         role: "user",
         content: { blocks: [{ type: "text", text: `m${i}` }] },
-      })) as unknown as ChatMessage[];
+      })) as unknown as ChatMessageData[];
       return all
         .filter((m) => m.role === options.role)
         .slice(-Math.max(1, Math.floor(options.limit)));
@@ -656,7 +655,7 @@ describe("task fileAttachment 物化与预算（T-TA*）", () => {
 
     // 子会话侧：prepare 降级（同一份附件形态），但 attachments 数组里那条仍在
     // ——附件落库事实不因提示词降级而消失，UI 附件组（chip）照常渲染。
-    const childMsg: ChatMessage = {
+    const childMsg: ChatMessageData = {
       id: "c1",
       sessionId: session.id,
       seq: 1,
@@ -668,7 +667,7 @@ describe("task fileAttachment 物化与预算（T-TA*）", () => {
       hidden: false,
       attachments: attached,
     };
-    const prepared = await prepareUserMessagesForPrompt(
+    const prepared = await promptAssembler.prepare(
       [childMsg],
       {
         sessionId: session.id,
@@ -676,7 +675,7 @@ describe("task fileAttachment 物化与预算（T-TA*）", () => {
         vfs,
       },
     );
-    const body = messageBodyText(prepared[0]!);
+    const body = messageBodyTextFromBlocks(prepared[0]!.content.blocks);
     assert.match(body, /文件过长，可用 read 配合 offset\/limit 分段读取/);
     assert.match(body, /"display": "filename"/);
     assert.equal(body.includes("1|HHHH"), false);

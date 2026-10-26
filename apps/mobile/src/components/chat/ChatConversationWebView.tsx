@@ -50,7 +50,7 @@ import WebView, {type WebViewMessageEvent} from 'react-native-webview';
 // 根入口 index.d.ts 未 re-export 此类型，只能从 lib/WebViewTypes 深导入；
 // import type 会被擦除，不影响运行时打包。
 import type {WebViewOpenWindowEvent} from 'react-native-webview/lib/WebViewTypes';
-import {type ChatMessage} from '@novel-master/core/chat';
+import {type ChatMessageData} from '@novel-master/core/chat';
 import {
   bootTimingLog,
   rollbackTimingLog,
@@ -159,7 +159,7 @@ const READY_TIMEOUT_MS = 8000;
 
 export type ChatConversationWebViewProps = {
   readonly sessionKey: string;
-  readonly messages: readonly ChatMessage[];
+  readonly messages: readonly ChatMessageData[];
   readonly streamingText?: string;
   readonly streamingThinking?: string;
   readonly hasMore?: boolean;
@@ -296,7 +296,7 @@ function emitScrollRestoreTelemetry(
 
 /** streamCommit 已同步的行，跳过 messages effect 重复 snapshot/append。 */
 function shouldSkipSnapshotAfterStreamCommit(
-  messages: readonly ChatMessage[],
+  messages: readonly ChatMessageData[],
   prevCount: number,
   committedIds: readonly string[],
 ): boolean {
@@ -309,7 +309,7 @@ function shouldSkipSnapshotAfterStreamCommit(
 
 /** 跳过 snapshot 的前提是 streamCommit 同步过的行仍全部在当前列表里。 */
 function committedStreamRowsStillPresent(
-  messages: readonly ChatMessage[],
+  messages: readonly ChatMessageData[],
   committedIds: readonly string[],
 ): boolean {
   const idSet = new Set(messages.map(message => message.id));
@@ -1034,7 +1034,7 @@ export const ChatConversationWebView = memo(
       }, []);
 
       const sendAppendTailRows = useCallback(
-        (tailMessages: readonly ChatMessage[]) => {
+        (tailMessages: readonly ChatMessageData[]) => {
           if (tailMessages.length === 0) {
             return;
           }
@@ -1098,7 +1098,7 @@ export const ChatConversationWebView = memo(
       );
 
       const tryCommitStreamTail = useCallback(
-        (allMessages: readonly ChatMessage[], prevCount: number): boolean => {
+        (allMessages: readonly ChatMessageData[], prevCount: number): boolean => {
           if (!webReady) {
             return false;
           }

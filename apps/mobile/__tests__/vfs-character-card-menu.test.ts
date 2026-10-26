@@ -126,11 +126,9 @@ describe('vfs 导入导出菜单源码契约（vfs-import-export-menu / Step 5�
     expect(src).toContain("'ZIP 已保存到所选位置'");
   });
 
-  it('format-error 特判 CharacterCardError（对齐 VfsZipError）', () => {
+  it('format-error 走 AppError 统一分支', () => {
     const src = readSrc('src/errors/format-error.ts');
-    expect(src).toContain('CharacterCardError');
-    expect(src).toMatch(
-      /error instanceof VfsZipError[\s\S]*error instanceof CharacterCardError/,
-    );
+    expect(src).toContain('error instanceof AppError');
+    expect(src).not.toContain('CharacterCardError');
   });
 });

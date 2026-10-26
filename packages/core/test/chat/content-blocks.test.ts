@@ -1,9 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { ChatError } from "../../src/errors/chat-errors.js";
 import {
-  assertMessageContent,
   parseMessageContent,
+  parseMessageContentValue,
 } from "../../src/domain/chat/content/parse-message-content.js";
 
 describe("parseMessageContent", () => {
@@ -38,19 +37,22 @@ describe("parseMessageContent", () => {
       ],
     };
     const parsed = parseMessageContent(JSON.stringify(payload));
-    assert.equal(parsed.blocks.length, 6);
-    assert.equal(parsed.blocks[0]!.type, "text");
-    assert.equal(parsed.blocks[3]!.type, "tool_use");
+    assert.ok(parsed.ok);
+    assert.equal(parsed.value.blocks.length, 6);
+    assert.equal(parsed.value.blocks[0]!.type, "text");
+    assert.equal(parsed.value.blocks[3]!.type, "tool_use");
   });
 
   it("accepts thinking-only blocks (no empty text)", () => {
-    const payload = { blocks: [{ type: "thinking", text: "chain only" }] };
-    const parsed = parseMessageContent(JSON.stringify(payload));
-    assert.equal(parsed.blocks.length, 1);
-    assert.equal(parsed.blocks[0]!.type, "thinking");
+    const parsed = parseMessageContent(
+      JSON.stringify({ blocks: [{ type: "thinking", text: "chain only" }] }),
+    );
+    assert.ok(parsed.ok);
+    assert.equal(parsed.value.blocks.length, 1);
+    assert.equal(parsed.value.blocks[0]!.type, "thinking");
   });
 
-  it("strips legacy empty text blocks on parse and append", () => {
+  it("strips legacy empty text blocks on parse and validation", () => {
     const legacy = {
       blocks: [
         { type: "thinking", text: "reasoning" },
@@ -58,107 +60,103 @@ describe("parseMessageContent", () => {
       ],
     };
     const parsed = parseMessageContent(JSON.stringify(legacy));
-    assert.equal(parsed.blocks.length, 1);
-    assert.equal(parsed.blocks[0]!.type, "thinking");
+    assert.ok(parsed.ok);
+    assert.equal(parsed.value.blocks.length, 1);
 
-    const inMemory = structuredClone(legacy);
-    assertMessageContent(inMemory);
-    assert.equal(inMemory.blocks.length, 1);
+    const inMemory = parseMessageContentValue(legacy);
+    assert.ok(inMemory.ok);
+    assert.equal(inMemory.value.blocks.length, 1);
+    // 不再就地改写调用方对象：归一结果是新值。
+    assert.equal(legacy.blocks.length, 2);
   });
 
-  it("rejects legacy { content } shape", () => {
-    assert.throws(
-      () => parseMessageContent(JSON.stringify({ content: "x" })),
-      (err: unknown) => {
-        assert.ok(err instanceof ChatError);
-        assert.equal(err.code, "INVALID_ARGUMENT");
-        assert.match(err.message, /Legacy message content shape/);
-        return true;
-      },
-    );
+  it("rejects legacy { content } shape with CHAT_INVALID_ARGUMENT", () => {
+    const parsed = parseMessageContent(JSON.stringify({ content: "x" }));
+    assert.equal(parsed.ok, false);
+    if (parsed.ok) return;
+    assert.equal(parsed.error.key, "CHAT_INVALID_ARGUMENT");
+    assert.equal(parsed.error.code, 106001);
+    assert.match(parsed.error.message, /Legacy message content shape/);
   });
 
   it("rejects legacy { parts } shape", () => {
-    assert.throws(
-      () =>
-        parseMessageContent(
-          JSON.stringify({ parts: [{ type: "text", text: "x" }] }),
-        ),
-      (err: unknown) => {
-        assert.ok(err instanceof ChatError);
-        assert.equal(err.code, "INVALID_ARGUMENT");
-        assert.match(err.message, /Legacy message content shape/);
-        return true;
-      },
+    const parsed = parseMessageContent(
+      JSON.stringify({ parts: [{ type: "text", text: "x" }] }),
     );
+    assert.equal(parsed.ok, false);
+    if (parsed.ok) return;
+    assert.equal(parsed.error.key, "CHAT_INVALID_ARGUMENT");
+    assert.match(parsed.error.message, /Legacy message content shape/);
   });
 
   it("rejects unknown block type", () => {
-    assert.throws(() =>
-      parseMessageContent(
-        JSON.stringify({ blocks: [{ type: "video", url: "x" }] }),
-      ),
+    const parsed = parseMessageContent(
+      JSON.stringify({ blocks: [{ type: "video", url: "x" }] }),
     );
+    assert.equal(parsed.ok, false);
+    if (parsed.ok) return;
+    assert.equal(parsed.error.key, "CHAT_INVALID_ARGUMENT");
   });
 
   it("allows empty blocks array", () => {
     const parsed = parseMessageContent(JSON.stringify({ blocks: [] }));
-    assert.deepEqual(parsed.blocks, []);
+    assert.ok(parsed.ok);
+    assert.deepEqual(parsed.value.blocks, []);
   });
 
-  it("assertMessageContent validates in memory", () => {
-    const value = { blocks: [{ type: "text", text: "ok" }] };
-    assertMessageContent(value);
-    assert.equal(value.blocks[0]!.type, "text");
+  it("rejects invalid JSON", () => {
+    const parsed = parseMessageContent("{");
+    assert.equal(parsed.ok, false);
+    if (parsed.ok) return;
+    assert.equal(parsed.error.key, "CHAT_INVALID_ARGUMENT");
+    assert.match(parsed.error.message, /Invalid JSON in message content/);
+  });
+
+  it("parseMessageContentValue validates in memory", () => {
+    const parsed = parseMessageContentValue({
+      blocks: [{ type: "text", text: "ok" }],
+    });
+    assert.ok(parsed.ok);
+    assert.equal(parsed.value.blocks[0]!.type, "text");
   });
 
   it("rejects tool_result with non-boolean ok", () => {
-    assert.throws(
-      () =>
-        parseMessageContent(
-          JSON.stringify({
-            blocks: [
-              {
-                type: "tool_result",
-                toolUseId: "tu_1",
-                content: "found",
-                ok: "false",
-              },
-            ],
-          }),
-        ),
-      (err: unknown) => {
-        assert.ok(err instanceof ChatError);
-        assert.equal(err.code, "INVALID_ARGUMENT");
-        assert.match(err.message, /ok must be a boolean/);
-        return true;
-      },
+    const parsed = parseMessageContent(
+      JSON.stringify({
+        blocks: [
+          {
+            type: "tool_result",
+            toolUseId: "tu_1",
+            content: "found",
+            ok: "false",
+          },
+        ],
+      }),
     );
+    assert.equal(parsed.ok, false);
+    if (parsed.ok) return;
+    assert.equal(parsed.error.key, "CHAT_INVALID_ARGUMENT");
+    assert.match(parsed.error.message, /ok must be a boolean/);
   });
 
   it("rejects tool_result with non-string summary", () => {
-    assert.throws(
-      () =>
-        parseMessageContent(
-          JSON.stringify({
-            blocks: [
-              {
-                type: "tool_result",
-                toolUseId: "tu_1",
-                content: "found",
-                ok: true,
-                summary: 30,
-              },
-            ],
-          }),
-        ),
-      (err: unknown) => {
-        assert.ok(err instanceof ChatError);
-        assert.equal(err.code, "INVALID_ARGUMENT");
-        assert.match(err.message, /summary must be a string/);
-        return true;
-      },
+    const parsed = parseMessageContent(
+      JSON.stringify({
+        blocks: [
+          {
+            type: "tool_result",
+            toolUseId: "tu_1",
+            content: "found",
+            ok: true,
+            summary: 30,
+          },
+        ],
+      }),
     );
+    assert.equal(parsed.ok, false);
+    if (parsed.ok) return;
+    assert.equal(parsed.error.key, "CHAT_INVALID_ARGUMENT");
+    assert.match(parsed.error.message, /summary must be a string/);
   });
 
   it("R3: round-trips tool_result ok and summary", () => {
@@ -174,8 +172,10 @@ describe("parseMessageContent", () => {
       ],
     };
     const parsed = parseMessageContent(JSON.stringify(payload));
-    assert.equal(parsed.blocks.length, 1);
-    const block = parsed.blocks[0]!;
+    assert.ok(parsed.ok);
+    if (!parsed.ok) return;
+    assert.equal(parsed.value.blocks.length, 1);
+    const block = parsed.value.blocks[0]!;
     assert.equal(block.type, "tool_result");
     if (block.type !== "tool_result") {
       return;

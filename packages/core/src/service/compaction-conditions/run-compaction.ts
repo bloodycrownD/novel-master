@@ -26,20 +26,18 @@
  * @module service/compaction-conditions/run-compaction
  */
 
-import { runHideMessageAction } from "@/service/compaction-conditions/hide-message.action.js";
+import { messageIdsInSlice } from "@/domain/depth/logic/depth-slice.js";
+import { resolveHideMessageRange } from "@/domain/depth/logic/resolve-hide-message-range.js";
 import type { DepthSlice } from "@/domain/depth/logic/depth-slice.js";
 import { DEFAULT_HIDE_START_DEPTH } from "@/domain/compaction-conditions/model/compaction-conditions.js";
-import {
-  SESSION_KKV_DOMAIN_FILE_CACHE,
-  SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
-} from "@/domain/session-kkv/model/session-kkv-domains.js";
+import { SESSION_KKV_DOMAIN_FILE_CACHE, SESSION_KKV_DOMAIN_RULE_SNAPSHOT } from "@/domain/session-kkv/model/session-kkv-domains.js";
 import { invalidateSessionApiPromptTokenEntry } from "@/infra/tokenizer/logic/session-api-prompt-token-store.js";
 import type { MessageService } from "@/service/chat/message.port.js";
 import type { MessageTranscriptEffectsService } from "@/service/chat/message-transcript-effects.port.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
 
 /** 压缩触发来源：手动（用户点「压缩上下文」）vs 自动（agent 回合中段条件压缩）。 */
-export type CompactionTrigger = "manual" | "auto";
+type CompactionTrigger = "manual" | "auto";
 
 /** runCompaction 的运行时依赖（与事件编排器原先持有的那组服务同构）。 */
 export interface RunCompactionDeps {
@@ -49,7 +47,7 @@ export interface RunCompactionDeps {
 }
 
 /** runCompaction 的调用参数。 */
-export interface RunCompactionParams {
+interface RunCompactionParams {
   readonly sessionId: string;
   readonly projectId: string;
   /** hide-message 起始深度（tail 0 = newest），缺省按 {@link DEFAULT_HIDE_START_DEPTH}。 */
@@ -64,7 +62,7 @@ export interface RunCompactionParams {
 }
 
 /** 压缩执行结果：只关心成败，不暴露 failures 细节。 */
-export interface RunCompactionResult {
+interface RunCompactionResult {
   readonly ok: boolean;
 }
 
@@ -76,18 +74,27 @@ export interface RunCompactionResult {
  * `emit()` 在 result.ok 为 false 时跳过 kkv 清理的语义一致（异常路径下不清缓存）。
  * 该早 return 结构天然保证「manual 场景 hide 失败 → 两域不清」。
  */
-export async function runCompaction(
-  deps: RunCompactionDeps,
-  params: RunCompactionParams
-): Promise<RunCompactionResult> {
+export async function runCompaction(deps: RunCompactionDeps, params: RunCompactionParams): Promise<RunCompactionResult> {
   const startDepth = params.hideStartDepth ?? DEFAULT_HIDE_START_DEPTH;
   const slice: DepthSlice = { startDepth };
 
   try {
-    await runHideMessageAction(params.projectId, params.sessionId, slice, {
-      messages: deps.messages,
-      messageTranscriptEffects: deps.messageTranscriptEffects,
-    });
+    const headers = await deps.messages.listMessageHeadersBySession(params.sessionId);
+    const stubAll = headers.map((header) => ({ id: header.id, sessionId: header.sessionId, seq: header.seq, role: header.role, content: { blocks: [] }, provider: null, raw: null, createdAtMs: header.createdAtMs, hidden: header.hidden }));
+    const visible = stubAll.filter((m) => !m.hidden);
+    const ids = messageIdsInSlice(visible, slice);
+    if (!ids.ok) throw ids.error;
+    if (ids.value.length > 0) {
+      const idSet = new Set(ids.value);
+      const minSeq = Math.min(...visible.filter((m) => idSet.has(m.id)).map((m) => m.seq));
+      const fullRows = await deps.messages.listBySessionFromSeq(params.sessionId, minSeq);
+      const fullById = new Map(fullRows.map((m) => [m.id, m]));
+      const mergedVisible = visible.map((m) => fullById.get(m.id) ?? m);
+      const range = resolveHideMessageRange(mergedVisible, slice, ids.value);
+      if (range != null) {
+        await deps.messageTranscriptEffects.hideMessagesInRange(params.projectId, params.sessionId, range.fromSeq, range.toSeq);
+      }
+    }
   } catch {
     return { ok: false };
   }
@@ -96,10 +103,7 @@ export async function runCompaction(
   // 落库值若残留，重启后会按 api 口径参与阈值判定（跳掉 heuristic 安全
   // 系数），陈旧值会放大误判，所以这里必须连 KKV 行一起清。
   // rule_snapshot / file_cache 自动压缩不清、仅 manual 清——见模块头注释。
-  await invalidateSessionApiPromptTokenEntry(
-    deps.sessionKkv,
-    params.sessionId
-  );
+  await invalidateSessionApiPromptTokenEntry(deps.sessionKkv, params.sessionId);
 
   // 手动压缩：清 workplace 两域，让下一次拼提示词时按当前工作区完整刷新
   // （新文件进清单、正文重读）。失败只吞错 + warn——file_cache 是纯加速层，
@@ -107,17 +111,11 @@ export async function runCompaction(
   // 两域各自独立 try：rule_snapshot 清失败不能拦住 file_cache 的清空，
   // 否则快照已重评估而正文缓存命中旧正文，静默沿用旧内容。
   if ((params.trigger ?? "auto") === "manual") {
-    for (const domain of [
-      SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
-      SESSION_KKV_DOMAIN_FILE_CACHE,
-    ]) {
+    for (const domain of [SESSION_KKV_DOMAIN_RULE_SNAPSHOT, SESSION_KKV_DOMAIN_FILE_CACHE]) {
       try {
         await deps.sessionKkv.clearDomain(params.sessionId, domain);
       } catch (error) {
-        console.warn(
-          `runCompaction: 手动压缩后 best-effort 清空 ${domain} 失败（session=${params.sessionId}）`,
-          error
-        );
+        console.warn(`runCompaction: 手动压缩后 best-effort 清空 ${domain} 失败（session=${params.sessionId}）`, error);
       }
     }
   }

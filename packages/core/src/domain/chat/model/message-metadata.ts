@@ -5,14 +5,14 @@
  */
 
 /** synthetic 消息种类。 */
-export type MessageMetadataKind =
+type MessageMetadataKind =
   | "tool_turn_bridge"
   | "user_vfs_action"
   | "user_vfs_ack"
   | (string & {});
 
-/** 写入 `ChatMessage.raw.metadata` 的键结构。 */
-export interface MessageMetadata {
+/** 写入 `ChatMessageData.raw.metadata` 的键结构。 */
+interface MessageMetadata {
   /** 消息来源：`user` 表示用户侧 synthetic。 */
   readonly source?: "user";
   /** 行为主体：`user` 表示用户触发的 assistant synthetic。 */
@@ -26,9 +26,7 @@ export interface MessageMetadata {
 }
 
 /** 从 `raw` 对象读取 metadata（无则 undefined）。 */
-export function readMessageMetadata(
-  raw: Record<string, unknown> | null | undefined
-): MessageMetadata | undefined {
+export function readMessageMetadata(raw: Record<string, unknown> | null | undefined): MessageMetadata | undefined {
   if (raw == null) {
     return undefined;
   }

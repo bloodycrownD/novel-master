@@ -7,7 +7,7 @@
 import type { ModelSamplingParams } from "@/domain/provider/model/model-sampling-params.js";
 import type { ModelThinkingParams } from "@/domain/provider/model/model-thinking-params.js";
 import type { ContentBlock } from "@/domain/chat/model/content-block.js";
-import type { ChatMessage } from "@/domain/chat/model/message.js";
+import type { ChatMessageData } from "@/domain/chat/model/message.js";
 
 export type LlmProtocolKind = "openai" | "anthropic" | "gemini";
 
@@ -59,9 +59,9 @@ export interface LlmChatRequest {
   readonly userContent: string;
   readonly extraHeaders?: Readonly<Record<string, string>>;
   /** When set, used instead of a single user message built from `userContent`. */
-  readonly history?: readonly ChatMessage[];
+  readonly history?: readonly ChatMessageData[];
   /** Full session messages (including hidden) for Gemini tool_use id → name resolution. */
-  readonly toolUseLookupMessages?: readonly ChatMessage[];
+  readonly toolUseLookupMessages?: readonly ChatMessageData[];
   readonly system?: string;
   readonly tools?: readonly LlmToolDefinition[];
   readonly stream?: boolean;

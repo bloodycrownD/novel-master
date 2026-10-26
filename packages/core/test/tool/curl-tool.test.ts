@@ -17,7 +17,7 @@ import {
   isReadOutput,
 } from "../../src/domain/tool/logic/format-tool-output.js";
 import { buildToolResultBlock } from "../../src/domain/tool/logic/build-tool-result-block.js";
-import { resolveAgentToolRegistry } from "../../src/domain/agent/logic/resolve-agent-tool-registry.js";
+import { resolveAgentToolRegistry } from "../../src/domain/agent/logic/resolve-agent-tools.js";
 import type { AgentDefinition } from "../../src/domain/agent/model/agent-definition.js";
 
 afterEach(() => {

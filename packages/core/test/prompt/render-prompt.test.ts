@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { textBlocks, type ChatMessage } from "@novel-master/core/chat";
+import { textBlocks, type ChatMessageData } from "@novel-master/core/chat";
 
 import {
   buildPromptAssemblyFromLayout,
@@ -8,13 +8,13 @@ import {
   buildPromptPreviewSegmentsFromLayout,
   computeLlmExportZonesFromLayout,
   formatPromptLlmInputForCliFromLayout,
-  messageBodyText,
+  messageBodyTextFromBlocks,
   type AgentPromptLayout,
 } from "@novel-master/core/prompt";
 
 const fixedNow = new Date(2026, 4, 24, 9, 0, 0);
 
-function message(role: string, content: string, seq: number): ChatMessage {
+function message(role: string, content: string, seq: number): ChatMessageData {
   return {
     id: `m${seq}`,
     sessionId: "s1",
@@ -47,7 +47,7 @@ describe("buildPromptLlmInputFromLayout", () => {
     assert.equal(input.messages.length, 2);
     assert.equal(input.messages[0]!.id, "prompt:u");
     assert.equal(input.messages[1]!.id, "m1");
-    assert.equal(messageBodyText(input.messages[0]!), "ask");
+    assert.equal(messageBodyTextFromBlocks(input.messages[0]!.content.blocks), "ask");
   });
 
   it("T-WT4: worktree 块注入 user 树 + assistant done 双消息", async () => {
@@ -67,10 +67,10 @@ describe("buildPromptLlmInputFromLayout", () => {
     assert.equal(input.messages.length, 4);
     assert.equal(input.messages[0]!.id, "prompt:workplace");
     assert.equal(input.messages[0]!.role, "user");
-    assert.equal(messageBodyText(input.messages[0]!), "WT");
+    assert.equal(messageBodyTextFromBlocks(input.messages[0]!.content.blocks), "WT");
     assert.equal(input.messages[1]!.id, "prompt:workplace:done");
     assert.equal(input.messages[1]!.role, "assistant");
-    assert.equal(messageBodyText(input.messages[1]!), "【done】");
+    assert.equal(messageBodyTextFromBlocks(input.messages[1]!.content.blocks), "【done】");
   });
 
   it("T-WT5: 无 worktree 块时不注入双消息", async () => {
@@ -201,7 +201,7 @@ describe("formatPromptLlmInputForCliFromLayout", () => {
 });
 
 describe("includeThinkingBlocks 预览（T-PV1）", () => {
-  const thinkingMessage: ChatMessage = {
+  const thinkingMessage: ChatMessageData = {
     ...message("assistant", "", 1),
     content: {
       blocks: [
@@ -253,7 +253,7 @@ describe("buildPromptAssemblyFromLayout", () => {
   it("UA 两段按两条普通 message 展示（不合并摘要）", async () => {
     const actionXml = '<action name="delete">\n{"path":"/test.md"}\n</action>';
     const wrapped = `<system-message>\n${actionXml}\n</system-message>`;
-    const messages: ChatMessage[] = [
+    const messages: ChatMessageData[] = [
       {
         id: "u1",
         sessionId: "s1",
@@ -408,7 +408,7 @@ describe("persistEnabled / dynamicEnabled 开关", () => {
     const input = await buildPromptLlmInputFromLayout(layout, ctx);
     assert.equal(input.messages[0]!.role, "user");
     assert.equal(input.messages[1]!.role, "assistant");
-    assert.equal(messageBodyText(input.messages[1]!), "【done】");
+    assert.equal(messageBodyTextFromBlocks(input.messages[1]!.content.blocks), "【done】");
 
     const segments = await buildPromptAssemblyFromLayout(layout, ctx);
     const wt = segments.find((s) => s.id === "prompt-workplace");

@@ -15,7 +15,7 @@ import React from 'react';
 import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
 import {AppState, Linking, Platform, Text} from 'react-native';
-import {type ChatMessage} from '@novel-master/core/chat';
+import {type ChatMessageData} from '@novel-master/core/chat';
 import {CONVERSATION_BRIDGE_V} from '@/components/chat/ChatConversationBridge';
 import {
   ChatConversationWebView,
@@ -115,7 +115,7 @@ Object.defineProperty(Platform, 'OS', {
 // 属 dock 域、不再进宿主 ready 消费面）。
 const MODERN_CAPABILITIES = ['streamBlockCommit'];
 
-function sampleMessage(id: string, seq: number): ChatMessage {
+function sampleMessage(id: string, seq: number): ChatMessageData {
   return {
     id,
     sessionId: 's1',
@@ -962,7 +962,7 @@ describe('ChatConversationWebView · 快照在途时切会话（key 重挂归零
   });
 
   /** 120 条 → 3 片（50/片）：closeChunkGate 后首片已过桥、余片挂在让步上。 */
-  function bigMessages(): ChatMessage[] {
+  function bigMessages(): ChatMessageData[] {
     return Array.from({length: 120}, (_, i) => sampleMessage(`m${i}`, i + 1));
   }
 
@@ -1176,7 +1176,7 @@ describe('ChatConversationWebView · 流式命令式 API 与块提交判路', ()
       raw: null,
       createdAtMs: 1,
       hidden: false,
-    } as unknown as ChatMessage;
+    } as unknown as ChatMessageData;
 
     const msgs = [toolUse];
     let tree: TestRenderer.ReactTestRenderer;
@@ -1212,7 +1212,7 @@ describe('ChatConversationWebView · 流式命令式 API 与块提交判路', ()
       ...sampleMessage('a1', 2),
       role: 'assistant',
       content: {blocks: [{type: 'text', text: 'stream done'}]},
-    } as ChatMessage;
+    } as ChatMessageData;
     let tree: TestRenderer.ReactTestRenderer;
     const ref = React.createRef<ChatConversationWebViewHandle>();
     await act(async () => {

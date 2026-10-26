@@ -1,96 +1,151 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import {
-  assertNoCrossRoundDoomLoop,
-  assertNoDoomLoopInBlocks,
-  CROSS_ROUND_WINDOW,
-  DOOM_LOOP_THRESHOLD,
-} from "../../src/domain/agent/logic/doom-loop.js";
-import { AgentError } from "../../src/errors/agent-runtime-errors.js";
+import { DoomLoopDetector } from "../../src/domain/agent/logic/doom-loop.js";
+import { AppError } from "../../src/errors/app-error.js";
+import type { Result } from "../../src/errors/either.js";
 
-describe("doom-loop", () => {
-  it(`throws DOOM_LOOP after ${DOOM_LOOP_THRESHOLD} identical tool_use blocks`, () => {
+/** 造一个 tool_use 内容块；检测只看 name + input，id 不影响判定。 */
+function tu(name: string, input: Record<string, unknown>) {
+  return { type: "tool_use" as const, id: `${name}-id`, name, input };
+}
+
+function isDoomLoop(e: unknown): boolean {
+  return e instanceof AppError && e.key === "AGENT_DOOM_LOOP";
+}
+
+/** 取出 Err 载荷前先断言失败分支（兼证 checkStep 不抛）。 */
+function expectErr(result: Result<void, AppError>): AppError {
+  assert.equal(result.ok, false);
+  if (result.ok) {
+    throw new Error("expected Err");
+  }
+  return result.error;
+}
+
+function expectOk(result: Result<void, AppError>): void {
+  assert.equal(result.ok, true);
+}
+
+describe("DoomLoopDetector", () => {
+  it(`returns Err after ${DoomLoopDetector.DEFAULT_THRESHOLD} identical tool_use blocks`, () => {
     const input = { path: "/x" };
-    const blocks = Array.from({ length: DOOM_LOOP_THRESHOLD }, (_, i) => ({
-      type: "tool_use" as const,
-      id: `id${i}`,
-      name: "read",
-      input,
-    }));
-    assert.throws(
-      () => assertNoDoomLoopInBlocks(blocks),
-      (e: unknown) => e instanceof AgentError && e.code === "DOOM_LOOP",
+    const detector = new DoomLoopDetector();
+    const result = detector.checkStep(
+      Array.from({ length: DoomLoopDetector.DEFAULT_THRESHOLD }, () =>
+        tu("read", input)
+      )
     );
+    assert.ok(isDoomLoop(expectErr(result)));
   });
 
-  it("allows two identical tool_use blocks", () => {
+  it("returns Ok for two identical tool_use blocks", () => {
     const input = { path: "/x" };
-    assert.doesNotThrow(() =>
-      assertNoDoomLoopInBlocks([
-        { type: "tool_use", id: "1", name: "read", input },
-        { type: "tool_use", id: "2", name: "read", input },
-      ]),
+    const detector = new DoomLoopDetector();
+    expectOk(detector.checkStep([tu("read", input), tu("read", input)]));
+  });
+
+  it("returns Ok for three tool_use with different inputs", () => {
+    const detector = new DoomLoopDetector();
+    expectOk(
+      detector.checkStep([
+        tu("read", { path: "/a" }),
+        tu("read", { path: "/b" }),
+        tu("read", { path: "/c" }),
+      ])
     );
   });
 
-  it("allows three tool_use with different inputs", () => {
-    assert.doesNotThrow(() =>
-      assertNoDoomLoopInBlocks([
-        { type: "tool_use", id: "1", name: "read", input: { path: "/a" } },
-        { type: "tool_use", id: "2", name: "read", input: { path: "/b" } },
-        { type: "tool_use", id: "3", name: "read", input: { path: "/c" } },
-      ]),
-    );
+  it("only inspects the tail window when earlier blocks differ", () => {
+    const same = { path: "/x" };
+    const detector = new DoomLoopDetector();
+    const result = detector.checkStep([
+      tu("read", { path: "/a" }),
+      tu("read", { path: "/b" }),
+      tu("read", same),
+      tu("read", same),
+      tu("read", same),
+    ]);
+    assert.ok(isDoomLoop(expectErr(result)));
   });
 
-  it(`throws DOOM_LOOP on cross-round A-B-A-B in last ${CROSS_ROUND_WINDOW}`, () => {
-    const calls = [
-      { type: "tool_use" as const, id: "1", name: "read", input: { path: "/a" } },
-      { type: "tool_use" as const, id: "2", name: "list", input: { dir: "/" } },
-      { type: "tool_use" as const, id: "3", name: "read", input: { path: "/a" } },
-      { type: "tool_use" as const, id: "4", name: "list", input: { dir: "/" } },
-    ];
-    assert.throws(
-      () => assertNoCrossRoundDoomLoop(calls),
-      (e: unknown) => e instanceof AgentError && e.code === "DOOM_LOOP",
-    );
+  it(`returns Err on cross-round A-B-A-B in last ${DoomLoopDetector.DEFAULT_CROSS_ROUND_WINDOW}`, () => {
+    const detector = new DoomLoopDetector();
+    const read = () => detector.checkStep([tu("read", { path: "/a" })]);
+    const list = () => detector.checkStep([tu("list", { dir: "/" })]);
+    expectOk(read());
+    expectOk(list());
+    expectOk(read());
+    assert.ok(isDoomLoop(expectErr(list())));
   });
 
-  it("allows non-alternating cross-round history", () => {
-    assert.doesNotThrow(() =>
-      assertNoCrossRoundDoomLoop([
-        { type: "tool_use", id: "1", name: "read", input: { path: "/a" } },
-        { type: "tool_use", id: "2", name: "list", input: { dir: "/" } },
-        { type: "tool_use", id: "3", name: "write", input: { path: "/a", content: "x" } },
-        { type: "tool_use", id: "4", name: "list", input: { dir: "/" } },
-      ]),
-    );
+  it("names both alternating tools and the window in the error message", () => {
+    const detector = new DoomLoopDetector();
+    const steps = ["read", "list", "read", "list"] as const;
+    const last = steps[steps.length - 1]!;
+    for (const name of steps.slice(0, -1)) {
+      expectOk(detector.checkStep([tu(name, { path: `/${name}` })]));
+    }
+    const error = expectErr(detector.checkStep([tu(last, { path: `/${last}` })]));
+    assert.ok(isDoomLoop(error));
+    assert.match(error.message, /"read" and "list"/);
+    assert.match(error.message, /last 4 calls/);
   });
 
-  it("uses configured threshold for identical tool_use checks", () => {
+  it("accumulates tool_use across steps inside one instance", () => {
+    const detector = new DoomLoopDetector();
+    expectOk(
+      detector.checkStep([tu("read", { path: "/a" }), tu("list", { dir: "/" })])
+    );
+    expectOk(detector.checkStep([tu("read", { path: "/a" })]));
+    assert.ok(isDoomLoop(expectErr(detector.checkStep([tu("list", { dir: "/" })]))));
+  });
+
+  it("returns Ok for non-alternating cross-round history", () => {
+    const detector = new DoomLoopDetector();
+    expectOk(detector.checkStep([tu("read", { path: "/a" })]));
+    expectOk(detector.checkStep([tu("list", { dir: "/" })]));
+    expectOk(detector.checkStep([tu("write", { path: "/a", content: "x" })]));
+    expectOk(detector.checkStep([tu("list", { dir: "/" })]));
+  });
+
+  it("uses configured threshold and reports it in the message", () => {
     const input = { path: "/x" };
-    const blocks = [
-      { type: "tool_use" as const, id: "1", name: "read", input },
-      { type: "tool_use" as const, id: "2", name: "read", input },
-    ];
-    assert.throws(
-      () => assertNoDoomLoopInBlocks(blocks, { threshold: 2 }),
-      (e: unknown) => e instanceof AgentError && e.code === "DOOM_LOOP",
+    const detector = new DoomLoopDetector({ doomLoopThreshold: 2 });
+    const error = expectErr(
+      detector.checkStep([tu("read", input), tu("read", input)])
     );
+    assert.ok(isDoomLoop(error));
+    assert.match(error.message, /invoked 2 times/);
   });
 
   it("uses configured cross-round window", () => {
-    const calls = [
-      { type: "tool_use" as const, id: "1", name: "read", input: { path: "/a" } },
-      { type: "tool_use" as const, id: "2", name: "list", input: { dir: "/" } },
-      { type: "tool_use" as const, id: "3", name: "read", input: { path: "/a" } },
-      { type: "tool_use" as const, id: "4", name: "list", input: { dir: "/" } },
-      { type: "tool_use" as const, id: "5", name: "read", input: { path: "/a" } },
-      { type: "tool_use" as const, id: "6", name: "list", input: { dir: "/" } },
-    ];
-    assert.throws(
-      () => assertNoCrossRoundDoomLoop(calls, { crossRoundWindow: 6 }),
-      (e: unknown) => e instanceof AgentError && e.code === "DOOM_LOOP",
-    );
+    const detector = new DoomLoopDetector({ doomLoopCrossRoundWindow: 6 });
+    const read = () => detector.checkStep([tu("read", { path: "/a" })]);
+    const list = () => detector.checkStep([tu("list", { dir: "/" })]);
+    expectOk(read());
+    expectOk(list());
+    expectOk(read());
+    expectOk(list());
+    expectOk(read());
+    assert.ok(isDoomLoop(expectErr(list())));
+  });
+
+  it("silently disables cross-round check for non-even windows below 4", () => {
+    const detector = new DoomLoopDetector({ doomLoopCrossRoundWindow: 3 });
+    expectOk(detector.checkStep([tu("read", { path: "/a" })]));
+    expectOk(detector.checkStep([tu("list", { dir: "/" })]));
+    expectOk(detector.checkStep([tu("read", { path: "/a" })]));
+    expectOk(detector.checkStep([tu("list", { dir: "/" })]));
+    expectOk(detector.checkStep([tu("read", { path: "/a" })]));
+    expectOk(detector.checkStep([tu("list", { dir: "/" })]));
+  });
+
+  it("reset clears the trajectory", () => {
+    const detector = new DoomLoopDetector();
+    expectOk(detector.checkStep([tu("read", { path: "/a" })]));
+    expectOk(detector.checkStep([tu("list", { dir: "/" })]));
+    expectOk(detector.checkStep([tu("read", { path: "/a" })]));
+    detector.reset();
+    expectOk(detector.checkStep([tu("list", { dir: "/" })]));
   });
 });

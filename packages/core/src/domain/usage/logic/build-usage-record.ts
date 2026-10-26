@@ -4,7 +4,7 @@
  * @module domain/usage/logic/build-usage-record
  */
 
-import type { ChatMessage } from "@/domain/chat/model/message.js";
+import type { ChatMessageData } from "@/domain/chat/model/message.js";
 import type { UsageRecordInsert } from "../model/usage-record.js";
 
 /**
@@ -18,9 +18,7 @@ import type { UsageRecordInsert } from "../model/usage-record.js";
  * 其余统计列（total / cache / 耗时 / 协议 / 服务商 / 模型）原样快照，缺省记
  * NULL——口径由读侧 SQL 决定，账本侧不做二次加工。
  */
-export function buildUsageRecordFromMessage(
-  message: ChatMessage
-): UsageRecordInsert | null {
+export function buildUsageRecordFromMessage(message: ChatMessageData): UsageRecordInsert | null {
   if (message.role !== "assistant") {
     return null;
   }

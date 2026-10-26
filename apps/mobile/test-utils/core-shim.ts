@@ -19,15 +19,13 @@ export {buildVfsZip} from '../../../packages/core/dist/domain/vfs/logic/vfs-zip-
 export {parseVfsZip} from '../../../packages/core/dist/domain/vfs/logic/vfs-zip-parse.js';
 export {createVfsZipIoService} from '../../../packages/core/dist/service/vfs/create-vfs-zip-io-service.js';
 export {TdbcError} from '../../../packages/core/dist/infra/tdbc/errors.js';
-export {KkvError} from '../../../packages/core/dist/errors/kkv-errors.js';
 export {ProviderError} from '../../../packages/core/dist/errors/provider-errors.js';
-export {ChatError} from '../../../packages/core/dist/errors/chat-errors.js';
 export {ToolError} from '../../../packages/core/dist/errors/tool-errors.js';
 export {
   ENGINE_IDS,
   KEY_ENGINE_IDS,
 } from '../../../packages/core/dist/domain/tool/builtin/search/types.js';
-export {AgentError} from '../../../packages/core/dist/errors/agent-runtime-errors.js';
+export {AppError} from '../../../packages/core/dist/errors/app-error.js';
 export {
   CloudSyncError,
   isCloudSyncError,
@@ -50,7 +48,6 @@ export type {
   WorkplaceDirRule,
   WorkplaceListRow,
 } from '../../../packages/core/dist/domain/workplace/model/workplace-types.js';
-export {messageBodyText} from '../../../packages/core/dist/domain/chat/content/message-body-text.js';
 export {textBlocks} from '../../../packages/core/dist/domain/chat/content/text-blocks.js';
 export {ToolRegistry} from '../../../packages/core/dist/domain/tool/logic/tool-registry.js';
 export {
@@ -58,7 +55,7 @@ export {
   resolveToolResultOk,
 } from '../../../packages/core/dist/domain/tool/logic/build-tool-result-block.js';
 export {registerBuiltinTools} from '../../../packages/core/dist/domain/tool/builtin/register-builtin-tools.js';
-export {resolveAgentToolRegistry} from '../../../packages/core/dist/domain/agent/logic/resolve-agent-tool-registry.js';
+export {resolveAgentToolRegistry} from '../../../packages/core/dist/domain/agent/logic/resolve-agent-tools.js';
 export {validateAgentDefinition} from '../../../packages/core/dist/domain/agent/logic/validate-agent-definition.js';
 export {createAgentRunner} from '../../../packages/core/dist/service/agent/create-agent-runner.js';
 export {ChatAgentSession} from '../../../packages/core/dist/service/agent/impl/chat-agent-session.js';
@@ -76,22 +73,16 @@ export type {AgentDefinition} from '../../../packages/core/dist/domain/agent/mod
 export type {AgentRunResult} from '../../../packages/core/dist/domain/agent/model/agent-run-result.js';
 export {
   DEFAULT_USER_VFS_UNIFIED_TOOL_TURN,
-  isUserVfsUnifiedToolTurnEnabled,
+  userVfsUnifiedToolTurnFlag,
 } from '../../../packages/core/dist/domain/feature-flags/user-vfs-unified-tool-turn.js';
-export {
-  buildUserVfsTurnView,
-  deriveToolUsesFromVfsActions,
-  formatUserVfsTurnPreviewBody,
-  matchUserVfsTurnAt,
-  parseAllUserVfsActionsFromText,
-  USER_VFS_TURN_SPAN,
-} from '../../../packages/core/dist/domain/chat/logic/user-vfs-turn-view.js';
+export {userVfsTurns, USER_VFS_TURN_SPAN} from '../../../packages/core/dist/domain/chat/logic/vfs-turn/user-vfs-turn-view.js';
+export {formatUserVfsTurnPreviewBody} from '../../../packages/core/dist/presentation/chat/user-vfs-turn-preview.js';
 export {
   USER_VFS_TURN_ACK_TEXT,
-  wrapUserVfsActionsForStorage,
-} from '../../../packages/core/dist/domain/chat/logic/user-vfs-turn-constants.js';
+  userVfsTurnStorage,
+} from '../../../packages/core/dist/domain/chat/logic/vfs-turn/user-vfs-turn-constants.js';
 export type {
   ParsedUserVfsAction,
   ParsedUserVfsEditHunk,
   UserVfsTurnView,
-} from '../../../packages/core/dist/domain/chat/logic/user-vfs-turn-view.js';
+} from '../../../packages/core/dist/domain/chat/logic/vfs-turn/user-vfs-turn-view.js';

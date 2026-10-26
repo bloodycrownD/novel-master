@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { ChatMessageDto, MessageAttachmentDto } from '@shared/ipc-types';
 import {
-  isPlainUserUndoSendEligible,
+  ChatMessage,
   type RollbackMode,
 } from '@shared/logic/chat';
 import { editableTextFromMessage } from '@/features/chat/message-edit';
@@ -36,7 +36,7 @@ function resolveRollbackContext(message: ChatMessageDto): {
 } {
   const chatMsg = chatMessageFromDto(message);
   return {
-    rollbackMode: isPlainUserUndoSendEligible(chatMsg) ? 'undo_send' : 'rewind',
+    rollbackMode: ChatMessage.from(chatMsg).isUndoSendEligible() ? 'undo_send' : 'rewind',
     restoreText: editableTextFromMessage(message),
     restoreAttachments: message.attachments ?? null,
   };

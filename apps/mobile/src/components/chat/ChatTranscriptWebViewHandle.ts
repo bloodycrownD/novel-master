@@ -15,7 +15,7 @@
  * controller 落点（IME 防线 M7 要求命令式路径与 effect 版 setText 走**相反**的
  * 选区基线规则，故必须是独立通道），对本文件定义的七方法本身无任何增删。
  */
-import type {ChatMessage} from '@novel-master/core/chat';
+import type {ChatMessageData} from '@novel-master/core/chat';
 import type {StreamWireChunk} from '@/services/stream-wire-queue';
 
 export type ChatTranscriptWebViewHandle = {
@@ -24,7 +24,7 @@ export type ChatTranscriptWebViewHandle = {
   resetStream: () => void;
   /** 流式结束：单次 DOM 提交落库行并清 stream tail（纯文本 assistant）。成功返回 true。 */
   tryCommitStreamTail: (
-    allMessages: readonly ChatMessage[],
+    allMessages: readonly ChatMessageData[],
     prevCount: number,
   ) => boolean;
   /** abort 极早 stop：将 overlay stream tail 固化为 assistant 行（不含 tools）。无 tail 则 skip。 */

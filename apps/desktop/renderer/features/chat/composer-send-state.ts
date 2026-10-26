@@ -1,7 +1,7 @@
 /**
- * Composer 三分支发送状态（基于 core message-content-helpers）。
+ * Composer 三分支发送状态（基于 core ChatMessage）。
  */
-import { isPlainUserText, type ChatMessage, type ContentBlock } from "@shared/logic/chat";
+import { ChatMessage, type ChatMessageData, type ContentBlock } from "@shared/logic/chat";
 import type { ChatMessageDto, ContentBlockDto } from "@shared/ipc-types";
 
 function blockFromDto(dto: ContentBlockDto): ContentBlock | null {
@@ -30,9 +30,9 @@ function blockFromDto(dto: ContentBlockDto): ContentBlock | null {
   }
 }
 
-/** 将 IPC DTO 转为 {@link ChatMessage} 供 helpers 使用。 */
+/** 将 IPC DTO 转为 {@link ChatMessage} 供领域行为使用。 */
 export function chatMessageFromDto(dto: ChatMessageDto): ChatMessage {
-  return {
+  return ChatMessage.from({
     id: dto.id,
     sessionId: dto.sessionId,
     role: dto.role,
@@ -49,7 +49,7 @@ export function chatMessageFromDto(dto: ChatMessageDto): ChatMessage {
     ...(dto.attachments != null && dto.attachments.length > 0
       ? { attachments: dto.attachments }
       : {}),
-  };
+  });
 }
 
 export type ComposerSendState = {
@@ -85,6 +85,6 @@ export function deriveComposerSendState(
   const msg = chatMessageFromDto(lastMessage);
   return {
     canResumeWithoutInput: lastMessage.role === "user",
-    lastMessageIsPlainUserText: isPlainUserText(msg),
+    lastMessageIsPlainUserText: ChatMessage.from(msg).isPlainUserText(),
   };
 }

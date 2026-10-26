@@ -4,6 +4,7 @@
  * @module infra/llm-protocol/logic/gemini-content-mapper
  */
 
+import { isRecord } from "@/common/guards.js";
 import { messageBodyTextFromBlocks } from "@/domain/chat/content/message-body-text.js";
 import { ProviderError } from "@/errors/provider-errors.js";
 import type {
@@ -11,7 +12,7 @@ import type {
   ToolResultBlock,
   ToolUseBlock,
 } from "@/domain/chat/model/content-block.js";
-import type { ChatMessage } from "@/domain/chat/model/message.js";
+import type { ChatMessageData } from "@/domain/chat/model/message.js";
 import type { LlmToolDefinition } from "../ports/adapter.port.js";
 
 type GeminiPart = Record<string, unknown>;
@@ -24,7 +25,7 @@ export type GeminiPartsToBlocksOptions = {
 
 export type ChatMessagesToGeminiContentsOptions = {
   /** Full session history (including hidden) for resolving tool_use id → function name. */
-  readonly toolLookupMessages?: readonly ChatMessage[];
+  readonly toolLookupMessages?: readonly ChatMessageData[];
   /** Declared tool names on the outbound request (fallback when id equals function name). */
   readonly knownToolNames?: readonly string[];
 };
@@ -39,10 +40,6 @@ type ResolveContext = {
   readonly knownToolNames?: readonly string[];
 };
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 /** Read Gemini wire thought_signature (snake or camelCase). */
 function readThoughtSignature(
   part: Record<string, unknown>
@@ -51,7 +48,7 @@ function readThoughtSignature(
   return typeof sig === "string" && sig !== "" ? sig : undefined;
 }
 
-function buildToolUseLookup(messages: readonly ChatMessage[]): ToolUseLookup {
+function buildToolUseLookup(messages: readonly ChatMessageData[]): ToolUseLookup {
   const idToName = new Map<string, string>();
   const idToUse = new Map<string, ToolUseBlock>();
   for (const msg of messages) {
@@ -327,7 +324,7 @@ function mergeAdjacentUserContents(
 
 /** Session history → Gemini `contents[]`. */
 export function chatMessagesToGeminiContents(
-  messages: readonly ChatMessage[],
+  messages: readonly ChatMessageData[],
   options: ChatMessagesToGeminiContentsOptions = {}
 ): GeminiContent[] {
   const out: GeminiContent[] = [];

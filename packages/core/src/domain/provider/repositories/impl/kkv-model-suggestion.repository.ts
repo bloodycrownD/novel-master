@@ -5,7 +5,7 @@
  */
 
 import { decode } from "@/infra/serialization/decode.js";
-import { isKkvError } from "@/errors/kkv-errors.js";
+import { isAppError } from "@/errors/app-error.js";
 import type { KkvReaderPort } from "@/domain/kkv/ports/kkv-reader.port.js";
 import type { ModelSuggestion } from "../../model/model-suggestion.js";
 import type { ModelSuggestionCache } from "../../model/model-suggestion-cache.js";
@@ -15,59 +15,30 @@ import type { ModelSuggestionRepository } from "../model-suggestion.port.js";
 /** KKV module for per-provider fetch candidate caches. */
 const MODULE = "nm-model-suggestions";
 
-function entryToSuggestion(
-  providerId: string,
-  entry: ModelSuggestionCache["models"][number]
-): ModelSuggestion {
-  return {
-    providerId,
-    vendorModelId: entry.vendorModelId,
-    displayName: entry.displayName,
-    stale: entry.stale,
-    lastSeenAtMs: entry.lastSeenAtMs,
-  };
-}
-
-function emptyCache(): ModelSuggestionCache {
-  return { schemaVersion: 1, models: [] };
-}
-
 /** KKV-backed model suggestion repository. */
 export class KkvModelSuggestionRepository implements ModelSuggestionRepository {
   constructor(private readonly kkv: KkvReaderPort) {}
 
   async listByProvider(providerId: string): Promise<ModelSuggestion[]> {
     const cache = await this.readCache(providerId);
-    return cache.models.map((entry) => entryToSuggestion(providerId, entry));
+    return cache.models.map((entry) => ({ providerId, vendorModelId: entry.vendorModelId, displayName: entry.displayName, stale: entry.stale, lastSeenAtMs: entry.lastSeenAtMs }));
   }
 
   async upsert(suggestion: ModelSuggestion): Promise<void> {
     const cache = await this.readCache(suggestion.providerId);
     const models = [...cache.models];
-    const index = models.findIndex(
-      (m) => m.vendorModelId === suggestion.vendorModelId
-    );
-    const entry = {
-      vendorModelId: suggestion.vendorModelId,
-      displayName: suggestion.displayName,
-      stale: suggestion.stale,
-      lastSeenAtMs: suggestion.lastSeenAtMs,
-    };
+    const index = models.findIndex((m) => m.vendorModelId === suggestion.vendorModelId);
+    const entry = { vendorModelId: suggestion.vendorModelId, displayName: suggestion.displayName, stale: suggestion.stale, lastSeenAtMs: suggestion.lastSeenAtMs };
     if (index >= 0) {
       models[index] = entry;
     } else {
       models.push(entry);
     }
-    await this.writeCache(suggestion.providerId, {
-      schemaVersion: 1,
-      models,
-    });
+    await this.writeCache(suggestion.providerId, { schemaVersion: 1, models });
   }
 
-  async markStaleExcept(
-    providerId: string,
-    seen: ReadonlySet<string>
-  ): Promise<void> {
+  /** nm-style: keep-public — 实现 ModelSuggestionRepository 端口，由 service 经接口注入调用。 */
+  async markStaleExcept(providerId: string, seen: ReadonlySet<string>): Promise<void> {
     const cache = await this.readCache(providerId);
     const now = Date.now();
     const byId = new Map(cache.models.map((m) => [m.vendorModelId, m]));
@@ -78,26 +49,16 @@ export class KkvModelSuggestionRepository implements ModelSuggestionRepository {
     }
     for (const vendorModelId of seen) {
       const existing = byId.get(vendorModelId);
-      byId.set(vendorModelId, {
-        vendorModelId,
-        displayName: existing?.displayName ?? null,
-        stale: false,
-        lastSeenAtMs: now,
-      });
+      byId.set(vendorModelId, { vendorModelId, displayName: existing?.displayName ?? null, stale: false, lastSeenAtMs: now });
     }
-    await this.writeCache(providerId, {
-      schemaVersion: 1,
-      models: [...byId.values()],
-    });
+    await this.writeCache(providerId, { schemaVersion: 1, models: [...byId.values()] });
   }
 
   async deleteByProvider(providerId: string): Promise<void> {
     try {
       await this.kkv.delete(MODULE, providerId);
     } catch (error) {
-      if (isKkvError(error, "NOT_FOUND")) {
-        return;
-      }
+      if (isAppError(error, "KKV_NOT_FOUND")) return;
       throw error;
     }
   }
@@ -107,17 +68,12 @@ export class KkvModelSuggestionRepository implements ModelSuggestionRepository {
       const raw = await this.kkv.get(MODULE, providerId);
       return decode(JSON.parse(raw) as unknown, modelSuggestionCacheSchema);
     } catch (error) {
-      if (isKkvError(error, "NOT_FOUND")) {
-        return emptyCache();
-      }
+      if (isAppError(error, "KKV_NOT_FOUND")) return { schemaVersion: 1, models: [] };
       throw error;
     }
   }
 
-  private async writeCache(
-    providerId: string,
-    cache: ModelSuggestionCache
-  ): Promise<void> {
+  private async writeCache(providerId: string, cache: ModelSuggestionCache): Promise<void> {
     await this.kkv.set(MODULE, providerId, JSON.stringify(cache));
   }
 }

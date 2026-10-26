@@ -13,7 +13,7 @@
 import {afterEach, beforeEach, describe, expect, it, jest} from '@jest/globals';
 import React from 'react';
 import TestRenderer, {act} from 'react-test-renderer';
-import {type ChatMessage} from '@novel-master/core/chat';
+import {type ChatMessageData} from '@novel-master/core/chat';
 import {Alert} from 'react-native';
 import {createSnapshotCompleteSignal} from '../src/services/snapshot-complete-signal';
 import {useChatTabMessageActions} from '../src/screens/tabs/chat-tab/useChatTabMessageActions';
@@ -49,7 +49,7 @@ jest.mock('react-native', () => ({
 
 const mockRuntime = {};
 
-function plainUserMessage(text: string): ChatMessage {
+function plainUserMessage(text: string): ChatMessageData {
   return {
     id: 'm-user',
     sessionId: 's1',
@@ -67,7 +67,7 @@ type MountOptions = {
   snapshotCompleteSignal?: ReturnType<typeof createSnapshotCompleteSignal>;
 };
 
-function mountActions(chatMessages: ChatMessage[], options?: MountOptions) {
+function mountActions(chatMessages: ChatMessageData[], options?: MountOptions) {
   let api: ReturnType<typeof useChatTabMessageActions> | undefined;
   function Harness() {
     api = useChatTabMessageActions({

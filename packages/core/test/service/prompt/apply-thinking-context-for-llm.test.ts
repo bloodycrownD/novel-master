@@ -5,7 +5,7 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import type { ChatMessage } from "../../../src/domain/chat/model/message.js";
+import type { ChatMessageData } from "../../../src/domain/chat/model/message.js";
 import type { ContentBlock } from "../../../src/domain/chat/model/content-block.js";
 import { applyThinkingContextForLlm } from "../../../src/service/prompt/apply-thinking-context-for-llm.js";
 
@@ -16,7 +16,7 @@ function msg(
     readonly raw?: Record<string, unknown> | null;
     readonly blocks?: readonly ContentBlock[];
   },
-): ChatMessage {
+): ChatMessageData {
   const blocks = options?.blocks ?? [{ type: "text" as const, text: "t" }];
   return {
     id: options?.id ?? `m-${role}-${Math.random().toString(36).slice(2)}`,
@@ -31,11 +31,11 @@ function msg(
   };
 }
 
-function user(text: string, id?: string): ChatMessage {
+function user(text: string, id?: string): ChatMessageData {
   return msg("user", { id, blocks: [{ type: "text", text }] });
 }
 
-function toolResultUser(toolUseId: string, id?: string): ChatMessage {
+function toolResultUser(toolUseId: string, id?: string): ChatMessageData {
   return msg("user", {
     id,
     blocks: [{ type: "tool_result", toolUseId, content: "ok" }],
@@ -48,7 +48,7 @@ function assistantThinking(options?: {
   readonly withRedacted?: boolean;
   readonly withSignature?: boolean;
   readonly text?: string;
-}): ChatMessage {
+}): ChatMessageData {
   const blocks: ContentBlock[] = [
     {
       type: "thinking",
@@ -73,7 +73,7 @@ function assistantThinking(options?: {
   return msg("assistant", { id: options?.id, blocks });
 }
 
-function thinkingBlocks(message: ChatMessage): ContentBlock[] {
+function thinkingBlocks(message: ChatMessageData): ContentBlock[] {
   return message.content.blocks.filter(
     (block) =>
       block.type === "thinking" || block.type === "redacted_thinking",

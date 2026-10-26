@@ -8,7 +8,7 @@
  * @module infra/tokenizer/logic/resolve-prompt-tokens-with-backfill
  */
 
-import type { ChatMessage } from "../../../domain/chat/model/message.js";
+import type { ChatMessageData } from "../../../domain/chat/model/message.js";
 import type { CountPromptLlmInputParams } from "./count-prompt-llm-input.js";
 import {
   resolveCurrentPromptTokens,
@@ -31,7 +31,7 @@ import {
  */
 export async function resolvePromptTokensWithBackfill(
   sessionId: string,
-  _rawMessages: readonly ChatMessage[],
+  _rawMessages: readonly ChatMessageData[],
   params: CountPromptLlmInputParams,
   options?: ResolveCurrentPromptTokensOptions
 ): Promise<ResolvedPromptTokens> {

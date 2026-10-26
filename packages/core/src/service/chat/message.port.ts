@@ -5,7 +5,7 @@
  */
 
 import type {
-  ChatMessage,
+  ChatMessageData,
   ChatMessageHeader,
   MessageAttachment,
   MessageContent,
@@ -19,7 +19,7 @@ export interface MessageService {
   listBySession(
     sessionId: string,
     options?: { includeHidden?: boolean }
-  ): Promise<ChatMessage[]>;
+  ): Promise<ChatMessageData[]>;
 
   /** 消息头投影（无正文不解压）——压缩/置位的区间逻辑专用轻量读。 */
   listMessageHeadersBySession(
@@ -30,11 +30,11 @@ export interface MessageService {
   listBySessionFromSeq(
     sessionId: string,
     fromSeq: number
-  ): Promise<ChatMessage[]>;
+  ): Promise<ChatMessageData[]>;
   listBySessionTail(
     sessionId: string,
     options: { limit: number }
-  ): Promise<ChatMessage[]>;
+  ): Promise<ChatMessageData[]>;
   /**
    * tail + role 过滤：取该 role 的最后 `limit` 条（role 在 SQL 子查询里滤，
    * limit 只数该 role 的行 ⇒ 夹在中间的其它 role 消息不占配额）。
@@ -43,13 +43,13 @@ export interface MessageService {
   listBySessionTailOfRole(
     sessionId: string,
     options: { role: string; limit: number }
-  ): Promise<ChatMessage[]>;
+  ): Promise<ChatMessageData[]>;
   listBySessionPage(
     sessionId: string,
     options: { limit: number; beforeSeq?: number }
-  ): Promise<ChatMessage[]>;
+  ): Promise<ChatMessageData[]>;
 
-  get(id: string): Promise<ChatMessage>;
+  get(id: string): Promise<ChatMessageData>;
 
   append(
     sessionId: string,
@@ -67,7 +67,7 @@ export interface MessageService {
       /** LLM token usage（assistant message 持久化）。 */
       usage?: MessageUsage;
     }
-  ): Promise<ChatMessage>;
+  ): Promise<ChatMessageData>;
 
   delete(id: string): Promise<void>;
 
@@ -75,7 +75,7 @@ export interface MessageService {
   updateContent(
     messageId: string,
     content: MessageContent
-  ): Promise<ChatMessage>;
+  ): Promise<ChatMessageData>;
 
   /**
    * Creates a new session with source session VFS and messages up to `upToMessageId`.

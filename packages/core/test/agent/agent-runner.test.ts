@@ -4,7 +4,7 @@ import {
   ChatAgentSession,
   createAgentRunner,
   InMemoryAgentSession,
-  AgentError,
+  AppError,
   type AgentDefinition,
   type CreateAgentRunnerDeps,
 } from "@novel-master/core/agent";
@@ -12,7 +12,6 @@ import { textBlocks } from "@novel-master/core/chat";
 import { EVENT_AGENT_RUN_STARTED, EVENT_AGENT_STEP_COMMITTED, EVENT_AGENT_RUN_FINISHED, EVENT_AGENT_RUN_FAILED, EVENT_AGENT_STREAM_TEXT_DELTA, SimpleEventBus, type AgentStepCommittedPayload, type AgentRunFinishedPayload, type AgentRunStartedPayload, type AgentStreamTextDeltaPayload } from "@novel-master/core/events";
 import { isRandomUuidV4 } from "../../src/infra/random-uuid.js";
 import { registerBuiltinTools, ToolRegistry, ToolRunner, type BuiltinToolContext } from "@novel-master/core";
-import { PreferencesError } from "@novel-master/core";
 import { type LlmChatResult, type ModelRequestService } from "@novel-master/core/provider";
 import { createMemorySessionKkv } from "../helpers/prompt-layout-test-helpers.js";
 import { type VfsService } from "@novel-master/core/vfs";
@@ -898,7 +897,7 @@ describe("AgentRunner", () => {
           ...defaultRunScope,
         }),
       (e: unknown) =>
-        e instanceof Error && e.name === "AgentError" && (e as AgentError).code === "DOOM_LOOP",
+        e instanceof AppError && e.key === "AGENT_DOOM_LOOP",
     );
   });
 
@@ -1459,7 +1458,7 @@ describe("AgentRunner", () => {
           ...defaultRunScope,
         }),
       (e: unknown) =>
-        e instanceof Error && e.name === "AgentError" && (e as AgentError).code === "DOOM_LOOP",
+        e instanceof AppError && e.key === "AGENT_DOOM_LOOP",
     );
   });
 
@@ -1722,8 +1721,8 @@ describe("AgentRunner", () => {
           toolCtx: mockToolCtx(mockVfs()),
           preferences: {
             getThinkingContextEnabled: async () => {
-              throw new PreferencesError(
-                "INVALID_VALUE",
+              throw new AppError(
+                "PREFERENCES_INVALID_VALUE",
                 "not-a-bool",
                 { key: "chat.thinkingContext" },
               );
@@ -1748,7 +1747,7 @@ describe("AgentRunner", () => {
       assert.equal(consoleErrors[0]!.tag, "[agent-runner] thinking_context_pref_read_failed");
       const payload = consoleErrors[0]!.payload as Record<string, unknown>;
       assert.equal(payload.key, "chat.thinkingContext");
-      assert.equal(payload.code, "INVALID_VALUE");
+      assert.equal(payload.code, "PREFERENCES_INVALID_VALUE");
       assert.equal(payload.fallback, false);
     } finally {
       console.error = originalError;

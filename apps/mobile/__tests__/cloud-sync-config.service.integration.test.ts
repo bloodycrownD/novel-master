@@ -4,7 +4,7 @@
  * 选取不触网的 service 路径（未配置 / 配置不完整的短路分支），
  * 验证 service 真实消费 store 从 KKV + SKSP 装载的状态。
  */
-import {KkvError} from '@novel-master/core';
+import {AppError} from '@novel-master/core/agent';
 import {
   getCloudSyncStatusView,
   pullCloudSync,
@@ -29,7 +29,7 @@ class InMemoryKkv {
   async get(module: string, key: string): Promise<string> {
     const value = this.map.get(`${module}/${key}`);
     if (value === undefined) {
-      throw new KkvError('NOT_FOUND', 'missing');
+      throw new AppError('KKV_NOT_FOUND', 'missing');
     }
     return value;
   }

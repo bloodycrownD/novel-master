@@ -4,8 +4,6 @@
  * @module public/smart-sort-rule
  */
 
-export { SmartSortRuleError } from "../errors/smart-sort-rule-errors.js";
-export type { SmartSortRuleErrorCode } from "../errors/smart-sort-rule-errors.js";
 export {
   BUILTIN_SMART_SORT_RULE_ID_PREFIX,
   isBuiltinSmartSortRuleId,

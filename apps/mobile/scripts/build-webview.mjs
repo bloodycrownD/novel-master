@@ -68,6 +68,13 @@ const WEBVIEW_CORE_ALLOWLIST = {
     // 这一档只导出 zod schema、内置规则与 domain 名单，不 import 数据库层、不在顶层做重活，
     // 是「引用它不会把病根拖进产物」里最安全的一档。
     // 删了会怎样：入参校验直接消失，或要在 React 侧重抄一份常量——重抄就是两处漂移的起点。
+    'common/guards.js',
+    // truncateText：ChatTranscriptBridge 经 common barrel 引入的小纯函数；
+    // 删了 webview 侧得重抄截断逻辑。
+    'common/text.js',
+    // tool-output-limits / curl 在 webview 内也要按 UTF-8 字节算预算；
+    // 删了会退化成按字符数估算，中文/emoji 场景会超预算。
+    'common/utf8.js',
     'bootstrap/skills/skills-schema.js',
     'bootstrap/smart-sort-rule/builtin-smart-sort-rules.js',
     'bootstrap/smart-sort-rule/smart-sort-rule-schema.js',
@@ -78,7 +85,6 @@ const WEBVIEW_CORE_ALLOWLIST = {
     'domain/chat/model/message-attachment.schema.js',
     'domain/chat/model/project-agent-config.schema.js',
     'domain/chat/model/session-agent-config.schema.js',
-    'domain/chat/model/user-vfs-pending.schema.js',
     'domain/session-kkv/model/session-kkv-domains.js',
     'domain/smart-sort-rule/model/smart-sort-rule-io.js',
     'domain/smart-sort-rule/model/smart-sort-rule.js',
@@ -126,12 +132,17 @@ const WEBVIEW_CORE_ALLOWLIST = {
     // ⚠️ 病根 `domain/provider/logic/builtin-providers.js`
     //    （`BUILTIN_DEFAULT_API_KEY_BY_KEY = Object.fromEntries(...)`，顶层执行）
     //    **刻意不在**本白名单里——它一旦被 barrel 拖进来就是老 WebView 白屏，门 B 会直接打红。
-    'domain/agent/logic/merge-agent-definition-patch.js',
     'domain/character-card/logic/character-card-limits.js',
-    'domain/chat/logic/render-dir-attach-tree.js',
-    'domain/chat/logic/status-chip-label.js',
-    'domain/chat/logic/tool-summary.js',
-    'domain/chat/logic/user-vfs-turn-view.js',
+    'domain/chat/logic/attachment/render-dir-attach-tree.js',
+    'presentation/chat/attachment-chip.js',
+    // attachment-chip 的 rename/move 分类依赖；删了 chip 文案退化为裸 path。
+    'domain/chat/logic/message/attachment-path.js',
+    'presentation/chat/tool-summary.js',
+    'domain/chat/logic/vfs-turn/user-vfs-turn-view.js',
+    // action XML 唯一 codec：user-vfs-turn-view 解析 VFS 操作卡片正文；删了卡片无内容。
+    'domain/vfs/logic/user-vfs-action-xml.js',
+    // 批注草稿 store：webview composer 经 public/chat 传递消费；删了批注草案丢失。
+    'domain/chat/logic/chat-annotate-draft-store.js',
     'domain/message-checkpoint/logic/restore-path.js',
     'domain/prompt/logic/agent-prompt-layout-wire.js',
     'domain/prompt/logic/normalize-agent-prompt-layout.js',
@@ -159,9 +170,13 @@ const WEBVIEW_CORE_ALLOWLIST = {
     // 解码与路径映射在 webview 侧失效。
     // ⚠️ `composer-at-path.js` 刻意**不**在本组——它是 dock/typeahead 的
     // @ 查询纯函数，仅合成包（含 dock）的闭包消费，独立入口实测未拉入。
-    'domain/chat/logic/attach-binary-heuristic.js',
-    'domain/chat/logic/prompt-path-seen.js',
-    'domain/chat/logic/scan-at-path-attachments.js',
+    'common/file.js',
+    'domain/chat/logic/attachment/prompt-path-seen.js',
+    'domain/chat/logic/attachment/attachment-scanner.js',
+    // public/chat 的 attachmentXmlCodec 导出链：codec → coerce/xml；删了回滚/批注发送侧构造直接断。
+    'domain/chat/logic/attachment/attachment-xml-codec.js',
+    'common/coerce.js',
+    'common/xml.js',
     'domain/vfs/content-store/logic/pack-codec.js',
     'domain/vfs/logic/vfs-path-mapper.js',
   ],

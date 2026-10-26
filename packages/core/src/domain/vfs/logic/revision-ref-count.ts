@@ -50,22 +50,12 @@ export type RepairReport = {
 };
 
 /** 单条 (entryId, version) ±1。 */
-export async function adjustRef(
-  revisionRepo: VfsRevisionRepository,
-  entryId: number,
-  version: number,
-  delta: 1 | -1
-): Promise<void> {
+export async function adjustRef(revisionRepo: VfsRevisionRepository, entryId: number, version: number, delta: 1 | -1): Promise<void> {
   await revisionRepo.adjustRefCount(entryId, version, delta);
 }
 
 /** live head 从旧版转移到新版（write bump / resetHead）。 */
-export async function transferLiveRef(
-  revisionRepo: VfsRevisionRepository,
-  entryId: number,
-  fromVersion: number,
-  toVersion: number
-): Promise<void> {
+export async function transferLiveRef(revisionRepo: VfsRevisionRepository, entryId: number, fromVersion: number, toVersion: number): Promise<void> {
   if (fromVersion === toVersion) {
     return;
   }
@@ -74,43 +64,24 @@ export async function transferLiveRef(
 }
 
 /** checkpoint_file 行列表 → 每条 (entryId, version) +1。 */
-export async function incrementRefsForCheckpointFiles(
-  revisionRepo: VfsRevisionRepository,
-  files: ReadonlyArray<CheckpointFilePointer>
-): Promise<void> {
+export async function incrementRefsForCheckpointFiles(revisionRepo: VfsRevisionRepository, files: ReadonlyArray<CheckpointFilePointer>): Promise<void> {
   // 走批量 +1，缺失行会报 NOT_FOUND（守护 T-RB-REF-MISSING），跟原来的逐条语义一致
-  await revisionRepo.batchAdjustRefCount(
-    files.map((f) => ({ entryId: f.entryId, version: f.revisionVersion })),
-    +1
-  );
+  const pointers = files.map((f) => ({ entryId: f.entryId, version: f.revisionVersion }));
+  await revisionRepo.batchAdjustRefCount(pointers, +1);
 }
 
 /** checkpoint_file 行列表 → 每条 (entryId, version) −1。 */
-export async function decrementRefsForCheckpointFiles(
-  revisionRepo: VfsRevisionRepository,
-  files: ReadonlyArray<CheckpointFilePointer>
-): Promise<void> {
+export async function decrementRefsForCheckpointFiles(revisionRepo: VfsRevisionRepository, files: ReadonlyArray<CheckpointFilePointer>): Promise<void> {
   // 减引用时缺失行 no-op（UPDATE 命不中即跳过），所以不需要前置校验
-  await revisionRepo.batchAdjustRefCount(
-    files.map((f) => ({ entryId: f.entryId, version: f.revisionVersion })),
-    -1
-  );
+  const pointers = files.map((f) => ({ entryId: f.entryId, version: f.revisionVersion }));
+  await revisionRepo.batchAdjustRefCount(pointers, -1);
 }
 
 /** 前缀打扫：scope + path 前缀下 DELETE ref_count<=0 的 revision 行。
  *
  * `excludePrefixes` 非空时，排除前缀下的 revision 不参与 GC（隔离豁免）。 */
-export async function deleteUnreferencedUnderScope(
-  revisionRepo: VfsRevisionRepository,
-  scopeKey: string,
-  pathPrefix: string,
-  excludePrefixes?: readonly string[]
-): Promise<number> {
-  return revisionRepo.deleteUnreferencedUnderScope(
-    scopeKey,
-    pathPrefix,
-    excludePrefixes
-  );
+export async function deleteUnreferencedUnderScope(revisionRepo: VfsRevisionRepository, scopeKey: string, pathPrefix: string, excludePrefixes?: readonly string[]): Promise<number> {
+  return revisionRepo.deleteUnreferencedUnderScope(scopeKey, pathPrefix, excludePrefixes);
 }
 
 /**
@@ -120,14 +91,7 @@ export async function deleteUnreferencedUnderScope(
  * @remarks 可对任意 scope 调用；bootstrap W3 作为全局 template 兜底以 (global, /)
  * 触发，只覆盖 global scope，session/project 靠 migration 保留 ref_count。
  */
-export async function repairRefCounts(
-  revisionRepo: VfsRevisionRepository,
-  entryRepo: VfsEntryRepository,
-  checkpoints: MessageCheckpointRepository,
-  scopeKey: string,
-  pathPrefix: string,
-  sessionId: string
-): Promise<RepairReport> {
+export async function repairRefCounts(revisionRepo: VfsRevisionRepository, entryRepo: VfsEntryRepository, checkpoints: MessageCheckpointRepository, scopeKey: string, pathPrefix: string, sessionId: string): Promise<RepairReport> {
   const expected = new Map<string, number>();
 
   const bump = (entryId: number, version: number): void => {
@@ -142,19 +106,13 @@ export async function repairRefCounts(
   }
 
   // 持有者二：live head。
-  const liveHeads = await entryRepo.listFileHeadsUnderPrefix(
-    scopeKey,
-    pathPrefix
-  );
+  const liveHeads = await entryRepo.listFileHeadsUnderPrefix(scopeKey, pathPrefix);
   for (const head of liveHeads) {
     bump(head.entryId, head.headVersion);
   }
 
   // 带回当前 ref_count 一次取齐：偏低走 floor 上调，偏高只报告。
-  const rows = await revisionRepo.listKeysWithRefCountUnderScope(
-    scopeKey,
-    pathPrefix
-  );
+  const rows = await revisionRepo.listKeysWithRefCountUnderScope(scopeKey, pathPrefix);
   // 批量化：以前是逐条 repairRefCountFloor（每条 1 SELECT + 1 UPDATE），
   // 200 revision 会发 200 + 200 条 SQL。现在一次性把所有 (entryId, version, expected)
   // 丢给 batchRepairRefCountFloor，它内部按 500 分块批量 SELECT + conn.batch UPDATE，
@@ -169,11 +127,7 @@ export async function repairRefCounts(
   // 偏高泄漏检测（T-RR13）：ref_count 超过两类期望值之和——不自动修
   //（只增不减：泄漏方向可接受，误删不可恢复），交给报告方决定处置。
   const overExpected = rows
-    .filter(
-      (row) =>
-        row.refCount >
-        (expected.get(`${row.entryId}:${row.version}`) ?? 0)
-    )
+    .filter((row) => row.refCount > (expected.get(`${row.entryId}:${row.version}`) ?? 0))
     .map((row) => ({
       entryId: row.entryId,
       version: row.version,
@@ -195,22 +149,8 @@ export async function repairRefCounts(
  * `batchRepairRefCountFloor` 只更新 `ref_count` 列、不改 `content_hash`，触发器不会 fire，
  * 所以应用层修复和触发器维护两条路径不会重复计数（T-SC5 守护的不变量）。
  */
-export function createRevisionRefCountRepairOperation(args: {
-  readonly revisionRepo: VfsRevisionRepository;
-  readonly entryRepo: VfsEntryRepository;
-  readonly checkpoints: MessageCheckpointRepository;
-  readonly scopeKey: string;
-  readonly pathPrefix: string;
-  readonly sessionId: string;
-}): IntegrityRepairOperation {
-  const {
-    revisionRepo,
-    entryRepo,
-    checkpoints,
-    scopeKey,
-    pathPrefix,
-    sessionId,
-  } = args;
+export function createRevisionRefCountRepairOperation(args: { readonly revisionRepo: VfsRevisionRepository; readonly entryRepo: VfsEntryRepository; readonly checkpoints: MessageCheckpointRepository; readonly scopeKey: string; readonly pathPrefix: string; readonly sessionId: string }): IntegrityRepairOperation {
+  const { revisionRepo, entryRepo, checkpoints, scopeKey, pathPrefix, sessionId } = args;
   const name = `vfs-revision-ref-count:${scopeKey}:${pathPrefix || "/"}`;
   return {
     name,
@@ -222,20 +162,11 @@ export function createRevisionRefCountRepairOperation(args: {
       }
       return {
         needsRepair: true,
-        details: `scope=${scopeKey} prefix=${pathPrefix || "/"} 下有 ${
-          keys.length
-        } 条 revision 行，交给幂等 repair 兜底`,
+        details: `scope=${scopeKey} prefix=${pathPrefix || "/"} 下有 ${keys.length} 条 revision 行，交给幂等 repair 兜底`,
       };
     },
     async repair() {
-      await repairRefCounts(
-        revisionRepo,
-        entryRepo,
-        checkpoints,
-        scopeKey,
-        pathPrefix,
-        sessionId
-      );
+      await repairRefCounts(revisionRepo, entryRepo, checkpoints, scopeKey, pathPrefix, sessionId);
     },
   };
 }
@@ -243,23 +174,10 @@ export function createRevisionRefCountRepairOperation(args: {
 /** scope + path 前缀下全部 live file head 批量 −1（会话删除 Step 2）。
  *
  * `excludePrefixes` 非空时，排除前缀下的 live head 引用不减（隔离豁免）。 */
-export async function decrementLiveRefsUnderScope(
-  revisionRepo: VfsRevisionRepository,
-  entryRepo: VfsEntryRepository,
-  scopeKey: string,
-  pathPrefix: string,
-  excludePrefixes?: readonly string[]
-): Promise<void> {
+export async function decrementLiveRefsUnderScope(revisionRepo: VfsRevisionRepository, entryRepo: VfsEntryRepository, scopeKey: string, pathPrefix: string, excludePrefixes?: readonly string[]): Promise<void> {
   const excludes = excludePrefixes ?? [];
-  const liveHeads = await entryRepo.listFileHeadsUnderPrefix(
-    scopeKey,
-    pathPrefix
-  );
+  const liveHeads = await entryRepo.listFileHeadsUnderPrefix(scopeKey, pathPrefix);
   // 批量减引用，避免对每个 live head 发一条 SQL（会话删除场景下文件多会卡）
-  await revisionRepo.batchAdjustRefCount(
-    liveHeads
-      .filter((h) => !isVfsPathExcluded(h.path, excludes))
-      .map((h) => ({ entryId: h.entryId, version: h.headVersion })),
-    -1
-  );
+  const pointers = liveHeads.filter((h) => !isVfsPathExcluded(h.path, excludes)).map((h) => ({ entryId: h.entryId, version: h.headVersion }));
+  await revisionRepo.batchAdjustRefCount(pointers, -1);
 }

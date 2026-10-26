@@ -16,12 +16,7 @@
  * @module domain/tool/logic/skill-read-truncation
  */
 
-import {
-  capUtf8Bytes,
-  sliceLinesFromOffset,
-  TOOL_OUTPUT_MAX_LINES,
-  truncateLine,
-} from "./tool-output-limits.js";
+import { capUtf8Bytes, sliceLinesFromOffset, TOOL_OUTPUT_MAX_LINES, truncateLine } from "./tool-output-limits.js";
 
 /** skill read 截断管线的全部派生量（content 已截断到预算内，可直接进 wire）。 */
 export interface SkillReadTruncation {
@@ -50,11 +45,7 @@ export interface SkillReadTruncation {
  * @param offset 1-based 起始行号（与工具输入同参）
  * @param limit 最多返回行数（与工具输入同参）
  */
-export function deriveSkillReadTruncation(
-  plain: string,
-  offset: number,
-  limit: number = TOOL_OUTPUT_MAX_LINES
-): SkillReadTruncation {
+export function deriveSkillReadTruncation(plain: string, offset: number, limit: number = TOOL_OUTPUT_MAX_LINES): SkillReadTruncation {
   const lines = plain.split("\n");
   const totalLines = lines.length;
   // 越界 offset（offset > totalLines）：**内部短路**，跳过切行 / truncateLine /
@@ -65,21 +56,14 @@ export function deriveSkillReadTruncation(
   if (offset > totalLines) {
     return { content: "", returnedLines: 0, totalLines, truncated: false };
   }
-  const { slice, nextOffset: lineNextOffset } = sliceLinesFromOffset(
-    lines,
-    offset,
-    limit
-  );
+  const { slice, nextOffset: lineNextOffset } = sliceLinesFromOffset(lines, offset, limit);
   const truncatedLines = slice.map((line) => truncateLine(line).line);
   const byteCapped = capUtf8Bytes(truncatedLines);
   const content = byteCapped.lines.join("\n");
   const returnedLines = byteCapped.lines.length;
   // 三条截断路径任一命中：字节预算（末行装不下被整行丢弃）、行数帽
   // （limit 截断且文件还有剩余行）。
-  const truncated =
-    byteCapped.truncated ||
-    returnedLines < slice.length ||
-    (lineNextOffset != null && returnedLines >= limit);
+  const truncated = byteCapped.truncated || returnedLines < slice.length || (lineNextOffset != null && returnedLines >= limit);
   let nextOffset: number | undefined;
   if (truncated) {
     if (byteCapped.truncated && returnedLines > 0) {
@@ -118,7 +102,6 @@ export function deriveSkillLoadTruncation(plain: string): SkillLoadTruncation {
   const byteCapped = capUtf8Bytes(truncatedLines);
   return {
     content: byteCapped.lines.join("\n"),
-    truncated:
-      byteCapped.truncated || byteCapped.lines.length < lines.length,
+    truncated: byteCapped.truncated || byteCapped.lines.length < lines.length,
   };
 }

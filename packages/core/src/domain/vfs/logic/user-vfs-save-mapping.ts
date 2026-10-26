@@ -5,6 +5,9 @@
  */
 
 import { diffArrays } from "diff";
+import { buildUserVfsActionXml } from "./user-vfs-action-xml.js";
+
+export { buildUserVfsActionXml };
 import type { ToolUseBlock } from "@/domain/chat/model/content-block.js";
 
 /** 保存映射可选参数。 */
@@ -76,10 +79,7 @@ function countOccurrences(haystack: string, needle: string): number {
  * （中间没有公共行）归并成一个变更块，最终转换成与原来一致的闭区间表示。
  * 纯插入侧 oldStart > oldEnd、纯删除侧 newStart > newEnd，由 expandAnchorHunk 处理。
  */
-function computeLineChangeRegions(
-  baselineLines: readonly string[],
-  savedLines: readonly string[]
-): LineChangeRegion[] {
+function computeLineChangeRegions(baselineLines: readonly string[], savedLines: readonly string[]): LineChangeRegion[] {
   const regions: LineChangeRegion[] = [];
   const parts = diffArrays([...baselineLines], [...savedLines]);
 
@@ -133,12 +133,7 @@ function computeLineChangeRegions(
  * 基于 Myers 输出做对称线性扩展：每轮把上下文向首尾各扩 radius 行，
  * 找到第一个在 baseline 中唯一出现的锚点就返回。
  */
-function expandAnchorHunk(
-  baseline: string,
-  baselineLines: readonly string[],
-  savedLines: readonly string[],
-  region: LineChangeRegion
-): { oldString: string; newString: string } | null {
+function expandAnchorHunk(baseline: string, baselineLines: readonly string[], savedLines: readonly string[], region: LineChangeRegion): { oldString: string; newString: string } | null {
   const maxRadius = Math.max(baselineLines.length, savedLines.length);
   for (let radius = 0; radius <= maxRadius; radius++) {
     const oldStart = Math.max(0, region.oldStart - radius);
@@ -158,12 +153,7 @@ function expandAnchorHunk(
   return null;
 }
 
-function buildEditToolUse(
-  path: string,
-  oldString: string,
-  newString: string,
-  options?: UserVfsSaveMappingOptions
-): ToolUseBlock {
+function buildEditToolUse(path: string, oldString: string, newString: string, options?: UserVfsSaveMappingOptions): ToolUseBlock {
   return {
     type: "tool_use",
     id: "",
@@ -172,9 +162,7 @@ function buildEditToolUse(
       path,
       oldString,
       newString,
-      ...(options?.replaceAll === true
-        ? { options: { replaceAll: true } }
-        : {}),
+      ...(options?.replaceAll === true ? { options: { replaceAll: true } } : {}),
     },
   };
 }
@@ -185,13 +173,7 @@ function buildEditToolUse(
  * @param baseline - 保存前磁盘内容；`null` 表示新文件。
  * @param saved - 用户保存后的全文（与 `fileContentAtSave` 一致）。
  */
-export function mapUserSaveToToolUses(
-  baseline: string | null,
-  _saved: string,
-  path: string,
-  fileContentAtSave: string,
-  options?: UserVfsSaveMappingOptions
-): UserVfsSaveMappingResult {
+export function mapUserSaveToToolUses(baseline: string | null, _saved: string, path: string, fileContentAtSave: string, options?: UserVfsSaveMappingOptions): UserVfsSaveMappingResult {
   const content = fileContentAtSave;
   if (baseline != null && baseline === content) {
     return { kind: "noop" };
@@ -211,12 +193,7 @@ export function mapUserSaveToToolUses(
   const toolUses: ToolUseBlock[] = [];
 
   for (const region of regions) {
-    const anchor = expandAnchorHunk(
-      baseline,
-      baselineLines,
-      savedLines,
-      region
-    );
+    const anchor = expandAnchorHunk(baseline, baselineLines, savedLines, region);
     if (anchor == null || anchor.oldString === baseline) {
       return {
         kind: "write",
@@ -230,9 +207,7 @@ export function mapUserSaveToToolUses(
       oldString: anchor.oldString,
       newString: anchor.newString,
     });
-    toolUses.push(
-      buildEditToolUse(path, anchor.oldString, anchor.newString, options)
-    );
+    toolUses.push(buildEditToolUse(path, anchor.oldString, anchor.newString, options));
   }
 
   return {
@@ -243,59 +218,19 @@ export function mapUserSaveToToolUses(
   };
 }
 
-function escapeXmlText(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-}
-
-function escapeXmlAttr(value: string): string {
-  return escapeXmlText(value).replace(/"/g, "&quot;");
-}
-
-/**
- * 通用 action XML：`<action name="…">{json}</action>`。
- * JSON 为对应 tool / 操作入参（写盘后供 LLM 与 round-trip）。
- */
-export function buildUserVfsActionXml(
-  name: string,
-  params: Record<string, unknown>
-): string {
-  const body = escapeXmlText(JSON.stringify(params, null, 2));
-  return `<action name="${escapeXmlAttr(name)}">\n${body}\n</action>`;
-}
-
 /** 生成 write 的 `<action name="write">`（正文在 JSON `content`）。 */
-export function buildUserVfsSaveWriteActionXml(
-  path: string,
-  _reason: "new-file" | "anchor-not-unique" = "anchor-not-unique",
-  content = ""
-): string {
+export function buildUserVfsSaveWriteActionXml(path: string, _reason: "new-file" | "anchor-not-unique" = "anchor-not-unique", content = ""): string {
   return buildUserVfsActionXml("write", { path, content });
 }
 
 /** 生成 edit：每个 hunk 一条 `<action name="edit">`（oldString/newString）。 */
-export function buildUserVfsSaveEditActionXml(
-  path: string,
-  editHunks: readonly UserVfsEditHunk[]
-): string {
-  return editHunks
-    .map((hunk) =>
-      buildUserVfsActionXml("edit", {
-        path,
-        oldString: hunk.oldString,
-        newString: hunk.newString,
-      })
-    )
-    .join("\n");
+export function buildUserVfsSaveEditActionXml(path: string, editHunks: readonly UserVfsEditHunk[]): string {
+  const actions = editHunks.map((hunk) => buildUserVfsActionXml("edit", { path, oldString: hunk.oldString, newString: hunk.newString }));
+  return actions.join("\n");
 }
 
 /** 生成 delete / mkdir / rename / move 的 `<action name="…">`。 */
-export function buildUserVfsSimpleActionXml(
-  kind: "delete" | "mkdir" | "rename" | "move",
-  attrs: Record<string, string>
-): string {
+export function buildUserVfsSimpleActionXml(kind: "delete" | "mkdir" | "rename" | "move", attrs: Record<string, string>): string {
   if (kind === "delete") {
     const params: Record<string, unknown> = { path: attrs.path ?? "" };
     if (attrs.recursive === "true") {

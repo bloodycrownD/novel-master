@@ -42,7 +42,7 @@ import {nextDefaultSessionTitle} from '@/utils/session-default-title';
 import {
   resolveChatLinkIntent,
 } from './chat-link-nav';
-import {chatLinkNotFoundMessage} from '@novel-master/core/chat';
+import {chatLinkResolver} from '@novel-master/core/chat';
 
 export type SessionListPanel = 'sessions' | 'projects';
 export type ChatSubview = 'sessions' | 'conversation';
@@ -842,7 +842,7 @@ export function useChatTabScope({
         }
         if (intent.kind === 'not-found') {
           // 路径型链接双域探测未命中：用户拍板弹提示，不再静默无动作
-          showAppToast(chatLinkNotFoundMessage(intent.path));
+          showAppToast(chatLinkResolver.notFoundMessage(intent.path));
         }
       });
     },

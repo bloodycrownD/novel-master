@@ -64,7 +64,7 @@ describe("agent CLI smoke", () => {
     }
   });
 
-  it("agent doom_loop surfaces AgentError on stderr", async () => {
+  it("agent doom_loop surfaces AppError on stderr", async () => {
     const dir = await mkdtemp(join(tmpdir(), "nm-agent-doom-"));
     const dbPath = join(dir, "novel.db");
     try {

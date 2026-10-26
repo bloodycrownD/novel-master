@@ -7,6 +7,7 @@ import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import {ScrollView, StyleSheet, Text, View} from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
 import {splitMarkdownFrontMatter} from '@novel-master/core/workplace';
+import {truncateText} from '@novel-master/core/common';
 import type {AnnotateDraft} from '@novel-master/core/chat';
 import type {ThemeTokens} from '../../theme/tokens';
 import {useNovelMaster} from '../../runtime/novel-master-context';
@@ -15,13 +16,7 @@ import {
   readVfsMarkdownPreviewEngine,
   type VfsMarkdownPreviewEngine,
 } from '../../storage/vfs-markdown-preview-engine';
-import {
-  addChatAnnotateDraft,
-  listChatAnnotateDrafts,
-  removeChatAnnotateDraft,
-  subscribeChatAnnotateDraft,
-  updateChatAnnotateDraft,
-} from '@novel-master/core/chat';
+import { chatAnnotateDraftStore } from '@novel-master/core/chat';
 import {refreshComposerAnnotateChips} from '../../storage/chat-composer-draft';
 import {RichContentBody} from '../rich-content/RichContentBody';
 import {prepareTranscriptRichHtml} from '../rich-content/prepare-transcript-rich-html';
@@ -176,7 +171,7 @@ export function FileMarkdownPreview({
     if (!annotateEnabled || sessionId == null || sessionId === '') {
       return [];
     }
-    return listChatAnnotateDrafts(sessionId).filter(d => d.path === path);
+    return chatAnnotateDraftStore.list(sessionId).filter(d => d.path === path);
   }, [annotateEnabled, sessionId, path, draftTick]);
 
   const recogitoMarks = useMemo(
@@ -188,7 +183,7 @@ export function FileMarkdownPreview({
     if (!annotateEnabled || sessionId == null || sessionId === '') {
       return;
     }
-    return subscribeChatAnnotateDraft(changed => {
+    return chatAnnotateDraftStore.subscribe(changed => {
       if (changed === sessionId) {
         setDraftTick(t => t + 1);
       }
@@ -218,7 +213,7 @@ export function FileMarkdownPreview({
         return;
       }
       const range = pendingRenderRange;
-      addChatAnnotateDraft(sessionId, {
+      chatAnnotateDraftStore.add(sessionId, {
         id: newAnnotateId(),
         path,
         originalText: pendingOriginalText,
@@ -256,7 +251,7 @@ export function FileMarkdownPreview({
     if (!sessionId || !detailDraft) {
       return;
     }
-    removeChatAnnotateDraft(sessionId, detailDraft.id);
+    chatAnnotateDraftStore.remove(sessionId, detailDraft.id);
     refreshComposerAnnotateChips(sessionId);
     setDetailVisible(false);
     setDetailDraft(null);
@@ -276,7 +271,7 @@ export function FileMarkdownPreview({
       if (!sessionId || !editingDraft) {
         return;
       }
-      updateChatAnnotateDraft(sessionId, editingDraft.id, {userAnnotation});
+      chatAnnotateDraftStore.update(sessionId, editingDraft.id, {userAnnotation});
       refreshComposerAnnotateChips(sessionId);
       setEditingDraft(null);
     },
@@ -355,11 +350,7 @@ export function FileMarkdownPreview({
       <MessageEditModal
         visible={addVisible}
         title="批注"
-        label={
-          pendingOriginalText.length > 80
-            ? `${pendingOriginalText.slice(0, 80)}…`
-            : pendingOriginalText
-        }
+        label={truncateText(pendingOriginalText, 80)}
         placeholder="批注说明"
         confirmLabel="添加"
         onClose={() => {
@@ -387,11 +378,7 @@ export function FileMarkdownPreview({
       <MessageEditModal
         visible={editVisible}
         title="编辑批注"
-        label={
-          editingDraft && editingDraft.originalText.length > 80
-            ? `${editingDraft.originalText.slice(0, 80)}…`
-            : editingDraft?.originalText
-        }
+        label={editingDraft ? truncateText(editingDraft.originalText, 80) : undefined}
         placeholder="批注说明"
         initialValue={editingDraft?.userAnnotation ?? ''}
         confirmLabel="保存"

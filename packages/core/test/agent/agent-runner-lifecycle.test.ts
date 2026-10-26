@@ -8,7 +8,6 @@ import {
   type CreateAgentRunnerDeps,
 } from "@novel-master/core/agent";
 import { textBlocks } from "@novel-master/core/chat";
-import { messageBodyText } from "@novel-master/core/prompt";
 import { type LlmChatResult, type ModelRequestOptions, type ModelRequestService } from "@novel-master/core/provider";
 import { SimpleEventBus } from "@novel-master/core/events";
 import { registerBuiltinTools, ToolRegistry } from "@novel-master/core";

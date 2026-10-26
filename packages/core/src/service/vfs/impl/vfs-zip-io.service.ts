@@ -5,16 +5,13 @@
  */
 
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
+import { throwLegacyVfs, throwLegacyVfsZip } from "./legacy-vfs-error.js";
 import { vfsZipError } from "@/errors/vfs-zip-errors.js";
 import { ensureParentDirectories } from "@/domain/vfs/logic/ensure-parent-dirs.js";
 import { buildVfsZip } from "@/domain/vfs/logic/vfs-zip-build.js";
 import { parseVfsZip } from "@/domain/vfs/logic/vfs-zip-parse.js";
 import { type VfsScope, scopeKey } from "@/domain/vfs/logic/vfs-path-mapper.js";
-import {
-  resolveZipDirectoryPath,
-  zipDirectoryEntryNameRelativeToDirectory,
-  zipEntryNameRelativeToDirectory,
-} from "@/domain/vfs/logic/vfs-zip-path.js";
+import { resolveZipDirectoryPath, zipDirectoryEntryNameRelativeToDirectory, zipEntryNameRelativeToDirectory } from "@/domain/vfs/logic/vfs-zip-path.js";
 import { validateVfsZipEntries } from "@/domain/vfs/logic/vfs-zip-validate.js";
 import { vfsNotADirectory } from "@/errors/vfs-errors.js";
 import { insertFileSeedingRevision } from "@/domain/vfs/logic/seed-live-head-revisions.js";
@@ -23,21 +20,13 @@ import { runDeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
-import type {
-  VfsZipImportOptions,
-  VfsZipIoService,
-  ZipPathOptions,
-} from "@/domain/vfs/ports/vfs-zip-io.port.js";
+import type { VfsZipImportOptions, VfsZipIoService, ZipPathOptions } from "@/domain/vfs/ports/vfs-zip-io.port.js";
 import { backfillBaselineCheckpoints } from "@/domain/message-checkpoint/logic/backfill-baseline-checkpoints.js";
 import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
 import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
 import { clearSessionPromptCaches } from "@/service/vfs/logic/clear-session-prompt-caches.js";
-import {
-  ZIP_AND_CARD_IMPORT_TXN_FILE_CHUNK,
-  chunkArray,
-  yieldToEventLoop,
-} from "@/domain/vfs/logic/vfs-import-chunk.js";
+import { ZIP_AND_CARD_IMPORT_TXN_FILE_CHUNK, chunkArray, yieldToEventLoop } from "@/domain/vfs/logic/vfs-import-chunk.js";
 import { ensureImportDirRules } from "@/service/vfs/logic/ensure-import-dir-rules.js";
 import type { WorkplaceRepository } from "@/domain/workplace/repositories/workplace.port.js";
 import { SqliteWorkplaceRepository } from "@/domain/workplace/repositories/impl/sqlite-workplace.repository.js";
@@ -54,12 +43,7 @@ export type VfsZipImportTestHook = {
 };
 
 function relativeUnderPhysicalPrefix(fullPath: string, prefix: string): string {
-  const base =
-    prefix === "/"
-      ? prefix
-      : prefix.endsWith("/")
-      ? prefix.slice(0, -1)
-      : prefix;
+  const base = prefix === "/" ? prefix : prefix.endsWith("/") ? prefix.slice(0, -1) : prefix;
   if (fullPath === base) {
     return "";
   }
@@ -74,16 +58,13 @@ function relativeUnderPhysicalPrefix(fullPath: string, prefix: string): string {
   return fullPath.slice(withSlash.length);
 }
 
-async function ensureEmptyDirectoryRow(
-  repo: VfsEntryRepository,
-  scope: VfsScope,
-  logical: string
-): Promise<void> {
+async function ensureEmptyDirectoryRow(repo: VfsEntryRepository, scope: VfsScope, logical: string): Promise<void> {
   const sk = scopeKey(scope);
   if (logical === "/") {
     return;
   }
-  await ensureParentDirectories(repo, sk, `${logical}/__vfs_zip_placeholder`);
+  const parentCheck = await ensureParentDirectories(repo, sk, `${logical}/__vfs_zip_placeholder`);
+  if (!parentCheck.ok) throwLegacyVfs(parentCheck.error);
   const existing = await repo.findByPath(sk, logical);
   if (existing == null) {
     await repo.insertDirectory(sk, logical);
@@ -101,38 +82,23 @@ async function ensureEmptyDirectoryRow(
  * 分片后**已提交片不再回滚** ⇒ 这是本条唯一的真实行为损失：旧内容在段 B0
  * 就已删除，补偿只把半棵新树清掉、不恢复旧内容。
  */
-function wrapImportError(
-  error: unknown,
-  committedShards?: number,
-  failedShard?: number
-): unknown {
+function wrapImportError(error: unknown, committedShards?: number, failedShard?: number): unknown {
   if (error instanceof Error && error.message === "test import failure") {
     return error;
   }
   if (error instanceof Error && error.name === "VfsZipError") {
     return error;
   }
-  const base =
-    error instanceof Error ? error.message : "import transaction failed";
-  const progress =
-    committedShards != null && failedShard != null
-      ? `（已提交 ${committedShards} 片 / 失败在第 ${failedShard} 片）`
-      : "";
+  const base = error instanceof Error ? error.message : "import transaction failed";
+  const progress = committedShards != null && failedShard != null ? `（已提交 ${committedShards} 片 / 失败在第 ${failedShard} 片）` : "";
   const wrapped = vfsZipError("IMPORT_FAILED", `${base}${progress}`);
   return wrapped;
 }
 
-async function assertDirectoryPathNotFile(
-  repo: VfsEntryRepository,
-  scope: VfsScope,
-  directoryPath: string
-): Promise<void> {
+async function assertDirectoryPathNotFile(repo: VfsEntryRepository, scope: VfsScope, directoryPath: string): Promise<void> {
   const existing = await repo.findByPath(scopeKey(scope), directoryPath);
   if (existing != null && existing.entryKind === "file") {
-    throw vfsZipError(
-      "INVALID_PATH",
-      `ZIP target path is a file, not a directory: ${directoryPath}`
-    );
+    throw vfsZipError("INVALID_PATH", `ZIP target path is a file, not a directory: ${directoryPath}`);
   }
 }
 
@@ -156,11 +122,7 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
   private readonly backfillBaseline: boolean;
   private readonly sessionKkv?: SessionKkvService;
 
-  constructor(
-    private readonly conn: TdbcConnection,
-    private readonly repo: VfsEntryRepository,
-    options: DefaultVfsZipIoServiceOptions = {}
-  ) {
+  constructor(private readonly conn: TdbcConnection, private readonly repo: VfsEntryRepository, options: DefaultVfsZipIoServiceOptions = {}) {
     this.testHook = options.testHook;
     this.backfillBaseline = options.backfillBaseline ?? true;
     this.sessionKkv = options.sessionKkv;
@@ -175,10 +137,9 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
 
     for (const row of rows) {
       // entry_id 化后 storageKind 已下线，所有文件均为 inline blob
-      const entryName = zipEntryNameRelativeToDirectory(
-        row.path,
-        directoryPath
-      );
+      const entryNameResult = zipEntryNameRelativeToDirectory(row.path, directoryPath);
+      if (!entryNameResult.ok) throwLegacyVfsZip(entryNameResult.error);
+      const entryName = entryNameResult.value;
       if (entryName.length === 0) {
         continue;
       }
@@ -186,10 +147,7 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
     }
 
     const directoryZipNames: string[] = [];
-    const entriesUnderScope = await this.repo.listEntriesUnderPrefix(
-      sk,
-      directoryPath
-    );
+    const entriesUnderScope = await this.repo.listEntriesUnderPrefix(sk, directoryPath);
     for (const entry of entriesUnderScope) {
       if (entry.kind !== "directory") {
         continue;
@@ -197,36 +155,28 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
       if (relativeUnderPhysicalPrefix(entry.path, directoryPath).length === 0) {
         continue;
       }
-      directoryZipNames.push(
-        zipDirectoryEntryNameRelativeToDirectory(entry.path, directoryPath)
-      );
+      const directoryNameResult = zipDirectoryEntryNameRelativeToDirectory(entry.path, directoryPath);
+      if (!directoryNameResult.ok) throwLegacyVfsZip(directoryNameResult.error);
+      directoryZipNames.push(directoryNameResult.value);
     }
 
     return buildVfsZip(zipFiles, directoryZipNames);
   }
 
-  async import(
-    scope: VfsScope,
-    zipBytes: Uint8Array,
-    options: VfsZipImportOptions & ZipPathOptions
-  ): Promise<void> {
+  async import(scope: VfsScope, zipBytes: Uint8Array, options: VfsZipImportOptions & ZipPathOptions): Promise<void> {
     if (options.confirmed !== true) {
-      throw vfsZipError(
-        "NOT_CONFIRMED",
-        "import requires explicit confirmation (CLI --yes or mobile confirm dialog)"
-      );
+      throw vfsZipError("NOT_CONFIRMED", "import requires explicit confirmation (CLI --yes or mobile confirm dialog)");
     }
 
     const directoryPath = resolveZipDirectoryPath(options.directoryPath);
     await assertDirectoryPathNotFile(this.repo, scope, directoryPath);
 
-    const rawEntries = parseVfsZip(zipBytes);
+    const rawEntriesResult = parseVfsZip(zipBytes);
+    if (!rawEntriesResult.ok) throwLegacyVfsZip(rawEntriesResult.error);
     // Phase A：路径/UTF-8/带域根前缀判定 — 任何 delete 之前
-    const { files, directories } = validateVfsZipEntries(
-      scope,
-      rawEntries,
-      directoryPath
-    );
+    const validated = validateVfsZipEntries(scope, rawEntriesResult.value, directoryPath);
+    if (!validated.ok) throwLegacyVfsZip(validated.error);
+    const { files, directories } = validated.value;
     const sk = scopeKey(scope);
     const fileEntries = [...files];
 
@@ -238,12 +188,7 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
     const compensate = async (): Promise<void> => {
       try {
         await this.conn.transaction(async (tx) => {
-          await releaseAndDeleteVfsPrefix(
-            new SqliteVfsEntryRepository(tx),
-            new SqliteVfsRevisionRepository(tx),
-            sk,
-            directoryPath
-          );
+          await releaseAndDeleteVfsPrefix(new SqliteVfsEntryRepository(tx), new SqliteVfsRevisionRepository(tx), sk, directoryPath);
         });
       } catch (error) {
         console.warn("[vfs-zip-io] import compensation failed", error);
@@ -279,10 +224,7 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
     // 那条分支整个绕过，补偿永不执行。
     let committedShards = 0;
     let shardIndex = 0;
-    for (const shard of chunkArray(
-      fileEntries,
-      ZIP_AND_CARD_IMPORT_TXN_FILE_CHUNK
-    )) {
+    for (const shard of chunkArray(fileEntries, ZIP_AND_CARD_IMPORT_TXN_FILE_CHUNK)) {
       try {
         await this.conn.transaction(async (tx) => {
           const repoTx = new SqliteVfsEntryRepository(tx);
@@ -291,14 +233,9 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
             if (this.testHook?.throwOnInsertLogical === logical) {
               throw new Error("test import failure");
             }
-            await ensureParentDirectories(repoTx, sk, logical);
-            await insertFileSeedingRevision(
-              repoTx,
-              revisionTx,
-              sk,
-              logical,
-              content
-            );
+            const parentCheck = await ensureParentDirectories(repoTx, sk, logical);
+            if (!parentCheck.ok) throwLegacyVfs(parentCheck.error);
+            await insertFileSeedingRevision(repoTx, revisionTx, sk, logical, content);
           }
         });
         committedShards += 1;
@@ -321,9 +258,7 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
           vfsRepo: new SqliteVfsEntryRepository(tx),
           // 必须喂**段 R 这条事务**的 tx：在事务回调里用外层 this.conn 会
           // 撞驱动层 AsyncMutex 不可重入——那是死锁不是报错。
-          workplaceRepo: this.testHook?.createWorkplaceRepo
-            ? this.testHook.createWorkplaceRepo(tx)
-            : new SqliteWorkplaceRepository(tx),
+          workplaceRepo: this.testHook?.createWorkplaceRepo ? this.testHook.createWorkplaceRepo(tx) : new SqliteWorkplaceRepository(tx),
           scope,
           directoryPath,
         });
@@ -340,13 +275,7 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
     if (this.backfillBaseline && scope.kind === "session") {
       try {
         await this.conn.transaction(async (tx) => {
-          await backfillBaselineCheckpoints(
-            new SqliteVfsEntryRepository(tx),
-            new SqliteMessageRepository(tx),
-            new SqliteMessageCheckpointRepository(tx),
-            scope.projectId,
-            scope.sessionId
-          );
+          await backfillBaselineCheckpoints(new SqliteVfsEntryRepository(tx), new SqliteMessageRepository(tx), new SqliteMessageCheckpointRepository(tx), scope.projectId, scope.sessionId);
         });
       } catch (error) {
         // best-effort：与紧邻的 clearSessionPromptCaches 同一口径，且不得

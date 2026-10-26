@@ -5,11 +5,7 @@
  */
 
 /** 按 saved-model-identity-v1 规则从旧 display_name 推导 model_name。 */
-export function deriveModelNameFromLegacy(
-  providerId: string,
-  vendorModelId: string,
-  displayName: string | null | undefined
-): string {
+export function deriveModelNameFromLegacy(providerId: string, vendorModelId: string, displayName: string | null | undefined): string {
   const trimmed = displayName?.trim() ?? "";
   if (!trimmed) {
     return vendorModelId;

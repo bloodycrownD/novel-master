@@ -15,16 +15,12 @@ export interface MutatingToolCall {
 /**
  * 提取突变 tool 调用涉及的路径；非突变 tool 返回 null。
  */
-export function extractMutatingPaths(
-  call: MutatingToolCall
-): readonly string[] | null {
+export function extractMutatingPaths(call: MutatingToolCall): readonly string[] | null {
   return classifyMutatingToolCall(call.name, call.input).paths;
 }
 
 /** 合并一次 op 内所有突变路径（去重、保序）。 */
-export function collectMutatingPathsFromCalls(
-  calls: readonly MutatingToolCall[]
-): readonly string[] {
+export function collectMutatingPathsFromCalls(calls: readonly MutatingToolCall[]): readonly string[] {
   const seen = new Set<string>();
   const paths: string[] = [];
   for (const call of calls) {

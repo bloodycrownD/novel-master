@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { ConfigDecodeError } from "@novel-master/core";
-import { ChatError } from "@novel-master/core/chat";
+import { isAppError } from "@novel-master/core/agent";
 import type { AgentDefinition } from "@novel-master/core/agent";
 import {
   getNovelMasterTestContext,
@@ -99,7 +99,7 @@ describe("ProjectService agent config", () => {
     await assert.rejects(
       () => ctx.projects.getAgentConfig(project.id),
       (error: unknown) =>
-        error instanceof ChatError && error.code === "NOT_FOUND",
+        isAppError(error, "CHAT_NOT_FOUND"),
     );
   });
 });

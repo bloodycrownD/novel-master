@@ -14,8 +14,8 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { createSkillsService, isSkillError } from "@novel-master/core/skills";
-import type { SkillError } from "@novel-master/core/skills";
+import { createSkillsService } from "@novel-master/core/skills";
+import { isAppError, type AppError } from "@novel-master/core/agent";
 import {
   getNovelMasterTestContext,
   novelMasterTestFixture,
@@ -44,12 +44,12 @@ async function captureError(fn: () => Promise<unknown>): Promise<Error> {
   });
 }
 
-function asSkillError(error: Error, context: string): SkillError {
+function asSkillError(error: Error, context: string): AppError<"SKILL_NOT_FOUND"> {
   assert.ok(
-    isSkillError(error, "NOT_FOUND"),
-    `${context} 应抛 SkillError(NOT_FOUND)，实际：${error.name}: ${error.message}`
+    isAppError(error, "SKILL_NOT_FOUND"),
+    `${context} 应抛 SKILL_NOT_FOUND，实际：${error.name}: ${error.message}`
   );
-  return error as SkillError;
+  return error as AppError<"SKILL_NOT_FOUND">;
 }
 
 describe("写操作域内未找到（回归：skill 工具 edit 报裸 VFS 路径）", () => {
@@ -223,7 +223,7 @@ describe("写操作域内未找到（回归：skill 工具 edit 报裸 VFS 路�
     );
 
     assert.ok(
-      !isSkillError(error, "NOT_FOUND"),
+      !isAppError(error, "SKILL_NOT_FOUND"),
       `匹配失败不应伪装成域内未找到，实际：${error.name}: ${error.message}`
     );
   });

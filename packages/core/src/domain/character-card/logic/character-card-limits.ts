@@ -6,7 +6,7 @@
  * 每次重启的 workplace 前缀组装还会整读全文，形成「重启必崩」的崩溃循环。
  * 本模块集中定义两道闸门的阈值：
  *
- * - 导入侧（防新增）：`importFromBytes` 入口 + md 树三闸（见 validate-md-tree-limits）
+ * - 导入侧（防新增）：`importFromBytes` 入口 + md 树三闸（内联在 character-card-import.service）
  * - 读取侧（救存量、保启动存活）：workplace 前缀组装对超大文件降级为占位符
  *
  * @module domain/character-card/logic/character-card-limits
@@ -33,52 +33,4 @@ export const CHARACTER_CARD_MAX_FILE_COUNT = 5000;
  * 重复字符）理论上可绕过，但现实角色卡数据（模型生成的 JSON/文本）压缩比有限，
  * 不会落入该窗口。
  */
-export const CHARACTER_CARD_BLOB_COMPRESSED_GATE_BYTES =
-  CHARACTER_CARD_MAX_SINGLE_FILE_BYTES / 4;
-
-/** 惰性持有的 TextEncoder（无该全局时保持 undefined，走手动兜底）。 */
-let textEncoder: TextEncoder | undefined;
-let textEncoderChecked = false;
-
-/**
- * 计算字符串的 UTF-8 字节数（Node 与 RN/Hermes 两侧结果一致）。
- *
- * 优先复用全局 TextEncoder；运行时缺失时按 UTF-16 码元手动累计 UTF-8 字节数，
- * 正确处理代理对：完整代理对计 4 字节，落单代理按替换字符 U+FFFD 计 3 字节
- * （与 TextEncoder 的行为一致）。
- */
-export function utf8ByteLength(text: string): number {
-  if (!textEncoderChecked) {
-    textEncoderChecked = true;
-    if (typeof TextEncoder !== "undefined") {
-      textEncoder = new TextEncoder();
-    }
-  }
-  if (textEncoder != null) {
-    return textEncoder.encode(text).byteLength;
-  }
-
-  // 手动兜底：按 UTF-16 码元逐个折算 UTF-8 字节数
-  let bytes = 0;
-  for (let i = 0; i < text.length; i++) {
-    const code = text.charCodeAt(i);
-    // 高位代理后面紧跟低位代理 → 一个码点 4 字节，跳过下一个码元
-    if (code >= 0xd800 && code <= 0xdbff && i + 1 < text.length) {
-      const next = text.charCodeAt(i + 1);
-      if (next >= 0xdc00 && next <= 0xdfff) {
-        bytes += 4;
-        i++;
-        continue;
-      }
-    }
-    if (code < 0x80) {
-      bytes += 1;
-    } else if (code < 0x800) {
-      bytes += 2;
-    } else {
-      // 含落单代理：TextEncoder 会替换为 U+FFFD（3 字节），这里保持一致
-      bytes += 3;
-    }
-  }
-  return bytes;
-}
+export const CHARACTER_CARD_BLOB_COMPRESSED_GATE_BYTES = CHARACTER_CARD_MAX_SINGLE_FILE_BYTES / 4;

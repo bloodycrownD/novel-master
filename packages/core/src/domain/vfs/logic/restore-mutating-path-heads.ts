@@ -1,21 +1,24 @@
+// legacy-port: VfsService — phase 2 端口实现改抛 AppError 后删除 isVfsError 分支。
 /**
  * 突变路径 head 快照与补偿回滚。
  *
  * @module domain/vfs/logic/restore-mutating-path-heads
  */
 
+import { AppError } from "@/errors/app-error.js";
 import type { VfsService } from "@/domain/vfs/ports/vfs-service.port.js";
 import type { VfsListEntry } from "../model/vfs-list-entry.js";
 import { isVfsError } from "@/errors/vfs-errors.js";
+import { vfsPortError } from "./vfs-port-error.js";
 
 /** 起始 head 快照：路径不存在。 */
-export type MutatingPathHeadAbsent = {
+type MutatingPathHeadAbsent = {
   readonly kind: "absent";
   readonly path: string;
 };
 
 /** 起始 head 快照：路径存在。 */
-export type MutatingPathHeadPresent = {
+type MutatingPathHeadPresent = {
   readonly kind: "present";
   readonly path: string;
   readonly content: string;
@@ -23,7 +26,7 @@ export type MutatingPathHeadPresent = {
 };
 
 /** 起始 head 快照：目录（含子树文件 head version）。 */
-export type MutatingPathHeadDirectory = {
+type MutatingPathHeadDirectory = {
   readonly kind: "directory";
   readonly path: string;
   readonly files: readonly {
@@ -33,17 +36,14 @@ export type MutatingPathHeadDirectory = {
 };
 
 /** 单路径 head 快照。 */
-export type MutatingPathHeadSnapshot =
-  | MutatingPathHeadAbsent
-  | MutatingPathHeadPresent
-  | MutatingPathHeadDirectory;
+type MutatingPathHeadSnapshot = MutatingPathHeadAbsent | MutatingPathHeadPresent | MutatingPathHeadDirectory;
 
-/** restore 阶段聚合错误（spec：CompositeError 语义）。 */
-export class MutatingPathRestoreCompositeError extends Error {
+/** restore 阶段聚合错误（保留 CompositeError 的多 cause 语义）。 */
+export class MutatingPathRestoreCompositeError extends AppError<"VFS_RESTORE_FAILED"> {
   readonly causes: readonly unknown[];
 
   constructor(causes: readonly unknown[]) {
-    super("mutating path restore failed");
+    super("VFS_RESTORE_FAILED", "mutating path restore failed", { causes });
     this.name = "MutatingPathRestoreCompositeError";
     this.causes = causes;
   }
@@ -55,10 +55,7 @@ export class MutatingPathRestoreCompositeError extends Error {
  * @remarks 回滚只依赖 version（见 {@link restoreDirectorySnapshot}），
  * 故 list 返回的 head_version 已足够，不必再 read 正文。
  */
-function captureDirectorySnapshot(
-  path: string,
-  entries: readonly VfsListEntry[]
-): MutatingPathHeadDirectory {
+function captureDirectorySnapshot(path: string, entries: readonly VfsListEntry[]): MutatingPathHeadDirectory {
   const files: MutatingPathHeadDirectory["files"][number][] = [];
   for (const entry of entries) {
     if (entry.kind !== "file") {
@@ -78,10 +75,7 @@ function captureDirectorySnapshot(
 /**
  * 读取 mutating paths 当前 head，供 executeOp 失败时回滚。
  */
-export async function captureMutatingPathHeadSnapshots(
-  vfs: VfsService,
-  paths: readonly string[]
-): Promise<Map<string, MutatingPathHeadSnapshot>> {
+export async function captureMutatingPathHeadSnapshots(vfs: VfsService, paths: readonly string[]): Promise<Map<string, MutatingPathHeadSnapshot>> {
   const snapshots = new Map<string, MutatingPathHeadSnapshot>();
   for (const path of paths) {
     try {
@@ -124,10 +118,7 @@ export async function captureMutatingPathHeadSnapshots(
 /**
  * directory 补偿：快照外 hardDelete + 快照内 resetHead（禁 write 注水）。
  */
-async function restoreDirectorySnapshot(
-  vfs: VfsService,
-  snapshot: MutatingPathHeadDirectory
-): Promise<void> {
+async function restoreDirectorySnapshot(vfs: VfsService, snapshot: MutatingPathHeadDirectory): Promise<void> {
   // 空目录：硬清 D 下残留文件/子树后，确保目录存在
   if (snapshot.files.length === 0) {
     try {
@@ -151,9 +142,7 @@ async function restoreDirectorySnapshot(
   let currentFilePaths: string[] = [];
   try {
     const entries = await vfs.list(snapshot.path, { recursive: true });
-    currentFilePaths = entries
-      .filter((entry) => entry.kind === "file")
-      .map((entry) => entry.path);
+    currentFilePaths = entries.filter((entry) => entry.kind === "file").map((entry) => entry.path);
   } catch (error: unknown) {
     if (!isVfsError(error, "NOT_FOUND")) {
       throw error;
@@ -185,11 +174,7 @@ async function restoreDirectorySnapshot(
  *
  * @remarks 走 resetHeadToVersion / hardDelete 补偿原语，禁止 write 注水。
  */
-export async function restoreMutatingPathHeads(
-  vfs: VfsService,
-  snapshots: ReadonlyMap<string, MutatingPathHeadSnapshot>,
-  paths: readonly string[]
-): Promise<void> {
+export async function restoreMutatingPathHeads(vfs: VfsService, snapshots: ReadonlyMap<string, MutatingPathHeadSnapshot>, paths: readonly string[]): Promise<void> {
   const errors: unknown[] = [];
   for (const path of paths) {
     const snapshot = snapshots.get(path);
@@ -213,7 +198,7 @@ export async function restoreMutatingPathHeads(
       }
       await vfs.resetHeadToVersion(snapshot.path, snapshot.version);
     } catch (error: unknown) {
-      errors.push(error);
+      errors.push(isVfsError(error) ? vfsPortError(error) : error);
     }
   }
   if (errors.length > 0) {

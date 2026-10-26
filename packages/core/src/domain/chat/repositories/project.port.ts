@@ -20,11 +20,7 @@ export interface ProjectRepository {
   getAgentConfig(id: string): Promise<string | null>;
 
   /** 写入 `agent_config_json` 列并更新 `updated_at_ms`；`configJson` 为 null 时清空列。 */
-  updateAgentConfig(
-    id: string,
-    configJson: string | null,
-    updatedAtMs: number
-  ): Promise<boolean>;
+  updateAgentConfig(id: string, configJson: string | null, updatedAtMs: number): Promise<boolean>;
 
   delete(id: string): Promise<boolean>;
 }

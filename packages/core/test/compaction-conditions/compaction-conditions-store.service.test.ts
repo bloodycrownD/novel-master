@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   createCompactionConditionsStore,
-  isCompactionConditionsError,
 } from "@novel-master/core/compaction";
+import { isAppError } from "@novel-master/core/agent";
 import { createKkvService } from "../../src/service/kkv/create-kkv-service.js";
 import { openNovelMasterTestConnection } from "../helpers/novel-master.js";
 
@@ -25,7 +25,7 @@ describe("compaction conditions store integrity", () => {
     await kkv.set(MODULE, KEY, "{invalid json");
     await assert.rejects(
       () => store.getConditions(),
-      (error: unknown) => isCompactionConditionsError(error, "INVALID_SCHEMA"),
+      (error: unknown) => isAppError(error, "COMPACTION_CONDITIONS_INVALID_SCHEMA"),
     );
     await ctx.conn.close();
   });
@@ -41,7 +41,7 @@ describe("compaction conditions store integrity", () => {
     );
     await assert.rejects(
       () => store.getConditions(),
-      (error: unknown) => isCompactionConditionsError(error, "INVALID_SCHEMA"),
+      (error: unknown) => isAppError(error, "COMPACTION_CONDITIONS_INVALID_SCHEMA"),
     );
     await ctx.conn.close();
   });
@@ -66,7 +66,7 @@ describe("compaction conditions store integrity", () => {
     await assert.rejects(
       () =>
         store.setConditions({ schemaVersion: 4, enabled: true }),
-      (error: unknown) => isCompactionConditionsError(error, "INVALID_SCHEMA"),
+      (error: unknown) => isAppError(error, "COMPACTION_CONDITIONS_INVALID_SCHEMA"),
     );
     assert.equal(await store.getConditions(), null);
     await ctx.conn.close();

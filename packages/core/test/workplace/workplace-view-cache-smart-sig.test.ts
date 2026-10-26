@@ -19,20 +19,13 @@ import { SqliteSmartSortRuleRepository } from "@/domain/smart-sort-rule/reposito
 import { compileSmartSortRule } from "@/domain/smart-sort-rule/logic/compile-smart-sort-rule.js";
 import { DefaultWorkplaceService } from "@/service/workplace/impl/workplace.service.js";
 import { clearAllWorkplaceViewCache } from "@/service/workplace/impl/workplace-view-cache.js";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
+import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 
 /**
  * spying 构造：provider 组装照生产工厂（createWorkplaceService）同款——
  * smartRules 懒加载编译 + smartRuleRows 原始行（签名采样）。
  */
-function createSpyingWorkplaceService(
-  conn: import("@novel-master/core").TdbcConnection,
-  projectId: string
-) {
+function createSpyingWorkplaceService(conn: import("@novel-master/core").TdbcConnection, projectId: string) {
   const baseRepo = new SqliteVfsEntryRepository(conn);
   const calls = {
     listFileMetaUnderPrefix: 0,
@@ -42,42 +35,33 @@ function createSpyingWorkplaceService(
     list: (...args) => baseRepo.list(...args),
     findByPath: (...args) => baseRepo.findByPath(...args),
     findContentHash: (...args) => baseRepo.findContentHash(...args),
-    findContentHashesByPaths: (...args) =>
-      baseRepo.findContentHashesByPaths(...args),
+    findContentHashesByPaths: (...args) => baseRepo.findContentHashesByPaths(...args),
     findContentSizeByPath: (...args) => baseRepo.findContentSizeByPath(...args),
     insert: (...args) => baseRepo.insert(...args),
     insertWithContentHash: (...args) => baseRepo.insertWithContentHash(...args),
     insertAtVersion: (...args) => baseRepo.insertAtVersion(...args),
     insertDirectory: (...args) => baseRepo.insertDirectory(...args),
     update: (...args) => baseRepo.update(...args),
-    updateWithContentHash: (...args) =>
-      baseRepo.updateWithContentHash(...args),
+    updateWithContentHash: (...args) => baseRepo.updateWithContentHash(...args),
     setHeadContentHash: (...args) => baseRepo.setHeadContentHash(...args),
     delete: (...args) => baseRepo.delete(...args),
     deleteRecursiveIfAny: (...args) => baseRepo.deleteRecursiveIfAny(...args),
     listAllPaths: (...args) => baseRepo.listAllPaths(...args),
-    listDirectoryPathsUnderPrefix: (...args) =>
-      baseRepo.listDirectoryPathsUnderPrefix(...args),
-    listEntriesUnderPrefix: (...args) =>
-      baseRepo.listEntriesUnderPrefix(...args),
+    listDirectoryPathsUnderPrefix: (...args) => baseRepo.listDirectoryPathsUnderPrefix(...args),
+    listEntriesUnderPrefix: (...args) => baseRepo.listEntriesUnderPrefix(...args),
     listFileMetaUnderPrefix: async (...args) => {
       calls.listFileMetaUnderPrefix += 1;
       return baseRepo.listFileMetaUnderPrefix(...args);
     },
-    listDirectoryMetaUnderPrefix: (...args) =>
-      baseRepo.listDirectoryMetaUnderPrefix(...args),
-    listFileHeadsUnderPrefix: (...args) =>
-      baseRepo.listFileHeadsUnderPrefix(...args),
+    listDirectoryMetaUnderPrefix: (...args) => baseRepo.listDirectoryMetaUnderPrefix(...args),
+    listFileHeadsUnderPrefix: (...args) => baseRepo.listFileHeadsUnderPrefix(...args),
     scanContents: (...args) => baseRepo.scanContents(...args),
     renamePathInScope: (...args) => baseRepo.renamePathInScope(...args),
     renamePrefixInScope: (...args) => baseRepo.renamePrefixInScope(...args),
-    scanFileEntriesWithMeta: (...args) =>
-      baseRepo.scanFileEntriesWithMeta(...args),
+    scanFileEntriesWithMeta: (...args) => baseRepo.scanFileEntriesWithMeta(...args),
     findExistingPaths: (...args) => baseRepo.findExistingPaths(...args),
-    batchInsertFileEntriesWithHash: (...args) =>
-      baseRepo.batchInsertFileEntriesWithHash(...args),
-    batchInsertDirectoryEntries: (...args) =>
-      baseRepo.batchInsertDirectoryEntries(...args),
+    batchInsertFileEntriesWithHash: (...args) => baseRepo.batchInsertFileEntriesWithHash(...args),
+    batchInsertDirectoryEntries: (...args) => baseRepo.batchInsertDirectoryEntries(...args),
     computeEntrySignature: (...args) => baseRepo.computeEntrySignature(...args),
   };
 
@@ -91,7 +75,9 @@ function createSpyingWorkplaceService(
       const compiled = [];
       for (const rule of await smartRepo.listOrdered()) {
         if (rule.enabled) {
-          compiled.push(compileSmartSortRule(rule));
+          const compiledRule = compileSmartSortRule(rule);
+          if (!compiledRule.ok) throw compiledRule.error;
+          compiled.push(compiledRule.value);
         }
       }
       return compiled;
@@ -103,13 +89,8 @@ function createSpyingWorkplaceService(
 }
 
 /** 取列表中某目录下的 file 行路径序列（保持行序）。 */
-function filePathsUnder(
-  rows: ReadonlyArray<{ kind: string; path: string }>,
-  dir: string
-): string[] {
-  return rows
-    .filter((r) => r.kind === "file" && r.path.startsWith(`${dir}/`))
-    .map((r) => r.path);
+function filePathsUnder(rows: ReadonlyArray<{ kind: string; path: string }>, dir: string): string[] {
+  return rows.filter((r) => r.kind === "file" && r.path.startsWith(`${dir}/`)).map((r) => r.path);
 }
 
 novelMasterTestFixture();
@@ -138,18 +119,12 @@ describe("L1 缓存签名三元组：smart_sort_rule 指纹（core/B-3）", () =
     // 元组 (-Infinity)，builtin-zh-chapter 命中「第5章」提取序号 5；
     // 元组比较 -Infinity < 5 → 序章恒在前
     const first = filePathsUnder(await wt.buildListRows(), "/r");
-    assert.deepEqual(
-      first,
-      ["/r/序章.md", "/r/第5章.md"],
-      "smart 排序：序章（fixed_min 哨兵）排在第5章（序号 5）前"
-    );
+    assert.deepEqual(first, ["/r/序章.md", "/r/第5章.md"], "smart 排序：序章（fixed_min 哨兵）排在第5章（序号 5）前");
     assert.equal(calls.listFileMetaUnderPrefix, 1, "首次评估全量加载一次");
 
     // 改智能规则：禁用 builtin-zh-prologue（整行 update，行数不变）
     const smartRepo = new SqliteSmartSortRuleRepository(ctx.conn);
-    const prologue = (await smartRepo.listOrdered()).find(
-      (r) => r.ruleId === "builtin-zh-prologue"
-    );
+    const prologue = (await smartRepo.listOrdered()).find((r) => r.ruleId === "builtin-zh-prologue");
     assert.ok(prologue != null, "seed 应含 builtin-zh-prologue");
     assert.equal(prologue.enabled, true, "内置规则 seed 默认启用");
     await smartRepo.update({ ...prologue, enabled: false });
@@ -157,16 +132,8 @@ describe("L1 缓存签名三元组：smart_sort_rule 指纹（core/B-3）", () =
     // 再评：签名 miss 重算——「序章」失去哨兵元组退化为无序号，而「第5章」
     // 仍命中 zh-chapter 提取 [5]；比较全序第 1 条（有序号者在前）序反转
     const second = filePathsUnder(await wt.buildListRows(), "/r");
-    assert.equal(
-      calls.listFileMetaUnderPrefix,
-      2,
-      "改智能规则后签名失效，缓存 miss 重算"
-    );
-    assert.deepEqual(
-      second,
-      ["/r/第5章.md", "/r/序章.md"],
-      "禁用后：有序号的第5章排在无序号的序章前（全序第 1 条）"
-    );
+    assert.equal(calls.listFileMetaUnderPrefix, 2, "改智能规则后签名失效，缓存 miss 重算");
+    assert.deepEqual(second, ["/r/第5章.md", "/r/序章.md"], "禁用后：有序号的第5章排在无序号的序章前（全序第 1 条）");
     assert.notDeepEqual(second, first, "排序结果与旧缓存不一致");
   });
 
@@ -184,11 +151,7 @@ describe("L1 缓存签名三元组：smart_sort_rule 指纹（core/B-3）", () =
 
     // 无写、无规则改动：智能规则表指纹恒定，第二次评估命中缓存
     const second = await wt.buildListRows();
-    assert.equal(
-      calls.listFileMetaUnderPrefix,
-      1,
-      "智能规则未变，签名恒定，缓存照旧命中"
-    );
+    assert.equal(calls.listFileMetaUnderPrefix, 1, "智能规则未变，签名恒定，缓存照旧命中");
     assert.deepEqual(second, first, "两次结果 deep-equal");
   });
 });

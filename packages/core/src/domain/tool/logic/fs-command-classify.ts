@@ -4,10 +4,7 @@
  * @module domain/tool/logic/fs-command-classify
  */
 
-import {
-  SKILLS_ROOT,
-  resolveSkillRelPathCore,
-} from "@/domain/skills/logic/skill-paths.js";
+import { SKILLS_ROOT, resolveSkillRelPathCore } from "@/domain/skills/logic/skill-paths.js";
 import { SKILL_TOOL_NAME } from "../builtin/skill-tool.js";
 import type { FsToolInput } from "./fs-command.js";
 import { parseFsCommand } from "./fs-command.js";
@@ -63,38 +60,25 @@ export function classifyFsCommand(input: unknown): FsCommandClassification {
  * 服务层拒绝。
  */
 function classifySkillToolCall(input: unknown): FsCommandClassification {
-  const record = input as
-    | { action?: unknown; name?: unknown; domain?: unknown; path?: unknown }
-    | null
-    | undefined;
+  const record = input as { action?: unknown; name?: unknown; domain?: unknown; path?: unknown } | null | undefined;
   const action = record?.action;
   if (action !== "write" && action !== "edit") {
     return { mutating: false, paths: null };
   }
   const skillName = record?.name;
   const domain = record?.domain;
-  const effectiveDomain =
-    action === "write" && domain == null ? "project" : domain;
-  if (
-    typeof skillName !== "string" ||
-    skillName.length === 0 ||
-    (effectiveDomain !== "global" && effectiveDomain !== "project")
-  ) {
+  const effectiveDomain = action === "write" && domain == null ? "project" : domain;
+  if (typeof skillName !== "string" || skillName.length === 0 || (effectiveDomain !== "global" && effectiveDomain !== "project")) {
     return { mutating: true, paths: null };
   }
   const path = record?.path;
-  const resolved = resolveSkillRelPathCore(
-    skillName,
-    typeof path === "string" ? path : undefined,
-  );
+  const resolved = resolveSkillRelPathCore(skillName, typeof path === "string" ? path : undefined);
   if (!resolved.ok) {
     return { mutating: true, paths: null };
   }
   return {
     mutating: true,
-    paths: [
-      `skill:${effectiveDomain}:${SKILLS_ROOT}/${skillName}/${resolved.rel}`,
-    ],
+    paths: [`skill:${effectiveDomain}:${SKILLS_ROOT}/${skillName}/${resolved.rel}`],
   };
 }
 
@@ -108,15 +92,9 @@ function classifySkillToolCall(input: unknown): FsCommandClassification {
  *   逻辑路径合成键串行化，只读 action 不串行化。
  * - 其他 tool：`mutating=false`、`paths=null`。
  */
-export function classifyMutatingToolCall(
-  name: string,
-  input: unknown,
-): FsCommandClassification {
+export function classifyMutatingToolCall(name: string, input: unknown): FsCommandClassification {
   if (name === "write" || name === "edit") {
-    const path =
-      typeof (input as { path?: unknown }).path === "string"
-        ? (input as { path: string }).path
-        : "";
+    const path = typeof (input as { path?: unknown }).path === "string" ? (input as { path: string }).path : "";
     if (path.length === 0) {
       return { mutating: true, paths: null };
     }

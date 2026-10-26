@@ -4,6 +4,7 @@
  * @module service/vfs/impl/character-card-import.service
  */
 
+import { throwLegacyVfs } from "./legacy-vfs-error.js";
 import { insertFileSeedingRevision } from "@/domain/vfs/logic/seed-live-head-revisions.js";
 import { releaseAndDeleteVfsPrefix } from "@/domain/vfs/logic/vfs-tree-copy.js";
 import { runDeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
@@ -11,35 +12,27 @@ import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.por
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import type { MdTree } from "@/domain/character-card/model/character-card.js";
-import { parseCharacterCardToMdTree } from "@/domain/character-card/logic/parse-character-card-to-md-tree.js";
-import { validateMdTreeForImport } from "@/domain/character-card/logic/validate-md-tree-paths.js";
-import { validateMdTreeLimits } from "@/domain/character-card/logic/validate-md-tree-limits.js";
-import { CHARACTER_CARD_MAX_INPUT_BYTES } from "@/domain/character-card/logic/character-card-limits.js";
-import type {
-  CharacterCardImportOptions,
-  CharacterCardImportService,
-} from "@/domain/vfs/ports/character-card-import.port.js";
-import {
-  CharacterCardError,
-  characterCardError,
-} from "@/errors/character-card-errors.js";
+import { parseCharacterCardToMdTree } from "@/domain/character-card/logic/character-card-to-md-tree.js";
+import { CHARACTER_CARD_MAX_FILE_COUNT, CHARACTER_CARD_MAX_INPUT_BYTES, CHARACTER_CARD_MAX_SINGLE_FILE_BYTES, CHARACTER_CARD_MAX_TOTAL_CONTENT_BYTES } from "@/domain/character-card/logic/character-card-limits.js";
+import type { CharacterCardImportOptions, CharacterCardImportService } from "@/domain/vfs/ports/character-card-import.port.js";
+import { AppError, isAppError } from "@/errors/app-error.js";
+import { utf8ByteLength } from "@/common/utf8.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { ensureParentDirectories } from "@/domain/vfs/logic/ensure-parent-dirs.js";
-import { scopeKey, type VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
-import { resolveZipDirectoryPath } from "@/domain/vfs/logic/vfs-zip-path.js";
+import { assertLogicalPathAllowed, scopeKey, type VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
+import { VFS_ZIP_MAX_ENTRY_PATH_LEN } from "@/domain/vfs/logic/vfs-zip-validate.js";
+import { logicalFromZipEntryRelativeToDirectory, resolveZipDirectoryPath } from "@/domain/vfs/logic/vfs-zip-path.js";
 import { backfillBaselineCheckpoints } from "@/domain/message-checkpoint/logic/backfill-baseline-checkpoints.js";
 import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
 import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
 import { clearSessionPromptCaches } from "@/service/vfs/logic/clear-session-prompt-caches.js";
-import {
-  ZIP_AND_CARD_IMPORT_TXN_FILE_CHUNK,
-  chunkArray,
-  yieldToEventLoop,
-} from "@/domain/vfs/logic/vfs-import-chunk.js";
+import { ZIP_AND_CARD_IMPORT_TXN_FILE_CHUNK, chunkArray, yieldToEventLoop } from "@/domain/vfs/logic/vfs-import-chunk.js";
 import { ensureImportDirRules } from "@/service/vfs/logic/ensure-import-dir-rules.js";
 import type { WorkplaceRepository } from "@/domain/workplace/repositories/workplace.port.js";
 import { SqliteWorkplaceRepository } from "@/domain/workplace/repositories/impl/sqlite-workplace.repository.js";
+const WINDOWS_DRIVE_PATH = /^[a-zA-Z]:[\\/]/;
+
 /** @internal 导入事务回滚单测钩子 */
 export type CharacterCardImportTestHook = {
   readonly throwOnInsertLogical?: string;
@@ -52,67 +45,46 @@ export type CharacterCardImportTestHook = {
   readonly createWorkplaceRepo?: (conn: TdbcConnection) => WorkplaceRepository;
 };
 
-async function ensureEmptyDirectoryRow(
-  repo: VfsEntryRepository,
-  scope: VfsScope,
-  logical: string
-): Promise<void> {
+async function ensureEmptyDirectoryRow(repo: VfsEntryRepository, scope: VfsScope, logical: string): Promise<void> {
   const sk = scopeKey(scope);
   if (logical === "/") {
     return;
   }
-  await ensureParentDirectories(repo, sk, `${logical}/__vfs_card_placeholder`);
+  const parentCheck = await ensureParentDirectories(repo, sk, `${logical}/__vfs_card_placeholder`);
+  if (!parentCheck.ok) throwLegacyVfs(parentCheck.error);
   const existing = await repo.findByPath(sk, logical);
   if (existing == null) {
     await repo.insertDirectory(sk, logical);
     return;
   }
   if (existing.entryKind !== "directory") {
-    throw characterCardError(
-      "INVALID_PATH",
-      `character card target path is a file, not a directory: ${logical}`
-    );
+    throw new AppError("VFS_CHARACTER_CARD_INVALID_PATH", `character card target path is a file, not a directory: ${logical}`);
   }
 }
 
 /**
- * 导入失败的错误包装：保留测试钩子直抛与 CharacterCardError 原形，其余包成
- * `IMPORT_FAILED`，并在消息里带上分片进度。
+ * 导入失败的错误包装：保留测试钩子直抛与 AppError 原形，其余包成
+ * `VFS_CHARACTER_CARD_IMPORT_FAILED`，并在消息里带上分片进度。
  *
  * 分片后**已提交片不再回滚** ⇒ 本条唯一的真实行为损失：旧内容在段 B0 就已
  * 删除，补偿只把半棵新树清掉、不恢复旧内容。
  */
-function wrapCardImportError(
-  error: unknown,
-  committedShards?: number,
-  failedShard?: number
-): unknown {
+function wrapCardImportError(error: unknown, committedShards?: number, failedShard?: number): unknown {
   if (error instanceof Error && error.message === "test import failure") {
     return error;
   }
-  if (error instanceof CharacterCardError) {
+  if (isAppError(error)) {
     return error;
   }
-  const base =
-    error instanceof Error ? error.message : "import transaction failed";
-  const progress =
-    committedShards != null && failedShard != null
-      ? `（已提交 ${committedShards} 片 / 失败在第 ${failedShard} 片）`
-      : "";
-  return characterCardError("IMPORT_FAILED", `${base}${progress}`);
+  const base = error instanceof Error ? error.message : "import transaction failed";
+  const progress = committedShards != null && failedShard != null ? `（已提交 ${committedShards} 片 / 失败在第 ${failedShard} 片）` : "";
+  return new AppError("VFS_CHARACTER_CARD_IMPORT_FAILED", `${base}${progress}`);
 }
 
-async function assertDirectoryPathNotFile(
-  repo: VfsEntryRepository,
-  scope: VfsScope,
-  directoryPath: string
-): Promise<void> {
+async function assertDirectoryPathNotFile(repo: VfsEntryRepository, scope: VfsScope, directoryPath: string): Promise<void> {
   const existing = await repo.findByPath(scopeKey(scope), directoryPath);
   if (existing != null && existing.entryKind === "file") {
-    throw characterCardError(
-      "INVALID_PATH",
-      `character card target path is a file, not a directory: ${directoryPath}`
-    );
+    throw new AppError("VFS_CHARACTER_CARD_INVALID_PATH", `character card target path is a file, not a directory: ${directoryPath}`);
   }
 }
 
@@ -131,42 +103,80 @@ export type DefaultCharacterCardImportServiceOptions = {
   readonly sessionKkv?: SessionKkvService;
 };
 
-export class DefaultCharacterCardImportService
-  implements CharacterCardImportService
-{
+export class DefaultCharacterCardImportService implements CharacterCardImportService {
   private readonly testHook?: CharacterCardImportTestHook;
   private readonly backfillBaseline: boolean;
   private readonly sessionKkv?: SessionKkvService;
 
-  constructor(
-    private readonly conn: TdbcConnection,
-    private readonly repo: VfsEntryRepository,
-    options: DefaultCharacterCardImportServiceOptions = {}
-  ) {
+  constructor(private readonly conn: TdbcConnection, private readonly repo: VfsEntryRepository, options: DefaultCharacterCardImportServiceOptions = {}) {
     this.testHook = options.testHook;
     this.backfillBaseline = options.backfillBaseline ?? true;
     this.sessionKkv = options.sessionKkv;
   }
 
-  async import(
-    scope: VfsScope,
-    tree: MdTree,
-    options: CharacterCardImportOptions
-  ): Promise<void> {
+  async import(scope: VfsScope, tree: MdTree, options: CharacterCardImportOptions): Promise<void> {
     if (options.confirmed !== true) {
-      throw characterCardError(
-        "NOT_CONFIRMED",
-        "import requires explicit confirmation (CLI --yes or confirm dialog)"
-      );
+      throw new AppError("VFS_CHARACTER_CARD_NOT_CONFIRMED", "import requires explicit confirmation (CLI --yes or confirm dialog)");
     }
 
     const directoryPath = resolveZipDirectoryPath(options.directoryPath);
     await assertDirectoryPathNotFile(this.repo, scope, directoryPath);
 
-    // Phase A：路径校验 — 任何 delete 之前；禁止 ZIP basename / validateVfsZipEntries
-    const files = validateMdTreeForImport(scope, tree, directoryPath);
-    // 体积/条目闸门 — 事务之前，超限零写库（防巨型卡片落库后形成重启崩溃循环）
-    validateMdTreeLimits(files);
+    // Phase A + 体积闸门：路径校验、逻辑路径拼装、条目/体积检查一次扫完；
+    // 任何 delete 之前失败，保证零写库。
+    const files = new Map<string, string>();
+    let totalBytes = 0;
+    for (const [relativePath, content] of tree) {
+      if (relativePath.length === 0) {
+        throw new AppError("VFS_CHARACTER_CARD_INVALID_PATH", "empty relative path in md tree");
+      }
+      if (relativePath.startsWith("/")) {
+        throw new AppError("VFS_CHARACTER_CARD_INVALID_PATH", `leading slash in md tree path: ${relativePath}`);
+      }
+      if (relativePath.includes("\\")) {
+        throw new AppError("VFS_CHARACTER_CARD_INVALID_PATH", `backslash in md tree path: ${relativePath}`);
+      }
+      if (relativePath.length > VFS_ZIP_MAX_ENTRY_PATH_LEN) {
+        throw new AppError("VFS_CHARACTER_CARD_INVALID_PATH", `md tree path exceeds ${VFS_ZIP_MAX_ENTRY_PATH_LEN} characters: ${relativePath}`);
+      }
+      if (WINDOWS_DRIVE_PATH.test(relativePath)) {
+        throw new AppError("VFS_CHARACTER_CARD_INVALID_PATH", `absolute Windows path in md tree: ${relativePath}`);
+      }
+      for (const segment of relativePath.split("/")) {
+        if (segment.length === 0) {
+          throw new AppError("VFS_CHARACTER_CARD_INVALID_PATH", `empty segment in md tree path: ${relativePath}`);
+        }
+        if (segment === "..") {
+          throw new AppError("VFS_CHARACTER_CARD_INVALID_PATH", `parent segment in md tree path: ${relativePath}`);
+        }
+      }
+
+      let logical: string;
+      const logicalResult = logicalFromZipEntryRelativeToDirectory(relativePath, directoryPath);
+      if (!logicalResult.ok) {
+        throw new AppError("VFS_CHARACTER_CARD_INVALID_PATH", logicalResult.error.message);
+      }
+      logical = logicalResult.value;
+      try {
+        assertLogicalPathAllowed(scope, logical);
+      } catch (error) {
+        throw new AppError("VFS_CHARACTER_CARD_INVALID_PATH", `md tree "${relativePath}" → logical "${logical}": ${error instanceof Error ? error.message : "path not allowed for scope"}`);
+      }
+
+      const sizeBytes = utf8ByteLength(content);
+      if (sizeBytes > CHARACTER_CARD_MAX_SINGLE_FILE_BYTES) {
+        throw new AppError("VFS_CHARACTER_CARD_TOO_LARGE", `角色卡过大：文件 "${logical}" 内容 ${sizeBytes} 字节，超过单文件上限 ${CHARACTER_CARD_MAX_SINGLE_FILE_BYTES} 字节，已拒绝导入`);
+      }
+      totalBytes += sizeBytes;
+      // 超限即抛，避免对后续条目做无谓的编码累计
+      if (totalBytes > CHARACTER_CARD_MAX_TOTAL_CONTENT_BYTES) {
+        throw new AppError("VFS_CHARACTER_CARD_TOO_LARGE", `角色卡过大：全部文件内容合计 ${totalBytes} 字节，超过总量上限 ${CHARACTER_CARD_MAX_TOTAL_CONTENT_BYTES} 字节，已拒绝导入`);
+      }
+      files.set(logical, content);
+    }
+    if (files.size > CHARACTER_CARD_MAX_FILE_COUNT) {
+      throw new AppError("VFS_CHARACTER_CARD_TOO_LARGE", `角色卡过大：共 ${files.size} 个文件，超过条目数上限 ${CHARACTER_CARD_MAX_FILE_COUNT}，已拒绝导入`);
+    }
     const sk = scopeKey(scope);
     const fileEntries = [...files];
 
@@ -176,12 +186,7 @@ export class DefaultCharacterCardImportService
     const compensate = async (): Promise<void> => {
       try {
         await this.conn.transaction(async (tx) => {
-          await releaseAndDeleteVfsPrefix(
-            new SqliteVfsEntryRepository(tx),
-            new SqliteVfsRevisionRepository(tx),
-            sk,
-            directoryPath
-          );
+          await releaseAndDeleteVfsPrefix(new SqliteVfsEntryRepository(tx), new SqliteVfsRevisionRepository(tx), sk, directoryPath);
         });
       } catch (error) {
         console.warn("[character-card] import compensation failed", error);
@@ -211,10 +216,7 @@ export class DefaultCharacterCardImportService
     // （测试钩子直抛分支位于 IMPORT_FAILED 包装之前，只挂外层 catch 会被绕过）。
     let committedShards = 0;
     let shardIndex = 0;
-    for (const shard of chunkArray(
-      fileEntries,
-      ZIP_AND_CARD_IMPORT_TXN_FILE_CHUNK
-    )) {
+    for (const shard of chunkArray(fileEntries, ZIP_AND_CARD_IMPORT_TXN_FILE_CHUNK)) {
       try {
         await this.conn.transaction(async (tx) => {
           const repoTx = new SqliteVfsEntryRepository(tx);
@@ -223,14 +225,9 @@ export class DefaultCharacterCardImportService
             if (this.testHook?.throwOnInsertLogical === logical) {
               throw new Error("test import failure");
             }
-            await ensureParentDirectories(repoTx, sk, logical);
-            await insertFileSeedingRevision(
-              repoTx,
-              revisionTx,
-              sk,
-              logical,
-              content
-            );
+            const parentCheck = await ensureParentDirectories(repoTx, sk, logical);
+            if (!parentCheck.ok) throwLegacyVfs(parentCheck.error);
+            await insertFileSeedingRevision(repoTx, revisionTx, sk, logical, content);
           }
         });
         committedShards += 1;
@@ -251,9 +248,7 @@ export class DefaultCharacterCardImportService
           vfsRepo: new SqliteVfsEntryRepository(tx),
           // 必须喂**段 R 这条事务**的 tx：在事务回调里用外层 this.conn 会撞
           // 驱动层 AsyncMutex 不可重入——那是死锁不是报错。
-          workplaceRepo: this.testHook?.createWorkplaceRepo
-            ? this.testHook.createWorkplaceRepo(tx)
-            : new SqliteWorkplaceRepository(tx),
+          workplaceRepo: this.testHook?.createWorkplaceRepo ? this.testHook.createWorkplaceRepo(tx) : new SqliteWorkplaceRepository(tx),
           scope,
           directoryPath,
         });
@@ -267,20 +262,11 @@ export class DefaultCharacterCardImportService
     if (this.backfillBaseline && scope.kind === "session") {
       try {
         await this.conn.transaction(async (tx) => {
-          await backfillBaselineCheckpoints(
-            new SqliteVfsEntryRepository(tx),
-            new SqliteMessageRepository(tx),
-            new SqliteMessageCheckpointRepository(tx),
-            scope.projectId,
-            scope.sessionId
-          );
+          await backfillBaselineCheckpoints(new SqliteVfsEntryRepository(tx), new SqliteMessageRepository(tx), new SqliteMessageCheckpointRepository(tx), scope.projectId, scope.sessionId);
         });
       } catch (error) {
         // best-effort：与紧邻的 clearSessionPromptCaches 同一口径，不包进 IMPORT_FAILED。
-        console.warn(
-          "[character-card] baseline checkpoint backfill failed",
-          error
-        );
+        console.warn("[character-card] baseline checkpoint backfill failed", error);
       }
     }
 
@@ -290,27 +276,18 @@ export class DefaultCharacterCardImportService
     }
   }
 
-  async importFromBytes(
-    scope: VfsScope,
-    bytes: Uint8Array,
-    options: CharacterCardImportOptions
-  ): Promise<void> {
+  async importFromBytes(scope: VfsScope, bytes: Uint8Array, options: CharacterCardImportOptions): Promise<void> {
     // 解析在 confirmed 门闸之后、delete 之前；解析失败零写库
     if (options.confirmed !== true) {
-      throw characterCardError(
-        "NOT_CONFIRMED",
-        "import requires explicit confirmation (CLI --yes or confirm dialog)"
-      );
+      throw new AppError("VFS_CHARACTER_CARD_NOT_CONFIRMED", "import requires explicit confirmation (CLI --yes or confirm dialog)");
     }
     // 输入闸门 — 解析之前拦截：巨型输入在解码链上会产生多份全尺寸拷贝
     // （base64 → latin1 → JSON），这里用纯长度比对直接拒绝，不进解析。
     if (bytes.length > CHARACTER_CARD_MAX_INPUT_BYTES) {
-      throw characterCardError(
-        "TOO_LARGE",
-        `角色卡文件过大：${bytes.length} 字节，超过输入上限 ${CHARACTER_CARD_MAX_INPUT_BYTES} 字节（约 48MB），已拒绝导入`
-      );
+      throw new AppError("VFS_CHARACTER_CARD_TOO_LARGE", `角色卡文件过大：${bytes.length} 字节，超过输入上限 ${CHARACTER_CARD_MAX_INPUT_BYTES} 字节（约 48MB），已拒绝导入`);
     }
-    const tree = parseCharacterCardToMdTree(bytes);
-    await this.import(scope, tree, options);
+    const parsed = parseCharacterCardToMdTree(bytes);
+    if (!parsed.ok) throw parsed.error;
+    await this.import(scope, parsed.value, options);
   }
 }

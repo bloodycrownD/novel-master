@@ -4,21 +4,9 @@
  * @module domain/workplace/workplace-eval
  */
 
-import type {
-  DisplayState,
-  FillPolicy,
-  InclusionMode,
-  SortField,
-  SortOrder,
-  WorkplaceDirRule,
-} from "../model/workplace-types.js";
+import type { DisplayState, FillPolicy, InclusionMode, SortField, SortOrder, WorkplaceDirRule } from "../model/workplace-types.js";
 import { DEFAULT_WORKPLACE_DIR_RULE } from "./default-dir-rule.js";
-import {
-  compareSmartBasenames,
-  extractSortKey,
-  type CompiledSmartSortRule,
-  type SmartSortKeyCache,
-} from "./smart-sort.js";
+import { compareSmartBasenames, extractSortKey, type CompiledSmartSortRule, type SmartSortKeyCache } from "./smart-sort.js";
 
 /** File metadata used for sorting within a directory. */
 export interface WorkplaceFileSortMeta {
@@ -43,11 +31,7 @@ export interface SortDirPathsOptions {
 /**
  * Indices in a sorted auto-file list that belong to the head/tail priority set.
  */
-export function computeHeadTailIndices(
-  totalCount: number,
-  head: number,
-  tail: number
-): Set<number> {
+export function computeHeadTailIndices(totalCount: number, head: number, tail: number): Set<number> {
   const indices = new Set<number>();
   for (let i = 0; i < head && i < totalCount; i++) {
     indices.add(i);
@@ -80,10 +64,7 @@ function compareNumbers(a: number, b: number, order: SortOrder): number {
 }
 
 /** Decorate-sort-undecorate: pre-extract ordinals once per basename (D5). */
-function decorateSmartCache(
-  basenames: readonly string[],
-  rules: readonly CompiledSmartSortRule[]
-): SmartSortKeyCache {
+function decorateSmartCache(basenames: readonly string[], rules: readonly CompiledSmartSortRule[]): SmartSortKeyCache {
   const cache: SmartSortKeyCache = new Map();
   for (const base of basenames) {
     if (!cache.has(base)) {
@@ -96,41 +77,23 @@ function decorateSmartCache(
 /**
  * Sorts direct child files using directory rule (or name asc default).
  */
-export function sortFilesForDir(
-  files: readonly WorkplaceFileSortMeta[],
-  dirRule: WorkplaceDirRule | null,
-  opts?: SortFilesForDirOptions
-): WorkplaceFileSortMeta[] {
-  const sortField: SortField =
-    dirRule?.sortField ?? DEFAULT_WORKPLACE_DIR_RULE.sortField;
-  const sortOrder: SortOrder =
-    dirRule?.sortOrder ?? DEFAULT_WORKPLACE_DIR_RULE.sortOrder;
+export function sortFilesForDir(files: readonly WorkplaceFileSortMeta[], dirRule: WorkplaceDirRule | null, opts?: SortFilesForDirOptions): WorkplaceFileSortMeta[] {
+  const sortField: SortField = dirRule?.sortField ?? DEFAULT_WORKPLACE_DIR_RULE.sortField;
+  const sortOrder: SortOrder = dirRule?.sortOrder ?? DEFAULT_WORKPLACE_DIR_RULE.sortOrder;
   let smartCache: SmartSortKeyCache | undefined;
   if (sortField === "smart") {
-    smartCache = decorateSmartCache(
-      files.map((f) => basename(f.logicalPath)),
-      opts?.smartRules ?? []
-    );
+    smartCache = decorateSmartCache(files.map((f) => basename(f.logicalPath)), opts?.smartRules ?? []);
   }
   const sorted = [...files];
   sorted.sort((a, b) => {
     switch (sortField) {
       case "name":
-        return compareStrings(
-          basename(a.logicalPath),
-          basename(b.logicalPath),
-          sortOrder
-        );
+        return compareStrings(basename(a.logicalPath), basename(b.logicalPath), sortOrder);
       case "created":
       case "updated":
         return compareNumbers(a.mtimeMs, b.mtimeMs, sortOrder);
       case "smart":
-        return compareSmartBasenames(
-          basename(a.logicalPath),
-          basename(b.logicalPath),
-          sortOrder,
-          smartCache
-        );
+        return compareSmartBasenames(basename(a.logicalPath), basename(b.logicalPath), sortOrder, smartCache);
     }
   });
   return sorted;
@@ -139,14 +102,7 @@ export function sortFilesForDir(
 /**
  * Evaluates display state for one file under its parent directory.
  */
-export function evaluateFileDisplay(params: {
-  readonly inclusion: InclusionMode;
-  readonly parentRuleOn: boolean;
-  readonly dirRule: WorkplaceDirRule | null;
-  readonly indexInSortedAutoFiles: number;
-  readonly autoFileCount: number;
-  readonly logicalPath: string;
-}): DisplayState {
+export function evaluateFileDisplay(params: { readonly inclusion: InclusionMode; readonly parentRuleOn: boolean; readonly dirRule: WorkplaceDirRule | null; readonly indexInSortedAutoFiles: number; readonly autoFileCount: number; readonly logicalPath: string }): DisplayState {
   if (params.inclusion === "hide") {
     return "hidden";
   }
@@ -156,12 +112,9 @@ export function evaluateFileDisplay(params: {
   if (!params.parentRuleOn) {
     return "hidden";
   }
-  const head =
-    params.dirRule?.headCount ?? DEFAULT_WORKPLACE_DIR_RULE.headCount;
-  const tail =
-    params.dirRule?.tailCount ?? DEFAULT_WORKPLACE_DIR_RULE.tailCount;
-  const fill: FillPolicy =
-    params.dirRule?.fillPolicy ?? DEFAULT_WORKPLACE_DIR_RULE.fillPolicy;
+  const head = params.dirRule?.headCount ?? DEFAULT_WORKPLACE_DIR_RULE.headCount;
+  const tail = params.dirRule?.tailCount ?? DEFAULT_WORKPLACE_DIR_RULE.tailCount;
+  const fill: FillPolicy = params.dirRule?.fillPolicy ?? DEFAULT_WORKPLACE_DIR_RULE.fillPolicy;
   const priority = computeHeadTailIndices(params.autoFileCount, head, tail);
   if (priority.has(params.indexInSortedAutoFiles)) {
     return "full";
@@ -191,20 +144,12 @@ export function evaluateFileDisplay(params: {
  * spec D7); `smart` orders by extracted ordinals (missing rules degrade to
  * natural order). Direction (`sortOrder`) applies uniformly.
  */
-export function sortDirPaths(
-  paths: readonly string[],
-  parentDirRule: WorkplaceDirRule | null,
-  opts?: SortDirPathsOptions
-): string[] {
+export function sortDirPaths(paths: readonly string[], parentDirRule: WorkplaceDirRule | null, opts?: SortDirPathsOptions): string[] {
   const sortOrder: SortOrder = parentDirRule?.sortOrder ?? "asc";
-  const sortField: SortField =
-    parentDirRule?.sortField ?? DEFAULT_WORKPLACE_DIR_RULE.sortField;
+  const sortField: SortField = parentDirRule?.sortField ?? DEFAULT_WORKPLACE_DIR_RULE.sortField;
   let smartCache: SmartSortKeyCache | undefined;
   if (sortField === "smart") {
-    smartCache = decorateSmartCache(
-      paths.map((p) => basename(p)),
-      opts?.smartRules ?? []
-    );
+    smartCache = decorateSmartCache(paths.map((p) => basename(p)), opts?.smartRules ?? []);
   }
   const sorted = [...paths];
   sorted.sort((a, b) => {

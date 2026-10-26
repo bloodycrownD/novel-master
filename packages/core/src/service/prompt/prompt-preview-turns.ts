@@ -19,8 +19,8 @@
  * @module service/prompt/prompt-preview-turns
  */
 
-import { isUserInputMessage } from "@/domain/chat/logic/message-content-helpers.js";
-import type { ChatMessage } from "@/domain/chat/model/message.js";
+import { ChatMessage } from "@/domain/chat/logic/message/chat-message.js";
+import type { ChatMessageData } from "@/domain/chat/model/message.js";
 import type {
   ContentBlock,
   ToolResultBlock,
@@ -360,7 +360,7 @@ function buildToolResultCell(
  * 它的 tool_result 不该把 use 的组卡从「lost」救成「ok」，否则会出现「段里没有、卡里有」。
  */
 function buildToolResultByUseId(
-  messages: readonly ChatMessage[]
+  messages: readonly ChatMessageData[]
 ): Map<string, ToolResultBlock> {
   const map = new Map<string, ToolResultBlock>();
   for (const message of messages) {
@@ -378,7 +378,7 @@ function buildToolResultByUseId(
 
 /** 一张消息的卡片：文本缓冲卡（`\n\n` 连接）/ thinking 卡 / 工具组卡，顺序=块序（因果序）。 */
 function buildMessageCards(
-  message: ChatMessage,
+  message: ChatMessageData,
   results: ReadonlyMap<string, ToolResultBlock>,
   includeThinking: boolean
 ): PromptTurnCardData[] {
@@ -449,8 +449,9 @@ function buildMessageCards(
  * @remarks 卡片正文是显示层口径：附件 action 块里 `"content"` 值内的转义行号会被剥掉
  * （见 {@link stripAttachmentContentLinePrefix}）。`<user-input>` 内层与摘要取值
  * 不受影响——附件块整体在 `<user-input>` 之外。
+ * nm-style: keep-local — user turn 卡片投影阶段，与 buildMessageCards 分路。
  */
-function buildUserTurnCards(message: ChatMessage): PromptTurnCardData[] {
+function buildUserTurnCards(message: ChatMessageData): PromptTurnCardData[] {
   const blocks = message.content.blocks;
   const parts: Array<{ index: number; text: string }> = [];
   blocks.forEach((block, index) => {
@@ -561,9 +562,9 @@ function buildUserMetaText(
 /** 分组中间形态：先按切轮规则归组，最后一步才补 summary / body / cards / 新摘要字段。 */
 interface TurnGroup {
   readonly kind: PromptPreviewTurn["kind"];
-  /** 来源 ChatMessage id（user 组用于判断是否同一条消息的多段）。 */
+  /** 来源 ChatMessageData id（user 组用于判断是否同一条消息的多段）。 */
   readonly messageId: string | undefined;
-  /** 来源 ChatMessage seq：message 段入组时取首段的 seq，合成段轮无此值。 */
+  /** 来源 ChatMessageData seq：message 段入组时取首段的 seq，合成段轮无此值。 */
   readonly seq?: number;
   readonly items: PromptPreviewSegment[];
   /** 结构化卡片流（从 ctx.messages 的 blocks 重建，与 items 段序无关）。 */
@@ -583,8 +584,8 @@ function syntheticSegmentKind(role: string): TurnGroup["kind"] {
  * 按「模板段各自独立 / 真用户输入开新轮 / 其余归当前 assistant 轮」聚合提示词段。
  *
  * @remarks
- * 切轮判定回到 **ChatMessage 层**：user 且不含 tool_result 才是真用户输入
- * （`isUserInputMessage`）；含 tool_result 的 user 消息是工具结果回传，归 assistant 轮。
+ * 切轮判定回到 **ChatMessageData 层**：user 且不含 tool_result 才是真用户输入
+ * （`ChatMessage.isUserInput()`）；含 tool_result 的 user 消息是工具结果回传，归 assistant 轮。
  * workplace / skills 合成段虽然 role 是 user，但 `source !== "message"`，天然不参与切轮。
  * hidden 消息已在 assembly 链上过滤，这里不再处理。
  */
@@ -595,10 +596,10 @@ export async function buildPromptPreviewTurnsFromLayout(
 ): Promise<PromptPreviewTurn[]> {
   const segments = await buildPromptAssemblyFromLayout(layout, ctx, options);
   const userInputMessageIds = new Set(
-    ctx.messages.filter(isUserInputMessage).map((message) => message.id)
+    ctx.messages.filter((message) => ChatMessage.from(message).isUserInput()).map((message) => message.id)
   );
   // cards 旁路的两个预扫：消息 id → 消息本体（段侧 messageId 回查），以及全量 toolUseId→result 配对表。
-  const messageById = new Map<string, ChatMessage>();
+  const messageById = new Map<string, ChatMessageData>();
   for (const message of ctx.messages) {
     messageById.set(message.id, message);
   }

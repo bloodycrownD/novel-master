@@ -4,20 +4,13 @@ import { textBlocks } from "@novel-master/core/chat";
 import { findMissingRevisionPointers } from "../../src/domain/message-checkpoint/logic/detect-missing-revisions.js";
 import { restorePathToRevision } from "../../src/domain/message-checkpoint/logic/restore-path.js";
 import type { VfsContentStore } from "../../src/domain/vfs/content-store/vfs-content-store.port.js";
-import {
-  scopeKey,
-  toPhysicalPath,
-} from "../../src/domain/vfs/logic/vfs-path-mapper.js";
+import { scopeKey, toPhysicalPath } from "../../src/domain/vfs/logic/vfs-path-mapper.js";
 import { revisionPairKey } from "../../src/domain/vfs/logic/revision-pair-key.js";
 import { SqliteVfsRevisionRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import type { VfsEntryRepository } from "../../src/domain/vfs/repositories/vfs-entry.port.js";
 import type { VfsRevisionRepository } from "../../src/domain/vfs/repositories/vfs-revision.port.js";
 import type { VfsRestorePort } from "../../src/domain/vfs/ports/vfs-restore.port.js";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
+import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 
@@ -45,15 +38,10 @@ describe("rollback version short-circuit", () => {
       sessionId: session.id,
     };
     const physical = toPhysicalPath(scope, "/blob-only.md");
-    const revisions = new SqliteVfsRevisionRepository(
-      ctx.conn,
-      createNoGetContentStore(),
-    );
+    const revisions = new SqliteVfsRevisionRepository(ctx.conn, createNoGetContentStore());
 
     // need to get entryId first; append now requires entryId
-    const { SqliteVfsEntryRepository } = await import(
-      "../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js"
-    );
+    const { SqliteVfsEntryRepository } = await import("../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js");
     const entries = new SqliteVfsEntryRepository(ctx.conn);
     await entries.insert(scopeKey(scope), "/blob-only.md", "seed");
     const entry = await entries.findByPath(scopeKey(scope), "/blob-only.md");
@@ -92,12 +80,7 @@ describe("rollback version short-circuit", () => {
       findMetaByEntryAndVersion: async () => null,
       findMetasByEntryVersions: async (pairs) => {
         batchCalls++;
-        return new Map([
-          [
-            revisionPairKey(entryId, pairs[0]!.version),
-            { status: "active", contentHash: null },
-          ],
-        ]);
+        return new Map([[revisionPairKey(entryId, pairs[0]!.version), { status: "active", contentHash: null }]]);
       },
       findMaxVersionForEntry: async () => null,
       append: async () => undefined,
@@ -132,13 +115,7 @@ describe("rollback version short-circuit", () => {
       renamePrefixInScope: async () => undefined,
     };
 
-    const missing = await findMissingRevisionPointers(
-      revisionRepo,
-      entryRepo,
-      scope,
-      new Map([["/a.md", 1]]),
-      ["/a.md"],
-    );
+    const missing = await findMissingRevisionPointers(revisionRepo, entryRepo, scope, new Map([["/a.md", 1]]), ["/a.md"]);
 
     assert.deepEqual(missing, []);
     assert.equal(batchCalls, 1);
@@ -213,17 +190,11 @@ describe("rollback version short-circuit", () => {
       renamePrefixInScope: async () => undefined,
     };
 
-    const outcome = await restorePathToRevision(
-      vfs,
-      revisionRepo,
-      scope,
-      "/same.md",
-      2,
-      liveHeadByPath,
-      entryRepo,
-    );
+    const result = await restorePathToRevision(vfs, revisionRepo, scope, "/same.md", 2, liveHeadByPath, entryRepo);
 
-    assert.equal(outcome, "skipped_same_version");
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+    assert.equal(result.value, "skipped_same_version");
     assert.equal(findCalls, 0);
     assert.equal(writeCalls, 0);
   });
@@ -280,17 +251,11 @@ describe("rollback version short-circuit", () => {
     // live head 高于锚点（T-RB1），但正文 hash 已与目标 revision 一致
     const liveHeadByPath = new Map([["/hash-same.md", 3]]);
 
-    const outcome = await restorePathToRevision(
-      vfs,
-      revisionRepo,
-      scope,
-      "/hash-same.md",
-      1,
-      liveHeadByPath,
-      entryRepo,
-    );
+    const result = await restorePathToRevision(vfs, revisionRepo, scope, "/hash-same.md", 1, liveHeadByPath, entryRepo);
 
-    assert.equal(outcome, "skipped_same_content_hash");
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+    assert.equal(result.value, "skipped_same_content_hash");
     assert.equal(findMetaCalls, 1);
     assert.equal(findFullCalls, 0);
     assert.equal(writeCalls, 0);
@@ -302,9 +267,7 @@ describe("rollback version short-circuit", () => {
     const session = await ctx.sessions.create(project.id);
     const svfs = ctx.sessionVfs(project.id, session.id);
     const revisions = new SqliteVfsRevisionRepository(ctx.conn);
-    const { SqliteVfsEntryRepository } = await import(
-      "../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js"
-    );
+    const { SqliteVfsEntryRepository } = await import("../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js");
     const entries = new SqliteVfsEntryRepository(ctx.conn);
     const scope = {
       kind: "session" as const,
@@ -315,21 +278,13 @@ describe("rollback version short-circuit", () => {
     await svfs.write("/delta.md", "anchor", { versionCheck: false });
     const anchorVersion = (await svfs.read("/delta.md")).version;
     await svfs.write("/delta.md", "tail", { versionCheck: false });
-    const liveHeadByPath = new Map([
-      ["/delta.md", (await svfs.read("/delta.md")).version],
-    ]);
+    const liveHeadByPath = new Map([["/delta.md", (await svfs.read("/delta.md")).version]]);
 
-    const outcome = await restorePathToRevision(
-      svfs,
-      revisions,
-      scope,
-      "/delta.md",
-      anchorVersion,
-      liveHeadByPath,
-      entries,
-    );
+    const result = await restorePathToRevision(svfs, revisions, scope, "/delta.md", anchorVersion, liveHeadByPath, entries);
 
-    assert.equal(outcome, "restored");
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+    assert.equal(result.value, "restored");
     assert.equal((await svfs.read("/delta.md")).content, "anchor");
   });
 
@@ -354,11 +309,7 @@ describe("rollback version short-circuit", () => {
 
     assert.equal((await svfs.read("/stable.md")).version, headVersion);
 
-    await ctx.sessionFs.rollbackToMessage(
-      session.id,
-      project.id,
-      assistant1.id,
-    );
+    await ctx.sessionFs.rollbackToMessage(session.id, project.id, assistant1.id);
 
     assert.equal((await svfs.read("/stable.md")).content, "keep-me");
     assert.equal((await svfs.read("/stable.md")).version, headVersion);

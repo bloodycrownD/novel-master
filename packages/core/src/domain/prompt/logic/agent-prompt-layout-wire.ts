@@ -4,10 +4,7 @@
  * @module domain/prompt/logic/agent-prompt-layout-wire
  */
 
-import type {
-  DynamicPromptBlock,
-  PersistTextPromptBlock,
-} from "../model/agent-prompt-layout.js";
+import type { DynamicPromptBlock, PersistTextPromptBlock } from "../model/agent-prompt-layout.js";
 
 /** persist 文本块 wire 形状。 */
 export type PersistTextBlockWire = {
@@ -29,9 +26,7 @@ export type DynamicPromptBlockWire = {
 /**
  * 将 persist 文本块序列化为 wire map 条目。
  */
-export function persistBlockToWire(
-  block: PersistTextPromptBlock
-): PersistPromptBlockWire {
+export function persistBlockToWire(block: PersistTextPromptBlock): PersistPromptBlockWire {
   return { type: "text", role: block.role, content: block.content };
 }
 
@@ -40,9 +35,7 @@ export function persistBlockToWire(
  *
  * @remarks lifecycle 已下线：写出的块恒不含该键（存量读入侧由 schema preprocess 剥除）。
  */
-export function dynamicBlockToWire(
-  block: DynamicPromptBlock
-): DynamicPromptBlockWire {
+export function dynamicBlockToWire(block: DynamicPromptBlock): DynamicPromptBlockWire {
   return {
     type: "text",
     role: block.role,

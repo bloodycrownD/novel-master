@@ -22,9 +22,9 @@ import {
   setSessionViewCache,
 } from '../src/services/chat-session-view-cache';
 import type {MobileNovelMasterRuntime} from '../src/runtime/types';
-import type {ChatMessage} from '@novel-master/core/chat';
+import type {ChatMessageData} from '@novel-master/core/chat';
 
-function makeMessage(sid: string, seq: number): ChatMessage {
+function makeMessage(sid: string, seq: number): ChatMessageData {
   return {
     id: `${sid}-${seq}`,
     sessionId: sid,
@@ -32,10 +32,10 @@ function makeMessage(sid: string, seq: number): ChatMessage {
     role: 'user',
     content: `msg-${sid}-${seq}`,
     createdAtMs: seq * 1000,
-  } as unknown as ChatMessage;
+  } as unknown as ChatMessageData;
 }
 
-function createHarness(tailImpl: (sid: string) => Promise<ChatMessage[]>) {
+function createHarness(tailImpl: (sid: string) => Promise<ChatMessageData[]>) {
   const eventBus = new SimpleEventBus();
   const runtime = {
     eventBus,
@@ -70,7 +70,7 @@ describe('T-X: manager idle 消息路径的会话作用域守卫（串会话竞�
   it('在途 tail 加载期间并行查看另一会话：结果只落属主视图，不串进当前会话', async () => {
     const messagesOfA = [makeMessage('sess-A', 1), makeMessage('sess-A', 2)];
     const messagesOfB = [makeMessage('sess-B', 7)];
-    let releaseA: ((list: ChatMessage[]) => void) | null = null;
+    let releaseA: ((list: ChatMessageData[]) => void) | null = null;
     const {manager} = createHarness(sid => {
       if (sid === 'sess-A') {
         return new Promise(resolve => {
@@ -116,14 +116,14 @@ describe('T-X: manager idle 消息路径的会话作用域守卫（串会话竞�
   it('在途分页期间切换查看另一会话：分页结果只 prepend 回属主视图', async () => {
     const rowsB = [makeMessage('sess-B', 5), makeMessage('sess-B', 6)];
     const olderB = [makeMessage('sess-B', 3)];
-    let releaseOlder: ((list: ChatMessage[]) => void) | null = null;
+    let releaseOlder: ((list: ChatMessageData[]) => void) | null = null;
     const {manager} = createHarness(async () => []);
     // listBySessionPage 受控（分页在途）
     (manager as unknown as {runtime: {messages: {listBySessionPage: jest.Mock}}})
       .runtime.messages.listBySessionPage.mockImplementation(
         () =>
           new Promise(resolve => {
-            releaseOlder = (list: ChatMessage[]) => resolve(list ?? []);
+            releaseOlder = (list: ChatMessageData[]) => resolve(list ?? []);
           }),
       );
     // 预置 B 的 idle 视图（缓存水合路径）

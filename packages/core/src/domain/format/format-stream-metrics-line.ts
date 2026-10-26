@@ -9,7 +9,7 @@
  * @module domain/format/format-stream-metrics-line
  */
 
-import {formatCharCount} from "./format-char-count.js";
+import { formatCharCount } from "./format-char-count.js";
 
 /** 流式 metrics 展示切片。 */
 export type StreamMetricsLineInput = {
@@ -34,30 +34,17 @@ export function formatStreamElapsed(seconds: number): string {
   return `${Math.round(seconds)}s`;
 }
 
-/**
- * tok/s 数字格式（对齐统计页 formatTokensPerSecond 惯例：≥100 整数、否则
- * 1 位小数；整数值不带尾随 .0——与 T-M8 例文「45 tok/s」形态一致）。
- */
-function formatTokensPerSecondValue(rate: number): string {
-  if (rate >= 100) {
-    return `${Math.round(rate)}`;
-  }
-  return `${Number.parseFloat(rate.toFixed(1))}`;
-}
-
 /** 构建 metrics 条文案（供 ChatStreamMetricsBar 与单测共用）。 */
-export function buildStreamMetricsLine(
-  metrics: StreamMetricsLineInput,
-): string {
+export function buildStreamMetricsLine(metrics: StreamMetricsLineInput): string {
   const elapsedSec = metrics.elapsedMs / 1000;
   const elapsedLabel = formatStreamElapsed(elapsedSec);
   const prefix = metrics.running ? "生成中" : "上次生成";
-  const parts: string[] = [
-    `${prefix} · ${elapsedLabel}`,
-    `输出 ${formatCharCount(metrics.completionTokens)} tok`,
-  ];
+  const parts: string[] = [`${prefix} · ${elapsedLabel}`, `输出 ${formatCharCount(metrics.completionTokens)} tok`];
   if (metrics.tokensPerSecond != null) {
-    parts.push(`${formatTokensPerSecondValue(metrics.tokensPerSecond)} tok/s`);
+    // tok/s 数字格式（对齐统计页 formatTokensPerSecond 惯例：≥100 整数、否则
+    // 1 位小数；整数值不带尾随 .0——与 T-M8 例文「45 tok/s」形态一致）。
+    const rate = metrics.tokensPerSecond;
+    parts.push(`${rate >= 100 ? Math.round(rate) : Number.parseFloat(rate.toFixed(1))} tok/s`);
   }
   return parts.join(" · ");
 }

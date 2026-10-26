@@ -36,8 +36,9 @@ describe("ToolResultBlock.meta parse（C5 + C36）单元", () => {
       ],
     };
     const parsed = parseMessageContent(JSON.stringify(payload));
-    assert.equal(parsed.blocks.length, 1);
-    const block = parsed.blocks[0] as ToolResultBlock;
+    assert.ok(parsed.ok);
+    assert.equal(parsed.value.blocks.length, 1);
+    const block = parsed.value.blocks[0] as ToolResultBlock;
     assert.equal(block.type, "tool_result");
     assert.equal(block.meta?.subagentSessionId, "sess-child-001");
   });
@@ -54,7 +55,8 @@ describe("ToolResultBlock.meta parse（C5 + C36）单元", () => {
       ],
     };
     const parsed = parseMessageContent(JSON.stringify(payload));
-    const block = parsed.blocks[0] as ToolResultBlock;
+    assert.ok(parsed.ok);
+    const block = parsed.value.blocks[0] as ToolResultBlock;
     assert.equal(block.meta, undefined);
   });
 
@@ -70,47 +72,48 @@ describe("ToolResultBlock.meta parse（C5 + C36）单元", () => {
       ],
     };
     const parsed = parseMessageContent(JSON.stringify(payload));
-    const block = parsed.blocks[0] as ToolResultBlock;
+    assert.ok(parsed.ok);
+    const block = parsed.value.blocks[0] as ToolResultBlock;
     // subagentSessionId 缺失 → meta 折叠成 undefined（向前兼容）。
     assert.equal(block.meta, undefined);
   });
 
-  it("tool_result meta.subagentSessionId 非字符串时抛 INVALID_ARGUMENT", () => {
-    assert.throws(
-      () =>
-        parseMessageContent(
-          JSON.stringify({
-            blocks: [
-              {
-                type: "tool_result",
-                toolUseId: "tu_1",
-                content: "x",
-                meta: { subagentSessionId: 123 },
-              },
-            ],
-          }),
-        ),
-      /subagentSessionId must be a string/,
+  it("tool_result meta.subagentSessionId 非字符串时返回 CHAT_INVALID_ARGUMENT", () => {
+    const parsed = parseMessageContent(
+      JSON.stringify({
+        blocks: [
+          {
+            type: "tool_result",
+            toolUseId: "tu_1",
+            content: "x",
+            meta: { subagentSessionId: 123 },
+          },
+        ],
+      }),
     );
+    assert.equal(parsed.ok, false);
+    if (parsed.ok) return;
+    assert.equal(parsed.error.key, "CHAT_INVALID_ARGUMENT");
+    assert.match(parsed.error.message, /subagentSessionId must be a string/);
   });
 
-  it("tool_result meta 非对象时抛 INVALID_ARGUMENT", () => {
-    assert.throws(
-      () =>
-        parseMessageContent(
-          JSON.stringify({
-            blocks: [
-              {
-                type: "tool_result",
-                toolUseId: "tu_1",
-                content: "x",
-                meta: "not-an-object",
-              },
-            ],
-          }),
-        ),
-      /meta must be an object/,
+  it("tool_result meta 非对象时返回 CHAT_INVALID_ARGUMENT", () => {
+    const parsed = parseMessageContent(
+      JSON.stringify({
+        blocks: [
+          {
+            type: "tool_result",
+            toolUseId: "tu_1",
+            content: "x",
+            meta: "not-an-object",
+          },
+        ],
+      }),
     );
+    assert.equal(parsed.ok, false);
+    if (parsed.ok) return;
+    assert.equal(parsed.error.key, "CHAT_INVALID_ARGUMENT");
+    assert.match(parsed.error.message, /meta must be an object/);
   });
 
   it("meta 与 summary/ok 可同时存在", () => {
@@ -127,7 +130,8 @@ describe("ToolResultBlock.meta parse（C5 + C36）单元", () => {
       ],
     };
     const parsed = parseMessageContent(JSON.stringify(payload));
-    const block = parsed.blocks[0] as ToolResultBlock;
+    assert.ok(parsed.ok);
+    const block = parsed.value.blocks[0] as ToolResultBlock;
     assert.equal(block.ok, true);
     assert.equal(block.summary, "3 行");
     assert.equal(block.meta?.subagentSessionId, "child-1");

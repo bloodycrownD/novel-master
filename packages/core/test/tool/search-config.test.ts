@@ -12,7 +12,7 @@ import {
   KEY_SEARXNG_BASE_URL,
   type SearchConfigDeps,
 } from "../../src/domain/tool/builtin/search/search-config.js";
-import { KkvError } from "../../src/errors/kkv-errors.js";
+import { AppError } from "../../src/errors/app-error.js";
 import type { KkvService } from "../../src/service/kkv/kkv.port.js";
 import type { SecretStore } from "../../src/infra/sksp/ports/secret-store.port.js";
 
@@ -57,7 +57,7 @@ function fakeKkv(): KkvService & { readonly map: Map<string, string> } {
     async get(module, key) {
       const value = map.get(`${module}/${key}`);
       if (value == null) {
-        throw new KkvError("NOT_FOUND", `KKV key not found: ${module}/${key}`);
+        throw new AppError("KKV_NOT_FOUND", `KKV key not found: ${module}/${key}`);
       }
       return value;
     },
@@ -67,7 +67,7 @@ function fakeKkv(): KkvService & { readonly map: Map<string, string> } {
     async delete(module, key) {
       const composite = `${module}/${key}`;
       if (!map.has(composite)) {
-        throw new KkvError("NOT_FOUND", `KKV key not found: ${module}/${key}`);
+        throw new AppError("KKV_NOT_FOUND", `KKV key not found: ${module}/${key}`);
       }
       map.delete(composite);
       return true;

@@ -2,6 +2,8 @@
  * RN ↔ Web transcript bridge: typed JSON envelopes ({ v, type, payload }).
  * Single source of truth for postMessage payloads — no ad-hoc strings.
  */
+import { isRecord } from '@novel-master/core/common';
+
 export const CHAT_TRANSCRIPT_BRIDGE_VERSION = 1 as const;
 
 export type BridgeEnvelope<T extends string, P> = {
@@ -316,6 +318,3 @@ export function parseScrollSnapshotFromHost(
   return {schemaVersion, offsetY, nearBottom};
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value != null && !Array.isArray(value);
-}

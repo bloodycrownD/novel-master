@@ -9,26 +9,14 @@
 
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { SqlTemplateParser } from "@/infra/sql-template/index.js";
-import {
-  executeTemplate,
-  queryTemplate,
-} from "@/infra/tdbc/logic/template-helper.js";
+import { executeTemplate, queryTemplate } from "@/infra/tdbc/logic/template-helper.js";
 import type { Row } from "@/infra/tdbc/types.js";
+import { nullableText } from "@/common/coerce.js";
 import { SqliteVfsContentStore } from "../../content-store/impl/sqlite-vfs-content-store.js";
 import type { VfsContentStore } from "../../content-store/vfs-content-store.port.js";
-import {
-  nullableText,
-  resolveRevisionPlainContent,
-} from "../../content-store/logic/resolve-stored-content.js";
-import type {
-  VfsRevision,
-  VfsRevisionStatus,
-} from "../../model/vfs-revision.js";
-import type {
-  VfsRevisionAppendInput,
-  VfsRevisionPointerMeta,
-  VfsRevisionRepository,
-} from "../vfs-revision.port.js";
+import { resolveRevisionPlainContent } from "../../content-store/logic/resolve-stored-content.js";
+import type { VfsRevision, VfsRevisionStatus } from "../../model/vfs-revision.js";
+import type { VfsRevisionAppendInput, VfsRevisionPointerMeta, VfsRevisionRepository } from "../vfs-revision.port.js";
 import { VfsError } from "@/errors/vfs-errors.js";
 import { revisionPairKey } from "../../logic/revision-pair-key.js";
 import { escapeLike, normalizePrefix } from "./scope-prefix-helpers.js";
@@ -61,56 +49,34 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
   private readonly parser = new SqlTemplateParser();
   private readonly contentStore: VfsContentStore;
 
-  constructor(
-    private readonly conn: TdbcConnection,
-    contentStore?: VfsContentStore
-  ) {
+  constructor(private readonly conn: TdbcConnection, contentStore?: VfsContentStore) {
     this.contentStore = contentStore ?? new SqliteVfsContentStore(conn);
   }
 
   async findMaxVersionForEntry(entryId: number): Promise<number | null> {
-    const rows = await queryTemplate<{ max_version: number | null }>(
-      this.conn,
-      this.parser,
-      `SELECT MAX(version) AS max_version FROM vfs_revision WHERE entry_id = #{entryId}`,
-      { entryId }
-    );
+    const rows = await queryTemplate<{ max_version: number | null }>(this.conn, this.parser, `SELECT MAX(version) AS max_version FROM vfs_revision WHERE entry_id = #{entryId}`, { entryId });
     const max = rows[0]?.max_version;
     return max == null ? null : Number(max);
   }
 
-  async findMaxVersionsForEntries(
-    entryIds: number[]
-  ): Promise<Map<number, number>> {
+  async findMaxVersionsForEntries(entryIds: number[]): Promise<Map<number, number>> {
     const result = new Map<number, number>();
     if (entryIds.length === 0) {
       return result;
     }
-    for (
-      let offset = 0;
-      offset < entryIds.length;
-      offset += REVISION_BATCH_CHUNK_SIZE
-    ) {
+    for (let offset = 0; offset < entryIds.length; offset += REVISION_BATCH_CHUNK_SIZE) {
       const chunk = entryIds.slice(offset, offset + REVISION_BATCH_CHUNK_SIZE);
       const bindings: Record<string, number> = {};
-      const inList = chunk
-        .map((entryId, index) => {
-          bindings[`entryId${index}`] = entryId;
-          return `#{entryId${index}}`;
-        })
-        .join(", ");
-      const rows = await queryTemplate<{
-        entry_id: number;
-        max_version: number;
-      }>(
-        this.conn,
-        this.parser,
-        `SELECT entry_id, MAX(version) AS max_version
+      const placeholders = chunk.map((entryId, index) => {
+        bindings[`entryId${index}`] = entryId;
+        return `#{entryId${index}}`;
+      });
+      const inList = placeholders.join(", ");
+      const sql52 = `SELECT entry_id, MAX(version) AS max_version
          FROM vfs_revision
          WHERE entry_id IN (${inList})
-         GROUP BY entry_id`,
-        bindings
-      );
+         GROUP BY entry_id`;
+      const rows = await queryTemplate<{ entry_id: number; max_version: number }>(this.conn, this.parser, sql52, bindings);
       for (const row of rows) {
         result.set(Number(row.entry_id), Number(row.max_version));
       }
@@ -118,54 +84,24 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
     return result;
   }
 
-  async findByEntryAndVersion(
-    entryId: number,
-    version: number
-  ): Promise<VfsRevision | null> {
-    const rows = await queryTemplate(
-      this.conn,
-      this.parser,
-      `SELECT entry_id, version, content_hash, status, mtime_ms
-       FROM vfs_revision
-       WHERE entry_id = #{entryId} AND version = #{version}`,
-      { entryId, version }
-    );
+  async findByEntryAndVersion(entryId: number, version: number): Promise<VfsRevision | null> {
+    const sql53 = "SELECT entry_id, version, content_hash, status, mtime_ms\n       FROM vfs_revision\n       WHERE entry_id = #{entryId} AND version = #{version}";
+    const rows = await queryTemplate(this.conn, this.parser, sql53, { entryId, version });
     if (rows.length === 0) {
       return null;
     }
     return this.rowToRevision(rows[0]!);
   }
 
-  async existsByEntryAndVersion(
-    entryId: number,
-    version: number
-  ): Promise<boolean> {
-    const rows = await queryTemplate<{ one: number }>(
-      this.conn,
-      this.parser,
-      `SELECT 1 AS one FROM vfs_revision
-       WHERE entry_id = #{entryId} AND version = #{version}
-       LIMIT 1`,
-      { entryId, version }
-    );
+  async existsByEntryAndVersion(entryId: number, version: number): Promise<boolean> {
+    const sql54 = "SELECT 1 AS one FROM vfs_revision\n       WHERE entry_id = #{entryId} AND version = #{version}\n       LIMIT 1";
+    const rows = await queryTemplate<{ one: number }>(this.conn, this.parser, sql54, { entryId, version });
     return rows.length > 0;
   }
 
-  async findMetaByEntryAndVersion(
-    entryId: number,
-    version: number
-  ): Promise<VfsRevisionPointerMeta | null> {
-    const rows = await queryTemplate<{
-      status: string;
-      content_hash: string | null;
-    }>(
-      this.conn,
-      this.parser,
-      `SELECT status, content_hash FROM vfs_revision
-       WHERE entry_id = #{entryId} AND version = #{version}
-       LIMIT 1`,
-      { entryId, version }
-    );
+  async findMetaByEntryAndVersion(entryId: number, version: number): Promise<VfsRevisionPointerMeta | null> {
+    const sql55 = "SELECT status, content_hash FROM vfs_revision\n       WHERE entry_id = #{entryId} AND version = #{version}\n       LIMIT 1";
+    const rows = await queryTemplate<{ status: string; content_hash: string | null }>(this.conn, this.parser, sql55, { entryId, version });
     const row = rows[0];
     if (row == null) {
       return null;
@@ -176,40 +112,24 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
     };
   }
 
-  async findMetasByEntryVersions(
-    pairs: ReadonlyArray<{ readonly entryId: number; readonly version: number }>
-  ): Promise<Map<string, VfsRevisionPointerMeta>> {
+  async findMetasByEntryVersions(pairs: ReadonlyArray<{ readonly entryId: number; readonly version: number }>): Promise<Map<string, VfsRevisionPointerMeta>> {
     const result = new Map<string, VfsRevisionPointerMeta>();
     if (pairs.length === 0) {
       return result;
     }
-    for (
-      let offset = 0;
-      offset < pairs.length;
-      offset += REVISION_BATCH_CHUNK_SIZE
-    ) {
+    for (let offset = 0; offset < pairs.length; offset += REVISION_BATCH_CHUNK_SIZE) {
       const chunk = pairs.slice(offset, offset + REVISION_BATCH_CHUNK_SIZE);
       const bindings: Record<string, string | number> = {};
-      const conditions = chunk
-        .map((pair, index) => {
-          bindings[`entryId${index}`] = pair.entryId;
-          bindings[`version${index}`] = pair.version;
-          return `(entry_id = #{entryId${index}} AND version = #{version${index}})`;
-        })
-        .join(" OR ");
-      const rows = await queryTemplate<{
-        entry_id: number;
-        version: number;
-        status: string;
-        content_hash: string | null;
-      }>(
-        this.conn,
-        this.parser,
-        `SELECT entry_id, version, status, content_hash
+      const placeholders = chunk.map((pair, index) => {
+        bindings[`entryId${index}`] = pair.entryId;
+        bindings[`version${index}`] = pair.version;
+        return `(entry_id = #{entryId${index}} AND version = #{version${index}})`;
+      });
+      const conditions = placeholders.join(" OR ");
+      const sql56 = `SELECT entry_id, version, status, content_hash
          FROM vfs_revision
-         WHERE ${conditions}`,
-        bindings
-      );
+         WHERE ${conditions}`;
+      const rows = await queryTemplate<{ entry_id: number; version: number; status: string; content_hash: string | null }>(this.conn, this.parser, sql56, bindings);
       for (const row of rows) {
         result.set(revisionPairKey(Number(row.entry_id), Number(row.version)), {
           status: row.status as VfsRevisionStatus,
@@ -220,9 +140,7 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
     return result;
   }
 
-  async findExistingEntryVersionKeys(
-    pairs: ReadonlyArray<{ readonly entryId: number; readonly version: number }>
-  ): Promise<Set<string>> {
+  async findExistingEntryVersionKeys(pairs: ReadonlyArray<{ readonly entryId: number; readonly version: number }>): Promise<Set<string>> {
     const result = new Set<string>();
     if (pairs.length === 0) {
       return result;
@@ -235,10 +153,7 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
       for (const pair of chunk) {
         params.push(pair.entryId, pair.version);
       }
-      const rows = await this.conn.query<{ entry_id: number; version: number }>(
-        `SELECT entry_id, version FROM vfs_revision WHERE (entry_id, version) IN (${placeholders})`,
-        params
-      );
+      const rows = await this.conn.query<{ entry_id: number; version: number }>(`SELECT entry_id, version FROM vfs_revision WHERE (entry_id, version) IN (${placeholders})`, params);
       for (const row of rows) {
         result.add(revisionPairKey(Number(row.entry_id), Number(row.version)));
       }
@@ -246,26 +161,17 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
     return result;
   }
 
-  async batchAppendWithRefCount(
-    items: ReadonlyArray<{
+  async batchAppendWithRefCount(items: ReadonlyArray<{
       readonly entryId: number;
       readonly version: number;
       readonly contentHash: string | null;
       readonly status: string;
       readonly mtimeMs: number;
       readonly refCount: number;
-    }>
-  ): Promise<void> {
+    }>): Promise<void> {
     if (items.length === 0) return;
     const sql = `INSERT INTO vfs_revision (entry_id, version, content_hash, status, mtime_ms, ref_count) VALUES (?, ?, ?, ?, ?, ?)`;
-    const paramsList = items.map((i) => [
-      i.entryId,
-      i.version,
-      i.contentHash,
-      i.status,
-      i.mtimeMs,
-      i.refCount,
-    ]);
+    const paramsList = items.map((i) => [i.entryId, i.version, i.contentHash, i.status, i.mtimeMs, i.refCount]);
     await this.conn.batch(sql, paramsList);
   }
 
@@ -279,70 +185,34 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
       }
     }
 
-    await executeTemplate(
-      this.conn,
-      this.parser,
-      `INSERT INTO vfs_revision
-       (entry_id, version, content_hash, status, mtime_ms)
-       VALUES (#{entryId}, #{version}, #{contentHash}, #{status}, #{mtimeMs})`,
-      {
-        entryId: input.entryId,
-        version: input.version,
-        contentHash,
-        status: input.status,
-        mtimeMs: input.mtimeMs,
-      }
-    );
+    const sql23 = "INSERT INTO vfs_revision\n       (entry_id, version, content_hash, status, mtime_ms)\n       VALUES (#{entryId}, #{version}, #{contentHash}, #{status}, #{mtimeMs})";
+    await executeTemplate(this.conn, this.parser, sql23, {
+      entryId: input.entryId,
+      version: input.version,
+      contentHash,
+      status: input.status,
+      mtimeMs: input.mtimeMs,
+    });
   }
 
-  async listKeysUnderScope(
-    scopeKey: string,
-    pathPrefix: string
-  ): Promise<ReadonlyArray<{ entryId: number; version: number }>> {
+  async listKeysUnderScope(scopeKey: string, pathPrefix: string): Promise<ReadonlyArray<{ entryId: number; version: number }>> {
     const base = normalizePrefix(pathPrefix);
     const escaped = escapeLike(base);
     const pattern = base === "/" ? "/%" : `${escaped}/%`;
-    const rows = await queryTemplate<{ entry_id: number; version: number }>(
-      this.conn,
-      this.parser,
-      `SELECT r.entry_id AS entry_id, r.version AS version
-       FROM vfs_revision r
-       JOIN vfs_entry e ON e.entry_id = r.entry_id
-       WHERE e.scope_key = #{scopeKey}
-         AND (e.path = #{path} OR e.path LIKE #{pattern} ESCAPE '\\')
-       ORDER BY r.entry_id, r.version`,
-      { scopeKey, path: base, pattern }
-    );
+    const sql57 = "SELECT r.entry_id AS entry_id, r.version AS version\n       FROM vfs_revision r\n       JOIN vfs_entry e ON e.entry_id = r.entry_id\n       WHERE e.scope_key = #{scopeKey}\n         AND (e.path = #{path} OR e.path LIKE #{pattern} ESCAPE '\\')\n       ORDER BY r.entry_id, r.version";
+    const rows = await queryTemplate<{ entry_id: number; version: number }>(this.conn, this.parser, sql57, { scopeKey, path: base, pattern });
     return rows.map((row) => ({
       entryId: Number(row.entry_id),
       version: Number(row.version),
     }));
   }
 
-  async listKeysWithRefCountUnderScope(
-    scopeKey: string,
-    pathPrefix: string
-  ): Promise<
-    ReadonlyArray<{ entryId: number; version: number; refCount: number }>
-  > {
+  async listKeysWithRefCountUnderScope(scopeKey: string, pathPrefix: string): Promise<ReadonlyArray<{ entryId: number; version: number; refCount: number }>> {
     const base = normalizePrefix(pathPrefix);
     const escaped = escapeLike(base);
     const pattern = base === "/" ? "/%" : `${escaped}/%`;
-    const rows = await queryTemplate<{
-      entry_id: number;
-      version: number;
-      ref_count: number;
-    }>(
-      this.conn,
-      this.parser,
-      `SELECT r.entry_id AS entry_id, r.version AS version, r.ref_count AS ref_count
-       FROM vfs_revision r
-       JOIN vfs_entry e ON e.entry_id = r.entry_id
-       WHERE e.scope_key = #{scopeKey}
-         AND (e.path = #{path} OR e.path LIKE #{pattern} ESCAPE '\\')
-       ORDER BY r.entry_id, r.version`,
-      { scopeKey, path: base, pattern }
-    );
+    const sql58 = "SELECT r.entry_id AS entry_id, r.version AS version, r.ref_count AS ref_count\n       FROM vfs_revision r\n       JOIN vfs_entry e ON e.entry_id = r.entry_id\n       WHERE e.scope_key = #{scopeKey}\n         AND (e.path = #{path} OR e.path LIKE #{pattern} ESCAPE '\\')\n       ORDER BY r.entry_id, r.version";
+    const rows = await queryTemplate<{ entry_id: number; version: number; ref_count: number }>(this.conn, this.parser, sql58, { scopeKey, path: base, pattern });
     return rows.map((row) => ({
       entryId: Number(row.entry_id),
       version: Number(row.version),
@@ -350,86 +220,44 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
     }));
   }
 
-  async deleteExceptReachable(
-    scopeKey: string,
-    pathPrefix: string,
-    reachable: ReadonlySet<string>
-  ): Promise<number> {
+  async deleteExceptReachable(scopeKey: string, pathPrefix: string, reachable: ReadonlySet<string>): Promise<number> {
     const candidates = await this.listKeysUnderScope(scopeKey, pathPrefix);
-    const toDelete = candidates.filter(
-      ({ entryId, version }) =>
-        !reachable.has(revisionPairKey(entryId, version))
-    );
+    const toDelete = candidates.filter(({ entryId, version }) => !reachable.has(revisionPairKey(entryId, version)));
     if (toDelete.length === 0) {
       return 0;
     }
     let deleted = 0;
-    for (
-      let offset = 0;
-      offset < toDelete.length;
-      offset += REVISION_BATCH_CHUNK_SIZE
-    ) {
+    for (let offset = 0; offset < toDelete.length; offset += REVISION_BATCH_CHUNK_SIZE) {
       const chunk = toDelete.slice(offset, offset + REVISION_BATCH_CHUNK_SIZE);
       const bindings: Record<string, string | number> = {};
-      const conditions = chunk
-        .map(({ entryId, version }, index) => {
-          bindings[`entryId${index}`] = entryId;
-          bindings[`version${index}`] = version;
-          return `(entry_id = #{entryId${index}} AND version = #{version${index}})`;
-        })
-        .join(" OR ");
-      await executeTemplate(
-        this.conn,
-        this.parser,
-        `DELETE FROM vfs_revision WHERE ${conditions}`,
-        bindings
-      );
+      const placeholders = chunk.map(({ entryId, version }, index) => {
+        bindings[`entryId${index}`] = entryId;
+        bindings[`version${index}`] = version;
+        return `(entry_id = #{entryId${index}} AND version = #{version${index}})`;
+      });
+      const conditions = placeholders.join(" OR ");
+      await executeTemplate(this.conn, this.parser, `DELETE FROM vfs_revision WHERE ${conditions}`, bindings);
       deleted += chunk.length;
     }
     return deleted;
   }
 
-  async adjustRefCount(
-    entryId: number,
-    version: number,
-    delta: number
-  ): Promise<void> {
+  async adjustRefCount(entryId: number, version: number, delta: number): Promise<void> {
     if (delta === 0) {
       return;
     }
-    const result = await executeTemplate(
-      this.conn,
-      this.parser,
-      `UPDATE vfs_revision SET ref_count = ref_count + #{delta}
-       WHERE entry_id = #{entryId} AND version = #{version}`,
-      { entryId, version, delta }
-    );
+    const sql24 = "UPDATE vfs_revision SET ref_count = ref_count + #{delta}\n       WHERE entry_id = #{entryId} AND version = #{version}";
+    const result = await executeTemplate(this.conn, this.parser, sql24, { entryId, version, delta });
     if (delta > 0 && result.changes === 0) {
-      throw new VfsError(
-        "NOT_FOUND",
-        `Revision not found: entry ${entryId}@${version}`,
-        { details: { entryId, version } }
-      );
+      throw new VfsError("NOT_FOUND", `Revision not found: entry ${entryId}@${version}`, { details: { entryId, version } });
     }
   }
 
-  async batchAdjustRefCount(
-    pointers: ReadonlyArray<{
-      readonly entryId: number;
-      readonly version: number;
-    }>,
-    delta: 1 | -1
-  ): Promise<void> {
+  async batchAdjustRefCount(pointers: ReadonlyArray<{ readonly entryId: number; readonly version: number }>, delta: 1 | -1): Promise<void> {
     await this.batchAdjustRefCountWithDelta(pointers, delta);
   }
 
-  async batchAdjustRefCountWithDelta(
-    pointers: ReadonlyArray<{
-      readonly entryId: number;
-      readonly version: number;
-    }>,
-    delta: number
-  ): Promise<void> {
+  async batchAdjustRefCountWithDelta(pointers: ReadonlyArray<{ readonly entryId: number; readonly version: number }>, delta: number): Promise<void> {
     if (pointers.length === 0 || delta === 0) {
       return;
     }
@@ -447,13 +275,9 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
       }
       if (missing.length > 0) {
         const first = missing[0]!;
-        throw new VfsError(
-          "NOT_FOUND",
-          `Revision not found: entry ${first.entryId}@${first.version} （共 ${missing.length} 条缺失）`,
-          {
-            details: { missing },
-          }
-        );
+        throw new VfsError("NOT_FOUND", `Revision not found: entry ${first.entryId}@${first.version} （共 ${missing.length} 条缺失）`, {
+          details: { missing },
+        });
       }
     }
 
@@ -475,25 +299,13 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
       for (const pair of chunk) {
         params.push(pair.entryId, pair.version);
       }
-      await this.conn.execute(
-        `UPDATE vfs_revision SET ref_count = ref_count ${deltaLiteral} WHERE (entry_id, version) IN (${placeholders})${clamp}`,
-        params
-      );
+      await this.conn.execute(`UPDATE vfs_revision SET ref_count = ref_count ${deltaLiteral} WHERE (entry_id, version) IN (${placeholders})${clamp}`, params);
     }
   }
 
-  async repairRefCountFloor(
-    entryId: number,
-    version: number,
-    expected: number
-  ): Promise<boolean> {
-    const rows = await queryTemplate<{ ref_count: number }>(
-      this.conn,
-      this.parser,
-      `SELECT ref_count FROM vfs_revision
-       WHERE entry_id = #{entryId} AND version = #{version}`,
-      { entryId, version }
-    );
+  async repairRefCountFloor(entryId: number, version: number, expected: number): Promise<boolean> {
+    const sql59 = "SELECT ref_count FROM vfs_revision\n       WHERE entry_id = #{entryId} AND version = #{version}";
+    const rows = await queryTemplate<{ ref_count: number }>(this.conn, this.parser, sql59, { entryId, version });
     const row = rows[0];
     if (row == null) {
       return false;
@@ -502,23 +314,16 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
     if (current >= expected) {
       return false;
     }
-    await executeTemplate(
-      this.conn,
-      this.parser,
-      `UPDATE vfs_revision SET ref_count = #{expected}
-       WHERE entry_id = #{entryId} AND version = #{version}`,
-      { entryId, version, expected }
-    );
+    const sql25 = "UPDATE vfs_revision SET ref_count = #{expected}\n       WHERE entry_id = #{entryId} AND version = #{version}";
+    await executeTemplate(this.conn, this.parser, sql25, { entryId, version, expected });
     return true;
   }
 
-  async batchRepairRefCountFloor(
-    items: ReadonlyArray<{
+  async batchRepairRefCountFloor(items: ReadonlyArray<{
       readonly entryId: number;
       readonly version: number;
       readonly expected: number;
-    }>
-  ): Promise<number> {
+    }>): Promise<number> {
     if (items.length === 0) {
       return 0;
     }
@@ -527,39 +332,23 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
     // 按 500 分块避免单条 SQL 太长。缺失行（revision 已被 GC）自然不会进 currentMap，
     // 后面 diff 时当作 no-op，跟逐条 repairRefCountFloor 的 row == null 分支一致。
     const currentMap = new Map<string, number>();
-    for (
-      let offset = 0;
-      offset < items.length;
-      offset += REVISION_REPAIR_CHUNK_SIZE
-    ) {
+    for (let offset = 0; offset < items.length; offset += REVISION_REPAIR_CHUNK_SIZE) {
       const chunk = items.slice(offset, offset + REVISION_REPAIR_CHUNK_SIZE);
       const placeholders = chunk.map(() => `(?,?)`).join(`,`);
       const params: unknown[] = [];
       for (const item of chunk) {
         params.push(item.entryId, item.version);
       }
-      const rows = await this.conn.query<{
-        entry_id: number;
-        version: number;
-        ref_count: number;
-      }>(
-        `SELECT entry_id, version, ref_count FROM vfs_revision WHERE (entry_id, version) IN (${placeholders})`,
-        params
-      );
+      const rows = await this.conn.query<{ entry_id: number; version: number; ref_count: number }>(`SELECT entry_id, version, ref_count FROM vfs_revision WHERE (entry_id, version) IN (${placeholders})`, params);
       for (const row of rows) {
-        currentMap.set(
-          revisionPairKey(Number(row.entry_id), Number(row.version)),
-          Number(row.ref_count)
-        );
+        currentMap.set(revisionPairKey(Number(row.entry_id), Number(row.version)), Number(row.ref_count));
       }
     }
 
     // Step 2：内存算 diff，只挑 current < expected 的项（保持「只增不减」语义）。
     const toUpdate: Array<[number, number, number]> = [];
     for (const item of items) {
-      const current = currentMap.get(
-        revisionPairKey(item.entryId, item.version)
-      );
+      const current = currentMap.get(revisionPairKey(item.entryId, item.version));
       if (current == null) {
         continue;
       }
@@ -577,11 +366,7 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
     // 避免单次 batch 参数列表过长。
     const sql = `UPDATE vfs_revision SET ref_count = ? WHERE entry_id = ? AND version = ?`;
     let adjusted = 0;
-    for (
-      let offset = 0;
-      offset < toUpdate.length;
-      offset += REVISION_REPAIR_CHUNK_SIZE
-    ) {
+    for (let offset = 0; offset < toUpdate.length; offset += REVISION_REPAIR_CHUNK_SIZE) {
       const chunk = toUpdate.slice(offset, offset + REVISION_REPAIR_CHUNK_SIZE);
       await this.conn.batch(sql, chunk);
       adjusted += chunk.length;
@@ -589,11 +374,7 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
     return adjusted;
   }
 
-  async deleteUnreferencedUnderScope(
-    scopeKey: string,
-    pathPrefix: string,
-    excludePrefixes?: readonly string[]
-  ): Promise<number> {
+  async deleteUnreferencedUnderScope(scopeKey: string, pathPrefix: string, excludePrefixes?: readonly string[]): Promise<number> {
     const base = normalizePrefix(pathPrefix);
     const escaped = escapeLike(base);
     const pattern = base === "/" ? "/%" : `${escaped}/%`;
@@ -607,41 +388,24 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
     };
     for (let i = 0; i < excludes.length; i++) {
       const exclRaw = excludes[i]!;
-      const excl = normalizePrefix(
-        exclRaw.startsWith("/") ? exclRaw : `/${exclRaw}`
-      );
+      const excl = normalizePrefix(exclRaw.startsWith("/") ? exclRaw : `/${exclRaw}`);
       bindings[`exclPath${i}`] = excl;
       bindings[`exclPattern${i}`] = `${escapeLike(excl)}/%`;
-      excludeClauses.push(
-        `(e.path = #{exclPath${i}} OR e.path LIKE #{exclPattern${i}} ESCAPE '\\')`
-      );
+      excludeClauses.push(`(e.path = #{exclPath${i}} OR e.path LIKE #{exclPattern${i}} ESCAPE '\\')`);
     }
-    const excludeSql =
-      excludeClauses.length > 0
-        ? ` AND NOT (${excludeClauses.join(" OR ")})`
-        : "";
-    const before = await queryTemplate<{ n: number }>(
-      this.conn,
-      this.parser,
-      `SELECT COUNT(*) AS n
+    const excludeSql = excludeClauses.length > 0 ? ` AND NOT (${excludeClauses.join(" OR ")})` : "";
+    const sql26 = `SELECT COUNT(*) AS n
        FROM vfs_revision r
        JOIN vfs_entry e ON e.entry_id = r.entry_id
        WHERE e.scope_key = #{scopeKey}
          AND (e.path = #{path} OR e.path LIKE #{pattern} ESCAPE '\\')${excludeSql}
-         AND r.ref_count <= 0`,
-      bindings
-    );
+         AND r.ref_count <= 0`;
+    const before = await queryTemplate<{ n: number }>(this.conn, this.parser, sql26, bindings);
     const count = Number(before[0]?.n ?? 0);
     if (count === 0) {
       return 0;
     }
-    await executeTemplate(
-      this.conn,
-      this.parser,
-      // 用复合 PK (entry_id, version) 寻址而非 rowid，这样 vfs_revision 可以安全地
-      // 切换到 WITHOUT ROWID（决策 4）。rowid 表和 WITHOUT ROWID 表都支持这种写法，
-      // 所以这条改动本身不改变 rowid 表上的行为。
-      `DELETE FROM vfs_revision
+    const sql27 = `DELETE FROM vfs_revision
        WHERE (entry_id, version) IN (
          SELECT r.entry_id, r.version
          FROM vfs_revision r
@@ -649,9 +413,11 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
          WHERE e.scope_key = #{scopeKey}
            AND (e.path = #{path} OR e.path LIKE #{pattern} ESCAPE '\\')${excludeSql}
            AND r.ref_count <= 0
-       )`,
-      bindings
-    );
+       )`;
+    // 用复合 PK (entry_id, version) 寻址而非 rowid，这样 vfs_revision 可以安全地
+    // 切换到 WITHOUT ROWID（决策 4）。rowid 表和 WITHOUT ROWID 表都支持这种写法，
+    // 所以这条改动本身不改变 rowid 表上的行为。
+    await executeTemplate(this.conn, this.parser, sql27, bindings);
     return count;
   }
 
@@ -660,28 +426,19 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
     // 直接按「ref_count<=0 且 entry_id 不存在」全表清扫。
     // revision DELETE 触发器会连带维护 vfs_content_blob.ref_count 并回收归零 blob。
     // 常量即上方 ORPHAN_REVISION_GC_SQL（migration 退役后运行期独占）。
-    const result = await executeTemplate(
-      this.conn,
-      this.parser,
-      ORPHAN_REVISION_GC_SQL,
-      {}
-    );
+    const result = await executeTemplate(this.conn, this.parser, ORPHAN_REVISION_GC_SQL, {});
     return Number(result.changes);
   }
 
   private async rowToRevision(row: Row): Promise<VfsRevision> {
     const statusRaw = String(row.status);
-    const status: VfsRevisionStatus =
-      statusRaw === "deleted" ? "deleted" : "active";
-    const content = await resolveRevisionPlainContent(this.contentStore, {
-      status,
-      content: null,
-      contentHash: nullableText(row.content_hash),
-    });
+    const status: VfsRevisionStatus = statusRaw === "deleted" ? "deleted" : "active";
+    const resolved = await resolveRevisionPlainContent(this.contentStore, { status, content: null, contentHash: nullableText(row.content_hash) });
+    if (!resolved.ok) throw resolved.error;
     return {
       entryId: Number(row.entry_id),
       version: Number(row.version),
-      content,
+      content: resolved.value,
       status,
       mtimeMs: Number(row.mtime_ms),
     };

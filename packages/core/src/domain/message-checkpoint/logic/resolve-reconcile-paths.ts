@@ -38,14 +38,8 @@ export type ReconcilePathSets = {
  *        的路径；它们同样要过事务内 live 判定——间隙里已被删掉的文件没有「物」
  *        可删，跳过即可（`deletePathIfExists` 本来也吞 NOT_FOUND）。
  */
-export function resolvePathsNeedDeleteInTransaction(args: {
-  readonly liveHeads: ReadonlyArray<SessionFileHead>;
-  readonly targetTree: ReadonlyMap<string, number>;
-  readonly hasDirectTargetTree: boolean;
-  readonly extraTailDeletePaths: ReadonlySet<string>;
-}): ReadonlySet<string> {
-  const { liveHeads, targetTree, hasDirectTargetTree, extraTailDeletePaths } =
-    args;
+export function resolvePathsNeedDeleteInTransaction(args: { readonly liveHeads: ReadonlyArray<SessionFileHead>; readonly targetTree: ReadonlyMap<string, number>; readonly hasDirectTargetTree: boolean; readonly extraTailDeletePaths: ReadonlySet<string> }): ReadonlySet<string> {
+  const { liveHeads, targetTree, hasDirectTargetTree, extraTailDeletePaths } = args;
   const pathsNeedDelete = new Set<string>();
   // 与 {@link resolveReconcilePathSets} 的 hasDirectTargetTree 门同口径：
   // rewind 分支在 targetTree 为空时拿不到任何删除（这一路是漏删而非误删，
@@ -76,20 +70,11 @@ export function resolvePathsNeedDeleteInTransaction(args: {
  *        entry 行已被物理删除的路径靠它寻址 revision（rollback-restore-deleted-entry），
  *        不再一律标 -1 判「必写盘+必 missing」。
  */
-export async function resolveReconcilePathSets(
-  entryRepo: VfsEntryRepository,
-  revisionRepo: VfsRevisionRepository,
-  scope: Extract<VfsScope, { kind: "session" }>,
-  targetTree: ReadonlyMap<string, number>,
-  _hasDirectTargetTree: boolean,
-  checkpointEntryIdByPath?: ReadonlyMap<string, number>
-): Promise<ReconcilePathSets> {
+export async function resolveReconcilePathSets(entryRepo: VfsEntryRepository, revisionRepo: VfsRevisionRepository, scope: Extract<VfsScope, { kind: "session" }>, targetTree: ReadonlyMap<string, number>, _hasDirectTargetTree: boolean, checkpointEntryIdByPath?: ReadonlyMap<string, number>): Promise<ReconcilePathSets> {
   const { projectId, sessionId } = scope;
   const scopeKeyStr = scopeKey(scope);
   const liveHeads = await listSessionFileHeads(entryRepo, projectId, sessionId);
-  const liveHeadByPath = new Map(
-    liveHeads.map((head) => [head.logicalPath, head.headVersion])
-  );
+  const liveHeadByPath = new Map(liveHeads.map((head) => [head.logicalPath, head.headVersion]));
   const entryIdByPath = new Map<string, number>();
   for (const head of liveHeads) {
     entryIdByPath.set(head.logicalPath, head.entryId);
@@ -126,12 +111,8 @@ export async function resolveReconcilePathSets(
   }
 
   const queryable = reconcilePairs.filter((pair) => pair.entryId >= 0);
-  const revisionMetaByKey = await revisionRepo.findMetasByEntryVersions(
-    queryable.map((pair) => ({ entryId: pair.entryId, version: pair.version }))
-  );
-  const liveHashByPath = await entryRepo.findContentHashesByPaths(scopeKeyStr, [
-    ...new Set(reconcilePairs.map((pair) => pair.logicalPath)),
-  ]);
+  const revisionMetaByKey = await revisionRepo.findMetasByEntryVersions(queryable.map((pair) => ({ entryId: pair.entryId, version: pair.version })));
+  const liveHashByPath = await entryRepo.findContentHashesByPaths(scopeKeyStr, [...new Set(reconcilePairs.map((pair) => pair.logicalPath))]);
 
   for (const pair of reconcilePairs) {
     const liveHead = liveHeadByPath.get(pair.logicalPath);
@@ -142,9 +123,7 @@ export async function resolveReconcilePathSets(
       pathsNeedWrite.add(pair.logicalPath);
       continue;
     }
-    const meta = revisionMetaByKey.get(
-      revisionPairKey(pair.entryId, pair.version)
-    );
+    const meta = revisionMetaByKey.get(revisionPairKey(pair.entryId, pair.version));
     if (meta == null) {
       pathsNeedWrite.add(pair.logicalPath);
       continue;
@@ -156,12 +135,7 @@ export async function resolveReconcilePathSets(
       continue;
     }
     const liveHash = liveHashByPath.get(pair.logicalPath) ?? null;
-    if (
-      meta.contentHash != null &&
-      meta.contentHash.length > 0 &&
-      liveHash != null &&
-      liveHash === meta.contentHash
-    ) {
+    if (meta.contentHash != null && meta.contentHash.length > 0 && liveHash != null && liveHash === meta.contentHash) {
       continue;
     }
     pathsNeedWrite.add(pair.logicalPath);

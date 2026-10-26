@@ -5,11 +5,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
-  NO_PATH_ATTACHMENT_NAME,
   attachmentStorageName,
   messageAttachmentSchema,
   parseAttachmentsJson,
-  serializeAttachmentsJson,
 } from "../../src/domain/chat/model/message-attachment.schema.js";
 
 describe("messageAttachmentSchema", () => {
@@ -39,7 +37,7 @@ describe("messageAttachmentSchema", () => {
     assert.equal(withPath.action, "write");
 
     const emptyPath = messageAttachmentSchema.parse({
-      name: NO_PATH_ATTACHMENT_NAME,
+      name: attachmentStorageName(undefined),
       source: "user_ops",
       type: "text",
       content: null,
@@ -161,7 +159,7 @@ describe("messageAttachmentSchema", () => {
     );
   });
 
-  it("parseAttachmentsJson / serializeAttachmentsJson round-trip（含 skillAttach）", () => {
+  it("parseAttachmentsJson round-trip（含 skillAttach）", () => {
     const list = [
       {
         name: "/ops.md",
@@ -180,10 +178,9 @@ describe("messageAttachmentSchema", () => {
         action: "skillAttach" as const,
       },
     ];
-    const json = serializeAttachmentsJson(list);
-    assert.ok(json != null);
+    const json = JSON.stringify(list);
     assert.deepEqual(parseAttachmentsJson(json), list);
-    assert.equal(serializeAttachmentsJson([]), null);
+    assert.deepEqual(parseAttachmentsJson("[]"), []);
     assert.equal(parseAttachmentsJson(null), undefined);
     assert.equal(parseAttachmentsJson("not-json"), undefined);
   });

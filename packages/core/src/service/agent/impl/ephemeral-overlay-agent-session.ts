@@ -8,7 +8,7 @@
 
 import type { AgentSession } from "@/domain/agent/session/agent-session.port.js";
 import type {
-  ChatMessage,
+  ChatMessageData,
   MessageContent,
 } from "@/domain/chat/model/message.js";
 import type { MessageUsage } from "@/domain/chat/model/message-usage.js";
@@ -18,7 +18,7 @@ import type { MessageAttachment } from "@/domain/chat/model/message-attachment.s
  * {@link AgentSession} that lists base + overlay messages; {@link append} never hits SQLite.
  */
 export class EphemeralOverlayAgentSession implements AgentSession {
-  private readonly overlay: ChatMessage[] = [];
+  private readonly overlay: ChatMessageData[] = [];
   private nextSeq = 1_000_000_000;
 
   constructor(
@@ -36,7 +36,7 @@ export class EphemeralOverlayAgentSession implements AgentSession {
     return this.base.kkvScopeSessionId;
   }
 
-  async list(): Promise<readonly ChatMessage[]> {
+  async list(): Promise<readonly ChatMessageData[]> {
     const base = await this.base.list();
     return [...base, ...this.overlay];
   }
@@ -56,9 +56,9 @@ export class EphemeralOverlayAgentSession implements AgentSession {
        */
       attachments?: readonly MessageAttachment[];
     }
-  ): Promise<ChatMessage> {
+  ): Promise<ChatMessageData> {
     const seq = this.nextSeq++;
-    const message: ChatMessage = {
+    const message: ChatMessageData = {
       id: `ephemeral-${seq}`,
       sessionId: this.sessionId,
       seq,

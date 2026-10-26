@@ -4,8 +4,11 @@ import { isVfsError } from "@novel-master/core/vfs";
 import { moveVfsPath, remapPathUnderDir } from "../../src/domain/vfs/logic/vfs-move.js";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 
-
 novelMasterTestFixture();
+
+function assertOk(result: { readonly ok: boolean }): void {
+  assert.ok(result.ok);
+}
 
 describe("moveVfsPath", () => {
   it("moves a file and preserves content", async () => {
@@ -15,13 +18,13 @@ describe("moveVfsPath", () => {
     const vfs = ctx.sessionVfs(project.id, session.id);
 
     await vfs.write("/old.md", "content");
-    await moveVfsPath(vfs, "/old.md", "/new.md");
+    assertOk(await moveVfsPath(vfs, "/old.md", "/new.md"));
 
     const read = await vfs.read("/new.md");
     assert.equal(read.content, "content");
     await assert.rejects(
       () => vfs.read("/old.md"),
-      (e: unknown) => isVfsError(e, "NOT_FOUND"),
+      (e: unknown) => isVfsError(e, "NOT_FOUND")
     );
   });
 
@@ -36,13 +39,13 @@ describe("moveVfsPath", () => {
     await vfs.write("/src/a.md", "a");
     await vfs.write("/src/sub/b.md", "b");
 
-    await moveVfsPath(vfs, "/src", "/dst");
+    assertOk(await moveVfsPath(vfs, "/src", "/dst"));
 
     assert.equal((await vfs.read("/dst/a.md")).content, "a");
     assert.equal((await vfs.read("/dst/sub/b.md")).content, "b");
     await assert.rejects(
       () => vfs.read("/src/a.md"),
-      (e: unknown) => isVfsError(e, "NOT_FOUND"),
+      (e: unknown) => isVfsError(e, "NOT_FOUND")
     );
   });
 
@@ -55,13 +58,13 @@ describe("moveVfsPath", () => {
     await vfs.mkdir("/empty-dir");
 
     // 空目录（有 directory 行、零子项）也必须允许 rename，不能误报 NOT_FOUND。
-    await moveVfsPath(vfs, "/empty-dir", "/renamed-dir");
+    assertOk(await moveVfsPath(vfs, "/empty-dir", "/renamed-dir"));
 
     // directory 行的 path 已更新：新路径是空目录（list 成功且为空），旧路径不存在。
     assert.deepEqual(await vfs.list("/renamed-dir"), []);
     await assert.rejects(
       () => vfs.list("/empty-dir"),
-      (e: unknown) => isVfsError(e, "NOT_FOUND"),
+      (e: unknown) => isVfsError(e, "NOT_FOUND")
     );
 
     // rename 后新目录仍可正常写入子项。
@@ -84,18 +87,21 @@ describe("moveVfsPath", () => {
     await vfs.mkdir(oldDir);
     await vfs.write(`${oldDir}/child.md`, "child");
 
-    await moveVfsPath(vfs, oldDir, newDir);
+    assertOk(await moveVfsPath(vfs, oldDir, newDir));
 
     assert.equal((await vfs.read(`${newDir}/child.md`)).content, "child");
     const children = await vfs.list(newDir);
-    assert.equal(children.some((e) => e.path === `${newDir}/child.md`), true);
+    assert.equal(
+      children.some((e) => e.path === `${newDir}/child.md`),
+      true
+    );
     await assert.rejects(
       () => vfs.read(`${oldDir}/child.md`),
-      (e: unknown) => isVfsError(e, "NOT_FOUND"),
+      (e: unknown) => isVfsError(e, "NOT_FOUND")
     );
     await assert.rejects(
       () => vfs.list(oldDir),
-      (e: unknown) => isVfsError(e, "NOT_FOUND"),
+      (e: unknown) => isVfsError(e, "NOT_FOUND")
     );
   });
 
@@ -108,10 +114,9 @@ describe("moveVfsPath", () => {
     await vfs.write("/a.md", "original-a");
     await vfs.write("/b.md", "original-b");
 
-    await assert.rejects(
-      () => moveVfsPath(vfs, "/b.md", "/a.md"),
-      (e: unknown) => isVfsError(e, "ALREADY_EXISTS"),
-    );
+    const result = await moveVfsPath(vfs, "/b.md", "/a.md");
+    assert.equal(result.ok, false);
+    if (!result.ok) assert.equal(result.error.key, "VFS_ALREADY_EXISTS");
     assert.equal((await vfs.read("/a.md")).content, "original-a");
     assert.equal((await vfs.read("/b.md")).content, "original-b");
   });
@@ -125,10 +130,9 @@ describe("moveVfsPath", () => {
     await vfs.mkdir("/dirA");
     await vfs.write("/other.md", "stay");
 
-    await assert.rejects(
-      () => moveVfsPath(vfs, "/other.md", "/dirA"),
-      (e: unknown) => isVfsError(e, "ALREADY_EXISTS"),
-    );
+    const result = await moveVfsPath(vfs, "/other.md", "/dirA");
+    assert.equal(result.ok, false);
+    if (!result.ok) assert.equal(result.error.key, "VFS_ALREADY_EXISTS");
     assert.equal((await vfs.read("/other.md")).content, "stay");
     await vfs.list("/dirA");
   });
@@ -140,7 +144,7 @@ describe("moveVfsPath", () => {
     const vfs = ctx.sessionVfs(project.id, session.id);
 
     await vfs.write("/same.md", "content");
-    await moveVfsPath(vfs, "/same.md", "/same.md");
+    assertOk(await moveVfsPath(vfs, "/same.md", "/same.md"));
     assert.equal((await vfs.read("/same.md")).content, "content");
   });
 
@@ -150,19 +154,15 @@ describe("moveVfsPath", () => {
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
 
-    await assert.rejects(
-      () => moveVfsPath(vfs, "/missing", "/elsewhere"),
-      (e: unknown) => isVfsError(e, "NOT_FOUND"),
-    );
+    const result = await moveVfsPath(vfs, "/missing", "/elsewhere");
+    assert.equal(result.ok, false);
+    if (!result.ok) assert.equal(result.error.key, "VFS_NOT_FOUND");
   });
 });
 
 describe("remapPathUnderDir", () => {
   it("remaps nested paths under a new directory root", () => {
-    assert.equal(
-      remapPathUnderDir("/src/sub/file.txt", "/src", "/dst"),
-      "/dst/sub/file.txt",
-    );
+    assert.equal(remapPathUnderDir("/src/sub/file.txt", "/src", "/dst"), "/dst/sub/file.txt");
     assert.equal(remapPathUnderDir("/src", "/src", "/dst"), "/dst");
   });
 });

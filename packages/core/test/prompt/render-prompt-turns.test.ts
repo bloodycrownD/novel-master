@@ -3,14 +3,13 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import {
-  buildAttachmentActionXml,
-  buildDirTreeActionXml,
-  buildFileRefActionXml,
   textBlocks,
-  wrapUserMessageForLlm,
-  type ChatMessage,
+  userMessageFormatter,
+  type ChatMessageData,
   type ContentBlock,
 } from "@novel-master/core/chat";
+import { attachmentXmlCodec } from "@/domain/chat/logic/attachment/attachment-xml-codec.js";
+import { buildUserVfsActionXml } from "@/domain/vfs/logic/user-vfs-save-mapping.js";
 
 import {
   buildPromptAssemblyFromLayout,
@@ -28,7 +27,7 @@ import {
 
 const fixedNow = new Date(2026, 4, 24, 9, 0, 0);
 
-function message(role: string, content: string, seq: number): ChatMessage {
+function message(role: string, content: string, seq: number): ChatMessageData {
   return blocksMessage(role, textBlocks(content).blocks, seq);
 }
 
@@ -36,7 +35,7 @@ function blocksMessage(
   role: string,
   blocks: readonly ContentBlock[],
   seq: number
-): ChatMessage {
+): ChatMessageData {
   return {
     id: `m${seq}`,
     sessionId: "s1",
@@ -50,7 +49,7 @@ function blocksMessage(
   };
 }
 
-function ctxOf(messages: readonly ChatMessage[], workplaceDisplay = "WT"): PromptRenderContext {
+function ctxOf(messages: readonly ChatMessageData[], workplaceDisplay = "WT"): PromptRenderContext {
   return { workplaceDisplay, messages, now: fixedNow };
 }
 
@@ -85,7 +84,7 @@ describe("T-R1 切轮正确性", () => {
     persist: [{ name: "persona", type: "text", role: "user", content: "人设" }],
     dynamic: [],
   };
-  const messages: ChatMessage[] = [
+  const messages: ChatMessageData[] = [
     message("user", "帮我看看", 1),
     blocksMessage("assistant", [
       { type: "tool_use", id: "t1", name: "read", input: { path: "test.md" } },
@@ -376,7 +375,7 @@ describe("T-R4 assistant 轮摘要", () => {
   });
 
   it("摘要只取 assistant 文本卡：tool_result 回传里的 user 文本不参与", async () => {
-    const messages: ChatMessage[] = [
+    const messages: ChatMessageData[] = [
       message("user", "跑", 1),
       blocksMessage("assistant", [
         { type: "tool_use", id: "t1", name: "read", input: { path: "a.md" } },
@@ -494,7 +493,7 @@ function userMessageWithAttachments(
   content: string,
   seq: number,
   count: number
-): ChatMessage {
+): ChatMessageData {
   return {
     ...blocksMessage("user", textBlocks(content).blocks, seq),
     attachments: Array.from({ length: count }, (_, index) => ({
@@ -508,7 +507,7 @@ function userMessageWithAttachments(
 
 describe("T-PT1 工具调用跨消息配对", () => {
   it("m2 的 tool_use 与 m3 的 tool_result 按 id 收进同一张组卡，status=ok", async () => {
-    const messages: ChatMessage[] = [
+    const messages: ChatMessageData[] = [
       message("user", "读一下", 1),
       blocksMessage("assistant", [
         { type: "tool_use", id: "t1", name: "read", input: { path: "a.md" } },
@@ -536,7 +535,7 @@ describe("T-PT1 工具调用跨消息配对", () => {
   });
 
   it("input 为空对象时 inputJson 退化为 CLI 同款单行头", async () => {
-    const messages: ChatMessage[] = [
+    const messages: ChatMessageData[] = [
       message("user", "hi", 1),
       blocksMessage("assistant", [
         { type: "tool_use", id: "t1", name: "list", input: {} },
@@ -550,7 +549,7 @@ describe("T-PT1 工具调用跨消息配对", () => {
   });
 
   it("hidden 消息里的 tool_result 不参与配对 → 对应组卡落 lost", async () => {
-    const messages: ChatMessage[] = [
+    const messages: ChatMessageData[] = [
       message("user", "跑", 1),
       blocksMessage("assistant", [
         { type: "tool_use", id: "t1", name: "read", input: { path: "a.md" } },
@@ -573,7 +572,7 @@ describe("T-PT1 工具调用跨消息配对", () => {
 
 describe("T-PT2 并行工具调用按 id 配对", () => {
   it("一条 assistant 两个 tool_use + 下一条消息两个 tool_result → 两张组卡 parallel=true", async () => {
-    const messages: ChatMessage[] = [
+    const messages: ChatMessageData[] = [
       message("user", "一起查", 1),
       blocksMessage("assistant", [
         { type: "tool_use", id: "t1", name: "read", input: { path: "a.md" } },
@@ -600,7 +599,7 @@ describe("T-PT2 并行工具调用按 id 配对", () => {
   });
 
   it("单条 tool_use 时 parallel=false", async () => {
-    const messages: ChatMessage[] = [
+    const messages: ChatMessageData[] = [
       message("user", "hi", 1),
       blocksMessage("assistant", [
         { type: "tool_use", id: "t1", name: "read", input: { path: "a.md" } },
@@ -613,7 +612,7 @@ describe("T-PT2 并行工具调用按 id 配对", () => {
 
 describe("T-PT3 失败双路判定", () => {
   it("显式 ok:false 与 legacy 缺省 + Error: 前缀都判 status=error", async () => {
-    const messages: ChatMessage[] = [
+    const messages: ChatMessageData[] = [
       message("user", "跑一下", 1),
       blocksMessage("assistant", [
         { type: "tool_use", id: "t1", name: "read", input: { path: "a.md" } },
@@ -636,7 +635,7 @@ describe("T-PT3 失败双路判定", () => {
   });
 
   it("legacy 缺省但正文非 Error 前缀 → 判 ok", async () => {
-    const messages: ChatMessage[] = [
+    const messages: ChatMessageData[] = [
       message("user", "hi", 1),
       blocksMessage("assistant", [
         { type: "tool_use", id: "t1", name: "read", input: { path: "a.md" } },
@@ -652,7 +651,7 @@ describe("T-PT3 失败双路判定", () => {
 
 describe("T-PT4 悬挂 tool_use 丢失占位", () => {
   it("无对应 result 时 result=null、status=lost，槽位保留不消失", async () => {
-    const messages: ChatMessage[] = [
+    const messages: ChatMessageData[] = [
       message("user", "跑一下", 1),
       blocksMessage("assistant", [
         { type: "tool_use", id: "t1", name: "read", input: { path: "a.md" } },
@@ -678,7 +677,7 @@ describe("T-PT4 悬挂 tool_use 丢失占位", () => {
 
 describe("T-PT5 user 轮真摘要与计数", () => {
   it("无附件：直取正文首行", async () => {
-    const messages: ChatMessage[] = [
+    const messages: ChatMessageData[] = [
       message("user", "帮我看看这段\n第二行不参与摘要", 1),
       message("assistant", "好", 2),
     ];
@@ -698,7 +697,7 @@ describe("T-PT5 user 轮真摘要与计数", () => {
       "第二行不参与摘要",
       "</user-input>",
     ].join("\n");
-    const messages: ChatMessage[] = [
+    const messages: ChatMessageData[] = [
       userMessageWithAttachments(wrapped, 1, 2),
       message("assistant", "好", 2),
     ];
@@ -717,7 +716,7 @@ describe("T-PT5 user 轮真摘要与计数", () => {
   });
 
   it("无附件时 metaText 不带附件位", async () => {
-    const messages: ChatMessage[] = [
+    const messages: ChatMessageData[] = [
       message("user", "hi", 1),
       message("assistant", "yo", 2),
     ];
@@ -726,7 +725,7 @@ describe("T-PT5 user 轮真摘要与计数", () => {
   });
 
   it("首行超 70 字截断为 slice(0,69) + …", async () => {
-    const messages: ChatMessage[] = [
+    const messages: ChatMessageData[] = [
       message("user", "问".repeat(100), 1),
       message("assistant", "好", 2),
     ];
@@ -735,7 +734,7 @@ describe("T-PT5 user 轮真摘要与计数", () => {
   });
 
   it("空正文兜底「（无文本）」", async () => {
-    const messages: ChatMessage[] = [
+    const messages: ChatMessageData[] = [
       userMessageWithAttachments(
         ["<attachment>", "</attachment>", "<user-input>", "", "</user-input>"].join("\n"),
         1,
@@ -756,7 +755,7 @@ describe("T-PT6 合成段轮摘要", () => {
       persist: [{ name: "persona", type: "text", role: "user", content: "人设" }],
       dynamic: [],
     };
-    const messages: ChatMessage[] = [message("user", "hi", 1)];
+    const messages: ChatMessageData[] = [message("user", "hi", 1)];
     const turns = await buildPromptPreviewTurnsFromLayout(layout, ctxOf(messages, ""));
     const system = turns[0]!;
     assert.equal(system.kind, "system");
@@ -776,7 +775,7 @@ describe("T-PT6 合成段轮摘要", () => {
 
 describe("T-PT7 assistant 轮摘要与计数拆分", () => {
   it("纯工具轮无文本卡 → summaryText 用卡片数占位", async () => {
-    const messages: ChatMessage[] = [
+    const messages: ChatMessageData[] = [
       message("user", "跑", 1),
       blocksMessage("assistant", [
         { type: "tool_use", id: "t1", name: "read", input: { path: "a.md" } },
@@ -792,7 +791,7 @@ describe("T-PT7 assistant 轮摘要与计数拆分", () => {
   });
 
   it("metaText 分别计算失败 / 丢失计数并追加", async () => {
-    const messages: ChatMessage[] = [
+    const messages: ChatMessageData[] = [
       message("user", "跑", 1),
       blocksMessage("assistant", [
         { type: "tool_use", id: "t1", name: "read", input: { path: "a.md" } },
@@ -820,7 +819,7 @@ describe("T-PT7 assistant 轮摘要与计数拆分", () => {
   });
 
   it("无失败 / 丢失时不追加计数位", async () => {
-    const messages: ChatMessage[] = [
+    const messages: ChatMessageData[] = [
       message("user", "hi", 1),
       message("assistant", "答", 2),
     ];
@@ -831,7 +830,7 @@ describe("T-PT7 assistant 轮摘要与计数拆分", () => {
 
 describe("T-PT8 cards 因果顺序与 items 段序解耦", () => {
   it("items 里 tool_result 段排首位（parity 乱序），cards 仍按块序重建", async () => {
-    const messages: ChatMessage[] = [
+    const messages: ChatMessageData[] = [
       message("user", "跑", 1),
       blocksMessage("assistant", [
         { type: "tool_use", id: "t1", name: "read", input: { path: "a.md" } },
@@ -861,7 +860,7 @@ describe("T-PT8 cards 因果顺序与 items 段序解耦", () => {
   });
 
   it("card id 走独立命名空间，与段 id 无对应关系", async () => {
-    const messages: ChatMessage[] = [
+    const messages: ChatMessageData[] = [
       message("user", "跑", 1),
       blocksMessage("assistant", [
         { type: "tool_use", id: "t1", name: "read", input: { path: "a.md" } },
@@ -882,7 +881,7 @@ describe("T-PT8 cards 因果顺序与 items 段序解耦", () => {
   });
 
   it("同消息内多个连续 text 块合并成一张卡，id 取首块 index", async () => {
-    const messages: ChatMessage[] = [
+    const messages: ChatMessageData[] = [
       message("user", "hi", 1),
       blocksMessage("assistant", [
         { type: "text", text: "第一段" },
@@ -905,7 +904,7 @@ describe("T-PT9 items / body / 切轮零改动回归", () => {
     dynamic: [],
     persist: [{ name: "persona", type: "text", role: "user", content: "人设" }],
   };
-  const messages: ChatMessage[] = [
+  const messages: ChatMessageData[] = [
     message("user", "帮我看看", 1),
     blocksMessage("assistant", [
       { type: "tool_use", id: "t1", name: "read", input: { path: "test.md" } },
@@ -971,7 +970,7 @@ describe("T-PT9 items / body / 切轮零改动回归", () => {
 
 describe("T-PT10 thinking 卡门控与 redacted 形态", () => {
   it("includeThinkingBlocks 开 / 关两态 cards 产出差异", async () => {
-    const messages: ChatMessage[] = [
+    const messages: ChatMessageData[] = [
       message("user", "想一下", 1),
       blocksMessage("assistant", [
         { type: "thinking", text: "让我想想" },
@@ -991,7 +990,7 @@ describe("T-PT10 thinking 卡门控与 redacted 形态", () => {
   });
 
   it("redacted_thinking 产出 body=[redacted thinking] 的 thinking 卡", async () => {
-    const messages: ChatMessage[] = [
+    const messages: ChatMessageData[] = [
       message("user", "想一下", 1),
       blocksMessage("assistant", [
         { type: "redacted_thinking", data: "opaque" },
@@ -1012,7 +1011,7 @@ describe("T-PT10 thinking 卡门控与 redacted 形态", () => {
   });
 
   it("thinking 块夹在文本中间时正确切分缓冲卡", async () => {
-    const messages: ChatMessage[] = [
+    const messages: ChatMessageData[] = [
       message("user", "想一下", 1),
       blocksMessage("assistant", [
         { type: "text", text: "前段" },
@@ -1066,7 +1065,7 @@ function workplaceFilesOf(turn: PromptPreviewTurn) {
  * @param content tool_result 原始 content（走 `formatToolResultContentForDisplay`）。
  */
 async function toolResultBodyOf(toolName: string, content: string): Promise<string> {
-  const messages: ChatMessage[] = [
+  const messages: ChatMessageData[] = [
     message("user", "跑", 1),
     blocksMessage("assistant", [
       { type: "tool_use", id: "t1", name: toolName, input: { path: "a.md" } },
@@ -1219,7 +1218,7 @@ describe("T-PL5 原文自身含 `12|34` 只剥外层一次", () => {
 
 describe("T-PL6 text / thinking 卡不剥（防误伤用户正文）", () => {
   it("assistant 文本卡以 `N|` 开头的正文零改动", async () => {
-    const messages: ChatMessage[] = [
+    const messages: ChatMessageData[] = [
       message("user", "hi", 1),
       message("assistant", "1|第一行\n2|第二行", 2),
     ];
@@ -1229,7 +1228,7 @@ describe("T-PL6 text / thinking 卡不剥（防误伤用户正文）", () => {
   });
 
   it("thinking 卡正文零改动", async () => {
-    const messages: ChatMessage[] = [
+    const messages: ChatMessageData[] = [
       message("user", "hi", 1),
       blocksMessage("assistant", [
         { type: "thinking", text: "     1|我在想" },
@@ -1248,7 +1247,7 @@ describe("T-PL6 text / thinking 卡不剥（防误伤用户正文）", () => {
   });
 
   it("user 文本卡（无附件 action）以 `N|` 开头的正文零改动", async () => {
-    const messages: ChatMessage[] = [
+    const messages: ChatMessageData[] = [
       message("user", "1|这是用户正文\n2|第二行", 1),
       message("assistant", "好", 2),
     ];
@@ -1318,7 +1317,7 @@ describe("T-PL7 wire 不变（三段结构判据）", () => {
     const turn = turns.find((t) => t.id === "prompt-workplace")!;
     // items / body 走 `ctx.workplaceDisplay`，这里用 chat 轮交叉核实同一断言：
     // 轮 body 完全由 items 拼成，段 body 未被剥。
-    const messages: ChatMessage[] = [
+    const messages: ChatMessageData[] = [
       message("user", "hi", 1),
       message("assistant", "1|第一行\n2|第二行", 2),
     ];
@@ -1363,7 +1362,7 @@ describe("T-PL8 metaText 字数按剥后正文", () => {
   });
 
   it("assistant 轮 metaText 的工具结果字数按剥后正文", async () => {
-    const messages: ChatMessage[] = [
+    const messages: ChatMessageData[] = [
       message("user", "跑", 1),
       blocksMessage("assistant", [
         { type: "tool_use", id: "t1", name: "read", input: { path: "a.md" } },
@@ -1382,13 +1381,13 @@ describe("T-PL8 metaText 字数按剥后正文", () => {
 describe("T-PL9 user 附件 JSON 转义形态定向剥离（Step 7）", () => {
   /** 走生产构造器拼 wrap 形态，保证 fixture 与 wire 侧同源。 */
   function userAttachBody(content: string, path = "notes/a.md"): string {
-    const actionXml = buildFileRefActionXml({
+    const actionXml = attachmentXmlCodec.encodeFileRef({
       action: "userAttach",
       path,
       content,
       display: "full",
     });
-    return wrapUserMessageForLlm("看看这个", [
+    return userMessageFormatter.wrapForLlm("看看这个", [
       {
         name: "a.md",
         source: "attach",
@@ -1400,7 +1399,7 @@ describe("T-PL9 user 附件 JSON 转义形态定向剥离（Step 7）", () => {
 
   /** user 轮 text 卡正文（唯一的 user 轮卡片）。 */
   async function userCardBody(text: string): Promise<string> {
-    const messages: ChatMessage[] = [
+    const messages: ChatMessageData[] = [
       blocksMessage("user", textBlocks(text).blocks, 1),
       message("assistant", "好", 2),
     ];
@@ -1421,7 +1420,7 @@ describe("T-PL9 user 附件 JSON 转义形态定向剥离（Step 7）", () => {
     // 钉在附件段上：剥离一旦上提到 `toPreviewSegment` / `segment.body`，
     // 本用例的 items/body 断言立刻红。
     const wrapped = userAttachBody("1|第一行\n2|第二行");
-    const messages: ChatMessage[] = [
+    const messages: ChatMessageData[] = [
       blocksMessage("user", textBlocks(wrapped).blocks, 1),
       message("assistant", "好", 2),
     ];
@@ -1451,12 +1450,12 @@ describe("T-PL9 user 附件 JSON 转义形态定向剥离（Step 7）", () => {
   });
 
   it("annotate 块不动（没有 `content` 键，原文一律不碰）", async () => {
-    const actionXml = buildAttachmentActionXml("annotate", {
+    const actionXml = buildUserVfsActionXml("annotate", {
       path: "notes/a.md",
       originalText: "1|这行不是行号",
       userAnnotation: "2|批注也不是",
     });
-    const wrapped = wrapUserMessageForLlm("批注一下", [
+    const wrapped = userMessageFormatter.wrapForLlm("批注一下", [
       { name: "a.md", source: "user_ops", type: "text", content: actionXml },
     ]);
     assert.equal(await userCardBody(wrapped), wrapped);
@@ -1466,13 +1465,13 @@ describe("T-PL9 user 附件 JSON 转义形态定向剥离（Step 7）", () => {
     // `LINE_NUMBERED_ATTACHMENT_ACTION` 显式枚举 `userAttach|workplaceChange`
     // 两个 action；此前只测了前者。工作区规则调整变更卡（workplaceChange）
     // 是生产常客，枚举被误改/收窄成只 userAttach 时本用例红。
-    const actionXml = buildFileRefActionXml({
+    const actionXml = attachmentXmlCodec.encodeFileRef({
       action: "workplaceChange",
       path: "notes/a.md",
       content: "1|第一行\n2|第二行",
       display: "full",
     });
-    const wrapped = wrapUserMessageForLlm("规则改了", [
+    const wrapped = userMessageFormatter.wrapForLlm("规则改了", [
       { name: "a.md", source: "attach", type: "text", content: actionXml },
     ]);
     const body = await userCardBody(wrapped);
@@ -1482,7 +1481,7 @@ describe("T-PL9 user 附件 JSON 转义形态定向剥离（Step 7）", () => {
   });
 
   it("`<user-input>` 内层用户正文零改动（摘要取值也不受影响）", async () => {
-    const messages: ChatMessage[] = [
+    const messages: ChatMessageData[] = [
       blocksMessage(
         "user",
         textBlocks(userAttachBody("1|附件行")).blocks,
@@ -1496,11 +1495,11 @@ describe("T-PL9 user 附件 JSON 转义形态定向剥离（Step 7）", () => {
   });
 
   it("skillAttach 块不动（`content` 是无行号原文，判据不适用）", async () => {
-    const actionXml = buildAttachmentActionXml("skillAttach", {
+    const actionXml = buildUserVfsActionXml("skillAttach", {
       name: "novel-master",
       content: "第一行\n12|这不是行号",
     });
-    const wrapped = wrapUserMessageForLlm("用一下技能", [
+    const wrapped = userMessageFormatter.wrapForLlm("用一下技能", [
       { name: "skill", source: "attach", type: "text", content: actionXml },
     ]);
     const body = await userCardBody(wrapped);
@@ -1508,8 +1507,8 @@ describe("T-PL9 user 附件 JSON 转义形态定向剥离（Step 7）", () => {
   });
 
   it("dirTree 块不动（ASCII 树不构成 `^ *\\d+\\|`）", async () => {
-    const actionXml = buildDirTreeActionXml("notes", "notes/\n├── sub/\n└── a.md");
-    const wrapped = wrapUserMessageForLlm("看下目录", [
+    const actionXml = attachmentXmlCodec.encodeDirTree("notes", "notes/\n├── sub/\n└── a.md");
+    const wrapped = userMessageFormatter.wrapForLlm("看下目录", [
       { name: "notes", source: "attach", type: "text", content: actionXml },
     ]);
     const body = await userCardBody(wrapped);
@@ -1518,13 +1517,13 @@ describe("T-PL9 user 附件 JSON 转义形态定向剥离（Step 7）", () => {
 
   it("binary / 超限降级文案零改动", async () => {
     for (const note of ["二进制文件，不提供正文", "文件过长，可用 read 配合 offset/limit 分段读取"]) {
-      const actionXml = buildFileRefActionXml({
+      const actionXml = attachmentXmlCodec.encodeFileRef({
         action: "userAttach",
         path: "a.bin",
         content: note,
         display: "filename",
       });
-      const wrapped = wrapUserMessageForLlm("看下", [
+      const wrapped = userMessageFormatter.wrapForLlm("看下", [
         { name: "a.bin", source: "attach", type: "text", content: actionXml },
       ]);
       assert.equal(await userCardBody(wrapped), wrapped);

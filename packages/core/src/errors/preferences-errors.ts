@@ -1,42 +1,16 @@
 /**
- * Persistent preferences domain errors.
+ * Persistent preferences 错误工厂：统一返回 `AppError`。
  *
  * @module errors/preferences-errors
  */
 
-/** Discriminant codes for {@link PreferencesError}. */
-export type PreferencesErrorCode = "INVALID_VALUE";
+import { AppError } from "./app-error.js";
 
-/**
- * Unified error for persistent preferences operations.
- */
-export class PreferencesError extends Error {
-  readonly code: PreferencesErrorCode;
-  readonly key?: string;
-
-  constructor(
-    code: PreferencesErrorCode,
-    message: string,
-    options?: { key?: string }
-  ) {
-    super(message);
-    this.name = "PreferencesError";
-    this.code = code;
-    this.key = options?.key;
-  }
-}
-
-/**
- * Thrown when a preference value cannot be converted to the requested type.
- */
-export function preferencesInvalidValue(
-  key: string,
-  expectedType: string,
-  actualValue: string
-): PreferencesError {
-  return new PreferencesError(
-    "INVALID_VALUE",
-    `Preference key "${key}" expected ${expectedType}, got: ${actualValue}`,
-    { key }
-  );
+/** 持久化偏好的值无法转换为请求的类型。 */
+export function preferencesInvalidValue(key: string, expectedType: string, actualValue: string): AppError<"PREFERENCES_INVALID_VALUE"> {
+  return new AppError("PREFERENCES_INVALID_VALUE", `Preference key "${key}" expected ${expectedType}, got: ${actualValue}`, {
+    key,
+    expectedType,
+    actualValue,
+  });
 }

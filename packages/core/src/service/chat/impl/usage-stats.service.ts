@@ -9,7 +9,6 @@ import { queryTemplate } from "@/infra/tdbc/logic/template-helper.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import type { Row } from "@/infra/tdbc/types.js";
 import { parseMessageContent } from "@/domain/chat/content/parse-message-content.js";
-import { countToolUseBlocks } from "@/domain/chat/logic/tool-use-count.js";
 import {
   SESSION_KKV_DOMAIN_USAGE_STATS,
   USAGE_STATS_TOOL_USE_COUNT_KEY,
@@ -452,7 +451,7 @@ export class DefaultUsageStatsService implements UsageStatsService {
     // 最近行 + 可见计数两条 SQL 与会话 KKV 缓存读并行。最近行改打账本
     // （usage_record，按 created_at_ms 倒序取首行）——消息被删除/回滚后
     // 账本行仍在，「最近一次请求」不再随内容消失；可见数 SQL 数行
-    // （hidden 列判定，与 listVisibleSorted 同口径——只剔 hidden 不筛角色），
+    // （hidden 列判定，只剔 hidden 不筛角色），
     // 它属内容侧读数（随会话删），仍打 chat_message。
     // 工具调用数走会话 KKV `usage_stats.toolUseCount` 缓存（2026-09-29 用户
     // 拍板「实时算 + 缓存，失效挂 run/编辑/删除」；缓存跟随会话生命周期，
@@ -531,16 +530,13 @@ export class DefaultUsageStatsService implements UsageStatsService {
     let toolUseCount = 0;
     // 无 keyword 语义，无粗筛面：全量 parse 为固有成本
     for (const row of assistantRows) {
-      try {
-        toolUseCount += countToolUseBlocks(
-          parseMessageContent(String(row.content_json))
-        );
-      } catch (error) {
-        console.warn(
-          `[usage-stats] 工具调用现算遇坏行（按 0 计）：${
-            error instanceof Error ? error.message : String(error)
-          }`
-        );
+      const parsed = parseMessageContent(String(row.content_json));
+      if (!parsed.ok) {
+        console.warn(`[usage-stats] 工具调用现算遇坏行（按 0 计）：${parsed.error.message}`);
+        continue;
+      }
+      for (const block of parsed.value.blocks) {
+        if (block.type === "tool_use") toolUseCount += 1;
       }
     }
     // 回填前复核（cr-fix-spec-r2 s3/B-1）：现算的数百毫秒里若发生失效

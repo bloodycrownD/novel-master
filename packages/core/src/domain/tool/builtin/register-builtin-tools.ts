@@ -28,9 +28,7 @@ import { searchTool } from "./search/search-tool.js";
  * 经 `ctx.fetchFn` 可选注入（缺省 globalThis.fetch）；search 另读
  * `ctx.search` 闭包解析引擎（未装配时 run 返回可读错误）。
  */
-export function registerBuiltinTools(
-  registry: ToolRegistry<BuiltinToolContext>
-): void {
+export function registerBuiltinTools(registry: ToolRegistry<BuiltinToolContext>): void {
   for (const tool of createVfsTools()) {
     registry.register(tool);
   }
@@ -44,8 +42,6 @@ export function registerBuiltinTools(
 /**
  * @deprecated Use {@link registerBuiltinTools}.
  */
-export function registerVfsTools(
-  registry: ToolRegistry<BuiltinToolContext>
-): void {
+export function registerVfsTools(registry: ToolRegistry<BuiltinToolContext>): void {
   registerBuiltinTools(registry);
 }

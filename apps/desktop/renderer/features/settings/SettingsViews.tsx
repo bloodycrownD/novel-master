@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { truncateText } from "@novel-master/core/common";
 export { AgentEditorView } from "./AgentEditorView";
 
 
@@ -23,6 +24,7 @@ import {
   ipcAgentRegistryDelete,
   ipcAgentRegistryGet,
   ipcAgentRegistryList,
+  ipcAgentRegistryUpdate,
   ipcAgentRegistryUpsert,
   ipcAgentResolveCurrent,
   ipcAgentSetCurrent,
@@ -100,11 +102,6 @@ import type {
 } from "@shared/ipc-types";
 
 type Nav = SettingsNavHandle;
-
-/** 列表 meta 中截断失效说明。 */
-function truncateInvalidMessage(message: string, max = 80): string {
-  return message.length <= max ? message : `${message.slice(0, max)}…`;
-}
 
 type CloudSyncStatusState = {
   configured: boolean;
@@ -809,10 +806,9 @@ export function AgentsSettingsView({ nav }: { nav: Nav }) {
       toastSettingsError("配置已失效，请先修复后再重命名");
       return;
     }
-    const def = getRes.data.value;
-    await ipcAgentRegistryUpsert({
+    await ipcAgentRegistryUpdate({
       agentId: prompt.agentId,
-      definition: { ...def, name },
+      patch: { name },
     });
     await reload();
   };
@@ -907,9 +903,7 @@ export function AgentsSettingsView({ nav }: { nav: Nav }) {
                     className="settings-list-item__meta-error"
                     title={row.invalid.message}
                   >
-                    {truncateInvalidMessage(
-                      storedConfigInvalidReason(row.invalid.code),
-                    )}
+                    {truncateText(storedConfigInvalidReason(row.invalid.code), 80)}
                   </span>
                 </span>
               ) : row.mode == null || row.mode === "all" ? (

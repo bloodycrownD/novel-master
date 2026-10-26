@@ -20,9 +20,8 @@
  * @module service/agent/logic/run-agent-turn
  */
 
-import { resolveAgentToolRegistry } from "@/domain/agent/logic/resolve-agent-tool-registry.js";
+import { resolveAgentToolRegistry } from "@/domain/agent/logic/resolve-agent-tools.js";
 import { validateAgentDefinition } from "@/domain/agent/logic/validate-agent-definition.js";
-import { resolveSavedModelId } from "@/domain/agent/logic/resolve-saved-model-id.js";
 import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
 import type { AgentRunResult } from "@/domain/agent/model/agent-run-result.js";
 import { registerBuiltinTools } from "@/domain/tool/builtin/register-builtin-tools.js";
@@ -41,7 +40,7 @@ import type { SearchConfigStore } from "@/domain/tool/builtin/search/search-conf
 import { ToolRegistry } from "@/domain/tool/logic/tool-registry.js";
 import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { SimpleEventBus } from "@/infra/events/simple-event-bus.js";
-import { PreferencesError } from "@/errors/preferences-errors.js";
+import { isAppError } from "@/errors/app-error.js";
 import { ToolError } from "@/errors/tool-errors.js";
 import { textBlocks } from "@/domain/chat/content/text-blocks.js";
 import {
@@ -52,11 +51,8 @@ import {
 import type { SendAnnotateDraft } from "@/domain/chat/model/annotate-draft.schema.js";
 import type { ComposerDraftTokenRange } from "@/domain/chat/model/composer-draft.schema.js";
 import type { MessageAttachment } from "@/domain/chat/model/message-attachment.schema.js";
-import { buildAnnotateAttachmentFromDraft } from "@/domain/chat/logic/build-attachment-action-xml.js";
-import { estimateSoftRangeFromOriginalText } from "@/domain/chat/logic/annotate-source-range.js";
-import { maskComposerScanRanges } from "@/domain/chat/logic/mask-composer-scan-ranges.js";
-import { mergeAttachmentsWithScannedAtPaths } from "@/domain/chat/logic/scan-at-path-attachments.js";
-import { mergeAttachmentsWithScannedSkills } from "@/domain/chat/logic/scan-skill-attachments.js";
+import { attachmentXmlCodec } from "@/domain/chat/logic/attachment/attachment-xml-codec.js";
+import { attachmentScanner } from "@/domain/chat/logic/attachment/attachment-scanner.js";
 import type { CompactionConditionEvaluator } from "@/service/compaction-conditions/create-compaction-condition-evaluator.js";
 import { CoordinatedWrite } from "@/service/coordinated-write.js";
 import type { MessageCheckpointService } from "@/service/message-checkpoint/message-checkpoint.port.js";
@@ -92,6 +88,28 @@ import { resolveAgentForProject } from "./resolve-agent-for-project.js";
 export interface AgentTurnScope {
   readonly projectId: string;
   readonly sessionId: string;
+}
+
+/** 0-based 字符偏移 → 1-based 行列；用于批注行号补算。 */
+function offsetToSourceLineCol(sourceText: string, offset: number): { readonly line: number; readonly col: number } {
+  let line = 1;
+  let col = 1;
+  for (let i = 0; i < offset; i++) {
+    const ch = sourceText[i]!;
+    if (ch === "\r") {
+      if (sourceText[i + 1] === "\n") {
+        i++;
+      }
+      line++;
+      col = 1;
+    } else if (ch === "\n") {
+      line++;
+      col = 1;
+    } else {
+      col++;
+    }
+  }
+  return { line, col };
 }
 
 /** Runtime surface required to run one agent dialogue turn. */
@@ -242,7 +260,7 @@ export function assembleAgentsToolContext(
   };
 }
 
-export interface RunAgentTurnAfterResolveContext {
+interface RunAgentTurnAfterResolveContext {
   readonly scope: AgentTurnScope;
   readonly definition: AgentDefinition;
   readonly savedModelId: string;
@@ -250,7 +268,7 @@ export interface RunAgentTurnAfterResolveContext {
   readonly stream: boolean;
 }
 
-export interface RunAgentTurnOptions {
+interface RunAgentTurnOptions {
   readonly stream?: boolean;
   /**
    * 空 content 续跑且末条为 user（含 App Composer 空发）。
@@ -281,7 +299,7 @@ export interface RunAgentTurnOptions {
    * （`source === 'attach'`），本字段只供**全量扫描掩码**——扫描前把区间替换成
    * 等长空白，避免 `$技能` 被并进 `@path`、避免区间内 token 重复扫描。
    * 缺失或空数组 → 全量扫描不掩码，与历史行为逐字节一致。
-   * 越界/重叠区间由掩码侧夹取与过滤（见 `maskComposerScanRanges`）。
+   * 越界/重叠区间由本段掩码逻辑夹取与过滤。
    */
   readonly excludedScanRanges?: readonly ComposerDraftTokenRange[];
   /**
@@ -681,23 +699,52 @@ async function runAgentTurnWithController(
   // D9：确认胶囊区间先掩码成等长空白再全量扫描——区间内触发符（`$A$B` /
   // `@path$技能`）不再污染/重复扫描；区间结果由发送侧预扫后经 attachments
   // 传入（composerAttachOnly 在合并时位于 existing 位 = 区间结果优先）。
-  const scanText = maskComposerScanRanges(trimmed, options?.excludedScanRanges);
-  const scannedComposer = mergeAttachmentsWithScannedSkills(
-    scanText,
-    mergeAttachmentsWithScannedAtPaths(scanText, composerAttachOnly)
-  );
+  const excludedScanRanges = options?.excludedScanRanges ?? [];
+  const clampedScanRanges: ComposerDraftTokenRange[] = [];
+  for (const range of excludedScanRanges) {
+    if (!Number.isInteger(range.start) || !Number.isInteger(range.end)) {
+      continue;
+    }
+    const start = Math.max(0, range.start);
+    const end = Math.min(trimmed.length, range.end);
+    if (start < end) {
+      clampedScanRanges.push({ start, end });
+    }
+  }
+  clampedScanRanges.sort((a, b) => a.start - b.start || a.end - b.end);
+  const disjointScanRanges: ComposerDraftTokenRange[] = [];
+  let coveredUntil = 0;
+  for (const range of clampedScanRanges) {
+    if (range.start >= coveredUntil) {
+      disjointScanRanges.push(range);
+      coveredUntil = range.end;
+    }
+  }
+  let scanText = trimmed;
+  if (disjointScanRanges.length > 0) {
+    let masked = "";
+    let cursor = 0;
+    for (const range of disjointScanRanges) {
+      masked += trimmed.slice(cursor, range.start);
+      masked += " ".repeat(range.end - range.start);
+      cursor = range.end;
+    }
+    scanText = masked + trimmed.slice(cursor);
+  }
+  const withAtPaths = attachmentScanner.mergeScannedAtPaths(scanText, composerAttachOnly);
+  const scannedComposer = attachmentScanner.mergeScannedSkills(scanText, withAtPaths);
 
   let checkpointAnchorMessageId: string | undefined;
 
   // annotate：concat 追加（禁止 mergeAttachmentsByPath / path 去重，以免同 path 丢条）
   // 上游划词创建草稿时只传了 renderStart/renderEnd，没填 startLine/endLine，
-  // 这里在落库前用 VFS 读源文本 + originalText 反查，补上精确行号（padding=0）
+  // 这里在落库前用 VFS 读源文本 + originalText 反查，补上精确行号
   // 给模型读附件时多一个「第 N 行」的位置提示；匹配不到或读盘失败就静默跳过。
   const annotateVfs = runtime.sessionVfs(scope.projectId, scope.sessionId);
   const annotateAttachments = await Promise.all(
     annotateDrafts.map(async (draft) => {
       if (draft.startLine != null && draft.endLine != null) {
-        return buildAnnotateAttachmentFromDraft(draft);
+        return attachmentXmlCodec.encodeAnnotateAttachment(draft);
       }
       let sourceText: string | undefined;
       try {
@@ -706,25 +753,29 @@ async function runAgentTurnWithController(
         // 文件不存在 / 权限 / 伪 path 等：拿不到源文本就跳过行号补算
       }
       if (typeof sourceText !== "string" || sourceText.length === 0) {
-        return buildAnnotateAttachmentFromDraft(draft);
+        return attachmentXmlCodec.encodeAnnotateAttachment(draft);
       }
-      const softRange = estimateSoftRangeFromOriginalText(
-        sourceText,
-        draft.originalText,
-        { linePadding: 0 }
-      );
-      if (softRange == null) {
-        return buildAnnotateAttachmentFromDraft(draft);
+      const needle = draft.originalText.replace(/\u00a0/g, " ");
+      if (needle.length === 0) {
+        return attachmentXmlCodec.encodeAnnotateAttachment(draft);
       }
-      // draft 来自 annotateDrafts（SendAnnotateDraft），合并行号后还是同型；显式标注避免依赖推导
-      const enriched: SendAnnotateDraft = {
-        ...draft,
-        startLine: softRange.startLine,
-        endLine: softRange.endLine,
-        ...(softRange.startCol != null ? { startCol: softRange.startCol } : {}),
-        ...(softRange.endCol != null ? { endCol: softRange.endCol } : {}),
-      };
-      return buildAnnotateAttachmentFromDraft(enriched);
+      let at = sourceText.indexOf(needle);
+      let matchLen = needle.length;
+      let haystack = sourceText;
+      if (at < 0) {
+        const normSource = sourceText.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+        const normNeedle = needle.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+        at = normSource.indexOf(normNeedle);
+        if (at < 0) {
+          return attachmentXmlCodec.encodeAnnotateAttachment(draft);
+        }
+        matchLen = normNeedle.length;
+        haystack = normSource;
+      }
+      const start = offsetToSourceLineCol(haystack, at);
+      const end = offsetToSourceLineCol(haystack, at + matchLen - 1);
+      const enriched: SendAnnotateDraft = { ...draft, startLine: start.line, endLine: end.line, startCol: start.col, endCol: end.col };
+      return attachmentXmlCodec.encodeAnnotateAttachment(enriched);
     })
   );
 
@@ -804,9 +855,8 @@ async function runAgentTurnWithController(
   stage = "validate-agent-definition";
   const toolProbe = new ToolRegistry<BuiltinToolContext>();
   registerBuiltinTools(toolProbe);
-  await validateAgentDefinition(definition, {
-    registeredToolNames: toolProbe.list(),
-  });
+  const validation = await validateAgentDefinition(definition, {registeredToolNames: toolProbe.list()});
+  if (!validation.ok) throw validation.error;
 
   // 预算候选子代理名单：mode !== "primary"（排除主 agent）、排除当前 agent 自身防自递归。
   // 内置 general 永远 mode:"subagent"，排除自身后至少含 general，task 描述始终有内容。
@@ -915,10 +965,7 @@ async function runAgentTurnWithController(
         def: AgentDefinition
       ): { savedModelId: string; workspaceModelId: string } => {
         // 子 agent pin → 父 savedModelId → 报错（不走 workspace fallback）。
-        const resolved = resolveSavedModelId({
-          agentModelId: def.model,
-          sessionModelId: savedModelId,
-        });
+        const resolved = def.model ?? savedModelId;
         if (resolved == null || resolved === "") {
           throw new AgentRunResolveError(
             "子代理未指定模型，且父 agent 也无可用 savedModelId。"
@@ -1296,10 +1343,7 @@ async function runChildAgent(args: {
           grandchildDef: AgentDefinition
         ): { savedModelId: string; workspaceModelId: string } => {
           // 子 agent pin → 父子 agent 的 savedModelId → 报错（不走 workspace fallback）。
-          const resolved = resolveSavedModelId({
-            agentModelId: grandchildDef.model,
-            sessionModelId: opts.savedModelId,
-          });
+          const resolved = grandchildDef.model ?? opts.savedModelId;
           if (resolved == null || resolved === "") {
             throw new AgentRunResolveError(
               "孙代理未指定模型，且子 agent 也无可用 savedModelId。"
@@ -1347,14 +1391,14 @@ async function runChildAgent(args: {
 
     // 子会话流式开关（每 run 快照，与 thinkingContext 口径一致）：run 进行中
     // 切开关不影响当次子 run；递归各层闭包捕获同一 runtime，读的是同一偏好。
-    // 偏好读失败（如手工写入脏值）时只兜 PreferencesError——回退默认流式并记
+    // 偏好读失败（如手工写入脏值）时只兜 PREFERENCES_INVALID_VALUE——回退默认流式并记
     // 标签日志，不炸 run；其余异常重抛，避免静默吞掉装配类 bug。
     let childStream = true;
     try {
       childStream =
         (await runtime.preferences?.getSubagentStreamEnabled()) ?? true;
     } catch (cause) {
-      if (!(cause instanceof PreferencesError)) throw cause;
+      if (!isAppError(cause, "PREFERENCES_INVALID_VALUE")) throw cause;
       console.error("[agent-run] subagentStream pref read failed", cause);
     }
 

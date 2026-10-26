@@ -4,20 +4,20 @@
  * @module domain/vfs/logic/ensure-parent-dirs
  */
 
-import { vfsNotADirectory } from "@/errors/vfs-errors.js";
+import { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 import type { VfsEntryRepository } from "../repositories/vfs-entry.port.js";
 import { isStorageRootParent, parentDir } from "./parent-dir.js";
+
+/** ensureParentDirectories 的失败载荷。 */
+type VfsParentDirectoryError = AppError<"VFS_NOT_A_DIRECTORY">;
 
 /**
  * Creates missing directory rows from root down to the file's parent.
  *
- * @throws {import("../../errors/vfs-errors.js").VfsError} `NOT_A_DIRECTORY` when a parent is a file row
+ * @returns Result.err `VFS_NOT_A_DIRECTORY` when a parent is a file row
  */
-export async function ensureParentDirectories(
-  repo: VfsEntryRepository,
-  scopeKey: string,
-  filePath: string
-): Promise<void> {
+export async function ensureParentDirectories(repo: VfsEntryRepository, scopeKey: string, filePath: string): Promise<Result<void, VfsParentDirectoryError>> {
   const chain: string[] = [];
   let current = parentDir(filePath);
   while (current !== "/") {
@@ -32,10 +32,11 @@ export async function ensureParentDirectories(
     const existing = await repo.findByPath(scopeKey, dirPath);
     if (existing != null) {
       if (existing.entryKind === "file") {
-        throw vfsNotADirectory(dirPath);
+        return Result.err(new AppError("VFS_NOT_A_DIRECTORY", `Not a directory: ${dirPath}`, { path: dirPath }));
       }
       continue;
     }
     await repo.insertDirectory(scopeKey, dirPath);
   }
+  return Result.ok(undefined);
 }

@@ -22,20 +22,14 @@ export interface SavedModel {
  * @param providerDisplayName 必填：调用方须先 resolve 服务商 displayName 再传入；
  *   禁止省略；禁止把 provider UUID / 旧 slug 当作第二参来源糊弄过去。
  */
-export function savedModelDisplayName(
-  model: SavedModel,
-  providerDisplayName: string
-): string {
+export function savedModelDisplayName(model: SavedModel, providerDisplayName: string): string {
   return formatSavedModelDisplayName(providerDisplayName, model.modelName);
 }
 
 /** 构造带派生 displayName 视图的 saved model（map 层使用）。 */
 export type SavedModelView = SavedModel & { readonly displayName: string };
 
-export function toSavedModelView(
-  model: SavedModel,
-  providerDisplayName: string
-): SavedModelView {
+export function toSavedModelView(model: SavedModel, providerDisplayName: string): SavedModelView {
   return {
     ...model,
     displayName: savedModelDisplayName(model, providerDisplayName),

@@ -3,7 +3,7 @@ import test from "node:test";
 import type { ChatMessageDto } from "@shared/ipc-types";
 import {
   USER_VFS_TURN_ACK_TEXT,
-  wrapUserVfsActionsForStorage,
+  userVfsTurnStorage,
 } from "@shared/logic/chat";
 import {
   buildChatListItems,
@@ -349,9 +349,9 @@ test("T-UO2x：历史 UA 两段按普通 message，无 user_vfs_turn", () => {
       role: "user",
       hidden: false,
       createdAtMs: 1,
-      bodyText: wrapUserVfsActionsForStorage(actionXml),
+      bodyText: userVfsTurnStorage.wrapActions(actionXml),
       contentBlocks: [
-        { type: "text", text: wrapUserVfsActionsForStorage(actionXml) },
+        { type: "text", text: userVfsTurnStorage.wrapActions(actionXml) },
       ],
       metadata: {
         kind: "user_vfs_action",

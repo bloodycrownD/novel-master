@@ -1,6 +1,6 @@
 import {describe, expect, it, jest} from '@jest/globals';
 import {buildDefaultAgentDefinitionPreservingName} from '@novel-master/core/config-forms/stored-config-validity';
-import {ChatError} from '@novel-master/core/chat';
+import {AppError} from '@novel-master/core/agent';
 import {
   isAgentDeleted,
   isAgentLocked,
@@ -162,14 +162,14 @@ describe('loadChatAgentMeta 错误归一口径（au/C-orch-2）', () => {
     expect(isAgentLocked(meta)).toBe(false);
   });
 
-  it('ChatError（如配置缺失/迁移未跑）原样上抛——调用方 meta 停 undefined，锁定且不可弹重选', async () => {
+  it('CHAT_INVALID_ARGUMENT（如配置缺失/迁移未跑）原样上抛——调用方 meta 停 undefined，锁定且不可弹重选', async () => {
     const runtime: any = mockRuntime({});
     runtime.sessions.getSessionAgentConfig = jest.fn(async () => {
-      throw new ChatError('INVALID_ARGUMENT', 'session 配置缺失');
+      throw new AppError('CHAT_INVALID_ARGUMENT', 'session 配置缺失');
     });
     await expect(
       loadChatAgentMeta(runtime, 'proj-1', 'sess-1'),
-    ).rejects.toBeInstanceOf(ChatError);
+    ).rejects.toBeInstanceOf(AppError);
     // 调用方 catch 后 meta 保持 undefined：未加载锁定态，绝无「已删待重选」语义。
     expect(isAgentDeleted(undefined)).toBe(false);
     expect(isAgentLocked(undefined)).toBe(true);

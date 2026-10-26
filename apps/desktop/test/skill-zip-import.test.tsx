@@ -220,7 +220,7 @@ describe("ZIP 导入保留名新建门（CR D-1）", () => {
     });
     assert.equal(denied.ok, false);
     if (!denied.ok) {
-      assert.equal(denied.error.code, "BUILTIN_SKILL_NAME_RESERVED");
+      assert.equal(denied.error.code, "SKILL_BUILTIN_NAME_RESERVED");
       assert.match(denied.error.message, /「agent-config」为内置技能保留名/);
     }
 

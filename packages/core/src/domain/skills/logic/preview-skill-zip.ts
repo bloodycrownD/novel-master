@@ -9,8 +9,13 @@
 
 import { strFromU8 } from "fflate";
 
+import { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 import { parseVfsZip } from "@/domain/vfs/logic/vfs-zip-parse.js";
 import { parseSkillFrontMatter } from "./parse-skill-front-matter.js";
+
+/** 本模块的失败载荷：zip 不可读 / 非法 UTF-8 条目名 / 超出解压限制。 */
+type SkillZipPreviewError = AppError<"VFS_ZIP_INVALID_ARCHIVE" | "VFS_ZIP_INVALID_UTF8" | "VFS_ZIP_PAYLOAD_TOO_LARGE">;
 
 /** 技能 zip 预检结果；`skillMd == null` 表示 zip 根缺少 SKILL.md。 */
 export interface SkillZipPreview {
@@ -29,10 +34,14 @@ export interface SkillZipPreview {
 /**
  * 解析技能 zip 字节，产出新建弹窗预填所需的元数据。
  *
- * @throws {VfsZipError} `INVALID_ZIP` 当归档无法读取
+ * @returns 归档不可读 / 超出解压限制时为 `Err`（key `VFS_ZIP_*`），本函数不抛。
  */
-export function previewSkillZip(zipBytes: Uint8Array): SkillZipPreview {
-  const entries = parseVfsZip(zipBytes);
+export function previewSkillZip(zipBytes: Uint8Array): Result<SkillZipPreview, SkillZipPreviewError> {
+  const parsedZip = parseVfsZip(zipBytes);
+  if (!parsedZip.ok) {
+    return Result.err(parsedZip.error);
+  }
+  const entries = parsedZip.value;
   let fileCount = 0;
   for (const name of entries.keys()) {
     if (!name.endsWith("/")) {
@@ -41,21 +50,21 @@ export function previewSkillZip(zipBytes: Uint8Array): SkillZipPreview {
   }
   const skillMdBytes = entries.get("SKILL.md");
   if (skillMdBytes == null) {
-    return {
+    return Result.ok({
       name: null,
       description: null,
       skillMd: null,
       fileCount,
       valid: false,
-    };
+    });
   }
   const skillMd = strFromU8(skillMdBytes);
   const parsed = parseSkillFrontMatter(skillMd);
-  return {
+  return Result.ok({
     name: parsed.name,
     description: parsed.description,
     skillMd,
     fileCount,
     valid: parsed.valid,
-  };
+  });
 }

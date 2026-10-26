@@ -5,7 +5,7 @@
  */
 
 import type { MessageContent } from "@/domain/chat/model/message.js";
-import type { ChatMessage } from "@/domain/chat/model/message.js";
+import type { ChatMessageData } from "@/domain/chat/model/message.js";
 import type { MessageUsage } from "@/domain/chat/model/message-usage.js";
 import type { MessageService } from "@/service/chat/message.port.js";
 import type { MessageAttachment } from "@/domain/chat/model/message-attachment.schema.js";
@@ -28,7 +28,7 @@ export class ChatAgentSession implements AgentSession {
     readonly kkvScopeSessionId: string = sessionId
   ) {}
 
-  async list(): Promise<readonly ChatMessage[]> {
+  async list(): Promise<readonly ChatMessageData[]> {
     // 可见-only 走 SQL 层过滤（`AND hidden = 0`，不解压隐藏行正文），返回集合
     // 与旧「全量 + JS filter(!hidden)」逐条等价（含顺序）。本方法被 agent-runner
     // 每 step 调一次，而压缩/置位后的会话里 hidden 行常占多数——全量拉回再逐条
@@ -50,7 +50,7 @@ export class ChatAgentSession implements AgentSession {
       /** 结构化附件：透传给 `MessageService.append`（写 `attachments_json`）。 */
       attachments?: readonly MessageAttachment[];
     }
-  ): Promise<ChatMessage> {
+  ): Promise<ChatMessageData> {
     return this.messages.append(this.sessionId, role, content, options);
   }
 

@@ -21,18 +21,7 @@
  * @module domain/tool/builtin/search/engines/duckduckgo
  */
 
-import {
-  engineApiErrorMessage,
-  engineTimeoutError,
-  matchesDomainFilters,
-  normalizeMaxResults,
-  parseDomainFilters,
-  type DomainFilters,
-  type ResolvedEngineConfig,
-  type SearchResponse,
-  type SearchResult,
-  type SearchToolOptions,
-} from "../types.js";
+import { engineApiErrorMessage, engineFailed, engineTimeoutError, matchesDomainFilters, normalizeMaxResults, parseDomainFilters, type DomainFilters, type ResolvedEngineConfig, type SearchResponse, type SearchResult, type SearchToolOptions } from "../types.js";
 
 /** DuckDuckGo HTML 端点（硬编码，内置引擎无自定义 baseUrl）。 */
 export const DUCKDUCKGO_SEARCH_URL = "https://html.duckduckgo.com/html/";
@@ -41,8 +30,7 @@ export const DUCKDUCKGO_SEARCH_URL = "https://html.duckduckgo.com/html/";
 export const DUCKDUCKGO_TIMEOUT_MS = 30_000;
 
 /** 自报轻客户端 UA（照参考实现格式，novel-master 风格；不伪装浏览器）。 */
-export const DUCKDUCKGO_USER_AGENT =
-  "Mozilla/5.0 (compatible; novel-master/1.0; +https://github.com/bloodycrownD/novel-master)";
+export const DUCKDUCKGO_USER_AGENT = "Mozilla/5.0 (compatible; novel-master/1.0; +https://github.com/bloodycrownD/novel-master)";
 
 /**
  * HTML 实体解码：只处理标题/摘要/href 中常见的五个命名实体
@@ -50,13 +38,8 @@ export const DUCKDUCKGO_USER_AGENT =
  * `&#NN;` 一般数字实体不做（真实页面罕用，简化口径）。
  */
 function decodeHtmlEntities(text: string): string {
-  return text
-    .replace(/&quot;/g, '"')
-    .replace(/&#x27;/g, "'")
-    .replace(/&#39;/g, "'")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&amp;/g, "&");
+  const withoutNamed = text.replace(/&quot;/g, '"').replace(/&#x27;/g, "'").replace(/&#39;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">");
+  return withoutNamed.replace(/&amp;/g, "&");
 }
 
 /**
@@ -65,9 +48,8 @@ function decodeHtmlEntities(text: string): string {
  * `textContent.trim()` 加浏览器渲染的空白折叠语义。
  */
 function cleanAnchorText(innerHtml: string): string {
-  return decodeHtmlEntities(innerHtml.replace(/<[^>]*>/g, ""))
-    .replace(/\s+/g, " ")
-    .trim();
+  const stripped = innerHtml.replace(/<[^>]*>/g, "");
+  return decodeHtmlEntities(stripped).replace(/\s+/g, " ").trim();
 }
 
 /**
@@ -79,9 +61,7 @@ function decodeResultUrl(href: string): string | null {
     const link = new URL(decodeHtmlEntities(href), DUCKDUCKGO_SEARCH_URL);
     const destination = link.searchParams.get("uddg") ?? link.href;
     const url = new URL(destination);
-    return url.protocol === "http:" || url.protocol === "https:"
-      ? url.href
-      : null;
+    return url.protocol === "http:" || url.protocol === "https:" ? url.href : null;
   } catch {
     return null;
   }
@@ -94,10 +74,7 @@ interface AnchorMatch {
 }
 
 /** 块内取第一个 class token 精确等于 `className` 的锚（querySelector 语义）。 */
-function findAnchorByClass(
-  blockHtml: string,
-  className: string
-): AnchorMatch | null {
+function findAnchorByClass(blockHtml: string, className: string): AnchorMatch | null {
   for (const match of blockHtml.matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/g)) {
     const attrs = match[1] ?? "";
     const classAttr = attrs.match(/\bclass\s*=\s*"([^"]*)"/);
@@ -126,8 +103,7 @@ interface ResultBlock {
  * 下一块起点；class token 含 `result--ad` 标记广告块（调用方跳过）。
  */
 function splitResultBlocks(html: string): ResultBlock[] {
-  const blockStarts: Array<{ index: number; end: number; tokens: string[] }> =
-    [];
+  const blockStarts: Array<{ index: number; end: number; tokens: string[] }> = [];
   for (const match of html.matchAll(/<div\b[^>]*>/g)) {
     const tag = match[0];
     const classAttr = tag.match(/\bclass\s*=\s*"([^"]*)"/);
@@ -143,8 +119,7 @@ function splitResultBlocks(html: string): ResultBlock[] {
   const blocks: ResultBlock[] = [];
   for (let i = 0; i < blockStarts.length; i++) {
     const start = blockStarts[i]!.end;
-    const end =
-      i + 1 < blockStarts.length ? blockStarts[i + 1]!.index : html.length;
+    const end = i + 1 < blockStarts.length ? blockStarts[i + 1]!.index : html.length;
     blocks.push({
       html: html.slice(start, end),
       isAd: blockStarts[i]!.tokens.includes("result--ad"),
@@ -159,12 +134,7 @@ function splitResultBlocks(html: string): ResultBlock[] {
  * （HTML 端点无 `site:` 服务端过滤能力，不拼查询词——与 brave/searxng
  * 的双保险模式不同，参考实现同口径）。
  */
-export async function searchWithDuckduckgo(
-  _resolved: ResolvedEngineConfig,
-  query: string,
-  options: SearchToolOptions,
-  fetchFn: typeof globalThis.fetch
-): Promise<SearchResponse> {
+export async function searchWithDuckduckgo(_resolved: ResolvedEngineConfig, query: string, options: SearchToolOptions, fetchFn: typeof globalThis.fetch): Promise<SearchResponse> {
   const numResults = normalizeMaxResults(options.maxResults);
   const filters: DomainFilters = parseDomainFilters(options.domainFilter);
 
@@ -177,28 +147,22 @@ export async function searchWithDuckduckgo(
   try {
     let response: Response;
     try {
-      response = await fetchFn(url.toString(), {
+      const requestInit = {
         method: "GET",
         headers: {
           Accept: "text/html",
           "User-Agent": DUCKDUCKGO_USER_AGENT,
         },
         signal: controller.signal,
-      });
+      };
+      response = await fetchFn(url.toString(), requestInit);
     } catch (e) {
-      throw engineTimeoutError(
-        e,
-        controller.signal.aborted,
-        "DuckDuckGo",
-        DUCKDUCKGO_TIMEOUT_MS
-      );
+      throw engineTimeoutError(e, controller.signal.aborted, "DuckDuckGo", DUCKDUCKGO_TIMEOUT_MS);
     }
 
     if (!response.ok) {
       const body = await response.text();
-      throw new Error(
-        engineApiErrorMessage("DuckDuckGo", response.status, body)
-      );
+      throw engineFailed(engineApiErrorMessage("DuckDuckGo", response.status, body));
     }
 
     const html = await response.text();
@@ -219,15 +183,12 @@ export async function searchWithDuckduckgo(
       results.push({
         title,
         url: resultUrl,
-        snippet:
-          snippetAnchor != null ? cleanAnchorText(snippetAnchor.innerHtml) : "",
+        snippet: snippetAnchor != null ? cleanAnchorText(snippetAnchor.innerHtml) : "",
       });
       if (results.length >= numResults) break;
     }
     if (parseableResults === 0) {
-      throw new Error(
-        "DuckDuckGo returned no parseable results (invalid response)"
-      );
+      throw engineFailed("DuckDuckGo returned no parseable results (invalid response)");
     }
     return { engine: "duckduckgo", results };
   } finally {

@@ -1,9 +1,7 @@
 import {TdbcError, ToolError} from '@novel-master/core';
-import {AgentError} from '@novel-master/core/agent';
-import {ChatError} from '@novel-master/core/chat';
+import {AppError} from '@novel-master/core/agent';
 import {ProviderError} from '@novel-master/core/provider';
 import {
-  CharacterCardError,
   VfsError,
   VfsZipError,
 } from '@novel-master/core/vfs';
@@ -15,11 +13,11 @@ describe('formatError (T4)', () => {
     expect(formatError(err)).toBe('文件不存在或已被删除。');
   });
 
-  it('formats CharacterCardError message (align VfsZipError)', () => {
+  it('formats AppError message (align VfsZipError)', () => {
     const zipErr = new VfsZipError('INVALID_ZIP', 'bad zip');
     expect(formatError(zipErr)).toBe('bad zip');
-    const cardErr = new CharacterCardError(
-      'NOT_CHARACTER_CARD',
+    const cardErr = new AppError(
+      'VFS_CHARACTER_CARD_UNRECOGNIZED',
       '无法识别为角色卡',
     );
     expect(formatError(cardErr)).toBe('无法识别为角色卡');
@@ -48,8 +46,8 @@ describe('formatError (T4)', () => {
     expect(formatError(err)).toBe('请先在服务商设置中配置 API Key');
   });
 
-  it('formats ChatError message', () => {
-    const err = new ChatError('NOT_FOUND', 'session not found: s1', {
+  it('formats CHAT_NOT_FOUND message', () => {
+    const err = new AppError('CHAT_NOT_FOUND', 'session not found: s1', {
       sessionId: 's1',
     });
     expect(formatError(err)).toBe('session not found: s1');
@@ -63,8 +61,8 @@ describe('formatError (T4)', () => {
     expect(formatError(err)).toBe('Tool failed: vfs.read\nPath missing');
   });
 
-  it('formats AgentError message', () => {
-    const err = new AgentError('DOOM_LOOP', 'Doom loop detected');
+  it('formats AppError message', () => {
+    const err = new AppError('AGENT_DOOM_LOOP', 'Doom loop detected');
     expect(formatError(err)).toBe('Doom loop detected');
   });
 

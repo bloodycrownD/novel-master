@@ -168,22 +168,15 @@ export class DefaultModelRequestService implements ModelRequestService {
     userContent: string,
     options?: ModelRequestOptions
   ): Promise<LlmChatResult> {
-    let saved;
-    try {
-      saved = await assertSavedModelUuid(savedModelId, this.deps.savedModels);
-    } catch (error) {
-      if (
-        error instanceof ProviderError &&
-        error.code === "INVALID_SAVED_MODEL_ID"
-      ) {
-        throw new ProviderError(
-          "MODEL_NOT_SAVED",
-          providerModelNotSavedMessage(savedModelId),
-          { modelId: savedModelId, providerId: error.providerId }
-        );
-      }
-      throw error;
+    const asserted = await assertSavedModelUuid(savedModelId, this.deps.savedModels);
+    if (!asserted.ok) {
+      throw new ProviderError(
+        "MODEL_NOT_SAVED",
+        providerModelNotSavedMessage(savedModelId),
+        { modelId: savedModelId }
+      );
     }
+    const saved = asserted.value;
     const { providerId, vendorModelId } = saved;
     const provider = await this.deps.providers.findById(providerId);
     if (!provider) {
@@ -195,7 +188,11 @@ export class DefaultModelRequestService implements ModelRequestService {
         }
       );
     }
-    const apiKey = await resolveProviderApiKey(provider, this.deps.secretStore);
+    const apiKeyResult = await resolveProviderApiKey(provider, this.deps.secretStore);
+    if (!apiKeyResult.ok) {
+      throw new ProviderError("API_KEY_NOT_SET", apiKeyResult.error.message, { providerId: provider.id });
+    }
+    const apiKey = apiKeyResult.value;
     let sampling = options?.sampling;
     if (sampling === undefined) {
       const savedSampling = saved.settings.generation.sampling;

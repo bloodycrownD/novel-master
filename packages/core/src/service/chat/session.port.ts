@@ -12,6 +12,10 @@ import type {
 
 /** Session CRUD, template copy on create, and full copy. */
 export interface SessionService {
+  /**
+   * 只返回 `parent_session_id IS NULL` 的顶层会话；子 session 用 repository 的
+   * `listByParentSession` 自行 BFS。
+   */
   listByProject(projectId: string): Promise<ChatSession[]>;
 
   get(id: string): Promise<ChatSession>;

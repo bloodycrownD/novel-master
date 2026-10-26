@@ -14,17 +14,8 @@
  * @module domain/tool/builtin/search/engines/bocha
  */
 
-import {
-  engineApiErrorMessage,
-  engineTimeoutError,
-  matchesDomainFilters,
-  normalizeMaxResults,
-  parseDomainFilters,
-  redactSecret,
-  type ResolvedEngineConfig,
-  type SearchResponse,
-  type SearchToolOptions,
-} from "../types.js";
+import { isRecord } from "@/common/guards.js";
+import { engineApiErrorMessage, engineFailed, engineTimeoutError, matchesDomainFilters, normalizeMaxResults, parseDomainFilters, redactSecret, type ResolvedEngineConfig, type SearchResponse, type SearchToolOptions } from "../types.js";
 
 /** Bocha 端点（硬编码，无自定义 baseUrl 口径）。 */
 export const BOCHA_SEARCH_URL = "https://api.bochaai.com/v1/web-search";
@@ -33,9 +24,7 @@ export const BOCHA_SEARCH_URL = "https://api.bochaai.com/v1/web-search";
 export const BOCHA_TIMEOUT_MS = 60_000;
 
 /** 时间范围 → bocha freshness 参数映射。 */
-function mapFreshness(
-  recency: SearchToolOptions["recencyFilter"]
-): string {
+function mapFreshness(recency: SearchToolOptions["recencyFilter"]): string {
   switch (recency) {
     case "day":
       return "oneDay";
@@ -61,38 +50,24 @@ function firstString(...values: unknown[]): string | null {
 }
 
 /** 解析 bocha 响应信封：业务码校验 + webPages.value 抽取与字段容错。 */
-function parseBochaResults(
-  raw: unknown,
-  apiKey: string
-): {
+function parseBochaResults(raw: unknown, apiKey: string): {
   readonly results: { readonly title: string; readonly url: string; readonly snippet: string }[];
 } {
   if (raw == null || typeof raw !== "object" || Array.isArray(raw)) {
-    throw new Error("Bocha API returned invalid response: expected an object envelope");
+    throw engineFailed("Bocha API returned invalid response: expected an object envelope");
   }
   const envelope = raw as Record<string, unknown>;
   if (envelope.code !== undefined && Number(envelope.code) !== 200) {
     // 业务码错误文案与 HTTP 分支同口径脱敏（T-C2）：个别错误响应会
     // 回显鉴权凭证，msg/message 先经 redactSecret 再拼进错误消息。
-    const detail =
-      firstString(envelope.msg, envelope.message) ?? "unknown error";
-    throw new Error(
-      `Bocha API error ${String(envelope.code)}: ${redactSecret(detail, apiKey)}`
-    );
+    const detail = firstString(envelope.msg, envelope.message) ?? "unknown error";
+    throw engineFailed(`Bocha API error ${String(envelope.code)}: ${redactSecret(detail, apiKey)}`);
   }
   const data = envelope.data;
-  const pages =
-    typeof data === "object" && data !== null && !Array.isArray(data)
-      ? (data as Record<string, unknown>).webPages
-      : undefined;
-  const items =
-    typeof pages === "object" && pages !== null && !Array.isArray(pages)
-      ? (pages as Record<string, unknown>).value
-      : undefined;
+  const pages = isRecord(data) ? data.webPages : undefined;
+  const items = isRecord(pages) ? pages.value : undefined;
   if (!Array.isArray(items)) {
-    throw new Error(
-      "Bocha API returned invalid response: missing data.webPages.value array"
-    );
+    throw engineFailed("Bocha API returned invalid response: missing data.webPages.value array");
   }
   const results: {
     title: string;
@@ -100,15 +75,11 @@ function parseBochaResults(
     snippet: string;
   }[] = [];
   for (const item of items) {
-    if (item == null || typeof item !== "object" || Array.isArray(item)) {
-      continue;
-    }
-    const entry = item as Record<string, unknown>;
-    const url = firstString(entry.url, entry.link, entry.href);
+    if (!isRecord(item)) continue;
+    const url = firstString(item.url, item.link, item.href);
     if (url == null) continue;
-    const title = firstString(entry.title, entry.name) ?? url;
-    const snippet =
-      firstString(entry.summary, entry.snippet, entry.description, entry.content) ?? "";
+    const title = firstString(item.title, item.name) ?? url;
+    const snippet = firstString(item.summary, item.snippet, item.description, item.content) ?? "";
     results.push({ title, url, snippet });
   }
   return { results };
@@ -118,15 +89,10 @@ function parseBochaResults(
  * Bocha 搜索适配器：`resolved.apiKey` 缺失时抛可读错误（解析链只路由到
  * 已配置引擎，此为防御兜底）；超时 60s，错误消息绝不携带 key 明文。
  */
-export async function searchWithBocha(
-  resolved: ResolvedEngineConfig,
-  query: string,
-  options: SearchToolOptions,
-  fetchFn: typeof globalThis.fetch
-): Promise<SearchResponse> {
+export async function searchWithBocha(resolved: ResolvedEngineConfig, query: string, options: SearchToolOptions, fetchFn: typeof globalThis.fetch): Promise<SearchResponse> {
   const apiKey = resolved.apiKey;
   if (apiKey == null || apiKey.length === 0) {
-    throw new Error("Bocha API key missing: engine not configured");
+    throw engineFailed("Bocha API key missing: engine not configured");
   }
   const numResults = normalizeMaxResults(options.maxResults);
   const filters = parseDomainFilters(options.domainFilter);
@@ -136,7 +102,7 @@ export async function searchWithBocha(
   try {
     let response: Response;
     try {
-      response = await fetchFn(BOCHA_SEARCH_URL, {
+      const requestInit = {
         method: "POST",
         headers: {
           Authorization: `Bearer ${apiKey}`,
@@ -150,40 +116,28 @@ export async function searchWithBocha(
           summary: true,
         }),
         signal: controller.signal,
-      });
+      };
+      response = await fetchFn(BOCHA_SEARCH_URL, requestInit);
     } catch (e) {
-      throw engineTimeoutError(
-        e,
-        controller.signal.aborted,
-        "Bocha",
-        BOCHA_TIMEOUT_MS
-      );
+      throw engineTimeoutError(e, controller.signal.aborted, "Bocha", BOCHA_TIMEOUT_MS);
     }
 
     if (!response.ok) {
       const body = await response.text();
-      throw new Error(
-        engineApiErrorMessage("Bocha", response.status, body, apiKey)
-      );
+      throw engineFailed(engineApiErrorMessage("Bocha", response.status, body, apiKey));
     }
 
     let raw: unknown;
     try {
       raw = await response.json();
     } catch (e) {
-      throw new Error(
-        `Bocha API returned invalid JSON: ${
-          e instanceof Error ? e.message : String(e)
-        }`
-      );
+      throw engineFailed(`Bocha API returned invalid JSON: ${e instanceof Error ? e.message : String(e)}`);
     }
 
     const { results } = parseBochaResults(raw, apiKey);
     return {
       engine: "bocha",
-      results: results
-        .filter((result) => matchesDomainFilters(result.url, filters))
-        .slice(0, numResults),
+      results: results.filter((result) => matchesDomainFilters(result.url, filters)).slice(0, numResults),
     };
   } finally {
     clearTimeout(timer);

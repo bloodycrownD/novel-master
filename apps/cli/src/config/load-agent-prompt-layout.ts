@@ -47,9 +47,7 @@ export function loadAgentPromptLayoutFromYaml(source: string): AgentPromptLayout
 
   const promptsRaw = extractPromptsRecord(parsed);
   const doc = decode(promptsRaw, promptsDocumentSchema);
-  return validateAgentPromptLayoutFromMaps(
-    doc.persist,
-    doc.dynamic,
-    doc.system,
-  );
+  const layout = validateAgentPromptLayoutFromMaps(doc.persist, doc.dynamic, doc.system);
+  if (!layout.ok) throw layout.error;
+  return layout.value;
 }

@@ -3,7 +3,6 @@
  *
  * @module ipc/handlers/agent
  */
-import { resolveSavedModelId } from "@novel-master/core/agent";
 
 import {
   assertSavedModelUuid,
@@ -79,9 +78,7 @@ export async function handleAgentResolveCurrent(): Promise<
     const hasDedicatedModel =
       definition.model != null && definition.model !== "";
     // workspace 层已移除：workspace 级 agent 显示只取 agent pin，不再回退 workspace 模型。
-    const savedModelId = resolveSavedModelId({
-      agentModelId: definition.model,
-    });
+    const savedModelId = definition.model;
     let modelLabel = "未选择模型";
     if (savedModelId) {
       modelLabel = await resolveModelLabel(rt, savedModelId);
@@ -174,7 +171,8 @@ export async function handleModelSetCurrent(
       req.savedModelId,
       rt.savedModelRepo,
     );
-    await rt.state.setCurrentModelId(saved.id);
+    if (!saved.ok) throw saved.error;
+    await rt.state.setCurrentModelId(saved.value.id);
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };

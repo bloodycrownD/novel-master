@@ -11,10 +11,7 @@ import {
   draftsToRecogitoAnnotations,
   recogitoAnnotationToDraftFields,
 } from '@/web/rich-document/webview/runtime/annotate-recogito-map';
-import {
-  addChatAnnotateDraft,
-  resetChatAnnotateDraftStoreForTests,
-} from '@novel-master/core/chat';
+import { chatAnnotateDraftStore } from '@novel-master/core/chat';
 
 const mockReadEngine = jest.fn(async () => 'webview' as const);
 
@@ -84,14 +81,6 @@ function readSrc(relFromSrc: string): string {
 }
 
 describe('T-RG2 无插锚预览主路径', () => {
-  it('FileMarkdownPreview 不 import/调用 buildAnnotatedSource', () => {
-    const src = readSrc('components/vfs/FileMarkdownPreview.tsx');
-    expect(src).not.toMatch(
-      /from\s+['"][^'"]*buildAnnotatedSource|buildAnnotatedSource\s*\(/,
-    );
-    expect(src).not.toMatch(/\bbuildAnnotatedSource\b/);
-  });
-
   it('RichDocumentWebView 无 DOM 搜字 fallback 开关', () => {
     const src = readSrc('components/vfs/RichDocumentWebView.tsx');
     expect(src).not.toMatch(/NM_ANNOTATE_DOM_SEARCH_FALLBACK/);
@@ -111,11 +100,11 @@ describe('T-RG2 无插锚预览主路径', () => {
   it('MD 预览 html 为干净渲染，不含 nm-annotate-anchor', async () => {
     mockReadEngine.mockResolvedValue('webview');
     mockRichDocumentWebView.mockClear();
-    resetChatAnnotateDraftStoreForTests();
+    chatAnnotateDraftStore.resetForTests();
     const sessionId = 's-rg2';
     const path = '/a.md';
     const content = 'hello world\n';
-    addChatAnnotateDraft(sessionId, {
+    chatAnnotateDraftStore.add(sessionId, {
       id: 'x',
       path,
       originalText: 'hello',
@@ -144,7 +133,7 @@ describe('T-RG2 无插锚预览主路径', () => {
     expect(String(last.html ?? '')).toContain('hello world');
     expect(String(last.html ?? '')).not.toContain('nm-annotate-anchor');
     expect(String(last.html ?? '')).not.toContain('data-annotate-id');
-    resetChatAnnotateDraftStoreForTests();
+    chatAnnotateDraftStore.resetForTests();
   });
 });
 
@@ -174,7 +163,7 @@ describe('T-RG3 Mobile Recogito 初始化与草稿映射接线', () => {
   it('MD annotateEnabled 向 WebView 传 annotations（render 坐标）', async () => {
     mockReadEngine.mockResolvedValue('webview');
     mockRichDocumentWebView.mockClear();
-    resetChatAnnotateDraftStoreForTests();
+    chatAnnotateDraftStore.resetForTests();
     const sessionId = 's-rg3';
     const path = '/note.md';
     const content = `---
@@ -182,7 +171,7 @@ title: T
 ---
 hello world
 `;
-    addChatAnnotateDraft(sessionId, {
+    chatAnnotateDraftStore.add(sessionId, {
       id: 'a1',
       path,
       originalText: 'hello',
@@ -220,7 +209,7 @@ hello world
         renderEnd: 5,
       },
     ]);
-    resetChatAnnotateDraftStoreForTests();
+    chatAnnotateDraftStore.resetForTests();
   });
 });
 
@@ -229,16 +218,16 @@ describe('T-RG4 plain 无批注', () => {
     mockReadEngine.mockReset();
     mockReadEngine.mockResolvedValue('webview');
     mockRichDocumentWebView.mockClear();
-    resetChatAnnotateDraftStoreForTests();
+    chatAnnotateDraftStore.resetForTests();
   });
 
   afterEach(() => {
-    resetChatAnnotateDraftStoreForTests();
+    chatAnnotateDraftStore.resetForTests();
   });
 
   it('txt Tab 即使 annotateEnabled 也不挂 RichDocumentWebView / Recogito', async () => {
     const sessionId = 's-rg4';
-    addChatAnnotateDraft(sessionId, {
+    chatAnnotateDraftStore.add(sessionId, {
       id: 'a1',
       path: '/note.md',
       originalText: 'hello',

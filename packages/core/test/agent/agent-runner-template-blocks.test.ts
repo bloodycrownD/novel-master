@@ -8,7 +8,7 @@ import {
   type BuiltinToolContext,
 } from "@novel-master/core/agent";
 import { textBlocks } from "@novel-master/core/chat";
-import { messageBodyText } from "@novel-master/core/prompt";
+import { messageBodyTextFromBlocks } from "@novel-master/core/prompt";
 import {
   type LlmChatResult,
   type ModelRequestOptions,
@@ -175,9 +175,9 @@ describe("AgentRunner template blocks", () => {
     const history = captured.options?.history ?? [];
     assert.equal(history.length, 3);
     assert.equal(history[0]!.id, "prompt:workplace");
-    assert.match(messageBodyText(history[0]!), new RegExp(SNAPSHOT_BODY));
+    assert.match(messageBodyTextFromBlocks(history[0]!.content.blocks), new RegExp(SNAPSHOT_BODY));
     assert.equal(history[1]!.id, "prompt:workplace:done");
-    assert.equal(messageBodyText(history[1]!), "【done】");
+    assert.equal(messageBodyTextFromBlocks(history[1]!.content.blocks), "【done】");
     assert.equal(history[2]!.role, "user");
   });
 
@@ -262,11 +262,11 @@ describe("AgentRunner template blocks", () => {
         (m) => m.id === "prompt:workplace:done",
       );
       assert.match(
-        ctxMsg != null ? messageBodyText(ctxMsg) : "",
+        ctxMsg != null ? messageBodyTextFromBlocks(ctxMsg.content.blocks) : "",
         new RegExp(SNAPSHOT_BODY),
       );
       assert.equal(
-        doneMsg != null ? messageBodyText(doneMsg) : "",
+        doneMsg != null ? messageBodyTextFromBlocks(doneMsg.content.blocks) : "",
         "【done】",
       );
     }

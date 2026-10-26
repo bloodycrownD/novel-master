@@ -53,7 +53,7 @@ domain/<ctx>/
 | Service factory | `create-<storage>-<role>.ts` or `impl/createSqlite*` | `createSqliteCompactionAgentResolver` |
 | Errors | `errors/<ctx>-errors.ts` | `chat-errors.ts` |
 
-错误方向：新建错误优先用 `AppError` + `ErrorCodes`（`errors/app-error.ts`，数值按域分段，发布后不复用/不改号），存量 `<ctx>-errors.ts` 随 Either 迁移逐步收敛。
+错误方向：新建错误优先用 `AppError` + `ErrorCodes`（`errors/error-codes.ts` 注册表 + `errors/app-error.ts` 类，6 位域段码 DDDSSS，发布后不复用/不改号），存量 `<ctx>-errors.ts` 随 Either 迁移逐步收敛。
 
 ### Documented exceptions
 

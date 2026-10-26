@@ -3,7 +3,7 @@
  * 行列表结构主路径在 ui/render；由 main 注册 Preact 实现。
  * 流式壳已迁 ui/stream；不再保留 renderAssistantBubbleInner 拼串。
  */
-import {formatStatusChipLabelFromAttachment} from '@novel-master/core/chat';
+import {formatStatusChipLabelFromAttachment} from '@novel-master/core/presentation/chat/attachment-chip.js';
 import type {TranscriptFlags} from '../state/state';
 
 export type RenderRowsView = () => void;

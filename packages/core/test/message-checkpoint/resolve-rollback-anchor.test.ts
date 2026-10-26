@@ -3,15 +3,15 @@
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { type ChatMessage } from "@novel-master/core/chat";
+import { type ChatMessageData } from "@novel-master/core/chat";
 import { resolveRollbackAnchorMessage } from "../../src/domain/message-checkpoint/logic/resolve-rollback-anchor.js";
 
 function msg(
   id: string,
   role: string,
-  blocks: ChatMessage["content"]["blocks"],
+  blocks: ChatMessageData["content"]["blocks"],
   seq: number,
-): ChatMessage {
+): ChatMessageData {
   return {
     id,
     sessionId: "s1",
