@@ -4,6 +4,8 @@
  * @module domain/workplace/logic/rule-snapshot-codec
  */
 
+import { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 import type { WorkplaceRuleView } from "../model/workplace-rule-view.js";
 import type { WorkplaceDisplayStatus } from "@/domain/session-kkv/model/session-kkv-domains.js";
 
@@ -13,14 +15,15 @@ export type RuleSnapshotEntry = {
   readonly status: WorkplaceDisplayStatus;
 };
 
+/** 本模块的领域失败：快照或文件缓存载荷非法（本模块不抛，调用方按 `if (!r.ok)` 降级）。 */
+type RuleSnapshotCodecError = AppError<"WORKPLACE_INVALID_RULE_SNAPSHOT" | "WORKPLACE_INVALID_FILE_CACHE">;
+
 const DISPLAY_STATUSES = new Set<string>(["full", "header", "filename"]);
 
 /**
  * 将规则视图转为快照条目（DFS 文件行顺序；过滤 hidden）。
  */
-export function ruleViewToSnapshotEntries(
-  view: WorkplaceRuleView
-): RuleSnapshotEntry[] {
+export function ruleViewToSnapshotEntries(view: WorkplaceRuleView): RuleSnapshotEntry[] {
   const entries: RuleSnapshotEntry[] = [];
   for (const row of view.rows) {
     if (row.kind !== "file") {
@@ -38,44 +41,36 @@ export function ruleViewToSnapshotEntries(
 /**
  * 序列化规则快照为 JSON 字符串。
  */
-export function serializeRuleSnapshot(
-  entries: readonly RuleSnapshotEntry[]
-): string {
+export function serializeRuleSnapshot(entries: readonly RuleSnapshotEntry[]): string {
   return JSON.stringify(entries);
 }
 
 /**
- * 解析规则快照 JSON；非法结构返回 `null`。
+ * 解析规则快照 JSON；非法结构返回 `Err`（key `WORKPLACE_INVALID_RULE_SNAPSHOT`）。
  */
-export function parseRuleSnapshotJson(raw: string): RuleSnapshotEntry[] | null {
+export function parseRuleSnapshotJson(raw: string): Result<RuleSnapshotEntry[], RuleSnapshotCodecError> {
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
-  } catch {
-    return null;
+  } catch (cause) {
+    return Result.err(new AppError("WORKPLACE_INVALID_RULE_SNAPSHOT", "rule snapshot is not valid json", { cause }));
   }
   if (!Array.isArray(parsed)) {
-    return null;
+    return Result.err(new AppError("WORKPLACE_INVALID_RULE_SNAPSHOT", "rule snapshot must be a json array"));
   }
   const entries: RuleSnapshotEntry[] = [];
   for (const item of parsed) {
     if (item == null || typeof item !== "object") {
-      return null;
+      return Result.err(new AppError("WORKPLACE_INVALID_RULE_SNAPSHOT", "rule snapshot entry must be an object"));
     }
     const path = (item as { path?: unknown }).path;
     const status = (item as { status?: unknown }).status;
-    if (typeof path !== "string" || path.length === 0) {
-      return null;
+    if (typeof path !== "string" || path.length === 0 || typeof status !== "string" || !DISPLAY_STATUSES.has(status)) {
+      return Result.err(new AppError("WORKPLACE_INVALID_RULE_SNAPSHOT", "rule snapshot entry needs a non-empty path and a known display status"));
     }
-    if (typeof status !== "string" || !DISPLAY_STATUSES.has(status)) {
-      return null;
-    }
-    entries.push({
-      path,
-      status: status as WorkplaceDisplayStatus,
-    });
+    entries.push({ path, status: status as WorkplaceDisplayStatus });
   }
-  return entries;
+  return Result.ok(entries);
 }
 
 /** `file_cache` 值：`{ body, mtimeMs }`。 */
@@ -92,25 +87,22 @@ export function serializeFileCachePayload(payload: FileCachePayload): string {
 }
 
 /**
- * 解析文件缓存 JSON；非法结构返回 `null`。
+ * 解析文件缓存 JSON；非法结构返回 `Err`（key `WORKPLACE_INVALID_FILE_CACHE`）。
  */
-export function parseFileCachePayload(raw: string): FileCachePayload | null {
+export function parseFileCachePayload(raw: string): Result<FileCachePayload, RuleSnapshotCodecError> {
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
-  } catch {
-    return null;
+  } catch (cause) {
+    return Result.err(new AppError("WORKPLACE_INVALID_FILE_CACHE", "file cache payload is not valid json", { cause }));
   }
   if (parsed == null || typeof parsed !== "object") {
-    return null;
+    return Result.err(new AppError("WORKPLACE_INVALID_FILE_CACHE", "file cache payload must be an object"));
   }
   const body = (parsed as { body?: unknown }).body;
   const mtimeMs = (parsed as { mtimeMs?: unknown }).mtimeMs;
-  if (typeof body !== "string") {
-    return null;
+  if (typeof body !== "string" || typeof mtimeMs !== "number" || !Number.isFinite(mtimeMs)) {
+    return Result.err(new AppError("WORKPLACE_INVALID_FILE_CACHE", "file cache payload must be { body: string, mtimeMs: finite number }"));
   }
-  if (typeof mtimeMs !== "number" || !Number.isFinite(mtimeMs)) {
-    return null;
-  }
-  return { body, mtimeMs };
+  return Result.ok({ body, mtimeMs });
 }

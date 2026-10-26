@@ -107,10 +107,7 @@ export const PROMPT_WHOLE_CACHE_KEY = "promptWholeCache" as const;
  *
  * **不含** `rule_snapshot`：那是常驻工作区渲染快照，回滚不得清。
  */
-export const SESSION_KKV_COMPOSER_STATUS_DOMAINS = [
-  SESSION_KKV_DOMAIN_FILE_CACHE,
-  SESSION_KKV_DOMAIN_USER_VFS_PENDING,
-] as const;
+export const SESSION_KKV_COMPOSER_STATUS_DOMAINS = [SESSION_KKV_DOMAIN_FILE_CACHE, SESSION_KKV_DOMAIN_USER_VFS_PENDING] as const;
 
 /** 规则快照域单键：`canon`。 */
 export const RULE_SNAPSHOT_CANON_KEY = "canon" as const;
@@ -121,25 +118,12 @@ export const USER_VFS_PENDING_QUEUE_KEY = "queue" as const;
 /** backfill_cursor 域单键：上次确认无空窗时的消息总数（十进制字符串）。 */
 export const BACKFILL_CURSOR_LAST_SCANNED_COUNT_KEY = "lastScannedCount" as const;
 
-export type SessionKkvDomain =
-  | typeof SESSION_KKV_DOMAIN_RULE_SNAPSHOT
-  | typeof SESSION_KKV_DOMAIN_FILE_CACHE
-  | typeof SESSION_KKV_DOMAIN_USER_VFS_PENDING
-  | typeof SESSION_KKV_DOMAIN_BACKFILL_CURSOR
-  | typeof SESSION_KKV_DOMAIN_STREAM_METRICS
-  | typeof SESSION_KKV_DOMAIN_PROMPT_TOKENS
-  | typeof SESSION_KKV_DOMAIN_TOKEN_CHUNKS
-  | (string & {});
-
 /** 可写入 file_cache 的展示档位（不含 hidden）。 */
 export type WorkplaceDisplayStatus = "full" | "header" | "filename";
 
 /**
  * 生成 file_cache 键：`{status}:{path}`，如 `full:/a.md`。
  */
-export function fileCacheKey(
-  status: WorkplaceDisplayStatus,
-  path: string
-): string {
+export function fileCacheKey(status: WorkplaceDisplayStatus, path: string): string {
   return `${status}:${path}`;
 }

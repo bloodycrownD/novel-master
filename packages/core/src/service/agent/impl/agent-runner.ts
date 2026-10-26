@@ -27,7 +27,7 @@ import {
 } from "@/domain/tool/logic/tool-runner.js";
 import type { BuiltinToolContext } from "@/domain/tool/builtin/builtin-tool-context.js";
 import { ProviderError } from "@/errors/provider-errors.js";
-import { PreferencesError } from "@/errors/preferences-errors.js";
+import { isAppError } from "@/errors/app-error.js";
 import type { MessageCheckpointService } from "@/service/message-checkpoint/message-checkpoint.port.js";
 import { toolsFromRegistry } from "@/infra/llm-protocol/logic/tool-definitions.js";
 import { pickLastPromptUsage } from "@/infra/tokenizer/logic/pick-last-prompt-usage.js";
@@ -290,7 +290,7 @@ export class DefaultAgentRunner implements AgentRunner {
 
     // 思考上下文偏好（每 run 一次快照，对齐 savedModelForAppend 的读法）：
     // run 中途切换开关不影响进行中的 run，同 run 内各 step 口径一致。
-    // KKV 存了坏值（如手工写入 not-a-bool）时 PreferencesError 不炸 run：
+    // KKV 存了坏值（如手工写入 not-a-bool）时 PREFERENCES_INVALID_VALUE 不炸 run：
     // 回退 false（跟随默认关，与旧版「思考不进上下文」行为一致、无兼容风险）
     // 并记标签日志；GUI 无自愈入口，用户重置偏好后自然恢复。
     let thinkingContextEnabled = false;
@@ -298,13 +298,13 @@ export class DefaultAgentRunner implements AgentRunner {
       thinkingContextEnabled =
         (await this.deps.preferences?.getThinkingContextEnabled()) ?? false;
     } catch (error) {
-      if (!(error instanceof PreferencesError)) {
+      if (!isAppError(error, "PREFERENCES_INVALID_VALUE")) {
         throw error;
       }
       console.error("[agent-runner] thinking_context_pref_read_failed", {
         stage: "thinking_context_pref",
         key: "chat.thinkingContext",
-        code: error.code,
+        code: error.key,
         fallback: false,
         error,
       });

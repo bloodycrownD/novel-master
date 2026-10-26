@@ -171,7 +171,8 @@ export async function handleModelSetCurrent(
       req.savedModelId,
       rt.savedModelRepo,
     );
-    await rt.state.setCurrentModelId(saved.id);
+    if (!saved.ok) throw saved.error;
+    await rt.state.setCurrentModelId(saved.value.id);
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };

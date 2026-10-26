@@ -28,19 +28,6 @@ import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqli
 let orphanGcInFlight = false;
 
 /**
- * 执行一次全局孤儿 revision 清扫（仅 {@link scheduleDeferredRevisionOrphanGc}
- * 的清扫体使用）。
- *
- * @returns 删除的孤儿 revision 行数。
- */
-async function runDeferredRevisionOrphanGc(
-  conn: TdbcConnection
-): Promise<number> {
-  const revisions = new SqliteVfsRevisionRepository(conn);
-  return revisions.deleteGlobalOrphans();
-}
-
-/**
  * 事务提交后 fire-and-forget 调度全局孤儿清扫（回滚链挂点）。
  *
  * 不 await、不抛错（失败吞掉并打日志，收敛式语义下一轮回滚会再补）；
@@ -58,22 +45,18 @@ export function scheduleDeferredRevisionOrphanGc(conn: TdbcConnection): void {
   }
   orphanGcInFlight = true;
   setImmediate(() => {
-    void runDeferredRevisionOrphanGc(conn)
+    void new SqliteVfsRevisionRepository(conn)
+      .deleteGlobalOrphans()
       .then((deleted) => {
         orphanGcInFlight = false;
         if (deleted > 0) {
           // 收敛式 GC 的轻量痕迹日志：仅在实际清到孤儿时输出。
-          console.log(
-            `[nm-revision-gc] deferred orphan sweep deleted ${deleted} revision row(s)`
-          );
+          console.log(`[nm-revision-gc] deferred orphan sweep deleted ${deleted} revision row(s)`);
         }
       })
       .catch((error: unknown) => {
         orphanGcInFlight = false;
-        console.warn(
-          "[nm-revision-gc] deferred orphan sweep failed:",
-          error instanceof Error ? error.message : error
-        );
+        console.warn("[nm-revision-gc] deferred orphan sweep failed:", error instanceof Error ? error.message : error);
       });
   });
 }

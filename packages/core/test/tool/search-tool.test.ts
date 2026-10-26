@@ -13,7 +13,7 @@ import {
 } from "../../src/domain/tool/builtin/search/engines/dispatch.js";
 import { assembleSearchToolContext } from "../../src/service/agent/logic/run-agent-turn.js";
 import { createSearchConfigStore } from "../../src/domain/tool/builtin/search/search-config.js";
-import { KkvError } from "../../src/errors/kkv-errors.js";
+import { AppError } from "../../src/errors/app-error.js";
 import type { KkvService } from "../../src/service/kkv/kkv.port.js";
 import type { SecretStore } from "../../src/infra/sksp/ports/secret-store.port.js";
 import type { BuiltinToolContext } from "../../src/domain/tool/builtin/builtin-tool-context.js";
@@ -36,7 +36,7 @@ function fakeStores(): { kkv: KkvService; secretStore: SecretStore } {
     get: async (module, key) => {
       const value = kkvMap.get(`${module}/${key}`);
       if (value == null) {
-        throw new KkvError("NOT_FOUND", `KKV key not found: ${module}/${key}`);
+        throw new AppError("KKV_NOT_FOUND", `KKV key not found: ${module}/${key}`);
       }
       return value;
     },

@@ -124,12 +124,8 @@ function chineseNumToIntPowerForm(s: string): number | null {
       // Single digit. A trailing digit directly after a 百/千/万/亿 unit is
       // the abbreviated form: "一千二" → 2 * 1000 / 10 = 200 (legado rule:
       // i >= 2, last char, previous char's unit > 10).
-      const prevUnit =
-        i >= 2 && i === chars.length - 1 ? CHN_NUM_VALUE[chars[i - 1]] : undefined;
-      tmp =
-        prevUnit !== undefined && prevUnit > 10
-          ? (value * prevUnit) / 10
-          : tmp * 10 + value;
+      const prevUnit = i >= 2 && i === chars.length - 1 ? CHN_NUM_VALUE[chars[i - 1]] : undefined;
+      tmp = prevUnit !== undefined && prevUnit > 10 ? (value * prevUnit) / 10 : tmp * 10 + value;
     }
   }
   return result + tmp + billion;
@@ -282,10 +278,7 @@ export interface SmartSortKeyDetail {
  * Same priority walk as {@link extractSortKey} but also reports which rule
  * claimed the basename (used by the smart-sort-rule preview API, Step 7).
  */
-export function extractSortKeyDetail(
-  basename: string,
-  rules: readonly CompiledSmartSortRule[],
-): SmartSortKeyDetail | null {
+export function extractSortKeyDetail(basename: string, rules: readonly CompiledSmartSortRule[]): SmartSortKeyDetail | null {
   for (const rule of rules) {
     // A `g`-flagged regex keeps lastIndex across execs; always match from 0.
     rule.regex.lastIndex = 0;
@@ -330,10 +323,7 @@ export function extractSortKeyDetail(
  * falls through to the next one. Returns `null` when no rule yields an
  * ordinal (the basename then orders via the natural fallback).
  */
-export function extractSortKey(
-  basename: string,
-  rules: readonly CompiledSmartSortRule[],
-): readonly number[] | null {
+export function extractSortKey(basename: string, rules: readonly CompiledSmartSortRule[]): readonly number[] | null {
   return extractSortKeyDetail(basename, rules)?.nums ?? null;
 }
 
@@ -353,12 +343,7 @@ export function extractSortKey(
  * missing from the cache (or with no cache at all) is treated as ordinal-less
  * — callers should pre-decorate every candidate name.
  */
-export function compareSmartBasenames(
-  a: string,
-  b: string,
-  order: SortOrder,
-  cache?: SmartSortKeyCache,
-): number {
+export function compareSmartBasenames(a: string, b: string, order: SortOrder, cache?: SmartSortKeyCache): number {
   const keyA = cache?.get(a) ?? null;
   const keyB = cache?.get(b) ?? null;
   let cmp: number;

@@ -40,7 +40,7 @@ import type { SearchConfigStore } from "@/domain/tool/builtin/search/search-conf
 import { ToolRegistry } from "@/domain/tool/logic/tool-registry.js";
 import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { SimpleEventBus } from "@/infra/events/simple-event-bus.js";
-import { PreferencesError } from "@/errors/preferences-errors.js";
+import { isAppError } from "@/errors/app-error.js";
 import { ToolError } from "@/errors/tool-errors.js";
 import { textBlocks } from "@/domain/chat/content/text-blocks.js";
 import {
@@ -1391,14 +1391,14 @@ async function runChildAgent(args: {
 
     // 子会话流式开关（每 run 快照，与 thinkingContext 口径一致）：run 进行中
     // 切开关不影响当次子 run；递归各层闭包捕获同一 runtime，读的是同一偏好。
-    // 偏好读失败（如手工写入脏值）时只兜 PreferencesError——回退默认流式并记
+    // 偏好读失败（如手工写入脏值）时只兜 PREFERENCES_INVALID_VALUE——回退默认流式并记
     // 标签日志，不炸 run；其余异常重抛，避免静默吞掉装配类 bug。
     let childStream = true;
     try {
       childStream =
         (await runtime.preferences?.getSubagentStreamEnabled()) ?? true;
     } catch (cause) {
-      if (!(cause instanceof PreferencesError)) throw cause;
+      if (!isAppError(cause, "PREFERENCES_INVALID_VALUE")) throw cause;
       console.error("[agent-run] subagentStream pref read failed", cause);
     }
 

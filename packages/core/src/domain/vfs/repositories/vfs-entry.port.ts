@@ -13,20 +13,13 @@ import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import type { VfsEntry } from "../model/vfs-entry.js";
 import type { VfsContentSize } from "../model/vfs-content-size.js";
 import type { VfsListEntry } from "../model/vfs-list-entry.js";
-import type {
-  VfsDeleteOptions,
-  VfsListOptions,
-} from "../model/vfs-options.js";
+import type { VfsDeleteOptions, VfsListOptions } from "../model/vfs-options.js";
 
 /**
  * Persistence contract for vfs_entry rows. Implemented by SQLite adapter only.
  */
 export interface VfsEntryRepository {
-  list(
-    scopeKey: string,
-    dir: string,
-    options?: VfsListOptions
-  ): Promise<VfsListEntry[]>;
+  list(scopeKey: string, dir: string, options?: VfsListOptions): Promise<VfsListEntry[]>;
 
   findByPath(scopeKey: string, path: string): Promise<VfsEntry | null>;
 
@@ -42,10 +35,7 @@ export interface VfsEntryRepository {
    *
    * @returns 键为规范化逻辑 path；目录行 / 无 hash / 路径不存在时值为 `null`
    */
-  findContentHashesByPaths(
-    scopeKey: string,
-    paths: ReadonlyArray<string>
-  ): Promise<Map<string, string | null>>;
+  findContentHashesByPaths(scopeKey: string, paths: ReadonlyArray<string>): Promise<Map<string, string | null>>;
 
   /**
    * 按路径轻量探测文件 content 大小（不读正文，供读取侧降级闸门使用）。
@@ -56,27 +46,16 @@ export interface VfsEntryRepository {
    * @returns 目录行 / 路径不存在 / blob 缺失等无法探测的情形返回 `null`，
    *   由调用方决定回退行为
    */
-  findContentSizeByPath(
-    scopeKey: string,
-    path: string
-  ): Promise<VfsContentSize | null>;
+  findContentSizeByPath(scopeKey: string, path: string): Promise<VfsContentSize | null>;
 
-  insert(
-    scopeKey: string,
-    path: string,
-    content: string
-  ): Promise<{ version: number }>;
+  insert(scopeKey: string, path: string, content: string): Promise<{ version: number }>;
 
   /**
    * 以已有 content_hash 插入文件行（不 put；`content=NULL`）。
    *
    * @remarks tree-copy / seed 共享 blob 时使用。
    */
-  insertWithContentHash(
-    scopeKey: string,
-    path: string,
-    contentHash: string
-  ): Promise<{ version: number }>;
+  insertWithContentHash(scopeKey: string, path: string, contentHash: string): Promise<{ version: number }>;
 
   /**
    * 以显式 entry_id 重建文件 entry 行（回滚复活已删 entry 专用）。
@@ -88,26 +67,14 @@ export interface VfsEntryRepository {
    *   SQLite AUTOINCREMENT 表显式插 INTEGER PRIMARY KEY 会自动推高
    *   sqlite_sequence（不低于旧值），后续新 entry 不会撞旧 id。
    */
-  reviveEntryAtVersion(input: {
-    entryId: number;
-    scopeKey: string;
-    path: string;
-    contentHash: string;
-    headVersion: number;
-    mtimeMs: number;
-  }): Promise<void>;
+  reviveEntryAtVersion(input: { entryId: number; scopeKey: string; path: string; contentHash: string; headVersion: number; mtimeMs: number }): Promise<void>;
 
   /**
    * Inserts a new file entry at an explicit head version.
    *
    * @remarks Used when re-creating a path whose vfs_entry was removed but revision history remains.
    */
-  insertAtVersion(
-    scopeKey: string,
-    path: string,
-    content: string,
-    version: number
-  ): Promise<{ version: number }>;
+  insertAtVersion(scopeKey: string, path: string, content: string, version: number): Promise<{ version: number }>;
 
   insertDirectory(scopeKey: string, path: string): Promise<void>;
 
@@ -118,24 +85,14 @@ export interface VfsEntryRepository {
    *   `max(head_version, MAX(vfs_revision.version)) + 1` 语义分配，
    *   避免 head 回拨后撞上历史占号。写入为 last-write-wins，不做版本比对。
    */
-  update(
-    scopeKey: string,
-    path: string,
-    content: string,
-    nextVersion: number
-  ): Promise<{ version: number }>;
+  update(scopeKey: string, path: string, content: string, nextVersion: number): Promise<{ version: number }>;
 
   /**
    * 以已有 content_hash 更新文件行（不 put；`content=NULL`）。
    *
    * @param nextVersion - 同 {@link update}，由 service 层按 MAX 语义分配。
    */
-  updateWithContentHash(
-    scopeKey: string,
-    path: string,
-    contentHash: string,
-    nextVersion: number
-  ): Promise<{ version: number }>;
+  updateWithContentHash(scopeKey: string, path: string, contentHash: string, nextVersion: number): Promise<{ version: number }>;
 
   /**
    * 不升版写回 live head（补偿专用）。
@@ -160,11 +117,7 @@ export interface VfsEntryRepository {
    *
    * @returns 实际删除的行数（changes）；命中 0 行时抛 `vfsNotFound`。
    */
-  delete(
-    scopeKey: string,
-    path: string,
-    options: VfsDeleteOptions
-  ): Promise<number>;
+  delete(scopeKey: string, path: string, options: VfsDeleteOptions): Promise<number>;
 
   /**
    * 递归删除 scope+prefix 下所有 entry；prefix 下无任何 entry 时静默返回 0。
@@ -185,27 +138,15 @@ export interface VfsEntryRepository {
   /** scope 下所有文件路径（glob 用）。 */
   listAllPaths(scopeKey: string): Promise<string[]>;
 
-  listDirectoryPathsUnderPrefix(
-    scopeKey: string,
-    pathPrefix: string
-  ): Promise<string[]>;
+  listDirectoryPathsUnderPrefix(scopeKey: string, pathPrefix: string): Promise<string[]>;
 
   /** Lists directory paths with mtimes under a prefix (dir time sort, spec D7). */
-  listDirectoryMetaUnderPrefix(
-    scopeKey: string,
-    pathPrefix: string
-  ): Promise<ReadonlyArray<{ path: string; mtimeMs: number }>>;
+  listDirectoryMetaUnderPrefix(scopeKey: string, pathPrefix: string): Promise<ReadonlyArray<{ path: string; mtimeMs: number }>>;
 
-  listEntriesUnderPrefix(
-    scopeKey: string,
-    pathPrefix: string
-  ): Promise<VfsListEntry[]>;
+  listEntriesUnderPrefix(scopeKey: string, pathPrefix: string): Promise<VfsListEntry[]>;
 
   /** Lists file paths and mtimes under a prefix without reading `content`. */
-  listFileMetaUnderPrefix(
-    scopeKey: string,
-    pathPrefix: string
-  ): Promise<ReadonlyArray<{ path: string; mtimeMs: number }>>;
+  listFileMetaUnderPrefix(scopeKey: string, pathPrefix: string): Promise<ReadonlyArray<{ path: string; mtimeMs: number }>>;
 
   /**
    * 计算 scope 下全部 vfs_entry 行的有序聚合签名（workplace 读时校验缓存用）。
@@ -251,24 +192,14 @@ export interface VfsEntryRepository {
    *
    * @remarks 需在调用方事务的连接上执行。
    */
-  renamePathInScope(
-    tx: TdbcConnection,
-    scopeKey: string,
-    oldPath: string,
-    newPath: string
-  ): Promise<void>;
+  renamePathInScope(tx: TdbcConnection, scopeKey: string, oldPath: string, newPath: string): Promise<void>;
 
   /**
    * 单事务内批量重命名目录前缀下所有子 entry（`REPLACE(path, old||'/', new||'/')`）。
    *
    * @remarks 需在调用方事务的连接上执行。
    */
-  renamePrefixInScope(
-    tx: TdbcConnection,
-    scopeKey: string,
-    oldPrefix: string,
-    newPrefix: string
-  ): Promise<void>;
+  renamePrefixInScope(tx: TdbcConnection, scopeKey: string, oldPrefix: string, newPrefix: string): Promise<void>;
 
   /**
    * 扫描 scope + 前缀下所有文件 entry 的元数据（不解正文）。
@@ -289,10 +220,7 @@ export interface VfsEntryRepository {
   >;
 
   /** 批量检查哪些路径在指定 scope 下已存在（文件或目录行）。 */
-  findExistingPaths(
-    scopeKey: string,
-    paths: ReadonlyArray<string>
-  ): Promise<Set<string>>;
+  findExistingPaths(scopeKey: string, paths: ReadonlyArray<string>): Promise<Set<string>>;
 
   /**
    * 批量插入文件 entry（共享 blob，content=NULL）。
@@ -310,10 +238,7 @@ export interface VfsEntryRepository {
   ): Promise<void>;
 
   /** 批量插入目录 entry（head_version=1, content_hash=NULL）。 */
-  batchInsertDirectoryEntries(
-    scopeKey: string,
-    paths: ReadonlyArray<string>
-  ): Promise<void>;
+  batchInsertDirectoryEntries(scopeKey: string, paths: ReadonlyArray<string>): Promise<void>;
 }
 
 /** re-export entry kind type for impl convenience. */

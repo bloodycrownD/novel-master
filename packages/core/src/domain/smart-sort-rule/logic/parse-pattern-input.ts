@@ -23,41 +23,6 @@ export interface ParsedPatternInput {
   readonly flags: string;
 }
 
-/** Whether `text` contains a `/` not preceded by an odd number of backslashes. */
-function containsUnescapedSlash(text: string): boolean {
-  let escaped = false;
-  for (const ch of text) {
-    if (escaped) {
-      escaped = false;
-    } else if (ch === "\\") {
-      escaped = true;
-    } else if (ch === "/") {
-      return true;
-    }
-  }
-  return false;
-}
-
-/** Escape unescaped `/` as `\/` so a formatted literal always round-trips. */
-function escapeUnescapedSlash(text: string): string {
-  let result = "";
-  let escaped = false;
-  for (const ch of text) {
-    if (escaped) {
-      result += ch;
-      escaped = false;
-    } else if (ch === "\\") {
-      result += ch;
-      escaped = true;
-    } else if (ch === "/") {
-      result += "\\/";
-    } else {
-      result += ch;
-    }
-  }
-  return result;
-}
-
 /**
  * Parses a GUI regex input that may use `/pattern/flags` literal style.
  *
@@ -84,10 +49,24 @@ export function parsePatternInput(input: string): ParsedPatternInput {
     }
     const body = input.slice(1, i);
     const flags = input.slice(i + 1);
+    // body 内出现未转义 `/`（奇数个反斜杠不算转义）即不是合法字面量；
+    // 逐字符扫描与「最右未转义 `/`」同一套反斜杠口径。
+    let bodyHasUnescapedSlash = false;
+    let escaped = false;
+    for (const ch of body) {
+      if (escaped) {
+        escaped = false;
+      } else if (ch === "\\") {
+        escaped = true;
+      } else if (ch === "/") {
+        bodyHasUnescapedSlash = true;
+        break;
+      }
+    }
     // Empty body (JS has no empty-regex literal), invalid flags, or an
     // unescaped `/` inside the body all mean "not a literal" — degrade to
     // treating the whole input as a bare pattern.
-    if (body === "" || !isFlagsValid(flags) || containsUnescapedSlash(body)) {
+    if (body === "" || !isFlagsValid(flags) || bodyHasUnescapedSlash) {
       break;
     }
     return { pattern: body, flags };
@@ -103,5 +82,21 @@ export function parsePatternInput(input: string): ParsedPatternInput {
  * to the same pattern + flags (round-trip).
  */
 export function formatPatternInput(pattern: string, flags: string): string {
-  return `/${escapeUnescapedSlash(pattern)}/${flags}`;
+  // 只转义「未被反斜杠转义」的 `/`，保证 format → parse 往返无损。
+  let escapedBody = "";
+  let escaped = false;
+  for (const ch of pattern) {
+    if (escaped) {
+      escapedBody += ch;
+      escaped = false;
+    } else if (ch === "\\") {
+      escapedBody += ch;
+      escaped = true;
+    } else if (ch === "/") {
+      escapedBody += "\\/";
+    } else {
+      escapedBody += ch;
+    }
+  }
+  return `/${escapedBody}/${flags}`;
 }

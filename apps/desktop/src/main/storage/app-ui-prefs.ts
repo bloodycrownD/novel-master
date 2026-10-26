@@ -3,7 +3,7 @@
  *
  * @module storage/app-ui-prefs
  */
-import { KkvError } from "@novel-master/core";
+import { isAppError } from "@novel-master/core/agent";
 import type { KkvService } from "@novel-master/core/kkv";
 
 export const DESKTOP_UI_KKV_MODULE = "nm-desktop-ui";
@@ -40,7 +40,7 @@ export function createDesktopAppUiPreferences(
       try {
         return await kkv.get(DESKTOP_UI_KKV_MODULE, key);
       } catch (error) {
-        if (error instanceof KkvError && error.code === "NOT_FOUND") {
+        if (isAppError(error, "KKV_NOT_FOUND")) {
           return key in DESKTOP_UI_DEFAULTS
             ? DESKTOP_UI_DEFAULTS[key]
             : undefined;

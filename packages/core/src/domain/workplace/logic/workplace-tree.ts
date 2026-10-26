@@ -21,11 +21,7 @@ export function parentDirOf(logicalPath: string): string | null {
   return n.slice(0, idx);
 }
 
-function addParentChain(
-  dirs: Set<string>,
-  logicalPath: string,
-  root: string
-): void {
+function addParentChain(dirs: Set<string>, logicalPath: string, root: string): void {
   let current = parentDirOf(logicalPath);
   while (current != null && current !== root) {
     dirs.add(current);
@@ -37,11 +33,7 @@ function addParentChain(
 /**
  * Builds the set of directory logical paths for list/display traversal.
  */
-export function buildWorkplaceDirSet(params: {
-  readonly scope: WorkplaceScope;
-  readonly filePaths: readonly string[];
-  readonly configuredPaths: readonly string[];
-}): Set<string> {
+export function buildWorkplaceDirSet(params: { readonly scope: WorkplaceScope; readonly filePaths: readonly string[]; readonly configuredPaths: readonly string[] }): Set<string> {
   const root = workplaceRootLogicalPath(params.scope);
   const dirs = new Set<string>([root]);
   for (const p of params.filePaths) {
@@ -63,10 +55,7 @@ export function buildWorkplaceDirSet(params: {
 }
 
 /** Direct child directories of `dir` within `allDirs`. */
-export function directChildDirs(
-  dir: string,
-  allDirs: ReadonlySet<string>
-): string[] {
+export function directChildDirs(dir: string, allDirs: ReadonlySet<string>): string[] {
   const normalized = normalizePath(dir);
   const children: string[] = [];
   for (const d of allDirs) {
@@ -81,10 +70,7 @@ export function directChildDirs(
 }
 
 /** Direct child files of `dir` from the file path list. */
-export function directChildFiles(
-  dir: string,
-  filePaths: ReadonlySet<string>
-): string[] {
+export function directChildFiles(dir: string, filePaths: ReadonlySet<string>): string[] {
   const normalized = normalizePath(dir);
   const prefix = normalized === "/" ? "/" : `${normalized}/`;
   const children: string[] = [];

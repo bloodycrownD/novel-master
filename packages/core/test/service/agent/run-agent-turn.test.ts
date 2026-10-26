@@ -1,10 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
-import {
-  refreshUserVfsUnifiedToolTurnSnapshot,
-  resetUserVfsUnifiedToolTurnSnapshotForTests,
-} from "@/domain/feature-flags/user-vfs-unified-tool-turn.js";
+import { userVfsUnifiedToolTurnFlag } from "@/domain/feature-flags/user-vfs-unified-tool-turn.js";
 import {
   AgentTurnError,
   runAgentTurn,
@@ -246,8 +243,8 @@ describe("runAgentTurn", () => {
 
   // T-AT5（落库 path 一律带前导 `/`；composer-at-token-prompt-dedup SPEC / scanAtPathAttachments）
   it("T-AT5: 手输 @path 入库 attachments 且 content 保留 token", async () => {
-    resetUserVfsUnifiedToolTurnSnapshotForTests();
-    refreshUserVfsUnifiedToolTurnSnapshot(false);
+    userVfsUnifiedToolTurnFlag.resetForTests();
+    userVfsUnifiedToolTurnFlag.refresh(false);
     let appendedContent: unknown;
     let appendedOptions: { attachments?: readonly { path?: string; source?: string }[] } | undefined;
     const runtime = makeRuntime({
@@ -272,12 +269,12 @@ describe("runAgentTurn", () => {
     assert.equal(appendedOptions?.attachments?.length, 1);
     assert.equal(appendedOptions?.attachments?.[0]?.source, "attach");
     assert.equal(appendedOptions?.attachments?.[0]?.path, "/notes/a.md");
-    resetUserVfsUnifiedToolTurnSnapshotForTests();
+    userVfsUnifiedToolTurnFlag.resetForTests();
   });
 
   it("T-AT6: chips 与手输同一 @path 发送时按 path 去重", async () => {
-    resetUserVfsUnifiedToolTurnSnapshotForTests();
-    refreshUserVfsUnifiedToolTurnSnapshot(false);
+    userVfsUnifiedToolTurnFlag.resetForTests();
+    userVfsUnifiedToolTurnFlag.refresh(false);
     let appendedOptions: { attachments?: readonly { path?: string }[] } | undefined;
     const runtime = makeRuntime({
       append: async (_sid, _role, _content, opts) => {
@@ -307,12 +304,12 @@ describe("runAgentTurn", () => {
     }
     assert.equal(appendedOptions?.attachments?.length, 1);
     assert.equal(appendedOptions?.attachments?.[0]?.path, "/notes/a.md");
-    resetUserVfsUnifiedToolTurnSnapshotForTests();
+    userVfsUnifiedToolTurnFlag.resetForTests();
   });
 
   it("T-CA9: attachments 区间结果 + excludedScanRanges 掩码驱动发送挂点补挂（贴邻 chip）", async () => {
-    resetUserVfsUnifiedToolTurnSnapshotForTests();
-    refreshUserVfsUnifiedToolTurnSnapshot(false);
+    userVfsUnifiedToolTurnFlag.resetForTests();
+    userVfsUnifiedToolTurnFlag.refresh(false);
     let appendedOptions:
       | {
           attachments?: readonly {
@@ -351,12 +348,12 @@ describe("runAgentTurn", () => {
       ["agent-config", "节拍成章"],
       "贴邻两颗技能都应挂载（全量扫描只认第一颗）",
     );
-    resetUserVfsUnifiedToolTurnSnapshotForTests();
+    userVfsUnifiedToolTurnFlag.resetForTests();
   });
 
   it("T-CA9: excludedScanRanges 掩码后 @path 不被贴邻 $技能 污染", async () => {
-    resetUserVfsUnifiedToolTurnSnapshotForTests();
-    refreshUserVfsUnifiedToolTurnSnapshot(false);
+    userVfsUnifiedToolTurnFlag.resetForTests();
+    userVfsUnifiedToolTurnFlag.refresh(false);
     let appendedOptions:
       | {
           attachments?: readonly {
@@ -398,12 +395,12 @@ describe("runAgentTurn", () => {
         .map((a) => a.skillName),
       ["写作"],
     );
-    resetUserVfsUnifiedToolTurnSnapshotForTests();
+    userVfsUnifiedToolTurnFlag.resetForTests();
   });
 
   it("仅 attach attachments 非空允许发送并 append", async () => {
-    resetUserVfsUnifiedToolTurnSnapshotForTests();
-    refreshUserVfsUnifiedToolTurnSnapshot(false);
+    userVfsUnifiedToolTurnFlag.resetForTests();
+    userVfsUnifiedToolTurnFlag.refresh(false);
     let appended = false;
     const runtime = makeRuntime({
       append: async () => {
@@ -427,11 +424,11 @@ describe("runAgentTurn", () => {
       // runner deps stubbed
     }
     assert.equal(appended, true);
-    resetUserVfsUnifiedToolTurnSnapshotForTests();
+    userVfsUnifiedToolTurnFlag.resetForTests();
   });
 
   it("T-SR1：丢弃预览 workplace/user_ops；不 materialize workplace（user ops 拆除后无 flush 注入）", async () => {
-    resetUserVfsUnifiedToolTurnSnapshotForTests();
+    userVfsUnifiedToolTurnFlag.resetForTests();
     let appendedOpts:
       | {
           attachments?: readonly {
@@ -498,12 +495,12 @@ describe("runAgentTurn", () => {
       "误传的 user_ops 预览一律丢弃（flush 已拆除）",
     );
     assert.ok(atts.some((a) => a.source === "attach" && a.path === "/chip.md"));
-    resetUserVfsUnifiedToolTurnSnapshotForTests();
+    userVfsUnifiedToolTurnFlag.resetForTests();
   });
 
   it("T-CR3：空正文+仅规则可见文件（无 pending/批注）→ 抛「消息不能为空」且不 append", async () => {
-    resetUserVfsUnifiedToolTurnSnapshotForTests();
-    refreshUserVfsUnifiedToolTurnSnapshot(false);
+    userVfsUnifiedToolTurnFlag.resetForTests();
+    userVfsUnifiedToolTurnFlag.refresh(false);
     let appendCount = 0;
     let evaluateCalled = false;
     const runtime = makeRuntime({
@@ -533,12 +530,12 @@ describe("runAgentTurn", () => {
       false,
       "发送路径不得再 evaluateRuleView materialize",
     );
-    resetUserVfsUnifiedToolTurnSnapshotForTests();
+    userVfsUnifiedToolTurnFlag.resetForTests();
   });
 
   it("B-01：空输入且末条 assistant → 抛「消息不能为空」、不 append 空 user", async () => {
-    resetUserVfsUnifiedToolTurnSnapshotForTests();
-    refreshUserVfsUnifiedToolTurnSnapshot(false);
+    userVfsUnifiedToolTurnFlag.resetForTests();
+    userVfsUnifiedToolTurnFlag.refresh(false);
     const existing = [
       {
         id: "a1",
@@ -573,12 +570,12 @@ describe("runAgentTurn", () => {
       false,
       "不得新增空 user",
     );
-    resetUserVfsUnifiedToolTurnSnapshotForTests();
+    userVfsUnifiedToolTurnFlag.resetForTests();
   });
 
   it("A7: workplace=false → 空输入仍抛「消息不能为空」", async () => {
-    resetUserVfsUnifiedToolTurnSnapshotForTests();
-    refreshUserVfsUnifiedToolTurnSnapshot(false);
+    userVfsUnifiedToolTurnFlag.resetForTests();
+    userVfsUnifiedToolTurnFlag.refresh(false);
     let appendCount = 0;
     const runtime = makeRuntime({
       // sampleDefinition：workplace 缺省 false
@@ -600,15 +597,15 @@ describe("runAgentTurn", () => {
       },
     );
     assert.equal(appendCount, 0);
-    resetUserVfsUnifiedToolTurnSnapshotForTests();
+    userVfsUnifiedToolTurnFlag.resetForTests();
   });
 
   // T-DS3（S-13 治本）：普通纯文本 chat 路径下，runAgentTurn 必须为新 append
   // 的 user 消息写 baseline checkpoint。原先仅 userOpsAttachments 非空时才写，
   // 导致 plain chat 无 baseline → undo_send 时 targetTree 空 → 删光工作区。
   it("T-DS3a：普通纯文本 chat 路径为新 user 消息写 baseline checkpoint", async () => {
-    resetUserVfsUnifiedToolTurnSnapshotForTests();
-    refreshUserVfsUnifiedToolTurnSnapshot(false);
+    userVfsUnifiedToolTurnFlag.resetForTests();
+    userVfsUnifiedToolTurnFlag.refresh(false);
     const captured: Array<{
       sessionId: string;
       projectId: string;
@@ -635,14 +632,14 @@ describe("runAgentTurn", () => {
       projectId: "p",
       messageId: "u-plain-1",
     });
-    resetUserVfsUnifiedToolTurnSnapshotForTests();
+    userVfsUnifiedToolTurnFlag.resetForTests();
   });
 
   // T-DS3b：baseline checkpoint 写入失败必须向上抛出，不能静默吞掉，否则
   // 调用方无法感知 baseline 缺失，后续 undo_send 仍会撞护栏。
   it("T-DS3b：baseline capture 抛错时 runAgentTurn 向上抛出", async () => {
-    resetUserVfsUnifiedToolTurnSnapshotForTests();
-    refreshUserVfsUnifiedToolTurnSnapshot(false);
+    userVfsUnifiedToolTurnFlag.resetForTests();
+    userVfsUnifiedToolTurnFlag.refresh(false);
     const runtime = makeRuntime({
       append: async () => ({ id: "u-plain-2" }),
       capture: async () => {
@@ -658,15 +655,15 @@ describe("runAgentTurn", () => {
         ),
       /baseline capture failed/,
     );
-    resetUserVfsUnifiedToolTurnSnapshotForTests();
+    userVfsUnifiedToolTurnFlag.resetForTests();
   });
 
   // T-SC1（S-1 迁移）：runAgentTurn 的 append+capture 链走 CoordinatedWrite 后，
   // capture 步骤抛错时必须逆序回滚——删掉刚 append 的 user 消息，同时入口的
   // backfillMissingBaselines 已为历史消息写了 baseline，会话仍可回滚。
   it("T-SC1：capture 抛错时 append 被逆序回滚、baseline checkpoint 仍存在", async () => {
-    resetUserVfsUnifiedToolTurnSnapshotForTests();
-    refreshUserVfsUnifiedToolTurnSnapshot(false);
+    userVfsUnifiedToolTurnFlag.resetForTests();
+    userVfsUnifiedToolTurnFlag.refresh(false);
     const deletedIds: string[] = [];
     const released: Array<{ sessionId: string; messageId: string }> = [];
     const backfilled: Array<{ sessionId: string; projectId: string }> = [];
@@ -700,15 +697,15 @@ describe("runAgentTurn", () => {
     assert.deepEqual(deletedIds, ["u-sc1"], "capture 失败后 append 必须被逆序回滚");
     // capture 的补偿动作（release）在 execute 抛错前未实际写入，这里仅验证调度路径
     assert.equal(released.length, 0, "capture execute 抛错，其自身回滚不触发");
-    resetUserVfsUnifiedToolTurnSnapshotForTests();
+    userVfsUnifiedToolTurnFlag.resetForTests();
   });
 
   // T-DS5（S-13 扩展）：runAgentTurn 入口必须调一次 backfillMissingBaselines，
   // 给历史空窗消息补 baseline。Step 9 已保证新消息源头有 baseline，但旧会话里
   // 可能还留着 Step 9 之前的消息——这里在 turn 开始时幂等补齐。
   it("T-DS5：runAgentTurn 开始时调一次 backfillMissingBaselines", async () => {
-    resetUserVfsUnifiedToolTurnSnapshotForTests();
-    refreshUserVfsUnifiedToolTurnSnapshot(false);
+    userVfsUnifiedToolTurnFlag.resetForTests();
+    userVfsUnifiedToolTurnFlag.refresh(false);
     const backfilled: Array<{ sessionId: string; projectId: string }> = [];
     const runtime = makeRuntime({
       append: async () => ({ id: "u-backfill-1" }),
@@ -727,14 +724,14 @@ describe("runAgentTurn", () => {
     }
     assert.equal(backfilled.length, 1, "每轮发送只能调一次 backfill");
     assert.deepEqual(backfilled[0], { sessionId: "s", projectId: "p" });
-    resetUserVfsUnifiedToolTurnSnapshotForTests();
+    userVfsUnifiedToolTurnFlag.resetForTests();
   });
 
   // T-B4（init-busy-yield Step 4）：连续多轮 run 时每轮仍恰好调用一次
   // backfillMissingBaselines——判定加游标短路后调用契约不变（T-DS5 的多轮形态）。
   it("T-B4：连续两轮 run 每轮恰调用一次 backfillMissingBaselines", async () => {
-    resetUserVfsUnifiedToolTurnSnapshotForTests();
-    refreshUserVfsUnifiedToolTurnSnapshot(false);
+    userVfsUnifiedToolTurnFlag.resetForTests();
+    userVfsUnifiedToolTurnFlag.refresh(false);
     const backfilled: Array<{ sessionId: string; projectId: string }> = [];
     const runtime = makeRuntime({
       append: async () => ({ id: `u-b4-${backfilled.length}` }),
@@ -756,6 +753,6 @@ describe("runAgentTurn", () => {
     assert.equal(backfilled.length, 2, "两轮 run 每轮恰调用一次 backfill");
     assert.deepEqual(backfilled[0], { sessionId: "s", projectId: "p" });
     assert.deepEqual(backfilled[1], { sessionId: "s", projectId: "p" });
-    resetUserVfsUnifiedToolTurnSnapshotForTests();
+    userVfsUnifiedToolTurnFlag.resetForTests();
   });
 });

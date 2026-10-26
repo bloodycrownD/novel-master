@@ -1,26 +1,9 @@
-import type {
-  AgentDefinition,
-  AgentToolPolicy,
-} from "@/domain/agent/model/agent-definition.js";
-import type {
-  AgentPromptLayout,
-  DynamicPromptBlock,
-  EditorPersistPromptBlock,
-  PersistTextPromptBlock,
-} from "@/domain/prompt/model/agent-prompt-layout.js";
-import {
-  DEFAULT_SKILLS_INDEX_PREFIX,
-  DEFAULT_WORKPLACE_ASSISTANT_TEXT,
-  layoutHasCustomAttach,
-  layoutHasWorkplace,
-} from "@/domain/prompt/model/agent-prompt-layout.js";
+import type { AgentDefinition, AgentToolPolicy } from "@/domain/agent/model/agent-definition.js";
+import type { AgentPromptLayout, DynamicPromptBlock, EditorPersistPromptBlock, PersistTextPromptBlock } from "@/domain/prompt/model/agent-prompt-layout.js";
+import { DEFAULT_SKILLS_INDEX_PREFIX, DEFAULT_WORKPLACE_ASSISTANT_TEXT, layoutHasCustomAttach, layoutHasWorkplace } from "@/domain/prompt/model/agent-prompt-layout.js";
 import { validateAgentPromptLayout } from "@/domain/prompt/logic/validate-agent-prompt-layout.js";
-import { PromptError } from "@/errors/prompt-errors.js";
 import { isSavedModelUuidFormat } from "@/domain/provider/logic/assert-saved-model-uuid.js";
-import {
-  buildToolsPolicyFromSelection,
-  toolsSelectionFromDefinition,
-} from "./agent-tool-catalog.js";
+import { buildToolsPolicyFromSelection, toolsSelectionFromDefinition } from "./agent-tool-catalog.js";
 
 export type ToolsMode = "default" | "allow" | "deny";
 
@@ -97,10 +80,7 @@ export function parseToolsList(text: string): string[] {
 }
 
 /** @deprecated Use {@link buildToolsPolicyFromSelection}. */
-export function buildToolsPolicy(
-  mode: ToolsMode,
-  listText: string
-): AgentToolPolicy | undefined {
+export function buildToolsPolicy(mode: ToolsMode, listText: string): AgentToolPolicy | undefined {
   return buildToolsPolicyFromSelection(mode, parseToolsList(listText));
 }
 
@@ -128,8 +108,7 @@ export const WORKPLACE_DISABLED_HINT = "关闭时不注入项目文件树。";
 export const WORKPLACE_ASSISTANT_TEXT_LABEL = "助手确认语";
 
 /** 开态但确认语为空时的保存失败文案（W9 显式阻断，不依赖区域门闩）。 */
-export const WORKPLACE_ASSISTANT_TEXT_REQUIRED_MESSAGE =
-  "请填写常驻工作区助手确认语";
+export const WORKPLACE_ASSISTANT_TEXT_REQUIRED_MESSAGE = "请填写常驻工作区助手确认语";
 
 /** Agent 编辑器三区 Prompt 用户可见文案（wire 字段名与类型名保持英文）。 */
 export const PROMPT_REGION_LABELS = {
@@ -160,34 +139,24 @@ export const PROMPT_REGION_LABELS = {
   chat: "会话历史",
   chatTag: "会话消息",
   chatBlocks: "会话区",
-  chatReadonlyHint:
-    "运行时自动注入当前会话的可见消息，固定位于持久区与动态区之间。不可编辑、不可关闭，始终会发送给 AI。",
+  chatReadonlyHint: "运行时自动注入当前会话的可见消息，固定位于持久区与动态区之间。不可编辑、不可关闭，始终会发送给 AI。",
   skills: "技能索引",
   skillsTag: "技能",
   skillsBlocks: "技能索引区",
   skillsReadonlyHint: "运行时注入生效技能索引。",
-  skillsDisabledHint:
-    "关闭后不注入索引且不注册 skill 工具；手动引用 skill 不受影响。",
+  skillsDisabledHint: "关闭后不注入索引且不注册 skill 工具；手动引用 skill 不受影响。",
 } as const;
 
-export function blockTypeLabel(
-  _type: EditorPersistPromptBlock["type"] | DynamicPromptBlock["type"]
-): string {
+export function blockTypeLabel(_type: EditorPersistPromptBlock["type"] | DynamicPromptBlock["type"]): string {
   return "文本";
 }
 
-function persistTextBlocksFromEditor(
-  persist: readonly EditorPersistPromptBlock[]
-): PersistTextPromptBlock[] {
-  return persist.filter(
-    (block): block is PersistTextPromptBlock => block.type === "text"
-  );
+function persistTextBlocksFromEditor(persist: readonly EditorPersistPromptBlock[]): PersistTextPromptBlock[] {
+  return persist.filter((block): block is PersistTextPromptBlock => block.type === "text");
 }
 
 /** 将 persist 拆为有序文本块列表（读入时丢弃旧 worktree 块）。 */
-export function splitPersistBlocksForEditor(
-  persist: readonly EditorPersistPromptBlock[]
-): {
+export function splitPersistBlocksForEditor(persist: readonly EditorPersistPromptBlock[]): {
   readonly blocks: readonly PersistTextPromptBlock[];
   readonly textBlocks: readonly PersistTextPromptBlock[];
 } {
@@ -196,28 +165,16 @@ export function splitPersistBlocksForEditor(
 }
 
 /** 合并有序 persist 文本块（保留传入顺序）。 */
-export function joinPersistBlocksForLayout(
-  blocks: readonly EditorPersistPromptBlock[]
-): PersistTextPromptBlock[] {
+export function joinPersistBlocksForLayout(blocks: readonly EditorPersistPromptBlock[]): PersistTextPromptBlock[] {
   return persistTextBlocksFromEditor(blocks);
 }
 
-export function mapPersistTextBlocks(
-  persist: readonly EditorPersistPromptBlock[],
-  mapper: (
-    block: PersistTextPromptBlock,
-    index: number
-  ) => PersistTextPromptBlock
-): PersistTextPromptBlock[] {
+export function mapPersistTextBlocks(persist: readonly EditorPersistPromptBlock[], mapper: (block: PersistTextPromptBlock, index: number) => PersistTextPromptBlock): PersistTextPromptBlock[] {
   const { textBlocks } = splitPersistBlocksForEditor(persist);
   return textBlocks.map(mapper);
 }
 
-export function movePersistBlock(
-  persist: readonly EditorPersistPromptBlock[],
-  index: number,
-  direction: -1 | 1
-): PersistTextPromptBlock[] {
+export function movePersistBlock(persist: readonly EditorPersistPromptBlock[], index: number, direction: -1 | 1): PersistTextPromptBlock[] {
   const blocks = [...splitPersistBlocksForEditor(persist).blocks];
   const target = index + direction;
   if (target < 0 || target >= blocks.length) {
@@ -229,18 +186,11 @@ export function movePersistBlock(
   return blocks;
 }
 
-export function movePersistTextBlock(
-  persist: readonly EditorPersistPromptBlock[],
-  textIndex: number,
-  direction: -1 | 1
-): PersistTextPromptBlock[] {
+export function movePersistTextBlock(persist: readonly EditorPersistPromptBlock[], textIndex: number, direction: -1 | 1): PersistTextPromptBlock[] {
   return movePersistBlock(persist, textIndex, direction);
 }
 
-export function deletePersistTextBlock(
-  persist: readonly EditorPersistPromptBlock[],
-  textIndex: number
-): PersistTextPromptBlock[] {
+export function deletePersistTextBlock(persist: readonly EditorPersistPromptBlock[], textIndex: number): PersistTextPromptBlock[] {
   const { textBlocks } = splitPersistBlocksForEditor(persist);
   return textBlocks.filter((_, index) => index !== textIndex);
 }
@@ -248,10 +198,7 @@ export function deletePersistTextBlock(
 /**
  * 常驻工作区开关变更：关保持文案；开且文案 trim 空则预填默认确认语（T-WP8）。
  */
-export function withWorkplaceToggle(
-  enabled: boolean,
-  workplaceAssistantText: string
-): Pick<AgentEditorFormInput, "workplaceEnabled" | "workplaceAssistantText"> {
+export function withWorkplaceToggle(enabled: boolean, workplaceAssistantText: string): Pick<AgentEditorFormInput, "workplaceEnabled" | "workplaceAssistantText"> {
   if (!enabled) {
     return {
       workplaceEnabled: false,
@@ -260,27 +207,12 @@ export function withWorkplaceToggle(
   }
   return {
     workplaceEnabled: true,
-    workplaceAssistantText:
-      workplaceAssistantText.trim() === ""
-        ? DEFAULT_WORKPLACE_ASSISTANT_TEXT
-        : workplaceAssistantText,
+    workplaceAssistantText: workplaceAssistantText.trim() === "" ? DEFAULT_WORKPLACE_ASSISTANT_TEXT : workplaceAssistantText,
   };
 }
 
 /** 新建 Agent 默认 Prompt 表单片段。 */
-export function createDefaultAgentEditorPrompts(): Pick<
-  AgentEditorFormInput,
-  | "systemEnabled"
-  | "systemContent"
-  | "persistEnabled"
-  | "dynamicEnabled"
-  | "workplaceEnabled"
-  | "workplaceAssistantText"
-  | "customAttachEnabled"
-  | "customAttachText"
-  | "persist"
-  | "dynamic"
-> {
+export function createDefaultAgentEditorPrompts(): Pick<AgentEditorFormInput, "systemEnabled" | "systemContent" | "persistEnabled" | "dynamicEnabled" | "workplaceEnabled" | "workplaceAssistantText" | "customAttachEnabled" | "customAttachText" | "persist" | "dynamic"> {
   return {
     systemEnabled: false,
     systemContent: "",
@@ -296,46 +228,17 @@ export function createDefaultAgentEditorPrompts(): Pick<
 }
 
 /** 是否启用了任一 Prompt 区域（system / persist / dynamic）。 */
-export function hasAnyPromptRegionEnabled(
-  input: Pick<
-    AgentEditorFormInput,
-    "systemEnabled" | "persistEnabled" | "dynamicEnabled"
-  >
-): boolean {
+export function hasAnyPromptRegionEnabled(input: Pick<AgentEditorFormInput, "systemEnabled" | "persistEnabled" | "dynamicEnabled">): boolean {
   return input.systemEnabled || input.persistEnabled || input.dynamicEnabled;
 }
 
 /** 是否存在与区域开关绑定的有效 Prompt 来源。 */
-export function hasEffectivePromptSource(
-  input: Pick<
-    AgentEditorFormInput,
-    | "systemEnabled"
-    | "systemContent"
-    | "persistEnabled"
-    | "dynamicEnabled"
-    | "workplaceEnabled"
-    | "workplaceAssistantText"
-    | "persist"
-    | "dynamic"
-  >
-): boolean {
+export function hasEffectivePromptSource(input: Pick<AgentEditorFormInput, "systemEnabled" | "systemContent" | "persistEnabled" | "dynamicEnabled" | "workplaceEnabled" | "workplaceAssistantText" | "persist" | "dynamic">): boolean {
   return countEffectiveFormPromptSources(input) > 0;
 }
 
 /** 统计与区域开关绑定的有效 Prompt 来源数量（每区至多计 1）。 */
-export function countEffectiveFormPromptSources(
-  input: Pick<
-    AgentEditorFormInput,
-    | "systemEnabled"
-    | "systemContent"
-    | "persistEnabled"
-    | "dynamicEnabled"
-    | "workplaceEnabled"
-    | "workplaceAssistantText"
-    | "persist"
-    | "dynamic"
-  >
-): number {
+export function countEffectiveFormPromptSources(input: Pick<AgentEditorFormInput, "systemEnabled" | "systemContent" | "persistEnabled" | "dynamicEnabled" | "workplaceEnabled" | "workplaceAssistantText" | "persist" | "dynamic">): number {
   let count = 0;
   if (input.systemEnabled && input.systemContent.trim() !== "") {
     count += 1;
@@ -353,34 +256,18 @@ export function countEffectiveFormPromptSources(
 }
 
 /** 统计 system + dynamic 有效 Prompt 来源（删除持久区块时允许 persist 全空）。 */
-export function countMinimumPromptSources(
-  input: Pick<
-    AgentEditorFormInput,
-    "systemEnabled" | "systemContent" | "dynamic"
-  >,
-  options?: { excludeDynamicIndex?: number }
-): number {
+export function countMinimumPromptSources(input: Pick<AgentEditorFormInput, "systemEnabled" | "systemContent" | "dynamic">, options?: { excludeDynamicIndex?: number }): number {
   let count = 0;
   if (input.systemEnabled && input.systemContent.trim() !== "") {
     count += 1;
   }
-  count += input.dynamic.filter(
-    (_, index) => index !== options?.excludeDynamicIndex
-  ).length;
+  count += input.dynamic.filter((_, index) => index !== options?.excludeDynamicIndex).length;
   return count;
 }
 
 /** 统计表单中有效 Prompt 来源数量（删除块时校验下限）。 */
 export function countFormPromptSources(
-  input: Pick<
-    AgentEditorFormInput,
-    | "systemEnabled"
-    | "systemContent"
-    | "workplaceEnabled"
-    | "workplaceAssistantText"
-    | "persist"
-    | "dynamic"
-  >,
+  input: Pick<AgentEditorFormInput, "systemEnabled" | "systemContent" | "workplaceEnabled" | "workplaceAssistantText" | "persist" | "dynamic">,
   options?: {
     excludePersistTextIndex?: number;
     excludeDynamicIndex?: number;
@@ -391,21 +278,15 @@ export function countFormPromptSources(
     count += 1;
   }
   const { textBlocks } = splitPersistBlocksForEditor(input.persist);
-  count += textBlocks.filter(
-    (_, index) => index !== options?.excludePersistTextIndex
-  ).length;
+  count += textBlocks.filter((_, index) => index !== options?.excludePersistTextIndex).length;
   if (input.workplaceEnabled && input.workplaceAssistantText.trim() !== "") {
     count += 1;
   }
-  count += input.dynamic.filter(
-    (_, index) => index !== options?.excludeDynamicIndex
-  ).length;
+  count += input.dynamic.filter((_, index) => index !== options?.excludeDynamicIndex).length;
   return count;
 }
 
-export function createDefaultPersistTextBlock(
-  index: number
-): PersistTextPromptBlock {
+export function createDefaultPersistTextBlock(index: number): PersistTextPromptBlock {
   return {
     name: `persist-${index + 1}`,
     type: "text",
@@ -414,9 +295,7 @@ export function createDefaultPersistTextBlock(
   };
 }
 
-export function createDefaultDynamicTextBlock(
-  index: number
-): DynamicPromptBlock {
+export function createDefaultDynamicTextBlock(index: number): DynamicPromptBlock {
   return {
     name: `dynamic-${index + 1}`,
     type: "text",
@@ -426,32 +305,10 @@ export function createDefaultDynamicTextBlock(
 }
 
 /** AgentDefinition → 编辑器表单 Prompt 字段。 */
-export function definitionToForm(
-  def: AgentDefinition
-): Pick<
-  AgentEditorFormInput,
-  | "mode"
-  | "systemEnabled"
-  | "systemContent"
-  | "persistEnabled"
-  | "dynamicEnabled"
-  | "workplaceEnabled"
-  | "workplaceAssistantText"
-  | "customAttachEnabled"
-  | "customAttachText"
-  | "skillsEnabled"
-  | "skillsPrefixText"
-  | "description"
-  | "persist"
-  | "dynamic"
-> {
+export function definitionToForm(def: AgentDefinition): Pick<AgentEditorFormInput, "mode" | "systemEnabled" | "systemContent" | "persistEnabled" | "dynamicEnabled" | "workplaceEnabled" | "workplaceAssistantText" | "customAttachEnabled" | "customAttachText" | "skillsEnabled" | "skillsPrefixText" | "description" | "persist" | "dynamic"> {
   const system = def.prompts.system?.trim() ?? "";
-  const workplaceText =
-    typeof def.prompts.workplace === "string" ? def.prompts.workplace : "";
-  const customAttachText =
-    typeof def.prompts.customAttach === "string"
-      ? def.prompts.customAttach
-      : "";
+  const workplaceText = typeof def.prompts.workplace === "string" ? def.prompts.workplace : "";
+  const customAttachText = typeof def.prompts.customAttach === "string" ? def.prompts.customAttach : "";
   return {
     mode: def.mode ?? "all",
     systemEnabled: system.length > 0,
@@ -471,27 +328,8 @@ export function definitionToForm(
 }
 
 /** 表单 Prompt 字段 → {@link AgentPromptLayout}（system 关闭时 omit）。 */
-export function layoutFromFormInput(
-  input: Pick<
-    AgentEditorFormInput,
-    | "systemEnabled"
-    | "systemContent"
-    | "persistEnabled"
-    | "dynamicEnabled"
-    | "workplaceEnabled"
-    | "workplaceAssistantText"
-    | "customAttachEnabled"
-    | "customAttachText"
-    | "skillsEnabled"
-    | "skillsPrefixText"
-    | "persist"
-    | "dynamic"
-  >
-): AgentPromptLayout {
-  const system =
-    input.systemEnabled && input.systemContent.trim() !== ""
-      ? input.systemContent
-      : undefined;
+export function layoutFromFormInput(input: Pick<AgentEditorFormInput, "systemEnabled" | "systemContent" | "persistEnabled" | "dynamicEnabled" | "workplaceEnabled" | "workplaceAssistantText" | "customAttachEnabled" | "customAttachText" | "skillsEnabled" | "skillsPrefixText" | "persist" | "dynamic">): AgentPromptLayout {
+  const system = input.systemEnabled && input.systemContent.trim() !== "" ? input.systemContent : undefined;
   const { textBlocks } = splitPersistBlocksForEditor(input.persist);
   const workplaceText = input.workplaceAssistantText.trim();
   const customAttachText = (input.customAttachText ?? "").trim();
@@ -499,20 +337,11 @@ export function layoutFromFormInput(
     ...(system != null ? { system } : {}),
     ...(input.persistEnabled ? { persistEnabled: true } : {}),
     ...(input.dynamicEnabled ? { dynamicEnabled: true } : {}),
-    ...(input.workplaceEnabled && workplaceText !== ""
-      ? { workplace: workplaceText }
-      : {}),
-    ...(input.customAttachEnabled && customAttachText !== ""
-      ? { customAttach: customAttachText }
-      : {}),
+    ...(input.workplaceEnabled && workplaceText !== "" ? { workplace: workplaceText } : {}),
+    ...(input.customAttachEnabled && customAttachText !== "" ? { customAttach: customAttachText } : {}),
     ...(input.skillsEnabled === false ? { skillsEnabled: false } : {}),
     // 前缀语等于默认值 / 空时 omit（落库省噪音；关闭时前缀无意义一并 omit）
-    ...((input.skillsPrefixText ?? "").trim() !== "" &&
-    (input.skillsPrefixText ?? "").trim() !==
-      DEFAULT_SKILLS_INDEX_PREFIX.trim() &&
-    input.skillsEnabled !== false
-      ? { skillsPrefix: (input.skillsPrefixText ?? "").trim() }
-      : {}),
+    ...((input.skillsPrefixText ?? "").trim() !== "" && (input.skillsPrefixText ?? "").trim() !== DEFAULT_SKILLS_INDEX_PREFIX.trim() && input.skillsEnabled !== false ? { skillsPrefix: (input.skillsPrefixText ?? "").trim() } : {}),
     persist: [...textBlocks],
     dynamic: [...input.dynamic],
   };
@@ -554,9 +383,7 @@ export function formSnapshotJson(input: AgentEditorFormInput): string {
   });
 }
 
-export function buildAgentDefinitionFromForm(
-  input: AgentEditorFormInput
-): { ok: true; definition: AgentDefinition } | { ok: false; message: string } {
+export function buildAgentDefinitionFromForm(input: AgentEditorFormInput): { ok: true; definition: AgentDefinition } | { ok: false; message: string } {
   if (!input.name.trim()) {
     return { ok: false, message: "请填写 Agent 名称" };
   }
@@ -571,20 +398,13 @@ export function buildAgentDefinitionFromForm(
     return { ok: false, message: "至少保留一个 Prompt 块" };
   }
   const layout = layoutFromFormInput(input);
-  let validatedLayout: AgentPromptLayout;
-  try {
-    validatedLayout = validateAgentPromptLayout(layout);
-  } catch (error) {
-    if (error instanceof PromptError) {
-      return { ok: false, message: error.message };
-    }
-    throw error;
+  const validated = validateAgentPromptLayout(layout);
+  if (!validated.ok) {
+    return { ok: false, message: validated.error.message };
   }
+  const validatedLayout = validated.value;
   const steps = Number(input.maxSteps);
-  const tools = buildToolsPolicyFromSelection(
-    input.toolsMode,
-    input.toolsSelected
-  );
+  const tools = buildToolsPolicyFromSelection(input.toolsMode, input.toolsSelected);
   let modelPin: string | undefined;
   if (input.modelEnabled && input.savedModelId.trim()) {
     const trimmed = input.savedModelId.trim();
@@ -598,9 +418,7 @@ export function buildAgentDefinitionFromForm(
     name: input.name.trim(),
     mode: input.mode,
     prompts: validatedLayout,
-    ...(Number.isFinite(steps) && steps > 0
-      ? { runtime: { maxSteps: steps } }
-      : {}),
+    ...(Number.isFinite(steps) && steps > 0 ? { runtime: { maxSteps: steps } } : {}),
     ...(modelPin != null ? { model: modelPin } : {}),
     ...(tools != null ? { tools } : {}),
     ...(descriptionText.length > 0 ? { description: descriptionText } : {}),

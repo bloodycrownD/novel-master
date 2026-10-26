@@ -79,7 +79,10 @@ class PromptAssembler {
         const hasExtraInfo = typeof extraInfoRaw === "string" && extraInfoRaw.trim().length > 0;
         const macroContext = {now: runtime.now, workplace: runtime.workplace, filetree: runtime.filetree};
         const extraInfoResolved = hasExtraInfo ? await expandDynamicMacros(extraInfoRaw, macroContext) : undefined;
-        const resolvedRuntime = extraInfoResolved === undefined ? runtime : {...runtime, extraInfo: extraInfoResolved};
+        if (extraInfoResolved !== undefined && !extraInfoResolved.ok) {
+            throw extraInfoResolved.error;
+        }
+        const resolvedRuntime = extraInfoResolved === undefined ? runtime : {...runtime, extraInfo: extraInfoResolved.value};
         // extra info 只对最新一条非隐藏 user 输入消息生效。
         let latestUserInputIndex = -1;
         for (let i = messages.length - 1; i >= 0; i--) {

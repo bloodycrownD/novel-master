@@ -129,7 +129,8 @@ export async function renameVfsFile(
   oldPath: string,
   newPath: string,
 ): Promise<void> {
-  await moveVfsPath(vfs, oldPath, newPath);
+  const moved = await moveVfsPath(vfs, oldPath, newPath);
+  if (!moved.ok) throw moved.error;
 }
 
 /** 会话 scope：重命名文件经 userVfsTurn。 */

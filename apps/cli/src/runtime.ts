@@ -4,12 +4,22 @@
  * @module runtime
  */
 
-import { mkdir } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
-import { deflateSync, inflateSync } from "node:zlib";
+import {
+  mkdir } from "node:fs/promises";
+import { dirname,
+  resolve } from "node:path";
+import { deflateSync,
+  inflateSync } from "node:zlib";
 import { registerTokenizerNodeDriver } from "@novel-master/tokenizer-driver-node";
-import { bootstrapNovelMaster, createPersistentPreferences, createPersistentState, open, registerZlibCodecAccelerator, type PersistentPreferences, type PersistentState, type TdbcConnection } from "@novel-master/core";
-import { refreshUserVfsUnifiedToolTurnSnapshot } from "@novel-master/core/feature-flags";
+import { bootstrapNovelMaster,
+  createPersistentPreferences,
+  createPersistentState,
+  open,
+  registerZlibCodecAccelerator,
+  type PersistentPreferences,
+  type PersistentState,
+  type TdbcConnection } from "@novel-master/core";
+import { userVfsUnifiedToolTurnFlag } from "@novel-master/core/feature-flags";
 
 import { createAgentRegistryService, createAgentStreamRegistry, createAgentAbortRegistry } from "@novel-master/core/agent";
 import {
@@ -206,7 +216,7 @@ export async function createNovelMasterRuntime(
   const smartSortRule = createSmartSortRuleService(conn);
   const preferences = createPersistentPreferences(conn);
   const userVfsUnifiedToolTurnEnabled = await preferences.getUserVfsUnifiedToolTurn();
-  refreshUserVfsUnifiedToolTurnSnapshot(userVfsUnifiedToolTurnEnabled);
+  userVfsUnifiedToolTurnFlag.refresh(userVfsUnifiedToolTurnEnabled);
   const scope = new CliScopeResolver(state);
 
   const dbStore = resolveSkspDriver(skspName).createStore(conn);

@@ -149,10 +149,8 @@ export type {
 /**
  * 偏好与持久状态：对 KKV 的稳定封装（非 UI 模块直连 KKV）。
  */
-export { KkvError, isKkvError } from "./errors/kkv-errors.js";
-export type { KkvErrorCode } from "./errors/kkv-errors.js";
-export { PreferencesError } from "./errors/preferences-errors.js";
-export type { PreferencesErrorCode } from "./errors/preferences-errors.js";
+export { kkvNotFound } from "./errors/kkv-errors.js";
+export { preferencesInvalidValue } from "./errors/preferences-errors.js";
 export { createPersistentState } from "./service/persistent-state/create-persistent-state.js";
 export type { PersistentState } from "./service/persistent-state/persistent-state.port.js";
 export { createPersistentPreferences } from "./service/persistent-preferences/create-persistent-preferences.js";

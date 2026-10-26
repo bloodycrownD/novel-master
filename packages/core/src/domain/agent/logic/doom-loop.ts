@@ -12,9 +12,9 @@
  * @module domain/agent/logic/doom-loop
  */
 
-import type {ContentBlock, ToolUseBlock} from "@/domain/chat/model/content-block.js";
-import {AppError} from "@/errors/app-error.js";
-import {Result} from "@/errors/either.js";
+import type { ContentBlock, ToolUseBlock } from "@/domain/chat/model/content-block.js";
+import { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 
 /**
  * 构造参数；字段名与 agent 定义的 runtime 同名，可直接把 runtime 传进来。
@@ -24,6 +24,9 @@ export interface DoomLoopConfig {
   readonly doomLoopThreshold?: number;
   readonly doomLoopCrossRoundWindow?: number;
 }
+
+/** 本模块唯一的失败载荷。 */
+type DoomLoopError = AppError<"AGENT_DOOM_LOOP">;
 
 /** 同名工具 + 逐字节相同的 JSON 输入视为「同一调用」（沿用旧实现口径）。 */
 function sameToolUse(a: ToolUseBlock, b: ToolUseBlock): boolean {
@@ -58,8 +61,10 @@ export class DoomLoopDetector {
    * 三步顺序固定：① 本步尾部同输入连击 → ② 本步 tool_use 折进轨迹 → ③ 跨轮
    * A-B-A-B。②③ 在本步检查之后，与旧实现两处调用点的先后一致。失败载荷是
    * `AppError`（key `AGENT_DOOM_LOOP`）；调用方按 `if (!r.ok)` 收窄后自行决定抛还是展示。
+   *
+   * nm-style: keep-public — 检测器实例状态（轨迹窗口）的唯一 step 入口，内联会拆散状态机。
    */
-  checkStep(blocks: readonly ContentBlock[]): Result<void, AppError> {
+  checkStep(blocks: readonly ContentBlock[]): Result<void, DoomLoopError> {
     const toolUses = blocks.filter((b): b is ToolUseBlock => b.type === "tool_use");
 
     // ① 只查本步最后 threshold 个；不足 threshold 个不可能构成连击。

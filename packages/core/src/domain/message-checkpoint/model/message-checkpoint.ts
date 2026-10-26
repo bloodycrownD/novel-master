@@ -4,13 +4,6 @@
  * @module domain/message-checkpoint/model/message-checkpoint
  */
 
-/** Anchor row for one Agent message with mutating tools. */
-export interface MessageCheckpoint {
-  readonly sessionId: string;
-  readonly messageId: string;
-  readonly createdAtMs: number;
-}
-
 /** entry_id → revision version pointer at capture time. */
 export interface MessageCheckpointFile {
   readonly sessionId: string;

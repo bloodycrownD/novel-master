@@ -23,7 +23,7 @@ import type { ChatMessageData } from "../../src/domain/chat/model/message.js";
 import { SqliteMessageRepository } from "../../src/domain/chat/repositories/impl/sqlite-message.repository.js";
 import { SqliteUsageRecordRepository } from "../../src/domain/usage/repositories/impl/sqlite-usage-record.repository.js";
 import { buildUsageRecordFromMessage } from "../../src/domain/usage/logic/build-usage-record.js";
-import { ChatError } from "../../src/errors/chat-errors.js";
+import { isAppError } from "@novel-master/core/agent";
 import { createUsageStatsService } from "../../src/service/chat/create-chat-services.js";
 import type { UsageStatsRange } from "../../src/service/chat/usage-stats.port.js";
 import {
@@ -31,6 +31,8 @@ import {
   novelMasterTestFixture,
   testIsolationSuffix,
 } from "../helpers/novel-master-fixture.js";
+
+const isChatInvalidArgument = (error: unknown): boolean => isAppError(error, "CHAT_INVALID_ARGUMENT");
 
 // G-2 DST：固定日期断言需要可控时区。node:test 每个文件独立进程，在 fixture
 // 初始化前把本地时区固定为带 DST 切换的 America/New_York；既有用例全部以
@@ -490,7 +492,7 @@ describe("usage stats service (T-S5)", () => {
     assert.equal(page.rows.length, 2);
 
     // getDailyBuckets：缺 range 抛错（日桶序列需要界）。
-    await assert.rejects(svc.getDailyBuckets({}), ChatError);
+    await assert.rejects(svc.getDailyBuckets({}), isChatInvalidArgument);
   });
 
   it("listModels 来自服务商配置的已保存模型，不从历史消息 distinct", async () => {
@@ -569,25 +571,25 @@ describe("usage stats service (T-S5)", () => {
       svc.getSummary({
         range: { fromDay: "2026/03/08", toDay: "2026-03-10" },
       }),
-      ChatError
+      isChatInvalidArgument
     );
     await assert.rejects(
       svc.getSummary({
         range: { fromDay: "2026-03-08", toDay: "not-a-date" },
       }),
-      ChatError
+      isChatInvalidArgument
     );
     await assert.rejects(
       svc.getSummary({
         range: { fromDay: "2026-02-30", toDay: "2026-03-10" },
       }),
-      ChatError
+      isChatInvalidArgument
     );
     await assert.rejects(
       svc.getDailyBuckets({
         range: { fromDay: "2026-03-10", toDay: "2026-03-08" },
       }),
-      ChatError
+      isChatInvalidArgument
     );
   });
 
@@ -596,11 +598,11 @@ describe("usage stats service (T-S5)", () => {
     const svc = createUsageStatsService(ctx.conn);
     await assert.rejects(
       svc.getHourlyBuckets("2026-02-30", {}),
-      ChatError
+      isChatInvalidArgument
     );
     await assert.rejects(
       svc.getHourlyBuckets("not-a-date", {}),
-      ChatError
+      isChatInvalidArgument
     );
   });
 
@@ -1527,7 +1529,7 @@ describe("usage stats service 会话维度详情（T-MD1/T-MD2，metric-detail-s
     const svc = createUsageStatsService(ctx.conn);
     await assert.rejects(
       () => svc.getSessionUsageDetail(""),
-      ChatError
+      isChatInvalidArgument
     );
   });
 

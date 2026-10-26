@@ -20,17 +20,9 @@ export interface LlmExportZones {
 
 export type LlmExportZone = "persist" | "chat" | "dynamic";
 
-const VFS_SEMANTIC_KINDS = new Set([
-  "user_vfs_action",
-  "user_vfs_ack",
-  "tool_turn_bridge",
-]);
+const VFS_SEMANTIC_KINDS = new Set(["user_vfs_action", "user_vfs_ack", "tool_turn_bridge"]);
 
-function resolveZone(
-  index: number,
-  total: number,
-  zones: LlmExportZones | undefined
-): LlmExportZone {
+function resolveZone(index: number, total: number, zones: LlmExportZones | undefined): LlmExportZone {
   if (zones == null) {
     return "chat";
   }
@@ -60,90 +52,6 @@ function hasNonEmptyAttachments(message: ChatMessageData): boolean {
   return (message.attachments?.length ?? 0) > 0;
 }
 
-function canMergeAdjacent(
-  left: ChatMessageData,
-  right: ChatMessageData,
-  leftZone: LlmExportZone,
-  rightZone: LlmExportZone
-): boolean {
-  if (leftZone !== rightZone) {
-    return false;
-  }
-  if (left.role !== right.role) {
-    return false;
-  }
-  if (!isPlainTextOnly(left) || !isPlainTextOnly(right)) {
-    return false;
-  }
-  if (isVfsSemanticSegment(left) || isVfsSemanticSegment(right)) {
-    return false;
-  }
-  if (hasNonEmptyAttachments(left) || hasNonEmptyAttachments(right)) {
-    return false;
-  }
-  return true;
-}
-
-function mergePlainTextMessages(
-  left: ChatMessageData,
-  right: ChatMessageData
-): ChatMessageData {
-  const leftText = messageBodyTextFromBlocks(left.content.blocks);
-  const rightText = messageBodyTextFromBlocks(right.content.blocks);
-  let combined = leftText;
-  if (rightText !== "") {
-    combined = combined === "" ? rightText : `${combined}\n\n${rightText}`;
-  }
-  return {
-    ...left,
-    content: textBlocks(combined),
-  };
-}
-
-function mergeWithinZones(
-  messages: readonly ChatMessageData[],
-  zones: LlmExportZones | undefined
-): ChatMessageData[] {
-  if (messages.length === 0) {
-    return [];
-  }
-
-  const result: ChatMessageData[] = [];
-  let buffer = messages[0]!;
-  let bufferZone = resolveZone(0, messages.length, zones);
-
-  for (let i = 1; i < messages.length; i++) {
-    const current = messages[i]!;
-    const currentZone = resolveZone(i, messages.length, zones);
-    if (canMergeAdjacent(buffer, current, bufferZone, currentZone)) {
-      buffer = mergePlainTextMessages(buffer, current);
-      continue;
-    }
-    result.push(buffer);
-    buffer = current;
-    bufferZone = currentZone;
-  }
-  result.push(buffer);
-  return result;
-}
-
-/** OpenAI：可剔除空内容的 tool_turn_bridge synthetic。 */
-function applyProviderPostProcess(
-  messages: readonly ChatMessageData[],
-  provider: LlmProtocolKind
-): ChatMessageData[] {
-  if (provider !== "openai") {
-    return [...messages];
-  }
-  return messages.filter((message) => {
-    const kind = readMessageMetadata(message.raw)?.kind;
-    if (kind !== "tool_turn_bridge") {
-      return true;
-    }
-    return !(isPlainTextOnly(message) && messageBodyTextFromBlocks(message.content.blocks).trim() === "");
-  });
-}
-
 /**
  * 在 zone 内 merge 连续同 role 纯文本；跨区、VFS 段、带 attachments、含 tool 块均不 merge。
  * **保持 sync**：不在此做 async hydrate（须由上游 `prepareUserMessagesForPrompt` 先 wrap）。
@@ -153,11 +61,40 @@ function applyProviderPostProcess(
  * @param provider LLM 协议种类（per-provider 后处理）
  * @param zones 三区边界；缺省时整段视为 chat 区
  */
-export function normalizeForLlmExport(
-  messages: readonly ChatMessageData[],
-  provider: LlmProtocolKind,
-  zones?: LlmExportZones
-): ChatMessageData[] {
-  const merged = mergeWithinZones(messages, zones);
-  return applyProviderPostProcess(merged, provider);
+export function normalizeForLlmExport(messages: readonly ChatMessageData[], provider: LlmProtocolKind, zones?: LlmExportZones): ChatMessageData[] {
+  const merged: ChatMessageData[] = [];
+  if (messages.length > 0) {
+    let buffer = messages[0]!;
+    let bufferZone = resolveZone(0, messages.length, zones);
+    for (let i = 1; i < messages.length; i++) {
+      const current = messages[i]!;
+      const currentZone = resolveZone(i, messages.length, zones);
+      const canMerge = bufferZone === currentZone && buffer.role === current.role && isPlainTextOnly(buffer) && isPlainTextOnly(current) && !isVfsSemanticSegment(buffer) && !isVfsSemanticSegment(current) && !hasNonEmptyAttachments(buffer) && !hasNonEmptyAttachments(current);
+      if (canMerge) {
+        const leftText = messageBodyTextFromBlocks(buffer.content.blocks);
+        const rightText = messageBodyTextFromBlocks(current.content.blocks);
+        let combined = leftText;
+        if (rightText !== "") {
+          combined = combined === "" ? rightText : `${combined}\n\n${rightText}`;
+        }
+        buffer = { ...buffer, content: textBlocks(combined) };
+        continue;
+      }
+      merged.push(buffer);
+      buffer = current;
+      bufferZone = currentZone;
+    }
+    merged.push(buffer);
+  }
+  // OpenAI：可剔除空内容的 tool_turn_bridge synthetic。
+  if (provider !== "openai") {
+    return [...merged];
+  }
+  return merged.filter((message) => {
+    const kind = readMessageMetadata(message.raw)?.kind;
+    if (kind !== "tool_turn_bridge") {
+      return true;
+    }
+    return !(isPlainTextOnly(message) && messageBodyTextFromBlocks(message.content.blocks).trim() === "");
+  });
 }

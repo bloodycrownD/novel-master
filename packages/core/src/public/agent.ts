@@ -40,8 +40,6 @@ export type {
   AgentStreamPartial,
 } from "../service/agent/agent-stream-registry.port.js";
 export { createAgentStreamRegistry } from "../service/agent/create-agent-stream-registry.js";
-export { AgentConfigError } from "../errors/agent-config-errors.js";
-export type { AgentConfigErrorCode } from "../errors/agent-config-errors.js";
 export {
   resolveCurrentAgentId,
   resolveCurrentAgentDefinition,

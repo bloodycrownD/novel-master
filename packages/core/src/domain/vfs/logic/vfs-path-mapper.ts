@@ -8,12 +8,7 @@ import { vfsInvalidPath } from "@/errors/vfs-errors.js";
 import { normalizePath } from "../repositories/impl/normalize-path.js";
 
 /** VFS visibility scope (global, project, session, and meta domains). */
-export type VfsScope =
-  | { kind: "global" }
-  | { kind: "project"; projectId: string }
-  | { kind: "session"; projectId: string; sessionId: string }
-  | { kind: "global-meta" }
-  | { kind: "project-meta"; projectId: string };
+export type VfsScope = { kind: "global" } | { kind: "project"; projectId: string } | { kind: "session"; projectId: string; sessionId: string } | { kind: "global-meta" } | { kind: "project-meta"; projectId: string };
 
 /**
  * global-meta 域的物理挂载前缀为**空串**：域内逻辑路径自带 `/meta` 段
@@ -28,14 +23,10 @@ const GLOBAL_PHYSICAL_PREFIX = "/template";
 /** Legacy logical prefix — rejected on input; no dual-read. */
 const LEGACY_TEMPLATE_LOGICAL = "/template";
 
-const LEGACY_TEMPLATE_MESSAGE =
-  "逻辑路径以 `/` 为根，请勿使用 `/template/` 前缀";
+const LEGACY_TEMPLATE_MESSAGE = "逻辑路径以 `/` 为根，请勿使用 `/template/` 前缀";
 
 function isLegacyTemplateLogicalPath(normalized: string): boolean {
-  return (
-    normalized === LEGACY_TEMPLATE_LOGICAL ||
-    normalized.startsWith(`${LEGACY_TEMPLATE_LOGICAL}/`)
-  );
+  return normalized === LEGACY_TEMPLATE_LOGICAL || normalized.startsWith(`${LEGACY_TEMPLATE_LOGICAL}/`);
 }
 
 /**
@@ -73,10 +64,7 @@ export function resolveLogicalPath(input: string): string {
  *
  * @throws {import("@/errors/vfs-errors.js").VfsError} `INVALID_PATH`
  */
-export function assertLogicalPathAllowed(
-  _scope: VfsScope,
-  logical: string
-): void {
+export function assertLogicalPathAllowed(_scope: VfsScope, logical: string): void {
   const normalized = resolveLogicalPath(logical);
   assertNormalizedPathAllowed(normalized);
 }
@@ -130,10 +118,7 @@ export function toLogicalPath(scope: VfsScope, physical: string): string {
   const normalized = normalizePath(physical);
   switch (scope.kind) {
     case "global": {
-      if (
-        normalized !== GLOBAL_PHYSICAL_PREFIX &&
-        !normalized.startsWith(`${GLOBAL_PHYSICAL_PREFIX}/`)
-      ) {
+      if (normalized !== GLOBAL_PHYSICAL_PREFIX && !normalized.startsWith(`${GLOBAL_PHYSICAL_PREFIX}/`)) {
         throw vfsInvalidPath(physical, "not in global template scope");
       }
       if (normalized === GLOBAL_PHYSICAL_PREFIX) {
@@ -169,10 +154,7 @@ export function toLogicalPath(scope: VfsScope, physical: string): string {
       const metaPrefix = `${prefix}/meta`;
       // 域内逻辑路径自带 /meta 段：物理必须形如 /projects/{pid}/meta[...]，
       // 否则是同项目其他子域（如 template）的路径，不属于 project-meta 域
-      if (
-        normalized !== metaPrefix &&
-        !normalized.startsWith(`${metaPrefix}/`)
-      ) {
+      if (normalized !== metaPrefix && !normalized.startsWith(`${metaPrefix}/`)) {
         throw vfsInvalidPath(physical, "not in project meta scope");
       }
       // 剥掉 /projects/{pid} 项目段，保留域内自带的 /meta 段

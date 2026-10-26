@@ -17,7 +17,7 @@ import {
   createWorkplaceService,
 } from "@novel-master/core/workplace";
 import { SqliteWorkplaceRepository } from "@/domain/workplace/repositories/impl/sqlite-workplace.repository.js";
-import { ChatError } from "@/errors/chat-errors.js";
+import { isAppError } from "@/errors/app-error.js";
 import { pushSessionWorkspace } from "@/service/template/logic/push-session-workspace.js";
 import {
   getNovelMasterTestContext,
@@ -158,8 +158,7 @@ describe("push-session-workspace（session → project 整树推送）", () => {
     await assert.rejects(
       createTemplatePullService(ctx.conn).sessionTemplatePush(`missing-${suffix}`),
       (err: unknown) => {
-        assert.ok(err instanceof ChatError, "应为 ChatError");
-        assert.equal(err.code, "NOT_FOUND", "错误码应为 NOT_FOUND");
+        assert.ok(isAppError(err, "CHAT_NOT_FOUND"), "应为 CHAT_NOT_FOUND");
         return true;
       },
     );

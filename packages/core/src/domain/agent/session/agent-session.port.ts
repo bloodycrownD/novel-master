@@ -4,10 +4,7 @@
  * @module domain/agent/session/agent-session.port
  */
 
-import type {
-  ChatMessageData,
-  MessageContent,
-} from "@/domain/chat/model/message.js";
+import type { ChatMessageData, MessageContent } from "@/domain/chat/model/message.js";
 import type { MessageUsage } from "@/domain/chat/model/message-usage.js";
 import type { MessageAttachment } from "@/domain/chat/model/message-attachment.schema.js";
 

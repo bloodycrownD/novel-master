@@ -21,11 +21,7 @@ function basename(logicalPath: string): string {
   return idx >= 0 ? logicalPath.slice(idx + 1) : logicalPath;
 }
 
-function contentLines(
-  display: DisplayState,
-  logicalPath: string,
-  content: string
-): string[] {
+function contentLines(display: DisplayState, logicalPath: string, content: string): string[] {
   switch (display) {
     case "full": {
       const lines = content.split(/\r?\n/);
@@ -47,35 +43,19 @@ function contentLines(
  * 与 {@link renderFileBlock} 标签内正文同形的行号正文（无外层 `<file>` / 无 mtime 属性）。
  * 供消息增量 `userAttach` / `workplaceChange` JSON `content` 使用。
  */
-export function renderFileBlockBody(params: {
-  readonly logicalPath: string;
-  readonly display: DisplayState;
-  readonly content: string;
-}): string {
-  return contentLines(params.display, params.logicalPath, params.content).join(
-    "\n"
-  );
+export function renderFileBlockBody(params: { readonly logicalPath: string; readonly display: DisplayState; readonly content: string }): string {
+  return contentLines(params.display, params.logicalPath, params.content).join("\n");
 }
 
 /** Renders a single visible file block. */
-export function renderFileBlock(params: {
-  readonly logicalPath: string;
-  readonly mtimeMs: number;
-  readonly display: DisplayState;
-  readonly content: string;
-}): string {
+export function renderFileBlock(params: { readonly logicalPath: string; readonly mtimeMs: number; readonly display: DisplayState; readonly content: string }): string {
   const body = renderFileBlockBody({
     logicalPath: params.logicalPath,
     display: params.display,
     content: params.content,
   });
   const mtimeLocal = formatLocalMtime(params.mtimeMs);
-  const attrs = [
-    `path="${escapeXmlAttr(params.logicalPath)}"`,
-    `createdAt="${escapeXmlAttr(mtimeLocal)}"`,
-    `updatedAt="${escapeXmlAttr(mtimeLocal)}"`,
-    `updatedBy="user"`,
-  ].join(" ");
+  const attrs = [`path="${escapeXmlAttr(params.logicalPath)}"`, `createdAt="${escapeXmlAttr(mtimeLocal)}"`, `updatedAt="${escapeXmlAttr(mtimeLocal)}"`, `updatedBy="user"`].join(" ");
   return `<file ${attrs}>\n${body}\n</file>`;
 }
 

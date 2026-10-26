@@ -4,11 +4,7 @@
  * @module domain/workplace/logic/workplace-labels
  */
 
-import type {
-  DisplayState,
-  InclusionMode,
-  RuleState,
-} from "../model/workplace-types.js";
+import type { DisplayState, InclusionMode, RuleState } from "../model/workplace-types.js";
 
 export function ruleStateLabel(state: RuleState): string {
   return state === "rule_on" ? "规则·开" : "规则·关";

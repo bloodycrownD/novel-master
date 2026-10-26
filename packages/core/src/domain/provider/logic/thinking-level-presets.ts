@@ -34,12 +34,6 @@ const GEMINI_25_PRESET_BUDGET: Record<Exclude<ThinkingLevel, "off">, number> = {
   high: 16384,
 };
 
-/** 判断 Gemini 型号是否应使用 thinkingLevel 而非 thinkingBudget。 */
-function geminiUsesThinkingLevel(vendorModelId: string): boolean {
-  const id = vendorModelId.toLowerCase();
-  return id.includes("gemini-3") || id.startsWith("gemini-3.");
-}
-
 /**
  * 将持久化档位解析为与 provider 协议匹配的请求参数。
  *
@@ -48,12 +42,7 @@ function geminiUsesThinkingLevel(vendorModelId: string): boolean {
  * @param vendorModelId 厂商模型 id（Gemini 启发式用）。
  * @param sampling 已保存采样小节（Anthropic budget 上限钳制用）。
  */
-export function thinkingLevelToModelThinkingParams(
-  level: ThinkingLevel,
-  protocol: LlmProtocolKind,
-  vendorModelId: string,
-  sampling: SavedModelSamplingSettings
-): ModelThinkingParams | undefined {
+export function thinkingLevelToModelThinkingParams(level: ThinkingLevel, protocol: LlmProtocolKind, vendorModelId: string, sampling: SavedModelSamplingSettings): ModelThinkingParams | undefined {
   if (level === "off") {
     return undefined;
   }
@@ -66,17 +55,14 @@ export function thinkingLevelToModelThinkingParams(
       };
     case "anthropic": {
       const effectiveMax = resolveEffectiveMaxTokens(sampling, "anthropic");
-      const budget = Math.min(
-        ANTHROPIC_PRESET_BUDGET[level],
-        Math.max(1, Math.floor(effectiveMax * ANTHROPIC_THINKING_BUDGET_RATIO))
-      );
+      const budget = Math.min(ANTHROPIC_PRESET_BUDGET[level], Math.max(1, Math.floor(effectiveMax * ANTHROPIC_THINKING_BUDGET_RATIO)));
       return {
         protocol: "anthropic",
         anthropic: { type: "enabled", budget_tokens: budget },
       };
     }
     case "gemini":
-      if (geminiUsesThinkingLevel(vendorModelId)) {
+      if (vendorModelId.toLowerCase().includes("gemini-3")) {
         return {
           protocol: "gemini",
           gemini: { thinkingConfig: { thinkingLevel: level } },

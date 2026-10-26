@@ -3,7 +3,8 @@
  *
  * @module services/cloud-sync-config.store
  */
-import {KkvError, normalizePrefix} from '@novel-master/core';
+import {normalizePrefix} from '@novel-master/core';
+import {isAppError} from '@novel-master/core/agent';
 import type {KkvService} from '@novel-master/core/kkv';
 import {type SecretStore} from '@novel-master/core/provider';
 import type {S3StorageConfig} from '@novel-master/cloud-sync-driver-s3';
@@ -90,7 +91,7 @@ async function kkvGet(
   try {
     return await kkv.get(CLOUD_SYNC_KKV_MODULE, key);
   } catch (error) {
-    if (error instanceof KkvError && error.code === 'NOT_FOUND') {
+    if (isAppError(error, 'KKV_NOT_FOUND')) {
       return undefined;
     }
     throw error;

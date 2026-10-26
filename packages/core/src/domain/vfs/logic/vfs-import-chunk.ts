@@ -31,10 +31,7 @@ export function yieldToEventLoop(): Promise<void> {
  *
  * 空数组产出 0 片——调用方据此跳过整个分片循环（只跑段 B0）。
  */
-export function* chunkArray<T>(
-  items: ReadonlyArray<T>,
-  size: number
-): Generator<ReadonlyArray<T>> {
+export function* chunkArray<T>(items: ReadonlyArray<T>, size: number): Generator<ReadonlyArray<T>> {
   for (let offset = 0; offset < items.length; offset += size) {
     yield items.slice(offset, offset + size);
   }

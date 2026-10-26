@@ -16,6 +16,15 @@ function zipOf(files: Record<string, string>, dirs: string[] = []): Uint8Array {
   return buildVfsZip(new Map(Object.entries(files)), dirs);
 }
 
+/** 预检成功路径；失败时把 AppError 抛给测试（测试是边界）。 */
+function previewOf(bytes: Uint8Array) {
+  const result = previewSkillZip(bytes);
+  if (!result.ok) {
+    throw result.error;
+  }
+  return result.value;
+}
+
 describe("previewSkillZip", () => {
   it("根含 SKILL.md：提取 front matter 元数据与文件数（目录条目不计）", () => {
     const bytes = zipOf(
@@ -25,7 +34,7 @@ describe("previewSkillZip", () => {
       },
       ["references"],
     );
-    const preview = previewSkillZip(bytes);
+    const preview = previewOf(bytes);
     assert.equal(preview.name, "demo");
     assert.equal(preview.description, "演示技能");
     assert.equal(preview.valid, true);
@@ -35,7 +44,7 @@ describe("previewSkillZip", () => {
 
   it("front matter 无效：valid=false，name/description 可空但 skillMd 保留", () => {
     const bytes = zipOf({"SKILL.md": "# 没有 front matter"});
-    const preview = previewSkillZip(bytes);
+    const preview = previewOf(bytes);
     assert.equal(preview.valid, false);
     assert.equal(preview.name, null);
     assert.equal(preview.description, null);
@@ -45,7 +54,7 @@ describe("previewSkillZip", () => {
 
   it("zip 根缺少 SKILL.md：skillMd=null（嵌套目录不算根）", () => {
     const bytes = zipOf({"demo/SKILL.md": "---\nname: demo\n---\n"});
-    const preview = previewSkillZip(bytes);
+    const preview = previewOf(bytes);
     assert.equal(preview.skillMd, null);
     assert.equal(preview.name, null);
     assert.equal(preview.fileCount, 1);
@@ -55,7 +64,7 @@ describe("previewSkillZip", () => {
     const bytes = zipOf({
       "SKILL.md": '---\nname: demo\ndescription: "含: 冒号 与 引号"\n---\n',
     });
-    const preview = previewSkillZip(bytes);
+    const preview = previewOf(bytes);
     assert.equal(preview.description, "含: 冒号 与 引号");
   });
 });

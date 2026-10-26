@@ -5,10 +5,7 @@
  */
 
 import { randomUUID } from "@/infra/random-uuid.js";
-import type {
-  ChatMessageData,
-  MessageContent,
-} from "@/domain/chat/model/message.js";
+import type { ChatMessageData, MessageContent } from "@/domain/chat/model/message.js";
 import type { MessageUsage } from "@/domain/chat/model/message-usage.js";
 import type { MessageAttachment } from "@/domain/chat/model/message-attachment.schema.js";
 import type { AgentSession } from "../agent-session.port.js";
@@ -20,28 +17,14 @@ export class InMemoryAgentSession implements AgentSession {
   private readonly messages: ChatMessageData[] = [];
   private seq = 0;
 
-  constructor(
-    readonly sessionId = "in-memory",
-    readonly workplaceScopeSessionId = sessionId,
-    readonly kkvScopeSessionId = sessionId
-  ) {}
+  constructor(readonly sessionId = "in-memory", readonly workplaceScopeSessionId = sessionId, readonly kkvScopeSessionId = sessionId) {}
 
   async list(): Promise<readonly ChatMessageData[]> {
     return this.messages.filter((m) => !m.hidden);
   }
 
-  async append(
-    role: string,
-    content: MessageContent,
-    options?: {
-      provider?: string | null;
-      modelName?: string | null;
-      raw?: Record<string, unknown> | null;
-      usage?: MessageUsage;
-      /** 结构化附件：随内存消息一起保留，供测试断言落库形态。 */
-      attachments?: readonly MessageAttachment[];
-    }
-  ): Promise<ChatMessageData> {
+  /** 追加一条内存消息；`options.attachments` 供测试断言落库形态。 */
+  async append(role: string, content: MessageContent, options?: {provider?: string | null; modelName?: string | null; raw?: Record<string, unknown> | null; usage?: MessageUsage; attachments?: readonly MessageAttachment[]}): Promise<ChatMessageData> {
     this.seq += 1;
     const message: ChatMessageData = {
       id: randomUUID(),

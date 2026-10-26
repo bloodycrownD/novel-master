@@ -7,7 +7,7 @@
 import {readFile} from "node:fs/promises";
 import {registerBuiltinTools, ToolRegistry} from "@novel-master/core";
 
-import {AgentConfigError, type AgentDefinition, runAgentTurn, validateAgentDefinition,} from "@novel-master/core/agent";
+import {isAppError, type AgentDefinition, runAgentTurn, validateAgentDefinition,} from "@novel-master/core/agent";
 
 import {assertSavedModelUuid, type LlmStreamEvent} from "@novel-master/core/provider";
 import type {NovelMasterRuntime} from "../runtime.js";
@@ -47,7 +47,8 @@ async function validateDefinitionForCli(
     registerBuiltinTools(toolProbe);
     const validation = await validateAgentDefinition(definition, {
         assertSavedModel: async (savedModelId) => {
-            await assertSavedModelUuid(savedModelId, rt.savedModels);
+            const saved = await assertSavedModelUuid(savedModelId, rt.savedModels);
+            if (!saved.ok) throw saved.error;
         },
         registeredToolNames: toolProbe.list(),
     });
@@ -77,7 +78,7 @@ async function tryResolveDefinitionFromFlags(
         try {
             definition = await rt.agentRegistry.get(agentId);
         } catch (error) {
-            if (error instanceof AgentConfigError && error.code === "AGENT_NOT_FOUND") {
+            if (isAppError(error, "AGENT_NOT_FOUND")) {
                 throw new Error(
                     `agent not found in registry: ${agentId} (run nm agent list to see registered agents)`,
                 );

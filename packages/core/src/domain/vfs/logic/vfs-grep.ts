@@ -4,7 +4,12 @@
  * @module domain/vfs/logic/vfs-grep
  */
 
+import { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
 import type { VfsGrepMatch } from "../ports/vfs-service.port.js";
+
+/** grepContents 的失败载荷。 */
+type VfsGrepError = AppError<"VFS_INVALID_PATTERN">;
 
 /** pattern 解释方式：auto 先尝试正则，失败则退化为字面量。 */
 export type VfsGrepMatchMode = "auto" | "literal" | "regex";
@@ -26,7 +31,7 @@ export interface VfsGrepOptions {
   readonly oneMatchPerFile?: boolean;
 }
 
-export type VfsGrepContentRow = {
+type VfsGrepContentRow = {
   readonly path: string;
   readonly content: string;
 };
@@ -41,10 +46,9 @@ function compileRegex(pattern: string, caseInsensitive: boolean): RegExp {
   return new RegExp(pattern, flags);
 }
 
-function createLineMatcher(
-  pattern: string,
-  options?: VfsGrepOptions
-): LineMatcher {
+// nm-style: keep-local — 匹配器闭包持有 regex / literal 与 lastIndex、大小写策略，
+// lineMatches 与 matchColumns 共用同一份编译状态；内联会把构建逻辑混进行遍历。
+function createLineMatcher(pattern: string, options?: VfsGrepOptions): Result<LineMatcher, VfsGrepError> {
   const mode = options?.matchMode ?? "auto";
   const caseInsensitive = options?.caseInsensitive === true;
 
@@ -52,7 +56,11 @@ function createLineMatcher(
   let literal: string | null = null;
 
   if (mode === "regex") {
-    regex = compileRegex(pattern, caseInsensitive);
+    try {
+      regex = compileRegex(pattern, caseInsensitive);
+    } catch {
+      return Result.err(new AppError("VFS_INVALID_PATTERN", `Invalid regular expression: ${pattern}`, { pattern }));
+    }
   } else if (mode === "literal") {
     literal = pattern;
   } else {
@@ -64,7 +72,7 @@ function createLineMatcher(
   }
 
   if (regex != null) {
-    return {
+    return Result.ok({
       lineMatches(line: string) {
         regex!.lastIndex = 0;
         return regex!.test(line);
@@ -81,13 +89,13 @@ function createLineMatcher(
         }
         return columns;
       },
-    };
+    });
   }
 
   const needle = literal!;
   const haystackNeedle = caseInsensitive ? needle.toLowerCase() : needle;
 
-  return {
+  return Result.ok({
     lineMatches(line: string) {
       const haystack = caseInsensitive ? line.toLowerCase() : line;
       return haystack.includes(haystackNeedle);
@@ -106,14 +114,10 @@ function createLineMatcher(
       }
       return columns;
     },
-  };
+  });
 }
 
-function buildExcerpt(
-  lines: readonly string[],
-  lineIndex: number,
-  contextLines: number
-): string {
+function buildExcerpt(lines: readonly string[], lineIndex: number, contextLines: number): string {
   if (contextLines <= 0) {
     return lines[lineIndex] ?? "";
   }
@@ -125,12 +129,10 @@ function buildExcerpt(
 /**
  * 在若干文件内容行中搜索 pattern，返回命中列表（不含条数/字节截断）。
  */
-export function grepContents(
-  rows: readonly VfsGrepContentRow[],
-  pattern: string,
-  options?: VfsGrepOptions
-): VfsGrepMatch[] {
-  const matcher = createLineMatcher(pattern, options);
+export function grepContents(rows: readonly VfsGrepContentRow[], pattern: string, options?: VfsGrepOptions): Result<VfsGrepMatch[], VfsGrepError> {
+  const matcherResult = createLineMatcher(pattern, options);
+  if (!matcherResult.ok) return Result.err(matcherResult.error);
+  const matcher = matcherResult.value;
   const invert = options?.invert === true;
   const contextLines = Math.max(0, options?.contextLines ?? 0);
   const onePerFile = options?.oneMatchPerFile === true;
@@ -186,5 +188,5 @@ export function grepContents(
     }
   }
 
-  return matches;
+  return Result.ok(matches);
 }

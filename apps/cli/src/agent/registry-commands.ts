@@ -29,7 +29,8 @@ async function assertSavedModel(
   rt: NovelMasterRuntime,
   savedModelId: string,
 ): Promise<void> {
-  await assertSavedModelUuid(savedModelId, rt.savedModels);
+  const saved = await assertSavedModelUuid(savedModelId, rt.savedModels);
+  if (!saved.ok) throw saved.error;
 }
 
 export async function runAgentRegistryCommand(

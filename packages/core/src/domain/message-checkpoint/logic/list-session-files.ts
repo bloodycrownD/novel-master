@@ -13,11 +13,7 @@ import type { SessionFileHead } from "../model/message-checkpoint.js";
 /**
  * Scans the session work tree for file entries (excludes empty directories).
  */
-export async function listSessionFileHeads(
-  entryRepo: VfsEntryRepository,
-  projectId: string,
-  sessionId: string
-): Promise<SessionFileHead[]> {
+export async function listSessionFileHeads(entryRepo: VfsEntryRepository, projectId: string, sessionId: string): Promise<SessionFileHead[]> {
   const scopeKeyStr = scopeKey({ kind: "session", projectId, sessionId });
   const heads = await entryRepo.listFileHeadsUnderPrefix(scopeKeyStr, "/");
   return heads.map((head) => ({

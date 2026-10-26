@@ -9,12 +9,14 @@
  * @module domain/vfs/logic/validate-entry-name
  */
 
-import { vfsInvalidName } from "@/errors/vfs-errors.js";
+import { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
+
+/** assertValidVfsEntryName 的失败载荷。 */
+type VfsInvalidNameError = AppError<"VFS_INVALID_NAME">;
 
 /** {@link validateVfsEntryName} 的返回形态。 */
-export type VfsEntryNameValidation =
-  | { readonly ok: true }
-  | { readonly ok: false; readonly reason: string };
+export type VfsEntryNameValidation = { readonly ok: true } | { readonly ok: false; readonly reason: string };
 
 /** C0（U+0000–U+001F，含 \n \r \t）、DEL（U+007F）与 C1（U+0080–U+009F）控制字符。 */
 // 校验目的就是拒绝控制字符，正则必须字面包含它们
@@ -30,9 +32,7 @@ const CONTROL_CHARS = /[\u0000-\u001f\u007f-\u009f]/;
  * `String.prototype.trim` 同时覆盖半角与全角空白（U+3000 等），纯空白与首尾空白
  * 判断均以它为准。
  */
-export function validateVfsEntryName(
-  name: string
-): VfsEntryNameValidation {
+export function validateVfsEntryName(name: string): VfsEntryNameValidation {
   if (name === "." || name === "..") {
     return { ok: false, reason: "文件名不能为 . 或 .." };
   }
@@ -49,29 +49,17 @@ export function validateVfsEntryName(
 }
 
 /**
- * 取路径末段（文件名语境）；根路径与空段返回 "/"。
- *
- * @remarks 入参应是 normalizePath 之后的逻辑路径（末段不会是 `.` / `..`）。根路径
- * 交由各入口既有的 root 拦截（cannot mkdir/delete root 等），本校验对其放行。
- */
-export function vfsEntryNameOfPath(path: string): string {
-  const idx = path.lastIndexOf("/");
-  if (idx === -1) {
-    return path;
-  }
-  return path.slice(idx + 1) || "/";
-}
-
-/**
- * 创建/重命名入口的断言式校验：末段名不合法时抛 `INVALID_NAME` VfsError。
+ * 创建/重命名入口的断言式校验：末段名不合法时返回 VFS_INVALID_NAME。
  *
  * 只在「新条目诞生」的时机调用（mkdir、write 创建分支、renamePath/renamePrefix
  * 的新路径）——存量条目的内容更新不重新审判名字（zip 导入的历史名可继续编辑）。
  */
-export function assertValidVfsEntryName(normalizedPath: string): void {
-  const name = vfsEntryNameOfPath(normalizedPath);
+export function assertValidVfsEntryName(normalizedPath: string): Result<void, VfsInvalidNameError> {
+  const idx = normalizedPath.lastIndexOf("/");
+  const name = idx === -1 ? normalizedPath : normalizedPath.slice(idx + 1) || "/";
   const result = validateVfsEntryName(name);
   if (!result.ok) {
-    throw vfsInvalidName(name, result.reason);
+    return Result.err(new AppError("VFS_INVALID_NAME", result.reason, { path: name }));
   }
+  return Result.ok(undefined);
 }

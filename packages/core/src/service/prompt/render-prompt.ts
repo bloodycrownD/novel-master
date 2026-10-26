@@ -330,11 +330,14 @@ export async function buildPromptAssemblyFromLayout(
         workplace: ctx.workplace,
         filetree: ctx.filetree,
       });
+      if (!expanded.ok) {
+        throw expanded.error;
+      }
       segments.push({
         id: `dynamic-${block.name}`,
         role: block.role,
         title: block.name,
-        body: expanded,
+        body: expanded.value,
         source: "template",
       });
     }
@@ -384,7 +387,10 @@ export async function buildPromptLlmInputFromLayout(
         workplace: ctx.workplace,
         filetree: ctx.filetree,
       });
-      messages.push(syntheticTemplateMessage(block, expanded, ctx));
+      if (!expanded.ok) {
+        throw expanded.error;
+      }
+      messages.push(syntheticTemplateMessage(block, expanded.value, ctx));
     }
   }
 

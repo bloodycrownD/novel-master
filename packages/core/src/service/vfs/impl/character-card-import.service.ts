@@ -4,6 +4,7 @@
  * @module service/vfs/impl/character-card-import.service
  */
 
+import { throwLegacyVfs } from "./legacy-vfs-error.js";
 import { insertFileSeedingRevision } from "@/domain/vfs/logic/seed-live-head-revisions.js";
 import { releaseAndDeleteVfsPrefix } from "@/domain/vfs/logic/vfs-tree-copy.js";
 import { runDeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
@@ -13,10 +14,7 @@ import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqli
 import type { MdTree } from "@/domain/character-card/model/character-card.js";
 import { parseCharacterCardToMdTree } from "@/domain/character-card/logic/character-card-to-md-tree.js";
 import { CHARACTER_CARD_MAX_FILE_COUNT, CHARACTER_CARD_MAX_INPUT_BYTES, CHARACTER_CARD_MAX_SINGLE_FILE_BYTES, CHARACTER_CARD_MAX_TOTAL_CONTENT_BYTES } from "@/domain/character-card/logic/character-card-limits.js";
-import type {
-  CharacterCardImportOptions,
-  CharacterCardImportService,
-} from "@/domain/vfs/ports/character-card-import.port.js";
+import type { CharacterCardImportOptions, CharacterCardImportService } from "@/domain/vfs/ports/character-card-import.port.js";
 import { AppError, isAppError } from "@/errors/app-error.js";
 import { utf8ByteLength } from "@/common/utf8.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
@@ -29,11 +27,7 @@ import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-
 import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
 import { clearSessionPromptCaches } from "@/service/vfs/logic/clear-session-prompt-caches.js";
-import {
-  ZIP_AND_CARD_IMPORT_TXN_FILE_CHUNK,
-  chunkArray,
-  yieldToEventLoop,
-} from "@/domain/vfs/logic/vfs-import-chunk.js";
+import { ZIP_AND_CARD_IMPORT_TXN_FILE_CHUNK, chunkArray, yieldToEventLoop } from "@/domain/vfs/logic/vfs-import-chunk.js";
 import { ensureImportDirRules } from "@/service/vfs/logic/ensure-import-dir-rules.js";
 import type { WorkplaceRepository } from "@/domain/workplace/repositories/workplace.port.js";
 import { SqliteWorkplaceRepository } from "@/domain/workplace/repositories/impl/sqlite-workplace.repository.js";
@@ -51,16 +45,13 @@ export type CharacterCardImportTestHook = {
   readonly createWorkplaceRepo?: (conn: TdbcConnection) => WorkplaceRepository;
 };
 
-async function ensureEmptyDirectoryRow(
-  repo: VfsEntryRepository,
-  scope: VfsScope,
-  logical: string
-): Promise<void> {
+async function ensureEmptyDirectoryRow(repo: VfsEntryRepository, scope: VfsScope, logical: string): Promise<void> {
   const sk = scopeKey(scope);
   if (logical === "/") {
     return;
   }
-  await ensureParentDirectories(repo, sk, `${logical}/__vfs_card_placeholder`);
+  const parentCheck = await ensureParentDirectories(repo, sk, `${logical}/__vfs_card_placeholder`);
+  if (!parentCheck.ok) throwLegacyVfs(parentCheck.error);
   const existing = await repo.findByPath(sk, logical);
   if (existing == null) {
     await repo.insertDirectory(sk, logical);
@@ -78,31 +69,19 @@ async function ensureEmptyDirectoryRow(
  * 分片后**已提交片不再回滚** ⇒ 本条唯一的真实行为损失：旧内容在段 B0 就已
  * 删除，补偿只把半棵新树清掉、不恢复旧内容。
  */
-function wrapCardImportError(
-  error: unknown,
-  committedShards?: number,
-  failedShard?: number
-): unknown {
+function wrapCardImportError(error: unknown, committedShards?: number, failedShard?: number): unknown {
   if (error instanceof Error && error.message === "test import failure") {
     return error;
   }
   if (isAppError(error)) {
     return error;
   }
-  const base =
-    error instanceof Error ? error.message : "import transaction failed";
-  const progress =
-    committedShards != null && failedShard != null
-      ? `（已提交 ${committedShards} 片 / 失败在第 ${failedShard} 片）`
-      : "";
+  const base = error instanceof Error ? error.message : "import transaction failed";
+  const progress = committedShards != null && failedShard != null ? `（已提交 ${committedShards} 片 / 失败在第 ${failedShard} 片）` : "";
   return new AppError("VFS_CHARACTER_CARD_IMPORT_FAILED", `${base}${progress}`);
 }
 
-async function assertDirectoryPathNotFile(
-  repo: VfsEntryRepository,
-  scope: VfsScope,
-  directoryPath: string
-): Promise<void> {
+async function assertDirectoryPathNotFile(repo: VfsEntryRepository, scope: VfsScope, directoryPath: string): Promise<void> {
   const existing = await repo.findByPath(scopeKey(scope), directoryPath);
   if (existing != null && existing.entryKind === "file") {
     throw new AppError("VFS_CHARACTER_CARD_INVALID_PATH", `character card target path is a file, not a directory: ${directoryPath}`);
@@ -124,28 +103,18 @@ export type DefaultCharacterCardImportServiceOptions = {
   readonly sessionKkv?: SessionKkvService;
 };
 
-export class DefaultCharacterCardImportService
-  implements CharacterCardImportService
-{
+export class DefaultCharacterCardImportService implements CharacterCardImportService {
   private readonly testHook?: CharacterCardImportTestHook;
   private readonly backfillBaseline: boolean;
   private readonly sessionKkv?: SessionKkvService;
 
-  constructor(
-    private readonly conn: TdbcConnection,
-    private readonly repo: VfsEntryRepository,
-    options: DefaultCharacterCardImportServiceOptions = {}
-  ) {
+  constructor(private readonly conn: TdbcConnection, private readonly repo: VfsEntryRepository, options: DefaultCharacterCardImportServiceOptions = {}) {
     this.testHook = options.testHook;
     this.backfillBaseline = options.backfillBaseline ?? true;
     this.sessionKkv = options.sessionKkv;
   }
 
-  async import(
-    scope: VfsScope,
-    tree: MdTree,
-    options: CharacterCardImportOptions
-  ): Promise<void> {
+  async import(scope: VfsScope, tree: MdTree, options: CharacterCardImportOptions): Promise<void> {
     if (options.confirmed !== true) {
       throw new AppError("VFS_CHARACTER_CARD_NOT_CONFIRMED", "import requires explicit confirmation (CLI --yes or confirm dialog)");
     }
@@ -183,11 +152,11 @@ export class DefaultCharacterCardImportService
       }
 
       let logical: string;
-      try {
-        logical = logicalFromZipEntryRelativeToDirectory(relativePath, directoryPath);
-      } catch (error) {
-        throw new AppError("VFS_CHARACTER_CARD_INVALID_PATH", error instanceof Error ? error.message : "invalid relative path");
+      const logicalResult = logicalFromZipEntryRelativeToDirectory(relativePath, directoryPath);
+      if (!logicalResult.ok) {
+        throw new AppError("VFS_CHARACTER_CARD_INVALID_PATH", logicalResult.error.message);
       }
+      logical = logicalResult.value;
       try {
         assertLogicalPathAllowed(scope, logical);
       } catch (error) {
@@ -217,12 +186,7 @@ export class DefaultCharacterCardImportService
     const compensate = async (): Promise<void> => {
       try {
         await this.conn.transaction(async (tx) => {
-          await releaseAndDeleteVfsPrefix(
-            new SqliteVfsEntryRepository(tx),
-            new SqliteVfsRevisionRepository(tx),
-            sk,
-            directoryPath
-          );
+          await releaseAndDeleteVfsPrefix(new SqliteVfsEntryRepository(tx), new SqliteVfsRevisionRepository(tx), sk, directoryPath);
         });
       } catch (error) {
         console.warn("[character-card] import compensation failed", error);
@@ -252,10 +216,7 @@ export class DefaultCharacterCardImportService
     // （测试钩子直抛分支位于 IMPORT_FAILED 包装之前，只挂外层 catch 会被绕过）。
     let committedShards = 0;
     let shardIndex = 0;
-    for (const shard of chunkArray(
-      fileEntries,
-      ZIP_AND_CARD_IMPORT_TXN_FILE_CHUNK
-    )) {
+    for (const shard of chunkArray(fileEntries, ZIP_AND_CARD_IMPORT_TXN_FILE_CHUNK)) {
       try {
         await this.conn.transaction(async (tx) => {
           const repoTx = new SqliteVfsEntryRepository(tx);
@@ -264,14 +225,9 @@ export class DefaultCharacterCardImportService
             if (this.testHook?.throwOnInsertLogical === logical) {
               throw new Error("test import failure");
             }
-            await ensureParentDirectories(repoTx, sk, logical);
-            await insertFileSeedingRevision(
-              repoTx,
-              revisionTx,
-              sk,
-              logical,
-              content
-            );
+            const parentCheck = await ensureParentDirectories(repoTx, sk, logical);
+            if (!parentCheck.ok) throwLegacyVfs(parentCheck.error);
+            await insertFileSeedingRevision(repoTx, revisionTx, sk, logical, content);
           }
         });
         committedShards += 1;
@@ -292,9 +248,7 @@ export class DefaultCharacterCardImportService
           vfsRepo: new SqliteVfsEntryRepository(tx),
           // 必须喂**段 R 这条事务**的 tx：在事务回调里用外层 this.conn 会撞
           // 驱动层 AsyncMutex 不可重入——那是死锁不是报错。
-          workplaceRepo: this.testHook?.createWorkplaceRepo
-            ? this.testHook.createWorkplaceRepo(tx)
-            : new SqliteWorkplaceRepository(tx),
+          workplaceRepo: this.testHook?.createWorkplaceRepo ? this.testHook.createWorkplaceRepo(tx) : new SqliteWorkplaceRepository(tx),
           scope,
           directoryPath,
         });
@@ -308,20 +262,11 @@ export class DefaultCharacterCardImportService
     if (this.backfillBaseline && scope.kind === "session") {
       try {
         await this.conn.transaction(async (tx) => {
-          await backfillBaselineCheckpoints(
-            new SqliteVfsEntryRepository(tx),
-            new SqliteMessageRepository(tx),
-            new SqliteMessageCheckpointRepository(tx),
-            scope.projectId,
-            scope.sessionId
-          );
+          await backfillBaselineCheckpoints(new SqliteVfsEntryRepository(tx), new SqliteMessageRepository(tx), new SqliteMessageCheckpointRepository(tx), scope.projectId, scope.sessionId);
         });
       } catch (error) {
         // best-effort：与紧邻的 clearSessionPromptCaches 同一口径，不包进 IMPORT_FAILED。
-        console.warn(
-          "[character-card] baseline checkpoint backfill failed",
-          error
-        );
+        console.warn("[character-card] baseline checkpoint backfill failed", error);
       }
     }
 
@@ -331,11 +276,7 @@ export class DefaultCharacterCardImportService
     }
   }
 
-  async importFromBytes(
-    scope: VfsScope,
-    bytes: Uint8Array,
-    options: CharacterCardImportOptions
-  ): Promise<void> {
+  async importFromBytes(scope: VfsScope, bytes: Uint8Array, options: CharacterCardImportOptions): Promise<void> {
     // 解析在 confirmed 门闸之后、delete 之前；解析失败零写库
     if (options.confirmed !== true) {
       throw new AppError("VFS_CHARACTER_CARD_NOT_CONFIRMED", "import requires explicit confirmation (CLI --yes or confirm dialog)");

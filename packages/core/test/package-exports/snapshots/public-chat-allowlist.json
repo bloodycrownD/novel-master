@@ -1,7 +1,6 @@
 [
   "ATTACH_PROMPT_CHAR_BUDGET",
   "AttachmentPathArgumentError",
-  "ChatError",
   "ChatMessage",
   "USER_VFS_TURN_ACK_TEXT",
   "attachmentPath",

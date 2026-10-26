@@ -192,7 +192,7 @@ describe("skills IPC handlers", () => {
     });
     assert.equal(missingDomain.ok, false);
     if (!missingDomain.ok) {
-      assert.equal(missingDomain.error.code, "MISSING_DOMAIN");
+      assert.equal(missingDomain.error.code, "SKILL_MISSING_DOMAIN");
     }
 
     const badName = await handleSkillsWrite({
@@ -202,7 +202,7 @@ describe("skills IPC handlers", () => {
     });
     assert.equal(badName.ok, false);
     if (!badName.ok) {
-      assert.equal(badName.error.code, "INVALID_NAME");
+      assert.equal(badName.error.code, "SKILL_INVALID_NAME");
     }
   });
 
@@ -278,7 +278,7 @@ describe("skills IPC handlers", () => {
     const readOld = await handleSkillsRead({ domain: "global", name: "bar" });
     assert.equal(readOld.ok, false);
     if (!readOld.ok) {
-      assert.equal(readOld.error.code, "NOT_FOUND");
+      assert.equal(readOld.error.code, "SKILL_NOT_FOUND");
     }
 
     // 仅改描述：目录不迁（同名可读）、description 更新
@@ -318,7 +318,7 @@ describe("skills IPC handlers", () => {
     });
     assert.equal(builtinRes.ok, false);
     if (!builtinRes.ok) {
-      assert.equal(builtinRes.error.code, "BUILTIN_SKILL_RENAME");
+      assert.equal(builtinRes.error.code, "SKILL_BUILTIN_RENAME");
       assert.match(builtinRes.error.message, /内置技能不支持重命名：agent-config/);
     }
   });

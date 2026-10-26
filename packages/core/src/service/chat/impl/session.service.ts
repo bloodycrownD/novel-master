@@ -403,12 +403,8 @@ export class DefaultSessionService implements SessionService {
         { contentStore: new SqliteVfsContentStore(tx) }
       );
       await r.messages.batchInsert(copyMessages);
-      await forkCopySeeder.seed(tx, {
-        projectId: source.projectId,
-        sourceSessionId: source.id,
-        targetSessionId: copy.id,
-        newMessages,
-      });
+      const seeded = await forkCopySeeder.seed(tx, { projectId: source.projectId, sourceSessionId: source.id, targetSessionId: copy.id, newMessages });
+      if (!seeded.ok) throw seeded.error;
       return copy;
     });
   }

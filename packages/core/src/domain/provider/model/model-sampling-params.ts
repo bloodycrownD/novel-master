@@ -39,8 +39,6 @@ export type ModelSamplingParams =
   | { readonly protocol: "gemini"; readonly gemini: GeminiSamplingParams };
 
 /** Returns the protocol tag for sampling params, if any. */
-export function samplingProtocol(
-  params: ModelSamplingParams | undefined
-): LlmProtocolKind | undefined {
+export function samplingProtocol(params: ModelSamplingParams | undefined): LlmProtocolKind | undefined {
   return params?.protocol;
 }

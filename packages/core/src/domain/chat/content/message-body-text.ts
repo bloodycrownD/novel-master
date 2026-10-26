@@ -12,9 +12,7 @@ function blockBodyText(block: ContentBlock): string | null {
   switch (block.type) {
     case "text": {
       // 剥离模型泄漏的孤立闭合思考标签（GLM / 代理网关常见）。
-      const text = block.text
-        .replace(/<\/(?:thought|thinking|think|redacted_thinking)\b[^>]*>/gi, "")
-        .trim();
+      const text = block.text.replace(/<\/(?:thought|thinking|think|redacted_thinking)\b[^>]*>/gi, "").trim();
       return text === "" ? null : text;
     }
     case "image":

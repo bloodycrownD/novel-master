@@ -1,6 +1,5 @@
 import {TdbcError, ToolError} from '@novel-master/core';
 import {AppError} from '@novel-master/core/agent';
-import {ChatError} from '@novel-master/core/chat';
 import {ProviderError} from '@novel-master/core/provider';
 import {
   VfsError,
@@ -47,8 +46,8 @@ describe('formatError (T4)', () => {
     expect(formatError(err)).toBe('请先在服务商设置中配置 API Key');
   });
 
-  it('formats ChatError message', () => {
-    const err = new ChatError('NOT_FOUND', 'session not found: s1', {
+  it('formats CHAT_NOT_FOUND message', () => {
+    const err = new AppError('CHAT_NOT_FOUND', 'session not found: s1', {
       sessionId: 's1',
     });
     expect(formatError(err)).toBe('session not found: s1');

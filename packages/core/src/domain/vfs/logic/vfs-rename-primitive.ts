@@ -17,13 +17,7 @@ import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.por
  * @returns 影响行数
  * @throws 当旧路径不存在时由 repo.renamePathInScope 抛 NOT_FOUND
  */
-export async function renameVfsEntry(
-  tx: TdbcConnection,
-  entryRepo: VfsEntryRepository,
-  scopeKey: string,
-  oldPath: string,
-  newPath: string
-): Promise<void> {
+export async function renameVfsEntry(tx: TdbcConnection, entryRepo: VfsEntryRepository, scopeKey: string, oldPath: string, newPath: string): Promise<void> {
   await entryRepo.renamePathInScope(tx, scopeKey, oldPath, newPath);
 }
 
@@ -35,12 +29,6 @@ export async function renameVfsEntry(
  *
  * @throws 当旧目录前缀不存在时由 repo.renamePrefixInScope 抛 NOT_FOUND
  */
-export async function renameVfsDirectory(
-  tx: TdbcConnection,
-  entryRepo: VfsEntryRepository,
-  scopeKey: string,
-  oldDir: string,
-  newDir: string
-): Promise<void> {
+export async function renameVfsDirectory(tx: TdbcConnection, entryRepo: VfsEntryRepository, scopeKey: string, oldDir: string, newDir: string): Promise<void> {
   await entryRepo.renamePrefixInScope(tx, scopeKey, oldDir, newDir);
 }

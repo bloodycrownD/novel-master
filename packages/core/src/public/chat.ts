@@ -1,5 +1,3 @@
-export { ChatError } from "../errors/chat-errors.js";
-export type { ChatErrorCode } from "../errors/chat-errors.js";
 export type { ChatProject } from "../domain/chat/model/project.js";
 export type {
   ProjectAgentConfig,

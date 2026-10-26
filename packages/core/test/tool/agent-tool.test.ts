@@ -12,7 +12,7 @@ import type { BuiltinToolContext } from "../../src/domain/tool/builtin/builtin-t
 import type { AgentRegistryService } from "../../src/service/agent/agent-registry.port.js";
 import type { AgentDefinition, AgentDefinitionPatch } from "../../src/domain/agent/model/agent-definition.js";
 import { applyMergePatch } from "../../src/common/merge-patch.js";
-import { AgentConfigError } from "../../src/errors/agent-config-errors.js";
+import { AppError } from "../../src/errors/app-error.js";
 import { ToolError } from "../../src/errors/tool-errors.js";
 import { assembleAgentsToolContext } from "../../src/service/agent/logic/run-agent-turn.js";
 import { resolveAgentToolRegistry } from "../../src/domain/agent/logic/resolve-agent-tools.js";
@@ -68,13 +68,13 @@ function fakeAgentRegistry(options?: {
     ),
     get: record("get", async (id: string) => {
       const found = persisted.get(id);
-      if (found == null) throw new AgentConfigError("AGENT_NOT_FOUND", `未找到 ${id}`);
+      if (found == null) throw new AppError("AGENT_NOT_FOUND", `未找到 ${id}`);
       return found;
     }),
     upsert: recordedUpsert,
     update: record("update", async (id: string, patch: AgentDefinitionPatch) => {
       const current = persisted.get(id);
-      if (current == null) throw new AgentConfigError("AGENT_NOT_FOUND", `未找到 ${id}`);
+      if (current == null) throw new AppError("AGENT_NOT_FOUND", `未找到 ${id}`);
       const merged = applyMergePatch(current, patch);
       await recordedUpsert(id, merged);
       return merged;
@@ -320,11 +320,11 @@ describe("agent 管理工具", () => {
     assert.equal(upsert.args[0], out.agentId);
   });
 
-  it("T-AG3：upsert 抛 AgentConfigError（未注册工具名）→ INVALID_ARGUMENT 且含原因", async () => {
+  it("T-AG3：upsert 抛 AppError（未注册工具名）→ INVALID_ARGUMENT 且含原因", async () => {
     const registry = fakeAgentRegistry({
       upsertThrows: () =>
-        new AgentConfigError(
-          "INVALID_TOOL_POLICY",
+        new AppError(
+          "AGENT_INVALID_TOOL_POLICY",
           "工具策略含未注册工具名：nope_tool",
         ),
     });

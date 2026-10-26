@@ -38,10 +38,7 @@ export interface SmartSortHighlightMatchInput {
  * matches 需按出现顺序排列（matchAll 天然有序）；入参用 `{index, text}`
  * 最小结构，各端携带自有 match 形态也能直接复用本切分逻辑。
  */
-export function splitSmartSortHighlightSegments(
-  text: string,
-  matches: readonly SmartSortHighlightMatchInput[]
-): SmartSortHighlightSegment[] {
+export function splitSmartSortHighlightSegments(text: string, matches: readonly SmartSortHighlightMatchInput[]): SmartSortHighlightSegment[] {
   const segments: SmartSortHighlightSegment[] = [];
   let cursor = 0;
   for (const m of matches) {

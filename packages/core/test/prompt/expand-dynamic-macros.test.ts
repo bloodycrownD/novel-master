@@ -11,7 +11,8 @@ describe("expandDynamicMacros", () => {
     const out = await expandDynamicMacros("树: {{$filetree}}", { workplace: worktree });
 
     assert.equal(renderFileTree.mock.callCount(), 1);
-    assert.match(out, /note\.md 全部加载/);
+    assert.equal(out.ok, true);
+    assert.match(out.ok ? out.value : "", /note\.md 全部加载/);
   });
 
   it("T-SNAP1：ctx.filetree 快照优先，不调实时 renderFileTree", async () => {
@@ -24,6 +25,14 @@ describe("expandDynamicMacros", () => {
     });
 
     assert.equal(renderFileTree.mock.callCount(), 0);
-    assert.match(out, /\/snapshot-tree/);
+    assert.equal(out.ok, true);
+    assert.match(out.ok ? out.value : "", /\/snapshot-tree/);
+  });
+
+  it("非法宏返回 PROMPT_INVALID_MACRO，不漏出旧 PromptError", async () => {
+    const out = await expandDynamicMacros("坏: {{.missing}}", {});
+
+    assert.equal(out.ok, false);
+    assert.equal(out.ok ? "" : out.error.key, "PROMPT_INVALID_MACRO");
   });
 });

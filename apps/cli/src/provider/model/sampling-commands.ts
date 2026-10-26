@@ -40,10 +40,11 @@ export async function runProviderModelSampling(
   const { flags } = parseCliArgs(args);
   const modelId = requireModelId(flags);
   const saved = await assertSavedModelUuid(modelId, rt.savedModels);
+  if (!saved.ok) throw saved.error;
 
   switch (subcommand) {
     case "show": {
-      const sampling = savedModelSampling(saved.settings);
+      const sampling = savedModelSampling(saved.value.settings);
       console.log(
         JSON.stringify(
           {
@@ -65,7 +66,7 @@ export async function runProviderModelSampling(
       }
       const raw = await readFile(filePath, "utf8");
       const doc = JSON.parse(raw) as unknown;
-      const base = savedModelSettingsToJson(saved.settings);
+      const base = savedModelSettingsToJson(saved.value.settings);
       const parsed = savedModelSettingsFromJson({
         ...base,
         generation: {
@@ -76,13 +77,14 @@ export async function runProviderModelSampling(
           },
         },
       });
-      await rt.providerModels.updateSettings(saved.id, {
-        sampling: savedModelSampling(parsed),
+      if (!parsed.ok) throw parsed.error;
+      await rt.providerModels.updateSettings(saved.value.id, {
+        sampling: savedModelSampling(parsed.value),
       });
       return;
     }
     case "clear": {
-      await rt.providerModels.updateSettings(saved.id, {
+      await rt.providerModels.updateSettings(saved.value.id, {
         sampling: { enabled: false },
       });
       return;

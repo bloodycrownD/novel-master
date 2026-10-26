@@ -38,7 +38,8 @@ export async function runModel(
         throw new Error("Usage: nm model use --modelId <uuid>");
       }
       const saved = await assertSavedModelUuid(modelId, rt.savedModels);
-      await rt.state.setCurrentModelId(saved.id);
+      if (!saved.ok) throw saved.error;
+      await rt.state.setCurrentModelId(saved.value.id);
       return;
     }
     case "current": {

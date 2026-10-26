@@ -1,53 +1,23 @@
 /**
- * Chat domain errors (project, session, message).
+ * Chat 域错误工厂：统一返回 `AppError`，不再保留独立的 ChatError 类。
  *
  * @module errors/chat-errors
  */
 
-/** Discriminant codes for {@link ChatError}. */
-export type ChatErrorCode = "NOT_FOUND" | "CONFLICT" | "INVALID_ARGUMENT";
+import { AppError } from "./app-error.js";
 
-/**
- * Unified error for chat service and repository operations.
- */
-export class ChatError extends Error {
-  readonly code: ChatErrorCode;
-  readonly projectId?: string;
-  readonly sessionId?: string;
-  readonly messageId?: string;
-
-  constructor(
-    code: ChatErrorCode,
-    message: string,
-    options?: {
-      projectId?: string;
-      sessionId?: string;
-      messageId?: string;
-    }
-  ) {
-    super(message);
-    this.name = "ChatError";
-    this.code = code;
-    this.projectId = options?.projectId;
-    this.sessionId = options?.sessionId;
-    this.messageId = options?.messageId;
-  }
-}
-
-/** Entity not found. */
-export function chatNotFound(
-  kind: string,
-  id: string,
-  options?: { projectId?: string; sessionId?: string }
-): ChatError {
-  return new ChatError("NOT_FOUND", `${kind} not found: ${id}`, {
-    projectId: options?.projectId,
-    sessionId: options?.sessionId,
-    messageId: kind === "message" ? id : undefined,
+/** 会话 / 项目 / 消息不存在。 */
+export function chatNotFound(kind: string, id: string, options?: { projectId?: string; sessionId?: string }): AppError<"CHAT_NOT_FOUND"> {
+  return new AppError("CHAT_NOT_FOUND", `${kind} not found: ${id}`, {
+    kind,
+    id,
+    ...(options?.projectId != null ? { projectId: options.projectId } : {}),
+    ...(options?.sessionId != null ? { sessionId: options.sessionId } : {}),
+    ...(kind === "message" ? { messageId: id } : {}),
   });
 }
 
-/** Invalid argument for chat operations. */
-export function chatInvalidArgument(message: string): ChatError {
-  return new ChatError("INVALID_ARGUMENT", message);
+/** Chat 操作入参非法。 */
+export function chatInvalidArgument(message: string): AppError<"CHAT_INVALID_ARGUMENT"> {
+  return new AppError("CHAT_INVALID_ARGUMENT", message);
 }

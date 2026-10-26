@@ -4,32 +4,22 @@
  * @module domain/provider/application-model-id
  */
 
-import { ProviderError } from "@/errors/provider-errors.js";
+import { AppError } from "@/errors/app-error.js";
+import { Result } from "@/errors/either.js";
+
+type ProviderLogicError = AppError<"PROVIDER_INVALID_ARGUMENT">;
 
 /** Splits `providerId/vendorModelId` at the first `/`. */
-export function parseApplicationModelId(modelId: string): {
-  providerId: string;
-  vendorModelId: string;
-} {
+export function parseApplicationModelId(modelId: string): Result<{ providerId: string; vendorModelId: string }, ProviderLogicError> {
   const slash = modelId.indexOf("/");
   if (slash <= 0 || slash === modelId.length - 1) {
-    throw new ProviderError(
-      "INVALID_ARGUMENT",
-      `Invalid application model id: ${modelId}`,
-      { modelId }
-    );
+    return Result.err(new AppError("PROVIDER_INVALID_ARGUMENT", `Invalid application model id: ${modelId}`, { modelId }));
   }
-  return {
-    providerId: modelId.slice(0, slash),
-    vendorModelId: modelId.slice(slash + 1),
-  };
+  return Result.ok({ providerId: modelId.slice(0, slash), vendorModelId: modelId.slice(slash + 1) });
 }
 
 /** Formats provider id and vendor model id into application model id. */
-export function formatApplicationModelId(
-  providerId: string,
-  vendorModelId: string
-): string {
+export function formatApplicationModelId(providerId: string, vendorModelId: string): string {
   return `${providerId}/${normalizeVendorModelId(providerId, vendorModelId)}`;
 }
 
@@ -37,10 +27,7 @@ export function formatApplicationModelId(
  * Normalizes vendor model ids from remote APIs or pasted application ids.
  * Strips `{providerId}/` prefix and OpenAI-style `models/` path segments.
  */
-export function normalizeVendorModelId(
-  providerId: string,
-  raw: string
-): string {
+export function normalizeVendorModelId(providerId: string, raw: string): string {
   let value = raw.trim();
   if (!value) {
     return value;
@@ -51,13 +38,9 @@ export function normalizeVendorModelId(
     return value.slice(providerPrefix.length);
   }
 
-  try {
-    const parsed = parseApplicationModelId(value);
-    if (parsed.providerId === providerId) {
-      return parsed.vendorModelId;
-    }
-  } catch {
-    /* not a full application model id */
+  const parsed = parseApplicationModelId(value);
+  if (parsed.ok && parsed.value.providerId === providerId) {
+    return parsed.value.vendorModelId;
   }
 
   if (value.startsWith("models/")) {

@@ -8,18 +8,13 @@
  * @module domain/vfs/vfs-tree-copy
  */
 
+import { AppError } from "@/errors/app-error.js";
 import type { VfsContentStore } from "../content-store/vfs-content-store.port.js";
 import type { VfsEntryRepository } from "../repositories/vfs-entry.port.js";
 import type { VfsRevisionRepository } from "../repositories/vfs-revision.port.js";
-import {
-  decrementLiveRefsUnderScope,
-  deleteUnreferencedUnderScope,
-} from "./revision-ref-count.js";
+import { decrementLiveRefsUnderScope, deleteUnreferencedUnderScope } from "./revision-ref-count.js";
 import { seedLiveHeadRevisionsUnderPrefix } from "./seed-live-head-revisions.js";
-import {
-  isVfsPathAncestorOfExcluded,
-  isVfsPathExcluded,
-} from "./vfs-exclude-prefixes.js";
+import { isVfsPathAncestorOfExcluded, isVfsPathExcluded } from "./vfs-exclude-prefixes.js";
 
 /** 轻量 scope 引用（只需 scopeKey 字符串）。 */
 export interface VfsCopyScope {
@@ -33,18 +28,14 @@ function normalizePrefix(prefix: string): string {
   return prefix.endsWith("/") ? prefix.slice(0, -1) : prefix;
 }
 
-function withSlashSuffix(prefix: string): string {
-  return prefix === "/" ? prefix : `${prefix}/`;
-}
-
 function relativeUnderPrefix(fullPath: string, prefix: string): string {
   const base = normalizePrefix(prefix);
   if (fullPath === base) {
     return "";
   }
-  const slashSuffix = withSlashSuffix(base);
+  const slashSuffix = base === "/" ? base : `${base}/`;
   if (!fullPath.startsWith(slashSuffix)) {
-    throw new Error(`Path ${fullPath} is not under prefix ${prefix}`);
+    throw new AppError("VFS_INVARIANT_VIOLATION", `[invariant] Path ${fullPath} is not under prefix ${prefix}`);
   }
   return fullPath.slice(slashSuffix.length);
 }
@@ -63,13 +54,7 @@ function joinLogical(prefix: string, relative: string): string {
  * `revisions` 未提供时（fork/copy 直调场景，目标 entry 无 revision 语义）
  * 退回 head + 1，与既有行为等价；`known` 传 null 时内部补一次 findByPath。
  */
-async function nextUpdateVersion(
-  repo: VfsEntryRepository,
-  revisions: VfsRevisionRepository | undefined,
-  scopeKey: string,
-  path: string,
-  known: { entryId: number; version: number } | null
-): Promise<number> {
+async function nextUpdateVersion(repo: VfsEntryRepository, revisions: VfsRevisionRepository | undefined, scopeKey: string, path: string, known: { entryId: number; version: number } | null): Promise<number> {
   const existing = known ?? (await repo.findByPath(scopeKey, path));
   if (existing == null || revisions == null) {
     return (existing?.version ?? 0) + 1;
@@ -83,11 +68,7 @@ async function nextUpdateVersion(
  *
  * @remarks 仅在回退路径（blob 缺失或无 hash）调用；快路径不触发。
  */
-async function resolvePlainContentMap(
-  repo: VfsEntryRepository,
-  scopeKey: string,
-  pathPrefix: string
-): Promise<Map<string, string>> {
+async function resolvePlainContentMap(repo: VfsEntryRepository, scopeKey: string, pathPrefix: string): Promise<Map<string, string>> {
   const rows = await repo.scanContents(scopeKey, pathPrefix);
   const map = new Map<string, string>();
   for (const row of rows) {
@@ -96,7 +77,7 @@ async function resolvePlainContentMap(
   return map;
 }
 
-export type CopyVfsTreeOptions = {
+type CopyVfsTreeOptions = {
   mapPath?: (relative: string) => string;
 
   /** content store：共享 blob 写入前执行 ensureBlob / findExistingBlobHashes。 */
@@ -116,7 +97,7 @@ export type CopyVfsTreeOptions = {
   readonly revisions?: VfsRevisionRepository;
 };
 
-export type ReplaceVfsSubtreeOptions = CopyVfsTreeOptions & {
+type ReplaceVfsSubtreeOptions = CopyVfsTreeOptions & {
   /**
    * 传入时：删除前释放 live ref + GC，拷贝后为 live head 补种 revision。
    * fork/copy 仍走 seedForkCopyParity，不要传此字段以免双重播种。
@@ -125,9 +106,7 @@ export type ReplaceVfsSubtreeOptions = CopyVfsTreeOptions & {
 };
 
 /** 供三侧（拷贝/删除/seed）统一取排除前缀，缺省为空数组。 */
-function resolveExcludePrefixes(
-  excludePrefixes: readonly string[] | undefined
-): readonly string[] {
+function resolveExcludePrefixes(excludePrefixes: readonly string[] | undefined): readonly string[] {
   return excludePrefixes ?? [];
 }
 
@@ -136,20 +115,10 @@ function resolveExcludePrefixes(
  *
  * 文件行优先复制 `content_hash`（共享 blob）；无 hash 时再 put 同源明文一次。
  */
-export async function copyVfsTree(
-  repo: VfsEntryRepository,
-  fromScope: VfsCopyScope,
-  fromPathPrefix: string,
-  toScope: VfsCopyScope,
-  toPathPrefix: string,
-  options?: CopyVfsTreeOptions
-): Promise<void> {
+export async function copyVfsTree(repo: VfsEntryRepository, fromScope: VfsCopyScope, fromPathPrefix: string, toScope: VfsCopyScope, toPathPrefix: string, options?: CopyVfsTreeOptions): Promise<void> {
   const excludePrefixes = resolveExcludePrefixes(options?.excludePrefixes);
   // --- 目录：批量检查存在 + 批量 INSERT ---
-  const dirPaths = await repo.listDirectoryPathsUnderPrefix(
-    fromScope.scopeKey,
-    fromPathPrefix
-  );
+  const dirPaths = await repo.listDirectoryPathsUnderPrefix(fromScope.scopeKey, fromPathPrefix);
   const targetDirPaths: string[] = [];
   for (const dirPath of dirPaths) {
     if (isVfsPathExcluded(dirPath, excludePrefixes)) {
@@ -157,10 +126,7 @@ export async function copyVfsTree(
     }
     // 排除前缀的祖先目录不镜像到目标，避免残留空目录链（如只排除 meta/skills
     // 时，源里单独为它存在的 /meta 不该出现在目标）。
-    if (
-      excludePrefixes.length > 0 &&
-      isVfsPathAncestorOfExcluded(dirPath, excludePrefixes)
-    ) {
+    if (excludePrefixes.length > 0 && isVfsPathAncestorOfExcluded(dirPath, excludePrefixes)) {
       continue;
     }
     const relative = relativeUnderPrefix(dirPath, fromPathPrefix);
@@ -171,10 +137,7 @@ export async function copyVfsTree(
     targetDirPaths.push(joinLogical(toPathPrefix, mapped));
   }
   if (targetDirPaths.length > 0) {
-    const existingDirs = await repo.findExistingPaths(
-      toScope.scopeKey,
-      targetDirPaths
-    );
+    const existingDirs = await repo.findExistingPaths(toScope.scopeKey, targetDirPaths);
     const newDirs = targetDirPaths.filter((p) => !existingDirs.has(p));
     if (newDirs.length > 0) {
       await repo.batchInsertDirectoryEntries(toScope.scopeKey, newDirs);
@@ -182,10 +145,7 @@ export async function copyVfsTree(
   }
 
   // --- 文件：scanFileEntriesWithMeta 一次 SELECT 拿全部元数据（不解明文）---
-  const fileEntries = await repo.scanFileEntriesWithMeta(
-    fromScope.scopeKey,
-    fromPathPrefix
-  );
+  const fileEntries = await repo.scanFileEntriesWithMeta(fromScope.scopeKey, fromPathPrefix);
   const mappedFiles: Array<{
     sourcePath: string;
     targetPath: string;
@@ -217,19 +177,14 @@ export async function copyVfsTree(
     const hashes = [...new Set(blobFiles.map((f) => f.contentHash!))];
     let allBlobsExist = true;
     if (options != null) {
-      const existingBlobs = await options.contentStore.findExistingBlobHashes(
-        hashes
-      );
+      const existingBlobs = await options.contentStore.findExistingBlobHashes(hashes);
       allBlobsExist = hashes.every((h) => existingBlobs.has(h));
     }
 
     if (allBlobsExist) {
       // 快路径：批量检查目标存在 + 批量 INSERT
       const targetPaths = blobFiles.map((f) => f.targetPath);
-      const existingTargets = await repo.findExistingPaths(
-        toScope.scopeKey,
-        targetPaths
-      );
+      const existingTargets = await repo.findExistingPaths(toScope.scopeKey, targetPaths);
       const newEntries = blobFiles
         .filter((f) => !existingTargets.has(f.targetPath))
         .map((f) => ({
@@ -241,58 +196,23 @@ export async function copyVfsTree(
         await repo.batchInsertFileEntriesWithHash(toScope.scopeKey, newEntries);
       }
       // 已存在的目标用逐条 update（tree-copy 到清空 scope 时不会走到）
-      for (const f of blobFiles.filter((f) =>
-        existingTargets.has(f.targetPath)
-      )) {
-        const nextVersion = await nextUpdateVersion(
-          repo,
-          options?.revisions,
-          toScope.scopeKey,
-          f.targetPath,
-          null
-        );
-        await repo.updateWithContentHash(
-          toScope.scopeKey,
-          f.targetPath,
-          f.contentHash!,
-          nextVersion
-        );
+      for (const f of blobFiles.filter((f) => existingTargets.has(f.targetPath))) {
+        const nextVersion = await nextUpdateVersion(repo, options?.revisions, toScope.scopeKey, f.targetPath, null);
+        await repo.updateWithContentHash(toScope.scopeKey, f.targetPath, f.contentHash!, nextVersion);
       }
     } else {
       // 慢路径：部分 blob 缺失，回退逐条处理
-      const plainMap = await resolvePlainContentMap(
-        repo,
-        fromScope.scopeKey,
-        fromPathPrefix
-      );
+      const plainMap = await resolvePlainContentMap(repo, fromScope.scopeKey, fromPathPrefix);
       for (const f of blobFiles) {
         if (options != null) {
-          await options.contentStore.ensureBlob(
-            f.contentHash!,
-            plainMap.get(f.sourcePath) ?? null
-          );
+          await options.contentStore.ensureBlob(f.contentHash!, plainMap.get(f.sourcePath) ?? null);
         }
         const existing = await repo.findByPath(toScope.scopeKey, f.targetPath);
         if (existing == null) {
-          await repo.insertWithContentHash(
-            toScope.scopeKey,
-            f.targetPath,
-            f.contentHash!
-          );
+          await repo.insertWithContentHash(toScope.scopeKey, f.targetPath, f.contentHash!);
         } else {
-          const nextVersion = await nextUpdateVersion(
-            repo,
-            options?.revisions,
-            toScope.scopeKey,
-            f.targetPath,
-            { entryId: existing.entryId, version: existing.version }
-          );
-          await repo.updateWithContentHash(
-            toScope.scopeKey,
-            f.targetPath,
-            f.contentHash!,
-            nextVersion
-          );
+          const nextVersion = await nextUpdateVersion(repo, options?.revisions, toScope.scopeKey, f.targetPath, { entryId: existing.entryId, version: existing.version });
+          await repo.updateWithContentHash(toScope.scopeKey, f.targetPath, f.contentHash!, nextVersion);
         }
       }
     }
@@ -300,11 +220,7 @@ export async function copyVfsTree(
 
   // --- 无 hash 文件：回退 scanContents 取明文逐条写入 ---
   if (plainFiles.length > 0) {
-    const plainMap = await resolvePlainContentMap(
-      repo,
-      fromScope.scopeKey,
-      fromPathPrefix
-    );
+    const plainMap = await resolvePlainContentMap(repo, fromScope.scopeKey, fromPathPrefix);
     for (const f of plainFiles) {
       const content = plainMap.get(f.sourcePath);
       if (content == null) {
@@ -314,19 +230,8 @@ export async function copyVfsTree(
       if (existing == null) {
         await repo.insert(toScope.scopeKey, f.targetPath, content);
       } else {
-        const nextVersion = await nextUpdateVersion(
-          repo,
-          options?.revisions,
-          toScope.scopeKey,
-          f.targetPath,
-          { entryId: existing.entryId, version: existing.version }
-        );
-        await repo.update(
-          toScope.scopeKey,
-          f.targetPath,
-          content,
-          nextVersion
-        );
+        const nextVersion = await nextUpdateVersion(repo, options?.revisions, toScope.scopeKey, f.targetPath, { entryId: existing.entryId, version: existing.version });
+        await repo.update(toScope.scopeKey, f.targetPath, content, nextVersion);
       }
     }
   }
@@ -335,48 +240,16 @@ export async function copyVfsTree(
 /**
  * Replaces the target VFS subtree: delete `(toScope, toPathPrefix)` then copy from source。
  */
-export async function replaceVfsSubtree(
-  repo: VfsEntryRepository,
-  fromScope: VfsCopyScope,
-  fromPathPrefix: string,
-  toScope: VfsCopyScope,
-  toPathPrefix: string,
-  options?: ReplaceVfsSubtreeOptions
-): Promise<void> {
+export async function replaceVfsSubtree(repo: VfsEntryRepository, fromScope: VfsCopyScope, fromPathPrefix: string, toScope: VfsCopyScope, toPathPrefix: string, options?: ReplaceVfsSubtreeOptions): Promise<void> {
   const excludePrefixes = resolveExcludePrefixes(options?.excludePrefixes);
   if (options?.revisions != null) {
-    await sweepRevisionsUnderScope(
-      repo,
-      options.revisions,
-      toScope.scopeKey,
-      toPathPrefix,
-      excludePrefixes
-    );
+    await sweepRevisionsUnderScope(repo, options.revisions, toScope.scopeKey, toPathPrefix, excludePrefixes);
   } else {
-    await deleteVfsPrefix(
-      repo,
-      toScope.scopeKey,
-      toPathPrefix,
-      excludePrefixes
-    );
+    await deleteVfsPrefix(repo, toScope.scopeKey, toPathPrefix, excludePrefixes);
   }
-  await copyVfsTree(
-    repo,
-    fromScope,
-    fromPathPrefix,
-    toScope,
-    toPathPrefix,
-    options
-  );
+  await copyVfsTree(repo, fromScope, fromPathPrefix, toScope, toPathPrefix, options);
   if (options?.revisions != null) {
-    await seedLiveHeadRevisionsUnderPrefix(
-      repo,
-      options.revisions,
-      toScope.scopeKey,
-      toPathPrefix,
-      undefined,
-      excludePrefixes
-    );
+    await seedLiveHeadRevisionsUnderPrefix(repo, options.revisions, toScope.scopeKey, toPathPrefix, undefined, excludePrefixes);
   }
 }
 
@@ -416,26 +289,9 @@ export async function replaceVfsSubtree(
  * zip 导入 / 角色卡导入 / 技能整目录删除这三条链**从不调它**，见
  * `vfs-gc-trigger.test.ts` 里对应三条链的 blob 口径用例。
  */
-export async function sweepRevisionsUnderScope(
-  repo: VfsEntryRepository,
-  revisionRepo: VfsRevisionRepository,
-  scopeKey: string,
-  pathPrefix: string,
-  excludePrefixes?: readonly string[]
-): Promise<void> {
-  await decrementLiveRefsUnderScope(
-    revisionRepo,
-    repo,
-    scopeKey,
-    pathPrefix,
-    excludePrefixes
-  );
-  await deleteUnreferencedUnderScope(
-    revisionRepo,
-    scopeKey,
-    pathPrefix,
-    excludePrefixes
-  );
+export async function sweepRevisionsUnderScope(repo: VfsEntryRepository, revisionRepo: VfsRevisionRepository, scopeKey: string, pathPrefix: string, excludePrefixes?: readonly string[]): Promise<void> {
+  await decrementLiveRefsUnderScope(revisionRepo, repo, scopeKey, pathPrefix, excludePrefixes);
+  await deleteUnreferencedUnderScope(revisionRepo, scopeKey, pathPrefix, excludePrefixes);
   await deleteVfsPrefix(repo, scopeKey, pathPrefix, excludePrefixes);
 }
 
@@ -444,12 +300,7 @@ export async function sweepRevisionsUnderScope(
  *
  * @deprecated 使用 {@link sweepRevisionsUnderScope} 替代，语义相同。
  */
-export async function releaseAndDeleteVfsPrefix(
-  repo: VfsEntryRepository,
-  revisionRepo: VfsRevisionRepository,
-  scopeKey: string,
-  pathPrefix: string
-): Promise<void> {
+export async function releaseAndDeleteVfsPrefix(repo: VfsEntryRepository, revisionRepo: VfsRevisionRepository, scopeKey: string, pathPrefix: string): Promise<void> {
   await sweepRevisionsUnderScope(repo, revisionRepo, scopeKey, pathPrefix);
 }
 
@@ -460,12 +311,7 @@ export async function releaseAndDeleteVfsPrefix(
  * 探测，空 prefix 静默返回（不抛 vfsNotFound），非空则一条批量 DELETE...LIKE 清掉整棵子树。
  * `excludePrefixes` 非空时跳过排除前缀下的条目（隔离豁免），退回逐条删除路径。
  */
-export async function deleteVfsPrefix(
-  repo: VfsEntryRepository,
-  scopeKey: string,
-  prefix: string,
-  excludePrefixes?: readonly string[]
-): Promise<void> {
+export async function deleteVfsPrefix(repo: VfsEntryRepository, scopeKey: string, prefix: string, excludePrefixes?: readonly string[]): Promise<void> {
   const excludes = excludePrefixes ?? [];
   const base = normalizePrefix(prefix);
   if (excludes.length === 0) {
@@ -481,10 +327,7 @@ export async function deleteVfsPrefix(
     }
     // 祖先目录也保留：排除子树里的 entry 不删，承载它的目录层级不能删，
     // 否则会因「目录非空」失败。
-    if (
-      excludes.length > 0 &&
-      isVfsPathAncestorOfExcluded(entry.path, excludes)
-    ) {
+    if (excludes.length > 0 && isVfsPathAncestorOfExcluded(entry.path, excludes)) {
       continue;
     }
     await repo.delete(scopeKey, entry.path, { recursive: false });

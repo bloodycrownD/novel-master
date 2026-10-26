@@ -15,12 +15,7 @@ import { z } from "zod";
 export type SkillDomain = "global" | "project";
 
 /** SKILL.md front matter 的严格 schema（name / description 必填）。 */
-export const skillFrontMatterSchema = z
-  .object({
-    name: z.string().min(1),
-    description: z.string().min(1),
-  })
-  .strict();
+export const skillFrontMatterSchema = z.object({ name: z.string().min(1), description: z.string().min(1) }).strict();
 
 /** 解析成功的 front matter 字段。 */
 export type SkillFrontMatter = z.infer<typeof skillFrontMatterSchema>;

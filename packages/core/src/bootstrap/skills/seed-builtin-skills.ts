@@ -22,7 +22,7 @@
 
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { createSkillsService } from "@/service/skills/create-skills-service.js";
-import { isSkillError } from "@/errors/skill-errors.js";
+import { isAppError } from "@/errors/app-error.js";
 
 /**
  * 内置技能名名单（删除 / 新建拦截与 seed 共用的单一来源）。
@@ -184,7 +184,7 @@ export async function seedBuiltinSkills(conn: TdbcConnection): Promise<void> {
   try {
     await service.readSkillFile("global", "agent-config");
   } catch (error) {
-    if (!isSkillError(error, "NOT_FOUND")) {
+    if (!isAppError(error, "SKILL_NOT_FOUND")) {
       throw error;
     }
     exists = false;

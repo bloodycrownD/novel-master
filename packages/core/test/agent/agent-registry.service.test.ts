@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { decode } from "@novel-master/core";
 
-import { AgentConfigError, createAgentRegistryService, agentDefinitionSchema } from "@novel-master/core/agent";
+import { AppError, createAgentRegistryService, agentDefinitionSchema, isAppError } from "@novel-master/core/agent";
 import type { AgentDefinition } from "@novel-master/core/agent";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 
@@ -18,7 +18,7 @@ describe("AgentRegistryService", () => {
         name: "写作助手",
         prompts: { persist: {}, dynamic: {} },
       },
-      agentDefinitionSchema,
+      agentDefinitionSchema
     );
     await registry.upsert("writer", def);
     const loaded = await registry.get("writer");
@@ -56,7 +56,7 @@ describe("AgentRegistryService", () => {
     const id = `agent-missing-${testIsolationSuffix()}`;
     await assert.rejects(
       () => registry.update(id, { description: "x" }),
-      (e: unknown) => e instanceof AgentConfigError && e.code === "AGENT_NOT_FOUND",
+      (e: unknown) => e instanceof AppError && isAppError(e, "AGENT_NOT_FOUND")
     );
   });
 
@@ -71,16 +71,11 @@ describe("AgentRegistryService", () => {
     } as unknown as AgentDefinition;
     await assert.rejects(
       () => registry.upsert(`agent-poison-${testIsolationSuffix()}`, bad),
-      (e: unknown) =>
-        e instanceof AgentConfigError &&
-        e.code === "INVALID_SCHEMA" &&
-        /definition\.name 必填/.test(e.message),
+      (e: unknown) => isAppError(e, "AGENT_INVALID_SCHEMA") && /definition\.name 必填/.test(e.message)
     );
     // 拒绝后未落盘：注册表仍可完整 list/get（不会被毒行拖垮）。
     const defs = await registry.list();
-    assert.ok(
-      defs.every((d) => typeof d.name === "string" && d.name.length > 0),
-    );
+    assert.ok(defs.every((d) => typeof d.name === "string" && d.name.length > 0));
   });
 
   it("prompts 缺省补空布局：仅 name 的最小 create 落盘成功且可读回", async () => {
@@ -119,15 +114,11 @@ describe("AgentRegistryService", () => {
           name: "坏形状-字符串",
           prompts: "你是翻译",
         } as unknown as AgentDefinition),
-      (e: unknown) =>
-        e instanceof AgentConfigError &&
-        e.code === "INVALID_SCHEMA" &&
-        /definition\.prompts/.test(e.message),
+      (e: unknown) => isAppError(e, "AGENT_INVALID_SCHEMA") && /definition\.prompts/.test(e.message)
     );
     await assert.rejects(
       () => registry.get(id),
-      (e: unknown) =>
-        e instanceof AgentConfigError && e.code === "AGENT_NOT_FOUND",
+      (e: unknown) => e instanceof AppError && isAppError(e, "AGENT_NOT_FOUND")
     );
   });
 
@@ -141,15 +132,11 @@ describe("AgentRegistryService", () => {
           name: "坏形状-数组",
           prompts: [{ persist: [], dynamic: [] }],
         } as unknown as AgentDefinition),
-      (e: unknown) =>
-        e instanceof AgentConfigError &&
-        e.code === "INVALID_SCHEMA" &&
-        /definition\.prompts/.test(e.message),
+      (e: unknown) => isAppError(e, "AGENT_INVALID_SCHEMA") && /definition\.prompts/.test(e.message)
     );
     await assert.rejects(
       () => registry.get(id),
-      (e: unknown) =>
-        e instanceof AgentConfigError && e.code === "AGENT_NOT_FOUND",
+      (e: unknown) => e instanceof AppError && isAppError(e, "AGENT_NOT_FOUND")
     );
   });
 
@@ -163,15 +150,11 @@ describe("AgentRegistryService", () => {
           name: "坏形状-数字",
           prompts: 42,
         } as unknown as AgentDefinition),
-      (e: unknown) =>
-        e instanceof AgentConfigError &&
-        e.code === "INVALID_SCHEMA" &&
-        /definition\.prompts/.test(e.message),
+      (e: unknown) => isAppError(e, "AGENT_INVALID_SCHEMA") && /definition\.prompts/.test(e.message)
     );
     await assert.rejects(
       () => registry.get(id),
-      (e: unknown) =>
-        e instanceof AgentConfigError && e.code === "AGENT_NOT_FOUND",
+      (e: unknown) => e instanceof AppError && isAppError(e, "AGENT_NOT_FOUND")
     );
   });
 
@@ -186,14 +169,13 @@ describe("AgentRegistryService", () => {
           name: "summarizer",
           prompts: { persist: {}, dynamic: {} },
         },
-        agentDefinitionSchema,
-      ),
+        agentDefinitionSchema
+      )
     );
     await registry.delete("summarizer");
     await assert.rejects(
       () => registry.get("summarizer"),
-      (e: unknown) =>
-        e instanceof AgentConfigError && e.code === "AGENT_NOT_FOUND",
+      (e: unknown) => e instanceof AppError && isAppError(e, "AGENT_NOT_FOUND")
     );
   });
 
@@ -207,15 +189,12 @@ describe("AgentRegistryService", () => {
         name: displayName,
         prompts: { persist: {}, dynamic: {} },
       },
-      agentDefinitionSchema,
+      agentDefinitionSchema
     );
     await registry.upsert("writer-a", def);
     await assert.rejects(
       () => registry.upsert("writer-b", def),
-      (e: unknown) =>
-        e instanceof AgentConfigError &&
-        e.code === "DUPLICATE_NAME" &&
-        e.message === "Agent 名称已存在",
+      (e: unknown) => e instanceof AppError && isAppError(e, "AGENT_DUPLICATE_NAME") && e.message === "Agent 名称已存在"
     );
   });
 
@@ -228,7 +207,7 @@ describe("AgentRegistryService", () => {
         name: "写作助手",
         prompts: { persist: {}, dynamic: {} },
       },
-      agentDefinitionSchema,
+      agentDefinitionSchema
     );
     await registry.upsert("writer", def);
     await registry.upsert("writer", { ...def, runtime: { maxSteps: 10 } });
@@ -249,8 +228,8 @@ describe("AgentRegistryService", () => {
           name: `  ${displayName}  `,
           prompts: { persist: {}, dynamic: {} },
         },
-        agentDefinitionSchema,
-      ),
+        agentDefinitionSchema
+      )
     );
     await assert.rejects(
       () =>
@@ -262,11 +241,10 @@ describe("AgentRegistryService", () => {
               name: displayName,
               prompts: { persist: {}, dynamic: {} },
             },
-            agentDefinitionSchema,
-          ),
+            agentDefinitionSchema
+          )
         ),
-      (e: unknown) =>
-        e instanceof AgentConfigError && e.code === "DUPLICATE_NAME",
+      (e: unknown) => e instanceof AppError && isAppError(e, "AGENT_DUPLICATE_NAME")
     );
   });
 
@@ -279,7 +257,7 @@ describe("AgentRegistryService", () => {
         name: "a",
         prompts: { persist: {}, dynamic: {} },
       },
-      agentDefinitionSchema,
+      agentDefinitionSchema
     );
     await registry.upsert("agent-a", def);
     await registry.upsert("agent-b", { ...def, name: "b" });
@@ -297,7 +275,7 @@ describe("AgentRegistryService", () => {
         name: "a",
         prompts: { persist: {}, dynamic: {} },
       },
-      agentDefinitionSchema,
+      agentDefinitionSchema
     );
     await registry.upsert("agent-a", def);
     await registry.upsert("agent-b", { ...def, name: "b" });
@@ -315,7 +293,7 @@ describe("AgentRegistryService", () => {
         name: "a",
         prompts: { persist: {}, dynamic: {} },
       },
-      agentDefinitionSchema,
+      agentDefinitionSchema
     );
     await registry.upsert("agent-a", def);
     await ctx.state.setCurrentAgentId("agent-a");

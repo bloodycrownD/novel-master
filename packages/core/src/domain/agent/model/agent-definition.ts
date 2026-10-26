@@ -4,11 +4,7 @@
  * @module domain/agent/model/agent-definition
  */
 
-import type {
-  AgentPromptLayout,
-  DynamicPromptBlock,
-  PersistTextPromptBlock,
-} from "@/domain/prompt/model/agent-prompt-layout.js";
+import type { AgentPromptLayout, DynamicPromptBlock, PersistTextPromptBlock } from "@/domain/prompt/model/agent-prompt-layout.js";
 
 /** Allowlist or denylist tool policy (mutually exclusive). */
 export interface AgentToolPolicy {
@@ -36,7 +32,7 @@ export interface AgentDefinition {
 }
 
 /** prompts 的部分更新：未提供的键保留、`null` 清除、persist/dynamic 数组整体替换。 */
-export interface AgentPromptLayoutPatch {
+interface AgentPromptLayoutPatch {
   readonly system?: string | null;
   readonly persistEnabled?: boolean | null;
   readonly dynamicEnabled?: boolean | null;
@@ -49,14 +45,14 @@ export interface AgentPromptLayoutPatch {
 }
 
 /** runtime 的部分更新：未提供的键保留、`null` 清除。 */
-export interface AgentRuntimePatch {
+interface AgentRuntimePatch {
   readonly maxSteps?: number | null;
   readonly doomLoopThreshold?: number | null;
   readonly doomLoopCrossRoundWindow?: number | null;
 }
 
 /** tools 的部分更新：allow/deny 数组整体替换；两者同时存在由校验层拒绝。 */
-export interface AgentToolPolicyPatch {
+interface AgentToolPolicyPatch {
   readonly allow?: readonly string[] | null;
   readonly deny?: readonly string[] | null;
 }

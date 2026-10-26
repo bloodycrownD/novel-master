@@ -77,7 +77,7 @@ jest.mock('@/errors/toast-message', () => ({
 // 不能引用后面声明的 const（TDZ）——所以只导出 jest.fn()，
 // 由用例在运行时通过 requireMock 改实现。
 jest.mock('@novel-master/core/feature-flags', () => ({
-  isUserVfsUnifiedToolTurnEnabled: jest.fn(() => false),
+  userVfsUnifiedToolTurnFlag: {isEnabled: jest.fn(() => false)},
 }));
 
 jest.mock('@/services/vfs-operations.service', () => ({
@@ -498,11 +498,11 @@ describe('FileEditorScreen', () => {
     (mockRouteParams as Record<string, unknown>).sessionId = 's1';
     const featureFlags = jest.requireMock(
       '@novel-master/core/feature-flags',
-    ) as {isUserVfsUnifiedToolTurnEnabled: jest.Mock};
+    ) as {userVfsUnifiedToolTurnFlag: {isEnabled: jest.Mock}};
     const vfsOps = jest.requireMock('@/services/vfs-operations.service') as {
       sessionSaveVfsFile: jest.Mock;
     };
-    featureFlags.isUserVfsUnifiedToolTurnEnabled.mockReturnValue(true);
+    featureFlags.userVfsUnifiedToolTurnFlag.isEnabled.mockReturnValue(true);
     vfsOps.sessionSaveVfsFile.mockResolvedValue(undefined);
 
     // 挂载前写入回调（模拟 openFileEditor 在 navigate 前 setter）

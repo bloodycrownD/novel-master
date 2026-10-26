@@ -13,10 +13,7 @@ export const TOOL_OUTPUT_MAX_MATCHES = 100;
 export const TOOL_OUTPUT_LINE_TRUNCATED_SUFFIX = `... (line truncated to ${TOOL_OUTPUT_MAX_LINE_LENGTH} chars)`;
 
 /** Truncates a single line when it exceeds {@link TOOL_OUTPUT_MAX_LINE_LENGTH}. */
-export function truncateLine(
-  text: string,
-  maxLen: number = TOOL_OUTPUT_MAX_LINE_LENGTH
-): { readonly line: string; readonly truncated: boolean } {
+export function truncateLine(text: string, maxLen: number = TOOL_OUTPUT_MAX_LINE_LENGTH): { readonly line: string; readonly truncated: boolean } {
   if (text.length <= maxLen) {
     return { line: text, truncated: false };
   }
@@ -31,11 +28,7 @@ export function truncateLine(
  *
  * @returns `nextOffset` when more lines remain beyond the slice.
  */
-export function sliceLinesFromOffset(
-  lines: readonly string[],
-  offset1Based: number,
-  limit: number = TOOL_OUTPUT_MAX_LINES
-): {
+export function sliceLinesFromOffset(lines: readonly string[], offset1Based: number, limit: number = TOOL_OUTPUT_MAX_LINES): {
   readonly slice: readonly string[];
   readonly totalLines: number;
   readonly nextOffset?: number;
@@ -49,10 +42,7 @@ export function sliceLinesFromOffset(
 }
 
 /** Stops accumulating lines once UTF-8 byte budget would be exceeded. */
-export function capUtf8Bytes(
-  lines: readonly string[],
-  maxBytes: number = TOOL_OUTPUT_MAX_BYTES
-): {
+export function capUtf8Bytes(lines: readonly string[], maxBytes: number = TOOL_OUTPUT_MAX_BYTES): {
   readonly lines: readonly string[];
   readonly truncated: boolean;
   readonly bytesUsed: number;
@@ -96,11 +86,7 @@ export function sliceUtf8BytePrefix(text: string, maxBytes: number): string {
     // 把代理对留在同一块内——孤儿 surrogate 会被编码为 U+FFFD（3B），
     // 既虚高 chunkBytes 又可能让块尾返回值携带孤立代理。
     const tailUnit = text.charCodeAt(end - 1);
-    if (
-      end < text.length &&
-      tailUnit >= 0xd800 &&
-      tailUnit <= 0xdbff
-    ) {
+    if (end < text.length && tailUnit >= 0xd800 && tailUnit <= 0xdbff) {
       end += 1;
     }
     const chunk = text.slice(start, end);
@@ -114,9 +100,7 @@ export function sliceUtf8BytePrefix(text: string, maxBytes: number): string {
     for (let j = 0; j < chunk.length; ) {
       const codePoint = chunk.codePointAt(j)!;
       const charLength = codePoint > 0xffff ? 2 : 1;
-      const charBytes = encoder.encode(
-        String.fromCodePoint(codePoint)
-      ).byteLength;
+      const charBytes = encoder.encode(String.fromCodePoint(codePoint)).byteLength;
       if (used + charBytes > maxBytes) {
         return text.slice(0, start + j);
       }
@@ -140,10 +124,7 @@ export function sliceUtf8BytePrefix(text: string, maxBytes: number): string {
  * 丢弃）。既有函数（capUtf8Bytes / truncateLine 等）不动——fs ls /
  * grep excerpt / skill 路径仍用旧口径。
  */
-export function capUtf8BytesFill(
-  lines: readonly string[],
-  maxBytes: number = TOOL_OUTPUT_MAX_BYTES
-): {
+export function capUtf8BytesFill(lines: readonly string[], maxBytes: number = TOOL_OUTPUT_MAX_BYTES): {
   readonly lines: readonly string[];
   readonly truncated: boolean;
   readonly bytesUsed: number;
@@ -184,11 +165,7 @@ export function capUtf8BytesFill(
  *
  * @param formatItem Serializes each item for byte accounting (e.g. JSON line).
  */
-export function capMatchList<T>(
-  items: readonly T[],
-  maxItems: number = TOOL_OUTPUT_MAX_MATCHES,
-  formatItem: (item: T) => string
-): {
+export function capMatchList<T>(items: readonly T[], maxItems: number = TOOL_OUTPUT_MAX_MATCHES, formatItem: (item: T) => string): {
   readonly items: readonly T[];
   readonly total: number;
   readonly truncated: boolean;

@@ -33,7 +33,8 @@ async function requireSavedModelId(
     throw new Error("Missing --modelId <uuid>");
   }
   const saved = await assertSavedModelUuid(modelId, rt.savedModels);
-  return saved.id;
+  if (!saved.ok) throw saved.error;
+  return saved.value.id;
 }
 
 export async function runProviderModel(

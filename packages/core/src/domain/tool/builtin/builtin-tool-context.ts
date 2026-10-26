@@ -15,10 +15,7 @@ import type { AgentRunResult } from "@/domain/agent/model/agent-run-result.js";
 import type { SkillService } from "@/service/skills/skills.port.js";
 import type { EffectiveSkill } from "@/domain/skills/logic/effective-skills.js";
 import type { WorkplaceService } from "@/service/workplace/workplace.port.js";
-import type {
-  EngineId,
-  ResolvedEngineConfig,
-} from "@/domain/tool/builtin/search/types.js";
+import type { EngineId, ResolvedEngineConfig } from "@/domain/tool/builtin/search/types.js";
 
 /** `runChildAgent` 透传给子 agent run 的解析后模型信息。 */
 export interface ResolveChildModelIdResult {
@@ -74,15 +71,9 @@ export interface BuiltinToolSubagentContext {
    * 返回值 {@link AgentRunResult} 不带文本——`task` 工具跑完后自己
    * `messages.listBySession(childSessionId)` 取末条 assistant text。
    */
-  readonly runChildAgent: (
-    def: AgentDefinition,
-    childSessionId: string,
-    opts: RunChildAgentOptions
-  ) => Promise<AgentRunResult>;
+  readonly runChildAgent: (def: AgentDefinition, childSessionId: string, opts: RunChildAgentOptions) => Promise<AgentRunResult>;
   /** 解析子 agent 模型：子 pin → 父 savedModelId → 报错（不走 workspace fallback）。 */
-  readonly resolveChildModelId: (
-    def: AgentDefinition
-  ) => ResolveChildModelIdResult;
+  readonly resolveChildModelId: (def: AgentDefinition) => ResolveChildModelIdResult;
   /** 当前 agent 的递归深度：主 agent depth=0，子 depth=1，孙 depth=2。 */
   readonly depth: number;
   /** 父 agent run 的 abort signal；子 agent 内部派生自己的 controller 监听它。 */
@@ -169,9 +160,7 @@ export interface BuiltinToolSearchContext {
    * 时从该引擎起截取；只含 configured 引擎；全无返回空数组，工具回落
    * 未配置提示）。
    */
-  readonly resolveEngineChain: (
-    inputEngine?: EngineId
-  ) => Promise<ResolvedEngineConfig[]>;
+  readonly resolveEngineChain: (inputEngine?: EngineId) => Promise<ResolvedEngineConfig[]>;
 }
 
 /** 注入到内置工具 `run()` 的运行时上下文。 */
@@ -247,10 +236,7 @@ export type BuiltinToolContext = {
    * rule_off，新目录默认应启用规则）；编辑已有文件不补，不融存量状态。
    * 未注入时跳过，行为向后兼容。
    */
-  readonly workplace?: Pick<
-    WorkplaceService,
-    "setDirRule" | "getDirRule" | "listDirRules"
-  >;
+  readonly workplace?: Pick<WorkplaceService, "setDirRule" | "getDirRule" | "listDirRules">;
   /**
    * 可选：仅 `search` 工具读取。未注入时（CLI 无 kkv、旧测试 mock）
    * search 的 run 抛 ToolError（FAILED），工具对 LLM 仍可见。

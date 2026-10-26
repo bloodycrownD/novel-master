@@ -4,16 +4,10 @@
  * @module cli-errors
  */
 
-import { PreferencesError, TdbcError } from "@novel-master/core";
+import { TdbcError } from "@novel-master/core";
 
 
-import { AgentConfigError, AppError } from "@novel-master/core/agent";
-
-
-import { ChatError } from "@novel-master/core/chat";
-
-
-import { CompactionConditionsError } from "@novel-master/core/compaction";
+import { AppError } from "@novel-master/core/agent";
 
 
 import { PromptError } from "@novel-master/core/prompt";
@@ -23,7 +17,6 @@ import { ProviderError } from "@novel-master/core/provider";
 
 
 import { SessionFsError } from "@novel-master/core/session-fs";
-import { SmartSortRuleError } from "@novel-master/core/smart-sort-rule";
 
 
 import { VfsError, VfsZipError } from "@novel-master/core/vfs";
@@ -39,15 +32,10 @@ export function formatCliError(error: unknown): string {
   if (
     error instanceof VfsError ||
     error instanceof VfsZipError ||
-    error instanceof AgentConfigError ||
-    error instanceof PreferencesError ||
-    error instanceof CompactionConditionsError ||
-    error instanceof ChatError ||
     error instanceof PromptError ||
     error instanceof TdbcError ||
     error instanceof ProviderError ||
     error instanceof SessionFsError ||
-    error instanceof SmartSortRuleError ||
     error instanceof SkspError
   ) {
     return error.message;
@@ -65,15 +53,10 @@ export function exitCodeForError(error: unknown): number {
   if (
     error instanceof VfsError ||
     error instanceof VfsZipError ||
-    error instanceof AgentConfigError ||
-    error instanceof PreferencesError ||
-    error instanceof CompactionConditionsError ||
-    error instanceof ChatError ||
     error instanceof PromptError ||
     error instanceof TdbcError ||
     error instanceof ProviderError ||
     error instanceof SessionFsError ||
-    error instanceof SmartSortRuleError ||
     error instanceof SkspError
   ) {
     return EXIT_RUNTIME;

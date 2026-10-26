@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { AgentConfigError } from "@/errors/agent-config-errors.js";
+import { AppError } from "@/errors/app-error.js";
 import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
 import type { SessionAgentConfig } from "@/domain/chat/model/session-agent-config.js";
 import {
@@ -71,7 +71,7 @@ describe("agent-run-shared", () => {
     const runtime = makeRuntime({
       currentAgentId: "missing",
       getAgent: async () => {
-        throw new AgentConfigError("AGENT_NOT_FOUND", "missing");
+        throw new AppError("AGENT_NOT_FOUND", "missing");
       },
     });
     await assert.rejects(

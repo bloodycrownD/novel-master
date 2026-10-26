@@ -6,7 +6,7 @@
 
 import { isSavedModelUuidFormat } from "@/domain/provider/logic/assert-saved-model-uuid.js";
 import { ProviderError } from "@/errors/provider-errors.js";
-import { isKkvError } from "@/errors/kkv-errors.js";
+import { isAppError } from "@/errors/app-error.js";
 import { invalidateSessionApiPromptTokenEntry } from "@/infra/tokenizer/logic/session-api-prompt-token-store.js";
 import type { KkvService } from "@/service/kkv/kkv.port.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
@@ -113,7 +113,7 @@ export class DefaultPersistentState implements PersistentState {
     try {
       return await this.kkv.get(MODULE, key);
     } catch (error) {
-      if (isKkvError(error, "NOT_FOUND")) {
+      if (isAppError(error, "KKV_NOT_FOUND")) {
         return undefined;
       }
       throw error;
@@ -145,7 +145,7 @@ export class DefaultPersistentState implements PersistentState {
     try {
       await this.kkv.delete(MODULE, key);
     } catch (error) {
-      if (isKkvError(error, "NOT_FOUND")) {
+      if (isAppError(error, "KKV_NOT_FOUND")) {
         return;
       }
       throw error;

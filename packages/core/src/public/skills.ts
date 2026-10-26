@@ -44,5 +44,15 @@ export {
   validateSkillName,
   isValidSkillName,
 } from "../domain/skills/model/skill-name.js";
-export { SkillError, isSkillError } from "../errors/skill-errors.js";
-export type { SkillErrorCode } from "../errors/skill-errors.js";
+export {
+  skillAlreadyExists,
+  skillBuiltin,
+  skillBuiltinNameReserved,
+  skillBuiltinRename,
+  skillInvalidName,
+  skillInvalidPath,
+  skillMissingDomain,
+  skillMissingProjectId,
+  skillNotFound,
+  skillNotFoundInDomain,
+} from "../errors/skill-errors.js";

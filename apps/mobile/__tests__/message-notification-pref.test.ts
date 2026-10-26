@@ -3,7 +3,7 @@
  * 两个偏好的测试形态，key 换 messageNotification、默认关）。
  */
 import {describe, expect, it, jest} from '@jest/globals';
-import {KkvError} from '@novel-master/core';
+import {AppError} from '@novel-master/core/agent';
 import type {KkvService} from '@novel-master/core/kkv';
 import {
   readMessageNotificationEnabled,
@@ -38,7 +38,7 @@ function createMemoryKkv(): KkvService {
     async get(module: string, key: string) {
       const v = data.get(compound(module, key));
       if (v === undefined) {
-        throw new KkvError('NOT_FOUND', 'missing', {module, key});
+        throw new AppError('KKV_NOT_FOUND', 'missing', {module, key});
       }
       return v;
     },
@@ -48,7 +48,7 @@ function createMemoryKkv(): KkvService {
     async delete(module: string, key: string) {
       const k = compound(module, key);
       if (!data.has(k)) {
-        throw new KkvError('NOT_FOUND', 'missing', {module, key});
+        throw new AppError('KKV_NOT_FOUND', 'missing', {module, key});
       }
       data.delete(k);
     },

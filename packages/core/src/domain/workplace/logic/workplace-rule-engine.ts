@@ -9,31 +9,11 @@
  * @module domain/workplace/logic/workplace-rule-engine
  */
 
-import {
-  evaluateFileDisplay,
-  sortDirPaths,
-  sortFilesForDir,
-  type WorkplaceFileSortMeta,
-} from "./workplace-eval.js";
-import {
-  directChildDirs,
-  parentDirOf,
-} from "./workplace-tree.js";
-import {
-  isWorkplaceRootPath,
-  workplaceRootLogicalPath,
-} from "./workplace-scope.js";
-import type {
-  DisplayState,
-  InclusionMode,
-  RuleState,
-  WorkplaceRuleRow,
-  WorkplaceScope,
-} from "../model/workplace-types.js";
-import type {
-  WorkplaceRuleContext,
-  WorkplaceRuleView,
-} from "../model/workplace-rule-view.js";
+import { evaluateFileDisplay, sortDirPaths, sortFilesForDir, type WorkplaceFileSortMeta } from "./workplace-eval.js";
+import { directChildDirs, parentDirOf } from "./workplace-tree.js";
+import { isWorkplaceRootPath, workplaceRootLogicalPath } from "./workplace-scope.js";
+import type { DisplayState, InclusionMode, RuleState, WorkplaceRuleRow, WorkplaceScope } from "../model/workplace-types.js";
+import type { WorkplaceRuleContext, WorkplaceRuleView } from "../model/workplace-rule-view.js";
 
 /** 每个目录一次性的排序产物：auto 排名 + 完整子文件序列。 */
 interface DirSortPlan {
@@ -48,21 +28,11 @@ interface DirSortPlan {
 /**
  * 评估工作区规则视图：纯规则 DFS，不算文件正文。
  */
-export function evaluateWorkplaceRuleView(
-  scope: WorkplaceScope,
-  ctx: WorkplaceRuleContext
-): WorkplaceRuleView {
+export function evaluateWorkplaceRuleView(scope: WorkplaceScope, ctx: WorkplaceRuleContext): WorkplaceRuleView {
   const planByDir = buildDirSortPlans(ctx);
   const displayByPath = buildDisplayByPath(scope, ctx, planByDir);
   const rows: WorkplaceRuleRow[] = [];
-  walkDir(
-    scope,
-    ctx,
-    workplaceRootLogicalPath(scope),
-    rows,
-    displayByPath,
-    planByDir
-  );
+  walkDir(scope, ctx, workplaceRootLogicalPath(scope), rows, displayByPath, planByDir);
   return { rows, displayByPath };
 }
 
@@ -119,30 +89,19 @@ function buildDirSortPlans(ctx: WorkplaceRuleContext): Map<string, DirSortPlan> 
 }
 
 /** 各文件 path → 展示档位（宏树后缀与列表 file 行共用）。 */
-function buildDisplayByPath(
-  scope: WorkplaceScope,
-  ctx: WorkplaceRuleContext,
-  planByDir: ReadonlyMap<string, DirSortPlan>
-): Map<string, DisplayState> {
+function buildDisplayByPath(scope: WorkplaceScope, ctx: WorkplaceRuleContext, planByDir: ReadonlyMap<string, DirSortPlan>): Map<string, DisplayState> {
   const displayByPath = new Map<string, DisplayState>();
   for (const filePath of ctx.fileSet) {
     const parent = parentDirOf(filePath);
     if (parent == null) {
       continue;
     }
-    displayByPath.set(
-      filePath,
-      computeDisplay(scope, ctx, filePath, parent, planByDir)
-    );
+    displayByPath.set(filePath, computeDisplay(scope, ctx, filePath, parent, planByDir));
   }
   return displayByPath;
 }
 
-function resolveRuleState(
-  scope: WorkplaceScope,
-  dirPath: string,
-  ctx: WorkplaceRuleContext
-): RuleState {
+function resolveRuleState(scope: WorkplaceScope, dirPath: string, ctx: WorkplaceRuleContext): RuleState {
   if (isWorkplaceRootPath(scope, dirPath)) {
     return "rule_on";
   }
@@ -153,20 +112,11 @@ function resolveRuleState(
   return "rule_on";
 }
 
-function resolveInclusion(
-  filePath: string,
-  ctx: WorkplaceRuleContext
-): InclusionMode {
+function resolveInclusion(filePath: string, ctx: WorkplaceRuleContext): InclusionMode {
   return ctx.fileRuleMap.get(filePath)?.inclusionMode ?? "auto";
 }
 
-function computeDisplay(
-  scope: WorkplaceScope,
-  ctx: WorkplaceRuleContext,
-  filePath: string,
-  parentDir: string,
-  planByDir: ReadonlyMap<string, DirSortPlan>
-): DisplayState {
+function computeDisplay(scope: WorkplaceScope, ctx: WorkplaceRuleContext, filePath: string, parentDir: string, planByDir: ReadonlyMap<string, DirSortPlan>): DisplayState {
   const inclusion = resolveInclusion(filePath, ctx);
   const parentRuleOn = resolveRuleState(scope, parentDir, ctx) === "rule_on";
   const dirRule = ctx.dirRuleMap.get(parentDir) ?? null;
@@ -183,14 +133,7 @@ function computeDisplay(
   });
 }
 
-function walkDir(
-  scope: WorkplaceScope,
-  ctx: WorkplaceRuleContext,
-  dirPath: string,
-  rows: WorkplaceRuleRow[],
-  displayByPath: ReadonlyMap<string, DisplayState>,
-  planByDir: ReadonlyMap<string, DirSortPlan>
-): void {
+function walkDir(scope: WorkplaceScope, ctx: WorkplaceRuleContext, dirPath: string, rows: WorkplaceRuleRow[], displayByPath: ReadonlyMap<string, DisplayState>, planByDir: ReadonlyMap<string, DirSortPlan>): void {
   rows.push({
     kind: "dir",
     path: dirPath,
@@ -199,11 +142,7 @@ function walkDir(
 
   const dirRule = ctx.dirRuleMap.get(dirPath) ?? null;
 
-  const subdirs = sortDirPaths(
-    directChildDirs(dirPath, ctx.allDirs),
-    dirRule,
-    { smartRules: ctx.smartRules, dirMtimeByPath: ctx.dirMtimeByPath }
-  );
+  const subdirs = sortDirPaths(directChildDirs(dirPath, ctx.allDirs), dirRule, { smartRules: ctx.smartRules, dirMtimeByPath: ctx.dirMtimeByPath });
   for (const sub of subdirs) {
     walkDir(scope, ctx, sub, rows, displayByPath, planByDir);
   }

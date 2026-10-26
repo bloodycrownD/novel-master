@@ -20,6 +20,9 @@ const SPEC_V2 = "chara_card_v2";
 // eslint-disable-next-line no-control-regex -- 故意剔除控制字符（文件名非法字符表的核心部分）
 const ILLEGAL_CHARS = /[/\\:*?"<>|\x00-\x1f]/g;
 
+/** 本模块的失败载荷：无法识别 / 规格不支持。 */
+type CharacterCardError = AppError<"VFS_CHARACTER_CARD_UNRECOGNIZED" | "VFS_CHARACTER_CARD_UNSUPPORTED_SPEC">;
+
 /** PNG 文件签名（8 字节）。 */
 const PNG_SIGNATURE = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 const CHUNK_TYPE_TEXT = "tEXt";
@@ -34,7 +37,7 @@ function decodeLatin1(bytes: Uint8Array): string {
   return out;
 }
 
-function characterCardJsonToMdTree(card: unknown): Result<MdTree, AppError> {
+function characterCardJsonToMdTree(card: unknown): Result<MdTree, CharacterCardError> {
   if (!isRecord(card)) {
     return Result.err(new AppError("VFS_CHARACTER_CARD_UNRECOGNIZED", "无法识别为角色卡"));
   }
@@ -87,7 +90,7 @@ function characterCardJsonToMdTree(card: unknown): Result<MdTree, AppError> {
     }
     usedNames.add(fileName);
     const content = typeof entry["content"] === "string" ? entry["content"] : "";
-    const fmBody = stringifyText({keywords: [...keys]}, "yaml").trimEnd();
+    const fmBody = stringifyText({ keywords: [...keys] }, "yaml").trimEnd();
     tree.set(`世界书/${fileName}`, `---\n${fmBody}\n---\n${content}`);
   }
   return Result.ok(tree);
@@ -95,8 +98,11 @@ function characterCardJsonToMdTree(card: unknown): Result<MdTree, AppError> {
 
 /**
  * 将角色卡字节或 JSON 文本解析为相对路径 md 树。
+ *
+ * nm-style: keep-public — 角色卡解析的唯一 domain 入口，由 vfs 导入 service 跨层调用；
+ * 内联会把领域解析搬进 service。
  */
-export function parseCharacterCardToMdTree(input: Uint8Array | string): Result<MdTree, AppError> {
+export function parseCharacterCardToMdTree(input: Uint8Array | string): Result<MdTree, CharacterCardError> {
   if (typeof input === "string") {
     const parsed = parseJsonText(input);
     if (!parsed.ok) {

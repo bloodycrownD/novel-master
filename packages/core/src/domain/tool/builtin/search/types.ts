@@ -18,14 +18,10 @@
  * @module domain/tool/builtin/search/types
  */
 
+import { AppError } from "@/errors/app-error.js";
+
 /** 支持的搜索引擎标识（注册顺序即「第一个已配置引擎」回落的优先顺序；duckduckgo 内置免费兜底固定队尾）。 */
-export const ENGINE_IDS = [
-  "bocha",
-  "tavily",
-  "brave",
-  "searxng",
-  "duckduckgo",
-] as const;
+export const ENGINE_IDS = ["bocha", "tavily", "brave", "searxng", "duckduckgo"] as const;
 
 /** 搜索引擎标识。 */
 export type EngineId = (typeof ENGINE_IDS)[number];
@@ -132,9 +128,7 @@ function normalizeDomain(raw: string): string | null {
   if (input.startsWith("-")) input = input.slice(1).trim();
   if (input.length === 0) return null;
   try {
-    const parsed = input.includes("://")
-      ? new URL(input)
-      : new URL(`https://${input}`);
+    const parsed = input.includes("://") ? new URL(input) : new URL(`https://${input}`);
     input = parsed.hostname;
   } catch {
     input = input.split("/")[0]?.split(":")[0] ?? "";
@@ -147,9 +141,7 @@ function normalizeDomain(raw: string): string | null {
  * 解析域名过滤条目列表：`-` 前缀进 exclude，其余进 include；
  * 非法条目跳过、重复条目去重。
  */
-export function parseDomainFilters(
-  domainFilter?: readonly string[]
-): DomainFilters {
+export function parseDomainFilters(domainFilter?: readonly string[]): DomainFilters {
   const include: string[] = [];
   const exclude: string[] = [];
   for (const raw of domainFilter ?? []) {
@@ -170,10 +162,7 @@ function hostMatchesDomain(hostname: string, domain: string): boolean {
  * 客户端域名过滤兜底：include 非空时要求命中其一，exclude 命中即排除；
  * URL 解析失败按不命中处理。brave / searxng / bocha / duckduckgo 共用。
  */
-export function matchesDomainFilters(
-  url: string,
-  filters: DomainFilters
-): boolean {
+export function matchesDomainFilters(url: string, filters: DomainFilters): boolean {
   if (filters.include.length === 0 && filters.exclude.length === 0) {
     return true;
   }
@@ -183,15 +172,10 @@ export function matchesDomainFilters(
   } catch {
     return false;
   }
-  if (
-    filters.include.length > 0 &&
-    !filters.include.some((domain) => hostMatchesDomain(hostname, domain))
-  ) {
+  if (filters.include.length > 0 && !filters.include.some((domain) => hostMatchesDomain(hostname, domain))) {
     return false;
   }
-  return !filters.exclude.some((domain) =>
-    hostMatchesDomain(hostname, domain)
-  );
+  return !filters.exclude.some((domain) => hostMatchesDomain(hostname, domain));
 }
 
 /**
@@ -207,30 +191,25 @@ export function redactSecret(text: string, secret?: string): string {
  * 统一引擎 HTTP 错误范式：`` `${Engine} API error ${status}: ${body.slice(0,300)}` ``。
  * body 先经 redactSecret 脱敏再截断。
  */
-export function engineApiErrorMessage(
-  engine: string,
-  status: number,
-  body: string,
-  apiKey?: string
-): string {
-  return `${engine} API error ${status}: ${redactSecret(body, apiKey).slice(
-    0,
-    300
-  )}`;
+export function engineApiErrorMessage(engine: string, status: number, body: string, apiKey?: string): string {
+  return `${engine} API error ${status}: ${redactSecret(body, apiKey).slice(0, 300)}`;
+}
+
+/**
+ * 引擎适配器失败的统一 AppError（TOOL_SEARCH_FAILED）：消息原样保留，
+ * search-tool 只读 message 聚合成 ToolError，不按 key 分支。
+ */
+export function engineFailed(message: string): AppError<"TOOL_SEARCH_FAILED"> {
+  return new AppError("TOOL_SEARCH_FAILED", message);
 }
 
 /**
  * 引擎适配器超时错误的统一映射：signal 已 abort（计时器触发）给可读超时
  * 文案，其余错误原样透传（照 curl-tool 的 curlPhaseError 模式）。
  */
-export function engineTimeoutError(
-  e: unknown,
-  aborted: boolean,
-  engine: string,
-  timeoutMs: number
-): unknown {
+export function engineTimeoutError(e: unknown, aborted: boolean, engine: string, timeoutMs: number): unknown {
   if (aborted) {
-    return new Error(`${engine} search timed out after ${timeoutMs}ms`);
+    return engineFailed(`${engine} search timed out after ${timeoutMs}ms`);
   }
   return e;
 }

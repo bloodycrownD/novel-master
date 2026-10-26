@@ -23,10 +23,7 @@
 import type { BuiltinToolContext } from "./builtin-tool-context.js";
 import { utf8ByteLength } from "@/common/utf8.js";
 import { TOOL_OUTPUT_MAX_BYTES } from "../logic/tool-output-limits.js";
-import {
-  ensureDirRulesForNewPath,
-  upsertFileCacheAfterWrite,
-} from "./vfs-tools.js";
+import { ensureDirRulesForNewPath, upsertFileCacheAfterWrite } from "./vfs-tools.js";
 
 /** 落盘子目录（会话工作区 VFS 内，子代理时为父会话工作区）。 */
 export const OVERFLOW_SINK_DIR = "/tmp";
@@ -53,9 +50,7 @@ export interface OversizedSinkResult {
  * content-type → 扩展名映射：含 json → `json`，含 html → `html`，
  * 其余（text/plain、xml、缺省等）→ `txt`。
  */
-export function extensionForContentType(
-  contentType: string
-): "html" | "json" | "txt" {
+export function extensionForContentType(contentType: string): "html" | "json" | "txt" {
   const lower = contentType.toLowerCase();
   if (lower.includes("json")) return "json";
   if (lower.includes("html")) return "html";
@@ -71,9 +66,8 @@ function localDateStamp(now: Date): string {
 
 /** 生成落盘文件路径 `/tmp/{tool}-{yyyyMMdd}-{rand4}.{ext}`。 */
 function buildSinkPath(tool: string, contentType: string): string {
-  const rand4 = Math.floor(Math.random() * 0x10000)
-    .toString(16)
-    .padStart(4, "0");
+  const randHex = Math.floor(Math.random() * 0x10000).toString(16);
+  const rand4 = randHex.padStart(4, "0");
   return `${OVERFLOW_SINK_DIR}/${tool}-${localDateStamp(new Date())}-${rand4}.${extensionForContentType(contentType)}`;
 }
 
@@ -83,10 +77,7 @@ function buildSinkPath(tool: string, contentType: string): string {
  * @throws `vfs.write` 失败时原样抛出（调用方降级）；落盘成功后的
  * `file_cache` upsert 与目录规则补齐失败只吞错不阻断。
  */
-export async function sinkOversizedOutput(
-  ctx: BuiltinToolContext,
-  input: SinkOversizedInput
-): Promise<OversizedSinkResult> {
+export async function sinkOversizedOutput(ctx: BuiltinToolContext, input: SinkOversizedInput): Promise<OversizedSinkResult> {
   const savedPath = buildSinkPath(input.tool, input.contentType);
   await ctx.vfs.write(savedPath, input.content);
   // 配套动作失败不阻断（照 write 工具口径）：file_cache 是加速缓存，
@@ -94,17 +85,12 @@ export async function sinkOversizedOutput(
   try {
     await upsertFileCacheAfterWrite(ctx, savedPath, input.content);
   } catch (error) {
-    console.debug(
-      `[overflow-sink] file_cache upsert 失败（${savedPath}）:`,
-      error
-    );
+    console.debug(`[overflow-sink] file_cache upsert 失败（${savedPath}）:`, error);
   }
   await ensureDirRulesForNewPath(ctx, OVERFLOW_SINK_DIR);
   const contentBytes = utf8ByteLength(input.content);
   return {
     savedPath,
-    message: `输出超过 ${
-      TOOL_OUTPUT_MAX_BYTES / 1024
-    }KB 预算（original ${contentBytes} bytes），全文已自动保存到会话工作区，可用 read 分页读取。`,
+    message: `输出超过 ${TOOL_OUTPUT_MAX_BYTES / 1024}KB 预算（original ${contentBytes} bytes），全文已自动保存到会话工作区，可用 read 分页读取。`,
   };
 }

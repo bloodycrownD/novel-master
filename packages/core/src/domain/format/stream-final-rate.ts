@@ -40,16 +40,12 @@ export interface StreamFinalRateSnapshot {
  * runId 缺省/空串（run 身份未知）时省略该字段——写出的就是旧格式值，
  * 读回侧自然按「无身份可比对」的兼容路径处理。
  */
-export function serializeStreamFinalRateSnapshot(
-  snapshot: StreamFinalRateSnapshot,
-): string {
+export function serializeStreamFinalRateSnapshot(snapshot: StreamFinalRateSnapshot): string {
   return JSON.stringify({
     rate: snapshot.rate,
     tokens: snapshot.tokens,
     atMs: snapshot.atMs,
-    ...(snapshot.runId != null && snapshot.runId.length > 0
-      ? {runId: snapshot.runId}
-      : {}),
+    ...(snapshot.runId != null && snapshot.runId.length > 0 ? { runId: snapshot.runId } : {}),
   });
 }
 
@@ -58,9 +54,7 @@ export function serializeStreamFinalRateSnapshot(
  * tokens/atMs 缺字段退化为 0——它们只服务自检，不影响速率段渲染。
  * runId 缺字段/非字符串/空串即省略该键（旧格式值照常解析成功，不判坏数据）。
  */
-export function parseStreamFinalRateSnapshot(
-  raw: string | null | undefined,
-): StreamFinalRateSnapshot | null {
+export function parseStreamFinalRateSnapshot(raw: string | null | undefined): StreamFinalRateSnapshot | null {
   if (raw == null || raw.length === 0) {
     return null;
   }
@@ -73,19 +67,16 @@ export function parseStreamFinalRateSnapshot(
   if (parsed == null || typeof parsed !== "object") {
     return null;
   }
-  const {rate, tokens, atMs, runId} = parsed as Partial<
-    Record<keyof StreamFinalRateSnapshot, unknown>
-  >;
+  const { rate, tokens, atMs, runId } = parsed as Partial<Record<keyof StreamFinalRateSnapshot, unknown>>;
   if (typeof rate !== "number" || !Number.isFinite(rate) || rate < 0) {
     return null;
   }
   return {
     rate,
-    tokens:
-      typeof tokens === "number" && Number.isFinite(tokens) ? tokens : 0,
+    tokens: typeof tokens === "number" && Number.isFinite(tokens) ? tokens : 0,
     atMs: typeof atMs === "number" && Number.isFinite(atMs) ? atMs : 0,
     // 只在真拿到非空字符串时带上该键：旧格式值（无 runId）解析出的对象
     // 与加固前逐字段一致，不给消费方多出 `runId: undefined` 的形状差异。
-    ...(typeof runId === "string" && runId.length > 0 ? {runId} : {}),
+    ...(typeof runId === "string" && runId.length > 0 ? { runId } : {}),
   };
 }

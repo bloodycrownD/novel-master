@@ -13,6 +13,8 @@ import {agentDefinitionSchema} from "../../model/agent-definition.schema.js";
 import type {AgentDefinition} from "../../model/agent-definition.js";
 import type {AgentDefinitionRepository} from "../agent-definition.port.js";
 
+const UPSERT_SQL = `INSERT INTO agent_definition (agent_id, prompts_json, created_at_ms, updated_at_ms) VALUES (#{agentId}, #{promptsJson}, #{now}, #{now}) ON CONFLICT(agent_id) DO UPDATE SET prompts_json = excluded.prompts_json, updated_at_ms = excluded.updated_at_ms`;
+
 /** TDBC-backed agent definition repository. */
 export class SqliteAgentDefinitionRepository implements AgentDefinitionRepository {
   private readonly parser = new SqlTemplateParser();
@@ -43,16 +45,8 @@ export class SqliteAgentDefinitionRepository implements AgentDefinitionRepositor
   async upsert(agentId: string, def: AgentDefinition): Promise<void> {
     const now = Date.now();
     const promptsJson = JSON.stringify(encode(def, agentDefinitionSchema));
-    await executeTemplate(this.conn, this.parser, `INSERT INTO agent_definition (
-      agent_id, prompts_json, created_at_ms, updated_at_ms
-    ) VALUES (
-      #{agentId}, #{promptsJson}, #{now}, #{now}
-    )
-    ON CONFLICT(agent_id) DO UPDATE SET
-      prompts_json = excluded.prompts_json,
-      updated_at_ms = excluded.updated_at_ms`, {agentId, promptsJson, now});
+    await executeTemplate(this.conn, this.parser, UPSERT_SQL, {agentId, promptsJson, now});
   }
-
   async delete(agentId: string): Promise<void> {
     await executeTemplate(this.conn, this.parser, `DELETE FROM agent_definition WHERE agent_id = #{agentId}`, {agentId});
   }

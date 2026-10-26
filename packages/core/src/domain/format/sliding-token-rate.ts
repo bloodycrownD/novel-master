@@ -21,7 +21,7 @@
  * @module domain/format/sliding-token-rate
  */
 
-import type {StreamTokenSource} from "../session-run-state/model/session-run-state.js";
+import type { StreamTokenSource } from "../session-run-state/model/session-run-state.js";
 
 /** 一次速率采样：时刻（毫秒）与该时刻的累计 token 数。 */
 export interface TokenRateSample {
@@ -43,11 +43,7 @@ export const SLIDING_TOKEN_RATE_WINDOW_MS = 2_500;
  * @param nowMs 当前时刻（毫秒）。
  * @param windowMs 窗口时长（毫秒），缺省 2.5s。
  */
-export function slidingTokenRate(
-  samples: readonly TokenRateSample[],
-  nowMs: number,
-  windowMs: number = SLIDING_TOKEN_RATE_WINDOW_MS,
-): number | null {
+export function slidingTokenRate(samples: readonly TokenRateSample[], nowMs: number, windowMs: number = SLIDING_TOKEN_RATE_WINDOW_MS): number | null {
   // 末样本 = 不晚于 nowMs 的最近一条：时钟回拨/跳变留下的未来样本不参与
   // 窗口（全未来样本 → lastIndex < 1 → null，与「样本不足」同解）。
   let lastIndex = samples.length - 1;
@@ -61,11 +57,7 @@ export function slidingTokenRate(
   // nowMs（无序残留的未来样本到此为止，窗口内样本恒 ≤ nowMs）。
   const windowStartMs = nowMs - windowMs;
   let firstIndex = lastIndex;
-  while (
-    firstIndex > 0 &&
-    samples[firstIndex - 1]!.tMs >= windowStartMs &&
-    samples[firstIndex - 1]!.tMs <= nowMs
-  ) {
+  while (firstIndex > 0 && samples[firstIndex - 1]!.tMs >= windowStartMs && samples[firstIndex - 1]!.tMs <= nowMs) {
     firstIndex -= 1;
   }
   const first = samples[firstIndex]!;
@@ -105,11 +97,7 @@ const MAX_RATE_SAMPLES = 512;
  */
 export interface TokenRateSampler {
   /** 采样当前累计值并返回窗口速率（token/秒）；样本不足返回 null。 */
-  sample(
-    tokens: number,
-    source: StreamTokenSource,
-    nowMs: number,
-  ): number | null;
+  sample(tokens: number, source: StreamTokenSource, nowMs: number): number | null;
   /**
    * 只读当前窗口速率（不记样本、不改序列）——供渲染节拍读取：暂停期随
    * nowMs 增长自然衰减，恢复输出后随新样本回升。
@@ -148,7 +136,7 @@ export function createTokenRateSampler(): TokenRateSampler {
       if (lastSource !== source) {
         // 校正点（heuristic→usage 覆盖跳变）：先留翻转前末值，再清空重 seed。
         lastSettledRate = tailRate() ?? lastSettledRate;
-        samples = [{tMs: nowMs, tokens}];
+        samples = [{ tMs: nowMs, tokens }];
         lastSampleMs = nowMs;
         lastSource = source;
       } else if (lastTokens !== tokens) {
@@ -160,14 +148,14 @@ export function createTokenRateSampler(): TokenRateSampler {
             lastSettledRate = tailRate() ?? lastSettledRate;
             samples = [];
           }
-          samples.push({tMs: nowMs, tokens});
+          samples.push({ tMs: nowMs, tokens });
           lastSampleMs = nowMs;
           if (samples.length > MAX_RATE_SAMPLES) {
             samples = samples.slice(-MAX_RATE_SAMPLES);
           }
         } else if (nowMs === lastSampleMs) {
           // 同刻去重：同一毫秒内的多条 delta 只留最终累计值，不 push。
-          samples[samples.length - 1] = {tMs: nowMs, tokens};
+          samples[samples.length - 1] = { tMs: nowMs, tokens };
         }
         // nowMs < lastSampleMs：时钟回拨，入口丢弃——不记样本，保序列升序。
       }

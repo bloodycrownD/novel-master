@@ -12,16 +12,7 @@
  * @module domain/tool/builtin/search/engines/tavily
  */
 
-import {
-  engineApiErrorMessage,
-  engineTimeoutError,
-  normalizeMaxResults,
-  parseDomainFilters,
-  type ResolvedEngineConfig,
-  type SearchResponse,
-  type SearchResult,
-  type SearchToolOptions,
-} from "../types.js";
+import { engineApiErrorMessage, engineFailed, engineTimeoutError, normalizeMaxResults, parseDomainFilters, type ResolvedEngineConfig, type SearchResponse, type SearchResult, type SearchToolOptions } from "../types.js";
 
 /** Tavily 端点（硬编码，无自定义 baseUrl 口径）。 */
 export const TAVILY_SEARCH_URL = "https://api.tavily.com/search";
@@ -30,20 +21,14 @@ export const TAVILY_SEARCH_URL = "https://api.tavily.com/search";
 export const TAVILY_TIMEOUT_MS = 60_000;
 
 /** 域名过滤条目 → tavily include_domains / exclude_domains 参数。 */
-function mapDomainFilter(
-  domainFilter: readonly string[] | undefined
-): {
+function mapDomainFilter(domainFilter: readonly string[] | undefined): {
   readonly include_domains?: readonly string[];
   readonly exclude_domains?: readonly string[];
 } {
   const filters = parseDomainFilters(domainFilter);
   return {
-    ...(filters.include.length > 0
-      ? { include_domains: filters.include }
-      : {}),
-    ...(filters.exclude.length > 0
-      ? { exclude_domains: filters.exclude }
-      : {}),
+    ...(filters.include.length > 0 ? { include_domains: filters.include } : {}),
+    ...(filters.exclude.length > 0 ? { exclude_domains: filters.exclude } : {}),
   };
 }
 
@@ -61,24 +46,15 @@ interface TavilyResponse {
 }
 
 /** results 字段抽取：缺 url 跳过、content 折叠空白、截断到条数上限。 */
-function mapResults(
-  results: readonly TavilyResult[] | undefined,
-  numResults: number
-): readonly SearchResult[] {
+function mapResults(results: readonly TavilyResult[] | undefined, numResults: number): readonly SearchResult[] {
   if (!Array.isArray(results)) return [];
   const mapped: SearchResult[] = [];
   for (const item of results) {
     if (item?.url == null || item.url.length === 0) continue;
     mapped.push({
-      title:
-        item.title && item.title.length > 0
-          ? item.title
-          : `Source ${mapped.length + 1}`,
+      title: item.title && item.title.length > 0 ? item.title : `Source ${mapped.length + 1}`,
       url: item.url,
-      snippet:
-        typeof item.content === "string"
-          ? item.content.replace(/\s+/g, " ").trim()
-          : "",
+      snippet: typeof item.content === "string" ? item.content.replace(/\s+/g, " ").trim() : "",
     });
     if (mapped.length >= numResults) break;
   }
@@ -89,15 +65,10 @@ function mapResults(
  * Tavily 搜索适配器：`resolved.apiKey` 缺失时抛可读错误；超时 60s；
  * 唯一透传原生 answer 的引擎。
  */
-export async function searchWithTavily(
-  resolved: ResolvedEngineConfig,
-  query: string,
-  options: SearchToolOptions,
-  fetchFn: typeof globalThis.fetch
-): Promise<SearchResponse> {
+export async function searchWithTavily(resolved: ResolvedEngineConfig, query: string, options: SearchToolOptions, fetchFn: typeof globalThis.fetch): Promise<SearchResponse> {
   const apiKey = resolved.apiKey;
   if (apiKey == null || apiKey.length === 0) {
-    throw new Error("Tavily API key missing: engine not configured");
+    throw engineFailed("Tavily API key missing: engine not configured");
   }
   const numResults = normalizeMaxResults(options.maxResults);
 
@@ -107,9 +78,7 @@ export async function searchWithTavily(
     max_results: numResults,
     include_answer: "basic",
     include_raw_content: false,
-    ...(options.recencyFilter != null
-      ? { time_range: options.recencyFilter }
-      : {}),
+    ...(options.recencyFilter != null ? { time_range: options.recencyFilter } : {}),
     ...mapDomainFilter(options.domainFilter),
   };
 
@@ -118,7 +87,7 @@ export async function searchWithTavily(
   try {
     let response: Response;
     try {
-      response = await fetchFn(TAVILY_SEARCH_URL, {
+      const requestInit = {
         method: "POST",
         headers: {
           Authorization: `Bearer ${apiKey}`,
@@ -126,38 +95,25 @@ export async function searchWithTavily(
         },
         body: JSON.stringify(body),
         signal: controller.signal,
-      });
+      };
+      response = await fetchFn(TAVILY_SEARCH_URL, requestInit);
     } catch (e) {
-      throw engineTimeoutError(
-        e,
-        controller.signal.aborted,
-        "Tavily",
-        TAVILY_TIMEOUT_MS
-      );
+      throw engineTimeoutError(e, controller.signal.aborted, "Tavily", TAVILY_TIMEOUT_MS);
     }
 
     if (!response.ok) {
       const errorBody = await response.text();
-      throw new Error(
-        engineApiErrorMessage("Tavily", response.status, errorBody, apiKey)
-      );
+      throw engineFailed(engineApiErrorMessage("Tavily", response.status, errorBody, apiKey));
     }
 
     let data: TavilyResponse;
     try {
       data = (await response.json()) as TavilyResponse;
     } catch (e) {
-      throw new Error(
-        `Tavily API returned invalid JSON: ${
-          e instanceof Error ? e.message : String(e)
-        }`
-      );
+      throw engineFailed(`Tavily API returned invalid JSON: ${e instanceof Error ? e.message : String(e)}`);
     }
 
-    const answer =
-      typeof data.answer === "string" && data.answer.trim().length > 0
-        ? data.answer
-        : undefined;
+    const answer = typeof data.answer === "string" && data.answer.trim().length > 0 ? data.answer : undefined;
     return {
       engine: "tavily",
       ...(answer != null ? { answer } : {}),

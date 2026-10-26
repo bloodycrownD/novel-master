@@ -7,14 +7,7 @@
 import type { TokenizerOverride } from "@/infra/tokenizer/logic/resolve-tokenizer-family.js";
 
 /** Modes shown in model settings UI and CLI `--tokenCounterMode`. */
-export const TOKEN_COUNTER_MODE_OPTIONS = [
-  "auto",
-  "tiktoken",
-  "claude",
-  "gemma",
-  "llama3",
-  "mistral",
-] as const satisfies readonly TokenizerOverride[];
+export const TOKEN_COUNTER_MODE_OPTIONS = ["auto", "tiktoken", "claude", "gemma", "llama3", "mistral"] as const satisfies readonly TokenizerOverride[];
 
 /** Value + Chinese label for model settings select (value persisted to DB). */
 export const TOKEN_COUNTER_MODE_SELECT_OPTIONS: ReadonlyArray<{

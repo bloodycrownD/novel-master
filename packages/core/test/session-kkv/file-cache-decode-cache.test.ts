@@ -17,28 +17,16 @@ import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
 import { SESSION_KKV_DOMAIN_FILE_CACHE } from "@/domain/session-kkv/model/session-kkv-domains.js";
-import {
-  parseFileCachePayload,
-  serializeFileCachePayload,
-} from "@/domain/workplace/logic/rule-snapshot-codec.js";
+import { parseFileCachePayload, serializeFileCachePayload, type FileCachePayload } from "@/domain/workplace/logic/rule-snapshot-codec.js";
 import { clearDecodedContentCaches } from "@/infra/content-cache/logic/decoded-content-cache.js";
-import {
-  openSqlCountingNovelMasterTestConnection,
-  type SqlCounter,
-} from "../helpers/sql-counting-connection.js";
+import { openSqlCountingNovelMasterTestConnection, type SqlCounter } from "../helpers/sql-counting-connection.js";
 import type { NovelMasterTestContext } from "../helpers/novel-master.js";
-import {
-  getNovelMasterTestContext,
-  novelMasterTestFixture,
-  testIsolationSuffix,
-} from "../helpers/novel-master-fixture.js";
+import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 
 // SQL 计数用例要一条自己的连接（fixture 的 ctx.conn 未装饰）。
-let countingCtx:
-  | (NovelMasterTestContext & { readonly counter: SqlCounter })
-  | undefined;
+let countingCtx: (NovelMasterTestContext & { readonly counter: SqlCounter }) | undefined;
 before(async () => {
   countingCtx = await openSqlCountingNovelMasterTestConnection();
 });
@@ -47,11 +35,15 @@ after(async () => {
   countingCtx = undefined;
 });
 
+/** 解析必须成功（非法载荷直接让用例红），返回载荷本体。 */
+function parsePayload(raw: string): FileCachePayload {
+  const parsed = parseFileCachePayload(raw);
+  assert.ok(parsed.ok);
+  return parsed.value;
+}
+
 /** 把 file_cache blob 行的指定 hash 换成解压必失败的字节。 */
-async function corruptFileCacheBlob(
-  conn: { execute(sql: string, params?: readonly unknown[]): Promise<unknown> },
-  contentHash: string
-): Promise<void> {
+async function corruptFileCacheBlob(conn: { execute(sql: string, params?: readonly unknown[]): Promise<unknown> }, contentHash: string): Promise<void> {
   await conn.execute(
     `UPDATE session_file_cache_blob SET bytes = ?, encoding = 'zlib'
      WHERE content_hash = ?`,
@@ -60,11 +52,7 @@ async function corruptFileCacheBlob(
 }
 
 /** 取某会话 file_cache 键当前指向的 content_hash。 */
-async function entryHash(
-  conn: { query<T extends Record<string, unknown>>(sql: string, params?: readonly unknown[]): Promise<T[]> },
-  sessionId: string,
-  key: string
-): Promise<string> {
+async function entryHash(conn: { query<T extends Record<string, unknown>>(sql: string, params?: readonly unknown[]): Promise<T[]> }, sessionId: string, key: string): Promise<string> {
   const rows = await conn.query<{ content_hash: string }>(
     `SELECT content_hash FROM session_file_cache_entry
      WHERE session_id = ? AND key = ?`,
@@ -83,18 +71,9 @@ describe("file_cache × 进程内解压产物层", () => {
     const key = `full:/正文-${testIsolationSuffix()}.md`;
     const body = `文件正文-${testIsolationSuffix()}：${"段落内容\n".repeat(70)}`;
 
-    await sessionKkv.set(
-      sessionId,
-      SESSION_KKV_DOMAIN_FILE_CACHE,
-      key,
-      serializeFileCachePayload({ body, mtimeMs: 1000 })
-    );
-    const first = await sessionKkv.get(
-      sessionId,
-      SESSION_KKV_DOMAIN_FILE_CACHE,
-      key
-    );
-    assert.equal(parseFileCachePayload(first!)!.body, body);
+    await sessionKkv.set(sessionId, SESSION_KKV_DOMAIN_FILE_CACHE, key, serializeFileCachePayload({ body, mtimeMs: 1000 }));
+    const first = await sessionKkv.get(sessionId, SESSION_KKV_DOMAIN_FILE_CACHE, key);
+    assert.equal(parsePayload(first!).body, body);
 
     const hash = await entryHash(conn, sessionId, key);
     await corruptFileCacheBlob(conn, hash);
@@ -105,21 +84,14 @@ describe("file_cache × 进程内解压产物层", () => {
        WHERE session_id = ? AND key = ?`,
       [sessionId, key]
     );
-    const second = await sessionKkv.get(
-      sessionId,
-      SESSION_KKV_DOMAIN_FILE_CACHE,
-      key
-    );
-    const payload = parseFileCachePayload(second!)!;
+    const second = await sessionKkv.get(sessionId, SESSION_KKV_DOMAIN_FILE_CACHE, key);
+    const payload = parsePayload(second!);
     assert.equal(payload.body, body, "正文命中内存层（blob 已投毒）");
     assert.equal(payload.mtimeMs, 2000, "mtime 是行上的新值，不是缓存里的旧值");
 
     // 反向锁：清池后再读 → 投毒的 blob 解压失败 → 按 miss 自愈返回 null
     clearDecodedContentCaches();
-    assert.equal(
-      await sessionKkv.get(sessionId, SESSION_KKV_DOMAIN_FILE_CACHE, key),
-      null
-    );
+    assert.equal(await sessionKkv.get(sessionId, SESSION_KKV_DOMAIN_FILE_CACHE, key), null);
   });
 
   it("getMany：部分命中时命中项不吃投毒、未命中项照常解压", async () => {
@@ -132,43 +104,18 @@ describe("file_cache × 进程内解压产物层", () => {
     const cachedBody = `已读正文-${testIsolationSuffix()}`;
     const freshBody = `未读正文-${testIsolationSuffix()}`;
 
-    await sessionKkv.set(
-      sessionId,
-      SESSION_KKV_DOMAIN_FILE_CACHE,
-      cachedKey,
-      serializeFileCachePayload({ body: cachedBody, mtimeMs: 11 })
-    );
-    await sessionKkv.set(
-      sessionId,
-      SESSION_KKV_DOMAIN_FILE_CACHE,
-      freshKey,
-      serializeFileCachePayload({ body: freshBody, mtimeMs: 22 })
-    );
+    await sessionKkv.set(sessionId, SESSION_KKV_DOMAIN_FILE_CACHE, cachedKey, serializeFileCachePayload({ body: cachedBody, mtimeMs: 11 }));
+    await sessionKkv.set(sessionId, SESSION_KKV_DOMAIN_FILE_CACHE, freshKey, serializeFileCachePayload({ body: freshBody, mtimeMs: 22 }));
 
     // 只把 cachedKey 读一次（进池），freshKey 保持未读
-    const single = await sessionKkv.get(
-      sessionId,
-      SESSION_KKV_DOMAIN_FILE_CACHE,
-      cachedKey
-    );
-    assert.equal(parseFileCachePayload(single!)!.body, cachedBody);
+    const single = await sessionKkv.get(sessionId, SESSION_KKV_DOMAIN_FILE_CACHE, cachedKey);
+    assert.equal(parsePayload(single!).body, cachedBody);
     const cachedHash = await entryHash(conn, sessionId, cachedKey);
     await corruptFileCacheBlob(conn, cachedHash);
 
-    const batch = await sessionKkv.getMany(sessionId, SESSION_KKV_DOMAIN_FILE_CACHE, [
-      cachedKey,
-      freshKey,
-    ]);
-    assert.equal(
-      parseFileCachePayload(batch.get(cachedKey)!)!.body,
-      cachedBody,
-      "命中项走内存（blob 已投毒）"
-    );
-    assert.equal(
-      parseFileCachePayload(batch.get(freshKey)!)!.body,
-      freshBody,
-      "未命中项照常读库解压"
-    );
+    const batch = await sessionKkv.getMany(sessionId, SESSION_KKV_DOMAIN_FILE_CACHE, [cachedKey, freshKey]);
+    assert.equal(parsePayload(batch.get(cachedKey)!).body, cachedBody, "命中项走内存（blob 已投毒）");
+    assert.equal(parsePayload(batch.get(freshKey)!).body, freshBody, "未命中项照常读库解压");
   });
 
   it("全命中时连 blob 表 SQL 都不发（workplace 批次读形态）", async () => {
@@ -191,39 +138,19 @@ describe("file_cache × 进程内解压产物层", () => {
 
     // 第一次读：entry 行 + blob 行各一趟
     ctx.counter.clear();
-    const first = await sessionKkv.getMany(
-      sessionId,
-      SESSION_KKV_DOMAIN_FILE_CACHE,
-      keys
-    );
+    const first = await sessionKkv.getMany(sessionId, SESSION_KKV_DOMAIN_FILE_CACHE, keys);
     assert.equal(first.size, 3);
-    assert.equal(
-      ctx.counter.countBySubstring("FROM session_file_cache_blob"),
-      1,
-      "首读（池空）要发一趟 blob 批量查询"
-    );
+    assert.equal(ctx.counter.countBySubstring("FROM session_file_cache_blob"), 1, "首读（池空）要发一趟 blob 批量查询");
 
     // 第二次读：正文全在内存 → blob 查询一条都不发（entry 行照查，它是身份来源）。
     // 按键逐条比对（Map 迭代序不是缓存语义的一部分）。
     ctx.counter.clear();
-    const second = await sessionKkv.getMany(
-      sessionId,
-      SESSION_KKV_DOMAIN_FILE_CACHE,
-      keys
-    );
+    const second = await sessionKkv.getMany(sessionId, SESSION_KKV_DOMAIN_FILE_CACHE, keys);
     assert.equal(second.size, first.size);
     for (const [key, value] of first) {
       assert.equal(second.get(key), value);
     }
-    assert.equal(
-      ctx.counter.countBySubstring("FROM session_file_cache_blob"),
-      0,
-      "全命中还发 blob 查询 = 内存层没接上（本用例的牙齿）"
-    );
-    assert.equal(
-      ctx.counter.countBySubstring("FROM session_file_cache_entry"),
-      1,
-      "entry 行查询保留（hash/mtime 的身份来源）"
-    );
+    assert.equal(ctx.counter.countBySubstring("FROM session_file_cache_blob"), 0, "全命中还发 blob 查询 = 内存层没接上（本用例的牙齿）");
+    assert.equal(ctx.counter.countBySubstring("FROM session_file_cache_entry"), 1, "entry 行查询保留（hash/mtime 的身份来源）");
   });
 });

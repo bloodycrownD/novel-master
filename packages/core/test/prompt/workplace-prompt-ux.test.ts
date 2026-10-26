@@ -5,25 +5,11 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { decode, encode, ConfigDecodeError } from "@novel-master/core";
 import { agentDefinitionSchema } from "@novel-master/core/agent";
-import {
-  DEFAULT_WORKPLACE_ASSISTANT_TEXT,
-  WORKPLACE_TRUE_COMPAT_ASSISTANT_TEXT,
-  buildPromptAssemblyFromLayout,
-  buildPromptLlmInputFromLayout,
-  messageBodyTextFromBlocks,
-  PromptError,
-} from "@novel-master/core/prompt";
-import {
-  assembleWorkplaceDisplay,
-  joinFileBlocks,
-  renderFileBlock,
-} from "@novel-master/core/workplace";
+import { DEFAULT_WORKPLACE_ASSISTANT_TEXT, WORKPLACE_TRUE_COMPAT_ASSISTANT_TEXT, buildPromptAssemblyFromLayout, buildPromptLlmInputFromLayout, messageBodyTextFromBlocks } from "@novel-master/core/prompt";
+import { assembleWorkplaceDisplay, joinFileBlocks, renderFileBlock } from "@novel-master/core/workplace";
 import { validateAgentPromptLayoutFromMaps } from "../../src/domain/prompt/logic/validate-agent-prompt-layout.js";
 import type { AgentPromptLayout } from "../../src/domain/prompt/model/agent-prompt-layout.js";
-import {
-  createMemorySessionKkv,
-  mockWorkplaceService,
-} from "../helpers/prompt-layout-test-helpers.js";
+import { createMemorySessionKkv, mockWorkplaceService } from "../helpers/prompt-layout-test-helpers.js";
 
 const fixedNow = new Date(2026, 4, 24, 9, 0, 0);
 const emptyPrompts = { persist: {}, dynamic: {} };
@@ -49,7 +35,7 @@ describe("workplace schema / wire（T-WP1–T-WP3）", () => {
         name: "compat",
         prompts: { ...emptyPrompts, workplace: true },
       },
-      agentDefinitionSchema,
+      agentDefinitionSchema
     );
     assert.equal(def.prompts.workplace, WORKPLACE_TRUE_COMPAT_ASSISTANT_TEXT);
     assert.equal(def.prompts.workplace, "【done】");
@@ -65,7 +51,7 @@ describe("workplace schema / wire（T-WP1–T-WP3）", () => {
           workplace: DEFAULT_WORKPLACE_ASSISTANT_TEXT,
         },
       },
-      agentDefinitionSchema,
+      agentDefinitionSchema
     );
     assert.equal(def.prompts.workplace, DEFAULT_WORKPLACE_ASSISTANT_TEXT);
     const wire = encode(def, agentDefinitionSchema) as {
@@ -84,19 +70,15 @@ describe("workplace schema / wire（T-WP1–T-WP3）", () => {
             name: "empty",
             prompts: { ...emptyPrompts, workplace: "" },
           },
-          agentDefinitionSchema,
+          agentDefinitionSchema
         ),
-      (e: unknown) =>
-        e instanceof ConfigDecodeError && /workplace/.test(e.message),
+      (e: unknown) => e instanceof ConfigDecodeError && /workplace/.test(e.message)
     );
-    assert.throws(
-      () =>
-        validateAgentPromptLayoutFromMaps({}, {}, undefined, {
-          workplace: "   ",
-        }),
-      (e: unknown) =>
-        e instanceof PromptError && /workplace/.test((e as Error).message),
-    );
+    const blank = validateAgentPromptLayoutFromMaps({}, {}, undefined, {
+      workplace: "   ",
+    });
+    assert.ok(!blank.ok);
+    assert.match(blank.error.message, /workplace/);
   });
 });
 
@@ -137,7 +119,7 @@ describe("workplace assemble / render（T-WP4–T-WP5）", () => {
         workplace: mockWorkplaceService(""),
         vfs: { read: async () => ({ content: "x", mtimeMs: 1 }) } as never,
         layout,
-      },
+      }
     );
     assert.equal(emptyOut.workplaceDisplay, "");
   });

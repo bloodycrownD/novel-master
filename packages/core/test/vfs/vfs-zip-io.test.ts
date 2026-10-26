@@ -3,10 +3,7 @@ import { describe, it } from "node:test";
 import { unzipSync, zipSync } from "fflate";
 import { createVfsZipIoService, VfsZipError } from "@novel-master/core/vfs";
 import { isVfsError } from "../../src/errors/vfs-errors.js";
-import {
-  createCharacterCardImportService,
-  type VfsService,
-} from "@novel-master/core/vfs";
+import { createCharacterCardImportService, type VfsService } from "@novel-master/core/vfs";
 import { parseCharacterCardToMdTree } from "../../src/domain/character-card/logic/character-card-to-md-tree.js";
 import { buildVfsZip } from "../../src/domain/vfs/logic/vfs-zip-build.js";
 import { SqliteVfsContentStore } from "../../src/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
@@ -15,14 +12,10 @@ import { SqliteWorkplaceRepository } from "../../src/domain/workplace/repositori
 import type { WorkplaceDirRule } from "../../src/domain/workplace/model/workplace-types.js";
 import type { WorkplaceRepository } from "../../src/domain/workplace/repositories/workplace.port.js";
 import { decodeUtf8Entry } from "../../src/domain/vfs/logic/vfs-zip-validate.js";
-import {
-  SESSION_KKV_DOMAIN_FILE_CACHE,
-  SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
-} from "../../src/domain/session-kkv/model/session-kkv-domains.js";
+import { SESSION_KKV_DOMAIN_FILE_CACHE, SESSION_KKV_DOMAIN_RULE_SNAPSHOT } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
 import { sessionApiPromptTokenCache } from "../../src/infra/tokenizer/logic/session-api-prompt-token-cache.js";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 import { buildGbkFilenameZip } from "./helpers/gbk-zip-fixture.js";
-
 
 async function listFilePaths(vfs: VfsService, dir = "/"): Promise<string[]> {
   const entries = await vfs.list(dir, { recursive: true });
@@ -31,7 +24,6 @@ async function listFilePaths(vfs: VfsService, dir = "/"): Promise<string[]> {
     .map((entry) => entry.path)
     .sort();
 }
-
 
 novelMasterTestFixture();
 
@@ -51,15 +43,9 @@ describe("VfsZipIoService", () => {
       sessionId: session.id,
     });
     const entries = unzipSync(bytes);
-    assert.equal(
-      new TextDecoder().decode(entries["plain.md"]!),
-      "中文正文-zip-io1",
-    );
+    assert.equal(new TextDecoder().decode(entries["plain.md"]!), "中文正文-zip-io1");
     assert.equal(new TextDecoder().decode(entries["empty.md"]!), "");
-    assert.notEqual(
-      new TextDecoder().decode(entries["plain.md"]!),
-      "null",
-    );
+    assert.notEqual(new TextDecoder().decode(entries["plain.md"]!), "null");
   });
 
   it("Z2: global export has no projects/ prefix", async () => {
@@ -81,11 +67,7 @@ describe("VfsZipIoService", () => {
     await vfs.write("/old.md", "old");
 
     const zipSvc = createVfsZipIoService(ctx.conn);
-    await zipSvc.import(
-      { kind: "session", projectId: project.id, sessionId: session.id },
-      buildVfsZip(new Map([["new.md", "new"]])),
-      { confirmed: true },
-    );
+    await zipSvc.import({ kind: "session", projectId: project.id, sessionId: session.id }, buildVfsZip(new Map([["new.md", "new"]])), { confirmed: true });
 
     await assert.rejects(() => vfs.read("/old.md"));
     const read = await vfs.read("/new.md");
@@ -120,28 +102,22 @@ describe("VfsZipIoService", () => {
     const oldHash = await new SqliteVfsContentStore(ctx.conn).put(oldBody);
 
     const zipSvc = createVfsZipIoService(ctx.conn);
-    await zipSvc.import(
-      { kind: "session", projectId: project.id, sessionId: session.id },
-      buildVfsZip(new Map([["new.md", `zip-gc-residue-new-${suffix}`]])),
-      { confirmed: true },
-    );
+    await zipSvc.import({ kind: "session", projectId: project.id, sessionId: session.id }, buildVfsZip(new Map([["new.md", `zip-gc-residue-new-${suffix}`]])), { confirmed: true });
 
     const residue = await ctx.conn.query<{ n: number }>(
       `SELECT COUNT(*) AS n FROM vfs_content_blob
        WHERE content_hash = ? AND ref_count <= 0`,
-      [oldHash],
+      [oldHash]
     );
-    assert.equal(
-      Number(residue[0]!.n),
-      0,
-      "zip 导入替换后不应残留 ref_count<=0 的 blob 行（本链不调 runDeferredBlobGc）",
-    );
+    assert.equal(Number(residue[0]!.n), 0, "zip 导入替换后不应残留 ref_count<=0 的 blob 行（本链不调 runDeferredBlobGc）");
   });
 
   it("markdown front matter passes UTF-8 zip validation", () => {
     const content = "---\ntitle: x\n---\n# Hi\n";
     const bytes = new TextEncoder().encode(content);
-    assert.equal(decodeUtf8Entry(bytes, "xxx.md"), content);
+    const decoded = decodeUtf8Entry(bytes, "xxx.md");
+    assert.ok(decoded.ok);
+    assert.equal(decoded.value, content);
   });
 
   it("Z4: invalid UTF-8 rejects import without changing domain", async () => {
@@ -156,14 +132,8 @@ describe("VfsZipIoService", () => {
       "bad.md": new Uint8Array([0xff, 0xfe, 0x80]),
     });
     await assert.rejects(
-      () =>
-        zipSvc.import(
-          { kind: "session", projectId: project.id, sessionId: session.id },
-          invalidUtf8Zip,
-          { confirmed: true },
-        ),
-      (e: unknown) =>
-        e instanceof VfsZipError && e.code === "INVALID_UTF8",
+      () => zipSvc.import({ kind: "session", projectId: project.id, sessionId: session.id }, invalidUtf8Zip, { confirmed: true }),
+      (e: unknown) => e instanceof VfsZipError && e.code === "INVALID_UTF8"
     );
 
     const still = await vfs.read("/keep.md");
@@ -187,25 +157,20 @@ describe("VfsZipIoService", () => {
       new Map([
         ["before.md", "mutated"],
         ["new.md", "new"],
-      ]),
+      ])
     );
 
     // 测试钩子直抛分支绕过了 IMPORT_FAILED 包装 ⇒ 抛出的是原始 Error。
     await assert.rejects(
-      () =>
-        zipSvc.import(
-          { kind: "session", projectId: project.id, sessionId: session.id },
-          zipBytes,
-          { confirmed: true },
-        ),
-      (e: unknown) => e instanceof Error && e.message === "test import failure",
+      () => zipSvc.import({ kind: "session", projectId: project.id, sessionId: session.id }, zipBytes, { confirmed: true }),
+      (e: unknown) => e instanceof Error && e.message === "test import failure"
     );
 
     await assert.rejects(() => vfs.read("/new.md"));
     // 补偿把目标前缀清空（releaseAndDeleteVfsPrefix）⇒ 旧内容不再存在。
     await assert.rejects(
       () => vfs.read("/before.md"),
-      (e: unknown) => isVfsError(e, "NOT_FOUND"),
+      (e: unknown) => isVfsError(e, "NOT_FOUND")
     );
   });
 
@@ -219,14 +184,8 @@ describe("VfsZipIoService", () => {
     const zipSvc = createVfsZipIoService(ctx.conn);
     const zipBytes = buildVfsZip(new Map([["other.md", "x"]]));
     await assert.rejects(
-      () =>
-        zipSvc.import(
-          { kind: "session", projectId: project.id, sessionId: session.id },
-          zipBytes,
-          { confirmed: false },
-        ),
-      (e: unknown) =>
-        e instanceof VfsZipError && e.code === "NOT_CONFIRMED",
+      () => zipSvc.import({ kind: "session", projectId: project.id, sessionId: session.id }, zipBytes, { confirmed: false }),
+      (e: unknown) => e instanceof VfsZipError && e.code === "NOT_CONFIRMED"
     );
     const read = await vfs.read("/stay.md");
     assert.equal(read.content, "stay");
@@ -245,10 +204,8 @@ describe("VfsZipIoService", () => {
     await vfs.mkdir("/test");
     await vfs.write("/note.md", "x");
     assert.ok(
-      (await vfs.list("/")).some(
-        (e) => e.kind === "directory" && e.path === "/test",
-      ),
-      "mkdir should create /test directory row",
+      (await vfs.list("/")).some((e) => e.kind === "directory" && e.path === "/test"),
+      "mkdir should create /test directory row"
     );
 
     const zipSvc = createVfsZipIoService(ctx.conn);
@@ -264,7 +221,7 @@ describe("VfsZipIoService", () => {
     const entries = await vfs.list("/", { recursive: false });
     assert.ok(
       entries.some((e) => e.kind === "directory" && e.path === "/test"),
-      "empty directory /test should exist after import",
+      "empty directory /test should exist after import"
     );
     assert.equal((await vfs.read("/note.md")).content, "x");
   });
@@ -300,7 +257,7 @@ describe("VfsZipIoService", () => {
       new Map([
         ["alpha.md", "alpha"],
         ["dir/beta.md", "beta"],
-      ]),
+      ])
     );
     const zipSvc = createVfsZipIoService(ctx.conn);
     const scopeA = {
@@ -338,14 +295,8 @@ describe("VfsZipIoService", () => {
       "bad.md": new Uint8Array([0xff, 0xfe, 0x80]),
     });
     await assert.rejects(
-      () =>
-        zipSvc.import(
-          { kind: "session", projectId: project.id, sessionId: session.id },
-          invalidUtf8Zip,
-          { confirmed: true },
-        ),
-      (e: unknown) =>
-        e instanceof VfsZipError && e.code === "INVALID_UTF8",
+      () => zipSvc.import({ kind: "session", projectId: project.id, sessionId: session.id }, invalidUtf8Zip, { confirmed: true }),
+      (e: unknown) => e instanceof VfsZipError && e.code === "INVALID_UTF8"
     );
     assert.equal(deleteReached, false);
   });
@@ -366,14 +317,8 @@ describe("VfsZipIoService", () => {
       "../escape.md": new TextEncoder().encode("x"),
     });
     await assert.rejects(
-      () =>
-        zipSvc.import(
-          { kind: "session", projectId: project.id, sessionId: session.id },
-          zipWithParent,
-          { confirmed: true },
-        ),
-      (e: unknown) =>
-        e instanceof VfsZipError && e.code === "INVALID_PATH",
+      () => zipSvc.import({ kind: "session", projectId: project.id, sessionId: session.id }, zipWithParent, { confirmed: true }),
+      (e: unknown) => e instanceof VfsZipError && e.code === "INVALID_PATH"
     );
     assert.equal(deleteReached, false);
   });
@@ -389,11 +334,7 @@ describe("VfsZipIoService", () => {
     const names = Object.keys(unzipSync(bytes));
     assert.ok(names.includes("t.md"));
 
-    await zipSvc.import(
-      { kind: "project", projectId: project.id },
-      buildVfsZip(new Map([["t.md", "T2"]])),
-      { confirmed: true },
-    );
+    await zipSvc.import({ kind: "project", projectId: project.id }, buildVfsZip(new Map([["t.md", "T2"]])), { confirmed: true });
     const read = await pvfs.read("/t.md");
     assert.equal(read.content, "T2");
   });
@@ -405,7 +346,7 @@ describe("VfsZipIoService", () => {
         ["readme.md", "ok"],
         ["__MACOSX/._readme.md", ""],
         [".DS_Store", ""],
-      ]),
+      ])
     );
     const zipSvc = createVfsZipIoService(ctx.conn);
     await zipSvc.import({ kind: "global" }, zip, { confirmed: true });
@@ -428,11 +369,7 @@ describe("VfsZipIoService", () => {
       sessionId: session.id,
     });
 
-    await zipSvc.import(
-      { kind: "project", projectId: project.id },
-      zipBytes,
-      { confirmed: true },
-    );
+    await zipSvc.import({ kind: "project", projectId: project.id }, zipBytes, { confirmed: true });
 
     const pvfs = ctx.projectVfs(project.id);
     const read = await pvfs.read("/ddd/love_message.txt");
@@ -450,9 +387,7 @@ describe("VfsZipIoService", () => {
       sessionId: session.id,
     };
     const logicalPath = "笔记/第一章.md";
-    const zipBytes = buildGbkFilenameZip([
-      { logicalPath, content: "GBK 正文" },
-    ]);
+    const zipBytes = buildGbkFilenameZip([{ logicalPath, content: "GBK 正文" }]);
 
     const zipSvc = createVfsZipIoService(ctx.conn);
     await zipSvc.import(scope, zipBytes, { confirmed: true });
@@ -570,7 +505,7 @@ describe("VfsZipIoService", () => {
           confirmed: false,
           directoryPath: "/a",
         }),
-      (e: unknown) => e instanceof VfsZipError && e.code === "NOT_CONFIRMED",
+      (e: unknown) => e instanceof VfsZipError && e.code === "NOT_CONFIRMED"
     );
 
     const invalidUtf8Zip = zipSync({
@@ -582,7 +517,7 @@ describe("VfsZipIoService", () => {
           confirmed: true,
           directoryPath: "/a",
         }),
-      (e: unknown) => e instanceof VfsZipError && e.code === "INVALID_UTF8",
+      (e: unknown) => e instanceof VfsZipError && e.code === "INVALID_UTF8"
     );
 
     assert.equal((await vfs.read("/a/stay.txt")).content, "stay-a");
@@ -617,7 +552,7 @@ describe("VfsZipIoService", () => {
           confirmed: true,
           directoryPath: "/a",
         }),
-      (e: unknown) => e instanceof VfsZipError && e.code === "INVALID_PATH",
+      (e: unknown) => e instanceof VfsZipError && e.code === "INVALID_PATH"
     );
     assert.equal(deleteReached, false);
     assert.equal((await vfs.read("/a/keep.txt")).content, "keep");
@@ -650,11 +585,11 @@ describe("VfsZipIoService", () => {
             new Map([
               ["a/foo.txt", "foo"],
               ["a/bar.md", "bar"],
-            ]),
+            ])
           ),
-          { confirmed: true, directoryPath: "/a" },
+          { confirmed: true, directoryPath: "/a" }
         ),
-      (e: unknown) => e instanceof VfsZipError && e.code === "INVALID_PATH",
+      (e: unknown) => e instanceof VfsZipError && e.code === "INVALID_PATH"
     );
     assert.equal(deleteReached, false);
     assert.equal((await vfs.read("/a/keep.txt")).content, "keep");
@@ -674,20 +609,16 @@ describe("VfsZipIoService", () => {
     await vfs.write("/note.md", "note");
 
     const zipSvc = createVfsZipIoService(ctx.conn);
-    const assertInvalidPath = (e: unknown) =>
-      e instanceof VfsZipError && e.code === "INVALID_PATH";
+    const assertInvalidPath = (e: unknown) => e instanceof VfsZipError && e.code === "INVALID_PATH";
 
-    await assert.rejects(
-      () => zipSvc.export(scope, { directoryPath: "/note.md" }),
-      assertInvalidPath,
-    );
+    await assert.rejects(() => zipSvc.export(scope, { directoryPath: "/note.md" }), assertInvalidPath);
     await assert.rejects(
       () =>
         zipSvc.import(scope, buildVfsZip(new Map([["x.txt", "x"]])), {
           confirmed: true,
           directoryPath: "/note.md",
         }),
-      assertInvalidPath,
+      assertInvalidPath
     );
     assert.equal((await vfs.read("/note.md")).content, "note");
   });
@@ -715,7 +646,7 @@ describe("VfsZipIoService", () => {
     const rootEntries = await vfs.list("/", { recursive: false });
     assert.ok(
       rootEntries.some((e) => e.kind === "directory" && e.path === "/a"),
-      "empty ZIP import should retain /a directory row",
+      "empty ZIP import should retain /a directory row"
     );
     await assert.rejects(() => vfs.read("/a/old.txt"));
     assert.equal((await vfs.read("/b/sib.txt")).content, "sib");
@@ -756,18 +687,8 @@ describe("VfsZipIoService", () => {
       sessionId: session.id,
     };
 
-    await ctx.sessionKkv.set(
-      session.id,
-      SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
-      "canon",
-      "snap",
-    );
-    await ctx.sessionKkv.set(
-      session.id,
-      SESSION_KKV_DOMAIN_FILE_CACHE,
-      "full:/a.md",
-      "a",
-    );
+    await ctx.sessionKkv.set(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, "canon", "snap");
+    await ctx.sessionKkv.set(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, "full:/a.md", "a");
     sessionApiPromptTokenCache.set(session.id, {
       promptTokens: 88,
       updatedAt: Date.now(),
@@ -779,14 +700,8 @@ describe("VfsZipIoService", () => {
     });
 
     assert.equal((await vfs.read("/a.md")).content, "zip-a");
-    assert.deepEqual(
-      await ctx.sessionKkv.listKeys(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT),
-      [],
-    );
-    assert.deepEqual(
-      await ctx.sessionKkv.listKeys(session.id, SESSION_KKV_DOMAIN_FILE_CACHE),
-      [],
-    );
+    assert.deepEqual(await ctx.sessionKkv.listKeys(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT), []);
+    assert.deepEqual(await ctx.sessionKkv.listKeys(session.id, SESSION_KKV_DOMAIN_FILE_CACHE), []);
     assert.equal(sessionApiPromptTokenCache.get(session.id), undefined);
   });
 
@@ -796,39 +711,19 @@ describe("VfsZipIoService", () => {
     // session 仅用来埋脏数据；导入走 global scope（非 session kind，三件套不触发）
     const session = await ctx.sessions.create(project.id);
 
-    await ctx.sessionKkv.set(
-      session.id,
-      SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
-      "canon",
-      "snap",
-    );
-    await ctx.sessionKkv.set(
-      session.id,
-      SESSION_KKV_DOMAIN_FILE_CACHE,
-      "full:/a.md",
-      "a",
-    );
+    await ctx.sessionKkv.set(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, "canon", "snap");
+    await ctx.sessionKkv.set(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, "full:/a.md", "a");
     sessionApiPromptTokenCache.set(session.id, {
       promptTokens: 12,
       updatedAt: Date.now(),
     });
 
     const zipSvc = createVfsZipIoService(ctx.conn);
-    await zipSvc.import(
-      { kind: "global" },
-      buildVfsZip(new Map([["readme.md", "global-r"]])),
-      { confirmed: true },
-    );
+    await zipSvc.import({ kind: "global" }, buildVfsZip(new Map([["readme.md", "global-r"]])), { confirmed: true });
 
     assert.equal((await ctx.globalVfs().read("/readme.md")).content, "global-r");
-    assert.deepEqual(
-      await ctx.sessionKkv.listKeys(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT),
-      ["canon"],
-    );
-    assert.deepEqual(
-      await ctx.sessionKkv.listKeys(session.id, SESSION_KKV_DOMAIN_FILE_CACHE),
-      ["full:/a.md"],
-    );
+    assert.deepEqual(await ctx.sessionKkv.listKeys(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT), ["canon"]);
+    assert.deepEqual(await ctx.sessionKkv.listKeys(session.id, SESSION_KKV_DOMAIN_FILE_CACHE), ["full:/a.md"]);
     assert.ok(sessionApiPromptTokenCache.get(session.id) != null);
   });
 
@@ -848,12 +743,7 @@ describe("VfsZipIoService", () => {
       projectId: project.id,
       sessionId: session.id,
     };
-    await ctx.sessionKkv.set(
-      session.id,
-      SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
-      "canon",
-      "snap",
-    );
+    await ctx.sessionKkv.set(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, "canon", "snap");
     sessionApiPromptTokenCache.set(session.id, {
       promptTokens: 5,
       updatedAt: Date.now(),
@@ -861,10 +751,7 @@ describe("VfsZipIoService", () => {
     await zipSvc.import(scope, buildVfsZip(new Map([["b.md", "b"]])), {
       confirmed: true,
     });
-    assert.deepEqual(
-      await ctx.sessionKkv.listKeys(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT),
-      [],
-    );
+    assert.deepEqual(await ctx.sessionKkv.listKeys(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT), []);
     assert.equal(sessionApiPromptTokenCache.get(session.id), undefined);
 
     const session2 = await ctx.sessions.create(project.id);
@@ -873,34 +760,19 @@ describe("VfsZipIoService", () => {
       projectId: project.id,
       sessionId: session2.id,
     };
-    await ctx.sessionKkv.set(
-      session2.id,
-      SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
-      "canon",
-      "snap",
-    );
+    await ctx.sessionKkv.set(session2.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, "canon", "snap");
     const parsedCard = parseCharacterCardToMdTree(
       JSON.stringify({
         spec: "chara_card_v2",
         data: { description: "d" },
-      }),
+      })
     );
     assert.equal(parsedCard.ok, true);
     if (!parsedCard.ok) {
       return;
     }
-    await cardSvc.import(
-      scope2,
-      parsedCard.value,
-      { confirmed: true, directoryPath: "/角色" },
-    );
-    assert.deepEqual(
-      await ctx.sessionKkv.listKeys(
-        session2.id,
-        SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
-      ),
-      [],
-    );
+    await cardSvc.import(scope2, parsedCard.value, { confirmed: true, directoryPath: "/角色" });
+    assert.deepEqual(await ctx.sessionKkv.listKeys(session2.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT), []);
   });
 
   it("T-I2: ZIP 导入后前缀下全部目录（显式 directories 与隐式父链、深嵌套）默认启用并参与裁剪", async () => {
@@ -923,19 +795,13 @@ describe("VfsZipIoService", () => {
           ["设定集/显式目录条目.md", "显式"],
           ["世界书/章节/深层/设定.md", "深层设定"],
         ]),
-        ["设定集/"],
+        ["设定集/"]
       ),
-      { confirmed: true, directoryPath: "/角色" },
+      { confirmed: true, directoryPath: "/角色" }
     );
 
     const wt = createWorkplaceService(ctx.conn, scope);
-    for (const dir of [
-      "/角色",
-      "/角色/设定集",
-      "/角色/世界书",
-      "/角色/世界书/章节",
-      "/角色/世界书/章节/深层",
-    ]) {
+    for (const dir of ["/角色", "/角色/设定集", "/角色/世界书", "/角色/世界书/章节", "/角色/世界书/章节/深层"]) {
       const rule = await wt.getDirRule(dir);
       assert.ok(rule, `${dir} 应有默认规则行`);
       assert.equal(rule.ruleEnabled, true, `${dir} 应默认启用`);
@@ -950,10 +816,7 @@ describe("VfsZipIoService", () => {
     const view = await wt.materializeLiveView();
     assert.ok(view.filetreeDisplay.includes("设定.md"));
     assert.ok(view.filetreeDisplay.includes("显式目录条目.md"));
-    assert.equal(
-      (await vfs.read("/角色/世界书/章节/深层/设定.md")).content,
-      "深层设定",
-    );
+    assert.equal((await vfs.read("/角色/世界书/章节/深层/设定.md")).content, "深层设定");
   });
 
   it("T-I3: ZIP 导入后已有规则行（rule_off 与自定义 headCount）不被覆盖", async () => {
@@ -979,11 +842,7 @@ describe("VfsZipIoService", () => {
     await wt.setDirRule({ logicalPath: "/角色/世界书", ruleEnabled: false });
 
     const zipSvc = createVfsZipIoService(ctx.conn);
-    await zipSvc.import(
-      scope,
-      buildVfsZip(new Map([["世界书/设定.md", "设定"]])),
-      { confirmed: true, directoryPath: "/角色" },
-    );
+    await zipSvc.import(scope, buildVfsZip(new Map([["世界书/设定.md", "设定"]])), { confirmed: true, directoryPath: "/角色" });
 
     const after = await wt.getDirRule("/角色");
     assert.ok(after);
@@ -1014,18 +873,13 @@ describe("VfsZipIoService", () => {
           ["设定集/显式目录条目.md", "显式"],
           ["世界书/章节/深层/设定.md", "深层设定"],
         ]),
-        ["设定集/"],
+        ["设定集/"]
       ),
-      { confirmed: true, directoryPath: "/" },
+      { confirmed: true, directoryPath: "/" }
     );
 
     const wt = createWorkplaceService(ctx.conn, scope);
-    for (const dir of [
-      "/设定集",
-      "/世界书",
-      "/世界书/章节",
-      "/世界书/章节/深层",
-    ]) {
+    for (const dir of ["/设定集", "/世界书", "/世界书/章节", "/世界书/章节/深层"]) {
       const rule = await wt.getDirRule(dir);
       assert.ok(rule, `${dir} 应有默认规则行`);
       assert.equal(rule.ruleEnabled, true, `${dir} 应默认启用`);
@@ -1036,10 +890,7 @@ describe("VfsZipIoService", () => {
     }
     // 根自身 / 不补规则行
     assert.equal(await wt.getDirRule("/"), undefined);
-    assert.equal(
-      (await vfs.read("/世界书/章节/深层/设定.md")).content,
-      "深层设定",
-    );
+    assert.equal((await vfs.read("/世界书/章节/深层/设定.md")).content, "深层设定");
   });
 
   it("T-Z9: 补规则行中途失败——已补目录保留、失败之后的目录仍补、导入整体成功", async () => {
@@ -1059,15 +910,14 @@ describe("VfsZipIoService", () => {
       testHook: {
         createWorkplaceRepo: (tx) =>
           ({
-            listDirRules: (scopeKey: string) =>
-              new SqliteWorkplaceRepository(tx).listDirRules(scopeKey),
+            listDirRules: (scopeKey: string) => new SqliteWorkplaceRepository(tx).listDirRules(scopeKey),
             upsertDirRule: async (rule: WorkplaceDirRule) => {
               if (rule.logicalPath === "/角色/世界书") {
                 throw new Error("boom-on-worldbook");
               }
               await new SqliteWorkplaceRepository(tx).upsertDirRule(rule);
             },
-          }) as unknown as WorkplaceRepository,
+          } as unknown as WorkplaceRepository),
       },
     });
     const originalWarn = console.warn;
@@ -1076,13 +926,7 @@ describe("VfsZipIoService", () => {
       warnCalls.push(args);
     };
     try {
-      await assert.doesNotReject(
-        zipSvc.import(
-          scope,
-          buildVfsZip(new Map([["世界书/章节/深层/设定.md", "深层设定"]])),
-          { confirmed: true, directoryPath: "/角色" },
-        ),
-      );
+      await assert.doesNotReject(zipSvc.import(scope, buildVfsZip(new Map([["世界书/章节/深层/设定.md", "深层设定"]])), { confirmed: true, directoryPath: "/角色" }));
     } finally {
       console.warn = originalWarn;
     }
@@ -1090,18 +934,11 @@ describe("VfsZipIoService", () => {
     // 仅失败目录触发一次 warn，导入整体成功
     assert.equal(warnCalls.length, 1);
     assert.match(String(warnCalls[0]![0]), /directory=\/角色\/世界书/);
-    assert.equal(
-      (await vfs.read("/角色/世界书/章节/深层/设定.md")).content,
-      "深层设定",
-    );
+    assert.equal((await vfs.read("/角色/世界书/章节/深层/设定.md")).content, "深层设定");
 
     // 失败之前的 /角色 与之后的章节链都有默认启用行，失败目录自身无行
     const wt = createWorkplaceService(ctx.conn, scope);
-    for (const dir of [
-      "/角色",
-      "/角色/世界书/章节",
-      "/角色/世界书/章节/深层",
-    ]) {
+    for (const dir of ["/角色", "/角色/世界书/章节", "/角色/世界书/章节/深层"]) {
       const rule = await wt.getDirRule(dir);
       assert.ok(rule, `${dir} 应有默认规则行`);
       assert.equal(rule.ruleEnabled, true, `${dir} 应默认启用`);
@@ -1111,9 +948,7 @@ describe("VfsZipIoService", () => {
 
   it("T-Z10: 补规则行语句真失败时不影响导入整体成功，ZIP 导入仍成功且文件完整", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(
-      `P-tz10-${testIsolationSuffix()}`,
-    );
+    const project = await ctx.projects.create(`P-tz10-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
     const scope = {
@@ -1128,12 +963,11 @@ describe("VfsZipIoService", () => {
       testHook: {
         createWorkplaceRepo: (tx) =>
           ({
-            listDirRules: (scopeKey: string) =>
-              new SqliteWorkplaceRepository(tx).listDirRules(scopeKey),
+            listDirRules: (scopeKey: string) => new SqliteWorkplaceRepository(tx).listDirRules(scopeKey),
             upsertDirRule: async () => {
               await tx.execute("INSERT INTO no_such_table_boom (id) VALUES (1)");
             },
-          }) as unknown as WorkplaceRepository,
+          } as unknown as WorkplaceRepository),
       },
     });
     await assert.doesNotReject(
@@ -1143,24 +977,17 @@ describe("VfsZipIoService", () => {
           new Map([
             ["a.md", "甲"],
             ["世界书/章节/深层/设定.md", "深层设定"],
-          ]),
+          ])
         ),
-        { confirmed: true, directoryPath: "/角色" },
-      ),
+        { confirmed: true, directoryPath: "/角色" }
+      )
     );
 
     // 已写文件完整保留
     assert.equal((await vfs.read("/角色/a.md")).content, "甲");
-    assert.equal(
-      (await vfs.read("/角色/世界书/章节/深层/设定.md")).content,
-      "深层设定",
-    );
+    assert.equal((await vfs.read("/角色/世界书/章节/深层/设定.md")).content, "深层设定");
     // 补行失败后 workplace 表无残留行（best-effort，不阻断也不留脏数据）
     const repo = new SqliteWorkplaceRepository(ctx.conn);
-    assert.deepEqual(
-      await repo.listDirRules(`session:${session.id}`),
-      [],
-    );
+    assert.deepEqual(await repo.listDirRules(`session:${session.id}`), []);
   });
-
 });

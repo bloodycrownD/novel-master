@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import * as coreMain from "@novel-master/core";
-import { createKkvService, KkvError } from "@novel-master/core/kkv";
+import { createKkvService, kkvNotFound } from "@novel-master/core/kkv";
 import {
   createAgentRegistryService,
   resolveAgentForProject,
@@ -64,9 +64,9 @@ describe("T0 package exports (@novel-master/core entry)", () => {
     assert.equal(mainEntry.createWorkplaceService, undefined);
   });
 
-  it("exports createKkvService and KkvError from @novel-master/core/kkv", async () => {
+  it("exports createKkvService and kkvNotFound from @novel-master/core/kkv", async () => {
     assert.equal(typeof createKkvService, "function");
-    assert.equal(KkvError.name, "KkvError");
+    assert.equal(kkvNotFound("m", "k").key, "KKV_NOT_FOUND");
 
     const ctx = getNovelMasterTestContext();
     const kkv = createKkvService(ctx.conn);

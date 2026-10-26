@@ -18,6 +18,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import { AppError } from "@/errors/app-error.js";
 import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
 import type { ChatMessageData } from "@/domain/chat/model/message.js";
 import {
@@ -83,9 +84,7 @@ interface MockResult {
 }
 
 function chatErrorNotFound(): Error {
-  const err = new Error(`session not found`) as Error & { code?: string };
-  err.code = "NOT_FOUND";
-  return err;
+  return new AppError("CHAT_NOT_FOUND", "session not found");
 }
 
 function makeSubagent(opts: MockOpts = {}): MockResult {

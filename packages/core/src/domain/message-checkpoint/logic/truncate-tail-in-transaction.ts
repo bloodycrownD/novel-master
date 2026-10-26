@@ -6,10 +6,7 @@
 
 import type { MessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/message-checkpoint.port.js";
 import type { MessageRepository } from "@/domain/chat/repositories/message.port.js";
-import {
-  SESSION_KKV_COMPOSER_STATUS_DOMAINS,
-  SESSION_KKV_DOMAIN_BACKFILL_CURSOR,
-} from "@/domain/session-kkv/model/session-kkv-domains.js";
+import { SESSION_KKV_COMPOSER_STATUS_DOMAINS, SESSION_KKV_DOMAIN_BACKFILL_CURSOR } from "@/domain/session-kkv/model/session-kkv-domains.js";
 import type { SessionKkvRepository } from "@/domain/session-kkv/repositories/session-kkv.port.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revision.port.js";
@@ -55,18 +52,12 @@ export type TruncateTailDeps = {
  *    调用方传 deferGlobalOrphanGc 时跳过全局孤儿那一半）
  * 4. 若 tail 非空 → 清 backfill 游标（seq 复用防线）+ 清空 Composer 无叉 chip 对应 kkv 域
  */
-export async function truncateTailInTransaction(
-  deps: TruncateTailDeps,
-  params: TruncateTailParams
-): Promise<void> {
+export async function truncateTailInTransaction(deps: TruncateTailDeps, params: TruncateTailParams): Promise<void> {
   const { projectId, sessionId, afterSeq, sweepRevisions, deferGlobalOrphanGc } = params;
 
   // 拉 tail（seq > afterSeq ⟺ seq >= afterSeq + 1）：id 列表删除链素材。
   // read 引用 −1（尾截断的消息不再持有 revision）已随 E1 清理版退役。
-  const tailMessages = await deps.messages.listBySessionFromSeq(
-    sessionId,
-    afterSeq + 1
-  );
+  const tailMessages = await deps.messages.listBySessionFromSeq(sessionId, afterSeq + 1);
   const tailIds = tailMessages.map((m) => m.id);
 
   if (tailIds.length > 0) {
@@ -79,24 +70,13 @@ export async function truncateTailInTransaction(
     // 孤儿兜底（全表 DELETE）。只有显式 deferGlobalOrphanGc 的调用方（回滚
     // 链）才把它移出事务，改由该调用方在事务提交后 fire-and-forget 调度
     // scheduleDeferredRevisionOrphanGc 补做。
-    await sweepSessionRevisions(
-      deps.revisions,
-      deps.entries,
-      deps.checkpoints,
-      projectId,
-      sessionId,
-      deps.conn,
-      deferGlobalOrphanGc === true ? {includeGlobalOrphans: false} : undefined
-    );
+    await sweepSessionRevisions(deps.revisions, deps.entries, deps.checkpoints, projectId, sessionId, deps.conn, deferGlobalOrphanGc === true ? { includeGlobalOrphans: false } : undefined);
   }
 
   if (tailIds.length > 0) {
     // 发生删除即清 backfill 游标（seq 复用防线）：tail 删除后新消息会复用被删
     // 的 seq，残留游标按行数圈段会错位——清掉让下次判定回退全量自愈。
-    await deps.sessionKkv.clearDomain(
-      sessionId,
-      SESSION_KKV_DOMAIN_BACKFILL_CURSOR
-    );
+    await deps.sessionKkv.clearDomain(sessionId, SESSION_KKV_DOMAIN_BACKFILL_CURSOR);
     for (const domain of SESSION_KKV_COMPOSER_STATUS_DOMAINS) {
       await deps.sessionKkv.clearDomain(sessionId, domain);
     }

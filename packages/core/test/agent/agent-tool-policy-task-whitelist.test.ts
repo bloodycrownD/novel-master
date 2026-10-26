@@ -2,9 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { registerBuiltinTools, ToolRegistry } from "@novel-master/core";
 
-import {
-  validateAgentToolPolicy,
-} from "@novel-master/core/agent";
+import { validateAgentToolPolicy } from "@novel-master/core/agent";
 import type { BuiltinToolContext } from "../../src/domain/tool/builtin/builtin-tool-context.js";
 
 function vfsRegistryNames(): Set<string> {
@@ -34,7 +32,7 @@ describe("validateAgentToolPolicy task 是合法工具（T-C4）", () => {
     if (result.ok) {
       return;
     }
-    assert.equal(result.error.code, "INVALID_TOOL_POLICY");
+    assert.equal(result.error.key, "AGENT_INVALID_TOOL_POLICY");
   });
 
   it("tools.allow 只含 vfs 工具正常", () => {

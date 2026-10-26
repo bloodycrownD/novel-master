@@ -36,6 +36,13 @@ export async function resolveProviderId(
   );
 }
 
+/** Unwraps the Result-based saved-model lookup at the CLI boundary. */
+async function requireSavedModelId(savedModelId: string, savedModels: ProviderServiceBundle["savedModelRepo"]): Promise<string> {
+  const saved = await assertSavedModelUuid(savedModelId, savedModels);
+  if (!saved.ok) throw saved.error;
+  return saved.value.id;
+}
+
 /** Resolves saved model UUID: flag > state > error. */
 export async function resolveModelId(
   flags: ReadonlyMap<string, string | true>,
@@ -44,13 +51,11 @@ export async function resolveModelId(
 ): Promise<string> {
   const fromFlag = flagString(flags, "modelId");
   if (fromFlag != null) {
-    const saved = await assertSavedModelUuid(fromFlag, savedModels);
-    return saved.id;
+    return requireSavedModelId(fromFlag, savedModels);
   }
   const fromState = await state.getCurrentModelId();
   if (fromState != null && fromState !== "") {
-    const saved = await assertSavedModelUuid(fromState, savedModels);
-    return saved.id;
+    return requireSavedModelId(fromState, savedModels);
   }
   throw new Error(
     "Missing --modelId <uuid> (or run: nm model use --modelId <uuid>)",

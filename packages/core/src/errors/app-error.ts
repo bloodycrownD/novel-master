@@ -40,7 +40,7 @@ export class AppError<K extends ErrorKey = ErrorKey> extends Error {
   }
 }
 
-/** `instanceof` 收窄；给了 key 时再校一次业务码。 */
-export function isAppError(error: unknown, key?: ErrorKey): error is AppError {
+/** `instanceof` 收窄；给了 key 时再校一次业务码，并把 key 收窄到该字面量。 */
+export function isAppError<K extends ErrorKey = ErrorKey>(error: unknown, key?: K): error is AppError<K> {
   return error instanceof AppError && (key === undefined || error.key === key);
 }

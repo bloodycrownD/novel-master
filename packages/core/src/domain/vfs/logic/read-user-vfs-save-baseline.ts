@@ -1,3 +1,4 @@
+// legacy-port: VfsService — phase 2 端口实现改抛 AppError 后删除 isVfsError 分支。
 /**
  * 用户保存前读取磁盘 baseline（与 Desktop/Mobile FileEditor 对齐）。
  *
@@ -12,10 +13,7 @@ import type { VfsService } from "@/domain/vfs/ports/vfs-service.port.js";
  *
  * @throws 非 NOT_FOUND 的 Vfs 错误原样抛出
  */
-export async function readUserVfsSaveBaseline(
-  vfs: VfsService,
-  path: string
-): Promise<string | null> {
+export async function readUserVfsSaveBaseline(vfs: VfsService, path: string): Promise<string | null> {
   try {
     const result = await vfs.read(path);
     return result.content;

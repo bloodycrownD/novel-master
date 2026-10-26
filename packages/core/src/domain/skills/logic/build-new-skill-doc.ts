@@ -8,14 +8,13 @@
  * 同一输入 mobile 端正常。（⚠️ 必须是半角冒号 + 后跟空格；全角 `：` 不复现。
  * ⚠️ 也不是抛错——解析失败走 `valid:false` + `invalidReason`，对外不抛。）
  *
- * 本模块把两端收敛成一份实现，转义口径统一走 {@link yamlScalar}。
+ * 本模块把两端收敛成一份实现，转义口径统一走 `JSON.stringify`
+ * （JSON 字符串本身即合法 YAML double-quoted scalar）。
  * 正文引导文案两端原本不同，为避免对任一端造成可见的行为回退，
  * 保留两个正文变体（`variant`），**只有 front matter 的转义是单源的**。
  *
  * @module domain/skills/logic/build-new-skill-doc
  */
-
-import { yamlScalar } from "./yaml-scalar.js";
 
 /**
  * 模板正文变体：
@@ -27,39 +26,8 @@ import { yamlScalar } from "./yaml-scalar.js";
 export type SkillDocBodyVariant = "desktop" | "mobile";
 
 /** 新建技能的 SKILL.md 模板；`variant` 缺省取 `desktop`。 */
-export function buildNewSkillDoc(
-  name: string,
-  description: string,
-  variant: SkillDocBodyVariant = "desktop",
-): string {
-  const frontMatter = [
-    "---",
-    `name: ${yamlScalar(name)}`,
-    `description: ${yamlScalar(description)}`,
-    "---",
-    "",
-  ];
-  const body =
-    variant === "mobile"
-      ? [
-          `# ${name}`,
-          "",
-          description,
-          "",
-          "## 使用说明",
-          "",
-          "- 这里描述技能的用途、触发时机与使用方式，模型会据此决定是否使用本技能。",
-          "- 辅助文件可放在本目录或子目录（如 `references/notes.md`），",
-          "  由模型经技能工具按需读取；正文无需内联全文。",
-          "",
-        ]
-      : [
-          `# ${name}`,
-          "",
-          description,
-          "",
-          "<!-- 在这里编写技能说明。可添加辅助文件（如 references/x.md），模型会经 skill 工具按需读取。 -->",
-          "",
-        ];
+export function buildNewSkillDoc(name: string, description: string, variant: SkillDocBodyVariant = "desktop"): string {
+  const frontMatter = ["---", `name: ${JSON.stringify(name)}`, `description: ${JSON.stringify(description)}`, "---", ""];
+  const body = variant === "mobile" ? [`# ${name}`, "", description, "", "## 使用说明", "", "- 这里描述技能的用途、触发时机与使用方式，模型会据此决定是否使用本技能。", "- 辅助文件可放在本目录或子目录（如 `references/notes.md`），", "  由模型经技能工具按需读取；正文无需内联全文。", ""] : [`# ${name}`, "", description, "", "<!-- 在这里编写技能说明。可添加辅助文件（如 references/x.md），模型会经 skill 工具按需读取。 -->", ""];
   return [...frontMatter, ...body].join("\n");
 }

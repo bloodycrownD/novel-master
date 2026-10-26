@@ -9,6 +9,7 @@ import { executeTemplate, queryTemplate } from "@/infra/tdbc/logic/template-help
 import { runInTransactionOrConn } from "@/infra/tdbc/index.js";
 import type { Row } from "@/infra/tdbc/types.js";
 import { nullableText } from "@/common/coerce.js";
+import { AppError } from "@/errors/app-error.js";
 import { parseMessageContent } from "../../content/parse-message-content.js";
 import { parseAttachmentsJson } from "../../model/message-attachment.schema.js";
 import type { ChatMessageData, ChatMessageHeader } from "../../model/message.js";
@@ -67,11 +68,17 @@ function toMessageParams(message: ChatMessageData): unknown[] {
   ];
 }
 
+/** 存储行损坏：把底层解析失败收成可区分的 `CHAT_MESSAGE_CORRUPT`。 */
+function corruptMessageRow(row: Row, field: string, cause: unknown): AppError<"CHAT_MESSAGE_CORRUPT"> {
+  const detail = cause instanceof Error ? cause.message : String(cause);
+  return new AppError("CHAT_MESSAGE_CORRUPT", `chat_message ${String(row.id)} ${field} 损坏：${detail}`, { messageId: String(row.id), field });
+}
+
 function rowToMessage(row: Row): ChatMessage {
   // 正文只有明文一种形态：content_json 直接 parse；解析失败按 repository 边界抛。
   const content = parseMessageContent(String(row.content_json));
   if (!content.ok) {
-    throw content.error;
+    throw corruptMessageRow(row, "content_json", content.error);
   }
   const attachments = parseAttachmentsJson(nullableText(row.attachments_json));
   // usage 列全空时保持「无 usage 属性」形状（条件 spread 保证空对象没有 key）。
@@ -85,6 +92,14 @@ function rowToMessage(row: Row): ChatMessage {
     ...(row.duration_ms != null ? { durationMs: Number(row.duration_ms) } : {}),
   };
   const usage: MessageUsage | undefined = Object.keys(usageFields).length > 0 ? usageFields : undefined;
+  let raw: Record<string, unknown> | null = null;
+  if (row.raw_json != null) {
+    try {
+      raw = JSON.parse(String(row.raw_json)) as Record<string, unknown>;
+    } catch (error) {
+      throw corruptMessageRow(row, "raw_json", error);
+    }
+  }
   return ChatMessage.from({
     id: String(row.id),
     sessionId: String(row.session_id),
@@ -94,7 +109,7 @@ function rowToMessage(row: Row): ChatMessage {
     provider: nullableText(row.provider),
     providerId: nullableText(row.provider_id),
     modelName: nullableText(row.model_name),
-    raw: row.raw_json == null ? null : (JSON.parse(String(row.raw_json)) as Record<string, unknown>),
+    raw,
     createdAtMs: Number(row.created_at_ms),
     hidden: Number(row.hidden) === 1,
     ...(attachments != null ? { attachments } : {}),

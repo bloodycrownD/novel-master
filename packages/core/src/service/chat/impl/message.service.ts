@@ -412,12 +412,8 @@ export class DefaultMessageService implements MessageService {
         seq++;
       }
       await r.messages.batchInsert(forkedMessages);
-      await forkCopySeeder.seed(tx, {
-        projectId: source.projectId,
-        sourceSessionId: source.id,
-        targetSessionId: forked.id,
-        newMessages,
-      });
+      const seeded = await forkCopySeeder.seed(tx, { projectId: source.projectId, sourceSessionId: source.id, targetSessionId: forked.id, newMessages });
+      if (!seeded.ok) throw seeded.error;
       return forked;
     });
   }

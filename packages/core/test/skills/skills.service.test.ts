@@ -12,7 +12,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { createSkillsService } from "@novel-master/core/skills";
 import { SqliteVfsContentStore } from "../../src/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
-import { SkillError } from "@novel-master/core/skills";
+import { isAppError } from "@novel-master/core/agent";
 import { isVfsError } from "@novel-master/core/vfs";
 import {
   getNovelMasterTestContext,
@@ -122,7 +122,7 @@ describe("SkillService（T-SK5）", () => {
           VALID_SKILL_MD,
         ),
       (error: unknown) =>
-        error instanceof SkillError && error.code === "MISSING_DOMAIN",
+        isAppError(error, "SKILL_MISSING_DOMAIN"),
     );
   });
 
@@ -136,7 +136,7 @@ describe("SkillService（T-SK5）", () => {
     await assert.rejects(
       () => skills.readSkillFile("global", name, "../other/SKILL.md"),
       (error: unknown) =>
-        error instanceof SkillError && error.code === "INVALID_PATH",
+        isAppError(error, "SKILL_INVALID_PATH"),
     );
     // write：`..` 会被 normalizePath 静默消化成回溯，必须在这里拦截
     await assert.rejects(
@@ -148,7 +148,7 @@ describe("SkillService（T-SK5）", () => {
           "逃逸内容",
         ),
       (error: unknown) =>
-        error instanceof SkillError && error.code === "INVALID_PATH",
+        isAppError(error, "SKILL_INVALID_PATH"),
     );
     // edit 同样拒绝
     await assert.rejects(
@@ -158,7 +158,7 @@ describe("SkillService（T-SK5）", () => {
           newString: "b",
         }),
       (error: unknown) =>
-        error instanceof SkillError && error.code === "INVALID_PATH",
+        isAppError(error, "SKILL_INVALID_PATH"),
     );
     // 隔壁技能目录未被写脏
     await assert.rejects(
@@ -175,7 +175,7 @@ describe("SkillService（T-SK5）", () => {
       await assert.rejects(
         () => skills.writeSkillFile("global", bad, undefined, VALID_SKILL_MD),
         (error: unknown) =>
-          error instanceof SkillError && error.code === "INVALID_NAME",
+          isAppError(error, "SKILL_INVALID_NAME"),
         `技能名 ${bad} 应被拒绝`,
       );
     }
@@ -232,7 +232,7 @@ describe("SkillService（T-SK5）", () => {
       () =>
         skills.readSkillFile(undefined, `missing-${suffix}`, undefined, project.id),
       (error: unknown) =>
-        error instanceof SkillError && error.code === "NOT_FOUND",
+        isAppError(error, "SKILL_NOT_FOUND"),
     );
   });
 
@@ -336,7 +336,7 @@ describe("SkillService（T-SK5）", () => {
     await assert.rejects(
       () => skills.readSkillFile("project", "del-skill", undefined, p1.id),
       (error: unknown) =>
-        error instanceof SkillError && error.code === "NOT_FOUND",
+        isAppError(error, "SKILL_NOT_FOUND"),
     );
   });
 
@@ -408,7 +408,7 @@ describe("SkillService（T-SK5）", () => {
       () =>
         skills.writeSkillFile("project", "no-pid", undefined, VALID_SKILL_MD),
       (error: unknown) =>
-        error instanceof SkillError && error.code === "MISSING_PROJECT_ID",
+        isAppError(error, "SKILL_MISSING_PROJECT_ID"),
     );
   });
 
@@ -420,8 +420,7 @@ describe("SkillService（T-SK5）", () => {
     await assert.rejects(
       () => skills.deleteSkill({ domain: "global", name: "agent-config" }),
       (error: unknown) =>
-        error instanceof SkillError &&
-        error.code === "BUILTIN_SKILL" &&
+        isAppError(error, "SKILL_BUILTIN") &&
         /内置技能不支持删除：agent-config/.test(error.message),
     );
 
@@ -496,8 +495,7 @@ describe("SkillService（T-SK5）", () => {
           project.id,
         ),
       (error: unknown) =>
-        error instanceof SkillError &&
-        error.code === "BUILTIN_SKILL_NAME_RESERVED" &&
+        isAppError(error, "SKILL_BUILTIN_NAME_RESERVED") &&
         /「agent-config」为内置技能保留名，不能用于新建/.test(error.message),
     );
 
@@ -509,8 +507,7 @@ describe("SkillService（T-SK5）", () => {
       () =>
         skills.writeSkillFile("global", "agent-config", undefined, VALID_SKILL_MD),
       (error: unknown) =>
-        error instanceof SkillError &&
-        error.code === "BUILTIN_SKILL_NAME_RESERVED",
+        isAppError(error, "SKILL_BUILTIN_NAME_RESERVED"),
     );
 
     // 恢复内置目录（builtinSeed 豁免重种）：同文件后续用例
@@ -549,8 +546,7 @@ describe("SkillService（T-SK5）", () => {
           project.id,
         ),
       (error: unknown) =>
-        error instanceof SkillError &&
-        error.code === "BUILTIN_SKILL_NAME_RESERVED" &&
+        isAppError(error, "SKILL_BUILTIN_NAME_RESERVED") &&
         /「agent-config」为内置技能保留名，不能用于新建/.test(error.message),
     );
 
@@ -558,7 +554,7 @@ describe("SkillService（T-SK5）", () => {
     await assert.rejects(
       () => skills.assertSkillNameNotReservedForCreate("project", "agent-config"),
       (error: unknown) =>
-        error instanceof SkillError && error.code === "MISSING_PROJECT_ID",
+        isAppError(error, "SKILL_MISSING_PROJECT_ID"),
     );
 
     // builtinSeed 豁免仍仅 seed 通道有效：新入口无豁免参数（同一目录不存在
@@ -604,7 +600,7 @@ describe("SkillService（T-SK5）", () => {
       await assert.rejects(
         () => skills.readSkillFile("global", oldName),
         (error: unknown) =>
-          error instanceof SkillError && error.code === "NOT_FOUND",
+          isAppError(error, "SKILL_NOT_FOUND"),
       );
       const after = await skills.readSkillFile("global", newName);
       assert.match(after.content, /name: "ren-new-[^"]*"/);
@@ -699,8 +695,7 @@ describe("SkillService（T-SK5）", () => {
             { newName: victim },
           ),
         (error: unknown) =>
-          error instanceof SkillError &&
-          error.code === "SKILL_ALREADY_EXISTS" &&
+          isAppError(error, "SKILL_ALREADY_EXISTS") &&
           /已存在同名技能/.test(error.message),
       );
       // 拒绝后源技能原样（未半迁移）
@@ -720,8 +715,7 @@ describe("SkillService（T-SK5）", () => {
             { newName: `agent-renamed-${testIsolationSuffix()}` },
           ),
         (error: unknown) =>
-          error instanceof SkillError &&
-          error.code === "BUILTIN_SKILL_RENAME" &&
+          isAppError(error, "SKILL_BUILTIN_RENAME") &&
           /内置技能不支持重命名：agent-config/.test(error.message),
       );
 
@@ -755,9 +749,8 @@ describe("SkillService（T-SK5）", () => {
             { newName: "agent-config" },
           ),
         (error: unknown) =>
-          error instanceof SkillError &&
-          (error.code === "BUILTIN_SKILL_NAME_RESERVED" ||
-            error.code === "SKILL_ALREADY_EXISTS"),
+          isAppError(error, "SKILL_BUILTIN_NAME_RESERVED") ||
+          isAppError(error, "SKILL_ALREADY_EXISTS"),
       );
 
       const project = await ctx.projects.create(`P-TB-${suffix}`);
@@ -768,10 +761,9 @@ describe("SkillService（T-SK5）", () => {
             { newName: "agent-config" },
           ),
         (error: unknown) =>
-          error instanceof SkillError &&
           // 保留名门先于源目录存在性检查：project 域目标目录不存在
           //（= 新建语义）直接拒，不会走到 NOT_FOUND
-          error.code === "BUILTIN_SKILL_NAME_RESERVED",
+          isAppError(error, "SKILL_BUILTIN_NAME_RESERVED"),
       );
 
       // project 域真实存在的技能改名为内置名：目录不存在 → 保留名门拒
@@ -789,8 +781,7 @@ describe("SkillService（T-SK5）", () => {
             { newName: "agent-config" },
           ),
         (error: unknown) =>
-          error instanceof SkillError &&
-          error.code === "BUILTIN_SKILL_NAME_RESERVED",
+          isAppError(error, "SKILL_BUILTIN_NAME_RESERVED"),
       );
     });
 

@@ -14,8 +14,8 @@ import {
   type BatchIngestWriter,
   type BatchExportSkip,
   type VfsScope,
-} from "@novel-master/core/vfs";
-import { isUserVfsUnifiedToolTurnEnabled } from "@novel-master/core/feature-flags";
+  } from "@novel-master/core/vfs";
+import { userVfsUnifiedToolTurnFlag } from "@novel-master/core/feature-flags";
 import { app, dialog, nativeImage, type BrowserWindow, type WebContents } from "electron";
 import { randomUUID } from "node:crypto";
 import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
@@ -208,7 +208,7 @@ export async function ingestVfsFromHostPaths(
   const applyOptions = { overwriteConfirmed: options.overwriteConfirmed };
   let report: BatchApplyReport;
 
-  if (isSessionVfsScope(scope) && isUserVfsUnifiedToolTurnEnabled()) {
+  if (isSessionVfsScope(scope) && userVfsUnifiedToolTurnFlag.isEnabled()) {
     const vfs = runtime.sessionVfs(scope.projectId, scope.sessionId);
     const writer = createSessionBatchWriter(runtime, scope.sessionId, vfs);
     report = await batch.applyBatchIngestWithWriter(

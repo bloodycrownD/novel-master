@@ -4,7 +4,7 @@
  * @module storage/app-ui-prefs
  */
 
-import {KkvError} from '@novel-master/core';
+import {isAppError} from '@novel-master/core/agent';
 import type {KkvService} from '@novel-master/core/kkv';
 import {APP_UI_DEFAULTS, APP_UI_KKV_MODULE} from './app-ui-keys';
 
@@ -27,7 +27,7 @@ export function createAppUiPreferences(kkv: KkvService): AppUiPreferences {
       try {
         return await kkv.get(APP_UI_KKV_MODULE, key);
       } catch (error) {
-        if (error instanceof KkvError && error.code === 'NOT_FOUND') {
+        if (isAppError(error, 'KKV_NOT_FOUND')) {
           return key in defaults ? defaults[key] : undefined;
         }
         throw error;
@@ -40,7 +40,7 @@ export function createAppUiPreferences(kkv: KkvService): AppUiPreferences {
       try {
         await kkv.delete(APP_UI_KKV_MODULE, key);
       } catch (error) {
-        if (error instanceof KkvError && error.code === 'NOT_FOUND') {
+        if (isAppError(error, 'KKV_NOT_FOUND')) {
           return;
         }
         throw error;

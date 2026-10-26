@@ -10,15 +10,9 @@
 
 import { isRecord } from "@/common/guards.js";
 import { utf8ByteLength } from "@/common/utf8.js";
-import type {
-  SkillToolRef,
-  ToolResultBlock,
-} from "@/domain/chat/model/content-block.js";
+import type { SkillToolRef, ToolResultBlock } from "@/domain/chat/model/content-block.js";
 import { skillToolRefResolver } from "@/domain/chat/logic/skill-tool-ref.js";
-import {
-  formatToolErrorForLlm,
-  formatToolOutputForLlm,
-} from "./format-tool-output.js";
+import { formatToolErrorForLlm, formatToolOutputForLlm } from "./format-tool-output.js";
 import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { ParallelToolOutcome } from "./tool-runner.js";
 import { TOOL_OUTPUT_MAX_BYTES } from "../logic/tool-output-limits.js";
@@ -62,10 +56,7 @@ function formatByteSize(bytes: number): string {
   return `${trimFraction(kb / 1024)}MB`;
 }
 
-function summarizeToolSuccess(
-  toolName: string | undefined,
-  output: unknown
-): string | undefined {
+function summarizeToolSuccess(toolName: string | undefined, output: unknown): string | undefined {
   if (!isRecord(output)) {
     return undefined;
   }
@@ -110,10 +101,7 @@ function summarizeToolSuccess(
   if (name === "skill" && typeof output.action === "string") {
     if (output.action === "load") {
       const parts: string[] = [];
-      if (
-        typeof output.domain === "string" &&
-        typeof output.name === "string"
-      ) {
+      if (typeof output.domain === "string" && typeof output.name === "string") {
         parts.push(`${output.domain}:${output.name}`);
       }
       if (output.alreadyReferenced === true) {
@@ -133,16 +121,9 @@ function summarizeToolSuccess(
         return `${returned} lines`;
       }
     }
-    if (
-      (output.action === "write" || output.action === "edit") &&
-      typeof output.domain === "string" &&
-      typeof output.name === "string" &&
-      typeof output.path === "string"
-    ) {
+    if ((output.action === "write" || output.action === "edit") && typeof output.domain === "string" && typeof output.name === "string" && typeof output.path === "string") {
       if (output.action === "edit" && typeof output.replacements === "number") {
-        return output.replacements === 1
-          ? `${output.domain}:${output.name}/${output.path}`
-          : `${output.replacements} replacements · ${output.domain}:${output.name}/${output.path}`;
+        return output.replacements === 1 ? `${output.domain}:${output.name}/${output.path}` : `${output.replacements} replacements · ${output.domain}:${output.name}/${output.path}`;
       }
       return `${output.domain}:${output.name}/${output.path}`;
     }
@@ -169,10 +150,7 @@ function summarizeToolSuccess(
         return def.name;
       }
     }
-    if (
-      (output.action === "create" || output.action === "update") &&
-      typeof output.name === "string"
-    ) {
+    if ((output.action === "create" || output.action === "update") && typeof output.name === "string") {
       return `已保存 ${output.name}`;
     }
   }
@@ -201,18 +179,10 @@ function summarizeToolSuccess(
     const originalBytes = output.originalBytes;
     if (typeof status === "number" && typeof originalBytes === "number") {
       if (output.truncated === true) {
-        const bodyBytes =
-          typeof output.body === "string"
-            ? utf8ByteLength(output.body)
-            : undefined;
+        const bodyBytes = typeof output.body === "string" ? utf8ByteLength(output.body) : undefined;
         // 正常截断路径 body 含标注行会略超预算，展示上按预算值口径。
-        const kept =
-          bodyBytes != null && bodyBytes < TOOL_OUTPUT_MAX_BYTES
-            ? bodyBytes
-            : TOOL_OUTPUT_MAX_BYTES;
-        return `truncated · ${formatByteSize(kept)}/${formatByteSize(
-          originalBytes
-        )}`;
+        const kept = bodyBytes != null && bodyBytes < TOOL_OUTPUT_MAX_BYTES ? bodyBytes : TOOL_OUTPUT_MAX_BYTES;
+        return `truncated · ${formatByteSize(kept)}/${formatByteSize(originalBytes)}`;
       }
       return `${status} · ${formatByteSize(originalBytes)}`;
     }
@@ -243,26 +213,15 @@ function summarizeToolError(content: string): string | undefined {
 /**
  * Maps one parallel tool outcome to a block ready for session persistence.
  */
-export function buildToolResultBlock(
-  toolUseId: string,
-  outcome: ParallelToolOutcome,
-  meta?: BuildToolResultBlockMeta
-): ToolResultBlock {
+export function buildToolResultBlock(toolUseId: string, outcome: ParallelToolOutcome, meta?: BuildToolResultBlockMeta): ToolResultBlock {
   if (outcome.ok) {
     const content = formatToolOutputForLlm(outcome.output);
     const summary = summarizeToolSuccess(meta?.toolName, outcome.output);
     // task 工具输出对象形如 { text, subagentSessionId }：透传 subagentSessionId 到 meta。
-    const subagentSessionId = resolveSubagentSessionIdFromOutcome(
-      outcome.output,
-      meta?.subagentSessionId
-    );
+    const subagentSessionId = resolveSubagentSessionIdFromOutcome(outcome.output, meta?.subagentSessionId);
     // skill 成功输出携带实际 domain/name（read 缺省域命中生效副本的解析结果
     // 也在这里）：照 subagentSessionId 自动检测透传到 meta.skillRef。
-    const skillRef = resolveSkillToolRefFromOutcome(
-      meta?.toolName,
-      outcome.output,
-      meta?.skillProjectId
-    );
+    const skillRef = resolveSkillToolRefFromOutcome(meta?.toolName, outcome.output, meta?.skillProjectId);
 
     // 引用块（contentRef）已随 v1.5.30 的 unref 回迁整体退役：成功分支恒走
     // 全文形态（`formatToolOutputForLlm` 直出），read / skill load / skill
@@ -336,12 +295,7 @@ export function buildToolResultBlock(
  * 的 object 判定，语义上更直结。
  */
 function isStoppedTaskOutput(output: unknown): boolean {
-  return (
-    output != null &&
-    typeof output === "object" &&
-    !Array.isArray(output) &&
-    (output as { stopped?: unknown }).stopped === true
-  );
+  return output != null && typeof output === "object" && !Array.isArray(output) && (output as { stopped?: unknown }).stopped === true;
 }
 
 /** 从 task 工具输出读取 failureReason（仅 string 时生效，否则返回 undefined）。 */
@@ -359,22 +313,11 @@ function readFailureReason(output: unknown): string | undefined {
  * 优先 `outcome.output.subagentSessionId`（string 时生效）；否则回落到调用方显式传入的 meta。
  * 仅 task 工具有该字段，其他工具输出不含 subagentSessionId，返回 undefined。
  */
-function resolveSubagentSessionIdFromOutcome(
-  output: unknown,
-  fallback?: string
-): string | undefined {
-  if (
-    output != null &&
-    typeof output === "object" &&
-    !Array.isArray(output) &&
-    typeof (output as { subagentSessionId?: unknown }).subagentSessionId ===
-      "string"
-  ) {
+function resolveSubagentSessionIdFromOutcome(output: unknown, fallback?: string): string | undefined {
+  if (output != null && typeof output === "object" && !Array.isArray(output) && typeof (output as { subagentSessionId?: unknown }).subagentSessionId === "string") {
     return (output as { subagentSessionId: string }).subagentSessionId;
   }
-  return typeof fallback === "string" && fallback.length > 0
-    ? fallback
-    : undefined;
+  return typeof fallback === "string" && fallback.length > 0 ? fallback : undefined;
 }
 
 /**
@@ -383,11 +326,7 @@ function resolveSubagentSessionIdFromOutcome(
  * 仅 `meta.toolName === "skill"` 时有意义；实际判定在
  * `resolveSkillToolRefFromOutput` 内（工具名 + 输出形态双门控）。
  */
-function resolveSkillToolRefFromOutcome(
-  toolName: string | undefined,
-  output: unknown,
-  skillProjectId?: string
-): SkillToolRef | undefined {
+function resolveSkillToolRefFromOutcome(toolName: string | undefined, output: unknown, skillProjectId?: string): SkillToolRef | undefined {
   if (toolName == null) return undefined;
   return skillToolRefResolver.fromOutput(toolName, output, skillProjectId);
 }

@@ -4,12 +4,8 @@
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { AttachmentPathArgumentError, attachmentScanner } from "../../src/domain/chat/logic/attachment/attachment-scanner.js";
-import {
-  attachmentStorageName,
-  messageAttachmentsSchema,
-  type MessageAttachment,
-} from "../../src/domain/chat/model/message-attachment.schema.js";
+import { attachmentScanner } from "../../src/domain/chat/logic/attachment/attachment-scanner.js";
+import { attachmentStorageName, messageAttachmentsSchema, type MessageAttachment } from "../../src/domain/chat/model/message-attachment.schema.js";
 
 describe("scanAtPathAttachments (T-AT5 / T-AT6)", () => {
   it("T-AT5: 正文含手输 @path 且 chips 无该 path → 生成 source:attach（path 带 /）", () => {
@@ -51,10 +47,7 @@ describe("scanAtPathAttachments (T-AT5 / T-AT6)", () => {
     const text = "见 @docs/说明.md 和 @foo/bar.txt";
     const scanned = attachmentScanner.scanAtPaths(text);
     assert.equal(scanned.length, 2);
-    assert.deepEqual(
-      scanned.map((a) => a.path).sort(),
-      ["/docs/说明.md", "/foo/bar.txt"],
-    );
+    assert.deepEqual(scanned.map((a) => a.path).sort(), ["/docs/说明.md", "/foo/bar.txt"]);
   });
 
   it("目录尾 /：type=dir，落库可保留尾 /，seen 去重去尾", () => {
@@ -65,9 +58,16 @@ describe("scanAtPathAttachments (T-AT5 / T-AT6)", () => {
   });
 });
 
+/** 测试内解包；失败直接抛出以便定位。 */
+function fromPaths(paths: readonly string[]): MessageAttachment[] {
+  const r = attachmentScanner.fromPaths(paths);
+  if (!r.ok) throw r.error;
+  return r.value;
+}
+
 describe("attachmentsFromPaths（显式路径列表 → 合规新写入附件）", () => {
   it("name === attachmentStorageName(path)、action=userAttach、content=null、source=attach", () => {
-    const [first] = attachmentScanner.fromPaths(["notes/a.md"]);
+    const [first] = fromPaths(["notes/a.md"]);
     assert.ok(first);
     assert.equal(first.source, "attach");
     assert.equal(first.path, "/notes/a.md");
@@ -78,18 +78,13 @@ describe("attachmentsFromPaths（显式路径列表 → 合规新写入附件）
   });
 
   it("产出形态可直接过 messageAttachmentsSchema.parse（落库硬 parse 非 safeParse）", () => {
-    const built = attachmentScanner.fromPaths([
-      "notes/a.md",
-      "notes/",
-      "pic.png",
-      "blob.bin",
-    ]);
+    const built = fromPaths(["notes/a.md", "notes/", "pic.png", "blob.bin"]);
     // 牙齿的反面：合规形态必须 parse 通过（name 覆写 + action 补齐都在）。
     assert.doesNotThrow(() => messageAttachmentsSchema.parse(built));
   });
 
   it("牙齿：name 若沿用 basename（不覆写）必被 zod refine 拒绝", () => {
-    const [first] = attachmentScanner.fromPaths(["notes/a.md"]);
+    const [first] = fromPaths(["notes/a.md"]);
     assert.ok(first);
     const basenameForm: MessageAttachment = { ...first, name: "a.md" };
     // 带 action 时 name 必须是 attachmentStorageName(path)，basename 形态 100% 抛错。
@@ -97,21 +92,13 @@ describe("attachmentsFromPaths（显式路径列表 → 合规新写入附件）
   });
 
   it("重复路径按 seen key 去重（含相对写法与带前导 / 的同形路径）", () => {
-    const built = attachmentScanner.fromPaths([
-      "notes/a.md",
-      "/notes/a.md",
-      "notes/a.md",
-      "notes/b.md",
-    ]);
+    const built = fromPaths(["notes/a.md", "/notes/a.md", "notes/a.md", "notes/b.md"]);
     assert.equal(built.length, 2);
-    assert.deepEqual(
-      built.map((a) => a.path),
-      ["/notes/a.md", "/notes/b.md"],
-    );
+    assert.deepEqual(built.map((a) => a.path), ["/notes/a.md", "/notes/b.md"]);
   });
 
   it("目录 / 图片 / 二进制形态分派保留（type + 落库 path 形态）", () => {
-    const built = attachmentScanner.fromPaths(["notes/", "pic.png", "data.bin"]);
+    const built = fromPaths(["notes/", "pic.png", "data.bin"]);
     assert.equal(built.length, 3);
     assert.equal(built[0]!.type, "dir");
     assert.equal(built[0]!.path, "/notes/");
@@ -127,15 +114,27 @@ describe("attachmentsFromPaths（显式路径列表 → 合规新写入附件）
     }
   });
 
-  it("空串 / 纯空白元素抛 AttachmentPathArgumentError（调用方转 ToolError）", () => {
-    assert.throws(
-      () => attachmentScanner.fromPaths(["notes/a.md", ""]),
-      AttachmentPathArgumentError,
-    );
-    assert.throws(() => attachmentScanner.fromPaths(["   "]), AttachmentPathArgumentError);
+  it("空串 / 纯空白元素返回 CHAT_INVALID_ARGUMENT（调用方转 ToolError）", () => {
+    for (const paths of [["notes/a.md", ""], ["   "]]) {
+      const r = attachmentScanner.fromPaths(paths);
+      assert.equal(r.ok, false);
+      if (r.ok) continue;
+      assert.equal(r.error.key, "CHAT_INVALID_ARGUMENT");
+      assert.match(r.error.message, /附件路径/);
+      assert.equal(r.error.details?.path, paths[paths.length - 1]);
+    }
+  });
+
+  it("路径穿越写法返回 CHAT_INVALID_ARGUMENT（不再抛旧 VfsError / AttachmentPathArgumentError）", () => {
+    const r = attachmentScanner.fromPaths(["/../evil"]);
+    assert.equal(r.ok, false);
+    if (r.ok) return;
+    assert.equal(r.error.key, "CHAT_INVALID_ARGUMENT");
+    assert.match(r.error.message, /Invalid path/);
+    assert.equal(r.error.details?.path, "/../evil");
   });
 
   it("空列表 → 空数组（不抛）", () => {
-    assert.deepEqual(attachmentScanner.fromPaths([]), []);
+    assert.deepEqual(fromPaths([]), []);
   });
 });

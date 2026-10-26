@@ -13,22 +13,11 @@
  * 下次重新回填。
  */
 
-import {
-  fileCacheKey,
-  SESSION_KKV_DOMAIN_FILE_CACHE,
-  type WorkplaceDisplayStatus,
-} from "@/domain/session-kkv/model/session-kkv-domains.js";
+import { fileCacheKey, SESSION_KKV_DOMAIN_FILE_CACHE, type WorkplaceDisplayStatus } from "@/domain/session-kkv/model/session-kkv-domains.js";
 import type { VfsService } from "@/domain/vfs/ports/vfs-service.port.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
-import {
-  CHARACTER_CARD_BLOB_COMPRESSED_GATE_BYTES,
-  CHARACTER_CARD_MAX_SINGLE_FILE_BYTES,
-} from "@/domain/character-card/logic/character-card-limits.js";
-import {
-  parseFileCachePayload,
-  serializeFileCachePayload,
-  type FileCachePayload,
-} from "./rule-snapshot-codec.js";
+import { CHARACTER_CARD_BLOB_COMPRESSED_GATE_BYTES, CHARACTER_CARD_MAX_SINGLE_FILE_BYTES } from "@/domain/character-card/logic/character-card-limits.js";
+import { parseFileCachePayload, serializeFileCachePayload, type FileCachePayload } from "./rule-snapshot-codec.js";
 
 export type LoadOrFillFileCacheDeps = {
   readonly sessionId: string;
@@ -52,19 +41,13 @@ export type LoadOrFillFileCacheDeps = {
  * filename 档会做一次轻量 meta 探测（`vfs.findContentSize`，不读正文）拿真实
  * `mtimeMs`，避免组装时把 `1970-01-01` 假时间戳写进常驻提示词。
  */
-export async function loadOrFillFileCache(
-  deps: LoadOrFillFileCacheDeps
-): Promise<FileCachePayload> {
+export async function loadOrFillFileCache(deps: LoadOrFillFileCacheDeps): Promise<FileCachePayload> {
   const key = fileCacheKey(deps.status, deps.path);
-  const raw = await deps.sessionKkv.get(
-    deps.sessionId,
-    SESSION_KKV_DOMAIN_FILE_CACHE,
-    key
-  );
+  const raw = await deps.sessionKkv.get(deps.sessionId, SESSION_KKV_DOMAIN_FILE_CACHE, key);
   if (raw != null) {
     const parsed = parseFileCachePayload(raw);
-    if (parsed != null) {
-      return parsed;
+    if (parsed.ok) {
+      return parsed.value;
     }
   }
   return fillFileCacheFromVfs(deps);
@@ -126,12 +109,7 @@ export async function settlePendingFileCacheBackfills(): Promise<void> {
  */
 function scheduleBackfill(write: () => Promise<void>): void {
   const settled = new Promise<void>((resolve) => {
-    setTimeout(() => {
-      void write().then(
-        () => resolve(),
-        () => resolve()
-      );
-    }, 0);
+    setTimeout(() => void write().then(resolve, resolve), 0);
   });
   pendingBackfills.add(settled);
   void settled.then(() => {
@@ -161,15 +139,23 @@ type FillResult = {
  * @param options `deferBackfillWrite: true` 时写回后台化（见
  *   {@link FillFileCacheOptions}）；返回值始终是读到的内容，与写回无关。
  */
-export async function fillFileCacheFromVfs(
-  deps: LoadOrFillFileCacheDeps,
-  options?: FillFileCacheOptions
-): Promise<FileCachePayload> {
+export async function fillFileCacheFromVfs(deps: LoadOrFillFileCacheDeps, options?: FillFileCacheOptions): Promise<FileCachePayload> {
   const key = fileCacheKey(deps.status, deps.path);
 
   // 轻量 meta 探测提到 status 判断之外：filename 档也需要它拿真实 mtimeMs
   // （否则组装时渲染出 1970 假时间戳）。探测失败 / null 一律保守放行原路径。
-  const probe = await probeFileMeta(deps.vfs, deps.path);
+  let probe: FileMetaProbe = { placeholder: null, mtimeMs: undefined };
+  try {
+    const size = await deps.vfs.findContentSize(deps.path);
+    if (size != null) {
+      // 压缩侧长度按 4× 折算为明文字符数的估计值（标注「约」）
+      const limit = size.kind === "inlineChars" ? CHARACTER_CARD_MAX_SINGLE_FILE_BYTES : CHARACTER_CARD_BLOB_COMPRESSED_GATE_BYTES;
+      const chars = size.kind === "inlineChars" ? size.size : size.size * 4;
+      probe = { placeholder: size.size > limit ? { body: `（文件过大，已跳过，约 ${chars} 字符）`, mtimeMs: size.mtimeMs } : null, mtimeMs: size.mtimeMs };
+    }
+  } catch {
+    // 查询失败按可读处理：走原路径（不阻断组装）
+  }
 
   // ⚠️ 超限占位分支**只对非 filename 档生效**（既有语义不变）：filename 档渲染的是
   // 文件名本身、payload.body 恒为空串，占位正文对它没有意义。
@@ -180,24 +166,25 @@ export async function fillFileCacheFromVfs(
     return probe.placeholder;
   }
 
-  const filled = await readWorkplaceFileBody(
-    deps.path,
-    deps.status,
-    deps.vfs,
-    probe.mtimeMs
-  );
+  // filename 档不读正文，但仍用探测带回的真实 mtime（探测不可用时退回 0）；
+  // 读失败按 `(missing)` 降级，且不落 cache（见 degraded 注释）。
+  let filled: FillResult;
+  if (deps.status === "filename") {
+    filled = { payload: { body: "", mtimeMs: probe.mtimeMs ?? 0 } };
+  } else {
+    try {
+      const result = await deps.vfs.read(deps.path);
+      filled = { payload: { body: result.content, mtimeMs: result.mtimeMs } };
+    } catch {
+      filled = { payload: { body: "(missing)", mtimeMs: 0 }, degraded: true };
+    }
+  }
   // 降级来源不落 cache（判据用显式标记，**不是**正文匹配——`(missing)`
   // 三个字可能真出现在文件正文里）。
   if (filled.degraded === true) {
     return filled.payload;
   }
-  const writeBack = (): Promise<void> =>
-    deps.sessionKkv.set(
-      deps.sessionId,
-      SESSION_KKV_DOMAIN_FILE_CACHE,
-      key,
-      serializeFileCachePayload(filled.payload)
-    );
+  const writeBack = (): Promise<void> => deps.sessionKkv.set(deps.sessionId, SESSION_KKV_DOMAIN_FILE_CACHE, key, serializeFileCachePayload(filled.payload));
   if (options?.deferBackfillWrite === true) {
     scheduleBackfill(writeBack);
   } else {
@@ -216,60 +203,3 @@ type FileMetaProbe = {
   readonly placeholder: FileCachePayload | null;
   readonly mtimeMs: number | undefined;
 };
-
-async function probeFileMeta(
-  vfs: VfsService,
-  path: string
-): Promise<FileMetaProbe> {
-  let size;
-  try {
-    size = await vfs.findContentSize(path);
-  } catch {
-    // 查询失败按可读处理：走原路径（不阻断组装）
-    return { placeholder: null, mtimeMs: undefined };
-  }
-  if (size == null) {
-    return { placeholder: null, mtimeMs: undefined };
-  }
-  if (size.kind === "inlineChars") {
-    if (size.size > CHARACTER_CARD_MAX_SINGLE_FILE_BYTES) {
-      return {
-        placeholder: {
-          body: `（文件过大，已跳过，约 ${size.size} 字符）`,
-          mtimeMs: size.mtimeMs,
-        },
-        mtimeMs: size.mtimeMs,
-      };
-    }
-    return { placeholder: null, mtimeMs: size.mtimeMs };
-  }
-  if (size.size > CHARACTER_CARD_BLOB_COMPRESSED_GATE_BYTES) {
-    // 压缩侧长度按 4× 折算为明文字符数的估计值（标注「约」）
-    return {
-      placeholder: {
-        body: `（文件过大，已跳过，约 ${size.size * 4} 字符）`,
-        mtimeMs: size.mtimeMs,
-      },
-      mtimeMs: size.mtimeMs,
-    };
-  }
-  return { placeholder: null, mtimeMs: size.mtimeMs };
-}
-
-async function readWorkplaceFileBody(
-  path: string,
-  status: WorkplaceDisplayStatus,
-  vfs: VfsService,
-  probedMtimeMs: number | undefined
-): Promise<FillResult> {
-  if (status === "filename") {
-    // filename 档不读正文，但仍用探测带回的真实 mtime（探测不可用时退回 0）。
-    return { payload: { body: "", mtimeMs: probedMtimeMs ?? 0 } };
-  }
-  try {
-    const result = await vfs.read(path);
-    return { payload: { body: result.content, mtimeMs: result.mtimeMs } };
-  } catch {
-    return { payload: { body: "(missing)", mtimeMs: 0 }, degraded: true };
-  }
-}

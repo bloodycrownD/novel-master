@@ -16,10 +16,10 @@ import { runDeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 
+import { isAppError, type AppError } from "@/errors/app-error.js";
 import { isVfsError } from "@/errors/vfs-errors.js";
 import { TdbcError } from "@/infra/tdbc/index.js";
 import {
-  SkillError,
   skillAlreadyExists,
   skillBuiltin,
   skillBuiltinNameReserved,
@@ -196,7 +196,7 @@ export class SkillsService implements SkillService {
    * 裸 VfsError 会把 `Path not found: /meta/skills/...` 抛给调用方，既泄漏内部
    * 逻辑路径，也看不出该补 domain 参数——模型据此无法自我修复。
    *
-   * @returns 可直接抛出的 SkillError；非 NOT_FOUND 的错误原样抛出。
+   * @returns 可直接抛出的 SKILL_NOT_FOUND；非 NOT_FOUND 的错误原样抛出。
    * （返回错误而非声明 `Promise<never>`：`await` 一个 `Promise<never>` 不足以让
    * tsc 认定外层函数在此终止，会误报 TS2366。）
    */
@@ -206,7 +206,7 @@ export class SkillsService implements SkillService {
     path: string,
     domain: SkillDomain,
     projectId?: string
-  ): Promise<SkillError> {
+  ): Promise<AppError<"SKILL_NOT_FOUND">> {
     if (!isVfsError(error, "NOT_FOUND")) {
       throw error;
     }
@@ -598,9 +598,9 @@ export class SkillsService implements SkillService {
         }
       });
     } catch (error) {
-      // 两 driver 的事务实现都会把非 TdbcError（含 SkillError）包装成
+      // 两 driver 的事务实现都会把非 TdbcError（含 AppError）包装成
       // SQLITE_ERROR（cause 保留原错）：解包还原业务错误码
-      if (error instanceof TdbcError && error.cause instanceof SkillError) {
+      if (error instanceof TdbcError && isAppError(error.cause)) {
         throw error.cause;
       }
       throw error;

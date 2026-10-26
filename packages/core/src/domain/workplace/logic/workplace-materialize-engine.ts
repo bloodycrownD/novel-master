@@ -14,12 +14,7 @@ import type { WorkplaceRuleView } from "../model/workplace-rule-view.js";
  * 从规则视图物化持久 workplace 块文本。
  * 按 DFS 文件行顺序遍历；仅对非 hidden 且 full/header 档位读取 VFS 正文。
  */
-export async function materializeBlockFromView(
-  view: WorkplaceRuleView,
-  vfs: VfsEntryRepository,
-  scope: WorkplaceScope,
-  mtimeByPath: ReadonlyMap<string, number>
-): Promise<string> {
+export async function materializeBlockFromView(view: WorkplaceRuleView, vfs: VfsEntryRepository, scope: WorkplaceScope, mtimeByPath: ReadonlyMap<string, number>): Promise<string> {
   const scopeKeyStr = scopeKey(scope);
   const blocks: string[] = [];
   for (const row of view.rows) {
@@ -36,14 +31,13 @@ export async function materializeBlockFromView(
       const entry = await vfs.findByPath(scopeKeyStr, row.path);
       content = entry?.content ?? "";
     }
-    blocks.push(
-      renderFileBlock({
-        logicalPath: row.path,
-        mtimeMs: mtimeByPath.get(row.path) ?? 0,
-        display,
-        content,
-      })
-    );
+    const block = renderFileBlock({
+      logicalPath: row.path,
+      mtimeMs: mtimeByPath.get(row.path) ?? 0,
+      display,
+      content,
+    });
+    blocks.push(block);
   }
   return joinFileBlocks(blocks);
 }

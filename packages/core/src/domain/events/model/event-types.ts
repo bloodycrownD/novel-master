@@ -9,8 +9,7 @@ export const EVENT_AGENT_RUN_STARTED = "agent.run.started" as const;
 export const EVENT_AGENT_RUN_FINISHED = "agent.run.finished" as const;
 export const EVENT_AGENT_RUN_FAILED = "agent.run.failed" as const;
 export const EVENT_AGENT_STREAM_TEXT_DELTA = "agent.stream.text-delta" as const;
-export const EVENT_AGENT_STREAM_THINKING_DELTA =
-  "agent.stream.thinking-delta" as const;
+export const EVENT_AGENT_STREAM_THINKING_DELTA = "agent.stream.thinking-delta" as const;
 /** Streamed tool_use block before tool_result is persisted. */
 export const EVENT_AGENT_STREAM_TOOL_USE = "agent.stream.tool-use" as const;
 /** 流中 token usage（run 级累计 completionTokens；流中透传与 step done 补发共用）。 */
@@ -18,19 +17,9 @@ export const EVENT_AGENT_STREAM_USAGE = "agent.stream.usage" as const;
 /** One agent loop step persisted (assistant turn or tool_result user turn). */
 export const EVENT_AGENT_STEP_COMMITTED = "agent.step.committed" as const;
 /** 子 agent 会话创建：task 工具执行中即可点击进入子会话浏览。 */
-export const EVENT_SUBAGENT_CHILD_SESSION_CREATED =
-  "subagent.child-session.created" as const;
+export const EVENT_SUBAGENT_CHILD_SESSION_CREATED = "subagent.child-session.created" as const;
 
-export type NovelMasterEventType =
-  | typeof EVENT_AGENT_RUN_STARTED
-  | typeof EVENT_AGENT_RUN_FINISHED
-  | typeof EVENT_AGENT_RUN_FAILED
-  | typeof EVENT_AGENT_STREAM_TEXT_DELTA
-  | typeof EVENT_AGENT_STREAM_THINKING_DELTA
-  | typeof EVENT_AGENT_STREAM_TOOL_USE
-  | typeof EVENT_AGENT_STREAM_USAGE
-  | typeof EVENT_AGENT_STEP_COMMITTED
-  | typeof EVENT_SUBAGENT_CHILD_SESSION_CREATED;
+export type NovelMasterEventType = typeof EVENT_AGENT_RUN_STARTED | typeof EVENT_AGENT_RUN_FINISHED | typeof EVENT_AGENT_RUN_FAILED | typeof EVENT_AGENT_STREAM_TEXT_DELTA | typeof EVENT_AGENT_STREAM_THINKING_DELTA | typeof EVENT_AGENT_STREAM_TOOL_USE | typeof EVENT_AGENT_STREAM_USAGE | typeof EVENT_AGENT_STEP_COMMITTED | typeof EVENT_SUBAGENT_CHILD_SESSION_CREATED;
 
 export interface AgentRunStartedPayload {
   readonly sessionId: string;
@@ -107,14 +96,3 @@ export interface SubagentChildSessionCreatedPayload {
   /** 子会话标题（来自 task 工具入参 description 或 prompt 前 40 字）；供 UI 按 title 匹配 pending tool_use。 */
   readonly title: string;
 }
-
-export type NovelMasterEventPayload =
-  | AgentRunStartedPayload
-  | AgentRunFinishedPayload
-  | AgentRunFailedPayload
-  | AgentStreamTextDeltaPayload
-  | AgentStreamThinkingDeltaPayload
-  | AgentStreamToolUsePayload
-  | AgentStreamUsagePayload
-  | AgentStepCommittedPayload
-  | SubagentChildSessionCreatedPayload;

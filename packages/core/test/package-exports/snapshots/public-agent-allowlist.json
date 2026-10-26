@@ -1,8 +1,7 @@
 [
-  "AgentConfigError",
-  "AppError",
   "AgentRunResolveError",
   "AgentTurnError",
+  "AppError",
   "ChatAgentSession",
   "DEFAULT_AGENT_MAX_STEPS",
   "DEFAULT_SUBAGENT_DEFINITION",

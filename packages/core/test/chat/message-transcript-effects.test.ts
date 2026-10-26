@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { textBlocks } from '@novel-master/core/chat';
-import { ChatError } from '../../src/errors/chat-errors.js';
+import { isAppError } from '@novel-master/core/agent';
 import { createMessageTranscriptEffectsService } from '../../src/service/chat/create-message-transcript-effects.js';
 import { DefaultMessageTranscriptEffectsService } from '../../src/service/chat/impl/message-transcript-effects.service.js';
 import { createSessionKkvService } from '../../src/service/session-kkv/create-session-kkv-service.js';
@@ -396,10 +396,9 @@ describe('MessageTranscriptEffectsService', () => {
       () =>
         effects.setMessageFloorAtMessage(project.id, sessionA.id, anchorB.id),
       (err: unknown) => {
-        assert.ok(err instanceof ChatError);
-        assert.equal(err.code, 'NOT_FOUND');
-        assert.equal(err.sessionId, sessionA.id);
-        assert.equal(err.messageId, anchorB.id);
+        assert.ok(isAppError(err, 'CHAT_NOT_FOUND'));
+        assert.equal(err.details?.sessionId, sessionA.id);
+        assert.equal(err.details?.messageId, anchorB.id);
         return true;
       },
     );

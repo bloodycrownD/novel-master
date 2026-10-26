@@ -22,10 +22,7 @@ export function normalizeExcludePrefix(raw: string): string {
  * @remarks 排除 `/` 等于排除整棵树——正常调用方不会这样传，此处按
  * 「全部命中」处理，保证语义自洽而非静默忽略。
  */
-export function isVfsPathExcluded(
-  path: string,
-  excludePrefixes: readonly string[]
-): boolean {
+export function isVfsPathExcluded(path: string, excludePrefixes: readonly string[]): boolean {
   for (const raw of excludePrefixes) {
     const base = normalizeExcludePrefix(raw);
     if (base === "/" || base === "") {
@@ -44,10 +41,7 @@ export function isVfsPathExcluded(
  * @remarks 删除侧需要连带保留祖先目录：排除子树里的 entry 不删，
  * 那么承载它们的目录层级也不能删，否则会因「目录非空」失败。
  */
-export function isVfsPathAncestorOfExcluded(
-  path: string,
-  excludePrefixes: readonly string[]
-): boolean {
+export function isVfsPathAncestorOfExcluded(path: string, excludePrefixes: readonly string[]): boolean {
   for (const raw of excludePrefixes) {
     const base = normalizeExcludePrefix(raw);
     if (base === "/" || base === "") {

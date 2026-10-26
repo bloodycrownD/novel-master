@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 import { decode } from "@novel-master/core";
 
 import {
-  AgentConfigError,
+  isAppError,
   agentDefinitionSchema,
   createAgentRegistryService,
 } from "@novel-master/core/agent";
@@ -34,7 +34,7 @@ describe("AgentRegistryService.list 虚拟 seed（T-C2 / P1-5）", () => {
     await assert.rejects(
       () => registry.get("non-existent-uuid-xxx"),
       (e: unknown) =>
-        e instanceof AgentConfigError && e.code === "AGENT_NOT_FOUND",
+        isAppError(e, "AGENT_NOT_FOUND"),
     );
   });
 
@@ -44,7 +44,7 @@ describe("AgentRegistryService.list 虚拟 seed（T-C2 / P1-5）", () => {
     await assert.rejects(
       () => registry.delete("general"),
       (e: unknown) =>
-        e instanceof AgentConfigError && e.code === "AGENT_NOT_FOUND",
+        isAppError(e, "AGENT_NOT_FOUND"),
     );
   });
 
@@ -73,7 +73,7 @@ describe("AgentRegistryService.list 虚拟 seed（T-C2 / P1-5）", () => {
         ),
       ),
       (e: unknown) =>
-        e instanceof AgentConfigError && e.code === "INVALID_SCHEMA",
+        isAppError(e, "AGENT_INVALID_SCHEMA"),
     );
   });
 

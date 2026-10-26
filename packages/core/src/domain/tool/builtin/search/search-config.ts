@@ -13,17 +13,10 @@
  * @module domain/tool/builtin/search/search-config
  */
 
-import { KkvError } from "@/errors/kkv-errors.js";
+import { AppError, isAppError } from "@/errors/app-error.js";
 import type { KkvService } from "@/service/kkv/kkv.port.js";
 import type { SecretStore } from "@/infra/sksp/ports/secret-store.port.js";
-import {
-  ENGINE_IDS,
-  KEY_ENGINE_IDS,
-  type EngineId,
-  type KeyEngineId,
-  type ResolvedEngineConfig,
-  type SearchEngineStatus,
-} from "./types.js";
+import { ENGINE_IDS, KEY_ENGINE_IDS, type EngineId, type KeyEngineId, type ResolvedEngineConfig, type SearchEngineStatus } from "./types.js";
 
 /** KKV 模块名（照 nm-cloud-sync 命名先例）。 */
 export const SEARCH_KKV_MODULE = "nm-search";
@@ -82,14 +75,11 @@ export function normalizeSearxngBaseUrl(value: string): string | null {
 }
 
 /** KKV 读取：NOT_FOUND 归一化为 undefined（缺省视同未配置）。 */
-async function kkvGet(
-  kkv: KkvService,
-  key: string
-): Promise<string | undefined> {
+async function kkvGet(kkv: KkvService, key: string): Promise<string | undefined> {
   try {
     return await kkv.get(SEARCH_KKV_MODULE, key);
   } catch (error) {
-    if (error instanceof KkvError && error.code === "NOT_FOUND") {
+    if (isAppError(error, "KKV_NOT_FOUND")) {
       return undefined;
     }
     throw error;
@@ -101,7 +91,7 @@ async function kkvDelete(kkv: KkvService, key: string): Promise<void> {
   try {
     await kkv.delete(SEARCH_KKV_MODULE, key);
   } catch (error) {
-    if (error instanceof KkvError && error.code === "NOT_FOUND") {
+    if (isAppError(error, "KKV_NOT_FOUND")) {
       return;
     }
     throw error;
@@ -121,11 +111,7 @@ function normalizeEngineOrder(raw: string | undefined): EngineId[] {
       const parsed: unknown = JSON.parse(raw);
       if (Array.isArray(parsed)) {
         for (const item of parsed) {
-          if (
-            typeof item === "string" &&
-            (ENGINE_IDS as readonly string[]).includes(item) &&
-            !order.includes(item as EngineId)
-          ) {
+          if (typeof item === "string" && (ENGINE_IDS as readonly string[]).includes(item) && !order.includes(item as EngineId)) {
             order.push(item as EngineId);
           }
         }
@@ -145,16 +131,8 @@ function normalizeEngineOrder(raw: string | undefined): EngineId[] {
  * searxng 的 `configured` 只看 baseUrl 是否非空，duckduckgo 恒 true，
  * 均不触碰 secretStore。
  */
-export async function readSearchConfig(
-  deps: SearchConfigDeps
-): Promise<SearchConfigPublic> {
-  const [engineOrderRaw, baseUrlRaw, ...keySet] = await Promise.all([
-    kkvGet(deps.kkv, KEY_ENGINE_ORDER),
-    kkvGet(deps.kkv, KEY_SEARXNG_BASE_URL),
-    ...KEY_ENGINE_IDS.map((engineId) =>
-      deps.secretStore.has(searchApiKeyRef(engineId))
-    ),
-  ]);
+export async function readSearchConfig(deps: SearchConfigDeps): Promise<SearchConfigPublic> {
+  const [engineOrderRaw, baseUrlRaw, ...keySet] = await Promise.all([kkvGet(deps.kkv, KEY_ENGINE_ORDER), kkvGet(deps.kkv, KEY_SEARXNG_BASE_URL), ...KEY_ENGINE_IDS.map((engineId) => deps.secretStore.has(searchApiKeyRef(engineId)))]);
   const searxngBaseUrl = baseUrlRaw ?? "";
   return {
     engineOrder: normalizeEngineOrder(engineOrderRaw),
@@ -179,10 +157,7 @@ export async function readSearchConfig(
  * get 不到明文视作未配置跳过；searxng 存库 baseUrl 损坏同样跳过），
  * 全无 → 空数组（仅防御路径可达：DDG 恒在链，工具常规不会回落未配置提示）。
  */
-export async function resolveEngineChain(
-  deps: SearchConfigDeps,
-  inputEngine?: EngineId
-): Promise<ResolvedEngineConfig[]> {
+export async function resolveEngineChain(deps: SearchConfigDeps, inputEngine?: EngineId): Promise<ResolvedEngineConfig[]> {
   const config = await readSearchConfig(deps);
   let order: readonly EngineId[] = config.engineOrder;
   if (inputEngine != null) {
@@ -222,9 +197,7 @@ export interface SearchConfigStore {
   /** 读取对外配置（不含 key 明文）。 */
   readConfig(): Promise<SearchConfigPublic>;
   /** 解析串行引擎链（链语义同 {@link resolveEngineChain}）。 */
-  resolveEngineChain(
-    inputEngine?: EngineId
-  ): Promise<ResolvedEngineConfig[]>;
+  resolveEngineChain(inputEngine?: EngineId): Promise<ResolvedEngineConfig[]>;
   /** 保存引擎 API key（明文只经 SKSP set；空串拒绝）。 */
   saveEngineKey(engineId: KeyEngineId, apiKey: string): Promise<void>;
   /** 清除引擎 API key。 */
@@ -241,9 +214,7 @@ export interface SearchConfigStore {
  * 构造搜索配置存储：绑定 kkv + secretStore 的薄封装，全部逻辑走本模块
  * 纯函数（工厂只做依赖闭包，便于双端装配与单测复用同一实现）。
  */
-export function createSearchConfigStore(
-  deps: SearchConfigDeps
-): SearchConfigStore {
+export function createSearchConfigStore(deps: SearchConfigDeps): SearchConfigStore {
   const { kkv, secretStore } = deps;
   return {
     async readConfig() {
@@ -255,7 +226,7 @@ export function createSearchConfigStore(
     async saveEngineKey(engineId, apiKey) {
       const trimmed = apiKey.trim();
       if (trimmed.length === 0) {
-        throw new Error("API key 不能为空");
+        throw new AppError("TOOL_SEARCH_INVALID_ARGUMENT", "API key 不能为空");
       }
       await secretStore.set(searchApiKeyRef(engineId), trimmed);
     },
@@ -270,35 +241,22 @@ export function createSearchConfigStore(
       }
       const normalized = normalizeSearxngBaseUrl(trimmed);
       if (normalized == null) {
-        throw new Error(
-          "searxng baseUrl 无效：仅支持 http/https，且不允许携带用户名密码"
-        );
+        throw new AppError("TOOL_SEARCH_INVALID_ARGUMENT", "searxng baseUrl 无效：仅支持 http/https，且不允许携带用户名密码");
       }
       await kkv.set(SEARCH_KKV_MODULE, KEY_SEARXNG_BASE_URL, normalized);
     },
     async setEngineOrder(order) {
       const seen = new Set<string>();
       for (const item of order) {
-        if (
-          !(ENGINE_IDS as readonly string[]).includes(item) ||
-          seen.has(item)
-        ) {
-          throw new Error(
-            `engineOrder 必须是五引擎的合法排列（不重复、不缺项），收到: ${JSON.stringify(order)}`
-          );
+        if (!(ENGINE_IDS as readonly string[]).includes(item) || seen.has(item)) {
+          throw new AppError("TOOL_SEARCH_INVALID_ARGUMENT", `engineOrder 必须是五引擎的合法排列（不重复、不缺项），收到: ${JSON.stringify(order)}`);
         }
         seen.add(item);
       }
       if (seen.size !== ENGINE_IDS.length) {
-        throw new Error(
-          `engineOrder 必须是五引擎的合法排列（不重复、不缺项），收到: ${JSON.stringify(order)}`
-        );
+        throw new AppError("TOOL_SEARCH_INVALID_ARGUMENT", `engineOrder 必须是五引擎的合法排列（不重复、不缺项），收到: ${JSON.stringify(order)}`);
       }
-      await kkv.set(
-        SEARCH_KKV_MODULE,
-        KEY_ENGINE_ORDER,
-        JSON.stringify(order)
-      );
+      await kkv.set(SEARCH_KKV_MODULE, KEY_ENGINE_ORDER, JSON.stringify(order));
     },
   };
 }

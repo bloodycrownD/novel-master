@@ -6,24 +6,11 @@
 
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { SqlTemplateParser } from "@/infra/sql-template/index.js";
-import {
-  executeTemplate,
-  queryTemplate,
-} from "@/infra/tdbc/logic/template-helper.js";
+import { executeTemplate, queryTemplate } from "@/infra/tdbc/logic/template-helper.js";
 import type { Row } from "@/infra/tdbc/types.js";
 import { normalizePath } from "@/domain/vfs/repositories/impl/normalize-path.js";
-import {
-  WORKPLACE_DIR_RULE_TABLE,
-  WORKPLACE_FILE_RULE_TABLE,
-} from "@/bootstrap/workplace/workplace-schema.js";
-import type {
-  FillPolicy,
-  InclusionMode,
-  SortField,
-  SortOrder,
-  WorkplaceDirRule,
-  WorkplaceFileRule,
-} from "../../model/workplace-types.js";
+import { WORKPLACE_DIR_RULE_TABLE, WORKPLACE_FILE_RULE_TABLE } from "@/bootstrap/workplace/workplace-schema.js";
+import type { FillPolicy, InclusionMode, SortField, SortOrder, WorkplaceDirRule, WorkplaceFileRule } from "../../model/workplace-types.js";
 import type { WorkplaceRepository } from "../workplace.port.js";
 
 function escapeLike(value: string): string {
@@ -61,10 +48,7 @@ export class SqliteWorkplaceRepository implements WorkplaceRepository {
 
   async upsertDirRule(rule: WorkplaceDirRule): Promise<void> {
     const logicalPath = normalizePath(rule.logicalPath);
-    await executeTemplate(
-      this.conn,
-      this.parser,
-      `INSERT INTO ${WORKPLACE_DIR_RULE_TABLE} (
+        const sql28 = `INSERT INTO ${WORKPLACE_DIR_RULE_TABLE} (
         scope_key, logical_path, rule_enabled, sort_field, sort_order,
         head_count, tail_count, fill_policy
       ) VALUES (
@@ -77,8 +61,8 @@ export class SqliteWorkplaceRepository implements WorkplaceRepository {
         sort_order = excluded.sort_order,
         head_count = excluded.head_count,
         tail_count = excluded.tail_count,
-        fill_policy = excluded.fill_policy`,
-      {
+        fill_policy = excluded.fill_policy`;
+await executeTemplate(this.conn, this.parser, sql28, {
         scopeKey: rule.scopeKey,
         logicalPath,
         ruleEnabled: rule.ruleEnabled ? 1 : 0,
@@ -87,25 +71,20 @@ export class SqliteWorkplaceRepository implements WorkplaceRepository {
         headCount: rule.headCount,
         tailCount: rule.tailCount,
         fillPolicy: rule.fillPolicy,
-      }
-    );
+      });
   }
 
   async upsertFileRule(rule: WorkplaceFileRule): Promise<void> {
     const logicalPath = normalizePath(rule.logicalPath);
-    await executeTemplate(
-      this.conn,
-      this.parser,
-      `INSERT INTO ${WORKPLACE_FILE_RULE_TABLE} (scope_key, logical_path, inclusion_mode)
+        const sql29 = `INSERT INTO ${WORKPLACE_FILE_RULE_TABLE} (scope_key, logical_path, inclusion_mode)
        VALUES (#{scopeKey}, #{logicalPath}, #{inclusionMode})
        ON CONFLICT(scope_key, logical_path) DO UPDATE SET
-         inclusion_mode = excluded.inclusion_mode`,
-      {
+         inclusion_mode = excluded.inclusion_mode`;
+await executeTemplate(this.conn, this.parser, sql29, {
         scopeKey: rule.scopeKey,
         logicalPath,
         inclusionMode: rule.inclusionMode,
-      }
-    );
+      });
   }
 
   async batchUpsertDirRules(rules: readonly WorkplaceDirRule[]): Promise<void> {
@@ -128,22 +107,11 @@ export class SqliteWorkplaceRepository implements WorkplaceRepository {
         head_count = excluded.head_count,
         tail_count = excluded.tail_count,
         fill_policy = excluded.fill_policy`;
-    const paramsList = rules.map((rule) => [
-      rule.scopeKey,
-      normalizePath(rule.logicalPath),
-      rule.ruleEnabled ? 1 : 0,
-      rule.sortField,
-      rule.sortOrder,
-      rule.headCount,
-      rule.tailCount,
-      rule.fillPolicy,
-    ]);
+    const paramsList = rules.map((rule) => [rule.scopeKey, normalizePath(rule.logicalPath), rule.ruleEnabled ? 1 : 0, rule.sortField, rule.sortOrder, rule.headCount, rule.tailCount, rule.fillPolicy]);
     await this.conn.batch(sql, paramsList);
   }
 
-  async batchUpsertFileRules(
-    rules: readonly WorkplaceFileRule[]
-  ): Promise<void> {
+  async batchUpsertFileRules(rules: readonly WorkplaceFileRule[]): Promise<void> {
     if (rules.length === 0) {
       return;
     }
@@ -152,94 +120,54 @@ export class SqliteWorkplaceRepository implements WorkplaceRepository {
       VALUES (?, ?, ?)
       ON CONFLICT(scope_key, logical_path) DO UPDATE SET
         inclusion_mode = excluded.inclusion_mode`;
-    const paramsList = rules.map((rule) => [
-      rule.scopeKey,
-      normalizePath(rule.logicalPath),
-      rule.inclusionMode,
-    ]);
+    const paramsList = rules.map((rule) => [rule.scopeKey, normalizePath(rule.logicalPath), rule.inclusionMode]);
     await this.conn.batch(sql, paramsList);
   }
 
   async deleteScope(scopeKey: string): Promise<void> {
-    await executeTemplate(
-      this.conn,
-      this.parser,
-      `DELETE FROM ${WORKPLACE_DIR_RULE_TABLE} WHERE scope_key = #{scopeKey}`,
-      { scopeKey }
-    );
-    await executeTemplate(
-      this.conn,
-      this.parser,
-      `DELETE FROM ${WORKPLACE_FILE_RULE_TABLE} WHERE scope_key = #{scopeKey}`,
-      { scopeKey }
-    );
+    await executeTemplate(this.conn, this.parser, `DELETE FROM ${WORKPLACE_DIR_RULE_TABLE} WHERE scope_key = #{scopeKey}`, { scopeKey });
+    await executeTemplate(this.conn, this.parser, `DELETE FROM ${WORKPLACE_FILE_RULE_TABLE} WHERE scope_key = #{scopeKey}`, { scopeKey });
   }
 
   async listDirRules(scopeKey: string): Promise<WorkplaceDirRule[]> {
-    const rows = await queryTemplate(
-      this.conn,
-      this.parser,
-      `SELECT scope_key, logical_path, rule_enabled, sort_field, sort_order,
+        const sql30 = `SELECT scope_key, logical_path, rule_enabled, sort_field, sort_order,
               head_count, tail_count, fill_policy
-       FROM ${WORKPLACE_DIR_RULE_TABLE} WHERE scope_key = #{scopeKey}`,
-      { scopeKey }
-    );
+       FROM ${WORKPLACE_DIR_RULE_TABLE} WHERE scope_key = #{scopeKey}`;
+const rows = await queryTemplate(this.conn, this.parser, sql30, { scopeKey });
     return rows.map(rowToDirRule);
   }
 
   async listFileRules(scopeKey: string): Promise<WorkplaceFileRule[]> {
-    const rows = await queryTemplate(
-      this.conn,
-      this.parser,
-      `SELECT scope_key, logical_path, inclusion_mode
-       FROM ${WORKPLACE_FILE_RULE_TABLE} WHERE scope_key = #{scopeKey}`,
-      { scopeKey }
-    );
+        const sql31 = `SELECT scope_key, logical_path, inclusion_mode
+       FROM ${WORKPLACE_FILE_RULE_TABLE} WHERE scope_key = #{scopeKey}`;
+const rows = await queryTemplate(this.conn, this.parser, sql31, { scopeKey });
     return rows.map(rowToFileRule);
   }
 
-  async findDirRule(
-    scopeKey: string,
-    logicalPath: string
-  ): Promise<WorkplaceDirRule | null> {
-    const rows = await queryTemplate(
-      this.conn,
-      this.parser,
-      `SELECT scope_key, logical_path, rule_enabled, sort_field, sort_order,
+  async findDirRule(scopeKey: string, logicalPath: string): Promise<WorkplaceDirRule | null> {
+        const sql32 = `SELECT scope_key, logical_path, rule_enabled, sort_field, sort_order,
               head_count, tail_count, fill_policy
        FROM ${WORKPLACE_DIR_RULE_TABLE}
-       WHERE scope_key = #{scopeKey} AND logical_path = #{logicalPath}`,
-      { scopeKey, logicalPath: normalizePath(logicalPath) }
-    );
+       WHERE scope_key = #{scopeKey} AND logical_path = #{logicalPath}`;
+const rows = await queryTemplate(this.conn, this.parser, sql32, { scopeKey, logicalPath: normalizePath(logicalPath) });
     if (rows.length === 0) {
       return null;
     }
     return rowToDirRule(rows[0]!);
   }
 
-  async findFileRule(
-    scopeKey: string,
-    logicalPath: string
-  ): Promise<WorkplaceFileRule | null> {
-    const rows = await queryTemplate(
-      this.conn,
-      this.parser,
-      `SELECT scope_key, logical_path, inclusion_mode
+  async findFileRule(scopeKey: string, logicalPath: string): Promise<WorkplaceFileRule | null> {
+        const sql33 = `SELECT scope_key, logical_path, inclusion_mode
        FROM ${WORKPLACE_FILE_RULE_TABLE}
-       WHERE scope_key = #{scopeKey} AND logical_path = #{logicalPath}`,
-      { scopeKey, logicalPath: normalizePath(logicalPath) }
-    );
+       WHERE scope_key = #{scopeKey} AND logical_path = #{logicalPath}`;
+const rows = await queryTemplate(this.conn, this.parser, sql33, { scopeKey, logicalPath: normalizePath(logicalPath) });
     if (rows.length === 0) {
       return null;
     }
     return rowToFileRule(rows[0]!);
   }
 
-  async copyScope(
-    fromScopeKey: string,
-    toScopeKey: string,
-    mapLogicalPath: (logical: string) => string
-  ): Promise<void> {
+  async copyScope(fromScopeKey: string, toScopeKey: string, mapLogicalPath: (logical: string) => string): Promise<void> {
     // 先清空目标 scope（覆盖目标 scope 原有、但不在源 scope 的规则），语义保持不变。
     await this.deleteScope(toScopeKey);
     const dirs = await this.listDirRules(fromScopeKey);
@@ -259,42 +187,26 @@ export class SqliteWorkplaceRepository implements WorkplaceRepository {
     await this.batchUpsertFileRules(mappedFiles);
   }
 
-  async deleteRulesUnderLogicalPrefix(
-    scopeKey: string,
-    logicalPrefix: string
-  ): Promise<void> {
+  async deleteRulesUnderLogicalPrefix(scopeKey: string, logicalPrefix: string): Promise<void> {
     const base = normalizePath(logicalPrefix);
     const escaped = escapeLike(base);
     const childPattern = `${escaped}/%`;
-    await executeTemplate(
-      this.conn,
-      this.parser,
-      `DELETE FROM ${WORKPLACE_DIR_RULE_TABLE}
+        const sql34 = `DELETE FROM ${WORKPLACE_DIR_RULE_TABLE}
        WHERE scope_key = #{scopeKey}
-         AND (logical_path = #{path} OR logical_path LIKE #{childPattern} ESCAPE '\\')`,
-      { scopeKey, path: base, childPattern }
-    );
-    await executeTemplate(
-      this.conn,
-      this.parser,
-      `DELETE FROM ${WORKPLACE_FILE_RULE_TABLE}
+         AND (logical_path = #{path} OR logical_path LIKE #{childPattern} ESCAPE '\\')`;
+await executeTemplate(this.conn, this.parser, sql34, { scopeKey, path: base, childPattern });
+        const sql35 = `DELETE FROM ${WORKPLACE_FILE_RULE_TABLE}
        WHERE scope_key = #{scopeKey}
-         AND (logical_path = #{path} OR logical_path LIKE #{childPattern} ESCAPE '\\')`,
-      { scopeKey, path: base, childPattern }
-    );
+         AND (logical_path = #{path} OR logical_path LIKE #{childPattern} ESCAPE '\\')`;
+await executeTemplate(this.conn, this.parser, sql35, { scopeKey, path: base, childPattern });
   }
 
-  async renameRulesUnderLogicalPrefix(
-    scopeKey: string,
-    oldPrefix: string,
-    newPrefix: string
-  ): Promise<void> {
+  async renameRulesUnderLogicalPrefix(scopeKey: string, oldPrefix: string, newPrefix: string): Promise<void> {
     const oldBase = normalizePath(oldPrefix);
     const newBase = normalizePath(newPrefix);
     const escaped = escapeLike(oldBase);
     const childPattern = `${escaped}/%`;
-    const matchClause =
-      "scope_key = #{scopeKey} AND (logical_path = #{oldBase} OR logical_path LIKE #{childPattern} ESCAPE '\\')";
+    const matchClause = "scope_key = #{scopeKey} AND (logical_path = #{oldBase} OR logical_path LIKE #{childPattern} ESCAPE '\\')";
     // 一条 UPDATE：精确匹配自身（替换为 newBase）或子路径（拼接 newBase + 剩余部分）
     const renameDir = `
       UPDATE ${WORKPLACE_DIR_RULE_TABLE}

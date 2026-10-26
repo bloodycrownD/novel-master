@@ -73,17 +73,11 @@ export function pathStartsWithPrefix(path: string, prefix: string): boolean {
   if (prefix === "" || prefix === "/" || prefix === "\\") {
     return true;
   }
-  const normalizedPrefix =
-    prefix.endsWith("/") || prefix.endsWith("\\")
-      ? prefix.slice(0, -1)
-      : prefix;
+  const normalizedPrefix = prefix.endsWith("/") || prefix.endsWith("\\") ? prefix.slice(0, -1) : prefix;
   if (path === normalizedPrefix) {
     return true;
   }
-  return (
-    path.startsWith(normalizedPrefix + "/") ||
-    path.startsWith(normalizedPrefix + "\\")
-  );
+  return path.startsWith(normalizedPrefix + "/") || path.startsWith(normalizedPrefix + "\\");
 }
 
 /**
@@ -91,10 +85,7 @@ export function pathStartsWithPrefix(path: string, prefix: string): boolean {
  *
  * `allowedPaths === undefined` 表示不限制（向后兼容）。
  */
-export function isPathAllowed(
-  path: string,
-  allowedPaths?: readonly string[]
-): boolean {
+export function isPathAllowed(path: string, allowedPaths?: readonly string[]): boolean {
   if (allowedPaths === undefined) {
     return true;
   }
@@ -107,10 +98,7 @@ export function isPathAllowed(
  * 给 `ToolRunner.call()` 用——它只需要知道「是否要拒」以及「拒哪条路径」，
  * 不需要知道每条具体校验过程。
  */
-export function findDisallowedPath(
-  paths: readonly string[],
-  allowedPaths?: readonly string[]
-): string | null {
+export function findDisallowedPath(paths: readonly string[], allowedPaths?: readonly string[]): string | null {
   if (allowedPaths === undefined) {
     return null;
   }
@@ -153,10 +141,7 @@ export function readAllowedPaths(ctx: unknown): readonly string[] | undefined {
  * 这是 `ToolRunner.call()` 实际调的入口——把 input 抽取与 ctx 读取封装在一起，
  * runner 那边只关心结果。
  */
-export function checkToolPathPolicy(
-  input: unknown,
-  ctx: unknown
-): string | null {
+export function checkToolPathPolicy(input: unknown, ctx: unknown): string | null {
   const allowedPaths = readAllowedPaths(ctx);
   const paths = extractInputPaths(input);
   return findDisallowedPath(paths, allowedPaths);

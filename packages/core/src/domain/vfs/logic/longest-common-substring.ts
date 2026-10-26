@@ -51,10 +51,7 @@ export function countOccurrences(haystack: string, needle: string): number {
  * 不能因为一次失败诊断把进程打爆；降级结果被上游三处 `length === 0` 分支消化，
  * 错误码与调用流程零变化。
  */
-export function longestCommonSubstring(
-  a: string,
-  b: string
-): LongestCommonSubstringResult {
+export function longestCommonSubstring(a: string, b: string): LongestCommonSubstringResult {
   if (a.length === 0 || b.length === 0) {
     return { substring: "", length: 0 };
   }
