@@ -114,7 +114,14 @@ markdown.renderer.rules.code_block = (tokens, idx) => {
  */
 export function prepareTranscriptRichHtml(content: string): string {
   const normalized = decodeForMarkdownInput(content);
-  const sanitized = sanitizeRichHtml(markdown.render(normalized));
-  // sanitize-html 可能把 markdown-it 的 &quot; 变成 &amp;quot; — 出口仍解 quot/amp
+  // 表格包一层横滚容器：单元格上限（72vw）+ 表宽 max-content 的组合需要「不超过气泡宽」的外壳来滚动，
+  // 否则 table 自己的盒子与内容同宽，没有可滚动的溢出、只会撑破气泡（真机实测）。
+  // 代码块里的 <table> 字面量已被转义成 &lt;table&gt;，不会误伤。
+  const rendered = markdown
+    .render(normalized)
+    .replace(/<table(\s[^>]*)?>/g, '<div class="table-wrap"><table$1>')
+    .replace(/<\/table>/g, '</table></div>');
+  const sanitized = sanitizeRichHtml(rendered);
+  // sanitize-html 只能把 markdown-it 的 &quot; 变成 &amp;quot; —— 出口仍解 quot/amp
   return decodeAfterSanitize(sanitized);
 }

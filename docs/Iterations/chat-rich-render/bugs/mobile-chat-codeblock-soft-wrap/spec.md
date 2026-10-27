@@ -7,6 +7,8 @@ agile_trace: true
 
 ## 根因 / 方案摘要
 
+> **【已废止 · superseded 2026-10-28】** 本文「`pre` 不折行改横滚」的结论已被 `docs/Iterations/chat-ux-fixes-2026-10/features/C-mobile-md-horizontal-scroll/spec.md` 接续：基底 `pre` 保持 `pre-wrap` 折行，普通代码块通过 `pre[data-lang]` 作用域改横向滚动（mermaid 三态源码仍折行）。本文仅作历史记录。
+
 `buildRichContentCssRules` 中 `pre` 仅设 `overflow-x: auto`，未覆盖 UA `white-space: pre`。改为 `white-space: pre-wrap` + `overflow-wrap: anywhere`。后续为避免内层滚动抢 transcript 竖滑，将 `overflow-x` 改为 `visible`（不再用 `auto` 兜底）。
 
 ## 变更点清单

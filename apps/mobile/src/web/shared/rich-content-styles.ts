@@ -54,6 +54,12 @@ export function buildRichContentCssRules(selectors: readonly string[]): string {
     .join(', ');
   // 块级代码：pre 内 code 重置行内形态（透明背景/零 padding/无圆角）
   const preCode = selectors.map(s => `${s} pre code`).join(', ');
+  // 代码块横滚容器：必须逐 root 挂 `> code`——`${child('pre[data-lang]')} > code`
+  // 只会把后缀加到最后一个 root 上（与下方 ::after 同一个坑），chat 侧会整条拿不到规则、
+  // pre 自己变成滚动容器，复制按钮跟着滚（2026-10-28 真机 + WebView devtools 实测）。
+  const preScroller = selectors
+    .map(s => `${s} pre[data-lang] > code`)
+    .join(', ');
   const preLangLabel = selectors
     .map(s => `${s} pre[data-lang]::before`)
     .join(', ');
@@ -125,7 +131,8 @@ export function buildRichContentCssRules(selectors: readonly string[]): string {
     ${child(
       'code',
     )} { font-family: ui-monospace, monospace; font-size: 0.9em; background: rgba(0,0,0,0.06); padding: 0.1em 0.25em; border-radius: 4px; }
-    /* 覆盖 UA white-space:pre；折行后勿用 overflow-x:auto，避免内层滚动抢 transcript 竖滑 */
+    /* 覆盖 UA white-space:pre。基底继续折行：mermaid 三态源码（pending/failed/success）
+       都不带 data-lang，横滚只覆盖下面的 pre[data-lang]，基底视觉与折行不受波及 */
     /* 块级独立形态：背景叠层 + 边框 + padding，与行内 code（rgba 背景 + 无边框）拉开 */
     ${child('pre')} {
       position: relative;
@@ -139,6 +146,19 @@ export function buildRichContentCssRules(selectors: readonly string[]): string {
       background: rgba(0,0,0,0.045);
     }
     ${preCode} { background: transparent; padding: 0; border-radius: 0; }
+    /* 普通代码块不折行 + 横向滚动（2026-10-27 手机端拍板，废止 T-CB10 折行禁令）。
+       滚动容器落在内层 code 上、而不是 pre：pre 一旦成为滚动容器，绝对定位的
+       复制按钮会跟着内容一起滚走（真机反馈）。现在 pre 仍是定位基准，按钮钉住。
+       作用域收在 pre[data-lang]：无语言 fence 与缩进块都带 data-lang=plain，
+       mermaid 的裸 pre 不带，天然豁免；overflow-y:hidden 防内层纵滚抢 transcript 竖滑 */
+    ${preScroller} {
+      display: block;
+      white-space: pre;
+      overflow-wrap: normal;
+      overflow-x: auto;
+      overflow-y: hidden;
+      -webkit-overflow-scrolling: touch;
+    }
     /* 复制按钮：常驻右上角（触屏无 hover，不藏）;文案伪元素呈现，复制成功切「已复制」 */
     ${preCopyBtn} {
       position: absolute;
@@ -172,6 +192,38 @@ export function buildRichContentCssRules(selectors: readonly string[]): string {
       )
       .join('\n    ')}
     ${child('a')} { color: var(--primary, #007aff); }
+    /* 表格外层横滚容器：单元格上限是 72vw，表宽又必须取 max-content 才能让「长列封顶、短列自然窄」，
+       而 width:max-content 的盒子会跟内容一样宽——它自己永远没有可滚动的溢出，只会撑破气泡。
+       所以由 renderer 包一层 div.table-wrap：外壳 ≤ 气泡宽并负责横滚，里面的表按内容自然铺开。 */
+    ${child('.table-wrap')} {
+      max-width: 100%;
+      overflow-x: auto;
+      overflow-y: hidden;
+      -webkit-overflow-scrolling: touch;
+      margin: 0.5em 0;
+    }
+    ${child('.table-wrap > table')} {
+      display: block;
+      width: max-content;
+      margin: 0;
+      border: 1px solid var(--border, #e5e5ea);
+      border-radius: 6px;
+    }
+    ${child('th')}, ${child('td')} {
+      min-width: 0;
+      max-width: 72vw;
+      padding: 0.3em 0.7em;
+      border-bottom: 1px solid var(--border, #e5e5ea);
+      text-align: left;
+      vertical-align: top;
+      /* 表头也折行：长标题不再把整列撑宽 */
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
+    ${child('th')} {
+      background: rgba(0,0,0,0.04);
+      font-weight: 600;
+    }
     /* Mermaid 图表：成功态源码 display:none 保留（批注文本流不偏移）；SVG 缩放适配宽度 */
     ${mermaidBlock} {
       margin: 0.35em 0;

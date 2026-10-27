@@ -13,7 +13,7 @@ dependency:
 - 围栏代码块在双端四场景（desktop 预览 / desktop 聊天 / mobile `.md` 预览 / mobile 聊天 transcript）具备**独立块级形态**（背景 / 边框 / 内边距 / 圆角），与行内 `code` 视觉明确区分。
 - 代码块顶部显示**语言标签**（fence 标注归一化后的语言名，如 `ts → typescript`）；未标注语言时不显示标签、无空残留；不在支持清单的语言降级为纯文本块级形态。
 - **语法高亮**覆盖 PRD 语言清单：typescript / javascript / json / python / bash / shell / sql / markdown / yaml / html / css（别名归一化：ts、js、sh、yml、py 等）。高亮配色跟随应用明暗主题。
-- **mobile 保留折行设计**：`pre` 维持 `white-space: pre-wrap`，禁止 `overflow-x: auto`（避免内层横向滚动抢 transcript 竖滑手势）。
+- ~~**mobile 保留折行设计**：`pre` 维持 `white-space: pre-wrap`，禁止 `overflow-x: auto`（避免内层横向滚动抢 transcript 竖滑手势）。~~ **【已废止 · superseded 2026-10-28】** 横滚禁令由 `docs/Iterations/chat-ux-fixes-2026-10/features/C-mobile-md-horizontal-scroll/spec.md` 推翻：基底 `pre` 仍折行，普通代码块改走 `pre[data-lang]` 作用域的横滚（mermaid 三态源码不受影响）；T-CB10 判定口径同步改为「横滚只在 `pre[data-lang]` 上」。
 - **mermaid 不回归**：` ```mermaid ` 继续走图表链路（desktop `MermaidBlock`、mobile WebView `mermaid-core.ts` 扫描 `code.language-mermaid`），不套用普通代码块高亮，全屏查看器行为不变。
 - **批注不回归**：批注以渲染后 DOM 文本流为坐标基准（annotate-source-anchor-render R4）。高亮与语言标签不得改变 `textContent` 顺序与内容。
 - **RN 回退路径维持纯文本现状**：`RichContentBody.tsx` 是纯文本回退组件（只渲染 `Text`，无 RenderHTML 树），`FileMarkdownPreview` 在 overLimit / 非 webview 引擎时 `html` 为 `undefined` 直走纯文本——本迭代不改动其渲染行为，仅做「行为不变」回归验证（见 C-12 / T-CB12）。
