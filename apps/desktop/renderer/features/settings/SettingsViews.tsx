@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { truncateText } from "@novel-master/core/common";
+import { truncateText } from "@shared/logic/common";
 export { AgentEditorView } from "./AgentEditorView";
 
 
