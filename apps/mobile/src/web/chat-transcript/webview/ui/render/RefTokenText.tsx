@@ -110,14 +110,25 @@ export function splitRefTokenSpans(
   matches.sort((a, b) => a.index - b.index || b.end - a.end);
 
   const spans: RefSpan[] = [];
+  // 所有命中起点：判断「终止符是否已被另一条命中占用」用（旧格式 `$A$B` 两颗粒各自成药丸）
+  const matchStarts = new Set(matches.map(match => match.index));
   let cursor = 0;
   for (const match of matches) {
     if (match.index < cursor) continue;
+    // 新格式明文 `$A$`：字面量右侧还挂着一颗终止符，消费它才算整颗胶囊。
+    // 两个条件必须同时成立——① 该位置字符确实是同一触发符（只查相邻就推进会误吞
+    // `$写作文` 这类「附件技能名 + 下一普通字」的正常文本）；② 没有另一条命中恰从这里开始。
+    let end = match.end;
+    const trigger = match.text[0];
+    if (end < text.length && text[end] === trigger && !matchStarts.has(end)) {
+      end += 1;
+    }
     if (match.index > cursor) {
       spans.push({kind: 'text', text: text.slice(cursor, match.index)});
     }
-    spans.push({kind: match.kind, text: match.text});
-    cursor = match.end;
+    // span 文本必须带上被消费的终止符（沿用 match.text 会把它从渲染里丢掉）
+    spans.push({kind: match.kind, text: text.slice(match.index, end)});
+    cursor = end;
   }
   if (cursor < text.length) {
     spans.push({kind: 'text', text: text.slice(cursor)});

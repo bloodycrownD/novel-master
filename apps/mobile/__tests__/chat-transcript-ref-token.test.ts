@@ -162,3 +162,62 @@ describe('splitRefTokenSpans（附件真源口径）', () => {
     ]);
   });
 });
+
+/**
+ * F-A7：新格式明文（`$技能名$` / `@路径@`）下，胶囊要连终止符一起吃掉；
+ * 旧格式贴邻（`$A$B`、`@path$skill`）保持两颗各自成药丸，不许退化。
+ */
+describe('新格式终止符消费', () => {
+  it('新格式技能：终止符进胶囊，后面的普通字留在外面', () => {
+    const attached = {skills: new Set(['写文档']), paths: new Set<string>()};
+    expect(splitRefTokenSpans('看$写文档$呀', attached)).toEqual([
+      {kind: 'text', text: '看'},
+      {kind: 'skill', text: '$写文档$'},
+      {kind: 'text', text: '呀'},
+    ]);
+  });
+
+  it('新格式路径：终止符进胶囊', () => {
+    const attached = {skills: new Set<string>(), paths: new Set(['notes/a.md'])};
+    expect(splitRefTokenSpans('看@notes/a.md@谢', attached)).toEqual([
+      {kind: 'text', text: '看'},
+      {kind: 'path', text: '@notes/a.md@'},
+      {kind: 'text', text: '谢'},
+    ]);
+  });
+
+  it('旧格式贴邻双技能：各自成药丸，不被当成终止符吞掉', () => {
+    const attached = {skills: new Set(['A', 'B']), paths: new Set<string>()};
+    expect(splitRefTokenSpans('$A$B', attached)).toEqual([
+      {kind: 'skill', text: '$A'},
+      {kind: 'skill', text: '$B'},
+    ]);
+  });
+
+  it('旧格式 @path 贴邻 $skill：路径胶囊不被技能触发符吞掉', () => {
+    const attached = {
+      skills: new Set(['写作文']),
+      paths: new Set(['/docs/a.md']),
+    };
+    expect(splitRefTokenSpans('@/docs/a.md$写作文', attached)).toEqual([
+      {kind: 'path', text: '@/docs/a.md'},
+      {kind: 'skill', text: '$写作文'},
+    ]);
+  });
+
+  it('相邻字符恰好是触发符但无第二条命中：按新格式消费终止符', () => {
+    const attached = {skills: new Set(['A']), paths: new Set<string>()};
+    // 只有一个附件命中，尾随 `$` 就是终止符（不是第二颗胶囊的开头）
+    expect(splitRefTokenSpans('$A$', attached)).toEqual([
+      {kind: 'skill', text: '$A$'},
+    ]);
+  });
+
+  it('终止符位置是普通字（非触发符）时不推进：旧文本不被吞', () => {
+    const attached = {skills: new Set(['写作文']), paths: new Set<string>()};
+    expect(splitRefTokenSpans('$写作文本', attached)).toEqual([
+      {kind: 'skill', text: '$写作文'},
+      {kind: 'text', text: '本'},
+    ]);
+  });
+});

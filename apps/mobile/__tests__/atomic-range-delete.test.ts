@@ -17,13 +17,13 @@ function backspaceOnce(value: string, cursor: number): string {
 
 describe('tryAtomicRangeDelete', () => {
   it('T-AD1：token 区间内退格，整段删掉命中区间', () => {
-    const prev = '看 $apm-recall 和 @/a.md 哦';
-    // 在 $apm-recall 中段退格一次（删掉 '-'）
+    const prev = '看 $apm-recall$ 和 @/a.md@ 哦';
+    // 在 $apm-recall$ 中段退格一次（删掉 '-'）
     const cursorInside = prev.indexOf('$apm-') + '$apm-'.length;
     const next = backspaceOnce(prev, cursorInside);
 
     expect(tryAtomicRangeDelete(prev, next, composerTokenRanges(prev))).toBe(
-      '看  和 @/a.md 哦',
+      '看  和 @/a.md@ 哦',
     );
   });
 
@@ -101,7 +101,7 @@ describe('tryAtomicRangeDelete', () => {
 
   it('T-AD5：token 区间源与宏区间源行为模式一致（对称场景）', () => {
     // 区间内退格 → 整段删（token 侧）
-    const prevToken = '帮我看 @/a.md 谢谢';
+    const prevToken = '帮我看 @/a.md@ 谢谢';
     const nextToken = backspaceOnce(
       prevToken,
       prevToken.indexOf('@/a.') + '/a.'.length,

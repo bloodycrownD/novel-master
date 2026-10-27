@@ -3,6 +3,9 @@
  *
  * 断言面全部是纯函数返回值——**不读源码文本**（Windows CRLF 会让
  * readFileSync 型断言误红）；DOM 装配与事件链由宿主层集成测试与模拟器验收覆盖。
+ *
+ * token 明文为 `$技能名$` / `@路径@`（触发符开头、同字符收尾），区间含收尾
+ * 触发符；无尾终止符的旧格式不再命中（不高亮 / 无原子删除区间）。
  */
 import {
   atomicDeleteRanges,
@@ -35,14 +38,14 @@ describe('renderHighlightHtml（composer-token 模式）', () => {
   });
 
   it('T-CW2：token 段包 span 且类名固定', () => {
-    expect(renderHighlightHtml('看 @src/a.ts 谢谢', 'composer-token')).toBe(
-      `看 ${TOKEN_SPAN('@src/a.ts')} 谢谢`,
+    expect(renderHighlightHtml('看 @src/a.ts@ 谢谢', 'composer-token')).toBe(
+      `看 ${TOKEN_SPAN('@src/a.ts@')} 谢谢`,
     );
   });
 
-  it('T-CW3：@a$b 互斥成两个独立 token（不互吞）', () => {
-    expect(renderHighlightHtml('@a$b', 'composer-token')).toBe(
-      `${TOKEN_SPAN('@a')}${TOKEN_SPAN('$b')}`,
+  it('T-CW3：@a@$b$ 互斥成两个独立 token（不互吞）', () => {
+    expect(renderHighlightHtml('@a@$b$', 'composer-token')).toBe(
+      `${TOKEN_SPAN('@a@')}${TOKEN_SPAN('$b$')}`,
     );
   });
 
@@ -68,6 +71,11 @@ describe('renderHighlightHtml（composer-token 模式）', () => {
       '价格 $ 100',
     );
   });
+
+  it('旧格式（无尾终止符）不再命中：@路径 与 $技能 都按普通文本渲染', () => {
+    const plain = '看 @src/a.ts 与 $技能 都不高亮';
+    expect(renderHighlightHtml(plain, 'composer-token')).toBe(plain);
+  });
 });
 
 describe('renderHighlightHtml（prompt-macro 模式）', () => {
@@ -92,11 +100,10 @@ describe('renderHighlightHtml（prompt-macro 模式）', () => {
   });
 
   it('T-CW6：模式隔离——宏模式不认 @/$ token；token 模式无宏语义', () => {
-    expect(renderHighlightHtml('@a $b', 'prompt-macro')).toBe('@a $b');
-    // token 规则由字符类驱动（$ 后紧跟非空白即命中，以空白截止），不看 {{ }}：
-    // 宏形态在 token 模式里只按 $ token 命中，尾部 }} 一起被吃掉
+    expect(renderHighlightHtml('@a@ $b$', 'prompt-macro')).toBe('@a@ $b$');
+    // token 规则要求首尾同字符收尾：{{$time}} 里只有一个 $，token 模式不高亮
     expect(renderHighlightHtml('{{$time}}', 'composer-token')).toBe(
-      `{{${TOKEN_SPAN('$time}}')}`,
+      '{{$time}}',
     );
   });
 
@@ -108,14 +115,19 @@ describe('renderHighlightHtml（prompt-macro 模式）', () => {
 });
 
 describe('atomicDeleteRanges / resolveAtomicDelete（T-CW7 原子删纯逻辑）', () => {
-  it('token 源：退格命中 token 尾 → 整段摘除', () => {
-    const prev = '看 @a.rb 好';
-    const raw = '看 @a.r 好';
+  it('token 源：退格删进 token 内侧 → 整段摘除', () => {
+    const prev = '看 @a.rb@ 好';
+    const raw = '看 @a.r@ 好';
     expect(atomicDeleteRanges(prev, 'composer-token')).toEqual([
-      {start: 2, end: 7},
+      {start: 2, end: 8},
     ]);
     expect(resolveAtomicDelete(prev, raw, 'composer-token')).toBe('看  好');
     expect(resolveAtomicCaret(prev, raw, '看  好')).toBe(2);
+    // 旧格式（无尾终止符）无候选区间，退格不拦截
+    expect(atomicDeleteRanges('看 @a.rb 好', 'composer-token')).toEqual([]);
+    expect(
+      resolveAtomicDelete('看 @a.rb 好', '看 @a.r 好', 'composer-token'),
+    ).toBeNull();
   });
 
   it('宏源：退格命中宏尾 → 整段摘除', () => {
@@ -129,10 +141,10 @@ describe('atomicDeleteRanges / resolveAtomicDelete（T-CW7 原子删纯逻辑）
   });
 
   it('选中删除跨进 token 内侧：删除窗起点早于区间起点 → caret 取删除窗起点', () => {
-    // 选中 ' @t'（删除窗 [1,4)）删进 token 区间 [2,6)：整段摘除后光标落在
+    // 选中 ' @t'（删除窗 [1,4)）删进 token 区间 [2,7)：整段摘除后光标落在
     // 删除窗起点（1），不被推到被删内容右侧——min() 另一支的回归锁。
-    expect(resolveAtomicDelete('a @tok', 'aok', 'composer-token')).toBe('a ');
-    expect(resolveAtomicCaret('a @tok', 'aok', 'a ')).toBe(1);
+    expect(resolveAtomicDelete('a @tok@', 'aok@', 'composer-token')).toBe('a ');
+    expect(resolveAtomicCaret('a @tok@', 'aok@', 'a ')).toBe(1);
   });
 
   it('双源互不串台（token 模式不认宏区间，反之亦然）', () => {
@@ -146,18 +158,18 @@ describe('atomicDeleteRanges / resolveAtomicDelete（T-CW7 原子删纯逻辑）
       '前缀后缀',
     );
     expect(
-      resolveAtomicDelete('看 @a.rb 好', '看 @a.r 好', 'prompt-macro'),
+      resolveAtomicDelete('看 @a.rb@ 好', '看 @a.r@ 好', 'prompt-macro'),
     ).toBeNull();
   });
 
   it('非删除/整段覆盖/多处不连续删都不拦截（交内核默认差分）', () => {
     expect(
-      resolveAtomicDelete('看 @a.rb', '看 @a.rb!', 'composer-token'),
+      resolveAtomicDelete('看 @a.rb@', '看 @a.rb@!', 'composer-token'),
     ).toBeNull();
     // 删除窗已覆盖整段区间
-    expect(resolveAtomicDelete('@a', '', 'composer-token')).toBeNull();
+    expect(resolveAtomicDelete('$技能$', '', 'composer-token')).toBeNull();
     expect(
-      resolveAtomicDelete('x@a b@c', 'x@a @c', 'composer-token'),
+      resolveAtomicDelete('x@a@ b@c@', 'x@a@ @c@', 'composer-token'),
     ).toBeNull();
   });
 

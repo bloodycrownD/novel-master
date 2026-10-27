@@ -113,3 +113,16 @@ describe("scanSkillAttachments (T-SK11)", () => {
     );
   });
 });
+
+describe("F-A4: mobile 双终止符明文 `$skill$` 在 core 扫描下照常可用（实现零改动）", () => {
+  it("行首 `$写文档$` → skill 写文档（终止符被字符类挡在名字外）", () => {
+    const scanned = attachmentScanner.scanSkills("$写文档$ 就好");
+    assert.equal(scanned.length, 1);
+    assert.equal(scanned[0]!.skillName, "写文档");
+    assert.equal(scanned[0]!.action, "skillAttach");
+  });
+
+  it("夹在中文中间（无前置空白）→ 不挂附件，正文照常入库", () => {
+    assert.equal(attachmentScanner.scanSkills("帮我$写文档$总结").length, 0);
+  });
+});

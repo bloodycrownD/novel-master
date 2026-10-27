@@ -255,7 +255,7 @@ export function PromptEditorScreen() {
           ? activeSkill.start
           : cursor;
       commitDraft(
-        buildTokenInsertion(draft, cursor, replaceStart, `$${skillName}`),
+        buildTokenInsertion(draft, cursor, replaceStart, `$${skillName}$`),
       );
     },
     [activeSkill, cursor, draft, commitDraft],
@@ -277,7 +277,13 @@ export function PromptEditorScreen() {
           ? activeAt.start
           : cursor;
       commitDraft(
-        buildTokenInsertion(draft, cursor, replaceStart, pathTokens),
+        buildTokenInsertion(
+          draft,
+          cursor,
+          replaceStart,
+          // picker 交上来的是裸 `@path`：终止符在 composer 侧补（picker 与目录移动共用）
+          pathTokens.map(token => `${token}@`),
+        ),
       );
     },
     [activeAt, cursor, draft, commitDraft],

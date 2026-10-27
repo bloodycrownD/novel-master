@@ -992,6 +992,33 @@ describe('ChatConversationPanel · 原生 dock 接线（Step 5）', () => {
     // 绕过面板箭头、抓不到丢参缺陷，所以必须在这里断言。
     mockRuntime.sessions.getComposerDraftJson = jest.fn(async () =>
       serializeComposerDraftJson({
+        text: '$技能$尾追',
+        attachments: [],
+        tokenRanges: [{start: 0, end: 4}],
+      }),
+    );
+
+    await act(async () => {
+      tree = TestRenderer.create(<TestHost />);
+      await flushPromises();
+    });
+
+    expect(mockComposerSetText).toHaveBeenCalledTimes(1);
+    expect(mockComposerSetText).toHaveBeenCalledWith(
+      '$技能$尾追',
+      undefined,
+      [{start: 0, end: 4}],
+    );
+    // 确认态同样进 prop 面（composer 的 tokenRanges = 持久化值，不是兜底扫描
+    // 出来的结果——尾追不升格）。
+    expect(lastComposerProps().tokenRanges).toEqual([{start: 0, end: 4}]);
+  });
+
+  it('F-A5 自愈：持久化旧格式区间（`$技能尾追` + [{0,3}]）→ 丢弃并写回 []', async () => {
+    const draftWrite = jest.fn(async () => undefined);
+    mockRuntime.sessions.setComposerDraftJson = draftWrite;
+    mockRuntime.sessions.getComposerDraftJson = jest.fn(async () =>
+      serializeComposerDraftJson({
         text: '$技能尾追',
         attachments: [],
         tokenRanges: [{start: 0, end: 3}],
@@ -1003,14 +1030,19 @@ describe('ChatConversationPanel · 原生 dock 接线（Step 5）', () => {
       await flushPromises();
     });
 
-    expect(mockComposerSetText).toHaveBeenCalledTimes(1);
+    // 首帧就下发过滤后的空区间（不是 [{0,3}] 那枚错区间）
     expect(mockComposerSetText).toHaveBeenCalledWith(
       '$技能尾追',
       undefined,
-      [{start: 0, end: 3}],
+      [],
     );
-    // 确认态同样进 prop 面（composer 的 tokenRanges = 持久化值，不是兜底扫描
-    // 出来的 [{0,5}]——尾追不升格）。
-    expect(lastComposerProps().tokenRanges).toEqual([{start: 0, end: 3}]);
+    expect(lastComposerProps().tokenRanges).toEqual([]);
+    // 并且过滤结果写回草稿，坏区间不会在 store 里永久循环
+    const writtenJson = draftWrite.mock.calls.at(-1)?.[1] as
+      | string
+      | null
+      | undefined;
+    expect(writtenJson).toBeTruthy();
+    expect(JSON.parse(writtenJson as string).tokenRanges).toEqual([]);
   });
 });

@@ -98,7 +98,7 @@ describe('NativeChatComposer（T-NC1~T-NC6）', () => {
   it('T-NC1 明文变化 → setTokenRanges 收到 composerTokenRanges 同款区间', () => {
     const { input } = renderComposer();
 
-    const plain = '看看 @src/a.ts 和 $技能名 好了';
+    const plain = '看看 @src/a.ts@ 和 $技能名$ 好了';
     act(() => {
       input().props.onChangeText(plain);
     });
@@ -118,6 +118,9 @@ describe('NativeChatComposer（T-NC1~T-NC6）', () => {
     expect(mockCalls.setTokenRanges).toHaveLength(3);
     expect(lastRanges()).toEqual([]);
 
+    // 旧格式明文（无尾终止符）不再是 token：兜底扫描返回空（新规范 bounded 自证）
+    expect(scanTokensToRanges('$技能名 与 @src/a.ts 保持普通文本')).toEqual([]);
+
     // 变异验证（spec T-NC1 口径「删下发必红」）：删掉 NativeChatComposer 的
     // handleChangeText 里 dispatchTokenRanges(plain) 一行后运行本套件，
     // 上面 setTokenRanges 长度断言即红——测试锁的就是这条下发链本身。
@@ -126,21 +129,21 @@ describe('NativeChatComposer（T-NC1~T-NC6）', () => {
   it('T-NC2 ref.setText 推进基线 + 合成 markdown 进 setValue + change 补发', () => {
     const ref = React.createRef<NativeChatComposerInstance>();
     const { tree, onChange, input } = renderComposer({ ref });
-    const plain = '@src/a.ts 是重点';
+    const plain = '@src/a.ts@ 是重点';
 
     act(() => {
-      ref.current?.setText(plain, 12);
+      ref.current?.setText(plain, 13);
     });
 
     // 合成 markdown 进 setValue（@ → nmtoken 链接，普通段原样）
     expect(mockCalls.setValue).toEqual([
-      '[@src/a.ts](nmtoken://src/a.ts) 是重点',
+      '[@src/a.ts@](nmtoken://src/a.ts) 是重点',
     ]);
     // token ranges 同步下发（挂载兜底 1 次 + setText 1 次）
     expect(mockCalls.setTokenRanges).toHaveLength(2);
     expect(lastRanges()).toEqual(toRangeShapes(plain));
     // 可选光标落位（M7 通道 cursor 透传）
-    expect(mockCalls.setSelection).toEqual([{ start: 12, end: 12 }]);
+    expect(mockCalls.setSelection).toEqual([{ start: 13, end: 13 }]);
     // E10/F6 补发语义：setValue 期间库事件被抑制，change 由组件主动补发
     expect(onChange).toHaveBeenCalledTimes(1);
     expect(onChange).toHaveBeenCalledWith(plain);
@@ -167,7 +170,7 @@ describe('NativeChatComposer（T-NC1~T-NC6）', () => {
       input().props.onChangeText('第一键');
     });
     act(() => {
-      input().props.onChangeText('第一键@src');
+      input().props.onChangeText('第一键@src@');
     });
 
     // 逐键 onChange 回调链里 setValue 必须零调用：打字真源在库内部编辑器态
@@ -222,39 +225,39 @@ describe('NativeChatComposer（T-NC1~T-NC6）', () => {
     expect(onHeightChange).toHaveBeenLastCalledWith(122);
   });
 
-  it('T-NC5 草稿水化：明文 → 合成 markdown setValue → ranges（老草稿照常出胶囊）', () => {
+  it('T-NC5 草稿水化：明文 → 合成 markdown setValue → ranges（完整 token 照常出胶囊）', () => {
     const { tree, onChange } = renderComposer();
     // 空初值（无草稿）不触发任何写入
     expect(mockCalls.setValue).toHaveLength(0);
 
     // 外部直改 state（水化路径）：value effect 兜底经 M7 通道进框
-    const draft = '@src/a.ts $技能';
+    const draft = '@src/a.ts@ $技能$';
     act(() => {
       tree.update(makeElement(onChange, { value: draft }));
     });
 
     // setValue 收到合成 markdown：@ → nmtoken、$ → nmskill（D3 形态）
     expect(mockCalls.setValue).toEqual([
-      '[@src/a.ts](nmtoken://src/a.ts) [$技能](nmskill://技能)',
+      '[@src/a.ts@](nmtoken://src/a.ts) [$技能$](nmskill://技能)',
     ]);
     // 区间正确（两个完整 token，含触发符）
     expect(lastRanges()).toEqual(toRangeShapes(draft));
     // 水化同样补发 change（controller 同值去重兜底）
     expect(onChange).toHaveBeenCalledWith(draft);
 
-    // 老草稿明文照常出胶囊：合成链路对存量草稿零迁移——普通路径 + 转义兜底
-    expect(synthesizeTokenMarkdown('正文 @a/b 结尾')).toBe(
-      '正文 [@a/b](nmtoken://a/b) 结尾',
+    // 完整明文照常出胶囊：合成链路对明文零特判——普通路径 + 转义兜底
+    expect(synthesizeTokenMarkdown('正文 @a/b@ 结尾')).toBe(
+      '正文 [@a/b@](nmtoken://a/b) 结尾',
     );
     // 病态 token（displayText 含 ]）不合成链接、明文原样——胶囊由 TOKEN span 兜底
     act(() => {
-      tree.update(makeElement(onChange, { value: '破 @a]b 尾' }));
+      tree.update(makeElement(onChange, { value: '破 @a]b@ 尾' }));
     });
     expect(mockCalls.setValue).toEqual([
-      '[@src/a.ts](nmtoken://src/a.ts) [$技能](nmskill://技能)',
-      '破 @a]b 尾',
+      '[@src/a.ts@](nmtoken://src/a.ts) [$技能$](nmskill://技能)',
+      '破 @a]b@ 尾',
     ]);
-    expect(lastRanges()).toEqual(toRangeShapes('破 @a]b 尾'));
+    expect(lastRanges()).toEqual(toRangeShapes('破 @a]b@ 尾'));
   });
 
   it('T-NC6 ranges 与 tryAtomicRangeDelete 的区间语义一致性（mock 面）', () => {
@@ -262,16 +265,16 @@ describe('NativeChatComposer（T-NC1~T-NC6）', () => {
     // （tryAtomicRangeDelete）」吃的是同一套区间形状——退格删除窗与区间
     // 相交即整段摘除。原生侧的退格整删接线（Kotlin deleteLinkBeforeCursor
     // 并入 TOKEN）属真机 QA（Step 7），mock 无编辑器文本态，不在此断言。
-    const prev = '看看 @src/a.ts 后续';
+    const prev = '看看 @src/a.ts@ 后续';
     const ranges = scanTokensToRanges(prev);
-    expect(ranges).toEqual([{ start: 3, end: 12 }]);
+    expect(ranges).toEqual([{ start: 3, end: 13 }]);
 
     // 场景 A：删除窗落在 token 中段（删一个 token 内字符）→ 整段摘除，
     // 返回串 = prev 去掉整个命中区间（区间形状语义与原生整删一致）
-    const delInToken = 8; // '@src/a.ts' 内的 'a'
+    const delInToken = 8; // '@src/a.ts@' 内的 'a'
     const nextA = prev.slice(0, delInToken) + prev.slice(delInToken + 1);
     expect(tryAtomicRangeDelete(prev, nextA, ranges)).toBe(
-      prev.slice(0, 3) + prev.slice(12),
+      prev.slice(0, 3) + prev.slice(13),
     );
 
     // 场景 B：删除窗在 token 之前（删 token 前的普通字符）→ 不拦截
@@ -279,7 +282,7 @@ describe('NativeChatComposer（T-NC1~T-NC6）', () => {
     expect(tryAtomicRangeDelete(prev, nextB, ranges)).toBeNull();
 
     // 场景 C：删除窗完整覆盖 token（整体删除）→ 交给默认差分（null）
-    const nextC = prev.slice(0, 3) + prev.slice(12);
+    const nextC = prev.slice(0, 3) + prev.slice(13);
     expect(tryAtomicRangeDelete(prev, nextC, ranges)).toBeNull();
 
     // 场景 D：非删除操作（增长）→ 非删除一律不拦截
@@ -341,10 +344,10 @@ describe('NativeChatComposer（T-NC1~T-NC6）', () => {
   });
 
   describe('胶囊确认制（tokenRanges prop · 2026-10-07 真机轮拍板）', () => {
-    it('手输 $xxx 不成胶囊：打字只重映射既有确认区间、不登记新区间', () => {
+    it('手输 $xxx$ 不成胶囊：打字只重映射既有确认区间、不登记新区间', () => {
       const { input } = renderComposer({ value: '', tokenRanges: [] });
       act(() => {
-        input().props.onChangeText('$手动输入的技能');
+        input().props.onChangeText('$手动输入的技能$');
       });
       // 确认区间为空 → 无论打什么字都不新增胶囊（旧行为会正则全扫出区间）
       expect(lastRanges()).toEqual([]);
@@ -352,54 +355,54 @@ describe('NativeChatComposer（T-NC1~T-NC6）', () => {
 
     it('胶囊边缘不空格继续打字：贴边插入不并入胶囊', () => {
       const { input } = renderComposer({
-        value: '$时序图大纲',
-        tokenRanges: [{ start: 0, end: 6 }],
+        value: '$时序图大纲$',
+        tokenRanges: [{ start: 0, end: 7 }],
       });
       act(() => {
-        input().props.onChangeText('$时序图大纲后续字符');
+        input().props.onChangeText('$时序图大纲$后续字符');
       });
       // 插入点 == 区间 end（贴右边界）：区间原位保留、插入字符落在区间外
-      expect(lastRanges()).toEqual([{ start: 0, end: 6 }]);
+      expect(lastRanges()).toEqual([{ start: 0, end: 7 }]);
     });
 
     it('粘贴贴边落文：多字符一次性粘贴不并入胶囊（T-CA5 粘贴变体）', () => {
       const { input } = renderComposer({
-        value: '$技能',
-        tokenRanges: [{ start: 0, end: 3 }],
+        value: '$技能$',
+        tokenRanges: [{ start: 0, end: 4 }],
       });
       act(() => {
         // 模拟剪贴板粘贴：单次 change 事件一次性携带多字符（区别于逐字打字）
-        input().props.onChangeText('$技能粘贴内容');
+        input().props.onChangeText('$技能$粘贴内容');
       });
       // 粘贴点 == 区间 end（贴右边界）：区间原位保留，粘贴文本全部落在胶囊外
-      expect(lastRanges()).toEqual([{ start: 0, end: 3 }]);
+      expect(lastRanges()).toEqual([{ start: 0, end: 4 }]);
     });
 
     it('胶囊中段被改动：区间摘除（不再视为那条引用）', () => {
       const { input } = renderComposer({
-        value: '$时序图大纲',
-        tokenRanges: [{ start: 0, end: 6 }],
+        value: '$时序图大纲$',
+        tokenRanges: [{ start: 0, end: 7 }],
       });
       act(() => {
-        input().props.onChangeText('$时序x图大纲');
+        input().props.onChangeText('$时序x图大纲$');
       });
       expect(lastRanges()).toEqual([]);
     });
 
     it('胶囊前插入：区间右移保留；胶囊整体删除：区间摘除', () => {
       const { input } = renderComposer({
-        value: '$时序图大纲 sss',
+        value: '$时序图大纲$ sss',
         tokenRanges: [
-          { start: 0, end: 6 },
-          { start: 7, end: 10 },
+          { start: 0, end: 7 },
+          { start: 8, end: 11 },
         ],
       });
       act(() => {
-        input().props.onChangeText('x$时序图大纲 sss');
+        input().props.onChangeText('x$时序图大纲$ sss');
       });
       expect(lastRanges()).toEqual([
-        { start: 1, end: 7 },
-        { start: 8, end: 11 },
+        { start: 1, end: 8 },
+        { start: 9, end: 12 },
       ]);
       act(() => {
         input().props.onChangeText('x sss');
@@ -411,23 +414,23 @@ describe('NativeChatComposer（T-NC1~T-NC6）', () => {
       const ref = React.createRef<NativeChatComposerInstance>();
       const { input } = renderComposer({
         ref,
-        value: '$时序图大纲',
-        tokenRanges: [{ start: 0, end: 6 }],
+        value: '$时序图大纲$',
+        tokenRanges: [{ start: 0, end: 7 }],
       });
       expect(input).toBeTruthy();
       act(() => {
-        ref.current?.setText('$时序图大纲 手输$不成胶囊', 0);
+        ref.current?.setText('$时序图大纲$ 手输$不成胶囊$', 0);
       });
       expect(mockCalls.setValue).toEqual([
-        '[$时序图大纲](nmskill://时序图大纲) 手输$不成胶囊',
+        '[$时序图大纲$](nmskill://时序图大纲) 手输$不成胶囊$',
       ]);
     });
 
     it('prop 收敛内容相等短路：同内容新数组身份不再二次下发（CR-fix-06）', () => {
       const onChange = jest.fn();
       const { tree } = renderComposer({
-        value: '$时序图大纲',
-        tokenRanges: [{ start: 0, end: 6 }],
+        value: '$时序图大纲$',
+        tokenRanges: [{ start: 0, end: 7 }],
         onComposerChangeText: onChange,
       });
       // 挂载兜底下发 1 次（首帧 ranges）
@@ -440,8 +443,8 @@ describe('NativeChatComposer（T-NC1~T-NC6）', () => {
       act(() => {
         tree.update(
           makeElement(onChange, {
-            value: '$时序图大纲',
-            tokenRanges: [{ start: 0, end: 6 }],
+            value: '$时序图大纲$',
+            tokenRanges: [{ start: 0, end: 7 }],
           }),
         );
       });
@@ -453,18 +456,18 @@ describe('NativeChatComposer（T-NC1~T-NC6）', () => {
       act(() => {
         tree.update(
           makeElement(onChange, {
-            value: '$时序图大纲',
+            value: '$时序图大纲$',
             tokenRanges: [
-              { start: 0, end: 6 },
-              { start: 7, end: 9 },
+              { start: 0, end: 7 },
+              { start: 8, end: 10 },
             ],
           }),
         );
       });
       expect(mockCalls.setTokenRanges).toHaveLength(2);
       expect(lastRanges()).toEqual([
-        { start: 0, end: 6 },
-        { start: 7, end: 9 },
+        { start: 0, end: 7 },
+        { start: 8, end: 10 },
       ]);
     });
   });
@@ -472,13 +475,13 @@ describe('NativeChatComposer（T-NC1~T-NC6）', () => {
   describe('D4 水化三跳（T-CA6）', () => {
     it('首帧 defaultValue 按持久化 ranges 合成（尾追内容不并入胶囊）', () => {
       const { input } = renderComposer({
-        value: '$技能尾追',
-        tokenRanges: [{ start: 0, end: 3 }],
+        value: '$技能$尾追',
+        tokenRanges: [{ start: 0, end: 4 }],
       });
 
-      // 链接只包 [0,3) 的 `$技能`；水化不再正则全扫（旧行为会包整串）。
+      // 链接只包 [0,4) 的 `$技能$`；水化不再正则全扫（旧行为会包整串）。
       expect(input().props.defaultValue).toBe(
-        '[$技能](nmskill://技能)尾追',
+        '[$技能$](nmskill://技能)尾追',
       );
     });
 
@@ -491,15 +494,15 @@ describe('NativeChatComposer（T-NC1~T-NC6）', () => {
       });
 
       // 先种一个与传入 ranges 不同的基线：走 remap 的话，'aaaaaaaaaa' 与
-      // '$技能尾追' 的整串差异会与 [0,10) 相交 → 区间摘除 → 合成纯明文。
+      // '$技能$尾追' 的整串差异会与 [0,4) 相交 → 区间摘除 → 合成纯明文。
       act(() => {
-        ref.current?.setText('$技能尾追', undefined, [{ start: 0, end: 3 }]);
+        ref.current?.setText('$技能$尾追', undefined, [{ start: 0, end: 4 }]);
       });
 
       expect(
         mockCalls.setValue[mockCalls.setValue.length - 1],
-      ).toBe('[$技能](nmskill://技能)尾追');
-      expect(lastRanges()).toEqual([{ start: 0, end: 3 }]);
+      ).toBe('[$技能$](nmskill://技能)尾追');
+      expect(lastRanges()).toEqual([{ start: 0, end: 4 }]);
     });
 
     it('幂等：同内容 ranges 经 prop 收敛不二次下发（mock view 层计数）', () => {
@@ -515,7 +518,7 @@ describe('NativeChatComposer（T-NC1~T-NC6）', () => {
       expect(mockCalls.setTokenRanges).toHaveLength(1);
 
       act(() => {
-        ref.current?.setText('$技能尾追', undefined, [{ start: 0, end: 3 }]);
+        ref.current?.setText('$技能$尾追', undefined, [{ start: 0, end: 4 }]);
       });
       // 命令式写入带 ranges 下发 1 次
       expect(mockCalls.setTokenRanges).toHaveLength(2);
@@ -525,8 +528,8 @@ describe('NativeChatComposer（T-NC1~T-NC6）', () => {
         tree.update(
           makeElement(onChange, {
             ref,
-            value: '$技能尾追',
-            tokenRanges: [{ start: 0, end: 3 }],
+            value: '$技能$尾追',
+            tokenRanges: [{ start: 0, end: 4 }],
           }),
         );
       });
@@ -537,34 +540,34 @@ describe('NativeChatComposer（T-NC1~T-NC6）', () => {
   describe('D11 删除锚接线（T-CA11）', () => {
     it('T-CA11 打字路径：编辑前 selection 下沉——相邻胶囊删左颗，幸存区间保留', () => {
       const { input } = renderComposer({
-        value: '$A$B',
+        value: '$A$$B$',
         tokenRanges: [
-          { start: 0, end: 2 },
-          { start: 2, end: 4 },
+          { start: 0, end: 3 },
+          { start: 3, end: 6 },
         ],
       });
       // 原生事件序：选区回调（删前的原子区间右缘）先于文本变更被记录
       act(() => {
-        input().props.onChangeSelection({ start: 2, end: 2 });
+        input().props.onChangeSelection({ start: 3, end: 3 });
       });
       act(() => {
-        input().props.onChangeText('$B');
+        input().props.onChangeText('$B$');
       });
-      expect(lastRanges()).toEqual([{ start: 0, end: 2 }]);
+      expect(lastRanges()).toEqual([{ start: 0, end: 3 }]);
       // 打字路径依然不回写 setValue（M6 不被接线破坏）
       expect(mockCalls.setValue).toHaveLength(0);
     });
 
     it('T-CA11 打字路径：未收到选区事件 → 回退现状保守口径（不凭空锚定）', () => {
       const { input } = renderComposer({
-        value: '$A$B',
+        value: '$A$$B$',
         tokenRanges: [
-          { start: 0, end: 2 },
-          { start: 2, end: 4 },
+          { start: 0, end: 3 },
+          { start: 3, end: 6 },
         ],
       });
       act(() => {
-        input().props.onChangeText('$B');
+        input().props.onChangeText('$B$');
       });
       expect(lastRanges()).toEqual([]);
     });
@@ -573,20 +576,20 @@ describe('NativeChatComposer（T-NC1~T-NC6）', () => {
       const ref = React.createRef<NativeChatComposerInstance>();
       renderComposer({
         ref,
-        value: '$A',
-        tokenRanges: [{ start: 0, end: 2 }],
+        value: '$A$',
+        tokenRanges: [{ start: 0, end: 3 }],
       });
 
-      // 头部插入 `$B`、编辑后光标 2：光标若被丢弃，对齐插入点 1 落在旧区间
-      // [0,2) 内部 → 旧胶囊摘除；透传后反推插入点 0 → 旧区间右移 [2,4)。
+      // 头部插入 `$B$`、编辑后光标 3：光标若被丢弃，对齐插入点 1 落在旧区间
+      // [0,3) 内部 → 旧胶囊摘除；透传后反推插入点 0 → 旧区间右移 [3,6)。
       act(() => {
-        ref.current?.setText('$B$A', 2);
+        ref.current?.setText('$B$$A$', 3);
       });
 
       expect(mockCalls.setValue[mockCalls.setValue.length - 1]).toBe(
-        '$B[$A](nmskill://A)',
+        '$B$[$A$](nmskill://A)',
       );
-      expect(lastRanges()).toEqual([{ start: 2, end: 4 }]);
+      expect(lastRanges()).toEqual([{ start: 3, end: 6 }]);
     });
   });
 
@@ -599,41 +602,41 @@ describe('NativeChatComposer（T-NC1~T-NC6）', () => {
 
     it('token 中段删一字 → 该区间摘除、右侧区间平移', () => {
       expect(
-        remapTokenRanges('$aa $bb', '$a $bb', [
-          { start: 0, end: 3 },
-          { start: 4, end: 7 },
+        remapTokenRanges('$aa$ $bb$', '$a$ $bb$', [
+          { start: 0, end: 4 },
+          { start: 5, end: 9 },
         ]),
-      ).toEqual([{ start: 3, end: 6 }]);
+      ).toEqual([{ start: 4, end: 8 }]);
     });
 
     it('头部插入 → 区间整体右移', () => {
       expect(
-        remapTokenRanges('$a x', 'w$a x', [
-          { start: 0, end: 2 },
-          { start: 3, end: 4 },
+        remapTokenRanges('$a$ x', 'w$a$ x', [
+          { start: 0, end: 3 },
+          { start: 4, end: 5 },
         ]),
       ).toEqual([
-        { start: 1, end: 3 },
-        { start: 4, end: 5 },
+        { start: 1, end: 4 },
+        { start: 5, end: 6 },
       ]);
     });
 
     it('多处差异折叠为单编辑区：跨编辑区的区间保守摘除', () => {
       expect(
-        remapTokenRanges('x$a y$b z', 'w$a y$b!', [
-          { start: 1, end: 3 },
-          { start: 5, end: 7 },
+        remapTokenRanges('x$a$ y$b$ z', 'w$a$ y$b$!', [
+          { start: 1, end: 4 },
+          { start: 6, end: 9 },
         ]),
       ).toEqual([]);
     });
 
     it('纯插入光标锚（2026-10-20 真机轮）：同 `$` 头新胶囊插在旧胶囊头部——对齐点漂移进旧区间，无光标维持保守摘除', () => {
-      // prev=`$agent-config `（旧胶囊 [0,13)），头部插入 `$节拍成章 `：
+      // prev=`$agent-config$ `（旧胶囊 [0,14)），头部插入 `$节拍成章$ `：
       // 公共前缀咬住 `$`，对齐插入点=1（旧区间内部）→ 误摘（真机「连插
       // 两颗只剩一颗」缺陷的根因面）。
       expect(
-        remapTokenRanges('$agent-config ', '$节拍成章 $agent-config ', [
-          { start: 0, end: 13 },
+        remapTokenRanges('$agent-config$ ', '$节拍成章$ $agent-config$ ', [
+          { start: 0, end: 14 },
         ]),
       ).toEqual([]);
     });
@@ -641,12 +644,12 @@ describe('NativeChatComposer（T-NC1~T-NC6）', () => {
     it('纯插入光标锚：给编辑后光标（插入段末尾）→ 反推真实插入点 0，旧区间右移保真', () => {
       expect(
         remapTokenRanges(
-          '$agent-config ',
-          '$节拍成章 $agent-config ',
-          [{ start: 0, end: 13 }],
-          6, // 光标落在插入段 `$节拍成章 ` 末尾
+          '$agent-config$ ',
+          '$节拍成章$ $agent-config$ ',
+          [{ start: 0, end: 14 }],
+          7, // 光标落在插入段 `$节拍成章$ ` 末尾
         ),
-      ).toEqual([{ start: 6, end: 19 }]);
+      ).toEqual([{ start: 7, end: 21 }]);
     });
 
     it('纯插入光标锚：守卫不过（反推点前缀不一致）→ 回退对齐点，摘除语义不变', () => {
@@ -659,118 +662,118 @@ describe('NativeChatComposer（T-NC1~T-NC6）', () => {
 
     it('纯插入光标锚：反推点与对齐点一致 → 与既有头部插入语义等价', () => {
       expect(
-        remapTokenRanges('$a x', 'w$a x', [{ start: 0, end: 2 }], 1),
-      ).toEqual([{ start: 1, end: 3 }]);
+        remapTokenRanges('$a$ x', 'w$a$ x', [{ start: 0, end: 3 }], 1),
+      ).toEqual([{ start: 1, end: 4 }]);
     });
 
-    it('T-CA10 删除锚：相邻胶囊删左颗——删除段 [0,2) 覆盖 A，幸存 B 平移保留', () => {
-      // 缺陷原样：'$A$B' 退格原子删 A → '$B'。无光标时公共前缀吃掉 '$'，
-      // 对齐编辑区 [1,3) 同时咬住 A 尾与 B 头 → 两颗一并摘除（[]）。
-      // 编辑前光标 2（A 右缘）反推删除段 [0,2) → 只摘 A、B 平移至 [0,2)。
+    it('T-CA10 删除锚：相邻胶囊删左颗——删除段 [0,3) 覆盖 A，幸存 B 平移保留', () => {
+      // 缺陷原样：'$A$$B$' 退格原子删 A → '$B$'。无光标时公共前缀吃掉 '$'，
+      // 对齐编辑区 [1,4) 同时咬住 A 尾与 B 头 → 两颗一并摘除（[]）。
+      // 编辑前光标 3（A 右缘）反推删除段 [0,3) → 只摘 A、B 平移至 [0,3)。
       expect(
         remapTokenRanges(
-          '$A$B',
-          '$B',
+          '$A$$B$',
+          '$B$',
           [
-            { start: 0, end: 2 },
-            { start: 2, end: 4 },
+            { start: 0, end: 3 },
+            { start: 3, end: 6 },
           ],
           undefined,
-          2,
+          3,
         ),
-      ).toEqual([{ start: 0, end: 2 }]);
+      ).toEqual([{ start: 0, end: 3 }]);
     });
 
     it('T-CA10 删除锚：显式编辑后光标同样构成删除段（命令通道形态）', () => {
       expect(
         remapTokenRanges(
-          '$A$B',
-          '$B',
+          '$A$$B$',
+          '$B$',
           [
-            { start: 0, end: 2 },
-            { start: 2, end: 4 },
+            { start: 0, end: 3 },
+            { start: 3, end: 6 },
           ],
           0,
-          2,
+          3,
         ),
-      ).toEqual([{ start: 0, end: 2 }]);
+      ).toEqual([{ start: 0, end: 3 }]);
     });
 
     it('T-CA10 删除锚：删普通尾字符不摘相邻胶囊（端点相触不算公共字符）', () => {
-      // D=[2,3) 与 A=[0,2) 只在端点 2 相触，无公共字符 → A 幸存。
+      // D=[3,4) 与 A=[0,3) 只在端点 3 相触，无公共字符 → A 幸存。
       expect(
-        remapTokenRanges('$Ax', '$A', [{ start: 0, end: 2 }], undefined, 3),
-      ).toEqual([{ start: 0, end: 2 }]);
+        remapTokenRanges('$A$x', '$A$', [{ start: 0, end: 3 }], undefined, 4),
+      ).toEqual([{ start: 0, end: 3 }]);
     });
 
     it('T-CA10 删除锚：删右颗胶囊——幸存 A 原位保留', () => {
       expect(
         remapTokenRanges(
-          '$A$B',
-          '$A',
+          '$A$$B$',
+          '$A$',
           [
-            { start: 0, end: 2 },
-            { start: 2, end: 4 },
+            { start: 0, end: 3 },
+            { start: 3, end: 6 },
           ],
           undefined,
-          4,
+          6,
         ),
-      ).toEqual([{ start: 0, end: 2 }]);
+      ).toEqual([{ start: 0, end: 3 }]);
     });
 
     it('T-CA10 删除锚：文本中段删胶囊——删除段按光标定位，右侧幸存区间平移', () => {
       expect(
         remapTokenRanges(
-          'x$A$B',
-          'x$B',
+          'x$A$$B$',
+          'x$B$',
           [
-            { start: 1, end: 3 },
-            { start: 3, end: 5 },
+            { start: 1, end: 4 },
+            { start: 4, end: 7 },
           ],
           undefined,
-          3,
+          4,
         ),
-      ).toEqual([{ start: 1, end: 3 }]);
+      ).toEqual([{ start: 1, end: 4 }]);
     });
 
     it('T-CA10 删除锚：前向删除（光标在删除段左侧）同语义——无需方向信号', () => {
-      // 光标 0、Delete 向前删掉 A：删除段 [0,2)，与退格路径结果一致。
+      // 光标 0、Delete 向前删掉 A：删除段 [0,3)，与退格路径结果一致。
       expect(
         remapTokenRanges(
-          '$A$B',
-          '$B',
+          '$A$$B$',
+          '$B$',
           [
-            { start: 0, end: 2 },
-            { start: 2, end: 4 },
+            { start: 0, end: 3 },
+            { start: 3, end: 6 },
           ],
           undefined,
           0,
         ),
-      ).toEqual([{ start: 0, end: 2 }]);
+      ).toEqual([{ start: 0, end: 3 }]);
     });
 
     it('T-CA10 无编辑前光标：维持现状保守口径（对齐区咬住两颗 → 一并摘除）', () => {
       expect(
-        remapTokenRanges('$A$B', '$B', [
-          { start: 0, end: 2 },
-          { start: 2, end: 4 },
+        remapTokenRanges('$A$$B$', '$B$', [
+          { start: 0, end: 3 },
+          { start: 3, end: 6 },
         ]),
       ).toEqual([]);
       // 删普通尾字符的现状结果本来就是幸存（端点贴边不并入），一并锁住。
-      expect(remapTokenRanges('$Ax', '$A', [{ start: 0, end: 2 }])).toEqual([
-        { start: 0, end: 2 },
+      expect(remapTokenRanges('$A$x', '$A$', [{ start: 0, end: 3 }])).toEqual([
+        { start: 0, end: 3 },
       ]);
     });
 
     it('T-CA10 删除锚守卫：光标越界 / 非整数 / 非纯删除替换 → 回退现状差分口径', () => {
-      // 越界光标不可信 → 对齐编辑区 [1,3) → 两颗摘除（现状）。
+      // 越界光标不可信 → 对齐编辑区 [1,4) → 两颗摘除（现状）。
       expect(
         remapTokenRanges(
-          '$A$B',
-          '$B',
+          '$A$$B$',
+          '$B$',
           [
-            { start: 0, end: 2 },
-            { start: 2, end: 4 },
+            { start: 0, end: 3 },
+            { start: 3, end: 6 },
           ],
           undefined,
           99,
@@ -783,11 +786,11 @@ describe('NativeChatComposer（T-NC1~T-NC6）', () => {
       // 非整数光标 → 同守卫拒收。
       expect(
         remapTokenRanges(
-          '$A$B',
-          '$B',
+          '$A$$B$',
+          '$B$',
           [
-            { start: 0, end: 2 },
-            { start: 2, end: 4 },
+            { start: 0, end: 3 },
+            { start: 3, end: 6 },
           ],
           undefined,
           1.5,
@@ -797,7 +800,7 @@ describe('NativeChatComposer（T-NC1~T-NC6）', () => {
   });
 
   describe('synthesizeTokenMarkdownFromRanges 非法区间守卫（CR-fix-11）', () => {
-    const text = '正文 @a/b 尾';
+    const text = '正文 @a/b@ 尾';
 
     it('负 start 跳过：slice(cursor, -1) 会按 from-end 切出错拼文本', () => {
       expect(
@@ -821,9 +824,9 @@ describe('NativeChatComposer（T-NC1~T-NC6）', () => {
       expect(
         synthesizeTokenMarkdownFromRanges(text, [
           { start: -3, end: 2 },
-          { start: 3, end: 7 },
+          { start: 3, end: 8 },
         ]),
-      ).toBe('正文 [@a/b](nmtoken://a/b) 尾');
+      ).toBe('正文 [@a/b@](nmtoken://a/b) 尾');
     });
   });
 

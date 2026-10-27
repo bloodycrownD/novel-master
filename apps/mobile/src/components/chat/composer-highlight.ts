@@ -1,19 +1,40 @@
 /**
  * composer 手输 token 高亮纯函数层：token 区间与分段切分。
  *
- * 正则口径严格对齐桌面蓝本
- * `apps/desktop/renderer/features/chat/ComposerAtPathInput.tsx` 的 `AT_TOKEN_RE`：
- * `@` 与 `$` 各自的字符类互相排除对方（`@a$b` 不互吞，成两个独立 token）；
- * token 以空白截止；无「前置须空白」要求（`a@b` 中 `@b` 命中）；
- * 孤立 `$`（后随空白/结尾/`$`/`@`）不成 token，原文保留。
+ * 明文 token 形如 `$技能名$` / `@路径@`：触发符开头、**同字符收尾**，bounded 自证——
+ * 正则不再靠空白猜边界，胶囊后面的普通文字不会被吞进胶囊。
+ * 字符类沿用既有口径：`@` 与 `$` 互相排除对方触发符并排除空白；
+ * 相邻两颗 `$A$$B$` 天然可分（前一段 lastIndex 停在第二颗的起始 `$`）。
+ * 空体 `$$` / `@@` 不命中；路径含 `@`、名字含 `$` 仍无法表达（既有口径，非新增限制）。
+ * 行为契约见 `__tests__/fixtures/composer-token-cases.json`。
  */
-const COMPOSER_TOKEN_RE = /@([^\s@$]+)|\$([^\s$@]+)/g;
+const COMPOSER_TOKEN_RE = /@([^\s@$]+)@|\$([^\s$@]+)\$/g;
 
 /** `@token` / `$token` 的完整区间（含触发符，end 为开区间下标）。 */
 export type ComposerTokenRange = {
   readonly start: number;
   readonly end: number;
 };
+
+/** 区间文本形态是否合法（首尾同字符触发符，且整段恰好是一颗完整 token）。水化自愈用。 */
+export function isValidTokenRangeText(
+  plain: string,
+  range: ComposerTokenRange,
+): boolean {
+  const {start, end} = range;
+  if (!Number.isInteger(start) || !Number.isInteger(end)) {
+    return false;
+  }
+  if (start < 0 || end > plain.length || start >= end) {
+    return false;
+  }
+  const ranges = composerTokenRanges(plain.slice(start, end));
+  return (
+    ranges.length === 1 &&
+    ranges[0].start === 0 &&
+    ranges[0].end === end - start
+  );
+}
 
 /** 扫描 plain，返回全部 token 完整区间（按出现顺序，互不重叠）。 */
 export function composerTokenRanges(

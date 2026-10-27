@@ -63,6 +63,7 @@ import {
   statusOnlyComposerAttachments,
 } from './composer-token-insert';
 import {scanComposerTokenRangesForSend} from './composer-send-scan';
+import {isValidTokenRangeText} from './composer-highlight';
 import {
   remapTokenRanges,
   scanTokensToRanges,
@@ -70,6 +71,18 @@ import {
 } from './native-composer/token-ranges';
 import type {ComposerInputSelection} from './ComposerInputBridge';
 import type {ConversationDockAction} from './ChatConversationBridge';
+
+/**
+ * 持久化区间逐条过形态校验，丢弃不合法的（旧格式 `$name`、越界、半截）。
+ * 全合法时原引用返回（保持 maker 稳定），有丢弃才换新数组。
+ */
+function filterValidTokenRanges(
+  plain: string,
+  ranges: readonly TokenRange[],
+): readonly TokenRange[] {
+  const kept = ranges.filter(range => isValidTokenRangeText(plain, range));
+  return kept.length === ranges.length ? ranges : kept;
+}
 
 /**
  * dock 全字段状态（composer-native-2026-10 Step 6 自 `ChatConversationBridge`
@@ -248,7 +261,9 @@ export function useChatComposerController({
    * 那会把尾追内容重新吞进胶囊、把半截手输升格。
    */
   const [tokenRanges, setTokenRanges] = useState<readonly TokenRange[]>(() =>
-    initial.tokenRanges ?? scanTokensToRanges(initial.text),
+    initial.tokenRanges != null
+      ? filterValidTokenRanges(initial.text, initial.tokenRanges)
+      : scanTokensToRanges(initial.text),
   );
   const [cursor, setCursor] = useState(0);
   const [attachments, setAttachments] = useState<MessageAttachment[]>([
@@ -385,7 +400,13 @@ export function useChatComposerController({
     // （旧草稿 / 全屏回填未给值 / undo_send 恢复）才做一次正则兜底扫描。
     // ranges 的更新按**内容**比较而非挂在 textChanged 上——同文本不同会话
     // 切换时（A 确认胶囊 / B 手输同串）才不会串台。
-    const nextRanges = draft.tokenRanges ?? scanTokensToRanges(draft.text);
+    const draftRanges = draft.tokenRanges;
+    // 水化自愈：持久化区间逐条过形态校验（首尾同字符触发符且整段恰好一颗 token）。
+    // 旧格式 / 越界 / 半截区间一律丢弃——否则会把尾随文字整段画成大胶囊；过滤结果写回草稿。
+    const nextRanges =
+      draftRanges != null
+        ? filterValidTokenRanges(draft.text, draftRanges)
+        : scanTokensToRanges(draft.text);
     const rangesChanged = !tokenRangesEqual(nextRanges, tokenRangesRef.current);
     if (rangesChanged) {
       tokenRangesRef.current = nextRanges;
@@ -401,8 +422,10 @@ export function useChatComposerController({
       // 状态条广播不重写输入框，也不该动光标快照。
       prevCursorRef.current = draft.text.length;
     }
-    if (draft.tokenRanges === undefined && draft.text !== '') {
-      // 兜底扫描结果写回固化（仅此一次）：text 与 ranges 均空（空会话）跳过，
+    const rangesDropped =
+      draftRanges != null && nextRanges.length !== draftRanges.length;
+    if ((draftRanges === undefined || rangesDropped) && draft.text !== '') {
+      // 兜底扫描结果 / 自愈过滤结果写回固化（仅此一次）：text 与 ranges 均空（空会话）跳过，
       // 避免每次水化写一次 null 的无害写放大。persistDraft 读的是刚推进过的
       // tokenRangesRef，落库即固化本次扫描值。
       persistDraft(draft.text, draft.attachments);
@@ -805,7 +828,8 @@ export function useChatComposerController({
   const insertSkillToken = useCallback(
     (skillName: string) => {
       const current = textRef.current;
-      const token = `$${skillName}`;
+      // 明文带终止符：`$技能名$`，与 composer 高亮/发送扫描的 bounded 口径一致
+      const token = `$${skillName}$`;
       const activeSkill = composerAtPath.detectQuery(current, cursor, '$');
       const replaceStart =
         activeSkill != null &&
@@ -837,7 +861,8 @@ export function useChatComposerController({
 
   const onAtPickerConfirm = useCallback(
     (pathTokens: readonly string[]) => {
-      insertTokensIntoComposer(pathTokens);
+      // picker 交上来的是裸 `@path`：终止符必须在 composer 侧补（picker 被 VfsMoveDirPicker 复用做目录移动）
+      insertTokensIntoComposer(pathTokens.map(token => `${token}@`));
     },
     [insertTokensIntoComposer],
   );

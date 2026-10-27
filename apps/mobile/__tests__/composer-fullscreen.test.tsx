@@ -499,20 +499,20 @@ describe('T-FS2/T-FS3 全屏编辑链（ChatTabScreen → 面板 → NativeChatC
   }
 
   it('T-CA8: 全屏退出回填按旧草稿 remap 保真写入 tokenRanges', async () => {
-    // 带确认胶囊的草稿：`$技能` 是确认胶囊（区间 [{0,3}]）。
+    // 带确认胶囊的草稿：`$技能$` 是新格式确认胶囊（终止符计入区间，[{0,4}]）。
     mockDraftJsonBySession.set(
       's1',
       JSON.stringify({
-        text: '$技能',
+        text: '$技能$',
         attachments: [],
-        tokenRanges: [{start: 0, end: 3}],
+        tokenRanges: [{start: 0, end: 4}],
       }),
     );
     const tree = await mountConversation();
     await flush();
-    expect(readChatComposerDraftState('s1').text).toBe('$技能');
+    expect(readChatComposerDraftState('s1').text).toBe('$技能$');
     expect(readChatComposerDraftState('s1').tokenRanges).toEqual([
-      {start: 0, end: 3},
+      {start: 0, end: 4},
     ]);
 
     resetMockCalls();
@@ -522,23 +522,23 @@ describe('T-FS2/T-FS3 全屏编辑链（ChatTabScreen → 面板 → NativeChatC
 
     // 全屏里在胶囊前插入两个字符：remap 语义=整体右移，区间保真（不丢、不扩）。
     await act(async () => {
-      onExit!('前缀$技能');
+      onExit!('前缀$技能$');
     });
     await flush();
 
     // 回填**当时**的 payload 就带 remap 值（不是靠后续水化兜底扫描补出来的）。
-    const written = writtenDraftsForText('前缀$技能');
+    const written = writtenDraftsForText('前缀$技能$');
     expect(written.length).toBeGreaterThan(0);
-    expect(written[0]!.tokenRanges).toEqual([{start: 2, end: 5}]);
+    expect(written[0]!.tokenRanges).toEqual([{start: 2, end: 6}]);
 
     const payload = JSON.parse(mockDraftJsonBySession.get('s1')!) as {
       text: string;
       tokenRanges?: unknown;
     };
-    expect(payload.text).toBe('前缀$技能');
-    expect(payload.tokenRanges).toEqual([{start: 2, end: 5}]);
+    expect(payload.text).toBe('前缀$技能$');
+    expect(payload.tokenRanges).toEqual([{start: 2, end: 6}]);
     expect(readChatComposerDraftState('s1').tokenRanges).toEqual([
-      {start: 2, end: 5},
+      {start: 2, end: 6},
     ]);
   });
 
@@ -546,9 +546,9 @@ describe('T-FS2/T-FS3 全屏编辑链（ChatTabScreen → 面板 → NativeChatC
     mockDraftJsonBySession.set(
       's1',
       JSON.stringify({
-        text: '$技能',
+        text: '$技能$',
         attachments: [],
-        tokenRanges: [{start: 0, end: 3}],
+        tokenRanges: [{start: 0, end: 4}],
       }),
     );
     const tree = await mountConversation();
@@ -559,23 +559,24 @@ describe('T-FS2/T-FS3 全屏编辑链（ChatTabScreen → 面板 → NativeChatC
     const onExit = takePromptEditorOnSaved();
     expect(onExit).not.toBeNull();
 
-    // `$技能尾追`：正则全扫会给出 [{0,5}]（尾追被并入）；remap 必须保持 [{0,3}]。
+    // `$技能$尾追`：尾追落在区间右缘之外，remap 必须保持 [{0,4}]
+    // （终止符让兜底正则也不再吞尾追，两条路径同口径）。
     await act(async () => {
-      onExit!('$技能尾追');
+      onExit!('$技能$尾追');
     });
     await flush();
 
-    const written = writtenDraftsForText('$技能尾追');
+    const written = writtenDraftsForText('$技能$尾追');
     expect(written.length).toBeGreaterThan(0);
-    expect(written[0]!.tokenRanges).toEqual([{start: 0, end: 3}]);
+    expect(written[0]!.tokenRanges).toEqual([{start: 0, end: 4}]);
 
     expect(readChatComposerDraftState('s1').tokenRanges).toEqual([
-      {start: 0, end: 3},
+      {start: 0, end: 4},
     ]);
     expect(
       (JSON.parse(mockDraftJsonBySession.get('s1')!) as {tokenRanges?: unknown})
         .tokenRanges,
-    ).toEqual([{start: 0, end: 3}]);
+    ).toEqual([{start: 0, end: 4}]);
   });
 
   it('T-CA8: 旧草稿无 tokenRanges → 回填 payload 无该字段（undefined 而非 []）', async () => {
@@ -594,14 +595,13 @@ describe('T-FS2/T-FS3 全屏编辑链（ChatTabScreen → 面板 → NativeChatC
     expect(writes.length).toBeGreaterThan(0);
     expect('tokenRanges' in writes[0]!).toBe(false);
 
-    // 回填不预处理：水化链随后兜底扫描一次并写回固化（旧草稿语义）。
+    // 回填不预处理：水化链随后兜底扫描一次并写回固化；旧格式明文
+    // `$技能`（无尾终止符）在新正则下不再命中，扫描结果为 `[]`（确认无胶囊）。
     await flush();
-    expect(readChatComposerDraftState('s1').tokenRanges).toEqual([
-      {start: 0, end: 3},
-    ]);
+    expect(readChatComposerDraftState('s1').tokenRanges).toEqual([]);
     expect(
       (JSON.parse(mockDraftJsonBySession.get('s1')!) as {tokenRanges?: unknown})
         .tokenRanges,
-    ).toEqual([{start: 0, end: 3}]);
+    ).toEqual([]);
   });
 });

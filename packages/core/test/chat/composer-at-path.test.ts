@@ -61,3 +61,10 @@ describe("composer-at-path", () => {
     assert.equal(attachmentScanner.scanAtPaths("看").length, 0);
   });
 });
+
+describe("F-A6: 终止符右侧光标不弹候选（触发符前须空白）", () => {
+  it("光标停在整串末尾 / 终止符右侧 → detectQuery 返回 null", () => {
+    assert.equal(composerAtPath.detectQuery("$写文档$总结", 7, "$"), null);
+    assert.equal(composerAtPath.detectQuery("$写文档$", 5, "$"), null);
+  });
+});

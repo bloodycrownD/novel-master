@@ -138,3 +138,16 @@ describe("attachmentsFromPaths（显式路径列表 → 合规新写入附件）
     assert.deepEqual(fromPaths([]), []);
   });
 });
+
+describe("F-A4: mobile 双终止符明文 `@path@` 在 core 扫描下照常可用（实现零改动）", () => {
+  it("`@notes/a.md@` → /notes/a.md；目录尾 `@notes/@` → /notes/", () => {
+    const file = attachmentScanner.scanAtPaths("看 @notes/a.md@ 谢谢");
+    assert.equal(file.length, 1);
+    assert.equal(file[0]!.source, "attach");
+    assert.equal(file[0]!.path, "/notes/a.md");
+
+    const dir = attachmentScanner.scanAtPaths("搬 @notes/@ 好了");
+    assert.equal(dir.length, 1);
+    assert.equal(dir[0]!.path, "/notes/");
+  });
+});

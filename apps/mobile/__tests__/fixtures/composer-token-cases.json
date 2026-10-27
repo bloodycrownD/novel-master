@@ -1,0 +1,11 @@
+[
+  {"plain": "$写文档$", "ranges": [{"start": 0, "end": 5}]},
+  {"plain": "$写文档$总结", "ranges": [{"start": 0, "end": 5}]},
+  {"plain": "帮我$写文档$看下", "ranges": [{"start": 2, "end": 7}]},
+  {"plain": "@notes/a.md@", "ranges": [{"start": 0, "end": 12}]},
+  {"plain": "@notes/@$A$", "ranges": [{"start": 0, "end": 8}, {"start": 8, "end": 11}]},
+  {"plain": "$A$$B$", "ranges": [{"start": 0, "end": 3}, {"start": 3, "end": 6}]},
+  {"plain": "$写文档总结", "ranges": []},
+  {"plain": "$$ @@ $ $", "ranges": []},
+  {"plain": "价格$100$是", "ranges": [{"start": 2, "end": 7}]}
+]

@@ -304,10 +304,15 @@ export function synthesizeTokenMarkdownFromRanges(
   return parts.join('');
 }
 
-/** 单个 token（形如 `@path` / `$name`）→ 链接 markdown；不可合成时原样返回。 */
+/** 单个 token（形如 `@path@` / `$name$`）→ 链接 markdown；不可合成时原样返回。 */
 function synthesizeToken(token: string): string {
+  // 终止符 = 触发符同字符：先做形态校验，首尾不同字符一律原文返回（半截 token 不成胶囊）
+  if (token.length < 3 || token[0] !== token[token.length - 1]) {
+    return token;
+  }
   const indicator = token[0];
-  const body = token.slice(1);
+  // 剥掉两端触发符：destination 只留 body，LINK 文本保留完整明文（native 侧回声逐字一致）
+  const body = token.slice(1, -1);
   if (body.length === 0) {
     return token;
   }
