@@ -23,6 +23,7 @@ import {
   EVENT_AGENT_RUN_FINISHED,
   EVENT_AGENT_RUN_STARTED,
   EVENT_AGENT_STREAM_TEXT_DELTA,
+  EVENT_SUBAGENT_CHILD_SESSION_CREATED,
 } from '@novel-master/core/events';
 import {setMobileAgentActive} from '@/runtime/agent-activity';
 import {SessionStreamUnitManager} from '@/services/session-stream-unit-manager.service';
@@ -552,6 +553,61 @@ describe('SubagentSessionScreen 卡片点击 handler 装配（子会话点卡片
       domain: 'global',
       name: 'my-skill',
     });
+    unmount();
+  });
+});
+
+/**
+ * F-B4：子会话屏的两处兜底。
+ * ① 挂载时按 force 回源加载尾部——复用场景下 unit 可能是宽限期内第二次重建的，
+ *    首轮缓存不能直接用；② 把 unitView.pendingChildrenByTitle 传给 WebView，
+ *    否则子会话里新发的孙任务 pending 卡在「执行中」不可点。
+ */
+describe('F-B4 子会话屏兜底：force 回源 + 孙任务 pending 映射注入', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+    setMobileAgentActive(false);
+  });
+
+  afterEach(() => {
+    mockManager?.dispose();
+    mockManager = undefined;
+    mockRuntime = undefined;
+    mockGetSessionUsageDetail.mockClear();
+    mockChatWebViewProps.length = 0;
+    mockNavigate.mockClear();
+    jest.useRealTimers();
+  });
+
+  it('挂载即 force 加载尾部，并把 pendingChildrenByTitle 传给 WebView', async () => {
+    const h = buildHarness();
+    mockManager = h.manager;
+    mockRuntime = {
+      sessionStreamUnitManager: h.manager,
+      usageStats: {getSessionUsageDetail: mockGetSessionUsageDetail},
+    };
+    const loadSpy = jest.spyOn(h.manager, 'loadSessionTailMessages');
+    driveConsumptiveRun(h.eventBus, 2);
+
+    const {unmount} = await renderScreen();
+    expect(loadSpy).toHaveBeenCalledWith(CHILD_SESSION_ID, {force: true});
+
+    // 子会话里再派一个孙任务：登记进 pendingChildrenByTitle，屏幕必须把它带下去
+    h.eventBus.publish(EVENT_SUBAGENT_CHILD_SESSION_CREATED, {
+      parentSessionId: CHILD_SESSION_ID,
+      projectId: 'p1',
+      childSessionId: 'grand-1',
+      title: '孙任务',
+    } as never);
+    await act(async () => {
+      jest.advanceTimersByTime(10);
+    });
+
+    const latest = mockChatWebViewProps[mockChatWebViewProps.length - 1];
+    expect(latest.pendingSubagentSessions).toBeInstanceOf(Map);
+    expect(
+      (latest.pendingSubagentSessions as Map<string, string>).get('孙任务'),
+    ).toBe('grand-1');
     unmount();
   });
 });

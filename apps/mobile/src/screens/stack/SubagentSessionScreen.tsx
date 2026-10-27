@@ -92,7 +92,9 @@ export function SubagentSessionScreen() {
       }
       if (manager.snapshot(sessionId) != null) {
         try {
-          return (await manager.loadSessionTailMessages(sessionId)) ?? [];
+          // force：宽限期内的 settled 单元可能还挂着首轮缓存，复用场景（第二轮 run）
+          // 必须回源，否则进屏先看到旧内容
+          return (await manager.loadSessionTailMessages(sessionId, {force: true})) ?? [];
         } catch (error) {
           showToast(toastMessage('加载子会话失败', error));
           return [];
@@ -349,6 +351,8 @@ export function SubagentSessionScreen() {
           transcriptOnly
           sessionKey={sessionKey}
           messages={displayMessages}
+          // 孙任务 pending 卡的 title→child 映射：不传则子会话屏内的新建孙任务卡执行中不可点
+          pendingSubagentSessions={unitView?.pendingChildrenByTitle}
           flags={flags}
           agentRunning={agentRunning}
           uiRunning={agentRunning}
