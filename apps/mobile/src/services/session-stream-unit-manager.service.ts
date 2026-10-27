@@ -1372,7 +1372,28 @@ export class SessionStreamUnitManager {
       unit = this.adoptConsumptiveUnit(payload.sessionId, payload.projectId);
     }
     if (!unit.markRunning(payload.runId)) {
-      return;
+      // 消费型子会话的 run 复用（同一 childSessionId 连跑两轮）会撞上仍在宽限期内的
+      // settled 旧单元；不替换吸收的话后续 delta / STEP / FINISHED 全被 runId 守卫丢掉，
+      // 子会话屏只能看到首轮的旧内容。发起型 run 的 settled 单元不在此列——那由
+      // startRun 负责替换，这里复活会绕过持久层口径。
+      const replaceable =
+        this.consumptiveSessions.has(payload.sessionId) &&
+        isSessionStreamUnitSettled(unit.getStatus());
+      if (!replaceable) {
+        return;
+      }
+      // 句柄迁移 + 消费型标记重建都靠 adoptConsumptiveUnit（removeUnit 会 delete 标记）
+      const inheritedHandles = unit.takeWebviewHandles();
+      this.removeUnit(payload.sessionId, unit);
+      unit = this.adoptConsumptiveUnit(payload.sessionId, payload.projectId);
+      for (const handle of inheritedHandles) {
+        unit.attachWebview(handle);
+      }
+      if (!unit.markRunning(payload.runId)) {
+        return;
+      }
+      // 新单元 messages 为空，屏侧会先落到空数组；立即回源填历史，避免二轮 run 开场空白
+      void this.loadSessionTailMessages(payload.sessionId, {force: true});
     }
     if (!this.consumptiveSessions.has(payload.sessionId)) {
       // Step 5：挂写通 coalescer（供后续 delta append）+ 直接写 running 行

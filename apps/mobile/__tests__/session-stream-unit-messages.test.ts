@@ -45,6 +45,7 @@ import {
   SessionStreamUnitManager,
   SESSION_STREAM_MAX_MESSAGE_VIEWS,
 } from '@/services/session-stream-unit-manager.service';
+import type {SessionStreamRunStateStore} from '@/services/session-stream-unit-manager.service';
 import {
   SESSION_STREAM_APPLY_INTERVAL_MS,
   SESSION_STREAM_INGRESS_COALESCE_MS,
@@ -123,7 +124,10 @@ function makeMessageStore(db: Map<string, ChatMessageData[]>) {
   };
 }
 
-function createHarness(options?: {readonly settledGraceMs?: number}) {
+function createHarness(options?: {
+  readonly settledGraceMs?: number;
+  readonly runStateService?: SessionStreamRunStateStore;
+}) {
   const eventBus = new SimpleEventBus();
   const abortRegistry = {
     has: jest.fn((_sessionId: string) => false),
@@ -152,6 +156,7 @@ function createHarness(options?: {readonly settledGraceMs?: number}) {
     runtime: {eventBus, abortRegistry, sessions, projects, messages} as never,
     runAgentTurn: runAgentTurn as never,
     settledGraceMs: options?.settledGraceMs,
+    runStateService: options?.runStateService,
     // Step 2 水合分片的让步点注入同步 mock（fake timers 下无需真实定时器）
     yieldQuantum: async () => undefined,
   });
@@ -836,5 +841,63 @@ describe('CR L1-5: idle 上翻 in-flight 不受 LRU 淘汰影响', () => {
     expect(
       h.manager.readMessagesSnapshot('sess-a')?.loadingMoreMessages,
     ).toBe(false);
+  });
+});
+
+/**
+ * F-B3（H2）：同一 childSessionId 在 30s 宽限期内连跑两轮。
+ * 第一轮 settled 单元仍挂在注册表里，第二轮 RUN_STARTED 的 markRunning 会被状态守卫拒绝；
+ * 必须是「消耗型 + settled」才走替换吸收，替换后新 runId 生效、旧 partial/指标清零、
+ * webview 句柄继承、并立刻回源加载历史；消耗型单元始终不写 run_state 行。
+ */
+describe('F-B3 复用子会话：宽限期内二次 RUN_STARTED 替换吸收（H2）', () => {
+  it('新单元接管 runId、旧 partial 清空、句柄继承、立刻回源历史、不写 run_state', async () => {
+    const runState = {
+      upsert: jest.fn(async () => undefined),
+      settle: jest.fn(async () => undefined),
+      listByStatuses: jest.fn(async () => []),
+    };
+    const h = createHarness({runStateService: runState});
+    h.db.set('kid', [makeMessage('kid', 1, 'user')]);
+
+    // 第一轮：子会话 run 由 core 发起，manager 只做消耗型落点（屏幕侧订阅注入）
+    publishStarted(h.eventBus, 'kid', 'r1');
+    const recorder = {payloads: [] as unknown[]};
+    const handle: SessionStreamWebviewHandle = {
+      handleId: 'w-kid',
+      onStreamPayload: payload => recorder.payloads.push(payload),
+    };
+    h.manager.attachWebview('kid', handle);
+    publishTextDelta(h.eventBus, 'kid', 'r1', '第一轮半截');
+    advanceStreamTimers();
+    expect(h.manager.snapshot('kid')?.partialText).toBe('第一轮半截');
+    publishFinished(h.eventBus, 'kid', 'r1');
+    advanceStreamTimers();
+    expect(h.manager.snapshot('kid')?.status).toBe('finished');
+
+    // 宽限期内第二轮：撞上 settled 旧单元 → 替换吸收（不静默丢弃后续事件）
+    publishStarted(h.eventBus, 'kid', 'r2');
+    await flushAsync();
+
+    const snap = h.manager.snapshot('kid');
+    expect(snap?.status).toBe('running');
+    // 旧单元的流式残留不带进新单元
+    expect(snap?.partialText).toBe('');
+    expect(snap?.partialThinking).toBe('');
+    expect(snap?.metrics.textChars).toBe(0);
+    // 新单元 messages 起点为空，必须立刻回源填历史（否则二轮开场空白）
+    expect(snap?.messages.map(m => m.seq)).toEqual([1]);
+    expect(h.messages.listBySessionTail).toHaveBeenCalledWith('kid', {
+      limit: SESSION_STREAM_MESSAGES_PAGE_SIZE + 1,
+    });
+    // 消耗型单元不写持久层
+    expect(runState.upsert).not.toHaveBeenCalled();
+
+    // 句柄继承：第二轮 delta 仍能推到同一个 webview
+    const before = recorder.payloads.length;
+    publishTextDelta(h.eventBus, 'kid', 'r2', '第二轮');
+    advanceStreamTimers();
+    expect(recorder.payloads.length).toBeGreaterThan(before);
+    expect(h.manager.snapshot('kid')?.partialText).toBe('第二轮');
   });
 });

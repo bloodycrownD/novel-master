@@ -240,20 +240,28 @@ export function toolCallViewFromUse(
       input: use.input,
       status: 'pending',
     };
-    // pending task 工具：尝试从 pendingSubagentSessions 按 title 匹配 childSessionId，
-    // 这样执行中的 task 卡片也能点击进入子会话浏览。
-    if (use.name === 'task' && options?.pendingSubagentSessions) {
-      const desc =
-        typeof use.input?.description === 'string'
-          ? use.input.description.trim()
-          : '';
-      const prompt =
-        typeof use.input?.prompt === 'string' ? use.input.prompt.trim() : '';
-      const title = desc || prompt.slice(0, 40);
-      if (title) {
-        const childSessionId = options.pendingSubagentSessions.get(title);
-        if (childSessionId) {
-          return {...view, subagentSessionId: childSessionId};
+    // pending task 工具：优先读 input.sessionId。复用既有子会话时 core 不发
+    // child-created 事件，title 映射里没有它，这是复用场景唯一可靠来源；
+    // 新建路径仍回退按 title 匹配 pendingSubagentSessions（执行中也能点进子会话）。
+    if (use.name === 'task') {
+      const fromInput = use.input?.sessionId;
+      const reused = typeof fromInput === 'string' ? fromInput.trim() : '';
+      if (reused) {
+        return {...view, subagentSessionId: reused};
+      }
+      if (options?.pendingSubagentSessions) {
+        const desc =
+          typeof use.input?.description === 'string'
+            ? use.input.description.trim()
+            : '';
+        const prompt =
+          typeof use.input?.prompt === 'string' ? use.input.prompt.trim() : '';
+        const title = desc || prompt.slice(0, 40);
+        if (title) {
+          const childSessionId = options.pendingSubagentSessions.get(title);
+          if (childSessionId) {
+            return {...view, subagentSessionId: childSessionId};
+          }
         }
       }
     }

@@ -1261,3 +1261,30 @@ describe('T-R1 长列表预扫等价（init-busy-yield Step 5）', () => {
     expect(turnToolResultsComplete(completeRound, messages)).toBe(true);
   });
 });
+
+describe('pending task 卡片可点（复用子会话）', () => {
+  const pendingTask = (input: Record<string, unknown>) =>
+    toolCallViewFromUse(
+      {type: 'tool_use', id: 'tu-task', name: 'task', input},
+      new Map(),
+    );
+
+  it('F-B1: 不传 pendingSubagentSessions 也能从 input.sessionId 得到可点 id', () => {
+    const view = pendingTask({description: '复用第二次', sessionId: 'kid-1'});
+    expect(view.status).toBe('pending');
+    expect(view.subagentSessionId).toBe('kid-1');
+  });
+
+  it('F-B2: 无 sessionId 时回退 title 映射（新建路径的 pending 卡仍可点）', () => {
+    const view = toolCallViewFromUse(
+      {type: 'tool_use', id: 'tu-task', name: 'task', input: {description: '新建任务'}},
+      new Map(),
+      {pendingSubagentSessions: new Map([['新建任务', 'kid-new']])},
+    );
+    expect(view.subagentSessionId).toBe('kid-new');
+  });
+
+  it('无 sessionId 且未传映射时不注入 subagentSessionId', () => {
+    expect(pendingTask({description: 'x'}).subagentSessionId).toBeUndefined();
+  });
+});
