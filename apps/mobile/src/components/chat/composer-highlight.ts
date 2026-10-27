@@ -17,10 +17,7 @@ export type ComposerTokenRange = {
 };
 
 /** 区间文本形态是否合法（首尾同字符触发符，且整段恰好是一颗完整 token）。水化自愈用。 */
-export function isValidTokenRangeText(
-  plain: string,
-  range: ComposerTokenRange,
-): boolean {
+export function isValidTokenRangeText(plain: string, range: ComposerTokenRange): boolean {
   const {start, end} = range;
   if (!Number.isInteger(start) || !Number.isInteger(end)) {
     return false;
@@ -49,7 +46,7 @@ export function composerTokenRanges(
   return ranges;
 }
 
-export type ComposerSegment =
+type ComposerSegment =
   | {readonly kind: 'plain'; readonly text: string}
   | {readonly kind: 'token'; readonly text: string};
 

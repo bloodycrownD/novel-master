@@ -37,10 +37,10 @@ import {composerTokenRanges} from '../composer-highlight';
 export type TokenRange = ComposerDraftTokenRange;
 
 /** `nmtoken://` scheme：`@` 文件引用 token 的链接 destination 前缀（D3）。 */
-export const NM_TOKEN_SCHEME = 'nmtoken://';
+const NM_TOKEN_SCHEME = 'nmtoken://';
 
 /** `nmskill://` scheme：`$` 技能 token 的链接 destination 前缀（D3）。 */
-export const NM_SKILL_SCHEME = 'nmskill://';
+const NM_SKILL_SCHEME = 'nmskill://';
 
 /**
  * 扫描明文，返回全部 token 区间（按出现顺序，互不重叠）。

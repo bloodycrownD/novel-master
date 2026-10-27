@@ -76,10 +76,7 @@ import type {ConversationDockAction} from './ChatConversationBridge';
  * 持久化区间逐条过形态校验，丢弃不合法的（旧格式 `$name`、越界、半截）。
  * 全合法时原引用返回（保持 maker 稳定），有丢弃才换新数组。
  */
-function filterValidTokenRanges(
-  plain: string,
-  ranges: readonly TokenRange[],
-): readonly TokenRange[] {
+function filterValidTokenRanges(plain: string, ranges: readonly TokenRange[]): readonly TokenRange[] {
   const kept = ranges.filter(range => isValidTokenRangeText(plain, range));
   return kept.length === ranges.length ? ranges : kept;
 }

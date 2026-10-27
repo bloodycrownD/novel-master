@@ -61,7 +61,7 @@ function findLiteralTokenMatches(
 }
 
 /** 附件侧的胶囊真源：技能名集合与路径集合（source==='attach'）。 */
-export type AttachedRefTokens = {
+type AttachedRefTokens = {
   skills: Set<string>;
   paths: Set<string>;
 };

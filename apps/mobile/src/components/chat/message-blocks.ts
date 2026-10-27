@@ -244,8 +244,7 @@ export function toolCallViewFromUse(
     // child-created 事件，title 映射里没有它，这是复用场景唯一可靠来源；
     // 新建路径仍回退按 title 匹配 pendingSubagentSessions（执行中也能点进子会话）。
     if (use.name === 'task') {
-      const fromInput = use.input?.sessionId;
-      const reused = typeof fromInput === 'string' ? fromInput.trim() : '';
+      const reused = typeof use.input?.sessionId === 'string' ? use.input.sessionId.trim() : '';
       if (reused) {
         return {...view, subagentSessionId: reused};
       }
