@@ -220,17 +220,29 @@ describe('code block render (mobile)', () => {
     expect(css.match(/html\[data-nm-mode="dark"\] \.hljs-/g)?.length).toBe(11);
   });
 
-  it('T-CB10: pre 规则不含 overflow-x: auto（折行约束钉死）', () => {
-    // 剥掉注释后断言规则本体（注释含「勿用 overflow-x:auto」提醒，会误伤 not.toContain）
+  it('T-CB10: 横滚落在内层 code 上，基底 pre 仍折行', () => {
+    // 剥掉注释后断言规则本体（注释里提到 overflow-x:auto，全量匹配会误伤）
     const css = buildRichContentCssRules(['.bubble.rich']).replace(
       /\/\*[\s\S]*?\*\//g,
       '',
     );
-    expect(css).not.toContain('overflow-x: auto');
-    expect(css).not.toContain('overflow-x:auto');
     const preRule = css.match(/\.bubble\.rich pre \{[^}]*\}/s)?.[0] ?? '';
     expect(preRule).toContain('white-space: pre-wrap');
     expect(preRule).toContain('overflow-x: visible');
+    expect(preRule).not.toContain('overflow-x: auto');
+    const scrolledRule =
+      css.match(/\.bubble\.rich pre\[data-lang\] > code \{[^}]*\}/s)?.[0] ?? '';
+    expect(scrolledRule).toContain('white-space: pre;');
+    expect(scrolledRule).toContain('overflow-x: auto');
+    expect(scrolledRule).toContain('overflow-y: hidden');
+  });
+
+  it('T-CB18: 表格被包进 div.table-wrap（横滚外壳），且 sanitize 不剥 div/class', () => {
+    const html = prepareTranscriptRichHtml(
+      '| 列一 | 列二 |\n|---|---|\n| 1 | 2 |',
+    );
+    expect(html).toContain('<div class="table-wrap"><table>');
+    expect(html).toContain('</table></div>');
   });
 
   it('T-CB16: 高亮/纯文本块带复制按钮 span.code-copy，mermaid 块无（零 DOM 文本）', () => {
