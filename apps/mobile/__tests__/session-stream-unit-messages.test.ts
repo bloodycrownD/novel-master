@@ -60,6 +60,7 @@ import {
   setSessionViewCache,
 } from '@/services/chat-session-view-cache';
 import {resetKeepAliveStateForTests} from '@/services/agent-finished-notification';
+import * as finishedNotification from '@/services/agent-finished-notification';
 import type {ChatMessageData} from '@novel-master/core/chat';
 
 /** 时钟起点（fake timers 的 Date.now 从此起算）。 */
@@ -899,5 +900,103 @@ describe('F-B3 复用子会话：宽限期内二次 RUN_STARTED 替换吸收（H
     advanceStreamTimers();
     expect(recorder.payloads.length).toBeGreaterThan(before);
     expect(h.manager.snapshot('kid')?.partialText).toBe('第二轮');
+
+    // —— 替换后新单元的副作用面（spec F-B3 三件）——
+
+    // ① 注入标记不残留：新单元自己没注入过，attach 才该收到恰一次 stream-delta
+    const late = {payloads: [] as unknown[]};
+    h.manager.attachWebview('kid', {
+      handleId: 'w-kid-2',
+      onStreamPayload: payload => late.payloads.push(payload),
+    });
+    const lateDeltas = late.payloads.filter(
+      payload => (payload as {type?: string}).type === 'stream-delta',
+    ) as {kind?: string; delta?: string}[];
+    expect(lateDeltas).toHaveLength(1);
+    expect(lateDeltas[0]).toEqual(
+      expect.objectContaining({kind: 'text', delta: '第二轮'}),
+    );
+
+    // ② 二轮 STEP 按新 runId 收口：partial 清零，metrics 保留（属于二轮自己）
+    publishStepCommitted(h.eventBus, 'kid', 'r2');
+    const afterStep = h.manager.snapshot('kid');
+    expect(afterStep?.partialText).toBe('');
+    expect(afterStep?.metrics.textChars).toBeGreaterThan(0);
+
+    // ③ 二轮 FINISHED 能被 finishRun 收口（runId 没回填就会永远 running），
+    // 且消耗型单元照旧不写持久层、不发完成通知。
+    const notifySpy = jest
+      .spyOn(finishedNotification, 'notifyAgentRunFinished')
+      .mockResolvedValue(undefined);
+    try {
+      publishFinished(h.eventBus, 'kid', 'r2');
+      await flushAsync();
+      expect(h.manager.snapshot('kid')?.status).toBe('finished');
+      expect(runState.upsert).not.toHaveBeenCalled();
+      expect(runState.settle).not.toHaveBeenCalled();
+      expect(notifySpy).not.toHaveBeenCalled();
+    } finally {
+      notifySpy.mockRestore();
+    }
+  });
+});
+
+/**
+ * 替换吸收的两个「不该替换」守卫（F-B3 的反向面）：
+ * ① 发起型 settled 单元收到迟到/重复 RUN_STARTED 必须不复活（startRun 负责替换）；
+ * ② 消费型但 running（另一 run 在飞）收到不同 runId 必须保持原 runId；
+ * ③ 消费型 settled 但同一 runId 重复 STARTED 必须不重建（该 runId 的终态已消费）。
+ */
+describe('F-B3 守卫：替换吸收只发生在「消费型 + settled + 换了 runId」', () => {
+  it('发起型 settled 单元收到新 runId 的 RUN_STARTED 不复活', async () => {
+    const h = createHarness();
+    // 发起型 run 必须「在飞」（runAgentTurn 挂起）：若它立刻 resolve，startRun 的
+    // .then 兜底会把单元摘掉，后续 RUN_STARTED 会走消费型落点，测的就不是这道守卫。
+    h.runAgentTurn.mockImplementation(() => new Promise(() => undefined));
+    h.manager.startRun('a', 'p', 'hi');
+    await flushAsync();
+    publishStarted(h.eventBus, 'a', 'r1');
+    publishFinished(h.eventBus, 'a', 'r1');
+    await flushAsync();
+    expect(h.manager.snapshot('a')?.status).toBe('finished');
+
+    publishStarted(h.eventBus, 'a', 'r2');
+    await flushAsync();
+
+    const snap = h.manager.snapshot('a');
+    expect(snap?.status).toBe('finished');
+    expect(snap?.runId).toBe('r1');
+  });
+
+  it('消费型 running（另一 run 在飞）收到不同 runId 保持原 runId', async () => {
+    const h = createHarness();
+    publishStarted(h.eventBus, 'kid', 'r1');
+    expect(h.manager.snapshot('kid')?.status).toBe('running');
+
+    publishStarted(h.eventBus, 'kid', 'r2');
+    await flushAsync();
+
+    const snap = h.manager.snapshot('kid');
+    expect(snap?.status).toBe('running');
+    expect(snap?.runId).toBe('r1');
+  });
+
+  it('消费型 settled 但同一 runId 重复 STARTED 不重建（不造幽灵 running）', async () => {
+    const h = createHarness();
+    h.db.set('kid', [makeMessage('kid', 1, 'user')]);
+    publishStarted(h.eventBus, 'kid', 'r1');
+    publishTextDelta(h.eventBus, 'kid', 'r1', '半截');
+    advanceStreamTimers();
+    publishFinished(h.eventBus, 'kid', 'r1');
+    await flushAsync();
+    expect(h.manager.snapshot('kid')?.status).toBe('finished');
+
+    // 同 runId 的重复 STARTED（真机轮曾有「回填双发」）：终态已消费，不得重建
+    publishStarted(h.eventBus, 'kid', 'r1');
+    await flushAsync();
+
+    const snap = h.manager.snapshot('kid');
+    expect(snap?.status).toBe('finished');
+    expect(snap?.runId).toBe('r1');
   });
 });

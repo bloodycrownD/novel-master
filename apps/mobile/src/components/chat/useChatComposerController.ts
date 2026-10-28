@@ -74,9 +74,12 @@ import type {ConversationDockAction} from './ChatConversationBridge';
 
 /**
  * 持久化区间逐条过形态校验，丢弃不合法的（旧格式 `$name`、越界、半截）。
- * 全合法时原引用返回（保持 maker 稳定），有丢弃才换新数组。
+ * 全合法时原引用返回（保持 marker 稳定），有丢弃才换新数组。
  */
-function filterValidTokenRanges(plain: string, ranges: readonly TokenRange[]): readonly TokenRange[] {
+function filterValidTokenRanges(
+  plain: string,
+  ranges: readonly TokenRange[],
+): readonly TokenRange[] {
   const kept = ranges.filter(range => isValidTokenRangeText(plain, range));
   return kept.length === ranges.length ? ranges : kept;
 }
@@ -190,8 +193,9 @@ type ChatComposerController = {
 
   /**
    * Picker 确认落文（`onAtPickerConfirm` / `onSkillPickerConfirm` 消费）：
-   * `@` 侧整 token（含触发符），`$` 侧传剥掉触发符的技能名。两者经
-   * `commitComposerText`（M7 命令式通道）落文，并替换活跃的半截查询。
+   * 两者都收**裸** token（`@path` / 技能名），终止符由本方法补——`@` 侧补尾 `@`
+   * 成 `@path@`，`$` 侧包成 `$技能名$`。落文走 `commitComposerText`
+   * （M7 命令式通道），并替换活跃的半截查询。
    */
   readonly insertTokensIntoComposer: (pathTokens: readonly string[]) => void;
   readonly insertSkillToken: (skillName: string) => void;
@@ -615,7 +619,7 @@ export function useChatComposerController({
           allowResumeWithoutInput,
           // D9：区间扫描结果随 run 下传，core 以 existing 位合并（区间结果
           // 优先于掩码后的全量扫描）；excludedScanRanges 让 core 的全量扫描
-          // 看不到胶囊内触发符（`@path$技能` 不再污染路径、`$A$B` 不重复挂载）。
+          // 看不到胶囊内触发符（`@path@$技能$` 不再污染路径、`$A$$B$` 不重复挂载）。
           // 空数组不传：undefined 与 `[]` 在 core 侧行为等价，不传更贴近旧调用形态。
           attachments:
             sendAttachments.length > 0 ? sendAttachments : undefined,
@@ -800,6 +804,9 @@ export function useChatComposerController({
       if (pathTokens.length === 0) {
         return;
       }
+      // picker 交上来的是裸 `@path`（picker 被 VfsMoveDirPicker 复用做目录移动，
+      // 不能自带终止符）：尾 `@` 统一在这里补，与 `insertSkillToken` 的 `$…$` 对称。
+      const tokens = pathTokens.map(token => `${token}@`);
       const current = textRef.current;
       const activeAt = composerAtPath.detectQuery(current, cursor);
       const replaceStart =
@@ -815,7 +822,7 @@ export function useChatComposerController({
         current,
         cursor,
         replaceStart,
-        pathTokens,
+        tokens,
       );
       commitComposerText(next.text, next.cursor, next.tokenRanges);
     },
@@ -858,8 +865,7 @@ export function useChatComposerController({
 
   const onAtPickerConfirm = useCallback(
     (pathTokens: readonly string[]) => {
-      // picker 交上来的是裸 `@path`：终止符必须在 composer 侧补（picker 被 VfsMoveDirPicker 复用做目录移动）
-      insertTokensIntoComposer(pathTokens.map(token => `${token}@`));
+      insertTokensIntoComposer(pathTokens);
     },
     [insertTokensIntoComposer],
   );

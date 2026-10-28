@@ -828,6 +828,13 @@ describe('NativeChatComposer（T-NC1~T-NC6）', () => {
         ]),
       ).toBe('正文 [@a/b@](nmtoken://a/b) 尾');
     });
+
+    it('首尾不同字符（旧格式/半截 token）原样返回，不被 slice(1,-1) 吞掉一个真字符', () => {
+      // `@a/b` 没有尾终止符：守卫不生效时 destination 会被截成 `a/`，这才是这条的唯一防线
+      expect(
+        synthesizeTokenMarkdownFromRanges('正文 @a/b 尾', [{ start: 3, end: 7 }]),
+      ).toBe('正文 @a/b 尾');
+    });
   });
 
   describe('封顶滚动切换（D7 · Step 7 真机轮补齐）', () => {

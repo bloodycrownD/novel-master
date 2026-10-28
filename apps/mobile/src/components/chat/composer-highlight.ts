@@ -10,14 +10,17 @@
  */
 const COMPOSER_TOKEN_RE = /@([^\s@$]+)@|\$([^\s$@]+)\$/g;
 
-/** `@token` / `$token` 的完整区间（含触发符，end 为开区间下标）。 */
+/** `$技能名$` / `@路径@` 的完整区间（含两端触发符，end 为开区间下标）。 */
 export type ComposerTokenRange = {
   readonly start: number;
   readonly end: number;
 };
 
-/** 区间文本形态是否合法（首尾同字符触发符，且整段恰好是一颗完整 token）。水化自愈用。 */
-export function isValidTokenRangeText(plain: string, range: ComposerTokenRange): boolean {
+/** 区间文本形态是否合法（整段恰好是一颗完整 token）。水化自愈用。 */
+export function isValidTokenRangeText(
+  plain: string,
+  range: ComposerTokenRange,
+): boolean {
   const {start, end} = range;
   if (!Number.isInteger(start) || !Number.isInteger(end)) {
     return false;

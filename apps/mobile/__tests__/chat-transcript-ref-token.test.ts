@@ -173,7 +173,7 @@ describe('新格式终止符消费', () => {
     const attached = {skills: new Set(['写文档']), paths: new Set<string>()};
     expect(splitRefTokenSpans('看$写文档$呀', attached)).toEqual([
       {kind: 'text', text: '看'},
-      {kind: 'skill', text: '$写文档$'},
+      {kind: 'skill', text: '$写文档$', displayText: '写文档'},
       {kind: 'text', text: '呀'},
     ]);
   });
@@ -182,7 +182,7 @@ describe('新格式终止符消费', () => {
     const attached = {skills: new Set<string>(), paths: new Set(['notes/a.md'])};
     expect(splitRefTokenSpans('看@notes/a.md@谢', attached)).toEqual([
       {kind: 'text', text: '看'},
-      {kind: 'path', text: '@notes/a.md@'},
+      {kind: 'path', text: '@notes/a.md@', displayText: 'notes/a.md'},
       {kind: 'text', text: '谢'},
     ]);
   });
@@ -210,7 +210,7 @@ describe('新格式终止符消费', () => {
     const attached = {skills: new Set(['A']), paths: new Set<string>()};
     // 只有一个附件命中，尾随 `$` 就是终止符（不是第二颗胶囊的开头）
     expect(splitRefTokenSpans('$A$', attached)).toEqual([
-      {kind: 'skill', text: '$A$'},
+      {kind: 'skill', text: '$A$', displayText: 'A'},
     ]);
   });
 
@@ -221,10 +221,40 @@ describe('新格式终止符消费', () => {
       {kind: 'text', text: '本'},
     ]);
   });
+
+  /**
+   * F-A7 第 5 组：新格式相邻，每颗消费**自己**的终止符。
+   * 这里的牙齿是 `matchStarts`——正向消费后下一颗仍要被正常处理（不是被跳过）。
+   */
+  it('新格式相邻两颗技能 `$A$$B$`：各自消费终止符、互不吞噬', () => {
+    const attached = {skills: new Set(['A', 'B']), paths: new Set<string>()};
+    expect(splitRefTokenSpans('$A$$B$', attached)).toEqual([
+      {kind: 'skill', text: '$A$', displayText: 'A'},
+      {kind: 'skill', text: '$B$', displayText: 'B'},
+    ]);
+  });
+
+  it('新格式路径贴技能 `@docs/a.md@$写作$`：两种触发符各自收尾', () => {
+    const attached = {
+      skills: new Set(['写作']),
+      paths: new Set(['/docs/a.md']),
+    };
+    expect(splitRefTokenSpans('@docs/a.md@$写作$', attached)).toEqual([
+      {kind: 'path', text: '@docs/a.md@', displayText: 'docs/a.md'},
+      {kind: 'skill', text: '$写作$', displayText: '写作'},
+    ]);
+  });
 });
 
 describe('RefTokenText 渲染（气泡里只显示名字）', () => {
-  /** 从 VNode 树里取胶囊子节点：字符串段是纯文本，对象段就是胶囊 span。 */
+  /** 拍平 VNode 树成整串：字符串段原样拼，胶囊 span 取其子节点。 */
+  const flatText = (text: string, attached: any): string => {
+    const vnode = RefTokenText({text, attached}) as any;
+    return (vnode.props.children as unknown[])
+      .map(child => (typeof child === 'string' ? child : (child as any).props.children))
+      .join('');
+  };
+  /** 胶囊子节点（字符串段是纯文本，对象段就是胶囊 span）。 */
   const chipLabels = (text: string, attached: any): unknown[] => {
     const vnode = RefTokenText({text, attached}) as any;
     return (vnode.props.children as unknown[])
@@ -232,11 +262,15 @@ describe('RefTokenText 渲染（气泡里只显示名字）', () => {
       .map((chip: any) => chip.props.children);
   };
 
-  it('新格式 `$名字$` / `@路径@`：成对终止符不进入气泡文本', () => {
+  it('新格式 `$名字$` / `@路径@`：整串里不残留任何终止符', () => {
     const attached = {
       skills: new Set(['写文档']),
       paths: new Set(['/docs/a.md']),
     };
+    const flat = flatText('$写文档$ 看 @/docs/a.md@', attached);
+    // 只查胶囊标签会漏掉「裸终止符落在文字段」的坏形状（span 拉长了但 cursor 没推进）
+    expect(flat).toBe('写文档 看 /docs/a.md');
+    expect(flat).not.toMatch(/[$@]/);
     expect(chipLabels('$写文档$ 看 @/docs/a.md@', attached)).toEqual([
       '写文档',
       '/docs/a.md',
@@ -245,6 +279,7 @@ describe('RefTokenText 渲染（气泡里只显示名字）', () => {
 
   it('旧格式（无尾终止符）照旧原样显示，不误裁', () => {
     const attached = {skills: new Set(['写作文']), paths: new Set<string>()};
+    expect(flatText('$写作文', attached)).toBe('$写作文');
     expect(chipLabels('$写作文', attached)).toEqual(['$写作文']);
   });
 });

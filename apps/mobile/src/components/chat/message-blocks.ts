@@ -59,7 +59,10 @@ export interface BuildChatListItemsOptions {
   readonly agentRunning?: boolean;
   /** true 当 uiRunning=false（Composer 已停）；与 agentRunning 正交 */
   readonly runUiStopped?: boolean;
-  /** pending task 工具的子会话映射：title → childSessionId（执行中即可点击进入）。 */
+  /**
+   * pending task 工具的子会话映射：title → childSessionId（执行中即可点击进入）。
+   * 命中优先读 task 的 `input.sessionId`（复用场景下唯一可靠来源），title 仅作回退。
+   */
   readonly pendingSubagentSessions?: ReadonlyMap<string, string>;
 }
 

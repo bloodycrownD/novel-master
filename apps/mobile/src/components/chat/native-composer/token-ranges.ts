@@ -9,10 +9,11 @@
  *
  * ## 合成形态（D3）
  *
- * `@path` → `[@path](nmtoken://path)`、`$name` → `[$name](nmskill://name)`。
- * 合成结果只喂给库的 `setValue`（水化 / 命令式写入），库解析出 LINK range 后
- * 由 `linkVariants`（`^nmtoken:` / `^nmskill:`）渲染成胶囊；发送语义继续吃
- * `onChangeText` 的明文，markdown 形态不参与发送。
+ * `@path@` → `[@path@](nmtoken://path)`、`$name$` → `[$name$](nmskill://name)`：
+ * **LINK 文本保留两端终止符、destination 只留 body**。合成结果只喂给库的
+ * `setValue`（水化 / 命令式写入），库解析出 LINK range 后由 `linkVariants`
+ * （`^nmtoken:` / `^nmskill:`）渲染成胶囊；发送语义继续吃 `onChangeText` 的
+ * 明文，markdown 形态不参与发送。
  *
  * ## 为什么**没有** plainTextFromMarkdown（语义边界）
  *
@@ -48,7 +49,9 @@ const NM_SKILL_SCHEME = 'nmskill://';
  * 定位（D1 后）：**undefined 兜底 + 发送/测试辅助**——运行期水化优先用持久化
  * tokenRanges（scan 只在草稿无 ranges 时兜底）；发送链与测试仍用它取区间。
  * 保留这层转发壳是为了让下发链（NativeChatComposer 与测试）读起来语义直达，
- * 也方便日后在此追加 mobile 侧专属的识别微调而不动桌面对齐的正则真源。
+ * 也方便日后在此追加 mobile 侧专属的识别微调——注意正则真源只在
+ * `composer-highlight.ts` 一处，desktop 已不再共用这套明文形态（双端分叉是
+ * spec 已认的取舍，见 chat-ux-fixes-2026-10 A 特性风险 11）。
  */
 export function scanTokensToRanges(text: string): readonly TokenRange[] {
   return composerTokenRanges(text);
@@ -70,7 +73,7 @@ export function scanTokensToRanges(text: string): readonly TokenRange[] {
  * 落在区外的照常平移，跨编辑区的摘除——保守但可预测。
  *
  * **纯插入的光标锚（2026-10-20 真机轮）**：文本对齐在「插入内容与邻接文本
- * 共享字符」时会把插入点咬进公共前缀（典型：新胶囊 `$B` 插在旧胶囊 `$A` 头
+ * 共享字符」时会把插入点咬进公共前缀（典型：新胶囊 `$B$` 插在旧胶囊 `$A$` 头
  * 部——公共前缀吃掉 `$`，对齐插入点落进旧区间内部 → 旧胶囊被误摘，表现为
  * 「连插两颗只剩一颗」）。纯编辑区为空（纯插入）且调用方给出编辑后光标
  * （引用落文 / 命令式提交恒有）时，用 `光标 - 插入长度` 反推真实插入点，

@@ -233,7 +233,7 @@ export interface SessionStreamStartOptions {
   /**
    * D9：Composer 确认胶囊区间（**已换算到 trim 后正文坐标**；空/缺失 →
    * core 全量扫描不掩码）。core 发送挂点把这几段替换成等长空白后再全量扫描，
-   * 贴邻 chip（`$A$B` / `@path$技能`）的触发符不再参与全量识别。
+   * 贴邻 chip（`$A$$B$` / `@path@$技能$`）的触发符不再参与全量识别。
    */
   readonly excludedScanRanges?: readonly ComposerDraftTokenRange[];
   /**
@@ -1376,7 +1376,15 @@ export class SessionStreamUnitManager {
       // settled 旧单元；不替换吸收的话后续 delta / STEP / FINISHED 全被 runId 守卫丢掉，
       // 子会话屏只能看到首轮的旧内容。发起型 run 的 settled 单元不在此列——那由
       // startRun 负责替换，这里复活会绕过持久层口径。
-      if (!this.consumptiveSessions.has(payload.sessionId) || !isSessionStreamUnitSettled(unit.getStatus())) {
+      //
+      // 同一个 runId 的重复 RUN_STARTED（真机轮曾有「回填双发」）不替换：该 runId 的
+      // FINISHED 已被消费，重建出的 running 单元等不到第二次终态 → 屏上停止按钮不消失、
+      // activeSessionIds 误报、单元永不进宽限销毁。
+      if (
+        !this.consumptiveSessions.has(payload.sessionId) ||
+        !isSessionStreamUnitSettled(unit.getStatus()) ||
+        unit.getRunId() === payload.runId
+      ) {
         return;
       }
       // 句柄迁移 + 消费型标记重建都靠 adoptConsumptiveUnit（removeUnit 会 delete 标记）
@@ -1390,9 +1398,14 @@ export class SessionStreamUnitManager {
         return;
       }
       // 新单元 messages 为空，屏侧会先落到空数组；立即回源填历史，避免二轮 run 开场空白
-      void this.loadSessionTailMessages(payload.sessionId, {force: true}).catch(error => {
-        console.error('[novel-master/session-stream-unit] reuse tail reload failed', error);
-      });
+      void this.loadSessionTailMessages(payload.sessionId, {force: true}).catch(
+        error => {
+          console.error(
+            '[novel-master/session-stream-unit-manager] reuse tail reload failed',
+            error,
+          );
+        },
+      );
     }
     if (!this.consumptiveSessions.has(payload.sessionId)) {
       // Step 5：挂写通 coalescer（供后续 delta append）+ 直接写 running 行

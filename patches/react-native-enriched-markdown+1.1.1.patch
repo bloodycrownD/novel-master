@@ -1319,10 +1319,10 @@ index 8b90a87..ed7fd5b 100644
  
 diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/styles/TokenStyleHandler.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/styles/TokenStyleHandler.kt
 new file mode 100644
-index 0000000..48358df
+index 0000000..eae1a4e
 --- /dev/null
 +++ b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/input/styles/TokenStyleHandler.kt
-@@ -0,0 +1,85 @@
+@@ -0,0 +1,92 @@
 +package com.swmansion.enriched.markdown.input.styles
 +
 +import android.text.style.CharacterStyle
@@ -1355,6 +1355,12 @@ index 0000000..48358df
 +  paddingTop: Float,
 +  paddingBottom: Float,
 +  gapHorizontal: Float,
++  /**
++   * 裁掉成对终止符（`$名字$` / `@路径@` 的首尾触发符）的显示：TOKEN 专属，
++   * 由本 handler 显式开启。基类默认恒等，因为基类同时服务 LINK——
++   * 普通链接 label（`[@alice@](url)`）不能被裁。
++   */
++  trimPairedDelimiters: Boolean = true,
 +) : RoundedBackgroundSpan(
 +  backgroundColor = backgroundColor,
 +  borderRadius = borderRadius,
@@ -1362,6 +1368,7 @@ index 0000000..48358df
 +  paddingTop = paddingTop,
 +  paddingBottom = paddingBottom,
 +  gapHorizontal = gapHorizontal,
++  trimPairedDelimiters = trimPairedDelimiters,
 +)
 +
 +/**
@@ -1467,10 +1474,10 @@ index 1ebda75..634645b 100644
    private fun applyFormat(styleType: StyleType) {
 diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/spans/RoundedBackgroundSpan.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/spans/RoundedBackgroundSpan.kt
 new file mode 100644
-index 0000000..64329ae
+index 0000000..f57ff22
 --- /dev/null
 +++ b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/spans/RoundedBackgroundSpan.kt
-@@ -0,0 +1,104 @@
+@@ -0,0 +1,113 @@
 +package com.swmansion.enriched.markdown.spans
 +
 +import android.graphics.Canvas
@@ -1503,6 +1510,14 @@ index 0000000..64329ae
 +   * 「删空格→胶囊重叠」）；gap=0 时框内几何不变（左右各 padding 的对称胶囊）。
 +   */
 +  private val gapHorizontal: Float = 0f,
++  /**
++   * 是否裁掉成对终止符（`$名字$` / `@路径@` 的首尾同字符触发符）——**只服务 TOKEN**。
++   *
++   * 默认 false：本类同时被 LINK 复用（LinkStyleHandler 用它画链接胶囊），普通链接
++   * label 首尾是 `$`/`@` 时不能裁——`[@alice@](https://x)` 必须完整显示 `@alice@`，
++   * 否则就是把 token 规则误用到普通链接内容上。
++   */
++  private val trimPairedDelimiters: Boolean = false,
 +) : ReplacementSpan() {
 +
 +  private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -1513,17 +1528,18 @@ index 0000000..64329ae
 +  private val rect = RectF()
 +
 +  /**
-+   * 可绘制区间起点：成对终止符（`$名字$` / `@路径@`）的**前**触发符不绘制、不占宽。
++   * 可绘制区间起点：开启 [trimPairedDelimiters] 时，成对终止符（`$名字$` / `@路径@`）
++   * 的**前**触发符不绘制、不占宽。
 +   *
 +   * ReplacementSpan 自己决定画什么、占多宽，所以裁掉只影响视觉——明文、区间偏移、
 +   * 发送与回滚语义全部不变（与 composer 层「明文即真源」口径一致）。子类可覆盖。
 +   */
 +  protected open fun displayStart(text: CharSequence, start: Int, end: Int): Int =
-+    if (isPairedMark(text, start, end)) start + 1 else start
++    if (trimPairedDelimiters && isPairedMark(text, start, end)) start + 1 else start
 +
-+  /** 可绘制区间终点（开区间）：成对终止符的**后**触发符同样不绘制。 */
++  /** 可绘制区间终点（开区间）：开启裁切时，成对终止符的**后**触发符同样不绘制。 */
 +  protected open fun displayEnd(text: CharSequence, start: Int, end: Int): Int =
-+    if (isPairedMark(text, start, end)) end - 1 else end
++    if (trimPairedDelimiters && isPairedMark(text, start, end)) end - 1 else end
 +
 +  /** 首尾同字符且是 `$` / `@`，且中间有内容（`$$` / `@@` 不算）。 */
 +  private fun isPairedMark(text: CharSequence, start: Int, end: Int): Boolean =

@@ -17,6 +17,12 @@ type RefMatch = {
   index: number;
   end: number;
   text: string;
+  /**
+   * 气泡里实际渲染的文本：消费了成对终止符的胶囊在 split 时就裁好（只显示名字）。
+   * 未消费终止符时缺省（渲染回落 `text`）。纯渲染层删字符不影响任何偏移——区间语义
+   * 与附件判定仍按完整明文，回滚重放读的是 core 的 editableText，与 DOM 无关。
+   */
+  displayText?: string;
   kind: 'path' | 'skill';
 };
 
@@ -126,8 +132,20 @@ export function splitRefTokenSpans(
     if (match.index > cursor) {
       spans.push({kind: 'text', text: text.slice(cursor, match.index)});
     }
-    // span 文本必须带上被消费的终止符（沿用 match.text 会把它从渲染里丢掉）
-    spans.push({kind: match.kind, text: text.slice(match.index, end)});
+    // span 文本必须带上被消费的终止符（沿用 match.text 会把它从渲染里丢掉）；
+    // 展示文本在**这里**一并算好（消费了才裁首尾）——渲染侧不再重算一遍判据，
+    // 否则「什么算成对终止符」会有两份实现，阈值一漂移就出现「split 吃了、渲染没裁」。
+    // 未消费终止符的 span 不带 displayText（渲染回落 text），旧格式断言面因此不变。
+    const consumed = end > match.end;
+    spans.push(
+      consumed
+        ? {
+            kind: match.kind,
+            text: text.slice(match.index, end),
+            displayText: text.slice(match.index + 1, end - 1),
+          }
+        : {kind: match.kind, text: text.slice(match.index, end)},
+    );
     cursor = end;
   }
   if (cursor < text.length) {
@@ -153,27 +171,18 @@ export function RefTokenText({
   }
   return (
     <>
-      {spans.map((span, index) => {
-        if (span.kind === 'text') {
-          return span.text;
-        }
-        // 终止符（`$名字$` / `@路径@` 的首尾同字符触发符）是输入语法，气泡里只显示名字：
-        // 这里是纯渲染层，删字符不影响任何偏移——`splitRefTokenSpans` 的区间语义与附件
-        // 判定仍按完整明文，回滚重放读的是 core 的 editableText，与 DOM 无关。
-        const head = span.text[0];
-        const marked =
-          span.text.length > 2 &&
-          head === span.text[span.text.length - 1] &&
-          (head === '$' || head === '@');
-        return (
+      {spans.map((span, index) =>
+        span.kind === 'text' ? (
+          span.text
+        ) : (
           <span
             key={`ref-${index}`}
             className={`ref-token ref-token--${span.kind}`}
           >
-            {marked ? span.text.slice(1, -1) : span.text}
+            {span.displayText ?? span.text}
           </span>
-        );
-      })}
+        ),
+      )}
     </>
   );
 }

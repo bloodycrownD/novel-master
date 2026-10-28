@@ -290,6 +290,7 @@ jest.mock('@/components/skills/SkillPicker', () => ({
 import {ChatTabScreen} from '@/screens/tabs/ChatTabScreen';
 import {
   readChatComposerDraftState,
+  writeChatComposerDraftState,
   clearChatComposerDraft,
 } from '@/storage/chat-composer-draft';
 import {takePromptEditorOnSaved} from '@/components/agent/prompt-editor-callback';
@@ -447,6 +448,49 @@ describe('T-FS2/T-FS3 全屏编辑链（ChatTabScreen → 面板 → NativeChatC
     });
     // 回调走模块级存取（不可序列化，不进路由参数），未消费前只有 set 的这一次。
     expect(typeof takePromptEditorOnSaved()).toBe('function');
+  });
+
+  /**
+   * F-A10 落点③（进全屏前的最后一道自愈）：草稿里带着旧格式/半截区间时，
+   * 路由参数必须只剩合法胶囊。基准是 **remap 后的 payload.text**，不是 entryDraft.text。
+   */
+  it('T-FS2b: 进全屏前按 payload.text 逐条校验区间，旧格式半截胶囊被滤空', async () => {
+    const tree = await mountConversation();
+    // 先让 controller 文本与草稿文本一致（打字路径落草稿），再覆盖出坏区间——
+    // 否则 remap 会因「编辑区相交」直接摘空，断的就不是这道 filter 了。
+    typeComposerText(tree.root, '$技能尾追');
+    await flush();
+    writeChatComposerDraftState('s1', {
+      text: '$技能尾追',
+      attachments: [],
+      tokenRanges: [{start: 0, end: 5}],
+    });
+
+    pressFullscreen(tree.root);
+
+    expect(mockNavigate).toHaveBeenCalledWith(
+      'PromptEditor',
+      expect.objectContaining({tokenRanges: []}),
+    );
+  });
+
+  it('T-FS2c: 草稿文本与 payload 不一致时按 remap 后的区间带入（基准不能取旧草稿文本）', async () => {
+    const tree = await mountConversation();
+    typeComposerText(tree.root, '$技能$');
+    await flush();
+    // 旧草稿多一个前缀字符 → remap 把 [{1,5}] 平移到 [{0,4}]，在 payload.text 上合法。
+    writeChatComposerDraftState('s1', {
+      text: 'x$技能$',
+      attachments: [],
+      tokenRanges: [{start: 1, end: 5}],
+    });
+
+    pressFullscreen(tree.root);
+
+    expect(mockNavigate).toHaveBeenCalledWith(
+      'PromptEditor',
+      expect.objectContaining({tokenRanges: [{start: 0, end: 4}]}),
+    );
   });
 
   it('T-FS3: 退出即回填 —— 写会话草稿并 bump 令牌，水化链经 M7 ref.setText 回填输入框', async () => {

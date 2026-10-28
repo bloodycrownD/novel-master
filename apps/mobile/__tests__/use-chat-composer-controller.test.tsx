@@ -1022,6 +1022,21 @@ describe('useChatComposerController · D1 tokenRanges 持久化优先', () => {
     expect(readDbPayload('s1').tokenRanges).toEqual([]);
   });
 
+  /**
+   * F-A3 用户报告链路的**正例**：回滚重发把正文原样塞回草稿（不带 tokenRanges），
+   * 水化兜底扫描必须只认成对终止符包住的那一颗——`$写文档$`，且 `总结` 留在胶囊外。
+   * 负例（`$技能尾追` → `[]`）挡不住「正则永不命中」的实现，正例才是那条防线。
+   */
+  it('T-CA3: 回滚链正例 `帮我$写文档$总结` → 兜底扫描只认一颗胶囊并写回', async () => {
+    seedDbJson('s1', {text: '帮我$写文档$总结', attachments: []});
+
+    await mount();
+    await flush();
+
+    expect(current().tokenRanges).toEqual([{start: 2, end: 7}]);
+    expect(readDbPayload('s1').tokenRanges).toEqual([{start: 2, end: 7}]);
+  });
+
   it('T-CA3: 空草稿水化跳过写回（不产生空会话 null 写放大）', async () => {
     await mount();
     await flush();

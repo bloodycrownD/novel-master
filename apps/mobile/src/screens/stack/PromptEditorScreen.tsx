@@ -240,7 +240,7 @@ export function PromptEditorScreen() {
     [advanceConfirmedRanges],
   );
 
-  /** SkillPicker 单选：从光标（或活跃 `$` 查询）处插入 `$技能名` token。 */
+  /** SkillPicker 单选：从光标（或活跃 `$` 查询）处插入 `$技能名$` token。 */
   const insertSkillToken = useCallback(
     (skillName: string) => {
       // 有未完成 $… 时从 $ 起替换到光标，避免残留半截查询；但整段落进已确认
@@ -261,7 +261,10 @@ export function PromptEditorScreen() {
     [activeSkill, cursor, draft, commitDraft],
   );
 
-  /** FileReferencePicker 多选：`@path` token 零分隔空格直插（chip 口径）。 */
+  /**
+   * FileReferencePicker 多选：`@path@` token 零分隔空格直插（chip 口径）。
+   * picker 交上来的是裸 `@path`（它被 VfsMoveDirPicker 复用），尾 `@` 在本方法补。
+   */
   const insertPathTokens = useCallback(
     (pathTokens: readonly string[]) => {
       if (pathTokens.length === 0) {

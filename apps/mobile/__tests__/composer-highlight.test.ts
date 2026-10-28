@@ -102,4 +102,12 @@ describe('isValidTokenRangeText（水化自愈判据）', () => {
     // 首尾不同字符
     expect(isValidTokenRangeText('@a$', {start: 0, end: 3})).toBe(false);
   });
+
+  it('首尾同字符但中段还有触发符（伪区间）：两步判定必须拦下', () => {
+    // 只判「长度 ≥3 且首尾同字符」会放行这三条——正则只认一颗完整 token 才是判据
+    expect(isValidTokenRangeText('@a@b@', {start: 0, end: 5})).toBe(false);
+    expect(isValidTokenRangeText('$A$B$', {start: 0, end: 5})).toBe(false);
+    // 非整数下标（浮点/NaN 不能靠比较运算符挡住）
+    expect(isValidTokenRangeText('$A$', {start: 0.5, end: 3})).toBe(false);
+  });
 });

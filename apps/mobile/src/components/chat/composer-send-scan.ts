@@ -4,11 +4,11 @@
  *
  * 1. `attachments`：区间扫描（rangeResults）∪ 掩码全量扫描（fullScanResults）
  *    按「existing=区间」合并后的 `source: 'attach'` 附件（贴邻 chip 的
- *    `$A$B` 第二颗、`@path$技能` 的干净路径与技能、区间外手输 token）——
+ *    `$A$$B$` 第二颗、`@path@$技能$` 的干净路径与技能、区间外手输 token）——
  *    经 `SessionStreamStartOptions.attachments` 透传，core 发送挂点再把它放在
  *    「existing 位」与自身掩码扫描结果去重合并（区间结果优先）；
  * 2. `excludedScanRanges`：同一批区间换算到 **trim 后正文** 的坐标系，供 core
- *    做全量扫描掩码（等长空白）——`@([^\s@]+)` 不再把 `$技能` 并进路径，
+ *    做全量扫描掩码（等长空白）——`@([^\s@]+)` 不再把 `$技能$` 并进路径，
  *    区间内 token 也不会被全量扫描重复挂载。
  *
  * 为什么区间扫描必须用**未 trim** 的 `sourceText`：区间下标相对草稿原文；
@@ -63,7 +63,7 @@ export function scanComposerTokenRangesForSend(
   }
 
   // 第 1 段：区间扫描。区间内触发符在 index 0：`$` 满足 `(?<!\S)`，`@` 到
-  // 区间尾自然终止，`$技能` 与 `@path` 因切分互不吞噬。
+  // 区间尾自然终止，`$技能$` 与 `@path@` 因成对切分互不吞噬。
   const rangeResults: MessageAttachment[] = [];
   for (const range of normalized) {
     const slice = sourceText.slice(range.start, range.end);
@@ -74,7 +74,7 @@ export function scanComposerTokenRangesForSend(
   }
 
   // 第 2 段：掩码全量扫描。等长空白保证下标不变；区间外的手输 token
-  // （`用 $foo 看 @notes/a.md`）照常识别，贴邻触发器（`$A$B`）在源头消失。
+  // （`用 $foo$ 看 @notes/a.md@`）照常识别，贴邻触发器（`$A$$B$`）在源头消失。
   const maskedText = maskRangesWithSpaces(sourceText, normalized);
   const fullScanResults: MessageAttachment[] = [
     ...attachmentScanner.scanAtPaths(maskedText),
@@ -126,7 +126,7 @@ function toTrimmedCoordinates(
 
 /**
  * 夹取并排序区间；丢弃非法/零长度/重叠区间（端点相接的相邻区间保留——
- * `$A$B` 的第二颗必须作为独立区间扫描）。
+ * `$A$$B$` 的第二颗必须作为独立区间扫描）。
  */
 function normalizeRanges(
   textLength: number,

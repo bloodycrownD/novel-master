@@ -54,7 +54,7 @@ describe('tryAtomicRangeDelete', () => {
 
   it('T-AD4：删除已覆盖整段区间返回 null（默认差分即可）', () => {
     // 选中整段 token 删除
-    const prev = 'x @/a.md y';
+    const prev = 'x @/a.md@ y';
     const next = 'x  y';
     expect(
       tryAtomicRangeDelete(prev, next, composerTokenRanges(prev)),
@@ -69,7 +69,7 @@ describe('tryAtomicRangeDelete', () => {
   });
 
   it('T-AD4：区间外删除不拦截返回 null', () => {
-    const prev = '帮我看 @/a.md 谢谢';
+    const prev = '帮我看 @/a.md@ 谢谢';
     const next = backspaceOnce(prev, prev.length); // 删末尾「谢」
     expect(
       tryAtomicRangeDelete(prev, next, composerTokenRanges(prev)),
@@ -116,9 +116,9 @@ describe('tryAtomicRangeDelete', () => {
     ).toBeNull();
     expect(
       tryAtomicRangeDelete(
-        '@a.md 和 $apm-recall',
-        'a.md 和 $apm-recal',
-        composerTokenRanges('@a.md 和 $apm-recall'),
+        '@a.md@ 和 $apm-recall$',
+        'a.md@ 和 $apm-recal$',
+        composerTokenRanges('@a.md@ 和 $apm-recall$'),
       ),
     ).toBeNull();
     expect(
