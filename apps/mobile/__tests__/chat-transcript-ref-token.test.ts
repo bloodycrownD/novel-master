@@ -5,6 +5,7 @@
  */
 import {
   attachedRefTokensFrom,
+  RefTokenText,
   splitRefTokenSpans,
 } from '@/web/chat-transcript/webview/ui/render/RefTokenText';
 
@@ -219,5 +220,31 @@ describe('新格式终止符消费', () => {
       {kind: 'skill', text: '$写作文'},
       {kind: 'text', text: '本'},
     ]);
+  });
+});
+
+describe('RefTokenText 渲染（气泡里只显示名字）', () => {
+  /** 从 VNode 树里取胶囊子节点：字符串段是纯文本，对象段就是胶囊 span。 */
+  const chipLabels = (text: string, attached: any): unknown[] => {
+    const vnode = RefTokenText({text, attached}) as any;
+    return (vnode.props.children as unknown[])
+      .filter(child => typeof child === 'object' && child != null)
+      .map((chip: any) => chip.props.children);
+  };
+
+  it('新格式 `$名字$` / `@路径@`：成对终止符不进入气泡文本', () => {
+    const attached = {
+      skills: new Set(['写文档']),
+      paths: new Set(['/docs/a.md']),
+    };
+    expect(chipLabels('$写文档$ 看 @/docs/a.md@', attached)).toEqual([
+      '写文档',
+      '/docs/a.md',
+    ]);
+  });
+
+  it('旧格式（无尾终止符）照旧原样显示，不误裁', () => {
+    const attached = {skills: new Set(['写作文']), paths: new Set<string>()};
+    expect(chipLabels('$写作文', attached)).toEqual(['$写作文']);
   });
 });

@@ -153,18 +153,27 @@ export function RefTokenText({
   }
   return (
     <>
-      {spans.map((span, index) =>
-        span.kind === 'text' ? (
-          span.text
-        ) : (
+      {spans.map((span, index) => {
+        if (span.kind === 'text') {
+          return span.text;
+        }
+        // 终止符（`$名字$` / `@路径@` 的首尾同字符触发符）是输入语法，气泡里只显示名字：
+        // 这里是纯渲染层，删字符不影响任何偏移——`splitRefTokenSpans` 的区间语义与附件
+        // 判定仍按完整明文，回滚重放读的是 core 的 editableText，与 DOM 无关。
+        const head = span.text[0];
+        const marked =
+          span.text.length > 2 &&
+          head === span.text[span.text.length - 1] &&
+          (head === '$' || head === '@');
+        return (
           <span
             key={`ref-${index}`}
             className={`ref-token ref-token--${span.kind}`}
           >
-            {span.text}
+            {marked ? span.text.slice(1, -1) : span.text}
           </span>
-        ),
-      )}
+        );
+      })}
     </>
   );
 }
