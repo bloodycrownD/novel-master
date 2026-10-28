@@ -93,11 +93,11 @@ function maskRangesWithSpaces(
   text: string,
   ranges: readonly ComposerDraftTokenRange[],
 ): string {
-  let masked = "";
+  let masked = '';
   let cursor = 0;
   for (const range of ranges) {
     masked += text.slice(cursor, range.start);
-    masked += " ".repeat(range.end - range.start);
+    masked += ' '.repeat(range.end - range.start);
     cursor = range.end;
   }
   return masked + text.slice(cursor);

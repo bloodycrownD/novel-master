@@ -213,11 +213,13 @@ function synthesizeToken(token: string): string {
   - `$A$$B$` / `@docs/a.md@$写作$`（新格式）→ 每颗消费自己的终止符，中间不出现裸 `$`/`@`。
 - **F-A8**：T-CA8 维持（回滚不带 tokenRanges 的原断言不动，防误改）。
 - **F-A9**（真机）：插入 skill/文件引用后胶囊显示 `$写文档$` / `@a.md@`，退格删终止符整颗删除，胶囊后继续打字不再吞入。
+  - **后手（2026-10-29）**：真机验收后追加两条后续改动——Android 输入框胶囊**不再绘制**成对终止符（`RoundedBackgroundSpan.trimPairedDelimiters`，只裁视觉、明文不变），气泡里的引用胶囊只显示名字（`RefTokenText` 的 `displayText`）。因此本条的真机期望改为「胶囊只显示 `写文档` / `a.md`」，退格与继续打字口径不变。
 
 ## 风险点
 
 1. **历史消息回滚降级为纯文本**（拍板路线固有代价）：升级前发送的 `$skill总结` 回滚后既不是大胶囊也不再是胶囊。若真机反馈不可接受，后手是「附件字面量反推」方案（`RefTokenText.findLiteralTokenMatches` 思路）或「发送时持久化确认区间」，本 SPEC 不含。
 2. **胶囊内显示双 `$`**：`$写文档$` 两美元符号可见；相邻两胶囊明文出现 `$$` 连排。需真机截图确认；若要美化（只显示 `$写文档`）须承担 `onChangeText` 基线错位风险（native 库行为只能真机验证）。
+   - **已收口（2026-10-29，真机确认）**：风险 2 的原判断（「美化须承担 onChangeText 基线错位」）**不成立**。胶囊是 `ReplacementSpan`，绘制什么、占多宽全由 span 自己算，与 `onChangeText` 基线无关；给基类加 `trimPairedDelimiters`（只对 TOKEN 开启，LINK 恒等）即裁掉成对终止符，明文/区间/发送/回滚零改动。气泡侧同理（`RefTokenText` 渲染裁字）。双 `$` 不再显示。
 3. **IME/原生行为未验证**：终止符在中文 IME 组合态、`setComposingText`、LINK 解析下的表现只能真机回归（`react-native-enriched-markdown@1.1.1` + `patches/`，仓库内无法静态验证）。
 4. **发给模型的文本多一个 `$`**：正文 `$skill$` 原样入库并进提示词；`skillAttach` 按 skillName 挂载不受影响，token 计数有极小变化——接受。
 5. **双端形态分叉**：desktop 读到 mobile 写入的 `$写文档$`（复制粘贴、跨端同步会话正文）时，其旧高亮停在 `$写文档` 并留一个裸 `$`；desktop 自己插入仍是 `$写文档`。纯视觉、无功能影响。若日后要求双端一致，另立迭代（届时才动 core `formatToken` 与 desktop 正则，并补双端一致性用例）。

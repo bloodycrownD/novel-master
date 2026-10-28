@@ -27,13 +27,7 @@
  * 提供（与工作区 FileEditorScreen 共用）。
  */
 import React, {useCallback, useEffect, useRef, useState} from 'react';
-import {
-  Keyboard,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import {Keyboard, Pressable, StyleSheet, Text, View} from 'react-native';
 import {useRoute, type RouteProp} from '@react-navigation/native';
 import type {RootStackParamList} from '../../navigation/types';
 import {useStackOverrideSetter} from '../../navigation/HeaderContext';
@@ -152,7 +146,9 @@ export function PromptEditorScreen() {
   const canOpenPicker =
     isComposer && projectId != null && sessionId != null && runtime != null;
   /** 活跃的 `@`/`$` 半截查询：Picker 确认时从查询起点替换到光标（不残留半截）。 */
-  const activeAt = canOpenPicker ? composerAtPath.detectQuery(draft, cursor) : null;
+  const activeAt = canOpenPicker
+    ? composerAtPath.detectQuery(draft, cursor)
+    : null;
   const activeSkill = canOpenPicker
     ? composerAtPath.detectQuery(draft, cursor, '$')
     : null;
@@ -371,7 +367,13 @@ export function PromptEditorScreen() {
         }
         /* composer 变体不传 title：页内 toolbar 整行不渲染——导航栏已经有「编辑消息」
            （route.params.title → stackOverride），页内再居中写一个就是两个标题叠着。 */
-        title={isComposer ? undefined : isDirty ? '未保存' : title ?? DEFAULT_FORM_TITLE}
+        title={
+          isComposer
+            ? undefined
+            : isDirty
+            ? '未保存'
+            : title ?? DEFAULT_FORM_TITLE
+        }
         titleDanger={!isComposer && isDirty}
         /* composer 变体是**纯编辑态**（用户定案：输入框全屏只要编辑，不要预览）：
            不传 toggle / segmented / preview，shell 只渲染编辑器。 */

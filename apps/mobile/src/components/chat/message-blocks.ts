@@ -247,7 +247,10 @@ export function toolCallViewFromUse(
     // child-created 事件，title 映射里没有它，这是复用场景唯一可靠来源；
     // 新建路径仍回退按 title 匹配 pendingSubagentSessions（执行中也能点进子会话）。
     if (use.name === 'task') {
-      const reused = typeof use.input?.sessionId === 'string' ? use.input.sessionId.trim() : '';
+      const reused =
+        typeof use.input?.sessionId === 'string'
+          ? use.input.sessionId.trim()
+          : '';
       if (reused) {
         return {...view, subagentSessionId: reused};
       }
@@ -453,8 +456,7 @@ function transcriptRowFromItem(item: ChatListItem): TranscriptRow {
   // 与 buildChatListItems 同口径：丢弃 user_ops 遗留操作日志（非 annotate），
   // 仅保留批注与其它来源附件。
   const userAttachments =
-    item.message.role === 'user' &&
-    (item.message.attachments?.length ?? 0) > 0
+    item.message.role === 'user' && (item.message.attachments?.length ?? 0) > 0
       ? item.message.attachments!.filter(isDisplayableAttachment)!.map(a => ({
           source: a.source,
           type: a.type,

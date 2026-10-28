@@ -11,18 +11,21 @@ import type {ComponentChildren} from 'preact';
 
 type RefSpan =
   | {kind: 'text'; text: string}
-  | {kind: 'path' | 'skill'; text: string};
+  | {
+      kind: 'path' | 'skill';
+      text: string;
+      /**
+       * 气泡里实际渲染的文本：消费了成对终止符的胶囊在 split 时就裁好（只显示名字）。
+       * 未消费终止符时缺省（渲染回落 `text`）。纯渲染层删字符不影响任何偏移——区间语义
+       * 与附件判定仍按完整明文，回滚重放读的是 core 的 editableText，与 DOM 无关。
+       */
+      displayText?: string;
+    };
 
 type RefMatch = {
   index: number;
   end: number;
   text: string;
-  /**
-   * 气泡里实际渲染的文本：消费了成对终止符的胶囊在 split 时就裁好（只显示名字）。
-   * 未消费终止符时缺省（渲染回落 `text`）。纯渲染层删字符不影响任何偏移——区间语义
-   * 与附件判定仍按完整明文，回滚重放读的是 core 的 editableText，与 DOM 无关。
-   */
-  displayText?: string;
   kind: 'path' | 'skill';
 };
 

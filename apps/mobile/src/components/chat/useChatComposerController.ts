@@ -443,7 +443,11 @@ export function useChatComposerController({
    * （挂载后的 value effect 会兜底补写，见组件侧注释）。
    */
   const commitComposerText = useCallback(
-    (next: string, nextCursor?: number, insertedRanges?: readonly TokenRange[]) => {
+    (
+      next: string,
+      nextCursor?: number,
+      insertedRanges?: readonly TokenRange[],
+    ) => {
       advanceTokenRanges(textRef.current, next, insertedRanges, nextCursor);
       setText(next);
       textRef.current = next;
@@ -542,15 +546,12 @@ export function useChatComposerController({
     [attachments, persistDraft, advanceTokenRanges],
   );
 
-  const onSelectionChange = useCallback(
-    (selection: ComposerInputSelection) => {
-      // 选区右缘是删除锚的「编辑前光标」（D11）：选区删除后光标落在起点，
-      // 用右缘才能把整段选区反推成删除段。
-      prevCursorRef.current = selection.end;
-      setCursor(selection.start);
-    },
-    [],
-  );
+  const onSelectionChange = useCallback((selection: ComposerInputSelection) => {
+    // 选区右缘是删除锚的「编辑前光标」（D11）：选区删除后光标落在起点，
+    // 用右缘才能把整段选区反推成删除段。
+    prevCursorRef.current = selection.end;
+    setCursor(selection.start);
+  }, []);
 
   /* ------------------------------------------------------------------ *
    * 发送决策
@@ -621,8 +622,7 @@ export function useChatComposerController({
           // 优先于掩码后的全量扫描）；excludedScanRanges 让 core 的全量扫描
           // 看不到胶囊内触发符（`@path@$技能$` 不再污染路径、`$A$$B$` 不重复挂载）。
           // 空数组不传：undefined 与 `[]` 在 core 侧行为等价，不传更贴近旧调用形态。
-          attachments:
-            sendAttachments.length > 0 ? sendAttachments : undefined,
+          attachments: sendAttachments.length > 0 ? sendAttachments : undefined,
           excludedScanRanges:
             sendScan.excludedScanRanges.length > 0
               ? sendScan.excludedScanRanges
@@ -693,13 +693,7 @@ export function useChatComposerController({
         hasModel,
         running,
       }),
-    [
-      text,
-      canResumeWithoutInput,
-      hasAnnotateDrafts,
-      hasModel,
-      running,
-    ],
+    [text, canResumeWithoutInput, hasAnnotateDrafts, hasModel, running],
   );
 
   const terminate = useCallback(() => {
@@ -818,12 +812,7 @@ export function useChatComposerController({
         )
           ? activeAt.start
           : cursor;
-      const next = buildTokenInsertion(
-        current,
-        cursor,
-        replaceStart,
-        tokens,
-      );
+      const next = buildTokenInsertion(current, cursor, replaceStart, tokens);
       commitComposerText(next.text, next.cursor, next.tokenRanges);
     },
     [cursor, commitComposerText],
@@ -844,12 +833,7 @@ export function useChatComposerController({
         )
           ? activeSkill.start
           : cursor;
-      const next = buildTokenInsertion(
-        current,
-        cursor,
-        replaceStart,
-        token,
-      );
+      const next = buildTokenInsertion(current, cursor, replaceStart, token);
       commitComposerText(next.text, next.cursor, next.tokenRanges);
     },
     [cursor, commitComposerText],

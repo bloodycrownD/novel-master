@@ -94,7 +94,10 @@ export function SubagentSessionScreen() {
         try {
           // force：宽限期内的 settled 单元可能还挂着首轮缓存，复用场景（第二轮 run）
           // 必须回源，否则进屏先看到旧内容
-          return (await manager.loadSessionTailMessages(sessionId, {force: true})) ?? [];
+          return (
+            (await manager.loadSessionTailMessages(sessionId, {force: true})) ??
+            []
+          );
         } catch (error) {
           showToast(toastMessage('加载子会话失败', error));
           return [];

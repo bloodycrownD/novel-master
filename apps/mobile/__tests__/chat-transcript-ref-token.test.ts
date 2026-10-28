@@ -148,7 +148,10 @@ describe('splitRefTokenSpans（附件真源口径）', () => {
   });
 
   it('手输相对路径命中去前导斜杠形态（落库归一 /、正文原样无斜杠）', () => {
-    const attached = {skills: new Set<string>(), paths: new Set(['/notes/a.md'])};
+    const attached = {
+      skills: new Set<string>(),
+      paths: new Set(['/notes/a.md']),
+    };
     expect(splitRefTokenSpans('见 @notes/a.md', attached)).toEqual([
       {kind: 'text', text: '见 '},
       {kind: 'path', text: '@notes/a.md'},
@@ -156,7 +159,10 @@ describe('splitRefTokenSpans（附件真源口径）', () => {
   });
 
   it('挂载 path 为正文更长 token 前缀时按挂载边界切分', () => {
-    const attached = {skills: new Set<string>(), paths: new Set(['/notes/a.md'])};
+    const attached = {
+      skills: new Set<string>(),
+      paths: new Set(['/notes/a.md']),
+    };
     expect(splitRefTokenSpans('@notes/a.md.bak', attached)).toEqual([
       {kind: 'path', text: '@notes/a.md'},
       {kind: 'text', text: '.bak'},
@@ -179,7 +185,10 @@ describe('新格式终止符消费', () => {
   });
 
   it('新格式路径：终止符进胶囊', () => {
-    const attached = {skills: new Set<string>(), paths: new Set(['notes/a.md'])};
+    const attached = {
+      skills: new Set<string>(),
+      paths: new Set(['notes/a.md']),
+    };
     expect(splitRefTokenSpans('看@notes/a.md@谢', attached)).toEqual([
       {kind: 'text', text: '看'},
       {kind: 'path', text: '@notes/a.md@', displayText: 'notes/a.md'},
@@ -251,7 +260,9 @@ describe('RefTokenText 渲染（气泡里只显示名字）', () => {
   const flatText = (text: string, attached: any): string => {
     const vnode = RefTokenText({text, attached}) as any;
     return (vnode.props.children as unknown[])
-      .map(child => (typeof child === 'string' ? child : (child as any).props.children))
+      .map(child =>
+        typeof child === 'string' ? child : (child as any).props.children,
+      )
       .join('');
   };
   /** 胶囊子节点（字符串段是纯文本，对象段就是胶囊 span）。 */

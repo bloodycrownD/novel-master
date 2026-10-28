@@ -382,9 +382,7 @@ export class SessionStreamUnitManager {
   private readonly maxSettledUnits: number;
 
   /** run 状态持久层（未注入 = 纯内存模式，不写通不水合）。 */
-  private readonly runStateStore:
-    | SessionStreamRunStateStore
-    | undefined;
+  private readonly runStateStore: SessionStreamRunStateStore | undefined;
   /** 写通节流参数（透传 coalescer；测试覆盖用）。 */
   private readonly writethroughOptions:
     | {
@@ -623,10 +621,7 @@ export class SessionStreamUnitManager {
         this.markHydrated();
         return;
       }
-      const activeRows = await store.listByStatuses([
-        'starting',
-        'running',
-      ]);
+      const activeRows = await store.listByStatuses(['starting', 'running']);
       bootTimingLog(`hydrate active rows listed (n=${activeRows.length})`);
       if (this.disposed) {
         // dispose 已发生（慢扫描撞上 runtime 重建）：不再往死 manager 里
@@ -650,10 +645,7 @@ export class SessionStreamUnitManager {
           // 水合窗口内新受理的 run 优先：不 adopt、不覆盖。
           continue;
         }
-        const unit = this.adoptInterruptedUnit(
-          row.sessionId,
-          row.projectId,
-        );
+        const unit = this.adoptInterruptedUnit(row.sessionId, row.projectId);
         let pendingChildren: readonly string[] = [];
         if (row.pendingChildrenJson != null) {
           try {
@@ -851,9 +843,7 @@ export class SessionStreamUnitManager {
    * resetStream；无单元 no-op）。
    */
   requestStreamReset(sessionId: string): void {
-    this.units
-      .get(sessionId)
-      ?.broadcastControlMessage({type: 'reset-stream'});
+    this.units.get(sessionId)?.broadcastControlMessage({type: 'reset-stream'});
   }
 
   /**
@@ -890,10 +880,7 @@ export class SessionStreamUnitManager {
    * 把 webview 句柄挂到该会话的单元（Step 6 屏幕接线的消费面；无单元
    * no-op）。单元内会在 attach 时尝试注入本 step 已累积的 partial。
    */
-  attachWebview(
-    sessionId: string,
-    handle: SessionStreamWebviewHandle,
-  ): void {
+  attachWebview(sessionId: string, handle: SessionStreamWebviewHandle): void {
     this.units.get(sessionId)?.attachWebview(handle);
   }
 
@@ -1226,15 +1213,15 @@ export class SessionStreamUnitManager {
 
     timingLog('runAgentTurn invoke');
     void this.runAgentTurnFn(this.runtime, {projectId, sessionId}, content, {
-        stream: options?.stream,
-        annotateDrafts: options?.annotateDrafts,
-        allowResumeWithoutInput: options?.allowResumeWithoutInput,
-        // D9：区间扫描结果与掩码区间同步透传（白名单漏一处 = 静默断链；
-        // core 对 attachments 过滤非 attach，对 excludedScanRanges 做掩码）。
-        excludedScanRanges: options?.excludedScanRanges,
-        attachments: options?.attachments,
-        onUserMessageAppended: options?.onUserMessageAppended,
-      })
+      stream: options?.stream,
+      annotateDrafts: options?.annotateDrafts,
+      allowResumeWithoutInput: options?.allowResumeWithoutInput,
+      // D9：区间扫描结果与掩码区间同步透传（白名单漏一处 = 静默断链；
+      // core 对 attachments 过滤非 attach，对 excludedScanRanges 做掩码）。
+      excludedScanRanges: options?.excludedScanRanges,
+      attachments: options?.attachments,
+      onUserMessageAppended: options?.onUserMessageAppended,
+    })
       .then(result => {
         // 前奏期停止（2026-09-30）：core 在检查点命中 abort 时以合成 cancelled
         // 结果收尾（stepsExecuted=0、无模型请求）。
@@ -1247,7 +1234,10 @@ export class SessionStreamUnitManager {
         // starting 单元仍需按 FINISHED 同款语义收尾（cancelled 归 finished
         // 家族，流式中途停止同样走 finishRun('finished')）。
         // RunAgentTurnFn 契约是 Promise<unknown>，按 stopReason 字段窄化取用。
-        if ((result as {stopReason?: unknown} | null | undefined)?.stopReason === 'cancelled') {
+        if (
+          (result as {stopReason?: unknown} | null | undefined)?.stopReason ===
+          'cancelled'
+        ) {
           const current = this.units.get(sessionId);
           if (current === unit && current.getRunId() == null) {
             this.finishRun(sessionId, '', 'finished');
@@ -1340,7 +1330,10 @@ export class SessionStreamUnitManager {
    * 本节点只立入口与替换/LRU 语义）。返回单元供回填；若该会话已有单元
    * （settled）则被替换销毁——活跃单元场景下水合流程不应调用。
    */
-  adoptInterruptedUnit(sessionId: string, projectId: string): SessionStreamUnit {
+  adoptInterruptedUnit(
+    sessionId: string,
+    projectId: string,
+  ): SessionStreamUnit {
     const unit = new SessionStreamUnit({
       sessionId,
       projectId,
@@ -1643,8 +1636,7 @@ export class SessionStreamUnitManager {
     projectId: string,
   ): Promise<void> {
     timingLog('keepalive: begin');
-    const enabled =
-      (await this.prefBridge?.isNotificationEnabled()) ?? false;
+    const enabled = (await this.prefBridge?.isNotificationEnabled()) ?? false;
     if (!enabled) {
       timingLog('keepalive: disabled by pref, skip');
       return;
@@ -1726,7 +1718,10 @@ export class SessionStreamUnitManager {
     settled.sort(
       (a, b) => (a.getSettledAtMs() ?? 0) - (b.getSettledAtMs() ?? 0),
     );
-    for (const unit of settled.slice(0, settled.length - this.maxSettledUnits)) {
+    for (const unit of settled.slice(
+      0,
+      settled.length - this.maxSettledUnits,
+    )) {
       this.removeUnit(unit.sessionId, unit);
     }
     this.notifyChanged();
@@ -1780,9 +1775,7 @@ export class SessionStreamUnitManager {
     if (writethrough == null) {
       return;
     }
-    writethrough.append(
-      this.runStateRowFromSnapshot(unit, unit.snapshot()),
-    );
+    writethrough.append(this.runStateRowFromSnapshot(unit, unit.snapshot()));
   }
 
   /** 单元快照 → run_state 行（partial 全量覆盖写；空值存 null）。 */

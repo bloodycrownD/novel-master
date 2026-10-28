@@ -1031,8 +1031,8 @@ function legacyBuildChatListItems(
       ? runUiStopped
         ? 'error'
         : legacyIsTurnToolExecuting(message, messages, agentRunning)
-          ? 'pending'
-          : 'error'
+        ? 'pending'
+        : 'error'
       : undefined;
     const tools = toolUses.map(use => {
       const view = toolCallViewFromUse(use, results, options);
@@ -1074,7 +1074,12 @@ function buildDenseToolMessages(plan: DenseToolPlan): ChatMessageData[] {
   let toolSeq = 0;
   for (let round = 0; round < plan.rounds; round += 1) {
     messages.push(
-      msg(`q-${round}`, 'user', [{type: 'text', text: `第 ${round} 轮提问`}], seq++),
+      msg(
+        `q-${round}`,
+        'user',
+        [{type: 'text', text: `第 ${round} 轮提问`}],
+        seq++,
+      ),
     );
     const readId = `read-${toolSeq++}`;
     const listId = `list-${toolSeq++}`;
@@ -1147,9 +1152,7 @@ describe('T-R1 长列表预扫等价（init-busy-yield Step 5）', () => {
       // 每 9 轮一轮部分配对，尾轮整轮悬空。
       const messages = buildDenseToolMessages({
         rounds: 180,
-        partialRounds: new Set(
-          Array.from({length: 20}, (_, i) => 4 + i * 9),
-        ),
+        partialRounds: new Set(Array.from({length: 20}, (_, i) => 4 + i * 9)),
         dropLastResults: true,
       });
       expect(messages).toHaveLength(539);
@@ -1167,9 +1170,7 @@ describe('T-R1 长列表预扫等价（init-busy-yield Step 5）', () => {
       // 不是尾部消息——旧算法取「最后一条 incomplete」，新预扫须同口径。
       const messages = buildDenseToolMessages({
         rounds: 180,
-        partialRounds: new Set(
-          Array.from({length: 20}, (_, i) => 4 + i * 9),
-        ),
+        partialRounds: new Set(Array.from({length: 20}, (_, i) => 4 + i * 9)),
       });
       expect(messages).toHaveLength(540);
       expect(buildChatListItems(messages, options)).toEqual(
@@ -1190,9 +1191,7 @@ describe('T-R1 长列表预扫等价（init-busy-yield Step 5）', () => {
       dropLastResults: true,
     });
     const running = buildChatListItems(withDroppedLast, {agentRunning: true});
-    const lastAssistant = running.find(
-      item => item.message.id === 'a-179',
-    );
+    const lastAssistant = running.find(item => item.message.id === 'a-179');
     expect(lastAssistant?.tools.map(t => t.status)).toEqual([
       'pending',
       'pending',
@@ -1200,9 +1199,9 @@ describe('T-R1 长列表预扫等价（init-busy-yield Step 5）', () => {
     // agentRunning=false 时同一轮直接 error。
     const stopped = buildChatListItems(withDroppedLast, {agentRunning: false});
     expect(
-      stopped.find(item => item.message.id === 'a-179')?.tools.map(
-        t => t.status,
-      ),
+      stopped
+        .find(item => item.message.id === 'a-179')
+        ?.tools.map(t => t.status),
     ).toEqual(['error', 'error']);
     // 普通配对轮：read success、list 按轮次 success / error。
     expect(
@@ -1226,18 +1225,16 @@ describe('T-R1 长列表预扫等价（init-busy-yield Step 5）', () => {
       'pending',
     ]);
     // 更早的 partial 轮（a-166）不是 lastIncomplete → 悬空的 list 显示 error。
-    const earlierPartial = midRunning.find(
-      item => item.message.id === 'a-166',
-    );
+    const earlierPartial = midRunning.find(item => item.message.id === 'a-166');
     expect(earlierPartial?.tools.map(t => t.status)).toEqual([
       'success',
       'error',
     ]);
     // 尾轮（a-179）齐备：状态与执行态无关——read success；179 为奇数轮 list 结果 error。
     expect(
-      midRunning.find(item => item.message.id === 'a-179')?.tools.map(
-        t => t.status,
-      ),
+      midRunning
+        .find(item => item.message.id === 'a-179')
+        ?.tools.map(t => t.status),
     ).toEqual(['success', 'error']);
   });
 
@@ -1277,7 +1274,12 @@ describe('pending task 卡片可点（复用子会话）', () => {
 
   it('F-B2: 无 sessionId 时回退 title 映射（新建路径的 pending 卡仍可点）', () => {
     const view = toolCallViewFromUse(
-      {type: 'tool_use', id: 'tu-task', name: 'task', input: {description: '新建任务'}},
+      {
+        type: 'tool_use',
+        id: 'tu-task',
+        name: 'task',
+        input: {description: '新建任务'},
+      },
       new Map(),
       {pendingSubagentSessions: new Map([['新建任务', 'kid-new']])},
     );

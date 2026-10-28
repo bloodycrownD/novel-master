@@ -272,3 +272,29 @@
 | spec_deviations | open 5（F-A3、F-A7 第 5 组、F-A10、F-B3、B spec:181 changelog），均已落条目；changed 1（F-A9 / 已决口径 2 / 风险 2）随 K 节补说明 |
 | C-orch | ✅ 已查（结论：两条替换路径重复 3 行，登记为 K 节建议，不升 must-fix） |
 | C 类合并后 QA | 6 条（含 F-A9、F-B5 真机项），不阻塞 |
+
+---
+
+## 执行记录（2026-10-29）
+
+按本 fix-spec 全部 16 条已落地，逐条变异验证「删掉对应分支测试必须变红」：
+
+| 条目 | 落地 | 变异验证 |
+|---|---|---|
+| scope-c/B-1 | `RoundedBackgroundSpan` 加 `trimPairedDelimiters`（默认 false），`TokenBackgroundSpan` 默认 true 并透传；补丁按 RULE ④ 重打 | 真机三验（普通链接 label 不裁 / 两种 token 仍只显示名字） |
+| scope-a/G-1 | `composer-fullscreen.test.tsx` 新增 T-FS2b / T-FS2c | 删 `ChatTabScreen` 的 `.filter` → T-FS2b 红 ✅ |
+| scope-b/B-1 | F-B3 补 delta→注入→STEP→FINISHED（含 `advanceStreamTimers` / `flushAsync`） | 删 runId 回填 → 红 ✅ |
+| scope-b/B-2 | 三道守卫各一条用例（发起型 settled / 消费型 running / 同 runId 重复） | 删任一守卫 → 对应用例红 ✅ |
+| scope-b/B-3 | `onRunStarted` 替换条件追加 `unit.getRunId() === payload.runId` 早退 | 同上（第三道）✅ |
+| scope-b/B-4 | catch 日志 tag 改 `[novel-master/session-stream-unit-manager]` | grep 一致 |
+| scope-b/B-5 | 14 个触达文件过 prettier（含夹具 json），`--check` 全绿 | `prettier --check` ✅ |
+| scope-a/G-2 | `use-chat-composer-controller.test.tsx` 新增回滚链正例（`帮我$写文档$总结` → `[{2,7}]`） | 正则退回无尾终止符 → 红 ✅（旧负例仍绿，正是它挡不住的那种坏实现） |
+| scope-a/G-3 | atomic-range-delete 三条用例补终止符 | 背景区间非空（断言恢复几何检验） |
+| scope-a/G-4 | `@a@b@` / `$A$B$` / 浮点下标三条反例 | 谓词简化成「首尾同字符」→ 红 ✅ |
+| scope-a/C-1 | 12 处注释/文档统一到双终止符口径（含 `composer-send-scan`、manager、message-blocks JSDoc） | 无行为变更 |
+| scope-a/C-2 | 尾 `@` 下沉进 `insertTokensIntoComposer`，`onAtPickerConfirm` 退化为转手；契约与 `insertSkillToken` 对称 | 两屏 picker 用例保持绿 ✅ |
+| scope-c/C-1 | `RefSpan` 增可选 `displayText`，render 侧判据删除（单判据） | 阈值/判据只此一处 |
+| scope-c/G-1 | 渲染断言改「拍平整串 + 不含 `[$@]`」两层 | `cursor = end` 改回 `match.end` → 红 ✅ |
+| scope-c/G-2 | `$A$$B$` / `@docs/a.md@$写作$` 两条相邻正例 | `match.index <= cursor` → 红 ✅ |
+| review-full/G-1 | `synthesizeTokenMarkdownFromRanges('正文 @a/b 尾', [{3,7}])` 原样返回 | 删首尾同字符守卫 → 红 ✅ |
+| K 节 | CHANGELOG 增 `[Unreleased]` 三条；A spec 的 F-A9 / 风险 2 补「后手已改为不显示」 | — |
