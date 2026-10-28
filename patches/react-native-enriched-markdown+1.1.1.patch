@@ -1467,10 +1467,10 @@ index 1ebda75..634645b 100644
    private fun applyFormat(styleType: StyleType) {
 diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/spans/RoundedBackgroundSpan.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/spans/RoundedBackgroundSpan.kt
 new file mode 100644
-index 0000000..dcec883
+index 0000000..64329ae
 --- /dev/null
 +++ b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/spans/RoundedBackgroundSpan.kt
-@@ -0,0 +1,81 @@
+@@ -0,0 +1,104 @@
 +package com.swmansion.enriched.markdown.spans
 +
 +import android.graphics.Canvas
@@ -1512,6 +1512,23 @@ index 0000000..dcec883
 +
 +  private val rect = RectF()
 +
++  /**
++   * 可绘制区间起点：成对终止符（`$名字$` / `@路径@`）的**前**触发符不绘制、不占宽。
++   *
++   * ReplacementSpan 自己决定画什么、占多宽，所以裁掉只影响视觉——明文、区间偏移、
++   * 发送与回滚语义全部不变（与 composer 层「明文即真源」口径一致）。子类可覆盖。
++   */
++  protected open fun displayStart(text: CharSequence, start: Int, end: Int): Int =
++    if (isPairedMark(text, start, end)) start + 1 else start
++
++  /** 可绘制区间终点（开区间）：成对终止符的**后**触发符同样不绘制。 */
++  protected open fun displayEnd(text: CharSequence, start: Int, end: Int): Int =
++    if (isPairedMark(text, start, end)) end - 1 else end
++
++  /** 首尾同字符且是 `$` / `@`，且中间有内容（`$$` / `@@` 不算）。 */
++  private fun isPairedMark(text: CharSequence, start: Int, end: Int): Boolean =
++    end - start > 2 && (text[start] == '$' || text[start] == '@') && text[start] == text[end - 1]
++
 +  override fun getSize(
 +    paint: Paint,
 +    text: CharSequence,
@@ -1519,7 +1536,9 @@ index 0000000..dcec883
 +    end: Int,
 +    fm: Paint.FontMetricsInt?,
 +  ): Int {
-+    val textWidth = paint.measureText(text, start, end).roundToInt()
++    val from = displayStart(text, start, end)
++    val to = displayEnd(text, start, end)
++    val textWidth = if (to > from) paint.measureText(text, from, to).roundToInt() else 0
 +    return (textWidth + paddingHorizontal * 2 + gapHorizontal * 2).roundToInt()
 +  }
 +
@@ -1534,7 +1553,9 @@ index 0000000..dcec883
 +    bottom: Int,
 +    paint: Paint,
 +  ) {
-+    val textWidth = paint.measureText(text, start, end)
++    val from = displayStart(text, start, end)
++    val to = displayEnd(text, start, end)
++    val textWidth = if (to > from) paint.measureText(text, from, to) else 0f
 +
 +    // 矩形严格落在 [x, x + getSize] 预留框内：left 从 x+gap 起，宽度为
 +    // 字宽 + 两侧 padding，文字画在 left+padding（胶囊内对称）。
@@ -1548,8 +1569,10 @@ index 0000000..dcec883
 +    canvas.drawRoundRect(rect, borderRadius, borderRadius, this.paint)
 +    // ReplacementSpan 整体接管文本绘制：画完胶囊底色后必须自己把文字画回来
 +    // （基线 y、起点在胶囊内左 padding 处），复用传入的 paint——token 字色
-+    // span 才能照常生效。
-+    canvas.drawText(text, start, end, left + paddingHorizontal, y.toFloat(), paint)
++    // span 才能照常生效。只画可绘制区间，成对终止符留在明文里但不显示。
++    if (to > from) {
++      canvas.drawText(text, from, to, left + paddingHorizontal, y.toFloat(), paint)
++    }
 +  }
 +}
 diff --git a/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/utils/input/MarkdownStyleParser.kt b/node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/utils/input/MarkdownStyleParser.kt
