@@ -14,16 +14,16 @@ let textEncoder: TextEncoder | null | undefined;
  * 落单代理按替换字符 U+FFFD 计 3 字节（与 TextEncoder 的行为一致）。
  */
 export function utf8ByteLength(text: string): number {
-  if (textEncoder === undefined) {
-    textEncoder = typeof TextEncoder !== "undefined" ? new TextEncoder() : null;
-  }
-  if (textEncoder != null) {
-    return textEncoder.encode(text).byteLength;
-  }
-  let bytes = 0;
-  for (const char of text) {
-    const code = char.codePointAt(0)!;
-    bytes += code < 0x80 ? 1 : code < 0x800 ? 2 : code < 0x10000 ? 3 : 4;
-  }
-  return bytes;
+    if (textEncoder === undefined) {
+        textEncoder = typeof TextEncoder !== "undefined" ? new TextEncoder() : null;
+    }
+    if (textEncoder != null) {
+        return textEncoder.encode(text).byteLength;
+    }
+    let bytes = 0;
+    for (const char of text) {
+        const code = char.codePointAt(0)!;
+        bytes += code < 0x80 ? 1 : code < 0x800 ? 2 : code < 0x10000 ? 3 : 4;
+    }
+    return bytes;
 }

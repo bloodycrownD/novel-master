@@ -9,5 +9,5 @@
  * 输出长度上限是 `maxChars + 1`（省略号不计入 `maxChars`）。
  */
 export function truncateText(text: string, maxChars: number): string {
-  return text.length <= maxChars ? text : `${text.slice(0, maxChars)}…`;
+    return text.length <= maxChars ? text : `${text.slice(0, maxChars)}…`;
 }

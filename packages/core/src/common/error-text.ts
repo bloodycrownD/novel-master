@@ -17,5 +17,5 @@
  * @returns 可直接拼进告警/失败原因的文本（不抛错、不返回空串）
  */
 export function errorText(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
+    return error instanceof Error ? error.message : String(error);
+}

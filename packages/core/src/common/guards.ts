@@ -9,5 +9,5 @@
 
 /** 判断值是不是非数组的普通对象（JSON object）。只排除 `null` 与数组，不校验原型。 */
 export function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+    return typeof value === "object" && value !== null && !Array.isArray(value);
 }

@@ -25,8 +25,8 @@
  * @module common/normalize-smart-sort-import-error
  */
 
-import { TdbcError } from "../infra/tdbc/errors.js";
-import { normalizeYamlError } from "./normalize-yaml-error.js";
+import {TdbcError} from "../infra/tdbc/errors.js";
+import {normalizeYamlError} from "./normalize-yaml-error.js";
 
 /** 智能排序规则 YAML 导入失败时给用户看的标签（两端 app 共用这一份字面量）。 */
 const SMART_SORT_IMPORT_YAML_INVALID_LABEL = "智能排序规则 YAML 无效";
@@ -43,8 +43,8 @@ const SMART_SORT_IMPORT_YAML_INVALID_LABEL = "智能排序规则 YAML 无效";
  *   所以调用方 `throw normalizeSmartSortImportError(error)` 即可，无需再判类型。
  */
 export function normalizeSmartSortImportError(error: unknown): Error {
-  if (error instanceof TdbcError) {
-    return error;
-  }
-  return normalizeYamlError(error, SMART_SORT_IMPORT_YAML_INVALID_LABEL);
+    if (error instanceof TdbcError) {
+        return error;
+    }
+    return normalizeYamlError(error, SMART_SORT_IMPORT_YAML_INVALID_LABEL);
 }

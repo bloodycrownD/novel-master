@@ -5,8 +5,8 @@
  * 这样调用方拿到的永远是带上下文提示的 Error，不用各自再判一次类型。
  */
 export function normalizeYamlError(error: unknown, fallback: string): Error {
-  if (error instanceof Error) {
-    return new Error(`${fallback}：${error.message}`);
-  }
-  return new Error(fallback);
+    if (error instanceof Error) {
+        return new Error(`${fallback}：${error.message}`);
+    }
+    return new Error(fallback);
 }

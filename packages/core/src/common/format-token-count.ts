@@ -22,8 +22,8 @@
  * 来源记号：`mark`（源/家族展示名）+ `connector`（精确 = / 估算 ≈）。
  */
 export interface TokenSourceBadge {
-  readonly mark: string;
-  readonly connector: "=" | "≈";
+    readonly mark: string;
+    readonly connector: "=" | "≈";
 }
 
 /**
@@ -35,11 +35,11 @@ export interface TokenSourceBadge {
  * 表内，落 `?? counterKind` 原样透传。
  */
 const TOKENIZER_FAMILY_DISPLAY_NAMES: Readonly<Record<string, string>> = {
-  tiktoken: "gpt",
-  gpt2: "gpt",
-  qwen2: "qwen",
-  llama3: "llama",
-  "command-r": "command",
+    tiktoken: "gpt",
+    gpt2: "gpt",
+    qwen2: "qwen",
+    llama3: "llama",
+    "command-r": "command",
 };
 
 /**
@@ -55,14 +55,14 @@ const TOKENIZER_FAMILY_DISPLAY_NAMES: Readonly<Record<string, string>> = {
  * - 未知 counterKind → mark 原样透传（防御未来家族），est=false 仍按精确 `=`。
  */
 export function formatTokenSourceBadge(source: "api" | "local" | undefined, counterKind: string, estimated: boolean): TokenSourceBadge {
-  if (source === "api") {
-    return { mark: "远程", connector: "=" };
-  }
-  if (counterKind === "heuristic" || estimated) {
-    return { mark: "gpt", connector: "≈" };
-  }
-  const display = TOKENIZER_FAMILY_DISPLAY_NAMES[counterKind];
-  return { mark: display ?? counterKind, connector: "=" };
+    if (source === "api") {
+        return {mark: "远程", connector: "="};
+    }
+    if (counterKind === "heuristic" || estimated) {
+        return {mark: "gpt", connector: "≈"};
+    }
+    const display = TOKENIZER_FAMILY_DISPLAY_NAMES[counterKind];
+    return {mark: display ?? counterKind, connector: "="};
 }
 
 /**
@@ -73,16 +73,16 @@ export function formatTokenSourceBadge(source: "api" | "local" | undefined, coun
  * 标签视觉更轻）；pct 封顶 999；非法 count 显示 `—`。
  */
 export function formatContextUsageLabel(count: number, contextWindow?: number, badge?: TokenSourceBadge): string {
-  const prefix = badge != null ? `${badge.mark} ${badge.connector} ` : "";
-  if (!Number.isFinite(count) || count < 0) {
-    return `${prefix}—`;
-  }
-  const current = labelCount(count);
-  if (contextWindow == null || contextWindow <= 0) {
-    return `${prefix}${current} tokens`;
-  }
-  const pct = Math.min(999, Math.round((count / contextWindow) * 100));
-  return `${prefix}${current} / ${labelCount(contextWindow)} (${pct}%)`;
+    const prefix = badge != null ? `${badge.mark} ${badge.connector} ` : "";
+    if (!Number.isFinite(count) || count < 0) {
+        return `${prefix}—`;
+    }
+    const current = labelCount(count);
+    if (contextWindow == null || contextWindow <= 0) {
+        return `${prefix}${current} tokens`;
+    }
+    const pct = Math.min(999, Math.round((count / contextWindow) * 100));
+    return `${prefix}${current} / ${labelCount(contextWindow)} (${pct}%)`;
 }
 
 /**
@@ -90,31 +90,31 @@ export function formatContextUsageLabel(count: number, contextWindow?: number, b
  * 字母小写（`7.1k` / `2m`）。仅标签内使用；统计页卡片等场景仍走大写 K/M。
  */
 function labelCount(n: number): string {
-  return formatTokenCount(n).replace(/[KM]$/, (unit) => unit.toLowerCase());
+    return formatTokenCount(n).replace(/[KM]$/, (unit) => unit.toLowerCase());
 }
 
 function trimTrailingZeros(s: string): string {
-  return s.replace(/\.0$/, "");
+    return s.replace(/\.0$/, "");
 }
 
 export function formatTokenCount(n: number): string {
-  if (!Number.isFinite(n) || n < 0) {
-    return "—";
-  }
-  const rounded = Math.round(n);
-  if (rounded < 1000) {
-    return String(rounded);
-  }
-  if (rounded < 1_000_000) {
-    const k = rounded / 1000;
-    if (k >= 100) {
-      return `${Math.round(k)}K`;
+    if (!Number.isFinite(n) || n < 0) {
+        return "—";
     }
-    return `${trimTrailingZeros(k.toFixed(1))}K`;
-  }
-  const m = rounded / 1_000_000;
-  if (m >= 100) {
-    return `${Math.round(m)}M`;
-  }
-  return `${trimTrailingZeros(m.toFixed(1))}M`;
+    const rounded = Math.round(n);
+    if (rounded < 1000) {
+        return String(rounded);
+    }
+    if (rounded < 1_000_000) {
+        const k = rounded / 1000;
+        if (k >= 100) {
+            return `${Math.round(k)}K`;
+        }
+        return `${trimTrailingZeros(k.toFixed(1))}K`;
+    }
+    const m = rounded / 1_000_000;
+    if (m >= 100) {
+        return `${Math.round(m)}M`;
+    }
+    return `${trimTrailingZeros(m.toFixed(1))}M`;
 }

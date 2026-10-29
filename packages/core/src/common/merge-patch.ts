@@ -8,7 +8,7 @@
  * @module common/merge-patch
  */
 
-import { isRecord } from "./guards.js";
+import {isRecord} from "./guards.js";
 
 /** 只跳过这三类键，防 `__proto__` 之类的原型污染（patch 可能来自外部 JSON）。 */
 const UNSAFE_KEYS = new Set(["__proto__", "constructor", "prototype"]);
@@ -20,20 +20,20 @@ const UNSAFE_KEYS = new Set(["__proto__", "constructor", "prototype"]);
  * 统一做；这里只保证合并语义可预期。
  */
 export function applyMergePatch<T>(current: T, patch: unknown): T {
-  if (!isRecord(patch)) {
-    // undefined 视为「没传」，保留现值；null / 数组 / 标量整体替换。
-    return (patch === undefined ? current : patch) as T;
-  }
-  const merged: Record<string, unknown> = isRecord(current) ? {...current} : {};
-  for (const [key, value] of Object.entries(patch)) {
-    if (value === undefined || UNSAFE_KEYS.has(key)) {
-      continue;
+    if (!isRecord(patch)) {
+        // undefined 视为「没传」，保留现值；null / 数组 / 标量整体替换。
+        return (patch === undefined ? current : patch) as T;
     }
-    if (value === null) {
-      delete merged[key];
-      continue;
+    const merged: Record<string, unknown> = isRecord(current) ? {...current} : {};
+    for (const [key, value] of Object.entries(patch)) {
+        if (value === undefined || UNSAFE_KEYS.has(key)) {
+            continue;
+        }
+        if (value === null) {
+            delete merged[key];
+            continue;
+        }
+        merged[key] = applyMergePatch(merged[key], value);
     }
-    merged[key] = applyMergePatch(merged[key], value);
-  }
-  return merged as T;
+    return merged as T;
 }
