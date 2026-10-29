@@ -35,9 +35,14 @@ import {
 const isChatInvalidArgument = (error: unknown): boolean => isAppError(error, "CHAT_INVALID_ARGUMENT");
 
 // G-2 DST：固定日期断言需要可控时区。node:test 每个文件独立进程，在 fixture
-// 初始化前把本地时区固定为带 DST 切换的 America/New_York；既有用例全部以
+// 初始化前把本地时区固定为带 DST 切换的东部时区；既有用例全部以
 // 「本地今日 0 点 ± 偏移」相对构造，与具体时区取值无关，换时区后依然自洽。
-process.env.TZ = "America/New_York";
+// ⚠️ 必须用 POSIX 形式（EST5EDT），不能写 IANA 名（America/New_York）：
+// Windows 的 UCRT tzset 解析不了 IANA 名，better-sqlite3 的
+// strftime(..., 'localtime') 会回退 UTC——而 V8/ICU 认 IANA 名，JS 侧
+// localDayStart 与 SQL 侧 day_key 归桶就此分裂（T-C2/T-C6 在 Windows 门禁上
+// 红）。POSIX 名两侧都认且 DST 规则一致（3 月第二个星期日 / 11 月第一个星期日）。
+process.env.TZ = "EST5EDT";
 
 novelMasterTestFixture();
 

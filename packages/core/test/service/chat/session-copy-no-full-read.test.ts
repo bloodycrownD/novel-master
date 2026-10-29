@@ -174,12 +174,20 @@ async function withFullReadProbe<T>(
   }
 }
 
-/** 会话 scope 下 21 列全量读的 SQL 特征（含正文三列 + token 列）。 */
+/**
+ * 会话 scope 下全量读的 SQL 特征（含正文列 + token 列）。
+ *
+ * ⚠️ 正文列特征是 `CONTENT_JSON` 不是 `CONTENT_ENCODING`：V1' 退役
+ * （migration-cleanup-r6）后读投影只认明文列，`content_encoding` /
+ * `content_blob` 只留在 INSERT 列清单（恒绑 NULL），SELECT 已不含它——
+ * 若仍以 CONTENT_ENCODING 为特征，事务外那次真读永远匹配不上，
+ * 「窗口外必须有」的防恒真断言会反咬一口。
+ */
 function isFullMessageRead(sql: string): boolean {
   const norm = sql.replace(/\s+/g, " ").toUpperCase();
   return (
     norm.includes("FROM CHAT_MESSAGE") &&
-    norm.includes("CONTENT_ENCODING") &&
+    norm.includes("CONTENT_JSON") &&
     norm.includes("CACHE_READ_TOKENS")
   );
 }
